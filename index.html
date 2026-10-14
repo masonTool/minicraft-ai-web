@@ -148,6 +148,26 @@
 
       .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 3px; }
       .inv-grid.inv-creative { grid-template-columns: repeat(12, 34px); gap: 2px; }
+
+      /* ---------------- 创造物品栏：分类与搜索 ---------------- */
+      .inv-creative-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; }
+      .inv-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+      .inv-tab {
+        font: inherit; font-size: 12px; padding: 3px 9px; cursor: pointer;
+        background: #a8a8a8; color: #2b2b2b;
+        border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      .inv-tab.active { background: #dcdec4; border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
+      .inv-tab:active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
+      .inv-search {
+        flex: 1; min-width: 130px; font: inherit; font-size: 12px; padding: 3px 6px;
+        background: #efefef; color: #222;
+        border: 2px solid; border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+        outline: none;
+      }
+      .inv-count-label { color: #6a6a6a; font-size: 11px; }
+      /* 空状态提示在网格里要跨满整行，否则会被 34px 的列宽挤成一列字 */
+      .inv-empty { grid-column: 1 / -1; color: #5a5a5a; font-size: 12px; padding: 10px 2px; }
       .inv-slot {
         position: relative; width: 42px; height: 42px;
         display: grid; place-items: center;

@@ -311,6 +311,11 @@ class App {
 
   private bindEvents(): void {
     document.addEventListener('keydown', (e) => {
+      // 正在界面里输入文字（创造物品栏搜索框）时不要抢按键，否则输入 e 会把界面关掉
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        if (e.code !== 'Escape') return;
+      }
       if (e.code === 'Tab') e.preventDefault();
       this.keys.add(e.code);
       if (e.code === 'KeyE') {

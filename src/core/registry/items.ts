@@ -10,7 +10,7 @@
  * 工具等级沿用原版：0 木 / 1 石 / 2 铁 / 3 钻石 / 4 下界合金。
  */
 
-import { Block, blockDef } from './blocks.ts';
+import { Block, blockDef, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 
 export const MAX_STACK = 64;
@@ -134,6 +134,113 @@ export function itemDef(id: number): ItemDef | undefined {
   return ITEMS[id];
 }
 
+// ---------------------------------------------------------------- 创造模式分类
+
+/** 创造物品栏的分类标签 */
+export const ITEM_CATEGORIES = ['all', 'building', 'natural', 'ores', 'wool', 'functional'] as const;
+export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
+
+export const CATEGORY_LABELS: Record<ItemCategory, string> = {
+  all: '全部',
+  building: '建筑',
+  natural: '自然',
+  ores: '矿石与材料',
+  wool: '羊毛与染料',
+  functional: '功能方块',
+};
+
+const BUILDING = new Set<number>([
+  Block.STONE,
+  Block.COBBLESTONE,
+  Block.OAK_PLANKS,
+  Block.GLASS,
+  Block.STONE_BRICKS,
+  Block.CHISELED_STONE_BRICKS,
+  Block.SMOOTH_STONE,
+  Block.POLISHED_GRANITE,
+  Block.POLISHED_DIORITE,
+  Block.POLISHED_ANDESITE,
+  Block.DEEPSLATE_BRICKS,
+  Block.CHISELED_DEEPSLATE,
+  Block.POLISHED_DEEPSLATE,
+  Block.BRICKS,
+  Block.SANDSTONE,
+]);
+
+const NATURAL = new Set<number>([
+  Block.GRASS_BLOCK,
+  Block.DIRT,
+  Block.SAND,
+  Block.GRAVEL,
+  Block.CLAY,
+  Block.OAK_LOG,
+  Block.OAK_LEAVES,
+  Block.SNOW_BLOCK,
+  Block.ICE,
+  Block.PACKED_ICE,
+  Block.OBSIDIAN,
+  Block.DEEPSLATE,
+  Block.GRANITE,
+  Block.DIORITE,
+  Block.ANDESITE,
+  Block.TUFF,
+  Block.CALCITE,
+]);
+
+const FUNCTIONAL = new Set<number>([Block.CRAFTING_TABLE, Block.FURNACE, Block.CHEST, Block.GLOWSTONE]);
+
+/** 矿石与材料：所有矿石（含深板岩变体）与加工产物 */
+const ORES = new Set<number>([
+  Block.COAL_ORE,
+  Block.IRON_ORE,
+  Block.COPPER_ORE,
+  Block.GOLD_ORE,
+  Block.REDSTONE_ORE,
+  Block.LAPIS_ORE,
+  Block.DIAMOND_ORE,
+  Block.EMERALD_ORE,
+  Block.DEEPSLATE_COAL_ORE,
+  Block.DEEPSLATE_IRON_ORE,
+  Block.DEEPSLATE_COPPER_ORE,
+  Block.DEEPSLATE_GOLD_ORE,
+  Block.DEEPSLATE_REDSTONE_ORE,
+  Block.DEEPSLATE_LAPIS_ORE,
+  Block.DEEPSLATE_DIAMOND_ORE,
+  Block.DEEPSLATE_EMERALD_ORE,
+  Item.COAL,
+  Item.CHARCOAL,
+  Item.RAW_IRON,
+  Item.RAW_COPPER,
+  Item.RAW_GOLD,
+  Item.IRON_INGOT,
+  Item.GOLD_INGOT,
+  Item.COPPER_INGOT,
+  Item.REDSTONE,
+  Item.LAPIS_LAZULI,
+  Item.DIAMOND,
+  Item.EMERALD,
+  Item.STICK,
+  Item.BRICK,
+  Item.CLAY_BALL,
+]);
+
+/** 16 色羊毛 + 16 种染料 */
+const WOOL_AND_DYE = new Set<number>();
+for (let index = 0; index < DYE_COLORS.length; index++) {
+  WOOL_AND_DYE.add(woolId(index));
+  WOOL_AND_DYE.add(dyeItemId(index));
+}
+
+/** 判断物品属于哪个创造分类；未登记的默认归入"矿石与材料" */
+export function categoryOf(itemId: number): ItemCategory {
+  if (WOOL_AND_DYE.has(itemId)) return 'wool';
+  if (FUNCTIONAL.has(itemId)) return 'functional';
+  if (ORES.has(itemId)) return 'ores';
+  if (BUILDING.has(itemId)) return 'building';
+  if (NATURAL.has(itemId)) return 'natural';
+  return 'ores';
+}
+
 /** 物品显示名（去掉命名空间前缀） */
 export function itemName(id: number): string {
   return (itemDef(id)?.name ?? 'minecraft:air').replace('minecraft:', '');
@@ -152,10 +259,18 @@ export function blockForItem(itemId: number): number | undefined {
   return itemDef(itemId)?.block;
 }
 
-/** 所有可放置的物品 id（创造物品栏用） */
+/** 所有可放置的物品 id（方块物品） */
 export const PLACEABLE_ITEMS: readonly number[] = ITEMS.filter(
   (item): item is ItemDef => item !== undefined && item.block !== undefined,
 ).map((item) => item.id);
+
+/**
+ * 创造物品栏展示的全部物品。
+ * 必须包含非方块物品（染料、金属锭、宝石……），否则这些物品在创造模式下根本拿不到。
+ */
+export const CREATIVE_ITEMS: readonly number[] = ITEMS.filter((item): item is ItemDef => item !== undefined).map(
+  (item) => item.id,
+);
 
 // ---------------------------------------------------------------- 掉落表
 

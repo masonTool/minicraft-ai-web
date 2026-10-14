@@ -31,7 +31,15 @@ import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { CHEST_SIZE } from '../core/container/Chest.ts';
 import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, Furnace } from '../core/container/Furnace.ts';
 import { Chest } from '../core/container/Chest.ts';
-import { PLACEABLE_ITEMS, itemName, maxStackOf } from '../core/registry/items.ts';
+import {
+  CATEGORY_LABELS,
+  ITEM_CATEGORIES,
+  CREATIVE_ITEMS,
+  categoryOf,
+  itemName,
+  maxStackOf,
+  type ItemCategory,
+} from '../core/registry/items.ts';
 
 export type InventoryPanelMode = 'inventory' | 'crafting' | 'furnace' | 'chest';
 
@@ -67,6 +75,16 @@ export class InventoryScreen {
   private readonly furnaceOutputSlot: HTMLDivElement;
   private readonly flameEl: HTMLDivElement;
   private readonly cookFillEl: HTMLElement;
+
+  // 创造物品栏的分类与搜索状态。
+  // 这几个元素在 buildCreativeSection() 里创建（构造函数中调用），
+  // 因此不能用 readonly —— TS 无法跨方法验证"只赋值一次"。
+  private creativeGrid!: HTMLDivElement;
+  private creativeTabs!: HTMLDivElement;
+  private creativeSearch!: HTMLInputElement;
+  private creativeCountEl!: HTMLSpanElement;
+  private creativeCategory: ItemCategory = 'all';
+  private creativeQuery = '';
 
   /** key → 槽位绑定；key 形如 "inv:12" / "craft:3" / "furnace:1" / "chest:5" */
   private readonly bindings = new Map<string, SlotBinding>();
@@ -143,7 +161,7 @@ export class InventoryScreen {
     this.panel.appendChild(this.buildGrid(HOTBAR_START, HOTBAR_SIZE, 'inv-grid inv-hotbar', 'inv'));
 
     this.creativeSection = document.createElement('div');
-    this.creativeSection.append(this.buildLabel('创造物品栏（左键取一整叠 / 右键取一个）'), this.buildCreativeGrid());
+    this.buildCreativeSection();
     this.panel.appendChild(this.creativeSection);
 
     this.root.appendChild(this.panel);
@@ -186,20 +204,91 @@ export class InventoryScreen {
     return grid;
   }
 
-  private buildCreativeGrid(): HTMLDivElement {
-    const grid = document.createElement('div');
-    grid.className = 'inv-grid inv-creative';
-    for (const itemId of PLACEABLE_ITEMS) {
+  /** 创造物品栏：分类标签 + 搜索框 + 物品网格 */
+  private buildCreativeSection(): void {
+    const header = document.createElement('div');
+    header.className = 'inv-label';
+    header.append('创造物品栏');
+    this.creativeCountEl = document.createElement('span');
+    this.creativeCountEl.className = 'inv-count-label';
+    header.appendChild(this.creativeCountEl);
+
+    const controls = document.createElement('div');
+    controls.className = 'inv-creative-controls';
+
+    this.creativeTabs = document.createElement('div');
+    this.creativeTabs.className = 'inv-tabs';
+    for (const category of ITEM_CATEGORIES) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'inv-tab';
+      button.textContent = CATEGORY_LABELS[category];
+      button.dataset.category = category;
+      button.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        this.creativeCategory = category;
+        this.updateTabHighlight();
+        this.renderCreativeGrid();
+      });
+      this.creativeTabs.appendChild(button);
+    }
+
+    this.creativeSearch = document.createElement('input');
+    this.creativeSearch.type = 'text';
+    this.creativeSearch.className = 'inv-search';
+    this.creativeSearch.placeholder = '搜索物品…';
+    this.creativeSearch.addEventListener('input', () => {
+      this.creativeQuery = this.creativeSearch.value.trim().toLowerCase();
+      this.renderCreativeGrid();
+    });
+
+    controls.append(this.creativeTabs, this.creativeSearch);
+
+    this.creativeGrid = document.createElement('div');
+    this.creativeGrid.className = 'inv-grid inv-creative';
+
+    this.creativeSection.append(header, controls, this.creativeGrid);
+    this.updateTabHighlight();
+    this.renderCreativeGrid();
+  }
+
+  private updateTabHighlight(): void {
+    for (const child of Array.from(this.creativeTabs.children)) {
+      const element = child as HTMLElement;
+      element.classList.toggle('active', element.dataset.category === this.creativeCategory);
+    }
+  }
+
+  /** 按当前分类与搜索词重建创造网格 */
+  private renderCreativeGrid(): void {
+    const query = this.creativeQuery;
+    const items = CREATIVE_ITEMS.filter((itemId) => {
+      if (this.creativeCategory !== 'all' && categoryOf(itemId) !== this.creativeCategory) return false;
+      if (query.length > 0 && !itemName(itemId).toLowerCase().includes(query)) return false;
+      return true;
+    });
+
+    this.creativeGrid.replaceChildren();
+    for (const itemId of items) {
       const slot = this.createSlot();
+      slot.classList.add('creative-slot');
       slot.title = itemName(itemId);
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
       slot.addEventListener('mousedown', (event) => {
         event.preventDefault();
         this.inventory.add(itemId, event.button === 2 ? 1 : maxStackOf(itemId));
       });
-      grid.appendChild(slot);
+      this.creativeGrid.appendChild(slot);
     }
-    return grid;
+
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'inv-empty';
+      empty.textContent = '没有匹配的物品';
+      this.creativeGrid.appendChild(empty);
+    }
+
+    this.creativeCountEl.textContent = `  ${items.length} / ${CREATIVE_ITEMS.length}`;
   }
 
   /** 清掉某一前缀的旧绑定 */
