@@ -97,11 +97,22 @@ export class LightEngine {
   }
 
   /**
-   * 竖直列扫描：从区块内容顶部往下推天光。
-   * 说明：高于 maxY 的格子不参与计算（恒为全亮空气，网格化时不会读到），
-   * 因此无需付出遍历整个世界高度的代价。
+   * 初始化天光。
+   *
+   * ⚠️ 高于 maxY 的格子必须也要写满级天光。
+   * 曾经的实现只算到 maxY（理由是"那里的格子恒为空气、网格化读不到"），
+   * 结果玩家一旦飞到地形之上搭建，那些格子读到的天光是 0，
+   * 整片建筑与平台就会永远漆黑——这是实测踩到的 bug。
    */
   private fillSkyColumns(chunk: Chunk, maxY: number): void {
+    // 地形之上的开放天空：整片区域都是空气，直接给满级
+    for (let y = maxY + 1; y < WORLD_MAX_Y; y++) {
+      for (let z = 0; z < 16; z++) {
+        for (let x = 0; x < 16; x++) chunk.setSkyLight(x, y, z, 15);
+      }
+    }
+
+    // 从区块内容顶部往下逐列推天光
     for (let z = 0; z < 16; z++) {
       for (let x = 0; x < 16; x++) {
         let level = 15;
