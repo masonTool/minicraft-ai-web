@@ -19,6 +19,10 @@ import { Block, BLOCKS, breakSeconds, blockDef } from './core/registry/blocks.ts
 import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
+import { HOTBAR_SIZE, Inventory } from './core/container/Inventory.ts';
+import { InventoryScreen } from './ui/InventoryScreen.ts';
+import { drawItemIcon } from './ui/ItemIcon.ts';
+import { blockForItem, dropFor, itemName } from './core/registry/items.ts';
 
 /** 渲染距离（区块） */
 const VIEW_DISTANCE = 12;
@@ -31,8 +35,14 @@ const REACH = 4.5;
 const BREAK_COOLDOWN = 0.25;
 const PLACE_COOLDOWN = 0.22;
 
-/** 快捷栏方块（数字键 1-9） */
-const HOTBAR: readonly number[] = [
+/**
+ * 开发期初始物资：补齐各色基础方块，便于立刻验证玩法。
+ * 生存模式（I1）接入后这里应当清空，改为从世界采集。
+ */
+/** 界面打开时喂给物理的空输入，让玩家原地停住而不是保持上一帧的速度 */
+const IDLE_INPUT: PlayerInput = { forward: 0, strafe: 0, jump: false, sneak: false, sprint: false };
+
+const STARTING_HOTBAR: readonly number[] = [
   Block.GRASS_BLOCK,
   Block.DIRT,
   Block.STONE,
@@ -55,6 +65,11 @@ class App {
   private readonly skyColor: THREE.Color;
   private readonly outline = new BlockOutline();
   private readonly physics = new PlayerPhysics();
+  private readonly inventory = new Inventory();
+  private readonly inventoryScreen: InventoryScreen;
+  /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
+  private uiOpen = false;
+  private readonly hotbarSlots: HTMLDivElement[] = [];
 
   /** 一天中的时刻 [0,1)：0 = 日出，0.25 = 正午，0.5 = 日落，0.75 = 午夜 */
   private timeOfDay = 0.12;
@@ -92,7 +107,7 @@ class App {
     container: HTMLElement,
     private readonly debugEl: HTMLElement,
     private readonly overlayEl: HTMLElement,
-    atlas: TextureAtlas,
+    private readonly atlas: TextureAtlas,
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -134,9 +149,38 @@ class App {
       },
     };
 
-    this.buildHotbar(atlas);
+    this.buildHotbar();
+    this.inventoryScreen = new InventoryScreen(atlas, this.inventory, {
+      onOpenChange: (open) => this.handleInventoryOpen(open),
+    });
+    this.inventory.onChange = () => {
+      this.refreshHotbar();
+      this.inventoryScreen.refresh();
+    };
+
+    // 开发期初始物资（见 STARTING_HOTBAR 注释）
+    for (const blockId of STARTING_HOTBAR) this.inventory.add(blockId, 64);
+
     this.bindEvents();
     this.refreshWorld(0, 0, true);
+  }
+
+  /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
+  private handleInventoryOpen(open: boolean): void {
+    this.uiOpen = open;
+    this.keys.clear();
+    this.leftDown = false;
+    this.rightDown = false;
+
+    if (open) {
+      if (document.pointerLockElement) document.exitPointerLock();
+      this.outline.hide();
+    } else {
+      const result = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
+      result?.catch(() => {
+        /* 浏览器可能拒绝自动重新锁定，玩家点击画面即可 */
+      });
+    }
   }
 
   // ---------------------------------------------------------------- 环境
@@ -182,51 +226,71 @@ class App {
 
   // ---------------------------------------------------------------- 快捷栏
 
-  private buildHotbar(atlas: TextureAtlas): void {
+  private buildHotbar(): void {
     const container = document.getElementById('hotbar');
     if (!container) return;
     container.replaceChildren();
+    this.hotbarSlots.length = 0;
 
-    HOTBAR.forEach((blockId, index) => {
+    for (let index = 0; index < HOTBAR_SIZE; index++) {
       const slot = document.createElement('div');
       slot.className = 'slot';
       slot.dataset.index = String(index);
 
       const icon = document.createElement('canvas');
+      icon.className = 'icon';
       icon.width = 32;
       icon.height = 32;
-      const ctx = icon.getContext('2d');
-      if (ctx) {
-        ctx.imageSmoothingEnabled = false;
-        const tile = blockDef(blockId).tiles[2];
-        const column = atlas.tileIndex(tile);
-        ctx.drawImage(atlas.canvas, column * 16, 0, 16, 16, 0, 0, 32, 32);
-      }
       slot.appendChild(icon);
+
+      const count = document.createElement('span');
+      count.className = 'count';
+      slot.appendChild(count);
 
       const label = document.createElement('span');
       label.className = 'index';
       label.textContent = String(index + 1);
       slot.appendChild(label);
 
-      slot.title = blockDef(blockId).name;
       container.appendChild(slot);
-    });
+      this.hotbarSlots.push(slot);
+    }
 
-    this.updateHotbarHighlight();
+    this.refreshHotbar();
   }
 
-  private updateHotbarHighlight(): void {
-    const container = document.getElementById('hotbar');
-    if (!container) return;
-    for (const child of Array.from(container.children)) {
-      const element = child as HTMLElement;
-      element.classList.toggle('active', Number(element.dataset.index) === this.hotbarIndex);
+  /** 快捷栏直接反映背包的 0-8 号槽位 */
+  private refreshHotbar(): void {
+    for (let index = 0; index < this.hotbarSlots.length; index++) {
+      const slot = this.hotbarSlots[index]!;
+      const stack = this.inventory.get(index);
+      const icon = slot.querySelector('canvas') as HTMLCanvasElement;
+      const count = slot.querySelector('.count') as HTMLSpanElement;
+
+      if (stack) {
+        drawItemIcon(icon, this.atlas, stack.id, 32);
+        icon.style.visibility = 'visible';
+        count.textContent = stack.count > 1 ? String(stack.count) : '';
+        slot.title = itemName(stack.id);
+      } else {
+        icon.style.visibility = 'hidden';
+        count.textContent = '';
+        slot.title = '';
+      }
+      slot.classList.toggle('active', index === this.hotbarIndex);
     }
   }
 
-  private get selectedBlock(): number {
-    return HOTBAR[this.hotbarIndex] ?? Block.STONE;
+  /** 当前手持方块；手上不是可放置物品时返回 undefined */
+  private get selectedBlock(): number | undefined {
+    const stack = this.inventory.get(this.hotbarIndex);
+    if (!stack) return undefined;
+    return blockForItem(stack.id);
+  }
+
+  private get heldName(): string {
+    const stack = this.inventory.get(this.hotbarIndex);
+    return stack ? `${itemName(stack.id)} ×${stack.count}` : '空';
   }
 
   // ---------------------------------------------------------------- 输入
@@ -235,12 +299,18 @@ class App {
     document.addEventListener('keydown', (e) => {
       if (e.code === 'Tab') e.preventDefault();
       this.keys.add(e.code);
+      if (e.code === 'KeyE') {
+        e.preventDefault();
+        this.inventoryScreen.toggle();
+        return;
+      }
+      if (this.uiOpen) return;
       if (e.code === 'KeyF') this.flying = !this.flying;
       if (e.code.startsWith('Digit')) {
         const digit = Number(e.code.slice(5));
-        if (digit >= 1 && digit <= HOTBAR.length) {
+        if (digit >= 1 && digit <= HOTBAR_SIZE) {
           this.hotbarIndex = digit - 1;
-          this.updateHotbarHighlight();
+          this.refreshHotbar();
         }
       }
     });
@@ -306,6 +376,12 @@ class App {
   // ---------------------------------------------------------------- 方块交互
 
   private updateInteraction(dt: number): void {
+    if (this.uiOpen) {
+      this.hit = null;
+      this.outline.hide();
+      return;
+    }
+
     const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
     this.hit = raycastVoxels(
       (x, y, z) => this.world.isSelectable(x, y, z),
@@ -351,7 +427,13 @@ class App {
     this.breakProgress += required <= 0 ? 1 : dt / required;
     if (this.breakProgress < 1) return;
 
+    const brokenId = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
+
+    // 掉落直接进背包（掉落物实体与拾取动画在 I3 实现）
+    const drop = dropFor(brokenId);
+    if (drop) this.inventory.add(drop.id, drop.count);
+
     this.breakProgress = 0;
     this.breakingKey = '';
     this.breakCooldown = BREAK_COOLDOWN;
@@ -370,6 +452,9 @@ class App {
   private updatePlacing(): void {
     if (!this.rightDown || !this.hit || this.placeCooldown > 0) return;
 
+    const blockId = this.selectedBlock;
+    if (blockId === undefined) return;
+
     const x = this.hit.x + this.hit.nx;
     const y = this.hit.y + this.hit.ny;
     const z = this.hit.z + this.hit.nz;
@@ -378,8 +463,9 @@ class App {
     if (existing !== Block.AIR && !blockDef(existing).liquid) return;
     if (this.physics.blockIntersects(x, y, z)) return;
 
-    if (this.world.setBlockAndUpdate(x, y, z, this.selectedBlock)) {
+    if (this.world.setBlockAndUpdate(x, y, z, blockId)) {
       this.placeCooldown = PLACE_COOLDOWN;
+      this.inventory.consume(blockId, 1);
     }
   }
 
@@ -460,7 +546,7 @@ class App {
       `朝向: ${facing}   时间: ${clock}   模式: ${this.flying ? '创造(飞行)' : '生存'}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
-      `持有: ${blockDef(this.selectedBlock).name.replace('minecraft:', '')}\n` +
+      `持有: ${this.heldName}\n` +
       `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   待生成: ${this.world.pendingCount}`;
   }
 
@@ -471,7 +557,7 @@ class App {
       this.lastTime = now;
 
       this.tryResolveSpawn();
-      this.physics.update(this.world, this.collectInput(), this.yaw, dt, this.flying);
+      this.physics.update(this.world, this.uiOpen ? IDLE_INPUT : this.collectInput(), this.yaw, dt, this.flying);
 
       this.camera.position.set(this.physics.x, this.physics.eyeY, this.physics.z);
       this.camera.rotation.set(this.pitch, this.yaw, 0);
@@ -543,9 +629,22 @@ class App {
   }
 
   selectSlot(index: number): void {
-    if (index < 0 || index >= HOTBAR.length) return;
+    if (index < 0 || index >= HOTBAR_SIZE) return;
     this.hotbarIndex = index;
-    this.updateHotbarHighlight();
+    this.refreshHotbar();
+  }
+
+  /** 查看/操作背包（自动化测试用） */
+  get items(): Inventory {
+    return this.inventory;
+  }
+
+  toggleInventory(): void {
+    this.inventoryScreen.toggle();
+  }
+
+  get isInventoryOpen(): boolean {
+    return this.uiOpen;
   }
 
   /** 模拟按住左键（用于自动化测试破坏方块） */

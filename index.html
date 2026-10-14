@@ -79,6 +79,64 @@
       }
       #break-progress.on { display: block; }
       #break-progress i { display: block; height: 100%; width: 0; background: #e8e8e8; }
+
+      #hotbar .slot .count {
+        position: absolute; right: 2px; bottom: 0; font-size: 12px; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+      #hotbar .slot .icon { width: 32px; height: 32px; visibility: hidden; }
+
+      /* ---------------- 背包界面 ---------------- */
+      #inventory-screen {
+        position: fixed; inset: 0; z-index: 10;
+        display: grid; place-items: center;
+        background: rgba(0, 0, 0, .55);
+      }
+      #inventory-screen.hidden { display: none; }
+
+      .inv-panel {
+        background: #c6c6c6;
+        border: 3px solid #565656; border-radius: 4px;
+        padding: 14px 16px;
+        max-width: 660px; max-height: 88vh; overflow-y: auto;
+      }
+      .inv-header {
+        display: flex; justify-content: space-between; align-items: baseline; gap: 18px;
+        color: #2b2b2b; font-size: 14px; margin-bottom: 6px;
+      }
+      .inv-header kbd {
+        padding: 0 4px; border: 1px solid #777; border-radius: 3px;
+        background: #e6e6e6; font-size: 12px;
+      }
+      .inv-label { color: #3a3a3a; font-size: 12px; margin: 12px 0 5px; }
+
+      .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 3px; }
+      .inv-grid.inv-creative { grid-template-columns: repeat(12, 34px); gap: 2px; }
+      .inv-slot {
+        position: relative; width: 42px; height: 42px;
+        display: grid; place-items: center;
+        background: #8b8b8b;
+        border: 2px solid;
+        border-color: #373737 #ffffff #ffffff #373737;
+      }
+      .inv-grid.inv-creative .inv-slot { width: 34px; height: 34px; }
+      .inv-slot canvas { width: 36px; height: 36px; image-rendering: pixelated; }
+      .inv-grid.inv-creative .inv-slot canvas { width: 28px; height: 28px; }
+      .inv-count {
+        position: absolute; right: 2px; bottom: 0; font-size: 12px; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
+
+      #inv-held {
+        position: fixed; z-index: 11; pointer-events: none;
+        transform: translate(-50%, -50%); display: none;
+      }
+      #inv-held.on { display: block; }
+      #inv-held canvas { width: 32px; height: 32px; image-rendering: pixelated; display: block; }
+      #inv-held span {
+        position: absolute; right: -2px; bottom: -2px; font-size: 12px; color: #fff;
+        text-shadow: 1px 1px 0 #000;
+      }
     </style>
   </head>
   <body>
