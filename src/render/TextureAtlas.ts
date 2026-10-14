@@ -68,6 +68,12 @@ export const TILE_ORDER = [
   'item_diamond',
   'item_emerald',
   'item_stick',
+  'crafting_table_top',
+  'crafting_table_side',
+  'furnace_top',
+  'furnace_side',
+  'chest_top',
+  'chest_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
@@ -213,16 +219,18 @@ const STICK_PAINTER: Painter = (x, y, rng) => {
   return [clamp255(v * 1.1), clamp255(v * 0.78), clamp255(v * 0.42), 255];
 };
 
+/** 鹅卵石：按 4×4 分块取随机灰阶，块间留暗缝（熔炉侧面也复用它） */
+const cobblestonePainter: Painter = (x, y, rng) => {
+  const key = (y >> 2) * 4 + (x >> 2);
+  const gray = 100 + (hashString(`cob${key}`) % 60);
+  const edge = x % 4 === 0 || y % 4 === 0 ? -18 : 0;
+  const v = gray + edge + (rng() * 10 - 5);
+  return [clamp255(v), clamp255(v), clamp255(v), 255];
+};
+
 const PAINTERS: Record<string, Painter> = {
   stone: STONE_BASE(),
-  cobblestone: (x, y, rng) => {
-    // 大块鹅卵石：按 4×4 分块取随机灰阶，块间留暗缝
-    const key = (y >> 2) * 4 + (x >> 2);
-    const g = 100 + (hashString('cob' + key) % 60);
-    const edge = x % 4 === 0 || y % 4 === 0 ? -18 : 0;
-    const v = g + edge + (rng() * 10 - 5);
-    return [clamp255(v), clamp255(v), clamp255(v), 255];
-  },
+  cobblestone: cobblestonePainter,
   dirt: layered(134, 8, 9, [1.0, 0.85, 0.68]),
   sand: layered(220, 6, 6, [1.0, 0.96, 0.78]),
   grass_top: layered(148, 7, 10, [0.62, 1.0, 0.42]),
@@ -402,6 +410,60 @@ const PAINTERS: Record<string, Painter> = {
     'iemerald',
   ),
   item_stick: STICK_PAINTER,
+
+  // ---- 功能方块
+  crafting_table_top: (x, y, rng) => {
+    const base = layered(150, 8, 8, [1.05, 0.82, 0.5])(x, y, rng);
+    // 面板上的九宫格刻线
+    const gridLine = x === 0 || y === 0 || x === 15 || y === 15 || x % 5 === 0 || y % 5 === 0;
+    if (!gridLine) return base;
+    const v = 118 + (rng() * 12 - 6);
+    return [clamp255(v * 1.05), clamp255(v * 0.8), clamp255(v * 0.48), 255];
+  },
+  crafting_table_side: (x, y, rng) => {
+    const base = layered(146, 8, 8, [1.05, 0.8, 0.48])(x, y, rng);
+    // 侧面画一道工具箱似的横档
+    if (y >= 4 && y <= 6) {
+      const v = 122 + (rng() * 10 - 5);
+      return [clamp255(v * 1.02), clamp255(v * 0.76), clamp255(v * 0.46), 255];
+    }
+    return base;
+  },
+  furnace_top: (x, y, rng) => {
+    const base = layered(122, 9, 8)(x, y, rng);
+    const distance = Math.hypot(x - 7.5, y - 7.5);
+    if (distance > 3.4) return base;
+    const v = 58 + rng() * 18;
+    return [clamp255(v), clamp255(v), clamp255(v), 255];
+  },
+  furnace_side: (x, y, rng) => {
+    const base = cobblestonePainter(x, y, rng);
+    // 正面炉口的暗色开口
+    if (x >= 3 && x <= 12 && y >= 6 && y <= 12) {
+      const v = 46 + rng() * 20;
+      return [clamp255(v * 1.1), clamp255(v * 0.9), clamp255(v * 0.8), 255];
+    }
+    return base;
+  },
+  chest_top: (x, y, rng) => {
+    const base = layered(140, 7, 7, [1.1, 0.78, 0.44])(x, y, rng);
+    if (x === 0 || y === 0 || x === 15 || y === 15) {
+      return [clamp255(88), clamp255(58), clamp255(30), 255];
+    }
+    return base;
+  },
+  chest_side: (x, y, rng) => {
+    const base = layered(140, 7, 7, [1.1, 0.78, 0.44])(x, y, rng);
+    if (x === 0 || y === 0 || x === 15 || y === 15) {
+      return [clamp255(88), clamp255(58), clamp255(30), 255];
+    }
+    // 中间的金属锁扣
+    if (x >= 6 && x <= 9 && y >= 4 && y <= 8) {
+      const v = 176 + rng() * 22;
+      return [clamp255(v), clamp255(v * 0.92), clamp255(v * 0.62), 255];
+    }
+    return base;
+  },
 };
 
 export class TextureAtlas {

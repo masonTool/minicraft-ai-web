@@ -18,6 +18,14 @@ export interface ItemStack {
   count: number;
 }
 
+/**
+ * 槽位数据源：让界面里的拖拽逻辑对"背包"和"合成网格"一视同仁。
+ */
+export interface SlotSource {
+  get(index: number): ItemStack | null;
+  set(index: number, stack: ItemStack | null): void;
+}
+
 export const HOTBAR_START = 0;
 export const HOTBAR_SIZE = 9;
 export const MAIN_START = 9;
@@ -27,7 +35,7 @@ export const ARMOR_SIZE = 4;
 export const OFFHAND_SLOT = 40;
 export const TOTAL_SLOTS = 41;
 
-export class Inventory {
+export class Inventory implements SlotSource {
   private readonly slots: (ItemStack | null)[] = new Array<ItemStack | null>(TOTAL_SLOTS).fill(null);
 
   /** 槽位内容变化时触发（UI 刷新用） */

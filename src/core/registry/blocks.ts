@@ -135,6 +135,11 @@ const SPECS: readonly BlockSpec[] = [
     name: 'minecraft:deepslate_emerald_ore',
     tiles: ['deepslate_emerald_ore', 'deepslate_emerald_ore', 'deepslate_emerald_ore'],
   },
+
+  // ---- 功能方块
+  { id: 43, name: 'minecraft:crafting_table', tiles: ['crafting_table_top', 'oak_planks', 'crafting_table_side'] },
+  { id: 44, name: 'minecraft:furnace', tiles: ['furnace_top', 'furnace_top', 'furnace_side'] },
+  { id: 45, name: 'minecraft:chest', tiles: ['chest_top', 'chest_top', 'chest_side'] },
 ];
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -182,6 +187,9 @@ export const Block = {
   DEEPSLATE_LAPIS_ORE: 40,
   DEEPSLATE_DIAMOND_ORE: 41,
   DEEPSLATE_EMERALD_ORE: 42,
+  CRAFTING_TABLE: 43,
+  FURNACE: 44,
+  CHEST: 45,
 } as const;
 
 /** 按 id 索引的方块定义表 */
@@ -254,6 +262,10 @@ const HARDNESS = new Map<number, number>([
   [Block.ICE, 0.5],
   [Block.PACKED_ICE, 0.5],
   [Block.GLOWSTONE, 0.3],
+
+  [Block.CRAFTING_TABLE, 2.5],
+  [Block.FURNACE, 3.5],
+  [Block.CHEST, 2.5],
 ]);
 
 /** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
@@ -272,6 +284,9 @@ const HAND_HARVESTABLE = new Set<number>([
   Block.ICE,
   Block.PACKED_ICE,
   Block.GLOWSTONE,
+  // 木质方块徒手可采集；熔炉需要镐，所以不在列表里
+  Block.CRAFTING_TABLE,
+  Block.CHEST,
 ]);
 
 export function blockHardness(id: number): number {

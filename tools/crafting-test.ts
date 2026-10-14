@@ -1,0 +1,157 @@
+/**
+ * 合成系统离线测试
+ *
+ * 运行：npm run test:crafting
+ */
+
+import { Block } from '../src/core/registry/blocks.ts';
+import { Item } from '../src/core/registry/items.ts';
+import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { CraftingGrid } from '../src/core/crafting/CraftingGrid.ts';
+import { Inventory } from '../src/core/container/Inventory.ts';
+
+let passed = 0;
+let failed = 0;
+
+function check(label: string, condition: boolean, detail = ''): void {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${label}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
+  }
+}
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
+
+const P = Block.OAK_PLANKS;
+const LOG = Block.OAK_LOG;
+const COBBLE = Block.COBBLESTONE;
+
+/** 构造 size×size 的扁平网格，'·' 表示空 */
+function grid(size: 2 | 3, rows: readonly string[], legend: Record<string, number>): number[] {
+  const cells = new Array<number>(size * size).fill(0);
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r]!;
+    for (let c = 0; c < row.length; c++) {
+      const ch = row[c]!;
+      if (ch === '·') continue;
+      cells[r * size + c] = legend[ch] ?? 0;
+    }
+  }
+  return cells;
+}
+
+const L = { P, L: LOG, C: COBBLE };
+
+console.log('\n[有序配方：最小包围盒归一化]');
+{
+  // 2×2 木板放在 2×2 网格的左上
+  const inCorner = grid(2, ['PP', 'PP'], L);
+  const result = matchRecipe(inCorner, 2);
+  equal('2×2 木板 → 工作台', result?.id, Block.CRAFTING_TABLE);
+
+  // 同样的 2×2 图案放在 3×3 网格的右下角（第 2-3 行 / 第 2-3 列）
+  const offset = grid(3, ['···', '·PP', '·PP'], L);
+  const offsetResult = matchRecipe(offset, 3);
+  equal('3×3 网格右下角的 2×2 图案也能合成工作台', offsetResult?.id, Block.CRAFTING_TABLE);
+
+  // 材料不足
+  const incomplete = grid(2, ['PP', 'P·'], L);
+  equal('缺一格不匹配', matchRecipe(incomplete, 2), null);
+
+  // 形状不对（摆成一行）
+  const line = grid(2, ['PP', '··'], L);
+  equal('摆成一行不匹配工作台', matchRecipe(line, 2), null);
+}
+
+console.log('\n[有序配方：3×3 环形]');
+{
+  const chest = grid(3, ['PPP', 'P·P', 'PPP'], L);
+  equal('8 木板围一圈 → 箱子', matchRecipe(chest, 3)?.id, Block.CHEST);
+
+  const furnace = grid(3, ['CCC', 'C·C', 'CCC'], L);
+  equal('8 圆石围一圈 → 熔炉', matchRecipe(furnace, 3)?.id, Block.FURNACE);
+
+  // 3×3 配方在 2×2 网格里放不下（4 圆石既不是熔炉也不是工作台）
+  const tooSmall = grid(2, ['CC', 'CC'], L);
+  check('2×2 网格无法完成 3×3 配方', matchRecipe(tooSmall, 2) === null);
+
+  // 中间也填满 → 不再是环形
+  const solid = grid(3, ['PPP', 'PPP', 'PPP'], L);
+  equal('填满 9 格不匹配箱子', matchRecipe(solid, 3), null);
+}
+
+console.log('\n[有序配方：竖直木棍]');
+{
+  const sticks = grid(2, ['P·', 'P·'], L);
+  equal('2 木板竖排 → 4 木棍', matchRecipe(sticks, 2)?.id, Item.STICK);
+  equal('木棍产量 4', matchRecipe(sticks, 2)?.count, 4);
+
+  // 木棍的图案是 2 行 1 列，横排是 1 行 2 列，镜像也不会变成竖排
+  const horizontal = grid(2, ['PP', '··'], L);
+  check('横排木板不匹配木棍配方', matchRecipe(horizontal, 2) === null);
+}
+
+console.log('\n[无序配方]');
+{
+  const single = grid(2, ['L·', '··'], L);
+  const result = matchRecipe(single, 2);
+  equal('1 原木 → 木板', result?.id, P);
+  equal('木板产量 4', result?.count, 4);
+
+  const corner = grid(2, ['··', '·L'], L);
+  equal('原木放任意位置都能合成（无序）', matchRecipe(corner, 2)?.id, P);
+
+  const two = grid(2, ['LL', '··'], L);
+  equal('2 原木不匹配（配方只吃 1 个）', matchRecipe(two, 2), null);
+
+  const empty = grid(2, ['··', '··'], L);
+  equal('空网格无产物', matchRecipe(empty, 2), null);
+}
+
+console.log('\n[合成网格：取出产物消耗材料]');
+{
+  const inventory = new Inventory();
+  const gridModel = new CraftingGrid(2);
+  gridModel.set(0, { id: P, count: 5 });
+  gridModel.set(1, { id: P, count: 5 });
+  gridModel.set(2, { id: P, count: 5 });
+  gridModel.set(3, { id: P, count: 5 });
+
+  equal('4 格木板 → 工作台', gridModel.result?.id, Block.CRAFTING_TABLE);
+  check('取出产物成功', gridModel.takeResult());
+  equal('合成一次后每格剩 4 个', gridModel.get(0)?.count, 4);
+  equal('产物仍是工作台（材料还够）', gridModel.result?.id, Block.CRAFTING_TABLE);
+
+  // 只放一格木板：不匹配
+  const partial = new CraftingGrid(2);
+  partial.set(0, { id: P, count: 1 });
+  equal('单格木板无产物', partial.result, null);
+
+  gridModel.drainTo(inventory);
+  check('收起网格后材料回到背包', gridModel.isEmpty);
+  equal('背包中共 16 个木板', inventory.countOf(P), 16);
+}
+
+console.log('\n[合成网格：木棍进阶链]');
+{
+  const table = new CraftingGrid(3);
+  // 1 原木 → 4 木板
+  table.set(0, { id: LOG, count: 1 });
+  equal('第一步：原木 → 木板', table.result?.id, P);
+  equal('第一步产量 4', table.result?.count, 4);
+
+  const grid2 = new CraftingGrid(2);
+  grid2.set(0, { id: P, count: 1 });
+  grid2.set(2, { id: P, count: 1 });
+  equal('第二步：2 木板竖排 → 木棍', grid2.result?.id, Item.STICK);
+
+  equal('配方表规模', RECIPES.length, 5);
+}
+
+console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
+process.exit(failed === 0 ? 0 : 1);
