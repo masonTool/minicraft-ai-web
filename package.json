@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
-    "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs"
+    "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs",
+    "test:inventory": "esbuild tools/inventory-test.ts --bundle --platform=node --format=esm --outfile=.tmp/inventory-test.mjs --log-level=error && node .tmp/inventory-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

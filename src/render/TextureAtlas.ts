@@ -59,6 +59,15 @@ export const TILE_ORDER = [
   'deepslate_lapis_ore',
   'deepslate_diamond_ore',
   'deepslate_emerald_ore',
+  'item_coal',
+  'item_raw_iron',
+  'item_raw_copper',
+  'item_raw_gold',
+  'item_redstone',
+  'item_lapis',
+  'item_diamond',
+  'item_emerald',
+  'item_stick',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
@@ -169,6 +178,39 @@ const ORE_SPOTS: Record<string, readonly (readonly [number, number, number])[]> 
     [60, 220, 110],
     [40, 170, 84],
   ],
+};
+
+/**
+ * 物品图标：在 16×16 中央画一个边缘不规则的小块（原版物品图标基本都是这种"一块东西"）。
+ * 半径外返回全透明，方便 UI 直接叠在槽位上。
+ */
+function lump(colors: readonly (readonly [number, number, number])[], salt: string, radius = 5.4): Painter {
+  return (x, y, rng) => {
+    const dx = x - 7.5;
+    const dy = y - 7.5;
+    const distance = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    const wobble = 0.78 + (hashString(`${salt}a${Math.round(angle * 10)}`) % 40) / 100;
+    if (distance > radius * wobble) return [0, 0, 0, 0];
+    const base = colors[hashString(`${salt}p${x},${y}`) % colors.length]!;
+    // 边缘压暗，制造轻微立体感
+    const shade = 0.72 + 0.4 * (1 - distance / (radius * 1.8));
+    const jitter = rng() * 16 - 8;
+    return [
+      clamp255(base[0] * shade + jitter),
+      clamp255(base[1] * shade + jitter),
+      clamp255(base[2] * shade + jitter),
+      255,
+    ];
+  };
+}
+
+/** 木棍：竖直的细长条 */
+const STICK_PAINTER: Painter = (x, y, rng) => {
+  const centered = Math.abs(x - 7.5);
+  if (centered > 1.6 || y < 1 || y > 14) return [0, 0, 0, 0];
+  const v = 150 - centered * 22 + (rng() * 14 - 7);
+  return [clamp255(v * 1.1), clamp255(v * 0.78), clamp255(v * 0.42), 255];
 };
 
 const PAINTERS: Record<string, Painter> = {
@@ -299,6 +341,67 @@ const PAINTERS: Record<string, Painter> = {
   deepslate_lapis_ore: oreTexture(DEEPSLATE_BASE(), ORE_SPOTS.lapis!, 0.3, 'dlapis'),
   deepslate_diamond_ore: oreTexture(DEEPSLATE_BASE(), ORE_SPOTS.diamond!, 0.3, 'ddiamond'),
   deepslate_emerald_ore: oreTexture(DEEPSLATE_BASE(), ORE_SPOTS.emerald!, 0.28, 'demerald'),
+
+  // ---- 物品图标
+  item_coal: lump(
+    [
+      [34, 34, 36],
+      [52, 52, 56],
+    ],
+    'icoal',
+    5,
+  ),
+  item_raw_iron: lump(
+    [
+      [216, 175, 147],
+      [190, 148, 120],
+    ],
+    'iiron',
+  ),
+  item_raw_copper: lump(
+    [
+      [224, 132, 84],
+      [186, 104, 64],
+    ],
+    'icopper',
+  ),
+  item_raw_gold: lump(
+    [
+      [252, 220, 80],
+      [224, 188, 60],
+    ],
+    'igold',
+  ),
+  item_redstone: lump(
+    [
+      [200, 30, 30],
+      [148, 20, 20],
+    ],
+    'iredstone',
+    5,
+  ),
+  item_lapis: lump(
+    [
+      [40, 70, 190],
+      [28, 48, 140],
+    ],
+    'ilapis',
+  ),
+  item_diamond: lump(
+    [
+      [95, 235, 230],
+      [64, 200, 200],
+    ],
+    'idiamond',
+  ),
+  item_emerald: lump(
+    [
+      [60, 220, 110],
+      [40, 170, 84],
+    ],
+    'iemerald',
+  ),
+  item_stick: STICK_PAINTER,
 };
 
 export class TextureAtlas {
