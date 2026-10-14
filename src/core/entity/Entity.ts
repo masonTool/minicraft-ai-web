@@ -18,6 +18,14 @@ export interface EntityContext {
    * @returns 未能放入的剩余数量（0 表示全部收下）
    */
   pickup: (itemId: number, count: number) => number;
+  /** 读取方块 id（生物寻路用） */
+  getBlock: (x: number, y: number, z: number) => number;
+  /** 玩家位置（敌对生物追击用）；未加载时为 null */
+  player: { x: number; y: number; z: number } | null;
+  /** 对玩家造成伤害（生物攻击用，第二个参数是伤害来源的水平位置，用于击退方向） */
+  hurtPlayer: (amount: number, sourceX: number, sourceZ: number) => void;
+  /** 生成掉落物实体（生物死亡掉落用） */
+  spawnDrop: (itemId: number, count: number, x: number, y: number, z: number) => void;
 }
 
 let nextEntityId = 1;

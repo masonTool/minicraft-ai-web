@@ -658,12 +658,35 @@ class App {
     this.entities.spawn(new ItemEntity(itemId, count, x, y, z));
   }
 
+  /**
+   * 生物对玩家造成伤害：结算生命值并施加击退。
+   * 创造模式（飞行）免疫；无敌帧由 PlayerStats 判断。
+   */
+  private damagePlayer(amount: number, sourceX: number, sourceZ: number): void {
+    if (this.flying) return;
+    const result = this.stats.damage(amount, 'generic');
+    if (result.applied <= 0) return;
+
+    // 沿"伤害来源 → 玩家"方向击退
+    const dx = this.physics.x - sourceX;
+    const dz = this.physics.z - sourceZ;
+    const length = Math.hypot(dx, dz) || 1;
+    this.physics.vx += (dx / length) * 6;
+    this.physics.vz += (dz / length) * 6;
+    this.physics.vy = Math.max(this.physics.vy, 4.2);
+    this.physics.onGround = false;
+  }
+
   /** 推进所有实体并同步到渲染层 */
   private updateEntities(dt: number): void {
     const context: EntityContext = {
       world: this.world,
       playerBox: this.physics.box(),
       pickup: (itemId, count) => this.inventory.add(itemId, count),
+      getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+      player: { x: this.physics.x, y: this.physics.y, z: this.physics.z },
+      hurtPlayer: (amount, sourceX, sourceZ) => this.damagePlayer(amount, sourceX, sourceZ),
+      spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),
     };
     this.entities.update(context, dt);
     // 逐实体采样光照：洞里暗、火把旁亮

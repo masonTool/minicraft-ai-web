@@ -58,6 +58,16 @@ export const Item = {
   CHARCOAL: 1012,
   BRICK: 1013,
   CLAY_BALL: 1014,
+  // ---- 生物掉落物
+  ROTTEN_FLESH: 1030,
+  BONE: 1031,
+  GUNPOWDER: 1032,
+  BEEF: 1033,
+  PORKCHOP: 1034,
+  MUTTON: 1035,
+  CHICKEN: 1036,
+  LEATHER: 1037,
+  FEATHER: 1038,
 } as const;
 
 /** 染料物品 id 起始值，顺序与 DYE_COLORS 一致 */
@@ -91,6 +101,16 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.CHARCOAL, name: 'minecraft:charcoal', tile: 'item_charcoal' },
   { id: Item.BRICK, name: 'minecraft:brick', tile: 'item_brick' },
   { id: Item.CLAY_BALL, name: 'minecraft:clay_ball', tile: 'item_clay_ball' },
+  // ---- 生物掉落物
+  { id: Item.ROTTEN_FLESH, name: 'minecraft:rotten_flesh', tile: 'item_rotten_flesh' },
+  { id: Item.BONE, name: 'minecraft:bone', tile: 'item_bone' },
+  { id: Item.GUNPOWDER, name: 'minecraft:gunpowder', tile: 'item_gunpowder' },
+  { id: Item.BEEF, name: 'minecraft:beef', tile: 'item_beef' },
+  { id: Item.PORKCHOP, name: 'minecraft:porkchop', tile: 'item_porkchop' },
+  { id: Item.MUTTON, name: 'minecraft:mutton', tile: 'item_mutton' },
+  { id: Item.CHICKEN, name: 'minecraft:chicken', tile: 'item_chicken' },
+  { id: Item.LEATHER, name: 'minecraft:leather', tile: 'item_leather' },
+  { id: Item.FEATHER, name: 'minecraft:feather', tile: 'item_feather' },
 ];
 
 /** 16 种染料，id 连续且顺序与 DYE_COLORS 一致 */

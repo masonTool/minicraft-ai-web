@@ -704,6 +704,80 @@ PAINTERS.item_clay_ball = lump(
   4.6,
 );
 
+// ---- 生物掉落物
+PAINTERS.item_rotten_flesh = lump(
+  [
+    [122, 100, 68],
+    [92, 76, 52],
+  ],
+  'irotten',
+  5.2,
+);
+PAINTERS.item_bone = lump(
+  [
+    [238, 238, 226],
+    [206, 206, 194],
+  ],
+  'ibone',
+  4.4,
+);
+PAINTERS.item_gunpowder = lump(
+  [
+    [112, 112, 118],
+    [78, 78, 84],
+  ],
+  'igunpowder',
+  5.4,
+);
+PAINTERS.item_beef = lump(
+  [
+    [196, 82, 82],
+    [150, 56, 56],
+  ],
+  'ibeef',
+  5.2,
+);
+PAINTERS.item_porkchop = lump(
+  [
+    [234, 154, 154],
+    [190, 112, 112],
+  ],
+  'ipork',
+  5.2,
+);
+PAINTERS.item_mutton = lump(
+  [
+    [186, 96, 92],
+    [140, 66, 64],
+  ],
+  'imutton',
+  5.2,
+);
+PAINTERS.item_chicken = lump(
+  [
+    [242, 210, 154],
+    [206, 170, 118],
+  ],
+  'ichicken',
+  5.2,
+);
+PAINTERS.item_leather = lump(
+  [
+    [166, 114, 68],
+    [130, 86, 48],
+  ],
+  'ileather',
+  5.0,
+);
+PAINTERS.item_feather = lump(
+  [
+    [246, 246, 252],
+    [210, 212, 226],
+  ],
+  'ifeather',
+  4.2,
+);
+
 PAINTERS.item_brick = (x, y, rng) => {
   // 小砖块：红棕色矩形 + 一点高光
   if (x < 3 || x > 12 || y < 5 || y > 11) return [0, 0, 0, 0];
