@@ -988,6 +988,31 @@ export class TextureAtlas {
     return TILE_INDEX.get(tile) ?? 0;
   }
 
+  /**
+   * 贴图在图集中的**完整**起点（未内缩）。
+   *
+   * 贪心网格化会把多个相邻的同材质面合并成一个大四边形，此时贴图必须沿面
+   * 平铺而不是拉伸。顶点属性里带上「完整起点」，着色器再用 `fract(平铺坐标)`
+   * 把插值结果映射回这一张贴图内部，就能在不越过贴图边界（不渗色）的前提下
+   * 任意次平铺。因此这里返回的是未内缩的起点，内缩交给着色器的 uniform 做。
+   */
+  tileOrigin(tile: string): [number, number] {
+    const index = TILE_INDEX.get(tile) ?? 0;
+    const cols = this.columns;
+    const rows = this.rows;
+    return [(index % cols) / cols, Math.floor(index / cols) / rows];
+  }
+
+  /** 单张贴图占图集的 UV 尺寸（所有贴图相同） */
+  get tileSpan(): [number, number] {
+    return [1 / this.columns, 1 / this.rows];
+  }
+
+  /** 归一化的半像素内缩，着色器用它把采样点限制在贴图内部 */
+  get tileInset(): number {
+    return 0.5 / TILE_SIZE;
+  }
+
   /** 返回贴图在图集中的 [u0, v0, u1, v1]，已做半像素内缩以避免图集渗色 */
   uv(tile: string): [number, number, number, number] {
     const index = TILE_INDEX.get(tile) ?? 0;

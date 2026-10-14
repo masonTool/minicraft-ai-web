@@ -16,14 +16,18 @@ import * as THREE from 'three';
 const VERTEX_SHADER = /* glsl */ `
 attribute vec2 aLight;
 attribute float aShade;
+/** 贴图在图集中的完整起点（未内缩） */
+attribute vec2 aTile;
 
 varying vec2 vUv;
+varying vec2 vTile;
 varying vec2 vLight;
 varying float vShade;
 varying float vFogDepth;
 
 void main() {
   vUv = uv;
+  vTile = aTile;
   vLight = aLight;
   vShade = aShade;
 
@@ -41,14 +45,22 @@ uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
 uniform float uAlphaTest;
+/** 单张贴图占图集的 UV 尺寸，以及半像素内缩比例 */
+uniform vec2 uTileSpan;
+uniform float uTileInset;
 
 varying vec2 vUv;
+varying vec2 vTile;
 varying vec2 vLight;
 varying float vShade;
 varying float vFogDepth;
 
 void main() {
-  vec4 texel = texture2D(uAtlas, vUv);
+  // uv 是「平铺坐标」：单面时落在 [0,1]，贪心合并出的大四边形则是 [0,w]×[0,h]。
+  // 取小数部分即可把任意大小的面都映射回同一张贴图，再叠加半像素内缩避免渗色。
+  vec2 local = fract(vUv);
+  vec2 tileUv = vTile + (uTileInset + local * (1.0 - 2.0 * uTileInset)) * uTileSpan;
+  vec4 texel = texture2D(uAtlas, tileUv);
   if (texel.a < uAlphaTest) discard;
 
   float level = max(vLight.x * uSkyBrightness, vLight.y);
@@ -66,6 +78,10 @@ void main() {
 export interface VoxelMaterialOptions {
   /** 半透明层：关闭 alphaTest、开启混合、不写深度 */
   translucent?: boolean;
+  /** 单张贴图占图集的 UV 尺寸（默认整张图集 = 一张贴图） */
+  tileSpan?: readonly [number, number];
+  /** 半像素内缩比例 */
+  tileInset?: number;
 }
 
 export class VoxelMaterial {
@@ -74,6 +90,7 @@ export class VoxelMaterial {
 
   constructor(atlas: THREE.Texture, options: VoxelMaterialOptions = {}) {
     const translucent = options.translucent ?? false;
+    const span = options.tileSpan ?? [1, 1];
 
     this.uniforms = {
       uAtlas: { value: atlas },
@@ -83,6 +100,8 @@ export class VoxelMaterial {
       uFogNear: { value: 120 },
       uFogFar: { value: 160 },
       uAlphaTest: { value: translucent ? 0 : 0.5 },
+      uTileSpan: { value: new THREE.Vector2(span[0], span[1]) },
+      uTileInset: { value: options.tileInset ?? 0 },
     };
 
     this.material = new THREE.ShaderMaterial({

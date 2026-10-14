@@ -1,7 +1,13 @@
 /**
  * 区块网格化
  *
- * 当前实现：
+ * 流程：
+ *  1. **贪心网格化**：完整立方体方块的 6 个面按「贴图 + 4 个顶点的光照/AO」分组，
+ *     在每一层切片上做二维矩形合并，把 n×m 个面塌成一个四边形。
+ *     平坦地形（草地、沙漠、岩石面）因此能省下大量三角形。
+ *  2. 非完整方块（台阶 / 楼梯 / 栅栏 / 墙 / 门 / 火把 / 梯子 / 玻璃板）仍逐个盒子输出。
+ *
+ * 其余特性不变：
  *  - 面剔除：只为与空气/非遮挡方块相邻的面生成三角形
  *  - 环境光遮蔽（AO）：顶点级明暗，还原方块交界处的"阴影缝"
  *  - 平滑光照：每个顶点取周围 4 个格子的光照平均值，消除方块间的硬边
@@ -11,8 +17,12 @@
  *  - solid       ：不透光方块 + 使用 alphaTest 的镂空方块（树叶）
  *  - translucent ：水、玻璃（需要混合与排序）
  *
- * 顶点属性：position(3) / uv(2) / aLight(2: 天光,方块光 归一化) / aShade(1: 方向阴影 × AO)
- * 亮度由着色器按"光照等级 → 曲线"换算，因此昼夜变化只需改一个 uniform，无需重建网格。
+ * 顶点属性：position(3) / uv(2: **平铺坐标**) / aTile(2: 图集内贴图起点) /
+ *          aLight(2: 天光,方块光 归一化) / aShade(1: 方向阴影 × AO)
+ *
+ * ⚠️ uv 的语义是「平铺坐标」而不是「图集 UV」：单面时落在 [0,1]，贪心合并出的
+ * 大四边形则是 [0,w]×[0,h]。着色器取小数部分再叠加半像素内缩，就能把任何尺寸的
+ * 面都正确映射回同一张贴图。这也是为什么这里要额外传一个 aTile。
  */
 
 import * as THREE from 'three';
@@ -26,7 +36,13 @@ import {
 } from '../registry/blockShapes.ts';
 import { FACING_OFFSET, type Facing } from '../registry/blockState.ts';
 import { Chunk, SECTION_HEIGHT, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
-import type { TextureAtlas } from '../../render/TextureAtlas.ts';
+/**
+ * 网格化只需要「贴图在图集中的起点」这一点信息，所以这里只依赖一个最小接口。
+ * 好处是离线测试（无 DOM，造不出 TextureAtlas）也能用假实现跑网格化。
+ */
+export interface TileUvSource {
+  tileOrigin(tile: string): [number, number];
+}
 
 export type RenderLayer = 'solid' | 'translucent';
 
@@ -41,6 +57,11 @@ export interface MeshContext {
 
 /** 完整方块的盒子，供统一的面输出函数使用 */
 const UNIT_BOX: LocalBox = [0, 0, 0, 1, 1, 1];
+
+/** 面法线所在的轴 */
+function axisOf(dir: readonly [number, number, number]): 0 | 1 | 2 {
+  return dir[0] !== 0 ? 0 : dir[1] !== 0 ? 1 : 2;
+}
 
 interface FaceCorner {
   pos: readonly [number, number, number];
@@ -70,7 +91,7 @@ function aoOffsetsFor(
   dir: readonly [number, number, number],
   pos: readonly [number, number, number],
 ): FaceCorner['aoOffsets'] {
-  const axis = dir[0] !== 0 ? 0 : dir[1] !== 0 ? 1 : 2;
+  const axis = axisOf(dir);
   const perp: number[] = [0, 1, 2].filter((a) => a !== axis);
   const u = perp[0]!;
   const v = perp[1]!;
@@ -183,6 +204,50 @@ const FACES: readonly Face[] = RAW_FACES.map((face) => ({
   })) as unknown as Face['corners'],
 }));
 
+/** uv 的某个分量对应哪个轴、正向还是反向 */
+interface UvAxis {
+  axis: 0 | 1 | 2;
+  sign: 1 | -1;
+}
+
+/**
+ * 贪心合并时需要用「轴跨度」缩放 uv，所以必须知道 uv 的两个分量各自沿哪个轴。
+ * 这个对应关系在不同面上并不一致（+Y 面的 uv.x 沿 +X，而 -X 面的 uv.x 沿 +Z），
+ * 所以不能写死，必须在模块加载时从面定义本身推导出来。
+ */
+interface FaceLayout {
+  axis: 0 | 1 | 2;
+  uAxis: 0 | 1 | 2;
+  vAxis: 0 | 1 | 2;
+  positive: boolean;
+  uv0: UvAxis;
+  uv1: UvAxis;
+}
+
+function deriveUvAxis(face: (typeof RAW_FACES)[number], component: 0 | 1, candidates: readonly (0 | 1 | 2)[]): UvAxis {
+  for (const axis of candidates) {
+    if (face.corners.every((corner) => corner.uv[component] === corner.pos[axis])) return { axis, sign: 1 };
+    if (face.corners.every((corner) => corner.uv[component] === 1 - corner.pos[axis])) return { axis, sign: -1 };
+  }
+  throw new Error('无法从面定义推导 UV 轴');
+}
+
+const LAYOUTS: readonly FaceLayout[] = FACES.map((face, index) => {
+  const raw = RAW_FACES[index]!;
+  const axis = axisOf(face.dir);
+  const perp = [0, 1, 2].filter((a) => a !== axis) as (0 | 1 | 2)[];
+  const uAxis = perp[0]!;
+  const vAxis = perp[1]!;
+  return {
+    axis,
+    uAxis,
+    vAxis,
+    positive: face.dir[axis]! > 0,
+    uv0: deriveUvAxis(raw, 0, [uAxis, vAxis]),
+    uv1: deriveUvAxis(raw, 1, [uAxis, vAxis]),
+  };
+});
+
 function layerOf(id: number): RenderLayer {
   return blockDef(id).translucent ? 'translucent' : 'solid';
 }
@@ -190,13 +255,14 @@ function layerOf(id: number): RenderLayer {
 interface LayerBuffer {
   pos: number[];
   uv: number[];
+  tile: number[];
   light: number[];
   shade: number[];
   idx: number[];
 }
 
 function newBuffer(): LayerBuffer {
-  return { pos: [], uv: [], light: [], shade: [], idx: [] };
+  return { pos: [], uv: [], tile: [], light: [], shade: [], idx: [] };
 }
 
 export interface MeshResult {
@@ -208,75 +274,298 @@ interface EmitContext {
   buf: LayerBuffer;
   def: BlockDef;
   isTranslucent: boolean;
-  atlas: TextureAtlas;
+  atlas: TileUvSource;
   ctx: MeshContext;
   originX: number;
   originZ: number;
   sampleBlock: (x: number, y: number, z: number) => number;
 }
 
+/** 一个顶点最终的光照/AO（光照用 4 个采样的**和**表示，便于按整数比较） */
+interface CornerLight {
+  skySum: number;
+  blkSum: number;
+  /** AO 等级下标（0 最暗 / 3 最亮）；半透明面固定为 3（不做 AO） */
+  ao: number;
+}
+
 /**
- * 输出一个面的 4 个顶点。
+ * 计算一个面某个顶点的光照与 AO。
+ * 单面输出和贪心合并共用这段逻辑，保证两条路径的明暗完全一致。
+ */
+function cornerLighting(
+  ctx: MeshContext,
+  originX: number,
+  originZ: number,
+  sampleBlock: (x: number, y: number, z: number) => number,
+  isTranslucent: boolean,
+  x: number,
+  y: number,
+  z: number,
+  worldY: number,
+  face: Face,
+  corner: FaceCorner,
+): CornerLight {
+  const [dx, dy, dz] = face.dir;
+  const nx = x + dx;
+  const nz = z + dz;
+
+  if (isTranslucent) {
+    // 流体不做 AO，避免水面出现栅格状阴影
+    const sky = ctx.getSkyLight(originX + nx, worldY + dy, originZ + nz);
+    const blk = ctx.getBlockLight(originX + nx, worldY + dy, originZ + nz);
+    return { skySum: sky * 4, blkSum: blk * 4, ao: 3 };
+  }
+
+  const [o1, o2, o3] = corner.aoOffsets;
+  const b1 = sampleBlock(x + o1[0], y + o1[1], z + o1[2]);
+  const b2 = sampleBlock(x + o2[0], y + o2[1], z + o2[2]);
+  const b3 = sampleBlock(x + o3[0], y + o3[1], z + o3[2]);
+  const o1o = blockDef(b1).opaque ? 1 : 0;
+  const o2o = blockDef(b2).opaque ? 1 : 0;
+  const o3o = blockDef(b3).opaque ? 1 : 0;
+
+  // AO 等级：两邻边同时遮挡时取最暗
+  const aoIndex = o1o === 1 && o2o === 1 ? 0 : 3 - (o1o + o2o + o3o);
+
+  // 平滑光照：4 个采样格取平均；被遮挡的格子用中心格光照替代，避免硬缝
+  const l0 = lightOf(ctx, originX + nx, worldY + dy, originZ + nz);
+  const l1 = o1o === 1 ? l0 : lightOf(ctx, originX + x + o1[0], worldY + o1[1], originZ + z + o1[2]);
+  const l2 = o2o === 1 ? l0 : lightOf(ctx, originX + x + o2[0], worldY + o2[1], originZ + z + o2[2]);
+  const l3 =
+    o1o === 1 && o2o === 1
+      ? l0
+      : o3o === 1
+        ? ([Math.min(l1[0], l2[0]), Math.min(l1[1], l2[1])] as const)
+        : lightOf(ctx, originX + x + o3[0], worldY + o3[1], originZ + z + o3[2]);
+
+  return { skySum: l0[0] + l1[0] + l2[0] + l3[0], blkSum: l0[1] + l1[1] + l2[1] + l3[1], ao: aoIndex };
+}
+
+/**
+ * 输出一个面的 4 个顶点（非贪心路径）。
  *
  * box 是该面所属盒子的局部范围（完整方块为 [0,0,0,1,1,1]），顶点坐标按盒子尺寸插值，
  * 因此同一套面定义既能画完整立方体，也能画台阶 / 楼梯 / 栅栏横杆 / 火把。
  * 顶点顺序与法线方向由 FACES 保证，盒子只缩放不改变绕序。
  */
-function emitFace(e: EmitContext, x: number, y: number, z: number, worldY: number, face: Face, box: LocalBox): void {
+function emitFace(
+  e: EmitContext,
+  x: number,
+  y: number,
+  z: number,
+  worldY: number,
+  face: Face,
+  box: LocalBox,
+  precomputed?: readonly CornerLight[],
+): void {
   const { buf, def, isTranslucent, atlas, ctx, originX, originZ, sampleBlock } = e;
-  const [u0, v0, u1, v1] = atlas.uv(def.tiles[face.tile]);
+  const [tileU, tileV] = atlas.tileOrigin(def.tiles[face.tile]);
   const [bx0, by0, bz0, bx1, by1, bz1] = box;
 
-  const [dx, dy, dz] = face.dir;
-  const nx = x + dx;
-  const nz = z + dz;
   const vertexBase = buf.pos.length / 3;
 
-  for (const corner of face.corners) {
+  for (let i = 0; i < 4; i++) {
+    const corner = face.corners[i]!;
     buf.pos.push(
       x + (corner.pos[0] === 0 ? bx0 : bx1),
       y + (corner.pos[1] === 0 ? by0 : by1),
       z + (corner.pos[2] === 0 ? bz0 : bz1),
     );
-    buf.uv.push(u0 + corner.uv[0] * (u1 - u0), v0 + corner.uv[1] * (v1 - v0));
+    // 平铺坐标：单个面就是 [0,1]
+    buf.uv.push(corner.uv[0], corner.uv[1]);
+    buf.tile.push(tileU, tileV);
 
-    if (isTranslucent) {
-      // 流体不做 AO，避免水面出现栅格状阴影
-      const sky = ctx.getSkyLight(originX + nx, worldY + dy, originZ + nz);
-      const blk = ctx.getBlockLight(originX + nx, worldY + dy, originZ + nz);
-      buf.light.push(sky / 15, blk / 15);
-      buf.shade.push(face.shade);
-      continue;
-    }
-
-    const [o1, o2, o3] = corner.aoOffsets;
-    const b1 = sampleBlock(x + o1[0], y + o1[1], z + o1[2]);
-    const b2 = sampleBlock(x + o2[0], y + o2[1], z + o2[2]);
-    const b3 = sampleBlock(x + o3[0], y + o3[1], z + o3[2]);
-    const o1o = blockDef(b1).opaque ? 1 : 0;
-    const o2o = blockDef(b2).opaque ? 1 : 0;
-    const o3o = blockDef(b3).opaque ? 1 : 0;
-
-    // AO 等级：两邻边同时遮挡时取最暗
-    const aoIndex = o1o === 1 && o2o === 1 ? 0 : 3 - (o1o + o2o + o3o);
-    const ao = AO_BRIGHTNESS[aoIndex]!;
-
-    // 平滑光照：4 个采样格取平均；被遮挡的格子用中心格光照替代，避免硬缝
-    const l0 = lightOf(ctx, originX + nx, worldY + dy, originZ + nz);
-    const l1 = o1o === 1 ? l0 : lightOf(ctx, originX + x + o1[0], worldY + o1[1], originZ + z + o1[2]);
-    const l2 = o2o === 1 ? l0 : lightOf(ctx, originX + x + o2[0], worldY + o2[1], originZ + z + o2[2]);
-    const l3 =
-      o1o === 1 && o2o === 1
-        ? l0
-        : o3o === 1
-          ? ([Math.min(l1[0], l2[0]), Math.min(l1[1], l2[1])] as const)
-          : lightOf(ctx, originX + x + o3[0], worldY + o3[1], originZ + z + o3[2]);
-
-    buf.light.push((l0[0] + l1[0] + l2[0] + l3[0]) / 60, (l0[1] + l1[1] + l2[1] + l3[1]) / 60);
-    buf.shade.push(face.shade * ao);
+    // 贪心路径已经把 4 个顶点的光照算过一遍（用来判断能否合并），这里直接复用避免重复采样
+    const light =
+      precomputed?.[i] ?? cornerLighting(ctx, originX, originZ, sampleBlock, isTranslucent, x, y, z, worldY, face, corner);
+    buf.light.push(light.skySum / 60, light.blkSum / 60);
+    buf.shade.push(face.shade * AO_BRIGHTNESS[light.ao]!);
   }
 
   buf.idx.push(vertexBase, vertexBase + 1, vertexBase + 2, vertexBase + 2, vertexBase + 1, vertexBase + 3);
+}
+
+/** 贪心合并后的大四边形：4 个顶点共享同一份光照 */
+function emitQuad(
+  buf: LayerBuffer,
+  atlas: TileUvSource,
+  tile: string,
+  face: Face,
+  layout: FaceLayout,
+  axisPos: number,
+  u: number,
+  v: number,
+  w: number,
+  h: number,
+  light: CornerLight,
+): void {
+  const [tileU, tileV] = atlas.tileOrigin(tile);
+  const vertexBase = buf.pos.length / 3;
+  const spanU = layout.uv0.axis === layout.uAxis ? w : h;
+  const spanV = layout.uv1.axis === layout.uAxis ? w : h;
+  const pos: [number, number, number] = [0, 0, 0];
+
+  for (const corner of face.corners) {
+    pos[layout.axis] = axisPos;
+    pos[layout.uAxis] = u + corner.pos[layout.uAxis] * w;
+    pos[layout.vAxis] = v + corner.pos[layout.vAxis] * h;
+    buf.pos.push(pos[0], pos[1], pos[2]);
+
+    const uv0 = layout.uv0.sign > 0 ? corner.pos[layout.uv0.axis] : 1 - corner.pos[layout.uv0.axis];
+    const uv1 = layout.uv1.sign > 0 ? corner.pos[layout.uv1.axis] : 1 - corner.pos[layout.uv1.axis];
+    buf.uv.push(uv0 * spanU, uv1 * spanV);
+    buf.tile.push(tileU, tileV);
+
+    buf.light.push(light.skySum / 60, light.blkSum / 60);
+    buf.shade.push(face.shade * AO_BRIGHTNESS[light.ao]!);
+  }
+
+  buf.idx.push(vertexBase, vertexBase + 1, vertexBase + 2, vertexBase + 2, vertexBase + 1, vertexBase + 3);
+}
+
+/** 贪心网格化的合并候选：一个面长什么样（贴图 + 4 顶点光照/AO + 渲染层） */
+interface FaceGroup {
+  tile: string;
+  layer: RenderLayer;
+  light: CornerLight;
+}
+
+/**
+ * 对整个 section 里完整立方体方块的面做贪心网格化。
+ *
+ * 做法：对每个朝向、每个切片层构建一张 16×16 的"面掩码"，
+ * 掩码里存的是「贴图 + 4 顶点光照/AO」完全相同的分组 id；
+ * 然后在二维掩码上做矩形扩张，把同组的面塌成一个四边形。
+ * 光照不同（洞穴边缘、室内）的面不会被强行合并，因此明暗完全保持原样。
+ */
+function greedyMesh(
+  chunk: Chunk,
+  baseY: number,
+  originX: number,
+  originZ: number,
+  atlas: TileUvSource,
+  ctx: MeshContext,
+  buffers: Record<RenderLayer, LayerBuffer>,
+): void {
+  const sampleBlock = (x: number, y: number, z: number): number => ctx.getBlock(originX + x, baseY + y, originZ + z);
+  const mask = new Int32Array(256);
+  const groups: FaceGroup[] = [];
+  const groupIds = new Map<string, number>();
+
+  for (let faceIndex = 0; faceIndex < FACES.length; faceIndex++) {
+    const face = FACES[faceIndex]!;
+    const layout = LAYOUTS[faceIndex]!;
+    const { axis, uAxis, vAxis, positive } = layout;
+
+    for (let layer = 0; layer < SECTION_HEIGHT; layer++) {
+      mask.fill(0);
+      groups.length = 0;
+      groupIds.clear();
+
+      for (let v = 0; v < 16; v++) {
+        for (let u = 0; u < 16; u++) {
+          const pos: [number, number, number] = [0, 0, 0];
+          pos[axis] = layer;
+          pos[uAxis] = u;
+          pos[vAxis] = v;
+          const x = pos[0];
+          const y = pos[1];
+          const z = pos[2];
+          const worldY = baseY + y;
+
+          const id = chunk.get(x, worldY, z);
+          if (id === Block.AIR) continue;
+          const def = blockDef(id);
+          if (def.shape !== 'cube') continue;
+
+          // 面剔除：邻居不透明则本面不可见；同种半透明方块之间的内部面也剔除
+          const neighborId = sampleBlock(x + face.dir[0], y + face.dir[1], z + face.dir[2]);
+          if (blockDef(neighborId).opaque) continue;
+          if (neighborId === id && def.translucent) continue;
+
+          const tile = def.tiles[face.tile];
+          const layerId = layerOf(id);
+          const lights = face.corners.map((corner) =>
+            cornerLighting(ctx, originX, originZ, sampleBlock, def.translucent, x, y, z, worldY, face, corner),
+          );
+
+          // 只有当 4 个顶点的光照/AO 完全一致时才能合并，所以把 4 组值写进 key。
+          // 光照用「4 次采样的和」表示（整数 0~60），shade 由 AO 等级决定，都是整数。
+          const c0 = lights[0]!;
+          const c1 = lights[1]!;
+          const c2 = lights[2]!;
+          const c3 = lights[3]!;
+          const uniform =
+            c1.skySum === c0.skySum &&
+            c2.skySum === c0.skySum &&
+            c3.skySum === c0.skySum &&
+            c1.blkSum === c0.blkSum &&
+            c2.blkSum === c0.blkSum &&
+            c3.blkSum === c0.blkSum &&
+            c1.ao === c0.ao &&
+            c2.ao === c0.ao &&
+            c3.ao === c0.ao;
+          if (!uniform) {
+            // 顶点光照不一致时退回逐面输出（不能合并，否则明暗会变）
+            const buf = buffers[layerId];
+            const emit: EmitContext = {
+              buf,
+              def,
+              isTranslucent: def.translucent,
+              atlas,
+              ctx,
+              originX,
+              originZ,
+              sampleBlock,
+            };
+            emitFace(emit, x, y, z, worldY, face, UNIT_BOX, lights);
+            continue;
+          }
+
+          const key = `${tile}|${layerId}|${c0.skySum},${c0.blkSum},${c0.ao}`;
+          let groupId = groupIds.get(key);
+          if (groupId === undefined) {
+            groupId = groups.length + 1;
+            groupIds.set(key, groupId);
+            groups.push({ tile, layer: layerId, light: c0 });
+          }
+          mask[u * 16 + v] = groupId;
+        }
+      }
+
+      // ---- 二维矩形合并
+      const axisPos = layer + (positive ? 1 : 0);
+      for (let v = 0; v < 16; v++) {
+        for (let u = 0; u < 16; ) {
+          const groupId = mask[u * 16 + v]!;
+          if (groupId === 0) {
+            u++;
+            continue;
+          }
+
+          let w = 1;
+          while (u + w < 16 && mask[(u + w) * 16 + v] === groupId) w++;
+
+          let h = 1;
+          grow: while (v + h < 16) {
+            for (let k = 0; k < w; k++) {
+              if (mask[(u + k) * 16 + (v + h)] !== groupId) break grow;
+            }
+            h++;
+          }
+
+          for (let dv = 0; dv < h; dv++) {
+            for (let du = 0; du < w; du++) mask[(u + du) * 16 + (v + dv)] = 0;
+          }
+
+          const group = groups[groupId - 1]!;
+          emitQuad(buffers[group.layer], atlas, group.tile, face, layout, axisPos, u, v, w, h, group.light);
+          u += w;
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -286,7 +575,7 @@ function emitFace(e: EmitContext, x: number, y: number, z: number, worldY: numbe
 export function meshSection(
   chunk: Chunk,
   section: number,
-  atlas: TextureAtlas,
+  atlas: TileUvSource,
   ctx: MeshContext,
 ): MeshResult {
   if (section < 0 || section >= SECTION_COUNT) return { solid: null, translucent: null };
@@ -302,6 +591,8 @@ export function meshSection(
   const sampleBlock = (x: number, y: number, z: number): number =>
     ctx.getBlock(originX + x, baseY + y, originZ + z);
 
+  greedyMesh(chunk, baseY, originX, originZ, atlas, ctx, buffers);
+
   for (let y = 0; y < SECTION_HEIGHT; y++) {
     const worldY = baseY + y;
     for (let z = 0; z < 16; z++) {
@@ -310,6 +601,9 @@ export function meshSection(
         if (id === Block.AIR) continue;
 
         const def = blockDef(id);
+        // 完整立方体已经在上面的贪心网格化里处理过
+        if (def.shape === 'cube') continue;
+
         const emit: EmitContext = {
           buf: buffers[layerOf(id)],
           def,
@@ -320,19 +614,6 @@ export function meshSection(
           originZ,
           sampleBlock,
         };
-
-        if (def.shape === 'cube') {
-          for (const face of FACES) {
-            const [dx, dy, dz] = face.dir;
-            const neighborId = sampleBlock(x + dx, y + dy, z + dz);
-            // 遮挡剔除：邻居不透明则本面不可见
-            if (blockDef(neighborId).opaque) continue;
-            // 同种半透明方块（水-水、玻璃-玻璃）之间的内部面也剔除
-            if (neighborId === id && def.translucent) continue;
-            emitFace(emit, x, y, z, worldY, face, UNIT_BOX);
-          }
-          continue;
-        }
 
         // ---- 非完整方块：逐个盒子输出
         // 栅栏/墙的连接方向、楼梯的内角外角都按邻居**实时计算**，
@@ -367,7 +648,7 @@ export function meshSection(
 
         for (const box of boxes) {
           for (const face of FACES) {
-            const axis = face.dir[0] !== 0 ? 0 : face.dir[1] !== 0 ? 1 : 2;
+            const axis = axisOf(face.dir);
             const positive = face.dir[axis]! > 0;
             // 只有贴合体素边界的面才做邻居剔除；盒子内部的面（如台阶顶面）必须保留
             const bound = positive ? box[axis + 3]! : box[axis]!;
@@ -400,6 +681,7 @@ function buildGeometry(buf: LayerBuffer): THREE.BufferGeometry | null {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buf.pos), 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(buf.uv), 2));
+  geometry.setAttribute('aTile', new THREE.BufferAttribute(new Float32Array(buf.tile), 2));
   geometry.setAttribute('aLight', new THREE.BufferAttribute(new Float32Array(buf.light), 2));
   geometry.setAttribute('aShade', new THREE.BufferAttribute(new Float32Array(buf.shade), 1));
   geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(buf.idx), 1));

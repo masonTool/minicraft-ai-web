@@ -154,8 +154,10 @@ class App {
     this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, fogFar + 32);
     this.camera.rotation.order = 'YXZ';
 
-    this.solidMaterial = new VoxelMaterial(atlas.texture);
-    this.translucentMaterial = new VoxelMaterial(atlas.texture, { translucent: true });
+    // 贴图尺寸与内缩交给着色器：贪心网格化合并出的大四边形要沿面平铺贴图
+    const atlasShape = { tileSpan: atlas.tileSpan, tileInset: atlas.tileInset };
+    this.solidMaterial = new VoxelMaterial(atlas.texture, atlasShape);
+    this.translucentMaterial = new VoxelMaterial(atlas.texture, { translucent: true, ...atlasShape });
     // 必须在 applyEnvironment() 之前创建：环境函数会把昼夜亮度推给它
     this.entityRenderer = new EntityRenderer(this.scene, atlas);
     this.applyEnvironment();

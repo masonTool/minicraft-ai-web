@@ -18,7 +18,8 @@
     "test:biome": "esbuild tools/biome-test.ts --bundle --platform=node --format=esm --outfile=.tmp/biome-test.mjs --log-level=error && node .tmp/biome-test.mjs",
     "test:aquifer": "esbuild tools/aquifer-test.ts --bundle --platform=node --format=esm --outfile=.tmp/aquifer-test.mjs --log-level=error && node .tmp/aquifer-test.mjs",
     "test:ore": "esbuild tools/ore-test.ts --bundle --platform=node --format=esm --outfile=.tmp/ore-test.mjs --log-level=error && node .tmp/ore-test.mjs",
-    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer && npm run test:ore"
+    "test:mesh": "esbuild tools/mesh-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mesh-test.mjs --log-level=error && node .tmp/mesh-test.mjs",
+    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer && npm run test:ore && npm run test:mesh"
   },
   "dependencies": {
     "three": "^0.186.1"
