@@ -1,0 +1,2 @@
+- [自动 Git 提交与版本记录](feedback_git_auto_commit.md) — 每次改动自动 review/commit/push，且每个独立改动单独提交保留版本记录
+- [自动继续（Stop 钩子）配置与关键坑](feedback_auto_continue_hook.md) — 用户要求不停下来等确认；Stop 钩子须用 continue:true + stderr + exit 2
