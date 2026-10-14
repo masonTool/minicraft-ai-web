@@ -91,6 +91,8 @@ export const TILE_ORDER = [
   'item_raw_iron',
   'item_raw_copper',
   'item_raw_gold',
+  'raw_copper_block',
+  'raw_iron_block',
   'item_redstone',
   'item_lapis',
   'item_diamond',
@@ -584,6 +586,9 @@ const PAINTERS: Record<string, Painter> = {
   andesite: layered(132, 9, 8, [1.0, 1.01, 1.0]),
   tuff: layered(108, 8, 8, [1.0, 1.02, 0.94]),
   calcite: layered(224, 6, 5, [1.0, 1.0, 0.98]),
+  // 粗金属块：原版的粗铜块偏橙粉、粗铁块偏米黄，都用大颗粒噪点表现"未精炼"的质感
+  raw_copper_block: layered(200, 11, 9, [1.0, 0.62, 0.48]),
+  raw_iron_block: layered(205, 10, 8, [1.0, 0.85, 0.72]),
   gravel: (x, y, rng) => {
     // 砾石：更粗的颗粒感
     const key = (y >> 1) * 8 + (x >> 1);

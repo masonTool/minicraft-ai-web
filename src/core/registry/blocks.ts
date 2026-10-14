@@ -336,6 +336,10 @@ const GLASS_AND_STONE_SPECS: readonly BlockSpec[] = [
       translucent: true,
     }),
   ),
+
+  // ---- 粗金属块（1.18 大矿脉里的稀有伴生方块）
+  { id: 201, name: 'minecraft:raw_copper_block', tiles: ['raw_copper_block', 'raw_copper_block', 'raw_copper_block'] },
+  { id: 202, name: 'minecraft:raw_iron_block', tiles: ['raw_iron_block', 'raw_iron_block', 'raw_iron_block'] },
 ];
 
 // ---------------------------------------------------------------- 台阶 / 楼梯
@@ -538,6 +542,9 @@ export const Block = {
   OAK_DOOR: 99,
   TORCH: 100,
   LADDER: 101,
+  /** 大矿脉的伴生稀有方块 */
+  RAW_COPPER_BLOCK: 201,
+  RAW_IRON_BLOCK: 202,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -695,6 +702,10 @@ HARDNESS.set(164, 3);
 HARDNESS.set(165, 0.8);
 HARDNESS.set(166, 0.8);
 HARDNESS.set(167, 0.8);
+
+// 粗金属块：硬度 5（原版），必须用镐
+HARDNESS.set(Block.RAW_COPPER_BLOCK, 5);
+HARDNESS.set(Block.RAW_IRON_BLOCK, 5);
 
 // 玻璃与玻璃板：0.3，徒手可采集（徒手可采集表在下面统一维护）
 HARDNESS.set(GLASS_PANE_ID, 0.3);
