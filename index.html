@@ -2,7 +2,17 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <!-- maximum-scale + user-scalable=no：禁止双指缩放，否则游戏画面会被误缩放
+         viewport-fit=cover：让页面铺满刘海屏，配合 env(safe-area-inset-*) 排布触摸控件 -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <!-- 手机上以全屏应用的方式运行（加到主屏后隐藏浏览器地址栏） -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#0b0b0b" />
     <title>Bedrock 1.18 Web</title>
     <link
       rel="icon"
@@ -10,7 +20,13 @@
     />
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+      html, body {
+        width: 100%; height: 100%; overflow: hidden; background: #000;
+        /* 手机上必须关掉浏览器自带的滚动/下拉刷新/双击缩放，否则拖动视角会连带滚页面 */
+        touch-action: none; overscroll-behavior: none;
+        -webkit-user-select: none; user-select: none;
+        -webkit-touch-callout: none;
+      }
       body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       #app { position: fixed; inset: 0; }
       #app canvas { display: block; width: 100%; height: 100%; }
@@ -192,6 +208,102 @@
       #inv-held span {
         position: absolute; right: -2px; bottom: -2px; font-size: 12px; color: #fff;
         text-shadow: 1px 1px 0 #000;
+      }
+
+      /* ---------------- 触摸操作层（手机 / 平板）----------------
+         放在 #hud 里面，但 #hud 是 pointer-events: none，
+         所以这里只给真正要接收手势的元素打开 pointer-events。 */
+      #touch-ui {
+        position: fixed; inset: 0; pointer-events: none;
+        /* 刘海屏/圆角屏：把 UI 收进安全区 */
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      #touch-ui.hidden { display: none; }
+
+      /* 视角面铺满全屏：承接拖动转视角，以及轻点/长按 */
+      #touch-look {
+        position: absolute; inset: 0;
+        pointer-events: auto; touch-action: none;
+      }
+
+      #touch-stick {
+        position: absolute; left: 22px; bottom: 96px;
+        width: 132px; height: 132px; border-radius: 50%;
+        background: rgba(255, 255, 255, .13);
+        border: 2px solid rgba(255, 255, 255, .3);
+        pointer-events: auto; touch-action: none;
+        display: grid; place-items: center;
+        transition: background .15s;
+      }
+      #touch-stick.active { background: rgba(255, 255, 255, .22); }
+      #touch-stick .knob {
+        width: 56px; height: 56px; border-radius: 50%;
+        background: rgba(255, 255, 255, .55);
+        border: 2px solid rgba(255, 255, 255, .8);
+        will-change: transform;
+      }
+
+      #touch-buttons {
+        position: absolute; right: 20px; bottom: 96px;
+        display: grid; grid-template-columns: repeat(2, 62px); gap: 12px;
+        pointer-events: none;
+      }
+      .touch-button {
+        width: 62px; height: 62px; border-radius: 50%;
+        font: inherit; font-size: 17px; color: #fff;
+        background: rgba(255, 255, 255, .16);
+        border: 2px solid rgba(255, 255, 255, .34);
+        text-shadow: 1px 1px 0 rgba(0, 0, 0, .6);
+        pointer-events: auto; touch-action: none;
+        user-select: none; -webkit-user-select: none;
+      }
+      .touch-button.on { background: rgba(140, 220, 140, .38); border-color: rgba(200, 255, 200, .8); }
+      .touch-button.jump { width: 76px; height: 76px; font-size: 19px; }
+
+      #touch-hint {
+        position: absolute; left: 50%; bottom: 214px; transform: translateX(-50%);
+        padding: 7px 14px; border-radius: 16px;
+        background: rgba(0, 0, 0, .5); color: #fff; font-size: 12px;
+        white-space: nowrap; transition: opacity .6s;
+      }
+      #touch-hint.fade { opacity: 0; }
+
+      /* ---------------- 小屏适配 ----------------
+         目标：竖屏/横屏手机都能操作，且界面不溢出、热区够大。 */
+      @media (max-width: 900px), (max-height: 560px) {
+        #debug { font-size: 10px; line-height: 1.45; padding: 4px 6px; max-width: 46vw; }
+        #hotbar { bottom: 12px; padding: 2px; gap: 1px; }
+        #hotbar .slot { width: 36px; height: 36px; }
+        #hotbar .slot canvas { width: 28px; height: 28px; }
+        #hotbar .slot .index { font-size: 9px; }
+        #hotbar .slot .count { font-size: 11px; }
+
+        /* 背包/容器面板在小屏上几乎全屏，并把槽位放大到好点按的尺寸 */
+        .inv-panel {
+          max-width: 96vw; max-height: 92vh; padding: 10px;
+          border-width: 2px;
+        }
+        .inv-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 2px; }
+        .inv-grid .inv-slot { width: auto; aspect-ratio: 1; }
+        .inv-grid.inv-creative { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+        .inv-grid.inv-creative .inv-slot { width: auto; }
+        .inv-craft-grid.size-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .inv-craft-grid.size-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .inv-craft .inv-slot { width: 46px; }
+        /* 面板内允许纵向拖动滚动，其余手势交给操作层 */
+        .inv-panel { touch-action: pan-y; }
+        .inv-slot { -webkit-tap-highlight-color: transparent; }
+      }
+
+      /* 横屏手机：摇杆与按钮再往下、缩小一点，避免遮挡视野中心 */
+      @media (max-height: 480px) {
+        #touch-stick { width: 108px; height: 108px; bottom: 70px; left: 16px; }
+        #touch-stick .knob { width: 46px; height: 46px; }
+        #touch-buttons { bottom: 70px; }
+        .touch-button { width: 54px; height: 54px; font-size: 15px; }
+        .touch-button.jump { width: 64px; height: 64px; }
+        #touch-hint { bottom: 178px; }
       }
     </style>
   </head>

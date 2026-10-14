@@ -29,6 +29,7 @@ import { ItemEntity } from './core/entity/ItemEntity.ts';
 import type { EntityContext } from './core/entity/Entity.ts';
 import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
+import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
 import { blockForItem, dropFor, itemName } from './core/registry/items.ts';
 
@@ -39,6 +40,15 @@ const MESH_BUDGET_PER_FRAME = 3;
 const WORLD_SEED = 20261014;
 /** 原版触及距离：生存 4.5 格 */
 const REACH = 4.5;
+/** 鼠标视角灵敏度（弧度/像素） */
+const MOUSE_SENSITIVITY = 0.0022;
+/**
+ * 触摸视角灵敏度（弧度/像素）。
+ * 比鼠标高：手指在屏幕上的一次拖动行程通常只有鼠标的 1/3 左右，
+ * 用同样的系数会转得很吃力。
+ */
+const TOUCH_SENSITIVITY = 0.0034;
+
 /** 连续破坏/放置的最小间隔（秒） */
 const BREAK_COOLDOWN = 0.25;
 const PLACE_COOLDOWN = 0.22;
@@ -77,6 +87,13 @@ class App {
   private readonly inventoryScreen: InventoryScreen;
   private readonly entities = new EntityManager();
   private readonly entityRenderer: EntityRenderer;
+  /**
+   * 触摸操作层。只有手势设备才创建——桌面端不创建，
+   * 这样键盘/鼠标路径完全不受影响，也不会多出一层挡事件的 DOM。
+   */
+  private readonly touch: TouchControls | null;
+  /** 触摸端"轻点"产生的一次性放置/交互请求，由 updatePlacing 消费 */
+  private touchPlaceRequest = false;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   private readonly hotbarSlots: HTMLDivElement[] = [];
@@ -175,6 +192,27 @@ class App {
     // 开发期初始物资（见 STARTING_HOTBAR 注释）
     for (const blockId of STARTING_HOTBAR) this.inventory.add(blockId, 64);
 
+    // 触摸操作层：只在手势设备上创建，桌面端完全不引入这套 DOM
+    this.touch = isTouchDevice()
+      ? new TouchControls(document.getElementById('hud') ?? container, {
+          // 轻点：放置方块，或与工作台/熔炉/箱子/门交互（与鼠标右键同一套逻辑）
+          onTap: () => {
+            this.touchPlaceRequest = true;
+          },
+          // 长按：等价于按住左键破坏
+          onBreakStart: () => {
+            this.leftDown = true;
+          },
+          onBreakEnd: () => {
+            this.leftDown = false;
+          },
+          onToggleInventory: () => this.inventoryScreen.toggle(),
+          onToggleFly: () => this.setFlying(!this.flying),
+          // 潜行状态由操作层自己维护并出现在 input 里，这里只做一次提示同步
+          onToggleSneak: () => undefined,
+        })
+      : null;
+
     this.bindEvents();
     this.refreshWorld(0, 0, true);
   }
@@ -185,9 +223,14 @@ class App {
     this.keys.clear();
     this.leftDown = false;
     this.rightDown = false;
+    // 触摸端：界面打开时收起操作层，避免界面开着人还在走
+    if (this.touch) this.touch.visible = !open;
 
     if (open) {
       if (document.pointerLockElement) document.exitPointerLock();
+      this.outline.hide();
+    } else if (this.touch) {
+      // 触摸端没有指针锁，关掉界面直接继续玩
       this.outline.hide();
     } else {
       const result = this.renderer.domElement.requestPointerLock() as unknown as Promise<void> | undefined;
@@ -272,6 +315,12 @@ class App {
       this.hotbarSlots.push(slot);
     }
 
+    // 触摸端点快捷栏切换（鼠标路径走键盘 1-9）
+    bindHotbarTouch(container, (index) => {
+      this.hotbarIndex = index;
+      this.refreshHotbar();
+    });
+
     this.refreshHotbar();
   }
 
@@ -326,7 +375,7 @@ class App {
         return;
       }
       if (this.uiOpen) return;
-      if (e.code === 'KeyF') this.flying = !this.flying;
+      if (e.code === 'KeyF') this.setFlying(!this.flying);
       if (e.code.startsWith('Digit')) {
         const digit = Number(e.code.slice(5));
         if (digit >= 1 && digit <= HOTBAR_SIZE) {
@@ -337,38 +386,40 @@ class App {
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
 
-    document.addEventListener('pointerlockchange', () => {
-      this.locked = document.pointerLockElement === this.renderer.domElement;
-      this.overlayEl.classList.toggle('hidden', this.locked);
-      if (!this.locked) {
-        this.keys.clear();
-        this.leftDown = false;
-        this.rightDown = false;
-      }
-    });
+    if (this.touch) {
+      // 触摸端不用指针锁：点一下遮罩就开始玩
+      this.overlayEl.addEventListener('pointerdown', () => this.overlayEl.classList.add('hidden'));
+    } else {
+      document.addEventListener('pointerlockchange', () => {
+        this.locked = document.pointerLockElement === this.renderer.domElement;
+        this.overlayEl.classList.toggle('hidden', this.locked);
+        if (!this.locked) {
+          this.keys.clear();
+          this.leftDown = false;
+          this.rightDown = false;
+        }
+      });
 
-    const requestLock = () => void this.renderer.domElement.requestPointerLock();
-    this.overlayEl.addEventListener('click', requestLock);
-    this.renderer.domElement.addEventListener('click', requestLock);
+      const requestLock = () => void this.renderer.domElement.requestPointerLock();
+      this.overlayEl.addEventListener('click', requestLock);
+      this.renderer.domElement.addEventListener('click', requestLock);
 
-    document.addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
-      this.yaw -= e.movementX * 0.0022;
-      this.pitch -= e.movementY * 0.0022;
-      const limit = Math.PI / 2 - 0.001;
-      this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
-    });
+      document.addEventListener('mousemove', (e) => {
+        if (!this.locked) return;
+        this.applyLook(e.movementX * MOUSE_SENSITIVITY, e.movementY * MOUSE_SENSITIVITY);
+      });
 
-    document.addEventListener('mousedown', (e) => {
-      if (!this.locked) return;
-      if (e.button === 0) this.leftDown = true;
-      if (e.button === 2) this.rightDown = true;
-    });
-    document.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.leftDown = false;
-      if (e.button === 2) this.rightDown = false;
-    });
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
+      document.addEventListener('mousedown', (e) => {
+        if (!this.locked) return;
+        if (e.button === 0) this.leftDown = true;
+        if (e.button === 2) this.rightDown = true;
+      });
+      document.addEventListener('mouseup', (e) => {
+        if (e.button === 0) this.leftDown = false;
+        if (e.button === 2) this.rightDown = false;
+      });
+      document.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -377,7 +428,21 @@ class App {
     });
   }
 
+  /**
+   * 施加视角增量（像素）。鼠标与触摸共用同一套，只是灵敏度不同。
+   * 触摸端手指行程比鼠标短，所以灵敏度调高一些，手感才接近。
+   */
+  private applyLook(dxPixels: number, dyPixels: number): void {
+    this.yaw -= dxPixels;
+    this.pitch -= dyPixels;
+    const limit = Math.PI / 2 - 0.001;
+    this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
+  }
+
   private collectInput(): PlayerInput {
+    // 键盘与触摸取"较大者"而不是相加：外接键盘时同时用也不会速度翻倍
+    const touch = this.touch?.input;
+
     let forward = 0;
     let strafe = 0;
     if (this.keys.has('KeyW')) forward += 1;
@@ -385,12 +450,14 @@ class App {
     if (this.keys.has('KeyD')) strafe += 1;
     if (this.keys.has('KeyA')) strafe -= 1;
 
+    const keyboardSprint = this.keys.has('ControlLeft') || this.keys.has('ControlRight');
+
     return {
-      forward,
-      strafe,
-      jump: this.keys.has('Space'),
-      sneak: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
-      sprint: this.keys.has('ControlLeft') || this.keys.has('ControlRight'),
+      forward: Math.max(-1, Math.min(1, forward + (touch?.forward ?? 0))),
+      strafe: Math.max(-1, Math.min(1, strafe + (touch?.strafe ?? 0))),
+      jump: this.keys.has('Space') || (touch?.jump ?? false),
+      sneak: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || (touch?.sneak ?? false),
+      sprint: keyboardSprint || (touch?.sprint ?? false),
     };
   }
 
@@ -573,7 +640,9 @@ class App {
   }
 
   private updatePlacing(): void {
-    if (!this.rightDown || !this.hit || this.placeCooldown > 0) return;
+    // 触摸端是"一次性轻点"，鼠标是"按住不放"，这里统一成一个待执行标记
+    const tapped = this.touchPlaceRequest;
+    if ((!this.rightDown && !tapped) || !this.hit || this.placeCooldown > 0) return;
 
     // 右键功能方块：潜行时仍然走放置逻辑（与原版一致）
     const sneak = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
@@ -602,6 +671,9 @@ class App {
         return;
       }
     }
+
+    // 触摸端只有一次轻点，放完就要清掉，否则会一直放
+    this.touchPlaceRequest = false;
 
     const blockId = this.selectedBlock;
     if (blockId === undefined) return;
@@ -707,6 +779,15 @@ class App {
       ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})`
       : '无';
 
+    // 手机上屏幕小：只保留最关键的几行，免得调试面板盖住半个屏幕
+    if (this.touch) {
+      this.debugEl.textContent =
+        `${this.fps} fps   ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\n` +
+        `${this.flying ? '创造(飞行)' : '生存'}   ${clock}   朝向 ${facing.slice(0, 1)}\n` +
+        `持有 ${this.heldName}`;
+      return;
+    }
+
     this.debugEl.textContent =
       `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
@@ -726,6 +807,20 @@ class App {
       this.lastTime = now;
 
       this.tryResolveSpawn();
+
+      // 触摸视角：在物理与射线之前应用，保证同一帧里"看到的"和"走到的"是一致的
+      if (this.touch) {
+        this.touch.setEnabled(!this.uiOpen);
+        if (!this.uiOpen) {
+          const look = this.touch.consumeLook();
+          if (look.x !== 0 || look.y !== 0) {
+            this.applyLook(look.x * TOUCH_SENSITIVITY, look.y * TOUCH_SENSITIVITY);
+          }
+        } else {
+          this.touch.consumeLook();
+        }
+      }
+
       this.physics.update(this.world, this.uiOpen ? IDLE_INPUT : this.collectInput(), this.yaw, dt, this.flying);
 
       this.camera.position.set(this.physics.x, this.physics.eyeY, this.physics.z);
@@ -797,8 +892,11 @@ class App {
     this.applyEnvironment();
   }
 
+  /** 切换创造飞行（键盘 F、触摸按钮与调试入口共用） */
   setFlying(value: boolean): void {
     this.flying = value;
+    // 触摸端的"飞"按钮需要跟着亮/灭
+    this.touch?.setFlying(value);
   }
 
   selectSlot(index: number): void {
@@ -847,6 +945,8 @@ class App {
     onGround: boolean;
     flying: boolean;
     entities: number;
+    /** 射线命中的方块坐标；没有命中时为 null */
+    hit: [number, number, number] | null;
   } {
     return {
       fps: this.fps,
@@ -857,6 +957,7 @@ class App {
       onGround: this.physics.onGround,
       flying: this.flying,
       entities: this.entities.count,
+      hit: this.hit ? [this.hit.x, this.hit.y, this.hit.z] : null,
     };
   }
 

@@ -118,7 +118,11 @@ export class InventoryScreen {
     this.titleEl = document.createElement('b');
     this.titleEl.textContent = '物品栏';
     const hint = document.createElement('span');
-    hint.innerHTML = '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭 · 左键整叠 / 右键单个';
+    // 触摸端没有左右键之分，提示改成"轻点"的说法，免得玩家找不到右键
+    const touchDevice = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+    hint.innerHTML = touchDevice
+      ? '点空白处关闭 · 轻点拿起 / 再轻点放下，点空槽可放下一个'
+      : '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭 · 左键整叠 / 右键单个';
     header.append(this.titleEl, hint);
     this.panel.appendChild(header);
 
@@ -224,7 +228,7 @@ export class InventoryScreen {
       button.className = 'inv-tab';
       button.textContent = CATEGORY_LABELS[category];
       button.dataset.category = category;
-      button.addEventListener('mousedown', (event) => {
+      button.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         this.creativeCategory = category;
         this.updateTabHighlight();
@@ -274,7 +278,7 @@ export class InventoryScreen {
       slot.classList.add('creative-slot');
       slot.title = itemName(itemId);
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
-      slot.addEventListener('mousedown', (event) => {
+      slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         this.inventory.add(itemId, event.button === 2 ? 1 : maxStackOf(itemId));
       });
@@ -382,7 +386,7 @@ export class InventoryScreen {
     count.className = 'inv-count';
     slot.append(canvas, count);
 
-    slot.addEventListener('mousedown', (event) => {
+    slot.addEventListener('pointerdown', (event) => {
       const key = slot.dataset.key;
       if (!key) return;
       event.preventDefault();
@@ -411,13 +415,13 @@ export class InventoryScreen {
   // ---------------------------------------------------------------- 交互
 
   private bindEvents(): void {
-    document.addEventListener('mousemove', (event) => {
+    document.addEventListener('pointermove', (event) => {
       if (!this.open) return;
       this.heldElement.style.left = `${event.clientX}px`;
       this.heldElement.style.top = `${event.clientY}px`;
     });
 
-    this.root.addEventListener('mousedown', (event) => {
+    this.root.addEventListener('pointerdown', (event) => {
       if (event.target !== this.root) return;
       event.preventDefault();
       this.returnHeldToInventory();
