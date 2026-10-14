@@ -17,6 +17,9 @@ import { PlayerStats, type DamageCause, type SurvivalEnvironment } from './core/
 import { VitalsHud } from './ui/VitalsHud.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
+import { MobRenderer } from './render/MobRenderer.ts';
+import { Mob } from './core/entity/Mob.ts';
+import { mobTypeById } from './core/entity/mobs.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
@@ -102,6 +105,8 @@ class App {
   private readonly sky: Sky;
   /** 天气：晴 / 雨 / 雷暴 */
   private readonly weather: Weather;
+  /** 生物渲染 */
+  private readonly mobRenderer: MobRenderer;
   private readonly domeTop = new THREE.Color();
   private readonly domeHorizon = new THREE.Color();
   /** 玩家所在地表是否为寒冷群系（决定下雪还是下雨），每秒复查一次 */
@@ -202,6 +207,8 @@ class App {
     this.scene.add(this.sky.object);
     this.weather = new Weather();
     this.scene.add(this.weather.object);
+    // 生物亮度直接用方块材质的天光倍率，保证与地形明暗一致
+    this.mobRenderer = new MobRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
     this.applyEnvironment();
 
     // 网格化放在独立 Worker 池里：地形生成的 Worker 忙于长任务，混在一起会互相拖慢。
@@ -690,10 +697,17 @@ class App {
     };
     this.entities.update(context, dt);
     // 逐实体采样光照：洞里暗、火把旁亮
-    this.entityRenderer.update(this.entities.all, this.camera, dt, (x, y, z) => {
+    const sampleLight = (x: number, y: number, z: number): { sky: number; block: number } | null => {
       if (!this.world.isLoaded(x, z)) return null;
       return { sky: this.world.getSkyLight(x, y, z), block: this.world.getBlockLight(x, y, z) };
-    });
+    };
+    this.entityRenderer.update(this.entities.all, this.camera, dt, sampleLight);
+
+    const mobs: Mob[] = [];
+    for (const entity of this.entities.all) {
+      if (entity instanceof Mob) mobs.push(entity);
+    }
+    this.mobRenderer.update(mobs, this.camera, dt, sampleLight);
   }
 
   /**
@@ -1083,6 +1097,7 @@ class App {
   }
 
   dispose(): void {
+    this.mobRenderer.dispose();
     this.sky.dispose();
     this.weather.dispose();
     this.chunkRenderer.disposeAll();
@@ -1169,6 +1184,54 @@ class App {
       return id === Block.SNOW_BLOCK || id === Block.ICE || id === Block.PACKED_ICE;
     }
     return false;
+  }
+
+  /**
+   * 调试用：在指定位置生成一只生物。
+   * 会自动把生成高度吸附到该列的地表 —— 直接按调用方给的 y 放，
+   * 很容易把生物生成在方块内部（表现为"生成了但看不见"）。
+   */
+  spawnMob(typeId: string, x: number, y: number, z: number): boolean {
+    const type = mobTypeById(typeId);
+    if (!type) return false;
+
+    let spawnY = Math.floor(y);
+    for (let dy = 6; dy >= -2; dy--) {
+      const candidate = Math.floor(y) + dy;
+      if (this.world.isSolid(x, candidate - 1, z) && !this.world.isSolid(x, candidate, z) && !this.world.isSolid(x, candidate + 1, z)) {
+        spawnY = candidate;
+        break;
+      }
+    }
+
+    this.entities.spawn(new Mob(type, x + 0.5, spawnY, z + 0.5));
+    return true;
+  }
+
+  /** 调试用：清空所有生物（掉落物保留） */
+  clearMobs(): number {
+    let removed = 0;
+    for (const entity of this.entities.all) {
+      if (entity instanceof Mob) {
+        entity.dead = true;
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  /** 调试用：生物统计 */
+  get mobStats(): { total: number; hostile: number; passive: number; byType: Record<string, number> } {
+    let hostile = 0;
+    let passive = 0;
+    const byType: Record<string, number> = {};
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob)) continue;
+      byType[entity.type.id] = (byType[entity.type.id] ?? 0) + 1;
+      if (entity.type.hostile) hostile++;
+      else passive++;
+    }
+    return { total: hostile + passive, hostile, passive, byType };
   }
 
   /** 调试 / 命令用：切换天气 */
