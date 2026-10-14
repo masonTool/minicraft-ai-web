@@ -39,6 +39,19 @@ export class Chunk {
     return ((y - WORLD_MIN_Y) * CHUNK_SIZE_Z + z) * CHUNK_SIZE_X + x;
   }
 
+  /** 用 Worker 生成的裸数组接管所有权（零拷贝），并重建分段计数 */
+  static fromData(cx: number, cz: number, blocks: Uint8Array): Chunk {
+    const chunk = new Chunk(cx, cz);
+    chunk.blocks.set(blocks);
+    for (let section = 0; section < SECTION_COUNT; section++) {
+      const start = section * SECTION_HEIGHT * XZ;
+      let count = 0;
+      for (let i = start; i < start + SECTION_HEIGHT * XZ; i++) if (chunk.blocks[i] !== 0) count++;
+      chunk.sectionCounts[section] = count;
+    }
+    return chunk;
+  }
+
   get(x: number, y: number, z: number): number {
     if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return 0;
     return this.blocks[Chunk.index(x, y, z)]!;
