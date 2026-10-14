@@ -452,6 +452,17 @@ class App {
   private updatePlacing(): void {
     if (!this.rightDown || !this.hit || this.placeCooldown > 0) return;
 
+    // 右键功能方块：潜行时仍然走放置逻辑（与原版一致）
+    const sneak = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    if (!sneak) {
+      const hitBlock = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
+      if (hitBlock === Block.CRAFTING_TABLE) {
+        this.inventoryScreen.openWith('crafting');
+        this.placeCooldown = PLACE_COOLDOWN * 2;
+        return;
+      }
+    }
+
     const blockId = this.selectedBlock;
     if (blockId === undefined) return;
 
@@ -641,6 +652,15 @@ class App {
 
   toggleInventory(): void {
     this.inventoryScreen.toggle();
+  }
+
+  /** 直接打开工作台界面（自动化测试用） */
+  openCrafting(): void {
+    this.inventoryScreen.openWith('crafting');
+  }
+
+  get craftingScreen(): InventoryScreen {
+    return this.inventoryScreen;
   }
 
   get isInventoryOpen(): boolean {
