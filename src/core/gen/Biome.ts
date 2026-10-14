@@ -38,6 +38,7 @@ export const Biome = {
   STONY_PEAKS: 19,
   SNOWY_SLOPES: 20,
   GROVE: 21,
+  BADLANDS: 22,
 } as const;
 
 export type BiomeId = (typeof Biome)[keyof typeof Biome];
@@ -476,6 +477,28 @@ export const BIOMES: readonly BiomeDef[] = [
     foliageColor: 0x60a17b,
   },
   {
+    id: Biome.BADLANDS,
+    name: 'badlands',
+    ocean: false,
+    // 炎热、极干燥、低侵蚀（原版恶地是高地台地）。
+    // ⚠️ 区间不能收得太窄：湿度那一维的实际标准差只有 ~0.97，
+    // 一开始写成「温度>0.55 且湿度<-0.75」，联合概率过低，实测世界里一次都不出现。
+    temperature: [0.35, 1.1],
+    humidity: [-1.1, -0.62],
+    continentalness: [-0.15, 1.1],
+    erosion: [-1.1, -0.375],
+    depth: ANY,
+    weirdness: ANY,
+    // 地表是陶瓦；下方的彩色陶瓦色带由地表规则按高度分层铺（见 SurfaceRules）
+    surface: Block.TERRACOTTA,
+    subSurface: Block.TERRACOTTA,
+    subDepth: 2,
+    underwater: Block.TERRACOTTA,
+    snowy: false,
+    grassColor: 0x90814d,
+    foliageColor: 0x9e814d,
+  },
+  {
     id: Biome.GROVE,
     name: 'grove',
     ocean: false,
@@ -618,9 +641,43 @@ export const LAND_BIOMES = BIOMES.filter(
 /**
  * 只在陆地群系里找最近匹配
  */
+/** 全区间宽度（ANY 的宽度） */
+const ANY_WIDTH = 1.1 * 2;
+
+/**
+ * 「特化程度」度量：**先看约束了几个维度，再比总宽度**。
+ *
+ * ⚠️ 只比总宽度是不行的：沙漠（约束温度、湿度）的总宽度比恶地（约束温度、湿度、侵蚀度）
+ * 还窄，于是并列时沙漠依旧胜出、恶地依然不出现。必须先比"约束了几个维度"——
+ * 约束越多说明越具体，这才是"恶地是沙漠的子集"这件事的正确度量。
+ */
+function specificity(biome: BiomeDef): number {
+  const ranges: readonly Range[] = [biome.temperature, biome.humidity, biome.erosion, biome.weirdness];
+  let constrained = 0;
+  let width = 0;
+  for (const range of ranges) {
+    const w = range[1] - range[0];
+    if (w < ANY_WIDTH - 0.01) {
+      constrained++;
+      width += w;
+    }
+  }
+  // 约束维度数优先（越大越具体），同维数时区间越窄越具体
+  return constrained * 100 - width;
+}
+
+/**
+ * 只在陆地群系里找最近匹配。
+ *
+ * ⚠️ 并列（距离同为 0）时必须优先**更特化**的群系，而不能按声明顺序取第一个。
+ * 否则「沙漠」（温度>0.3 且湿度<-0.35，区间很宽）会把「恶地」
+ * （还要更干、且侵蚀度低，区间窄得多）的采样点全部抢走——
+ * 实测表现就是恶地在这个世界里一次都不出现。
+ */
 export function findLandBiome(point: ClimatePoint): BiomeDef {
   let best = LAND_BIOMES[0]!;
   let bestDistance = Number.POSITIVE_INFINITY;
+  let bestSpecificity = specificity(best);
 
   for (const biome of LAND_BIOMES) {
     const distance =
@@ -628,11 +685,17 @@ export function findLandBiome(point: ClimatePoint): BiomeDef {
       rangeDistance(biome.humidity, point.humidity) ** 2 +
       rangeDistance(biome.erosion, point.erosion) ** 2 +
       rangeDistance(biome.weirdness, point.weirdness) ** 2;
-    if (distance < bestDistance) {
+    const biomeSpecificity = specificity(biome);
+
+    // 并列时取「特化度更高」的（数值越大越具体）
+    const better =
+      distance < bestDistance ||
+      (distance === bestDistance && biomeSpecificity > bestSpecificity);
+    if (better) {
       bestDistance = distance;
+      bestSpecificity = biomeSpecificity;
       best = biome;
     }
-    if (bestDistance === 0) break;
   }
 
   return best;

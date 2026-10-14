@@ -20,6 +20,7 @@
 import { Block } from '../registry/blocks.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../world/Chunk.ts';
 import { CaveCarver } from './CaveCarver.ts';
+import { bandBlockAt, columnSurface } from './SurfaceRules.ts';
 import { OreGenerator } from './OreGenerator.ts';
 import { applyClimateGain, biomeForColumn, findLandBiome, type BiomeDef } from './Biome.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
@@ -343,24 +344,27 @@ export class OverworldGenerator {
         );
         const underwater = top < SEA_LEVEL;
 
-        // 地表方块完全由群系决定（与原版一致：同一个群系在哪儿长什么样是固定的）
-        let surfaceBlock = biome.surface;
-        let subSurface = biome.subSurface;
-        const subDepth = biome.subDepth;
+        // 地表分层交给 SurfaceRules：群系地表 → 次表层 → （恶地的）深层彩色色带
+        const profile = columnSurface(biome, top, SEA_LEVEL, worldX, worldZ);
 
-        if (underwater) {
-          // 水下统一换成该群系的水下变体（海洋是沙/砾石、沼泽是黏土）
-          surfaceBlock = biome.underwater;
-          subSurface = biome.underwater;
-        }
-
-        blocks[Chunk.index(x, top, z)] = surfaceBlock;
-        for (let d = 1; d <= subDepth; d++) {
+        blocks[Chunk.index(x, top, z)] = profile.surface;
+        for (let d = 1; d <= profile.subDepth; d++) {
           const y = top - d;
           if (y < WORLD_MIN_Y) break;
           const current = blocks[Chunk.index(x, y, z)]!;
           if (current !== Block.STONE && current !== Block.DEEPSLATE) break;
-          blocks[Chunk.index(x, y, z)] = subSurface;
+          blocks[Chunk.index(x, y, z)] = profile.subSurface;
+        }
+
+        // 恶地：次表层之下继续铺彩色陶瓦色带（原版恶地最标志性的特征）
+        if (profile.deepBands) {
+          const from = top - profile.subDepth - 1;
+          const to = Math.max(WORLD_MIN_Y, top - profile.deepDepth);
+          for (let y = from; y >= to; y--) {
+            const current = blocks[Chunk.index(x, y, z)]!;
+            if (current !== Block.STONE && current !== Block.DEEPSLATE) continue;
+            blocks[Chunk.index(x, y, z)] = bandBlockAt(profile.deepBands, worldX, y, worldZ);
+          }
         }
 
         // 灌水到海平面
