@@ -984,6 +984,25 @@ class App {
     };
   }
 
+  /** 调试用：图集尺寸与某个贴图的 UV / 像素起点（排查贴图错位） */
+  atlasDebug(tile: string): {
+    columns: number;
+    rows: number;
+    width: number;
+    height: number;
+    uv: [number, number, number, number];
+    source: { x: number; y: number };
+  } {
+    return {
+      columns: this.atlas.columns,
+      rows: this.atlas.rows,
+      width: this.atlas.canvas.width,
+      height: this.atlas.canvas.height,
+      uv: this.atlas.uv(tile),
+      source: this.atlas.tileSource(tile),
+    };
+  }
+
   /** 调试用：抽样某区块网格顶点里的光照值（可限定世界 Y 区间） */
   sampleMeshLight(
     cx: number,

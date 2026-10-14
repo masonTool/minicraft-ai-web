@@ -186,6 +186,30 @@ export const TILE_ORDER = [
   'concrete_green',
   'concrete_red',
   'concrete_black',
+  'mossy_cobblestone',
+  'mossy_stone_bricks',
+  'cracked_stone_bricks',
+  'cracked_deepslate_bricks',
+  'cobbled_deepslate',
+  'chiseled_sandstone',
+  'cut_sandstone',
+  'smooth_sandstone',
+  'stained_glass_white',
+  'stained_glass_orange',
+  'stained_glass_magenta',
+  'stained_glass_light_blue',
+  'stained_glass_yellow',
+  'stained_glass_lime',
+  'stained_glass_pink',
+  'stained_glass_gray',
+  'stained_glass_light_gray',
+  'stained_glass_cyan',
+  'stained_glass_purple',
+  'stained_glass_blue',
+  'stained_glass_brown',
+  'stained_glass_green',
+  'stained_glass_red',
+  'stained_glass_black',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
@@ -454,6 +478,46 @@ function leavesPainter(base: readonly [number, number, number], alpha = 255): Pa
     const v = 1 + (rng() * 0.34 - 0.17);
     const hole = hashString(`leaf${x},${y}`) % 11 === 0;
     return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), hole ? 150 : alpha];
+  };
+}
+
+/** 染色玻璃：中间半透明、边缘更实，形成"镶边玻璃"的观感 */
+function stainedGlassPainter(rgb: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const border = x === 0 || y === 0 || x === 15 || y === 15;
+    const v = border ? 0.86 : 1.08;
+    const jitter = rng() * 10 - 5;
+    return [
+      clamp255(rgb[0] * v + jitter),
+      clamp255(rgb[1] * v + jitter),
+      clamp255(rgb[2] * v + jitter),
+      border ? 236 : 132,
+    ];
+  };
+}
+
+/** 在已有画笔上叠加苔藓斑块（苔石 / 苔石砖用） */
+function mossyPainter(base: Painter): Painter {
+  const moss = layered(92, 8, 10, [0.52, 1.0, 0.34]);
+  return (x, y, rng) => {
+    // 用低频哈希决定苔藓覆盖，形成成片的斑块而不是噪点
+    const coverage = hashString(`moss${x >> 1},${y >> 1}`) % 100;
+    if (coverage >= 46) return base(x, y, rng);
+    const [r, g, b] = moss(x, y, rng);
+    const under = base(x, y, rng);
+    // 苔藓不完全盖住底材，透出一点石头颜色
+    return [clamp255(r * 0.85 + under[0] * 0.15), clamp255(g * 0.85 + under[1] * 0.15), clamp255(b * 0.85 + under[2] * 0.15), 255];
+  };
+}
+
+/** 在砖纹上叠加裂纹 */
+function crackedPainter(base: Painter, salt: string): Painter {
+  return (x, y, rng) => {
+    const [r, g, b] = base(x, y, rng);
+    const crack = hashString(`${salt}${x},${y}`) % 23 === 0 || hashString(`${salt}${x},${y >> 1}`) % 31 === 0;
+    if (!crack) return [r, g, b, 255];
+    const v = 0.6;
+    return [clamp255(r * v), clamp255(g * v), clamp255(b * v), 255];
   };
 }
 
@@ -747,6 +811,31 @@ for (const wood of WOOD_TYPES) {
   PAINTERS[`${wood.name}_leaves`] = leavesPainter(wood.leaf, wood.leafAlpha ?? 255);
 }
 
+// 石材补全：苔石与裂纹变体都是在已有画笔上叠加一层
+PAINTERS.mossy_cobblestone = mossyPainter(cobblestonePainter);
+PAINTERS.mossy_stone_bricks = mossyPainter(brickPainter([124, 124, 124]));
+PAINTERS.cracked_stone_bricks = crackedPainter(brickPainter([124, 124, 124]), 'csb');
+PAINTERS.cracked_deepslate_bricks = crackedPainter(brickPainter([88, 88, 92]), 'cdb');
+PAINTERS.cobbled_deepslate = (x, y, rng) => {
+  const [r, g, b] = cobblestonePainter(x, y, rng);
+  return [clamp255(r * 0.62), clamp255(g * 0.62), clamp255(b * 0.68), 255];
+};
+
+// 砂岩变体：切割砂岩是整齐的砌块、平滑砂岩无纹路
+PAINTERS.chiseled_sandstone = chiseledPainter([218, 210, 158]);
+PAINTERS.cut_sandstone = (x, y, rng) => {
+  const base = layered(214, 4, 5, [1.0, 0.96, 0.76])(x, y, rng);
+  if (x % 8 !== 7 && y % 8 !== 7) return base;
+  const v = 0.88 + rng() * 0.06;
+  return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+};
+PAINTERS.smooth_sandstone = layered(224, 2, 3, [1.0, 0.96, 0.78]);
+
+// 染色玻璃：16 张由配色表生成（玻璃板复用同一张，靠几何做薄片）
+for (const color of DYE_COLORS) {
+  PAINTERS[`stained_glass_${color.name}`] = stainedGlassPainter(color.rgb);
+}
+
 // 陶瓦与混凝土：33 张贴图由配色表生成
 PAINTERS.terracotta = terracottaPainter(TERRACOTTA_BASE);
 for (const color of DYE_COLORS) {
@@ -861,6 +950,13 @@ export class TextureAtlas {
     this.rows = rows;
 
     const texture = new THREE.CanvasTexture(canvas);
+    // ⚠️ three 的 Texture 默认 flipY = true，上传时会整个垂直翻转，
+    // 于是 v=0 对应画布的**最后一行**，与 uv() 里「v=0 是画布顶部」的假设正好相反。
+    //
+    // 单行图集时这个错位被掩盖了（首行与末行是同一行），只导致每张贴图上下镜像；
+    // 改成网格后立刻暴露：石头（第 0 行）采到了最后一行的 stained_glass_yellow，
+    // 整片地面变成带边框网格的亮黄色。关掉 flipY 才能让 v=0 真正对应画布顶部。
+    texture.flipY = false;
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
     texture.generateMipmaps = false;

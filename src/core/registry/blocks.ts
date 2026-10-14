@@ -285,6 +285,59 @@ export function concreteId(colorIndex: number): number {
   return CONCRETE_ID_START + colorIndex;
 }
 
+// ---------------------------------------------------------------- 石材补全 / 玻璃
+
+export const STONE_EXTRA_ID_START = 160;
+export const STAINED_GLASS_ID_START = 168;
+export const GLASS_PANE_ID = 184;
+export const STAINED_GLASS_PANE_ID_START = 185;
+
+/** 第 index 种颜色的染色玻璃 id */
+export function stainedGlassId(colorIndex: number): number {
+  return STAINED_GLASS_ID_START + colorIndex;
+}
+
+/** 第 index 种颜色的染色玻璃板 id */
+export function stainedGlassPaneId(colorIndex: number): number {
+  return STAINED_GLASS_PANE_ID_START + colorIndex;
+}
+
+const GLASS_AND_STONE_SPECS: readonly BlockSpec[] = [
+  // ---- 石材补全（苔石 / 裂纹变体）
+  { id: 160, name: 'minecraft:mossy_cobblestone', tiles: ['mossy_cobblestone', 'mossy_cobblestone', 'mossy_cobblestone'] },
+  { id: 161, name: 'minecraft:mossy_stone_bricks', tiles: ['mossy_stone_bricks', 'mossy_stone_bricks', 'mossy_stone_bricks'] },
+  { id: 162, name: 'minecraft:cracked_stone_bricks', tiles: ['cracked_stone_bricks', 'cracked_stone_bricks', 'cracked_stone_bricks'] },
+  { id: 163, name: 'minecraft:cracked_deepslate_bricks', tiles: ['cracked_deepslate_bricks', 'cracked_deepslate_bricks', 'cracked_deepslate_bricks'] },
+  { id: 164, name: 'minecraft:cobbled_deepslate', tiles: ['cobbled_deepslate', 'cobbled_deepslate', 'cobbled_deepslate'] },
+
+  // ---- 砂岩变体
+  { id: 165, name: 'minecraft:chiseled_sandstone', tiles: ['chiseled_sandstone', 'sandstone', 'chiseled_sandstone'] },
+  { id: 166, name: 'minecraft:cut_sandstone', tiles: ['cut_sandstone', 'sandstone', 'cut_sandstone'] },
+  { id: 167, name: 'minecraft:smooth_sandstone', tiles: ['smooth_sandstone', 'smooth_sandstone', 'smooth_sandstone'] },
+
+  // ---- 染色玻璃（半透明整块）+ 玻璃板（薄片，连接方向由邻居实时决定）
+  { id: GLASS_PANE_ID, name: 'minecraft:glass_pane', tiles: ['glass', 'glass', 'glass'], shape: 'pane' as const, opaque: false, translucent: true },
+  ...DYE_COLORS.map(
+    (color, index): BlockSpec => ({
+      id: STAINED_GLASS_ID_START + index,
+      name: `minecraft:${color.name}_stained_glass`,
+      tiles: [`stained_glass_${color.name}`, `stained_glass_${color.name}`, `stained_glass_${color.name}`],
+      opaque: false,
+      translucent: true,
+    }),
+  ),
+  ...DYE_COLORS.map(
+    (color, index): BlockSpec => ({
+      id: STAINED_GLASS_PANE_ID_START + index,
+      name: `minecraft:${color.name}_stained_glass_pane`,
+      tiles: [`stained_glass_${color.name}`, `stained_glass_${color.name}`, `stained_glass_${color.name}`],
+      shape: 'pane' as const,
+      opaque: false,
+      translucent: true,
+    }),
+  ),
+];
+
 // ---------------------------------------------------------------- 台阶 / 楼梯
 
 /**
@@ -413,6 +466,7 @@ const SPECS: readonly BlockSpec[] = [
   ...WOOL_SPECS,
   ...WOOD_SPECS,
   ...COLORED_SPECS,
+  ...GLASS_AND_STONE_SPECS,
   ...SHAPED_SPECS,
   ...FUNCTIONAL_SHAPED_SPECS,
 ].sort((a, b) => a.id - b.id);
@@ -629,6 +683,23 @@ for (let i = 0; i < DYE_COLORS.length; i++) {
   HARDNESS.set(concreteId(i), 1.8);
 }
 
+// 石材补全与砂岩变体
+HARDNESS.set(160, 2);
+HARDNESS.set(161, 1.5);
+HARDNESS.set(162, 1.5);
+HARDNESS.set(163, 3.5);
+HARDNESS.set(164, 3);
+HARDNESS.set(165, 0.8);
+HARDNESS.set(166, 0.8);
+HARDNESS.set(167, 0.8);
+
+// 玻璃与玻璃板：0.3，徒手可采集（徒手可采集表在下面统一维护）
+HARDNESS.set(GLASS_PANE_ID, 0.3);
+for (let i = 0; i < DYE_COLORS.length; i++) {
+  HARDNESS.set(stainedGlassId(i), 0.3);
+  HARDNESS.set(stainedGlassPaneId(i), 0.3);
+}
+
 /** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
 const HAND_HARVESTABLE = new Set<number>([
   Block.DIRT,
@@ -671,6 +742,13 @@ for (const ids of Object.values(Wood)) {
   HAND_HARVESTABLE.add(ids.leaves);
   HAND_HARVESTABLE.add(ids.slab);
   HAND_HARVESTABLE.add(ids.stairs);
+}
+
+// 玻璃与玻璃板徒手可采集（石材补全与砂岩变体需要镐，不加入）
+HAND_HARVESTABLE.add(GLASS_PANE_ID);
+for (let i = 0; i < DYE_COLORS.length; i++) {
+  HAND_HARVESTABLE.add(stainedGlassId(i));
+  HAND_HARVESTABLE.add(stainedGlassPaneId(i));
 }
 
 export function blockHardness(id: number): number {

@@ -9,7 +9,17 @@
  * 匹配默认允许镜像（把图案左右翻转再比一次），这也是原版默认行为。
  */
 
-import { Block, SHAPED_PARENTS, Wood, slabId, stairsId, woolId } from '../registry/blocks.ts';
+import {
+  Block,
+  GLASS_PANE_ID,
+  SHAPED_PARENTS,
+  Wood,
+  slabId,
+  stairsId,
+  stainedGlassId,
+  stainedGlassPaneId,
+  woolId,
+} from '../registry/blocks.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import { Item, dyeItemId } from '../registry/items.ts';
 
@@ -192,12 +202,31 @@ const WOOD_RECIPES: readonly Recipe[] = Object.values(Wood).flatMap((ids) => [
   },
 ]);
 
+/** 玻璃板：6 块玻璃横排两行 → 16 片；染色玻璃同理 */
+const PANE_RECIPES: readonly Recipe[] = [
+  {
+    kind: 'shaped',
+    result: { id: GLASS_PANE_ID, count: 16 },
+    pattern: ['GGG', 'GGG'],
+    key: { G: Block.GLASS },
+  },
+  ...DYE_COLORS.map(
+    (_color, index): Recipe => ({
+      kind: 'shaped',
+      result: { id: stainedGlassPaneId(index), count: 16 },
+      pattern: ['GGG', 'GGG'],
+      key: { G: stainedGlassId(index) },
+    }),
+  ),
+];
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...WOOL_RECIPES,
   ...SHAPED_BLOCK_RECIPES,
   ...UTILITY_RECIPES,
   ...WOOD_RECIPES,
+  ...PANE_RECIPES,
 ];
 
 interface Normalized {

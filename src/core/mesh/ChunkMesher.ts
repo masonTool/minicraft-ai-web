@@ -17,7 +17,13 @@
 
 import * as THREE from 'three';
 import { Block, blockDef, type BlockDef } from '../registry/blocks.ts';
-import { canConnectTo, meshBoxes, type LocalBox, type ShapeContext } from '../registry/blockShapes.ts';
+import {
+  canConnectTo,
+  canPaneConnectTo,
+  meshBoxes,
+  type LocalBox,
+  type ShapeContext,
+} from '../registry/blockShapes.ts';
 import { FACING_OFFSET, type Facing } from '../registry/blockState.ts';
 import { Chunk, SECTION_HEIGHT, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
@@ -332,15 +338,17 @@ export function meshSection(
         // 栅栏/墙的连接方向、楼梯的内角外角都按邻居**实时计算**，
         // 因此旁边放一个新方块后它们会自动长出新的一节 / 变成转角，
         // 不需要在方块变动时反过来更新四周方块的状态。
-        const shapeCtx: ShapeContext =
-          def.shape === 'fence' || def.shape === 'wall'
-            ? {
-                connect: (facing: Facing): boolean => {
-                  const [cx, cz] = FACING_OFFSET[facing]!;
-                  return canConnectTo(sampleBlock(x + cx, y, z + cz));
-                },
-              }
-            : def.shape === 'stairs'
+        const needsConnect = def.shape === 'fence' || def.shape === 'wall' || def.shape === 'pane';
+        const connectProbe = def.shape === 'pane' ? canPaneConnectTo : canConnectTo;
+
+        const shapeCtx: ShapeContext = needsConnect
+          ? {
+              connect: (facing: Facing): boolean => {
+                const [cx, cz] = FACING_OFFSET[facing]!;
+                return connectProbe(sampleBlock(x + cx, y, z + cz));
+              },
+            }
+          : def.shape === 'stairs'
               ? {
                   neighbor: (dx, dy, dz) => {
                     const id = sampleBlock(x + dx, y + dy, z + dz);

@@ -64,6 +64,8 @@ const FENCE_POST = 0.375;
 const FENCE_HEIGHT = 1.5;
 /** 横杆厚度 */
 const RAIL_WIDTH = 0.1875;
+/** 玻璃板的半厚（总厚 2/16，与原版一致） */
+const PANE_HALF = 0.0625;
 
 // ---------------------------------------------------------------- 碰撞盒
 
@@ -92,6 +94,12 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'fence':
     case 'wall':
       return [[0, 0, 0, 1, FENCE_HEIGHT, 1]];
+    case 'pane':
+      // 原版的玻璃板碰撞固定是"十字"两块（1 格长、2/16 厚），不随连接方向变化
+      return [
+        [0, 0, 0.5 - PANE_HALF, 1, 1, 0.5 + PANE_HALF],
+        [0.5 - PANE_HALF, 0, 0, 0.5 + PANE_HALF, 1, 1],
+      ];
     case 'door':
       return [doorBox(state)];
     case 'torch':
@@ -156,6 +164,8 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       return fenceBoxes(ctx.connect ?? NEVER_CONNECT);
     case 'wall':
       return wallBoxes(ctx.connect ?? NEVER_CONNECT);
+    case 'pane':
+      return paneBoxes(ctx.connect ?? NEVER_CONNECT);
     case 'door':
       return [doorBox(state)];
     case 'torch':
@@ -278,6 +288,27 @@ function fenceBoxes(connect: ConnectQuery): readonly LocalBox[] {
   return boxes;
 }
 
+/** 玻璃板：中心柱 + 四个方向按需延伸的薄片（高度铺满整格） */
+function paneBoxes(connect: ConnectQuery): readonly LocalBox[] {
+  const t = PANE_HALF;
+  const boxes: LocalBox[] = [[0.5 - t, 0, 0.5 - t, 0.5 + t, 1, 0.5 + t]];
+
+  for (const facing of [0, 1, 2, 3] as const) {
+    if (!connect(facing)) continue;
+    const [dx, dz] = FACING_OFFSET[facing]!;
+    if (dx !== 0) {
+      const x0 = dx > 0 ? 0.5 + t : 0;
+      const x1 = dx > 0 ? 1 : 0.5 - t;
+      boxes.push([x0, 0, 0.5 - t, x1, 1, 0.5 + t]);
+    } else {
+      const z0 = dz > 0 ? 0.5 + t : 0;
+      const z1 = dz > 0 ? 1 : 0.5 - t;
+      boxes.push([0.5 - t, 0, z0, 0.5 + t, 1, z1]);
+    }
+  }
+  return boxes;
+}
+
 /** 墙：柱子较细且矮一点，横杆只有一根 */
 function wallBoxes(connect: ConnectQuery): readonly LocalBox[] {
   const post = 0.25;
@@ -335,4 +366,16 @@ export function canConnectTo(neighborId: number): boolean {
   if (def.shape === 'fence' || def.shape === 'wall') return true;
   // 完整实心方块也能挂上横杆
   return def.solid && def.shape === 'cube';
+}
+
+/**
+ * 玻璃板的连接判定。
+ * 与原版一致：相邻的玻璃板之间会连成一片，贴着完整实心方块时也会延伸过去
+ * （这样窗户镶在墙里时边缘是齐的）。
+ */
+export function canPaneConnectTo(neighborId: number): boolean {
+  if (neighborId === 0) return false;
+  const def = blockDef(neighborId);
+  if (def.shape === 'pane') return true;
+  return def.solid && def.opaque && def.shape === 'cube';
 }

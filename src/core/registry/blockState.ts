@@ -26,7 +26,8 @@ export type BlockShape =
   | 'wall'
   | 'door'
   | 'torch'
-  | 'ladder';
+  | 'ladder'
+  | 'pane';
 
 /** 朝向对应的水平偏移（与 Facing 一一对应） */
 export const FACING_OFFSET: readonly (readonly [number, number])[] = [
