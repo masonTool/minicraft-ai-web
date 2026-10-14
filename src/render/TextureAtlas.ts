@@ -123,6 +123,9 @@ export const TILE_ORDER = [
   'dye_black',
   'item_brick',
   'item_clay_ball',
+  'torch',
+  'ladder',
+  'oak_door',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
@@ -644,6 +647,47 @@ for (const color of DYE_COLORS) {
   PAINTERS[`dye_${color.name}`] = dyePainter(color.rgb);
 }
 
+/** 火把：木柄 + 顶端火焰 */
+PAINTERS.torch = (x, y, rng) => {
+  const centered = Math.abs(x - 7.5);
+  // 火焰（顶部 3 像素）
+  if (y <= 3) {
+    if (centered > 2.2 - y * 0.4) return [0, 0, 0, 0];
+    const v = 200 + rng() * 55;
+    return [clamp255(v), clamp255(v * (0.55 + y * 0.1)), clamp255(v * 0.25), 255];
+  }
+  // 木柄
+  if (centered > 1.6 || y > 14) return [0, 0, 0, 0];
+  const v = 148 - centered * 20 + (rng() * 12 - 6);
+  return [clamp255(v * 1.05), clamp255(v * 0.78), clamp255(v * 0.44), 255];
+};
+
+/** 梯子：两侧立杆 + 若干横档 */
+PAINTERS.ladder = (x, y, rng) => {
+  const rail = x <= 2 || x >= 13;
+  const rung = y % 4 === 1 || y % 4 === 2;
+  if (!rail && !rung) return [0, 0, 0, 0];
+  const shade = rail ? 1.0 : 0.84;
+  const v = (142 + (rng() * 14 - 7)) * shade;
+  return [clamp255(v * 1.06), clamp255(v * 0.78), clamp255(v * 0.44), 255];
+};
+
+/** 木门：木板底 + 竖边框 + 门把手 */
+PAINTERS.oak_door = (x, y, rng) => {
+  const base = layered(146, 6, 7, [1.05, 0.8, 0.48])(x, y, rng);
+  // 上下横档与左右竖框
+  if (y <= 1 || y >= 14 || x <= 1 || x >= 14 || (y >= 5 && y <= 6)) {
+    const v = 128 + (rng() * 10 - 5);
+    return [clamp255(v * 1.02), clamp255(v * 0.74), clamp255(v * 0.42), 255];
+  }
+  // 门把手
+  if (x >= 11 && x <= 12 && y >= 8 && y <= 9) {
+    const v = 178 + rng() * 24;
+    return [clamp255(v), clamp255(v * 0.94), clamp255(v * 0.66), 255];
+  }
+  return base;
+};
+
 PAINTERS.item_clay_ball = lump(
   [
     [168, 168, 178],
@@ -704,7 +748,18 @@ export class TextureAtlas {
     texture.generateMipmaps = false;
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.colorSpace = THREE.SRGBColorSpace;
+    // ⚠️ 必须是 NoColorSpace（按原始数据采样），不能标成 SRGBColorSpace。
+    //
+    // 原因：体素用的是自定义 ShaderMaterial，three 不会替它做
+    // 「线性 → 输出色彩空间」的转换。若把贴图标成 sRGB，texture2D() 返回的是
+    // **线性化后**的值（0.58 → 0.29），而我们又把这个线性值原样写进 sRGB 帧缓冲，
+    // 结果所有方块整体暗一大截——实测草地 148 只渲染出 74、石砖 128 只渲染出 55，
+    // 正好是 2.2 次幂的差距。
+    //
+    // 标成 NoColorSpace 后采样值就是创作者写入的 sRGB 值，光照乘法也在 sRGB 空间进行，
+    // 这正是原版体素的做法。这个 bug 靠 tools/pixel-probe.mjs 取像素亮度才定位到，
+    // 肉眼只会觉得"整体偏暗"，很容易误判成光照或 AO 的问题。
+    texture.colorSpace = THREE.NoColorSpace;
     texture.needsUpdate = true;
     this.texture = texture;
   }
