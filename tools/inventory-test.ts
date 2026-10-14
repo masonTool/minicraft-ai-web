@@ -6,7 +6,7 @@
  * 比开浏览器验证快得多，也不必担心渲染干扰。
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
+import { Block, BLOCKS } from '../src/core/registry/blocks.ts';
 import {
   Item,
   PLACEABLE_ITEMS,
@@ -36,8 +36,14 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 
 console.log('\n[物品注册表]');
 
-// 43 种方块去掉空气 / 水 / 岩浆 = 40 种可放置物品
-equal('可放置物品数（43 种方块去掉空气/水/岩浆）', PLACEABLE_ITEMS.length, 40);
+// 动态比对：每种"非空气、非流体"的方块都应该有对应的方块物品，
+// 这样后续往方块表里加方块时不会再让这条断言过期。
+const expectedPlaceable = BLOCKS.filter((def) => def.id !== Block.AIR && !def.liquid).length;
+equal(
+  `可放置物品数（${BLOCKS.length} 种方块去掉空气与水/岩浆）`,
+  PLACEABLE_ITEMS.length,
+  expectedPlaceable,
+);
 equal('石头是可放置物品', blockForItem(Block.STONE), Block.STONE);
 equal('煤炭不可放置', blockForItem(Item.COAL), undefined);
 equal('煤炭名称去掉命名空间', itemName(Item.COAL), 'coal');

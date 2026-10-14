@@ -10,6 +10,7 @@
  */
 
 import { Chunk } from './Chunk.ts';
+import { BlockEntityStore } from './BlockEntityStore.ts';
 import { LightEngine } from '../light/LightEngine.ts';
 import { blockDef } from '../registry/blocks.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
@@ -45,6 +46,9 @@ export class World {
 
   /** 光照引擎 */
   readonly light: LightEngine;
+
+  /** 熔炉 / 箱子这类带内容的方块 */
+  readonly containers = new BlockEntityStore();
 
   /** 已完成的生成任务数 / 已派发任务数，供加载进度显示 */
   completed = 0;

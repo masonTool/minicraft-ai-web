@@ -48,6 +48,10 @@ export const Item = {
   DIAMOND: 106,
   EMERALD: 107,
   STICK: 108,
+  IRON_INGOT: 109,
+  GOLD_INGOT: 110,
+  COPPER_INGOT: 111,
+  CHARCOAL: 112,
 } as const;
 
 interface NonBlockItemSpec {
@@ -67,6 +71,10 @@ const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.DIAMOND, name: 'minecraft:diamond', tile: 'item_diamond' },
   { id: Item.EMERALD, name: 'minecraft:emerald', tile: 'item_emerald' },
   { id: Item.STICK, name: 'minecraft:stick', tile: 'item_stick' },
+  { id: Item.IRON_INGOT, name: 'minecraft:iron_ingot', tile: 'item_iron_ingot' },
+  { id: Item.GOLD_INGOT, name: 'minecraft:gold_ingot', tile: 'item_gold_ingot' },
+  { id: Item.COPPER_INGOT, name: 'minecraft:copper_ingot', tile: 'item_copper_ingot' },
+  { id: Item.CHARCOAL, name: 'minecraft:charcoal', tile: 'item_charcoal' },
 ];
 
 const MAX_ITEM_ID = 200;

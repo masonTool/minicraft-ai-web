@@ -74,6 +74,10 @@ export const TILE_ORDER = [
   'furnace_side',
   'chest_top',
   'chest_side',
+  'item_iron_ingot',
+  'item_gold_ingot',
+  'item_copper_ingot',
+  'item_charcoal',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
@@ -218,6 +222,26 @@ const STICK_PAINTER: Painter = (x, y, rng) => {
   const v = 150 - centered * 22 + (rng() * 14 - 7);
   return [clamp255(v * 1.1), clamp255(v * 0.78), clamp255(v * 0.42), 255];
 };
+
+/** 金属锭：上窄下宽的梯形，顶部更亮、边缘压暗 */
+function ingot(colors: readonly (readonly [number, number, number])[], salt: string): Painter {
+  return (x, y, rng) => {
+    if (y < 5 || y > 10) return [0, 0, 0, 0];
+    const t = (y - 5) / 5;
+    const halfWidth = 3.8 + t * 2.6;
+    const dx = Math.abs(x - 7.5);
+    if (dx > halfWidth) return [0, 0, 0, 0];
+    const shade = 0.86 + 0.4 * (1 - t) - (dx / halfWidth) * 0.2;
+    const base = colors[hashString(`${salt}${x},${y}`) % colors.length]!;
+    const jitter = rng() * 14 - 7;
+    return [
+      clamp255(base[0] * shade + jitter),
+      clamp255(base[1] * shade + jitter),
+      clamp255(base[2] * shade + jitter),
+      255,
+    ];
+  };
+}
 
 /** 鹅卵石：按 4×4 分块取随机灰阶，块间留暗缝（熔炉侧面也复用它） */
 const cobblestonePainter: Painter = (x, y, rng) => {
@@ -410,6 +434,35 @@ const PAINTERS: Record<string, Painter> = {
     'iemerald',
   ),
   item_stick: STICK_PAINTER,
+  item_iron_ingot: ingot(
+    [
+      [232, 232, 232],
+      [205, 205, 205],
+    ],
+    'iironi',
+  ),
+  item_gold_ingot: ingot(
+    [
+      [252, 232, 120],
+      [232, 200, 72],
+    ],
+    'igoldi',
+  ),
+  item_copper_ingot: ingot(
+    [
+      [228, 152, 108],
+      [190, 116, 78],
+    ],
+    'icopperi',
+  ),
+  item_charcoal: lump(
+    [
+      [46, 42, 40],
+      [66, 60, 56],
+    ],
+    'icharcoal',
+    5,
+  ),
 
   // ---- 功能方块
   crafting_table_top: (x, y, rng) => {

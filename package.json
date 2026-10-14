@@ -12,7 +12,8 @@
     "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs",
     "test:inventory": "esbuild tools/inventory-test.ts --bundle --platform=node --format=esm --outfile=.tmp/inventory-test.mjs --log-level=error && node .tmp/inventory-test.mjs",
     "test:crafting": "esbuild tools/crafting-test.ts --bundle --platform=node --format=esm --outfile=.tmp/crafting-test.mjs --log-level=error && node .tmp/crafting-test.mjs",
-    "test": "npm run test:inventory && npm run test:crafting"
+    "test:furnace": "esbuild tools/furnace-test.ts --bundle --platform=node --format=esm --outfile=.tmp/furnace-test.mjs --log-level=error && node .tmp/furnace-test.mjs",
+    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace"
   },
   "dependencies": {
     "three": "^0.186.1"
