@@ -34,6 +34,9 @@ const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
 
   // 原木 → 木炭
   { input: Block.OAK_LOG, output: { id: Item.CHARCOAL, count: 1 }, time: SMELTING_TIME, experience: 0.15 },
+
+  // 黏土球 → 红砖
+  { input: Item.CLAY_BALL, output: { id: Item.BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.3 },
 ];
 
 const RECIPE_BY_INPUT = new Map<number, SmeltingRecipe>(SMELTING_RECIPES.map((recipe) => [recipe.input, recipe]));

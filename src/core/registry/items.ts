@@ -11,6 +11,7 @@
  */
 
 import { Block, blockDef } from './blocks.ts';
+import { DYE_COLORS } from './colors.ts';
 
 export const MAX_STACK = 64;
 
@@ -52,7 +53,17 @@ export const Item = {
   GOLD_INGOT: 110,
   COPPER_INGOT: 111,
   CHARCOAL: 112,
+  BRICK: 129,
+  CLAY_BALL: 130,
 } as const;
+
+/** 染料物品 id 起始值，顺序与 DYE_COLORS 一致 */
+export const DYE_ITEM_START = 113;
+
+/** 第 index 种染料的物品 id */
+export function dyeItemId(colorIndex: number): number {
+  return DYE_ITEM_START + colorIndex;
+}
 
 interface NonBlockItemSpec {
   id: number;
@@ -61,7 +72,7 @@ interface NonBlockItemSpec {
   maxStack?: number;
 }
 
-const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
+const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.COAL, name: 'minecraft:coal', tile: 'item_coal' },
   { id: Item.RAW_IRON, name: 'minecraft:raw_iron', tile: 'item_raw_iron' },
   { id: Item.RAW_COPPER, name: 'minecraft:raw_copper', tile: 'item_raw_copper' },
@@ -75,7 +86,18 @@ const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.GOLD_INGOT, name: 'minecraft:gold_ingot', tile: 'item_gold_ingot' },
   { id: Item.COPPER_INGOT, name: 'minecraft:copper_ingot', tile: 'item_copper_ingot' },
   { id: Item.CHARCOAL, name: 'minecraft:charcoal', tile: 'item_charcoal' },
+  { id: Item.BRICK, name: 'minecraft:brick', tile: 'item_brick' },
+  { id: Item.CLAY_BALL, name: 'minecraft:clay_ball', tile: 'item_clay_ball' },
 ];
+
+/** 16 种染料，id 连续且顺序与 DYE_COLORS 一致 */
+const DYE_SPECS: readonly NonBlockItemSpec[] = DYE_COLORS.map((color, index) => ({
+  id: dyeItemId(index),
+  name: `minecraft:${color.name}_dye`,
+  tile: `dye_${color.name}`,
+}));
+
+const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, ...DYE_SPECS];
 
 const MAX_ITEM_ID = 200;
 
@@ -153,6 +175,8 @@ const NO_DROP = new Set<number>([
 const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.GRASS_BLOCK, { id: Block.DIRT, count: 1 }],
   [Block.STONE, { id: Block.COBBLESTONE, count: 1 }],
+  // 黏土块一次掉 4 个黏土球（原版行为），黏土球烧炼后得到红砖
+  [Block.CLAY, { id: Item.CLAY_BALL, count: 4 }],
 
   [Block.COAL_ORE, { id: Item.COAL, count: 1 }],
   [Block.DEEPSLATE_COAL_ORE, { id: Item.COAL, count: 1 }],

@@ -9,6 +9,7 @@
  */
 
 import * as THREE from 'three';
+import { DYE_COLORS } from '../core/registry/colors.ts';
 
 export const TILE_SIZE = 16;
 
@@ -78,6 +79,50 @@ export const TILE_ORDER = [
   'item_gold_ingot',
   'item_copper_ingot',
   'item_charcoal',
+  'wool_white',
+  'wool_orange',
+  'wool_magenta',
+  'wool_light_blue',
+  'wool_yellow',
+  'wool_lime',
+  'wool_pink',
+  'wool_gray',
+  'wool_light_gray',
+  'wool_cyan',
+  'wool_purple',
+  'wool_blue',
+  'wool_brown',
+  'wool_green',
+  'wool_red',
+  'wool_black',
+  'stone_bricks',
+  'chiseled_stone_bricks',
+  'smooth_stone',
+  'polished_granite',
+  'polished_diorite',
+  'polished_andesite',
+  'deepslate_bricks',
+  'chiseled_deepslate',
+  'bricks',
+  'polished_deepslate',
+  'dye_white',
+  'dye_orange',
+  'dye_magenta',
+  'dye_light_blue',
+  'dye_yellow',
+  'dye_lime',
+  'dye_pink',
+  'dye_gray',
+  'dye_light_gray',
+  'dye_cyan',
+  'dye_purple',
+  'dye_blue',
+  'dye_brown',
+  'dye_green',
+  'dye_red',
+  'dye_black',
+  'item_brick',
+  'item_clay_ball',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
@@ -240,6 +285,68 @@ function ingot(colors: readonly (readonly [number, number, number])[], salt: str
       clamp255(base[2] * shade + jitter),
       255,
     ];
+  };
+}
+
+/** 羊毛：细密绒面，颜色自带轻微明暗起伏 */
+function woolPainter(rgb: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    // 用两个不同粒度的随机叠加，避免出现规则网格
+    const grain = (hashString(`w${x >> 1},${y >> 1}`) % 100) / 100;
+    const fine = rng();
+    const shade = 0.88 + grain * 0.16 + fine * 0.08;
+    const jitter = rng() * 12 - 6;
+    return [
+      clamp255(rgb[0] * shade + jitter),
+      clamp255(rgb[1] * shade + jitter),
+      clamp255(rgb[2] * shade + jitter),
+      255,
+    ];
+  };
+}
+
+/** 砖块纹理：按 4×8 交错砌块 + 灰缝 */
+function brickPainter(base: [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const row = y >> 2; // 每 4 像素一行砖
+    const offset = (row % 2) * 4;
+    const mortar = y % 4 === 3 || (x + offset) % 8 === 7;
+    if (mortar) {
+      const v = 150 + rng() * 16;
+      return [clamp255(v), clamp255(v * 0.98), clamp255(v * 0.94), 255];
+    }
+    const v = 1 + (rng() * 0.18 - 0.09);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+  };
+}
+
+/** 染料：一小堆粉末（下半部的圆丘，中心偏亮） */
+function dyePainter(rgb: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const dx = (x - 7.5) / 5.3;
+    const dy = (y - 9.6) / 4.3;
+    const distance = Math.hypot(dx, dy);
+    if (distance > 1) return [0, 0, 0, 0];
+    const shade = 1.1 - distance * 0.3;
+    const jitter = rng() * 18 - 9;
+    return [
+      clamp255(rgb[0] * shade + jitter),
+      clamp255(rgb[1] * shade + jitter),
+      clamp255(rgb[2] * shade + jitter),
+      255,
+    ];
+  };
+}
+
+/** 錾制方块：外圈描边 + 内框 + 中心纹样，模拟原版的雕刻图案 */
+function chiseledPainter(base: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const outerBorder = x === 0 || y === 0 || x === 15 || y === 15;
+    const innerBorder = x === 3 || y === 3 || x === 12 || y === 12;
+    const core = x >= 6 && x <= 9 && y >= 6 && y <= 9;
+    const shade = outerBorder ? 0.7 : innerBorder ? 1.12 : core ? 0.82 : 0.97;
+    const v = shade + (rng() * 0.1 - 0.05);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
   };
 }
 
@@ -517,6 +624,41 @@ const PAINTERS: Record<string, Painter> = {
     }
     return base;
   },
+
+  // ---- 石材家族
+  stone_bricks: brickPainter([124, 124, 124]),
+  chiseled_stone_bricks: chiseledPainter([124, 124, 124]),
+  smooth_stone: layered(158, 2, 3),
+  polished_granite: layered(154, 2, 3, [1.0, 0.74, 0.65]),
+  polished_diorite: layered(200, 2, 3, [1.0, 1.0, 1.03]),
+  polished_andesite: layered(134, 2, 3),
+  deepslate_bricks: brickPainter([88, 88, 92]),
+  chiseled_deepslate: chiseledPainter([84, 84, 90]),
+  bricks: brickPainter([150, 84, 66]),
+  polished_deepslate: layered(90, 2, 3),
+};
+
+// 羊毛与染料：16 色按配色表批量生成，避免手写 32 份几乎相同的代码
+for (const color of DYE_COLORS) {
+  PAINTERS[`wool_${color.name}`] = woolPainter(color.rgb);
+  PAINTERS[`dye_${color.name}`] = dyePainter(color.rgb);
+}
+
+PAINTERS.item_clay_ball = lump(
+  [
+    [168, 168, 178],
+    [146, 146, 158],
+  ],
+  'iclay',
+  4.6,
+);
+
+PAINTERS.item_brick = (x, y, rng) => {
+  // 小砖块：红棕色矩形 + 一点高光
+  if (x < 3 || x > 12 || y < 5 || y > 11) return [0, 0, 0, 0];
+  const highlight = y <= 6 ? 1.14 : 0.94;
+  const v = highlight + (rng() * 0.1 - 0.05);
+  return [clamp255(150 * v), clamp255(84 * v), clamp255(66 * v), 255];
 };
 
 export class TextureAtlas {

@@ -7,6 +7,8 @@
  * - 完整 1.18 方块集（含 block state）会在 B3/B4 逐步补齐；当前覆盖地形生成所需部分。
  */
 
+import { DYE_COLORS } from './colors.ts';
+
 export interface BlockDef {
   readonly id: number;
   readonly name: string;
@@ -38,7 +40,7 @@ interface BlockSpec {
   translucent?: boolean;
 }
 
-const SPECS: readonly BlockSpec[] = [
+const BASE_SPECS: readonly BlockSpec[] = [
   { id: 0, name: 'minecraft:air', tiles: ['', '', ''], solid: false, opaque: false },
 
   // ---- 基础建筑与地形方块
@@ -140,7 +142,34 @@ const SPECS: readonly BlockSpec[] = [
   { id: 43, name: 'minecraft:crafting_table', tiles: ['crafting_table_top', 'oak_planks', 'crafting_table_side'] },
   { id: 44, name: 'minecraft:furnace', tiles: ['furnace_top', 'furnace_top', 'furnace_side'] },
   { id: 45, name: 'minecraft:chest', tiles: ['chest_top', 'chest_top', 'chest_side'] },
+
+  // ---- 石材家族
+  { id: 62, name: 'minecraft:stone_bricks', tiles: ['stone_bricks', 'stone_bricks', 'stone_bricks'] },
+  { id: 63, name: 'minecraft:chiseled_stone_bricks', tiles: ['chiseled_stone_bricks', 'chiseled_stone_bricks', 'chiseled_stone_bricks'] },
+  { id: 64, name: 'minecraft:smooth_stone', tiles: ['smooth_stone', 'smooth_stone', 'smooth_stone'] },
+  { id: 65, name: 'minecraft:polished_granite', tiles: ['polished_granite', 'polished_granite', 'polished_granite'] },
+  { id: 66, name: 'minecraft:polished_diorite', tiles: ['polished_diorite', 'polished_diorite', 'polished_diorite'] },
+  { id: 67, name: 'minecraft:polished_andesite', tiles: ['polished_andesite', 'polished_andesite', 'polished_andesite'] },
+  { id: 68, name: 'minecraft:deepslate_bricks', tiles: ['deepslate_bricks', 'deepslate_bricks', 'deepslate_bricks'] },
+  { id: 69, name: 'minecraft:chiseled_deepslate', tiles: ['chiseled_deepslate', 'chiseled_deepslate', 'chiseled_deepslate'] },
+  { id: 70, name: 'minecraft:bricks', tiles: ['bricks', 'bricks', 'bricks'] },
+  { id: 71, name: 'minecraft:polished_deepslate', tiles: ['polished_deepslate', 'polished_deepslate', 'polished_deepslate'] },
 ];
+
+/** 羊毛 id 起始值：16 种颜色连续排列，顺序与 DYE_COLORS 一致 */
+export const WOOL_ID_START = 46;
+
+const WOOL_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
+  id: WOOL_ID_START + index,
+  name: `minecraft:${color.name}_wool`,
+  tiles: [`wool_${color.name}`, `wool_${color.name}`, `wool_${color.name}`],
+}));
+
+/**
+ * 全部方块定义。
+ * ⚠️ 必须按 id 升序排列：BLOCKS 是按数组下标索引的，顺序错位会让 blockDef(id) 取到别的方块。
+ */
+const SPECS: readonly BlockSpec[] = [...BASE_SPECS, ...WOOL_SPECS].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
 export const Block = {
@@ -190,21 +219,55 @@ export const Block = {
   CRAFTING_TABLE: 43,
   FURNACE: 44,
   CHEST: 45,
+  STONE_BRICKS: 62,
+  CHISELED_STONE_BRICKS: 63,
+  SMOOTH_STONE: 64,
+  POLISHED_GRANITE: 65,
+  POLISHED_DIORITE: 66,
+  POLISHED_ANDESITE: 67,
+  DEEPSLATE_BRICKS: 68,
+  CHISELED_DEEPSLATE: 69,
+  BRICKS: 70,
+  POLISHED_DEEPSLATE: 71,
 } as const;
 
+/** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
+export function woolId(colorIndex: number): number {
+  return WOOL_ID_START + colorIndex;
+}
+
 /** 按 id 索引的方块定义表 */
-export const BLOCKS: readonly BlockDef[] = SPECS.map((s) => ({
-  id: s.id,
-  name: s.name,
-  tiles: s.tiles ?? ['stone', 'stone', 'stone'],
-  solid: s.solid ?? true,
-  opaque: s.opaque ?? true,
-  light: s.light ?? 0,
-  // 默认：不透光方块完全阻挡光照，透明方块不衰减
-  lightOpacity: s.lightOpacity ?? ((s.opaque ?? true) ? 15 : 0),
-  liquid: s.liquid ?? false,
-  translucent: s.translucent ?? false,
-}));
+/**
+ * 构造按 id 索引的方块表。
+ *
+ * 这里强制校验 id 从 0 开始连续——BLOCKS 是数组下标索引，一旦有空缺或错位，
+ * blockDef(id) 就会静默地返回错误的方块。宁可启动时报错也不要让这种问题潜伏下去。
+ */
+function buildBlockTable(): readonly BlockDef[] {
+  const table: BlockDef[] = [];
+  for (const spec of SPECS) {
+    if (spec.id !== table.length) {
+      throw new Error(
+        `方块 id 必须从 0 开始连续：第 ${table.length} 项期望 id=${table.length}，实际 id=${spec.id}（${spec.name}）`,
+      );
+    }
+    table.push({
+      id: spec.id,
+      name: spec.name,
+      tiles: spec.tiles ?? ['stone', 'stone', 'stone'],
+      solid: spec.solid ?? true,
+      opaque: spec.opaque ?? true,
+      light: spec.light ?? 0,
+      // 默认：不透光方块完全阻挡光照，透明方块不衰减
+      lightOpacity: spec.lightOpacity ?? ((spec.opaque ?? true) ? 15 : 0),
+      liquid: spec.liquid ?? false,
+      translucent: spec.translucent ?? false,
+    });
+  }
+  return table;
+}
+
+export const BLOCKS: readonly BlockDef[] = buildBlockTable();
 
 export function blockDef(id: number): BlockDef {
   return BLOCKS[id] ?? BLOCKS[0]!;
@@ -266,7 +329,21 @@ const HARDNESS = new Map<number, number>([
   [Block.CRAFTING_TABLE, 2.5],
   [Block.FURNACE, 3.5],
   [Block.CHEST, 2.5],
+
+  [Block.STONE_BRICKS, 1.5],
+  [Block.CHISELED_STONE_BRICKS, 1.5],
+  [Block.SMOOTH_STONE, 2],
+  [Block.POLISHED_GRANITE, 1.5],
+  [Block.POLISHED_DIORITE, 1.5],
+  [Block.POLISHED_ANDESITE, 1.5],
+  [Block.DEEPSLATE_BRICKS, 3.5],
+  [Block.CHISELED_DEEPSLATE, 3.5],
+  [Block.BRICKS, 2],
+  [Block.POLISHED_DEEPSLATE, 3.5],
 ]);
+
+// 羊毛：16 种颜色硬度相同
+for (let i = 0; i < DYE_COLORS.length; i++) HARDNESS.set(woolId(i), 0.8);
 
 /** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
 const HAND_HARVESTABLE = new Set<number>([
@@ -288,6 +365,9 @@ const HAND_HARVESTABLE = new Set<number>([
   Block.CRAFTING_TABLE,
   Block.CHEST,
 ]);
+
+// 羊毛徒手即可采集（石材家族一律需要镐，不加入此表）
+for (let i = 0; i < DYE_COLORS.length; i++) HAND_HARVESTABLE.add(woolId(i));
 
 export function blockHardness(id: number): number {
   return HARDNESS.get(id) ?? 3;

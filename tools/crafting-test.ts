@@ -4,8 +4,9 @@
  * 运行：npm run test:crafting
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { Block, WOOL_ID_START, woolId } from '../src/core/registry/blocks.ts';
+import { DYE_COLORS } from '../src/core/registry/colors.ts';
+import { Item, dyeItemId } from '../src/core/registry/items.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { CraftingGrid } from '../src/core/crafting/CraftingGrid.ts';
 import { Inventory } from '../src/core/container/Inventory.ts';
@@ -150,7 +151,54 @@ console.log('\n[合成网格：木棍进阶链]');
   grid2.set(2, { id: P, count: 1 });
   equal('第二步：2 木板竖排 → 木棍', grid2.result?.id, Item.STICK);
 
-  equal('配方表规模', RECIPES.length, 5);
+  // 15 条基础配方 + 16 条羊毛染色
+  equal('配方表规模', RECIPES.length, 31);
+}
+
+console.log('\n[石材家族配方]');
+{
+  const stoneBricks = grid(2, ['SS', 'SS'], { S: Block.STONE });
+  equal('4 石头 → 4 石砖', matchRecipe(stoneBricks, 2)?.id, Block.STONE_BRICKS);
+  equal('石砖产量 4', matchRecipe(stoneBricks, 2)?.count, 4);
+
+  const chiseled = grid(2, ['S·', 'S·'], { S: Block.STONE_BRICKS });
+  equal('2 石砖竖排 → 錾制石砖', matchRecipe(chiseled, 2)?.id, Block.CHISELED_STONE_BRICKS);
+
+  const polished = grid(2, ['GG', 'GG'], { G: Block.GRANITE });
+  equal('4 花岗岩 → 4 磨制花岗岩', matchRecipe(polished, 2)?.id, Block.POLISHED_GRANITE);
+
+  const deepslateChain = grid(2, ['DD', 'DD'], { D: Block.DEEPSLATE });
+  equal('4 深板岩 → 4 磨制深板岩', matchRecipe(deepslateChain, 2)?.id, Block.POLISHED_DEEPSLATE);
+
+  const deepslateBricks = grid(2, ['DD', 'DD'], { D: Block.POLISHED_DEEPSLATE });
+  equal('4 磨制深板岩 → 4 深板岩砖', matchRecipe(deepslateBricks, 2)?.id, Block.DEEPSLATE_BRICKS);
+
+  const bricks = grid(2, ['BB', 'BB'], { B: Item.BRICK });
+  equal('4 红砖 → 1 砖块', matchRecipe(bricks, 2)?.id, Block.BRICKS);
+
+  const sandstone = grid(2, ['SS', 'SS'], { S: Block.SAND });
+  equal('4 沙 → 1 砂岩', matchRecipe(sandstone, 2)?.id, Block.SANDSTONE);
+}
+
+console.log('\n[羊毛染色：16 色]');
+{
+  let matched = 0;
+  for (let index = 0; index < DYE_COLORS.length; index++) {
+    const cells = grid(2, ['WD', '··'], { W: woolId(0), D: dyeItemId(index) });
+    const result = matchRecipe(cells, 2);
+    if (result?.id === woolId(index)) matched++;
+  }
+  equal('16 种染料都能把白羊毛染成对应颜色', matched, DYE_COLORS.length);
+
+  // 染色是无序的：左右调换也能合成
+  const swapped = grid(2, ['DW', '··'], { W: woolId(0), D: dyeItemId(3) });
+  equal('染料与羊毛位置调换也成立（无序配方）', matchRecipe(swapped, 2)?.id, woolId(3));
+
+  // 不能直接拿两种染料合成
+  const dyeOnly = grid(2, ['DD', '··'], { D: dyeItemId(1) });
+  check('两种染料不能合成羊毛', matchRecipe(dyeOnly, 2) === null);
+
+  equal('蓝色羊毛的 id 与起始值一致', woolId(11), WOOL_ID_START + 11);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
