@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node $CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/auto-continue.mjs",
+            "command": "node /Users/mason/DouDou/AI/minecraft/.codebuddy/hooks/auto-continue.mjs",
             "timeout": 15
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node $CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/auto-continue.mjs",
+            "command": "node /Users/mason/DouDou/AI/minecraft/.codebuddy/hooks/auto-continue.mjs",
             "timeout": 15
           }
         ]
