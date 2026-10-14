@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
+import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
@@ -84,6 +85,7 @@ class App {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly world = new World(WORLD_SEED);
   private readonly chunkRenderer: ChunkRenderer;
+  private readonly meshPool: MeshWorkerPool;
   private readonly solidMaterial: VoxelMaterial;
   private readonly translucentMaterial: VoxelMaterial;
   private readonly skyColor: THREE.Color;
@@ -162,12 +164,17 @@ class App {
     this.entityRenderer = new EntityRenderer(this.scene, atlas);
     this.applyEnvironment();
 
+    // 网格化放在独立 Worker 池里：地形生成的 Worker 忙于长任务，混在一起会互相拖慢。
+    // 留 2 个核心给主线程（渲染 + 物理），最多用 2 个做网格化。
+    const meshWorkers = Math.max(1, Math.min(2, (navigator.hardwareConcurrency ?? 4) - 2));
+    this.meshPool = new MeshWorkerPool(meshWorkers);
     this.chunkRenderer = new ChunkRenderer(
       this.scene,
       atlas,
       this.world,
       this.solidMaterial.material,
       this.translucentMaterial.material,
+      this.meshPool,
     );
     this.scene.add(this.outline.object);
 
@@ -821,7 +828,7 @@ class App {
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
-      `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   待生成: ${this.world.pendingCount}\n` +
+      `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}`;
   }
 
@@ -887,6 +894,7 @@ class App {
 
   dispose(): void {
     this.chunkRenderer.disposeAll();
+    this.meshPool.dispose();
     this.world.dispose();
     this.outline.dispose();
   }

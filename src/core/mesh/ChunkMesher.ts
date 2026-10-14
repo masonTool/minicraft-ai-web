@@ -675,16 +675,41 @@ function lightOf(ctx: MeshContext, wx: number, wy: number, wz: number): [number,
   return [ctx.getSkyLight(wx, wy, wz), ctx.getBlockLight(wx, wy, wz)];
 }
 
-function buildGeometry(buf: LayerBuffer): THREE.BufferGeometry | null {
-  if (buf.idx.length === 0) return null;
+/** 一层网格的顶点数组 */
+export interface GeometryArrays {
+  position: Float32Array;
+  uv: Float32Array;
+  tile: Float32Array;
+  light: Float32Array;
+  shade: Float32Array;
+  index: Uint32Array;
+}
 
+/**
+ * 顶点数组 → BufferGeometry。
+ * 主线程既用它装配本地网格化的结果，也用它重建 Worker 传回来的顶点数据，
+ * 两边共用同一套属性布局，避免属性名/分量数对不上。
+ */
+export function createGeometry(arrays: GeometryArrays): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buf.pos), 3));
-  geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(buf.uv), 2));
-  geometry.setAttribute('aTile', new THREE.BufferAttribute(new Float32Array(buf.tile), 2));
-  geometry.setAttribute('aLight', new THREE.BufferAttribute(new Float32Array(buf.light), 2));
-  geometry.setAttribute('aShade', new THREE.BufferAttribute(new Float32Array(buf.shade), 1));
-  geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(buf.idx), 1));
+  geometry.setAttribute('position', new THREE.BufferAttribute(arrays.position, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(arrays.uv, 2));
+  geometry.setAttribute('aTile', new THREE.BufferAttribute(arrays.tile, 2));
+  geometry.setAttribute('aLight', new THREE.BufferAttribute(arrays.light, 2));
+  geometry.setAttribute('aShade', new THREE.BufferAttribute(arrays.shade, 1));
+  geometry.setIndex(new THREE.BufferAttribute(arrays.index, 1));
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+function buildGeometry(buf: LayerBuffer): THREE.BufferGeometry | null {
+  if (buf.idx.length === 0) return null;
+  return createGeometry({
+    position: new Float32Array(buf.pos),
+    uv: new Float32Array(buf.uv),
+    tile: new Float32Array(buf.tile),
+    light: new Float32Array(buf.light),
+    shade: new Float32Array(buf.shade),
+    index: new Uint32Array(buf.idx),
+  });
 }

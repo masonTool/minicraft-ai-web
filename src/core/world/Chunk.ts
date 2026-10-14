@@ -101,10 +101,17 @@ export class Chunk {
     return ((y - WORLD_MIN_Y) * CHUNK_SIZE_Z + z) * CHUNK_SIZE_X + x;
   }
 
-  /** 用 Worker 生成的裸数组接管所有权（零拷贝），并重建分段计数 */
-  static fromData(cx: number, cz: number, blocks: Uint8Array): Chunk {
+  /**
+   * 用 Worker 生成的裸数组接管所有权（零拷贝），并重建分段计数。
+   * @param counts 已有的分段计数（网格化 Worker 用，省掉一次全量扫描）
+   */
+  static fromData(cx: number, cz: number, blocks: Uint8Array, counts?: Int32Array): Chunk {
     const chunk = new Chunk(cx, cz);
     chunk.blocks.set(blocks);
+    if (counts) {
+      chunk.sectionCounts.set(counts);
+      return chunk;
+    }
     for (let section = 0; section < SECTION_COUNT; section++) {
       const start = section * SECTION_HEIGHT * XZ;
       let count = 0;
@@ -112,6 +119,16 @@ export class Chunk {
       chunk.sectionCounts[section] = count;
     }
     return chunk;
+  }
+
+  /** 方块状态数组的副本（网格化 Worker 需要；没有状态时返回 null） */
+  copyStates(): Uint8Array | null {
+    return this.states ? this.states.slice() : null;
+  }
+
+  /** 整体接管一份状态数组（网格化 Worker 还原请求数据用） */
+  restoreStates(data: Uint8Array): void {
+    this.states = data.slice();
   }
 
   get(x: number, y: number, z: number): number {

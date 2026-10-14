@@ -3,15 +3,23 @@
  *
  * 负责把 World 里的区块变成场景中的 Mesh：
  *  - 区块生成完成后排队网格化（每帧限量，避免长卡顿）
+ *  - 网格化默认丢给 Worker 池（见 MeshWorkerPool）；Worker 不可用时回退到主线程
  *  - 区块卸载时释放几何体
  *  - 新区块加载后连带重刷 4 个邻居，保证跨区块的边界面正确剔除
+ *
+ * 异步网格化的两个要点：
+ *  1. 每个请求带一个自增序号，结果回来时若序号已经不是最新的就丢弃 ——
+ *     否则"玩家改了方块后重刷"的旧结果会把新网格覆盖掉；
+ *  2. 限制同时在途的请求数，避免 Worker 池被无上限堆积。
  */
 
 import * as THREE from 'three';
-import { meshSection } from '../core/mesh/ChunkMesher.ts';
-import { SECTION_COUNT, WORLD_MIN_Y } from '../core/world/Chunk.ts';
+import { createGeometry, meshSection } from '../core/mesh/ChunkMesher.ts';
+import { SECTION_COUNT, WORLD_MIN_Y, type Chunk } from '../core/world/Chunk.ts';
 import { chunkKey, type World } from '../core/world/World.ts';
 import type { TextureAtlas } from './TextureAtlas.ts';
+import type { MeshWorkerPool } from './MeshWorkerPool.ts';
+import type { MeshChunkPayload, MeshResponse } from '../worker/chunk.worker.ts';
 
 interface ChunkMeshes {
   meshes: THREE.Mesh[];
@@ -28,6 +36,11 @@ export class ChunkRenderer {
   private readonly rendered = new Map<string, ChunkMeshes>();
   private readonly queue: QueueItem[] = [];
   private readonly queued = new Set<string>();
+  /** 每个区块最近一次派发的请求序号，用于丢弃过期结果 */
+  private readonly pending = new Map<string, number>();
+  private requestSeq = 0;
+  private inFlight = 0;
+  private readonly maxInFlight: number;
 
   /**
    * 调试用：抽样某区块网格顶点里的光照值，以及这段网格覆盖的 Y 区间。
@@ -84,7 +97,15 @@ export class ChunkRenderer {
     private readonly world: World,
     private readonly solidMaterial: THREE.Material,
     private readonly translucentMaterial: THREE.Material,
-  ) {}
+    private readonly meshPool: MeshWorkerPool | null = null,
+  ) {
+    this.maxInFlight = Math.max(4, (meshPool?.size ?? 1) * 3);
+  }
+
+  /** 供调试面板显示：当前在途的网格化请求数 */
+  get inFlightCount(): number {
+    return this.inFlight;
+  }
 
   get triangles(): number {
     let total = 0;
@@ -113,6 +134,7 @@ export class ChunkRenderer {
     const key = chunkKey(cx, cz);
     this.dispose(key);
     this.queued.delete(key);
+    this.pending.delete(key);
   }
 
   /**
@@ -139,8 +161,8 @@ export class ChunkRenderer {
   }
 
   /**
-   * 每帧处理若干区块。优先处理离玩家最近的，保证视野中心先成型。
-   * @param budget 本帧最多网格化的区块数
+   * 每帧派发若干区块的网格化任务。优先处理离玩家最近的，保证视野中心先成型。
+   * @param budget 本帧最多派发的区块数
    */
   processQueue(budget: number, centerCx: number, centerCz: number): void {
     if (this.queue.length === 0) return;
@@ -151,7 +173,7 @@ export class ChunkRenderer {
     this.queue.sort((a, b) => a.distanceSq - b.distanceSq);
 
     let processed = 0;
-    while (processed < budget && this.queue.length > 0) {
+    while (processed < budget && this.queue.length > 0 && this.inFlight < this.maxInFlight) {
       const item = this.queue.shift()!;
       this.queued.delete(chunkKey(item.cx, item.cz));
       this.build(item.cx, item.cz);
@@ -166,6 +188,103 @@ export class ChunkRenderer {
     const chunk = this.world.getChunk(cx, cz);
     if (!chunk) return;
 
+    if (this.meshPool) {
+      const request = this.collectChunkData(cx, cz);
+      if (!request) return;
+      const seq = ++this.requestSeq;
+      this.pending.set(key, seq);
+      this.inFlight++;
+      this.meshPool.request(cx, cz, request.chunks, request.transfer, (response) => {
+        this.inFlight--;
+        if (this.pending.get(key) !== seq) return; // 已被更新的请求取代
+        this.pending.delete(key);
+        this.applyMeshes(key, response);
+      });
+      return;
+    }
+
+    this.buildOnMainThread(cx, cz, chunk);
+  }
+
+  /**
+   * 把中心区块与周围 8 个邻居复制一份交给 Worker（复制后立刻转移所有权）。
+   *
+   * ⚠️ 必须是 3×3 而不是"中心 + 4 个正邻居"：AO 与平滑光照的采样点会落在
+   * **对角方向**（例如顶面最靠外那个顶点的 AO 采样偏移是 x+1、z+1），
+   * 若对角区块缺失就会被当成空气，光照/AO 与主线程不一致 ——
+   * 具体表现是同一区块在 Worker 下合并结果不同（实测少 5098 个三角形）。
+   * 边缘区块缺邻居时仍然按"空气"处理，与主线程 World 的行为一致。
+   */
+  private collectChunkData(
+    cx: number,
+    cz: number,
+  ): { chunks: MeshChunkPayload[]; transfer: Transferable[] } | null {
+    const center = this.world.getChunk(cx, cz);
+    if (!center) return null;
+
+    const chunks: MeshChunkPayload[] = [];
+    const transfer: Transferable[] = [];
+
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const chunk = this.world.getChunk(cx + dx, cz + dz);
+        if (!chunk) continue;
+
+        const blocks = chunk.blocks.slice();
+        const light = chunk.light.slice();
+        const states = chunk.copyStates();
+        chunks.push({
+          cx: chunk.cx,
+          cz: chunk.cz,
+          blocks: blocks.buffer as ArrayBuffer,
+          light: light.buffer as ArrayBuffer,
+          counts: chunk.sectionCounts.slice(),
+          states: states ? (states.buffer as ArrayBuffer) : null,
+        });
+        transfer.push(blocks.buffer, light.buffer);
+        if (states) transfer.push(states.buffer);
+      }
+    }
+
+    return chunks.length > 0 ? { chunks, transfer } : null;
+  }
+
+  /** Worker 结果 → 场景网格 */
+  private applyMeshes(key: string, response: MeshResponse): void {
+    const offsetX = response.cx * 16;
+    const offsetZ = response.cz * 16;
+    const meshes: THREE.Mesh[] = [];
+    let triangles = 0;
+
+    for (const section of response.sections) {
+      const baseY = WORLD_MIN_Y + section.section * 16;
+
+      if (section.solid) {
+        const geometry = createGeometry(section.solid);
+        const mesh = new THREE.Mesh(geometry, this.solidMaterial);
+        mesh.position.set(offsetX, baseY, offsetZ);
+        mesh.frustumCulled = true;
+        this.scene.add(mesh);
+        meshes.push(mesh);
+        triangles += geometry.index!.count / 3;
+      }
+      if (section.translucent) {
+        const geometry = createGeometry(section.translucent);
+        const mesh = new THREE.Mesh(geometry, this.translucentMaterial);
+        mesh.position.set(offsetX, baseY, offsetZ);
+        mesh.frustumCulled = true;
+        this.scene.add(mesh);
+        meshes.push(mesh);
+        triangles += geometry.index!.count / 3;
+      }
+    }
+
+    if (meshes.length > 0) this.rendered.set(key, { meshes, triangles });
+  }
+
+  /** Worker 不可用时的回退：在主线程同步网格化 */
+  private buildOnMainThread(cx: number, cz: number, chunk: Chunk): void {
+    const key = chunkKey(cx, cz);
     const offsetX = cx * 16;
     const offsetZ = cz * 16;
     const meshes: THREE.Mesh[] = [];
@@ -211,5 +330,6 @@ export class ChunkRenderer {
     for (const key of [...this.rendered.keys()]) this.dispose(key);
     this.queue.length = 0;
     this.queued.clear();
+    this.pending.clear();
   }
 }
