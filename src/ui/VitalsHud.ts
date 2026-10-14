@@ -1,0 +1,151 @@
+/**
+ * 生命 / 饥饿 / 氧气 HUD
+ *
+ * 用内联 SVG 画图标（而不是贴图图集）：这几个图标需要"整 / 半 / 空"三态，
+ * 用 SVG 的填色 + clip 表达最直接，也能跟着 CSS 缩放适配手机。
+ *
+ * 只在数值变化时重建一次状态，避免每帧操作 DOM。
+ */
+
+import { MAX_AIR, MAX_HEALTH, type PlayerStats } from '../core/survival/PlayerStats.ts';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+/** 9×9 坐标下的心形 */
+const HEART_PATH =
+  'M4.5 8 C4.5 8 1 5.4 1 3.4 C1 2 2.1 1 3.4 1 C4 1 4.5 1.3 4.5 1.6 C4.5 1.3 5 1 5.6 1 C6.9 1 8 2 8 3.4 C8 5.4 4.5 8 4.5 8 Z';
+/** 鸡腿（饥饿） */
+const FOOD_PATH =
+  'M6.4 1.1 A2.9 2.9 0 1 0 3.2 5.6 L1.5 7.3 a1.2 1.2 0 1 0 1.7 1.7 L4.9 7.3 A2.9 2.9 0 0 0 6.4 1.1 Z';
+
+const EMPTY_COLOR = '#3a1414';
+const HEALTH_COLOR = '#e03b3b';
+const FOOD_EMPTY_COLOR = '#33281a';
+const FOOD_COLOR = '#b1742f';
+const AIR_COLOR = '#9fd8ff';
+
+/** 半颗心 / 半只鸡腿的裁剪（只显示左半边） */
+const HALF_CLIP_ID = 'vitals-half-clip';
+
+interface IconState {
+  readonly foreground: SVGElement;
+}
+
+function createSvg(viewBox = '0 0 9 9'): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', viewBox);
+  svg.setAttribute('class', 'vital-icon');
+  return svg;
+}
+
+function createPath(d: string, fill: string): SVGPathElement {
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', fill);
+  return path;
+}
+
+/** 应用"整 / 半 / 空"三态 */
+function applyState(icon: IconState, state: 'full' | 'half' | 'empty'): void {
+  if (state === 'empty') {
+    icon.foreground.style.display = 'none';
+    return;
+  }
+  icon.foreground.style.display = '';
+  if (state === 'half') icon.foreground.setAttribute('clip-path', `url(#${HALF_CLIP_ID})`);
+  else icon.foreground.removeAttribute('clip-path');
+}
+
+function stateOf(value: number): 'full' | 'half' | 'empty' {
+  return value >= 2 ? 'full' : value >= 1 ? 'half' : 'empty';
+}
+
+export class VitalsHud {
+  private readonly hearts: IconState[] = [];
+  private readonly foods: IconState[] = [];
+  private readonly bubbles: IconState[] = [];
+  private readonly airRow: HTMLElement;
+  private lastKey = '';
+
+  constructor(container: HTMLElement) {
+    // 半颗心的裁剪定义只放一份，所有图标共用
+    const defs = createSvg();
+    defs.setAttribute('class', 'vital-defs');
+    defs.innerHTML = `<defs><clipPath id="${HALF_CLIP_ID}"><rect x="0" y="0" width="4.5" height="9"/></clipPath></defs>`;
+    container.append(defs);
+
+    this.airRow = document.createElement('div');
+    this.airRow.className = 'vital-row';
+    this.airRow.id = 'vital-air';
+
+    const healthRow = document.createElement('div');
+    healthRow.className = 'vital-row';
+    healthRow.id = 'vital-health';
+
+    const foodRow = document.createElement('div');
+    foodRow.className = 'vital-row';
+    foodRow.id = 'vital-food';
+
+    const iconCount = MAX_HEALTH / 2;
+    for (let i = 0; i < iconCount; i++) {
+      const svg = createSvg();
+      svg.append(createPath(HEART_PATH, EMPTY_COLOR));
+      const fg = createPath(HEART_PATH, HEALTH_COLOR);
+      svg.append(fg);
+      healthRow.append(svg);
+      this.hearts.push({ foreground: fg });
+
+      const foodSvg = createSvg();
+      foodSvg.append(createPath(FOOD_PATH, FOOD_EMPTY_COLOR));
+      const foodFg = createPath(FOOD_PATH, FOOD_COLOR);
+      foodSvg.append(foodFg);
+      foodRow.append(foodSvg);
+      this.foods.push({ foreground: foodFg });
+    }
+
+    for (let i = 0; i < 10; i++) {
+      const svg = createSvg();
+      const bg = document.createElementNS(SVG_NS, 'circle');
+      bg.setAttribute('cx', '4.5');
+      bg.setAttribute('cy', '4.5');
+      bg.setAttribute('r', '3.6');
+      bg.setAttribute('fill', 'none');
+      bg.setAttribute('stroke', EMPTY_COLOR);
+      bg.setAttribute('stroke-width', '1.2');
+      const fg = document.createElementNS(SVG_NS, 'circle');
+      fg.setAttribute('cx', '4.5');
+      fg.setAttribute('cy', '4.5');
+      fg.setAttribute('r', '3.6');
+      fg.setAttribute('fill', AIR_COLOR);
+      svg.append(bg, fg);
+      this.airRow.append(svg);
+      this.bubbles.push({ foreground: fg });
+    }
+
+    container.append(this.airRow, healthRow, foodRow);
+  }
+
+  update(stats: PlayerStats): void {
+    const key = `${stats.health}|${stats.food}|${stats.air}|${stats.dead}`;
+    if (key === this.lastKey) return;
+    this.lastKey = key;
+
+    for (let i = 0; i < this.hearts.length; i++) {
+      applyState(this.hearts[i]!, stateOf(stats.health - i * 2));
+    }
+    for (let i = 0; i < this.foods.length; i++) {
+      applyState(this.foods[i]!, stateOf(stats.food - i * 2));
+    }
+
+    // 氧气条只在没吸满时出现（与原版一致）
+    const showAir = stats.air < MAX_AIR;
+    this.airRow.classList.toggle('on', showAir);
+    if (showAir) {
+      const perBubble = MAX_AIR / this.bubbles.length;
+      for (let i = 0; i < this.bubbles.length; i++) {
+        const value = stats.air - i * perBubble;
+        const state = value >= perBubble ? 'full' : value > 0 ? 'half' : 'empty';
+        applyState(this.bubbles[i]!, state);
+      }
+    }
+  }
+}

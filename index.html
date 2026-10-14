@@ -62,6 +62,14 @@
         display: inline-block; padding: 1px 6px; border-radius: 3px;
         background: #ffffff22; border: 1px solid #ffffff44; font-size: 13px;
       }
+      #death {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        background: rgba(130, 0, 0, .45); color: #fff; font-size: 16px;
+        text-align: center; line-height: 2; pointer-events: none;
+      }
+      #death.hidden { display: none; }
+      #death b { font-size: 26px; display: block; letter-spacing: 2px; }
+
       #loading {
         position: fixed; inset: 0; display: grid; place-items: center;
         background: #0b0b0b; color: #ccc; font-size: 14px;
@@ -87,6 +95,17 @@
         position: absolute; top: 0; left: 3px; font-size: 10px; color: #fff;
         text-shadow: 1px 1px 0 #000; opacity: .75;
       }
+
+      /* ---------------- 生命 / 饥饿 / 氧气 ---------------- */
+      #vitals {
+        position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%);
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+      }
+      #vitals .vital-defs { position: absolute; width: 0; height: 0; }
+      .vital-row { display: flex; gap: 1px; }
+      .vital-row svg.vital-icon { width: 18px; height: 18px; display: block; }
+      #vital-air { visibility: hidden; }
+      #vital-air.on { visibility: visible; }
 
       #break-progress {
         position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%);
@@ -278,6 +297,8 @@
         #hotbar .slot canvas { width: 28px; height: 28px; }
         #hotbar .slot .index { font-size: 9px; }
         #hotbar .slot .count { font-size: 11px; }
+        #vitals { bottom: 54px; }
+        .vital-row svg.vital-icon { width: 14px; height: 14px; }
 
         /* 背包/容器面板在小屏上几乎全屏，并把槽位放大到好点按的尺寸 */
         .inv-panel {
@@ -314,6 +335,7 @@
       <div id="debug"></div>
       <div id="crosshair"></div>
       <div id="break-progress"><i></i></div>
+      <div id="vitals"></div>
       <div id="hotbar"></div>
     </div>
 
@@ -327,6 +349,8 @@
         <kbd>F</kbd> 创造/飞行 · <kbd>Esc</kbd> 释放鼠标
       </div>
     </div>
+
+    <div id="death" class="hidden"><div><b>你死了！</b>正在重生…</div></div>
 
     <div id="loading">正在生成世界…</div>
 

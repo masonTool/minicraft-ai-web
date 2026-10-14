@@ -13,6 +13,8 @@ import * as THREE from 'three';
 import { TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
+import { PlayerStats, type DamageCause, type SurvivalEnvironment } from './core/survival/PlayerStats.ts';
+import { VitalsHud } from './ui/VitalsHud.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
@@ -44,6 +46,11 @@ import { blockForItem, dropFor, itemName } from './core/registry/items.ts';
 const VIEW_DISTANCE = 12;
 /** 每帧最多网格化的区块数，用于把加载耗时摊到多帧 */
 const MESH_BUDGET_PER_FRAME = 3;
+
+/** 游戏逻辑 tick（原版 20 次/秒），生存机制按这个节奏结算 */
+const TICK_SECONDS = 0.05;
+/** 死亡后自动重生的等待时间（秒） */
+const RESPAWN_DELAY = 3;
 const WORLD_SEED = 20261014;
 /** 原版触及距离：生存 4.5 格 */
 const REACH = 4.5;
@@ -86,6 +93,19 @@ class App {
   private readonly world = new World(WORLD_SEED);
   private readonly chunkRenderer: ChunkRenderer;
   private readonly meshPool: MeshWorkerPool;
+  /** 生命 / 饥饿 / 氧气 */
+  readonly stats = new PlayerStats();
+  private readonly vitalsHud: VitalsHud;
+  private readonly deathEl: HTMLElement;
+  /** 帧时间累积成 20Hz 游戏 tick */
+  private tickAccumulator = 0;
+  /** 本次下落起始高度（用于摔落伤害） */
+  private fallStartY: number | null = null;
+  private pendingFallDistance = 0;
+  private respawnCountdown = 0;
+  private spawnPoint: [number, number, number] = [0.5, 80, 0.5];
+  private lastPlayerX = 0;
+  private lastPlayerZ = 0;
   private readonly solidMaterial: VoxelMaterial;
   private readonly translucentMaterial: VoxelMaterial;
   private readonly skyColor: THREE.Color;
@@ -143,7 +163,11 @@ class App {
     private readonly debugEl: HTMLElement,
     private readonly overlayEl: HTMLElement,
     private readonly atlas: TextureAtlas,
+    vitalsEl: HTMLElement,
+    deathEl: HTMLElement,
   ) {
+    this.deathEl = deathEl;
+    this.vitalsHud = new VitalsHud(vitalsEl);
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -563,6 +587,9 @@ class App {
       }
     }
 
+    // 挖掘消耗疲劳值（原版 0.005/方块）
+    this.stats.addExhaustion(0.005);
+
     this.breakProgress = 0;
     this.breakingKey = '';
     this.breakCooldown = BREAK_COOLDOWN;
@@ -769,6 +796,9 @@ class App {
         const ground = this.groundHeight(dx, dz);
         if (ground >= SEA_LEVEL + 1) {
           this.physics.teleport(dx + 0.5, ground + 1.2, dz + 0.5);
+          this.spawnPoint = [dx + 0.5, ground + 1.2, dz + 0.5];
+          this.lastPlayerX = dx + 0.5;
+          this.lastPlayerZ = dz + 0.5;
           this.lastCenterCx = Number.NaN;
           this.lastCenterCz = Number.NaN;
           this.spawnResolved = true;
@@ -785,6 +815,100 @@ class App {
       if (id !== 0 && id !== Block.WATER) return y;
     }
     return -999;
+  }
+
+  // ---------------------------------------------------------------- 生存
+
+  /**
+   * 每帧调用：跟踪下落高度与疲劳值，并把帧时间累积成 20Hz 的游戏 tick。
+   *
+   * 生存机制必须按原版的 20 tick/秒 结算 —— 直接用帧时间会在高帧率下把
+   * 饥饿与回血速度放大好几倍。
+   */
+  private updateSurvival(dt: number, input: PlayerInput, wasOnGround: boolean): void {
+    const p = this.physics;
+
+    // ---- 下落高度：离开地面时记录最高点，落地那一 tick 结算摔落伤害
+    if (this.flying || p.inWater) {
+      this.fallStartY = null;
+    } else if (p.onGround) {
+      if (this.fallStartY !== null) {
+        const distance = this.fallStartY - p.y;
+        if (distance > 3) this.pendingFallDistance = distance;
+      }
+      this.fallStartY = null;
+    } else if (p.vy < -0.2) {
+      this.fallStartY = this.fallStartY === null ? p.y : Math.max(this.fallStartY, p.y);
+    }
+
+    // ---- 疲劳值：走路每格 0.01、疾跑每格 0.1、跳跃 0.05（疾跑跳 0.2）
+    const distance = Math.hypot(p.x - this.lastPlayerX, p.z - this.lastPlayerZ);
+    this.lastPlayerX = p.x;
+    this.lastPlayerZ = p.z;
+    if (distance > 0 && !this.flying) {
+      this.stats.addExhaustion(distance * (input.sprint ? 0.1 : 0.01));
+    }
+    if (input.jump && wasOnGround && !this.flying) {
+      this.stats.addExhaustion(input.sprint ? 0.2 : 0.05);
+    }
+
+    // ---- 20Hz 游戏 tick（一帧最多补 4 个，避免卡顿后追帧雪崩）
+    this.tickAccumulator = Math.min(this.tickAccumulator + dt, 1);
+    let ticks = 0;
+    while (this.tickAccumulator >= TICK_SECONDS && ticks < 4) {
+      this.tickAccumulator -= TICK_SECONDS;
+      ticks++;
+      this.stats.tick(this.survivalEnvironment());
+      // 摔落伤害只结算一次，避免同一帧的多个 tick 重复扣血
+      this.pendingFallDistance = 0;
+    }
+
+    this.vitalsHud.update(this.stats);
+
+    // ---- 死亡与重生
+    if (this.stats.dead) {
+      this.deathEl.classList.remove('hidden');
+      this.respawnCountdown += dt;
+      if (this.respawnCountdown >= RESPAWN_DELAY) this.respawnPlayer();
+    } else if (this.respawnCountdown !== 0) {
+      this.respawnCountdown = 0;
+      this.deathEl.classList.add('hidden');
+    }
+  }
+
+  /** 采集一帧的环境快照（水 / 岩浆 / 窒息 / 虚空） */
+  private survivalEnvironment(): SurvivalEnvironment {
+    const p = this.physics;
+    const eye = this.world.getBlock(Math.floor(p.x), Math.floor(p.eyeY), Math.floor(p.z));
+    const feet = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 0.15), Math.floor(p.z));
+    const body = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 1.0), Math.floor(p.z));
+
+    return {
+      eyeInWater: eye === Block.WATER,
+      inLava: feet === Block.LAVA || body === Block.LAVA,
+      // 仙人掌还没进方块表，先保持关闭（加了之后这里改成四邻检测）
+      onCactus: false,
+      suffocating: body !== Block.AIR && blockDef(body).opaque,
+      fallDistance: this.pendingFallDistance,
+      y: p.y,
+      // 创造模式就是飞行状态（P1 的模式切换定义如此）
+      creative: this.flying,
+    };
+  }
+
+  private respawnPlayer(): void {
+    const [sx, sy, sz] = this.spawnPoint;
+    this.physics.teleport(sx, sy, sz);
+    this.physics.vx = 0;
+    this.physics.vy = 0;
+    this.physics.vz = 0;
+    this.stats.respawn();
+    this.fallStartY = null;
+    this.pendingFallDistance = 0;
+    this.respawnCountdown = 0;
+    this.lastPlayerX = sx;
+    this.lastPlayerZ = sz;
+    this.deathEl.classList.add('hidden');
   }
 
   // ---------------------------------------------------------------- 主循环
@@ -829,6 +953,7 @@ class App {
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
       `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
+      `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}`;
   }
 
@@ -853,7 +978,10 @@ class App {
         }
       }
 
-      this.physics.update(this.world, this.uiOpen ? IDLE_INPUT : this.collectInput(), this.yaw, dt, this.flying);
+      const survivalInput = this.uiOpen ? IDLE_INPUT : this.collectInput();
+      const wasOnGround = this.physics.onGround;
+      this.physics.update(this.world, survivalInput, this.yaw, dt, this.flying);
+      this.updateSurvival(dt, survivalInput, wasOnGround);
 
       this.camera.position.set(this.physics.x, this.physics.eyeY, this.physics.z);
       this.camera.rotation.set(this.pitch, this.yaw, 0);
@@ -967,6 +1095,32 @@ class App {
 
   setRightButton(down: boolean): void {
     this.rightDown = down;
+  }
+
+  /** 调试用：生存状态快照 */
+  get survivalState(): {
+    health: number;
+    food: number;
+    saturation: number;
+    air: number;
+    dead: boolean;
+    invulnerable: boolean;
+    totalDamage: number;
+  } {
+    return {
+      health: this.stats.health,
+      food: this.stats.food,
+      saturation: this.stats.saturation,
+      air: this.stats.air,
+      dead: this.stats.dead,
+      invulnerable: this.stats.invulnerable,
+      totalDamage: this.stats.totalDamage,
+    };
+  }
+
+  /** 调试用：直接造成伤害（自动化验收用） */
+  hurtPlayer(amount: number, cause: DamageCause = 'generic'): void {
+    this.stats.damage(amount, cause);
   }
 
   get info(): {
@@ -1131,10 +1285,12 @@ function boot(): void {
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
   const overlayEl = document.getElementById('overlay');
-  if (!container || !debugEl || !overlayEl) throw new Error('缺少必要的 DOM 节点');
+  const vitalsEl = document.getElementById('vitals');
+  const deathEl = document.getElementById('death');
+  if (!container || !debugEl || !overlayEl || !vitalsEl || !deathEl) throw new Error('缺少必要的 DOM 节点');
 
   const atlas = new TextureAtlas();
-  const app = new App(container, debugEl, overlayEl, atlas);
+  const app = new App(container, debugEl, overlayEl, atlas, vitalsEl, deathEl);
   app.start();
 
   // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样
