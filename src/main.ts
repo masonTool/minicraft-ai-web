@@ -15,10 +15,11 @@ import { TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
-import { BLOCKS } from './core/registry/blocks.ts';
+import { Block, BLOCKS } from './core/registry/blocks.ts';
+import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 
 /** 渲染距离（区块） */
-const VIEW_DISTANCE = 10;
+const VIEW_DISTANCE = 12;
 /** 每帧最多网格化的区块数，用于把加载耗时摊到多帧 */
 const MESH_BUDGET_PER_FRAME = 3;
 /** 每帧最多处理的光照 BFS 步数 */
@@ -53,6 +54,7 @@ class App {
   private lastCenterCx = Number.NaN;
   private lastCenterCz = Number.NaN;
   private ready = false;
+  private spawnResolved = false;
 
   constructor(
     container: HTMLElement,
@@ -113,8 +115,9 @@ class App {
     this.solidMaterial.skyBrightness = skyBrightness;
     this.translucentMaterial.skyBrightness = skyBrightness;
 
-    const fogFar = VIEW_DISTANCE * 16 - 8;
-    const fogNear = (VIEW_DISTANCE - 3) * 16;
+    // 雾只在内侧少量范围内起效，尽量把视距内的地形露出来
+    const fogFar = VIEW_DISTANCE * 16 - 6;
+    const fogNear = fogFar * 0.72;
     this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
     this.translucentMaterial.setFog(this.skyColor, fogNear, fogFar);
   }
@@ -186,6 +189,50 @@ class App {
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }
 
+  /**
+   * 在世界刚加载出一片区域时，就近寻找一块高于海平面的陆地作为出生点，
+   * 避免玩家出生在深海里。
+   */
+  private tryResolveSpawn(): void {
+    if (this.spawnResolved) return;
+    if (this.world.chunks.size < 9) return;
+
+    for (let radius = 0; radius <= 96; radius += 4) {
+      const candidates: Array<[number, number]> =
+        radius === 0
+          ? [[0, 0]]
+          : [
+              [radius, 0],
+              [-radius, 0],
+              [0, radius],
+              [0, -radius],
+              [radius, radius],
+              [-radius, -radius],
+              [radius, -radius],
+              [-radius, radius],
+            ];
+      for (const [dx, dz] of candidates) {
+        const ground = this.groundHeight(dx, dz);
+        if (ground >= SEA_LEVEL + 1) {
+          this.position.set(dx + 0.5, ground + 2, dz + 0.5);
+          this.lastCenterCx = Number.NaN;
+          this.lastCenterCz = Number.NaN;
+          this.spawnResolved = true;
+          return;
+        }
+      }
+    }
+  }
+
+  /** 该列最高固体（跳过水）的 y 坐标 */
+  private groundHeight(x: number, z: number): number {
+    for (let y = 200; y >= 0; y--) {
+      const id = this.world.getBlock(x, y, z);
+      if (id !== 0 && id !== Block.WATER) return y;
+    }
+    return -999;
+  }
+
   private updateDebug(dt: number): void {
     this.frames++;
     this.fpsTimer += dt;
@@ -222,6 +269,7 @@ class App {
       const dt = Math.min((now - this.lastTime) / 1000, 0.1);
       this.lastTime = now;
 
+      this.tryResolveSpawn();
       this.updateMovement(dt);
       this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
       this.applyEnvironment();
@@ -261,6 +309,12 @@ class App {
     this.pitch = (pitchDeg * Math.PI) / 180;
   }
 
+  /** 允许自动化脚本传送到某个坐标（会跳过自动出生点定位） */
+  teleportForce(x: number, y: number, z: number): void {
+    this.spawnResolved = true;
+    this.teleport(x, y, z);
+  }
+
   setTimeOfDay(t: number): void {
     this.timeOfDay = ((t % 1) + 1) % 1;
     this.applyEnvironment();
@@ -273,6 +327,53 @@ class App {
       lit: this.world.litChunkCount,
       triangles: this.chunkRenderer.triangles,
     };
+  }
+
+  /** 单点取样：方块名 + 天光/方块光 */
+  probe(x: number, y: number, z: number): { block: string; sky: number; blockLight: number } {
+    const id = this.world.getBlock(x, y, z);
+    return {
+      block: BLOCKS[id]?.name ?? `unknown(${id})`,
+      sky: this.world.getSkyLight(x, y, z),
+      blockLight: this.world.getBlockLight(x, y, z),
+    };
+  }
+
+  /** 逐列扫描：返回最高非空气方块（可能是水）与最高固体（地面） */
+  column(x: number, z: number): { top: number; block: string; ground: number; groundBlock: string } {
+    const WATER = 10;
+    let top = -999;
+    let topBlock = 'none';
+    let ground = -999;
+    let groundBlock = 'none';
+    for (let y = 319; y >= -64; y--) {
+      const id = this.world.getBlock(x, y, z);
+      if (id === 0) continue;
+      if (top === -999) {
+        top = y;
+        topBlock = BLOCKS[id]?.name ?? `${id}`;
+      }
+      if (id !== WATER) {
+        ground = y;
+        groundBlock = BLOCKS[id]?.name ?? `${id}`;
+        break;
+      }
+    }
+    return { top, block: topBlock, ground, groundBlock };
+  }
+
+  /** 一片区域的地表高度统计（跳过水面，看真实地面） */
+  sampleColumns(x0: number, z0: number, step: number): string {
+    const rows: string[] = [];
+    for (let dz = 0; dz < 6; dz++) {
+      const cells: string[] = [];
+      for (let dx = 0; dx < 8; dx++) {
+        const c = this.column(x0 + dx * step, z0 + dz * step);
+        cells.push(String(c.ground).padStart(4));
+      }
+      rows.push(cells.join(' '));
+    }
+    return rows.join('\n');
   }
 }
 

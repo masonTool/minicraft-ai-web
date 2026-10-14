@@ -46,7 +46,8 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 - [x] B1 方块注册表骨架（id / 名称 / 三面贴图 / 碰撞 / 遮挡 / 自发光 / 半透明）
 - [x] B2 基础方块 12 种
-- [ ] B3 完整方块表：按 1.18 方块清单登记 ~700 种，含 `minecraft:` 命名空间
+- [~] B3 完整方块表：已登记 43 种（基础建筑 + 地下岩石 + 寒冷群系 + 8 种主世界矿石及深板岩变体 + 流体/发光）；
+      目标 ~700 种
 - [ ] B4 Block state 系统（朝向 facing、半砖 type、楼梯 shape、栅栏连接、水logged）
 - [ ] B5 方块属性扩展：硬度/爆炸抗性/易燃/音效组/挖掘工具与等级/掉落表
 - [ ] B6 方块行为接口：onUse / onBreak / onNeighborChange / tick（随机刻、计划刻）
@@ -67,15 +68,19 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 
 ## D. 地形生成（1.18 噪声体系）—— 决定"像不像 1.18"的核心
 
-- [ ] D1 噪声基础：Perlin / Simplex / 八度叠加（octave）、种子派生（用 Xoroshiro128++ 对齐原版）
-- [ ] D2 密度函数框架（DensityFunction 组合树：add/mul/min/max/clamp/spline/noise/interpolated）
-- [ ] D3 噪声路由器（Noise Router）字段：
-      `barrier` / `fluid_level_floodedness` / `fluid_level_spread` / `lava` /
-      `temperature` / `vegetation` / `continents` / `erosion` / `depth` / `ridges` /
-      `initial_density_without_jaggedness` / `final_density` / `vein_toggle` / `vein_ridged` /
-      `vein_gap` / `vein_control`
-- [ ] D4 大陆度→高度偏移样条、侵蚀度→地形平坦度与崎岖度样条
-- [ ] D5 主世界三套噪声设置：overworld / caves / floating_islands 之外的所有预设
+- [x] D1 噪声基础：Perlin（原版 16 梯度）/ 多八度 NormalNoise / DoublePerlinNoise、
+      种子派生（SplitMix64 + Xoroshiro128++）
+- [~] D2 密度函数框架：已有样条（三次 Hermite）与密度组合；完整的 DF 组合树（add/mul/min/max/clamp/
+      interpolated 的 JSON 化表示）待补
+- [~] D3 噪声路由器字段：已实现 `continents` / `erosion` / `ridges` / `temperature` / `vegetation` /
+      `depth`(以竖直梯度表达) / `final_density`(以密度场表达)；
+      待补 `barrier` / `fluid_level_floodedness` / `fluid_level_spread` / `lava` /
+      `initial_density_without_jaggedness` / `vein_toggle` / `vein_ridged` / `vein_gap` / `vein_control`
+- [x] D4 大陆度→高度偏移样条、侵蚀度→起伏系数与山脊锐度样条
+- [~] D5 主世界噪声设置：overworld 已完成；caves / floating_islands 等预设待补
+- [x] D5b 密度场粗网格采样（4×8×4）+ 三线性插值（对齐原版性能做法）
+- [x] D5c 基岩层、深板岩过渡、海平面灌水、简化地表规则
+- [x] D5d 自动寻找陆地出生点，避免出生在深海
 - [ ] D6 生物群系源：`multi_noise`（温度/湿度/大陆度/侵蚀度/深度/奇异度 六维参数）
 - [ ] D7 完整群系表：主世界 ~61 + 下界 5 + 末地 6，含各群系地表/植被/生成参数
 - [ ] D8 地表规则（Surface Rules）：草/土/砂/雪/石/深板岩/水下变体/恶地分层/菌岩
