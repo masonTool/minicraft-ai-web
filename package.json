@@ -21,7 +21,8 @@
     "test:mesh": "esbuild tools/mesh-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mesh-test.mjs --log-level=error && node .tmp/mesh-test.mjs",
     "test:survival": "esbuild tools/survival-test.ts --bundle --platform=node --format=esm --outfile=.tmp/survival-test.mjs --log-level=error && node .tmp/survival-test.mjs",
     "test:mob": "esbuild tools/mob-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mob-test.mjs --log-level=error && node .tmp/mob-test.mjs",
-    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer && npm run test:ore && npm run test:mesh && npm run test:survival && npm run test:mob"
+    "test:spawn": "esbuild tools/spawn-test.ts --bundle --platform=node --format=esm --outfile=.tmp/spawn-test.mjs --log-level=error && node .tmp/spawn-test.mjs",
+    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer && npm run test:ore && npm run test:mesh && npm run test:survival && npm run test:mob && npm run test:spawn"
   },
   "dependencies": {
     "three": "^0.186.1"

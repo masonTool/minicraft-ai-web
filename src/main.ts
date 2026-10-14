@@ -20,6 +20,7 @@ import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
 import { Mob } from './core/entity/Mob.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
+import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
@@ -107,6 +108,8 @@ class App {
   private readonly weather: Weather;
   /** 生物渲染 */
   private readonly mobRenderer: MobRenderer;
+  /** 生物生成规则 */
+  private readonly mobSpawner = new MobSpawner();
   private readonly domeTop = new THREE.Color();
   private readonly domeHorizon = new THREE.Color();
   /** 玩家所在地表是否为寒冷群系（决定下雪还是下雨），每秒复查一次 */
@@ -666,6 +669,45 @@ class App {
   }
 
   /**
+   * 生物生成与消失。
+   * 生成只发生在已加载区块（未加载时 getBlock 返回空气，规则会自然拒绝），
+   * 因此不需要额外的"是否加载"判断也不会刷到虚空中。
+   */
+  private updateMobSpawning(dt: number): void {
+    let hostileCount = 0;
+    let passiveCount = 0;
+    const player = { x: this.physics.x, y: this.physics.y, z: this.physics.z };
+
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob)) continue;
+      if (entity.type.hostile) {
+        hostileCount++;
+        // 敌对生物离玩家太远就消失，避免远处无限堆积
+        if (Math.hypot(entity.x - player.x, entity.z - player.z) > MOB_DESPAWN_DISTANCE) {
+          entity.dead = true;
+        }
+      } else {
+        passiveCount++;
+      }
+    }
+
+    const ctx: SpawnContext = {
+      getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+      // 天光要按昼夜折算：我们的光照引擎里地表天光恒为 15，
+      // 不折算的话夜晚地表永远刷不出怪（原版夜里是会刷的）
+      getSkyLight: (x, y, z) => this.world.getSkyLight(x, y, z) * this.solidMaterial.skyBrightnessValue,
+      getBlockLight: (x, y, z) => this.world.getBlockLight(x, y, z),
+      player,
+      spawn: (type, x, y, z) => {
+        this.entities.spawn(new Mob(type, x, y, z));
+      },
+      hostileCount,
+      passiveCount,
+    };
+    this.mobSpawner.update(dt, ctx);
+  }
+
+  /**
    * 生物对玩家造成伤害：结算生命值并施加击退。
    * 创造模式（飞行）免疫；无敌帧由 PlayerStats 判断。
    */
@@ -708,6 +750,7 @@ class App {
       if (entity instanceof Mob) mobs.push(entity);
     }
     this.mobRenderer.update(mobs, this.camera, dt, sampleLight);
+    this.updateMobSpawning(dt);
   }
 
   /**
@@ -1221,6 +1264,11 @@ class App {
   }
 
   /** 调试用：生物统计 */
+  /** 调试用：生成器统计 */
+  get spawnerStats(): { hostile: number; passive: number } {
+    return { hostile: this.mobSpawner.spawnedHostile, passive: this.mobSpawner.spawnedPassive };
+  }
+
   get mobStats(): { total: number; hostile: number; passive: number; byType: Record<string, number> } {
     let hostile = 0;
     let passive = 0;
