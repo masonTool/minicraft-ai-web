@@ -21,6 +21,7 @@ import { MobRenderer } from './render/MobRenderer.ts';
 import { Mob } from './core/entity/Mob.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
+import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
@@ -57,6 +58,11 @@ const MESH_BUDGET_PER_FRAME = 3;
 const TICK_SECONDS = 0.05;
 /** 死亡后自动重生的等待时间（秒） */
 const RESPAWN_DELAY = 3;
+
+/** 玩家近战距离（原版约 3 格） */
+const ATTACK_RANGE = 3.2;
+/** 攻击冷却（原版满蓄力为 0.625 秒） */
+const ATTACK_COOLDOWN = 0.5;
 const WORLD_SEED = 20261014;
 /** 原版触及距离：生存 4.5 格 */
 const REACH = 4.5;
@@ -125,6 +131,12 @@ class App {
   private spawnPoint: [number, number, number] = [0.5, 80, 0.5];
   private lastPlayerX = 0;
   private lastPlayerZ = 0;
+  /** 近战冷却 */
+  private attackCooldown = 0;
+  /** 本帧打中了生物，就不再破坏方块（否则会连脚下的方块一起挖掉） */
+  private suppressBreaking = false;
+  /** 上一帧的实体上下文（攻击生物时要把掉落物交回给世界） */
+  private lastEntityContext: EntityContext | null = null;
   private readonly solidMaterial: VoxelMaterial;
   private readonly translucentMaterial: VoxelMaterial;
   private readonly skyColor: THREE.Color;
@@ -578,11 +590,60 @@ class App {
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
 
+    this.updateAttacking(dt);
     this.updateBreaking(dt);
     this.updatePlacing();
   }
 
+  /**
+   * 近战攻击：左键按下时先看准星有没有对着生物。
+   * 生物比方块更靠前就优先攻击，并且这一帧不再破坏方块。
+   */
+  private updateAttacking(dt: number): void {
+    this.suppressBreaking = false;
+    if (this.attackCooldown > 0) this.attackCooldown -= dt;
+    if (!this.leftDown || this.uiOpen || this.attackCooldown > 0) return;
+
+    const context = this.lastEntityContext;
+    if (!context) return;
+
+    const cosPitch = Math.cos(this.pitch);
+    const dirX = -Math.sin(this.yaw) * cosPitch;
+    const dirY = Math.sin(this.pitch);
+    const dirZ = -Math.cos(this.yaw) * cosPitch;
+
+    const hit = raycastEntities(
+      this.entities.all,
+      this.physics.x,
+      this.physics.eyeY,
+      this.physics.z,
+      dirX,
+      dirY,
+      dirZ,
+      ATTACK_RANGE,
+    );
+    if (!hit || !(hit.entity instanceof Mob)) return;
+    // 方块比生物更近，说明玩家其实在挖方块
+    if (this.hit && this.hit.distance < hit.distance) return;
+
+    this.attackCooldown = ATTACK_COOLDOWN;
+    this.suppressBreaking = true;
+    this.breakProgress = 0;
+    this.breakingKey = '';
+
+    const mob = hit.entity;
+    // 下落中攻击算暴击（原版 ×1.5）；创造模式一击必杀
+    const critical = !this.physics.onGround && this.physics.vy < -0.1;
+    const damage = this.flying ? 100 : critical ? 1.5 : 1;
+    mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context);
+  }
+
   private updateBreaking(dt: number): void {
+    if (this.suppressBreaking) {
+      this.breakingKey = '';
+      this.breakProgress = 0;
+      return;
+    }
     if (!this.leftDown || !this.hit || this.breakCooldown > 0) {
       this.breakingKey = '';
       this.breakProgress = 0;
@@ -737,6 +798,7 @@ class App {
       hurtPlayer: (amount, sourceX, sourceZ) => this.damagePlayer(amount, sourceX, sourceZ),
       spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),
     };
+    this.lastEntityContext = context;
     this.entities.update(context, dt);
     // 逐实体采样光照：洞里暗、火把旁亮
     const sampleLight = (x: number, y: number, z: number): { sky: number; block: number } | null => {
@@ -1264,6 +1326,11 @@ class App {
   }
 
   /** 调试用：生物统计 */
+  /** 调试用：清空攻击冷却，让下一次按下左键立刻生效（自动化验收用） */
+  resetAttackCooldown(): void {
+    this.attackCooldown = 0;
+  }
+
   /** 调试用：生成器统计 */
   get spawnerStats(): { hostile: number; passive: number } {
     return { hostile: this.mobSpawner.spawnedHostile, passive: this.mobSpawner.spawnedPassive };
