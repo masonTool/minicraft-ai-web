@@ -67,7 +67,7 @@ export class CaveCarver {
 
         // 峡谷只跟水平坐标有关，按列算一次即可
         const canyonValue = Math.abs(this.canyon.getValue(worldX, 0, worldZ));
-        const isCanyonColumn = canyonValue < 0.018;
+        const isCanyonColumn = canyonValue < 0.06;
 
         const yMax = Math.min(top, WORLD_HEIGHT + WORLD_MIN_Y - 1);
         // 从基岩层之上开始：熔岩湖高度以下的洞穴会被岩浆填满（对齐原版 y<=-54 为岩浆层）
@@ -100,21 +100,25 @@ export class CaveCarver {
     }
 
     // ---- 奶酪洞穴：阈值随高度升高，洞穴集中在地表以下
-    const cheeseThreshold = 0.58 + Math.max(0, (y - 16) / 96) * 0.8;
+    // 阈值是按「噪声标准差 ≈ 1」标定的（见 PerlinNoise.PERLIN_VARIANCE）。
+    // 早先噪声幅度被压小 10 倍时这里写的是 0.58，归一化修正后必须同步放大，
+    // 否则 P(噪声 > 阈值) 会从"几乎为零"跳到 28%，洞穴直接淹没整个地下。
+    const cheeseThreshold = 2.4 + Math.max(0, (y - 16) / 96) * 1.6;
     if (this.cheese.getValue(worldX, y, worldZ) > cheeseThreshold) return true;
 
     // ---- 意大利面隧道：两张等值面的交线附近才是隧道，阈值决定隧道宽度
+    // 隧道宽度 ≈ 阈值 / |∇噪声|，噪声幅度放大 10 倍后阈值也要放大 10 倍才能保持同样的洞宽
     const a = this.tunnelA.getValue(worldX, y, worldZ);
-    if (Math.abs(a) < 0.062) {
+    if (Math.abs(a) < 0.28) {
       const b = this.tunnelB.getValue(worldX, y, worldZ);
-      if (Math.abs(b) < 0.062) return true;
+      if (Math.abs(b) < 0.28) return true;
     }
 
     // ---- 细管洞穴（1 格宽的窄道）
     const na = this.noodleA.getValue(worldX, y, worldZ);
-    if (Math.abs(na) < 0.022) {
+    if (Math.abs(na) < 0.09) {
       const nb = this.noodleB.getValue(worldX, y, worldZ);
-      if (Math.abs(nb) < 0.022) return true;
+      if (Math.abs(nb) < 0.09) return true;
     }
 
     return false;

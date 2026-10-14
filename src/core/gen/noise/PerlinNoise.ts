@@ -89,6 +89,13 @@ function grad(hash: number, x: number, y: number, z: number): number {
 }
 
 /** 多八度噪声：振幅数组描述各倍频的相对权重 */
+/**
+ * 单层 Perlin 的实测方差（tools/noise-stats.ts 量出来的，标准差 ≈ 0.2478）。
+ *
+ * ⚠️ 这个常量决定了整个地形与群系体系的量纲，改动必须重新量、并重新校准样条。
+ */
+export const PERLIN_VARIANCE = 0.0614;
+
 export class NormalNoise {
   private readonly noises: PerlinNoise[] = [];
   private readonly amplitudes: number[] = [];
@@ -97,17 +104,25 @@ export class NormalNoise {
 
   constructor(random: Random, firstOctave: number, amplitudes: readonly number[]) {
     const count = amplitudes.length;
-    let total = 0;
+    let sumOfSquares = 0;
     for (let i = 0; i < count; i++) {
       const amplitude = amplitudes[i]!;
       if (amplitude === 0) continue;
       this.amplitudes.push(amplitude);
       this.frequencies.push(Math.pow(2, firstOctave + i));
       this.noises.push(new PerlinNoise(random));
-      total += Math.abs(amplitude);
+      sumOfSquares += amplitude * amplitude;
     }
-    // 归一化到约 [-1, 1]，便于样条使用统一量纲
-    this.valueFactor = total === 0 ? 0 : 1 / total;
+
+    // 按**方差**归一化：各八度相互独立，方差可加，所以
+    //   Var(输出) = Σ(a_i²) × Var(单层 Perlin)
+    // 除以它的平方根即让输出标准差 ≈ 1，与原版一致。
+    //
+    // ⚠️ 曾经这里用的是 1/Σ|振幅|（等价于对多八度做加权平均），
+    // 结果把幅度压掉了约 10 倍（实测标准差只有 0.06~0.12），
+    // 而地形样条与群系参数表都是按 ±1.1 量纲写的 —— 直接后果是
+    // 样条只用到中间一小段、地形起伏过小、世界 99.4% 都是平原。详见 TASKS 的 D1b。
+    this.valueFactor = sumOfSquares === 0 ? 0 : 1 / Math.sqrt(sumOfSquares * PERLIN_VARIANCE);
   }
 
   /** 该噪声的最大振幅（归一化前），对应原版的 amplitude() */
@@ -137,7 +152,8 @@ export class DoublePerlinNoise {
   constructor(random: Random, firstOctave: number, amplitudes: readonly number[]) {
     this.first = new NormalNoise(random, firstOctave, amplitudes);
     this.second = new NormalNoise(random, firstOctave, amplitudes);
-    this.valueFactor = 0.5 * (this.first.amplitude + this.second.amplitude);
+    // 两组独立噪声取平均会把方差减半，所以乘 1/√2 而不是 0.5，保持标准差仍为 1
+    this.valueFactor = Math.SQRT1_2 * 0.5 * (this.first.amplitude + this.second.amplitude);
   }
 
   get amplitude(): number {
@@ -145,6 +161,6 @@ export class DoublePerlinNoise {
   }
 
   getValue(x: number, y: number, z: number): number {
-    return (this.first.getValue(x, y, z) + this.second.getValue(x, y, z)) * 0.5;
+    return (this.first.getValue(x, y, z) + this.second.getValue(x, y, z)) * Math.SQRT1_2;
   }
 }

@@ -127,7 +127,28 @@ export class LightEngine {
     }
   }
 
-  /** 播种本区块：天光 > 1 的格子（可能在横向照亮邻居）+ 发光方块 */
+  /**
+   * 该格的天光是否"还需要往外扩散"——即某个邻居比它暗。
+   *
+   * 这一步是性能关键：早先的实现把**每个天光 > 1 的格子**都塞进队列，
+   * 而开阔天空下整列空气都是 15，一个区块就能塞进 8 万多条无用任务。
+   * 地形变高之后（y 可达 244）这个数字还会再涨，队列根本来不及消费，
+   * 而网格化又必须等光照队列排空——于是整个世界的网格都生成不出来（实测 489 个区块全部卡住）。
+   *
+   * 只播种"光会流出去"的边界格子后，平坦开阔的区域一条都不会入队。
+   */
+  private static needsSpread(chunk: Chunk, x: number, y: number, z: number, level: number): boolean {
+    const threshold = level - 1;
+    if (x > 0 && chunk.getSkyLight(x - 1, y, z) < threshold) return true;
+    if (x < 15 && chunk.getSkyLight(x + 1, y, z) < threshold) return true;
+    if (z > 0 && chunk.getSkyLight(x, y, z - 1) < threshold) return true;
+    if (z < 15 && chunk.getSkyLight(x, y, z + 1) < threshold) return true;
+    if (y > WORLD_MIN_Y && chunk.getSkyLight(x, y - 1, z) < threshold) return true;
+    if (y < WORLD_MAX_Y - 1 && chunk.getSkyLight(x, y + 1, z) < threshold) return true;
+    return false;
+  }
+
+  /** 播种本区块：光会往更暗处扩散的格子 + 发光方块 */
   private seedSelf(chunk: Chunk, minY: number, maxY: number): void {
     const originX = chunk.cx * 16;
     const originZ = chunk.cz * 16;
@@ -135,7 +156,8 @@ export class LightEngine {
     for (let y = minY; y <= maxY; y++) {
       for (let z = 0; z < 16; z++) {
         for (let x = 0; x < 16; x++) {
-          if (chunk.getSkyLight(x, y, z) > 1) {
+          const sky = chunk.getSkyLight(x, y, z);
+          if (sky > 1 && LightEngine.needsSpread(chunk, x, y, z, sky)) {
             this.skyQueue.push(originX + x, y, originZ + z);
           }
           const id = chunk.get(x, y, z);

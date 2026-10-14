@@ -584,11 +584,13 @@ export function biomeName(id: number): string {
  * 已作为任务记进 TASKS（D1b）。这里的每个增益都按「3 倍标准差 ≈ 0.9」反推。
  */
 export const CLIMATE_GAIN = {
-  continentalness: 5.6,
-  temperature: 3.0,
-  humidity: 2.9,
-  erosion: 3.7,
-  weirdness: 3.5,
+  // D1b 修好噪声归一化后，各通道标准差已经 ≈1，参数空间量纲与区间盒一致，增益全部为 1。
+  // 这张表保留为「按通道微调」的统一入口：将来某一维度偏强/偏弱时改这里即可。
+  continentalness: 1,
+  temperature: 1,
+  humidity: 1,
+  erosion: 1,
+  weirdness: 1,
 } as const;
 
 export function applyClimateGain(point: ClimatePoint): ClimatePoint {

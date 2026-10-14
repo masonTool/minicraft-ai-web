@@ -87,7 +87,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       待补 `barrier` / `fluid_level_floodedness` / `fluid_level_spread` / `lava` /
       `initial_density_without_jaggedness` / `vein_toggle` / `vein_ridged` / `vein_gap` / `vein_control`
 - [x] D4 大陆度→高度偏移样条、侵蚀度→起伏系数与山脊锐度样条
-- [ ] **D1b（重要缺口）噪声按方差归一化 + 重新校准地形样条**
+- [x] **D1b（已完成）噪声按方差归一化 + 重新校准地形样条**
       现状：NormalNoise 用 `1/Σ|振幅|` 归一化，等价于对多八度做加权平均，
       把幅度压得远小于原版。实测各气候通道标准差只有 0.054 / 0.101 / 0.105 / 0.082，
       而官方样条与群系参数表都是按 ±1.1 量纲写的 → 样条只用到中间一小段，
