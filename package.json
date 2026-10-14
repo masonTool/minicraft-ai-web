@@ -13,7 +13,8 @@
     "test:inventory": "esbuild tools/inventory-test.ts --bundle --platform=node --format=esm --outfile=.tmp/inventory-test.mjs --log-level=error && node .tmp/inventory-test.mjs",
     "test:crafting": "esbuild tools/crafting-test.ts --bundle --platform=node --format=esm --outfile=.tmp/crafting-test.mjs --log-level=error && node .tmp/crafting-test.mjs",
     "test:furnace": "esbuild tools/furnace-test.ts --bundle --platform=node --format=esm --outfile=.tmp/furnace-test.mjs --log-level=error && node .tmp/furnace-test.mjs",
-    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace"
+    "test:entity": "esbuild tools/entity-test.ts --bundle --platform=node --format=esm --outfile=.tmp/entity-test.mjs --log-level=error && node .tmp/entity-test.mjs",
+    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity"
   },
   "dependencies": {
     "three": "^0.186.1"

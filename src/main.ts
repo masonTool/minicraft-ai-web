@@ -22,6 +22,10 @@ import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 import { HOTBAR_SIZE, Inventory } from './core/container/Inventory.ts';
 import { CHEST_SIZE } from './core/container/Chest.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
+import { EntityManager } from './core/entity/EntityManager.ts';
+import { ItemEntity } from './core/entity/ItemEntity.ts';
+import type { EntityContext } from './core/entity/Entity.ts';
+import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
 import { blockForItem, dropFor, itemName } from './core/registry/items.ts';
@@ -69,6 +73,8 @@ class App {
   private readonly physics = new PlayerPhysics();
   private readonly inventory = new Inventory();
   private readonly inventoryScreen: InventoryScreen;
+  private readonly entities = new EntityManager();
+  private readonly entityRenderer: EntityRenderer;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   private readonly hotbarSlots: HTMLDivElement[] = [];
@@ -125,6 +131,8 @@ class App {
 
     this.solidMaterial = new VoxelMaterial(atlas.texture);
     this.translucentMaterial = new VoxelMaterial(atlas.texture, { translucent: true });
+    // 必须在 applyEnvironment() 之前创建：环境函数会把昼夜亮度推给它
+    this.entityRenderer = new EntityRenderer(this.scene, atlas);
     this.applyEnvironment();
 
     this.chunkRenderer = new ChunkRenderer(
@@ -143,6 +151,8 @@ class App {
       },
       onChunkUnloaded: (cx, cz) => {
         this.chunkRenderer.onChunkUnloaded(cx, cz);
+        // 区块卸载时一并清掉落在该区块里的掉落物，避免未加载区域实体无限堆积
+        this.entities.removeInChunk(cx, cz);
         this.refreshLoadingState();
       },
       onBlockChanged: (x, y, z) => {
@@ -201,6 +211,8 @@ class App {
     this.skyColor.copy(NIGHT_SKY).lerp(DAY_SKY, daylight);
     this.solidMaterial.skyBrightness = skyBrightness;
     this.translucentMaterial.skyBrightness = skyBrightness;
+    // 掉落物也跟着昼夜明暗（暂不做逐实体光照采样）
+    this.entityRenderer.brightness = skyBrightness;
 
     const fogFar = VIEW_DISTANCE * 16 - 6;
     const fogNear = fogFar * 0.72;
@@ -430,30 +442,47 @@ class App {
     if (this.breakProgress < 1) return;
 
     const brokenId = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
-    this.emptyContainerAt(this.hit.x, this.hit.y, this.hit.z);
+    this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
 
-    // 掉落直接进背包（掉落物实体与拾取动画在 I3 实现）
-    const drop = dropFor(brokenId);
-    if (drop) this.inventory.add(drop.id, drop.count);
+    // 创造模式不产生掉落（与原版一致）
+    if (!this.flying) {
+      const drop = dropFor(brokenId);
+      if (drop) this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+    }
 
     this.breakProgress = 0;
     this.breakingKey = '';
     this.breakCooldown = BREAK_COOLDOWN;
   }
 
+  /** 生成一堆掉落物 */
+  private spawnDrop(itemId: number, count: number, x: number, y: number, z: number): void {
+    this.entities.spawn(new ItemEntity(itemId, count, x, y, z));
+  }
+
+  /** 推进所有实体并同步到渲染层 */
+  private updateEntities(dt: number): void {
+    const context: EntityContext = {
+      world: this.world,
+      playerBox: this.physics.box(),
+      pickup: (itemId, count) => this.inventory.add(itemId, count),
+    };
+    this.entities.update(context, dt);
+    this.entityRenderer.update(this.entities.all, this.camera, dt);
+  }
+
   /**
-   * 破坏容器方块时清空其内容。
-   * 目前直接把内容物收进玩家背包——掉落物实体（G7）实现后会改成原地生成掉落物。
+   * 破坏容器方块时把内容物倒出来（原地生成掉落物）。
    */
-  private emptyContainerAt(x: number, y: number, z: number): void {
+  private dropContainerContents(x: number, y: number, z: number): void {
     const container = this.world.containers.get(x, y, z);
     if (!container) return;
     const size = container instanceof Furnace ? FURNACE_SIZE : CHEST_SIZE;
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;
-      this.inventory.add(stack.id, stack.count);
+      this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.5, z + 0.5);
       container.set(i, null);
     }
     this.world.containers.remove(x, y, z);
@@ -644,6 +673,7 @@ class App {
       if (!lightBusy) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
 
       this.tickContainers(dt);
+      this.updateEntities(dt);
       this.inventoryScreen.tickUi(dt);
 
       this.refreshLoadingState();
@@ -736,6 +766,7 @@ class App {
     position: [number, number, number];
     onGround: boolean;
     flying: boolean;
+    entities: number;
   } {
     return {
       fps: this.fps,
@@ -745,7 +776,25 @@ class App {
       position: [this.physics.x, this.physics.y, this.physics.z],
       onGround: this.physics.onGround,
       flying: this.flying,
+      entities: this.entities.count,
     };
+  }
+
+  /** 当前所有实体的概览（自动化验收用） */
+  get entityList(): Array<{ kind: string; item: string; count: number; x: number; y: number; z: number }> {
+    return this.entities.all.map((entity) => {
+      if (entity instanceof ItemEntity) {
+        return {
+          kind: 'item',
+          item: itemName(entity.itemId),
+          count: entity.count,
+          x: entity.x,
+          y: entity.y,
+          z: entity.z,
+        };
+      }
+      return { kind: 'unknown', item: '', count: 0, x: entity.x, y: entity.y, z: entity.z };
+    });
   }
 
   /** 单点取样：方块名 + 天光/方块光 */
@@ -797,6 +846,11 @@ class App {
   /** 直接放置方块（自动化测试用） */
   place(x: number, y: number, z: number, blockId: number): boolean {
     return this.world.setBlockAndUpdate(x, y, z, blockId);
+  }
+
+  /** 直接在指定位置生成掉落物（自动化测试用） */
+  dropItem(itemId: number, count: number, x: number, y: number, z: number): void {
+    this.spawnDrop(itemId, count, x, y, z);
   }
 }
 
