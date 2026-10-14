@@ -19,6 +19,7 @@
 
 import { Block } from '../registry/blocks.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../world/Chunk.ts';
+import { Aquifer } from './Aquifer.ts';
 import { CaveCarver } from './CaveCarver.ts';
 import { bandBlockAt, columnSurface } from './SurfaceRules.ts';
 import { OreGenerator } from './OreGenerator.ts';
@@ -81,6 +82,7 @@ export class OverworldGenerator {
   private readonly jaggednessSpline: Spline;
 
   private readonly carver: CaveCarver;
+  private readonly aquifer: Aquifer;
   private readonly oreGenerator: OreGenerator;
 
   // 复用缓冲区，避免每次生成都重新分配
@@ -140,6 +142,8 @@ export class OverworldGenerator {
     ]);
 
     this.carver = new CaveCarver(new Random(mixSeed(seed, 0xc0ffee)));
+    // 含水层用独立随机流派生，避免改动这里会连带改变地形/洞穴的噪声序列
+    this.aquifer = new Aquifer(new Random(mixSeed(seed, 0xa9f10d)), SEA_LEVEL);
     this.oreGenerator = new OreGenerator(seed);
   }
 
@@ -162,6 +166,11 @@ export class OverworldGenerator {
       temperature: this.temperature.getValue(x, 0, z),
       humidity: this.humidity.getValue(x, 0, z),
     };
+  }
+
+  /** 该列的含水层水位（世界坐标，供测试与调试面板使用） */
+  waterLevelAt(x: number, z: number): number {
+    return this.aquifer.waterLevelAt(x, z);
   }
 
   /**
@@ -224,8 +233,9 @@ export class OverworldGenerator {
     this.applySurface(blocks, originX, originZ);
     this.applyBedrock(blocks);
 
-    // 雕刻顺序对齐原版：地形 → 地表规则 → 雕刻 → 矿石
+    // 雕刻顺序对齐原版：地形 → 地表规则 → 雕刻 → 含水层 → 矿石
     this.carver.carve(blocks, originX, originZ);
+    this.aquifer.fill(blocks, originX, originZ);
     this.oreGenerator.generate(blocks, cx, cz, (wx, wz) => this.erosion.getValue(wx, 0, wz));
 
     return blocks;

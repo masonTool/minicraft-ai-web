@@ -16,7 +16,8 @@
     "test:entity": "esbuild tools/entity-test.ts --bundle --platform=node --format=esm --outfile=.tmp/entity-test.mjs --log-level=error && node .tmp/entity-test.mjs",
     "test:shapes": "esbuild tools/shapes-test.ts --bundle --platform=node --format=esm --outfile=.tmp/shapes-test.mjs --log-level=error && node .tmp/shapes-test.mjs",
     "test:biome": "esbuild tools/biome-test.ts --bundle --platform=node --format=esm --outfile=.tmp/biome-test.mjs --log-level=error && node .tmp/biome-test.mjs",
-    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome"
+    "test:aquifer": "esbuild tools/aquifer-test.ts --bundle --platform=node --format=esm --outfile=.tmp/aquifer-test.mjs --log-level=error && node .tmp/aquifer-test.mjs",
+    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer"
   },
   "dependencies": {
     "three": "^0.186.1"
