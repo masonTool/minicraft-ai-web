@@ -233,10 +233,34 @@ export class LightEngine {
     this.unlight(worldX, worldY, worldZ, true);
     this.unlight(worldX, worldY, worldZ, false);
 
-    const opacity = blockDef(this.world.getBlock(worldX, worldY, worldZ)).lightOpacity;
+    const def = blockDef(this.world.getBlock(worldX, worldY, worldZ));
+    const opacity = def.lightOpacity;
 
+    // ---- 方块光：自发光方块直接播种。
+    // ⚠️ 这一步不能放在"透光"判断里面：荧石、南瓜灯这类方块是**不透光但自发光**的，
+    // 若跟着 opacity<15 一起跳过，运行时放下荧石就不会亮（区块生成走的是另一条路径，所以不易察觉）。
+    if (def.light > 0) {
+      this.world.setBlockLight(worldX, worldY, worldZ, def.light);
+      this.blockQueue.push(worldX, worldY, worldZ);
+    } else if (opacity < 15) {
+      let block = 0;
+      for (const [dx, dy, dz] of DIRS) {
+        const nx = worldX + dx;
+        const ny = worldY + dy;
+        const nz = worldZ + dz;
+        if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
+        if (!this.world.isLoaded(nx, nz)) continue;
+        const neighbor = this.world.getBlockLight(nx, ny, nz) - Math.max(1, opacity);
+        if (neighbor > block) block = neighbor;
+      }
+      if (block > 0) {
+        this.world.setBlockLight(worldX, worldY, worldZ, block);
+        this.blockQueue.push(worldX, worldY, worldZ);
+      }
+    }
+
+    // ---- 天光：只有透光方块才可能存有天光
     if (opacity < 15) {
-      // ---- 天光：优先看正上方（直射天光不衰减）
       const above = worldY + 1 >= WORLD_MAX_Y ? 15 : this.world.getSkyLight(worldX, worldY + 1, worldZ);
       let sky = 0;
       if (opacity === 0 && above === 15) sky = 15;
@@ -257,28 +281,6 @@ export class LightEngine {
       if (sky > 0) {
         this.world.setSkyLight(worldX, worldY, worldZ, sky);
         this.skyQueue.push(worldX, worldY, worldZ);
-      }
-
-      // ---- 方块光：发光方块直接播种，否则从邻居汇聚
-      const emit = blockDef(this.world.getBlock(worldX, worldY, worldZ)).light;
-      if (emit > 0) {
-        this.world.setBlockLight(worldX, worldY, worldZ, emit);
-        this.blockQueue.push(worldX, worldY, worldZ);
-      } else {
-        let block = 0;
-        for (const [dx, dy, dz] of DIRS) {
-          const nx = worldX + dx;
-          const ny = worldY + dy;
-          const nz = worldZ + dz;
-          if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
-          if (!this.world.isLoaded(nx, nz)) continue;
-          const neighbor = this.world.getBlockLight(nx, ny, nz) - Math.max(1, opacity);
-          if (neighbor > block) block = neighbor;
-        }
-        if (block > 0) {
-          this.world.setBlockLight(worldX, worldY, worldZ, block);
-          this.blockQueue.push(worldX, worldY, worldZ);
-        }
       }
     }
 
