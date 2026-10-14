@@ -9,7 +9,7 @@
  * 匹配默认允许镜像（把图案左右翻转再比一次），这也是原版默认行为。
  */
 
-import { Block, SHAPED_PARENTS, slabId, stairsId, woolId } from '../registry/blocks.ts';
+import { Block, SHAPED_PARENTS, Wood, slabId, stairsId, woolId } from '../registry/blocks.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import { Item, dyeItemId } from '../registry/items.ts';
 
@@ -177,11 +177,27 @@ const UTILITY_RECIPES: readonly Recipe[] = [
   },
 ];
 
+/**
+ * 木材家族：每种木头 3 条（原木→木板、木板→台阶、木板→楼梯）。
+ * 由 Wood 表批量生成，加一种木头自动获得全套配方。
+ */
+const WOOD_RECIPES: readonly Recipe[] = Object.values(Wood).flatMap((ids) => [
+  { kind: 'shapeless' as const, result: { id: ids.planks, count: 4 }, ingredients: [ids.log] },
+  { kind: 'shaped' as const, result: { id: ids.slab, count: 6 }, pattern: ['PPP'], key: { P: ids.planks } },
+  {
+    kind: 'shaped' as const,
+    result: { id: ids.stairs, count: 4 },
+    pattern: ['P  ', 'PP ', 'PPP'],
+    key: { P: ids.planks },
+  },
+]);
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...WOOL_RECIPES,
   ...SHAPED_BLOCK_RECIPES,
   ...UTILITY_RECIPES,
+  ...WOOD_RECIPES,
 ];
 
 interface Normalized {

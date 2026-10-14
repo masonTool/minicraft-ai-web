@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three';
-import { DYE_COLORS } from '../core/registry/colors.ts';
+import { DYE_COLORS, WOOD_TYPES } from '../core/registry/colors.ts';
 
 export const TILE_SIZE = 16;
 
@@ -24,6 +24,26 @@ export const TILE_ORDER = [
   'oak_log_top',
   'oak_leaves',
   'oak_planks',
+  'spruce_log_side',
+  'spruce_log_top',
+  'spruce_leaves',
+  'spruce_planks',
+  'birch_log_side',
+  'birch_log_top',
+  'birch_leaves',
+  'birch_planks',
+  'jungle_log_side',
+  'jungle_log_top',
+  'jungle_leaves',
+  'jungle_planks',
+  'acacia_log_side',
+  'acacia_log_top',
+  'acacia_leaves',
+  'acacia_planks',
+  'dark_oak_log_side',
+  'dark_oak_log_top',
+  'dark_oak_leaves',
+  'dark_oak_planks',
   'cobblestone',
   'bedrock',
   'water',
@@ -353,6 +373,50 @@ function chiseledPainter(base: readonly [number, number, number]): Painter {
   };
 }
 
+// ---------------------------------------------------------------- 木材贴图
+
+/** 原木侧面：竖直木纹条纹 */
+function barkPainter(base: readonly [number, number, number], spotted = false): Painter {
+  return (x, _y, rng) => {
+    // 白桦的树皮是白底 + 黑色斑块，单独处理
+    if (spotted && hashString(`birch${x},${Math.floor(rng() * 3)}`) % 5 === 0) {
+      const v = 0.45 + rng() * 0.15;
+      return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+    }
+    const streak = Math.sin(x * 1.7) * 0.09;
+    const v = 1 + streak + (rng() * 0.12 - 0.06);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+  };
+}
+
+/** 原木顶面：同心年轮 */
+function logTopPainter(base: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const d = Math.hypot(x - 7.5, y - 7.5);
+    const v = 1 + Math.sin(d * 2.4) * 0.11 + (rng() * 0.1 - 0.05);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+  };
+}
+
+/** 木板：横向板条 + 交错竖缝 */
+function planksPainter(base: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const plankRow = y % 4 === 3 ? -0.15 : 0;
+    const seam = (x + (Math.floor(y / 4) % 2) * 8) % 8 === 0 ? -0.07 : 0;
+    const v = 1 + plankRow + seam + (rng() * 0.08 - 0.04);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+  };
+}
+
+/** 树叶：颗粒 + 少量镂空（alphaTest 会把这些洞裁掉） */
+function leavesPainter(base: readonly [number, number, number], alpha = 255): Painter {
+  return (x, y, rng) => {
+    const v = 1 + (rng() * 0.34 - 0.17);
+    const hole = hashString(`leaf${x},${y}`) % 11 === 0;
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), hole ? 150 : alpha];
+  };
+}
+
 /** 鹅卵石：按 4×4 分块取随机灰阶，块间留暗缝（熔炉侧面也复用它） */
 const cobblestonePainter: Painter = (x, y, rng) => {
   const key = (y >> 2) * 4 + (x >> 2);
@@ -376,30 +440,7 @@ const PAINTERS: Record<string, Painter> = {
     }
     return base;
   },
-  oak_log_side: (x, _y, rng) => {
-    const streak = Math.sin(x * 1.7) * 10;
-    const v = 108 + streak + (rng() * 14 - 7);
-    return [clamp255(v * 1.25), clamp255(v * 0.95), clamp255(v * 0.6), 255];
-  },
-  oak_log_top: (x, y, rng) => {
-    const cx = x - 7.5;
-    const cy = y - 7.5;
-    const d = Math.sqrt(cx * cx + cy * cy);
-    const ring = Math.sin(d * 2.4) * 14;
-    const v = 140 + ring + (rng() * 12 - 6);
-    return [clamp255(v * 1.2), clamp255(v * 0.92), clamp255(v * 0.58), 255];
-  },
-  oak_leaves: (x, y, rng) => {
-    const v = 112 + (rng() * 40 - 20);
-    const hole = hashString(`leaf${x},${y}`) % 11 === 0;
-    return [clamp255(v * 0.5), clamp255(v * 0.95), clamp255(v * 0.35), hole ? 150 : 255];
-  },
-  oak_planks: (x, y, rng) => {
-    const plankRow = y % 4 === 3 ? -22 : 0;
-    const seam = (x + (Math.floor(y / 4) % 2) * 8) % 8 === 0 ? -10 : 0;
-    const v = 150 + plankRow + seam + (rng() * 12 - 6);
-    return [clamp255(v * 1.05), clamp255(v * 0.82), clamp255(v * 0.5), 255];
-  },
+  // ---- 木材：6 种木头的贴图全部由 WOOD_TYPES 批量生成（见文件末尾的循环）
   bedrock: (x, y) => {
     const key = (y >> 2) * 4 + (x >> 2);
     const v = 40 + (hashString('bed' + key) % 70);
@@ -640,6 +681,14 @@ const PAINTERS: Record<string, Painter> = {
   bricks: brickPainter([150, 84, 66]),
   polished_deepslate: layered(90, 2, 3),
 };
+
+// 木材：6 种木头的 4 张贴图统一由 WOOD_TYPES 生成——加一种木头只需往配色表加一行
+for (const wood of WOOD_TYPES) {
+  PAINTERS[`${wood.name}_log_side`] = barkPainter(wood.bark, wood.name === 'birch');
+  PAINTERS[`${wood.name}_log_top`] = logTopPainter(wood.wood);
+  PAINTERS[`${wood.name}_planks`] = planksPainter(wood.wood);
+  PAINTERS[`${wood.name}_leaves`] = leavesPainter(wood.leaf, wood.leafAlpha ?? 255);
+}
 
 // 羊毛与染料：16 色按配色表批量生成，避免手写 32 份几乎相同的代码
 for (const color of DYE_COLORS) {

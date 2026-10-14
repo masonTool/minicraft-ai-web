@@ -152,7 +152,7 @@ console.log('\n[合成网格：木棍进阶链]');
   equal('第二步：2 木板竖排 → 木棍', grid2.result?.id, Item.STICK);
 
   // 15 条基础配方 + 16 条羊毛染色
-  equal('配方表规模（基础 15 + 羊毛 16 + 台阶楼梯 24 + 功能 7）', RECIPES.length, 62);
+  equal('配方表规模（基础 15 + 羊毛 16 + 台阶楼梯 24 + 功能 7 + 木材 15）', RECIPES.length, 77);
 }
 
 console.log('\n[石材家族配方]');

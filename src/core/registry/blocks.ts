@@ -7,7 +7,7 @@
  * - 完整 1.18 方块集（含 block state）会在 B3/B4 逐步补齐；当前覆盖地形生成所需部分。
  */
 
-import { DYE_COLORS } from './colors.ts';
+import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { BlockShape } from './blockState.ts';
 
 export interface BlockDef {
@@ -169,6 +169,81 @@ const WOOL_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
   tiles: [`wool_${color.name}`, `wool_${color.name}`, `wool_${color.name}`],
 }));
 
+// ---------------------------------------------------------------- 木材家族
+
+/**
+ * 除橡木之外的 5 种木材，每种派生 5 个方块：原木 / 木板 / 树叶 / 台阶 / 楼梯。
+ *
+ * id 从 102 起按「每种木头连续 5 个」分配；橡木（5/6/7 以及已有的台阶楼梯）保持原 id 不动。
+ * 这种**追加式布局**的意义在于：以后再加木材只需要往 WOOD_TYPES 加一行，不会打乱既有编号。
+ */
+export const WOOD_BLOCK_ID_START = 102;
+
+export interface WoodBlockIds {
+  readonly log: number;
+  readonly planks: number;
+  readonly leaves: number;
+  readonly slab: number;
+  readonly stairs: number;
+}
+
+const EXTRA_WOODS = WOOD_TYPES.filter((wood) => wood.name !== 'oak');
+
+const WOOD_ID_MAP = new Map<string, WoodBlockIds>();
+const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood, index) => {
+  const base = WOOD_BLOCK_ID_START + index * 5;
+  const ids: WoodBlockIds = {
+    log: base,
+    planks: base + 1,
+    leaves: base + 2,
+    slab: base + 3,
+    stairs: base + 4,
+  };
+  WOOD_ID_MAP.set(wood.name, ids);
+
+  const plankTile = `${wood.name}_planks`;
+  return [
+    {
+      id: ids.log,
+      name: `minecraft:${wood.name}_log`,
+      tiles: [`${wood.name}_log_top`, `${wood.name}_log_top`, `${wood.name}_log_side`],
+    },
+    { id: ids.planks, name: `minecraft:${wood.name}_planks`, tiles: [plankTile, plankTile, plankTile] },
+    {
+      id: ids.leaves,
+      name: `minecraft:${wood.name}_leaves`,
+      tiles: [`${wood.name}_leaves`, `${wood.name}_leaves`, `${wood.name}_leaves`],
+      lightOpacity: 1,
+    },
+    {
+      id: ids.slab,
+      name: `minecraft:${wood.name}_planks_slab`,
+      tiles: [plankTile, plankTile, plankTile],
+      shape: 'slab' as const,
+      opaque: false,
+      lightOpacity: 0,
+    },
+    {
+      id: ids.stairs,
+      name: `minecraft:${wood.name}_planks_stairs`,
+      tiles: [plankTile, plankTile, plankTile],
+      shape: 'stairs' as const,
+      opaque: false,
+      lightOpacity: 0,
+    },
+  ];
+});
+
+/** 取某种木材的 5 个方块 id；未知木材返回 undefined */
+export function woodBlocks(name: string): WoodBlockIds | undefined {
+  return WOOD_ID_MAP.get(name);
+}
+
+/** 木材方块 id 的具名入口（配方与测试用；与 WOOD_SPECS 同源，不会写错） */
+export const Wood: Readonly<Record<string, WoodBlockIds>> = Object.fromEntries(
+  EXTRA_WOODS.map((wood) => [wood.name, WOOD_ID_MAP.get(wood.name)!]),
+);
+
 // ---------------------------------------------------------------- 台阶 / 楼梯
 
 /**
@@ -295,6 +370,7 @@ const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
+  ...WOOD_SPECS,
   ...SHAPED_SPECS,
   ...FUNCTIONAL_SHAPED_SPECS,
 ].sort((a, b) => a.id - b.id);
@@ -495,6 +571,15 @@ HARDNESS.set(Block.OAK_DOOR, 3);
 HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
 
+// 木材家族：原木与木板 2.0、树叶 0.2，台阶楼梯跟随木板
+for (const ids of Object.values(Wood)) {
+  HARDNESS.set(ids.log, 2);
+  HARDNESS.set(ids.planks, 2);
+  HARDNESS.set(ids.leaves, 0.2);
+  HARDNESS.set(ids.slab, 2);
+  HARDNESS.set(ids.stairs, 2);
+}
+
 /** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
 const HAND_HARVESTABLE = new Set<number>([
   Block.DIRT,
@@ -529,6 +614,15 @@ HAND_HARVESTABLE.add(Block.OAK_FENCE);
 HAND_HARVESTABLE.add(Block.OAK_DOOR);
 HAND_HARVESTABLE.add(Block.TORCH);
 HAND_HARVESTABLE.add(Block.LADDER);
+
+// 木材家族全部徒手可采集
+for (const ids of Object.values(Wood)) {
+  HAND_HARVESTABLE.add(ids.log);
+  HAND_HARVESTABLE.add(ids.planks);
+  HAND_HARVESTABLE.add(ids.leaves);
+  HAND_HARVESTABLE.add(ids.slab);
+  HAND_HARVESTABLE.add(ids.stairs);
+}
 
 export function blockHardness(id: number): number {
   return HARDNESS.get(id) ?? 3;
