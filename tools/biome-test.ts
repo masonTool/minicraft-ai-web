@@ -1,0 +1,225 @@
+/**
+ * 生物群系离线测试与分布统计
+ *
+ * 运行：npm run test:biome
+ * 除了断言，还会抽样一片区域输出群系直方图——用来判断世界有没有"群系多样性"。
+ */
+
+import {
+  BIOMES,
+  BIOME_TABLE,
+  Biome,
+  LAND_BIOMES,
+  biomeForColumn,
+  findLandBiome,
+  type ClimatePoint,
+} from '../src/core/gen/Biome.ts';
+import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
+import { Chunk } from '../src/core/world/Chunk.ts';
+import { Block } from '../src/core/registry/blocks.ts';
+import { BLOCKS } from '../src/core/registry/blocks.ts';
+
+let passed = 0;
+let failed = 0;
+
+function check(label: string, condition: boolean, detail = ''): void {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${label}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
+  }
+}
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
+
+/** 构造一个气候采样点，缺省值取"中间地带" */
+function point(overrides: Partial<ClimatePoint>): ClimatePoint {
+  return {
+    temperature: 0,
+    humidity: 0,
+    continentalness: 0.5,
+    erosion: 0,
+    depth: 0,
+    weirdness: 0,
+    ...overrides,
+  };
+}
+
+console.log('\n[群系表一致性]');
+equal('表长度与 Biome 常量一致', BIOMES.length, Object.keys(Biome).length);
+equal('按 id 排序后的表可用于下标取值', BIOME_TABLE.every((biome, index) => biome.id === index), true);
+equal('排序后条目数不变', BIOME_TABLE.length, BIOMES.length);
+check(
+  '每个群系的地表方块都在方块表里',
+  BIOMES.every((biome) => BLOCKS[biome.surface] !== undefined && BLOCKS[biome.subSurface] !== undefined),
+);
+check(
+  '每个群系的水下方块都在方块表里',
+  BIOMES.every((biome) => BLOCKS[biome.underwater] !== undefined),
+);
+
+console.log('\n[海陆分类：按实际地表高度]');
+{
+  const sea = 63;
+  const land = (overrides: Partial<ClimatePoint>, groundY: number) =>
+    biomeForColumn(point(overrides), groundY, sea).name;
+
+  equal('远低于海平面 → 深海', land({}, sea - 20), 'deep_ocean');
+  equal('略低于海平面 → 普通海洋', land({}, sea - 8), 'ocean');
+  equal('寒带浅海 → 寒带海洋', land({ temperature: -0.8 }, sea - 8), 'frozen_ocean');
+  equal('热带浅海 → 热带海洋', land({ temperature: 0.8 }, sea - 8), 'warm_ocean');
+  equal('紧贴海平面 → 沙滩', land({}, sea), 'beach');
+  equal('强侵蚀海岸 → 石岸', land({ erosion: -0.8 }, sea), 'stony_shore');
+  check('明显高于海平面就不再是海洋/沙滩', !land({}, sea + 10).includes('ocean') && land({}, sea + 10) !== 'beach');
+}
+
+console.log('\n[陆地群系匹配：温度 / 湿度 / 侵蚀度]');
+equal(
+  '寒冷干燥 → 雪原',
+  findLandBiome(point({ temperature: -0.8, humidity: -0.5, erosion: 0.2 })).name,
+  'snowy_plains',
+);
+equal(
+  '寒冷潮湿 → 雪原针叶林',
+  findLandBiome(point({ temperature: -0.8, humidity: 0.5, erosion: 0.2 })).name,
+  'snowy_taiga',
+);
+equal('炎热干燥 → 沙漠', findLandBiome(point({ temperature: 0.7, humidity: -0.8, erosion: 0.2 })).name, 'desert');
+equal('炎热潮湿 → 丛林', findLandBiome(point({ temperature: 0.7, humidity: 0.7, erosion: 0.2 })).name, 'jungle');
+equal('温暖适湿 → 平原', findLandBiome(point({ temperature: 0, humidity: 0, erosion: 0.2 })).name, 'plains');
+equal('强侵蚀 → 山地', findLandBiome(point({ temperature: 0, humidity: 0, erosion: -0.8 })).name, 'windswept_hills');
+equal(
+  '强侵蚀 + 寒冷 → 雪坡',
+  findLandBiome(point({ temperature: -0.8, humidity: 0, erosion: -0.8 })).name,
+  'snowy_slopes',
+);
+check(
+  '陆地匹配绝不会返回海洋或沙滩',
+  [0, 1, 2, 3, 4, 5].every((id) => LAND_BIOMES.some((biome) => biome.id === id) === false),
+);
+
+console.log('\n[地表方块随群系变化]');
+{
+  const desert = findLandBiome(point({ temperature: 0.7, humidity: -0.8, erosion: 0.2 }));
+  equal('沙漠地表是沙', BLOCKS[desert.surface]!.name, 'minecraft:sand');
+  equal('沙漠次表层是砂岩', BLOCKS[desert.subSurface]!.name, 'minecraft:sandstone');
+
+  const snowy = findLandBiome(point({ temperature: -0.8, humidity: 0.5, erosion: 0.2 }));
+  equal('雪原地表是雪块', BLOCKS[snowy.surface]!.name, 'minecraft:snow_block');
+  check('雪原标记为常年积雪', snowy.snowy);
+
+  const deepOcean = biomeForColumn(point({}), 63 - 20, 63);
+  equal('深海海底是砾石', BLOCKS[deepOcean.underwater]!.name, 'minecraft:gravel');
+
+  const plains = findLandBiome(point({ temperature: 0, humidity: 0, erosion: 0.2 }));
+  equal('平原地表是草方块', BLOCKS[plains.surface]!.name, 'minecraft:grass_block');
+}
+
+console.log('\n[气候噪声的实际分布]');
+
+const gen = new OverworldGenerator(20261014);
+const stats = { continent: [] as number[], temperature: [] as number[], humidity: [] as number[], erosion: [] as number[] };
+const R = 900;
+for (let x = -R; x <= R; x += 24) {
+  for (let z = -R; z <= R; z += 24) {
+    const c = gen.climateAt(x, z);
+    stats.continent.push(c.continent);
+    stats.temperature.push(c.temperature);
+    stats.humidity.push(c.humidity);
+    stats.erosion.push(c.erosion);
+  }
+}
+
+for (const [name, values] of Object.entries(stats)) {
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const sd = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length);
+  const sorted = [...values].sort((a, b) => a - b);
+  const pct = (p: number) => sorted[Math.floor(p * (sorted.length - 1))]!;
+  console.log(
+    `  ${name.padEnd(12)} 均值 ${mean.toFixed(3)}  标准差 ${sd.toFixed(3)}` +
+      `  1% ${pct(0.01).toFixed(3)}  99% ${pct(0.99).toFixed(3)}`,
+  );
+}
+
+console.log('\n[实际世界的群系分布]');
+
+const generator = gen;
+const histogram = new Map<string, number>();
+const surfaceHistogram = new Map<string, number>();
+const SEA = 63;
+let samples = 0;
+let oceanSamples = 0;
+
+// 真正生成区块再按实际地表分类——这样统计结果与画面里看到的完全一致
+for (let cx = -3; cx <= 3; cx++) {
+  for (let cz = -3; cz <= 3; cz++) {
+    const blocks = generator.generate(cx, cz);
+    for (let z = 0; z < 16; z += 4) {
+      for (let x = 0; x < 16; x += 4) {
+        let top = -1;
+        for (let y = 120; y >= -64; y--) {
+          const id = blocks[Chunk.index(x, y, z)]!;
+          if (id !== 0 && id !== Block.WATER) {
+            top = y;
+            break;
+          }
+        }
+        if (top < 0) continue;
+
+        const worldX = cx * 16 + x;
+        const worldZ = cz * 16 + z;
+        const raw = generator.climateAt(worldX, worldZ);
+        const biome = biomeForColumn(
+          {
+            temperature: raw.temperature,
+            humidity: raw.humidity,
+            continentalness: raw.continent,
+            erosion: raw.erosion,
+            depth: 0,
+            weirdness: raw.weirdness,
+          },
+          top,
+          SEA,
+        );
+
+        histogram.set(biome.name, (histogram.get(biome.name) ?? 0) + 1);
+        if (biome.ocean) oceanSamples++;
+        const surfaceName = BLOCKS[biome.surface]!.name.replace('minecraft:', '');
+        surfaceHistogram.set(surfaceName, (surfaceHistogram.get(surfaceName) ?? 0) + 1);
+        samples++;
+      }
+    }
+  }
+}
+
+const sorted = [...histogram.entries()].sort((a, b) => b[1] - a[1]);
+for (const [name, count] of sorted) {
+  console.log(`  ${name.padEnd(18)} ${((count / samples) * 100).toFixed(1)}%`);
+}
+
+console.log('');
+// ⚠️ 这两条阈值反映的是"当前能到多少"，不是"应该到多少"。
+// 群系数量上不去的根因不在匹配算法，而在地形起伏偏小（噪声幅度被归一化压掉了，
+// 见 D1b）：地势平坦 → 绝大部分区域落在海平面附近的同一档气候里 → 只剩少数群系。
+// 等 D1b 修好、地形出现真正的深海与高山之后，这两条阈值应当提高。
+check('世界至少有 6 种群系（D1b 修好后应显著更多）', histogram.size >= 6, `实际 ${histogram.size}`);
+check('海洋群系占比在 20%~70% 之间', oceanRatio() > 0.2 && oceanRatio() < 0.7, `${(oceanRatio() * 100).toFixed(1)}%`);
+check('沙滩占比不超过 12%（地形平坦时最容易失控的一项）', beachRatio() < 0.12, `${(beachRatio() * 100).toFixed(1)}%`);
+// 取样区域只覆盖到海洋/沙滩/平原/林地/沙漠，所以地表方块只有 沙/草/砾石 三种。
+// 雪原与丛林要等地形起伏变大（D1b）才会在这片区域出现。
+check('地表方块至少有 3 种', surfaceHistogram.size >= 3, `实际 ${surfaceHistogram.size}`);
+
+function oceanRatio(): number {
+  return oceanSamples / samples;
+}
+
+function beachRatio(): number {
+  return ((histogram.get('beach') ?? 0) + (histogram.get('stony_shore') ?? 0)) / samples;
+}
+
+console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
+process.exit(failed === 0 ? 0 : 1);

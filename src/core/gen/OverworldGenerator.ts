@@ -21,6 +21,7 @@ import { Block } from '../registry/blocks.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../world/Chunk.ts';
 import { CaveCarver } from './CaveCarver.ts';
 import { OreGenerator } from './OreGenerator.ts';
+import { applyClimateGain, biomeForColumn, findLandBiome, type BiomeDef } from './Biome.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { Spline } from './noise/Spline.ts';
@@ -160,6 +161,24 @@ export class OverworldGenerator {
       temperature: this.temperature.getValue(x, 0, z),
       humidity: this.humidity.getValue(x, 0, z),
     };
+  }
+
+  /**
+   * 该列所属的生物群系。
+   * 地形采样出的五个气候参数直接作为参数空间坐标交给群系匹配器；
+   * depth 维度目前恒为 0（所有群系的 depth 区间都是全集，不影响匹配结果）。
+   */
+  biomeAt(x: number, z: number): BiomeDef {
+    return findLandBiome(
+      applyClimateGain({
+        temperature: this.temperature.getValue(x, 0, z),
+        humidity: this.humidity.getValue(x, 0, z),
+        continentalness: this.continents.getValue(x, 0, z),
+        erosion: this.erosion.getValue(x, 0, z),
+        depth: 0,
+        weirdness: this.ridges.getValue(x, 0, z),
+      }),
+    );
   }
 
   /**
@@ -309,32 +328,30 @@ export class OverworldGenerator {
         }
         if (top < WORLD_MIN_Y) continue;
 
-        const climate = this.climateAt(worldX, worldZ);
+        const raw = this.climateAt(worldX, worldZ);
+        const biome = biomeForColumn(
+          {
+            temperature: raw.temperature,
+            humidity: raw.humidity,
+            continentalness: raw.continent,
+            erosion: raw.erosion,
+            depth: 0,
+            weirdness: raw.weirdness,
+          },
+          top,
+          SEA_LEVEL,
+        );
         const underwater = top < SEA_LEVEL;
 
-        let surfaceBlock: number;
-        let subSurface: number;
-        let subDepth = 3;
+        // 地表方块完全由群系决定（与原版一致：同一个群系在哪儿长什么样是固定的）
+        let surfaceBlock = biome.surface;
+        let subSurface = biome.subSurface;
+        const subDepth = biome.subDepth;
 
         if (underwater) {
-          // 水下：浅水铺沙，深水铺砾石（贴近原版海底观感）
-          surfaceBlock = top < SEA_LEVEL - 7 ? Block.GRAVEL : Block.SAND;
-          subSurface = surfaceBlock;
-        } else if (climate.temperature < -0.45) {
-          surfaceBlock = Block.SNOW_BLOCK;
-          subSurface = Block.DIRT;
-        } else if (climate.temperature > 0.2 && climate.humidity < -0.3) {
-          surfaceBlock = Block.SAND;
-          subSurface = Block.SANDSTONE;
-          subDepth = 4;
-        } else if (top < SEA_LEVEL + 2) {
-          // 近海平面：沙滩
-          surfaceBlock = Block.SAND;
-          subSurface = Block.SAND;
-          subDepth = 3;
-        } else {
-          surfaceBlock = Block.GRASS_BLOCK;
-          subSurface = Block.DIRT;
+          // 水下统一换成该群系的水下变体（海洋是沙/砾石、沼泽是黏土）
+          surfaceBlock = biome.underwater;
+          subSurface = biome.underwater;
         }
 
         blocks[Chunk.index(x, top, z)] = surfaceBlock;
