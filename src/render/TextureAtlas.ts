@@ -67,38 +67,41 @@ function noisy(base: number, spread: number, tint: [number, number, number] = [1
   };
 }
 
-/** 带聚簇感的噪声：每 2×2 像素共享一个随机值，看起来更像原版颗粒 */
-function clustered(base: number, spread: number, tint: [number, number, number] = [1, 1, 1]): Painter {
-  const seedCache = new Map<number, number>();
+/**
+ * 双尺度噪声：4×4 的粗粒起伏 + 逐像素的细粒噪点。
+ * 单用 2×2 聚簇会在草地上形成明显的棋盘格，双尺度叠加才接近原版观感。
+ */
+function layered(base: number, coarse: number, fine: number, tint: [number, number, number] = [1, 1, 1]): Painter {
+  const coarseCache = new Map<number, number>();
   return (x, y, rng) => {
-    const key = (y >> 1) * 8 + (x >> 1);
-    let r = seedCache.get(key);
-    if (r === undefined) {
-      r = rng();
-      seedCache.set(key, r);
+    const key = (y >> 2) * 4 + (x >> 2);
+    let c = coarseCache.get(key);
+    if (c === undefined) {
+      c = rng();
+      coarseCache.set(key, c);
     }
-    const v = base + (r * 2 - 1) * spread;
+    const v = base + (c * 2 - 1) * coarse + (rng() * 2 - 1) * fine;
     return [clamp255(v * tint[0]), clamp255(v * tint[1]), clamp255(v * tint[2]), 255];
   };
 }
 
 const PAINTERS: Record<string, Painter> = {
-  stone: clustered(128, 16),
+  stone: layered(128, 10, 8),
   cobblestone: (x, y, rng) => {
-    // 大块鹅卵石：按 4×4 分块取随机灰阶
+    // 大块鹅卵石：按 4×4 分块取随机灰阶，块间留暗缝
     const key = (y >> 2) * 4 + (x >> 2);
-    const g = 100 + ((hashString('cob' + key) % 60) as number);
+    const g = 100 + (hashString('cob' + key) % 60);
     const edge = x % 4 === 0 || y % 4 === 0 ? -18 : 0;
     const v = g + edge + (rng() * 10 - 5);
     return [clamp255(v), clamp255(v), clamp255(v), 255];
   },
-  dirt: clustered(134, 18, [1.0, 0.85, 0.68]),
-  sand: clustered(222, 14, [1.0, 0.96, 0.78]),
-  grass_top: clustered(122, 20, [0.62, 1.0, 0.42]),
+  dirt: layered(134, 8, 9, [1.0, 0.85, 0.68]),
+  sand: layered(220, 6, 6, [1.0, 0.96, 0.78]),
+  grass_top: layered(148, 7, 10, [0.62, 1.0, 0.42]),
   grass_side: (x, y, rng) => {
-    const base = clustered(134, 16, [1.0, 0.85, 0.68])(x, y, rng);
+    const base = layered(134, 8, 9, [1.0, 0.85, 0.68])(x, y, rng);
     if (y < 3 + (hashString('gs' + x) % 2)) {
-      const g = 118 + (rng() * 22 - 11);
+      const g = 120 + (rng() * 20 - 10);
       return [clamp255(g * 0.6), clamp255(g), clamp255(g * 0.4), 255];
     }
     return base;
@@ -117,10 +120,10 @@ const PAINTERS: Record<string, Painter> = {
     return [clamp255(v * 1.2), clamp255(v * 0.92), clamp255(v * 0.58), 255];
   },
   oak_leaves: (x, y, rng) => {
-    const v = 92 + (rng() * 46 - 23);
+    const v = 112 + (rng() * 40 - 20);
     // 少量"空洞"表现树叶的疏密
     const hole = hashString(`leaf${x},${y}`) % 11 === 0;
-    return [clamp255(v * 0.5), clamp255(v), clamp255(v * 0.36), hole ? 150 : 255];
+    return [clamp255(v * 0.5), clamp255(v * 0.95), clamp255(v * 0.35), hole ? 150 : 255];
   },
   oak_planks: (x, y, rng) => {
     const plankRow = y % 4 === 3 ? -22 : 0;
@@ -134,8 +137,9 @@ const PAINTERS: Record<string, Painter> = {
     return [clamp255(v), clamp255(v), clamp255(v), 255];
   },
   water: (_x, _y, rng) => {
-    const v = 200 + rng() * 30;
-    return [clamp255(v * 0.28), clamp255(v * 0.55), clamp255(v), 190];
+    const v = 210 + rng() * 30;
+    // 半透明：让海底纹理透出来（对应原版水的透明度观感）
+    return [clamp255(v * 0.3), clamp255(v * 0.58), clamp255(v), 168];
   },
   glass: (x, y) => {
     const border = x === 0 || y === 0 || x === TILE_SIZE - 1 || y === TILE_SIZE - 1;

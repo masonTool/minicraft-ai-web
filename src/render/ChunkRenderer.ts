@@ -101,9 +101,6 @@ export class ChunkRenderer {
     const chunk = this.world.getChunk(cx, cz);
     if (!chunk) return;
 
-    const neighbor = (worldX: number, worldY: number, worldZ: number): number =>
-      this.world.getBlock(worldX, worldY, worldZ);
-
     const offsetX = cx * 16;
     const offsetZ = cz * 16;
     const meshes: THREE.Mesh[] = [];
@@ -111,7 +108,7 @@ export class ChunkRenderer {
 
     for (let section = 0; section < SECTION_COUNT; section++) {
       if (chunk.sectionIsEmpty(section)) continue;
-      const { solid, translucent } = meshSection(chunk, section, this.atlas, neighbor);
+      const { solid, translucent } = meshSection(chunk, section, this.atlas, this.world);
       const baseY = WORLD_MIN_Y + section * 16;
 
       if (solid) {

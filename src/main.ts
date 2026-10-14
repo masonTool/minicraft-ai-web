@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
+import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { BLOCKS } from './core/registry/blocks.ts';
 
@@ -30,6 +31,14 @@ class App {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly world = new World(WORLD_SEED);
   private readonly chunkRenderer: ChunkRenderer;
+  private readonly solidMaterial: VoxelMaterial;
+  private readonly translucentMaterial: VoxelMaterial;
+  private readonly skyColor: THREE.Color;
+
+  /** 一天中的时刻 [0,1)：0 = 日出，0.25 = 正午，0.5 = 日落，0.75 = 午夜 */
+  private timeOfDay = 0.12;
+  /** 一个游戏日为 20 分钟（与原版一致），首帧先给个初值避免除零 */
+  private readonly dayLengthSeconds = 1200;
 
   private yaw = 0;
   private pitch = -0.22;
@@ -56,33 +65,24 @@ class App {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
 
-    const sky = new THREE.Color(0x8fc7ff);
-    this.scene.background = sky;
+    this.skyColor = new THREE.Color(0x8fc7ff);
+    this.scene.background = this.skyColor;
 
     const fogFar = VIEW_DISTANCE * 16;
-    this.scene.fog = new THREE.Fog(sky, (VIEW_DISTANCE - 3) * 16, fogFar - 8);
-
     this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, fogFar + 32);
     this.camera.rotation.order = 'YXZ';
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.35));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-    sun.position.set(0.55, 1, 0.35).normalize();
-    this.scene.add(sun);
+    this.solidMaterial = new VoxelMaterial(atlas.texture);
+    this.translucentMaterial = new VoxelMaterial(atlas.texture, { translucent: true });
+    this.applyEnvironment();
 
-    const solidMaterial = new THREE.MeshLambertMaterial({
-      map: atlas.texture,
-      alphaTest: 0.5,
-      side: THREE.FrontSide,
-    });
-    const translucentMaterial = new THREE.MeshLambertMaterial({
-      map: atlas.texture,
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-
-    this.chunkRenderer = new ChunkRenderer(this.scene, atlas, this.world, solidMaterial, translucentMaterial);
+    this.chunkRenderer = new ChunkRenderer(
+      this.scene,
+      atlas,
+      this.world,
+      this.solidMaterial.material,
+      this.translucentMaterial.material,
+    );
     this.world.events = {
       onChunkLoaded: (chunk) => {
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
@@ -96,6 +96,27 @@ class App {
 
     this.bindEvents();
     this.refreshWorld(0, 0, true);
+  }
+
+  /**
+   * 把时间换算成天空亮度与天空颜色，推给材质与场景。
+   * 因为光照等级是烘焙在顶点属性里的，这里每帧只改 uniform，开销可以忽略。
+   */
+  private applyEnvironment(): void {
+    // 约定：t=0 日出(06:00)、t=0.25 正午、t=0.5 日落(18:00)、t=0.75 午夜
+    const sunHeight = Math.sin(this.timeOfDay * Math.PI * 2);
+    const daylight = smoothstep(-0.25, 0.35, sunHeight);
+    // 夜晚天光倍率下限 0.2，对应原版夜间天光被大幅压暗
+    const skyBrightness = 0.2 + 0.8 * daylight;
+
+    this.skyColor.copy(NIGHT_SKY).lerp(DAY_SKY, daylight);
+    this.solidMaterial.skyBrightness = skyBrightness;
+    this.translucentMaterial.skyBrightness = skyBrightness;
+
+    const fogFar = VIEW_DISTANCE * 16 - 8;
+    const fogNear = (VIEW_DISTANCE - 3) * 16;
+    this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
+    this.translucentMaterial.setFog(this.skyColor, fogNear, fogFar);
   }
 
   private refreshWorld(centerCx: number, centerCz: number, force = false): void {
@@ -177,14 +198,18 @@ class App {
     const p = this.position;
     const cx = toChunkCoord(p.x);
     const cz = toChunkCoord(p.z);
-    const facing = ['南 (+Z)', '西 (-X)', '北 (-Z)', '东 (+X)'][Math.round(-this.yaw / (Math.PI / 2)) & 3]!;
+    // yaw=0 时朝向 (-sin, 0, -cos) = -Z，即原版定义的"北"
+    const facing = ['北 (-Z)', '东 (+X)', '南 (+Z)', '西 (-X)'][Math.round(-this.yaw / (Math.PI / 2)) & 3]!;
     const loading = this.world.pendingCount > 0 || this.chunkRenderer.queueLength > 0;
 
+    const clockHours = (this.timeOfDay * 24 + 6) % 24;
+    const clock = `${String(Math.floor(clockHours)).padStart(2, '0')}:${String(Math.floor((clockHours % 1) * 60)).padStart(2, '0')}`;
+
     this.debugEl.textContent =
-      `Bedrock 1.18 Web  ·  P1 世界流式加载 + 光照\n` +
+      `Bedrock 1.18 Web  ·  P1 光照 + 环境光遮蔽 + 平滑光照\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}\n` +
-      `区块: ${cx}, ${cz}   朝向: ${facing}\n` +
+      `区块: ${cx}, ${cz}   朝向: ${facing}   时间: ${clock}\n` +
       `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   已加载: ${this.world.chunks.size}\n` +
       `待生成: ${this.world.pendingCount}   待网格化: ${this.chunkRenderer.queueLength}\n` +
       `已点亮: ${this.world.litChunkCount}   光照队列: ${this.world.light.pendingCells}   方块种类: ${BLOCKS.length}` +
@@ -198,6 +223,8 @@ class App {
       this.lastTime = now;
 
       this.updateMovement(dt);
+      this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
+      this.applyEnvironment();
 
       const centerCx = toChunkCoord(this.position.x);
       const centerCz = toChunkCoord(this.position.z);
@@ -218,6 +245,45 @@ class App {
     this.chunkRenderer.disposeAll();
     this.world.dispose();
   }
+
+  // ---------------------------------------------------------------- 开发调试接口
+  // 供开发/自动化验收使用：精确定位相机、设置时间，便于复现与截图对比。
+
+  teleport(x: number, y: number, z: number): void {
+    this.position.set(x, y, z);
+    this.lastCenterCx = Number.NaN;
+    this.lastCenterCz = Number.NaN;
+  }
+
+  /** 单位：度。yaw 0 = 看向 -Z（北），pitch 为正表示向上看 */
+  look(yawDeg: number, pitchDeg: number): void {
+    this.yaw = (yawDeg * Math.PI) / 180;
+    this.pitch = (pitchDeg * Math.PI) / 180;
+  }
+
+  setTimeOfDay(t: number): void {
+    this.timeOfDay = ((t % 1) + 1) % 1;
+    this.applyEnvironment();
+  }
+
+  get info(): { fps: number; chunks: number; lit: number; triangles: number } {
+    return {
+      fps: this.fps,
+      chunks: this.world.chunks.size,
+      lit: this.world.litChunkCount,
+      triangles: this.chunkRenderer.triangles,
+    };
+  }
+}
+
+// ---------------------------------------------------------------- 启动与环境色
+
+const DAY_SKY = new THREE.Color(0x8fc7ff);
+const NIGHT_SKY = new THREE.Color(0x040814);
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
 }
 
 function boot(): void {
@@ -231,6 +297,9 @@ function boot(): void {
   const app = new App(container, debugEl, overlayEl, atlas);
   loadingEl?.remove();
   app.start();
+
+  // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样
+  (window as unknown as { __mc: App }).__mc = app;
 }
 
 boot();
