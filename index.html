@@ -115,6 +115,36 @@
       .inv-craft-grid.size-3 { grid-template-columns: repeat(3, 42px); }
       .inv-arrow { font-size: 22px; color: #4a4a4a; }
       .inv-slot.ready { background: #8fbf8f; }
+      /* 只取不放的槽位（合成结果、熔炉产物）用暖色底提示 */
+      .inv-slot.take-only { background: #9a9a8b; }
+
+      .inv-chest { grid-template-columns: repeat(9, 42px); }
+
+      /* ---------------- 熔炉 ---------------- */
+      .furnace-layout {
+        display: flex; align-items: center; gap: 14px;
+        margin: 6px 0 10px; padding: 8px 4px;
+      }
+      .furnace-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+      .furnace-flame {
+        position: relative; width: 18px; height: 20px;
+        background: rgba(0, 0, 0, .28); border-radius: 3px; overflow: hidden;
+      }
+      .furnace-flame i {
+        position: absolute; left: 0; bottom: 0; width: 100%; height: 0;
+        background: linear-gradient(#ffd76a, #ff8a1e); transition: height .1s linear;
+      }
+      .furnace-flame.lit i { box-shadow: 0 0 6px #ff9a2e; }
+      .furnace-middle { width: 70px; }
+      .furnace-cook {
+        height: 12px; background: rgba(0, 0, 0, .28);
+        border-radius: 3px; overflow: hidden;
+      }
+      .furnace-cook i {
+        display: block; height: 100%; width: 0;
+        background: linear-gradient(90deg, #cfe6ff, #6fa8dc);
+        transition: width .1s linear;
+      }
 
       .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 3px; }
       .inv-grid.inv-creative { grid-template-columns: repeat(12, 34px); gap: 2px; }

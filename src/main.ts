@@ -20,6 +20,8 @@ import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 import { HOTBAR_SIZE, Inventory } from './core/container/Inventory.ts';
+import { CHEST_SIZE } from './core/container/Chest.ts';
+import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
 import { blockForItem, dropFor, itemName } from './core/registry/items.ts';
@@ -428,6 +430,7 @@ class App {
     if (this.breakProgress < 1) return;
 
     const brokenId = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
+    this.emptyContainerAt(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
 
     // 掉落直接进背包（掉落物实体与拾取动画在 I3 实现）
@@ -437,6 +440,40 @@ class App {
     this.breakProgress = 0;
     this.breakingKey = '';
     this.breakCooldown = BREAK_COOLDOWN;
+  }
+
+  /**
+   * 破坏容器方块时清空其内容。
+   * 目前直接把内容物收进玩家背包——掉落物实体（G7）实现后会改成原地生成掉落物。
+   */
+  private emptyContainerAt(x: number, y: number, z: number): void {
+    const container = this.world.containers.get(x, y, z);
+    if (!container) return;
+    const size = container instanceof Furnace ? FURNACE_SIZE : CHEST_SIZE;
+    for (let i = 0; i < size; i++) {
+      const stack = container.get(i);
+      if (!stack) continue;
+      this.inventory.add(stack.id, stack.count);
+      container.set(i, null);
+    }
+    this.world.containers.remove(x, y, z);
+  }
+
+  /**
+   * 推进附近的熔炉。
+   * 只 tick 玩家周围 64 格内的熔炉，避免容器多了以后每帧全量遍历。
+   */
+  private tickContainers(dt: number): void {
+    const { x: px, y: py, z: pz } = this.physics;
+    const rangeSq = 64 * 64;
+    this.world.containers.forEach((container, x, y, z) => {
+      if (!(container instanceof Furnace)) return;
+      const dx = x + 0.5 - px;
+      const dy = y + 0.5 - py;
+      const dz = z + 0.5 - pz;
+      if (dx * dx + dy * dy + dz * dz > rangeSq) return;
+      container.tick(dt);
+    });
   }
 
   /** 破坏进度条：只在真正挖掘时显示，创造模式瞬间破坏不显示 */
@@ -456,8 +493,20 @@ class App {
     const sneak = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     if (!sneak) {
       const hitBlock = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
+      const { x, y, z } = this.hit;
+
       if (hitBlock === Block.CRAFTING_TABLE) {
         this.inventoryScreen.openWith('crafting');
+        this.placeCooldown = PLACE_COOLDOWN * 2;
+        return;
+      }
+      if (hitBlock === Block.FURNACE) {
+        this.inventoryScreen.openWith('furnace', this.world.containers.getOrCreateFurnace(x, y, z));
+        this.placeCooldown = PLACE_COOLDOWN * 2;
+        return;
+      }
+      if (hitBlock === Block.CHEST) {
+        this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(x, y, z));
         this.placeCooldown = PLACE_COOLDOWN * 2;
         return;
       }
@@ -593,6 +642,9 @@ class App {
       }
 
       if (!lightBusy) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
+
+      this.tickContainers(dt);
+      this.inventoryScreen.tickUi(dt);
 
       this.refreshLoadingState();
       this.updateBreakProgressUi();
