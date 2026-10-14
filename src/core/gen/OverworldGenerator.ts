@@ -19,6 +19,8 @@
 
 import { Block } from '../registry/blocks.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../world/Chunk.ts';
+import { CaveCarver } from './CaveCarver.ts';
+import { OreGenerator } from './OreGenerator.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { Spline } from './noise/Spline.ts';
@@ -38,6 +40,15 @@ const CHANNELS = 5;
 /** 深板岩起始深度（原版 y=0 附近开始过渡） */
 const DEEPSLATE_TOP = 0;
 const DEEPSLATE_FULL = -8;
+
+/** 稳定种子混合，用于给子生成器派生独立随机流 */
+function mixSeed(seed: number, salt: number): number {
+  let h = Math.imul(seed | 0, 0x27d4eb2d) ^ Math.imul(salt | 0, 0x165667b1);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  return h >>> 0;
+}
 
 /** 原版的峰谷折叠函数 */
 function peaksAndValleys(weirdness: number): number {
@@ -67,11 +78,14 @@ export class OverworldGenerator {
   private readonly factorSpline: Spline;
   private readonly jaggednessSpline: Spline;
 
+  private readonly carver: CaveCarver;
+  private readonly oreGenerator: OreGenerator;
+
   // 复用缓冲区，避免每次生成都重新分配
   private readonly climateGrid = new Float32Array(GRID_XZ * GRID_XZ * CHANNELS);
   private readonly densityGrid = new Float32Array(GRID_XZ * GRID_XZ * GRID_Y);
 
-  constructor(readonly seed: number) {
+  constructor(seed: number) {
     const random = new Random(seed);
 
     // firstOctave / amplitudes 采用官方 overworld 的公开参数
@@ -122,6 +136,9 @@ export class OverworldGenerator {
       { location: -0.2, value: 0.0 },
       { location: 1.1, value: 0.0 },
     ]);
+
+    this.carver = new CaveCarver(new Random(mixSeed(seed, 0xc0ffee)));
+    this.oreGenerator = new OreGenerator(seed);
   }
 
   /** 采样一列的气候参数，写入 climateGrid 的指定槽位 */
@@ -186,6 +203,11 @@ export class OverworldGenerator {
     this.fillFromDensity(blocks);
     this.applySurface(blocks, originX, originZ);
     this.applyBedrock(blocks);
+
+    // 雕刻顺序对齐原版：地形 → 地表规则 → 雕刻 → 矿石
+    this.carver.carve(blocks, originX, originZ);
+    this.oreGenerator.generate(blocks, cx, cz, (wx, wz) => this.erosion.getValue(wx, 0, wz));
+
     return blocks;
   }
 

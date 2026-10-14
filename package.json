@@ -8,13 +8,15 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"
   }
