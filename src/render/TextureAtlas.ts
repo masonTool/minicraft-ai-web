@@ -349,6 +349,11 @@ export class TextureAtlas {
     this.texture = texture;
   }
 
+  /** 贴图在图集中的列号（供 UI 从图集裁切图标） */
+  tileIndex(tile: string): number {
+    return TILE_INDEX.get(tile) ?? 0;
+  }
+
   /** 返回贴图在图集中的 [u0, v0, u1, v1]，已做半像素内缩以避免图集渗色 */
   uv(tile: string): [number, number, number, number] {
     const index = TILE_INDEX.get(tile) ?? 0;

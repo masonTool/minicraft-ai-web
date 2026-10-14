@@ -66,6 +66,22 @@ export class ChunkRenderer {
     this.queued.delete(key);
   }
 
+  /**
+   * 方块被玩家修改后，把受影响的区块重新入队。
+   * 改动落在区块边界上时要连带邻居一起重刷，否则交界面的剔除会残留。
+   */
+  enqueueAround(worldX: number, worldZ: number): void {
+    const cx = worldX >> 4;
+    const cz = worldZ >> 4;
+    this.enqueue(cx, cz);
+    const lx = worldX & 15;
+    const lz = worldZ & 15;
+    if (lx === 0) this.enqueue(cx - 1, cz);
+    if (lx === 15) this.enqueue(cx + 1, cz);
+    if (lz === 0) this.enqueue(cx, cz - 1);
+    if (lz === 15) this.enqueue(cx, cz + 1);
+  }
+
   private enqueue(cx: number, cz: number): void {
     const key = chunkKey(cx, cz);
     if (this.queued.has(key)) return;

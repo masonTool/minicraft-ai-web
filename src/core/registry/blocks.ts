@@ -219,6 +219,81 @@ export function emitLight(id: number): number {
   return blockDef(id).light;
 }
 
+// ---------------------------------------------------------------- 挖掘属性
+
+/** 方块硬度（原版量纲）；-1 表示不可破坏 */
+const HARDNESS = new Map<number, number>([
+  [Block.AIR, 0],
+  [Block.BEDROCK, -1],
+  [Block.WATER, -1],
+  [Block.LAVA, -1],
+
+  [Block.STONE, 1.5],
+  [Block.COBBLESTONE, 2],
+  [Block.DEEPSLATE, 3],
+  [Block.GRANITE, 1.5],
+  [Block.DIORITE, 1.5],
+  [Block.ANDESITE, 1.5],
+  [Block.TUFF, 1.5],
+  [Block.CALCITE, 0.75],
+  [Block.OBSIDIAN, 50],
+
+  [Block.DIRT, 0.5],
+  [Block.GRASS_BLOCK, 0.6],
+  [Block.SAND, 0.5],
+  [Block.GRAVEL, 0.6],
+  [Block.CLAY, 0.6],
+  [Block.SANDSTONE, 0.8],
+  [Block.SNOW_BLOCK, 0.2],
+
+  [Block.OAK_LOG, 2],
+  [Block.OAK_PLANKS, 2],
+  [Block.OAK_LEAVES, 0.2],
+
+  [Block.GLASS, 0.3],
+  [Block.ICE, 0.5],
+  [Block.PACKED_ICE, 0.5],
+  [Block.GLOWSTONE, 0.3],
+]);
+
+/** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
+const HAND_HARVESTABLE = new Set<number>([
+  Block.DIRT,
+  Block.GRASS_BLOCK,
+  Block.SAND,
+  Block.GRAVEL,
+  Block.CLAY,
+  Block.SANDSTONE,
+  Block.SNOW_BLOCK,
+  Block.OAK_LOG,
+  Block.OAK_PLANKS,
+  Block.OAK_LEAVES,
+  Block.GLASS,
+  Block.ICE,
+  Block.PACKED_ICE,
+  Block.GLOWSTONE,
+]);
+
+export function blockHardness(id: number): number {
+  return HARDNESS.get(id) ?? 3;
+}
+
+export function isHandHarvestable(id: number): boolean {
+  return HAND_HARVESTABLE.has(id);
+}
+
+/**
+ * 破坏该方块所需秒数（对齐原版公式）：
+ *   可采集 → 1.5 × 硬度；不可采集 → 5 × 硬度
+ * 例：泥土 0.75s、原木 3s、石头徒手 7.5s、黑曜石徒手 250s。
+ */
+export function breakSeconds(id: number, hasPickaxe = false): number {
+  const hardness = blockHardness(id);
+  if (hardness < 0) return Number.POSITIVE_INFINITY;
+  const harvestable = hasPickaxe || isHandHarvestable(id);
+  return harvestable ? hardness * 1.5 : hardness * 5;
+}
+
 /** 石材类方块（深板岩变体的判定基准） */
 export function deepslateVariantOf(id: number): number {
   switch (id) {

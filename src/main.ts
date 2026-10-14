@@ -1,30 +1,48 @@
 /**
- * P1 入口：世界流式加载
+ * 入口：流式世界 + 光照 + 玩家物理 + 方块交互
  *
- * 现在的数据流：
- *   玩家位置 → World.update() 派发区块生成任务（Worker 池并行）
- *            → Worker 返回方块数据（零拷贝 Transferable）
- *            → ChunkRenderer 排队网格化（每帧限量）
- *            → 场景渲染
+ * 每帧流程：
+ *   输入 → PlayerPhysics 更新（逐轴碰撞 / 自动上台阶）→ 相机跟随
+ *   → 视线射线选取方块 → 描边 → 破坏/放置 → 区块流式加载 → 光照收敛 → 网格化 → 渲染
  *
- * 地形生成仍是占位实现（见 core/gen/TerrainGenerator.ts），P2 替换为 1.18 生成器。
+ * 方块被修改后会先做增量光照修正，等光照队列排空再重刷网格，
+ * 避免出现"光还没传过去就把顶点烘焙下来"的脏数据。
  */
 
 import * as THREE from 'three';
 import { TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
+import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
-import { Block, BLOCKS } from './core/registry/blocks.ts';
+import { Block, BLOCKS, breakSeconds, blockDef } from './core/registry/blocks.ts';
 import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
+import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
+import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 
 /** 渲染距离（区块） */
 const VIEW_DISTANCE = 12;
 /** 每帧最多网格化的区块数，用于把加载耗时摊到多帧 */
 const MESH_BUDGET_PER_FRAME = 3;
-/** 每帧最多处理的光照 BFS 步数 */
-const LIGHT_BUDGET_PER_FRAME = 120000;
 const WORLD_SEED = 20261014;
+/** 原版触及距离：生存 4.5 格 */
+const REACH = 4.5;
+/** 连续破坏/放置的最小间隔（秒） */
+const BREAK_COOLDOWN = 0.25;
+const PLACE_COOLDOWN = 0.22;
+
+/** 快捷栏方块（数字键 1-9） */
+const HOTBAR: readonly number[] = [
+  Block.GRASS_BLOCK,
+  Block.DIRT,
+  Block.STONE,
+  Block.COBBLESTONE,
+  Block.OAK_PLANKS,
+  Block.OAK_LOG,
+  Block.OAK_LEAVES,
+  Block.GLASS,
+  Block.GLOWSTONE,
+];
 
 class App {
   private readonly renderer: THREE.WebGLRenderer;
@@ -35,17 +53,31 @@ class App {
   private readonly solidMaterial: VoxelMaterial;
   private readonly translucentMaterial: VoxelMaterial;
   private readonly skyColor: THREE.Color;
+  private readonly outline = new BlockOutline();
+  private readonly physics = new PlayerPhysics();
 
   /** 一天中的时刻 [0,1)：0 = 日出，0.25 = 正午，0.5 = 日落，0.75 = 午夜 */
   private timeOfDay = 0.12;
-  /** 一个游戏日为 20 分钟（与原版一致），首帧先给个初值避免除零 */
+  /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
   private yaw = 0;
   private pitch = -0.22;
-  private readonly position = new THREE.Vector3(8.5, 64, 8.5);
   private readonly keys = new Set<string>();
   private locked = false;
+  private flying = false;
+  private hotbarIndex = 0;
+
+  private hit: RayHit | null = null;
+  private breakingKey = '';
+  private breakProgress = 0;
+  private breakCooldown = 0;
+  private placeCooldown = 0;
+  private leftDown = false;
+  private rightDown = false;
+
+  /** 方块改动后等待光照收敛、需要再次重刷网格的坐标 */
+  private readonly pendingSettle: number[] = [];
 
   private frames = 0;
   private fpsTimer = 0;
@@ -53,8 +85,8 @@ class App {
   private lastTime = performance.now();
   private lastCenterCx = Number.NaN;
   private lastCenterCz = Number.NaN;
-  private ready = false;
   private spawnResolved = false;
+  private loadingCleared = false;
 
   constructor(
     container: HTMLElement,
@@ -85,6 +117,8 @@ class App {
       this.solidMaterial.material,
       this.translucentMaterial.material,
     );
+    this.scene.add(this.outline.object);
+
     this.world.events = {
       onChunkLoaded: (chunk) => {
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
@@ -94,11 +128,18 @@ class App {
         this.chunkRenderer.onChunkUnloaded(cx, cz);
         this.refreshLoadingState();
       },
+      onBlockChanged: (x, y, z) => {
+        this.chunkRenderer.enqueueAround(x, z);
+        this.pendingSettle.push(x, y, z);
+      },
     };
 
+    this.buildHotbar(atlas);
     this.bindEvents();
     this.refreshWorld(0, 0, true);
   }
+
+  // ---------------------------------------------------------------- 环境
 
   /**
    * 把时间换算成天空亮度与天空颜色，推给材质与场景。
@@ -115,7 +156,6 @@ class App {
     this.solidMaterial.skyBrightness = skyBrightness;
     this.translucentMaterial.skyBrightness = skyBrightness;
 
-    // 雾只在内侧少量范围内起效，尽量把视距内的地形露出来
     const fogFar = VIEW_DISTANCE * 16 - 6;
     const fogNear = fogFar * 0.72;
     this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
@@ -129,25 +169,91 @@ class App {
     this.world.update(centerCx, centerCz, VIEW_DISTANCE);
   }
 
+  /**
+   * 只要第一块地形完成网格化就撤掉加载遮罩。
+   * 注意：必须在主循环里检查——区块"加载完成"时还没有网格，只监听加载事件会永远等不到。
+   */
   private refreshLoadingState(): void {
-    if (this.ready) return;
-    if (!this.world.isIdle && this.chunkRenderer.chunkMeshCount > 0) {
-      // 先让玩家看到地形再撤掉遮罩
-      this.ready = true;
+    if (this.loadingCleared) return;
+    if (this.chunkRenderer.chunkMeshCount === 0) return;
+    this.loadingCleared = true;
+    document.getElementById('loading')?.remove();
+  }
+
+  // ---------------------------------------------------------------- 快捷栏
+
+  private buildHotbar(atlas: TextureAtlas): void {
+    const container = document.getElementById('hotbar');
+    if (!container) return;
+    container.replaceChildren();
+
+    HOTBAR.forEach((blockId, index) => {
+      const slot = document.createElement('div');
+      slot.className = 'slot';
+      slot.dataset.index = String(index);
+
+      const icon = document.createElement('canvas');
+      icon.width = 32;
+      icon.height = 32;
+      const ctx = icon.getContext('2d');
+      if (ctx) {
+        ctx.imageSmoothingEnabled = false;
+        const tile = blockDef(blockId).tiles[2];
+        const column = atlas.tileIndex(tile);
+        ctx.drawImage(atlas.canvas, column * 16, 0, 16, 16, 0, 0, 32, 32);
+      }
+      slot.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'index';
+      label.textContent = String(index + 1);
+      slot.appendChild(label);
+
+      slot.title = blockDef(blockId).name;
+      container.appendChild(slot);
+    });
+
+    this.updateHotbarHighlight();
+  }
+
+  private updateHotbarHighlight(): void {
+    const container = document.getElementById('hotbar');
+    if (!container) return;
+    for (const child of Array.from(container.children)) {
+      const element = child as HTMLElement;
+      element.classList.toggle('active', Number(element.dataset.index) === this.hotbarIndex);
     }
   }
+
+  private get selectedBlock(): number {
+    return HOTBAR[this.hotbarIndex] ?? Block.STONE;
+  }
+
+  // ---------------------------------------------------------------- 输入
 
   private bindEvents(): void {
     document.addEventListener('keydown', (e) => {
       if (e.code === 'Tab') e.preventDefault();
       this.keys.add(e.code);
+      if (e.code === 'KeyF') this.flying = !this.flying;
+      if (e.code.startsWith('Digit')) {
+        const digit = Number(e.code.slice(5));
+        if (digit >= 1 && digit <= HOTBAR.length) {
+          this.hotbarIndex = digit - 1;
+          this.updateHotbarHighlight();
+        }
+      }
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
 
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.renderer.domElement;
       this.overlayEl.classList.toggle('hidden', this.locked);
-      if (!this.locked) this.keys.clear();
+      if (!this.locked) {
+        this.keys.clear();
+        this.leftDown = false;
+        this.rightDown = false;
+      }
     });
 
     const requestLock = () => void this.renderer.domElement.requestPointerLock();
@@ -162,6 +268,17 @@ class App {
       this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
     });
 
+    document.addEventListener('mousedown', (e) => {
+      if (!this.locked) return;
+      if (e.button === 0) this.leftDown = true;
+      if (e.button === 2) this.rightDown = true;
+    });
+    document.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.leftDown = false;
+      if (e.button === 2) this.rightDown = false;
+    });
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
@@ -169,25 +286,104 @@ class App {
     });
   }
 
-  private updateMovement(dt: number): void {
-    const boosted = this.keys.has('ControlLeft') || this.keys.has('ControlRight');
-    const speed = (boosted ? 42 : 14) * dt;
-    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const move = new THREE.Vector3();
+  private collectInput(): PlayerInput {
+    let forward = 0;
+    let strafe = 0;
+    if (this.keys.has('KeyW')) forward += 1;
+    if (this.keys.has('KeyS')) forward -= 1;
+    if (this.keys.has('KeyD')) strafe += 1;
+    if (this.keys.has('KeyA')) strafe -= 1;
 
-    if (this.keys.has('KeyW')) move.add(forward);
-    if (this.keys.has('KeyS')) move.sub(forward);
-    if (this.keys.has('KeyD')) move.add(right);
-    if (this.keys.has('KeyA')) move.sub(right);
-    if (this.keys.has('Space')) move.y += 1;
-    if (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) move.y -= 1;
-
-    if (move.lengthSq() > 0) this.position.addScaledVector(move.normalize(), speed);
-
-    this.camera.position.copy(this.position);
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
+    return {
+      forward,
+      strafe,
+      jump: this.keys.has('Space'),
+      sneak: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      sprint: this.keys.has('ControlLeft') || this.keys.has('ControlRight'),
+    };
   }
+
+  // ---------------------------------------------------------------- 方块交互
+
+  private updateInteraction(dt: number): void {
+    const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
+    this.hit = raycastVoxels(
+      (x, y, z) => this.world.isSelectable(x, y, z),
+      this.physics.x,
+      this.physics.eyeY,
+      this.physics.z,
+      dx,
+      dy,
+      dz,
+      REACH,
+    );
+
+    if (this.hit) {
+      this.outline.show(this.hit.x, this.hit.y, this.hit.z);
+    } else {
+      this.outline.hide();
+    }
+
+    this.breakCooldown = Math.max(0, this.breakCooldown - dt);
+    this.placeCooldown = Math.max(0, this.placeCooldown - dt);
+
+    this.updateBreaking(dt);
+    this.updatePlacing();
+  }
+
+  private updateBreaking(dt: number): void {
+    if (!this.leftDown || !this.hit || this.breakCooldown > 0) {
+      this.breakingKey = '';
+      this.breakProgress = 0;
+      return;
+    }
+
+    const key = `${this.hit.x},${this.hit.y},${this.hit.z}`;
+    if (key !== this.breakingKey) {
+      this.breakingKey = key;
+      this.breakProgress = 0;
+    }
+
+    const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
+    const required = this.flying ? 0 : breakSeconds(id);
+    if (!Number.isFinite(required)) return;
+
+    this.breakProgress += required <= 0 ? 1 : dt / required;
+    if (this.breakProgress < 1) return;
+
+    this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
+    this.breakProgress = 0;
+    this.breakingKey = '';
+    this.breakCooldown = BREAK_COOLDOWN;
+  }
+
+  /** 破坏进度条：只在真正挖掘时显示，创造模式瞬间破坏不显示 */
+  private updateBreakProgressUi(): void {
+    const container = document.getElementById('break-progress');
+    const bar = container?.firstElementChild as HTMLElement | null;
+    if (!container || !bar) return;
+    const active = this.breakProgress > 0 && this.breakProgress < 1;
+    container.classList.toggle('on', active);
+    if (active) bar.style.width = `${Math.round(this.breakProgress * 100)}%`;
+  }
+
+  private updatePlacing(): void {
+    if (!this.rightDown || !this.hit || this.placeCooldown > 0) return;
+
+    const x = this.hit.x + this.hit.nx;
+    const y = this.hit.y + this.hit.ny;
+    const z = this.hit.z + this.hit.nz;
+
+    const existing = this.world.getBlock(x, y, z);
+    if (existing !== Block.AIR && !blockDef(existing).liquid) return;
+    if (this.physics.blockIntersects(x, y, z)) return;
+
+    if (this.world.setBlockAndUpdate(x, y, z, this.selectedBlock)) {
+      this.placeCooldown = PLACE_COOLDOWN;
+    }
+  }
+
+  // ---------------------------------------------------------------- 出生点
 
   /**
    * 在世界刚加载出一片区域时，就近寻找一块高于海平面的陆地作为出生点，
@@ -214,7 +410,7 @@ class App {
       for (const [dx, dz] of candidates) {
         const ground = this.groundHeight(dx, dz);
         if (ground >= SEA_LEVEL + 1) {
-          this.position.set(dx + 0.5, ground + 2, dz + 0.5);
+          this.physics.teleport(dx + 0.5, ground + 1.2, dz + 0.5);
           this.lastCenterCx = Number.NaN;
           this.lastCenterCz = Number.NaN;
           this.spawnResolved = true;
@@ -233,6 +429,8 @@ class App {
     return -999;
   }
 
+  // ---------------------------------------------------------------- 主循环
+
   private updateDebug(dt: number): void {
     this.frames++;
     this.fpsTimer += dt;
@@ -242,25 +440,28 @@ class App {
       this.fpsTimer = 0;
     }
 
-    const p = this.position;
+    const p = this.physics;
     const cx = toChunkCoord(p.x);
     const cz = toChunkCoord(p.z);
     // yaw=0 时朝向 (-sin, 0, -cos) = -Z，即原版定义的"北"
     const facing = ['北 (-Z)', '东 (+X)', '南 (+Z)', '西 (-X)'][Math.round(-this.yaw / (Math.PI / 2)) & 3]!;
-    const loading = this.world.pendingCount > 0 || this.chunkRenderer.queueLength > 0;
-
     const clockHours = (this.timeOfDay * 24 + 6) % 24;
     const clock = `${String(Math.floor(clockHours)).padStart(2, '0')}:${String(Math.floor((clockHours % 1) * 60)).padStart(2, '0')}`;
 
+    const feetLight = this.world.getBlockLight(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
+    const target = this.hit
+      ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})`
+      : '无';
+
     this.debugEl.textContent =
-      `Bedrock 1.18 Web  ·  P1 光照 + 环境光遮蔽 + 平滑光照\n` +
+      `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
-      `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}\n` +
-      `区块: ${cx}, ${cz}   朝向: ${facing}   时间: ${clock}\n` +
-      `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   已加载: ${this.world.chunks.size}\n` +
-      `待生成: ${this.world.pendingCount}   待网格化: ${this.chunkRenderer.queueLength}\n` +
-      `已点亮: ${this.world.litChunkCount}   光照队列: ${this.world.light.pendingCells}   方块种类: ${BLOCKS.length}` +
-      (loading ? '\n世界加载中…' : '');
+      `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
+      `朝向: ${facing}   时间: ${clock}   模式: ${this.flying ? '创造(飞行)' : '生存'}\n` +
+      `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
+      `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
+      `持有: ${blockDef(this.selectedBlock).name.replace('minecraft:', '')}\n` +
+      `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   待生成: ${this.world.pendingCount}`;
   }
 
   start(): void {
@@ -270,18 +471,34 @@ class App {
       this.lastTime = now;
 
       this.tryResolveSpawn();
-      this.updateMovement(dt);
+      this.physics.update(this.world, this.collectInput(), this.yaw, dt, this.flying);
+
+      this.camera.position.set(this.physics.x, this.physics.eyeY, this.physics.z);
+      this.camera.rotation.set(this.pitch, this.yaw, 0);
+
+      this.updateInteraction(dt);
+
       this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
       this.applyEnvironment();
 
-      const centerCx = toChunkCoord(this.position.x);
-      const centerCz = toChunkCoord(this.position.z);
+      const centerCx = toChunkCoord(this.physics.x);
+      const centerCz = toChunkCoord(this.physics.z);
       this.refreshWorld(centerCx, centerCz);
 
-      // 先让光照收敛，再网格化：避免用未稳定的光照值生成顶点数据后又要重刷
-      const lightBusy = this.world.processLighting(LIGHT_BUDGET_PER_FRAME);
+      const lightBusy = this.world.processLighting(6000);
+
+      // 光照收敛后再重刷一次方块改动过的区块，避免烘焙进未收敛的光照
+      if (!lightBusy && this.pendingSettle.length > 0) {
+        for (let i = 0; i < this.pendingSettle.length; i += 3) {
+          this.chunkRenderer.enqueueAround(this.pendingSettle[i]!, this.pendingSettle[i + 2]!);
+        }
+        this.pendingSettle.length = 0;
+      }
+
       if (!lightBusy) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
 
+      this.refreshLoadingState();
+      this.updateBreakProgressUi();
       this.renderer.render(this.scene, this.camera);
       this.updateDebug(dt);
       requestAnimationFrame(loop);
@@ -292,13 +509,14 @@ class App {
   dispose(): void {
     this.chunkRenderer.disposeAll();
     this.world.dispose();
+    this.outline.dispose();
   }
 
   // ---------------------------------------------------------------- 开发调试接口
   // 供开发/自动化验收使用：精确定位相机、设置时间，便于复现与截图对比。
 
   teleport(x: number, y: number, z: number): void {
-    this.position.set(x, y, z);
+    this.physics.teleport(x, y, z);
     this.lastCenterCx = Number.NaN;
     this.lastCenterCz = Number.NaN;
   }
@@ -320,12 +538,42 @@ class App {
     this.applyEnvironment();
   }
 
-  get info(): { fps: number; chunks: number; lit: number; triangles: number } {
+  setFlying(value: boolean): void {
+    this.flying = value;
+  }
+
+  selectSlot(index: number): void {
+    if (index < 0 || index >= HOTBAR.length) return;
+    this.hotbarIndex = index;
+    this.updateHotbarHighlight();
+  }
+
+  /** 模拟按住左键（用于自动化测试破坏方块） */
+  setLeftButton(down: boolean): void {
+    this.leftDown = down;
+  }
+
+  setRightButton(down: boolean): void {
+    this.rightDown = down;
+  }
+
+  get info(): {
+    fps: number;
+    chunks: number;
+    lit: number;
+    triangles: number;
+    position: [number, number, number];
+    onGround: boolean;
+    flying: boolean;
+  } {
     return {
       fps: this.fps,
       chunks: this.world.chunks.size,
       lit: this.world.litChunkCount,
       triangles: this.chunkRenderer.triangles,
+      position: [this.physics.x, this.physics.y, this.physics.z],
+      onGround: this.physics.onGround,
+      flying: this.flying,
     };
   }
 
@@ -341,7 +589,6 @@ class App {
 
   /** 逐列扫描：返回最高非空气方块（可能是水）与最高固体（地面） */
   column(x: number, z: number): { top: number; block: string; ground: number; groundBlock: string } {
-    const WATER = 10;
     let top = -999;
     let topBlock = 'none';
     let ground = -999;
@@ -353,7 +600,7 @@ class App {
         top = y;
         topBlock = BLOCKS[id]?.name ?? `${id}`;
       }
-      if (id !== WATER) {
+      if (id !== Block.WATER) {
         ground = y;
         groundBlock = BLOCKS[id]?.name ?? `${id}`;
         break;
@@ -375,6 +622,11 @@ class App {
     }
     return rows.join('\n');
   }
+
+  /** 直接放置方块（自动化测试用） */
+  place(x: number, y: number, z: number, blockId: number): boolean {
+    return this.world.setBlockAndUpdate(x, y, z, blockId);
+  }
 }
 
 // ---------------------------------------------------------------- 启动与环境色
@@ -391,12 +643,10 @@ function boot(): void {
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
   const overlayEl = document.getElementById('overlay');
-  const loadingEl = document.getElementById('loading');
   if (!container || !debugEl || !overlayEl) throw new Error('缺少必要的 DOM 节点');
 
   const atlas = new TextureAtlas();
   const app = new App(container, debugEl, overlayEl, atlas);
-  loadingEl?.remove();
   app.start();
 
   // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样

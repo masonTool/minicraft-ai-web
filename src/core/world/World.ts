@@ -11,6 +11,7 @@
 
 import { Chunk } from './Chunk.ts';
 import { LightEngine } from '../light/LightEngine.ts';
+import { blockDef } from '../registry/blocks.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
 
 export function chunkKey(cx: number, cz: number): string {
@@ -25,6 +26,8 @@ export function toChunkCoord(worldCoord: number): number {
 export interface WorldEvents {
   onChunkLoaded?: (chunk: Chunk) => void;
   onChunkUnloaded?: (cx: number, cz: number) => void;
+  /** 方块被玩家修改（放置/破坏），渲染层据此重新网格化受影响的区块 */
+  onBlockChanged?: (worldX: number, worldY: number, worldZ: number) => void;
 }
 
 export class World {
@@ -179,6 +182,36 @@ export class World {
     return true;
   }
 
+  /** 该方块是否参与碰撞（物理查询入口） */
+  isSolid(worldX: number, worldY: number, worldZ: number): boolean {
+    if (worldY < -64 || worldY >= 320) return false;
+    return blockDef(this.getBlock(worldX, worldY, worldZ)).solid;
+  }
+
+  /** 该方块是否为流体（水/岩浆） */
+  isLiquid(worldX: number, worldY: number, worldZ: number): boolean {
+    if (worldY < -64 || worldY >= 320) return false;
+    return blockDef(this.getBlock(worldX, worldY, worldZ)).liquid;
+  }
+
+  /** 该方块是否阻挡射线（选取方块用） */
+  isSelectable(worldX: number, worldY: number, worldZ: number): boolean {
+    const def = blockDef(this.getBlock(worldX, worldY, worldZ));
+    return def.id !== 0 && !def.liquid;
+  }
+
+  /**
+   * 玩家修改方块：写入 + 增量光照更新 + 通知渲染层重网格化。
+   * @returns 是否成功
+   */
+  setBlockAndUpdate(worldX: number, worldY: number, worldZ: number, id: number): boolean {
+    if (!this.setBlock(worldX, worldY, worldZ, id)) return false;
+    if (worldY < -64 || worldY >= 320) return true;
+    this.light.onBlockChanged(worldX, worldY, worldZ);
+    this.events.onBlockChanged?.(worldX, worldY, worldZ);
+    return true;
+  }
+
   // ---------------------------------------------------------------- 光照读写（世界坐标）
 
   getSkyLight(worldX: number, worldY: number, worldZ: number): number {
@@ -203,6 +236,11 @@ export class World {
     const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
     if (!chunk) return;
     chunk.setBlockLight(worldX & 15, worldY, worldZ & 15, value);
+  }
+
+  /** 光照队列是否还有未完成的工作 */
+  get hasLightWork(): boolean {
+    return this.light.hasWork;
   }
 
   get pendingCount(): number {

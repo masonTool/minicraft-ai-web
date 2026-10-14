@@ -50,6 +50,35 @@
         position: fixed; inset: 0; display: grid; place-items: center;
         background: #0b0b0b; color: #ccc; font-size: 14px;
       }
+
+      #hotbar {
+        position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+        display: flex; gap: 2px; padding: 3px;
+        background: rgba(0, 0, 0, .45); border-radius: 4px;
+      }
+      #hotbar .slot {
+        position: relative; width: 42px; height: 42px;
+        display: grid; place-items: center;
+        background: rgba(255, 255, 255, .12);
+        border: 2px solid rgba(0, 0, 0, .35); border-radius: 3px;
+      }
+      #hotbar .slot.active {
+        border-color: #fff; background: rgba(255, 255, 255, .3);
+        transform: scale(1.08);
+      }
+      #hotbar .slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+      #hotbar .slot .index {
+        position: absolute; top: 0; left: 3px; font-size: 10px; color: #fff;
+        text-shadow: 1px 1px 0 #000; opacity: .75;
+      }
+
+      #break-progress {
+        position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%);
+        width: 120px; height: 5px; background: rgba(0, 0, 0, .5);
+        border-radius: 3px; overflow: hidden; display: none;
+      }
+      #break-progress.on { display: block; }
+      #break-progress i { display: block; height: 100%; width: 0; background: #e8e8e8; }
     </style>
   </head>
   <body>
@@ -58,6 +87,8 @@
     <div id="hud">
       <div id="debug"></div>
       <div id="crosshair"></div>
+      <div id="break-progress"><i></i></div>
+      <div id="hotbar"></div>
     </div>
 
     <div id="overlay">
@@ -65,8 +96,9 @@
         <b>Bedrock 1.18 Web</b>
         点击进入游戏<br />
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 ·
-        <kbd>Space</kbd> 上升 · <kbd>Shift</kbd> 下降 · <kbd>Ctrl</kbd> 加速 ·
-        <kbd>Esc</kbd> 释放鼠标
+        <kbd>Space</kbd> 跳跃 · <kbd>Shift</kbd> 潜行/下降 · <kbd>Ctrl</kbd> 疾跑<br />
+        <kbd>左键</kbd> 破坏 · <kbd>右键</kbd> 放置 · <kbd>1</kbd>-<kbd>9</kbd> 切换方块 ·
+        <kbd>F</kbd> 创造/飞行 · <kbd>Esc</kbd> 释放鼠标
       </div>
     </div>
 

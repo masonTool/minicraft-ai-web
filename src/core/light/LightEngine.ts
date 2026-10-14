@@ -220,6 +220,135 @@ export class LightEngine {
     }
   }
 
+  /**
+   * 某个方块发生变化后的增量光照更新。
+   *
+   * 相比"整块重算"，这里做的是局部修正：
+   *  1. 用"光照移除 BFS"清掉该点及其下游依赖它的光（否则放上方块后光会从缝隙漏过去）；
+   *  2. 若该点现在透光，重新从上方与四周汇聚光照；
+   *  3. 把 6 个邻居重新入队，让它们重新扩散。
+   * 队列由 process() 分帧消费，因此这里只做登记，不会阻塞。
+   */
+  onBlockChanged(worldX: number, worldY: number, worldZ: number): void {
+    this.unlight(worldX, worldY, worldZ, true);
+    this.unlight(worldX, worldY, worldZ, false);
+
+    const opacity = blockDef(this.world.getBlock(worldX, worldY, worldZ)).lightOpacity;
+
+    if (opacity < 15) {
+      // ---- 天光：优先看正上方（直射天光不衰减）
+      const above = worldY + 1 >= WORLD_MAX_Y ? 15 : this.world.getSkyLight(worldX, worldY + 1, worldZ);
+      let sky = 0;
+      if (opacity === 0 && above === 15) sky = 15;
+      else if (above > 0) sky = Math.max(0, above - Math.max(1, opacity));
+
+      for (const [dx, dy, dz] of DIRS) {
+        const nx = worldX + dx;
+        const ny = worldY + dy;
+        const nz = worldZ + dz;
+        if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
+        if (!this.world.isLoaded(nx, nz)) continue;
+        const neighbor = this.world.getSkyLight(nx, ny, nz);
+        if (neighbor <= sky) continue;
+        const candidate = neighbor - Math.max(1, opacity);
+        if (candidate > sky) sky = candidate;
+      }
+
+      if (sky > 0) {
+        this.world.setSkyLight(worldX, worldY, worldZ, sky);
+        this.skyQueue.push(worldX, worldY, worldZ);
+      }
+
+      // ---- 方块光：发光方块直接播种，否则从邻居汇聚
+      const emit = blockDef(this.world.getBlock(worldX, worldY, worldZ)).light;
+      if (emit > 0) {
+        this.world.setBlockLight(worldX, worldY, worldZ, emit);
+        this.blockQueue.push(worldX, worldY, worldZ);
+      } else {
+        let block = 0;
+        for (const [dx, dy, dz] of DIRS) {
+          const nx = worldX + dx;
+          const ny = worldY + dy;
+          const nz = worldZ + dz;
+          if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
+          if (!this.world.isLoaded(nx, nz)) continue;
+          const neighbor = this.world.getBlockLight(nx, ny, nz) - Math.max(1, opacity);
+          if (neighbor > block) block = neighbor;
+        }
+        if (block > 0) {
+          this.world.setBlockLight(worldX, worldY, worldZ, block);
+          this.blockQueue.push(worldX, worldY, worldZ);
+        }
+      }
+    }
+
+    // ---- 邻居重新扩散：它们可能因为新增遮挡而需要变暗
+    for (const [dx, dy, dz] of DIRS) {
+      const nx = worldX + dx;
+      const ny = worldY + dy;
+      const nz = worldZ + dz;
+      if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
+      if (!this.world.isLoaded(nx, nz)) continue;
+      if (this.world.getSkyLight(nx, ny, nz) > 1) this.skyQueue.push(nx, ny, nz);
+      if (this.world.getBlockLight(nx, ny, nz) > 0) this.blockQueue.push(nx, ny, nz);
+    }
+  }
+
+  /**
+   * 光照移除 BFS：从 (worldX, worldY, worldZ) 开始，清掉所有"光来自这里"的格子。
+   * 遇到比当前链更亮（说明是独立光源）的格子时，把它记到 reAdd 重新扩散。
+   */
+  private unlight(worldX: number, worldY: number, worldZ: number, isSky: boolean): void {
+    const get = isSky
+      ? (x: number, y: number, z: number) => this.world.getSkyLight(x, y, z)
+      : (x: number, y: number, z: number) => this.world.getBlockLight(x, y, z);
+    const set = isSky
+      ? (x: number, y: number, z: number, v: number) => this.world.setSkyLight(x, y, z, v)
+      : (x: number, y: number, z: number, v: number) => this.world.setBlockLight(x, y, z, v);
+
+    const startLevel = get(worldX, worldY, worldZ);
+    set(worldX, worldY, worldZ, 0);
+    if (startLevel === 0) return;
+
+    const removal: number[] = [worldX, worldY, worldZ, startLevel];
+    const reAdd: number[] = [];
+
+    while (removal.length > 0) {
+      const level = removal.pop()!;
+      const z = removal.pop()!;
+      const y = removal.pop()!;
+      const x = removal.pop()!;
+
+      for (const [dx, dy, dz] of DIRS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        const nz = z + dz;
+        if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
+        if (!this.world.isLoaded(nx, nz)) continue;
+
+        const neighborLevel = get(nx, ny, nz);
+        if (neighborLevel === 0) continue;
+
+        // 天光竖直向下时水平保持 15，所以这里允许"相等"也算继承
+        const inherited = isSky && dy === -1 && level === 15 ? 15 : level - 1;
+        if (neighborLevel <= inherited) {
+          set(nx, ny, nz, 0);
+          removal.push(nx, ny, nz, neighborLevel);
+        } else {
+          reAdd.push(nx, ny, nz);
+        }
+      }
+    }
+
+    for (let i = 0; i < reAdd.length; i += 3) {
+      const x = reAdd[i]!;
+      const y = reAdd[i + 1]!;
+      const z = reAdd[i + 2]!;
+      if (isSky) this.skyQueue.push(x, y, z);
+      else this.blockQueue.push(x, y, z);
+    }
+  }
+
   /** 回收已消费的队列头部，避免数组无限增长 */
   private compact(): void {
     if (this.skyHead > COMPACT_THRESHOLD) {
