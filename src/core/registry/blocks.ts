@@ -244,6 +244,47 @@ export const Wood: Readonly<Record<string, WoodBlockIds>> = Object.fromEntries(
   EXTRA_WOODS.map((wood) => [wood.name, WOOD_ID_MAP.get(wood.name)!]),
 );
 
+// ---------------------------------------------------------------- 陶瓦与混凝土
+
+export const TERRACOTTA_ID_START = 127;
+export const CONCRETE_ID_START = 144;
+
+/**
+ * 陶瓦与混凝土：都是 16 色 + 陶瓦多一个原色。
+ * 陶瓦偏土、有颗粒感；混凝土是纯色 + 极细的杂点，两者观感差异明显。
+ */
+const COLORED_SPECS: readonly BlockSpec[] = [
+  {
+    id: TERRACOTTA_ID_START,
+    name: 'minecraft:terracotta',
+    tiles: ['terracotta', 'terracotta', 'terracotta'],
+  },
+  ...DYE_COLORS.map(
+    (color, index): BlockSpec => ({
+      id: TERRACOTTA_ID_START + 1 + index,
+      name: `minecraft:${color.name}_terracotta`,
+      tiles: [`terracotta_${color.name}`, `terracotta_${color.name}`, `terracotta_${color.name}`],
+    }),
+  ),
+  ...DYE_COLORS.map(
+    (color, index): BlockSpec => ({
+      id: CONCRETE_ID_START + index,
+      name: `minecraft:${color.name}_concrete`,
+      tiles: [`concrete_${color.name}`, `concrete_${color.name}`, `concrete_${color.name}`],
+    }),
+  ),
+];
+
+/** 第 index 种颜色的陶瓦 id（0 为原色陶瓦，1-16 对应 DYE_COLORS） */
+export function terracottaId(colorIndex: number): number {
+  return TERRACOTTA_ID_START + colorIndex;
+}
+
+/** 第 index 种颜色的混凝土 id */
+export function concreteId(colorIndex: number): number {
+  return CONCRETE_ID_START + colorIndex;
+}
+
 // ---------------------------------------------------------------- 台阶 / 楼梯
 
 /**
@@ -371,6 +412,7 @@ const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
   ...WOOD_SPECS,
+  ...COLORED_SPECS,
   ...SHAPED_SPECS,
   ...FUNCTIONAL_SHAPED_SPECS,
 ].sort((a, b) => a.id - b.id);
@@ -578,6 +620,13 @@ for (const ids of Object.values(Wood)) {
   HARDNESS.set(ids.leaves, 0.2);
   HARDNESS.set(ids.slab, 2);
   HARDNESS.set(ids.stairs, 2);
+}
+
+// 陶瓦 1.25、混凝土 1.8（都需要镐，不进徒手可采集表）
+HARDNESS.set(terracottaId(0), 1.25);
+for (let i = 0; i < DYE_COLORS.length; i++) {
+  HARDNESS.set(terracottaId(i + 1), 1.25);
+  HARDNESS.set(concreteId(i), 1.8);
 }
 
 /** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */

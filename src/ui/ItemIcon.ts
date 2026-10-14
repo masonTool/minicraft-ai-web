@@ -24,6 +24,7 @@ export function drawItemIcon(
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, size, size);
 
-  const column = atlas.tileIndex(itemIconTile(itemId));
-  ctx.drawImage(atlas.canvas, column * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE, 0, 0, size, size);
+  // 图集是网格排布，裁切起点必须走 tileSource（不能用"列号 × 宽度"直接算）
+  const source = atlas.tileSource(itemIconTile(itemId));
+  ctx.drawImage(atlas.canvas, source.x, source.y, TILE_SIZE, TILE_SIZE, 0, 0, size, size);
 }

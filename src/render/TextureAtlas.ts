@@ -9,9 +9,16 @@
  */
 
 import * as THREE from 'three';
-import { DYE_COLORS, WOOD_TYPES } from '../core/registry/colors.ts';
+import { DYE_COLORS, TERRACOTTA_BASE, WOOD_TYPES, terracottaColor } from '../core/registry/colors.ts';
 
 export const TILE_SIZE = 16;
+/**
+ * 图集列数。
+ *
+ * 贴图数量已经超过 160，单行排布在 256 张时会撞上移动 GPU 常见的 4096 纹理上限，
+ * 所以改成 16 列的网格；新增贴图只会让画布变高，不会变宽。
+ */
+const ATLAS_COLUMNS = 16;
 
 /** 图集中的贴图顺序（索引即图集列号，必须稳定） */
 export const TILE_ORDER = [
@@ -146,6 +153,39 @@ export const TILE_ORDER = [
   'torch',
   'ladder',
   'oak_door',
+  'terracotta',
+  'terracotta_white',
+  'terracotta_orange',
+  'terracotta_magenta',
+  'terracotta_light_blue',
+  'terracotta_yellow',
+  'terracotta_lime',
+  'terracotta_pink',
+  'terracotta_gray',
+  'terracotta_light_gray',
+  'terracotta_cyan',
+  'terracotta_purple',
+  'terracotta_blue',
+  'terracotta_brown',
+  'terracotta_green',
+  'terracotta_red',
+  'terracotta_black',
+  'concrete_white',
+  'concrete_orange',
+  'concrete_magenta',
+  'concrete_light_blue',
+  'concrete_yellow',
+  'concrete_lime',
+  'concrete_pink',
+  'concrete_gray',
+  'concrete_light_gray',
+  'concrete_cyan',
+  'concrete_purple',
+  'concrete_blue',
+  'concrete_brown',
+  'concrete_green',
+  'concrete_red',
+  'concrete_black',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
@@ -414,6 +454,23 @@ function leavesPainter(base: readonly [number, number, number], alpha = 255): Pa
     const v = 1 + (rng() * 0.34 - 0.17);
     const hole = hashString(`leaf${x},${y}`) % 11 === 0;
     return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), hole ? 150 : alpha];
+  };
+}
+
+/** 陶瓦：偏土的色调 + 颗粒 + 轻微横向色带（原版陶瓦的层次感就来自这个） */
+function terracottaPainter(base: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const band = Math.sin(y * 0.9) * 0.05;
+    const v = 1 + band + (rng() * 0.14 - 0.07) - (x % 5 === 0 ? 0.04 : 0);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+  };
+}
+
+/** 混凝土：纯色 + 极细杂点，与陶瓦的颗粒感形成对比 */
+function concretePainter(base: readonly [number, number, number]): Painter {
+  return (_x, _y, rng) => {
+    const v = 1 + (rng() * 0.05 - 0.025);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
   };
 }
 
@@ -690,6 +747,13 @@ for (const wood of WOOD_TYPES) {
   PAINTERS[`${wood.name}_leaves`] = leavesPainter(wood.leaf, wood.leafAlpha ?? 255);
 }
 
+// 陶瓦与混凝土：33 张贴图由配色表生成
+PAINTERS.terracotta = terracottaPainter(TERRACOTTA_BASE);
+for (const color of DYE_COLORS) {
+  PAINTERS[`terracotta_${color.name}`] = terracottaPainter(terracottaColor(color.rgb));
+  PAINTERS[`concrete_${color.name}`] = concretePainter(color.rgb);
+}
+
 // 羊毛与染料：16 色按配色表批量生成，避免手写 32 份几乎相同的代码
 for (const color of DYE_COLORS) {
   PAINTERS[`wool_${color.name}`] = woolPainter(color.rgb);
@@ -758,12 +822,14 @@ export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;
   readonly columns: number;
+  readonly rows: number;
 
   constructor() {
-    const columns = TILE_ORDER.length;
+    const columns = ATLAS_COLUMNS;
+    const rows = Math.ceil(TILE_ORDER.length / columns);
     const canvas = document.createElement('canvas');
     canvas.width = TILE_SIZE * columns;
-    canvas.height = TILE_SIZE;
+    canvas.height = TILE_SIZE * rows;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('无法获取 2D 绘图上下文');
@@ -771,14 +837,16 @@ export class TextureAtlas {
     const image = ctx.createImageData(canvas.width, canvas.height);
     const data = image.data;
 
-    for (let col = 0; col < columns; col++) {
-      const name = TILE_ORDER[col]!;
+    for (let index = 0; index < TILE_ORDER.length; index++) {
+      const name = TILE_ORDER[index]!;
       const painter = PAINTERS[name] ?? noisy(128, 14);
       const rng = makeRng(hashString(name));
+      const originX = (index % columns) * TILE_SIZE;
+      const originY = Math.floor(index / columns) * TILE_SIZE;
       for (let y = 0; y < TILE_SIZE; y++) {
         for (let x = 0; x < TILE_SIZE; x++) {
           const [r, g, b, a] = painter(x, y, rng);
-          const px = (y * canvas.width + col * TILE_SIZE + x) * 4;
+          const px = ((originY + y) * canvas.width + originX + x) * 4;
           data[px] = r;
           data[px + 1] = g;
           data[px + 2] = b;
@@ -790,6 +858,7 @@ export class TextureAtlas {
 
     this.canvas = canvas;
     this.columns = columns;
+    this.rows = rows;
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.magFilter = THREE.NearestFilter;
@@ -822,12 +891,27 @@ export class TextureAtlas {
   uv(tile: string): [number, number, number, number] {
     const index = TILE_INDEX.get(tile) ?? 0;
     const cols = this.columns;
+    const rows = this.rows;
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+
+    // 半像素内缩，避免相邻贴图渗色
     const insetU = 0.5 / (TILE_SIZE * cols);
-    const insetV = 0.5 / TILE_SIZE;
-    const u0 = index / cols + insetU;
-    const u1 = (index + 1) / cols - insetU;
-    const v0 = 0 + insetV;
-    const v1 = 1 - insetV;
+    const insetV = 0.5 / (TILE_SIZE * rows);
+
+    const u0 = col / cols + insetU;
+    const u1 = (col + 1) / cols - insetU;
+    const v0 = row / rows + insetV;
+    const v1 = (row + 1) / rows - insetV;
     return [u0, v0, u1, v1];
+  }
+
+  /** 贴图在图集画布上的像素左上角（UI 用 drawImage 裁切图标） */
+  tileSource(tile: string): { x: number; y: number } {
+    const index = TILE_INDEX.get(tile) ?? 0;
+    return {
+      x: (index % this.columns) * TILE_SIZE,
+      y: Math.floor(index / this.columns) * TILE_SIZE,
+    };
   }
 }

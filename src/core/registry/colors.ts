@@ -67,6 +67,22 @@ export function woodColor(name: string): WoodColor | undefined {
   return WOOD_TYPES.find((wood) => wood.name === name);
 }
 
+// ---------------------------------------------------------------- 陶瓦
+
+/**
+ * 陶瓦基色（原版是偏土的砖红色）。
+ *
+ * 染色陶瓦在原版里是**灰调**的——直接用染料色会太鲜艳，
+ * 所以这里把染料色与基色按 55:45 混合，出来的土色调与原版观感一致。
+ */
+export const TERRACOTTA_BASE: readonly [number, number, number] = [152, 94, 67];
+
+/** 染料色与陶瓦基色混合，得到染色陶瓦色 */
+export function terracottaColor(dye: readonly [number, number, number]): readonly [number, number, number] {
+  const mix = (a: number, b: number) => Math.round(a * 0.55 + b * 0.45);
+  return [mix(dye[0], TERRACOTTA_BASE[0]), mix(dye[1], TERRACOTTA_BASE[1]), mix(dye[2], TERRACOTTA_BASE[2])];
+}
+
 export function dyeColor(name: string): DyeColor | undefined {
   return DYE_COLORS.find((color) => color.name === name);
 }
