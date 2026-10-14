@@ -16,6 +16,10 @@ export interface RayHit {
   nz: number;
   /** 起点到命中面的距离 */
   distance: number;
+  /** 命中点的精确世界坐标（放置方块时用来判断准星落在方块的哪一半） */
+  hitX: number;
+  hitY: number;
+  hitZ: number;
 }
 
 /**
@@ -67,7 +71,18 @@ export function raycastVoxels(
   const maxSteps = Math.ceil(maxDistance * 2) + 8;
   for (let step = 0; step < maxSteps; step++) {
     if (isTarget(x, y, z)) {
-      return { x, y, z, nx, ny, nz, distance: travelled };
+      return {
+        x,
+        y,
+        z,
+        nx,
+        ny,
+        nz,
+        distance: travelled,
+        hitX: originX + dx * travelled,
+        hitY: originY + dy * travelled,
+        hitZ: originZ + dz * travelled,
+      };
     }
 
     if (tMaxX <= tMaxY && tMaxX <= tMaxZ) {

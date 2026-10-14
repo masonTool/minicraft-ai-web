@@ -27,6 +27,14 @@ export class Chunk {
    * 打包存储可让一次内存访问同时取到两种光照，网格化时缓存友好。
    */
   readonly light: Uint8Array;
+  /**
+   * 方块状态（朝向 / 上下半 / 开关等），按需分配。
+   *
+   * 只有真正放了带状态方块的区块才占这份内存——自然生成的地形里没有任何带状态的方块，
+   * 因此绝大多数区块的这份开销是 0。这一点对内存很关键：
+   * 一个区块的方块数组是 96KB，若每区块都无条件多带一份状态就是翻倍。
+   */
+  private states: Uint8Array | null = null;
   /** 每个 section 的非空气方块计数，用于快速跳过空段 */
   readonly sectionCounts: Int32Array;
   /** 光照是否已初始化 */
@@ -41,6 +49,28 @@ export class Chunk {
     this.blocks = new Uint8Array(CHUNK_VOLUME);
     this.light = new Uint8Array(CHUNK_VOLUME);
     this.sectionCounts = new Int32Array(SECTION_COUNT);
+  }
+
+  // ---------------------------------------------------------------- 方块状态
+
+  get hasStates(): boolean {
+    return this.states !== null;
+  }
+
+  getState(x: number, y: number, z: number): number {
+    if (!this.states) return 0;
+    if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return 0;
+    return this.states[Chunk.index(x, y, z)]!;
+  }
+
+  setState(x: number, y: number, z: number, state: number): void {
+    if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return;
+    if (state === 0) {
+      if (this.states) this.states[Chunk.index(x, y, z)] = 0;
+      return;
+    }
+    if (!this.states) this.states = new Uint8Array(CHUNK_VOLUME);
+    this.states[Chunk.index(x, y, z)] = state;
   }
 
   // ---------------------------------------------------------------- 光照读写
@@ -89,12 +119,19 @@ export class Chunk {
     return this.blocks[Chunk.index(x, y, z)]!;
   }
 
-  set(x: number, y: number, z: number, id: number): void {
+  set(x: number, y: number, z: number, id: number, state = 0): void {
     if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return;
     const i = Chunk.index(x, y, z);
     const prev = this.blocks[i]!;
-    if (prev === id) return;
+    if (prev === id) {
+      // 同种方块也要更新状态（例如把台阶从下半翻到上半）
+      if (state !== 0 || this.states) this.setState(x, y, z, state);
+      return;
+    }
     this.blocks[i] = id;
+    // 换方块时旧状态一律作废
+    if (this.states) this.states[i] = 0;
+    if (state !== 0) this.setState(x, y, z, state);
     const section = (y - WORLD_MIN_Y) >> 4;
     if (prev === 0 && id !== 0) this.sectionCounts[section]!++;
     else if (prev !== 0 && id === 0) this.sectionCounts[section]!--;

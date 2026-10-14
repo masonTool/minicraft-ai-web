@@ -37,28 +37,31 @@ export interface ItemDef {
   readonly tool?: ToolInfo;
 }
 
+/** 方块物品可用的 id 上限：非方块物品一律从 1000 起，两段空间彻底隔开 */
+export const BLOCK_ITEM_ID_LIMIT = 1000;
+
 /** 非方块物品的 id 常量 */
 export const Item = {
   AIR: 0,
-  COAL: 100,
-  RAW_IRON: 101,
-  RAW_COPPER: 102,
-  RAW_GOLD: 103,
-  REDSTONE: 104,
-  LAPIS_LAZULI: 105,
-  DIAMOND: 106,
-  EMERALD: 107,
-  STICK: 108,
-  IRON_INGOT: 109,
-  GOLD_INGOT: 110,
-  COPPER_INGOT: 111,
-  CHARCOAL: 112,
-  BRICK: 129,
-  CLAY_BALL: 130,
+  COAL: 1000,
+  RAW_IRON: 1001,
+  RAW_COPPER: 1002,
+  RAW_GOLD: 1003,
+  REDSTONE: 1004,
+  LAPIS_LAZULI: 1005,
+  DIAMOND: 1006,
+  EMERALD: 1007,
+  STICK: 1008,
+  IRON_INGOT: 1009,
+  GOLD_INGOT: 1010,
+  COPPER_INGOT: 1011,
+  CHARCOAL: 1012,
+  BRICK: 1013,
+  CLAY_BALL: 1014,
 } as const;
 
 /** 染料物品 id 起始值，顺序与 DYE_COLORS 一致 */
-export const DYE_ITEM_START = 113;
+export const DYE_ITEM_START = 1020;
 
 /** 第 index 种染料的物品 id */
 export function dyeItemId(colorIndex: number): number {
@@ -99,13 +102,13 @@ const DYE_SPECS: readonly NonBlockItemSpec[] = DYE_COLORS.map((color, index) => 
 
 const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, ...DYE_SPECS];
 
-const MAX_ITEM_ID = 200;
+const MAX_ITEM_ID = 1200;
 
 /** 按 id 索引的物品表（未定义的 id 为 undefined） */
 export const ITEMS: (ItemDef | undefined)[] = new Array(MAX_ITEM_ID).fill(undefined);
 
 // ---- 方块物品：id 与方块 id 相同，图标用方块侧面贴图
-for (let id = Block.AIR + 1; id < 100; id++) {
+for (let id = Block.AIR + 1; id < BLOCK_ITEM_ID_LIMIT; id++) {
   const def = blockDef(id);
   // 注册表按 id 顺序密集排列，blockDef 回落到空气说明已经越过末尾
   if (def.id !== id) break;

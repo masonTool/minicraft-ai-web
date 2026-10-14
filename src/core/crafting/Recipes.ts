@@ -9,7 +9,7 @@
  * 匹配默认允许镜像（把图案左右翻转再比一次），这也是原版默认行为。
  */
 
-import { Block, woolId } from '../registry/blocks.ts';
+import { Block, SHAPED_PARENTS, slabId, stairsId, woolId } from '../registry/blocks.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import { Item, dyeItemId } from '../registry/items.ts';
 
@@ -105,7 +105,84 @@ const WOOL_RECIPES: readonly Recipe[] = DYE_COLORS.map((_color, index) => ({
   ingredients: [woolId(0), dyeItemId(index)],
 }));
 
-export const RECIPES: readonly Recipe[] = [...BASE_RECIPES, ...WOOL_RECIPES];
+/**
+ * 台阶与楼梯：由 12 个母方块批量生成，共 24 条。
+ *  - 台阶：横排 3 个母方块 → 6 个台阶
+ *  - 楼梯：阶梯状 6 个母方块 → 4 个楼梯（允许镜像，左右两侧的摆法都能合成）
+ */
+const SHAPED_BLOCK_RECIPES: readonly Recipe[] = SHAPED_PARENTS.flatMap(([parentId], index) => [
+  {
+    kind: 'shaped' as const,
+    result: { id: slabId(index), count: 6 },
+    pattern: ['PPP'],
+    key: { P: parentId },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: stairsId(index), count: 4 },
+    pattern: ['P  ', 'PP ', 'PPP'],
+    key: { P: parentId },
+  },
+]);
+
+/** 栅栏 / 墙 / 门 / 梯子 / 火把 */
+const UTILITY_RECIPES: readonly Recipe[] = [
+  // 4 木板 + 2 木棍 → 3 栅栏
+  {
+    kind: 'shaped',
+    result: { id: Block.OAK_FENCE, count: 3 },
+    pattern: ['PSP', 'PSP'],
+    key: { P, S: Item.STICK },
+  },
+  // 6 圆石 → 6 圆石墙
+  {
+    kind: 'shaped',
+    result: { id: Block.COBBLESTONE_WALL, count: 6 },
+    pattern: ['CCC', 'CCC'],
+    key: { C: COBBLE },
+  },
+  // 6 石砖 → 6 石砖墙
+  {
+    kind: 'shaped',
+    result: { id: Block.STONE_BRICK_WALL, count: 6 },
+    pattern: ['BBB', 'BBB'],
+    key: { B: Block.STONE_BRICKS },
+  },
+  // 6 木板竖排 2×3 → 3 扇门
+  {
+    kind: 'shaped',
+    result: { id: Block.OAK_DOOR, count: 3 },
+    pattern: ['PP', 'PP', 'PP'],
+    key: { P },
+  },
+  // 7 木棍摆成 H 形 → 3 个梯子
+  {
+    kind: 'shaped',
+    result: { id: Block.LADDER, count: 3 },
+    pattern: ['S S', 'SSS', 'S S'],
+    key: { S: Item.STICK },
+  },
+  // 煤炭 / 木炭 + 木棍 → 4 个火把（两种燃料各写一条，配方匹配是精确物品匹配）
+  {
+    kind: 'shaped',
+    result: { id: Block.TORCH, count: 4 },
+    pattern: ['C', 'S'],
+    key: { C: Item.COAL, S: Item.STICK },
+  },
+  {
+    kind: 'shaped',
+    result: { id: Block.TORCH, count: 4 },
+    pattern: ['C', 'S'],
+    key: { C: Item.CHARCOAL, S: Item.STICK },
+  },
+];
+
+export const RECIPES: readonly Recipe[] = [
+  ...BASE_RECIPES,
+  ...WOOL_RECIPES,
+  ...SHAPED_BLOCK_RECIPES,
+  ...UTILITY_RECIPES,
+];
 
 interface Normalized {
   /** height × width，0 表示空 */

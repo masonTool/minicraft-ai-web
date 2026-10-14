@@ -102,6 +102,10 @@ export class VoxelMaterial {
     this.uniforms.uSkyBrightness!.value = value;
   }
 
+  get skyBrightnessValue(): number {
+    return this.uniforms.uSkyBrightness!.value as number;
+  }
+
   setFog(color: THREE.ColorRepresentation, near: number, far: number): void {
     this.uniforms.uFogColor!.value = new THREE.Color(color);
     this.uniforms.uFogNear!.value = near;

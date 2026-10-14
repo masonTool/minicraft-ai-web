@@ -13,6 +13,8 @@ import { Chunk } from './Chunk.ts';
 import { BlockEntityStore } from './BlockEntityStore.ts';
 import { LightEngine } from '../light/LightEngine.ts';
 import { blockDef } from '../registry/blocks.ts';
+import { collisionBoxes } from '../registry/blockShapes.ts';
+import type { VoxelCollision } from '../physics/AABB.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
 
 export function chunkKey(cx: number, cz: number): string {
@@ -179,17 +181,41 @@ export class World {
   }
 
   /** @returns 是否写入成功（区块未加载时返回 false） */
-  setBlock(worldX: number, worldY: number, worldZ: number, id: number): boolean {
+  setBlock(worldX: number, worldY: number, worldZ: number, id: number, state = 0): boolean {
     const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
     if (!chunk) return false;
-    chunk.set(worldX & 15, worldY, worldZ & 15, id);
+    chunk.set(worldX & 15, worldY, worldZ & 15, id, state);
     return true;
   }
 
-  /** 该方块是否参与碰撞（物理查询入口） */
+  /** 读取方块状态（朝向/上下半/开关等） */
+  getBlockState(worldX: number, worldY: number, worldZ: number): number {
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
+    if (!chunk) return 0;
+    return chunk.getState(worldX & 15, worldY, worldZ & 15);
+  }
+
+  /** 该方块是否参与碰撞（粗判，非完整方块的精确检测走 collisionAt） */
   isSolid(worldX: number, worldY: number, worldZ: number): boolean {
     if (worldY < -64 || worldY >= 320) return false;
     return blockDef(this.getBlock(worldX, worldY, worldZ)).solid;
+  }
+
+  /**
+   * 物理碰撞查询：完整方块返回 'full' 快路径，非完整方块返回局部盒子列表，
+   * 无碰撞返回 null。
+   */
+  collisionAt(worldX: number, worldY: number, worldZ: number): VoxelCollision {
+    if (worldY < -64 || worldY >= 320) return null;
+    const id = this.getBlock(worldX, worldY, worldZ);
+    if (id === 0) return null;
+
+    const def = blockDef(id);
+    if (!def.solid) return null;
+    if (def.shape === 'cube') return 'full';
+
+    const boxes = collisionBoxes(def.shape, this.getBlockState(worldX, worldY, worldZ));
+    return boxes.length === 0 ? null : boxes;
   }
 
   /** 该方块是否为流体（水/岩浆） */
@@ -208,8 +234,8 @@ export class World {
    * 玩家修改方块：写入 + 增量光照更新 + 通知渲染层重网格化。
    * @returns 是否成功
    */
-  setBlockAndUpdate(worldX: number, worldY: number, worldZ: number, id: number): boolean {
-    if (!this.setBlock(worldX, worldY, worldZ, id)) return false;
+  setBlockAndUpdate(worldX: number, worldY: number, worldZ: number, id: number, state = 0): boolean {
+    if (!this.setBlock(worldX, worldY, worldZ, id, state)) return false;
     if (worldY < -64 || worldY >= 320) return true;
     this.light.onBlockChanged(worldX, worldY, worldZ);
     this.events.onBlockChanged?.(worldX, worldY, worldZ);
@@ -245,6 +271,11 @@ export class World {
   /** 光照队列是否还有未完成的工作 */
   get hasLightWork(): boolean {
     return this.light.hasWork;
+  }
+
+  /** 光照队列里待处理的格子数（调试用） */
+  get lightWorkCount(): number {
+    return this.light.pendingCells;
   }
 
   get pendingCount(): number {

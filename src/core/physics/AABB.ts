@@ -85,17 +85,50 @@ export function forEachVoxel(box: AABB, fn: (x: number, y: number, z: number) =>
   }
 }
 
-/** 世界碰撞查询能力（由 World 实现，接口化以避免循环依赖） */
+/** 局部碰撞盒：[x0, y0, z0, x1, y1, z1]，坐标在 0-1 的方块局部空间内 */
+export type BoxTuple = readonly [number, number, number, number, number, number];
+
+/** 体素碰撞查询结果 */
+export type VoxelCollision = null | 'full' | readonly BoxTuple[];
+
+/**
+ * 世界碰撞查询能力（由 World 实现，接口化以避免循环依赖）。
+ *
+ * 返回 'full' 是快路径：绝大多数方块是完整立方体，一次判断即可，
+ * 不必构造盒子。只有台阶/楼梯这类非完整方块才走精确相交检测。
+ */
 export interface CollisionWorld {
-  isSolid(x: number, y: number, z: number): boolean;
+  collisionAt(x: number, y: number, z: number): VoxelCollision;
 }
 
-/** 盒子是否与任何实心方块重叠 */
+/** 盒子是否与任何方块的碰撞体重叠 */
 export function collides(world: CollisionWorld, box: AABB): boolean {
   let hit = false;
+
   forEachVoxel(box, (x, y, z) => {
     if (hit) return;
-    if (world.isSolid(x, y, z)) hit = true;
+    const collision = world.collisionAt(x, y, z);
+    if (collision === null) return;
+    if (collision === 'full') {
+      hit = true;
+      return;
+    }
+    for (const local of collision) {
+      if (
+        intersects(box, {
+          minX: x + local[0],
+          minY: y + local[1],
+          minZ: z + local[2],
+          maxX: x + local[3],
+          maxY: y + local[4],
+          maxZ: z + local[5],
+        })
+      ) {
+        hit = true;
+        return;
+      }
+    }
   });
+
   return hit;
 }

@@ -16,7 +16,9 @@
  */
 
 import * as THREE from 'three';
-import { Block, blockDef } from '../registry/blocks.ts';
+import { Block, blockDef, type BlockDef } from '../registry/blocks.ts';
+import { canConnectTo, meshBoxes, type LocalBox } from '../registry/blockShapes.ts';
+import { FACING_OFFSET, type Facing } from '../registry/blockState.ts';
 import { Chunk, SECTION_HEIGHT, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 
@@ -28,6 +30,9 @@ export interface MeshContext {
   getSkyLight(worldX: number, worldY: number, worldZ: number): number;
   getBlockLight(worldX: number, worldY: number, worldZ: number): number;
 }
+
+/** 完整方块的盒子，供统一的面输出函数使用 */
+const UNIT_BOX: LocalBox = [0, 0, 0, 1, 1, 1];
 
 interface FaceCorner {
   pos: readonly [number, number, number];
@@ -191,6 +196,81 @@ export interface MeshResult {
   translucent: THREE.BufferGeometry | null;
 }
 
+interface EmitContext {
+  buf: LayerBuffer;
+  def: BlockDef;
+  isTranslucent: boolean;
+  atlas: TextureAtlas;
+  ctx: MeshContext;
+  originX: number;
+  originZ: number;
+  sampleBlock: (x: number, y: number, z: number) => number;
+}
+
+/**
+ * 输出一个面的 4 个顶点。
+ *
+ * box 是该面所属盒子的局部范围（完整方块为 [0,0,0,1,1,1]），顶点坐标按盒子尺寸插值，
+ * 因此同一套面定义既能画完整立方体，也能画台阶 / 楼梯 / 栅栏横杆 / 火把。
+ * 顶点顺序与法线方向由 FACES 保证，盒子只缩放不改变绕序。
+ */
+function emitFace(e: EmitContext, x: number, y: number, z: number, worldY: number, face: Face, box: LocalBox): void {
+  const { buf, def, isTranslucent, atlas, ctx, originX, originZ, sampleBlock } = e;
+  const [u0, v0, u1, v1] = atlas.uv(def.tiles[face.tile]);
+  const [bx0, by0, bz0, bx1, by1, bz1] = box;
+
+  const [dx, dy, dz] = face.dir;
+  const nx = x + dx;
+  const nz = z + dz;
+  const vertexBase = buf.pos.length / 3;
+
+  for (const corner of face.corners) {
+    buf.pos.push(
+      x + (corner.pos[0] === 0 ? bx0 : bx1),
+      y + (corner.pos[1] === 0 ? by0 : by1),
+      z + (corner.pos[2] === 0 ? bz0 : bz1),
+    );
+    buf.uv.push(u0 + corner.uv[0] * (u1 - u0), v0 + corner.uv[1] * (v1 - v0));
+
+    if (isTranslucent) {
+      // 流体不做 AO，避免水面出现栅格状阴影
+      const sky = ctx.getSkyLight(originX + nx, worldY + dy, originZ + nz);
+      const blk = ctx.getBlockLight(originX + nx, worldY + dy, originZ + nz);
+      buf.light.push(sky / 15, blk / 15);
+      buf.shade.push(face.shade);
+      continue;
+    }
+
+    const [o1, o2, o3] = corner.aoOffsets;
+    const b1 = sampleBlock(x + o1[0], y + o1[1], z + o1[2]);
+    const b2 = sampleBlock(x + o2[0], y + o2[1], z + o2[2]);
+    const b3 = sampleBlock(x + o3[0], y + o3[1], z + o3[2]);
+    const o1o = blockDef(b1).opaque ? 1 : 0;
+    const o2o = blockDef(b2).opaque ? 1 : 0;
+    const o3o = blockDef(b3).opaque ? 1 : 0;
+
+    // AO 等级：两邻边同时遮挡时取最暗
+    const aoIndex = o1o === 1 && o2o === 1 ? 0 : 3 - (o1o + o2o + o3o);
+    const ao = AO_BRIGHTNESS[aoIndex]!;
+
+    // 平滑光照：4 个采样格取平均；被遮挡的格子用中心格光照替代，避免硬缝
+    const l0 = lightOf(ctx, originX + nx, worldY + dy, originZ + nz);
+    const l1 = o1o === 1 ? l0 : lightOf(ctx, originX + x + o1[0], worldY + o1[1], originZ + z + o1[2]);
+    const l2 = o2o === 1 ? l0 : lightOf(ctx, originX + x + o2[0], worldY + o2[1], originZ + z + o2[2]);
+    const l3 =
+      o1o === 1 && o2o === 1
+        ? l0
+        : o3o === 1
+          ? ([Math.min(l1[0], l2[0]), Math.min(l1[1], l2[1])] as const)
+          : lightOf(ctx, originX + x + o3[0], worldY + o3[1], originZ + z + o3[2]);
+
+    buf.light.push((l0[0] + l1[0] + l2[0] + l3[0]) / 60, (l0[1] + l1[1] + l2[1] + l3[1]) / 60);
+    buf.shade.push(face.shade * ao);
+  }
+
+  buf.idx.push(vertexBase, vertexBase + 1, vertexBase + 2, vertexBase + 2, vertexBase + 1, vertexBase + 3);
+}
+
 /**
  * 对一个 section 生成网格。顶点坐标为 section 局部坐标（x/z ∈ [0,16)，y ∈ [0,16)），
  * 由调用方设置 mesh.position 完成定位。
@@ -222,65 +302,55 @@ export function meshSection(
         if (id === Block.AIR) continue;
 
         const def = blockDef(id);
-        const isTranslucent = def.translucent;
-        const buf = buffers[layerOf(id)];
+        const emit: EmitContext = {
+          buf: buffers[layerOf(id)],
+          def,
+          isTranslucent: def.translucent,
+          atlas,
+          ctx,
+          originX,
+          originZ,
+          sampleBlock,
+        };
 
-        for (const face of FACES) {
-          const [dx, dy, dz] = face.dir;
-          const nx = x + dx;
-          const ny = y + dy;
-          const nz = z + dz;
-
-          const neighborId = sampleBlock(nx, ny, nz);
-          // 遮挡剔除：邻居不透明则本面不可见
-          if (blockDef(neighborId).opaque) continue;
-          // 同种半透明方块（水-水、玻璃-玻璃）之间的内部面也剔除
-          if (neighborId === id && isTranslucent) continue;
-
-          const [u0, v0, u1, v1] = atlas.uv(def.tiles[face.tile]);
-          const vertexBase = buf.pos.length / 3;
-
-          for (const corner of face.corners) {
-            buf.pos.push(x + corner.pos[0], y + corner.pos[1], z + corner.pos[2]);
-            buf.uv.push(u0 + corner.uv[0] * (u1 - u0), v0 + corner.uv[1] * (v1 - v0));
-
-            if (isTranslucent) {
-              // 流体不做 AO，避免水面出现栅格状阴影
-              const sky = ctx.getSkyLight(originX + nx, worldY + dy, originZ + nz);
-              const blk = ctx.getBlockLight(originX + nx, worldY + dy, originZ + nz);
-              buf.light.push(sky / 15, blk / 15);
-              buf.shade.push(face.shade);
-              continue;
-            }
-
-            const [o1, o2, o3] = corner.aoOffsets;
-            const b1 = sampleBlock(x + o1[0], y + o1[1], z + o1[2]);
-            const b2 = sampleBlock(x + o2[0], y + o2[1], z + o2[2]);
-            const b3 = sampleBlock(x + o3[0], y + o3[1], z + o3[2]);
-            const o1o = blockDef(b1).opaque ? 1 : 0;
-            const o2o = blockDef(b2).opaque ? 1 : 0;
-            const o3o = blockDef(b3).opaque ? 1 : 0;
-
-            // AO 等级：两邻边同时遮挡时取最暗
-            const aoIndex = o1o === 1 && o2o === 1 ? 0 : 3 - (o1o + o2o + o3o);
-            const ao = AO_BRIGHTNESS[aoIndex]!;
-
-            // 平滑光照：4 个采样格取平均；被遮挡的格子用中心格光照替代，避免硬缝
-            const l0 = lightOf(ctx, originX + nx, worldY + dy, originZ + nz);
-            const l1 = o1o === 1 ? l0 : lightOf(ctx, originX + x + o1[0], worldY + o1[1], originZ + z + o1[2]);
-            const l2 = o2o === 1 ? l0 : lightOf(ctx, originX + x + o2[0], worldY + o2[1], originZ + z + o2[2]);
-            const l3 =
-              o1o === 1 && o2o === 1
-                ? l0
-                : o3o === 1
-                  ? [Math.min(l1[0], l2[0]), Math.min(l1[1], l2[1])] as const
-                  : lightOf(ctx, originX + x + o3[0], worldY + o3[1], originZ + z + o3[2]);
-
-            buf.light.push((l0[0] + l1[0] + l2[0] + l3[0]) / 60, (l0[1] + l1[1] + l2[1] + l3[1]) / 60);
-            buf.shade.push(face.shade * ao);
+        if (def.shape === 'cube') {
+          for (const face of FACES) {
+            const [dx, dy, dz] = face.dir;
+            const neighborId = sampleBlock(x + dx, y + dy, z + dz);
+            // 遮挡剔除：邻居不透明则本面不可见
+            if (blockDef(neighborId).opaque) continue;
+            // 同种半透明方块（水-水、玻璃-玻璃）之间的内部面也剔除
+            if (neighborId === id && def.translucent) continue;
+            emitFace(emit, x, y, z, worldY, face, UNIT_BOX);
           }
+          continue;
+        }
 
-          buf.idx.push(vertexBase, vertexBase + 1, vertexBase + 2, vertexBase + 2, vertexBase + 1, vertexBase + 3);
+        // ---- 非完整方块：逐个盒子输出
+        // 栅栏与墙的连接方向按邻居实时计算，因此放一个邻居方块后它们会自动"长"出新的一节
+        const connect =
+          def.shape === 'fence' || def.shape === 'wall'
+            ? (facing: Facing): boolean => {
+                const [cx, cz] = FACING_OFFSET[facing]!;
+                return canConnectTo(sampleBlock(x + cx, y, z + cz));
+              }
+            : undefined;
+
+        const boxes = meshBoxes(def.shape, chunk.getState(x, worldY, z), connect);
+
+        for (const box of boxes) {
+          for (const face of FACES) {
+            const axis = face.dir[0] !== 0 ? 0 : face.dir[1] !== 0 ? 1 : 2;
+            const positive = face.dir[axis]! > 0;
+            // 只有贴合体素边界的面才做邻居剔除；盒子内部的面（如台阶顶面）必须保留
+            const bound = positive ? box[axis + 3]! : box[axis]!;
+            const onBoundary = positive ? bound >= 1 - 1e-6 : bound <= 1e-6;
+            if (onBoundary) {
+              const [dx, dy, dz] = face.dir;
+              if (blockDef(sampleBlock(x + dx, y + dy, z + dz)).opaque) continue;
+            }
+            emitFace(emit, x, y, z, worldY, face, box);
+          }
         }
       }
     }

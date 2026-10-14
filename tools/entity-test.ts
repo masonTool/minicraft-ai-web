@@ -32,7 +32,7 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 
 /** 地面位于 y<0；x>=4 处有一堵墙 */
 const world: PhysicsWorld = {
-  isSolid: (x, y) => y < 0 || x >= 4,
+  collisionAt: (x, y) => (y < 0 || x >= 4 ? 'full' : null),
   isLiquid: () => false,
 };
 
@@ -129,7 +129,7 @@ console.log('\n[掉落物：超时消失]');
 console.log('\n[掉落物：水中上浮]');
 {
   const waterWorld: PhysicsWorld = {
-    isSolid: (x, y) => y < -10 || x >= 99,
+    collisionAt: (_x, y) => (y < -10 ? 'full' : null),
     isLiquid: (_x, y) => y < 5,
   };
   const ctx: EntityContext = { world: waterWorld, playerBox: null, pickup: () => 0 };

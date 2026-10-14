@@ -29,6 +29,55 @@ export class ChunkRenderer {
   private readonly queue: QueueItem[] = [];
   private readonly queued = new Set<string>();
 
+  /**
+   * 调试用：抽样某区块网格顶点里的光照值，以及这段网格覆盖的 Y 区间。
+   * 用于把"画面偏暗"这类现象定位到"是顶点数据错了还是着色器/环境色错了"。
+   */
+  sampleMeshLight(
+    cx: number,
+    cz: number,
+    minWorldY = Number.NEGATIVE_INFINITY,
+    maxWorldY = Number.POSITIVE_INFINITY,
+  ): {
+    count: number;
+    sky: number[];
+    block: number[];
+    shade: number[];
+    minY: number;
+    maxY: number;
+  } | null {
+    const entry = this.rendered.get(chunkKey(cx, cz));
+    if (!entry || entry.meshes.length === 0) return null;
+
+    const sky: number[] = [];
+    const block: number[] = [];
+    const shade: number[] = [];
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let count = 0;
+
+    for (const mesh of entry.meshes) {
+      const light = mesh.geometry.getAttribute('aLight');
+      const shadeAttr = mesh.geometry.getAttribute('aShade');
+      const position = mesh.geometry.getAttribute('position');
+      if (!light || !shadeAttr || !position) continue;
+
+      const step = Math.max(1, Math.floor(light.count / 8));
+      for (let i = 0; i < light.count; i += step) {
+        const y = position.getY(i) + mesh.position.y;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+        if (y < minWorldY || y > maxWorldY) continue;
+        sky.push(Number(light.getX(i).toFixed(3)));
+        block.push(Number(light.getY(i).toFixed(3)));
+        shade.push(Number(shadeAttr.getX(i).toFixed(3)));
+        count++;
+      }
+    }
+
+    return { count, sky, block, shade, minY, maxY };
+  }
+
   constructor(
     private readonly scene: THREE.Scene,
     private readonly atlas: TextureAtlas,

@@ -19,6 +19,8 @@ import { Block, BLOCKS, breakSeconds, blockDef } from './core/registry/blocks.ts
 import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
+import { planPlacement } from './core/interaction/Placement.ts';
+import { isDoorOpen, isDoorUpper, withDoorOpen, withDoorUpper } from './core/registry/blockState.ts';
 import { HOTBAR_SIZE, Inventory } from './core/container/Inventory.ts';
 import { CHEST_SIZE } from './core/container/Chest.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
@@ -414,7 +416,15 @@ class App {
     );
 
     if (this.hit) {
-      this.outline.show(this.hit.x, this.hit.y, this.hit.z);
+      const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
+      this.outline.show(
+        id,
+        this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z),
+        blockDef(id).shape,
+        this.hit.x,
+        this.hit.y,
+        this.hit.z,
+      );
     } else {
       this.outline.hide();
     }
@@ -447,6 +457,16 @@ class App {
     if (this.breakProgress < 1) return;
 
     const brokenId = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
+
+    // 门是两格高的整体：拆一半就把另一半一起带走（且整扇门只掉落一次）
+    if (brokenId === Block.OAK_DOOR) {
+      this.breakDoorPair(this.hit.x, this.hit.y, this.hit.z);
+      this.breakProgress = 0;
+      this.breakingKey = '';
+      this.breakCooldown = BREAK_COOLDOWN;
+      return;
+    }
+
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
 
@@ -459,6 +479,34 @@ class App {
     this.breakProgress = 0;
     this.breakingKey = '';
     this.breakCooldown = BREAK_COOLDOWN;
+  }
+
+  /** 开门/关门：上下两半必须同步切换，否则会出现"半扇门" */
+  private toggleDoor(x: number, y: number, z: number): void {
+    const state = this.world.getBlockState(x, y, z);
+    const baseY = isDoorUpper(state) ? y - 1 : y;
+    if (this.world.getBlock(x, baseY, z) !== Block.OAK_DOOR) return;
+    if (this.world.getBlock(x, baseY + 1, z) !== Block.OAK_DOOR) return;
+
+    const baseState = this.world.getBlockState(x, baseY, z);
+    const next = withDoorOpen(baseState, !isDoorOpen(baseState));
+    this.world.setBlockAndUpdate(x, baseY, z, Block.OAK_DOOR, next);
+    this.world.setBlockAndUpdate(x, baseY + 1, z, Block.OAK_DOOR, withDoorUpper(next, true));
+  }
+
+  /** 拆掉整扇门（上下两半一起），整扇只掉落一次 */
+  private breakDoorPair(x: number, y: number, z: number): void {
+    const state = this.world.getBlockState(x, y, z);
+    const baseY = isDoorUpper(state) ? y - 1 : y;
+
+    for (let dy = 0; dy < 2; dy++) {
+      const oy = baseY + dy;
+      if (this.world.getBlock(x, oy, z) !== Block.OAK_DOOR) continue;
+      this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
+      if (this.flying || dy !== 0) continue;
+      const drop = dropFor(Block.OAK_DOOR);
+      if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5);
+    }
   }
 
   /** 生成一堆掉落物 */
@@ -533,6 +581,11 @@ class App {
       const hitBlock = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
       const { x, y, z } = this.hit;
 
+      if (hitBlock === Block.OAK_DOOR) {
+        this.toggleDoor(x, y, z);
+        this.placeCooldown = PLACE_COOLDOWN * 2;
+        return;
+      }
       if (hitBlock === Block.CRAFTING_TABLE) {
         this.inventoryScreen.openWith('crafting');
         this.placeCooldown = PLACE_COOLDOWN * 2;
@@ -561,7 +614,24 @@ class App {
     if (existing !== Block.AIR && !blockDef(existing).liquid) return;
     if (this.physics.blockIntersects(x, y, z)) return;
 
-    if (this.world.setBlockAndUpdate(x, y, z, blockId)) {
+    // 按方块形状与命中面推导状态（台阶上下半、楼梯朝向、火把挂墙、门轴……）
+    const plan = planPlacement({
+      blockId,
+      normal: [this.hit.nx, this.hit.ny, this.hit.nz],
+      hitX: this.hit.hitX,
+      hitY: this.hit.hitY,
+      hitZ: this.hit.hitZ,
+      yaw: this.yaw,
+      sneaking: sneak,
+      blockAt: (dx, dy, dz) => this.world.getBlock(x + dx, y + dy, z + dz),
+    });
+    if (!plan) return;
+
+    if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.state)) {
+      if (plan.extra) {
+        const { dx, dy, dz, id, state } = plan.extra;
+        this.world.setBlockAndUpdate(x + dx, y + dy, z + dz, id, state);
+      }
       this.placeCooldown = PLACE_COOLDOWN;
       this.inventory.consume(blockId, 1);
     }
@@ -645,7 +715,8 @@ class App {
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
-      `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   待生成: ${this.world.pendingCount}`;
+      `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   待生成: ${this.world.pendingCount}\n` +
+      `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}`;
   }
 
   start(): void {
@@ -789,6 +860,21 @@ class App {
     };
   }
 
+  /** 调试用：抽样某区块网格顶点里的光照值（可限定世界 Y 区间） */
+  sampleMeshLight(
+    cx: number,
+    cz: number,
+    minWorldY?: number,
+    maxWorldY?: number,
+  ): ReturnType<ChunkRenderer['sampleMeshLight']> {
+    return this.chunkRenderer.sampleMeshLight(cx, cz, minWorldY, maxWorldY);
+  }
+
+  /** 当前天空亮度倍率（昼夜） */
+  get skyBrightness(): number {
+    return this.solidMaterial.skyBrightnessValue;
+  }
+
   /** 调试用：实体渲染当前用到的光照档位（确认逐实体光照生效） */
   get entityLightBuckets(): number[] {
     return this.entityRenderer.createdLightLevels;
@@ -857,9 +943,19 @@ class App {
     return rows.join('\n');
   }
 
-  /** 直接放置方块（自动化测试用） */
-  place(x: number, y: number, z: number, blockId: number): boolean {
-    return this.world.setBlockAndUpdate(x, y, z, blockId);
+  /** 直接放置方块（自动化测试用）；可带状态 */
+  place(x: number, y: number, z: number, blockId: number, state = 0): boolean {
+    return this.world.setBlockAndUpdate(x, y, z, blockId, state);
+  }
+
+  /** 查询某处方块的状态与形状（自动化验收用） */
+  probeState(x: number, y: number, z: number): { block: string; shape: string; state: number } {
+    const id = this.world.getBlock(x, y, z);
+    return {
+      block: BLOCKS[id]?.name ?? `unknown(${id})`,
+      shape: blockDef(id).shape,
+      state: this.world.getBlockState(x, y, z),
+    };
   }
 
   /** 直接在指定位置生成掉落物（自动化测试用） */

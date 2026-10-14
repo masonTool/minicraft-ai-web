@@ -8,6 +8,7 @@
  */
 
 import { DYE_COLORS } from './colors.ts';
+import type { BlockShape } from './blockState.ts';
 
 export interface BlockDef {
   readonly id: number;
@@ -26,6 +27,8 @@ export interface BlockDef {
   readonly liquid: boolean;
   /** 半透明：走独立的透明渲染层（水、玻璃、冰） */
   readonly translucent: boolean;
+  /** 几何形状族：完整立方体 / 台阶 / 楼梯 / 栅栏 / 墙 / 门 / 火把 / 梯子 */
+  readonly shape: BlockShape;
 }
 
 interface BlockSpec {
@@ -38,6 +41,7 @@ interface BlockSpec {
   lightOpacity?: number;
   liquid?: boolean;
   translucent?: boolean;
+  shape?: BlockShape;
 }
 
 const BASE_SPECS: readonly BlockSpec[] = [
@@ -165,11 +169,135 @@ const WOOL_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
   tiles: [`wool_${color.name}`, `wool_${color.name}`, `wool_${color.name}`],
 }));
 
+// ---------------------------------------------------------------- 台阶 / 楼梯
+
+/**
+ * 有台阶与楼梯变体的母方块：[母方块 id, 命名前缀]。
+ * 顺序决定 slabId / stairsId 的取值，改动顺序会导致存档不兼容。
+ */
+export const SHAPED_PARENTS: readonly (readonly [number, string])[] = [
+  [1, 'stone'],
+  [8, 'cobblestone'],
+  [7, 'oak_planks'],
+  [20, 'sandstone'],
+  [62, 'stone_bricks'],
+  [64, 'smooth_stone'],
+  [65, 'polished_granite'],
+  [66, 'polished_diorite'],
+  [67, 'polished_andesite'],
+  [68, 'deepslate_bricks'],
+  [70, 'bricks'],
+  [71, 'polished_deepslate'],
+];
+
+export const SLAB_ID_START = 72;
+export const STAIRS_ID_START = 84;
+
+export function slabId(parentIndex: number): number {
+  return SLAB_ID_START + parentIndex;
+}
+
+export function stairsId(parentIndex: number): number {
+  return STAIRS_ID_START + parentIndex;
+}
+
+/** 从基础定义里取母方块的贴图（此时 BLOCKS 还没构建，只能查 SPECS） */
+function baseTiles(id: number): readonly [string, string, string] {
+  return BASE_SPECS.find((spec) => spec.id === id)?.tiles ?? ['stone', 'stone', 'stone'];
+}
+
+/**
+ * 台阶与楼梯同母方块共用贴图，且都是**非完整方块**：
+ * opaque=false 让相邻方块的面正常渲染（台阶上方是空的），lightOpacity=0 让光自由通过。
+ */
+const SHAPED_SPECS: readonly BlockSpec[] = SHAPED_PARENTS.flatMap(([parentId, name], index) => {
+  const tiles = baseTiles(parentId);
+  return [
+    {
+      id: SLAB_ID_START + index,
+      name: `minecraft:${name}_slab`,
+      tiles,
+      shape: 'slab' as const,
+      opaque: false,
+      lightOpacity: 0,
+    },
+    {
+      id: STAIRS_ID_START + index,
+      name: `minecraft:${name}_stairs`,
+      tiles,
+      shape: 'stairs' as const,
+      opaque: false,
+      lightOpacity: 0,
+    },
+  ];
+});
+
+// ---------------------------------------------------------------- 栅栏 / 墙 / 门 / 火把 / 梯子
+
+const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
+  {
+    id: 96,
+    name: 'minecraft:oak_fence',
+    tiles: baseTiles(7),
+    shape: 'fence',
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 97,
+    name: 'minecraft:cobblestone_wall',
+    tiles: baseTiles(8),
+    shape: 'wall',
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 98,
+    name: 'minecraft:stone_brick_wall',
+    tiles: baseTiles(62),
+    shape: 'wall',
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 99,
+    name: 'minecraft:oak_door',
+    tiles: ['oak_door', 'oak_door', 'oak_door'],
+    shape: 'door',
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 100,
+    name: 'minecraft:torch',
+    tiles: ['torch', 'torch', 'torch'],
+    shape: 'torch',
+    solid: false,
+    opaque: false,
+    light: 14,
+    lightOpacity: 0,
+  },
+  {
+    id: 101,
+    name: 'minecraft:ladder',
+    tiles: ['ladder', 'ladder', 'ladder'],
+    shape: 'ladder',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 /**
  * 全部方块定义。
  * ⚠️ 必须按 id 升序排列：BLOCKS 是按数组下标索引的，顺序错位会让 blockDef(id) 取到别的方块。
  */
-const SPECS: readonly BlockSpec[] = [...BASE_SPECS, ...WOOL_SPECS].sort((a, b) => a.id - b.id);
+const SPECS: readonly BlockSpec[] = [
+  ...BASE_SPECS,
+  ...WOOL_SPECS,
+  ...SHAPED_SPECS,
+  ...FUNCTIONAL_SHAPED_SPECS,
+].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
 export const Block = {
@@ -229,6 +357,12 @@ export const Block = {
   CHISELED_DEEPSLATE: 69,
   BRICKS: 70,
   POLISHED_DEEPSLATE: 71,
+  OAK_FENCE: 96,
+  COBBLESTONE_WALL: 97,
+  STONE_BRICK_WALL: 98,
+  OAK_DOOR: 99,
+  TORCH: 100,
+  LADDER: 101,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -262,6 +396,7 @@ function buildBlockTable(): readonly BlockDef[] {
       lightOpacity: spec.lightOpacity ?? ((spec.opaque ?? true) ? 15 : 0),
       liquid: spec.liquid ?? false,
       translucent: spec.translucent ?? false,
+      shape: spec.shape ?? 'cube',
     });
   }
   return table;
@@ -345,6 +480,21 @@ const HARDNESS = new Map<number, number>([
 // 羊毛：16 种颜色硬度相同
 for (let i = 0; i < DYE_COLORS.length; i++) HARDNESS.set(woolId(i), 0.8);
 
+// 台阶 / 楼梯的硬度跟随母方块（原版行为）
+for (let index = 0; index < SHAPED_PARENTS.length; index++) {
+  const parentId = SHAPED_PARENTS[index]![0];
+  const hardness = HARDNESS.get(parentId) ?? 1.5;
+  HARDNESS.set(slabId(index), hardness);
+  HARDNESS.set(stairsId(index), hardness);
+}
+
+HARDNESS.set(Block.OAK_FENCE, 2);
+HARDNESS.set(Block.COBBLESTONE_WALL, 2);
+HARDNESS.set(Block.STONE_BRICK_WALL, 1.5);
+HARDNESS.set(Block.OAK_DOOR, 3);
+HARDNESS.set(Block.TORCH, 0);
+HARDNESS.set(Block.LADDER, 0.4);
+
 /** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
 const HAND_HARVESTABLE = new Set<number>([
   Block.DIRT,
@@ -368,6 +518,17 @@ const HAND_HARVESTABLE = new Set<number>([
 
 // 羊毛徒手即可采集（石材家族一律需要镐，不加入此表）
 for (let i = 0; i < DYE_COLORS.length; i++) HAND_HARVESTABLE.add(woolId(i));
+
+// 台阶 / 楼梯的"徒手可采集"跟随母方块；木质与火把梯子一律徒手可采
+for (let index = 0; index < SHAPED_PARENTS.length; index++) {
+  if (!HAND_HARVESTABLE.has(SHAPED_PARENTS[index]![0])) continue;
+  HAND_HARVESTABLE.add(slabId(index));
+  HAND_HARVESTABLE.add(stairsId(index));
+}
+HAND_HARVESTABLE.add(Block.OAK_FENCE);
+HAND_HARVESTABLE.add(Block.OAK_DOOR);
+HAND_HARVESTABLE.add(Block.TORCH);
+HAND_HARVESTABLE.add(Block.LADDER);
 
 export function blockHardness(id: number): number {
   return HARDNESS.get(id) ?? 3;
