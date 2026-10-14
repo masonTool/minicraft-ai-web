@@ -141,6 +141,66 @@ console.log('\n[掉落物：水中上浮]');
   check('在水中向上浮', item.y > before, `y ${before.toFixed(2)} → ${item.y.toFixed(2)}`);
 }
 
+console.log('\n[掉落物：同类合并]');
+{
+  const ctx = makeContext();
+
+  // 同类且靠近 → 合并成一堆
+  const manager = new EntityManager();
+  const a = new ItemEntity(Block.STONE, 20, 0.5, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  const b = new ItemEntity(Block.STONE, 12, 1.0, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  a.age = 1;
+  b.age = 1;
+  manager.spawn(a);
+  manager.spawn(b);
+  manager.update(ctx, 0.05);
+  equal('同类掉落物合并为一个实体', manager.count, 1);
+  equal('数量相加', (manager.all[0] as ItemEntity).count, 32);
+
+  // 不同物品不合并
+  const manager2 = new EntityManager();
+  const c = new ItemEntity(Block.STONE, 1, 0.5, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  const d = new ItemEntity(Block.DIRT, 1, 1.0, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  c.age = 1;
+  d.age = 1;
+  manager2.spawn(c);
+  manager2.spawn(d);
+  manager2.update(ctx, 0.05);
+  equal('不同物品不合并', manager2.count, 2);
+
+  // 合并遵循堆叠上限
+  const manager3 = new EntityManager();
+  const e = new ItemEntity(Block.STONE, 40, 0.5, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  const f = new ItemEntity(Block.STONE, 40, 1.0, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  e.age = 1;
+  f.age = 1;
+  manager3.spawn(e);
+  manager3.spawn(f);
+  manager3.update(ctx, 0.05);
+  const counts = (manager3.all as ItemEntity[]).map((item) => item.count).sort((p, q) => q - p);
+  equal('80 个同类按 64 上限拆成两堆', `${manager3.count}:${counts.join(',')}`, '2:64,16');
+
+  // 刚丢出的不参与合并
+  const manager4 = new EntityManager();
+  const g = new ItemEntity(Block.STONE, 5, 0.5, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  const h = new ItemEntity(Block.STONE, 5, 0.8, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  manager4.spawn(g);
+  manager4.spawn(h);
+  manager4.update(ctx, 0.05);
+  equal('0.5 秒冷却期内不合并', manager4.count, 2);
+
+  // 距离太远不合并
+  const manager5 = new EntityManager();
+  const i = new ItemEntity(Block.STONE, 5, 0.5, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  const j = new ItemEntity(Block.STONE, 5, 5.0, 0.5, 0.5, { x: 0, y: 0, z: 0 });
+  i.age = 1;
+  j.age = 1;
+  manager5.spawn(i);
+  manager5.spawn(j);
+  manager5.update(ctx, 0.05);
+  equal('距离超过 1 格不合并', manager5.count, 2);
+}
+
 console.log('\n[实体管理器]');
 {
   const manager = new EntityManager();

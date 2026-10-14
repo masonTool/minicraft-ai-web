@@ -211,8 +211,8 @@ class App {
     this.skyColor.copy(NIGHT_SKY).lerp(DAY_SKY, daylight);
     this.solidMaterial.skyBrightness = skyBrightness;
     this.translucentMaterial.skyBrightness = skyBrightness;
-    // 掉落物也跟着昼夜明暗（暂不做逐实体光照采样）
-    this.entityRenderer.brightness = skyBrightness;
+    // 掉落物的天光贡献跟着昼夜变化（逐实体采样在 updateEntities 里做）
+    this.entityRenderer.skyBrightness = skyBrightness;
 
     const fogFar = VIEW_DISTANCE * 16 - 6;
     const fogNear = fogFar * 0.72;
@@ -469,7 +469,11 @@ class App {
       pickup: (itemId, count) => this.inventory.add(itemId, count),
     };
     this.entities.update(context, dt);
-    this.entityRenderer.update(this.entities.all, this.camera, dt);
+    // 逐实体采样光照：洞里暗、火把旁亮
+    this.entityRenderer.update(this.entities.all, this.camera, dt, (x, y, z) => {
+      if (!this.world.isLoaded(x, z)) return null;
+      return { sky: this.world.getSkyLight(x, y, z), block: this.world.getBlockLight(x, y, z) };
+    });
   }
 
   /**
@@ -778,6 +782,11 @@ class App {
       flying: this.flying,
       entities: this.entities.count,
     };
+  }
+
+  /** 调试用：实体渲染当前用到的光照档位（确认逐实体光照生效） */
+  get entityLightBuckets(): number[] {
+    return this.entityRenderer.createdLightLevels;
   }
 
   /** 当前所有实体的概览（自动化验收用） */

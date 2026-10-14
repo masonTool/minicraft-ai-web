@@ -6,7 +6,9 @@
  *  - 非方块物品 → 一张始终朝向镜头的平面贴图
  *
  * 几何体按物品 id 缓存复用，所以同种掉落物再多也只有一个 BufferGeometry。
- * 亮度用一个 uniform 统一给（昼夜会一起变暗），暂不做逐实体的光照采样。
+ *
+ * 光照：逐实体采样所在格子的天光/方块光，把亮度量化成 16 档，每一档共用一个材质。
+ * 这样既能有"洞里暗、火把旁亮"的效果，又不会给每个实体各建一个材质。
  */
 
 import * as THREE from 'three';
@@ -18,6 +20,11 @@ import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 
 const BLOCK_SIZE = 0.26;
 const SPRITE_SIZE = 0.3;
+/** 光照档数（0-15） */
+const LIGHT_LEVELS = 16;
+/** 最暗也要能看见轮廓，与原版的"最低亮度"一致 */
+const MIN_BRIGHTNESS = 0.08;
+
 /** BoxGeometry 每个面的 UV 排布（顶点顺序固定） */
 const FACE_UV_PATTERN: readonly (readonly [number, number])[] = [
   [0, 1],
@@ -45,20 +52,36 @@ void main() {
 }
 `;
 
+/** 光照等级 → 亮度：沿用与原版一致的曲线 level/(4-3×level) */
+function brightnessForLevel(level: number): number {
+  const normalized = Math.max(0, Math.min(1, level / (LIGHT_LEVELS - 1)));
+  const curve = normalized / (4 - 3 * normalized);
+  return Math.max(curve, MIN_BRIGHTNESS);
+}
+
+export interface EntityLight {
+  sky: number;
+  block: number;
+}
+
 export class EntityRenderer {
   readonly object = new THREE.Group();
 
   private readonly meshes = new Map<number, THREE.Mesh>();
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly spriteGeometries = new Map<number, THREE.BufferGeometry>();
-  private readonly material: THREE.ShaderMaterial;
+  private readonly baseMaterial: THREE.ShaderMaterial;
+  /** 按光照档位缓存的材质（0-15），同档位的实体共用 */
+  private readonly materialByLevel: THREE.ShaderMaterial[] = [];
+  /** 天光倍率（昼夜），与 setter 同名会与访问器冲突，这里换个内部名 */
+  private skyLightFactor = 1;
   private elapsed = 0;
 
   constructor(scene: THREE.Scene, private readonly atlas: TextureAtlas) {
-    this.material = new THREE.ShaderMaterial({
+    this.baseMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uAtlas: { value: atlas.texture },
-        uBrightness: { value: 0.92 },
+        uBrightness: { value: 1 },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
@@ -70,12 +93,20 @@ export class EntityRenderer {
     scene.add(this.object);
   }
 
-  /** 昼夜变化时统一调节掉落物亮度 */
-  set brightness(value: number) {
-    this.material.uniforms.uBrightness!.value = 0.45 + 0.55 * value;
+  /** 昼夜变化时调节天光对实体的贡献 */
+  set skyBrightness(value: number) {
+    this.skyLightFactor = value;
   }
 
-  update(entities: readonly Entity[], camera: THREE.Camera, dt: number): void {
+  /**
+   * @param lightAt 采样世界坐标处的光照；返回 null 表示该位置未加载（按全亮处理）
+   */
+  update(
+    entities: readonly Entity[],
+    camera: THREE.Camera,
+    dt: number,
+    lightAt?: (x: number, y: number, z: number) => EntityLight | null,
+  ): void {
     this.elapsed += dt;
     const alive = new Set<number>();
 
@@ -88,6 +119,15 @@ export class EntityRenderer {
         mesh = this.createMesh(entity.itemId);
         this.meshes.set(entity.id, mesh);
         this.object.add(mesh);
+      }
+
+      // 逐实体光照：取所在格的光照等级（天光按当前昼夜亮度衰减）
+      if (lightAt) {
+        const light = lightAt(Math.floor(entity.x), Math.floor(entity.y + 0.1), Math.floor(entity.z));
+        if (light) {
+          const level = Math.max(light.sky * this.skyLightFactor, light.block);
+          mesh.material = this.materialForLevel(Math.round(level));
+        }
       }
 
       const bob = Math.sin(this.elapsed * 1.8 + entity.bobPhase) * 0.055;
@@ -107,17 +147,36 @@ export class EntityRenderer {
     }
   }
 
+  /** 调试用：当前已按需创建的光照档位（能直观确认"逐实体光照"确实在切换材质） */
+  get createdLightLevels(): number[] {
+    const levels: number[] = [];
+    this.materialByLevel.forEach((material, level) => {
+      if (material) levels.push(level);
+    });
+    return levels;
+  }
+
+  private materialForLevel(level: number): THREE.ShaderMaterial {
+    const clamped = Math.max(0, Math.min(LIGHT_LEVELS - 1, level));
+    let material = this.materialByLevel[clamped];
+    if (!material) {
+      material = this.baseMaterial.clone();
+      material.uniforms = THREE.UniformsUtils.clone(this.baseMaterial.uniforms);
+      material.uniforms.uBrightness!.value = brightnessForLevel(clamped);
+      this.materialByLevel[clamped] = material;
+    }
+    return material;
+  }
+
   private createMesh(itemId: number): THREE.Mesh {
     const blockId = blockForItem(itemId);
     if (blockId !== undefined) {
-      const geometry = this.blockGeometry(itemId, blockId);
-      const mesh = new THREE.Mesh(geometry, this.material);
+      const mesh = new THREE.Mesh(this.blockGeometry(itemId, blockId), this.baseMaterial);
       mesh.userData.billboard = false;
       return mesh;
     }
 
-    const geometry = this.spriteGeometry(itemId);
-    const mesh = new THREE.Mesh(geometry, this.material);
+    const mesh = new THREE.Mesh(this.spriteGeometry(itemId), this.baseMaterial);
     mesh.userData.billboard = true;
     return mesh;
   }
@@ -156,7 +215,9 @@ export class EntityRenderer {
     for (const geometry of this.spriteGeometries.values()) geometry.dispose();
     this.blockGeometries.clear();
     this.spriteGeometries.clear();
-    this.material.dispose();
+    for (const material of this.materialByLevel) material?.dispose();
+    this.materialByLevel.length = 0;
+    this.baseMaterial.dispose();
     this.object.removeFromParent();
   }
 }
