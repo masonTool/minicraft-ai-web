@@ -18,6 +18,8 @@ export interface BlockDef {
   readonly opaque: boolean;
   /** 自发光等级 0-15 */
   readonly light: number;
+  /** 光照衰减（0-15）：光穿过该方块时减少的等级，≥15 视为完全阻挡 */
+  readonly lightOpacity: number;
   /** 是否为液体 */
   readonly liquid: boolean;
   /** 半透明：走独立的透明渲染层（水、玻璃） */
@@ -31,6 +33,7 @@ interface BlockSpec {
   solid?: boolean;
   opaque?: boolean;
   light?: number;
+  lightOpacity?: number;
   liquid?: boolean;
   translucent?: boolean;
 }
@@ -42,12 +45,12 @@ const SPECS: readonly BlockSpec[] = [
   { id: 3, name: 'minecraft:grass_block', tiles: ['grass_top', 'dirt', 'grass_side'] },
   { id: 4, name: 'minecraft:sand', tiles: ['sand', 'sand', 'sand'] },
   { id: 5, name: 'minecraft:oak_log', tiles: ['oak_log_top', 'oak_log_top', 'oak_log_side'] },
-  { id: 6, name: 'minecraft:oak_leaves', tiles: ['oak_leaves', 'oak_leaves', 'oak_leaves'] },
+  { id: 6, name: 'minecraft:oak_leaves', tiles: ['oak_leaves', 'oak_leaves', 'oak_leaves'], lightOpacity: 1 },
   { id: 7, name: 'minecraft:oak_planks', tiles: ['oak_planks', 'oak_planks', 'oak_planks'] },
   { id: 8, name: 'minecraft:cobblestone', tiles: ['cobblestone', 'cobblestone', 'cobblestone'] },
   { id: 9, name: 'minecraft:bedrock', tiles: ['bedrock', 'bedrock', 'bedrock'] },
-  { id: 10, name: 'minecraft:water', tiles: ['water', 'water', 'water'], solid: false, opaque: false, liquid: true, translucent: true },
-  { id: 11, name: 'minecraft:glass', tiles: ['glass', 'glass', 'glass'], opaque: false, translucent: true },
+  { id: 10, name: 'minecraft:water', tiles: ['water', 'water', 'water'], solid: false, opaque: false, liquid: true, translucent: true, lightOpacity: 1 },
+  { id: 11, name: 'minecraft:glass', tiles: ['glass', 'glass', 'glass'], opaque: false, translucent: true, lightOpacity: 0 },
 ];
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -74,6 +77,8 @@ export const BLOCKS: readonly BlockDef[] = SPECS.map((s) => ({
   solid: s.solid ?? true,
   opaque: s.opaque ?? true,
   light: s.light ?? 0,
+  // 默认：不透光方块完全阻挡光照，透明方块不衰减
+  lightOpacity: s.lightOpacity ?? ((s.opaque ?? true) ? 15 : 0),
   liquid: s.liquid ?? false,
   translucent: s.translucent ?? false,
 }));
@@ -88,4 +93,13 @@ export function isOpaque(id: number): boolean {
 
 export function isSolid(id: number): boolean {
   return blockDef(id).solid;
+}
+
+/** 光照衰减：≥15 表示完全阻挡，0 表示完全透过 */
+export function lightOpacity(id: number): number {
+  return blockDef(id).lightOpacity;
+}
+
+export function emitLight(id: number): number {
+  return blockDef(id).light;
 }

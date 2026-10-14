@@ -22,8 +22,15 @@ export const CHUNK_VOLUME = XZ * WORLD_HEIGHT;
 
 export class Chunk {
   readonly blocks: Uint8Array;
+  /**
+   * 光照数据：高 4 位为天光等级，低 4 位为方块光等级（各 0-15）。
+   * 打包存储可让一次内存访问同时取到两种光照，网格化时缓存友好。
+   */
+  readonly light: Uint8Array;
   /** 每个 section 的非空气方块计数，用于快速跳过空段 */
   readonly sectionCounts: Int32Array;
+  /** 光照是否已初始化 */
+  lit = false;
   /** 是否被修改过（P8 存档用） */
   dirty = false;
 
@@ -32,7 +39,32 @@ export class Chunk {
     readonly cz: number,
   ) {
     this.blocks = new Uint8Array(CHUNK_VOLUME);
+    this.light = new Uint8Array(CHUNK_VOLUME);
     this.sectionCounts = new Int32Array(SECTION_COUNT);
+  }
+
+  // ---------------------------------------------------------------- 光照读写
+
+  getSkyLight(x: number, y: number, z: number): number {
+    if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return y >= WORLD_MAX_Y ? 15 : 0;
+    return this.light[Chunk.index(x, y, z)]! >>> 4;
+  }
+
+  setSkyLight(x: number, y: number, z: number, value: number): void {
+    if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return;
+    const i = Chunk.index(x, y, z);
+    this.light[i] = ((value & 15) << 4) | (this.light[i]! & 15);
+  }
+
+  getBlockLight(x: number, y: number, z: number): number {
+    if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return 0;
+    return this.light[Chunk.index(x, y, z)]! & 15;
+  }
+
+  setBlockLight(x: number, y: number, z: number, value: number): void {
+    if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return;
+    const i = Chunk.index(x, y, z);
+    this.light[i] = (this.light[i]! & 0xf0) | (value & 15);
   }
 
   static index(x: number, y: number, z: number): number {

@@ -10,6 +10,7 @@
  */
 
 import { Chunk } from './Chunk.ts';
+import { LightEngine } from '../light/LightEngine.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
 
 export function chunkKey(cx: number, cz: number): string {
@@ -39,14 +40,23 @@ export class World {
 
   events: WorldEvents = {};
 
+  /** 光照引擎 */
+  readonly light: LightEngine;
+
   /** 已完成的生成任务数 / 已派发任务数，供加载进度显示 */
   completed = 0;
   dispatched = 0;
+
+  /** 单条目的区块查询缓存：网格化/光照会大量按世界坐标连续取样，命中率极高 */
+  private cacheCx = Number.NaN;
+  private cacheCz = Number.NaN;
+  private cacheChunk: Chunk | undefined = undefined;
 
   constructor(
     readonly seed: number,
     workerCount: number = Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 1)),
   ) {
+    this.light = new LightEngine(this);
     for (let i = 0; i < workerCount; i++) {
       const worker = new Worker(new URL('../../worker/chunk.worker.ts', import.meta.url), { type: 'module' });
       worker.addEventListener('message', (event: MessageEvent<GenerateResponse>) => this.onGenerated(event.data));
@@ -65,7 +75,29 @@ export class World {
 
     const chunk = Chunk.fromData(data.cx, data.cz, new Uint8Array(data.blocks));
     this.chunks.set(key, chunk);
+    this.invalidateChunkCache();
+    this.light.initChunk(chunk);
     this.events.onChunkLoaded?.(chunk);
+  }
+
+  /** 处理光照队列，返回是否仍有未完成的光照工作 */
+  processLighting(budget: number): boolean {
+    return this.light.process(budget);
+  }
+
+  private invalidateChunkCache(): void {
+    this.cacheCx = Number.NaN;
+    this.cacheCz = Number.NaN;
+    this.cacheChunk = undefined;
+  }
+
+  /** 带单条目缓存的区块查询（比裸 Map 查询快很多，key 是字符串） */
+  chunkAt(cx: number, cz: number): Chunk | undefined {
+    if (cx === this.cacheCx && cz === this.cacheCz) return this.cacheChunk;
+    this.cacheCx = cx;
+    this.cacheCz = cz;
+    this.cacheChunk = this.chunks.get(chunkKey(cx, cz));
+    return this.cacheChunk;
   }
 
   /**
@@ -103,6 +135,7 @@ export class World {
       if (Math.abs(chunk.cx - centerCx) <= keepRadius && Math.abs(chunk.cz - centerCz) <= keepRadius) continue;
       this.chunks.delete(key);
       this.wanted.delete(key);
+      this.invalidateChunkCache();
       this.events.onChunkUnloaded?.(chunk.cx, chunk.cz);
     }
 
@@ -128,18 +161,48 @@ export class World {
     return this.chunks.get(chunkKey(cx, cz));
   }
 
+  isLoaded(worldX: number, worldZ: number): boolean {
+    return this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ)) !== undefined;
+  }
+
   getBlock(worldX: number, worldY: number, worldZ: number): number {
-    const chunk = this.chunks.get(chunkKey(toChunkCoord(worldX), toChunkCoord(worldZ)));
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
     if (!chunk) return 0;
     return chunk.get(worldX & 15, worldY, worldZ & 15);
   }
 
   /** @returns 是否写入成功（区块未加载时返回 false） */
   setBlock(worldX: number, worldY: number, worldZ: number, id: number): boolean {
-    const chunk = this.chunks.get(chunkKey(toChunkCoord(worldX), toChunkCoord(worldZ)));
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
     if (!chunk) return false;
     chunk.set(worldX & 15, worldY, worldZ & 15, id);
     return true;
+  }
+
+  // ---------------------------------------------------------------- 光照读写（世界坐标）
+
+  getSkyLight(worldX: number, worldY: number, worldZ: number): number {
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
+    if (!chunk) return 0;
+    return chunk.getSkyLight(worldX & 15, worldY, worldZ & 15);
+  }
+
+  setSkyLight(worldX: number, worldY: number, worldZ: number, value: number): void {
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
+    if (!chunk) return;
+    chunk.setSkyLight(worldX & 15, worldY, worldZ & 15, value);
+  }
+
+  getBlockLight(worldX: number, worldY: number, worldZ: number): number {
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
+    if (!chunk) return 0;
+    return chunk.getBlockLight(worldX & 15, worldY, worldZ & 15);
+  }
+
+  setBlockLight(worldX: number, worldY: number, worldZ: number, value: number): void {
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
+    if (!chunk) return;
+    chunk.setBlockLight(worldX & 15, worldY, worldZ & 15, value);
   }
 
   get pendingCount(): number {
@@ -150,6 +213,13 @@ export class World {
     return this.loading.size === 0;
   }
 
+  /** 已点亮光照的区块数（调试用，低频调用） */
+  get litChunkCount(): number {
+    let count = 0;
+    for (const chunk of this.chunks.values()) if (chunk.lit) count++;
+    return count;
+  }
+
   dispose(): void {
     for (const worker of this.workers) worker.terminate();
     this.workers.length = 0;
@@ -157,5 +227,7 @@ export class World {
     this.loading.clear();
     this.pending.clear();
     this.wanted.clear();
+    this.light.reset();
+    this.invalidateChunkCache();
   }
 }

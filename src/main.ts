@@ -20,6 +20,8 @@ import { BLOCKS } from './core/registry/blocks.ts';
 const VIEW_DISTANCE = 10;
 /** 每帧最多网格化的区块数，用于把加载耗时摊到多帧 */
 const MESH_BUDGET_PER_FRAME = 3;
+/** 每帧最多处理的光照 BFS 步数 */
+const LIGHT_BUDGET_PER_FRAME = 120000;
 const WORLD_SEED = 20261014;
 
 class App {
@@ -179,12 +181,13 @@ class App {
     const loading = this.world.pendingCount > 0 || this.chunkRenderer.queueLength > 0;
 
     this.debugEl.textContent =
-      `Bedrock 1.18 Web  ·  P1 世界流式加载\n` +
+      `Bedrock 1.18 Web  ·  P1 世界流式加载 + 光照\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}\n` +
       `区块: ${cx}, ${cz}   朝向: ${facing}\n` +
       `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   已加载: ${this.world.chunks.size}\n` +
-      `待生成: ${this.world.pendingCount}   待网格化: ${this.chunkRenderer.queueLength}   方块种类: ${BLOCKS.length}` +
+      `待生成: ${this.world.pendingCount}   待网格化: ${this.chunkRenderer.queueLength}\n` +
+      `已点亮: ${this.world.litChunkCount}   光照队列: ${this.world.light.pendingCells}   方块种类: ${BLOCKS.length}` +
       (loading ? '\n世界加载中…' : '');
   }
 
@@ -199,7 +202,10 @@ class App {
       const centerCx = toChunkCoord(this.position.x);
       const centerCz = toChunkCoord(this.position.z);
       this.refreshWorld(centerCx, centerCz);
-      this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
+
+      // 先让光照收敛，再网格化：避免用未稳定的光照值生成顶点数据后又要重刷
+      const lightBusy = this.world.processLighting(LIGHT_BUDGET_PER_FRAME);
+      if (!lightBusy) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
 
       this.renderer.render(this.scene, this.camera);
       this.updateDebug(dt);
