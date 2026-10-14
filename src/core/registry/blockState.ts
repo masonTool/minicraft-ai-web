@@ -42,6 +42,14 @@ const WALL_MOUNT_MASK = 0b1000;
 const DOOR_OPEN_MASK = 0b1000;
 const DOOR_HINGE_MASK = 0b10000;
 const DOOR_UPPER_MASK = 0b100000;
+/**
+ * 台阶的"双层"标记（bit6）。
+ *
+ * 原版把上下两块台阶合并后变成独立的 double_slab 方块；这里改成**同一方块加一个状态位**，
+ * 好处是不用为 12 种台阶各加一个方块 id，网格化与碰撞只需判断这一位就能输出整格。
+ * 破坏时按 2 个台阶掉落（见 blocks.ts 的掉落表）。
+ */
+const SLAB_DOUBLE_MASK = 0b1000000;
 
 export const DEFAULT_STATE = 0;
 
@@ -68,6 +76,16 @@ export function facingFromYaw(yaw: number): Facing {
   // yaw=0 → 看向 -Z（北）。换算成 0-3 并取反方向。
   const index = Math.round(-yaw / (Math.PI / 2)) & 3;
   return ((index + 2) & 3) as Facing;
+}
+
+// ---------------------------------------------------------------- 台阶双层
+
+export function isSlabDouble(state: number): boolean {
+  return (state & SLAB_DOUBLE_MASK) !== 0;
+}
+
+export function withSlabDouble(state: number, doubled: boolean): number {
+  return doubled ? state | SLAB_DOUBLE_MASK : state & ~SLAB_DOUBLE_MASK;
 }
 
 // ---------------------------------------------------------------- 火把

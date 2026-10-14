@@ -10,7 +10,17 @@
  */
 
 import { blockDef } from './blocks.ts';
-import { FACING_OFFSET, facingOf, isDoorOpen, isTop, isWallMounted, doorHinge, type BlockShape, type Facing } from './blockState.ts';
+import {
+  FACING_OFFSET,
+  doorHinge,
+  facingOf,
+  isDoorOpen,
+  isSlabDouble,
+  isTop,
+  isWallMounted,
+  type BlockShape,
+  type Facing,
+} from './blockState.ts';
 
 export type LocalBox = readonly [number, number, number, number, number, number];
 
@@ -19,6 +29,32 @@ const HALF_BOTTOM: LocalBox = [0, 0, 0, 1, 0.5, 1];
 
 /** 栅栏/墙的连接判定回调：该方向是否有可连接的方块 */
 export type ConnectQuery = (facing: Facing) => boolean;
+
+/** 邻居方块信息；stairs 由调用方（网格化）填好，避免这里反向依赖方块表 */
+export interface NeighborBlock {
+  id: number;
+  state: number;
+  stairs: boolean;
+}
+
+/** 邻居方块查询：返回相对本方块偏移 (dx, dy, dz) 处的方块 */
+export type NeighborQuery = (dx: number, dy: number, dz: number) => NeighborBlock | null;
+
+/**
+ * 形状计算上下文。
+ * 栅栏/墙与楼梯都依赖邻居，但需要的邻居信息不同，所以分成两个可选回调；
+ * 不传时按"孤立方块"处理（描边、测试等场景）。
+ */
+export interface ShapeContext {
+  connect?: ConnectQuery;
+  neighbor?: NeighborQuery;
+}
+
+/** 楼梯的相接形状（原版的 StairsShape） */
+export type StairsShape = 'straight' | 'outer_left' | 'outer_right' | 'inner_left' | 'inner_right';
+
+/** 由方块 id 判断是不是楼梯（形状判定只需要知道"邻居是不是楼梯"） */
+export type StairsProbe = (id: number) => boolean;
 
 const NEVER_CONNECT: ConnectQuery = () => false;
 
@@ -36,9 +72,12 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'cube':
       return [FULL];
     case 'slab':
+      // 双层台阶 = 整格；这也是它与"直接放一个原方块"在碰撞上完全一致的原因
+      if (isSlabDouble(state)) return [FULL];
       return isTop(state) ? [[0, 0.5, 0, 1, 1, 1]] : [HALF_BOTTOM];
     case 'stairs': {
       // 下半层整块 + 上半层的半格（朝向决定在哪一侧）
+      // 说明：原版的楼梯碰撞盒不随内角/外角变化，所以这里只用朝向与上下半，不看形状
       const boxes: LocalBox[] = [HALF_BOTTOM];
       const d = FACING_OFFSET[facingOf(state)];
       if (!isTop(state)) {
@@ -104,18 +143,19 @@ function doorBox(state: number): LocalBox {
 
 // ---------------------------------------------------------------- 渲染盒
 
-export function meshBoxes(shape: BlockShape, state: number, connect: ConnectQuery = NEVER_CONNECT): readonly LocalBox[] {
+export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = {}): readonly LocalBox[] {
   switch (shape) {
     case 'cube':
       return [FULL];
     case 'slab':
+      if (isSlabDouble(state)) return [FULL];
       return isTop(state) ? [[0, 0.5, 0, 1, 1, 1]] : [HALF_BOTTOM];
     case 'stairs':
-      return collisionBoxes('stairs', state);
+      return stairsBoxes(state, ctx.neighbor);
     case 'fence':
-      return fenceBoxes(connect);
+      return fenceBoxes(ctx.connect ?? NEVER_CONNECT);
     case 'wall':
-      return wallBoxes(connect);
+      return wallBoxes(ctx.connect ?? NEVER_CONNECT);
     case 'door':
       return [doorBox(state)];
     case 'torch':
@@ -125,6 +165,95 @@ export function meshBoxes(shape: BlockShape, state: number, connect: ConnectQuer
     default:
       return [FULL];
   }
+}
+
+// ---------------------------------------------------------------- 楼梯转角
+
+/** 原版的 Direction#rotateYCCW：北→西→南→东→北 */
+function rotateYccw(facing: Facing): Facing {
+  return ((facing + 3) & 3) as Facing;
+}
+
+/**
+ * 楼梯的相接形状（复刻原版 StairsBlock#getShape）。
+ *
+ * 规则：看**朝向一侧**（内角）与**背后一侧**（外角）是否有一个朝向垂直的楼梯，
+ * 再看那个邻居的朝向是否等于本朝向的 rotateYCCW 来决定左右。
+ *
+ * ⚠️ 这里是在**网格化时按邻居实时计算**的，而不是放置时把形状写进状态。
+ * 好处是旁边放一个新楼梯后，原来的楼梯会自动变成转角——不需要在每次方块变动时
+ * 反过来更新四周楼梯的状态（那一套同步逻辑非常容易漏）。
+ */
+export function stairsShape(facing: Facing, top: boolean, neighbor?: NeighborQuery): StairsShape {
+  if (!neighbor) return 'straight';
+
+  const d = FACING_OFFSET[facing]!;
+
+  // 内角：正前方有同层、朝向垂直的楼梯
+  const infront = neighbor(d[0], 0, d[1]);
+  if (isMatchingStair(infront, top) && isPerpendicular(facing, facingOf(infront.state))) {
+    return facingOf(infront.state) === rotateYccw(facing) ? 'inner_left' : 'inner_right';
+  }
+
+  // 外角：背后有同层、朝向垂直的楼梯
+  const behind = neighbor(-d[0], 0, -d[1]);
+  if (isMatchingStair(behind, top) && isPerpendicular(facing, facingOf(behind.state))) {
+    return facingOf(behind.state) === rotateYccw(facing) ? 'outer_right' : 'outer_left';
+  }
+
+  return 'straight';
+}
+
+/** 两个朝向是否垂直（Facing 的奇偶正好对应两个轴） */
+function isPerpendicular(a: Facing, b: Facing): boolean {
+  return ((a ^ b) & 1) === 1;
+}
+
+/** 邻居是不是「同层的楼梯」——形状判定只关心这一件事 */
+function isMatchingStair(other: NeighborBlock | null, top: boolean): other is NeighborBlock {
+  return other !== null && other.stairs && isTop(other.state) === top;
+}
+
+/**
+ * 楼梯的渲染盒：基础两级 + 转角时在「低侧」补 1/4 块。
+ *
+ * 内角与外角补的是**相对的两个侧向半边**，这正是原版 stairs_inner / stairs_outer
+ * 两个模型文件的差别（其余部分完全一致）。
+ */
+function stairsBoxes(state: number, neighbor?: NeighborQuery): readonly LocalBox[] {
+  const boxes: LocalBox[] = [...collisionBoxes('stairs', state)];
+  const shape = stairsShape(facingOf(state), isTop(state), neighbor);
+  if (shape === 'straight') return boxes;
+
+  const facing = facingOf(state);
+  const d = FACING_OFFSET[facing]!;
+  const top = isTop(state);
+
+  // 取参与相接的那个邻居的朝向
+  const other =
+    shape.startsWith('inner') ? neighbor?.(d[0], 0, d[1]) : neighbor?.(-d[0], 0, -d[1]);
+  if (!other) return boxes;
+
+  // 邻居朝向等于 rotateYCCW 时补「负侧」半边；内角与外角取相反的一侧
+  const negativeSide = (facingOf(other.state) === rotateYccw(facing)) === shape.startsWith('outer');
+  boxes.push(quarterBox(d, negativeSide, top));
+  return boxes;
+}
+
+/** 「低侧 + 指定侧向半边」的 1/4 块（低侧 = 朝向的反侧） */
+function quarterBox(d: readonly [number, number], negativeSide: boolean, top: boolean): LocalBox {
+  const y0 = top ? 0 : 0.5;
+  const y1 = top ? 0.5 : 1;
+
+  if (d[0] !== 0) {
+    // 高侧沿 X，低侧与侧向半边都在 X/Z 上切分
+    const x0 = d[0] > 0 ? 0 : 0.5;
+    const z0 = negativeSide ? 0 : 0.5;
+    return [x0, y0, z0, x0 + 0.5, y1, z0 + 0.5];
+  }
+  const z0 = d[1] > 0 ? 0 : 0.5;
+  const x0 = negativeSide ? 0 : 0.5;
+  return [x0, y0, z0, x0 + 0.5, y1, z0 + 0.5];
 }
 
 /** 栅栏：中心柱 + 四个方向按需长横杆（上下两根，与原版一致） */

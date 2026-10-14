@@ -6,14 +6,16 @@
  */
 
 import { Block, SHAPED_PARENTS, blockDef, slabId, stairsId } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
+import { collisionBoxes, meshBoxes, stairsShape } from '../src/core/registry/blockShapes.ts';
 import {
   facingOf,
   isDoorOpen,
   isDoorUpper,
+  isSlabDouble,
   isTop,
   isWallMounted,
   withFacing,
+  withSlabDouble,
   withTop,
 } from '../src/core/registry/blockState.ts';
 import { planPlacement } from '../src/core/interaction/Placement.ts';
@@ -78,13 +80,13 @@ console.log('\n[碰撞盒几何]');
 
 console.log('\n[栅栏渲染盒：按邻居生长]');
 {
-  const alone = meshBoxes('fence', 0, () => false);
+  const alone = meshBoxes('fence', 0, { connect: () => false });
   equal('孤立栅栏只有柱子', alone.length, 1);
 
-  const connected = meshBoxes('fence', 0, () => true);
+  const connected = meshBoxes('fence', 0, { connect: () => true });
   equal('四个方向都连上时 = 柱子 + 4×2 根横杆', connected.length, 9);
 
-  const oneSide = meshBoxes('fence', 0, (facing) => facing === 1);
+  const oneSide = meshBoxes('fence', 0, { connect: (facing) => facing === 1 });
   equal('只连一侧时 = 柱子 + 2 根横杆', oneSide.length, 3);
 }
 
@@ -260,6 +262,131 @@ console.log('\n[台阶 / 楼梯配方]');
   // 梯子：H 形
   const ladderRecipe = grid(3, ['S·S', 'SSS', 'S·S'], { S: 1008 });
   equal('7 木棍 → 梯子', matchRecipe(ladderRecipe, 3)?.id, Block.LADDER);
+}
+
+console.log('\n[B4b 台阶：叠成双层]');
+{
+  const single = collisionBoxes('slab', 0);
+  equal('单层台阶高 0.5', single[0]![4], 0.5);
+
+  const doubled = withSlabDouble(0, true);
+  equal('双层台阶标记生效', isSlabDouble(doubled), true);
+  equal('双层台阶碰撞盒是整格', collisionBoxes('slab', doubled)[0]![4], 1);
+  equal('双层台阶渲染盒也是整格', meshBoxes('slab', doubled).length, 1);
+
+  // 双层再放一个台阶不该回到单层（状态位是或运算，不是取反）
+  equal('已是双层时再标记仍为双层', isSlabDouble(withSlabDouble(doubled, true)), true);
+
+  // 上下半的标记与双层标记互不干扰
+  equal('上半 + 双层可以共存', isTop(withSlabDouble(withTop(0, true), true)), true);
+}
+
+console.log('\n[B4b 台阶：放置时合并]');
+{
+  const base = {
+    blockId: STONE_SLAB,
+    hitX: 0.5,
+    hitY: 64,
+    hitZ: 0.5,
+    yaw: 0,
+    sneaking: false,
+    blockAt: () => 0,
+  };
+
+  // 命中同一个台阶的顶面 → 合并成双层
+  const merge = planPlacement({
+    ...base,
+    normal: [0, 1, 0],
+    hitBlock: STONE_SLAB,
+    hitState: 0,
+  });
+  equal('命中同种台阶顶面 → 合并', merge?.mergeInto !== undefined, true);
+  equal('合并后是双层', merge ? isSlabDouble(merge.mergeInto!.state) : false, true);
+
+  // 命中别的方块 → 正常放一块新的
+  const fresh = planPlacement({
+    ...base,
+    normal: [0, 1, 0],
+    hitBlock: Block.STONE,
+    hitState: 0,
+  });
+  equal('命中别的方块 → 正常放置', fresh?.mergeInto, undefined);
+
+  // 命中侧面不合并（原版只在竖直面上合并）
+  const side = planPlacement({
+    ...base,
+    normal: [1, 0, 0],
+    hitBlock: STONE_SLAB,
+    hitState: 0,
+  });
+  equal('命中台阶侧面 → 不合并', side?.mergeInto, undefined);
+
+  // 命中别的台阶（木头台阶）也不该合并
+  const other = planPlacement({
+    ...base,
+    normal: [0, 1, 0],
+    hitBlock: slabId(2),
+    hitState: 0,
+  });
+  equal('命中异种台阶 → 不合并', other?.mergeInto, undefined);
+}
+
+console.log('\n[B4b 楼梯：内角 / 外角]');
+{
+  const EAST = 1 as const;
+  const stairsAt =
+    (map: Record<string, { id: number; state: number }>) =>
+    (dx: number, dy: number, dz: number) => {
+      const found = map[`${dx},${dy},${dz}`];
+      return found ? { ...found, stairs: true } : null;
+    };
+
+  const straight = stairsShape(EAST, false, stairsAt({}));
+  equal('周围没有楼梯 → 直形', straight, 'straight');
+  equal('直形是 2 个盒子', meshBoxes('stairs', withFacing(0, EAST), {}).length, 2);
+  equal('不传邻居查询时也按直形处理', stairsShape(EAST, false), 'straight');
+
+  // 正前方（+X）有一个朝北的楼梯：北 = rotateYCCW(东)，对应 inner_left
+  const inner = stairsShape(EAST, false, stairsAt({ '1,0,0': { id: STONE_STAIRS, state: withFacing(0, 0) } }));
+  equal('正前方垂直楼梯 → 内角', inner, 'inner_left');
+
+  // 背后（-X）有一个朝北的楼梯
+  const outer = stairsShape(EAST, false, stairsAt({ '-1,0,0': { id: STONE_STAIRS, state: withFacing(0, 0) } }));
+  equal('背后垂直楼梯 → 外角', outer, 'outer_right');
+
+  // 正前方是**同向**楼梯 → 仍是直形（原版要求垂直）
+  const sameDir = stairsShape(EAST, false, stairsAt({ '1,0,0': { id: STONE_STAIRS, state: withFacing(0, EAST) } }));
+  equal('正前方同向楼梯 → 仍为直形', sameDir, 'straight');
+
+  // 上下半不同 → 不算相接
+  const differentHalf = stairsShape(
+    EAST,
+    false,
+    stairsAt({ '1,0,0': { id: STONE_STAIRS, state: withTop(withFacing(0, 0), true) } }),
+  );
+  equal('正前方倒置楼梯 → 仍为直形', differentHalf, 'straight');
+
+  // 转角会在低侧补一块 1/4，所以盒子数 +1
+  const innerBoxes = meshBoxes('stairs', withFacing(0, EAST), {
+    neighbor: stairsAt({ '1,0,0': { id: STONE_STAIRS, state: withFacing(0, 0) } }),
+  });
+  equal('内角是 3 个盒子', innerBoxes.length, 3);
+
+  const outerBoxes = meshBoxes('stairs', withFacing(0, EAST), {
+    neighbor: stairsAt({ '-1,0,0': { id: STONE_STAIRS, state: withFacing(0, 0) } }),
+  });
+  equal('外角是 3 个盒子', outerBoxes.length, 3);
+
+  // 内角与外角补的必须是**相对的两个侧向半边**（这正是原版两个模型文件的差别）。
+  // 朝东的楼梯：高侧在 +X，所以补块都落在 x∈[0,0.5] 的低侧，
+  // 内角在 z∈[0.5,1]、外角在 z∈[0,0.5]。
+  const innerQuarter = innerBoxes[2]!;
+  const outerQuarter = outerBoxes[2]!;
+  equal('内角补块在低侧 x∈[0,0.5]', `${innerQuarter[0]},${innerQuarter[3]}`, '0,0.5');
+  equal('内角补块在 z 的正半边', `${innerQuarter[2]},${innerQuarter[5]}`, '0.5,1');
+  equal('外角补块在低侧 x∈[0,0.5]', `${outerQuarter[0]},${outerQuarter[3]}`, '0,0.5');
+  equal('外角补块在 z 的负半边（与内角镜像）', `${outerQuarter[2]},${outerQuarter[5]}`, '0,0.5');
+  equal('补块补齐上半层（y∈[0.5,1]）', `${innerQuarter[1]},${innerQuarter[4]}`, '0.5,1');
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

@@ -17,7 +17,7 @@
 
 import * as THREE from 'three';
 import { Block, blockDef, type BlockDef } from '../registry/blocks.ts';
-import { canConnectTo, meshBoxes, type LocalBox } from '../registry/blockShapes.ts';
+import { canConnectTo, meshBoxes, type LocalBox, type ShapeContext } from '../registry/blockShapes.ts';
 import { FACING_OFFSET, type Facing } from '../registry/blockState.ts';
 import { Chunk, SECTION_HEIGHT, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
@@ -27,6 +27,8 @@ export type RenderLayer = 'solid' | 'translucent';
 /** 网格化时需要从世界取样的数据 */
 export interface MeshContext {
   getBlock(worldX: number, worldY: number, worldZ: number): number;
+  /** 邻居的方块状态（楼梯判定转角形状用） */
+  getBlockState(worldX: number, worldY: number, worldZ: number): number;
   getSkyLight(worldX: number, worldY: number, worldZ: number): number;
   getBlockLight(worldX: number, worldY: number, worldZ: number): number;
 }
@@ -327,16 +329,33 @@ export function meshSection(
         }
 
         // ---- 非完整方块：逐个盒子输出
-        // 栅栏与墙的连接方向按邻居实时计算，因此放一个邻居方块后它们会自动"长"出新的一节
-        const connect =
+        // 栅栏/墙的连接方向、楼梯的内角外角都按邻居**实时计算**，
+        // 因此旁边放一个新方块后它们会自动长出新的一节 / 变成转角，
+        // 不需要在方块变动时反过来更新四周方块的状态。
+        const shapeCtx: ShapeContext =
           def.shape === 'fence' || def.shape === 'wall'
-            ? (facing: Facing): boolean => {
-                const [cx, cz] = FACING_OFFSET[facing]!;
-                return canConnectTo(sampleBlock(x + cx, y, z + cz));
+            ? {
+                connect: (facing: Facing): boolean => {
+                  const [cx, cz] = FACING_OFFSET[facing]!;
+                  return canConnectTo(sampleBlock(x + cx, y, z + cz));
+                },
               }
-            : undefined;
+            : def.shape === 'stairs'
+              ? {
+                  neighbor: (dx, dy, dz) => {
+                    const id = sampleBlock(x + dx, y + dy, z + dz);
+                    if (id === Block.AIR) return null;
+                    return {
+                      id,
+                      // 相邻格可能属于别的区块，状态要按世界坐标取
+                      state: ctx.getBlockState(originX + x + dx, worldY + dy, originZ + z + dz),
+                      stairs: blockDef(id).shape === 'stairs',
+                    };
+                  },
+                }
+              : {};
 
-        const boxes = meshBoxes(def.shape, chunk.getState(x, worldY, z), connect);
+        const boxes = meshBoxes(def.shape, chunk.getState(x, worldY, z), shapeCtx);
 
         for (const box of boxes) {
           for (const face of FACES) {

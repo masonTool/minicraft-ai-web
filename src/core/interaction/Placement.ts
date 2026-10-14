@@ -20,6 +20,7 @@ import {
   withDoorHinge,
   withDoorUpper,
   withFacing,
+  withSlabDouble,
   withTop,
   withWallMounted,
   type Facing,
@@ -40,6 +41,10 @@ export interface PlacementInput {
   sneaking: boolean;
   /** 查询相对位置的方块 id */
   blockAt(dx: number, dy: number, dz: number): number;
+  /** 射线命中的那个方块 id（台阶合并成双层时要用） */
+  hitBlock: number;
+  /** 命中方块当前的状态（判断它是不是已经叠了一层的台阶） */
+  hitState: number;
 }
 
 export interface PlacementPlan {
@@ -47,6 +52,11 @@ export interface PlacementPlan {
   state: number;
   /** 需要额外放置的方块（门的上半部分） */
   extra?: { dx: number; dy: number; dz: number; id: number; state: number };
+  /**
+   * 与命中方块合并（台阶叠成双层）。
+   * 出现这个字段时，放置目标是**命中方块自身**而不是命中面外侧那一格。
+   */
+  mergeInto?: { state: number };
 }
 
 /** 水平法线 → 朝向（朝向指向法线的反方向，即"朝向墙壁"） */
@@ -64,6 +74,11 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
 
   switch (def.shape) {
     case 'slab': {
+      // 命中同一个台阶的竖直面 → 合并成双层（原版行为）
+      if (ny !== 0 && input.hitBlock === input.blockId) {
+        return { state: 0, mergeInto: { state: withSlabDouble(input.hitState, true) } };
+      }
+
       // 命中顶面 → 下半砖；命中底面 → 上半砖；命中侧面 → 按准星高度决定
       let top: boolean;
       if (ny > 0) top = false;

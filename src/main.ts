@@ -20,7 +20,13 @@ import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 import { planPlacement } from './core/interaction/Placement.ts';
-import { isDoorOpen, isDoorUpper, withDoorOpen, withDoorUpper } from './core/registry/blockState.ts';
+import {
+  isDoorOpen,
+  isDoorUpper,
+  isSlabDouble,
+  withDoorOpen,
+  withDoorUpper,
+} from './core/registry/blockState.ts';
 import { HOTBAR_SIZE, Inventory } from './core/container/Inventory.ts';
 import { CHEST_SIZE } from './core/container/Chest.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
@@ -524,6 +530,7 @@ class App {
     if (this.breakProgress < 1) return;
 
     const brokenId = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
+    const brokenState = this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z);
 
     // 门是两格高的整体：拆一半就把另一半一起带走（且整扇门只掉落一次）
     if (brokenId === Block.OAK_DOOR) {
@@ -540,7 +547,11 @@ class App {
     // 创造模式不产生掉落（与原版一致）
     if (!this.flying) {
       const drop = dropFor(brokenId);
-      if (drop) this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+      if (drop) {
+        // 双层台阶是两块叠起来的，破坏时按 2 个掉落
+        const count = isSlabDouble(brokenState) ? drop.count * 2 : drop.count;
+        this.spawnDrop(drop.id, count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+      }
     }
 
     this.breakProgress = 0;
@@ -696,8 +707,20 @@ class App {
       yaw: this.yaw,
       sneaking: sneak,
       blockAt: (dx, dy, dz) => this.world.getBlock(x + dx, y + dy, z + dz),
+      hitBlock: this.world.getBlock(this.hit.x, this.hit.y, this.hit.z),
+      hitState: this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z),
     });
     if (!plan) return;
+
+    // 台阶叠成双层：改的是**命中方块自身**，不是命中面外侧那一格
+    if (plan.mergeInto) {
+      const { x: hx, y: hy, z: hz } = this.hit;
+      if (this.world.setBlockAndUpdate(hx, hy, hz, blockId, plan.mergeInto.state)) {
+        this.placeCooldown = PLACE_COOLDOWN;
+        this.inventory.consume(blockId, 1);
+      }
+      return;
+    }
 
     if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.state)) {
       if (plan.extra) {
