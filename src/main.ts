@@ -15,6 +15,8 @@ import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
 import { PlayerStats, type DamageCause, type SurvivalEnvironment } from './core/survival/PlayerStats.ts';
 import { VitalsHud } from './ui/VitalsHud.ts';
+import { Sky } from './render/Sky.ts';
+import { Weather, type WeatherKind } from './render/Weather.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
@@ -96,6 +98,15 @@ class App {
   /** 生命 / 饥饿 / 氧气 */
   readonly stats = new PlayerStats();
   private readonly vitalsHud: VitalsHud;
+  /** 天空：渐变穹顶 / 太阳月亮 / 星空 / 云 */
+  private readonly sky: Sky;
+  /** 天气：晴 / 雨 / 雷暴 */
+  private readonly weather: Weather;
+  private readonly domeTop = new THREE.Color();
+  private readonly domeHorizon = new THREE.Color();
+  /** 玩家所在地表是否为寒冷群系（决定下雪还是下雨），每秒复查一次 */
+  private snowyHere = false;
+  private snowCheckTimer = 0;
   private readonly deathEl: HTMLElement;
   /** 帧时间累积成 20Hz 游戏 tick */
   private tickAccumulator = 0;
@@ -186,6 +197,11 @@ class App {
     this.translucentMaterial = new VoxelMaterial(atlas.texture, { translucent: true, ...atlasShape });
     // 必须在 applyEnvironment() 之前创建：环境函数会把昼夜亮度推给它
     this.entityRenderer = new EntityRenderer(this.scene, atlas);
+    // 天空与天气同样要先建好：applyEnvironment 会按天气压暗天空、拉近雾
+    this.sky = new Sky();
+    this.scene.add(this.sky.object);
+    this.weather = new Weather();
+    this.scene.add(this.weather.object);
     this.applyEnvironment();
 
     // 网格化放在独立 Worker 池里：地形生成的 Worker 忙于长任务，混在一起会互相拖慢。
@@ -289,16 +305,30 @@ class App {
     // 约定：t=0 日出(06:00)、t=0.25 正午、t=0.5 日落(18:00)、t=0.75 午夜
     const sunHeight = Math.sin(this.timeOfDay * Math.PI * 2);
     const daylight = smoothstep(-0.25, 0.35, sunHeight);
+
+    // 天气：雨天压暗天空、拉近雾；雷暴更暗，并叠上闪电的瞬时提亮
+    const overcast = this.weather.raining ? (this.weather.current === 'thunder' ? 0.8 : 0.55) : 0;
+    const flash = this.weather.flash;
     // 夜晚天光倍率下限 0.2，对应原版夜间天光被大幅压暗
-    const skyBrightness = 0.2 + 0.8 * daylight;
+    const skyBrightness = Math.min(1.25, (0.2 + 0.8 * daylight) * (1 - overcast * 0.42) + flash * 0.55);
 
     this.skyColor.copy(NIGHT_SKY).lerp(DAY_SKY, daylight);
+    if (overcast > 0) this.skyColor.lerp(OVERCAST_SKY, overcast);
+    if (flash > 0) this.skyColor.lerp(FLASH_SKY, flash * 0.65);
+
     this.solidMaterial.skyBrightness = skyBrightness;
     this.translucentMaterial.skyBrightness = skyBrightness;
     // 掉落物的天光贡献跟着昼夜变化（逐实体采样在 updateEntities 里做）
     this.entityRenderer.skyBrightness = skyBrightness;
 
-    const fogFar = VIEW_DISTANCE * 16 - 6;
+    // 穹顶：顶部略深、地平线略亮；日出日落时给太阳附近加霞光
+    this.domeTop.copy(this.skyColor).multiplyScalar(0.86);
+    this.domeHorizon.copy(this.skyColor).lerp(WHITE_SKY, 0.32);
+    this.sky.setDomeColors(this.domeTop, this.domeHorizon);
+    this.sky.setSunGlow(Math.max(0, 1 - Math.abs(sunHeight) * 3.2) * (1 - overcast) * 0.9);
+    this.sky.setCloudAppearance(daylight, overcast);
+
+    const fogFar = (VIEW_DISTANCE * 16 - 6) * (1 - overcast * 0.45);
     const fogNear = fogFar * 0.72;
     this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
     this.translucentMaterial.setFog(this.skyColor, fogNear, fogFar);
@@ -989,6 +1019,15 @@ class App {
       this.updateInteraction(dt);
 
       this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
+
+      // 寒冷群系下雪：每秒复查一次地表方块即可
+      this.snowCheckTimer -= dt;
+      if (this.snowCheckTimer <= 0) {
+        this.snowCheckTimer = 1;
+        this.snowyHere = this.isSnowyColumn(Math.floor(this.physics.x), Math.floor(this.physics.z));
+      }
+      this.weather.update(dt, this.camera.position, this.snowyHere);
+      this.sky.update(this.timeOfDay, this.camera.position, dt);
       this.applyEnvironment();
 
       const centerCx = toChunkCoord(this.physics.x);
@@ -1021,6 +1060,8 @@ class App {
   }
 
   dispose(): void {
+    this.sky.dispose();
+    this.weather.dispose();
     this.chunkRenderer.disposeAll();
     this.meshPool.dispose();
     this.world.dispose();
@@ -1095,6 +1136,32 @@ class App {
 
   setRightButton(down: boolean): void {
     this.rightDown = down;
+  }
+
+  /** 该列地表是否为雪 / 冰（决定降水形态） */
+  private isSnowyColumn(x: number, z: number): boolean {
+    for (let y = 200; y >= 0; y--) {
+      const id = this.world.getBlock(x, y, z);
+      if (id === Block.AIR || id === Block.WATER) continue;
+      return id === Block.SNOW_BLOCK || id === Block.ICE || id === Block.PACKED_ICE;
+    }
+    return false;
+  }
+
+  /** 调试 / 命令用：切换天气 */
+  setWeather(kind: WeatherKind): void {
+    this.weather.setKind(kind);
+    this.applyEnvironment();
+  }
+
+  /** 调试用：天气状态快照 */
+  get weatherState(): { kind: WeatherKind; raining: boolean; snowy: boolean; flash: number } {
+    return {
+      kind: this.weather.current,
+      raining: this.weather.raining,
+      snowy: this.snowyHere,
+      flash: Number(this.weather.flash.toFixed(3)),
+    };
   }
 
   /** 调试用：生存状态快照 */
@@ -1275,6 +1342,11 @@ class App {
 
 const DAY_SKY = new THREE.Color(0x8fc7ff);
 const NIGHT_SKY = new THREE.Color(0x040814);
+/** 阴天：天空整体压成灰蓝 */
+const OVERCAST_SKY = new THREE.Color(0x5d6773);
+/** 闪电：瞬间的冷白 */
+const FLASH_SKY = new THREE.Color(0xd8e6ff);
+const WHITE_SKY = new THREE.Color(0xffffff);
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
