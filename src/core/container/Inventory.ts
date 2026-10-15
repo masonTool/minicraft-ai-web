@@ -11,6 +11,7 @@
  * 这样 UI 拖拽时不必到处判断"数量为 0 的残留槽位"。
  */
 
+import { ARMOR_SLOT_BASE, armorSlotAccepts } from '../registry/armor.ts';
 import { maxStackOf } from '../registry/items.ts';
 
 export interface ItemStack {
@@ -35,10 +36,13 @@ export const HOTBAR_START = 0;
 export const HOTBAR_SIZE = 9;
 export const MAIN_START = 9;
 export const MAIN_SIZE = 27;
-export const ARMOR_START = 36;
+export const ARMOR_START = ARMOR_SLOT_BASE;
 export const ARMOR_SIZE = 4;
 export const OFFHAND_SLOT = 40;
 export const TOTAL_SLOTS = 41;
+
+/** 自动拾取只会用到的槽位区间（[0, 36)）：盔甲槽与副手槽不参与自动填充 */
+export const AUTO_FILL_SLOTS = ARMOR_SLOT_BASE;
 
 export class Inventory implements SlotSource {
   private readonly slots: (ItemStack | null)[] = new Array<ItemStack | null>(TOTAL_SLOTS).fill(null);
@@ -59,6 +63,10 @@ export class Inventory implements SlotSource {
 
   /**
    * 放入物品（优先进已有堆叠，再占空槽）。
+   *
+   * 只填 0-35（快捷栏与主背包）：盔甲槽与副手槽**不参与自动拾取**——
+   * 否则捡到的铁靴子会自己"穿"到 36 号槽上，与原版行为不符（原版只有主动装备才会穿）。
+   *
    * @returns 未能放入的剩余数量
    */
   add(itemId: number, count: number): number {
@@ -66,7 +74,7 @@ export class Inventory implements SlotSource {
     const limit = maxStackOf(itemId);
     let remaining = count;
 
-    for (let i = 0; i < TOTAL_SLOTS && remaining > 0; i++) {
+    for (let i = 0; i < AUTO_FILL_SLOTS && remaining > 0; i++) {
       const slot = this.slots[i];
       if (!slot || slot.id !== itemId) continue;
       const room = limit - slot.count;
@@ -76,7 +84,7 @@ export class Inventory implements SlotSource {
       remaining -= moved;
     }
 
-    for (let i = 0; i < TOTAL_SLOTS && remaining > 0; i++) {
+    for (let i = 0; i < AUTO_FILL_SLOTS && remaining > 0; i++) {
       if (this.slots[i]) continue;
       const moved = Math.min(limit, remaining);
       this.slots[i] = { id: itemId, count: moved };
@@ -85,6 +93,14 @@ export class Inventory implements SlotSource {
 
     if (remaining !== count) this.notify();
     return remaining;
+  }
+
+  /**
+   * 第 index 号槽位能不能放这件物品。
+   * 盔甲槽（36-39）只吃对应部位；其余槽位不限——界面在"放下/交换"之前先问一句。
+   */
+  canPlace(index: number, itemId: number): boolean {
+    return armorSlotAccepts(index, itemId);
   }
 
   /** 从槽位取出指定数量；数量不足时按实际数量取出 */
@@ -157,6 +173,8 @@ export class Inventory implements SlotSource {
     if (from === to) return;
     const source = this.get(from);
     if (!source) return;
+    // 目标槽位不收这件东西（例如把石头塞进头盔位）就整次操作作废，不做半途改动
+    if (!this.canPlace(to, source.id)) return;
     const target = this.get(to);
 
     if (!target) {

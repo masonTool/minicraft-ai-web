@@ -324,7 +324,10 @@ export function breakSeconds(blockId: number, tool?: ToolInfo | null): number {
 
 // ---------------------------------------------------------------- 工具耐久文案
 
-/** 供界面显示的"耐久 137/250" */
-export function durabilityLabel(tool: ToolInfo, damage: number): string {
-  return `耐久 ${Math.max(0, tool.durability - damage)}/${tool.durability}`;
+/**
+ * 供界面显示的"耐久 137/250"。
+ * 参数只要求"有 durability"，因此工具（`ToolInfo`）与盔甲（`ArmorInfo`）都能直接用。
+ */
+export function durabilityLabel(item: { durability: number }, damage: number): string {
+  return `耐久 ${Math.max(0, item.durability - damage)}/${item.durability}`;
 }

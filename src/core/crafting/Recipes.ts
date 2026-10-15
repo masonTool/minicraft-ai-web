@@ -20,6 +20,7 @@ import {
   stainedGlassPaneId,
   woolId,
 } from '../registry/blocks.ts';
+import { ARMOR_SPECS } from '../registry/armor.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import { Item, dyeItemId } from '../registry/items.ts';
 import { TOOL_SPECS } from '../registry/tools.ts';
@@ -249,6 +250,44 @@ const TOOL_RECIPES: readonly Recipe[] = TOOL_SPECS.map((spec) => ({
   key: { M: TOOL_MATERIAL_INGREDIENTS[spec.tool.material]!, S: Item.STICK },
 }));
 
+/**
+ * 盔甲：4 部位 × 4 材质 = 16 条，图案与原版一致（胸甲 8 块、护腿 7 块、头盔 5 块、靴子 4 块）。
+ *
+ * ⚠️ **锁链盔甲故意没有配方**，与原版一致（原版只能从穿甲的怪物掉落或与村民交易获得）。
+ * 这里不是偷懒：锁链甲在原版的"材料"就是铁锭，图案也逐格相同——
+ * 一旦给它写配方，就会和铁盔甲**完全撞车**（同样的材料、同样的图案），
+ * 配方表里必然只剩先注册的那一条，玩家永远合不出另一条。
+ * 代价是锁链甲目前只能从创造模式拿；等怪物会穿甲之后走"掉落"这条路补上。
+ */
+const ARMOR_MATERIAL_INGREDIENTS: Record<string, number | undefined> = {
+  leather: Item.LEATHER,
+  chainmail: undefined,
+  iron: Item.IRON_INGOT,
+  golden: Item.GOLD_INGOT,
+  diamond: Item.DIAMOND,
+};
+
+/** M = 材质 */
+const ARMOR_PATTERNS: Record<string, readonly string[]> = {
+  helmet: ['MMM', 'M M'],
+  chestplate: ['M M', 'MMM', 'MMM'],
+  leggings: ['MMM', 'M M', 'M M'],
+  boots: ['M M', 'M M'],
+};
+
+const ARMOR_RECIPES: readonly Recipe[] = ARMOR_SPECS.flatMap<Recipe>((spec) => {
+  const ingredient = ARMOR_MATERIAL_INGREDIENTS[spec.armor.material];
+  if (ingredient === undefined) return [];
+  return [
+    {
+      kind: 'shaped' as const,
+      result: { id: spec.id, count: 1 },
+      pattern: ARMOR_PATTERNS[spec.armor.type]!,
+      key: { M: ingredient },
+    },
+  ];
+});
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...WOOL_RECIPES,
@@ -257,6 +296,7 @@ export const RECIPES: readonly Recipe[] = [
   ...WOOD_RECIPES,
   ...PANE_RECIPES,
   ...TOOL_RECIPES,
+  ...ARMOR_RECIPES,
 ];
 
 interface Normalized {

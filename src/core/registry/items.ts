@@ -10,6 +10,7 @@
  * 工具等级沿用原版：0 木 / 1 石 / 2 铁 / 3 钻石 / 4 下界合金。
  */
 
+import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
 import { Block, Wood, blockDef, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { TOOL_SPECS, type ToolInfo } from './tools.ts';
@@ -17,7 +18,9 @@ import { TOOL_SPECS, type ToolInfo } from './tools.ts';
 export const MAX_STACK = 64;
 
 export type { ToolType, ToolInfo } from './tools.ts';
+export type { ArmorInfo, ArmorMaterial, ArmorSlot, ArmorSlotType } from './armor.ts';
 export { TOOL_SPECS } from './tools.ts';
+export { ARMOR_SPECS } from './armor.ts';
 
 export interface ItemDef {
   readonly id: number;
@@ -28,6 +31,7 @@ export interface ItemDef {
   /** 图标贴图名 */
   readonly tile: string;
   readonly tool?: ToolInfo;
+  readonly armor?: ArmorInfo;
 }
 
 /** 方块物品可用的 id 上限：非方块物品一律从 1000 起，两段空间彻底隔开 */
@@ -157,6 +161,17 @@ for (const spec of TOOL_SPECS) {
   };
 }
 
+// ---- 盔甲（20 件：4 部位 × 5 材质），同样「每件一叠」+ 带耐久
+for (const spec of ARMOR_SPECS) {
+  ITEMS[spec.id] = {
+    id: spec.id,
+    name: spec.name,
+    maxStack: 1,
+    tile: spec.tile,
+    armor: spec.armor,
+  };
+}
+
 export function itemDef(id: number): ItemDef | undefined {
   return ITEMS[id];
 }
@@ -166,10 +181,15 @@ export function isTool(itemId: number): boolean {
   return itemDef(itemId)?.tool !== undefined;
 }
 
+/** 该物品是不是盔甲 */
+export function isArmor(itemId: number): boolean {
+  return itemDef(itemId)?.armor !== undefined;
+}
+
 // ---------------------------------------------------------------- 创造模式分类
 
 /** 创造物品栏的分类标签 */
-export const ITEM_CATEGORIES = ['all', 'building', 'natural', 'ores', 'wool', 'tools', 'functional'] as const;
+export const ITEM_CATEGORIES = ['all', 'building', 'natural', 'ores', 'wool', 'tools', 'armor', 'functional'] as const;
 export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
 
 export const CATEGORY_LABELS: Record<ItemCategory, string> = {
@@ -179,11 +199,15 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   ores: '矿石与材料',
   wool: '羊毛与染料',
   tools: '工具与武器',
+  armor: '盔甲',
   functional: '功能方块',
 };
 
 /** 工具与武器（25 种，由 TOOL_SPECS 派生） */
 const TOOLS = new Set<number>(TOOL_SPECS.map((spec) => spec.id));
+
+/** 盔甲（20 件，由 ARMOR_SPECS 派生） */
+const ARMOR = new Set<number>(ARMOR_SPECS.map((spec) => spec.id));
 
 const BUILDING = new Set<number>([
   Block.STONE,
@@ -349,6 +373,7 @@ for (let index = 0; index < DYE_COLORS.length; index++) {
 /** 判断物品属于哪个创造分类；未登记的默认归入"矿石与材料" */
 export function categoryOf(itemId: number): ItemCategory {
   if (TOOLS.has(itemId)) return 'tools';
+  if (ARMOR.has(itemId)) return 'armor';
   if (WOOL_AND_DYE.has(itemId)) return 'wool';
   if (FUNCTIONAL.has(itemId)) return 'functional';
   if (ORES.has(itemId)) return 'ores';

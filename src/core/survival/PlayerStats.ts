@@ -67,11 +67,26 @@ export interface SurvivalEnvironment {
 }
 
 export interface DamageResult {
-  /** 实际扣掉的生命值 */
+  /** 实际扣掉的生命值（护甲减伤后的净值） */
   applied: number;
   cause: DamageCause;
   /** 是否致死 */
   fatal: boolean;
+}
+
+/**
+ * 护甲吸收器。由 `main` 启动时注入（实现见 `core/registry/armor.ts`）。
+ *
+ * 这个接口声明在**消费方**（生存模块）而不是 `armor.ts`：
+ * 生存模块不该反向依赖物品注册表，`armor.ts` 只要结构上满足它就能接上。
+ * 走这一层的好处是**环境伤害（岩浆/仙人掌）也自动被护甲减伤**——
+ * 否则得在摔落、岩浆、仙人掌、生物攻击、爆炸每个入口各写一遍减伤。
+ */
+export interface ArmorAbsorber {
+  /** 当前总护甲值（HUD 与调试面板用） */
+  readonly points: number;
+  /** 返回减伤后的伤害；同时结算盔甲的耐久损耗 */
+  absorb(amount: number, cause: DamageCause): number;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -86,6 +101,14 @@ export class PlayerStats {
 
   /** 疲劳值（隐藏数值，攒满 4 扣 1 饥饿） */
   exhaustion = 0;
+
+  /** 护甲吸收器：`main` 启动时注入。为 null 时所有伤害原样结算（离线测试里就是这样） */
+  armor: ArmorAbsorber | null = null;
+
+  /** 当前总护甲值（没穿盔甲就是 0） */
+  get armorPoints(): number {
+    return this.armor?.points ?? 0;
+  }
 
   private hurtResistantTime = 0;
   private foodTickTimer = 0;
@@ -123,6 +146,10 @@ export class PlayerStats {
 
   /**
    * 施加伤害。受无敌帧限制：无敌期间只有更高的伤害才能覆盖。
+   *
+   * 护甲在这里统一减伤——**环境伤害（摔落/岩浆/仙人掌）与生物攻击走的是同一条路**，
+   * 不必在每个伤害来源各写一遍。哪些伤害类型无视护甲由 `armor.ts` 判定。
+   *
    * @returns 实际结算的伤害（被无敌帧挡下时为 0）
    */
   damage(amount: number, cause: DamageCause): DamageResult {
@@ -131,11 +158,15 @@ export class PlayerStats {
 
     if (this.hurtResistantTime > 0 && amount <= this.lastDamageAmount) return result;
 
+    const afterArmor = this.armor ? this.armor.absorb(amount, cause) : amount;
+    if (afterArmor <= 0) return result;
+
     this.hurtResistantTime = HURT_RESISTANT_TICKS;
+    // 记录的是"减伤前"的伤害：原版也这样比，否则穿透伤害会被无敌帧误挡
     this.lastDamageAmount = amount;
-    this.health = Math.max(0, this.health - amount);
-    this.totalDamage += amount;
-    result.applied = amount;
+    this.health = Math.max(0, this.health - afterArmor);
+    this.totalDamage += afterArmor;
+    result.applied = afterArmor;
     result.fatal = this.health <= 0;
     this.lastDamage = result;
     // 受伤本身也消耗疲劳值（原版 0.1）

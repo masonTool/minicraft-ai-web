@@ -1595,6 +1595,116 @@ for (const material of ['wooden', 'stone', 'iron', 'golden', 'diamond']) {
   }
 }
 
+// ---------------------------------------------------------------- 盔甲图标
+
+/** 盔甲图标的像素模板：'M' 是甲片，'.' 透明（四件共用一套配色，形状区分部位） */
+const ARMOR_TEMPLATES: Record<string, readonly string[]> = {
+  helmet: [
+    '................',
+    '................',
+    '....MMMMMMMM....',
+    '...MMMMMMMMMM...',
+    '..MMMMMMMMMMMM..',
+    '..MMMMMMMMMMMM..',
+    '..MM........MM..',
+    '..MM........MM..',
+    '..MM........MM..',
+    '..MM........MM..',
+    '..MM........MM..',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+  ],
+  chestplate: [
+    '................',
+    '................',
+    '..MMMM....MMMM..',
+    '.MMMMMM..MMMMMM.',
+    '.MMMMMMMMMMMMMM.',
+    '..MMMMMMMMMMMM..',
+    '..MMMMMMMMMMMM..',
+    '..MMMMMMMMMMMM..',
+    '..MMMMMMMMMMMM..',
+    '..MMMMMMMMMMMM..',
+    '..MMMMMMMMMMMM..',
+    '..MMMM....MMMM..',
+    '................',
+    '................',
+    '................',
+    '................',
+  ],
+  leggings: [
+    '................',
+    '................',
+    '..MMMMMMMMMMMM..',
+    '..MMMMMMMMMMMM..',
+    '..MMMMMMMMMMMM..',
+    '..MMMMM..MMMMM..',
+    '..MMMM....MMMM..',
+    '..MMMM....MMMM..',
+    '..MMMM....MMMM..',
+    '..MMMM....MMMM..',
+    '..MMMM....MMMM..',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+  ],
+  boots: [
+    '................',
+    '................',
+    '................',
+    '..MMMM....MMMM..',
+    '..MMMM....MMMM..',
+    '..MMMM....MMMM..',
+    '..MMMM....MMMM..',
+    '..MMMMM..MMMMM..',
+    '..MMMMM..MMMMM..',
+    '.MMMMMM..MMMMMM.',
+    '.MMMMMMMMMMMMMM.',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+  ],
+};
+
+/** 盔甲材质配色（皮革是棕色、锁链是铁灰，工具那边没有这两种） */
+const ARMOR_MATERIAL_RGB: Record<string, readonly [number, number, number]> = {
+  leather: [136, 86, 52],
+  chainmail: [152, 152, 160],
+  iron: [205, 205, 212],
+  golden: [248, 210, 74],
+  diamond: [96, 228, 224],
+};
+
+function armorPainter(type: string, material: string): Painter {
+  const template = ARMOR_TEMPLATES[type]!;
+  const base = ARMOR_MATERIAL_RGB[material] ?? [180, 180, 180];
+  return (x, y, rng) => {
+    if ((template[y]?.[x] ?? '.') !== 'M') return [0, 0, 0, 0];
+    // 竖直渐变：上亮下暗，一排甲片才有"厚度"而不像一块色板
+    const shade = 1.08 - (y / 15) * 0.26;
+    const jitter = rng() * 12 - 6;
+    return [
+      clamp255(base[0] * shade + jitter),
+      clamp255(base[1] * shade + jitter),
+      clamp255(base[2] * shade + jitter),
+      255,
+    ];
+  };
+}
+
+for (const material of ['leather', 'chainmail', 'iron', 'golden', 'diamond']) {
+  for (const type of ['helmet', 'chestplate', 'leggings', 'boots']) {
+    PAINTERS[`item_${material}_${type}`] = armorPainter(type, material);
+  }
+}
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

@@ -23,6 +23,7 @@ import {
   maxStackOf,
   type ItemCategory,
 } from './items.ts';
+import { ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
 import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
 
 // ---------------------------------------------------------------- 规则生成
@@ -151,6 +152,26 @@ const TOOL_KINDS_CN: Record<string, string> = {
 for (const [material, materialCn] of Object.entries(TOOL_MATERIALS_CN)) {
   for (const [kind, kindCn] of Object.entries(TOOL_KINDS_CN)) {
     put(`${material}_${kind}`, `${materialCn}${kindCn}`);
+  }
+}
+
+// 盔甲：部位 × 材质 = 20 件（皮革头盔 / 锁链胸甲 / 铁护腿 / 钻石靴子……）
+const ARMOR_MATERIALS_CN: Record<string, string> = {
+  leather: '皮革',
+  chainmail: '锁链',
+  iron: '铁',
+  golden: '金',
+  diamond: '钻石',
+};
+const ARMOR_TYPES_CN: Record<string, string> = {
+  helmet: '头盔',
+  chestplate: '胸甲',
+  leggings: '护腿',
+  boots: '靴子',
+};
+for (const material of ARMOR_MATERIALS) {
+  for (const type of ARMOR_TYPES) {
+    put(`${material}_${type}`, `${ARMOR_MATERIALS_CN[material]!}${ARMOR_TYPES_CN[type]!}`);
   }
 }
 
@@ -435,6 +456,28 @@ for (const spec of TOOL_SPECS) {
     ` 采集等级 ${TOOL_TIER_CN[spec.tool.tier]!}｜速度 ×${spec.tool.speed}｜攻击 ${spec.tool.attack}｜耐久 ${spec.tool.durability}`;
 }
 
+// 盔甲的说明同样从属性表生成。
+// "满套 N 点"是新手最想知道的那个数，所以顺手按材质算出来写进说明里
+const ARMOR_KIND_DESC: Record<string, string> = {
+  helmet: '戴在头上，四件里护甲值最低但材料最省。',
+  chestplate: '穿在胸口，护甲值最高，优先做它。',
+  leggings: '穿在腿上，护甲值居中。',
+  boots: '穿在脚上，护甲值最低。',
+};
+const armorSetTotals = new Map<string, number>();
+for (const spec of ARMOR_SPECS) {
+  armorSetTotals.set(spec.armor.material, (armorSetTotals.get(spec.armor.material) ?? 0) + spec.armor.defense);
+}
+for (const spec of ARMOR_SPECS) {
+  const materialCn = ARMOR_MATERIALS_CN[spec.armor.material]!;
+  const typeCn = ARMOR_TYPES_CN[spec.armor.type]!;
+  const toughness = spec.armor.toughness > 0 ? `｜韧性 ${spec.armor.toughness}` : '';
+  DESCRIPTIONS[`${spec.armor.material}_${spec.armor.type}`] =
+    `${materialCn}${typeCn}：${ARMOR_KIND_DESC[spec.armor.type]!}` +
+    ` 护甲值 ${spec.armor.defense}${toughness}｜耐久 ${spec.armor.durability}` +
+    `｜${materialCn}满套共 ${armorSetTotals.get(spec.armor.material)!} 点护甲`;
+}
+
 // ---------------------------------------------------------------- 对外接口
 
 /** 由英文 id（可带命名空间）取中文名；查不到就回退成英文 id */
@@ -509,9 +552,10 @@ export interface ItemTooltip {
 export function itemTooltip(itemId: number, count = 1, damage?: number): ItemTooltip {
   const def = itemDef(itemId);
   const rawName = def?.name ?? 'unknown';
-  const tool = toolInfoById(itemId);
+  // 工具与盔甲都用同一个 damage 字段存耐久，这里一并取出来显示
+  const durable = toolInfoById(itemId) ?? armorInfoById(itemId);
   const description = itemDescription(itemId);
-  const durability = tool && damage !== undefined ? durabilityLabel(tool, damage) : '';
+  const durability = durable && damage !== undefined ? durabilityLabel(durable, damage) : '';
   return {
     title: itemLabel(itemId),
     subtitle: rawName,

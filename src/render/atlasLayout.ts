@@ -329,6 +329,27 @@ export const TILE_ORDER = [
   'item_iron_sword',
   'item_golden_sword',
   'item_diamond_sword',
+  // ---- 盔甲图标（4 部位 × 5 材质，顺序与 armor.ts 的 ARMOR_SPECS 一致）
+  'item_leather_helmet',
+  'item_chainmail_helmet',
+  'item_iron_helmet',
+  'item_golden_helmet',
+  'item_diamond_helmet',
+  'item_leather_chestplate',
+  'item_chainmail_chestplate',
+  'item_iron_chestplate',
+  'item_golden_chestplate',
+  'item_diamond_chestplate',
+  'item_leather_leggings',
+  'item_chainmail_leggings',
+  'item_iron_leggings',
+  'item_golden_leggings',
+  'item_diamond_leggings',
+  'item_leather_boots',
+  'item_chainmail_boots',
+  'item_iron_boots',
+  'item_golden_boots',
+  'item_diamond_boots',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
