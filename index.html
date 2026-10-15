@@ -222,6 +222,9 @@
       .vital-row svg.vital-icon { width: 18px; height: 18px; display: block; }
       #vital-air { visibility: hidden; }
       #vital-air.on { visibility: visible; }
+      /* 护甲条只在身上有甲时出现（与原版一致：脱了就整条收起，不占屏） */
+      #vital-armor { visibility: hidden; }
+      #vital-armor.on { visibility: visible; }
 
       /* ---------------- 暂停 / 设置 ---------------- */
       #settings-screen {
@@ -384,6 +387,22 @@
       /* 只取不放的槽位（合成结果、熔炉产物）用暖色底提示 */
       .inv-slot.take-only { background: #9a9a8b; }
 
+      /* ---------------- 盔甲与副手（36-40 号槽） ---------------- */
+      .inv-grid.inv-armor { grid-template-columns: repeat(5, 42px); }
+      /* 空槽里写"头/胸/腿/靴/副"：触摸端没有悬停提示，只能靠槽位自己说明 */
+      .inv-slot-hint {
+        position: absolute; inset: 0; display: grid; place-items: center;
+        color: #5f5f5f; font-size: 14px; pointer-events: none; user-select: none;
+      }
+      .inv-slot.has-item .inv-slot-hint { display: none; }
+      /* 放不下（例如把石头塞进头盔位）：抖一下，别让玩家以为是点击没生效 */
+      @keyframes inv-reject-shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-3px); }
+        75% { transform: translateX(3px); }
+      }
+      .inv-slot.inv-reject { animation: inv-reject-shake .18s linear; }
+
       .inv-chest { grid-template-columns: repeat(9, 42px); }
 
       /* ---------------- 熔炉 ---------------- */
@@ -538,6 +557,7 @@
         }
         .inv-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 2px; }
         .inv-grid .inv-slot { width: auto; aspect-ratio: 1; }
+        .inv-grid.inv-armor { grid-template-columns: repeat(5, minmax(0, 1fr)); }
         .inv-grid.inv-creative { grid-template-columns: repeat(8, minmax(0, 1fr)); }
         .inv-grid.inv-creative .inv-slot { width: auto; }
         .inv-craft-grid.size-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

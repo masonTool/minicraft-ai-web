@@ -19,6 +19,8 @@
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { drawItemIcon } from './ItemIcon.ts';
 import {
+  ARMOR_SIZE,
+  ARMOR_START,
   HOTBAR_SIZE,
   HOTBAR_START,
   Inventory,
@@ -199,6 +201,10 @@ export class InventoryScreen {
     this.panel.appendChild(this.buildLabel('快捷栏'));
     this.panel.appendChild(this.buildGrid(HOTBAR_START, HOTBAR_SIZE, 'inv-grid inv-hotbar', 'inv'));
 
+    // ---- 玩家装备（4 格盔甲 + 1 格副手）；空槽显示部位提示字，触摸端才知道该放哪
+    this.panel.appendChild(this.buildLabel('盔甲与副手'));
+    this.panel.appendChild(this.buildArmorGrid());
+
     this.creativeSection = document.createElement('div');
     this.buildCreativeSection();
     this.panel.appendChild(this.creativeSection);
@@ -239,6 +245,23 @@ export class InventoryScreen {
     for (let i = 0; i < size; i++) {
       const index = start + i;
       grid.appendChild(this.registerSlot(`${prefix}:${index}`, this.inventory, index));
+    }
+    return grid;
+  }
+
+  /** 盔甲 4 格 + 副手 1 格（槽位号 36-40，与原版一致） */
+  private buildArmorGrid(): HTMLDivElement {
+    const grid = document.createElement('div');
+    grid.className = 'inv-grid inv-armor';
+    const hints = ['头', '胸', '腿', '靴', '副'];
+    for (let i = 0; i < ARMOR_SIZE + 1; i++) {
+      const index = ARMOR_START + i;
+      const slot = this.registerSlot(`inv:${index}`, this.inventory, index);
+      const hint = document.createElement('span');
+      hint.className = 'inv-slot-hint';
+      hint.textContent = hints[i]!;
+      slot.appendChild(hint);
+      grid.appendChild(slot);
     }
     return grid;
   }
@@ -527,6 +550,24 @@ export class InventoryScreen {
     }
   }
 
+  /**
+   * 这个槽位收不收这件物品。
+   * 只有玩家背包有"部位限制"（36-39 是盔甲槽），合成网格/箱子/熔炉一律放行。
+   */
+  private accepts(binding: SlotBinding, itemId: number): boolean {
+    if (binding.source !== this.inventory) return true;
+    return this.inventory.canPlace(binding.index, itemId);
+  }
+
+  /** 触摸端没有"指针变禁止符"这种提示，用一次短促的抖动告诉玩家"这里放不下" */
+  private rejectSlot(element: HTMLElement): void {
+    element.classList.remove('inv-reject');
+    // 读一次布局属性强制重排，否则连续两次拒绝不会重播动画
+    void element.offsetWidth;
+    element.classList.add('inv-reject');
+    window.setTimeout(() => element.classList.remove('inv-reject'), 220);
+  }
+
   private handleSlotClick(key: string, button: number): void {
     const binding = this.bindings.get(key);
     if (!binding) return;
@@ -534,6 +575,11 @@ export class InventoryScreen {
     const slot = source.get(index);
 
     if (this.held && !takeOnly) {
+      // 盔甲槽只吃对应部位：不匹配就整次操作作废（既不放下也不交换）
+      if (!this.accepts(binding, this.held.id)) {
+        this.rejectSlot(binding.element);
+        return;
+      }
       if (button === 2) {
         if (!slot) {
           source.set(index, { id: this.held.id, count: 1 });
@@ -716,6 +762,8 @@ export class InventoryScreen {
   private renderInto(element: HTMLElement, stack: ItemStack | null): void {
     const canvas = element.querySelector('canvas') as HTMLCanvasElement;
     const count = element.querySelector('.inv-count') as HTMLSpanElement;
+    // 空槽的"头/胸/腿/靴/副"提示字靠这个类名隐藏（有东西时就不该再显示）
+    element.classList.toggle('has-item', stack !== null);
     if (stack) {
       drawItemIcon(canvas, this.atlas, stack.id);
       canvas.style.visibility = 'visible';

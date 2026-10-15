@@ -1,5 +1,5 @@
 /**
- * 生命 / 饥饿 / 氧气 HUD
+ * 生命 / 饥饿 / 氧气 / 护甲 HUD
  *
  * 用内联 SVG 画图标（而不是贴图图集）：这几个图标需要"整 / 半 / 空"三态，
  * 用 SVG 的填色 + clip 表达最直接，也能跟着 CSS 缩放适配手机。
@@ -16,12 +16,19 @@ const HEART_PATH =
 /** 鸡腿（饥饿） */
 const FOOD_PATH =
   'M6.4 1.1 A2.9 2.9 0 1 0 3.2 5.6 L1.5 7.3 a1.2 1.2 0 1 0 1.7 1.7 L4.9 7.3 A2.9 2.9 0 0 0 6.4 1.1 Z';
+/** 护甲片（胸甲：顶部中间留出领口） */
+const ARMOR_PATH = 'M1 1.5 H3.5 V3 H5.5 V1.5 H8 V7.5 H1 Z';
 
 const EMPTY_COLOR = '#3a1414';
 const HEALTH_COLOR = '#e03b3b';
 const FOOD_EMPTY_COLOR = '#33281a';
 const FOOD_COLOR = '#b1742f';
 const AIR_COLOR = '#9fd8ff';
+const ARMOR_EMPTY_COLOR = '#2c3138';
+const ARMOR_COLOR = '#dfe2ea';
+
+/** 一颗护甲图标代表 2 点护甲值（满护甲 20 点 = 10 颗，与 10 颗心同宽） */
+const ARMOR_PER_ICON = 2;
 
 /** 半颗心 / 半只鸡腿的裁剪（只显示左半边） */
 const HALF_CLIP_ID = 'vitals-half-clip';
@@ -63,7 +70,9 @@ export class VitalsHud {
   private readonly hearts: IconState[] = [];
   private readonly foods: IconState[] = [];
   private readonly bubbles: IconState[] = [];
+  private readonly armors: IconState[] = [];
   private readonly airRow: HTMLElement;
+  private readonly armorRow: HTMLElement;
   private lastKey = '';
 
   constructor(container: HTMLElement) {
@@ -76,6 +85,10 @@ export class VitalsHud {
     this.airRow = document.createElement('div');
     this.airRow.className = 'vital-row';
     this.airRow.id = 'vital-air';
+
+    this.armorRow = document.createElement('div');
+    this.armorRow.className = 'vital-row';
+    this.armorRow.id = 'vital-armor';
 
     const healthRow = document.createElement('div');
     healthRow.className = 'vital-row';
@@ -100,6 +113,13 @@ export class VitalsHud {
       foodSvg.append(foodFg);
       foodRow.append(foodSvg);
       this.foods.push({ foreground: foodFg });
+
+      const armorSvg = createSvg();
+      armorSvg.append(createPath(ARMOR_PATH, ARMOR_EMPTY_COLOR));
+      const armorFg = createPath(ARMOR_PATH, ARMOR_COLOR);
+      armorSvg.append(armorFg);
+      this.armorRow.append(armorSvg);
+      this.armors.push({ foreground: armorFg });
     }
 
     for (let i = 0; i < 10; i++) {
@@ -121,11 +141,12 @@ export class VitalsHud {
       this.bubbles.push({ foreground: fg });
     }
 
-    container.append(this.airRow, healthRow, foodRow);
+    container.append(this.airRow, this.armorRow, healthRow, foodRow);
   }
 
   update(stats: PlayerStats): void {
-    const key = `${stats.health}|${stats.food}|${stats.air}|${stats.dead}`;
+    const armorPoints = stats.armorPoints;
+    const key = `${stats.health}|${stats.food}|${stats.air}|${stats.dead}|${armorPoints}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
 
@@ -134,6 +155,14 @@ export class VitalsHud {
     }
     for (let i = 0; i < this.foods.length; i++) {
       applyState(this.foods[i]!, stateOf(stats.food - i * 2));
+    }
+
+    // 护甲条只在穿着盔甲时出现；一点护甲值 = 半颗图标（与原版的半片甲一致）
+    this.armorRow.classList.toggle('on', armorPoints > 0);
+    if (armorPoints > 0) {
+      for (let i = 0; i < this.armors.length; i++) {
+        applyState(this.armors[i]!, stateOf(armorPoints - i * ARMOR_PER_ICON));
+      }
     }
 
     // 氧气条只在没吸满时出现（与原版一致）

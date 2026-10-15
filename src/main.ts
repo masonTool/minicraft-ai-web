@@ -90,6 +90,7 @@ import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, blockDef } from './core/registry/blocks.ts';
+import { ARMOR_TYPES, armorItemId, createArmorWearer } from './core/registry/armor.ts';
 import {
   breakSeconds,
   canHarvest,
@@ -248,6 +249,8 @@ const STARTING_HOTBAR: readonly number[] = [
   toolItemId('axe', 'iron'),
   toolItemId('shovel', 'iron'),
   toolItemId('sword', 'iron'),
+  // 开发期盔甲：皮革/铁/钻石各一套，方便对比护甲条的档位与减伤
+  ...(['leather', 'iron', 'diamond'] as const).flatMap((material) => ARMOR_TYPES.map((type) => armorItemId(type, material))),
 ];
 
 class App {
@@ -623,6 +626,10 @@ class App {
       this.refreshHotbar();
       this.inventoryScreen.refresh();
     };
+
+    // 护甲：把背包（36-39 号槽）当作护甲提供者接给生存系统。
+    // 走这道接口而不是直接在伤害入口算，是为了让**环境伤害也自动吃到减伤**
+    this.stats.armor = createArmorWearer(this.inventory);
 
     // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
     this.viewDistance = this.settings.viewDistance;
@@ -2931,12 +2938,14 @@ class App {
       ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
       : '无';
 
+    const armorPoints = this.stats.armorPoints;
+
     // 手机上屏幕小：只保留最关键的几行，免得调试面板盖住半个屏幕
     if (this.touch) {
       this.debugEl.textContent =
         `${this.fps} fps   ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\n` +
         `${this.flying ? '创造(飞行)' : '生存'}   ${clock}   ${DIMENSION_LABELS[this.dimension]}   朝向 ${facing.slice(0, 1)}\n` +
-        `持有 ${this.heldName}`;
+        `持有 ${this.heldName}${armorPoints > 0 ? `   护甲 ${armorPoints}` : ''}`;
       return;
     }
 
@@ -2949,7 +2958,7 @@ class App {
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
       `视距: ${this.viewDistance}${this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance ? `（自适应，上限 ${this.settings.viewDistance}）` : ''} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
-      `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}\n` +
+      `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}   护甲: ${armorPoints}\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
       `联机: ${this.netStatus}${this.net.selfId > 0 ? `（#${this.net.selfId} · 在线 ${this.net.playerCount} 人）` : ''}` +
       (this.chatLine && performance.now() < this.chatUntil ? `\n${this.chatLine}` : '');
@@ -3321,6 +3330,7 @@ class App {
     food: number;
     saturation: number;
     air: number;
+    armor: number;
     dead: boolean;
     invulnerable: boolean;
     totalDamage: number;
@@ -3330,6 +3340,7 @@ class App {
       food: this.stats.food,
       saturation: this.stats.saturation,
       air: this.stats.air,
+      armor: this.stats.armorPoints,
       dead: this.stats.dead,
       invulnerable: this.stats.invulnerable,
       totalDamage: this.stats.totalDamage,
