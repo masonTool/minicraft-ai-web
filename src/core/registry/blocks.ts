@@ -802,6 +802,14 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   plantSpec(277, 'wheat_stage1', 'wheat_stage1'),
   plantSpec(278, 'wheat_stage2', 'wheat_stage2'),
   plantSpec(279, 'wheat_stage3', 'wheat_stage3'),
+  {
+    id: 288,
+    name: 'minecraft:brewing_stand',
+    // 三段贴图：顶面（放药水的台面）/ 底面 / 侧面（石座 + 一根烈焰棒）
+    tiles: ['brewing_stand_top', 'brewing_stand_bottom', 'brewing_stand_side'],
+    solid: true,
+    opaque: true,
+  },
   plantSpec(280, 'carrots_stage0', 'carrots_stage0'),
   plantSpec(281, 'carrots_stage1', 'carrots_stage1'),
   plantSpec(282, 'carrots_stage2', 'carrots_stage2'),
@@ -1005,6 +1013,7 @@ export const Block = {
   POTATOES_STAGE1: 285,
   POTATOES_STAGE2: 286,
   POTATOES_STAGE3: 287,
+  BREWING_STAND: 288,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1155,6 +1164,7 @@ HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
 // 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
 HARDNESS.set(Block.FARMLAND, 0.6);
+HARDNESS.set(Block.BREWING_STAND, 0.5);
 HARDNESS.set(Block.ENCHANTING_TABLE, 5);
 HARDNESS.set(Block.BOOKSHELF, 1.5);
 // 铁砧 5（原版 5.0，也砸得动）

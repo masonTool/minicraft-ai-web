@@ -354,6 +354,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     pattern: ['WWW'],
     key: { W: Item.WHEAT },
   },
+  // ---- 酿造台（H10）：3 圆石 + 1 烈焰粉（原版是 1 烈焰棒，本项目的烈焰棒还没做）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.BREWING_STAND, count: 1 },
+    pattern: ['CCC', ' B '],
+    key: { C: Block.COBBLESTONE, B: Item.BLAZE_POWDER },
+  },
   // ---- 桶（J8）：3 铁锭摆成 V 形（原版）
   {
     kind: 'shaped' as const,

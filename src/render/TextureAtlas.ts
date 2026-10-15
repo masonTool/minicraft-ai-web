@@ -1139,6 +1139,45 @@ PAINTERS.item_wheat = (x, y, rng) => {
   return [clamp255(226 + jitter), clamp255(190 + jitter), clamp255(78 + jitter), 255];
 };
 
+/** 酿造台顶面：深色石台 + 中间三个放药水的凹槽 */
+PAINTERS.brewing_stand_top = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 三个凹槽（原版就是三个药水位）
+  for (const sx of [4, 11]) {
+    if (Math.abs(x - sx) <= 1 && Math.abs(y - 7.5) <= 1) {
+      return [clamp255(58 + jitter), clamp255(56 + jitter), clamp255(62 + jitter), 255];
+    }
+  }
+  if (Math.abs(x - 7.5) <= 1 && Math.abs(y - 10) <= 1) {
+    return [clamp255(58 + jitter), clamp255(56 + jitter), clamp255(62 + jitter), 255];
+  }
+  return [clamp255(126 + jitter), clamp255(124 + jitter), clamp255(120 + jitter), 255];
+};
+
+/** 酿造台底面：纯石头 */
+PAINTERS.brewing_stand_bottom = (_x, _y, rng) => {
+  const jitter = rng() * 12 - 6;
+  return [clamp255(122 + jitter), clamp255(120 + jitter), clamp255(116 + jitter), 255];
+};
+
+/** 酿造台侧面：下半是圆石座，上半中间一根烈焰棒（原版观感） */
+PAINTERS.brewing_stand_side = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  if (y < 5) {
+    // 烈焰棒：中间三格宽，橙黄带暗纹
+    if (Math.abs(x - 7.5) <= 1.5) {
+      const hot = (x * 3 + y * 5) % 7 === 0;
+      return hot
+        ? [clamp255(252 + jitter), clamp255(206 + jitter), clamp255(96 + jitter), 255]
+        : [clamp255(232 + jitter), clamp255(148 + jitter), clamp255(48 + jitter), 255];
+    }
+    return [0, 0, 0, 0];
+  }
+  // 石座：上半略亮
+  const shade = y < 9 ? 1.1 : 0.92;
+  return [clamp255(122 * shade + jitter), clamp255(120 * shade + jitter), clamp255(116 * shade + jitter), 255];
+};
+
 /**
  * 药水瓶：细颈 + 圆肚（`liquid` 为空就是空瓶子，无色液体）。
  * 液体颜色按药水种类给——这也是玩家分辨药水的唯一线索，所以别都画成同一瓶紫水。

@@ -399,6 +399,9 @@ export const TILE_ORDER = [
   'item_baked_potato',
   'item_bread',
   // ---- 酿造（H10）
+  'brewing_stand_top',
+  'brewing_stand_bottom',
+  'brewing_stand_side',
   'item_glass_bottle',
   'item_water_bottle',
   'item_nether_wart',
