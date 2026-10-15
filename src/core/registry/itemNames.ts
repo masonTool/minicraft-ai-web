@@ -23,7 +23,7 @@ import {
   maxStackOf,
   type ItemCategory,
 } from './items.ts';
-import { ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
+import { ALL_ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
 import { SPLASH_RADIUS, isInstantEffect } from '../survival/SplashPotion.ts';
 import { CLOUD_DURATION, CLOUD_PULSE_INTERVAL, LINGERING_RADIUS } from '../survival/PotionCloud.ts';
@@ -142,13 +142,14 @@ for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
   put(`deepslate_${ore}_ore`, `深层${cn}`);
 }
 
-// 工具与武器：材质 × 种类 = 25 条（木镐 / 石斧 / 铁锹 / 金锄 / 钻石剑……）
+// 工具与武器：材质 × 种类 = 30 条（木镐 / 石斧 / 铁锹 / 金锄 / 钻石剑 / 下界合金镐……）
 const TOOL_MATERIALS_CN: Record<string, string> = {
   wooden: '木',
   stone: '石',
   iron: '铁',
   golden: '金',
   diamond: '钻石',
+  netherite: '下界合金',
 };
 const TOOL_KINDS_CN: Record<string, string> = {
   pickaxe: '镐',
@@ -163,13 +164,14 @@ for (const [material, materialCn] of Object.entries(TOOL_MATERIALS_CN)) {
   }
 }
 
-// 盔甲：部位 × 材质 = 20 件（皮革头盔 / 锁链胸甲 / 铁护腿 / 钻石靴子……）
+// 盔甲：部位 × 材质 = 24 件（皮革头盔 / 锁链胸甲 / 铁护腿 / 钻石靴子 / 下界合金头盔……）
 const ARMOR_MATERIALS_CN: Record<string, string> = {
   leather: '皮革',
   chainmail: '锁链',
   iron: '铁',
   golden: '金',
   diamond: '钻石',
+  netherite: '下界合金',
 };
 const ARMOR_TYPES_CN: Record<string, string> = {
   helmet: '头盔',
@@ -177,7 +179,7 @@ const ARMOR_TYPES_CN: Record<string, string> = {
   leggings: '护腿',
   boots: '靴子',
 };
-for (const material of ARMOR_MATERIALS) {
+for (const material of ALL_ARMOR_MATERIALS) {
   for (const type of ARMOR_TYPES) {
     put(`${material}_${type}`, `${ARMOR_MATERIALS_CN[material]!}${ARMOR_TYPES_CN[type]!}`);
   }
@@ -216,6 +218,9 @@ const EXPLICIT: Record<string, string> = {
   // 但方块的调试信息、主菜单与提示里要用到这两个名字
   fire: '火焰',
   nether_portal: '下界传送门',
+  // 下界合金（K8 尾巴）
+  netherite_block: '下界合金块',
+  smithing_table: '锻造台',
   // 建材
   stone_bricks: '石砖',
   chiseled_stone_bricks: '錾制石砖',
@@ -384,6 +389,9 @@ const EXPLICIT: Record<string, string> = {
   bucket: '桶',
   milk_bucket: '牛奶桶',
   flint_and_steel: '打火石',
+  // 下界合金（K8 尾巴）：材料
+  netherite_scrap: '下界合金碎片',
+  netherite_ingot: '下界合金锭',
   // 弓与箭
   flint: '燧石',
   string: '线',
@@ -481,6 +489,11 @@ const DESCRIPTIONS: Record<string, string> = {
   water: '可以在里面游泳，会缓慢恢复氧气以外的状态。',
   bedrock: '世界底部的基岩，挖不动。',
   obsidian: '需要钻石镐才能挖动；要塞的传送门房用它搭成。摆成一个 2×3 以上的空心框、用打火石点燃，就是一座下界传送门；把框敲掉门就跟着熄灭。',
+  ancient_debris: '只在**下界的 y 8~22** 成小簇生成，是下界合金唯一的来源。烧成"下界合金碎片"、4 碎片 + 4 金锭合成 1 个下界合金锭；必须用钻石镐以上才挖得动（硬度 30，徒手要 2 分钟）。',
+  netherite_scrap: '远古残骸在熔炉里烧出来的碎片（原地烧 10 秒、给 2 点经验）。4 个碎片 + 4 个金锭 = 1 个下界合金锭。',
+  netherite_ingot: '4 个下界合金碎片 + 4 个金锭合成。**它不能直接做成工具或盔甲**：要拿着钻石装备去锻造台上升级（这一步不消耗经验，也不会掉附魔）。也能当盔甲与工具的修复材料。',
+  netherite_block: '9 个下界合金锭合成的储物方块。硬度 50（比黑曜石更硬），要钻石镐以上才挖得动。',
+  smithing_table: '右键打开：把**钻石装备**升级成下界合金装备，每次消耗 1 个下界合金锭。附魔、耐久损耗与自定义名字全部保留（不修耐久）；也能拆回 9 个锭。',
   sugar_cane: '长在水边的植物：3 个可以合成 3 张纸（纸再做成书）。',
   enchanting_table: '右键打开附魔界面：花经验与青金石给工具/武器/盔甲附魔。周围的书架越多，能出的附魔等级越高（满加成要 15 个书架）。',
   bookshelf: '放在附魔台周围给它加成：满 15 级需要 15 个书架（书架与附魔台之间要留一格空）。',

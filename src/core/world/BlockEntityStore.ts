@@ -17,10 +17,11 @@ import { BrewingStand } from '../container/BrewingStand.ts';
 import { Chest } from '../container/Chest.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
+import { SmithingTable } from '../container/SmithingTable.ts';
 import type { DimensionId } from '../gen/Dimension.ts';
 
-export type BlockContainer = Furnace | Chest | EnchantTable | Anvil | BrewingStand;
-export type ContainerKind = 'furnace' | 'chest' | 'enchanting' | 'anvil' | 'brewing';
+export type BlockContainer = Furnace | Chest | EnchantTable | Anvil | BrewingStand | SmithingTable;
+export type ContainerKind = 'furnace' | 'chest' | 'enchanting' | 'anvil' | 'brewing' | 'smithing';
 
 interface Entry {
   dimension: DimensionId;
@@ -84,6 +85,20 @@ export class BlockEntityStore {
     const anvil = new Anvil();
     this.put({ dimension, x, y, z, container: anvil });
     return anvil;
+  }
+
+  getSmithingTable(dimension: DimensionId, x: number, y: number, z: number): SmithingTable | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof SmithingTable ? container : undefined;
+  }
+
+  /** 锻造台的两格输入也按坐标存（与铁砧同一个理由：放下东西走开再回来还在台面上） */
+  getOrCreateSmithingTable(dimension: DimensionId, x: number, y: number, z: number): SmithingTable {
+    const existing = this.getSmithingTable(dimension, x, y, z);
+    if (existing) return existing;
+    const table = new SmithingTable();
+    this.put({ dimension, x, y, z, container: table });
+    return table;
   }
 
   getEnchantTable(dimension: DimensionId, x: number, y: number, z: number): EnchantTable | undefined {

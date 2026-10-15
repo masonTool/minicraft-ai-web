@@ -6,14 +6,16 @@
  * `canHarvest` 同时用到方块的采集需求与工具的等级。分散到两个文件很容易改一边忘一边。
  *
  * 与原版对齐的部分：
- *  - 等级沿用原版：0 木/金 · 1 石 · 2 铁 · 3 钻石（下界合金 4 暂未实现）；
+ *  - 等级沿用原版：0 木/金 · 1 石 · 2 铁 · 3 钻石 · 4 下界合金；
  *  - 挖掘耗时 = 硬度 × (可采集 ? 1.5 : 5) ÷ 工具速度（原版 30/100 除以 20 tick 的等价写法）；
  *  - 「必须用正确工具才掉落」的方块（`minecraft:mineable/*` + `requiresCorrectToolForDrops`）：
  *    等级不够就**挖得动但什么都不掉**，与原版一致。
  *
  * 与原版的已知差异：
- *  - 工具类型只有镐/斧/锹/锄/剑五种（没有剪刀、打火石、弓、三叉戟）；
- *  - 攻击速度（冷却）统一为 0.5 秒，没有按武器区分（原版剑 1.6、斧 0.8~1.0）。
+ *  - 这里的"工具"只指镐/斧/锹/锄/剑（剪刀、打火石、弓各自有专用模块）；
+ *  - 攻击速度（冷却）统一为 0.5 秒，没有按武器区分（原版剑 1.6、斧 0.8~1.0）；
+ *  - 下界合金的 id 单独一段（改 id 会毁存档，见 `TOOL_MATERIALS` 的注解），
+ *    它也没有合成配方——只能在锻造台上把钻石工具升上去。
  */
 
 import {
@@ -42,12 +44,12 @@ import { enchantLevel } from './enchantments.ts';
 export type ToolType = 'pickaxe' | 'axe' | 'shovel' | 'hoe' | 'sword' | 'shears';
 
 /** 工具材质（原版 `golden_*`，写成 gold 会和矿物 id 混） */
-export type ToolMaterial = 'wooden' | 'stone' | 'iron' | 'golden' | 'diamond';
+export type ToolMaterial = 'wooden' | 'stone' | 'iron' | 'golden' | 'diamond' | 'netherite';
 
 export interface ToolInfo {
   readonly type: ToolType;
   readonly material: ToolMaterial;
-  /** 采集等级 0-3（原版 0-4，下界合金未实现） */
+  /** 采集等级 0-4（0 木/金 · 1 石 · 2 铁 · 3 钻石 · 4 下界合金） */
   readonly tier: number;
   /** 采集速度倍率（徒手为 1） */
   readonly speed: number;
@@ -59,14 +61,29 @@ export interface ToolInfo {
 
 /** 工具种类顺序（决定物品 id，不要改动顺序） */
 export const TOOL_KINDS: readonly ToolType[] = ['pickaxe', 'axe', 'shovel', 'hoe', 'sword'];
-/** 工具材质顺序（决定物品 id，不要改动顺序） */
+/**
+ * **可合成**的 5 种材质，也决定物品 id 的排布。
+ *
+ * ⚠️ 下界合金**刻意不在这张表里**：`toolItemId` 的公式是
+ * `起点 + 种类序号 × TOOL_MATERIALS.length + 材质序号`，往这张表里塞第 6 种材质会让
+ * **所有工具的 id 整体错位**（斧子从 1105 变成 1106…），而存档里存的就是这些数字——
+ * 一改就等于把老存档里的钻石斧变成别的东西。所以下界合金走**单独一段 id**
+ * （`NETHERITE_TOOL_ITEM_START`），要枚举"全部材质"请用 `ALL_TOOL_MATERIALS`。
+ */
 export const TOOL_MATERIALS: readonly ToolMaterial[] = ['wooden', 'stone', 'iron', 'golden', 'diamond'];
+
+/** 全部工具材质，含下界合金（枚举用；**不要**拿它算 id） */
+export const ALL_TOOL_MATERIALS: readonly ToolMaterial[] = [...TOOL_MATERIALS, 'netherite'];
 
 /** 工具物品 id 起点（非方块物品区，1000 以上且避开染料 1020-1035 / 生物掉落 1030-1038 的区间） */
 export const TOOL_ITEM_START = 1100;
 
+/** 下界合金工具的物品 id 起点（接在 1270 之后；1270-1379 这一段是空的） */
+export const NETHERITE_TOOL_ITEM_START = 1270;
+
 /** 第 (kind, material) 种工具的物品 id */
 export function toolItemId(kind: ToolType, material: ToolMaterial): number {
+  if (material === 'netherite') return NETHERITE_TOOL_ITEM_START + TOOL_KINDS.indexOf(kind);
   return TOOL_ITEM_START + TOOL_KINDS.indexOf(kind) * TOOL_MATERIALS.length + TOOL_MATERIALS.indexOf(material);
 }
 
@@ -83,17 +100,19 @@ const MATERIAL_STATS: Record<ToolMaterial, MaterialStat> = {
   // 金工具等级低但速度最快（原版特性）
   golden: { tier: 0, speed: 12, durability: 32 },
   diamond: { tier: 3, speed: 8, durability: 1561 },
+  // 下界合金：采集等级 4（比钻石高一级，能挖钻石镐挖的一切）、速度 9、耐久 2031
+  netherite: { tier: 4, speed: 9, durability: 2031 },
 };
 
 /** 攻击伤害表（原版 1.18 的显示值，已含徒手 1 点） */
 const ATTACK_BY_KIND: Record<ToolType, Record<ToolMaterial, number>> = {
-  sword: { wooden: 4, stone: 5, iron: 6, golden: 4, diamond: 7 },
-  axe: { wooden: 7, stone: 9, iron: 9, golden: 7, diamond: 9 },
-  pickaxe: { wooden: 2, stone: 3, iron: 4, golden: 2, diamond: 5 },
-  shovel: { wooden: 2.5, stone: 3.5, iron: 4.5, golden: 2.5, diamond: 5.5 },
-  hoe: { wooden: 1, stone: 1, iron: 1, golden: 1, diamond: 1 },
+  sword: { wooden: 4, stone: 5, iron: 6, golden: 4, diamond: 7, netherite: 8 },
+  axe: { wooden: 7, stone: 9, iron: 9, golden: 7, diamond: 9, netherite: 10 },
+  pickaxe: { wooden: 2, stone: 3, iron: 4, golden: 2, diamond: 5, netherite: 6 },
+  shovel: { wooden: 2.5, stone: 3.5, iron: 4.5, golden: 2.5, diamond: 5.5, netherite: 6.5 },
+  hoe: { wooden: 1, stone: 1, iron: 1, golden: 1, diamond: 1, netherite: 1 },
   // 剪刀只有铁的一种，攻击力与徒手相同（原版 1 点）
-  shears: { wooden: 1, stone: 1, iron: 1, golden: 1, diamond: 1 },
+  shears: { wooden: 1, stone: 1, iron: 1, golden: 1, diamond: 1, netherite: 1 },
 };
 
 /** 组装一件工具的完整属性 */
@@ -118,10 +137,12 @@ export interface ToolSpec {
 }
 
 /**
- * 全部 25 种工具（5 种类 × 5 种材质），由两张表叉乘生成。
- * 加一种材质只需要往 MATERIAL_STATS / TOOL_MATERIALS 里加一行。
+ * 全部 30 种工具 = 可合成的 25 种（5 种类 × 5 材质，由两张表叉乘）+ 下界合金 5 种。
+ *
+ * 下界合金单独一段，是因为它的 id 走另一套（见 `TOOL_MATERIALS` 的注解）；
+ * 它也没有合成配方——只能拿钻石工具去锻造台升级（见 `core/crafting/Smithing.ts`）。
  */
-export const TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.flatMap((kind) =>
+const BASE_TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.flatMap((kind) =>
   TOOL_MATERIALS.map((material) => ({
     id: toolItemId(kind, material),
     name: `minecraft:${material}_${kind}`,
@@ -129,6 +150,15 @@ export const TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.flatMap((kind) =>
     tool: makeToolInfo(kind, material),
   })),
 );
+
+const NETHERITE_TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.map((kind) => ({
+  id: toolItemId(kind, 'netherite'),
+  name: `minecraft:netherite_${kind}`,
+  tile: `item_netherite_${kind}`,
+  tool: makeToolInfo(kind, 'netherite'),
+}));
+
+export const TOOL_SPECS: readonly ToolSpec[] = [...BASE_TOOL_SPECS, ...NETHERITE_TOOL_SPECS];
 
 /** 按物品 id 反查工具属性（非工具返回 undefined） */
 /**
@@ -265,6 +295,8 @@ requirePickaxe(0, [
   Block.ANVIL,
   // 铁块要石镐（原版）
   Block.IRON_BLOCK,
+  // 锻造台（K8 尾巴）：原版要镐但对等级没有要求——任何镐都能采到
+  Block.SMITHING_TABLE,
 ]);
 // 书架：原版是"斧更快、徒手也能采到"，所以只进加速表不进需求表
 EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');
@@ -301,8 +333,9 @@ requirePickaxe(2, [
   Block.DEEPSLATE_EMERALD_ORE,
 ]);
 
-// ---- 钻石镐（tier 3）：黑曜石与远古残骸
-requirePickaxe(3, [Block.OBSIDIAN, Block.ANCIENT_DEBRIS]);
+// ---- 钻石镐（tier 3）：黑曜石、远古残骸与下界合金块
+// 下界合金块要钻石镐（原版如此）：想把它挖回去得先有钻石镐，和"想炼下界合金先要钻石镐"一致
+requirePickaxe(3, [Block.OBSIDIAN, Block.ANCIENT_DEBRIS, Block.NETHERITE_BLOCK]);
 
 // 台阶 / 楼梯跟随母方块：母方块要镐，它们也要
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {

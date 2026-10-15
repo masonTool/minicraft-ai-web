@@ -258,7 +258,11 @@ const TOOL_PATTERNS: Record<string, readonly string[]> = {
   sword: ['M', 'M', 'S'],
 };
 
-const TOOL_RECIPES: readonly Recipe[] = TOOL_SPECS.map((spec) => ({
+// ⚠️ 要滤掉"没有合成材料"的材质：下界合金工具只能由锻造台升级而来，
+// 在这里给它配一条配方就等于"4 个下界合金锭能直接做出一把镐"，与原版不符
+const TOOL_RECIPES: readonly Recipe[] = TOOL_SPECS.filter(
+  (spec) => TOOL_MATERIAL_INGREDIENTS[spec.tool.material] !== undefined,
+).map((spec) => ({
   kind: 'shaped' as const,
   result: { id: spec.id, count: 1 },
   pattern: TOOL_PATTERNS[spec.tool.type]!,
@@ -424,6 +428,39 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.FLINT_AND_STEEL, count: 1 },
     ingredients: [Item.IRON_INGOT, Item.FLINT],
   },
+  // ---- 下界合金（K8 尾巴）
+  // 下界合金锭：4 碎片 + 4 金锭（原版是无序配方，"4+4"这个配比就是它的全部难点）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.NETHERITE_INGOT, count: 1 },
+    ingredients: [
+      Item.NETHERITE_SCRAP,
+      Item.NETHERITE_SCRAP,
+      Item.NETHERITE_SCRAP,
+      Item.NETHERITE_SCRAP,
+      Item.GOLD_INGOT,
+      Item.GOLD_INGOT,
+      Item.GOLD_INGOT,
+      Item.GOLD_INGOT,
+    ],
+  },
+  // 下界合金块与锭互转（与铁块同款）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.NETHERITE_BLOCK, count: 1 },
+    pattern: ['III', 'III', 'III'],
+    key: { I: Item.NETHERITE_INGOT },
+  },
+  { kind: 'shapeless' as const, result: { id: Item.NETHERITE_INGOT, count: 9 }, ingredients: [Block.NETHERITE_BLOCK] },
+  // 锻造台：4 木板 + 2 铁锭（原版图案：上一排两铁锭、下面两块各两木板）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.SMITHING_TABLE, count: 1 },
+    pattern: ['II', 'PP', 'PP'],
+    key: { I: Item.IRON_INGOT, P: Block.OAK_PLANKS },
+  },
+  // ⚠️ 下界合金的**工具与盔甲没有配方**：它们只能在锻造台上、由对应的钻石装备 + 1 个
+  // 下界合金锭升级而来（见 `core/crafting/Smithing.ts`），与原版一致。
   // ⚠️ 与 原版 的差异：原版是 4 线 → 1 羊毛，方向相反。
   // 这里反着来是因为**蜘蛛还没做**，否则"线"没有任何来源，弓就永远做不出来。
   {

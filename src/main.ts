@@ -41,6 +41,7 @@ import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { ANVIL_SIZE, Anvil } from './core/container/Anvil.ts';
+import { SMITHING_SIZE, SmithingTable } from './core/container/SmithingTable.ts';
 import { EnchantTable } from './core/container/EnchantTable.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
@@ -354,6 +355,11 @@ const STARTING_HOTBAR: readonly number[] = [
   toolItemId('sword', 'iron'),
   // 开发期盔甲：皮革/铁/钻石各一套，方便对比护甲条的档位与减伤
   ...(['leather', 'iron', 'diamond'] as const).flatMap((material) => ARMOR_TYPES.map((type) => armorItemId(type, material))),
+  // 开发期下界合金（K8 尾巴）：锻造台 + 材料 + 远古残骸，配合上面的钻石装备就能走通"升级"这条链
+  Block.SMITHING_TABLE,
+  Item.NETHERITE_INGOT,
+  Block.ANCIENT_DEBRIS,
+  Block.NETHERITE_BLOCK,
   // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
   Block.ANVIL,
   Block.IRON_BLOCK,
@@ -3236,6 +3242,10 @@ class App {
       this.inventoryScreen.openWith('anvil', this.world.containers.getOrCreateAnvil(this.dimension, x, y, z));
       return true;
     }
+    if (hitBlock === Block.SMITHING_TABLE) {
+      this.inventoryScreen.openWith('smithing', this.world.containers.getOrCreateSmithingTable(this.dimension, x, y, z));
+      return true;
+    }
     if (hitBlock === Block.ENCHANTING_TABLE) {
       // 记下位置：书架加成要围着**这一台**数，而 `enchantContext` 是每次刷新时问的
       this.enchantTablePos = { x, y, z };
@@ -3401,16 +3411,18 @@ class App {
   private dropContainerContents(x: number, y: number, z: number): void {
     const container = this.world.containers.get(this.dimension, x, y, z);
     if (!container) return;
-    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、酿造台 5
+    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、锻造台 3、酿造台 5
     const size = container instanceof Furnace
       ? FURNACE_SIZE
       : container instanceof EnchantTable
         ? 2
         : container instanceof Anvil
           ? ANVIL_SIZE
-          : container instanceof BrewingStand
-            ? BREW_SLOT_COUNT
-            : CHEST_SIZE;
+          : container instanceof SmithingTable
+            ? SMITHING_SIZE
+            : container instanceof BrewingStand
+              ? BREW_SLOT_COUNT
+              : CHEST_SIZE;
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;

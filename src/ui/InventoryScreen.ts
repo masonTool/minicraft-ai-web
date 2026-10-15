@@ -10,6 +10,7 @@
  *   chest     ：3×9 容器格
  *   enchanting：物品 + 青金石 + 三个候选槽（H9）
  *   anvil     ：左 / 右 / 产物三格 + 改名与代价（H8）
+ *   smithing  ：装备 / 下界合金锭 / 产物三格（K8 尾巴，不要经验）
  *   brewing   ：3 个药水槽 + 材料 + 燃料 + 20 秒进度（H10）
  *
  * 拖拽语义：
@@ -35,6 +36,13 @@ import {
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { CHEST_SIZE } from '../core/container/Chest.ts';
 import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, Anvil } from '../core/container/Anvil.ts';
+import {
+  SMITHING_EQUIPMENT,
+  SMITHING_MATERIAL,
+  SMITHING_RESULT,
+  SmithingTable,
+} from '../core/container/SmithingTable.ts';
+import { smithingHint } from '../core/crafting/Smithing.ts';
 import {
   ENCHANT_ITEM_SLOT,
   ENCHANT_LAPIS_SLOT,
@@ -78,6 +86,7 @@ export type InventoryPanelMode =
   | 'chest'
   | 'enchanting'
   | 'anvil'
+  | 'smithing'
   | 'brewing';
 
 export interface InventoryScreenHooks {
@@ -164,6 +173,13 @@ export class InventoryScreen {
   private readonly anvilCostEl: HTMLDivElement;
   private readonly anvilStatusEl: HTMLDivElement;
   private readonly cookFillEl: HTMLElement;
+
+  /** 锻造台（K8 尾巴）：装备格 + 材料格 + 产物格 + 提示行 */
+  private readonly smithingLayout: HTMLDivElement;
+  private readonly smithingEquipmentSlot: HTMLDivElement;
+  private readonly smithingMaterialSlot: HTMLDivElement;
+  private readonly smithingResultSlot: HTMLDivElement;
+  private readonly smithingHintEl: HTMLDivElement;
 
   /** 酿造台（H10）：3 个药水槽 + 材料槽 + 燃料槽 + 进度条 */
   private readonly brewingLayout: HTMLDivElement;
@@ -292,6 +308,18 @@ export class InventoryScreen {
     this.anvilCostEl.className = 'anvil-cost';
     this.anvilStatusEl = document.createElement('div');
     this.anvilStatusEl.className = 'enchant-status';
+
+    // 锻造台（K8 尾巴）：装备格 + 材料格 + 产物格（比铁砧少一个改名输入框）
+    this.smithingLayout = document.createElement('div');
+    this.smithingLayout.className = 'anvil-layout';
+    this.smithingEquipmentSlot = this.createSlot();
+    this.smithingEquipmentSlot.dataset.key = 'smithing:equipment';
+    this.smithingMaterialSlot = this.createSlot();
+    this.smithingMaterialSlot.dataset.key = 'smithing:material';
+    this.smithingResultSlot = this.createSlot();
+    this.smithingResultSlot.dataset.key = 'smithing:result';
+    this.smithingHintEl = document.createElement('div');
+    this.smithingHintEl.className = 'anvil-cost';
 
     // 附魔台（H9）：物品槽 + 青金石槽 + 三个候选按钮
     this.enchantLayout = document.createElement('div');
@@ -560,6 +588,7 @@ export class InventoryScreen {
     this.clearBindings('chest:');
     this.clearBindings('enchant:');
     this.clearBindings('anvil:');
+    this.clearBindings('smithing:');
     this.clearBindings('brewing:');
 
     if (this.mode === 'furnace') {
@@ -638,6 +667,32 @@ export class InventoryScreen {
       side.append(this.buildLabel('重命名'), this.anvilNameInput, this.anvilCostEl, this.anvilStatusEl);
       this.anvilLayout.replaceChildren(row, side);
       this.topArea.appendChild(this.anvilLayout);
+      return;
+    }
+
+    if (this.mode === 'smithing') {
+      const table = this.activeContainer instanceof SmithingTable ? this.activeContainer : null;
+      const equipment = this.registerExisting(this.smithingEquipmentSlot, 'smithing:equipment', table!, SMITHING_EQUIPMENT);
+      const material = this.registerExisting(this.smithingMaterialSlot, 'smithing:material', table!, SMITHING_MATERIAL);
+      // 产物槽：只能取不能放（与铁砧一样，产物是两格算出来的）
+      const result = this.registerExisting(this.smithingResultSlot, 'smithing:result', table!, SMITHING_RESULT, true);
+      this.smithingHintEl.textContent = '';
+
+      const row = document.createElement('div');
+      row.className = 'anvil-row';
+      row.append(
+        this.buildLabel('钻石装备'),
+        equipment,
+        this.buildLabel('下界合金锭'),
+        material,
+        this.buildLabel('产物'),
+        result,
+      );
+      const side = document.createElement('div');
+      side.className = 'anvil-side';
+      side.append(this.smithingHintEl);
+      this.smithingLayout.replaceChildren(row, side);
+      this.topArea.appendChild(this.smithingLayout);
       return;
     }
 
@@ -839,8 +894,9 @@ export class InventoryScreen {
    * 只有玩家背包有"部位限制"（36-39 是盔甲槽），合成网格/箱子/熔炉一律放行。
    */
   private accepts(binding: SlotBinding, itemId: number): boolean {
-    // 铁砧的产物槽由左右两格算出来，不能手动放
+    // 铁砧与锻造台的产物槽都由输入格算出来，不能手动放
     if (binding.source instanceof Anvil && binding.index === ANVIL_RESULT) return false;
+    if (binding.source instanceof SmithingTable && binding.index === SMITHING_RESULT) return false;
     // 附魔台的青金石槽只吃青金石（放别的进去会把"点不动"的原因藏起来）
     if (binding.source instanceof EnchantTable) {
       return binding.index !== ENCHANT_LAPIS_SLOT || EnchantTable.acceptsLapis(itemId);
@@ -864,6 +920,11 @@ export class InventoryScreen {
     // 铁砧产物：不是普通搬运——要先查等级、扣等级、扣材料再重算（H8）
     if (binding.source instanceof Anvil && binding.index === ANVIL_RESULT) {
       this.handleAnvilTake();
+      return;
+    }
+    // 锻造台产物：同样要先扣材料再重算（不要经验，见 K8 尾巴）
+    if (binding.source instanceof SmithingTable && binding.index === SMITHING_RESULT) {
+      this.handleSmithingTake();
       return;
     }
     const { source, index, takeOnly } = binding;
@@ -1054,6 +1115,7 @@ export class InventoryScreen {
 
     if (this.mode === 'enchanting') this.refreshEnchantOptions();
     if (this.mode === 'anvil') this.refreshAnvil();
+    if (this.mode === 'smithing') this.refreshSmithing();
 
     if (this.held) {
       drawItemIcon(this.heldCanvas, this.atlas, this.held.id, 32);
@@ -1102,6 +1164,51 @@ export class InventoryScreen {
     this.anvilStatusEl.textContent = `花费 ${result.cost} 级`;
     this.anvilStatusEl.classList.remove('bad');
     this.refresh();
+  }
+
+  /**
+   * 取走锻造台的产物（K8 尾巴）。
+   *
+   * 与铁砧的差别：**不查等级、不扣等级**（原版锻造台不要经验），
+   * 只扣材料（左格整件 + 右格 1 个锭）。手上已经有同类物品时并上去，否则放到光标上。
+   */
+  private handleSmithingTake(): void {
+    const table = this.activeContainer;
+    if (!(table instanceof SmithingTable)) return;
+    const preview = table.get(SMITHING_RESULT);
+    if (!preview) return;
+    // 产物永远不可堆叠（工具/盔甲），所以手上拿着任何东西都不能直接取
+    if (this.held) {
+      this.rejectSlot(this.smithingResultSlot);
+      return;
+    }
+
+    const result = table.take();
+    if (!result.ok) {
+      this.smithingHintEl.textContent = result.reason;
+      this.smithingHintEl.classList.add('bad');
+      this.refresh();
+      return;
+    }
+    this.held = result.output;
+    this.smithingHintEl.textContent = '升级完成：附魔与耐久损耗都保留';
+    this.smithingHintEl.classList.remove('bad');
+    this.refresh();
+  }
+
+  /** 刷新锻造台的提示行：没产物时解释为什么，有产物时把代价说清楚 */
+  private refreshSmithing(): void {
+    const table = this.activeContainer;
+    if (!(table instanceof SmithingTable)) return;
+    const outcome = table.outcome;
+    this.smithingResultSlot.classList.toggle('ready', outcome !== null);
+    if (outcome) {
+      this.smithingHintEl.textContent = `消耗 ${outcome.cost} 个下界合金锭（不要经验）`;
+      this.smithingHintEl.classList.remove('bad');
+      return;
+    }
+    this.smithingHintEl.textContent = smithingHint(table.equipment, table.material);
+    this.smithingHintEl.classList.add('bad');
   }
 
   /**
@@ -1199,6 +1306,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   chest: '箱子',
   enchanting: '附魔台',
   anvil: '铁砧',
+  smithing: '锻造台',
   brewing: '酿造台',
 };
 

@@ -11,6 +11,8 @@
 import * as THREE from 'three';
 import { DYE_COLORS, TERRACOTTA_BASE, WOOD_TYPES, terracottaColor } from '../core/registry/colors.ts';
 import { POTIONS, TIPPED_ARROWS, potionById, potionColor } from '../core/registry/potions.ts';
+import { ARMOR_TYPES, ALL_ARMOR_MATERIALS } from '../core/registry/armor.ts';
+import { ALL_TOOL_MATERIALS, TOOL_KINDS } from '../core/registry/tools.ts';
 
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from './atlasLayout.ts';
 
@@ -589,6 +591,28 @@ const PAINTERS: Record<string, Painter> = {
     ],
     'icopperi',
   ),
+  // ---- 下界合金（K8 尾巴）：深紫灰的金属色，原版那套的观感
+  item_netherite_ingot: ingot(
+    [
+      [126, 108, 118],
+      [92, 78, 88],
+    ],
+    'inetheritei',
+  ),
+  /** 下界合金碎片：一块带棱角的暗色碎片（比锭更不规则，一眼能与锭区分） */
+  item_netherite_scrap: (x, y, rng) => {
+    const jitter = rng() * 12 - 6;
+    const dx = x - 7.5;
+    const dy = y - 8.5;
+    // 上窄下宽的多边形碎片：四条边各不相同，看起来是"敲下来的一块"
+    if (dy > 5.6 || dy < -5.4) return [0, 0, 0, 0];
+    const halfWidth = dy < -1 ? 3.2 : dy < 3 ? 5.2 : 4.0;
+    if (Math.abs(dx) > halfWidth) return [0, 0, 0, 0];
+    // 斜向的暗色纹理：碎片表面有金属光泽
+    const sheen = (x * 2 + y) % 9 < 3;
+    const shade = (dy < -1 ? 1.2 : dy < 3 ? 1 : 0.78) * (sheen ? 1.12 : 1);
+    return [clamp255(104 * shade + jitter), clamp255(88 * shade + jitter), clamp255(98 * shade + jitter), 255];
+  },
   item_charcoal: lump(
     [
       [46, 42, 40],
@@ -1193,6 +1217,62 @@ PAINTERS.iron_block = (x, y, rng) => {
   const polish = x === 7 || y === 7;
   const shade = edge ? 0.84 : polish ? 1.05 : 1;
   return [clamp255(212 * shade + jitter), clamp255(212 * shade + jitter), clamp255(218 * shade + jitter), 255];
+};
+
+// ---- 下界合金（K8 尾巴）
+/**
+ * 下界合金块：深紫灰的抛光金属面 + 细密的暗纹。
+ *
+ * 原版这块的观感是"金属上刻着纹路"——所以除了底色，还在 4 像素的格子上压出暗缝，
+ * 并加一道斜向的亮纹，否则一整块深色在洞里就是一块糊住的黑板。
+ */
+PAINTERS.netherite_block = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  const groove = x % 4 === 0 || y % 4 === 0;
+  const sheen = (x + y * 2) % 13 < 2;
+  const edge = x < 1 || x > 14 || y < 1 || y > 14;
+  const shade = edge ? 0.84 : groove ? 0.9 : sheen ? 1.14 : 1;
+  return [clamp255(80 * shade + jitter), clamp255(68 * shade + jitter), clamp255(76 * shade + jitter), 255];
+};
+
+/** 锻造台顶面：深色木台面 + 中间一条金属带（原版是"砧面嵌在木台里"的样子） */
+PAINTERS.smithing_table_top = (x, y, rng) => {
+  const base = layered(96, 7, 8, [1.0, 0.86, 0.6])(x, y, rng);
+  // 中间一条横向的金属带：y 6~9
+  if (y >= 6 && y <= 9) {
+    const shade = y === 6 || y === 9 ? 0.82 : 1.06;
+    const jitter = rng() * 8 - 4;
+    return [clamp255(196 * shade + jitter), clamp255(196 * shade + jitter), clamp255(204 * shade + jitter), 255];
+  }
+  // 四边压暗一圈，让台面有边框
+  if (x < 1 || x > 14 || y < 1 || y > 14) {
+    return [clamp255(base[0] * 0.82), clamp255(base[1] * 0.82), clamp255(base[2] * 0.82), 255];
+  }
+  return base;
+};
+
+/**
+ * 锻造台侧面：深色木板 + 上沿一圈金属 + 中间一把锤子的剪影。
+ *
+ * 锤子是这个方块的"招牌"：原版锻造台的侧面就是一把锤子，
+ * 远远看一眼就知道这是干什么用的（比只画木板强得多）。
+ */
+PAINTERS.smithing_table_side = (x, y, rng) => {
+  const base = layered(96, 7, 8, [1.0, 0.86, 0.6])(x, y, rng);
+  const jitter = rng() * 8 - 4;
+  // 上沿的金属包边
+  if (y <= 2) {
+    const shade = y === 0 ? 0.84 : 1.08;
+    return [clamp255(196 * shade + jitter), clamp255(196 * shade + jitter), clamp255(204 * shade + jitter), 255];
+  }
+  // 锤子：锤头是左上角的一横块，手柄斜向右下
+  const head = y >= 5 && y <= 7 && x >= 3 && x <= 9;
+  const handle = x - 6 === (y - 8) >> 0 && y >= 7 && y <= 13;
+  if (head || handle) {
+    const shade = head ? 1.1 : 0.9;
+    return [clamp255(178 * shade + jitter), clamp255(178 * shade + jitter), clamp255(186 * shade + jitter), 255];
+  }
+  return base;
 };
 
 // ---- 铁砧（H8）
@@ -2437,6 +2517,8 @@ const TOOL_MATERIAL_RGB: Record<string, readonly [number, number, number]> = {
   iron: [205, 205, 212],
   golden: [248, 210, 74],
   diamond: [96, 228, 224],
+  // 下界合金：深紫灰（比铁暗、比石头偏紫），在深色槽位上仍然分得出来
+  netherite: [118, 100, 110],
 };
 
 const TOOL_HANDLE_RGB: readonly [number, number, number] = [150, 108, 58];
@@ -2463,8 +2545,10 @@ function toolPainter(kind: string, material: string): Painter {
   };
 }
 
-for (const material of ['wooden', 'stone', 'iron', 'golden', 'diamond']) {
-  for (const kind of ['pickaxe', 'axe', 'shovel', 'hoe', 'sword']) {
+// 材质表直接取自注册表：以后加一种材质（比如以后再补"铜工具"）这里自动跟上，
+// 不用改渲染层——这一条是上一批"批量生成的地方要问一句有没有例外"的教训
+for (const material of ALL_TOOL_MATERIALS) {
+  for (const kind of TOOL_KINDS) {
     PAINTERS[`item_${material}_${kind}`] = toolPainter(kind, material);
   }
 }
@@ -2554,6 +2638,8 @@ const ARMOR_MATERIAL_RGB: Record<string, readonly [number, number, number]> = {
   iron: [205, 205, 212],
   golden: [248, 210, 74],
   diamond: [96, 228, 224],
+  // 与工具头同一个色系（下界合金盔甲与工具是一套东西）
+  netherite: [118, 100, 110],
 };
 
 function armorPainter(type: string, material: string): Painter {
@@ -2573,8 +2659,8 @@ function armorPainter(type: string, material: string): Painter {
   };
 }
 
-for (const material of ['leather', 'chainmail', 'iron', 'golden', 'diamond']) {
-  for (const type of ['helmet', 'chestplate', 'leggings', 'boots']) {
+for (const material of ALL_ARMOR_MATERIALS) {
+  for (const type of ARMOR_TYPES) {
     PAINTERS[`item_${material}_${type}`] = armorPainter(type, material);
   }
 }

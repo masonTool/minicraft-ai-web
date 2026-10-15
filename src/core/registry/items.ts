@@ -129,6 +129,9 @@ export const Item = {
   MILK_BUCKET: 1152,
   /** 打火石（I12）：耐用品，对着方块右键点燃火焰。原版耐久 64 */
   FLINT_AND_STEEL: 1153,
+  // ---- 下界合金（K8 尾巴）：远古残骸烧成碎片，4 碎片 + 4 金锭 = 1 锭
+  NETHERITE_SCRAP: 1155,
+  NETHERITE_INGOT: 1156,
   // ---- 弓与箭（J9）
   FLINT: 1072,
   STRING: 1073,
@@ -259,6 +262,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
     maxStack: 1,
     durability: 64,
   },
+  // ---- 下界合金（K8 尾巴）：远古残骸烧出来的碎片，与金锭合成下界合金锭
+  { id: Item.NETHERITE_SCRAP, name: 'minecraft:netherite_scrap', tile: 'item_netherite_scrap' },
+  { id: Item.NETHERITE_INGOT, name: 'minecraft:netherite_ingot', tile: 'item_netherite_ingot' },
 
   // ---- 食物（贴图在 TextureAtlas、数值在 food.ts，这里只登记 id / 名字 / 贴图名）
   { id: Item.COOKED_BEEF, name: 'minecraft:cooked_beef', tile: 'item_cooked_beef' },
@@ -390,6 +396,8 @@ export const MATERIAL_REPAIR_ITEM: Record<string, number> = {
   iron: Item.IRON_INGOT,
   golden: Item.GOLD_INGOT,
   diamond: Item.DIAMOND,
+  // 下界合金用下界合金锭修（原版）；一件修耐久上限的 1/4，也就是一块锭换 500+ 点
+  netherite: Item.NETHERITE_INGOT,
   leather: Item.LEATHER,
   chainmail: Item.IRON_INGOT,
 };
@@ -555,6 +563,8 @@ const FUNCTIONAL = new Set<number>([
   Block.PISTON_HEAD,
   Block.STICKY_PISTON,
   Block.OBSERVER,
+  // 锻造台（K8 尾巴）：和铁砧一样是"右键打开的工作台"
+  Block.SMITHING_TABLE,
 ]);
 
 /** 自然装饰与下界方块（创造物品栏的"自然"分类） */
@@ -648,6 +658,8 @@ const ORES = new Set<number>([
   Block.SHROOMLIGHT,
   Block.SEA_LANTERN,
   Block.NETHER_BRICKS,
+  // 下界合金块放在"矿石与材料"里而不是"建筑"：与铁块/粗铁块在本项目里的归处保持一致
+  Block.NETHERITE_BLOCK,
 ]);
 
 /** 16 色羊毛 + 16 种染料 */

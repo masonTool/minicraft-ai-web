@@ -40,6 +40,9 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 原木 → 木炭
   { input: Block.OAK_LOG, output: { id: Item.CHARCOAL, count: 1 }, time: SMELTING_TIME, experience: 0.15 },
 
+  // 远古残骸 → 下界合金碎片（K8 尾巴）：原版 2 点经验，是整个下界合金链的第一环
+  { input: Block.ANCIENT_DEBRIS, output: { id: Item.NETHERITE_SCRAP, count: 1 }, time: SMELTING_TIME, experience: 2 },
+
   // 黏土球 → 红砖
   { input: Item.CLAY_BALL, output: { id: Item.BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.3 },
 

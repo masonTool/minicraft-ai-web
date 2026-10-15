@@ -103,6 +103,9 @@ export const TILE_ORDER = [
   'item_gold_ingot',
   'item_copper_ingot',
   'item_charcoal',
+  // 下界合金材料（K8 尾巴）
+  'item_netherite_scrap',
+  'item_netherite_ingot',
   'wool_white',
   'wool_orange',
   'wool_magenta',
@@ -154,6 +157,10 @@ export const TILE_ORDER = [
   'oak_fence_gate',
   // 火焰（I12）：走植物那套 cross 形状，所以是一张"贴着透明背景的火苗"
   'fire',
+  // 下界合金（K8 尾巴）
+  'netherite_block',
+  'smithing_table_top',
+  'smithing_table_side',
   'terracotta',
   'terracotta_white',
   'terracotta_orange',
@@ -335,6 +342,12 @@ export const TILE_ORDER = [
   'item_iron_sword',
   'item_golden_sword',
   'item_diamond_sword',
+  // 下界合金（K8 尾巴）：id 走单独一段，所以图标也单独列一组
+  'item_netherite_pickaxe',
+  'item_netherite_axe',
+  'item_netherite_shovel',
+  'item_netherite_hoe',
+  'item_netherite_sword',
   // ---- 盔甲图标（4 部位 × 5 材质，顺序与 armor.ts 的 ARMOR_SPECS 一致）
   'item_leather_helmet',
   'item_chainmail_helmet',
@@ -356,6 +369,11 @@ export const TILE_ORDER = [
   'item_iron_boots',
   'item_golden_boots',
   'item_diamond_boots',
+  // 下界合金盔甲（K8 尾巴）
+  'item_netherite_helmet',
+  'item_netherite_chestplate',
+  'item_netherite_leggings',
+  'item_netherite_boots',
   // ---- 食物图标（熟肉 / 水果）
   'item_cooked_beef',
   'item_cooked_porkchop',

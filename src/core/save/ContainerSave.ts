@@ -20,6 +20,7 @@ import { FURNACE_SIZE, Furnace } from '../container/Furnace.ts';
 import { ANVIL_SIZE, Anvil } from '../container/Anvil.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
+import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import type { ItemStack } from '../container/Inventory.ts';
 import { itemDef } from '../registry/items.ts';
 import { Dimension, isDimension, type DimensionId } from '../gen/Dimension.ts';
@@ -35,6 +36,7 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   enchanting: ENCHANT_SLOT_COUNT,
   anvil: ANVIL_SIZE,
   brewing: BREW_SLOT_COUNT,
+  smithing: SMITHING_SIZE,
 };
 
 export interface SerializedContainer {
@@ -67,6 +69,7 @@ export function kindOf(container: BlockContainer): ContainerKind {
   if (container instanceof Furnace) return 'furnace';
   if (container instanceof EnchantTable) return 'enchanting';
   if (container instanceof Anvil) return 'anvil';
+  if (container instanceof SmithingTable) return 'smithing';
   return 'brewing';
 }
 
@@ -83,6 +86,7 @@ function containerFor(
   if (kind === 'furnace') return store.getOrCreateFurnace(dimension, x, y, z);
   if (kind === 'enchanting') return store.getOrCreateEnchantTable(dimension, x, y, z);
   if (kind === 'anvil') return store.getOrCreateAnvil(dimension, x, y, z);
+  if (kind === 'smithing') return store.getOrCreateSmithingTable(dimension, x, y, z);
   return store.getOrCreateBrewingStand(dimension, x, y, z);
 }
 

@@ -42,7 +42,17 @@ export type ArmorSlotType = (typeof ARMOR_TYPES)[number];
 
 /** 材质顺序（决定物品 id，不要改动顺序） */
 export const ARMOR_MATERIALS = ['leather', 'chainmail', 'iron', 'golden', 'diamond'] as const;
-export type ArmorMaterial = (typeof ARMOR_MATERIALS)[number];
+export type ArmorMaterial = (typeof ARMOR_MATERIALS)[number] | 'netherite';
+
+/**
+ * 全部材质（含下界合金），枚举用。
+ *
+ * ⚠️ `ARMOR_MATERIALS` 是 5 种**可合成**的材质，同时决定物品 id 的排布
+ * （`armorItemId` = 起点 + 部位序号 × 5 + 材质序号）。下界合金不能塞进去：
+ * 那会让铁盔甲从 1135 变成 1136、钻石靴子从 1149 变成 1154……
+ * 而存档里存的就是这些数字。所以它单独一段 id，见 `NETHERITE_ARMOR_ITEM_START`。
+ */
+export const ALL_ARMOR_MATERIALS: readonly ArmorMaterial[] = [...ARMOR_MATERIALS, 'netherite'];
 
 /** 盔甲部位编号 0 头 / 1 胸 / 2 腿 / 3 靴 */
 export type ArmorSlot = 0 | 1 | 2 | 3;
@@ -63,8 +73,12 @@ export interface ArmorInfo {
 /** 盔甲物品 id 起点（接在 25 种工具的 1100-1124 之后） */
 export const ARMOR_ITEM_START = 1130;
 
+/** 下界合金盔甲的物品 id 起点（1275 起，接在下界合金工具的 1270-1274 之后） */
+export const NETHERITE_ARMOR_ITEM_START = 1275;
+
 /** 第 (type, material) 件盔甲的物品 id */
 export function armorItemId(type: ArmorSlotType, material: ArmorMaterial): number {
+  if (material === 'netherite') return NETHERITE_ARMOR_ITEM_START + ARMOR_TYPES.indexOf(type);
   return ARMOR_ITEM_START + ARMOR_TYPES.indexOf(type) * ARMOR_MATERIALS.length + ARMOR_MATERIALS.indexOf(material);
 }
 
@@ -75,15 +89,18 @@ const DEFENSE_TABLE: Record<ArmorMaterial, readonly [number, number, number, num
   iron: [2, 6, 5, 2],
   golden: [2, 5, 3, 1],
   diamond: [3, 8, 6, 3],
+  // 下界合金的护甲值与钻石**完全相同**（原版如此），贵在韧性、耐久与抗火
+  netherite: [3, 8, 6, 3],
 };
 
-/** 韧性（只有钻石有） */
+/** 韧性（钻石 2 点/件，下界合金 3 点/件；其余为 0） */
 const TOUGHNESS_TABLE: Record<ArmorMaterial, number> = {
   leather: 0,
   chainmail: 0,
   iron: 0,
   golden: 0,
   diamond: 2,
+  netherite: 3,
 };
 
 /** 耐久基数（头/胸/腿/靴），再乘材质倍率 */
@@ -95,6 +112,7 @@ const DURABILITY_MULTIPLIER: Record<ArmorMaterial, number> = {
   iron: 15,
   golden: 7,
   diamond: 33,
+  netherite: 37,
 };
 
 /** 组装一件盔甲的完整属性 */
@@ -129,11 +147,12 @@ export function armorTile(armor: Pick<ArmorInfo, 'material' | 'type'>): string {
 }
 
 /**
- * 全部 20 件盔甲（4 部位 × 5 材质）。
- * 加一种材质只需要往 DEFENSE_TABLE / DURABILITY_MULTIPLIER / ARMOR_MATERIALS 各加一行。
+ * 全部 24 件盔甲 = 可合成的 20 件（4 部位 × 5 材质）+ 下界合金 4 件。
+ *
+ * 下界合金和工具一样：id 单独一段、没有合成配方（只能在锻造台上把钻石盔甲升上去）。
  */
 export const ARMOR_SPECS: readonly ArmorSpec[] = ARMOR_TYPES.flatMap((type) =>
-  ARMOR_MATERIALS.map((material) => {
+  ALL_ARMOR_MATERIALS.map((material) => {
     const armor = makeArmorInfo(type, material);
     return {
       id: armorItemId(type, material),

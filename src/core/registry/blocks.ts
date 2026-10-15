@@ -910,6 +910,23 @@ const PORTAL_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 下界合金（K8 尾巴）。
+ *
+ * - **下界合金块**：9 个下界合金锭合成的储物方块（与铁块/金块同一档硬度）
+ * - **锻造台**：把钻石装备升级成下界合金装备的工作台。原版它有 `facing` 状态与
+ *   "把物品放在台面上"的模型；这里和铁砧/附魔台一样**简化成整格方块**
+ *   （理由同 H9：新增矮方块形状要同时改碰撞盒、网格化与放置逻辑，收益不成比例）
+ */
+const NETHERITE_SPECS: readonly BlockSpec[] = [
+  { id: 293, name: 'minecraft:netherite_block', tiles: ['netherite_block', 'netherite_block', 'netherite_block'] },
+  {
+    id: 294,
+    name: 'minecraft:smithing_table',
+    tiles: ['smithing_table_top', 'oak_planks', 'smithing_table_side'],
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -926,6 +943,7 @@ const SPECS: readonly BlockSpec[] = [
   ...OPENABLE_SPECS,
   ...FIRE_SPECS,
   ...PORTAL_SPECS,
+  ...NETHERITE_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1108,6 +1126,9 @@ export const Block = {
   FIRE: 291,
   /** 下界传送门（K8）：黑曜石框点燃后填满框内的那 2×3 格 */
   NETHER_PORTAL: 292,
+  /** 下界合金（K8 尾巴）：储物方块与锻造台 */
+  NETHERITE_BLOCK: 293,
+  SMITHING_TABLE: 294,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1274,6 +1295,10 @@ HARDNESS.set(Block.BOOKSHELF, 1.5);
 HARDNESS.set(Block.ANVIL, 5);
 // 铁块 5（原版），必须用镐
 HARDNESS.set(Block.IRON_BLOCK, 5);
+// 下界合金块 50（原版 50，比黑曜石还硬；必须钻石镐以上）
+HARDNESS.set(Block.NETHERITE_BLOCK, 50);
+// 锻造台 2.5（原版），斧最快、徒手也能采
+HARDNESS.set(Block.SMITHING_TABLE, 2.5);
 
 // 木材家族：原木与木板 2.0、树叶 0.2，台阶楼梯跟随木板
 for (const ids of Object.values(Wood)) {

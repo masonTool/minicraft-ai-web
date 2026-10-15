@@ -12,6 +12,8 @@
 
 import { Block } from './blocks.ts';
 import { Item } from './items.ts';
+import { ARMOR_SPECS } from './armor.ts';
+import { TOOL_SPECS } from './tools.ts';
 
 /** 稀有度（与原版一致的四个档） */
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic';
@@ -32,12 +34,28 @@ export const RARITY_ORDER: readonly ItemRarity[] = ['common', 'uncommon', 'rare'
  * 钻石/铁这类常见材料在原版里也是普通档，不登记（否则整个背包都是彩色的，
  * 稀有度就失去意义了）。
  */
-const SPECIAL_RARITY: Readonly<Record<number, ItemRarity>> = {
+const SPECIAL_RARITY: Record<number, ItemRarity> = {
   [Item.GOLDEN_APPLE]: 'rare',
   [Block.DRAGON_EGG]: 'epic',
   [Block.ENCHANTING_TABLE]: 'rare',
   // 信标 / 潮涌核心 / 下界之星都还没做，等做了再加（加一行就行）
 };
+
+/**
+ * 下界合金那一族（材料、方块、5 种工具、4 件盔甲）在原版里都是**稀有**档
+ * （青色名字）——它是"终点装备"，一眼能从背包里认出来。
+ *
+ * 这里用"族"批量登记而不是抄 11 行：以后加下界合金的别的东西（比如盔甲纹饰）自动跟上。
+ */
+for (const spec of TOOL_SPECS) {
+  if (spec.tool.material === 'netherite') SPECIAL_RARITY[spec.id] = 'rare';
+}
+for (const spec of ARMOR_SPECS) {
+  if (spec.armor.material === 'netherite') SPECIAL_RARITY[spec.id] = 'rare';
+}
+SPECIAL_RARITY[Item.NETHERITE_SCRAP] = 'rare';
+SPECIAL_RARITY[Item.NETHERITE_INGOT] = 'rare';
+SPECIAL_RARITY[Block.NETHERITE_BLOCK] = 'rare';
 
 /**
  * 一件物品的稀有度。
