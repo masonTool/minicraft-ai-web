@@ -114,3 +114,19 @@
 - [x] K7 单元测试：vitest 38 条断言（光照/碰撞/生成/存档/音效/资源包），已并入 npm test
 - [x] K8 打包：PWA 可用（manifest + Service Worker + 离线缓存，`sh tools/pwa-check.sh`）；
       Capacitor/Electron 套壳说明见 HANDOFF §5.5
+
+---
+
+## 批次 6：渲染与人机交互补完（E13/E15/E16）
+
+- [x] E13 粒子系统：`render/ParticleSystem.ts`（池化 + 单 draw call + 着色器软边小方块）；
+      六类粒子（破坏碎块/挖掘碎屑/入水水花/暴击火花/死亡烟雾/岩浆火焰）全部接在真实事件上；
+      破坏粒子颜色取方块贴图平均色
+- [x] E15 手持物品与第一人称手臂：`render/HandRenderer.ts`（独立场景 + clearDepth 叠画，
+      方块用迷你立方体、物品用平面；走路摆动 + 挥手臂动画）
+- [x] E16 视野效果：`render/ScreenEffects.ts`（水下/岩浆整屏色罩 + 平滑过渡 + 拉近雾）
+- [x] 顺带：抽出 `render/atlasMesh.ts` 共用图集 UV/逐面明暗；修掉 `new THREE.Color(hex)`
+      在自定义着色器里被色彩管理转换的缺陷（新增 `render/srgb.ts`）
+- [x] 测试：新增 `tools/render-test.ts`（49 条断言）并并入 `npm test`
+
+> 本批次已完成并提交（`c664870`）。队列在此清空 —— 下一批由用户指定后再写入。
