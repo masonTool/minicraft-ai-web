@@ -24,7 +24,7 @@ npm run dev            # http://localhost:5173
 
 - 时间：2026-10-15 · 提交总数 45（每个功能点一条，可逐条回滚）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 170 项 —— 已完成 **78**、进行中 **61**、待办 31；
+- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **83**、进行中 **61**、待办 29；
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
@@ -46,6 +46,8 @@ npm run dev            # http://localhost:5173
 | 地物 | `core/gen/Features.ts`：11 种树 + 花草/蘑菇/甘蔗/南瓜/西瓜/仙人掌，23 群系地物表；跨区块重放 3×3 邻域保证树冠不断 |
 | 结构 | `core/gen/Structures.ts`：村庄/废弃矿井/要塞/地牢/沉船/海底神殿/林地府邸，间距+分离度+盐值放置框架 |
 | 下界 | `core/gen/NetherGenerator.ts` + `Dimension.ts`：岩浆海 + 洞窟 + 5 个下界群系 + 菌菇树等；`N` 键切维度 |
+| 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
+| 说明与配方 | `core/registry/itemNames.ts`（296 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成） |
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
 | 测试 | `npm test` = 17 套离线测试（inventory/crafting/furnace/entity/shapes/biome/aquifer/ore/mesh/survival/mob/spawn/combat/decor/structure/nether/end/endboss/redstone/save/net/render），当前全绿 |
 
@@ -102,6 +104,10 @@ npm run dev            # http://localhost:5173
 | 下界洞顶漏光 / 被顶穿 | 洞顶高度是噪声函数，偶尔会超出预期范围 → 必须夹紧（`ceilingAt` 上限 `NETHER_CEILING`）（J3） |
 | 手臂 / 色罩颜色偏成橙褐色 | `new THREE.Color(hex)` 会做一次 sRGB→线性（0.86→0.72），而自定义 ShaderMaterial 是**原样写进帧缓冲**的 → 平色一律用 `render/srgb.ts` 的 `srgbColor()`；连 `getHex()` 读出来也要加 `NoColorSpace`（E15） |
 | 手持物品的位置 / 大小怎么摆 | 别纯靠投影公式推：先用洋红把整只手染色，扫截图里洋红像素的包围盒，再按"差多少像素就是差多少格"反推（E15） |
+| 面板被遮罩/死亡界面盖住 | 面板的 z-index 只在**同一个层叠上下文**里比较。挂在 `#app` 里的话，DOM 更靠后的 `#overlay` / `#death` 永远在它上面 → 所有面板一律挂 `<body>`（用 `document.elementFromPoint` 定位是谁盖住了谁）（本轮） |
+| 设置滑块调了没反应 | "滑块存在"不等于"接线了"：灵敏度曾经就是这样（一直用常量）。加设置项时把**消费它的每一条路径**都搜出来（鼠标/触摸/手柄/渲染器）（本轮） |
+| 界面里冒出英文 id | 新增方块/物品时中文名表不会自动跟上。用"每个方块都有中文名"这条断言把缺口暴露出来（`missingBlockNames()`），比等人发现强（本轮） |
+| 加了世界类型但地形没变 | 生成器是**按种子缓存**的（`generators` Map），世界类型必须进缓存键，否则同一种子的两种世界会串（本轮） |
 | 第二遍 render 把世界清掉 | 叠画手持物品 / 色罩之前必须 `renderer.autoClear = false` + `clearDepth()`，画完再改回来（E15/E16） |
 | 版权素材 | 官方贴图/音效不随仓库分发；贴图运行时程序化生成，P9 计划支持玩家自备资源包 |
 
@@ -143,10 +149,12 @@ npm run agent:setup # 跨机器自检
 
 浏览器控制台 `window.__mc`（`src/main.ts` 末尾挂的 App 实例）：
 `connect(url,name)` / `disconnect()` / `netState` / `sendChat(text)` / `saveNow()` /
-`clearSaveAndReload()` / `saveStatus` / `openSettings()` / `updateSettings(patch)` /
+`saveStatus` / `openSettings()` / `updateSettings(patch)` / `setCameraMode()` / `cycleCameraMode()` /
+`toggleRecipeBookForTest()` / `hoverHotbarForTest()` /
 `blockId(name)` / `simulateFrameTime(ms)` /
 `teleport(x,y,z)` / `teleportForce` / `look(yawDeg,pitchDeg)` / `setTimeOfDay(t)` /
-`setDimension('overworld'|'nether')` / `toggleDimension()` /
+`setDimension('overworld'|'nether'|'end')` / `toggleDimension()` /
+`__worldMenu`（主菜单：`fillNewWorldForm()` / `submitNewWorld()` / `render()`）/
 `probe(x,y,z)`（方块 + 天光 + 方块光）/ `probeState` / `column(x,z)` / `sampleColumns(x0,z0,step)` /
 `place(x,y,z,blockId,state)` / `dropItem(itemId,count,x,y,z)`，另有 info / 实体列表等。
 
