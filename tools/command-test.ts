@@ -36,6 +36,7 @@ import {
 } from '../src/core/world/Rules.ts';
 import { BLOCKS } from '../src/core/registry/blocks.ts';
 import { resolveBlockId, resolveItemId } from '../src/core/registry/itemNames.ts';
+import { Experience } from '../src/core/survival/Experience.ts';
 
 let passed = 0;
 let failed = 0;
@@ -185,6 +186,26 @@ class FakeWorld implements CommandContext {
   }
   onlinePlayers(): string[] {
     return ['玩家(你)'];
+  }
+
+  /**
+   * 经验（I5）：直接用真的 `Experience`，而不是再造一个简化模型——
+   * 命令测试要验的正是"`/xp` 有没有走对那条等级公式"。
+   */
+  readonly experience = new Experience();
+  addXp(amount: number): number {
+    return this.experience.add(amount);
+  }
+  setXpLevel(level: number): void {
+    this.experience.setLevel(level);
+  }
+  xpState(): { level: number; progress: number; toNext: number; total: number } {
+    return {
+      level: this.experience.level,
+      progress: this.experience.progress,
+      toNext: this.experience.toNext,
+      total: this.experience.total,
+    };
   }
 }
 
@@ -426,6 +447,34 @@ console.log('\n[物品/方块名解析]');
   check('未知名返回 undefined', resolveItemId('not_a_thing') === undefined);
   check('方块名解析（air 特判为 0）', resolveBlockId('air') === 0 && resolveBlockId('石头') === resolveItemId('stone'));
   check('每个方块都能被解析出来（名字表与方块表一致）', BLOCKS.every((def) => !def || def.id === 0 || resolveBlockId(def.name.replace('minecraft:', '')) === def.id));
+}
+
+// ---------------------------------------------------------------- 6. 经验（I5）
+
+console.log('\n[/xp 命令]');
+{
+  const { world, out } = run('/xp query');
+  check('初始是 0 级', out.lastInfo.includes('等级 0'), out.lastInfo);
+
+  const add = run('/xp add 7', world);
+  check('加 7 点经验升到 1 级（原版 0→1 级只要 7 点）', world.experience.level === 1, String(world.experience.level));
+  check('反馈里说明了实际进账', add.out.lastInfo.includes('实际进账 7'), add.out.lastInfo);
+
+  run('/xp add 100', world);
+  check('一次加 100 点会连升好几级', world.experience.level > 3, String(world.experience.level));
+
+  run('/xp set 30', world);
+  check('set 直接设等级', world.experience.level === 30);
+  const query = run('/xp query', world);
+  check('query 报出当前等级与进度', query.out.lastInfo.includes('等级 30'), query.out.lastInfo);
+
+  const bad = run('/xp add abc', world);
+  check('非法数量报错而不是静默', bad.out.lastError.includes('数量无效'), bad.out.lastError);
+  const negative = run('/xp add -5', world);
+  check('负数经验被拒绝', negative.out.lastError.includes('数量无效'), negative.out.lastError);
+  const unknown = run('/xp nope', world);
+  check('未知子命令给出用法', unknown.out.lastError.includes('用法'), unknown.out.lastError);
+  check('失败时等级没被改动', world.experience.level === 30, String(world.experience.level));
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);

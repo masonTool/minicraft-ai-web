@@ -130,6 +130,16 @@ export class Furnace implements SlotSource {
     this.storedExperience += recipe.experience;
   }
 
+  /**
+   * 取走攒下的烧炼经验（返回并清零）。
+   * 由界面在"产物槽被取空"时调用——原版也是整槽取走才结算。
+   */
+  takeExperience(): number {
+    const amount = this.storedExperience;
+    this.storedExperience = 0;
+    return amount;
+  }
+
   get isEmpty(): boolean {
     return this.slots.every((slot) => slot === null);
   }

@@ -48,6 +48,8 @@ export interface MobType {
   /** 发现玩家的距离（格） */
   followRange: number;
   drops: readonly MobDrop[];
+  /** 击杀经验（原版数值：敌对 5 点、被动 1~3 点） */
+  xp: number;
   /** 渲染用的主色 / 点缀色 */
   bodyColor: number;
   accentColor: number;
@@ -276,6 +278,8 @@ export class Mob extends Entity {
       const count = drop.min + Math.floor(Math.random() * (drop.max - drop.min + 1));
       if (count > 0) ctx.spawnDrop(drop.itemId, count, this.x, this.y + this.height * 0.5, this.z);
     }
+    // 击杀经验（原版数值）；经验球实体还没做，直接进账
+    if (this.type.xp > 0) ctx.awardXp?.(this.type.xp);
   }
 
   /** 与玩家的水平距离（战斗判定用） */

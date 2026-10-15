@@ -1,0 +1,17 @@
+// 离线测试（tools/ 与 tests/）的类型检查配置。
+//
+// 为什么单独一份：主 `tsconfig.json` 只 include `src` 与 `vite.config.ts`，
+// 于是 **30 多套离线测试从来没被 `tsc` 检查过**——它们只经 esbuild 打包运行，
+// 而 esbuild 只剥类型、不做检查。
+//
+// 后果是实打实的：`CommandContext` 加了新方法之后，`tools/command-test.ts` 里的
+// 桩对象 `FakeWorld` 少实现了三个方法，`npx tsc --noEmit` 依然是绿的，
+// 直到运行到这个测试才报错。
+//
+// 现状：`npm run typecheck:tools` 还有一批**历史遗留**错误（Node 全局、桩对象过时、
+// `Uint16Array`/`Uint8Array` 之类的窄化），见 TASKS 的 O6。这份配置先以"可量化"的方式
+// 留在仓库里（跑一次就知道还剩多少条），清到 0 之后再并进 `npm test`。
+{
+  "extends": "./tsconfig.json",
+  "include": ["tools", "tests", "src"]
+}

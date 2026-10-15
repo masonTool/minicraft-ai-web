@@ -29,6 +29,11 @@ export interface EntityContext {
    * 生物只负责"什么时候炸"，"炸成什么样"由主程序决定（要不要炸地形由 mobGriefing 规则控制）。
    */
   explode?: (x: number, y: number, z: number, power: number) => void;
+  /**
+   * 击杀经验（I5）：生物死亡时把 `type.xp` 交给主程序记账。
+   * 放在这里而不是让实体直接持有经验对象，是为了让实体层不认识"玩家进度"。
+   */
+  awardXp?: (amount: number) => void;
   /** 对玩家造成伤害（生物攻击用，第二个参数是伤害来源的水平位置，用于击退方向） */
   hurtPlayer: (amount: number, sourceX: number, sourceZ: number) => void;
   /** 生成掉落物实体（生物死亡掉落用） */

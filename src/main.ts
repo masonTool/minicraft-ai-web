@@ -21,6 +21,8 @@ import {
   type SurvivalEnvironment,
 } from './core/survival/PlayerStats.ts';
 import { VitalsHud } from './ui/VitalsHud.ts';
+import { XpHud } from './ui/XpHud.ts';
+import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
@@ -287,6 +289,8 @@ class App {
   private readonly meshPool: MeshWorkerPool;
   /** 生命 / 饥饿 / 氧气 */
   readonly stats = new PlayerStats();
+  /** 经验值与等级（I5） */
+  readonly experience = new Experience();
   /** 当前维度（与 world.dimension 同步，供渲染与环境使用） */
   private dimension: DimensionId = Dimension.OVERWORLD;
   /** 末影龙（进入末地时生成；HUD 血条与水晶回血都要用它） */
@@ -317,6 +321,7 @@ class App {
   /** 末地的背景色（星空黑） */
   private readonly endBackground = new THREE.Color(END_SKY);
   private readonly vitalsHud: VitalsHud;
+  private readonly xpHud: XpHud;
   /** 天空：渐变穹顶 / 太阳月亮 / 星空 / 云 */
   private readonly sky: Sky;
   /** 天气：晴 / 雨 / 雷暴 */
@@ -557,6 +562,9 @@ class App {
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType);
     this.deathEl = deathEl;
     this.vitalsHud = new VitalsHud(vitalsEl);
+    // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
+    // 塞进 #vitals 那个 flex 列会被挤到别的地方
+    this.xpHud = new XpHud(document.getElementById('hud') ?? container);
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -633,6 +641,8 @@ class App {
       {
         onOpenChange: (open) => this.handleInventoryOpen(open),
         onOpenRecipes: () => this.openRecipeBook(),
+        // 熔炉产物被取空时结算烧炼经验（I5）
+        onFurnaceXp: (amount) => this.awardXp(amount),
       },
       this.tooltip,
     );
@@ -951,6 +961,8 @@ class App {
     this.difficulty = data.difficulty ? normalizeDifficulty(data.difficulty) : this.worldConfig.difficulty;
     this.rules = normalizeGameRules(data.gameRules);
     this.effects.restore(data.effects);
+    // 旧存档没有 xp 字段：视为 0 级，而不是 NaN
+    this.experience.restore(data.xp);
 
     this.inventory.restore(data.inventory);
     this.selectSlot(data.selectedSlot);
@@ -987,6 +999,7 @@ class App {
       difficulty: this.difficulty,
       gameRules: { ...this.rules },
       effects: this.effects.serialize(),
+      xp: this.experience.serialize(),
     };
   }
 
@@ -1416,6 +1429,17 @@ class App {
   private get usingItem(): boolean {
     if (this.rightDown || this.padUse) return true;
     return this.touch !== null && this.leftDown && this.hit === null;
+  }
+
+  /**
+   * 记账一处经验（I5）。
+   *
+   * 所有来源都走这里：击杀生物（`EntityContext.awardXp`）、挖矿、熔炉取出产物。
+   * 经验球实体还没做，所以是**直接进账**；`Experience.add` 自己处理连升多级与小数余数。
+   */
+  private awardXp(amount: number): void {
+    if (amount <= 0) return;
+    this.experience.add(amount);
   }
 
   /**
@@ -1939,6 +1963,10 @@ class App {
       }
     }
 
+    // 挖矿经验（I5）：只有部分矿石给（煤 0~2、钻石/绿宝石 3~7…），
+    // 与掉落无关——铁矿挖出来有粗铁但**不给**经验，与原版一致；创造模式不给
+    if (!this.flying) this.awardXp(rollBlockXp(brokenId, Math.random()));
+
     // 挖掘消耗疲劳值（原版 0.005/方块）
     this.stats.addExhaustion(0.005);
 
@@ -2123,6 +2151,7 @@ class App {
       playSound: (kind, x, y, z) => this.audio.play(kind, { x, y, z }),
       explode: (x, y, z, power) => this.explodeAt(x, y, z, power),
       spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),
+      awardXp: (amount) => this.awardXp(amount),
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);
@@ -2328,6 +2357,14 @@ class App {
       },
       applyEffect: (name, seconds, amplifier) => this.applyEffectByName(name, seconds, amplifier),
       clearEffects: () => this.effects.clear(),
+      addXp: (amount) => this.experience.add(amount),
+      setXpLevel: (level) => this.experience.setLevel(level),
+      xpState: () => ({
+        level: this.experience.level,
+        progress: this.experience.progress,
+        toNext: this.experience.toNext,
+        total: this.experience.total,
+      }),
       onlinePlayers: () => {
         const names = [`${this.playerName}(你)`];
         for (const player of this.net.remote.values()) names.push(player.name);
@@ -2874,6 +2911,7 @@ class App {
     }
 
     this.vitalsHud.update(this.stats);
+    this.xpHud.update(this.experience);
     this.chat.update();
     this.updateEffectsHud();
     // 水面动画的时间（与昼夜时间分开：调 /time 不该让水面跳一下）
@@ -2887,6 +2925,7 @@ class App {
       if (!this.deathHandled) {
         this.deathHandled = true;
         this.dropInventoryOnDeath();
+        this.dropExperienceOnDeath();
       }
       this.deathEl.classList.remove('hidden');
       this.respawnCountdown += dt;
@@ -2943,6 +2982,18 @@ class App {
     this.inventory.clear();
     this.refreshHotbar();
     this.inventoryScreen.refresh();
+  }
+
+  /**
+   * 死亡掉经验（I5）。
+   *
+   * 原版是掉一地经验球、可以跑回去捡；本项目还没有经验球实体，
+   * 所以这里**只是清零**（`keepInventory` 打开时连经验一起保留，与原版一致）。
+   * 这不是 bug，是"经验球"那一项还没做——见 TASKS I5 的待补说明。
+   */
+  private dropExperienceOnDeath(): void {
+    if (this.rules.keepInventory) return;
+    this.experience.reset();
   }
 
   private respawnPlayer(): void {
@@ -3094,6 +3145,7 @@ class App {
       `持有: ${this.heldName}\n` +
       `视距: ${this.viewDistance}${this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance ? `（自适应，上限 ${this.settings.viewDistance}）` : ''} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
       `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}   护甲: ${armorPoints}\n` +
+      `经验: ${this.experience.level} 级 ${this.experience.progress}/${this.experience.toNext}（累计 ${this.experience.total}）\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
       `联机: ${this.netStatus}${this.net.selfId > 0 ? `（#${this.net.selfId} · 在线 ${this.net.playerCount} 人）` : ''}` +
       (this.chatLine && performance.now() < this.chatUntil ? `\n${this.chatLine}` : '');
@@ -3466,6 +3518,9 @@ class App {
     saturation: number;
     air: number;
     armor: number;
+    xpLevel: number;
+    xpProgress: number;
+    xpToNext: number;
     dead: boolean;
     invulnerable: boolean;
     totalDamage: number;
@@ -3476,6 +3531,9 @@ class App {
       saturation: this.stats.saturation,
       air: this.stats.air,
       armor: this.stats.armorPoints,
+      xpLevel: this.experience.level,
+      xpProgress: this.experience.progress,
+      xpToNext: this.experience.toNext,
       dead: this.stats.dead,
       invulnerable: this.stats.invulnerable,
       totalDamage: this.stats.totalDamage,

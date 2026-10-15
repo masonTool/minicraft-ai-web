@@ -70,6 +70,13 @@ export interface CommandContext {
   applyEffect(effectName: string, seconds: number, amplifier: number): boolean;
   clearEffects(): void;
 
+  // ---- 经验（I5）
+  /** 加经验（允许小数）；返回实际进账的整点经验 */
+  addXp(amount: number): number;
+  /** 直接设置等级（`/xp set`） */
+  setXpLevel(level: number): void;
+  xpState(): { level: number; progress: number; toNext: number; total: number };
+
   // ---- 联机
   onlinePlayers(): string[];
 }
@@ -490,6 +497,41 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(_args, ctx, out) {
       const players = ctx.onlinePlayers();
       out.info(`在线玩家（${players.length}）：${players.join(', ')}`);
+    },
+  },
+  {
+    // 与原版的 `/xp add|set|query` 对应；原版还有 `<n>L` 的"按级给"写法，这里没做
+    name: 'xp',
+    usage: '/xp add <点数> | /xp set <等级> | /xp query',
+    description: '查看或修改经验值与等级',
+    run(args, ctx, out) {
+      const mode = (args[0] ?? 'query').toLowerCase();
+      const state = ctx.xpState();
+
+      if (mode === 'query') {
+        out.info(`等级 ${state.level}：${state.progress}/${state.toNext}（累计 ${state.total} 点）`);
+        return;
+      }
+      if (mode !== 'add' && mode !== 'set') {
+        out.error('用法：/xp add <点数> | /xp set <等级> | /xp query');
+        return;
+      }
+
+      const value = Number(args[1]);
+      if (!Number.isFinite(value) || value < 0) {
+        out.error(`数量无效：${args[1] ?? '(空)'}`);
+        return;
+      }
+
+      if (mode === 'add') {
+        // 0.4 这样的点数允许（原版经验球是整数，但命令接受小数并向下取整）
+        const gained = ctx.addXp(value);
+        const after = ctx.xpState();
+        out.info(`已给予 ${value} 点经验（实际进账 ${gained} 点），当前等级 ${after.level}`);
+      } else {
+        ctx.setXpLevel(Math.floor(value));
+        out.info(`已将等级设置为 ${Math.floor(value)}`);
+      }
     },
   },
 ];

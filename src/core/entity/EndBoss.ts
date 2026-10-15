@@ -19,6 +19,9 @@ import type { EntityContext } from './Entity.ts';
 import { Mob, type MobType } from './Mob.ts';
 import { Block } from '../registry/blocks.ts';
 
+/** 击杀末影龙的经验（原版 12000 点，够从 0 级连升到 60 级往上） */
+export const ENDER_DRAGON_XP = 12000;
+
 /** 末影龙：200 点生命（对齐原版），碰撞盒按可玩性缩小到 6×4 */
 export const DRAGON_TYPE: MobType = {
   id: 'ender_dragon',
@@ -31,6 +34,8 @@ export const DRAGON_TYPE: MobType = {
   attackDamage: 6,
   followRange: 200,
   drops: [{ itemId: Block.DRAGON_EGG, min: 1, max: 1 }],
+  // 龙的 `hurt` 是自己写的（带无敌帧），经验在那里显式结算，不走 Mob.dropLoot
+  xp: ENDER_DRAGON_XP,
   bodyColor: 0x15121c,
   accentColor: 0x2f2647,
   eyeHeight: 3,
@@ -48,6 +53,7 @@ export const END_CRYSTAL_TYPE: MobType = {
   attackDamage: 0,
   followRange: 0,
   drops: [],
+  xp: 0,
   bodyColor: 0xe8d8f0,
   accentColor: 0x8a4fd0,
   eyeHeight: 0.8,
@@ -179,11 +185,13 @@ export class Dragon extends Mob {
     if (this.health <= 0) {
       this.health = 0;
       this.dead = true;
-      // 死亡掉落（原版是龙蛋 + 大量经验；经验系统未做，先给龙蛋）
+      // 死亡掉落（原版是龙蛋 + 12000 点经验）
       for (const drop of this.type.drops) {
         const count = drop.min + Math.floor(Math.random() * (drop.max - drop.min + 1));
         if (count > 0 && ctx) ctx.spawnDrop(drop.itemId, count, this.x, this.y + this.height * 0.5, this.z);
       }
+      // 12000 点会连升好多级（原版也是这么设计的），Experience.add 用 while 处理
+      ctx?.awardXp?.(ENDER_DRAGON_XP);
     }
     return true;
   }

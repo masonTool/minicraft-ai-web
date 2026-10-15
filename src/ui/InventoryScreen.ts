@@ -51,6 +51,11 @@ export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
   /** 打开配方书（背包标题栏上的按钮） */
   onOpenRecipes?: () => void;
+  /**
+   * 从熔炉里取走产物、且产物槽被取空时结算烧炼经验（I5）。
+   * 界面只负责"发现这件事发生了"，攒了多少、给谁加由主程序决定。
+   */
+  onFurnaceXp?: (amount: number) => void;
 }
 
 interface SlotBinding {
@@ -624,6 +629,12 @@ export class InventoryScreen {
           source.set(index, null);
         }
       }
+    }
+
+    // 熔炉产物被取空 → 结算攒下的烧炼经验（原版也是"整槽取走才给"）
+    if (takeOnly && source instanceof Furnace && source.get(FURNACE_OUTPUT) === null) {
+      const xp = source.takeExperience();
+      if (xp > 0) this.hooks.onFurnaceXp?.(xp);
     }
 
     if (this.held && this.held.count <= 0) this.held = null;

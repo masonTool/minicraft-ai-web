@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-15 · 提交总数 108（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-15 · 提交总数 109（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 175 项 —— 已完成 **98**、进行中 **56**、待办 21；
+- 进度口径：`TASKS.md` 共 176 项 —— 已完成 **99**、进行中 **56**、待办 21；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -60,10 +60,11 @@ npm run dev            # http://localhost:5173
 | 水面动画 | `VoxelMaterial` 的 `uTime` / `uFluidTiles`（按贴图起点识别流体，顶点做波浪、片元滚动贴图） |
 | 随机刻与流体 | `core/tick/RandomTicks.ts`（随机刻行为表 + 计划刻队列）、`core/world/Fluids.ts`（液面等级、无限水源、水火相遇） |
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
+| 经验与等级 | `core/survival/Experience.ts`：原版三段升级曲线（`2L+7 / 5L-38 / 9L-158`）；来源＝击杀生物（5 / 3 / 末影龙 12000）+ 挖矿（只给部分矿石，铁矿金矿不给）+ 熔炉取出（小数攒够 1 点）；经验条在快捷栏正上方、等级数字压在条中间；`/xp add\|set\|query`；死亡掉光、随存档走。⚠️ 经验球实体未做，所以是直接进账、死亡也捡不回来 |
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（379 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，136 条配方 + 11 条熔炼） |
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **33 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food，当前全绿；`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **34 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp，当前全绿；`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
 
 下一步的大头（队列与 TASKS.md 都能看到，按依赖顺序）：
 **经验值与附魔**（I5 → H9 附魔台 → K3 40+ 种附魔 → H8 铁砧）、
@@ -148,6 +149,8 @@ npm run dev            # http://localhost:5173
 | 断言都在比 id，就没人发现名字被顶了 | 染料区 1020~1035 与生物掉落 1030~1035 压在一起，后写的染料把"腐肉/骨头/火药/生牛肉/生猪排/生羊肉"整件覆盖。掉落、合成、背包测试**全是绿的**——因为它们比的都是 `Item.ROTTEN_FLESH` 这个 id，而不比"这件东西叫什么"。现在改成：`register()` 在启动时对重复 id 直接抛错，外加两条断言（id 无重复、每件物品都有中文名）（本轮） |
 | 原版 wiki 上那个数不一定是要填的数 | 食物表里两栏很容易写混：wiki 写"恢复 2.4 点饱和度"，而代码要填的 `saturationModifier` 是 **0.3**（= 2.4 ÷ (饥饿 4 × 2)）。第一版就是把 2.4 直接填了进去，苹果一口补 19.2 点饱和度。**把公式写进注释、再拿几组原版数值当断言**，这类"单位不对但量纲看起来对"的错才抓得住（本轮） |
 | 新加的贴图/物品不会自己出现在图集里 | 图集顺序表 `TILE_ORDER` 与 `PAINTERS` 是两处独立清单，加物品时**必须两边都加**（`test:armor` / `test:tool` 里都有"每件装备的图标都在图集名单里"的断言兜着）。食物这次照抄了同一套做法（本轮） |
+| **离线测试自己从来没被类型检查过** | `tsconfig.json` 只 include `src` 与 `vite.config.ts`，`tools/` 与 `tests/` 只经 esbuild 打包运行——而 esbuild 只剥类型、不做检查。给 `CommandContext` 加了三个方法之后，`tools/command-test.ts` 的桩对象没跟着改，`npx tsc --noEmit` **依然全绿**，跑到那个测试才炸。已加 `tsconfig.tools.json` + `npm run typecheck:tools` 把缺口量化：当前 121 处历史错误，见 TASKS O6（本轮） |
+| 公式"每段都对"不等于"整条曲线对" | 升级曲线 `2L+7 / 5L-38 / 9L-158` 三段分别取点都对，但分段边界最容易写错。真正的验证是拿一个公认的整体量去对：**练到 30 级共需 1395 点**。单点对拍很便宜，也最容易放过边界错误（本轮） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 

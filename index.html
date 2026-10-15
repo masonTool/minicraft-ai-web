@@ -212,9 +212,29 @@
         text-shadow: 1px 1px 0 #000; opacity: .75;
       }
 
+      /* ---------------- 经验条（快捷栏正上方，等级数字压在条中间） ---------------- */
+      #xp-bar {
+        position: absolute; left: 50%; bottom: 68px; transform: translateX(-50%);
+        width: 182px; height: 5px;
+        background: #1c1c1c; border: 1px solid #000; border-radius: 2px;
+        overflow: visible;
+      }
+      #xp-bar.hidden { display: none; }
+      #xp-bar #xp-fill {
+        display: block; height: 100%; width: 0;
+        background: linear-gradient(#a8f04a, #63c335);
+      }
+      #xp-level {
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        font-size: 13px; font-weight: 700; line-height: 1; color: #80ff20;
+        /* 原版是黑描边，压在绿色进度条上也读得清 */
+        text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+        pointer-events: none;
+      }
+
       /* ---------------- 生命 / 饥饿 / 氧气 ---------------- */
       #vitals {
-        position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%);
+        position: absolute; left: 50%; bottom: 86px; transform: translateX(-50%);
         display: flex; flex-direction: column; align-items: center; gap: 2px;
       }
       #vitals .vital-defs { position: absolute; width: 0; height: 0; }
@@ -547,7 +567,10 @@
         #hotbar .slot canvas { width: 28px; height: 28px; }
         #hotbar .slot .index { font-size: 9px; }
         #hotbar .slot .count { font-size: 11px; }
-        #vitals { bottom: 54px; }
+        /* 小屏：快捷栏更低，经验条与状态 HUD 跟着一起上移 */
+        #xp-bar { bottom: 58px; width: 156px; }
+        #xp-level { font-size: 11px; }
+        #vitals { bottom: 74px; }
         .vital-row svg.vital-icon { width: 14px; height: 14px; }
 
         /* 背包/容器面板在小屏上几乎全屏，并把槽位放大到好点按的尺寸 */

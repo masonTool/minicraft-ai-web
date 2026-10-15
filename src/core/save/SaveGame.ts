@@ -62,6 +62,8 @@ export interface PlayerSave {
   gameRules?: Record<string, boolean | number>;
   /** 状态效果（I4）：剩余时长接着走 */
   effects?: Array<{ id: string; amplifier: number; ticks: number; ambient: boolean }>;
+  /** 经验值与等级（I5）；旧存档没有时视为 0 级 */
+  xp?: { level: number; progress: number; total: number; partial: number };
 }
 
 /** 一个区块的存档记录 */
