@@ -273,6 +273,25 @@ export const TILE_ORDER = [
   'dragon_egg',
   'end_portal_frame',
   'end_portal',
+  // ---- 红石
+  'redstone_wire',
+  'redstone_torch',
+  'redstone_block',
+  'lever',
+  'stone_button',
+  'oak_button',
+  'stone_pressure_plate',
+  'oak_pressure_plate',
+  'repeater',
+  'comparator',
+  'redstone_lamp',
+  'redstone_lamp_on',
+  'piston_top',
+  'piston_side',
+  'sticky_piston_top',
+  'piston_head',
+  'observer_top',
+  'observer_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

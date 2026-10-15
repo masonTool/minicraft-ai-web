@@ -26,7 +26,7 @@
  */
 
 import * as THREE from 'three';
-import { Block, blockDef, type BlockDef } from '../registry/blocks.ts';
+import { Block, blockDef, blockTiles, type BlockDef } from '../registry/blocks.ts';
 import {
   canConnectTo,
   canPaneConnectTo,
@@ -360,7 +360,9 @@ function emitFace(
   precomputed?: readonly CornerLight[],
 ): void {
   const { buf, def, isTranslucent, atlas, ctx, originX, originZ, sampleBlock } = e;
-  const [tileU, tileV] = atlas.tileOrigin(def.tiles[face.tile]);
+  // 贴图按**状态**取：红石灯亮/灭是两套贴图，统一走 blockTiles
+  const tiles = blockTiles(def.id, ctx.getBlockState(originX + x, worldY, originZ + z));
+  const [tileU, tileV] = atlas.tileOrigin(tiles[face.tile]);
   const [bx0, by0, bz0, bx1, by1, bz1] = box;
 
   const vertexBase = buf.pos.length / 3;
@@ -395,7 +397,8 @@ function emitFace(
  */
 function emitCross(e: EmitContext, x: number, y: number, z: number, worldY: number): void {
   const { buf, def, atlas, ctx, originX, originZ } = e;
-  const [tileU, tileV] = atlas.tileOrigin(def.tiles[2]);
+  const tiles = blockTiles(def.id, ctx.getBlockState(originX + x, worldY, originZ + z));
+  const [tileU, tileV] = atlas.tileOrigin(tiles[2]);
   const sky = ctx.getSkyLight(originX + x, worldY, originZ + z);
   const blk = ctx.getBlockLight(originX + x, worldY, originZ + z);
 
@@ -527,7 +530,7 @@ function greedyMesh(
           if (blockDef(neighborId).opaque) continue;
           if (neighborId === id && def.translucent) continue;
 
-          const tile = def.tiles[face.tile];
+          const tile = blockTiles(id, ctx.getBlockState(originX + x, worldY, originZ + z))[face.tile];
           const layerId = layerOf(id);
           const lights = face.corners.map((corner) =>
             cornerLighting(ctx, originX, originZ, sampleBlock, def.translucent, x, y, z, worldY, face, corner),

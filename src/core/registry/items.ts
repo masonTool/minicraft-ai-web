@@ -210,7 +210,28 @@ const NATURAL = new Set<number>([
   Block.CALCITE,
 ]);
 
-const FUNCTIONAL = new Set<number>([Block.CRAFTING_TABLE, Block.FURNACE, Block.CHEST, Block.GLOWSTONE]);
+const FUNCTIONAL = new Set<number>([
+  Block.CRAFTING_TABLE,
+  Block.FURNACE,
+  Block.CHEST,
+  Block.GLOWSTONE,
+  // ---- 红石元件（都是"有信号才做事"的功能方块）
+  Block.REDSTONE_WIRE,
+  Block.REDSTONE_TORCH,
+  Block.REDSTONE_BLOCK,
+  Block.LEVER,
+  Block.STONE_BUTTON,
+  Block.OAK_BUTTON,
+  Block.STONE_PRESSURE_PLATE,
+  Block.OAK_PRESSURE_PLATE,
+  Block.REPEATER,
+  Block.COMPARATOR,
+  Block.REDSTONE_LAMP,
+  Block.PISTON,
+  Block.PISTON_HEAD,
+  Block.STICKY_PISTON,
+  Block.OBSERVER,
+]);
 
 /** 自然装饰与下界方块（创造物品栏的"自然"分类） */
 const DECORATION_AND_NETHER = new Set<number>([

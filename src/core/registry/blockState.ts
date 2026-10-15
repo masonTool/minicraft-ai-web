@@ -31,7 +31,12 @@ export type BlockShape =
   /** 十字交叉的两片薄面：草、花、蘑菇、甘蔗这类植物（无碰撞、双面可见） */
   | 'cross'
   /** 仙人掌：四面向内缩 1 像素，且不遮挡邻居（否则贴着的方块会被剔除掉一面） */
-  | 'cactus';
+  | 'cactus'
+  /**
+   * 贴地的薄板（红石粉 / 中继器 / 比较器 / 按钮 / 压力板）。
+   * 渲染成 1/16 高的一层，**无碰撞**：原版这些方块也确实不挡路（压力板能踩上去）。
+   */
+  | 'flat';
 
 /** 朝向对应的水平偏移（与 Facing 一一对应） */
 export const FACING_OFFSET: readonly (readonly [number, number])[] = [
@@ -47,6 +52,15 @@ const WALL_MOUNT_MASK = 0b1000;
 const DOOR_OPEN_MASK = 0b1000;
 const DOOR_HINGE_MASK = 0b10000;
 const DOOR_UPPER_MASK = 0b100000;
+/**
+ * 通用"通电 / 按下 / 开关"标记（bit3）。
+ *
+ * 与门的 OPEN、火把的 WALL_MOUNT **共用同一位**：它们属于不同的形状族，
+ * 同一个方块只会是其中一种，因此不需要各占一位。
+ * 红石系统统一用它表示"这个元件当前是否被激活"。
+ */
+const POWERED_MASK = 0b1000;
+
 /**
  * 台阶的"双层"标记（bit6）。
  *
@@ -101,6 +115,31 @@ export function isWallMounted(state: number): boolean {
 
 export function withWallMounted(state: number, mounted: boolean): number {
   return mounted ? state | WALL_MOUNT_MASK : state & ~WALL_MOUNT_MASK;
+}
+
+// ---------------------------------------------------------------- 红石元件
+
+/** 元件是否处于激活态（拉杆开、按钮按下、压力板被踩、红石灯亮、活塞伸出） */
+export function isPowered(state: number): boolean {
+  return (state & POWERED_MASK) !== 0;
+}
+
+export function withPowered(state: number, powered: boolean): number {
+  return powered ? state | POWERED_MASK : state & ~POWERED_MASK;
+}
+
+/**
+ * 中继器 / 比较器的延迟档位（0~3 → 1~4 红石刻，1 红石刻 = 0.1 秒）。
+ * 占 bit4-5：再往下 bit6 是台阶双层、bit7 空闲。
+ */
+const DELAY_MASK = 0b110000;
+
+export function delayOf(state: number): number {
+  return (state & DELAY_MASK) >> 4;
+}
+
+export function withDelay(state: number, delay: number): number {
+  return (state & ~DELAY_MASK) | ((delay & 0b11) << 4);
 }
 
 // ---------------------------------------------------------------- 门

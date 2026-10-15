@@ -1244,6 +1244,151 @@ PAINTERS.dragon_egg = DRAGON_EGG_PAINTER;
 PAINTERS.end_portal_frame = END_PORTAL_FRAME_PAINTER;
 PAINTERS.end_portal = END_PORTAL_PAINTER;
 
+// ---- 红石元件
+/** 红石粉：暗红底上一条更亮的"粉末线" */
+const REDSTONE_WIRE_PAINTER: Painter = (x, y, rng) => {
+  const line = Math.abs(x - 7.5) < 3 || Math.abs(y - 7.5) < 3;
+  const v = 1 + (rng() * 0.2 - 0.1);
+  if (line) return [clamp255(196 * v), clamp255(36 * v), clamp255(28 * v), 255];
+  const dark = 0.72 + (rng() * 0.16 - 0.08);
+  return [clamp255(126 * dark), clamp255(24 * dark), clamp255(20 * dark), 255];
+};
+/** 红石火把：木棍 + 顶端红光 */
+const REDSTONE_TORCH_PAINTER: Painter = (x, y, rng) => {
+  if (y < 8) return EMPTY;
+  const dx = Math.abs(x - 7.5);
+  if (dx > 2.2) return EMPTY;
+  const core = dx < 1.1 && y >= 11;
+  const v = 1 + (rng() * 0.12 - 0.06);
+  if (core) return [clamp255(248 * v), clamp255(96 * v), clamp255(72 * v), 255];
+  return [clamp255(140 * v), clamp255(66 * v), clamp255(58 * v), 255];
+};
+/** 红石块：通体暗红 + 细密颗粒 */
+const REDSTONE_BLOCK_PAINTER: Painter = (x, y, rng) => {
+  const key = (y >> 1) * 8 + (x >> 1);
+  const grain = (hashString(`rsb${key}`) % 100) / 100;
+  const v = 0.86 + grain * 0.3 + (rng() * 0.1 - 0.05);
+  return [clamp255(168 * v), clamp255(32 * v), clamp255(26 * v), 255];
+};
+/** 拉杆：中间一根木杆 + 底部石座 */
+const LEVER_PAINTER: Painter = (x, y, rng) => {
+  const dx = Math.abs(x - 7.5);
+  if (y < 6) return EMPTY;
+  const v = 1 + (rng() * 0.1 - 0.05);
+  if (dx < 1.4) return [clamp255(150 * v), clamp255(118 * v), clamp255(78 * v), 255];
+  if (dx < 3.4 && y > 12) return [clamp255(122 * v), clamp255(122 * v), clamp255(122 * v), 255];
+  return EMPTY;
+};
+/** 按钮：中央一个小方块 */
+function buttonPainter(rgb: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    if (x < 4 || x > 11 || y < 4 || y > 11) return [clamp255(rgb[0] * 0.7), clamp255(rgb[1] * 0.7), clamp255(rgb[2] * 0.7), 255];
+    const v = 1 + (rng() * 0.14 - 0.07);
+    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+  };
+}
+/** 压力板：整片薄板的俯视图 */
+function platePainter(rgb: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const edge = x < 1 || y < 1 || x > 14 || y > 14;
+    const v = (edge ? 0.82 : 1) + (rng() * 0.1 - 0.05);
+    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+  };
+}
+/** 中继器：石底 + 一条红石线 + 前后两个火把点 */
+const REPEATER_PAINTER: Painter = (x, y, rng) => {
+  const body = 1 + (rng() * 0.1 - 0.05);
+  if (y >= 5 && y <= 10 && Math.abs(x - 7.5) < 2.6) return [clamp255(186 * body), clamp255(40 * body), clamp255(30 * body), 255];
+  if ((y <= 3 || y >= 12) && Math.abs(x - 7.5) < 2.2) return [clamp255(214 * body), clamp255(72 * body), clamp255(52 * body), 255];
+  return [clamp255(150 * body), clamp255(150 * body), clamp255(150 * body), 255];
+};
+/** 比较器：与中继器同底，后端三点、前端单点 */
+const COMPARATOR_PAINTER: Painter = (x, y, rng) => {
+  const body = 1 + (rng() * 0.1 - 0.05);
+  if (y >= 5 && y <= 10 && Math.abs(x - 7.5) < 2.6) return [clamp255(178 * body), clamp255(36 * body), clamp255(28 * body), 255];
+  if (y <= 3 && (Math.abs(x - 4) < 1.6 || Math.abs(x - 7.5) < 1.6 || Math.abs(x - 11) < 1.6)) {
+    return [clamp255(210 * body), clamp255(70 * body), clamp255(50 * body), 255];
+  }
+  if (y >= 12 && Math.abs(x - 7.5) < 2.2) return [clamp255(210 * body), clamp255(70 * body), clamp255(50 * body), 255];
+  return [clamp255(146 * body), clamp255(146 * body), clamp255(146 * body), 255];
+};
+/** 红石灯（灭 / 亮两套） */
+function lampPainter(lit: boolean): Painter {
+  return (x, y, rng) => {
+    const key = (y >> 2) * 4 + (x >> 2);
+    const cell = hashString(`lamp${key}`) % 100;
+    const v = 1 + (rng() * 0.12 - 0.06);
+    if (lit) {
+      const glow = cell < 35 ? 1.35 : 1.05;
+      return [clamp255(250 * v * glow * 0.72), clamp255(214 * v * glow * 0.62), clamp255(120 * v * glow * 0.42), 255];
+    }
+    if (cell < 25) return [clamp255(122 * v), clamp255(66 * v), clamp255(48 * v), 255];
+    return [clamp255(96 * v), clamp255(72 * v), clamp255(44 * v), 255];
+  };
+}
+/** 活塞面：木质圆盘 + 金属环 */
+const PISTON_TOP_PAINTER: Painter = (x, y, rng) => {
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  const v = 1 + (rng() * 0.12 - 0.06);
+  if (r < 2.4) return [clamp255(206 * v), clamp255(180 * v), clamp255(140 * v), 255];
+  if (r < 6.2) return [clamp255(150 * v), clamp255(126 * v), clamp255(96 * v), 255];
+  return [clamp255(120 * v), clamp255(98 * v), clamp255(74 * v), 255];
+};
+/** 活塞侧面：木板 + 上下两条金属箍 */
+const PISTON_SIDE_PAINTER: Painter = (_x, y, rng) => {
+  const v = 1 + (rng() * 0.12 - 0.06);
+  if (y < 3 || y > 12) return [clamp255(138 * v), clamp255(116 * v), clamp255(90 * v), 255];
+  return [clamp255(178 * v), clamp255(150 * v), clamp255(116 * v), 255];
+};
+/** 粘性活塞面：活塞面 + 中央黏液绿 */
+const STICKY_PISTON_TOP_PAINTER: Painter = (x, y, rng) => {
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  const v = 1 + (rng() * 0.12 - 0.06);
+  if (r < 4.2) return [clamp255(120 * v), clamp255(178 * v), clamp255(92 * v), 255];
+  if (r < 6.2) return [clamp255(150 * v), clamp255(126 * v), clamp255(96 * v), 255];
+  return [clamp255(120 * v), clamp255(98 * v), clamp255(74 * v), 255];
+};
+/** 活塞头面部：金属板 + 四角铆钉 */
+const PISTON_HEAD_PAINTER: Painter = (x, y, rng) => {
+  const v = 1 + (rng() * 0.12 - 0.06);
+  const rivet = (x < 3 || x > 12) && (y < 3 || y > 12);
+  if (rivet) return [clamp255(206 * v), clamp255(184 * v), clamp255(148 * v), 255];
+  return [clamp255(146 * v), clamp255(124 * v), clamp255(98 * v), 255];
+};
+/** 侦测器顶面：中间一只"眼" */
+const OBSERVER_TOP_PAINTER: Painter = (x, y, rng) => {
+  const v = 1 + (rng() * 0.1 - 0.05);
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  if (r < 3) return [clamp255(206 * v), clamp255(206 * v), clamp255(206 * v), 255];
+  if (r < 5) return [clamp255(96 * v), clamp255(96 * v), clamp255(104 * v), 255];
+  return [clamp255(126 * v), clamp255(126 * v), clamp255(134 * v), 255];
+};
+/** 侦测器侧面：深灰石壳 + 一道红石纹 */
+const OBSERVER_SIDE_PAINTER: Painter = (x, _y, rng) => {
+  const v = 1 + (rng() * 0.1 - 0.05);
+  if (Math.abs(x - 7.5) < 2) return [clamp255(178 * v), clamp255(52 * v), clamp255(40 * v), 255];
+  return [clamp255(104 * v), clamp255(104 * v), clamp255(112 * v), 255];
+};
+
+PAINTERS.redstone_wire = REDSTONE_WIRE_PAINTER;
+PAINTERS.redstone_torch = REDSTONE_TORCH_PAINTER;
+PAINTERS.redstone_block = REDSTONE_BLOCK_PAINTER;
+PAINTERS.lever = LEVER_PAINTER;
+PAINTERS.stone_button = buttonPainter([140, 140, 140]);
+PAINTERS.oak_button = buttonPainter([168, 132, 84]);
+PAINTERS.stone_pressure_plate = platePainter([140, 140, 140]);
+PAINTERS.oak_pressure_plate = platePainter([168, 132, 84]);
+PAINTERS.repeater = REPEATER_PAINTER;
+PAINTERS.comparator = COMPARATOR_PAINTER;
+PAINTERS.redstone_lamp = lampPainter(false);
+PAINTERS.redstone_lamp_on = lampPainter(true);
+PAINTERS.piston_top = PISTON_TOP_PAINTER;
+PAINTERS.piston_side = PISTON_SIDE_PAINTER;
+PAINTERS.sticky_piston_top = STICKY_PISTON_TOP_PAINTER;
+PAINTERS.piston_head = PISTON_HEAD_PAINTER;
+PAINTERS.observer_top = OBSERVER_TOP_PAINTER;
+PAINTERS.observer_side = OBSERVER_SIDE_PAINTER;
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

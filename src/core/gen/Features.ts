@@ -21,7 +21,7 @@
 
 import { Block, Wood, type WoodBlockIds } from '../registry/blocks.ts';
 import { Biome, type BiomeDef } from './Biome.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
+import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 
 // ---------------------------------------------------------------- 随机与哈希
 
@@ -129,7 +129,7 @@ export class FeatureWriter {
    * @param onStateWrite 写入状态时的回调（用于把"本区块有状态"标记出去）
    */
   constructor(
-    private readonly blocks: Uint8Array,
+    private readonly blocks: BlockArray,
     readonly cx: number,
     readonly cz: number,
     private readonly states: Uint8Array | null = null,
@@ -733,7 +733,7 @@ function isPlantable(w: FeatureWriter, x: number, y: number, z: number, ground: 
  */
 export function plantTree(
   kind: TreeKind,
-  blocks: Uint8Array,
+  blocks: BlockArray,
   cx: number,
   cz: number,
   world: FeatureWorld,
@@ -779,7 +779,7 @@ export interface FeatureStats {
  * @param stats  可选统计输出
  */
 export function decorate(
-  blocks: Uint8Array,
+  blocks: BlockArray,
   cx: number,
   cz: number,
   world: FeatureWorld,

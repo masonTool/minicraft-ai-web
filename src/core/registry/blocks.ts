@@ -8,7 +8,7 @@
  */
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
-import type { BlockShape } from './blockState.ts';
+import { isPowered, type BlockShape } from './blockState.ts';
 
 export interface BlockDef {
   readonly id: number;
@@ -29,6 +29,10 @@ export interface BlockDef {
   readonly translucent: boolean;
   /** 几何形状族：完整立方体 / 台阶 / 楼梯 / 栅栏 / 墙 / 门 / 火把 / 梯子 */
   readonly shape: BlockShape;
+  /** 按状态取贴图（红石灯亮/灭这类）；不填则一律用 tiles */
+  readonly stateTiles?: (state: number) => readonly [string, string, string];
+  /** 按状态取发光等级（红石灯亮时 15）；不填则一律用 light */
+  readonly stateLight?: (state: number) => number;
 }
 
 interface BlockSpec {
@@ -42,6 +46,8 @@ interface BlockSpec {
   liquid?: boolean;
   translucent?: boolean;
   shape?: BlockShape;
+  stateTiles?: (state: number) => readonly [string, string, string];
+  stateLight?: (state: number) => number;
 }
 
 const BASE_SPECS: readonly BlockSpec[] = [
@@ -625,6 +631,133 @@ const END_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 红石元件
+//
+// 红石方块分两类：
+//  - **电源与传输**：红石粉（贴地薄板）、红石火把、红石块、拉杆、按钮、压力板、中继器、比较器
+//  - **执行器**：红石灯（亮/灭两套贴图 + 发光等级）、活塞 / 粘性活塞（伸出时在前方放一个活塞头）
+//
+// 信号强度**不存在方块状态里**，而是由 `core/redstone/RedstoneEngine.ts` 在运行时维护
+// （方块状态只有 8 位，还要留给朝向与延迟；强度是易变的中间量，没必要落盘）。
+// 状态位只用来记"元件的持久状态"：通电/按下（bit3）、朝向（bit1-2）、中继器延迟（bit4-5）。
+
+const REDSTONE_SPECS: readonly BlockSpec[] = [
+  {
+    id: 256,
+    name: 'minecraft:redstone_wire',
+    tiles: ['redstone_wire', 'redstone_wire', 'redstone_wire'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 257,
+    name: 'minecraft:redstone_torch',
+    tiles: ['redstone_torch', 'redstone_torch', 'redstone_torch'],
+    shape: 'torch',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+    light: 7,
+  },
+  { id: 258, name: 'minecraft:redstone_block', tiles: ['redstone_block', 'redstone_block', 'redstone_block'] },
+  {
+    id: 259,
+    name: 'minecraft:lever',
+    tiles: ['lever', 'lever', 'lever'],
+    shape: 'torch',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 260,
+    name: 'minecraft:stone_button',
+    tiles: ['stone_button', 'stone_button', 'stone_button'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 261,
+    name: 'minecraft:oak_button',
+    tiles: ['oak_button', 'oak_button', 'oak_button'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 262,
+    name: 'minecraft:stone_pressure_plate',
+    tiles: ['stone_pressure_plate', 'stone_pressure_plate', 'stone_pressure_plate'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 263,
+    name: 'minecraft:oak_pressure_plate',
+    tiles: ['oak_pressure_plate', 'oak_pressure_plate', 'oak_pressure_plate'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 264,
+    name: 'minecraft:repeater',
+    tiles: ['repeater', 'repeater', 'repeater'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 265,
+    name: 'minecraft:comparator',
+    tiles: ['comparator', 'comparator', 'comparator'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 266,
+    name: 'minecraft:redstone_lamp',
+    tiles: ['redstone_lamp', 'redstone_lamp', 'redstone_lamp'],
+    // 亮起的红石灯换成发光贴图，并把方块光拉到 15——这是"红石能点亮房间"的关键
+    stateTiles: (state) =>
+      isPowered(state)
+        ? ['redstone_lamp_on', 'redstone_lamp_on', 'redstone_lamp_on']
+        : ['redstone_lamp', 'redstone_lamp', 'redstone_lamp'],
+    stateLight: (state) => (isPowered(state) ? 15 : 0),
+  },
+  {
+    id: 267,
+    name: 'minecraft:piston',
+    tiles: ['piston_top', 'piston_top', 'piston_side'],
+  },
+  {
+    id: 268,
+    name: 'minecraft:piston_head',
+    tiles: ['piston_head', 'piston_head', 'piston_head'],
+  },
+  {
+    id: 269,
+    name: 'minecraft:sticky_piston',
+    tiles: ['sticky_piston_top', 'piston_top', 'piston_side'],
+  },
+  {
+    id: 270,
+    name: 'minecraft:observer',
+    tiles: ['observer_top', 'observer_top', 'observer_side'],
+  },
+];
+
 /**
  * 全部方块定义。
  * ⚠️ 必须按 id 升序排列：BLOCKS 是按数组下标索引的，顺序错位会让 blockDef(id) 取到别的方块。
@@ -641,6 +774,7 @@ const SPECS: readonly BlockSpec[] = [
   ...PRISMARINE_SPECS,
   ...NETHER_SPECS,
   ...END_SPECS,
+  ...REDSTONE_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -781,6 +915,23 @@ export const Block = {
   DRAGON_EGG: 253,
   END_PORTAL_FRAME: 254,
   END_PORTAL: 255,
+
+  // ---- 红石
+  REDSTONE_WIRE: 256,
+  REDSTONE_TORCH: 257,
+  REDSTONE_BLOCK: 258,
+  LEVER: 259,
+  STONE_BUTTON: 260,
+  OAK_BUTTON: 261,
+  STONE_PRESSURE_PLATE: 262,
+  OAK_PRESSURE_PLATE: 263,
+  REPEATER: 264,
+  COMPARATOR: 265,
+  REDSTONE_LAMP: 266,
+  PISTON: 267,
+  PISTON_HEAD: 268,
+  STICKY_PISTON: 269,
+  OBSERVER: 270,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -815,6 +966,8 @@ function buildBlockTable(): readonly BlockDef[] {
       liquid: spec.liquid ?? false,
       translucent: spec.translucent ?? false,
       shape: spec.shape ?? 'cube',
+      stateTiles: spec.stateTiles,
+      stateLight: spec.stateLight,
     });
   }
   return table;
@@ -841,6 +994,21 @@ export function lightOpacity(id: number): number {
 
 export function emitLight(id: number): number {
   return blockDef(id).light;
+}
+
+/**
+ * 按状态取贴图。绝大多数方块与状态无关；红石灯这类需要按状态换贴图的走 stateTiles。
+ * 网格化器统一走这个入口，于是"新增一个会变色的方块"不需要改网格化器。
+ */
+export function blockTiles(id: number, state: number): readonly [string, string, string] {
+  const def = BLOCKS[id] ?? BLOCKS[0]!;
+  return def.stateTiles ? def.stateTiles(state) : def.tiles;
+}
+
+/** 按状态取发光等级（红石灯亮时为 15） */
+export function emitLightWithState(id: number, state: number): number {
+  const def = BLOCKS[id] ?? BLOCKS[0]!;
+  return def.stateLight ? def.stateLight(state) : def.light;
 }
 
 // ---------------------------------------------------------------- 挖掘属性

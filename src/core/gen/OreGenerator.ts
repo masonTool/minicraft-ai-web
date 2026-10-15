@@ -23,7 +23,7 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk } from '../world/Chunk.ts';
+import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk } from '../world/Chunk.ts';
 import { Random } from './noise/Random.ts';
 
 interface OreSpec {
@@ -152,7 +152,7 @@ export class OreGenerator {
    * @param erosionAt 返回该列侵蚀度，用于判断是否属于多山区域（绿宝石）
    */
   generate(
-    blocks: Uint8Array,
+    blocks: BlockArray,
     cx: number,
     cz: number,
     erosionAt: (worldX: number, worldZ: number) => number,
@@ -212,7 +212,7 @@ export class OreGenerator {
    * 因此所有随机量（尺寸、半径、步长、每一步的类型与扰动）都按固定顺序取出。
    */
   private placeVein(
-    blocks: Uint8Array,
+    blocks: BlockArray,
     spec: OreSpec,
     rng: Random,
     startX: number,

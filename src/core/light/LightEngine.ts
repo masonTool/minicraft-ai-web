@@ -11,7 +11,7 @@
  * BFS 可按预算分帧执行，避免一次性阻塞主线程。
  */
 
-import { blockDef } from '../registry/blocks.ts';
+import { blockDef, emitLightWithState } from '../registry/blocks.ts';
 import { Chunk, SECTION_COUNT, SECTION_HEIGHT, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 
 /** 光照引擎需要的世界访问能力（由 World 实现，接口化以避免循环依赖） */
@@ -171,7 +171,8 @@ export class LightEngine {
           }
           const id = chunk.get(x, y, z);
           if (id !== 0) {
-            const emit = blockDef(id).light;
+            // 发光等级按**状态**取：红石灯亮的时候才发光（灭的时候 0）
+            const emit = emitLightWithState(id, chunk.getState(x, y, z));
             if (emit > 0) {
               chunk.setBlockLight(x, y, z, emit);
               this.blockQueue.push(originX + x, y, originZ + z);

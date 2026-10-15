@@ -15,7 +15,7 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../world/Chunk.ts';
+import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../world/Chunk.ts';
 import { NormalNoise } from './noise/PerlinNoise.ts';
 import type { Random } from './noise/Random.ts';
 
@@ -52,7 +52,7 @@ export class CaveCarver {
   }
 
   /** 就地雕刻一个区块的方块数组 */
-  carve(blocks: Uint8Array, originX: number, originZ: number): void {
+  carve(blocks: BlockArray, originX: number, originZ: number): void {
     this.buildHeightMap(blocks);
     this.broken.fill(0);
 
@@ -124,7 +124,7 @@ export class CaveCarver {
     return false;
   }
 
-  private buildHeightMap(blocks: Uint8Array): void {
+  private buildHeightMap(blocks: BlockArray): void {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
         let top = WORLD_MIN_Y;
@@ -143,7 +143,7 @@ export class CaveCarver {
    * 被洞穴破开地表的列，需要重新铺地表方块。
    * 否则草皮会悬在洞口上方，看起来像是地形生成出错。
    */
-  private repairSurface(blocks: Uint8Array): void {
+  private repairSurface(blocks: BlockArray): void {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
         const columnIndex = z * CHUNK_SIZE_X + x;

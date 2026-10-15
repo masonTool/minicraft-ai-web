@@ -15,7 +15,7 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
+import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_MIN_Y, createBlockArray } from '../world/Chunk.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { FeatureWriter, hashAt, PositionalRng } from './Features.ts';
@@ -142,8 +142,8 @@ export class NetherGenerator {
 
   // ---------------------------------------------------------------- 生成
 
-  generate(cx: number, cz: number, out?: Uint8Array): Uint8Array {
-    const blocks = out ?? new Uint8Array(CHUNK_VOLUME);
+  generate(cx: number, cz: number, out?: BlockArray): BlockArray {
+    const blocks = out ?? createBlockArray();
     if (out) blocks.fill(0);
 
     const originX = cx * CHUNK_SIZE_X;
@@ -209,7 +209,7 @@ export class NetherGenerator {
   }
 
   /** 地形主体：地板以下实心、洞顶以上实心、中间按洞窟噪声决定 */
-  private fillTerrain(blocks: Uint8Array, originX: number, originZ: number): void {
+  private fillTerrain(blocks: BlockArray, originX: number, originZ: number): void {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
         const worldX = originX + x;
@@ -244,7 +244,7 @@ export class NetherGenerator {
    *  - 玄武岩三角洲：玄武岩 + 黑石 + 岩浆块
    *  - 下界荒原：保持下界岩，撒一点岩浆块
    */
-  private applySurface(blocks: Uint8Array, originX: number, originZ: number): void {
+  private applySurface(blocks: BlockArray, originX: number, originZ: number): void {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
         const worldX = originX + x;
@@ -279,7 +279,7 @@ export class NetherGenerator {
   }
 
   /** 某列最上面的实心方块（地板到洞顶之间），没有返回 null */
-  private solidTop(blocks: Uint8Array, x: number, floor: number, z: number): number | null {
+  private solidTop(blocks: BlockArray, x: number, floor: number, z: number): number | null {
     // 从地板上方往上找第一格实心（团块噪声可能在地板上方又堆出石头）
     const limit = Math.min(WORLD_MAX_Y - 1, NETHER_CEILING);
     for (let y = Math.min(limit, floor + 12); y >= WORLD_MIN_Y; y--) {
@@ -288,7 +288,7 @@ export class NetherGenerator {
     return null;
   }
 
-  private applyGroundLayer(blocks: Uint8Array, x: number, top: number, z: number, biome: number, noise: number): void {
+  private applyGroundLayer(blocks: BlockArray, x: number, top: number, z: number, biome: number, noise: number): void {
     const set = (y: number, id: number): void => {
       if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return;
       blocks[Chunk.index(x, y, z)] = id;
@@ -332,7 +332,7 @@ export class NetherGenerator {
   }
 
   /** 矿石：石英（常见，全高度）+ 远古残骸（稀有，y 8~22） */
-  private generateOres(blocks: Uint8Array, cx: number, cz: number, originX: number, originZ: number): void {
+  private generateOres(blocks: BlockArray, cx: number, cz: number, originX: number, originZ: number): void {
     const rng = new PositionalRng(cx, cz, this.seed ^ 0x0f0f);
 
     const veins: Array<{ id: number; count: number; size: number; minY: number; maxY: number }> = [
@@ -372,7 +372,7 @@ export class NetherGenerator {
    * 与主世界同样的跨区块约定：地物的坐标只依赖世界坐标（地板高度是解析式，
    * 岩浆海面是常数），因此 3×3 邻域重放时不会错位。
    */
-  private decorate(blocks: Uint8Array, cx: number, cz: number, originX: number, originZ: number): void {
+  private decorate(blocks: BlockArray, cx: number, cz: number, originX: number, originZ: number): void {
     const writer = new FeatureWriter(blocks, cx, cz);
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -455,7 +455,7 @@ export class NetherGenerator {
    * 走的是与正式生成完全相同的代码路径，因此测到的形状就是世界里长出来的形状。
    */
   plantFungusTreeForTest(
-    blocks: Uint8Array,
+    blocks: BlockArray,
     cx: number,
     cz: number,
     x: number,

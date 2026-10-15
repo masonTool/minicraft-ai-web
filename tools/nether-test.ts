@@ -212,8 +212,8 @@ console.log('\n[跨区块一致性与确定性]');
   const wartIds = [Block.NETHER_WART_BLOCK, Block.WARPED_WART_BLOCK];
   const generator = new NetherGenerator(SEED);
 
-  const ownerChunk = new Uint8Array(CHUNK_VOLUME);
-  const neighbourChunk = new Uint8Array(CHUNK_VOLUME);
+  const ownerChunk = new Uint16Array(CHUNK_VOLUME);
+  const neighbourChunk = new Uint16Array(CHUNK_VOLUME);
   generator.plantFungusTreeForTest(ownerChunk, 0, 0, 15, 8, true, 77);
   generator.plantFungusTreeForTest(neighbourChunk, 1, 0, 15, 8, true, 77);
 

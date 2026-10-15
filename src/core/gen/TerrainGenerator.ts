@@ -10,7 +10,7 @@
  * 该模块必须保持"纯函数 + 无 DOM 依赖"，因为它会被 Web Worker 直接引用。
  */
 
-import { CHUNK_VOLUME } from '../world/Chunk.ts';
+import { CHUNK_VOLUME, type BlockArray } from '../world/Chunk.ts';
 import { BIOME_TABLE } from './Biome.ts';
 import { Dimension, type DimensionId } from './Dimension.ts';
 import { EndGenerator } from './EndGenerator.ts';
@@ -96,9 +96,9 @@ export function generateChunkBlocks(
   cz: number,
   seed: number,
   dimension: DimensionId = Dimension.OVERWORLD,
-  out?: Uint8Array,
+  out?: BlockArray,
   stats?: FeatureStats,
-): Uint8Array {
+): BlockArray {
   if (dimension === Dimension.NETHER) {
     // 下界不写方块状态：地物全是整块方块，没有门/楼梯
     return netherGeneratorFor(seed).generate(cx, cz, out);

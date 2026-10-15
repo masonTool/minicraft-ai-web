@@ -18,7 +18,7 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
+import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_MIN_Y, createBlockArray } from '../world/Chunk.ts';
 import { NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { FeatureWriter, hashAt, PositionalRng } from './Features.ts';
@@ -196,8 +196,8 @@ export class EndGenerator {
 
   // ---------------------------------------------------------------- 生成
 
-  generate(cx: number, cz: number, out?: Uint8Array): Uint8Array {
-    const blocks = out ?? new Uint8Array(CHUNK_VOLUME);
+  generate(cx: number, cz: number, out?: BlockArray): BlockArray {
+    const blocks = out ?? createBlockArray();
     if (out) blocks.fill(0);
 
     const originX = cx * CHUNK_SIZE_X;
@@ -212,7 +212,7 @@ export class EndGenerator {
   }
 
   /** 填岛：逐列从岛底填到岛面，其余保持空气（末地的岛是悬空的） */
-  private fillIslands(blocks: Uint8Array, originX: number, originZ: number): void {
+  private fillIslands(blocks: BlockArray, originX: number, originZ: number): void {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
         const worldX = originX + x;
@@ -236,7 +236,7 @@ export class EndGenerator {
   // ---------------------------------------------------------------- 地物
 
   /** 紫颂树：只长在外岛上（原版如此），沿用 3×3 邻域重放的跨区块约定 */
-  private decorate(blocks: Uint8Array, cx: number, cz: number, originX: number, originZ: number): void {
+  private decorate(blocks: BlockArray, cx: number, cz: number, originX: number, originZ: number): void {
     const writer = new FeatureWriter(blocks, cx, cz);
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -299,7 +299,7 @@ export class EndGenerator {
    * 返回传送门：岛心的 3×3 末地传送门 + 基岩基座 + 四角的基岩柱与火把。
    * （原版是召唤末影龙时生成、并带 4 根火把与龙蛋；这里先做成固定地标）
    */
-  private buildCentralPortal(blocks: Uint8Array, cx: number, cz: number): void {
+  private buildCentralPortal(blocks: BlockArray, cx: number, cz: number): void {
     const w = new FeatureWriter(blocks, cx, cz);
     const y = MAIN_ISLAND_TOP + 1;
 
@@ -331,7 +331,7 @@ export class EndGenerator {
    * 黑曜石柱：以岛心为中心、半径 42 格的圆上均匀立 10 根，高度 76~103，
    * 柱顶垫一格基岩（末地水晶由实体系统放在基岩之上）。
    */
-  private buildPillars(blocks: Uint8Array, cx: number, cz: number): void {
+  private buildPillars(blocks: BlockArray, cx: number, cz: number): void {
     const w = new FeatureWriter(blocks, cx, cz);
     for (const top of endPillarTops(this.seed)) {
       const px = top.x;

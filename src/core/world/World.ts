@@ -86,7 +86,7 @@ export class World {
     // 请求过程中玩家可能已经离开，丢弃过期结果
     if (!this.wanted.has(key)) return;
 
-    const chunk = Chunk.fromData(data.cx, data.cz, new Uint8Array(data.blocks));
+    const chunk = Chunk.fromData(data.cx, data.cz, new Uint16Array(data.blocks));
     if (data.states && data.states.byteLength > 0) chunk.adoptStates(new Uint8Array(data.states));
     this.chunks.set(key, chunk);
     this.invalidateChunkCache();

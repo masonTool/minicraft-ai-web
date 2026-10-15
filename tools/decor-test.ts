@@ -46,7 +46,7 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 // ---------------------------------------------------------------- 1. 注册表一致性
 
 console.log('\n[方块注册表]');
-equal('方块总数', BLOCKS.length, 256);
+equal('方块总数', BLOCKS.length, 271);
 check(
   'id 从 0 连续到末尾',
   BLOCKS.every((def, index) => def.id === index),
@@ -125,7 +125,7 @@ function flatWorld(surfaceY = 64, biomeId: number = Biome.PLAINS): FeatureWorld 
 
 /** 铺一层平地（y ≤ surfaceY 为石头，最上面一层为指定地表方块） */
 function flatChunk(surfaceY = 64, surfaceBlock = Block.GRASS_BLOCK): Uint8Array {
-  const blocks = new Uint8Array(CHUNK_VOLUME);
+  const blocks = new Uint16Array(CHUNK_VOLUME);
   for (let y = -64; y <= surfaceY; y++) {
     const id = y === surfaceY ? surfaceBlock : Block.STONE;
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {

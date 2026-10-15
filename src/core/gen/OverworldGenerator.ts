@@ -18,7 +18,7 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../world/Chunk.ts';
+import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_HEIGHT, WORLD_MIN_Y, createBlockArray } from '../world/Chunk.ts';
 import { Aquifer } from './Aquifer.ts';
 import { CaveCarver } from './CaveCarver.ts';
 import { bandBlockAt, columnSurface } from './SurfaceRules.ts';
@@ -333,8 +333,8 @@ export class OverworldGenerator {
     return density;
   }
 
-  generate(cx: number, cz: number, out?: Uint8Array): Uint8Array {
-    const blocks = out ?? new Uint8Array(CHUNK_VOLUME);
+  generate(cx: number, cz: number, out?: BlockArray): BlockArray {
+    const blocks = out ?? createBlockArray();
     if (out) blocks.fill(0);
 
     const originX = cx * CHUNK_SIZE_X;
@@ -372,7 +372,7 @@ export class OverworldGenerator {
   }
 
   /** 第二步：三线性插值填石头 */
-  private fillFromDensity(blocks: Uint8Array): void {
+  private fillFromDensity(blocks: BlockArray): void {
     const grid = this.densityGrid;
 
     for (let gx = 0; gx < GRID_XZ - 1; gx++) {
@@ -435,7 +435,7 @@ export class OverworldGenerator {
   }
 
   /** 第三步：地表规则 + 灌水 */
-  private applySurface(blocks: Uint8Array, originX: number, originZ: number): void {
+  private applySurface(blocks: BlockArray, originX: number, originZ: number): void {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
         const worldX = originX + x;
@@ -500,7 +500,7 @@ export class OverworldGenerator {
   }
 
   /** 第四步：底部基岩层（越深越密，形成原版的参差不齐过渡） */
-  private applyBedrock(blocks: Uint8Array): void {
+  private applyBedrock(blocks: BlockArray): void {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
         blocks[Chunk.index(x, WORLD_MIN_Y, z)] = Block.BEDROCK;

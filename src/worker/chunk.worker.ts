@@ -124,7 +124,7 @@ class MeshWorld implements MeshContext {
 
   constructor(payloads: readonly MeshChunkPayload[], private readonly centerCx: number, private readonly centerCz: number) {
     for (const payload of payloads) {
-      const chunk = Chunk.fromData(payload.cx, payload.cz, new Uint8Array(payload.blocks), payload.counts);
+      const chunk = Chunk.fromData(payload.cx, payload.cz, new Uint16Array(payload.blocks), payload.counts);
       if (payload.light.byteLength > 0) chunk.light.set(new Uint8Array(payload.light));
       if (payload.states && payload.states.byteLength > 0) chunk.restoreStates(new Uint8Array(payload.states));
       this.chunks.set(`${payload.cx},${payload.cz}`, chunk);
@@ -228,7 +228,7 @@ ctx.addEventListener('message', (event) => {
   const req = event.data;
 
   if (req.type === 'generate') {
-    const blocks = generateChunkBlocks(req.cx, req.cz, req.seed, req.dimension, new Uint8Array(CHUNK_BLOCK_COUNT));
+    const blocks = generateChunkBlocks(req.cx, req.cz, req.seed, req.dimension, new Uint16Array(CHUNK_BLOCK_COUNT));
     const states = takeGeneratedStates();
     const response: GenerateResponse = {
       type: 'generated',

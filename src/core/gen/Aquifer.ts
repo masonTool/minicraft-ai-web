@@ -19,7 +19,7 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MIN_Y } from '../world/Chunk.ts';
+import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MIN_Y } from '../world/Chunk.ts';
 import { DoublePerlinNoise } from './noise/PerlinNoise.ts';
 import type { Random } from './noise/Random.ts';
 
@@ -99,7 +99,7 @@ export class Aquifer {
    * 把雕刻后的地下空洞灌满流体。只填空气，所以不会破坏已有的海水/岩浆。
    * @returns 本次填充的水与岩浆方块数（供统计脚本与测试使用）
    */
-  fill(blocks: Uint8Array, originX: number, originZ: number): { water: number; lava: number } {
+  fill(blocks: BlockArray, originX: number, originZ: number): { water: number; lava: number } {
     this.prepareLevels(originX, originZ);
 
     const stride = CHUNK_SIZE_X + LEVEL_MARGIN * 2;

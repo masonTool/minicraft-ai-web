@@ -2,8 +2,12 @@
  * 区块存储
  *
  * 1.18 世界高度范围为 Y ∈ [-64, 320)，共 384 格，水平方向 16×16。
- * 存储采用单块 Uint8Array（方块 id），索引顺序为 y → z → x，保证同层相邻方块内存连续，
- * 网格化时缓存友好。
+ * 方块的索引顺序为 y → z → x，保证同层相邻方块内存连续，网格化时缓存友好。
+ *
+ * ⚠️ 方块 id 数组必须是 **16 位**（Uint16Array），不能用 Uint8Array。
+ * 方块种类已经超过 255（末地 246~255、红石 256~270），8 位存储会**静默溢出**：
+ * id 256 变成 0（空气）、266 变成 10（水）——不报错、不越界，只是世界里出现了别的方块，
+ * 排查成本极高（实测踩过：放红石粉却读出空气）。代价是每区块 96KB → 192KB。
  */
 
 export const CHUNK_SIZE_X = 16;
@@ -20,8 +24,16 @@ export const SECTION_COUNT = WORLD_HEIGHT / SECTION_HEIGHT; // 24
 const XZ = CHUNK_SIZE_X * CHUNK_SIZE_Z;
 export const CHUNK_VOLUME = XZ * WORLD_HEIGHT;
 
+/** 方块 id 数组的元素类型（16 位，见文件头的说明） */
+export type BlockArray = Uint16Array;
+
+/** 分配一个空的方块数组 */
+export function createBlockArray(): BlockArray {
+  return new Uint16Array(CHUNK_VOLUME);
+}
+
 export class Chunk {
-  readonly blocks: Uint8Array;
+  readonly blocks: BlockArray;
   /**
    * 光照数据：高 4 位为天光等级，低 4 位为方块光等级（各 0-15）。
    * 打包存储可让一次内存访问同时取到两种光照，网格化时缓存友好。
@@ -46,7 +58,7 @@ export class Chunk {
     readonly cx: number,
     readonly cz: number,
   ) {
-    this.blocks = new Uint8Array(CHUNK_VOLUME);
+    this.blocks = createBlockArray();
     this.light = new Uint8Array(CHUNK_VOLUME);
     this.sectionCounts = new Int32Array(SECTION_COUNT);
   }
@@ -105,7 +117,7 @@ export class Chunk {
    * 用 Worker 生成的裸数组接管所有权（零拷贝），并重建分段计数。
    * @param counts 已有的分段计数（网格化 Worker 用，省掉一次全量扫描）
    */
-  static fromData(cx: number, cz: number, blocks: Uint8Array, counts?: Int32Array): Chunk {
+  static fromData(cx: number, cz: number, blocks: BlockArray, counts?: Int32Array): Chunk {
     const chunk = new Chunk(cx, cz);
     chunk.blocks.set(blocks);
     if (counts) {

@@ -331,7 +331,7 @@ check(
   if (dungeon) {
     const cx = Math.floor(dungeon.x / 16);
     const cz = Math.floor(dungeon.z / 16);
-    const blocks = new Uint8Array(CHUNK_VOLUME);
+    const blocks = new Uint16Array(CHUNK_VOLUME);
     generateStructures(new FeatureWriter(blocks, cx, cz), gen, SEED);
     let count = 0;
     for (const id of blocks) if (id !== 0) count++;
