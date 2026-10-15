@@ -10,6 +10,7 @@
  */
 
 import { WORLD_TYPES, WORLD_TYPE_LABELS, randomSeed, type WorldType } from '../core/gen/WorldType.ts';
+import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../core/world/Rules.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
 
 export interface WorldScreenActions {
@@ -27,6 +28,8 @@ export class WorldScreen {
   private readonly nameInput: HTMLInputElement;
   private readonly seedInput: HTMLInputElement;
   private readonly typeSelect: HTMLSelectElement;
+  /** 新建世界时的难度（I7）：进世界后还能用 /difficulty 改 */
+  private readonly difficultySelect: HTMLSelectElement;
   private open = false;
 
   constructor(
@@ -89,6 +92,16 @@ export class WorldScreen {
       this.typeSelect.appendChild(option);
     }
 
+    this.difficultySelect = document.createElement('select');
+    this.difficultySelect.className = 'world-input';
+    for (const value of DIFFICULTIES) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = `${DIFFICULTY_LABELS[value]}（${value}）`;
+      this.difficultySelect.appendChild(option);
+    }
+    this.difficultySelect.value = 'normal';
+
     const create = document.createElement('button');
     create.type = 'button';
     create.className = 'world-primary';
@@ -108,6 +121,7 @@ export class WorldScreen {
       this.makeRow('世界名称', this.nameInput, null),
       this.makeRow('世界种子', this.seedInput, reroll),
       this.makeRow('世界类型', this.typeSelect, null),
+      this.makeRow('难度', this.difficultySelect, null),
       create,
     );
 
@@ -187,7 +201,7 @@ export class WorldScreen {
 
     const meta = document.createElement('div');
     meta.className = 'world-card-meta';
-    meta.textContent = `${WORLD_TYPE_LABELS[world.worldType]} · 种子 ${world.seed}`;
+    meta.textContent = `${WORLD_TYPE_LABELS[world.worldType]} · ${DIFFICULTY_LABELS[world.difficulty]} · 种子 ${world.seed}`;
 
     const stats = document.createElement('div');
     stats.className = 'world-card-meta';
@@ -237,6 +251,7 @@ export class WorldScreen {
       name: this.nameInput.value,
       seed,
       worldType: this.typeSelect.value as WorldType,
+      difficulty: this.difficultySelect.value as Difficulty,
     });
     // 清空表单：下次再新建时不会带上一次的名字与种子
     this.nameInput.value = '';
@@ -250,10 +265,11 @@ export class WorldScreen {
   }
 
   /** 验收脚本用：填表但不提交 */
-  fillNewWorldForm(name: string, seed: string, worldType: WorldType): void {
+  fillNewWorldForm(name: string, seed: string, worldType: WorldType, difficulty: Difficulty = 'normal'): void {
     this.nameInput.value = name;
     this.seedInput.value = seed;
     this.typeSelect.value = worldType;
+    this.difficultySelect.value = difficulty;
   }
 
   /** 验收脚本用：等价于点"创建并进入" */

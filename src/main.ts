@@ -216,6 +216,8 @@ export interface WorldConfig {
   name: string;
   seed: number;
   worldType: WorldType;
+  /** 新建这个世界时选的难度（进世界后还能用 /difficulty 改） */
+  difficulty: Difficulty;
 }
 
 const STARTING_HOTBAR: readonly number[] = [
@@ -374,6 +376,8 @@ class App {
   private playerName = '玩家';
   /** 难度（I7）：保存在世界里 */
   private difficulty: Difficulty = 'normal';
+  /** 难度被命令改动时的回调（主菜单用它回写世界清单） */
+  onDifficultyChanged: ((value: Difficulty) => void) | null = null;
   /** 状态效果（I4）：随身携带，死亡后清空 */
   private readonly effects = new StatusEffects();
   /** 游戏规则（I11）：保存在世界里 */
@@ -487,6 +491,7 @@ class App {
       name: '默认世界',
       seed: DEFAULT_WORLD_SEED,
       worldType: 'default',
+      difficulty: 'normal',
     },
   ) {
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType);
@@ -574,6 +579,9 @@ class App {
     this.recipeBook = new RecipeBook(document.body, atlas, this.inventory, {
       onCraft: (recipe) => this.craftFromBook(recipe),
     });
+
+    // 难度先按"新建世界时选的"来；如果存档里有玩家数据，loadPlayer 会再用存档的覆盖
+    this.difficulty = this.worldConfig.difficulty;
 
     this.chat.onSubmit = (text) => this.handleChatSubmit(text);
     this.chat.onOpenChange = (open) => this.handleChatOpen(open);
@@ -865,7 +873,8 @@ class App {
     this.stats.exhaustion = data.exhaustion;
     this.dragonDefeated = data.dragonDefeated;
     // 难度与游戏规则按世界存：旧存档没有这两个字段时回退默认值
-    this.difficulty = normalizeDifficulty(data.difficulty);
+    // 难度优先用存档里的（玩家可能在游戏里改过），没有就用世界清单里新建时选的
+    this.difficulty = data.difficulty ? normalizeDifficulty(data.difficulty) : this.worldConfig.difficulty;
     this.rules = normalizeGameRules(data.gameRules);
     this.effects.restore(data.effects);
 
@@ -2049,6 +2058,8 @@ class App {
       difficulty: () => this.difficulty,
       setDifficulty: (value) => {
         this.difficulty = value;
+        // 回写世界清单：下次进这个世界（还没保存过玩家数据时）也能拿到新难度
+        this.onDifficultyChanged?.(value);
       },
       gameRules: () => this.rules,
       setGameRule: (key, value) => {
@@ -3636,10 +3647,13 @@ async function boot(): Promise<void> {
       name: world.name,
       seed: world.seed,
       worldType: world.worldType,
+      difficulty: world.difficulty,
     });
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
     app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
     app.onWorldDeleted = (id) => registry.remove(id);
+    // 难度改了就回写世界清单（下次从主菜单进来还是这个难度）
+    app.onDifficultyChanged = (value) => registry.update(world.id, { difficulty: value });
     app.start();
     // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样
     (window as unknown as { __mc: App }).__mc = app;
