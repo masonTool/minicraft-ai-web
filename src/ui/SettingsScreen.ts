@@ -9,6 +9,8 @@
  * 设置是"这台设备的偏好"，换世界也不该丢；而世界存档属于某个种子。
  */
 
+import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
+
 export interface GameSettings {
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
   viewDistance: number;
@@ -18,6 +20,8 @@ export interface GameSettings {
   volume: number;
   /** 鼠标/触摸灵敏度倍率：0.5~2 */
   sensitivity: number;
+  /** 视角模式：第一人称 / 第三人称背后 / 第三人称正面（`V` 键循环切换） */
+  cameraMode: CameraMode;
   /** 是否显示左上角调试信息（HUD） */
   showDebug: boolean;
   /**
@@ -32,6 +36,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   fov: 72,
   volume: 0.7,
   sensitivity: 1,
+  cameraMode: 'first',
   showDebug: true,
   adaptiveViewDistance: true,
 };
@@ -49,6 +54,9 @@ export function loadSettings(): GameSettings {
       fov: clampNumber(parsed.fov, 60, 110, DEFAULT_SETTINGS.fov),
       volume: clampNumber(parsed.volume, 0, 1, DEFAULT_SETTINGS.volume),
       sensitivity: clampNumber(parsed.sensitivity, 0.5, 2, DEFAULT_SETTINGS.sensitivity),
+      cameraMode: CAMERA_MODES.includes(parsed.cameraMode as CameraMode)
+        ? (parsed.cameraMode as CameraMode)
+        : DEFAULT_SETTINGS.cameraMode,
       showDebug: parsed.showDebug !== false,
       adaptiveViewDistance: parsed.adaptiveViewDistance !== false,
     };
@@ -137,6 +145,13 @@ export class SettingsScreen {
 
     this.makeToggle(options, 'showDebug', '调试信息');
     this.makeToggle(options, 'adaptiveViewDistance', '自适应视距');
+
+    // 操作分类：视角模式（也可以随时按 V 键循环切换，两处状态同步）
+    const viewLabel = document.createElement('div');
+    viewLabel.className = 'settings-group';
+    viewLabel.textContent = '操作';
+    options.appendChild(viewLabel);
+    this.makeSelect(options, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
     options.appendChild(this.makeResourcePackRow());
 
     this.metaEl = document.createElement('div');
@@ -188,6 +203,43 @@ export class SettingsScreen {
     row.append(name, input, value);
     this.sliders.set(key, input);
     return row;
+  }
+
+  /**
+   * 造一个下拉选择设置项。
+   * 视角模式这种"就那么几个选项"的设置用下拉最省地方，也比滑块直观。
+   */
+  private makeSelect<T extends string>(
+    options: HTMLElement,
+    key: 'cameraMode',
+    label: string,
+    values: readonly T[],
+    labels: Record<T, string>,
+  ): HTMLSelectElement {
+    const row = document.createElement('label');
+    row.className = 'settings-row';
+
+    const name = document.createElement('span');
+    name.textContent = label;
+
+    const select = document.createElement('select');
+    select.className = 'settings-select';
+    for (const value of values) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = labels[value];
+      select.appendChild(option);
+    }
+    select.value = this.settings[key];
+
+    select.addEventListener('change', () => {
+      this.settings[key] = select.value as GameSettings[typeof key];
+      this.commit();
+    });
+
+    row.append(name, select);
+    options.appendChild(row);
+    return select;
   }
 
   /** 资源包导入行（.mcpack / .zip） */

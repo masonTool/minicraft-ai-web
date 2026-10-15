@@ -25,6 +25,15 @@ import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
+import {
+  CAMERA_MODE_LABELS,
+  THIRD_PERSON_DISTANCE,
+  CAMERA_CLEARANCE,
+  cameraPlacement,
+  clampedCameraDistance,
+  nextCameraMode,
+  type CameraMode,
+} from './core/viewMode.ts';
 import { AudioEngine, type SoundKind } from './core/audio/AudioEngine.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
@@ -39,6 +48,7 @@ import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { ParticleSystem } from './render/ParticleSystem.ts';
 import { HandRenderer } from './render/HandRenderer.ts';
+import { PlayerRenderer } from './render/PlayerRenderer.ts';
 import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
@@ -213,6 +223,14 @@ class App {
   private readonly particles = new ParticleSystem();
   /** 第一人称手持物品与手臂（E15） */
   private readonly hand: HandRenderer;
+  /** 第三人称的玩家模型（F7）：只有第三人称才可见 */
+  private readonly playerRenderer: PlayerRenderer;
+  /** 当前视角模式（F7）；`V` 键循环，也写进设置持久化 */
+  private cameraMode: CameraMode = 'first';
+  /** 走路相位（弧度）：驱动玩家模型摆腿，按水平速度累加 */
+  private walkPhase = 0;
+  /** 走路摆动幅度 0~1（平滑过渡，避免停下时双腿一下子立正） */
+  private walkAmount = 0;
   /** 全屏视野效果：水下 / 岩浆色罩（E16） */
   private readonly screenEffects = new ScreenEffects();
   /** 挖掘碎屑与挥手动画的节拍（秒） */
@@ -393,6 +411,8 @@ class App {
     this.scene.add(this.particles.object);
     // 生物亮度直接用方块材质的天光倍率，保证与地形明暗一致
     this.mobRenderer = new MobRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
+    // 玩家模型与生物用同一套亮度口径，第三人称下才可见
+    this.playerRenderer = new PlayerRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
     this.bossBarEl = document.getElementById('boss-bar');
     this.bossFillEl = document.getElementById('boss-fill');
     this.applyEnvironment();
@@ -484,6 +504,7 @@ class App {
         this.leftDown = false;
       },
       onToggleInventory: () => this.inventoryScreen.toggle(),
+      onCycleView: () => this.cycleCameraMode(),
       onToggleFly: () => this.setFlying(!this.flying),
       // 潜行状态由操作层自己维护并出现在 input 里，这里只做一次提示同步
       onToggleSneak: () => undefined,
@@ -504,6 +525,7 @@ class App {
    * 否则会出现"看得更远了但远处被裁掉"的割裂感。
    */
   private applySettings(settings: GameSettings): void {
+    this.cameraMode = settings.cameraMode;
     this.viewDistance = settings.viewDistance;
     // 玩家手动改视距时把自适应冷却重置：否则刚拖完滑块又要等几秒才允许升降
     this.adaptiveCooldown = 3;
@@ -1120,6 +1142,9 @@ class App {
       }
       if (this.uiOpen) return;
       if (e.code === 'KeyF') this.setFlying(!this.flying);
+      // V：切换人称视角（第一人称 → 背后 → 正面 → …）。
+      // 不用原版的 F5：浏览器里 F5 是刷新，拦不住。
+      if (e.code === 'KeyV') this.cycleCameraMode();
       // N：在主世界与下界之间切换（临时的维度入口；下界传送门要等火焰方块与打火石做完）
       if (e.code === 'KeyN') this.toggleDimension();
       // L：连接/断开联机服务器（服务端见 server/index.mjs）
@@ -1212,6 +1237,91 @@ class App {
       sneak: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || (touch?.sneak ?? false) || (pad?.sneak ?? false),
       sprint: keyboardSprint || (touch?.sprint ?? false) || (pad?.sprint ?? false),
     };
+  }
+
+  // ---------------------------------------------------------------- 视角（F7）
+
+  /**
+   * 每帧摆好相机与玩家模型。
+   *
+   * 第一人称：相机就架在眼睛上，朝向 = (pitch, yaw)，手上显示手臂 + 手持物品。
+   * 第三人称：相机沿视线方向前后挪一段距离，并且**先做一次体素射线检测**——
+   * 贴墙时如果不检测，镜头会退到方块内部，看到的是一片黑。
+   * 这时显示玩家模型、藏起第一人称的手臂（否则会有一只手飘在镜头前）。
+   */
+  private updateCamera(dt: number): void {
+    // 走路相位：按水平速度推进，停下时摆动幅度平滑衰减回 0（不然会突然"立正"）
+    const speed = Math.hypot(this.physics.vx, this.physics.vz);
+    const target = this.physics.onGround && speed > 0.6 ? Math.min(1, speed / 4.3) : 0;
+    this.walkAmount += (target - this.walkAmount) * Math.min(1, dt * 8);
+    if (this.walkAmount > 0.01) this.walkPhase += dt * (5 + speed * 1.4);
+
+    const eye = { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z };
+    const [dirX, dirY, dirZ] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
+    const dir = { x: dirX, y: dirY, z: dirZ };
+
+    const distance =
+      this.cameraMode === 'first'
+        ? 0
+        : this.cameraDistance(eye, dir, this.cameraMode === 'third-back' ? -1 : 1);
+    const placement = cameraPlacement(eye, dir, this.yaw, this.pitch, this.cameraMode, distance);
+    this.camera.position.set(placement.x, placement.y, placement.z);
+    this.camera.rotation.set(placement.pitch, placement.yaw, 0);
+
+    const thirdPerson = this.cameraMode !== 'first';
+    this.playerRenderer.setVisible(thirdPerson);
+    this.hand.setVisible(!thirdPerson);
+    if (thirdPerson) {
+      this.playerRenderer.update(
+        {
+          x: this.physics.x,
+          y: this.physics.y,
+          z: this.physics.z,
+          yaw: this.yaw,
+          pitch: this.pitch,
+          walkPhase: this.walkPhase,
+          walkAmount: this.walkAmount,
+          swing: this.hand.swingProgress,
+          flying: this.flying,
+        },
+        (x, y, z) => {
+          if (!this.world.isLoaded(x, z)) return null;
+          return { sky: this.world.getSkyLight(x, y, z), block: this.world.getBlockLight(x, y, z) };
+        },
+      );
+    }
+  }
+
+  /**
+   * 第三人称相机到眼睛的距离：撞到方块就停在撞点之前。
+   * @param sign +1 = 沿视线方向（正面视角），-1 = 反方向（背后视角）
+   */
+  private cameraDistance(eye: { x: number; y: number; z: number }, dir: { x: number; y: number; z: number }, sign: number): number {
+    const hit = raycastVoxels(
+      (x, y, z) => this.world.isSelectable(x, y, z),
+      eye.x,
+      eye.y,
+      eye.z,
+      dir.x * sign,
+      dir.y * sign,
+      dir.z * sign,
+      THIRD_PERSON_DISTANCE + CAMERA_CLEARANCE,
+    );
+    return clampedCameraDistance(hit ? hit.distance : null);
+  }
+
+  /** 切换视角模式（写进设置，下次进游戏保持） */
+  setCameraMode(mode: CameraMode): CameraMode {
+    this.cameraMode = mode;
+    this.settings.cameraMode = mode;
+    saveSettings(this.settings);
+    this.updateCamera(0);
+    return mode;
+  }
+
+  /** 循环切换视角（`V` 键）：第一人称 → 背后 → 正面 → 第一人称 */
+  cycleCameraMode(): CameraMode {
+    return this.setCameraMode(nextCameraMode(this.cameraMode));
   }
 
   // ---------------------------------------------------------------- 方块交互
@@ -2061,7 +2171,7 @@ class App {
       `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   模式: ${this.flying ? '创造(飞行)' : '生存'}   维度: ${DIMENSION_LABELS[this.dimension]}\n` +
+      `朝向: ${facing}   时间: ${clock}   模式: ${this.flying ? '创造(飞行)' : '生存'}   维度: ${DIMENSION_LABELS[this.dimension]}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
@@ -2119,8 +2229,7 @@ class App {
       this.physics.update(this.world, survivalInput, this.yaw, dt, this.flying);
       this.updateSurvival(dt, survivalInput, wasOnGround);
 
-      this.camera.position.set(this.physics.x, this.physics.eyeY, this.physics.z);
-      this.camera.rotation.set(this.pitch, this.yaw, 0);
+      this.updateCamera(dt);
 
       this.updateInteraction(dt);
 
@@ -2172,7 +2281,8 @@ class App {
       this.updateParticles(dt);
       this.inventoryScreen.tickUi(dt);
 
-      // 手持物品：跟快捷栏选中项同步，并按走路/挥动做动画
+      // 手持物品：跟快捷栏选中项同步，并按走路/挥动做动画。
+      // 第三人称看的是玩家模型（手里没有画方块），所以第一人称的手臂要藏起来。
       this.hand.setItem(this.inventory.get(this.hotbarIndex)?.id);
       this.hand.update(dt, this.isPlayerMoving(), this.camera.fov, this.camera.aspect);
       this.particles.setViewport(this.camera.fov, this.renderer.domElement.height);
@@ -2196,6 +2306,7 @@ class App {
 
   dispose(): void {
     this.mobRenderer.dispose();
+    this.playerRenderer.dispose();
     this.particles.dispose();
     this.hand.dispose();
     this.screenEffects.dispose();
@@ -2473,8 +2584,21 @@ class App {
     handItem: number | null;
     /** 当前的视野色罩（E16 验收用） */
     screenEffect: ScreenEffect;
+    /** 当前视角模式（F7 验收用） */
+    cameraMode: CameraMode;
+    /** 第三人称的玩家模型是否可见（F7 验收用） */
+    playerModelVisible: boolean;
+    /** 相机与玩家的距离（第一人称恒为 0，F7 验收用） */
+    cameraDistance: number;
   } {
     return {
+      cameraMode: this.cameraMode,
+      playerModelVisible: this.playerRenderer.visible,
+      cameraDistance: Math.hypot(
+        this.camera.position.x - this.physics.x,
+        this.camera.position.y - this.physics.eyeY,
+        this.camera.position.z - this.physics.z,
+      ),
       dimension: this.dimension,
       skyVisible: this.sky.object.visible,
       particles: this.particles.active,

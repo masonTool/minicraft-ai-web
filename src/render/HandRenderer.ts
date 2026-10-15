@@ -93,6 +93,8 @@ export class HandRenderer {
 
   private heldItem: number | undefined;
   private swingTime = SWING_DURATION;
+  /** 是否绘制（第三人称时关掉，改由玩家模型出场） */
+  private visible = true;
   private bobPhase = 0;
 
   constructor(private readonly atlas: TextureAtlas) {
@@ -146,6 +148,20 @@ export class HandRenderer {
   /** 是否正在挥动（测试/调试用） */
   get swinging(): boolean {
     return this.swingTime < SWING_DURATION;
+  }
+
+  /** 挥手进度 0~1（0 = 刚抬手，1 = 已经收回）；不在挥手时恒为 0 */
+  get swingProgress(): number {
+    return this.swinging ? this.swingTime / SWING_DURATION : 0;
+  }
+
+  /**
+   * 第一人称的手臂是否显示。
+   * 第三人称看的是玩家模型（手里没有画方块），此时必须把手臂藏起来，
+   * 否则会有一只手飘在镜头前面。
+   */
+  setVisible(visible: boolean): void {
+    this.visible = visible;
   }
 
   /**
@@ -215,6 +231,7 @@ export class HandRenderer {
 
   /** 画到屏幕上（调用方负责先关掉 autoClear 并 clearDepth） */
   render(renderer: THREE.WebGLRenderer): void {
+    if (!this.visible) return;
     renderer.render(this.scene, this.camera);
   }
 

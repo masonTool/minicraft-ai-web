@@ -133,6 +133,15 @@
       .settings-row i { font-style: normal; color: #9a9a9a; text-align: right; }
       .settings-row input[type="range"] { width: 100%; }
       .settings-row input[type="checkbox"] { justify-self: start; width: 16px; height: 16px; }
+      /* 分类小标题：设置项变多之后需要分组，否则一长条看不清 */
+      .settings-group {
+        margin: 10px 0 -2px; padding-top: 8px; font-size: 12px; color: #8fb98a;
+        border-top: 1px solid #ffffff1a; letter-spacing: 1px;
+      }
+      .settings-row select.settings-select {
+        grid-column: 2 / 4; width: 100%; padding: 4px 6px; font: inherit; font-size: 12px;
+        background: #2a2a2d; color: #eee; border: 1px solid #ffffff33; border-radius: 3px;
+      }
 
       #break-progress {
         position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%);

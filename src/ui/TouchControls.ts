@@ -27,6 +27,8 @@ const TAP_MOVE_SLOP = 12;
 const SPRINT_THRESHOLD = 0.92;
 
 export interface TouchActions {
+  /** 切换人称视角（F7）：第一人称 → 背后 → 正面 → … */
+  onCycleView: () => void;
   /** 轻点：放置方块或与目标方块交互 */
   onTap(): void;
   /** 长按开始 / 结束：破坏方块 */
@@ -132,8 +134,10 @@ export class TouchControls {
     this.flyButton = this.makeButton('飞', () => this.actions.onToggleFly());
 
     const inventory = this.makeButton('包', () => this.actions.onToggleInventory());
+    // 视：手机上按不了 V 键，给一个按钮循环切换人称视角
+    const view = this.makeButton('视', () => this.actions.onCycleView());
 
-    buttons.append(this.flyButton, this.sneakButton, inventory, jump);
+    buttons.append(this.flyButton, this.sneakButton, view, inventory, jump);
 
     // ---- 操作提示（首次进入时显示，动一下摇杆就淡出）
     this.hint = document.createElement('div');
