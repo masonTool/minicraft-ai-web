@@ -306,6 +306,7 @@ function cornerLighting(
   worldY: number,
   face: Face,
   corner: FaceCorner,
+  out?: CornerLight,
 ): CornerLight {
   const [dx, dy, dz] = face.dir;
   const nx = x + dx;
@@ -315,7 +316,7 @@ function cornerLighting(
     // 流体不做 AO，避免水面出现栅格状阴影
     const sky = ctx.getSkyLight(originX + nx, worldY + dy, originZ + nz);
     const blk = ctx.getBlockLight(originX + nx, worldY + dy, originZ + nz);
-    return { skySum: sky * 4, blkSum: blk * 4, ao: 3 };
+    return writeLight(out, sky * 4, blk * 4, 3);
   }
 
   const [o1, o2, o3] = corner.aoOffsets;
@@ -337,10 +338,15 @@ function cornerLighting(
     o1o === 1 && o2o === 1
       ? l0
       : o3o === 1
-        ? ([Math.min(l1[0], l2[0]), Math.min(l1[1], l2[1])] as const)
+        ? (Math.min(lightSky(l1), lightSky(l2)) << 4) | Math.min(lightBlk(l1), lightBlk(l2))
         : lightOf(ctx, originX + x + o3[0], worldY + o3[1], originZ + z + o3[2]);
 
-  return { skySum: l0[0] + l1[0] + l2[0] + l3[0], blkSum: l0[1] + l1[1] + l2[1] + l3[1], ao: aoIndex };
+  return writeLight(
+    out,
+    lightSky(l0) + lightSky(l1) + lightSky(l2) + lightSky(l3),
+    lightBlk(l0) + lightBlk(l1) + lightBlk(l2) + lightBlk(l3),
+    aoIndex,
+  );
 }
 
 /**
@@ -499,11 +505,25 @@ function greedyMesh(
   const mask = new Int32Array(256);
   const groups: FaceGroup[] = [];
   const groupIds = new Map<string, number>();
+  /**
+   * 4 个顶点光照的**复用对象**（每次网格化要算几十万个顶点）。
+   *
+   * ⚠️ 复用的前提是"用完就把值拷走"：合并成一组时要 `copyLight(c0)`，
+   * 否则下一次迭代会把数组里已经存好的光照改掉（这种错会表现为"光照偶尔闪一下"，
+   * 极难查）。`emitFace` 是同步写缓冲的，所以传复用对象是安全的。
+   */
+  const lightScratch: CornerLight[] = [
+    { skySum: 0, blkSum: 0, ao: 3 },
+    { skySum: 0, blkSum: 0, ao: 3 },
+    { skySum: 0, blkSum: 0, ao: 3 },
+    { skySum: 0, blkSum: 0, ao: 3 },
+  ];
 
   for (let faceIndex = 0; faceIndex < FACES.length; faceIndex++) {
     const face = FACES[faceIndex]!;
     const layout = LAYOUTS[faceIndex]!;
-    const { axis, uAxis, vAxis, positive } = layout;
+    // 只解构用得上的：v 轴由"另外两个轴"推出来（见下面的摊坐标）
+    const { axis, uAxis, positive } = layout;
 
     for (let layer = 0; layer < SECTION_HEIGHT; layer++) {
       mask.fill(0);
@@ -512,13 +532,10 @@ function greedyMesh(
 
       for (let v = 0; v < 16; v++) {
         for (let u = 0; u < 16; u++) {
-          const pos: [number, number, number] = [0, 0, 0];
-          pos[axis] = layer;
-          pos[uAxis] = u;
-          pos[vAxis] = v;
-          const x = pos[0];
-          const y = pos[1];
-          const z = pos[2];
+          // 把 (layer, u, v) 摊回 (x, y, z)：不用数组下标，省掉每次迭代的一次分配
+          const x = axis === 0 ? layer : uAxis === 0 ? u : v;
+          const y = axis === 1 ? layer : uAxis === 1 ? u : v;
+          const z = axis === 2 ? layer : uAxis === 2 ? u : v;
           const worldY = baseY + y;
 
           const id = chunk.get(x, worldY, z);
@@ -533,16 +550,23 @@ function greedyMesh(
 
           const tile = blockTiles(id, ctx.getBlockState(originX + x, worldY, originZ + z))[face.tile];
           const layerId = layerOf(id);
-          const lights = face.corners.map((corner) =>
-            cornerLighting(ctx, originX, originZ, sampleBlock, def.translucent, x, y, z, worldY, face, corner),
+          // 四个角直接写进复用对象，不走 `face.corners.map(...)`（那会每面多分配 1 个数组）
+          const corners = face.corners;
+          const c0 = cornerLighting(
+            ctx, originX, originZ, sampleBlock, def.translucent, x, y, z, worldY, face, corners[0]!, lightScratch[0]!,
+          );
+          const c1 = cornerLighting(
+            ctx, originX, originZ, sampleBlock, def.translucent, x, y, z, worldY, face, corners[1]!, lightScratch[1]!,
+          );
+          const c2 = cornerLighting(
+            ctx, originX, originZ, sampleBlock, def.translucent, x, y, z, worldY, face, corners[2]!, lightScratch[2]!,
+          );
+          const c3 = cornerLighting(
+            ctx, originX, originZ, sampleBlock, def.translucent, x, y, z, worldY, face, corners[3]!, lightScratch[3]!,
           );
 
           // 只有当 4 个顶点的光照/AO 完全一致时才能合并，所以把 4 组值写进 key。
           // 光照用「4 次采样的和」表示（整数 0~60），shade 由 AO 等级决定，都是整数。
-          const c0 = lights[0]!;
-          const c1 = lights[1]!;
-          const c2 = lights[2]!;
-          const c3 = lights[3]!;
           const uniform =
             c1.skySum === c0.skySum &&
             c2.skySum === c0.skySum &&
@@ -566,7 +590,8 @@ function greedyMesh(
               originZ,
               sampleBlock,
             };
-            emitFace(emit, x, y, z, worldY, face, UNIT_BOX, lights);
+            // 这一路（顶点光照不一致、不能合并）比较少见，这里才建一个小数组
+            emitFace(emit, x, y, z, worldY, face, UNIT_BOX, [c0, c1, c2, c3]);
             continue;
           }
 
@@ -575,7 +600,8 @@ function greedyMesh(
           if (groupId === undefined) {
             groupId = groups.length + 1;
             groupIds.set(key, groupId);
-            groups.push({ tile, layer: layerId, light: c0 });
+            // ⚠️ 必须**拷一份**：`c0` 是复用对象，下一次迭代就被改写了
+            groups.push({ tile, layer: layerId, light: { skySum: c0.skySum, blkSum: c0.blkSum, ao: c0.ao } });
           }
           mask[u * 16 + v] = groupId;
         }
@@ -723,9 +749,29 @@ export function meshSection(
   };
 }
 
-function lightOf(ctx: MeshContext, wx: number, wy: number, wz: number): [number, number] {
-  if (wy < WORLD_MIN_Y || wy >= WORLD_MAX_Y) return wy >= WORLD_MAX_Y ? [15, 0] : [0, 0];
-  return [ctx.getSkyLight(wx, wy, wz), ctx.getBlockLight(wx, wy, wz)];
+/**
+ * 采样一格光照，**打包成一个整数**：天光在高 4 位、方块光在低 4 位。
+ *
+ * 为什么不用 `[sky, blk]` 元组：这个函数每个角都要调用两次（平滑光照 4 个采样格），
+ * 即每个面 8 次、一个区块几万个面——返回数组意味着几万次分配，全落在 GC 上。
+ */
+function lightOf(ctx: MeshContext, wx: number, wy: number, wz: number): number {
+  if (wy < WORLD_MIN_Y || wy >= WORLD_MAX_Y) return wy >= WORLD_MAX_Y ? 15 << 4 : 0;
+  return (ctx.getSkyLight(wx, wy, wz) << 4) | ctx.getBlockLight(wx, wy, wz);
+}
+
+const lightSky = (packed: number): number => packed >> 4;
+const lightBlk = (packed: number): number => packed & 15;
+
+/** 写进（或新建）一个光照结构：热路径传复用对象，省掉每次分配 */
+function writeLight(out: CornerLight | undefined, skySum: number, blkSum: number, ao: number): CornerLight {
+  if (out) {
+    out.skySum = skySum;
+    out.blkSum = blkSum;
+    out.ao = ao;
+    return out;
+  }
+  return { skySum, blkSum, ao };
 }
 
 /** 一层网格的顶点数组 */
