@@ -70,6 +70,8 @@ const VANILLA: Record<string, readonly [number, number]> = {
   cooked_porkchop: [8, 12.8],
   cooked_mutton: [6, 9.6],
   cooked_chicken: [6, 7.2],
+  // 面包（3 小麦，原版 5 点饥饿 / 6 点饱和度）
+  bread: [5, 6],
   // 牛奶：不回饥饿也不回饱和度，只清效果（J8）——它是"饮品"，不是食物
   milk_bucket: [0, 0],
 };

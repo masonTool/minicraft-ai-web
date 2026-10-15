@@ -82,6 +82,10 @@ export const Item = {
   // ---- 单个注册的耐用品（J8 起：剪刀、桶…）
   // id 定义在 tools.ts（`TOOL_BY_ID` 需要按 id 反查，反向 import 会成环）
   SHEARS: SHEARS_ITEM_ID,
+  // ---- 农业（H13）
+  WHEAT_SEEDS: 1160,
+  WHEAT: 1161,
+  BREAD: 1162,
   // ---- 桶与牛奶（J8）
   BUCKET: 1151,
   MILK_BUCKET: 1152,
@@ -126,6 +130,11 @@ interface NonBlockItemSpec {
   maxStack?: number;
   /** 耐用品（弓）：与 `ItemDef.durability` 同一个意思 */
   durability?: number;
+  /**
+   * 放置时变成哪个方块（H13 的小麦种子）。
+   * 与方块物品的 `block` 字段同一个含义——种子不是方块，但右键耕地会把小麦苗种上去。
+   */
+  block?: number;
 }
 
 const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
@@ -164,6 +173,11 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // 弓是耐用品（原版 384 点耐久，每射一箭 -1），但不是"工具"：
   // 它没有采集等级与挖掘速度，所以不放进 TOOL_SPECS（那是 5 种类 × 5 材质的表）
   { id: Item.BOW, name: 'minecraft:bow', tile: 'item_bow', maxStack: 1, durability: 384 },
+  // ---- 农业：种子（可种在耕地上）与小麦
+  { id: Item.WHEAT_SEEDS, name: 'minecraft:wheat_seeds', tile: 'item_wheat_seeds', block: Block.WHEAT_STAGE0, maxStack: 64 },
+  { id: Item.WHEAT, name: 'minecraft:wheat', tile: 'item_wheat' },
+  { id: Item.BREAD, name: 'minecraft:bread', tile: 'item_bread' },
+
   // ---- 桶（可堆 16，与原版一致）与牛奶桶（一次性的"饮品"，不可堆）
   { id: Item.BUCKET, name: 'minecraft:bucket', tile: 'item_bucket', maxStack: 16 },
   { id: Item.MILK_BUCKET, name: 'minecraft:milk_bucket', tile: 'item_milk_bucket', maxStack: 1 },
@@ -241,6 +255,8 @@ for (const spec of NON_BLOCK_SPECS) {
     // 耐久也要在这一处搬运。`ItemDef` 上的可选字段每加一个，都要回来补这句——
     // 漏了的话表现是"弓永远是崭新的"（`durabilityOf` 返回 0），而且不报任何错
     ...(spec.durability !== undefined ? { durability: spec.durability } : {}),
+    // 同理：可放置的非方块物品（小麦种子）必须带上 block，否则右键耕地种不下去
+    ...(spec.block !== undefined ? { block: spec.block } : {}),
   });
 }
 

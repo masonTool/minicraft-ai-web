@@ -787,6 +787,21 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     name: 'minecraft:iron_block',
     tiles: ['iron_block', 'iron_block', 'iron_block'],
   },
+  // ---- 农业（H13）：耕地与小麦（4 个生长阶段各占一个 id）
+  // 用"一个阶段一个 id"而不是方块状态：贴图是按 id 静态查的（`blockDef(id).tiles`），
+  // 状态化就要改网格化与图集两处；而 id 在这套代码里本来就充裕（台阶/楼梯/16 色都是批量生成）。
+  {
+    id: 275,
+    name: 'minecraft:farmland',
+    tiles: ['farmland', 'dirt', 'farmland_side'],
+    // ⚠️ 原版耕地是 15/16 高、而且踩上去会"退化"回泥土；这里先做成整格、不退化
+    solid: true,
+    opaque: true,
+  },
+  plantSpec(276, 'wheat_stage0', 'wheat_stage0'),
+  plantSpec(277, 'wheat_stage1', 'wheat_stage1'),
+  plantSpec(278, 'wheat_stage2', 'wheat_stage2'),
+  plantSpec(279, 'wheat_stage3', 'wheat_stage3'),
 ];
 
 
@@ -969,6 +984,11 @@ export const Block = {
   BOOKSHELF: 272,
   ANVIL: 273,
   IRON_BLOCK: 274,
+  FARMLAND: 275,
+  WHEAT_STAGE0: 276,
+  WHEAT_STAGE1: 277,
+  WHEAT_STAGE2: 278,
+  WHEAT_STAGE3: 279,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1118,6 +1138,7 @@ HARDNESS.set(Block.OAK_DOOR, 3);
 HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
 // 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
+HARDNESS.set(Block.FARMLAND, 0.6);
 HARDNESS.set(Block.ENCHANTING_TABLE, 5);
 HARDNESS.set(Block.BOOKSHELF, 1.5);
 // 铁砧 5（原版 5.0，也砸得动）
@@ -1309,6 +1330,24 @@ for (const id of [
 
 // 书架徒手也能采（原版如此）；附魔台要镐，所以**不进**这张表
 HAND_HARVESTABLE.add(Block.BOOKSHELF);
+HAND_HARVESTABLE.add(Block.FARMLAND);
+for (let stage = 0; stage < 4; stage++) HAND_HARVESTABLE.add(Block.WHEAT_STAGE0 + stage);
+
+/**
+ * 小麦的 4 个生长阶段（按顺序）。
+ * 作物生长就是"把当前阶段换成下一个 id"，所以这张表是唯一的事实来源。
+ */
+export const WHEAT_STAGES: readonly number[] = [
+  Block.WHEAT_STAGE0,
+  Block.WHEAT_STAGE1,
+  Block.WHEAT_STAGE2,
+  Block.WHEAT_STAGE3,
+];
+
+/** 这个 id 是小麦的某个阶段吗 */
+export function wheatStageOf(id: number): number {
+  return WHEAT_STAGES.indexOf(id);
+}
 
 export function blockHardness(id: number): number {
   return HARDNESS.get(id) ?? 3;

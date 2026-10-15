@@ -375,8 +375,18 @@ export const TILE_ORDER = [
   'item_chicken',
   'item_leather',
   'item_feather',
+  // ---- 农业（H13）
+  'farmland',
+  'farmland_side',
+  'wheat_stage0',
+  'wheat_stage1',
+  'wheat_stage2',
+  'wheat_stage3',
   // ---- 剪刀与桶（J8）
   'item_shears',
+  'item_wheat_seeds',
+  'item_wheat',
+  'item_bread',
   'item_bucket',
   'item_milk_bucket',
   // ---- 弓与箭（J9）

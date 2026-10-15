@@ -40,12 +40,18 @@ console.log('\n[物品注册表]');
 
 // 动态比对：每种"非空气、非流体"的方块都应该有对应的方块物品，
 // 这样后续往方块表里加方块时不会再让这条断言过期。
-const expectedPlaceable = BLOCKS.filter((def) => def.id !== Block.AIR && !def.liquid).length;
-equal(
-  `可放置物品数（${BLOCKS.length} 种方块去掉空气与水/岩浆）`,
-  PLACEABLE_ITEMS.length,
-  expectedPlaceable,
+// 不写成"PLACEABLE_ITEMS.length === 方块数"：`PLACEABLE_ITEMS` 按 `ItemDef.block` 筛，
+// 而**小麦种子**（H13）不是方块却也能放置（种到耕地上），所以两者本就不该相等。
+// 真正要守的是"每种实心/可放置方块都有对应物品"这条不变量。
+const missingBlockItem = BLOCKS.filter(
+  (def) => def.id !== Block.AIR && !def.liquid && blockForItem(def.id) === undefined,
 );
+equal(
+  `每种非空气非流体方块都有可放置物品（共 ${BLOCKS.length} 种方块）`,
+  missingBlockItem.length,
+  0,
+);
+check('小麦种子这类"可放置的非方块物品"也在 PLACEABLE_ITEMS 里', PLACEABLE_ITEMS.includes(Item.WHEAT_SEEDS));
 equal('石头是可放置物品', blockForItem(Block.STONE), Block.STONE);
 equal('煤炭不可放置', blockForItem(Item.COAL), undefined);
 equal('煤炭名称去掉命名空间', itemName(Item.COAL), 'coal');

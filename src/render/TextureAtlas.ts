@@ -1108,6 +1108,99 @@ PAINTERS.anvil_side = (x, y, rng) => {
   return [clamp255(92 * shade + jitter), clamp255(92 * shade + jitter), clamp255(98 * shade + jitter), 255];
 };
 
+/** 小麦种子：几粒浅黄绿色的种子（小椭圆若干颗） */
+PAINTERS.item_wheat_seeds = (x, y, rng) => {
+  const jitter = rng() * 14 - 7;
+  // 用三行错位的小点阵表示"一小把种子"
+  const seeds = [
+    [4, 4], [7, 3], [10, 5], [4, 8], [8, 7], [11, 9], [5, 11], [9, 12],
+  ];
+  for (const [sx, sy] of seeds) {
+    if (Math.abs(x - sx!) <= 1 && Math.abs(y - sy!) <= 1) {
+      return [clamp255(196 + jitter), clamp255(178 + jitter), clamp255(88 + jitter), 255];
+    }
+  }
+  return [0, 0, 0, 0];
+};
+
+/** 小麦：一捆金黄色麦穗（中间用暗色扎起来） */
+PAINTERS.item_wheat = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  if (y < 1 || y > 14) return [0, 0, 0, 0];
+  // 中间那一段是"扎起来的绳"
+  if (y >= 6 && y <= 8 && x >= 4 && x <= 11) {
+    return [clamp255(146 + jitter), clamp255(96 + jitter), clamp255(44 + jitter), 255];
+  }
+  // 上下是散开的麦穗：三束，越靠边越窄
+  const dx = Math.abs(x - 7.5);
+  const halfWidth = y < 6 ? 2.2 + (6 - y) * 0.5 : 2.2 + (y - 8) * 0.35;
+  if (dx > halfWidth) return [0, 0, 0, 0];
+  if (x % 3 === 2 && Math.abs(y - 7.5) > 1) return [0, 0, 0, 0];
+  return [clamp255(226 + jitter), clamp255(190 + jitter), clamp255(78 + jitter), 255];
+};
+
+/** 面包：椭圆形的浅棕面包，上面斜切三道口子 */
+PAINTERS.item_bread = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 椭圆：中心 (7.5, 8)，半轴 6 × 4.5
+  const dx = (x - 7.5) / 6;
+  const dy = (y - 8) / 4.5;
+  if (dx * dx + dy * dy > 1) return [0, 0, 0, 0];
+  // 三道斜切口（更浅的色）
+  if ((x + y) % 7 === 3 && Math.abs(dx) < 0.8) {
+    return [clamp255(236 + jitter), clamp255(206 + jitter), clamp255(146 + jitter), 255];
+  }
+  // 上亮下暗，面包才有鼓起来的感觉
+  const shade = y < 8 ? 1.08 : 0.9;
+  return [clamp255(198 * shade + jitter), clamp255(146 * shade + jitter), clamp255(78 * shade + jitter), 255];
+};
+
+/** 耕地顶面：深色土 + 几道犁沟（横着的暗褐条纹） */
+PAINTERS.farmland = (_x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  // 每隔 4 像素一道犁沟
+  const furrow = y % 4 === 2;
+  const base = furrow ? 86 : 128;
+  return [clamp255(base * 0.86 + jitter), clamp255(base * 0.6 + jitter), clamp255(base * 0.36 + jitter), 255];
+};
+
+/** 耕地侧面：上沿一圈深色土（比泥土暗一档） */
+PAINTERS.farmland_side = (_x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  const top = y <= 2;
+  const base = top ? [104, 72, 42] : [134, 96, 62];
+  return [clamp255(base[0] + jitter), clamp255(base[1] + jitter), clamp255(base[2] + jitter), 255];
+};
+
+/**
+ * 小麦：4 个生长阶段。
+ * 用一株"竖着长的草"表示：`stage` 越高越高越金黄，成熟时顶端挂上麦穗。
+ */
+function wheatPainter(stage: number): Painter {
+  const height = 4 + stage * 3; // 4 / 7 / 10 / 13 像素高
+  const ripe = stage === 3;
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    const dy = 15 - y; // 从底部往上数
+    if (dy > height) return [0, 0, 0, 0];
+    // 三株并排：中间那株稍高，两侧稍矮（看起来像一簇）
+    const dx = Math.abs(x - 7.5);
+    const inStalk = dx < 5.5;
+    if (!inStalk) return [0, 0, 0, 0];
+    const stalk = x % 3 === 1 || Math.floor(x / 3) === 2;
+    if (!stalk) return [0, 0, 0, 0];
+    // 成熟的小麦顶端两行画成麦穗（更亮的金黄）
+    const ear = ripe && dy > height - 3;
+    const color = ear ? [238, 206, 92] : ripe ? [212, 176, 74] : [0, 0, 0];
+    if (ripe) return [clamp255(color[0]! + jitter), clamp255(color[1]! + jitter), clamp255(color[2]! + jitter), 255];
+    // 未成熟：绿色，越晚越浅
+    const green = 120 + stage * 26;
+    return [clamp255(green * 0.55 + jitter), clamp255(green + jitter), clamp255(green * 0.45 + jitter), 255];
+  };
+}
+
+for (let stage = 0; stage < 4; stage++) PAINTERS[`wheat_stage${stage}`] = wheatPainter(stage);
+
 /** 纸：略微歪斜的白色薄片 + 一道折角 */
 PAINTERS.item_paper = (x, y, rng) => {
   const jitter = rng() * 8 - 4;
