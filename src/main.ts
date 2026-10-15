@@ -1277,7 +1277,9 @@ class App {
 
       document.addEventListener('mousemove', (e) => {
         if (!this.locked) return;
-        this.applyLook(e.movementX * MOUSE_SENSITIVITY, e.movementY * MOUSE_SENSITIVITY);
+        // 灵敏度是设置项（0.5~2 倍）：鼠标、触摸、手柄三条路径都要乘上，不然调了没感觉
+        const gain = this.settings.sensitivity;
+        this.applyLook(e.movementX * MOUSE_SENSITIVITY * gain, e.movementY * MOUSE_SENSITIVITY * gain);
       });
 
       document.addEventListener('mousedown', (e) => {
@@ -1834,7 +1836,8 @@ class App {
 
     // 视角：右摇杆按帧速率转（与触摸拖动共用 applyLook，因此灵敏度表现一致）
     if (pad.lookDx !== 0 || pad.lookDy !== 0) {
-      this.applyLook(pad.lookDx * 0.0035, pad.lookDy * 0.0035);
+      const gain = this.settings.sensitivity;
+      this.applyLook(pad.lookDx * 0.0035 * gain, pad.lookDy * 0.0035 * gain);
     }
 
     this.padAttack = pad.attack;
@@ -2366,7 +2369,8 @@ class App {
         if (!this.uiOpen) {
           const look = this.touch.consumeLook();
           if (look.x !== 0 || look.y !== 0) {
-            this.applyLook(look.x * TOUCH_SENSITIVITY, look.y * TOUCH_SENSITIVITY);
+            const gain = this.settings.sensitivity;
+            this.applyLook(look.x * TOUCH_SENSITIVITY * gain, look.y * TOUCH_SENSITIVITY * gain);
           }
         } else {
           this.touch.consumeLook();
