@@ -20,7 +20,9 @@ export interface SmeltingRecipe {
 /** 普通熔炉的单次烧炼耗时 */
 export const SMELTING_TIME = 10;
 
-const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
+/** 全部熔炼配方（配方书要列出来，所以导出） */
+
+export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 矿物 → 金属锭
   { input: Item.RAW_IRON, output: { id: Item.IRON_INGOT, count: 1 }, time: SMELTING_TIME, experience: 0.7 },
   { input: Item.RAW_GOLD, output: { id: Item.GOLD_INGOT, count: 1 }, time: SMELTING_TIME, experience: 1 },

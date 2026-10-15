@@ -28,6 +28,9 @@
         -webkit-touch-callout: none;
       }
       body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      /* 层级约定（从小到大）：遮罩(5) < 死亡(6) < 背包(10) < 配方书(20) < 主菜单(40) < 设置(50)。
+         ⚠️ #app 刻意**不给** z-index：所有面板都要挂在 <body> 上（而不是 #app 里面），
+         否则 z-index 只在 #app 这个层叠上下文内部比较，面板会被 DOM 更靠后的遮罩盖住。 */
       #app { position: fixed; inset: 0; }
       #app canvas { display: block; width: 100%; height: 100%; }
 
@@ -104,8 +107,68 @@
         background: #33333a; color: #eee; border: 1px solid #ffffff22; border-radius: 4px; cursor: pointer;
       }
 
+      /* ---------------- 配方书 ---------------- */
+      #recipe-book {
+        position: fixed; inset: 0; z-index: 20; padding: 18px 12px;
+        display: grid; place-items: center; background: rgba(0, 0, 0, .6);
+      }
+      #recipe-book.hidden { display: none; }
+      .recipe-panel {
+        width: min(96vw, 780px); max-height: 90vh; overflow-y: auto;
+        background: #c6c6c6; border: 3px solid #565656; border-radius: 4px;
+        padding: 12px 14px; color: #2b2b2b; font-size: 13px;
+      }
+      .recipe-header {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        padding-bottom: 8px; border-bottom: 2px solid #9a9a9a; margin-bottom: 8px;
+      }
+      .recipe-header b { font-size: 15px; }
+      .recipe-hint { color: #4a4a4a; font-size: 11px; }
+      .recipe-search {
+        flex: 1; min-width: 160px; padding: 5px 8px; font: inherit; font-size: 12px;
+        background: #eee; color: #222; border: 1px solid #777; border-radius: 3px;
+      }
+      .recipe-close {
+        font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer;
+        background: #a8a8a8; color: #222; border: 2px solid;
+        border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      .recipe-list { display: flex; flex-direction: column; gap: 6px; }
+      .recipe-empty { padding: 20px; text-align: center; color: #5a5a5a; }
+      .recipe-card {
+        display: flex; align-items: center; gap: 10px;
+        padding: 6px 8px; background: #b4b4b4;
+        border: 2px solid; border-color: #d8d8d8 #7a7a7a #7a7a7a #d8d8d8;
+      }
+      .recipe-card.craftable { background: #b9c9b0; }
+      .recipe-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .recipe-result { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #1c1c1c; }
+      .recipe-result canvas { image-rendering: pixelated; }
+      .recipe-ingredients { display: flex; flex-wrap: wrap; gap: 4px; }
+      .recipe-chip {
+        display: inline-flex; align-items: center; gap: 3px;
+        padding: 2px 5px; background: #d2d2d2; border-radius: 3px; color: #333; font-size: 11px;
+      }
+      .recipe-chip.missing { background: #e0b0b0; color: #6b1a1a; }
+      .recipe-chip canvas { image-rendering: pixelated; }
+      .recipe-chip i { font-style: normal; }
+      .recipe-craft {
+        flex-shrink: 0; font: inherit; font-size: 12px; padding: 6px 10px; cursor: pointer;
+        background: #6f9a63; color: #fff; border: 2px solid; border-color: #a8d69c #3c5c33 #3c5c33 #a8d69c;
+      }
+      .recipe-craft:disabled { background: #9a9a9a; border-color: #c0c0c0 #6a6a6a #6a6a6a #c0c0c0; cursor: not-allowed; }
+      .recipe-smelting { margin-top: 10px; padding-top: 8px; border-top: 2px solid #9a9a9a; }
+      .recipe-smelt-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+      .inv-recipes-btn {
+        font: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer;
+        background: #a8a8a8; color: #2b2b2b; border: 2px solid;
+        border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+
       #overlay {
-        position: fixed; inset: 0; display: grid; place-items: center;
+        /* z-index 要低于所有面板（背包 10 / 配方书 20 / 主菜单 40）：遮罩只是"开始前的一层"，
+           面板打开时不该被它挡住 */
+        position: fixed; inset: 0; z-index: 5; display: grid; place-items: center;
         background: rgba(0, 0, 0, .62); color: #fff; cursor: pointer;
         font-size: 15px; text-align: center; line-height: 1.9;
       }
@@ -116,7 +179,7 @@
         background: #ffffff22; border: 1px solid #ffffff44; font-size: 13px;
       }
       #death {
-        position: fixed; inset: 0; display: grid; place-items: center;
+        position: fixed; inset: 0; z-index: 6; display: grid; place-items: center;
         background: rgba(130, 0, 0, .45); color: #fff; font-size: 16px;
         text-align: center; line-height: 2; pointer-events: none;
       }
@@ -196,6 +259,20 @@
         grid-column: 2 / 4; width: 100%; padding: 4px 6px; font: inherit; font-size: 12px;
         background: #2a2a2d; color: #eee; border: 1px solid #ffffff33; border-radius: 3px;
       }
+
+      /* ---------------- 物品提示框 ---------------- */
+      #item-tooltip {
+        position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none;
+        max-width: 280px; padding: 8px 10px;
+        background: rgba(14, 14, 17, .95); border: 1px solid #ffffff33; border-radius: 5px;
+        color: #e6e6e6; font-size: 12px; line-height: 1.55;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+      }
+      #item-tooltip.hidden { display: none; }
+      #item-tooltip .tooltip-title { color: #fff; font-size: 13px; }
+      #item-tooltip .tooltip-subtitle { color: #7f8c9b; font-size: 11px; margin-bottom: 4px; }
+      #item-tooltip .tooltip-desc { color: #d8d8d8; }
+      #item-tooltip .tooltip-meta { color: #9a9a9a; font-size: 11px; margin-top: 4px; }
 
       #break-progress {
         position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%);

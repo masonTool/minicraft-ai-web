@@ -26,6 +26,11 @@ import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
+import { Tooltip } from './ui/Tooltip.ts';
+import { RecipeBook } from './ui/RecipeBook.ts';
+import { craftFromInventory } from './core/crafting/RecipeBook.ts';
+import type { Recipe } from './core/crafting/Recipes.ts';
+import { itemTooltip } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
 import type { WorldType } from './core/gen/WorldType.ts';
 import { PARTICLE_DENSITY } from './ui/SettingsScreen.ts';
@@ -302,6 +307,12 @@ class App {
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   private readonly hotbarSlots: HTMLDivElement[] = [];
+  /** 配方书：列出所有配方，材料够就能一键合成 */
+  private readonly recipeBook: RecipeBook;
+  /** 物品提示框（快捷栏与背包共用同一个，位置跟着指针走） */
+  private readonly tooltip = new Tooltip();
+  /** 快捷栏的提示委托只挂一次：buildHotbar 可能被重复调用 */
+  private hotbarTooltipBound = false;
 
   /** 一天中的时刻 [0,1)：0 = 日出，0.25 = 正午，0.5 = 日落，0.75 = 午夜 */
   private timeOfDay = 0.12;
@@ -478,8 +489,19 @@ class App {
     };
 
     this.buildHotbar();
-    this.inventoryScreen = new InventoryScreen(atlas, this.inventory, {
-      onOpenChange: (open) => this.handleInventoryOpen(open),
+    this.inventoryScreen = new InventoryScreen(
+      atlas,
+      this.inventory,
+      {
+        onOpenChange: (open) => this.handleInventoryOpen(open),
+        onOpenRecipes: () => this.openRecipeBook(),
+      },
+      this.tooltip,
+    );
+    // 挂到 <body> 上而不是 #app：面板的 z-index 只在同一个层叠上下文里比较，
+    // 放进 #app 就会被 DOM 更靠后的遮罩（#overlay / #death）盖住
+    this.recipeBook = new RecipeBook(document.body, atlas, this.inventory, {
+      onCraft: (recipe) => this.craftFromBook(recipe),
     });
     this.inventory.onChange = () => {
       this.refreshHotbar();
@@ -491,7 +513,7 @@ class App {
     this.audio.volume = this.settings.volume;
     this.lastStepX = this.physics.x;
     this.lastStepZ = this.physics.z;
-    this.settingsScreen = new SettingsScreen(container, this.settings, {
+    this.settingsScreen = new SettingsScreen(document.body, this.settings, {
       onResume: () => this.closeSettings(),
       onExitToMenu: () => void this.exitToMenu(),
       onDeleteWorld: () => void this.deleteCurrentWorld(),
@@ -1108,6 +1130,8 @@ class App {
       const slot = document.createElement('div');
       slot.className = 'slot';
       slot.dataset.index = String(index);
+      // 悬停提示：Tooltip 靠这个属性认出可悬停元素
+      slot.dataset.tooltip = '';
 
       const icon = document.createElement('canvas');
       icon.className = 'icon';
@@ -1126,6 +1150,16 @@ class App {
 
       container.appendChild(slot);
       this.hotbarSlots.push(slot);
+    }
+
+    if (!this.hotbarTooltipBound) {
+      this.hotbarTooltipBound = true;
+      this.tooltip.delegate(container, (element) => {
+        const index = Number(element.dataset.index);
+        if (!Number.isFinite(index)) return null;
+        const stack = this.inventory.get(index);
+        return stack ? itemTooltip(stack.id, stack.count) : null;
+      });
     }
 
     // 触摸端点快捷栏切换（鼠标路径走键盘 1-9）
@@ -1149,7 +1183,8 @@ class App {
         drawItemIcon(icon, this.atlas, stack.id, 32);
         icon.style.visibility = 'visible';
         count.textContent = stack.count > 1 ? String(stack.count) : '';
-        slot.title = itemName(stack.id);
+        // 不用浏览器自带的 title：会和我们的提示框重复弹两次（内容也少）
+        slot.title = '';
       } else {
         icon.style.visibility = 'hidden';
         count.textContent = '';
@@ -1191,6 +1226,13 @@ class App {
       if (e.code === 'KeyE') {
         e.preventDefault();
         this.inventoryScreen.toggle();
+        return;
+      }
+      // R：配方书（原版是 E 里的一个页签，这里给个独立热键更顺手）。
+      // 放在 uiOpen 判断**之前**：书开着的时候也要能按 R 关掉。
+      if (e.code === 'KeyR') {
+        e.preventDefault();
+        this.toggleRecipeBook();
         return;
       }
       if (this.uiOpen) return;
@@ -1679,6 +1721,59 @@ class App {
     this.updateMobSpawning(dt);
     // 红石：按钮回弹、中继器延迟、压力板轮询都由它推进
     this.redstone.tick(this.redstoneWorld, Math.min(dt, 0.1));
+  }
+
+  /** 验收脚本用：直接打开/关闭配方书 */
+  toggleRecipeBookForTest(): boolean {
+    this.toggleRecipeBook();
+    return this.recipeBook.isOpen;
+  }
+
+  /** 验收脚本用：模拟鼠标悬停在某个快捷栏槽位上，检查提示框内容 */
+  hoverHotbarForTest(pointerX: number, pointerY: number, slotIndex: number): string {
+    const slot = this.hotbarSlots[slotIndex];
+    if (!slot) return '';
+    const rect = slot.getBoundingClientRect();
+    slot.dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: pointerX || rect.left + rect.width / 2,
+        clientY: pointerY || rect.top + rect.height / 2,
+      }),
+    );
+    return this.tooltip.text;
+  }
+
+  /** 打开配方书（背包里的按钮与 R 键都走这里） */
+  private openRecipeBook(): void {
+    this.inventoryScreen.close();
+    this.recipeBook.show();
+    this.handleInventoryOpen(true);
+    // 与暂停菜单一样：能打开界面说明玩家已经在玩了，"点击进入游戏"的遮罩没必要再挡着
+    this.overlayEl.classList.add('hidden');
+  }
+
+  /** R 键：开/关配方书。关掉时要把 uiOpen 交回给背包（背包可能还开着） */
+  private toggleRecipeBook(): void {
+    if (this.recipeBook.isOpen) {
+      this.recipeBook.hide();
+      this.handleInventoryOpen(this.inventoryScreen.isOpen);
+      return;
+    }
+    this.openRecipeBook();
+  }
+
+  /**
+   * 配方书里点"合成"：直接对背包扣材料、给产物（不经过合成台界面）。
+   * 成功后要给玩家一点反馈：刷新快捷栏 + 播一声轻响。
+   */
+  private craftFromBook(recipe: Recipe): boolean {
+    const result = craftFromInventory(this.inventory, recipe);
+    if (!result) return false;
+    this.refreshHotbar();
+    this.inventoryScreen.refresh();
+    this.audio.play('click');
+    return true;
   }
 
   /**
@@ -2360,6 +2455,8 @@ class App {
   }
 
   dispose(): void {
+    this.recipeBook.dispose();
+    this.tooltip.dispose();
     this.mobRenderer.dispose();
     this.playerRenderer.dispose();
     this.particles.dispose();
@@ -2639,6 +2736,10 @@ class App {
     handItem: number | null;
     /** 当前的视野色罩（E16 验收用） */
     screenEffect: ScreenEffect;
+    /** 配方书是否打开（验收用） */
+    recipeBookOpen: boolean;
+    /** 物品提示框当前显示的文字（验收用） */
+    tooltip: string;
     /** 当前视角模式（F7 验收用） */
     cameraMode: CameraMode;
     /** 第三人称的玩家模型是否可见（F7 验收用） */
@@ -2659,6 +2760,8 @@ class App {
       particles: this.particles.active,
       handItem: this.hand.item ?? null,
       screenEffect: this.screenEffects.effect,
+      recipeBookOpen: this.recipeBook.isOpen,
+      tooltip: this.tooltip.text,
       fps: this.fps,
       chunks: this.world.chunks.size,
       lit: this.world.litChunkCount,

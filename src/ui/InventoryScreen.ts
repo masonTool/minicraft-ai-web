@@ -40,11 +40,15 @@ import {
   maxStackOf,
   type ItemCategory,
 } from '../core/registry/items.ts';
+import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
+import { Tooltip } from './Tooltip.ts';
 
 export type InventoryPanelMode = 'inventory' | 'crafting' | 'furnace' | 'chest';
 
 export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
+  /** 打开配方书（背包标题栏上的按钮） */
+  onOpenRecipes?: () => void;
 }
 
 interface SlotBinding {
@@ -104,6 +108,8 @@ export class InventoryScreen {
 
   /** key → 槽位绑定；key 形如 "inv:12" / "craft:3" / "furnace:1" / "chest:5" */
   private readonly bindings = new Map<string, SlotBinding>();
+  /** 每个槽位当前显示的物品（提示框按元素反查；槽位会被反复重建，所以用 WeakMap 不占内存） */
+  private readonly tooltipStacks = new WeakMap<HTMLElement, { id: number; count: number }>();
   private readonly grids: Record<2 | 3, CraftingGrid>;
 
   private mode: InventoryPanelMode = 'inventory';
@@ -118,6 +124,8 @@ export class InventoryScreen {
     private readonly atlas: TextureAtlas,
     private readonly inventory: Inventory,
     private readonly hooks: InventoryScreenHooks = {},
+    /** 物品提示框；不传就自己建一个（验收脚本里单独构造界面时用得上） */
+    private readonly tooltip: Tooltip = new Tooltip(),
   ) {
     this.grids = { 2: new CraftingGrid(2), 3: new CraftingGrid(3) };
     for (const grid of Object.values(this.grids)) grid.onChange = () => this.refresh();
@@ -125,6 +133,9 @@ export class InventoryScreen {
     this.root = document.createElement('div');
     this.root.id = 'inventory-screen';
     this.root.className = 'hidden';
+
+    // 一个委托监听覆盖所有槽位（含后面动态重建的创造物品栏）
+    this.tooltip.delegate(this.root, (target) => this.tooltipFor(target));
 
     this.panel = document.createElement('div');
     this.panel.className = 'inv-panel';
@@ -140,6 +151,14 @@ export class InventoryScreen {
       ? '点空白处关闭 · 轻点拿起 / 再轻点放下，点空槽可放下一个'
       : '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭 · 左键整叠 / 右键单个';
     header.append(this.titleEl, hint);
+    if (this.hooks.onOpenRecipes) {
+      const recipes = document.createElement('button');
+      recipes.type = 'button';
+      recipes.className = 'inv-recipes-btn';
+      recipes.textContent = '配方书 (R)';
+      recipes.addEventListener('click', () => this.hooks.onOpenRecipes?.());
+      header.appendChild(recipes);
+    }
     this.panel.appendChild(header);
 
     // ---- 上半部分：随模式切换
@@ -284,7 +303,8 @@ export class InventoryScreen {
     const query = this.creativeQuery;
     const items = CREATIVE_ITEMS.filter((itemId) => {
       if (this.creativeCategory !== 'all' && categoryOf(itemId) !== this.creativeCategory) return false;
-      if (query.length > 0 && !itemName(itemId).toLowerCase().includes(query)) return false;
+      // 中文名与英文 id 都能搜：写"石头"或写 stone 都能找到（原来只认英文 id）
+      if (query.length > 0 && !matchesQuery(itemId, query)) return false;
       return true;
     });
 
@@ -292,7 +312,7 @@ export class InventoryScreen {
     for (const itemId of items) {
       const slot = this.createSlot();
       slot.classList.add('creative-slot');
-      slot.title = itemName(itemId);
+      this.tooltipStacks.set(slot, { id: itemId, count: 1 });
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
@@ -395,6 +415,8 @@ export class InventoryScreen {
   private createSlot(): HTMLDivElement {
     const slot = document.createElement('div');
     slot.className = 'inv-slot';
+    // 提示框靠这个属性认出"指针下面是可悬停的东西"（见 Tooltip.delegate）
+    slot.dataset.tooltip = '';
     const canvas = document.createElement('canvas');
     canvas.width = 36;
     canvas.height = 36;
@@ -684,6 +706,13 @@ export class InventoryScreen {
     }
   }
 
+  /** 指针底下的槽位当前是什么物品 */
+  private tooltipFor(element: HTMLElement): ItemTooltip | null {
+    const stack = this.tooltipStacks.get(element);
+    if (!stack) return null;
+    return itemTooltip(stack.id, stack.count);
+  }
+
   private renderInto(element: HTMLElement, stack: ItemStack | null): void {
     const canvas = element.querySelector('canvas') as HTMLCanvasElement;
     const count = element.querySelector('.inv-count') as HTMLSpanElement;
@@ -691,11 +720,12 @@ export class InventoryScreen {
       drawItemIcon(canvas, this.atlas, stack.id);
       canvas.style.visibility = 'visible';
       count.textContent = stack.count > 1 ? String(stack.count) : '';
-      element.title = itemName(stack.id);
+      // 悬停提示交给托管的 Tooltip（浏览器自带的 title 只有一行、手机上还弹不出来）
+      this.tooltipStacks.set(element, stack);
     } else {
       canvas.style.visibility = 'hidden';
       count.textContent = '';
-      element.title = '';
+      this.tooltipStacks.delete(element);
     }
   }
 
@@ -712,3 +742,11 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   furnace: '熔炉',
   chest: '箱子',
 };
+
+/** 创造物品栏的搜索匹配：中文名、英文 id、数字 id 都认 */
+function matchesQuery(itemId: number, query: string): boolean {
+  const lower = query.toLowerCase();
+  if (itemLabel(itemId).includes(query)) return true;
+  if (itemName(itemId).toLowerCase().includes(lower)) return true;
+  return String(itemId) === query;
+}
