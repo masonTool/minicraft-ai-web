@@ -26,6 +26,7 @@ import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower } from './core/crafting/Enchanting.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
+import { ANVIL_SIZE, Anvil } from './core/container/Anvil.ts';
 import { EnchantTable } from './core/container/EnchantTable.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
@@ -154,6 +155,7 @@ import {
   rareDropFor,
   saturationFrom,
   type FoodInfo,
+  Item,
 } from './core/registry/items.ts';
 import { canEat } from './core/registry/food.ts';
 
@@ -286,6 +288,14 @@ const STARTING_HOTBAR: readonly number[] = [
   toolItemId('sword', 'iron'),
   // 开发期盔甲：皮革/铁/钻石各一套，方便对比护甲条的档位与减伤
   ...(['leather', 'iron', 'diamond'] as const).flatMap((material) => ARMOR_TYPES.map((type) => armorItemId(type, material))),
+  // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
+  Block.ANVIL,
+  Block.IRON_BLOCK,
+  Item.IRON_INGOT,
+  Item.BOOK,
+  Block.ENCHANTING_TABLE,
+  Block.BOOKSHELF,
+  Item.LAPIS_LAZULI,
 ];
 
 class App {
@@ -654,6 +664,11 @@ class App {
         onOpenRecipes: () => this.openRecipeBook(),
         // 熔炉产物被取空时结算烧炼经验（I5）
         onFurnaceXp: (amount) => this.awardXp(amount),
+        // 铁砧（H8）：同样只需要等级与扣等级的出口
+        anvilContext: () => ({
+          playerLevel: this.experience.level,
+          consumeLevels: (levels) => this.experience.consumeLevels(levels),
+        }),
         // 附魔台（H9）：等级、书架加成、扣等级的出口都由主程序提供
         enchantContext: () => ({
           playerLevel: this.experience.level,
@@ -1376,7 +1391,7 @@ class App {
         const index = Number(element.dataset.index);
         if (!Number.isFinite(index)) return null;
         const stack = this.inventory.get(index);
-        return stack ? itemTooltip(stack.id, stack.count, stack.damage, stack.enchants) : null;
+        return stack ? itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name) : null;
       });
     }
 
@@ -2642,6 +2657,10 @@ class App {
       this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(x, y, z));
       return true;
     }
+    if (hitBlock === Block.ANVIL) {
+      this.inventoryScreen.openWith('anvil', this.world.containers.getOrCreateAnvil(x, y, z));
+      return true;
+    }
     if (hitBlock === Block.ENCHANTING_TABLE) {
       // 记下位置：书架加成要围着**这一台**数，而 `enchantContext` 是每次刷新时问的
       this.enchantTablePos = { x, y, z };
@@ -2791,8 +2810,14 @@ class App {
   private dropContainerContents(x: number, y: number, z: number): void {
     const container = this.world.containers.get(x, y, z);
     if (!container) return;
-    // 三个容器各自的格数：熔炉 3、箱子 27、附魔台 2
-    const size = container instanceof Furnace ? FURNACE_SIZE : container instanceof EnchantTable ? 2 : CHEST_SIZE;
+    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3
+    const size = container instanceof Furnace
+      ? FURNACE_SIZE
+      : container instanceof EnchantTable
+        ? 2
+        : container instanceof Anvil
+          ? ANVIL_SIZE
+          : CHEST_SIZE;
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;

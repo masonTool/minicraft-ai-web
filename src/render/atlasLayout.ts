@@ -364,6 +364,10 @@ export const TILE_ORDER = [
   'bookshelf',
   'item_paper',
   'item_book',
+  // ---- 铁砧与铁块（H8）
+  'anvil_top',
+  'anvil_side',
+  'iron_block',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

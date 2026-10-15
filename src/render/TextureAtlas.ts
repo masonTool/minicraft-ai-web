@@ -934,6 +934,47 @@ PAINTERS.enchanting_table_side = (x, y, rng) => {
   return [clamp255(26 + jitter), clamp255(20 + jitter), clamp255(38 + jitter), 255];
 };
 
+// ---- 铁砧与铁块（H8）
+/** 铁块：抛光金属面，比"粗铁块"平整（粗铁块有那种粗糙的层理） */
+PAINTERS.iron_block = (x, y, rng) => {
+  const jitter = rng() * 7 - 3.5;
+  // 四边压一圈暗边，中间一道很浅的十字抛光痕，避免看起来像一块纯色板
+  const edge = x < 1 || x > 14 || y < 1 || y > 14;
+  const polish = x === 7 || y === 7;
+  const shade = edge ? 0.84 : polish ? 1.05 : 1;
+  return [clamp255(212 * shade + jitter), clamp255(212 * shade + jitter), clamp255(218 * shade + jitter), 255];
+};
+
+// ---- 铁砧（H8）
+/** 铁砧顶面：深灰铁面 + 右侧一角是"砧角"（原版那个尖） */
+PAINTERS.anvil_top = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  // 砧角：右上角伸出去一块
+  const horn = dx > 5.5 && dy < 0;
+  if (horn) return [clamp255(78 + jitter), clamp255(78 + jitter), clamp255(84 + jitter), 255];
+  if (Math.abs(dx) > 6.2 || Math.abs(dy) > 6.2) return [0, 0, 0, 0];
+  // 中间一条亮面，两侧稍暗，看着像一块被打平过的铁
+  const shade = Math.abs(dy) < 2 ? 1.12 : Math.abs(dy) < 4.5 ? 1 : 0.84;
+  return [clamp255(96 * shade + jitter), clamp255(96 * shade + jitter), clamp255(102 * shade + jitter), 255];
+};
+
+/** 铁砧侧面：上细下粗的砧身 + 底座 */
+PAINTERS.anvil_side = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const dx = Math.abs(x - 7.5);
+  // 顶沿（y 0~2）最宽
+  if (y < 2) return [clamp255(104 + jitter), clamp255(104 + jitter), clamp255(110 + jitter), 255];
+  // 砧腰收窄：越往下越宽（原版铁砧是"T"形）
+  const waist = y < 8 ? 3.5 : 5.5;
+  if (dx > waist) return [0, 0, 0, 0];
+  // 底座最后两行最宽、最暗
+  if (y > 13) return [clamp255(70 + jitter), clamp255(70 + jitter), clamp255(76 + jitter), 255];
+  const shade = 1.06 - (y / 15) * 0.22;
+  return [clamp255(92 * shade + jitter), clamp255(92 * shade + jitter), clamp255(98 * shade + jitter), 255];
+};
+
 /** 纸：略微歪斜的白色薄片 + 一道折角 */
 PAINTERS.item_paper = (x, y, rng) => {
   const jitter = rng() * 8 - 4;

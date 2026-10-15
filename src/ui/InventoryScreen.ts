@@ -31,11 +31,13 @@ import {
 } from '../core/container/Inventory.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { CHEST_SIZE } from '../core/container/Chest.ts';
+import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, Anvil } from '../core/container/Anvil.ts';
 import {
   ENCHANT_ITEM_SLOT,
   ENCHANT_LAPIS_SLOT,
   EnchantTable,
 } from '../core/container/EnchantTable.ts';
+import { anvilHint, repairCostLabel } from '../core/crafting/Anvil.ts';
 import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, Furnace } from '../core/container/Furnace.ts';
 import { UI_HINT_UNIMPLEMENTED, optionLabel, type EnchantOption } from '../core/crafting/Enchanting.ts';
 import { Chest } from '../core/container/Chest.ts';
@@ -51,7 +53,7 @@ import {
 import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
 import { Tooltip } from './Tooltip.ts';
 
-export type InventoryPanelMode = 'inventory' | 'crafting' | 'furnace' | 'chest' | 'enchanting';
+export type InventoryPanelMode = 'inventory' | 'crafting' | 'furnace' | 'chest' | 'enchanting' | 'anvil';
 
 export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
@@ -69,6 +71,11 @@ export interface InventoryScreenHooks {
   enchantContext?: () => {
     playerLevel: number;
     bookshelfPower: number;
+    consumeLevels: (levels: number) => boolean;
+  };
+  /** 铁砧同样只需要"当前等级 + 扣等级的出口"（H8） */
+  anvilContext?: () => {
+    playerLevel: number;
     consumeLevels: (levels: number) => boolean;
   };
 }
@@ -122,6 +129,15 @@ export class InventoryScreen {
   private readonly enchantLapisSlot: HTMLDivElement;
   private readonly enchantStatusEl: HTMLDivElement;
   private readonly enchantButtons: HTMLButtonElement[] = [];
+
+  /** 铁砧（H8） */
+  private readonly anvilLayout: HTMLDivElement;
+  private readonly anvilLeftSlot: HTMLDivElement;
+  private readonly anvilRightSlot: HTMLDivElement;
+  private readonly anvilResultSlot: HTMLDivElement;
+  private readonly anvilNameInput: HTMLInputElement;
+  private readonly anvilCostEl: HTMLDivElement;
+  private readonly anvilStatusEl: HTMLDivElement;
   private readonly cookFillEl: HTMLElement;
 
   // 创造物品栏的分类与搜索状态。
@@ -141,7 +157,7 @@ export class InventoryScreen {
   private readonly grids: Record<2 | 3, CraftingGrid>;
 
   private mode: InventoryPanelMode = 'inventory';
-  private activeContainer: Furnace | Chest | EnchantTable | null = null;
+  private activeContainer: Furnace | Chest | EnchantTable | Anvil | null = null;
   private containerDirty = false;
   private containerRefreshTimer = 0;
 
@@ -211,6 +227,29 @@ export class InventoryScreen {
     this.furnaceFuelSlot.dataset.key = 'furnace:fuel';
     this.furnaceInputSlot.dataset.key = 'furnace:input';
     this.furnaceOutputSlot.dataset.key = 'furnace:output';
+    // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
+    this.anvilLayout = document.createElement('div');
+    this.anvilLayout.className = 'anvil-layout';
+    this.anvilLeftSlot = this.createSlot();
+    this.anvilLeftSlot.dataset.key = 'anvil:left';
+    this.anvilRightSlot = this.createSlot();
+    this.anvilRightSlot.dataset.key = 'anvil:right';
+    this.anvilResultSlot = this.createSlot();
+    this.anvilResultSlot.dataset.key = 'anvil:result';
+    this.anvilNameInput = document.createElement('input');
+    this.anvilNameInput.type = 'text';
+    this.anvilNameInput.className = 'anvil-name';
+    this.anvilNameInput.maxLength = 40;
+    this.anvilNameInput.placeholder = '重命名为……（可留空）';
+    this.anvilNameInput.addEventListener('input', () => {
+      const anvil = this.activeContainer;
+      if (anvil instanceof Anvil) anvil.setName(this.anvilNameInput.value);
+    });
+    this.anvilCostEl = document.createElement('div');
+    this.anvilCostEl.className = 'anvil-cost';
+    this.anvilStatusEl = document.createElement('div');
+    this.anvilStatusEl.className = 'enchant-status';
+
     // 附魔台（H9）：物品槽 + 青金石槽 + 三个候选按钮
     this.enchantLayout = document.createElement('div');
     this.enchantLayout.className = 'enchant-layout';
@@ -404,6 +443,7 @@ export class InventoryScreen {
     this.clearBindings('furnace:');
     this.clearBindings('chest:');
     this.clearBindings('enchant:');
+    this.clearBindings('anvil:');
 
     if (this.mode === 'furnace') {
       const input = this.registerExisting(this.furnaceInputSlot, 'furnace:input', this.activeContainer!, FURNACE_INPUT);
@@ -426,6 +466,26 @@ export class InventoryScreen {
 
       this.furnaceLayout.replaceChildren(left, middle, output);
       this.topArea.appendChild(this.furnaceLayout);
+      return;
+    }
+
+    if (this.mode === 'anvil') {
+      const anvil = this.activeContainer instanceof Anvil ? this.activeContainer : null;
+      const left = this.registerExisting(this.anvilLeftSlot, 'anvil:left', anvil!, ANVIL_LEFT);
+      const right = this.registerExisting(this.anvilRightSlot, 'anvil:right', anvil!, ANVIL_RIGHT);
+      const result = this.registerExisting(this.anvilResultSlot, 'anvil:result', anvil!, ANVIL_RESULT, true);
+      // 名字输入框跟着容器状态走：切换模式会重建上半区，不重新同步会把玩家输的字丢掉
+      this.anvilNameInput.value = anvil?.name ?? '';
+      this.anvilStatusEl.textContent = '';
+
+      const row = document.createElement('div');
+      row.className = 'anvil-row';
+      row.append(this.buildLabel('物品'), left, this.buildLabel('材料 / 附魔书'), right, this.buildLabel('产物'), result);
+      const side = document.createElement('div');
+      side.className = 'anvil-side';
+      side.append(this.buildLabel('重命名'), this.anvilNameInput, this.anvilCostEl, this.anvilStatusEl);
+      this.anvilLayout.replaceChildren(row, side);
+      this.topArea.appendChild(this.anvilLayout);
       return;
     }
 
@@ -623,6 +683,8 @@ export class InventoryScreen {
    * 只有玩家背包有"部位限制"（36-39 是盔甲槽），合成网格/箱子/熔炉一律放行。
    */
   private accepts(binding: SlotBinding, itemId: number): boolean {
+    // 铁砧的产物槽由左右两格算出来，不能手动放
+    if (binding.source instanceof Anvil && binding.index === ANVIL_RESULT) return false;
     // 附魔台的青金石槽只吃青金石（放别的进去会把"点不动"的原因藏起来）
     if (binding.source instanceof EnchantTable) {
       return binding.index !== ENCHANT_LAPIS_SLOT || EnchantTable.acceptsLapis(itemId);
@@ -643,6 +705,11 @@ export class InventoryScreen {
   private handleSlotClick(key: string, button: number): void {
     const binding = this.bindings.get(key);
     if (!binding) return;
+    // 铁砧产物：不是普通搬运——要先查等级、扣等级、扣材料再重算（H8）
+    if (binding.source instanceof Anvil && binding.index === ANVIL_RESULT) {
+      this.handleAnvilTake();
+      return;
+    }
     const { source, index, takeOnly } = binding;
     const slot = source.get(index);
 
@@ -747,7 +814,7 @@ export class InventoryScreen {
   }
 
   /** 打开为指定模式；容器模式必须传入容器实例 */
-  openWith(mode: InventoryPanelMode, container?: Furnace | Chest | EnchantTable): void {
+  openWith(mode: InventoryPanelMode, container?: Furnace | Chest | EnchantTable | Anvil): void {
     if (this.mode !== mode || this.activeContainer !== container) {
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = mode;
@@ -821,6 +888,7 @@ export class InventoryScreen {
     }
 
     if (this.mode === 'enchanting') this.refreshEnchantOptions();
+    if (this.mode === 'anvil') this.refreshAnvil();
 
     if (this.held) {
       drawItemIcon(this.heldCanvas, this.atlas, this.held.id, 32);
@@ -836,7 +904,62 @@ export class InventoryScreen {
   private tooltipFor(element: HTMLElement): ItemTooltip | null {
     const stack = this.tooltipStacks.get(element);
     if (!stack) return null;
-    return itemTooltip(stack.id, stack.count, stack.damage, stack.enchants);
+    return itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name);
+  }
+
+  /**
+   * 取铁砧产物。
+   *
+   * 手上已经有同类物品时并上去（省得玩家先放下再捡），否则直接放到光标上。
+   * 任何一步不满足都只提示、不改动东西——「扣了等级又没拿到东西」是最恼人的 bug。
+   */
+  private handleAnvilTake(): void {
+    const anvil = this.activeContainer;
+    if (!(anvil instanceof Anvil)) return;
+    const context = this.hooks.anvilContext?.();
+    if (!context) return;
+
+    const preview = anvil.get(ANVIL_RESULT);
+    if (!preview) return;
+    if (this.held && (this.held.id !== preview.id || this.held.count + preview.count > maxStackOf(preview.id))) {
+      this.rejectSlot(this.anvilResultSlot);
+      return;
+    }
+
+    const result = anvil.take(context.playerLevel, context.consumeLevels);
+    if (!result.ok) {
+      this.anvilStatusEl.textContent = result.reason;
+      this.anvilStatusEl.classList.add('bad');
+      this.refresh();
+      return;
+    }
+    this.held = this.held ? { id: this.held.id, count: this.held.count + result.output.count } : result.output;
+    this.anvilStatusEl.textContent = `花费 ${result.cost} 级`;
+    this.anvilStatusEl.classList.remove('bad');
+    this.refresh();
+  }
+
+  /**
+   * 刷新铁砧的代价与提示。
+   * 代价里**含"积累惩罚"**，所以要顺手把它显示出来——不然玩家只会觉得"怎么越来越贵"。
+   */
+  private refreshAnvil(): void {
+    const anvil = this.activeContainer;
+    if (!(anvil instanceof Anvil)) return;
+    const context = this.hooks.anvilContext?.();
+    if (!context) return;
+
+    const outcome = anvil.outcome;
+    this.anvilResultSlot.classList.toggle('ready', outcome !== null);
+    if (!outcome) {
+      this.anvilCostEl.textContent = anvilHint(anvil.left, anvil.right, anvil.name);
+      this.anvilCostEl.classList.add('bad');
+      return;
+    }
+    const penalty = (anvil.left?.repairCost ?? 0) + (anvil.right?.repairCost ?? 0);
+    this.anvilCostEl.textContent =
+      `需要 ${outcome.cost} 级（你 ${context.playerLevel} 级）${repairCostLabel(penalty)}`;
+    this.anvilCostEl.classList.toggle('bad', context.playerLevel < outcome.cost);
   }
 
   /** 点第 slot 个候选：校验 → 扣等级与青金石 → 附魔 */
@@ -909,6 +1032,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   furnace: '熔炉',
   chest: '箱子',
   enchanting: '附魔台',
+  anvil: '铁砧',
 };
 
 /** 创造物品栏的搜索匹配：中文名、英文 id、数字 id 都认 */

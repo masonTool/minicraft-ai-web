@@ -323,6 +323,21 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     pattern: ['PPP', 'BBB', 'PPP'],
     key: { P: P, B: Item.BOOK },
   },
+  // 铁砧：3 个铁块 + 4 个铁锭（原版图案）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.ANVIL, count: 1 },
+    pattern: ['BBB', ' I ', 'III'],
+    key: { B: Block.IRON_BLOCK, I: Item.IRON_INGOT },
+  },
+  // 铁块与铁锭互转（储物方块的标准做法）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.IRON_BLOCK, count: 1 },
+    pattern: ['III', 'III', 'III'],
+    key: { I: Item.IRON_INGOT },
+  },
+  { kind: 'shapeless' as const, result: { id: Item.IRON_INGOT, count: 9 }, ingredients: [Block.IRON_BLOCK] },
 ];
 
 export const RECIPES: readonly Recipe[] = [

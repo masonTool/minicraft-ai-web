@@ -772,6 +772,21 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     name: 'minecraft:bookshelf',
     tiles: ['oak_planks', 'oak_planks', 'bookshelf'],
   },
+  // ---- 铁砧（H8）
+  {
+    // 铁砧原版有朝向与"落地受损"两种状态（受损后第三次使用会毁掉），
+    // 这里只做**单一方块**：朝向要用方块状态（B4 的旋转变体那套），
+    // 落地受损则要方块状态里再存一个"损伤度"，都留给后续。
+    id: 273,
+    name: 'minecraft:anvil',
+    tiles: ['anvil_top', 'iron_block', 'anvil_side'],
+  },
+  {
+    // 铁块：铁砧的配方材料。此前项目里只有"粗铁块"，而铁块是原版最基础的储物方块之一
+    id: 274,
+    name: 'minecraft:iron_block',
+    tiles: ['iron_block', 'iron_block', 'iron_block'],
+  },
 ];
 
 
@@ -952,6 +967,8 @@ export const Block = {
   OBSERVER: 270,
   ENCHANTING_TABLE: 271,
   BOOKSHELF: 272,
+  ANVIL: 273,
+  IRON_BLOCK: 274,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1103,6 +1120,10 @@ HARDNESS.set(Block.LADDER, 0.4);
 // 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
 HARDNESS.set(Block.ENCHANTING_TABLE, 5);
 HARDNESS.set(Block.BOOKSHELF, 1.5);
+// 铁砧 5（原版 5.0，也砸得动）
+HARDNESS.set(Block.ANVIL, 5);
+// 铁块 5（原版），必须用镐
+HARDNESS.set(Block.IRON_BLOCK, 5);
 
 // 木材家族：原木与木板 2.0、树叶 0.2，台阶楼梯跟随木板
 for (const ids of Object.values(Wood)) {

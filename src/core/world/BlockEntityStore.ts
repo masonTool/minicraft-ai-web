@@ -7,12 +7,13 @@
  * 关卡存档（K1）接入时，这里就是序列化的入口：entries() 可完整导出状态。
  */
 
+import { Anvil } from '../container/Anvil.ts';
 import { Chest } from '../container/Chest.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 
-export type BlockContainer = Furnace | Chest | EnchantTable;
-export type ContainerKind = 'furnace' | 'chest' | 'enchanting';
+export type BlockContainer = Furnace | Chest | EnchantTable | Anvil;
+export type ContainerKind = 'furnace' | 'chest' | 'enchanting' | 'anvil';
 
 interface Entry {
   x: number;
@@ -56,6 +57,20 @@ export class BlockEntityStore {
     const chest = new Chest();
     this.entries.set(BlockEntityStore.key(x, y, z), { x, y, z, container: chest });
     return chest;
+  }
+
+  getAnvil(x: number, y: number, z: number): Anvil | undefined {
+    const container = this.get(x, y, z);
+    return container instanceof Anvil ? container : undefined;
+  }
+
+  /** 铁砧的两格输入也按坐标存：放下东西走开再回来，东西还在台面上 */
+  getOrCreateAnvil(x: number, y: number, z: number): Anvil {
+    const existing = this.getAnvil(x, y, z);
+    if (existing) return existing;
+    const anvil = new Anvil();
+    this.entries.set(BlockEntityStore.key(x, y, z), { x, y, z, container: anvil });
+    return anvil;
   }
 
   getEnchantTable(x: number, y: number, z: number): EnchantTable | undefined {

@@ -252,9 +252,11 @@ const EXPLICIT: Record<string, string> = {
   cactus: '仙人掌',
   dead_bush: '枯萎的灌木',
   bamboo: '竹子',
-  // 附魔（H9）
+  // 附魔与铁砧（H9 / H8）
   enchanting_table: '附魔台',
   bookshelf: '书架',
+  anvil: '铁砧',
+  iron_block: '铁块',
   // 海底
   prismarine: '海晶石',
   prismarine_bricks: '海晶石砖',
@@ -415,6 +417,7 @@ const DESCRIPTIONS: Record<string, string> = {
   sugar_cane: '长在水边的植物：3 个可以合成 3 张纸（纸再做成书）。',
   enchanting_table: '右键打开附魔界面：花经验与青金石给工具/武器/盔甲附魔。周围的书架越多，能出的附魔等级越高（满加成要 15 个书架）。',
   bookshelf: '放在附魔台周围给它加成：满 15 级需要 15 个书架（书架与附魔台之间要留一格空）。',
+  anvil: '右键打开：可以合并两件装备的附魔、用材料修耐久、给物品改名。每次使用都会增加"积累惩罚"，所以同一件东西反复用会越来越贵——这也是经验修补更划算的原因。总代价超过 40 级就修不动了。',
   paper: '甘蔗做成的材料：3 张纸 + 1 个皮革 = 1 本书。',
   book: '附魔台与书架的原料，也可以放进附魔台当装饰。',
   cactus: '碰到会掉血；可烧成绿色染料。',
@@ -607,6 +610,7 @@ export function itemTooltip(
   count = 1,
   damage?: number,
   enchants?: Readonly<Record<string, number>>,
+  name?: string,
 ): ItemTooltip {
   const def = itemDef(itemId);
   const rawName = def?.name ?? 'unknown';
@@ -618,8 +622,9 @@ export function itemTooltip(
   const enchantLine = enchantLabel(enchants);
   const body = [description, durability, enchantLine].filter((part) => part.length > 0).join('｜');
   return {
-    title: itemLabel(itemId),
-    subtitle: rawName,
+    // 铁砧改过名字就用改过的名字当标题（原版也这样，而且会把原来的名字留在副标题里）
+    title: name && name.length > 0 ? name : itemLabel(itemId),
+    subtitle: name && name.length > 0 ? `原名 ${itemLabel(itemId)}` : rawName,
     description: body,
     showMeta: !hasDescription(itemId) && durability.length === 0 && enchantLine.length === 0,
     category: categoryLabel(itemId),

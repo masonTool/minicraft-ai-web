@@ -231,6 +231,25 @@ for (const spec of ARMOR_SPECS) {
   });
 }
 
+/**
+ * 铁砧上的修复材料（原版 `isValidRepairItem`）：材质名 → 用什么东西修。
+ *
+ * 放在 `items.ts` 而不是 `tools.ts` / `armor.ts`：那两个模块**被** `items.ts` 引用，
+ * 反过来让它们引用 `Item` 就会成环（items → tools → items）。
+ * 工具与盔甲的材料名共用一张表（木质/石质/铁/金/钻石/皮革/锁链）。
+ *
+ * 两个容易记错的点：石工具用**圆石**修（不是石头），锁链甲用**铁锭**修。
+ */
+export const MATERIAL_REPAIR_ITEM: Record<string, number> = {
+  wooden: Block.OAK_PLANKS,
+  stone: Block.COBBLESTONE,
+  iron: Item.IRON_INGOT,
+  golden: Item.GOLD_INGOT,
+  diamond: Item.DIAMOND,
+  leather: Item.LEATHER,
+  chainmail: Item.IRON_INGOT,
+};
+
 export function itemDef(id: number): ItemDef | undefined {
   return ITEMS[id];
 }

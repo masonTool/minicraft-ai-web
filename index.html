@@ -407,6 +407,19 @@
       /* 只取不放的槽位（合成结果、熔炉产物）用暖色底提示 */
       .inv-slot.take-only { background: #9a9a8b; }
 
+      /* ---------------- 铁砧（H8） ---------------- */
+      .anvil-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+      .anvil-row { display: flex; align-items: flex-end; gap: 8px; }
+      .anvil-row .inv-label { align-self: flex-end; padding-bottom: 4px; }
+      .anvil-side { display: flex; flex-direction: column; gap: 6px; min-width: 190px; flex: 1; }
+      .anvil-name {
+        font: inherit; font-size: 12px; padding: 5px 7px; color: #2b2b2b;
+        background: #b8b8b8; border: 2px solid; border-color: #6a6a6a #ffffff #ffffff #6a6a6a;
+      }
+      .anvil-name::placeholder { color: #5f5f5f; }
+      .anvil-cost { font-size: 12px; color: #2b5a2b; min-height: 16px; }
+      .anvil-cost.bad { color: #7a2020; }
+
       /* ---------------- 附魔台（H9） ---------------- */
       .enchant-layout { display: flex; gap: 14px; align-items: flex-start; }
       .enchant-col {

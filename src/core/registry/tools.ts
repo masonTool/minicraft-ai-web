@@ -209,8 +209,11 @@ requirePickaxe(0, [
   Block.PISTON,
   Block.STICKY_PISTON,
   Block.OBSERVER,
-  // 附魔台（H9）：原版要镐但对等级没有要求——**任何**镐都能采到
+  // 附魔台（H9）与铁砧（H8）：原版要镐但对等级没有要求——**任何**镐都能采到
   Block.ENCHANTING_TABLE,
+  Block.ANVIL,
+  // 铁块要石镐（原版）
+  Block.IRON_BLOCK,
 ]);
 // 书架：原版是"斧更快、徒手也能采到"，所以只进加速表不进需求表
 EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');

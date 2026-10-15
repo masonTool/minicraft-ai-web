@@ -27,6 +27,13 @@ export interface ItemStack {
    * 与 `damage` 同样是"可选 + 跟着栈走"，用普通对象而不是 Map 是为了能直接进存档。
    */
   enchants?: Record<string, number>;
+  /** 铁砧改过的名字（H8）；没改过就不带这个字段 */
+  name?: string;
+  /**
+   * 铁砧的累积惩罚（原版 `RepairCost`）：每上过一次铁砧就 `2 × 旧值 + 1`，
+   * 下次操作要多花这么多级。不带这个字段表示"没用过铁砧"（0）。
+   */
+  repairCost?: number;
 }
 
 /**
@@ -48,6 +55,8 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
   const extras: Partial<ItemStack> = {};
   if (stack.damage !== undefined) extras.damage = stack.damage;
   if (stack.enchants !== undefined) extras.enchants = { ...stack.enchants };
+  if (stack.name !== undefined) extras.name = stack.name;
+  if (stack.repairCost !== undefined) extras.repairCost = stack.repairCost;
   return extras;
 }
 
@@ -177,6 +186,9 @@ export class Inventory implements SlotSource {
         }
         if (Object.keys(enchants).length > 0) restored.enchants = enchants;
       }
+      // 改名与累积惩罚同理：只收合法值，坏存档不会把整件物品读崩
+      if (typeof stack.name === 'string' && stack.name.length > 0) restored.name = stack.name.slice(0, 64);
+      if (typeof stack.repairCost === 'number' && stack.repairCost > 0) restored.repairCost = Math.floor(stack.repairCost);
       this.slots[i] = restored;
     }
     this.notify();
