@@ -15,6 +15,7 @@ import { meshSection, type MeshContext, type TileUvSource } from '../src/core/me
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
 import { Chunk, SECTION_COUNT, Chunk as ChunkClass } from '../src/core/world/Chunk.ts';
+import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
 
 let passed = 0;
 let failed = 0;
@@ -121,7 +122,7 @@ console.log('\n[真实地形：合并率]');
   const seedBlocks = generator.generate(0, 0);
   const chunk = ChunkClass.fromData(0, 0, seedBlocks);
 
-  // 参考值：逐面网格化会输出多少三角形（只统计完整立方体方块）
+  // 参考值：逐面网格化会输出多少三角形（只统计"按整格处理"的方块）
   let naiveFaces = 0;
   for (let y = -64; y < 320; y++) {
     for (let z = 0; z < 16; z++) {
@@ -129,7 +130,8 @@ console.log('\n[真实地形：合并率]');
         const id = chunk.get(x, y, z);
         if (id === Block.AIR) continue;
         const def = blockDef(id);
-        if (def.shape !== 'cube') continue;
+        // 满格的流体也算整格（与网格化里的判定共用同一个函数）
+        if (!isFullBlockShape(def.shape, chunk.getState(x, y, z))) continue;
         for (const [dx, dy, dz] of [
           [1, 0, 0],
           [-1, 0, 0],

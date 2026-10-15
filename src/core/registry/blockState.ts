@@ -36,7 +36,9 @@ export type BlockShape =
    * 贴地的薄板（红石粉 / 中继器 / 比较器 / 按钮 / 压力板）。
    * 渲染成 1/16 高的一层，**无碰撞**：原版这些方块也确实不挡路（压力板能踩上去）。
    */
-  | 'flat';
+  | 'flat'
+  /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
+  | 'fluid';
 
 /** 朝向对应的水平偏移（与 Facing 一一对应） */
 export const FACING_OFFSET: readonly (readonly [number, number])[] = [
@@ -69,6 +71,47 @@ const POWERED_MASK = 0b1000;
  * 破坏时按 2 个台阶掉落（见 blocks.ts 的掉落表）。
  */
 const SLAB_DOUBLE_MASK = 0b1000000;
+
+// ---------------------------------------------------------------- 流体
+//
+// 流体独占整格，因此低位可以随便用：
+//   低 3 位 = 液面等级（0 = 水源，1~7 越流越薄）
+//   第 4 位   = "下落"标记（上方是同一液体，这一格是瀑布的一节）
+const FLUID_LEVEL_MASK = 0b111;
+const FLUID_FALLING_MASK = 0b1000;
+
+/** 液面等级 */
+export function fluidLevel(state: number): number {
+  return state & FLUID_LEVEL_MASK;
+}
+
+export function withFluidLevel(state: number, level: number): number {
+  return (state & ~FLUID_LEVEL_MASK) | (level & FLUID_LEVEL_MASK);
+}
+
+export function isFallingFluid(state: number): boolean {
+  return (state & FLUID_FALLING_MASK) !== 0;
+}
+
+export function withFallingFluid(state: number, falling = true): number {
+  return falling ? state | FLUID_FALLING_MASK : state & ~FLUID_FALLING_MASK;
+}
+
+/**
+ * 流体的渲染高度（0~1）。
+ *
+ * ⚠️ **水源与下落液体保持满格**，只有"流动中"的液体才变薄。
+ * 原版水源其实是 14/16 格高，但那样会让海洋里每一格水都退化成独立的面，
+ * 贪心网格化再也合并不了（实测三角形从 100% 涨到 175%）。
+ * 换来的收益只是水面低 1 像素，不划算——把"能看出液面高度"这件事
+ * 留给真正有意义的流动水。
+ */
+export function fluidHeight(state: number): number {
+  if (isFallingFluid(state)) return 1;
+  const level = fluidLevel(state);
+  if (level === 0) return 1;
+  return Math.max(0.15, 0.9 - level * 0.1);
+}
 
 export const DEFAULT_STATE = 0;
 

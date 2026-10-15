@@ -14,6 +14,7 @@ import {
   FACING_OFFSET,
   doorHinge,
   facingOf,
+  fluidHeight,
   isDoorOpen,
   isSlabDouble,
   isTop,
@@ -78,6 +79,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
   switch (shape) {
     case 'cube':
       return [FULL];
+    case 'fluid':
+      // 流体不挡路（玩家在水里会被减速，但不会被挡住）
+      return [];
     case 'slab':
       // 双层台阶 = 整格；这也是它与"直接放一个原方块"在碰撞上完全一致的原因
       if (isSlabDouble(state)) return [FULL];
@@ -163,7 +167,24 @@ function doorBox(state: number): LocalBox {
 
 // ---------------------------------------------------------------- 渲染盒
 
+/**
+ * 这一格能不能按"整格"处理（完整立方体，或满格的流体）。
+ *
+ * 网格化用它决定"要不要走贪心合并"，测试也用它算逐面基准值——
+ * 两边共用一份判定，免得基准与实际实现悄悄跑偏（本轮就踩过一次）。
+ */
+export function isFullBlockShape(shape: BlockShape, state: number): boolean {
+  if (shape === 'cube') return true;
+  // 水位为 0（水源）或下落中的液体高度是整格，海洋里绝大多数水都属于这一类
+  if (shape === 'fluid') return fluidHeight(state) >= 1;
+  return false;
+}
+
 export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = {}): readonly LocalBox[] {
+  if (shape === 'fluid') {
+    // 液面高度由状态位决定：水源接近满格、越流越薄、下落时填满
+    return [[0, 0, 0, 1, fluidHeight(state), 1]];
+  }
   switch (shape) {
     case 'cube':
       return [FULL];

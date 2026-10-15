@@ -30,6 +30,7 @@ import { Block, blockDef, blockTiles, type BlockDef } from '../registry/blocks.t
 import {
   canConnectTo,
   canPaneConnectTo,
+  isFullBlockShape,
   meshBoxes,
   type LocalBox,
   type ShapeContext,
@@ -523,7 +524,7 @@ function greedyMesh(
           const id = chunk.get(x, worldY, z);
           if (id === Block.AIR) continue;
           const def = blockDef(id);
-          if (def.shape !== 'cube') continue;
+          if (!isFullBlockShape(def.shape, chunk.getState(x, worldY, z))) continue;
 
           // 面剔除：邻居不透明则本面不可见；同种半透明方块之间的内部面也剔除
           const neighborId = sampleBlock(x + face.dir[0], y + face.dir[1], z + face.dir[2]);
@@ -647,8 +648,8 @@ export function meshSection(
         if (id === Block.AIR) continue;
 
         const def = blockDef(id);
-        // 完整立方体已经在上面的贪心网格化里处理过
-        if (def.shape === 'cube') continue;
+        // 完整立方体（含满格的流体）已经在上面的贪心网格化里处理过
+        if (isFullBlockShape(def.shape, chunk.getState(x, worldY, z))) continue;
 
         const emit: EmitContext = {
           buf: buffers[layerOf(id)],

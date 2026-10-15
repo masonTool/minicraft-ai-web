@@ -31,6 +31,13 @@ import { Tooltip } from './ui/Tooltip.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
 import {
+  TickScheduler,
+  randomTickChunk,
+  type ScheduledTick,
+  type TickWorld,
+} from './core/tick/RandomTicks.ts';
+import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
+import {
   StatusEffects,
   effectLabel,
   effectTone,
@@ -114,6 +121,9 @@ const MESH_BUDGET_PER_FRAME = 3;
 
 /** 游戏逻辑 tick（原版 20 次/秒），生存机制按这个节奏结算 */
 const TICK_SECONDS = 0.05;
+/** 随机刻的作用半径（区块）：原版是 128 格，这里取 3 个区块以免每 tick 做太多事 */
+const RANDOM_TICK_RADIUS = 3;
+
 /** 死亡后自动重生的等待时间（秒） */
 const RESPAWN_DELAY = 3;
 
@@ -301,6 +311,30 @@ class App {
   private respawnCountdown = 0;
   /** 这一条命是否已经结算过死亡掉落（避免每帧都掉一次） */
   private deathHandled = false;
+  /** 计划刻队列（流体等"延迟若干 tick 再处理"的方块） */
+  private readonly scheduler = new TickScheduler();
+  /** 随机刻看到的世界（掉落回调接到掉落物系统上） */
+  private readonly tickWorld: TickWorld = {
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+    setBlock: (x, y, z, id) => this.world.setBlockAndUpdate(x, y, z, id),
+    drop: (id, count, x, y, z) => this.spawnDrop(id, count, x, y, z),
+  };
+  /**
+   * 流体看到的世界：读写方块与状态 + 把后续流动排进计划刻队列。
+   * 写方块走 `setBlockAndUpdate`（会触发光照与重网格化），状态一并带上液面等级。
+   */
+  private readonly fluidWorld: FluidWorld = {
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+    getState: (x, y, z) => this.world.getBlockState(x, y, z),
+    setFluid: (x, y, z, id, state) => this.world.setBlockAndUpdate(x, y, z, id, state),
+    schedule: (x, y, z, delay) => {
+      this.scheduler.schedule(x, y, z, this.dimension, delay);
+    },
+  };
+  /** 随机刻改动世界的累计次数（调试面板与验收用） */
+  private randomTickChanges = 0;
+  /** 流体流动改动的累计次数（验收用） */
+  private fluidChanges = 0;
   /** 状态效果 HUD（右上角）与它的内容签名（内容没变就不重建 DOM） */
   private readonly effectsHudEl = document.getElementById('effects-hud');
   private effectsHudSignature = '';
@@ -1932,13 +1966,20 @@ class App {
       },
       seed: () => this.world.seed,
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
-      setBlock: (x, y, z, id) => this.world.setBlockAndUpdate(x, y, z, id),
+      setBlock: (x, y, z, id) => {
+        const ok = this.world.setBlockAndUpdate(x, y, z, id);
+        if (ok) this.wakeFluidsAround(x, y, z);
+        return ok;
+      },
       fillBlocks: (x1, y1, z1, x2, y2, z2, id) => {
         let placed = 0;
         for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
           for (let z = Math.min(z1, z2); z <= Math.max(z1, z2); z++) {
             for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
-              if (this.world.setBlockAndUpdate(x, y, z, id)) placed++;
+              if (this.world.setBlockAndUpdate(x, y, z, id)) {
+                placed++;
+                this.wakeFluidsAround(x, y, z);
+              }
             }
           }
         }
@@ -2014,6 +2055,62 @@ class App {
     const scaled = amount * this.effects.incomingDamageMultiplier();
     if (scaled <= 0) return;
     this.stats.damage(scaled, cause);
+  }
+
+  /**
+   * 每 tick 推进随机刻与计划刻（20Hz 调用）。
+   *
+   * 随机刻只跑玩家周围一圈区块：原版是 128 格半径内所有 section，
+   * 而我们一次加载 489 个区块，全跑一遍（每段 3 次）会有上万次采样。
+   * 半径取 3 个区块（7×7 = 49 个区块）已经足够让"视野内的世界活着"。
+   */
+  private tickWorldBlocks(): void {
+    // 1) 计划刻：流体等延迟处理
+    for (const pos of this.scheduler.advance()) this.runScheduledTick(pos);
+
+    // 2) 随机刻：数量由游戏规则 randomTickSpeed 控制（0 = 关闭）
+    const speed = this.rules.randomTickSpeed;
+    if (speed <= 0) return;
+
+    const centerCx = toChunkCoord(this.physics.x);
+    const centerCz = toChunkCoord(this.physics.z);
+    for (let dz = -RANDOM_TICK_RADIUS; dz <= RANDOM_TICK_RADIUS; dz++) {
+      for (let dx = -RANDOM_TICK_RADIUS; dx <= RANDOM_TICK_RADIUS; dx++) {
+        const chunk = this.world.getChunk(centerCx + dx, centerCz + dz);
+        if (!chunk) continue;
+        this.randomTickChanges += randomTickChunk(
+          this.tickWorld,
+          { originX: chunk.cx * 16, originZ: chunk.cz * 16, sectionCounts: chunk.sectionCounts },
+          speed,
+          Math.random,
+        );
+      }
+    }
+  }
+
+  /**
+   * 一次流体流动刻（计划刻到期时调用）。
+   * 玻璃后面的水管、瀑布、岩浆流都靠它一点点摊开。
+   */
+  private updateFluid(x: number, y: number, z: number): void {
+    if (fluidTick(this.fluidWorld, x, y, z)) this.fluidChanges++;
+  }
+
+  /**
+   * 玩家改动方块之后唤醒周围的流体（放水、挖掉水底会让水重新流）。
+   * 放在破坏/放置的公共出口上，避免每个调用点都写一遍。
+   */
+  private wakeFluidsAround(x: number, y: number, z: number): void {
+    wakeFluidAt(this.fluidWorld, x, y, z);
+  }
+
+  /**
+   * 计划刻到期的单个方块。
+   * 目前只有流体（B8）会往队列里塞东西，所以这里是流体流动的入口。
+   */
+  private runScheduledTick(pos: ScheduledTick): void {
+    if (pos.dimension !== this.dimension) return;
+    this.updateFluid(pos.x, pos.y, pos.z);
   }
 
   /**
@@ -2461,6 +2558,7 @@ class App {
       ticks++;
       this.tickEffects();
       this.stats.tick(this.survivalEnvironment());
+      this.tickWorldBlocks();
       // 摔落伤害只结算一次，避免同一帧的多个 tick 重复扣血
       this.pendingFallDistance = 0;
     }
@@ -3100,6 +3198,12 @@ class App {
     gameRules: GameRules;
     /** 当前状态效果的文字描述（验收用） */
     effects: string[];
+    /** 随机刻累计改动的方块数（验收用） */
+    randomTicks: number;
+    /** 计划刻队列长度（验收用） */
+    scheduledTicks: number;
+    /** 流体流动改动的累计次数（验收用） */
+    fluidChanges: number;
     /** 物品提示框当前显示的文字（验收用） */
     tooltip: string;
     /** 当前视角模式（F7 验收用） */
@@ -3127,6 +3231,9 @@ class App {
       difficulty: this.difficulty,
       gameRules: { ...this.rules },
       effects: this.effects.describe(),
+      randomTicks: this.randomTickChanges,
+      scheduledTicks: this.scheduler.size,
+      fluidChanges: this.fluidChanges,
       tooltip: this.tooltip.text,
       fps: this.fps,
       chunks: this.world.chunks.size,
