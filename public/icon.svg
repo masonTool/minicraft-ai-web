@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 草方块：顶面草绿、侧面泥土棕，程序化画出来不依赖外部美术资源 -->
+  <rect width="512" height="512" fill="#7fb2e5"/>
+  <g transform="translate(64 128)">
+    <polygon points="192,0 384,96 192,192 0,96" fill="#6aa832"/>
+    <polygon points="0,96 192,192 192,336 0,240" fill="#7a5230"/>
+    <polygon points="384,96 192,192 192,336 384,240" fill="#5c3d22"/>
+    <polygon points="192,0 384,96 192,192 0,96" fill="#7dbd3a" opacity="0.35"/>
+  </g>
+</svg>
