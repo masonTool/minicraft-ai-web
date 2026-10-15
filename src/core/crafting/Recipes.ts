@@ -338,6 +338,27 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     key: { I: Item.IRON_INGOT },
   },
   { kind: 'shapeless' as const, result: { id: Item.IRON_INGOT, count: 9 }, ingredients: [Block.IRON_BLOCK] },
+  // ---- 弓与箭（J9）
+  // 箭：1 燧石 + 1 木棍 + 1 羽毛 → 4 支（原版是无序配方）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.ARROW, count: 4 },
+    ingredients: [Item.FLINT, Item.STICK, Item.FEATHER],
+  },
+  // 弓：3 木棍 + 3 线（原版图案，镜像摆法也能合成）
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.BOW, count: 1 },
+    pattern: [' ST', 'S T', ' ST'],
+    key: { S: Item.STRING, T: Item.STICK },
+  },
+  // ⚠️ 与 原版 的差异：原版是 4 线 → 1 羊毛，方向相反。
+  // 这里反着来是因为**蜘蛛还没做**，否则"线"没有任何来源，弓就永远做不出来。
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.STRING, count: 4 },
+    ingredients: [woolId(0)],
+  },
 ];
 
 export const RECIPES: readonly Recipe[] = [

@@ -37,6 +37,12 @@ export interface ItemDef {
   readonly armor?: ArmorInfo;
   /** 可食用时对应的食物数值（饥饿/饱和度/附加效果） */
   readonly food?: FoodInfo;
+  /**
+   * 耐用品但不是工具/盔甲的（目前只有弓）。
+   * 工具与盔甲的耐久在各自的属性表里（它们还要登记等级、护甲值），
+   * 这里只给"只差一个耐久上限"的东西留个位置。
+   */
+  readonly durability?: number;
 }
 
 /** 方块物品可用的 id 上限：非方块物品一律从 1000 起，两段空间彻底隔开 */
@@ -73,6 +79,11 @@ export const Item = {
   // ---- 附魔相关材料（H9）
   PAPER: 1070,
   BOOK: 1071,
+  // ---- 弓与箭（J9）
+  FLINT: 1072,
+  STRING: 1073,
+  ARROW: 1075,
+  BOW: 1076,
   // ---- 食物（数值表在 `food.ts`，这里只占 id）
   COOKED_BEEF: 1040,
   COOKED_PORKCHOP: 1041,
@@ -107,6 +118,8 @@ interface NonBlockItemSpec {
   name: string;
   tile: string;
   maxStack?: number;
+  /** 耐用品（弓）：与 `ItemDef.durability` 同一个意思 */
+  durability?: number;
 }
 
 const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
@@ -138,6 +151,13 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // ---- 附魔材料：纸（甘蔗做）与书（纸 + 皮革）
   { id: Item.PAPER, name: 'minecraft:paper', tile: 'item_paper' },
   { id: Item.BOOK, name: 'minecraft:book', tile: 'item_book' },
+  // ---- 弓与箭
+  { id: Item.FLINT, name: 'minecraft:flint', tile: 'item_flint' },
+  { id: Item.STRING, name: 'minecraft:string', tile: 'item_string' },
+  { id: Item.ARROW, name: 'minecraft:arrow', tile: 'item_arrow' },
+  // 弓是耐用品（原版 384 点耐久，每射一箭 -1），但不是"工具"：
+  // 它没有采集等级与挖掘速度，所以不放进 TOOL_SPECS（那是 5 种类 × 5 材质的表）
+  { id: Item.BOW, name: 'minecraft:bow', tile: 'item_bow', maxStack: 1, durability: 384 },
   // ---- 食物（贴图在 TextureAtlas、数值在 food.ts，这里只登记 id / 名字 / 贴图名）
   { id: Item.COOKED_BEEF, name: 'minecraft:cooked_beef', tile: 'item_cooked_beef' },
   { id: Item.COOKED_PORKCHOP, name: 'minecraft:cooked_porkchop', tile: 'item_cooked_porkchop' },
@@ -206,6 +226,9 @@ for (const spec of NON_BLOCK_SPECS) {
     maxStack: spec.maxStack ?? MAX_STACK,
     tile: spec.tile,
     ...(food ? { food } : {}),
+    // 耐久也要在这一处搬运。`ItemDef` 上的可选字段每加一个，都要回来补这句——
+    // 漏了的话表现是"弓永远是崭新的"（`durabilityOf` 返回 0），而且不报任何错
+    ...(spec.durability !== undefined ? { durability: spec.durability } : {}),
   });
 }
 
@@ -249,6 +272,26 @@ export const MATERIAL_REPAIR_ITEM: Record<string, number> = {
   leather: Item.LEATHER,
   chainmail: Item.IRON_INGOT,
 };
+
+/**
+ * 非工具/盔甲、但要参与附魔与铁砧的物品（J9）。
+ *
+ * 弓是唯一的例子：附魔台要按 `kind` 决定能出哪些附魔（力量/冲击/火矢/无限），
+ * 铁砧要按 `repair` 决定用什么修（木板）。
+ * 放在 `items.ts` 是因为附魔与铁砧两个模块都**被** `items.ts` 引用（反向引用会成环）。
+ */
+export const SPECIAL_ITEMS: Record<number, { kind: string; repair: string }> = {
+  [Item.BOW]: { kind: 'bow', repair: 'wooden' },
+};
+
+/**
+ * 这件物品的耐久上限；不是耐用品返回 0。
+ * 三处来源按"越具体越优先"排：工具/盔甲自带属性，其余看 `ItemDef.durability`。
+ */
+export function durabilityOf(itemId: number): number {
+  const def = ITEMS[itemId];
+  return def?.tool?.durability ?? def?.armor?.durability ?? def?.durability ?? 0;
+}
 
 export function itemDef(id: number): ItemDef | undefined {
   return ITEMS[id];
@@ -547,6 +590,25 @@ export function rareDropFor(blockId: number, roll: number): { id: number; count:
   if (chance === undefined || roll >= chance.rate) return null;
   return { id: chance.id, count: 1 };
 }
+
+/**
+ * 「概率替换」掉落：以一定概率**顶替**原本的掉落（不是额外掉一份）。
+ *
+ * 目前只有"砂砾 10% 掉燧石"——原版也是替换关系：挖砂砾要么掉砂砾、要么掉燧石。
+ * 与 `RARE_DROPS`（额外掉一份，例如树叶掉苹果）分成两张表，
+ * 是因为两者语义完全不同，混在一张表里迟早会搞错。
+ *
+ * @param roll 掷出的随机数（0~1）
+ */
+export function replaceDropFor(blockId: number, roll: number): { id: number; count: number } | null {
+  const entry = REPLACE_DROPS.get(blockId);
+  if (entry === undefined || roll >= entry.rate) return null;
+  return { id: entry.id, count: 1 };
+}
+
+const REPLACE_DROPS = new Map<number, { id: number; rate: number }>([
+  [Block.GRAVEL, { id: Item.FLINT, rate: 0.1 }],
+]);
 
 /**
  * 概率掉落表：方块 → 掉落物与概率。

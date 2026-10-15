@@ -24,7 +24,7 @@
 import type { ItemStack } from '../container/Inventory.ts';
 import { armorInfoById } from '../registry/armor.ts';
 import { enchantmentById, type EnchantmentDef } from '../registry/enchantments.ts';
-import { MATERIAL_REPAIR_ITEM } from '../registry/items.ts';
+import { MATERIAL_REPAIR_ITEM, SPECIAL_ITEMS, durabilityOf } from '../registry/items.ts';
 import { toolInfoById } from '../registry/tools.ts';
 
 /** 总代价到这条线就是"过于昂贵"，原版是 40 */
@@ -59,13 +59,16 @@ export function repairCostLabel(penalty: number): string {
  * 这样加一种材质只要在两个地方各加一行（属性表 + 材料表）。
  */
 export function repairMaterialOf(itemId: number): number | undefined {
-  const material = toolInfoById(itemId)?.material ?? armorInfoById(itemId)?.material;
+  const material =
+    toolInfoById(itemId)?.material ?? armorInfoById(itemId)?.material ?? SPECIAL_ITEMS[itemId]?.repair;
   return material === undefined ? undefined : MATERIAL_REPAIR_ITEM[material];
 }
 
 /** 这件物品的耐久上限；不是耐用品返回 0 */
 export function maxDurabilityOf(itemId: number): number {
-  return toolInfoById(itemId)?.durability ?? armorInfoById(itemId)?.durability ?? 0;
+  // 统一走 items.ts 的 `durabilityOf`：工具、盔甲、以及弓这类"只有耐久"的东西都在里面，
+  // 免得三处各写一遍合并逻辑、漏掉一边
+  return durabilityOf(itemId);
 }
 
 /** 在铁砧上合并一条附魔的代价（原版按 rarity 给 1/2/4/8 倍等级） */

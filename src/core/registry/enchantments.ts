@@ -33,7 +33,12 @@ export type EnchantTarget =
   | 'fishing_rod'
   | 'book';
 
-/** 「所有有耐久的装备」的简写，展开后是剑/工具/护甲 */
+/**
+ * 「所有有耐久的装备」的简写：剑/工具/护甲 + 弓/弩/三叉戟/钓竿。
+ *
+ * 后面四样目前只有弓落地了，但**一并写进来**：耐久与经验修补在原版是"只要物品有耐久就能附"，
+ * 漏掉一个就会表现为"弓附不到耐久"，而且这种漏很难从界面上看出来。
+ */
 const ALL_GEAR: readonly EnchantTarget[] = [
   'sword',
   'axe',
@@ -44,6 +49,10 @@ const ALL_GEAR: readonly EnchantTarget[] = [
   'chestplate',
   'leggings',
   'boots',
+  'bow',
+  'crossbow',
+  'trident',
+  'fishing_rod',
 ];
 /** 四种盔甲 */
 const ARMOR: readonly EnchantTarget[] = ['helmet', 'chestplate', 'leggings', 'boots'];

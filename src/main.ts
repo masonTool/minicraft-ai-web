@@ -150,9 +150,11 @@ import {
   EAT_SECONDS,
   fortuneMultiplier,
   silkTouchDropsSelf,
+  durabilityOf,
   foodInfoById,
   itemName,
   rareDropFor,
+  replaceDropFor,
   saturationFrom,
   type FoodInfo,
   Item,
@@ -1559,13 +1561,15 @@ class App {
     const index = this.hotbarIndex;
     const stack = this.inventory.get(index);
     if (!stack) return;
-    const tool = toolInfoById(stack.id);
-    if (!tool) return;
+    // 用统一的 `durabilityOf`：工具、盔甲、弓都在里面。
+    // 注意**不能**只看 `toolInfoById`——那样弓永远不掉耐久
+    const max = durabilityOf(stack.id);
+    if (max <= 0) return;
     // 耐久附魔：每级有 level/(level+1) 的概率**不**消耗这次耐久（原版 `random.nextInt(level+1) > 0`）
     const unbreaking = enchantLevel(stack.enchants, 'unbreaking');
     if (unbreaking > 0 && Math.random() < unbreaking / (unbreaking + 1)) return;
     const damage = (stack.damage ?? 0) + amount;
-    if (damage >= tool.durability) {
+    if (damage >= max) {
       // 耐久耗尽：工具直接消失（原版行为，不掉落残骸）
       this.inventory.set(index, null);
       this.audio.play('break_wood');
@@ -2045,10 +2049,13 @@ class App {
       const fortune = enchantLevel(enchants, 'fortune');
 
       // 精准采集：直接掉方块自身（玻璃、草方块、西瓜块都能这样"完整带走"）
-      // 否则走常规掉落；常规掉落为空的方块再掷一次概率掉落（树叶 0.5% 掉苹果）
-      const drop = silkTouch && silkTouchDropsSelf(brokenId)
-        ? { id: brokenId, count: 1 }
-        : dropFor(brokenId) ?? rareDropFor(brokenId, Math.random());
+      // 否则先看"概率替换"（砂砾 10% 掉燧石——是**替换**不是额外掉），
+      // 再看常规掉落，最后才掷"额外概率掉落"（树叶 0.5% 掉苹果）
+      const silkDrop = silkTouch && silkTouchDropsSelf(brokenId) ? { id: brokenId, count: 1 } : null;
+      const drop = silkDrop
+        ?? replaceDropFor(brokenId, Math.random())
+        ?? dropFor(brokenId)
+        ?? rareDropFor(brokenId, Math.random());
       if (drop) {
         // 双层台阶是两块叠起来的，破坏时按 2 个掉落
         const baseCount = isSlabDouble(brokenState) ? drop.count * 2 : drop.count;

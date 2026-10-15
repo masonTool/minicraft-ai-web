@@ -23,6 +23,7 @@
 
 import { armorInfoById } from '../registry/armor.ts';
 import { ENCHANTMENTS, enchantmentById, romanLevel, type EnchantItemKind, type EnchantmentDef } from '../registry/enchantments.ts';
+import { SPECIAL_ITEMS } from '../registry/items.ts';
 import { toolInfoById } from '../registry/tools.ts';
 
 /** 书架加成的上限（原版 15） */
@@ -43,7 +44,9 @@ export function enchantKindOf(itemId: number): EnchantItemKind {
   if (tool) return tool.type;
   const armor = armorInfoById(itemId);
   if (armor) return armor.type;
-  return null;
+  // 弓这类"不是工具也不是盔甲但能附魔"的走 `SPECIAL_ITEMS` 表（J9）
+  const special = SPECIAL_ITEMS[itemId];
+  return special ? (special.kind as EnchantItemKind) : null;
 }
 
 /** 原版 `EnchantmentHelper.getEnchantmentCost` */

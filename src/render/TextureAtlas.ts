@@ -934,6 +934,64 @@ PAINTERS.enchanting_table_side = (x, y, rng) => {
   return [clamp255(26 + jitter), clamp255(20 + jitter), clamp255(38 + jitter), 255];
 };
 
+// ---- 弓与箭（J9）
+/** 燧石：深灰的尖锐石块（画成一块带斜面的碎石） */
+PAINTERS.item_flint = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  const dx = x - 7.5;
+  const dy = y - 8.5;
+  // 上尖下宽的三角形，边角切掉一点显得有棱角
+  if (dy > 5.5 || dy < -5.5 || Math.abs(dx) > (dy + 5.5) * 0.55 + 1.5) return [0, 0, 0, 0];
+  const shade = dy < -1 ? 1.18 : dy < 2.5 ? 1 : 0.8;
+  return [clamp255(74 * shade + jitter), clamp255(74 * shade + jitter), clamp255(80 * shade + jitter), 255];
+};
+
+/** 线：一团绕起来的白色细线（用交叉的斜线模拟缠绕） */
+PAINTERS.item_string = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const r = Math.hypot(dx, dy);
+  if (r > 5.6) return [0, 0, 0, 0];
+  // 三组斜线 + 一圈外环，看起来像缠成一团的线
+  const strand = (x + y) % 4 === 0 || (x - y + 16) % 5 === 0 || Math.abs(r - 4.6) < 0.7;
+  if (!strand) return [0, 0, 0, 0];
+  const shade = r > 3 ? 1 : 0.88;
+  return [clamp255(238 * shade + jitter), clamp255(238 * shade + jitter), clamp255(232 * shade + jitter), 255];
+};
+
+/** 箭：斜着的木杆 + 右上角的灰色箭头 + 左下角的羽毛 */
+PAINTERS.item_arrow = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 杆：从左上到右下的斜线（斜着放才像一支箭）
+  const along = x - y;
+  if (Math.abs(along) > 1.2) return [0, 0, 0, 0];
+  if (x < 2 || x > 14 || y < 1 || y > 14) return [0, 0, 0, 0];
+  // 箭头在左上（x 小 y 小）
+  if (x + y <= 6) return [clamp255(196 + jitter), clamp255(196 + jitter), clamp255(202 + jitter), 255];
+  // 羽毛在右下
+  if (x + y >= 22) return [clamp255(236 + jitter), clamp255(236 + jitter), clamp255(230 + jitter), 255];
+  return [clamp255(146 + jitter), clamp255(104 + jitter), clamp255(56 + jitter), 255];
+};
+
+/** 弓：左侧木弧 + 一条弦 */
+PAINTERS.item_bow = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const dx = x - 10.5;
+  const dy = y - 7.5;
+  const r = Math.hypot(dx, dy);
+  // 弓背：一段圆弧（半径 6.5 左右）
+  if (Math.abs(r - 6.5) < 1.2) {
+    const shade = dy < 0 ? 1.1 : 0.9;
+    return [clamp255(150 * shade + jitter), clamp255(106 * shade + jitter), clamp255(58 * shade + jitter), 255];
+  }
+  // 弦：竖直的一条细线
+  if (x === 4 && Math.abs(dy) < 6) {
+    return [clamp255(232 + jitter), clamp255(232 + jitter), clamp255(226 + jitter), 255];
+  }
+  return [0, 0, 0, 0];
+};
+
 // ---- 铁砧与铁块（H8）
 /** 铁块：抛光金属面，比"粗铁块"平整（粗铁块有那种粗糙的层理） */
 PAINTERS.iron_block = (x, y, rng) => {
