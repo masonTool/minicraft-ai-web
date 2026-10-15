@@ -99,6 +99,10 @@ export const Item = {
   GOLDEN_CARROT: 1197,
   REDSTONE_DUST: 1198,
   GLOWSTONE_DUST: 1199,
+  // ---- 投掷物（K4 尾巴）：雪球与鸡蛋，原版都是 16 个一堆。
+  // 1175~1179 是"酿造材料"与"药水（1180 起）"之间一直空着的一段，投掷物用掉前两个
+  SNOWBALL: 1175,
+  EGG: 1176,
   // 药水：用 id 枚举而不是给 ItemStack 加字段（见 potions.ts 的说明）
   // id 定义在 potions.ts（本文件要 import 它来批量注册，反过来会成环）
   POTION_AWKWARD: POTION_IDS.awkward,
@@ -202,6 +206,10 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.FLINT, name: 'minecraft:flint', tile: 'item_flint' },
   { id: Item.STRING, name: 'minecraft:string', tile: 'item_string' },
   { id: Item.ARROW, name: 'minecraft:arrow', tile: 'item_arrow' },
+  // ---- 投掷物（K4 尾巴）：扔出去的是这两个 + 喷溅药水
+  { id: Item.SNOWBALL, name: 'minecraft:snowball', tile: 'item_snowball', maxStack: 16 },
+  { id: Item.EGG, name: 'minecraft:egg', tile: 'item_egg', maxStack: 16 },
+  // 喷溅药水：与饮用型共用 `POTION_ITEMS`（id = 饮用型 + 50，见 potions.ts）——不在这里单列
   // 弓是耐用品（原版 384 点耐久，每射一箭 -1），但不是"工具"：
   // 它没有采集等级与挖掘速度，所以不放进 TOOL_SPECS（那是 5 种类 × 5 材质的表）
   { id: Item.BOW, name: 'minecraft:bow', tile: 'item_bow', maxStack: 1, durability: 384 },
@@ -259,10 +267,11 @@ const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, .
 /**
  * 物品表的长度（按 id 索引）。
  *
- * ⚠️ 改小会**静默丢掉** id 更大的物品（数组直接截断），所以每次新增一段 id 都要回来看这里：
- * 药水的延长/强化档（1200~1215）就是这么加进来的。
+ * ⚠️ 改小会**静默丢掉** id 更大的物品（数组直接截断），所以每次新增一段 id 都要回来看这里。
+ * 当前最大的一段是**喷溅药水 1230~1265**（饮用型 id + 50，见 `potions.ts`），
+ * 所以留到 1300。
  */
-const MAX_ITEM_ID = 1230;
+const MAX_ITEM_ID = 1300;
 
 /** 按 id 索引的物品表（未定义的 id 为 undefined） */
 export const ITEMS: (ItemDef | undefined)[] = new Array(MAX_ITEM_ID).fill(undefined);
@@ -917,6 +926,8 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.STONE, { id: Block.COBBLESTONE, count: 1 }],
   // 黏土块一次掉 4 个黏土球（原版行为），黏土球烧炼后得到红砖
   [Block.CLAY, { id: Item.CLAY_BALL, count: 4 }],
+  // 雪块一次掉 4 个雪球（原版行为）——雪球在生存里的唯一来源
+  [Block.SNOW_BLOCK, { id: Item.SNOWBALL, count: 4 }],
   // 西瓜块掉西瓜片（原版 3~7 片，取中值 5）
   [Block.MELON, { id: Item.MELON_SLICE, count: 5 }],
 

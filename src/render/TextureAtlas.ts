@@ -1180,12 +1180,41 @@ PAINTERS.brewing_stand_side = (x, y, rng) => {
 };
 
 /**
- * 药水瓶：细颈 + 圆肚（`liquid` 为空就是空瓶子，无色液体）。
+ * 药水瓶（`liquid` 为空就是空瓶子，无色液体）。
  * 液体颜色按药水种类给——这也是玩家分辨药水的唯一线索，所以别都画成同一瓶紫水。
+ *
+ * 两种瓶型（K4 尾巴）：
+ *  - **饮用型**：细颈 + 直瓶底（默认）
+ *  - **喷溅型**：圆底烧瓶——更胖的瓶肚 + 短颈 + 棕色瓶塞。
+ *    造型必须一眼能分：两瓶颜色一样、只有"能不能扔"的区别，
+ *    要是形状也一样，玩家就会把要扔的那瓶喝掉。
  */
-function bottlePainter(liquid: readonly [number, number, number] | null): Painter {
+function bottlePainter(liquid: readonly [number, number, number] | null, splash = false): Painter {
   return (x, y, rng) => {
     const jitter = rng() * 10 - 5;
+
+    if (splash) {
+      // 瓶肚：x 4~11、y 6~13，四角削掉做成球状
+      const dx = (x - 7.5) / 4.4;
+      const dy = (y - 9.5) / 4.2;
+      const inBelly = dx * dx + dy * dy <= 1;
+      const inNeck = x >= 7 && x <= 8 && y >= 4 && y <= 6;
+      const inCork = x >= 6 && x <= 9 && y >= 1 && y <= 3;
+      if (!inBelly && !inNeck && !inCork) return [0, 0, 0, 0];
+      if (inCork) return [clamp255(132 + jitter), clamp255(96 + jitter), clamp255(58 + jitter), 255];
+      if (liquid && inBelly && y >= 8) {
+        const shade = x < 8 ? 1.12 : 0.9;
+        return [
+          clamp255(liquid[0] * shade + jitter),
+          clamp255(liquid[1] * shade + jitter),
+          clamp255(liquid[2] * shade + jitter),
+          255,
+        ];
+      }
+      const edge = x === 4 || x === 11 || y === 13;
+      return [clamp255(214 + jitter), clamp255(226 + jitter), clamp255(232 + jitter), edge ? 255 : 210];
+    }
+
     // 瓶身：x 4~11、y 5~14 的圆角矩形
     const inBody = x >= 4 && x <= 11 && y >= 5 && y <= 14;
     // 瓶颈：x 6~9、y 1~4
@@ -1239,8 +1268,33 @@ function tierColor(base: readonly [number, number, number], tier: string): [numb
 // 表现是"背包里一瓶空白"，而这类遗漏在数据表里看不出来。
 for (const potion of POTIONS) {
   const base = POTION_BASE_COLORS[potion.variant] ?? POTION_BASE_COLORS.awkward!;
-  PAINTERS[`item_potion_${potion.key}`] = bottlePainter(tierColor(base, potion.tier));
+  PAINTERS[`item_potion_${potion.key}`] = bottlePainter(tierColor(base, potion.tier), potion.splash === true);
 }
+
+/** 雪球：偏冷白的球，左上角一片高光（不然在浅色地面上看不出来） */
+PAINTERS.item_snowball = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  const dx = (x - 7.5) / 5.2;
+  const dy = (y - 8.5) / 5;
+  if (dx * dx + dy * dy > 1) return [0, 0, 0, 0];
+  const highlight = (x - 5.5) ** 2 + (y - 6) ** 2 < 3;
+  const shade = highlight ? 1.0 : y > 10 ? 0.86 : 0.94;
+  return [clamp255(248 * shade + jitter), clamp255(252 * shade + jitter), clamp255(255 * shade + jitter), 255];
+};
+
+/** 鸡蛋：竖椭圆 + 几粒褐色斑点 */
+PAINTERS.item_egg = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  const dx = (x - 7.5) / 4.4;
+  const dy = (y - 8.5) / 5.4;
+  // 蛋是"上尖下圆"：越往下越宽
+  const taper = 1 - Math.max(0, 7.5 - y) * 0.06;
+  if (dx * dx * taper + dy * dy > 1) return [0, 0, 0, 0];
+  const speck = (x * 5 + y * 11) % 17 === 0;
+  const base = speck ? 178 : 238;
+  const shade = x < 7 ? 1.0 : 0.92;
+  return [clamp255(base * shade + jitter), clamp255((base - 12) * shade + jitter), clamp255((base - 44) * shade + jitter), 255];
+};
 
 /**
  * 酿造材料（H10）：形状分三类（粉末 / 团块 / 脚爪），颜色按材料给。

@@ -347,6 +347,12 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   },
   // 1 甘蔗 → 1 糖（原版无序）
   { kind: 'shapeless' as const, result: { id: Item.SUGAR, count: 1 }, ingredients: [Block.SUGAR_CANE] },
+  // ---- 投掷物（K4 尾巴）：4 个雪球 → 1 块雪块（原版无序配方；雪块挖掉又掉 4 个雪球）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Block.SNOW_BLOCK, count: 1 },
+    ingredients: [Item.SNOWBALL, Item.SNOWBALL, Item.SNOWBALL, Item.SNOWBALL],
+  },
   // ---- 面包（H13）：3 个小麦横排（原版）
   {
     kind: 'shaped' as const,

@@ -36,13 +36,18 @@ export interface PotionEntry {
   /** 稳定 key（拼注册名与贴图名） */
   readonly key: string;
   readonly name: string;
-  /** 喝下后挂上的效果；空数组表示这瓶什么都不做（粗制药水就是"半成品"） */
+  /** 喝下/砸中后挂上的效果；空数组表示这瓶什么都不做（粗制药水就是"半成品"） */
   readonly effects: readonly PotionEffectEntry[];
   /** 半成品：只能当酿造原料，喝了没效果 */
   readonly base?: boolean;
   /** 这条属于哪个效果变体（粗制自己是一组）；贴图配色按它分组 */
   readonly variant: string;
   readonly tier: PotionTier;
+  /**
+   * 喷溅型（K4 尾巴）：**扔出去**而不是喝下去。
+   * 效果表与饮用型完全一样，差别只在"怎么生效"（见 `survival/SplashPotion.ts`）与贴图形状。
+   */
+  readonly splash?: boolean;
 }
 
 /**
@@ -108,6 +113,25 @@ export const POTION_IDS = {
   poison_strong: 1214,
   slowness_strong: 1215,
 } as const;
+
+/**
+ * 喷溅型的 id 偏移：**饮用型 id + 50**。
+ *
+ * 为什么用偏移而不是再列一张 24 条的 id 表：喷溅版与饮用版是**一一对应**的，
+ * 再手写一张表就多了一处会漂的地方（加了新药水忘了加喷溅 id —— 而那种漏不会报错，
+ * 只会让新药水的喷溅版"不存在"）。偏移一览：
+ *
+ *   粗制 1180 → 1230 · 普通档 1181~1189 → 1231~1239
+ *   延长档 1200~1207 → 1250~1257 · 强化档 1210~1215 → 1260~1265
+ *
+ * 断言里有一条专门盯着"偏移后的 id 不和任何饮用型撞车"（`test:brewing`）。
+ */
+export const SPLASH_ID_OFFSET = 50;
+
+/** 饮用型 id → 喷溅型 id */
+export function splashIdOf(potionId: number): number {
+  return potionId + SPLASH_ID_OFFSET;
+}
 
 /** 粗制药水：一切药水的起点（水瓶 + 下界疣） */
 export const AWKWARD: PotionEntry = {
@@ -259,8 +283,8 @@ function entry(variant: PotionVariant, tier: PotionTier, id: number, seconds: nu
   };
 }
 
-/** 所有可喝的药水（含粗制）：9 种效果 × 各自有的档位 + 粗制，共 24 条 */
-export const POTIONS: readonly PotionEntry[] = [
+/** 所有**饮用型**药水（含粗制）：9 种效果 × 各自有的档位 + 粗制，共 24 条 */
+export const DRINKABLE: readonly PotionEntry[] = [
   AWKWARD,
   ...POTION_VARIANTS.flatMap((variant): PotionEntry[] => {
     const rows: PotionEntry[] = [entry(variant, 'base', variant.baseId, variant.seconds, 0)];
@@ -271,6 +295,42 @@ export const POTIONS: readonly PotionEntry[] = [
     return rows;
   }),
 ];
+
+/** 一瓶饮用型的喷溅版：效果一模一样，只有 id / 名字 / 贴图不同 */
+function splashEntry(potion: PotionEntry): PotionEntry {
+  return {
+    id: splashIdOf(potion.id),
+    key: `splash_${potion.key}`,
+    name: `喷溅${potion.name}`,
+    effects: potion.effects,
+    // 粗制的喷溅版同样是"半成品"（扔出去也没有效果），所以 `base` 一起继承
+    base: potion.base,
+    variant: potion.variant,
+    tier: potion.tier,
+    splash: true,
+  };
+}
+
+/**
+ * 全部药水物品：**24 瓶饮用型 + 24 瓶喷溅型 = 48 条**。
+ *
+ * 两半放在一起是有意的——酿造链（药水 + 火药 → 喷溅）与贴图生成都按这张表遍历，
+ * 分成两张表就会出现"新药水只加进了一张"的半残状态。
+ */
+export const POTIONS: readonly PotionEntry[] = [...DRINKABLE, ...DRINKABLE.map(splashEntry)];
+
+/** 喷溅型药水（投掷用） */
+export const SPLASH_POTIONS: readonly PotionEntry[] = POTIONS.filter((potion) => potion.splash === true);
+
+/** 按 key 找一瓶药水（喷溅型的 key 是 `splash_<饮用型 key>`） */
+export function potionByKey(key: string): PotionEntry | undefined {
+  return POTIONS.find((potion) => potion.key === key);
+}
+
+/** 拿一瓶药水的喷溅版 */
+export function splashOf(potion: PotionEntry): PotionEntry | undefined {
+  return potion.splash ? potion : potionByKey(`splash_${potion.key}`);
+}
 
 /** 给物品注册表用的最小信息（id + key 就够拼注册名与贴图名） */
 export const POTION_ITEMS: readonly { id: number; key: string }[] = POTIONS.map((potion) => ({
@@ -289,7 +349,11 @@ export function isPotion(itemId: number): boolean {
   return BY_ID.has(itemId);
 }
 
-/** 这瓶能不能喝（粗制药水是半成品，喝了没效果） */
+/**
+ * 这瓶能不能**喝**。
+ * 两种不能喝：粗制药水（半成品，喝了没效果）、喷溅型（原版其实能喝，但只给 1/4 时长；
+ * 本项目不做这个冷门行为，统一"喷溅型只能扔"，所以它在手上点按会扔出去而不是喝掉）。
+ */
 export function isDrinkable(potion: PotionEntry | undefined): potion is PotionEntry {
-  return potion !== undefined && potion.base !== true;
+  return potion !== undefined && potion.base !== true && potion.splash !== true;
 }

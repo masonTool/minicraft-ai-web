@@ -4,9 +4,10 @@
  * 与原版对齐：
  *  - 一次酿造 **20 秒**；燃料是**烈焰粉**，1 份能酿 **20 次**（原版就是 20）
  *  - 三个药水槽**同时**推进（放一瓶也是 20 秒，放三瓶一样是 20 秒——这是原版的特点）
- *  - 配方四类：水瓶 + 下界疣 → 粗制；粗制 + 材料 → 具体药水；
+ *  - 配方五类：水瓶 + 下界疣 → 粗制；粗制 + 材料 → 具体药水；
  *    具体药水 + 红石粉 → **延长**；+ 荧石粉 → **强化**；
- *    + 发酵蜘蛛眼 → **腐化**（换一种效果，见 `CORRUPTION`）
+ *    + 发酵蜘蛛眼 → **腐化**（换一种效果，见 `CORRUPTION`）；
+ *    **药水 + 火药 → 喷溅版**（K4 尾巴，任何饮用型都能这么变）
  *  - 不需要"配方解锁"，但**原料与基础药水不匹配时什么都不发生**（不消耗、不浪费）
  *
  * 配方表**由 `POTIONS` 的变体表展开**，不手写 24 条：手写的话"加一种药水"要改两处，
@@ -24,7 +25,7 @@
  */
 
 import { Item } from '../registry/items.ts';
-import { POTION_IDS, POTION_VARIANTS, variantBaseId } from '../registry/potions.ts';
+import { POTION_IDS, POTIONS, POTION_VARIANTS, splashIdOf, variantBaseId } from '../registry/potions.ts';
 
 /** 一次酿造耗时（秒，原版 20） */
 export const BREW_SECONDS = 20;
@@ -101,6 +102,14 @@ function buildRecipes(): BrewIngredient[] {
   // 腐化"没有效果的药水"→ 虚弱：原版里水瓶与粗制药水都能这么变
   recipes.push({ ingredient: Item.FERMENTED_SPIDER_EYE, from: Item.WATER_BOTTLE, to: requireBaseId('weakness') });
   recipes.push({ ingredient: Item.FERMENTED_SPIDER_EYE, from: POTION_IDS.awkward, to: requireBaseId('weakness') });
+
+  // 喷溅药水（K4 尾巴）：**任何饮用型 + 火药 → 它的喷溅版**（原版就这么做）。
+  // 只从饮用型出发：喷溅版本身不再是酿造原料（原版里它要和龙息才能变滞留，
+  // 而滞留药水不在本批范围内）。
+  for (const potion of POTIONS) {
+    if (potion.splash === true) continue;
+    recipes.push({ ingredient: Item.GUNPOWDER, from: potion.id, to: splashIdOf(potion.id) });
+  }
 
   return recipes;
 }

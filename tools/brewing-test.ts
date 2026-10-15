@@ -19,6 +19,7 @@
 import { Block } from '../src/core/registry/blocks.ts';
 import { CREATIVE_ITEMS, Item, itemDef, itemName, maxStackOf } from '../src/core/registry/items.ts';
 import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+import { SPLASH_RADIUS } from '../src/core/survival/SplashPotion.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import {
   BREW_RECIPES,
@@ -34,7 +35,18 @@ import {
   BREW_SLOT_COUNT,
   BrewingStand,
 } from '../src/core/container/BrewingStand.ts';
-import { POTION_IDS, POTIONS, POTION_VARIANTS, isDrinkable, potionById } from '../src/core/registry/potions.ts';
+import {
+  DRINKABLE,
+  POTION_IDS,
+  POTIONS,
+  POTION_VARIANTS,
+  SPLASH_ID_OFFSET,
+  SPLASH_POTIONS,
+  isDrinkable,
+  potionById,
+  splashIdOf,
+  splashOf,
+} from '../src/core/registry/potions.ts';
 import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
 import { EFFECTS, StatusEffects, type EffectId } from '../src/core/survival/StatusEffects.ts';
 import type { ItemStack } from '../src/core/container/Inventory.ts';
@@ -94,7 +106,10 @@ const VANILLA: Record<
 const expectedPotionCount =
   1 + // 粗制
   Object.values(VANILLA).reduce((sum, v) => sum + 1 + (v.long ? 1 : 0) + (v.strong ? 1 : 0), 0);
-equal('药水条目总数（9 种效果 × 各自有的档位 + 粗制）', POTIONS.length, expectedPotionCount);
+// 表里是**两半**：饮用型 + 喷溅型（喷溅的 id = 饮用 id + 50，见 `SPLASH_ID_OFFSET`）
+equal('饮用型药水条目总数（9 种效果 × 各自有的档位 + 粗制）', DRINKABLE.length, expectedPotionCount);
+equal('药水条目总数（饮用 + 喷溅）', POTIONS.length, expectedPotionCount * 2);
+equal('喷溅型数量与饮用型一致', SPLASH_POTIONS.length, expectedPotionCount);
 
 for (const [key, vanilla] of Object.entries(VANILLA)) {
   const rows: Array<[string, readonly [number, number] | undefined, string]> = [
@@ -153,6 +168,46 @@ check(
 );
 check('粗制药水不可喝（半成品）', !isDrinkable(potionById(POTION_IDS.awkward)));
 check('具体药水可喝', isDrinkable(potionById(POTION_IDS.swiftness_long)));
+
+// ---- 喷溅型（K4 尾巴）：id 偏移、配方与"不能喝"
+
+console.log('\n[喷溅型：id 偏移 / 配方 / 只能扔]');
+
+/** 饮用型的 id 集合：喷溅型绝不允许落在这上面 */
+const drinkIds = new Set(DRINKABLE.map((potion) => potion.id));
+
+for (const potion of DRINKABLE) {
+  const splash = splashOf(potion);
+  check(`${potion.key} 有喷溅版（id = 饮用型 + ${SPLASH_ID_OFFSET}）`, splash?.id === splashIdOf(potion.id));
+  equal(`${potion.key} + 火药 → 喷溅版`, brewRecipeFor(Item.GUNPOWDER, potion.id)?.to, splashIdOf(potion.id));
+  if (!splash) continue;
+  check(`${splash.key} 的 id 不与任何饮用型撞车`, !drinkIds.has(splash.id));
+  check(`${splash.key} 的名字带"喷溅"`, itemLabel(splash.id).startsWith('喷溅'), itemLabel(splash.id));
+  check(
+    `${splash.key} 与饮用型挂的效果表完全一致`,
+    JSON.stringify(splash.effects) === JSON.stringify(potion.effects),
+  );
+  check(`${splash.key} 只能扔不能喝`, !isDrinkable(splash));
+  // 粗制的喷溅版什么都不做，说明里也就没有"范围"这回事
+  if (!splash.base) {
+    check(
+      `${splash.key} 的说明里写了爆炸半径（与 SPLASH_RADIUS 同源）`,
+      itemDescription(splash.id).includes(`${SPLASH_RADIUS} 格`),
+      itemDescription(splash.id),
+    );
+  }
+}
+
+for (const potion of SPLASH_POTIONS) {
+  if (potion.base) continue;
+  check(
+    `${potion.key} 不能再改造（红石 / 荧石 / 火药都不行）`,
+    brewRecipeFor(Item.REDSTONE_DUST, potion.id) === null &&
+      brewRecipeFor(Item.GLOWSTONE_DUST, potion.id) === null &&
+      brewRecipeFor(Item.GUNPOWDER, potion.id) === null,
+  );
+}
+check('粗制的喷溅版同样是半成品（不可喝）', !isDrinkable(potionById(splashIdOf(POTION_IDS.awkward))));
 
 // ---------------------------------------------------------------- 2. 配方表完整性
 
@@ -418,7 +473,7 @@ equal('一份烈焰粉酿 20 次', BREWS_PER_BLAZE_POWDER, 20);
 
 // ---------------------------------------------------------------- 5. 喝下去
 
-console.log('\n[喝下去：效果真的挂上]');
+console.log('\n[生效：效果真的挂上（喝下与砸中用的是同一张效果表）]');
 
 for (const potion of POTIONS) {
   if (potion.base) continue;

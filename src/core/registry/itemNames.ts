@@ -25,6 +25,7 @@ import {
 } from './items.ts';
 import { ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
+import { SPLASH_RADIUS, isInstantEffect } from '../survival/SplashPotion.ts';
 import { POTIONS, type PotionEntry } from './potions.ts';
 import { enchantmentById, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
@@ -318,6 +319,8 @@ const EXPLICIT: Record<string, string> = {
   // 生物掉落物（这几件此前**根本没有词条**，一直被染料区压着显示成染料名）
   rotten_flesh: '腐肉',
   bone: '骨头',
+  snowball: '雪球',
+  egg: '鸡蛋',
   gunpowder: '火药',
   beef: '生牛肉',
   porkchop: '生猪排',
@@ -486,6 +489,8 @@ const DESCRIPTIONS: Record<string, string> = {
   nether_wart: '在下界要塞的楼梯上能找到的作物，是**一切药水的起点**（水瓶 + 下界疣 = 粗制药水）。',
   blaze_powder: '酿造台的燃料，1 份能酿 20 次。也可以做成烈焰棒（还没做）。',
   sugar: '甘蔗做的（1 甘蔗 → 1 糖）。在酿造里把粗制药水变成迅捷药水。',
+  snowball: '右键扔出去：对生物**0 伤害**（原版如此），只会把它们推开；4 个雪球能合成 1 块雪块。',
+  egg: '右键扔出去，1/8 概率砸出小鸡（原版概率）；鸡每 5~10 分钟下一个蛋，是鸡蛋的唯一来源。',
   carrot: '种在耕地上会长出胡萝卜（收一次得 2~4 个）。能回 3 点饥饿，也能把猪引过来——**这就是猪的原版口粮**。',
   potato: '种在耕地上会长出马铃薯。生吃回 1 点饥饿，**烤过之后回 5 点**（原版差得很明显）。',
   baked_potato: '烤过的马铃薯：一口回 5 点饥饿、6 点饱和度（生的只有 1 点）。熔炉里烤一下就行。',
@@ -614,18 +619,24 @@ function durationLabel(seconds: number): string {
 }
 
 function potionDescription(potion: PotionEntry): string {
-  if (potion.base) return '半成品：酿出具体药水之前的中间状态，直接喝没有效果。';
+  const splash = potion.splash === true;
+  if (potion.variant === 'awkward') {
+    return splash ? '半成品（喷溅版）：扔出去也不会有任何效果。' : '半成品：酿出具体药水之前的中间状态，直接喝没有效果。';
+  }
   const tier = potion.tier === 'long' ? '红石粉延长版：' : potion.tier === 'strong' ? '荧石粉强化版：' : '';
   const effects = potion.effects.map((effect) => {
     // ⚠️ 本文件用的是 `enchantments.romanLevel`（**1 起始**，所以 +1）；
     // `StatusEffects` 里那个同名函数吃的是 amplifier（0 → I），两处别抄错
     const level = effect.amplifier > 0 ? ` ${romanLevel(effect.amplifier + 1)}` : '';
     const label = `${EFFECT_LABELS[effect.id]}${level}`;
-    // 瞬间效果（治疗）没有"持续多久"可言
-    if (effect.id === 'instant_health' || effect.id === 'instant_damage') return `${label}（立刻生效）`;
+    // 瞬间效果（治疗/伤害）没有"持续多久"可言——判定与喷溅那边的缩放共用同一个函数
+    if (isInstantEffect(effect.id)) return `${label}（立刻生效）`;
     return `${label} ${durationLabel(effect.seconds)}`;
   });
-  return `${tier}喝下获得${effects.join('、')}。${POTION_NOTES[potion.variant] ?? ''}`;
+  // 喷溅版的文案与半径同源（`SPLASH_RADIUS`）：改半径不会让说明书开始说谎
+  const verb = splash ? `扔出去砸中后 ${SPLASH_RADIUS} 格内的实体获得` : '喝下获得';
+  const tail = splash ? '离爆心越远时长越短，直接命中的目标拿满时长。' : '';
+  return `${tier}${verb}${effects.join('、')}。${tail}${POTION_NOTES[potion.variant] ?? ''}`;
 }
 
 for (const potion of POTIONS) {
