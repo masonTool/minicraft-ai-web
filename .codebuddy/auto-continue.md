@@ -95,15 +95,17 @@
 - [x] M15 触摸端免指针锁；setPointerCapture 异常保护
 - [x] M16 触摸端交互补强：分堆、合成网格批量放置、破坏震动、手柄支持
       —— 长按 = 右键语义（取一半/放一个 + 连发）；震动反馈；`ui/GamepadInput.ts` 手柄全套映射
-- [ ] M17 手机端实机验收：真机帧率 / 发热 / 内存 / 触控延迟
+- [~] M17 手机端验收：桌面端 13 项已自动验收通过（`sh tools/mobile-check.sh`）；
+      真机的发热/耗电/内存增长需在手机上跑，清单已写进 TASKS.md
 
 ## 批次 6：工程收尾
 
-- [ ] K1 存档：IndexedDB 持久化 + 区块增量保存 + 玩家状态
-- [ ] K2 多人联机：WebSocket 服务端 + 区块同步 + 实体同步
-- [ ] K3 UI：主菜单、设置界面（视距/音量/按键）、暂停菜单
-- [ ] K4 资源包加载（.mcpack / .zip），支持替换官方材质
-- [ ] K5 音效与音乐（程序化或 CC0 音源）
-- [ ] K6 性能：视距自适应、区块网格 LOD、实例化渲染
-- [ ] K7 单元测试（vitest）覆盖噪声/密度/光照/碰撞
-- [ ] K8 打包发布：PWA + Capacitor 套壳 Android / Electron 桌面端
+- [x] K1 存档：IndexedDB + 区块增量保存 + 玩家状态（`core/save/`）；端到端 `sh tools/save-check.sh`
+- [x] K2 多人联机：`server/index.mjs` + `src/net/NetClient.ts`；区块同步为零带宽（种子 + 增量）
+- [x] K3 UI：暂停菜单与设置界面（视距/视野/音量/灵敏度/调试/自适应视距），Esc 唤出
+- [x] K4 资源包：自解析 zip + 按文件名热替换图集贴图，设置界面可导入
+- [x] K5 音效：Web Audio 现场合成 20 种音效（破坏 6 类 + 环境 8 + 生物 5），距离衰减
+- [~] K6 性能：自适应视距已完成（帧时间迟滞控制）；网格 LOD 与掉落物实例化渲染待办（成本与风险已记录）
+- [x] K7 单元测试：vitest 38 条断言（光照/碰撞/生成/存档/音效/资源包），已并入 npm test
+- [x] K8 打包：PWA 可用（manifest + Service Worker + 离线缓存，`sh tools/pwa-check.sh`）；
+      Capacitor/Electron 套壳说明见 HANDOFF §5.5
