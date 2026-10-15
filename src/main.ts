@@ -221,7 +221,7 @@ class App {
    * 触摸操作层。只有手势设备才创建——桌面端不创建，
    * 这样键盘/鼠标路径完全不受影响，也不会多出一层挡事件的 DOM。
    */
-  private readonly touch: TouchControls | null;
+  private touch: TouchControls | null;
   /** 触摸端"轻点"产生的一次性放置/交互请求，由 updatePlacing 消费 */
   private touchPlaceRequest = false;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
@@ -345,28 +345,43 @@ class App {
     for (const blockId of STARTING_HOTBAR) this.inventory.add(blockId, 64);
 
     // 触摸操作层：只在手势设备上创建，桌面端完全不引入这套 DOM
-    this.touch = isTouchDevice()
-      ? new TouchControls(document.getElementById('hud') ?? container, {
-          // 轻点：放置方块，或与工作台/熔炉/箱子/门交互（与鼠标右键同一套逻辑）
-          onTap: () => {
-            this.touchPlaceRequest = true;
-          },
-          // 长按：等价于按住左键破坏
-          onBreakStart: () => {
-            this.leftDown = true;
-          },
-          onBreakEnd: () => {
-            this.leftDown = false;
-          },
-          onToggleInventory: () => this.inventoryScreen.toggle(),
-          onToggleFly: () => this.setFlying(!this.flying),
-          // 潜行状态由操作层自己维护并出现在 input 里，这里只做一次提示同步
-          onToggleSneak: () => undefined,
-        })
-      : null;
+    this.touch = isTouchDevice() ? this.createTouchControls() : null;
 
     this.bindEvents();
     this.refreshWorld(0, 0, true);
+  }
+
+  /**
+   * 创建触摸操作层。
+   *
+   * 抽成方法是为了让桌面端也能临时启用触摸 UI——验收触摸布局、量触控响应
+   * 都不必真的拿一台手机（调试接口 `mc.enableTouchControls()`）。
+   */
+  private createTouchControls(): TouchControls {
+    return new TouchControls(document.getElementById('hud') ?? document.body, {
+      // 轻点：放置方块，或与工作台/熔炉/箱子/门交互（与鼠标右键同一套逻辑）
+      onTap: () => {
+        this.touchPlaceRequest = true;
+      },
+      // 长按：等价于按住左键破坏
+      onBreakStart: () => {
+        this.leftDown = true;
+      },
+      onBreakEnd: () => {
+        this.leftDown = false;
+      },
+      onToggleInventory: () => this.inventoryScreen.toggle(),
+      onToggleFly: () => this.setFlying(!this.flying),
+      // 潜行状态由操作层自己维护并出现在 input 里，这里只做一次提示同步
+      onToggleSneak: () => undefined,
+    });
+  }
+
+  /** 调试/验收用：桌面端也能把触摸 UI 打开（手机上本来就是自动创建的） */
+  enableTouchControls(): boolean {
+    if (this.touch) return true;
+    this.touch = this.createTouchControls();
+    return true;
   }
 
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
@@ -1493,6 +1508,16 @@ class App {
     this.physics.teleport(x, y, z);
     this.lastCenterCx = Number.NaN;
     this.lastCenterCz = Number.NaN;
+  }
+
+  /** 是否正在挖掘（按住左键/长按屏幕且对着可破坏方块）——验收脚本用 */
+  get isBreaking(): boolean {
+    return this.breakProgress > 0 && this.breakingKey !== '';
+  }
+
+  /** 当前视角（度）：验收脚本用它判断"拖动有没有真的转视角" */
+  get lookAngles(): { yaw: number; pitch: number } {
+    return { yaw: (this.yaw * 180) / Math.PI, pitch: (this.pitch * 180) / Math.PI };
   }
 
   /** 单位：度。yaw 0 = 看向 -Z（北），pitch 为正表示向上看 */
