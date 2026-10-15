@@ -8,18 +8,25 @@
 import { Block, SHAPED_PARENTS, blockDef, slabId, stairsId } from '../src/core/registry/blocks.ts';
 import { collisionBoxes, meshBoxes, stairsShape } from '../src/core/registry/blockShapes.ts';
 import {
+  facingFromYaw,
   facingOf,
   isDoorOpen,
   isDoorUpper,
+  isFenceGateOpen,
   isSlabDouble,
   isTop,
+  isTrapdoorOpen,
   isWallMounted,
   withFacing,
+  withFenceGateOpen,
   withSlabDouble,
   withTop,
+  withTrapdoorOpen,
 } from '../src/core/registry/blockState.ts';
 import { planPlacement } from '../src/core/interaction/Placement.ts';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { CREATIVE_ITEMS, categoryOf } from '../src/core/registry/items.ts';
+import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
 
 let passed = 0;
 let failed = 0;
@@ -221,6 +228,105 @@ console.log('\n[放置规则：门]');
   equal('上方被占用时拒绝', door(Block.STONE, Block.STONE), null);
 }
 
+console.log('\n[活板门与栅栏门（批次 30）]');
+{
+  // ---- 活板门：四种状态各画一块薄板，渲染盒与碰撞盒**必须是同一份**
+  const closedBottom = withTrapdoorOpen(withTop(withFacing(0, 1), false), false);
+  const closedTop = withTop(withFacing(0, 1), true);
+  const openedBoxes = meshBoxes('trapdoor', withTrapdoorOpen(closedBottom, true));
+  check('关着的活板门是一块贴地的薄板', meshBoxes('trapdoor', closedBottom)[0]![1] === 0);
+  check('贴天花板时薄板在上方', meshBoxes('trapdoor', closedTop)[0]![4] === 1);
+  check('开着的活板门竖起来（高度占满一格）', openedBoxes[0]![4] === 1 && openedBoxes[0]![1] === 0);
+  check(
+    '开着的活板门**有碰撞**（原版那是一片竖着的挡板）',
+    collisionBoxes('trapdoor', withTrapdoorOpen(closedBottom, true)).length === 1,
+  );
+  equal(
+    '渲染盒与碰撞盒完全一致（免得画一片板、撞在另一处）',
+    JSON.stringify(meshBoxes('trapdoor', closedBottom)),
+    JSON.stringify(collisionBoxes('trapdoor', closedBottom)),
+  );
+
+  // 朝向决定开着的板贴哪一侧：朝东 → 贴在 +X 侧
+  const eastOpen = withTrapdoorOpen(withTop(withFacing(0, 1), false), true);
+  const box = meshBoxes('trapdoor', eastOpen)[0]!;
+  check('朝东的活板门打开后贴在 +X 那一侧', box[0] > 0.7 && box[3] === 1, `[${box.join(', ')}]`);
+
+  // ---- 栅栏门：关着挡路、开着中间能走过去（这是它存在的意义）
+  const gateClosed = withFenceGateOpen(withFacing(0, 0), false);
+  const gateOpen = withFenceGateOpen(withFacing(0, 0), true);
+  const closedBoxes = collisionBoxes('fence_gate', gateClosed);
+  const openBoxes = collisionBoxes('fence_gate', gateOpen);
+  equal('关着的栅栏门是"两柱 + 门板"三块', closedBoxes.length, 3);
+  equal('开着的栅栏门也是三块（门板转到了侧面）', openBoxes.length, 3);
+  check('栅栏门 1.5 格高（与原版一致）', closedBoxes[0]![4] === 1.5, String(closedBoxes[0]![4]));
+
+  /**
+   * 开着的时候，X 轴中线上必须留出一条 ≥0.6 格宽的空档——
+   * 玩家宽 0.6，这就是"门开着能走过去"的充要条件。
+   * 光断言"有几个盒子"是不够的：盒子位置错了照样挡路。
+   */
+  const blockedSpans = openBoxes
+    .filter((b) => b[2] < 0.5 && b[5] > 0.5) // 横跨中线（z 从 <0.5 到 >0.5）的盒子会挡路
+    .map((b) => [b[0], b[3]] as const)
+    .sort((a, b) => a[0] - b[0]);
+  // 沿 X 轴把挡路的区间拼起来，取最大空档（不能只看"第一个盒子的起点"）
+  let cursor = 0;
+  let gap = 0;
+  for (const [x0, x1] of blockedSpans) {
+    if (x0 > cursor) gap = Math.max(gap, x0 - cursor);
+    cursor = Math.max(cursor, x1);
+  }
+  gap = Math.max(gap, 1 - cursor);
+  check('开着的栅栏门中间留出 ≥0.6 格的空档（人走得过去）', gap >= 0.6, `空档 ${gap.toFixed(3)} 格`);
+
+  // 关着的时候反过来：必须挡得住（中线处有东西）
+  check(
+    '关着的栅栏门挡得住（中线被门板占住）',
+    closedBoxes.some((b) => b[0] === 0 && b[3] === 1),
+    JSON.stringify(closedBoxes),
+  );
+
+  // ---- 放置规则
+  const place = (normal: readonly [number, number, number], yaw: number) =>
+    planPlacement({
+      blockId: Block.OAK_TRAPDOOR,
+      normal,
+      hitX: 10.5,
+      hitY: 64.9,
+      hitZ: 10.5,
+      yaw,
+      sneaking: false,
+      blockAt: () => 0,
+    });
+  const onTopFace = place([0, 1, 0], 0);
+  equal('对着顶面放 → 贴地（下半）', onTopFace ? isTop(onTopFace.state) : true, false);
+  const onBottomFace = place([0, -1, 0], 0);
+  equal('对着底面放 → 贴天花板（上半）', onBottomFace ? isTop(onBottomFace.state) : false, true);
+  equal('活板门朝向跟随玩家', onTopFace ? facingOf(onTopFace.state) : -1, facingFromYaw(0));
+
+  const gate = planPlacement({
+    blockId: Block.OAK_FENCE_GATE,
+    normal: [0, 0, 1],
+    hitX: 10.5,
+    hitY: 64.5,
+    hitZ: 10.9,
+    yaw: Math.PI / 2,
+    sneaking: false,
+    blockAt: () => 0,
+  });
+  equal('栅栏门默认是关着的', gate ? isFenceGateOpen(gate.state) : true, false);
+  equal('栅栏门朝向跟随玩家', gate ? facingOf(gate.state) : -1, facingFromYaw(Math.PI / 2));
+
+  // ---- 注册表层面：能不能真的拿到、拿到的是什么形状
+  equal('活板门已注册', blockDef(Block.OAK_TRAPDOOR)?.name, 'minecraft:oak_trapdoor');
+  equal('活板门的形状是 trapdoor', blockDef(Block.OAK_TRAPDOOR)?.shape, 'trapdoor');
+  equal('栅栏门的形状是 fence_gate', blockDef(Block.OAK_FENCE_GATE)?.shape, 'fence_gate');
+  check('两者都在创造物品栏里（否则生存里只能靠作弊拿）', CREATIVE_ITEMS.includes(Block.OAK_TRAPDOOR) && CREATIVE_ITEMS.includes(Block.OAK_FENCE_GATE));
+  equal('门类方块归在"建筑"分类（原版也在 Building Blocks）', categoryOf(Block.OAK_TRAPDOOR), 'building');
+  check('都有中文名与说明', itemLabel(Block.OAK_TRAPDOOR) === '橡木活板门' && itemTooltip(Block.OAK_FENCE_GATE).description.includes('红石'));
+}
+
 console.log('\n[台阶 / 楼梯配方]');
 {
   const grid = (size: 2 | 3, rows: readonly string[], legend: Record<string, number>) => {
@@ -262,6 +368,18 @@ console.log('\n[台阶 / 楼梯配方]');
   // 梯子：H 形
   const ladderRecipe = grid(3, ['S·S', 'SSS', 'S·S'], { S: 1008 });
   equal('7 木棍 → 梯子', matchRecipe(ladderRecipe, 3)?.id, Block.LADDER);
+
+  // 活板门与栅栏门（批次 30）
+  const trapdoorRecipe = grid(3, ['PPP', 'PPP', '···'], { P: Block.OAK_PLANKS });
+  equal('6 木板横铺 → 2 个活板门', matchRecipe(trapdoorRecipe, 3)?.id, Block.OAK_TRAPDOOR);
+  equal('活板门一次出 2 个', matchRecipe(trapdoorRecipe, 3)?.count, 2);
+  // 门是竖着 2×3，活板门是横着 3×2——两者不能互相匹配（同一批木板）
+  const doorShape = grid(3, ['PP·', 'PP·', 'PP·'], { P: Block.OAK_PLANKS });
+  equal('竖着的 2×3 仍然是门（不会串到活板门）', matchRecipe(doorShape, 3)?.id, Block.OAK_DOOR);
+
+  const gateRecipe = grid(3, ['SPS', 'SPS', '···'], { P: Block.OAK_PLANKS, S: 1008 });
+  equal('2 木板 + 4 木棍 → 栅栏门', matchRecipe(gateRecipe, 3)?.id, Block.OAK_FENCE_GATE);
+  equal('栅栏门一次出 1 个', matchRecipe(gateRecipe, 3)?.count, 1);
 }
 
 console.log('\n[B4b 台阶：叠成双层]');

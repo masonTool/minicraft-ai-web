@@ -16,7 +16,16 @@
  */
 
 import { Block } from '../src/core/registry/blocks.ts';
-import { isPowered, withDelay, withFacing } from '../src/core/registry/blockState.ts';
+import {
+  isDoorOpen,
+  isDoorUpper,
+  isFenceGateOpen,
+  isPowered,
+  isTrapdoorOpen,
+  withDelay,
+  withDoorUpper,
+  withFacing,
+} from '../src/core/registry/blockState.ts';
 import { RedstoneEngine, canPush, wirePowerOf, type RedstoneWorld } from '../src/core/redstone/RedstoneEngine.ts';
 
 let passed = 0;
@@ -116,6 +125,54 @@ console.log('\n[拉杆 → 红石粉 → 红石灯]');
   step(engine, world, 0.1);
   check('拉杆关掉后灯熄灭', !isPowered(world.getState(3, Y, 0)));
   check('粉的强度清零', wirePowerOf(engine, 1, Y, 0) === 0);
+}
+
+// ---------------------------------------------------------------- 1.5 门 / 活板门 / 栅栏门
+
+console.log('\n[红石驱动门类：通电即开、断电即关]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  // ⚠️ 三种方块都必须**贴着红石粉**才会被算进这次洪泛（红石是六邻域传播）：
+  //   拉杆(0,Y,0) → 粉(1,Y,0) → 活板门(2,Y,0)
+  //                       └── 粉(1,Y+1,0) → 门的下半(2,Y+1,0) + 上半(2,Y+2,0)
+  //                       └── 栅栏门(1,Y,-1)
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_WIRE, 0);
+  world.setBlock(1, Y + 1, 0, Block.REDSTONE_WIRE, 0);
+  world.setBlock(2, Y, 0, Block.OAK_TRAPDOOR, 0);
+  world.setBlock(1, Y, -1, Block.OAK_FENCE_GATE, 0);
+  world.setBlock(2, Y + 1, 0, Block.OAK_DOOR, 0);
+  world.setBlock(2, Y + 2, 0, Block.OAK_DOOR, withDoorUpper(0, true));
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+
+  check('初始时活板门是关的', !isTrapdoorOpen(world.getState(2, Y, 0)));
+  check('初始时栅栏门是关的', !isFenceGateOpen(world.getState(1, Y, -1)));
+  check(
+    '初始时门是关的（上下半都是）',
+    !isDoorOpen(world.getState(2, Y + 1, 0)) && !isDoorOpen(world.getState(2, Y + 2, 0)),
+  );
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+
+  check('通电后活板门开了', isTrapdoorOpen(world.getState(2, Y, 0)));
+  check('通电后栅栏门开了', isFenceGateOpen(world.getState(1, Y, -1)));
+  check('通电后门的下半开了', isDoorOpen(world.getState(2, Y + 1, 0)));
+  // 门的上下两半必须一起开：分开判会得到"半扇门"（上半格自己够不到那格红石粉）
+  check('通电后门的上半**也**开了（上下同步）', isDoorOpen(world.getState(2, Y + 2, 0)));
+  check('门的上半仍然是"上半"（没被顺手洗掉标记）', isDoorUpper(world.getState(2, Y + 2, 0)));
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+
+  check('断电后活板门关上', !isTrapdoorOpen(world.getState(2, Y, 0)));
+  check('断电后栅栏门关上', !isFenceGateOpen(world.getState(1, Y, -1)));
+  check(
+    '断电后门的两半都关上',
+    !isDoorOpen(world.getState(2, Y + 1, 0)) && !isDoorOpen(world.getState(2, Y + 2, 0)),
+  );
 }
 
 // ---------------------------------------------------------------- 2. 红石块与火把
