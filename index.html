@@ -260,6 +260,36 @@
         background: #2a2a2d; color: #eee; border: 1px solid #ffffff33; border-radius: 3px;
       }
 
+      /* ---------------- 聊天与命令 ---------------- */
+      #chat {
+        position: fixed; left: 10px; bottom: 82px; z-index: 15;
+        width: min(52vw, 620px); display: flex; flex-direction: column; gap: 2px;
+        font-size: 13px; line-height: 1.45; pointer-events: none;
+      }
+      #chat.open { pointer-events: auto; }
+      .chat-log { display: flex; flex-direction: column; gap: 1px; max-height: 34vh; overflow: hidden; }
+      .chat-line {
+        padding: 2px 6px; border-radius: 3px; color: #fff;
+        background: rgba(0, 0, 0, .45); text-shadow: 1px 1px 0 #000;
+        transition: opacity .8s linear; overflow-wrap: anywhere;
+        /* 多行反馈（/help）保留换行 */
+        white-space: normal;
+      }
+      .chat-line.chat-system { color: #d8e6b0; }
+      .chat-line.chat-error { color: #ff9a8a; }
+      .chat-line.chat-player { color: #fff; }
+      .chat-line.fading { opacity: .45; }
+      .chat-hint {
+        padding: 2px 6px; color: #c8c8c8; font-size: 12px;
+        background: rgba(0, 0, 0, .35); border-radius: 3px;
+      }
+      .chat-input {
+        font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 3px;
+        background: rgba(0, 0, 0, .78); color: #fff; border: 1px solid #ffffff44;
+        outline: none;
+      }
+      .chat-input.hidden, .chat-hint.hidden { display: none; }
+
       /* ---------------- 物品提示框 ---------------- */
       #item-tooltip {
         position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none;

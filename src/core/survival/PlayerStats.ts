@@ -28,6 +28,7 @@ const HURT_RESISTANT_TICKS = 10;
 export const VOID_DAMAGE_Y = -70;
 
 export type DamageCause =
+  | 'poison'
   | 'fall'
   | 'drown'
   | 'lava'
@@ -53,6 +54,12 @@ export interface SurvivalEnvironment {
   y: number;
   /** 创造模式：不受伤、不消耗饥饿、不会饿死 */
   creative: boolean;
+  /** 饥饿值高时是否自然回血（游戏规则 naturalRegeneration，缺省开） */
+  naturalRegeneration?: boolean;
+  /** 自然回复的间隔倍率（难度；越小回得越快，缺省 1） */
+  regenRate?: number;
+  /** 饿死的速率倍率（难度；0 = 饿不死，缺省 1） */
+  starveRate?: number;
 }
 
 export interface DamageResult {
@@ -215,13 +222,16 @@ export class PlayerStats {
     if (env.suffocating) this.damage(1, 'suffocate');
   }
 
-  /** 饥饿：自然回复 / 饿死 / 疲劳值结算 */
+  /** 饥饿：自然回复 / 饿死 / 疲劳值结算（受游戏规则与难度影响） */
   private tickHunger(env: SurvivalEnvironment): void {
-    void env;
+    const regenEnabled = env.naturalRegeneration ?? true;
+    const regenRate = env.regenRate ?? 1;
+    const starveRate = env.starveRate ?? 1;
 
-    if (this.food >= 18 && this.health < MAX_HEALTH) {
+    if (regenEnabled && this.food >= 18 && this.health < MAX_HEALTH) {
       this.foodTickTimer++;
-      const interval = this.saturation > 0 ? 10 : 80;
+      const base = this.saturation > 0 ? 10 : 80;
+      const interval = Math.max(1, Math.round(base * regenRate));
       if (this.foodTickTimer >= interval) {
         this.foodTickTimer = 0;
         this.heal(1);
@@ -230,9 +240,10 @@ export class PlayerStats {
       return;
     }
 
-    if (this.food <= 0) {
+    if (this.food <= 0 && starveRate > 0) {
       this.foodTickTimer++;
-      if (this.foodTickTimer >= 80) {
+      const interval = Math.max(1, Math.round(80 / starveRate));
+      if (this.foodTickTimer >= interval) {
         this.foodTickTimer = 0;
         // 饿死不受无敌帧保护（否则血量会在 10 tick 内不再下降）
         this.hurtResistantTime = 0;
@@ -243,6 +254,22 @@ export class PlayerStats {
     }
 
     this.foodTickTimer = 0;
+  }
+
+  /**
+   * 中毒伤害：**不会致死**（原版会把人打到剩半颗心就停）。
+   * 凋零等其它持续伤害走普通 `damage`。
+   */
+  poisonDamage(amount: number): DamageResult {
+    const result: DamageResult = { applied: 0, cause: 'poison', fatal: false };
+    if (this.dead || amount <= 0) return result;
+    if (this.health <= 1) return result;
+    const applied = Math.min(amount, this.health - 1);
+    this.health -= applied;
+    this.totalDamage += applied;
+    result.applied = applied;
+    this.lastDamage = result;
+    return result;
   }
 
   /** 重生：清空状态并回到满血 */

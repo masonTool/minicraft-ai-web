@@ -15,7 +15,14 @@
  */
 
 import { BLOCKS } from './blocks.ts';
-import { CATEGORY_LABELS, categoryOf, itemDef, maxStackOf, type ItemCategory } from './items.ts';
+import {
+  CATEGORY_LABELS,
+  categoryOf,
+  CREATIVE_ITEMS,
+  itemDef,
+  maxStackOf,
+  type ItemCategory,
+} from './items.ts';
 
 // ---------------------------------------------------------------- 规则生成
 
@@ -484,4 +491,66 @@ export function missingBlockNames(): string[] {
     if (!NAMES.has(key)) missing.push(key);
   }
   return missing;
+}
+
+// ---------------------------------------------------------------- 名字 → id
+
+/** 物品名索引：英文全名 / 英文短名 / 中文名 / 数字 id 都指向同一个 id */
+let itemIndex: Map<string, number> | null = null;
+/** 方块名索引：只有方块（放置类命令用） */
+let blockIndex: Map<string, number> | null = null;
+
+function buildItemIndex(): Map<string, number> {
+  const index = new Map<string, number>();
+  for (const id of CREATIVE_ITEMS) {
+    const def = itemDef(id);
+    if (!def) continue;
+    const full = def.name;
+    const short = full.startsWith('minecraft:') ? full.slice('minecraft:'.length) : full;
+    index.set(full.toLowerCase(), id);
+    index.set(short.toLowerCase(), id);
+    index.set(itemLabel(id), id);
+    index.set(String(id), id);
+  }
+  return index;
+}
+
+function buildBlockIndex(): Map<string, number> {
+  const index = new Map<string, number>();
+  for (const def of BLOCKS) {
+    if (!def || def.id === 0) continue;
+    const short = def.name.replace('minecraft:', '');
+    index.set(short.toLowerCase(), def.id);
+    index.set(def.name.toLowerCase(), def.id);
+    index.set(blockLabel(def.id), def.id);
+  }
+  return index;
+}
+
+/**
+ * 按名字找物品 id。
+ * 接受 `minecraft:stone` / `stone` / `石头` / 数字 id 四种写法——
+ * 命令与创造物品栏搜索共用同一套解析，玩家不用记英文。
+ */
+export function resolveItemId(query: string): number | undefined {
+  const raw = query.trim();
+  if (raw.length === 0) return undefined;
+  if (!itemIndex) itemIndex = buildItemIndex();
+  return itemIndex.get(raw.toLowerCase()) ?? itemIndex.get(raw);
+}
+
+/** 按名字找方块 id（只含方块；空气用 `air` 或 0） */
+export function resolveBlockId(query: string): number | undefined {
+  const raw = query.trim();
+  if (raw.length === 0) return undefined;
+  if (raw === 'air' || raw === 'minecraft:air' || raw === '空气' || raw === '0') return 0;
+  if (!blockIndex) blockIndex = buildBlockIndex();
+  return blockIndex.get(raw.toLowerCase()) ?? blockIndex.get(raw);
+}
+
+/** 供测试与调试：索引规模 */
+export function nameIndexSize(): { items: number; blocks: number } {
+  if (!itemIndex) itemIndex = buildItemIndex();
+  if (!blockIndex) blockIndex = buildBlockIndex();
+  return { items: itemIndex.size, blocks: blockIndex.size };
 }

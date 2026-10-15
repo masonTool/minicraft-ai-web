@@ -13,7 +13,8 @@ import * as THREE from 'three';
 import { TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
-import { PlayerStats, type DamageCause, type SurvivalEnvironment } from './core/survival/PlayerStats.ts';
+import {
+  MAX_HEALTH, PlayerStats, type DamageCause, type SurvivalEnvironment } from './core/survival/PlayerStats.ts';
 import { VitalsHud } from './ui/VitalsHud.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
@@ -27,10 +28,22 @@ import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
 import { Tooltip } from './ui/Tooltip.ts';
+import { ChatInput } from './ui/ChatInput.ts';
+import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
+import { StatusEffects, effectLabel, resolveEffect, romanLevel } from './core/survival/StatusEffects.ts';
+import {
+  DEFAULT_GAME_RULES,
+  DIFFICULTY_LABELS,
+  difficultyProfile,
+  normalizeDifficulty,
+  normalizeGameRules,
+  type Difficulty,
+  type GameRules,
+} from './core/world/Rules.ts';
 import { RecipeBook } from './ui/RecipeBook.ts';
 import { craftFromInventory } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
-import { itemTooltip } from './core/registry/itemNames.ts';
+import { itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
 import type { WorldType } from './core/gen/WorldType.ts';
 import { PARTICLE_DENSITY } from './ui/SettingsScreen.ts';
@@ -74,7 +87,8 @@ import {
   withDoorOpen,
   withDoorUpper,
 } from './core/registry/blockState.ts';
-import { HOTBAR_SIZE, Inventory } from './core/container/Inventory.ts';
+import {
+  TOTAL_SLOTS, HOTBAR_SIZE, Inventory } from './core/container/Inventory.ts';
 import { CHEST_SIZE } from './core/container/Chest.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
@@ -279,6 +293,8 @@ class App {
   private fallStartY: number | null = null;
   private pendingFallDistance = 0;
   private respawnCountdown = 0;
+  /** 这一条命是否已经结算过死亡掉落（避免每帧都掉一次） */
+  private deathHandled = false;
   private spawnPoint: [number, number, number] = [0.5, 80, 0.5];
   private lastPlayerX = 0;
   private lastPlayerZ = 0;
@@ -307,6 +323,16 @@ class App {
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   private readonly hotbarSlots: HTMLDivElement[] = [];
+  /** 聊天与命令输入（左下角消息栏 + 命令输入行） */
+  private readonly chat = new ChatInput();
+  /** 玩家名（联机时用服务端给的，单机固定"玩家"） */
+  private playerName = '玩家';
+  /** 难度（I7）：保存在世界里 */
+  private difficulty: Difficulty = 'normal';
+  /** 状态效果（I4）：随身携带，死亡后清空 */
+  private readonly effects = new StatusEffects();
+  /** 游戏规则（I11）：保存在世界里 */
+  private rules: GameRules = { ...DEFAULT_GAME_RULES };
   /** 配方书：列出所有配方，材料够就能一键合成 */
   private readonly recipeBook: RecipeBook;
   /** 物品提示框（快捷栏与背包共用同一个，位置跟着指针走） */
@@ -339,7 +365,7 @@ class App {
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
     onChat: (id, name, text) => {
-      console.info(`[chat] <${name}> ${text}`);
+      this.chat.push(`<${name}> ${text}`, 'player');
       this.chatLine = `<${name}> ${text}`;
       this.chatUntil = performance.now() + 8000;
       void id;
@@ -503,6 +529,9 @@ class App {
     this.recipeBook = new RecipeBook(document.body, atlas, this.inventory, {
       onCraft: (recipe) => this.craftFromBook(recipe),
     });
+
+    this.chat.onSubmit = (text) => this.handleChatSubmit(text);
+    this.chat.onOpenChange = (open) => this.handleChatOpen(open);
     this.inventory.onChange = () => {
       this.refreshHotbar();
       this.inventoryScreen.refresh();
@@ -790,6 +819,10 @@ class App {
     this.stats.air = data.air;
     this.stats.exhaustion = data.exhaustion;
     this.dragonDefeated = data.dragonDefeated;
+    // 难度与游戏规则按世界存：旧存档没有这两个字段时回退默认值
+    this.difficulty = normalizeDifficulty(data.difficulty);
+    this.rules = normalizeGameRules(data.gameRules);
+    this.effects.restore(data.effects);
 
     this.inventory.restore(data.inventory);
     this.selectSlot(data.selectedSlot);
@@ -823,6 +856,9 @@ class App {
       inventory: this.inventory.serialize(),
       selectedSlot: this.hotbarIndex,
       dragonDefeated: this.dragonDefeated,
+      difficulty: this.difficulty,
+      gameRules: { ...this.rules },
+      effects: this.effects.serialize(),
     };
   }
 
@@ -1233,6 +1269,12 @@ class App {
       if (e.code === 'KeyR') {
         e.preventDefault();
         this.toggleRecipeBook();
+        return;
+      }
+      // T / 斜杠：打开聊天与命令输入（原版就是这两个键）
+      if (e.code === 'KeyT' || e.code === 'Slash') {
+        e.preventDefault();
+        this.chat.openWith(e.code === 'Slash' ? '/' : '');
         return;
       }
       if (this.uiOpen) return;
@@ -1654,6 +1696,9 @@ class App {
       }
     }
 
+    // doMobSpawning 关掉后连刷怪逻辑都不跑（刷怪笼与 /summon 不受影响）
+    if (!this.rules.doMobSpawning) return;
+
     const ctx: SpawnContext = {
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       // 天光要按昼夜折算：我们的光照引擎里地表天光恒为 15，
@@ -1679,7 +1724,13 @@ class App {
     if (amount > 0) this.vibrate([18, 40, 18]);
     if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
     if (this.flying) return;
-    const result = this.stats.damage(amount, 'generic');
+    // 难度倍率：和平难度下生物不造成伤害（原版和平难度敌对生物根本不生成）
+    const damage = amount * difficultyProfile(this.difficulty).mobDamage;
+    if (damage <= 0) return;
+    // 状态效果（抗性提升）在统一入口里叠加
+    const before = this.stats.health;
+    this.applyIncomingDamage(damage, 'generic');
+    const result = { applied: before - this.stats.health };
     if (result.applied <= 0) return;
 
     // 沿"伤害来源 → 玩家"方向击退
@@ -1725,6 +1776,21 @@ class App {
     this.redstone.tick(this.redstoneWorld, Math.min(dt, 0.1));
   }
 
+  /**
+   * 验收脚本用：执行一行命令或发言，并返回消息栏里的全部文字。
+   * 走的是与输入框完全相同的路径（`handleChatSubmit`），因此测到的就是真实行为。
+   */
+  runCommand(text: string): string[] {
+    this.handleChatSubmit(text);
+    return this.chat.messageLines;
+  }
+
+  /** 验收脚本用：打开聊天输入框（模拟按 T） */
+  openChatForTest(prefill = ''): boolean {
+    this.chat.openWith(prefill);
+    return this.chat.isOpen;
+  }
+
   /** 验收脚本用：直接打开/关闭配方书 */
   toggleRecipeBookForTest(): boolean {
     this.toggleRecipeBook();
@@ -1744,6 +1810,190 @@ class App {
       }),
     );
     return this.tooltip.text;
+  }
+
+  // ---------------------------------------------------------------- 聊天与命令
+
+  /** 聊天栏/命令输入共用的提交入口 */
+  private handleChatSubmit(text: string): void {
+    // 以 / 开头 = 命令；否则是普通发言
+    if (text.startsWith('/')) {
+      executeCommand(text, this.commandContext(), this.commandFeedback());
+      return;
+    }
+    if (this.net.connected) this.net.sendChat(text);
+    this.chat.push(`<${this.playerName}> ${text}`, 'player');
+    this.chatLine = `<${this.playerName}> ${text}`;
+    this.chatUntil = performance.now() + 8000;
+  }
+
+  /** 输入框打开/关闭：借背包那套"界面打开就停用移动与交互"的逻辑 */
+  private handleChatOpen(open: boolean): void {
+    this.handleInventoryOpen(open);
+    // 打字时释放指针锁，否则鼠标动不了、点不到输入框
+    if (open && document.pointerLockElement) document.exitPointerLock();
+  }
+
+  private commandFeedback(): CommandFeedback {
+    return {
+      info: (text) => this.chat.push(text, 'system'),
+      error: (text) => this.chat.push(text, 'error'),
+    };
+  }
+
+  /**
+   * 命令的上下文实现。
+   *
+   * 命令逻辑本身在 `core/commands/Commands.ts`（不碰 DOM、可离线测），
+   * 这里只把"玩家/世界/规则"这些真实对象包成它要的接口。
+   */
+  private commandContext(): CommandContext {
+    return {
+      playerName: () => this.playerName,
+      position: () => ({
+        x: this.physics.x,
+        y: this.physics.y,
+        z: this.physics.z,
+        dimension: this.dimension,
+      }),
+      teleport: (x, y, z, dimension) => {
+        if (dimension && dimension !== this.dimension) {
+          if (dimension !== 'overworld' && dimension !== 'nether' && dimension !== 'end') return false;
+          // setDimension 会清空区块并重新流式加载，之后再落坐标
+          this.setDimension(dimension as DimensionId);
+        }
+        this.physics.teleport(x, y, z);
+        this.physics.vx = 0;
+        this.physics.vy = 0;
+        this.physics.vz = 0;
+        this.fallStartY = null;
+        this.pendingFallDistance = 0;
+        this.refreshWorld(toChunkCoord(x), toChunkCoord(z), true);
+        return true;
+      },
+      give: (name, count) => {
+        const id = resolveItemId(name);
+        if (id === undefined) return -1;
+        const remaining = this.inventory.add(id, count);
+        this.refreshHotbar();
+        this.inventoryScreen.refresh();
+        return count - remaining;
+      },
+      clearInventory: () => {
+        let slots = 0;
+        for (let i = 0; i < TOTAL_SLOTS; i++) if (this.inventory.get(i)) slots++;
+        this.inventory.clear();
+        this.refreshHotbar();
+        this.inventoryScreen.refresh();
+        return slots;
+      },
+      setFlying: (on) => this.setFlying(on),
+      isFlying: () => this.flying,
+      setCreative: (on) => this.setFlying(on),
+      isCreative: () => this.flying,
+      killPlayer: () => {
+        this.stats.damage(MAX_HEALTH * 10, 'generic');
+      },
+      seed: () => this.world.seed,
+      getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+      setBlock: (x, y, z, id) => this.world.setBlockAndUpdate(x, y, z, id),
+      fillBlocks: (x1, y1, z1, x2, y2, z2, id) => {
+        let placed = 0;
+        for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
+          for (let z = Math.min(z1, z2); z <= Math.max(z1, z2); z++) {
+            for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
+              if (this.world.setBlockAndUpdate(x, y, z, id)) placed++;
+            }
+          }
+        }
+        return placed;
+      },
+      setTimeOfDay: (t) => {
+        this.timeOfDay = ((t % 1) + 1) % 1;
+      },
+      timeOfDay: () => this.timeOfDay,
+      setWeather: (kind) => this.weather.setKind(kind),
+      difficulty: () => this.difficulty,
+      setDifficulty: (value) => {
+        this.difficulty = value;
+      },
+      gameRules: () => this.rules,
+      setGameRule: (key, value) => {
+        this.rules[key] = value;
+        // 昼夜循环这类规则同时写回设置（设置是"这台设备的默认"，规则是"这个世界的当前值"）
+        if (key === 'doDaylightCycle') this.settings.daylightCycle = value as boolean;
+      },
+      summon: (name, x, y, z) => {
+        const type = mobTypeById(name);
+        if (!type) return false;
+        this.entities.spawn(new Mob(type, x + 0.5, y, z + 0.5));
+        return true;
+      },
+      killNearby: (radius) => {
+        let killed = 0;
+        for (const entity of [...this.entities.all]) {
+          if (!(entity instanceof Mob)) continue;
+          if (Math.hypot(entity.x - this.physics.x, entity.z - this.physics.z) > radius) continue;
+          entity.dead = true;
+          killed++;
+        }
+        return killed;
+      },
+      applyEffect: (name, seconds, amplifier) => this.applyEffectByName(name, seconds, amplifier),
+      clearEffects: () => this.effects.clear(),
+      onlinePlayers: () => {
+        const names = [`${this.playerName}(你)`];
+        for (const player of this.net.remote.values()) names.push(player.name);
+        return names;
+      },
+    };
+  }
+
+  /** `/effect` 的入口：按名字施加状态效果 */
+  private applyEffectByName(name: string, seconds: number, amplifier: number): boolean {
+    const id = resolveEffect(name);
+    if (!id) return false;
+    this.effects.apply(id, seconds, amplifier, true);
+    this.resolveInstantEffects();
+    this.chat.push(`获得效果：${effectLabel(id)}${amplifier > 0 ? ` ${romanLevel(amplifier)}` : ''}`, 'system');
+    return true;
+  }
+
+  /** 瞬间效果（瞬间治疗/瞬间伤害）立即结算 */
+  private resolveInstantEffects(): void {
+    for (const instant of this.effects.takeInstant()) {
+      if (instant.id === 'instant_health') {
+        this.stats.heal(4 * (instant.amplifier + 1));
+      } else if (instant.id === 'instant_damage') {
+        this.applyIncomingDamage(6 * (instant.amplifier + 1), 'generic');
+      }
+    }
+  }
+
+  /**
+   * 统一的外部伤害入口：先把状态效果的减伤算进去（抗性提升），
+   * 然后交给 `PlayerStats` 走无敌帧。生物攻击、中毒、瞬间伤害都从这里进。
+   */
+  private applyIncomingDamage(amount: number, cause: DamageCause): void {
+    const scaled = amount * this.effects.incomingDamageMultiplier();
+    if (scaled <= 0) return;
+    this.stats.damage(scaled, cause);
+  }
+
+  /** 每 tick 结算状态效果（中毒伤害 / 生命恢复 / 饥饿 / 到期） */
+  private tickEffects(): void {
+    const result = this.effects.tick();
+    if (result.damage > 0) {
+      if (result.damageCause === 'poison') {
+        // 中毒不会致死（原版会停在半颗心）
+        this.stats.poisonDamage(result.damage);
+      } else {
+        this.applyIncomingDamage(result.damage, 'generic');
+      }
+    }
+    if (result.heal > 0) this.stats.heal(result.heal);
+    if (result.exhaustion > 0) this.stats.addExhaustion(result.exhaustion);
+    if (result.food > 0 || result.saturation > 0) this.stats.eat(result.food, result.saturation);
   }
 
   /** 打开配方书（背包里的按钮与 R 键都走这里） */
@@ -2146,21 +2396,29 @@ class App {
     while (this.tickAccumulator >= TICK_SECONDS && ticks < 4) {
       this.tickAccumulator -= TICK_SECONDS;
       ticks++;
+      this.tickEffects();
       this.stats.tick(this.survivalEnvironment());
       // 摔落伤害只结算一次，避免同一帧的多个 tick 重复扣血
       this.pendingFallDistance = 0;
     }
 
     this.vitalsHud.update(this.stats);
+    this.chat.update();
 
     // ---- 死亡与重生
     if (this.stats.dead) {
+      // 死亡只结算一次：把背包里的东西掉在原地（keepInventory 打开时保留）
+      if (!this.deathHandled) {
+        this.deathHandled = true;
+        this.dropInventoryOnDeath();
+      }
       this.deathEl.classList.remove('hidden');
       this.respawnCountdown += dt;
       if (this.respawnCountdown >= RESPAWN_DELAY) this.respawnPlayer();
-    } else if (this.respawnCountdown !== 0) {
-      this.respawnCountdown = 0;
+    } else {
+      if (this.respawnCountdown !== 0) this.respawnCountdown = 0;
       this.deathEl.classList.add('hidden');
+      this.deathHandled = false;
     }
   }
 
@@ -2181,7 +2439,31 @@ class App {
       y: p.y,
       // 创造模式就是飞行状态（P1 的模式切换定义如此）
       creative: this.flying,
+      // 难度与游戏规则影响饥饿/回复（和平难度饿不死、回血更快）
+      naturalRegeneration: this.rules.naturalRegeneration,
+      starveRate: difficultyProfile(this.difficulty).starveRate,
+      regenRate: difficultyProfile(this.difficulty).regenRate,
     };
+  }
+
+  /**
+   * 死亡时把背包掉在原地。
+   * `keepInventory` 打开时物品留在背包里（原版行为）。
+   */
+  private dropInventoryOnDeath(): void {
+    if (this.rules.keepInventory) return;
+    const x = this.physics.x;
+    const y = this.physics.y + 0.5;
+    const z = this.physics.z;
+
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
+      const stack = this.inventory.get(i);
+      if (!stack) continue;
+      this.spawnDrop(stack.id, stack.count, x, y, z);
+    }
+    this.inventory.clear();
+    this.refreshHotbar();
+    this.inventoryScreen.refresh();
   }
 
   private respawnPlayer(): void {
@@ -2191,6 +2473,8 @@ class App {
     this.physics.vy = 0;
     this.physics.vz = 0;
     this.stats.respawn();
+    // 死亡会清空状态效果（原版行为）
+    this.effects.clear();
     this.fallStartY = null;
     this.pendingFallDistance = 0;
     this.respawnCountdown = 0;
@@ -2323,7 +2607,7 @@ class App {
       `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   模式: ${this.flying ? '创造(飞行)' : '生存'}   维度: ${DIMENSION_LABELS[this.dimension]}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
+      `朝向: ${facing}   时间: ${clock}   难度: ${DIFFICULTY_LABELS[this.difficulty]}   模式: ${this.flying ? '创造(飞行)' : '生存'}   维度: ${DIMENSION_LABELS[this.dimension]}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
@@ -2742,6 +3026,13 @@ class App {
     screenEffect: ScreenEffect;
     /** 配方书是否打开（验收用） */
     recipeBookOpen: boolean;
+    /** 聊天/命令输入框是否打开（验收用） */
+    chatOpen: boolean;
+    /** 当前难度与游戏规则（验收用） */
+    difficulty: string;
+    gameRules: GameRules;
+    /** 当前状态效果的文字描述（验收用） */
+    effects: string[];
     /** 物品提示框当前显示的文字（验收用） */
     tooltip: string;
     /** 当前视角模式（F7 验收用） */
@@ -2765,6 +3056,10 @@ class App {
       handItem: this.hand.item ?? null,
       screenEffect: this.screenEffects.effect,
       recipeBookOpen: this.recipeBook.isOpen,
+      chatOpen: this.chat.isOpen,
+      difficulty: this.difficulty,
+      gameRules: { ...this.rules },
+      effects: this.effects.describe(),
       tooltip: this.tooltip.text,
       fps: this.fps,
       chunks: this.world.chunks.size,

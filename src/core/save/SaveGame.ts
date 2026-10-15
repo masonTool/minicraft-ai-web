@@ -56,6 +56,12 @@ export interface PlayerSave {
   selectedSlot: number;
   /** 末影龙是否已被击败（决定重进末地要不要重新生成 boss） */
   dragonDefeated: boolean;
+  /** 难度（I7）；旧存档没有时回退普通 */
+  difficulty?: string;
+  /** 游戏规则（I11）；旧存档没有时回退默认 */
+  gameRules?: Record<string, boolean | number>;
+  /** 状态效果（I4）：剩余时长接着走 */
+  effects?: Array<{ id: string; amplifier: number; ticks: number; ambient: boolean }>;
 }
 
 /** 一个区块的存档记录 */
