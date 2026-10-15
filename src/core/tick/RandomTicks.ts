@@ -14,7 +14,7 @@
  * 同一位置重复计划只保留最早的一次（与原版一致）。
  */
 
-import { Block, blockDef, Wood } from '../registry/blocks.ts';
+import { Block, WHEAT_STAGES, blockDef, wheatStageOf, Wood } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 
 /** 随机刻看到的世界 */
@@ -23,6 +23,11 @@ export interface TickWorld {
   setBlock(worldX: number, worldY: number, worldZ: number, id: number): boolean;
   /** 掉落物回调（树叶消失掉木棍之类）；不传就什么都不掉 */
   drop?: (itemId: number, count: number, x: number, y: number, z: number) => void;
+  /**
+   * 该点的光照等级（0~15，取天光与方块光的较大者）。
+   * 作物生长要用它；**不传就当全亮**——这样离线测试不必为了"能不能长"搭一套光照。
+   */
+  lightAt?: (x: number, y: number, z: number) => number;
 }
 
 export interface TickChunkView {
@@ -192,11 +197,55 @@ function makeNyliumBehavior(nylium: number): RandomTickBehavior {
 export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.GRASS_BLOCK, grassBehavior],
   ...LEAF_IDS.map((id) => [id, leavesBehavior] as const),
+  // 小麦的 4 个阶段都要登记：随机刻是按"当前这个 id"查行为的，
+  // 只登记第 0 阶段的话，苗长到第 1 阶段就再也不长了
+  ...WHEAT_STAGES.map((id) => [id, growWheat] as [number, RandomTickBehavior]),
   [Block.SUGAR_CANE, makeCaneBehavior(true, CANE_MAX_HEIGHT)],
   [Block.BAMBOO, makeCaneBehavior(false, BAMBOO_MAX_HEIGHT)],
   [Block.CRIMSON_NYLIUM, makeNyliumBehavior(Block.CRIMSON_NYLIUM)],
   [Block.WARPED_NYLIUM, makeNyliumBehavior(Block.WARPED_NYLIUM)],
 ]);
+
+/** 作物生长需要的最低光照（原版小麦就是 9） */
+export const CROP_MIN_LIGHT = 9;
+/**
+ * 随机刻命中时"长一节"的概率。
+ *
+ * ⚠️ 与原版的差异：原版小麦平均要 20 分钟才熟，单机验收场景下太久，
+ * 这里把概率调高（干旱 35%、旁边有水 70%）。**"有水长得快"这条关系保留**——
+ * 它才是玩家该感觉到的东西，绝对时长不是。
+ */
+export const CROP_GROW_CHANCE_DRY = 0.35;
+export const CROP_GROW_CHANCE_WET = 0.7;
+
+/** 耕地是否被水浸润（下层的水平 4 格内有水；原版判定范围就是 4 格） */
+function isHydrated(world: TickWorld, x: number, y: number, z: number): boolean {
+  for (let dz = -4; dz <= 4; dz++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      if (world.getBlock(x + dx, y, z + dz) === Block.WATER) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 小麦生长：随机刻命中就往前推一个阶段。
+ *
+ * 三个条件缺一不可（都对原版）：**下方是耕地**、**光照 ≥ 9**、随机数命中。
+ * 已经成熟的停在最后一个阶段，不会"长过头"变成别的方块。
+ */
+function growWheat(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const stage = wheatStageOf(world.getBlock(x, y, z));
+  if (stage < 0 || stage >= WHEAT_STAGES.length - 1) return false;
+  if (world.getBlock(x, y - 1, z) !== Block.FARMLAND) return false;
+  if ((world.lightAt?.(x, y, z) ?? 15) < CROP_MIN_LIGHT) return false;
+
+  const chance = isHydrated(world, x, y - 1, z) ? CROP_GROW_CHANCE_WET : CROP_GROW_CHANCE_DRY;
+  if (random() >= chance) return false;
+
+  world.setBlock(x, y, z, WHEAT_STAGES[stage + 1]!);
+  return true;
+}
 
 /** 这个方块是否会在随机刻里做事（用来估算开销） */
 export function hasRandomTick(id: number): boolean {

@@ -50,6 +50,10 @@ function check(label: string, condition: boolean, detail = ''): void {
   }
 }
 
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
+
 /** 确定性随机序列（测试里不该有真的随机） */
 function sequence(values: number[]): () => number {
   let index = 0;
@@ -382,5 +386,54 @@ console.log('\n[流体：唤醒]');
   check('唤醒包含液体自己（刚放下的水才会开始流）', wokenSelf >= 1 && fresh.scheduled.some((entry) => entry.x === 0 && entry.z === 0));
 }
 
-console.log(`\n随机刻与流体测试：${passed} 通过 / ${failed} 失败`);
+console.log('\n[小麦生长（H13）]');
+{
+  const solid = new Set<string>([`0,64,0`]);
+  const cells = new Map<string, number>();
+  const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+  cells.set(key(0, 64, 0), Block.FARMLAND);
+  cells.set(key(0, 65, 0), Block.WHEAT_STAGE0);
+
+  let light = 15;
+  const world: TickWorld = {
+    getBlock: (x, y, z) => cells.get(key(x, y, z)) ?? Block.AIR,
+    setBlock: (x, y, z, id) => {
+      cells.set(key(x, y, z), id);
+      return true;
+    },
+    lightAt: () => light,
+  };
+  void solid;
+
+  // 一路掷 0（必定命中概率）→ 一路长到成熟
+  equal('第 0 阶段会生长', randomTickBlock(world, 0, 65, 0, () => 0), true);
+  equal('长到了第 1 阶段', cells.get(key(0, 65, 0)), Block.WHEAT_STAGE1);
+  randomTickBlock(world, 0, 65, 0, () => 0);
+  randomTickBlock(world, 0, 65, 0, () => 0);
+  equal('封顶在最后一个阶段', cells.get(key(0, 65, 0)), Block.WHEAT_STAGE3);
+  equal('成熟之后不再变化', randomTickBlock(world, 0, 65, 0, () => 0), false);
+
+  // 光照不够：不长
+  cells.set(key(1, 64, 0), Block.FARMLAND);
+  cells.set(key(1, 65, 0), Block.WHEAT_STAGE0);
+  light = 5;
+  equal('光照不足时不长（原版要 9）', randomTickBlock(world, 1, 65, 0, () => 0), false);
+  light = 15;
+
+  // 下方不是耕地：不长
+  cells.set(key(2, 65, 0), Block.WHEAT_STAGE0);
+  equal('下方不是耕地就不长', randomTickBlock(world, 2, 65, 0, () => 0), false);
+
+  // 概率：掷 0.9 时干旱不长（0.35 门槛）
+  cells.set(key(3, 64, 0), Block.FARMLAND);
+  cells.set(key(3, 65, 0), Block.WHEAT_STAGE0);
+  equal('干旱地掷 0.9 不长', randomTickBlock(world, 3, 65, 0, () => 0.9), false);
+  // 有水时门槛放宽到 0.7：同一个 0.5 干旱不长、有水长
+  equal('干旱地掷 0.5 也不长', randomTickBlock(world, 3, 65, 0, () => 0.5), false);
+  cells.set(key(6, 64, 0), Block.WATER);
+  cells.set(key(3, 64, 0), Block.FARMLAND);
+  equal('旁边有水时同一个掷点就长了（湿润耕地长得快）', randomTickBlock(world, 3, 65, 0, () => 0.5), true);
+}
+
+console.log(`\nTick 测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

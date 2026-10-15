@@ -11,7 +11,7 @@
  */
 
 import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
-import { Block, Wood, blockDef, woolId } from './blocks.ts';
+import { Block, WHEAT_STAGES, Wood, blockDef, wheatStageOf, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
 import { SHEARS_INFO, SHEARS_ITEM_ID, TOOL_SPECS, type ToolInfo } from './tools.ts';
@@ -781,17 +781,47 @@ export function blockDrops(blockId: number, ctx: DropContext): { id: number; cou
   const silkTakes = ctx.silkTouch && !SHEARS_ONLY.has(blockId) && silkTouchDropsSelf(blockId);
   if (shearsTakes || silkTakes) return scale({ id: blockId, count: 1 });
 
-  // 3) 羊毛没剪就一无所有（注意要在"常规掉落"之前拦，否则会顺着"方块掉自身"漏出来）
+  // 3) 草丛：没剪刀拿不到它本身，但**有 12.5% 概率掉小麦种子**——
+  //    这是原版唯一稳定的种子来源。必须排在下一条 SHEARS_ONLY 之前，
+  //    否则会先被判定成"一无所有"，种子永远掉不出来。
+  if (GRASS_SEED_SOURCES.has(blockId) && ctx.roll() < GRASS_SEED_CHANCE) {
+    return scale({ id: Item.WHEAT_SEEDS, count: 1 });
+  }
+
+  // 4) 羊毛没剪就一无所有（注意要在"常规掉落"之前拦，否则会顺着"方块掉自身"漏出来）
   if (SHEARS_ONLY.has(blockId)) return null;
 
-  // 4~6) 概率替换 → 常规掉落 → 额外概率掉落
+  // 5~7) 概率替换 → 常规掉落 → 额外概率掉落
   const drop = replaceDropFor(blockId, ctx.roll()) ?? dropFor(blockId) ?? rareDropFor(blockId, ctx.roll());
   return drop ? scale(drop) : null;
+}
+
+/** 草丛这类"拔了有概率掉种子"的方块（原版 12.5%） */
+const GRASS_SEED_SOURCES = new Set<number>([Block.SHORT_GRASS, Block.FERN]);
+export const GRASS_SEED_CHANCE = 0.125;
+
+/**
+ * 收成熟小麦时额外掉的种子（H13）。
+ *
+ * 原版成熟小麦掉 **1 个小麦 + 0~3 粒种子（平均 1.5 粒）**。
+ * 单独抽出来而不是让 `blockDrops` 返回数组：目前只有这一处要"一个方块掉两样"，
+ * 为它改 `blockDrops` 的返回类型会牵动所有调用方与断言，等以后（比如树叶掉树苗+苹果）
+ * 真的多起来了再改。两次掷点拼出 0~3，期望 1.5 与原版一致。
+ */
+export function wheatExtraSeeds(blockId: number, roll: () => number): number {
+  const stage = wheatStageOf(blockId);
+  if (stage < 0 || stage < WHEAT_STAGES.length - 1) return 0;
+  return (roll() < 0.75 ? 1 : 0) + (roll() < 0.75 ? 1 : 0);
 }
 
 /** 与"掉落自身"不同的特例 */
 const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.GRASS_BLOCK, { id: Block.DIRT, count: 1 }],
+  // 小麦（H13）：没熟只能拿回 1 粒种子，熟了才给小麦（种子另算，见 wheatExtraSeeds）
+  [Block.WHEAT_STAGE0, { id: Item.WHEAT_SEEDS, count: 1 }],
+  [Block.WHEAT_STAGE1, { id: Item.WHEAT_SEEDS, count: 1 }],
+  [Block.WHEAT_STAGE2, { id: Item.WHEAT_SEEDS, count: 1 }],
+  [Block.WHEAT_STAGE3, { id: Item.WHEAT, count: 1 }],
   [Block.STONE, { id: Block.COBBLESTONE, count: 1 }],
   // 黏土块一次掉 4 个黏土球（原版行为），黏土球烧炼后得到红砖
   [Block.CLAY, { id: Item.CLAY_BALL, count: 4 }],

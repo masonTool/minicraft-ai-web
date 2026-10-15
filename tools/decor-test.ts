@@ -14,10 +14,13 @@ import { breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
 import {
   CREATIVE_ITEMS,
   Item,
+  type DropContext,
   blockDrops,
+  wheatExtraSeeds,
   dropFor,
   itemDef,
   requiresShears,
+  GRASS_SEED_CHANCE,
 } from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
@@ -405,6 +408,32 @@ console.log('\n[破坏掉落：剪刀 / 精准采集 / 时运 / 替换]');
   // ---- 双层台阶翻倍
   equal('双层台阶掉 2 个', blockDrops(slabId(0), { ...plain, doubleSlab: true })?.count, 2);
   void none;
+}
+
+console.log('\n[小麦与种子（H13）]');
+{
+  const plain: DropContext = { shears: false, silkTouch: false, fortune: 0, doubleSlab: false, roll: () => 0.5 };
+  equal('未熟小麦（第 0 阶段）只掉 1 粒种子', blockDrops(Block.WHEAT_STAGE0, plain)?.id, Item.WHEAT_SEEDS);
+  equal('第 2 阶段还是只掉 1 粒种子', blockDrops(Block.WHEAT_STAGE2, plain)?.count, 1);
+  equal('成熟小麦掉 1 个小麦', blockDrops(Block.WHEAT_STAGE3, plain)?.id, Item.WHEAT);
+  equal('成熟小麦掉 1 个（不是一堆）', blockDrops(Block.WHEAT_STAGE3, plain)?.count, 1);
+
+  // 额外种子：0~3 粒，期望 1.5（原版平均就是 1.5）
+  equal('未熟小麦没有额外种子', wheatExtraSeeds(Block.WHEAT_STAGE0, () => 0), 0);
+  equal('成熟小麦两次掷点都命中 → 2 粒', wheatExtraSeeds(Block.WHEAT_STAGE3, () => 0), 2);
+  equal('两次都没命中 → 0 粒', wheatExtraSeeds(Block.WHEAT_STAGE3, () => 0.9), 0);
+  let total = 0;
+  for (let i = 0; i < 20000; i++) total += wheatExtraSeeds(Block.WHEAT_STAGE3, Math.random);
+  const average = total / 20000;
+  check(`20000 次收获平均 ${average.toFixed(2)} 粒种子（原版 1.5）`, Math.abs(average - 1.5) < 0.06, average.toFixed(3));
+
+  // 草丛：12.5% 掉种子，其余什么都不掉（原版唯一稳定的种子来源）
+  equal('草丛掷点 0.1 → 掉小麦种子', blockDrops(Block.SHORT_GRASS, { ...plain, roll: () => 0.1 })?.id, Item.WHEAT_SEEDS);
+  equal('草丛掷点 0.5 → 什么都不掉', blockDrops(Block.SHORT_GRASS, { ...plain, roll: () => 0.5 }), null);
+  equal('草丛的种子概率是 12.5%（原版）', GRASS_SEED_CHANCE, 0.125);
+  let seeds = 0;
+  for (let i = 0; i < 20000; i++) if (blockDrops(Block.SHORT_GRASS, { ...plain, roll: Math.random })) seeds++;
+  check(`20000 次拔草掉了 ${seeds} 次种子（期望约 2500）`, Math.abs(seeds / 20000 - 0.125) < 0.01, (seeds / 20000).toFixed(4));
 }
 
 console.log(`\n装饰策略测试：${passed} 通过 / ${failed} 失败`);

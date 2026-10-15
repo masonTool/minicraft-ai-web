@@ -170,6 +170,7 @@ import {
   saturationFrom,
   type FoodInfo,
   Item,
+  wheatExtraSeeds,
 } from './core/registry/items.ts';
 import { canEat } from './core/registry/food.ts';
 
@@ -412,6 +413,9 @@ class App {
     getBlock: (x, y, z) => this.world.getBlock(x, y, z),
     setBlock: (x, y, z, id) => this.world.setBlockAndUpdate(x, y, z, id),
     drop: (id, count, x, y, z) => this.spawnDrop(id, count, x, y, z),
+    // 作物生长要判光照（H13）：取天光与方块光的较大者，与原版"作物看最亮的那一项"一致
+    lightAt: (x, y, z) =>
+      Math.max(this.world.getSkyLight(x, y, z), this.world.getBlockLight(x, y, z)),
   };
   /**
    * 流体看到的世界：读写方块与状态 + 把后续流动排进计划刻队列。
@@ -2274,7 +2278,12 @@ class App {
         doubleSlab: isSlabDouble(brokenState),
         roll: Math.random,
       });
-      if (drop) this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+      if (drop) {
+        this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+        // 收成熟小麦还会额外掉 0~3 粒种子（H13）
+        const seeds = wheatExtraSeeds(brokenId, Math.random);
+        if (seeds > 0) this.spawnDrop(Item.WHEAT_SEEDS, seeds, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+      }
     }
 
     // 挖矿经验（I5）：只有部分矿石给（煤 0~2、钻石/绿宝石 3~7…），
