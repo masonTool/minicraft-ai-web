@@ -10,7 +10,7 @@
  * 运行：npm run test:tool
  */
 
-import { Block, slabId } from '../src/core/registry/blocks.ts';
+import { Block, WHEAT_STAGES, blockHardness, isHandHarvestable, slabId } from '../src/core/registry/blocks.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import {
   Item,
@@ -34,6 +34,8 @@ import {
   makeToolInfo,
   toolInfoById,
   toolItemId,
+  canTill,
+  tillableTo,
 } from '../src/core/registry/tools.ts';
 import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
@@ -270,6 +272,27 @@ console.log('\n[剪刀（J8）]');
   // 中文名与说明
   equal('剪刀叫"剪刀"', itemLabel(Item.SHEARS), '剪刀');
   check('说明里写了"不剪就没有"', itemTooltip(Item.SHEARS).description.includes('不剪就没有'), itemTooltip(Item.SHEARS).description);
+}
+
+console.log('\n[锄头耕地（H13）]');
+{
+  const hoe = toolInfoById(toolItemId('hoe', 'iron'))!;
+  const pick = toolInfoById(toolItemId('pickaxe', 'iron'))!;
+  check('锄头能耕地', canTill(hoe));
+  check('镐不能耕地', !canTill(pick));
+  check('空手不能耕地', !canTill(null));
+  equal('泥土 → 耕地', tillableTo(Block.DIRT), Block.FARMLAND);
+  equal('草方块 → 耕地（原版也会把草皮一起翻掉）', tillableTo(Block.GRASS_BLOCK), Block.FARMLAND);
+  equal('石头耕不动', tillableTo(Block.STONE), undefined);
+  equal('沙子耕不动', tillableTo(Block.SAND), undefined);
+  equal('耕地本身不用再耕', tillableTo(Block.FARMLAND), undefined);
+  // 小麦只能种在耕地上：种子物品带着"放置成第 0 阶段"的映射
+  equal('小麦种子放置后是最初阶段', itemDef(Item.WHEAT_SEEDS)?.block, Block.WHEAT_STAGE0);
+  equal('小麦有 4 个阶段', WHEAT_STAGES.length, 4);
+  equal('成熟阶段是最后一个', WHEAT_STAGES[3], Block.WHEAT_STAGE3);
+  check('耕地徒手可采', isHandHarvestable(Block.FARMLAND));
+  check('小麦徒手可采（一碰就掉）', WHEAT_STAGES.every((id) => isHandHarvestable(id)));
+  equal('耕地硬度 0.6', blockHardness(Block.FARMLAND), 0.6);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

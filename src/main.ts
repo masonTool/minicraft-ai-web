@@ -122,6 +122,8 @@ import {
   toolInfoById,
   toolItemId,
   type ToolInfo,
+  canTill,
+  tillableTo,
 } from './core/registry/tools.ts';
 import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
@@ -2093,6 +2095,26 @@ class App {
   }
 
   /**
+   * 锄头耕地（H13）。
+   *
+   * 判定顺序与原版一致：**手上是锄头**且**准星对着土类方块**才耕；
+   * 上方必须是空气（原版也是这样，否则会把方块塞进作物里）。
+   * 判定本身抽成了 `tools.ts#tillableTo` / `canTill` 两个纯函数，好离线断言。
+   */
+  private tillSoil(x: number, y: number, z: number): boolean {
+    if (!canTill(this.heldTool)) return false;
+    const target = tillableTo(this.world.getBlock(x, y, z));
+    if (target === undefined) return false;
+    // 上方有东西就不耕（原版行为：不然耕地会"长出"方块里）
+    if (this.world.getBlock(x, y + 1, z) !== Block.AIR) return false;
+
+    this.world.setBlockAndUpdate(x, y, z, target);
+    this.audio.play('break_grass', { x, y, z });
+    this.damageHeldTool();
+    return true;
+  }
+
+  /**
    * 挤奶（J8）：拿空桶对着成年牛右键。
    * 幼体挤不出奶（原版也挤不出来），所以先判成年。
    */
@@ -3115,6 +3137,12 @@ class App {
 
     // 手上是弓时右键是"拉弓"，不放置也不使用（功能方块在上面已经处理过了）
     if (this.heldItemId === Item.BOW) return;
+
+    // 锄头耕地（H13）：拿着锄头右键泥土/草方块 → 变成耕地，不放置方块
+    if (this.tillSoil(this.hit.x, this.hit.y, this.hit.z)) {
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
 
     const blockId = this.selectedBlock;
     if (blockId === undefined) return;

@@ -163,6 +163,19 @@ const TOOL_BY_ID = new Map<number, ToolInfo>([
   [SHEARS_ITEM_ID, SHEARS_INFO],
 ]);
 
+/**
+ * 锄头能耕出耕地的方块（H13）。原版还认粗泥/灰化土/土径，我们目前只有前两种。
+ * @returns 耕完之后的方块 id；耕地不适合耕就返回 undefined
+ */
+export function tillableTo(blockId: number): number | undefined {
+  return blockId === Block.DIRT || blockId === Block.GRASS_BLOCK ? Block.FARMLAND : undefined;
+}
+
+/** 手上这东西能不能耕地（只有锄头行） */
+export function canTill(tool: ToolInfo | null | undefined): boolean {
+  return tool !== null && tool !== undefined && tool.type === 'hoe';
+}
+
 export function toolInfoById(itemId: number): ToolInfo | undefined {
   return TOOL_BY_ID.get(itemId);
 }
