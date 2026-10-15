@@ -19,6 +19,7 @@ import type { TextureAtlas } from './TextureAtlas.ts';
 import { applyFaceUvs, blockFaceTiles } from './atlasMesh.ts';
 import { Arrow } from '../core/entity/Arrow.ts';
 import { ItemEntity } from '../core/entity/ItemEntity.ts';
+import { itemDef } from '../core/registry/items.ts';
 import { Throwable } from '../core/entity/Throwable.ts';
 import type { Entity } from '../core/entity/Entity.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
@@ -73,7 +74,8 @@ export class EntityRenderer {
   private readonly meshes = new Map<number, THREE.Mesh>();
   private readonly arrowMeshes = new Map<number, THREE.Mesh>();
   private readonly throwableMeshes = new Map<number, THREE.Mesh>();
-  private arrowGeometry: THREE.BufferGeometry | null = null;
+  /** 箭的几何体按**物品 id** 缓存：药水箭各有自己的贴图（箭头上染了药水颜色） */
+  private readonly arrowGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly spriteGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly baseMaterial: THREE.ShaderMaterial;
@@ -223,7 +225,7 @@ export class EntityRenderer {
 
     let mesh = this.arrowMeshes.get(arrow.id);
     if (!mesh) {
-      mesh = new THREE.Mesh(this.arrow(), this.baseMaterial);
+      mesh = new THREE.Mesh(this.arrowGeometryFor(arrow.itemId), this.baseMaterial);
       this.arrowMeshes.set(arrow.id, mesh);
       this.object.add(mesh);
     }
@@ -246,17 +248,20 @@ export class EntityRenderer {
   }
 
   /** 箭的几何体（所有箭共用一份） */
-  private arrow(): THREE.BufferGeometry {
-    if (this.arrowGeometry) return this.arrowGeometry;
+  private arrowGeometryFor(itemId: number): THREE.BufferGeometry {
+    const cached = this.arrowGeometries.get(itemId);
+    if (cached) return cached;
+
     const geometry = new THREE.BoxGeometry(ARROW_THICKNESS, ARROW_THICKNESS, ARROW_LENGTH);
-    // 六面都用箭的图标贴图（斜着的贴图铺在小盒子上，看起来就是一支箭）
-    const uv = this.atlas.uv('item_arrow');
+    // 六面都用这支箭的图标贴图（斜着的贴图铺在小盒子上，看起来就是一支箭）。
+    // 药水箭的贴图是"箭头染了药水颜色"的那张，所以这里必须按物品 id 取。
+    const uv = this.atlas.uv(itemDef(itemId)?.tile ?? 'item_arrow');
     const attribute = geometry.getAttribute('uv') as THREE.BufferAttribute;
     for (let i = 0; i < attribute.count; i++) {
       attribute.setXY(i, uv[0] + (attribute.getX(i) > 0.5 ? uv[2] - uv[0] : 0), uv[1] + (attribute.getY(i) > 0.5 ? uv[3] - uv[1] : 0));
     }
     attribute.needsUpdate = true;
-    this.arrowGeometry = geometry;
+    this.arrowGeometries.set(itemId, geometry);
     return geometry;
   }
 
@@ -323,8 +328,10 @@ export class EntityRenderer {
     for (const mesh of this.meshes.values()) this.object.remove(mesh);
     this.meshes.clear();
     for (const geometry of this.blockGeometries.values()) geometry.dispose();
+    for (const geometry of this.arrowGeometries.values()) geometry.dispose();
     for (const geometry of this.spriteGeometries.values()) geometry.dispose();
     this.blockGeometries.clear();
+    this.arrowGeometries.clear();
     this.spriteGeometries.clear();
     for (const material of this.materialByLevel) material?.dispose();
     this.materialByLevel.length = 0;

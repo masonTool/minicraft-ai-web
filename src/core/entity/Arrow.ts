@@ -15,6 +15,7 @@
 
 import { Entity, entityIntersectsBox, type EntityContext } from './Entity.ts';
 import { Item } from '../registry/items.ts';
+import { tippedArrowEffectsOf } from '../survival/TippedArrow.ts';
 import { boxAt } from '../physics/AABB.ts';
 import { moveBody, type MovingBody } from '../physics/EntityMotion.ts';
 
@@ -45,6 +46,27 @@ export interface ArrowOptions {
    * 原版里"无限"附魔射出的箭**不可拾取**（否则等于无限刷箭），由调用方传 false。
    */
   pickable?: boolean;
+  /**
+   * 这一箭是**哪件物品**（默认普通箭）。
+   * 药水箭射出去之后捡回来必须还是原来那支 —— 否则一箭下去就"降级"成普通箭了。
+   */
+  itemId?: number;
+  /**
+   * 这一箭带的药水（K4 最后一步）：命中生物时按它挂 **1/8 时长**的效果
+   * （见 `survival/TippedArrow.ts`）。普通箭不传。
+   */
+  potionId?: number;
+}
+
+/** 补全默认值之后的选项（内部用，避免到处写 `?? 1`） */
+interface ResolvedArrowOptions {
+  fromPlayer: boolean;
+  damage: number;
+  knockback: number;
+  fireSeconds: number;
+  pickable: boolean;
+  itemId: number;
+  potionId?: number;
 }
 
 export class Arrow extends Entity implements MovingBody {
@@ -55,7 +77,7 @@ export class Arrow extends Entity implements MovingBody {
   dirY = 0;
   dirZ = -1;
 
-  private readonly options: Required<ArrowOptions>;
+  private readonly options: ResolvedArrowOptions;
   /** 命中过的生物 id，避免同一支箭在子步里重复打同一个目标 */
   private hitMobIds = new Set<number>();
 
@@ -76,8 +98,20 @@ export class Arrow extends Entity implements MovingBody {
       knockback: options.knockback ?? 1,
       fireSeconds: options.fireSeconds ?? 0,
       pickable: options.pickable ?? true,
+      itemId: options.itemId ?? Item.ARROW,
+      ...(options.potionId === undefined ? {} : { potionId: options.potionId }),
     };
     this.updateDirection();
+  }
+
+  /** 这一箭是哪件物品（渲染贴图与捡回来都用它） */
+  get itemId(): number {
+    return this.options.itemId;
+  }
+
+  /** 这一箭带的药水（普通箭是 undefined） */
+  get potionId(): number | undefined {
+    return this.options.potionId;
   }
 
   /** 当前朝向（单位向量） */
@@ -174,6 +208,13 @@ export class Arrow extends Entity implements MovingBody {
     const kz = length > 1e-6 ? this.vz / length : this.dirZ;
     mob.hurt(this.options.damage, kx * this.options.knockback, kz * this.options.knockback, ctx);
     if (this.options.fireSeconds > 0) mob.ignite(this.options.fireSeconds);
+    // 药水箭（K4 最后一步）：命中挂上药水的效果，时长是原药水的 1/8（原版规则）。
+    // 与喷溅药水的差别：**只作用于被射中的那一只**，没有范围结算（原版如此）
+    if (this.options.potionId !== undefined) {
+      for (const effect of tippedArrowEffectsOf(this.options.potionId)) {
+        mob.effects.apply(effect.id, effect.seconds, effect.amplifier);
+      }
+    }
     this.dead = true;
     return true;
   }
@@ -189,7 +230,8 @@ export class Arrow extends Entity implements MovingBody {
     const dz = this.z - (box.minZ + box.maxZ) / 2;
     if (dx * dx + dy * dy + dz * dz > PICKUP_RANGE * PICKUP_RANGE) return;
 
-    const leftover = ctx.pickup(Item.ARROW, 1);
+    // 捡回来的是**这一支本身**（药水箭捡回来还是药水箭，不能降级成普通箭）
+    const leftover = ctx.pickup(this.options.itemId, 1);
     if (leftover <= 0) this.dead = true;
   }
 }

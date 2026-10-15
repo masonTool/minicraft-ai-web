@@ -37,6 +37,7 @@ import {
   type PotionCloud,
 } from './core/survival/PotionCloud.ts';
 import { PLAYER_THROW_SPEED, Throwable, type ThrowableKind } from './core/entity/Throwable.ts';
+import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { ANVIL_SIZE, Anvil } from './core/container/Anvil.ts';
@@ -2075,15 +2076,19 @@ class App {
   /** 放出一支箭：扣箭、算伤害与附魔、给弓扣耐久 */
   private fireBow(charge: number): void {
     const effects = bowEffects(this.heldEnchants);
-    const arrows = this.inventory.countOf(Item.ARROW);
+    // 普通箭与药水箭都能射：按槽位顺序（快捷栏在前）取第一堆箭，
+    // 想射药水箭就把它摆在普通箭前面（`core/entity/ArrowAmmo.ts`）
+    const ammo = pickArrowAmmo(this.inventory.serialize());
+    const arrows = ammo?.total ?? 0;
     if (!canShoot(true, charge, arrows, effects)) {
       // 拉了半天没箭，得说一声——不然玩家只会觉得"弓坏了"
       if (arrows < 1) this.chat.push('没有箭了', 'error');
       return;
     }
+    if (!ammo) return;
 
     const used = arrowsConsumed(effects);
-    if (used > 0) this.inventory.consume(Item.ARROW, used);
+    if (used > 0) this.inventory.consume(ammo.itemId, used);
 
     const cosPitch = Math.cos(this.pitch);
     const dirX = -Math.sin(this.yaw) * cosPitch;
@@ -2103,6 +2108,9 @@ class App {
         fireSeconds: effects.flame > 0 ? FLAME_SECONDS : 0,
         // 无限附魔射出的箭不能捡（否则等于无限刷箭）
         pickable: effects.infinity === 0,
+        // 这一箭是哪件物品 + 带没带药水（药水箭命中时按 1/8 时长挂效果）
+        itemId: ammo.itemId,
+        ...(ammo.potionId === undefined ? {} : { potionId: ammo.potionId }),
       },
     );
 
