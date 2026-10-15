@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-15 · 提交总数 114（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-15 · 提交总数 122（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 176 项 —— 已完成 **101**、进行中 **57**、待办 18；
+- 进度口径：`TASKS.md` 共 176 项 —— 已完成 **101**、进行中 **58**、待办 17；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -61,12 +61,13 @@ npm run dev            # http://localhost:5173
 | 随机刻与流体 | `core/tick/RandomTicks.ts`（随机刻行为表 + 计划刻队列）、`core/world/Fluids.ts`（液面等级、无限水源、水火相遇） |
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
 | 附魔台与附魔表 | `core/registry/enchantments.ts`（38 条对齐原版 1.18）+ `core/crafting/Enchanting.ts`（候选掷点）+ `core/container/EnchantTable.ts`（台面状态）+ 背包界面里的附魔台模式；新方块**附魔台/书架**、新材料**纸/书**；书架加成照抄原版判定（5×5 外圈 + 隔一格空气）上限 15；三个候选槽花费沿用原版 `getEnchantmentCost`、青金石 1/2/3。⚠️ 38 条里已有 13 条真接了效果，其余在候选里带 `*` 标记 |
+| 弹射物与弓 | `core/entity/Arrow.ts`（重力/逐段命中判定/撞墙插住/可拾回/60 秒消失）+ `core/entity/Bow.ts`（拉满 1 秒、15% 阈值、箭速 60 格/秒、伤害线性到 6 点）+ 弓/箭/燧石/线四件物品与配方（燧石来自砂砾 10% 的"概率替换"掉落）。玩家按住右键拉弓、松手放箭；**骷髅改远程**（射程 16、每 2 秒一箭、贴到 5 格内后退），命中的箭走 `'projectile'` 伤害类型 → 弹射物保护有了来源。弓的附魔全部接线：力量/冲击/火矢/无限 |
 | 铁砧与改造 | `core/crafting/Anvil.ts` + `core/container/Anvil.ts` + 界面里的铁砧模式：重命名（1 级）、材料修复（每材料修 1/4 上限）、合并同种装备（耐久相加 +12%、附魔取更高）、附魔书（按稀有度计费）；**累积惩罚** `2 × 旧值 + 1`，总价 ≥ 40 判"过于昂贵"。铁砧/铁块为新方块；装备可带自定义名字（提示框标题换成新名字） |
 | 经验与等级 | `core/survival/Experience.ts`：原版三段升级曲线（`2L+7 / 5L-38 / 9L-158`）；来源＝击杀生物（5 / 3 / 末影龙 12000）+ 挖矿（只给部分矿石，铁矿金矿不给）+ 熔炉取出（小数攒够 1 点）；经验条在快捷栏正上方、等级数字压在条中间；`/xp add\|set\|query`；死亡掉光、随存档走。⚠️ 经验球实体未做，所以是直接进账、死亡也捡不回来 |
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（385 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，143 条配方 + 11 条熔炼） |
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **36 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil，当前全绿；`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **37 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile，当前全绿；`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
 
 下一步的大头（队列与 TASKS.md 都能看到，按依赖顺序）：
 **经验值与附魔**（I5 → H9 附魔台 → K3 40+ 种附魔 → H8 铁砧）、
@@ -152,6 +153,9 @@ npm run dev            # http://localhost:5173
 | 原版 wiki 上那个数不一定是要填的数 | 食物表里两栏很容易写混：wiki 写"恢复 2.4 点饱和度"，而代码要填的 `saturationModifier` 是 **0.3**（= 2.4 ÷ (饥饿 4 × 2)）。第一版就是把 2.4 直接填了进去，苹果一口补 19.2 点饱和度。**把公式写进注释、再拿几组原版数值当断言**，这类"单位不对但量纲看起来对"的错才抓得住（本轮） |
 | 新加的贴图/物品不会自己出现在图集里 | 图集顺序表 `TILE_ORDER` 与 `PAINTERS` 是两处独立清单，加物品时**必须两边都加**（`test:armor` / `test:tool` 里都有"每件装备的图标都在图集名单里"的断言兜着）。食物这次照抄了同一套做法（本轮） |
 | **离线测试自己从来没被类型检查过** | `tsconfig.json` 只 include `src` 与 `vite.config.ts`，`tools/` 与 `tests/` 只经 esbuild 打包运行——而 esbuild 只剥类型、不做检查。给 `CommandContext` 加了三个方法之后，`tools/command-test.ts` 的桩对象没跟着改，`npx tsc --noEmit` **依然全绿**，跑到那个测试才炸。已加 `tsconfig.tools.json` + `npm run typecheck:tools` 把缺口量化：当前 121 处历史错误，见 TASKS O6（本轮） |
+| 概率掉落有两种语义，别混一张表 | "额外掉一份"（树叶 0.5% 掉苹果）与"顶替原掉落"（砂砾 10% 掉燧石）在代码上长得几乎一样，混在一张表里迟早搞错。分成 `RARE_DROPS` / `REPLACE_DROPS` 两张表，破坏路径里的顺序也写成一行注释（精准采集 → 替换 → 常规 → 额外）（本轮） |
+| 射程要在"发现范围"之内 | 测"射程外会靠近"时把玩家放到 20 格外没问题，放到 40 格就失败——因为 `followRange`（24）先一步让骷髅**根本没发现玩家**，它去游荡了。两个半径的关系（followRange > range）是这类"没反应"的第一嫌疑（本轮） |
+| 实体层报伤害类型用字面量联合 | 箭要传 `'projectile'` 才能让"弹射物保护"生效，但实体层不该 import 生存模块的 `DamageCause`。用 `EntityDamageCause`（子集字面量联合）既不断层，又能让 `typecheck` 挡住拼错（本轮） |
 | 失败原因要"从最具体排到最笼统" | 铁砧的提示最初把"完好的镐 + 钻石"报成"过于昂贵"——玩家会以为是自己等级不够，其实是根本不需要修。把所有失败原因按"具体 → 笼统"排序后，每种情况都能给出真正有用的那句话（本轮） |
 | 累积惩罚不能拿"两件之和"再算一遍 | 产物的惩罚是 `2 × max(左, 右) + 1`。写成 `2 × (左 + 右) / 2 + 1` 看着差不多，实际会让惩罚翻倍增长，第三次上铁砧就爆表——这类"看着像等价变形"的代数错误最难靠肉眼发现（本轮） |
 | 附魔"表里登记了"和"效果生效了"是两件事 | 38 条附魔一次性登记很容易，但每条效果要改的地方差得远（挖掘速度在 `tools.ts`、掉落数量在破坏路径、减伤在 `armor.ts`、攻击伤害在近战入口）。**先做扎实 6 条，其余在候选里带 `*` 并在界面写明"效果未接"**——比 38 条都"看起来能附"但 32 条毫无作用要诚实得多（本轮） |
