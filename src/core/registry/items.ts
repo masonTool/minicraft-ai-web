@@ -11,7 +11,7 @@
  */
 
 import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
-import { POTION_IDS, POTION_ITEMS } from './potions.ts';
+import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
 import { Block, WHEAT_STAGES, Wood, blockDef, cropOf, wheatStageOf, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
@@ -208,6 +208,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.FLINT, name: 'minecraft:flint', tile: 'item_flint' },
   { id: Item.STRING, name: 'minecraft:string', tile: 'item_string' },
   { id: Item.ARROW, name: 'minecraft:arrow', tile: 'item_arrow' },
+  // 药水箭（K4 最后一步）：28 支，id = 饮用型 + 200，贴图与名字都由药水表生成
+  ...TIPPED_ARROWS.map((entry) => ({ id: entry.id, name: `minecraft:${entry.key}`, tile: `item_${entry.key}`, maxStack: 64 })),
   // ---- 投掷物（K4 尾巴）：扔出去的是这两个 + 喷溅药水
   { id: Item.SNOWBALL, name: 'minecraft:snowball', tile: 'item_snowball', maxStack: 16 },
   { id: Item.EGG, name: 'minecraft:egg', tile: 'item_egg', maxStack: 16 },
@@ -273,10 +275,10 @@ const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, .
  * 物品表的长度（按 id 索引）。
  *
  * ⚠️ 改小会**静默丢掉** id 更大的物品（数组直接截断），所以每次新增一段 id 都要回来看这里。
- * 当前最大的一段是**滞留药水 1280~1319**（饮用型 id + 100，见 `potions.ts`），
- * 再上面是喷溅药水 1230~1269，所以留到 1400。
+ * 当前最大的一段是**药水箭 1380~1419**（饮用型 id + 200，见 `potions.ts`）；
+ * 再下面是滞留药水 1280~1319、喷溅药水 1230~1269，所以留到 1500。
  */
-const MAX_ITEM_ID = 1400;
+const MAX_ITEM_ID = 1500;
 
 /** 按 id 索引的物品表（未定义的 id 为 undefined） */
 export const ITEMS: (ItemDef | undefined)[] = new Array(MAX_ITEM_ID).fill(undefined);
@@ -456,7 +458,19 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
 };
 
 /** 工具与武器（25 种由 TOOL_SPECS 派生，另外加上单独注册的剪刀） */
-const TOOLS = new Set<number>([...TOOL_SPECS.map((spec) => spec.id), Item.SHEARS]);
+/**
+ * 工具与武器：工具表 + 剪刀 + **弓与箭（含 28 支药水箭）**。
+ *
+ * 弓/箭原来没登记，于是掉进"矿石与材料"——一个叫"工具与武器"的分类里没有弓和箭，
+ * 玩家第一次找就会觉得哪里不对（批次 27 顺手修正）。
+ */
+const TOOLS = new Set<number>([
+  ...TOOL_SPECS.map((spec) => spec.id),
+  Item.SHEARS,
+  Item.BOW,
+  Item.ARROW,
+  ...TIPPED_ARROWS.map((entry) => entry.id),
+]);
 
 /** 盔甲（20 件，由 ARMOR_SPECS 派生） */
 const ARMOR = new Set<number>(ARMOR_SPECS.map((spec) => spec.id));

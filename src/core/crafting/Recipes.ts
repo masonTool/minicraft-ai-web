@@ -24,6 +24,7 @@ import { ARMOR_SPECS } from '../registry/armor.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import { Item, dyeItemId } from '../registry/items.ts';
 import { TOOL_SPECS } from '../registry/tools.ts';
+import { DRINKABLE, lingeringIdOf, tippedArrowIdOf } from '../registry/potions.ts';
 
 export interface RecipeResult {
   id: number;
@@ -353,6 +354,14 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Block.SNOW_BLOCK, count: 1 },
     ingredients: [Item.SNOWBALL, Item.SNOWBALL, Item.SNOWBALL, Item.SNOWBALL],
   },
+  // ---- 药水箭（K4 最后一步）：滞留药水 + 8 支箭 → 8 支药水箭（原版配方，1 瓶出 8 支）
+  // 由药水表展开而不是手写 28 条：漏写一条只会表现成"某种药水箭合不出来"，不报错。
+  // ⚠️ 必须用**滞留型**（不是饮用型/喷溅型）——这一条由断言盯着。
+  ...DRINKABLE.map((potion) => ({
+    kind: 'shapeless' as const,
+    result: { id: tippedArrowIdOf(potion.id), count: 8 },
+    ingredients: [lingeringIdOf(potion.id), ...Array<number>(8).fill(Item.ARROW)],
+  })),
   // ---- 面包（H13）：3 个小麦横排（原版）
   {
     kind: 'shaped' as const,

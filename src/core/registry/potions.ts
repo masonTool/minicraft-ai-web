@@ -408,6 +408,79 @@ export function lingeringOf(potion: PotionEntry): PotionEntry | undefined {
 }
 
 /**
+ * 药水箭的 id 偏移：**饮用型 id + 200**（K4 最后一块）。
+ *
+ * 偏移一览（一段一段排开，互不重叠，`test:tipped` 里有"全表不撞车"的断言）：
+ *
+ *   饮用 1180~1219 · 喷溅 +50 = 1230~1269 · 滞留 +100 = 1280~1319 · **药水箭 +200 = 1380~1419**
+ */
+export const TIPPED_ARROW_ID_OFFSET = 200;
+
+/** 饮用型 id → 药水箭 id */
+export function tippedArrowIdOf(potionId: number): number {
+  return potionId + TIPPED_ARROW_ID_OFFSET;
+}
+
+/**
+ * 一支药水箭。
+ *
+ * 它**不是药水**（不能喝、不能酿），所以单独一张表而不是塞进 `POTIONS`：
+ * 混进去的话酿造链与贴图生成那些"遍历药水表"的循环都要额外判断，
+ * 而它们是这批功能里最容易漏改的地方。效果表仍然与药水**同源**（直接引用）。
+ */
+export interface TippedArrowEntry {
+  readonly id: number;
+  readonly key: string;
+  readonly name: string;
+  /** 箭上带的是哪瓶药水：命中生物时按它的效果表挂 1/8 时长（见 `survival/TippedArrow.ts`） */
+  readonly potionId: number;
+  readonly variant: string;
+  readonly tier: PotionTier;
+  readonly effects: readonly PotionEffectEntry[];
+}
+
+/** 药水箭的名字：`药水箭（迅捷 · II）`——后缀与药水名同源（`romanLevel` 吃的是 amplifier） */
+function tippedArrowName(potion: PotionEntry, variantName: string): string {
+  const short = variantName.endsWith('药水') ? variantName.slice(0, -'药水'.length) : variantName;
+  const tier =
+    potion.tier === 'long'
+      ? ' · 延长'
+      : potion.tier === 'strong'
+        ? ` · ${romanLevel(potion.effects[0]!.amplifier)}`
+        : '';
+  return `药水箭（${short}${tier}）`;
+}
+
+/** 全部药水箭：**每种饮用型各一支，共 28 支**（原版就是"滞留药水 + 8 支箭"合出来的） */
+export const TIPPED_ARROWS: readonly TippedArrowEntry[] = DRINKABLE.map((potion) => {
+  const variant = POTION_VARIANTS.find((entry) => entry.key === potion.variant);
+  return {
+    id: tippedArrowIdOf(potion.id),
+    key: `tipped_arrow_${potion.key}`,
+    name: tippedArrowName(potion, variant?.name ?? AWKWARD.name),
+    potionId: potion.id,
+    variant: potion.variant,
+    tier: potion.tier,
+    effects: potion.effects,
+  };
+});
+
+/** 按物品 id 找一支药水箭 */
+export function tippedArrowById(itemId: number): TippedArrowEntry | undefined {
+  return TIPPED_ARROWS.find((arrow) => arrow.id === itemId);
+}
+
+/** 拿"某瓶药水"对应的药水箭 */
+export function tippedArrowOfPotion(potionId: number): TippedArrowEntry | undefined {
+  return tippedArrowById(tippedArrowIdOf(potionId));
+}
+
+/** 某个物品 id 是不是药水箭 */
+export function isTippedArrowItem(itemId: number): boolean {
+  return tippedArrowById(itemId) !== undefined;
+}
+
+/**
  * 各效果的**基础档**液体颜色（对照游戏里的大致观感）。
  *
  * 放在数据层而不是渲染层：**贴图（瓶子）、粒子（药水云）、说明**都要用同一个颜色，

@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import { DYE_COLORS, TERRACOTTA_BASE, WOOD_TYPES, terracottaColor } from '../core/registry/colors.ts';
-import { POTIONS, potionColor } from '../core/registry/potions.ts';
+import { POTIONS, TIPPED_ARROWS, potionById, potionColor } from '../core/registry/potions.ts';
 
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from './atlasLayout.ts';
 
@@ -1037,18 +1037,42 @@ PAINTERS.item_string = (x, y, rng) => {
 };
 
 /** 箭：斜着的木杆 + 右上角的灰色箭头 + 左下角的羽毛 */
-PAINTERS.item_arrow = (x, y, rng) => {
-  const jitter = rng() * 10 - 5;
-  // 杆：从左上到右下的斜线（斜着放才像一支箭）
-  const along = x - y;
-  if (Math.abs(along) > 1.2) return [0, 0, 0, 0];
-  if (x < 2 || x > 14 || y < 1 || y > 14) return [0, 0, 0, 0];
-  // 箭头在左上（x 小 y 小）
-  if (x + y <= 6) return [clamp255(196 + jitter), clamp255(196 + jitter), clamp255(202 + jitter), 255];
-  // 羽毛在右下
-  if (x + y >= 22) return [clamp255(236 + jitter), clamp255(236 + jitter), clamp255(230 + jitter), 255];
-  return [clamp255(146 + jitter), clamp255(104 + jitter), clamp255(56 + jitter), 255];
-};
+/**
+ * 箭（`tip` 给了就是**药水箭**：箭头按药水颜色染）。
+ *
+ * 药水箭必须一眼能分——它与普通箭在背包里挨着放，只有箭头颜色不同，
+ * 但"射出去之后挂什么效果"完全取决于它是哪一支（与药水瓶子的配色同源，
+ * 见数据层的 `potionColor`）。
+ */
+function arrowPainter(tip: readonly [number, number, number] | null = null): Painter {
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    // 杆：从左上到右下的斜线（斜着放才像一支箭）
+    const along = x - y;
+    if (Math.abs(along) > 1.2) return [0, 0, 0, 0];
+    if (x < 2 || x > 14 || y < 1 || y > 14) return [0, 0, 0, 0];
+    // 箭头在左上（x 小 y 小）
+    if (x + y <= 6) {
+      if (!tip) return [clamp255(196 + jitter), clamp255(196 + jitter), clamp255(202 + jitter), 255];
+      return [clamp255(tip[0] * 1.05 + jitter), clamp255(tip[1] * 1.05 + jitter), clamp255(tip[2] * 1.05 + jitter), 255];
+    }
+    // 羽毛在右下
+    if (x + y >= 22) return [clamp255(236 + jitter), clamp255(236 + jitter), clamp255(230 + jitter), 255];
+    // 箭杆中段：药水箭再染一小段，这样"远远扫一眼"也能看出它不是普通箭
+    if (tip && x + y >= 12 && x + y <= 16) {
+      return [clamp255(tip[0] * 0.85 + jitter), clamp255(tip[1] * 0.85 + jitter), clamp255(tip[2] * 0.85 + jitter), 255];
+    }
+    return [clamp255(146 + jitter), clamp255(104 + jitter), clamp255(56 + jitter), 255];
+  };
+}
+
+PAINTERS.item_arrow = arrowPainter();
+
+// 药水箭：28 支，箭头颜色与对应的药水瓶子同源
+for (const arrow of TIPPED_ARROWS) {
+  const potion = potionById(arrow.potionId);
+  PAINTERS[`item_${arrow.key}`] = arrowPainter(potion ? potionColor(potion) : null);
+}
 
 /** 弓：左侧木弧 + 一条弦 */
 PAINTERS.item_bow = (x, y, rng) => {

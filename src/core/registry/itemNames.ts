@@ -27,7 +27,8 @@ import { ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armo
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
 import { SPLASH_RADIUS, isInstantEffect } from '../survival/SplashPotion.ts';
 import { CLOUD_DURATION, CLOUD_PULSE_INTERVAL, LINGERING_RADIUS } from '../survival/PotionCloud.ts';
-import { POTIONS, type PotionEntry } from './potions.ts';
+import { POTIONS, TIPPED_ARROWS, potionById, type PotionEntry, type TippedArrowEntry } from './potions.ts';
+import { tippedArrowEffects } from '../survival/TippedArrow.ts';
 import { enchantmentById, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
 import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
@@ -612,9 +613,15 @@ const POTION_NOTES: Record<string, string> = {
   slowness: '原版里这瓶通常是用来砸别人的——喷溅药水还没做，现在只能自己喝。',
 };
 
-/** 时长文案：`45 秒` / `3 分钟` / `1 分 30 秒` */
+/**
+ * 时长文案：`45 秒` / `3 分钟` / `1 分 30 秒`。
+ *
+ * ⚠️ 小数**向下取整**（与原版的 mm:ss 一样）：药水箭的时长是折算出来的
+ * （45 秒 → 5.625 秒），四舍五入会让说明写着"6 秒"而实际只有 5.6 秒——
+ * 说明书宁可少说一点，也不该承诺打不到的时间。
+ */
 function durationLabel(seconds: number): string {
-  const total = Math.round(seconds);
+  const total = Math.floor(seconds);
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   if (minutes === 0) return `${rest} 秒`;
@@ -657,6 +664,27 @@ for (const potion of POTIONS) {
   const key = `potion_${potion.key}`;
   put(key, potion.name);
   DESCRIPTIONS[key] = potionDescription(potion);
+}
+
+// ---- 药水箭（K4 最后一步）：28 支，名字与说明同样由数据表生成。
+// ⚠️ 说明里的时长必须是**折算之后**的（1/8），否则文案与实际射出去的箭不符——
+// 所以这里直接用运行时那条同一个函数（`tippedArrowEffects`），不另抄一份数字。
+
+function tippedArrowDescription(arrow: TippedArrowEntry): string {
+  const potion = potionById(arrow.potionId);
+  if (!potion || potion.base) return '半成品做的箭：射中生物也不会有任何效果（只能当普通箭用）。';
+  const effects = tippedArrowEffects(potion).map((effect) => {
+    const level = effect.amplifier > 0 ? ` ${romanLevel(effect.amplifier + 1)}` : '';
+    const label = `${EFFECT_LABELS[effect.id]}${level}`;
+    if (isInstantEffect(effect.id)) return `${label}（立刻生效）`;
+    return `${label} ${durationLabel(effect.seconds)}`;
+  });
+  return `射中生物后获得${effects.join('、')}（药水箭只给原药水 **1/8** 的时长）。酿造：滞留药水 + 8 支箭 → 8 支。`;
+}
+
+for (const arrow of TIPPED_ARROWS) {
+  put(arrow.key, arrow.name);
+  DESCRIPTIONS[arrow.key] = tippedArrowDescription(arrow);
 }
 
 // ---------------------------------------------------------------- 对外接口
