@@ -276,11 +276,41 @@
       .recipe-empty { padding: 20px; text-align: center; color: #5a5a5a; }
       .recipe-card {
         display: flex; align-items: center; gap: 10px;
-        padding: 6px 8px; background: #b4b4b4;
+        padding: 7px 9px; background: #b4b4b4;
         border: 2px solid; border-color: #d8d8d8 #7a7a7a #7a7a7a #d8d8d8;
+        border-radius: var(--radius-sm);
       }
       .recipe-card.craftable { background: #b9c9b0; }
       .recipe-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+      /* ---------------- 摆放位置（批次 29） ----------------
+         形状配方画成 `grid × grid` 的格子（**空格也画**：哪一格要空着也是配方的一部分）；
+         无序配方画成一排槽位并写明"摆哪一格都行"。 */
+      .recipe-layout {
+        display: grid; gap: 2px;
+        grid-template-columns: repeat(var(--layout-cols, 3), 26px);
+      }
+      .recipe-layout[data-grid='2'] { --layout-cols: 2; }
+      .recipe-layout[data-grid='3'] { --layout-cols: 3; }
+      /* 无序配方不占网格：排成一排，视觉上明确"这不是摆放顺序" */
+      .recipe-layout.shapeless {
+        display: flex; flex-wrap: wrap; gap: 3px;
+        padding: 3px; border-radius: var(--radius-sm);
+        background: repeating-linear-gradient(45deg, #00000010, #00000010 6px, transparent 6px, transparent 12px);
+      }
+      .recipe-slot {
+        width: 26px; height: 26px; display: grid; place-items: center;
+        background: var(--slot-bg);
+        border: 1px solid; border-color: var(--slot-edge-dark) #cfcfcf #cfcfcf var(--slot-edge-dark);
+        border-radius: 2px;
+      }
+      .recipe-slot.empty { background: #9d9d9d; border-color: #8a8a8a; }
+      .recipe-slot.missing { box-shadow: inset 0 0 0 2px #d06a6a; }
+      .recipe-arrow { color: #4a4a4a; font-size: 16px; line-height: 1; }
+      /* "在哪摆"：2×2 背包就能做、3×3 要工作台——把这条信息单独摆一行，别混在材料里 */
+      .recipe-station {
+        flex: 1 1 100%; color: #3f3f3f; font-size: 11px;
+      }
       .recipe-result { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #1c1c1c; }
       .recipe-result canvas { image-rendering: pixelated; }
       .recipe-ingredients { display: flex; flex-wrap: wrap; gap: 4px; }

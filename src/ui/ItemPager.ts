@@ -18,6 +18,17 @@
 export const PAGE_SIZE_WIDE = 60;
 /** 窄屏（手机竖屏等）每页条数：8 列 × 4 行，与窄屏媒体查询里的列数一致 */
 export const PAGE_SIZE_NARROW = 32;
+
+/**
+ * **卡片列表**的每页条数（配方书用）。
+ *
+ * 与格子网格分开定：一张配方卡比一个 34px 的格子高得多（要画摆放用的 2×2/3×3 小格、
+ * 产物、材料与按钮），一页 60 张会滚到天边。
+ * 值也不是拍脑袋来的——配方卡画满 181 张要 435ms（1348 个小格），
+ * 分页之后只画一页，重建降到可忽略（见 `test:ui` 与 `ui-acceptance`）。
+ */
+export const CARD_PAGE_SIZE_WIDE = 18;
+export const CARD_PAGE_SIZE_NARROW = 8;
 /** 窄屏判定阈值（px）：与 CSS 里那个 `@media (max-width: 900px)` 是同一个数 */
 export const NARROW_MAX_WIDTH = 900;
 
@@ -29,6 +40,11 @@ export function isNarrowViewport(width: number): boolean {
 /** 该视口下每页显示多少件 */
 export function pageSizeFor(width: number): number {
   return isNarrowViewport(width) ? PAGE_SIZE_NARROW : PAGE_SIZE_WIDE;
+}
+
+/** 该视口下每页显示多少张卡片（配方书这类列表） */
+export function cardPageSizeFor(width: number): number {
+  return isNarrowViewport(width) ? CARD_PAGE_SIZE_NARROW : CARD_PAGE_SIZE_WIDE;
 }
 
 /** 一共几页（空列表也算 1 页，这样"第 1/1 页 · 共 0 件"说的是人话） */

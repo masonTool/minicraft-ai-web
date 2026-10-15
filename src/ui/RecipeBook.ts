@@ -11,6 +11,8 @@
 
 import type { Inventory } from '../core/container/Inventory.ts';
 import { buildRecipeEntries, matchesRecipe, type RecipeEntry } from '../core/crafting/RecipeBook.ts';
+import { recipeLayout, stationLabel, type RecipeLayout } from '../core/crafting/RecipeLayout.ts';
+import { cardPageSizeFor, clampPage, pageCount, pageLabel, slicePage } from './ItemPager.ts';
 import { SMELTING_RECIPES, SMELTING_TIME } from '../core/crafting/Smelting.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import type { Recipe } from '../core/crafting/Recipes.ts';
@@ -33,6 +35,13 @@ export class RecipeBook {
   private query = '';
   /** 上次画出来的条目数（验收脚本用） */
   private entryCount = 0;
+  /** 当前页（0 起）；改搜索词会回到第 1 页 */
+  private page = 0;
+  private readonly panelEl: HTMLDivElement;
+  private readonly pagerEl: HTMLDivElement;
+  private readonly prevButton: HTMLButtonElement;
+  private readonly nextButton: HTMLButtonElement;
+  private readonly pageLabel: HTMLSpanElement;
 
   constructor(
     host: HTMLElement,
@@ -44,8 +53,9 @@ export class RecipeBook {
     this.root.id = 'recipe-book';
     this.root.classList.add('hidden');
 
-    const panel = document.createElement('div');
-    panel.className = 'recipe-panel';
+    this.panelEl = document.createElement('div');
+    this.panelEl.className = 'recipe-panel';
+    const panel = this.panelEl;
 
     // ---- 标题栏
     const header = document.createElement('div');
@@ -63,6 +73,8 @@ export class RecipeBook {
     this.searchEl.placeholder = '搜索物品或材料（中文/英文都行）';
     this.searchEl.addEventListener('input', () => {
       this.query = this.searchEl.value;
+      // 搜索是从头筛一遍，页码当然要回到第 1 页
+      this.page = 0;
       this.render();
     });
 
@@ -82,7 +94,19 @@ export class RecipeBook {
     this.smeltingEl = document.createElement('div');
     this.smeltingEl.className = 'recipe-smelting';
 
-    panel.append(header, this.listEl, this.smeltingEl);
+    // ---- 翻页条（与创造物品栏同一套类名与样式）
+    this.pagerEl = document.createElement('div');
+    this.pagerEl.className = 'inv-pager hidden';
+    this.prevButton = this.makePagerButton('‹ 上一页', () => this.flipPage(-1));
+    this.nextButton = this.makePagerButton('下一页 ›', () => this.flipPage(1));
+    this.pageLabel = document.createElement('span');
+    this.pageLabel.className = 'inv-page-label';
+    this.pageLabel.dataset.role = 'label';
+    this.prevButton.dataset.role = 'prev';
+    this.nextButton.dataset.role = 'next';
+    this.pagerEl.append(this.prevButton, this.pageLabel, this.nextButton);
+
+    panel.append(header, this.listEl, this.pagerEl, this.smeltingEl);
     this.root.append(panel);
     host.appendChild(this.root);
 
@@ -125,6 +149,12 @@ export class RecipeBook {
     const craftable = entries.filter((entry) => entry.craftable).length;
     this.summaryEl.textContent = `共 ${entries.length} 条 · 现在能做 ${craftable} 条`;
 
+    // 分页（批次 29）：摆放位置让每张卡片重了不少——181 张一起画要 400ms 以上
+    // （1348 个摆放小格），而搜索框每敲一个字都会重建。只画当前页就回到可忽略。
+    const pageSize = cardPageSizeFor(this.viewportWidth);
+    this.page = clampPage(this.page, entries.length, pageSize);
+    const visible = slicePage(entries, this.page, pageSize);
+
     this.listEl.replaceChildren();
     if (entries.length === 0) {
       const empty = document.createElement('div');
@@ -132,10 +162,46 @@ export class RecipeBook {
       empty.textContent = '没有匹配的配方';
       this.listEl.appendChild(empty);
     } else {
-      for (const entry of entries) this.listEl.appendChild(this.makeCard(entry));
+      for (const entry of visible) this.listEl.appendChild(this.makeCard(entry));
     }
 
+    this.renderPager(entries.length, pageSize);
     this.renderSmelting();
+  }
+
+  /** 翻页条：与创造物品栏共用 `.inv-pager` 那套样式（一处样式，两处使用） */
+  private renderPager(total: number, pageSize: number): void {
+    const pages = pageCount(total, pageSize);
+    this.pageLabel.textContent = pageLabel(this.page, total, pageSize);
+    this.prevButton.disabled = this.page <= 0;
+    this.nextButton.disabled = this.page >= pages - 1;
+    // 只有一页时整条隐藏：搜索到 3 条配方时不该还挂着一条翻不动的按钮
+    this.pagerEl.classList.toggle('hidden', pages <= 1);
+  }
+
+  private flipPage(delta: number): void {
+    this.page += delta;
+    this.render();
+    this.listEl.scrollTop = 0;
+    this.panelEl.scrollTop = 0;
+  }
+
+  private get viewportWidth(): number {
+    if (typeof window === 'undefined') return Number.POSITIVE_INFINITY;
+    return window.innerWidth;
+  }
+
+  private makePagerButton(label: string, onClick: () => void): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'inv-page-button';
+    button.textContent = label;
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      if (button.disabled) return;
+      onClick();
+    });
+    return button;
   }
 
   private makeCard(entry: RecipeEntry): HTMLDivElement {
@@ -144,6 +210,10 @@ export class RecipeBook {
     // 记下产物 id：验收脚本靠它找到"某条配方"的卡片（界面里没有别的稳定标识）
     card.dataset.resultId = String(entry.result.id);
     if (entry.craftable) card.classList.add('craftable');
+
+    // ---- 摆放位置（批次 29）：形状配方画成真正的格子，无序配方说明"摆哪都行"
+    const layout = recipeLayout(entry.recipe);
+    const layoutEl = this.makeLayout(layout);
 
     // ---- 产物
     const result = document.createElement('div');
@@ -158,7 +228,7 @@ export class RecipeBook {
       : itemLabel(entry.result.id);
     result.append(icon, name);
 
-    // ---- 材料
+    // ---- 材料（数量与"有/需要"）：格子已经说明摆放位置，这里只回答"够不够"
     const ingredients = document.createElement('div');
     ingredients.className = 'recipe-ingredients';
     for (const ingredient of entry.ingredients) {
@@ -199,10 +269,76 @@ export class RecipeBook {
 
     const main = document.createElement('div');
     main.className = 'recipe-main';
-    main.append(result, ingredients);
+    main.append(layoutEl, this.makeArrow(), result);
+
+    const meta = document.createElement('div');
+    meta.className = 'recipe-station';
+    // "在哪摆"也要说清楚：2×2 在背包里就能做，3×3 必须站到工作台前
+    meta.textContent = entry.recipe.kind === 'shapeless' ? '无序配方（摆哪一格都行）' : stationLabel(layout.station);
+    main.append(ingredients, meta);
 
     card.append(main, craft);
+    // 摆放说明挂在 title/aria 上：读屏与鼠标悬停都能拿到"每个格子放什么"
+    card.setAttribute('aria-label', `${itemLabel(entry.result.id)}：${layout.text}`);
+    card.title = layout.text;
     return card;
+  }
+
+  /**
+   * 画一条配方的摆放位置。
+   *
+   * - **形状配方**：`grid × grid` 的格子，格子里就是该放的物品（空格也画出来——
+   *   "哪一格要空着"和"哪一格要放东西"一样是配方的一部分）
+   * - **无序配方**：画成一排槽位，标题已经写了"摆哪一格都行"，不画成网格
+   *   （画成网格会让人以为必须按这个顺序摆）
+   */
+  private makeLayout(layout: RecipeLayout): HTMLDivElement {
+    const wrap = document.createElement('div');
+    wrap.className = `recipe-layout ${layout.kind}`;
+    wrap.dataset.kind = layout.kind;
+    wrap.dataset.grid = String(layout.grid);
+
+    if (layout.kind === 'shapeless') {
+      for (const id of layout.items) {
+        wrap.appendChild(this.makeLayoutSlot(id));
+      }
+      return wrap;
+    }
+
+    // 形状配方：空格也占位，这样"第 2 行第 2 格"的位置一眼可见
+    for (const id of layout.cells) {
+      wrap.appendChild(this.makeLayoutSlot(id));
+    }
+    // 3×3 才需要工作台；2×2 在背包里就能摆
+    wrap.classList.toggle('needs-table', layout.station === 'crafting_table');
+    return wrap;
+  }
+
+  /** 摆放格里的一格（`null` = 空格）；`data-item-id` 让验收脚本能核对位置 */
+  private makeLayoutSlot(id: number | null): HTMLDivElement {
+    const slot = document.createElement('div');
+    slot.className = 'recipe-slot';
+    if (id === null) {
+      slot.classList.add('empty');
+      return slot;
+    }
+    slot.dataset.itemId = String(id);
+    slot.title = itemLabel(id);
+    const canvas = document.createElement('canvas');
+    canvas.width = 26;
+    canvas.height = 26;
+    drawItemIcon(canvas, this.atlas, id, 24);
+    slot.appendChild(canvas);
+    if (this.inventory.countOf(id) === 0) slot.classList.add('missing');
+    return slot;
+  }
+
+  /** 摆放格与产物之间的箭头 */
+  private makeArrow(): HTMLSpanElement {
+    const arrow = document.createElement('span');
+    arrow.className = 'recipe-arrow';
+    arrow.textContent = '➜';
+    return arrow;
   }
 
   /** 熔炼表：输入 → 产物（熔炼要时间，这里只做展示，真正的烧炼在熔炉界面里） */
@@ -211,7 +347,8 @@ export class RecipeBook {
 
     const title = document.createElement('div');
     title.className = 'recipe-hint';
-    title.textContent = `熔炼（每个约 ${SMELTING_TIME} 秒，需要熔炉与燃料）`;
+    // 熔炼没有摆放顺序问题，但"哪一格放什么"同样要说清楚：原料在上、燃料在下
+    title.textContent = `熔炼：原料放上面的格子、燃料放下面的格子（每个约 ${SMELTING_TIME} 秒）`;
     this.smeltingEl.appendChild(title);
 
     const row = document.createElement('div');
@@ -239,6 +376,7 @@ export class RecipeBook {
   setQuery(query: string): void {
     this.query = query;
     this.searchEl.value = query;
+    this.page = 0;
     this.render();
   }
 
