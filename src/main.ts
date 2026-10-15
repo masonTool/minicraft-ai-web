@@ -64,6 +64,7 @@ import {
   type TickWorld,
 } from './core/tick/RandomTicks.ts';
 import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
+import { FIRE_IGNITE_SECONDS, igniteAt } from './core/world/Fire.ts';
 import {
   StatusEffects,
   effectLabel,
@@ -440,6 +441,12 @@ class App {
     // 作物生长要判光照（H13）：取天光与方块光的较大者，与原版"作物看最亮的那一项"一致
     lightAt: (x, y, z) =>
       Math.max(this.world.getSkyLight(x, y, z), this.world.getBlockLight(x, y, z)),
+    // 火焰被雨浇灭要判"露不露天"（I12）：这里必须是**天光**，
+    // 方块光会被火焰自己的 15 级照满，拿它当判据等于"在洞里也在下雨"
+    skyLightAt: (x, y, z) => this.world.getSkyLight(x, y, z),
+    // `raining` 每 tick 现写（见 `tickWorldBlocks`）——天气是变量，
+    // 用 getter 会拿到 `this` 指向对象本身而不是 App 实例
+    raining: false,
   };
   /**
    * 流体看到的世界：读写方块与状态 + 把后续流动排进计划刻队列。
@@ -1373,7 +1380,10 @@ class App {
     if (this.flameTimer <= 0) {
       this.flameTimer = 0.07;
       const feet = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 0.2), Math.floor(p.z));
-      if (feet === Block.LAVA || this.eyeMedium() === 'lava') {
+      // 站在火里、被点燃（离开火之后还会烧一会儿）或泡在岩浆里都冒火焰粒子——
+      // 这是"我着火了"唯一的视觉反馈，没有它玩家只会看到血量莫名其妙地掉
+      const onFire = this.stats.burning || feet === Block.FIRE;
+      if (feet === Block.LAVA || this.eyeMedium() === 'lava' || onFire) {
         this.particles.spawnFlame(
           p.x + (Math.random() - 0.5) * 0.6,
           p.y + 0.5 + Math.random() * 0.7,
@@ -2227,6 +2237,29 @@ class App {
   }
 
   /**
+   * 打火石点火（I12）：手上是打火石、准星对着方块 → 在**命中面的外侧**点一格火。
+   *
+   * 能不能点着由 `Fire.ts#canPlaceFire` 判定（对齐原版的两条活路：下方有实心顶面，
+   * 或 3×3×3 内有可燃方块）。点不着就返回 `false`——**不消耗耐久、不播音效**，
+   * 也不阻断后面的放置逻辑（与原版"对着石头缝隙点不燃"一致）。
+   */
+  private igniteWithFlint(): boolean {
+    if (this.heldItemId !== Item.FLINT_AND_STEEL || !this.hit) return false;
+    const x = this.hit.x + this.hit.nx;
+    const y = this.hit.y + this.hit.ny;
+    const z = this.hit.z + this.hit.nz;
+    if (!igniteAt(this.world, x, y, z)) return false;
+
+    this.damageHeldTool();
+    this.audio.play('flint', { x, y, z });
+    this.hand.swing();
+    // 联机：把这一格火广播给队友（否则只有自己这边在烧）
+    this.net.sendBlock(x, y, z, Block.FIRE, 0, this.dimension);
+    this.refreshHotbar();
+    return true;
+  }
+
+  /**
    * 空玻璃瓶装水（H10）：手上是玻璃瓶、准星对着水，就换成一瓶水。
    *
    * 严格照原版："手上必须是玻璃瓶"，不是玻璃瓶时返回 `false`，
@@ -2691,7 +2724,12 @@ class App {
 
     const mobs: Mob[] = [];
     for (const entity of this.entities.all) {
-      if (entity instanceof Mob) mobs.push(entity);
+      if (entity instanceof Mob) {
+        // 站在火里的生物会被点燃（I12）：原版生物走进火里同样会烧起来。
+        // 放在这一层（而不是 Mob 内部）是因为"当前这一格是不是火"要读世界
+        if (!entity.dead && this.mobInFire(entity)) entity.ignite(FIRE_IGNITE_SECONDS);
+        mobs.push(entity);
+      }
     }
     // 联机队友也交给同一个渲染器（只是不进 EntityManager，不跑 AI 与物理）
     for (const mob of this.remotePlayers.values()) mobs.push(mob);
@@ -2944,6 +2982,9 @@ class App {
 
     // 2) 随机刻：数量由游戏规则 randomTickSpeed 控制（0 = 关闭）
     const speed = this.rules.randomTickSpeed;
+    // 火焰浇灭要用"现在下不下雨"（I12）。放在 speed 判定之前，
+    // 否则关掉随机刻时火焰连"被雨浇灭"都做不到（那是随机刻行为的一部分）
+    this.tickWorld.raining = this.weather.raining;
     if (speed <= 0) return;
 
     const centerCx = toChunkCoord(this.physics.x);
@@ -3204,6 +3245,17 @@ class App {
       }
     }
     return false;
+  }
+
+  /**
+   * 这只生物的脚下或身体所在格是不是火（I12）。
+   * 只有两格要查（原版也是判实体 AABB 覆盖到的方块），不必扫整个包围盒。
+   */
+  private mobInFire(entity: { x: number; y: number; z: number; height: number }): boolean {
+    const bx = Math.floor(entity.x);
+    const bz = Math.floor(entity.z);
+    if (this.world.getBlock(bx, Math.floor(entity.y + 0.1), bz) === Block.FIRE) return true;
+    return this.world.getBlock(bx, Math.floor(entity.y + entity.height * 0.5), bz) === Block.FIRE;
   }
 
   /**
@@ -3553,6 +3605,13 @@ class App {
       return;
     }
 
+    // 打火石点火（I12）：放在放置之前——它本身不是方块物品，`selectedBlock` 是 undefined，
+    // 落到下面的放置分支就什么都不做
+    if (this.igniteWithFlint()) {
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
     const blockId = this.selectedBlock;
     if (blockId === undefined) return;
 
@@ -3743,6 +3802,8 @@ class App {
     return {
       eyeInWater: eye === Block.WATER,
       inLava: feet === Block.LAVA || body === Block.LAVA,
+      // 站在火里（I12）：脚或身体所在格是火焰 → 被点燃 + 每秒掉血
+      inFire: feet === Block.FIRE || body === Block.FIRE,
       // 仙人掌还没进方块表，先保持关闭（加了之后这里改成四邻检测）
       onCactus: false,
       suffocating: body !== Block.AIR && blockDef(body).opaque,
@@ -4325,6 +4386,8 @@ class App {
     dead: boolean;
     invulnerable: boolean;
     totalDamage: number;
+    /** 是否着火（I12）：验收脚本靠它确认"站在火里真的被点燃了" */
+    burning: boolean;
   } {
     return {
       health: this.stats.health,
@@ -4338,6 +4401,7 @@ class App {
       dead: this.stats.dead,
       invulnerable: this.stats.invulnerable,
       totalDamage: this.stats.totalDamage,
+      burning: this.stats.burning,
     };
   }
 

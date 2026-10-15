@@ -16,6 +16,7 @@
 
 import { Block, CROP_STAGES, blockDef, cropOf, Wood } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
+import { fireBehavior } from '../world/Fire.ts';
 
 /** 随机刻看到的世界 */
 export interface TickWorld {
@@ -28,6 +29,14 @@ export interface TickWorld {
    * 作物生长要用它；**不传就当全亮**——这样离线测试不必为了"能不能长"搭一套光照。
    */
   lightAt?: (x: number, y: number, z: number) => number;
+  /**
+   * 该点的**天光**等级（0~15）。
+   * 火焰被雨浇灭要判"露不露天"——方块光在这里没用（火自己就发 15 级方块光），
+   * 所以不能复用 `lightAt`。不传当 0（室内）。
+   */
+  skyLightAt?: (x: number, y: number, z: number) => number;
+  /** 是否正在下雨（雨天露天的火焰会被浇灭）；不传当不下雨 */
+  raining?: boolean;
 }
 
 export interface TickChunkView {
@@ -206,6 +215,8 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.BAMBOO, makeCaneBehavior(false, BAMBOO_MAX_HEIGHT)],
   [Block.CRIMSON_NYLIUM, makeNyliumBehavior(Block.CRIMSON_NYLIUM)],
   [Block.WARPED_NYLIUM, makeNyliumBehavior(Block.WARPED_NYLIUM)],
+  // 火焰（I12）：蔓延 / 被水与雨浇灭 / 没燃料就熄灭
+  [Block.FIRE, fireBehavior],
 ]);
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */

@@ -212,6 +212,8 @@ const EXPLICIT: Record<string, string> = {
   water: '水',
   lava: '岩浆',
   glowstone: '荧石',
+  // 火焰（I12）：没有物品（背包里拿不到），但方块的调试信息与提示里要用到这个名字
+  fire: '火焰',
   // 建材
   stone_bricks: '石砖',
   chiseled_stone_bricks: '錾制石砖',
@@ -379,6 +381,7 @@ const EXPLICIT: Record<string, string> = {
   shears: '剪刀',
   bucket: '桶',
   milk_bucket: '牛奶桶',
+  flint_and_steel: '打火石',
   // 弓与箭
   flint: '燧石',
   string: '线',
@@ -461,6 +464,8 @@ const DESCRIPTIONS: Record<string, string> = {
   feather: '鸡的掉落物，可以做箭与书。',
   chicken: '生鸡肉：可以吃，但生的会闹肚子，烤熟更安全。',
   torch: '照明方块：放在地面或墙上，夜里也能看清周围。',
+  fire: '点燃后会往附近的可燃方块上蔓延，被水或雨浇灭。站在里面会被点燃、每秒掉 1 点血。',
+  flint_and_steel: '对着方块右键点火（耐久 64 次）：下方是实心方块、或旁边有可燃方块才点得着。',
   crafting_table: '右键打开 3×3 合成台（背包里只有 2×2）。',
   furnace: '右键打开熔炉：烧炼矿石、烤食物，需要燃料。',
   chest: '右键打开 27 格存储空间，多个箱子可以并排摆放。',

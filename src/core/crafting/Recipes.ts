@@ -418,6 +418,12 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     pattern: [' ST', 'S T', ' ST'],
     key: { S: Item.STRING, T: Item.STICK },
   },
+  // 打火石（I12）：1 铁锭 + 1 燧石（原版是无序配方）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.FLINT_AND_STEEL, count: 1 },
+    ingredients: [Item.IRON_INGOT, Item.FLINT],
+  },
   // ⚠️ 与 原版 的差异：原版是 4 线 → 1 羊毛，方向相反。
   // 这里反着来是因为**蜘蛛还没做**，否则"线"没有任何来源，弓就永远做不出来。
   {

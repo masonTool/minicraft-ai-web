@@ -797,6 +797,33 @@ PAINTERS.oak_fence_gate = (x, y, rng) => {
   return base;
 };
 
+/**
+ * 火焰（I12）：三束高低不一的火苗，背景全透明（走 alpha 裁剪）。
+ *
+ * 渐变方向与原版一致：**底部中心最亮（接近白黄）、越往上越红**。
+ * 火苗高度按列取两条正弦叠加，于是边缘是锯齿状的火舌而不是一块方砖——
+ * 这张贴图贴在 `cross` 的两片交叉薄面上，所以左右边缘的锯齿会被看得很清楚。
+ */
+PAINTERS.fire = (x, y, rng) => {
+  // 每列的火苗高度（约 8~14 像素）
+  const height =
+    10 + Math.round(Math.sin(x * 0.8) * 2.2 + Math.sin(x * 2.1) * 1.1) + (hashString(`fire${x}`) % 3);
+  const up = 15 - y; // 距底部的行数（0 = 最底一行）
+  if (up > height) return [0, 0, 0, 0];
+
+  // 靠中心与靠底部更热：t=0 在底、t=1 在火苗尖
+  const t = up / Math.max(1, height);
+  const center = 1 - Math.abs(x - 7.5) / 8;
+  const heat = Math.max(0, Math.min(1, (1 - t) * (0.55 + center * 0.45)));
+  const jitter = rng() * 16 - 8;
+  return [
+    clamp255(198 + heat * 57 + jitter),
+    clamp255(58 + heat * 158 + jitter),
+    clamp255(18 + heat * 42),
+    255,
+  ];
+};
+
 PAINTERS.item_clay_ball = lump(
   [
     [168, 168, 178],
@@ -1102,6 +1129,36 @@ function arrowPainter(tip: readonly [number, number, number] | null = null): Pai
 }
 
 PAINTERS.item_arrow = arrowPainter();
+
+/**
+ * 打火石（I12）：左下角一块燧石、右上角一根铁条，中间几点火星。
+ * 三样东西凑在一起才认得出是"打火石"——只画铁条会像铁锭，只画燧石会像燧石。
+ */
+PAINTERS.item_flint_and_steel = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const dx = x - 5;
+  const dy = y - 10;
+  // 燧石：左下角的深灰三角
+  if (dy > -4 && dy < 4 && Math.abs(dx) < (4 - Math.abs(dy)) * 0.9 + 1) {
+    return [clamp255(78 + jitter), clamp255(78 + jitter), clamp255(84 + jitter), 255];
+  }
+  // 铁条：右上到左下的斜条（原版那把"打火的铁片"）
+  const along = x + y;
+  if (along >= 15 && along <= 22 && Math.abs(x - y) < 10) {
+    const shade = y < 8 ? 1.15 : 0.85;
+    return [
+      clamp255(186 * shade + jitter),
+      clamp255(186 * shade + jitter),
+      clamp255(196 * shade + jitter),
+      255,
+    ];
+  }
+  // 火星：铁条下端的两三点橙黄
+  if (hashString(`flintspark${x},${y}`) % 11 === 0 && x < 9 && y < 12) {
+    return [clamp255(246 + jitter), clamp255(186 + jitter), clamp255(72 + jitter), 255];
+  }
+  return [0, 0, 0, 0];
+};
 
 // 药水箭：28 支，箭头颜色与对应的药水瓶子同源
 for (const arrow of TIPPED_ARROWS) {

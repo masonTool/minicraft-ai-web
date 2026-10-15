@@ -26,6 +26,18 @@ export const MAX_AIR = 300;
 const HURT_RESISTANT_TICKS = 10;
 /** 虚空伤害的起始高度（原版 y=-64 以下开始掉血） */
 export const VOID_DAMAGE_Y = -70;
+/** 每 tick 的秒数（20Hz），着火计时用它 */
+const TICK_SECONDS = 1 / 20;
+/**
+ * 站在火里被点燃的秒数（原版 `setSecondsOnFire(8)`）与伤害节奏（每 20 tick 1 点）。
+ *
+ * ⚠️ `core/world/Fire.ts` 里有同名的一份：生存模块不该反向依赖世界模块
+ * （`Fire` 要用方块表与 `TickWorld`），所以两个数各写一份。
+ * 两边必须一致——`tools/fire-test.ts` 用 `Fire.ts` 的常量去驱动 `PlayerStats`，
+ * 改了一边不改另一边会当场失败。
+ */
+export const FIRE_IGNITE_SECONDS = 8;
+export const FIRE_DAMAGE_INTERVAL_TICKS = 20;
 
 export type DamageCause =
   | 'poison'
@@ -49,6 +61,8 @@ export interface SurvivalEnvironment {
   eyeInWater: boolean;
   /** 身体泡在岩浆里 */
   inLava: boolean;
+  /** 身体所在格是火方块（会被点燃，见 I12） */
+  inFire?: boolean;
   /** 身体贴着仙人掌 */
   onCactus: boolean;
   /** 身体被不透明方块压住（窒息） */
@@ -118,6 +132,15 @@ export class PlayerStats {
   private foodTickTimer = 0;
   private drownTickTimer = 0;
   private lavaTickTimer = 0;
+  private fireTickTimer = 0;
+
+  /**
+   * 着火剩余秒数（站在火里 / 被点燃后持续掉血）。
+   *
+   * 原版是"**站在火里**会持续受伤，离开后还会再烧一会儿"，两者共用同一个计时器：
+   * 只要计时器没走完就每秒掉 1 点，期间再站进火里会把计时器续上（`ignite` 取更长的那个）。
+   */
+  fireSeconds = 0;
 
   /** 最近一次受伤（HUD 抖动 / 调试面板用） */
   lastDamage: DamageResult | null = null;
@@ -146,6 +169,20 @@ export class PlayerStats {
   heal(amount: number): void {
     if (this.dead) return;
     this.health = Math.min(MAX_HEALTH, this.health + amount);
+  }
+
+  /** 是否正在着火（渲染与 HUD 用） */
+  get burning(): boolean {
+    return this.fireSeconds > 0;
+  }
+
+  /**
+   * 点燃：取"更长的那个持续时间"，重复被点燃不会把火越点越短（与 `Mob.ignite` 同一口径）。
+   * 抗火效果下不生效（原版免疫火焰）。
+   */
+  ignite(seconds: number): void {
+    if (seconds <= 0 || this.dead) return;
+    this.fireSeconds = Math.max(this.fireSeconds, seconds);
   }
 
   /**
@@ -200,16 +237,50 @@ export class PlayerStats {
     if (this.hurtResistantTime > 0) this.hurtResistantTime--;
 
     if (env.creative) {
-      // 创造模式：饱食度、氧气都保持满值，也不会受伤
+      // 创造模式：饱食度、氧气都保持满值，也不会受伤（着火也一并清掉，否则 HUD 会一直显示在烧）
       this.food = MAX_FOOD;
       this.saturation = MAX_SATURATION;
       this.air = MAX_AIR;
+      this.fireSeconds = 0;
+      this.fireTickTimer = 0;
       return;
     }
 
     this.tickAir(env);
     this.tickDamageSources(env);
+    this.tickFire(env);
     this.tickHunger(env);
+  }
+
+  /**
+   * 着火结算（I12）。
+   *
+   * - 站在火里：把计时器续到 8 秒（原版行为）
+   * - 计时器没走完：每 20 tick 掉 1 点 `'fire'` 伤害。**无视无敌帧**——
+   *   否则被岩浆/怪物打一下之后火焰就有 0.5 秒白烧，与原版"每秒稳定 1 点"不符
+   * - 抗火（`fireImmune`）：火直接灭掉、不进伤害
+   */
+  private tickFire(env: SurvivalEnvironment): void {
+    if (env.fireImmune) {
+      this.fireSeconds = 0;
+      this.fireTickTimer = 0;
+      return;
+    }
+
+    if (env.inFire) this.ignite(FIRE_IGNITE_SECONDS);
+    if (this.fireSeconds <= 0) {
+      this.fireTickTimer = 0;
+      return;
+    }
+
+    this.fireSeconds = Math.max(0, this.fireSeconds - TICK_SECONDS);
+    this.fireTickTimer++;
+    if (this.fireTickTimer >= FIRE_DAMAGE_INTERVAL_TICKS) {
+      this.fireTickTimer = 0;
+      this.hurtResistantTime = 0;
+      this.lastDamageAmount = 0;
+      this.damage(1, 'fire');
+    }
   }
 
   /** 氧气：水下缓慢耗尽，耗尽后周期性溺水伤害 */
@@ -331,5 +402,7 @@ export class PlayerStats {
     this.hurtResistantTime = 0;
     this.lastDamageAmount = 0;
     this.lastDamage = null;
+    this.fireSeconds = 0;
+    this.fireTickTimer = 0;
   }
 }

@@ -127,6 +127,8 @@ export const Item = {
   // ---- 桶与牛奶（J8）
   BUCKET: 1151,
   MILK_BUCKET: 1152,
+  /** 打火石（I12）：耐用品，对着方块右键点燃火焰。原版耐久 64 */
+  FLINT_AND_STEEL: 1153,
   // ---- 弓与箭（J9）
   FLINT: 1072,
   STRING: 1073,
@@ -249,8 +251,14 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // ---- 桶（可堆 16，与原版一致）与牛奶桶（一次性的"饮品"，不可堆）
   { id: Item.BUCKET, name: 'minecraft:bucket', tile: 'item_bucket', maxStack: 16 },
   { id: Item.MILK_BUCKET, name: 'minecraft:milk_bucket', tile: 'item_milk_bucket', maxStack: 1 },
-
-  // ---- 桶（可堆 16，与原版一致）与牛奶桶（一次性的"饮品"，不可堆）
+  // ---- 打火石（I12）：铁锭 + 燧石；耐久 64（原版），对着方块面右键点燃火焰
+  {
+    id: Item.FLINT_AND_STEEL,
+    name: 'minecraft:flint_and_steel',
+    tile: 'item_flint_and_steel',
+    maxStack: 1,
+    durability: 64,
+  },
 
   // ---- 食物（贴图在 TextureAtlas、数值在 food.ts，这里只登记 id / 名字 / 贴图名）
   { id: Item.COOKED_BEEF, name: 'minecraft:cooked_beef', tile: 'item_cooked_beef' },
@@ -305,8 +313,8 @@ for (let id = Block.AIR + 1; id < BLOCK_ITEM_ID_LIMIT; id++) {
   const def = blockDef(id);
   // 注册表按 id 顺序密集排列，blockDef 回落到空气说明已经越过末尾
   if (def.id !== id) break;
-  // 流体不进入物品栏
-  if (def.liquid) continue;
+  // 流体不进入物品栏；火焰这类"本来就没有对应物品"的方块也不进（见 `BlockDef.itemless`）
+  if (def.liquid || def.itemless) continue;
   register({
     id,
     name: def.name,
@@ -467,6 +475,8 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
 const TOOLS = new Set<number>([
   ...TOOL_SPECS.map((spec) => spec.id),
   Item.SHEARS,
+  // 打火石算"工具"：它也不可堆叠、有耐久、右键对着方块用（放"矿石与材料"里找不到）
+  Item.FLINT_AND_STEEL,
   Item.BOW,
   Item.ARROW,
   ...TIPPED_ARROWS.map((entry) => entry.id),

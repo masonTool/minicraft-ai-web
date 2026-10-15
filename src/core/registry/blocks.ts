@@ -33,6 +33,13 @@ export interface BlockDef {
   readonly stateTiles?: (state: number) => readonly [string, string, string];
   /** 按状态取发光等级（红石灯亮时 15）；不填则一律用 light */
   readonly stateLight?: (state: number) => number;
+  /**
+   * 不生成对应物品（原版火焰就没有物品：只能靠打火石/岩浆点燃）。
+   *
+   * 方块物品是**批量注册**的（见 `items.ts` 里那段循环），不显式排除的话
+   * 会自动多出一件"可放置的火焰"，玩家能在背包里拿到它——与 I12 的设计不符。
+   */
+  readonly itemless: boolean;
 }
 
 interface BlockSpec {
@@ -48,6 +55,7 @@ interface BlockSpec {
   shape?: BlockShape;
   stateTiles?: (state: number) => readonly [string, string, string];
   stateLight?: (state: number) => number;
+  itemless?: boolean;
 }
 
 const BASE_SPECS: readonly BlockSpec[] = [
@@ -852,6 +860,30 @@ const OPENABLE_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 火焰（I12）。
+ *
+ * 形状借用了植物那套 `cross`（两片交叉薄面、无碰撞）——原版火焰其实有 4 张朝向不同的面，
+ * 但 `cross` 已经能表达"站在草/木板上的火苗"，而新增一种形状要同时改网格化与碰撞两处。
+ *
+ * - **自发光 15**：火把是 14，火焰比火把更亮，这一点在夜里看得很明显
+ * - **不生成物品**（见 `itemless`）：只能靠打火石点燃，背包里拿不到"一叠火"
+ * - **硬度 0**：徒手一拍即灭（与原版一致——打火是瞬间的，灭也是）
+ */
+const FIRE_SPECS: readonly BlockSpec[] = [
+  {
+    id: 291,
+    name: 'minecraft:fire',
+    tiles: ['fire', 'fire', 'fire'],
+    shape: 'cross',
+    solid: false,
+    opaque: false,
+    light: 15,
+    lightOpacity: 0,
+    itemless: true,
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -866,6 +898,7 @@ const SPECS: readonly BlockSpec[] = [
   ...END_SPECS,
   ...REDSTONE_SPECS,
   ...OPENABLE_SPECS,
+  ...FIRE_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1044,6 +1077,8 @@ export const Block = {
   /** 活板门与栅栏门（批次 30）：id 接在最大 id 之后，SPECS 会按 id 排序 */
   OAK_TRAPDOOR: 289,
   OAK_FENCE_GATE: 290,
+  /** 火焰（I12）：没有物品，只能靠打火石点燃 */
+  FIRE: 291,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1080,6 +1115,7 @@ function buildBlockTable(): readonly BlockDef[] {
       shape: spec.shape ?? 'cube',
       stateTiles: spec.stateTiles,
       stateLight: spec.stateLight,
+      itemless: spec.itemless ?? false,
     });
   }
   return table;
@@ -1198,6 +1234,8 @@ HARDNESS.set(Block.LADDER, 0.4);
 // 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
 HARDNESS.set(Block.FARMLAND, 0.6);
 HARDNESS.set(Block.BREWING_STAND, 0.5);
+// 火焰硬度 0：徒手一拍即灭（`breakSeconds` 直接返回 0，不做任何计时）
+HARDNESS.set(Block.FIRE, 0);
 HARDNESS.set(Block.ENCHANTING_TABLE, 5);
 HARDNESS.set(Block.BOOKSHELF, 1.5);
 // 铁砧 5（原版 5.0，也砸得动）

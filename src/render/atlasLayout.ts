@@ -152,6 +152,8 @@ export const TILE_ORDER = [
   'oak_door',
   'oak_trapdoor',
   'oak_fence_gate',
+  // 火焰（I12）：走植物那套 cross 形状，所以是一张"贴着透明背景的火苗"
+  'fire',
   'terracotta',
   'terracotta_white',
   'terracotta_orange',
@@ -518,6 +520,8 @@ export const TILE_ORDER = [
   'item_flint',
   'item_string',
   'item_arrow',
+  // 打火石（I12）
+  'item_flint_and_steel',
   // 药水箭（K4 最后一步）：28 支，贴图名由 `TIPPED_ARROWS` 的 key 推出（`item_tipped_arrow_<药水 key>`）
   'item_tipped_arrow_awkward',
   'item_tipped_arrow_swiftness',
