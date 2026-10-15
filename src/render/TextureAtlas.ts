@@ -1221,6 +1221,53 @@ for (const [key, color] of Object.entries(POTION_COLORS)) {
   PAINTERS[`item_potion_${key}`] = bottlePainter(color);
 }
 
+/**
+ * 酿造材料（H10）：形状分三类（粉末 / 团块 / 脚爪），颜色按材料给。
+ * 这十样在原版里也是"同一套形状换个色"，没必要每个手画。
+ */
+function brewMaterialPainter(color: readonly number[], shape: string): Painter {
+  return (px, py, rng) => {
+    const jitter = rng() * 14 - 7;
+    const dx = px - 7.5;
+    const dy = py - 8;
+    if (shape === 'dust') {
+      // 一小堆粉末：下宽上窄的锥
+      const dyy = 14 - py;
+      if (dyy > 7) return [0, 0, 0, 0];
+      if (Math.abs(dx) > 2.4 + (7 - dyy) * 0.6) return [0, 0, 0, 0];
+    } else if (shape === 'foot') {
+      // 脚爪/长条：竖着的椭圆 + 上端一个小突起
+      const e = (dx / 3.4) ** 2 + (dy / 5.2) ** 2;
+      const knob = Math.abs(dx) < 1.6 && py >= 2 && py <= 5;
+      if (e > 1 && !knob) return [0, 0, 0, 0];
+    } else if (shape === 'slice') {
+      // 瓜片：月牙形
+      const e = (dx / 5.6) ** 2 + (dy / 4.8) ** 2;
+      if (e > 1 || (y2 => y2)(0) === 1) return [0, 0, 0, 0];
+    } else {
+      const e = (dx / 5) ** 2 + (dy / 4.6) ** 2;
+      if (e > 1) return [0, 0, 0, 0];
+    }
+    const shade = py < 8 ? 1.08 : 0.9;
+    return [clamp255(color[0] * shade + jitter), clamp255(color[1] * shade + jitter), clamp255(color[2] * shade + jitter), 255];
+  };
+}
+
+for (const [n, color, shape] of [
+  ['rabbit_foot', [198, 168, 132], 'foot'],
+  ['magma_cream', [232, 138, 60], 'blob'],
+  ['ghast_tear', [214, 238, 232], 'blob'],
+  ['spider_eye', [168, 52, 58], 'blob'],
+  ['fermented_spider_eye', [126, 88, 64], 'blob'],
+  ['glistering_melon_slice', [246, 206, 72], 'slice'],
+  ['pufferfish', [214, 176, 72], 'blob'],
+  ['golden_carrot', [246, 206, 72], 'foot'],
+  ['redstone_ingredient', [206, 42, 42], 'dust'],
+  ['glowstone_dust_ingredient', [246, 222, 140], 'dust'],
+] as [string, number[], string][]) {
+  PAINTERS[`item_${n}`] = brewMaterialPainter(color, shape);
+}
+
 /** 下界疣：暗红色的瘤状小块 */
 PAINTERS.item_nether_wart = (x, y, rng) => {
   const jitter = rng() * 14 - 7;
