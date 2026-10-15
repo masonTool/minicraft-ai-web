@@ -13,9 +13,9 @@
 
 import * as THREE from 'three';
 import type { TextureAtlas } from './TextureAtlas.ts';
+import { applyFaceUvs, blockFaceTiles } from './atlasMesh.ts';
 import { ItemEntity } from '../core/entity/ItemEntity.ts';
 import type { Entity } from '../core/entity/Entity.ts';
-import { blockDef } from '../core/registry/blocks.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 
 const BLOCK_SIZE = 0.26;
@@ -24,14 +24,6 @@ const SPRITE_SIZE = 0.3;
 const LIGHT_LEVELS = 16;
 /** 最暗也要能看见轮廓，与原版的"最低亮度"一致 */
 const MIN_BRIGHTNESS = 0.08;
-
-/** BoxGeometry 每个面的 UV 排布（顶点顺序固定） */
-const FACE_UV_PATTERN: readonly (readonly [number, number])[] = [
-  [0, 1],
-  [1, 1],
-  [0, 0],
-  [1, 0],
-];
 
 const VERTEX_SHADER = /* glsl */ `
 varying vec2 vUv;
@@ -191,11 +183,9 @@ export class EntityRenderer {
     const cached = this.blockGeometries.get(itemId);
     if (cached) return cached;
 
-    const tiles = blockDef(blockId).tiles;
     const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-    // BoxGeometry 的面顺序为 +X, -X, +Y, -Y, +Z, -Z
-    const faceTiles = [tiles[2], tiles[2], tiles[0], tiles[1], tiles[2], tiles[2]];
-    applyFaceUvs(geometry, this.atlas, faceTiles);
+    // BoxGeometry 的面顺序为 +X, -X, +Y, -Y, +Z, -Z（取贴图名的规则见 atlasMesh）
+    applyFaceUvs(geometry, this.atlas, blockFaceTiles(blockId));
 
     this.blockGeometries.set(itemId, geometry);
     return geometry;
@@ -225,19 +215,4 @@ export class EntityRenderer {
     this.baseMaterial.dispose();
     this.object.removeFromParent();
   }
-}
-
-/** 把图集里各贴图的 UV 写进几何体（几何体每个面固定 4 个顶点） */
-function applyFaceUvs(geometry: THREE.BufferGeometry, atlas: TextureAtlas, faceTiles: readonly string[]): void {
-  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
-  const faceCount = Math.min(faceTiles.length, uv.count / 4);
-
-  for (let face = 0; face < faceCount; face++) {
-    const [u0, v0, u1, v1] = atlas.uv(faceTiles[face]!);
-    for (let corner = 0; corner < 4; corner++) {
-      const [cu, cv] = FACE_UV_PATTERN[corner]!;
-      uv.setXY(face * 4 + corner, u0 + cu * (u1 - u0), v0 + cv * (v1 - v0));
-    }
-  }
-  uv.needsUpdate = true;
 }

@@ -1394,6 +1394,8 @@ export class TextureAtlas {
   readonly canvas: HTMLCanvasElement;
   readonly columns: number;
   readonly rows: number;
+  /** 贴图平均色缓存（`averageColor` 用，懒算） */
+  private readonly averageColors = new Map<string, number>();
 
   constructor() {
     const columns = ATLAS_COLUMNS;
@@ -1507,6 +1509,45 @@ export class TextureAtlas {
     const v0 = row / rows + insetV;
     const v1 = (row + 1) / rows - insetV;
     return [u0, v0, u1, v1];
+  }
+
+  /**
+   * 贴图的平均色（0xRRGGBB，已缓存）。
+   *
+   * 破坏粒子用它给碎块染色 —— 挖草是绿的、挖沙是黄的、挖石头是灰的，
+   * 不用为每个方块单独维护一份颜色表。透明像素（cross 类贴图有大片透明）不参与平均，
+   * 否则草会算出接近黑灰的颜色。
+   */
+  averageColor(tile: string): number {
+    const cached = this.averageColors.get(tile);
+    if (cached !== undefined) return cached;
+
+    const index = TILE_INDEX.get(tile) ?? 0;
+    const originX = (index % this.columns) * TILE_SIZE;
+    const originY = Math.floor(index / this.columns) * TILE_SIZE;
+
+    let color = 0x808080;
+    const ctx = this.canvas.getContext('2d');
+    if (ctx) {
+      const data = ctx.getImageData(originX, originY, TILE_SIZE, TILE_SIZE).data;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3]! < 8) continue;
+        r += data[i]!;
+        g += data[i + 1]!;
+        b += data[i + 2]!;
+        count++;
+      }
+      if (count > 0) {
+        color = ((Math.round(r / count) << 16) | (Math.round(g / count) << 8) | Math.round(b / count)) >>> 0;
+      }
+    }
+
+    this.averageColors.set(tile, color);
+    return color;
   }
 
   /** 贴图在图集画布上的像素左上角（UI 用 drawImage 裁切图标） */

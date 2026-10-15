@@ -37,6 +37,9 @@ import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/enti
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
+import { ParticleSystem } from './render/ParticleSystem.ts';
+import { HandRenderer } from './render/HandRenderer.ts';
+import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
@@ -112,6 +115,19 @@ const END_FOG_NEAR = 48;
 const END_FOG_FAR = 190;
 const END_SKY_BRIGHTNESS = 0.42;
 const END_MIN_BRIGHTNESS = 0.2;
+
+/**
+ * 视线介质的雾与色罩（E16）。
+ * 水下能看清十几格、颜色偏青蓝；岩浆里只能看清贴脸的两三格，橙红一片。
+ */
+const WATER_FOG = 0x1b4a7a;
+const WATER_FOG_NEAR = 0.6;
+const WATER_FOG_FAR = 22;
+const LAVA_FOG = 0x8a2a05;
+const LAVA_FOG_NEAR = 0.2;
+const LAVA_FOG_FAR = 2.6;
+/** 粒子的最低亮度：夜里挖方块也要看得见碎块 */
+const PARTICLE_MIN_BRIGHTNESS = 0.3;
 /** 末影龙的出生点：盘旋圆上的一点（主岛在原点） */
 const DRAGON_SPAWN_X = 0;
 const DRAGON_SPAWN_Z = 46;
@@ -193,6 +209,18 @@ class App {
   private readonly sky: Sky;
   /** 天气：晴 / 雨 / 雷暴 */
   private readonly weather: Weather;
+  /** 粒子：破坏碎块、水花、烟雾、火焰（E13） */
+  private readonly particles = new ParticleSystem();
+  /** 第一人称手持物品与手臂（E15） */
+  private readonly hand: HandRenderer;
+  /** 全屏视野效果：水下 / 岩浆色罩（E16） */
+  private readonly screenEffects = new ScreenEffects();
+  /** 挖掘碎屑与挥手动画的节拍（秒） */
+  private particleTimer = 0;
+  /** 上一帧是否在水里（用来捕捉"入水那一瞬间"并溅水花） */
+  private wasInWater = false;
+  /** 岩浆里冒火焰粒子的节拍（秒） */
+  private flameTimer = 0;
   /** 生物渲染 */
   private readonly mobRenderer: MobRenderer;
   /** 生物生成规则 */
@@ -360,6 +388,9 @@ class App {
     this.scene.add(this.sky.object);
     this.weather = new Weather();
     this.scene.add(this.weather.object);
+    // 手持物品与粒子都要在 applyEnvironment() 之前建好：环境函数会推亮度给它们
+    this.hand = new HandRenderer(atlas);
+    this.scene.add(this.particles.object);
     // 生物亮度直接用方块材质的天光倍率，保证与地形明暗一致
     this.mobRenderer = new MobRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
     this.bossBarEl = document.getElementById('boss-bar');
@@ -802,6 +833,11 @@ class App {
    * 因为光照等级是烘焙在顶点属性里的，这里每帧只改 uniform，开销可以忽略。
    */
   private applyEnvironment(): void {
+    this.applyDimensionEnvironment();
+    this.applyMediumEnvironment();
+  }
+
+  private applyDimensionEnvironment(): void {
     if (this.dimension === Dimension.NETHER) {
       // 下界：没有昼夜与天气，只有暗红雾气 + 固定亮度
       //
@@ -813,6 +849,7 @@ class App {
       this.solidMaterial.skyBrightness = NETHER_SKY_BRIGHTNESS;
       this.translucentMaterial.skyBrightness = NETHER_SKY_BRIGHTNESS;
       this.entityRenderer.skyBrightness = NETHER_SKY_BRIGHTNESS;
+      this.syncRenderBrightness(NETHER_SKY_BRIGHTNESS);
       this.solidMaterial.setFog(NETHER_FOG, NETHER_FOG_NEAR, NETHER_FOG_FAR);
       this.translucentMaterial.setFog(NETHER_FOG, NETHER_FOG_NEAR, NETHER_FOG_FAR);
       this.solidMaterial.setMinBrightness(NETHER_MIN_BRIGHTNESS);
@@ -829,6 +866,7 @@ class App {
       this.solidMaterial.skyBrightness = END_SKY_BRIGHTNESS;
       this.translucentMaterial.skyBrightness = END_SKY_BRIGHTNESS;
       this.entityRenderer.skyBrightness = END_SKY_BRIGHTNESS;
+      this.syncRenderBrightness(END_SKY_BRIGHTNESS);
       this.solidMaterial.setFog(END_FOG, END_FOG_NEAR, END_FOG_FAR);
       this.translucentMaterial.setFog(END_FOG, END_FOG_NEAR, END_FOG_FAR);
       this.solidMaterial.setMinBrightness(END_MIN_BRIGHTNESS);
@@ -861,6 +899,7 @@ class App {
     this.translucentMaterial.skyBrightness = skyBrightness;
     // 掉落物的天光贡献跟着昼夜变化（逐实体采样在 updateEntities 里做）
     this.entityRenderer.skyBrightness = skyBrightness;
+    this.syncRenderBrightness(skyBrightness);
 
     // 穹顶：顶部略深、地平线略亮；日出日落时给太阳附近加霞光
     this.domeTop.copy(this.skyColor).multiplyScalar(0.86);
@@ -873,6 +912,95 @@ class App {
     const fogNear = fogFar * 0.72;
     this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
     this.translucentMaterial.setFog(this.skyColor, fogNear, fogFar);
+  }
+
+  /**
+   * 同步"非体素"渲染物（粒子、手持物品）的亮度。
+   *
+   * 它们不走烘焙进顶点的光照，但仍然要跟着昼夜与维度变暗，
+   * 否则夜里挖方块会看到一簇亮得发光的碎块、洞里举着方块像自发光。
+   */
+  private syncRenderBrightness(value: number): void {
+    const brightness = Math.max(PARTICLE_MIN_BRIGHTNESS, value);
+    this.particles.setBrightness(brightness);
+    this.hand.setBrightness(brightness);
+  }
+
+  /**
+   * 视线介质（水下 / 岩浆）：整屏色罩 + 更近的雾。
+   *
+   * 必须放在维度环境**之后**：雾是每帧重算的，介质要覆盖维度给的远雾，
+   * 否则在水下还能看清远处地形（原版水下只能看清十几格）。
+   */
+  private applyMediumEnvironment(): void {
+    const effect = this.eyeMedium();
+    this.screenEffects.set(effect);
+
+    if (effect === 'water') {
+      this.solidMaterial.setFog(WATER_FOG, WATER_FOG_NEAR, WATER_FOG_FAR);
+      this.translucentMaterial.setFog(WATER_FOG, WATER_FOG_NEAR, WATER_FOG_FAR);
+    } else if (effect === 'lava') {
+      this.solidMaterial.setFog(LAVA_FOG, LAVA_FOG_NEAR, LAVA_FOG_FAR);
+      this.translucentMaterial.setFog(LAVA_FOG, LAVA_FOG_NEAR, LAVA_FOG_FAR);
+    }
+  }
+
+  /** 玩家眼睛泡在什么介质里（决定色罩与雾） */
+  private eyeMedium(): ScreenEffect {
+    const p = this.physics;
+    const eye = this.world.getBlock(Math.floor(p.x), Math.floor(p.eyeY), Math.floor(p.z));
+    if (eye === Block.WATER) return 'water';
+    if (eye === Block.LAVA) return 'lava';
+    return 'none';
+  }
+
+  /**
+   * 粒子总更新（E13）：推进已有粒子，再按玩家所处位置补"环境粒子"。
+   *  - 入水那一瞬间溅一片水花（靠上一帧的 inWater 判定跳变）
+   *  - 泡在岩浆里持续冒火焰
+   */
+  private updateParticles(dt: number): void {
+    const p = this.physics;
+
+    if (p.inWater && !this.wasInWater) {
+      this.particles.spawnSplash(p.x, p.y + 0.25, p.z);
+    }
+    this.wasInWater = p.inWater;
+
+    this.flameTimer -= dt;
+    if (this.flameTimer <= 0) {
+      this.flameTimer = 0.07;
+      const feet = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 0.2), Math.floor(p.z));
+      if (feet === Block.LAVA || this.eyeMedium() === 'lava') {
+        this.particles.spawnFlame(
+          p.x + (Math.random() - 0.5) * 0.6,
+          p.y + 0.5 + Math.random() * 0.7,
+          p.z + (Math.random() - 0.5) * 0.6,
+        );
+      }
+    }
+
+    this.particles.update(dt);
+  }
+
+  /** 走路时手臂轻微上下摆动（静止时归零，避免站着也在抖） */
+  private isPlayerMoving(): boolean {
+    const p = this.physics;
+    return p.onGround && Math.hypot(p.vx, p.vz) > 0.6;
+  }
+
+  /**
+   * 方块碎块的颜色：取顶面与侧面贴图的平均色。
+   * 只取一张容易失真 —— 草方块侧面大半是土色，只用侧面会把"挖草"画成"挖土"。
+   */
+  private blockParticleColor(blockId: number): number {
+    const tiles = blockDef(blockId).tiles;
+    const top = this.atlas.averageColor(tiles[0]);
+    const side = this.atlas.averageColor(tiles[2]);
+    const r = (((top >> 16) & 0xff) + ((side >> 16) & 0xff)) >> 1;
+    const g = (((top >> 8) & 0xff) + ((side >> 8) & 0xff)) >> 1;
+    const b = ((top & 0xff) + (side & 0xff)) >> 1;
+    return (r << 16) | (g << 8) | b;
   }
 
   private refreshWorld(centerCx: number, centerCz: number, force = false): void {
@@ -1170,6 +1298,14 @@ class App {
     const critical = !this.physics.onGround && this.physics.vy < -0.1;
     const damage = this.flying ? 100 : critical ? 1.5 : 1;
     mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context);
+    this.hand.swing();
+    if (mob.dead) {
+      // 死亡的烟：原版生物死时会冒一团烟
+      this.particles.spawnSmoke(mob.x, mob.y + 0.5, mob.z, 10, 0.32);
+    } else {
+      // 暴击火花（原版暴击是星星状的白色粒子）
+      this.particles.spawnCrit(mob.x, mob.y + 0.7, mob.z, critical ? 8 : 4);
+    }
   }
 
   private updateBreaking(dt: number): void {
@@ -1195,6 +1331,15 @@ class App {
     if (!Number.isFinite(required)) return;
 
     this.breakProgress += required <= 0 ? 1 : dt / required;
+
+    // 挖掘途中持续掉碎屑 + 挥手臂（原版每挖一下挥一次）
+    this.particleTimer -= dt;
+    if (this.particleTimer <= 0) {
+      this.particleTimer = 0.12;
+      this.particles.spawnDigging(this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5, this.blockParticleColor(id));
+      this.hand.swing();
+    }
+
     if (this.breakProgress < 1) return;
 
     const brokenId = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
@@ -1211,6 +1356,12 @@ class App {
 
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
+    this.particles.spawnBlockBreak(
+      this.hit.x + 0.5,
+      this.hit.y + 0.5,
+      this.hit.z + 0.5,
+      this.blockParticleColor(brokenId),
+    );
 
     // 创造模式不产生掉落（与原版一致）
     if (!this.flying) {
@@ -1260,6 +1411,7 @@ class App {
       if (this.world.getBlock(x, oy, z) !== Block.OAK_DOOR) continue;
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
       this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
+      this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(Block.OAK_DOOR));
       if (this.flying || dy !== 0) continue;
       const drop = dropFor(Block.OAK_DOOR);
       if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5);
@@ -1632,6 +1784,7 @@ class App {
       // 触觉反馈：放下一块方块的轻震
       this.vibrate(6);
       this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.hand.swing();
       // 联机：把这次改动广播给队友
       this.net.sendBlock(x, y, z, blockId, plan.state, this.dimension);
       if (plan.extra) {
@@ -2016,11 +2169,25 @@ class App {
 
       this.tickContainers(dt);
       this.updateEntities(dt);
+      this.updateParticles(dt);
       this.inventoryScreen.tickUi(dt);
+
+      // 手持物品：跟快捷栏选中项同步，并按走路/挥动做动画
+      this.hand.setItem(this.inventory.get(this.hotbarIndex)?.id);
+      this.hand.update(dt, this.isPlayerMoving(), this.camera.fov, this.camera.aspect);
+      this.particles.setViewport(this.camera.fov, this.renderer.domElement.height);
+      this.screenEffects.update(dt);
 
       this.refreshLoadingState();
       this.updateBreakProgressUi();
       this.renderer.render(this.scene, this.camera);
+      // 世界之后叠画"贴在屏幕上的两件事"：手持物品与视野色罩。
+      // ⚠️ 必须先关掉 autoClear，否则第二次 render 会把刚画好的世界清掉。
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.hand.render(this.renderer);
+      this.screenEffects.render(this.renderer);
+      this.renderer.autoClear = true;
       this.updateDebug(dt);
       requestAnimationFrame(loop);
     };
@@ -2029,6 +2196,9 @@ class App {
 
   dispose(): void {
     this.mobRenderer.dispose();
+    this.particles.dispose();
+    this.hand.dispose();
+    this.screenEffects.dispose();
     this.sky.dispose();
     this.weather.dispose();
     this.chunkRenderer.disposeAll();
@@ -2080,6 +2250,7 @@ class App {
     this.world.setDimension(dimension);
     // 掉落物实体属于旧维度，直接清掉
     this.entities.clear();
+    this.particles.clear();
     // 落点：下界在洞窟上方、末地在主岛上方（岛面在 y≈66），主世界回高空
     const landingY = dimension === Dimension.NETHER ? 96 : dimension === Dimension.END ? 96 : 140;
     this.physics.teleport(this.physics.x, landingY, this.physics.z);
@@ -2296,10 +2467,19 @@ class App {
     dimension: DimensionId;
     /** 天空穹顶是否可见（下界应为 false） */
     skyVisible: boolean;
+    /** 当前存活的粒子数（E13 验收用） */
+    particles: number;
+    /** 手持物品 id（空手为 null，E15 验收用） */
+    handItem: number | null;
+    /** 当前的视野色罩（E16 验收用） */
+    screenEffect: ScreenEffect;
   } {
     return {
       dimension: this.dimension,
       skyVisible: this.sky.object.visible,
+      particles: this.particles.active,
+      handItem: this.hand.item ?? null,
+      screenEffect: this.screenEffects.effect,
       fps: this.fps,
       chunks: this.world.chunks.size,
       lit: this.world.litChunkCount,
@@ -2574,6 +2754,17 @@ class App {
   /** 直接在指定位置生成掉落物（自动化测试用） */
   dropItem(itemId: number, count: number, x: number, y: number, z: number): void {
     this.spawnDrop(itemId, count, x, y, z);
+  }
+
+  /**
+   * 直接给玩家背包塞物品（自动化测试用）。
+   * 等价于在创造物品栏里点一下 —— 浏览器验收脚本靠它把"手持物品"摆出来。
+   * @returns 没塞进去的数量（0 表示全部塞下）
+   */
+  giveItem(itemId: number, count = 1): number {
+    const left = this.inventory.add(itemId, count);
+    this.refreshHotbar();
+    return left;
   }
 }
 
