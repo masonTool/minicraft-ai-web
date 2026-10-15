@@ -24,7 +24,7 @@ npm run dev            # http://localhost:5173
 
 - 时间：2026-10-15 · 提交总数 45（每个功能点一条，可逐条回滚）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **84**、进行中 **60**、待办 29；
+- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **90**、进行中 **59**、待办 24；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -47,6 +47,9 @@ npm run dev            # http://localhost:5173
 | 地物 | `core/gen/Features.ts`：11 种树 + 花草/蘑菇/甘蔗/南瓜/西瓜/仙人掌，23 群系地物表；跨区块重放 3×3 邻域保证树冠不断 |
 | 结构 | `core/gen/Structures.ts`：村庄/废弃矿井/要塞/地牢/沉船/海底神殿/林地府邸，间距+分离度+盐值放置框架 |
 | 下界 | `core/gen/NetherGenerator.ts` + `Dimension.ts`：岩浆海 + 洞窟 + 5 个下界群系 + 菌菇树等；`N` 键切维度 |
+| 命令与规则 | `core/commands/Commands.ts`（16 条命令，解析层不碰 DOM）+ `ui/ChatInput.ts`（消息栏与输入行）、`core/world/Rules.ts`（难度与六条游戏规则） |
+| 状态效果 | `core/survival/StatusEffects.ts`（30 种，影响移速/跳跃/挖掘/伤害/氧气/视觉/HUD） |
+| 随机刻与流体 | `core/tick/RandomTicks.ts`（随机刻行为表 + 计划刻队列）、`core/world/Fluids.ts`（液面等级、无限水源、水火相遇） |
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
 | 说明与配方 | `core/registry/itemNames.ts`（296 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成） |
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
@@ -109,6 +112,11 @@ npm run dev            # http://localhost:5173
 | 设置滑块调了没反应 | "滑块存在"不等于"接线了"：灵敏度曾经就是这样（一直用常量）。加设置项时把**消费它的每一条路径**都搜出来（鼠标/触摸/手柄/渲染器）（本轮） |
 | 界面里冒出英文 id | 新增方块/物品时中文名表不会自动跟上。用"每个方块都有中文名"这条断言把缺口暴露出来（`missingBlockNames()`），比等人发现强（本轮） |
 | 加了世界类型但地形没变 | 生成器是**按种子缓存**的（`generators` Map），世界类型必须进缓存键，否则同一种子的两种世界会串（本轮） |
+| 随机刻"什么都没发生" | 384 格高度里纯随机取点，命中地表的概率极低（实测 400 次抽样 0 格变化）→ 必须先在所有**非空 section** 里挑段再段内随机（`sectionCounts`）（本轮） |
+| 水体把贪心网格化废掉 | 水源按原版做成 0.875 格高会让海洋每格水退化成独立面，三角形 28648 → 65538 → **水源保持满格**，只有流动的水才按等级变薄；"整格判定"要抽成共用函数（`isFullBlockShape`），连测试的逐面基准值也用它，否则基准与实际实现会悄悄跑偏（本轮） |
+| 放下的水永远不流动 | 唤醒流体时必须连**自己**一起排进计划刻：刚放的那格四周还是空气，只唤醒邻居谁都不会被唤醒（`wakeFluidAt`）（本轮） |
+| 死亡率相关规则"没对象可控" | 加规则前先看它管的是什么：`mobGriefing` 在苦力怕会爆炸之前根本没有意义 → 先补上引信与爆炸（本轮） |
+| 加了新设置/新字段没人用 | 滑块存在 ≠ 接线（灵敏度曾是个摆设），难度/规则也要"随世界存 + 读档回退默认 + 脏数据逐项校验"，否则老存档一读就崩（本轮） |
 | 第二遍 render 把世界清掉 | 叠画手持物品 / 色罩之前必须 `renderer.autoClear = false` + `clearDepth()`，画完再改回来（E15/E16） |
 | 版权素材 | 官方贴图/音效不随仓库分发；贴图运行时程序化生成，P9 计划支持玩家自备资源包 |
 
@@ -152,7 +160,7 @@ npm run agent:setup # 跨机器自检
 浏览器控制台 `window.__mc`（`src/main.ts` 末尾挂的 App 实例）：
 `connect(url,name)` / `disconnect()` / `netState` / `sendChat(text)` / `saveNow()` /
 `saveStatus` / `openSettings()` / `updateSettings(patch)` / `setCameraMode()` / `cycleCameraMode()` /
-`toggleRecipeBookForTest()` / `hoverHotbarForTest()` /
+`toggleRecipeBookForTest()` / `hoverHotbarForTest()` / `runCommand(text)` / `openChatForTest()` /
 `blockId(name)` / `simulateFrameTime(ms)` /
 `teleport(x,y,z)` / `teleportForce` / `look(yawDeg,pitchDeg)` / `setTimeOfDay(t)` /
 `setDimension('overworld'|'nether'|'end')` / `toggleDimension()` /
