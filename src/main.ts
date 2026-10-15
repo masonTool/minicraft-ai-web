@@ -24,6 +24,7 @@ import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower } from './core/crafting/Enchanting.ts';
+import { potionById, type PotionEntry } from './core/registry/potions.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { ANVIL_SIZE, Anvil } from './core/container/Anvil.ts';
@@ -1484,6 +1485,20 @@ class App {
   }
 
   /**
+   * 手上的药水（H10）。
+   *
+   * 药水**不走 `FOOD_TABLE`**：它不回饥饿也不回饱和度，唯一的作用是挂状态效果，
+   * 而且种类是 id 枚举（见 `potions.ts`）。但"按住 1.6 秒才喝下去"这套状态机
+   * 与进食完全一样，所以复用它、只换最后那一步结算。
+   */
+  private get heldPotion(): PotionEntry | null {
+    const stack = this.inventory.get(this.hotbarIndex);
+    if (!stack) return null;
+    const potion = potionById(stack.id);
+    return potion && !potion.base ? potion : null;
+  }
+
+  /**
    * 是否正在"按住使用"。
    *
    * 鼠标右键与手柄的"使用"键直接算按住；触摸端没有独立的"使用"按钮，
@@ -1912,7 +1927,9 @@ class App {
    */
   private updateEating(dt: number): void {
     const held = this.heldFood;
-    const edible = held !== null && canEat(held.food, this.stats.food, MAX_FOOD);
+    const potion = this.heldPotion;
+    // 药水随时都能喝（不像食物要"没吃饱"），其余条件与进食完全一致
+    const edible = potion !== null || (held !== null && canEat(held.food, this.stats.food, MAX_FOOD));
     if (!edible || !this.usingItem || this.uiOpen || this.stats.dead) {
       this.eatProgress = 0;
       this.chewTimer = 0;
@@ -1931,7 +1948,34 @@ class App {
 
     this.eatProgress = 0;
     this.chewTimer = 0;
+    if (potion) {
+      this.drinkPotion(potion);
+      return;
+    }
     this.eatFood(held!.id, held!.food);
+  }
+
+  /**
+   * 喝下药水（H10）：扣掉一瓶、空瓶退回背包、把效果挂上。
+   *
+   * 空瓶**必须退回**——原版喝完会留下玻璃瓶，否则酿一瓶就永久少一个瓶子，
+   * 玩家会觉得"越喝越亏"却不知道原因。
+   */
+  private drinkPotion(potion: PotionEntry): void {
+    if (!this.inventory.consume(potion.id, 1)) return;
+    for (const effect of potion.effects) {
+      this.effects.apply(effect.id, effect.seconds, effect.amplifier);
+    }
+    const leftover = this.inventory.add(Item.GLASS_BOTTLE, 1);
+    if (leftover > 0) this.spawnDrop(Item.GLASS_BOTTLE, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
+
+    this.chat.push(
+      `喝下${potion.name}：${potion.effects.map((e) => effectLabel(e.id)).join('、') || '无效果'}`,
+      'system',
+    );
+    this.audio.play('eat');
+    this.hand.swing();
+    this.refreshHotbar();
   }
 
   /** 咽下这一份：扣 1 个、补饥饿与饱和度、结算附加效果（腐肉的饥饿就靠这里） */
