@@ -12,6 +12,8 @@
 
 import { CHUNK_VOLUME } from '../world/Chunk.ts';
 import { BIOME_TABLE } from './Biome.ts';
+import { Dimension, type DimensionId } from './Dimension.ts';
+import { NetherGenerator } from './NetherGenerator.ts';
 import { FeatureWriter, decorate, validateBiomeFeatures, type FeatureStats } from './Features.ts';
 import { OverworldGenerator, SEA_LEVEL } from './OverworldGenerator.ts';
 import { generateStructures } from './Structures.ts';
@@ -21,6 +23,8 @@ export { SEA_LEVEL };
 
 /** 每个种子一个生成器实例（内部持有噪声表，构造开销不应重复付出） */
 const generators = new Map<number, OverworldGenerator>();
+/** 下界生成器同样是"每个种子一个" */
+const netherGenerators = new Map<number, NetherGenerator>();
 
 /** 地物配置表完整性校验：每个群系都必须有一行（启动即报错，不留隐患） */
 validateBiomeFeatures(BIOME_TABLE.length);
@@ -30,6 +34,15 @@ function generatorFor(seed: number): OverworldGenerator {
   if (!generator) {
     generator = new OverworldGenerator(seed);
     generators.set(seed, generator);
+  }
+  return generator;
+}
+
+function netherGeneratorFor(seed: number): NetherGenerator {
+  let generator = netherGenerators.get(seed);
+  if (!generator) {
+    generator = new NetherGenerator(seed);
+    netherGenerators.set(seed, generator);
   }
   return generator;
 }
@@ -57,6 +70,11 @@ export function takeGeneratedStates(): Uint8Array | null {
 
 /**
  * 生成一个区块的方块数据（含地物与结构）。
+ *
+ * 维度分派：下界只需要地形 + 自己的地物（没有主世界那套群系地物与结构），
+ * 因此直接走 NetherGenerator 的自包含流程；主世界才需要地物 / 结构 / 状态回传。
+ *
+ * @param dimension 维度（默认主世界）
  * @param out 可选复用缓冲区，避免频繁分配大数组
  * @param stats 可选：统计本次生成的地物数量（测试与调试用）
  */
@@ -64,9 +82,15 @@ export function generateChunkBlocks(
   cx: number,
   cz: number,
   seed: number,
+  dimension: DimensionId = Dimension.OVERWORLD,
   out?: Uint8Array,
   stats?: FeatureStats,
 ): Uint8Array {
+  if (dimension === Dimension.NETHER) {
+    // 下界不写方块状态：地物全是整块方块，没有门/楼梯
+    return netherGeneratorFor(seed).generate(cx, cz, out);
+  }
+
   const generator = generatorFor(seed);
   const blocks = generator.generate(cx, cz, out);
 

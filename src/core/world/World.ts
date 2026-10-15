@@ -11,6 +11,7 @@
 
 import { Chunk } from './Chunk.ts';
 import { BlockEntityStore } from './BlockEntityStore.ts';
+import { Dimension, type DimensionId } from '../gen/Dimension.ts';
 import { LightEngine } from '../light/LightEngine.ts';
 import { blockDef } from '../registry/blocks.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
@@ -48,6 +49,9 @@ export class World {
 
   /** 光照引擎 */
   readonly light: LightEngine;
+
+  /** 当前维度 */
+  dimension: DimensionId = Dimension.OVERWORLD;
 
   /** 熔炉 / 箱子这类带内容的方块 */
   readonly containers = new BlockEntityStore();
@@ -163,8 +167,31 @@ export class World {
     const id = this.nextId++;
     this.pending.set(id, key);
     const worker = this.workers[this.roundRobin++ % this.workers.length]!;
-    const message: GenerateRequest = { type: 'generate', id, cx, cz, seed: this.seed };
+    const message: GenerateRequest = { type: 'generate', id, cx, cz, seed: this.seed, dimension: this.dimension };
     worker.postMessage(message);
+  }
+
+  /**
+   * 切换维度：清空已加载区块并让光照引擎重新按新维度播种。
+   *
+   * 为什么直接清空：两个维度的同坐标区块内容完全不同，保留会导致
+   * "走到下界却看到主世界地形"。清空后 `update()` 会按玩家位置重新流式加载，
+   * 另外卸载事件会把渲染层的网格与实体一并回收。
+   */
+  setDimension(dimension: DimensionId): void {
+    if (dimension === this.dimension) return;
+    for (const chunk of [...this.chunks.values()]) {
+      this.events.onChunkUnloaded?.(chunk.cx, chunk.cz);
+    }
+    this.chunks.clear();
+    this.loading.clear();
+    this.pending.clear();
+    this.wanted.clear();
+    this.light.reset();
+    this.light.setSkyEnabled(dimension === Dimension.OVERWORLD);
+    this.containers.clear();
+    this.dimension = dimension;
+    this.invalidateChunkCache();
   }
 
   getChunk(cx: number, cz: number): Chunk | undefined {

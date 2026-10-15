@@ -25,6 +25,7 @@ import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
+import { DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, breakSeconds, blockDef } from './core/registry/blocks.ts';
 import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
@@ -75,6 +76,23 @@ const MOUSE_SENSITIVITY = 0.0022;
  */
 const TOUCH_SENSITIVITY = 0.0034;
 
+/**
+ * 下界的雾颜色与视距。
+ * 下界是被岩层包住的密闭空间，原版用很短的视距 + 暗红雾气表现"闷热的地下"，
+ * 这里同样把雾拉近并换成暗红，同时关掉天空穹顶（那里没有天空）。
+ */
+const NETHER_FOG = 0x3a1010;
+const NETHER_FOG_NEAR = 18;
+const NETHER_FOG_FAR = 84;
+/** 下界没有天光，场景亮度固定（岩浆与荧光石才是主要光源） */
+const NETHER_SKY_BRIGHTNESS = 0.38;
+/**
+ * 下界的最低亮度下限。
+ * 下界光照全靠方块光，而方块光的传播范围有限，远离光源就是纯黑；
+ * 原版下界靠"维度环境光"把整片空间托起来，这里用同一个手段（抬高亮度下限）。
+ */
+const NETHER_MIN_BRIGHTNESS = 0.24;
+
 /** 连续破坏/放置的最小间隔（秒） */
 const BREAK_COOLDOWN = 0.25;
 const PLACE_COOLDOWN = 0.22;
@@ -107,6 +125,10 @@ class App {
   private readonly meshPool: MeshWorkerPool;
   /** 生命 / 饥饿 / 氧气 */
   readonly stats = new PlayerStats();
+  /** 当前维度（与 world.dimension 同步，供渲染与环境使用） */
+  private dimension: DimensionId = Dimension.OVERWORLD;
+  /** 下界的背景色（暗红雾） */
+  private readonly netherBackground = new THREE.Color(NETHER_FOG);
   private readonly vitalsHud: VitalsHud;
   /** 天空：渐变穹顶 / 太阳月亮 / 星空 / 云 */
   private readonly sky: Sky;
@@ -324,6 +346,31 @@ class App {
    * 因为光照等级是烘焙在顶点属性里的，这里每帧只改 uniform，开销可以忽略。
    */
   private applyEnvironment(): void {
+    if (this.dimension === Dimension.NETHER) {
+      // 下界：没有昼夜与天气，只有暗红雾气 + 固定亮度
+      //
+      // ⚠️ 必须同时改 scene.background：它优先于 clearColor，
+      // 只改 clearColor 的话下界的"天空"仍然是主世界那抹蓝色。
+      this.sky.object.visible = false;
+      this.scene.background = this.netherBackground;
+      this.renderer.setClearColor(NETHER_FOG, 1);
+      this.solidMaterial.skyBrightness = NETHER_SKY_BRIGHTNESS;
+      this.translucentMaterial.skyBrightness = NETHER_SKY_BRIGHTNESS;
+      this.entityRenderer.skyBrightness = NETHER_SKY_BRIGHTNESS;
+      this.solidMaterial.setFog(NETHER_FOG, NETHER_FOG_NEAR, NETHER_FOG_FAR);
+      this.translucentMaterial.setFog(NETHER_FOG, NETHER_FOG_NEAR, NETHER_FOG_FAR);
+      this.solidMaterial.setMinBrightness(NETHER_MIN_BRIGHTNESS);
+      this.translucentMaterial.setMinBrightness(NETHER_MIN_BRIGHTNESS);
+      this.weather.object.visible = false;
+      return;
+    }
+
+    this.sky.object.visible = true;
+    this.weather.object.visible = true;
+    this.scene.background = this.skyColor;
+    this.solidMaterial.setMinBrightness(this.solidMaterial.defaultMinBrightness);
+    this.translucentMaterial.setMinBrightness(this.translucentMaterial.defaultMinBrightness);
+    this.renderer.setClearColor(0x000000, 0);
     // 约定：t=0 日出(06:00)、t=0.25 正午、t=0.5 日落(18:00)、t=0.75 午夜
     const sunHeight = Math.sin(this.timeOfDay * Math.PI * 2);
     const daylight = smoothstep(-0.25, 0.35, sunHeight);
@@ -467,6 +514,8 @@ class App {
       }
       if (this.uiOpen) return;
       if (e.code === 'KeyF') this.setFlying(!this.flying);
+      // N：在主世界与下界之间切换（临时的维度入口；下界传送门要等火焰方块与打火石做完）
+      if (e.code === 'KeyN') this.toggleDimension();
       if (e.code.startsWith('Digit')) {
         const digit = Number(e.code.slice(5));
         if (digit >= 1 && digit <= HOTBAR_SIZE) {
@@ -1111,7 +1160,7 @@ class App {
     if (this.touch) {
       this.debugEl.textContent =
         `${this.fps} fps   ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\n` +
-        `${this.flying ? '创造(飞行)' : '生存'}   ${clock}   朝向 ${facing.slice(0, 1)}\n` +
+        `${this.flying ? '创造(飞行)' : '生存'}   ${clock}   ${DIMENSION_LABELS[this.dimension]}   朝向 ${facing.slice(0, 1)}\n` +
         `持有 ${this.heldName}`;
       return;
     }
@@ -1120,7 +1169,7 @@ class App {
       `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   模式: ${this.flying ? '创造(飞行)' : '生存'}\n` +
+      `朝向: ${facing}   时间: ${clock}   模式: ${this.flying ? '创造(飞行)' : '生存'}   维度: ${DIMENSION_LABELS[this.dimension]}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
@@ -1168,8 +1217,10 @@ class App {
         this.snowCheckTimer = 1;
         this.snowyHere = this.isSnowyColumn(Math.floor(this.physics.x), Math.floor(this.physics.z));
       }
-      this.weather.update(dt, this.camera.position, this.snowyHere);
-      this.sky.update(this.timeOfDay, this.camera.position, dt);
+      if (this.dimension === Dimension.OVERWORLD) {
+        this.weather.update(dt, this.camera.position, this.snowyHere);
+        this.sky.update(this.timeOfDay, this.camera.position, dt);
+      }
       this.applyEnvironment();
 
       const centerCx = toChunkCoord(this.physics.x);
@@ -1230,6 +1281,31 @@ class App {
   teleportForce(x: number, y: number, z: number): void {
     this.spawnResolved = true;
     this.teleport(x, y, z);
+  }
+
+  /**
+   * 切换维度。
+   *
+   * ⚠️ 切换后玩家脚下是空的：区块要重新生成，因此先把玩家抬到该维度的"空中高度"
+   * 让物理自己落下，避免卡在地形里或掉进虚空。
+   */
+  setDimension(dimension: DimensionId): void {
+    if (dimension === this.dimension) return;
+    this.dimension = dimension;
+    this.world.setDimension(dimension);
+    // 掉落物实体属于旧维度，直接清掉
+    this.entities.clear();
+    this.physics.teleport(this.physics.x, dimension === Dimension.NETHER ? 96 : 140, this.physics.z);
+    this.lastCenterCx = Number.NaN;
+    this.lastCenterCz = Number.NaN;
+    this.weather.setKind('clear');
+    this.applyEnvironment();
+    this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+  }
+
+  toggleDimension(): DimensionId {
+    this.setDimension(this.dimension === Dimension.OVERWORLD ? Dimension.NETHER : Dimension.OVERWORLD);
+    return this.dimension;
   }
 
   setTimeOfDay(t: number): void {
@@ -1402,8 +1478,14 @@ class App {
     entities: number;
     /** 射线命中的方块坐标；没有命中时为 null */
     hit: [number, number, number] | null;
+    /** 当前维度 */
+    dimension: DimensionId;
+    /** 天空穹顶是否可见（下界应为 false） */
+    skyVisible: boolean;
   } {
     return {
+      dimension: this.dimension,
+      skyVisible: this.sky.object.visible,
       fps: this.fps,
       chunks: this.world.chunks.size,
       lit: this.world.litChunkCount,

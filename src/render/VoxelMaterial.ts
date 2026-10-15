@@ -87,6 +87,8 @@ export interface VoxelMaterialOptions {
 export class VoxelMaterial {
   readonly material: THREE.ShaderMaterial;
   private readonly uniforms: Record<string, THREE.IUniform>;
+  /** 构造时的默认最低亮度（切回主世界要还原） */
+  readonly defaultMinBrightness: number;
 
   constructor(atlas: THREE.Texture, options: VoxelMaterialOptions = {}) {
     const translucent = options.translucent ?? false;
@@ -104,6 +106,8 @@ export class VoxelMaterial {
       uTileInset: { value: options.tileInset ?? 0 },
     };
 
+    this.defaultMinBrightness = translucent ? 0.32 : 0.06;
+
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: VERTEX_SHADER,
@@ -114,6 +118,15 @@ export class VoxelMaterial {
       fog: false,
       lights: false,
     });
+  }
+
+  /**
+   * 最低亮度下限。
+   * 主世界靠天光，默认值（实心 0.06 / 半透明 0.32）只用于把纯黑的缝提一点；
+   * 下界没有天光，必须把它整体抬高，否则远离岩浆与荧光石的地方就是一片纯黑。
+   */
+  setMinBrightness(value: number): void {
+    this.uniforms.uMinBrightness!.value = value;
   }
 
   /** 0 = 深夜，1 = 正午。用于昼夜循环 */

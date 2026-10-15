@@ -57,6 +57,13 @@ export class LightEngine {
     return this.skyHead < this.skyQueue.length || this.blockHead < this.blockQueue.length;
   }
 
+  /** 该维度是否有天光（下界为 false） */
+  private skyEnabled = true;
+
+  setSkyEnabled(value: boolean): void {
+    this.skyEnabled = value;
+  }
+
   get pendingCells(): number {
     return (this.skyQueue.length - this.skyHead) / 3 + (this.blockQueue.length - this.blockHead) / 3;
   }
@@ -85,7 +92,9 @@ export class LightEngine {
   initChunk(chunk: Chunk): void {
     const [minY, maxY] = LightEngine.verticalRange(chunk);
 
-    this.fillSkyColumns(chunk, maxY);
+    // 下界没有天光：整片维度只有方块光（荧光石、岩浆），必须跳过天光播种，
+    // 否则洞顶之上的"开放天空"会被写满 15 级并顺着洞口漏进洞窟。
+    if (this.skyEnabled) this.fillSkyColumns(chunk, maxY);
     this.seedSelf(chunk, minY, maxY);
 
     for (const [dx, dz] of HORIZONTAL) {

@@ -22,6 +22,7 @@ import {
   type FeatureWorld,
 } from '../src/core/gen/Features.ts';
 import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
+import { Dimension } from '../src/core/gen/Dimension.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../src/core/world/Chunk.ts';
 
@@ -296,7 +297,7 @@ console.log('\n[真实地形抽样：10×10 区块]');
   const biomeHistogram = new Map<string, number>();
   for (let cz = 0; cz < 10; cz++) {
     for (let cx = 0; cx < 10; cx++) {
-      const blocks = generateChunkBlocks(cx, cz, 20261014, undefined, stats);
+      const blocks = generateChunkBlocks(cx, cz, 20261014, Dimension.OVERWORLD, undefined, stats);
       for (const id of blocks) counts.set(id, (counts.get(id) ?? 0) + 1);
       const biome = generator.columnBiome(cx * 16 + 8, cz * 16 + 8).name;
       biomeHistogram.set(biome, (biomeHistogram.get(biome) ?? 0) + 1);
