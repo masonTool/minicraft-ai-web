@@ -74,8 +74,14 @@
   const stickCy = stickRect.top + stickRect.height / 2;
 
   // ---------------------------------------------------------------- 3. 摇杆驱动移动
-  mc.look(0, 0);
+  // 先把玩家挪到高空再开飞行：存档恢复可能把玩家放在水下或洞里，
+  // 那种环境下"推满摇杆"走不动（水里慢、洞里撞墙），测出来的位移没有意义。
+  // 高空是"一定没有阻挡"的环境，测的才是摇杆本身。
   mc.setFlying(true);
+  const spawn = mc.info.position;
+  mc.teleportForce(spawn[0], 150, spawn[2]);
+  await sleep(1200);
+  mc.look(0, 0);
   const before = mc.info.position.slice();
   const stick = document.getElementById('touch-stick');
   fire(stick, 'pointerdown', stickCx, stickCy, 101);
@@ -114,8 +120,15 @@
   await sleep(60);
   check(`tap (<220ms, no movement) does not rotate view`, Math.abs(mc.lookAngles.pitch - pitchBefore) < 2);
 
-  // 长按破坏需要"射线命中一个方块"：先落地并朝脚下看，否则 hit 是空的
+  // 长按破坏需要"射线命中一个方块"：先把玩家传送到一块真正的地面上，
+  // 再朝脚下看——否则在空中/水面上射线经常落空（这条断言之前就因此偶发失败）
   mc.setFlying(false);
+  const self0 = mc.info.position;
+  const gx = Math.round(self0[0]);
+  const gz = Math.round(self0[2]);
+  let groundY = mc.column(gx, gz).ground;
+  if (groundY === -999 || groundY < 0) groundY = Math.round(self0[1]);
+  mc.teleportForce(gx + 0.5, groundY + 2, gz + 0.5);
   mc.look(0, -75);
   // 落体 + 网格重建都要时间：轮询等射线命中，最多 3 秒
   let hitForBreaking = null;
@@ -133,6 +146,43 @@
   const stillBreaking = mc.isBreaking;
   check('long press starts breaking', breakingAfterHold === true, `during=${breakingAfterHold} after=${stillBreaking}`);
   check('release stops breaking', stillBreaking === false, `after=${stillBreaking}`);
+
+  // ---------------------------------------------------------------- 5.5 触控延迟
+  // 合成事件测不到"手指→屏幕"的硬件延迟，但能测出**从事件进来到生效**的处理链路耗时
+  // （射线、物理、区块查询、重网格化的排队），这部分在真机上同样存在。
+  const pad = document.getElementById('touch-stick');
+  const padRect = pad.getBoundingClientRect();
+  const padCx = padRect.left + padRect.width / 2;
+  const padCy = padRect.top + padRect.height / 2;
+  const samples = [];
+  for (let i = 0; i < 5; i++) {
+    const before = mc.info.position.slice();
+    const t0 = performance.now();
+    fire(pad, 'pointerdown', padCx, padCy, 500 + i);
+    fire(pad, 'pointermove', padCx, padCy - padRect.height, 500 + i);
+    // 等玩家真的动起来（位置变化）即认为输入已生效
+    let latency = -1;
+    for (let wait = 0; wait < 40; wait++) {
+      await sleep(8);
+      const now = mc.info.position;
+      if (Math.hypot(now[0] - before[0], now[2] - before[2]) > 0.02) {
+        latency = performance.now() - t0;
+        break;
+      }
+    }
+    fire(pad, 'pointerup', padCx, padCy - padRect.height, 500 + i);
+    if (latency >= 0) samples.push(latency);
+    await sleep(120);
+  }
+  const avgLatency = samples.length > 0 ? samples.reduce((a, b) => a + b, 0) / samples.length : -1;
+  const worstLatency = samples.length > 0 ? Math.max(...samples) : -1;
+  // 阈值 100ms：这里量的是"事件进来 → 物理产生可见位移"的整条链路（含几帧加速），
+  // 不是"手指→屏幕"的硬件延迟。真机上的触控采样延迟必须上手才知道。
+  check(
+    `stick input latency avg ${avgLatency.toFixed(1)}ms / worst ${worstLatency.toFixed(1)}ms (${samples.length}/5 samples)`,
+    samples.length >= 3 && avgLatency < 100,
+    '量的是处理链路（事件→物理生效），硬件触控延迟需真机',
+  );
 
   // ---------------------------------------------------------------- 6. 性能基线
   await sleep(1200);
