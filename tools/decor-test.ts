@@ -23,6 +23,8 @@ import {
   requiresShears,
   GRASS_SEED_CHANCE,
 } from '../src/core/registry/items.ts';
+import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
 import {
@@ -448,6 +450,62 @@ console.log('\n[小麦与种子（H13）]');
   let seeds = 0;
   for (let i = 0; i < 20000; i++) if (blockDrops(Block.SHORT_GRASS, { ...plain, roll: Math.random })) seeds++;
   check(`20000 次拔草掉了 ${seeds} 次种子（期望约 2500）`, Math.abs(seeds / 20000 - 0.125) < 0.01, (seeds / 20000).toFixed(4));
+}
+
+console.log('\n[睡莲（B16）]');
+{
+  equal('注册名', blockDef(Block.LILY_PAD).name, 'minecraft:lily_pad');
+  equal('中文名是"睡莲"', itemLabel(Block.LILY_PAD), '睡莲');
+  equal('形状是 lily_pad（与 flat 的区别是有碰撞）', blockDef(Block.LILY_PAD).shape, 'lily_pad');
+  check('走半透明层（叶片四角透明，靠 alpha 混合）', blockDef(Block.LILY_PAD).translucent === true);
+  check('不遮挡邻居', !blockDef(Block.LILY_PAD).opaque);
+  equal('不透光（不影响光照传播）', blockDef(Block.LILY_PAD).lightOpacity, 0);
+  equal('硬度 0 → 徒手一碰就掉', breakSeconds(Block.LILY_PAD), 0);
+  check('徒手可采集（原版不用任何工具）', isHandHarvestable(Block.LILY_PAD));
+  equal('破坏掉落自身', dropFor(Block.LILY_PAD)?.id, Block.LILY_PAD);
+  check('贴图在图集名单里', TILES.includes('lily_pad'));
+  check('在创造物品栏里（否则生存里根本拿不到）', CREATIVE_ITEMS.includes(Block.LILY_PAD));
+  check('有中文说明（写明能踩、怎么放）', hasDescription(Block.LILY_PAD));
+  // 原版睡莲没有合成配方（只能从沼泽的水面上采）
+  check('没有工作台配方', recipesForResult(Block.LILY_PAD).length === 0);
+
+  /**
+   * 一小片水塘：y=63 是地面、y=64 是水（水面正上方 y=65 是空气）。
+   * 睡莲应该只出现在 y=65。
+   */
+  function pondChunk(): Uint8Array {
+    const blocks = flatChunk(63);
+    for (let z = 2; z < 12; z++) {
+      for (let x = 2; x < 12; x++) blocks[Chunk.index(x, 64, z)] = Block.WATER;
+    }
+    return blocks;
+  }
+
+  let pads = 0;
+  const misplaced: string[] = [];
+  for (let seed = 1; seed <= 20; seed++) {
+    const chunk = pondChunk();
+    decorate(chunk, 0, 0, flatWorld(63, Biome.SWAMP), seed);
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        for (let y = -64; y < 320; y++) {
+          if (chunk[Chunk.index(x, y, z)] !== Block.LILY_PAD) continue;
+          pads++;
+          // 唯一合法的落点：水面正上方那一格（下方是水）
+          if (y !== 65 || chunk[Chunk.index(x, 64, z)] !== Block.WATER) misplaced.push(`${x},${y},${z}`);
+        }
+      }
+    }
+  }
+  // 100 列水面 × 密度 0.05 × 20 个种子 ≈ 100 片
+  check(`20 个种子在水塘里长出 ${pads} 片睡莲（期望约 100）`, pads > 20, `实际 ${pads}`);
+  check('睡莲只落在"水面正上方那一格"（水里/地面/空中都不该有）', misplaced.length === 0, misplaced.slice(0, 3).join(' '));
+
+  // 群系约束：只有沼泽配了睡莲，别的群系不该长
+  const plains = pondChunk();
+  decorate(plains, 0, 0, flatWorld(63, Biome.PLAINS), 7);
+  check('平原的水塘里不长睡莲（只有沼泽配了它）', countBlocks(plains, [Block.LILY_PAD]) === 0);
+  check('沼泽的配置里确实开了睡莲', (BIOME_FEATURES[Biome.SWAMP]!.lilyPads ?? 0) > 0);
 }
 
 console.log(`\n装饰策略测试：${passed} 通过 / ${failed} 失败`);

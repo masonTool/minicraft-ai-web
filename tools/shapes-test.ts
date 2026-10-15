@@ -6,7 +6,7 @@
  */
 
 import { Block, SHAPED_PARENTS, blockDef, slabId, stairsId } from '../src/core/registry/blocks.ts';
-import { collisionBoxes, meshBoxes, stairsShape } from '../src/core/registry/blockShapes.ts';
+import { FLAT_HEIGHT, collisionBoxes, isFullBlockShape, meshBoxes, stairsShape } from '../src/core/registry/blockShapes.ts';
 import {
   facingFromYaw,
   facingOf,
@@ -505,6 +505,40 @@ console.log('\n[B4b 楼梯：内角 / 外角]');
   equal('外角补块在低侧 x∈[0,0.5]', `${outerQuarter[0]},${outerQuarter[3]}`, '0,0.5');
   equal('外角补块在 z 的负半边（与内角镜像）', `${outerQuarter[2]},${outerQuarter[5]}`, '0,0.5');
   equal('补块补齐上半层（y∈[0.5,1]）', `${innerQuarter[1]},${innerQuarter[4]}`, '0.5,1');
+}
+
+console.log('\n[睡莲（B16）：形状与放置]');
+{
+  // 形状：与"贴地薄板"长得一样（1/16 的一层），但**有碰撞**——原版能站在睡莲上
+  const padBoxes = collisionBoxes('lily_pad', 0);
+  equal('睡莲有碰撞盒（1 个）', padBoxes.length, 1);
+  equal('碰撞盒是 1/16 厚的薄板', padBoxes[0]![4], FLAT_HEIGHT);
+  equal('薄板贴地（y 从 0 开始）', padBoxes[0]![1], 0);
+  equal('薄板占满整格（四边不内缩）', `${padBoxes[0]![0]},${padBoxes[0]![3]},${padBoxes[0]![2]},${padBoxes[0]![5]}`, '0,1,0,1');
+  equal('红石粉那批"贴地薄板"没有碰撞（不挡路）', collisionBoxes('flat', 0).length, 0);
+  equal('渲染盒与 flat 同高', meshBoxes('lily_pad', 0)[0]![4], meshBoxes('flat', 0)[0]![4]);
+  check('不是整格（否则会走贪心合并）', !isFullBlockShape('lily_pad', 0));
+
+  // 放置：自己那一格必须是空气、下面必须是水
+  const place = (self: number, below: number) =>
+    planPlacement({
+      blockId: Block.LILY_PAD,
+      normal: [0, 1, 0],
+      hitX: 0.5,
+      hitY: 64,
+      hitZ: 0.5,
+      yaw: 0,
+      sneaking: false,
+      blockAt: (_dx, dy) => (dy === 0 ? self : dy === -1 ? below : Block.AIR),
+      hitBlock: Block.WATER,
+      hitState: 0,
+    });
+  check('水面正上方的空气格能放', place(Block.AIR, Block.WATER) !== null);
+  check('下面不是水就放不了', place(Block.AIR, Block.STONE) === null);
+  check('下面还是草方块也放不了', place(Block.AIR, Block.GRASS_BLOCK) === null);
+  check('自己那一格是水放不了（叶片会被同一格的水面盖住）', place(Block.WATER, Block.WATER) === null);
+  check('自己那一格是实体方块也放不了', place(Block.STONE, Block.WATER) === null);
+  equal('放下时状态为 0（睡莲没有状态位）', place(Block.AIR, Block.WATER)?.state, 0);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
