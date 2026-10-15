@@ -360,8 +360,12 @@ export class Mob extends Entity {
     const dz = player ? player.z - this.z : 0;
     const distanceSq = dx * dx + dz * dz;
 
+    // 隐身的玩家不会被盯上（K4 尾巴）：已经追到一半的会停下来（下一帧就不满足条件了）
     const chasing =
-      this.type.hostile && player !== null && distanceSq <= this.type.followRange * this.type.followRange;
+      this.type.hostile &&
+      player !== null &&
+      ctx.playerInvisible !== true &&
+      distanceSq <= this.type.followRange * this.type.followRange;
 
     // 被手里的食物吸引：玩家拿着它爱吃的东西走近，它会跟着走（原版行为）。
     // 放在"求爱"之前：正在被引的时候不会乱跑，但求爱仍然优先（毕竟那是在办事）

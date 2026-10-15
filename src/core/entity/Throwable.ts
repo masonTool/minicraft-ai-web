@@ -35,13 +35,13 @@ export const PLAYER_THROW_SPEED = 30;
 /** 鸡蛋砸出小鸡的概率（原版 1/8） */
 export const EGG_CHICK_CHANCE = 0.125;
 
-export type ThrowableKind = 'snowball' | 'egg' | 'splash_potion';
+export type ThrowableKind = 'snowball' | 'egg' | 'splash_potion' | 'lingering_potion';
 
 export interface ThrowableOptions {
   readonly kind: ThrowableKind;
   /** 渲染用的物品 id（贴图与中文名都从它查） */
   readonly itemId: number;
-  /** 喷溅药水的物品 id（`kind === 'splash_potion'` 时必填，结算范围效果要用） */
+  /** 药水的物品 id（喷溅/滞留时必填：一个要结算范围效果、一个要留下云） */
   readonly potionId?: number;
 }
 
@@ -172,6 +172,12 @@ export class Throwable extends Entity implements MovingBody {
       case 'splash_potion':
         // 范围结算交给主程序（它才知道周围有谁），实体层只管"在哪炸"
         if (this.potionId !== undefined) ctx.applySplash?.(this.potionId, x, y, z);
+        else ctx.playSound?.('splash', x, y, z);
+        break;
+      case 'lingering_potion':
+        // 滞留型不炸开，而是**在原地留下**一片云（K4 尾巴）：云的生命周期归主程序，
+        // 实体层同样只报"在哪摔的"
+        if (this.potionId !== undefined) ctx.spawnLingering?.(this.potionId, x, y, z);
         else ctx.playSound?.('splash', x, y, z);
         break;
       default:

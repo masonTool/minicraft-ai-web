@@ -24,8 +24,18 @@ import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower } from './core/crafting/Enchanting.ts';
-import { isDrinkable, potionById, type PotionEntry } from './core/registry/potions.ts';
+import { isDrinkable, potionById, potionTint, type PotionEntry } from './core/registry/potions.ts';
 import { splashEffectsAt } from './core/survival/SplashPotion.ts';
+import {
+  DRAGON_BREATH_COLLECT_SHRINK,
+  DRAGON_BREATH_DAMAGE,
+  canCollectDragonBreath,
+  cloudEffectsAt,
+  createDragonBreathCloud,
+  createLingeringCloud,
+  tickCloud,
+  type PotionCloud,
+} from './core/survival/PotionCloud.ts';
 import { PLAYER_THROW_SPEED, Throwable, type ThrowableKind } from './core/entity/Throwable.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
@@ -527,6 +537,15 @@ class App {
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
+
+  /**
+   * 活着的药水云（K4 尾巴）：滞留药水摔出来的 + 末影龙吐出来的血息。
+   *
+   * **不是实体**：原版的药水云只有"效果 + 粒子"，没有碰撞盒也不参与物理，
+   * 做成实体反而要多接线渲染、存档、联机三处。这里就是主程序自己维护的一小串状态，
+   * 生命周期与范围都走 `survival/PotionCloud.ts` 里的纯函数。
+   */
+  private readonly clouds: PotionCloud[] = [];
   /** 音效引擎（程序化合成，不依赖音频文件） */
   private readonly audio = new AudioEngine();
   /** 脚步音的距离累积器（走满一格半响一声） */
@@ -1808,7 +1827,8 @@ class App {
     this.camera.rotation.set(placement.pitch, placement.yaw, 0);
 
     const thirdPerson = this.cameraMode !== 'first';
-    this.playerRenderer.setVisible(thirdPerson);
+    // 隐身（K4 尾巴）：第三人称看不到自己；第一人称的手仍然照画（原版也是这样）
+    this.playerRenderer.setVisible(thirdPerson && !this.effects.invisible);
     this.hand.setVisible(!thirdPerson);
     // 盔甲：第三人称画甲片、第一人称只画胸甲袖套，但取色是同一份
     this.applyArmorAppearance();
@@ -2593,9 +2613,18 @@ class App {
       },
       // 喷溅药水的范围结算（K4 尾巴）：实体层只报"在哪炸了"，周围有谁得问这里
       applySplash: (potionId, x, y, z) => this.applySplash(potionId, x, y, z),
+      // 滞留药水摔碎 → 原地留一片云；末影龙吐息 → 吐一团血息云
+      spawnLingering: (potionId, x, y, z) => this.spawnLingeringCloud(potionId, x, y, z),
+      spawnDragonBreath: (x, y, z) => this.spawnDragonBreathCloud(x, y, z),
+      // 隐身（K4 尾巴）：敌对生物看不见你就不追（原版隐形后 8 格内还是会被发现，
+      // 这里简化成"完全不追"，见 TASKS K4 的差异记录）
+      playerInvisible: this.effects.invisible,
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);
+    // 药水云在主循环里推进（不是实体）：`lastEntityContext` 刚更新过，
+    // 所以云结算里伤到生物时用得上"掉落物要交给谁"这些回调
+    this.updateClouds(dt);
     // 逐实体采样光照：洞里暗、火把旁亮
     const sampleLight = (x: number, y: number, z: number): { sky: number; block: number } | null => {
       if (!this.world.isLoaded(x, z)) return null;
@@ -3236,7 +3265,9 @@ class App {
           ? 'egg'
           : potion?.splash === true
             ? 'splash_potion'
-            : null;
+            : potion?.lingering === true
+              ? 'lingering_potion'
+              : null;
     if (kind === null) return false;
 
     // 先扣再扔：扔不出去（背包里其实没有）时什么都不该发生
@@ -3254,7 +3285,11 @@ class App {
         this.physics.eyeY - 0.1,
         this.physics.z + dirZ * 0.4,
         { x: dirX * PLAYER_THROW_SPEED, y: dirY * PLAYER_THROW_SPEED, z: dirZ * PLAYER_THROW_SPEED },
-        { kind, itemId: held, potionId: kind === 'splash_potion' ? held : undefined },
+        {
+          kind,
+          itemId: held,
+          potionId: kind === 'splash_potion' || kind === 'lingering_potion' ? held : undefined,
+        },
       ),
     );
 
@@ -3297,6 +3332,114 @@ class App {
     // 也不往消息栏里写一行——原版砸药水是没有提示的，扔一排在手机上会被刷屏
   }
 
+  /** 摔出一片滞留药水的云（K4 尾巴）：只登记，结算交给 `updateClouds` 按节奏推进 */
+  private spawnLingeringCloud(potionId: number, x: number, y: number, z: number): void {
+    const cloud = createLingeringCloud(potionId, x, y, z);
+    this.clouds.push(cloud);
+    this.audio.play('splash', { x, y, z });
+    this.puffCloud(cloud);
+  }
+
+  /** 末影龙吐出一团血息云（K4 尾巴） */
+  private spawnDragonBreathCloud(x: number, y: number, z: number): void {
+    const cloud = createDragonBreathCloud(x, y, z);
+    this.clouds.push(cloud);
+    this.puffCloud(cloud);
+  }
+
+  /**
+   * 给一片云撒一把粒子。
+   * 药水云在视觉上**就是一团彩烟**（原版也没有实心模型），所以不建 mesh；
+   * 颜色与瓶子贴图同源（`potionTint`），不会出现"云是绿的、瓶子是黄的"。
+   */
+  private puffCloud(cloud: PotionCloud): void {
+    if (cloud.kind === 'dragon_breath') {
+      this.particles.spawnFlame(cloud.x, cloud.y, cloud.z, 0xa070e0, 3);
+      return;
+    }
+    const potion = cloud.potionId === undefined ? undefined : potionById(cloud.potionId);
+    this.particles.spawnSplash(cloud.x, cloud.y, cloud.z, potion ? potionTint(potion) : 0x8a6ab0, 8);
+  }
+
+  /** 推进所有药水云：存活、收缩、结算节奏全部由 `survival/PotionCloud.ts` 决定 */
+  private updateClouds(dt: number): void {
+    for (let i = this.clouds.length - 1; i >= 0; i--) {
+      const cloud = this.clouds[i]!;
+      const { alive, pulse } = tickCloud(cloud, dt);
+      if (!alive) {
+        this.clouds.splice(i, 1);
+        continue;
+      }
+      if (!pulse) continue;
+      this.puffCloud(cloud);
+      this.pulseCloud(cloud);
+    }
+  }
+
+  /**
+   * 云的一次结算（每 `CLOUD_PULSE_INTERVAL` 秒一次）。
+   * ⚠️ 与喷溅药水一样**不分敌我**：站在自己的毒云里一样会中毒。
+   * 龙息云是固定伤害、不按距离缩；药水云沿用喷溅那套"离云心越远越短"的缩放。
+   */
+  private pulseCloud(cloud: PotionCloud): void {
+    const playerDistance = Math.hypot(
+      this.physics.x - cloud.x,
+      this.physics.y + 0.9 - cloud.y,
+      this.physics.z - cloud.z,
+    );
+
+    if (cloud.kind === 'dragon_breath') {
+      // 同一秒里被好几片云罩住也只掉一次：玩家的无敌帧会挡掉重复的伤害
+      if (playerDistance <= cloud.radius) this.applyIncomingDamage(DRAGON_BREATH_DAMAGE, 'generic');
+    } else {
+      for (const effect of cloudEffectsAt(cloud, playerDistance)) {
+        this.effects.apply(effect.id, effect.seconds, effect.amplifier);
+      }
+    }
+
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity.dead) continue;
+      const distance = Math.hypot(entity.x - cloud.x, entity.y + entity.height / 2 - cloud.y, entity.z - cloud.z);
+      if (distance > cloud.radius) continue;
+      if (cloud.kind === 'dragon_breath') {
+        entity.hurt(DRAGON_BREATH_DAMAGE, 0, 0, this.lastEntityContext ?? undefined);
+        continue;
+      }
+      for (const effect of cloudEffectsAt(cloud, distance)) {
+        entity.effects.apply(effect.id, effect.seconds, effect.amplifier);
+      }
+    }
+  }
+
+  /**
+   * 空玻璃瓶接龙息（K4 尾巴）：站在**血息云**里右键。
+   * 接一次会让云缩小一圈（原版 `radiusOnUse`），所以一片云能接的量是有限的。
+   */
+  private collectDragonBreath(): boolean {
+    if (this.heldItemId !== Item.GLASS_BOTTLE) return false;
+    const cloud = this.dragonBreathCloudInReach();
+    if (!cloud) return false;
+    if (!this.inventory.consume(Item.GLASS_BOTTLE, 1)) return false;
+
+    const leftover = this.inventory.add(Item.DRAGON_BREATH, 1);
+    if (leftover > 0) this.spawnDrop(Item.DRAGON_BREATH, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
+    cloud.radius = Math.max(0, cloud.radius - DRAGON_BREATH_COLLECT_SHRINK);
+
+    this.audio.play('splash');
+    this.refreshHotbar();
+    return true;
+  }
+
+  /** 眼睛够得着的血息云：判定用**云自己的半径**（原版是"站进云里"才接得到） */
+  private dragonBreathCloudInReach(): PotionCloud | null {
+    for (const cloud of this.clouds) {
+      if (cloud.kind !== 'dragon_breath') continue;
+      const distance = Math.hypot(cloud.x - this.physics.x, cloud.y - this.physics.eyeY, cloud.z - this.physics.z);
+      if (canCollectDragonBreath(cloud, distance)) return cloud;
+    }
+    return null;
+  }
+
   private updatePlacing(): void {
     // 触摸端是"一次性轻点"，鼠标是"按住不放"，这里统一成一个待执行标记
     const tapped = this.touchPlaceRequest;
@@ -3304,6 +3447,13 @@ class App {
 
     // 投掷物优先于放置：手里拿着雪球/鸡蛋/喷溅药水时，这一下是"扔"而不是"放"
     if (this.throwHeld()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
+    // 空玻璃瓶接龙息（K4 尾巴）：血息云飘在空气里，所以和投掷一样**不需要准星对着方块**
+    if (this.collectDragonBreath()) {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;
       return;

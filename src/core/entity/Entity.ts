@@ -30,6 +30,13 @@ export interface EntityContext {
   /** 玩家位置（敌对生物追击用）；未加载时为 null */
   player: { x: number; y: number; z: number } | null;
   /**
+   * 玩家现在是不是隐身的（K4 尾巴）。
+   *
+   * ⚠️ 传**值**而不是函数：这一项每帧都可能变，而上下文每帧都会重建
+   * （反过来说，`heldItemId` 那种"要读时才问"的传函数——见 `HANDOFF` 的经验表）。
+   */
+  playerInvisible?: boolean;
+  /**
    * 播放音效（生物与投掷物用：点火、爆炸、命中……）；不传就没有声音。
    * 取值必须是音频模块里真实存在的 kind（多写一个不存在的名字会在运行时静默无声）。
    */
@@ -103,6 +110,10 @@ export interface EntityContext {
    * 范围与时长缩放本身是纯函数（见 `survival/SplashPotion.ts`）。
    */
   applySplash?: (potionId: number, x: number, y: number, z: number) => void;
+  /** 在原地留下一片药水云（K4 尾巴：滞留药水摔碎时调用） */
+  spawnLingering?: (potionId: number, x: number, y: number, z: number) => void;
+  /** 吐一团龙息云（K4 尾巴：末影龙的血息阶段调用） */
+  spawnDragonBreath?: (x: number, y: number, z: number) => void;
 }
 
 let nextEntityId = 1;

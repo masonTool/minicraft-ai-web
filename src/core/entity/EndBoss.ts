@@ -63,6 +63,15 @@ export const END_CRYSTAL_TYPE: MobType = {
 export const DRAGON_ORBIT_RADIUS = 46;
 export const DRAGON_CRUISE_Y = 78;
 
+/**
+ * 血息阶段（K4 尾巴）：龙悬停在玩家上方吐龙息，**每 0.4 秒一团云**，
+ * 这是龙息（滞留药水的原料）在生存里的唯一来源。
+ */
+export const DRAGON_BREATH_PHASE_TIME = 6;
+export const DRAGON_BREATH_INTERVAL = 0.4;
+/** 血息阶段的悬停高度（玩家上方 14 格：够高打不到近战，又够低能罩住脚下一片） */
+const BREATH_HOVER_HEIGHT = 14;
+
 export class Dragon extends Mob {
   /** 存活的水晶数量（主线程每帧同步）：>0 时龙会缓慢回血 */
   crystalCount = 0;
@@ -74,8 +83,10 @@ export class Dragon extends Mob {
   private attackTimer = 0;
   private regenTimer = 0;
   private orbitAngle: number;
-  private phase: 'circle' | 'charge' = 'circle';
+  private phase: 'circle' | 'charge' | 'breath' = 'circle';
   private phaseTimer = 10;
+  /** 血息阶段里距离下一团云还有多久（秒） */
+  private breathTimer = 0;
 
   constructor(x: number, y: number, z: number, orbitAngle = 0) {
     super(DRAGON_TYPE, x, y, z);
@@ -103,12 +114,17 @@ export class Dragon extends Mob {
       }
     }
 
-    // ---- 阶段切换
+    // ---- 阶段切换：盘旋 → 俯冲 → 血息 → 回盘旋
     this.phaseTimer -= dt;
     if (this.phaseTimer <= 0) {
       if (this.phase === 'circle') {
         this.phase = 'charge';
         this.phaseTimer = 4;
+      } else if (this.phase === 'charge') {
+        // 俯冲完接着吐一轮血息（K4 尾巴）：这也是**龙息**的唯一来源
+        this.phase = 'breath';
+        this.phaseTimer = DRAGON_BREATH_PHASE_TIME;
+        this.breathTimer = 0;
       } else {
         this.phase = 'circle';
         this.phaseTimer = 8 + Math.random() * 5;
@@ -126,6 +142,12 @@ export class Dragon extends Mob {
       targetY = player.y + 1;
       targetZ = player.z;
       speed = 20;
+    } else if (this.phase === 'breath' && player) {
+      // 血息阶段：悬停在玩家上方（够高打不到，又够低能罩住脚下一片）
+      targetX = player.x;
+      targetY = player.y + BREATH_HOVER_HEIGHT;
+      targetZ = player.z;
+      speed = 10;
     } else {
       this.orbitAngle += 0.32 * dt;
       targetX = Math.cos(this.orbitAngle) * DRAGON_ORBIT_RADIUS;
@@ -147,6 +169,30 @@ export class Dragon extends Mob {
       if (distance < 5.5 && vertical < 4) {
         ctx.hurtPlayer(this.type.attackDamage, this.x, this.z);
         this.attackTimer = 1.5;
+      }
+    }
+
+    // ---- 血息喷吐（K4 尾巴）：每 0.4 秒一团云，一团比一团更靠近玩家
+    if (this.phase === 'breath' && player) {
+      this.breathTimer -= dt;
+      if (this.breathTimer <= 0) {
+        this.breathTimer = DRAGON_BREATH_INTERVAL;
+        const dx = player.x - this.x;
+        const dz = player.z - this.z;
+        const length = Math.hypot(dx, dz) || 1;
+        // 从龙嘴出发朝玩家的脚下一路铺过去：进度随阶段时间推进。
+        // 于是"站着不动看龙吐息"会被一路烧到，走开就能躲——这与原版血息云
+        // "会朝吐出的方向漂"手感接近，但不用给云加一份速度与阻力（云是静止的）
+        const progress = 1 - Math.max(0, this.phaseTimer) / DRAGON_BREATH_PHASE_TIME;
+        const mouthX = this.x + (dx / length) * 4;
+        const mouthY = this.y + 0.5;
+        const mouthZ = this.z + (dz / length) * 4;
+        const targetY = player.y + 0.2;
+        ctx.spawnDragonBreath?.(
+          mouthX + (player.x - mouthX) * progress,
+          mouthY + (targetY - mouthY) * progress,
+          mouthZ + (player.z - mouthZ) * progress,
+        );
       }
     }
 
