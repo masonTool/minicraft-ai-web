@@ -137,6 +137,28 @@ export function mobTypeById(id: string): MobType | undefined {
   return BY_ID.get(id);
 }
 
+/**
+ * 联机时其它玩家的外观（K2）。
+ *
+ * 故意**不放进 `MOB_TYPES`**：那样会被 `PASSIVE_MOBS` 收录、进而被自然刷出来。
+ * 远程玩家只是"借渲染器的模型用一下"，位置完全由网络消息驱动，不参与 AI 与物理。
+ */
+export const REMOTE_PLAYER_TYPE: MobType = {
+  id: 'remote_player',
+  name: '玩家',
+  health: 20,
+  width: 0.6,
+  height: 1.8,
+  speed: 0,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  bodyColor: 0x3f7ad6,
+  accentColor: 0xe2b48c,
+  eyeHeight: 1.62,
+};
+
 /** 敌对生物（生成与战斗判定用） */
 export const HOSTILE_MOBS: readonly MobType[] = MOB_TYPES.filter((type) => type.hostile);
 /** 被动生物 */

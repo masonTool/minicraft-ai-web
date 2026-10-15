@@ -26,12 +26,16 @@ import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
+import { NetClient, defaultServerUrl } from './net/NetClient.ts';
+import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
+import type { NetPlayerState } from './net/NetClient.ts';
 import { delayOf, withDelay } from './core/registry/blockState.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
+import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, breakSeconds, blockDef } from './core/registry/blocks.ts';
 import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
@@ -245,6 +249,31 @@ class App {
   /** 末影龙是否已被击败（会写进存档，决定重进末地要不要再生成 boss） */
   private dragonDefeated = false;
 
+  /**
+   * 联机（K2）：服务端只发种子与方块增量，地形各算各的。
+   * 远程玩家借用生物渲染器的模型，位置完全由网络驱动，不进 EntityManager（不跑 AI/物理）。
+   */
+  private readonly net = new NetClient({
+    onWelcome: (seed, selfId, players, edits) => this.onNetWelcome(seed, selfId, players, edits),
+    onPlayer: (player) => this.onNetPlayer(player),
+    onLeave: (id) => this.onNetLeave(id),
+    onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
+    onChat: (id, name, text) => {
+      console.info(`[chat] <${name}> ${text}`);
+      this.chatLine = `<${name}> ${text}`;
+      this.chatUntil = performance.now() + 8000;
+      void id;
+    },
+    onStatus: (connected, detail) => {
+      this.netStatus = detail;
+      if (!connected) this.remotePlayers.clear();
+    },
+  });
+  private readonly remotePlayers = new Map<number, Mob>();
+  private netStatus = '未连接（按 L 联机）';
+  private chatLine = '';
+  private chatUntil = 0;
+
   private yaw = 0;
   private pitch = -0.22;
   private readonly keys = new Set<string>();
@@ -422,6 +451,100 @@ class App {
         /* 浏览器可能拒绝自动重新锁定，玩家点击画面即可 */
       });
     }
+  }
+
+  // ---------------------------------------------------------------- 联机（K2）
+
+  /** 连上服务器：拿到种子与已有玩家/方块改动 */
+  private onNetWelcome(seed: number, selfId: number, players: NetPlayerState[], edits: number[][]): void {
+    console.info(`[net] 已加入服务器 #${selfId}，种子 ${seed}，在线 ${players.length} 人，已有方块改动 ${edits.length} 条`);
+
+    // 种子不一致：地形会对不上（两边看到的是不同的大陆），只提示不强行切换
+    if (seed !== WORLD_SEED) {
+      console.warn(`[net] 服务端种子 ${seed} 与本地 ${WORLD_SEED} 不同，地形可能与队友不一致`);
+    }
+
+    // 服务端的方块改动并进增量表：这样它们也会被 K1 的存档保存下来
+    for (const entry of edits) {
+      const [x, y, z, id, state, dimension] = entry as [number, number, number, number, number, string];
+      this.world.edits.record(
+        dimension ?? 'overworld',
+        toChunkCoord(x),
+        toChunkCoord(z),
+        Chunk.index(x & 15, y, z & 15),
+        id,
+        state ?? 0,
+      );
+      // 已经加载出来的区块立即生效
+      if (this.world.isLoaded(x, z)) this.world.setBlockAndUpdate(x, y, z, id, state ?? 0);
+    }
+
+    for (const player of players) {
+      if (player.id === selfId) continue;
+      this.onNetPlayer(player);
+    }
+  }
+
+  /** 其它玩家的位置更新 */
+  private onNetPlayer(player: NetPlayerState): void {
+    let mob = this.remotePlayers.get(player.id);
+    if (!mob) {
+      mob = new Mob(REMOTE_PLAYER_TYPE, player.x, player.y, player.z);
+      mob.yaw = player.yaw;
+      this.remotePlayers.set(player.id, mob);
+      console.info(`[net] ${player.name}#${player.id} 加入了游戏`);
+    }
+    // 远程玩家不跑物理：每帧直接对齐网络位置（插值会让模型在低速更新下抖动）
+    mob.x = player.x;
+    mob.y = player.y;
+    mob.z = player.z;
+    mob.yaw = player.yaw;
+    // 俯仰不参与人形模型渲染（原版的其它玩家也是只转身体朝向），因此不入模型
+  }
+
+  private onNetLeave(id: number): void {
+    // 渲染器每帧会回收"这一帧没出现"的模型，所以这里只要从表里删掉就够了
+    this.remotePlayers.delete(id);
+  }
+
+  /** 队友改了方块：直接写进世界（也会进增量存档） */
+  private onNetBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
+    if (!this.world.isLoaded(x, z)) return;
+    // 走 setBlockAndUpdate：光照与网格会跟着更新，也会被记进增量存档
+    this.world.setBlockAndUpdate(x, y, z, id, state);
+    void dimension;
+  }
+
+  /** 连接服务器（也可以在控制台直接调：mc.connect('ws://192.168.1.5:8787', '小明')） */
+  connect(url = defaultServerUrl(), name = '玩家'): string {
+    this.net.connect(url, name);
+    return this.netStatus;
+  }
+
+  disconnect(): void {
+    this.net.disconnect();
+  }
+
+  sendChat(text: string): void {
+    this.net.sendChat(text);
+  }
+
+  get netState(): {
+    status: string;
+    selfId: number;
+    seed: number | null;
+    players: number;
+    remote: Array<{ id: number; x: number; y: number; z: number }>;
+    chat: string;
+  } {
+    return {
+      status: this.netStatus,
+      selfId: this.net.selfId,
+      seed: this.net.worldSeed,
+      players: this.net.playerCount,
+      remote: [...this.remotePlayers.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z })),
+      chat: this.chatLine,
+    };
   }
 
   // ---------------------------------------------------------------- 存档（K1）
@@ -775,6 +898,11 @@ class App {
       if (e.code === 'KeyF') this.setFlying(!this.flying);
       // N：在主世界与下界之间切换（临时的维度入口；下界传送门要等火焰方块与打火石做完）
       if (e.code === 'KeyN') this.toggleDimension();
+      // L：连接/断开联机服务器（服务端见 server/index.mjs）
+      if (e.code === 'KeyL') {
+        if (this.net.connected) this.disconnect();
+        else this.connect();
+      }
       if (e.code.startsWith('Digit')) {
         const digit = Number(e.code.slice(5));
         if (digit >= 1 && digit <= HOTBAR_SIZE) {
@@ -1006,6 +1134,8 @@ class App {
     this.breakCooldown = BREAK_COOLDOWN;
     // 触觉反馈：方块被挖掉的那一下
     this.vibrate(12);
+    // 联机：告诉队友这里被挖空了
+    this.net.sendBlock(this.hit.x, this.hit.y, this.hit.z, Block.AIR, 0, this.dimension);
   }
 
   /** 开门/关门：上下两半必须同步切换，否则会出现"半扇门" */
@@ -1030,6 +1160,7 @@ class App {
       const oy = baseY + dy;
       if (this.world.getBlock(x, oy, z) !== Block.OAK_DOOR) continue;
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
+      this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
       if (this.flying || dy !== 0) continue;
       const drop = dropFor(Block.OAK_DOOR);
       if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5);
@@ -1125,6 +1256,8 @@ class App {
     for (const entity of this.entities.all) {
       if (entity instanceof Mob) mobs.push(entity);
     }
+    // 联机队友也交给同一个渲染器（只是不进 EntityManager，不跑 AI 与物理）
+    for (const mob of this.remotePlayers.values()) mobs.push(mob);
     this.mobRenderer.update(mobs, this.camera, dt, sampleLight);
     this.updateEndBoss();
     this.updateMobSpawning(dt);
@@ -1398,6 +1531,12 @@ class App {
       this.inventory.consume(blockId, 1);
       // 触觉反馈：放下一块方块的轻震
       this.vibrate(6);
+      // 联机：把这次改动广播给队友
+      this.net.sendBlock(x, y, z, blockId, plan.state, this.dimension);
+      if (plan.extra) {
+        const { dx, dy, dz, id, state } = plan.extra;
+        this.net.sendBlock(x + dx, y + dy, z + dz, id, state, this.dimension);
+      }
     }
   }
 
@@ -1587,7 +1726,9 @@ class App {
       `持有: ${this.heldName}\n` +
       `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
       `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}\n` +
-      `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}`;
+      `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
+      `联机: ${this.netStatus}${this.net.selfId > 0 ? `（#${this.net.selfId} · 在线 ${this.net.playerCount} 人）` : ''}` +
+      (this.chatLine && performance.now() < this.chatUntil ? `\n${this.chatLine}` : '');
   }
 
   start(): void {
@@ -1649,6 +1790,14 @@ class App {
 
       this.updateGamepad(dt);
       this.tickAutoSave(dt);
+      this.net.tick(
+        this.physics.x,
+        this.physics.y,
+        this.physics.z,
+        this.yaw,
+        this.pitch,
+        this.dimension,
+      );
 
       const centerCx = toChunkCoord(this.physics.x);
       const centerCz = toChunkCoord(this.physics.z);
