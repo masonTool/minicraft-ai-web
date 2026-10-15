@@ -32,8 +32,8 @@ const HALF_BOTTOM: LocalBox = [0, 0, 0, 1, 0.5, 1];
 /** 仙人掌：原版四周各内缩 1 像素（15/16 宽），碰撞与渲染一致 */
 const CACTUS_BOX: LocalBox = [0.0625, 0, 0.0625, 0.9375, 1, 0.9375];
 
-/** 贴地薄板的厚度（1/16 格，与原版红石粉/压力板一致） */
-const FLAT_HEIGHT = 0.0625;
+/** 贴地薄板的厚度（1/16 格，与原版红石粉/压力板一致）。睡莲也用这个厚度 */
+export const FLAT_HEIGHT = 0.0625;
 
 /** 栅栏/墙的连接判定回调：该方向是否有可连接的方块 */
 export type ConnectQuery = (facing: Facing) => boolean;
@@ -132,6 +132,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'flat':
       // 火把、梯子、植物、贴地薄板都没有碰撞体积（原版红石粉与压力板也不挡路）
       return [];
+    case 'lily_pad':
+      // 睡莲是"能站上去的薄板"：原版可以踩着一路走过水面，所以它**有**碰撞体积
+      return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
     default:
       return [FULL];
   }
@@ -294,6 +297,8 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'cactus':
       return [CACTUS_BOX];
     case 'flat':
+    case 'lily_pad':
+      // 睡莲与"贴地薄板"长得一样（都是 1/16 的一层），差别只在碰撞（见 `collisionBoxes`）
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':

@@ -161,6 +161,8 @@ export const TILE_ORDER = [
   'netherite_block',
   'smithing_table_top',
   'smithing_table_side',
+  // 睡莲（B16）：四角透明（叶片是个圆盘，靠 alpha 混合）
+  'lily_pad',
   'terracotta',
   'terracotta_white',
   'terracotta_orange',

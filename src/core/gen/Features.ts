@@ -230,6 +230,27 @@ export class FeatureWriter {
   }
 
   /**
+   * 该列**水面正上方那一格**的 y（睡莲就落在那里）；这一列没有静水就返回 -1。
+   *
+   * 判据是"这一格是水、上面那一格是空气"——只看水面那一格，不看水有多深：
+   * 睡莲只能停在最上面那一格（见 `Placement.ts` 的 `lily_pad`），
+   * 底下的水格放上去会被同一格的水面盖住。
+   *
+   * 扫描范围取地表之上 8 格：沼泽的水大多是浅坑，海平面附近就能找到；
+   * 故意不从世界顶扫下来——那会把每一列都变成几十次读方块的开销。
+   */
+  waterSurfaceAbove(world: FeatureWorld, worldX: number, worldZ: number): number {
+    if (!this.owns(worldX, worldZ)) return -1;
+    const start = world.surfaceY(worldX, worldZ) + 1;
+    for (let dy = 0; dy < 8; dy++) {
+      const y = start + dy;
+      if (this.get(worldX, y, worldZ) !== Block.WATER) continue;
+      return this.get(worldX, y + 1, worldZ) === Block.AIR ? y + 1 : -1;
+    }
+    return -1;
+  }
+
+  /**
    * 从 y 往下补方块直到碰到实心方块（最多 depth 格）。
    * 只在拥有该列的区块里生效——近似地形高度可能有 1~2 格误差，
    * 补一截树干/柱子可以避免树悬空。
@@ -494,6 +515,12 @@ interface BiomeFeature {
   flowerKinds: readonly number[];
   /** 蘑菇密度 */
   mushrooms: number;
+  /**
+   * 睡莲密度（B16）：按列哈希，落在"水面正上方那一格"。
+   * **省略 = 0**（只有沼泽写了它）——这几张表是一条条手写的，
+   * 给 15 个跟睡莲无关的群系各补一个 `lilyPads: 0` 只会让表更难读。
+   */
+  lilyPads?: number;
   /** 特殊地物 */
   special?: 'cactus' | 'pumpkin' | 'melon' | 'sugar_cane' | 'dead_bush' | 'bamboo';
   /** 特殊地物密度 */
@@ -511,6 +538,7 @@ const EMPTY_FEATURE: BiomeFeature = {
   flowers: 0,
   flowerKinds: NO_FLOWERS,
   mushrooms: 0,
+  lilyPads: 0,
   specialDensity: 0,
 };
 
@@ -642,6 +670,8 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     flowers: 0.004,
     flowerKinds: [Block.BLUE_ORCHID],
     mushrooms: 0.012,
+    // 睡莲（原版就是沼泽的招牌景物；密度按列算，0.05 ≈ 每区块十几片）
+    lilyPads: 0.05,
     special: 'sugar_cane',
     specialDensity: 0.02,
   },
@@ -876,6 +906,26 @@ function decorateLocal(w: FeatureWriter, world: FeatureWorld, seed: number, stat
         if (!isPlantable(w, wx, y, wz, SOIL)) continue;
         const kind = config.flowerKinds[(hashAt(wx, wz, seed ^ 0x1234) * config.flowerKinds.length) | 0]!;
         if (w.put(wx, y, wz, kind) && stats) stats.plants++;
+      }
+    }
+  }
+
+  // ---- 睡莲（B16）：沼泽的静水表面
+  //
+  // 这是**唯一一个"落在水面上"的地物**：落点是"水面正上方那一格空气"，
+  // 不是地表之上。密度按列哈希给（0.05 ≈ 每区块十几片叶子），
+  // 并且只在**拥有该列的区块**里写——邻列的水面高度要靠本区块数据判断，
+  // 越界写会让两边的结果不一致（这条与花草/甘蔗同一条规矩）。
+  const lilyPads = config.lilyPads ?? 0;
+  if (lilyPads > 0) {
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        const wx = originX + x;
+        const wz = originZ + z;
+        if (hashAt(wx, wz, seed ^ 0x11a9) >= lilyPads) continue;
+        const y = w.waterSurfaceAbove(world, wx, wz);
+        if (y < 0) continue;
+        if (w.put(wx, y, wz, Block.LILY_PAD) && stats) stats.plants++;
       }
     }
   }

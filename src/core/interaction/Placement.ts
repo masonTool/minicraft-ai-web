@@ -14,7 +14,7 @@
  *  - 门：需要下方有支撑 + 上方两格空间，朝外一侧朝向玩家
  */
 
-import { blockDef } from '../registry/blocks.ts';
+import { Block, blockDef } from '../registry/blocks.ts';
 import {
   facingFromYaw,
   withDoorHinge,
@@ -150,6 +150,18 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
     case 'fence_gate':
       // 栅栏门只有朝向：门板横在朝向的**垂直方向**上（与栅栏连成一线）
       return { state: withFacing(0, facingFromYaw(input.yaw)) };
+
+    case 'lily_pad': {
+      // 睡莲必须"浮在水面上"：自己那一格是空气、下面那一格是水。
+      //
+      // 为什么自己那一格也要求空气（原版允许替换水）：本项目的睡莲叶片贴在格子**底部**
+      // （见 `blockShapes.ts` 的 1/16 薄板），要是让它替换掉水面那一格的水，
+      // 叶片就会被同一个格子里的水面盖住——看起来像没放上去。
+      // 所以只在"水面正上方那一格空气"里放，`main.ts` 负责把落点算到那一格（见 `onWaterSurface`）。
+      if (input.blockAt(0, 0, 0) !== Block.AIR) return null;
+      if (input.blockAt(0, -1, 0) !== Block.WATER) return null;
+      return { state: 0 };
+    }
 
     default:
       return { state: 0 };

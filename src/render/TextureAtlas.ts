@@ -1219,6 +1219,32 @@ PAINTERS.iron_block = (x, y, rng) => {
   return [clamp255(212 * shade + jitter), clamp255(212 * shade + jitter), clamp255(218 * shade + jitter), 255];
 };
 
+// ---- 睡莲（B16）
+/**
+ * 睡莲：一片浮在水面的圆叶。
+ *
+ * 三件事让它一眼就是"睡莲"而不是"一块绿方块"：
+ *  1. **四角透明**（圆盘轮廓，靠半透明层做 alpha 混合）
+ *  2. 边缘有轻微起伏（不是完美的圆）
+ *  3. 右侧切掉一块扇形**缺口** + 从中心放射的深色**叶脉**（原版叶片的招牌特征）
+ */
+PAINTERS.lily_pad = (x, y, rng) => {
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const distance = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx);
+  // 边缘起伏：按角度取哈希，做出"叶缘不是正圆"的观感
+  const wobble = 0.9 + (hashString(`lp${Math.round((angle + Math.PI) * 4)}`) % 12) / 100;
+  if (distance > 7.1 * wobble) return [0, 0, 0, 0];
+  // 缺口：右上方切掉一块扇形（原版那片叶子上就有这么个口子）
+  if (angle > -0.55 && angle < 0.1 && distance > 3.4) return [0, 0, 0, 0];
+  // 叶脉：从中心放射的深色细线；叶片边缘再压暗一圈
+  const vein = distance > 2 && Math.abs((angle * 5) % 1) < 0.13;
+  const shade = (1.06 - (distance / 8) * 0.32) * (vein ? 0.8 : 1);
+  const jitter = rng() * 12 - 6;
+  return [clamp255(74 * shade + jitter), clamp255(128 * shade + jitter), clamp255(56 * shade + jitter), 255];
+};
+
 // ---- 下界合金（K8 尾巴）
 /**
  * 下界合金块：深紫灰的抛光金属面 + 细密的暗纹。

@@ -2001,6 +2001,25 @@ class App {
 
   // ---------------------------------------------------------------- 方块交互
 
+  /**
+   * 准星射线要"挡住"哪些体素。
+   *
+   * 默认与 `World.isSelectable` 一致（水与岩浆可穿过）——这正是一般情况下想要的行为：
+   * 站在水里也能选中水下的石头。
+   *
+   * **例外是手上拿着睡莲**（B16）：水面没有任何"实体面"可以贴，而睡莲只能放在水面上。
+   * 所以拿着睡莲时，**只把"水面那一格水"（上方是空气）算作可命中**——
+   * 玩家从任何角度看都能选中水面，落点就是水面正上方那一格空气。
+   * 只认最上面那一格是关键：否则准星会钻进水里选中底下几格，
+   * 落点算出来会是一片水，反而放不下去（见 `updatePlacing` 里的 `onWaterSurface`）。
+   */
+  private isCrosshairTarget(x: number, y: number, z: number): boolean {
+    if (this.world.isSelectable(x, y, z)) return true;
+    if (this.selectedBlock !== Block.LILY_PAD) return false;
+    if (this.world.getBlock(x, y, z) !== Block.WATER) return false;
+    return this.world.getBlock(x, y + 1, z) === Block.AIR;
+  }
+
   private updateInteraction(dt: number): void {
     if (this.uiOpen) {
       this.hit = null;
@@ -2011,7 +2030,7 @@ class App {
 
     const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
     this.hit = raycastVoxels(
-      (x, y, z) => this.world.isSelectable(x, y, z),
+      (x, y, z) => this.isCrosshairTarget(x, y, z),
       this.physics.x,
       this.physics.eyeY,
       this.physics.z,
@@ -3720,9 +3739,19 @@ class App {
     const blockId = this.selectedBlock;
     if (blockId === undefined) return;
 
-    const x = this.hit.x + this.hit.nx;
-    const y = this.hit.y + this.hit.ny;
-    const z = this.hit.z + this.hit.nz;
+    // 睡莲（B16）：命中水面时一律按**上表面**算落点。
+    // 水面没有可贴的实体面，玩家从侧面看水面时命中的是水面那一格的侧面，
+    // 按原法线算出来的落点会落到旁边那一格水里（不是空气 → 被下面拒掉，
+    // 症状是"怎么点都放不下去"）；统一按上表面算，玩家从哪个角度都能放下。
+    const onWaterSurface =
+      blockId === Block.LILY_PAD && this.world.getBlock(this.hit.x, this.hit.y, this.hit.z) === Block.WATER;
+    const nx = onWaterSurface ? 0 : this.hit.nx;
+    const ny = onWaterSurface ? 1 : this.hit.ny;
+    const nz = onWaterSurface ? 0 : this.hit.nz;
+
+    const x = this.hit.x + nx;
+    const y = this.hit.y + ny;
+    const z = this.hit.z + nz;
 
     const existing = this.world.getBlock(x, y, z);
     if (existing !== Block.AIR && !blockDef(existing).liquid) return;
@@ -3731,7 +3760,7 @@ class App {
     // 按方块形状与命中面推导状态（台阶上下半、楼梯朝向、火把挂墙、门轴……）
     const plan = planPlacement({
       blockId,
-      normal: [this.hit.nx, this.hit.ny, this.hit.nz],
+      normal: [nx, ny, nz],
       hitX: this.hit.hitX,
       hitY: this.hit.hitY,
       hitZ: this.hit.hitZ,

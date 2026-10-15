@@ -927,6 +927,27 @@ const NETHERITE_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 睡莲（B16）：水面上的薄叶片。
+ *
+ * 形状是 `lily_pad`（1/16 薄板 + **有碰撞**，见 `blockShapes.ts`）——
+ * 与红石粉那批 `flat` 的唯一区别就是能站上去。
+ * 走**半透明层**：贴图四角是透明的（叶片是个圆盘），必须 alpha 混合而不是 alphaTest，
+ * 否则叶片边缘会出现硬锯齿；它也只有 1/16 高，与水面挨着时不会有明显的排序问题。
+ */
+const LILY_PAD_SPECS: readonly BlockSpec[] = [
+  {
+    id: 295,
+    name: 'minecraft:lily_pad',
+    tiles: ['lily_pad', 'lily_pad', 'lily_pad'],
+    shape: 'lily_pad',
+    solid: false,
+    opaque: false,
+    translucent: true,
+    lightOpacity: 0,
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -944,6 +965,7 @@ const SPECS: readonly BlockSpec[] = [
   ...FIRE_SPECS,
   ...PORTAL_SPECS,
   ...NETHERITE_SPECS,
+  ...LILY_PAD_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1129,6 +1151,8 @@ export const Block = {
   /** 下界合金（K8 尾巴）：储物方块与锻造台 */
   NETHERITE_BLOCK: 293,
   SMITHING_TABLE: 294,
+  /** 睡莲（B16）：水面上的平铺叶片，id 接在最大 id 之后 */
+  LILY_PAD: 295,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1356,6 +1380,8 @@ for (const plant of [
   Block.CRIMSON_ROOTS,
   Block.WARPED_ROOTS,
   Block.NETHER_SPROUTS,
+  // 睡莲也是"一碰就掉"（原版硬度 0）
+  Block.LILY_PAD,
 ]) {
   HARDNESS.set(plant, 0);
 }
@@ -1459,6 +1485,8 @@ for (const id of [
   Block.SUGAR_CANE,
   Block.DEAD_BUSH,
   Block.BAMBOO,
+  // 睡莲徒手就能采（原版不需要任何工具）
+  Block.LILY_PAD,
   Block.PUMPKIN,
   Block.MELON,
   Block.CACTUS,
