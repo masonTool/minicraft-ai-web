@@ -43,8 +43,10 @@ console.log('\n[物品注册表]');
 // 不写成"PLACEABLE_ITEMS.length === 方块数"：`PLACEABLE_ITEMS` 按 `ItemDef.block` 筛，
 // 而**小麦种子**（H13）不是方块却也能放置（种到耕地上），所以两者本就不该相等。
 // 真正要守的是"每种实心/可放置方块都有对应物品"这条不变量。
+// `itemless`（火焰）是**故意没有物品**的方块：原版火焰也不能被拿在手里，
+// 只能靠打火石/岩浆点燃，所以它要从这条不变量里排除
 const missingBlockItem = BLOCKS.filter(
-  (def) => def.id !== Block.AIR && !def.liquid && blockForItem(def.id) === undefined,
+  (def) => def.id !== Block.AIR && !def.liquid && !def.itemless && blockForItem(def.id) === undefined,
 );
 equal(
   `每种非空气非流体方块都有可放置物品（共 ${BLOCKS.length} 种方块）`,
