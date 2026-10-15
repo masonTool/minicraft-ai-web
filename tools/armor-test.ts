@@ -13,12 +13,14 @@
 
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import {
+  ALL_ARMOR_MATERIALS,
   ARMOR_ITEM_START,
   ARMOR_MATERIALS,
   ARMOR_SLOT_BASE,
   ARMOR_SLOT_COUNT,
   ARMOR_SPECS,
   ARMOR_TYPES,
+  NETHERITE_ARMOR_ITEM_START,
   armorInfoById,
   armorItemId,
   armorSlotAccepts,
@@ -70,11 +72,18 @@ function equipSet(inventory: Inventory, material: (typeof ARMOR_MATERIALS)[numbe
 // ---------------------------------------------------------------- 1. 注册表
 
 console.log('\n[盔甲注册表]');
-equal('盔甲数量（4 部位 × 5 材质）', ARMOR_SPECS.length, ARMOR_TYPES.length * ARMOR_MATERIALS.length);
-equal('盔甲总数 20', ARMOR_SPECS.length, 20);
+// 24 件 = 可合成的 20（4 部位 × 5 材质）+ 下界合金 4（只能由锻造台升级）
+equal('盔甲数量（4 部位 × 6 材质）', ARMOR_SPECS.length, ARMOR_TYPES.length * ALL_ARMOR_MATERIALS.length);
+equal('盔甲总数 24', ARMOR_SPECS.length, 24);
 check(
-  'id 从 ARMOR_ITEM_START 起连续',
-  ARMOR_SPECS.every((spec, index) => spec.id === ARMOR_ITEM_START + index),
+  '可合成的 20 件 id 从 ARMOR_ITEM_START 起连续',
+  ARMOR_TYPES.flatMap((type) => ARMOR_MATERIALS.map((material) => armorItemId(type, material))).every(
+    (id, index) => id === ARMOR_ITEM_START + index,
+  ),
+);
+check(
+  '下界合金 4 件从 NETHERITE_ARMOR_ITEM_START 起连续（单独一段，不动老 id）',
+  ARMOR_TYPES.every((type, index) => armorItemId(type, 'netherite') === NETHERITE_ARMOR_ITEM_START + index),
 );
 check(
   '每件盔甲都注册进了物品表，且属性一致',
@@ -271,9 +280,17 @@ console.log('\n[存档往返]');
 console.log('\n[盔甲配方]');
 {
   const armorRecipes = RECIPES.filter((recipe) => ARMOR_SPECS.some((spec) => spec.id === recipe.result.id));
-  const craftable = ARMOR_SPECS.filter((spec) => spec.armor.material !== 'chainmail');
+  const craftable = ARMOR_SPECS.filter(
+    (spec) => spec.armor.material !== 'chainmail' && spec.armor.material !== 'netherite',
+  );
   equal('可合成的盔甲 16 件（4 部位 × 4 材质）', craftable.length, 16);
   equal('16 条盔甲配方', armorRecipes.length, craftable.length);
+  check(
+    '下界合金盔甲没有配方（只能由锻造台把钻石盔甲升上去）',
+    ARMOR_SPECS.filter((spec) => spec.armor.material === 'netherite').every(
+      (spec) => recipesForResult(spec.id).length === 0,
+    ),
+  );
   check(
     '锁链甲故意没有配方（与原版一致：材料与图案都和铁甲完全相同，写了必然撞车）',
     ARMOR_SPECS.filter((spec) => spec.armor.material === 'chainmail').every(

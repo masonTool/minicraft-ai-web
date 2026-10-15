@@ -23,6 +23,8 @@ import { offeringFor } from '../src/core/crafting/Enchanting.ts';
 import { efficientToolType, harvestRequirement, toolInfoById } from '../src/core/registry/tools.ts';
 import { Block, woolId } from '../src/core/registry/blocks.ts';
 import {
+  ALL_TOOL_MATERIALS,
+  NETHERITE_TOOL_ITEM_START,
   TOOL_ITEM_START,
   TOOL_KINDS,
   TOOL_MATERIALS,
@@ -74,11 +76,19 @@ const IRON_SHOVEL = makeToolInfo('shovel', 'iron');
 // ---------------------------------------------------------------- 1. 注册表
 
 console.log('\n[工具注册表]');
-equal('工具数量（5 种类 × 5 材质）', TOOL_SPECS.length, TOOL_KINDS.length * TOOL_MATERIALS.length);
-equal('工具总数 25', TOOL_SPECS.length, 25);
+// 30 件 = 可合成的 25（5 种类 × 5 材质）+ 下界合金 5（只能由锻造台升级）
+equal('工具数量（5 种类 × 6 材质）', TOOL_SPECS.length, TOOL_KINDS.length * ALL_TOOL_MATERIALS.length);
+equal('工具总数 30', TOOL_SPECS.length, 30);
+equal('其中可合成的仍是 25 件', TOOL_SPECS.length - TOOL_KINDS.length, 25);
 check(
-  'id 从 TOOL_ITEM_START 起连续',
-  TOOL_SPECS.every((spec, index) => spec.id === TOOL_ITEM_START + index),
+  '可合成的 25 件 id 从 TOOL_ITEM_START 起连续',
+  TOOL_KINDS.flatMap((kind) => TOOL_MATERIALS.map((material) => toolItemId(kind, material))).every(
+    (id, index) => id === TOOL_ITEM_START + index,
+  ),
+);
+check(
+  '下界合金 5 件从 NETHERITE_TOOL_ITEM_START 起连续（单独一段，不动老 id）',
+  TOOL_KINDS.every((kind, index) => toolItemId(kind, 'netherite') === NETHERITE_TOOL_ITEM_START + index),
 );
 check(
   '每个工具都注册进了物品表，且属性一致',
@@ -206,10 +216,18 @@ console.log('\n[工具耐久]');
 console.log('\n[工具配方]');
 {
   const toolRecipes = RECIPES.filter((recipe) => TOOL_SPECS.some((spec) => spec.id === recipe.result.id));
-  equal('25 条工具配方', toolRecipes.length, TOOL_SPECS.length);
+  // 只有可合成的 25 件有配方：下界合金那 5 件必须**一件都查不到**，
+  // 否则玩家能跳过锻造台直接"用 4 个锭做出一把镐"
+  equal('25 条工具配方（下界合金没有配方）', toolRecipes.length, 25);
   check(
-    '每个工具都能被配方表查到（配方书能一键合成）',
-    TOOL_SPECS.every((spec) => recipesForResult(spec.id).length > 0),
+    '每个可合成的工具都能被配方表查到（配方书能一键合成）',
+    TOOL_SPECS.filter((spec) => spec.tool.material !== 'netherite').every((spec) => recipesForResult(spec.id).length > 0),
+  );
+  check(
+    '下界合金工具**没有**合成配方（只能锻造）',
+    TOOL_SPECS.filter((spec) => spec.tool.material === 'netherite').every(
+      (spec) => recipesForResult(spec.id).length === 0,
+    ),
   );
 
   /** 构造 size×size 网格 */
@@ -251,7 +269,7 @@ console.log('\n[剪刀（J8）]');
   equal('剪刀的耐久是原版的 238', toolInfoById(Item.SHEARS)?.durability, 238);
   equal('剪刀的加速倍率是 15（原版）', toolInfoById(Item.SHEARS)?.speed, 15);
   equal('剪刀的种类是 shears', toolInfoById(Item.SHEARS)?.type, 'shears');
-  equal('剪刀不是"5 种类 × 5 材质"的成员（工具表仍是 25 件）', TOOL_SPECS.length, 25);
+  equal('剪刀不是"5 种类 × 材质"的成员（工具表不含它）', TOOL_SPECS.some((spec) => spec.id === Item.SHEARS), false);
   equal('剪刀每件一叠', maxStackOf(Item.SHEARS), 1);
   equal('剪刀也算耐用品（走统一入口）', durabilityOf(Item.SHEARS), 238);
 
