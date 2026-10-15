@@ -21,7 +21,12 @@ import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import { Block, woolId } from '../src/core/registry/blocks.ts';
 import { Item } from '../src/core/registry/items.ts';
-import { WOOL_REGROW_SECONDS } from '../src/core/entity/Mob.ts';
+import {
+  BABY_GROW_SECONDS,
+  BABY_SCALE,
+  LOVE_SECONDS,
+  WOOL_REGROW_SECONDS,
+} from '../src/core/entity/Mob.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
@@ -429,6 +434,103 @@ console.log('\n[剪羊毛]');
   for (let t = 0; t < 4; t += 0.5) grow.tick(quietCtx, 0.5);
   check('30 秒后羊毛长回来了', !grow.sheared);
   check('长回来之后还能再剪', grow.shear() >= 1);
+}
+
+console.log('\n[喂食繁殖与幼体]');
+{
+  const world = new TestWorld();
+  world.floor(-8, 8, -8, 8, 64);
+
+  const babies: string[] = [];
+  const hearts: number[] = [];
+  /** 让 ctx.findMate 直接返回"另一只牛"，不依赖真实的实体列表 */
+  let mateFor: Mob | null = null;
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player: null,
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+    findMate: () => mateFor,
+    spawnBaby: (type, x, y, z) => {
+      const baby = new Mob(type, x, y, z);
+      baby.makeBaby();
+      babies.push(`${type.id}@${x.toFixed(1)},${z.toFixed(1)}`);
+    },
+    spawnHearts: () => {
+      hearts.push(1);
+    },
+  };
+
+  const cowType = mobTypeById('cow')!;
+  const apple = Item.APPLE;
+
+  // ---- 喂食表
+  equal('牛爱吃的是苹果（原版是小麦，等耕作落地后换回）', cowType.feed, apple);
+  equal('猪爱吃西瓜片', mobTypeById('pig')!.feed, Item.MELON_SLICE);
+  equal('鸡爱吃甘蔗（原版是种子）', mobTypeById('chicken')!.feed, Block.SUGAR_CANE);
+  equal('僵尸不吃东西（不参与繁殖）', mobTypeById('zombie')!.feed, undefined);
+
+  // ---- 喂食：成年体进入求爱
+  const cow = new Mob(cowType, 0.5, 65.5, 0.5);
+  equal('喂错东西没反应', cow.feed(Item.BONE), null);
+  equal('喂对了进入求爱', cow.feed(apple), 'love');
+  check('喂完处于求爱状态', cow.inLove);
+  equal('刚喂过再喂没反应（已经在求爱了）', cow.feed(apple), null);
+
+  // ---- 求爱时partner不在附近：只冒爱心，不生孩子
+  mateFor = null;
+  babies.length = 0;
+  hearts.length = 0;
+  for (let i = 0; i < 20; i++) cow.tick(ctx, 0.05);
+  equal('没有配偶时不会凭空生孩子', babies.length, 0);
+  check('但会一直冒爱心', hearts.length > 0);
+
+  // ---- 配偶就在旁边：生出幼体
+  const partner = new Mob(cowType, 2.0, 65.5, 0.5);
+  partner.startLove();
+  mateFor = partner;
+  babies.length = 0;
+  cow.tick(ctx, 0.05);
+  equal('挨得够近就生一只', babies.length, 1, JSON.stringify(babies));
+  check('两只亲本都退出了求爱', !cow.inLove && !partner.inLove);
+  check('幼体生在两只中间', babies[0]!.startsWith('cow@'), babies[0]);
+
+  // ---- 冷却：刚生完不能再喂
+  equal('刚繁殖完有冷却，喂了也没用', cow.feed(apple), null);
+
+  // ---- 幼体
+  const baby = new Mob(cowType, 0.5, 65.5, 0.5);
+  baby.makeBaby();
+  check('幼体标记生效', baby.baby);
+  equal('幼体体型缩到 55%', Number(baby.width.toFixed(3)), Number((cowType.width * BABY_SCALE).toFixed(3)));
+  check('幼体碰撞盒比成年小', baby.height < cowType.height);
+  equal('幼体喂食是"加速成长"而不是求爱', baby.feed(apple), 'grow');
+  check('幼体不会进入求爱', !baby.inLove);
+
+  // ---- 幼体不掉落
+  const dropped: number[] = [];
+  const lootCtx: EntityContext = { ...ctx, spawnDrop: (id) => dropped.push(id) };
+  baby.hurt(100, 0, 0, lootCtx);
+  equal('幼体死了什么都不掉（原版行为）', dropped.length, 0, dropped.join(','));
+
+  // ---- 长大
+  const grow = new Mob(cowType, 0.5, 65.5, 0.5);
+  grow.makeBaby();
+  for (let t = 0; t < BABY_GROW_SECONDS - 1; t += 0.5) grow.tick(ctx, 0.5);
+  check('还没到时间就是幼体', grow.baby);
+  for (let t = 0; t < 2; t += 0.5) grow.tick(ctx, 0.5);
+  check('到时间长大', !grow.baby);
+  equal('长大之后碰撞盒回到成年', grow.height, cowType.height);
+  equal('长大之后喂食会进入求爱（不再是加速成长）', grow.feed(apple), 'love');
+
+  // ---- 求爱会过期
+  const timeout = new Mob(cowType, 0.5, 65.5, 0.5);
+  timeout.feed(apple);
+  for (let t = 0; t < LOVE_SECONDS + 1; t += 0.5) timeout.tick(ctx, 0.5);
+  check('求爱超过 LOVE_SECONDS 就自动结束（原版也会）', !timeout.inLove);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

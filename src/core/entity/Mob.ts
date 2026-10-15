@@ -26,6 +26,23 @@ export const WOOL_REGROW_SECONDS = 30;
 
 export const CREEPER_FUSE_TIME = 1.5;
 
+/** 幼体的体型比例（原版大约是一半） */
+export const BABY_SCALE = 0.55;
+/**
+ * 幼体长成成年需要的时间（秒）。
+ * ⚠️ 原版是 20 分钟，这里缩到 5 分钟——单机验收场景下 20 分钟太久，
+ * 而"能不能长大"这件事本身没有别的观测手段。
+ */
+export const BABY_GROW_SECONDS = 300;
+/** 求爱持续时长（秒，原版 30 秒） */
+export const LOVE_SECONDS = 30;
+/** 繁殖后的冷却（秒，原版 5 分钟，这里同样缩短） */
+export const BREED_COOLDOWN_SECONDS = 60;
+/** 求爱时靠多近才能配对（格） */
+export const MATE_RANGE = 2.5;
+/** 求爱时能"看见"配偶的距离（格） */
+export const MATE_SEARCH_RANGE = 8;
+
 const GRAVITY = 32;
 const JUMP_SPEED = 8.95;
 /** 受击后的无敌时间（秒） */
@@ -63,6 +80,15 @@ export interface MobType {
   drops: readonly MobDrop[];
   /** 击杀经验（原版数值：敌对 5 点、被动 1~3 点） */
   xp: number;
+  /**
+   * 喂什么能繁殖（J8）。留空表示这种生物不参与繁殖（敌对生物都是空的）。
+   *
+   * ⚠️ 与原版的差异：原版是小麦（牛羊）/胡萝卜（猪）/种子（鸡），
+   * 但**耕作系统还没做**，这些作物在游戏里根本不存在（连小麦物品都没有）。
+   * 所以先用现有的植物性物品代替，等 H6/H7 耕作落地后把这里换回原版即可——
+   * 换的只是这一行数据，繁殖逻辑不用动。
+   */
+  feed?: number;
   /**
    * 死亡时按**自己身上的颜色**掉羊毛（J8，羊用）。
    * 羊毛不在 `drops` 表里，因为颜色是每只动物各自的——写死在表里就只能掉白色的。
@@ -108,6 +134,19 @@ export class Mob extends Entity {
   yaw = 0;
   /** 受击红闪剩余时间 */
   hitFlash = 0;
+  /**
+   * 幼体（J8）：体型按 `BABY_SCALE` 缩小、**不产出任何掉落与经验**、`BABY_GROW_SECONDS` 后长大。
+   */
+  baby = false;
+
+  /** 求爱剩余秒数（>0 表示正在找配偶）与两次繁殖之间的冷却 */
+  private loveTimer = 0;
+  private breedCooldown = 0;
+  /** 幼体的成长计时 */
+  private growTimer = BABY_GROW_SECONDS;
+  /** 被喂食加速成长的次数（原版喂食能缩短 10% 的成长时间） */
+  private fedCount = 0;
+
   /**
    * 羊毛颜色（`DYE_COLORS` 的下标）与"是否已被剪"（J8，目前只有羊用）。
    *
@@ -173,6 +212,17 @@ export class Mob extends Entity {
       this.woolTimer -= dt;
       if (this.woolTimer <= 0) this.sheared = false;
     }
+    if (this.baby) {
+      this.growTimer -= dt;
+      if (this.growTimer <= 0) {
+        this.baby = false;
+        // 长大后体型回到成年：碰撞盒也得跟着换，否则会卡在方块里
+        this.width = this.type.width;
+        this.height = this.type.height;
+      }
+    }
+    if (this.loveTimer > 0) this.loveTimer -= dt;
+    if (this.breedCooldown > 0) this.breedCooldown -= dt;
     this.tickBurning(dt);
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
@@ -211,6 +261,34 @@ export class Mob extends Entity {
 
     const chasing =
       this.type.hostile && player !== null && distanceSq <= this.type.followRange * this.type.followRange;
+
+    // 求爱优先：在找配偶的这段时间里它只想找对象，别的行为都让位
+    if (this.loveTimer > 0 && !this.baby && ctx.findMate && ctx.spawnBaby) {
+      const mate = ctx.findMate(this);
+      if (mate) {
+        const dxm = mate.x - this.x;
+        const dzm = mate.z - this.z;
+        const distance = Math.hypot(dxm, dzm);
+        if (distance <= MATE_RANGE) {
+          // 两只都在求爱、而且挨够了近 → 生一只幼体
+          this.breedWith();
+          mate.breedWith();
+          const bx = (this.x + mate.x) / 2;
+          const bz = (this.z + mate.z) / 2;
+          ctx.spawnBaby(this.type, bx, Math.min(this.y, mate.y), bz);
+          ctx.spawnHearts?.(bx, Math.max(this.y, mate.y) + this.type.height, bz);
+          return;
+        }
+        // 朝配偶走过去（直线，不走寻路：就几格距离，够用且不会抖）
+        this.moveDirX = dxm / Math.max(1e-4, distance);
+        this.moveDirZ = dzm / Math.max(1e-4, distance);
+        this.yaw = Math.atan2(dxm, dzm);
+        this.move(true, dt);
+        return;
+      }
+      // 没找到对象：原地冒一会儿爱心再回去游荡（原版也会边冒边等）
+      ctx.spawnHearts?.(this.x, this.y + this.type.height, this.z, 0.4);
+    }
 
     // 远程生物走自己那套（保持距离 + 放箭），不参与近战的寻路追击
     if (chasing && player && this.type.ranged) {
@@ -337,10 +415,12 @@ export class Mob extends Entity {
     let targetVx = 0;
     let targetVz = 0;
 
-    if (this.type.ranged) {
-      // 远程生物：方向由 `updateRangedAi` 决定（保持距离），不走寻路
+    if (this.type.ranged || this.moveDirX !== 0 || this.moveDirZ !== 0) {
+      // 远程生物（保持距离）与求爱中的生物（走向配偶）：方向由 AI 直接给，不走寻路
       targetVx = this.moveDirX * speed;
       targetVz = this.moveDirZ * speed;
+      this.moveDirX = 0;
+      this.moveDirZ = 0;
     } else if (chasing) {
       while (this.pathIndex < this.path.length) {
         const node = this.path[this.pathIndex]!;
@@ -413,6 +493,58 @@ export class Mob extends Entity {
     return this.sheared;
   }
 
+  /** 是否在求爱（渲染层可以据此冒爱心；测试也用它读状态） */
+  get inLove(): boolean {
+    return this.loveTimer > 0;
+  }
+
+  /**
+   * 喂食（J8）。
+   *
+   * @returns `'grow'` = 喂的是幼体、加速成长；`'love'` = 喂的是成年体、进入求爱；
+   *          `null` = 这东西它不吃 / 已经吃饱了 / 刚繁殖完还在冷却
+   */
+  feed(itemId: number): 'grow' | 'love' | null {
+    if (this.dead || this.type.feed === undefined || this.type.feed !== itemId) return null;
+
+    if (this.baby) {
+      // 原版每喂一次缩短 10% 的成长时间；这里改成固定减少 1/10 的总额
+      this.fedCount++;
+      this.growTimer = Math.max(0, this.growTimer - BABY_GROW_SECONDS / 10);
+      return 'grow';
+    }
+    if (this.loveTimer > 0 || this.breedCooldown > 0) return null;
+    this.loveTimer = LOVE_SECONDS;
+    return 'love';
+  }
+
+  /**
+   * 变成幼体（生成时调）。
+   *
+   * 碰撞盒一起缩小——不然小小的身体配着成年的碰撞盒，会出现"隔着半格就撞上"的怪手感。
+   */
+  makeBaby(): void {
+    this.baby = true;
+    this.width = this.type.width * BABY_SCALE;
+    this.height = this.type.height * BABY_SCALE;
+    this.growTimer = BABY_GROW_SECONDS;
+    this.fedCount = 0;
+  }
+
+  /** 直接让这只生物进入求爱（测试与命令用，省得先喂一遍） */
+  startLove(): void {
+    if (!this.baby) this.loveTimer = LOVE_SECONDS;
+  }
+
+  /**
+   * 生下一只幼体：两只亲本各自进入冷却，幼体由上层生成（`ctx.spawnBaby`）。
+   * @returns 幼体的初始状态（位置与朝向由上层决定）
+   */
+  breedWith(): void {
+    this.loveTimer = 0;
+    this.breedCooldown = BREED_COOLDOWN_SECONDS;
+  }
+
   /** 是否正在燃烧（渲染层用它上色） */
   get burning(): boolean {
     return this.burnTime > 0;
@@ -479,6 +611,8 @@ export class Mob extends Entity {
    */
   private dropLoot(ctx?: EntityContext, looting = 0): void {
     if (!ctx) return;
+    // 幼体不掉落也不给经验（原版行为：小动物杀了白杀）
+    if (this.baby) return;
     for (const drop of this.type.drops) {
       if (drop.chance !== undefined && Math.random() > drop.chance) continue;
       const max = drop.max + Math.max(0, looting);

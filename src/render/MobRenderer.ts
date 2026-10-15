@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import type { Mob } from '../core/entity/Mob.ts';
+import { BABY_SCALE, type Mob } from '../core/entity/Mob.ts';
 import type { MobType } from '../core/entity/Mob.ts';
 import { DYE_COLORS } from '../core/registry/colors.ts';
 
@@ -242,8 +242,11 @@ export class MobRenderer {
       }
 
       // ---- 生物本体的变换
+      // 幼体整体缩小（部件坐标是绝对尺寸，缩放根节点等于"以脚为原点等比缩小"）
+      const scale = mob.baby ? BABY_SCALE : 1;
       this.rootDummy.position.set(mob.x, mob.y, mob.z);
       this.rootDummy.rotation.set(0, mob.yaw, 0);
+      this.rootDummy.scale.setScalar(scale);
       this.rootDummy.updateMatrix();
 
       // ---- 光照与受击红闪

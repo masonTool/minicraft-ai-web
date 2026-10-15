@@ -74,6 +74,8 @@ const KINDS = {
   smoke: { gravity: -1.4, drag: 1.5, life: [0.8, 1.7], size: [0.16, 0.34], alpha: 0.55 },
   /** 火焰：向上窜、短命 */
   flame: { gravity: -2.2, drag: 2.1, life: [0.35, 0.75], size: [0.1, 0.2], alpha: 0.95 },
+  /** 爱心（J8）：缓缓上飘、几乎不受重力 */
+  heart: { gravity: -1.1, drag: 1.2, life: [0.7, 1.3], size: [0.14, 0.24], alpha: 1 },
 } as const satisfies Record<string, KindParams>;
 
 export type ParticleKind = keyof typeof KINDS;
@@ -222,6 +224,14 @@ export class ParticleSystem {
   /** 火焰（泡在岩浆里） */
   spawnFlame(x: number, y: number, z: number, color = 0xff9a1f, count = 1): void {
     this.burst('flame', x, y, z, color, count, 0.16, 0.8);
+  }
+
+  /**
+   * 爱心（J8：求爱与繁殖成功）。
+   * @param scale 数量倍率：`MATE_RANGE` 内配对成功时给 1，只是"在等对象"时给小一点
+   */
+  spawnHearts(x: number, y: number, z: number, scale = 1): void {
+    this.burst('heart', x, y, z, 0xff4d80, Math.max(1, Math.round(6 * scale)), 0.34, 1.6);
   }
 
   /** 通用爆发：`spread` 是生成点的抖动半径，`speed` 是初速度上限 */

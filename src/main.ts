@@ -31,7 +31,7 @@ import { EnchantTable } from './core/container/EnchantTable.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
-import { Mob } from './core/entity/Mob.ts';
+import { MATE_SEARCH_RANGE, Mob } from './core/entity/Mob.ts';
 import { entityIntersectsBox } from './core/entity/Entity.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
@@ -2024,6 +2024,29 @@ class App {
    * 生物比方块更靠前就优先攻击，并且这一帧不再破坏方块。
    */
   /**
+   * 找一只愿意配对的同类（J8）。
+   *
+   * 只认"同种 + 成年 + 也在求爱"的，取最近的一只。
+   * 顺带把"离得太远的"排除掉，否则两只隔着半张地图的牛会一直朝对方走。
+   */
+  private findMate(mob: Mob): Mob | null {
+    let best: Mob | null = null;
+    let bestDistance = MATE_SEARCH_RANGE * MATE_SEARCH_RANGE;
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity === mob || entity.dead) continue;
+      if (entity.type !== mob.type || entity.baby || !entity.inLove) continue;
+      const dx = entity.x - mob.x;
+      const dy = entity.y - mob.y;
+      const dz = entity.z - mob.z;
+      const distance = dx * dx + dy * dy + dz * dz;
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = entity;
+    }
+    return best;
+  }
+
+  /**
    * 准星指向的生物（方块更近时返回 null —— 说明玩家其实在挖方块）。
    *
    * 抽出来是因为**左键攻击**与**右键对生物使用物品**（剪羊毛、后面的喂食/挤奶）
@@ -2057,8 +2080,26 @@ class App {
   private useOnEntity(): boolean {
     const mob = this.mobUnderCrosshair();
     if (!mob || mob.dead) return false;
-    if (this.heldItemId !== Item.SHEARS) return false;
-    return this.shearMob(mob);
+    const held = this.heldItemId;
+    if (held === undefined) return false;
+    if (held === Item.SHEARS && this.shearMob(mob)) return true;
+    return this.feedMob(mob, held);
+  }
+
+  /**
+   * 喂食（J8）：手里拿着这种动物爱吃的东西，右键就喂。
+   * 成年体进入求爱、幼体加速成长；两样都不是就当作没发生（不吃的东西不消耗）。
+   */
+  private feedMob(mob: Mob, itemId: number): boolean {
+    const result = mob.feed(itemId);
+    if (result === null) return false;
+    if (!this.inventory.consume(itemId, 1)) return false;
+
+    this.particles.spawnHearts(mob.x, mob.y + mob.type.height, mob.z, result === 'grow' ? 0.6 : 1);
+    // 牛羊猪鸡都吃这几样，用各自家族的叫声最贴切；没有的用通用的"吃掉"音
+    this.audio.play(result === 'grow' ? 'mob_sheep' : 'eat', { x: mob.x, y: mob.y, z: mob.z });
+    this.refreshHotbar();
+    return true;
   }
 
   /** 用剪刀剪一只羊的毛 */
@@ -2401,9 +2442,21 @@ class App {
       explode: (x, y, z, power) => this.explodeAt(x, y, z, power),
       spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),
       // 骷髅射箭与玩家走完全同一条路径，两边不会各自漂移
+      // 骷髅射箭走与玩家完全同一条路径，两边不会各自漂移
       spawnArrow: (x, y, z, velocity, options) => {
         this.spawnArrow(x, y, z, velocity, options);
       },
+      // 繁殖（J8）：找配偶与生成幼体都由主程序操刀——生物不持有实体列表
+      findMate: (mob) => this.findMate(mob),
+      spawnBaby: (type, x, y, z) => {
+        const baby = new Mob(type, x, y, z);
+        baby.makeBaby();
+        this.entities.spawn(baby);
+        // 原版生小动物有"噗"的一声，这里用一个短促的烟雾 + 移动音效代替
+        this.audio.play('step', { x, y, z });
+        this.particles.spawnSmoke(x, y + 0.3, z, 6, 0.28);
+      },
+      spawnHearts: (x, y, z, scale) => this.particles.spawnHearts(x, y, z, scale),
       awardXp: (amount) => this.awardXp(amount),
     };
     this.lastEntityContext = context;

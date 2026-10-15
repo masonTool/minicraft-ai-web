@@ -5,7 +5,7 @@
  * 位置 + 速度 + 碰撞盒 + 每帧 tick + 生死标记。
  */
 
-import type { Mob } from './Mob.ts';
+import type { Mob, MobType } from './Mob.ts';
 import type { AABB } from '../physics/AABB.ts';
 import type { PhysicsWorld } from '../physics/PlayerPhysics.ts';
 
@@ -58,6 +58,16 @@ export interface EntityContext {
   /** 生成掉落物实体（生物死亡掉落用） */
   spawnDrop: (itemId: number, count: number, x: number, y: number, z: number) => void;
   /**
+   * 找一只愿意配对的同类（J8）。
+   * 实体层不持有生物列表，所以由主程序去实体管理器里找——
+   * 与 `hitMob` 同一个理由：生物只描述"想干什么"，"周围有谁"交给上层。
+   */
+  findMate?: (mob: Mob) => Mob | null;
+  /** 生成一只幼体（J8 繁殖用） */
+  spawnBaby?: (type: MobType, x: number, y: number, z: number) => void;
+  /** 冒爱心粒子（J8：求爱与繁殖成功时）。`scale` 用来让"没找到对象"时少冒几颗 */
+  spawnHearts?: (x: number, y: number, z: number, scale?: number) => void;
+  /**
    * 射出一支箭（J9，骷髅用）。
    * 与 `spawnDrop` 同理：生物只负责"什么时候射、往哪射"，
    * 箭怎么建、飞出去长什么样由主程序决定。
@@ -83,8 +93,13 @@ export abstract class Entity {
   vy = 0;
   vz = 0;
 
-  readonly width: number;
-  readonly height: number;
+  /**
+   * 碰撞盒尺寸。
+   * 不是 `readonly`：幼体长大后要换回成年的尺寸（J8），
+   * 只读的话就只能让幼体一直用成年碰撞盒，会出现"小小的身体卡在方块里"。
+   */
+  width: number;
+  height: number;
 
   onGround = false;
   /** 存在时长（秒） */
