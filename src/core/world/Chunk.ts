@@ -10,6 +10,8 @@
  * 排查成本极高（实测踩过：放红石粉却读出空气）。代价是每区块 96KB → 192KB。
  */
 
+import { createHeightmap, heightAt, onBlockChanged, type HeightmapKind } from './Heightmap.ts';
+
 export const CHUNK_SIZE_X = 16;
 export const CHUNK_SIZE_Z = 16;
 
@@ -47,6 +49,14 @@ export class Chunk {
    * 一个区块的方块数组是 96KB，若每区块都无条件多带一份状态就是翻倍。
    */
   private states: Uint8Array | null = null;
+  /**
+   * 高度图（C6）：每种一张 `Uint16Array(256)`，**按需分配**（第一次查询时才建）。
+   *
+   * 与 `states` 同一个思路：自然生成的区块里绝大多数从不被"找地表"的代码碰到，
+   * 那就一字节都不占。建表之后由 `Chunk.set` 维护，见 `Heightmap.ts`。
+   */
+  private worldSurface: Uint16Array | null = null;
+  private motionBlocking: Uint16Array | null = null;
   /** 每个 section 的非空气方块计数，用于快速跳过空段 */
   readonly sectionCounts: Int32Array;
   /** 光照是否已初始化 */
@@ -190,6 +200,34 @@ export class Chunk {
     if (prev === 0 && id !== 0) this.sectionCounts[section]!++;
     else if (prev !== 0 && id === 0) this.sectionCounts[section]!--;
     this.dirty = true;
+
+    // 高度图（C6）：只维护"已经建过表"的列，没建过的等第一次查询再算。
+    // 两个 if 都是廉价的空判断（`null` + 一次比较），而这里是生成期最热的写路径
+    if (this.worldSurface) onBlockChanged(this.worldSurface, this, x, z, y, id, 'world_surface');
+    if (this.motionBlocking) onBlockChanged(this.motionBlocking, this, x, z, y, id, 'motion_blocking');
+  }
+
+  /**
+   * 某一列的高度（C6）：返回"存进去的值"（见 `Heightmap.ts`），
+   * 第一次查询当场建表，之后 O(1)。
+   */
+  getSurfaceHeight(kind: HeightmapKind, x: number, z: number): number {
+    const map = this.heightmap(kind);
+    return heightAt(map, this, x, z, kind);
+  }
+
+  /** 这张高度图建过表没有（调试与断言用） */
+  hasHeightmap(kind: HeightmapKind): boolean {
+    return (kind === 'world_surface' ? this.worldSurface : this.motionBlocking) !== null;
+  }
+
+  private heightmap(kind: HeightmapKind): Uint16Array {
+    if (kind === 'world_surface') {
+      this.worldSurface ??= createHeightmap();
+      return this.worldSurface;
+    }
+    this.motionBlocking ??= createHeightmap();
+    return this.motionBlocking;
   }
 
   sectionIsEmpty(section: number): boolean {

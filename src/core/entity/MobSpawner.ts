@@ -28,6 +28,13 @@ export interface SpawnContext {
   getBlock: (x: number, y: number, z: number) => number;
   getSkyLight: (x: number, y: number, z: number) => number;
   getBlockLight: (x: number, y: number, z: number) => number;
+  /**
+   * 这一列**会挡住移动的最高方块**的 y（C6 高度图）；没有或未加载时 null。
+   *
+   * 被动刷怪拿它代替"从玩家高度往下逐格找草方块"——后者的开销是
+   * `16 列 × 最多 330 格 ≈ 5000 次 getBlock`／每 2 秒，是当时最大的一个纯逻辑热点。
+   */
+  getSurfaceBlockY: (x: number, z: number) => number | null;
   /** 玩家位置；未加载时为 null（此时不生成） */
   player: { x: number; y: number; z: number } | null;
   spawn: (type: MobType, x: number, y: number, z: number) => void;
@@ -124,36 +131,50 @@ export class MobSpawner {
     return spawned;
   }
 
+  /**
+   * 被动生物：随机撒点后先问**高度图**（C6）。
+   *
+   * ⚠️ 这一处是上一版的性能热点：原来是"从玩家高度往下逐格找草方块"，
+   * 一次尝试最多 16 列 × 330 格 ≈ **5000 次 `getBlock`**（每 2 秒跑一次）。
+   * 现在地表高度是 O(1) 查表，只对查到的那一格做一次 `getBlock` 复核。
+   *
+   * 语义**有一处细微变化**（更接近原版）：原来会顺带找到"地表下方"的草地
+   * （例如悬崖下的草地只露出一点），现在严格按"最高的会挡住移动的方块"判定，
+   * 与原版用 MOTION_BLOCKING 高度图的做法一致。
+   */
   private trySpawnPassive(ctx: SpawnContext): number {
     const player = ctx.player!;
+    const top = Math.min(WORLD_MAX_Y - 2, Math.floor(player.y) + 12);
 
     for (let attempt = 0; attempt < 16; attempt++) {
       const { x, z } = this.randomAround(player, PASSIVE_MIN_DISTANCE, PASSIVE_MAX_DISTANCE);
-      // 从上方往下找**草方块**（不能只找"第一个落脚点"——那可能是地下岩壁上的平台，
-      // 原版被动生物只在地表草地上生成）
-      const top = Math.min(WORLD_MAX_Y - 2, Math.floor(player.y) + 12);
-      for (let y = top; y > WORLD_MIN_Y + 1; y--) {
-        if (ctx.getBlock(x, y, z) !== Block.GRASS_BLOCK) continue;
-        if (!this.canSpawnAt(ctx, x, y + 1, z)) break;
-        // 光照条件：白天户外（天光 ≥ 9）
-        if (ctx.getSkyLight(x, y + 1, z) < 9) break;
+      // 地表（= 最高的"会挡住移动"的方块）够不到玩家附近就不试：
+      // 原来的逐格扫描也是从玩家高度往下找，所以够不到就等于扫不到
+      const surfaceY = ctx.getSurfaceBlockY(x, z);
+      if (surfaceY === null || surfaceY > top) continue;
+      // 只在地表**草地**上生成（不能只找"第一个落脚点"——那可能是地下岩壁上的平台）
+      if (ctx.getBlock(x, surfaceY, z) !== Block.GRASS_BLOCK) continue;
+      if (!this.canSpawnAt(ctx, x, surfaceY + 1, z)) continue;
+      // 光照条件：白天户外（天光 ≥ 9）
+      if (ctx.getSkyLight(x, surfaceY + 1, z) < 9) continue;
 
-        const type = this.pick(PASSIVE_MOBS);
-        ctx.spawn(type, x + 0.5, y + 1, z + 0.5);
-        this.spawnedPassive++;
-        return 1;
-      }
+      const type = this.pick(PASSIVE_MOBS);
+      ctx.spawn(type, x + 0.5, surfaceY + 1, z + 0.5);
+      this.spawnedPassive++;
+      return 1;
     }
     return 0;
   }
 
-  /** 该列地表（草方块）的高度，找不到返回 null */
+  /**
+   * 该列地表（草方块）的高度，找不到返回 null。
+   * 与 `trySpawnPassive` 一样走高度图：先查到"会挡住移动的最高方块"，再复核它是不是草方块。
+   */
   surfaceHeight(ctx: SpawnContext, x: number, fromY: number, z: number): number | null {
     const top = Math.min(WORLD_MAX_Y - 2, fromY);
-    for (let y = top; y > WORLD_MIN_Y + 1; y--) {
-      if (ctx.getBlock(x, y, z) === Block.GRASS_BLOCK) return y;
-    }
-    return null;
+    const surfaceY = ctx.getSurfaceBlockY(x, z);
+    if (surfaceY === null || surfaceY > top) return null;
+    return ctx.getBlock(x, surfaceY, z) === Block.GRASS_BLOCK ? surfaceY : null;
   }
 
   /** 该位置是否适合生成：脚下实心、身体两格空、且在世界范围内 */

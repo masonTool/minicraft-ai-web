@@ -37,10 +37,20 @@ interface Spawned {
  * 其中 y=64 那一层换成草方块，用来验证被动生物的地面规则。
  */
 function makeContext(
-  options: { sky: number; block: number; player?: { x: number; y: number; z: number }; spawned: Spawned[]; hostile?: number; passive?: number },
+  options: {
+    sky: number;
+    block: number;
+    player?: { x: number; y: number; z: number };
+    spawned: Spawned[];
+    hostile?: number;
+    passive?: number;
+    /** 调用了多少次世界查询（用来钉住"刷怪不再逐格扫描"，见文件末尾） */
+    counts?: { block: number; surface: number };
+  },
 ): SpawnContext {
   return {
     getBlock: (_x, y) => {
+      if (options.counts) options.counts.block++;
       const phase = ((y % 4) + 4) % 4;
       if (phase === 0) return y === 64 ? Block.GRASS_BLOCK : Block.STONE;
       if (phase === 1 || phase === 2) return Block.AIR;
@@ -48,6 +58,14 @@ function makeContext(
     },
     getSkyLight: () => options.sky,
     getBlockLight: () => options.block,
+    /**
+     * 这个虚拟世界一路实心到 y=320，没有"自然地表"可言，
+     * 所以直接把它声明成草地那一层（64）——测试意图就是"地表是草方块"。
+     */
+    getSurfaceBlockY: () => {
+      if (options.counts) options.counts.surface++;
+      return 64;
+    },
     player: options.player ?? { x: 0.5, y: 65, z: 0.5 },
     spawn: (type, x, y, z) => options.spawned.push({ type, x, y, z }),
     hostileCount: options.hostile ?? 0,
@@ -155,6 +173,18 @@ console.log('\n[节流]');
   for (let i = 0; i < 40; i++) spawner.update(0.05, ctx);
   // 一个生成周期最多刷 3 只敌对（实现里的上限）
   check('2 秒内只触发一次生成周期（最多 3 只）', spawned.length <= 3, `${spawned.length} 只`);
+}
+
+console.log('\n[性能：被动刷怪不再逐格扫描（C6 高度图）]');
+{
+  // hostileCount 先顶满，这样一次 update 里只剩被动那条路，计数才干净
+  const spawned: Spawned[] = [];
+  const counts = { block: 0, surface: 0 };
+  new MobSpawner().update(2.0, makeContext({ sky: 15, block: 0, spawned, counts, hostile: 24 }));
+
+  check('地表高度走的是高度图', counts.surface > 0, `surface=${counts.surface} 次`);
+  check('16 次尝试里的世界查询很少（原来要往下扫几十~几百格）', counts.block <= 64, `实际 ${counts.block} 次 getBlock`);
+  check('而且照样刷得出来（优化没把功能优化没）', spawned.some((s) => !s.type.hostile), `${spawned.length} 只`);
 }
 
 console.log('\n[生物表覆盖]');

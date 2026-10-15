@@ -12,6 +12,7 @@
 import { Chunk } from './Chunk.ts';
 import { ChunkEdits } from '../save/ChunkEdits.ts';
 import { BlockEntityStore } from './BlockEntityStore.ts';
+import { heightToY, type HeightmapKind } from './Heightmap.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import type { WorldType } from '../gen/WorldType.ts';
 import { LightEngine } from '../light/LightEngine.ts';
@@ -245,6 +246,18 @@ export class World {
     const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
     if (!chunk) return 0;
     return chunk.getState(worldX & 15, worldY, worldZ & 15);
+  }
+
+  /**
+   * 这一列**最高匹配方块**的 y（C6，走高度图，O(1)）；区块未加载或整列没有匹配方块时返回 null。
+   *
+   * @param kind 默认 `motion_blocking`（会挡住移动的方块）——那才是"地表"的正解；
+   *   要"最高的任何方块"（含草/花）就传 `world_surface`
+   */
+  getSurfaceBlockY(worldX: number, worldZ: number, kind: HeightmapKind = 'motion_blocking'): number | null {
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
+    if (!chunk) return null;
+    return heightToY(chunk.getSurfaceHeight(kind, worldX & 15, worldZ & 15));
   }
 
   /** 该方块是否参与碰撞（粗判，非完整方块的精确检测走 collisionAt） */

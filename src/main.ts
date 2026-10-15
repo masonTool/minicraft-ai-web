@@ -2482,6 +2482,8 @@ class App {
       // 不折算的话夜晚地表永远刷不出怪（原版夜里是会刷的）
       getSkyLight: (x, y, z) => this.world.getSkyLight(x, y, z) * this.solidMaterial.skyBrightnessValue,
       getBlockLight: (x, y, z) => this.world.getBlockLight(x, y, z),
+      // 地表高度走高度图（C6）：被动刷怪原来每 2 秒要扫掉几千次 getBlock
+      getSurfaceBlockY: (x, z) => this.world.getSurfaceBlockY(x, z),
       player,
       spawn: (type, x, y, z) => {
         this.entities.spawn(new Mob(type, x, y, z));
