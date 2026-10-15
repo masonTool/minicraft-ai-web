@@ -9,7 +9,6 @@
  * 颜色字段给渲染器用（程序化模型按主色 + 点缀色拼出身体与四肢）。
  */
 
-import { Block } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 import type { MobType } from './Mob.ts';
 
@@ -81,8 +80,8 @@ export const MOB_TYPES: readonly MobType[] = [
       { itemId: Item.BEEF, min: 1, max: 3 },
       { itemId: Item.LEATHER, min: 0, max: 2 },
     ],
-    // ⚠️ 原版是小麦，但耕作还没做（游戏里连小麦物品都没有），先用苹果代替
-    feed: Item.APPLE,
+    // 小麦（H13 耕作落地后换回原版口粮）
+    feed: Item.WHEAT,
     milk: true,
     xp: 3,
     bodyColor: 0x4a3325,
@@ -100,7 +99,8 @@ export const MOB_TYPES: readonly MobType[] = [
     attackDamage: 0,
     followRange: 0,
     drops: [{ itemId: Item.PORKCHOP, min: 1, max: 3 }],
-    // ⚠️ 原版是胡萝卜/马铃薯，同样等耕作落地后换回
+    // ⚠️ 原版是胡萝卜/马铃薯/甜菜根——**这两样作物还没做**，猪暂时吃西瓜片。
+    // 等下一批把胡萝卜与马铃薯种出来，这一行换回 Item.CARROT 即可（逻辑不用动）
     feed: Item.MELON_SLICE,
     xp: 3,
     bodyColor: 0xe39a9a,
@@ -119,7 +119,7 @@ export const MOB_TYPES: readonly MobType[] = [
     followRange: 0,
     // 羊毛不写进 drops：颜色是每只羊各自的（见 MobType.wool，在 Mob.dropLoot 里结算）
     drops: [{ itemId: Item.MUTTON, min: 1, max: 2 }],
-    feed: Item.APPLE,
+    feed: Item.WHEAT,
     wool: true,
     xp: 3,
     bodyColor: 0xe8e8e8,
@@ -140,8 +140,8 @@ export const MOB_TYPES: readonly MobType[] = [
       { itemId: Item.CHICKEN, min: 1, max: 1 },
       { itemId: Item.FEATHER, min: 0, max: 2 },
     ],
-    // ⚠️ 原版是种子；甘蔗至少是植物，先顶着
-    feed: Block.SUGAR_CANE,
+    // 小麦种子（H13 耕作落地后换回原版口粮）
+    feed: Item.WHEAT_SEEDS,
     xp: 3,
     bodyColor: 0xf2f2ee,
     accentColor: 0xd94f2b,

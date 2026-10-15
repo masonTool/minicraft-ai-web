@@ -465,12 +465,13 @@ console.log('\n[喂食繁殖与幼体]');
   };
 
   const cowType = mobTypeById('cow')!;
-  const apple = Item.APPLE;
+  const apple = Item.WHEAT;
 
   // ---- 喂食表
-  equal('牛爱吃的是苹果（原版是小麦，等耕作落地后换回）', cowType.feed, apple);
-  equal('猪爱吃西瓜片', mobTypeById('pig')!.feed, Item.MELON_SLICE);
-  equal('鸡爱吃甘蔗（原版是种子）', mobTypeById('chicken')!.feed, Block.SUGAR_CANE);
+  equal('牛爱吃小麦（H13 耕作落地后已换回原版）', cowType.feed, Item.WHEAT);
+  // ⚠️ 猪暂时吃西瓜片：胡萝卜/马铃薯还没做（见 mobs.ts 里的说明）
+  equal('猪暂时吃西瓜片（胡萝卜/马铃薯待做）', mobTypeById('pig')!.feed, Item.MELON_SLICE);
+  equal('鸡爱吃小麦种子（原版）', mobTypeById('chicken')!.feed, Item.WHEAT_SEEDS);
   equal('僵尸不吃东西（不参与繁殖）', mobTypeById('zombie')!.feed, undefined);
 
   // ---- 喂食：成年体进入求爱
@@ -553,14 +554,14 @@ console.log('\n[手持食物的吸引跟随]');
 
   const cowType = mobTypeById('cow')!;
 
-  // ---- 拿着苹果：牛会跟过来
-  heldItemId = Item.APPLE;
+  // ---- 拿着小麦：牛会跟过来
+  heldItemId = Item.WHEAT;
   // 站在 6 格外（`TEMPT_RANGE` 是 8，别卡在边界上——8.0 < 8 是 false）
   const cow = new Mob(cowType, 2.5, 65.5, 0.5);
   const before = Math.abs(player.x - cow.x);
   for (let i = 0; i < 60; i++) cow.tick(ctx, 0.05); // 3 秒
   const after = Math.abs(player.x - cow.x);
-  check('拿着苹果时牛会跟过来', after < before - 2, `${before.toFixed(1)} → ${after.toFixed(1)}`);
+  check('拿着小麦时牛会跟过来', after < before - 2, `${before.toFixed(1)} → ${after.toFixed(1)}`);
   check('但不会贴着玩家推（停在 1.6 格外）', after > 1, `距离 ${after.toFixed(2)}`);
 
   // ---- 空手：牛不跟
@@ -578,7 +579,7 @@ console.log('\n[手持食物的吸引跟随]');
   check('拿着骨头牛不理（它不是食物）', Math.abs(player.x - wrong.x) > wrongBefore - 4, `${wrongBefore.toFixed(1)} → ${Math.abs(player.x - wrong.x).toFixed(1)}`);
 
   // ---- 太远就不跟（8 格外）
-  heldItemId = Item.APPLE;
+  heldItemId = Item.WHEAT;
   const farWorld = new TestWorld();
   farWorld.floor(-40, 40, -8, 8, 64);
   const farCtx: EntityContext = { ...ctx, world: farWorld.asPhysicsWorld() };
