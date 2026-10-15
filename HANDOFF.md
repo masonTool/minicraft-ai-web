@@ -105,18 +105,39 @@ npm run dev            # http://localhost:5173
 （见 `src/main.ts` 调试面板一行）。复现与判据：站上平台，观察这两个数是否归零、
 归零后该区块的网格有没有重新生成；若没重刷，就是队列收敛后缺少"脏区块重新入网格队列"的一步。
 
+## 5.5 打包与发布（K8）
+
+**PWA 已经可用**：`npm run build` 的产物里带 `manifest.webmanifest`、`sw.js`、`icon.svg`，
+Service Worker 只在生产模式注册（开发时注册会把 vite 的开发资源缓存住，改代码看不到效果——
+这是 PWA 开发最常见的坑）。验收：`sh tools/pwa-check.sh`。
+缓存策略：导航请求网络优先、静态资源缓存优先 + 后台更新。
+
+**想套壳成 App 时**（本项目没装这些依赖，按需再加）：
+
+- **Android（Capacitor）**：
+  `npm i -D @capacitor/cli && npm i @capacitor/core @capacitor/android` →
+  `npx cap init` → `npm run build` → `npx cap add android` → `npx cap sync` → `npx cap open android`。
+  注意 `vite.config.ts` 用的是 `base: './'`（相对路径），套壳与 PWA 都能直接用，不必为 `file://` 另做构建。
+- **桌面（Electron）**：`npm i -D electron`，主进程 `loadFile('dist/index.html')`；
+  存档走 IndexedDB，默认持久化在用户数据目录。
+- **手机浏览器直接用**：`npm run dev -- --host` 后用手机访问局域网地址（触控层自动启用），
+  真机验收清单见 `TASKS.md` 的 M17。
+
 ## 6. 常用命令与调试接口
 
 ```bash
 npm run dev         # 开发服务器
 npm run typecheck   # tsc --noEmit（提交前必过）
 npm run build       # 类型检查 + 生产构建
-npm test            # 16 套离线测试（含 decor/structure/nether）
+npm test            # 18 套离线测试（含 decor/structure/nether/end/redstone/save/net）
 npm run gen:stats   # 地形生成统计（耗时/洞穴占比/矿石产量）
 npm run agent:setup # 跨机器自检
 ```
 
 浏览器控制台 `window.__mc`（`src/main.ts` 末尾挂的 App 实例）：
+`connect(url,name)` / `disconnect()` / `netState` / `sendChat(text)` / `saveNow()` /
+`clearSaveAndReload()` / `saveStatus` / `openSettings()` / `updateSettings(patch)` /
+`blockId(name)` / `simulateFrameTime(ms)` /
 `teleport(x,y,z)` / `teleportForce` / `look(yawDeg,pitchDeg)` / `setTimeOfDay(t)` /
 `setDimension('overworld'|'nether')` / `toggleDimension()` /
 `probe(x,y,z)`（方块 + 天光 + 方块光）/ `probeState` / `column(x,z)` / `sampleColumns(x0,z0,step)` /
