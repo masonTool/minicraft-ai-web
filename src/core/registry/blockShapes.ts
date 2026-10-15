@@ -106,7 +106,10 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
         [0.5 - PANE_HALF, 0, 0, 0.5 + PANE_HALF, 1, 1],
       ];
     case 'door':
-      return [doorBox(state)];
+      // ⚠️ 开着的门**没有碰撞体积**（原版可以直接穿过门洞）。
+      // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
+      // 是 K7 的单元测试（tests/collision.test.ts）把它抓出来的。
+      return isDoorOpen(state) ? [] : [doorBox(state)];
     case 'cactus':
       return [CACTUS_BOX];
     case 'torch':
@@ -176,7 +179,10 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'pane':
       return paneBoxes(ctx.connect ?? NEVER_CONNECT);
     case 'door':
-      return [doorBox(state)];
+      // ⚠️ 开着的门**没有碰撞体积**（原版可以直接穿过门洞）。
+      // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
+      // 是 K7 的单元测试（tests/collision.test.ts）把它抓出来的。
+      return isDoorOpen(state) ? [] : [doorBox(state)];
     case 'torch':
       return torchBoxes(state);
     case 'ladder':
