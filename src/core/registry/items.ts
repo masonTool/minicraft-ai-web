@@ -12,19 +12,12 @@
 
 import { Block, Wood, blockDef, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
+import { TOOL_SPECS, type ToolInfo } from './tools.ts';
 
 export const MAX_STACK = 64;
 
-export type ToolType = 'pickaxe' | 'axe' | 'shovel' | 'hoe' | 'sword' | 'shears';
-
-export interface ToolInfo {
-  readonly type: ToolType;
-  /** 工具等级 0-4 */
-  readonly tier: number;
-  /** 采集速度倍率（徒手为 1） */
-  readonly speed: number;
-  readonly durability: number;
-}
+export type { ToolType, ToolInfo } from './tools.ts';
+export { TOOL_SPECS } from './tools.ts';
 
 export interface ItemDef {
   readonly id: number;
@@ -153,14 +146,30 @@ for (const spec of NON_BLOCK_SPECS) {
   };
 }
 
+// ---- 工具（25 种：5 种类 × 5 材质），耐久按「每件一叠」处理
+for (const spec of TOOL_SPECS) {
+  ITEMS[spec.id] = {
+    id: spec.id,
+    name: spec.name,
+    maxStack: 1,
+    tile: spec.tile,
+    tool: spec.tool,
+  };
+}
+
 export function itemDef(id: number): ItemDef | undefined {
   return ITEMS[id];
+}
+
+/** 该物品是不是工具/武器（决定堆叠上限与耐久逻辑） */
+export function isTool(itemId: number): boolean {
+  return itemDef(itemId)?.tool !== undefined;
 }
 
 // ---------------------------------------------------------------- 创造模式分类
 
 /** 创造物品栏的分类标签 */
-export const ITEM_CATEGORIES = ['all', 'building', 'natural', 'ores', 'wool', 'functional'] as const;
+export const ITEM_CATEGORIES = ['all', 'building', 'natural', 'ores', 'wool', 'tools', 'functional'] as const;
 export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
 
 export const CATEGORY_LABELS: Record<ItemCategory, string> = {
@@ -169,8 +178,12 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   natural: '自然',
   ores: '矿石与材料',
   wool: '羊毛与染料',
+  tools: '工具与武器',
   functional: '功能方块',
 };
+
+/** 工具与武器（25 种，由 TOOL_SPECS 派生） */
+const TOOLS = new Set<number>(TOOL_SPECS.map((spec) => spec.id));
 
 const BUILDING = new Set<number>([
   Block.STONE,
@@ -335,6 +348,7 @@ for (let index = 0; index < DYE_COLORS.length; index++) {
 
 /** 判断物品属于哪个创造分类；未登记的默认归入"矿石与材料" */
 export function categoryOf(itemId: number): ItemCategory {
+  if (TOOLS.has(itemId)) return 'tools';
   if (WOOL_AND_DYE.has(itemId)) return 'wool';
   if (FUNCTIONAL.has(itemId)) return 'functional';
   if (ORES.has(itemId)) return 'ores';

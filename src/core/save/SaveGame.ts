@@ -51,8 +51,8 @@ export interface PlayerSave {
   saturation: number;
   air: number;
   exhaustion: number;
-  /** 36 个背包槽；空槽为 null */
-  inventory: Array<{ id: number; count: number } | null>;
+  /** 41 个背包槽（含盔甲与副手）；空槽为 null。`damage` 只有工具/盔甲会带 */
+  inventory: Array<{ id: number; count: number; damage?: number } | null>;
   selectedSlot: number;
   /** 末影龙是否已被击败（决定重进末地要不要重新生成 boss） */
   dragonDefeated: boolean;

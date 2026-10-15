@@ -1,0 +1,330 @@
+/**
+ * 工具、武器与采集规则
+ *
+ * 这个模块把「工具是什么」和「方块需要什么工具才能挖」放在一起，
+ * 因为这两件事必须互相印证：`breakSeconds` 同时用到方块的硬度与工具的速度，
+ * `canHarvest` 同时用到方块的采集需求与工具的等级。分散到两个文件很容易改一边忘一边。
+ *
+ * 与原版对齐的部分：
+ *  - 等级沿用原版：0 木/金 · 1 石 · 2 铁 · 3 钻石（下界合金 4 暂未实现）；
+ *  - 挖掘耗时 = 硬度 × (可采集 ? 1.5 : 5) ÷ 工具速度（原版 30/100 除以 20 tick 的等价写法）；
+ *  - 「必须用正确工具才掉落」的方块（`minecraft:mineable/*` + `requiresCorrectToolForDrops`）：
+ *    等级不够就**挖得动但什么都不掉**，与原版一致。
+ *
+ * 与原版的已知差异：
+ *  - 工具类型只有镐/斧/锹/锄/剑五种（没有剪刀、打火石、弓、三叉戟）；
+ *  - 攻击速度（冷却）统一为 0.5 秒，没有按武器区分（原版剑 1.6、斧 0.8~1.0）。
+ */
+
+import {
+  Block,
+  SHAPED_PARENTS,
+  Wood,
+  blockHardness,
+  concreteId,
+  isHandHarvestable,
+  slabId,
+  stairsId,
+  terracottaId,
+} from './blocks.ts';
+import { DYE_COLORS } from './colors.ts';
+
+// ---------------------------------------------------------------- 工具定义
+
+/** 工具种类 */
+export type ToolType = 'pickaxe' | 'axe' | 'shovel' | 'hoe' | 'sword';
+
+/** 工具材质（原版 `golden_*`，写成 gold 会和矿物 id 混） */
+export type ToolMaterial = 'wooden' | 'stone' | 'iron' | 'golden' | 'diamond';
+
+export interface ToolInfo {
+  readonly type: ToolType;
+  readonly material: ToolMaterial;
+  /** 采集等级 0-3（原版 0-4，下界合金未实现） */
+  readonly tier: number;
+  /** 采集速度倍率（徒手为 1） */
+  readonly speed: number;
+  /** 耐久（可挖多少方块 / 攻击多少次） */
+  readonly durability: number;
+  /** 攻击伤害（含玩家徒手的 1 点，对齐原版界面显示值） */
+  readonly attack: number;
+}
+
+/** 工具种类顺序（决定物品 id，不要改动顺序） */
+export const TOOL_KINDS: readonly ToolType[] = ['pickaxe', 'axe', 'shovel', 'hoe', 'sword'];
+/** 工具材质顺序（决定物品 id，不要改动顺序） */
+export const TOOL_MATERIALS: readonly ToolMaterial[] = ['wooden', 'stone', 'iron', 'golden', 'diamond'];
+
+/** 工具物品 id 起点（非方块物品区，1000 以上且避开染料 1020-1035 / 生物掉落 1030-1038 的区间） */
+export const TOOL_ITEM_START = 1100;
+
+/** 第 (kind, material) 种工具的物品 id */
+export function toolItemId(kind: ToolType, material: ToolMaterial): number {
+  return TOOL_ITEM_START + TOOL_KINDS.indexOf(kind) * TOOL_MATERIALS.length + TOOL_MATERIALS.indexOf(material);
+}
+
+interface MaterialStat {
+  tier: number;
+  speed: number;
+  durability: number;
+}
+
+const MATERIAL_STATS: Record<ToolMaterial, MaterialStat> = {
+  wooden: { tier: 0, speed: 2, durability: 59 },
+  stone: { tier: 1, speed: 4, durability: 131 },
+  iron: { tier: 2, speed: 6, durability: 250 },
+  // 金工具等级低但速度最快（原版特性）
+  golden: { tier: 0, speed: 12, durability: 32 },
+  diamond: { tier: 3, speed: 8, durability: 1561 },
+};
+
+/** 攻击伤害表（原版 1.18 的显示值，已含徒手 1 点） */
+const ATTACK_BY_KIND: Record<ToolType, Record<ToolMaterial, number>> = {
+  sword: { wooden: 4, stone: 5, iron: 6, golden: 4, diamond: 7 },
+  axe: { wooden: 7, stone: 9, iron: 9, golden: 7, diamond: 9 },
+  pickaxe: { wooden: 2, stone: 3, iron: 4, golden: 2, diamond: 5 },
+  shovel: { wooden: 2.5, stone: 3.5, iron: 4.5, golden: 2.5, diamond: 5.5 },
+  hoe: { wooden: 1, stone: 1, iron: 1, golden: 1, diamond: 1 },
+};
+
+/** 组装一件工具的完整属性 */
+export function makeToolInfo(kind: ToolType, material: ToolMaterial): ToolInfo {
+  const stat = MATERIAL_STATS[material];
+  return {
+    type: kind,
+    material,
+    tier: stat.tier,
+    speed: stat.speed,
+    durability: stat.durability,
+    attack: ATTACK_BY_KIND[kind][material],
+  };
+}
+
+/** 一件待注册的工具：id / 注册名 / 图集贴图 / 属性 */
+export interface ToolSpec {
+  readonly id: number;
+  readonly name: string;
+  readonly tile: string;
+  readonly tool: ToolInfo;
+}
+
+/**
+ * 全部 25 种工具（5 种类 × 5 种材质），由两张表叉乘生成。
+ * 加一种材质只需要往 MATERIAL_STATS / TOOL_MATERIALS 里加一行。
+ */
+export const TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.flatMap((kind) =>
+  TOOL_MATERIALS.map((material) => ({
+    id: toolItemId(kind, material),
+    name: `minecraft:${material}_${kind}`,
+    tile: `item_${material}_${kind}`,
+    tool: makeToolInfo(kind, material),
+  })),
+);
+
+/** 按物品 id 反查工具属性（非工具返回 undefined） */
+const TOOL_BY_ID = new Map<number, ToolInfo>(TOOL_SPECS.map((spec) => [spec.id, spec.tool]));
+
+export function toolInfoById(itemId: number): ToolInfo | undefined {
+  return TOOL_BY_ID.get(itemId);
+}
+
+// ---------------------------------------------------------------- 采集需求
+
+/** 采集该方块需要的工具与最低等级 */
+export interface HarvestRequirement {
+  readonly tool: ToolType;
+  readonly tier: number;
+}
+
+/**
+ * 必须用正确工具（且等级够）才会掉落的方块。
+ *
+ * 对应原版的 `requiresCorrectToolForDrops`：等级不够时**挖得动但一无所获**。
+ * 不在表里的方块一律按「徒手可采集」（见 `isHandHarvestable`）判断，
+ * 这样木质方块、泥土、玻璃这些"斧/锹能加速但徒手也能捡"的方块不用逐个登记。
+ */
+const REQUIRED_TOOL = new Map<number, HarvestRequirement>();
+
+/**
+ * 徒手也能采集、但用对应工具会明显加速的方块。
+ * （必须用工具的方块不必登记在这里，`efficientToolType` 会从 REQUIRED_TOOL 里取。）
+ */
+const EFFICIENT_TOOL = new Map<number, ToolType>();
+
+function requirePickaxe(tier: number, ids: readonly number[]): void {
+  for (const id of ids) REQUIRED_TOOL.set(id, { tool: 'pickaxe', tier });
+}
+
+// ---- 木质镐就能挖（原版 tier 0）：石质家族、部分矿物、功能方块
+requirePickaxe(0, [
+  Block.STONE,
+  Block.COBBLESTONE,
+  Block.DEEPSLATE,
+  Block.GRANITE,
+  Block.DIORITE,
+  Block.ANDESITE,
+  Block.TUFF,
+  Block.CALCITE,
+  Block.SANDSTONE,
+  Block.SMOOTH_STONE,
+  Block.STONE_BRICKS,
+  Block.CHISELED_STONE_BRICKS,
+  Block.POLISHED_GRANITE,
+  Block.POLISHED_DIORITE,
+  Block.POLISHED_ANDESITE,
+  Block.DEEPSLATE_BRICKS,
+  Block.CHISELED_DEEPSLATE,
+  Block.POLISHED_DEEPSLATE,
+  Block.BRICKS,
+  Block.COBBLED_DEEPSLATE,
+  Block.MOSSY_COBBLESTONE,
+  Block.MOSSY_STONE_BRICKS,
+  Block.CRACKED_STONE_BRICKS,
+  Block.CRACKED_DEEPSLATE_BRICKS,
+  Block.CHISELED_SANDSTONE,
+  Block.CUT_SANDSTONE,
+  Block.SMOOTH_SANDSTONE,
+  Block.COBBLESTONE_WALL,
+  Block.STONE_BRICK_WALL,
+  Block.FURNACE,
+  Block.COAL_ORE,
+  Block.DEEPSLATE_COAL_ORE,
+  Block.NETHER_QUARTZ_ORE,
+  // 海晶石家族与末地建材
+  Block.PRISMARINE,
+  Block.PRISMARINE_BRICKS,
+  Block.DARK_PRISMARINE,
+  Block.END_STONE,
+  Block.END_STONE_BRICKS,
+  Block.PURPUR_BLOCK,
+  Block.PURPUR_PILLAR,
+  // 下界石材
+  Block.BASALT,
+  Block.SMOOTH_BASALT,
+  Block.BLACKSTONE,
+  Block.NETHER_BRICKS,
+  // 红石元件里需要镐的那几个
+  Block.REDSTONE_LAMP,
+  Block.PISTON,
+  Block.STICKY_PISTON,
+  Block.OBSERVER,
+]);
+// 陶瓦与混凝土（17 色 / 16 色）都需要镐
+for (let i = 0; i <= DYE_COLORS.length; i++) REQUIRED_TOOL.set(terracottaId(i), { tool: 'pickaxe', tier: 0 });
+for (let i = 0; i < DYE_COLORS.length; i++) REQUIRED_TOOL.set(concreteId(i), { tool: 'pickaxe', tier: 0 });
+
+// ---- 石镐（tier 1）：铁/铜/青金石矿与粗金属块
+requirePickaxe(1, [
+  Block.IRON_ORE,
+  Block.COPPER_ORE,
+  Block.LAPIS_ORE,
+  Block.DEEPSLATE_IRON_ORE,
+  Block.DEEPSLATE_COPPER_ORE,
+  Block.DEEPSLATE_LAPIS_ORE,
+  Block.RAW_COPPER_BLOCK,
+  Block.RAW_IRON_BLOCK,
+]);
+
+// ---- 铁镐（tier 2）：金/红石/钻石/绿宝石矿
+requirePickaxe(2, [
+  Block.GOLD_ORE,
+  Block.REDSTONE_ORE,
+  Block.DIAMOND_ORE,
+  Block.EMERALD_ORE,
+  Block.DEEPSLATE_GOLD_ORE,
+  Block.DEEPSLATE_REDSTONE_ORE,
+  Block.DEEPSLATE_DIAMOND_ORE,
+  Block.DEEPSLATE_EMERALD_ORE,
+]);
+
+// ---- 钻石镐（tier 3）：黑曜石与远古残骸
+requirePickaxe(3, [Block.OBSIDIAN, Block.ANCIENT_DEBRIS]);
+
+// 台阶 / 楼梯跟随母方块：母方块要镐，它们也要
+for (let index = 0; index < SHAPED_PARENTS.length; index++) {
+  const parent = SHAPED_PARENTS[index]![0];
+  const required = REQUIRED_TOOL.get(parent);
+  if (!required) continue;
+  REQUIRED_TOOL.set(slabId(index), required);
+  REQUIRED_TOOL.set(stairsId(index), required);
+}
+
+// ---- 加速表：斧头砍木、锹挖土
+for (const id of [
+  Block.OAK_FENCE,
+  Block.OAK_DOOR,
+  Block.LADDER,
+  Block.CRAFTING_TABLE,
+  Block.CHEST,
+  Block.PUMPKIN,
+  Block.MELON,
+  Block.BAMBOO,
+  Block.CRIMSON_STEM,
+  Block.WARPED_STEM,
+  Block.CRIMSON_PLANKS,
+  Block.WARPED_PLANKS,
+  Block.NETHER_WART_BLOCK,
+  Block.WARPED_WART_BLOCK,
+]) {
+  EFFICIENT_TOOL.set(id, 'axe');
+}
+for (const ids of Object.values(Wood)) {
+  EFFICIENT_TOOL.set(ids.log, 'axe');
+  EFFICIENT_TOOL.set(ids.planks, 'axe');
+  EFFICIENT_TOOL.set(ids.slab, 'axe');
+  EFFICIENT_TOOL.set(ids.stairs, 'axe');
+}
+// 橡木是"基础方块"（id 5/6/7 与台阶楼梯 80/84），不在 Wood 表里，得单独登记
+EFFICIENT_TOOL.set(Block.OAK_LOG, 'axe');
+EFFICIENT_TOOL.set(Block.OAK_PLANKS, 'axe');
+for (let index = 0; index < SHAPED_PARENTS.length; index++) {
+  if (SHAPED_PARENTS[index]![0] !== Block.OAK_PLANKS) continue;
+  EFFICIENT_TOOL.set(slabId(index), 'axe');
+  EFFICIENT_TOOL.set(stairsId(index), 'axe');
+}
+for (const id of [Block.DIRT, Block.GRASS_BLOCK, Block.SAND, Block.GRAVEL, Block.CLAY, Block.SNOW_BLOCK, Block.SOUL_SAND, Block.SOUL_SOIL]) {
+  EFFICIENT_TOOL.set(id, 'shovel');
+}
+
+/** 该方块的采集需求；undefined 表示徒手可采集 */
+export function harvestRequirement(blockId: number): HarvestRequirement | undefined {
+  return REQUIRED_TOOL.get(blockId);
+}
+
+/** 用哪种工具挖这个方块会加速；undefined 表示没有工具能加速 */
+export function efficientToolType(blockId: number): ToolType | undefined {
+  return REQUIRED_TOOL.get(blockId)?.tool ?? EFFICIENT_TOOL.get(blockId);
+}
+
+/**
+ * 用这把手上的工具能不能"采到"这个方块（决定是否掉落）。
+ * 等级不够 / 工具类型不对 → false（原版：挖得动但什么都不掉）。
+ */
+export function canHarvest(blockId: number, tool?: ToolInfo | null): boolean {
+  const required = REQUIRED_TOOL.get(blockId);
+  if (!required) return isHandHarvestable(blockId);
+  if (!tool || tool.type !== required.tool) return false;
+  return tool.tier >= required.tier;
+}
+
+/**
+ * 破坏该方块所需秒数（对齐原版公式）：
+ *   可采集 → 1.5 × 硬度 ÷ 速度；不可采集 → 5 × 硬度 ÷ 速度
+ * 例：石头徒手 7.5s、木镐 1.125s、钻石镐 0.281s；黑曜石徒手 250s、钻石镐 9.375s。
+ */
+export function breakSeconds(blockId: number, tool?: ToolInfo | null): number {
+  const hardness = blockHardness(blockId);
+  if (hardness < 0) return Number.POSITIVE_INFINITY;
+  if (hardness === 0) return 0;
+  const efficient = efficientToolType(blockId);
+  const speed = tool && efficient === tool.type ? tool.speed : 1;
+  const multiplier = canHarvest(blockId, tool) ? 1.5 : 5;
+  return (hardness * multiplier) / speed;
+}
+
+// ---------------------------------------------------------------- 工具耐久文案
+
+/** 供界面显示的"耐久 137/250" */
+export function durabilityLabel(tool: ToolInfo, damage: number): string {
+  return `耐久 ${Math.max(0, tool.durability - damage)}/${tool.durability}`;
+}

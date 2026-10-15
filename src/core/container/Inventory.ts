@@ -16,6 +16,11 @@ import { maxStackOf } from '../registry/items.ts';
 export interface ItemStack {
   id: number;
   count: number;
+  /**
+   * 工具/盔甲的已损耗耐久（0 表示崭新）。
+   * 普通方块与材料不带这个字段，因此存档里不会多出一堆 `damage: 0`。
+   */
+  damage?: number;
 }
 
 /**
@@ -88,9 +93,10 @@ export class Inventory implements SlotSource {
     if (!slot || count <= 0) return null;
     const moved = Math.min(slot.count, count);
     slot.count -= moved;
+    const taken: ItemStack = slot.damage === undefined ? { id: slot.id, count: moved } : { id: slot.id, count: moved, damage: slot.damage };
     if (slot.count <= 0) this.slots[index] = null;
     this.notify();
-    return { id: slot.id, count: moved };
+    return taken;
   }
 
   /** 消耗指定物品，数量不足则不做任何改动并返回 false */
@@ -111,17 +117,26 @@ export class Inventory implements SlotSource {
 
   /**
    * 导出全部槽位（存档用）。
-   * 返回定长的 36 项数组，空槽为 null——不存下标，读档时按下标直接还原。
+   * 返回定长的 41 项数组，空槽为 null——不存下标，读档时按下标直接还原。
    */
-  serialize(): Array<{ id: number; count: number } | null> {
-    return this.slots.map((slot) => (slot ? { id: slot.id, count: slot.count } : null));
+  serialize(): Array<ItemStack | null> {
+    return this.slots.map((slot) =>
+      slot ? (slot.damage === undefined ? { id: slot.id, count: slot.count } : { id: slot.id, count: slot.count, damage: slot.damage }) : null,
+    );
   }
 
   /** 从存档恢复槽位（长度不符时按能恢复的部分恢复） */
-  restore(data: ReadonlyArray<{ id: number; count: number } | null>): void {
+  restore(data: ReadonlyArray<ItemStack | null>): void {
     for (let i = 0; i < TOTAL_SLOTS; i++) {
       const stack = data[i];
-      this.slots[i] = stack && stack.count > 0 ? { id: stack.id, count: stack.count } : null;
+      if (!stack || stack.count <= 0) {
+        this.slots[i] = null;
+        continue;
+      }
+      const restored: ItemStack = { id: stack.id, count: stack.count };
+      // 旧存档没有 damage 字段；顺手夹紧非法值，避免坏存档把工具直接判成"已损坏"
+      if (typeof stack.damage === 'number' && stack.damage > 0) restored.damage = stack.damage;
+      this.slots[i] = restored;
     }
     this.notify();
   }
@@ -147,7 +162,9 @@ export class Inventory implements SlotSource {
     if (!target) {
       this.slots[to] = source;
       this.slots[from] = null;
-    } else if (target.id === source.id) {
+    } else if (target.id === source.id && maxStackOf(target.id) > 1) {
+      // 只能堆叠的物品才合并；工具（maxStack 1）走下面的交换分支，
+      // 否则两把同款工具互拖会变成"什么都没发生"
       const room = maxStackOf(target.id) - target.count;
       const moved = Math.min(room, source.count);
       target.count += moved;

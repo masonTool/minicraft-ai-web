@@ -22,6 +22,7 @@ import {
 } from '../registry/blocks.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import { Item, dyeItemId } from '../registry/items.ts';
+import { TOOL_SPECS } from '../registry/tools.ts';
 
 export interface RecipeResult {
   id: number;
@@ -220,6 +221,34 @@ const PANE_RECIPES: readonly Recipe[] = [
   ),
 ];
 
+/**
+ * 工具与武器：5 种类 × 5 材质 = 25 条，图案与原版一致。
+ * 材质只影响"头部材料"，手柄一律是木棍。
+ */
+const TOOL_MATERIAL_INGREDIENTS: Record<string, number> = {
+  wooden: P,
+  stone: COBBLE,
+  iron: Item.IRON_INGOT,
+  golden: Item.GOLD_INGOT,
+  diamond: Item.DIAMOND,
+};
+
+/** M = 材质，S = 木棍 */
+const TOOL_PATTERNS: Record<string, readonly string[]> = {
+  pickaxe: ['MMM', ' S ', ' S '],
+  axe: ['MM', 'MS', ' S'],
+  shovel: ['M', 'S', 'S'],
+  hoe: ['MM', ' S', ' S'],
+  sword: ['M', 'M', 'S'],
+};
+
+const TOOL_RECIPES: readonly Recipe[] = TOOL_SPECS.map((spec) => ({
+  kind: 'shaped' as const,
+  result: { id: spec.id, count: 1 },
+  pattern: TOOL_PATTERNS[spec.tool.type]!,
+  key: { M: TOOL_MATERIAL_INGREDIENTS[spec.tool.material]!, S: Item.STICK },
+}));
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...WOOL_RECIPES,
@@ -227,6 +256,7 @@ export const RECIPES: readonly Recipe[] = [
   ...UTILITY_RECIPES,
   ...WOOD_RECIPES,
   ...PANE_RECIPES,
+  ...TOOL_RECIPES,
 ];
 
 interface Normalized {

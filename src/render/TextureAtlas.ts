@@ -1455,6 +1455,146 @@ PAINTERS.piston_head = PISTON_HEAD_PAINTER;
 PAINTERS.observer_top = OBSERVER_TOP_PAINTER;
 PAINTERS.observer_side = OBSERVER_SIDE_PAINTER;
 
+// ---------------------------------------------------------------- 工具与武器图标
+
+/**
+ * 工具图标的像素模板。用字符画而不是几何公式，是因为 16×16 下手写形状最可控，
+ * 一眼也能看出画的是什么：
+ *   '.' 透明 · 'M' 金属头 · 'D' 金属头暗部 · 'H' 木柄 · 'h' 木柄暗部
+ * 5 种形状 × 5 种材质只需要 5 份模板，材质只影响配色。
+ */
+const TOOL_TEMPLATES: Record<string, readonly string[]> = {
+  pickaxe: [
+    '................',
+    '.........MMMM...',
+    '........MMMMMM..',
+    '.......MMM...MM.',
+    '......MM......M.',
+    '.....MM.........',
+    '....HH..........',
+    '...HH...........',
+    '..HH............',
+    '.HH.............',
+    'HH..............',
+    'H...............',
+    '................',
+    '................',
+    '................',
+    '................',
+  ],
+  axe: [
+    '................',
+    '.........MMMM...',
+    '........MMMMMM..',
+    '........MMMMMM..',
+    '.......MMMMMM...',
+    '.......MMMM.....',
+    '....HHH.........',
+    '...HH...........',
+    '..HH............',
+    '.HH.............',
+    'HH..............',
+    'H...............',
+    '................',
+    '................',
+    '................',
+    '................',
+  ],
+  shovel: [
+    '................',
+    '.........MMMM...',
+    '........MMMMMM..',
+    '........MMMMMM..',
+    '........MMMMMM..',
+    '.........MMMM...',
+    '..........HH....',
+    '.........HH.....',
+    '........HH......',
+    '.......HH.......',
+    '......HH........',
+    '.....HH.........',
+    '....HH..........',
+    '...HH...........',
+    '..HH............',
+    '................',
+  ],
+  hoe: [
+    '................',
+    '................',
+    '.........MMMMM..',
+    '.........MMMMMM.',
+    '.........MM.....',
+    '.........M......',
+    '........HH......',
+    '.......HH.......',
+    '......HH........',
+    '.....HH.........',
+    '....HH..........',
+    '...HH...........',
+    '..HH............',
+    '.HH.............',
+    '................',
+    '................',
+  ],
+  sword: [
+    '................',
+    '.............MM.',
+    '............MMM.',
+    '...........MMM..',
+    '..........MMM...',
+    '.........MMM....',
+    '........MMM.....',
+    '.......MMM......',
+    '......MMM.......',
+    '.....MMM........',
+    '..DDMMM.........',
+    '.DDDDD..........',
+    '..HH............',
+    '.HH.............',
+    '................',
+    '................',
+  ],
+};
+
+/** 工具头的材质配色（贴近原版） */
+const TOOL_MATERIAL_RGB: Record<string, readonly [number, number, number]> = {
+  wooden: [150, 110, 62],
+  stone: [130, 130, 128],
+  iron: [205, 205, 212],
+  golden: [248, 210, 74],
+  diamond: [96, 228, 224],
+};
+
+const TOOL_HANDLE_RGB: readonly [number, number, number] = [150, 108, 58];
+
+/** 按模板取像素：材质只决定头部颜色，木柄所有工具共用 */
+function toolPainter(kind: string, material: string): Painter {
+  const template = TOOL_TEMPLATES[kind]!;
+  const head = TOOL_MATERIAL_RGB[material] ?? [180, 180, 180];
+  return (x, y, rng) => {
+    const pixel = template[y]?.[x] ?? '.';
+    if (pixel === '.') return [0, 0, 0, 0];
+    const jitter = rng() * 14 - 7;
+    if (pixel === 'H' || pixel === 'h') {
+      const shade = pixel === 'h' ? 0.7 : 1;
+      return [
+        clamp255(TOOL_HANDLE_RGB[0] * shade + jitter),
+        clamp255(TOOL_HANDLE_RGB[1] * shade + jitter),
+        clamp255(TOOL_HANDLE_RGB[2] * shade + jitter),
+        255,
+      ];
+    }
+    const shade = pixel === 'D' ? 0.68 : 1;
+    return [clamp255(head[0] * shade + jitter), clamp255(head[1] * shade + jitter), clamp255(head[2] * shade + jitter), 255];
+  };
+}
+
+for (const material of ['wooden', 'stone', 'iron', 'golden', 'diamond']) {
+  for (const kind of ['pickaxe', 'axe', 'shovel', 'hoe', 'sword']) {
+    PAINTERS[`item_${material}_${kind}`] = toolPainter(kind, material);
+  }
+}
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

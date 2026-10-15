@@ -23,6 +23,7 @@ import {
   maxStackOf,
   type ItemCategory,
 } from './items.ts';
+import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
 
 // ---------------------------------------------------------------- 规则生成
 
@@ -130,6 +131,27 @@ for (const [base, cn] of Object.entries(STRUCTURE_BASES_CN)) {
 for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
   put(`${ore}_ore`, cn);
   put(`deepslate_${ore}_ore`, `深层${cn}`);
+}
+
+// 工具与武器：材质 × 种类 = 25 条（木镐 / 石斧 / 铁锹 / 金锄 / 钻石剑……）
+const TOOL_MATERIALS_CN: Record<string, string> = {
+  wooden: '木',
+  stone: '石',
+  iron: '铁',
+  golden: '金',
+  diamond: '钻石',
+};
+const TOOL_KINDS_CN: Record<string, string> = {
+  pickaxe: '镐',
+  axe: '斧',
+  shovel: '锹',
+  hoe: '锄',
+  sword: '剑',
+};
+for (const [material, materialCn] of Object.entries(TOOL_MATERIALS_CN)) {
+  for (const [kind, kindCn] of Object.entries(TOOL_KINDS_CN)) {
+    put(`${material}_${kind}`, `${materialCn}${kindCn}`);
+  }
 }
 
 // ---------------------------------------------------------------- 显式表
@@ -396,6 +418,23 @@ for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
   DESCRIPTIONS[`deepslate_${ore}_ore`] = `深层（深板岩层）的${cn}，掉落与普通${cn}相同。`;
 }
 
+// 工具与武器的说明由属性表生成：新加一把工具就自带说明，不会漏
+const TOOL_TIER_CN = ['木/金', '石', '铁', '钻石', '下界合金'];
+const TOOL_KIND_DESC: Record<string, string> = {
+  pickaxe: '挖石头、矿石与砖石类方块；等级不够的矿石挖了也不掉落。',
+  axe: '砍木头最快；近战单次伤害最高。',
+  shovel: '挖泥土、沙子、砂砾这类松软方块最快。',
+  hoe: '耕地的工具，也能当低伤害武器。',
+  sword: '近战伤害与攻击手感最好的武器。',
+};
+for (const spec of TOOL_SPECS) {
+  const materialCn = TOOL_MATERIALS_CN[spec.tool.material]!;
+  const kindCn = TOOL_KINDS_CN[spec.tool.type]!;
+  DESCRIPTIONS[`${spec.tool.material}_${spec.tool.type}`] =
+    `${materialCn}${kindCn}：${TOOL_KIND_DESC[spec.tool.type]!}` +
+    ` 采集等级 ${TOOL_TIER_CN[spec.tool.tier]!}｜速度 ×${spec.tool.speed}｜攻击 ${spec.tool.attack}｜耐久 ${spec.tool.durability}`;
+}
+
 // ---------------------------------------------------------------- 对外接口
 
 /** 由英文 id（可带命名空间）取中文名；查不到就回退成英文 id */
@@ -463,14 +502,21 @@ export interface ItemTooltip {
   count: number;
 }
 
-export function itemTooltip(itemId: number, count = 1): ItemTooltip {
+/**
+ * 提示框内容。
+ * @param damage 工具/盔甲的已损耗耐久；不传就不显示耐久那一行
+ */
+export function itemTooltip(itemId: number, count = 1, damage?: number): ItemTooltip {
   const def = itemDef(itemId);
   const rawName = def?.name ?? 'unknown';
+  const tool = toolInfoById(itemId);
+  const description = itemDescription(itemId);
+  const durability = tool && damage !== undefined ? durabilityLabel(tool, damage) : '';
   return {
     title: itemLabel(itemId),
     subtitle: rawName,
-    description: itemDescription(itemId),
-    showMeta: !hasDescription(itemId),
+    description: durability ? (description ? `${description}｜${durability}` : durability) : description,
+    showMeta: !hasDescription(itemId) && durability.length === 0,
     category: categoryLabel(itemId),
     maxStack: maxStackOf(itemId),
     count,

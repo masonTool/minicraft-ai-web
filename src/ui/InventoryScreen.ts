@@ -109,7 +109,7 @@ export class InventoryScreen {
   /** key → 槽位绑定；key 形如 "inv:12" / "craft:3" / "furnace:1" / "chest:5" */
   private readonly bindings = new Map<string, SlotBinding>();
   /** 每个槽位当前显示的物品（提示框按元素反查；槽位会被反复重建，所以用 WeakMap 不占内存） */
-  private readonly tooltipStacks = new WeakMap<HTMLElement, { id: number; count: number }>();
+  private readonly tooltipStacks = new WeakMap<HTMLElement, ItemStack>();
   private readonly grids: Record<2 | 3, CraftingGrid>;
 
   private mode: InventoryPanelMode = 'inventory';
@@ -710,7 +710,7 @@ export class InventoryScreen {
   private tooltipFor(element: HTMLElement): ItemTooltip | null {
     const stack = this.tooltipStacks.get(element);
     if (!stack) return null;
-    return itemTooltip(stack.id, stack.count);
+    return itemTooltip(stack.id, stack.count, stack.damage);
   }
 
   private renderInto(element: HTMLElement, stack: ItemStack | null): void {
