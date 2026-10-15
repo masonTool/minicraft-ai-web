@@ -26,7 +26,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-15 · 提交总数 112（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-15 · 提交总数 113（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 176 项 —— 已完成 **100**、进行中 **57**、待办 19；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -60,7 +60,7 @@ npm run dev            # http://localhost:5173
 | 水面动画 | `VoxelMaterial` 的 `uTime` / `uFluidTiles`（按贴图起点识别流体，顶点做波浪、片元滚动贴图） |
 | 随机刻与流体 | `core/tick/RandomTicks.ts`（随机刻行为表 + 计划刻队列）、`core/world/Fluids.ts`（液面等级、无限水源、水火相遇） |
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
-| 附魔台与附魔表 | `core/registry/enchantments.ts`（38 条对齐原版 1.18）+ `core/crafting/Enchanting.ts`（候选掷点）+ `core/container/EnchantTable.ts`（台面状态）+ 背包界面里的附魔台模式；新方块**附魔台/书架**、新材料**纸/书**；书架加成照抄原版判定（5×5 外圈 + 隔一格空气）上限 15；三个候选槽花费沿用原版 `getEnchantmentCost`、青金石 1/2/3。⚠️ 38 条里只有 6 条真接了效果，其余在候选里带 `*` 标记 |
+| 附魔台与附魔表 | `core/registry/enchantments.ts`（38 条对齐原版 1.18）+ `core/crafting/Enchanting.ts`（候选掷点）+ `core/container/EnchantTable.ts`（台面状态）+ 背包界面里的附魔台模式；新方块**附魔台/书架**、新材料**纸/书**；书架加成照抄原版判定（5×5 外圈 + 隔一格空气）上限 15；三个候选槽花费沿用原版 `getEnchantmentCost`、青金石 1/2/3。⚠️ 38 条里已有 13 条真接了效果，其余在候选里带 `*` 标记 |
 | 经验与等级 | `core/survival/Experience.ts`：原版三段升级曲线（`2L+7 / 5L-38 / 9L-158`）；来源＝击杀生物（5 / 3 / 末影龙 12000）+ 挖矿（只给部分矿石，铁矿金矿不给）+ 熔炉取出（小数攒够 1 点）；经验条在快捷栏正上方、等级数字压在条中间；`/xp add\|set\|query`；死亡掉光、随存档走。⚠️ 经验球实体未做，所以是直接进账、死亡也捡不回来 |
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（383 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，140 条配方 + 11 条熔炼） |

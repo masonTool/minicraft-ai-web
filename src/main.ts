@@ -24,6 +24,7 @@ import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower } from './core/crafting/Enchanting.ts';
+import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { EnchantTable } from './core/container/EnchantTable.ts';
 import { Sky } from './render/Sky.ts';
@@ -114,6 +115,7 @@ import {
   canHarvest,
   durabilityLabel,
   harvestRequirement,
+  lootingBonus,
   meleeDamage,
   toolInfoById,
   toolItemId,
@@ -131,7 +133,7 @@ import {
   withDoorUpper,
 } from './core/registry/blockState.ts';
 import {
-  TOTAL_SLOTS, HOTBAR_SIZE, Inventory } from './core/container/Inventory.ts';
+  TOTAL_SLOTS, HOTBAR_SIZE, Inventory, type ItemStack } from './core/container/Inventory.ts';
 import { CHEST_SIZE } from './core/container/Chest.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
@@ -1487,7 +1489,22 @@ class App {
    */
   private awardXp(amount: number): void {
     if (amount <= 0) return;
-    this.experience.add(amount);
+    // 「经验修补」（K3）：身上带这条附魔的装备没修满时，经验先被拿去修它，
+    // 剩下的才进经验条（原版就是这样——球直接被消耗掉，不进条）
+    const used = applyMending(this.mendingCandidates(), amount);
+    const remaining = amount - used;
+    if (remaining > 0) this.experience.add(remaining);
+    if (used > 0) this.refreshHotbar();
+  }
+
+  /**
+   * 能被「经验修补」修到的物品：整个背包 0-40 号槽（含盔甲与副手）。
+   * 每次现取一份快照而不是缓存——背包随时在变，缓存一份迟早会修到已经丢掉的物品上。
+   */
+  private mendingCandidates(): (ItemStack | null)[] {
+    const stacks: (ItemStack | null)[] = [];
+    for (let i = 0; i < TOTAL_SLOTS; i++) stacks.push(this.inventory.get(i));
+    return stacks;
   }
 
   /**
@@ -1925,10 +1942,12 @@ class App {
     const critical = !this.physics.onGround && this.physics.vy < -0.1;
     // 徒手 1 点；手持武器按 tools.ts 的伤害表（剑 4~7、斧 7~9…），
     // 锋利每级 +0.5 且只要有一级就额外 +0.5（原版就是这个式子），力量/虚弱在这里加减；暴击 ×1.5
-    const weapon = meleeDamage(this.heldTool?.attack ?? 1, this.heldEnchants);
+    // 亡灵杀手/节肢杀手只对对应家族的生物生效，所以要把家族传进去
+    const weapon = meleeDamage(this.heldTool?.attack ?? 1, this.heldEnchants, mob.type.family);
     const base = Math.max(0, weapon + this.effects.attackBonus());
     const damage = this.flying ? 100 : critical ? base * 1.5 : base;
-    mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context);
+    // 抢夺只影响掉落数量（在 mob.hurt 内部结算）
+    mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context, lootingBonus(this.heldEnchants));
     this.hand.swing();
     // 攻击也要消耗耐久（原版剑/斧砍怪掉耐久）
     this.damageHeldTool();
@@ -2124,7 +2143,7 @@ class App {
    * 生物对玩家造成伤害：结算生命值并施加击退。
    * 创造模式（飞行）免疫；无敌帧由 PlayerStats 判断。
    */
-  private damagePlayer(amount: number, sourceX: number, sourceZ: number): void {
+  private damagePlayer(amount: number, sourceX: number, sourceZ: number, cause: DamageCause = 'generic'): void {
     // 触觉反馈：受击用"双短震"区分于放方块的轻震
     if (amount > 0) this.vibrate([18, 40, 18]);
     if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
@@ -2134,7 +2153,7 @@ class App {
     if (damage <= 0) return;
     // 状态效果（抗性提升）在统一入口里叠加
     const before = this.stats.health;
-    this.applyIncomingDamage(damage, 'generic');
+    this.applyIncomingDamage(damage, cause);
     const result = { applied: before - this.stats.health };
     if (result.applied <= 0) return;
 
@@ -2168,7 +2187,7 @@ class App {
     if (distance < radius) {
       const falloff = 1 - distance / radius;
       // 贴脸约 20 点（原版普通难度苦力怕在同距离差不多是这个量级）
-      this.damagePlayer(Math.max(1, Math.round(20 * falloff * falloff)), x, z);
+      this.damagePlayer(Math.max(1, Math.round(20 * falloff * falloff)), x, z, 'explosion');
     }
 
     if (!this.rules.mobGriefing) return;

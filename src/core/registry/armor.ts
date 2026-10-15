@@ -214,20 +214,40 @@ export function armorSlotAccepts(slotIndex: number, itemId: number): boolean {
  * 否则会出现"看着没戴头盔，护甲值却多了 3 点"这种查不出来的怪事。
  */
 /**
- * 「保护」附魔的防护点数（原版 EPF）。
+ * 附魔保护的"作用范围"：一条附魔能挡哪些伤害类型。
+ *
+ * 原版里每种保护附魔只对特定伤害来源生效，所以 EPF 要按**本次伤害的类型**挑着加：
+ *  - 保护：什么都挡（原版 `getDamageProtection` 对所有来源都返回 level）
+ *  - 火焰保护：火焰与岩浆
+ *  - 爆炸保护：爆炸
+ *  - 弹射物保护：箭矢这类弹射物
+ * 一条伤害可能同时被多条附魔覆盖（例如岩浆同时吃"保护"和"火焰保护"），这是原版行为。
+ */
+const PROTECTION_SCOPE: Record<string, readonly string[]> = {
+  protection: ['*'],
+  fire_protection: ['fire', 'lava'],
+  blast_protection: ['explosion'],
+  projectile_protection: ['projectile'],
+};
+
+/**
+ * 「保护」类附魔的防护点数（原版 EPF）。
  *
  * 原版把减伤分成两步：先用护甲值/韧性算一次，再用 EPF 算一次，**两次是相乘关系**。
- * 保护每级贡献 1 点 EPF（保护 IV × 4 件 = 16 点），EPF 总和上限 20 点。
+ * 每级贡献 1 点 EPF（保护 IV × 4 件 = 16 点），EPF 总和上限 20 点。
  *
- * 只接「保护」一条：火焰保护/爆炸保护/弹射物保护要按伤害类型分流，属于下一步（见 TASKS K3）。
+ * @param cause 本次伤害的类型；不传或传 `'*'` 时按"全都算"处理
  */
-export function protectionPoints(slots: ArmorSlotAccess): number {
+export function protectionPoints(slots: ArmorSlotAccess, cause = '*'): number {
   let epf = 0;
   for (let slot = 0; slot < ARMOR_SLOT_COUNT; slot++) {
     const stack = slots.get(ARMOR_SLOT_BASE + slot);
     const info = stack ? armorInfoById(stack.id) : undefined;
     if (!info || info.slot !== slot) continue;
-    epf += enchantLevel(stack?.enchants, 'protection');
+    for (const [id, scope] of Object.entries(PROTECTION_SCOPE)) {
+      if (!scope.includes('*') && !scope.includes(cause)) continue;
+      epf += enchantLevel(stack?.enchants, id);
+    }
   }
   return Math.min(20, epf);
 }
@@ -310,7 +330,8 @@ export function absorbWithArmor(slots: ArmorSlotAccess, amount: number, cause: s
 
   const equipped = equippedArmor(slots);
   const defense = totalDefense(equipped);
-  const epf = protectionPoints(slots);
+  // EPF 按伤害类型挑：挨炸的时候只有"保护"和"爆炸保护"算数，火焰保护不帮忙
+  const epf = protectionPoints(slots, cause);
   if (defense <= 0 && epf <= 0) return result;
 
   // 先按护甲值/韧性算一次，再按"保护"附魔的 EPF 算一次（原版是两次相乘）

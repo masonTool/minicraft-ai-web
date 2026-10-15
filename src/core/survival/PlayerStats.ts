@@ -37,6 +37,10 @@ export type DamageCause =
   | 'suffocate'
   | 'starve'
   | 'void'
+  /** 爆炸（苦力怕/TNT）：火焰保护与爆炸保护要靠它区分 */
+  | 'explosion'
+  /** 弹射物（箭矢）：弹射物保护要靠它区分；骷髅目前还是近战，暂时没有来源 */
+  | 'projectile'
   | 'generic';
 
 /** 每 tick 从主循环传入的环境快照 */

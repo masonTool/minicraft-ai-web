@@ -32,6 +32,12 @@ export interface MobDrop {
   chance?: number;
 }
 
+/**
+ * 生物家族：只用于附魔的分流（亡灵杀手 / 节肢杀手）。
+ * 原版是给每种生物打 `#undead` / `#arthropod` 标签，这里在种类表上写一个字段就够了。
+ */
+export type MobFamily = 'undead' | 'arthropod';
+
 /** 生物种类定义（数据表在 mobs.ts） */
 export interface MobType {
   id: string;
@@ -50,6 +56,8 @@ export interface MobType {
   drops: readonly MobDrop[];
   /** 击杀经验（原版数值：敌对 5 点、被动 1~3 点） */
   xp: number;
+  /** 生物家族（亡灵 / 节肢）；蜘蛛还没做，所以目前只有亡灵有成员 */
+  family?: MobFamily;
   /** 渲染用的主色 / 点缀色 */
   bodyColor: number;
   accentColor: number;
@@ -246,9 +254,10 @@ export class Mob extends Entity {
 
   /**
    * 受到伤害：无敌帧内无效；否则扣血 + 击退 + 红闪，生命归零则标记死亡并把掉落物交给上层。
+   * @param looting 击杀者的「抢夺」等级，只影响掉落数量（伤害加成在 `tools.ts#meleeDamage` 里算好）
    * @returns 是否真的受到了伤害
    */
-  hurt(amount: number, knockbackX: number, knockbackZ: number, ctx?: EntityContext): boolean {
+  hurt(amount: number, knockbackX: number, knockbackZ: number, ctx?: EntityContext, looting = 0): boolean {
     if (this.dead || this.hurtTime > 0 || amount <= 0) return false;
 
     this.hurtTime = HURT_COOLDOWN;
@@ -266,16 +275,20 @@ export class Mob extends Entity {
     if (this.health <= 0) {
       this.health = 0;
       this.dead = true;
-      this.dropLoot(ctx);
+      this.dropLoot(ctx, looting);
     }
     return true;
   }
 
-  private dropLoot(ctx?: EntityContext): void {
+  /**
+   * @param looting 「抢夺」等级：原版把每种掉落的数量上限抬高这么多（`uniform(min, max + level)`）
+   */
+  private dropLoot(ctx?: EntityContext, looting = 0): void {
     if (!ctx) return;
     for (const drop of this.type.drops) {
       if (drop.chance !== undefined && Math.random() > drop.chance) continue;
-      const count = drop.min + Math.floor(Math.random() * (drop.max - drop.min + 1));
+      const max = drop.max + Math.max(0, looting);
+      const count = drop.min + Math.floor(Math.random() * (max - drop.min + 1));
       if (count > 0) ctx.spawnDrop(drop.itemId, count, this.x, this.y + this.height * 0.5, this.z);
     }
     // 击杀经验（原版数值）；经验球实体还没做，直接进账

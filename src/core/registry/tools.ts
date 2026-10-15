@@ -339,15 +339,35 @@ export function breakSeconds(
 }
 
 /**
- * 近战伤害（含「锋利」附魔）。
+ * 近战伤害（含「锋利」与按生物家族分流的「亡灵杀手 / 节肢杀手」）。
  *
- * 原版式子：锋利每级 +0.5、且**只要有一级就再 +0.5**（所以 I 级是 +1.0 而不是 +0.5）。
+ * 原版式子：
+ *  - 锋利：每级 +0.5、且**只要有一级就再 +0.5**（所以 I 级是 +1.0 而不是 +0.5）
+ *  - 亡灵杀手 / 节肢杀手：每级 +2.5，**只对对应家族的生物生效**（对别的生物一点不加）
  * 抽成纯函数是因为伤害公式原先写在 `main` 的近战分支里，离线测不到——
  * "锋利到底加了多少"这种数必须能断言。
+ *
+ * @param family 被打的生物家族；不是亡灵/节肢就为 undefined（此时两条杀手都不生效）
  */
-export function meleeDamage(weaponAttack: number, enchants?: Readonly<Record<string, number>>): number {
+export function meleeDamage(
+  weaponAttack: number,
+  enchants?: Readonly<Record<string, number>>,
+  family?: 'undead' | 'arthropod',
+): number {
   const sharpness = enchantLevel(enchants, 'sharpness');
-  return weaponAttack + (sharpness > 0 ? 0.5 * sharpness + 0.5 : 0);
+  let damage = weaponAttack + (sharpness > 0 ? 0.5 * sharpness + 0.5 : 0);
+  if (family === 'undead') damage += 2.5 * enchantLevel(enchants, 'smite');
+  if (family === 'arthropod') damage += 2.5 * enchantLevel(enchants, 'bane_of_arthropods');
+  return damage;
+}
+
+/**
+ * 「抢夺」带来的额外掉落上限。
+ * 原版是把每种掉落的**数量上限**加上等级（`uniform(min, max + looting)`），
+ * 所以这里返回的正是那个加数，由 `Mob.dropLoot` 加在 `max` 上。
+ */
+export function lootingBonus(enchants?: Readonly<Record<string, number>>): number {
+  return enchantLevel(enchants, 'looting');
 }
 
 // ---------------------------------------------------------------- 工具耐久文案

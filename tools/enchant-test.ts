@@ -286,14 +286,29 @@ console.log('\n[未接效果的附魔要标出来]');
 {
   const { UI_HINT_UNIMPLEMENTED, UNIMPLEMENTED_MARK } = await import('../src/core/crafting/Enchanting.ts');
   const implemented = ENCHANTMENTS.filter((def) => def.implemented === true);
-  check('已接效果的附魔有 6 条（效率/时运/精准采集/耐久/锋利/保护）',
-    implemented.length === 6 &&
-      ['efficiency', 'fortune', 'silk_touch', 'unbreaking', 'sharpness', 'protection'].every((id) =>
-        implemented.some((def) => def.id === id)),
+  check(
+    '已接效果的附魔有 13 条（第一批 6 条 + 按伤害类型/生物家族分流的 7 条）',
+    implemented.length === 13 &&
+      [
+        'efficiency',
+        'fortune',
+        'silk_touch',
+        'unbreaking',
+        'sharpness',
+        'protection',
+        'fire_protection',
+        'blast_protection',
+        'projectile_protection',
+        'smite',
+        'bane_of_arthropods',
+        'looting',
+        'mending',
+      ].every((id) => implemented.some((def) => def.id === id)),
     implemented.map((def) => def.id).join(','),
   );
   equal('已接效果的附魔不带标记', optionLabel([{ id: 'efficiency', level: 3 }]), '效率 III');
-  equal('未接效果的附魔带 * 标记', optionLabel([{ id: 'smite', level: 2 }]), `亡灵杀手 II${UNIMPLEMENTED_MARK}`);
+  equal('亡灵杀手已接效果，所以不带标记', optionLabel([{ id: 'smite', level: 2 }]), '亡灵杀手 II');
+  equal('未接效果的附魔带 * 标记', optionLabel([{ id: 'power', level: 2 }]), `力量 II${UNIMPLEMENTED_MARK}`);
   check('界面图例会说明这个标记', UI_HINT_UNIMPLEMENTED.includes(UNIMPLEMENTED_MARK));
 }
 
@@ -413,6 +428,117 @@ console.log('\n[K3-6 耐久：按概率跳过一次损耗]');
   bare.set(ARMOR_SLOT_BASE + 1, { id, count: 1 });
   absorbWithArmor(bare, 10, 'generic');
   equal('没有耐久附魔时每次必掉耐久', bare.get(ARMOR_SLOT_BASE + 1)?.damage, 2);
+}
+
+console.log('\n[K3-7 保护类：按伤害类型分流]');
+{
+  const { protectionPoints, absorbWithArmor, ARMOR_SLOT_BASE } = await import('../src/core/registry/armor.ts');
+  const { Inventory } = await import('../src/core/container/Inventory.ts');
+
+  /** 造一套四件都带指定附魔的钻石甲 */
+  const setWith = (enchants: Record<string, number>): Inventory => {
+    const inventory = new Inventory();
+    for (let slot = 0; slot < 4; slot++) {
+      const type = (['helmet', 'chestplate', 'leggings', 'boots'] as const)[slot]!;
+      inventory.set(ARMOR_SLOT_BASE + slot, { id: armorItemId(type, 'diamond'), count: 1, enchants });
+    }
+    return inventory;
+  };
+
+  const fire = setWith({ fire_protection: 4 });
+  equal('火焰保护对火焰有效', protectionPoints(fire, 'fire'), 16);
+  equal('火焰保护对岩浆有效', protectionPoints(fire, 'lava'), 16);
+  equal('火焰保护对爆炸无效', protectionPoints(fire, 'explosion'), 0);
+  equal('火焰保护对普通攻击无效', protectionPoints(fire, 'generic'), 0);
+
+  const blast = setWith({ blast_protection: 4 });
+  equal('爆炸保护只挡爆炸', protectionPoints(blast, 'explosion'), 16);
+  equal('爆炸保护不挡火焰', protectionPoints(blast, 'fire'), 0);
+
+  const proj = setWith({ projectile_protection: 4 });
+  equal('弹射物保护只挡弹射物', protectionPoints(proj, 'projectile'), 16);
+  equal('弹射物保护不挡爆炸', protectionPoints(proj, 'explosion'), 0);
+
+  const plain = setWith({ protection: 4 });
+  check(
+    '保护对所有伤害类型都算（原版 `getDamageProtection` 就是这样）',
+    ['fire', 'lava', 'explosion', 'projectile', 'generic', 'cactus', 'fall'].every(
+      (cause) => protectionPoints(plain, cause) === 16,
+    ),
+  );
+
+  // 两条附魔叠加时要相加（原版行为）
+  const both = setWith({ protection: 2, blast_protection: 2 });
+  equal('保护 + 爆炸保护 在爆炸时相加', protectionPoints(both, 'explosion'), 16);
+  equal('保护 + 爆炸保护 在挨打时只有保护算', protectionPoints(both, 'generic'), 8);
+
+  // 上限 20：四条 IV 级的"保护"已经 16，再叠别的也不会超
+  const over = setWith({ protection: 4, blast_protection: 4, fire_protection: 4 });
+  equal('EPF 上限 20', protectionPoints(over, 'explosion'), 20);
+
+  // 实打实走一遍减伤：挨爆炸时火焰保护不该帮忙
+  const hit = (inventory: InstanceType<typeof Inventory>): number => absorbWithArmor(inventory, 20, 'explosion').applied;
+  check(`爆炸时爆炸保护比火焰保护挡得多（${hit(blast).toFixed(2)} < ${hit(fire).toFixed(2)}）`, hit(blast) < hit(fire));
+  equal('砖头都不带附魔时两者一致', hit(fire), hit(setWith({})));
+}
+
+console.log('\n[K3-8 亡灵杀手 / 节肢杀手]');
+{
+  const { meleeDamage } = await import('../src/core/registry/tools.ts');
+  const sword = 7;
+  equal('对亡灵：亡灵杀手每级 +2.5', meleeDamage(sword, { smite: 5 }, 'undead'), sword + 12.5);
+  equal('对普通生物：亡灵杀手一点不加', meleeDamage(sword, { smite: 5 }), sword);
+  equal('对节肢：节肢杀手每级 +2.5', meleeDamage(sword, { bane_of_arthropods: 5 }, 'arthropod'), sword + 12.5);
+  equal('对亡灵：节肢杀手不加', meleeDamage(sword, { bane_of_arthropods: 5 }, 'undead'), sword);
+  equal('锋利与亡灵杀手可以叠加', meleeDamage(sword, { sharpness: 5, smite: 5 }, 'undead'), sword + 3 + 12.5);
+  equal('一级都不带时就是基础伤害', meleeDamage(sword, undefined, 'undead'), sword);
+}
+
+console.log('\n[K3-9 抢夺：抬高掉落上限]');
+{
+  const { lootingBonus } = await import('../src/core/registry/tools.ts');
+  equal('没抢夺时加成 0', lootingBonus(undefined), 0);
+  equal('抢夺 III 加成 3', lootingBonus({ looting: 3 }), 3);
+  check('抢夺只认自己的等级，不受别的附魔影响', lootingBonus({ sharpness: 5, looting: 1 }) === 1);
+}
+
+console.log('\n[K3-10 经验修补]');
+{
+  const { applyMending, isMendable, MENDING_DURABILITY_PER_XP } = await import('../src/core/crafting/Repair.ts');
+  const { toolItemId } = await import('../src/core/registry/tools.ts');
+  const pick = toolItemId('pickaxe', 'diamond');
+  const { toolInfoById } = await import('../src/core/registry/tools.ts');
+  equal('1 点经验换 2 点耐久', MENDING_DURABILITY_PER_XP, 2);
+  equal('没损耗的物品不算可修', isMendable({ id: pick, count: 1 }), false);
+
+  const stack = { id: pick, count: 1, damage: 10, enchants: { mending: 1 } };
+  check('带经验修补且已损耗 → 可修', isMendable(stack));
+  equal('不带经验修补就修不了', applyMending([{ id: pick, count: 1, damage: 10 }], 5), 0);
+
+  const used = applyMending([stack], 3);
+  equal('3 点经验修 6 点耐久', stack.damage, 4);
+  equal('返回实际用掉的经验', used, 3);
+
+  // 经验多到修满：多出来的应该还回去（不退的话就等于吞经验）
+  const fresh = { id: pick, count: 1, damage: 4, enchants: { mending: 1 } };
+  const used2 = applyMending([fresh], 50);
+  equal('修满后 damage 字段被清掉', fresh.damage, undefined);
+  equal('只花掉修满所需的那部分经验', used2, 2);
+
+  // 修满的物品再吃经验不该消耗（否则经验会被白白吃掉）
+  const intact = { id: pick, count: 1, enchants: { mending: 1 } };
+  equal('已经修满就不再吃经验', applyMending([intact], 10), 0);
+
+  // 多件一起：按顺序修，前面的修满再修后面的
+  const a = { id: pick, count: 1, damage: 2, enchants: { mending: 1 } };
+  const b = { id: pick, count: 1, damage: 100, enchants: { mending: 1, unbreaking: 3 } };
+  const used3 = applyMending([a, b], 10);
+  equal('先修满第一件（2 点耐久 = 1 点经验）', a.damage, undefined);
+  equal('剩下的经验给第二件', b.damage, 100 - (10 - 1) * 2);
+  equal('总共只花 10 点', used3, 10);
+
+  // 非耐用品（石头）不会被"修"
+  equal('普通方块不吃经验修补', applyMending([{ id: Block.STONE, count: 1, enchants: { mending: 1 } }], 5), 0);
 }
 
 console.log('\n[配方链条]');
