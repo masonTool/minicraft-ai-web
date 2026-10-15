@@ -16,6 +16,9 @@ import { moveBody } from '../physics/EntityMotion.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 
 /** 与玩家一致的常量（原版数值） */
+/** 苦力怕引信时长（秒） */
+export const CREEPER_FUSE_TIME = 1.5;
+
 const GRAVITY = 32;
 const JUMP_SPEED = 8.95;
 /** 受击后的无敌时间（秒） */
@@ -67,6 +70,8 @@ export class Mob extends Entity {
 
   private hurtTime = 0;
   private attackCooldown = 0;
+  /** 苦力怕的引信（秒）：贴到玩家身上开始点燃，1.5 秒后炸 */
+  private fuse = 0;
   private jumpCooldown = 0;
 
   private path: PathPoint[] = [];
@@ -138,8 +143,28 @@ export class Mob extends Entity {
         this.pathIndex = 0;
       }
 
-      // 贴脸就打（原版僵尸的触及距离约 2 格）
-      if (distanceSq < 4 && this.attackCooldown <= 0) {
+      if (this.type.id === 'creeper') {
+        // 苦力怕不近战：贴到 3 格内点燃引信，1.5 秒后自爆（原版行为）
+        // 已经炸过的就不再点火（实体通常立刻被移除，但测试里会继续 tick）
+        if (this.dead) return;
+        if (distanceSq < 9) {
+          const wasIdle = this.fuse === 0;
+          this.fuse += dt;
+          if (wasIdle) {
+            // 点燃的瞬间给个声响提示，否则玩家来不及跑
+            ctx.playSound?.('fuse', this.x, this.y, this.z);
+          }
+          if (this.fuse >= CREEPER_FUSE_TIME) {
+            ctx.explode?.(this.x, this.y + 0.5, this.z, 3);
+            this.fuse = 0;
+            this.dead = true;
+          }
+        } else if (this.fuse > 0) {
+          // 玩家跑远了 → 引信熄灭（原版会回缩）
+          this.fuse = Math.max(0, this.fuse - dt * 2);
+        }
+      } else if (distanceSq < 4 && this.attackCooldown <= 0) {
+        // 贴脸就打（原版僵尸的触及距离约 2 格）
         this.attackCooldown = 1;
         ctx.hurtPlayer(this.type.attackDamage, this.x, this.z);
       }

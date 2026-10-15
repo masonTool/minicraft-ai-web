@@ -168,6 +168,48 @@ console.log('\n[僵尸追击]');
   check('僵尸始终站在地面上（不会被地形卡死）', zombie.y > 60 && zombie.y < 68, `y=${zombie.y.toFixed(2)}`);
 }
 
+console.log('\n[苦力怕：贴身后点燃引信并爆炸]');
+{
+  const world = new TestWorld();
+  world.floor(-8, 8, -8, 8, 64);
+
+  let explosions = 0;
+  let power = 0;
+  const player = { x: 2.5, y: 65, z: 0.5 };
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player,
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+    explode: (_x, _y, _z, value) => {
+      explosions++;
+      power = value;
+    },
+  };
+
+  // 贴到 1 格外：引信点燃，1.5 秒后自爆（0.05 秒一 tick，40 次给足余量）
+  const creeper = new Mob(mobTypeById('creeper')!, 1.5, 65.5, 0.5);
+  for (let i = 0; i < 40; i++) creeper.tick(ctx, 0.05);
+  check('苦力怕贴身 1.5 秒后自爆', explosions === 1, String(explosions));
+  check('爆炸威力是 3', power === 3, String(power));
+  check('爆炸之后苦力怕消失', creeper.dead);
+
+  // 远处（超出跟随距离）不会点燃
+  const farCreeper = new Mob(mobTypeById('creeper')!, 40, 65.5, 0.5);
+  for (let i = 0; i < 40; i++) farCreeper.tick(ctx, 0.05);
+  check('超出跟随距离时不会引爆', explosions === 1, String(explosions));
+
+  // 别的敌对生物仍然是近战，不会爆炸
+  let zombieDamage = 0;
+  const zombieCtx: EntityContext = { ...ctx, hurtPlayer: (amount) => { zombieDamage += amount; } };
+  const zombie = new Mob(mobTypeById('zombie')!, 2.5, 65.5, 0.5);
+  for (let i = 0; i < 40; i++) zombie.tick(zombieCtx, 0.05);
+  check('僵尸依旧近战（不会爆炸）', zombieDamage > 0 && explosions === 1, `伤害 ${zombieDamage}`);
+}
+
 console.log('\n[被动生物不会跳崖]');
 {
   const world = new TestWorld();

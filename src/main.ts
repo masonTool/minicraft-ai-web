@@ -335,6 +335,8 @@ class App {
   private randomTickChanges = 0;
   /** 流体流动改动的累计次数（验收用） */
   private fluidChanges = 0;
+  /** 爆炸炸掉的方块数（验收用） */
+  private explosionBlocks = 0;
   /** 状态效果 HUD（右上角）与它的内容签名（内容没变就不重建 DOM） */
   private readonly effectsHudEl = document.getElementById('effects-hud');
   private effectsHudSignature = '';
@@ -1813,6 +1815,58 @@ class App {
     this.physics.onGround = false;
   }
 
+  /**
+   * 爆炸（苦力怕、将来的 TNT 都走这里）。
+   *
+   * 三件事：伤害与击退玩家（按距离衰减）、粒子与音效、炸掉范围内的方块。
+   * **炸地形受 `mobGriefing` 规则控制**：关掉之后爆炸只伤人、不留坑。
+   * 基岩与黑曜石免疫（原版行为）。
+   */
+  private explodeAt(x: number, y: number, z: number, power: number): void {
+    this.audio.play('explode', { x, y, z });
+    this.particles.spawnSmoke(x, y + 0.5, z, Math.round(40 * (power / 3)), 0.7);
+
+    // ---- 玩家伤害：半径 = power * 1.4，越远越轻
+    const radius = power * 1.4;
+    const px = this.physics.x;
+    const py = this.physics.y + 0.9;
+    const pz = this.physics.z;
+    const distance = Math.hypot(px - x, py - y, pz - z);
+    if (distance < radius) {
+      const falloff = 1 - distance / radius;
+      // 贴脸约 20 点（原版普通难度苦力怕在同距离差不多是这个量级）
+      this.damagePlayer(Math.max(1, Math.round(20 * falloff * falloff)), x, z);
+    }
+
+    if (!this.rules.mobGriefing) return;
+
+    // ---- 炸方块：球形范围，只炸得动"能被炸掉"的方块
+    const r = Math.ceil(power);
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    const cz = Math.floor(z);
+    let broken = 0;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy + dz * dz > power * power) continue;
+          const bx = cx + dx;
+          const by = cy + dy;
+          const bz = cz + dz;
+          const id = this.world.getBlock(bx, by, bz);
+          if (id === Block.AIR) continue;
+          if (id === Block.BEDROCK || id === Block.OBSIDIAN) continue;
+          if (this.world.setBlockAndUpdate(bx, by, bz, Block.AIR)) {
+            broken++;
+            // 炸完要唤醒周围的水（挖掉水底会让水重新流）
+            this.wakeFluidsAround(bx, by, bz);
+          }
+        }
+      }
+    }
+    this.explosionBlocks += broken;
+  }
+
   /** 推进所有实体并同步到渲染层 */
   private updateEntities(dt: number): void {
     const context: EntityContext = {
@@ -1822,6 +1876,8 @@ class App {
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       player: { x: this.physics.x, y: this.physics.y, z: this.physics.z },
       hurtPlayer: (amount, sourceX, sourceZ) => this.damagePlayer(amount, sourceX, sourceZ),
+      playSound: (kind, x, y, z) => this.audio.play(kind, { x, y, z }),
+      explode: (x, y, z, power) => this.explodeAt(x, y, z, power),
       spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),
     };
     this.lastEntityContext = context;
@@ -3204,6 +3260,8 @@ class App {
     scheduledTicks: number;
     /** 流体流动改动的累计次数（验收用） */
     fluidChanges: number;
+    /** 爆炸累计炸掉的方块数（验收用） */
+    explosionBlocks: number;
     /** 物品提示框当前显示的文字（验收用） */
     tooltip: string;
     /** 当前视角模式（F7 验收用） */
@@ -3234,6 +3292,7 @@ class App {
       randomTicks: this.randomTickChanges,
       scheduledTicks: this.scheduler.size,
       fluidChanges: this.fluidChanges,
+      explosionBlocks: this.explosionBlocks,
       tooltip: this.tooltip.text,
       fps: this.fps,
       chunks: this.world.chunks.size,

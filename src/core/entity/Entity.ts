@@ -22,6 +22,13 @@ export interface EntityContext {
   getBlock: (x: number, y: number, z: number) => number;
   /** 玩家位置（敌对生物追击用）；未加载时为 null */
   player: { x: number; y: number; z: number } | null;
+  /** 播放音效（生物用：点火、爆炸等）；不传就没有声音 */
+  playSound?: (kind: 'fuse' | 'explode', x: number, y: number, z: number) => void;
+  /**
+   * 爆炸（苦力怕用）。
+   * 生物只负责"什么时候炸"，"炸成什么样"由主程序决定（要不要炸地形由 mobGriefing 规则控制）。
+   */
+  explode?: (x: number, y: number, z: number, power: number) => void;
   /** 对玩家造成伤害（生物攻击用，第二个参数是伤害来源的水平位置，用于击退方向） */
   hurtPlayer: (amount: number, sourceX: number, sourceZ: number) => void;
   /** 生成掉落物实体（生物死亡掉落用） */

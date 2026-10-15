@@ -29,7 +29,8 @@ export type SoundKind =
   | 'mob_skeleton'
   | 'mob_creeper'
   | 'mob_cow'
-  | 'mob_sheep';
+  | 'mob_sheep'
+  | 'fuse';
 
 interface SoundSpec {
   /** 声音总时长（秒） */
@@ -78,6 +79,8 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   mob_creeper: { duration: 0.55, gain: 0.45, noise: 1, freqFrom: 700, freqTo: 380, type: 'triangle', filter: 2400, filterQ: 1.2, attack: 0.01, release: 0.5 },
   mob_cow: { duration: 0.75, gain: 0.38, noise: 0.2, freqFrom: 210, freqTo: 150, type: 'sawtooth', filter: 900, filterQ: 1.1, attack: 0.08, release: 0.65 },
   mob_sheep: { duration: 0.6, gain: 0.36, noise: 0.25, freqFrom: 380, freqTo: 300, type: 'sawtooth', filter: 1400, filterQ: 1.3, attack: 0.05, release: 0.55 },
+  // 苦力怕引信：持续的嘶嘶声，音调缓慢上扬（原版点火音的辨识度全靠它）
+  fuse: { duration: 1.4, gain: 0.34, noise: 1, freqFrom: 1500, freqTo: 2600, type: 'triangle', filter: 3200, filterQ: 1.1, attack: 0.08, release: 1.3 },
 };
 
 /**
