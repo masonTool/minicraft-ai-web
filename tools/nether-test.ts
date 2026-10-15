@@ -257,7 +257,7 @@ console.log('\n[维度之间互不干扰]');
   check('同坐标的主世界与下界方块数据完全不同', same / total < 0.25, `y ∈ [-64,128] 内相同比例 ${((same / total) * 100).toFixed(1)}%`);
   check('主世界无下界岩', countBlocks(overworld, Block.NETHERRACK) === 0);
   check('下界无草方块与石头', countBlocks(nether, Block.GRASS_BLOCK) === 0 && countBlocks(nether, Block.STONE) === 0);
-  check('Dimension 常量只有两个维度', Object.keys(Dimension).length === 2);
+  check('Dimension 常量登记了三个维度', Object.keys(Dimension).length === 3, Object.keys(Dimension).join(','));
 }
 
 console.log(`\n下界测试：${passed} 通过 / ${failed} 失败`);

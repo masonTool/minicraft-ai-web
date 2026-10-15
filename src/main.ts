@@ -25,7 +25,7 @@ import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
-import { DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
+import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, breakSeconds, blockDef } from './core/registry/blocks.ts';
 import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
@@ -87,6 +87,17 @@ const NETHER_FOG_FAR = 84;
 /** 下界没有天光，场景亮度固定（岩浆与荧光石才是主要光源） */
 const NETHER_SKY_BRIGHTNESS = 0.38;
 /**
+ * 末地的天空与雾。
+ * 末地同样是"没有天光"的维度，但它不像下界那样密闭：外岛之间是开阔的虚空，
+ * 所以雾拉得比下界远得多，背景是带紫的星空黑。
+ */
+const END_SKY = 0x0a0714;
+const END_FOG = 0x140b22;
+const END_FOG_NEAR = 48;
+const END_FOG_FAR = 190;
+const END_SKY_BRIGHTNESS = 0.42;
+const END_MIN_BRIGHTNESS = 0.2;
+/**
  * 下界的最低亮度下限。
  * 下界光照全靠方块光，而方块光的传播范围有限，远离光源就是纯黑；
  * 原版下界靠"维度环境光"把整片空间托起来，这里用同一个手段（抬高亮度下限）。
@@ -129,6 +140,8 @@ class App {
   private dimension: DimensionId = Dimension.OVERWORLD;
   /** 下界的背景色（暗红雾） */
   private readonly netherBackground = new THREE.Color(NETHER_FOG);
+  /** 末地的背景色（星空黑） */
+  private readonly endBackground = new THREE.Color(END_SKY);
   private readonly vitalsHud: VitalsHud;
   /** 天空：渐变穹顶 / 太阳月亮 / 星空 / 云 */
   private readonly sky: Sky;
@@ -361,6 +374,22 @@ class App {
       this.translucentMaterial.setFog(NETHER_FOG, NETHER_FOG_NEAR, NETHER_FOG_FAR);
       this.solidMaterial.setMinBrightness(NETHER_MIN_BRIGHTNESS);
       this.translucentMaterial.setMinBrightness(NETHER_MIN_BRIGHTNESS);
+      this.weather.object.visible = false;
+      return;
+    }
+
+    if (this.dimension === Dimension.END) {
+      // 末地：星空黑背景 + 紫色雾，视距比下界远（外岛之间是开阔虚空）
+      this.sky.object.visible = false;
+      this.scene.background = this.endBackground;
+      this.renderer.setClearColor(END_SKY, 1);
+      this.solidMaterial.skyBrightness = END_SKY_BRIGHTNESS;
+      this.translucentMaterial.skyBrightness = END_SKY_BRIGHTNESS;
+      this.entityRenderer.skyBrightness = END_SKY_BRIGHTNESS;
+      this.solidMaterial.setFog(END_FOG, END_FOG_NEAR, END_FOG_FAR);
+      this.translucentMaterial.setFog(END_FOG, END_FOG_NEAR, END_FOG_FAR);
+      this.solidMaterial.setMinBrightness(END_MIN_BRIGHTNESS);
+      this.translucentMaterial.setMinBrightness(END_MIN_BRIGHTNESS);
       this.weather.object.visible = false;
       return;
     }
@@ -1295,7 +1324,9 @@ class App {
     this.world.setDimension(dimension);
     // 掉落物实体属于旧维度，直接清掉
     this.entities.clear();
-    this.physics.teleport(this.physics.x, dimension === Dimension.NETHER ? 96 : 140, this.physics.z);
+    // 落点：下界在洞窟上方、末地在主岛上方（岛面在 y≈66），主世界回高空
+    const landingY = dimension === Dimension.NETHER ? 96 : dimension === Dimension.END ? 96 : 140;
+    this.physics.teleport(this.physics.x, landingY, this.physics.z);
     this.lastCenterCx = Number.NaN;
     this.lastCenterCz = Number.NaN;
     this.weather.setKind('clear');
@@ -1303,8 +1334,16 @@ class App {
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
   }
 
+  /** 按「主世界 → 下界 → 末地 → 主世界」循环切维度（N 键与调试脚本共用） */
   toggleDimension(): DimensionId {
-    this.setDimension(this.dimension === Dimension.OVERWORLD ? Dimension.NETHER : Dimension.OVERWORLD);
+    const index = DIMENSION_CYCLE.indexOf(this.dimension);
+    this.setDimension(DIMENSION_CYCLE[(index + 1) % DIMENSION_CYCLE.length]!);
+    return this.dimension;
+  }
+
+  /** 直接切到指定维度（调试脚本用） */
+  setDimensionById(dimension: DimensionId): DimensionId {
+    this.setDimension(dimension);
     return this.dimension;
   }
 

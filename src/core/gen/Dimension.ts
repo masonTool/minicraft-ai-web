@@ -12,6 +12,7 @@
 export const Dimension = {
   OVERWORLD: 'overworld',
   NETHER: 'nether',
+  END: 'end',
 } as const;
 
 export type DimensionId = (typeof Dimension)[keyof typeof Dimension];
@@ -20,8 +21,17 @@ export type DimensionId = (typeof Dimension)[keyof typeof Dimension];
 export const DIMENSION_LABELS: Readonly<Record<DimensionId, string>> = {
   overworld: '主世界',
   nether: '下界',
+  end: '末地',
 };
 
+/** 维度循环顺序（N 键依次切过去） */
+export const DIMENSION_CYCLE: readonly DimensionId[] = [Dimension.OVERWORLD, Dimension.NETHER, Dimension.END];
+
+/** 该维度有没有天光（下界与末地都没有：整片空间只有方块光） */
+export function hasSkyLight(dimension: DimensionId): boolean {
+  return dimension === Dimension.OVERWORLD;
+}
+
 export function isDimension(value: unknown): value is DimensionId {
-  return value === Dimension.OVERWORLD || value === Dimension.NETHER;
+  return value === Dimension.OVERWORLD || value === Dimension.NETHER || value === Dimension.END;
 }

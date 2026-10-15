@@ -11,7 +11,7 @@
 
 import { Chunk } from './Chunk.ts';
 import { BlockEntityStore } from './BlockEntityStore.ts';
-import { Dimension, type DimensionId } from '../gen/Dimension.ts';
+import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import { LightEngine } from '../light/LightEngine.ts';
 import { blockDef } from '../registry/blocks.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
@@ -188,7 +188,7 @@ export class World {
     this.pending.clear();
     this.wanted.clear();
     this.light.reset();
-    this.light.setSkyEnabled(dimension === Dimension.OVERWORLD);
+    this.light.setSkyEnabled(hasSkyLight(dimension));
     this.containers.clear();
     this.dimension = dimension;
     this.invalidateChunkCache();

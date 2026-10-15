@@ -13,6 +13,8 @@
 import { CHUNK_VOLUME } from '../world/Chunk.ts';
 import { BIOME_TABLE } from './Biome.ts';
 import { Dimension, type DimensionId } from './Dimension.ts';
+import { EndGenerator } from './EndGenerator.ts';
+import { generateEndStructures } from './EndStructures.ts';
 import { NetherGenerator } from './NetherGenerator.ts';
 import { FeatureWriter, decorate, validateBiomeFeatures, type FeatureStats } from './Features.ts';
 import { OverworldGenerator, SEA_LEVEL } from './OverworldGenerator.ts';
@@ -25,6 +27,8 @@ export { SEA_LEVEL };
 const generators = new Map<number, OverworldGenerator>();
 /** 下界生成器同样是"每个种子一个" */
 const netherGenerators = new Map<number, NetherGenerator>();
+/** 末地生成器 */
+const endGenerators = new Map<number, EndGenerator>();
 
 /** 地物配置表完整性校验：每个群系都必须有一行（启动即报错，不留隐患） */
 validateBiomeFeatures(BIOME_TABLE.length);
@@ -43,6 +47,15 @@ function netherGeneratorFor(seed: number): NetherGenerator {
   if (!generator) {
     generator = new NetherGenerator(seed);
     netherGenerators.set(seed, generator);
+  }
+  return generator;
+}
+
+function endGeneratorFor(seed: number): EndGenerator {
+  let generator = endGenerators.get(seed);
+  if (!generator) {
+    generator = new EndGenerator(seed);
+    endGenerators.set(seed, generator);
   }
   return generator;
 }
@@ -71,8 +84,8 @@ export function takeGeneratedStates(): Uint8Array | null {
 /**
  * 生成一个区块的方块数据（含地物与结构）。
  *
- * 维度分派：下界只需要地形 + 自己的地物（没有主世界那套群系地物与结构），
- * 因此直接走 NetherGenerator 的自包含流程；主世界才需要地物 / 结构 / 状态回传。
+ * 维度分派：下界与末地各自走自包含流程（地形 + 自己的地物 + 自己的结构），
+ * 主世界才需要群系地物 / 结构 / 状态回传。
  *
  * @param dimension 维度（默认主世界）
  * @param out 可选复用缓冲区，避免频繁分配大数组
@@ -89,6 +102,19 @@ export function generateChunkBlocks(
   if (dimension === Dimension.NETHER) {
     // 下界不写方块状态：地物全是整块方块，没有门/楼梯
     return netherGeneratorFor(seed).generate(cx, cz, out);
+  }
+
+  if (dimension === Dimension.END) {
+    // 末地：地形 + 紫颂地物 + 黑曜石柱/中央传送门在生成器内完成，
+    // 末地城与末地船是独立的"结构"（用世界坐标的岛判定做放置）
+    const endGenerator = endGeneratorFor(seed);
+    const blocks = endGenerator.generate(cx, cz, out);
+    generationStates.fill(0);
+    statesUsed = false;
+    generateEndStructures(new FeatureWriter(blocks, cx, cz, generationStates, () => {
+      statesUsed = true;
+    }), endGenerator, seed);
+    return blocks;
   }
 
   const generator = generatorFor(seed);
