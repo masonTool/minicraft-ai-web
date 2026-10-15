@@ -130,28 +130,61 @@ function crystalBoxes(): BoxSpec[] {
 }
 
 interface MobVisual {
-  group: THREE.Group;
-  /** 模型族（决定"腿"怎么摆） */
   kind: ModelKind;
-  /** 逐块材质（亮度按光照单独缩放） */
-  materials: THREE.MeshBasicMaterial[];
-  baseColors: readonly number[];
-  /** 腿部（走路摆动用） */
-  legs: THREE.Object3D[];
-  colors: { body: number; accent: number };
+  specs: readonly BoxSpec[];
+  /** 参与摆动的部件数量（人形/鸟/龙的翅膀是前 2 个，四足是前 4 个） */
+  legCount: number;
+  /** 水晶这类自转物体的旋转角：实例化后没有自己的 Object3D，需要在这里累加 */
+  spin: number;
+  /** 逐部件颜色（0xRRGGBB，预解析好避免每帧重算） */
+  partColors: Uint32Array;
 }
+
+/** 实例容量：约 64 只生物 × 最多 16 个部件。超出会被截断并打印一次警告 */
+const MAX_PARTS = 1024;
 
 export class MobRenderer {
   readonly object = new THREE.Group();
 
   private readonly visuals = new Map<number, MobVisual>();
+  private readonly mesh: THREE.InstancedMesh;
+  private readonly material: THREE.MeshBasicMaterial;
+  private readonly geometry: THREE.BoxGeometry;
+  /** 逐实例变换用：root 承载"生物的位置与朝向"，part 承载"部件的偏移与旋转" */
+  private readonly rootDummy = new THREE.Object3D();
+  private readonly partDummy = new THREE.Object3D();
+  private readonly scratchColor = new THREE.Color();
   private elapsed = 0;
+  /** 上一帧实际用到的实例数（调试与验收用） */
+  usedInstances = 0;
+  private warnedOverflow = false;
 
   constructor(
     private readonly scene: THREE.Scene,
     private readonly skyBrightnessOf: () => number,
   ) {
     this.scene.add(this.object);
+
+    // **实例化渲染（K6）**：所有生物的**所有部件**合并成一个 InstancedMesh。
+    // 改造前每只生物是一个 Group、每个部件一个 Mesh（各自一个材质），
+    // 一只僵尸 6~8 次 draw call，20 只生物就是 120+ 次提交；现在整场只占 1 次。
+    //   · 几何统一 1×1×1 方块，尺寸靠实例矩阵的缩放
+    //   · 颜色（含光照衰减与受击红闪）写进 instanceColor，逐实例生效
+    //   · 走路摆腿/龙扇翅通过逐实例的旋转实现
+    this.geometry = new THREE.BoxGeometry(1, 1, 1);
+    this.material = new THREE.MeshBasicMaterial();
+    this.mesh = new THREE.InstancedMesh(this.geometry, this.material, MAX_PARTS);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARTS * 3), 3);
+    this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    // 实例矩阵每帧都在动，交给 three 做整体视锥剔除意义不大，关掉省一次遍历
+    this.mesh.frustumCulled = false;
+    this.mesh.count = 0;
+    this.object.add(this.mesh);
+
+    // part 是 root 的子节点：updateWorldMatrix 会自动把"生物的位置与朝向"
+    // 叠到"部件的偏移与旋转"上，不必手写矩阵乘法
+    this.rootDummy.add(this.partDummy);
   }
 
   /**
@@ -167,74 +200,92 @@ export class MobRenderer {
     this.elapsed += dt;
     const skyBrightness = this.skyBrightnessOf();
     const seen = new Set<number>();
+    let instance = 0;
 
     for (const mob of mobs) {
       seen.add(mob.id);
+      if (mob.dead) continue;
+
       let visual = this.visuals.get(mob.id);
       if (!visual) {
         visual = this.createVisual(mob);
         this.visuals.set(mob.id, visual);
       }
 
-      visual.group.position.set(mob.x, mob.y, mob.z);
-      // 模型是朝 +Z 建的，而 yaw = atan2(vx, vz) 也是以 +Z 为 0，直接对应
-      visual.group.rotation.y = mob.yaw;
-      visual.group.visible = !mob.dead;
+      // ---- 生物本体的变换
+      this.rootDummy.position.set(mob.x, mob.y, mob.z);
+      this.rootDummy.rotation.set(0, mob.yaw, 0);
+      this.rootDummy.updateMatrix();
 
-      // ---- 光照
+      // ---- 光照与受击红闪
       const light = sampleLight(Math.floor(mob.x), Math.floor(mob.y + mob.height * 0.5), Math.floor(mob.z));
       const sky = light ? light.sky : 15;
       const block = light ? light.block : 0;
       const level = Math.max((sky / 15) * skyBrightness, block / 15);
       const brightness = Math.max(level / (4 - 3 * level), 0.08);
-
-      // 受击红闪
       const flash = mob.hitFlash > 0 ? Math.min(1, mob.hitFlash * 3.3) : 0;
 
-      for (let i = 0; i < visual.materials.length; i++) {
-        const material = visual.materials[i]!;
-        const base = visual.baseColors[i]!;
+      // ---- 摆动量
+      let legSwing = 0;
+      let flap = 0;
+      if (visual.kind === 'dragon') {
+        const speed = Math.hypot(mob.vx, mob.vz);
+        flap = Math.sin(this.elapsed * (5 + speed * 0.15)) * 0.55;
+      } else if (visual.kind === 'crystal') {
+        visual.spin += dt * 0.8;
+      } else {
+        const speed = Math.hypot(mob.vx, mob.vz);
+        legSwing = Math.sin(this.elapsed * 9) * Math.min(0.6, speed * 0.28);
+      }
+
+      for (let i = 0; i < visual.specs.length; i++) {
+        if (instance >= MAX_PARTS) {
+          if (!this.warnedOverflow) {
+            console.warn(`[mob] 部件实例数超过上限 ${MAX_PARTS}，多余的生物不会被渲染`);
+            this.warnedOverflow = true;
+          }
+          break;
+        }
+        const spec = visual.specs[i]!;
+
+        this.partDummy.position.set(spec.x, spec.y, spec.z);
+        this.partDummy.scale.set(spec.width, spec.height, spec.depth);
+        let rotX = 0;
+        let rotY = 0;
+        let rotZ = 0;
+        if (visual.kind === 'crystal') rotY = visual.spin;
+        else if (i < visual.legCount) {
+          if (visual.kind === 'dragon') rotZ = i % 2 === 0 ? flap : -flap;
+          else rotX = i % 2 === 0 ? legSwing : -legSwing;
+        }
+        this.partDummy.rotation.set(rotX, rotY, rotZ);
+        this.partDummy.updateMatrix();
+        this.partDummy.updateWorldMatrix(true, false);
+        this.mesh.setMatrixAt(instance, this.partDummy.matrixWorld);
+
+        // 逐实例颜色：基色 × 亮度，再按受击比例推向红
+        const base = visual.partColors[i]!;
         const r = ((base >> 16) & 0xff) * brightness;
         const g = ((base >> 8) & 0xff) * brightness;
         const b = (base & 0xff) * brightness;
-        material.color.setRGB(
+        this.scratchColor.setRGB(
           Math.min(1, (r * (1 - flash) + 255 * flash) / 255),
           Math.min(1, (g * (1 - flash) + 60 * flash) / 255),
           Math.min(1, (b * (1 - flash) + 60 * flash) / 255),
         );
-      }
-
-      // ---- 走路摆腿 / 龙的扇翅 / 水晶自转
-      if (visual.kind === 'dragon') {
-        // 翅膀绕 z 轴扇动；俯冲时扇得更快（用水平速度近似）
-        const speed = Math.hypot(mob.vx, mob.vz);
-        const flap = Math.sin(this.elapsed * (5 + speed * 0.15)) * 0.55;
-        for (let i = 0; i < visual.legs.length; i++) {
-          visual.legs[i]!.rotation.z = i % 2 === 0 ? flap : -flap;
-        }
-      } else if (visual.kind === 'crystal') {
-        // 水晶缓慢自转 + 轻微上下浮动
-        visual.group.rotation.y += dt * 0.8;
-        visual.group.position.y = mob.y + Math.sin(this.elapsed * 1.6) * 0.12;
-      } else {
-        const speed = Math.hypot(mob.vx, mob.vz);
-        const swing = Math.sin(this.elapsed * 9) * Math.min(0.6, speed * 0.28);
-        for (let i = 0; i < visual.legs.length; i++) {
-          visual.legs[i]!.rotation.x = i % 2 === 0 ? swing : -swing;
-        }
+        this.mesh.setColorAt(instance, this.scratchColor);
+        instance++;
       }
     }
 
-    // 回收已经消失的生物
-    for (const [id, visual] of this.visuals) {
-      if (seen.has(id)) continue;
-      this.object.remove(visual.group);
-      for (const material of visual.materials) material.dispose();
-      visual.group.traverse((child) => {
-        const mesh = child as THREE.Mesh;
-        mesh.geometry?.dispose();
-      });
-      this.visuals.delete(id);
+    this.usedInstances = instance;
+    this.mesh.count = instance;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+
+    // 回收消失的生物：实例化后没有 GPU 资源要销毁，丢掉规格表即可
+    for (const id of [...this.visuals.keys()]) {
+      if (!seen.has(id)) this.visuals.delete(id);
     }
   }
 
@@ -252,41 +303,27 @@ export class MobRenderer {
               ? quadrupedBoxes(type)
               : birdBoxes(type);
 
-    const group = new THREE.Group();
-    const materials: THREE.MeshBasicMaterial[] = [];
-    const baseColors: number[] = [];
-    const legs: THREE.Object3D[] = [];
-
+    const partColors = new Uint32Array(specs.length);
     for (let i = 0; i < specs.length; i++) {
       const spec = specs[i]!;
-      const color = spec.color === 'body' ? type.bodyColor : spec.color === 'accent' ? type.accentColor : 0x14161c;
-      const material = new THREE.MeshBasicMaterial({ color });
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(spec.width, spec.height, spec.depth), material);
-      mesh.position.set(spec.x, spec.y, spec.z);
-
-      // 前 2（人形 / 鸟 / 龙的翅膀）/ 前 4（四足）个盒子参与摆动
-      const legCount = kind === 'quadruped' ? 4 : kind === 'crystal' ? 0 : 2;
-      if (i < legCount) legs.push(mesh);
-
-      group.add(mesh);
-      materials.push(material);
-      baseColors.push(color);
+      partColors[i] = spec.color === 'body' ? type.bodyColor : spec.color === 'accent' ? type.accentColor : 0x14161c;
     }
 
-    this.object.add(group);
-    return { group, kind, materials, baseColors, legs, colors: { body: type.bodyColor, accent: type.accentColor } };
+    return {
+      kind,
+      specs,
+      legCount: kind === 'quadruped' ? 4 : kind === 'crystal' ? 0 : 2,
+      spin: 0,
+      partColors,
+    };
   }
 
   dispose(): void {
-    for (const visual of this.visuals.values()) {
-      this.object.remove(visual.group);
-      for (const material of visual.materials) material.dispose();
-      visual.group.traverse((child) => {
-        const mesh = child as THREE.Mesh;
-        mesh.geometry?.dispose();
-      });
-    }
     this.visuals.clear();
     this.scene.remove(this.object);
+    this.object.remove(this.mesh);
+    this.mesh.dispose();
+    this.geometry.dispose();
+    this.material.dispose();
   }
 }

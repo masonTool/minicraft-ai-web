@@ -98,6 +98,11 @@ export class EntityRenderer {
     this.skyLightFactor = value;
   }
 
+  /** 当前渲染的掉落物 mesh 数量（验收用：每个掉落物一个 mesh，实例化的候选） */
+  get drawableCount(): number {
+    return this.meshes.size;
+  }
+
   /**
    * @param lightAt 采样世界坐标处的光照；返回 null 表示该位置未加载（按全亮处理）
    */

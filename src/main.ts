@@ -2464,6 +2464,48 @@ class App {
     };
   }
 
+  /**
+   * 渲染层的"可绘制对象"明细（验收用）。
+   * draw call 的增量到底来自哪一块，看这个比看总数可靠。
+   */
+  get renderBreakdown(): {
+    chunkMeshes: number;
+    itemMeshes: number;
+    mobInstancedMeshes: number;
+    mobInstances: number;
+    mobParts: number;
+  } {
+    const mobParts = this.mobInstanceCount;
+    return {
+      chunkMeshes: this.chunkRenderer.chunkMeshCount,
+      itemMeshes: this.entityRenderer.drawableCount,
+      // 实例化后生物只占 1 个可绘制对象（就是那个 InstancedMesh）
+      mobInstancedMeshes: 1,
+      mobInstances: mobParts,
+      mobParts,
+    };
+  }
+
+  /** 生物渲染占用的实例数（实例化改造后用于验收：部件数应远大于 draw call 增量） */
+  get mobInstanceCount(): number {
+    return this.mobRenderer.usedInstances;
+  }
+
+  /**
+   * 渲染统计（验收用）：draw call 数是"实例化改造"这类优化的直接指标。
+   * three 的 info 是每帧重置的，这里读的是上一帧的结果。
+   */
+  get renderStats(): { calls: number; triangles: number; geometries: number; textures: number; programs: number } {
+    const info = this.renderer.info;
+    return {
+      calls: info.render.calls,
+      triangles: info.render.triangles,
+      geometries: info.memory.geometries,
+      textures: info.memory.textures,
+      programs: info.programs?.length ?? 0,
+    };
+  }
+
   /** 音效状态（验收脚本用） */
   get audioState(): { enabled: boolean; context: string; volume: number; played: number } {
     return {
