@@ -28,7 +28,8 @@
     "test:nether": "esbuild tools/nether-test.ts --bundle --platform=node --format=esm --outfile=.tmp/nether-test.mjs --log-level=error && node .tmp/nether-test.mjs",
     "test:end": "esbuild tools/end-test.ts --bundle --platform=node --format=esm --outfile=.tmp/end-test.mjs --log-level=error && node .tmp/end-test.mjs",
     "test:endboss": "esbuild tools/end-boss-test.ts --bundle --platform=node --format=esm --outfile=.tmp/end-boss-test.mjs --log-level=error && node .tmp/end-boss-test.mjs",
-    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer && npm run test:ore && npm run test:mesh && npm run test:survival && npm run test:mob && npm run test:spawn && npm run test:combat && npm run test:decor && npm run test:structure && npm run test:nether && npm run test:end && npm run test:endboss"
+    "test:redstone": "esbuild tools/redstone-test.ts --bundle --platform=node --format=esm --outfile=.tmp/redstone-test.mjs --log-level=error && node .tmp/redstone-test.mjs",
+    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer && npm run test:ore && npm run test:mesh && npm run test:survival && npm run test:mob && npm run test:spawn && npm run test:combat && npm run test:decor && npm run test:structure && npm run test:nether && npm run test:end && npm run test:endboss && npm run test:redstone"
   },
   "dependencies": {
     "three": "^0.186.1"

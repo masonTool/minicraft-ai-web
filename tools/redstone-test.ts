@@ -1,0 +1,311 @@
+/**
+ * 红石电路（J5）离线测试
+ *
+ * 用内存里的 stub 世界驱动引擎（不需要浏览器），覆盖：
+ *  1. 拉杆 → 红石粉 → 红石灯：逐格衰减 15→14→13…，拉杆关掉灯就灭
+ *  2. 红石块 / 红石火把 作为电源直接点亮相邻的灯
+ *  3. 按钮：按下通电、到点自动弹起
+ *  4. 压力板：有实体踩上去才通电
+ *  5. 中继器：输入到达后延迟输出，断输入立刻停止
+ *  6. 活塞：通电伸出（前方生成活塞头）、断电收回
+ *  7. 粘性活塞：收回时把前面的方块拉回来
+ *  8. 侦测器：前方方块发生变化时发一个短脉冲，脉冲结束后自动熄灭
+ *  9. 推动规则：基岩/黑曜石/活塞推不动，实体方块能推
+ *
+ * 运行：npm run test:redstone
+ */
+
+import { Block } from '../src/core/registry/blocks.ts';
+import { isPowered, withDelay, withFacing } from '../src/core/registry/blockState.ts';
+import { RedstoneEngine, canPush, wirePowerOf, type RedstoneWorld } from '../src/core/redstone/RedstoneEngine.ts';
+
+let passed = 0;
+let failed = 0;
+
+function check(label: string, condition: boolean, detail = ''): void {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${label}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
+  }
+}
+
+/** 内存世界：方块与状态各一张表，压力板用实体集合模拟 */
+class StubWorld implements RedstoneWorld {
+  private readonly blocks = new Map<string, number>();
+  private readonly states = new Map<string, number>();
+  private readonly entities = new Set<string>();
+
+  private static key(x: number, y: number, z: number): string {
+    return `${x},${y},${z}`;
+  }
+
+  getBlock(x: number, y: number, z: number): number {
+    return this.blocks.get(StubWorld.key(x, y, z)) ?? 0;
+  }
+
+  getState(x: number, y: number, z: number): number {
+    return this.states.get(StubWorld.key(x, y, z)) ?? 0;
+  }
+
+  setBlock(x: number, y: number, z: number, id: number, state: number): boolean {
+    this.blocks.set(StubWorld.key(x, y, z), id);
+    this.states.set(StubWorld.key(x, y, z), state);
+    return true;
+  }
+
+  setState(x: number, y: number, z: number, state: number): boolean {
+    this.states.set(StubWorld.key(x, y, z), state);
+    return true;
+  }
+
+  isLoaded(): boolean {
+    return true;
+  }
+
+  hasEntityAt(x: number, y: number, z: number): boolean {
+    return this.entities.has(StubWorld.key(x, y, z));
+  }
+
+  placeEntity(x: number, y: number, z: number): void {
+    this.entities.add(StubWorld.key(x, y, z));
+  }
+
+  removeEntity(x: number, y: number, z: number): void {
+    this.entities.delete(StubWorld.key(x, y, z));
+  }
+}
+
+/** 推进引擎若干秒 */
+function step(engine: RedstoneEngine, world: StubWorld, seconds: number): void {
+  const dt = 1 / 20;
+  for (let i = 0; i < Math.round(seconds / dt); i++) engine.tick(world, dt);
+}
+
+const Y = 100;
+
+// ---------------------------------------------------------------- 1. 拉杆与粉
+
+console.log('\n[拉杆 → 红石粉 → 红石灯]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_WIRE, 0);
+  world.setBlock(2, Y, 0, Block.REDSTONE_WIRE, 0);
+  world.setBlock(3, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+
+  check('初始时灯是灭的', !isPowered(world.getState(3, Y, 0)));
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+
+  const p1 = wirePowerOf(engine, 1, Y, 0);
+  const p2 = wirePowerOf(engine, 2, Y, 0);
+  console.log(`  粉的强度：第 1 格 ${p1} · 第 2 格 ${p2}`);
+  check('拉杆打开后相邻的粉通电', p1 > 0, `${p1}`);
+  check('粉逐格衰减 1', p1 === 14 && p2 === 13, `${p1} / ${p2}`);
+  check('灯被点亮', isPowered(world.getState(3, Y, 0)));
+  check('拉杆自身状态为开', isPowered(world.getState(0, Y, 0)));
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('拉杆关掉后灯熄灭', !isPowered(world.getState(3, Y, 0)));
+  check('粉的强度清零', wirePowerOf(engine, 1, Y, 0) === 0);
+}
+
+// ---------------------------------------------------------------- 2. 红石块与火把
+
+console.log('\n[红石块 / 红石火把 直接点亮相邻的灯]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.REDSTONE_BLOCK, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_LAMP, 0);
+  world.setBlock(0, Y, 2, Block.REDSTONE_TORCH, 0);
+  world.setBlock(1, Y, 2, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  engine.onBlockChanged(world, 0, Y, 2);
+  step(engine, world, 0.1);
+  check('红石块点亮相邻的灯', isPowered(world.getState(1, Y, 0)));
+  check('红石火把点亮相邻的灯', isPowered(world.getState(1, Y, 2)));
+
+  // 挖掉红石块，灯应当熄灭
+  world.setBlock(0, Y, 0, Block.AIR, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('红石块被挖掉后灯熄灭', !isPowered(world.getState(1, Y, 0)));
+}
+
+// ---------------------------------------------------------------- 3. 按钮
+
+console.log('\n[按钮：按下通电、自动弹起]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.STONE_BUTTON, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+
+  check('按钮按下成功', engine.pressButton(world, 0, Y, 0));
+  step(engine, world, 0.1);
+  check('按下时灯亮', isPowered(world.getState(1, Y, 0)));
+  check('重复按下无效（已经是按下状态）', !engine.pressButton(world, 0, Y, 0));
+
+  step(engine, world, 1.2);
+  check('石按钮 1 秒后自动弹起', !isPowered(world.getState(0, Y, 0)));
+  step(engine, world, 0.1);
+  check('弹起后灯熄灭', !isPowered(world.getState(1, Y, 0)));
+}
+
+// ---------------------------------------------------------------- 4. 压力板
+
+console.log('\n[压力板：踩上去才通电]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.STONE_PRESSURE_PLATE, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.3);
+  check('没有实体时压力板不通电', !isPowered(world.getState(0, Y, 0)));
+
+  world.placeEntity(0, Y, 0);
+  step(engine, world, 0.3);
+  check('实体踩上去后通电', isPowered(world.getState(0, Y, 0)));
+  check('灯随之点亮', isPowered(world.getState(1, Y, 0)));
+
+  world.removeEntity(0, Y, 0);
+  step(engine, world, 0.3);
+  check('实体离开后断电', !isPowered(world.getState(0, Y, 0)));
+  check('灯随之熄灭', !isPowered(world.getState(1, Y, 0)));
+}
+
+// ---------------------------------------------------------------- 5. 中继器
+
+console.log('\n[中继器：延迟输出]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_WIRE, 0);
+  // 中继器朝向 +X（1 = 东），输出到 (3, Y, 0)
+  world.setBlock(2, Y, 0, Block.REPEATER, withFacing(withDelay(0, 1), 1));
+  world.setBlock(3, Y, 0, Block.REDSTONE_WIRE, 0);
+  world.setBlock(4, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  engine.onBlockChanged(world, 2, Y, 0);
+  step(engine, world, 0.2);
+
+  check('未通电时灯是灭的', !isPowered(world.getState(4, Y, 0)));
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.05);
+  check('延迟未到时还没有输出', !isPowered(world.getState(4, Y, 0)), '延迟 = 2 红石刻 = 0.2 秒');
+
+  step(engine, world, 0.3);
+  check('延迟结束后灯亮（信号被中继器放大回 15）', isPowered(world.getState(4, Y, 0)));
+  const afterRepeater = wirePowerOf(engine, 3, Y, 0);
+  console.log(`  中继器输出到下一格粉的强度：${afterRepeater}`);
+  // 中继器/红石火把是"直接给相邻格充能 15"，所以下一格粉读到的是满强度 15（原版行为）
+  check('中继器把信号复位成满强度（下一格粉 15）', afterRepeater === 15, `${afterRepeater}`);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('断开输入后立刻停止输出', !isPowered(world.getState(4, Y, 0)));
+}
+
+// ---------------------------------------------------------------- 6. 活塞
+
+console.log('\n[活塞：伸出与收回]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  // 活塞朝向 +X（facing=1），前方一格放石头
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.PISTON, withFacing(0, 1));
+  world.setBlock(2, Y, 0, Block.STONE, 0);
+  engine.onBlockChanged(world, 1, Y, 0);
+  step(engine, world, 0.1);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+
+  check('活塞通电后标记为伸出', isPowered(world.getState(1, Y, 0)));
+  check('前方生成活塞头', world.getBlock(2, Y, 0) === Block.PISTON_HEAD, `实际 ${world.getBlock(2, Y, 0)}`);
+  check('石头被推到更前面一格', world.getBlock(3, Y, 0) === Block.STONE);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('断电后活塞收回', !isPowered(world.getState(1, Y, 0)));
+  check('活塞头被移除', world.getBlock(2, Y, 0) === Block.AIR);
+  check('石头留在原地（普通活塞不拉回）', world.getBlock(3, Y, 0) === Block.STONE);
+}
+
+console.log('\n[粘性活塞：收回时把方块拉回来]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.STICKY_PISTON, withFacing(0, 1));
+  world.setBlock(2, Y, 0, Block.OAK_PLANKS, 0);
+  engine.onBlockChanged(world, 1, Y, 0);
+  step(engine, world, 0.1);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('伸出时木板被推到前面', world.getBlock(3, Y, 0) === Block.OAK_PLANKS);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('收回时木板被拉回活塞前方', world.getBlock(2, Y, 0) === Block.OAK_PLANKS, `实际 ${world.getBlock(2, Y, 0)}`);
+  check('更前面那格变成空气', world.getBlock(3, Y, 0) === Block.AIR);
+}
+
+// ---------------------------------------------------------------- 7. 侦测器
+
+console.log('\n[侦测器：检测前方方块变化]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  // 侦测器朝向 +X（facing=1），盯着 (5,Y,0)
+  world.setBlock(4, Y, 0, Block.OBSERVER, withFacing(0, 1));
+  world.setBlock(5, Y, 0, Block.STONE, 0);
+  world.setBlock(3, Y, 0, Block.REDSTONE_WIRE, 0);
+  world.setBlock(2, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 4, Y, 0);
+  step(engine, world, 0.1);
+  check('平静时侦测器不输出', !isPowered(world.getState(4, Y, 0)));
+
+  // 改变被观察的方块
+  world.setBlock(5, Y, 0, Block.STONE_BRICKS, 0);
+  engine.onBlockChanged(world, 5, Y, 0);
+  step(engine, world, 0.06);
+  check('前方方块变化时侦测器输出脉冲', isPowered(world.getState(4, Y, 0)));
+  check('脉冲驱动了红石粉与灯', isPowered(world.getState(2, Y, 0)));
+
+  step(engine, world, 0.4);
+  check('脉冲结束后自动熄灭', !isPowered(world.getState(4, Y, 0)));
+}
+
+// ---------------------------------------------------------------- 8. 推动规则
+
+console.log('\n[推动规则]');
+{
+  check('石头能推', canPush(Block.STONE));
+  check('木板能推', canPush(Block.OAK_PLANKS));
+  check('基岩推不动', !canPush(Block.BEDROCK));
+  check('黑曜石推不动', !canPush(Block.OBSIDIAN));
+  check('活塞推不动', !canPush(Block.PISTON));
+  check('空气不需要推', !canPush(Block.AIR));
+  check('水推不动', !canPush(Block.WATER));
+  check('红石粉（非整方块）推不动', !canPush(Block.REDSTONE_WIRE));
+}
+
+console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);
+if (failed > 0) process.exit(1);

@@ -270,6 +270,20 @@ export class World {
     return true;
   }
 
+  /**
+   * 只修改方块状态（红石元件用：拉杆开关、红石灯亮灭、活塞伸出）。
+   * 与 setBlockAndUpdate 一样会触发光照与重网格化——红石灯亮起来要换贴图也要发光。
+   */
+  setStateAndUpdate(worldX: number, worldY: number, worldZ: number, state: number): boolean {
+    const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
+    if (!chunk) return false;
+    chunk.setState(worldX & 15, worldY, worldZ & 15, state);
+    if (worldY < -64 || worldY >= 320) return true;
+    this.light.onBlockChanged(worldX, worldY, worldZ);
+    this.events.onBlockChanged?.(worldX, worldY, worldZ);
+    return true;
+  }
+
   // ---------------------------------------------------------------- 光照读写（世界坐标）
 
   getSkyLight(worldX: number, worldY: number, worldZ: number): number {
