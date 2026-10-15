@@ -22,6 +22,8 @@ import { Mob } from './core/entity/Mob.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { endPillarTops } from './core/gen/EndGenerator.ts';
+import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
+import { delayOf, withDelay } from './core/registry/blockState.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
@@ -145,6 +147,17 @@ class App {
   private dimension: DimensionId = Dimension.OVERWORLD;
   /** 末影龙（进入末地时生成；HUD 血条与水晶回血都要用它） */
   private endDragon: Dragon | null = null;
+  /** 红石电路引擎（信号传播、元件状态、活塞推拉） */
+  private readonly redstone = new RedstoneEngine();
+  /** 给红石引擎的"世界适配器"：把 World 与玩家/实体查询包成引擎需要的形状 */
+  private readonly redstoneWorld: RedstoneWorld = {
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+    getState: (x, y, z) => this.world.getBlockState(x, y, z),
+    setBlock: (x, y, z, id, state) => this.world.setBlockAndUpdate(x, y, z, id, state),
+    setState: (x, y, z, state) => this.world.setStateAndUpdate(x, y, z, state),
+    isLoaded: (x, z) => this.world.isLoaded(x, z),
+    hasEntityAt: (x, y, z) => this.hasEntityAt(x, y, z),
+  };
   /** 末影龙血条（触摸端也共用；元素不存在时为 null） */
   private bossBarEl: HTMLElement | null = null;
   private bossFillEl: HTMLElement | null = null;
@@ -301,6 +314,8 @@ class App {
       onBlockChanged: (x, y, z) => {
         this.chunkRenderer.enqueueAround(x, z);
         this.pendingSettle.push(x, y, z);
+        // 红石：方块一变就重算受影响的电路（放粉、开关、活塞推拉都走这条路径）
+        this.redstone.onBlockChanged(this.redstoneWorld, x, y, z);
       },
     };
 
@@ -904,6 +919,87 @@ class App {
     this.mobRenderer.update(mobs, this.camera, dt, sampleLight);
     this.updateEndBoss();
     this.updateMobSpawning(dt);
+    // 红石：按钮回弹、中继器延迟、压力板轮询都由它推进
+    this.redstone.tick(this.redstoneWorld, Math.min(dt, 0.1));
+  }
+
+  /**
+   * 对"功能方块"执行右键行为：门 / 工作台 / 熔炉 / 箱子 / 红石元件。
+   *
+   * 抽成一个方法同时给玩家右键与自动化脚本用——两条路径共用同一套逻辑，
+   * 避免"脚本能开箱子但拉杆按下没反应"这类只在调试接口上出现的不一致。
+   *
+   * @returns 是否消费了这次右键（false 表示应当继续走"放置方块"）
+   */
+  useFunctionalBlock(x: number, y: number, z: number): boolean {
+    const hitBlock = this.world.getBlock(x, y, z);
+
+    if (hitBlock === Block.OAK_DOOR) {
+      this.toggleDoor(x, y, z);
+      return true;
+    }
+    if (hitBlock === Block.CRAFTING_TABLE) {
+      this.inventoryScreen.openWith('crafting');
+      return true;
+    }
+    if (hitBlock === Block.FURNACE) {
+      this.inventoryScreen.openWith('furnace', this.world.containers.getOrCreateFurnace(x, y, z));
+      return true;
+    }
+    if (hitBlock === Block.CHEST) {
+      this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(x, y, z));
+      return true;
+    }
+
+    // ---- 红石元件：拉杆开关、按钮按下
+    if (hitBlock === Block.LEVER) return this.redstone.toggleLever(this.redstoneWorld, x, y, z);
+    if (hitBlock === Block.STONE_BUTTON || hitBlock === Block.OAK_BUTTON) {
+      return this.redstone.pressButton(this.redstoneWorld, x, y, z);
+    }
+    if (hitBlock === Block.REPEATER) {
+      // 右键循环切换延迟档位（原版行为：0.1 / 0.2 / 0.3 / 0.4 秒）
+      const state = this.world.getBlockState(x, y, z);
+      this.world.setStateAndUpdate(x, y, z, withDelay(state, (delayOf(state) + 1) & 3));
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * 该方块格里是否有玩家或生物（压力板触发用）。
+   * 用 AABB 与方块格相交判定——与碰撞检测同一套几何，不需要额外的实体事件。
+   */
+  private hasEntityAt(x: number, y: number, z: number): boolean {
+    const minX = x;
+    const maxX = x + 1;
+    const minY = y;
+    const maxY = y + 1;
+    const minZ = z;
+    const maxZ = z + 1;
+
+    // 玩家（半宽 0.3、身高 1.8）
+    const px = this.physics.x;
+    const py = this.physics.y;
+    const pz = this.physics.z;
+    if (px + 0.3 > minX && px - 0.3 < maxX && py < maxY && py + 1.8 > minY && pz + 0.3 > minZ && pz - 0.3 < maxZ) {
+      return true;
+    }
+
+    for (const entity of this.entities.all) {
+      const half = entity.width / 2;
+      if (
+        entity.x + half > minX &&
+        entity.x - half < maxX &&
+        entity.y < maxY &&
+        entity.y + entity.height > minY &&
+        entity.z + half > minZ &&
+        entity.z - half < maxZ
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -1000,30 +1096,9 @@ class App {
 
     // 右键功能方块：潜行时仍然走放置逻辑（与原版一致）
     const sneak = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
-    if (!sneak) {
-      const hitBlock = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
-      const { x, y, z } = this.hit;
-
-      if (hitBlock === Block.OAK_DOOR) {
-        this.toggleDoor(x, y, z);
-        this.placeCooldown = PLACE_COOLDOWN * 2;
-        return;
-      }
-      if (hitBlock === Block.CRAFTING_TABLE) {
-        this.inventoryScreen.openWith('crafting');
-        this.placeCooldown = PLACE_COOLDOWN * 2;
-        return;
-      }
-      if (hitBlock === Block.FURNACE) {
-        this.inventoryScreen.openWith('furnace', this.world.containers.getOrCreateFurnace(x, y, z));
-        this.placeCooldown = PLACE_COOLDOWN * 2;
-        return;
-      }
-      if (hitBlock === Block.CHEST) {
-        this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(x, y, z));
-        this.placeCooldown = PLACE_COOLDOWN * 2;
-        return;
-      }
+    if (!sneak && this.useFunctionalBlock(this.hit.x, this.hit.y, this.hit.z)) {
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
     }
 
     // 触摸端只有一次轻点，放完就要清掉，否则会一直放
@@ -1713,6 +1788,19 @@ class App {
       rows.push(cells.join(' '));
     }
     return rows.join('\n');
+  }
+
+  /**
+   * 查询某格的红石粉强度（0~15；非红石粉返回 0）。
+   * 自动化验收靠它判断"电有没有传到"，不必盯着画面看。
+   */
+  redstonePower(x: number, y: number, z: number): number {
+    return wirePowerOf(this.redstone, x, y, z);
+  }
+
+  /** 红石引擎已经算过多少轮（调试用） */
+  get redstoneUpdates(): number {
+    return this.redstone.updates;
   }
 
   /** 直接放置方块（自动化测试用）；可带状态 */
