@@ -58,7 +58,23 @@ interface SlotBinding {
 /** 容器类界面的 UI 刷新节流间隔（秒）：熔炉每帧都在烧，但界面不需要每帧重绘 */
 const CONTAINER_REFRESH_INTERVAL = 0.1;
 
+/**
+ * 触摸端的"长按"手势参数。
+ *
+ * 触摸屏没有右键，所以把原版的右键语义（取一半 / 放一个）映射到长按上：
+ *   短按抬起 → 左键（拿起整叠 / 放下整叠）
+ *   按住超过 260ms → 右键（取一半 / 放一个），并且**按住不放每 170ms 重复一次**，
+ *     于是在合成格上按住不动就是"连续放材料"（批量放置），在箱子里按住就是"连续取一个"。
+ * 桌面鼠标完全不走这条路径，行为与原来一致。
+ */
+const TOUCH_LONG_PRESS_MS = 260;
+const TOUCH_REPEAT_MS = 170;
+
 export class InventoryScreen {
+  /** 触摸长按的定时器（长按判定 + 连发），桌面端始终为 null */
+  private touchPressTimer: number | null = null;
+  private touchRepeatTimer: number | null = null;
+
   private readonly root: HTMLDivElement;
   private readonly panel: HTMLDivElement;
   private readonly titleEl: HTMLElement;
@@ -390,8 +406,15 @@ export class InventoryScreen {
       const key = slot.dataset.key;
       if (!key) return;
       event.preventDefault();
-      if (key === 'craft:result') this.handleResultClick();
-      else this.handleSlotClick(key, event.button);
+
+      // 鼠标：左键 / 右键语义保持不变
+      if (event.pointerType === 'mouse') {
+        this.activateSlot(key, event.button);
+        return;
+      }
+
+      // 触摸：短按 = 左键，长按 = 右键（并支持连发批量放置）
+      this.beginTouchPress(slot, key, event.pointerId);
     });
     return slot;
   }
@@ -431,6 +454,55 @@ export class InventoryScreen {
       if (event.code !== 'Escape') return;
       this.close();
     });
+  }
+
+  /** 统一的槽位激活入口（左键 = 0，右键 = 2） */
+  private activateSlot(key: string, button: number): void {
+    if (key === 'craft:result') this.handleResultClick();
+    else this.handleSlotClick(key, button);
+  }
+
+  /**
+   * 触摸端的槽位手势：短按抬起算左键，按住超过阈值算长按（右键 + 连发）。
+   *
+   * 用 `setPointerCapture` 把后续事件绑到同一个槽位元素上，
+   * 这样手指稍微滑出槽位再抬起也能正确收尾（否则 pointerup 会丢，定时器一直跑）。
+   */
+  private beginTouchPress(slot: HTMLDivElement, key: string, pointerId: number): void {
+    this.clearTouchPress();
+    try {
+      slot.setPointerCapture(pointerId);
+    } catch {
+      // 指针已经失效时调用会抛错，直接忽略：没有捕获也不影响短按
+    }
+
+    this.touchPressTimer = window.setTimeout(() => {
+      this.touchPressTimer = null;
+      // 长按：右键行为 + 连发（合成网格批量放置、箱子连续取一个都靠它）
+      this.activateSlot(key, 2);
+      this.touchRepeatTimer = window.setInterval(() => this.activateSlot(key, 2), TOUCH_REPEAT_MS);
+    }, TOUCH_LONG_PRESS_MS);
+
+    const finish = (): void => {
+      const wasQuickTap = this.touchPressTimer !== null;
+      this.clearTouchPress();
+      if (wasQuickTap) this.activateSlot(key, 0);
+    };
+
+    slot.addEventListener('pointerup', finish, { once: true });
+    slot.addEventListener('pointercancel', () => this.clearTouchPress(), { once: true });
+  }
+
+  /** 清掉长按相关的定时器（抬起 / 取消 / 开始新手势时调用） */
+  private clearTouchPress(): void {
+    if (this.touchPressTimer !== null) {
+      window.clearTimeout(this.touchPressTimer);
+      this.touchPressTimer = null;
+    }
+    if (this.touchRepeatTimer !== null) {
+      window.clearInterval(this.touchRepeatTimer);
+      this.touchRepeatTimer = null;
+    }
   }
 
   private handleSlotClick(key: string, button: number): void {
@@ -562,6 +634,7 @@ export class InventoryScreen {
   }
 
   close(): void {
+    this.clearTouchPress();
     if (!this.open) return;
     this.returnHeldToInventory();
     if (this.activeContainer) this.activeContainer.onChange = null;

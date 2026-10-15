@@ -23,6 +23,7 @@ import { mobTypeById } from './core/entity/mobs.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
+import { GamepadInput } from './ui/GamepadInput.ts';
 import { delayOf, withDelay } from './core/registry/blockState.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
@@ -122,6 +123,11 @@ const PLACE_COOLDOWN = 0.22;
 /** 界面打开时喂给物理的空输入，让玩家原地停住而不是保持上一帧的速度 */
 const IDLE_INPUT: PlayerInput = { forward: 0, strafe: 0, jump: false, sneak: false, sprint: false };
 
+/** 把多路输入相加后夹到 -1~1（键盘 + 触摸 + 手柄可能同时给出分量） */
+function clampUnit(value: number): number {
+  return value < -1 ? -1 : value > 1 ? 1 : value;
+}
+
 const STARTING_HOTBAR: readonly number[] = [
   Block.GRASS_BLOCK,
   Block.DIRT,
@@ -149,6 +155,13 @@ class App {
   private endDragon: Dragon | null = null;
   /** 红石电路引擎（信号传播、元件状态、活塞推拉） */
   private readonly redstone = new RedstoneEngine();
+  /** 手柄输入（Gamepad API）：与键盘/触摸翻译成同一套 PlayerInput */
+  private readonly gamepad = new GamepadInput();
+  /** 手柄的破坏/放置（按住持续，与鼠标的 leftDown/rightDown 等效） */
+  private padAttack = false;
+  private padUse = false;
+  /** 本帧的手柄输入（collectInput 与视角更新共用；没连接手柄时为 null） */
+  private gamepadState: ReturnType<GamepadInput['poll']> = null;
   /** 给红石引擎的"世界适配器"：把 World 与玩家/实体查询包成引擎需要的形状 */
   private readonly redstoneWorld: RedstoneWorld = {
     getBlock: (x, y, z) => this.world.getBlock(x, y, z),
@@ -636,8 +649,10 @@ class App {
   }
 
   private collectInput(): PlayerInput {
-    // 键盘与触摸取"较大者"而不是相加：外接键盘时同时用也不会速度翻倍
+    // 键盘 / 触摸 / 手柄三路输入取"较大者"而不是相加：
+    // 外接键盘 + 手柄同时用时也不会速度翻倍
     const touch = this.touch?.input;
+    const pad = this.gamepadState;
 
     let forward = 0;
     let strafe = 0;
@@ -649,11 +664,11 @@ class App {
     const keyboardSprint = this.keys.has('ControlLeft') || this.keys.has('ControlRight');
 
     return {
-      forward: Math.max(-1, Math.min(1, forward + (touch?.forward ?? 0))),
-      strafe: Math.max(-1, Math.min(1, strafe + (touch?.strafe ?? 0))),
-      jump: this.keys.has('Space') || (touch?.jump ?? false),
-      sneak: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || (touch?.sneak ?? false),
-      sprint: keyboardSprint || (touch?.sprint ?? false),
+      forward: clampUnit(forward + (touch?.forward ?? 0) + (pad?.forward ?? 0)),
+      strafe: clampUnit(strafe + (touch?.strafe ?? 0) + (pad?.strafe ?? 0)),
+      jump: this.keys.has('Space') || (touch?.jump ?? false) || (pad?.jump ?? false),
+      sneak: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || (touch?.sneak ?? false) || (pad?.sneak ?? false),
+      sprint: keyboardSprint || (touch?.sprint ?? false) || (pad?.sprint ?? false),
     };
   }
 
@@ -749,7 +764,7 @@ class App {
       this.breakProgress = 0;
       return;
     }
-    if (!this.leftDown || !this.hit || this.breakCooldown > 0) {
+    if ((!this.leftDown && !this.padAttack) || !this.hit || this.breakCooldown > 0) {
       this.breakingKey = '';
       this.breakProgress = 0;
       return;
@@ -799,6 +814,8 @@ class App {
     this.breakProgress = 0;
     this.breakingKey = '';
     this.breakCooldown = BREAK_COOLDOWN;
+    // 触觉反馈：方块被挖掉的那一下
+    this.vibrate(12);
   }
 
   /** 开门/关门：上下两半必须同步切换，否则会出现"半扇门" */
@@ -878,6 +895,8 @@ class App {
    * 创造模式（飞行）免疫；无敌帧由 PlayerStats 判断。
    */
   private damagePlayer(amount: number, sourceX: number, sourceZ: number): void {
+    // 触觉反馈：受击用"双短震"区分于放方块的轻震
+    if (amount > 0) this.vibrate([18, 40, 18]);
     if (this.flying) return;
     const result = this.stats.damage(amount, 'generic');
     if (result.applied <= 0) return;
@@ -964,6 +983,46 @@ class App {
     }
 
     return false;
+  }
+
+  /**
+   * 轮询手柄并把它接进游戏：视角、破坏/放置、开背包。
+   * 移动与跳跃在 collectInput 里合并，这里只处理"需要每帧推进"的部分。
+   */
+  private updateGamepad(dt: number): void {
+    const pad = this.gamepad.poll(Math.min(dt, 0.1));
+    this.gamepadState = pad;
+    if (!pad) {
+      this.padAttack = false;
+      this.padUse = false;
+      return;
+    }
+
+    // 视角：右摇杆按帧速率转（与触摸拖动共用 applyLook，因此灵敏度表现一致）
+    if (pad.lookDx !== 0 || pad.lookDy !== 0) {
+      this.applyLook(pad.lookDx * 0.0035, pad.lookDy * 0.0035);
+    }
+
+    this.padAttack = pad.attack;
+    this.padUse = pad.use;
+
+    if (pad.openInventoryPressed && !this.uiOpen) this.inventoryScreen.openWith('crafting');
+  }
+
+  /**
+   * 触觉反馈（移动端）。
+   *
+   * 只在与触摸设备同一会话里调用：桌面浏览器没有振动马达，
+   * 而且部分浏览器对 vibrate 的调用会打印警告。
+   */
+  private vibrate(pattern: number | number[]): void {
+    if (!this.touch) return;
+    if (typeof navigator.vibrate !== 'function') return;
+    try {
+      navigator.vibrate(pattern);
+    } catch {
+      // 某些环境（如跨域 iframe）会直接抛错，忽略即可
+    }
   }
 
   /**
@@ -1092,7 +1151,7 @@ class App {
   private updatePlacing(): void {
     // 触摸端是"一次性轻点"，鼠标是"按住不放"，这里统一成一个待执行标记
     const tapped = this.touchPlaceRequest;
-    if ((!this.rightDown && !tapped) || !this.hit || this.placeCooldown > 0) return;
+    if ((!this.rightDown && !tapped && !this.padUse) || !this.hit || this.placeCooldown > 0) return;
 
     // 右键功能方块：潜行时仍然走放置逻辑（与原版一致）
     const sneak = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
@@ -1147,6 +1206,8 @@ class App {
       }
       this.placeCooldown = PLACE_COOLDOWN;
       this.inventory.consume(blockId, 1);
+      // 触觉反馈：放下一块方块的轻震
+      this.vibrate(6);
     }
   }
 
@@ -1383,6 +1444,8 @@ class App {
         this.sky.update(this.timeOfDay, this.camera.position, dt);
       }
       this.applyEnvironment();
+
+      this.updateGamepad(dt);
 
       const centerCx = toChunkCoord(this.physics.x);
       const centerCz = toChunkCoord(this.physics.z);
