@@ -104,7 +104,14 @@ import { restoreContainers, serializeContainers } from './core/save/ContainerSav
 import { NetClient, defaultServerUrl } from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import type { NetPlayerState } from './net/NetClient.ts';
-import { delayOf, withDelay } from './core/registry/blockState.ts';
+import {
+  delayOf,
+  isFenceGateOpen,
+  isTrapdoorOpen,
+  withDelay,
+  withFenceGateOpen,
+  withTrapdoorOpen,
+} from './core/registry/blockState.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
@@ -2452,6 +2459,22 @@ class App {
     this.audio.play('door', { x: x + 0.5, y: baseY + 0.5, z: z + 0.5 });
   }
 
+  /**
+   * 活板门 / 栅栏门的开合（批次 30）。
+   *
+   * 两者都是**单格**方块，只需要翻自己的开关位（与门共用同一个位，见 `blockState.ts`）。
+   * 与门一样播 `door` 音效——原版这三种的开合音是同一套木质声。
+   */
+  private toggleOpenable(x: number, y: number, z: number, id: number): void {
+    const state = this.world.getBlockState(x, y, z);
+    const next =
+      id === Block.OAK_TRAPDOOR
+        ? withTrapdoorOpen(state, !isTrapdoorOpen(state))
+        : withFenceGateOpen(state, !isFenceGateOpen(state));
+    this.world.setBlockAndUpdate(x, y, z, id, next);
+    this.audio.play('door', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+  }
+
   /** 拆掉整扇门（上下两半一起），整扇只掉落一次 */
   private breakDoorPair(x: number, y: number, z: number): void {
     const state = this.world.getBlockState(x, y, z);
@@ -3052,6 +3075,11 @@ class App {
 
     if (hitBlock === Block.OAK_DOOR) {
       this.toggleDoor(x, y, z);
+      return true;
+    }
+    // 活板门与栅栏门（批次 30）：右键开合，与门同一套手感
+    if (hitBlock === Block.OAK_TRAPDOOR || hitBlock === Block.OAK_FENCE_GATE) {
+      this.toggleOpenable(x, y, z, hitBlock);
       return true;
     }
     if (hitBlock === Block.CRAFTING_TABLE) {
@@ -4087,6 +4115,11 @@ class App {
 
   /** 允许自动化脚本传送到某个坐标（会跳过自动出生点定位） */
   teleportForce(x: number, y: number, z: number): void {
+    // 防呆：坐标里只要有一个不是有限数就直接忽略。
+    // 之前用调试脚本传进过 NaN，物理位置一旦变成 NaN **就再也回不来**
+    // （后面每一次位移运算的结果都是 NaN），整个浏览器会话看起来就像"卡死"了——
+    // 排查时完全看不出是脚本把玩家传走的。
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
     this.spawnResolved = true;
     this.teleport(x, y, z);
   }

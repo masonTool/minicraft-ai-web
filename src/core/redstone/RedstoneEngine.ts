@@ -20,7 +20,21 @@
  */
 
 import { Block, blockDef } from '../registry/blocks.ts';
-import { FACING_OFFSET, facingOf, isPowered, withFacing, withPowered } from '../registry/blockState.ts';
+import {
+  FACING_OFFSET,
+  facingOf,
+  isDoorOpen,
+  isDoorUpper,
+  isFenceGateOpen,
+  isPowered,
+  isTrapdoorOpen,
+  withDoorOpen,
+  withDoorUpper,
+  withFacing,
+  withFenceGateOpen,
+  withPowered,
+  withTrapdoorOpen,
+} from '../registry/blockState.ts';
 import { WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 
 /** 引擎需要的世界能力（便于离线测试时替换成 stub） */
@@ -55,6 +69,10 @@ function isRedstoneComponent(id: number): boolean {
     case Block.STICKY_PISTON:
     case Block.PISTON_HEAD:
     case Block.OBSERVER:
+    // 门 / 活板门 / 栅栏门（批次 30）：它们是红石**负载**（通电即开）
+    case Block.OAK_DOOR:
+    case Block.OAK_TRAPDOOR:
+    case Block.OAK_FENCE_GATE:
       return true;
     default:
       return false;
@@ -395,6 +413,46 @@ export class RedstoneEngine {
               this.markDirty(nx, ny, nz);
               changed = true;
             }
+          }
+          break;
+        }
+        case Block.OAK_DOOR: {
+          // 门（批次 30 接进红石）：通电即开、断电即关。
+          //
+          // ⚠️ 门是**两格**的：红石通常只贴在下半格旁边，上半格自己的 `input` 是 0，
+          // 分开判就会得到"上半开着、下半关着"的半扇门。所以：
+          //  - 上半格直接跳过（由下半格负责改写两格）
+          //  - 下半格依据自己的输入决定开合，然后把上半格设成同一个开合状态
+          if (isDoorUpper(state)) break;
+          const upperId = world.getBlock(nx, ny + 1, nz);
+          const paired = upperId === Block.OAK_DOOR;
+          const wantOpen = input > 0;
+          if (isDoorOpen(state) === wantOpen) break;
+          world.setState(nx, ny, nz, withDoorOpen(state, wantOpen));
+          if (paired) {
+            // 上半格：保持"上"位、跟随下半格的开合
+            const upperState = withDoorOpen(world.getState(nx, ny + 1, nz), wantOpen);
+            world.setState(nx, ny + 1, nz, withDoorUpper(upperState, true));
+          }
+          this.markDirty(nx, ny, nz);
+          changed = true;
+          break;
+        }
+        case Block.OAK_TRAPDOOR: {
+          const wantOpen = input > 0;
+          if (isTrapdoorOpen(state) !== wantOpen) {
+            world.setState(nx, ny, nz, withTrapdoorOpen(state, wantOpen));
+            this.markDirty(nx, ny, nz);
+            changed = true;
+          }
+          break;
+        }
+        case Block.OAK_FENCE_GATE: {
+          const wantOpen = input > 0;
+          if (isFenceGateOpen(state) !== wantOpen) {
+            world.setState(nx, ny, nz, withFenceGateOpen(state, wantOpen));
+            this.markDirty(nx, ny, nz);
+            changed = true;
           }
           break;
         }

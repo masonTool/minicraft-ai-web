@@ -25,6 +25,10 @@ export type BlockShape =
   | 'fence'
   | 'wall'
   | 'door'
+  /** 活板门：一块薄板，关时贴地/贴顶、开时竖起来贴在朝向那一侧 */
+  | 'trapdoor'
+  /** 栅栏门：两根柱子 + 一块可开关的门板，关着时挡路、开着时中间能走过去 */
+  | 'fence_gate'
   | 'torch'
   | 'ladder'
   | 'pane'
@@ -211,6 +215,31 @@ export function withDoorUpper(state: number, upper: boolean): number {
   return upper ? state | DOOR_UPPER_MASK : state & ~DOOR_UPPER_MASK;
 }
 
+// ---------------------------------------------------------------- 活板门 / 栅栏门
+//
+// 两者各只需要"朝向 + 开关"，而开关与门的 OPEN **共用同一位**——
+// 沿用本文件开头那条既有设计（不同形状族不会同时出现在一个方块上，所以不必各占一位）。
+// 仍然给它们各自的取名函数：调用处写 `isTrapdoorOpen(state)` 比 `isDoorOpen(state)` 诚实，
+// 也让"门"与"活板门"的代码在搜索时不会互相误伤。
+
+/** 活板门是不是开着（竖起来贴着侧面） */
+export function isTrapdoorOpen(state: number): boolean {
+  return isDoorOpen(state);
+}
+
+export function withTrapdoorOpen(state: number, open: boolean): number {
+  return withDoorOpen(state, open);
+}
+
+/** 栅栏门是不是开着 */
+export function isFenceGateOpen(state: number): boolean {
+  return isDoorOpen(state);
+}
+
+export function withFenceGateOpen(state: number, open: boolean): number {
+  return withDoorOpen(state, open);
+}
+
 // ---------------------------------------------------------------- 调试
 
 export function describeState(shape: BlockShape, state: number): string {
@@ -225,6 +254,10 @@ export function describeState(shape: BlockShape, state: number): string {
       return `贴·${FACING_NAMES[facingOf(state)]}`;
     case 'door':
       return `${FACING_NAMES[facingOf(state)]}${isDoorUpper(state) ? '·上' : '·下'}${isDoorOpen(state) ? '·开' : '·关'}`;
+    case 'trapdoor':
+      return `贴${FACING_NAMES[facingOf(state)]}${isTop(state) ? '·上半' : '·下半'}${isTrapdoorOpen(state) ? '·开' : '·关'}`;
+    case 'fence_gate':
+      return `${FACING_NAMES[facingOf(state)]}${isFenceGateOpen(state) ? '·开' : '·关'}`;
     default:
       return '';
   }

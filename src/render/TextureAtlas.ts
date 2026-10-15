@@ -762,6 +762,41 @@ PAINTERS.oak_door = (x, y, rng) => {
   return base;
 };
 
+/**
+ * 活板门（批次 30）：木板打底 + 上下两道横档 + 四角铆钉。
+ * 与门一样用 `layered(146, ...)`（同一块木板的底色），一眼能看出是"同一种木头做的"。
+ */
+PAINTERS.oak_trapdoor = (x, y, rng) => {
+  const base = layered(146, 6, 7, [1.05, 0.8, 0.48])(x, y, rng);
+  // 横档：上沿与下沿各一条，比底色深一点
+  if (y <= 1 || y >= 14 || (y >= 7 && y <= 8)) {
+    const v = 132 + (rng() * 10 - 5);
+    return [clamp255(v * 1.02), clamp255(v * 0.74), clamp255(v * 0.42), 255];
+  }
+  // 四角的铁件
+  if ((x <= 1 || x >= 14) && (y <= 2 || y >= 13)) {
+    const v = 168 + rng() * 20;
+    return [clamp255(v), clamp255(v * 0.97), clamp255(v * 0.9), 255];
+  }
+  return base;
+};
+
+/** 栅栏门（批次 30）：两根竖柱 + 两道横杆——与栅栏同一套木料，但中间是"门板" */
+PAINTERS.oak_fence_gate = (x, y, rng) => {
+  const base = layered(146, 6, 7, [1.05, 0.8, 0.48])(x, y, rng);
+  // 两根竖柱：左右各 2 像素
+  if (x <= 1 || x >= 14) {
+    const v = 128 + (rng() * 10 - 5);
+    return [clamp255(v * 1.02), clamp255(v * 0.74), clamp255(v * 0.42), 255];
+  }
+  // 两道横杆
+  if ((y >= 3 && y <= 4) || (y >= 11 && y <= 12)) {
+    const v = 140 + (rng() * 10 - 5);
+    return [clamp255(v * 1.02), clamp255(v * 0.76), clamp255(v * 0.44), 255];
+  }
+  return base;
+};
+
 PAINTERS.item_clay_ball = lump(
   [
     [168, 168, 178],

@@ -826,6 +826,32 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
  * 全部方块定义。
  * ⚠️ 必须按 id 升序排列：BLOCKS 是按数组下标索引的，顺序错位会让 blockDef(id) 取到别的方块。
  */
+/**
+ * 活板门与栅栏门（批次 30）。
+ *
+ * 两者都是"非立方体形状"家族的最后两块（见 B7）：形状定义在 `blockShapes.ts` 里，
+ * 渲染与碰撞**共用同一份几何**（免得画一片板、撞在另一处）。
+ * 状态位与门共用"开/关"那一位（见 `blockState.ts` 的说明）。
+ */
+const OPENABLE_SPECS: readonly BlockSpec[] = [
+  {
+    id: 289,
+    name: 'minecraft:oak_trapdoor',
+    tiles: ['oak_trapdoor', 'oak_trapdoor', 'oak_trapdoor'],
+    shape: 'trapdoor',
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 290,
+    name: 'minecraft:oak_fence_gate',
+    tiles: ['oak_fence_gate', 'oak_fence_gate', 'oak_fence_gate'],
+    shape: 'fence_gate',
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -839,6 +865,7 @@ const SPECS: readonly BlockSpec[] = [
   ...NETHER_SPECS,
   ...END_SPECS,
   ...REDSTONE_SPECS,
+  ...OPENABLE_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1014,6 +1041,9 @@ export const Block = {
   POTATOES_STAGE2: 286,
   POTATOES_STAGE3: 287,
   BREWING_STAND: 288,
+  /** 活板门与栅栏门（批次 30）：id 接在最大 id 之后，SPECS 会按 id 排序 */
+  OAK_TRAPDOOR: 289,
+  OAK_FENCE_GATE: 290,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1160,6 +1190,9 @@ HARDNESS.set(Block.OAK_FENCE, 2);
 HARDNESS.set(Block.COBBLESTONE_WALL, 2);
 HARDNESS.set(Block.STONE_BRICK_WALL, 1.5);
 HARDNESS.set(Block.OAK_DOOR, 3);
+// 活板门 3（与门同档）、栅栏门 2（与栅栏同档）——都是木头，原版如此
+HARDNESS.set(Block.OAK_TRAPDOOR, 3);
+HARDNESS.set(Block.OAK_FENCE_GATE, 2);
 HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
 // 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
@@ -1293,6 +1326,8 @@ for (let index = 0; index < SHAPED_PARENTS.length; index++) {
 }
 HAND_HARVESTABLE.add(Block.OAK_FENCE);
 HAND_HARVESTABLE.add(Block.OAK_DOOR);
+HAND_HARVESTABLE.add(Block.OAK_TRAPDOOR);
+HAND_HARVESTABLE.add(Block.OAK_FENCE_GATE);
 HAND_HARVESTABLE.add(Block.TORCH);
 HAND_HARVESTABLE.add(Block.LADDER);
 

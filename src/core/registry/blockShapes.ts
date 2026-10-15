@@ -16,8 +16,10 @@ import {
   facingOf,
   fluidHeight,
   isDoorOpen,
+  isFenceGateOpen,
   isSlabDouble,
   isTop,
+  isTrapdoorOpen,
   isWallMounted,
   type BlockShape,
   type Facing,
@@ -114,6 +116,14 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
       // 是 K7 的单元测试（tests/collision.test.ts）把它抓出来的。
       return isDoorOpen(state) ? [] : [doorBox(state)];
+    case 'trapdoor':
+      // 活板门**开关都有碰撞**（开着的活板门就是一片竖着的挡板，原版也撞得到）。
+      // 与渲染共用同一份几何：免得"画一片板、撞在另一处"
+      return [trapdoorBox(state)];
+    case 'fence_gate':
+      // 栅栏门：关着时门板横在两柱之间（1.5 格高，挡路），开着时门板转到侧面、
+      // **中间让开一个 0.75 格宽的洞**（玩家 0.6 格宽，正好走过去）
+      return fenceGateBoxes(state);
     case 'cactus':
       return [CACTUS_BOX];
     case 'torch':
@@ -140,6 +150,74 @@ function bottomHalfBox(d: readonly [number, number]): LocalBox {
   if (d[0] === -1) return [0, 0, 0, 0.5, 0.5, 1];
   if (d[1] === 1) return [0, 0, 0.5, 1, 0.5, 1];
   return [0, 0, 0, 1, 0.5, 0.5];
+}
+
+/**
+ * 活板门：一块 3/16 厚的板。
+ *
+ * - 关：横着——贴在被放置的那一半（`isTop` = 贴天花板，否则贴地）
+ * - 开：竖起来，贴在**朝向所指的那一侧**（朝向取自放置时玩家面对的方向）
+ *
+ * 渲染与碰撞共用这一份（见 `meshBoxes`／`collisionBoxes`）：原版开着的活板门
+ * 确实是一块竖着的挡板，所以这里不像门那样"开着就没有碰撞"。
+ */
+function trapdoorBox(state: number): LocalBox {
+  const thickness = 0.1875;
+  if (!isTrapdoorOpen(state)) {
+    return isTop(state) ? [0, 1 - thickness, 0, 1, 1, 1] : [0, 0, 0, 1, thickness, 1];
+  }
+  const d = FACING_OFFSET[facingOf(state)]!;
+  if (d[0] === 1) return [1 - thickness, 0, 0, 1, 1, 1];
+  if (d[0] === -1) return [0, 0, 0, thickness, 1, 1];
+  if (d[1] === 1) return [0, 0, 1 - thickness, 1, 1, 1];
+  return [0, 0, 0, 1, 1, thickness];
+}
+
+/** 栅栏门的柱子宽度（2/16）与门板厚度（4/16）、高度（原版 1.5 格） */
+const GATE_POST = 0.125;
+const GATE_THICKNESS = 0.25;
+const GATE_HEIGHT = 1.5;
+
+/**
+ * 栅栏门：两根柱子 + 一块门板。
+ *
+ * - 关：门板横在两柱之间，整扇 1.5 格高（挡路）
+ * - 开：门板绕着一侧的柱子转 90°，贴到朝向那一侧；两柱之间**让开 0.75 格**
+ *
+ * ⚠️ 简化的地方：原版开门时门板会"绕柱旋转"，这里只把门板挪到那一侧并转 90°，
+ * 观感近似（门板贴着一根柱子、朝着玩家面对的方向伸出去）。
+ */
+function fenceGateBoxes(state: number): LocalBox[] {
+  const d = FACING_OFFSET[facingOf(state)]!;
+  const alongX = d[0] === 0;
+  const half = GATE_THICKNESS / 2;
+  const boxes: LocalBox[] = [];
+
+  const post = (at: number): LocalBox =>
+    alongX
+      ? [at, 0, 0.5 - half, at + GATE_POST, GATE_HEIGHT, 0.5 + half]
+      : [0.5 - half, 0, at, 0.5 + half, GATE_HEIGHT, at + GATE_POST];
+  boxes.push(post(0), post(1 - GATE_POST));
+
+  if (!isFenceGateOpen(state)) {
+    boxes.push(
+      alongX
+        ? [0, 0, 0.5 - half, 1, GATE_HEIGHT, 0.5 + half]
+        : [0.5 - half, 0, 0, 0.5 + half, GATE_HEIGHT, 1],
+    );
+    return boxes;
+  }
+
+  // 开：门板贴着 -X（或 -Z）那根柱子，朝朝向那一侧伸出去
+  const forward = alongX ? d[1] : d[0];
+  if (alongX) {
+    const z0 = forward > 0 ? 0 : 1 - GATE_THICKNESS;
+    boxes.push([0, 0, z0, GATE_POST, GATE_HEIGHT, z0 + GATE_THICKNESS]);
+  } else {
+    const x0 = forward > 0 ? 0 : 1 - GATE_THICKNESS;
+    boxes.push([x0, 0, 0, x0 + GATE_THICKNESS, GATE_HEIGHT, GATE_POST]);
+  }
+  return boxes;
 }
 
 /** 门板：关着时贴在朝向前方的边缘，开着时旋转 90° 贴到门轴那一侧 */
@@ -204,6 +282,11 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
       // 是 K7 的单元测试（tests/collision.test.ts）把它抓出来的。
       return isDoorOpen(state) ? [] : [doorBox(state)];
+    case 'trapdoor':
+      // 与碰撞盒共用同一份几何（见 `collisionBoxes`）
+      return [trapdoorBox(state)];
+    case 'fence_gate':
+      return fenceGateBoxes(state);
     case 'torch':
       return torchBoxes(state);
     case 'ladder':

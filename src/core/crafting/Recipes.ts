@@ -168,6 +168,20 @@ const UTILITY_RECIPES: readonly Recipe[] = [
     pattern: ['PP', 'PP', 'PP'],
     key: { P },
   },
+  // 6 木板横铺 3×2 → 2 个活板门（原版配方）
+  {
+    kind: 'shaped',
+    result: { id: Block.OAK_TRAPDOOR, count: 2 },
+    pattern: ['PPP', 'PPP'],
+    key: { P },
+  },
+  // 2 木板 + 4 木棍 → 1 个栅栏门（原版的"两柱一门板"形状）
+  {
+    kind: 'shaped',
+    result: { id: Block.OAK_FENCE_GATE, count: 1 },
+    pattern: ['SPS', 'SPS'],
+    key: { P, S: Item.STICK },
+  },
   // 7 木棍摆成 H 形 → 3 个梯子
   {
     kind: 'shaped',

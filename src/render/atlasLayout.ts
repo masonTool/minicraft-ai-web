@@ -150,6 +150,8 @@ export const TILE_ORDER = [
   'torch',
   'ladder',
   'oak_door',
+  'oak_trapdoor',
+  'oak_fence_gate',
   'terracotta',
   'terracotta_white',
   'terracotta_orange',

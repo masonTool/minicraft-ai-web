@@ -496,6 +496,12 @@ const BUILDING = new Set<number>([
   Block.POLISHED_DEEPSLATE,
   Block.BRICKS,
   Block.SANDSTONE,
+  // 门 / 活板门 / 栅栏 / 栅栏门：原版归在"建筑"里（此前没登记，
+  // 于是掉进了"矿石与材料"）。批次 30 顺手补上
+  Block.OAK_DOOR,
+  Block.OAK_TRAPDOOR,
+  Block.OAK_FENCE_GATE,
+  Block.OAK_FENCE,
 ]);
 
 const NATURAL = new Set<number>([

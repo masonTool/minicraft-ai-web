@@ -140,6 +140,17 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       };
     }
 
+    case 'trapdoor': {
+      // 朝向：水平面按玩家面对的方向；命中顶面 → 贴地（下半），命中底面 → 贴天花板（上半）
+      const facing = facingFromYaw(input.yaw);
+      const top = ny < 0;
+      return { state: withTop(withFacing(0, facing), top) };
+    }
+
+    case 'fence_gate':
+      // 栅栏门只有朝向：门板横在朝向的**垂直方向**上（与栅栏连成一线）
+      return { state: withFacing(0, facingFromYaw(input.yaw)) };
+
     default:
       return { state: 0 };
   }
