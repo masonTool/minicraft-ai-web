@@ -20,6 +20,11 @@ export interface GameSettings {
   sensitivity: number;
   /** 是否显示左上角调试信息（HUD） */
   showDebug: boolean;
+  /**
+   * 自适应视距：帧率掉下去时自动缩小视距（玩家设定的视距是**上限**，只会往下调）。
+   * 移动端长时间游玩容易发热降频，这个开关能避免越玩越卡。
+   */
+  adaptiveViewDistance: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -28,6 +33,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   volume: 0.7,
   sensitivity: 1,
   showDebug: true,
+  adaptiveViewDistance: true,
 };
 
 const STORAGE_KEY = 'bedrock-settings';
@@ -44,6 +50,7 @@ export function loadSettings(): GameSettings {
       volume: clampNumber(parsed.volume, 0, 1, DEFAULT_SETTINGS.volume),
       sensitivity: clampNumber(parsed.sensitivity, 0.5, 2, DEFAULT_SETTINGS.sensitivity),
       showDebug: parsed.showDebug !== false,
+      adaptiveViewDistance: parsed.adaptiveViewDistance !== false,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -76,7 +83,6 @@ export class SettingsScreen {
   readonly root: HTMLDivElement;
   private open = false;
   private readonly sliders = new Map<keyof GameSettings, HTMLInputElement>();
-  private readonly debugToggle: HTMLInputElement;
   private readonly metaEl: HTMLDivElement;
 
   constructor(
@@ -127,19 +133,8 @@ export class SettingsScreen {
       this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05),
     );
 
-    const debugRow = document.createElement('label');
-    debugRow.className = 'settings-row';
-    const debugLabel = document.createElement('span');
-    debugLabel.textContent = '调试信息';
-    this.debugToggle = document.createElement('input');
-    this.debugToggle.type = 'checkbox';
-    this.debugToggle.checked = settings.showDebug;
-    this.debugToggle.addEventListener('change', () => {
-      this.settings.showDebug = this.debugToggle.checked;
-      this.commit();
-    });
-    debugRow.append(debugLabel, this.debugToggle);
-    options.appendChild(debugRow);
+    this.makeToggle(options, 'showDebug', '调试信息');
+    this.makeToggle(options, 'adaptiveViewDistance', '自适应视距');
 
     this.metaEl = document.createElement('div');
     this.metaEl.className = 'settings-hint';
@@ -190,6 +185,24 @@ export class SettingsScreen {
     row.append(name, input, value);
     this.sliders.set(key, input);
     return row;
+  }
+
+  /** 造一个开关设置项 */
+  private makeToggle(options: HTMLElement, key: 'showDebug' | 'adaptiveViewDistance', label: string): HTMLInputElement {
+    const row = document.createElement('label');
+    row.className = 'settings-row';
+    const name = document.createElement('span');
+    name.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = this.settings[key];
+    input.addEventListener('change', () => {
+      this.settings[key] = input.checked;
+      this.commit();
+    });
+    row.append(name, input);
+    options.appendChild(row);
+    return input;
   }
 
   private commit(): void {

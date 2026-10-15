@@ -275,8 +275,17 @@ class App {
   /** 本机设置（视距/视野/音量/灵敏度/调试信息），存在 localStorage */
   private readonly settings: GameSettings = loadSettings();
   private readonly settingsScreen: SettingsScreen;
-  /** 当前视距（区块）；与设置联动，改完立即生效 */
+  /** 当前生效的视距（区块）；自适应会在这个值上浮动，玩家设置的是上限 */
   private viewDistance = VIEW_DISTANCE;
+  /**
+   * 帧时间的指数滑动平均（毫秒）。
+   * 用滑动平均而不是"上一帧耗时"：偶发的一次卡顿（GC、区块上传）不该触发降视距。
+   */
+  private frameTimeAvg = 16.7;
+  /** 调试用：把帧时间固定成这个值（毫秒），0 表示用真实值。验收脚本靠它稳定复现"掉帧" */
+  private simulatedFrameTime = 0;
+  /** 自适应视距的冷却倒计时（秒）：避免帧率在阈值附近抖动时反复升降 */
+  private adaptiveCooldown = 3;
   private netStatus = '未连接（按 L 联机）';
   private chatLine = '';
   private chatUntil = 0;
@@ -453,6 +462,8 @@ class App {
    */
   private applySettings(settings: GameSettings): void {
     this.viewDistance = settings.viewDistance;
+    // 玩家手动改视距时把自适应冷却重置：否则刚拖完滑块又要等几秒才允许升降
+    this.adaptiveCooldown = 3;
     this.camera.fov = settings.fov;
     this.camera.far = settings.viewDistance * 16 + 32;
     this.camera.updateProjectionMatrix();
@@ -1757,6 +1768,53 @@ class App {
 
   // ---------------------------------------------------------------- 主循环
 
+  /**
+   * 自适应视距（K6）。
+   *
+   * 手机长时间游玩会发热降频，帧率掉下去之后如果什么都不做，就只会越来越卡。
+   * 这里用帧时间滑动平均做迟滞控制：
+   *   平均帧时间 > 22ms（约 45fps）→ 降 1 区块，冷却 4 秒
+   *   平均帧时间 < 17ms（约 59fps）→ 升 1 区块，冷却 8 秒（升比降保守，避免抖动）
+   * 玩家设定的视距是上限：自适应只会往下调，不会超过玩家想要的范围。
+   */
+  private updateAdaptiveViewDistance(dt: number): void {
+    // 平滑系数 0.05：约 20 帧的时间常数，半秒内的抖动会被抹平
+    const frameTime = this.simulatedFrameTime > 0 ? this.simulatedFrameTime : dt * 1000;
+    this.frameTimeAvg += (frameTime - this.frameTimeAvg) * 0.05;
+    if (!this.settings.adaptiveViewDistance) return;
+
+    this.adaptiveCooldown -= dt;
+    if (this.adaptiveCooldown > 0) return;
+
+    const max = this.settings.viewDistance;
+    if (this.frameTimeAvg > 22 && this.viewDistance > 4) {
+      this.setViewDistance(this.viewDistance - 1);
+      this.adaptiveCooldown = 4;
+      console.info(`[perf] 帧时间 ${this.frameTimeAvg.toFixed(1)}ms，视距降到 ${this.viewDistance}`);
+    } else if (this.frameTimeAvg < 17 && this.viewDistance < max) {
+      this.setViewDistance(this.viewDistance + 1);
+      this.adaptiveCooldown = 8;
+    }
+  }
+
+  /** 改视距：相机远裁剪面、雾、区块流式范围一起更新 */
+  private setViewDistance(distance: number): void {
+    if (distance === this.viewDistance) return;
+    this.viewDistance = distance;
+    this.camera.far = distance * 16 + 32;
+    this.camera.updateProjectionMatrix();
+    this.applyEnvironment();
+    this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+  }
+
+  /**
+   * 验收用：把帧时间固定成给定值（毫秒），0 表示恢复真实值。
+   * 真机上没法稳定复现"掉帧"，但对自适应逻辑来说只需要一个持续的高帧时间输入。
+   */
+  simulateFrameTime(milliseconds: number): void {
+    this.simulatedFrameTime = milliseconds;
+  }
+
   private updateDebug(dt: number): void {
     this.frames++;
     this.fpsTimer += dt;
@@ -1796,7 +1854,7 @@ class App {
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
-      `视距: ${this.viewDistance} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
+      `视距: ${this.viewDistance}${this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance ? `（自适应，上限 ${this.settings.viewDistance}）` : ''} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
       `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
       `联机: ${this.netStatus}${this.net.selfId > 0 ? `（#${this.net.selfId} · 在线 ${this.net.playerCount} 人）` : ''}` +
@@ -1862,6 +1920,7 @@ class App {
 
       this.updateGamepad(dt);
       this.tickAutoSave(dt);
+      this.updateAdaptiveViewDistance(dt);
       this.net.tick(
         this.physics.x,
         this.physics.y,
@@ -2306,12 +2365,19 @@ class App {
   }
 
   /** 当前设置与设置界面的状态（验收脚本用） */
-  get settingsState(): { open: boolean; settings: GameSettings; viewDistance: number; fov: number } {
+  get settingsState(): {
+    open: boolean;
+    settings: GameSettings;
+    viewDistance: number;
+    fov: number;
+    frameTimeAvg: number;
+  } {
     return {
       open: this.settingsScreen.isOpen,
       settings: this.settingsScreen.snapshot(),
       viewDistance: this.viewDistance,
       fov: this.camera.fov,
+      frameTimeAvg: Number(this.frameTimeAvg.toFixed(2)),
     };
   }
 
