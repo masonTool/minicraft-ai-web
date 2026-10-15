@@ -22,9 +22,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-14 · HEAD：`7c64d29` · 提交总数 37（每个功能点一条，可逐条回滚）
+- 时间：2026-10-15 · 提交总数 45（每个功能点一条，可逐条回滚）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 已勾选 **49** 项、未勾选 105 项；其中相当一部分是长期大项（红石、生物 AI、附魔等）
+- 进度口径：`TASKS.md` 已勾选 **55** 项；其中相当一部分是长期大项（红石、生物 AI、附魔等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
 
 已打通并实测过的部分：
@@ -40,7 +40,10 @@ npm run dev            # http://localhost:5173
 | 物品与容器 | 物品注册表、背包 36+9、2×2 / 3×3 合成、熔炉（燃料与烧炼进度）、箱子 27 格、掉落物实体（重力/拾取/合并/5 分钟消失） |
 | 方块内容 | **201 种**（6 族木材、石材家族、16 色羊毛、33 色陶瓦/混凝土、染色玻璃与玻璃板…）、方块状态、非常规形状（台阶/楼梯/栅栏/墙/门/火把/梯子） |
 | 移动端 | 触摸操作层（虚拟摇杆、长按破坏）、响应式 UI、PWA 全屏元信息、Pointer Events 统一输入 |
-| 测试 | `npm test` = inventory(39) / crafting(39) / furnace(45) / entity(31) / shapes(59) / biome，离线跑，当前全绿 |
+| 地物 | `core/gen/Features.ts`：11 种树 + 花草/蘑菇/甘蔗/南瓜/西瓜/仙人掌，23 群系地物表；跨区块重放 3×3 邻域保证树冠不断 |
+| 结构 | `core/gen/Structures.ts`：村庄/废弃矿井/要塞/地牢/沉船/海底神殿/林地府邸，间距+分离度+盐值放置框架 |
+| 下界 | `core/gen/NetherGenerator.ts` + `Dimension.ts`：岩浆海 + 洞窟 + 5 个下界群系 + 菌菇树等；`N` 键切维度 |
+| 测试 | `npm test` = 13 套离线测试（inventory/crafting/furnace/entity/shapes/biome/aquifer/ore/mesh/survival/mob/spawn/combat/decor/structure/nether），当前全绿 |
 
 下一步的大头（队列与 TASKS.md 都能看到）：含水层、大矿脉、贪心网格化 + 网格化移入 Worker、
 生存机制（生命/饥饿/摔落）、生物 AI 与生成、结构生成、红石、存档（IndexedDB）与联机。
@@ -66,6 +69,18 @@ npm run dev            # http://localhost:5173
 **踩过的坑（别重犯）**：Stop 钩子里输出 `{"continue": false}` 会被实现层当成"硬停止"，
 表现为 AI 真的停了、不自动继续；正确写法是 `{"continue": true}` + 反馈走 **stderr** + `exit 2`。
 
+## 3.5 本轮（J1/J2/J3）新增的硬性约定
+
+**跨区块地物/结构必须"只依赖世界坐标"**：一棵树的树冠会伸进邻居区块，村庄会横跨好几个区块。
+做法是"生成区块 C 时重放 3×3 邻域里各地物的实例，只写入落在 C 的部分"，于是每个地物只属于一个区块。
+但这条机制成立的前提是**地物的每个决策都是世界坐标的纯函数**——一旦某处读了本区块的方块数据来做判断，
+拥有者与邻居就会得出两种结论，接缝上的树冠只会剩半边。为此：
+
+- `OverworldGenerator.surfaceY(x,z)` 提供"世界坐标 → 地表高度"（4 个粗网格节点求零点再双线性插值）；
+- 树干用**强制写入** + 只在拥有者区块里向下补齐（估算高度差 1~3 格时不会悬空）；
+- 单列地物（草花蘑菇……）不参与邻域重放，直接用本区块真实地面校准落点；
+- 下界的地板高度是解析式，天然满足这条约定。
+
 ## 4. 已定论的经验（省时间，别重复踩）
 
 | 症状 | 根因 |
@@ -76,6 +91,11 @@ npm run dev            # http://localhost:5173
 | 方块表错位、`blockDef(id)` 静默返回错误方块 | `BLOCKS` 按数组下标索引，id 必须从 0 开始连续（已加构建期强校验） |
 | 地形平坦、群系只剩几种 | 多八度噪声按 `1/Σ|振幅|` 归一化把幅度压小了，样条量纲对不上；须按方差归一化（D1b） |
 | 抓 wiki 数据失败 | zh.minecraft.wiki 对脚本抓取返回 403 → 地形参数是"算法结构对齐 + 视觉校准"，不是逐位对齐官方 JSON（已在注释与 TASKS 标注） |
+| 地物高度估算与地形差出几十格 | 真实地形是**粗网格取样 + 三线性插值**，不要对密度解析式直接求根；必须在 4×8×4 粗网格的 Y 层上求零点（J2） |
+| 花草几乎不生成 | 用估算高度去找"草方块那一格"，命中率极低；单列地物应当用本区块真实数据把落点校准到地面上（J2） |
+| 下界"天空"还是蓝色 | `scene.background` 优先于 `renderer.setClearColor`，切维度必须同时改前者（J3） |
+| 下界一片纯黑 | 下界没有天光，方块光的传播范围又有限；靠 `VoxelMaterial.setMinBrightness` 抬高亮度下限（下界 0.24）（J3） |
+| 下界洞顶漏光 / 被顶穿 | 洞顶高度是噪声函数，偶尔会超出预期范围 → 必须夹紧（`ceilingAt` 上限 `NETHER_CEILING`）（J3） |
 | 版权素材 | 官方贴图/音效不随仓库分发；贴图运行时程序化生成，P9 计划支持玩家自备资源包 |
 
 ## 5. 待复核的悬案（下次接手优先看）
@@ -91,13 +111,14 @@ npm run dev            # http://localhost:5173
 npm run dev         # 开发服务器
 npm run typecheck   # tsc --noEmit（提交前必过）
 npm run build       # 类型检查 + 生产构建
-npm test            # 6 套离线测试
+npm test            # 16 套离线测试（含 decor/structure/nether）
 npm run gen:stats   # 地形生成统计（耗时/洞穴占比/矿石产量）
 npm run agent:setup # 跨机器自检
 ```
 
 浏览器控制台 `window.__mc`（`src/main.ts` 末尾挂的 App 实例）：
 `teleport(x,y,z)` / `teleportForce` / `look(yawDeg,pitchDeg)` / `setTimeOfDay(t)` /
+`setDimension('overworld'|'nether')` / `toggleDimension()` /
 `probe(x,y,z)`（方块 + 天光 + 方块光）/ `probeState` / `column(x,z)` / `sampleColumns(x0,z0,step)` /
 `place(x,y,z,blockId,state)` / `dropItem(itemId,count,x,y,z)`，另有 info / 实体列表等。
 
