@@ -20,6 +20,8 @@ import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
 import { Mob } from './core/entity/Mob.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
+import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
+import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
@@ -97,6 +99,9 @@ const END_FOG_NEAR = 48;
 const END_FOG_FAR = 190;
 const END_SKY_BRIGHTNESS = 0.42;
 const END_MIN_BRIGHTNESS = 0.2;
+/** 末影龙的出生点：盘旋圆上的一点（主岛在原点） */
+const DRAGON_SPAWN_X = 0;
+const DRAGON_SPAWN_Z = 46;
 /**
  * 下界的最低亮度下限。
  * 下界光照全靠方块光，而方块光的传播范围有限，远离光源就是纯黑；
@@ -138,6 +143,11 @@ class App {
   readonly stats = new PlayerStats();
   /** 当前维度（与 world.dimension 同步，供渲染与环境使用） */
   private dimension: DimensionId = Dimension.OVERWORLD;
+  /** 末影龙（进入末地时生成；HUD 血条与水晶回血都要用它） */
+  private endDragon: Dragon | null = null;
+  /** 末影龙血条（触摸端也共用；元素不存在时为 null） */
+  private bossBarEl: HTMLElement | null = null;
+  private bossFillEl: HTMLElement | null = null;
   /** 下界的背景色（暗红雾） */
   private readonly netherBackground = new THREE.Color(NETHER_FOG);
   /** 末地的背景色（星空黑） */
@@ -259,6 +269,8 @@ class App {
     this.scene.add(this.weather.object);
     // 生物亮度直接用方块材质的天光倍率，保证与地形明暗一致
     this.mobRenderer = new MobRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
+    this.bossBarEl = document.getElementById('boss-bar');
+    this.bossFillEl = document.getElementById('boss-fill');
     this.applyEnvironment();
 
     // 网格化放在独立 Worker 池里：地形生成的 Worker 忙于长任务，混在一起会互相拖慢。
@@ -890,7 +902,52 @@ class App {
       if (entity instanceof Mob) mobs.push(entity);
     }
     this.mobRenderer.update(mobs, this.camera, dt, sampleLight);
+    this.updateEndBoss();
     this.updateMobSpawning(dt);
+  }
+
+  /**
+   * 末地 boss 的生成与状态同步。
+   *
+   * 生成时机放在"进入末地"而不是世界初始化：龙与水晶只属于末地，
+   * 主世界/下界不该白白维护这两个实体（也会被区块卸载逻辑来回清理）。
+   */
+  private updateEndBoss(): void {
+    // 水晶数量决定龙是否回血（原版机制）
+    if (this.endDragon && !this.endDragon.dead) {
+      let crystals = 0;
+      for (const entity of this.entities.all) {
+        if (entity instanceof EndCrystal && !entity.dead) crystals++;
+      }
+      this.endDragon.crystalCount = crystals;
+    }
+
+    // 血条
+    if (this.bossBarEl && this.bossFillEl) {
+      const dragon = this.endDragon;
+      const show = this.dimension === Dimension.END && dragon !== null && !dragon.dead;
+      this.bossBarEl.classList.toggle('on', show);
+      if (show && dragon) {
+        const ratio = Math.max(0, Math.min(1, dragon.health / DRAGON_TYPE.health));
+        this.bossFillEl.style.width = `${(ratio * 100).toFixed(1)}%`;
+      }
+    }
+  }
+
+  /**
+   * 在末地主岛上方生成末影龙，并在 10 根黑曜石柱顶生成末地水晶。
+   * 柱顶坐标由 `endPillarTops` 给出——与 Worker 里生成柱子的算法同源，位置必然对得上。
+   */
+  private spawnEndBoss(): void {
+    if (this.endDragon && !this.endDragon.dead) return;
+
+    const dragon = new Dragon(DRAGON_SPAWN_X, DRAGON_CRUISE_Y, DRAGON_SPAWN_Z, 0);
+    this.entities.spawn(dragon);
+    this.endDragon = dragon;
+
+    for (const top of endPillarTops(this.world.seed)) {
+      this.entities.spawn(new EndCrystal(top.x + 0.5, top.y + 0.5, top.z + 0.5));
+    }
   }
 
   /**
@@ -1330,8 +1387,27 @@ class App {
     this.lastCenterCx = Number.NaN;
     this.lastCenterCz = Number.NaN;
     this.weather.setKind('clear');
+    if (dimension === Dimension.END) this.spawnEndBoss();
     this.applyEnvironment();
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+  }
+
+  /**
+   * 末影龙状态（调试与自动化验收用）；没有龙时为 null。
+   * 血条的宽度、阶段、位置都能从这里读到，不必去扒 DOM。
+   */
+  get dragon(): { health: number; max: number; stage: string; x: number; y: number; z: number; crystals: number } | null {
+    const dragon = this.endDragon;
+    if (!dragon || dragon.dead) return null;
+    return {
+      health: dragon.health,
+      max: DRAGON_TYPE.health,
+      stage: dragon.stage,
+      x: dragon.x,
+      y: dragon.y,
+      z: dragon.z,
+      crystals: dragon.crystalCount,
+    };
   }
 
   /** 按「主世界 → 下界 → 末地 → 主世界」循环切维度（N 键与调试脚本共用） */

@@ -77,6 +77,24 @@ export interface IslandInfo {
   radius: number;
 }
 
+/**
+ * 10 根黑曜石柱的顶部坐标（柱顶基岩之上那一格）。
+ *
+ * 独立成一个不依赖类实例的函数：主线程要用它在柱顶生成末地水晶，
+ * 而地形生成在 Worker 里——两边必须算出**完全相同**的柱子位置。
+ */
+export function endPillarTops(seed: number): Array<{ x: number; y: number; z: number }> {
+  const out: Array<{ x: number; y: number; z: number }> = [];
+  for (let i = 0; i < PILLAR_COUNT; i++) {
+    const angle = (i / PILLAR_COUNT) * Math.PI * 2;
+    const x = Math.round(Math.cos(angle) * PILLAR_RING);
+    const z = Math.round(Math.sin(angle) * PILLAR_RING);
+    const height = 76 + Math.floor(hashAt(i, 31, seed ^ 0x9f9f) * 28);
+    out.push({ x, y: height + 1, z });
+  }
+  return out;
+}
+
 export class EndGenerator {
   private readonly detail: NormalNoise;
   private readonly seed: number;
@@ -151,6 +169,11 @@ export class EndGenerator {
     if (distance < MAIN_ISLAND_RADIUS * 1.25) return this.mainIsland(x, z, distance);
     if (distance < OUTER_ISLAND_START) return null;
     return this.outerIsland(x, z);
+  }
+
+  /** 10 根黑曜石柱的顶部坐标（柱顶基座之上），供末地水晶使用 */
+  pillarTops(): Array<{ x: number; y: number; z: number }> {
+    return endPillarTops(this.seed);
   }
 
   /** 岛面高度（供地物使用）；没有岛返回 null */
@@ -310,11 +333,10 @@ export class EndGenerator {
    */
   private buildPillars(blocks: Uint8Array, cx: number, cz: number): void {
     const w = new FeatureWriter(blocks, cx, cz);
-    for (let i = 0; i < PILLAR_COUNT; i++) {
-      const angle = (i / PILLAR_COUNT) * Math.PI * 2;
-      const px = Math.round(Math.cos(angle) * PILLAR_RING);
-      const pz = Math.round(Math.sin(angle) * PILLAR_RING);
-      const height = 76 + Math.floor(hashAt(i, 31, this.seed ^ 0x9f9f) * 28);
+    for (const top of endPillarTops(this.seed)) {
+      const px = top.x;
+      const pz = top.z;
+      const height = top.y - 1;
 
       for (let y = MAIN_ISLAND_TOP; y < height; y++) {
         // 3×3 的柱子，四角砍掉（截面接近"十字柱"）

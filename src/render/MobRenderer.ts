@@ -17,9 +17,11 @@ import * as THREE from 'three';
 import type { Mob } from '../core/entity/Mob.ts';
 import type { MobType } from '../core/entity/Mob.ts';
 
-type ModelKind = 'humanoid' | 'quadruped' | 'bird';
+type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal';
 
 function modelKindOf(typeId: string): ModelKind {
+  if (typeId === 'ender_dragon') return 'dragon';
+  if (typeId === 'end_crystal') return 'crystal';
   if (typeId === 'chicken') return 'bird';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   return 'humanoid';
@@ -93,8 +95,44 @@ function birdBoxes(type: MobType): BoxSpec[] {
   ];
 }
 
+/**
+ * 末影龙：长条躯干 + 头 + 尾巴 + 两片大翼。
+ * 前两个盒子（翼）会被当作"腿"参与摆动，但转的是 z 轴（扇翅）。
+ */
+function dragonBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  return [
+    // 两片翼（索引 0、1 → 扇翅用）
+    { width: w * 1.5, height: h * 0.08, depth: h * 0.7, x: -w * 0.85, y: h * 0.55, z: -h * 0.1, color: 'accent' },
+    { width: w * 1.5, height: h * 0.08, depth: h * 0.7, x: w * 0.85, y: h * 0.55, z: -h * 0.1, color: 'accent' },
+    // 躯干
+    { width: w * 0.75, height: h * 0.55, depth: h * 1.5, x: 0, y: h * 0.5, z: 0, color: 'body' },
+    // 颈与头
+    { width: w * 0.34, height: h * 0.3, depth: h * 0.5, x: 0, y: h * 0.66, z: h * 0.85, color: 'body' },
+    { width: w * 0.42, height: h * 0.36, depth: h * 0.5, x: 0, y: h * 0.7, z: h * 1.2, color: 'body' },
+    // 双眼
+    { width: w * 0.11, height: h * 0.09, depth: h * 0.06, x: -w * 0.13, y: h * 0.78, z: h * 1.42, color: 'eye' },
+    { width: w * 0.11, height: h * 0.09, depth: h * 0.06, x: w * 0.13, y: h * 0.78, z: h * 1.42, color: 'eye' },
+    // 尾巴（两段，越往后越细）
+    { width: w * 0.3, height: h * 0.26, depth: h * 0.7, x: 0, y: h * 0.5, z: -h * 0.9, color: 'body' },
+    { width: w * 0.16, height: h * 0.16, depth: h * 0.6, x: 0, y: h * 0.5, z: -h * 1.5, color: 'accent' },
+  ];
+}
+
+/** 末地水晶：一块悬浮的发光方块 + 上下两个尖角 */
+function crystalBoxes(): BoxSpec[] {
+  return [
+    { width: 0.9, height: 0.9, depth: 0.9, x: 0, y: 0.5, z: 0, color: 'accent' },
+    { width: 0.45, height: 0.45, depth: 0.45, x: 0, y: 1.15, z: 0, color: 'body' },
+    { width: 0.45, height: 0.45, depth: 0.45, x: 0, y: -0.15, z: 0, color: 'body' },
+  ];
+}
+
 interface MobVisual {
   group: THREE.Group;
+  /** 模型族（决定"腿"怎么摆） */
+  kind: ModelKind;
   /** 逐块材质（亮度按光照单独缩放） */
   materials: THREE.MeshBasicMaterial[];
   baseColors: readonly number[];
@@ -166,11 +204,24 @@ export class MobRenderer {
         );
       }
 
-      // ---- 走路摆腿
-      const speed = Math.hypot(mob.vx, mob.vz);
-      const swing = Math.sin(this.elapsed * 9) * Math.min(0.6, speed * 0.28);
-      for (let i = 0; i < visual.legs.length; i++) {
-        visual.legs[i]!.rotation.x = i % 2 === 0 ? swing : -swing;
+      // ---- 走路摆腿 / 龙的扇翅 / 水晶自转
+      if (visual.kind === 'dragon') {
+        // 翅膀绕 z 轴扇动；俯冲时扇得更快（用水平速度近似）
+        const speed = Math.hypot(mob.vx, mob.vz);
+        const flap = Math.sin(this.elapsed * (5 + speed * 0.15)) * 0.55;
+        for (let i = 0; i < visual.legs.length; i++) {
+          visual.legs[i]!.rotation.z = i % 2 === 0 ? flap : -flap;
+        }
+      } else if (visual.kind === 'crystal') {
+        // 水晶缓慢自转 + 轻微上下浮动
+        visual.group.rotation.y += dt * 0.8;
+        visual.group.position.y = mob.y + Math.sin(this.elapsed * 1.6) * 0.12;
+      } else {
+        const speed = Math.hypot(mob.vx, mob.vz);
+        const swing = Math.sin(this.elapsed * 9) * Math.min(0.6, speed * 0.28);
+        for (let i = 0; i < visual.legs.length; i++) {
+          visual.legs[i]!.rotation.x = i % 2 === 0 ? swing : -swing;
+        }
       }
     }
 
@@ -190,7 +241,16 @@ export class MobRenderer {
   private createVisual(mob: Mob): MobVisual {
     const type = mob.type;
     const kind = modelKindOf(type.id);
-    const specs = kind === 'humanoid' ? humanoidBoxes(type) : kind === 'quadruped' ? quadrupedBoxes(type) : birdBoxes(type);
+    const specs =
+      kind === 'dragon'
+        ? dragonBoxes(type)
+        : kind === 'crystal'
+          ? crystalBoxes()
+          : kind === 'humanoid'
+            ? humanoidBoxes(type)
+            : kind === 'quadruped'
+              ? quadrupedBoxes(type)
+              : birdBoxes(type);
 
     const group = new THREE.Group();
     const materials: THREE.MeshBasicMaterial[] = [];
@@ -204,8 +264,8 @@ export class MobRenderer {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(spec.width, spec.height, spec.depth), material);
       mesh.position.set(spec.x, spec.y, spec.z);
 
-      // 前 2（人形）/ 前 4（四足）/ 前 2（鸟）个盒子是腿，参与摆动
-      const legCount = kind === 'quadruped' ? 4 : 2;
+      // 前 2（人形 / 鸟 / 龙的翅膀）/ 前 4（四足）个盒子参与摆动
+      const legCount = kind === 'quadruped' ? 4 : kind === 'crystal' ? 0 : 2;
       if (i < legCount) legs.push(mesh);
 
       group.add(mesh);
@@ -214,7 +274,7 @@ export class MobRenderer {
     }
 
     this.object.add(group);
-    return { group, materials, baseColors, legs, colors: { body: type.bodyColor, accent: type.accentColor } };
+    return { group, kind, materials, baseColors, legs, colors: { body: type.bodyColor, accent: type.accentColor } };
   }
 
   dispose(): void {
