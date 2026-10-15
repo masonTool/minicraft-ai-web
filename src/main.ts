@@ -81,6 +81,7 @@ import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/enti
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
+import { BlockOverlay, DAMAGE_STAGES } from './render/BlockOverlay.ts';
 import { ParticleSystem } from './render/ParticleSystem.ts';
 import { HandRenderer } from './render/HandRenderer.ts';
 import { PlayerRenderer } from './render/PlayerRenderer.ts';
@@ -313,6 +314,8 @@ class App {
   private respawnCountdown = 0;
   /** 这一条命是否已经结算过死亡掉落（避免每帧都掉一次） */
   private deathHandled = false;
+  /** 验收脚本用：强制显示的破坏阶段（-1 = 走正常逻辑） */
+  private forcedDamageStage = -1;
   /** 计划刻队列（流体等"延迟若干 tick 再处理"的方块） */
   private readonly scheduler = new TickScheduler();
   /** 随机刻看到的世界（掉落回调接到掉落物系统上） */
@@ -355,6 +358,8 @@ class App {
   private readonly translucentMaterial: VoxelMaterial;
   private readonly skyColor: THREE.Color;
   private readonly outline = new BlockOutline();
+  /** 破坏裂纹与命中面高亮（G2 / G3） */
+  private readonly blockOverlay: BlockOverlay;
   private readonly physics = new PlayerPhysics();
   private readonly inventory = new Inventory();
   private readonly inventoryScreen: InventoryScreen;
@@ -544,6 +549,8 @@ class App {
       this.meshPool,
     );
     this.scene.add(this.outline.object);
+    this.blockOverlay = new BlockOverlay(atlas);
+    this.scene.add(this.blockOverlay.object);
 
     this.world.events = {
       onChunkLoaded: (chunk) => {
@@ -1548,6 +1555,7 @@ class App {
     if (this.uiOpen) {
       this.hit = null;
       this.outline.hide();
+      this.blockOverlay.hide();
       return;
     }
 
@@ -1565,16 +1573,25 @@ class App {
 
     if (this.hit) {
       const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
-      this.outline.show(
-        id,
-        this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z),
-        blockDef(id).shape,
-        this.hit.x,
-        this.hit.y,
-        this.hit.z,
-      );
+      const state = this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z);
+      this.outline.show(id, state, blockDef(id).shape, this.hit.x, this.hit.y, this.hit.z);
+
+      // 破坏裂纹：进度 0~1 映射到 0~(DAMAGE_STAGES-1) 段（原版 10 段）
+      const shape = blockDef(id).shape;
+      if (this.forcedDamageStage >= 0) {
+        // 验收脚本强制指定的阶段（截图对比用，与真实挖掘解耦）
+        this.blockOverlay.showDamage(this.hit.x, this.hit.y, this.hit.z, shape, state, this.forcedDamageStage);
+      } else if (this.breakProgress > 0) {
+        const stage = Math.min(DAMAGE_STAGES - 1, Math.floor(this.breakProgress * DAMAGE_STAGES));
+        this.blockOverlay.showDamage(this.hit.x, this.hit.y, this.hit.z, shape, state, stage);
+      } else {
+        this.blockOverlay.hideDamage();
+      }
+      // 命中面高亮：让玩家看清这一下打在哪一面
+      this.blockOverlay.showHighlight(this.hit.x, this.hit.y, this.hit.z, [this.hit.nx, this.hit.ny, this.hit.nz]);
     } else {
       this.outline.hide();
+      this.blockOverlay.hide();
     }
 
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
@@ -1918,6 +1935,14 @@ class App {
   runCommand(text: string): string[] {
     this.handleChatSubmit(text);
     return this.chat.messageLines;
+  }
+
+  /**
+   * 验收脚本用：强制显示某个阶段的破坏裂纹（-1 = 恢复正常逻辑）。
+   * 有了它就能在不真正挖掘的情况下截图对比"有裂纹/没裂纹"。
+   */
+  forceDamageStage(stage: number): void {
+    this.forcedDamageStage = stage;
   }
 
   /** 验收脚本用：打开聊天输入框（模拟按 T） */
@@ -2988,6 +3013,7 @@ class App {
     this.meshPool.dispose();
     this.world.dispose();
     this.outline.dispose();
+    this.blockOverlay.dispose();
   }
 
   // ---------------------------------------------------------------- 开发调试接口
@@ -3273,6 +3299,10 @@ class App {
     fluidChanges: number;
     /** 爆炸累计炸掉的方块数（验收用） */
     explosionBlocks: number;
+    /** 当前破坏裂纹阶段（-1 = 没在挖；验收用） */
+    damageStage: number;
+    /** 命中面高亮是否可见（验收用） */
+    faceHighlight: boolean;
     /** 物品提示框当前显示的文字（验收用） */
     tooltip: string;
     /** 当前视角模式（F7 验收用） */
@@ -3304,6 +3334,8 @@ class App {
       scheduledTicks: this.scheduler.size,
       fluidChanges: this.fluidChanges,
       explosionBlocks: this.explosionBlocks,
+      damageStage: this.blockOverlay.damageStage,
+      faceHighlight: this.blockOverlay.highlightVisible,
       tooltip: this.tooltip.text,
       fps: this.fps,
       chunks: this.world.chunks.size,

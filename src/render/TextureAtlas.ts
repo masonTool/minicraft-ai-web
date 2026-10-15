@@ -349,6 +349,57 @@ const cobblestonePainter: Painter = (x, y, rng) => {
   return [clamp255(v), clamp255(v), clamp255(v), 255];
 };
 
+/**
+ * 破坏裂纹（10 个阶段）。
+ *
+ * 做法：先摆好一组裂纹线段（每条带一个"第几阶段开始出现"的门槛），
+ * 某阶段的贴图只画门槛 ≤ 自己的那些线段；线段附近 1 像素内画成深灰，
+ * 其余像素完全透明。这样 10 张贴图是**同一条裂纹逐渐加深**，
+ * 而不是 10 个互不相干的随机图案（后者看起来像闪烁）。
+ */
+const CRACK_SEGMENTS: ReadonlyArray<{ x0: number; y0: number; x1: number; y1: number; stage: number }> = [
+  { x0: 7.5, y0: 7.5, x1: 2.5, y1: 3.5, stage: 0 },
+  { x0: 7.5, y0: 7.5, x1: 12.5, y1: 4.5, stage: 0 },
+  { x0: 2.5, y0: 3.5, x1: 1.5, y1: 0.5, stage: 1 },
+  { x0: 12.5, y0: 4.5, x1: 15.0, y1: 2.0, stage: 2 },
+  { x0: 7.5, y0: 7.5, x1: 9.5, y1: 13.5, stage: 3 },
+  { x0: 7.5, y0: 7.5, x1: 3.0, y1: 12.0, stage: 4 },
+  { x0: 9.5, y0: 13.5, x1: 11.5, y1: 15.0, stage: 5 },
+  { x0: 3.0, y0: 12.0, x1: 1.0, y1: 14.5, stage: 6 },
+  { x0: 10.5, y0: 5.0, x1: 14.0, y1: 8.5, stage: 7 },
+  { x0: 5.0, y0: 10.5, x1: 2.0, y1: 8.0, stage: 8 },
+  { x0: 1.5, y0: 0.5, x1: 0.5, y1: 3.0, stage: 9 },
+];
+
+/** 点到线段的最短距离 */
+function distanceToSegment(px: number, py: number, x0: number, y0: number, x1: number, y1: number): number {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const lengthSq = dx * dx + dy * dy;
+  const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / lengthSq));
+  return Math.hypot(px - (x0 + t * dx), py - (y0 + t * dy));
+}
+
+/** 生成"第 stage 阶段"的裂纹画师（纯函数，同一阶段每次画都一样） */
+function crackPainter(stage: number): Painter {
+  return (x, y) => {
+    const px = x + 0.5;
+    const py = y + 0.5;
+    let nearest = Infinity;
+    for (const segment of CRACK_SEGMENTS) {
+      if (segment.stage > stage) continue;
+      const distance = distanceToSegment(px, py, segment.x0, segment.y0, segment.x1, segment.y1);
+      if (distance < nearest) nearest = distance;
+    }
+    if (nearest > 1.1) return [0, 0, 0, 0];
+    // 越靠近裂纹中心越黑、越不透明；边缘 1 像素内做渐变，避免锯齿
+    const edge = Math.max(0, 1 - nearest / 1.1);
+    const alpha = Math.round(255 * Math.min(1, edge * 1.6) * 0.92);
+    const shade = Math.round(18 + (1 - edge) * 34);
+    return [shade, shade, shade, alpha];
+  };
+}
+
 const PAINTERS: Record<string, Painter> = {
   stone: STONE_BASE(),
   cobblestone: cobblestonePainter,
@@ -606,6 +657,16 @@ const PAINTERS: Record<string, Painter> = {
   chiseled_deepslate: chiseledPainter([84, 84, 90]),
   bricks: brickPainter([150, 84, 66]),
   polished_deepslate: layered(90, 2, 3),
+  destroy_stage_0: crackPainter(0),
+  destroy_stage_1: crackPainter(1),
+  destroy_stage_2: crackPainter(2),
+  destroy_stage_3: crackPainter(3),
+  destroy_stage_4: crackPainter(4),
+  destroy_stage_5: crackPainter(5),
+  destroy_stage_6: crackPainter(6),
+  destroy_stage_7: crackPainter(7),
+  destroy_stage_8: crackPainter(8),
+  destroy_stage_9: crackPainter(9),
 };
 
 // 木材：6 种木头的 4 张贴图统一由 WOOD_TYPES 生成——加一种木头只需往配色表加一行

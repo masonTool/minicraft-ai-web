@@ -292,6 +292,17 @@ export const TILE_ORDER = [
   'piston_head',
   'observer_top',
   'observer_side',
+  // 破坏裂纹（10 个阶段）：每一阶段比上一阶段多露出一段裂纹
+  'destroy_stage_0',
+  'destroy_stage_1',
+  'destroy_stage_2',
+  'destroy_stage_3',
+  'destroy_stage_4',
+  'destroy_stage_5',
+  'destroy_stage_6',
+  'destroy_stage_7',
+  'destroy_stage_8',
+  'destroy_stage_9',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

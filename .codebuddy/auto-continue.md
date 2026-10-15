@@ -180,7 +180,7 @@
 - [x] M5 命令系统：聊天输入框（`T`/`/` 打开、Enter 提交、↑↓ 历史）+ 命令注册表
       （`/help /tp /give /clear /time /weather /summon /kill /setblock /fill /difficulty
       /gamerule /effect /gamemode /seed /list`），解析层是纯函数、可离线测
-- [~] I7 难度（和平/简单/普通/困难：影响生物伤害与刷怪、自然回复速率）+ 世界创建时可选；
+- [x] I7 难度（已完成：见 TASKS 的 I7，随世界保存 + 新建世界可选 + /difficulty 回写）
       I11 游戏规则（keepInventory / doMobSpawning / mobGriefing / randomTickSpeed /
       doDaylightCycle / naturalRegeneration），按世界存进存档
 - [x] I4 状态效果（**30 种**）（速度/缓慢/跳跃/生命恢复/抗性/中毒/凋零/夜视/失明/黑暗/
@@ -188,7 +188,7 @@
 - [x] B6 方块行为接口 + 随机刻 / 计划刻调度：草方块蔓延与退化、树叶消失（无原木时）、
       水与岩浆的计划刻接入点；randomTickSpeed 由游戏规则控制
 - [x] B8 流体流动：水 7 格扩散 + 液面高度 + 无限水源；岩浆更慢更短；流动刻调度
-- [ ] G2 命中面高亮 + G3 破坏裂纹动画（10 阶段）
+- [x] G2 命中面高亮 + G3 破坏裂纹动画（10 阶段）
 - [ ] 有余力再做：E12 水面动画（UV 滚动 + 顶点起伏）
 
 > 用户本轮要求"尽量做多一点"，故一次排了 6 项。每项独立提交，做完一项就把这里的 `[ ]`

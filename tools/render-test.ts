@@ -23,6 +23,7 @@ import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from '../src
 import { PARTICLE_POOL, ParticleSystem } from '../src/render/ParticleSystem.ts';
 import { ScreenEffects } from '../src/render/ScreenEffects.ts';
 import { HandRenderer } from '../src/render/HandRenderer.ts';
+import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
 import { srgbColor } from '../src/render/srgb.ts';
 
 let passed = 0;
@@ -49,8 +50,15 @@ const TILE_RECTS: Record<string, [number, number, number, number]> = {
 
 const stubAtlas = {
   texture: new THREE.Texture(),
+  columns: 16,
+  rows: 18,
   uv(tile: string): [number, number, number, number] {
     return TILE_RECTS[tile] ?? [0, 0, 0, 0];
+  },
+  /** 破坏裂纹叠加层要用它换算贴图起点 */
+  tileOrigin(tile: string): [number, number] {
+    const rect = TILE_RECTS[tile];
+    return rect ? [rect[0], rect[1]] : [0, 0];
   },
 } as unknown as TextureAtlas;
 
@@ -210,6 +218,35 @@ console.log('\n[颜色空间：自定义着色器的平色必须是原始 sRGB]'
   check('水下色罩的蓝色分量是原始值 107', ((effects.state.color & 0xff) === 107), `0x${effects.state.color.toString(16)}`);
   hand.dispose();
   effects.dispose();
+}
+
+// ---------------------------------------------------------------- 2.8 破坏裂纹叠加层
+
+console.log('\n[破坏裂纹与命中面高亮（G2/G3）]');
+{
+  const inward = facesWithInwardWinding();
+  // ⚠️ 这条踩过坑：绕序朝内的面会被背面剔除，表现为"顶面看不见裂纹"
+  check('六个面的顶点绕序全部朝外', inward.length === 0, `朝内的面下标 ${inward.join(',')}`);
+  check('破坏阶段是 10 段（与原版一致）', DAMAGE_STAGES === 10);
+
+  const overlay = new BlockOverlay(stubAtlas);
+  check('初始不显示', overlay.damageStage === -1 && !overlay.highlightVisible);
+  overlay.showDamage(1, 2, 3, 'cube', 0, 0);
+  check('showDamage 之后阶段正确', overlay.damageStage === 0);
+  overlay.showDamage(1, 2, 3, 'cube', 0, 9);
+  check('阶段会跟着进度走', overlay.damageStage === 9);
+  overlay.showDamage(1, 2, 3, 'cube', 0, 42);
+  check('超范围的阶段被夹到 9', overlay.damageStage === 9);
+  overlay.hideDamage();
+  check('hideDamage 之后不显示', overlay.damageStage === -1);
+
+  overlay.showHighlight(1, 2, 3, [0, 1, 0]);
+  check('命中面高亮可以单独显示', overlay.highlightVisible && overlay.damageStage === -1);
+  overlay.showHighlight(1, 2, 3, [5, 0, 0]);
+  check('法线只取符号（不必是单位向量）', overlay.highlightVisible);
+  overlay.hide();
+  check('hide 一次性收起两者', !overlay.highlightVisible && overlay.damageStage === -1);
+  overlay.dispose();
 }
 
 // ---------------------------------------------------------------- 3. 视野效果

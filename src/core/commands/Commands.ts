@@ -461,7 +461,8 @@ export const COMMANDS: readonly CommandSpec[] = [
     name: 'gamemode',
     usage: '/gamemode <creative|survival>',
     description: '切换创造/生存（创造 = 飞行 + 不受伤 + 秒破）',
-    creativeOnly: true,
+    // ⚠️ 故意**不设** creativeOnly：否则一旦切到生存就再也切不回来了
+    // （其他创造专用命令仍然要求创造模式）。原版这条命令是权限等级控制的。
     run(args, ctx, out) {
       const mode = args[0]?.toLowerCase();
       if (mode !== 'creative' && mode !== 'survival' && mode !== 'c' && mode !== 's') {
