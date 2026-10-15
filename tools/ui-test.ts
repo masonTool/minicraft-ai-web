@@ -14,9 +14,12 @@
 
 import { readFileSync } from 'node:fs';
 import {
+  CARD_PAGE_SIZE_NARROW,
+  CARD_PAGE_SIZE_WIDE,
   NARROW_MAX_WIDTH,
   PAGE_SIZE_NARROW,
   PAGE_SIZE_WIDE,
+  cardPageSizeFor,
   clampPage,
   isNarrowViewport,
   pageCount,
@@ -86,6 +89,15 @@ console.log('\n[物品分页：页码夹取与切片]');
   equal('页码文案：第 9 页', pageLabel(8, 495, 60), '第 9/9 页 · 共 495 件');
   equal('页码文案：越界时也自洽', pageLabel(50, 495, 60), '第 9/9 页 · 共 495 件');
   equal('页码文案：空列表', pageLabel(0, 0, 60), '第 1/1 页 · 共 0 件');
+
+  // 卡片列表（配方书）的页大小：卡片比格子高，所以单独定一套
+  equal('宽屏每页 18 张卡片', CARD_PAGE_SIZE_WIDE, 18);
+  equal('窄屏每页 8 张卡片', CARD_PAGE_SIZE_NARROW, 8);
+  equal('窄屏走小页', cardPageSizeFor(430), CARD_PAGE_SIZE_NARROW);
+  equal('宽屏走大页', cardPageSizeFor(1440), CARD_PAGE_SIZE_WIDE);
+  equal('181 条配方按宽屏分页 = 11 页', pageCount(181, CARD_PAGE_SIZE_WIDE), 11);
+  equal('181 条配方按窄屏分页 = 23 页', pageCount(181, CARD_PAGE_SIZE_NARROW), 23);
+  equal('最后一页只放 1 张（181 - 180）', slicePage(Array.from({ length: 181 }), 10, CARD_PAGE_SIZE_WIDE).length, 1);
 }
 
 // ---------------------------------------------------------------- 2. 图标集

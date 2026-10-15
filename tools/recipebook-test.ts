@@ -26,6 +26,7 @@ import {
   translateName,
 } from '../src/core/registry/itemNames.ts';
 import { RECIPES, type Recipe } from '../src/core/crafting/Recipes.ts';
+import { recipeLayout, stationLabel, trimPattern } from '../src/core/crafting/RecipeLayout.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import {
   buildRecipeEntries,
@@ -50,6 +51,11 @@ function check(label: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+/** 断言两个值相等（摆放位置这一段用得多） */
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
 /** 只实现 countOf 的桩背包 */
@@ -238,6 +244,96 @@ console.log('\n[配方书列表]');
     }
   }
   check('配方里出现的物品都能查到中文名', unknown.length === 0, [...new Set(unknown)].slice(0, 6).join(', '));
+}
+
+// ---------------------------------------------------------------- 摆放位置（批次 29）
+
+console.log('\n[摆放位置：每条配方都画得出来，而且画得对]');
+{
+  // ---- 具体几条：手工核对格子
+  const torch = RECIPES.find((recipe) => recipe.result.id === Block.TORCH)!;
+  const torchLayout = recipeLayout(torch);
+  equal('火把是形状配方', torchLayout.kind, 'shaped');
+  equal('火把只占 2×2（背包就能做）', torchLayout.grid, 2);
+  equal('火把在背包里做', stationLabel(torchLayout.station), '背包 2×2');
+  if (torchLayout.kind === 'shaped') {
+    equal('火把：第 1 格是煤炭（上面）', torchLayout.cells[0], Item.COAL);
+    equal('火把：第 2 格空着', torchLayout.cells[1], null);
+    equal('火把：第 3 格是木棍（下面）', torchLayout.cells[2], Item.STICK);
+    equal('火把：第 4 格空着', torchLayout.cells[3], null);
+    check('火把的说明写了"第 1 行"', torchLayout.text.includes('第 1 行'), torchLayout.text);
+    check('火把的说明写了"空"（空格也是配方的一部分）', torchLayout.text.includes('空'), torchLayout.text);
+  }
+
+  // 镐子：第 1 行三格材料、中间列两根棍（3×3，要工作台）
+  const pick = RECIPES.find(
+    (recipe) => recipe.kind === 'shaped' && itemLabel(recipe.result.id).includes('镐'),
+  )!;
+  const pickLayout = recipeLayout(pick);
+  equal('三行图案的配方占 3×3', pickLayout.grid, 3);
+  equal('3×3 需要工作台', stationLabel(pickLayout.station), '工作台 3×3');
+  if (pickLayout.kind === 'shaped') {
+    const filled = pickLayout.cells.filter((id) => id !== null).length;
+    equal('3×3 的格子里正好放下 5 个材料', filled, 5);
+    // 镐子的形状：上面三格同一种材料、中间那一列竖着两根棍，其余四格空着。
+    // 这条断言专门盯"按列摆"这件事——按顺序平铺也能凑够 5 个材料，但位置就错了
+    equal('第 1 行三格是同一种材料', pickLayout.cells[0] === pickLayout.cells[1] && pickLayout.cells[1] === pickLayout.cells[2], true);
+    equal('第 2 行中间是木棍', pickLayout.cells[4], Item.STICK);
+    equal('第 3 行中间也是木棍', pickLayout.cells[7], Item.STICK);
+    const holes = [3, 5, 6, 8].map((index) => pickLayout.cells[index]);
+    equal('其余四格都是空的', holes.every((id) => id === null), true);
+  }
+
+  // 无序配方：不画格子，只说明"摆哪都行"
+  const shapeless = RECIPES.find((recipe) => recipe.kind === 'shapeless')!;
+  const shapelessLayout = recipeLayout(shapeless);
+  equal('无序配方不画网格', shapelessLayout.kind, 'shapeless');
+  check('无序配方写明"摆哪一格都行"', shapelessLayout.text.includes('无序'), shapelessLayout.text);
+  if (shapelessLayout.kind === 'shapeless') {
+    equal('无序配方的材料逐个列出（数量与材料数一致）', shapelessLayout.items.length, shapeless.ingredients.length);
+  }
+
+  // ---- 全表不变量：181 条配方逐条过
+  let wrongLength = 0;
+  let wrongCount = 0;
+  let outOfKey = 0;
+  let wrongStation = 0;
+  let emptyText = 0;
+  for (const recipe of RECIPES as readonly Recipe[]) {
+    const layout = recipeLayout(recipe);
+    if (!layout.text || layout.text.length === 0) emptyText++;
+    if (layout.grid === 2 !== (layout.station === 'inventory')) wrongStation++;
+    if (layout.kind === 'shapeless') {
+      if (layout.items.length !== recipe.ingredients.length) wrongCount++;
+      continue;
+    }
+    // 格子数 = grid²（空格也占位）
+    if (layout.cells.length !== layout.grid * layout.grid) wrongLength++;
+    // 格子里的东西必须是这条配方真的会用到的东西，且数量与材料表一致
+    const used = new Map<number, number>();
+    for (const id of layout.cells) {
+      if (id === null) continue;
+      used.set(id, (used.get(id) ?? 0) + 1);
+    }
+    const expected = new Map<number, number>();
+    for (const ingredient of recipeIngredients(recipe)) {
+      expected.set(ingredient.id, (expected.get(ingredient.id) ?? 0) + ingredient.count);
+    }
+    const same =
+      used.size === expected.size && [...expected].every(([id, count]) => used.get(id) === count);
+    if (!same) wrongCount++;
+    if ([...used.keys()].some((id) => ![...expected.keys()].includes(id))) outOfKey++;
+  }
+  equal('每条形状配方的格子数都是 grid²', wrongLength, 0);
+  equal('每条配方的格子内容与材料表完全一致（不重不漏）', wrongCount, 0);
+  equal('格子里的物品都来自这条配方的 key', outOfKey, 0);
+  equal('2×2 一定对应"背包"、3×3 一定对应"工作台"', wrongStation, 0);
+  equal('每条配方都有摆放说明', emptyText, 0);
+
+  // ---- 裁剪包围盒：与合成匹配器的口径一致（2×2 图案放 3×3 任意角落都能合成）
+  equal('整行整列的空白会被裁掉', trimPattern(['   ', ' A ', '   ']).join('|'), 'A');
+  equal('保留内部空格', trimPattern(['AB', ' B']).join('|'), 'AB| B');
+  equal('全空图案裁成空数组', trimPattern(['  ', '  ']).length, 0);
 }
 
 function labelOfUnknown(id: number): boolean {
