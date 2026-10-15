@@ -22,6 +22,12 @@ const ARM_WIDTH = 0.15;
 const ARM_LENGTH = 0.75;
 /** 皮肤色（原版默认皮肤的手臂色） */
 const SKIN_COLOR = 0xdc9a6b;
+/**
+ * 胸甲袖套：第一人称下"能看到自己穿着甲"的唯一途径（其余三件在镜头的盲区里）。
+ * 只覆盖手臂靠近肩膀的一段，跟原版一样露出手。
+ */
+const SLEEVE_LENGTH = ARM_LENGTH * 0.45;
+const SLEEVE_RADIUS = ARM_WIDTH * 1.3;
 /** 挥动一次的时间（秒） */
 const SWING_DURATION = 0.26;
 /** 走路时的摆动频率（次/秒）与幅度 */
@@ -81,11 +87,14 @@ export class HandRenderer {
   private readonly group = new THREE.Group();
   /** 手臂（空手时也要画） */
   private readonly arm: THREE.Mesh;
+  /** 胸甲袖套（穿着胸甲时才显示） */
+  private readonly armorSleeve: THREE.Mesh;
   /** 手持物品的挂点（在手臂末端） */
   private readonly itemAnchor = new THREE.Group();
 
   private readonly itemMaterial: THREE.ShaderMaterial;
   private readonly armMaterial: THREE.ShaderMaterial;
+  private readonly sleeveMaterial: THREE.ShaderMaterial;
 
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly spriteGeometries = new Map<number, THREE.BufferGeometry>();
@@ -125,16 +134,37 @@ export class HandRenderer {
       fragmentShader: FRAGMENT_SHADER,
     });
 
+    // 袖套与手臂共用同一套着色器，只是把"平面色"换成盔甲色
+    this.sleeveMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uAtlas: { value: atlas.texture },
+        uFlatColor: { value: srgbColor(0xffffff) },
+        uUseAtlas: { value: 0 },
+        uBrightness: { value: 1 },
+        uAlphaTest: { value: 0 },
+      },
+      vertexShader: VERTEX_SHADER,
+      fragmentShader: FRAGMENT_SHADER,
+    });
+
     const armGeometry = new THREE.BoxGeometry(ARM_WIDTH, ARM_WIDTH, ARM_LENGTH);
     applyFaceShade(armGeometry, FACE_SHADE);
     this.arm = new THREE.Mesh(armGeometry, this.armMaterial);
     // 几何体中心在原点，往 -Z 推半截，让手臂从"手的根部"向外伸
     this.arm.position.set(0, 0, -ARM_LENGTH / 2);
 
+    const sleeveGeometry = new THREE.BoxGeometry(SLEEVE_RADIUS, SLEEVE_RADIUS, SLEEVE_LENGTH);
+    applyFaceShade(sleeveGeometry, FACE_SHADE);
+    this.armorSleeve = new THREE.Mesh(sleeveGeometry, this.sleeveMaterial);
+    // 套在手臂靠近肩膀的一段（手臂从 z=0 往 -Z 伸），默认不显示
+    this.armorSleeve.position.set(0, 0, -SLEEVE_LENGTH / 2 + 0.01);
+    this.armorSleeve.visible = false;
+
     this.itemAnchor.position.set(0, 0, -ARM_LENGTH - ITEM_SIZE * 0.36);
 
-    this.group.add(this.arm);
-    this.group.add(this.itemAnchor);
+    // 顺序固定为「手臂 → 手持物挂点 → 袖套」：挂点必须排在袖套前面，
+    // 否则袖套会挡住手上的东西（袖套比手臂粗一圈）
+    this.group.add(this.arm, this.itemAnchor, this.armorSleeve);
     this.group.position.set(...SHOULDER_POSITION);
     this.group.rotation.set(...SHOULDER_ROTATION);
     this.scene.add(this.group);
@@ -193,9 +223,19 @@ export class HandRenderer {
     this.swingTime = 0;
   }
 
+  /**
+   * 胸甲袖套的颜色（`null` = 没穿胸甲，整块不画）。
+   * 与第三人称的甲片同源：都由调用方从装备图标取色，渲染层不认识"材质"。
+   */
+  setArmorColor(color: number | null): void {
+    this.armorSleeve.visible = color !== null;
+    if (color !== null) this.sleeveMaterial.uniforms.uFlatColor!.value = srgbColor(color);
+  }
+
   setBrightness(value: number): void {
     this.itemMaterial.uniforms.uBrightness!.value = value;
     this.armMaterial.uniforms.uBrightness!.value = value;
+    this.sleeveMaterial.uniforms.uBrightness!.value = value;
   }
 
   /** 每帧动画：挥动弧线 + 走路时的轻微上下摆动 */
@@ -265,8 +305,10 @@ export class HandRenderer {
     this.blockGeometries.clear();
     this.spriteGeometries.clear();
     this.arm.geometry.dispose();
+    this.armorSleeve.geometry.dispose();
     this.itemMaterial.dispose();
     this.armMaterial.dispose();
+    this.sleeveMaterial.dispose();
     this.scene.clear();
   }
 }

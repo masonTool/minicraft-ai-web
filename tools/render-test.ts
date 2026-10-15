@@ -7,6 +7,8 @@
  *     寿命淘汰、池子上限、只上传活跃粒子、清空
  *  3. 视野效果：预设映射、平滑过渡与帧率无关性、回到无色、立即到位
  *  4. 手持物品：切物品、挥手动画的时间窗与位移、亮度同步
+ *  5. 盔甲外观（E14）：三个部位的甲片独立显隐、换材质换色、亮度不累积；
+ *     第一人称只画胸甲袖套（其余三件在镜头盲区）
  *
  * 说明：这些对象在 Node 里可以正常构造 —— `THREE.Points` / `ShaderMaterial` /
  * `BufferGeometry` 都是纯 CPU 对象，只有真正 `render()` 才需要 WebGL 上下文；
@@ -23,6 +25,7 @@ import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from '../src
 import { PARTICLE_POOL, ParticleSystem } from '../src/render/ParticleSystem.ts';
 import { ScreenEffects } from '../src/render/ScreenEffects.ts';
 import { HandRenderer } from '../src/render/HandRenderer.ts';
+import { PlayerRenderer } from '../src/render/PlayerRenderer.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { srgbColor } from '../src/render/srgb.ts';
@@ -38,6 +41,10 @@ function check(label: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
 /** 按贴图名给出固定 UV 的桩图集：石头在 (0,0)-(0.25,0.25)，草方块各面各占一格 */
@@ -368,6 +375,93 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
 
   hand.update(0.016, false, 90, 1.2);
   check('相机会跟着视野设置走', hand.camera.fov === 90 && Math.abs(hand.camera.aspect - 1.2) < 1e-6);
+  hand.dispose();
+}
+
+// ---------------------------------------------------------------- 5. 盔甲（E14）
+
+console.log('\n[盔甲：第三人称甲片]');
+{
+  const scene = new THREE.Scene();
+  const player = new PlayerRenderer(scene, () => 1);
+  player.setVisible(true);
+
+  const plates = player.armorPlates;
+  const visiblePlates = (): number => plates.filter((mesh) => mesh.visible).length;
+
+  // 没穿甲时不该有任何甲片可见（否则身上会多出一层白壳）
+  equal('初始没有任何甲片可见', visiblePlates(), 0);
+  player.setArmor([null, null, null, null]);
+  equal('明确传四个 null 也不显示', visiblePlates(), 0);
+
+  // 只戴头盔：只有头盔的 2 块甲片出现
+  player.setArmor([0x5a3a24, null, null, null]);
+  equal('只戴头盔时只有头盔甲片可见', visiblePlates(), 2);
+
+  // 满套：2 头盔 + 3 胸甲（含两只护肩）+ 3 护腿 + 2 靴子 = 10
+  player.setArmor([0x5a3a24, 0xcdcdd4, 0xcdcdd4, 0xcdcdd4]);
+  equal('整套盔甲共 10 块甲片', visiblePlates(), 10);
+
+  // 颜色：甲片材质取到的是"原始色"，且亮度会乘上去
+  const helmetPlate = plates.find(
+    (mesh) => mesh.visible && (mesh.material as THREE.MeshBasicMaterial).userData.rawColor === 0x5a3a24,
+  );
+  check('头盔甲片用了传入的颜色', helmetPlate !== undefined);
+  const plateMaterial = helmetPlate!.material as THREE.MeshBasicMaterial;
+
+  const pose = { x: 0, y: 70, z: 0, yaw: 0, pitch: 0, walkPhase: 0, walkAmount: 0, swing: 1, flying: false };
+  player.update(pose, () => ({ sky: 0, block: 0 }));
+  // 注意要取数值快照：material.color 是同一个对象，会被下一次 update 就地改写
+  const darkR = plateMaterial.color.r;
+  check('甲片跟着亮度变暗（洞里不会只有身体变暗）', darkR < 0x5a / 255, `r=${darkR.toFixed(3)}`);
+
+  player.update(pose, () => ({ sky: 15, block: 0 }));
+  check(
+    '回到亮处颜色恢复（亮度不会一帧帧累积到变黑）',
+    plateMaterial.color.r > darkR && Math.abs(plateMaterial.color.r - 0x5a / 255) < 1e-6,
+    `暗处 r=${darkR.toFixed(3)}，亮处 r=${plateMaterial.color.r.toFixed(3)}`,
+  );
+
+  // 换材质：颜色跟着换
+  player.setArmor([0x60e4e0, null, null, null]);
+  check(
+    '换成钻石头盔后甲片颜色变了',
+    (helmetPlate!.material as THREE.MeshBasicMaterial).userData.rawColor === 0x60e4e0,
+  );
+
+  // 脱掉再穿：可见性要能来回切
+  player.setArmor([null, null, null, null]);
+  equal('脱下后甲片重新隐藏', visiblePlates(), 0);
+
+  player.dispose();
+}
+
+console.log('\n[盔甲：第一人称袖套]');
+{
+  const hand = new HandRenderer(stubAtlas);
+  const group = hand.scene.children[0] as THREE.Group;
+  const sleeve = group.children[2] as THREE.Mesh;
+  const sleeveMaterial = sleeve.material as THREE.ShaderMaterial;
+
+  check('初始不显示袖套（没穿胸甲）', !sleeve.visible);
+  hand.setArmorColor(0xcdcdd4);
+  check('穿上胸甲后袖套出现', sleeve.visible);
+  const color = sleeveMaterial.uniforms.uFlatColor!.value as THREE.Color;
+  check('袖套颜色与传入的甲片色一致', close(color.r, 0xcd / 255, 1e-6) && close(color.g, 0xcd / 255, 1e-6));
+  // 手臂与袖套都用自己的几何体（不是缩放出来的），所以比的是几何体宽度
+  const armWidth = (group.children[0] as THREE.Mesh).geometry as THREE.BoxGeometry;
+  const sleeveWidth = sleeve.geometry as THREE.BoxGeometry;
+  check(
+    '袖套比手臂粗（套在外面而不是重叠）',
+    sleeveWidth.parameters.width > armWidth.parameters.width,
+    `${sleeveWidth.parameters.width} vs ${armWidth.parameters.width}`,
+  );
+
+  hand.setArmorColor(null);
+  check('脱下胸甲后袖套消失', !sleeve.visible);
+
+  hand.setBrightness(0.35);
+  check('袖套亮度也跟着同步', sleeveMaterial.uniforms.uBrightness!.value === 0.35);
   hand.dispose();
 }
 

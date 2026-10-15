@@ -13,11 +13,20 @@
  *  - **朝向**：本项目 `yaw=0` 时视线是 -Z（见 `PlayerPhysics.lookDirection`），
  *    所以模型的正脸朝 **-Z**，`root.rotation.y = yaw` 后正好与视线一致。
  *
+ * 盔甲（E14）：四个部位各挂一组"比身体略大一圈"的甲片，**跟着所属身体部位一起动**
+ * （头盔挂在头的枢轴上、护肩挂在手臂枢轴上），这样摆腿摆臂时甲片不会穿帮。
+ *
+ * 甲片用的是**纯色**而不是把 `item_<材质>_<部位>` 那张 16×16 图标直接贴上去：
+ *  - 这套模型本来就是"方块拼小人 + 逐面明暗"，把带透明边距的图标贴上去反而像贴纸；
+ *  - 取该图标的**平均色**当甲片颜色（`TextureAtlas.averageColor`），
+ *    于是"背包里看到的图标"和"身上甲片的颜色"同源，换套甲不会出现颜色对不上的情况。
+ *
  * 亮度沿用生物/方块那一套：按模型所在位置采样天光与方块光，乘到材质颜色上，
  * 因此进洞会变暗、站在火把旁会变亮。
  */
 
 import * as THREE from 'three';
+import { ARMOR_SLOT_COUNT } from '../core/registry/armor.ts';
 
 /** 肤色（与第一人称手臂同一个色，切换人称时不会"换个人"） */
 const SKIN = 0xdc9a6b;
@@ -58,6 +67,14 @@ export class PlayerRenderer {
   private readonly armR: THREE.Group;
   private readonly head: THREE.Group;
 
+  /**
+   * 盔甲：每个部位一份材质（同部位的几块甲片共用），材质颜色按装备的材质换。
+   * 用一个数组而不是 Map 是因为部位是固定的 4 个，下标就是背包 36-39 号槽的偏移。
+   */
+  private readonly armorMaterials: THREE.MeshBasicMaterial[] = [];
+  /** 部位 → 该部位的所有甲片（换装备时统一显隐） */
+  private readonly armorMeshes: Map<number, THREE.Mesh[]> = new Map();
+
   constructor(
     private readonly scene: THREE.Scene,
     private readonly skyBrightnessOf: () => number,
@@ -94,6 +111,95 @@ export class PlayerRenderer {
     this.addBox(this.head, 0.1, 0.09, 0.02, 0.13, 0.3, -0.255, EYE);
     this.addBox(this.head, 0.1, 0.09, 0.02, -0.13, 0.3, -0.255, EYE);
     this.addBox(this.head, 0.13, 0.03, 0.02, 0, 0.15, -0.255, EYE);
+
+    this.buildArmor();
+  }
+
+  /**
+   * 盔甲甲片（E14）。
+   *
+   * 部位编号与背包槽位一一对应：0 头盔 / 1 胸甲 / 2 护腿 / 3 靴子。
+   * 尺寸都比对应的身体部位大 0.02~0.06 格，靠"套在外面"而不是 z-fighting 来分层。
+   * 挂点按"这块甲跟着谁动"来选：护肩挂手臂、大腿甲与靴子挂腿、头盔挂头。
+   */
+  private buildArmor(): void {
+    const HELMET = 0;
+    const CHEST = 1;
+    const LEGS = 2;
+    const BOOTS = 3;
+
+    // 头盔：罩住整个脑袋（含头发），下面再压一圈帽檐，但不挡到眼睛（五官在 y=0.3）
+    this.addArmorBox(HELMET, this.head, 0.56, 0.48, 0.56, 0, 0.28, 0);
+    this.addArmorBox(HELMET, this.head, 0.5, 0.1, 0.62, 0, 0.06, -0.02);
+
+    // 胸甲：躯干上段 + 两只护肩（护肩必须挂在手臂枢轴上，抬手时跟着走）
+    this.addArmorBox(CHEST, this.object, 0.56, 0.52, 0.34, 0, 1.2, 0);
+    this.addArmorBox(CHEST, this.armL, 0.28, 0.2, 0.28, 0, -0.04, 0);
+    this.addArmorBox(CHEST, this.armR, 0.28, 0.2, 0.28, 0, -0.04, 0);
+
+    // 护腿：髋部一圈 + 两条大腿
+    this.addArmorBox(LEGS, this.object, 0.56, 0.24, 0.32, 0, 0.72, 0);
+    this.addArmorBox(LEGS, this.legL, 0.28, 0.36, 0.28, 0, -0.2, 0);
+    this.addArmorBox(LEGS, this.legR, 0.28, 0.36, 0.28, 0, -0.2, 0);
+
+    // 靴子：连鞋一起裹住
+    this.addArmorBox(BOOTS, this.legL, 0.3, 0.22, 0.32, 0, -0.64, -0.01);
+    this.addArmorBox(BOOTS, this.legR, 0.3, 0.22, 0.32, 0, -0.64, -0.01);
+  }
+
+  private addArmorBox(
+    slot: number,
+    parent: THREE.Object3D,
+    width: number,
+    height: number,
+    depth: number,
+    x: number,
+    y: number,
+    z: number,
+  ): void {
+    let material = this.armorMaterials[slot];
+    if (!material) {
+      material = new THREE.MeshBasicMaterial();
+      this.setBaseColor(material, 0xffffff);
+      this.armorMaterials[slot] = material;
+    }
+    const mesh = new THREE.Mesh(this.geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.scale.set(width, height, depth);
+    // 默认不显示：没穿盔甲时身上不该多出一层白壳
+    mesh.visible = false;
+    parent.add(mesh);
+    const list = this.armorMeshes.get(slot);
+    if (list) list.push(mesh);
+    else this.armorMeshes.set(slot, [mesh]);
+  }
+
+  /** 全部甲片网格（是否可见由 `setArmor` 决定）；离线测试与调试用 */
+  get armorPlates(): readonly THREE.Mesh[] {
+    const plates: THREE.Mesh[] = [];
+    for (const meshes of this.armorMeshes.values()) plates.push(...meshes);
+    return plates;
+  }
+
+  /**
+   * 换装备。数组下标 = 背包 36-39 号槽的偏移，值为甲片颜色（`null` = 该部位空着）。
+   *
+   * 颜色由调用方给（`main` 取装备图标贴图的平均色）：渲染层不认识"材质"，
+   * 也就不会在加一种盔甲材质时漏改这里。
+   */
+  setArmor(colors: readonly (number | null)[]): void {
+    for (let slot = 0; slot < ARMOR_SLOT_COUNT; slot++) {
+      const material = this.armorMaterials[slot];
+      const meshes = this.armorMeshes.get(slot);
+      if (!material || !meshes) continue;
+      const color = colors[slot] ?? null;
+      for (const mesh of meshes) mesh.visible = color !== null;
+      // 颜色没变就别重算：`setBaseColor` 会新建一个对象，逐帧调用会平白产生垃圾
+      if (color !== null && material.userData.rawColor !== color) {
+        material.userData.rawColor = color;
+        this.setBaseColor(material, color);
+      }
+    }
   }
 
   /** 造一个挂点（枢轴），加到根节点上 */
@@ -126,23 +232,27 @@ export class PlayerRenderer {
     let material = this.materials.get(color);
     if (!material) {
       material = new THREE.MeshBasicMaterial();
-      // 原始分量要先存起来：逐帧的亮度会覆盖 material.color，
-      // 下一次必须从"原始色"重新乘，否则亮度会一帧帧累积下去直到变黑。
-      // 数值口径与 `MobRenderer` 一致（同样是"分量当线性值 + MeshBasicMaterial"），
-      // 这样玩家和生物在同一个场景里的明暗表现完全相同。
-      material.userData.base = {
-        r: ((color >> 16) & 0xff) / 255,
-        g: ((color >> 8) & 0xff) / 255,
-        b: (color & 0xff) / 255,
-      };
-      material.color.setRGB(
-        (material.userData.base as { r: number }).r,
-        (material.userData.base as { g: number }).g,
-        (material.userData.base as { b: number }).b,
-      );
+      this.setBaseColor(material, color);
       this.materials.set(color, material);
     }
     return material;
+  }
+
+  /**
+   * 记下"原始色"并把当前颜色设成它。
+   *
+   * 原始分量必须先存起来：逐帧的亮度会覆盖 `material.color`，下一次必须从原始色重新乘，
+   * 否则亮度会一帧帧累积下去直到变黑。数值口径与 `MobRenderer` 一致
+   * （同样是"分量当线性值 + MeshBasicMaterial"），这样玩家和生物在同一场景里的明暗表现完全相同。
+   */
+  private setBaseColor(material: THREE.MeshBasicMaterial, color: number): void {
+    const base = {
+      r: ((color >> 16) & 0xff) / 255,
+      g: ((color >> 8) & 0xff) / 255,
+      b: (color & 0xff) / 255,
+    };
+    material.userData.base = base;
+    material.color.setRGB(base.r, base.g, base.b);
   }
 
   setVisible(visible: boolean): void {
@@ -197,10 +307,14 @@ export class PlayerRenderer {
     const level = Math.max((sky / 15) * this.skyBrightnessOf(), block / 15);
     const brightness = Math.max(level / (4 - 3 * level), 0.08);
 
-    for (const material of this.materials.values()) {
-      const base = material.userData.base as { r: number; g: number; b: number };
-      material.color.setRGB(base.r * brightness, base.g * brightness, base.b * brightness);
-    }
+    for (const material of this.materials.values()) this.applyBrightness(material, brightness);
+    // 甲片跟着一起明暗变化，否则站在洞里只有身体变暗、甲还是亮的
+    for (const material of this.armorMaterials) this.applyBrightness(material, brightness);
+  }
+
+  private applyBrightness(material: THREE.MeshBasicMaterial, brightness: number): void {
+    const base = material.userData.base as { r: number; g: number; b: number };
+    material.color.setRGB(base.r * brightness, base.g * brightness, base.b * brightness);
   }
 
   dispose(): void {
@@ -208,6 +322,7 @@ export class PlayerRenderer {
     this.object.clear();
     for (const material of this.materials.values()) material.dispose();
     this.materials.clear();
+    for (const material of this.armorMaterials) material.dispose();
     this.geometry.dispose();
   }
 }

@@ -90,7 +90,15 @@ import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, blockDef } from './core/registry/blocks.ts';
-import { ARMOR_TYPES, armorItemId, createArmorWearer } from './core/registry/armor.ts';
+import {
+  ARMOR_SLOT_BASE,
+  ARMOR_SLOT_COUNT,
+  ARMOR_TYPES,
+  armorInfoById,
+  armorItemId,
+  armorTile,
+  createArmorWearer,
+} from './core/registry/armor.ts';
 import {
   breakSeconds,
   canHarvest,
@@ -490,6 +498,10 @@ class App {
   private placeCooldown = 0;
   private leftDown = false;
   private rightDown = false;
+
+  /** 盔甲外观：装备 id 串成的 key（变了才重算颜色）与四个部位的甲片颜色 */
+  private armorKey = 'init';
+  private readonly armorColors: (number | null)[] = [null, null, null, null];
 
   /** 方块改动后等待光照收敛、需要再次重刷网格的坐标 */
   private readonly pendingSettle: number[] = [];
@@ -1363,6 +1375,34 @@ class App {
   }
 
   /**
+   * 把身上这套盔甲"长"到模型上（E14）。
+   *
+   * 甲片颜色取**该件装备图标贴图的平均色**（`TextureAtlas.averageColor` 自带缓存），
+   * 于是"背包里看到的图标"和"第三人称身上甲片的颜色"同源，换套甲不会出现颜色对不上；
+   * 渲染层因此也不需要认识"盔甲材质"这个概念，加一种材质不必改渲染代码。
+   *
+   * 装备没变时 `setArmor` 只做几次比较，所以逐帧调用不会产生垃圾。
+   */
+  private applyArmorAppearance(): void {
+    let key = '';
+    for (let slot = 0; slot < ARMOR_SLOT_COUNT; slot++) {
+      key += `${this.inventory.get(ARMOR_SLOT_BASE + slot)?.id ?? 0},`;
+    }
+    if (key === this.armorKey) return;
+    this.armorKey = key;
+
+    for (let slot = 0; slot < ARMOR_SLOT_COUNT; slot++) {
+      const stack = this.inventory.get(ARMOR_SLOT_BASE + slot);
+      const info = stack ? armorInfoById(stack.id) : undefined;
+      // 部位与槽位对不上（坏存档）时不画，与 `armor.ts#equippedArmor` 保持同一口径
+      this.armorColors[slot] = info && info.slot === slot ? this.atlas.averageColor(armorTile(info)) : null;
+    }
+    this.playerRenderer.setArmor(this.armorColors);
+    // 第一人称只看得到胸甲（袖套），其余三件在镜头盲区
+    this.hand.setArmorColor(this.armorColors[1] ?? null);
+  }
+
+  /**
    * 消耗手持工具 1 点耐久；耐久耗尽就整件消失。
    * 创造模式（飞行中）不掉耐久，与原版一致。
    */
@@ -1570,6 +1610,8 @@ class App {
     const thirdPerson = this.cameraMode !== 'first';
     this.playerRenderer.setVisible(thirdPerson);
     this.hand.setVisible(!thirdPerson);
+    // 盔甲：第三人称画甲片、第一人称只画胸甲袖套，但取色是同一份
+    this.applyArmorAppearance();
     if (thirdPerson) {
       this.playerRenderer.update(
         {

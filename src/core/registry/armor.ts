@@ -117,16 +117,29 @@ export interface ArmorSpec {
 }
 
 /**
+ * 图集里的盔甲图标名（`item_<材质>_<部位>`）。
+ *
+ * 命名规则只有这一处：注册物品（`ARMOR_SPECS`）、2D 图标、玩家模型上的甲片配色
+ * 全都走这个函数，避免"改了命名规则但漏改某一处"。
+ */
+export function armorTile(armor: Pick<ArmorInfo, 'material' | 'type'>): string {
+  return `item_${armor.material}_${armor.type}`;
+}
+
+/**
  * 全部 20 件盔甲（4 部位 × 5 材质）。
  * 加一种材质只需要往 DEFENSE_TABLE / DURABILITY_MULTIPLIER / ARMOR_MATERIALS 各加一行。
  */
 export const ARMOR_SPECS: readonly ArmorSpec[] = ARMOR_TYPES.flatMap((type) =>
-  ARMOR_MATERIALS.map((material) => ({
-    id: armorItemId(type, material),
-    name: `minecraft:${material}_${type}`,
-    tile: `item_${material}_${type}`,
-    armor: makeArmorInfo(type, material),
-  })),
+  ARMOR_MATERIALS.map((material) => {
+    const armor = makeArmorInfo(type, material);
+    return {
+      id: armorItemId(type, material),
+      name: `minecraft:${material}_${type}`,
+      tile: armorTile(armor),
+      armor,
+    };
+  }),
 );
 
 const ARMOR_BY_ID = new Map<number, ArmorInfo>(ARMOR_SPECS.map((spec) => [spec.id, spec.armor]));
