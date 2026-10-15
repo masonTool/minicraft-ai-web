@@ -26,7 +26,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-15 · 提交总数 111（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-15 · 提交总数 112（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 176 项 —— 已完成 **100**、进行中 **57**、待办 19；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
