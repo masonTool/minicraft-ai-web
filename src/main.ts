@@ -14,7 +14,12 @@ import { TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
 import {
-  MAX_HEALTH, PlayerStats, type DamageCause, type SurvivalEnvironment } from './core/survival/PlayerStats.ts';
+  MAX_FOOD,
+  MAX_HEALTH,
+  PlayerStats,
+  type DamageCause,
+  type SurvivalEnvironment,
+} from './core/survival/PlayerStats.ts';
 import { VitalsHud } from './ui/VitalsHud.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
@@ -130,7 +135,17 @@ import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
-import { blockForItem, dropFor, itemName } from './core/registry/items.ts';
+import {
+  blockForItem,
+  dropFor,
+  EAT_SECONDS,
+  foodInfoById,
+  itemName,
+  rareDropFor,
+  saturationFrom,
+  type FoodInfo,
+} from './core/registry/items.ts';
+import { canEat } from './core/registry/food.ts';
 
 /** 渲染距离（区块） */
 /** 视距默认值（玩家可在设置里改，见 `App.viewDistance`） */
@@ -213,6 +228,8 @@ const NETHER_MIN_BRIGHTNESS = 0.24;
 /** 连续破坏/放置的最小间隔（秒） */
 const BREAK_COOLDOWN = 0.25;
 const PLACE_COOLDOWN = 0.22;
+/** 进食时的咀嚼间隔（秒）：每嚼一口晃一下手臂、响一声咀嚼音 */
+const CHEW_INTERVAL = 0.4;
 
 /**
  * 开发期初始物资：补齐各色基础方块，便于立刻验证玩法。
@@ -502,6 +519,10 @@ class App {
   /** 盔甲外观：装备 id 串成的 key（变了才重算颜色）与四个部位的甲片颜色 */
   private armorKey = 'init';
   private readonly armorColors: (number | null)[] = [null, null, null, null];
+
+  /** 进食进度（0~1）与"距离下一次咀嚼"的计时 */
+  private eatProgress = 0;
+  private chewTimer = 0;
 
   /** 方块改动后等待光照收敛、需要再次重刷网格的坐标 */
   private readonly pendingSettle: number[] = [];
@@ -1375,6 +1396,29 @@ class App {
   }
 
   /**
+   * 手上拿着的东西能不能吃；能的话连物品 id 一起返回。
+   * 手里是食物时**不是**可放置方块，所以放置那条路径会自己走空。
+   */
+  private get heldFood(): { id: number; food: FoodInfo } | null {
+    const stack = this.inventory.get(this.hotbarIndex);
+    if (!stack) return null;
+    const food = foodInfoById(stack.id);
+    return food ? { id: stack.id, food } : null;
+  }
+
+  /**
+   * 是否正在"按住使用"。
+   *
+   * 鼠标右键与手柄的"使用"键直接算按住；触摸端没有独立的"使用"按钮，
+   * 于是借用手势里唯一还没被用掉的空档：**长按空处**（准星没对着任何方块）。
+   * 长按方块仍然是破坏，长按空处以前什么都不做。
+   */
+  private get usingItem(): boolean {
+    if (this.rightDown || this.padUse) return true;
+    return this.touch !== null && this.leftDown && this.hit === null;
+  }
+
+  /**
    * 把身上这套盔甲"长"到模型上（E14）。
    *
    * 甲片颜色取**该件装备图标贴图的平均色**（`TextureAtlas.averageColor` 自带缓存），
@@ -1716,6 +1760,53 @@ class App {
     this.updateAttacking(dt);
     this.updateBreaking(dt);
     this.updatePlacing();
+    // 进食放在放置之后：准星对着功能方块时右键的那一下归方块（开箱子/开门），
+    // UI 一开 `uiOpen` 就是 true，这一帧的进食自然被挡掉
+    this.updateEating(dt);
+  }
+
+  /**
+   * 进食。
+   *
+   * 原版是"按住使用键 1.6 秒"，中途松手、换物品、开界面都会作废；
+   * 这里照搬那套状态机——进度只在真正按住且手里还是那份食物时累加，别的任何情况清零。
+   */
+  private updateEating(dt: number): void {
+    const held = this.heldFood;
+    const edible = held !== null && canEat(held.food, this.stats.food, MAX_FOOD);
+    if (!edible || !this.usingItem || this.uiOpen || this.stats.dead) {
+      this.eatProgress = 0;
+      this.chewTimer = 0;
+      return;
+    }
+
+    this.eatProgress += dt / EAT_SECONDS;
+    // 每 0.4 秒"嚼一口"：手臂晃一下 + 一声咀嚼，让玩家看得出正在吃（原版也有咀嚼音）
+    this.chewTimer -= dt;
+    if (this.chewTimer <= 0) {
+      this.chewTimer = CHEW_INTERVAL;
+      this.hand.swing();
+      this.audio.play('eat');
+    }
+    if (this.eatProgress < 1) return;
+
+    this.eatProgress = 0;
+    this.chewTimer = 0;
+    this.eatFood(held!.id, held!.food);
+  }
+
+  /** 咽下这一份：扣 1 个、补饥饿与饱和度、结算附加效果（腐肉的饥饿就靠这里） */
+  private eatFood(itemId: number, food: FoodInfo): void {
+    if (!this.inventory.consume(itemId, 1)) return;
+    this.stats.eat(food.hunger, saturationFrom(food));
+    for (const effect of food.effects ?? []) {
+      // 概率效果要在这里掷点：表里存的是"触发概率"（腐肉 80%、生鸡肉 30%）
+      if (effect.chance !== undefined && Math.random() >= effect.chance) continue;
+      this.effects.apply(effect.id, effect.seconds, effect.amplifier);
+    }
+    this.audio.play('eat');
+    this.hand.swing();
+    this.refreshHotbar();
   }
 
   /**
@@ -1838,7 +1929,9 @@ class App {
     // 创造模式不产生掉落（与原版一致）
     // G4：还需要"手上工具够格"——石镐挖不动钻石矿（挖得动但一无所获）
     if (!this.flying && canHarvest(brokenId, tool)) {
-      const drop = dropFor(brokenId);
+      // 常规掉落优先；没有常规掉落的方块再掷一次概率掉落
+      // （目前只有树叶 0.5% 掉苹果——树苗还没做，否则苹果只能靠创造模式拿）
+      const drop = dropFor(brokenId) ?? rareDropFor(brokenId, Math.random());
       if (drop) {
         // 双层台阶是两块叠起来的，破坏时按 2 个掉落
         const count = isSlabDouble(brokenState) ? drop.count * 2 : drop.count;

@@ -206,9 +206,9 @@ if (!claimCommits) {
   }
   if (actual !== null) {
     const claimed = Number(claimCommits[1]);
-    // 容差 1：更新这一行的那次提交本身还没落盘，或刚好是待提交的那一次
-    if (Math.abs(actual - claimed) <= 1) {
-      console.log(`✓ HANDOFF 的提交总数与实际一致（${actual}）`);
+    // 容差 2：一个批次通常是"内容一条 + 文档一条"，更新这一句时那两条都还没落盘
+    if (Math.abs(actual - claimed) <= 2) {
+      console.log(`✓ HANDOFF 的提交总数与实际一致（写着 ${claimed}，实际 ${actual}）`);
     } else {
       failed = true;
       console.log(`\n✗ HANDOFF 的提交总数过期：写着 ${claimed}，实际 ${actual}（差 ${actual - claimed}）`);

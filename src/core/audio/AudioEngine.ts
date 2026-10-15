@@ -25,6 +25,7 @@ export type SoundKind =
   | 'explode'
   | 'splash'
   | 'click'
+  | 'eat'
   | 'mob_zombie'
   | 'mob_skeleton'
   | 'mob_creeper'
@@ -74,6 +75,8 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   explode: { duration: 1.1, gain: 0.7, noise: 1, freqFrom: 120, freqTo: 40, type: 'triangle', filter: 500, filterQ: 0.5, attack: 0.002, release: 1.05, thump: 45 },
   splash: { duration: 0.5, gain: 0.4, noise: 1, freqFrom: 900, freqTo: 300, type: 'triangle', filter: 2200, filterQ: 0.5, attack: 0.004, release: 0.46 },
   click: { duration: 0.07, gain: 0.3, noise: 0.15, freqFrom: 900, freqTo: 700, type: 'square', filter: 3000, filterQ: 1, attack: 0.001, release: 0.06 },
+  // 咀嚼声：短促的低频噪声，进食过程中每嚼一口响一次
+  eat: { duration: 0.14, gain: 0.26, noise: 0.85, freqFrom: 320, freqTo: 200, type: 'triangle', filter: 900, filterQ: 1.6, attack: 0.008, release: 0.13 },
   mob_zombie: { duration: 0.7, gain: 0.42, noise: 0.45, freqFrom: 150, freqTo: 110, type: 'sawtooth', filter: 700, filterQ: 1.4, attack: 0.05, release: 0.6, thump: 80 },
   mob_skeleton: { duration: 0.35, gain: 0.38, noise: 0.4, freqFrom: 900, freqTo: 600, type: 'square', filter: 2800, filterQ: 2.2, attack: 0.002, release: 0.32 },
   mob_creeper: { duration: 0.55, gain: 0.45, noise: 1, freqFrom: 700, freqTo: 380, type: 'triangle', filter: 2400, filterQ: 1.2, attack: 0.01, release: 0.5 },
