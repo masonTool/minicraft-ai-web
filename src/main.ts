@@ -24,6 +24,7 @@ import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/
 import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
+import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { NetClient, defaultServerUrl } from './net/NetClient.ts';
@@ -62,6 +63,7 @@ import { drawItemIcon } from './ui/ItemIcon.ts';
 import { blockForItem, dropFor, itemName } from './core/registry/items.ts';
 
 /** 渲染距离（区块） */
+/** 视距默认值（玩家可在设置里改，见 `App.viewDistance`） */
 const VIEW_DISTANCE = 12;
 /** 每帧最多网格化的区块数，用于把加载耗时摊到多帧 */
 const MESH_BUDGET_PER_FRAME = 3;
@@ -270,6 +272,11 @@ class App {
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
+  /** 本机设置（视距/视野/音量/灵敏度/调试信息），存在 localStorage */
+  private readonly settings: GameSettings = loadSettings();
+  private readonly settingsScreen: SettingsScreen;
+  /** 当前视距（区块）；与设置联动，改完立即生效 */
+  private viewDistance = VIEW_DISTANCE;
   private netStatus = '未连接（按 L 联机）';
   private chatLine = '';
   private chatUntil = 0;
@@ -321,7 +328,7 @@ class App {
     this.skyColor = new THREE.Color(0x8fc7ff);
     this.scene.background = this.skyColor;
 
-    const fogFar = VIEW_DISTANCE * 16;
+    const fogFar = this.viewDistance * 16;
     this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, fogFar + 32);
     this.camera.rotation.order = 'YXZ';
 
@@ -384,6 +391,14 @@ class App {
       this.inventoryScreen.refresh();
     };
 
+    // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
+    this.viewDistance = this.settings.viewDistance;
+    this.settingsScreen = new SettingsScreen(container, this.settings, {
+      onResume: () => this.closeSettings(),
+      onNewWorld: () => void this.clearSaveAndReload(),
+      onChange: (settings) => this.applySettings(settings),
+    });
+
     // 开发期初始物资（见 STARTING_HOTBAR 注释）
     for (const blockId of STARTING_HOTBAR) this.inventory.add(blockId, 64);
 
@@ -428,6 +443,57 @@ class App {
     if (this.touch) return true;
     this.touch = this.createTouchControls();
     return true;
+  }
+
+  /**
+   * 应用设置项。
+   *
+   * 视距会影响相机的远裁剪面与雾的距离，改完必须 `updateProjectionMatrix()`，
+   * 否则会出现"看得更远了但远处被裁掉"的割裂感。
+   */
+  private applySettings(settings: GameSettings): void {
+    this.viewDistance = settings.viewDistance;
+    this.camera.fov = settings.fov;
+    this.camera.far = settings.viewDistance * 16 + 32;
+    this.camera.updateProjectionMatrix();
+    this.debugEl.style.display = settings.showDebug ? '' : 'none';
+    this.applyEnvironment();
+    // 视距变化后立刻按新的范围请求/卸载区块
+    this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+  }
+
+  /** 打开暂停菜单 */
+  openSettings(): void {
+    if (this.settingsScreen.isOpen) return;
+    const save = this.saveStatus;
+    this.settingsScreen.setMeta(
+      save.enabled
+        ? `存档：${save.hasSave ? '已保存' : '新世界'} · 改动 ${save.edits} 格 / ${save.editedChunks} 区块 · 自动保存每 30 秒`
+        : '存档：不可用（浏览器未提供 IndexedDB）',
+    );
+    this.settingsScreen.show();
+    // 能按 Esc 说明玩家已经在玩了，"点击进入游戏"的遮罩没必要再挡着菜单
+    this.overlayEl.classList.add('hidden');
+    this.handleInventoryOpen(true);
+    // 打开界面时释放指针锁，否则鼠标被锁住点不到按钮
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  /** 关闭暂停菜单 */
+  closeSettings(): void {
+    this.settingsScreen.hide();
+    this.handleInventoryOpen(false);
+    // 指针锁必须由用户手势触发，非手势下调用会被拒绝——吞掉异常，别让它打断关闭流程
+    try {
+      void this.renderer.domElement.requestPointerLock?.();
+    } catch {
+      // 忽略：玩家点一下画面就会重新锁定
+    }
+  }
+
+  toggleSettings(): void {
+    if (this.settingsScreen.isOpen) this.closeSettings();
+    else this.openSettings();
   }
 
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
@@ -779,7 +845,7 @@ class App {
     this.sky.setSunGlow(Math.max(0, 1 - Math.abs(sunHeight) * 3.2) * (1 - overcast) * 0.9);
     this.sky.setCloudAppearance(daylight, overcast);
 
-    const fogFar = (VIEW_DISTANCE * 16 - 6) * (1 - overcast * 0.45);
+    const fogFar = (this.viewDistance * 16 - 6) * (1 - overcast * 0.45);
     const fogNear = fogFar * 0.72;
     this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
     this.translucentMaterial.setFog(this.skyColor, fogNear, fogFar);
@@ -789,7 +855,7 @@ class App {
     if (!force && centerCx === this.lastCenterCx && centerCz === this.lastCenterCz) return;
     this.lastCenterCx = centerCx;
     this.lastCenterCz = centerCz;
-    this.world.update(centerCx, centerCz, VIEW_DISTANCE);
+    this.world.update(centerCx, centerCz, this.viewDistance);
   }
 
   /**
@@ -886,6 +952,12 @@ class App {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
         if (e.code !== 'Escape') return;
+      }
+      // Esc：打开/关闭暂停菜单（内含设置）。原版也是 Esc 唤出菜单而不是直接退出
+      if (e.code === 'Escape' && !this.inventoryScreen.isOpen) {
+        e.preventDefault();
+        this.toggleSettings();
+        return;
       }
       if (e.code === 'Tab') e.preventDefault();
       this.keys.add(e.code);
@@ -1724,7 +1796,7 @@ class App {
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
-      `视距: ${VIEW_DISTANCE} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
+      `视距: ${this.viewDistance} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
       `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
       `联机: ${this.netStatus}${this.net.selfId > 0 ? `（#${this.net.selfId} · 在线 ${this.net.playerCount} 人）` : ''}` +
@@ -2226,6 +2298,29 @@ class App {
   /** 红石引擎已经算过多少轮（调试用） */
   get redstoneUpdates(): number {
     return this.redstone.updates;
+  }
+
+  /** 界面是否打开（暂停菜单/背包都算）——验收脚本用 */
+  get isUiOpen(): boolean {
+    return this.uiOpen;
+  }
+
+  /** 当前设置与设置界面的状态（验收脚本用） */
+  get settingsState(): { open: boolean; settings: GameSettings; viewDistance: number; fov: number } {
+    return {
+      open: this.settingsScreen.isOpen,
+      settings: this.settingsScreen.snapshot(),
+      viewDistance: this.viewDistance,
+      fov: this.camera.fov,
+    };
+  }
+
+  /** 以编程方式改设置（等同于拖滑块） */
+  updateSettings(patch: Partial<GameSettings>): GameSettings {
+    Object.assign(this.settings, patch);
+    this.applySettings(this.settings);
+    saveSettings(this.settings);
+    return this.settingsScreen.snapshot();
   }
 
   /** 直接放置方块（自动化测试用）；可带状态 */

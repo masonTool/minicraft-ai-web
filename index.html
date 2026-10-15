@@ -107,6 +107,33 @@
       #vital-air { visibility: hidden; }
       #vital-air.on { visibility: visible; }
 
+      /* ---------------- 暂停 / 设置 ---------------- */
+      #settings-screen {
+        position: fixed; inset: 0; z-index: 30;
+        display: grid; place-items: center;
+        background: rgba(0, 0, 0, .55);
+      }
+      #settings-screen.hidden { display: none; }
+      .settings-panel {
+        width: min(92vw, 420px); max-height: 88vh; overflow-y: auto;
+        background: #1d1d1f; color: #eee; border-radius: 6px;
+        padding: 16px 18px 18px; font-size: 13px;
+        border: 1px solid #ffffff22;
+      }
+      .settings-panel b { font-size: 18px; display: block; }
+      .settings-hint { color: #9a9a9a; font-size: 12px; margin: 4px 0 12px; }
+      .settings-buttons { display: flex; gap: 8px; margin-bottom: 14px; }
+      .settings-buttons button {
+        flex: 1; padding: 9px 10px; font-size: 13px; cursor: pointer;
+        background: #3a7d33; color: #fff; border: 1px solid #ffffff22; border-radius: 4px;
+      }
+      .settings-buttons button.danger { background: #7d3a3a; }
+      .settings-options { display: flex; flex-direction: column; gap: 8px; }
+      .settings-row { display: grid; grid-template-columns: 76px 1fr 56px; align-items: center; gap: 8px; }
+      .settings-row i { font-style: normal; color: #9a9a9a; text-align: right; }
+      .settings-row input[type="range"] { width: 100%; }
+      .settings-row input[type="checkbox"] { justify-self: start; width: 16px; height: 16px; }
+
       #break-progress {
         position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%);
         width: 120px; height: 5px; background: rgba(0, 0, 0, .5);
