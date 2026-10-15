@@ -18,6 +18,21 @@ import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { enchantKindOf, offeringFor } from '../src/core/crafting/Enchanting.ts';
 import { maxDurabilityOf, repairMaterialOf } from '../src/core/crafting/Anvil.ts';
 import { Arrow, ARROW_LIFETIME } from '../src/core/entity/Arrow.ts';
+import {
+  ARROW_MAX_DAMAGE,
+  ARROW_MAX_SPEED,
+  BOW_FULL_CHARGE,
+  BOW_MIN_CHARGE,
+  FLAME_SECONDS,
+  arrowDamageAt,
+  arrowSpeedAt,
+  arrowsConsumed,
+  bowEffects,
+  canFire,
+  canShoot,
+  chargeAfter,
+  knockbackStrength,
+} from '../src/core/entity/Bow.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { Mob } from '../src/core/entity/Mob.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
@@ -330,6 +345,74 @@ console.log('\n[箭矢：命中生物]');
   const free = new Arrow(0.5, 2, 0.5, { x: 40, y: 0, z: 0 }, { fromPlayer: true, damage: 6 });
   for (let t = 0; t < 0.1; t += 0.02) free.tick(emptyCtx, 0.02);
   check('没命中生物时箭继续飞', !free.dead && free.x > 1, `x=${free.x.toFixed(2)}`);
+}
+
+// ---------------------------------------------------------------- 6. 蓄力与射击数值
+
+console.log('\n[蓄力]');
+{
+  equal('拉满需要 1 秒', BOW_FULL_CHARGE, 1);
+  equal('低于 15% 射不出去（原版阈值）', BOW_MIN_CHARGE, 0.15);
+
+  equal('按住 0.25 秒 = 蓄力 0.25', chargeAfter(0, 0.25), 0.25);
+  equal('按住 1 秒 = 拉满', chargeAfter(0, 1), 1);
+  equal('按住 2 秒还是 1（不会超过满）', chargeAfter(0, 2), 1);
+  equal('从 0.8 再按 0.5 秒 → 夹到 1', chargeAfter(0.8, 0.5), 1);
+  equal('dt 为 0 时不变', chargeAfter(0.4, 0), 0.4);
+
+  check('14% 蓄力射不出去', !canFire(0.14));
+  check('15% 蓄力刚好能射', canFire(0.15));
+  check('拉满当然能射', canFire(1));
+}
+
+console.log('\n[箭速与伤害随蓄力]');
+{
+  equal('满蓄力箭速 60 格/秒（原版 3 格/tick）', ARROW_MAX_SPEED, 60);
+  equal('半蓄力箭速 30', arrowSpeedAt(0.5), 30);
+  equal('零蓄力箭速 0', arrowSpeedAt(0), 0);
+  equal('蓄力超过 1 也按 1 算', arrowSpeedAt(1.5), 60);
+
+  equal('满蓄力基础伤害 6（原版）', ARROW_MAX_DAMAGE, 6);
+  equal('满蓄力、无附魔 = 6', arrowDamageAt(1), 6);
+  equal('半蓄力 = 3', arrowDamageAt(0.5), 3);
+  equal('三成蓄力 = 1.8', Number(arrowDamageAt(0.3).toFixed(2)), 1.8);
+}
+
+console.log('\n[弓的附魔]');
+{
+  equal('力量 I：满蓄力 9 点（×1.5）', arrowDamageAt(1, 1), 9);
+  equal('力量 II：满蓄力 10.5 点（×1.75）', arrowDamageAt(1, 2), 10.5);
+  equal('力量 V：满蓄力 15 点（×2.5，原版数值）', arrowDamageAt(1, 5), 15);
+  equal('力量对半蓄力也按比例', arrowDamageAt(0.5, 1), 4.5);
+
+  equal('没有冲击时击退 1', knockbackStrength(0), 1);
+  equal('冲击 II 击退 3', knockbackStrength(2), 3);
+
+  const plain = bowEffects(undefined);
+  equal('没附魔时力量 0', plain.power, 0);
+  equal('没附魔时没有无限', plain.infinity, 0);
+  const loaded = bowEffects({ power: 3, punch: 2, flame: 1, infinity: 1, mending: 1 });
+  equal('读出力量 3', loaded.power, 3);
+  equal('读出冲击 2', loaded.punch, 2);
+  equal('读出火矢 1', loaded.flame, 1);
+  equal('读出无限 1', loaded.infinity, 1);
+  equal('火矢点燃 5 秒（原版）', FLAME_SECONDS, 5);
+}
+
+console.log('\n[箭够不够]');
+{
+  const plain = bowEffects(undefined);
+  const infinite = bowEffects({ infinity: 1 });
+
+  equal('普通弓：1 支箭就要消耗 1 支', arrowsConsumed(plain), 1);
+  equal('无限弓：不消耗', arrowsConsumed(infinite), 0);
+
+  check('普通弓有 1 支箭 → 能射', canShoot(true, 1, 1, plain));
+  check('普通弓没箭 → 不能射', !canShoot(true, 1, 0, plain));
+  check('无限弓有 1 支箭 → 能射（留着那一支）', canShoot(true, 1, 1, infinite));
+  check('无限弓一支箭都没有 → 也不能射（原版行为，否则空手无限射）', !canShoot(true, 1, 0, infinite));
+  check('蓄力不够 → 不能射', !canShoot(true, 0.1, 64, plain));
+  check('手上不是弓 → 不能射', !canShoot(false, 1, 64, plain));
 }
 
 console.log(`\n弹射物测试：${passed} 通过 / ${failed} 失败`);

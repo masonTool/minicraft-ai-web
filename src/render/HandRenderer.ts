@@ -104,6 +104,8 @@ export class HandRenderer {
   private swingTime = SWING_DURATION;
   /** 是否绘制（第三人称时关掉，改由玩家模型出场） */
   private visible = true;
+  /** 拉弓进度 0~1（1 = 拉满）；非 0 时手会往回拉一点 */
+  private drawPull = 0;
   private bobPhase = 0;
 
   constructor(private readonly atlas: TextureAtlas) {
@@ -232,6 +234,14 @@ export class HandRenderer {
     if (color !== null) this.sleeveMaterial.uniforms.uFlatColor!.value = srgbColor(color);
   }
 
+  /**
+   * 拉弓进度（J9）。手没有真的"拉开弓"，但把整只手往回、往外拉一点，
+   * 玩家就能看出"正在拉"以及"拉了几成"——不然蓄力这件事完全看不见。
+   */
+  setDrawPull(progress: number): void {
+    this.drawPull = Math.max(0, Math.min(1, progress));
+  }
+
   setBrightness(value: number): void {
     this.itemMaterial.uniforms.uBrightness!.value = value;
     this.armMaterial.uniforms.uBrightness!.value = value;
@@ -251,15 +261,17 @@ export class HandRenderer {
 
     // 挥动 = 绕肩部往下砸：X 角**减小**（手臂落下去），同时整体往上、往镜头方向挪一点，
     // 这样看起来是"手臂从屏幕外抡进来"，而不是整只手在平面上滑。
+    // 拉弓：整只手往右下、朝镜头方向收一点，拉得越满收得越多
+    const pull = this.drawPull;
     this.group.position.set(
-      SHOULDER_POSITION[0] - swing * 0.1,
-      SHOULDER_POSITION[1] + bob + swing * 0.08,
-      SHOULDER_POSITION[2] + swing * 0.1,
+      SHOULDER_POSITION[0] - swing * 0.1 + pull * 0.06,
+      SHOULDER_POSITION[1] + bob + swing * 0.08 - pull * 0.04,
+      SHOULDER_POSITION[2] + swing * 0.1 + pull * 0.12,
     );
     this.group.rotation.set(
-      SHOULDER_ROTATION[0] - swing * 0.85,
+      SHOULDER_ROTATION[0] - swing * 0.85 - pull * 0.18,
       SHOULDER_ROTATION[1] - swing * 0.12,
-      SHOULDER_ROTATION[2] + swing * 0.25,
+      SHOULDER_ROTATION[2] + swing * 0.25 + pull * 0.2,
     );
 
     if (this.camera.fov !== fovDeg || this.camera.aspect !== aspect) {

@@ -140,6 +140,17 @@ import { CHEST_SIZE } from './core/container/Chest.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
 import { Arrow, type ArrowOptions } from './core/entity/Arrow.ts';
+import {
+  FLAME_SECONDS,
+  arrowDamageAt,
+  arrowSpeedAt,
+  arrowsConsumed,
+  bowEffects,
+  canFire,
+  canShoot,
+  chargeAfter,
+  knockbackStrength,
+} from './core/entity/Bow.ts';
 import { ItemEntity } from './core/entity/ItemEntity.ts';
 import type { EntityContext } from './core/entity/Entity.ts';
 import { EntityRenderer } from './render/EntityRenderer.ts';
@@ -300,6 +311,11 @@ const STARTING_HOTBAR: readonly number[] = [
   Block.ENCHANTING_TABLE,
   Block.BOOKSHELF,
   Item.LAPIS_LAZULI,
+  // 开发期弓与箭（J9）：一拉就能射
+  Item.BOW,
+  Item.ARROW,
+  Item.STRING,
+  Item.FLINT,
 ];
 
 class App {
@@ -549,6 +565,10 @@ class App {
 
   /** 当前打开的附魔台坐标（数周围书架用） */
   private enchantTablePos: { x: number; y: number; z: number } | null = null;
+
+  /** 拉弓蓄力 0~1（J9）与"这一次拉弓是否还在进行"的标记 */
+  private bowCharge = 0;
+  private bowDrawing = false;
 
   /** 进食进度（0~1）与"距离下一次咀嚼"的计时 */
   private eatProgress = 0;
@@ -1876,6 +1896,9 @@ class App {
     // 进食放在放置之后：准星对着功能方块时右键的那一下归方块（开箱子/开门），
     // UI 一开 `uiOpen` 就是 true，这一帧的进食自然被挡掉
     this.updateEating(dt);
+    // 拉弓也放在放置之后：准星对着功能方块时右键那一下归方块
+    this.updateBow(dt);
+    this.hand.setDrawPull(this.bowCharge);
   }
 
   /**
@@ -1919,6 +1942,83 @@ class App {
     }
     this.audio.play('eat');
     this.hand.swing();
+    this.refreshHotbar();
+  }
+
+  /** 当前手持物品 id（空手为 undefined） */
+  private get heldItemId(): number | undefined {
+    return this.inventory.get(this.hotbarIndex)?.id;
+  }
+
+  /**
+   * 拉弓与放箭（J9）。
+   *
+   * 与进食同一套状态机（按住累加、别的情况清零），但多一步：
+   * **松手那一下要把箭射出去**。所以不能"没按住就无脑清零"——
+   * 得先用 `bowDrawing` 记住"这一次拉弓正在进行"，等它结束时再判断：
+   *  - 松手 → 射（这是正常路径）
+   *  - 换物品 / 开界面 / 死亡 → 取消（原版也是直接作废，不白送一箭）
+   */
+  private updateBow(dt: number): void {
+    const holding = this.heldItemId === Item.BOW;
+    const active = holding && this.usingItem && !this.uiOpen && !this.stats.dead;
+
+    if (active) {
+      this.bowCharge = chargeAfter(this.bowCharge, dt);
+      this.bowDrawing = true;
+      return;
+    }
+
+    if (!this.bowDrawing) {
+      this.bowCharge = 0;
+      return;
+    }
+    this.bowDrawing = false;
+    const charge = this.bowCharge;
+    this.bowCharge = 0;
+
+    // 只有"手还拿着弓、而且没开界面"才算正常松手
+    if (!holding || this.uiOpen || this.stats.dead) return;
+    if (canFire(charge)) this.fireBow(charge);
+  }
+
+  /** 放出一支箭：扣箭、算伤害与附魔、给弓扣耐久 */
+  private fireBow(charge: number): void {
+    const effects = bowEffects(this.heldEnchants);
+    const arrows = this.inventory.countOf(Item.ARROW);
+    if (!canShoot(true, charge, arrows, effects)) {
+      // 拉了半天没箭，得说一声——不然玩家只会觉得"弓坏了"
+      if (arrows < 1) this.chat.push('没有箭了', 'error');
+      return;
+    }
+
+    const used = arrowsConsumed(effects);
+    if (used > 0) this.inventory.consume(Item.ARROW, used);
+
+    const cosPitch = Math.cos(this.pitch);
+    const dirX = -Math.sin(this.yaw) * cosPitch;
+    const dirY = Math.sin(this.pitch);
+    const dirZ = -Math.cos(this.yaw) * cosPitch;
+    const speed = arrowSpeedAt(charge);
+
+    this.spawnArrow(
+      this.physics.x + dirX * 0.4,
+      this.physics.eyeY - 0.12,
+      this.physics.z + dirZ * 0.4,
+      { x: dirX * speed, y: dirY * speed, z: dirZ * speed },
+      {
+        fromPlayer: true,
+        damage: arrowDamageAt(charge, effects.power),
+        knockback: knockbackStrength(effects.punch),
+        fireSeconds: effects.flame > 0 ? FLAME_SECONDS : 0,
+        // 无限附魔射出的箭不能捡（否则等于无限刷箭）
+        pickable: effects.infinity === 0,
+      },
+    );
+
+    this.audio.play('bow_shoot');
+    this.hand.swing();
+    this.damageHeldTool();
     this.refreshHotbar();
   }
 
@@ -2898,6 +2998,9 @@ class App {
 
     // 触摸端只有一次轻点，放完就要清掉，否则会一直放
     this.touchPlaceRequest = false;
+
+    // 手上是弓时右键是"拉弓"，不放置也不使用（功能方块在上面已经处理过了）
+    if (this.heldItemId === Item.BOW) return;
 
     const blockId = this.selectedBlock;
     if (blockId === undefined) return;
