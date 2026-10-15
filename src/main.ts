@@ -99,6 +99,7 @@ import { AudioEngine, type SoundKind } from './core/audio/AudioEngine.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
+import { restoreContainers, serializeContainers } from './core/save/ContainerSave.ts';
 import { NetClient, defaultServerUrl } from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import type { NetPlayerState } from './net/NetClient.ts';
@@ -1015,6 +1016,11 @@ class App {
       console.info(`[save] 已装载 ${records.length} 个区块的增量改动，共 ${this.world.edits.totalEdits} 格`);
     }
 
+    // 容器内容（C7 尾巴）：箱子/熔炉/附魔台/铁砧/酿造台的东西不能丢
+    const containers = await this.save.loadContainers();
+    const restoredContainers = restoreContainers(this.world.containers, containers);
+    if (restoredContainers > 0) console.info(`[save] 已还原 ${restoredContainers} 个容器的内容`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -1105,6 +1111,8 @@ class App {
 
       await this.save.savePlayer(this.snapshotPlayer());
       await this.save.saveChunks(records);
+      // 容器内容（C7 尾巴）：整份覆盖写，几十个容器而已，比维护"哪些脏了"省心
+      await this.save.saveContainers(serializeContainers(this.world.containers));
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -3025,25 +3033,25 @@ class App {
       return true;
     }
     if (hitBlock === Block.FURNACE) {
-      this.inventoryScreen.openWith('furnace', this.world.containers.getOrCreateFurnace(x, y, z));
+      this.inventoryScreen.openWith('furnace', this.world.containers.getOrCreateFurnace(this.dimension, x, y, z));
       return true;
     }
     if (hitBlock === Block.CHEST) {
-      this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(x, y, z));
+      this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
       return true;
     }
     if (hitBlock === Block.BREWING_STAND) {
-      this.inventoryScreen.openWith('brewing', this.world.containers.getOrCreateBrewingStand(x, y, z));
+      this.inventoryScreen.openWith('brewing', this.world.containers.getOrCreateBrewingStand(this.dimension, x, y, z));
       return true;
     }
     if (hitBlock === Block.ANVIL) {
-      this.inventoryScreen.openWith('anvil', this.world.containers.getOrCreateAnvil(x, y, z));
+      this.inventoryScreen.openWith('anvil', this.world.containers.getOrCreateAnvil(this.dimension, x, y, z));
       return true;
     }
     if (hitBlock === Block.ENCHANTING_TABLE) {
       // 记下位置：书架加成要围着**这一台**数，而 `enchantContext` 是每次刷新时问的
       this.enchantTablePos = { x, y, z };
-      this.inventoryScreen.openWith('enchanting', this.world.containers.getOrCreateEnchantTable(x, y, z));
+      this.inventoryScreen.openWith('enchanting', this.world.containers.getOrCreateEnchantTable(this.dimension, x, y, z));
       return true;
     }
 
@@ -3192,7 +3200,7 @@ class App {
    * 破坏容器方块时把内容物倒出来（原地生成掉落物）。
    */
   private dropContainerContents(x: number, y: number, z: number): void {
-    const container = this.world.containers.get(x, y, z);
+    const container = this.world.containers.get(this.dimension, x, y, z);
     if (!container) return;
     // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、酿造台 5
     const size = container instanceof Furnace
@@ -3210,7 +3218,7 @@ class App {
       this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.5, z + 0.5);
       container.set(i, null);
     }
-    this.world.containers.remove(x, y, z);
+    this.world.containers.remove(this.dimension, x, y, z);
   }
 
   /**
@@ -3223,8 +3231,10 @@ class App {
   private tickContainers(dt: number): void {
     const { x: px, y: py, z: pz } = this.physics;
     const rangeSq = 64 * 64;
-    this.world.containers.forEach((container, x, y, z) => {
+    this.world.containers.forEach((container, x, y, z, dimension) => {
       if (!(container instanceof Furnace) && !(container instanceof BrewingStand)) return;
+      // 只 tick 当前维度的：另一个维度同坐标的熔炉不该在这里被推进
+      if (dimension !== this.dimension) return;
       const dx = x + 0.5 - px;
       const dy = y + 0.5 - py;
       const dz = z + 0.5 - pz;

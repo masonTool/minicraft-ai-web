@@ -1,12 +1,15 @@
 /**
  * 存档（K1）：IndexedDB 持久化
  *
- * 存三样东西：
+ * 存四样东西：
  *   1. **meta**：世界种子、存档版本、创建时间、最后游玩时间——启动时先读它，
  *      种子不一致就说明"这是一个新世界"，不能把旧存档的改动叠到新地形上
  *   2. **player**：位置、朝向、维度、时间、生命/饥饿/氧气、背包与选中槽
  *   3. **chunks**：**只存玩家改过的格子**（增量，见 `ChunkEdits.ts`），
  *      键是 `维度|cx,cz`，值是两条 Uint32Array 的 buffer（下标 + 打包后的 id/状态）
+ *   4. **containers**：箱子/熔炉/附魔台/铁砧/酿造台的内容与运转状态
+ *      （C7 尾巴补上的第四样——在这之前容器内容**关掉页面就没了**，
+ *      序列化本身在 `ContainerSave.ts`）
  *
  * 为什么用 IndexedDB 而不是 localStorage：
  *   localStorage 只能存字符串且容量约 5MB，把二进制转 base64 还会再胖 33%；
@@ -16,12 +19,15 @@
  */
 
 import { ChunkEdits, type SerializedEdits } from './ChunkEdits.ts';
+import type { SerializedContainer } from './ContainerSave.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 
-const DB_VERSION = 1;
+/** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
+const DB_VERSION = 2;
 const STORE_META = 'meta';
 const STORE_PLAYER = 'player';
 const STORE_CHUNKS = 'chunks';
+const STORE_CONTAINERS = 'containers';
 
 /** 存档结构版本：改了字段含义就要 +1，并在加载时做迁移或丢弃 */
 export const SAVE_VERSION = 1;
@@ -132,6 +138,7 @@ export class SaveGame {
         if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META);
         if (!db.objectStoreNames.contains(STORE_PLAYER)) db.createObjectStore(STORE_PLAYER);
         if (!db.objectStoreNames.contains(STORE_CHUNKS)) db.createObjectStore(STORE_CHUNKS);
+        if (!db.objectStoreNames.contains(STORE_CONTAINERS)) db.createObjectStore(STORE_CONTAINERS);
       };
       const db = await promisify(request);
       const save = new SaveGame(db, worldId);
@@ -251,6 +258,29 @@ export class SaveGame {
           key,
         );
       }
+    });
+  }
+
+  /**
+   * 读容器内容（C7 尾巴）。
+   * **整份一次读写**：容器数量以人为单位（几百个已经很多了），
+   * 而"按坐标懒加载"会带来与区块增量同样的时序问题（加载时还不知道有没有内容）。
+   */
+  async loadContainers(): Promise<SerializedContainer[]> {
+    const value = await this.transaction(STORE_CONTAINERS, 'readonly', (store) =>
+      promisify(store.get('containers') as IDBRequest<SerializedContainer[] | undefined>),
+    );
+    return value ?? [];
+  }
+
+  /**
+   * 写容器内容（C7 尾巴）：**整体覆盖**而不是增量。
+   * 容器会被搬走、清空、破坏，做增量就要额外维护一张"哪些容器脏了"的表；
+   * 而整份内容本身很小（几十个容器、每个几格），整写省心且不会漏。
+   */
+  async saveContainers(containers: SerializedContainer[]): Promise<void> {
+    await this.transaction(STORE_CONTAINERS, 'readwrite', (store) => {
+      store.put(containers, 'containers');
     });
   }
 
