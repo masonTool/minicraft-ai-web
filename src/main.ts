@@ -2471,6 +2471,8 @@ class App {
       },
       // 繁殖（J8）：找配偶与生成幼体都由主程序操刀——生物不持有实体列表
       findMate: (mob) => this.findMate(mob),
+      // 拿着食物能把动物引过来（传函数，不传值：上下文是缓存住的）
+      heldItemId: () => this.heldItemId,
       spawnBaby: (type, x, y, z) => {
         const baby = new Mob(type, x, y, z);
         baby.makeBaby();

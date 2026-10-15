@@ -502,7 +502,7 @@ console.log('\n[喂食繁殖与幼体]');
   equal('刚繁殖完有冷却，喂了也没用', cow.feed(apple), null);
 
   // ---- 幼体
-  const baby = new Mob(cowType, 0.5, 65.5, 0.5);
+  const baby = new Mob(cowType, 2.5, 65.5, 0.5);
   baby.makeBaby();
   check('幼体标记生效', baby.baby);
   equal('幼体体型缩到 55%', Number(baby.width.toFixed(3)), Number((cowType.width * BABY_SCALE).toFixed(3)));
@@ -531,6 +531,67 @@ console.log('\n[喂食繁殖与幼体]');
   timeout.feed(apple);
   for (let t = 0; t < LOVE_SECONDS + 1; t += 0.5) timeout.tick(ctx, 0.5);
   check('求爱超过 LOVE_SECONDS 就自动结束（原版也会）', !timeout.inLove);
+}
+
+console.log('\n[手持食物的吸引跟随]');
+{
+  const world = new TestWorld();
+  world.floor(-20, 20, -8, 8, 64);
+
+  let heldItemId: number | undefined;
+  const player = { x: 8.5, y: 65, z: 0.5 };
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player,
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+    heldItemId: () => heldItemId,
+  };
+
+  const cowType = mobTypeById('cow')!;
+
+  // ---- 拿着苹果：牛会跟过来
+  heldItemId = Item.APPLE;
+  // 站在 6 格外（`TEMPT_RANGE` 是 8，别卡在边界上——8.0 < 8 是 false）
+  const cow = new Mob(cowType, 2.5, 65.5, 0.5);
+  const before = Math.abs(player.x - cow.x);
+  for (let i = 0; i < 60; i++) cow.tick(ctx, 0.05); // 3 秒
+  const after = Math.abs(player.x - cow.x);
+  check('拿着苹果时牛会跟过来', after < before - 2, `${before.toFixed(1)} → ${after.toFixed(1)}`);
+  check('但不会贴着玩家推（停在 1.6 格外）', after > 1, `距离 ${after.toFixed(2)}`);
+
+  // ---- 空手：牛不跟
+  heldItemId = undefined;
+  const idle = new Mob(cowType, 12.5, 65.5, 0.5);
+  const idleBefore = Math.abs(player.x - idle.x);
+  for (let i = 0; i < 60; i++) idle.tick(ctx, 0.05);
+  check('空手时牛不会特意靠过来', Math.abs(player.x - idle.x) > idleBefore - 4, `${idleBefore.toFixed(1)} → ${Math.abs(player.x - idle.x).toFixed(1)}`);
+
+  // ---- 拿错东西：也不跟
+  heldItemId = Item.BONE;
+  const wrong = new Mob(cowType, 0.5, 65.5, 0.5);
+  const wrongBefore = Math.abs(player.x - wrong.x);
+  for (let i = 0; i < 40; i++) wrong.tick(ctx, 0.05);
+  check('拿着骨头牛不理（它不是食物）', Math.abs(player.x - wrong.x) > wrongBefore - 4, `${wrongBefore.toFixed(1)} → ${Math.abs(player.x - wrong.x).toFixed(1)}`);
+
+  // ---- 太远就不跟（8 格外）
+  heldItemId = Item.APPLE;
+  const farWorld = new TestWorld();
+  farWorld.floor(-40, 40, -8, 8, 64);
+  const farCtx: EntityContext = { ...ctx, world: farWorld.asPhysicsWorld() };
+  const far = new Mob(cowType, -4.5, 65.5, 0.5);
+  const farBefore = Math.abs(player.x - far.x);
+  for (let i = 0; i < 20; i++) far.tick(farCtx, 0.05); // 1 秒
+  check('8 格之外不会被引过来（远到 13 格）', Math.abs(player.x - far.x) > farBefore - 2, `${farBefore.toFixed(1)} → ${Math.abs(player.x - far.x).toFixed(1)}`);
+
+  // ---- 幼体也会跟（原版小牛也认食物）
+  const baby = new Mob(cowType, 2.5, 65.5, 0.5);
+  baby.makeBaby();
+  for (let i = 0; i < 60; i++) baby.tick(ctx, 0.05);
+  check('幼体也会跟着食物走', Math.abs(player.x - baby.x) < 6, `距离 ${Math.abs(player.x - baby.x).toFixed(1)}`);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

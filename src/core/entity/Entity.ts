@@ -63,6 +63,12 @@ export interface EntityContext {
    * 与 `hitMob` 同一个理由：生物只描述"想干什么"，"周围有谁"交给上层。
    */
   findMate?: (mob: Mob) => Mob | null;
+  /**
+   * 玩家手上拿着什么（J8：拿着食物能把动物引过来）。
+   *
+   * 用**函数**而不是值：上下文对象是建好之后缓存的，传值会永远停在建它那一帧的物品上。
+   */
+  heldItemId?: () => number | undefined;
   /** 生成一只幼体（J8 繁殖用） */
   spawnBaby?: (type: MobType, x: number, y: number, z: number) => void;
   /** 冒爱心粒子（J8：求爱与繁殖成功时）。`scale` 用来让"没找到对象"时少冒几颗 */

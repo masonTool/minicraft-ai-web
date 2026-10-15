@@ -26,6 +26,11 @@ export const WOOL_REGROW_SECONDS = 30;
 
 export const CREEPER_FUSE_TIME = 1.5;
 
+/** 手上的食物能把动物引过来的距离（格，原版约 8 格） */
+export const TEMPT_RANGE = 8;
+/** 引到这么近就停下来（否则动物会一直顶着玩家推） */
+export const TEMPT_FOLLOW_STOP = 1.6;
+
 /** 幼体的体型比例（原版大约是一半） */
 export const BABY_SCALE = 0.55;
 /**
@@ -263,6 +268,25 @@ export class Mob extends Entity {
 
     const chasing =
       this.type.hostile && player !== null && distanceSq <= this.type.followRange * this.type.followRange;
+
+    // 被手里的食物吸引：玩家拿着它爱吃的东西走近，它会跟着走（原版行为）。
+    // 放在"求爱"之前：正在被引的时候不会乱跑，但求爱仍然优先（毕竟那是在办事）
+    // 幼体也认食物（原版小牛一样会跟，而且喂了能快点长大）
+    if (!chasing && player && this.type.feed !== undefined) {
+      const bait = ctx.heldItemId?.();
+      const distance = Math.sqrt(distanceSq);
+      if (bait !== undefined && bait === this.type.feed && distance < TEMPT_RANGE) {
+        const length = Math.max(1e-4, distance);
+        // 挨到 1.6 格以内就停下（否则会一直顶着玩家推）
+        if (distance > TEMPT_FOLLOW_STOP) {
+          this.moveDirX = dx / length;
+          this.moveDirZ = dz / length;
+        }
+        this.yaw = Math.atan2(dx, dz);
+        this.move(true, dt);
+        return;
+      }
+    }
 
     // 求爱优先：在找配偶的这段时间里它只想找对象，别的行为都让位
     if (this.loveTimer > 0 && !this.baby && ctx.findMate && ctx.spawnBaby) {
