@@ -24,6 +24,7 @@ import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower } from './core/crafting/Enchanting.ts';
+import { enchantLevel } from './core/registry/enchantments.ts';
 import { EnchantTable } from './core/container/EnchantTable.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
@@ -113,6 +114,7 @@ import {
   canHarvest,
   durabilityLabel,
   harvestRequirement,
+  meleeDamage,
   toolInfoById,
   toolItemId,
   type ToolInfo,
@@ -143,6 +145,8 @@ import {
   blockForItem,
   dropFor,
   EAT_SECONDS,
+  fortuneMultiplier,
+  silkTouchDropsSelf,
   foodInfoById,
   itemName,
   rareDropFor,
@@ -1413,6 +1417,11 @@ class App {
     return blockForItem(stack.id);
   }
 
+  /** 当前手持物品的附魔（配合 `heldTool` 用；手上没东西时为空对象） */
+  private get heldEnchants(): Readonly<Record<string, number>> | undefined {
+    return this.inventory.get(this.hotbarIndex)?.enchants;
+  }
+
   /** 当前手持的工具属性；手上不是工具时返回 null（徒手） */
   private get heldTool(): ToolInfo | null {
     const stack = this.inventory.get(this.hotbarIndex);
@@ -1520,6 +1529,9 @@ class App {
     if (!stack) return;
     const tool = toolInfoById(stack.id);
     if (!tool) return;
+    // 耐久附魔：每级有 level/(level+1) 的概率**不**消耗这次耐久（原版 `random.nextInt(level+1) > 0`）
+    const unbreaking = enchantLevel(stack.enchants, 'unbreaking');
+    if (unbreaking > 0 && Math.random() < unbreaking / (unbreaking + 1)) return;
     const damage = (stack.damage ?? 0) + amount;
     if (damage >= tool.durability) {
       // 耐久耗尽：工具直接消失（原版行为，不掉落残骸）
@@ -1911,8 +1923,10 @@ class App {
     const mob = hit.entity;
     // 下落中攻击算暴击（原版 ×1.5）；创造模式一击必杀
     const critical = !this.physics.onGround && this.physics.vy < -0.1;
-    // 徒手 1 点；手持武器按 tools.ts 的伤害表（剑 4~7、斧 7~9…），力量/虚弱在这里加减；暴击 ×1.5
-    const base = Math.max(0, (this.heldTool?.attack ?? 1) + this.effects.attackBonus());
+    // 徒手 1 点；手持武器按 tools.ts 的伤害表（剑 4~7、斧 7~9…），
+    // 锋利每级 +0.5 且只要有一级就额外 +0.5（原版就是这个式子），力量/虚弱在这里加减；暴击 ×1.5
+    const weapon = meleeDamage(this.heldTool?.attack ?? 1, this.heldEnchants);
+    const base = Math.max(0, weapon + this.effects.attackBonus());
     const damage = this.flying ? 100 : critical ? base * 1.5 : base;
     mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context);
     this.hand.swing();
@@ -1950,7 +1964,7 @@ class App {
     // 免得后面工具刚好用坏时用 null 去判断掉落
     const tool = this.heldTool;
     // 状态效果：急迫加快、挖掘疲劳减慢（倍率在 StatusEffects 里算好）
-    const required = this.flying ? 0 : breakSeconds(id, tool) / this.effects.miningSpeedMultiplier();
+    const required = this.flying ? 0 : breakSeconds(id, tool, this.heldEnchants) / this.effects.miningSpeedMultiplier();
     if (!Number.isFinite(required)) return;
 
     this.breakProgress += required <= 0 ? 1 : dt / required;
@@ -1992,12 +2006,20 @@ class App {
     // 创造模式不产生掉落（与原版一致）
     // G4：还需要"手上工具够格"——石镐挖不动钻石矿（挖得动但一无所获）
     if (!this.flying && canHarvest(brokenId, tool)) {
-      // 常规掉落优先；没有常规掉落的方块再掷一次概率掉落
-      // （目前只有树叶 0.5% 掉苹果——树苗还没做，否则苹果只能靠创造模式拿）
-      const drop = dropFor(brokenId) ?? rareDropFor(brokenId, Math.random());
+      const enchants = this.heldEnchants;
+      const silkTouch = enchantLevel(enchants, 'silk_touch') > 0;
+      const fortune = enchantLevel(enchants, 'fortune');
+
+      // 精准采集：直接掉方块自身（玻璃、草方块、西瓜块都能这样"完整带走"）
+      // 否则走常规掉落；常规掉落为空的方块再掷一次概率掉落（树叶 0.5% 掉苹果）
+      const drop = silkTouch && silkTouchDropsSelf(brokenId)
+        ? { id: brokenId, count: 1 }
+        : dropFor(brokenId) ?? rareDropFor(brokenId, Math.random());
       if (drop) {
         // 双层台阶是两块叠起来的，破坏时按 2 个掉落
-        const count = isSlabDouble(brokenState) ? drop.count * 2 : drop.count;
+        const baseCount = isSlabDouble(brokenState) ? drop.count * 2 : drop.count;
+        // 时运只放大"矿石类"的掉落（石头掉圆石、草掉泥土这些不受影响）
+        const count = baseCount * fortuneMultiplier(brokenId, fortune, Math.random());
         this.spawnDrop(drop.id, count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
       }
     }

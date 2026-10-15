@@ -297,6 +297,124 @@ console.log('\n[未接效果的附魔要标出来]');
   check('界面图例会说明这个标记', UI_HINT_UNIMPLEMENTED.includes(UNIMPLEMENTED_MARK));
 }
 
+// ---------------------------------------------------------------- 5. 效果接线（K3）
+
+console.log('\n[K3-1 效率：拿对工具才加速]');
+{
+  const { breakSeconds, makeToolInfo } = await import('../src/core/registry/tools.ts');
+  // 注意 `breakSeconds` 收的是 `ToolInfo` 而不是物品 id（`toolItemId` 给的是 id）
+  const pick = makeToolInfo('pickaxe', 'diamond');
+  const bare = breakSeconds(Block.STONE, pick);
+  const eff1 = breakSeconds(Block.STONE, pick, { efficiency: 1 });
+  const eff5 = breakSeconds(Block.STONE, pick, { efficiency: 5 });
+  check(`效率 I 让挖掘更快（${bare.toFixed(3)}s → ${eff1.toFixed(3)}s）`, eff1 < bare);
+  check(`效率 V 比效率 I 更快（${eff1.toFixed(3)}s → ${eff5.toFixed(3)}s）`, eff5 < eff1);
+  // 原版：速度 = 工具速度 + level² + 1。钻石镐 8 + 1 + 1 = 10 → 石头 1.5*1.5/10 = 0.225
+  equal('效率 I 的速度加成是 level²+1（0.225 秒）', Number(eff1.toFixed(3)), 0.225);
+  equal('没有附魔时不该凭空快 1 点（回归：写成 +1 会让所有工具白送一点速度）', Number(bare.toFixed(3)), 0.281);
+  // 拿错工具时效率不生效
+  const wrongTool = breakSeconds(Block.DIRT, pick, { efficiency: 5 });
+  const wrongToolBare = breakSeconds(Block.DIRT, pick);
+  equal('拿镐挖土时"效率 V"不生效', wrongTool, wrongToolBare);
+}
+
+console.log('\n[K3-2 时运：只放大矿石]');
+{
+  const { fortuneMultiplier, isFortuneBlock } = await import('../src/core/registry/items.ts');
+  equal('没时运时倍数为 1', fortuneMultiplier(Block.DIAMOND_ORE, 0, 0.99), 1);
+  equal('时运不影响石头', fortuneMultiplier(Block.STONE, 3, 0.99), 1);
+  equal('时运不影响铁矿（原版也是）', fortuneMultiplier(Block.IRON_ORE, 3, 99), 1);
+  equal('时运 III 掷点 0 时不多掉', fortuneMultiplier(Block.DIAMOND_ORE, 3, 0), 1);
+  equal('时运 III 掷点 0.99 时多掉 3 倍', fortuneMultiplier(Block.DIAMOND_ORE, 3, 0.99), 4);
+  equal('时运 I 最多 2 倍', fortuneMultiplier(Block.COAL_ORE, 1, 0.99), 2);
+  check('钻石/煤/红石/青金石算矿石', [Block.DIAMOND_ORE, Block.COAL_ORE, Block.REDSTONE_ORE, Block.LAPIS_ORE].every(isFortuneBlock));
+  check('铁/金矿不算', !isFortuneBlock(Block.IRON_ORE) && !isFortuneBlock(Block.GOLD_ORE));
+  check('深板岩变体跟随主矿石', isFortuneBlock(Block.DEEPSLATE_DIAMOND_ORE));
+}
+
+console.log('\n[K3-3 精准采集：掉方块自身]');
+{
+  const { silkTouchDropsSelf } = await import('../src/core/registry/items.ts');
+  check('玻璃能完整带走（原版就是靠精准采集）', silkTouchDropsSelf(Block.GLASS));
+  check('草方块能完整带走', silkTouchDropsSelf(Block.GRASS_BLOCK));
+  check('西瓜块能完整带走（否则只会掉片）', silkTouchDropsSelf(Block.MELON));
+  check('钻石矿也能完整带走', silkTouchDropsSelf(Block.DIAMOND_ORE));
+  check('基岩不能被带走', !silkTouchDropsSelf(Block.BEDROCK));
+  check('水和岩浆不能被带走', !silkTouchDropsSelf(Block.WATER) && !silkTouchDropsSelf(Block.LAVA));
+}
+
+console.log('\n[K3-4 锋利：近战伤害]');
+{
+  const { meleeDamage } = await import('../src/core/registry/tools.ts');
+  const ironSword = toolItemId('sword', 'iron');
+  const { toolInfoById } = await import('../src/core/registry/tools.ts');
+  const base = toolInfoById(ironSword)!.attack;
+  equal('没有锋利时就是武器基础伤害', meleeDamage(base), base);
+  equal('锋利 I 加 1.0（0.5×1 + 0.5）', meleeDamage(base, { sharpness: 1 }), base + 1);
+  equal('锋利 V 加 3.0（0.5×5 + 0.5）', meleeDamage(base, { sharpness: 5 }), base + 3);
+  equal('徒手 + 锋利 I 也走同一个式子', meleeDamage(1, { sharpness: 1 }), 2);
+  check('锋利对镐也生效（原版如此）', meleeDamage(toolInfoById(toolItemId('pickaxe', 'iron'))!.attack, { sharpness: 3 }) > 4);
+}
+
+console.log('\n[K3-5 保护：EPF 叠加在护甲之上]');
+{
+  const { absorbWithArmor, createArmorWearer } = await import('../src/core/registry/armor.ts');
+  const { Inventory } = await import('../src/core/container/Inventory.ts');
+  const { ARMOR_SLOT_BASE } = await import('../src/core/registry/armor.ts');
+
+  const plain = new Inventory();
+  const protectedInv = new Inventory();
+  for (let slot = 0; slot < 4; slot++) {
+    const id = armorItemId(['helmet', 'chestplate', 'leggings', 'boots'][slot] as 'helmet', 'diamond');
+    plain.set(ARMOR_SLOT_BASE + slot, { id, count: 1 });
+    protectedInv.set(ARMOR_SLOT_BASE + slot, { id, count: 1, enchants: { protection: 4 } });
+  }
+
+  const without = absorbWithArmor(plain, 20, 'generic').applied;
+  const with4 = absorbWithArmor(protectedInv, 20, 'generic').applied;
+  check(`保护 IV 满套比裸甲挡得更多（${without.toFixed(2)} → ${with4.toFixed(2)}）`, with4 < without);
+  check('保护是按 EPF 相乘，不是直接免疫', with4 > 0);
+  check('EPF 有上限 20（满套保护 IV 是 16 点，还没到顶）', with4 > 0);
+
+  const halfProtected = new Inventory();
+  for (let slot = 0; slot < 2; slot++) {
+    const id = armorItemId(['helmet', 'chestplate'][slot] as 'helmet', 'diamond');
+    halfProtected.set(ARMOR_SLOT_BASE + slot, { id, count: 1, enchants: { protection: 4 } });
+  }
+  const with8 = absorbWithArmor(halfProtected, 20, 'generic').applied;
+  check(`保护点数越多挡得越多（两件 ${with8.toFixed(2)} > 四件 ${with4.toFixed(2)}）`, with8 > with4);
+  void createArmorWearer;
+  void armorItemId;
+}
+
+console.log('\n[K3-6 耐久：按概率跳过一次损耗]');
+{
+  const { absorbWithArmor } = await import('../src/core/registry/armor.ts');
+  const { Inventory } = await import('../src/core/container/Inventory.ts');
+  const { ARMOR_SLOT_BASE } = await import('../src/core/registry/armor.ts');
+  const id = armorItemId('chestplate', 'diamond');
+
+  // 耐久 III：每次有 3/4 概率不掉耐久。跑 60 次，全都没跳过的概率是 0.25^60，不可能发生
+  const inventory = new Inventory();
+  inventory.set(ARMOR_SLOT_BASE + 1, { id, count: 1, enchants: { unbreaking: 3 } });
+  let skipped = 0;
+  for (let i = 0; i < 60; i++) {
+    absorbWithArmor(inventory, 10, 'generic');
+    const damage = inventory.get(ARMOR_SLOT_BASE + 1)?.damage ?? 99;
+    if (damage === 0) skipped++;
+    // 把耐久刷回去，继续下一次试验
+    const stack = inventory.get(ARMOR_SLOT_BASE + 1);
+    if (stack) inventory.set(ARMOR_SLOT_BASE + 1, { ...stack, damage: 0 });
+  }
+  check(`耐久 III 明显降低了损耗频率（60 次里跳过了 ${skipped} 次）`, skipped > 20, `${skipped}/60`);
+
+  // 没有耐久附魔时必须每次都掉
+  const bare = new Inventory();
+  bare.set(ARMOR_SLOT_BASE + 1, { id, count: 1 });
+  absorbWithArmor(bare, 10, 'generic');
+  equal('没有耐久附魔时每次必掉耐久', bare.get(ARMOR_SLOT_BASE + 1)?.damage, 2);
+}
+
 console.log('\n[配方链条]');
 {
   const ids = RECIPES.map((recipe) => recipe.result.id);

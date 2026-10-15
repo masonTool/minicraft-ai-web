@@ -123,6 +123,15 @@ export function enchantmentName(id: string): string {
   return BY_ID.get(id)?.name ?? id;
 }
 
+/**
+ * 取某条附魔的等级；没有这条附魔返回 0。
+ * 所有"效果接线"的地方都用它，省得每处各写一遍 `enchants?.[id] ?? 0`。
+ */
+export function enchantLevel(enchants: Readonly<Record<string, number>> | undefined, id: string): number {
+  const level = enchants?.[id];
+  return typeof level === 'number' && level > 0 ? Math.floor(level) : 0;
+}
+
 /** 罗马数字（界面显示"效率 III"用；等级从 1 起） */
 export function romanLevel(level: number): string {
   const table: readonly [number, string][] = [

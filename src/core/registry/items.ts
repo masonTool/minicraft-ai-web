@@ -541,6 +541,54 @@ const RARE_DROPS = new Map<number, { id: number; rate: number }>([
   ),
 ]);
 
+/**
+ * 时运能加成的方块（原版只有这几类矿石：煤/钻石/绿宝石/青金石/红石/下界石英）。
+ * 铁/铜/金**不在内**——它们本来就掉 1 个粗矿，时运不影响。
+ */
+const FORTUNE_BLOCKS = new Set<number>([
+  Block.COAL_ORE,
+  Block.DEEPSLATE_COAL_ORE,
+  Block.DIAMOND_ORE,
+  Block.DEEPSLATE_DIAMOND_ORE,
+  Block.EMERALD_ORE,
+  Block.DEEPSLATE_EMERALD_ORE,
+  Block.LAPIS_ORE,
+  Block.DEEPSLATE_LAPIS_ORE,
+  Block.REDSTONE_ORE,
+  Block.DEEPSLATE_REDSTONE_ORE,
+  Block.NETHER_QUARTZ_ORE,
+]);
+
+/**
+ * 时运的掉落倍数（1 = 不变）。
+ *
+ * 原版对每种矿石的概率曲线都不一样（煤 1/3 概率 +1、红石是 uniform(0..level)…），
+ * 这里统一成 `1 + ⌊roll × (level+1)⌋`：III 级平均 1.5~2 倍，III 级挖钻石平均 2.2 倍的原版手感大致对上。
+ */
+export function fortuneMultiplier(blockId: number, level: number, roll: number): number {
+  if (level <= 0 || !FORTUNE_BLOCKS.has(blockId)) return 1;
+  return 1 + Math.floor(roll * (level + 1));
+}
+
+/** 时运能不能作用于这个方块（测试与界面提示用） */
+export function isFortuneBlock(blockId: number): boolean {
+  return FORTUNE_BLOCKS.has(blockId);
+}
+
+/**
+ * 精准采集**拿不到**的方块。
+ * 原版里树叶/草这类"只能靠剪刀"的东西精准采集也不掉自身；这里把无掉落表里的
+ * 非实体方块排除掉即可（空气/水/岩浆/基岩本来也挖不动或无物品）。
+ */
+const NO_SILK_TOUCH = new Set<number>([Block.AIR, Block.WATER, Block.LAVA, Block.BEDROCK]);
+
+/** 精准采集下这个方块该掉自身吗 */
+export function silkTouchDropsSelf(blockId: number): boolean {
+  if (NO_SILK_TOUCH.has(blockId)) return false;
+  // 有对应物品的方块才能掉自身（草、花这些也有物品，所以照掉）
+  return itemDef(blockId) !== undefined;
+}
+
 /** 与"掉落自身"不同的特例 */
 const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.GRASS_BLOCK, { id: Block.DIRT, count: 1 }],

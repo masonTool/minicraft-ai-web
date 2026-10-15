@@ -1,3 +1,5 @@
+import { enchantLevel } from './enchantments.ts';
+
 /**
  * 盔甲、护甲值与减伤结算
  *
@@ -187,6 +189,7 @@ export interface ArmorSlotStack {
   id: number;
   count: number;
   damage?: number;
+  enchants?: Record<string, number>;
 }
 
 export interface ArmorSlotAccess {
@@ -210,6 +213,25 @@ export function armorSlotAccepts(slotIndex: number, itemId: number): boolean {
  * 会校验"槽位与部位一致"：坏存档或误操作把靴子塞进头盔位时，它不该被算成穿上——
  * 否则会出现"看着没戴头盔，护甲值却多了 3 点"这种查不出来的怪事。
  */
+/**
+ * 「保护」附魔的防护点数（原版 EPF）。
+ *
+ * 原版把减伤分成两步：先用护甲值/韧性算一次，再用 EPF 算一次，**两次是相乘关系**。
+ * 保护每级贡献 1 点 EPF（保护 IV × 4 件 = 16 点），EPF 总和上限 20 点。
+ *
+ * 只接「保护」一条：火焰保护/爆炸保护/弹射物保护要按伤害类型分流，属于下一步（见 TASKS K3）。
+ */
+export function protectionPoints(slots: ArmorSlotAccess): number {
+  let epf = 0;
+  for (let slot = 0; slot < ARMOR_SLOT_COUNT; slot++) {
+    const stack = slots.get(ARMOR_SLOT_BASE + slot);
+    const info = stack ? armorInfoById(stack.id) : undefined;
+    if (!info || info.slot !== slot) continue;
+    epf += enchantLevel(stack?.enchants, 'protection');
+  }
+  return Math.min(20, epf);
+}
+
 export function equippedArmor(slots: ArmorSlotAccess): (ArmorInfo | undefined)[] {
   const result: (ArmorInfo | undefined)[] = [];
   for (let slot = 0; slot < ARMOR_SLOT_COUNT; slot++) {
@@ -254,12 +276,19 @@ export interface ArmorWearer {
   absorb(amount: number, cause: string): number;
 }
 
-/** 扣一件盔甲的耐久；耐久归零就整件消失（与原版一致，不掉残骸） */
+/**
+ * 扣一件盔甲的耐久；耐久归零就整件消失（与原版一致，不掉残骸）。
+ *
+ * 「耐久」附魔在这里同样生效：每级有 `level/(level+1)` 的概率跳过这次损耗，
+ * 与工具那边共用同一个式子（`main.damageHeldTool`）。
+ */
 function wearArmorPiece(slots: ArmorSlotAccess, index: number, wear: number): boolean {
   const stack = slots.get(index);
   if (!stack) return false;
   const info = armorInfoById(stack.id);
   if (!info) return false;
+  const unbreaking = enchantLevel(stack.enchants, 'unbreaking');
+  if (unbreaking > 0 && Math.random() < unbreaking / (unbreaking + 1)) return false;
   const damage = (stack.damage ?? 0) + wear;
   if (damage >= info.durability) {
     slots.set(index, null);
@@ -281,9 +310,12 @@ export function absorbWithArmor(slots: ArmorSlotAccess, amount: number, cause: s
 
   const equipped = equippedArmor(slots);
   const defense = totalDefense(equipped);
-  if (defense <= 0) return result;
+  const epf = protectionPoints(slots);
+  if (defense <= 0 && epf <= 0) return result;
 
-  result.applied = damageAfterArmor(amount, defense, totalToughness(equipped));
+  // 先按护甲值/韧性算一次，再按"保护"附魔的 EPF 算一次（原版是两次相乘）
+  const afterArmor = damageAfterArmor(amount, defense, totalToughness(equipped));
+  result.applied = epf > 0 ? afterArmor * (1 - epf / 25) : afterArmor;
   result.blocked = amount - result.applied;
 
   // 每件盔甲掉耐久（按"减伤前"的伤害算，与原版一致）

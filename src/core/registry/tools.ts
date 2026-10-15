@@ -28,6 +28,7 @@ import {
   terracottaId,
 } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
+import { enchantLevel } from './enchantments.ts';
 
 // ---------------------------------------------------------------- 工具定义
 
@@ -316,14 +317,37 @@ export function canHarvest(blockId: number, tool?: ToolInfo | null): boolean {
  *   可采集 → 1.5 × 硬度 ÷ 速度；不可采集 → 5 × 硬度 ÷ 速度
  * 例：石头徒手 7.5s、木镐 1.125s、钻石镐 0.281s；黑曜石徒手 250s、钻石镐 9.375s。
  */
-export function breakSeconds(blockId: number, tool?: ToolInfo | null): number {
+export function breakSeconds(
+  blockId: number,
+  tool?: ToolInfo | null,
+  enchants?: Readonly<Record<string, number>>,
+): number {
   const hardness = blockHardness(blockId);
   if (hardness < 0) return Number.POSITIVE_INFINITY;
   if (hardness === 0) return 0;
   const efficient = efficientToolType(blockId);
-  const speed = tool && efficient === tool.type ? tool.speed : 1;
+  // 效率附魔按原版加 `等级² + 1` 的速度，但**只有拿对工具时才生效**——
+  // 拿镐挖土不会因为镐上有"效率 V"就变快
+  const correctTool = tool !== null && tool !== undefined && efficient === tool.type;
+  const efficiency = correctTool ? enchantLevel(enchants, 'efficiency') : 0;
+  const toolSpeed = correctTool ? tool.speed : 1;
+  // 原版是 `if (efficiency > 0) speed += efficiency² + 1`——那个 +1 **只在有附魔时才加**，
+  // 写成 `tool.speed + 0 + 1` 会让所有工具凭空快 1 点
+  const speed = efficiency > 0 ? toolSpeed + efficiency * efficiency + 1 : toolSpeed;
   const multiplier = canHarvest(blockId, tool) ? 1.5 : 5;
   return (hardness * multiplier) / speed;
+}
+
+/**
+ * 近战伤害（含「锋利」附魔）。
+ *
+ * 原版式子：锋利每级 +0.5、且**只要有一级就再 +0.5**（所以 I 级是 +1.0 而不是 +0.5）。
+ * 抽成纯函数是因为伤害公式原先写在 `main` 的近战分支里，离线测不到——
+ * "锋利到底加了多少"这种数必须能断言。
+ */
+export function meleeDamage(weaponAttack: number, enchants?: Readonly<Record<string, number>>): number {
+  const sharpness = enchantLevel(enchants, 'sharpness');
+  return weaponAttack + (sharpness > 0 ? 0.5 * sharpness + 0.5 : 0);
 }
 
 // ---------------------------------------------------------------- 工具耐久文案
