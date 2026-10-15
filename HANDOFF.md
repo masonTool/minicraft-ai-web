@@ -24,7 +24,7 @@ npm run dev            # http://localhost:5173
 
 - 时间：2026-10-15 · 提交总数 45（每个功能点一条，可逐条回滚）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 170 项 —— 已完成 **76**、进行中 **60**、待办 34；
+- 进度口径：`TASKS.md` 共 170 项 —— 已完成 **78**、进行中 **61**、待办 31；
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
@@ -46,7 +46,8 @@ npm run dev            # http://localhost:5173
 | 地物 | `core/gen/Features.ts`：11 种树 + 花草/蘑菇/甘蔗/南瓜/西瓜/仙人掌，23 群系地物表；跨区块重放 3×3 邻域保证树冠不断 |
 | 结构 | `core/gen/Structures.ts`：村庄/废弃矿井/要塞/地牢/沉船/海底神殿/林地府邸，间距+分离度+盐值放置框架 |
 | 下界 | `core/gen/NetherGenerator.ts` + `Dimension.ts`：岩浆海 + 洞窟 + 5 个下界群系 + 菌菇树等；`N` 键切维度 |
-| 测试 | `npm test` = 13 套离线测试（inventory/crafting/furnace/entity/shapes/biome/aquifer/ore/mesh/survival/mob/spawn/combat/decor/structure/nether），当前全绿 |
+| 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
+| 测试 | `npm test` = 17 套离线测试（inventory/crafting/furnace/entity/shapes/biome/aquifer/ore/mesh/survival/mob/spawn/combat/decor/structure/nether/end/endboss/redstone/save/net/render），当前全绿 |
 
 下一步的大头（队列与 TASKS.md 都能看到）：含水层、大矿脉、贪心网格化 + 网格化移入 Worker、
 生存机制（生命/饥饿/摔落）、生物 AI 与生成、结构生成、红石、存档（IndexedDB）与联机。
@@ -99,6 +100,9 @@ npm run dev            # http://localhost:5173
 | 下界"天空"还是蓝色 | `scene.background` 优先于 `renderer.setClearColor`，切维度必须同时改前者（J3） |
 | 下界一片纯黑 | 下界没有天光，方块光的传播范围又有限；靠 `VoxelMaterial.setMinBrightness` 抬高亮度下限（下界 0.24）（J3） |
 | 下界洞顶漏光 / 被顶穿 | 洞顶高度是噪声函数，偶尔会超出预期范围 → 必须夹紧（`ceilingAt` 上限 `NETHER_CEILING`）（J3） |
+| 手臂 / 色罩颜色偏成橙褐色 | `new THREE.Color(hex)` 会做一次 sRGB→线性（0.86→0.72），而自定义 ShaderMaterial 是**原样写进帧缓冲**的 → 平色一律用 `render/srgb.ts` 的 `srgbColor()`；连 `getHex()` 读出来也要加 `NoColorSpace`（E15） |
+| 手持物品的位置 / 大小怎么摆 | 别纯靠投影公式推：先用洋红把整只手染色，扫截图里洋红像素的包围盒，再按"差多少像素就是差多少格"反推（E15） |
+| 第二遍 render 把世界清掉 | 叠画手持物品 / 色罩之前必须 `renderer.autoClear = false` + `clearDepth()`，画完再改回来（E15/E16） |
 | 版权素材 | 官方贴图/音效不随仓库分发；贴图运行时程序化生成，P9 计划支持玩家自备资源包 |
 
 ## 5. 待复核的悬案（下次接手优先看）
