@@ -122,10 +122,18 @@ export class FeatureWriter {
   readonly originX: number;
   readonly originZ: number;
 
+  /**
+   * @param blocks 该区块的方块数组
+   * @param states 可选的方块状态数组（门/楼梯这类需要朝向的方块用）；
+   *               不传时 `fillState` 会退化成普通写入（结构以外的地方不需要状态）
+   * @param onStateWrite 写入状态时的回调（用于把"本区块有状态"标记出去）
+   */
   constructor(
     private readonly blocks: Uint8Array,
     readonly cx: number,
     readonly cz: number,
+    private readonly states: Uint8Array | null = null,
+    private readonly onStateWrite?: () => void,
   ) {
     this.originX = cx * CHUNK_SIZE_X;
     this.originZ = cz * CHUNK_SIZE_Z;
@@ -164,8 +172,32 @@ export class FeatureWriter {
     const x = worldX - this.originX;
     const z = worldZ - this.originZ;
     if (x < 0 || x >= CHUNK_SIZE_X || z < 0 || z >= CHUNK_SIZE_Z) return false;
-    this.blocks[Chunk.index(x, worldY, z)] = id;
+    const index = Chunk.index(x, worldY, z);
+    this.blocks[index] = id;
+    // 换方块时旧状态一律作废（与 Chunk#set 的行为保持一致）
+    if (this.states) this.states[index] = 0;
     return true;
+  }
+
+  /** 强制写入并带方块状态（门、楼梯这类朝向方块） */
+  fillState(worldX: number, worldY: number, worldZ: number, id: number, state: number): boolean {
+    if (!this.fill(worldX, worldY, worldZ, id)) return false;
+    if (this.states && state !== 0) {
+      const x = worldX - this.originX;
+      const z = worldZ - this.originZ;
+      this.states[Chunk.index(x, worldY, z)] = state;
+      this.onStateWrite?.();
+    }
+    return true;
+  }
+
+  /** 读该位置的状态（区块外返回 0） */
+  getState(worldX: number, worldY: number, worldZ: number): number {
+    if (!this.states) return 0;
+    const x = worldX - this.originX;
+    const z = worldZ - this.originZ;
+    if (x < 0 || x >= CHUNK_SIZE_X || z < 0 || z >= CHUNK_SIZE_Z) return 0;
+    return this.states[Chunk.index(x, worldY, z)]!;
   }
 
   /**

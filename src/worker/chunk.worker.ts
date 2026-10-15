@@ -14,7 +14,7 @@
  * 贴图位置换算只依赖 atlasLayout 的常量，因此这里不会引入任何 DOM 依赖。
  */
 
-import { CHUNK_BLOCK_COUNT, generateChunkBlocks } from '../core/gen/TerrainGenerator.ts';
+import { CHUNK_BLOCK_COUNT, generateChunkBlocks, takeGeneratedStates } from '../core/gen/TerrainGenerator.ts';
 import { meshSection, type MeshContext, type TileUvSource } from '../core/mesh/ChunkMesher.ts';
 import { Chunk, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../core/world/Chunk.ts';
 import { ATLAS_COLUMNS, TILE_ORDER } from '../render/atlasLayout.ts';
@@ -35,6 +35,11 @@ export interface GenerateResponse {
   cx: number;
   cz: number;
   blocks: ArrayBuffer;
+  /**
+   * 方块状态（朝向/开关）。自然地形全是 0，只有结构生成的门、楼梯才会用到，
+   * 因此这里允许为 null —— 避免每个区块都白白多传 96KB。
+   */
+  states: ArrayBuffer | null;
 }
 
 /** 一个区块的网格化输入数据 */
@@ -221,6 +226,7 @@ ctx.addEventListener('message', (event) => {
 
   if (req.type === 'generate') {
     const blocks = generateChunkBlocks(req.cx, req.cz, req.seed, new Uint8Array(CHUNK_BLOCK_COUNT));
+    const states = takeGeneratedStates();
     const response: GenerateResponse = {
       type: 'generated',
       id: req.id,
@@ -228,8 +234,11 @@ ctx.addEventListener('message', (event) => {
       cz: req.cz,
       // 转移所有权：零拷贝交给主线程
       blocks: blocks.buffer as ArrayBuffer,
+      states: states ? (states.buffer as ArrayBuffer) : null,
     };
-    ctx.postMessage(response, [response.blocks]);
+    const transfer: Transferable[] = [response.blocks];
+    if (response.states) transfer.push(response.states);
+    ctx.postMessage(response, transfer);
     return;
   }
 

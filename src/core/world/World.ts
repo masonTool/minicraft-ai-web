@@ -83,6 +83,7 @@ export class World {
     if (!this.wanted.has(key)) return;
 
     const chunk = Chunk.fromData(data.cx, data.cz, new Uint8Array(data.blocks));
+    if (data.states && data.states.byteLength > 0) chunk.adoptStates(new Uint8Array(data.states));
     this.chunks.set(key, chunk);
     this.invalidateChunkCache();
     this.light.initChunk(chunk);

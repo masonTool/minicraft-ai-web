@@ -131,6 +131,19 @@ export class Chunk {
     this.states = data.slice();
   }
 
+  /** 零拷贝接管状态数组（生成 Worker 回传的状态；调用方之后不得再使用该数组） */
+  adoptStates(data: Uint8Array): void {
+    // 全是 0 时不必占内存：绝大多数区块没有带状态的方块
+    let any = false;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] !== 0) {
+        any = true;
+        break;
+      }
+    }
+    this.states = any ? data : null;
+  }
+
   get(x: number, y: number, z: number): number {
     if (y < WORLD_MIN_Y || y >= WORLD_MAX_Y) return 0;
     return this.blocks[Chunk.index(x, y, z)]!;
