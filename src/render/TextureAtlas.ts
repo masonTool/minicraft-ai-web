@@ -1139,6 +1139,45 @@ PAINTERS.item_wheat = (x, y, rng) => {
   return [clamp255(226 + jitter), clamp255(190 + jitter), clamp255(78 + jitter), 255];
 };
 
+/** 胡萝卜：上宽下尖的橙色锥形 + 顶部一小撮绿缨 */
+PAINTERS.item_carrot = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  const dy = y - 3;
+  if (y < 3) {
+    // 绿缨
+    if (Math.abs(x - 7.5) > 3 || y < 1) return [0, 0, 0, 0];
+    return [clamp255(96 + jitter), clamp255(158 + jitter), clamp255(58 + jitter), 255];
+  }
+  // 锥体：越往下越窄
+  const half = Math.max(1.2, 4.4 - dy * 0.42);
+  if (Math.abs(x - 7.5) > half) return [0, 0, 0, 0];
+  const shade = x < 7.5 ? 1.1 : 0.88;
+  return [clamp255(238 * shade + jitter), clamp255(132 * shade + jitter), clamp255(44 * shade + jitter), 255];
+};
+
+/** 马铃薯：土黄色的椭圆，带几个"芽眼"暗点 */
+PAINTERS.item_potato = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  const dx = (x - 7.5) / 5.6;
+  const dy = (y - 8) / 4.4;
+  if (dx * dx + dy * dy > 1) return [0, 0, 0, 0];
+  // 芽眼
+  if ((x * 3 + y * 5) % 17 === 0) return [clamp255(126 + jitter), clamp255(102 + jitter), clamp255(62 + jitter), 255];
+  const shade = y < 8 ? 1.06 : 0.9;
+  return [clamp255(206 * shade + jitter), clamp255(174 * shade + jitter), clamp255(92 * shade + jitter), 255];
+};
+
+/** 烤马铃薯：颜色更深的"烤过"版本，带一道裂口 */
+PAINTERS.item_baked_potato = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  const dx = (x - 7.5) / 5.6;
+  const dy = (y - 8) / 4.4;
+  if (dx * dx + dy * dy > 1) return [0, 0, 0, 0];
+  if ((x + y) % 9 === 4) return [clamp255(158 + jitter), clamp255(108 + jitter), clamp255(52 + jitter), 255];
+  const shade = y < 8 ? 1.05 : 0.88;
+  return [clamp255(168 * shade + jitter), clamp255(118 * shade + jitter), clamp255(56 * shade + jitter), 255];
+};
+
 /** 面包：椭圆形的浅棕面包，上面斜切三道口子 */
 PAINTERS.item_bread = (x, y, rng) => {
   const jitter = rng() * 10 - 5;
@@ -1200,6 +1239,37 @@ function wheatPainter(stage: number): Painter {
 }
 
 for (let stage = 0; stage < 4; stage++) PAINTERS[`wheat_stage${stage}`] = wheatPainter(stage);
+
+/**
+ * 胡萝卜 / 马铃薯：两种地下作物地面上的部分都是"一丛绿叶"，
+ * 差别在叶子的形状与成熟时露出的果实颜色（胡萝卜橙、马铃薯土黄带点紫）。
+ */
+function rootCropPainter(kind: 'carrots' | 'potatoes', stage: number): Painter {
+  const height = 3 + stage * 3;
+  const ripe = stage === 3;
+  const fruit = kind === 'carrots' ? [232, 132, 44] : [206, 172, 92];
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    const dy = 15 - y;
+    if (dy > height) return [0, 0, 0, 0];
+    // 成熟时底部一行露出果实（土里冒出来的那一截）
+    if (ripe && dy <= 2 && x >= 5 && x <= 10) {
+      return [clamp255(fruit[0]! + jitter), clamp255(fruit[1]! + jitter), clamp255(fruit[2]! + jitter), 255];
+    }
+    // 叶子：三束，越往上越窄
+    const dx = Math.abs(x - 7.5);
+    const half = 1.6 + (height - dy) * 0.22;
+    if (dx > half) return [0, 0, 0, 0];
+    if (x % 4 === 3 && dy > 2) return [0, 0, 0, 0];
+    // 胡萝卜的叶子偏深绿、马铃薯偏灰绿（与原版观感一致）
+    const green = (kind === 'carrots' ? 96 : 108) + stage * 18;
+    return [clamp255(green * 0.52 + jitter), clamp255(green + jitter), clamp255(green * 0.42 + jitter), 255];
+  };
+}
+
+for (const kind of ['carrots', 'potatoes'] as const) {
+  for (let stage = 0; stage < 4; stage++) PAINTERS[`${kind}_stage${stage}`] = rootCropPainter(kind, stage);
+}
 
 /** 纸：略微歪斜的白色薄片 + 一道折角 */
 PAINTERS.item_paper = (x, y, rng) => {

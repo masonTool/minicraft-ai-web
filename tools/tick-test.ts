@@ -413,6 +413,17 @@ console.log('\n[小麦生长（H13）]');
   equal('封顶在最后一个阶段', cells.get(key(0, 65, 0)), Block.WHEAT_STAGE3);
   equal('成熟之后不再变化', randomTickBlock(world, 0, 65, 0, () => 0), false);
 
+  // 胡萝卜/马铃薯共用同一套生长行为（通用化之后不该只对小麦生效）
+  cells.set(key(4, 64, 0), Block.FARMLAND);
+  cells.set(key(4, 65, 0), Block.CARROTS_STAGE0);
+  equal('胡萝卜也会生长', randomTickBlock(world, 4, 65, 0, () => 0), true);
+  equal('胡萝卜长到了第 1 阶段', cells.get(key(4, 65, 0)), Block.CARROTS_STAGE1);
+  cells.set(key(5, 64, 0), Block.FARMLAND);
+  cells.set(key(5, 65, 0), Block.POTATOES_STAGE2);
+  randomTickBlock(world, 5, 65, 0, () => 0);
+  equal('马铃薯长到成熟', cells.get(key(5, 65, 0)), Block.POTATOES_STAGE3);
+  equal('成熟的马铃薯不再长', randomTickBlock(world, 5, 65, 0, () => 0), false);
+
   // 光照不够：不长
   cells.set(key(1, 64, 0), Block.FARMLAND);
   cells.set(key(1, 65, 0), Block.WHEAT_STAGE0);

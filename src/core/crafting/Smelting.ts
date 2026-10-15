@@ -23,7 +23,10 @@ export const SMELTING_TIME = 10;
 /** 全部熔炼配方（配方书要列出来，所以导出） */
 
 export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
+  // 烤马铃薯（H13 续）：原版 0.35 经验
   // 矿物 → 金属锭
+  // 烤马铃薯（H13 续）：原版 0.35 经验
+  { input: Item.POTATO, output: { id: Item.BAKED_POTATO, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
   { input: Item.RAW_IRON, output: { id: Item.IRON_INGOT, count: 1 }, time: SMELTING_TIME, experience: 0.7 },
   { input: Item.RAW_GOLD, output: { id: Item.GOLD_INGOT, count: 1 }, time: SMELTING_TIME, experience: 1 },
   { input: Item.RAW_COPPER, output: { id: Item.COPPER_INGOT, count: 1 }, time: SMELTING_TIME, experience: 0.7 },

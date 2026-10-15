@@ -99,9 +99,8 @@ export const MOB_TYPES: readonly MobType[] = [
     attackDamage: 0,
     followRange: 0,
     drops: [{ itemId: Item.PORKCHOP, min: 1, max: 3 }],
-    // ⚠️ 原版是胡萝卜/马铃薯/甜菜根——**这两样作物还没做**，猪暂时吃西瓜片。
-    // 等下一批把胡萝卜与马铃薯种出来，这一行换回 Item.CARROT 即可（逻辑不用动）
-    feed: Item.MELON_SLICE,
+    // 胡萝卜（H13 续落地后换回原版口粮；原版还认马铃薯/甜菜根）
+    feed: Item.CARROT,
     xp: 3,
     bodyColor: 0xe39a9a,
     accentColor: 0xc47878,

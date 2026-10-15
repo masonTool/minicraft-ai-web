@@ -14,7 +14,7 @@
  * 同一位置重复计划只保留最早的一次（与原版一致）。
  */
 
-import { Block, WHEAT_STAGES, blockDef, wheatStageOf, Wood } from '../registry/blocks.ts';
+import { Block, CROP_STAGES, blockDef, cropOf, Wood } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 
 /** 随机刻看到的世界 */
@@ -199,7 +199,9 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   ...LEAF_IDS.map((id) => [id, leavesBehavior] as const),
   // 小麦的 4 个阶段都要登记：随机刻是按"当前这个 id"查行为的，
   // 只登记第 0 阶段的话，苗长到第 1 阶段就再也不长了
-  ...WHEAT_STAGES.map((id) => [id, growWheat] as [number, RandomTickBehavior]),
+  ...Object.values(CROP_STAGES)
+    .flat()
+    .map((id) => [id, growCrop] as [number, RandomTickBehavior]),
   [Block.SUGAR_CANE, makeCaneBehavior(true, CANE_MAX_HEIGHT)],
   [Block.BAMBOO, makeCaneBehavior(false, BAMBOO_MAX_HEIGHT)],
   [Block.CRIMSON_NYLIUM, makeNyliumBehavior(Block.CRIMSON_NYLIUM)],
@@ -234,16 +236,18 @@ function isHydrated(world: TickWorld, x: number, y: number, z: number): boolean 
  * 三个条件缺一不可（都对原版）：**下方是耕地**、**光照 ≥ 9**、随机数命中。
  * 已经成熟的停在最后一个阶段，不会"长过头"变成别的方块。
  */
-function growWheat(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
-  const stage = wheatStageOf(world.getBlock(x, y, z));
-  if (stage < 0 || stage >= WHEAT_STAGES.length - 1) return false;
+function growCrop(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const id = world.getBlock(x, y, z);
+  const crop = cropOf(id);
+  if (!crop || crop.ripe) return false;
   if (world.getBlock(x, y - 1, z) !== Block.FARMLAND) return false;
   if ((world.lightAt?.(x, y, z) ?? 15) < CROP_MIN_LIGHT) return false;
 
   const chance = isHydrated(world, x, y - 1, z) ? CROP_GROW_CHANCE_WET : CROP_GROW_CHANCE_DRY;
   if (random() >= chance) return false;
 
-  world.setBlock(x, y, z, WHEAT_STAGES[stage + 1]!);
+  const stages = CROP_STAGES[crop.crop]!;
+  world.setBlock(x, y, z, stages[crop.stage + 1]!);
   return true;
 }
 

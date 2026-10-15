@@ -802,6 +802,14 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   plantSpec(277, 'wheat_stage1', 'wheat_stage1'),
   plantSpec(278, 'wheat_stage2', 'wheat_stage2'),
   plantSpec(279, 'wheat_stage3', 'wheat_stage3'),
+  plantSpec(280, 'carrots_stage0', 'carrots_stage0'),
+  plantSpec(281, 'carrots_stage1', 'carrots_stage1'),
+  plantSpec(282, 'carrots_stage2', 'carrots_stage2'),
+  plantSpec(283, 'carrots_stage3', 'carrots_stage3'),
+  plantSpec(284, 'potatoes_stage0', 'potatoes_stage0'),
+  plantSpec(285, 'potatoes_stage1', 'potatoes_stage1'),
+  plantSpec(286, 'potatoes_stage2', 'potatoes_stage2'),
+  plantSpec(287, 'potatoes_stage3', 'potatoes_stage3'),
 ];
 
 
@@ -989,6 +997,14 @@ export const Block = {
   WHEAT_STAGE1: 277,
   WHEAT_STAGE2: 278,
   WHEAT_STAGE3: 279,
+  CARROTS_STAGE0: 280,
+  CARROTS_STAGE1: 281,
+  CARROTS_STAGE2: 282,
+  CARROTS_STAGE3: 283,
+  POTATOES_STAGE0: 284,
+  POTATOES_STAGE1: 285,
+  POTATOES_STAGE2: 286,
+  POTATOES_STAGE3: 287,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1332,19 +1348,44 @@ for (const id of [
 HAND_HARVESTABLE.add(Block.BOOKSHELF);
 HAND_HARVESTABLE.add(Block.FARMLAND);
 for (let stage = 0; stage < 4; stage++) HAND_HARVESTABLE.add(Block.WHEAT_STAGE0 + stage);
+for (let stage = 0; stage < 4; stage++) {
+  HAND_HARVESTABLE.add(Block.CARROTS_STAGE0 + stage);
+  HAND_HARVESTABLE.add(Block.POTATOES_STAGE0 + stage);
+}
 
 /**
- * 小麦的 4 个生长阶段（按顺序）。
- * 作物生长就是"把当前阶段换成下一个 id"，所以这张表是唯一的事实来源。
+ * 作物的生长阶段表（按顺序）。
+ *
+ * 作物生长就是"把当前阶段换成下一个 id"，所以这几张表是唯一的事实来源。
+ * 三种作物共用同一套生长行为，只是 id 区间与掉落不同（见 `cropOf`）。
  */
-export const WHEAT_STAGES: readonly number[] = [
-  Block.WHEAT_STAGE0,
-  Block.WHEAT_STAGE1,
-  Block.WHEAT_STAGE2,
-  Block.WHEAT_STAGE3,
-];
+export const CROP_STAGES: Readonly<Record<string, readonly number[]>> = {
+  wheat: [Block.WHEAT_STAGE0, Block.WHEAT_STAGE1, Block.WHEAT_STAGE2, Block.WHEAT_STAGE3],
+  carrots: [Block.CARROTS_STAGE0, Block.CARROTS_STAGE1, Block.CARROTS_STAGE2, Block.CARROTS_STAGE3],
+  potatoes: [Block.POTATOES_STAGE0, Block.POTATOES_STAGE1, Block.POTATOES_STAGE2, Block.POTATOES_STAGE3],
+};
 
-/** 这个 id 是小麦的某个阶段吗 */
+/** 小麦的阶段表（保留这个名字：调用点很多，而且它是最常用的一张） */
+export const WHEAT_STAGES: readonly number[] = CROP_STAGES.wheat!;
+
+export interface CropAt {
+  readonly crop: string;
+  /** 第几个阶段（0 起） */
+  readonly stage: number;
+  /** 是不是最后一阶段（成熟） */
+  readonly ripe: boolean;
+}
+
+/** 这个 id 属于哪种作物的哪个阶段；不是作物返回 null */
+export function cropOf(id: number): CropAt | null {
+  for (const [crop, stages] of Object.entries(CROP_STAGES)) {
+    const stage = stages.indexOf(id);
+    if (stage >= 0) return { crop, stage, ripe: stage === stages.length - 1 };
+  }
+  return null;
+}
+
+/** 这个 id 是小麦的某个阶段吗（不是则 -1） */
 export function wheatStageOf(id: number): number {
   return WHEAT_STAGES.indexOf(id);
 }

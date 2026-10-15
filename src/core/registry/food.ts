@@ -83,6 +83,10 @@ export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
   // 牛奶：不回饥饿也不回饱和度，只清除所有状态效果（原版行为）
   // 面包（3 小麦）：原版 5 点饥饿 / 6 点饱和度
   bread: { hunger: 5, saturationModifier: 0.6 },
+  // 胡萝卜 / 马铃薯 / 烤马铃薯（原版数值）
+  carrot: { hunger: 3, saturationModifier: 0.6 },
+  potato: { hunger: 1, saturationModifier: 0.6 },
+  baked_potato: { hunger: 5, saturationModifier: 0.6 },
   milk_bucket: { hunger: 0, saturationModifier: 0, alwaysEdible: true, clearsEffects: true },
 
   // ---- 生肉（原版生鸡肉 30% 概率给饥饿，腐肉 80%）

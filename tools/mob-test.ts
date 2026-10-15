@@ -469,8 +469,7 @@ console.log('\n[喂食繁殖与幼体]');
 
   // ---- 喂食表
   equal('牛爱吃小麦（H13 耕作落地后已换回原版）', cowType.feed, Item.WHEAT);
-  // ⚠️ 猪暂时吃西瓜片：胡萝卜/马铃薯还没做（见 mobs.ts 里的说明）
-  equal('猪暂时吃西瓜片（胡萝卜/马铃薯待做）', mobTypeById('pig')!.feed, Item.MELON_SLICE);
+  equal('猪爱吃胡萝卜（原版）', mobTypeById('pig')!.feed, Item.CARROT);
   equal('鸡爱吃小麦种子（原版）', mobTypeById('chicken')!.feed, Item.WHEAT_SEEDS);
   equal('僵尸不吃东西（不参与繁殖）', mobTypeById('zombie')!.feed, undefined);
 

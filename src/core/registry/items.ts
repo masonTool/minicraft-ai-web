@@ -11,7 +11,7 @@
  */
 
 import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
-import { Block, WHEAT_STAGES, Wood, blockDef, wheatStageOf, woolId } from './blocks.ts';
+import { Block, WHEAT_STAGES, Wood, blockDef, cropOf, wheatStageOf, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
 import { SHEARS_INFO, SHEARS_ITEM_ID, TOOL_SPECS, type ToolInfo } from './tools.ts';
@@ -83,6 +83,9 @@ export const Item = {
   // id 定义在 tools.ts（`TOOL_BY_ID` 需要按 id 反查，反向 import 会成环）
   SHEARS: SHEARS_ITEM_ID,
   // ---- 农业（H13）
+  CARROT: 1163,
+  POTATO: 1164,
+  BAKED_POTATO: 1165,
   WHEAT_SEEDS: 1160,
   WHEAT: 1161,
   BREAD: 1162,
@@ -176,6 +179,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // ---- 农业：种子（可种在耕地上）与小麦
   { id: Item.WHEAT_SEEDS, name: 'minecraft:wheat_seeds', tile: 'item_wheat_seeds', block: Block.WHEAT_STAGE0, maxStack: 64 },
   { id: Item.WHEAT, name: 'minecraft:wheat', tile: 'item_wheat' },
+  { id: Item.CARROT, name: 'minecraft:carrot', tile: 'item_carrot', block: Block.CARROTS_STAGE0 },
+  { id: Item.POTATO, name: 'minecraft:potato', tile: 'item_potato', block: Block.POTATOES_STAGE0 },
+  { id: Item.BAKED_POTATO, name: 'minecraft:baked_potato', tile: 'item_baked_potato' },
   { id: Item.BREAD, name: 'minecraft:bread', tile: 'item_bread' },
 
   // ---- 桶（可堆 16，与原版一致）与牛奶桶（一次性的"饮品"，不可堆）
@@ -814,6 +820,30 @@ export function wheatExtraSeeds(blockId: number, roll: () => number): number {
   return (roll() < 0.75 ? 1 : 0) + (roll() < 0.75 ? 1 : 0);
 }
 
+/**
+ * 收成熟作物时**额外**掉的那一份（H13 续）。
+ *
+ * - 小麦：0~3 粒种子（原版平均 1.5）
+ * - 胡萝卜/马铃薯：各 0~2 个（原版成熟一次给 1~4 个，主掉落已经给了 2 个）
+ *
+ * @returns 额外掉落物与数量；没有额外掉落返回 null
+ */
+export function extraCropDrop(blockId: number, roll: () => number): { id: number; count: number } | null {
+  const crop = cropOf(blockId);
+  if (!crop || !crop.ripe) {
+    // 未熟的胡萝卜/马铃薯只会掉回 1 个自己（主掉落已经处理），没有额外
+    return null;
+  }
+  if (crop.crop === 'wheat') {
+    const seeds = wheatExtraSeeds(blockId, roll);
+    return seeds > 0 ? { id: Item.WHEAT_SEEDS, count: seeds } : null;
+  }
+  // 胡萝卜/马铃薯：0~1 个，两次掷点拼出 0~2，期望 1（主掉落 2 + 额外 1 ≈ 原版 1~4 的中值）
+  const extra = (roll() < 0.5 ? 1 : 0) + (roll() < 0.5 ? 1 : 0);
+  if (extra <= 0) return null;
+  return { id: crop.crop === 'carrots' ? Item.CARROT : Item.POTATO, count: extra };
+}
+
 /** 与"掉落自身"不同的特例 */
 const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.GRASS_BLOCK, { id: Block.DIRT, count: 1 }],
@@ -822,6 +852,15 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.WHEAT_STAGE1, { id: Item.WHEAT_SEEDS, count: 1 }],
   [Block.WHEAT_STAGE2, { id: Item.WHEAT_SEEDS, count: 1 }],
   [Block.WHEAT_STAGE3, { id: Item.WHEAT, count: 1 }],
+  // 胡萝卜/马铃薯（H13 续）：没熟只掉 1 个自己（能再种回去），熟了才给果实
+  [Block.CARROTS_STAGE0, { id: Item.CARROT, count: 1 }],
+  [Block.CARROTS_STAGE1, { id: Item.CARROT, count: 1 }],
+  [Block.CARROTS_STAGE2, { id: Item.CARROT, count: 1 }],
+  [Block.CARROTS_STAGE3, { id: Item.CARROT, count: 2 }],
+  [Block.POTATOES_STAGE0, { id: Item.POTATO, count: 1 }],
+  [Block.POTATOES_STAGE1, { id: Item.POTATO, count: 1 }],
+  [Block.POTATOES_STAGE2, { id: Item.POTATO, count: 1 }],
+  [Block.POTATOES_STAGE3, { id: Item.POTATO, count: 2 }],
   [Block.STONE, { id: Block.COBBLESTONE, count: 1 }],
   // 黏土块一次掉 4 个黏土球（原版行为），黏土球烧炼后得到红砖
   [Block.CLAY, { id: Item.CLAY_BALL, count: 4 }],

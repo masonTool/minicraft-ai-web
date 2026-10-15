@@ -170,7 +170,7 @@ import {
   saturationFrom,
   type FoodInfo,
   Item,
-  wheatExtraSeeds,
+  extraCropDrop,
 } from './core/registry/items.ts';
 import { canEat } from './core/registry/food.ts';
 
@@ -2280,9 +2280,11 @@ class App {
       });
       if (drop) {
         this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
-        // 收成熟小麦还会额外掉 0~3 粒种子（H13）
-        const seeds = wheatExtraSeeds(brokenId, Math.random);
-        if (seeds > 0) this.spawnDrop(Item.WHEAT_SEEDS, seeds, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+        // 收成熟作物还会额外掉一份（小麦是种子、胡萝卜/马铃薯是果实）
+        const extra = extraCropDrop(brokenId, Math.random);
+        if (extra) {
+          this.spawnDrop(extra.id, extra.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+        }
       }
     }
 

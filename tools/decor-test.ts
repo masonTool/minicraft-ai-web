@@ -16,6 +16,7 @@ import {
   Item,
   type DropContext,
   blockDrops,
+  extraCropDrop,
   wheatExtraSeeds,
   dropFor,
   itemDef,
@@ -431,6 +432,19 @@ console.log('\n[小麦与种子（H13）]');
   equal('草丛掷点 0.1 → 掉小麦种子', blockDrops(Block.SHORT_GRASS, { ...plain, roll: () => 0.1 })?.id, Item.WHEAT_SEEDS);
   equal('草丛掷点 0.5 → 什么都不掉', blockDrops(Block.SHORT_GRASS, { ...plain, roll: () => 0.5 }), null);
   equal('草丛的种子概率是 12.5%（原版）', GRASS_SEED_CHANCE, 0.125);
+  // 胡萝卜/马铃薯（H13 续）
+  equal('未熟胡萝卜掉 1 个自己（能再种回去）', blockDrops(Block.CARROTS_STAGE1, plain)?.id, Item.CARROT);
+  equal('成熟胡萝卜主掉落 2 个', blockDrops(Block.CARROTS_STAGE3, plain)?.count, 2);
+  equal('成熟马铃薯主掉落 2 个', blockDrops(Block.POTATOES_STAGE3, plain)?.count, 2);
+  equal('未熟马铃薯没有额外掉落', extraCropDrop(Block.POTATOES_STAGE2, () => 0), null);
+  equal('成熟胡萝卜额外掷点都命中 → 额外 2 个', extraCropDrop(Block.CARROTS_STAGE3, () => 0)?.count, 2);
+  equal('成熟胡萝卜额外掷点都不中 → 没有额外', extraCropDrop(Block.CARROTS_STAGE3, () => 0.9), null);
+  equal('成熟小麦的额外掉落是种子（走同一条通用路径）', extraCropDrop(Block.WHEAT_STAGE3, () => 0)?.id, Item.WHEAT_SEEDS);
+  let carrotTotal = 0;
+  for (let i = 0; i < 20000; i++) carrotTotal += extraCropDrop(Block.CARROTS_STAGE3, Math.random)?.count ?? 0;
+  const carrotAvg = carrotTotal / 20000;
+  check(`20000 次收胡萝卜平均额外 ${carrotAvg.toFixed(2)} 个（期望 1.0，加主掉落 2 个 ≈ 原版 1~4 的中值）`,
+    Math.abs(carrotAvg - 1) < 0.06, carrotAvg.toFixed(3));
   let seeds = 0;
   for (let i = 0; i < 20000; i++) if (blockDrops(Block.SHORT_GRASS, { ...plain, roll: Math.random })) seeds++;
   check(`20000 次拔草掉了 ${seeds} 次种子（期望约 2500）`, Math.abs(seeds / 20000 - 0.125) < 0.01, (seeds / 20000).toFixed(4));
