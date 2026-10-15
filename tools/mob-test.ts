@@ -12,6 +12,7 @@
  *   6. 僵尸追击玩家（若干秒后距离显著缩短）
  *   7. 被动生物在平台边缘游荡不会掉下去
  *   8. 受伤扣血、无敌帧、致死掉落
+ *   9. 骷髅远程（J9）：射程内放箭、贴太近后退、有冷却、不再近战
  */
 
 import { Mob } from '../src/core/entity/Mob.ts';
@@ -32,6 +33,10 @@ function check(name: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${name}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+function equal(name: string, actual: unknown, expected: unknown): void {
+  check(name, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
 /** 用集合表示实心方块的测试世界 */
@@ -293,6 +298,80 @@ console.log('\n[生物表]');
   check('敌对生物有攻击力', MOB_TYPES.filter((t) => t.hostile).every((t) => t.attackDamage > 0));
   check('被动生物不掉落空表', MOB_TYPES.filter((t) => !t.hostile).every((t) => t.drops.length > 0));
   check('所有生物都有正的生命与尺寸', MOB_TYPES.every((t) => t.health > 0 && t.width > 0 && t.height > 0));
+}
+
+console.log('\n[骷髅：远程射击]');
+{
+  const world = new TestWorld();
+  world.floor(-40, 40, -8, 8, 64);
+
+  /** 记下每次射箭 */
+  const shots: { vx: number; vy: number; vz: number; damage: number; fromPlayer: boolean }[] = [];
+  let meleeDamage = 0;
+  const player = { x: 12.5, y: 65, z: 0.5 };
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player,
+    hurtPlayer: (amount) => {
+      meleeDamage += amount;
+    },
+    spawnDrop: () => undefined,
+    spawnArrow: (_x, _y, _z, velocity, options) => {
+      shots.push({ vx: velocity.x, vy: velocity.y, vz: velocity.z, damage: options.damage, fromPlayer: options.fromPlayer });
+    },
+  };
+
+  const skeletonType = mobTypeById('skeleton')!;
+  check('骷髅配了远程参数', skeletonType.ranged !== undefined);
+  equal('射程 16 格', skeletonType.ranged?.range, 16);
+  equal('每 2 秒一箭', skeletonType.ranged?.cooldown, 2);
+  equal('贴到 5 格内会后退', skeletonType.ranged?.keepDistance, 5);
+
+  // ---- 12 格外：射程内，应该放箭
+  const far = new Mob(skeletonType, 0.5, 65.5, 0.5);
+  for (let i = 0; i < 60; i++) far.tick(ctx, 0.05); // 3 秒
+  check('射程内会放箭', shots.length > 0, `射了 ${shots.length} 次`);
+  check('3 秒最多两箭（有冷却，不会连发）', shots.length <= 2, `射了 ${shots.length} 次`);
+  check('箭是"敌人射的"（会打玩家）', shots[0]?.fromPlayer === false);
+  check('射击方向朝向玩家（x 为正）', (shots[0]?.vx ?? 0) > 0, JSON.stringify(shots[0]));
+  equal('箭的伤害取生物的攻击力', shots[0]?.damage, skeletonType.attackDamage);
+  equal('骷髅不再近战（不直接扣玩家血）', meleeDamage, 0);
+
+  // ---- 玩家贴到 2 格：应该后退而不是继续贴
+  const shotsBefore = shots.length;
+  const closeWorld = new TestWorld();
+  closeWorld.floor(-40, 40, -8, 8, 64);
+  const closePlayer = { x: 2.5, y: 65, z: 0.5 };
+  const closeCtx: EntityContext = { ...ctx, world: closeWorld.asPhysicsWorld(), player: closePlayer };
+  const close = new Mob(skeletonType, 0.5, 65.5, 0.5);
+  const distanceBefore = Math.abs(closePlayer.x - close.x);
+  for (let i = 0; i < 40; i++) close.tick(closeCtx, 0.05); // 2 秒
+  const distanceAfter = Math.abs(closePlayer.x - close.x);
+  check(
+    '玩家贴脸时骷髅会后退',
+    distanceAfter > distanceBefore + 1,
+    `${distanceBefore.toFixed(1)} → ${distanceAfter.toFixed(1)}`,
+  );
+  void shotsBefore;
+
+  // ---- 20 格外：超出射程（16）但在警戒范围（24）内 → 不放箭、但会靠近
+  // 注意不能放到 24 格外：那样骷髅根本没发现玩家（followRange），会去游荡而不是靠近
+  const shotsFar = shots.length;
+  const awayWorld = new TestWorld();
+  awayWorld.floor(-40, 40, -8, 8, 64);
+  const awayPlayer = { x: 20.5, y: 65, z: 0.5 };
+  const awayCtx: EntityContext = { ...ctx, world: awayWorld.asPhysicsWorld(), player: awayPlayer };
+  const away = new Mob(skeletonType, 0.5, 65.5, 0.5);
+  // 先只跑 0.5 秒：这期间它还走不进射程（2.7 格/秒 × 0.5 = 1.35 格）
+  for (let i = 0; i < 10; i++) away.tick(awayCtx, 0.05);
+  equal('还在射程外时不开火', shots.length, shotsFar);
+  // 再跑 2 秒：它会走进射程，然后开火（这正是"接近后才射击"的完整表现）
+  for (let i = 0; i < 40; i++) away.tick(awayCtx, 0.05);
+  check('会朝玩家靠近', away.x > 4, `x=${away.x.toFixed(2)}`);
+  check('走进射程后开始放箭', shots.length > shotsFar, `${shotsFar} → ${shots.length}`);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

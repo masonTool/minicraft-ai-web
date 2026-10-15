@@ -44,6 +44,8 @@ export const MOB_TYPES: readonly MobType[] = [
     drops: [{ itemId: Item.BONE, min: 0, max: 2, chance: 0.85 }],
     xp: 5,
     family: 'undead',
+    // 原版骷髅：约 16 格射程、每 2 秒一箭、贴到 5 格内会后退
+    ranged: { range: 16, cooldown: 2, speed: 34, keepDistance: 5, spread: 0.12 },
     bodyColor: 0xd9d9d1,
     accentColor: 0xb4b4ac,
     eyeHeight: 1.74,

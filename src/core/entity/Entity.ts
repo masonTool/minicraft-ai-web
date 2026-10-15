@@ -30,7 +30,7 @@ export interface EntityContext {
   /** 玩家位置（敌对生物追击用）；未加载时为 null */
   player: { x: number; y: number; z: number } | null;
   /** 播放音效（生物用：点火、爆炸等）；不传就没有声音 */
-  playSound?: (kind: 'fuse' | 'explode', x: number, y: number, z: number) => void;
+  playSound?: (kind: 'fuse' | 'explode' | 'bow_shoot', x: number, y: number, z: number) => void;
   /**
    * 爆炸（苦力怕用）。
    * 生物只负责"什么时候炸"，"炸成什么样"由主程序决定（要不要炸地形由 mobGriefing 规则控制）。
@@ -57,6 +57,18 @@ export interface EntityContext {
   hitMob?: (box: AABB) => Mob | null;
   /** 生成掉落物实体（生物死亡掉落用） */
   spawnDrop: (itemId: number, count: number, x: number, y: number, z: number) => void;
+  /**
+   * 射出一支箭（J9，骷髅用）。
+   * 与 `spawnDrop` 同理：生物只负责"什么时候射、往哪射"，
+   * 箭怎么建、飞出去长什么样由主程序决定。
+   */
+  spawnArrow?: (
+    x: number,
+    y: number,
+    z: number,
+    velocity: { x: number; y: number; z: number },
+    options: { fromPlayer: boolean; damage: number; knockback?: number; fireSeconds?: number; pickable?: boolean },
+  ) => void;
 }
 
 let nextEntityId = 1;

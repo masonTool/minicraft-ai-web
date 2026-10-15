@@ -2376,6 +2376,10 @@ class App {
       playSound: (kind, x, y, z) => this.audio.play(kind, { x, y, z }),
       explode: (x, y, z, power) => this.explodeAt(x, y, z, power),
       spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),
+      // 骷髅射箭与玩家走完全同一条路径，两边不会各自漂移
+      spawnArrow: (x, y, z, velocity, options) => {
+        this.spawnArrow(x, y, z, velocity, options);
+      },
       awardXp: (amount) => this.awardXp(amount),
     };
     this.lastEntityContext = context;

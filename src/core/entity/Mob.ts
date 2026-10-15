@@ -58,6 +58,24 @@ export interface MobType {
   xp: number;
   /** 生物家族（亡灵 / 节肢）；蜘蛛还没做，所以目前只有亡灵有成员 */
   family?: MobFamily;
+  /**
+   * 远程攻击配置（J9，骷髅用）。不填就是近战。
+   *
+   * 有它的生物**不再贴身近战**：进入 `range` 就放箭，同时保持 `keepDistance` 以上的距离
+   * （原版骷髅就是这样——贴脸它反而会后退）。
+   */
+  ranged?: {
+    /** 有效射程（格） */
+    range: number;
+    /** 两箭之间的间隔（秒，实际会再加一点随机抖动） */
+    cooldown: number;
+    /** 箭的初速（格/秒） */
+    speed: number;
+    /** 保持的最小距离（格），太近就后退 */
+    keepDistance: number;
+    /** 射击散布（弧度，0 = 百发百中） */
+    spread: number;
+  };
   /** 渲染用的主色 / 点缀色 */
   bodyColor: number;
   accentColor: number;
@@ -86,6 +104,12 @@ export class Mob extends Entity {
   burnTime = 0;
 
   private burnTick = 0;
+  /** 远程生物的移动方向（保持距离用）与"正在拉开"标记 */
+  private moveDirX = 0;
+  private moveDirZ = 0;
+  private retreating = false;
+  /** 距离下一次放箭还有多久 */
+  private rangedTimer = 0;
   private hurtTime = 0;
   private attackCooldown = 0;
   /** 苦力怕的引信（秒）：贴到玩家身上开始点燃，1.5 秒后炸 */
@@ -161,6 +185,13 @@ export class Mob extends Entity {
     const chasing =
       this.type.hostile && player !== null && distanceSq <= this.type.followRange * this.type.followRange;
 
+    // 远程生物走自己那套（保持距离 + 放箭），不参与近战的寻路追击
+    if (chasing && player && this.type.ranged) {
+      this.updateRangedAi(ctx, distanceSq, player, dt);
+      this.move(true, dt);
+      return;
+    }
+
     if (chasing && player) {
       this.repathTimer -= dt;
       if (this.repathTimer <= 0 || this.path.length === 0) {
@@ -210,12 +241,80 @@ export class Mob extends Entity {
     this.move(chasing, dt);
   }
 
+  /**
+   * 远程生物的 AI（J9）。
+   *
+   * 三件事：**保持距离**（太近后退、太远靠近、射程内站住）、**定期放箭**、**朝向玩家**。
+   * 不走 `pathfinder`：远程生物的目标不是"贴上去"，用直线方向就够了；
+   * 而寻路每 0.5 秒重算一次，对"保持距离"这种小范围来回反而会抖。
+   */
+  private updateRangedAi(
+    ctx: EntityContext,
+    distanceSq: number,
+    player: { x: number; y: number; z: number },
+    dt: number,
+  ): void {
+    const ranged = this.type.ranged!;
+    const distance = Math.sqrt(distanceSq);
+    const dx = player.x - this.x;
+    const dz = player.z - this.z;
+    const length = Math.max(1e-4, Math.hypot(dx, dz));
+
+    // 前进 / 后退 / 站住
+    const approaching = distance > ranged.range * 0.9;
+    this.retreating = distance < ranged.keepDistance;
+    if (this.retreating) {
+      this.moveDirX = -dx / length;
+      this.moveDirZ = -dz / length;
+    } else if (approaching) {
+      this.moveDirX = dx / length;
+      this.moveDirZ = dz / length;
+    } else {
+      this.moveDirX = 0;
+      this.moveDirZ = 0;
+    }
+
+    // 朝向始终对着玩家（渲染与射击方向都靠它）
+    this.yaw = Math.atan2(dx, dz);
+
+    this.rangedTimer -= dt;
+    if (this.rangedTimer > 0 || distance > ranged.range) return;
+    this.rangedTimer = ranged.cooldown + Math.random() * 0.5;
+
+    // 从眼睛朝玩家胸口射，带一点散布
+    const eyeY = this.y + this.type.eyeHeight;
+    const targetY = player.y + 1.2;
+    const aimX = dx / length;
+    const aimZ = dz / length;
+    const aimY = (targetY - eyeY) / length;
+    const spread = (Math.random() - 0.5) * ranged.spread;
+    const cos = Math.cos(spread);
+    const sin = Math.sin(spread);
+
+    ctx.spawnArrow?.(
+      this.x,
+      eyeY,
+      this.z,
+      {
+        x: (aimX * cos - aimZ * sin) * ranged.speed,
+        y: aimY * ranged.speed,
+        z: (aimX * sin + aimZ * cos) * ranged.speed,
+      },
+      { fromPlayer: false, damage: this.type.attackDamage },
+    );
+    ctx.playSound?.('bow_shoot', this.x, this.y, this.z);
+  }
+
   private move(chasing: boolean, dt: number): void {
     const speed = chasing ? this.type.speed * 1.12 : this.type.speed * 0.5;
     let targetVx = 0;
     let targetVz = 0;
 
-    if (chasing) {
+    if (this.type.ranged) {
+      // 远程生物：方向由 `updateRangedAi` 决定（保持距离），不走寻路
+      targetVx = this.moveDirX * speed;
+      targetVz = this.moveDirZ * speed;
+    } else if (chasing) {
       while (this.pathIndex < this.path.length) {
         const node = this.path[this.pathIndex]!;
         const dx = node.x + 0.5 - this.x;
