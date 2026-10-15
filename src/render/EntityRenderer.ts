@@ -19,6 +19,7 @@ import type { TextureAtlas } from './TextureAtlas.ts';
 import { applyFaceUvs, blockFaceTiles } from './atlasMesh.ts';
 import { Arrow } from '../core/entity/Arrow.ts';
 import { ItemEntity } from '../core/entity/ItemEntity.ts';
+import { Throwable } from '../core/entity/Throwable.ts';
 import type { Entity } from '../core/entity/Entity.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 
@@ -71,6 +72,7 @@ export class EntityRenderer {
 
   private readonly meshes = new Map<number, THREE.Mesh>();
   private readonly arrowMeshes = new Map<number, THREE.Mesh>();
+  private readonly throwableMeshes = new Map<number, THREE.Mesh>();
   private arrowGeometry: THREE.BufferGeometry | null = null;
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly spriteGeometries = new Map<number, THREE.BufferGeometry>();
@@ -124,6 +126,10 @@ export class EntityRenderer {
         this.syncArrow(entity, alive, lightAt);
         continue;
       }
+      if (entity instanceof Throwable) {
+        this.syncThrowable(entity, alive, camera, lightAt);
+        continue;
+      }
       if (!(entity instanceof ItemEntity)) continue;
       alive.add(entity.id);
 
@@ -165,6 +171,46 @@ export class EntityRenderer {
       this.object.remove(mesh);
       this.arrowMeshes.delete(id);
     }
+    for (const [id, mesh] of [...this.throwableMeshes]) {
+      if (alive.has(id)) continue;
+      this.object.remove(mesh);
+      this.throwableMeshes.delete(id);
+    }
+  }
+
+  /**
+   * 同步一个投掷物（K4 尾巴：雪球/鸡蛋/喷溅药水）。
+   *
+   * 用**掉落物那套 billboard 平面**，而不是箭那种细长小盒子：
+   * 投掷物是圆的/瓶状的，且在空中的时间很短，一张始终朝向镜头的贴图最好认
+   * （原版也是精灵状的小东西在飞）。
+   */
+  private syncThrowable(
+    throwable: Throwable,
+    alive: Set<number>,
+    camera: THREE.Camera,
+    lightAt?: (x: number, y: number, z: number) => EntityLight | null,
+  ): void {
+    alive.add(throwable.id);
+
+    let mesh = this.throwableMeshes.get(throwable.id);
+    if (!mesh) {
+      mesh = new THREE.Mesh(this.spriteGeometry(throwable.itemId), this.baseMaterial);
+      mesh.userData.billboard = true;
+      this.throwableMeshes.set(throwable.id, mesh);
+      this.object.add(mesh);
+    }
+
+    if (lightAt) {
+      const light = lightAt(Math.floor(throwable.x), Math.floor(throwable.y + 0.1), Math.floor(throwable.z));
+      if (light) {
+        const level = Math.max(light.sky * this.skyLightFactor, light.block);
+        mesh.material = this.materialForLevel(Math.round(level));
+      }
+    }
+
+    mesh.position.set(throwable.x, throwable.y + 0.12, throwable.z);
+    mesh.quaternion.copy(camera.quaternion);
   }
 
   /** 同步一支箭的位置与朝向 */

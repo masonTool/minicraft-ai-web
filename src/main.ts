@@ -24,7 +24,9 @@ import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower } from './core/crafting/Enchanting.ts';
-import { potionById, type PotionEntry } from './core/registry/potions.ts';
+import { isDrinkable, potionById, type PotionEntry } from './core/registry/potions.ts';
+import { splashEffectsAt } from './core/survival/SplashPotion.ts';
+import { PLAYER_THROW_SPEED, Throwable, type ThrowableKind } from './core/entity/Throwable.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { ANVIL_SIZE, Anvil } from './core/container/Anvil.ts';
@@ -1496,7 +1498,9 @@ class App {
     const stack = this.inventory.get(this.hotbarIndex);
     if (!stack) return null;
     const potion = potionById(stack.id);
-    return potion && !potion.base ? potion : null;
+    // **喷溅型不能喝**（K4 尾巴）：它在手上点按是扔出去（见 `throwHeld`），
+    // 长按也不该变成"喝掉一瓶要扔的药水"
+    return isDrinkable(potion) ? potion : null;
   }
 
   /**
@@ -2578,6 +2582,17 @@ class App {
       },
       spawnHearts: (x, y, z, scale) => this.particles.spawnHearts(x, y, z, scale),
       awardXp: (amount) => this.awardXp(amount),
+      // 鸡蛋砸出小鸡（K4 尾巴）：与 `spawnBaby` 同一个套路，只是不走求爱那一套
+      hatchChicken: (x, y, z) => {
+        const chicken = mobTypeById('chicken');
+        if (!chicken) return;
+        const baby = new Mob(chicken, x, y, z);
+        baby.makeBaby();
+        this.entities.spawn(baby);
+        this.particles.spawnSmoke(x, y + 0.2, z, 6, 0.24);
+      },
+      // 喷溅药水的范围结算（K4 尾巴）：实体层只报"在哪炸了"，周围有谁得问这里
+      applySplash: (potionId, x, y, z) => this.applySplash(potionId, x, y, z),
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);
@@ -3199,10 +3214,103 @@ class App {
     if (active) bar.style.width = `${Math.round(this.breakProgress * 100)}%`;
   }
 
+  /**
+   * 扔出手上的东西（K4 尾巴）：雪球 / 鸡蛋 / 喷溅药水。
+   *
+   * 为什么是"点按即投"而不是像吃喝那样长按：扔东西时瞄准的就是正前方
+   * （对着生物，或者对着天空抛），而触摸端"长按空处 = 使用"的前提是
+   * **准星没对着方块**——那恰好把"瞄准生物"这个最主要的情况排除了。
+   * 所以投掷挂在轻点/右键那一路，和放置方块抢同一个手势（手里拿着投掷物时优先扔）。
+   *
+   * @returns 是否真的扔出去了（没扔出去就让这次点击继续走原本的放置逻辑）
+   */
+  private throwHeld(): boolean {
+    const held = this.heldItemId;
+    if (held === undefined) return false;
+
+    const potion = potionById(held);
+    const kind: ThrowableKind | null =
+      held === Item.SNOWBALL
+        ? 'snowball'
+        : held === Item.EGG
+          ? 'egg'
+          : potion?.splash === true
+            ? 'splash_potion'
+            : null;
+    if (kind === null) return false;
+
+    // 先扣再扔：扔不出去（背包里其实没有）时什么都不该发生
+    if (!this.inventory.consume(held, 1)) return false;
+
+    const cosPitch = Math.cos(this.pitch);
+    const dirX = -Math.sin(this.yaw) * cosPitch;
+    const dirY = Math.sin(this.pitch);
+    const dirZ = -Math.cos(this.yaw) * cosPitch;
+
+    // 出手点在眼睛前下方一点（与射箭一致），避免刚出手就撞上自己脚边的方块
+    this.entities.spawn(
+      new Throwable(
+        this.physics.x + dirX * 0.4,
+        this.physics.eyeY - 0.1,
+        this.physics.z + dirZ * 0.4,
+        { x: dirX * PLAYER_THROW_SPEED, y: dirY * PLAYER_THROW_SPEED, z: dirZ * PLAYER_THROW_SPEED },
+        { kind, itemId: held, potionId: kind === 'splash_potion' ? held : undefined },
+      ),
+    );
+
+    this.audio.play('bow_shoot');
+    this.hand.swing();
+    this.vibrate(8);
+    this.refreshHotbar();
+    return true;
+  }
+
+  /**
+   * 一次喷溅药水的范围结算（K4 尾巴）。
+   *
+   * 范围与"离得越远越短"的缩放都在 `survival/SplashPotion.ts`（纯函数），
+   * 这里只负责回答"谁在范围内"：**玩家自己 + 四周的生物**。
+   * ⚠️ 喷溅药水是**不分敌我**的（原版如此）：往脚下砸虚弱药水，自己也一样中招。
+   */
+  applySplash(potionId: number, x: number, y: number, z: number): void {
+    const potion = potionById(potionId);
+    if (!potion) return;
+
+    this.audio.play('splash', { x, y, z });
+    this.particles.spawnSmoke(x, y + 0.2, z, 10, 0.4);
+
+    // 玩家：按"身体中心"算距离（生物那边同样取身体中心，两边口径一致）
+    const playerDistance = Math.hypot(this.physics.x - x, this.physics.y + 0.9 - y, this.physics.z - z);
+    for (const effect of splashEffectsAt(potion, playerDistance)) {
+      this.effects.apply(effect.id, effect.seconds, effect.amplifier);
+    }
+
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity.dead) continue;
+      const distance = Math.hypot(entity.x - x, entity.y + entity.height / 2 - y, entity.z - z);
+      for (const effect of splashEffectsAt(potion, distance)) {
+        entity.effects.apply(effect.id, effect.seconds, effect.amplifier);
+      }
+    }
+
+    // 直接命中的目标不需要特殊处理：它的距离≈0，`splashScale` 本来就是 1（满时长）。
+    // 也不往消息栏里写一行——原版砸药水是没有提示的，扔一排在手机上会被刷屏
+  }
+
   private updatePlacing(): void {
     // 触摸端是"一次性轻点"，鼠标是"按住不放"，这里统一成一个待执行标记
     const tapped = this.touchPlaceRequest;
-    if ((!this.rightDown && !tapped && !this.padUse) || !this.hit || this.placeCooldown > 0) return;
+    if ((!this.rightDown && !tapped && !this.padUse) || this.placeCooldown > 0) return;
+
+    // 投掷物优先于放置：手里拿着雪球/鸡蛋/喷溅药水时，这一下是"扔"而不是"放"
+    if (this.throwHeld()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
+    // 没有命中方块就没什么可放/可交互的（投掷在上面已经处理过了）
+    if (!this.hit) return;
 
     // 右键功能方块：潜行时仍然走放置逻辑（与原版一致）
     const sneak = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');

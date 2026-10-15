@@ -141,6 +141,8 @@ export const MOB_TYPES: readonly MobType[] = [
     ],
     // 小麦种子（H13 耕作落地后换回原版口粮）
     feed: Item.WHEAT_SEEDS,
+    // 下蛋（K4 尾巴）：鸡蛋在生存里的唯一来源
+    laysEggs: true,
     xp: 3,
     bodyColor: 0xf2f2ee,
     accentColor: 0xd94f2b,

@@ -14,6 +14,8 @@
 import { Entity, type EntityContext } from './Entity.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
 import { woolId } from '../registry/blocks.ts';
+import { Item } from '../registry/items.ts';
+import { StatusEffects } from '../survival/StatusEffects.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 
 /** 与玩家一致的常量（原版数值） */
@@ -47,6 +49,16 @@ export const BREED_COOLDOWN_SECONDS = 60;
 export const MATE_RANGE = 2.5;
 /** 求爱时能"看见"配偶的距离（格） */
 export const MATE_SEARCH_RANGE = 8;
+
+/**
+ * 鸡下蛋的间隔（秒）：原版是 5~10 分钟一个蛋（`6000~12000` tick）。
+ * 鸡蛋在生存里的**唯一来源**就是这里，所以这个节奏不能"为了好测"改短——
+ * 改了就等于凭空提高产蛋率。
+ */
+export const EGG_LAY_INTERVAL_MIN = 300;
+export const EGG_LAY_INTERVAL_MAX = 600;
+/** 状态效果的结算频率（秒）：与玩家的状态效果同频（20Hz） */
+const EFFECT_STEP = 0.05;
 
 const GRAVITY = 32;
 const JUMP_SPEED = 8.95;
@@ -102,6 +114,8 @@ export interface MobType {
   wool?: boolean;
   /** 能不能挤奶（J8，牛用）。原版只有牛与山羊可以 */
   milk?: boolean;
+  /** 会不会下蛋（K4 尾巴，鸡用）。鸡蛋在生存里的唯一来源 */
+  laysEggs?: boolean;
   /** 生物家族（亡灵 / 节肢）；蜘蛛还没做，所以目前只有亡灵有成员 */
   family?: MobFamily;
   /**
@@ -185,6 +199,19 @@ export class Mob extends Entity {
   private fuse = 0;
   private jumpCooldown = 0;
 
+  /**
+   * 身上的状态效果（K4 尾巴：喷溅药水的对象）。
+   *
+   * 直接复用玩家那套 `StatusEffects`（它不依赖任何其它模块），于是
+   * "缓慢 -15%/级""中毒每 25 tick 掉 1 点""力量 +3 点""瞬间伤害 6 点"这些数值**只有一份**——
+   * 否则同一瓶药水砸玩家和砸僵尸会是两种效果。
+   */
+  readonly effects = new StatusEffects();
+  /** 效果按 20Hz 推进，这里攒时间片（与玩家那边的结算频率一致） */
+  private effectAccumulator = 0;
+  /** 下蛋倒计时（秒，仅 `type.laysEggs` 用）；初值随机是为了让一群鸡不要齐刷刷下蛋 */
+  private eggTimer = EGG_LAY_INTERVAL_MIN + Math.random() * (EGG_LAY_INTERVAL_MAX - EGG_LAY_INTERVAL_MIN);
+
   private path: PathPoint[] = [];
   private pathIndex = 0;
   private repathTimer = 0;
@@ -233,6 +260,9 @@ export class Mob extends Entity {
     this.tickBurning(dt);
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
+    // 效果要在 AI 之前结算：缓慢/速度影响的正是这一帧的移动速度
+    this.tickEffects(ctx, dt);
+    this.tickEggLaying(ctx, dt);
 
     this.updateAi(ctx, dt);
 
@@ -259,6 +289,70 @@ export class Mob extends Entity {
 
   /** 掉落是否已结算（防止死亡与着火两条路径重复掉一份） */
   private lootDropped = false;
+
+  /**
+   * 状态效果结算（K4 尾巴）。
+   *
+   * 顺序与原版一致：**瞬间效果先结算**（瞬间治疗/伤害不进持续列表），
+   * 之后每 0.05 秒推一次持续效果（中毒/凋零掉血、生命恢复回血、时长递减）。
+   * ⚠️ **中毒不会致死**（原版停在 1 点血），凋零会——两者在 `StatusEffects` 里靠
+   * `damageCause` 区分，这里不能只看 `damage > 0` 一刀切。
+   */
+  private tickEffects(ctx: EntityContext, dt: number): void {
+    for (const instant of this.effects.takeInstant()) {
+      // 瞬间治疗 I 回 4 点、II 回 8 点；瞬间伤害 I 打 6 点、II 打 12 点（原版数值）
+      if (instant.id === 'instant_health') this.heal(4 * (instant.amplifier + 1));
+      else this.hurt(6 * (instant.amplifier + 1), 0, 0, ctx);
+    }
+
+    if (this.effects.count === 0) {
+      this.effectAccumulator = 0;
+      return;
+    }
+
+    this.effectAccumulator += dt;
+    while (this.effectAccumulator >= EFFECT_STEP) {
+      this.effectAccumulator -= EFFECT_STEP;
+      const result = this.effects.tick();
+      if (result.damage > 0) {
+        if (result.damageCause === 'poison') this.health = Math.max(1, this.health - result.damage);
+        else this.hurt(result.damage, 0, 0, ctx);
+      }
+      if (result.heal > 0) this.heal(result.heal);
+      if (this.dead) return;
+    }
+  }
+
+  /** 回血（上限是本种生物的生命值；幼体的体型变小但生命上限不变，与原版不同，已在 K4 记档） */
+  heal(amount: number): void {
+    if (this.dead || amount <= 0) return;
+    this.health = Math.min(this.type.health, this.health + amount);
+  }
+
+  /**
+   * 只推一下、不造成伤害（雪球用）。
+   *
+   * 为什么不走 `hurt(0)`：`hurt` 对 `amount <= 0` 直接早退（那是"没造成伤害"的语义），
+   * 连挨打动画都不会有。原版雪球是 0 伤害 + 有击退，所以需要这条独立路径。
+   */
+  push(knockbackX: number, knockbackZ: number): void {
+    if (this.dead) return;
+    const length = Math.hypot(knockbackX, knockbackZ);
+    if (length <= 1e-4) return;
+    this.vx += (knockbackX / length) * 3;
+    this.vz += (knockbackZ / length) * 3;
+    this.vy = Math.max(this.vy, 2.2);
+    this.onGround = false;
+  }
+
+  /** 鸡下蛋（K4 尾巴）：鸡蛋的生存来源，原版节奏 5~10 分钟一个 */
+  private tickEggLaying(ctx: EntityContext, dt: number): void {
+    if (this.type.laysEggs !== true || this.baby || this.dead) return;
+    this.eggTimer -= dt;
+    if (this.eggTimer > 0) return;
+    this.eggTimer = EGG_LAY_INTERVAL_MIN + Math.random() * (EGG_LAY_INTERVAL_MAX - EGG_LAY_INTERVAL_MIN);
+    ctx.spawnDrop(Item.EGG, 1, this.x, this.y + this.height * 0.5, this.z);
+  }
 
   private updateAi(ctx: EntityContext, dt: number): void {
     const player = ctx.player;
@@ -357,7 +451,9 @@ export class Mob extends Entity {
       } else if (distanceSq < 4 && this.attackCooldown <= 0) {
         // 贴脸就打（原版僵尸的触及距离约 2 格）
         this.attackCooldown = 1;
-        ctx.hurtPlayer(this.type.attackDamage, this.x, this.z);
+        // 力量/虚弱影响出手伤害（数值与玩家同源）；虚弱不能把伤害打成负数
+        const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
+        ctx.hurtPlayer(damage, this.x, this.z);
       }
     } else {
       this.wanderTimer -= dt;
@@ -431,13 +527,15 @@ export class Mob extends Entity {
         y: aimY * ranged.speed,
         z: (aimX * sin + aimZ * cos) * ranged.speed,
       },
-      { fromPlayer: false, damage: this.type.attackDamage },
+      // 力量/虚弱同样作用于远程伤害（原版也如此）
+      { fromPlayer: false, damage: Math.max(0, this.type.attackDamage + this.effects.attackBonus()) },
     );
     ctx.playSound?.('bow_shoot', this.x, this.y, this.z);
   }
 
   private move(chasing: boolean, dt: number): void {
-    const speed = chasing ? this.type.speed * 1.12 : this.type.speed * 0.5;
+    // 状态效果直接乘在速度上：缓慢 -15%/级、速度 +20%/级（数值来自 `StatusEffects`，与玩家同源）
+    const speed = (chasing ? this.type.speed * 1.12 : this.type.speed * 0.5) * this.effects.moveSpeedMultiplier();
     let targetVx = 0;
     let targetVz = 0;
 
