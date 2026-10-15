@@ -28,6 +28,7 @@ import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from '.
 import { WorldScreen } from './ui/WorldScreen.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
 import type { WorldType } from './core/gen/WorldType.ts';
+import { PARTICLE_DENSITY } from './ui/SettingsScreen.ts';
 import {
   CAMERA_MODE_LABELS,
   THIRD_PERSON_DISTANCE,
@@ -560,6 +561,8 @@ class App {
     this.camera.far = settings.viewDistance * 16 + 32;
     this.camera.updateProjectionMatrix();
     this.audio.volume = settings.volume;
+    this.particles.setDensity(PARTICLE_DENSITY[settings.particles]);
+    this.sky.setCloudsVisible(settings.clouds);
     this.debugEl.style.display = settings.showDebug ? '' : 'none';
     this.applyEnvironment();
     // 视距变化后立刻按新的范围请求/卸载区块
@@ -1260,7 +1263,8 @@ class App {
    */
   private applyLook(dxPixels: number, dyPixels: number): void {
     this.yaw -= dxPixels;
-    this.pitch -= dyPixels;
+    // 反转上下视角（设置项）：把纵向增量取反即可，水平方向不受影响
+    this.pitch -= this.settings.invertY ? -dyPixels : dyPixels;
     const limit = Math.PI / 2 - 0.001;
     this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
   }
@@ -2283,7 +2287,8 @@ class App {
 
       this.updateInteraction(dt);
 
-      this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
+      // 昼夜循环可以在设置里关掉（时间停在当前时刻，截图对比/搭建筑时有用）
+      if (this.settings.daylightCycle) this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
 
       // 寒冷群系下雪：每秒复查一次地表方块即可
       this.snowCheckTimer -= dt;
@@ -3005,9 +3010,29 @@ async function boot(): Promise<void> {
     (window as unknown as { __mc: App }).__mc = app;
   };
 
+  /**
+   * 主菜单里的设置面板。
+   * 懒创建：直接复用同一个 `SettingsScreen`，只是不给它"回主菜单/删世界"两个按钮
+   * （那两个动作只在游戏里有意义），改动只写 localStorage，进世界时会被读走。
+   */
+  let menuSettings: SettingsScreen | null = null;
+  const openMenuSettings = (): void => {
+    if (!menuSettings) {
+      const settings = loadSettings();
+      menuSettings = new SettingsScreen(document.body, settings, {
+        onResume: () => menuSettings?.hide(),
+        onChange: (next) => saveSettings(next),
+      });
+      menuSettings.setTitle('设置', 'Esc 或点面板外关闭；这些设置存在这台设备上，进世界后直接生效', '返回');
+      menuSettings.setMeta('');
+    }
+    menuSettings.show();
+  };
+
   const menu = new WorldScreen(document.body, registry, {
     onEnter: (world) => void startWorld(world),
     onDelete: (world) => void deleteWorld(world),
+    onSettings: openMenuSettings,
   });
 
   /** 删除世界：先删库再删清单项（顺序反了会留下没人认领的库） */

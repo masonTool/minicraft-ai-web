@@ -17,6 +17,8 @@ export interface WorldScreenActions {
   onEnter: (world: WorldSummary) => void;
   /** 删除世界（含存档数据）；调用方负责真的删库 */
   onDelete: (world: WorldSummary) => void;
+  /** 打开设置（图形/操作/声音这些是"这台设备的偏好"，与世界无关） */
+  onSettings?: () => void;
 }
 
 export class WorldScreen {
@@ -114,6 +116,16 @@ export class WorldScreen {
     hint.textContent = '相同的种子会生成相同的地形；超平坦世界只有一层草地。';
 
     panel.append(title, subtitle, this.listEl, form, hint);
+
+    // 设置入口：这里的设置是"这台设备的偏好"（画面/操作/声音），进游戏之前也能改
+    if (this.actions.onSettings) {
+      const settings = document.createElement('button');
+      settings.type = 'button';
+      settings.className = 'world-secondary';
+      settings.textContent = '设置';
+      settings.addEventListener('click', () => this.actions.onSettings?.());
+      panel.append(settings);
+    }
     this.root.append(panel);
     host.appendChild(this.root);
   }

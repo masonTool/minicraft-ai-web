@@ -142,6 +142,8 @@ export class Sky {
   private readonly stars: THREE.Points;
   private readonly cloudMaterial: THREE.MeshBasicMaterial;
   private readonly cloudMesh: THREE.Mesh;
+  /** 云是否可见（设置里可以关掉：省一点填充率，也能看清远处地形） */
+  private cloudsVisible = true;
 
   constructor() {
     // ---- 渐变穹顶
@@ -244,6 +246,12 @@ export class Sky {
   /**
    * @param timeOfDay 0=日出、0.25=正午、0.5=日落、0.75=午夜
    */
+  /** 云的开关（设置项） */
+  setCloudsVisible(visible: boolean): void {
+    this.cloudsVisible = visible;
+    this.cloudMesh.visible = visible;
+  }
+
   update(timeOfDay: number, cameraPosition: THREE.Vector3, dt: number): void {
     this.object.position.copy(cameraPosition);
 
@@ -266,6 +274,8 @@ export class Sky {
 
     // 云层只跟随水平位置（y 固定为原版云高度），并缓慢飘移
     this.cloudMesh.position.set(0, CLOUD_HEIGHT - cameraPosition.y, 0);
+    // 关掉云之后仍然更新位置与飘移（省得再开时"跳一下"），只是不画
+    this.cloudMesh.visible = this.cloudsVisible;
     const map = this.cloudMaterial.map;
     if (map) {
       map.offset.x = (map.offset.x + dt * 0.0016) % 1;

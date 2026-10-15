@@ -11,6 +11,31 @@
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
 
+/**
+ * 粒子效果强度。
+ * 手机上粒子是最容易把帧率吃掉的项（一次破坏就要生成十几个四边形），
+ * 所以做成三档而不是简单的开关：`reduced` 仍然看得见碎屑，只是少一半。
+ */
+export type ParticleLevel = 'off' | 'reduced' | 'all';
+
+export const PARTICLE_LEVELS: readonly ParticleLevel[] = ['off', 'reduced', 'all'];
+
+export const PARTICLE_LEVEL_LABELS: Record<ParticleLevel, string> = {
+  off: '关闭',
+  reduced: '减少',
+  all: '全部',
+};
+
+/** 各档位对应的生成数量倍率（`off` 直接不生成） */
+export const PARTICLE_DENSITY: Record<ParticleLevel, number> = {
+  off: 0,
+  reduced: 0.4,
+  all: 1,
+};
+
+/** 布尔型设置项（开关那种），单独取个名字给 makeToggle 用 */
+type BoolSettingKey = 'clouds' | 'invertY' | 'daylightCycle' | 'showDebug' | 'adaptiveViewDistance';
+
 export interface GameSettings {
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
   viewDistance: number;
@@ -22,6 +47,14 @@ export interface GameSettings {
   sensitivity: number;
   /** 视角模式：第一人称 / 第三人称背后 / 第三人称正面（`V` 键循环切换） */
   cameraMode: CameraMode;
+  /** 粒子效果强度：`off` 完全关闭、`reduced` 减半、`all` 全开（低配设备/手机省电用） */
+  particles: ParticleLevel;
+  /** 是否显示云（关掉能省一点填充率，也能看清远处地形） */
+  clouds: boolean;
+  /** 反转视角的上下方向（触摸拖动与鼠标都受影响） */
+  invertY: boolean;
+  /** 昼夜循环：关掉之后时间停在当前时刻（截图对比、搭建筑时很好用） */
+  daylightCycle: boolean;
   /** 是否显示左上角调试信息（HUD） */
   showDebug: boolean;
   /**
@@ -37,6 +70,10 @@ export const DEFAULT_SETTINGS: GameSettings = {
   volume: 0.7,
   sensitivity: 1,
   cameraMode: 'first',
+  particles: 'all',
+  clouds: true,
+  invertY: false,
+  daylightCycle: true,
   showDebug: true,
   adaptiveViewDistance: true,
 };
@@ -57,6 +94,12 @@ export function loadSettings(): GameSettings {
       cameraMode: CAMERA_MODES.includes(parsed.cameraMode as CameraMode)
         ? (parsed.cameraMode as CameraMode)
         : DEFAULT_SETTINGS.cameraMode,
+      particles: PARTICLE_LEVELS.includes(parsed.particles as ParticleLevel)
+        ? (parsed.particles as ParticleLevel)
+        : DEFAULT_SETTINGS.particles,
+      clouds: parsed.clouds !== false,
+      invertY: parsed.invertY === true,
+      daylightCycle: parsed.daylightCycle !== false,
       showDebug: parsed.showDebug !== false,
       adaptiveViewDistance: parsed.adaptiveViewDistance !== false,
     };
@@ -81,10 +124,10 @@ export function saveSettings(settings: GameSettings): void {
 export interface SettingsActions {
   /** 继续游戏（关闭面板） */
   onResume: () => void;
-  /** 保存并回到主菜单（世界列表） */
-  onExitToMenu: () => void;
-  /** 删除当前世界（含存档）并回到主菜单 */
-  onDeleteWorld: () => void;
+  /** 保存并回到主菜单（世界列表）；只应该在游戏里提供——主菜单里没有"当前世界" */
+  onExitToMenu?: () => void;
+  /** 删除当前世界（含存档）并回到主菜单；同上 */
+  onDeleteWorld?: () => void;
   /** 设置变化：立即生效（视距/视野/调试信息都要马上看到效果） */
   onChange: (settings: GameSettings) => void;
   /** 导入资源包（.mcpack / .zip） */
@@ -96,6 +139,9 @@ export class SettingsScreen {
   private open = false;
   private readonly sliders = new Map<keyof GameSettings, HTMLInputElement>();
   private readonly metaEl: HTMLDivElement;
+  private readonly titleEl: HTMLElement;
+  private readonly subtitleEl: HTMLElement;
+  private readonly resumeButton: HTMLButtonElement;
 
   constructor(
     host: HTMLElement,
@@ -109,21 +155,21 @@ export class SettingsScreen {
     const panel = document.createElement('div');
     panel.className = 'settings-panel';
 
-    const title = document.createElement('b');
-    title.textContent = '游戏暂停';
+    this.titleEl = document.createElement('b');
+    this.titleEl.textContent = '设置与暂停';
 
-    const subtitle = document.createElement('div');
-    subtitle.className = 'settings-hint';
-    subtitle.textContent = '按 Esc 继续游戏';
+    this.subtitleEl = document.createElement('div');
+    this.subtitleEl.className = 'settings-hint';
+    this.subtitleEl.textContent = '按 Esc 继续游戏';
 
     // ---- 操作按钮
     const buttons = document.createElement('div');
     buttons.className = 'settings-buttons';
 
-    const resume = document.createElement('button');
-    resume.type = 'button';
-    resume.textContent = '继续游戏';
-    resume.addEventListener('click', () => this.actions.onResume());
+    this.resumeButton = document.createElement('button');
+    this.resumeButton.type = 'button';
+    this.resumeButton.textContent = '继续游戏';
+    this.resumeButton.addEventListener('click', () => this.actions.onResume());
 
     const exitToMenu = document.createElement('button');
     exitToMenu.type = 'button';
@@ -134,44 +180,61 @@ export class SettingsScreen {
     deleteWorld.className = 'danger';
     deleteWorld.textContent = '删除本世界';
     deleteWorld.addEventListener('click', () => {
-      if (confirm('确定要删除这个世界吗？存档会一起删掉，无法恢复。')) this.actions.onDeleteWorld();
+      if (confirm('确定要删除这个世界吗？存档会一起删掉，无法恢复。')) this.actions.onDeleteWorld?.();
     });
 
-    buttons.append(resume, exitToMenu, deleteWorld);
-    exitToMenu.addEventListener('click', () => this.actions.onExitToMenu());
+    buttons.append(this.resumeButton, exitToMenu, deleteWorld);
+    exitToMenu.addEventListener('click', () => this.actions.onExitToMenu?.());
+    // "回到主菜单/删除世界"只在游戏里有意义；主菜单打开这个面板时（没有当前世界）就藏起来。
+    // ⚠️ 用 style.display 而不是 .hidden 类：`.hidden` 只对面板根节点写了样式，加在按钮上没有任何效果。
+    if (!this.actions.onExitToMenu) exitToMenu.style.display = 'none';
+    if (!this.actions.onDeleteWorld) deleteWorld.style.display = 'none';
 
-    // ---- 设置项
+    // ---- 设置项（分类成组：图形 / 操作 / 声音 / 游戏；太长的一列没人看得完）
     const options = document.createElement('div');
     options.className = 'settings-options';
+
+    options.appendChild(this.makeGroup('图形'));
     options.append(
       this.makeSlider('viewDistance', '视距', ' 区块', 4, 16, 1),
       this.makeSlider('fov', '视野', '°', 60, 110, 1),
-      this.makeSlider('volume', '音量', '%', 0, 100, 1, 100),
-      this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05),
     );
-
-    this.makeToggle(options, 'showDebug', '调试信息');
+    this.makeToggle(options, 'clouds', '云');
     this.makeToggle(options, 'adaptiveViewDistance', '自适应视距');
+    this.makeSelect(options, 'particles', '粒子效果', PARTICLE_LEVELS, PARTICLE_LEVEL_LABELS);
 
-    // 操作分类：视角模式（也可以随时按 V 键循环切换，两处状态同步）
-    const viewLabel = document.createElement('div');
-    viewLabel.className = 'settings-group';
-    viewLabel.textContent = '操作';
-    options.appendChild(viewLabel);
+    options.appendChild(this.makeGroup('操作'));
     this.makeSelect(options, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
+    options.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05));
+    this.makeToggle(options, 'invertY', '反转上下视角');
+
+    options.appendChild(this.makeGroup('声音'));
+    options.append(this.makeSlider('volume', '音量', '%', 0, 100, 1, 100));
+
+    options.appendChild(this.makeGroup('游戏'));
+    this.makeToggle(options, 'daylightCycle', '昼夜循环');
+    this.makeToggle(options, 'showDebug', '调试信息');
     options.appendChild(this.makeResourcePackRow());
 
     this.metaEl = document.createElement('div');
     this.metaEl.className = 'settings-hint';
 
     this.root.append(panel);
-    panel.append(title, subtitle, buttons, options, this.metaEl);
+    panel.append(this.titleEl, this.subtitleEl, buttons, options, this.metaEl);
     host.appendChild(this.root);
 
     // 点面板外的区域 = 继续游戏（与原版"点空白关闭"一致）
     this.root.addEventListener('pointerdown', (event) => {
       if (event.target === this.root) this.actions.onResume();
     });
+  }
+
+  /** 分类标题 */
+  private makeGroup(label: string): HTMLDivElement {
+    const group = document.createElement('div');
+    group.className = 'settings-group';
+    group.textContent = label;
+    return group;
   }
 
   /** 造一个滑块设置项 */
@@ -218,7 +281,7 @@ export class SettingsScreen {
    */
   private makeSelect<T extends string>(
     options: HTMLElement,
-    key: 'cameraMode',
+    key: 'cameraMode' | 'particles',
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
@@ -240,7 +303,9 @@ export class SettingsScreen {
     select.value = this.settings[key];
 
     select.addEventListener('change', () => {
-      this.settings[key] = select.value as GameSettings[typeof key];
+      // 逐个分支赋值：`GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查
+      if (key === 'cameraMode') this.settings.cameraMode = select.value as CameraMode;
+      else this.settings.particles = select.value as ParticleLevel;
       this.commit();
     });
 
@@ -273,7 +338,7 @@ export class SettingsScreen {
   }
 
   /** 造一个开关设置项 */
-  private makeToggle(options: HTMLElement, key: 'showDebug' | 'adaptiveViewDistance', label: string): HTMLInputElement {
+  private makeToggle(options: HTMLElement, key: BoolSettingKey, label: string): HTMLInputElement {
     const row = document.createElement('label');
     row.className = 'settings-row';
     const name = document.createElement('span');
@@ -298,6 +363,16 @@ export class SettingsScreen {
   /** 存档信息（打开时刷新） */
   setMeta(text: string): void {
     this.metaEl.textContent = text;
+  }
+
+  /**
+   * 改标题与副标题：同一个面板在"游戏中"与"主菜单"两处用，文案要跟着场景变。
+   * @param resumeLabel "继续游戏"那行按钮的文字（主菜单里改成"返回"更贴切）
+   */
+  setTitle(title: string, subtitle: string, resumeLabel = '继续游戏'): void {
+    this.titleEl.textContent = title;
+    this.subtitleEl.textContent = subtitle;
+    this.resumeButton.textContent = resumeLabel;
   }
 
   get isOpen(): boolean {

@@ -159,6 +159,22 @@ export class ParticleSystem {
   }
 
   /** 当前存活粒子数 */
+  /**
+   * 粒子生成密度倍率（0 = 完全不生成）。
+   * 手机上粒子是最吃帧率的一项，设置里可以调到"减少"或"关闭"。
+   */
+  private density = 1;
+
+  setDensity(value: number): void {
+    this.density = Math.max(0, Math.min(1, value));
+  }
+
+  /** 按密度折算实际生成数量；为 0 时调用方直接返回 */
+  private scaledCount(base: number): number {
+    if (this.density <= 0) return 0;
+    return Math.max(1, Math.round(base * this.density));
+  }
+
   get active(): number {
     return this.count;
   }
@@ -219,6 +235,10 @@ export class ParticleSystem {
     spread: number,
     speed: number,
   ): void {
+    // 密度只在这里生效：所有粒子都从 burst 走，调一处就够
+    count = this.scaledCount(count);
+    if (count <= 0) return;
+
     const params = KINDS[kind];
     const [cr, cg, cb] = splitColor(color);
 
