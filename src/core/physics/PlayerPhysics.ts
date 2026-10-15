@@ -71,7 +71,19 @@ export class PlayerPhysics {
   }
 
   /** 相机所处的水平方向（yaw 为弧度，0 表示朝向 -Z） */
-  update(world: PhysicsWorld, input: PlayerInput, yaw: number, dt: number, flying: boolean): void {
+  /**
+   * @param speedMultiplier 移速倍率（状态效果：速度/缓慢）
+   * @param jumpMultiplier 起跳倍率（状态效果：跳跃提升）
+   */
+  update(
+    world: PhysicsWorld,
+    input: PlayerInput,
+    yaw: number,
+    dt: number,
+    flying: boolean,
+    speedMultiplier = 1,
+    jumpMultiplier = 1,
+  ): void {
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
 
@@ -89,7 +101,7 @@ export class PlayerPhysics {
 
     this.inWater = world.isLiquid(Math.floor(this.x), Math.floor(this.y + 0.4), Math.floor(this.z));
 
-    const speed = flying
+    const baseSpeed = flying
       ? input.sprint
         ? FLY_SPRINT_SPEED
         : FLY_SPEED
@@ -100,6 +112,7 @@ export class PlayerPhysics {
           : input.sprint
             ? SPRINT_SPEED
             : WALK_SPEED;
+    const speed = baseSpeed * speedMultiplier;
 
     const accelerate = flying ? 90 : this.onGround ? 48 : 10;
     this.vx = approach(this.vx, dirX * speed, accelerate * dt);
@@ -112,12 +125,12 @@ export class PlayerPhysics {
       this.fallStartY = null;
     } else if (this.inWater) {
       this.vy -= GRAVITY * 0.25 * dt;
-      if (input.jump) this.vy = 3.4;
+      if (input.jump) this.vy = 3.4 * jumpMultiplier;
       if (this.vy < -4) this.vy = -4;
       this.fallStartY = null;
     } else {
       if (input.jump && this.onGround) {
-        this.vy = JUMP_VELOCITY;
+        this.vy = JUMP_VELOCITY * jumpMultiplier;
         this.onGround = false;
       }
       this.vy -= GRAVITY * dt;

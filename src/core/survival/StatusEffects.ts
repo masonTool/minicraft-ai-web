@@ -85,6 +85,28 @@ export const EFFECT_LABELS: Record<EffectId, string> = {
   darkness: '黑暗',
 };
 
+/** 效果的"好/坏"标签（HUD 上区分配色，也让玩家一眼看出这是debuff） */
+export type EffectTone = 'good' | 'bad';
+
+const BAD_EFFECTS: readonly EffectId[] = [
+  'slowness',
+  'mining_fatigue',
+  'poison',
+  'wither',
+  'hunger',
+  'weakness',
+  'blindness',
+  'darkness',
+  'nausea',
+  'bad_omen',
+  'instant_damage',
+  'levitation',
+];
+
+export function effectTone(id: EffectId): EffectTone {
+  return BAD_EFFECTS.includes(id) ? 'bad' : 'good';
+}
+
 /** 命令里常用的别名（原版有 `/effect give minecraft:speed` 这种写法） */
 const ALIASES: Record<string, EffectId> = {
   // 中文名直接可用

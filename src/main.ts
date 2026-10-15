@@ -30,7 +30,13 @@ import { WorldScreen } from './ui/WorldScreen.ts';
 import { Tooltip } from './ui/Tooltip.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
-import { StatusEffects, effectLabel, resolveEffect, romanLevel } from './core/survival/StatusEffects.ts';
+import {
+  StatusEffects,
+  effectLabel,
+  effectTone,
+  resolveEffect,
+  romanLevel,
+} from './core/survival/StatusEffects.ts';
 import {
   DEFAULT_GAME_RULES,
   DIFFICULTY_LABELS,
@@ -295,6 +301,9 @@ class App {
   private respawnCountdown = 0;
   /** 这一条命是否已经结算过死亡掉落（避免每帧都掉一次） */
   private deathHandled = false;
+  /** 状态效果 HUD（右上角）与它的内容签名（内容没变就不重建 DOM） */
+  private readonly effectsHudEl = document.getElementById('effects-hud');
+  private effectsHudSignature = '';
   private spawnPoint: [number, number, number] = [0.5, 80, 0.5];
   private lastPlayerX = 0;
   private lastPlayerZ = 0;
@@ -1028,11 +1037,21 @@ class App {
     if (overcast > 0) this.skyColor.lerp(OVERCAST_SKY, overcast);
     if (flash > 0) this.skyColor.lerp(FLASH_SKY, flash * 0.65);
 
-    this.solidMaterial.skyBrightness = skyBrightness;
-    this.translucentMaterial.skyBrightness = skyBrightness;
+    // 夜视：把天光倍率抬到最低 0.75（原版夜视在洞穴里也能看清），并抬高亮度下限
+    const nightVision = this.effects.nightVision;
+    const effectiveSky = nightVision ? Math.max(0.75, skyBrightness) : skyBrightness;
+    this.solidMaterial.setMinBrightness(
+      nightVision ? 0.45 : this.solidMaterial.defaultMinBrightness,
+    );
+    this.translucentMaterial.setMinBrightness(
+      nightVision ? 0.5 : this.translucentMaterial.defaultMinBrightness,
+    );
+
+    this.solidMaterial.skyBrightness = effectiveSky;
+    this.translucentMaterial.skyBrightness = effectiveSky;
     // 掉落物的天光贡献跟着昼夜变化（逐实体采样在 updateEntities 里做）
-    this.entityRenderer.skyBrightness = skyBrightness;
-    this.syncRenderBrightness(skyBrightness);
+    this.entityRenderer.skyBrightness = effectiveSky;
+    this.syncRenderBrightness(effectiveSky);
 
     // 穹顶：顶部略深、地平线略亮；日出日落时给太阳附近加霞光
     this.domeTop.copy(this.skyColor).multiplyScalar(0.86);
@@ -1075,15 +1094,29 @@ class App {
     } else if (effect === 'lava') {
       this.solidMaterial.setFog(LAVA_FOG, LAVA_FOG_NEAR, LAVA_FOG_FAR);
       this.translucentMaterial.setFog(LAVA_FOG, LAVA_FOG_NEAR, LAVA_FOG_FAR);
+    } else if (effect === 'blindness' || effect === 'darkness') {
+      // 失明/黑暗：雾拉到很近，远处的方块直接看不见（原版失明就是这个观感）
+      const near = effect === 'blindness' ? 1.5 : 6;
+      const far = effect === 'blindness' ? 5 : 18;
+      this.solidMaterial.setFog(0x000000, near, far);
+      this.translucentMaterial.setFog(0x000000, near, far);
     }
   }
 
-  /** 玩家眼睛泡在什么介质里（决定色罩与雾） */
+  /**
+   * 当前应该显示哪种整屏色罩。
+   *
+   * 优先级：岩浆 > 失明 > 黑暗 > 水下。
+   * 理由是"越看不见越优先"——泡在岩浆里当然是岩浆色，失明时即使在水下也几乎全黑。
+   * （原版这几种效果是叠乘的，这里用单个色罩近似，视觉差别很小但代码简单得多。）
+   */
   private eyeMedium(): ScreenEffect {
     const p = this.physics;
     const eye = this.world.getBlock(Math.floor(p.x), Math.floor(p.eyeY), Math.floor(p.z));
-    if (eye === Block.WATER) return 'water';
     if (eye === Block.LAVA) return 'lava';
+    if (this.effects.blinded) return 'blindness';
+    if (this.effects.darkened) return 'darkness';
+    if (eye === Block.WATER) return 'water';
     return 'none';
   }
 
@@ -1546,7 +1579,9 @@ class App {
     const mob = hit.entity;
     // 下落中攻击算暴击（原版 ×1.5）；创造模式一击必杀
     const critical = !this.physics.onGround && this.physics.vy < -0.1;
-    const damage = this.flying ? 100 : critical ? 1.5 : 1;
+    // 基础伤害 1（还没有武器物品），力量/虚弱在这里加减；暴击 ×1.5
+    const base = Math.max(0, 1 + this.effects.attackBonus());
+    const damage = this.flying ? 100 : critical ? base * 1.5 : base;
     mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context);
     this.hand.swing();
     if (mob.dead) {
@@ -1577,7 +1612,8 @@ class App {
     }
 
     const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
-    const required = this.flying ? 0 : breakSeconds(id);
+    // 状态效果：急迫加快、挖掘疲劳减慢（倍率在 StatusEffects 里算好）
+    const required = this.flying ? 0 : breakSeconds(id) / this.effects.miningSpeedMultiplier();
     if (!Number.isFinite(required)) return;
 
     this.breakProgress += required <= 0 ? 1 : dt / required;
@@ -1978,6 +2014,33 @@ class App {
     const scaled = amount * this.effects.incomingDamageMultiplier();
     if (scaled <= 0) return;
     this.stats.damage(scaled, cause);
+  }
+
+  /**
+   * 右上角的状态效果列表。
+   * 每帧重建 DOM 太浪费（会有十几种效果同时挂着），因此只在文字变化时重画。
+   */
+  private updateEffectsHud(): void {
+    if (!this.effectsHudEl) return;
+    // 签名用"整秒"而不是 tick：不然每秒会重画 20 次 DOM
+    const signature = this.effects.all
+      .map((effect) => `${effect.id}:${effect.amplifier}:${Math.ceil(effect.ticks / 20)}`)
+      .join('|');
+    if (signature === this.effectsHudSignature) return;
+    this.effectsHudSignature = signature;
+
+    const container = this.effectsHudEl;
+    container.replaceChildren();
+    for (const effect of this.effects.all) {
+      const chip = document.createElement('div');
+      chip.className = `effect-chip ${effectTone(effect.id)}`;
+      const totalSeconds = Math.ceil(effect.ticks / 20);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      const level = effect.amplifier > 0 ? ` ${romanLevel(effect.amplifier)}` : '';
+      chip.textContent = `${effect.label}${level} ${minutes}:${String(seconds).padStart(2, '0')}`;
+      container.appendChild(chip);
+    }
   }
 
   /** 每 tick 结算状态效果（中毒伤害 / 生命恢复 / 饥饿 / 到期） */
@@ -2404,6 +2467,7 @@ class App {
 
     this.vitalsHud.update(this.stats);
     this.chat.update();
+    this.updateEffectsHud();
 
     // ---- 死亡与重生
     if (this.stats.dead) {
@@ -2443,6 +2507,9 @@ class App {
       naturalRegeneration: this.rules.naturalRegeneration,
       starveRate: difficultyProfile(this.difficulty).starveRate,
       regenRate: difficultyProfile(this.difficulty).regenRate,
+      // 水下呼吸效果：氧气不掉；抗火效果：岩浆不掉血
+      waterBreathing: this.effects.waterBreathing,
+      fireImmune: this.effects.fireResistant,
     };
   }
 
@@ -2663,7 +2730,7 @@ class App {
 
       const survivalInput = this.uiOpen ? IDLE_INPUT : this.collectInput();
       const wasOnGround = this.physics.onGround;
-      this.physics.update(this.world, survivalInput, this.yaw, dt, this.flying);
+      this.physics.update(this.world, survivalInput, this.yaw, dt, this.flying, this.effects.moveSpeedMultiplier(), this.effects.jumpMultiplier());
       this.updateSurvival(dt, survivalInput, wasOnGround);
 
       this.updateCamera(dt);

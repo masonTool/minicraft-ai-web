@@ -260,6 +260,21 @@
         background: #2a2a2d; color: #eee; border: 1px solid #ffffff33; border-radius: 3px;
       }
 
+      /* ---------------- 状态效果 HUD ---------------- */
+      #effects-hud {
+        position: fixed; right: 10px; top: 12px; z-index: 12;
+        display: flex; flex-direction: column; gap: 3px; align-items: flex-end;
+        pointer-events: none; font-size: 12px;
+      }
+      .effect-chip {
+        padding: 2px 7px; border-radius: 3px; color: #fff;
+        background: rgba(20, 20, 26, .62); border: 1px solid #ffffff22;
+        text-shadow: 1px 1px 0 #000;
+      }
+      .effect-chip.good { border-color: #79c46b88; }
+      .effect-chip.bad { border-color: #d46b6b88; }
+      .effect-chip.instant { border-color: #6b9cd488; }
+
       /* ---------------- 聊天与命令 ---------------- */
       #chat {
         position: fixed; left: 10px; bottom: 82px; z-index: 15;
@@ -553,6 +568,7 @@
       <div id="break-progress"><i></i></div>
       <div id="boss-bar"><b>末影龙</b><i><s id="boss-fill"></s></i></div>
       <div id="vitals"></div>
+      <div id="effects-hud"></div>
       <div id="hotbar"></div>
     </div>
 

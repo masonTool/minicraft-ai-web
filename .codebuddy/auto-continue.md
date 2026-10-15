@@ -177,13 +177,13 @@
 
 按依赖顺序做（命令系统先做，后面的难度/规则/效果都能直接用它来验收）：
 
-- [ ] M5 命令系统：聊天输入框（`T`/`/` 打开、Enter 提交、↑↓ 历史）+ 命令注册表
+- [x] M5 命令系统：聊天输入框（`T`/`/` 打开、Enter 提交、↑↓ 历史）+ 命令注册表
       （`/help /tp /give /clear /time /weather /summon /kill /setblock /fill /difficulty
       /gamerule /effect /gamemode /seed /list`），解析层是纯函数、可离线测
-- [ ] I7 难度（和平/简单/普通/困难：影响生物伤害与刷怪、自然回复速率）+ 世界创建时可选；
+- [~] I7 难度（和平/简单/普通/困难：影响生物伤害与刷怪、自然回复速率）+ 世界创建时可选；
       I11 游戏规则（keepInventory / doMobSpawning / mobGriefing / randomTickSpeed /
       doDaylightCycle / naturalRegeneration），按世界存进存档
-- [ ] I4 状态效果：核心约 14 种（速度/缓慢/跳跃/生命恢复/抗性/中毒/凋零/夜视/失明/黑暗/
+- [x] I4 状态效果（**30 种**）（速度/缓慢/跳跃/生命恢复/抗性/中毒/凋零/夜视/失明/黑暗/
       伤害吸收/挖掘疲劳/急迫/力量），接到移动、跳跃、挖掘速度、伤害结算、视野色罩与 HUD 图标上
 - [ ] B6 方块行为接口 + 随机刻 / 计划刻调度：草方块蔓延与退化、树叶消失（无原木时）、
       水与岩浆的计划刻接入点；randomTickSpeed 由游戏规则控制

@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { srgbColor } from './srgb.ts';
 
-export type ScreenEffect = 'none' | 'water' | 'lava';
+export type ScreenEffect = 'none' | 'water' | 'lava' | 'blindness' | 'darkness';
 
 interface EffectPreset {
   /** 色罩颜色 */
@@ -30,6 +30,18 @@ const PRESETS: Record<ScreenEffect, EffectPreset> = {
   // 水下：偏青蓝，边缘略暗，模拟"被水包围"的压迫感
   water: { color: 0x123a6b, alpha: 0.34, vignette: 0.45 },
   // 岩浆：橙红、几乎不透明（原版在岩浆里基本看不清东西）
+  /** 失明：几乎全黑，只留一点点轮廓（原版失明时连脚下都看不清） */
+  blindness: {
+    color: 0x000000,
+    alpha: 0.92,
+    vignette: 0.9,
+  },
+  /** 黑暗：像被"监守者"罩住，能看见但很暗 */
+  darkness: {
+    color: 0x05070a,
+    alpha: 0.62,
+    vignette: 0.75,
+  },
   lava: { color: 0xb83404, alpha: 0.68, vignette: 0.6 },
 };
 
@@ -45,6 +57,8 @@ const PRESET_COLORS: Record<ScreenEffect, THREE.Color> = {
   none: srgbColor(PRESETS.none.color),
   water: srgbColor(PRESETS.water.color),
   lava: srgbColor(PRESETS.lava.color),
+  blindness: srgbColor(PRESETS.blindness.color),
+  darkness: srgbColor(PRESETS.darkness.color),
 };
 
 const VERTEX_SHADER = /* glsl */ `

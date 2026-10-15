@@ -60,6 +60,10 @@ export interface SurvivalEnvironment {
   regenRate?: number;
   /** 饿死的速率倍率（难度；0 = 饿不死，缺省 1） */
   starveRate?: number;
+  /** 水下呼吸（状态效果，缺省 false）：有它就不消耗氧气 */
+  waterBreathing?: boolean;
+  /** 抗火（状态效果，缺省 false）：岩浆不造成伤害 */
+  fireImmune?: boolean;
 }
 
 export interface DamageResult {
@@ -175,6 +179,13 @@ export class PlayerStats {
 
   /** 氧气：水下缓慢耗尽，耗尽后周期性溺水伤害 */
   private tickAir(env: SurvivalEnvironment): void {
+    // 水下呼吸效果：氧气不掉（甚至回满）
+    if (env.waterBreathing) {
+      this.drownTickTimer = 0;
+      this.air = MAX_AIR;
+      return;
+    }
+
     if (env.eyeInWater) {
       if (this.air > 0) {
         this.air--;
@@ -206,7 +217,7 @@ export class PlayerStats {
       this.damage(4, 'void');
     }
 
-    if (env.inLava) {
+    if (env.inLava && !env.fireImmune) {
       this.lavaTickTimer++;
       if (this.lavaTickTimer >= 10) {
         this.lavaTickTimer = 0;
