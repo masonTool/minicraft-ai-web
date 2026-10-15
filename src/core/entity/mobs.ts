@@ -9,7 +9,6 @@
  * 颜色字段给渲染器用（程序化模型按主色 + 点缀色拼出身体与四肢）。
  */
 
-import { woolId } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 import type { MobType } from './Mob.ts';
 
@@ -112,10 +111,9 @@ export const MOB_TYPES: readonly MobType[] = [
     hostile: false,
     attackDamage: 0,
     followRange: 0,
-    drops: [
-      { itemId: Item.MUTTON, min: 1, max: 2 },
-      { itemId: woolId(0), min: 1, max: 1 },
-    ],
+    // 羊毛不写进 drops：颜色是每只羊各自的（见 MobType.wool，在 Mob.dropLoot 里结算）
+    drops: [{ itemId: Item.MUTTON, min: 1, max: 2 }],
+    wool: true,
     xp: 3,
     bodyColor: 0xe8e8e8,
     accentColor: 0xd0c8bc,

@@ -28,6 +28,7 @@ export type SoundKind =
   | 'eat'
   | 'bow_shoot'
   | 'arrow_hit'
+  | 'shear'
   | 'mob_zombie'
   | 'mob_skeleton'
   | 'mob_creeper'
@@ -83,6 +84,8 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   bow_shoot: { duration: 0.24, gain: 0.42, noise: 0.3, freqFrom: 880, freqTo: 180, type: 'triangle', filter: 2400, filterQ: 2.4, attack: 0.001, release: 0.22 },
   // 箭命中方块/生物：短促的"笃"
   arrow_hit: { duration: 0.1, gain: 0.32, noise: 0.55, freqFrom: 420, freqTo: 220, type: 'square', filter: 1800, filterQ: 1.4, attack: 0.001, release: 0.09 },
+  // 剪羊毛：高频的"咔嚓"（噪声为主，几乎没有音调）
+  shear: { duration: 0.12, gain: 0.34, noise: 1, freqFrom: 1800, freqTo: 900, type: 'square', filter: 5200, filterQ: 0.7, attack: 0.001, release: 0.11 },
   mob_zombie: { duration: 0.7, gain: 0.42, noise: 0.45, freqFrom: 150, freqTo: 110, type: 'sawtooth', filter: 700, filterQ: 1.4, attack: 0.05, release: 0.6, thump: 80 },
   mob_skeleton: { duration: 0.35, gain: 0.38, noise: 0.4, freqFrom: 900, freqTo: 600, type: 'square', filter: 2800, filterQ: 2.2, attack: 0.002, release: 0.32 },
   mob_creeper: { duration: 0.55, gain: 0.45, noise: 1, freqFrom: 700, freqTo: 380, type: 'triangle', filter: 2400, filterQ: 1.2, attack: 0.01, release: 0.5 },

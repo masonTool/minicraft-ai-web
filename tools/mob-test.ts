@@ -19,7 +19,9 @@ import { Mob } from '../src/core/entity/Mob.ts';
 import { Pathfinder, type BlockSampler } from '../src/core/entity/Pathfinder.ts';
 import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
-import { Block } from '../src/core/registry/blocks.ts';
+import { Block, woolId } from '../src/core/registry/blocks.ts';
+import { Item } from '../src/core/registry/items.ts';
+import { WOOL_REGROW_SECONDS } from '../src/core/entity/Mob.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 
 let passed = 0;
@@ -372,6 +374,61 @@ console.log('\n[骷髅：远程射击]');
   for (let i = 0; i < 40; i++) away.tick(awayCtx, 0.05);
   check('会朝玩家靠近', away.x > 4, `x=${away.x.toFixed(2)}`);
   check('走进射程后开始放箭', shots.length > shotsFar, `${shotsFar} → ${shots.length}`);
+}
+
+console.log('\n[剪羊毛]');
+{
+  const world = new TestWorld();
+  world.floor(-8, 8, -8, 8, 64);
+
+  const dropped: number[] = [];
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player: null,
+    hurtPlayer: () => undefined,
+    spawnDrop: (itemId) => dropped.push(itemId),
+  };
+
+  const sheepType = mobTypeById('sheep')!;
+  check('羊配了"按自己颜色掉羊毛"', sheepType.wool === true);
+  check(
+    '羊毛不在固定掉落表里（否则每只羊都只能掉白色）',
+    !sheepType.drops.some((drop) => drop.itemId === woolId(0)),
+  );
+
+  // ---- 剪一次
+  const sheep = new Mob(sheepType, 0.5, 65.5, 0.5);
+  const count = sheep.shear();
+  check(`剪羊毛得到 1~3 个（实际 ${count}）`, count >= 1 && count <= 3);
+  check('剪过之后处于"已剪"状态', sheep.sheared);
+  equal('同一只羊再剪什么都不掉', sheep.shear(), 0);
+
+  // ---- 剪过的羊死了也不掉羊毛
+  dropped.length = 0;
+  sheep.hurt(100, 0, 0, ctx);
+  check('剪过的羊死后不掉羊毛', dropped.every((id) => id !== woolId(0)), dropped.join(','));
+  check('但仍然掉羊肉', dropped.includes(Item.MUTTON), dropped.join(','));
+
+  // ---- 没剪的羊死了掉"自己颜色"的羊毛
+  const blue = new Mob(sheepType, 0.5, 65.5, 0.5);
+  blue.woolColor = 11;
+  dropped.length = 0;
+  blue.hurt(100, 0, 0, ctx);
+  check('没剪的羊死后掉羊毛', dropped.includes(woolId(11)), dropped.join(','));
+  check('掉的是它自己的颜色（不是白色）', !dropped.includes(woolId(0)), dropped.join(','));
+
+  // ---- 30 秒后长回来
+  const grow = new Mob(sheepType, 0.5, 65.5, 0.5);
+  grow.shear();
+  const quietCtx: EntityContext = { ...ctx, player: null };
+  for (let t = 0; t < WOOL_REGROW_SECONDS - 2; t += 0.5) grow.tick(quietCtx, 0.5);
+  check('30 秒内还没长回来', grow.sheared);
+  for (let t = 0; t < 4; t += 0.5) grow.tick(quietCtx, 0.5);
+  check('30 秒后羊毛长回来了', !grow.sheared);
+  check('长回来之后还能再剪', grow.shear() >= 1);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

@@ -13,10 +13,17 @@
 
 import { Entity, type EntityContext } from './Entity.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
+import { woolId } from '../registry/blocks.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 
 /** 与玩家一致的常量（原版数值） */
 /** 苦力怕引信时长（秒） */
+/**
+ * 剪过之后羊毛长回来的时间（秒）。
+ * 原版是"吃草长回来"，我们没有啃草皮这件事，用计时器代替。
+ */
+export const WOOL_REGROW_SECONDS = 30;
+
 export const CREEPER_FUSE_TIME = 1.5;
 
 const GRAVITY = 32;
@@ -56,6 +63,12 @@ export interface MobType {
   drops: readonly MobDrop[];
   /** 击杀经验（原版数值：敌对 5 点、被动 1~3 点） */
   xp: number;
+  /**
+   * 死亡时按**自己身上的颜色**掉羊毛（J8，羊用）。
+   * 羊毛不在 `drops` 表里，因为颜色是每只动物各自的——写死在表里就只能掉白色的。
+   * 被剪过的羊不掉羊毛（原版行为）。
+   */
+  wool?: boolean;
   /** 生物家族（亡灵 / 节肢）；蜘蛛还没做，所以目前只有亡灵有成员 */
   family?: MobFamily;
   /**
@@ -95,6 +108,16 @@ export class Mob extends Entity {
   yaw = 0;
   /** 受击红闪剩余时间 */
   hitFlash = 0;
+  /**
+   * 羊毛颜色（`DYE_COLORS` 的下标）与"是否已被剪"（J8，目前只有羊用）。
+   *
+   * 与原版的差异：原版羊要**吃草**才长回羊毛，我们没有"啃草皮"这件事，
+   * 用 30 秒计时器代替——不然剪完一次这只羊就废了。
+   */
+  woolColor = 0;
+  sheared = false;
+  private woolTimer = 0;
+
   /**
    * 着火剩余秒数（J9 的火矢用它）。
    *
@@ -146,6 +169,10 @@ export class Mob extends Entity {
 
     if (this.hurtTime > 0) this.hurtTime -= dt;
     if (this.hitFlash > 0) this.hitFlash -= dt;
+    if (this.sheared) {
+      this.woolTimer -= dt;
+      if (this.woolTimer <= 0) this.sheared = false;
+    }
     this.tickBurning(dt);
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
@@ -370,6 +397,22 @@ export class Mob extends Entity {
     return true;
   }
 
+  /**
+   * 剪羊毛（J8）。
+   * @returns 剪下来的羊毛数量（1~3，原版）；剪不动（已经剪过/幼体以外的原因）返回 0
+   */
+  shear(): number {
+    if (this.dead || this.sheared) return 0;
+    this.sheared = true;
+    this.woolTimer = WOOL_REGROW_SECONDS;
+    return 1 + Math.floor(Math.random() * 3);
+  }
+
+  /** 羊毛长回来了没有（渲染层与测试用） */
+  get woolGrowing(): boolean {
+    return this.sheared;
+  }
+
   /** 是否正在燃烧（渲染层用它上色） */
   get burning(): boolean {
     return this.burnTime > 0;
@@ -441,6 +484,12 @@ export class Mob extends Entity {
       const max = drop.max + Math.max(0, looting);
       const count = drop.min + Math.floor(Math.random() * (max - drop.min + 1));
       if (count > 0) ctx.spawnDrop(drop.itemId, count, this.x, this.y + this.height * 0.5, this.z);
+    }
+
+    // 羊毛按**自己身上的颜色**掉，所以进不了 drops 表；
+    // 剪过的羊不掉羊毛（原版行为，这样"剪"与"杀"才是两条路）
+    if (this.type.wool && !this.sheared) {
+      ctx.spawnDrop(woolId(this.woolColor), 1, this.x, this.y + this.height * 0.5, this.z);
     }
     // 击杀经验（原版数值）；经验球实体还没做，直接进账
     if (this.type.xp > 0) ctx.awardXp?.(this.type.xp);

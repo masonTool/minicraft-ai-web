@@ -26,6 +26,9 @@ import { PARTICLE_POOL, ParticleSystem } from '../src/render/ParticleSystem.ts';
 import { ScreenEffects } from '../src/render/ScreenEffects.ts';
 import { HandRenderer } from '../src/render/HandRenderer.ts';
 import { PlayerRenderer } from '../src/render/PlayerRenderer.ts';
+import { SHEARED_BODY_COLOR, mobBodyColor } from '../src/render/MobRenderer.ts';
+import { Mob } from '../src/core/entity/Mob.ts';
+import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { srgbColor } from '../src/render/srgb.ts';
@@ -463,6 +466,24 @@ console.log('\n[盔甲：第一人称袖套]');
   hand.setBrightness(0.35);
   check('袖套亮度也跟着同步', sleeveMaterial.uniforms.uBrightness!.value === 0.35);
   hand.dispose();
+}
+
+console.log('\n[剪羊毛的外观（J8）]');
+{
+  const sheepType = mobTypeById('sheep')!;
+  const sheep = new Mob(sheepType, 0, 65, 0);
+  equal('没剪过的白羊用羊毛的白色', mobBodyColor(sheep), 0xf9fffe);
+
+  sheep.woolColor = 11;
+  check('换了颜色就跟着换（深蓝 0x3c44aa）', mobBodyColor(sheep) === 0x3c44aa, mobBodyColor(sheep).toString(16));
+
+  sheep.woolColor = 0;
+  sheep.shear();
+  equal('剪过之后换成贴身皮色（一眼能看出已经剪了）', mobBodyColor(sheep), SHEARED_BODY_COLOR);
+  check('皮色与羊毛色明显不同', Math.abs(SHEARED_BODY_COLOR - 0xf9fffe) > 0x200000);
+
+  const cow = new Mob(mobTypeById('cow')!, 0, 65, 0);
+  equal('牛这种不掉羊毛的生物不受影响', mobBodyColor(cow), cow.type.bodyColor);
 }
 
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);

@@ -31,6 +31,7 @@ export type EnchantTarget =
   | 'crossbow'
   | 'trident'
   | 'fishing_rod'
+  | 'shears'
   | 'book';
 
 /**
@@ -53,6 +54,7 @@ const ALL_GEAR: readonly EnchantTarget[] = [
   'crossbow',
   'trident',
   'fishing_rod',
+  'shears',
 ];
 /** 四种盔甲 */
 const ARMOR: readonly EnchantTarget[] = ['helmet', 'chestplate', 'leggings', 'boots'];
@@ -100,8 +102,8 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'sweeping', name: '横扫之刃', maxLevel: 3, targets: ['sword'], weight: 2 },
 
   // ---- 工具类
-  { id: 'efficiency', name: '效率', maxLevel: 5, targets: ['pickaxe', 'axe', 'shovel', 'hoe'], weight: 10, implemented: true },
-  { id: 'silk_touch', name: '精准采集', maxLevel: 1, targets: ['pickaxe', 'axe', 'shovel', 'hoe'], weight: 1, implemented: true },
+  { id: 'efficiency', name: '效率', maxLevel: 5, targets: ['pickaxe', 'axe', 'shovel', 'hoe', 'shears'], weight: 10, implemented: true },
+  { id: 'silk_touch', name: '精准采集', maxLevel: 1, targets: ['pickaxe', 'axe', 'shovel', 'hoe', 'shears'], weight: 1, implemented: true },
   { id: 'unbreaking', name: '耐久', maxLevel: 3, targets: ALL_GEAR, weight: 5, implemented: true },
   { id: 'fortune', name: '时运', maxLevel: 3, targets: ['pickaxe', 'axe', 'shovel', 'hoe'], weight: 2, implemented: true },
   { id: 'mending', name: '经验修补', maxLevel: 1, targets: ALL_GEAR, weight: 2, treasure: true, implemented: true },

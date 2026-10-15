@@ -26,14 +26,20 @@ import {
   slabId,
   stairsId,
   terracottaId,
+  woolId,
 } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { enchantLevel } from './enchantments.ts';
 
 // ---------------------------------------------------------------- 工具定义
 
-/** 工具种类 */
-export type ToolType = 'pickaxe' | 'axe' | 'shovel' | 'hoe' | 'sword';
+/**
+ * 工具种类。
+ *
+ * 注意 `shears` **不在** `TOOL_KINDS` 里：剪刀只有铁的一种，而 `TOOL_KINDS` 是用来
+ * 「5 种类 × 5 材质」叉乘生成 25 件工具的。剪刀单独注册（见 `SHEARS_INFO`）。
+ */
+export type ToolType = 'pickaxe' | 'axe' | 'shovel' | 'hoe' | 'sword' | 'shears';
 
 /** 工具材质（原版 `golden_*`，写成 gold 会和矿物 id 混） */
 export type ToolMaterial = 'wooden' | 'stone' | 'iron' | 'golden' | 'diamond';
@@ -86,6 +92,8 @@ const ATTACK_BY_KIND: Record<ToolType, Record<ToolMaterial, number>> = {
   pickaxe: { wooden: 2, stone: 3, iron: 4, golden: 2, diamond: 5 },
   shovel: { wooden: 2.5, stone: 3.5, iron: 4.5, golden: 2.5, diamond: 5.5 },
   hoe: { wooden: 1, stone: 1, iron: 1, golden: 1, diamond: 1 },
+  // 剪刀只有铁的一种，攻击力与徒手相同（原版 1 点）
+  shears: { wooden: 1, stone: 1, iron: 1, golden: 1, diamond: 1 },
 };
 
 /** 组装一件工具的完整属性 */
@@ -123,7 +131,37 @@ export const TOOL_SPECS: readonly ToolSpec[] = TOOL_KINDS.flatMap((kind) =>
 );
 
 /** 按物品 id 反查工具属性（非工具返回 undefined） */
-const TOOL_BY_ID = new Map<number, ToolInfo>(TOOL_SPECS.map((spec) => [spec.id, spec.tool]));
+/**
+ * 剪刀（J8）。
+ *
+ * 它不是"采集等级"体系的成员（没有等级门槛），真正特别的地方在**掉落**：
+ * 羊毛不剪就没有、树叶不剪只掉苹果（见 `items.ts#requiresShears`）。
+ * 速度 15 与原版一致：徒手拆羊毛 1.2 秒，剪刀 0.08 秒。
+ */
+export const SHEARS_INFO: ToolInfo = {
+  type: 'shears',
+  material: 'iron',
+  tier: 1,
+  speed: 15,
+  durability: 238,
+  attack: 1,
+};
+
+/**
+ * 剪刀的物品 id。
+ *
+ * 放在这里而不是 `items.ts`，是因为 `TOOL_BY_ID` 必须能按 id 查到剪刀——
+ * 否则 `toolInfoById(剪刀)` 返回 undefined，`main.heldTool`、附魔分类、
+ * 耐久消耗全都会把剪刀当成"手上没东西"。而反过来让 tools.ts 去 import items.ts
+ * 会成环（items.ts 本来就 import 这里）。所以 id 定义在这边，`Item.SHEARS` 引用它。
+ */
+export const SHEARS_ITEM_ID = 1150;
+
+const TOOL_BY_ID = new Map<number, ToolInfo>([
+  ...TOOL_SPECS.map((spec) => [spec.id, spec.tool] as [number, ToolInfo]),
+  // 剪刀不在 TOOL_SPECS 里（那套是 5 种类 × 5 材质的叉乘），单独登记
+  [SHEARS_ITEM_ID, SHEARS_INFO],
+]);
 
 export function toolInfoById(itemId: number): ToolInfo | undefined {
   return TOOL_BY_ID.get(itemId);
@@ -217,6 +255,11 @@ requirePickaxe(0, [
 ]);
 // 书架：原版是"斧更快、徒手也能采到"，所以只进加速表不进需求表
 EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');
+
+// 羊毛：剪刀是加速工具，但**不能**顺手放进 REQUIRED_TOOL——
+// 原版"必须用剪刀"体现在掉落表里，破坏耗时不受影响（徒手拆羊毛仍是正常的 1.2 秒，
+// 只是什么都不掉）。放进 REQUIRED_TOOL 会让徒手耗时变成 4 秒，手感直接变差。
+for (let i = 0; i < DYE_COLORS.length; i++) EFFICIENT_TOOL.set(woolId(i), 'shears');
 // 陶瓦与混凝土（17 色 / 16 色）都需要镐
 for (let i = 0; i <= DYE_COLORS.length; i++) REQUIRED_TOOL.set(terracottaId(i), { tool: 'pickaxe', tier: 0 });
 for (let i = 0; i < DYE_COLORS.length; i++) REQUIRED_TOOL.set(concreteId(i), { tool: 'pickaxe', tier: 0 });
@@ -372,6 +415,8 @@ export function meleeDamage(
 export function lootingBonus(enchants?: Readonly<Record<string, number>>): number {
   return enchantLevel(enchants, 'looting');
 }
+
+// ---------------------------------------------------------------- 单个注册的耐久品
 
 // ---------------------------------------------------------------- 工具耐久文案
 

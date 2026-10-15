@@ -102,7 +102,7 @@ import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
-import { Block, BLOCKS, blockDef } from './core/registry/blocks.ts';
+import { Block, BLOCKS, blockDef, woolId } from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
   ARMOR_SLOT_COUNT,
@@ -161,13 +161,10 @@ import {
   blockForItem,
   dropFor,
   EAT_SECONDS,
-  fortuneMultiplier,
-  silkTouchDropsSelf,
+  blockDrops,
   durabilityOf,
   foodInfoById,
   itemName,
-  rareDropFor,
-  replaceDropFor,
   saturationFrom,
   type FoodInfo,
   Item,
@@ -1613,7 +1610,7 @@ class App {
   private targetToolHint(blockId: number): string {
     const required = harvestRequirement(blockId);
     if (!required || canHarvest(blockId, this.heldTool)) return '';
-    const toolName = { pickaxe: '镐', axe: '斧', shovel: '锹', hoe: '锄', sword: '剑' }[required.tool];
+    const toolName = { pickaxe: '镐', axe: '斧', shovel: '锹', hoe: '锄', sword: '剑', shears: '剪刀' }[required.tool];
     const tierName = ['木', '石', '铁', '钻石', '下界合金'][required.tier] ?? '';
     return `   ⚠ 需要${tierName}${toolName}才掉落`;
   }
@@ -2026,6 +2023,58 @@ class App {
    * 近战攻击：左键按下时先看准星有没有对着生物。
    * 生物比方块更靠前就优先攻击，并且这一帧不再破坏方块。
    */
+  /**
+   * 准星指向的生物（方块更近时返回 null —— 说明玩家其实在挖方块）。
+   *
+   * 抽出来是因为**左键攻击**与**右键对生物使用物品**（剪羊毛、后面的喂食/挤奶）
+   * 需要完全一样的判定，写两份迟早会一边改了另一边没改。
+   */
+  private mobUnderCrosshair(): Mob | null {
+    const cosPitch = Math.cos(this.pitch);
+    const hit = raycastEntities(
+      this.entities.all,
+      this.physics.x,
+      this.physics.eyeY,
+      this.physics.z,
+      -Math.sin(this.yaw) * cosPitch,
+      Math.sin(this.pitch),
+      -Math.cos(this.yaw) * cosPitch,
+      ATTACK_RANGE,
+    );
+    if (!hit || !(hit.entity instanceof Mob)) return null;
+    if (this.hit && this.hit.distance < hit.distance) return null;
+    return hit.entity;
+  }
+
+  /**
+   * 对生物右键使用手上的物品（J8）。
+   *
+   * 目前只有"用剪刀剪羊毛"，但这正是后面喂食繁殖、挤奶要挂的同一个入口，
+   * 所以先把它单独抽出来，而不是塞进放置逻辑里。
+   *
+   * @returns 是否发生了交互（发生了就把这一次右键吃掉，不再放置方块）
+   */
+  private useOnEntity(): boolean {
+    const mob = this.mobUnderCrosshair();
+    if (!mob || mob.dead) return false;
+    if (this.heldItemId !== Item.SHEARS) return false;
+    return this.shearMob(mob);
+  }
+
+  /** 用剪刀剪一只羊的毛 */
+  private shearMob(mob: Mob): boolean {
+    const count = mob.shear();
+    if (count <= 0) return false;
+
+    this.spawnDrop(woolId(mob.woolColor), count, mob.x, mob.y + 0.6, mob.z);
+    this.audio.play('shear');
+    this.particles.spawnSmoke(mob.x, mob.y + 0.7, mob.z, 8, 0.22);
+    // 剪刀也要掉耐久（原版每剪一次 -1）
+    this.damageHeldTool();
+    this.refreshHotbar();
+    return true;
+  }
+
   private updateAttacking(dt: number): void {
     this.suppressBreaking = false;
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
@@ -2034,31 +2083,14 @@ class App {
     const context = this.lastEntityContext;
     if (!context) return;
 
-    const cosPitch = Math.cos(this.pitch);
-    const dirX = -Math.sin(this.yaw) * cosPitch;
-    const dirY = Math.sin(this.pitch);
-    const dirZ = -Math.cos(this.yaw) * cosPitch;
-
-    const hit = raycastEntities(
-      this.entities.all,
-      this.physics.x,
-      this.physics.eyeY,
-      this.physics.z,
-      dirX,
-      dirY,
-      dirZ,
-      ATTACK_RANGE,
-    );
-    if (!hit || !(hit.entity instanceof Mob)) return;
-    // 方块比生物更近，说明玩家其实在挖方块
-    if (this.hit && this.hit.distance < hit.distance) return;
+    const mob = this.mobUnderCrosshair();
+    if (!mob) return;
 
     this.attackCooldown = ATTACK_COOLDOWN;
     this.suppressBreaking = true;
     this.breakProgress = 0;
     this.breakingKey = '';
 
-    const mob = hit.entity;
     // 下落中攻击算暴击（原版 ×1.5）；创造模式一击必杀
     const critical = !this.physics.onGround && this.physics.vy < -0.1;
     // 徒手 1 点；手持武器按 tools.ts 的伤害表（剑 4~7、斧 7~9…），
@@ -2147,24 +2179,16 @@ class App {
     // G4：还需要"手上工具够格"——石镐挖不动钻石矿（挖得动但一无所获）
     if (!this.flying && canHarvest(brokenId, tool)) {
       const enchants = this.heldEnchants;
-      const silkTouch = enchantLevel(enchants, 'silk_touch') > 0;
-      const fortune = enchantLevel(enchants, 'fortune');
-
-      // 精准采集：直接掉方块自身（玻璃、草方块、西瓜块都能这样"完整带走"）
-      // 否则先看"概率替换"（砂砾 10% 掉燧石——是**替换**不是额外掉），
-      // 再看常规掉落，最后才掷"额外概率掉落"（树叶 0.5% 掉苹果）
-      const silkDrop = silkTouch && silkTouchDropsSelf(brokenId) ? { id: brokenId, count: 1 } : null;
-      const drop = silkDrop
-        ?? replaceDropFor(brokenId, Math.random())
-        ?? dropFor(brokenId)
-        ?? rareDropFor(brokenId, Math.random());
-      if (drop) {
-        // 双层台阶是两块叠起来的，破坏时按 2 个掉落
-        const baseCount = isSlabDouble(brokenState) ? drop.count * 2 : drop.count;
-        // 时运只放大"矿石类"的掉落（石头掉圆石、草掉泥土这些不受影响）
-        const count = baseCount * fortuneMultiplier(brokenId, fortune, Math.random());
-        this.spawnDrop(drop.id, count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
-      }
+      // 七件事的先后顺序（精准采集 / 剪刀 / 替换 / 常规 / 额外 / 双层台阶 / 时运）
+      // 整体收在 `items.blockDrops` 里，那里写了注释，也才能离线断言
+      const drop = blockDrops(brokenId, {
+        shears: this.heldTool?.type === 'shears',
+        silkTouch: enchantLevel(enchants, 'silk_touch') > 0,
+        fortune: enchantLevel(enchants, 'fortune'),
+        doubleSlab: isSlabDouble(brokenState),
+        roll: Math.random,
+      });
+      if (drop) this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
     }
 
     // 挖矿经验（I5）：只有部分矿石给（煤 0~2、钻石/绿宝石 3~7…），
@@ -3002,6 +3026,14 @@ class App {
 
     // 触摸端只有一次轻点，放完就要清掉，否则会一直放
     this.touchPlaceRequest = false;
+
+    // 对生物使用物品（剪羊毛）：看在功能方块之后、放置之前——
+    // 玩家准星对着羊时，那一下应该剪羊毛而不是把方块放到羊身上
+    if (this.useOnEntity()) {
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      this.touchPlaceRequest = false;
+      return;
+    }
 
     // 手上是弓时右键是"拉弓"，不放置也不使用（功能方块在上面已经处理过了）
     if (this.heldItemId === Item.BOW) return;

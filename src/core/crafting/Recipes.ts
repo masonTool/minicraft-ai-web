@@ -338,6 +338,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     key: { I: Item.IRON_INGOT },
   },
   { kind: 'shapeless' as const, result: { id: Item.IRON_INGOT, count: 9 }, ingredients: [Block.IRON_BLOCK] },
+  // ---- 剪刀（J8）：2 铁锭斜着摆（原版）
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.SHEARS, count: 1 },
+    pattern: ['I ', ' I'],
+    key: { I: Item.IRON_INGOT },
+  },
   // ---- 弓与箭（J9）
   // 箭：1 燧石 + 1 木棍 + 1 羽毛 → 4 支（原版是无序配方）
   {

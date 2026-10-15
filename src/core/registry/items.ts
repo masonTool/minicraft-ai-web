@@ -14,7 +14,7 @@ import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
 import { Block, Wood, blockDef, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
-import { TOOL_SPECS, type ToolInfo } from './tools.ts';
+import { SHEARS_INFO, SHEARS_ITEM_ID, TOOL_SPECS, type ToolInfo } from './tools.ts';
 
 export const MAX_STACK = 64;
 
@@ -79,6 +79,9 @@ export const Item = {
   // ---- 附魔相关材料（H9）
   PAPER: 1070,
   BOOK: 1071,
+  // ---- 单个注册的耐用品（J8 起：剪刀、桶…）
+  // id 定义在 tools.ts（`TOOL_BY_ID` 需要按 id 反查，反向 import 会成环）
+  SHEARS: SHEARS_ITEM_ID,
   // ---- 弓与箭（J9）
   FLINT: 1072,
   STRING: 1073,
@@ -243,6 +246,16 @@ for (const spec of TOOL_SPECS) {
   });
 }
 
+// ---- 剪刀：单独注册（不参与「5 种类 × 5 材质」那套叉乘，只有铁的一种）
+ITEMS[Item.SHEARS] = {
+  id: Item.SHEARS,
+  name: 'minecraft:shears',
+  maxStack: 1,
+  tile: 'item_shears',
+  tool: SHEARS_INFO,
+  durability: SHEARS_INFO.durability,
+};
+
 // ---- 盔甲（20 件：4 部位 × 5 材质），同样「每件一叠」+ 带耐久
 for (const spec of ARMOR_SPECS) {
   register({
@@ -282,6 +295,7 @@ export const MATERIAL_REPAIR_ITEM: Record<string, number> = {
  */
 export const SPECIAL_ITEMS: Record<number, { kind: string; repair: string }> = {
   [Item.BOW]: { kind: 'bow', repair: 'wooden' },
+  [Item.SHEARS]: { kind: 'shears', repair: 'iron' },
 };
 
 /**
@@ -340,8 +354,8 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   functional: '功能方块',
 };
 
-/** 工具与武器（25 种，由 TOOL_SPECS 派生） */
-const TOOLS = new Set<number>(TOOL_SPECS.map((spec) => spec.id));
+/** 工具与武器（25 种由 TOOL_SPECS 派生，另外加上单独注册的剪刀） */
+const TOOLS = new Set<number>([...TOOL_SPECS.map((spec) => spec.id), Item.SHEARS]);
 
 /** 盔甲（20 件，由 ARMOR_SPECS 派生） */
 const ARMOR = new Set<number>(ARMOR_SPECS.map((spec) => spec.id));
@@ -668,6 +682,86 @@ export function silkTouchDropsSelf(blockId: number): boolean {
   if (NO_SILK_TOUCH.has(blockId)) return false;
   // 有对应物品的方块才能掉自身（草、花这些也有物品，所以照掉）
   return itemDef(blockId) !== undefined;
+}
+
+// ---------------------------------------------------------------- 破坏掉落（收成一个纯函数）
+
+/**
+ * **必须用剪刀才有掉落**的方块。
+ *
+ * 注意它不是 `REQUIRED_TOOL`：原版羊毛/树叶的"必须剪刀"写在 `getDrops` 里，
+ * 而不是 `requiresCorrectToolForDrops`——区别在于**徒手拆羊毛的时间是正常的 1.2 秒，
+ * 只是什么都不掉**。放进 `REQUIRED_TOOL` 会让徒手耗时变成 4 秒，手感直接变差。
+ *
+ * 剪刀拿到的东西与"精准采集"一致：直接掉方块自身（羊毛掉羊毛、树叶掉树叶）。
+ */
+const SHEARS_ONLY = new Set<number>();
+for (let i = 0; i < DYE_COLORS.length; i++) SHEARS_ONLY.add(woolId(i));
+
+/**
+ * 树叶：剪刀与**精准采集**都能完整带走（原版两样都行）。
+ * 和羊毛的区别就在这里——羊毛只认剪刀，精准采集对它无效。
+ */
+const LEAVES = new Set<number>([
+  // 橡木是"基础方块"，不在 `Wood` 表里，得单独写一行
+  // （踩过一次：批量注册时漏掉橡木，表现为"砍云杉有加速、砍橡木没有"）
+  Block.OAK_LEAVES,
+]);
+for (const ids of Object.values(Wood)) LEAVES.add(ids.leaves);
+
+/** 这个方块是不是"不剪就一无所获"（只有羊毛） */
+export function requiresShears(blockId: number): boolean {
+  return SHEARS_ONLY.has(blockId);
+}
+
+export interface DropContext {
+  /** 手上是不是剪刀 */
+  shears: boolean;
+  /** 有没有精准采集 */
+  silkTouch: boolean;
+  /** 时运等级（0 = 没有） */
+  fortune: number;
+  /** 破坏的是不是双层台阶（掉落翻倍） */
+  doubleSlab: boolean;
+  /** 0~1 的随机数发生器（测试里传固定值） */
+  roll: () => number;
+}
+
+/**
+ * 破坏一个方块该掉什么（J8 把这条规则收拢到一起）。
+ *
+ * 判定顺序是**有讲究**的，写成一条流水线：
+ *   1. 剪刀 → 羊毛/树叶"完整带走"
+ *   2. 精准采集 → 其余能"完整带走"的方块；**对羊毛无效**（羊毛只认剪刀）
+ *   3. 羊毛没剪 → 一无所有。**必须在常规掉落之前拦**，
+ *      否则会顺着"方块掉自身"的默认规则漏出来，剪刀就白做了
+ *   4. 概率替换（砂砾 10% 掉燧石）——是**顶替**原掉落，不是额外掉一份
+ *   5. 常规掉落表
+ *   6. 额外概率掉落（树叶 0.5% 掉苹果）
+ * 最后再乘双层台阶与时运。
+ *
+ * 原先这 5 条规则挤在 `main` 破坏分支的 10 行里，加"剪刀"这条时已经看不清顺序了。
+ */
+export function blockDrops(blockId: number, ctx: DropContext): { id: number; count: number } | null {
+  const scale = (drop: { id: number; count: number }): { id: number; count: number } => {
+    const base = ctx.doubleSlab ? drop.count * 2 : drop.count;
+    return { id: drop.id, count: base * fortuneMultiplier(blockId, ctx.fortune, ctx.roll()) };
+  };
+
+  // 1) 剪刀：羊毛与树叶都能"完整带走"（原版剪刀就是这两样的专用工具）
+  const shearsTakes = ctx.shears && (SHEARS_ONLY.has(blockId) || LEAVES.has(blockId));
+  // 2) 精准采集：能"完整带走"的都生效，但**对羊毛无效**——
+  //    原版羊毛的掉落判定只认剪刀（`is(WOOL) && tool.is(ShearsItem)`），
+  //    写成"精准采集也能拿羊毛"是个很容易漏掉的偏差
+  const silkTakes = ctx.silkTouch && !SHEARS_ONLY.has(blockId) && silkTouchDropsSelf(blockId);
+  if (shearsTakes || silkTakes) return scale({ id: blockId, count: 1 });
+
+  // 3) 羊毛没剪就一无所有（注意要在"常规掉落"之前拦，否则会顺着"方块掉自身"漏出来）
+  if (SHEARS_ONLY.has(blockId)) return null;
+
+  // 4~6) 概率替换 → 常规掉落 → 额外概率掉落
+  const drop = replaceDropFor(blockId, ctx.roll()) ?? dropFor(blockId) ?? rareDropFor(blockId, ctx.roll());
+  return drop ? scale(drop) : null;
 }
 
 /** 与"掉落自身"不同的特例 */

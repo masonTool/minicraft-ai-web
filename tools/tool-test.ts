@@ -12,7 +12,16 @@
 
 import { Block, slabId } from '../src/core/registry/blocks.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
-import { Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
+import {
+  Item,
+  durabilityOf,
+  itemDef,
+  maxStackOf,
+} from '../src/core/registry/items.ts';
+import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
+import { offeringFor } from '../src/core/crafting/Enchanting.ts';
+import { efficientToolType, harvestRequirement, toolInfoById } from '../src/core/registry/tools.ts';
+import { Block, woolId } from '../src/core/registry/blocks.ts';
 import {
   TOOL_ITEM_START,
   TOOL_KINDS,
@@ -42,6 +51,11 @@ function check(label: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+/** 浮点近似比较（破坏耗时这类除法结果） */
+function close(label: string, actual: number, expected: number, epsilon = 1e-9): void {
+  check(label, Math.abs(actual - expected) <= epsilon, `实际 ${actual}，期望 ${expected}`);
 }
 
 function equal(label: string, actual: unknown, expected: unknown): void {
@@ -229,5 +243,35 @@ console.log('\n[工具配方]');
   );
 }
 
+console.log('\n[剪刀（J8）]');
+{
+  equal('剪刀的耐久是原版的 238', toolInfoById(Item.SHEARS)?.durability, 238);
+  equal('剪刀的加速倍率是 15（原版）', toolInfoById(Item.SHEARS)?.speed, 15);
+  equal('剪刀的种类是 shears', toolInfoById(Item.SHEARS)?.type, 'shears');
+  equal('剪刀不是"5 种类 × 5 材质"的成员（工具表仍是 25 件）', TOOL_SPECS.length, 25);
+  equal('剪刀每件一叠', maxStackOf(Item.SHEARS), 1);
+  equal('剪刀也算耐用品（走统一入口）', durabilityOf(Item.SHEARS), 238);
+
+  // 加速与采集：羊毛拿剪刀最快，剪刀挖不动石头
+  equal('羊毛的加速工具是剪刀', efficientToolType(woolId(0)), 'shears');
+  close('徒手拆羊毛 1.2 秒（原版）', breakSeconds(woolId(0), null), 1.2);
+  const shears = toolInfoById(Item.SHEARS)!;
+  close('剪刀拆羊毛 0.08 秒（原版）', breakSeconds(woolId(0), shears), 0.08);
+  check('剪刀挖石头挖不动（不是镐）', !canHarvest(Block.STONE, shears));
+  check('剪刀也不需要采集等级（羊毛不设等级门槛）', harvestRequirement(woolId(0)) === undefined);
+
+  // 附魔：剪刀在原版可以附效率/精准采集/耐久
+  const shearsEnchants = offeringFor('shears').map((def) => def.id);
+  check('剪刀能附效率', shearsEnchants.includes('efficiency'));
+  check('剪刀能附精准采集', shearsEnchants.includes('silk_touch'));
+  check('剪刀能附耐久', shearsEnchants.includes('unbreaking'));
+  check('剪刀附不到锋利', !shearsEnchants.includes('sharpness'));
+
+  // 中文名与说明
+  equal('剪刀叫"剪刀"', itemLabel(Item.SHEARS), '剪刀');
+  check('说明里写了"不剪就没有"', itemTooltip(Item.SHEARS).description.includes('不剪就没有'), itemTooltip(Item.SHEARS).description);
+}
+
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
+process.exit(failed === 0 ? 0 : 1);
 process.exit(failed === 0 ? 0 : 1);

@@ -16,6 +16,26 @@
 import * as THREE from 'three';
 import type { Mob } from '../core/entity/Mob.ts';
 import type { MobType } from '../core/entity/Mob.ts';
+import { DYE_COLORS } from '../core/registry/colors.ts';
+
+/** 剪过毛的羊露出的贴身皮色（原版是把羊毛那层隐藏掉，我们只有一份颜色可用） */
+export const SHEARED_BODY_COLOR = 0xd9c3ad;
+
+/**
+ * 一只生物身上那层该用什么颜色（导出是为了能离线断言）。
+ *
+ * 目前只有羊会变：
+ *  - 没剪过 → 用羊毛的颜色（`DYE_COLORS[woolColor]`，默认白色，与原版 81% 白羊一致）
+ *  - 剪过   → 换成贴身皮色，玩家一眼能看出"这只已经剪了"
+ */
+export function mobBodyColor(mob: Mob): number {
+  if (!mob.type.wool) return mob.type.bodyColor;
+  if (mob.sheared) return SHEARED_BODY_COLOR;
+  const dye = DYE_COLORS[mob.woolColor];
+  if (!dye) return mob.type.bodyColor;
+  const [r, g, b] = dye.rgb;
+  return (r << 16) | (g << 8) | b;
+}
 
 type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal';
 
@@ -138,6 +158,8 @@ interface MobVisual {
   spin: number;
   /** 逐部件颜色（0xRRGGBB，预解析好避免每帧重算） */
   partColors: Uint32Array;
+  /** 生成这份规格时羊剪没剪（变了就整份重建，见 `update`） */
+  sheared?: boolean;
 }
 
 /** 实例容量：约 64 只生物 × 最多 16 个部件。超出会被截断并打印一次警告 */
@@ -207,8 +229,15 @@ export class MobRenderer {
       if (mob.dead) continue;
 
       let visual = this.visuals.get(mob.id);
+      // 羊毛剪了/长回来了：颜色是在 `createVisual` 里定死的，所以整份规格重建一次。
+      // 只对"身体颜色会变"的生物（羊）做这件事，别的生物不受影响。
+      if (visual && mob.type.wool && visual.sheared !== mob.sheared) {
+        this.visuals.delete(mob.id);
+        visual = undefined;
+      }
       if (!visual) {
         visual = this.createVisual(mob);
+        visual.sheared = mob.sheared;
         this.visuals.set(mob.id, visual);
       }
 
@@ -304,13 +333,16 @@ export class MobRenderer {
               : birdBoxes(type);
 
     const partColors = new Uint32Array(specs.length);
+    const bodyColor = mobBodyColor(mob);
     for (let i = 0; i < specs.length; i++) {
       const spec = specs[i]!;
-      partColors[i] = spec.color === 'body' ? type.bodyColor : spec.color === 'accent' ? type.accentColor : 0x14161c;
+      partColors[i] = spec.color === 'body' ? bodyColor : spec.color === 'accent' ? type.accentColor : 0x14161c;
     }
 
     return {
       kind,
+      // 记下"生成这份规格时羊剪没剪"（见 update 里的重建判定）
+      sheared: mob.sheared,
       specs,
       legCount: kind === 'quadruped' ? 4 : kind === 'crystal' ? 0 : 2,
       spin: 0,

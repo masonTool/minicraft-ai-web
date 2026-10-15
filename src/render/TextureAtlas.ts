@@ -934,6 +934,40 @@ PAINTERS.enchanting_table_side = (x, y, rng) => {
   return [clamp255(26 + jitter), clamp255(20 + jitter), clamp255(38 + jitter), 255];
 };
 
+// ---- 剪刀（J8）
+/**
+ * 剪刀：两片刀刃从左侧的轴向外张开（"<" 形），轴是一小段深色。
+ * 16×16 下再画手柄就糊成一团了，所以只保留最好认的那部分轮廓。
+ */
+const SHEARS_TEMPLATE: readonly string[] = [
+  '................',
+  '.......MMMM.....',
+  '........MMMM....',
+  '.........MMMM...',
+  '..........MMM...',
+  '...........MMM..',
+  '............MMM.',
+  '.......DD...MMM.',
+  '.......DD...MMM.',
+  '............MMM.',
+  '...........MMM..',
+  '..........MMM...',
+  '.........MMMM...',
+  '........MMMM....',
+  '.......MMMM.....',
+  '................',
+];
+
+PAINTERS.item_shears = (x, y, rng) => {
+  const pixel = SHEARS_TEMPLATE[y]?.[x] ?? '.';
+  if (pixel === '.') return [0, 0, 0, 0];
+  const jitter = rng() * 12 - 6;
+  if (pixel === 'D') return [clamp255(70 + jitter), clamp255(70 + jitter), clamp255(76 + jitter), 255];
+  // 刀刃：上侧亮、下侧暗，一眼能看出是斜着的金属片
+  const shade = y < 8 ? 1.12 : 0.86;
+  return [clamp255(216 * shade + jitter), clamp255(216 * shade + jitter), clamp255(224 * shade + jitter), 255];
+};
+
 // ---- 弓与箭（J9）
 /** 燧石：深灰的尖锐石块（画成一块带斜面的碎石） */
 PAINTERS.item_flint = (x, y, rng) => {

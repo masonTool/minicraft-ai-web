@@ -9,9 +9,16 @@
  * 运行：npm run test:decor
  */
 
-import { Block, BLOCKS, blockDef, isHandHarvestable } from '../src/core/registry/blocks.ts';
+import { Block, BLOCKS, blockDef, isHandHarvestable, slabId, woolId } from '../src/core/registry/blocks.ts';
 import { breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
-import { CREATIVE_ITEMS, itemDef, dropFor } from '../src/core/registry/items.ts';
+import {
+  CREATIVE_ITEMS,
+  Item,
+  blockDrops,
+  dropFor,
+  itemDef,
+  requiresShears,
+} from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
 import {
@@ -361,5 +368,44 @@ console.log('\n[真实地形抽样：10×10 区块]');
   check('生成 100 区块耗时 < 3s（地物没有把生成拖垮）', elapsed < 3000, `${elapsed}ms`);
 }
 
-console.log(`\n地物测试：${passed} 通过 / ${failed} 失败`);
+console.log('\n[破坏掉落：剪刀 / 精准采集 / 时运 / 替换]');
+{
+  const none = () => null;
+  const plain = { shears: false, silkTouch: false, fortune: 0, doubleSlab: false, roll: () => 0.99 };
+  const shears = { ...plain, shears: true };
+  const silk = { ...plain, silkTouch: true };
+
+  // ---- 羊毛：只认剪刀
+  const wool = woolId(0);
+  equal('徒手拆羊毛一无所获（原版行为）', blockDrops(wool, plain), null);
+  equal('剪刀剪羊毛掉羊毛自身', blockDrops(wool, shears)?.id, wool);
+  equal('精准采集对羊毛无效', blockDrops(wool, silk), null);
+  check('羊毛被登记为"必须剪刀"', requiresShears(wool));
+  for (let i = 1; i < 16; i++) equal(`第 ${i} 种羊毛同样只认剪刀`, blockDrops(woolId(i), plain), null);
+
+  // ---- 树叶：剪刀与精准采集都行
+  equal('剪刀剪树叶掉树叶方块', blockDrops(Block.OAK_LEAVES, shears)?.id, Block.OAK_LEAVES);
+  equal('精准采集也能拿树叶', blockDrops(Block.OAK_LEAVES, silk)?.id, Block.OAK_LEAVES);
+  check('树叶不要求剪刀（徒手也能拆，只是不掉叶子）', !requiresShears(Block.OAK_LEAVES));
+
+  // ---- 精准采集对普通方块仍然生效
+  equal('精准采集拿玻璃', blockDrops(Block.GLASS, silk)?.id, Block.GLASS);
+  check('剪刀拿不到玻璃（原版也是）', blockDrops(Block.GLASS, shears) === null || blockDrops(Block.GLASS, shears)?.id !== Block.GLASS);
+
+  // ---- 概率替换：砂砾 → 燧石
+  equal('砂砾掷中时掉燧石（顶替砂砾）', blockDrops(Block.GRAVEL, { ...plain, roll: () => 0.01 })?.id, Item.FLINT);
+  equal('砂砾没掷中时掉砂砾', blockDrops(Block.GRAVEL, plain)?.id, Block.GRAVEL);
+
+  // ---- 时运只放大矿石
+  const fortune3 = { ...plain, fortune: 3 };
+  equal('时运 III 掷满时钻石矿掉 4 个', blockDrops(Block.DIAMOND_ORE, { ...fortune3, roll: () => 0.99 })?.count, 4);
+  equal('时运不影响石头', blockDrops(Block.STONE, fortune3)?.count, 1);
+  equal('时运不影响砂砾→燧石', blockDrops(Block.GRAVEL, { ...fortune3, roll: () => 0.01 })?.count, 1);
+
+  // ---- 双层台阶翻倍
+  equal('双层台阶掉 2 个', blockDrops(slabId(0), { ...plain, doubleSlab: true })?.count, 2);
+  void none;
+}
+
+console.log(`\n装饰策略测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
