@@ -240,6 +240,32 @@ export function withFenceGateOpen(state: number, open: boolean): number {
   return withDoorOpen(state, open);
 }
 
+// ---------------------------------------------------------------- 下界传送门
+
+/**
+ * 下界传送门的门面沿哪个水平轴（原版的 `HORIZONTAL_AXIS`）。
+ *
+ * 与 POWERED / OPEN / WALL_MOUNT 共用 bit3——沿用本文件开头那条既有设计。
+ * 这一位只有两处用得上，但两处都离不开它：
+ *  1. 传出/传入时要知道往哪个方向把玩家推出去（垂直于门面）
+ *  2. 在目的地新建门时要尽量与原门的朝向一致（免得"从东西向的门进去、从南北向的门出来"）
+ */
+const PORTAL_AXIS_Z_MASK = 0b1000;
+
+/** 门面是否沿 Z 轴展开（false = 沿 X 轴展开，即门面法线是 Z） */
+export function portalAxisIsZ(state: number): boolean {
+  return (state & PORTAL_AXIS_Z_MASK) !== 0;
+}
+
+export function withPortalAxis(state: number, axisZ: boolean): number {
+  return axisZ ? state | PORTAL_AXIS_Z_MASK : state & ~PORTAL_AXIS_Z_MASK;
+}
+
+/** 门面沿哪个水平轴（'x' = 门面在 X 方向展开，门在 XZ 平面上是南北走向的墙） */
+export function portalAxis(state: number): 'x' | 'z' {
+  return portalAxisIsZ(state) ? 'z' : 'x';
+}
+
 // ---------------------------------------------------------------- 调试
 
 export function describeState(shape: BlockShape, state: number): string {

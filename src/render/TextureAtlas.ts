@@ -2146,6 +2146,32 @@ const END_PORTAL_PAINTER: Painter = (x, y, rng) => {
   return [clamp255(22 * v), clamp255(8 * v), clamp255(38 * v), 255];
 };
 
+/**
+ * 下界传送门（K8）：深紫底 + 两条反向旋转的螺旋带（"漩涡"是它最标志性的观感）。
+ *
+ * 贴图本身是静态的，滚动靠材质（`VoxelMaterial` 的 `uPortalTile`）——
+ * 与水面动画同一套做法：不逐顶点加属性，也就不必动网格化与 Worker。
+ * 半透明（alpha 234）是为了让门后面的东西隐约透出来（原版门面也是半透明的）。
+ */
+const NETHER_PORTAL_PAINTER: Painter = (x, y, rng) => {
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const angle = Math.atan2(dy, dx);
+  const radius = Math.hypot(dx, dy);
+  // 两条频率与旋向都不同的螺旋叠加：单条会看起来像"放射状条纹"
+  const swirl = Math.sin(angle * 3 + radius * 1.5) * 0.5 + Math.sin(radius * 2.7 - angle * 2) * 0.5;
+  const t = (swirl + 1) / 2; // 0~1
+  const jitter = rng() * 14 - 7;
+  return [
+    clamp255(66 + t * 112 + jitter),
+    clamp255(18 + t * 44 + jitter),
+    clamp255(122 + t * 124 + jitter),
+    234,
+  ];
+};
+
+PAINTERS.nether_portal = NETHER_PORTAL_PAINTER;
+
 PAINTERS.end_stone = END_STONE_PAINTER;
 PAINTERS.end_stone_bricks = END_STONE_BRICKS_PAINTER;
 PAINTERS.purpur_block = PURPUR_PAINTER;

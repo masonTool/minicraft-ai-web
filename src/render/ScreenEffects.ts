@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { srgbColor } from './srgb.ts';
 
-export type ScreenEffect = 'none' | 'water' | 'lava' | 'blindness' | 'darkness';
+export type ScreenEffect = 'none' | 'water' | 'lava' | 'blindness' | 'darkness' | 'portal';
 
 interface EffectPreset {
   /** 色罩颜色 */
@@ -43,6 +43,11 @@ const PRESETS: Record<ScreenEffect, EffectPreset> = {
     vignette: 0.75,
   },
   lava: { color: 0xb83404, alpha: 0.68, vignette: 0.6 },
+  /**
+   * 下界传送门（K8）：紫色、很淡、**只压中心**（vignette 取 0，即越到边缘越透）。
+   * 原版站在门里时整屏被紫色糊住，但还能看清方向；色罩太重会让人以为是卡住了。
+   */
+  portal: { color: 0x4a1e86, alpha: 0.4, vignette: 0 },
 };
 
 /** 过渡时间常数（秒）：越小切得越快，0.16 约等于 0.5 秒内基本到位 */
@@ -59,6 +64,7 @@ const PRESET_COLORS: Record<ScreenEffect, THREE.Color> = {
   lava: srgbColor(PRESETS.lava.color),
   blindness: srgbColor(PRESETS.blindness.color),
   darkness: srgbColor(PRESETS.darkness.color),
+  portal: srgbColor(PRESETS.portal.color),
 };
 
 const VERTEX_SHADER = /* glsl */ `

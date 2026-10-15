@@ -28,6 +28,13 @@ attribute vec2 aTile;
 uniform float uTime;
 /** 需要做水面动画的贴图起点（水 / 岩浆），长度固定为 FLUID_TILE_SLOTS，空位填 (-1,-1) */
 uniform vec2 uFluidTiles[${FLUID_TILE_SLOTS}];
+/**
+ * 下界传送门贴图的起点（K8）。
+ *
+ * 门面只做"贴图滚动"、**不做**波浪位移——门是立在空中的一块平板，
+ * 跟着水面一起上下起伏会从门框里穿出去。因此单独开一个 uniform 而不是塞进 uFluidTiles。
+ */
+uniform vec2 uPortalTile;
 
 varying vec2 vUv;
 varying vec2 vTile;
@@ -36,6 +43,8 @@ varying float vShade;
 varying float vFogDepth;
 /** 1 = 这一格是流体（要做波浪与滚动），0 = 普通方块 */
 varying float vFluid;
+/** 1 = 这一格是下界传送门（只做贴图滚动） */
+varying float vPortal;
 
 void main() {
   vUv = uv;
@@ -50,6 +59,7 @@ void main() {
     if (distance(aTile, uFluidTiles[i]) < 0.0004) fluid = 1.0;
   }
   vFluid = fluid;
+  vPortal = distance(aTile, uPortalTile) < 0.0004 ? 1.0 : 0.0;
 
   vec3 worldPos = (modelMatrix * vec4(position, 1.0)).xyz;
   vec3 displaced = position;
@@ -85,14 +95,19 @@ varying vec2 vLight;
 varying float vShade;
 varying float vFogDepth;
 varying float vFluid;
+varying float vPortal;
 
 void main() {
   // uv 是「平铺坐标」：单面时落在 [0,1]，贪心合并出的大四边形则是 [0,w]×[0,h]。
   // 取小数部分即可把任意大小的面都映射回同一张贴图，再叠加半像素内缩避免渗色。
   //
-  // 流体额外叠加一个随时间平移的偏移：**加在 fract 里面**，
+  // 流体与传送门额外叠加一个随时间平移的偏移：**加在 fract 里面**，
   // 于是滚动始终发生在这一张贴图内部（不会跑到邻居贴图上去）。
-  vec2 scroll = vFluid > 0.5 ? vec2(uTime * 0.06, uTime * 0.045) : vec2(0.0);
+  // 传送门滚得比水面慢（原版门面也是缓缓流动的紫色），两轴速度不成比例才不会
+  // 看起来像"斜着平移的条纹"。
+  vec2 scroll = vec2(0.0);
+  if (vFluid > 0.5) scroll = vec2(uTime * 0.06, uTime * 0.045);
+  else if (vPortal > 0.5) scroll = vec2(uTime * 0.026, uTime * 0.017);
   vec2 local = fract(vUv + scroll + vec2(vFluid * 0.5, 0.0));
   vec2 tileUv = vTile + (uTileInset + local * (1.0 - 2.0 * uTileInset)) * uTileSpan;
   vec4 texel = texture2D(uAtlas, tileUv);
@@ -137,6 +152,8 @@ export class VoxelMaterial {
       uAtlas: { value: atlas },
       uTime: { value: 0 },
       uFluidTiles: { value: fluidTiles },
+      // 传送门贴图起点（未登记时为 (-1,-1)，永远匹配不上任何顶点）
+      uPortalTile: { value: new THREE.Vector2(-1, -1) },
       uSkyBrightness: { value: 1 },
       uMinBrightness: { value: translucent ? 0.32 : 0.06 },
       uFogColor: { value: new THREE.Color(0x8fc7ff) },
@@ -182,7 +199,18 @@ export class VoxelMaterial {
     }
   }
 
-  /** 推进水面动画时间（秒） */
+  /**
+   * 登记"哪个贴图是下界传送门"（传图集里的贴图起点；不传就取消）。
+   *
+   * 只滚动、不做波浪位移，因此不走 `setFluidTiles`——那个槽位是给
+   * "要跟着水面起伏的整格流体"用的，门跟着晃会从门框里穿出去。
+   */
+  setPortalTile(tile?: readonly [number, number]): void {
+    const value = this.uniforms.uPortalTile!.value as THREE.Vector2;
+    value.set(tile ? tile[0] : -1, tile ? tile[1] : -1);
+  }
+
+  /** 推进水面 / 门面动画时间（秒） */
   setTime(seconds: number): void {
     this.uniforms.uTime!.value = seconds;
   }

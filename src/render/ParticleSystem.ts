@@ -76,6 +76,8 @@ const KINDS = {
   flame: { gravity: -2.2, drag: 2.1, life: [0.35, 0.75], size: [0.1, 0.2], alpha: 0.95 },
   /** 爱心（J8）：缓缓上飘、几乎不受重力 */
   heart: { gravity: -1.1, drag: 1.2, life: [0.7, 1.3], size: [0.14, 0.24], alpha: 1 },
+  /** 传送门（K8）：紫色光点，缓缓上飘、比爱心活得久一点（原版门前的紫粒子也是飘着的） */
+  portal: { gravity: -0.8, drag: 1.3, life: [0.9, 1.6], size: [0.09, 0.17], alpha: 0.9 },
 } as const satisfies Record<string, KindParams>;
 
 export type ParticleKind = keyof typeof KINDS;
@@ -224,6 +226,11 @@ export class ParticleSystem {
   /** 火焰（泡在岩浆里） */
   spawnFlame(x: number, y: number, z: number, color = 0xff9a1f, count = 1): void {
     this.burst('flame', x, y, z, color, count, 0.16, 0.8);
+  }
+
+  /** 下界传送门（K8）：紫色的光点（走进门、以及门被点燃时各冒一簇） */
+  spawnPortal(x: number, y: number, z: number, count = 8, spread = 0.4): void {
+    this.burst('portal', x, y, z, 0x9a4cff, count, spread, 1.1);
   }
 
   /**

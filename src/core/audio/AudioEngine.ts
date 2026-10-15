@@ -31,6 +31,8 @@ export type SoundKind =
   | 'shear'
   /** 打火石点火：铁片刮擦的"擦"声（I12） */
   | 'flint'
+  /** 传送门：低频的"嗡"（进出传送门时响一声，K8） */
+  | 'portal'
   | 'mob_zombie'
   | 'mob_skeleton'
   | 'mob_creeper'
@@ -90,6 +92,8 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   shear: { duration: 0.12, gain: 0.34, noise: 1, freqFrom: 1800, freqTo: 900, type: 'square', filter: 5200, filterQ: 0.7, attack: 0.001, release: 0.11 },
   // 打火石：高频噪声起手（铁片刮擦）→ 迅速滑到低频（火苗窜起来），所以频率跨度拉得很大
   flint: { duration: 0.34, gain: 0.4, noise: 1, freqFrom: 2600, freqTo: 420, type: 'triangle', filter: 4600, filterQ: 1.6, attack: 0.002, release: 0.32 },
+  // 传送门：偏低频、几乎没有噪声（"嗡"的一声），起手慢一点听起来才像被"吸"进去
+  portal: { duration: 0.9, gain: 0.45, noise: 0.18, freqFrom: 220, freqTo: 90, type: 'sawtooth', filter: 900, filterQ: 1.8, attack: 0.06, release: 0.84, thump: 70 },
   mob_zombie: { duration: 0.7, gain: 0.42, noise: 0.45, freqFrom: 150, freqTo: 110, type: 'sawtooth', filter: 700, filterQ: 1.4, attack: 0.05, release: 0.6, thump: 80 },
   mob_skeleton: { duration: 0.35, gain: 0.38, noise: 0.4, freqFrom: 900, freqTo: 600, type: 'square', filter: 2800, filterQ: 2.2, attack: 0.002, release: 0.32 },
   mob_creeper: { duration: 0.55, gain: 0.45, noise: 1, freqFrom: 700, freqTo: 380, type: 'triangle', filter: 2400, filterQ: 1.2, attack: 0.01, release: 0.5 },

@@ -277,6 +277,8 @@ export const TILE_ORDER = [
   'dragon_egg',
   'end_portal_frame',
   'end_portal',
+  // ---- 下界传送门（K8）：贴图在材质里做滚动，见 `VoxelMaterial` 的 uPortalTile
+  'nether_portal',
   // ---- 红石
   'redstone_wire',
   'redstone_torch',

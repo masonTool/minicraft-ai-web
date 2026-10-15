@@ -66,6 +66,25 @@ import {
 import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
 import { FIRE_IGNITE_SECONDS, igniteAt } from './core/world/Fire.ts';
 import {
+  PORTAL_COOLDOWN_TICKS,
+  PORTAL_CREATIVE_IGNITE_TICKS,
+  PORTAL_IGNITE_TICKS,
+  buildPortal,
+  clearBrokenPortalsAround,
+  findPortalNear,
+  findPortalSite,
+  ignitePortal,
+  portalCenter,
+  portalInterior,
+  portalFrame,
+  portalTarget,
+  shapeAt,
+  type PortalAxis,
+  type PortalShape,
+  type PortalTarget,
+  type PortalWorld,
+} from './core/world/NetherPortal.ts';
+import {
   StatusEffects,
   effectLabel,
   effectTone,
@@ -109,6 +128,7 @@ import {
   delayOf,
   isFenceGateOpen,
   isTrapdoorOpen,
+  portalAxis,
   withDelay,
   withFenceGateOpen,
   withTrapdoorOpen,
@@ -212,6 +232,12 @@ const RANDOM_TICK_RADIUS = 3;
 
 /** 死亡后自动重生的等待时间（秒） */
 const RESPAWN_DELAY = 3;
+
+/**
+ * 传送后等目的地区块加载的上限（帧；60fps 下 5 秒）。
+ * 超时就把玩家直接放在目标坐标上——宁可落在地形里，也不要一直冻着出不来。
+ */
+const PORTAL_ARRIVAL_TIMEOUT_FRAMES = 300;
 
 /** 玩家近战距离（原版约 3 格） */
 const ATTACK_RANGE = 3.2;
@@ -409,6 +435,28 @@ class App {
   private wasInWater = false;
   /** 岩浆里冒火焰粒子的节拍（秒） */
   private flameTimer = 0;
+
+  // ---------------------------------------------------------------- 下界传送门（K8）
+
+  /** 站在传送门里的累计 tick（20Hz 结算，普通 80 tick = 4 秒） */
+  private portalTicks = 0;
+  /** 传送后的冷却（tick）：300 = 15 秒，免得一落地就被传回去 */
+  private portalCooldownTicks = 0;
+  /**
+   * 传送途中：维度已经切过去了、正在等目的地的区块加载。
+   *
+   * 不为 null 时**冻结玩家物理**——新区块还没生成出来，`getBlock` 一律返回空气，
+   * 不冻住的话玩家会在"空"世界里一直往下掉。加载完就把玩家放进目的地那座门里。
+   */
+  private pendingArrival: (PortalTarget & { axis: PortalAxis; frames: number }) | null = null;
+
+  /** 传送门逻辑看到的世界（`PortalWorld` 接口） */
+  private readonly portalWorld: PortalWorld = {
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+    getState: (x, y, z) => this.world.getBlockState(x, y, z),
+    // 走 setBlockAndUpdate：光照、网格与增量存档都会跟着更新
+    setBlock: (x, y, z, id, state) => this.world.setBlockAndUpdate(x, y, z, id, state),
+  };
   /** 生物渲染 */
   private readonly mobRenderer: MobRenderer;
   /** 生物生成规则 */
@@ -761,6 +809,11 @@ class App {
     ];
     this.solidMaterial.setFluidTiles(fluidTiles);
     this.translucentMaterial.setFluidTiles(fluidTiles);
+    // 下界传送门（K8）：只滚动、不起伏，所以走单独的槽位（门在半透明层，
+    // 但两个材质共用同一套 uniform 布局，两个都登记才不会在别的材质里看到静止的门）
+    const portalTile = atlas.tileOrigin('nether_portal');
+    this.solidMaterial.setPortalTile(portalTile);
+    this.translucentMaterial.setPortalTile(portalTile);
 
     this.chat.onSubmit = (text) => this.handleChatSubmit(text);
     this.chat.onOpenChange = (open) => this.handleChatOpen(open);
@@ -1328,7 +1381,10 @@ class App {
    * 否则在水下还能看清远处地形（原版水下只能看清十几格）。
    */
   private applyMediumEnvironment(): void {
-    const effect = this.eyeMedium();
+    // 站在传送门里（或正在传送的等待期）时，紫色色罩**优先于**水下/岩浆色罩：
+    // 原版门的紫色是盖在一切之上的，否则在门里看水面会变成一片青色
+    const effect =
+      this.pendingArrival !== null || this.playerInPortal() ? 'portal' : this.eyeMedium();
     this.screenEffects.set(effect);
 
     if (effect === 'water') {
@@ -1388,6 +1444,16 @@ class App {
           p.x + (Math.random() - 0.5) * 0.6,
           p.y + 0.5 + Math.random() * 0.7,
           p.z + (Math.random() - 0.5) * 0.6,
+        );
+      }
+      // 站在传送门里：紫色光点从门里往上飘（原版门前一直飘着这样的粒子）
+      if (this.playerInPortal()) {
+        this.particles.spawnPortal(
+          p.x + (Math.random() - 0.5) * 0.7,
+          p.y + 0.4 + Math.random() * 0.8,
+          p.z + (Math.random() - 0.5) * 0.7,
+          1,
+          0.15,
         );
       }
     }
@@ -2237,19 +2303,44 @@ class App {
   }
 
   /**
-   * 打火石点火（I12）：手上是打火石、准星对着方块 → 在**命中面的外侧**点一格火。
+   * 打火石（I12 / K8）：手上是打火石、准星对着方块 → 先试着**点门**，再试着**点火**。
    *
-   * 能不能点着由 `Fire.ts#canPlaceFire` 判定（对齐原版的两条活路：下方有实心顶面，
-   * 或 3×3×3 内有可燃方块）。点不着就返回 `false`——**不消耗耐久、不播音效**，
-   * 也不阻断后面的放置逻辑（与原版"对着石头缝隙点不燃"一致）。
+   * 顺序与原版一致（命中黑曜石先试 `PortalShape`，成了就 `return SUCCESS`）：
+   *  - **点燃传送门**（框是黑曜石、框内是空的连片空气）：填满门方块。
+   *    这一步**不消耗耐久**——原版在 `FlintAndSteelItem` 里提前返回，走不到后面的
+   *    `hurtAndBreak`，是个容易改错的怪癖，所以在这里显式写明
+   *  - 否则在**命中面的外侧**点一格火（判定见 `Fire.ts#canPlaceFire`）；
+   *    点不着就返回 `false`——不消耗耐久、不播音效，也不阻断后面的放置逻辑
    */
   private igniteWithFlint(): boolean {
     if (this.heldItemId !== Item.FLINT_AND_STEEL || !this.hit) return false;
     const x = this.hit.x + this.hit.nx;
     const y = this.hit.y + this.hit.ny;
     const z = this.hit.z + this.hit.nz;
-    if (!igniteAt(this.world, x, y, z)) return false;
 
+    // ---- 1) 先试传送门（只有对着黑曜石点才有意义）
+    if (this.world.getBlock(this.hit.x, this.hit.y, this.hit.z) === Block.OBSIDIAN) {
+      const result = ignitePortal(this.portalWorld, x, y, z);
+      if (result !== 'none') {
+        this.hand.swing();
+        if (result === 'exists') return true;
+        // 联机：门方块要广播，否则队友那边框里是空的。
+        // 点燃之后框里已经填满了门方块，所以用 `shapeAt`（认门方块）而不是 `findPortalShape`（认空气）
+        const lit = shapeAt(this.portalWorld, x, y, z);
+        if (lit) {
+          for (const [px, py, pz] of portalInterior(lit)) {
+            this.net.sendBlock(px, py, pz, Block.NETHER_PORTAL, this.world.getBlockState(px, py, pz), this.dimension);
+          }
+        }
+        this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+        this.particles.spawnPortal(x + 0.5, y + 0.5, z + 0.5, 10, 0.5);
+        this.refreshHotbar();
+        return true;
+      }
+    }
+
+    // ---- 2) 普通火焰
+    if (!igniteAt(this.world, x, y, z)) return false;
     this.damageHeldTool();
     this.audio.play('flint', { x, y, z });
     this.hand.swing();
@@ -2416,6 +2507,8 @@ class App {
 
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
+    // 敲掉黑曜石 → 检查旁边的传送门还立不立得住（K8）：框一破，那一整片门方块跟着熄灭
+    if (brokenId === Block.OBSIDIAN) this.breakPortalsBeside(this.hit.x, this.hit.y, this.hit.z);
     this.particles.spawnBlockBreak(
       this.hit.x + 0.5,
       this.hit.y + 0.5,
@@ -3668,6 +3761,149 @@ class App {
     }
   }
 
+  // ---------------------------------------------------------------- 下界传送门（K8）
+
+  /** 玩家脚下或身体所在的那一格是不是传送门方块 */
+  private playerInPortal(): boolean {
+    const p = this.physics;
+    const x = Math.floor(p.x);
+    const z = Math.floor(p.z);
+    if (this.world.getBlock(x, Math.floor(p.y + 0.2), z) === Block.NETHER_PORTAL) return true;
+    return this.world.getBlock(x, Math.floor(p.y + 1), z) === Block.NETHER_PORTAL;
+  }
+
+  /** 玩家正站在哪座门上（用来让目的地的新门与它同朝向）；找不到就当沿 X 轴 */
+  private currentPortalAxis(): PortalAxis {
+    const p = this.physics;
+    const x = Math.floor(p.x);
+    const z = Math.floor(p.z);
+    for (const y of [Math.floor(p.y + 0.2), Math.floor(p.y + 1)]) {
+      if (this.world.getBlock(x, y, z) === Block.NETHER_PORTAL) {
+        return portalAxis(this.world.getBlockState(x, y, z));
+      }
+    }
+    return 'x';
+  }
+
+  /**
+   * 站门计时（K8）。按 20Hz 结算：普通模式 80 tick（4 秒）、创造模式 1 tick（原版数值）。
+   * 传送后的 300 tick 冷却期内不再计时，否则一落地就被立刻传回去。
+   */
+  private tickPortal(): void {
+    if (this.portalCooldownTicks > 0) {
+      this.portalCooldownTicks--;
+      this.portalTicks = 0;
+      return;
+    }
+    if (this.pendingArrival) return;
+    if (!this.playerInPortal()) {
+      this.portalTicks = 0;
+      return;
+    }
+
+    // 本项目的"飞行"开关就是创造模式（见 `survivalEnvironment`），
+    // 原版对创造/旁观玩家的 `getPortalWaitTime` 返回 1
+    const wait = this.flying ? PORTAL_CREATIVE_IGNITE_TICKS : PORTAL_IGNITE_TICKS;
+    this.portalTicks++;
+    if (this.portalTicks >= wait) this.travelThroughPortal();
+  }
+
+  /** 传送：算出另一边的坐标，切维度，然后把落地交给 `resolvePortalArrival` */
+  private travelThroughPortal(): void {
+    const p = this.physics;
+    const target = portalTarget(this.dimension, p.x, p.y, p.z);
+    const axis = this.currentPortalAxis();
+    this.portalTicks = 0;
+    this.audio.play('portal');
+    this.particles.spawnPortal(p.x, p.y + 0.6, p.z, 14, 0.5);
+
+    // 先记下这次传送（落地要等目的地的区块加载出来），再切维度：
+    // `setDimension` 会清空区块并按新位置重新流式加载
+    this.pendingArrival = { ...target, axis, frames: 0 };
+    this.setDimension(target.dimension, target);
+  }
+
+  /**
+   * 目的地落地：区块加载完之后调用（每帧一次）。
+   *
+   * 优先找**已有的门**（16 格半径），找不到就照着目标点**新建一座 2×3 的门**。
+   * 两者都不成（比如目标点整根柱子都是实心岩石）时就直接把人放在目标坐标上——
+   * 宁可落在地形里，也不要让人卡在"传送中"出不来。
+   */
+  private resolvePortalArrival(): void {
+    const pending = this.pendingArrival;
+    if (!pending) return;
+    pending.frames++;
+
+    // 中途玩家又自己切了维度（N 键 / 命令）：放弃这次落地
+    if (this.dimension !== pending.dimension) {
+      this.pendingArrival = null;
+      return;
+    }
+
+    if (!this.world.isLoaded(pending.x, pending.z)) {
+      // 区块迟迟不来也不能永远等着（否则玩家会一直被冻住）
+      if (pending.frames < PORTAL_ARRIVAL_TIMEOUT_FRAMES) return;
+      this.pendingArrival = null;
+      this.physics.teleport(pending.x, pending.y, pending.z);
+      this.portalCooldownTicks = PORTAL_COOLDOWN_TICKS;
+      return;
+    }
+
+    const shape =
+      findPortalNear(this.portalWorld, pending.x, pending.y, pending.z) ?? this.buildArrivalPortal(pending);
+    this.pendingArrival = null;
+    this.portalCooldownTicks = PORTAL_COOLDOWN_TICKS;
+    this.portalTicks = 0;
+
+    if (shape) {
+      const center = portalCenter(shape);
+      this.physics.teleport(center.x, center.y, center.z);
+      this.particles.spawnPortal(center.x, center.y + 0.6, center.z, 12, 0.4);
+    } else {
+      this.physics.teleport(pending.x, pending.y, pending.z);
+    }
+    // 换维度与传送都会让"视野色罩"变一下（水下/岩浆/门），立刻重算一次
+    this.applyEnvironment();
+    this.screenEffects.snap();
+  }
+
+  /**
+   * 敲掉门框上的一块黑曜石之后清场（K8）。
+   *
+   * 原版是门方块自己在邻居变化时重算 `canSurvive`；这里反过来做：
+   * 破坏方块时主动查一次相邻的门方块（最多几十次读方块），逻辑集中在一处，也好断言。
+   */
+  private breakPortalsBeside(x: number, y: number, z: number): void {
+    const removed = clearBrokenPortalsAround(this.portalWorld, x, y, z);
+    if (removed.length === 0) return;
+
+    for (const [px, py, pz] of removed) {
+      this.net.sendBlock(px, py, pz, Block.AIR, 0, this.dimension);
+      this.particles.spawnPortal(px + 0.5, py + 0.5, pz + 0.5, 4, 0.3);
+    }
+    this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+  }
+
+  /** 目的地没有现成的门：新建一座（黑曜石框 + 门方块），并把它们广播给队友 */
+  private buildArrivalPortal(pending: PortalTarget & { axis: PortalAxis }): PortalShape | null {
+    const site = findPortalSite(
+      this.portalWorld,
+      pending.x,
+      pending.y,
+      pending.z,
+      pending.axis,
+      pending.dimension,
+    );
+    if (!site) return null;
+    if (!buildPortal(this.portalWorld, site)) return null;
+
+    for (const [x, y, z] of [...portalFrame(site), ...portalInterior(site)]) {
+      this.net.sendBlock(x, y, z, this.world.getBlock(x, y, z), this.world.getBlockState(x, y, z), this.dimension);
+    }
+    return site;
+  }
+
   // ---------------------------------------------------------------- 出生点
 
   /**
@@ -3760,6 +3996,7 @@ class App {
       ticks++;
       this.tickEffects();
       this.stats.tick(this.survivalEnvironment());
+      this.tickPortal();
       this.tickWorldBlocks();
       // 摔落伤害只结算一次，避免同一帧的多个 tick 重复扣血
       this.pendingFallDistance = 0;
@@ -3868,6 +4105,11 @@ class App {
     this.lastPlayerX = sx;
     this.lastPlayerZ = sz;
     this.deathEl.classList.add('hidden');
+    // 重生点与传送门无关：站门计时、冷却与"传送途中"一律清掉，
+    // 免得死在下界的门里、重生回主世界之后还顶着 15 秒冷却
+    this.portalTicks = 0;
+    this.portalCooldownTicks = 0;
+    this.pendingArrival = null;
   }
 
   // ---------------------------------------------------------------- 主循环
@@ -4053,8 +4295,17 @@ class App {
 
       const survivalInput = this.uiOpen ? IDLE_INPUT : this.collectInput();
       const wasOnGround = this.physics.onGround;
-      this.physics.update(this.world, survivalInput, this.yaw, dt, this.flying, this.effects.moveSpeedMultiplier(), this.effects.jumpMultiplier());
+      if (this.pendingArrival) {
+        // 传送途中：目的地的区块还没流出来，`getBlock` 一律返回空气。
+        // 这里把玩家"冻"在原地（速度清零、不跑物理），等 `resolvePortalArrival` 把人放进门里
+        this.physics.vx = 0;
+        this.physics.vy = 0;
+        this.physics.vz = 0;
+      } else {
+        this.physics.update(this.world, survivalInput, this.yaw, dt, this.flying, this.effects.moveSpeedMultiplier(), this.effects.jumpMultiplier());
+      }
       this.updateSurvival(dt, survivalInput, wasOnGround);
+      this.resolvePortalArrival();
 
       this.updateCamera(dt);
 
@@ -4190,8 +4441,11 @@ class App {
    *
    * ⚠️ 切换后玩家脚下是空的：区块要重新生成，因此先把玩家抬到该维度的"空中高度"
    * 让物理自己落下，避免卡在地形里或掉进虚空。
+   *
+   * @param landing 指定的落点（传送门用：直接把玩家放在目的地坐标上；
+   *   不传就按维度挑一个"空中高度"，等物理自己落地）
    */
-  setDimension(dimension: DimensionId): void {
+  setDimension(dimension: DimensionId, landing?: { x: number; y: number; z: number }): void {
     if (dimension === this.dimension) return;
     this.dimension = dimension;
     this.world.setDimension(dimension);
@@ -4200,7 +4454,7 @@ class App {
     this.particles.clear();
     // 落点：下界在洞窟上方、末地在主岛上方（岛面在 y≈66），主世界回高空
     const landingY = dimension === Dimension.NETHER ? 96 : dimension === Dimension.END ? 96 : 140;
-    this.physics.teleport(this.physics.x, landingY, this.physics.z);
+    this.physics.teleport(landing?.x ?? this.physics.x, landing?.y ?? landingY, landing?.z ?? this.physics.z);
     this.lastCenterCx = Number.NaN;
     this.lastCenterCz = Number.NaN;
     this.weather.setKind('clear');
@@ -4388,6 +4642,11 @@ class App {
     totalDamage: number;
     /** 是否着火（I12）：验收脚本靠它确认"站在火里真的被点燃了" */
     burning: boolean;
+    /** 是否站在传送门里（K8） */
+    inPortal: boolean;
+    /** 站门计时的进度（0~1）与冷却剩余 tick：验收脚本靠它们确认传送真的在计时 */
+    portalProgress: number;
+    portalCooldown: number;
   } {
     return {
       health: this.stats.health,
@@ -4402,6 +4661,9 @@ class App {
       invulnerable: this.stats.invulnerable,
       totalDamage: this.stats.totalDamage,
       burning: this.stats.burning,
+      inPortal: this.playerInPortal(),
+      portalProgress: Math.min(1, this.portalTicks / PORTAL_IGNITE_TICKS),
+      portalCooldown: this.portalCooldownTicks,
     };
   }
 

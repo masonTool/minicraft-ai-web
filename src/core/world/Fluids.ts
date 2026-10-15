@@ -63,6 +63,8 @@ export function canFlowInto(world: FluidWorld, x: number, y: number, z: number):
   const id = world.getBlock(x, y, z);
   if (id === Block.AIR) return true;
   if (isFluid(id)) return false;
+  // 传送门（K8）冲不掉：原版水也进不了门方块，否则一条水流就能把一座门冲散
+  if (id === Block.NETHER_PORTAL) return false;
   const def = blockDef(id);
   return !def.solid;
 }
