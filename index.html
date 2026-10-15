@@ -178,6 +178,18 @@
         display: inline-block; padding: 1px 6px; border-radius: 3px;
         background: #ffffff22; border: 1px solid #ffffff44; font-size: 13px;
       }
+      /* 开始遮罩上的"进入游戏"：手机上直接点屏幕也能进，这里是给人看的按钮 */
+      .overlay-go {
+        display: inline-block; margin: 4px 0 12px; padding: 10px 22px;
+        font-size: 16px; border-radius: 6px;
+        background: #3a7d33; border: 1px solid #ffffff44;
+      }
+      .overlay-help { font-size: 13px; line-height: 2; color: #d8d8d8; }
+      /* 触屏提示默认隐藏，桌面键盘提示默认显示；`body.touch-mode` 由主程序按设备加上 */
+      .touch-only { display: none; }
+      body.touch-mode .touch-only { display: block; }
+      body.touch-mode .desktop-only { display: none; }
+      body.touch-mode #overlay { line-height: 2.1; }
       #death {
         position: fixed; inset: 0; z-index: 6; display: grid; place-items: center;
         background: rgba(130, 0, 0, .45); color: #fff; font-size: 16px;
@@ -192,7 +204,9 @@
       }
 
       #hotbar {
-        position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+        position: absolute; left: 50%; transform: translateX(-50%);
+        /* 底部安全区：刘海屏/全面屏的"home 横条"会盖住贴边的 UI */
+        bottom: calc(14px + env(safe-area-inset-bottom, 0px));
         display: flex; gap: 2px; padding: 3px;
         background: rgba(0, 0, 0, .45); border-radius: 4px;
       }
@@ -214,7 +228,8 @@
 
       /* ---------------- 经验条（快捷栏正上方，等级数字压在条中间） ---------------- */
       #xp-bar {
-        position: absolute; left: 50%; bottom: 68px; transform: translateX(-50%);
+        position: absolute; left: 50%; transform: translateX(-50%);
+        bottom: calc(68px + env(safe-area-inset-bottom, 0px));
         width: 182px; height: 5px;
         background: #1c1c1c; border: 1px solid #000; border-radius: 2px;
         overflow: visible;
@@ -234,7 +249,8 @@
 
       /* ---------------- 生命 / 饥饿 / 氧气 ---------------- */
       #vitals {
-        position: absolute; left: 50%; bottom: 86px; transform: translateX(-50%);
+        position: absolute; left: 50%; transform: translateX(-50%);
+        bottom: calc(86px + env(safe-area-inset-bottom, 0px));
         display: flex; flex-direction: column; align-items: center; gap: 2px;
       }
       #vitals .vital-defs { position: absolute; width: 0; height: 0; }
@@ -300,7 +316,8 @@
 
       /* ---------------- 聊天与命令 ---------------- */
       #chat {
-        position: fixed; left: 10px; bottom: 82px; z-index: 15;
+        position: fixed; left: 10px; z-index: 15;
+        bottom: calc(82px + env(safe-area-inset-bottom, 0px));
         width: min(52vw, 620px); display: flex; flex-direction: column; gap: 2px;
         font-size: 13px; line-height: 1.45; pointer-events: none;
       }
@@ -326,7 +343,15 @@
         background: rgba(0, 0, 0, .78); color: #fff; border: 1px solid #ffffff44;
         outline: none;
       }
-      .chat-input.hidden, .chat-hint.hidden { display: none; }
+      /* 触屏的"发送"按钮：与输入框同一行（手机虚拟键盘不一定给 Enter 的 keydown） */
+      .chat-send {
+        align-self: flex-start; margin-top: 2px; padding: 8px 16px;
+        font: inherit; font-size: 13px; color: #fff; cursor: pointer;
+        background: #3a7d33; border: 1px solid #ffffff55; border-radius: 4px;
+        min-height: 36px;
+      }
+      .chat-send:active { background: #2f6629; }
+      .chat-input.hidden, .chat-hint.hidden, .chat-send.hidden { display: none; }
 
       /* ---------------- 物品提示框 ---------------- */
       #item-tooltip {
@@ -499,9 +524,20 @@
       .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 3px; }
       .inv-grid.inv-creative { grid-template-columns: repeat(12, 34px); gap: 2px; }
 
-      /* ---------------- 创造物品栏：分类与搜索 ---------------- */
+      /* ---------------- 创造物品栏：分类、搜索与分页 ---------------- */
       .inv-creative-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; }
       .inv-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+      /* 分页条：PC 与手机共用；只有一页时整条隐藏（`hidden` 由界面加） */
+      .inv-pager { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 8px 0 2px; }
+      .inv-pager.hidden { display: none; }
+      .inv-page-button {
+        font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; cursor: pointer;
+        background: #a8a8a8; color: #2b2b2b;
+        border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      .inv-page-button:disabled { color: #7a7a7a; background: #9a9a9a; cursor: default; }
+      .inv-page-button:not(:disabled):active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
+      .inv-page-label { font-size: 12px; color: #3a3a3a; min-width: 108px; text-align: center; }
       .inv-tab {
         font: inherit; font-size: 12px; padding: 3px 9px; cursor: pointer;
         background: #a8a8a8; color: #2b2b2b;
@@ -584,7 +620,8 @@
         pointer-events: none;
       }
       .touch-button {
-        width: 62px; height: 62px; border-radius: 50%;
+        width: 62px; height: 62px; border-radius: 50%; padding: 0;
+        display: grid; place-items: center;
         font: inherit; font-size: 17px; color: #fff;
         background: rgba(255, 255, 255, .16);
         border: 2px solid rgba(255, 255, 255, .34);
@@ -592,8 +629,11 @@
         pointer-events: auto; touch-action: none;
         user-select: none; -webkit-user-select: none;
       }
+      /* 图标是内联 SVG：跟着按钮缩放，颜色用 currentColor 与按钮文字同色 */
+      .touch-button svg { width: 58%; height: 58%; display: block; fill: currentColor; }
       .touch-button.on { background: rgba(140, 220, 140, .38); border-color: rgba(200, 255, 200, .8); }
       .touch-button.jump { width: 76px; height: 76px; font-size: 19px; }
+      .touch-button.jump svg { width: 52%; height: 52%; }
 
       #touch-hint {
         position: absolute; left: 50%; bottom: 214px; transform: translateX(-50%);
@@ -634,16 +674,61 @@
         /* 面板内允许纵向拖动滚动，其余手势交给操作层 */
         .inv-panel { touch-action: pan-y; }
         .inv-slot { -webkit-tap-highlight-color: transparent; }
+
+        /* 分类标签：10 个换行会占掉三行屏幕，窄屏改成**单行横向滚动** */
+        .inv-tabs {
+          flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+          -webkit-overflow-scrolling: touch;
+          max-width: 100%; padding-bottom: 2px;
+        }
+        .inv-tab {
+          font-size: 13px; padding: 7px 12px; min-height: 38px;
+          white-space: nowrap; flex: 0 0 auto;
+        }
+        /* 物品网格自己滚：翻页条因此始终留在视野里（不用滚到底才能翻页） */
+        .inv-grid.inv-creative { max-height: 46vh; overflow-y: auto; }
+        /* 翻页键要够大：手机上 44px 是可用下限 */
+        .inv-page-button { min-height: 44px; padding: 10px 16px; font-size: 14px; }
+        .inv-page-label { font-size: 12px; min-width: 96px; }
+        .chat-send { min-height: 42px; padding: 10px 18px; font-size: 14px; }
+        .overlay-go { display: block; margin: 10px auto 12px; padding: 14px 26px; font-size: 17px; }
+
+        /* 世界列表的"名称 + 输入框 + 随机"三列在窄屏挤成一团，改成两行 */
+        .world-row { grid-template-columns: 1fr auto; }
+        .world-row .world-input { grid-column: 1 / -1; }
       }
 
-      /* 横屏手机：摇杆与按钮再往下、缩小一点，避免遮挡视野中心 */
+      /* 竖屏手机：摇杆与按钮簇都往上收一点，给屏幕中间留出视野 */
+      @media (orientation: portrait) and (max-width: 900px) {
+        #touch-stick {
+          left: 18px; bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+          width: 124px; height: 124px;
+        }
+        #touch-stick .knob { width: 52px; height: 52px; }
+        #touch-buttons {
+          right: 14px; bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+          grid-template-columns: repeat(2, 58px); gap: 10px;
+        }
+        .touch-button { width: 58px; height: 58px; }
+        .touch-button.jump { width: 70px; height: 70px; }
+        #touch-hint {
+          bottom: calc(322px + env(safe-area-inset-bottom, 0px));
+          max-width: 88vw; white-space: normal; text-align: center;
+        }
+      }
+
+      /* 横屏手机：摇杆与按钮再往下、缩小一点，避免遮挡视野中心。
+         六个按钮在横屏改成 **3 列 × 2 行**——竖着排三行会盖住准星那一带 */
       @media (max-height: 480px) {
         #touch-stick { width: 108px; height: 108px; bottom: 70px; left: 16px; }
         #touch-stick .knob { width: 46px; height: 46px; }
-        #touch-buttons { bottom: 70px; }
+        #touch-buttons {
+          bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+          grid-template-columns: repeat(3, 54px); gap: 10px;
+        }
         .touch-button { width: 54px; height: 54px; font-size: 15px; }
         .touch-button.jump { width: 64px; height: 64px; }
-        #touch-hint { bottom: 178px; }
+        #touch-hint { bottom: calc(178px + env(safe-area-inset-bottom, 0px)); }
       }
     </style>
   </head>
@@ -663,11 +748,20 @@
     <div id="overlay">
       <div>
         <b>Bedrock 1.18 Web</b>
-        点击进入游戏<br />
-        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 ·
-        <kbd>Space</kbd> 跳跃 · <kbd>Shift</kbd> 潜行/下降 · <kbd>Ctrl</kbd> 疾跑<br />
-        <kbd>左键</kbd> 破坏 · <kbd>右键</kbd> 放置 · <kbd>1</kbd>-<kbd>9</kbd> 切换方块 ·
-        <kbd>F</kbd> 创造/飞行 · <kbd>V</kbd> 切换人称视角 · <kbd>Esc/E</kbd> 菜单与背包
+        <span class="overlay-go">点击进入游戏</span>
+        <!-- 桌面端：键盘提示（触屏上这串字只会误导——手机没有这些键） -->
+        <div class="overlay-help desktop-only">
+          <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 ·
+          <kbd>Space</kbd> 跳跃 · <kbd>Shift</kbd> 潜行/下降 · <kbd>Ctrl</kbd> 疾跑<br />
+          <kbd>左键</kbd> 破坏 · <kbd>右键</kbd> 放置 · <kbd>1</kbd>-<kbd>9</kbd> 切换方块 ·
+          <kbd>F</kbd> 创造/飞行 · <kbd>V</kbd> 切换人称视角 · <kbd>Esc/E</kbd> 菜单与背包
+        </div>
+        <!-- 触屏：手势说明 -->
+        <div class="overlay-help touch-only">
+          左摇杆移动 · 拖动屏幕转视角<br />
+          轻点放置 / 交互 · 长按破坏<br />
+          右下角图标依次是：聊天 · 视角 · 飞行 · 潜行 · 背包 · 跳跃
+        </div>
       </div>
     </div>
 

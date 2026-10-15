@@ -40,6 +40,8 @@ export class ChatInput {
   private readonly logEl: HTMLDivElement;
   private readonly inputEl: HTMLInputElement;
   private readonly hintEl: HTMLDivElement;
+  /** 触屏的"发送"按钮：手机虚拟键盘的确定键不一定派发 Enter 的 keydown */
+  private readonly sendButton: HTMLButtonElement;
   private readonly lines: ChatLine[] = [];
   private readonly history: string[] = [];
   private historyIndex = -1;
@@ -65,7 +67,19 @@ export class ChatInput {
     this.hintEl = document.createElement('div');
     this.hintEl.className = 'chat-hint hidden';
 
-    this.root.append(this.logEl, this.hintEl, this.inputEl);
+    this.sendButton = document.createElement('button');
+    this.sendButton.type = 'button';
+    this.sendButton.className = 'chat-send hidden';
+    this.sendButton.textContent = '发送';
+    this.sendButton.setAttribute('aria-label', '发送');
+    // pointerdown 而不是 click：click 之前浏览器会先把焦点从输入框移走，
+    // 手机上会顺手收起键盘、甚至把整个输入行关掉（preventDefault 才不会）
+    this.sendButton.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      this.submit();
+    });
+
+    this.root.append(this.logEl, this.hintEl, this.inputEl, this.sendButton);
     host.appendChild(this.root);
 
     this.inputEl.addEventListener('keydown', (event) => this.onInputKeyDown(event));
@@ -98,6 +112,7 @@ export class ChatInput {
     this.root.classList.add('open');
     this.inputEl.classList.remove('hidden');
     this.hintEl.classList.remove('hidden');
+    this.sendButton.classList.remove('hidden');
     this.inputEl.value = prefill;
     this.inputEl.focus();
     // 光标放到末尾（`/` 预填时就在斜杠后面）
@@ -114,8 +129,19 @@ export class ChatInput {
     this.root.classList.remove('open');
     this.inputEl.classList.add('hidden');
     this.hintEl.classList.add('hidden');
+    this.sendButton.classList.add('hidden');
     this.inputEl.blur();
     this.onOpenChange?.(false);
+  }
+
+  /** 提交当前输入（Enter 与"发送"按钮共用同一条路径，避免两处行为漂移） */
+  private submit(): void {
+    const text = this.inputEl.value.trim();
+    this.close();
+    if (text.length === 0) return;
+    this.history.push(text);
+    while (this.history.length > MAX_HISTORY) this.history.shift();
+    this.onSubmit?.(text);
   }
 
   /** 每帧调用：把过期的消息淡出并移除 */
@@ -164,12 +190,7 @@ export class ChatInput {
 
     if (event.code === 'Enter' || event.code === 'NumpadEnter') {
       event.preventDefault();
-      const text = this.inputEl.value.trim();
-      this.close();
-      if (text.length === 0) return;
-      this.history.push(text);
-      while (this.history.length > MAX_HISTORY) this.history.shift();
-      this.onSubmit?.(text);
+      this.submit();
       return;
     }
 

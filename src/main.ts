@@ -790,6 +790,9 @@ class App {
    * 都不必真的拿一台手机（调试接口 `mc.enableTouchControls()`）。
    */
   private createTouchControls(): TouchControls {
+    // 触屏设备给 <body> 挂一个标记：CSS 靠它切换"键盘提示 / 手势提示"
+    // （开始遮罩上的提示文字在手机上写 <kbd>W</kbd> 只会误导）
+    document.body.classList.add('touch-mode');
     return new TouchControls(document.getElementById('hud') ?? document.body, {
       // 轻点：放置方块，或与工作台/熔炉/箱子/门交互（与鼠标右键同一套逻辑）
       onTap: () => {
@@ -807,6 +810,8 @@ class App {
       onToggleFly: () => this.setFlying(!this.flying),
       // 潜行状态由操作层自己维护并出现在 input 里，这里只做一次提示同步
       onToggleSneak: () => undefined,
+      // 聊天与命令：手机上原来只有键盘 T 与 /，等于没有入口
+      onOpenChat: () => this.chat.openWith(''),
     });
   }
 

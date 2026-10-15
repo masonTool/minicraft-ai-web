@@ -60,6 +60,14 @@ import {
   type ItemCategory,
 } from '../core/registry/items.ts';
 import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
+import {
+  NARROW_MAX_WIDTH,
+  clampPage,
+  pageCount,
+  pageLabel,
+  pageSizeFor,
+  slicePage,
+} from './ItemPager.ts';
 import { Tooltip } from './Tooltip.ts';
 
 export type InventoryPanelMode =
@@ -173,6 +181,15 @@ export class InventoryScreen {
   private creativeCountEl!: HTMLSpanElement;
   private creativeCategory: ItemCategory = 'all';
   private creativeQuery = '';
+  /** 当前页（0 起）：换分类/改搜索词/屏幕变化时都要夹一次 */
+  private creativePage = 0;
+  /** 翻页条（上一页 / 页码 / 下一页）：只有一页时整条隐藏 */
+  private creativePager!: HTMLDivElement;
+  private creativePrev!: HTMLButtonElement;
+  private creativeNext!: HTMLButtonElement;
+  private creativePageLabel!: HTMLSpanElement;
+  /** 页面尺寸变化（手机转屏）时重算每页条数：只在跨越窄屏阈值时才真的重渲染 */
+  private readonly narrowQuery = typeof window === 'undefined' ? null : window.matchMedia(`(max-width: ${NARROW_MAX_WIDTH}px)`);
 
   /** key → 槽位绑定；key 形如 "inv:12" / "craft:3" / "furnace:1" / "chest:5" */
   private readonly bindings = new Map<string, SlotBinding>();
@@ -405,6 +422,8 @@ export class InventoryScreen {
       button.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         this.creativeCategory = category;
+        // 换分类回到第 1 页：停在"第 7 页"而新分类只有 2 页会显示空网格
+        this.creativePage = 0;
         this.updateTabHighlight();
         this.renderCreativeGrid();
       });
@@ -417,6 +436,8 @@ export class InventoryScreen {
     this.creativeSearch.placeholder = '搜索物品…';
     this.creativeSearch.addEventListener('input', () => {
       this.creativeQuery = this.creativeSearch.value.trim().toLowerCase();
+      // 搜索是从头筛一遍，页码当然要回到第 1 页
+      this.creativePage = 0;
       this.renderCreativeGrid();
     });
 
@@ -425,9 +446,45 @@ export class InventoryScreen {
     this.creativeGrid = document.createElement('div');
     this.creativeGrid.className = 'inv-grid inv-creative';
 
-    this.creativeSection.append(header, controls, this.creativeGrid);
+    // 翻页条：只渲染当前页之后，"全部"分类也不会一次性塞进 495 个图标
+    this.creativePager = document.createElement('div');
+    this.creativePager.className = 'inv-pager';
+    this.creativePrev = this.makePagerButton('‹ 上一页', () => this.flipCreativePage(-1));
+    this.creativeNext = this.makePagerButton('下一页 ›', () => this.flipCreativePage(1));
+    this.creativePageLabel = document.createElement('span');
+    this.creativePageLabel.className = 'inv-page-label';
+    this.creativePrev.dataset.role = 'prev';
+    this.creativeNext.dataset.role = 'next';
+    this.creativePageLabel.dataset.role = 'label';
+    this.creativePager.append(this.creativePrev, this.creativePageLabel, this.creativeNext);
+
+    this.creativeSection.append(header, controls, this.creativeGrid, this.creativePager);
     this.updateTabHighlight();
     this.renderCreativeGrid();
+
+    // 转屏（竖屏 ↔ 横屏）会改变每页条数：跨过阈值时按新页大小重排
+    this.narrowQuery?.addEventListener('change', () => this.renderCreativeGrid());
+  }
+
+  /** 翻页条上的按钮：触摸端热区要够大（与 CSS 里的 44px 下限配套） */
+  private makePagerButton(label: string, onClick: () => void): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'inv-page-button';
+    button.textContent = label;
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      if (button.disabled) return;
+      onClick();
+    });
+    return button;
+  }
+
+  private flipCreativePage(delta: number): void {
+    this.creativePage += delta;
+    this.renderCreativeGrid();
+    // 翻页后把网格滚回顶部：留在底部会让人以为"这一页是空的"
+    this.creativeGrid.scrollTop = 0;
   }
 
   private updateTabHighlight(): void {
@@ -437,7 +494,7 @@ export class InventoryScreen {
     }
   }
 
-  /** 按当前分类与搜索词重建创造网格 */
+  /** 按当前分类与搜索词重建创造网格（**只建当前这一页**） */
   private renderCreativeGrid(): void {
     const query = this.creativeQuery;
     const items = CREATIVE_ITEMS.filter((itemId) => {
@@ -447,8 +504,13 @@ export class InventoryScreen {
       return true;
     });
 
+    const pageSize = pageSizeFor(this.viewportWidth);
+    // 夹一次页码：换分类、改搜索词、转屏之后原来的页码都可能越界
+    this.creativePage = clampPage(this.creativePage, items.length, pageSize);
+    const visible = slicePage(items, this.creativePage, pageSize);
+
     this.creativeGrid.replaceChildren();
-    for (const itemId of items) {
+    for (const itemId of visible) {
       const slot = this.createSlot();
       slot.classList.add('creative-slot');
       this.tooltipStacks.set(slot, { id: itemId, count: 1 });
@@ -467,7 +529,19 @@ export class InventoryScreen {
       this.creativeGrid.appendChild(empty);
     }
 
+    const pages = pageCount(items.length, pageSize);
     this.creativeCountEl.textContent = `  ${items.length} / ${CREATIVE_ITEMS.length}`;
+    this.creativePageLabel.textContent = pageLabel(this.creativePage, items.length, pageSize);
+    this.creativePrev.disabled = this.creativePage <= 0;
+    this.creativeNext.disabled = this.creativePage >= pages - 1;
+    // 只有一页时整条隐藏：手机屏幕本来就窄，没必要常驻一条翻不动的按钮
+    this.creativePager.classList.toggle('hidden', pages <= 1);
+  }
+
+  /** 当前视口宽度（窄屏判定用；不在浏览器里时按宽屏处理） */
+  private get viewportWidth(): number {
+    if (typeof window === 'undefined') return Number.POSITIVE_INFINITY;
+    return window.innerWidth;
   }
 
   /** 清掉某一前缀的旧绑定 */

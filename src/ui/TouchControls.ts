@@ -18,6 +18,7 @@
 
 import type { PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { HOTBAR_SIZE } from '../core/container/Inventory.ts';
+import { TOUCH_ICON_LABELS, touchIconSvg, type TouchIconName } from './TouchIcons.ts';
 
 /** 超过这个时长（毫秒）就算长按，升级为破坏 */
 const LONG_PRESS_MS = 220;
@@ -37,6 +38,8 @@ export interface TouchActions {
   onToggleInventory(): void;
   onToggleFly(): void;
   onToggleSneak(): void;
+  /** 打开聊天 / 命令输入（手机上原来只有键盘的 T 与 /，等于打不开） */
+  onOpenChat(): void;
 }
 
 /**
@@ -115,34 +118,36 @@ export class TouchControls {
     this.stickBase.appendChild(this.stickKnob);
     this.bindStick();
 
-    // ---- 右下按钮簇
+    // ---- 右下按钮簇（**图标而不是文字**：手机端五个单字不好认，图标才有一眼可读性）
     const buttons = document.createElement('div');
     buttons.id = 'touch-buttons';
 
-    const jump = this.makeButton('跳', () => undefined);
+    const jump = this.makeIconButton('jump', () => undefined);
     jump.classList.add('jump');
     this.bindHoldButton(jump, (down) => {
       this.jumpHeld = down;
     });
 
-    this.sneakButton = this.makeButton('潜', () => {
+    this.sneakButton = this.makeIconButton('sneak', () => {
       this.sneaking = !this.sneaking;
       this.sneakButton.classList.toggle('on', this.sneaking);
       this.actions.onToggleSneak();
     });
 
-    this.flyButton = this.makeButton('飞', () => this.actions.onToggleFly());
+    this.flyButton = this.makeIconButton('fly', () => this.actions.onToggleFly());
 
-    const inventory = this.makeButton('包', () => this.actions.onToggleInventory());
-    // 视：手机上按不了 V 键，给一个按钮循环切换人称视角
-    const view = this.makeButton('视', () => this.actions.onCycleView());
+    const inventory = this.makeIconButton('inventory', () => this.actions.onToggleInventory());
+    // 手机上没有 V 键，给一个按钮循环切换人称视角
+    const view = this.makeIconButton('view', () => this.actions.onCycleView());
+    // 手机上也没有 T 与 /，聊天与命令必须有个入口
+    const chat = this.makeIconButton('chat', () => this.actions.onOpenChat());
 
-    buttons.append(this.flyButton, this.sneakButton, view, inventory, jump);
+    buttons.append(chat, view, this.flyButton, this.sneakButton, inventory, jump);
 
     // ---- 操作提示（首次进入时显示，动一下摇杆就淡出）
     this.hint = document.createElement('div');
     this.hint.id = 'touch-hint';
-    this.hint.textContent = '左摇杆移动 · 拖动屏幕转视角 · 轻点放置 · 长按破坏';
+    this.hint.textContent = '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏 · 右下图标：聊天/视角/飞行/潜行/背包/跳跃';
 
     this.object.append(this.lookSurface, this.stickBase, buttons, this.hint);
     host.appendChild(this.object);
@@ -210,11 +215,20 @@ export class TouchControls {
 
   // ---------------------------------------------------------------- 内部实现
 
-  private makeButton(label: string, onClick: () => void): HTMLButtonElement {
+  /**
+   * 一个圆形图标按钮。
+   *
+   * 图标是内联 SVG（`currentColor`），文字只留在 `aria-label`/`title` 里——
+   * 屏幕上不写中文单字，但读屏与桌面端悬停仍能看到"这是什么"。
+   */
+  private makeIconButton(icon: TouchIconName, onClick: () => void): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'touch-button';
-    button.textContent = label;
+    button.dataset.icon = icon;
+    button.innerHTML = touchIconSvg(icon);
+    button.setAttribute('aria-label', TOUCH_ICON_LABELS[icon]);
+    button.title = TOUCH_ICON_LABELS[icon];
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       event.stopPropagation();
