@@ -582,6 +582,49 @@ const NETHER_SPECS: readonly BlockSpec[] = [
   plantSpec(245, 'nether_sprouts', 'nether_sprouts'),
 ];
 
+// ---------------------------------------------------------------- 末地
+//
+// 末地的方块数不多（末地石 / 末地石砖 / 紫珀家族 / 紫颂 / 末地烛 / 龙蛋 / 传送门），
+// 但紫颂植株与紫颂花是末地独有的"树"，末地城与末地船则全靠紫珀和末地石砖搭。
+//
+// ⚠️ 紫珀与末地石砖**没有台阶/楼梯变体**：SHAPED_PARENTS 的 slab/stairs id 区间
+// 与后面的栅栏/装饰 id 紧挨着，追加母方块会撞 id（见 blocks.ts 里 SHAPED_PARENTS 的注释）。
+// 末地城因此用整块搭建，已在 TASKS.md 记录这个取舍。
+
+const END_SPECS: readonly BlockSpec[] = [
+  { id: 246, name: 'minecraft:end_stone', tiles: ['end_stone', 'end_stone', 'end_stone'] },
+  { id: 247, name: 'minecraft:end_stone_bricks', tiles: ['end_stone_bricks', 'end_stone_bricks', 'end_stone_bricks'] },
+  { id: 248, name: 'minecraft:purpur_block', tiles: ['purpur_block', 'purpur_block', 'purpur_block'] },
+  {
+    id: 249,
+    name: 'minecraft:purpur_pillar',
+    tiles: ['purpur_pillar_top', 'purpur_pillar_top', 'purpur_pillar_side'],
+  },
+  plantSpec(250, 'chorus_plant', 'chorus_plant'),
+  plantSpec(251, 'chorus_flower', 'chorus_flower'),
+  {
+    id: 252,
+    name: 'minecraft:end_rod',
+    tiles: ['end_rod', 'end_rod', 'end_rod'],
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+    light: 14,
+    shape: 'cross',
+  },
+  { id: 253, name: 'minecraft:dragon_egg', tiles: ['dragon_egg', 'dragon_egg', 'dragon_egg'] },
+  { id: 254, name: 'minecraft:end_portal_frame', tiles: ['end_portal_frame', 'end_portal_frame', 'end_portal_frame'] },
+  {
+    id: 255,
+    name: 'minecraft:end_portal',
+    tiles: ['end_portal', 'end_portal', 'end_portal'],
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+    light: 15,
+  },
+];
+
 /**
  * 全部方块定义。
  * ⚠️ 必须按 id 升序排列：BLOCKS 是按数组下标索引的，顺序错位会让 blockDef(id) 取到别的方块。
@@ -597,6 +640,7 @@ const SPECS: readonly BlockSpec[] = [
   ...DECORATION_SPECS,
   ...PRISMARINE_SPECS,
   ...NETHER_SPECS,
+  ...END_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -725,6 +769,18 @@ export const Block = {
   CRIMSON_ROOTS: 243,
   WARPED_ROOTS: 244,
   NETHER_SPROUTS: 245,
+
+  // ---- 末地
+  END_STONE: 246,
+  END_STONE_BRICKS: 247,
+  PURPUR_BLOCK: 248,
+  PURPUR_PILLAR: 249,
+  CHORUS_PLANT: 250,
+  CHORUS_FLOWER: 251,
+  END_ROD: 252,
+  DRAGON_EGG: 253,
+  END_PORTAL_FRAME: 254,
+  END_PORTAL: 255,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */

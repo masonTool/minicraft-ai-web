@@ -1149,6 +1149,101 @@ PAINTERS.crimson_roots = rootsPainter([178, 48, 58], 'cr');
 PAINTERS.warped_roots = rootsPainter([54, 168, 160], 'wr');
 PAINTERS.nether_sprouts = rootsPainter([78, 156, 132], 'ns');
 
+// ---- 末地方块
+/** 末地石：淡黄绿底 + 细密的暗色孔洞（原版是"泛黄的浮石"质感） */
+const END_STONE_PAINTER: Painter = (x, y, rng) => {
+  const key = (y >> 1) * 8 + (x >> 1);
+  const pit = (hashString(`es${key}`) % 100) / 100;
+  const v = 0.9 + pit * 0.22 + (rng() * 0.1 - 0.05);
+  return [clamp255(222 * v), clamp255(226 * v), clamp255(160 * v), 255];
+};
+/** 末地石砖：末地石底色上的砖缝 */
+const END_STONE_BRICKS_PAINTER = brickPainter([214, 218, 154]);
+/** 紫珀块：带紫色星点的暗紫红 */
+const PURPUR_PAINTER: Painter = (x, y, rng) => {
+  const speck = hashString(`pp${x},${y}`) % 23 === 0;
+  const v = 1 + (rng() * 0.12 - 0.06) + (speck ? 0.24 : 0);
+  return [clamp255(172 * v), clamp255(122 * v), clamp255(172 * v), 255];
+};
+/** 紫珀柱侧面：竖向柱纹 */
+const PURPUR_PILLAR_SIDE_PAINTER: Painter = (x, _y, rng) => {
+  const band = x % 5 === 0 ? -0.16 : x % 5 === 2 ? 0.08 : 0;
+  const v = 1 + band + (rng() * 0.1 - 0.05);
+  return [clamp255(178 * v), clamp255(126 * v), clamp255(178 * v), 255];
+};
+/** 紫珀柱顶面：方形截面纹（同心方框） */
+const PURPUR_PILLAR_TOP_PAINTER: Painter = (x, y, rng) => {
+  const edge = Math.min(x, y, TILE_SIZE - 1 - x, TILE_SIZE - 1 - y);
+  const v = 1 + (edge <= 1 ? -0.2 : edge <= 3 ? 0.1 : 0) + (rng() * 0.1 - 0.05);
+  return [clamp255(184 * v), clamp255(132 * v), clamp255(184 * v), 255];
+};
+/** 紫颂植株：一根紫红色肉质细杆，带浅色节点 */
+const CHORUS_PLANT_PAINTER: Painter = (x, y, rng) => {
+  const dx = Math.abs(x - 7.5);
+  if (dx > 2.6) return EMPTY;
+  const node = y % 6 < 2;
+  const v = (node ? 1.16 : 1) + (rng() * 0.12 - 0.06);
+  return [clamp255(146 * v), clamp255(112 * v), clamp255(160 * v), 255];
+};
+/** 紫颂花：顶部的紫色花簇（花瓣向外翻） */
+const CHORUS_FLOWER_PAINTER: Painter = (x, y, rng) => {
+  const dx = (x - 7.5) / 7.4;
+  const dy = (y - 7.5) / 7.4;
+  const r = Math.hypot(dx, dy);
+  if (r > 1) return EMPTY;
+  const petal = hashString(`cf${x >> 1},${y >> 1}`) % 100 < 58;
+  if (!petal && r > 0.55) return EMPTY;
+  const v = (r > 0.7 ? 0.86 : 1.1) + (rng() * 0.12 - 0.06);
+  return [clamp255(206 * v), clamp255(150 * v), clamp255(212 * v), 255];
+};
+/** 末地烛：白色细杆 + 顶端的荧光球 */
+const END_ROD_PAINTER: Painter = (x, y, rng) => {
+  const dx = Math.abs(x - 7.5);
+  if (dx > 1.6) return EMPTY;
+  if (y < 4) {
+    const v = 1 + (rng() * 0.08 - 0.04);
+    return [clamp255(246 * v), clamp255(244 * v), clamp255(226 * v), 255];
+  }
+  const v = 1 + (rng() * 0.08 - 0.04);
+  return [clamp255(214 * v), clamp255(204 * v), clamp255(186 * v), 255];
+};
+/** 龙蛋：黑底 + 紫色斑点与裂纹 */
+const DRAGON_EGG_PAINTER: Painter = (x, y, rng) => {
+  const blotch = hashString(`de${x >> 1},${y >> 1}`) % 100 < 26;
+  const v = 1 + (rng() * 0.14 - 0.07);
+  if (blotch) return [clamp255(96 * v), clamp255(42 * v), clamp255(96 * v), 255];
+  return [clamp255(24 * v), clamp255(16 * v), clamp255(28 * v), 255];
+};
+/** 末地传送门框架：淡绿石框 + 中央的黄色"眼睛" */
+const END_PORTAL_FRAME_PAINTER: Painter = (x, y, rng) => {
+  const eye = x >= 5 && x <= 10 && y >= 5 && y <= 10;
+  if (eye) {
+    const v = 1 + (rng() * 0.1 - 0.05);
+    return [clamp255(226 * v), clamp255(212 * v), clamp255(96 * v), 255];
+  }
+  const v = 0.94 + (rng() * 0.12 - 0.06);
+  return [clamp255(158 * v), clamp255(174 * v), clamp255(132 * v), 255];
+};
+/** 末地传送门：深紫黑底 + 星点（自发光 15） */
+const END_PORTAL_PAINTER: Painter = (x, y, rng) => {
+  const star = hashString(`ep${x},${y}`) % 17 === 0;
+  if (star) return [clamp255(226), clamp255(206), clamp255(255), 255];
+  const v = 0.9 + (rng() * 0.16 - 0.08);
+  return [clamp255(22 * v), clamp255(8 * v), clamp255(38 * v), 255];
+};
+
+PAINTERS.end_stone = END_STONE_PAINTER;
+PAINTERS.end_stone_bricks = END_STONE_BRICKS_PAINTER;
+PAINTERS.purpur_block = PURPUR_PAINTER;
+PAINTERS.purpur_pillar_side = PURPUR_PILLAR_SIDE_PAINTER;
+PAINTERS.purpur_pillar_top = PURPUR_PILLAR_TOP_PAINTER;
+PAINTERS.chorus_plant = CHORUS_PLANT_PAINTER;
+PAINTERS.chorus_flower = CHORUS_FLOWER_PAINTER;
+PAINTERS.end_rod = END_ROD_PAINTER;
+PAINTERS.dragon_egg = DRAGON_EGG_PAINTER;
+PAINTERS.end_portal_frame = END_PORTAL_FRAME_PAINTER;
+PAINTERS.end_portal = END_PORTAL_PAINTER;
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

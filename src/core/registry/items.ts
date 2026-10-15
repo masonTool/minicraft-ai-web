@@ -252,6 +252,17 @@ const DECORATION_AND_NETHER = new Set<number>([
   Block.PRISMARINE,
   Block.PRISMARINE_BRICKS,
   Block.DARK_PRISMARINE,
+  // ---- 末地
+  Block.END_STONE,
+  Block.END_STONE_BRICKS,
+  Block.PURPUR_BLOCK,
+  Block.PURPUR_PILLAR,
+  Block.CHORUS_PLANT,
+  Block.CHORUS_FLOWER,
+  Block.END_ROD,
+  Block.DRAGON_EGG,
+  Block.END_PORTAL_FRAME,
+  Block.END_PORTAL,
 ]);
 
 /** 矿石与材料：所有矿石（含深板岩变体）与加工产物 */

@@ -261,6 +261,18 @@ export const TILE_ORDER = [
   'crimson_roots',
   'warped_roots',
   'nether_sprouts',
+  // ---- 末地
+  'end_stone',
+  'end_stone_bricks',
+  'purpur_block',
+  'purpur_pillar_top',
+  'purpur_pillar_side',
+  'chorus_plant',
+  'chorus_flower',
+  'end_rod',
+  'dragon_egg',
+  'end_portal_frame',
+  'end_portal',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

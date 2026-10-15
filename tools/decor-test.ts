@@ -46,7 +46,7 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 // ---------------------------------------------------------------- 1. 注册表一致性
 
 console.log('\n[方块注册表]');
-equal('方块总数', BLOCKS.length, 246);
+equal('方块总数', BLOCKS.length, 256);
 check(
   'id 从 0 连续到末尾',
   BLOCKS.every((def, index) => def.id === index),
