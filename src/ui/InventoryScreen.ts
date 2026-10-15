@@ -69,6 +69,7 @@ import {
   slicePage,
 } from './ItemPager.ts';
 import { Tooltip } from './Tooltip.ts';
+import { updateDurabilityBar } from './SlotVisuals.ts';
 
 export type InventoryPanelMode =
   | 'inventory'
@@ -724,7 +725,11 @@ export class InventoryScreen {
     canvas.height = 36;
     const count = document.createElement('span');
     count.className = 'inv-count';
-    slot.append(canvas, count);
+    // 耐久条（批次 28）：与快捷栏同一处实现，满耐久/无耐久时自己隐藏
+    const durability = document.createElement('i');
+    durability.className = 'dur-bar hidden';
+    durability.appendChild(document.createElement('b'));
+    slot.append(canvas, count, durability);
 
     slot.addEventListener('pointerdown', (event) => {
       const key = slot.dataset.key;
@@ -1177,6 +1182,7 @@ export class InventoryScreen {
       count.textContent = '';
       this.tooltipStacks.delete(element);
     }
+    updateDurabilityBar(element.querySelector('.dur-bar'), stack);
   }
 
   dispose(): void {

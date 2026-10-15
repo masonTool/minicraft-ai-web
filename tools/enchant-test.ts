@@ -270,12 +270,14 @@ console.log('\n[存档与提示框]');
   equal('取出时附魔跟着走', taken?.enchants?.efficiency, 4);
 
   const tooltip = itemTooltip(DIAMOND_PICK, 1, 0, { efficiency: 4, unbreaking: 3 });
+  // 批次 28：附魔拆成一行一条（`enchants` 数组），不再和说明挤在同一行
   check(
     '提示框单独显示附魔',
-    tooltip.description.includes('效率 IV') && tooltip.description.includes('耐久 III'),
-    tooltip.description,
+    tooltip.enchants.includes('效率 IV') && tooltip.enchants.includes('耐久 III'),
+    tooltip.enchants.join('、'),
   );
-  check('没有附魔时不多出那一行', !itemTooltip(DIAMOND_PICK).description.includes('附魔'));
+  check('附魔的物品按"稀有"上色', tooltip.rarity === 'rare', tooltip.rarity);
+  check('没有附魔时那一行是空的', itemTooltip(DIAMOND_PICK).enchants.length === 0);
 
   const legacy = new Inventory();
   legacy.restore([{ id: DIAMOND_PICK, count: 1, enchants: { efficiency: 0 } }]);

@@ -10,6 +10,7 @@
  */
 
 import type { ItemTooltip } from '../core/registry/itemNames.ts';
+import { rarityClassName } from '../core/registry/itemVisuals.ts';
 
 export class Tooltip {
   private readonly root: HTMLDivElement;
@@ -68,9 +69,11 @@ export class Tooltip {
 
   private render(data: ItemTooltip): void {
     this.root.textContent = '';
+    // 稀有度决定整块框的强调色（标题 + 左侧色条），CSS 只认类名
+    this.root.dataset.rarity = data.rarity;
 
     const title = document.createElement('div');
-    title.className = 'tooltip-title';
+    title.className = `tooltip-title ${rarityClassName(data.rarity)}`;
     title.textContent = data.count > 1 ? `${data.title} ×${data.count}` : data.title;
 
     const subtitle = document.createElement('div');
@@ -78,12 +81,44 @@ export class Tooltip {
     subtitle.textContent = data.subtitle;
 
     this.root.append(title, subtitle);
-    // 没写过说明的物品不占一行（提示框只显示名称 + 类别/堆叠）
+
+    // 说明只放说明（耐久与附魔各自一行，见下）
     if (data.description.length > 0) {
       const description = document.createElement('div');
       description.className = 'tooltip-desc';
       description.textContent = data.description;
       this.root.appendChild(description);
+    }
+
+    // 附魔：一条一行、青蓝色（一排附魔挤在说明里会被看漏）
+    if (data.enchants.length > 0) {
+      const enchants = document.createElement('div');
+      enchants.className = 'tooltip-enchants';
+      for (const line of data.enchants) {
+        const row = document.createElement('div');
+        row.className = 'tooltip-enchant';
+        row.textContent = line;
+        enchants.appendChild(row);
+      }
+      this.root.appendChild(enchants);
+    }
+
+    // 耐久：文案 + 一条迷你条（快坏了能一眼看出来，不用去读数字）
+    if (data.durability.length > 0) {
+      const durability = document.createElement('div');
+      durability.className = 'tooltip-durability';
+      const text = document.createElement('span');
+      text.textContent = data.durability;
+      durability.appendChild(text);
+      if (data.durabilityBar) {
+        const bar = document.createElement('div');
+        bar.className = `dur-bar dur-${data.durabilityBar.level}`;
+        const fill = document.createElement('b');
+        fill.style.width = `${Math.round(data.durabilityBar.ratio * 100)}%`;
+        bar.appendChild(fill);
+        durability.appendChild(bar);
+      }
+      this.root.appendChild(durability);
     }
 
     if (data.showMeta) {

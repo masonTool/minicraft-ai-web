@@ -32,6 +32,7 @@ import { tippedArrowEffects } from '../survival/TippedArrow.ts';
 import { enchantmentById, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
 import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
+import { durabilityBar, rarityOf, type ItemRarity } from './itemVisuals.ts';
 
 // ---------------------------------------------------------------- 规则生成
 
@@ -715,11 +716,21 @@ export function itemLabel(itemId: number): string {
  * 表里查不到的 id 原样显示——宁可露出一个生 id，也不要默默不显示（那才是真查不出来的 bug）。
  */
 export function enchantLabel(enchants?: Readonly<Record<string, number>>): string {
-  if (!enchants) return '';
-  const parts = Object.entries(enchants).map(
+  const parts = enchantList(enchants);
+  return parts.length > 0 ? `附魔：${parts.join('、')}` : '';
+}
+
+/**
+ * 附魔逐条列出（批次 28 的提示框用：一条一行）。
+ *
+ * 与 `enchantLabel` 共用同一份实现——两个函数各自拼一遍必然会漂
+ * （一边显示"效率 IV"、另一边显示"效率 4"）。
+ */
+export function enchantList(enchants?: Readonly<Record<string, number>>): string[] {
+  if (!enchants) return [];
+  return Object.entries(enchants).map(
     ([id, level]) => `${enchantmentById(id)?.name ?? id} ${romanLevel(level)}`,
   );
-  return parts.length > 0 ? `附魔：${parts.join('、')}` : '';
 }
 
 /** 中文类别名 */
@@ -756,8 +767,20 @@ export interface ItemTooltip {
   title: string;
   /** 副标题：英文 id（方便对照 wiki 与配方数据） */
   subtitle: string;
-  /** 说明正文 */
+  /**
+   * 说明正文。
+   * ⚠️ **只放说明**：耐久与附魔各自在下面两行（批次 28 改的）。
+   * 原来是"说明｜455/495｜效率 IV"挤成一行用 `｜` 分隔，三样信息量大又读不快。
+   */
   description: string;
+  /** 耐久文案（`剩余 455 / 495`）；没有耐久概念时为空串 */
+  durability: string;
+  /** 耐久条的档位（`itemVisuals.durabilityBar`）；不该显示时为 null */
+  durabilityBar: { ratio: number; level: string } | null;
+  /** 附魔各自的文案（`效率 IV`）；没有附魔时为空数组 */
+  enchants: readonly string[];
+  /** 稀有度：标题按它上色（附魔 → 稀有、龙蛋 → 史诗…） */
+  rarity: ItemRarity;
   /** 是否显示"类别 / 堆叠"那一行 */
   showMeta: boolean;
   category: string;
@@ -783,15 +806,21 @@ export function itemTooltip(
   const durable = toolInfoById(itemId) ?? armorInfoById(itemId);
   const description = itemDescription(itemId);
   const durability = durable && damage !== undefined ? durabilityLabel(durable, damage) : '';
-  // 附魔单独一行更好认（一排"效率 III、耐久 II"混在说明里会被看漏）
-  const enchantLine = enchantLabel(enchants);
-  const body = [description, durability, enchantLine].filter((part) => part.length > 0).join('｜');
+  const bar = durabilityBar(damage, durable?.durability ?? 0);
+  // 附魔逐条列出（`效率 IV`、`耐久 III`），由界面一条一行地排——
+  // 原来是拼成一句话挤在说明后面，一排附魔会被看漏
+  const enchantLines = enchantList(enchants);
   return {
     // 铁砧改过名字就用改过的名字当标题（原版也这样，而且会把原来的名字留在副标题里）
     title: name && name.length > 0 ? name : itemLabel(itemId),
     subtitle: name && name.length > 0 ? `原名 ${itemLabel(itemId)}` : rawName,
-    description: body,
-    showMeta: !hasDescription(itemId) && durability.length === 0 && enchantLine.length === 0,
+    description,
+    durability,
+    durabilityBar: bar,
+    enchants: enchantLines,
+    // 附魔的东西按"稀有"上色（与 `rarityOf` 同一个判断）
+    rarity: rarityOf(itemId, enchants),
+    showMeta: description.length === 0 && durability.length === 0 && enchantLines.length === 0,
     category: categoryLabel(itemId),
     maxStack: maxStackOf(itemId),
     count,

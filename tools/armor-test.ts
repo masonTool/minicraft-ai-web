@@ -261,7 +261,9 @@ console.log('\n[存档往返]');
   restored.restore(inventory.serialize());
   equal('读档还原盔甲耐久', restored.get(ARMOR_SLOT_BASE + 2)?.damage, 40);
   const tooltip = itemTooltip(armorItemId('leggings', 'diamond'), 1, 40);
-  check('提示框显示盔甲耐久', tooltip.description.includes('455/495'), tooltip.description);
+  // 批次 28：耐久与附魔从 `description` 里拆成了结构化字段（界面各自一行）
+  check('提示框显示盔甲耐久', tooltip.durability.includes('455/495'), tooltip.durability);
+  check('耐久受损时带一条耐久条', tooltip.durabilityBar !== null, JSON.stringify(tooltip.durabilityBar));
 }
 
 // ---------------------------------------------------------------- 6. 配方

@@ -175,6 +175,7 @@ import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
+import { updateDurabilityBar } from './ui/SlotVisuals.ts';
 import {
   blockForItem,
   dropFor,
@@ -1445,6 +1446,13 @@ class App {
       label.textContent = String(index + 1);
       slot.appendChild(label);
 
+      // 耐久条（批次 28）：受损的工具/盔甲在格子底部显示一条，快坏了会变红
+      const durability = document.createElement('i');
+      durability.className = 'dur-bar hidden';
+      const fill = document.createElement('b');
+      durability.appendChild(fill);
+      slot.appendChild(durability);
+
       container.appendChild(slot);
       this.hotbarSlots.push(slot);
     }
@@ -1475,6 +1483,7 @@ class App {
       const stack = this.inventory.get(index);
       const icon = slot.querySelector('canvas') as HTMLCanvasElement;
       const count = slot.querySelector('.count') as HTMLSpanElement;
+      const durability = slot.querySelector('.dur-bar') as HTMLElement;
 
       if (stack) {
         drawItemIcon(icon, this.atlas, stack.id, 32);
@@ -1487,6 +1496,8 @@ class App {
         count.textContent = '';
         slot.title = '';
       }
+      // 耐久条：满耐久的工具不显示（原版也只在受损后显示）
+      updateDurabilityBar(durability, stack);
       slot.classList.toggle('active', index === this.hotbarIndex);
     }
   }

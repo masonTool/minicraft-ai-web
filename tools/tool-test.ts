@@ -197,7 +197,8 @@ console.log('\n[工具耐久]');
   equal('旧存档工具视为崭新', legacy.get(0)?.damage, undefined);
 
   const tooltip = itemTooltip(id, 1, 7);
-  check('提示框显示剩余耐久', tooltip.description.includes('1554/1561'), tooltip.description);
+  // 批次 28：耐久从 `description` 里拆出来了（界面单独一行 + 一条耐久条）
+  check('提示框显示剩余耐久', tooltip.durability.includes('1554/1561'), tooltip.durability);
 }
 
 // ---------------------------------------------------------------- 6. 配方

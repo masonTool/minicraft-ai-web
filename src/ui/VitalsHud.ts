@@ -75,7 +75,7 @@ export class VitalsHud {
   private readonly armorRow: HTMLElement;
   private lastKey = '';
 
-  constructor(container: HTMLElement) {
+  constructor(private readonly container: HTMLElement) {
     // 半颗心的裁剪定义只放一份，所有图标共用
     const defs = createSvg();
     defs.setAttribute('class', 'vital-defs');
@@ -164,6 +164,10 @@ export class VitalsHud {
         applyState(this.armors[i]!, stateOf(armorPoints - i * ARMOR_PER_ICON));
       }
     }
+
+    // 低血量脉冲（批次 28）：血量掉到 4 点（两颗心）以下时整条状态栏自己"跳"起来，
+    // 提醒玩家该退了——原来只有数字变小，战斗中很容易没注意到
+    this.container.classList.toggle('low-health', !stats.dead && stats.health > 0 && stats.health <= 4);
 
     // 氧气条只在没吸满时出现（与原版一致）
     const showAir = stats.air < MAX_AIR;
