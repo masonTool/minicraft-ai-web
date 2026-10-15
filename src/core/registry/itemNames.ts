@@ -26,6 +26,7 @@ import {
 import { ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
 import { SPLASH_RADIUS, isInstantEffect } from '../survival/SplashPotion.ts';
+import { CLOUD_DURATION, CLOUD_PULSE_INTERVAL, LINGERING_RADIUS } from '../survival/PotionCloud.ts';
 import { POTIONS, type PotionEntry } from './potions.ts';
 import { enchantmentById, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
@@ -321,6 +322,7 @@ const EXPLICIT: Record<string, string> = {
   bone: '骨头',
   snowball: '雪球',
   egg: '鸡蛋',
+  dragon_breath: '龙息',
   gunpowder: '火药',
   beef: '生牛肉',
   porkchop: '生猪排',
@@ -491,6 +493,7 @@ const DESCRIPTIONS: Record<string, string> = {
   sugar: '甘蔗做的（1 甘蔗 → 1 糖）。在酿造里把粗制药水变成迅捷药水。',
   snowball: '右键扔出去：对生物**0 伤害**（原版如此），只会把它们推开；4 个雪球能合成 1 块雪块。',
   egg: '右键扔出去，1/8 概率砸出小鸡（原版概率）；鸡每 5~10 分钟下一个蛋，是鸡蛋的唯一来源。',
+  dragon_breath: '末影龙吐出的血息，用**空玻璃瓶**站在血息云里右键就能接一瓶；在酿造里把喷溅药水变成滞留药水。',
   carrot: '种在耕地上会长出胡萝卜（收一次得 2~4 个）。能回 3 点饥饿，也能把猪引过来——**这就是猪的原版口粮**。',
   potato: '种在耕地上会长出马铃薯。生吃回 1 点饥饿，**烤过之后回 5 点**（原版差得很明显）。',
   baked_potato: '烤过的马铃薯：一口回 5 点饥饿、6 点饱和度（生的只有 1 点）。熔炉里烤一下就行。',
@@ -620,8 +623,11 @@ function durationLabel(seconds: number): string {
 
 function potionDescription(potion: PotionEntry): string {
   const splash = potion.splash === true;
+  const lingering = potion.lingering === true;
   if (potion.variant === 'awkward') {
-    return splash ? '半成品（喷溅版）：扔出去也不会有任何效果。' : '半成品：酿出具体药水之前的中间状态，直接喝没有效果。';
+    if (splash) return '半成品（喷溅版）：扔出去也不会有任何效果。';
+    if (lingering) return '半成品（滞留版）：扔出去只会留下一片什么用都没有的云。';
+    return '半成品：酿出具体药水之前的中间状态，直接喝没有效果。';
   }
   const tier = potion.tier === 'long' ? '红石粉延长版：' : potion.tier === 'strong' ? '荧石粉强化版：' : '';
   const effects = potion.effects.map((effect) => {
@@ -633,9 +639,17 @@ function potionDescription(potion: PotionEntry): string {
     if (isInstantEffect(effect.id)) return `${label}（立刻生效）`;
     return `${label} ${durationLabel(effect.seconds)}`;
   });
-  // 喷溅版的文案与半径同源（`SPLASH_RADIUS`）：改半径不会让说明书开始说谎
-  const verb = splash ? `扔出去砸中后 ${SPLASH_RADIUS} 格内的实体获得` : '喝下获得';
-  const tail = splash ? '离爆心越远时长越短，直接命中的目标拿满时长。' : '';
+  // 三种用法的文案都与各自的范围/节奏同源（半径、持续、结算间隔都来自 `survival/`）
+  const verb = lingering
+    ? `扔出去留下一片 ${LINGERING_RADIUS} 格的药水云，云里的实体获得`
+    : splash
+      ? `扔出去砸中后 ${SPLASH_RADIUS} 格内的实体获得`
+      : '喝下获得';
+  const tail = lingering
+    ? `云持续 ${CLOUD_DURATION} 秒、每 ${CLOUD_PULSE_INTERVAL} 秒结算一次，站得越靠边领到的时长越短。`
+    : splash
+      ? '离爆心越远时长越短，直接命中的目标拿满时长。'
+      : '';
   return `${tier}${verb}${effects.join('、')}。${tail}${POTION_NOTES[potion.variant] ?? ''}`;
 }
 

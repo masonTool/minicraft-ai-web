@@ -4,28 +4,35 @@
  * 与原版对齐：
  *  - 一次酿造 **20 秒**；燃料是**烈焰粉**，1 份能酿 **20 次**（原版就是 20）
  *  - 三个药水槽**同时**推进（放一瓶也是 20 秒，放三瓶一样是 20 秒——这是原版的特点）
- *  - 配方五类：水瓶 + 下界疣 → 粗制；粗制 + 材料 → 具体药水；
+ *  - 配方六类：水瓶 + 下界疣 → 粗制；粗制 + 材料 → 具体药水；
  *    具体药水 + 红石粉 → **延长**；+ 荧石粉 → **强化**；
  *    + 发酵蜘蛛眼 → **腐化**（换一种效果，见 `CORRUPTION`）；
- *    **药水 + 火药 → 喷溅版**（K4 尾巴，任何饮用型都能这么变）
+ *    **药水 + 火药 → 喷溅版**、**喷溅版 + 龙息 → 滞留版**（K4 尾巴的两条链）
  *  - 不需要"配方解锁"，但**原料与基础药水不匹配时什么都不发生**（不消耗、不浪费）
  *
- * 配方表**由 `POTIONS` 的变体表展开**，不手写 24 条：手写的话"加一种药水"要改两处，
+ * 配方表**由 `POTIONS` 的变体表展开**，不手写几十条：手写的话"加一种药水"要改好几处，
  * 而漏改的那一处不会报错，只会让新药水永远酿不出来。
  *
  * 与原版的两处差异（都是"少一层状态"，行为可预期）：
  *  1. 红石粉与荧石粉**只能从普通档出发**（原版给 II 级药水再补红石粉也是可以的）；
  *     反过来说"已经改造过的药水不能再改造"，与原版 1.9 之后"二选一"的限制一致。
- *  2. 腐化只登记本项目**有的**目标效果：治疗→伤害、剧毒→伤害、夜视→隐身这三条
- *     目标药水还没做（`instant_damage`/`invisibility` 的效果本身是有的），
- *     所以那三样原料 + 发酵蜘蛛眼什么都不发生。做那三瓶药水时回来补 `CORRUPTION` 一行即可。
+ *  2. 腐化**只从基础档出发**（原版也不能给"延长版迅捷"腐化，这条是一致的）；
+ *     另外"跳跃药水 → 缓慢"这一条还没有原料药水（跳跃药水本身没做），
+ *     所以 `CORRUPTION` 里只有四条。
  *
  * 本文件要 import `items.ts` 拿材料 id —— 这是**必须**的：`POTIONS` 那边反过来
  * 不能 import `items.ts`（会成环，见 `potions.ts` 的文件头）。
  */
 
 import { Item } from '../registry/items.ts';
-import { POTION_IDS, POTIONS, POTION_VARIANTS, splashIdOf, variantBaseId } from '../registry/potions.ts';
+import {
+  DRINKABLE,
+  POTION_IDS,
+  POTION_VARIANTS,
+  lingeringIdOf,
+  splashIdOf,
+  variantBaseId,
+} from '../registry/potions.ts';
 
 /** 一次酿造耗时（秒，原版 20） */
 export const BREW_SECONDS = 20;
@@ -56,9 +63,17 @@ export const VARIANT_INGREDIENTS: Readonly<Record<string, number>> = {
   poison: Item.SPIDER_EYE,
 };
 
-/** 发酵蜘蛛眼腐化：原料效果的基础档 → 目标效果的基础档 */
+/**
+ * 发酵蜘蛛眼腐化：原料效果的基础档 → 目标效果的基础档。
+ *
+ * 原版一共五条，现在**全部补齐**（K4 尾巴把缺的三个目标效果做出来了）：
+ * 迅捷 → 缓慢、治疗 → 伤害、剧毒 → 伤害、夜视 → 隐身、跳跃 → 缓慢（跳跃药水还没做）。
+ */
 export const CORRUPTION: Readonly<Record<string, string>> = {
   swiftness: 'slowness',
+  healing: 'harming',
+  poison: 'harming',
+  night_vision: 'invisibility',
 };
 
 function requireBaseId(key: string): number {
@@ -104,11 +119,21 @@ function buildRecipes(): BrewIngredient[] {
   recipes.push({ ingredient: Item.FERMENTED_SPIDER_EYE, from: POTION_IDS.awkward, to: requireBaseId('weakness') });
 
   // 喷溅药水（K4 尾巴）：**任何饮用型 + 火药 → 它的喷溅版**（原版就这么做）。
-  // 只从饮用型出发：喷溅版本身不再是酿造原料（原版里它要和龙息才能变滞留，
-  // 而滞留药水不在本批范围内）。
-  for (const potion of POTIONS) {
-    if (potion.splash === true) continue;
+  // ⚠️ 必须只遍历 `DRINKABLE`：遍历 `POTIONS` 再跳过喷溅型的话，**滞留型也会被算进来**，
+  // 于是生成一批 id 为"滞留 + 50"的垃圾配方（1330、1331…指向不存在的物品）。
+  // 上一轮写成 `POTIONS` 是靠断言"每条配方的产物都是已注册物品"抓出来的。
+  for (const potion of DRINKABLE) {
     recipes.push({ ingredient: Item.GUNPOWDER, from: potion.id, to: splashIdOf(potion.id) });
+  }
+
+  // 滞留药水（K4 尾巴）：**喷溅型 + 龙息 → 滞留版**（原版就是这么做的）。
+  // 只从喷溅型出发：滞留版本身不再是酿造原料（原版里也没有"滞留 + 什么"的配方）
+  for (const potion of DRINKABLE) {
+    recipes.push({
+      ingredient: Item.DRAGON_BREATH,
+      from: splashIdOf(potion.id),
+      to: lingeringIdOf(potion.id),
+    });
   }
 
   return recipes;

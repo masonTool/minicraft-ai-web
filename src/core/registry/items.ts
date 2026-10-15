@@ -100,9 +100,11 @@ export const Item = {
   REDSTONE_DUST: 1198,
   GLOWSTONE_DUST: 1199,
   // ---- 投掷物（K4 尾巴）：雪球与鸡蛋，原版都是 16 个一堆。
-  // 1175~1179 是"酿造材料"与"药水（1180 起）"之间一直空着的一段，投掷物用掉前两个
+  // 1175~1179 是"酿造材料"与"药水（1180 起）"之间一直空着的一段
   SNOWBALL: 1175,
   EGG: 1176,
+  /** 龙息（K4 尾巴）：滞留药水的原料，来源见 `Dragon` 的血息阶段 */
+  DRAGON_BREATH: 1177,
   // 药水：用 id 枚举而不是给 ItemStack 加字段（见 potions.ts 的说明）
   // id 定义在 potions.ts（本文件要 import 它来批量注册，反过来会成环）
   POTION_AWKWARD: POTION_IDS.awkward,
@@ -209,7 +211,10 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // ---- 投掷物（K4 尾巴）：扔出去的是这两个 + 喷溅药水
   { id: Item.SNOWBALL, name: 'minecraft:snowball', tile: 'item_snowball', maxStack: 16 },
   { id: Item.EGG, name: 'minecraft:egg', tile: 'item_egg', maxStack: 16 },
-  // 喷溅药水：与饮用型共用 `POTION_ITEMS`（id = 饮用型 + 50，见 potions.ts）——不在这里单列
+  // 龙息（K4 尾巴）：可堆 64（原版也是如此），它是滞留药水的原料
+  { id: Item.DRAGON_BREATH, name: 'minecraft:dragon_breath', tile: 'item_dragon_breath' },
+  // 喷溅药水 / 滞留药水：与饮用型共用 `POTION_ITEMS`
+  // （id = 饮用型 + 50 / + 100，见 potions.ts）——不在这里单列
   // 弓是耐用品（原版 384 点耐久，每射一箭 -1），但不是"工具"：
   // 它没有采集等级与挖掘速度，所以不放进 TOOL_SPECS（那是 5 种类 × 5 材质的表）
   { id: Item.BOW, name: 'minecraft:bow', tile: 'item_bow', maxStack: 1, durability: 384 },
@@ -268,10 +273,10 @@ const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, .
  * 物品表的长度（按 id 索引）。
  *
  * ⚠️ 改小会**静默丢掉** id 更大的物品（数组直接截断），所以每次新增一段 id 都要回来看这里。
- * 当前最大的一段是**喷溅药水 1230~1265**（饮用型 id + 50，见 `potions.ts`），
- * 所以留到 1300。
+ * 当前最大的一段是**滞留药水 1280~1319**（饮用型 id + 100，见 `potions.ts`），
+ * 再上面是喷溅药水 1230~1269，所以留到 1400。
  */
-const MAX_ITEM_ID = 1300;
+const MAX_ITEM_ID = 1400;
 
 /** 按 id 索引的物品表（未定义的 id 为 undefined） */
 export const ITEMS: (ItemDef | undefined)[] = new Array(MAX_ITEM_ID).fill(undefined);
@@ -432,6 +437,8 @@ export const ITEM_CATEGORIES = [
   'armor',
   'food',
   'functional',
+  // 酿造与药水（K4 尾巴补的分类）：84 瓶药水挤在"矿石与材料"里根本翻不动
+  'brewing',
 ] as const;
 export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
 
@@ -445,6 +452,7 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   armor: '盔甲',
   food: '食物',
   functional: '功能方块',
+  brewing: '酿造与药水',
 };
 
 /** 工具与武器（25 种由 TOOL_SPECS 派生，另外加上单独注册的剪刀） */
@@ -619,6 +627,31 @@ for (let index = 0; index < DYE_COLORS.length; index++) {
   WOOL_AND_DYE.add(dyeItemId(index));
 }
 
+/**
+ * 酿造与药水（K4 尾巴）：**84 瓶药水** + 瓶子 + 材料 + 酿造台本身。
+ * 药水种类一多，"矿石与材料"里就再也翻不动了。
+ */
+const BREWING = new Set<number>([
+  ...POTION_ITEMS.map((entry) => entry.id),
+  Item.GLASS_BOTTLE,
+  Item.WATER_BOTTLE,
+  Item.NETHER_WART,
+  Item.BLAZE_POWDER,
+  Item.SUGAR,
+  Item.RABBIT_FOOT,
+  Item.MAGMA_CREAM,
+  Item.GHAST_TEAR,
+  Item.SPIDER_EYE,
+  Item.FERMENTED_SPIDER_EYE,
+  Item.GLISTERING_MELON,
+  Item.PUFFERFISH,
+  Item.GOLDEN_CARROT,
+  Item.REDSTONE_DUST,
+  Item.GLOWSTONE_DUST,
+  Item.DRAGON_BREATH,
+  Block.BREWING_STAND,
+]);
+
 /** 判断物品属于哪个创造分类；未登记的默认归入"矿石与材料" */
 export function categoryOf(itemId: number): ItemCategory {
   if (TOOLS.has(itemId)) return 'tools';
@@ -626,6 +659,7 @@ export function categoryOf(itemId: number): ItemCategory {
   // 食物排在矿石前面：腐肉/生肉此前被归进"矿石与材料"，看着不像能吃的东西
   if (FOODS.has(itemId)) return 'food';
   if (WOOL_AND_DYE.has(itemId)) return 'wool';
+  if (BREWING.has(itemId)) return 'brewing';
   if (FUNCTIONAL.has(itemId)) return 'functional';
   if (ORES.has(itemId)) return 'ores';
   if (BUILDING.has(itemId)) return 'building';

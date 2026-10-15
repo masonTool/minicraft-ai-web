@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import { DYE_COLORS, TERRACOTTA_BASE, WOOD_TYPES, terracottaColor } from '../core/registry/colors.ts';
-import { POTIONS } from '../core/registry/potions.ts';
+import { POTIONS, potionColor } from '../core/registry/potions.ts';
 
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from './atlasLayout.ts';
 
@@ -1180,20 +1180,46 @@ PAINTERS.brewing_stand_side = (x, y, rng) => {
 };
 
 /**
- * 药水瓶（`liquid` 为空就是空瓶子，无色液体）。
+ * 药水的三种瓶型（`liquid` 为空就是空瓶子，无色液体）。
  * 液体颜色按药水种类给——这也是玩家分辨药水的唯一线索，所以别都画成同一瓶紫水。
  *
- * 两种瓶型（K4 尾巴）：
- *  - **饮用型**：细颈 + 直瓶底（默认）
- *  - **喷溅型**：圆底烧瓶——更胖的瓶肚 + 短颈 + 棕色瓶塞。
- *    造型必须一眼能分：两瓶颜色一样、只有"能不能扔"的区别，
- *    要是形状也一样，玩家就会把要扔的那瓶喝掉。
+ *  - **饮用型**（`drink`）：细颈 + 直瓶底
+ *  - **喷溅型**（`splash`）：圆底烧瓶 + 棕瓶塞（扔出去炸开）
+ *  - **滞留型**（`lingering`）：圆底烧瓶 + **敞口** + 顶部两粒气雾（扔出去留一片云）
+ *
+ * 三种造型必须一眼能分：颜色一样、只有"能不能扔/要不要留云"的区别，
+ * 要是形状也一样，玩家就会把该扔的那瓶喝掉。
  */
-function bottlePainter(liquid: readonly [number, number, number] | null, splash = false): Painter {
+function bottlePainter(
+  liquid: readonly [number, number, number] | null,
+  style: 'drink' | 'splash' | 'lingering' = 'drink',
+): Painter {
   return (x, y, rng) => {
     const jitter = rng() * 10 - 5;
 
-    if (splash) {
+    if (style === 'lingering') {
+      const dx = (x - 7.5) / 4.4;
+      const dy = (y - 10) / 3.8;
+      const inBelly = dx * dx + dy * dy <= 1;
+      const inMouth = x >= 6 && x <= 9 && y >= 3 && y <= 6;
+      // 瓶口飘出的两粒气雾：把"这一瓶会留下一片云"画在图标上
+      const inWisp = (x === 5 || x === 10) && (y === 2 || y === 3);
+      if (!inBelly && !inMouth && !inWisp) return [0, 0, 0, 0];
+      if (inWisp) return [clamp255(196 + jitter), clamp255(206 + jitter), clamp255(218 + jitter), 190];
+      if (liquid && inBelly) {
+        const shade = x < 8 ? 1.12 : 0.9;
+        return [
+          clamp255(liquid[0] * shade + jitter),
+          clamp255(liquid[1] * shade + jitter),
+          clamp255(liquid[2] * shade + jitter),
+          255,
+        ];
+      }
+      const edge = x === 4 || x === 11 || y === 13;
+      return [clamp255(214 + jitter), clamp255(226 + jitter), clamp255(232 + jitter), edge ? 255 : 210];
+    }
+
+    if (style === 'splash') {
       // 瓶肚：x 4~11、y 6~13，四角削掉做成球状
       const dx = (x - 7.5) / 4.4;
       const dy = (y - 9.5) / 4.2;
@@ -1234,42 +1260,27 @@ function bottlePainter(liquid: readonly [number, number, number] | null, splash 
 PAINTERS.item_glass_bottle = bottlePainter(null);
 PAINTERS.item_water_bottle = bottlePainter([68, 128, 214]);
 
-/**
- * 各效果的**基础档**液体颜色（对照游戏里的大致观感）。
- *
- * 延长/强化档不另配色，而是由基础色推出来（见下面的 `tierColor`）：
- * 24 瓶药水逐个挑颜色既没必要，也会让"同一效果的三种档位看起来像三种药"。
- */
-const POTION_BASE_COLORS: Record<string, readonly [number, number, number]> = {
-  awkward: [126, 88, 162],
-  swiftness: [124, 196, 224],
-  strength: [196, 84, 60],
-  healing: [236, 92, 130],
-  regeneration: [222, 128, 168],
-  fire_resistance: [232, 152, 68],
-  night_vision: [44, 66, 158],
-  poison: [96, 172, 74],
-  slowness: [112, 118, 146],
-  weakness: [86, 92, 86],
-};
-
-/**
- * 同一效果的档位配色：普通档原色、延长档偏暗偏红（掺了红石粉）、
- * 强化档更亮（掺了荧石粉）。玩家在快捷栏上一眼就能看出"这是同一瓶，但更强/更久"。
- */
-function tierColor(base: readonly [number, number, number], tier: string): [number, number, number] {
-  const [r, g, b] = base;
-  if (tier === 'long') return [clamp255(r * 1.06), clamp255(g * 0.72), clamp255(b * 0.72)];
-  if (tier === 'strong') return [clamp255(r * 1.15 + 28), clamp255(g * 1.15 + 18), clamp255(b * 1.15 + 18)];
-  return [r, g, b];
-}
-
 // 贴图按 `POTIONS` 生成而不是照着 id 列表手写：加了新药水却忘了画贴图，
 // 表现是"背包里一瓶空白"，而这类遗漏在数据表里看不出来。
+// 颜色来自 `potionColor()`（数据层），配药水云粒子的那一处也用它，两边不会各配一套色。
 for (const potion of POTIONS) {
-  const base = POTION_BASE_COLORS[potion.variant] ?? POTION_BASE_COLORS.awkward!;
-  PAINTERS[`item_potion_${potion.key}`] = bottlePainter(tierColor(base, potion.tier), potion.splash === true);
+  const style = potion.lingering === true ? 'lingering' : potion.splash === true ? 'splash' : 'drink';
+  PAINTERS[`item_potion_${potion.key}`] = bottlePainter(potionColor(potion), style);
 }
+
+/** 龙息（K4 尾巴）：瓶子里一团紫雾——与药水同色系，但明显不是"一瓶能喝的东西" */
+PAINTERS.item_dragon_breath = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  // 瓶身：小一号的圆底瓶（原料瓶，不是药水瓶）
+  const dx = (x - 7.5) / 5;
+  const dy = (y - 9) / 4.4;
+  if (dx * dx + dy * dy > 1) return [0, 0, 0, 0];
+  const inside = dx * dx + dy * dy <= 0.62;
+  if (!inside) return [clamp255(216 + jitter), clamp255(228 + jitter), clamp255(234 + jitter), 210];
+  // 里面的雾：上浅下深，像一团翻滚的紫气
+  const shade = y < 9 ? 1.2 : 0.85;
+  return [clamp255(198 * shade + jitter), clamp255(160 * shade + jitter), clamp255(236 * shade + jitter), 255];
+};
 
 /** 雪球：偏冷白的球，左上角一片高光（不然在浅色地面上看不出来） */
 PAINTERS.item_snowball = (x, y, rng) => {

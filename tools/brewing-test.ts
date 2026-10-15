@@ -17,7 +17,7 @@
  */
 
 import { Block } from '../src/core/registry/blocks.ts';
-import { CREATIVE_ITEMS, Item, itemDef, itemName, maxStackOf } from '../src/core/registry/items.ts';
+import { CREATIVE_ITEMS, Item, categoryOf, itemDef, itemName, maxStackOf } from '../src/core/registry/items.ts';
 import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { SPLASH_RADIUS } from '../src/core/survival/SplashPotion.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
@@ -37,16 +37,22 @@ import {
 } from '../src/core/container/BrewingStand.ts';
 import {
   DRINKABLE,
+  LINGERING_ID_OFFSET,
+  LINGERING_POTIONS,
   POTION_IDS,
   POTIONS,
   POTION_VARIANTS,
   SPLASH_ID_OFFSET,
   SPLASH_POTIONS,
   isDrinkable,
+  lingeringIdOf,
+  lingeringOf,
   potionById,
   splashIdOf,
   splashOf,
+  variantBaseId,
 } from '../src/core/registry/potions.ts';
+import { CLOUD_DURATION, LINGERING_RADIUS } from '../src/core/survival/PotionCloud.ts';
 import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
 import { EFFECTS, StatusEffects, type EffectId } from '../src/core/survival/StatusEffects.ts';
 import type { ItemStack } from '../src/core/container/Inventory.ts';
@@ -101,15 +107,19 @@ const VANILLA: Record<
   // 缓慢的强化档是 **IV 级**（原版唯一跳级的）：荧石粉给的是缓慢 IV
   slowness: { effect: 'slowness', base: [90, 0], long: [240, 0], strong: [20, 3] },
   weakness: { effect: 'weakness', base: [90, 0], long: [240, 0] },
+  // K4 尾巴补的两个效果：**都没有"粗制 + 材料"的配方**，只能从腐化链来
+  harming: { effect: 'instant_damage', base: [1, 0], strong: [1, 1] },
+  invisibility: { effect: 'invisibility', base: [180, 0], long: [480, 0] },
 };
 
 const expectedPotionCount =
   1 + // 粗制
   Object.values(VANILLA).reduce((sum, v) => sum + 1 + (v.long ? 1 : 0) + (v.strong ? 1 : 0), 0);
-// 表里是**两半**：饮用型 + 喷溅型（喷溅的 id = 饮用 id + 50，见 `SPLASH_ID_OFFSET`）
-equal('饮用型药水条目总数（9 种效果 × 各自有的档位 + 粗制）', DRINKABLE.length, expectedPotionCount);
-equal('药水条目总数（饮用 + 喷溅）', POTIONS.length, expectedPotionCount * 2);
+// 表里是**三份**：饮用型 + 喷溅型（+50）+ 滞留型（+100），每种一一对应
+equal('饮用型药水条目总数（11 种效果 × 各自有的档位 + 粗制）', DRINKABLE.length, expectedPotionCount);
+equal('药水条目总数（饮用 + 喷溅 + 滞留）', POTIONS.length, expectedPotionCount * 3);
 equal('喷溅型数量与饮用型一致', SPLASH_POTIONS.length, expectedPotionCount);
+equal('滞留型数量与饮用型一致', LINGERING_POTIONS.length, expectedPotionCount);
 
 for (const [key, vanilla] of Object.entries(VANILLA)) {
   const rows: Array<[string, readonly [number, number] | undefined, string]> = [
@@ -201,13 +211,73 @@ for (const potion of DRINKABLE) {
 for (const potion of SPLASH_POTIONS) {
   if (potion.base) continue;
   check(
-    `${potion.key} 不能再改造（红石 / 荧石 / 火药都不行）`,
+    `${potion.key} 不能再被红石/荧石/火药改造（只能拿龙息去做滞留）`,
     brewRecipeFor(Item.REDSTONE_DUST, potion.id) === null &&
       brewRecipeFor(Item.GLOWSTONE_DUST, potion.id) === null &&
       brewRecipeFor(Item.GUNPOWDER, potion.id) === null,
   );
 }
 check('粗制的喷溅版同样是半成品（不可喝）', !isDrinkable(potionById(splashIdOf(POTION_IDS.awkward))));
+
+// ---- 滞留型（K4 尾巴）：id 偏移 +100、配方要龙息、只能扔不能喝
+
+console.log('\n[滞留型：id 偏移 / 龙息配方 / 只能扔]');
+
+const drinkIds2 = new Set(DRINKABLE.map((potion) => potion.id));
+const splashIds = new Set(SPLASH_POTIONS.map((potion) => potion.id));
+
+for (const potion of DRINKABLE) {
+  const lingering = lingeringOf(potion);
+  check(`${potion.key} 有滞留版（id = 饮用型 + ${LINGERING_ID_OFFSET}）`, lingering?.id === lingeringIdOf(potion.id));
+  equal(
+    `${potion.key} 的喷溅版 + 龙息 → 滞留版`,
+    brewRecipeFor(Item.DRAGON_BREATH, splashIdOf(potion.id))?.to,
+    lingeringIdOf(potion.id),
+  );
+  if (!lingering) continue;
+  check(`${lingering.key} 的 id 不与饮用型撞车`, !drinkIds2.has(lingering.id));
+  check(`${lingering.key} 的 id 不与喷溅型撞车`, !splashIds.has(lingering.id));
+  check(`${lingering.key} 的名字带"滞留"`, itemLabel(lingering.id).startsWith('滞留'), itemLabel(lingering.id));
+  check(
+    `${lingering.key} 与饮用型挂的效果表完全一致`,
+    JSON.stringify(lingering.effects) === JSON.stringify(potion.effects),
+  );
+  check(`${lingering.key} 只能扔不能喝`, !isDrinkable(lingering));
+  if (!lingering.base) {
+    check(
+      `${lingering.key} 的说明里写了云半径与持续（与 CLOUD_* 同源）`,
+      itemDescription(lingering.id).includes(`${LINGERING_RADIUS} 格`) &&
+        itemDescription(lingering.id).includes(`${CLOUD_DURATION} 秒`),
+      itemDescription(lingering.id),
+    );
+  }
+}
+
+for (const potion of LINGERING_POTIONS) {
+  check(
+    `${potion.key} 不再是酿造原料（没有"滞留 + 什么"的配方）`,
+    !BREW_RECIPES.some((recipe) => recipe.from === potion.id),
+  );
+}
+check('龙息在创造物品栏里（酿不出来就白做）', CREATIVE_ITEMS.includes(Item.DRAGON_BREATH));
+check('龙息是已注册物品', itemDef(Item.DRAGON_BREATH) !== undefined);
+
+// 分类：84 瓶药水挤在"矿石与材料"里根本翻不动，所以这一批补了"酿造与药水"分类
+check(
+  '84 瓶药水都归在"酿造与药水"分类里',
+  POTIONS.every((potion) => categoryOf(potion.id) === 'brewing'),
+  POTIONS.filter((potion) => categoryOf(potion.id) !== 'brewing')
+    .map((potion) => potion.key)
+    .slice(0, 3)
+    .join(','),
+);
+equal('瓶子与材料也在这个分类里', categoryOf(Item.GLASS_BOTTLE), 'brewing');
+equal('酿造台本身也在这个分类里', categoryOf(Block.BREWING_STAND), 'brewing');
+equal(
+  '投掷物（雪球/鸡蛋）不进这个分类（它们不是酿造材料）',
+  categoryOf(Item.SNOWBALL) !== 'brewing' && categoryOf(Item.EGG) !== 'brewing',
+  true,
+);
 
 // ---------------------------------------------------------------- 2. 配方表完整性
 
@@ -313,12 +383,24 @@ equal(
   brewRecipeFor(Item.FERMENTED_SPIDER_EYE, Item.WATER_BOTTLE)?.to,
   POTION_IDS.weakness,
 );
-for (const key of ['healing', 'poison', 'night_vision'] as const) {
-  const variant = POTION_VARIANTS.find((v) => v.key === key)!;
-  check(
-    `${key} 的腐化目标（伤害/隐身）还没做，因此不登记配方`,
-    brewRecipeFor(Item.FERMENTED_SPIDER_EYE, variant.baseId) === null,
+// K4 尾巴把原版剩下的三条腐化链补齐了（目标效果就是这一轮做的伤害与隐身）
+for (const [from, to] of [
+  ['healing', 'harming'],
+  ['poison', 'harming'],
+  ['night_vision', 'invisibility'],
+] as const) {
+  const variant = POTION_VARIANTS.find((v) => v.key === from)!;
+  equal(
+    `${from} + 发酵蜘蛛眼 → ${to}`,
+    brewRecipeFor(Item.FERMENTED_SPIDER_EYE, variant.baseId)?.to,
+    variantBaseId(to),
   );
+}
+// 有"粗制 + 材料"配方的效果才该出现在 VARIANT_INGREDIENTS 里：
+// 伤害与隐身只能靠腐化得到（原版也一样）
+for (const key of ['harming', 'invisibility'] as const) {
+  const variant = POTION_VARIANTS.find((v) => v.key === key)!;
+  check(`${key} 没有"粗制 + 材料"的配方（原版只能靠腐化）`, !BREW_RECIPES.some((r) => r.from === POTION_IDS.awkward && r.to === variant.baseId));
 }
 check(
   '强化档的迅捷不能被腐化（原版 1.9 之后的限制）',
