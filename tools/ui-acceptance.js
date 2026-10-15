@@ -158,6 +158,48 @@
     if (narrow && style) check('category tabs stay on one scrollable row', style.flexWrap === 'nowrap', style.flexWrap);
   }
 
+  // ------------------------------------------- 3.5 美化：耐久条、稀有度、设计令牌
+  {
+    const { toolItemId } = await import('/src/core/registry/tools.ts');
+    // 一把损到 23% 的附魔镐 + 一把完好的剑：前者该显示红条与青色标题，后者什么都不显示
+    mc.inventory.set(0, { id: toolItemId('pickaxe', 'diamond'), count: 1, damage: 1200, enchants: { efficiency: 4 } });
+    mc.inventory.set(1, { id: toolItemId('sword', 'iron'), count: 1 });
+    await sleep(250);
+
+    const bar = document.querySelector('#hotbar .slot .dur-bar:not(.hidden)');
+    check('damaged tool shows a durability bar in the hotbar', !!bar);
+    if (bar) {
+      const style = bar.querySelector('b')?.getAttribute('style') ?? '';
+      const level = /dur-(high|mid|low)/.exec(bar.className)?.[1];
+      check(
+        'bar reflects the ratio (~23% => low/red)',
+        /width:\s*2[0-9]%/.test(style) && level === 'low',
+        `${style.trim()} | ${level}`,
+      );
+    }
+    const undamaged = document.querySelectorAll('#hotbar .slot')[1]?.querySelector('.dur-bar');
+    check('undamaged tools get no bar', !!undamaged && undamaged.classList.contains('hidden'));
+
+    // 提示框：稀有度底色 + 附魔行 + 耐久行（三样都是这一批新加的）
+    const slot = document.querySelector('#hotbar .slot');
+    const slotRect = slot.getBoundingClientRect();
+    slot.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true, cancelable: true, pointerId: 9101,
+      clientX: slotRect.left + 8, clientY: slotRect.top + 8,
+    }));
+    await sleep(150);
+    const tip = document.getElementById('item-tooltip');
+    check('tooltip opens on hover', !!tip && !tip.classList.contains('hidden'));
+    check('tooltip is tinted by rarity (enchanted => rare)', tip?.dataset.rarity === 'rare', tip?.dataset.rarity ?? 'missing');
+    check('tooltip has an enchant row', !!tip?.querySelector('.tooltip-enchant'));
+    check('tooltip durability row carries a mini bar', !!tip?.querySelector('.tooltip-durability .dur-bar'));
+
+    // 设计令牌真的生效：面板背景来自 `--panel-bg`（渐变），而不是被写死的色值
+    const panelStyle = getComputedStyle(document.querySelector('.inv-panel'));
+    check('theme tokens reach the panel', panelStyle.backgroundImage.includes('gradient'), panelStyle.backgroundImage.slice(0, 48));
+    info(`panel background: ${panelStyle.backgroundImage.slice(0, 48)}…`);
+  }
+
   // ---------------------------------------------------------------- 4. 整体适配
   const overflow = document.documentElement.scrollWidth - window.innerWidth;
   check('no horizontal overflow', overflow <= 1, `scrollWidth ${document.documentElement.scrollWidth} vs ${window.innerWidth}`);
