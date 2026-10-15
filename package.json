@@ -36,6 +36,7 @@
     "test:viewmode": "esbuild tools/viewmode-test.ts --bundle --platform=node --format=esm --outfile=.tmp/viewmode-test.mjs --log-level=error && node .tmp/viewmode-test.mjs",
     "test:world": "esbuild tools/world-test.ts --bundle --platform=node --format=esm --outfile=.tmp/world-test.mjs --log-level=error && node .tmp/world-test.mjs",
     "test:settings": "esbuild tools/settings-test.ts --bundle --platform=node --format=esm --outfile=.tmp/settings-test.mjs --log-level=error && node .tmp/settings-test.mjs",
+    "audit:tasks": "node tools/audit-tasks.mjs",
     "test:recipebook": "esbuild tools/recipebook-test.ts --bundle --platform=node --format=esm --outfile=.tmp/recipebook-test.mjs --log-level=error && node .tmp/recipebook-test.mjs",
     "test:net": "node tools/net-test.mjs",
     "test:audio": "esbuild tools/audio-test.ts --bundle --platform=node --format=esm --outfile=.tmp/audio-test.mjs --log-level=error && node .tmp/audio-test.mjs",

@@ -24,7 +24,8 @@ npm run dev            # http://localhost:5173
 
 - 时间：2026-10-15 · 提交总数 45（每个功能点一条，可逐条回滚）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **83**、进行中 **61**、待办 29；
+- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **84**、进行中 **60**、待办 29；
+  （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
@@ -49,7 +50,7 @@ npm run dev            # http://localhost:5173
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
 | 说明与配方 | `core/registry/itemNames.ts`（296 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成） |
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = 17 套离线测试（inventory/crafting/furnace/entity/shapes/biome/aquifer/ore/mesh/survival/mob/spawn/combat/decor/structure/nether/end/endboss/redstone/save/net/render），当前全绿 |
+| 测试 | `npm test` = vitest（光照/碰撞/生成/存档/资源包/音效）+ **21 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / sound / nether / end / endboss / redstone / save / net / render / view / world / settings / recipebook，当前全绿；`npm run audit:tasks` 自检锚点文档 |
 
 下一步的大头（队列与 TASKS.md 都能看到）：含水层、大矿脉、贪心网格化 + 网格化移入 Worker、
 生存机制（生命/饥饿/摔落）、生物 AI 与生成、结构生成、红石、存档（IndexedDB）与联机。
@@ -142,7 +143,8 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 npm run dev         # 开发服务器
 npm run typecheck   # tsc --noEmit（提交前必过）
 npm run build       # 类型检查 + 生产构建
-npm test            # 18 套离线测试（含 decor/structure/nether/end/redstone/save/net）
+npm test            # 21 套离线测试（含 decor/structure/nether/end/redstone/save/net/render/view/world/settings/recipebook）
+npm run audit:tasks # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats   # 地形生成统计（耗时/洞穴占比/矿石产量）
 npm run agent:setup # 跨机器自检
 ```
