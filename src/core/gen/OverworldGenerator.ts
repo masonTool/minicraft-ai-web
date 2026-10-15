@@ -88,6 +88,8 @@ export class OverworldGenerator {
   // 复用缓冲区，避免每次生成都重新分配
   private readonly climateGrid = new Float32Array(GRID_XZ * GRID_XZ * CHANNELS);
   private readonly densityGrid = new Float32Array(GRID_XZ * GRID_XZ * GRID_Y);
+  /** 粗网格节点的地表高度缓存（地物/结构会反复查询同一片区域） */
+  private readonly surfaceYCache = new Map<number, number>();
 
   constructor(seed: number) {
     const random = new Random(seed);
@@ -188,6 +190,116 @@ export class OverworldGenerator {
         depth: 0,
         weirdness: this.ridges.getValue(x, 0, z),
       }),
+    );
+  }
+
+  /**
+   * 某个**粗网格节点**的地表高度（密度场在该节点上的零点）。
+   *
+   * ⚠️ 不能对解析式直接求根：解析式给的是"该点自己的零点"，而真实地形是在
+   * **粗网格的 Y 层上取值再线性插值**出来的（Y 层间隔 8 格）。detail 三维噪声
+   * 在 8 格内的起伏会被线性插值抹平，两者实测能差几十格。
+   * 因此这里必须在粗网格的 Y 层上找"最上面那个密度 > 0 的层"。
+   *
+   * 性能：解析式先给一个粗估高度 y_est，从 y_est + 48 那一层往下扫（detail 的
+   * 量级决定了真实零点不会高出这个上界太多），通常扫几层就命中；
+   * 万一没命中再从最顶层完整扫一遍兜底。
+   */
+  private nodeSurfaceY(x: number, z: number): number {
+    const key = ((x + 0x4000) * 0x10000 + (z + 0x4000)) | 0;
+    const cached = this.surfaceYCache.get(key);
+    if (cached !== undefined) return cached;
+
+    // 复用 climateGrid 的第 0 槽位：地物装饰发生在 generate() 全部结束之后
+    this.sampleClimate(x, z, 0);
+    const offset = this.offsetSpline.apply(this.climateGrid[0]!);
+    const factor = this.factorSpline.apply(this.climateGrid[1]!);
+    const jaggedness = this.jaggednessSpline.apply(this.climateGrid[1]!);
+    const pv = peaksAndValleys(this.climateGrid[2]!);
+
+    let surface = SEA_LEVEL + offset * 96 + pv * factor * 40;
+    if (jaggedness > 0.001) surface += jaggedness * Math.abs(this.ridgeNoise.getValue(x, 0, z)) * 46;
+    const spread = (0.5 + factor * 0.85) * 26;
+    let estimate = surface;
+    for (let i = 0; i < 2; i++) estimate = surface + this.detail3d.getValue(x, estimate, z) * spread;
+
+    const densityAt = (gy: number): number => this.densityAt(x, WORLD_MIN_Y + gy * CELL_Y, z, 0);
+
+    const startLevel = Math.min(GRID_Y - 2, Math.max(0, Math.ceil((estimate + 48 - WORLD_MIN_Y) / CELL_Y)));
+    let found = -1;
+    for (let gy = startLevel; gy >= 0; gy--) {
+      if (densityAt(gy) > 0) {
+        found = gy;
+        break;
+      }
+    }
+    if (found < 0) {
+      for (let gy = GRID_Y - 2; gy >= 0; gy--) {
+        if (densityAt(gy) > 0) {
+          found = gy;
+          break;
+        }
+      }
+    }
+    if (found < 0) return SEA_LEVEL;
+
+    const d0 = densityAt(found);
+    const d1 = densityAt(found + 1);
+    const y0 = WORLD_MIN_Y + found * CELL_Y;
+    // 密度场在 Y 上并非严格单调（detail 噪声会造出局部起伏），t 需要夹紧
+    const t = d0 === d1 ? 0 : Math.min(1, Math.max(0, d0 / (d0 - d1)));
+    const y = y0 + t * CELL_Y;
+
+    if (this.surfaceYCache.size > 16384) this.surfaceYCache.clear();
+    this.surfaceYCache.set(key, y);
+    return y;
+  }
+
+  /**
+   * 该列的近似地表高度（世界 Y）。
+   *
+   * 为什么需要它：地物（树、花）与结构（村庄、矿井）的落点必须**只依赖世界坐标**，
+   * 否则同一棵树在相邻两个区块里会被算到不同高度，跨区块的树冠就会错位。
+   *
+   * ⚠️ 关键点：地形是**在 4×8×4 的粗网格上采样密度再做三线性插值**得到的，
+   * 所以不能直接对该列的解析式求根——两者能差出 90 多格（实测）。
+   * 正确做法与网格化一致：在周围 4 个粗网格节点上求零点，再按位置双线性插值。
+   * 因为 density 对 y 是一次函数（斜率恒为 -1/26），"先插值密度再求根"与
+   * "先求根再插值高度"完全等价，所以这样做既便宜（4 次采样）又准确。
+   */
+  surfaceY(x: number, z: number): number {
+    const gx = Math.floor(x / CELL_XZ) * CELL_XZ;
+    const gz = Math.floor(z / CELL_XZ) * CELL_XZ;
+    const tx = (x - gx) / CELL_XZ;
+    const tz = (z - gz) / CELL_XZ;
+
+    const h00 = this.nodeSurfaceY(gx, gz);
+    const h10 = this.nodeSurfaceY(gx + CELL_XZ, gz);
+    const h01 = this.nodeSurfaceY(gx, gz + CELL_XZ);
+    const h11 = this.nodeSurfaceY(gx + CELL_XZ, gz + CELL_XZ);
+
+    const top = h00 + (h10 - h00) * tx;
+    const bottom = h01 + (h11 - h01) * tx;
+    return Math.round(top + (bottom - top) * tz);
+  }
+
+  /**
+   * 该列的群系（含海陆判定：地表低于海平面时按海洋群系处理）。
+   * 供地物与结构使用；与 `applySurface` 里的判定完全同一套逻辑。
+   */
+  columnBiome(x: number, z: number): BiomeDef {
+    const raw = this.climateAt(x, z);
+    return biomeForColumn(
+      {
+        temperature: raw.temperature,
+        humidity: raw.humidity,
+        continentalness: raw.continent,
+        erosion: raw.erosion,
+        depth: 0,
+        weirdness: raw.weirdness,
+      },
+      this.surfaceY(x, z),
+      SEA_LEVEL,
     );
   }
 
