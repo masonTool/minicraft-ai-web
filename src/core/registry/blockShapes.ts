@@ -26,6 +26,8 @@ export type LocalBox = readonly [number, number, number, number, number, number]
 
 const FULL: LocalBox = [0, 0, 0, 1, 1, 1];
 const HALF_BOTTOM: LocalBox = [0, 0, 0, 1, 0.5, 1];
+/** 仙人掌：原版四周各内缩 1 像素（15/16 宽），碰撞与渲染一致 */
+const CACTUS_BOX: LocalBox = [0.0625, 0, 0.0625, 0.9375, 1, 0.9375];
 
 /** 栅栏/墙的连接判定回调：该方向是否有可连接的方块 */
 export type ConnectQuery = (facing: Facing) => boolean;
@@ -102,9 +104,12 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       ];
     case 'door':
       return [doorBox(state)];
+    case 'cactus':
+      return [CACTUS_BOX];
     case 'torch':
     case 'ladder':
-      // 火把与梯子没有碰撞体积
+    case 'cross':
+      // 火把、梯子与植物都没有碰撞体积（植物可以穿过去，与原版一致）
       return [];
     default:
       return [FULL];
@@ -172,6 +177,11 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       return torchBoxes(state);
     case 'ladder':
       return ladderBoxes(state);
+    case 'cactus':
+      return [CACTUS_BOX];
+    // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
+    case 'cross':
+      return [];
     default:
       return [FULL];
   }

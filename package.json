@@ -23,7 +23,8 @@
     "test:mob": "esbuild tools/mob-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mob-test.mjs --log-level=error && node .tmp/mob-test.mjs",
     "test:spawn": "esbuild tools/spawn-test.ts --bundle --platform=node --format=esm --outfile=.tmp/spawn-test.mjs --log-level=error && node .tmp/spawn-test.mjs",
     "test:combat": "esbuild tools/combat-test.ts --bundle --platform=node --format=esm --outfile=.tmp/combat-test.mjs --log-level=error && node .tmp/combat-test.mjs",
-    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer && npm run test:ore && npm run test:mesh && npm run test:survival && npm run test:mob && npm run test:spawn && npm run test:combat"
+    "test:decor": "esbuild tools/decor-test.ts --bundle --platform=node --format=esm --outfile=.tmp/decor-test.mjs --log-level=error && node .tmp/decor-test.mjs",
+    "test": "npm run test:inventory && npm run test:crafting && npm run test:furnace && npm run test:entity && npm run test:shapes && npm run test:biome && npm run test:aquifer && npm run test:ore && npm run test:mesh && npm run test:survival && npm run test:mob && npm run test:spawn && npm run test:combat && npm run test:decor"
   },
   "dependencies": {
     "three": "^0.186.1"

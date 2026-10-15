@@ -386,6 +386,49 @@ function emitFace(
   buf.idx.push(vertexBase, vertexBase + 1, vertexBase + 2, vertexBase + 2, vertexBase + 1, vertexBase + 3);
 }
 
+/**
+ * 植物（十字形状）：两片沿方块对角线竖立的薄面。
+ *
+ * 为什么不用盒子：草、花、蘑菇都是"两张交叉的贴图"，用盒子会渲染成实心的；
+ * 这里直接输出两片四边形，并且**正反两面都输出**——从背面看过去必须可见，
+ * 而且植物是双面可见的（原版用 cull=false 做到这一点，这里用反向绕序实现）。
+ */
+function emitCross(e: EmitContext, x: number, y: number, z: number, worldY: number): void {
+  const { buf, def, atlas, ctx, originX, originZ } = e;
+  const [tileU, tileV] = atlas.tileOrigin(def.tiles[2]);
+  const sky = ctx.getSkyLight(originX + x, worldY, originZ + z);
+  const blk = ctx.getBlockLight(originX + x, worldY, originZ + z);
+
+  // 两片面对角线摆放，四边内缩 1/16，避免与相邻方块的面共面导致闪烁
+  const planes: readonly (readonly [number, number, number, number])[] = [
+    [0.0625, 0.0625, 0.9375, 0.9375],
+    [0.0625, 0.9375, 0.9375, 0.0625],
+  ];
+
+  for (const [x0, z0, x1, z1] of planes) {
+    const vertexBase = buf.pos.length / 3;
+    // 顶点顺序：左下 → 右下 → 右上 → 左上（贴图 v=0 在顶部，与图集绘制方向一致）
+    const corners: readonly (readonly [number, number, number])[] = [
+      [x0, 0, z0],
+      [x1, 0, z1],
+      [x1, 1, z1],
+      [x0, 1, z0],
+    ];
+    for (let i = 0; i < 4; i++) {
+      const corner = corners[i]!;
+      buf.pos.push(x + corner[0], y + corner[1], z + corner[2]);
+      buf.uv.push(i === 1 || i === 2 ? 1 : 0, i >= 2 ? 0 : 1);
+      buf.tile.push(tileU, tileV);
+      // 植物不吃 AO，也不做方向性明暗，直接取所在格的平滑光照（与原版一致）
+      buf.light.push(sky / 15, blk / 15);
+      buf.shade.push(1);
+    }
+    buf.idx.push(vertexBase, vertexBase + 1, vertexBase + 2, vertexBase, vertexBase + 2, vertexBase + 3);
+    // 反面：顶点顺序反过来，法线朝另一侧
+    buf.idx.push(vertexBase + 2, vertexBase + 1, vertexBase, vertexBase + 3, vertexBase + 2, vertexBase);
+  }
+}
+
 /** 贪心合并后的大四边形：4 个顶点共享同一份光照 */
 function emitQuad(
   buf: LayerBuffer,
@@ -614,6 +657,12 @@ export function meshSection(
           originZ,
           sampleBlock,
         };
+
+        // ---- 植物（十字）：两片交叉薄面，单独走一条路径
+        if (def.shape === 'cross') {
+          emitCross(emit, x, y, z, worldY);
+          continue;
+        }
 
         // ---- 非完整方块：逐个盒子输出
         // 栅栏/墙的连接方向、楼梯的内角外角都按邻居**实时计算**，

@@ -27,7 +27,11 @@ export type BlockShape =
   | 'door'
   | 'torch'
   | 'ladder'
-  | 'pane';
+  | 'pane'
+  /** 十字交叉的两片薄面：草、花、蘑菇、甘蔗这类植物（无碰撞、双面可见） */
+  | 'cross'
+  /** 仙人掌：四面向内缩 1 像素，且不遮挡邻居（否则贴着的方块会被剔除掉一面） */
+  | 'cactus';
 
 /** 朝向对应的水平偏移（与 Facing 一一对应） */
 export const FACING_OFFSET: readonly (readonly [number, number])[] = [

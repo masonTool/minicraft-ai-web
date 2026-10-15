@@ -786,6 +786,369 @@ PAINTERS.item_brick = (x, y, rng) => {
   return [clamp255(150 * v), clamp255(84 * v), clamp255(66 * v), 255];
 };
 
+// ================================================================ 自然装饰贴图
+//
+// 植物贴图与方块贴图的关键差别：**背景必须透明**（alpha=0），
+// 十字形状只输出两片薄面，靠 alphaTest 把背景裁掉才能看到"草叶"的轮廓。
+
+/** 空像素（透明） */
+const EMPTY: RGBA = [0, 0, 0, 0];
+
+/**
+ * 草丛 / 蕨类：从底部往上长的若干条细叶，叶尖渐窄。
+ * @param rgb 叶色
+ * @param blades 叶片数量
+ * @param tall 叶片最大高度（像素）
+ */
+function bladesPainter(rgb: readonly [number, number, number], blades: number, tall = 12): Painter {
+  return (x, y, rng) => {
+    // 每列是否属于某个叶片，以及该叶片的顶端高度：用列号哈希，保证纵向连续
+    const column = hashString(`blade${x}`);
+    if (column % 100 >= (blades / 16) * 100) return EMPTY;
+    const top = 16 - ((column >> 3) % tall) - 3;
+    if (y < top) return EMPTY;
+    // 叶尖 1 像素宽，往下 2 像素宽（用 x 偏移的哈希模拟"叶片歪斜"）
+    const lean = (column >> 7) % 3;
+    const width = y < top + 2 ? 1 : 2;
+    const inBlade = x % width === lean % width;
+    if (!inBlade) return EMPTY;
+    const v = 1 + (rng() * 0.3 - 0.15);
+    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+  };
+}
+
+/**
+ * 花：底部一根 1 像素的茎 + 顶部一团花瓣（中心亮、边缘暗）。
+ * 花瓣形状用"到花心的距离 + 角度抖动"画，避免出现方块状的圆。
+ */
+function flowerPainter(stem: readonly [number, number, number], petal: readonly [number, number, number], salt: string): Painter {
+  return (x, y, rng) => {
+    // 茎：竖直 1 像素，从 y=15 到 y=7，略微弯曲
+    const stemX = 7 + (hashString(`${salt}stem`) % 2);
+    if (y >= 7 && Math.abs(x - stemX) <= 0.5) {
+      const v = 1 + (rng() * 0.16 - 0.08);
+      return [clamp255(stem[0] * v), clamp255(stem[1] * v), clamp255(stem[2] * v), 255];
+    }
+    // 茎上的一片小叶
+    if (y >= 10 && y <= 11 && (x === stemX - 2 || x === stemX + 2)) {
+      return [clamp255(stem[0] * 0.9), clamp255(stem[1] * 1.05), clamp255(stem[2] * 0.85), 255];
+    }
+    // 花瓣：中心 (7.5, 4)，半径随角度抖动
+    const dx = x - 7.5;
+    const dy = y - 4.5;
+    const distance = Math.hypot(dx, dy);
+    const angle = Math.round((Math.atan2(dy, dx) * 8) / Math.PI);
+    const radius = 2.6 + (hashString(`${salt}${angle}`) % 40) / 40;
+    if (distance > radius) return EMPTY;
+    const core = distance < 1.2;
+    const shade = core ? 1.15 : 0.92 + 0.3 * (1 - distance / radius);
+    const jitter = rng() * 14 - 7;
+    return [
+      clamp255(petal[0] * shade + jitter),
+      clamp255(petal[1] * shade + jitter),
+      clamp255(petal[2] * shade + jitter),
+      255,
+    ];
+  };
+}
+
+/**
+ * 蘑菇：下半部一根浅色菌柄，上半部一顶圆伞（伞沿比伞顶暗）。
+ */
+function mushroomPainter(cap: readonly [number, number, number], stem: readonly [number, number, number], salt: string): Painter {
+  return (x, y, rng) => {
+    // 菌伞：半椭圆，中心 (7.5, 6)，横向半径 5、纵向半径 4
+    const dx = (x - 7.5) / 5;
+    const dy = (y - 6.5) / 3.6;
+    const inCap = y <= 7 && dx * dx + dy * dy <= 1;
+    if (inCap) {
+      const rim = dx * dx + dy * dy > 0.72;
+      const shade = rim ? 0.82 : 1.06;
+      const spot = hashString(`${salt}spot${x},${y}`) % 17 === 0;
+      const v = shade + (rng() * 0.12 - 0.06);
+      const s = spot ? 1.5 : 1;
+      return [clamp255(cap[0] * v * s), clamp255(cap[1] * v * s), clamp255(cap[2] * v * s), 255];
+    }
+    // 菌柄：两像素宽，位于中央
+    if (y > 7 && Math.abs(x - 7.5) < 1.5) {
+      const v = 1 + (rng() * 0.1 - 0.05);
+      return [clamp255(stem[0] * v), clamp255(stem[1] * v), clamp255(stem[2] * v), 255];
+    }
+    return EMPTY;
+  };
+}
+
+/** 甘蔗 / 竹子：若干根竖直的秆，秆上有节点色带（竹子更细更青） */
+function stalkPainter(rgb: readonly [number, number, number], stalks: number, nodeColor: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const column = hashString(`stalk${x}`) % stalks;
+    if (column !== 0) return EMPTY;
+    // 节点：每 5 像素一条横向色带
+    const node = y % 5 === 0;
+    const base = node ? nodeColor : rgb;
+    const v = 1 + (rng() * 0.14 - 0.07);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+  };
+}
+
+/** 枯木：几根没有叶子的枯枝 */
+const DEAD_BUSH_PAINTER: Painter = (x, y, rng) => {
+  const column = hashString(`bush${x}`);
+  if (column % 100 >= 43) return EMPTY;
+  const top = 4 + (column >> 4) % 8;
+  if (y < top) return EMPTY;
+  const v = 0.72 + (rng() * 0.2 - 0.1) - (y / 16) * 0.18;
+  return [clamp255(150 * v), clamp255(126 * v), clamp255(72 * v), 255];
+};
+
+/** 南瓜 / 西瓜：竖向瓜棱（两侧压暗形成立体感）；salt 决定瓜棱的相位，两种瓜的纹路不重合 */
+function gourdSidePainter(rgb: readonly [number, number, number], salt: string): Painter {
+  const phase = hashString(salt) % 4;
+  return (x, y, rng) => {
+    const ridge = ((x + phase) % 4 === 3 ? -0.22 : 0) + Math.sin((x / 16) * Math.PI) * 0.12;
+    const v = 1 + ridge + (rng() * 0.08 - 0.04) + (y < 2 || y > 13 ? -0.12 : 0);
+    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+  };
+}
+
+/** 瓜类顶面：中心略亮 + 果柄（南瓜顶有褐色柄） */
+function gourdTopPainter(rgb: readonly [number, number, number], stem: readonly [number, number, number] | null): Painter {
+  return (x, y, rng) => {
+    const distance = Math.hypot(x - 7.5, y - 7.5);
+    if (stem && distance < 2.2) {
+      const v = 1 + (rng() * 0.12 - 0.06);
+      return [clamp255(stem[0] * v), clamp255(stem[1] * v), clamp255(stem[2] * v), 255];
+    }
+    const radial = 1.08 - (distance / 11) * 0.16;
+    const v = radial + (rng() * 0.08 - 0.04);
+    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+  };
+}
+
+/** 仙人掌侧面：深绿底 + 竖向棱 + 稀疏白刺 */
+const CACTUS_SIDE_PAINTER: Painter = (x, y, rng) => {
+  const rib = x % 5 === 0 || x % 5 === 4 ? -0.16 : 0.06;
+  const v = 1 + rib + (rng() * 0.08 - 0.04);
+  if (hashString(`spike${x},${y}`) % 13 === 0) return [232, 236, 214, 255];
+  return [clamp255(58 * v), clamp255(126 * v), clamp255(50 * v), 255];
+};
+
+/** 仙人掌顶面：同心棱 + 中心略深 */
+const CACTUS_TOP_PAINTER: Painter = (x, y, rng) => {
+  const ring = Math.sin(Math.hypot(x - 7.5, y - 7.5) * 1.7) * 0.1;
+  const v = 1 + ring + (rng() * 0.07 - 0.035);
+  return [clamp255(62 * v), clamp255(132 * v), clamp255(54 * v), 255];
+};
+
+// ---- 海晶石家族：青绿色底 + 不同纹理组织
+const PRISMARINE_BASE: readonly [number, number, number] = [96, 168, 152];
+/** 海晶石：细密的颗粒 + 零星深色晶体 */
+const PRISMARINE_PAINTER: Painter = (x, y, rng) => {
+  const crystal = hashString(`prism${x >> 1},${y >> 1}`) % 11 === 0;
+  const v = crystal ? 0.78 : 1 + (rng() * 0.16 - 0.08);
+  return [clamp255(PRISMARINE_BASE[0] * v), clamp255(PRISMARINE_BASE[1] * v), clamp255(PRISMARINE_BASE[2] * v), 255];
+};
+/** 海晶石砖：整齐砌块 */
+const PRISMARINE_BRICKS_PAINTER = brickPainter([104, 176, 160]);
+/** 暗海晶石：更暗更均匀 */
+const DARK_PRISMARINE_PAINTER = layered(72, 5, 6, [0.92, 1.1, 1.02]);
+/** 海灯：明亮的方块 + 内部晶格（自发光 15，画得亮一些） */
+const SEA_LANTERN_PAINTER: Painter = (x, y, rng) => {
+  const cell = (x % 5 === 0 || y % 5 === 0) && Math.abs(x - 7.5) > 1;
+  const center = Math.hypot(x - 7.5, y - 7.5) < 2.4;
+  const v = (cell ? 0.86 : 1.14) + (center ? 0.14 : 0) + (rng() * 0.08 - 0.04);
+  return [clamp255(196 * v), clamp255(232 * v), clamp255(222 * v), 255];
+};
+
+// ---- 下界方块
+/** 下界岩：暗红底 + 肉瘤状皴裂 */
+const NETHERRACK_PAINTER: Painter = (x, y, rng) => {
+  const key = (y >> 1) * 8 + (x >> 1);
+  const bump = (hashString(`nr${key}`) % 100) / 100;
+  const v = 0.86 + bump * 0.34 + (rng() * 0.1 - 0.05);
+  return [clamp255(112 * v), clamp255(52 * v), clamp255(52 * v), 255];
+};
+/** 灵魂沙：灰褐底 + 一张张"人脸"似的孔洞 */
+const SOUL_SAND_PAINTER: Painter = (x, y, rng) => {
+  const hole = hashString(`ss${x >> 2},${y >> 2}`) % 3 === 0;
+  const inner = x % 4 === 1 && y % 4 >= 1 && y % 4 <= 2;
+  if (hole && inner) {
+    const v = 0.52 + rng() * 0.08;
+    return [clamp255(96 * v), clamp255(84 * v), clamp255(68 * v), 255];
+  }
+  const v = 1 + (rng() * 0.12 - 0.06);
+  return [clamp255(114 * v), clamp255(96 * v), clamp255(76 * v), 255];
+};
+/** 灵魂土：比灵魂沙更均匀的灰褐色 */
+const SOUL_SOIL_PAINTER = layered(96, 6, 7, [1.06, 0.98, 0.84]);
+/** 玄武岩侧面：竖直的柱状节理 */
+const BASALT_SIDE_PAINTER: Painter = (x, y, rng) => {
+  const column = x % 4 === 3 ? -0.2 : 0.04;
+  const v = 1 + column + (rng() * 0.1 - 0.05) + Math.sin(y * 0.7) * 0.03;
+  return [clamp255(66 * v), clamp255(64 * v), clamp255(70 * v), 255];
+};
+/** 玄武岩顶面：同心环状的节理截面 */
+const BASALT_TOP_PAINTER: Painter = (x, y, rng) => {
+  const ring = Math.sin(Math.hypot(x - 7.5, y - 7.5) * 1.1) * 0.14;
+  const v = 1 + ring + (rng() * 0.1 - 0.05);
+  return [clamp255(78 * v), clamp255(76 * v), clamp255(84 * v), 255];
+};
+const SMOOTH_BASALT_PAINTER = layered(62, 2, 4);
+/** 黑石：接近纯黑的玄武质岩石 + 细密裂纹 */
+const BLACKSTONE_PAINTER: Painter = (x, y, rng) => {
+  const crack = hashString(`bs${x},${y}`) % 19 === 0;
+  const v = 1 + (rng() * 0.12 - 0.06) + (crack ? -0.28 : 0);
+  return [clamp255(38 * v), clamp255(32 * v), clamp255(36 * v), 255];
+};
+/** 岩浆块：暗色底 + 明亮裂纹（自发光 3） */
+const MAGMA_PAINTER: Painter = (x, y, rng) => {
+  const key = (y >> 1) * 8 + (x >> 1);
+  const glow = (hashString(`magma${key}`) % 100) / 100;
+  if (glow > 0.62) {
+    const v = 0.9 + rng() * 0.3;
+    return [clamp255(238 * v), clamp255(126 * v), clamp255(36 * v), 255];
+  }
+  const v = 0.9 + rng() * 0.24;
+  return [clamp255(66 * v), clamp255(30 * v), clamp255(24 * v), 255];
+};
+/** 菌岩顶面：下界岩上长满一层彩色"苔" */
+function nyliumPainter(rgb: readonly [number, number, number], salt: string): Painter {
+  const base = NETHERRACK_PAINTER;
+  return (x, y, rng) => {
+    const coverage = hashString(`${salt}${x >> 1},${y >> 1}`) % 100;
+    if (coverage < 68) {
+      const v = 1 + (rng() * 0.22 - 0.11);
+      return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+    }
+    return base(x, y, rng);
+  };
+}
+/** 菌岩侧面：上半是菌苔、下半是下界岩 */
+function nyliumSidePainter(rgb: readonly [number, number, number], salt: string): Painter {
+  const top = nyliumPainter(rgb, salt);
+  const base = NETHERRACK_PAINTER;
+  return (x, y, rng) => (y < 5 + (hashString(`nys${x}`) % 3) ? top(x, y, rng) : base(x, y, rng));
+}
+/** 菌柄侧面：竖向纤维（比主世界原木更"肉质"） */
+function stemSidePainter(rgb: readonly [number, number, number]): Painter {
+  return (x, _y, rng) => {
+    const fiber = Math.sin(x * 1.3) * 0.1;
+    const v = 1 + fiber + (rng() * 0.14 - 0.07);
+    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+  };
+}
+/** 菌菇：一根细柄 + 一顶扁伞（比主世界蘑菇更鲜艳） */
+function fungusPainter(cap: readonly [number, number, number], stem: readonly [number, number, number], salt: string): Painter {
+  return (x, y, rng) => {
+    if (y >= 11 && Math.abs(x - 7.5) < 1.5) {
+      const v = 1 + (rng() * 0.1 - 0.05);
+      return [clamp255(stem[0] * v), clamp255(stem[1] * v), clamp255(stem[2] * v), 255];
+    }
+    const dx = (x - 7.5) / 6;
+    const dy = (y - 8) / 4.4;
+    if (dx * dx + dy * dy > 1) return EMPTY;
+    const rim = dx * dx + dy * dy > 0.62;
+    const spot = hashString(`${salt}f${x},${y}`) % 15 === 0;
+    const v = (rim ? 0.84 : 1.1) + (rng() * 0.1 - 0.05);
+    const s = spot ? 1.45 : 1;
+    return [clamp255(cap[0] * v * s), clamp255(cap[1] * v * s), clamp255(cap[2] * v * s), 255];
+  };
+}
+/** 疣块：成团的肉质凸起 */
+function wartBlockPainter(rgb: readonly [number, number, number], salt: string): Painter {
+  return (x, y, rng) => {
+    const key = (y >> 1) * 8 + (x >> 1);
+    const bump = (hashString(`${salt}w${key}`) % 100) / 100;
+    const v = 0.84 + bump * 0.4 + (rng() * 0.1 - 0.05);
+    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+  };
+}
+/** 菌光体：橙色发光的肉质团 */
+const SHROOMLIGHT_PAINTER: Painter = (x, y, rng) => {
+  const key = (y >> 1) * 8 + (x >> 1);
+  const bump = (hashString(`sl${key}`) % 100) / 100;
+  const v = 0.92 + bump * 0.34 + (rng() * 0.08 - 0.04);
+  return [clamp255(240 * v), clamp255(152 * v), clamp255(78 * v), 255];
+};
+/** 远古残骸：深褐底 + 紫色金属纹路 */
+const ANCIENT_DEBRIS_PAINTER: Painter = (x, y, rng) => {
+  const vein = hashString(`ad${x},${y}`) % 9 === 0 || hashString(`ad${x >> 1},${y}`) % 7 === 0;
+  if (vein) {
+    const v = 1 + (rng() * 0.16 - 0.08);
+    return [clamp255(148 * v), clamp255(112 * v), clamp255(120 * v), 255];
+  }
+  const v = 1 + (rng() * 0.16 - 0.08);
+  return [clamp255(78 * v), clamp255(56 * v), clamp255(52 * v), 255];
+};
+/** 下界苗 / 菌索：细小的红色或青色枝蔓 */
+function rootsPainter(rgb: readonly [number, number, number], salt: string): Painter {
+  return (x, y, rng) => {
+    const column = hashString(`${salt}r${x}`);
+    if (column % 100 >= 46) return EMPTY;
+    const top = 3 + (column >> 4) % 7;
+    if (y < top) return EMPTY;
+    const v = 1 + (rng() * 0.24 - 0.12);
+    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+  };
+}
+
+PAINTERS.short_grass = bladesPainter([104, 158, 66], 7, 12);
+PAINTERS.fern = bladesPainter([86, 142, 62], 9, 14);
+PAINTERS.dandelion = flowerPainter([92, 148, 60], [250, 226, 74], 'dand');
+PAINTERS.poppy = flowerPainter([92, 148, 60], [214, 54, 48], 'poppy');
+PAINTERS.blue_orchid = flowerPainter([92, 148, 60], [58, 168, 208], 'orchid');
+PAINTERS.oxeye_daisy = flowerPainter([92, 148, 60], [242, 242, 236], 'daisy');
+PAINTERS.cornflower = flowerPainter([92, 148, 60], [86, 108, 214], 'corn');
+PAINTERS.red_mushroom = mushroomPainter([196, 44, 44], [236, 226, 216], 'rm');
+PAINTERS.brown_mushroom = mushroomPainter([154, 112, 78], [222, 212, 198], 'bm');
+PAINTERS.sugar_cane = stalkPainter([142, 190, 96], 6, [166, 206, 118]);
+PAINTERS.bamboo = stalkPainter([122, 176, 66], 8, [148, 198, 92]);
+PAINTERS.dead_bush = DEAD_BUSH_PAINTER;
+PAINTERS.pumpkin_side = gourdSidePainter([226, 132, 32], 'pumpkin');
+PAINTERS.pumpkin_top = gourdTopPainter([216, 122, 28], [128, 94, 48]);
+PAINTERS.melon_side = gourdSidePainter([124, 168, 46], 'melon');
+PAINTERS.melon_top = gourdTopPainter([116, 158, 42], null);
+PAINTERS.cactus_side = CACTUS_SIDE_PAINTER;
+PAINTERS.cactus_top = CACTUS_TOP_PAINTER;
+
+PAINTERS.prismarine = PRISMARINE_PAINTER;
+PAINTERS.prismarine_bricks = PRISMARINE_BRICKS_PAINTER;
+PAINTERS.dark_prismarine = DARK_PRISMARINE_PAINTER;
+PAINTERS.sea_lantern = SEA_LANTERN_PAINTER;
+
+PAINTERS.netherrack = NETHERRACK_PAINTER;
+PAINTERS.soul_sand = SOUL_SAND_PAINTER;
+PAINTERS.soul_soil = SOUL_SOIL_PAINTER;
+PAINTERS.basalt_side = BASALT_SIDE_PAINTER;
+PAINTERS.basalt_top = BASALT_TOP_PAINTER;
+PAINTERS.smooth_basalt = SMOOTH_BASALT_PAINTER;
+PAINTERS.blackstone = BLACKSTONE_PAINTER;
+PAINTERS.magma = MAGMA_PAINTER;
+PAINTERS.crimson_nylium = nyliumPainter([132, 40, 44], 'crim');
+PAINTERS.crimson_nylium_side = nyliumSidePainter([132, 40, 44], 'crims');
+PAINTERS.warped_nylium = nyliumPainter([44, 132, 124], 'warp');
+PAINTERS.warped_nylium_side = nyliumSidePainter([44, 132, 124], 'warps');
+PAINTERS.crimson_stem_side = stemSidePainter([108, 48, 60]);
+PAINTERS.crimson_stem_top = logTopPainter([124, 62, 72]);
+PAINTERS.warped_stem_side = stemSidePainter([54, 104, 100]);
+PAINTERS.warped_stem_top = logTopPainter([68, 126, 120]);
+PAINTERS.crimson_planks = planksPainter([112, 54, 66]);
+PAINTERS.warped_planks = planksPainter([60, 112, 108]);
+PAINTERS.crimson_fungus = fungusPainter([196, 62, 62], [226, 196, 186], 'cf');
+PAINTERS.warped_fungus = fungusPainter([62, 152, 156], [206, 214, 196], 'wf');
+PAINTERS.nether_wart_block = wartBlockPainter([148, 30, 42], 'nw');
+PAINTERS.warped_wart_block = wartBlockPainter([40, 122, 116], 'ww');
+PAINTERS.shroomlight = SHROOMLIGHT_PAINTER;
+PAINTERS.nether_bricks = brickPainter([52, 26, 32]);
+PAINTERS.nether_quartz_ore = oreTexture(NETHERRACK_PAINTER, [
+  [236, 232, 226],
+  [206, 200, 194],
+], 0.28, 'quartz');
+PAINTERS.ancient_debris = ANCIENT_DEBRIS_PAINTER;
+PAINTERS.crimson_roots = rootsPainter([178, 48, 58], 'cr');
+PAINTERS.warped_roots = rootsPainter([54, 168, 160], 'wr');
+PAINTERS.nether_sprouts = rootsPainter([78, 156, 132], 'ns');
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

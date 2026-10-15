@@ -10,7 +10,7 @@
  * 工具等级沿用原版：0 木 / 1 石 / 2 铁 / 3 钻石 / 4 下界合金。
  */
 
-import { Block, blockDef, woolId } from './blocks.ts';
+import { Block, Wood, blockDef, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 
 export const MAX_STACK = 64;
@@ -212,6 +212,48 @@ const NATURAL = new Set<number>([
 
 const FUNCTIONAL = new Set<number>([Block.CRAFTING_TABLE, Block.FURNACE, Block.CHEST, Block.GLOWSTONE]);
 
+/** 自然装饰与下界方块（创造物品栏的"自然"分类） */
+const DECORATION_AND_NETHER = new Set<number>([
+  Block.SHORT_GRASS,
+  Block.FERN,
+  Block.DANDELION,
+  Block.POPPY,
+  Block.BLUE_ORCHID,
+  Block.OXEYE_DAISY,
+  Block.CORNFLOWER,
+  Block.RED_MUSHROOM,
+  Block.BROWN_MUSHROOM,
+  Block.SUGAR_CANE,
+  Block.PUMPKIN,
+  Block.MELON,
+  Block.CACTUS,
+  Block.DEAD_BUSH,
+  Block.BAMBOO,
+  Block.NETHERRACK,
+  Block.SOUL_SAND,
+  Block.SOUL_SOIL,
+  Block.BASALT,
+  Block.SMOOTH_BASALT,
+  Block.BLACKSTONE,
+  Block.MAGMA_BLOCK,
+  Block.CRIMSON_NYLIUM,
+  Block.WARPED_NYLIUM,
+  Block.CRIMSON_STEM,
+  Block.WARPED_STEM,
+  Block.CRIMSON_PLANKS,
+  Block.WARPED_PLANKS,
+  Block.CRIMSON_FUNGUS,
+  Block.WARPED_FUNGUS,
+  Block.NETHER_WART_BLOCK,
+  Block.WARPED_WART_BLOCK,
+  Block.CRIMSON_ROOTS,
+  Block.WARPED_ROOTS,
+  Block.NETHER_SPROUTS,
+  Block.PRISMARINE,
+  Block.PRISMARINE_BRICKS,
+  Block.DARK_PRISMARINE,
+]);
+
 /** 矿石与材料：所有矿石（含深板岩变体）与加工产物 */
 const ORES = new Set<number>([
   Block.COAL_ORE,
@@ -245,6 +287,11 @@ const ORES = new Set<number>([
   Item.STICK,
   Item.BRICK,
   Item.CLAY_BALL,
+  Block.NETHER_QUARTZ_ORE,
+  Block.ANCIENT_DEBRIS,
+  Block.SHROOMLIGHT,
+  Block.SEA_LANTERN,
+  Block.NETHER_BRICKS,
 ]);
 
 /** 16 色羊毛 + 16 种染料 */
@@ -261,6 +308,7 @@ export function categoryOf(itemId: number): ItemCategory {
   if (ORES.has(itemId)) return 'ores';
   if (BUILDING.has(itemId)) return 'building';
   if (NATURAL.has(itemId)) return 'natural';
+  if (DECORATION_AND_NETHER.has(itemId)) return 'natural';
   return 'ores';
 }
 
@@ -307,7 +355,13 @@ const NO_DROP = new Set<number>([
   Block.GLASS,
   Block.ICE,
   Block.PACKED_ICE,
+  // 草与蕨类：原版徒手破坏不掉落任何东西（只有用剪刀才会掉落草方块本身）
+  Block.SHORT_GRASS,
+  Block.FERN,
 ]);
+
+// 6 种木材的树叶都不掉落（原版徒手破坏树叶只偶尔掉树苗与苹果，这里简化为不掉落）
+for (const ids of Object.values(Wood)) NO_DROP.add(ids.leaves);
 
 /** 与"掉落自身"不同的特例 */
 const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([

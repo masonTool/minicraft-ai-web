@@ -461,6 +461,127 @@ const FUNCTIONAL_SHAPED_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 自然装饰（地物）
+//
+// 植物统一用 `cross` 形状（两片交叉薄面、无碰撞），仙人掌用 `cactus` 形状（内缩 1 像素的立方体）。
+// 它们都是**不遮挡**的（opaque=false）——否则长在草方块上的花会把脚下的草地剔掉一面。
+
+export const DECORATION_ID_START = 203;
+
+/**
+ * 植物方块。
+ * @param id 方块 id
+ * @param name 名称（不含命名空间）
+ * @param tile 贴图名（三面同一个）
+ */
+function plantSpec(id: number, name: string, tile: string): BlockSpec {
+  return {
+    id,
+    name: `minecraft:${name}`,
+    tiles: [tile, tile, tile],
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+    shape: 'cross',
+  };
+}
+
+const DECORATION_SPECS: readonly BlockSpec[] = [
+  plantSpec(203, 'short_grass', 'short_grass'),
+  plantSpec(204, 'fern', 'fern'),
+  plantSpec(205, 'dandelion', 'dandelion'),
+  plantSpec(206, 'poppy', 'poppy'),
+  plantSpec(207, 'blue_orchid', 'blue_orchid'),
+  plantSpec(208, 'oxeye_daisy', 'oxeye_daisy'),
+  plantSpec(209, 'cornflower', 'cornflower'),
+  plantSpec(210, 'red_mushroom', 'red_mushroom'),
+  plantSpec(211, 'brown_mushroom', 'brown_mushroom'),
+  plantSpec(212, 'sugar_cane', 'sugar_cane'),
+  plantSpec(216, 'dead_bush', 'dead_bush'),
+  plantSpec(217, 'bamboo', 'bamboo'),
+  {
+    id: 213,
+    name: 'minecraft:pumpkin',
+    tiles: ['pumpkin_top', 'pumpkin_top', 'pumpkin_side'],
+  },
+  {
+    id: 214,
+    name: 'minecraft:melon',
+    tiles: ['melon_top', 'melon_top', 'melon_side'],
+  },
+  {
+    id: 215,
+    name: 'minecraft:cactus',
+    tiles: ['cactus_top', 'cactus_top', 'cactus_side'],
+    opaque: false,
+    lightOpacity: 0,
+    shape: 'cactus' as const,
+  },
+];
+
+/** 海晶石家族（海底神殿用） */
+const PRISMARINE_SPECS: readonly BlockSpec[] = [
+  { id: 218, name: 'minecraft:prismarine', tiles: ['prismarine', 'prismarine', 'prismarine'] },
+  { id: 219, name: 'minecraft:prismarine_bricks', tiles: ['prismarine_bricks', 'prismarine_bricks', 'prismarine_bricks'] },
+  { id: 220, name: 'minecraft:dark_prismarine', tiles: ['dark_prismarine', 'dark_prismarine', 'dark_prismarine'] },
+  {
+    id: 221,
+    name: 'minecraft:sea_lantern',
+    tiles: ['sea_lantern', 'sea_lantern', 'sea_lantern'],
+    light: 15,
+  },
+];
+
+// ---------------------------------------------------------------- 下界
+//
+// 下界方块全部走同一竖列 id，下界地形生成器按这些 id 直接写方块。
+// 菌柄（stem）与主世界原木结构一致，只是配色偏紫红 / 青蓝。
+
+const NETHER_SPECS: readonly BlockSpec[] = [
+  { id: 222, name: 'minecraft:netherrack', tiles: ['netherrack', 'netherrack', 'netherrack'] },
+  { id: 223, name: 'minecraft:soul_sand', tiles: ['soul_sand', 'soul_sand', 'soul_sand'] },
+  { id: 224, name: 'minecraft:soul_soil', tiles: ['soul_soil', 'soul_soil', 'soul_soil'] },
+  { id: 225, name: 'minecraft:basalt', tiles: ['basalt_top', 'basalt_top', 'basalt_side'] },
+  { id: 226, name: 'minecraft:smooth_basalt', tiles: ['smooth_basalt', 'smooth_basalt', 'smooth_basalt'] },
+  { id: 227, name: 'minecraft:blackstone', tiles: ['blackstone', 'blackstone', 'blackstone'] },
+  {
+    id: 228,
+    name: 'minecraft:magma_block',
+    tiles: ['magma', 'magma', 'magma'],
+    light: 3,
+  },
+  { id: 229, name: 'minecraft:crimson_nylium', tiles: ['crimson_nylium', 'netherrack', 'crimson_nylium_side'] },
+  { id: 230, name: 'minecraft:warped_nylium', tiles: ['warped_nylium', 'netherrack', 'warped_nylium_side'] },
+  { id: 231, name: 'minecraft:crimson_stem', tiles: ['crimson_stem_top', 'crimson_stem_top', 'crimson_stem_side'] },
+  { id: 232, name: 'minecraft:warped_stem', tiles: ['warped_stem_top', 'warped_stem_top', 'warped_stem_side'] },
+  { id: 233, name: 'minecraft:crimson_planks', tiles: ['crimson_planks', 'crimson_planks', 'crimson_planks'] },
+  { id: 234, name: 'minecraft:warped_planks', tiles: ['warped_planks', 'warped_planks', 'warped_planks'] },
+  plantSpec(235, 'crimson_fungus', 'crimson_fungus'),
+  plantSpec(236, 'warped_fungus', 'warped_fungus'),
+  { id: 237, name: 'minecraft:nether_wart_block', tiles: ['nether_wart_block', 'nether_wart_block', 'nether_wart_block'] },
+  {
+    id: 238,
+    name: 'minecraft:warped_wart_block',
+    tiles: ['warped_wart_block', 'warped_wart_block', 'warped_wart_block'],
+  },
+  {
+    id: 239,
+    name: 'minecraft:shroomlight',
+    tiles: ['shroomlight', 'shroomlight', 'shroomlight'],
+    light: 15,
+  },
+  { id: 240, name: 'minecraft:nether_bricks', tiles: ['nether_bricks', 'nether_bricks', 'nether_bricks'] },
+  {
+    id: 241,
+    name: 'minecraft:nether_quartz_ore',
+    tiles: ['nether_quartz_ore', 'nether_quartz_ore', 'nether_quartz_ore'],
+  },
+  { id: 242, name: 'minecraft:ancient_debris', tiles: ['ancient_debris', 'ancient_debris', 'ancient_debris'] },
+  plantSpec(243, 'crimson_roots', 'crimson_roots'),
+  plantSpec(244, 'warped_roots', 'warped_roots'),
+  plantSpec(245, 'nether_sprouts', 'nether_sprouts'),
+];
+
 /**
  * 全部方块定义。
  * ⚠️ 必须按 id 升序排列：BLOCKS 是按数组下标索引的，顺序错位会让 blockDef(id) 取到别的方块。
@@ -473,6 +594,9 @@ const SPECS: readonly BlockSpec[] = [
   ...GLASS_AND_STONE_SPECS,
   ...SHAPED_SPECS,
   ...FUNCTIONAL_SHAPED_SPECS,
+  ...DECORATION_SPECS,
+  ...PRISMARINE_SPECS,
+  ...NETHER_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -545,6 +669,55 @@ export const Block = {
   /** 大矿脉的伴生稀有方块 */
   RAW_COPPER_BLOCK: 201,
   RAW_IRON_BLOCK: 202,
+
+  // ---- 自然装饰（地物）
+  SHORT_GRASS: 203,
+  FERN: 204,
+  DANDELION: 205,
+  POPPY: 206,
+  BLUE_ORCHID: 207,
+  OXEYE_DAISY: 208,
+  CORNFLOWER: 209,
+  RED_MUSHROOM: 210,
+  BROWN_MUSHROOM: 211,
+  SUGAR_CANE: 212,
+  PUMPKIN: 213,
+  MELON: 214,
+  CACTUS: 215,
+  DEAD_BUSH: 216,
+  BAMBOO: 217,
+
+  // ---- 海晶石家族
+  PRISMARINE: 218,
+  PRISMARINE_BRICKS: 219,
+  DARK_PRISMARINE: 220,
+  SEA_LANTERN: 221,
+
+  // ---- 下界
+  NETHERRACK: 222,
+  SOUL_SAND: 223,
+  SOUL_SOIL: 224,
+  BASALT: 225,
+  SMOOTH_BASALT: 226,
+  BLACKSTONE: 227,
+  MAGMA_BLOCK: 228,
+  CRIMSON_NYLIUM: 229,
+  WARPED_NYLIUM: 230,
+  CRIMSON_STEM: 231,
+  WARPED_STEM: 232,
+  CRIMSON_PLANKS: 233,
+  WARPED_PLANKS: 234,
+  CRIMSON_FUNGUS: 235,
+  WARPED_FUNGUS: 236,
+  NETHER_WART_BLOCK: 237,
+  WARPED_WART_BLOCK: 238,
+  SHROOMLIGHT: 239,
+  NETHER_BRICKS: 240,
+  NETHER_QUARTZ_ORE: 241,
+  ANCIENT_DEBRIS: 242,
+  CRIMSON_ROOTS: 243,
+  WARPED_ROOTS: 244,
+  NETHER_SPROUTS: 245,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -714,6 +887,59 @@ for (let i = 0; i < DYE_COLORS.length; i++) {
   HARDNESS.set(stainedGlassPaneId(i), 0.3);
 }
 
+// 自然装饰：植物一律"一碰就掉"（硬度 0），南瓜/西瓜/仙人掌按原版
+for (const plant of [
+  Block.SHORT_GRASS,
+  Block.FERN,
+  Block.DANDELION,
+  Block.POPPY,
+  Block.BLUE_ORCHID,
+  Block.OXEYE_DAISY,
+  Block.CORNFLOWER,
+  Block.RED_MUSHROOM,
+  Block.BROWN_MUSHROOM,
+  Block.SUGAR_CANE,
+  Block.DEAD_BUSH,
+  Block.BAMBOO,
+  Block.CRIMSON_FUNGUS,
+  Block.WARPED_FUNGUS,
+  Block.CRIMSON_ROOTS,
+  Block.WARPED_ROOTS,
+  Block.NETHER_SPROUTS,
+]) {
+  HARDNESS.set(plant, 0);
+}
+HARDNESS.set(Block.PUMPKIN, 1);
+HARDNESS.set(Block.MELON, 1);
+HARDNESS.set(Block.CACTUS, 0.4);
+
+// 海晶石家族（原版都需要镐）
+HARDNESS.set(Block.PRISMARINE, 1.5);
+HARDNESS.set(Block.PRISMARINE_BRICKS, 1.5);
+HARDNESS.set(Block.DARK_PRISMARINE, 1.5);
+HARDNESS.set(Block.SEA_LANTERN, 0.3);
+
+// 下界方块
+HARDNESS.set(Block.NETHERRACK, 0.4);
+HARDNESS.set(Block.SOUL_SAND, 0.5);
+HARDNESS.set(Block.SOUL_SOIL, 0.5);
+HARDNESS.set(Block.BASALT, 1.25);
+HARDNESS.set(Block.SMOOTH_BASALT, 1.25);
+HARDNESS.set(Block.BLACKSTONE, 1.5);
+HARDNESS.set(Block.MAGMA_BLOCK, 0.5);
+HARDNESS.set(Block.CRIMSON_NYLIUM, 0.4);
+HARDNESS.set(Block.WARPED_NYLIUM, 0.4);
+HARDNESS.set(Block.CRIMSON_STEM, 2);
+HARDNESS.set(Block.WARPED_STEM, 2);
+HARDNESS.set(Block.CRIMSON_PLANKS, 2);
+HARDNESS.set(Block.WARPED_PLANKS, 2);
+HARDNESS.set(Block.NETHER_WART_BLOCK, 1);
+HARDNESS.set(Block.WARPED_WART_BLOCK, 1);
+HARDNESS.set(Block.SHROOMLIGHT, 1);
+HARDNESS.set(Block.NETHER_BRICKS, 2);
+HARDNESS.set(Block.NETHER_QUARTZ_ORE, 3);
+HARDNESS.set(Block.ANCIENT_DEBRIS, 30);
+
 /** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
 const HAND_HARVESTABLE = new Set<number>([
   Block.DIRT,
@@ -763,6 +989,48 @@ HAND_HARVESTABLE.add(GLASS_PANE_ID);
 for (let i = 0; i < DYE_COLORS.length; i++) {
   HAND_HARVESTABLE.add(stainedGlassId(i));
   HAND_HARVESTABLE.add(stainedGlassPaneId(i));
+}
+
+/**
+ * 自然装饰与下界方块里徒手可采集的部分。
+ * 海晶石家族、黑石、下界砖、石英矿、远古残骸都需要镐（原版），故意不加入。
+ */
+for (const id of [
+  Block.SHORT_GRASS,
+  Block.FERN,
+  Block.DANDELION,
+  Block.POPPY,
+  Block.BLUE_ORCHID,
+  Block.OXEYE_DAISY,
+  Block.CORNFLOWER,
+  Block.RED_MUSHROOM,
+  Block.BROWN_MUSHROOM,
+  Block.SUGAR_CANE,
+  Block.DEAD_BUSH,
+  Block.BAMBOO,
+  Block.PUMPKIN,
+  Block.MELON,
+  Block.CACTUS,
+  Block.NETHERRACK,
+  Block.SOUL_SAND,
+  Block.SOUL_SOIL,
+  Block.MAGMA_BLOCK,
+  Block.CRIMSON_NYLIUM,
+  Block.WARPED_NYLIUM,
+  Block.CRIMSON_STEM,
+  Block.WARPED_STEM,
+  Block.CRIMSON_PLANKS,
+  Block.WARPED_PLANKS,
+  Block.CRIMSON_FUNGUS,
+  Block.WARPED_FUNGUS,
+  Block.CRIMSON_ROOTS,
+  Block.WARPED_ROOTS,
+  Block.NETHER_SPROUTS,
+  Block.NETHER_WART_BLOCK,
+  Block.WARPED_WART_BLOCK,
+  Block.SHROOMLIGHT,
+]) {
+  HAND_HARVESTABLE.add(id);
 }
 
 export function blockHardness(id: number): number {
