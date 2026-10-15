@@ -39,6 +39,12 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
 
   // 黏土球 → 红砖
   { input: Item.CLAY_BALL, output: { id: Item.BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.3 },
+
+  // 生肉 → 熟肉（经验值取自原版：生肉 0.35）
+  { input: Item.BEEF, output: { id: Item.COOKED_BEEF, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
+  { input: Item.PORKCHOP, output: { id: Item.COOKED_PORKCHOP, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
+  { input: Item.MUTTON, output: { id: Item.COOKED_MUTTON, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
+  { input: Item.CHICKEN, output: { id: Item.COOKED_CHICKEN, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
 ];
 
 const RECIPE_BY_INPUT = new Map<number, SmeltingRecipe>(SMELTING_RECIPES.map((recipe) => [recipe.input, recipe]));

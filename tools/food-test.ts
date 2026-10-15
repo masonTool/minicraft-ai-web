@@ -1,0 +1,216 @@
+/**
+ * 食物与进食离线测试（B9 / B10 / I2 补完）
+ *
+ * 覆盖五块：
+ *  1. 数值表：饥饿点与"恢复饱和度"与原版 wiki 一致（修饰值 → 点数的换算是重点，
+ *     这两个数极容易写混，本轮就写错过一次）
+ *  2. 注册：每件食物都挂上了数值、有中文名；**物品 id 无重复**（挡住 id 撞车）
+ *  3. 可食性判定：饥饿满时普通食物不能吃，金苹果能吃
+ *  4. 获取途径：树叶概率掉苹果、西瓜块掉西瓜片、生肉进熔炉出熟肉、金苹果配方
+ *  5. 吃下去的效果：`PlayerStats.eat` 的封顶行为
+ *
+ * 说明：真正的"按住 1.6 秒才咽下去"状态机在 `main.ts` 里（依赖 DOM 与输入），
+ * 这里测的是它用到的全部纯函数：`canEat` / `saturationFrom` / 数值表 / 掉落与配方。
+ *
+ * 运行：npm run test:food
+ */
+
+import { Block, Wood } from '../src/core/registry/blocks.ts';
+import {
+  CREATIVE_ITEMS,
+  Item,
+  dropFor,
+  foodInfoById,
+  itemDef,
+  rareDropFor,
+} from '../src/core/registry/items.ts';
+import { EAT_SECONDS, FOOD_TABLE, canEat, saturationFrom } from '../src/core/registry/food.ts';
+import { itemLabel } from '../src/core/registry/itemNames.ts';
+import { MAX_FOOD, MAX_HEALTH, MAX_SATURATION, PlayerStats } from '../src/core/survival/PlayerStats.ts';
+import { SMELTING_RECIPES, smeltingRecipeFor } from '../src/core/crafting/Smelting.ts';
+import { matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
+
+let passed = 0;
+let failed = 0;
+
+function check(label: string, condition: boolean, detail = ''): void {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${label}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
+  }
+}
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
+
+function close(label: string, actual: number, expected: number, epsilon = 1e-9): void {
+  check(label, Math.abs(actual - expected) <= epsilon, `实际 ${actual}，期望 ${expected}`);
+}
+
+// ---------------------------------------------------------------- 1. 数值表
+
+console.log('\n[食物数值表：与原版对齐]');
+/** 原版 wiki 上的"饥饿点 / 恢复饱和度"（后者就是 `saturationFrom` 应该算出来的数） */
+const VANILLA: Record<string, readonly [number, number]> = {
+  apple: [4, 2.4],
+  golden_apple: [4, 9.6],
+  melon_slice: [2, 1.2],
+  beef: [3, 1.8],
+  porkchop: [3, 1.8],
+  mutton: [2, 1.2],
+  chicken: [2, 1.2],
+  rotten_flesh: [4, 0.8],
+  cooked_beef: [8, 12.8],
+  cooked_porkchop: [8, 12.8],
+  cooked_mutton: [6, 9.6],
+  cooked_chicken: [6, 7.2],
+};
+
+equal('食物种类数', Object.keys(FOOD_TABLE).length, Object.keys(VANILLA).length);
+for (const [key, [hunger, saturation]] of Object.entries(VANILLA)) {
+  const food = FOOD_TABLE[key];
+  check(`数值表里有 ${key}`, food !== undefined);
+  if (!food) continue;
+  equal(`${key} 的饥饿点`, food.hunger, hunger);
+  close(`${key} 的恢复饱和度`, saturationFrom(food), saturation, 1e-9);
+}
+// 这一条是本轮写错过的那个坑：wiki 写"恢复 2.4 点饱和度"，但代码里要填 0.3
+check(
+  '修饰值都在 0~1.2 之间（写错成"饱和度点数"会在这里露馅：苹果应是 0.3 而不是 2.4）',
+  Object.values(FOOD_TABLE).every((food) => food.saturationModifier > 0 && food.saturationModifier <= 1.2),
+);
+equal('进食耗时与原版一致（1.6 秒）', EAT_SECONDS, 1.6);
+check('熟肉比同种生肉更顶饱', FOOD_TABLE.cooked_beef!.hunger > FOOD_TABLE.beef!.hunger);
+equal('腐肉的饱和度修饰值最低（原版 0.1）', FOOD_TABLE.rotten_flesh!.saturationModifier, 0.1);
+
+console.log('\n[附加效果]');
+equal('腐肉：80% 概率饥饿', FOOD_TABLE.rotten_flesh!.effects?.[0]?.chance, 0.8);
+equal('腐肉：饥饿 30 秒', FOOD_TABLE.rotten_flesh!.effects?.[0]?.seconds, 30);
+equal('生鸡肉：30% 概率饥饿', FOOD_TABLE.chicken!.effects?.[0]?.chance, 0.3);
+check(
+  '金苹果：伤害吸收 + 生命恢复 II',
+  FOOD_TABLE.golden_apple!.effects?.length === 2 &&
+    FOOD_TABLE.golden_apple!.effects[0]!.id === 'absorption' &&
+    FOOD_TABLE.golden_apple!.effects[1]!.id === 'regeneration' &&
+    FOOD_TABLE.golden_apple!.effects[1]!.amplifier === 1,
+);
+check('金苹果饥饿满时也能吃', FOOD_TABLE.golden_apple!.alwaysEdible === true);
+check(
+  '熟肉没有副作用',
+  ['cooked_beef', 'cooked_porkchop', 'cooked_mutton', 'cooked_chicken'].every(
+    (key) => FOOD_TABLE[key]!.effects === undefined,
+  ),
+);
+
+// ---------------------------------------------------------------- 2. 注册
+
+console.log('\n[食物都挂上了数值]');
+{
+  const foodItems = [
+    Item.BEEF,
+    Item.PORKCHOP,
+    Item.MUTTON,
+    Item.CHICKEN,
+    Item.ROTTEN_FLESH,
+    Item.COOKED_BEEF,
+    Item.COOKED_PORKCHOP,
+    Item.COOKED_MUTTON,
+    Item.COOKED_CHICKEN,
+    Item.APPLE,
+    Item.MELON_SLICE,
+    Item.GOLDEN_APPLE,
+  ];
+  equal('12 件食物', foodItems.filter((id) => foodInfoById(id) !== undefined).length, 12);
+  check('非食物没有数值（钻石不能吃）', foodInfoById(Item.DIAMOND) === undefined && foodInfoById(Block.STONE) === undefined);
+  equal('牛排的中文名', itemLabel(Item.COOKED_BEEF), '牛排');
+  equal('西瓜片的中文名', itemLabel(Item.MELON_SLICE), '西瓜片');
+  equal('金苹果的中文名', itemLabel(Item.GOLDEN_APPLE), '金苹果');
+  check(
+    '食物在创造物品栏里有独立分类',
+    CREATIVE_ITEMS.includes(Item.APPLE) && CREATIVE_ITEMS.includes(Item.COOKED_BEEF),
+  );
+  check('食物的堆叠上限是 64', foodItems.every((id) => itemDef(id)?.maxStack === 64));
+}
+
+// ---------------------------------------------------------------- 3. 可食性
+
+console.log('\n[可食性判定]');
+check('饿的时候能吃', canEat(FOOD_TABLE.apple!, 10, MAX_FOOD));
+check('饥饿满时普通食物不能吃', !canEat(FOOD_TABLE.apple!, MAX_FOOD, MAX_FOOD));
+check('饥饿满时金苹果仍能吃', canEat(FOOD_TABLE.golden_apple!, MAX_FOOD, MAX_FOOD));
+
+// ---------------------------------------------------------------- 4. 获取途径
+
+console.log('\n[获取途径]');
+{
+  equal('西瓜块掉西瓜片', dropFor(Block.MELON)?.id, Item.MELON_SLICE);
+  equal('西瓜块掉 5 片（原版 3~7，取中值）', dropFor(Block.MELON)?.count, 5);
+  check('石头没有常规掉落，也不会概率掉苹果', dropFor(Block.STONE)?.id !== Item.APPLE && rareDropFor(Block.STONE, 0) === null);
+  equal('树叶掷点 0 掉苹果（原版 0.5%）', rareDropFor(Block.OAK_LEAVES, 0)?.id, Item.APPLE);
+  equal('树叶掷点 0.0049 仍然掉', rareDropFor(Block.OAK_LEAVES, 0.0049)?.id, Item.APPLE);
+  check('掷点 0.005 正好等于概率阈值时不掉（左闭右开）', rareDropFor(Block.OAK_LEAVES, 0.005) === null);
+  check(
+    '6 种追加木材的树叶也能掉苹果',
+    Object.values(Wood).every((ids) => rareDropFor(ids.leaves, 0)?.id === Item.APPLE),
+  );
+  check('树叶本身仍然不掉方块（原版不掉树叶）', dropFor(Block.OAK_LEAVES) === null);
+
+  const meatRecipes = SMELTING_RECIPES.filter(
+    (recipe) => recipe.output.id >= Item.COOKED_BEEF && recipe.output.id <= Item.COOKED_CHICKEN,
+  );
+  equal('4 条生肉 → 熟肉', meatRecipes.length, 4);
+  equal('生牛肉烧成牛排', smeltingRecipeFor(Item.BEEF)?.output.id, Item.COOKED_BEEF);
+  equal('生鸡肉烧成熟鸡肉', smeltingRecipeFor(Item.CHICKEN)?.output.id, Item.COOKED_CHICKEN);
+  check('生肉能烧、熟肉不能反复烧', smeltingRecipeFor(Item.COOKED_BEEF) === undefined);
+
+  const grid = (rows: readonly string[], legend: Record<string, number>): number[] => {
+    const cells = new Array<number>(9).fill(0);
+    for (let r = 0; r < rows.length; r++) {
+      for (let c = 0; c < rows[r]!.length; c++) {
+        const ch = rows[r]![c]!;
+        if (ch === '·') continue;
+        cells[r * 3 + c] = legend[ch] ?? 0;
+      }
+    }
+    return cells;
+  };
+  equal(
+    '8 金锭围 1 苹果 → 金苹果',
+    matchRecipe(grid(['GGG', 'GAG', 'GGG'], { G: Item.GOLD_INGOT, A: Item.APPLE }), 3)?.id,
+    Item.GOLDEN_APPLE,
+  );
+  check('金苹果能被配方书查到', recipesForResult(Item.GOLDEN_APPLE).length > 0);
+}
+
+// ---------------------------------------------------------------- 5. 吃下去
+
+console.log('\n[吃下去的效果]');
+{
+  const stats = new PlayerStats();
+  stats.food = 0;
+  stats.saturation = 0;
+  stats.eat(FOOD_TABLE.cooked_beef!.hunger, saturationFrom(FOOD_TABLE.cooked_beef!));
+  equal('吃一块牛排，饥饿 +8', stats.food, 8);
+  equal('饱和度按原版封顶（本项目 MAX_SATURATION）', stats.saturation, MAX_SATURATION);
+  equal('进食不影响血量', stats.health, MAX_HEALTH);
+
+  const full = new PlayerStats();
+  full.food = MAX_FOOD;
+  full.eat(FOOD_TABLE.apple!.hunger, saturationFrom(FOOD_TABLE.apple!));
+  equal('饥饿满时吃苹果不会溢出', full.food, MAX_FOOD);
+
+  // 一口吃不掉一整格：靠物品数量，纯数值这里只验"多次吃能累加"
+  const hungry = new PlayerStats();
+  hungry.food = 0;
+  hungry.eat(2, 0);
+  hungry.eat(2, 0);
+  equal('吃两次西瓜片累计 +4', hungry.food, 4);
+}
+
+console.log(`\n食物测试：${passed} 通过 / ${failed} 失败`);
+if (failed > 0) process.exit(1);

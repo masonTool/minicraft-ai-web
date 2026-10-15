@@ -1,0 +1,103 @@
+/**
+ * 食物数值与进食规则
+ *
+ * 表里保留的是**原版那两个数**（饥饿点 + 饱和度修饰值），而不是直接把饱和度点数写死：
+ * 原版 `FoodData#eat` 的实际补量是 `hunger × modifier × 2`，写修饰值才能一眼和 wiki 对上、
+ * 也才能在测试里验算这条公式（换算见 `saturationFrom`）。
+ *
+ * ⚠️ 这两个数**很容易写混**：wiki 上写的是"恢复 2.4 点饱和度"，而代码里要填的是 **0.3**
+ * （= 2.4 ÷ (4 × 2)）。最初就是直接把 2.4 填进了 `saturationModifier`，
+ * 于是苹果一次补 19.2 点饱和度——离线测试里对了几组原版数值才抓出来。
+ *
+ * 为什么表以**注册名**为键而不是物品 id：`items.ts` 要依赖本模块来挂数值，
+ * 本模块再反向依赖 `items.ts` 就会成环。用名字当键，两边都只说名字，
+ * id 由 `items.ts` 单方面持有（`armor.ts` / `tools.ts` 那两套是反向的，
+ * 因为它们自己就是 id 的产地；食物这边要复用的都是既有物品，只能反过来）。
+ *
+ * 与原版的已知差异：
+ *  - 没有"进食减速"（原版吃的时候移速减到 1/3）与"吃完的饱嗝音效时长"
+ *  - 没有金胡萝卜/河豚这类带复杂副作用（伤害/反胃）的食物
+ *  - 蜂蜜瓶（要玻璃瓶）、蛋糕（要放置逻辑）暂缺
+ */
+
+import type { EffectId } from '../survival/StatusEffects.ts';
+
+/** 吃完附加的效果 */
+export interface FoodEffect {
+  readonly id: EffectId;
+  /** 持续秒数 */
+  readonly seconds: number;
+  /** 等级（0 = I 级） */
+  readonly amplifier: number;
+  /** 触发概率 0~1；省略即必定触发（原版腐肉 80%、生鸡肉 30%） */
+  readonly chance?: number;
+}
+
+export interface FoodInfo {
+  /** 饥饿点数（满 20） */
+  readonly hunger: number;
+  /** 原版饱和度修饰值 */
+  readonly saturationModifier: number;
+  /** 饥饿满时也能吃（原版只有金苹果这类"功能性食物"是这样） */
+  readonly alwaysEdible?: boolean;
+  readonly effects?: readonly FoodEffect[];
+}
+
+/** 吃完一份食物能补的饱和度点数（原版 `FoodData#eat` 的算法） */
+export function saturationFrom(food: FoodInfo): number {
+  return food.hunger * food.saturationModifier * 2;
+}
+
+/**
+ * 进食耗时（秒）。原版是 1.6 秒（32 tick），所有食物一样。
+ * 放在这里而不是 main 里写死：离线测试要拿它验"吃满 1.6 秒才咽下去"。
+ */
+export const EAT_SECONDS = 1.6;
+
+/**
+ * 食物数值表，键是注册名去掉 `minecraft:` 前缀。
+ * 数值取自原版 1.18 的 `Items.java`（食品那一段）。
+ */
+export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
+  // ---- 水果与作物
+  // （修饰值 = wiki 上的"恢复饱和度" ÷ (饥饿点 × 2)：苹果 2.4 ÷ 8 = 0.3）
+  apple: { hunger: 4, saturationModifier: 0.3 },
+  golden_apple: {
+    hunger: 4,
+    saturationModifier: 1.2,
+    alwaysEdible: true,
+    // 原版：伤害吸收 I 2:00 + 生命恢复 II 0:05
+    effects: [
+      { id: 'absorption', seconds: 120, amplifier: 0 },
+      { id: 'regeneration', seconds: 5, amplifier: 1 },
+    ],
+  },
+  melon_slice: { hunger: 2, saturationModifier: 0.3 },
+
+  // ---- 生肉（原版生鸡肉 30% 概率给饥饿，腐肉 80%）
+  beef: { hunger: 3, saturationModifier: 0.3 },
+  porkchop: { hunger: 3, saturationModifier: 0.3 },
+  mutton: { hunger: 2, saturationModifier: 0.3 },
+  chicken: { hunger: 2, saturationModifier: 0.3, effects: [{ id: 'hunger', seconds: 30, amplifier: 0, chance: 0.3 }] },
+  rotten_flesh: {
+    hunger: 4,
+    saturationModifier: 0.1,
+    effects: [{ id: 'hunger', seconds: 30, amplifier: 0, chance: 0.8 }],
+  },
+
+  // ---- 熟肉（熔炉烤过，饱食度明显更高）
+  cooked_beef: { hunger: 8, saturationModifier: 0.8 },
+  cooked_porkchop: { hunger: 8, saturationModifier: 0.8 },
+  cooked_mutton: { hunger: 6, saturationModifier: 0.8 },
+  cooked_chicken: { hunger: 6, saturationModifier: 0.6 },
+};
+
+/** 取某个注册名（可带 `minecraft:` 前缀）的食物数值 */
+export function foodForName(name: string): FoodInfo | undefined {
+  return FOOD_TABLE[name.replace('minecraft:', '')];
+}
+
+/** 这件物品能吃吗（饥饿满时还要看 `alwaysEdible`） */
+export function canEat(food: FoodInfo, currentFood: number, maxFood: number): boolean {
+  return food.alwaysEdible === true || currentFood < maxFood;
+}

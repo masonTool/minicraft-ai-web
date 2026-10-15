@@ -844,6 +844,78 @@ PAINTERS.item_feather = lump(
   4.2,
 );
 
+// ---- 食物：熟肉就是"颜色更深的同款肉块"，水果用圆球 + 叶子
+PAINTERS.item_cooked_beef = lump(
+  [
+    [148, 84, 52],
+    [106, 58, 36],
+  ],
+  'icbeef',
+  5.2,
+);
+PAINTERS.item_cooked_porkchop = lump(
+  [
+    [208, 138, 96],
+    [162, 100, 66],
+  ],
+  'icpork',
+  5.2,
+);
+PAINTERS.item_cooked_mutton = lump(
+  [
+    [150, 92, 60],
+    [110, 64, 42],
+  ],
+  'icmutton',
+  5.2,
+);
+PAINTERS.item_cooked_chicken = lump(
+  [
+    [196, 142, 82],
+    [156, 106, 58],
+  ],
+  'icchicken',
+  5.2,
+);
+
+/** 苹果：红色圆球 + 顶部一片绿叶 + 一点高光 */
+function applePainter(rgb: readonly [number, number, number], salt: string, shine = 1.42): Painter {
+  const base = lump(
+    [
+      [rgb[0], rgb[1], rgb[2]],
+      [Math.round(rgb[0] * 0.74), Math.round(rgb[1] * 0.74), Math.round(rgb[2] * 0.74)],
+    ],
+    salt,
+    5.6,
+  );
+  return (x, y, rng) => {
+    // 高光：左上一小块提亮
+    if (Math.hypot(x - 5.4, y - 5.4) < 1.6) {
+      const v = shine + (rng() * 0.1 - 0.05);
+      return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+    }
+    // 果柄与叶子：中上方一竖一斜
+    if (x === 8 && (y === 1 || y === 2)) return [92, 62, 34, 255];
+    if ((x === 9 && y === 2) || (x === 10 && y === 1) || (x === 10 && y === 2)) return [82, 148, 62, 255];
+    return base(x, y, rng);
+  };
+}
+PAINTERS.item_apple = applePainter([212, 54, 48], 'iapple');
+PAINTERS.item_golden_apple = applePainter([246, 208, 62], 'igapple', 1.5);
+
+/** 西瓜片：半圆（上面是红瓤、下面是绿皮）+ 几颗黑籽 */
+PAINTERS.item_melon_slice = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 圆心在 (7.5, 9)、半径 6.4，只取 y ≤ 12 的上半部分
+  if (y < 3 || y > 12) return [0, 0, 0, 0];
+  if (Math.hypot(x - 7.5, y - 9) > 6.4) return [0, 0, 0, 0];
+  // 最下面两行是瓜皮
+  if (y >= 11) return [clamp255(74 + jitter), clamp255(140 + jitter), clamp255(58 + jitter), 255];
+  // 瓜籽：按坐标定死几颗。用随机数会让籽在不同帧之间"闪"
+  if ((x + y) % 5 === 0 && y > 4 && y < 10) return [46, 40, 32, 255];
+  return [clamp255(232 + jitter), clamp255(78 + jitter), clamp255(84 + jitter), 255];
+};
+
 PAINTERS.item_brick = (x, y, rng) => {
   // 小砖块：红棕色矩形 + 一点高光
   if (x < 3 || x > 12 || y < 5 || y > 11) return [0, 0, 0, 0];

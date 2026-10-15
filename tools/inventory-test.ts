@@ -8,6 +8,7 @@
 
 import { Block, BLOCKS } from '../src/core/registry/blocks.ts';
 import {
+  ITEMS,
   Item,
   PLACEABLE_ITEMS,
   blockForItem,
@@ -15,6 +16,7 @@ import {
   itemName,
   maxStackOf,
 } from '../src/core/registry/items.ts';
+import { translateName } from '../src/core/registry/itemNames.ts';
 import { HOTBAR_SIZE, Inventory, OFFHAND_SLOT, TOTAL_SLOTS } from '../src/core/container/Inventory.ts';
 
 let passed = 0;
@@ -48,6 +50,42 @@ equal('石头是可放置物品', blockForItem(Block.STONE), Block.STONE);
 equal('煤炭不可放置', blockForItem(Item.COAL), undefined);
 equal('煤炭名称去掉命名空间', itemName(Item.COAL), 'coal');
 equal('石头最大堆叠 64', maxStackOf(Block.STONE), 64);
+
+console.log('\n[物品 id 卫生]');
+{
+  const definitions = ITEMS.filter((def) => def !== undefined);
+  check(
+    '每个槽位的 id 与下标一致（没有错位注册）',
+    definitions.every((def) => ITEMS[def.id] === def),
+  );
+  equal(
+    '物品 id 无重复（`register` 会在启动时直接抛错，这里是第二道保险）',
+    new Set(definitions.map((def) => def.id)).size,
+    definitions.length,
+  );
+  equal(
+    '物品注册名无重复',
+    new Set(definitions.map((def) => def.name)).size,
+    definitions.length,
+  );
+  check(
+    '每件物品都有中文名（id 撞车时名字会被静默顶替，这条能挡住）',
+    definitions.every((def) => translateName(def.name) !== def.name.replace('minecraft:', '')),
+    definitions
+      .filter((def) => translateName(def.name) === def.name.replace('minecraft:', ''))
+      .map((def) => def.name)
+      .join(' '),
+  );
+
+  // 曾经真的发生过：染料区 1020~1035 压住生物掉落的 1030~1035，
+  // 于是"腐肉"在物品表里被"紫色染料"顶替——捡起来显示成紫色染料，还能和真染料叠在一格
+  equal('腐肉没有被染料顶替', itemName(Item.ROTTEN_FLESH), 'rotten_flesh');
+  equal('骨头没有被染料顶替', itemName(Item.BONE), 'bone');
+  equal('火药没有被染料顶替', itemName(Item.GUNPOWDER), 'gunpowder');
+  equal('生牛肉没有被染料顶替', itemName(Item.BEEF), 'beef');
+  equal('生猪排没有被染料顶替', itemName(Item.PORKCHOP), 'porkchop');
+  equal('生羊肉没有被染料顶替', itemName(Item.MUTTON), 'mutton');
+}
 
 console.log('\n[掉落表]');
 equal('草方块掉落泥土', dropFor(Block.GRASS_BLOCK)?.id, Block.DIRT);

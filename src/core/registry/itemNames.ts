@@ -24,6 +24,8 @@ import {
   type ItemCategory,
 } from './items.ts';
 import { ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
+import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
+import { FOOD_TABLE, saturationFrom } from './food.ts';
 import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
 
 // ---------------------------------------------------------------- 规则生成
@@ -306,9 +308,24 @@ const EXPLICIT: Record<string, string> = {
   copper_ingot: '铜锭',
   brick: '红砖',
   clay_ball: '黏土球',
+  // 生物掉落物（这几件此前**根本没有词条**，一直被染料区压着显示成染料名）
+  rotten_flesh: '腐肉',
+  bone: '骨头',
+  gunpowder: '火药',
+  beef: '生牛肉',
+  porkchop: '生猪排',
+  mutton: '生羊肉',
   chicken: '生鸡肉',
   leather: '皮革',
   feather: '羽毛',
+  // 食物
+  cooked_beef: '牛排',
+  cooked_porkchop: '熟猪排',
+  cooked_mutton: '熟羊肉',
+  cooked_chicken: '熟鸡肉',
+  apple: '苹果',
+  melon_slice: '西瓜片',
+  golden_apple: '金苹果',
 };
 
 for (const [id, name] of Object.entries(EXPLICIT)) put(id, name);
@@ -476,6 +493,19 @@ for (const spec of ARMOR_SPECS) {
     `${materialCn}${typeCn}：${ARMOR_KIND_DESC[spec.armor.type]!}` +
     ` 护甲值 ${spec.armor.defense}${toughness}｜耐久 ${spec.armor.durability}` +
     `｜${materialCn}满套共 ${armorSetTotals.get(spec.armor.material)!} 点护甲`;
+}
+
+// 食物的说明也由数值表生成：饥饿与饱和度是玩家最关心的两个数，
+// 而附加效果（腐肉/生鸡肉的饥饿）不写出来玩家根本不知道，会以为吃了没事
+for (const [key, food] of Object.entries(FOOD_TABLE)) {
+  const parts = [`饥饿 +${food.hunger}`, `饱和度 +${saturationFrom(food).toFixed(1)}`];
+  if (food.alwaysEdible) parts.push('饥饿满时也能吃');
+  for (const effect of food.effects ?? []) {
+    const chance = effect.chance === undefined ? '' : `${Math.round(effect.chance * 100)}% 概率`;
+    const level = effect.amplifier > 0 ? ` ${effect.amplifier + 1} 级` : '';
+    parts.push(`${chance}${EFFECT_LABELS[effect.id]}${level} ${effect.seconds} 秒`);
+  }
+  DESCRIPTIONS[key] = `${parts.join('｜')}。`;
 }
 
 // ---------------------------------------------------------------- 对外接口

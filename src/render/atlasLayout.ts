@@ -350,6 +350,14 @@ export const TILE_ORDER = [
   'item_iron_boots',
   'item_golden_boots',
   'item_diamond_boots',
+  // ---- 食物图标（熟肉 / 水果）
+  'item_cooked_beef',
+  'item_cooked_porkchop',
+  'item_cooked_mutton',
+  'item_cooked_chicken',
+  'item_apple',
+  'item_melon_slice',
+  'item_golden_apple',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

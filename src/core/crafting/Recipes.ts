@@ -288,6 +288,19 @@ const ARMOR_RECIPES: readonly Recipe[] = ARMOR_SPECS.flatMap<Recipe>((spec) => {
   ];
 });
 
+/**
+ * 食物配方。目前只有金苹果（原版就这一条：8 个金锭围 1 个苹果）。
+ * 面包要小麦、曲奇要可可豆、南瓜派要鸡蛋与糖——都缺前置物品，等农业系统。
+ */
+const FOOD_RECIPES: readonly Recipe[] = [
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.GOLDEN_APPLE, count: 1 },
+    pattern: ['GGG', 'GAG', 'GGG'],
+    key: { G: Item.GOLD_INGOT, A: Item.APPLE },
+  },
+];
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...WOOL_RECIPES,
@@ -297,6 +310,7 @@ export const RECIPES: readonly Recipe[] = [
   ...PANE_RECIPES,
   ...TOOL_RECIPES,
   ...ARMOR_RECIPES,
+  ...FOOD_RECIPES,
 ];
 
 interface Normalized {
