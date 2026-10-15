@@ -37,6 +37,7 @@
     "test:world": "esbuild tools/world-test.ts --bundle --platform=node --format=esm --outfile=.tmp/world-test.mjs --log-level=error && node .tmp/world-test.mjs",
     "test:settings": "esbuild tools/settings-test.ts --bundle --platform=node --format=esm --outfile=.tmp/settings-test.mjs --log-level=error && node .tmp/settings-test.mjs",
     "audit:tasks": "node tools/audit-tasks.mjs",
+    "agent:setup": "node tools/agent-setup.mjs",
     "test:commands": "esbuild tools/command-test.ts --bundle --platform=node --format=esm --outfile=.tmp/command-test.mjs --log-level=error && node .tmp/command-test.mjs",
     "test:effects": "esbuild tools/effects-test.ts --bundle --platform=node --format=esm --outfile=.tmp/effects-test.mjs --log-level=error && node .tmp/effects-test.mjs",
     "test:tick": "esbuild tools/tick-test.ts --bundle --platform=node --format=esm --outfile=.tmp/tick-test.mjs --log-level=error && node .tmp/tick-test.mjs",

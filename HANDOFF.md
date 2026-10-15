@@ -9,11 +9,15 @@
 ## 0. 新机器 30 秒上手
 
 ```bash
-git clone <远程地址> && cd minecraft
+git clone <远程地址> && cd <仓库目录>
 npm install
 npm run agent:setup    # 恢复 AI 记忆到本机 + 自检 hooks / 环境 / 进度（有问题会直接列出来）
 npm run dev            # http://localhost:5173
 ```
+
+> `agent:setup` 走的是 `tools/agent-setup.mjs`。本脚本此前在 `package.json` 里**没有对应的
+> script 键**（文档写着 `npm run agent:setup`、实际会报 "Missing script"），已补回；
+> 首次在新机器上接手时如又报缺失，先确认这一行还在。
 
 然后对 AI 说一句：**「读 HANDOFF.md 与 .codebuddy/auto-continue.md，按队列继续推进。」**
 之后 Stop 钩子会自动按队列继续，不需要逐步确认（机制见第 3 节）。
@@ -22,7 +26,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-15 · 提交总数 48（每个功能点一条，可逐条回滚）
+- 时间：2026-10-15 · 提交总数 106（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 174 项 —— 已完成 **96**、进行中 **57**、待办 21；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -45,7 +49,7 @@ npm run dev            # http://localhost:5173
 | 工具与武器 | `core/registry/tools.ts`：25 种工具（木/石/铁/金/钻石 × 镐/斧/锹/锄/剑），等级 0-3、速度、耐久、攻击伤害全落到物品上；**采集等级校验**（石镐挖钻石矿＝挖得动但一无所获）、挖掘耗时按工具加速、工具耐久随存档走（`ItemStack.damage`，归零整件消失）；配方 25 条、中文名与说明自动生成 |
 | 盔甲与防御 | `core/registry/armor.ts`：20 件盔甲（皮革/锁链/铁/金/钻石 × 头/胸/腿/靴），护甲值满套 7/12/15/11/20、韧性只有钻石有；**1.9 之后那条减伤公式**（高伤害压到"护甲值 × 0.2"的保底线）；摔落/溺水/饿死/虚空/窒息/中毒无视护甲；受击每件掉 `max(1, ⌊伤害/4⌋)` 点耐久。减伤挂在 `PlayerStats.damage` 统一入口，所以岩浆/仙人掌也自动减伤；背包 36-39 号槽真正能穿（部位校验 + 空槽提示字），护甲 HUD 只在有甲时出现 |
 | 装备外观 | `render/PlayerRenderer.ts` 四个部位共 10 块甲片（分别挂在头/手臂/腿的枢轴上，摆臂摆腿时跟着动）+ `render/HandRenderer.ts` 的胸甲袖套（第一人称只有这个看得见）；甲片颜色取该件图标贴图的平均色（`TextureAtlas.averageColor`），3D 与 2D 同源 |
-| 方块内容 | **201 种**（6 族木材、石材家族、16 色羊毛、33 色陶瓦/混凝土、染色玻璃与玻璃板…）、方块状态、非常规形状（台阶/楼梯/栅栏/墙/门/火把/梯子） |
+| 方块内容 | **271 种**（6 族木材、石材家族、16 色羊毛、17 色陶瓦 + 16 色混凝土、染色玻璃与玻璃板…）、方块状态、非常规形状（台阶/楼梯/栅栏/墙/门/火把/梯子） |
 | 移动端 | 触摸操作层（虚拟摇杆、长按破坏）、响应式 UI、PWA 全屏元信息、Pointer Events 统一输入 |
 | 地物 | `core/gen/Features.ts`：11 种树 + 花草/蘑菇/甘蔗/南瓜/西瓜/仙人掌，23 群系地物表；跨区块重放 3×3 邻域保证树冠不断 |
 | 结构 | `core/gen/Structures.ts`：村庄/废弃矿井/要塞/地牢/沉船/海底神殿/林地府邸，间距+分离度+盐值放置框架 |
@@ -58,10 +62,13 @@ npm run dev            # http://localhost:5173
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
 | 说明与配方 | `core/registry/itemNames.ts`（366 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，135 条配方） |
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = vitest（光照/碰撞/生成/存档/资源包/音效）+ **23 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / sound / nether / end / endboss / redstone / save / net / render / view / world / settings / recipebook / tool / **armor**，当前全绿；`npm run audit:tasks` 自检锚点文档 |
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **32 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor，当前全绿；`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数） |
 
-下一步的大头（队列与 TASKS.md 都能看到）：含水层、大矿脉、贪心网格化 + 网格化移入 Worker、
-生存机制（生命/饥饿/摔落）、生物 AI 与生成、结构生成、红石、存档（IndexedDB）与联机。
+下一步的大头（队列与 TASKS.md 都能看到，按依赖顺序）：
+**经验值与附魔**（I5 → H9 附魔台 → K3 40+ 种附魔 → H8 铁砧）、
+**食物与进食**（B9/B10，`eat()` 至今只有状态效果在调）、
+酿造与药水（H10 / K4）、村民与交易（J11）、弹射物与繁殖（J9 / J8）、
+信标与地图（K5 / K7）、成就与 i18n（M7 / M8）。
 
 ## 2. 两条硬性约定（用户要求，必须遵守）
 
@@ -135,6 +142,8 @@ npm run dev            # http://localhost:5173
 | 模型上"贴盔甲"的取舍 | 这套玩家模型是"方块拼小人 + 逐面明暗"，没有 UV 贴图管线。把带透明边距的 16×16 图标直接贴到方块上会像贴纸，于是改成**取图标平均色当甲片颜色**（`averageColor` 本来就有缓存）：3D 与 2D 图标同源，渲染层也不必认识"盔甲材质"，加一种材质不用改渲染代码（本轮） |
 | 甲片挂错父节点会穿帮 | 甲片必须挂在"所属身体部位"的枢轴上：护肩挂手臂枢轴、大腿甲与靴子挂腿枢轴、头盔挂头枢轴。若统统挂根节点，抬手时护肩会留在原地（本轮） |
 | 测试里别存 THREE 对象的引用 | `material.color` 是**同一个对象**，下一次 `update()` 会就地改写它。断言"变暗了再恢复"必须先取数值快照，否则新旧值指向同一对象、断言永远成立（本轮踩到） |
+| 凡是能算出来的数字都别手写 | 一次文档梳理查出三处漂移：HANDOFF 的"提交总数 48"实际 105、README 路线图整体停在"未开始"、HANDOFF 说"方块 201 种"实际 271。**手写的派生数字迟早会漂**——现在路线图状态列由 `audit:tasks` 从 TASKS.md 重写，提交总数与离线测试套数也进了自检（本轮梳理） |
+| 文档里承诺的命令要真能跑 | HANDOFF 让新机器执行 `npm run agent:setup`，但 `package.json` 里**根本没有这个 script 键**（`tools/agent-setup.mjs` 一直在），照着做第一步就 "Missing script"。改文档时顺手把命令跑一遍，别只读文字（本轮梳理） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 

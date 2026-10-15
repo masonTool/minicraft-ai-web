@@ -10,18 +10,23 @@
  *   - **编号跳号**：删条目或插条目时漏号
  *   - **数字漂移**：HANDOFF 里写"已完成 78"，实际早就 85 了
  *
- * 所以这里做三件事，任何一个不过就以非 0 退出（方便挂到 CI 或提交前手动跑）：
+ * 所以这里做五件事，任何一个不过就以非 0 退出（方便挂到 CI 或提交前手动跑）：
  *   1. 报告 已完成 / 进行中 / 待办 的条数（HANDOFF 的数字要与它一致）
  *   2. 检查 id 是否重复、每段编号是否连续
  *   3. 核对 HANDOFF 的"进度口径"那一行
+ *   4. 用本表**自动重写 README 的路线图状态列**（README 里那张表是手写的，
+ *      已经漂过一次：P1~P9 全部标着"未开始"，而实际早就完成大半）
+ *   5. 核对 HANDOFF 的"提交总数"与 `git rev-list --count HEAD`
  *
  * 用法：`npm run audit:tasks`
  */
 
-import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const TASK_FILE = new URL('../TASKS.md', import.meta.url);
 const HANDOFF_FILE = new URL('../HANDOFF.md', import.meta.url);
+const README_FILE = new URL('../README.md', import.meta.url);
 
 /** 【原规格】那条只是锚点，与详细条目共用 id 是允许的 */
 const SPEC_MARK = '【原规格】';
@@ -33,6 +38,8 @@ const counts = { done: 0, doing: 0, todo: 0, dropped: 0 };
 const ids = [];
 /** @type {Map<string, string[]>} 段落字母 → 出现的编号 */
 const byPrefix = new Map();
+/** @type {Map<string, {done: number, doing: number, todo: number}>} 段落字母 → 完成情况（README 路线图用） */
+const bySection = new Map();
 
 let section = '';
 for (const line of lines) {
@@ -47,6 +54,15 @@ for (const line of lines) {
   else if (mark === '~') counts.doing++;
   else if (mark === '-') counts.dropped++;
   else counts.todo++;
+
+  if (section) {
+    const stat = bySection.get(section) ?? { done: 0, doing: 0, todo: 0, dropped: 0 };
+    if (mark === 'x') stat.done++;
+    else if (mark === '~') stat.doing++;
+    else if (mark === '-') stat.dropped++;
+    else stat.todo++;
+    bySection.set(section, stat);
+  }
 
   // 原规格锚点行不参与重号检查
   if (rest.includes(SPEC_MARK)) continue;
@@ -114,6 +130,115 @@ if (!claim) {
       `\n✗ HANDOFF 的进度口径过期：写着 已完成 ${done} / 进行中 ${doing} / 待办 ${todo}，` +
         `实际是 ${counts.done} / ${counts.doing} / ${counts.todo}`,
     );
+  }
+}
+
+// ---- 4. README 路线图：状态列由本表算出来，不手写
+/**
+ * README 的阶段 ↔ TASKS 的段落。表是手写的、内容列写的是"这一阶段的范围"，
+ * 但**状态列必须是算出来的**——之前它整体停留在"未开始"，而实际早已完成大半。
+ */
+const PHASE_SECTIONS = {
+  P0: ['A'],
+  P1: ['B', 'C', 'E'],
+  P2: ['D'],
+  P3: ['F', 'G'],
+  P4: ['H'],
+  P5: ['I'],
+  P6: ['J'],
+  P7: ['K'],
+  P8: ['L'],
+  P9: ['M'],
+};
+
+function phaseStatus(phase) {
+  let done = 0;
+  let total = 0;
+  for (const letter of PHASE_SECTIONS[phase] ?? []) {
+    const stat = bySection.get(letter);
+    if (!stat) continue;
+    done += stat.done;
+    total += stat.done + stat.doing + stat.todo + stat.dropped;
+  }
+  return { done, total };
+}
+
+const readme = readFileSync(README_FILE, 'utf8');
+let readmeOut = readme;
+let rewrote = 0;
+for (const [phase] of Object.entries(PHASE_SECTIONS)) {
+  const { done, total } = phaseStatus(phase);
+  const status = done === total && total > 0 ? `✅ 全部完成（${total} 项）` : `🔶 已完成 ${done} / 共 ${total}`;
+  // 三格的行：阶段+名称 | 内容 | 状态。只换第三格，前两格原样保留
+  const row = new RegExp(`^(\\| \\*\\*${phase}\\*\\* .*? \\| .*? \\| )[^|]*(\\|)$`, 'm');
+  const match = row.exec(readmeOut);
+  if (!match) {
+    failed = true;
+    console.log(`\n✗ README 里找不到阶段行 **${phase}**（路线图表格被改过？）`);
+    continue;
+  }
+  const next = `${match[1]}${status} ${match[2]}`;
+  if (next !== match[0]) {
+    readmeOut = readmeOut.replace(match[0], next);
+    rewrote++;
+  }
+}
+if (rewrote > 0) {
+  writeFileSync(README_FILE, readmeOut);
+  failed = true;
+  console.log(`\n✗ README 的路线图状态列已按 TASKS 自动重写（${rewrote} 行），请重新暂存后提交`);
+} else {
+  console.log('✓ README 路线图状态与本表一致');
+}
+
+// ---- 5. HANDOFF 的提交总数
+const claimCommits = /提交总数 (\d+)/.exec(handoff);
+if (!claimCommits) {
+  failed = true;
+  console.log('\n✗ HANDOFF.md 里找不到"提交总数 N"这一行');
+} else {
+  let actual = null;
+  try {
+    actual = Number(execSync('git rev-list --count HEAD', { encoding: 'utf8' }).trim());
+  } catch {
+    // 不在 git 仓库里（例如把源码解压出来单独跑）时跳过这一项，不该因此判失败
+    console.log('· 跳过提交总数核对（当前不在 git 仓库里）');
+  }
+  if (actual !== null) {
+    const claimed = Number(claimCommits[1]);
+    // 容差 1：更新这一行的那次提交本身还没落盘，或刚好是待提交的那一次
+    if (Math.abs(actual - claimed) <= 1) {
+      console.log(`✓ HANDOFF 的提交总数与实际一致（${actual}）`);
+    } else {
+      failed = true;
+      console.log(`\n✗ HANDOFF 的提交总数过期：写着 ${claimed}，实际 ${actual}（差 ${actual - claimed}）`);
+    }
+  }
+}
+
+// ---- 6. README/HANDOFF 里的"离线测试套数"与 package.json 的实际脚本数
+{
+  let declared = 0;
+  try {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    const names = Object.keys(pkg.scripts ?? {}).filter((key) => key.startsWith('test:'));
+    // `test:unit` 是 vitest，`test:unit:watch` 是它的监视模式，都不算"自建离线测试"
+    declared = names.filter((key) => key !== 'test:unit' && key !== 'test:unit:watch').length;
+  } catch {
+    declared = 0;
+  }
+
+  const claimTests = /vitest \+ (\d+) 套自建离线测试/.exec(readmeOut);
+  if (declared === 0) {
+    console.log('· 跳过离线测试套数核对（读不到 package.json）');
+  } else if (!claimTests) {
+    failed = true;
+    console.log('\n✗ README 里找不到"vitest + N 套自建离线测试"这一句');
+  } else if (Number(claimTests[1]) !== declared) {
+    failed = true;
+    console.log(`\n✗ README 的离线测试套数过期：写着 ${claimTests[1]} 套，package.json 里实际 ${declared} 套`);
+  } else {
+    console.log(`✓ README 的离线测试套数与 package.json 一致（${declared} 套）`);
   }
 }
 
