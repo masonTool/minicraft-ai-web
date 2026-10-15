@@ -18,7 +18,16 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_HEIGHT, WORLD_MIN_Y, createBlockArray } from '../world/Chunk.ts';
+import {
+  type BlockArray,
+  CHUNK_SIZE_X,
+  CHUNK_SIZE_Z,
+  Chunk,
+  WORLD_HEIGHT,
+  WORLD_MAX_Y,
+  WORLD_MIN_Y,
+  createBlockArray,
+} from '../world/Chunk.ts';
 import { Aquifer } from './Aquifer.ts';
 import { CaveCarver } from './CaveCarver.ts';
 import { bandBlockAt, columnSurface } from './SurfaceRules.ts';
@@ -27,6 +36,7 @@ import { applyClimateGain, biomeForColumn, findLandBiome, type BiomeDef } from '
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { Spline } from './noise/Spline.ts';
+import { AMPLIFIED_RELIEF_SCALE, type WorldType } from './WorldType.ts';
 
 /** 海平面（原版主世界海平面为 y=63） */
 export const SEA_LEVEL = 63;
@@ -91,7 +101,18 @@ export class OverworldGenerator {
   /** 粗网格节点的地表高度缓存（地物/结构会反复查询同一片区域） */
   private readonly surfaceYCache = new Map<number, number>();
 
-  constructor(seed: number) {
+  /**
+   * 起伏倍率：默认 1，放大化世界把山体与峡谷的幅度整体放大。
+   * 在构造函数体里赋值：`worldType` 是参数属性，字段初始化式里读它会被判为"用在自己初始化之前"。
+   */
+  private readonly reliefScale: number;
+
+  constructor(
+    seed: number,
+    /** 世界类型：目前只有 `amplified` 会改参数（把起伏放大） */
+    private readonly worldType: WorldType = 'default',
+  ) {
+    this.reliefScale = this.worldType === 'amplified' ? AMPLIFIED_RELIEF_SCALE : 1;
     const random = new Random(seed);
 
     // firstOctave / amplitudes 采用官方 overworld 的公开参数
@@ -318,10 +339,14 @@ export class OverworldGenerator {
     const jaggedness = this.jaggednessSpline.apply(erosion);
     const pv = peaksAndValleys(weirdness);
 
-    // 目标地表高度
-    let surface = SEA_LEVEL + offset * 96;
-    surface += pv * factor * 40;
-    if (jaggedness > 0.001) surface += jaggedness * Math.abs(this.ridgeNoise.getValue(x, 0, z)) * 46;
+    // 目标地表高度。
+    // `amplified` 世界把三项起伏都乘一个倍率：山更高、峡谷更深（原版放大化的观感），
+    // 同时把高度夹在世界高度之内，免得山尖顶出上限、出现"被切平"的怪地形。
+    const relief = this.reliefScale;
+    let surface = SEA_LEVEL + offset * 96 * relief;
+    surface += pv * factor * 40 * relief;
+    if (jaggedness > 0.001) surface += jaggedness * Math.abs(this.ridgeNoise.getValue(x, 0, z)) * 46 * relief;
+    if (surface > WORLD_MAX_Y - 12) surface = WORLD_MAX_Y - 12;
 
     // 竖直梯度 + 三维细节
     const gradient = (surface - y) / 26;

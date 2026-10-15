@@ -15,6 +15,7 @@
  */
 
 import type { DimensionId } from '../core/gen/Dimension.ts';
+import type { WorldType } from '../core/gen/WorldType.ts';
 import { CHUNK_BLOCK_COUNT, generateChunkBlocks, takeGeneratedStates } from '../core/gen/TerrainGenerator.ts';
 import { meshSection, type MeshContext, type TileUvSource } from '../core/mesh/ChunkMesher.ts';
 import { Chunk, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../core/world/Chunk.ts';
@@ -28,8 +29,10 @@ export interface GenerateRequest {
   cx: number;
   cz: number;
   seed: number;
-  /** 维度（主世界 / 下界） */
+  /** 维度（主世界 / 下界 / 末地） */
   dimension: DimensionId;
+  /** 世界类型（默认 / 超平坦 / 放大化） */
+  worldType: WorldType;
 }
 
 export interface GenerateResponse {
@@ -228,7 +231,14 @@ ctx.addEventListener('message', (event) => {
   const req = event.data;
 
   if (req.type === 'generate') {
-    const blocks = generateChunkBlocks(req.cx, req.cz, req.seed, req.dimension, new Uint16Array(CHUNK_BLOCK_COUNT));
+    const blocks = generateChunkBlocks(
+      req.cx,
+      req.cz,
+      req.seed,
+      req.dimension,
+      req.worldType,
+      new Uint16Array(CHUNK_BLOCK_COUNT),
+    );
     const states = takeGeneratedStates();
     const response: GenerateResponse = {
       type: 'generated',

@@ -14,6 +14,8 @@ import { CHUNK_VOLUME, type BlockArray } from '../world/Chunk.ts';
 import { BIOME_TABLE } from './Biome.ts';
 import { Dimension, type DimensionId } from './Dimension.ts';
 import { EndGenerator } from './EndGenerator.ts';
+import { generateFlatChunk } from './FlatGenerator.ts';
+import type { WorldType } from './WorldType.ts';
 import { generateEndStructures } from './EndStructures.ts';
 import { NetherGenerator } from './NetherGenerator.ts';
 import { FeatureWriter, decorate, validateBiomeFeatures, type FeatureStats } from './Features.ts';
@@ -23,8 +25,11 @@ import { generateStructures } from './Structures.ts';
 export const CHUNK_BLOCK_COUNT = CHUNK_VOLUME;
 export { SEA_LEVEL };
 
-/** 每个种子一个生成器实例（内部持有噪声表，构造开销不应重复付出） */
-const generators = new Map<number, OverworldGenerator>();
+/**
+ * 每个种子 + 世界类型一个生成器实例（内部持有噪声表，构造开销不应重复付出）。
+ * 键里带上世界类型：同一个种子的"默认"与"放大化"是两套参数，不能共用实例。
+ */
+const generators = new Map<string, OverworldGenerator>();
 /** 下界生成器同样是"每个种子一个" */
 const netherGenerators = new Map<number, NetherGenerator>();
 /** 末地生成器 */
@@ -33,11 +38,12 @@ const endGenerators = new Map<number, EndGenerator>();
 /** 地物配置表完整性校验：每个群系都必须有一行（启动即报错，不留隐患） */
 validateBiomeFeatures(BIOME_TABLE.length);
 
-function generatorFor(seed: number): OverworldGenerator {
-  let generator = generators.get(seed);
+function generatorFor(seed: number, worldType: WorldType): OverworldGenerator {
+  const key = `${worldType}|${seed}`;
+  let generator = generators.get(key);
   if (!generator) {
-    generator = new OverworldGenerator(seed);
-    generators.set(seed, generator);
+    generator = new OverworldGenerator(seed, worldType);
+    generators.set(key, generator);
   }
   return generator;
 }
@@ -88,6 +94,7 @@ export function takeGeneratedStates(): Uint8Array | null {
  * 主世界才需要群系地物 / 结构 / 状态回传。
  *
  * @param dimension 维度（默认主世界）
+ * @param worldType 世界类型（默认 `default`）；只影响主世界，下界与末地照旧
  * @param out 可选复用缓冲区，避免频繁分配大数组
  * @param stats 可选：统计本次生成的地物数量（测试与调试用）
  */
@@ -96,9 +103,17 @@ export function generateChunkBlocks(
   cz: number,
   seed: number,
   dimension: DimensionId = Dimension.OVERWORLD,
+  worldType: WorldType = 'default',
   out?: BlockArray,
   stats?: FeatureStats,
 ): BlockArray {
+  // 超平坦只换主世界：下界与末地仍按原样生成（原版也是这个规则）
+  if (dimension === Dimension.OVERWORLD && worldType === 'flat') {
+    generationStates.fill(0);
+    statesUsed = false;
+    return generateFlatChunk(cx, cz, out);
+  }
+
   if (dimension === Dimension.NETHER) {
     // 下界不写方块状态：地物全是整块方块，没有门/楼梯
     return netherGeneratorFor(seed).generate(cx, cz, out);
@@ -117,7 +132,7 @@ export function generateChunkBlocks(
     return blocks;
   }
 
-  const generator = generatorFor(seed);
+  const generator = generatorFor(seed, worldType);
   const blocks = generator.generate(cx, cz, out);
 
   decorate(blocks, cx, cz, generator, seed, stats);

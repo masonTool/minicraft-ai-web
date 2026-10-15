@@ -13,6 +13,7 @@ import { Chunk } from './Chunk.ts';
 import { ChunkEdits } from '../save/ChunkEdits.ts';
 import { BlockEntityStore } from './BlockEntityStore.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
+import type { WorldType } from '../gen/WorldType.ts';
 import { LightEngine } from '../light/LightEngine.ts';
 import { blockDef } from '../registry/blocks.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
@@ -76,6 +77,8 @@ export class World {
 
   constructor(
     readonly seed: number,
+    /** 世界类型：默认 / 超平坦 / 放大化（只影响主世界地形） */
+    readonly worldType: WorldType = 'default',
     workerCount: number = Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 1)),
   ) {
     this.light = new LightEngine(this);
@@ -180,7 +183,15 @@ export class World {
     const id = this.nextId++;
     this.pending.set(id, key);
     const worker = this.workers[this.roundRobin++ % this.workers.length]!;
-    const message: GenerateRequest = { type: 'generate', id, cx, cz, seed: this.seed, dimension: this.dimension };
+    const message: GenerateRequest = {
+      type: 'generate',
+      id,
+      cx,
+      cz,
+      seed: this.seed,
+      dimension: this.dimension,
+      worldType: this.worldType,
+    };
     worker.postMessage(message);
   }
 

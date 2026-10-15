@@ -51,6 +51,55 @@
       #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
       #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
 
+      /* ---------------- 主菜单：世界列表 ---------------- */
+      #world-screen {
+        position: fixed; inset: 0; z-index: 40; overflow-y: auto;
+        display: grid; place-items: center; padding: 20px 12px;
+        background: radial-gradient(circle at 50% 12%, #22303f, #0a0d12 70%);
+        color: #eee;
+      }
+      #world-screen.hidden { display: none; }
+      .world-panel {
+        width: min(94vw, 560px);
+        background: #1d1d1fdd; border: 1px solid #ffffff22; border-radius: 8px;
+        padding: 18px 20px 16px; font-size: 13px;
+      }
+      .world-panel > b { font-size: 20px; display: block; }
+      .world-hint { color: #9a9a9a; font-size: 12px; margin: 6px 0 12px; }
+      .world-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+      .world-empty {
+        padding: 14px; text-align: center; color: #8a8a8a;
+        border: 1px dashed #ffffff33; border-radius: 6px;
+      }
+      .world-card {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; background: #26262a; border: 1px solid #ffffff1a; border-radius: 6px;
+      }
+      .world-card-info { flex: 1; min-width: 0; }
+      .world-card-name { font-size: 14px; color: #fff; }
+      .world-card-meta {
+        color: #9a9a9a; font-size: 11px; margin-top: 2px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .world-card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+      .world-card-actions button, .world-primary, .world-mini {
+        font: inherit; cursor: pointer; border-radius: 4px;
+        border: 1px solid #ffffff22; padding: 6px 10px;
+      }
+      .world-card-actions button { background: #3a7d33; color: #fff; font-size: 12px; }
+      .world-card-actions button.danger { background: #7d3a3a; }
+      .world-new { display: flex; flex-direction: column; gap: 8px; }
+      .world-row { display: grid; grid-template-columns: 68px 1fr 52px; align-items: center; gap: 8px; }
+      .world-input {
+        width: 100%; padding: 6px 8px; font: inherit; font-size: 12px;
+        background: #2a2a2d; color: #eee; border: 1px solid #ffffff33; border-radius: 3px;
+      }
+      .world-mini { background: #4a4a52; color: #eee; font-size: 12px; }
+      .world-primary {
+        margin-top: 4px; padding: 10px; font-size: 14px;
+        background: #3a7d33; color: #fff; border: none;
+      }
+
       #overlay {
         position: fixed; inset: 0; display: grid; place-items: center;
         background: rgba(0, 0, 0, .62); color: #fff; cursor: pointer;
@@ -402,7 +451,7 @@
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 ·
         <kbd>Space</kbd> 跳跃 · <kbd>Shift</kbd> 潜行/下降 · <kbd>Ctrl</kbd> 疾跑<br />
         <kbd>左键</kbd> 破坏 · <kbd>右键</kbd> 放置 · <kbd>1</kbd>-<kbd>9</kbd> 切换方块 ·
-        <kbd>F</kbd> 创造/飞行 · <kbd>Esc</kbd> 释放鼠标
+        <kbd>F</kbd> 创造/飞行 · <kbd>V</kbd> 切换人称视角 · <kbd>Esc/E</kbd> 菜单与背包
       </div>
     </div>
 

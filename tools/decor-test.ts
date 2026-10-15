@@ -297,7 +297,7 @@ console.log('\n[真实地形抽样：10×10 区块]');
   const biomeHistogram = new Map<string, number>();
   for (let cz = 0; cz < 10; cz++) {
     for (let cx = 0; cx < 10; cx++) {
-      const blocks = generateChunkBlocks(cx, cz, 20261014, Dimension.OVERWORLD, undefined, stats);
+      const blocks = generateChunkBlocks(cx, cz, 20261014, Dimension.OVERWORLD, 'default', undefined, stats);
       for (const id of blocks) counts.set(id, (counts.get(id) ?? 0) + 1);
       const biome = generator.columnBiome(cx * 16 + 8, cz * 16 + 8).name;
       biomeHistogram.set(biome, (biomeHistogram.get(biome) ?? 0) + 1);

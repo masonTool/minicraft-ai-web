@@ -1,0 +1,280 @@
+/**
+ * 世界管理（世界列表 / 世界类型 / 超平坦地形）离线测试
+ *
+ * 覆盖：
+ *  1. 世界类型表：三种类型都有中文标签、`isWorldType` 认得出脏数据、随机种子在合法范围内
+ *  2. 世界清单：增删改查、排序、默认命名、持久化往返、清单损坏时回退、字段缺失时补默认
+ *  3. 库名映射：旧版单存档沿用旧库名（升级不搬数据），新世界各自一个库
+ *  4. 超平坦地形：基岩层在最底、泥土三层、草方块地表、之上全是空气；且只影响主世界
+ *  5. 放大化地形：起伏幅度明显比默认世界大，且不会顶出世界高度
+ *
+ * 运行：npm run test:world
+ */
+
+import {
+  AMPLIFIED_RELIEF_SCALE,
+  FLAT_LAYERS,
+  FLAT_SURFACE_Y,
+  WORLD_TYPES,
+  WORLD_TYPE_LABELS,
+  isWorldType,
+  randomSeed,
+} from '../src/core/gen/WorldType.ts';
+import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
+import { Dimension } from '../src/core/gen/Dimension.ts';
+import { OverworldGenerator, SEA_LEVEL } from '../src/core/gen/OverworldGenerator.ts';
+import { Chunk, CHUNK_SIZE_X, CHUNK_SIZE_Z, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
+import { LEGACY_WORLD_ID, WorldRegistry, dbNameFor } from '../src/core/save/WorldRegistry.ts';
+import { relativeTime } from '../src/ui/WorldScreen.ts';
+
+let passed = 0;
+let failed = 0;
+
+function check(label: string, condition: boolean, detail = ''): void {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${label}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
+  }
+}
+
+/** 内存版 localStorage（Node 里没有真的），只实现用到的几个方法 */
+class MemoryStorage implements Storage {
+  private readonly map = new Map<string, string>();
+  get length(): number {
+    return this.map.size;
+  }
+  clear(): void {
+    this.map.clear();
+  }
+  getItem(key: string): string | null {
+    return this.map.get(key) ?? null;
+  }
+  key(index: number): string | null {
+    return [...this.map.keys()][index] ?? null;
+  }
+  removeItem(key: string): void {
+    this.map.delete(key);
+  }
+  setItem(key: string, value: string): void {
+    this.map.set(key, value);
+  }
+  /** 测试用：直接塞一段原文（模拟清单损坏） */
+  raw(key: string, value: string): void {
+    this.map.set(key, value);
+  }
+}
+
+const SEED = 20261014;
+
+// ---------------------------------------------------------------- 1. 世界类型
+
+console.log('\n[世界类型]');
+{
+  check('三种类型齐全', WORLD_TYPES.join('|') === 'default|flat|amplified');
+  check(
+    '每种类型都有中文标签',
+    WORLD_TYPES.every((type) => typeof WORLD_TYPE_LABELS[type] === 'string' && WORLD_TYPE_LABELS[type].length > 0),
+  );
+  check('isWorldType 认得合法值', isWorldType('flat') && isWorldType('amplified') && isWorldType('default'));
+  check('isWorldType 拒绝脏数据', !isWorldType('nope') && !isWorldType(3) && !isWorldType(null));
+
+  let inRange = true;
+  for (let i = 0; i < 200; i++) {
+    const seed = randomSeed();
+    if (!Number.isInteger(seed) || seed < 0 || seed > 0x7fffffff) inRange = false;
+  }
+  check('随机种子都是 32 位正整数（能在界面上手输）', inRange);
+  check('超平坦地表高度就是草方块那一层', FLAT_SURFACE_Y === FLAT_LAYERS.grassY);
+}
+
+// ---------------------------------------------------------------- 2. 世界清单
+
+console.log('\n[世界清单]');
+{
+  const storage = new MemoryStorage();
+  const registry = new WorldRegistry(storage);
+  check('初始没有任何世界', registry.count === 0 && registry.list().length === 0);
+
+  const first = registry.create();
+  check('新建世界有 id 与非零种子', first.id.length > 0 && Number.isInteger(first.seed));
+  check('默认地形是 default', first.worldType === 'default');
+  check('默认名字带编号', first.name === '新的世界 1', first.name);
+
+  const flat = registry.create({ worldType: 'flat', seed: 42 });
+  check('按类型自动命名', flat.name === '超平坦世界 1', flat.name);
+  check('种子用传入的值', flat.seed === 42);
+
+  const named = registry.create({ name: '  我的存档  ', worldType: 'amplified' });
+  check('自定义名字会去掉首尾空格', named.name === '我的存档', `[${named.name}]`);
+  check('id 不重复', new Set([first.id, flat.id, named.id]).size === 3);
+
+  check('list 按上次游玩倒序', registry.list()[0]!.id === named.id || registry.list()[0]!.lastPlayed >= first.lastPlayed);
+
+  registry.update(flat.id, { playTime: 120, edits: 7, lastPlayed: Date.now() + 1000 });
+  check('update 能写回统计', registry.get(flat.id)!.playTime === 120 && registry.get(flat.id)!.edits === 7);
+  check('刚玩过的世界排到最前', registry.list()[0]!.id === flat.id);
+
+  registry.rename(flat.id, '  平坦乐园 ');
+  check('重命名生效', registry.get(flat.id)!.name === '平坦乐园');
+  registry.rename(flat.id, '   ');
+  check('重命名成空白时回退成"未命名世界"', registry.get(flat.id)!.name === '未命名世界');
+
+  // 持久化：换一个 registry 读同一个 storage
+  const reloaded = new WorldRegistry(storage);
+  check('清单会持久化（重新加载后还在）', reloaded.count === 3 && reloaded.get(first.id)!.name === first.name);
+
+  reloaded.remove(flat.id);
+  check('删除后清单里没有了', reloaded.count === 2 && reloaded.get(flat.id) === undefined);
+  check('删除也写回了存储', new WorldRegistry(storage).count === 2);
+
+  // 清单损坏 / 字段缺失
+  const broken = new MemoryStorage();
+  broken.raw('bedrock-worlds', '{ 这不是 JSON');
+  check('清单损坏时回退成空列表（而不是让游戏打不开）', new WorldRegistry(broken).count === 0);
+
+  const messy = new MemoryStorage();
+  messy.raw('bedrock-worlds', JSON.stringify([{ id: 'a' }, { id: '' }, 'nonsense', { id: 'b', worldType: 'flat', seed: 5 }]));
+  const healed = new WorldRegistry(messy);
+  check('缺字段的条目被补齐（名字/种子/类型/时间）', healed.count === 2 && healed.get('a')!.name === '未命名世界');
+  check('没有 id 的条目被丢掉', healed.get('') === undefined);
+  check('合法的 worldType 保留下来', healed.get('b')!.worldType === 'flat');
+  check('非法 worldType 回退成 default', healed.get('a')!.worldType === 'default');
+
+  // 认领旧存档
+  const legacyRegistry = new WorldRegistry(new MemoryStorage());
+  const adopted = legacyRegistry.adopt(LEGACY_WORLD_ID, 777, { name: '我的世界' });
+  check('认领旧存档会建出条目', adopted.seed === 777 && legacyRegistry.count === 1);
+  check('重复认领同一个 id 不会建出第二个', legacyRegistry.adopt(LEGACY_WORLD_ID, 999).seed === 777);
+}
+
+// ---------------------------------------------------------------- 3. 库名映射
+
+console.log('\n[存档库名]');
+{
+  check('旧版单存档沿用旧库名（升级不搬数据）', dbNameFor(LEGACY_WORLD_ID) === 'bedrock-118-web');
+  check('新世界各自一个库', dbNameFor('w123') === 'bedrock-118-web:w123');
+  check('两个世界不会共用一个库', dbNameFor('w1') !== dbNameFor('w2'));
+}
+
+// ---------------------------------------------------------------- 4. 超平坦地形
+
+console.log('\n[超平坦世界]');
+{
+  const blocks = generateChunkBlocks(0, 0, SEED, Dimension.OVERWORLD, 'flat');
+  const blockAt = (x: number, y: number, z: number): number => blocks[Chunk.index(x, y, z)]!;
+
+  check('最底下是基岩（防掉出世界）', blockAt(0, FLAT_LAYERS.bedrockY, 0) !== 0 && blockAt(15, FLAT_LAYERS.bedrockY, 15) !== 0);
+  // 基岩就在世界的底面（再往下越界了，不能取样）：这一层必须是实心的
+  check('基岩层就是世界底面', FLAT_SURFACE_Y > FLAT_LAYERS.bedrockY && FLAT_LAYERS.dirtFrom === FLAT_LAYERS.bedrockY + 1);
+  check('泥土层是实心的', blockAt(3, FLAT_LAYERS.dirtFrom, 7) !== 0 && blockAt(3, FLAT_LAYERS.dirtTo, 7) !== 0);
+  check('地表那一层是草方块', blockAt(3, FLAT_LAYERS.grassY, 7) !== 0);
+  check('地表之上全是空气', blockAt(3, FLAT_LAYERS.grassY + 1, 7) === 0 && blockAt(8, 100, 8) === 0);
+
+  let solidAbove = 0;
+  for (let y = FLAT_LAYERS.grassY + 1; y < WORLD_MAX_Y; y++) {
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        if (blockAt(x, y, z) !== 0) solidAbove++;
+      }
+    }
+  }
+  check('草地上方一个方块都没有（没有树、没有洞穴）', solidAbove === 0, `多出 ${solidAbove} 个方块`);
+
+  // 每个区块都一模一样：平坦世界不依赖坐标
+  const far = generateChunkBlocks(37, -12, SEED, Dimension.OVERWORLD, 'flat');
+  let identical = true;
+  for (let i = 0; i < blocks.length; i++) if (blocks[i] !== far[i]) identical = false;
+  check('不同区块的地形完全相同', identical);
+
+  // 只影响主世界：下界与末地照旧
+  const netherFlat = generateChunkBlocks(0, 0, SEED, Dimension.NETHER, 'flat');
+  const netherNormal = generateChunkBlocks(0, 0, SEED, Dimension.NETHER, 'default');
+  let same = true;
+  for (let i = 0; i < netherFlat.length; i++) if (netherFlat[i] !== netherNormal[i]) same = false;
+  check('超平坦不影响下界', same);
+
+  const endFlat = generateChunkBlocks(0, 0, SEED, Dimension.END, 'flat');
+  const endNormal = generateChunkBlocks(0, 0, SEED, Dimension.END, 'default');
+  same = true;
+  for (let i = 0; i < endFlat.length; i++) if (endFlat[i] !== endNormal[i]) same = false;
+  check('超平坦不影响末地', same);
+}
+
+// ---------------------------------------------------------------- 5. 放大化地形
+
+console.log('\n[放大化世界]');
+{
+  const normal = new OverworldGenerator(SEED, 'default');
+  const amplified = new OverworldGenerator(SEED, 'amplified');
+
+  let normalMax = -Infinity;
+  let amplifiedMax = -Infinity;
+  let normalDeviation = 0;
+  let amplifiedDeviation = 0;
+  const SAMPLES = 40;
+  for (let i = 0; i < SAMPLES; i++) {
+    const x = i * 37 - 300;
+    const z = i * 53 - 400;
+    const heightN = normal.surfaceY(x, z);
+    const heightA = amplified.surfaceY(x, z);
+    normalMax = Math.max(normalMax, heightN);
+    amplifiedMax = Math.max(amplifiedMax, heightA);
+    normalDeviation += Math.abs(heightN - SEA_LEVEL);
+    amplifiedDeviation += Math.abs(heightA - SEA_LEVEL);
+  }
+
+  check('放大化世界确实更高（最高点超过默认）', amplifiedMax > normalMax, `默认 ${normalMax} / 放大 ${amplifiedMax}`);
+  check(
+    '整体起伏也更大（偏离海平面的幅度更大）',
+    amplifiedDeviation > normalDeviation * 1.2,
+    `默认 ${normalDeviation} / 放大 ${amplifiedDeviation}`,
+  );
+  check(
+    '倍率就是配置里那个数',
+    AMPLIFIED_RELIEF_SCALE > 1 && AMPLIFIED_RELIEF_SCALE < 4,
+    String(AMPLIFIED_RELIEF_SCALE),
+  );
+
+  // 极值也不能顶出世界高度：夹紧之后仍要能正常生成
+  let tooHigh = 0;
+  for (let i = 0; i < 200; i++) {
+    const height = amplified.surfaceY(i * 11 - 1000, i * 17 - 1000);
+    if (height >= WORLD_MAX_Y - 4) tooHigh++;
+  }
+  check('山尖被夹在世界高度之内（不会出现被切平的地形）', tooHigh === 0, `${tooHigh} 列过高`);
+
+  const amplifiedChunk = generateChunkBlocks(0, 0, SEED, Dimension.OVERWORLD, 'amplified');
+  const normalChunk = generateChunkBlocks(0, 0, SEED, Dimension.OVERWORLD, 'default');
+  let different = false;
+  for (let i = 0; i < amplifiedChunk.length; i++) {
+    if (amplifiedChunk[i] !== normalChunk[i]) {
+      different = true;
+      break;
+    }
+  }
+  check('同一个种子的默认与放大化生成出不同的地形', different);
+
+  // 生成器缓存不能把两种世界类型串在一起
+  const again = generateChunkBlocks(0, 0, SEED, Dimension.OVERWORLD, 'default');
+  let sameAsNormal = true;
+  for (let i = 0; i < again.length; i++) if (again[i] !== normalChunk[i]) sameAsNormal = false;
+  check('切回默认类型拿到的还是默认地形（缓存没串）', sameAsNormal);
+}
+
+// ---------------------------------------------------------------- 6. 时间文案
+
+console.log('\n[相对时间]');
+{
+  const now = Date.now();
+  check('刚刚', relativeTime(now - 5_000, now) === '刚刚');
+  check('分钟', relativeTime(now - 3 * 60_000, now) === '3 分钟前');
+  check('小时', relativeTime(now - 5 * 3_600_000, now) === '5 小时前');
+  check('天', relativeTime(now - 3 * 86_400_000, now) === '3 天前');
+  check('未来时间不会显示负数', relativeTime(now + 60_000, now) === '刚刚');
+}
+
+console.log(`\n世界测试：${passed} 通过 / ${failed} 失败`);
+if (failed > 0) process.exit(1);

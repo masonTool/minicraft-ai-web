@@ -25,6 +25,9 @@ import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
+import { WorldScreen } from './ui/WorldScreen.ts';
+import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
+import type { WorldType } from './core/gen/WorldType.ts';
 import {
   CAMERA_MODE_LABELS,
   THIRD_PERSON_DISTANCE,
@@ -92,7 +95,11 @@ const RESPAWN_DELAY = 3;
 const ATTACK_RANGE = 3.2;
 /** 攻击冷却（原版满蓄力为 0.625 秒） */
 const ATTACK_COOLDOWN = 0.5;
-const WORLD_SEED = 20261014;
+/**
+ * 首次进入（没有存档、也没有世界清单）时用的默认种子。
+ * 平时的种子由主菜单里的世界决定，见 `WorldConfig`。
+ */
+const DEFAULT_WORLD_SEED = 20261014;
 /** 原版触及距离：生存 4.5 格 */
 const REACH = 4.5;
 /** 鼠标视角灵敏度（弧度/像素） */
@@ -164,6 +171,17 @@ function clampUnit(value: number): number {
   return value < -1 ? -1 : value > 1 ? 1 : value;
 }
 
+/**
+ * 当前正在玩的世界（由主菜单选定）。
+ * 没有它就没法知道该用哪个种子、哪种地形、往哪个存档库里存。
+ */
+export interface WorldConfig {
+  id: string;
+  name: string;
+  seed: number;
+  worldType: WorldType;
+}
+
 const STARTING_HOTBAR: readonly number[] = [
   Block.GRASS_BLOCK,
   Block.DIRT,
@@ -180,7 +198,7 @@ class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
-  private readonly world = new World(WORLD_SEED);
+  private readonly world: World;
   private readonly chunkRenderer: ChunkRenderer;
   private readonly meshPool: MeshWorkerPool;
   /** 生命 / 饥饿 / 氧气 */
@@ -380,7 +398,15 @@ class App {
     deathEl: HTMLElement,
     /** 存档（打开失败时为 null —— 无痕模式/配额满时游戏照常可玩，只是不保存） */
     private readonly save: SaveGame | null = null,
+    /** 本局玩的是哪个世界（主菜单选出来的）；缺省时用一个固定种子的默认世界 */
+    private readonly worldConfig: WorldConfig = {
+      id: LEGACY_WORLD_ID,
+      name: '默认世界',
+      seed: DEFAULT_WORLD_SEED,
+      worldType: 'default',
+    },
   ) {
+    this.world = new World(this.worldConfig.seed, this.worldConfig.worldType);
     this.deathEl = deathEl;
     this.vitalsHud = new VitalsHud(vitalsEl);
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -466,7 +492,8 @@ class App {
     this.lastStepZ = this.physics.z;
     this.settingsScreen = new SettingsScreen(container, this.settings, {
       onResume: () => this.closeSettings(),
-      onNewWorld: () => void this.clearSaveAndReload(),
+      onExitToMenu: () => void this.exitToMenu(),
+      onDeleteWorld: () => void this.deleteCurrentWorld(),
       onChange: (settings) => this.applySettings(settings),
       onResourcePack: (file) => void this.loadResourcePack(file),
     });
@@ -603,8 +630,8 @@ class App {
     console.info(`[net] 已加入服务器 #${selfId}，种子 ${seed}，在线 ${players.length} 人，已有方块改动 ${edits.length} 条`);
 
     // 种子不一致：地形会对不上（两边看到的是不同的大陆），只提示不强行切换
-    if (seed !== WORLD_SEED) {
-      console.warn(`[net] 服务端种子 ${seed} 与本地 ${WORLD_SEED} 不同，地形可能与队友不一致`);
+    if (seed !== this.worldConfig.seed) {
+      console.warn(`[net] 服务端种子 ${seed} 与本地 ${this.worldConfig.seed} 不同，地形可能与队友不一致`);
     }
 
     // 服务端的方块改动并进增量表：这样它们也会被 K1 的存档保存下来
@@ -701,7 +728,7 @@ class App {
    */
   async loadSaveState(): Promise<boolean> {
     if (!this.save || !this.save.hasSave) return false;
-    if (!this.save.matchesSeed(WORLD_SEED)) {
+    if (!this.save.matchesSeed(this.worldConfig.seed)) {
       console.warn('[save] 存档种子与当前世界不一致，按新世界处理');
       return false;
     }
@@ -795,19 +822,27 @@ class App {
       await this.save.savePlayer(this.snapshotPlayer());
       await this.save.saveChunks(records);
       this.save.addPlayTime(this.autoSaveInterval);
-      await this.save.saveMeta(this.save.buildMeta(WORLD_SEED, this.world.edits.totalEdits));
+      await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
       this.world.edits.markSaved();
 
       this.lastSaveAt = Date.now();
       this.lastSaveMs = performance.now() - started;
       this.saveCount++;
+      // 通知主菜单刷新"上次游玩 / 游玩时长 / 改动数"（没接就什么都不做）
+      this.onSaved?.({
+        playTime: this.save.meta?.playTime ?? 0,
+        edits: this.world.edits.totalEdits,
+      });
       return true;
     } catch (error) {
       console.warn(`[save] ${reason} 保存失败`, error);
       return false;
     }
   }
+
+  /** 保存成功后的回调（主菜单用） */
+  onSaved: ((info: { playTime: number; edits: number }) => void) | null = null;
 
   /** 每帧推进自动保存计时 */
   private tickAutoSave(dt: number): void {
@@ -842,11 +877,26 @@ class App {
   }
 
   /** 删除存档并重载页面（"新世界"入口） */
-  async clearSaveAndReload(): Promise<void> {
-    if (!this.save) return;
-    await this.save.clear();
+  /**
+   * 保存并回到主菜单。
+   *
+   * 直接 `location.reload()` 最省心：启动流程本来就会先出主菜单，
+   * 重载之后所有渲染资源、Worker、世界状态都干净重建，不必手写一套"卸载世界"的流程。
+   */
+  async exitToMenu(): Promise<void> {
+    await this.saveNow('exit');
     window.location.reload();
   }
+
+  /** 删除当前世界：连存档库一起删掉，再回主菜单 */
+  async deleteCurrentWorld(): Promise<void> {
+    await SaveGame.deleteWorld(this.worldConfig.id);
+    this.onWorldDeleted?.(this.worldConfig.id);
+    window.location.reload();
+  }
+
+  /** 世界被删掉时由 boot 注入的回调（App 本身不认识世界清单） */
+  onWorldDeleted: ((worldId: string) => void) | null = null;
 
   // ---------------------------------------------------------------- 环境
 
@@ -2907,6 +2957,22 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/**
+ * 认领旧版单存档。
+ *
+ * 多世界之前的版本只有一个库（`bedrock-118-web`），里面可能有玩家辛苦搭的房子。
+ * 升级后如果清单是空的、而旧库里确实有存档，就把它直接登记成第一个世界——
+ * 库名沿用旧库名（见 `dbNameFor`），一个字节都不用搬。
+ */
+async function adoptLegacyWorld(registry: WorldRegistry): Promise<void> {
+  if (registry.get(LEGACY_WORLD_ID)) return;
+  const legacy = await SaveGame.open(LEGACY_WORLD_ID);
+  if (!legacy?.hasSave) return;
+  const meta = legacy.meta!;
+  registry.adopt(LEGACY_WORLD_ID, meta.seed, { name: '我的世界', edits: meta.edits });
+  registry.update(LEGACY_WORLD_ID, { playTime: meta.playTime, lastPlayed: meta.lastPlayed });
+}
+
 async function boot(): Promise<void> {
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
@@ -2915,16 +2981,44 @@ async function boot(): Promise<void> {
   const deathEl = document.getElementById('death');
   if (!container || !debugEl || !overlayEl || !vitalsEl || !deathEl) throw new Error('缺少必要的 DOM 节点');
 
-  // 先开存档库再建世界：存档里有玩家位置与维度，世界要先知道该从哪生成
-  // （打开失败会返回 null，游戏照常可玩，只是不保存）
-  const save = await SaveGame.open();
-
   const atlas = new TextureAtlas();
-  const app = new App(container, debugEl, overlayEl, atlas, vitalsEl, deathEl, save);
-  app.start();
+  const registry = new WorldRegistry();
+  await adoptLegacyWorld(registry);
 
-  // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样
-  (window as unknown as { __mc: App }).__mc = app;
+  const startWorld = async (world: WorldSummary): Promise<void> => {
+    menu.hide();
+    // 先开存档库再建世界：存档里有玩家位置与维度，世界要先知道该从哪生成
+    // （打开失败会返回 null，游戏照常可玩，只是不保存）
+    const save = await SaveGame.open(world.id);
+    registry.update(world.id, { lastPlayed: Date.now() });
+    const app = new App(container, debugEl, overlayEl, atlas, vitalsEl, deathEl, save, {
+      id: world.id,
+      name: world.name,
+      seed: world.seed,
+      worldType: world.worldType,
+    });
+    // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
+    app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
+    app.onWorldDeleted = (id) => registry.remove(id);
+    app.start();
+    // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样
+    (window as unknown as { __mc: App }).__mc = app;
+  };
+
+  const menu = new WorldScreen(document.body, registry, {
+    onEnter: (world) => void startWorld(world),
+    onDelete: (world) => void deleteWorld(world),
+  });
+
+  /** 删除世界：先删库再删清单项（顺序反了会留下没人认领的库） */
+  const deleteWorld = async (world: WorldSummary): Promise<void> => {
+    await SaveGame.deleteWorld(world.id);
+    registry.remove(world.id);
+  };
+
+  // 开发调试入口：验收脚本用它建世界、看列表
+  (window as unknown as { __worldMenu: WorldScreen }).__worldMenu = menu;
+  menu.show();
 }
 
 void boot();

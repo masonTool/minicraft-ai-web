@@ -81,8 +81,10 @@ export function saveSettings(settings: GameSettings): void {
 export interface SettingsActions {
   /** 继续游戏（关闭面板） */
   onResume: () => void;
-  /** 删除存档并重载（新世界） */
-  onNewWorld: () => void;
+  /** 保存并回到主菜单（世界列表） */
+  onExitToMenu: () => void;
+  /** 删除当前世界（含存档）并回到主菜单 */
+  onDeleteWorld: () => void;
   /** 设置变化：立即生效（视距/视野/调试信息都要马上看到效果） */
   onChange: (settings: GameSettings) => void;
   /** 导入资源包（.mcpack / .zip） */
@@ -123,15 +125,20 @@ export class SettingsScreen {
     resume.textContent = '继续游戏';
     resume.addEventListener('click', () => this.actions.onResume());
 
-    const newWorld = document.createElement('button');
-    newWorld.type = 'button';
-    newWorld.className = 'danger';
-    newWorld.textContent = '新世界（删除存档）';
-    newWorld.addEventListener('click', () => {
-      if (confirm('确定要删除存档并重新开始吗？此操作不可撤销。')) this.actions.onNewWorld();
+    const exitToMenu = document.createElement('button');
+    exitToMenu.type = 'button';
+    exitToMenu.textContent = '保存并回到主菜单';
+
+    const deleteWorld = document.createElement('button');
+    deleteWorld.type = 'button';
+    deleteWorld.className = 'danger';
+    deleteWorld.textContent = '删除本世界';
+    deleteWorld.addEventListener('click', () => {
+      if (confirm('确定要删除这个世界吗？存档会一起删掉，无法恢复。')) this.actions.onDeleteWorld();
     });
 
-    buttons.append(resume, newWorld);
+    buttons.append(resume, exitToMenu, deleteWorld);
+    exitToMenu.addEventListener('click', () => this.actions.onExitToMenu());
 
     // ---- 设置项
     const options = document.createElement('div');

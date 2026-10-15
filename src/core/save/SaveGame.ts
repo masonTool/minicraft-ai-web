@@ -16,8 +16,8 @@
  */
 
 import { ChunkEdits, type SerializedEdits } from './ChunkEdits.ts';
+import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 
-const DB_NAME = 'bedrock-118-web';
 const DB_VERSION = 1;
 const STORE_META = 'meta';
 const STORE_PLAYER = 'player';
@@ -81,16 +81,44 @@ export class SaveGame {
   /** 是否已经写过一次（用于决定"新建存档"还是"更新"） */
   private created = false;
 
-  private constructor(private readonly db: IDBDatabase) {}
+  /** 删除某个世界的整个存档库（删世界用） */
+  static async deleteWorld(
+    worldId: string,
+    factory: IDBFactory | undefined = globalThis.indexedDB,
+  ): Promise<void> {
+    if (!factory) return;
+    await new Promise<void>((resolve) => {
+      const request = factory.deleteDatabase(dbNameFor(worldId));
+      // 删除失败（被其它标签页占用等）不该卡住界面：无论是成功还是出错都继续
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
+  }
+
+  private constructor(
+    private readonly db: IDBDatabase,
+    /** 这个存档属于哪个世界 */
+    readonly worldId: string = LEGACY_WORLD_ID,
+  ) {}
 
   /**
-   * 打开（或创建）存档库。
+   * 打开（或创建）某个世界的存档库。
+   *
+   * **一个世界一个库**（库名见 `dbNameFor`）：删世界就是删库，不会误伤别的世界；
+   * 而且从单存档版本升级时，`main` 直接沿用旧库名，一个字节都不用搬。
+   *
+   * @param worldId 世界 id（默认旧版的单存档库）
    * @returns 失败时返回 null —— 存档不可用不该让游戏打不开（无痕模式、配额满等）
    */
-  static async open(factory: IDBFactory | undefined = globalThis.indexedDB): Promise<SaveGame | null> {
+  static async open(
+    worldId: string = LEGACY_WORLD_ID,
+    factory: IDBFactory | undefined = globalThis.indexedDB,
+  ): Promise<SaveGame | null> {
     if (!factory) return null;
+    const dbName = dbNameFor(worldId);
     try {
-      const request = factory.open(DB_NAME, DB_VERSION);
+      const request = factory.open(dbName, DB_VERSION);
       request.onupgradeneeded = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META);
@@ -98,7 +126,7 @@ export class SaveGame {
         if (!db.objectStoreNames.contains(STORE_CHUNKS)) db.createObjectStore(STORE_CHUNKS);
       };
       const db = await promisify(request);
-      const save = new SaveGame(db);
+      const save = new SaveGame(db, worldId);
       save.meta = await save.readMeta();
       // 结构版本不一致：旧存档的字段含义可能已经变了，直接当作没有存档
       if (save.meta && save.meta.version !== SAVE_VERSION) {
