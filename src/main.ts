@@ -140,6 +140,7 @@ import {
 import {
   TOTAL_SLOTS, HOTBAR_SIZE, Inventory, type ItemStack } from './core/container/Inventory.ts';
 import { CHEST_SIZE } from './core/container/Chest.ts';
+import { BREW_SLOT_COUNT, BrewingStand } from './core/container/BrewingStand.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
 import { Arrow, type ArrowOptions } from './core/entity/Arrow.ts';
@@ -2163,6 +2164,23 @@ class App {
   }
 
   /**
+   * 空玻璃瓶装水（H10）：手上是玻璃瓶、准星对着水，就换成一瓶水。
+   *
+   * 严格照原版："手上必须是玻璃瓶"，不是玻璃瓶时返回 `false`，
+   * 让这次右键继续往下走（不然"对着水用锄头"这种操作会被无声吃掉）。
+   */
+  private fillWaterBottle(): boolean {
+    if (this.heldItemId !== Item.GLASS_BOTTLE) return false;
+    if (!this.inventory.consume(Item.GLASS_BOTTLE, 1)) return false;
+    const leftover = this.inventory.add(Item.WATER_BOTTLE, 1);
+    // 背包满了就掉在脚边（水瓶不可堆叠，一装满就得有地方放）
+    if (leftover > 0) this.spawnDrop(Item.WATER_BOTTLE, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
+    this.audio.play('splash');
+    this.refreshHotbar();
+    return true;
+  }
+
+  /**
    * 挤奶（J8）：拿空桶对着成年牛右键。
    * 幼体挤不出奶（原版也挤不出来），所以先判成年。
    */
@@ -2970,6 +2988,10 @@ class App {
       this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(x, y, z));
       return true;
     }
+    if (hitBlock === Block.BREWING_STAND) {
+      this.inventoryScreen.openWith('brewing', this.world.containers.getOrCreateBrewingStand(x, y, z));
+      return true;
+    }
     if (hitBlock === Block.ANVIL) {
       this.inventoryScreen.openWith('anvil', this.world.containers.getOrCreateAnvil(x, y, z));
       return true;
@@ -2980,6 +3002,11 @@ class App {
       this.inventoryScreen.openWith('enchanting', this.world.containers.getOrCreateEnchantTable(x, y, z));
       return true;
     }
+
+    // ---- 装水：拿空玻璃瓶对着水右键（H10 的起点）
+    // 没有这一步，酿造链在生存模式下根本走不通：水瓶只能在创造模式里拿。
+    // ⚠️ 桶装水与炼药锅还没做，所以"水桶"那条路仍然不通。
+    if (hitBlock === Block.WATER) return this.fillWaterBottle();
 
     // ---- 红石元件：拉杆开关、按钮按下
     if (hitBlock === Block.LEVER) return this.redstone.toggleLever(this.redstoneWorld, x, y, z);
@@ -3123,14 +3150,16 @@ class App {
   private dropContainerContents(x: number, y: number, z: number): void {
     const container = this.world.containers.get(x, y, z);
     if (!container) return;
-    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3
+    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、酿造台 5
     const size = container instanceof Furnace
       ? FURNACE_SIZE
       : container instanceof EnchantTable
         ? 2
         : container instanceof Anvil
           ? ANVIL_SIZE
-          : CHEST_SIZE;
+          : container instanceof BrewingStand
+            ? BREW_SLOT_COUNT
+            : CHEST_SIZE;
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;
@@ -3141,14 +3170,17 @@ class App {
   }
 
   /**
-   * 推进附近的熔炉。
-   * 只 tick 玩家周围 64 格内的熔炉，避免容器多了以后每帧全量遍历。
+   * 推进附近的熔炉与酿造台。
+   * 只 tick 玩家周围 64 格内的容器，避免容器多了以后每帧全量遍历。
+   *
+   * 两种容器都**自己会通知 `onChange`**（见各自的 `tick`），所以这里不需要看返回值：
+   * 界面开着的容器会因此被标脏、按节流重绘进度条。
    */
   private tickContainers(dt: number): void {
     const { x: px, y: py, z: pz } = this.physics;
     const rangeSq = 64 * 64;
     this.world.containers.forEach((container, x, y, z) => {
-      if (!(container instanceof Furnace)) return;
+      if (!(container instanceof Furnace) && !(container instanceof BrewingStand)) return;
       const dx = x + 0.5 - px;
       const dy = y + 0.5 - py;
       const dz = z + 0.5 - pz;

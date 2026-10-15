@@ -8,12 +8,13 @@
  */
 
 import { Anvil } from '../container/Anvil.ts';
+import { BrewingStand } from '../container/BrewingStand.ts';
 import { Chest } from '../container/Chest.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 
-export type BlockContainer = Furnace | Chest | EnchantTable | Anvil;
-export type ContainerKind = 'furnace' | 'chest' | 'enchanting' | 'anvil';
+export type BlockContainer = Furnace | Chest | EnchantTable | Anvil | BrewingStand;
+export type ContainerKind = 'furnace' | 'chest' | 'enchanting' | 'anvil' | 'brewing';
 
 interface Entry {
   x: number;
@@ -88,6 +89,18 @@ export class BlockEntityStore {
     const table = new EnchantTable();
     this.entries.set(BlockEntityStore.key(x, y, z), { x, y, z, container: table });
     return table;
+  }
+
+  /**
+   * 酿造台的容器按坐标存：三个药水槽 + 材料 + 燃料放在台上走开再回来，还在原处
+   * （与熔炉/附魔台同一个理由——否则"放下材料去拿瓶子"就等于白放）。
+   */
+  getOrCreateBrewingStand(x: number, y: number, z: number): BrewingStand {
+    const existing = this.get(x, y, z);
+    if (existing instanceof BrewingStand) return existing;
+    const stand = new BrewingStand();
+    this.entries.set(BlockEntityStore.key(x, y, z), { x, y, z, container: stand });
+    return stand;
   }
 
   remove(x: number, y: number, z: number): void {

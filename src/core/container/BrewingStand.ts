@@ -81,7 +81,11 @@ export class BrewingStand implements SlotSource {
     if (stack.count <= 0) this.slots[BREW_INGREDIENT_SLOT] = null;
   }
 
-  /** 推进 dt 秒；由主程序对附近的酿造台调用（与熔炉同一条 tick 通道） */
+  /**
+   * 推进 dt 秒；由主程序对附近的酿造台调用（与熔炉同一条 tick 通道）。
+   * 与熔炉一样**自己通知 `onChange`**：界面靠它知道"进度条该重画了"，
+   * 否则开着界面看酿造台会是一条永远不动的进度条。
+   */
   tick(dt: number): BrewTickResult {
     const result: BrewTickResult = { changed: false, brewed: false };
     if (!canBrew(this.material, this.bottleIds)) {
@@ -123,6 +127,7 @@ export class BrewingStand implements SlotSource {
     }
     result.brewed = changed.length > 0;
     if (this.fuelLeft <= 0) this.brewing = false;
+    this.onChange?.();
     return result;
   }
 

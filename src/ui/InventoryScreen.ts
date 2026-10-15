@@ -1,13 +1,16 @@
 /**
  * 通用容器界面
  *
- * 五种模式共用一块面板，下方永远是玩家自己的主背包 + 快捷栏，
+ * 七种模式共用一块面板，下方永远是玩家自己的主背包 + 快捷栏，
  * 上方区域随模式切换（与原版一致：打开不同容器时只是上半部分在变）：
  *
- *   inventory：2×2 合成 + 结果槽 + 创造物品栏
- *   crafting ：3×3 合成 + 结果槽
- *   furnace  ：原料 / 燃料 / 产物 三格 + 火焰与进度
- *   chest    ：3×9 容器格
+ *   inventory ：2×2 合成 + 结果槽 + 创造物品栏
+ *   crafting  ：3×3 合成 + 结果槽
+ *   furnace   ：原料 / 燃料 / 产物 三格 + 火焰与进度
+ *   chest     ：3×9 容器格
+ *   enchanting：物品 + 青金石 + 三个候选槽（H9）
+ *   anvil     ：左 / 右 / 产物三格 + 改名与代价（H8）
+ *   brewing   ：3 个药水槽 + 材料 + 燃料 + 20 秒进度（H10）
  *
  * 拖拽语义：
  *   左键 → 整叠拿起 / 放下 / 合并 / 交换
@@ -40,7 +43,13 @@ import {
 import { anvilHint, repairCostLabel } from '../core/crafting/Anvil.ts';
 import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, Furnace } from '../core/container/Furnace.ts';
 import { UI_HINT_UNIMPLEMENTED, optionLabel, type EnchantOption } from '../core/crafting/Enchanting.ts';
-import { Chest } from '../core/container/Chest.ts';
+import {
+  BREW_BOTTLE_SLOTS,
+  BREW_FUEL_SLOT,
+  BREW_INGREDIENT_SLOT,
+  BrewingStand,
+} from '../core/container/BrewingStand.ts';
+import type { BlockContainer } from '../core/world/BlockEntityStore.ts';
 import {
   CATEGORY_LABELS,
   ITEM_CATEGORIES,
@@ -53,7 +62,14 @@ import {
 import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
 import { Tooltip } from './Tooltip.ts';
 
-export type InventoryPanelMode = 'inventory' | 'crafting' | 'furnace' | 'chest' | 'enchanting' | 'anvil';
+export type InventoryPanelMode =
+  | 'inventory'
+  | 'crafting'
+  | 'furnace'
+  | 'chest'
+  | 'enchanting'
+  | 'anvil'
+  | 'brewing';
 
 export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
@@ -140,6 +156,14 @@ export class InventoryScreen {
   private readonly anvilStatusEl: HTMLDivElement;
   private readonly cookFillEl: HTMLElement;
 
+  /** 酿造台（H10）：3 个药水槽 + 材料槽 + 燃料槽 + 进度条 */
+  private readonly brewingLayout: HTMLDivElement;
+  private readonly brewBottleSlots: HTMLDivElement[] = [];
+  private readonly brewIngredientSlot: HTMLDivElement;
+  private readonly brewFuelSlot: HTMLDivElement;
+  private readonly brewProgressEl: HTMLElement;
+  private readonly brewFuelTextEl: HTMLDivElement;
+
   // 创造物品栏的分类与搜索状态。
   // 这几个元素在 buildCreativeSection() 里创建（构造函数中调用），
   // 因此不能用 readonly —— TS 无法跨方法验证"只赋值一次"。
@@ -157,7 +181,8 @@ export class InventoryScreen {
   private readonly grids: Record<2 | 3, CraftingGrid>;
 
   private mode: InventoryPanelMode = 'inventory';
-  private activeContainer: Furnace | Chest | EnchantTable | Anvil | null = null;
+  /** 当前打开的容器（熔炉/箱子/附魔台/铁砧/酿造台），类型由 `BlockEntityStore` 统一给出 */
+  private activeContainer: BlockContainer | null = null;
   private containerDirty = false;
   private containerRefreshTimer = 0;
 
@@ -259,6 +284,22 @@ export class InventoryScreen {
     this.enchantLapisSlot.dataset.key = 'enchant:lapis';
     this.enchantStatusEl = document.createElement('div');
     this.enchantStatusEl.className = 'enchant-status';
+
+    // 酿造台（H10）：药水槽是**三格**，材料与燃料分开两格（原版 3 + 1 + 1）
+    this.brewingLayout = document.createElement('div');
+    this.brewingLayout.className = 'brewing-layout';
+    for (const slot of BREW_BOTTLE_SLOTS) {
+      const element = this.createSlot();
+      element.dataset.key = `brewing:${slot}`;
+      this.brewBottleSlots.push(element);
+    }
+    this.brewIngredientSlot = this.createSlot();
+    this.brewIngredientSlot.dataset.key = `brewing:${BREW_INGREDIENT_SLOT}`;
+    this.brewFuelSlot = this.createSlot();
+    this.brewFuelSlot.dataset.key = `brewing:${BREW_FUEL_SLOT}`;
+    this.brewProgressEl = document.createElement('i');
+    this.brewFuelTextEl = document.createElement('div');
+    this.brewFuelTextEl.className = 'brewing-fuel-text';
 
     this.flameEl = document.createElement('div');
     this.flameEl.className = 'furnace-flame';
@@ -444,6 +485,7 @@ export class InventoryScreen {
     this.clearBindings('chest:');
     this.clearBindings('enchant:');
     this.clearBindings('anvil:');
+    this.clearBindings('brewing:');
 
     if (this.mode === 'furnace') {
       const input = this.registerExisting(this.furnaceInputSlot, 'furnace:input', this.activeContainer!, FURNACE_INPUT);
@@ -466,6 +508,41 @@ export class InventoryScreen {
 
       this.furnaceLayout.replaceChildren(left, middle, output);
       this.topArea.appendChild(this.furnaceLayout);
+      return;
+    }
+
+    if (this.mode === 'brewing') {
+      const stand = this.activeContainer instanceof BrewingStand ? this.activeContainer : null;
+      for (const slot of BREW_BOTTLE_SLOTS) {
+        this.registerExisting(this.brewBottleSlots[slot]!, `brewing:${slot}`, stand!, slot);
+      }
+      this.registerExisting(this.brewIngredientSlot, `brewing:${BREW_INGREDIENT_SLOT}`, stand!, BREW_INGREDIENT_SLOT);
+      this.registerExisting(this.brewFuelSlot, `brewing:${BREW_FUEL_SLOT}`, stand!, BREW_FUEL_SLOT);
+
+      const bottles = document.createElement('div');
+      bottles.className = 'brewing-bottles';
+      bottles.append(...this.brewBottleSlots);
+      const bottleCol = document.createElement('div');
+      bottleCol.className = 'brewing-col';
+      bottleCol.append(this.buildLabel('药水（最多 3 瓶同时酿）'), bottles);
+
+      const materialCol = document.createElement('div');
+      materialCol.className = 'brewing-col';
+      materialCol.append(this.buildLabel('材料'), this.brewIngredientSlot);
+
+      const fuelCol = document.createElement('div');
+      fuelCol.className = 'brewing-col';
+      fuelCol.append(this.buildLabel('燃料'), this.brewFuelSlot);
+
+      const middle = document.createElement('div');
+      middle.className = 'brewing-middle';
+      const track = document.createElement('div');
+      track.className = 'furnace-cook';
+      track.appendChild(this.brewProgressEl);
+      middle.append(track, this.brewFuelTextEl);
+
+      this.brewingLayout.replaceChildren(bottleCol, middle, materialCol, fuelCol);
+      this.topArea.appendChild(this.brewingLayout);
       return;
     }
 
@@ -814,7 +891,7 @@ export class InventoryScreen {
   }
 
   /** 打开为指定模式；容器模式必须传入容器实例 */
-  openWith(mode: InventoryPanelMode, container?: Furnace | Chest | EnchantTable | Anvil): void {
+  openWith(mode: InventoryPanelMode, container?: BlockContainer): void {
     if (this.mode !== mode || this.activeContainer !== container) {
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = mode;
@@ -885,6 +962,15 @@ export class InventoryScreen {
       if (flameFill) flameFill.style.height = `${Math.round(furnace.burnRatio * 100)}%`;
       this.flameEl.classList.toggle('lit', furnace.isLit);
       this.cookFillEl.style.width = `${Math.round(furnace.cookRatio * 100)}%`;
+    }
+
+    if (this.mode === 'brewing' && this.activeContainer instanceof BrewingStand) {
+      const stand = this.activeContainer;
+      this.brewProgressEl.style.width = `${Math.round(stand.brewRatio * 100)}%`;
+      // 燃料库存必须显示出来：烈焰粉是 1 份 20 次，"还剩 17 次"与"还剩 3 次"对玩家是两件事
+      const left = stand.fuelRemaining;
+      this.brewFuelTextEl.textContent = left > 0 ? `还能酿 ${left} 次` : '需要烈焰粉';
+      this.brewFuelTextEl.classList.toggle('bad', left <= 0);
     }
 
     if (this.mode === 'enchanting') this.refreshEnchantOptions();
@@ -1033,6 +1119,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   chest: '箱子',
   enchanting: '附魔台',
   anvil: '铁砧',
+  brewing: '酿造台',
 };
 
 /** 创造物品栏的搜索匹配：中文名、英文 id、数字 id 都认 */
