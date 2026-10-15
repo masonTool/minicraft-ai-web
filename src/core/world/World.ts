@@ -10,6 +10,7 @@
  */
 
 import { Chunk } from './Chunk.ts';
+import { ChunkEdits } from '../save/ChunkEdits.ts';
 import { BlockEntityStore } from './BlockEntityStore.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import { LightEngine } from '../light/LightEngine.ts';
@@ -32,6 +33,8 @@ export interface WorldEvents {
   onChunkUnloaded?: (cx: number, cz: number) => void;
   /** 方块被玩家修改（放置/破坏），渲染层据此重新网格化受影响的区块 */
   onBlockChanged?: (worldX: number, worldY: number, worldZ: number) => void;
+  /** 区块加载时叠加了玩家改动（读档恢复时会大量触发） */
+  onEditsApplied?: (cx: number, cz: number, count: number) => void;
 }
 
 export class World {
@@ -52,6 +55,12 @@ export class World {
 
   /** 当前维度 */
   dimension: DimensionId = Dimension.OVERWORLD;
+
+  /**
+   * 玩家对区块的修改（增量存档的基础，K1）。
+   * 地形由种子重现，只有被玩家动过的格子需要落盘。
+   */
+  readonly edits = new ChunkEdits();
 
   /** 熔炉 / 箱子这类带内容的方块 */
   readonly containers = new BlockEntityStore();
@@ -88,6 +97,10 @@ export class World {
 
     const chunk = Chunk.fromData(data.cx, data.cz, new Uint16Array(data.blocks));
     if (data.states && data.states.byteLength > 0) chunk.adoptStates(new Uint8Array(data.states));
+    // 叠加玩家改动（读档恢复 / 本次会话里改过的区块重新进出视野）：
+    // 地形由种子重现，因此"生成结果 + 增量"必然还原出玩家看到的那个世界
+    const editCount = this.edits.applyTo(this.dimension, data.cx, data.cz, chunk);
+    if (editCount > 0) this.events.onEditsApplied?.(chunk.cx, chunk.cz, editCount);
     this.chunks.set(key, chunk);
     this.invalidateChunkCache();
     this.light.initChunk(chunk);
@@ -265,6 +278,8 @@ export class World {
   setBlockAndUpdate(worldX: number, worldY: number, worldZ: number, id: number, state = 0): boolean {
     if (!this.setBlock(worldX, worldY, worldZ, id, state)) return false;
     if (worldY < -64 || worldY >= 320) return true;
+    // 记进增量存档：只有"玩家动过"的格子需要落盘
+    this.edits.record(this.dimension, toChunkCoord(worldX), toChunkCoord(worldZ), Chunk.index(worldX & 15, worldY, worldZ & 15), id, state);
     this.light.onBlockChanged(worldX, worldY, worldZ);
     this.events.onBlockChanged?.(worldX, worldY, worldZ);
     return true;
@@ -279,6 +294,14 @@ export class World {
     if (!chunk) return false;
     chunk.setState(worldX & 15, worldY, worldZ & 15, state);
     if (worldY < -64 || worldY >= 320) return true;
+    this.edits.record(
+      this.dimension,
+      toChunkCoord(worldX),
+      toChunkCoord(worldZ),
+      Chunk.index(worldX & 15, worldY, worldZ & 15),
+      chunk.get(worldX & 15, worldY, worldZ & 15),
+      state,
+    );
     this.light.onBlockChanged(worldX, worldY, worldZ);
     this.events.onBlockChanged?.(worldX, worldY, worldZ);
     return true;

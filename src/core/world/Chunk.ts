@@ -114,6 +114,18 @@ export class Chunk {
   }
 
   /**
+   * index 的逆运算：由区块内下标反解出方块坐标。
+   *
+   * 放在这里而不是让调用方自己算：存档（K1）只存下标以省空间，
+   * 读档时必须精确还原。反解与 index 摆在一起，改一处不会漏掉另一处。
+   */
+  static coordsAt(index: number): { x: number; y: number; z: number } {
+    const y = Math.floor(index / (CHUNK_SIZE_Z * CHUNK_SIZE_X)) + WORLD_MIN_Y;
+    const rest = index % (CHUNK_SIZE_Z * CHUNK_SIZE_X);
+    return { x: rest % CHUNK_SIZE_X, y, z: Math.floor(rest / CHUNK_SIZE_X) };
+  }
+
+  /**
    * 用 Worker 生成的裸数组接管所有权（零拷贝），并重建分段计数。
    * @param counts 已有的分段计数（网格化 Worker 用，省掉一次全量扫描）
    */

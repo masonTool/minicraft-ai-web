@@ -109,6 +109,23 @@ export class Inventory implements SlotSource {
     return true;
   }
 
+  /**
+   * 导出全部槽位（存档用）。
+   * 返回定长的 36 项数组，空槽为 null——不存下标，读档时按下标直接还原。
+   */
+  serialize(): Array<{ id: number; count: number } | null> {
+    return this.slots.map((slot) => (slot ? { id: slot.id, count: slot.count } : null));
+  }
+
+  /** 从存档恢复槽位（长度不符时按能恢复的部分恢复） */
+  restore(data: ReadonlyArray<{ id: number; count: number } | null>): void {
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
+      const stack = data[i];
+      this.slots[i] = stack && stack.count > 0 ? { id: stack.id, count: stack.count } : null;
+    }
+    this.notify();
+  }
+
   countOf(itemId: number): number {
     let total = 0;
     for (const slot of this.slots) if (slot && slot.id === itemId) total += slot.count;

@@ -24,6 +24,8 @@ import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/
 import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
+import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
+import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { delayOf, withDelay } from './core/registry/blockState.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
@@ -233,6 +235,16 @@ class App {
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
+  /** 自动保存间隔（秒）：与原版的自动保存节奏接近 */
+  private readonly autoSaveInterval = 30;
+  private autoSaveTimer = 0;
+  /** 上次保存的结果（调试面板与验收脚本用） */
+  private lastSaveAt = 0;
+  private lastSaveMs = 0;
+  private saveCount = 0;
+  /** 末影龙是否已被击败（会写进存档，决定重进末地要不要再生成 boss） */
+  private dragonDefeated = false;
+
   private yaw = 0;
   private pitch = -0.22;
   private readonly keys = new Set<string>();
@@ -267,6 +279,8 @@ class App {
     private readonly atlas: TextureAtlas,
     vitalsEl: HTMLElement,
     deathEl: HTMLElement,
+    /** 存档（打开失败时为 null —— 无痕模式/配额满时游戏照常可玩，只是不保存） */
+    private readonly save: SaveGame | null = null,
   ) {
     this.deathEl = deathEl;
     this.vitalsHud = new VitalsHud(vitalsEl);
@@ -348,7 +362,10 @@ class App {
     this.touch = isTouchDevice() ? this.createTouchControls() : null;
 
     this.bindEvents();
-    this.refreshWorld(0, 0, true);
+    // 没有存档时直接按出生点请求区块；
+    // 有存档时先不请求 —— 读档要先装载"方块增量"，否则先加载进来的区块
+    // 会以未修改的自然地形生成，之后还要回炉重算光照与网格（会在玩家眼前闪一下）
+    if (!this.save?.hasSave) this.refreshWorld(0, 0, true);
   }
 
   /**
@@ -405,6 +422,164 @@ class App {
         /* 浏览器可能拒绝自动重新锁定，玩家点击画面即可 */
       });
     }
+  }
+
+  // ---------------------------------------------------------------- 存档（K1）
+
+  /**
+   * 读档：把上次的玩家状态恢复到世界里。
+   *
+   * 时机很重要——**必须等存档读完再让玩家落地**，否则会出现
+   * "先按出生点落在 (0,80)，一秒后被存档传送到别处"的跳动。
+   * 因此这里在恢复位置前先设 `spawnResolved`，跳过自动出生点定位。
+   */
+  async loadSaveState(): Promise<boolean> {
+    if (!this.save || !this.save.hasSave) return false;
+    if (!this.save.matchesSeed(WORLD_SEED)) {
+      console.warn('[save] 存档种子与当前世界不一致，按新世界处理');
+      return false;
+    }
+
+    // 先把全部区块增量装进内存：之后任何区块生成都会自动叠加它们
+    const records = await this.save.loadAllChunkEdits();
+    for (const record of records) {
+      this.world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
+    }
+    if (records.length > 0) {
+      console.info(`[save] 已装载 ${records.length} 个区块的增量改动，共 ${this.world.edits.totalEdits} 格`);
+    }
+
+    const data = await this.save.loadPlayer();
+    if (!data) {
+      // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
+      this.refreshWorld(0, 0, true);
+      return false;
+    }
+
+    // 维度：存档在哪个维度就回哪个维度（区块会重新流式加载）
+    if (data.dimension !== this.dimension) {
+      this.setDimension(data.dimension === 'nether' ? Dimension.NETHER : data.dimension === 'end' ? Dimension.END : Dimension.OVERWORLD);
+    }
+
+    this.physics.teleport(data.x, data.y, data.z);
+    this.yaw = data.yaw;
+    this.pitch = data.pitch;
+    this.setFlying(data.flying);
+    this.timeOfDay = data.timeOfDay;
+    this.stats.health = data.health;
+    this.stats.food = data.food;
+    this.stats.saturation = data.saturation;
+    this.stats.air = data.air;
+    this.stats.exhaustion = data.exhaustion;
+    this.dragonDefeated = data.dragonDefeated;
+
+    this.inventory.restore(data.inventory);
+    this.selectSlot(data.selectedSlot);
+    this.refreshHotbar();
+    this.inventoryScreen.refresh();
+
+    // 跳过自动出生点定位，否则会被拉回默认出生点
+    this.spawnResolved = true;
+    this.lastCenterCx = Number.NaN;
+    this.lastCenterCz = Number.NaN;
+    this.refreshWorld(toChunkCoord(data.x), toChunkCoord(data.z), true);
+    return true;
+  }
+
+  /** 打包当前玩家状态 */
+  private snapshotPlayer(): PlayerSave {
+    return {
+      x: this.physics.x,
+      y: this.physics.y,
+      z: this.physics.z,
+      yaw: this.yaw,
+      pitch: this.pitch,
+      dimension: this.dimension,
+      flying: this.flying,
+      timeOfDay: this.timeOfDay,
+      health: this.stats.health,
+      food: this.stats.food,
+      saturation: this.stats.saturation,
+      air: this.stats.air,
+      exhaustion: this.stats.exhaustion,
+      inventory: this.inventory.serialize(),
+      selectedSlot: this.hotbarIndex,
+      dragonDefeated: this.dragonDefeated,
+    };
+  }
+
+  /**
+   * 保存：玩家状态 + 自上次保存以来被改动的区块（增量）。
+   *
+   * 增量从 `world.edits` 里取——它记录的是"玩家动过的格子"，
+   * 因此一次保存通常只有几十 KB，30 秒一次也不会卡顿。
+   */
+  async saveNow(reason = 'auto'): Promise<boolean> {
+    if (!this.save) return false;
+    const started = performance.now();
+    try {
+      const dirty = this.world.edits.dirtyKeys();
+      const records = [];
+      for (const key of dirty) {
+        const { dimension, cx, cz } = ChunkEdits.parseKey(key);
+        const edits = this.world.edits.serialize(dimension, cx, cz);
+        if (edits) records.push({ dimension, cx, cz, edits });
+      }
+
+      await this.save.savePlayer(this.snapshotPlayer());
+      await this.save.saveChunks(records);
+      this.save.addPlayTime(this.autoSaveInterval);
+      await this.save.saveMeta(this.save.buildMeta(WORLD_SEED, this.world.edits.totalEdits));
+      this.save.resetSessionTime();
+      this.world.edits.markSaved();
+
+      this.lastSaveAt = Date.now();
+      this.lastSaveMs = performance.now() - started;
+      this.saveCount++;
+      return true;
+    } catch (error) {
+      console.warn(`[save] ${reason} 保存失败`, error);
+      return false;
+    }
+  }
+
+  /** 每帧推进自动保存计时 */
+  private tickAutoSave(dt: number): void {
+    if (!this.save) return;
+    this.autoSaveTimer += dt;
+    if (this.autoSaveTimer < this.autoSaveInterval) return;
+    this.autoSaveTimer = 0;
+    void this.saveNow('auto');
+  }
+
+  /** 存档状态（调试面板与验收脚本用） */
+  get saveStatus(): {
+    enabled: boolean;
+    hasSave: boolean;
+    lastSaveAt: number;
+    lastSaveMs: number;
+    saveCount: number;
+    edits: number;
+    editedChunks: number;
+    pendingChunks: number;
+  } {
+    return {
+      enabled: this.save !== null,
+      hasSave: this.save?.hasSave ?? false,
+      lastSaveAt: this.lastSaveAt,
+      lastSaveMs: Number(this.lastSaveMs.toFixed(1)),
+      saveCount: this.saveCount,
+      edits: this.world.edits.totalEdits,
+      editedChunks: this.world.edits.chunkCount,
+      pendingChunks: this.world.edits.dirtyKeys().length,
+    };
+  }
+
+  /** 删除存档并重载页面（"新世界"入口） */
+  async clearSaveAndReload(): Promise<void> {
+    if (!this.save) return;
+    await this.save.clear();
+    window.location.reload();
   }
 
   // ---------------------------------------------------------------- 环境
@@ -1416,6 +1591,18 @@ class App {
   }
 
   start(): void {
+    // 读档是异步的：先让世界跑起来（玩家看到创建中的世界），读完再恢复位置与背包
+    if (this.save?.hasSave) {
+      void this.loadSaveState().then((restored) => {
+        if (restored) console.info('[save] 已恢复上次的进度');
+      });
+    }
+
+    // 切后台/关页面前补一次保存：移动端切走随时可能被系统回收
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') void this.saveNow('hidden');
+    });
+
     const loop = () => {
       const now = performance.now();
       const dt = Math.min((now - this.lastTime) / 1000, 0.1);
@@ -1461,6 +1648,7 @@ class App {
       this.applyEnvironment();
 
       this.updateGamepad(dt);
+      this.tickAutoSave(dt);
 
       const centerCx = toChunkCoord(this.physics.x);
       const centerCz = toChunkCoord(this.physics.z);
@@ -1896,6 +2084,16 @@ class App {
     return this.world.setBlockAndUpdate(x, y, z, blockId, state);
   }
 
+  /**
+   * 按名字取方块 id（自动化验收用）。
+   * 脚本里硬编码数字 id 很容易写错（实测把 24 当成玻璃、其实是黑曜石），
+   * 按名字取可以避免这类笔误，也让方块 id 变动时脚本不用跟着改。
+   */
+  blockId(name: string): number {
+    const full = name.includes(':') ? name : `minecraft:${name}`;
+    return BLOCKS.findIndex((def) => def.name === full);
+  }
+
   /** 查询某处方块的状态与形状（自动化验收用） */
   probeState(x: number, y: number, z: number): { block: string; shape: string; state: number } {
     const id = this.world.getBlock(x, y, z);
@@ -1927,7 +2125,7 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function boot(): void {
+async function boot(): Promise<void> {
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
   const overlayEl = document.getElementById('overlay');
@@ -1935,12 +2133,16 @@ function boot(): void {
   const deathEl = document.getElementById('death');
   if (!container || !debugEl || !overlayEl || !vitalsEl || !deathEl) throw new Error('缺少必要的 DOM 节点');
 
+  // 先开存档库再建世界：存档里有玩家位置与维度，世界要先知道该从哪生成
+  // （打开失败会返回 null，游戏照常可玩，只是不保存）
+  const save = await SaveGame.open();
+
   const atlas = new TextureAtlas();
-  const app = new App(container, debugEl, overlayEl, atlas, vitalsEl, deathEl);
+  const app = new App(container, debugEl, overlayEl, atlas, vitalsEl, deathEl, save);
   app.start();
 
   // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样
   (window as unknown as { __mc: App }).__mc = app;
 }
 
-boot();
+void boot();
