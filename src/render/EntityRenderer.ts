@@ -5,6 +5,9 @@
  *  - 方块类物品 → 一个 1/4 大小的迷你方块（六面取方块自身的贴图）
  *  - 非方块物品 → 一张始终朝向镜头的平面贴图
  *
+ * 箭矢（J9）：一个细长的小盒子，六面都用 `item_arrow` 的贴图，按飞行方向摆正。
+ * 所有箭共用一份几何体（形状完全一样），只是位置与朝向不同。
+ *
  * 几何体按物品 id 缓存复用，所以同种掉落物再多也只有一个 BufferGeometry。
  *
  * 光照：逐实体采样所在格子的天光/方块光，把亮度量化成 16 档，每一档共用一个材质。
@@ -14,16 +17,23 @@
 import * as THREE from 'three';
 import type { TextureAtlas } from './TextureAtlas.ts';
 import { applyFaceUvs, blockFaceTiles } from './atlasMesh.ts';
+import { Arrow } from '../core/entity/Arrow.ts';
 import { ItemEntity } from '../core/entity/ItemEntity.ts';
 import type { Entity } from '../core/entity/Entity.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 
 const BLOCK_SIZE = 0.26;
 const SPRITE_SIZE = 0.3;
+/** 箭的盒子尺寸：细长（横截面 0.07、长 0.7），与原版的箭差不多粗 */
+const ARROW_THICKNESS = 0.07;
+const ARROW_LENGTH = 0.7;
 /** 光照档数（0-15） */
 const LIGHT_LEVELS = 16;
 /** 最暗也要能看见轮廓，与原版的"最低亮度"一致 */
 const MIN_BRIGHTNESS = 0.08;
+/** 复用的临时对象（每帧给几十支箭算朝向，不该每次 new） */
+const _forward = new THREE.Vector3(0, 0, -1);
+const _dir = new THREE.Vector3();
 
 const VERTEX_SHADER = /* glsl */ `
 varying vec2 vUv;
@@ -60,6 +70,8 @@ export class EntityRenderer {
   readonly object = new THREE.Group();
 
   private readonly meshes = new Map<number, THREE.Mesh>();
+  private readonly arrowMeshes = new Map<number, THREE.Mesh>();
+  private arrowGeometry: THREE.BufferGeometry | null = null;
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly spriteGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly baseMaterial: THREE.ShaderMaterial;
@@ -108,6 +120,10 @@ export class EntityRenderer {
     const alive = new Set<number>();
 
     for (const entity of entities) {
+      if (entity instanceof Arrow) {
+        this.syncArrow(entity, alive, lightAt);
+        continue;
+      }
       if (!(entity instanceof ItemEntity)) continue;
       alive.add(entity.id);
 
@@ -142,6 +158,60 @@ export class EntityRenderer {
       this.object.remove(mesh);
       this.meshes.delete(id);
     }
+    // 箭用同一套"按 id 增删"的账，但要和掉落物分开两份 map——
+    // 两类实体的 mesh 形状与朝向逻辑都不一样，混在一张表里迟早会拿错
+    for (const [id, mesh] of [...this.arrowMeshes]) {
+      if (alive.has(id)) continue;
+      this.object.remove(mesh);
+      this.arrowMeshes.delete(id);
+    }
+  }
+
+  /** 同步一支箭的位置与朝向 */
+  private syncArrow(
+    arrow: Arrow,
+    alive: Set<number>,
+    lightAt?: (x: number, y: number, z: number) => EntityLight | null,
+  ): void {
+    alive.add(arrow.id);
+
+    let mesh = this.arrowMeshes.get(arrow.id);
+    if (!mesh) {
+      mesh = new THREE.Mesh(this.arrow(), this.baseMaterial);
+      this.arrowMeshes.set(arrow.id, mesh);
+      this.object.add(mesh);
+    }
+
+    if (lightAt) {
+      const light = lightAt(Math.floor(arrow.x), Math.floor(arrow.y), Math.floor(arrow.z));
+      if (light) {
+        const level = Math.max(light.sky * this.skyLightFactor, light.block);
+        mesh.material = this.materialForLevel(Math.round(level));
+      }
+    }
+
+    mesh.position.set(arrow.x, arrow.y + 0.1, arrow.z);
+    // 盒子默认沿 -Z 朝前，把 -Z 转到箭的飞行方向
+    _dir.set(arrow.dirX, arrow.dirY, arrow.dirZ);
+    if (_dir.lengthSq() > 1e-8) {
+      _dir.normalize();
+      mesh.quaternion.setFromUnitVectors(_forward, _dir);
+    }
+  }
+
+  /** 箭的几何体（所有箭共用一份） */
+  private arrow(): THREE.BufferGeometry {
+    if (this.arrowGeometry) return this.arrowGeometry;
+    const geometry = new THREE.BoxGeometry(ARROW_THICKNESS, ARROW_THICKNESS, ARROW_LENGTH);
+    // 六面都用箭的图标贴图（斜着的贴图铺在小盒子上，看起来就是一支箭）
+    const uv = this.atlas.uv('item_arrow');
+    const attribute = geometry.getAttribute('uv') as THREE.BufferAttribute;
+    for (let i = 0; i < attribute.count; i++) {
+      attribute.setXY(i, uv[0] + (attribute.getX(i) > 0.5 ? uv[2] - uv[0] : 0), uv[1] + (attribute.getY(i) > 0.5 ? uv[3] - uv[1] : 0));
+    }
+    attribute.needsUpdate = true;
+    this.arrowGeometry = geometry;
+    return geometry;
   }
 
   /** 调试用：当前已按需创建的光照档位（能直观确认"逐实体光照"确实在切换材质） */

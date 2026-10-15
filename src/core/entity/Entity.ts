@@ -5,8 +5,15 @@
  * 位置 + 速度 + 碰撞盒 + 每帧 tick + 生死标记。
  */
 
+import type { Mob } from './Mob.ts';
 import type { AABB } from '../physics/AABB.ts';
 import type { PhysicsWorld } from '../physics/PlayerPhysics.ts';
+
+/**
+ * 实体层能报出来的伤害类型（是 `PlayerStats.DamageCause` 的子集，那边才是权威定义）。
+ * 用字面量联合而不是直接引那边的类型：实体层不该认识生存模块。
+ */
+export type EntityDamageCause = 'generic' | 'projectile' | 'explosion' | 'fire';
 
 export interface EntityContext {
   /** 碰撞与流体查询 */
@@ -34,8 +41,20 @@ export interface EntityContext {
    * 放在这里而不是让实体直接持有经验对象，是为了让实体层不认识"玩家进度"。
    */
   awardXp?: (amount: number) => void;
-  /** 对玩家造成伤害（生物攻击用，第二个参数是伤害来源的水平位置，用于击退方向） */
-  hurtPlayer: (amount: number, sourceX: number, sourceZ: number) => void;
+  /**
+   * 对玩家造成伤害（生物攻击用，第二个参数是伤害来源的水平位置，用于击退方向）。
+   *
+   * `cause` 用**字符串字面量联合**而不是直接引 `PlayerStats.DamageCause`：
+   * 实体层不该认识生存模块的类型，但取值必须与那边对得上（箭矢要传 'projectile'，
+   * 否则"弹射物保护"这条附魔永远不生效）。
+   */
+  hurtPlayer: (amount: number, sourceX: number, sourceZ: number, cause?: EntityDamageCause) => void;
+  /**
+   * 查询与给定体积相交的生物（箭矢命中判定用）。
+   * 实体层不持有生物列表，所以由主程序从实体管理器里查——
+   * 这样箭矢不必知道"生物是怎么存的"，也方便测试里塞桩。
+   */
+  hitMob?: (box: AABB) => Mob | null;
   /** 生成掉落物实体（生物死亡掉落用） */
   spawnDrop: (itemId: number, count: number, x: number, y: number, z: number) => void;
 }

@@ -32,6 +32,7 @@ import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
 import { Mob } from './core/entity/Mob.ts';
+import { entityIntersectsBox } from './core/entity/Entity.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { endPillarTops } from './core/gen/EndGenerator.ts';
@@ -138,6 +139,7 @@ import {
 import { CHEST_SIZE } from './core/container/Chest.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
+import { Arrow, type ArrowOptions } from './core/entity/Arrow.ts';
 import { ItemEntity } from './core/entity/ItemEntity.ts';
 import type { EntityContext } from './core/entity/Entity.ts';
 import { EntityRenderer } from './render/EntityRenderer.ts';
@@ -2083,6 +2085,20 @@ class App {
     this.net.sendBlock(this.hit.x, this.hit.y, this.hit.z, Block.AIR, 0, this.dimension);
   }
 
+  /**
+   * 射出一支箭（J9）。玩家拉弓与骷髅射箭都走这里，
+   * 于是"箭怎么飞"只有一份实现，两边不会各自漂移。
+   */
+  spawnArrow(
+    x: number,
+    y: number,
+    z: number,
+    velocity: { x: number; y: number; z: number },
+    options: ArrowOptions,
+  ): Arrow {
+    return this.entities.spawn(new Arrow(x, y, z, velocity, options));
+  }
+
   /** 开门/关门：上下两半必须同步切换，否则会出现"半扇门" */
   private toggleDoor(x: number, y: number, z: number): void {
     const state = this.world.getBlockState(x, y, z);
@@ -2249,7 +2265,14 @@ class App {
       pickup: (itemId, count) => this.inventory.add(itemId, count),
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       player: { x: this.physics.x, y: this.physics.y, z: this.physics.z },
-      hurtPlayer: (amount, sourceX, sourceZ) => this.damagePlayer(amount, sourceX, sourceZ),
+      hurtPlayer: (amount, sourceX, sourceZ, cause) => this.damagePlayer(amount, sourceX, sourceZ, cause),
+      // 箭矢命中生物：实体层不持有生物列表，所以由这里从实体管理器里查
+      hitMob: (box) => {
+        for (const entity of this.entities.all) {
+          if (entity instanceof Mob && !entity.dead && entityIntersectsBox(entity, box)) return entity;
+        }
+        return null;
+      },
       playSound: (kind, x, y, z) => this.audio.play(kind, { x, y, z }),
       explode: (x, y, z, power) => this.explodeAt(x, y, z, power),
       spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),

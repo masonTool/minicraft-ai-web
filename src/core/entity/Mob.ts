@@ -77,7 +77,15 @@ export class Mob extends Entity {
   yaw = 0;
   /** 受击红闪剩余时间 */
   hitFlash = 0;
+  /**
+   * 着火剩余秒数（J9 的火矢用它）。
+   *
+   * 着火伤害**不走 `hurt()`**：那样会被 0.5 秒的无敌帧卡成"每 0.5 秒掉 1 点"，
+   * 而原版是每 20 tick（1 秒）掉 1 点、且不吃击退。所以单独攒一个计时器。
+   */
+  burnTime = 0;
 
+  private burnTick = 0;
   private hurtTime = 0;
   private attackCooldown = 0;
   /** 苦力怕的引信（秒）：贴到玩家身上开始点燃，1.5 秒后炸 */
@@ -114,6 +122,7 @@ export class Mob extends Entity {
 
     if (this.hurtTime > 0) this.hurtTime -= dt;
     if (this.hitFlash > 0) this.hitFlash -= dt;
+    this.tickBurning(dt);
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
 
@@ -131,7 +140,17 @@ export class Mob extends Entity {
     if (Math.abs(this.vx) > 0.05 || Math.abs(this.vz) > 0.05) {
       this.yaw = Math.atan2(this.vx, this.vz);
     }
+
+    // 被烧死的情况在 tickBurning 里只标了 dead，掉落要在这里补上——
+    // 否则"用火矢烧死"会变成怪物凭空消失（比被砍死少一条掉落路径）
+    if (this.dead && !this.lootDropped) {
+      this.lootDropped = true;
+      this.dropLoot(ctx);
+    }
   }
+
+  /** 掉落是否已结算（防止死亡与着火两条路径重复掉一份） */
+  private lootDropped = false;
 
   private updateAi(ctx: EntityContext, dt: number): void {
     const player = ctx.player;
@@ -252,6 +271,38 @@ export class Mob extends Entity {
     return true;
   }
 
+  /** 是否正在燃烧（渲染层用它上色） */
+  get burning(): boolean {
+    return this.burnTime > 0;
+  }
+
+  /**
+   * 点燃（火矢用）。取"更长的那个持续时间"，重复命中不会把火越点越短。
+   * 原版火矢是 5 秒。
+   */
+  ignite(seconds: number): void {
+    if (seconds <= 0) return;
+    this.burnTime = Math.max(this.burnTime, seconds);
+  }
+
+  /** 着火伤害：每满 1 秒扣 1 点（原版 20 tick 一次），不参与无敌帧与击退 */
+  private tickBurning(dt: number): void {
+    if (this.burnTime <= 0) return;
+    this.burnTime -= dt;
+    this.burnTick += dt;
+    while (this.burnTick >= 1) {
+      this.burnTick -= 1;
+      this.health -= 1;
+      this.hitFlash = 0.2;
+      if (this.health <= 0) {
+        this.health = 0;
+        this.dead = true;
+        return;
+      }
+    }
+    if (this.burnTime <= 0) this.burnTick = 0;
+  }
+
   /**
    * 受到伤害：无敌帧内无效；否则扣血 + 击退 + 红闪，生命归零则标记死亡并把掉落物交给上层。
    * @param looting 击杀者的「抢夺」等级，只影响掉落数量（伤害加成在 `tools.ts#meleeDamage` 里算好）
@@ -275,6 +326,7 @@ export class Mob extends Entity {
     if (this.health <= 0) {
       this.health = 0;
       this.dead = true;
+      this.lootDropped = true;
       this.dropLoot(ctx, looting);
     }
     return true;

@@ -17,6 +17,11 @@ import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { enchantKindOf, offeringFor } from '../src/core/crafting/Enchanting.ts';
 import { maxDurabilityOf, repairMaterialOf } from '../src/core/crafting/Anvil.ts';
+import { Arrow, ARROW_LIFETIME } from '../src/core/entity/Arrow.ts';
+import type { EntityContext } from '../src/core/entity/Entity.ts';
+import type { Mob } from '../src/core/entity/Mob.ts';
+import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { boxAt } from '../src/core/physics/AABB.ts';
 
 let passed = 0;
 let failed = 0;
@@ -139,6 +144,192 @@ console.log('\n[弓参与附魔与铁砧]');
 
   equal('弓用木板修', repairMaterialOf(Item.BOW), Block.OAK_PLANKS);
   equal('弓在特殊物品表里登记了', SPECIAL_ITEMS[Item.BOW]?.kind, 'bow');
+}
+
+// ---------------------------------------------------------------- 5. 箭矢实体
+
+console.log('\n[箭矢：重力与插住]');
+{
+  // 地面在 y<0；x>=4 处有一堵墙（与 entity-test 用的是同一个搭法）
+  const world = {
+    collisionAt: (x: number, y: number) => (y < 0 || x >= 4 ? 'full' : null),
+    isLiquid: () => false,
+  } as unknown as PhysicsWorld;
+
+  const makeCtx = (overrides: Partial<EntityContext> = {}): EntityContext =>
+    ({
+      world,
+      playerBox: null,
+      pickup: () => 0,
+      getBlock: () => Block.AIR,
+      player: { x: 0, y: 0, z: 0 },
+      hurtPlayer: () => {},
+      spawnDrop: () => {},
+      ...overrides,
+    }) as EntityContext;
+
+  const advance = (arrow: Arrow, ctx: EntityContext, seconds: number, step = 0.02): void => {
+    for (let t = 0; t < seconds; t += step) arrow.tick(ctx, step);
+  };
+
+  // ---- 重力
+  const falling = new Arrow(0.5, 6, 0.5, { x: 0, y: 0, z: 0 }, { fromPlayer: true, damage: 6 });
+  advance(falling, makeCtx(), 0.5);
+  check('自由飞行的箭会下坠（受重力）', falling.vy < 0 && falling.y < 6, `vy=${falling.vy.toFixed(2)}`);
+  equal('下坠的箭水平速度不变（没有凭空减速）', falling.vx, 0);
+
+  // ---- 撞墙插住
+  const intoWall = new Arrow(0.5, 2, 0.5, { x: 30, y: 0, z: 0 }, { fromPlayer: true, damage: 6 });
+  advance(intoWall, makeCtx(), 1.5);
+  check('撞到墙就插住', intoWall.stuck, `x=${intoWall.x.toFixed(2)}`);
+  check('插住后停在墙前（没有穿过去）', intoWall.x < 4, `x=${intoWall.x.toFixed(2)}`);
+  equal('插住后速度清零', intoWall.vx + intoWall.vy + intoWall.vz, 0);
+  const stuckX = intoWall.x;
+  advance(intoWall, makeCtx(), 1);
+  equal('插住后不再移动（也不会继续下坠）', intoWall.x, stuckX);
+
+  // ---- 命中朝向
+  check('记录了飞行方向（渲染用）', Math.abs(intoWall.dirX - 1) < 0.2, `dirX=${intoWall.dirX}`);
+
+  // ---- 超时消失
+  const old = new Arrow(0.5, 30, 0.5, { x: 0, y: 0, z: 0 }, { fromPlayer: true, damage: 6 });
+  advance(old, makeCtx(), ARROW_LIFETIME - 1);
+  check('60 秒内还活着', !old.dead);
+  advance(old, makeCtx(), 2);
+  check('超过 60 秒自然消失', old.dead);
+}
+
+console.log('\n[箭矢：捡回来]');
+{
+  const world = { collisionAt: () => 'full', isLiquid: () => false } as unknown as PhysicsWorld;
+  let picked = 0;
+  const ctx = {
+    world,
+    playerBox: boxAt(0.5, 0, 0.5, 0.6, 1.8),
+    pickup: (id: number) => {
+      if (id === Item.ARROW) picked += 1;
+      return 0;
+    },
+    getBlock: () => Block.AIR,
+    player: { x: 0.5, y: 0, z: 0.5 },
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+  } as unknown as EntityContext;
+
+  const arrow = new Arrow(0.5, 2, 0.5, { x: 0, y: 0, z: 0 }, { fromPlayer: true, damage: 6 });
+  arrow.tick(ctx, 0.02);
+  check('刚插住时还捡不起来（0.5 秒冷却）', picked === 0);
+  for (let t = 0; t < 1; t += 0.02) arrow.tick(ctx, 0.02);
+  equal('冷却过后玩家靠近就捡起来（1 支箭）', picked, 1);
+  check('捡起来之后这支箭消失', arrow.dead);
+
+  // 无限附魔射出的箭不可拾取
+  let infinitePicked = 0;
+  const infiniteCtx = {
+    ...ctx,
+    pickup: () => {
+      infinitePicked += 1;
+      return 0;
+    },
+  } as unknown as EntityContext;
+  const infiniteArrow = new Arrow(0.5, 2, 0.5, { x: 0, y: 0, z: 0 }, {
+    fromPlayer: true,
+    damage: 6,
+    pickable: false,
+  });
+  for (let t = 0; t < 2; t += 0.02) infiniteArrow.tick(infiniteCtx, 0.02);
+  equal('无限附魔的箭捡不回来（否则等于无限刷箭）', infinitePicked, 0);
+  check('但它仍然插在地上', infiniteArrow.stuck);
+}
+
+console.log('\n[箭矢：打玩家（骷髅的箭）]');
+{
+  const world = { collisionAt: () => null, isLiquid: () => false } as unknown as PhysicsWorld;
+  let hurt = 0;
+  let cause = '';
+  const ctx = {
+    world,
+    playerBox: boxAt(0.5, 1, 0.5, 0.6, 1.8),
+    pickup: () => 0,
+    getBlock: () => Block.AIR,
+    player: { x: 0.5, y: 1, z: 0.5 },
+    hurtPlayer: (_amount: number, _sx: number, _sz: number, c?: string) => {
+      hurt += 1;
+      cause = c ?? 'generic';
+    },
+    spawnDrop: () => {},
+  } as unknown as EntityContext;
+
+  // 骷髅的箭：从玩家上方斜着射下来
+  const mobArrow = new Arrow(0.5, 6, 0.5, { x: 0, y: -20, z: 0 }, { fromPlayer: false, damage: 4 });
+  for (let t = 0; t < 1 && !mobArrow.dead; t += 0.02) mobArrow.tick(ctx, 0.02);
+  equal('骷髅的箭打中玩家', hurt, 1);
+  equal('伤害类型是 projectile（弹射物保护靠它生效）', cause, 'projectile');
+  check('命中后箭消失', mobArrow.dead);
+
+  // 玩家自己的箭不该打玩家
+  let selfHurt = 0;
+  const selfCtx = {
+    ...ctx,
+    hurtPlayer: () => {
+      selfHurt += 1;
+    },
+  } as unknown as EntityContext;
+  const ownArrow = new Arrow(0.5, 6, 0.5, { x: 0, y: -20, z: 0 }, { fromPlayer: true, damage: 6 });
+  for (let t = 0; t < 1 && !ownArrow.dead; t += 0.02) ownArrow.tick(selfCtx, 0.02);
+  equal('玩家自己的箭不会打到自己', selfHurt, 0);
+}
+
+console.log('\n[箭矢：命中生物]');
+{
+  const world = { collisionAt: () => null, isLiquid: () => false } as unknown as PhysicsWorld;
+
+  /** 记下被打了几次、掉了多少血、有没有被点燃的桩生物 */
+  const makeMob = (): { id: number; hits: number; damage: number; knockback: [number, number]; fire: number; hurt: Function; ignite: (s: number) => void } => {
+    const mob = {
+      id: 9001,
+      hits: 0,
+      damage: 0,
+      knockback: [0, 0] as [number, number],
+      fire: 0,
+      hurt(amount: number, kx: number, kz: number) {
+        mob.hits += 1;
+        mob.damage += amount;
+        mob.knockback = [kx, kz];
+        return true;
+      },
+      ignite(seconds: number) {
+        mob.fire = Math.max(mob.fire, seconds);
+      },
+    };
+    return mob;
+  };
+
+  const mob = makeMob();
+  const ctx = {
+    world,
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: () => Block.AIR,
+    player: { x: 20, y: 0, z: 20 },
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+    hitMob: () => mob as unknown as Mob,
+  } as unknown as EntityContext;
+
+  const arrow = new Arrow(0.5, 2, 0.5, { x: 40, y: 0, z: 0 }, { fromPlayer: true, damage: 6, knockback: 2, fireSeconds: 5 });
+  for (let t = 0; t < 0.5 && !arrow.dead; t += 0.02) arrow.tick(ctx, 0.02);
+  equal('命中生物一次（子步不会重复打）', mob.hits, 1);
+  equal('造成的是算好的伤害', mob.damage, 6);
+  check('击退方向沿飞行方向（x 为正）', mob.knockback[0] > 0, String(mob.knockback));
+  equal('火矢点燃 5 秒', mob.fire, 5);
+  check('命中后箭消失', arrow.dead);
+
+  // 没打到生物时箭继续飞
+  const emptyCtx = { ...ctx, hitMob: () => null } as unknown as EntityContext;
+  const free = new Arrow(0.5, 2, 0.5, { x: 40, y: 0, z: 0 }, { fromPlayer: true, damage: 6 });
+  for (let t = 0; t < 0.1; t += 0.02) free.tick(emptyCtx, 0.02);
+  check('没命中生物时箭继续飞', !free.dead && free.x > 1, `x=${free.x.toFixed(2)}`);
 }
 
 console.log(`\n弹射物测试：${passed} 通过 / ${failed} 失败`);
