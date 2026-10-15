@@ -24,6 +24,7 @@ import { PARTICLE_POOL, ParticleSystem } from '../src/render/ParticleSystem.ts';
 import { ScreenEffects } from '../src/render/ScreenEffects.ts';
 import { HandRenderer } from '../src/render/HandRenderer.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
+import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { srgbColor } from '../src/render/srgb.ts';
 
 let passed = 0;
@@ -247,6 +248,28 @@ console.log('\n[破坏裂纹与命中面高亮（G2/G3）]');
   overlay.hide();
   check('hide 一次性收起两者', !overlay.highlightVisible && overlay.damageStage === -1);
   overlay.dispose();
+}
+
+// ---------------------------------------------------------------- 2.9 水面动画
+
+console.log('\n[水面动画（E12）]');
+{
+  check('流体贴图槽位够放水与岩浆', FLUID_TILE_SLOTS >= 2);
+  const material = new VoxelMaterial(new THREE.Texture(), { translucent: true });
+  const slots = material.material.uniforms.uFluidTiles!.value as THREE.Vector2[];
+  check('初始时所有槽位都是空位（-1,-1）', slots.length === FLUID_TILE_SLOTS && slots.every((slot) => slot.x === -1 && slot.y === -1));
+
+  material.setFluidTiles([
+    [0.25, 0.5],
+    [0.5, 0.5],
+  ]);
+  check('登记水与岩浆的贴图起点', slots[0]!.x === 0.25 && slots[1]!.x === 0.5);
+  check('没登记的槽位保持空位（不然会把别的贴图当成水面）', slots[2]!.x === -1 && slots[3]!.x === -1);
+
+  material.setTime(12.5);
+  check('时间写进 uniform', material.material.uniforms.uTime!.value === 12.5);
+  // VoxelMaterial 没有 dispose（材质由场景持有），这里只释放纹理对象
+  material.material.dispose();
 }
 
 // ---------------------------------------------------------------- 3. 视野效果

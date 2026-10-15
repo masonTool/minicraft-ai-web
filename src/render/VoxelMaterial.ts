@@ -13,17 +13,29 @@
 
 import * as THREE from 'three';
 
+/**
+ * 流体贴图槽位数（水、岩浆；再多就扩这个数组与着色器里的循环）。
+ * 必须是**编译期常量**：GLSL ES 1.0 的数组长度与循环上界都要求字面量。
+ */
+export const FLUID_TILE_SLOTS = 4;
+
 const VERTEX_SHADER = /* glsl */ `
 attribute vec2 aLight;
 attribute float aShade;
 /** 贴图在图集中的完整起点（未内缩） */
 attribute vec2 aTile;
 
+uniform float uTime;
+/** 需要做水面动画的贴图起点（水 / 岩浆），长度固定为 FLUID_TILE_SLOTS，空位填 (-1,-1) */
+uniform vec2 uFluidTiles[${FLUID_TILE_SLOTS}];
+
 varying vec2 vUv;
 varying vec2 vTile;
 varying vec2 vLight;
 varying float vShade;
 varying float vFogDepth;
+/** 1 = 这一格是流体（要做波浪与滚动），0 = 普通方块 */
+varying float vFluid;
 
 void main() {
   vUv = uv;
@@ -31,7 +43,23 @@ void main() {
   vLight = aLight;
   vShade = aShade;
 
-  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  // 按顶点带的贴图起点判断"是不是流体"。不用逐顶点新加属性，
+  // 也就不需要动网格化与 Worker —— 水面动画只影响渲染，不影响存档与物理。
+  float fluid = 0.0;
+  for (int i = 0; i < ${FLUID_TILE_SLOTS}; i++) {
+    if (distance(aTile, uFluidTiles[i]) < 0.0004) fluid = 1.0;
+  }
+  vFluid = fluid;
+
+  vec3 worldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+  vec3 displaced = position;
+  if (fluid > 0.5) {
+    // 两个不同频率的正弦叠加，按**世界坐标**取样：跨区块的接缝处不会断裂
+    float wave = sin(worldPos.x * 0.85 + uTime * 1.7) + sin(worldPos.z * 0.7 + uTime * 1.25);
+    displaced.y += wave * 0.014;
+  }
+
+  vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);
   vFogDepth = -mvPosition.z;
   gl_Position = projectionMatrix * mvPosition;
 }
@@ -49,16 +77,23 @@ uniform float uAlphaTest;
 uniform vec2 uTileSpan;
 uniform float uTileInset;
 
+uniform float uTime;
+
 varying vec2 vUv;
 varying vec2 vTile;
 varying vec2 vLight;
 varying float vShade;
 varying float vFogDepth;
+varying float vFluid;
 
 void main() {
   // uv 是「平铺坐标」：单面时落在 [0,1]，贪心合并出的大四边形则是 [0,w]×[0,h]。
   // 取小数部分即可把任意大小的面都映射回同一张贴图，再叠加半像素内缩避免渗色。
-  vec2 local = fract(vUv);
+  //
+  // 流体额外叠加一个随时间平移的偏移：**加在 fract 里面**，
+  // 于是滚动始终发生在这一张贴图内部（不会跑到邻居贴图上去）。
+  vec2 scroll = vFluid > 0.5 ? vec2(uTime * 0.06, uTime * 0.045) : vec2(0.0);
+  vec2 local = fract(vUv + scroll + vec2(vFluid * 0.5, 0.0));
   vec2 tileUv = vTile + (uTileInset + local * (1.0 - 2.0 * uTileInset)) * uTileSpan;
   vec4 texel = texture2D(uAtlas, tileUv);
   if (texel.a < uAlphaTest) discard;
@@ -94,8 +129,14 @@ export class VoxelMaterial {
     const translucent = options.translucent ?? false;
     const span = options.tileSpan ?? [1, 1];
 
+    // 流体贴图槽位（水 + 岩浆；上限 4 个，空位用 (-1,-1) 占位）
+    const fluidTiles: THREE.Vector2[] = [];
+    for (let i = 0; i < FLUID_TILE_SLOTS; i++) fluidTiles.push(new THREE.Vector2(-1, -1));
+
     this.uniforms = {
       uAtlas: { value: atlas },
+      uTime: { value: 0 },
+      uFluidTiles: { value: fluidTiles },
       uSkyBrightness: { value: 1 },
       uMinBrightness: { value: translucent ? 0.32 : 0.06 },
       uFogColor: { value: new THREE.Color(0x8fc7ff) },
@@ -127,6 +168,23 @@ export class VoxelMaterial {
    */
   setMinBrightness(value: number): void {
     this.uniforms.uMinBrightness!.value = value;
+  }
+
+  /**
+   * 登记"哪些贴图要做水面动画"。
+   * 传贴图在图集里的完整起点（`atlas.tileOrigin(name)`）；多余的槽位填 (-1,-1)。
+   */
+  setFluidTiles(tiles: ReadonlyArray<readonly [number, number]>): void {
+    const slots = this.uniforms.uFluidTiles!.value as THREE.Vector2[];
+    for (let i = 0; i < slots.length; i++) {
+      const tile = tiles[i];
+      slots[i]!.set(tile ? tile[0] : -1, tile ? tile[1] : -1);
+    }
+  }
+
+  /** 推进水面动画时间（秒） */
+  setTime(seconds: number): void {
+    this.uniforms.uTime!.value = seconds;
   }
 
   /** 0 = 深夜，1 = 正午。用于昼夜循环 */

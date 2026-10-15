@@ -314,6 +314,8 @@ class App {
   private respawnCountdown = 0;
   /** 这一条命是否已经结算过死亡掉落（避免每帧都掉一次） */
   private deathHandled = false;
+  /** 水面动画的累计时间（秒）：与昼夜时间分开，/time 不影响它 */
+  private waterTime = 0;
   /** 验收脚本用：强制显示的破坏阶段（-1 = 走正常逻辑） */
   private forcedDamageStage = -1;
   /** 计划刻队列（流体等"延迟若干 tick 再处理"的方块） */
@@ -589,6 +591,14 @@ class App {
 
     // 难度先按"新建世界时选的"来；如果存档里有玩家数据，loadPlayer 会再用存档的覆盖
     this.difficulty = this.worldConfig.difficulty;
+
+    // 水面动画：告诉材质"哪些贴图要做波浪与滚动"（水与岩浆）
+    const fluidTiles: Array<readonly [number, number]> = [
+      atlas.tileOrigin('water'),
+      atlas.tileOrigin('lava'),
+    ];
+    this.solidMaterial.setFluidTiles(fluidTiles);
+    this.translucentMaterial.setFluidTiles(fluidTiles);
 
     this.chat.onSubmit = (text) => this.handleChatSubmit(text);
     this.chat.onOpenChange = (open) => this.handleChatOpen(open);
@@ -2658,6 +2668,10 @@ class App {
     this.vitalsHud.update(this.stats);
     this.chat.update();
     this.updateEffectsHud();
+    // 水面动画的时间（与昼夜时间分开：调 /time 不该让水面跳一下）
+    this.waterTime += dt;
+    this.solidMaterial.setTime(this.waterTime);
+    this.translucentMaterial.setTime(this.waterTime);
 
     // ---- 死亡与重生
     if (this.stats.dead) {

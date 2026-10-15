@@ -420,10 +420,15 @@ const PAINTERS: Record<string, Painter> = {
     const v = 40 + (hashString('bed' + key) % 70);
     return [clamp255(v), clamp255(v), clamp255(v), 255];
   },
-  water: (_x, _y, rng) => {
+  water: (x, y, rng) => {
     const v = 210 + rng() * 30;
+    // 波纹条纹：两束不同频率的斜向正弦叠加，亮度波动 ±16%。
+    // 这层不只是为了好看——水面的"流动感"完全靠贴图随时间滚动，
+    // 贴图要是纯噪声，滚动起来几乎看不出变化（第一版就是这样，实测像素差仅 1~3）。
+    const band = Math.sin((x + y * 1.6) * 0.85) * 0.5 + Math.sin((x - y * 1.2) * 0.6) * 0.5;
+    const shade = 1 + band * 0.16;
     // 半透明：让海底纹理透出来（对应原版水的透明度观感）
-    return [clamp255(v * 0.3), clamp255(v * 0.58), clamp255(v), 168];
+    return [clamp255(v * 0.3 * shade), clamp255(v * 0.58 * shade), clamp255(v * shade), 168];
   },
   glass: (x, y) => {
     const border = x === 0 || y === 0 || x === TILE_SIZE - 1 || y === TILE_SIZE - 1;

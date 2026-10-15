@@ -24,7 +24,7 @@ npm run dev            # http://localhost:5173
 
 - 时间：2026-10-15 · 提交总数 45（每个功能点一条，可逐条回滚）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **90**、进行中 **59**、待办 24；
+- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **93**、进行中 **57**、待办 23；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -49,6 +49,8 @@ npm run dev            # http://localhost:5173
 | 下界 | `core/gen/NetherGenerator.ts` + `Dimension.ts`：岩浆海 + 洞窟 + 5 个下界群系 + 菌菇树等；`N` 键切维度 |
 | 命令与规则 | `core/commands/Commands.ts`（16 条命令，解析层不碰 DOM）+ `ui/ChatInput.ts`（消息栏与输入行）、`core/world/Rules.ts`（难度与六条游戏规则） |
 | 状态效果 | `core/survival/StatusEffects.ts`（30 种，影响移速/跳跃/挖掘/伤害/氧气/视觉/HUD） |
+| 破坏反馈 | `render/BlockOverlay.ts`（10 阶段破坏裂纹 + 命中面高亮）、图集里的 `destroy_stage_*` 贴图 |
+| 水面动画 | `VoxelMaterial` 的 `uTime` / `uFluidTiles`（按贴图起点识别流体，顶点做波浪、片元滚动贴图） |
 | 随机刻与流体 | `core/tick/RandomTicks.ts`（随机刻行为表 + 计划刻队列）、`core/world/Fluids.ts`（液面等级、无限水源、水火相遇） |
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
 | 说明与配方 | `core/registry/itemNames.ts`（296 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成） |
@@ -117,6 +119,9 @@ npm run dev            # http://localhost:5173
 | 放下的水永远不流动 | 唤醒流体时必须连**自己**一起排进计划刻：刚放的那格四周还是空气，只唤醒邻居谁都不会被唤醒（`wakeFluidAt`）（本轮） |
 | 死亡率相关规则"没对象可控" | 加规则前先看它管的是什么：`mobGriefing` 在苦力怕会爆炸之前根本没有意义 → 先补上引信与爆炸（本轮） |
 | 加了新设置/新字段没人用 | 滑块存在 ≠ 接线（灵敏度曾是个摆设），难度/规则也要"随世界存 + 读档回退默认 + 脏数据逐项校验"，否则老存档一读就崩（本轮） |
+| 叠加层"在某个面看不见" | 顶点绕序写反的面会被 `FrontSide` 背面剔除。症状很迷惑："裂纹在顶面看不见、别的面却看得见"，而顶面恰恰最常挖。判定：`cross(c1-c0, c2-c0)` 必须与面的外法线同向（已加 `facesWithInwardWinding()` 断言）（本轮） |
+| 动画"看不出在动" | 贴图要是纯噪声，滚动起来像素差只有 1~3。要让流动看得出来，**贴图本身得有条纹**（水贴图加了 ±16% 斜向波纹后，1 秒内像素差到 4~6）（本轮） |
+| 给着色器传"编译期常量" | GLSL ES 1.0 的数组长度与循环上界必须是字面量 → 用 `${CONST}` 插值进 shader 字符串，并且那个常量必须定义在字符串**之前**（`const` 有 TDZ，写在后面会直接 ReferenceError）（本轮） |
 | 第二遍 render 把世界清掉 | 叠画手持物品 / 色罩之前必须 `renderer.autoClear = false` + `clearDepth()`，画完再改回来（E15/E16） |
 | 版权素材 | 官方贴图/音效不随仓库分发；贴图运行时程序化生成，P9 计划支持玩家自备资源包 |
 
