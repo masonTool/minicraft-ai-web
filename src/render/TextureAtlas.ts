@@ -1139,6 +1139,84 @@ PAINTERS.item_wheat = (x, y, rng) => {
   return [clamp255(226 + jitter), clamp255(190 + jitter), clamp255(78 + jitter), 255];
 };
 
+/**
+ * 药水瓶：细颈 + 圆肚（`liquid` 为空就是空瓶子，无色液体）。
+ * 液体颜色按药水种类给——这也是玩家分辨药水的唯一线索，所以别都画成同一瓶紫水。
+ */
+function bottlePainter(liquid: readonly [number, number, number] | null): Painter {
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    // 瓶身：x 4~11、y 5~14 的圆角矩形
+    const inBody = x >= 4 && x <= 11 && y >= 5 && y <= 14;
+    // 瓶颈：x 6~9、y 1~4
+    const inNeck = x >= 6 && x <= 9 && y >= 1 && y <= 4;
+    if (!inBody && !inNeck) return [0, 0, 0, 0];
+    const edge = x === 4 || x === 11 || y === 14 || (inNeck && (x === 6 || x === 9));
+    // 瓶底留 2 行玻璃（液体装到这儿）
+    const liquidTop = 7;
+    if (liquid && inBody && y >= liquidTop) {
+      const shade = x < 8 ? 1.12 : 0.9;
+      return [clamp255(liquid[0] * shade + jitter), clamp255(liquid[1] * shade + jitter), clamp255(liquid[2] * shade + jitter), 255];
+    }
+    return [clamp255(214 + jitter), clamp255(226 + jitter), clamp255(232 + jitter), edge ? 255 : 210];
+  };
+}
+
+PAINTERS.item_glass_bottle = bottlePainter(null);
+PAINTERS.item_water_bottle = bottlePainter([68, 128, 214]);
+
+/** 各种药水的液体颜色（对照游戏里的大致观感） */
+const POTION_COLORS: Record<string, readonly [number, number, number]> = {
+  awkward: [126, 88, 162],
+  swiftness: [124, 196, 224],
+  strength: [196, 84, 60],
+  healing: [236, 92, 130],
+  regeneration: [222, 128, 168],
+  fire_resistance: [232, 152, 68],
+  night_vision: [44, 66, 158],
+  poison: [96, 172, 74],
+  slowness: [112, 118, 146],
+  weakness: [86, 92, 86],
+};
+for (const [key, color] of Object.entries(POTION_COLORS)) {
+  PAINTERS[`item_potion_${key}`] = bottlePainter(color);
+}
+
+/** 下界疣：暗红色的瘤状小块 */
+PAINTERS.item_nether_wart = (x, y, rng) => {
+  const jitter = rng() * 14 - 7;
+  const dx = (x - 8) / 5.4;
+  const dy = (y - 8.5) / 4.6;
+  if (dx * dx + dy * dy > 1) return [0, 0, 0, 0];
+  const dark = (x * 5 + y * 3) % 11 === 0;
+  return dark
+    ? [clamp255(92 + jitter), clamp255(24 + jitter), clamp255(36 + jitter), 255]
+    : [clamp255(152 + jitter), clamp255(46 + jitter), clamp255(58 + jitter), 255];
+};
+
+/** 烈焰粉：一小堆橙黄色粉末 */
+PAINTERS.item_blaze_powder = (x, y, rng) => {
+  const jitter = rng() * 16 - 8;
+  const dy = 14 - y;
+  if (dy > 8) return [0, 0, 0, 0];
+  const half = 2 + (8 - dy) * 0.7;
+  if (Math.abs(x - 7.5) > half) return [0, 0, 0, 0];
+  const hot = (x * 7 + y * 5) % 9 === 0;
+  return hot
+    ? [clamp255(252 + jitter), clamp255(198 + jitter), clamp255(72 + jitter), 255]
+    : [clamp255(236 + jitter), clamp255(146 + jitter), clamp255(40 + jitter), 255];
+};
+
+/** 糖：一小堆白色细粒 */
+PAINTERS.item_sugar = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const dy = 14 - y;
+  if (dy > 7) return [0, 0, 0, 0];
+  const half = 2.4 + (7 - dy) * 0.7;
+  if (Math.abs(x - 7.5) > half) return [0, 0, 0, 0];
+  return [clamp255(242 + jitter), clamp255(244 + jitter), clamp255(248 + jitter), 255];
+};
+
 /** 胡萝卜：上宽下尖的橙色锥形 + 顶部一小撮绿缨 */
 PAINTERS.item_carrot = (x, y, rng) => {
   const jitter = rng() * 12 - 6;

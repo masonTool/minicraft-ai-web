@@ -11,6 +11,7 @@
  */
 
 import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
+import { POTION_IDS, POTION_ITEMS } from './potions.ts';
 import { Block, WHEAT_STAGES, Wood, blockDef, cropOf, wheatStageOf, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
@@ -82,6 +83,24 @@ export const Item = {
   // ---- 单个注册的耐用品（J8 起：剪刀、桶…）
   // id 定义在 tools.ts（`TOOL_BY_ID` 需要按 id 反查，反向 import 会成环）
   SHEARS: SHEARS_ITEM_ID,
+  // ---- 酿造（H10）
+  GLASS_BOTTLE: 1170,
+  WATER_BOTTLE: 1171,
+  NETHER_WART: 1172,
+  BLAZE_POWDER: 1173,
+  SUGAR: 1174,
+  // 药水：用 id 枚举而不是给 ItemStack 加字段（见 potions.ts 的说明）
+  // id 定义在 potions.ts（本文件要 import 它来批量注册，反过来会成环）
+  POTION_AWKWARD: POTION_IDS.awkward,
+  POTION_SWIFTNESS: POTION_IDS.swiftness,
+  POTION_STRENGTH: POTION_IDS.strength,
+  POTION_HEALING: POTION_IDS.healing,
+  POTION_REGENERATION: POTION_IDS.regeneration,
+  POTION_FIRE_RESISTANCE: POTION_IDS.fire_resistance,
+  POTION_NIGHT_VISION: POTION_IDS.night_vision,
+  POTION_POISON: POTION_IDS.poison,
+  POTION_SLOWNESS: POTION_IDS.slowness,
+  POTION_WEAKNESS: POTION_IDS.weakness,
   // ---- 农业（H13）
   CARROT: 1163,
   POTATO: 1164,
@@ -179,6 +198,14 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // ---- 农业：种子（可种在耕地上）与小麦
   { id: Item.WHEAT_SEEDS, name: 'minecraft:wheat_seeds', tile: 'item_wheat_seeds', block: Block.WHEAT_STAGE0, maxStack: 64 },
   { id: Item.WHEAT, name: 'minecraft:wheat', tile: 'item_wheat' },
+  // ---- 酿造（H10）：瓶子与材料
+  { id: Item.GLASS_BOTTLE, name: 'minecraft:glass_bottle', tile: 'item_glass_bottle', maxStack: 16 },
+  { id: Item.WATER_BOTTLE, name: 'minecraft:water_bottle', tile: 'item_water_bottle', maxStack: 1 },
+  { id: Item.NETHER_WART, name: 'minecraft:nether_wart', tile: 'item_nether_wart' },
+  { id: Item.BLAZE_POWDER, name: 'minecraft:blaze_powder', tile: 'item_blaze_powder' },
+  { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
+  // ---- 药水（H10）：不可堆叠，一次一瓶
+  ...POTION_ITEMS.map((entry) => ({ id: entry.id, name: `minecraft:potion_${entry.key}`, tile: `item_potion_${entry.key}`, maxStack: 1 })),
   { id: Item.CARROT, name: 'minecraft:carrot', tile: 'item_carrot', block: Block.CARROTS_STAGE0 },
   { id: Item.POTATO, name: 'minecraft:potato', tile: 'item_potato', block: Block.POTATOES_STAGE0 },
   { id: Item.BAKED_POTATO, name: 'minecraft:baked_potato', tile: 'item_baked_potato' },

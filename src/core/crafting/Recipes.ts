@@ -338,6 +338,15 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     key: { I: Item.IRON_INGOT },
   },
   { kind: 'shapeless' as const, result: { id: Item.IRON_INGOT, count: 9 }, ingredients: [Block.IRON_BLOCK] },
+  // ---- 酿造（H10）：3 玻璃 → 3 玻璃瓶（原版）
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.GLASS_BOTTLE, count: 3 },
+    pattern: ['G G', ' G '],
+    key: { G: Block.GLASS },
+  },
+  // 1 甘蔗 → 1 糖（原版无序）
+  { kind: 'shapeless' as const, result: { id: Item.SUGAR, count: 1 }, ingredients: [Block.SUGAR_CANE] },
   // ---- 面包（H13）：3 个小麦横排（原版）
   {
     kind: 'shaped' as const,
