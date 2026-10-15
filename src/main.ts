@@ -25,6 +25,7 @@ import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
+import { AudioEngine, type SoundKind } from './core/audio/AudioEngine.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { NetClient, defaultServerUrl } from './net/NetClient.ts';
@@ -272,6 +273,12 @@ class App {
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
+  /** 音效引擎（程序化合成，不依赖音频文件） */
+  private readonly audio = new AudioEngine();
+  /** 脚步音的距离累积器（走满一格半响一声） */
+  private stepDistance = 0;
+  private lastStepX = 0;
+  private lastStepZ = 0;
   /** 本机设置（视距/视野/音量/灵敏度/调试信息），存在 localStorage */
   private readonly settings: GameSettings = loadSettings();
   private readonly settingsScreen: SettingsScreen;
@@ -402,6 +409,9 @@ class App {
 
     // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
     this.viewDistance = this.settings.viewDistance;
+    this.audio.volume = this.settings.volume;
+    this.lastStepX = this.physics.x;
+    this.lastStepZ = this.physics.z;
     this.settingsScreen = new SettingsScreen(container, this.settings, {
       onResume: () => this.closeSettings(),
       onNewWorld: () => void this.clearSaveAndReload(),
@@ -467,6 +477,7 @@ class App {
     this.camera.fov = settings.fov;
     this.camera.far = settings.viewDistance * 16 + 32;
     this.camera.updateProjectionMatrix();
+    this.audio.volume = settings.volume;
     this.debugEl.style.display = settings.showDebug ? '' : 'none';
     this.applyEnvironment();
     // 视距变化后立刻按新的范围请求/卸载区块
@@ -1217,6 +1228,8 @@ class App {
     this.breakCooldown = BREAK_COOLDOWN;
     // 触觉反馈：方块被挖掉的那一下
     this.vibrate(12);
+    // 音效：按方块材质挑（石头/木头/草/沙/玻璃/羊毛）
+    this.audio.playBreakForBlock(blockDef(brokenId).name, { x: this.hit.x + 0.5, y: this.hit.y + 0.5, z: this.hit.z + 0.5 });
     // 联机：告诉队友这里被挖空了
     this.net.sendBlock(this.hit.x, this.hit.y, this.hit.z, Block.AIR, 0, this.dimension);
   }
@@ -1232,6 +1245,7 @@ class App {
     const next = withDoorOpen(baseState, !isDoorOpen(baseState));
     this.world.setBlockAndUpdate(x, baseY, z, Block.OAK_DOOR, next);
     this.world.setBlockAndUpdate(x, baseY + 1, z, Block.OAK_DOOR, withDoorUpper(next, true));
+    this.audio.play('door', { x: x + 0.5, y: baseY + 0.5, z: z + 0.5 });
   }
 
   /** 拆掉整扇门（上下两半一起），整扇只掉落一次 */
@@ -1301,6 +1315,7 @@ class App {
   private damagePlayer(amount: number, sourceX: number, sourceZ: number): void {
     // 触觉反馈：受击用"双短震"区分于放方块的轻震
     if (amount > 0) this.vibrate([18, 40, 18]);
+    if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
     if (this.flying) return;
     const result = this.stats.damage(amount, 'generic');
     if (result.applied <= 0) return;
@@ -1614,6 +1629,7 @@ class App {
       this.inventory.consume(blockId, 1);
       // 触觉反馈：放下一块方块的轻震
       this.vibrate(6);
+      this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       // 联机：把这次改动广播给队友
       this.net.sendBlock(x, y, z, blockId, plan.state, this.dimension);
       if (plan.extra) {
@@ -1797,6 +1813,46 @@ class App {
     }
   }
 
+  /**
+   * 脚步与听觉位置（K5）。
+   *
+   * 脚步按**水平位移**累积而不是按时间：走动时约每 1.6 格一声（与原版节奏接近），
+   * 站着不动不会响，蹲行（速度慢）自然也就稀疏了。
+   */
+  private updateAudio(dt: number): void {
+    this.audio.setListener(this.physics.x, this.physics.eyeY, this.physics.z);
+
+    const dx = this.physics.x - this.lastStepX;
+    const dz = this.physics.z - this.lastStepZ;
+    this.lastStepX = this.physics.x;
+    this.lastStepZ = this.physics.z;
+
+    if (!this.physics.onGround) {
+      this.stepDistance = 0;
+      return;
+    }
+    this.stepDistance += Math.hypot(dx, dz);
+    const stride = this.physics.inWater ? 2.2 : 1.6;
+    if (this.stepDistance < stride) return;
+    this.stepDistance = 0;
+    // 踩水是水声；陆地上按脚下方块材质挑脚步音
+    if (this.physics.inWater) {
+      this.audio.play('splash');
+    } else {
+      const belowId = this.world.getBlock(
+        Math.floor(this.physics.x),
+        Math.floor(this.physics.y - 0.2),
+        Math.floor(this.physics.z),
+      );
+      const name = blockDef(belowId).name.replace('minecraft:', '');
+      if (name.includes('sand') || name.includes('gravel')) this.audio.play('break_sand');
+      else if (name.includes('grass') || name.includes('leaves')) this.audio.play('break_grass');
+      else if (name.includes('planks') || name.includes('log')) this.audio.play('break_wood');
+      else this.audio.play('step');
+    }
+    void dt;
+  }
+
   /** 改视距：相机远裁剪面、雾、区块流式范围一起更新 */
   private setViewDistance(distance: number): void {
     if (distance === this.viewDistance) return;
@@ -1874,6 +1930,15 @@ class App {
       if (document.visibilityState === 'hidden') void this.saveNow('hidden');
     });
 
+    // 浏览器要求音频必须由用户手势解锁：第一次点击/按键时创建 AudioContext
+    const unlockAudio = (): void => {
+      this.audio.resume();
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+    window.addEventListener('pointerdown', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+
     const loop = () => {
       const now = performance.now();
       const dt = Math.min((now - this.lastTime) / 1000, 0.1);
@@ -1921,6 +1986,7 @@ class App {
       this.updateGamepad(dt);
       this.tickAutoSave(dt);
       this.updateAdaptiveViewDistance(dt);
+      this.updateAudio(dt);
       this.net.tick(
         this.physics.x,
         this.physics.y,
@@ -2362,6 +2428,21 @@ class App {
   /** 界面是否打开（暂停菜单/背包都算）——验收脚本用 */
   get isUiOpen(): boolean {
     return this.uiOpen;
+  }
+
+  /** 音效状态（验收脚本用） */
+  get audioState(): { enabled: boolean; context: string; volume: number; played: number } {
+    return {
+      enabled: this.audio.enabled,
+      context: this.audio.contextState,
+      volume: this.audio.volume,
+      played: this.audio.played,
+    };
+  }
+
+  /** 验收用：直接播一个音效（可选坐标用于距离衰减验证） */
+  playSound(kind: SoundKind, x?: number, y?: number, z?: number): void {
+    this.audio.play(kind, x === undefined ? undefined : { x, y: y ?? 0, z: z ?? 0 });
   }
 
   /** 当前设置与设置界面的状态（验收脚本用） */
