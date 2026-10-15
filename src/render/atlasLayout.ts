@@ -364,6 +364,17 @@ export const TILE_ORDER = [
   'bookshelf',
   'item_paper',
   'item_book',
+  // ---- 生物掉落物（这 9 张的画笔早就写好了，但一直没登记进名单 →
+  //      图标全部回退成 tile 0，几种掉落物在背包里长得一模一样）
+  'item_rotten_flesh',
+  'item_bone',
+  'item_gunpowder',
+  'item_beef',
+  'item_porkchop',
+  'item_mutton',
+  'item_chicken',
+  'item_leather',
+  'item_feather',
   // ---- 铁砧与铁块（H8）
   'anvil_top',
   'anvil_side',

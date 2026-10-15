@@ -11,7 +11,7 @@
 
 import { Block, BLOCKS, blockDef, isHandHarvestable } from '../src/core/registry/blocks.ts';
 import { breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
-import { itemDef, dropFor } from '../src/core/registry/items.ts';
+import { CREATIVE_ITEMS, itemDef, dropFor } from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
 import {
@@ -61,6 +61,22 @@ check(
   BLOCKS.every((def) => def.tiles.every((tile) => tile === '' || TILES.includes(tile))),
   BLOCKS.filter((def) => def.tiles.some((tile) => tile !== '' && !TILES.includes(tile)))
     .map((def) => `${def.name}:${def.tiles.join('/')}`)
+    .join(' '),
+);
+// 物品图标同样要在名单里。这条断言是补上的——**此前只校验了方块**，
+// 结果 9 种生物掉落物（腐肉/骨头/火药/牛肉/猪排/羊肉/鸡肉/皮革/羽毛）
+// 的画笔早就写好了却没登记，图标全部回退成 tile 0，在背包里长得一模一样。
+check(
+  '每个物品的图标都在图集名单里',
+  CREATIVE_ITEMS.every((entry) => {
+    const def = itemDef(typeof entry === 'number' ? entry : entry.id);
+    return def === undefined || TILES.includes(def.tile);
+  }),
+  CREATIVE_ITEMS.filter((entry) => {
+    const def = itemDef(typeof entry === 'number' ? entry : entry.id);
+    return def !== undefined && !TILES.includes(def.tile);
+  })
+    .map((entry) => itemDef(typeof entry === 'number' ? entry : entry.id)!.tile)
     .join(' '),
 );
 check('图集贴图无重名', new Set(TILE_ORDER).size === TILE_ORDER.length);
