@@ -83,6 +83,7 @@ export const MOB_TYPES: readonly MobType[] = [
     ],
     // ⚠️ 原版是小麦，但耕作还没做（游戏里连小麦物品都没有），先用苹果代替
     feed: Item.APPLE,
+    milk: true,
     xp: 3,
     bodyColor: 0x4a3325,
     accentColor: 0xe8e4d8,

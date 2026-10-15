@@ -95,6 +95,8 @@ export interface MobType {
    * 被剪过的羊不掉羊毛（原版行为）。
    */
   wool?: boolean;
+  /** 能不能挤奶（J8，牛用）。原版只有牛与山羊可以 */
+  milk?: boolean;
   /** 生物家族（亡灵 / 节肢）；蜘蛛还没做，所以目前只有亡灵有成员 */
   family?: MobFamily;
   /**

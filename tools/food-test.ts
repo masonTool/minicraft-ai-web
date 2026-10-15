@@ -27,6 +27,7 @@ import {
 import { EAT_SECONDS, FOOD_TABLE, canEat, saturationFrom } from '../src/core/registry/food.ts';
 import { itemLabel } from '../src/core/registry/itemNames.ts';
 import { MAX_FOOD, MAX_HEALTH, MAX_SATURATION, PlayerStats } from '../src/core/survival/PlayerStats.ts';
+import { StatusEffects } from '../src/core/survival/StatusEffects.ts';
 import { SMELTING_RECIPES, smeltingRecipeFor } from '../src/core/crafting/Smelting.ts';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
@@ -69,6 +70,8 @@ const VANILLA: Record<string, readonly [number, number]> = {
   cooked_porkchop: [8, 12.8],
   cooked_mutton: [6, 9.6],
   cooked_chicken: [6, 7.2],
+  // 牛奶：不回饥饿也不回饱和度，只清效果（J8）——它是"饮品"，不是食物
+  milk_bucket: [0, 0],
 };
 
 equal('食物种类数', Object.keys(FOOD_TABLE).length, Object.keys(VANILLA).length);
@@ -82,11 +85,27 @@ for (const [key, [hunger, saturation]] of Object.entries(VANILLA)) {
 // 这一条是本轮写错过的那个坑：wiki 写"恢复 2.4 点饱和度"，但代码里要填 0.3
 check(
   '修饰值都在 0~1.2 之间（写错成"饱和度点数"会在这里露馅：苹果应是 0.3 而不是 2.4）',
-  Object.values(FOOD_TABLE).every((food) => food.saturationModifier > 0 && food.saturationModifier <= 1.2),
+  Object.values(FOOD_TABLE).every((food) => food.saturationModifier >= 0 && food.saturationModifier <= 1.2),
 );
+// 只有牛奶是 0/0：它靠"清效果"而不是靠回饥饿（J8）
+equal('牛奶的饥饿点是 0', FOOD_TABLE.milk_bucket!.hunger, 0);
+equal('牛奶的饱和度修饰值也是 0', FOOD_TABLE.milk_bucket!.saturationModifier, 0);
+check('牛奶是"饥饿满也能喝"的（原版行为）', FOOD_TABLE.milk_bucket!.alwaysEdible === true);
+check('牛奶会清除所有状态效果', FOOD_TABLE.milk_bucket!.clearsEffects === true);
 equal('进食耗时与原版一致（1.6 秒）', EAT_SECONDS, 1.6);
 check('熟肉比同种生肉更顶饱', FOOD_TABLE.cooked_beef!.hunger > FOOD_TABLE.beef!.hunger);
 equal('腐肉的饱和度修饰值最低（原版 0.1）', FOOD_TABLE.rotten_flesh!.saturationModifier, 0.1);
+
+console.log('\n[牛奶：清除所有状态效果]');
+{
+  const effects = new StatusEffects();
+  effects.apply('poison', 10);
+  effects.apply('speed', 10);
+  equal('先挂上两个效果', effects.count, 2);
+  effects.clear();
+  equal('clear() 之后一个都不剩', effects.count, 0);
+  equal('清空后再查特定效果也是没有', effects.has('poison'), false);
+}
 
 console.log('\n[附加效果]');
 equal('腐肉：80% 概率饥饿', FOOD_TABLE.rotten_flesh!.effects?.[0]?.chance, 0.8);

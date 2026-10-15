@@ -1931,7 +1931,12 @@ class App {
   /** 咽下这一份：扣 1 个、补饥饿与饱和度、结算附加效果（腐肉的饥饿就靠这里） */
   private eatFood(itemId: number, food: FoodInfo): void {
     if (!this.inventory.consume(itemId, 1)) return;
+    // 牛奶的回饥饿是 0，但**清效果**才是它的正事，所以照走同一条路
     this.stats.eat(food.hunger, saturationFrom(food));
+    if (food.clearsEffects === true) {
+      this.effects.clear();
+      this.chat.push('喝下牛奶，身上的状态效果被清除', 'system');
+    }
     for (const effect of food.effects ?? []) {
       // 概率效果要在这里掷点：表里存的是"触发概率"（腐肉 80%、生鸡肉 30%）
       if (effect.chance !== undefined && Math.random() >= effect.chance) continue;
@@ -2083,7 +2088,25 @@ class App {
     const held = this.heldItemId;
     if (held === undefined) return false;
     if (held === Item.SHEARS && this.shearMob(mob)) return true;
+    if (held === Item.BUCKET && this.milkMob(mob)) return true;
     return this.feedMob(mob, held);
+  }
+
+  /**
+   * 挤奶（J8）：拿空桶对着成年牛右键。
+   * 幼体挤不出奶（原版也挤不出来），所以先判成年。
+   */
+  private milkMob(mob: Mob): boolean {
+    if (mob.type.milk !== true || mob.baby) return false;
+    // 空桶换牛奶桶：先扣掉一个空桶，再给一个牛奶桶（背包满了就掉在地上）
+    if (!this.inventory.consume(Item.BUCKET, 1)) return false;
+    const leftover = this.inventory.add(Item.MILK_BUCKET, 1);
+    if (leftover > 0) this.spawnDrop(Item.MILK_BUCKET, leftover, mob.x, mob.y + 0.5, mob.z);
+
+    this.audio.play('mob_cow', { x: mob.x, y: mob.y, z: mob.z });
+    this.particles.spawnHearts(mob.x, mob.y + mob.type.height, mob.z, 0.4);
+    this.refreshHotbar();
+    return true;
   }
 
   /**

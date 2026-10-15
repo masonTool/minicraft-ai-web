@@ -41,6 +41,13 @@ export interface FoodInfo {
   /** 饥饿满时也能吃（原版只有金苹果这类"功能性食物"是这样） */
   readonly alwaysEdible?: boolean;
   readonly effects?: readonly FoodEffect[];
+  /**
+   * 喝完清除**所有**状态效果（J8 的牛奶）。
+   *
+   * 牛奶在原版不回饥饿也不回饱和度，纯粹是"洗掉身上的效果"，
+   * 所以这条与 `hunger`/`saturationModifier` 是并列关系而不是替代关系。
+   */
+  readonly clearsEffects?: boolean;
 }
 
 /** 吃完一份食物能补的饱和度点数（原版 `FoodData#eat` 的算法） */
@@ -73,6 +80,8 @@ export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
     ],
   },
   melon_slice: { hunger: 2, saturationModifier: 0.3 },
+  // 牛奶：不回饥饿也不回饱和度，只清除所有状态效果（原版行为）
+  milk_bucket: { hunger: 0, saturationModifier: 0, alwaysEdible: true, clearsEffects: true },
 
   // ---- 生肉（原版生鸡肉 30% 概率给饥饿，腐肉 80%）
   beef: { hunger: 3, saturationModifier: 0.3 },

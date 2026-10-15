@@ -375,8 +375,10 @@ export const TILE_ORDER = [
   'item_chicken',
   'item_leather',
   'item_feather',
-  // ---- 剪刀（J8）
+  // ---- 剪刀与桶（J8）
   'item_shears',
+  'item_bucket',
+  'item_milk_bucket',
   // ---- 弓与箭（J9）
   'item_flint',
   'item_string',

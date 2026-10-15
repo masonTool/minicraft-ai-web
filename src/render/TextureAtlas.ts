@@ -968,6 +968,47 @@ PAINTERS.item_shears = (x, y, rng) => {
   return [clamp255(216 * shade + jitter), clamp255(216 * shade + jitter), clamp255(224 * shade + jitter), 255];
 };
 
+/**
+ * 桶：上宽下窄的铁皮小桶（'M' 铁皮、'W' 桶里的白色液体）。
+ * 牛奶桶就是把桶里填上白，两种物品共用同一套形状。
+ */
+const BUCKET_TEMPLATE: readonly string[] = [
+  '................',
+  '................',
+  '....MMMMMMMM....',
+  '...MM......MM...',
+  '...MM.WWWW.MM...',
+  '...MM.WWWW.MM...',
+  '...MM.WWWW.MM...',
+  '...MM.WWWW.MM...',
+  '....MWWWWWWM....',
+  '....MWWWWWWM....',
+  '....MWWWWWWM....',
+  '....MMMMMMMM....',
+  '....MMMMMMMM....',
+  '................',
+  '................',
+  '................',
+];
+
+function bucketPainter(withMilk: boolean): Painter {
+  return (x, y, rng) => {
+    const pixel = BUCKET_TEMPLATE[y]?.[x] ?? '.';
+    if (pixel === '.') return [0, 0, 0, 0];
+    const jitter = rng() * 12 - 6;
+    if (pixel === 'W') {
+      if (!withMilk) return [0, 0, 0, 0];
+      return [clamp255(246 + jitter), clamp255(246 + jitter), clamp255(240 + jitter), 255];
+    }
+    // 铁皮：左亮右暗，桶才有圆柱感
+    const shade = x < 8 ? 1.12 : 0.86;
+    return [clamp255(198 * shade + jitter), clamp255(198 * shade + jitter), clamp255(206 * shade + jitter), 255];
+  };
+}
+
+PAINTERS.item_bucket = bucketPainter(false);
+PAINTERS.item_milk_bucket = bucketPainter(true);
+
 // ---- 弓与箭（J9）
 /** 燧石：深灰的尖锐石块（画成一块带斜面的碎石） */
 PAINTERS.item_flint = (x, y, rng) => {

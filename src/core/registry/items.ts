@@ -82,6 +82,9 @@ export const Item = {
   // ---- 单个注册的耐用品（J8 起：剪刀、桶…）
   // id 定义在 tools.ts（`TOOL_BY_ID` 需要按 id 反查，反向 import 会成环）
   SHEARS: SHEARS_ITEM_ID,
+  // ---- 桶与牛奶（J8）
+  BUCKET: 1151,
+  MILK_BUCKET: 1152,
   // ---- 弓与箭（J9）
   FLINT: 1072,
   STRING: 1073,
@@ -161,6 +164,12 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // 弓是耐用品（原版 384 点耐久，每射一箭 -1），但不是"工具"：
   // 它没有采集等级与挖掘速度，所以不放进 TOOL_SPECS（那是 5 种类 × 5 材质的表）
   { id: Item.BOW, name: 'minecraft:bow', tile: 'item_bow', maxStack: 1, durability: 384 },
+  // ---- 桶（可堆 16，与原版一致）与牛奶桶（一次性的"饮品"，不可堆）
+  { id: Item.BUCKET, name: 'minecraft:bucket', tile: 'item_bucket', maxStack: 16 },
+  { id: Item.MILK_BUCKET, name: 'minecraft:milk_bucket', tile: 'item_milk_bucket', maxStack: 1 },
+
+  // ---- 桶（可堆 16，与原版一致）与牛奶桶（一次性的"饮品"，不可堆）
+
   // ---- 食物（贴图在 TextureAtlas、数值在 food.ts，这里只登记 id / 名字 / 贴图名）
   { id: Item.COOKED_BEEF, name: 'minecraft:cooked_beef', tile: 'item_cooked_beef' },
   { id: Item.COOKED_PORKCHOP, name: 'minecraft:cooked_porkchop', tile: 'item_cooked_porkchop' },
