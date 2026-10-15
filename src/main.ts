@@ -89,7 +89,16 @@ import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
-import { Block, BLOCKS, breakSeconds, blockDef } from './core/registry/blocks.ts';
+import { Block, BLOCKS, blockDef } from './core/registry/blocks.ts';
+import {
+  breakSeconds,
+  canHarvest,
+  durabilityLabel,
+  harvestRequirement,
+  toolInfoById,
+  toolItemId,
+  type ToolInfo,
+} from './core/registry/tools.ts';
 import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
@@ -231,6 +240,14 @@ const STARTING_HOTBAR: readonly number[] = [
   Block.OAK_LEAVES,
   Block.GLASS,
   Block.GLOWSTONE,
+  // 开发期工具：木镐/石镐/铁镐/钻石镐 + 斧/锹/剑，方便直接验收挖掘等级与伤害
+  toolItemId('pickaxe', 'wooden'),
+  toolItemId('pickaxe', 'stone'),
+  toolItemId('pickaxe', 'iron'),
+  toolItemId('pickaxe', 'diamond'),
+  toolItemId('axe', 'iron'),
+  toolItemId('shovel', 'iron'),
+  toolItemId('sword', 'iron'),
 ];
 
 class App {
@@ -1289,7 +1306,7 @@ class App {
         const index = Number(element.dataset.index);
         if (!Number.isFinite(index)) return null;
         const stack = this.inventory.get(index);
-        return stack ? itemTooltip(stack.id, stack.count) : null;
+        return stack ? itemTooltip(stack.id, stack.count, stack.damage) : null;
       });
     }
 
@@ -1332,9 +1349,49 @@ class App {
     return blockForItem(stack.id);
   }
 
+  /** 当前手持的工具属性；手上不是工具时返回 null（徒手） */
+  private get heldTool(): ToolInfo | null {
+    const stack = this.inventory.get(this.hotbarIndex);
+    return stack ? toolInfoById(stack.id) ?? null : null;
+  }
+
+  /**
+   * 消耗手持工具 1 点耐久；耐久耗尽就整件消失。
+   * 创造模式（飞行中）不掉耐久，与原版一致。
+   */
+  private damageHeldTool(amount = 1): void {
+    if (this.flying || amount <= 0) return;
+    const index = this.hotbarIndex;
+    const stack = this.inventory.get(index);
+    if (!stack) return;
+    const tool = toolInfoById(stack.id);
+    if (!tool) return;
+    const damage = (stack.damage ?? 0) + amount;
+    if (damage >= tool.durability) {
+      // 耐久耗尽：工具直接消失（原版行为，不掉落残骸）
+      this.inventory.set(index, null);
+      this.audio.play('break_wood');
+    } else {
+      this.inventory.set(index, { ...stack, damage });
+    }
+    this.refreshHotbar();
+  }
+
   private get heldName(): string {
     const stack = this.inventory.get(this.hotbarIndex);
-    return stack ? `${itemName(stack.id)} ×${stack.count}` : '空';
+    if (!stack) return '空';
+    const tool = toolInfoById(stack.id);
+    const durability = tool ? ` (${durabilityLabel(tool, stack.damage ?? 0)})` : '';
+    return `${itemName(stack.id)} ×${stack.count}${durability}`;
+  }
+
+  /** 调试面板：手上工具挖不挖得动准星指向的方块（挖得动但采不到时给出提示） */
+  private targetToolHint(blockId: number): string {
+    const required = harvestRequirement(blockId);
+    if (!required || canHarvest(blockId, this.heldTool)) return '';
+    const toolName = { pickaxe: '镐', axe: '斧', shovel: '锹', hoe: '锄', sword: '剑' }[required.tool];
+    const tierName = ['木', '石', '铁', '钻石', '下界合金'][required.tier] ?? '';
+    return `   ⚠ 需要${tierName}${toolName}才掉落`;
   }
 
   // ---------------------------------------------------------------- 输入
@@ -1651,11 +1708,13 @@ class App {
     const mob = hit.entity;
     // 下落中攻击算暴击（原版 ×1.5）；创造模式一击必杀
     const critical = !this.physics.onGround && this.physics.vy < -0.1;
-    // 基础伤害 1（还没有武器物品），力量/虚弱在这里加减；暴击 ×1.5
-    const base = Math.max(0, 1 + this.effects.attackBonus());
+    // 徒手 1 点；手持武器按 tools.ts 的伤害表（剑 4~7、斧 7~9…），力量/虚弱在这里加减；暴击 ×1.5
+    const base = Math.max(0, (this.heldTool?.attack ?? 1) + this.effects.attackBonus());
     const damage = this.flying ? 100 : critical ? base * 1.5 : base;
     mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context);
     this.hand.swing();
+    // 攻击也要消耗耐久（原版剑/斧砍怪掉耐久）
+    this.damageHeldTool();
     if (mob.dead) {
       // 死亡的烟：原版生物死时会冒一团烟
       this.particles.spawnSmoke(mob.x, mob.y + 0.5, mob.z, 10, 0.32);
@@ -1684,8 +1743,11 @@ class App {
     }
 
     const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
+    // 手持工具决定挖掘速度与能否采到（G4）；先取一份快照，
+    // 免得后面工具刚好用坏时用 null 去判断掉落
+    const tool = this.heldTool;
     // 状态效果：急迫加快、挖掘疲劳减慢（倍率在 StatusEffects 里算好）
-    const required = this.flying ? 0 : breakSeconds(id) / this.effects.miningSpeedMultiplier();
+    const required = this.flying ? 0 : breakSeconds(id, tool) / this.effects.miningSpeedMultiplier();
     if (!Number.isFinite(required)) return;
 
     this.breakProgress += required <= 0 ? 1 : dt / required;
@@ -1702,6 +1764,9 @@ class App {
 
     const brokenId = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
     const brokenState = this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z);
+
+    // 工具耐久 -1（挖掉一格算一次；创造模式不掉，见 damageHeldTool）
+    this.damageHeldTool();
 
     // 门是两格高的整体：拆一半就把另一半一起带走（且整扇门只掉落一次）
     if (brokenId === Block.OAK_DOOR) {
@@ -1722,7 +1787,8 @@ class App {
     );
 
     // 创造模式不产生掉落（与原版一致）
-    if (!this.flying) {
+    // G4：还需要"手上工具够格"——石镐挖不动钻石矿（挖得动但一无所获）
+    if (!this.flying && canHarvest(brokenId, tool)) {
       const drop = dropFor(brokenId);
       if (drop) {
         // 双层台阶是两块叠起来的，破坏时按 2 个掉落
@@ -2862,7 +2928,7 @@ class App {
 
     const feetLight = this.world.getBlockLight(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
     const target = this.hit
-      ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})`
+      ? `${blockDef(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)).name.replace('minecraft:', '')} (${this.hit.x}, ${this.hit.y}, ${this.hit.z})${this.targetToolHint(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z))}`
       : '无';
 
     // 手机上屏幕小：只保留最关键的几行，免得调试面板盖住半个屏幕

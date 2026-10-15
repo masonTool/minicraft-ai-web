@@ -9,7 +9,8 @@
  * 运行：npm run test:decor
  */
 
-import { Block, BLOCKS, breakSeconds, blockDef, isHandHarvestable } from '../src/core/registry/blocks.ts';
+import { Block, BLOCKS, blockDef, isHandHarvestable } from '../src/core/registry/blocks.ts';
+import { breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
 import { itemDef, dropFor } from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
@@ -76,7 +77,11 @@ check('植物无碰撞且不遮挡', [Block.SHORT_GRASS, Block.POPPY, Block.SUGA
 check('仙人掌不遮挡邻居（否则贴着的方块会缺面）', !blockDef(Block.CACTUS).opaque);
 check('植物徒手可采集（硬度 0 → 瞬间破坏）', breakSeconds(Block.SHORT_GRASS) === 0);
 check('南瓜属于徒手可采集', isHandHarvestable(Block.PUMPKIN));
-check('海晶石需要镐（不在徒手表）', !isHandHarvestable(Block.PRISMARINE) && breakSeconds(Block.PRISMARINE, true) === 2.25);
+// 海晶石 1.5 硬度：木镐 1.5 × 1.5 ÷ 2 = 1.125 秒；徒手是 7.5 秒
+check(
+  '海晶石需要镐（不在徒手表）',
+  !isHandHarvestable(Block.PRISMARINE) && breakSeconds(Block.PRISMARINE, makeToolInfo('pickaxe', 'wooden')) === 1.125,
+);
 
 console.log('\n[物品与掉落]');
 check(

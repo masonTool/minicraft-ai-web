@@ -1180,7 +1180,6 @@ const HAND_HARVESTABLE = new Set<number>([
   Block.SAND,
   Block.GRAVEL,
   Block.CLAY,
-  Block.SANDSTONE,
   Block.SNOW_BLOCK,
   Block.OAK_LOG,
   Block.OAK_PLANKS,
@@ -1274,17 +1273,8 @@ export function isHandHarvestable(id: number): boolean {
   return HAND_HARVESTABLE.has(id);
 }
 
-/**
- * 破坏该方块所需秒数（对齐原版公式）：
- *   可采集 → 1.5 × 硬度；不可采集 → 5 × 硬度
- * 例：泥土 0.75s、原木 3s、石头徒手 7.5s、黑曜石徒手 250s。
- */
-export function breakSeconds(id: number, hasPickaxe = false): number {
-  const hardness = blockHardness(id);
-  if (hardness < 0) return Number.POSITIVE_INFINITY;
-  const harvestable = hasPickaxe || isHandHarvestable(id);
-  return harvestable ? hardness * 1.5 : hardness * 5;
-}
+// 注：破坏耗时的计算在 `tools.ts` 的 `breakSeconds`（需要工具的等级与速度），
+// 这里只提供硬度与「徒手可采集」这两份原始数据。
 
 /** 石材类方块（深板岩变体的判定基准） */
 export function deepslateVariantOf(id: number): number {

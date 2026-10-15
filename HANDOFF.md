@@ -22,9 +22,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-15 · 提交总数 45（每个功能点一条，可逐条回滚）
+- 时间：2026-10-15 · 提交总数 46（每个功能点一条，可逐条回滚）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **93**、进行中 **57**、待办 23；
+- 进度口径：`TASKS.md` 共 173 项 —— 已完成 **94**、进行中 **57**、待办 22；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -42,6 +42,7 @@ npm run dev            # http://localhost:5173
 | 玩家 | AABB 逐轴解析、自动上台阶 0.6、速度对齐原版（走 4.317 / 疾跑 5.612 / 潜行 1.295 / 游泳 2.2 / 飞行 10.9） |
 | 交互 | DDA 射线、选中描边、按硬度计时的破坏、命中面放置、快捷栏 1-9、创造/生存模式切换 |
 | 物品与容器 | 物品注册表、背包 36+9、2×2 / 3×3 合成、熔炉（燃料与烧炼进度）、箱子 27 格、掉落物实体（重力/拾取/合并/5 分钟消失） |
+| 工具与武器 | `core/registry/tools.ts`：25 种工具（木/石/铁/金/钻石 × 镐/斧/锹/锄/剑），等级 0-3、速度、耐久、攻击伤害全落到物品上；**采集等级校验**（石镐挖钻石矿＝挖得动但一无所获）、挖掘耗时按工具加速、工具耐久随存档走（`ItemStack.damage`，归零整件消失）；配方 25 条、中文名与说明自动生成 |
 | 方块内容 | **201 种**（6 族木材、石材家族、16 色羊毛、33 色陶瓦/混凝土、染色玻璃与玻璃板…）、方块状态、非常规形状（台阶/楼梯/栅栏/墙/门/火把/梯子） |
 | 移动端 | 触摸操作层（虚拟摇杆、长按破坏）、响应式 UI、PWA 全屏元信息、Pointer Events 统一输入 |
 | 地物 | `core/gen/Features.ts`：11 种树 + 花草/蘑菇/甘蔗/南瓜/西瓜/仙人掌，23 群系地物表；跨区块重放 3×3 邻域保证树冠不断 |
@@ -53,9 +54,9 @@ npm run dev            # http://localhost:5173
 | 水面动画 | `VoxelMaterial` 的 `uTime` / `uFluidTiles`（按贴图起点识别流体，顶点做波浪、片元滚动贴图） |
 | 随机刻与流体 | `core/tick/RandomTicks.ts`（随机刻行为表 + 计划刻队列）、`core/world/Fluids.ts`（液面等级、无限水源、水火相遇） |
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
-| 说明与配方 | `core/registry/itemNames.ts`（296 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成） |
+| 说明与配方 | `core/registry/itemNames.ts`（346 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，119 条配方） |
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = vitest（光照/碰撞/生成/存档/资源包/音效）+ **21 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / sound / nether / end / endboss / redstone / save / net / render / view / world / settings / recipebook，当前全绿；`npm run audit:tasks` 自检锚点文档 |
+| 测试 | `npm test` = vitest（光照/碰撞/生成/存档/资源包/音效）+ **22 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / sound / nether / end / endboss / redstone / save / net / render / view / world / settings / recipebook / **tool**，当前全绿；`npm run audit:tasks` 自检锚点文档 |
 
 下一步的大头（队列与 TASKS.md 都能看到）：含水层、大矿脉、贪心网格化 + 网格化移入 Worker、
 生存机制（生命/饥饿/摔落）、生物 AI 与生成、结构生成、红石、存档（IndexedDB）与联机。
@@ -124,6 +125,8 @@ npm run dev            # http://localhost:5173
 | 给着色器传"编译期常量" | GLSL ES 1.0 的数组长度与循环上界必须是字面量 → 用 `${CONST}` 插值进 shader 字符串，并且那个常量必须定义在字符串**之前**（`const` 有 TDZ，写在后面会直接 ReferenceError）（本轮） |
 | 第二遍 render 把世界清掉 | 叠画手持物品 / 色罩之前必须 `renderer.autoClear = false` + `clearDepth()`，画完再改回来（E15/E16） |
 | 版权素材 | 官方贴图/音效不随仓库分发；贴图运行时程序化生成，P9 计划支持玩家自备资源包 |
+| 新加的"加速工具表"漏掉了橡木 | `Wood` 表只装了 5 种**追加**木材，橡木是基础方块（id 5/6/7 与台阶 80/楼梯 84），不在表里。凡是"遍历 `Object.values(Wood)` 批量注册"的地方都要显式补上橡木——否则会出现"砍云杉有加速、砍橡木没有"这种半残状态（本轮） |
+| 工具耐久放在哪 | 放 `ItemStack.damage`（可选字段）而不是每种损耗各占一个物品 id：存档、取出、交换都天然跟着走。代价是 `Inventory.moveTo` 要改——`maxStack 1` 的物品不能走"合并"分支，否则两把同款工具互拖会变成"什么都没发生"（本轮） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 
@@ -156,7 +159,7 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 npm run dev         # 开发服务器
 npm run typecheck   # tsc --noEmit（提交前必过）
 npm run build       # 类型检查 + 生产构建
-npm test            # 21 套离线测试（含 decor/structure/nether/end/redstone/save/net/render/view/world/settings/recipebook）
+npm test            # 22 套离线测试（含 tool/decor/structure/nether/end/redstone/save/net/render/view/world/settings/recipebook）
 npm run audit:tasks # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats   # 地形生成统计（耗时/洞穴占比/矿石产量）
 npm run agent:setup # 跨机器自检
