@@ -77,6 +77,8 @@ export interface SettingsActions {
   onNewWorld: () => void;
   /** 设置变化：立即生效（视距/视野/调试信息都要马上看到效果） */
   onChange: (settings: GameSettings) => void;
+  /** 导入资源包（.mcpack / .zip） */
+  onResourcePack?: (file: File) => void;
 }
 
 export class SettingsScreen {
@@ -135,6 +137,7 @@ export class SettingsScreen {
 
     this.makeToggle(options, 'showDebug', '调试信息');
     this.makeToggle(options, 'adaptiveViewDistance', '自适应视距');
+    options.appendChild(this.makeResourcePackRow());
 
     this.metaEl = document.createElement('div');
     this.metaEl.className = 'settings-hint';
@@ -184,6 +187,29 @@ export class SettingsScreen {
 
     row.append(name, input, value);
     this.sliders.set(key, input);
+    return row;
+  }
+
+  /** 资源包导入行（.mcpack / .zip） */
+  private makeResourcePackRow(): HTMLElement {
+    const row = document.createElement('label');
+    row.className = 'settings-row';
+    const name = document.createElement('span');
+    name.textContent = '资源包';
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.mcpack,.zip,application/zip';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file) this.actions.onResourcePack?.(file);
+      // 清空 value：同一个文件再选一次也要能触发 change
+      input.value = '';
+    });
+
+    const hint = document.createElement('i');
+    hint.textContent = 'mcpack';
+    row.append(name, input, hint);
     return row;
   }
 

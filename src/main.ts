@@ -26,6 +26,7 @@ import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { AudioEngine, type SoundKind } from './core/audio/AudioEngine.ts';
+import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { NetClient, defaultServerUrl } from './net/NetClient.ts';
@@ -416,6 +417,7 @@ class App {
       onResume: () => this.closeSettings(),
       onNewWorld: () => void this.clearSaveAndReload(),
       onChange: (settings) => this.applySettings(settings),
+      onResourcePack: (file) => void this.loadResourcePack(file),
     });
 
     // 开发期初始物资（见 STARTING_HOTBAR 注释）
@@ -2428,6 +2430,38 @@ class App {
   /** 界面是否打开（暂停菜单/背包都算）——验收脚本用 */
   get isUiOpen(): boolean {
     return this.uiOpen;
+  }
+
+  /**
+   * 导入资源包（K4）。
+   *
+   * 这是图集方案的一个红利：网格顶点里存的是**图集内的 tile 索引**，
+   * 因此替换贴图内容后不需要重建任何区块网格，只要把纹理重新上传一次——
+   * 在设置里换材质包，画面下一帧就变了。
+   */
+  async loadResourcePack(file: File): Promise<ResourcePackResult | null> {
+    try {
+      const result = await applyResourcePack(file, this.atlas, packNameFromFile(file.name));
+      this.resourcePack = { name: packNameFromFile(file.name), replaced: result.replaced.length, skipped: result.skipped.length };
+      return result;
+    } catch (error) {
+      console.warn('[pack] 资源包加载失败（文件可能不是有效的 zip）', error);
+      this.resourcePack = { name: packNameFromFile(file.name), replaced: 0, skipped: 0, error: true };
+      return null;
+    }
+  }
+
+  /** 已加载的资源包状态（验收脚本用） */
+  private resourcePack: { name: string; replaced: number; skipped: number; error?: boolean } | null = null;
+
+  get resourcePackState(): { name: string; replaced: number; skipped: number; error: boolean } | null {
+    if (!this.resourcePack) return null;
+    return {
+      name: this.resourcePack.name,
+      replaced: this.resourcePack.replaced,
+      skipped: this.resourcePack.skipped,
+      error: this.resourcePack.error ?? false,
+    };
   }
 
   /** 音效状态（验收脚本用） */
