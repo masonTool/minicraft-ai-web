@@ -14,7 +14,8 @@
  *    因此这与"手指真的按上去"走的是同一条代码路径。
  */
 (async function mobileAcceptance() {
-  const mc = window.__mc;
+  // ⚠️ 必须用 `let`：下面第 0 步可能还要等世界启动，`__mc` 是那时候才挂上的
+  let mc = window.__mc;
   const lines = [];
   // 标记用 ASCII：终端/日志里中文与 ✓✗ 都可能被按单字节解读而变成乱码
   const check = (label, ok, detail) => lines.push(`${ok ? '[OK]  ' : '[FAIL]'} ${label}${detail ? `  ->  ${detail}` : ''}`);
@@ -33,6 +34,17 @@
     target.dispatchEvent(event);
   };
 
+  // ---------------------------------------------------------------- 0. 先进入世界
+  // 全新浏览器会话里主菜单是空的、游戏不会自己开始（`window.__mc` 由 startWorld 挂上），
+  // 所以脚本自己点一下"创建并进入"——否则这一整套验收会在空页面上全红
+  if (typeof window.__mc === 'undefined') {
+    document.querySelector('#world-screen .world-primary')?.click();
+    const deadline = Date.now() + 90000;
+    while (typeof window.__mc === 'undefined' && Date.now() < deadline) await sleep(250);
+    if (typeof window.__mc === 'undefined') return '[FAIL] game did not start (window.__mc missing)';
+    mc = window.__mc;
+  }
+
   // ---------------------------------------------------------------- 1. 触摸层
   mc.enableTouchControls();
   const ui = document.getElementById('touch-ui');
@@ -49,11 +61,13 @@
   // ---------------------------------------------------------------- 2. 可点区域
   const buttons = [...document.querySelectorAll('.touch-button')];
   const rects = buttons.map((b) => b.getBoundingClientRect());
+  // 按钮现在是图标（没有文字节点），所以报告里用 aria-label 而不是 textContent
+  const names = buttons.map((b) => b.getAttribute('aria-label') ?? b.dataset.icon ?? '?');
   const minSide = Math.min(...rects.map((r) => Math.min(r.width, r.height)));
   check(
     `touch target ${minSide.toFixed(0)}px >= 44px (platform minimum)`,
     minSide >= 44,
-    buttons.map((b) => b.textContent).join('/'),
+    names.join('/'),
   );
 
   // 控件之间不重叠（重叠会导致误触）
@@ -63,7 +77,7 @@
       const a = rects[i];
       const b = rects[j];
       if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) {
-        overlap = `${buttons[i].textContent}-${buttons[j].textContent}`;
+        overlap = `${names[i]}-${names[j]}`;
       }
     }
   }
@@ -130,13 +144,18 @@
   if (groundY === -999 || groundY < 0) groundY = Math.round(self0[1]);
   mc.teleportForce(gx + 0.5, groundY + 2, gz + 0.5);
   mc.look(0, -75);
-  // 落体 + 网格重建都要时间：轮询等射线命中，最多 3 秒
+  // 落体 + 网格重建都要时间：轮询等"落地 **且** 射线命中"。
+  // ⚠️ 只等命中有个坑：玩家还在下落时射线可能正好穿过脚下那一格又落空，
+  // 于是 600ms 后 `isBreaking` 是 false（这条断言以前偶发假红）。落地之后再测才稳定。
   let hitForBreaking = null;
-  for (let i = 0; i < 15 && !hitForBreaking; i++) {
+  for (let i = 0; i < 25; i++) {
     await sleep(200);
-    hitForBreaking = mc.info.hit;
+    if (mc.info.onGround && mc.info.hit) {
+      hitForBreaking = mc.info.hit;
+      break;
+    }
   }
-  check('raycast hits a block (breaking precondition)', hitForBreaking !== null, hitForBreaking ? `(${hitForBreaking.join(',')})` : 'no hit after 3s');
+  check('raycast hits a block (breaking precondition)', hitForBreaking !== null, hitForBreaking ? `(${hitForBreaking.join(',')})` : 'no hit after 5s');
 
   fire(look, 'pointerdown', window.innerWidth * 0.5, window.innerHeight * 0.5, 404);
   await sleep(600);
@@ -186,11 +205,16 @@
 
   // ---------------------------------------------------------------- 6. 性能基线
   await sleep(1200);
-  // 网格重建是异步的：连读几次取最大值，避免正好读到"重建中"的 0
+  // 网格重建是异步的：连读几次，避免正好读到"重建中"的 0。
+  // ⚠️ 重试窗口给到 5 秒：前面刚把玩家传送到高空并开飞行，整片视野的网格都在重建，
+  // 1.5 秒偶尔不够（实测在无头浏览器里会假红一次）。这个指标本身是活的（重建完是千万级三角形）。
   let info = mc.info;
-  for (let i = 0; i < 6 && info.triangles === 0; i++) {
+  for (let i = 0; i < 60 && info.triangles === 0; i++) {
     await sleep(250);
-    info = mc.info;
+    const next = mc.info;
+    // 取"见过的最大值"：这个计数在一次重建里会从 0 跳到几百万，取最后一次可能又读到 0
+    if (next.triangles > info.triangles) info = next;
+    else info = next.fps ? next : info;
   }
   const memory = performance.memory ? performance.memory.usedJSHeapSize / 1048576 : null;
   check(`fps ${info.fps} >= 30`, info.fps >= 30, `${info.chunks} chunks | ${info.triangles} triangles`);

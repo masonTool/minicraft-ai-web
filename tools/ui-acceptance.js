@@ -1,0 +1,176 @@
+/**
+ * 界面适配验收（批次 26：物品分页 / 手机端图标按钮 / 整体适配）
+ *
+ * 用法（dev server 已跑起来，视口由 `tools/ui-check.sh` 设好）：
+ *   playwright-cli eval "eval(atob('$(base64 -i tools/ui-acceptance.js | tr -d '\n')'))"
+ *
+ * 覆盖的是"能在桌面浏览器里自动验证的部分"：
+ *  1. 触摸按钮是**图标**（没有文字节点、有 svg、热区 ≥44px、互不重叠、有 aria-label）
+ *  2. 聊天/命令入口存在，点开输入框、点"发送"能把这一行发出去
+ *  3. 创造物品栏**分页**：只渲染当前页、翻页真的换内容、页码正确、页大小与视口匹配
+ *  4. 整体适配：没有横向溢出；触屏模式下开始遮罩显示手势说明而不是键盘提示
+ *
+ * 真机才能量的（发热、硬件触控延迟）仍然归 M17 的真机清单。
+ */
+(async function uiAcceptance() {
+  const lines = [];
+  // 标记用 ASCII：终端里中文与 ✓✗ 可能被按单字节解读成乱码
+  const check = (label, ok, detail) => lines.push(`${ok ? '[OK]  ' : '[FAIL]'} ${label}${detail ? `  ->  ${detail}` : ''}`);
+  const info = (text) => lines.push(`  ${text}`);
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const rect = (element) => element?.getBoundingClientRect();
+  const overlap = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  const waitFor = async (predicate, timeoutMs) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (predicate()) return true;
+      await sleep(250);
+    }
+    return predicate();
+  };
+
+  // 0. 先进入一个世界：全新的浏览器会话里主菜单是空的，游戏不会自己开始
+  //    （`window.__mc` 是 `startWorld` 里才挂上的，所以它同时也是"游戏起来了"的信号）
+  if (typeof window.__mc === 'undefined') {
+    document.querySelector('#world-screen .world-primary')?.click();
+    const started = await waitFor(() => typeof window.__mc !== 'undefined', 90000);
+    if (!started) return '[FAIL] game did not start (window.__mc missing after clicking 创建并进入)';
+  }
+  const mc = window.__mc;
+  await waitFor(() => mc.info.chunks > 0, 30000);
+
+  mc.enableTouchControls();
+  await sleep(300);
+
+  // ---------------------------------------------------------------- 1. 图标按钮
+  const buttons = [...document.querySelectorAll('#touch-buttons .touch-button')];
+  check('six touch buttons (chat/view/fly/sneak/inventory/jump)', buttons.length === 6, `${buttons.length} buttons`);
+
+  const noText = buttons.filter((button) => button.textContent.trim().length === 0);
+  check('buttons render icons, not text', noText.length === buttons.length, `${noText.length}/${buttons.length} have no text node`);
+
+  const withIcon = buttons.filter((button) => button.querySelector('svg path'));
+  check('every button has an inline svg icon', withIcon.length === buttons.length, `${withIcon.length}/${buttons.length}`);
+
+  const labelled = buttons.filter((button) => (button.getAttribute('aria-label') ?? '').length > 0);
+  check('every button has an aria-label', labelled.length === buttons.length, `${labelled.length}/${buttons.length}`);
+
+  const sizes = buttons.map((button) => rect(button)).filter(Boolean);
+  const smallest = Math.min(...sizes.map((r) => Math.min(r.width, r.height)));
+  check('every touch target >= 44px', smallest >= 44, `smallest ${smallest.toFixed(1)}px`);
+
+  let overlaps = 0;
+  for (let i = 0; i < sizes.length; i++) {
+    for (let j = i + 1; j < sizes.length; j++) if (overlap(sizes[i], sizes[j])) overlaps++;
+  }
+  check('buttons do not overlap', overlaps === 0, `${overlaps} overlapping pairs`);
+
+  // ---------------------------------------------------------------- 2. 聊天入口
+  const chatButton = buttons.find((button) => button.dataset.icon === 'chat');
+  check('chat button present (mobile had no way to open chat)', !!chatButton);
+
+  if (chatButton) {
+    chatButton.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 7001, pointerType: 'touch' }));
+    await sleep(120);
+    const chatRoot = document.getElementById('chat');
+    const input = chatRoot?.querySelector('.chat-input');
+    const send = chatRoot?.querySelector('.chat-send');
+    check('chat input opens from the icon', !!chatRoot?.classList.contains('open') && !input?.classList.contains('hidden'), chatRoot?.className ?? 'no #chat');
+    check('send button visible on touch', !!send && !send.classList.contains('hidden'));
+
+    if (input && send) {
+      const before = mc.chat.messageLines.length;
+      input.value = '/time set 1000';
+      send.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 7002, pointerType: 'touch' }));
+      await sleep(150);
+      check('send button submits the line', mc.chat.messageLines.length > before && !chatRoot.classList.contains('open'), `lines ${before} -> ${mc.chat.messageLines.length}`);
+    }
+    mc.chat.close();
+  }
+
+  // ---------------------------------------------------------------- 3. 创造物品栏分页
+  mc.toggleInventory();
+  await sleep(300);
+
+  const grid = document.querySelector('.inv-grid.inv-creative');
+  const pager = document.querySelector('.inv-pager');
+  const label = pager?.querySelector('[data-role="label"]');
+  const prev = pager?.querySelector('[data-role="prev"]');
+  const next = pager?.querySelector('[data-role="next"]');
+  check('creative grid + pager present', !!grid && !!pager && !!label && !!prev && !!next);
+
+  if (grid && pager && label) {
+    const narrow = window.innerWidth <= 900;
+    const pageSize = narrow ? 32 : 60;
+    const slots = () => [...grid.querySelectorAll('.inv-slot')];
+    const count = slots().length;
+    check(`only one page of items is in the DOM (<= ${pageSize})`, count > 0 && count <= pageSize, `${count} slots in DOM`);
+
+    check('pager is visible on the "all" category', !pager.classList.contains('hidden'), label.textContent ?? '');
+    info(`page label: ${label.textContent}`);
+
+    const firstBefore = slots()[0]?.querySelector('canvas')?.toDataURL();
+    next.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 7003, pointerType: 'touch' }));
+    await sleep(120);
+    const firstAfter = slots()[0]?.querySelector('canvas')?.toDataURL();
+    check('next page really changes the items', !!firstBefore && !!firstAfter && firstBefore !== firstAfter, `slots ${count} -> ${slots().length}`);
+    // 用数字解析而不是正则匹配整句：文案里那空格/分隔符一旦调整，正则就会假红
+    const pageMatch = /(\d+)\s*\/\s*(\d+)/.exec(label.textContent ?? '');
+    check('page label advanced to page 2', pageMatch?.[1] === '2' && Number(pageMatch[2]) > 1, label.textContent ?? '');
+    check('prev button enabled after paging', !prev.disabled);
+
+    // 回到第 1 页：第一格应该与翻页前一致
+    prev.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 7004, pointerType: 'touch' }));
+    await sleep(120);
+    const backFirst = slots()[0]?.querySelector('canvas')?.toDataURL();
+    check('prev page restores the first page', backFirst === firstBefore, 'first slot icon identical');
+    check('prev disabled on the first page', prev.disabled);
+
+    // 页码与页大小必须自洽：`第 1/N 页 · 共 M 件` 里的 N 应该等于 ceil(M / 页大小)
+    const summary = /第\s*\d+\s*\/\s*(\d+)\s*页\s*·\s*共\s*(\d+)\s*件/.exec(label.textContent ?? '');
+    if (summary) {
+      const expectedPages = Math.max(1, Math.ceil(Number(summary[2]) / pageSize));
+      check(`page count matches the page size (${pageSize})`, Number(summary[1]) === expectedPages, `${summary[1]} pages for ${summary[2]} items`);
+    } else {
+      check('page label has the expected shape', false, label.textContent ?? '');
+    }
+
+    // 搜索时只有一页 → 翻页条自动隐藏。
+    // 查询词用 ASCII：脚本是通过 `atob` 钻进页面的，非 ASCII 字面量很容易变成乱码，
+    // 那样"搜到 0 件"会伪装成"只有一页"（这一条本身也曾经假绿过），所以顺带断言真的搜到了东西
+    const search = document.querySelector('.inv-search');
+    if (search) {
+      search.value = 'diamond';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(120);
+      const found = slots().length;
+      check('search actually matched items', found > 0 && found <= pageSize, `${found} slots for "diamond"`);
+      check('pager hides when everything fits one page', pager.classList.contains('hidden'), `${found} slots`);
+      search.value = '';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(120);
+    }
+
+    // 分类标签在窄屏是单行横向滚动（不换行占三行）
+    const tabs = document.querySelector('.inv-tabs');
+    const style = tabs ? getComputedStyle(tabs) : null;
+    info(`tabs: ${style?.flexWrap} | ${tabs ? Math.round(tabs.getBoundingClientRect().height) : 0}px tall`);
+    if (narrow && style) check('category tabs stay on one scrollable row', style.flexWrap === 'nowrap', style.flexWrap);
+  }
+
+  // ---------------------------------------------------------------- 4. 整体适配
+  const overflow = document.documentElement.scrollWidth - window.innerWidth;
+  check('no horizontal overflow', overflow <= 1, `scrollWidth ${document.documentElement.scrollWidth} vs ${window.innerWidth}`);
+  check('viewport is recorded for the report', true, `${window.innerWidth}x${window.innerHeight} dpr ${window.devicePixelRatio}`);
+
+  mc.toggleInventory();
+  await sleep(200);
+
+  // 触屏模式下开始遮罩要显示手势说明（键盘提示在手机上是误导）
+  const desktopHelp = document.querySelector('#overlay .desktop-only');
+  const touchHelp = document.querySelector('#overlay .touch-only');
+  check('touch devices get gesture help, not keyboard hints', !!touchHelp && !!desktopHelp && getComputedStyle(touchHelp).display !== 'none' && getComputedStyle(desktopHelp).display === 'none',
+    `touch-help ${touchHelp ? getComputedStyle(touchHelp).display : 'missing'} | keyboard-help ${desktopHelp ? getComputedStyle(desktopHelp).display : 'missing'}`);
+
+  return lines.join('\n');
+})();
