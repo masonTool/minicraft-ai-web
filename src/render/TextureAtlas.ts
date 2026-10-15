@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { DYE_COLORS, TERRACOTTA_BASE, WOOD_TYPES, terracottaColor } from '../core/registry/colors.ts';
+import { POTIONS } from '../core/registry/potions.ts';
 
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from './atlasLayout.ts';
 
@@ -1204,8 +1205,13 @@ function bottlePainter(liquid: readonly [number, number, number] | null): Painte
 PAINTERS.item_glass_bottle = bottlePainter(null);
 PAINTERS.item_water_bottle = bottlePainter([68, 128, 214]);
 
-/** 各种药水的液体颜色（对照游戏里的大致观感） */
-const POTION_COLORS: Record<string, readonly [number, number, number]> = {
+/**
+ * 各效果的**基础档**液体颜色（对照游戏里的大致观感）。
+ *
+ * 延长/强化档不另配色，而是由基础色推出来（见下面的 `tierColor`）：
+ * 24 瓶药水逐个挑颜色既没必要，也会让"同一效果的三种档位看起来像三种药"。
+ */
+const POTION_BASE_COLORS: Record<string, readonly [number, number, number]> = {
   awkward: [126, 88, 162],
   swiftness: [124, 196, 224],
   strength: [196, 84, 60],
@@ -1217,8 +1223,23 @@ const POTION_COLORS: Record<string, readonly [number, number, number]> = {
   slowness: [112, 118, 146],
   weakness: [86, 92, 86],
 };
-for (const [key, color] of Object.entries(POTION_COLORS)) {
-  PAINTERS[`item_potion_${key}`] = bottlePainter(color);
+
+/**
+ * 同一效果的档位配色：普通档原色、延长档偏暗偏红（掺了红石粉）、
+ * 强化档更亮（掺了荧石粉）。玩家在快捷栏上一眼就能看出"这是同一瓶，但更强/更久"。
+ */
+function tierColor(base: readonly [number, number, number], tier: string): [number, number, number] {
+  const [r, g, b] = base;
+  if (tier === 'long') return [clamp255(r * 1.06), clamp255(g * 0.72), clamp255(b * 0.72)];
+  if (tier === 'strong') return [clamp255(r * 1.15 + 28), clamp255(g * 1.15 + 18), clamp255(b * 1.15 + 18)];
+  return [r, g, b];
+}
+
+// 贴图按 `POTIONS` 生成而不是照着 id 列表手写：加了新药水却忘了画贴图，
+// 表现是"背包里一瓶空白"，而这类遗漏在数据表里看不出来。
+for (const potion of POTIONS) {
+  const base = POTION_BASE_COLORS[potion.variant] ?? POTION_BASE_COLORS.awkward!;
+  PAINTERS[`item_potion_${potion.key}`] = bottlePainter(tierColor(base, potion.tier));
 }
 
 /**

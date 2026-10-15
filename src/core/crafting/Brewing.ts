@@ -4,15 +4,27 @@
  * 与原版对齐：
  *  - 一次酿造 **20 秒**；燃料是**烈焰粉**，1 份能酿 **20 次**（原版就是 20）
  *  - 三个药水槽**同时**推进（放一瓶也是 20 秒，放三瓶一样是 20 秒——这是原版的特点）
- *  - 配方：水瓶 + 下界疣 → 粗制药水；粗制药水 + 材料 → 各种药水
+ *  - 配方四类：水瓶 + 下界疣 → 粗制；粗制 + 材料 → 具体药水；
+ *    具体药水 + 红石粉 → **延长**；+ 荧石粉 → **强化**；
+ *    + 发酵蜘蛛眼 → **腐化**（换一种效果，见 `CORRUPTION`）
  *  - 不需要"配方解锁"，但**原料与基础药水不匹配时什么都不发生**（不消耗、不浪费）
  *
- * 不碰 DOM，也不持有状态：`BrewingStand` 容器负责攒进度，这里只回答
- * "这瓶能不能酿、酿成什么"。
+ * 配方表**由 `POTIONS` 的变体表展开**，不手写 24 条：手写的话"加一种药水"要改两处，
+ * 而漏改的那一处不会报错，只会让新药水永远酿不出来。
+ *
+ * 与原版的两处差异（都是"少一层状态"，行为可预期）：
+ *  1. 红石粉与荧石粉**只能从普通档出发**（原版给 II 级药水再补红石粉也是可以的）；
+ *     反过来说"已经改造过的药水不能再改造"，与原版 1.9 之后"二选一"的限制一致。
+ *  2. 腐化只登记本项目**有的**目标效果：治疗→伤害、剧毒→伤害、夜视→隐身这三条
+ *     目标药水还没做（`instant_damage`/`invisibility` 的效果本身是有的），
+ *     所以那三样原料 + 发酵蜘蛛眼什么都不发生。做那三瓶药水时回来补 `CORRUPTION` 一行即可。
+ *
+ * 本文件要 import `items.ts` 拿材料 id —— 这是**必须**的：`POTIONS` 那边反过来
+ * 不能 import `items.ts`（会成环，见 `potions.ts` 的文件头）。
  */
 
 import { Item } from '../registry/items.ts';
-import { POTION_IDS } from '../registry/potions.ts';
+import { POTION_IDS, POTION_VARIANTS, variantBaseId } from '../registry/potions.ts';
 
 /** 一次酿造耗时（秒，原版 20） */
 export const BREW_SECONDS = 20;
@@ -28,16 +40,70 @@ export interface BrewIngredient {
 }
 
 /**
- * 酿造配方表。
+ * 每种效果的基础档怎么来：粗制 + 哪种材料（原版一一对应）。
  *
- * 只做「水瓶 + 下界疣 → 粗制」与「粗制 + 材料 → 药水」两类；
- * 原版还有"药水 + 红石 → 延长""+ 荧石粉 → 强化""+ 发酵蜘蛛眼 → 腐化"这几条改造链，
- * 需要额外的药水 id（每种效果 × 三档），**放到下一批**——那时的做法是把
- * `POTIONS` 按"效果 × 档位"扩成表，而不是在这里加分支。
+ * **缓慢与虚弱故意不在表里**：它们不是"粗制 + 材料"，原版里只从腐化链来
+ * （迅捷→缓慢、水瓶/粗制→虚弱）。给它们硬塞一种材料就会凭空多出一条原版没有的配方。
  */
-export const BREW_RECIPES: readonly BrewIngredient[] = [
-  { ingredient: Item.NETHER_WART, from: Item.WATER_BOTTLE, to: POTION_IDS.awkward },
-];
+export const VARIANT_INGREDIENTS: Readonly<Record<string, number>> = {
+  swiftness: Item.SUGAR,
+  strength: Item.BLAZE_POWDER,
+  healing: Item.GLISTERING_MELON,
+  regeneration: Item.GHAST_TEAR,
+  fire_resistance: Item.MAGMA_CREAM,
+  night_vision: Item.GOLDEN_CARROT,
+  poison: Item.SPIDER_EYE,
+};
+
+/** 发酵蜘蛛眼腐化：原料效果的基础档 → 目标效果的基础档 */
+export const CORRUPTION: Readonly<Record<string, string>> = {
+  swiftness: 'slowness',
+};
+
+function requireBaseId(key: string): number {
+  const id = variantBaseId(key);
+  if (id === undefined) throw new Error(`酿造配方表里引用了不存在的效果变体：${key}`);
+  return id;
+}
+
+/**
+ * 酿造配方表（由变体表在模块加载时展开一次）。
+ *
+ * 顺序即"配方查找顺序"：每条 (材料, 原料瓶) 都是唯一的，
+ * 断言里有一条专门盯着"没有重复的 (材料, 原料瓶)"——配方表一旦撞车，
+ * 后写的那条永远查不到，玩家看到的是"明明放了材料却酿不出东西"。
+ */
+export const BREW_RECIPES: readonly BrewIngredient[] = buildRecipes();
+
+function buildRecipes(): BrewIngredient[] {
+  // 起点：水瓶 + 下界疣 → 粗制
+  const recipes: BrewIngredient[] = [
+    { ingredient: Item.NETHER_WART, from: Item.WATER_BOTTLE, to: POTION_IDS.awkward },
+  ];
+
+  for (const variant of POTION_VARIANTS) {
+    const ingredient = VARIANT_INGREDIENTS[variant.key];
+    if (ingredient !== undefined) {
+      recipes.push({ ingredient, from: POTION_IDS.awkward, to: variant.baseId });
+    }
+    if (variant.longId !== undefined) {
+      recipes.push({ ingredient: Item.REDSTONE_DUST, from: variant.baseId, to: variant.longId });
+    }
+    if (variant.strongId !== undefined) {
+      recipes.push({ ingredient: Item.GLOWSTONE_DUST, from: variant.baseId, to: variant.strongId });
+    }
+    const corruptTo = CORRUPTION[variant.key];
+    if (corruptTo !== undefined) {
+      recipes.push({ ingredient: Item.FERMENTED_SPIDER_EYE, from: variant.baseId, to: requireBaseId(corruptTo) });
+    }
+  }
+
+  // 腐化"没有效果的药水"→ 虚弱：原版里水瓶与粗制药水都能这么变
+  recipes.push({ ingredient: Item.FERMENTED_SPIDER_EYE, from: Item.WATER_BOTTLE, to: requireBaseId('weakness') });
+  recipes.push({ ingredient: Item.FERMENTED_SPIDER_EYE, from: POTION_IDS.awkward, to: requireBaseId('weakness') });
+
+  return recipes;
+}
 
 /** 查这条配方；没有配方返回 null */
 export function brewRecipeFor(ingredient: number, bottle: number): BrewIngredient | null {

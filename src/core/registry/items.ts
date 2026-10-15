@@ -256,7 +256,13 @@ const DYE_SPECS: readonly NonBlockItemSpec[] = DYE_COLORS.map((color, index) => 
 
 const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, ...DYE_SPECS];
 
-const MAX_ITEM_ID = 1200;
+/**
+ * 物品表的长度（按 id 索引）。
+ *
+ * ⚠️ 改小会**静默丢掉** id 更大的物品（数组直接截断），所以每次新增一段 id 都要回来看这里：
+ * 药水的延长/强化档（1200~1215）就是这么加进来的。
+ */
+const MAX_ITEM_ID = 1230;
 
 /** 按 id 索引的物品表（未定义的 id 为 undefined） */
 export const ITEMS: (ItemDef | undefined)[] = new Array(MAX_ITEM_ID).fill(undefined);

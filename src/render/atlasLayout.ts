@@ -427,6 +427,22 @@ export const TILE_ORDER = [
   'item_potion_poison',
   'item_potion_slowness',
   'item_potion_weakness',
+  // 延长档（红石粉）
+  'item_potion_swiftness_long',
+  'item_potion_strength_long',
+  'item_potion_regeneration_long',
+  'item_potion_fire_resistance_long',
+  'item_potion_night_vision_long',
+  'item_potion_poison_long',
+  'item_potion_slowness_long',
+  'item_potion_weakness_long',
+  // 强化档（荧石粉）
+  'item_potion_swiftness_strong',
+  'item_potion_strength_strong',
+  'item_potion_healing_strong',
+  'item_potion_regeneration_strong',
+  'item_potion_poison_strong',
+  'item_potion_slowness_strong',
   'item_bucket',
   'item_milk_bucket',
   // ---- 弓与箭（J9）

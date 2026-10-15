@@ -25,6 +25,7 @@ import {
 } from './items.ts';
 import { ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
+import { POTIONS, type PotionEntry } from './potions.ts';
 import { enchantmentById, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
 import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
@@ -360,16 +361,8 @@ const EXPLICIT: Record<string, string> = {
   nether_wart: '下界疣',
   blaze_powder: '烈焰粉',
   sugar: '糖',
-  potion_awkward: '粗制药水',
-  potion_swiftness: '迅捷药水',
-  potion_strength: '力量药水',
-  potion_healing: '治疗药水',
-  potion_regeneration: '生命恢复药水',
-  potion_fire_resistance: '抗火药水',
-  potion_night_vision: '夜视药水',
-  potion_poison: '剧毒药水',
-  potion_slowness: '缓慢药水',
-  potion_weakness: '虚弱药水',
+  // 药水的名字与说明**不在这里写**：24 瓶全部由 `potions.ts` 的变体表生成（见文件后半段），
+  // 否则"改了表的时长、忘了改文案"这类漂移没人能发现
   carrot: '胡萝卜',
   potato: '马铃薯',
   baked_potato: '烤马铃薯',
@@ -493,16 +486,6 @@ const DESCRIPTIONS: Record<string, string> = {
   nether_wart: '在下界要塞的楼梯上能找到的作物，是**一切药水的起点**（水瓶 + 下界疣 = 粗制药水）。',
   blaze_powder: '酿造台的燃料，1 份能酿 20 次。也可以做成烈焰棒（还没做）。',
   sugar: '甘蔗做的（1 甘蔗 → 1 糖）。在酿造里把粗制药水变成迅捷药水。',
-  potion_awkward: '半成品：酿出具体药水之前的中间状态，直接喝没有效果。',
-  potion_swiftness: '喝下获得迅捷（速度提升）3 分钟。',
-  potion_strength: '喝下获得力量（近战伤害提升）3 分钟。',
-  potion_healing: '喝下立刻回血（瞬间治疗）。',
-  potion_regeneration: '喝下获得生命恢复 45 秒。',
-  potion_fire_resistance: '喝下获得抗火 3 分钟：泡在岩浆里也不掉血。',
-  potion_night_vision: '喝下获得夜视 3 分钟：黑暗里也看得清。',
-  potion_poison: '喝下中毒 45 秒（中毒不会致死，会停在半颗心）。',
-  potion_slowness: '喝下变慢 90 秒——原版里这瓶通常是用来砸别人的。',
-  potion_weakness: '喝下变虚弱 90 秒（近战伤害下降）。',
   carrot: '种在耕地上会长出胡萝卜（收一次得 2~4 个）。能回 3 点饥饿，也能把猪引过来——**这就是猪的原版口粮**。',
   potato: '种在耕地上会长出马铃薯。生吃回 1 点饥饿，**烤过之后回 5 点**（原版差得很明显）。',
   baked_potato: '烤过的马铃薯：一口回 5 点饥饿、6 点饱和度（生的只有 1 点）。熔炉里烤一下就行。',
@@ -609,6 +592,46 @@ for (const [key, food] of Object.entries(FOOD_TABLE)) {
     parts.push(`${chance}${EFFECT_LABELS[effect.id]}${level} ${effect.seconds} 秒`);
   }
   DESCRIPTIONS[key] = `${parts.join('｜')}。`;
+}
+
+// ---- 药水（H10）：24 瓶的名字与说明都由 `potions.ts` 的变体表生成。
+// 只有两处信息需要人写：**档位前缀**（延长/强化，由 `tier` 决定）与
+// **效果本身的注意事项**（中毒不致死之类，下表）。
+
+/** 效果本身的注意事项（按变体 key）；没写的效果就是"照着效果名念一遍"就够清楚 */
+const POTION_NOTES: Record<string, string> = {
+  poison: '中毒不会致死（会停在半颗心）。',
+  slowness: '原版里这瓶通常是用来砸别人的——喷溅药水还没做，现在只能自己喝。',
+};
+
+/** 时长文案：`45 秒` / `3 分钟` / `1 分 30 秒` */
+function durationLabel(seconds: number): string {
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  if (minutes === 0) return `${rest} 秒`;
+  return rest === 0 ? `${minutes} 分钟` : `${minutes} 分 ${rest} 秒`;
+}
+
+function potionDescription(potion: PotionEntry): string {
+  if (potion.base) return '半成品：酿出具体药水之前的中间状态，直接喝没有效果。';
+  const tier = potion.tier === 'long' ? '红石粉延长版：' : potion.tier === 'strong' ? '荧石粉强化版：' : '';
+  const effects = potion.effects.map((effect) => {
+    // ⚠️ 本文件用的是 `enchantments.romanLevel`（**1 起始**，所以 +1）；
+    // `StatusEffects` 里那个同名函数吃的是 amplifier（0 → I），两处别抄错
+    const level = effect.amplifier > 0 ? ` ${romanLevel(effect.amplifier + 1)}` : '';
+    const label = `${EFFECT_LABELS[effect.id]}${level}`;
+    // 瞬间效果（治疗）没有"持续多久"可言
+    if (effect.id === 'instant_health' || effect.id === 'instant_damage') return `${label}（立刻生效）`;
+    return `${label} ${durationLabel(effect.seconds)}`;
+  });
+  return `${tier}喝下获得${effects.join('、')}。${POTION_NOTES[potion.variant] ?? ''}`;
+}
+
+for (const potion of POTIONS) {
+  const key = `potion_${potion.key}`;
+  put(key, potion.name);
+  DESCRIPTIONS[key] = potionDescription(potion);
 }
 
 // ---------------------------------------------------------------- 对外接口
