@@ -301,6 +301,30 @@ const FOOD_RECIPES: readonly Recipe[] = [
   },
 ];
 
+/**
+ * 附魔相关（H9）：纸 → 书 → 附魔台 / 书架。
+ * 链条完整对上原版：甘蔗做纸、纸加皮革做书、书 + 钻石 + 黑曜石做附魔台、
+ * 书 + 木板做书架（书架用来给附魔台加成）。
+ */
+const ENCHANT_RECIPES: readonly Recipe[] = [
+  // 3 甘蔗 → 3 纸（原版是无序配方）
+  { kind: 'shapeless' as const, result: { id: Item.PAPER, count: 3 }, ingredients: [Block.SUGAR_CANE, Block.SUGAR_CANE, Block.SUGAR_CANE] },
+  // 3 纸 + 1 皮革 → 1 书（原版无序）
+  { kind: 'shapeless' as const, result: { id: Item.BOOK, count: 1 }, ingredients: [Item.PAPER, Item.PAPER, Item.PAPER, Item.LEATHER] },
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.ENCHANTING_TABLE, count: 1 },
+    pattern: [' B ', 'DOD', 'OOO'],
+    key: { B: Item.BOOK, D: Item.DIAMOND, O: Block.OBSIDIAN },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.BOOKSHELF, count: 1 },
+    pattern: ['PPP', 'BBB', 'PPP'],
+    key: { P: P, B: Item.BOOK },
+  },
+];
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...WOOL_RECIPES,
@@ -311,6 +335,7 @@ export const RECIPES: readonly Recipe[] = [
   ...TOOL_RECIPES,
   ...ARMOR_RECIPES,
   ...FOOD_RECIPES,
+  ...ENCHANT_RECIPES,
 ];
 
 interface Normalized {

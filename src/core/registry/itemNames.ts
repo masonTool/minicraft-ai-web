@@ -25,6 +25,7 @@ import {
 } from './items.ts';
 import { ARMOR_MATERIALS, ARMOR_SPECS, ARMOR_TYPES, armorInfoById } from './armor.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
+import { enchantmentById, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
 import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
 
@@ -251,6 +252,9 @@ const EXPLICIT: Record<string, string> = {
   cactus: '仙人掌',
   dead_bush: '枯萎的灌木',
   bamboo: '竹子',
+  // 附魔（H9）
+  enchanting_table: '附魔台',
+  bookshelf: '书架',
   // 海底
   prismarine: '海晶石',
   prismarine_bricks: '海晶石砖',
@@ -318,6 +322,9 @@ const EXPLICIT: Record<string, string> = {
   chicken: '生鸡肉',
   leather: '皮革',
   feather: '羽毛',
+  // 附魔材料
+  paper: '纸',
+  book: '书',
   // 食物
   cooked_beef: '牛排',
   cooked_porkchop: '熟猪排',
@@ -405,7 +412,11 @@ const DESCRIPTIONS: Record<string, string> = {
   water: '可以在里面游泳，会缓慢恢复氧气以外的状态。',
   bedrock: '世界底部的基岩，挖不动。',
   obsidian: '需要钻石镐才能挖动；要塞的传送门房用它搭成。',
-  sugar_cane: '长在水边的植物：可以做纸，也能做糖。',
+  sugar_cane: '长在水边的植物：3 个可以合成 3 张纸（纸再做成书）。',
+  enchanting_table: '右键打开附魔界面：花经验与青金石给工具/武器/盔甲附魔。周围的书架越多，能出的附魔等级越高（满加成要 15 个书架）。',
+  bookshelf: '放在附魔台周围给它加成：满 15 级需要 15 个书架（书架与附魔台之间要留一格空）。',
+  paper: '甘蔗做成的材料：3 张纸 + 1 个皮革 = 1 本书。',
+  book: '附魔台与书架的原料，也可以放进附魔台当装饰。',
   cactus: '碰到会掉血；可烧成绿色染料。',
   melon: '西瓜片：吃下能恢复饥饿值。',
   pumpkin: '可以做成雕刻南瓜，也能做南瓜派。',
@@ -531,6 +542,18 @@ export function itemLabel(itemId: number): string {
   return translateName(def.name);
 }
 
+/**
+ * 附魔的展示文案：`附魔：效率 III、耐久 II`。
+ * 表里查不到的 id 原样显示——宁可露出一个生 id，也不要默默不显示（那才是真查不出来的 bug）。
+ */
+export function enchantLabel(enchants?: Readonly<Record<string, number>>): string {
+  if (!enchants) return '';
+  const parts = Object.entries(enchants).map(
+    ([id, level]) => `${enchantmentById(id)?.name ?? id} ${romanLevel(level)}`,
+  );
+  return parts.length > 0 ? `附魔：${parts.join('、')}` : '';
+}
+
 /** 中文类别名 */
 export function categoryLabel(itemId: number): string {
   const category: ItemCategory = categoryOf(itemId);
@@ -579,18 +602,26 @@ export interface ItemTooltip {
  * 提示框内容。
  * @param damage 工具/盔甲的已损耗耐久；不传就不显示耐久那一行
  */
-export function itemTooltip(itemId: number, count = 1, damage?: number): ItemTooltip {
+export function itemTooltip(
+  itemId: number,
+  count = 1,
+  damage?: number,
+  enchants?: Readonly<Record<string, number>>,
+): ItemTooltip {
   const def = itemDef(itemId);
   const rawName = def?.name ?? 'unknown';
   // 工具与盔甲都用同一个 damage 字段存耐久，这里一并取出来显示
   const durable = toolInfoById(itemId) ?? armorInfoById(itemId);
   const description = itemDescription(itemId);
   const durability = durable && damage !== undefined ? durabilityLabel(durable, damage) : '';
+  // 附魔单独一行更好认（一排"效率 III、耐久 II"混在说明里会被看漏）
+  const enchantLine = enchantLabel(enchants);
+  const body = [description, durability, enchantLine].filter((part) => part.length > 0).join('｜');
   return {
     title: itemLabel(itemId),
     subtitle: rawName,
-    description: durability ? (description ? `${description}｜${durability}` : durability) : description,
-    showMeta: !hasDescription(itemId) && durability.length === 0,
+    description: body,
+    showMeta: !hasDescription(itemId) && durability.length === 0 && enchantLine.length === 0,
     category: categoryLabel(itemId),
     maxStack: maxStackOf(itemId),
     count,

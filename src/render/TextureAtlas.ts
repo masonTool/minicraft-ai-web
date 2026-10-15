@@ -903,6 +903,79 @@ function applePainter(rgb: readonly [number, number, number], salt: string, shin
 PAINTERS.item_apple = applePainter([212, 54, 48], 'iapple');
 PAINTERS.item_golden_apple = applePainter([246, 208, 62], 'igapple', 1.5);
 
+// ---- 附魔台与书架（H9）
+/** 附魔台顶面：深色台面 + 中央一本摊开的书（红封皮 + 白书页） */
+PAINTERS.enchanting_table_top = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  // 外圈是黑曜石台面
+  if (Math.abs(dx) > 6.5 || Math.abs(dy) > 6.5) return [0, 0, 0, 0];
+  const edge = Math.max(Math.abs(dx), Math.abs(dy)) > 5.2;
+  if (edge) return [clamp255(28 + jitter), clamp255(24 + jitter), clamp255(40 + jitter), 255];
+  // 中央摊开的书：中间一道书脊，两侧书页
+  if (Math.abs(dx) < 1) return [clamp255(120 + jitter), clamp255(30 + jitter), clamp255(42 + jitter), 255];
+  if (Math.abs(dx) < 4 && Math.abs(dy) < 3.4) return [clamp255(232 + jitter), clamp255(226 + jitter), clamp255(206 + jitter), 255];
+  return [clamp255(38 + jitter), clamp255(32 + jitter), clamp255(52 + jitter), 255];
+};
+
+/** 附魔台侧面：黑曜石底 + 上半一圈符文石 */
+PAINTERS.enchanting_table_side = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  if (y < 4) {
+    // 上半：符文石台面，符文用"确定的伪随机"画几道亮线
+    const rune = (x * 7 + y * 13) % 11 === 0 || (x * 3 + y * 5) % 17 === 0;
+    if (rune) return [clamp255(196 + jitter), clamp255(72 + jitter), clamp255(214 + jitter), 255];
+    return [clamp255(96 + jitter), clamp255(74 + jitter), clamp255(118 + jitter), 255];
+  }
+  // 下半：黑曜石（紫黑 + 少量亮点）
+  const sparkle = (x * 5 + y * 11) % 23 === 0;
+  if (sparkle) return [clamp255(120 + jitter), clamp255(78 + jitter), clamp255(158 + jitter), 255];
+  return [clamp255(26 + jitter), clamp255(20 + jitter), clamp255(38 + jitter), 255];
+};
+
+/** 纸：略微歪斜的白色薄片 + 一道折角 */
+PAINTERS.item_paper = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  // 一个略微旋转的方块（用"x 越大越往下偏"模拟倾斜）
+  const skew = Math.round((y - 7.5) * 0.18);
+  const dx = x - 7.5 - skew;
+  const dy = y - 7.5;
+  if (Math.abs(dx) > 5.4 || Math.abs(dy) > 6) return [0, 0, 0, 0];
+  // 折角：右上角切掉一块
+  if (dx > 3.4 && dy < -3.8) return [0, 0, 0, 0];
+  const fold = Math.abs(dx) > 4.4 || Math.abs(dy) > 5;
+  const shade = fold ? 0.86 : 1;
+  return [clamp255(238 * shade + jitter), clamp255(236 * shade + jitter), clamp255(226 * shade + jitter), 255];
+};
+
+/** 书：棕色封皮 + 右侧露出的一叠白页 */
+PAINTERS.item_book = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  if (x < 2 || x > 13 || y < 2 || y > 13) return [0, 0, 0, 0];
+  // 右侧 3 列是书页
+  if (x >= 11) return [clamp255(228 + jitter), clamp255(224 + jitter), clamp255(210 + jitter), 255];
+  // 封皮上一条竖着的装订线
+  if (x === 3) return [clamp255(96 + jitter), clamp255(56 + jitter), clamp255(30 + jitter), 255];
+  return [clamp255(146 + jitter), clamp255(88 + jitter), clamp255(44 + jitter), 255];
+};
+
+/** 书架：木板外框 + 中间两层书 */
+PAINTERS.bookshelf = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 外框木板
+  if (x < 1 || x > 14 || y < 1 || y > 14) return [clamp255(150 + jitter), clamp255(112 + jitter), clamp255(66 + jitter), 255];
+  // 每层的"隔板"
+  if (y === 5 || y === 10) return [clamp255(132 + jitter), clamp255(98 + jitter), clamp255(56 + jitter), 255];
+  // 书脊：颜色按列确定（红/棕/深绿/蓝各几本），中间偶尔留出缝隙
+  if (x % 5 === 0) return [clamp255(58 + jitter), clamp255(44 + jitter), clamp255(32 + jitter), 255];
+  const spine = ['0xc0392b', '0x8a5a2b', '0x2f6b45', '0x2f4a7a'][(x * 3 + y) % 4]!;
+  const r = (parseInt(spine, 16) >> 16) & 0xff;
+  const g = (parseInt(spine, 16) >> 8) & 0xff;
+  const b = parseInt(spine, 16) & 0xff;
+  return [clamp255(r + jitter), clamp255(g + jitter), clamp255(b + jitter), 255];
+};
+
 /** 西瓜片：半圆（上面是红瓤、下面是绿皮）+ 几颗黑籽 */
 PAINTERS.item_melon_slice = (x, y, rng) => {
   const jitter = rng() * 10 - 5;

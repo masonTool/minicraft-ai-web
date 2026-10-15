@@ -22,6 +22,11 @@ export interface ItemStack {
    * 普通方块与材料不带这个字段，因此存档里不会多出一堆 `damage: 0`。
    */
   damage?: number;
+  /**
+   * 附魔（H9）：附魔 id → 等级。
+   * 与 `damage` 同样是"可选 + 跟着栈走"，用普通对象而不是 Map 是为了能直接进存档。
+   */
+  enchants?: Record<string, number>;
 }
 
 /**
@@ -30,6 +35,20 @@ export interface ItemStack {
 export interface SlotSource {
   get(index: number): ItemStack | null;
   set(index: number, stack: ItemStack | null): void;
+}
+
+/**
+ * 把"可选的栈附加数据"（耐久 / 附魔）拷成一个新对象。
+ *
+ * 抽成函数的原因：`take`、`serialize`、提示框、附魔台都要搬这几项，
+ * 每处各写一遍三元表达式的话，加第三项时必然漏掉一处——
+ * 耐久当初就是这么一项项加进来的（并且 `moveTo` 的交换分支也因此漏过一次搬运）。
+ */
+export function stackExtras(stack: ItemStack): Partial<ItemStack> {
+  const extras: Partial<ItemStack> = {};
+  if (stack.damage !== undefined) extras.damage = stack.damage;
+  if (stack.enchants !== undefined) extras.enchants = { ...stack.enchants };
+  return extras;
 }
 
 export const HOTBAR_START = 0;
@@ -109,7 +128,7 @@ export class Inventory implements SlotSource {
     if (!slot || count <= 0) return null;
     const moved = Math.min(slot.count, count);
     slot.count -= moved;
-    const taken: ItemStack = slot.damage === undefined ? { id: slot.id, count: moved } : { id: slot.id, count: moved, damage: slot.damage };
+    const taken: ItemStack = { id: slot.id, count: moved, ...stackExtras(slot) };
     if (slot.count <= 0) this.slots[index] = null;
     this.notify();
     return taken;
@@ -136,9 +155,7 @@ export class Inventory implements SlotSource {
    * 返回定长的 41 项数组，空槽为 null——不存下标，读档时按下标直接还原。
    */
   serialize(): Array<ItemStack | null> {
-    return this.slots.map((slot) =>
-      slot ? (slot.damage === undefined ? { id: slot.id, count: slot.count } : { id: slot.id, count: slot.count, damage: slot.damage }) : null,
-    );
+    return this.slots.map((slot) => (slot ? { id: slot.id, count: slot.count, ...stackExtras(slot) } : null));
   }
 
   /** 从存档恢复槽位（长度不符时按能恢复的部分恢复） */
@@ -152,6 +169,14 @@ export class Inventory implements SlotSource {
       const restored: ItemStack = { id: stack.id, count: stack.count };
       // 旧存档没有 damage 字段；顺手夹紧非法值，避免坏存档把工具直接判成"已损坏"
       if (typeof stack.damage === 'number' && stack.damage > 0) restored.damage = stack.damage;
+      // 附魔同理：只收"看起来像附魔表"的对象，坏存档不会把整件物品读崩
+      if (stack.enchants && typeof stack.enchants === 'object') {
+        const enchants: Record<string, number> = {};
+        for (const [id, level] of Object.entries(stack.enchants)) {
+          if (typeof level === 'number' && level > 0) enchants[id] = Math.floor(level);
+        }
+        if (Object.keys(enchants).length > 0) restored.enchants = enchants;
+      }
       this.slots[i] = restored;
     }
     this.notify();

@@ -31,7 +31,13 @@ import {
 } from '../core/container/Inventory.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { CHEST_SIZE } from '../core/container/Chest.ts';
+import {
+  ENCHANT_ITEM_SLOT,
+  ENCHANT_LAPIS_SLOT,
+  EnchantTable,
+} from '../core/container/EnchantTable.ts';
 import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, Furnace } from '../core/container/Furnace.ts';
+import { UI_HINT_UNIMPLEMENTED, optionLabel, type EnchantOption } from '../core/crafting/Enchanting.ts';
 import { Chest } from '../core/container/Chest.ts';
 import {
   CATEGORY_LABELS,
@@ -45,7 +51,7 @@ import {
 import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
 import { Tooltip } from './Tooltip.ts';
 
-export type InventoryPanelMode = 'inventory' | 'crafting' | 'furnace' | 'chest';
+export type InventoryPanelMode = 'inventory' | 'crafting' | 'furnace' | 'chest' | 'enchanting';
 
 export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
@@ -56,6 +62,15 @@ export interface InventoryScreenHooks {
    * 界面只负责"发现这件事发生了"，攒了多少、给谁加由主程序决定。
    */
   onFurnaceXp?: (amount: number) => void;
+  /**
+   * 附魔台要用到的"玩家侧信息"（H9）：当前等级、书架加成、以及扣等级的出口。
+   * 界面不持有 `Experience`，所以询问式地取——一次刷新只问一次。
+   */
+  enchantContext?: () => {
+    playerLevel: number;
+    bookshelfPower: number;
+    consumeLevels: (levels: number) => boolean;
+  };
 }
 
 interface SlotBinding {
@@ -101,6 +116,12 @@ export class InventoryScreen {
   private readonly furnaceFuelSlot: HTMLDivElement;
   private readonly furnaceOutputSlot: HTMLDivElement;
   private readonly flameEl: HTMLDivElement;
+  /** 附魔台（H9） */
+  private readonly enchantLayout: HTMLDivElement;
+  private readonly enchantItemSlot: HTMLDivElement;
+  private readonly enchantLapisSlot: HTMLDivElement;
+  private readonly enchantStatusEl: HTMLDivElement;
+  private readonly enchantButtons: HTMLButtonElement[] = [];
   private readonly cookFillEl: HTMLElement;
 
   // 创造物品栏的分类与搜索状态。
@@ -120,7 +141,7 @@ export class InventoryScreen {
   private readonly grids: Record<2 | 3, CraftingGrid>;
 
   private mode: InventoryPanelMode = 'inventory';
-  private activeContainer: Furnace | Chest | null = null;
+  private activeContainer: Furnace | Chest | EnchantTable | null = null;
   private containerDirty = false;
   private containerRefreshTimer = 0;
 
@@ -190,6 +211,16 @@ export class InventoryScreen {
     this.furnaceFuelSlot.dataset.key = 'furnace:fuel';
     this.furnaceInputSlot.dataset.key = 'furnace:input';
     this.furnaceOutputSlot.dataset.key = 'furnace:output';
+    // 附魔台（H9）：物品槽 + 青金石槽 + 三个候选按钮
+    this.enchantLayout = document.createElement('div');
+    this.enchantLayout.className = 'enchant-layout';
+    this.enchantItemSlot = this.createSlot();
+    this.enchantLapisSlot = this.createSlot();
+    this.enchantItemSlot.dataset.key = 'enchant:item';
+    this.enchantLapisSlot.dataset.key = 'enchant:lapis';
+    this.enchantStatusEl = document.createElement('div');
+    this.enchantStatusEl.className = 'enchant-status';
+
     this.flameEl = document.createElement('div');
     this.flameEl.className = 'furnace-flame';
     const flameFill = document.createElement('i');
@@ -372,6 +403,7 @@ export class InventoryScreen {
     this.clearBindings('craft:');
     this.clearBindings('furnace:');
     this.clearBindings('chest:');
+    this.clearBindings('enchant:');
 
     if (this.mode === 'furnace') {
       const input = this.registerExisting(this.furnaceInputSlot, 'furnace:input', this.activeContainer!, FURNACE_INPUT);
@@ -394,6 +426,37 @@ export class InventoryScreen {
 
       this.furnaceLayout.replaceChildren(left, middle, output);
       this.topArea.appendChild(this.furnaceLayout);
+      return;
+    }
+
+    if (this.mode === 'enchanting') {
+      const table = this.activeContainer instanceof EnchantTable ? this.activeContainer : null;
+      const item = this.registerExisting(this.enchantItemSlot, 'enchant:item', table!, ENCHANT_ITEM_SLOT);
+      const lapis = this.registerExisting(this.enchantLapisSlot, 'enchant:lapis', table!, ENCHANT_LAPIS_SLOT);
+
+      const left = document.createElement('div');
+      left.className = 'enchant-col';
+      left.append(this.buildLabel('物品'), item, this.buildLabel('青金石'), lapis);
+
+      const right = document.createElement('div');
+      right.className = 'enchant-options';
+      this.enchantButtons.length = 0;
+      for (let slot = 0; slot < 3; slot++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'enchant-option';
+        button.dataset.slot = String(slot);
+        button.addEventListener('click', () => this.handleEnchantClick(slot));
+        this.enchantButtons.push(button);
+        right.appendChild(button);
+      }
+      const hint = document.createElement('div');
+      hint.className = 'enchant-hint';
+      hint.textContent = UI_HINT_UNIMPLEMENTED;
+      right.append(this.enchantStatusEl, hint);
+
+      this.enchantLayout.replaceChildren(left, right);
+      this.topArea.appendChild(this.enchantLayout);
       return;
     }
 
@@ -560,6 +623,10 @@ export class InventoryScreen {
    * 只有玩家背包有"部位限制"（36-39 是盔甲槽），合成网格/箱子/熔炉一律放行。
    */
   private accepts(binding: SlotBinding, itemId: number): boolean {
+    // 附魔台的青金石槽只吃青金石（放别的进去会把"点不动"的原因藏起来）
+    if (binding.source instanceof EnchantTable) {
+      return binding.index !== ENCHANT_LAPIS_SLOT || EnchantTable.acceptsLapis(itemId);
+    }
     if (binding.source !== this.inventory) return true;
     return this.inventory.canPlace(binding.index, itemId);
   }
@@ -680,7 +747,7 @@ export class InventoryScreen {
   }
 
   /** 打开为指定模式；容器模式必须传入容器实例 */
-  openWith(mode: InventoryPanelMode, container?: Furnace | Chest): void {
+  openWith(mode: InventoryPanelMode, container?: Furnace | Chest | EnchantTable): void {
     if (this.mode !== mode || this.activeContainer !== container) {
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = mode;
@@ -753,6 +820,8 @@ export class InventoryScreen {
       this.cookFillEl.style.width = `${Math.round(furnace.cookRatio * 100)}%`;
     }
 
+    if (this.mode === 'enchanting') this.refreshEnchantOptions();
+
     if (this.held) {
       drawItemIcon(this.heldCanvas, this.atlas, this.held.id, 32);
       this.heldElement.classList.add('on');
@@ -767,7 +836,46 @@ export class InventoryScreen {
   private tooltipFor(element: HTMLElement): ItemTooltip | null {
     const stack = this.tooltipStacks.get(element);
     if (!stack) return null;
-    return itemTooltip(stack.id, stack.count, stack.damage);
+    return itemTooltip(stack.id, stack.count, stack.damage, stack.enchants);
+  }
+
+  /** 点第 slot 个候选：校验 → 扣等级与青金石 → 附魔 */
+  private handleEnchantClick(slot: number): void {
+    const table = this.activeContainer;
+    if (!(table instanceof EnchantTable)) return;
+    const context = this.hooks.enchantContext?.();
+    if (!context) return;
+
+    const result = table.applySlot(slot, context.playerLevel, context.consumeLevels);
+    this.enchantStatusEl.textContent = result.ok ? `已附上 ${optionLabel(result.enchants)}` : result.reason;
+    this.enchantStatusEl.classList.toggle('bad', !result.ok);
+    this.refresh();
+  }
+
+  /**
+   * 重掷候选槽并刷新三个按钮。
+   * 掷点放在容器里（`EnchantTable.refresh`）而不是这里：切换模式会重建上半区，
+   * 状态留在界面里会被丢掉；只有"局面指纹"变了才重掷，否则每帧刷新都会换一批附魔。
+   */
+  private refreshEnchantOptions(): void {
+    const table = this.activeContainer;
+    if (!(table instanceof EnchantTable)) return;
+    const context = this.hooks.enchantContext?.();
+    if (!context) return;
+
+    table.refresh(context.playerLevel, context.bookshelfPower, Math.random);
+
+    for (let slot = 0; slot < this.enchantButtons.length; slot++) {
+      const button = this.enchantButtons[slot]!;
+      const option: EnchantOption | undefined = table.options[slot];
+      const check = table.checkSlot(slot, context.playerLevel);
+      const cost = option?.cost ?? 0;
+      const label = option && option.enchants.length > 0 ? optionLabel(option.enchants) : '—';
+      button.textContent = cost > 0 ? `${label}　${cost} 级` : label;
+      button.classList.toggle('on', check.ok);
+      button.title = check.ok ? `消耗 ${cost} 级经验与 ${option!.lapis} 个青金石` : check.reason;
+      button.disabled = !check.ok;
+    }
   }
 
   private renderInto(element: HTMLElement, stack: ItemStack | null): void {
@@ -800,6 +908,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   crafting: '工作台',
   furnace: '熔炉',
   chest: '箱子',
+  enchanting: '附魔台',
 };
 
 /** 创造物品栏的搜索匹配：中文名、英文 id、数字 id 都认 */

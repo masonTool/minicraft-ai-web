@@ -208,7 +208,11 @@ requirePickaxe(0, [
   Block.PISTON,
   Block.STICKY_PISTON,
   Block.OBSERVER,
+  // 附魔台（H9）：原版要镐但对等级没有要求——**任何**镐都能采到
+  Block.ENCHANTING_TABLE,
 ]);
+// 书架：原版是"斧更快、徒手也能采到"，所以只进加速表不进需求表
+EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');
 // 陶瓦与混凝土（17 色 / 16 色）都需要镐
 for (let i = 0; i <= DYE_COLORS.length; i++) REQUIRED_TOOL.set(terracottaId(i), { tool: 'pickaxe', tier: 0 });
 for (let i = 0; i < DYE_COLORS.length; i++) REQUIRED_TOOL.set(concreteId(i), { tool: 'pickaxe', tier: 0 });

@@ -23,6 +23,8 @@ import {
 import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
+import { bookshelfPower } from './core/crafting/Enchanting.ts';
+import { EnchantTable } from './core/container/EnchantTable.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
@@ -525,6 +527,9 @@ class App {
   private armorKey = 'init';
   private readonly armorColors: (number | null)[] = [null, null, null, null];
 
+  /** 当前打开的附魔台坐标（数周围书架用） */
+  private enchantTablePos: { x: number; y: number; z: number } | null = null;
+
   /** 进食进度（0~1）与"距离下一次咀嚼"的计时 */
   private eatProgress = 0;
   private chewTimer = 0;
@@ -643,6 +648,12 @@ class App {
         onOpenRecipes: () => this.openRecipeBook(),
         // 熔炉产物被取空时结算烧炼经验（I5）
         onFurnaceXp: (amount) => this.awardXp(amount),
+        // 附魔台（H9）：等级、书架加成、扣等级的出口都由主程序提供
+        enchantContext: () => ({
+          playerLevel: this.experience.level,
+          bookshelfPower: bookshelfPower(this.enchantTablePos ? this.countBookshelves(this.enchantTablePos.x, this.enchantTablePos.y, this.enchantTablePos.z) : 0),
+          consumeLevels: (levels) => this.experience.consumeLevels(levels),
+        }),
       },
       this.tooltip,
     );
@@ -1359,7 +1370,7 @@ class App {
         const index = Number(element.dataset.index);
         if (!Number.isFinite(index)) return null;
         const stack = this.inventory.get(index);
-        return stack ? itemTooltip(stack.id, stack.count, stack.damage) : null;
+        return stack ? itemTooltip(stack.id, stack.count, stack.damage, stack.enchants) : null;
       });
     }
 
@@ -1429,6 +1440,34 @@ class App {
   private get usingItem(): boolean {
     if (this.rightDown || this.padUse) return true;
     return this.touch !== null && this.leftDown && this.hit === null;
+  }
+
+  /**
+   * 数附魔台周围的书架（H9）。
+   *
+   * 照抄原版的判定（`EnchantmentTableBlock#getEnchantPowerBonus` 那一段）：
+   *  - 只看**以附魔台为中心 5×5 的外圈**（内 3×3 不算），且与附魔台同一高度；
+   *  - 书架与附魔台之间那一格必须是空气——这条是关键：
+   *    少了它，玩家把书架贴着附魔台堆一圈也能满级，与"围一圈留空"的常识不符；
+   *  - 附魔台上方两格必须是空的（站不下人就没法附魔）。
+   */
+  private countBookshelves(x: number, y: number, z: number): number {
+    if (this.world.getBlock(x, y + 1, z) !== Block.AIR || this.world.getBlock(x, y + 2, z) !== Block.AIR) return 0;
+
+    let count = 0;
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        // 内圈跳过，只数外圈
+        if (Math.abs(dx) < 2 && Math.abs(dz) < 2) continue;
+        if (this.world.getBlock(x + dx, y, z + dz) !== Block.BOOKSHELF) continue;
+        // 中间那格（dx/2, dz/2）要是空气
+        const midX = x + Math.trunc(dx / 2);
+        const midZ = z + Math.trunc(dz / 2);
+        if (this.world.getBlock(midX, y, midZ) !== Block.AIR) continue;
+        count++;
+      }
+    }
+    return count;
   }
 
   /**
@@ -2562,6 +2601,12 @@ class App {
       this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(x, y, z));
       return true;
     }
+    if (hitBlock === Block.ENCHANTING_TABLE) {
+      // 记下位置：书架加成要围着**这一台**数，而 `enchantContext` 是每次刷新时问的
+      this.enchantTablePos = { x, y, z };
+      this.inventoryScreen.openWith('enchanting', this.world.containers.getOrCreateEnchantTable(x, y, z));
+      return true;
+    }
 
     // ---- 红石元件：拉杆开关、按钮按下
     if (hitBlock === Block.LEVER) return this.redstone.toggleLever(this.redstoneWorld, x, y, z);
@@ -2705,7 +2750,8 @@ class App {
   private dropContainerContents(x: number, y: number, z: number): void {
     const container = this.world.containers.get(x, y, z);
     if (!container) return;
-    const size = container instanceof Furnace ? FURNACE_SIZE : CHEST_SIZE;
+    // 三个容器各自的格数：熔炉 3、箱子 27、附魔台 2
+    const size = container instanceof Furnace ? FURNACE_SIZE : container instanceof EnchantTable ? 2 : CHEST_SIZE;
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;

@@ -47,7 +47,10 @@ function equal(label: string, actual: unknown, expected: unknown): void {
 // ---------------------------------------------------------------- 1. 注册表一致性
 
 console.log('\n[方块注册表]');
-equal('方块总数', BLOCKS.length, 271);
+// 方块总数只当下限用（不当"精确值"断言）：每加一批方块都要回来改一次这个数字，
+// 而真正有价值的两条是"id 从 0 连续"与"每个方块的贴图都在图集名单里"，它们已经在下面了。
+// 下限仍然能挡住"误删了几行方块定义"这种事故。
+check(`方块总数 ${BLOCKS.length}（不低于 273）`, BLOCKS.length >= 273);
 check(
   'id 从 0 连续到末尾',
   BLOCKS.every((def, index) => def.id === index),

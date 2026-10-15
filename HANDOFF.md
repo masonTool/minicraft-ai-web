@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-15 · 提交总数 109（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-15 · 提交总数 110（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 176 项 —— 已完成 **99**、进行中 **56**、待办 21；
+- 进度口径：`TASKS.md` 共 176 项 —— 已完成 **100**、进行中 **56**、待办 20；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（附魔、酿造、村民、药水效果等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -60,11 +60,12 @@ npm run dev            # http://localhost:5173
 | 水面动画 | `VoxelMaterial` 的 `uTime` / `uFluidTiles`（按贴图起点识别流体，顶点做波浪、片元滚动贴图） |
 | 随机刻与流体 | `core/tick/RandomTicks.ts`（随机刻行为表 + 计划刻队列）、`core/world/Fluids.ts`（液面等级、无限水源、水火相遇） |
 | 人称与世界 | `core/viewMode.ts`（相机摆位纯函数）、`render/PlayerRenderer.ts`（玩家模型）、`core/save/WorldRegistry.ts`（世界清单）、`ui/WorldScreen.ts`（主菜单）、`core/gen/WorldType.ts` + `FlatGenerator.ts`（超平坦/放大化） |
+| 附魔台与附魔表 | `core/registry/enchantments.ts`（38 条对齐原版 1.18）+ `core/crafting/Enchanting.ts`（候选掷点）+ `core/container/EnchantTable.ts`（台面状态）+ 背包界面里的附魔台模式；新方块**附魔台/书架**、新材料**纸/书**；书架加成照抄原版判定（5×5 外圈 + 隔一格空气）上限 15；三个候选槽花费沿用原版 `getEnchantmentCost`、青金石 1/2/3。⚠️ 38 条里只有 6 条真接了效果，其余在候选里带 `*` 标记 |
 | 经验与等级 | `core/survival/Experience.ts`：原版三段升级曲线（`2L+7 / 5L-38 / 9L-158`）；来源＝击杀生物（5 / 3 / 末影龙 12000）+ 挖矿（只给部分矿石，铁矿金矿不给）+ 熔炉取出（小数攒够 1 点）；经验条在快捷栏正上方、等级数字压在条中间；`/xp add\|set\|query`；死亡掉光、随存档走。⚠️ 经验球实体未做，所以是直接进账、死亡也捡不回来 |
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
-| 说明与配方 | `core/registry/itemNames.ts`（379 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，136 条配方 + 11 条熔炼） |
+| 说明与配方 | `core/registry/itemNames.ts`（383 条中文名 + 说明）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，140 条配方 + 11 条熔炼） |
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **34 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp，当前全绿；`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **35 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant，当前全绿；`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
 
 下一步的大头（队列与 TASKS.md 都能看到，按依赖顺序）：
 **经验值与附魔**（I5 → H9 附魔台 → K3 40+ 种附魔 → H8 铁砧）、

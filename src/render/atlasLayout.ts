@@ -358,6 +358,12 @@ export const TILE_ORDER = [
   'item_apple',
   'item_melon_slice',
   'item_golden_apple',
+  // ---- 附魔台与书架（H9）
+  'enchanting_table_top',
+  'enchanting_table_side',
+  'bookshelf',
+  'item_paper',
+  'item_book',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

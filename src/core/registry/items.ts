@@ -70,6 +70,9 @@ export const Item = {
   CHICKEN: 1066,
   LEATHER: 1067,
   FEATHER: 1068,
+  // ---- 附魔相关材料（H9）
+  PAPER: 1070,
+  BOOK: 1071,
   // ---- 食物（数值表在 `food.ts`，这里只占 id）
   COOKED_BEEF: 1040,
   COOKED_PORKCHOP: 1041,
@@ -132,6 +135,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.CHICKEN, name: 'minecraft:chicken', tile: 'item_chicken' },
   { id: Item.LEATHER, name: 'minecraft:leather', tile: 'item_leather' },
   { id: Item.FEATHER, name: 'minecraft:feather', tile: 'item_feather' },
+  // ---- 附魔材料：纸（甘蔗做）与书（纸 + 皮革）
+  { id: Item.PAPER, name: 'minecraft:paper', tile: 'item_paper' },
+  { id: Item.BOOK, name: 'minecraft:book', tile: 'item_book' },
   // ---- 食物（贴图在 TextureAtlas、数值在 food.ts，这里只登记 id / 名字 / 贴图名）
   { id: Item.COOKED_BEEF, name: 'minecraft:cooked_beef', tile: 'item_cooked_beef' },
   { id: Item.COOKED_PORKCHOP, name: 'minecraft:cooked_porkchop', tile: 'item_cooked_porkchop' },

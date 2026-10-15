@@ -8,10 +8,11 @@
  */
 
 import { Chest } from '../container/Chest.ts';
+import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 
-export type BlockContainer = Furnace | Chest;
-export type ContainerKind = 'furnace' | 'chest';
+export type BlockContainer = Furnace | Chest | EnchantTable;
+export type ContainerKind = 'furnace' | 'chest' | 'enchanting';
 
 interface Entry {
   x: number;
@@ -55,6 +56,23 @@ export class BlockEntityStore {
     const chest = new Chest();
     this.entries.set(BlockEntityStore.key(x, y, z), { x, y, z, container: chest });
     return chest;
+  }
+
+  getEnchantTable(x: number, y: number, z: number): EnchantTable | undefined {
+    const container = this.get(x, y, z);
+    return container instanceof EnchantTable ? container : undefined;
+  }
+
+  /**
+   * 附魔台的容器也按坐标存：玩家把装备与青金石放在台子上走开再回来，东西还在原处
+   * （候选槽是每次打开重掷的，所以不存在"走开再回来还是同一批附魔"的问题）。
+   */
+  getOrCreateEnchantTable(x: number, y: number, z: number): EnchantTable {
+    const existing = this.getEnchantTable(x, y, z);
+    if (existing) return existing;
+    const table = new EnchantTable();
+    this.entries.set(BlockEntityStore.key(x, y, z), { x, y, z, container: table });
+    return table;
   }
 
   remove(x: number, y: number, z: number): void {

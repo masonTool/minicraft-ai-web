@@ -758,7 +758,23 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     name: 'minecraft:observer',
     tiles: ['observer_top', 'observer_top', 'observer_side'],
   },
+  // ---- 附魔与书架（H9）
+  {
+    // 附魔台：原版只有 0.75 格高（底部一圈黑曜石 + 上面一本书）。
+    // ⚠️ 简化成**整格方块**：新增一种"矮方块"形状要同时改碰撞盒、网格化与放置逻辑，
+    // 与它带来的收益不成比例（见 TASKS H9 的说明）
+    id: 271,
+    name: 'minecraft:enchanting_table',
+    tiles: ['enchanting_table_top', 'obsidian', 'enchanting_table_side'],
+  },
+  {
+    id: 272,
+    name: 'minecraft:bookshelf',
+    tiles: ['oak_planks', 'oak_planks', 'bookshelf'],
+  },
 ];
+
+
 
 /**
  * 全部方块定义。
@@ -934,6 +950,8 @@ export const Block = {
   PISTON_HEAD: 268,
   STICKY_PISTON: 269,
   OBSERVER: 270,
+  ENCHANTING_TABLE: 271,
+  BOOKSHELF: 272,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1082,6 +1100,9 @@ HARDNESS.set(Block.STONE_BRICK_WALL, 1.5);
 HARDNESS.set(Block.OAK_DOOR, 3);
 HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
+// 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
+HARDNESS.set(Block.ENCHANTING_TABLE, 5);
+HARDNESS.set(Block.BOOKSHELF, 1.5);
 
 // 木材家族：原木与木板 2.0、树叶 0.2，台阶楼梯跟随木板
 for (const ids of Object.values(Wood)) {
@@ -1264,6 +1285,9 @@ for (const id of [
 ]) {
   HAND_HARVESTABLE.add(id);
 }
+
+// 书架徒手也能采（原版如此）；附魔台要镐，所以**不进**这张表
+HAND_HARVESTABLE.add(Block.BOOKSHELF);
 
 export function blockHardness(id: number): number {
   return HARDNESS.get(id) ?? 3;
