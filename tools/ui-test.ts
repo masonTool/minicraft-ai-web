@@ -610,8 +610,11 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   //    根因就是批次 107~109 给两页各写了一套宽度（菜单页 400px、设置页 820px）。
   check(
     '面板尺寸只有一个出处（--panel-w / --panel-h）',
-    compact.includes('--panel-w: min(94vw, 640px);') && compact.includes('--panel-h: min(88vh, 560px);'),
+    compact.includes('--panel-w: min(94vw, 760px);') && compact.includes('--panel-h: min(88vh, 620px);'),
   );
+  // "只留一点点外部游戏区域"：上限不能小到让 PC 上留下大半屏
+  check('面板上限够大（PC 上不会只剩半屏游戏区域）', compact.includes('--panel-w: min(94vw, 760px);'));
+  check('宽屏下滑杆不会被拉长（原版没那么长的滑杆）', compact.includes('max-width: 300px;'));
   check(
     '两页共用这对尺寸，且高度是固定值（不再是 auto）',
     compact.includes('.settings-panel { width: var(--panel-w); max-width: var(--panel-w); height: var(--panel-h); max-height: var(--panel-h);'),

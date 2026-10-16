@@ -78,8 +78,14 @@
            之前两页各写一套宽度，切页时面板会跳大小。
            ⚠️ 仍用 `min(vw, 上限)` 而不是写死像素：手机上要收进视口，
               "固定"指的是不随内容/页签变化（四周留出的一圈就是游戏区域）。 */
-        --panel-w: min(94vw, 640px);
-        --panel-h: min(88vh, 560px);
+        /* ⚠️ 上限不能太小：用户要的是"覆盖在游戏界面上、只留**一点点**外部游戏区域"。
+           640px 在 1440 宽的 PC 上会留下 70% 的游戏区域，那不是"一点点"。
+           760 × 620 在三个典型视口下的边距：
+             PC 1440×900   → 340 / 140px（约 24% / 16%）
+             手机横屏 844×390 → 42 / 23px（5% / 6%）
+             手机竖屏 430×932 → 13 / 156px（受 vw/vh 限制，面板仍收得进屏幕） */
+        --panel-w: min(94vw, 760px);
+        --panel-h: min(88vh, 620px);
 
         /* ---- 面板 ---- */
         --panel-bg: var(--mc-panel);
@@ -777,6 +783,9 @@
       .settings-row input[type="range"] {
         appearance: none; -webkit-appearance: none;
         width: 100%; height: 22px; background: transparent; cursor: pointer;
+        /* 面板宽到 760px 之后，`1fr` 会把滑杆拉到近 600px 长——原版没那么长的滑杆。
+           给个上限，让它左对齐、长度固定，宽屏多出来的地方留白 */
+        max-width: 300px;
       }
       .settings-row input[type="range"]::-webkit-slider-runnable-track {
         height: 10px;
