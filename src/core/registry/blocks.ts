@@ -2342,6 +2342,64 @@ export function stoneVariantId(parentName: string, kind: StoneVariantKind): numb
 /** 全部石材变体的 id（套件、创造分类、配方批量遍历用） */
 export const STONE_VARIANT_IDS: readonly number[] = [...STONE_VARIANT_MAP.values()];
 
+// ---------------------------------------------------------------- 床（B13，批次 79）
+
+/**
+ * 16 色床：**横跨两格**的一件家具，能躺在上面睡觉（跳过夜晚 + 设置重生点）。
+ *
+ * id 从 507 起（接在瓜藤结果的茎 506 之后），顺序与 `DYE_COLORS` 一致——
+ * 与羊毛/地毯/陶瓦同一条规矩：颜色顺序就是 id 顺序，改动顺序会让存档错位。
+ * 所以"第 i 种颜色的床"就是 `BED_ID_START + i`（`bedId(i)`），
+ * 想按 id 反查颜色用 `bedColorIndex(id)`。
+ *
+ * 贴图只有两张（顶面 / 侧面），16 色各一对：床头那端的"枕头"是**几何**
+ * （见 `blockShapes.ts` 的 `bedPillowBox`），所以不必为"朝向"多做一套贴图。
+ */
+export const BED_ID_START = 507;
+
+const BED_ID_MAP = new Map<string, number>();
+
+const BED_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => {
+  const id = BED_ID_START + index;
+  BED_ID_MAP.set(color.name, id);
+  const top = `bed_${color.name}_top`;
+  const side = `bed_${color.name}_side`;
+  return {
+    id,
+    name: `minecraft:${color.name}_bed`,
+    // [顶面, 底面, 侧面]：床头/床脚共用同一张顶面贴图（枕头是几何，不是贴图）
+    tiles: [top, top, side] as const,
+    shape: 'bed' as const,
+    // 9/16 高的家具：不遮挡邻居、不挡光（与台阶/活板门同一条），但**有碰撞**（能站上去）
+    opaque: false,
+    lightOpacity: 0,
+  };
+});
+
+/** 第 index 种颜色的床（顺序与 `DYE_COLORS` 一致） */
+export function bedId(colorIndex: number): number {
+  return BED_ID_START + colorIndex;
+}
+
+/** 某种颜色的床 id；未知颜色返回 undefined */
+export function bedIdOfColor(name: string): number | undefined {
+  return BED_ID_MAP.get(name);
+}
+
+/** 这张床是第几种颜色；不是床返回 -1（存档里出现越界 id 时也返回 -1） */
+export function bedColorIndex(blockId: number): number {
+  const index = blockId - BED_ID_START;
+  return index >= 0 && index < DYE_COLORS.length ? index : -1;
+}
+
+/** 这一格是不是床 */
+export function isBed(blockId: number): boolean {
+  return bedColorIndex(blockId) >= 0;
+}
+
+/** 全部床的 id（断言与创造分类遍历用，不手抄 16 行） */
+export const BED_IDS: readonly number[] = DYE_COLORS.map((_color, index) => BED_ID_START + index);
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -2390,6 +2448,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SHULKER_BOX_SPECS,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
+  ...BED_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2677,6 +2736,9 @@ export const Block = {
   PUMPKIN_STEM_ATTACHED: PUMPKIN_STEM_ATTACHED_ID,
   MELON_STEM_ATTACHED: MELON_STEM_ATTACHED_ID,
   // ---- 树苗（批次 75，见 `SAPLING_SPECS`）：一格就能长成一棵树
+  // ---- 床（B13，批次 79，见 `BED_SPECS`）：每个常量是**白色床**那一个，
+  // 其余 15 色用 `+ i` 取（i 与 `DYE_COLORS` 同序），或用 `bedId(i)`
+  BED: BED_ID_START,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
   SPRUCE_SAPLING: WOOD_SAPLING_ID_START + 2,
@@ -3005,6 +3067,8 @@ for (const id of SAPLING_IDS) HARDNESS.set(id, 0);
 for (const stages of Object.values(STEM_STAGES)) for (const id of stages) HARDNESS.set(id, 0);
 HARDNESS.set(PUMPKIN_STEM_ATTACHED_ID, 0);
 HARDNESS.set(MELON_STEM_ATTACHED_ID, 0);
+// 床（批次 79）：原版 0.2（徒手一拍就能拆，木色家具里最软的）
+for (const id of BED_IDS) HARDNESS.set(id, 0.2);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);

@@ -166,6 +166,7 @@ import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, isDimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, blockDef, woolId,
+  isBed,
   saplingTreeOf,
 } from './core/registry/blocks.ts';
 import {
@@ -201,6 +202,9 @@ import {
   withDoorOpen,
   withDoorUpper,
 } from './core/registry/blockState.ts';
+// 床的两半（B13，批次 79）：`bedOtherHalf` / `bedFootPos` 都是纯函数，
+// 主程序只负责照它们找另一半、拆对与定重生点
+import { bedFootPos, bedOtherHalf } from './core/registry/blockState.ts';
 import {
   TOTAL_SLOTS, HOTBAR_SIZE, Inventory, stackExtras, type ItemStack } from './core/container/Inventory.ts';
 import { BrewingStand } from './core/container/BrewingStand.ts';
@@ -223,6 +227,13 @@ import { Hopper, type HopperEnv } from './core/container/Hopper.ts';
 import { containerSlotCount } from './core/container/Transfer.ts';
 import type { BlockContainer } from './core/world/BlockEntityStore.ts';
 import { PrecipitationTicker } from './core/tick/Precipitation.ts';
+import {
+  DAWN_TIME,
+  SLEEP_SECONDS,
+  monstersNearBed,
+  sleepRefusal,
+  type SleepMob,
+} from './core/survival/Sleep.ts';
 import {
   CAKE_SLICES,
   cakeBites,
@@ -646,6 +657,21 @@ class App {
   private readonly effectsHudEl = document.getElementById('effects-hud');
   private effectsHudSignature = '';
   private spawnPoint: [number, number, number] = [0.5, 80, 0.5];
+  /**
+   * 睡出来的**重生点**（B13 / I13，批次 79）。
+   *
+   * 与 `spawnPoint`（世界的出生点，用于"床没了"时的兜底）分开记：
+   *  - `x/y/z` 是**床脚**那一格（原版重生点在床脚）；
+   *  - `dimension` 一起记：在下界睡觉、回主世界死掉，要能回到那张床所在的世界；
+   *  - 死亡时先校验"那张床还在不在"，不在就回退到世界出生点（原版行为）。
+   */
+  private bedSpawn: { x: number; y: number; z: number; dimension: DimensionId } | null = null;
+  /** 正在睡觉：非 null 时冻结移动与交互，只推进睡觉计时 */
+  private sleeping: { x: number; y: number; z: number } | null = null;
+  /** 已经躺了多久（秒），到 `SLEEP_SECONDS` 就天亮 */
+  private sleepTimer = 0;
+  /** 睡觉遮罩（index.html 的 `#sleep`；没接上就什么都不显示，逻辑照旧） */
+  private readonly sleepEl = document.getElementById('sleep');
   private lastPlayerX = 0;
   private lastPlayerZ = 0;
   /** 近战冷却 */
@@ -1282,6 +1308,21 @@ class App {
     this.inventory.restore(data.inventory);
     // 末影箱（批次 71）：旧存档没有这个字段 → 空箱子（与 xp/effects 同一条处理）
     this.enderChest.restore(data.enderChest);
+    // 床重生点（批次 79）：旧存档没有 → 没有床重生点；坐标非法（NaN）也当没有，
+    // 否则死亡时会把人"传送"到 NaN 位置（与本文件开头那条"别把 NaN 传给物理"同源）
+    this.bedSpawn =
+      data.bedSpawn &&
+      Number.isFinite(data.bedSpawn.x) &&
+      Number.isFinite(data.bedSpawn.y) &&
+      Number.isFinite(data.bedSpawn.z) &&
+      isDimension(data.bedSpawn.dimension)
+        ? {
+            x: data.bedSpawn.x,
+            y: data.bedSpawn.y,
+            z: data.bedSpawn.z,
+            dimension: data.bedSpawn.dimension,
+          }
+        : null;
     this.selectSlot(data.selectedSlot);
     this.refreshHotbar();
     this.inventoryScreen.refresh();
@@ -1313,6 +1354,8 @@ class App {
       inventory: this.inventory.serialize(),
       // 末影箱跟着玩家走（批次 71）：与背包同一层，但它是"跨坐标"的那一份
       enderChest: this.enderChest.slots(),
+      // 床重生点（批次 79）：没睡过床就写成 undefined（不缺字段，省得老存档迁移）
+      ...(this.bedSpawn ? { bedSpawn: { ...this.bedSpawn } } : {}),
       selectedSlot: this.hotbarIndex,
       dragonDefeated: this.dragonDefeated,
       difficulty: this.difficulty,
@@ -1934,6 +1977,9 @@ class App {
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
         if (e.code !== 'Escape') return;
       }
+      // 睡觉期间（B13）：只留跳跃键（提前起床），其余按键一律不处理——
+      // 否则会在睡觉遮罩下面打开背包/配方书/聊天，而时间已经跳到天亮了
+      if (this.sleeping && e.code !== 'Space') return;
       // Esc：打开/关闭暂停菜单（内含设置）。原版也是 Esc 唤出菜单而不是直接退出
       if (e.code === 'Escape' && !this.inventoryScreen.isOpen) {
         e.preventDefault();
@@ -2172,7 +2218,9 @@ class App {
   }
 
   private updateInteraction(dt: number): void {
-    if (this.uiOpen) {
+    // 开着界面、或者躺着睡觉时：准星与各种交互一律收起
+    // （睡觉时必须挡住破坏/放置：不然躺着还能拆自家床）
+    if (this.uiOpen || this.sleeping) {
       this.hit = null;
       this.outline.hide();
       this.blockOverlay.hide();
@@ -2889,6 +2937,16 @@ class App {
       return;
     }
 
+    // 床（批次 79）同理，只是它横着占两格：拆一半必须带走另一半，
+    // 否则会留下一张**半张床**（站上去只剩 9/16 的一半，看着像 bug）
+    if (blockDef(brokenId).shape === 'bed') {
+      this.breakBedPair(this.hit.x, this.hit.y, this.hit.z);
+      this.breakProgress = 0;
+      this.breakingKey = '';
+      this.breakCooldown = BREAK_COOLDOWN;
+      return;
+    }
+
     // 海带 / 甘蔗 / 脚手架都是"一整柱往上叠"的东西：拆掉任意一节，上面那几节跟着断
     // （原版行为，脚手架是"哗啦一下全掉"）。
     // 不这么做的话，水里会留一截从半空中长出来的海带、地上会立着一段悬空的甘蔗、
@@ -3121,6 +3179,154 @@ class App {
     return true;
   }
 
+  // ---------------------------------------------------------------- 床与睡觉（B13 / I13，批次 79）
+
+  /**
+   * 右键床：躺下睡觉。
+   *
+   * 判定全部在 `Sleep.ts`（纯函数），这里只做三件事：凑环境快照、显示提示、进入睡觉状态。
+   * @returns 是否消费了这次右键（床总是消费：不然"白天点床"会掉进放置分支）
+   */
+  private trySleep(x: number, y: number, z: number): boolean {
+    // 已经在睡了：别叠一层（触屏上连点很容易触发）
+    if (this.sleeping) return true;
+
+    // 重生点与"附近有没有怪物"都按**床脚**那一格算（原版的重生点也在床脚）
+    const [fx, fy, fz] = bedFootPos(x, y, z, this.world.getBlockState(x, y, z));
+    const refusal = sleepRefusal({
+      timeOfDay: this.timeOfDay,
+      // 雷暴时白天也能睡（原版规则）
+      thundering: this.weather.current === 'thunder',
+      dead: this.stats.dead,
+      monstersNear: this.hostileMobsNear(fx, fy, fz),
+    });
+    if (refusal !== null) {
+      this.chat.push(refusal, 'system');
+      return true;
+    }
+
+    this.sleeping = { x: fx, y: fy, z: fz };
+    this.sleepTimer = 0;
+    this.sleepEl?.classList.remove('hidden');
+    this.chat.push('你躺下了…（跳跃键 / 点击遮罩可以提前起床）', 'system');
+    return true;
+  }
+
+  /** 床附近有没有敌对生物（把实体表转成 `Sleep.ts` 要的那个形状） */
+  private hostileMobsNear(x: number, y: number, z: number): boolean {
+    const mobs: SleepMob[] = [];
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob)) continue;
+      mobs.push({
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        hostile: entity.type.hostile,
+        dead: entity.dead,
+      });
+    }
+    return monstersNearBed(x, y, z, mobs);
+  }
+
+  /**
+   * 睡觉的每帧推进。
+   *
+   * 演出时长 `SLEEP_SECONDS` 之后结算：**再看一眼床边有没有怪物**——
+   * 这时有怪就是原版的"被怪物惊醒"（天不亮、重生点也不设）；
+   * 没有就跳到黎明、清掉天气、把重生点记在这张床上。
+   */
+  private updateSleep(dt: number, input: PlayerInput): void {
+    const bed = this.sleeping;
+    if (!bed) return;
+
+    // 被怪物打死在床上的极端情况：静默收摊（死亡界面已经盖住了屏幕，不用再弹提示）
+    if (this.stats.dead) {
+      this.sleeping = null;
+      this.sleepTimer = 0;
+      this.sleepEl?.classList.add('hidden');
+      return;
+    }
+
+    // 提前起床：跳跃键（键盘 Space / 触屏"跳" / 手柄 A）——原版基岩版也能自己起身。
+    // ⚠️ 前 0.25 秒不认这个键：玩家点床那一下可能正按着跳跃键，
+    // 不挡的话会"刚点下去就立刻起床"，看起来像床坏了
+    if (input.jump && this.sleepTimer > 0.25) {
+      this.wakeUp('你起来了。');
+      return;
+    }
+
+    this.sleepTimer += dt;
+    if (this.sleepTimer < SLEEP_SECONDS) return;
+
+    // 醒来之前再看一眼：怪物在这几秒里靠近了床 → 被惊醒（原版"被怪物打扰而惊醒"）
+    if (this.hostileMobsNear(bed.x, bed.y, bed.z)) {
+      this.wakeUp('你被怪物惊醒了！');
+      return;
+    }
+
+    this.timeOfDay = DAWN_TIME;
+    // 原版睡一觉会放晴（雷暴与雨一起停）
+    this.weather.setKind('clear');
+    this.bedSpawn = { x: bed.x, y: bed.y, z: bed.z, dimension: this.dimension };
+    this.applyEnvironment();
+    // 睡醒回血在原版是"睡觉直接回满"以外的效果（1.18 只有饥饿够时自然回复），
+    // 这里不额外加血——只做"跳过夜晚 + 重生点"，避免凭空多一条回血规则
+    this.wakeUp('天亮了。重生点已设置在这张床上。');
+  }
+
+  /** 收起睡觉遮罩、恢复行动 */
+  private wakeUp(message: string): void {
+    this.sleeping = null;
+    this.sleepTimer = 0;
+    this.sleepEl?.classList.add('hidden');
+    this.chat.push(message, 'system');
+  }
+
+  /**
+   * 拆掉整张床（两半一起），整张只掉落一次。
+   *
+   * 与门一样是"占两格的一件东西"：只拆一半会留下半张悬空的床，
+   * 而方块本身看不出问题（这正是门那批踩过的坑）。
+   * 顺带：如果拆的是**当前重生点**那张床，重生点作废（回退到世界出生点）。
+   */
+  private breakBedPair(x: number, y: number, z: number): void {
+    const state = this.world.getBlockState(x, y, z);
+    const [ox, oy, oz] = bedOtherHalf(x, y, z, state);
+
+    for (const [bx, by, bz] of [[x, y, z], [ox, oy, oz]] as const) {
+      const id = this.world.getBlock(bx, by, bz);
+      // 另一半必须是**同一种**床（脏存档里可能只剩一半）
+      if (!isBed(id)) continue;
+      this.world.setBlockAndUpdate(bx, by, bz, Block.AIR);
+      this.net.sendBlock(bx, by, bz, Block.AIR, 0, this.dimension);
+      this.particles.spawnBlockBreak(bx + 0.5, by + 0.5, bz + 0.5, this.blockParticleColor(id));
+      // 整张床只掉一次（在床脚那一格的位置掉）
+      if (this.flying || [bx, by, bz].join() !== [x, y, z].join()) continue;
+      const drop = dropFor(id);
+      if (drop) this.spawnDrop(drop.id, drop.count, bx + 0.5, by + 0.5, bz + 0.5);
+    }
+
+    // 重生点的那张床被拆了 → 作废（死亡时回退到世界出生点，与原版一致）
+    if (
+      this.bedSpawn &&
+      ((this.bedSpawn.x === x && this.bedSpawn.y === y && this.bedSpawn.z === z) ||
+        (this.bedSpawn.x === ox && this.bedSpawn.y === oy && this.bedSpawn.z === oz))
+    ) {
+      this.bedSpawn = null;
+      this.chat.push('你的重生点（床）被拆掉了', 'system');
+    }
+  }
+
+  /**
+   * 坐在床上时被打了：起床（原版也会把人从床上拽起来）。
+   * 返回是否因此中断了睡觉。
+   */
+  private interruptSleep(): boolean {
+    if (!this.sleeping) return false;
+    this.wakeUp('你被惊醒了。');
+    return true;
+  }
+
   /**
    * 拆掉一整"柱"往上叠的植物（批次 50 的海带 + 批次 51 顺带接上甘蔗）。
    *
@@ -3244,6 +3450,9 @@ class App {
     this.applyIncomingDamage(damage, cause);
     const result = { applied: before - this.stats.health };
     if (result.applied <= 0) return;
+
+    // 挨打就会被从床上拽起来（原版：睡觉时受伤会惊醒）
+    this.interruptSleep();
 
     // 沿"伤害来源 → 玩家"方向击退
     const dx = this.physics.x - sourceX;
@@ -3830,6 +4039,12 @@ class App {
     // 花盆（批次 52）：手里拿着能种的植物 → 种进去；空手 → 把花取出来
     if (hitBlock === Block.FLOWER_POT) {
       return this.useFlowerPot(x, y, z);
+    }
+
+    // 床（批次 79）：右键躺下睡觉——按**形状**判定（16 色床共用一条规则），
+    // 所以这里不看 id、不看颜色
+    if (hitShape === 'bed') {
+      return this.trySleep(x, y, z);
     }
 
     // 烟熏炉与高炉（批次 46）：同一套界面与容器，站台从**方块**决定
@@ -5198,8 +5413,48 @@ class App {
     this.experience.reset();
   }
 
-  private respawnPlayer(): void {
+  /**
+   * 重生点：优先用**床**（睡过才有），床没了/对不上就回退世界出生点。
+   *
+   * 为什么要校验"床还在不在"：原版重生前会检查重生点那个方块还是不是床
+   * （床被拆掉、被爆掉之后死亡不该回到虚空中）。校验同时覆盖两件事：
+   *  ① 那一格还是不是**床**（同一个形状族就够了，颜色可能被换过）；
+   *  ② 另一半还在不在（半张床是个脏状态，不该拿它当重生点）。
+   */
+  private resolveRespawnPoint(): { x: number; y: number; z: number; dimension: DimensionId } {
+    const bed = this.bedSpawn;
+    if (bed) {
+      if (bed.dimension === this.dimension) {
+        const id = this.world.getBlock(bed.x, bed.y, bed.z);
+        const other = bedOtherHalf(bed.x, bed.y, bed.z, this.world.getBlockState(bed.x, bed.y, bed.z));
+        if (isBed(id) && isBed(this.world.getBlock(other[0], other[1], other[2]))) {
+          return { x: bed.x + 0.5, y: bed.y + 1.2, z: bed.z + 0.5, dimension: bed.dimension };
+        }
+        // 床没了：这一份重生点作废，下次睡觉才会重新记
+        this.bedSpawn = null;
+        this.chat.push('你的床不在了，回世界出生点复活', 'system');
+      } else {
+        // ⚠️ 床在**别的维度**：切维度会把区块重新流式加载，这一刻 `getBlock` 一律返回空气，
+        // 所以**没法在校验**"那张床还在不在"——直接把落点交给 `setDimension`（与传送门同一条路），
+        // 人一到那边就站在床边。床被拆掉的话会在那边自然暴露（差异记在 TASKS B13）
+        const landing = { x: bed.x + 0.5, y: bed.y + 1.2, z: bed.z + 0.5 };
+        this.setDimension(bed.dimension, landing);
+        return { ...landing, dimension: bed.dimension };
+      }
+    }
+    // 没有床（或者床没了）：回**世界出生点**——它在主世界，所以要连维度一起切。
+    // 顺手修掉一个老问题：在下界死掉时，原来只把坐标换成主世界出生点的坐标、
+    // 维度却还停在下界（表现为"重生后被埋在下界的石头里"）
+    if (this.dimension !== Dimension.OVERWORLD) this.setDimension(Dimension.OVERWORLD);
     const [sx, sy, sz] = this.spawnPoint;
+    return { x: sx, y: sy, z: sz, dimension: Dimension.OVERWORLD };
+  }
+
+  private respawnPlayer(): void {
+    const point = this.resolveRespawnPoint();
+    const [sx, sy, sz] = [point.x, point.y, point.z];
+    // 床重生点可能在世界出生点之外的维度（在下界死掉、床在主世界）：
+    // `resolveRespawnPoint` 已经切好了维度，这里只负责把人放上去
     this.physics.teleport(sx, sy, sz);
     this.physics.vx = 0;
     this.physics.vy = 0;
@@ -5401,7 +5656,7 @@ class App {
         }
       }
 
-      const survivalInput = this.uiOpen ? IDLE_INPUT : this.collectInput();
+      const rawInput = this.uiOpen ? IDLE_INPUT : this.collectInput();
       const wasOnGround = this.physics.onGround;
       if (this.pendingArrival) {
         // 传送途中：目的地的区块还没流出来，`getBlock` 一律返回空气。
@@ -5409,10 +5664,19 @@ class App {
         this.physics.vx = 0;
         this.physics.vy = 0;
         this.physics.vz = 0;
+      } else if (this.sleeping) {
+        // 睡觉（B13）：与传送途中同一条做法——把玩家冻在原地。
+        // 我们不把玩家"摆进床里"（床只有 9/16 高、玩家 1.8 高，摆进去要另写一套姿态），
+        // 所以睡觉期间人不动物理、只推遮罩，醒来还站在原地（差异记在 TASKS B13）
+        this.physics.vx = 0;
+        this.physics.vy = 0;
+        this.physics.vz = 0;
       } else {
-        this.physics.update(this.world, survivalInput, this.yaw, dt, this.flying, this.effects.moveSpeedMultiplier(), this.effects.jumpMultiplier());
+        this.physics.update(this.world, rawInput, this.yaw, dt, this.flying, this.effects.moveSpeedMultiplier(), this.effects.jumpMultiplier());
       }
-      this.updateSurvival(dt, survivalInput, wasOnGround);
+      this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
+      // 床（B13）：睡觉的计时与结算。用**真实输入**是为了让"跳跃键提前起床"能被读到
+      this.updateSleep(dt, rawInput);
       this.resolvePortalArrival();
 
       this.updateCamera(dt);
@@ -5520,6 +5784,23 @@ class App {
   /** 是否正在挖掘（按住左键/长按屏幕且对着可破坏方块）——验收脚本用 */
   get isBreaking(): boolean {
     return this.breakProgress > 0 && this.breakingKey !== '';
+  }
+
+  /**
+   * 床与睡觉的状态（B13，批次 79）——验收脚本用。
+   * 读它就不必去扒 `#sleep` 的 class，也不必猜"重生点是不是设上了"。
+   */
+  get bedState(): {
+    sleeping: boolean;
+    sleepSeconds: number;
+    /** 重生点（床脚那一格 + 维度）；没睡过床时为 null */
+    respawn: { x: number; y: number; z: number; dimension: DimensionId } | null;
+  } {
+    return {
+      sleeping: this.sleeping !== null,
+      sleepSeconds: Number(this.sleepTimer.toFixed(3)),
+      respawn: this.bedSpawn ? { ...this.bedSpawn } : null,
+    };
   }
 
   /** 当前视角（度）：验收脚本用它判断"拖动有没有真的转视角" */

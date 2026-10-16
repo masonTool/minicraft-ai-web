@@ -173,6 +173,17 @@ export type BlockShape =
    */
   | 'dropper'
   | 'dispenser'
+  /**
+   * 床（B13，批次 79）：**横跨两格**的一件家具，9/16 格高，能躺在上面睡觉。
+   *
+   * 两格分别叫"床脚"（放下去的那一格）与"床头"（床脚沿 `facing` 方向的那一格），
+   * 谁是谁写在状态位 `BED_HEAD_MASK` 里——这与门"上下两半"是同一套结构
+   * （拆一半必须带走另一半，否则会留下半张床）。
+   *
+   * 朝向的语义与其它族**一致**：`facing` 指向**床头相对床脚的方向**
+   * （原版 bed 的 `facing` 正是"床头朝向"，见 `bedOtherHalf`）。
+   */
+  | 'bed'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -805,6 +816,60 @@ export function withHopperLocked(state: number, locked: boolean): number {
   return withPowered(state, locked);
 }
 
+// ---------------------------------------------------------------- 床（B13，批次 79）
+
+/**
+ * 这一格是**床头**还是床脚（bit3）。
+ *
+ * 与门的 OPEN / 拉杆的 POWERED 共用 bit3：它们是不同的形状族，
+ * 同一个方块只会是其中一种（沿用本文件开头那条设计）。
+ *
+ * 朝向（哪一格是床头）用通用的 `facing` 两位：`facing` 指向**床头那一侧**。
+ * 两半共用同一个 `facing`，所以"另一半在哪"只看 `(x,z) + FACING_OFFSET[facing]`
+ * 就能算出来——这也是 `bedOtherHalf` 能是纯函数的原因。
+ */
+const BED_HEAD_MASK = 0b1000;
+
+export function isBedHead(state: number): boolean {
+  return (state & BED_HEAD_MASK) !== 0;
+}
+
+export function withBedHead(state: number, head: boolean): number {
+  return head ? state | BED_HEAD_MASK : state & ~BED_HEAD_MASK;
+}
+
+/**
+ * 床的"另一半"在哪个格子（纯函数，离线可断言）。
+ *
+ * 语义：`facing` 指向**床头**那一侧，所以
+ *  - 站在床脚上：另一半（床头）在 `facing` 方向；
+ *  - 站在床头上：另一半（床脚）在 `facing` 的反方向。
+ *
+ * 传入脏数据（`state` 里的朝向越界）时按朝北算——注册表里 `facing` 只有 2 位，
+ * 越界值只可能来自被改坏的存档，取一个确定的结果好过抛错。
+ */
+export function bedOtherHalf(
+  x: number,
+  y: number,
+  z: number,
+  state: number,
+): readonly [number, number, number] {
+  const [dx, dz] = FACING_OFFSET[facingOf(state)] ?? FACING_OFFSET[0]!;
+  // 床头在 facing 方向：站床头就反着走
+  const sign = isBedHead(state) ? -1 : 1;
+  return [x + dx * sign, y, z + dz * sign];
+}
+
+/** 床脚那一半的坐标（不管传进来的是哪一半） */
+export function bedFootPos(
+  x: number,
+  y: number,
+  z: number,
+  state: number,
+): readonly [number, number, number] {
+  return isBedHead(state) ? bedOtherHalf(x, y, z, state) : [x, y, z];
+}
+
 // ---------------------------------------------------------------- 调试
 
 export function describeState(shape: BlockShape, state: number): string {
@@ -852,6 +917,8 @@ export function describeState(shape: BlockShape, state: number): string {
     case 'dispenser':
       // 发射器（批次 60）：与投掷器同一套状态（朝向 + 通电位），读法也就一样
       return SIX_FACING_NAMES[sixFacingOf(state)];
+    case 'bed':
+      return `${isBedHead(state) ? '床头' : '床脚'}·床头朝${FACING_NAMES[facingOf(state)]}`;
     default:
       return '';
   }

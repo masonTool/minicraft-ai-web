@@ -17,6 +17,7 @@ import {
   STONE_VARIANT_PARENTS,
   Wood,
   WoodShaped,
+  bedId,
   carpetId,
   copperId,
   slabId,
@@ -164,6 +165,21 @@ const CARPET_RECIPES: readonly Recipe[] = DYE_COLORS.map((_color, index) => ({
   kind: 'shapeless' as const,
   result: { id: carpetId(index), count: 3 },
   ingredients: [woolId(index), woolId(index)],
+}));
+
+/**
+ * 床（B13，批次 79）：3 块**同色**羊毛 + 3 块木板（原版图案：上面一行羊毛、下面一行木板）。
+ *
+ * 两处口径与羊毛/地毯那条一致：
+ *  - 羊毛**必须与床同色**（写成"任意羊毛"会让玩家拿红羊毛合出白床）；
+ *  - 木板按本项目处理"任意木板"的老做法取**橡木**（与箱子/工作台等同一条），
+ *    不展开成 6 种木材——展开会让 `matchRecipe`（取首个匹配）留下一堆死配方。
+ */
+const BED_RECIPES: readonly Recipe[] = DYE_COLORS.map((_color, index) => ({
+  kind: 'shaped' as const,
+  result: { id: bedId(index), count: 1 },
+  pattern: ['WWW', 'PPP'],
+  key: { W: woolId(index), P: Block.OAK_PLANKS },
 }));
 
 /**
@@ -928,6 +944,7 @@ export const RECIPES: readonly Recipe[] = [
   ...FURNACE_VARIANT_RECIPES,
   ...WOOL_RECIPES,
   ...CARPET_RECIPES,
+  ...BED_RECIPES,
   ...SHAPED_BLOCK_RECIPES,
   ...UTILITY_RECIPES,
   ...WOOD_RECIPES,

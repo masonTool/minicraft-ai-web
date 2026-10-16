@@ -115,6 +115,8 @@ for (const [color, cn] of Object.entries(COLORS_CN)) {
   put(`${color}_dye`, `${cn}染料`);
   put(`${color}_wool`, `${cn}羊毛`);
   put(`${color}_carpet`, `${cn}地毯`);
+  // 床（B13，批次 79）：16 色，与羊毛/地毯同一条"配色表驱动"
+  put(`${color}_bed`, `${cn}床`);
   put(`${color}_terracotta`, `${cn}陶瓦`);
   put(`${color}_concrete`, `${cn}混凝土`);
   put(`${color}_stained_glass`, `${cn}染色玻璃`);
@@ -829,6 +831,11 @@ const DESCRIPTIONS: Record<string, string> = {
 // 深层矿石统一补一句
 for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
   DESCRIPTIONS[`deepslate_${ore}_ore`] = `深层（深板岩层）的${cn}，掉落与普通${cn}相同。`;
+}
+
+// 床（B13，批次 79）：16 色的说明是同一段（差别只有颜色，所以按配色表套模板）
+for (const [color, cn] of Object.entries(COLORS_CN)) {
+  DESCRIPTIONS[`${color}_bed`] = `${cn}床：**横着占两格**，右键躺下睡觉——**只能在夜晚或雷暴时**入睡，附近 8 格里有敌对生物也睡不着。睡一觉会**跳到天亮**、**把重生点设在这张床上**（死了之后从这里复活；床被拆掉就回世界出生点）。⚠️ 与原版差异：睡觉时视角停在原地（不摆出躺下的姿势），跳跃键随时可以起床。`;
 }
 
 // 珊瑚一族（批次 51）：30 件的说明按"形 × 活/失活"**四套模板**套上"种"的中文名——

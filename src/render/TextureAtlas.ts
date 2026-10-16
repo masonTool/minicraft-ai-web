@@ -222,6 +222,57 @@ function carpetPainter(rgb: readonly [number, number, number]): Painter {
   };
 }
 
+/**
+ * 床的顶面（批次 79）：一张被子——外圈一圈深色包边，里面按 4 像素一格压线。
+ *
+ * 床头/床脚**共用这一张**：哪头是床头由几何（枕头凸台，见 `blockShapes.ts`）表达，
+ * 所以贴图里刻意不画枕头——一旦画在角上，朝东西的床就会把枕头画到侧面去
+ * （本项目没有"按朝向旋转贴图"的能力）。
+ */
+function bedTopPainter(rgb: readonly [number, number, number]): Painter {
+  const woven = woolPainter(rgb);
+  return (x, y, rng) => {
+    const [r, g, b] = woven(x, y, rng);
+    const edge = x === 0 || y === 0 || x === 15 || y === 15;
+    // 压线：每 4 像素一道（被子上的方格），边框之外再压一道浅影
+    const seam = x % 4 === 0 || y % 4 === 0;
+    const shade = edge ? 0.72 : seam ? 0.9 : 1.0;
+    return [clamp255(r * shade), clamp255(g * shade), clamp255(b * shade), 255];
+  };
+}
+
+/** 床侧面的木框基色（橡木色，与木板同一档） */
+const BED_FRAME: readonly [number, number, number] = [124, 94, 56];
+
+/**
+ * 床的侧面（批次 79）：上半是床垫的边（竖条纹），下半是木框与床腿。
+ *
+ * ⚠️ 床只有 9/16 高，而贴图会**整张压进这 9 像素**——所以木框刻意只占下面 6 像素：
+ * 压过之后大约是 3 像素的木头，正好是"床垫底下那圈床架"的观感。
+ */
+function bedSidePainter(rgb: readonly [number, number, number]): Painter {
+  const woven = woolPainter(rgb);
+  return (x, y, rng) => {
+    if (y <= 8) {
+      // 床垫的边：与顶面同源的织面 + 每 4 像素一道竖缝
+      const [r, g, b] = woven(x, y, rng);
+      const seam = x % 4 === 0;
+      const shade = seam ? 0.86 : 1.0;
+      return [clamp255(r * shade), clamp255(g * shade), clamp255(b * shade), 255];
+    }
+    if (y === 9) {
+      // 床垫与床架之间的暗缝
+      return [clamp255(rgb[0] * 0.4), clamp255(rgb[1] * 0.4), clamp255(rgb[2] * 0.4), 255];
+    }
+    // 木框：下半段更深一点（腿部的阴影），并留一点木纹起伏
+    const v = (y >= 13 ? 0.72 : 1.0) * (0.92 + rng() * 0.16);
+    // 两根床腿的位置（x = 1..2 与 13..14）再压暗一档，让"有腿"看得出来
+    const leg = (x >= 1 && x <= 2) || (x >= 13 && x <= 14);
+    const shade = leg ? v * 0.78 : v;
+    return [clamp255(BED_FRAME[0] * shade), clamp255(BED_FRAME[1] * shade), clamp255(BED_FRAME[2] * shade), 255];
+  };
+}
+
 /** 砖块纹理：按 4×8 交错砌块 + 灰缝 */
 function brickPainter(base: [number, number, number]): Painter {
   return (x, y, rng) => {
@@ -1004,6 +1055,13 @@ for (const color of DYE_COLORS) {
 // 地毯（批次 37）：同样 16 色批量生成——它是"羊毛族的薄片"，配色与羊毛同源
 for (const color of DYE_COLORS) {
   PAINTERS[`carpet_${color.name}`] = carpetPainter(color.rgb);
+}
+
+// 床（B13，批次 79）：16 色 × 2 张（顶面 = 被子、侧面 = 床垫边 + 木框），
+// 材质与羊毛/地毯同源（原版的床就是羊毛做的），只有花纹不同
+for (const color of DYE_COLORS) {
+  PAINTERS[`bed_${color.name}_top`] = bedTopPainter(color.rgb);
+  PAINTERS[`bed_${color.name}_side`] = bedSidePainter(color.rgb);
 }
 
 /** 火把：木柄 + 顶端火焰 */

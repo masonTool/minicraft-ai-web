@@ -82,6 +82,14 @@ export interface PlayerSave {
    * 旧存档没有这个字段 → 空箱子（与 `xp` / `effects` 同一条处理）。
    */
   enderChest?: (ItemStack | null)[];
+  /**
+   * 睡出来的重生点（B13 / I13，批次 79）：床脚那一格的坐标 + 它所在的维度。
+   *
+   * 与"世界出生点"分开存：床没了（被拆/被爆）之后死亡应当回退到世界出生点，
+   * 而**是不是还在**这件事要等世界加载出来才知道（`main` 在重生那一刻校验）。
+   * 旧存档没有这个字段 → 没有床重生点，与 `xp` / `effects` 同一条处理。
+   */
+  bedSpawn?: { x: number; y: number; z: number; dimension: string };
 }
 
 /** 一个区块的存档记录 */

@@ -21,6 +21,7 @@ import {
   hopperOutputOf,
   hopperOutputOffset,
   hasVineUp,
+  isBedHead,
   isDoorOpen,
   isFenceGateOpen,
   isSlabDouble,
@@ -47,6 +48,12 @@ export const FLAT_HEIGHT = 0.0625;
 
 /** 营火的高度（原版 7/16 高：能站上去，也能一脚踩灭） */
 export const CAMPFIRE_HEIGHT = 0.4375;
+
+/**
+ * 床的高度（B13，批次 79）：原版 9/16 高——比半格高一点点，
+ * 所以**走上去不用跳**（自动上台阶是 0.6，9/16 = 0.5625 < 0.6），与原版手感一致。
+ */
+export const BED_HEIGHT = 0.5625;
 
 /** 栅栏/墙的连接判定回调：该方向是否有可连接的方块 */
 export type ConnectQuery = (facing: Facing) => boolean;
@@ -200,6 +207,10 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'composter':
       // 堆肥桶（批次 70）：**桶壁 + 桶底**（中间是空的，能看见里面的堆肥）
       return composterBoxes();
+    case 'bed':
+      // 床（批次 79）：9/16 高的一整块（能站上去，也能沿着床走）。
+      // 与渲染同源，所以"看着是张床、踩着是张床"
+      return [[0, 0, 0, 1, BED_HEIGHT, 1]];
     default:
       return [FULL];
   }
@@ -433,11 +444,51 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       // 堆肥桶（批次 70）：四面板条围一圈 + 2/16 厚的桶底；**顶面是敞口的**
       // （空着时从上面能看见桶底那张"暗口"贴图，满了换成"堆肥满仓"那张）
       return composterBoxes();
+    case 'bed':
+      // 床（批次 79）：9/16 的床体 + **床头那一端**多一块 2/16 高的枕头。
+      // 枕头用几何而不是贴图表达朝向：本项目没有"按朝向旋转贴图"的能力
+      // （与活塞/投掷器同一条取舍，见 HANDOFF 的经验表——
+      //  "某一面单独换贴图做不到时，用几何补"）。
+      // 枕头的位置由 `facing` 算出来：床头那一格**远离床脚**的那一端。
+      return isBedHead(state) ? [BED_BASE, bedPillowBox(state)] : [BED_BASE];
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
     default:
       return [FULL];
+  }
+}
+
+// ---------------------------------------------------------------- 床（批次 79）
+
+/** 床体：9/16 高的一整块（碰撞与渲染共用） */
+const BED_BASE: LocalBox = [0, 0, 0, 1, BED_HEIGHT, 1];
+
+/** 枕头的高度（原版只比床面高一点点；这里 2/16，从上方一眼能认出哪头是床头） */
+export const BED_PILLOW_HEIGHT = 2 / 16;
+
+/** 枕头沿着床的长边占多宽（原版枕头大约占床头那一格的 5/16） */
+export const BED_PILLOW_LENGTH = 5 / 16;
+
+/**
+ * 枕头的位置：床头那一格的**远离床脚**的那一端。
+ *
+ * `facing` 指向床头方向，所以"远离床脚"就是 `facing` 的正方向：
+ * 朝北 → 枕头贴在 z=0 那一侧；朝东 → 贴在 x=1 那一侧（依此类推）。
+ */
+function bedPillowBox(state: number): LocalBox {
+  const facing = facingOf(state);
+  const y0 = BED_HEIGHT;
+  const y1 = BED_HEIGHT + BED_PILLOW_HEIGHT;
+  switch (facing) {
+    case 0: // 床头朝北：枕头在北端
+      return [0, y0, 0, 1, y1, BED_PILLOW_LENGTH];
+    case 2: // 朝南：枕头在南端
+      return [0, y0, 1 - BED_PILLOW_LENGTH, 1, y1, 1];
+    case 1: // 朝东：枕头在东端
+      return [1 - BED_PILLOW_LENGTH, y0, 0, 1, y1, 1];
+    default: // 朝西
+      return [0, y0, 0, BED_PILLOW_LENGTH, y1, 1];
   }
 }
 

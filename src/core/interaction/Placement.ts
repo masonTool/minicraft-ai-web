@@ -18,10 +18,12 @@
 
 import { Block, JUNGLE_LOG_ID, blockDef } from '../registry/blocks.ts';
 import {
+  FACING_OFFSET,
   MAX_SNOW_LAYERS,
   facingFromYaw,
   snowLayers,
   withAxis,
+  withBedHead,
   withDoorHinge,
   withDoorUpper,
   withFacing,
@@ -332,6 +334,26 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       return {
         state: lower,
         extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withDoorUpper(lower, true) },
+      };
+    }
+
+    case 'bed': {
+      // 床（批次 79）：**占两格**——床脚在落点那一格，床头在玩家**面朝的方向**上
+      // （原版就是"枕头在你对面那一端"，因为放置时取的是玩家朝向）。
+      //
+      // 两条判据按原版：
+      //  ① 床脚那一格**下面要有实心方块**（原版 `canPlaceAt` 只查床脚那一格）；
+      //  ② 床头那一格必须能写（空气或流体）——被占住就整张床都放不下，
+      //     否则会先把床脚放下去、再发现床头放不了（半张床悬在那）。
+      const head = ((facingFromYaw(input.yaw) + 2) & 3) as Facing; // +2 = 玩家面朝的方向
+      const [dx, dz] = FACING_OFFSET[head]!;
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      const headBlock = input.blockAt(dx, 0, dz);
+      if (headBlock !== Block.AIR && !blockDef(headBlock).liquid) return null;
+
+      return {
+        state: withBedHead(withFacing(0, head), false),
+        extra: { dx, dy: 0, dz, id: input.blockId, state: withBedHead(withFacing(0, head), true) },
       };
     }
 

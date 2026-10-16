@@ -126,7 +126,10 @@ export function breakSoundFor(blockName: string): SoundKind {
     name.includes('chest') ||
     name.includes('table') ||
     name.includes('pumpkin') ||
-    name.includes('melon')
+    name.includes('melon') ||
+    // 床（批次 79）：木框 + 羊毛，归木头那一档。
+    // ⚠️ 用 `endsWith` 而不是 `includes('bed')`——后者会把 `bedrock`（基岩）也算成木头
+    name.endsWith('_bed')
   ) {
     return 'break_wood';
   }

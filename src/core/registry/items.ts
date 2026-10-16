@@ -27,6 +27,7 @@ import {
   WHEAT_STAGES,
   Wood,
   WoodShaped,
+  bedId,
   berryStageOf,
   blockDef,
   carpetId,
@@ -570,7 +571,10 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   building: '建筑',
   natural: '自然',
   ores: '矿石与材料',
-  wool: '羊毛与染料',
+  // 「床」也在这个分类里（批次 79）：它本质是**染色羊毛做的家具**，
+  // 16 张床跟 16 色羊毛/地毯摆在同一页才找得到——原版把它们放在"装饰方块"页，
+  // 而本项目没有装饰页（标签里点一句"床"，免得玩家翻遍分类找不到）
+  wool: '羊毛·床·染料',
   tools: '工具与武器',
   armor: '盔甲',
   food: '食物',
@@ -879,12 +883,14 @@ const ORES = new Set<number>([
   Block.NETHERITE_BLOCK,
 ]);
 
-/** 16 色羊毛 + 16 色地毯 + 16 种染料（地毯是羊毛族的薄片，摆在同一个分类里最好找） */
+/** 16 色羊毛 + 16 色地毯 + 16 张床 + 16 种染料（都是羊毛族的东西，摆在同一页最好找） */
 const WOOL_AND_DYE = new Set<number>();
 for (let index = 0; index < DYE_COLORS.length; index++) {
   WOOL_AND_DYE.add(woolId(index));
   WOOL_AND_DYE.add(carpetId(index));
   WOOL_AND_DYE.add(dyeItemId(index));
+  // 床（批次 79）：按 `bedId` 取，与方块定义同源（不手抄 16 个 id）
+  WOOL_AND_DYE.add(bedId(index));
 }
 // 可可豆（批次 49）：它是棕色染料的原料，摆在染料旁边比扔进"矿石与材料"好找
 WOOL_AND_DYE.add(Item.COCOA_BEANS);

@@ -378,7 +378,28 @@
         from { opacity: 0; transform: scale(1.15); }
         to { opacity: 1; transform: none; }
       }
-
+      /* 睡觉遮罩（B13）：整屏渐暗 + 一排"Zzz"，与死亡遮罩同一个层叠层（z-index 6）。
+         不接 pointer-events 的拦截：起床靠跳跃键，不需要点它（点了也不会穿透到世界）。
+         ⚠️ 这两个动画不需要自己写 prefers-reduced-motion 分支：文件末尾那条全局规则
+         会把所有元素的 animation-duration 压成 0（`#sleep b` 这个循环也一样） */
+      #sleep {
+        position: fixed; inset: 0; z-index: 6; display: grid; place-items: center;
+        background: radial-gradient(circle at 50% 50%, rgba(6, 8, 20, .86), rgba(0, 0, 0, .97) 72%);
+        color: #e8e8f4; font-size: 15px;
+        text-align: center; line-height: 2.2;
+        animation: sleep-fade var(--dur-med) var(--ease);
+      }
+      #sleep.hidden { display: none; }
+      #sleep b {
+        font-size: 30px; display: block; letter-spacing: 10px; margin-bottom: 8px;
+        text-shadow: 0 2px 20px rgba(120, 140, 255, .55);
+        animation: sleep-zzz 2.4s var(--ease) infinite;
+      }
+      @keyframes sleep-fade { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes sleep-zzz {
+        0%, 100% { opacity: .55; transform: translateY(2px); }
+        50% { opacity: 1; transform: translateY(-2px); }
+      }
       #loading {
         position: fixed; inset: 0; display: grid; place-items: center;
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
@@ -1227,6 +1248,10 @@
     </div>
 
     <div id="death" class="hidden"><div><b>你死了！</b>正在重生…</div></div>
+
+    <!-- 睡觉遮罩（B13）：躺在床上的那十几秒。文字里写清"怎么提前起来"，
+         手机上没有 Esc 之类的键，跳跃键是唯一可靠的入口 -->
+    <div id="sleep" class="hidden"><div><b>Zzz…</b>天快亮了<br />跳跃键可以提前起床</div></div>
 
     <div id="loading">正在生成世界…</div>
 
