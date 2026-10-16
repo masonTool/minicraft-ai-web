@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-17 · 提交总数 418（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-17 · 提交总数 420（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 286 项 —— 已完成 **166**、进行中 **70**、待办 50 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -175,6 +175,8 @@ npm run agent:setup        # 跨机器自检
 `villagerNearby()` / `openTradeNearbyForTest()` / `tradeNearbyForTest(i)` / `employNearbyVillagerForTest(id)`（村民验收用）/
 `nearestVillageForTest()`（批次 89：最近的村庄在哪——村庄每 512 格才有一个，
 手机上按它给的坐标 `/tp` 过去就能看到村民）/
+`nearestStrongholdForTest()`（批次 114：最近的**要塞**在哪——末影之眼飞向的就是它，
+要塞间距 96 区块 = 1536 格，靠走是走不到的）/
 `toggleAdvancementsForTest()` / `grantAdvancementForTest(id)` / `resetAdvancementsForTest()`（验收用）/
 `fishingState`（批次 81：`phase` / `timer` / `waitFor` / `bobber`）/
 `forceBite()`（把浮标直接推到咬钩，省掉 5~30 秒的等待）/
