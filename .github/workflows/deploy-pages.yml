@@ -1,0 +1,64 @@
+# 发布到 GitHub Pages
+#
+# 为什么走 Actions 而不是"提交 dist/ 到某个分支"：
+#   构建产物带内容哈希、体积还有 1MB+，提交进仓库会让每次 diff 淹没在几百个
+#   `assets/*.js` 里，而且历史会迅速膨胀。Actions 每次推 main 现场构建，
+#   仓库里只留源码。
+#
+# ⚠️ 首次发布前必须在仓库设置里把 Pages 的 Source 改成 **GitHub Actions**：
+#   Settings → Pages → Build and deployment → Source = GitHub Actions
+#   （保持默认的 "Deploy from a branch" 时，这个工作流会成功跑完但不生效）
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 允许在 Actions 页面手动点一次发布（改完仓库设置后不用空提交）
+  workflow_dispatch:
+
+# Pages 部署需要这三项：读代码、写 Pages、用 OIDC 换一次性部署令牌
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只允许一个部署在跑；后到的提交取消排队中的旧任务
+# （否则连续推送时两个部署会互相覆盖，最终线上可能停在一个旧版本）
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 与 vite 8 / vitest 5 的要求对齐（Node 20.19+ 为下限，取当前 LTS）
+          node-version: 24
+          cache: npm
+
+      # 用 ci 而不是 install：严格按 package-lock.json 装，构建可复现
+      - run: npm ci
+
+      # 内含 `tsc --noEmit`：类型不过就不发布，避免把编译错误的版本推上线
+      - run: npm run build
+
+      # 注入 Pages 的 base path 等环境信息（配合 vite 的 base: './' 生效）
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

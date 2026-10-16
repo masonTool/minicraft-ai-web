@@ -28,6 +28,33 @@ npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率�
 `T`（或 `/`）聊天与命令 · `F` 切换飞行 · `V` 切人称 · `N` 切维度 · `L` 连/断联机 ·
 `Esc` 暂停菜单（内含设置）。触摸端另有虚拟摇杆与按钮（`ui/TouchControls.ts`）。
 
+## 发布（GitHub Pages）
+
+线上地址：**https://masontool.github.io/minicraft-ai-web/**
+
+推送 `main` 即自动构建并发布，配置见 [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml)。
+仓库侧只需做一次设置：
+
+```
+Settings → Pages → Build and deployment → Source = GitHub Actions
+```
+
+之后在 Actions 页面手动跑一次 `Deploy to GitHub Pages`（或随便推一个提交）即可上线。
+工作流跑完但线上 404，几乎都是这一步没改——Pages 仍停在默认的 "Deploy from a branch"。
+
+几个已经踩平的坑，改代码时注意别退回去：
+
+- **路径**：`vite.config.ts` 的 `base` 必须是相对值 `'./'`，否则产物会去域名根目录找
+  `assets/*.js`（Pages 上本项目位于 `/<repo>/` 子路径）。
+- **PWA**：`index.html` 与 `manifest.webmanifest` 里的路径同样全是相对的；
+  Service Worker 按作用域注册在 `/<repo>/`，跨子路径不会串味。
+- **不用配 COOP/COEP**：项目没用到 `SharedArrayBuffer`，因此也不需要 Pages
+  无法自定义的响应头。
+- **联机在 Pages 上默认不可用**：`defaultServerUrl()` 给的是 `ws://<当前域名>:8787`，
+  而 Pages 是 HTTPS 页面，浏览器会直接拦掉这种混合内容。要用联机得自己跑
+  `npm run server` 并挂一个 `wss://` 反向代理，再在游戏里连：
+  控制台执行 `mc.connect('wss://你的域名', '昵称')`（`L` 键是连默认地址）。
+
 ## 路线图
 
 > 完整的任务清单见 [TASKS.md](./TASKS.md)（170+ 项，按 A~O 分段）。
