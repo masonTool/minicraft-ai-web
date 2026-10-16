@@ -13,6 +13,7 @@
  */
 
 import { Block, BLOCKS, blockDef } from '../src/core/registry/blocks.ts';
+import { chestLootIndex } from '../src/core/registry/blockState.ts';
 import { FeatureWriter, type FeatureWorld } from '../src/core/gen/Features.ts';
 import {
   STRUCTURE_KINDS,
@@ -343,6 +344,62 @@ check(
   } else {
     check('找到地牢实例', false);
   }
+}
+
+// ---------------------------------------------------------------- 8. 战利品箱（K8 尾巴）
+
+console.log('\n[结构箱都挂着战利品表]');
+{
+  /**
+   * 扫一片区域里的箱子，并检查每一只的状态里都写了战利品表序号。
+   *
+   * 这条断言盯的是"漏写一个箱子"——那种箱子打开是空的，
+   * 而且因为其它箱子都有东西，玩家只会觉得"运气差"。见 `Structures.ts#lootChest`。
+   */
+  function scanChests(minX: number, maxX: number, minZ: number, maxZ: number): { chests: number; untagged: string[] } {
+    const cx0 = Math.floor(minX / CHUNK_SIZE_X);
+    const cx1 = Math.floor(maxX / CHUNK_SIZE_X);
+    const cz0 = Math.floor(minZ / CHUNK_SIZE_Z);
+    const cz1 = Math.floor(maxZ / CHUNK_SIZE_Z);
+    let chests = 0;
+    const untagged: string[] = [];
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const blocks = generateChunkBlocks(cx, cz, SEED);
+        const states = takeGeneratedStates();
+        for (let y = -64; y < 320; y++) {
+          for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+            for (let x = 0; x < CHUNK_SIZE_X; x++) {
+              if (blocks[Chunk.index(x, y, z)] !== Block.CHEST) continue;
+              chests++;
+              const state = states ? (states[Chunk.index(x, y, z)] ?? 0) : 0;
+              if (chestLootIndex(state) <= 0) untagged.push(`${cx * CHUNK_SIZE_X + x},${y},${cz * CHUNK_SIZE_Z + z}`);
+            }
+          }
+        }
+      }
+    }
+    return { chests, untagged };
+  }
+
+  const kinds: StructureKind[] = ['village', 'mineshaft', 'stronghold', 'dungeon', 'shipwreck', 'woodland_mansion'];
+  const perKind: string[] = [];
+  const untagged: string[] = [];
+  let total = 0;
+  for (const kind of kinds) {
+    const instance = findInstance(kind, gen);
+    if (!instance) {
+      check(`${kind}：找得到可以扫的实例`, false);
+      continue;
+    }
+    const scanned = scanChests(instance.minX, instance.maxX, instance.minZ, instance.maxZ);
+    total += scanned.chests;
+    perKind.push(`${kind} ${scanned.chests}`);
+    untagged.push(...scanned.untagged);
+  }
+  console.log(`  各类结构的箱子数：${perKind.join(' · ')}`);
+  check(`六种结构里都有战利品箱（共 ${total} 只）`, total >= 6, perKind.join(' · '));
+  check('每一只箱子都写了战利品表（没有"打开是空的"箱子）', untagged.length === 0, untagged.slice(0, 3).join(' '));
 }
 
 console.log(`\n结构测试：${passed} 通过 / ${failed} 失败`);

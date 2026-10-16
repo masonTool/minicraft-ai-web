@@ -14,9 +14,10 @@
  */
 
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { chestLootIndex } from '../src/core/registry/blockState.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { END_BIOME_NAMES, EndGenerator } from '../src/core/gen/EndGenerator.ts';
-import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
+import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../src/core/world/Chunk.ts';
 
 const SEED = 20261014;
@@ -275,6 +276,39 @@ console.log('\n[维度之间互不干扰]');
   check('末地没有草方块与下界岩', countBlocks(end, Block.GRASS_BLOCK) === 0 && countBlocks(end, Block.NETHERRACK) === 0);
   check('末地全部方块类型可读', end.length === CHUNK_VOLUME);
   check('Dimension 有三个维度', Object.keys(Dimension).length === 3, Object.keys(Dimension).join(','));
+}
+
+// ---------------------------------------------------------------- 6. 末地城/末地船的战利品箱（K8 尾巴）
+
+console.log('\n[末地城的战利品箱都挂着表]');
+{
+  let chests = 0;
+  const untagged: string[] = [];
+  for (const entry of cells) {
+    const center = gen.outerIslandOfCell(entry.cellX, entry.cellZ);
+    if (!center) continue;
+    const cx = Math.floor(center.x / 16);
+    const cz = Math.floor(center.z / 16);
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const blocks = generateChunkBlocks(cx + dx, cz + dz, SEED, Dimension.END);
+        const states = takeGeneratedStates();
+        for (let y = -64; y < 320; y++) {
+          for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+            for (let x = 0; x < CHUNK_SIZE_X; x++) {
+              if (blocks[Chunk.index(x, y, z)] !== Block.CHEST) continue;
+              chests++;
+              const state = states ? (states[Chunk.index(x, y, z)] ?? 0) : 0;
+              if (chestLootIndex(state) <= 0) untagged.push(`${(cx + dx) * 16 + x},${y},${(cz + dz) * 16 + z}`);
+            }
+          }
+        }
+      }
+    }
+    if (chests > 0) break; // 找到一座有箱子的城就够了
+  }
+  check(`末地城/末地船里有战利品箱（${chests} 只）`, chests > 0);
+  check('每一只都写了战利品表', untagged.length === 0, untagged.slice(0, 3).join(' '));
 }
 
 console.log(`\n末地测试：${passed} 通过 / ${failed} 失败`);
