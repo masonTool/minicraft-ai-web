@@ -21,6 +21,8 @@ import { Block } from '../registry/blocks.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z } from '../world/Chunk.ts';
 import type { EndGenerator } from './EndGenerator.ts';
 import { hashAt, PositionalRng, type FeatureWriter } from './Features.ts';
+// 带战利品表的箱子统一走 `Structures.ts` 的那个助手（表序号进方块状态）
+import { lootChest } from './Structures.ts';
 
 /** 外岛的单元尺寸，必须与 EndGenerator 里的一致 */
 const OUTER_CELL = 256;
@@ -132,9 +134,9 @@ function buildCity(w: FeatureWriter, x: number, baseY: number, z: number, cellX:
     // 末地烛照明
     w.fill(x - half + 1, y0 + 1, z - half + 1, rod);
     w.fill(x + half - 1, y0 + 1, z + half - 1, rod);
-    // 战利品箱
-    if (layer === 1) w.fill(x, y0 + 1, z + half - 1, Block.CHEST);
-    if (layer === layers - 1) w.fill(x + half - 1, y0 + 1, z, Block.CHEST);
+    // 战利品箱（表序号写进方块状态，箱内物品由 `LootFill.ts` 在主线程填）
+    if (layer === 1) lootChest(w, x, y0 + 1, z + half - 1, 'end_city');
+    if (layer === layers - 1) lootChest(w, x + half - 1, y0 + 1, z, 'end_city');
   }
 
   // 顶层平台 + 四角的末地烛
@@ -223,7 +225,7 @@ function buildShip(w: FeatureWriter, x: number, y: number, z: number, cellX: num
       for (let dy = 2; dy <= 3; dy++) w.fill(cabinX + dx, deck + dy, z + dz, purpur);
     }
   }
-  w.fill(cabinX + 1, deck + 2, z, Block.CHEST);
+  lootChest(w, cabinX + 1, deck + 2, z, 'end_city');
   w.fill(cabinX + 3, deck + 2, z + 1, Block.END_ROD);
   // 船头的撞角
   w.fill(x0 - 1, y + 3, z, purpur);

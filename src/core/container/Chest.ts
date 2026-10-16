@@ -14,6 +14,16 @@ export class Chest implements SlotSource {
 
   onChange: (() => void) | null = null;
 
+  /**
+   * 这只箱子是不是**已经被战利品表填过**（结构里的箱子用过一次就置位）。
+   *
+   * 存在的唯一理由是"别被重复填满"：结构箱的内容是按坐标确定性掷出来的，
+   * 而加载区块时会再走一遍填充逻辑；如果没有这个标记，玩家把箱子掏空、
+   * 区块一卸载一加载，箱子又会**满血复活**——那等于无限刷铁锭。
+   * 因此它必须进存档（见 `ContainerSave`：置位过的空箱子也要写）。
+   */
+  looted = false;
+
   get(index: number): ItemStack | null {
     if (index < 0 || index >= CHEST_SIZE) return null;
     return this.slots[index] ?? null;

@@ -65,6 +65,7 @@ import {
   type TickWorld,
 } from './core/tick/RandomTicks.ts';
 import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
+import { fillLootChests } from './core/world/LootFill.ts';
 import { FIRE_IGNITE_SECONDS, igniteAt } from './core/world/Fire.ts';
 import {
   PORTAL_COOLDOWN_TICKS,
@@ -759,6 +760,9 @@ class App {
 
     this.world.events = {
       onChunkLoaded: (chunk) => {
+        // 结构箱的战利品（K8 尾巴）：方块状态里写着"哪张表"，在这里按表掷点填进容器。
+        // 放在网格化之前也没关系——箱子内容不影响渲染
+        fillLootChests(chunk, this.dimension, this.world.seed, this.world.containers);
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
         this.refreshLoadingState();
       },

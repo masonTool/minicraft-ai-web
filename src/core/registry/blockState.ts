@@ -274,6 +274,33 @@ export function portalAxis(state: number): 'x' | 'z' {
   return portalAxisIsZ(state) ? 'z' : 'x';
 }
 
+// ---------------------------------------------------------------- 箱子（结构战利品）
+
+/**
+ * 箱子装着哪张战利品表（bits 4-7，0 = 没有表 = 玩家自己放的箱子）。
+ *
+ * 为什么把"表序号"塞进方块状态，而不是另外传一份"箱子 → 表"的清单：
+ *  1. 方块状态**本来就会**跟着区块数据从 Worker 传过来、也会进增量存档，
+ *     另开一条通道要同时改 Worker 协议 + 存档格式 + 加载流程，三处都可能漏；
+ *  2. 结构生成（Worker 里）只需要知道"这一格放哪张表"，不需要碰容器；
+ *     容器在主线程按需创建（`LootFill.ts`），跨线程不需要传物品数组。
+ *
+ * 箱子当前不使用低位（朝向/开关都没做），所以 bits 4-7 是干净的。
+ * ⚠️ 以后要是给箱子加上 facing，务必避开这四位。
+ */
+const CHEST_LOOT_SHIFT = 4;
+const CHEST_LOOT_MASK = 0b1111 << CHEST_LOOT_SHIFT;
+
+/** 箱子带的战利品表序号（0 = 没有） */
+export function chestLootIndex(state: number): number {
+  return (state & CHEST_LOOT_MASK) >> CHEST_LOOT_SHIFT;
+}
+
+export function withChestLoot(state: number, index: number): number {
+  const clamped = Math.max(0, Math.min(15, index | 0));
+  return (state & ~CHEST_LOOT_MASK) | (clamped << CHEST_LOOT_SHIFT);
+}
+
 // ---------------------------------------------------------------- 调试
 
 export function describeState(shape: BlockShape, state: number): string {

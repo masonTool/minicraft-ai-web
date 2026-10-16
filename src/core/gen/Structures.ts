@@ -13,13 +13,16 @@
  * ⚠️ 与原版的差距（已记录到 TASKS.md）：
  *  - 建筑使用轴对齐布局，没有原版那套「结构模板 + 随机朝向 + 拼图（jigsaw）」系统；
  *  - 结构是"一次性生成"的，没有原版"先占位、后扩展"带来的跨结构连接；
- *  - 战利品箱只放了箱子方块，箱内物品由主线程在区块载入后填充（K/L 系列再做）。
+ *  - 战利品箱只写"哪张战利品表"（方块状态里的 bits 4-7），**箱内物品由主线程在区块
+ *    载入后按表掷点填充**（见 `core/world/LootFill.ts`）——Worker 里不碰容器，
+ *    也就不必把物品数组跨线程传回来。
  *
  * 该模块必须保持"纯函数 + 无 DOM 依赖"，因为它会被 Web Worker 直接引用。
  */
 
 import { Block, stairsId, Wood } from '../registry/blocks.ts';
 import {
+  withChestLoot,
   withDoorHinge,
   withDoorOpen,
   withDoorUpper,
@@ -27,6 +30,7 @@ import {
   withWallMounted,
   type Facing,
 } from '../registry/blockState.ts';
+import { lootTableIndex } from '../registry/loot.ts';
 import { Biome } from './Biome.ts';
 import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld, OUTSIDE } from './Features.ts';
 
@@ -132,6 +136,20 @@ function openDoor(w: FeatureWriter, x: number, y: number, z: number, facing: Fac
 }
 
 /** 一段楼梯（沿 facing 方向逐级上升） */
+/**
+ * 放一只**带战利品表**的箱子。
+ *
+ * 表序号写进方块状态的 bits 4-7（见 `blockState.ts` 的 `withChestLoot`），
+ * 于是"这是哪张表"跟着区块数据与增量存档一起走，不需要另开一条 Worker 通道；
+ * 箱内物品由主线程按表掷点（`LootFill.ts`），Worker 里完全不碰容器。
+ *
+ * ⚠️ 结构里**所有**箱子都要走这里：漏一处就是"打开箱子空空如也"，
+ * 而这正是这一批要修的 bug。`tools/loot-test.ts` 有一条断言专门盯着它。
+ */
+export function lootChest(w: FeatureWriter, x: number, y: number, z: number, tableKey: string): void {
+  w.fillState(x, y, z, Block.CHEST, withChestLoot(0, lootTableIndex(tableKey)));
+}
+
 function stairs(w: FeatureWriter, x: number, y: number, z: number, facing: Facing, count: number, id: number, dx: number, dz: number): void {
   for (let i = 0; i < count; i++) {
     w.fillState(x + dx * i, y + i, z + dz * i, id, withFacing(0, facing));
@@ -550,7 +568,7 @@ function buildHouse(w: FeatureWriter, x: number, floorY: number, z: number, rng:
 
   // 室内：一盏火把 + 一张箱子
   torch(w, x0 + 1, base + 1, z0 + 1, 0);
-  w.fill(x1 - 1, base, z1 - 2, Block.CHEST);
+  lootChest(w, x1 - 1, base, z1 - 2, 'village_house');
 }
 
 // ---------------------------------------------------------------- 废弃矿井
@@ -607,7 +625,7 @@ function buildMineshaft(w: FeatureWriter, s: StructureInstance, _world: FeatureW
       const ez = dirZ === 0 ? 3 : 0;
       clear(w, rx - ex, y, rz - ez, rx + ex, y + 3, rz + ez);
       box(w, rx - ex - 1, y - 1, rz - ez - 1, rx + ex + 1, y - 1, rz + ez + 1, plank);
-      w.fill(rx + ex, y, rz + ez, Block.CHEST);
+      lootChest(w, rx + ex, y, rz + ez, 'mineshaft');
       torch(w, rx, y + 3, rz, 0);
       // 支撑柱与可能的粗铁块（原版矿井里的"矿车箱"）
       w.fill(rx - ex, y, rz - ez, log);
@@ -662,8 +680,8 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
   for (let i = 0; i < 5; i++) {
     box(w, libX + 2 + i * 2, y, libZ + 1, libX + 2 + i * 2, y + 2, libZ + 1, Block.OAK_PLANKS);
   }
-  w.fill(libX + 1, y, libZ + 4, Block.CHEST);
-  w.fill(libX + 13, y, libZ + 8, Block.CHEST);
+  lootChest(w, libX + 1, y, libZ + 4, 'stronghold_library');
+  lootChest(w, libX + 13, y, libZ + 8, 'stronghold_library');
   torch(w, libX + 7, y + 4, libZ + 5, 0);
   // 连接走廊与图书馆的支路
   clear(w, libX + 6, y, s.z - 2, libX + 8, y + 3, libZ + 9);
@@ -719,7 +737,7 @@ function buildDungeon(w: FeatureWriter, s: StructureInstance): void {
   clear(w, s.x - size + 1, y + 1, s.z - size + 1, s.x + size - 1, y + 3, s.z + size - 1);
 
   // 中央箱子 + 火把
-  w.fill(s.x, y + 1, s.z, Block.CHEST);
+  lootChest(w, s.x, y + 1, s.z, 'dungeon');
   torch(w, s.x - size + 1, y + 1, s.z - size + 1, 0);
   torch(w, s.x + size - 1, y + 1, s.z + size - 1, 0);
 }
@@ -782,12 +800,13 @@ function buildShipwreck(w: FeatureWriter, s: StructureInstance): void {
     }
   }
   clear(w, cabinX, deck + 2, s.z - 1, cabinX + 3, deck + 3, s.z + 1);
-  w.fill(cabinX + 1, deck + 2, s.z, Block.CHEST);
+  // 甲板上的箱子是"补给箱"、船底的是"宝箱"（原版也是两张表：supply / treasure）
+  lootChest(w, cabinX + 1, deck + 2, s.z, 'shipwreck_supply');
   torch(w, cabinX + 3, deck + 2, s.z + 1, 0);
 
   // 船舱里的散落箱子
-  w.fill(s.x - 4, hullBottom + 1, s.z + 1, Block.CHEST);
-  if (rng.chance(0.5)) w.fill(s.x + 3, hullBottom + 2, s.z - 1, Block.CHEST);
+  lootChest(w, s.x - 4, hullBottom + 1, s.z + 1, 'shipwreck_treasure');
+  if (rng.chance(0.5)) lootChest(w, s.x + 3, hullBottom + 2, s.z - 1, 'shipwreck_treasure');
   // 注：船体周围的海水保留，船舱内部在上面的循环里已经被清空（原版沉船里可以呼吸）
 }
 
@@ -949,8 +968,8 @@ function buildWoodlandMansion(w: FeatureWriter, s: StructureInstance, world: Fea
   // 一层的门厅 + 箱子
   clear(w, s.x, base + 1, s.z + 11, s.x + 1, base + 3, s.z + 12);
   openDoor(w, s.x, base + 1, s.z + 12, 0, 1);
-  w.fill(s.x + 3, base + 1, s.z + 3, Block.CHEST);
-  w.fill(s.x - 3, base + 5, s.z - 3, Block.CHEST);
+  lootChest(w, s.x + 3, base + 1, s.z + 3, 'mansion');
+  lootChest(w, s.x - 3, base + 5, s.z - 3, 'mansion');
 
   // 屋顶
   for (const [radius, dy] of tiers) {

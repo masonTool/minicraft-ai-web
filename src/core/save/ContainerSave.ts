@@ -61,6 +61,13 @@ export interface SerializedContainer {
     fuelLeft: number;
     brewProgress: number;
   };
+  /**
+   * 箱子的"已被战利品表填过"标记。
+   * 少写这一个布尔值的后果是"掏空的结构箱会自己长回来"（无限刷矿物），见 `Chest#looted`。
+   */
+  chest?: {
+    looted: boolean;
+  };
 }
 
 /** 容器实例 → 种类 */
@@ -119,6 +126,9 @@ function hasContent(container: BlockContainer, kind: ContainerKind): boolean {
   for (let i = 0; i < count; i++) {
     if (!isEmptySlot(container.get(i))) return true;
   }
+  // 被战利品表填过的箱子：即使被玩家掏空了也必须写下来，
+  // 否则读档后它会被当成"还没填过"，再走进一次填充逻辑 → 箱子自己长回来（无限刷矿物）
+  if (container instanceof Chest && container.looted) return true;
   if (container instanceof Furnace) {
     // 只烧了一半的熔炉即使原料被拿走、也要把"燃烧剩余"留住，否则重新点火的节奏会抖
     return container.burnTimeLeft > 0 || container.cookProgress > 0 || container.storedExperience > 0;
@@ -159,6 +169,9 @@ export function serializeContainer(
   }
   if (container instanceof BrewingStand) {
     data.brewing = { fuelLeft: container.fuelLeft, brewProgress: container.brewProgress };
+  }
+  if (container instanceof Chest) {
+    data.chest = { looted: container.looted };
   }
   return data;
 }
@@ -211,6 +224,10 @@ export function restoreContainers(store: BlockEntityStore, data: readonly Serial
     if (container instanceof BrewingStand && entry.brewing) {
       container.fuelLeft = numberOr(entry.brewing.fuelLeft, 0);
       container.brewProgress = numberOr(entry.brewing.brewProgress, 0);
+    }
+    if (container instanceof Chest) {
+      // 旧存档没有这个字段：缺省 false 是安全的（那只箱子本来就还没被战利品表填过）
+      container.looted = entry.chest?.looted === true;
     }
 
     restored++;
