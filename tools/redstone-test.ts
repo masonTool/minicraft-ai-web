@@ -22,6 +22,8 @@ import {
   isFenceGateOpen,
   isPowered,
   isTrapdoorOpen,
+  sixFacingOf,
+  withSixFacing,
   withDelay,
   withDoorUpper,
   withFacing,
@@ -323,6 +325,73 @@ console.log('\n[粘性活塞：收回时把方块拉回来]');
   step(engine, world, 0.1);
   check('收回时木板被拉回活塞前方', world.getBlock(2, Y, 0) === Block.OAK_PLANKS, `实际 ${world.getBlock(2, Y, 0)}`);
   check('更前面那格变成空气', world.getBlock(3, Y, 0) === Block.AIR);
+}
+
+// ---------------------------------------------------------------- 6.5 竖直方向（批次 66）
+
+console.log('\n[活塞与侦测器：朝上/朝下也认了（批次 66）]');
+{
+  // ---- 朝上推：活塞在 (1,Y,0)、上方有石头
+  const up = new StubWorld();
+  const upEngine = new RedstoneEngine();
+  up.setBlock(0, Y, 0, Block.LEVER, 0);
+  up.setBlock(1, Y, 0, Block.PISTON, withSixFacing(0, 'up'));
+  up.setBlock(1, Y + 1, 0, Block.STONE, 0);
+  upEngine.onBlockChanged(up, 1, Y, 0);
+  step(upEngine, up, 0.1);
+  upEngine.toggleLever(up, 0, Y, 0);
+  step(upEngine, up, 0.1);
+  check('朝上的活塞：上方生成活塞头', up.getBlock(1, Y + 1, 0) === Block.PISTON_HEAD, `实际 ${up.getBlock(1, Y + 1, 0)}`);
+  check('石头被推到更上面一格', up.getBlock(1, Y + 2, 0) === Block.STONE);
+  check('活塞头的朝向也是"朝上"（贴图/几何要靠它）', sixFacingOf(up.getState(1, Y + 1, 0)) === 'up');
+  upEngine.toggleLever(up, 0, Y, 0);
+  step(upEngine, up, 0.1);
+  check('断电后上方清空', up.getBlock(1, Y + 1, 0) === Block.AIR);
+
+  // ---- 朝下的粘性活塞：把下面的方块拉回来
+  const down = new StubWorld();
+  const downEngine = new RedstoneEngine();
+  down.setBlock(0, Y, 0, Block.LEVER, 0);
+  down.setBlock(1, Y, 0, Block.STICKY_PISTON, withSixFacing(0, 'down'));
+  down.setBlock(1, Y - 1, 0, Block.OAK_PLANKS, 0);
+  downEngine.onBlockChanged(down, 1, Y, 0);
+  step(downEngine, down, 0.1);
+  downEngine.toggleLever(down, 0, Y, 0);
+  step(downEngine, down, 0.1);
+  check('朝下的粘性活塞：木板被推到下面一格', down.getBlock(1, Y - 2, 0) === Block.OAK_PLANKS);
+  downEngine.toggleLever(down, 0, Y, 0);
+  step(downEngine, down, 0.1);
+  check('收回时木板被拉回活塞下方', down.getBlock(1, Y - 1, 0) === Block.OAK_PLANKS, `实际 ${down.getBlock(1, Y - 1, 0)}`);
+  check('更下面那格清空', down.getBlock(1, Y - 2, 0) === Block.AIR);
+
+  // ---- 朝上的侦测器：盯着上面那一格，从**下面**（对面）输出
+  const watch = new StubWorld();
+  const watchEngine = new RedstoneEngine();
+  watch.setBlock(4, Y, 0, Block.OBSERVER, withSixFacing(0, 'up'));
+  watch.setBlock(4, Y + 1, 0, Block.STONE, 0);
+  watch.setBlock(4, Y - 1, 0, Block.REDSTONE_WIRE, 0);
+  watchEngine.onBlockChanged(watch, 4, Y, 0);
+  step(watchEngine, watch, 0.1);
+  check('刚放下时没脉冲（下面的粉无电）', wirePowerOf(watchEngine, 4, Y - 1, 0) === 0);
+
+  watchEngine.onBlockChanged(watch, 4, Y + 1, 0); // 上方那格变了
+  step(watchEngine, watch, 0.05);
+  check('上方方块变化 → 侦测器发脉冲', isPowered(watch.getState(4, Y, 0)));
+  check('脉冲从**下面**输出（对面那一格的粉通电）', wirePowerOf(watchEngine, 4, Y - 1, 0) > 0, `${wirePowerOf(watchEngine, 4, Y - 1, 0)}`);
+  step(watchEngine, watch, 0.5);
+  check('脉冲结束后自动熄灭', !isPowered(watch.getState(4, Y, 0)));
+
+  // ---- 水平行为不受影响（对照）
+  const flat = new StubWorld();
+  const flatEngine = new RedstoneEngine();
+  flat.setBlock(4, Y, 0, Block.OBSERVER, withFacing(0, 1));
+  flat.setBlock(5, Y, 0, Block.STONE, 0);
+  flat.setBlock(3, Y, 0, Block.REDSTONE_WIRE, 0);
+  flatEngine.onBlockChanged(flat, 4, Y, 0);
+  step(flatEngine, flat, 0.1);
+  flatEngine.onBlockChanged(flat, 5, Y, 0);
+  step(flatEngine, flat, 0.05);
+  check('水平的侦测器照旧工作（从背面输出）', wirePowerOf(flatEngine, 3, Y, 0) > 0);
 }
 
 // ---------------------------------------------------------------- 7. 侦测器

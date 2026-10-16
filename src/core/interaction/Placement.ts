@@ -114,6 +114,18 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
   // 与上面那条"水里的植物"同一个位置——这类规则与形状无关。
   if (def.facesPlayer) return { state: withFacing(0, facingFromYaw(input.yaw)) };
 
+  // 默认朝放置者、**潜行**时沿命中面法线（批次 66，六向）：活塞 / 侦测器。
+  // 与投掷器/发射器相反的口径（那两个是"凸口朝被点的方块"），见 `BlockSpec.facesSneak` 的注释。
+  if (def.facesSneak) {
+    if (input.sneaking) {
+      if (ny > 0) return { state: withSixFacing(0, 'up') };
+      if (ny < 0) return { state: withSixFacing(0, 'down') };
+      return { state: withSixFacing(0, facingFromYaw(input.yaw)) };
+    }
+    // 不潜行：朝放置者（**水平四向**——竖直朝向得靠潜行，见上）
+    return { state: withFacing(0, facingFromYaw(input.yaw)) };
+  }
+
   // 正脸沿**命中面法线**（批次 65，六向）：木桶的盖子——点顶面 → 盖朝上、点底面 → 盖朝下，
   // 点侧面 → 朝放置者（原版是"最近看向方向的反面"，常见手势下结果一致且不必知道俯仰角）。
   // ⚠️ 给六向的方块**不能**是"逻辑只读水平朝向"的那一族（熔炉/活塞/侦测器用 `facesPlayer`）。

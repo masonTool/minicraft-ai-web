@@ -26,6 +26,10 @@ import { CONTAINER_BLOCKS } from '../world/BlockEntityStore.ts';
 import {
   FACING_OFFSET,
   facingOf,
+  sixFacingOf,
+  sixFacingOffset,
+  sixFacingOpposite,
+  withSixFacing,
   isDisarmed,
   isDoorOpen,
   isDoorUpper,
@@ -38,7 +42,6 @@ import {
   withDisarmed,
   withDoorOpen,
   withDoorUpper,
-  withFacing,
   withFenceGateOpen,
   withInverted,
   withPowered,
@@ -593,8 +596,8 @@ export class RedstoneEngine {
         case Block.OBSERVER: {
           const output = this.componentOutput(world, nx, ny, nz, id, state);
           if (output.strength > 0) {
-            strengths.set(keyOf(nx + output.dx, ny, nz + output.dz), output.strength);
-            sources.push({ x: nx + output.dx, y: ny, z: nz + output.dz });
+            strengths.set(keyOf(nx + output.dx, ny + output.dy, nz + output.dz), output.strength);
+            sources.push({ x: nx + output.dx, y: ny + output.dy, z: nz + output.dz });
           }
           break;
         }
@@ -835,28 +838,31 @@ export class RedstoneEngine {
     z: number,
     id: number,
     state: number,
-  ): { dx: number; dz: number; strength: number } {
+  ): { dx: number; dy: number; dz: number; strength: number } {
     const key = keyOf(x, y, z);
+    // 中继器/比较器是**水平四向**（原版也是），只有侦测器支持六向（批次 66）
     const facing = facingOf(state);
     const front = FACING_OFFSET[facing]!;
     const back = FACING_OFFSET[(facing + 2) & 3]!;
+    // 侦测器：`facing` 是"眼"看的那一面，输出给它的对面
+    const observerBack = sixFacingOffset(sixFacingOpposite(sixFacingOf(state)));
 
     switch (id) {
       case Block.REPEATER: {
         const strength = (this.repeaterOutput.get(key) ?? false) ? 15 : 0;
-        return { dx: front[0], dz: front[1], strength };
+        return { dx: front[0], dy: 0, dz: front[1], strength };
       }
       case Block.COMPARATOR: {
         // 简化：比较器把背面的输入强度直通到正面输出
         const strength = this.inputStrength(world, this.wirePower, x + back[0], y, z + back[1]);
-        return { dx: front[0], dz: front[1], strength };
+        return { dx: front[0], dy: 0, dz: front[1], strength };
       }
       case Block.OBSERVER: {
         const strength = (this.observerPulses.get(key) ?? 0) > 0 ? 15 : 0;
-        return { dx: back[0], dz: back[1], strength };
+        return { dx: observerBack[0], dy: observerBack[1], dz: observerBack[2], strength };
       }
       default:
-        return { dx: 0, dz: 0, strength: 0 };
+        return { dx: 0, dy: 0, dz: 0, strength: 0 };
     }
   }
 
@@ -922,45 +928,52 @@ export class RedstoneEngine {
 
   /** 活塞伸出：把前方方块推走一格，然后放上活塞头 */
   private extendPiston(world: RedstoneWorld, x: number, y: number, z: number, _id: number, state: number): boolean {
-    const [dx, dz] = FACING_OFFSET[facingOf(state)]!;
+    // 批次 66：**六向**（活塞可以朝上/朝下推了）。水平那四向的偏移与原来完全一致，
+    // 所以老存档里的活塞行为不变。
+    const facing = sixFacingOf(state);
+    const [dx, dy, dz] = sixFacingOffset(facing);
     const fx = x + dx;
+    const fy = y + dy;
     const fz = z + dz;
-    const frontId = world.getBlock(fx, y, fz);
+    const frontId = world.getBlock(fx, fy, fz);
 
     if (frontId === Block.AIR) {
-      world.setBlock(fx, y, fz, Block.PISTON_HEAD, withFacing(0, facingOf(state)));
+      world.setBlock(fx, fy, fz, Block.PISTON_HEAD, withSixFacing(0, facing));
       return true;
     }
     if (!canPush(frontId)) return false;
 
     const fx2 = fx + dx;
+    const fy2 = fy + dy;
     const fz2 = fz + dz;
-    if (world.getBlock(fx2, y, fz2) !== Block.AIR) return false;
+    if (world.getBlock(fx2, fy2, fz2) !== Block.AIR) return false;
 
     // 先把被推的方块搬到前面，再放活塞头
-    world.setBlock(fx2, y, fz2, frontId, world.getState(fx, y, fz));
-    world.setBlock(fx, y, fz, Block.PISTON_HEAD, withFacing(0, facingOf(state)));
-    this.markDirty(fx2, y, fz2);
+    world.setBlock(fx2, fy2, fz2, frontId, world.getState(fx, fy, fz));
+    world.setBlock(fx, fy, fz, Block.PISTON_HEAD, withSixFacing(0, facing));
+    this.markDirty(fx2, fy2, fz2);
     return true;
   }
 
   /** 活塞收回：撤掉活塞头；粘性活塞会把前方的方块拉回来 */
   private retractPiston(world: RedstoneWorld, x: number, y: number, z: number, id: number, state: number): boolean {
-    const [dx, dz] = FACING_OFFSET[facingOf(state)]!;
+    const [dx, dy, dz] = sixFacingOffset(sixFacingOf(state));
     const hx = x + dx;
+    const hy = y + dy;
     const hz = z + dz;
-    if (world.getBlock(hx, y, hz) !== Block.PISTON_HEAD) return false;
+    if (world.getBlock(hx, hy, hz) !== Block.PISTON_HEAD) return false;
 
-    world.setBlock(hx, y, hz, Block.AIR, 0);
+    world.setBlock(hx, hy, hz, Block.AIR, 0);
 
     if (id === Block.STICKY_PISTON) {
       const px = hx + dx;
+      const py = hy + dy;
       const pz = hz + dz;
-      const pulled = world.getBlock(px, y, pz);
+      const pulled = world.getBlock(px, py, pz);
       if (pulled !== Block.AIR && canPush(pulled)) {
-        world.setBlock(hx, y, hz, pulled, world.getState(px, y, pz));
-        world.setBlock(px, y, pz, Block.AIR, 0);
-        this.markDirty(px, y, pz);
+        world.setBlock(hx, hy, hz, pulled, world.getState(px, py, pz));
+        world.setBlock(px, py, pz, Block.AIR, 0);
+        this.markDirty(px, py, pz);
       }
     }
     return true;
@@ -976,9 +989,10 @@ export class RedstoneEngine {
       const oz = z + dz;
       if (world.getBlock(ox, oy, oz) !== Block.OBSERVER) continue;
       const state = world.getState(ox, oy, oz);
-      const [fx, fz] = FACING_OFFSET[facingOf(state)]!;
+      // 批次 66：**六向**——侦测器也能朝上/朝下看
+      const [fx, fy, fz] = sixFacingOffset(sixFacingOf(state));
       // 侦测器的"脸"朝向被观察的方块
-      if (ox + fx !== x || oz + fz !== z) continue;
+      if (ox + fx !== x || oy + fy !== y || oz + fz !== z) continue;
       const key = keyOf(ox, oy, oz);
       this.observerPulses.set(key, OBSERVER_PULSE);
       world.setState(ox, oy, oz, withPowered(state, true));

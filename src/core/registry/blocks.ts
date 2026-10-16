@@ -58,6 +58,14 @@ export interface BlockDef {
    */
   readonly facesPlayer?: boolean;
   /**
+   * 朝向：默认**朝放置者**（水平四向），**潜行**时改成沿命中面法线（**六向**：点顶面 → 朝上）。
+   *
+   * 活塞 / 侦测器用（它们的默认朝向与"被点的那个方块"无关）。
+   * ⚠️ 投掷器 / 发射器那一族的口径是**相反**的——"凸口朝被点的那个方块"，
+   * 它们的潜行分支写在自己的形状 case 里（`Placement.ts`），刻意不合并到这里。
+   */
+  readonly facesSneak?: boolean;
+  /**
    * 放置时正脸**沿命中面的法线**（**六向**：点顶面 → 朝上、点底面 → 朝下）。
    *
    * 木桶用它（原版木桶的盖子朝向是"最近看向方向的反面"，而"点在哪个面上"
@@ -100,6 +108,7 @@ interface BlockSpec {
   stateTiles?: (state: number) => readonly [string, string, string];
   faceTile?: (state: number, faceDir: readonly [number, number, number]) => string | undefined;
   facesPlayer?: boolean;
+  facesSneak?: boolean;
   facesNormal?: boolean;
   stateLight?: (state: number) => number;
   itemless?: boolean;
@@ -976,7 +985,8 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     // 在此之前推板同时贴在顶面与底面（那时没有朝向贴图能力，只能"上下都画一个"）
     tiles: ['piston_side', 'piston_side', 'piston_side'],
     faceTile: nozzleTile('piston_top'),
-    facesPlayer: true,
+    // 批次 66：活塞支持上下（引擎侧也补齐了），所以用"潜行指定六向"这条规则
+    facesSneak: true,
   },
   {
     id: 268,
@@ -988,7 +998,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     name: 'minecraft:sticky_piston',
     tiles: ['piston_side', 'piston_side', 'piston_side'],
     faceTile: nozzleTile('sticky_piston_top'),
-    facesPlayer: true,
+    facesSneak: true,
   },
   {
     id: 270,
@@ -998,7 +1008,7 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     // 在此之前那只眼贴在顶面与底面——而侦测器看哪边完全看不出来
     tiles: ['observer_side', 'observer_side', 'observer_side'],
     faceTile: observerFace,
-    facesPlayer: true,
+    facesSneak: true,
   },
   // ---- 附魔与书架（H9）
   {
@@ -2564,6 +2574,7 @@ function buildBlockTable(): readonly BlockDef[] {
       stateTiles: spec.stateTiles,
       faceTile: spec.faceTile,
       facesPlayer: spec.facesPlayer ?? false,
+      facesSneak: spec.facesSneak ?? false,
       facesNormal: spec.facesNormal ?? false,
       stateLight: spec.stateLight,
       itemless: spec.itemless ?? false,

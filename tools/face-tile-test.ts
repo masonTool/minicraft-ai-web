@@ -321,12 +321,35 @@ console.log('\n[放置：正脸朝放置者]');
     sixFacingOf(planPlacement(placement(Block.BARREL, { normal: [0, 1, 0] }))!.state) !== facingOf(planPlacement(placement(Block.BARREL, { normal: [0, 1, 0] }))!.state),
   );
 
+  // ---- 活塞/侦测器：**潜行**可以指定上下（批次 66，引擎侧也补齐了）
+  equal(
+    '潜行 + 点顶面 → 活塞朝上',
+    sixFacingOf(planPlacement(placement(Block.PISTON, { normal: [0, 1, 0], sneaking: true }))!.state),
+    'up',
+  );
+  equal(
+    '潜行 + 点底面 → 活塞朝下',
+    sixFacingOf(planPlacement(placement(Block.PISTON, { normal: [0, -1, 0], sneaking: true }))!.state),
+    'down',
+  );
+  equal(
+    '潜行 + 点侧面 → 还是水平（朝放置者）',
+    sixFacingOf(planPlacement(placement(Block.OBSERVER, { normal: [1, 0, 0], sneaking: true }))!.state),
+    2,
+  );
+  check(
+    '不潜行时活塞只会拿到水平朝向（"上下"只走潜行那条路）',
+    sixFacingOf(planPlacement(placement(Block.PISTON, {}))!.state) ===
+      facingOf(planPlacement(placement(Block.PISTON, {}))!.state),
+  );
   // 不变量：一条规则只服务一种方向数（四向的方块绝不能被写成六向）
   const mixed = [];
   for (let id = 1; id < BLOCKS.length; id++) {
-    if (blockDef(id).facesPlayer && blockDef(id).facesNormal) mixed.push(blockDef(id).name);
+    const def = blockDef(id);
+    const rules = [def.facesPlayer, def.facesSneak, def.facesNormal].filter(Boolean).length;
+    if (rules > 1) mixed.push(def.name);
   }
-  check('没有方块同时声明两种朝向规则', mixed.length === 0, mixed.join(', '));
+  check('没有方块同时声明两种朝向规则（三种规则各管一档方向数）', mixed.length === 0, mixed.join(', '));
 
   // 朝向必须真的落在 0~3（别写进别的位）
   const state = planPlacement(placement(Block.FURNACE, { yaw: Math.PI }))!.state;
