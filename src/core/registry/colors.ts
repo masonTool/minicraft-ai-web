@@ -86,3 +86,19 @@ export function terracottaColor(dye: readonly [number, number, number]): readonl
 export function dyeColor(name: string): DyeColor | undefined {
   return DYE_COLORS.find((color) => color.name === name);
 }
+
+// ---------------------------------------------------------------- 铜的氧化（批次 40）
+
+/**
+ * 铜的四档氧化配色，**顺序即氧化顺序**（未氧化 → 斑驳 → 锈蚀 → 氧化）。
+ *
+ * 取值贴近原版观感：新铜是偏橙的铜色，一路偏灰、最后偏青绿（碱式碳酸铜）。
+ * 贴图（`copper_block` / `cut_copper` 各 4 张）与配方表都从这张表展开，
+ * 所以"加一档氧化"只需要往这里加一行。
+ */
+export const COPPER_COLORS: readonly (readonly [number, number, number])[] = [
+  [196, 113, 82],
+  [161, 125, 104],
+  [108, 153, 110],
+  [82, 181, 160],
+];

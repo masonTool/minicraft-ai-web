@@ -9,7 +9,14 @@
  */
 
 import * as THREE from 'three';
-import { DYE_COLORS, TERRACOTTA_BASE, WOOD_TYPES, terracottaColor } from '../core/registry/colors.ts';
+import {
+  COPPER_COLORS,
+  DYE_COLORS,
+  TERRACOTTA_BASE,
+  WOOD_TYPES,
+  terracottaColor,
+} from '../core/registry/colors.ts';
+import { COPPER_STAGES } from '../core/registry/blocks.ts';
 import { POTIONS, TIPPED_ARROWS, potionById, potionColor } from '../core/registry/potions.ts';
 import { ARMOR_TYPES, ALL_ARMOR_MATERIALS } from '../core/registry/armor.ts';
 import { ALL_TOOL_MATERIALS, TOOL_KINDS } from '../core/registry/tools.ts';
@@ -833,6 +840,41 @@ PAINTERS.vine = (x, y, rng) => {
   const v = 1 + (rng() * 0.3 - 0.15);
   return [clamp255(base[0]! * v), clamp255(base[1]! * v), clamp255(base[2]! * v), 255];
 };
+
+/**
+ * 铜块（批次 40）：底色 + 竖直拉丝 + 少量深色斑点，四档只是底色不同。
+ *
+ * 拉丝用两条不同频率的正弦叠加（1.3 与 0.7），所以拉丝是"横竖都有点"的金属质感，
+ * 而不是石头的均匀噪点。
+ */
+function copperBlockPainter(base: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const streak = Math.sin(x * 1.3) * 0.06 + Math.sin(y * 0.7) * 0.03;
+    const speck = hashString(`cu${x},${y}`) % 17 === 0 ? -0.16 : 0;
+    const v = 1 + streak + speck + (rng() * 0.08 - 0.04);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+  };
+}
+
+/**
+ * 切制铜：2×2 的方形砌块——每 8 像素一道深缝，缝的旁边压一条高光，
+ * 于是"这些铜块是被切过的"这件事一眼能看出来（与切制砂岩同一套路）。
+ */
+function cutCopperPainter(base: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const seam = x % 8 === 7 || y % 8 === 7;
+    const highlight = !seam && (x % 8 === 0 || y % 8 === 0);
+    const shade = seam ? 0.8 : highlight ? 1.1 : 1;
+    const v = shade + (rng() * 0.06 - 0.03);
+    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+  };
+}
+
+for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
+  const base = COPPER_COLORS[stage]!;
+  PAINTERS[COPPER_STAGES[stage]!.blockTile] = copperBlockPainter(base);
+  PAINTERS[COPPER_STAGES[stage]!.cutTile] = cutCopperPainter(base);
+}
 
 /** 梯子：两侧立杆 + 若干横档 */
 PAINTERS.ladder = (x, y, rng) => {

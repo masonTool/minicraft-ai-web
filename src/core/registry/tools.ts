@@ -20,11 +20,13 @@
 
 import {
   Block,
+  COPPER_STAGES,
   SHAPED_PARENTS,
   Wood,
   WoodShaped,
   blockHardness,
   concreteId,
+  copperId,
   isHandHarvestable,
   slabId,
   stairsId,
@@ -303,6 +305,14 @@ requirePickaxe(0, [
 ]);
 // 书架：原版是"斧更快、徒手也能采到"，所以只进加速表不进需求表
 EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');
+
+// 铜的四档 × 四种形状（批次 40）：原版要**石镐**（needs_stone_tool），全 16 个同档
+// （按表展开而不是从 `world/Copper.ts` 取：注册表层不该反向依赖 world 层）
+for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
+  for (let kind = 0; kind < 4; kind++) {
+    REQUIRED_TOOL.set(copperId(stage, kind as 0 | 1 | 2 | 3), { tool: 'pickaxe', tier: 1 });
+  }
+}
 
 // 羊毛：剪刀是加速工具，但**不能**顺手放进 REQUIRED_TOOL——
 // 原版"必须用剪刀"体现在掉落表里，破坏耗时不受影响（徒手拆羊毛仍是正常的 1.2 秒，

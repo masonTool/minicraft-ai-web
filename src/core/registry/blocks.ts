@@ -1138,6 +1138,61 @@ const VINE_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 铜的氧化（批次 40）
+
+/**
+ * 铜的四档氧化（原版 1.17 那条"铜会锈"的机制）。
+ *
+ * 每档 4 个方块：**铜块 / 切制铜 / 切制铜台阶 / 切制铜楼梯**，四档共 16 个。
+ * id 从 `COPPER_ID_START` 起**每档连续 4 个**，档内顺序固定为
+ * `[铜块, 切制铜, 台阶, 楼梯]`（见 `copperId(stage, kind)`）。
+ *
+ * ⚠️ **顺序即氧化顺序**：`core/world/Copper.ts` 就是按这张表的**下标**推进氧化的，
+ * 往中间插一行会打乱既有的存档方块（老存档里的"斑驳铜块"会变成别的档），只能往末尾加。
+ * 涂蜡变体（16 个）还没做——它要**蜜蜡**，而蜜蜡唯一的来源是蜂巢（蜜蜂没做），
+ * 于是记进了 TASKS：要么等蜜蜂，要么先不做（"第一件原料从哪来"那条老经验）。
+ */
+export const COPPER_ID_START = 335;
+
+/** 每档的贴图名与中文前缀（贴图、名字、配方都由它展开） */
+export const COPPER_STAGES = [
+  { blockTile: 'copper_block', cutTile: 'cut_copper' },
+  { blockTile: 'exposed_copper', cutTile: 'exposed_cut_copper' },
+  { blockTile: 'weathered_copper', cutTile: 'weathered_cut_copper' },
+  { blockTile: 'oxidized_copper', cutTile: 'oxidized_cut_copper' },
+] as const;
+
+/** 档内四种形状的名字后缀（与 `copperId` 的第二维一一对应） */
+const COPPER_SHAPES = [
+  { suffix: '_block', cut: false },
+  { suffix: '', cut: true },
+  { suffix: '_slab', cut: true },
+  { suffix: '_stairs', cut: true },
+] as const;
+
+/** 第 `stage` 档第 `kind` 种铜方块的 id：kind 0=铜块、1=切制铜、2=台阶、3=楼梯 */
+export function copperId(stage: number, kind: 0 | 1 | 2 | 3): number {
+  return COPPER_ID_START + stage * 4 + kind;
+}
+
+const COPPER_SPECS: readonly BlockSpec[] = COPPER_STAGES.flatMap((stage, index) =>
+  COPPER_SHAPES.map((shape, kind): BlockSpec => {
+    const tile = shape.cut ? stage.cutTile : stage.blockTile;
+    const name = shape.cut
+      ? `${stage.cutTile}${shape.suffix}` // cut_copper / cut_copper_slab / cut_copper_stairs
+      : `${stage.blockTile}`; // copper_block / exposed_copper / ...
+    const base: BlockSpec = {
+      id: copperId(index, kind as 0 | 1 | 2 | 3),
+      name: `minecraft:${name}`,
+      tiles: [tile, tile, tile],
+    };
+    // 台阶与楼梯是非完整方块：不遮挡邻居、不挡光（与石材家族同一套写法）
+    if (name.endsWith('_slab')) return { ...base, shape: 'slab', opaque: false, lightOpacity: 0 };
+    if (name.endsWith('_stairs')) return { ...base, shape: 'stairs', opaque: false, lightOpacity: 0 };
+    return base;
+  }),
+);
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -1161,6 +1216,7 @@ const SPECS: readonly BlockSpec[] = [
   ...WOOD_SHAPED_SPECS,
   ...CHAIN_SPECS,
   ...VINE_SPECS,
+  ...COPPER_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1350,6 +1406,23 @@ export const Block = {
   CHAIN: 333,
   /** 藤蔓（B11）：可攀爬、能蔓延，一个方块能同时挂 5 面 */
   VINE: 334,
+  // ---- 铜的氧化（批次 40）：四档 × 四种形状，顺序即氧化顺序（见 COPPER_STAGES）
+  COPPER_BLOCK: 335,
+  CUT_COPPER: 336,
+  CUT_COPPER_SLAB: 337,
+  CUT_COPPER_STAIRS: 338,
+  EXPOSED_COPPER_BLOCK: 339,
+  EXPOSED_CUT_COPPER: 340,
+  EXPOSED_CUT_COPPER_SLAB: 341,
+  EXPOSED_CUT_COPPER_STAIRS: 342,
+  WEATHERED_COPPER_BLOCK: 343,
+  WEATHERED_CUT_COPPER: 344,
+  WEATHERED_CUT_COPPER_SLAB: 345,
+  WEATHERED_CUT_COPPER_STAIRS: 346,
+  OXIDIZED_COPPER_BLOCK: 347,
+  OXIDIZED_CUT_COPPER: 348,
+  OXIDIZED_CUT_COPPER_SLAB: 349,
+  OXIDIZED_CUT_COPPER_STAIRS: 350,
   /** 睡莲（B16）：水面上的平铺叶片，id 接在最大 id 之后 */
   LILY_PAD: 295,
   /** 雪层（B11）：层数在状态里（1~8 层），id 单独一个 */
@@ -1527,6 +1600,10 @@ HARDNESS.set(Block.LADDER, 0.4);
 // 锁链 5（原版，必须用镐）；藤蔓 0.2（原版，徒手一拍就掉，但只有剪刀/精准采集会掉下来）
 HARDNESS.set(Block.CHAIN, 5);
 HARDNESS.set(Block.VINE, 0.2);
+// 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
+for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
+  for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
+}
 // 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
 HARDNESS.set(Block.FARMLAND, 0.6);
 HARDNESS.set(Block.BREWING_STAND, 0.5);

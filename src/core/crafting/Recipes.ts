@@ -11,11 +11,13 @@
 
 import {
   Block,
+  COPPER_STAGES,
   GLASS_PANE_ID,
   SHAPED_PARENTS,
   Wood,
   WoodShaped,
   carpetId,
+  copperId,
   slabId,
   stairsId,
   stainedGlassId,
@@ -196,6 +198,52 @@ const UTILITY_RECIPES: readonly Recipe[] = [
     key: { C: Item.CHARCOAL, S: Item.STICK },
   },
 ];
+
+/**
+ * 铜的四档（批次 40）：每档 4 条 —— 9 铜锭 ↔ 1 铜块、4 铜块 → 4 切制铜、
+ * 3 切制铜 → 6 台阶、6 切制铜 → 4 楼梯（后三条都是原版配方）。
+ *
+ * 按档展开而不是手抄 16 条：铜的"档"就是 `COPPER_STAGES` 的下标，
+ * 加一档氧化自动带上全套（这也是"能生成的就别手抄"那条老规矩）。
+ */
+const COPPER_RECIPES: readonly Recipe[] = COPPER_STAGES.flatMap((_stage, stage): Recipe[] => {
+  const block = copperId(stage, 0);
+  const cut = copperId(stage, 1);
+  return [
+    // ⚠️ 只有**新铜**能由 9 铜锭合成：锈是"放出来的"，不是做出来的（原版如此）
+    ...(stage === 0
+      ? ([
+          {
+            kind: 'shaped' as const,
+            result: { id: block, count: 1 },
+            pattern: ['III', 'III', 'III'],
+            key: { I: Item.COPPER_INGOT },
+          },
+        ] as Recipe[])
+      : ([] as Recipe[])),
+    // 反过来：**任意档**都能拆回 9 铜锭（锈了就熔回去。原版对已氧化档是否可拆没查证到，
+    // 这里做成可拆并记进 TASKS——不给玩家留"一堵锈墙只能砸了重做"的死路）
+    { kind: 'shapeless', result: { id: Item.COPPER_INGOT, count: 9 }, ingredients: [block] },
+    {
+      kind: 'shaped',
+      result: { id: cut, count: 4 },
+      pattern: ['CC', 'CC'],
+      key: { C: block },
+    },
+    {
+      kind: 'shaped',
+      result: { id: copperId(stage, 2), count: 6 },
+      pattern: ['CCC'],
+      key: { C: cut },
+    },
+    {
+      kind: 'shaped',
+      result: { id: copperId(stage, 3), count: 4 },
+      pattern: ['C  ', 'CC ', 'CCC'],
+      key: { C: cut },
+    },
+  ];
+});
 
 /**
  * 木材家族：每种木头 3 条（原木→木板、木板→台阶、木板→楼梯）。
@@ -526,6 +574,7 @@ export const RECIPES: readonly Recipe[] = [
   ...UTILITY_RECIPES,
   ...WOOD_RECIPES,
   ...WOOD_SHAPED_RECIPES,
+  ...COPPER_RECIPES,
   ...PANE_RECIPES,
   ...TOOL_RECIPES,
   ...ARMOR_RECIPES,

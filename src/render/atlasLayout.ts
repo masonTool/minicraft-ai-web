@@ -618,6 +618,15 @@ export const TILE_ORDER = [
   'vine',
   // 铁粒（B11）：锁链的原料
   'item_iron_nugget',
+  // ---- 铜的四档（批次 40）：4 张铜块 + 4 张切制铜（顺序与 COPPER_STAGES 一致）
+  'copper_block',
+  'exposed_copper',
+  'weathered_copper',
+  'oxidized_copper',
+  'cut_copper',
+  'exposed_cut_copper',
+  'weathered_cut_copper',
+  'oxidized_cut_copper',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

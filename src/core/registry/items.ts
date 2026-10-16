@@ -14,11 +14,13 @@ import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
 import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
 import {
   Block,
+  COPPER_STAGES,
   WHEAT_STAGES,
   Wood,
   WoodShaped,
   blockDef,
   carpetId,
+  copperId,
   cropOf,
   wheatStageOf,
   woolId,
@@ -542,6 +544,11 @@ for (const ids of Object.values(WoodShaped)) {
   BUILDING.add(ids.fenceGate);
   BUILDING.add(ids.door);
   BUILDING.add(ids.trapdoor);
+}
+
+// 铜的四档 × 四种形状（批次 40）：也归"建筑"（与原版的"建筑方块"页一致）
+for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
+  for (let kind = 0; kind < 4; kind++) BUILDING.add(copperId(stage, kind as 0 | 1 | 2 | 3));
 }
 
 const NATURAL = new Set<number>([

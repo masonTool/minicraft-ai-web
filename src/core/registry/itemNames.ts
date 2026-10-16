@@ -14,7 +14,7 @@
  * 文案是给界面用的，两者改动的理由和频率都不一样。
  */
 
-import { BLOCKS } from './blocks.ts';
+import { BLOCKS, COPPER_STAGES } from './blocks.ts';
 import {
   CATEGORY_LABELS,
   categoryOf,
@@ -146,6 +146,24 @@ for (const [base, cn] of Object.entries(STRUCTURE_BASES_CN)) {
   put(`${base}_slab`, `${cn}台阶`);
   put(`${base}_stairs`, `${cn}楼梯`);
 }
+
+// 铜的四档（批次 40）：铜块 / 斑驳的铜块 / 锈蚀的铜块 / 氧化的铜块 + 切制铜家族。
+// 名字由 `COPPER_STAGES` 展开（与方块表同源），加一档氧化不会漏名字。
+// ⚠️ 中文名的语序不是"前缀 + 块"：斑驳的是"斑驳的铜块"、切制那支是"斑驳的切制铜"，
+// 所以两种写法各列一份，不要拿一个前缀去拼。
+const COPPER_CN = [
+  { block: '铜块', cut: '切制铜' },
+  { block: '斑驳的铜块', cut: '斑驳的切制铜' },
+  { block: '锈蚀的铜块', cut: '锈蚀的切制铜' },
+  { block: '氧化的铜块', cut: '氧化的切制铜' },
+] as const;
+COPPER_STAGES.forEach((stage, index) => {
+  const cn = COPPER_CN[index]!;
+  put(stage.blockTile, cn.block);
+  put(stage.cutTile, cn.cut);
+  put(`${stage.cutTile}_slab`, `${cn.cut}台阶`);
+  put(`${stage.cutTile}_stairs`, `${cn.cut}楼梯`);
+});
 
 // 矿石：`coal_ore` = 煤矿石，`deepslate_coal_ore` = 深层煤矿石
 for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
@@ -601,6 +619,23 @@ const DESCRIPTIONS: Record<string, string> = {
 for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
   DESCRIPTIONS[`deepslate_${ore}_ore`] = `深层（深板岩层）的${cn}，掉落与普通${cn}相同。`;
 }
+
+// 铜的四档（批次 40）：说明写清"会氧化、斧头能刮、刮了会退一档"
+COPPER_STAGES.forEach((stage, index) => {
+  const cn = COPPER_CN[index]!;
+  const next = COPPER_CN[index + 1];
+  const oxidize = next
+    ? `放久了会慢慢变成**${next.block}**（一共 4 档，锈会从已经锈的地方往旁边蔓延）`
+    : '已经锈到底了，不会再变';
+  const scrape =
+    index > 0
+      ? `拿斧头右键能刮掉一层锈（退回**${COPPER_CN[index - 1]!.block}**，消耗 1 点耐久）`
+      : '拿斧头刮没有效果（它已经是最新的一档）';
+  DESCRIPTIONS[stage.blockTile] = `铜锭做的方块。${oxidize}；${scrape}。`;
+  DESCRIPTIONS[stage.cutTile] = `把 4 个${cn.block}切成 4 个${cn.cut}，切面更整齐的铜建材。同样会氧化、也能用斧头刮。`;
+  DESCRIPTIONS[`${stage.cutTile}_slab`] = `${cn.cut}做的台阶（3 个切 6 个）。`;
+  DESCRIPTIONS[`${stage.cutTile}_stairs`] = `${cn.cut}做的楼梯（6 个切 4 个）。`;
+});
 
 // 工具与武器的说明由属性表生成：新加一把工具就自带说明，不会漏
 const TOOL_TIER_CN = ['木/金', '石', '铁', '钻石', '下界合金'];
