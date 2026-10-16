@@ -275,6 +275,51 @@ const STONE_VARIANT_RECIPES: readonly Recipe[] = STONE_VARIANT_PARENTS.flatMap(
 );
 
 /**
+ * 石英家族 / 深板岩瓦 / 红色下界砖（批次 42）：原版的 5 条合成配方。
+ *
+ * 石英链的原料是**下界石英**——它此前根本没有物品（下界石英矿石掉的是方块本身），
+ * 所以这一批先补上"矿石 → 下界石英"的掉落覆盖，石英家族才有来源。
+ * 平滑石英走熔炼（见 `Smelting.ts`）。
+ */
+const QUARTZ_AND_STONE_RECIPES: readonly Recipe[] = [
+  // 4 下界石英（2×2）→ 1 石英块
+  {
+    kind: 'shaped',
+    result: { id: Block.QUARTZ_BLOCK, count: 1 },
+    pattern: ['QQ', 'QQ'],
+    key: { Q: Item.QUARTZ },
+  },
+  // 2 石英块竖排 → 2 石英柱（原版）
+  {
+    kind: 'shaped',
+    result: { id: Block.QUARTZ_PILLAR, count: 2 },
+    pattern: ['Q', 'Q'],
+    key: { Q: Block.QUARTZ_BLOCK },
+  },
+  // 2 石英台阶竖排 → 1 錾制石英块（原版就是拿台阶拼的）
+  {
+    kind: 'shaped',
+    result: { id: Block.CHISELED_QUARTZ_BLOCK, count: 1 },
+    pattern: ['S', 'S'],
+    key: { S: stoneVariantId('quartz_block', 'slab')! },
+  },
+  // 4 磨制深板岩（2×2）→ 4 深板岩瓦
+  {
+    kind: 'shaped',
+    result: { id: Block.DEEPSLATE_TILES, count: 4 },
+    pattern: ['DD', 'DD'],
+    key: { D: Block.POLISHED_DEEPSLATE },
+  },
+  // 2 下界砖 + 2 下界疣（棋盘 2×2）→ 1 红色下界砖
+  {
+    kind: 'shaped',
+    result: { id: Block.RED_NETHER_BRICKS, count: 1 },
+    pattern: ['NW', 'WN'],
+    key: { N: Block.NETHER_BRICKS, W: Item.NETHER_WART },
+  },
+];
+
+/**
  * 木材家族：每种木头 3 条（原木→木板、木板→台阶、木板→楼梯）。
  * 由 Wood 表批量生成，加一种木头自动获得全套配方。
  */
@@ -605,6 +650,7 @@ export const RECIPES: readonly Recipe[] = [
   ...WOOD_SHAPED_RECIPES,
   ...COPPER_RECIPES,
   ...STONE_VARIANT_RECIPES,
+  ...QUARTZ_AND_STONE_RECIPES,
   ...PANE_RECIPES,
   ...TOOL_RECIPES,
   ...ARMOR_RECIPES,

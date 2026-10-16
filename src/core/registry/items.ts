@@ -147,6 +147,8 @@ export const Item = {
   NETHERITE_INGOT: 1156,
   /** 铁粒（B11）：锁链的原料。1 铁锭 ↔ 9 铁粒（原版两向都有） */
   IRON_NUGGET: 1157,
+  /** 下界石英（批次 42）：石英家族的唯一原料，由下界石英矿石掉落 */
+  QUARTZ: 1158,
   // ---- 弓与箭（J9）
   FLINT: 1072,
   STRING: 1073,
@@ -208,6 +210,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.IRON_INGOT, name: 'minecraft:iron_ingot', tile: 'item_iron_ingot' },
   // 铁粒（B11）：锁链的原料；原版由铁锭拆成 9 粒，也能 9 粒合成 1 锭
   { id: Item.IRON_NUGGET, name: 'minecraft:iron_nugget', tile: 'item_iron_nugget' },
+  // 下界石英（批次 42）：此前**缺了这一件**——下界石英矿石掉的是"方块本身"，
+  // 于是石英家族（石英块/石英柱/平滑石英/錾制石英）根本无法合成，这一批补上
+  { id: Item.QUARTZ, name: 'minecraft:quartz', tile: 'item_quartz' },
   { id: Item.GOLD_INGOT, name: 'minecraft:gold_ingot', tile: 'item_gold_ingot' },
   { id: Item.COPPER_INGOT, name: 'minecraft:copper_ingot', tile: 'item_copper_ingot' },
   { id: Item.CHARCOAL, name: 'minecraft:charcoal', tile: 'item_charcoal' },
@@ -555,6 +560,18 @@ for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
 // 石材家族的台阶/楼梯/墙（批次 41）：建材，归"建筑"
 for (const id of STONE_VARIANT_IDS) BUILDING.add(id);
 
+// 石英家族 / 深板岩瓦 / 红色下界砖（批次 42）：同样是建材
+for (const id of [
+  Block.QUARTZ_BLOCK,
+  Block.CHISELED_QUARTZ_BLOCK,
+  Block.QUARTZ_PILLAR,
+  Block.SMOOTH_QUARTZ,
+  Block.DEEPSLATE_TILES,
+  Block.RED_NETHER_BRICKS,
+]) {
+  BUILDING.add(id);
+}
+
 const NATURAL = new Set<number>([
   Block.GRASS_BLOCK,
   Block.DIRT,
@@ -691,6 +708,8 @@ const ORES = new Set<number>([
   Item.BRICK,
   Item.CLAY_BALL,
   Block.NETHER_QUARTZ_ORE,
+  // 下界石英（批次 42）：与矿石归同一类"矿石与材料"
+  Item.QUARTZ,
   Block.ANCIENT_DEBRIS,
   Block.SHROOMLIGHT,
   Block.SEA_LANTERN,
@@ -1071,6 +1090,10 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.DEEPSLATE_DIAMOND_ORE, { id: Item.DIAMOND, count: 1 }],
   [Block.EMERALD_ORE, { id: Item.EMERALD, count: 1 }],
   [Block.DEEPSLATE_EMERALD_ORE, { id: Item.EMERALD, count: 1 }],
+  // 下界石英矿石（批次 42）：掉 1 个下界石英。
+  // ⚠️ 它此前**漏了这条覆盖**，于是掉的是矿石方块本身——石英家族因此没有原料来源
+  // （"一条链收尾时要问第一件原料从哪来"，这是第 N 次踩）
+  [Block.NETHER_QUARTZ_ORE, { id: Item.QUARTZ, count: 1 }],
 ]);
 
 /**

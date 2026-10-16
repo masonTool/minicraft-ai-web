@@ -46,6 +46,9 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 黏土球 → 红砖
   { input: Item.CLAY_BALL, output: { id: Item.BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.3 },
 
+  // 石英块 → 平滑石英（批次 42，原版：平滑石英只能这么来）
+  { input: Block.QUARTZ_BLOCK, output: { id: Block.SMOOTH_QUARTZ, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
+
   // 生肉 → 熟肉（经验值取自原版：生肉 0.35）
   { input: Item.BEEF, output: { id: Item.COOKED_BEEF, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
   { input: Item.PORKCHOP, output: { id: Item.COOKED_PORKCHOP, count: 1 }, time: SMELTING_TIME, experience: 0.35 },

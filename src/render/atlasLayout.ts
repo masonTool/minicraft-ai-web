@@ -627,6 +627,16 @@ export const TILE_ORDER = [
   'exposed_cut_copper',
   'weathered_cut_copper',
   'oxidized_cut_copper',
+  // ---- 石英与更多石材（批次 42）：石英家族的 6 张 + 深板岩瓦 + 红色下界砖 + 下界石英
+  'quartz_block_top',
+  'quartz_block_side',
+  'quartz_pillar_top',
+  'quartz_pillar_side',
+  'chiseled_quartz_block',
+  'smooth_quartz',
+  'deepslate_tiles',
+  'red_nether_bricks',
+  'item_quartz',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

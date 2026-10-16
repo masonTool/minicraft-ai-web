@@ -1202,6 +1202,38 @@ const COPPER_SPECS: readonly BlockSpec[] = COPPER_STAGES.flatMap((stage, index) 
   }),
 );
 
+// ---------------------------------------------------------------- 石英与更多石材（批次 42）
+
+/**
+ * 第二批"石材家族"的母方块：**石英家族 + 深板岩瓦 + 红色下界砖**。
+ *
+ * 它们与批次 41 的 16 个母方块共用同一张变体表（`STONE_VARIANT_PARENTS`），
+ * 所以下面的 id 段紧跟变体段：
+ *
+ *   id 351 ~ 386：批次 41 的 36 个变体
+ *   id 387 ~ 403：批次 42 新增的 17 个变体（石英 / 平滑石英 / 深板岩瓦 / 红色下界砖 / 海晶石三兄弟）
+ *   id 404 ~ 409：**本段的 6 个母方块**（石英块 / 錾制石英块 / 石英柱 / 平滑石英 / 深板岩瓦 / 红色下界砖）
+ *
+ * ⚠️ 母方块的 id 写成常量而不是"变体段末尾接着排"：变体段的长度会随表变化，
+ * 用运行时计算的话，往变体表里加一项就会把母方块的 id 整体挪一格（存档里存的正是这些数字）。
+ * 套件里有一条断言守着"变体段不许溢进母方块段"。
+ */
+export const MORE_STONE_ID_START = 404;
+
+const MORE_STONE_SPECS: readonly BlockSpec[] = [
+  {
+    id: 404,
+    name: 'minecraft:quartz_block',
+    tiles: ['quartz_block_top', 'quartz_block_top', 'quartz_block_side'],
+  },
+  { id: 405, name: 'minecraft:chiseled_quartz_block', tiles: ['chiseled_quartz_block', 'chiseled_quartz_block', 'chiseled_quartz_block'] },
+  // 石英柱在原版有轴向（横竖两种）；本项目与紫珀柱一样**不做轴向状态**（避免为一个方块加一条状态通道）
+  { id: 406, name: 'minecraft:quartz_pillar', tiles: ['quartz_pillar_top', 'quartz_pillar_top', 'quartz_pillar_side'] },
+  { id: 407, name: 'minecraft:smooth_quartz', tiles: ['smooth_quartz', 'smooth_quartz', 'smooth_quartz'] },
+  { id: 408, name: 'minecraft:deepslate_tiles', tiles: ['deepslate_tiles', 'deepslate_tiles', 'deepslate_tiles'] },
+  { id: 409, name: 'minecraft:red_nether_bricks', tiles: ['red_nether_bricks', 'red_nether_bricks', 'red_nether_bricks'] },
+];
+
 // ---------------------------------------------------------------- 石材家族的变体（批次 41）
 
 /**
@@ -1247,6 +1279,7 @@ const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
   CHAIN_SPECS,
   VINE_SPECS,
   COPPER_SPECS,
+  MORE_STONE_SPECS,
 ];
 
 /**
@@ -1290,6 +1323,15 @@ const STONE_VARIANT_FAMILIES: readonly (readonly [number, string, readonly Stone
   [240, 'nether_bricks', ['slab', 'stairs', 'wall']],
   [247, 'end_stone_bricks', ['slab', 'stairs', 'wall']],
   [248, 'purpur_block', ['slab', 'stairs']],
+  // ---- 批次 42 追加（id 387 起）：石英家族、深板岩瓦、红色下界砖、海晶石三兄弟。
+  // 石英只有台阶与楼梯（原版没有石英墙）；錾制石英块与石英柱没有任何变体。
+  [404, 'quartz_block', ['slab', 'stairs']],
+  [407, 'smooth_quartz', ['slab', 'stairs']],
+  [408, 'deepslate_tiles', ['slab', 'stairs', 'wall']],
+  [409, 'red_nether_bricks', ['slab', 'stairs', 'wall']],
+  [218, 'prismarine', ['slab', 'stairs', 'wall']],
+  [219, 'prismarine_bricks', ['slab', 'stairs']],
+  [220, 'dark_prismarine', ['slab', 'stairs']],
 ];
 
 const STONE_VARIANT_MAP = new Map<string, number>();
@@ -1346,6 +1388,7 @@ const SPECS: readonly BlockSpec[] = [
   ...CHAIN_SPECS,
   ...VINE_SPECS,
   ...COPPER_SPECS,
+  ...MORE_STONE_SPECS,
   ...STONE_VARIANT_SPECS,
 ].sort((a, b) => a.id - b.id);
 
@@ -1553,6 +1596,13 @@ export const Block = {
   OXIDIZED_CUT_COPPER: 348,
   OXIDIZED_CUT_COPPER_SLAB: 349,
   OXIDIZED_CUT_COPPER_STAIRS: 350,
+  // ---- 石英与更多石材的母方块（批次 42，见 `MORE_STONE_ID_START`）
+  QUARTZ_BLOCK: 404,
+  CHISELED_QUARTZ_BLOCK: 405,
+  QUARTZ_PILLAR: 406,
+  SMOOTH_QUARTZ: 407,
+  DEEPSLATE_TILES: 408,
+  RED_NETHER_BRICKS: 409,
   /** 睡莲（B16）：水面上的平铺叶片，id 接在最大 id 之后 */
   LILY_PAD: 295,
   /** 雪层（B11）：层数在状态里（1~8 层），id 单独一个 */
@@ -1788,6 +1838,13 @@ HARDNESS.set(Block.END_STONE, 3);
 HARDNESS.set(Block.END_STONE_BRICKS, 3);
 HARDNESS.set(Block.PURPUR_BLOCK, 1.5);
 HARDNESS.set(Block.PURPUR_PILLAR, 1.5);
+// 石英家族 0.8（原版）、深板岩瓦 3.5（与深板岩砖同档）、红色下界砖 2（与下界砖同档）
+HARDNESS.set(Block.QUARTZ_BLOCK, 0.8);
+HARDNESS.set(Block.CHISELED_QUARTZ_BLOCK, 0.8);
+HARDNESS.set(Block.QUARTZ_PILLAR, 0.8);
+HARDNESS.set(Block.SMOOTH_QUARTZ, 0.8);
+HARDNESS.set(Block.DEEPSLATE_TILES, 3.5);
+HARDNESS.set(Block.RED_NETHER_BRICKS, 2);
 
 // 粗金属块：硬度 5（原版），必须用镐
 HARDNESS.set(Block.RAW_COPPER_BLOCK, 5);

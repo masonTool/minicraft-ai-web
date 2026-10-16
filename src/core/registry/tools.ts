@@ -304,6 +304,14 @@ requirePickaxe(0, [
   Block.SMITHING_TABLE,
   // 锁链（B11）：原版同样是"要镐、不限等级"（徒手挖得动但什么都不掉）
   Block.CHAIN,
+  // 石英家族、深板岩瓦、红色下界砖（批次 42）：原版都要镐，且不限等级。
+  // 海晶石三兄弟早在 218~220 就登记过（这一批只是给它们补台阶/楼梯/墙）
+  Block.QUARTZ_BLOCK,
+  Block.CHISELED_QUARTZ_BLOCK,
+  Block.QUARTZ_PILLAR,
+  Block.SMOOTH_QUARTZ,
+  Block.DEEPSLATE_TILES,
+  Block.RED_NETHER_BRICKS,
 ]);
 // 书架：原版是"斧更快、徒手也能采到"，所以只进加速表不进需求表
 EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');

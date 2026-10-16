@@ -2817,6 +2817,82 @@ for (const material of ALL_ARMOR_MATERIALS) {
   }
 }
 
+// ================================================================ 石英与更多石材（批次 42）
+//
+// 石英是"奶白偏暖"的矿物：底色比石砖亮得多、几乎无纹理，只在侧面有一点点竖直的晶纹。
+// 这一批的 6 个母方块里有 4 个属于石英家族，它们共用同一套底色与晶纹参数。
+
+/** 石英底色（原版是偏暖的奶白，比白云石/方解石更"暖"一点） */
+const QUARTZ_BASE: readonly [number, number, number] = [236, 230, 222];
+
+/** 石英块的顶面：近乎无纹理的奶白，只有极细的颗粒 */
+const QUARTZ_TOP_PAINTER: Painter = (_x, _y, rng) => {
+  const v = 1 + (rng() * 0.05 - 0.025);
+  return [clamp255(QUARTZ_BASE[0] * v), clamp255(QUARTZ_BASE[1] * v), clamp255(QUARTZ_BASE[2] * v), 255];
+};
+
+/** 石英块的侧面：顶面底色 + 竖直晶纹（每 5 像素一道浅痕） */
+const QUARTZ_SIDE_PAINTER: Painter = (x, _y, rng) => {
+  const vein = x % 5 === 0 ? -0.05 : x % 5 === 3 ? 0.04 : 0;
+  const v = 1 + vein + (rng() * 0.05 - 0.025);
+  return [clamp255(QUARTZ_BASE[0] * v), clamp255(QUARTZ_BASE[1] * v), clamp255(QUARTZ_BASE[2] * v), 255];
+};
+
+/** 石英柱侧面：更深更规整的竖槽（"一根柱子"的观感） */
+const QUARTZ_PILLAR_SIDE_PAINTER: Painter = (x, _y, rng) => {
+  const groove = x % 8 === 0 ? -0.16 : x % 8 === 4 ? 0.08 : 0;
+  const v = 1 + groove + (rng() * 0.05 - 0.025);
+  return [clamp255(QUARTZ_BASE[0] * v), clamp255(QUARTZ_BASE[1] * v), clamp255(QUARTZ_BASE[2] * v), 255];
+};
+
+/** 石英柱顶面：同心方框（原版柱类方块的通用做法） */
+const QUARTZ_PILLAR_TOP_PAINTER: Painter = (x, y, rng) => {
+  const edge = Math.min(x, y, TILE_SIZE - 1 - x, TILE_SIZE - 1 - y);
+  const v = 1 + (edge <= 1 ? -0.14 : edge <= 3 ? 0.06 : 0) + (rng() * 0.05 - 0.025);
+  return [clamp255(QUARTZ_BASE[0] * v), clamp255(QUARTZ_BASE[1] * v), clamp255(QUARTZ_BASE[2] * v), 255];
+};
+
+/** 錾制石英块：中间两道竖线 + 上下横带的"雕花"图案 */
+const CHISELED_QUARTZ_PAINTER: Painter = (x, y, rng) => {
+  const band = y < 2 || y > 13 || (x >= 6 && x <= 9);
+  const v = 1 + (band ? -0.12 : 0.04) + (rng() * 0.05 - 0.025);
+  return [clamp255(QUARTZ_BASE[0] * v), clamp255(QUARTZ_BASE[1] * v), clamp255(QUARTZ_BASE[2] * v), 255];
+};
+
+/** 平滑石英：整块几乎纯色（比石英块更"平"，原版由石英块烧出来） */
+const SMOOTH_QUARTZ_PAINTER: Painter = (_x, _y, rng) => {
+  const v = 1 + (rng() * 0.03 - 0.015);
+  return [clamp255(QUARTZ_BASE[0] * v), clamp255(QUARTZ_BASE[1] * v), clamp255(QUARTZ_BASE[2] * v), 255];
+};
+
+/** 深板岩瓦：2×2 的方形瓦片 + 深缝（与深板岩砖同一族，但缝更密） */
+const DEEPSLATE_TILES_PAINTER: Painter = (x, y, rng) => {
+  const seam = x % 8 === 7 || y % 8 === 7;
+  const highlight = !seam && (x % 8 === 0 || y % 8 === 0);
+  const v = (seam ? 0.72 : highlight ? 1.08 : 1) + (rng() * 0.1 - 0.05);
+  return [clamp255(74 * v), clamp255(74 * v), clamp255(78 * v), 255];
+};
+
+PAINTERS.quartz_block_top = QUARTZ_TOP_PAINTER;
+PAINTERS.quartz_block_side = QUARTZ_SIDE_PAINTER;
+PAINTERS.quartz_pillar_top = QUARTZ_PILLAR_TOP_PAINTER;
+PAINTERS.quartz_pillar_side = QUARTZ_PILLAR_SIDE_PAINTER;
+PAINTERS.chiseled_quartz_block = CHISELED_QUARTZ_PAINTER;
+PAINTERS.smooth_quartz = SMOOTH_QUARTZ_PAINTER;
+PAINTERS.deepslate_tiles = DEEPSLATE_TILES_PAINTER;
+// 红色下界砖：与下界砖同一套砖缝画笔，只是底色换成暗红（原版就是"红砖版下界砖"）
+PAINTERS.red_nether_bricks = brickPainter([92, 28, 30]);
+/** 下界石英（物品图标）：一小堆奶白的碎晶 */
+PAINTERS.item_quartz = lump(
+  [
+    [244, 240, 234],
+    [214, 208, 200],
+    [178, 172, 166],
+  ],
+  'iquartz',
+  4.2,
+);
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

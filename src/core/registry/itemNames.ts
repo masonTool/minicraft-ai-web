@@ -171,6 +171,16 @@ const STONE_VARIANT_PARENTS_CN: Record<string, string> = {
   nether_bricks: '下界砖块',
   end_stone_bricks: '末地石砖',
   purpur_block: '紫珀块',
+  // ---- 批次 42 追加（石英家族 / 深板岩瓦 / 红色下界砖 / 海晶石三兄弟）
+  // ⚠️ 这张表是**变体名的词干**，通常等于母方块中文名，但石英是例外：
+  // 母方块叫"石英块"，它的台阶/楼梯在原版叫"石英台阶/石英楼梯"（没有"块"字）
+  quartz_block: '石英',
+  smooth_quartz: '平滑石英',
+  deepslate_tiles: '深板岩瓦',
+  red_nether_bricks: '红色下界砖',
+  prismarine: '海晶石',
+  prismarine_bricks: '海晶石砖',
+  dark_prismarine: '暗海晶石',
 };
 for (const [base, cn] of Object.entries(STONE_VARIANT_PARENTS_CN)) {
   put(`${base}_slab`, `${cn}台阶`);
@@ -304,6 +314,13 @@ const EXPLICIT: Record<string, string> = {
   chiseled_sandstone: '錾制砂岩',
   cut_sandstone: '切制砂岩',
   smooth_sandstone: '平滑砂岩',
+  // 石英家族与深板岩瓦、红色下界砖（批次 42）
+  quartz_block: '石英块',
+  chiseled_quartz_block: '錾制石英块',
+  quartz_pillar: '石英柱',
+  smooth_quartz: '平滑石英',
+  deepslate_tiles: '深板岩瓦',
+  red_nether_bricks: '红色下界砖',
   // 功能方块
   crafting_table: '工作台',
   furnace: '熔炉',
@@ -395,6 +412,8 @@ const EXPLICIT: Record<string, string> = {
   iron_ingot: '铁锭',
   // 铁粒（B11）：1 铁锭 ↔ 9 铁粒，锁链的原料
   iron_nugget: '铁粒',
+  // 下界石英（批次 42）：石英家族的唯一原料
+  quartz: '下界石英',
   gold_ingot: '金锭',
   copper_ingot: '铜锭',
   brick: '红砖',
