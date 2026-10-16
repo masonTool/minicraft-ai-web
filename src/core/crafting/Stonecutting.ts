@@ -103,9 +103,11 @@ const CONVERSIONS: readonly (readonly [number, number])[] = [
   [Block.STONE, Block.STONE_BRICKS],
   [Block.STONE, Block.CHISELED_STONE_BRICKS],
   [Block.STONE_BRICKS, Block.CHISELED_STONE_BRICKS],
-  // ---- 砂岩
+  // ---- 砂岩与红砂岩（批次 45 把红砂岩那一对补齐：两个家族在切石机里也同构）
   [Block.SANDSTONE, Block.CUT_SANDSTONE],
   [Block.SANDSTONE, Block.CHISELED_SANDSTONE],
+  [Block.RED_SANDSTONE, Block.CUT_RED_SANDSTONE],
+  [Block.RED_SANDSTONE, Block.CHISELED_RED_SANDSTONE],
   // ---- 三种石头磨制（原版只有这一条路，不能"石头直接切磨制花岗岩"）
   [Block.GRANITE, Block.POLISHED_GRANITE],
   [Block.DIORITE, Block.POLISHED_DIORITE],

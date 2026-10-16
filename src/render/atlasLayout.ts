@@ -600,6 +600,13 @@ export const TILE_ORDER = [
   'stonecutter_top',
   'stonecutter_bottom',
   'stonecutter_side',
+  // ---- 红沙与红砂岩（批次 45）：与砂岩家族一一对应，只换色调
+  'red_sand',
+  'red_sandstone',
+  'red_sandstone_top',
+  'chiseled_red_sandstone',
+  'cut_red_sandstone',
+  'smooth_red_sandstone',
   // ---- 木制方块族（批次 38）：5 种木材 ×（门 / 活板门 / 栅栏门）。
   // 栅栏不单独出贴图——它直接复用该木材的木板贴图（原版也是这个观感）
   'spruce_door',

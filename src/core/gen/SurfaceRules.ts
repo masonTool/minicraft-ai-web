@@ -81,11 +81,16 @@ export function columnSurface(
     return { surface: block, subSurface: block, subDepth: biome.subDepth, deepBands: null, deepDepth: 0 };
   }
 
-  // 恶地：地表陶瓦 + 往下 20 多格的彩色色带
+  // 恶地：地表红沙 + 次表层陶瓦 + 往下 20 多格的彩色色带
+  //
+  // ⚠️ 地表原本铺的是 `biome.surface`（原色陶瓦），批次 45 改成**红沙**——
+  // 原版恶地地表就是红沙，而且红沙是红砂岩家族**唯一**的原料来源
+  // （批次 42 正是因为"没有红沙"把红砂岩家族整族记进了不做清单）。
+  // 陶瓦没有消失：它退到次表层与下面的色带，那一层才是恶地的招牌。
   if (biome.id === Biome.BADLANDS) {
     const bandSeed = bandHash(Math.floor(worldX / 7), Math.floor(worldZ / 7), 0x5bd1);
     return {
-      surface: biome.surface,
+      surface: Block.RED_SAND,
       subSurface: biome.subSurface,
       subDepth: 2,
       deepBands: BADLANDS_BANDS,

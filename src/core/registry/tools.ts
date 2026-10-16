@@ -271,6 +271,11 @@ requirePickaxe(0, [
   Block.CHISELED_SANDSTONE,
   Block.CUT_SANDSTONE,
   Block.SMOOTH_SANDSTONE,
+  // 红砂岩家族（批次 45）：与砂岩家族同一档——要镐，但不挑等级
+  Block.RED_SANDSTONE,
+  Block.CHISELED_RED_SANDSTONE,
+  Block.CUT_RED_SANDSTONE,
+  Block.SMOOTH_RED_SANDSTONE,
   Block.COBBLESTONE_WALL,
   Block.STONE_BRICK_WALL,
   Block.FURNACE,

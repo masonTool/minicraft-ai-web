@@ -572,10 +572,27 @@ for (const id of [
   BUILDING.add(id);
 }
 
+// 砂岩家族与红砂岩家族（批次 41 的漏登记 + 批次 45）：同样是建材。
+// ⚠️ `錾制/切制/平滑砂岩` 自批次 41 起一直**漏在这里**（只有"砂岩"本体登记了），
+// 于是那三件掉进了"矿石与材料"——它们跟石头一样是建材，顺手补齐。
+for (const id of [
+  Block.CHISELED_SANDSTONE,
+  Block.CUT_SANDSTONE,
+  Block.SMOOTH_SANDSTONE,
+  Block.RED_SANDSTONE,
+  Block.CHISELED_RED_SANDSTONE,
+  Block.CUT_RED_SANDSTONE,
+  Block.SMOOTH_RED_SANDSTONE,
+]) {
+  BUILDING.add(id);
+}
+
 const NATURAL = new Set<number>([
   Block.GRASS_BLOCK,
   Block.DIRT,
   Block.SAND,
+  // 红沙（批次 45）：跟沙子一样是"自然"方块（它长在恶地地表）
+  Block.RED_SAND,
   Block.GRAVEL,
   Block.CLAY,
   Block.OAK_LOG,

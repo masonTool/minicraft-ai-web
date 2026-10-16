@@ -1256,6 +1256,45 @@ const STONECUTTER_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 红沙与红砂岩（批次 45）
+
+/**
+ * 红沙与红砂岩家族（批次 45，B23 的收尾）。
+ *
+ * 批次 42 把红砂岩家族记进了"不做"清单，理由是**原料从哪来**那条老规矩：
+ * 红砂岩要红沙，而红沙只长在恶地。当时判断"本项目没有恶地"——这句其实是错的：
+ * 恶地（`Biome.BADLANDS`）从地貌批次起就在，连彩色陶瓦色带都铺好了，
+ * 缺的只是**地表那一层红沙**（原版恶地地表是红沙，陶瓦在它下面）。
+ *
+ * 所以这一批先补红沙、再让它长在恶地地表，红砂岩家族才真正成立：
+ *
+ *   id 411      红沙（普通 cube，可以徒手铲）
+ *   id 412~415  红砂岩 / 錾制红砂岩 / 切制红砂岩 / 平滑红砂岩（4 个母方块）
+ *   id 416~421  它们的 6 个变体（3 + 1 + 2，见下面的变体表）
+ *
+ * ⚠️ 变体的 id **不能靠顺序排**：变体段从 351 起顺序分配，第一批 23 个家族正好排到 403，
+ * 后面 404~410 是写死的母方块常量（石英家族 + 切石机）。再往变体表末尾追加家族，
+ * 顺序分配就会**撞进那一段**。所以这里给变体表加了"显式起点"这一列
+ * （`RED_SANDSTONE_VARIANT_ID_START`），追加家族时把下一段的起点写清楚即可。
+ */
+export const RED_SAND_ID_START = 411;
+
+/** 红砂岩家族变体的显式起点（见上面的注解：顺序分配会撞进写死的母方块段） */
+export const RED_SANDSTONE_VARIANT_ID_START = 416;
+
+const RED_SAND_SPECS: readonly BlockSpec[] = [
+  { id: 411, name: 'minecraft:red_sand', tiles: ['red_sand', 'red_sand', 'red_sand'] },
+  {
+    id: 412,
+    name: 'minecraft:red_sandstone',
+    // 贴图顺序 [顶面, 底面, 侧面]：与普通砂岩同一套结构，只是换成红砂岩那三张
+    tiles: ['red_sandstone_top', 'red_sandstone_top', 'red_sandstone'],
+  },
+  { id: 413, name: 'minecraft:chiseled_red_sandstone', tiles: ['chiseled_red_sandstone', 'red_sandstone', 'chiseled_red_sandstone'] },
+  { id: 414, name: 'minecraft:cut_red_sandstone', tiles: ['cut_red_sandstone', 'red_sandstone', 'cut_red_sandstone'] },
+  { id: 415, name: 'minecraft:smooth_red_sandstone', tiles: ['smooth_red_sandstone', 'smooth_red_sandstone', 'smooth_red_sandstone'] },
+];
+
 // ---------------------------------------------------------------- 石材家族的变体（批次 41）
 
 /**
@@ -1298,6 +1337,9 @@ const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
   LILY_PAD_SPECS,
   CARPET_SPECS,
   SNOW_SPECS,
+  // 红沙与红砂岩（批次 45）：红砂岩家族的变体要按 `tilesOfDefined(412)` 查母方块贴图，
+  // 所以这一段必须在 `DEFINED_SPECS` 里（漏了会直接抛"找不到贴图"，这正是想要的效果）
+  RED_SAND_SPECS,
   CHAIN_SPECS,
   VINE_SPECS,
   COPPER_SPECS,
@@ -1323,12 +1365,18 @@ function tilesOfDefined(id: number): readonly [string, string, string] {
 export type StoneVariantKind = 'slab' | 'stairs' | 'wall';
 
 /**
- * [母方块 id, 命名前缀, 原版有的变体]。
+ * [母方块 id, 命名前缀, 原版有的变体, 显式起点?]。
  *
  * 母方块 id 这里只能写数字：本文件在 `Block` 枚举**之前**就要把这些方块拼进 `SPECS`。
  * 代价是数字可能打错——所以套件里有一条断言核对"id 对应的方块名 == 登记名"。
+ *
+ * **第 4 列（显式起点）只写在每一段的第一行**：写了它就把分配器的游标跳到那个 id，
+ * 后面的家族继续往后排。批次 45 的红砂岩家族就是这么接在 416 上的
+ * （不写的话会从 404 接着排，直接撞进写死的石英家族与切石机）。
  */
-const STONE_VARIANT_FAMILIES: readonly (readonly [number, string, readonly StoneVariantKind[]])[] = [
+const STONE_VARIANT_FAMILIES: readonly (
+  readonly [number, string, readonly StoneVariantKind[], number?]
+)[] = [
   [13, 'granite', ['slab', 'stairs', 'wall']],
   [14, 'diorite', ['slab', 'stairs', 'wall']],
   [15, 'andesite', ['slab', 'stairs', 'wall']],
@@ -1354,6 +1402,12 @@ const STONE_VARIANT_FAMILIES: readonly (readonly [number, string, readonly Stone
   [218, 'prismarine', ['slab', 'stairs', 'wall']],
   [219, 'prismarine_bricks', ['slab', 'stairs']],
   [220, 'dark_prismarine', ['slab', 'stairs']],
+  // ---- 批次 45 追加（id 416 起）：红砂岩家族（红沙长在恶地地表，原料链在这里闭合）。
+  // 原版的变体分布与普通砂岩**完全一致**（砂岩那三行就在上面几行，可以对着看）：
+  // 红砂岩三件套、切制只有台阶、平滑有台阶与楼梯、錾制没有变体。
+  [412, 'red_sandstone', ['slab', 'stairs', 'wall'], RED_SANDSTONE_VARIANT_ID_START],
+  [414, 'cut_red_sandstone', ['slab']],
+  [415, 'smooth_red_sandstone', ['slab', 'stairs']],
 ];
 
 const STONE_VARIANT_MAP = new Map<string, number>();
@@ -1361,7 +1415,9 @@ const STONE_VARIANT_MAP = new Map<string, number>();
 const STONE_VARIANT_SPECS: readonly BlockSpec[] = (() => {
   const specs: BlockSpec[] = [];
   let next = STONE_VARIANT_ID_START;
-  for (const [parent, name, kinds] of STONE_VARIANT_FAMILIES) {
+  for (const [parent, name, kinds, explicitStart] of STONE_VARIANT_FAMILIES) {
+    // 显式起点：把游标跳到这一段该在的位置（批次 45 的红砂岩家族用它避开写死的母方块段）
+    if (explicitStart !== undefined) next = explicitStart;
     // 母方块横跨好几段规格，所以查"全部已定义的段"而不是 `baseTiles`（它只认 BASE_SPECS）
     const tiles = tilesOfDefined(parent);
     for (const kind of kinds) {
@@ -1374,9 +1430,14 @@ const STONE_VARIANT_SPECS: readonly BlockSpec[] = (() => {
   return specs;
 })();
 
-/** 母方块与它的变体（硬度表 / 工具表"跟随母方块"要用） */
+/**
+ * 母方块与它的变体（硬度表 / 工具表"跟随母方块"要用）。
+ *
+ * ⚠️ 这里**故意只暴露前 3 列**：显式起点是"分配 id"用的实现细节，
+ * 下游（硬度 / 工具 / 配方 / 切石表）只关心"谁的变体有哪些"。
+ */
 export const STONE_VARIANT_PARENTS: readonly (readonly [number, string, readonly StoneVariantKind[]])[] =
-  STONE_VARIANT_FAMILIES;
+  STONE_VARIANT_FAMILIES.map(([parent, name, kinds]) => [parent, name, kinds] as const);
 
 /** 某个"母方块 + 变体"的 id；表里没有这个变体时返回 undefined */
 export function stoneVariantId(parentName: string, kind: StoneVariantKind): number | undefined {
@@ -1413,6 +1474,7 @@ const SPECS: readonly BlockSpec[] = [
   ...MORE_STONE_SPECS,
   ...STONE_VARIANT_SPECS,
   ...STONECUTTER_SPECS,
+  ...RED_SAND_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1632,6 +1694,12 @@ export const Block = {
   SNOW: SNOW_LAYER_ID,
   /** 切石机（H11）：整块方块，没有状态；右键打开"一进多选"的界面 */
   STONECUTTER: STONECUTTER_ID,
+  // ---- 红沙与红砂岩（批次 45，见 `RED_SAND_ID_START`）
+  RED_SAND: 411,
+  RED_SANDSTONE: 412,
+  CHISELED_RED_SANDSTONE: 413,
+  CUT_RED_SANDSTONE: 414,
+  SMOOTH_RED_SANDSTONE: 415,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1739,6 +1807,8 @@ const HARDNESS = new Map<number, number>([
   [Block.DIRT, 0.5],
   [Block.GRASS_BLOCK, 0.6],
   [Block.SAND, 0.5],
+  // 红沙与沙子同档 0.5（原版如此；挖起来与沙子一模一样）
+  [Block.RED_SAND, 0.5],
   [Block.GRAVEL, 0.6],
   [Block.CLAY, 0.6],
   [Block.SANDSTONE, 0.8],
@@ -1860,6 +1930,12 @@ HARDNESS.set(Block.COBBLED_DEEPSLATE, 3.5);
 HARDNESS.set(Block.CHISELED_SANDSTONE, 0.8);
 HARDNESS.set(Block.CUT_SANDSTONE, 0.8);
 HARDNESS.set(Block.SMOOTH_SANDSTONE, 0.8);
+
+// 红砂岩家族（批次 45）：与砂岩家族同档 0.8（原版两个家族是一套数值）
+HARDNESS.set(Block.RED_SANDSTONE, 0.8);
+HARDNESS.set(Block.CHISELED_RED_SANDSTONE, 0.8);
+HARDNESS.set(Block.CUT_RED_SANDSTONE, 0.8);
+HARDNESS.set(Block.SMOOTH_RED_SANDSTONE, 0.8);
 // 末地建材（此前没登记，一律落到默认的 3；紫珀实际是 1.5）
 HARDNESS.set(Block.END_STONE, 3);
 HARDNESS.set(Block.END_STONE_BRICKS, 3);
@@ -1956,6 +2032,8 @@ const HAND_HARVESTABLE = new Set<number>([
   Block.DIRT,
   Block.GRASS_BLOCK,
   Block.SAND,
+  // 红沙（批次 45）：与沙子同一条——徒手就能挖、拿锹更快（不放进需求表）
+  Block.RED_SAND,
   Block.GRAVEL,
   Block.CLAY,
   Block.SNOW_BLOCK,

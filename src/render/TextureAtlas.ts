@@ -762,6 +762,31 @@ PAINTERS.cut_sandstone = (x, y, rng) => {
 };
 PAINTERS.smooth_sandstone = layered(224, 2, 3, [1.0, 0.96, 0.78]);
 
+// ---- 红沙与红砂岩（批次 45）
+//
+// 三张母方块贴图与普通砂岩**同源**（同一套画笔、只把色调换成红沙那种赭红），
+// 这样"砂岩家族"与"红砂岩家族"在观感上是一家的两个颜色——
+// 原版正是如此，而且恶地地表换成红沙之后，玩家一眼就知道该来这里挖红砂岩。
+//
+// 红沙比普通沙**略深、略红**：沙子是 [1.0, 0.96, 0.78] 的偏黄，
+// 红沙用 [1.0, 0.66, 0.44]——再红就会像"砖粉"而不是"沙"。
+PAINTERS.red_sand = layered(216, 6, 6, [1.0, 0.68, 0.46]);
+PAINTERS.red_sandstone = (_x, y, rng) => {
+  // 与砂岩侧面同一套横向层理，只是底色偏红
+  const band = Math.sin(y * 0.9) * 8;
+  const v = 190 + band + (rng() * 8 - 4);
+  return [clamp255(v), clamp255(v * 0.68), clamp255(v * 0.5), 255];
+};
+PAINTERS.red_sandstone_top = layered(192, 5, 6, [1.0, 0.7, 0.5]);
+PAINTERS.chiseled_red_sandstone = chiseledPainter([186, 130, 96]);
+PAINTERS.cut_red_sandstone = (x, y, rng) => {
+  const base = layered(190, 4, 5, [1.0, 0.7, 0.5])(x, y, rng);
+  if (x % 8 !== 7 && y % 8 !== 7) return base;
+  const v = 0.88 + rng() * 0.06;
+  return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+};
+PAINTERS.smooth_red_sandstone = layered(198, 2, 3, [1.0, 0.71, 0.51]);
+
 // 染色玻璃：16 张由配色表生成（玻璃板复用同一张，靠几何做薄片）
 for (const color of DYE_COLORS) {
   PAINTERS[`stained_glass_${color.name}`] = stainedGlassPainter(color.rgb);

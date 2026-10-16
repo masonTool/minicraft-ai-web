@@ -369,6 +369,9 @@ const STARTING_HOTBAR: readonly number[] = [
   Block.STONE,
   Block.POLISHED_DEEPSLATE,
   Block.QUARTZ_BLOCK,
+  // 开发期红沙与红砂岩（批次 45）：红沙是恶地地表那一层，也是红砂岩家族的唯一起点
+  Block.RED_SAND,
+  Block.RED_SANDSTONE,
   // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
   Block.ANVIL,
   Block.IRON_BLOCK,

@@ -49,6 +49,11 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 石英块 → 平滑石英（批次 42，原版：平滑石英只能这么来）
   { input: Block.QUARTZ_BLOCK, output: { id: Block.SMOOTH_QUARTZ, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
 
+  // 砂岩 → 平滑砂岩 / 红砂岩 → 平滑红砂岩（批次 45，原版：平滑砂岩家族只能这么来）
+  // ⚠️ 普通砂岩这一条此前**漏了**（批次 41 做了平滑砂岩方块却没给来源），一并补上
+  { input: Block.SANDSTONE, output: { id: Block.SMOOTH_SANDSTONE, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
+  { input: Block.RED_SANDSTONE, output: { id: Block.SMOOTH_RED_SANDSTONE, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
+
   // 生肉 → 熟肉（经验值取自原版：生肉 0.35）
   { input: Item.BEEF, output: { id: Item.COOKED_BEEF, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
   { input: Item.PORKCHOP, output: { id: Item.COOKED_PORKCHOP, count: 1 }, time: SMELTING_TIME, experience: 0.35 },

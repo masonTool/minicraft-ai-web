@@ -181,6 +181,10 @@ const STONE_VARIANT_PARENTS_CN: Record<string, string> = {
   prismarine: '海晶石',
   prismarine_bricks: '海晶石砖',
   dark_prismarine: '暗海晶石',
+  // ---- 批次 45 追加（红砂岩家族）：词干与砂岩家族一一对应
+  red_sandstone: '红砂岩',
+  cut_red_sandstone: '切制红砂岩',
+  smooth_red_sandstone: '平滑红砂岩',
 };
 for (const [base, cn] of Object.entries(STONE_VARIANT_PARENTS_CN)) {
   put(`${base}_slab`, `${cn}台阶`);
@@ -316,6 +320,12 @@ const EXPLICIT: Record<string, string> = {
   chiseled_sandstone: '錾制砂岩',
   cut_sandstone: '切制砂岩',
   smooth_sandstone: '平滑砂岩',
+  // 红沙与红砂岩（批次 45）：名字与砂岩家族一一对应，只加"红"字
+  red_sand: '红沙',
+  red_sandstone: '红砂岩',
+  chiseled_red_sandstone: '錾制红砂岩',
+  cut_red_sandstone: '切制红砂岩',
+  smooth_red_sandstone: '平滑红砂岩',
   // 石英家族与深板岩瓦、红色下界砖（批次 42）
   quartz_block: '石英块',
   chiseled_quartz_block: '錾制石英块',
@@ -648,6 +658,7 @@ const DESCRIPTIONS: Record<string, string> = {
   ice: '光滑的冰面，走在上面会打滑。',
   gravel: '会掉落的方块；也是村庄道路的铺装材料。',
   sand: '会掉落的方块，能烧成玻璃。',
+  red_sand: '恶地地表那一层赭红色的沙：4 个能合成红砂岩，也是红砂岩家族的唯一起点（普通沙子在沙漠与海边）。',
   redstone_wire: '红石线：把信号从电源传到元件上，最多传 15 格。',
   redstone_torch: '持续输出 15 级信号，也能反过来给红石线充能。',
   lever: '手动开关：右键切换通断。',

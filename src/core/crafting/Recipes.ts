@@ -112,6 +112,27 @@ const BASE_RECIPES: readonly Recipe[] = [
 
   // ---- 沙 → 砂岩
   { kind: 'shaped', result: { id: Block.SANDSTONE, count: 1 }, pattern: ['SS', 'SS'], key: { S: Block.SAND } },
+
+  // ---- 砂岩家族与红砂岩家族（批次 45）
+  //
+  // 原版这两条链**完全同构**，所以这里成对写、也成对断言：
+  //   4 沙 → 1 砂岩            ｜ 4 红沙 → 1 红砂岩
+  //   4 砂岩 → 4 切制砂岩       ｜ 4 红砂岩 → 4 切制红砂岩
+  //   2 砂岩台阶 → 1 錾制砂岩    ｜ 2 红砂岩台阶 → 1 錾制红砂岩
+  //   （平滑砂岩走熔炼，见 Smelting.ts；切制/錾制也能用切石机，两条路都通）
+  //
+  // ⚠️ 普通砂岩的"切制 / 錾制"此前**只有切石机这一条路**（批次 44 才补上），
+  // 原版这两条合成配方一直都在——本批顺手补齐，两个家族从此一模一样。
+  { kind: 'shaped', result: { id: Block.CUT_SANDSTONE, count: 4 }, pattern: ['SS', 'SS'], key: { S: Block.SANDSTONE } },
+  { kind: 'shaped', result: { id: Block.CHISELED_SANDSTONE, count: 1 }, pattern: ['S', 'S'], key: { S: slabId(3) } },
+  { kind: 'shaped', result: { id: Block.RED_SANDSTONE, count: 1 }, pattern: ['SS', 'SS'], key: { S: Block.RED_SAND } },
+  { kind: 'shaped', result: { id: Block.CUT_RED_SANDSTONE, count: 4 }, pattern: ['SS', 'SS'], key: { S: Block.RED_SANDSTONE } },
+  {
+    kind: 'shaped',
+    result: { id: Block.CHISELED_RED_SANDSTONE, count: 1 },
+    pattern: ['S', 'S'],
+    key: { S: stoneVariantId('red_sandstone', 'slab')! },
+  },
 ];
 
 /**
