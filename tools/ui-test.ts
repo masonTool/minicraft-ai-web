@@ -28,6 +28,9 @@ import {
   slicePage,
 } from '../src/ui/ItemPager.ts';
 import { TOUCH_ICON_LABELS, TOUCH_ICON_NAMES, touchIconSvg } from '../src/ui/TouchIcons.ts';
+import { iconBackingScale } from '../src/ui/ItemIcon.ts';
+import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
+import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
 
 let passed = 0;
 let failed = 0;
@@ -158,6 +161,43 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
   // 触屏提示里不能再出现 <kbd>（手机上没有键盘）
   const touchBlock = /<div class="overlay-help touch-only">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
   check('触屏提示里没有键盘按键', touchBlock.length > 0 && !touchBlock.includes('<kbd>'), touchBlock.slice(0, 40));
+}
+
+console.log('\n[手机端物品显示与提示（批次 95 体检）]');
+{
+  // ---- ① 图标在高分屏上要清晰：背板按 DPR 放大（1~2 倍）
+  equal('DPR 1 → 1 倍（桌面不变）', iconBackingScale(1), 1);
+  equal('DPR 1.5 → 2 倍', iconBackingScale(1.5), 2);
+  equal('DPR 2 → 2 倍', iconBackingScale(2), 2);
+  equal('DPR 3 → 仍夹到 2 倍（图集一格只有 16px，再高只是更大更糊）', iconBackingScale(3), 2);
+  equal('DPR 0.5 / NaN / 0 → 1 倍（异常输入不吃亏）', `${iconBackingScale(0.5)},${iconBackingScale(Number.NaN)},${iconBackingScale(0)}`, '1,1,1');
+
+  // ---- ② 触摸端的"长按看详情"阈值必须**长于**长按右键，否则同一个手势会互相打架
+  check(
+    `看详情（${TOUCH_TOOLTIP_MS}ms）比长按右键（${TOUCH_LONG_PRESS_MS}ms）晚一步`,
+    TOUCH_TOOLTIP_MS > TOUCH_LONG_PRESS_MS,
+    `${TOUCH_TOOLTIP_MS} vs ${TOUCH_LONG_PRESS_MS}`,
+  );
+  check('但也不能长到"按不出来"（≤ 1200ms）', TOUCH_TOOLTIP_MS <= 1200, String(TOUCH_TOOLTIP_MS));
+
+  // ---- ③ CSS：触摸端的快捷栏必须可点、槽位够大、物品名浮标在
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  for (const [label, needle] of [
+    // ⚠️ 这一条是这次体检的核心：`#hud` 是 pointer-events: none，不显式打开的话
+    // 点快捷栏的手势会落到铺满全屏的视角面上（= 在身后挖方块），切槽永远点不动
+    ['快捷栏可点（命中打开）', '#hotbar { pointer-events: auto; z-index: 1; }'],
+    ['触摸端槽位按下有反馈', 'body.touch-mode #hotbar .slot:active'],
+    ['触摸端槽位放大到 44px（平台最小手势尺寸）', '#hotbar .slot { width: 44px; height: 44px; }'],
+    ['选中物品名浮标', '#selected-item-name'],
+    ['物品名浮标有显示态', '#selected-item-name.show'],
+  ] as const) {
+    check(`index.html 里有"${label}"`, compact.includes(needle), needle);
+  }
+  // 浮标只是提示，不能抢手势（它在 HUD 里本来就不吃事件；写显式一点，免得以后挪位置踩坑）
+  const nameRule = /#selected-item-name \{([^}]*)\}/.exec(compact)?.[1] ?? '';
+  check('物品名浮标不吃手势（pointer-events: none）', nameRule.includes('pointer-events: none'), nameRule.slice(0, 60));
+  check('物品名浮标贴在快捷栏上方（用了底部安全区）', nameRule.includes('safe-area-inset-bottom'));
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

@@ -79,7 +79,8 @@ import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
-import { Tooltip } from './ui/Tooltip.ts';
+import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
+import { devicePixelRatioValue } from './ui/Device.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
 import {
@@ -1125,7 +1126,7 @@ class App {
       lastRendererFailure = rendererFailure(message);
       throw new Error(UNSUPPORTED_GL_ERROR);
     }
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatioValue(), 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
 
@@ -1325,6 +1326,9 @@ class App {
     }
 
     // 触摸操作层：只在手势设备上创建，桌面端完全不引入这套 DOM
+    // `createTouchControls()` 里会给 <body> 挂 `touch-mode`（CSS 靠它切提示文案，
+    // 批次 95 起也靠它决定"快捷栏能不能点、槽位要不要放大"）——
+    // 用类名而不是 `@media (pointer: coarse)`，是为了与"操作层是否存在"共用**同一个判据**
     this.touch = isTouchDevice() ? this.createTouchControls() : null;
 
     this.bindEvents();
@@ -2087,21 +2091,36 @@ class App {
       this.hotbarSlots.push(slot);
     }
 
+    // 物品名浮标（批次 95）：挂在快捷栏**外面**（它自己不吃手势，且不该被槽位重建带走）
+    if (!this.selectedItemName) {
+      const label = document.createElement('div');
+      label.id = 'selected-item-name';
+      // 父元素是 HUD（pointer-events: none），这里不需要再关一次；显式写出来免得以后挪位置踩坑
+      label.style.pointerEvents = 'none';
+      document.getElementById('hud')?.appendChild(label);
+      this.selectedItemName = label;
+    }
+
     if (!this.hotbarTooltipBound) {
       this.hotbarTooltipBound = true;
-      this.tooltip.delegate(container, (element) => {
+      this.tooltip.delegate(
+        container,
+        (element) => {
         const index = Number(element.dataset.index);
         if (!Number.isFinite(index)) return null;
         const stack = this.inventory.get(index);
         return stack ? itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name) : null;
-      });
+        },
+        // 触摸端：长按 600ms 看详情（批次 95）。快捷栏上一次长按没有别的含义，
+        // 所以这里是最安全的"看物品详情"入口——手机上原来根本看不到耐久与附魔
+        { touchLongPressMs: TOUCH_TOOLTIP_MS },
+      );
     }
 
-    // 触摸端点快捷栏切换（鼠标路径走键盘 1-9）
-    bindHotbarTouch(container, (index) => {
-      this.hotbarIndex = index;
-      this.refreshHotbar();
-    });
+    // 触摸端点快捷栏切换（鼠标路径走键盘 1-9）。
+    // ⚠️ 这条绑定以前**从来没被触发过**：`#hud` 是 pointer-events: none，
+    // 而触摸层的视角面铺满全屏且排在快捷栏之后（见 index.html 的 body.touch 规则）
+    bindHotbarTouch(container, (index) => this.selectSlot(index));
 
     this.refreshHotbar();
   }
@@ -2385,7 +2404,7 @@ class App {
       if (e.code.startsWith('Digit')) {
         const digit = Number(e.code.slice(5));
         if (digit >= 1 && digit <= HOTBAR_SIZE) {
-          this.hotbarIndex = digit - 1;
+          this.selectSlot(digit - 1);
           this.refreshHotbar();
         }
       }
@@ -7510,9 +7529,40 @@ class App {
 
   selectSlot(index: number): void {
     if (index < 0 || index >= HOTBAR_SIZE) return;
+    const changed = this.hotbarIndex !== index;
     this.hotbarIndex = index;
     this.refreshHotbar();
+    // 换槽时浮一下物品名（批次 95，对齐基岩版）：手机上"手上是什么"只能靠图标，
+    // 而图标在 44px 的格子里看不太清（尤其是同名不同材质的工具）
+    if (changed) this.showSelectedItemName();
   }
+
+  /**
+   * 快捷栏上方的物品名浮标（批次 95）。
+   *
+   * 走 `selectedItemName` 这个元素而不是每帧重画：它是"换槽时的一次提示"，
+   * 2 秒后自己淡出（`#selected-item-name.show` 的过渡）。
+   */
+  private showSelectedItemName(): void {
+    const label = this.selectedItemName;
+    if (!label) return;
+    const stack = this.inventory.get(this.hotbarIndex);
+    if (!stack) {
+      label.classList.remove('show');
+      return;
+    }
+    const name = itemLabel(stack.id);
+    label.textContent = stack.count > 1 ? `${name} ×${stack.count}` : name;
+    label.classList.add('show');
+    if (this.itemNameTimer !== null) clearTimeout(this.itemNameTimer);
+    this.itemNameTimer = window.setTimeout(() => {
+      this.itemNameTimer = null;
+      label.classList.remove('show');
+    }, 2000);
+  }
+
+  private selectedItemName: HTMLDivElement | null = null;
+  private itemNameTimer: number | null = null;
 
   /** 查看/操作背包（自动化测试用） */
   get items(): Inventory {

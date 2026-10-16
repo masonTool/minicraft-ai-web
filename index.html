@@ -495,6 +495,32 @@
       }
       #hotbar .slot.active .index { opacity: 1; }
 
+      /* ⚠️ 触摸端必须让快捷栏**能点**（批次 95）。
+         `#hud` 是 pointer-events: none，而触摸操作层的"视角面"（#touch-look，铺满全屏）
+         在 DOM 里排在快捷栏之后——两者叠在一起时手势会落到视角面上：
+         表现是"点快捷栏没反应，反而在身后挖了一块方块"，而 `bindHotbarTouch()`
+         那句绑定从来没被触发过（离线断言也查不到，因为它只读 DOM 不看命中）。
+         打开命中 + 抬高层级之后，点格子才真的会切槽。
+         ⚠️ 这一条**不限定触摸设备**：桌面端同样是 pointer-events: none，所以"悬停快捷栏看物品
+         提示"与"点快捷栏切槽"在 PC 上也一直是死的（指针锁定期间鼠标事件不会落到 HUD 上，
+         解锁时又基本被暂停菜单盖住，所以打开它不会误伤操作）。 */
+      #hotbar { pointer-events: auto; z-index: 1; }
+      body.touch-mode #hotbar .slot { touch-action: manipulation; }
+      /* 手指按下去要有反馈：选中靠 `.active`，按下的瞬间也要变一下 */
+      body.touch-mode #hotbar .slot:active { background: rgba(255, 255, 255, .34); }
+
+      /* 选中物品的名字浮标（批次 95，对齐基岩版）：换槽时在快捷栏上方浮一条，
+         2 秒后淡出。手机上一眼能看到"手上是什么"，不用去翻背包 */
+      #selected-item-name {
+        position: absolute; left: 50%; transform: translateX(-50%);
+        bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+        padding: 4px 12px; border-radius: 14px;
+        background: rgba(0, 0, 0, .58); color: #fff; font-size: 13px;
+        white-space: nowrap; pointer-events: none;
+        opacity: 0; transition: opacity .35s;
+      }
+      #selected-item-name.show { opacity: 1; }
+
       /* ---------------- 经验条（快捷栏正上方，等级数字压在条中间） ---------------- */
       #xp-bar {
         position: absolute; left: 50%; transform: translateX(-50%);
@@ -1150,8 +1176,11 @@
       @media (max-width: 900px), (max-height: 560px) {
         #debug { font-size: 10px; line-height: 1.45; padding: 4px 6px; max-width: 46vw; }
         #hotbar { bottom: 12px; padding: 2px; gap: 1px; }
-        #hotbar .slot { width: 36px; height: 36px; }
-        #hotbar .slot canvas { width: 28px; height: 28px; }
+        /* 槽位从 36 提到 44（批次 95）：触摸端要"点得准"，44px 是平台最小手势尺寸，
+           而 36px 的格子在实际操作里经常点到隔壁。9 × 44 + 间隙 ≈ 408px，430px 宽的
+           竖屏手机放得下 */
+        #hotbar .slot { width: 44px; height: 44px; }
+        #hotbar .slot canvas { width: 36px; height: 36px; }
         #hotbar .slot .index { font-size: 9px; }
         #hotbar .slot .count { font-size: 11px; }
         /* 小屏：快捷栏更低，经验条与状态 HUD 跟着一起上移 */

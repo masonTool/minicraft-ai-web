@@ -86,7 +86,7 @@ import {
   pageSizeFor,
   slicePage,
 } from './ItemPager.ts';
-import { Tooltip } from './Tooltip.ts';
+import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
 
 export type InventoryPanelMode =
@@ -187,7 +187,7 @@ const CONTAINER_REFRESH_INTERVAL = 0.1;
  *     于是在合成格上按住不动就是"连续放材料"（批量放置），在箱子里按住就是"连续取一个"。
  * 桌面鼠标完全不走这条路径，行为与原来一致。
  */
-const TOUCH_LONG_PRESS_MS = 260;
+export const TOUCH_LONG_PRESS_MS = 260;
 const TOUCH_REPEAT_MS = 170;
 
 export class InventoryScreen {
@@ -346,7 +346,13 @@ export class InventoryScreen {
     this.root.className = 'hidden';
 
     // 一个委托监听覆盖所有槽位（含后面动态重建的创造物品栏）
-    this.tooltip.delegate(this.root, (target) => this.tooltipFor(target));
+    // 触摸端也开"长按看详情"（批次 95）：这里的长按**已经**被"右键"占着
+    //（按住 ≥260ms = 取一半 / 放一个），所以按**时长分层**——260ms 起是右键，
+    // 按住不放再到 600ms（`TOUCH_TOOLTIP_MS`）才是看详情。
+    // 内容和位置都在**显示这一刻**重算，所以就算右键已经动过格子也不会显示过期数量
+    this.tooltip.delegate(this.root, (target) => this.tooltipFor(target), {
+      touchLongPressMs: TOUCH_TOOLTIP_MS,
+    });
 
     this.panel = document.createElement('div');
     this.panel.className = 'inv-panel';

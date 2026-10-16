@@ -12,6 +12,28 @@
 import type { ItemTooltip } from '../core/registry/itemNames.ts';
 import { rarityClassName } from '../core/registry/itemVisuals.ts';
 
+/**
+ * 触摸端的"长按看详情"阈值（毫秒，批次 95）。
+ *
+ * 触摸屏**没有悬停**，所以桌面那条 `pointermove` 路径在手机上永远不成立：
+ * 第一版只有悬停，结果是"手机上根本看不到物品详情"（耐久、附魔、说明全在提示框里）。
+ * 长按是触摸端唯一可发现的手势，所以补一条按下计时。
+ *
+ * 取值比界面里"长按 = 右键"的 260ms（`InventoryScreen.TOUCH_LONG_PRESS_MS`）明显更长：
+ * 同一个手势按**时长分层**——260ms 起是"取一半/放一个"，按住不放再到 600ms 才是"看详情"。
+ */
+export const TOUCH_TOOLTIP_MS = 600;
+/** 手指移动超过这么多像素就当成"拖动/滚动"，取消长按 */
+const TOUCH_TOOLTIP_SLOP = 10;
+
+export interface DelegateOptions {
+  /**
+   * 触摸端长按多少毫秒后显示提示框（不填 = 触摸端不启用，只有悬停路径）。
+   * 只有在"长按没有别的含义"或"含义已经分层"的容器上才该开它。
+   */
+  touchLongPressMs?: number;
+}
+
 export class Tooltip {
   private readonly root: HTMLDivElement;
   private visible = false;
@@ -29,14 +51,18 @@ export class Tooltip {
   /**
    * 在一个容器上委托监听。
    * @param resolve 由"指针下面的元素"算出要显示的内容；返回 null 表示这个位置没有物品
+   * @param options 触摸端行为（见 `DelegateOptions`）
    */
-  delegate(container: HTMLElement, resolve: (target: HTMLElement) => ItemTooltip | null): void {
-    const onMove = (event: PointerEvent): void => {
+  delegate(
+    container: HTMLElement,
+    resolve: (target: HTMLElement) => ItemTooltip | null,
+    options: DelegateOptions = {},
+  ): void {
+    const targetAt = (event: Event): HTMLElement | null => {
       const target = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-tooltip]') ?? null;
-      if (!target || !container.contains(target)) {
-        this.hide();
-        return;
-      }
+      return target && container.contains(target) ? target : null;
+    };
+    const showFor = (target: HTMLElement, clientX: number, clientY: number): void => {
       if (target !== this.currentElement) {
         const data = resolve(target);
         if (!data) {
@@ -46,24 +72,94 @@ export class Tooltip {
         this.currentElement = target;
         this.render(data);
       }
-      this.place(event.clientX, event.clientY);
+      this.place(clientX, clientY);
     };
 
-    const onLeave = (): void => this.hide();
+    // ---- 桌面：跟着指针悬停（老路径，行为不变）
+    const onMove = (event: PointerEvent): void => {
+      // 触摸端不走这条：手指没有"悬停"，而且 `pointerover` 会在按下的同时触发，
+      // 紧接着被 `pointerdown` 收掉——表现成"闪一下就没了"（第一版就是这样）
+      if (event.pointerType === 'touch') return;
+      const target = targetAt(event);
+      if (!target) {
+        this.hide();
+        return;
+      }
+      showFor(target, event.clientX, event.clientY);
+    };
+
+    // ---- 触摸：按下后**按住不动**到阈值才显示，抬手即收
+    const touchMs = options.touchLongPressMs ?? 0;
+    let timer: number | null = null;
+    let startX = 0;
+    let startY = 0;
+    let touchShown = false;
+    const clearTimer = (): void => {
+      if (timer === null) return;
+      clearTimeout(timer);
+      timer = null;
+    };
+
+    const onDown = (event: PointerEvent): void => {
+      if (event.pointerType === 'touch' && touchMs > 0) {
+        const target = targetAt(event);
+        clearTimer();
+        touchShown = false;
+        if (!target) return;
+        startX = event.clientX;
+        startY = event.clientY;
+        const { clientX, clientY } = event;
+        timer = window.setTimeout(() => {
+          timer = null;
+          touchShown = true;
+          // 内容**在显示这一刻**才算（长按期间可能已经取走/放下了一件东西）
+          this.currentElement = null;
+          showFor(target, clientX, clientY);
+        }, touchMs);
+        return;
+      }
+      clearTimer();
+      this.hide();
+    };
+
+    const onTouchMove = (event: PointerEvent): void => {
+      if (event.pointerType !== 'touch') return;
+      if (timer === null) return;
+      // 手指挪了 = 在拖动/滚动，不是在"按住看详情"
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) <= TOUCH_TOOLTIP_SLOP) return;
+      clearTimer();
+    };
+
+    const onLeave = (): void => {
+      clearTimer();
+      this.hide();
+    };
+    const onUp = (): void => {
+      clearTimer();
+      if (touchShown) {
+        touchShown = false;
+        this.hide();
+      }
+    };
 
     container.addEventListener('pointermove', onMove);
+    container.addEventListener('pointermove', onTouchMove);
     container.addEventListener('pointerover', onMove);
     container.addEventListener('pointerleave', onLeave);
-    container.addEventListener('pointercancel', onLeave);
+    container.addEventListener('pointercancel', onUp);
+    container.addEventListener('pointerup', onUp);
     // 滚动/点击之后内容可能变了（例如刚合成掉一组材料），直接收起，避免显示过期信息
-    container.addEventListener('pointerdown', onLeave);
+    container.addEventListener('pointerdown', onDown);
 
     this.cleanups.push(() => {
+      clearTimer();
       container.removeEventListener('pointermove', onMove);
+      container.removeEventListener('pointermove', onTouchMove);
       container.removeEventListener('pointerover', onMove);
       container.removeEventListener('pointerleave', onLeave);
-      container.removeEventListener('pointercancel', onLeave);
-      container.removeEventListener('pointerdown', onLeave);
+      container.removeEventListener('pointercancel', onUp);
+      container.removeEventListener('pointerup', onUp);
+      container.removeEventListener('pointerdown', onDown);
     });
   }
 
