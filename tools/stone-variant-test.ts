@@ -22,6 +22,9 @@ import {
   BLOCKS,
   Block,
   MORE_STONE_ID_START,
+  RED_SAND_ID_START,
+  RED_SANDSTONE_VARIANT_ID_START,
+  STONECUTTER_ID,
   STONE_VARIANT_ID_START,
   STONE_VARIANT_IDS,
   STONE_VARIANT_PARENTS,
@@ -38,6 +41,9 @@ import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
+import { columnSurface } from '../src/core/gen/SurfaceRules.ts';
+import { terracottaId } from '../src/core/registry/blocks.ts';
 
 let passed = 0;
 let failed = 0;
@@ -81,34 +87,53 @@ const VARIANT_COUNT = STONE_VARIANT_PARENTS.reduce((sum, [, , kinds]) => sum + k
 
 // ---------------------------------------------------------------- 1. 表与注册
 
-console.log('\n[表：23 个母方块 / 53 个变体]');
+console.log('\n[表：26 个母方块 / 59 个变体]');
 {
-  // 批次 41 立表时是 16 个母方块 / 36 个变体；批次 42 追加了 7 个母方块 / 17 个变体
-  equal('家族数', STONE_VARIANT_PARENTS.length, 23);
-  equal('变体总数', VARIANT_COUNT, 53);
-  equal('变体 id 数', STONE_VARIANT_IDS.length, 53);
-  // 变体段不许溢进母方块段（母方块 id 是写死的常量，溢了就会撞 id）
-  check(
-    `变体段（351~${STONE_VARIANT_ID_START + VARIANT_COUNT - 1}）没有越过母方块段起点 ${MORE_STONE_ID_START}`,
-    STONE_VARIANT_ID_START + VARIANT_COUNT <= MORE_STONE_ID_START,
-  );
+  // 批次 41 立表时是 16 个母方块 / 36 个变体；批次 42 追加 7 个母方块 / 17 个变体；
+  // 批次 45 再追加 3 个（红砂岩家族）/ 6 个变体
+  equal('家族数', STONE_VARIANT_PARENTS.length, 26);
+  equal('变体总数', VARIANT_COUNT, 59);
+  equal('变体 id 数', STONE_VARIANT_IDS.length, 59);
 
   // 母方块名对得上（表里只能写数字 id，这一条专门防"数字抄错")
   for (const [parent, name] of STONE_VARIANT_PARENTS) {
     equal(`${name} 的母方块 id 指向自己`, blockDef(parent).name, `minecraft:${name}`);
   }
 
-  // id 连续、追加式
-  const expected = Array.from({ length: VARIANT_COUNT }, (_v, i) => STONE_VARIANT_ID_START + i);
-  equal('id 从 351 连续排下来', STONE_VARIANT_IDS.join(','), expected.join(','));
+  /**
+   * 变体的 id 分成**两段**：351~403（批次 41/42）+ 416~421（批次 45 的红砂岩家族）。
+   *
+   * ⚠️ 为什么不接着排：404~415 是**写死的母方块常量**（石英家族 404~409、
+   * 切石机 410、红砂岩家族 411~415）。往变体表末尾追加家族时，顺序分配会直接撞进这一段
+   * ——所以变体表支持"显式起点"这一列，第二段就是从 416 起。
+   * 这一组断言就是守住"两段 + 保留段"这三个区间不重叠。
+   */
+  const RESERVED_IDS: readonly number[] = [
+    ...Array.from({ length: 6 }, (_v, i) => MORE_STONE_ID_START + i), // 404~409 石英家族
+    STONECUTTER_ID, // 410
+    ...Array.from({ length: 5 }, (_v, i) => RED_SAND_ID_START + i), // 411~415 红砂岩家族
+  ];
+  check(
+    `变体 id 一个都不落在写死的母方块段里（保留 ${RESERVED_IDS.length} 个 id：${RESERVED_IDS[0]}~${RESERVED_IDS[RESERVED_IDS.length - 1]}）`,
+    STONE_VARIANT_IDS.every((id) => !RESERVED_IDS.includes(id)),
+  );
+
+  const firstWave = STONE_VARIANT_IDS.filter((id) => id < MORE_STONE_ID_START).sort((a, b) => a - b);
+  const secondWave = STONE_VARIANT_IDS.filter((id) => id >= RED_SANDSTONE_VARIANT_ID_START).sort((a, b) => a - b);
+  equal(
+    `第一段 ${STONE_VARIANT_ID_START}~403 连续排下来`,
+    firstWave.join(','),
+    Array.from({ length: firstWave.length }, (_v, i) => STONE_VARIANT_ID_START + i).join(','),
+  );
+  equal(
+    `第二段从显式起点 ${RED_SANDSTONE_VARIANT_ID_START} 连续排下来（${secondWave.length} 个）`,
+    secondWave.join(','),
+    Array.from({ length: secondWave.length }, (_v, i) => RED_SANDSTONE_VARIANT_ID_START + i).join(','),
+  );
+  equal('两段加起来正好是全部变体', firstWave.length + secondWave.length, VARIANT_COUNT);
   check(
     '每个 id 都能在方块表里按下标取到',
     STONE_VARIANT_IDS.every((id) => BLOCKS[id] !== undefined && BLOCKS[id]!.id === id),
-  );
-  check(
-    '最后一个变体之后没有断号',
-    BLOCKS[STONE_VARIANT_ID_START + VARIANT_COUNT] === undefined ||
-      BLOCKS[STONE_VARIANT_ID_START + VARIANT_COUNT]!.id === STONE_VARIANT_ID_START + VARIANT_COUNT,
   );
   check('全部在旧的最大 id 之后（追加式，不打乱老编号）', STONE_VARIANT_IDS.every((id) => id >= STONE_VARIANT_ID_START));
 
@@ -196,7 +221,7 @@ console.log('\n[分类与中文名]');
   check('全部归"建筑"分类', STONE_VARIANT_IDS.every((id) => categoryOf(id) === 'building'));
 
   const labels = STONE_VARIANT_IDS.map((id) => itemLabel(id));
-  equal('53 个中文名两两不同', new Set(labels).size, 53);
+  equal('59 个中文名两两不同', new Set(labels).size, 59);
   // 失败时把"哪几个没名字"直接打出来（漏一条中文名是靠肉眼看不出来的）
   const missingLabel = STONE_VARIANT_IDS.filter((id) => {
     const label = itemLabel(id);
@@ -253,9 +278,9 @@ console.log('\n[配方：每种变体一条，材料是它自己的母方块]');
   );
 
   equal(
-    '53 个变体各有且只有 1 条配方',
+    '59 个变体各有且只有 1 条配方',
     RECIPES.filter((recipe) => STONE_VARIANT_IDS.includes(recipe.result.id)).length,
-    53,
+    59,
   );
 }
 
@@ -399,6 +424,110 @@ console.log('\n[石英链：下界石英 → 石英块 → 石英柱 / 錾制石
   const smelt = SMELTING_RECIPES.find((recipe) => recipe.input === Block.QUARTZ_BLOCK);
   equal('平滑石英由石英块熔炼而来', smelt?.output.id, Block.SMOOTH_QUARTZ);
   check('石英块没有合成配方（只能熔炼出平滑石英，不能反过来合）', matchRecipe(grid(2, ['QQ', 'QQ'], { Q: Block.QUARTZ_BLOCK }), 2)?.id !== Block.SMOOTH_QUARTZ);
+}
+
+// ---------------------------------------------------------------- 8. 红沙与红砂岩（批次 45）
+
+console.log('\n[红沙与红砂岩（批次 45）：原料链闭合]');
+{
+  // ---- 红沙
+  equal('红沙的中文名', itemLabel(Block.RED_SAND), '红沙');
+  equal('红沙硬度 0.5（与沙子同档）', blockHardness(Block.RED_SAND), 0.5);
+  check('红沙徒手就能挖（与沙子同一条）', !harvestRequirement(Block.RED_SAND));
+  equal('红沙的掉落就是自己', blockDrops(Block.RED_SAND, dropCtx())?.id, Block.RED_SAND);
+  equal('红沙归"自然"分类（跟沙子一起）', categoryOf(Block.RED_SAND), 'natural');
+  check('红沙在创造物品栏里', CREATIVE_ITEMS.includes(Block.RED_SAND));
+  check('红沙的贴图在图集里', TILES.has('red_sand'));
+  check(
+    '红沙是"红"的（贴图名字里带 red，别把普通沙子的图拿来用）',
+    blockDef(Block.RED_SAND).tiles.every((tile) => tile.includes('red')),
+  );
+
+  // ---- 四个母方块
+  const parents: readonly (readonly [number, string])[] = [
+    [Block.RED_SANDSTONE, '红砂岩'],
+    [Block.CHISELED_RED_SANDSTONE, '錾制红砂岩'],
+    [Block.CUT_RED_SANDSTONE, '切制红砂岩'],
+    [Block.SMOOTH_RED_SANDSTONE, '平滑红砂岩'],
+  ];
+  for (const [id, cn] of parents) {
+    equal(`${cn}的中文名`, itemLabel(id), cn);
+    equal(`${cn}硬度 0.8（与砂岩家族同档）`, blockHardness(id), 0.8);
+    equal(`${cn}要镐但不挑等级`, harvestRequirement(id)?.tool, 'pickaxe');
+    equal(`${cn}要的是 0 级镐`, harvestRequirement(id)?.tier, 0);
+    equal(`${cn}归"建筑"分类`, categoryOf(id), 'building');
+    check(`${cn}在创造物品栏里`, CREATIVE_ITEMS.includes(id));
+    check(`${cn}的贴图都在图集里`, blockDef(id).tiles.every((tile) => TILES.has(tile)));
+  }
+  // 顺带补的漏登记：錾制/切制/平滑砂岩此前掉在"矿石与材料"里
+  check(
+    '錾制/切制/平滑砂岩也补进了"建筑"（批次 41 的漏登记）',
+    [Block.CHISELED_SANDSTONE, Block.CUT_SANDSTONE, Block.SMOOTH_SANDSTONE].every(
+      (id) => categoryOf(id) === 'building',
+    ),
+  );
+
+  // ---- 六个变体：id 从显式起点排（这一段不在 351~403 里）
+  equal(
+    '红砂岩三件套的 id 从 416 连着排',
+    ['slab', 'stairs', 'wall'].map((kind) => stoneVariantId('red_sandstone', kind)).join(','),
+    [RED_SANDSTONE_VARIANT_ID_START, RED_SANDSTONE_VARIANT_ID_START + 1, RED_SANDSTONE_VARIANT_ID_START + 2].join(','),
+  );
+  equal('切制红砂岩只有台阶（原版没有它的楼梯与墙）', stoneVariantId('cut_red_sandstone', 'stairs'), undefined);
+  equal('平滑红砂岩有台阶与楼梯（没有墙）', stoneVariantId('smooth_red_sandstone', 'wall'), undefined);
+  equal('錾制红砂岩没有任何变体（原版如此）', stoneVariantId('chiseled_red_sandstone', 'slab'), undefined);
+  equal('红砂岩墙的中文名', itemLabel(stoneVariantId('red_sandstone', 'wall')!), '红砂岩墙');
+  // 变体的硬度跟随母方块（通用循环已覆盖，这里专门盯一眼新家族）
+  for (const kind of ['slab', 'stairs', 'wall'] as const) {
+    equal(`红砂岩${kind} 硬度 = 母方块`, blockHardness(stoneVariantId('red_sandstone', kind)!), 0.8);
+  }
+
+  // ---- 配方链：红沙 → 红砂岩 → （切制 / 錾制 / 平滑）
+  equal(
+    '4 红沙 → 红砂岩',
+    matchRecipe(grid(2, ['SS', 'SS'], { S: Block.RED_SAND }), 2)?.id,
+    Block.RED_SANDSTONE,
+  );
+  equal(
+    '4 红砂岩 → 4 切制红砂岩',
+    matchRecipe(grid(2, ['SS', 'SS'], { S: Block.RED_SANDSTONE }), 2)?.count,
+    4,
+  );
+  equal(
+    '2 红砂岩台阶 → 錾制红砂岩',
+    matchRecipe(grid(2, ['S·', 'S·'], { S: stoneVariantId('red_sandstone', 'slab')! }), 2)?.id,
+    Block.CHISELED_RED_SANDSTONE,
+  );
+  equal(
+    '平滑红砂岩由红砂岩熔炼而来',
+    SMELTING_RECIPES.find((recipe) => recipe.input === Block.RED_SANDSTONE)?.output.id,
+    Block.SMOOTH_RED_SANDSTONE,
+  );
+  // 同一批顺手补上的普通砂岩那两条（原版一直有，此前只有切石机那条路）
+  equal(
+    '4 砂岩 → 4 切制砂岩（批次 45 补）',
+    matchRecipe(grid(2, ['SS', 'SS'], { S: Block.SANDSTONE }), 2)?.id,
+    Block.CUT_SANDSTONE,
+  );
+  equal(
+    '平滑砂岩由砂岩熔炼而来（批次 45 补：此前做了方块却没给来源）',
+    SMELTING_RECIPES.find((recipe) => recipe.input === Block.SANDSTONE)?.output.id,
+    Block.SMOOTH_SANDSTONE,
+  );
+  check(
+    '红砂岩没有"再合回红沙"的反向配方（原版不回收）',
+    matchRecipe(grid(2, ['SS', 'SS'], { S: Block.RED_SANDSTONE }), 2)?.id !== Block.RED_SAND,
+  );
+
+  // ---- 恶地地表：这一批最实在的一条（红沙的唯一来源）
+  const badlands = BIOME_TABLE[Biome.BADLANDS]!;
+  const surface = columnSurface(badlands, 70, 63, 12, 34);
+  equal('恶地地表是红沙（原来铺的是陶瓦）', surface.surface, Block.RED_SAND);
+  equal('次表层还是陶瓦（恶地的招牌没丢）', surface.subSurface, badlands.subSurface);
+  check('往下仍然是彩色陶瓦色带', surface.deepBands !== null && surface.deepBands.length > 0);
+  check('色带里全是陶瓦（没有被红沙污染）', surface.deepBands!.every((id) => id >= terracottaId(0)));
+  // 别的群系不受影响
+  equal('沙漠地表仍是沙子', columnSurface(BIOME_TABLE[Biome.DESERT]!, 70, 63, 12, 34).surface, Block.SAND);
 }
 
 console.log(`\n石材家族变体测试：${passed} 通过 / ${failed} 失败`);

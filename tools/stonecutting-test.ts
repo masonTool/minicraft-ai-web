@@ -28,6 +28,7 @@ import {
   stonecuttingRecipeCount,
   stonecuttingYield,
 } from '../src/core/crafting/Stonecutting.ts';
+import { stoneVariantId } from '../src/core/registry/blocks.ts';
 import {
   STONECUTTER_SIZE,
   Stonecutter,
@@ -184,6 +185,13 @@ console.log('\n[几个代表性输入]');
 
   // 石英 / 海晶石 / 末地石
   check('石英块 → 石英柱 / 錾制石英块', stonecuttingOffers(Block.QUARTZ_BLOCK).some((offer) => offer.output === Block.QUARTZ_PILLAR));
+  // 红砂岩（批次 45）：与砂岩那一对同构——两个家族在切石机里也该一模一样
+  equal(
+    '红砂岩能切出的东西与砂岩一一对应（三件套 + 切制 + 錾制）',
+    names(stonecuttingOffers(Block.RED_SANDSTONE).map((offer) => offer.output)).replace(/red_/g, ''),
+    names(stonecuttingOffers(Block.SANDSTONE).map((offer) => offer.output)),
+  );
+  equal('红砂岩石板也是 2 份', stonecuttingYield(Block.RED_SANDSTONE, stoneVariantId('red_sandstone', 'slab')!), 2);
   check('海晶石 → 三件套 + 海晶石砖 + 暗海晶石', stonecuttingOffers(Block.PRISMARINE).length === 5);
   check('末地石 → 末地石砖', stonecuttingOffers(Block.END_STONE).some((offer) => offer.output === Block.END_STONE_BRICKS));
   check('紫珀块 → 紫珀柱', stonecuttingOffers(Block.PURPUR_BLOCK).some((offer) => offer.output === Block.PURPUR_PILLAR));
