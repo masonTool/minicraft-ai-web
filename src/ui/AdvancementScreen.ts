@@ -25,6 +25,7 @@ import {
 } from '../core/progress/advancements.ts';
 import type { AdvancementState, AdvancementTracker } from '../core/progress/AdvancementTracker.ts';
 import { drawItemIcon } from './ItemIcon.ts';
+import { isTouchUi } from './TouchControls.ts';
 
 /** 页签：`null` 表示"全部" */
 type TabFilter = AdvancementTab | null;
@@ -68,7 +69,10 @@ export class AdvancementScreen {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'adv-close';
-    close.textContent = '关闭';
+    // 手机上统一成 ✕（与配方书、设置面板同一个形状：右上一个叉关掉，
+    // 基岩版也是这么给的），PC 上保留"关闭"两个字（有 Esc 也用得着点）
+    close.textContent = isTouchUi() ? '✕' : '关闭';
+    close.setAttribute('aria-label', '关闭成就');
     close.addEventListener('click', () => this.hide());
 
     header.append(title, this.summaryEl, close);

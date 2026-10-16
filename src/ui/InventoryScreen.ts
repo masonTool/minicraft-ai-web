@@ -88,6 +88,7 @@ import {
 } from './ItemPager.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
 import { CREATIVE_TAB_ICONS } from './CreativeTabs.ts';
+import { isTouchUi } from './TouchControls.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
 
 export type InventoryPanelMode =
@@ -364,7 +365,7 @@ export class InventoryScreen {
     this.titleEl.textContent = '物品栏';
     const hint = document.createElement('span');
     // 触摸端没有左右键之分，提示改成"轻点"的说法，免得玩家找不到右键
-    const touchDevice = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+    const touchDevice = isTouchUi();
     hint.innerHTML = touchDevice
       ? '点空白处关闭 · 轻点拿起 / 再轻点放下，点空槽可放下一个'
       : '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭 · 左键整叠 / 右键单个';
@@ -373,7 +374,9 @@ export class InventoryScreen {
       const recipes = document.createElement('button');
       recipes.type = 'button';
       recipes.className = 'inv-recipes-btn';
-      recipes.textContent = '配方书 (R)';
+      // 键盘热键的括注只在 PC 上给：手机上没有 R 这个键，写成"配方书 (R)"
+      // 只会让人以为"要按 R 才能打开"（批次 104）
+      recipes.textContent = touchDevice ? '配方书' : '配方书 (R)';
       recipes.addEventListener('click', () => this.hooks.onOpenRecipes?.());
       header.appendChild(recipes);
     }
@@ -383,7 +386,7 @@ export class InventoryScreen {
       achievements.type = 'button';
       achievements.className = 'inv-recipes-btn';
       achievements.dataset.role = 'advancements';
-      achievements.textContent = '成就 (J)';
+      achievements.textContent = touchDevice ? '成就' : '成就 (J)';
       achievements.addEventListener('click', () => this.hooks.onOpenAdvancements?.());
       header.appendChild(achievements);
     }

@@ -11,6 +11,7 @@
 
 import { commandNames, mobNames } from '../core/commands/Commands.ts';
 import { resolveItemId } from '../core/registry/itemNames.ts';
+import { isTouchUi } from './TouchControls.ts';
 
 export type ChatLineKind = 'player' | 'system' | 'error';
 
@@ -291,11 +292,19 @@ export class ChatInput {
     }
   }
 
-  /** 输入框下面那行小字：显示用法提示与"还有 N 个候选" */
+  /**
+   * 输入框下面那行小字：显示用法提示与"还有 N 个候选"。
+   *
+   * 触摸端（批次 104）不提 Enter / Esc / Tab：手机虚拟键盘上这几个键要么没有、
+   * 要么藏在二级面板里，真正的提交方式是下面那颗"发送"。
+   */
   private updateHint(): void {
+    const touch = isTouchUi();
     const value = this.inputEl.value;
     if (!value.startsWith('/') || value.length < 2) {
-      this.hintEl.textContent = '输入命令（/help 查看全部）或直接发言，Enter 提交，Esc 取消';
+      this.hintEl.textContent = touch
+        ? '输入命令（/help 查看全部）或直接发言，点"发送"提交'
+        : '输入命令（/help 查看全部）或直接发言，Enter 提交，Esc 取消';
       return;
     }
     const prefix = value.slice(1).split(/\s+/)[0]!.toLowerCase();
@@ -305,10 +314,14 @@ export class ChatInput {
       return;
     }
     if (matches.length === 1 && matches[0] === prefix) {
-      this.hintEl.textContent = 'Tab 补全参数 · Enter 提交 · ↑↓ 翻历史';
+      this.hintEl.textContent = touch
+        ? '点"发送"提交（手机上没有 Tab 补全，参数要打全）'
+        : 'Tab 补全参数 · Enter 提交 · ↑↓ 翻历史';
       return;
     }
-    this.hintEl.textContent = `候选：${matches.slice(0, 6).join(' / ')}${matches.length > 6 ? ' …' : ''}（Tab 补全）`;
+    this.hintEl.textContent = `候选：${matches.slice(0, 6).join(' / ')}${matches.length > 6 ? ' …' : ''}${
+      touch ? '' : '（Tab 补全）'
+    }`;
   }
 }
 

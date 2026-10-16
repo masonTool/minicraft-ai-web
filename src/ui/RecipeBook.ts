@@ -18,6 +18,7 @@ import { itemLabel } from '../core/registry/itemNames.ts';
 import type { Recipe } from '../core/crafting/Recipes.ts';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { drawItemIcon } from './ItemIcon.ts';
+import { isTouchUi } from './TouchControls.ts';
 
 export interface RecipeBookActions {
   /** 合成一次；返回是否成功（材料不够时返回 false） */
@@ -81,7 +82,11 @@ export class RecipeBook {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'recipe-close';
-    close.textContent = '关闭 (R)';
+    // 手机上是一个 ✕（基岩版也是右上角一个叉），PC 上保留 "关闭 (R)" 的键盘提示
+    //（批次 104：手机端不该出现键盘字母——"关闭 (R)"会让人以为要按 R 才关得掉）。
+    // 两种情况下读屏与无障碍拿到的都是"关闭配方书"。
+    close.textContent = isTouchUi() ? '✕' : '关闭 (R)';
+    close.setAttribute('aria-label', '关闭配方书');
     close.addEventListener('click', () => this.hide());
 
     header.append(title, this.summaryEl, this.searchEl, close);
