@@ -23,6 +23,8 @@
 
 import { Block, CROP_STAGES } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
+// 击杀类进度按**生物表派生**（批次 93）：见下面 `HOSTILE_MOBS` 的注释
+import { ALL_HOSTILE_MOBS } from '../entity/mobs.ts';
 import { toolItemId } from '../registry/tools.ts';
 import { armorItemId, ARMOR_TYPES, type ArmorMaterial } from '../registry/armor.ts';
 
@@ -143,8 +145,15 @@ function armorIdsOf(type: (typeof ARMOR_TYPES)[number], materials: readonly Armo
  */
 const CRAFTABLE_ARMOR_MATERIALS: readonly ArmorMaterial[] = ['leather', 'iron', 'golden', 'diamond'];
 
-/** 敌对生物（本批实现了的三种）：击杀类进度共用它 */
-const HOSTILE_MOBS: readonly string[] = ['zombie', 'skeleton', 'creeper'];
+/**
+ * 敌对生物（击杀类进度共用）：**从生物表派生，不手写**（批次 93 改）。
+ *
+ * 原先这里是手写的 `['zombie', 'skeleton', 'creeper']`——批次 92/93 加了烈焰人、
+ * 蜘蛛、洞穴蜘蛛之后它就成了**第二份真相**（"击败一只敌对生物"打蜘蛛反而不算）。
+ * 原版那条本来就不挑物种，所以直接引 `ALL_HOSTILE_MOBS`
+ * （含不自然刷新的烈焰人与洞穴蜘蛛——从刷怪笼里打出来的当然也算怪物）。
+ */
+const HOSTILE_MOBS: readonly string[] = ALL_HOSTILE_MOBS.map((type) => type.id);
 
 /** 能繁殖的四种家畜 */
 const BREEDABLE_MOBS: readonly string[] = ['cow', 'pig', 'sheep', 'chicken'];
@@ -350,7 +359,8 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     parent: null,
     tab: 'adventure',
     title: '冒险',
-    desc: '击败一只敌对生物（僵尸 / 骷髅 / 苦力怕）',
+    // 描述不再点名具体三种：池子是从生物表派生的（批次 93），点名就会漂
+    desc: '击败一只敌对生物',
     icon: toolItemId('sword', 'iron'),
     trigger: { kind: 'kill', mobs: HOSTILE_MOBS },
   },
@@ -359,7 +369,7 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     parent: 'minecraft:adventure/root',
     tab: 'adventure',
     title: '怪物猎人',
-    desc: '僵尸、骷髅、苦力怕各击败一只',
+    desc: '击败 3 种不同的敌对生物',
     icon: Item.BONE,
     trigger: { kind: 'kill', mobs: HOSTILE_MOBS, needCount: 3 },
   },

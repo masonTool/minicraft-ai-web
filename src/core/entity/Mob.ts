@@ -13,7 +13,7 @@
 
 import { Entity, type EntityContext } from './Entity.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
-import { woolId } from '../registry/blocks.ts';
+import { Block, blockDef, woolId } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 import { StatusEffects } from '../survival/StatusEffects.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
@@ -64,6 +64,21 @@ const GRAVITY = 32;
 const JUMP_SPEED = 8.95;
 /** 受击后的无敌时间（秒） */
 const HURT_COOLDOWN = 0.5;
+/**
+ * 爬墙速度（格/秒，批次 93 蜘蛛）。
+ *
+ * 原版蜘蛛的爬升是"贴着墙就有上行的速度"，约 0.5 格/秒慢爬与 3 格/秒快爬之间；
+ * 这里取 3——**必须比跳跃（8.95）小**，否则它会比玩家跳得还快，
+ * 在墙边看着像弹射；也不能太小，不然 3 格高的墙要爬十秒。
+ */
+const CLIMB_SPEED = 3;
+/**
+ * 被攻击后的"记仇"时长（秒，批次 93 蜘蛛在亮处也照样打）。
+ *
+ * ⚠️ 简化：本项目的 `hurt()` 不认识"谁打的"，所以**任何**伤害（含摔伤/着火）
+ * 都会让它记仇。原版只有"玩家打的"才会——写在这里，别当成原版行为（见 TASKS J15）。
+ */
+const ANGER_SECONDS = 10;
 
 export interface MobDrop {
   itemId: number;
@@ -126,6 +141,26 @@ export interface MobType {
    */
   fireImmune?: boolean;
   /**
+   * **会爬墙**（批次 93，蜘蛛）：贴着挡路的方块、又有往前的速度时，给一点**向上**的速度
+   * （原版蜘蛛就是这么翻墙的）。与 `flying` 的区别是它仍然是"地面生物"：
+   * 有重力、走寻路那一套，只是额外能顺着墙往上爬。
+   */
+  climbing?: boolean;
+  /**
+   * **光照够亮就中立**（批次 93，蜘蛛）：亮度 ≥ 这个值时不主动攻击玩家
+   * （原版蜘蛛的招牌行为——白天或火把旁边它只会干瞪眼）。
+   *
+   * 需要一个"这一格多亮"的查询（`EntityContext.lightAt`），而不是把亮度塞进上下文：
+   * 亮度是**按坐标查**的，一个值装不下整片世界。
+   */
+  neutralInLight?: number;
+  /**
+   * **打中玩家时附带的状态效果**（批次 93，洞穴蜘蛛的中毒）：原版洞穴蜘蛛每次命中
+   * 让对方中毒 7 秒。写成一个字段，而不是让 `CaveSpider` 去覆盖近战逻辑——
+   * 那样会与"接触伤害"的冷却、击退、`attackBonus` 三处各分一份（迟早漂）。
+   */
+  venom?: { effect: 'poison'; seconds: number };
+  /**
    * 死亡时按**自己身上的颜色**掉羊毛（J8，羊用）。
    * 羊毛不在 `drops` 表里，因为颜色是每只动物各自的——写死在表里就只能掉白色的。
    * 被剪过的羊不掉羊毛（原版行为）。
@@ -135,7 +170,7 @@ export interface MobType {
   milk?: boolean;
   /** 会不会下蛋（K4 尾巴，鸡用）。鸡蛋在生存里的唯一来源 */
   laysEggs?: boolean;
-  /** 生物家族（亡灵 / 节肢）；蜘蛛还没做，所以目前只有亡灵有成员 */
+  /** 生物家族（亡灵 / 节肢）：亡灵＝僵尸/骷髅，节肢＝蜘蛛/洞穴蜘蛛（批次 93 起两者都有成员） */
   family?: MobFamily;
   /**
    * 远程攻击配置（J9，骷髅用）。不填就是近战。
@@ -224,6 +259,8 @@ export class Mob extends Entity {
   /** 距离下一次放箭还有多久 */
   private rangedTimer = 0;
   private hurtTime = 0;
+  /** 记仇倒计时（批次 93）：>0 时"亮处中立"的蜘蛛照样追人 */
+  private angerTimer = 0;
   private attackCooldown = 0;
   /** 悬停相位（飞行生物上下浮动用，见 `flyAi`） */
   protected hoverPhase = 0;
@@ -249,6 +286,9 @@ export class Mob extends Entity {
   private repathTimer = 0;
   private wanderTimer = 0;
   private wanderYaw = 0;
+  /** 朝向被追击目标的单位方向（批次 93）：给"没有路时会爬墙的生物直推"用 */
+  private chaseDirX = 0;
+  private chaseDirZ = 0;
   /** 游荡时是否停下（一部分时间站着不动，比一直乱走自然） */
   private idle = false;
 
@@ -272,6 +312,7 @@ export class Mob extends Entity {
     this.age += dt;
     this.sampleBlock = ctx.getBlock;
 
+    if (this.angerTimer > 0) this.angerTimer -= dt;
     if (this.hurtTime > 0) this.hurtTime -= dt;
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.sheared) {
@@ -306,6 +347,7 @@ export class Mob extends Entity {
     } else {
       this.vy -= GRAVITY * dt;
       if (this.vy < -60) this.vy = -60;
+      this.applyClimbing(ctx);
     }
 
     moveBody(ctx.world, this, this.vx * dt, this.vy * dt, this.vz * dt);
@@ -328,6 +370,29 @@ export class Mob extends Entity {
 
   /** 掉落是否已结算（防止死亡与着火两条路径重复掉一份） */
   private lootDropped = false;
+
+  /**
+   * 爬墙（批次 93，蜘蛛）。
+   *
+   * 判据只有两条，都是原版那两条：**前面挡着方块**（按朝向取前方那一格、看头部高度）
+   * 与**确实在往前走**。满足就给一个向上的速度——位置仍然由 `moveBody` 推，
+   * 所以它是一格一格爬上去的，而不是"贴着墙穿上去"。
+   *
+   * ⚠️ 为什么不直接改 `vy` 让它在空中悬着：那是 `flying` 那一套。
+   * 蜘蛛是**地面生物**（有重力、会掉下来），它只是能顺着墙走。
+   */
+  private applyClimbing(ctx: EntityContext): void {
+    if (!this.type.climbing) return;
+    const forward = Math.hypot(this.vx, this.vz);
+    if (forward < 0.3) return;
+    const ahead = 0.3 + this.width * 0.5;
+    const fx = Math.floor(this.x + (this.vx / forward) * ahead);
+    const fz = Math.floor(this.z + (this.vz / forward) * ahead);
+    const fy = Math.floor(this.y + this.height * 0.6);
+    const block = ctx.getBlock(fx, fy, fz);
+    if (block === Block.AIR || !blockDef(block).solid) return;
+    this.vy = Math.max(this.vy, CLIMB_SPEED);
+  }
 
   /**
    * 状态效果结算（K4 尾巴）。
@@ -443,9 +508,22 @@ export class Mob extends Entity {
 
     if (distance < 2.5 && this.attackCooldown <= 0) {
       this.attackCooldown = 1;
-      const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
-      ctx.hurtPlayer(damage, this.x, this.z);
+      this.deliverMelee(ctx);
     }
+  }
+
+  /**
+   * 近战命中玩家：伤害 + **附带效果**（批次 93 把这件事收成一处）。
+   *
+   * 收成一处的理由：接触伤害在**两处**发生（飞行生物的 `flyAi` 与地面生物的
+   * `updateAi`），各自写一遍"算伤害 + 顺带中毒"的话，迟早只改一处
+   * （洞穴蜘蛛的中毒就是这条路径上的第二件事）。
+   */
+  private deliverMelee(ctx: EntityContext): void {
+    // 力量/虚弱影响出手伤害（数值与玩家同源）；虚弱不能把伤害打成负数
+    const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
+    ctx.hurtPlayer(damage, this.x, this.z);
+    if (this.type.venom) ctx.afflictPlayer?.(this.type.venom.effect, this.type.venom.seconds);
   }
 
   /** 朝目标点平滑加速（飞行用；与末影龙那个 `steer` 同一个套路，收在基类里） */
@@ -467,12 +545,28 @@ export class Mob extends Entity {
     const dz = player ? player.z - this.z : 0;
     const distanceSq = dx * dx + dz * dz;
 
+    // 亮处中立（批次 93，蜘蛛）：亮度够亮就不主动攻击（原版招牌行为）。
+    // ⚠️ 但**被打过之后会记仇**（`angerTimer`）——不然白天戳它一下它还在发呆，
+    // 看着就像"AI 坏了"
+    const pacified =
+      this.type.neutralInLight !== undefined &&
+      this.angerTimer <= 0 &&
+      (ctx.lightAt?.(this.x, this.y + this.height * 0.5, this.z) ?? 0) >= this.type.neutralInLight;
+
     // 隐身的玩家不会被盯上（K4 尾巴）：已经追到一半的会停下来（下一帧就不满足条件了）
     const chasing =
       this.type.hostile &&
+      !pacified &&
       player !== null &&
       ctx.playerInvisible !== true &&
       distanceSq <= this.type.followRange * this.type.followRange;
+
+    // 朝向目标的单位方向（批次 93）：**没有路时**给会爬墙的生物直推用（见 `move`）
+    if (chasing && player) {
+      const length = Math.max(1e-4, Math.sqrt(distanceSq));
+      this.chaseDirX = dx / length;
+      this.chaseDirZ = dz / length;
+    }
 
     // 飞行生物（批次 92）：悬停 + 逼近，走 `flyAi` 那一套。
     // 放在最前面是因为**下面每一条都假设它站在地上**（寻路要"能站人的格子"、
@@ -570,9 +664,7 @@ export class Mob extends Entity {
       } else if (distanceSq < 4 && this.attackCooldown <= 0) {
         // 贴脸就打（原版僵尸的触及距离约 2 格）
         this.attackCooldown = 1;
-        // 力量/虚弱影响出手伤害（数值与玩家同源）；虚弱不能把伤害打成负数
-        const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
-        ctx.hurtPlayer(damage, this.x, this.z);
+        this.deliverMelee(ctx);
       }
     } else {
       this.wanderTimer -= dt;
@@ -688,6 +780,20 @@ export class Mob extends Entity {
         break;
       }
       if (this.pathIndex >= this.path.length) this.path = [];
+
+      // **会爬墙的生物在没有路时朝目标直推**（批次 93）。
+      //
+      // 为什么必须有这一条：寻路只认"站得住人的格子"，所以"目标在墙顶上"
+      // （或者隔着墙）在它眼里**根本没有路**——蜘蛛会站在原地不动，
+      // 于是"会爬墙"这件事永远不会发生（这是真正的坑：功能写了但从不触发）。
+      // 原版蜘蛛也是这么干的：先贴着墙挤，然后顺着墙爬上去。
+      //
+      // ⚠️ 只给 `climbing` 的生物开这个口子：不会爬的僵尸直推只会白贴着墙抖，
+      // 反而丢掉了"绕路"的手感。
+      if (this.type.climbing && this.path.length === 0 && (this.chaseDirX !== 0 || this.chaseDirZ !== 0)) {
+        targetVx = this.chaseDirX * speed;
+        targetVz = this.chaseDirZ * speed;
+      }
     } else if (!this.idle) {
       targetVx = Math.cos(this.wanderYaw) * speed;
       targetVz = Math.sin(this.wanderYaw) * speed;
@@ -834,6 +940,8 @@ export class Mob extends Entity {
     if (this.dead || this.hurtTime > 0 || amount <= 0) return false;
 
     this.hurtTime = HURT_COOLDOWN;
+    // 记仇（批次 93）：亮处中立的蜘蛛被打过之后就会还手，见 `ANGER_SECONDS`
+    this.angerTimer = ANGER_SECONDS;
     this.hitFlash = 0.3;
     this.health -= amount;
 

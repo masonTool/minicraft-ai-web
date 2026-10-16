@@ -66,6 +66,18 @@ export interface EntityContext {
   pickup: (itemId: number, count: number, extras?: DroppedExtras) => number;
   /** 读取方块 id（生物寻路用） */
   getBlock: (x: number, y: number, z: number) => number;
+  /**
+   * 那一格的**亮度**（0~15，取天光与方块光的较大者；批次 93，蜘蛛的"亮处中立"用）。
+   * 不传就当 0（= 永远算暗，行为与批次 92 之前一致）。
+   */
+  lightAt?: (x: number, y: number, z: number) => number;
+  /**
+   * 给玩家施加一个状态效果（批次 93，洞穴蜘蛛的中毒）。
+   *
+   * 与 `hurtPlayer` 同一个分工：实体层只描述"**该中毒了**"，
+   * "毒多久、有没有免疫、难度要不要打折"全归生存模块。
+   */
+  afflictPlayer?: (effect: 'poison', seconds: number) => void;
   /** 玩家位置（敌对生物追击用）；未加载时为 null */
   player: { x: number; y: number; z: number } | null;
   /**

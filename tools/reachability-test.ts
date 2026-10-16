@@ -65,7 +65,7 @@ import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import { BREW_RECIPES, brewRecipeFor } from '../src/core/crafting/Brewing.ts';
 import { netheriteUpgradeOf } from '../src/core/crafting/Smithing.ts';
 import { isStonecuttingInput, stonecuttingOffers } from '../src/core/crafting/Stonecutting.ts';
-import { POTION_ITEMS, TIPPED_ARROWS, variantBaseId } from '../src/core/registry/potions.ts';
+import { POTION_ITEMS, TIPPED_ARROWS, TIPPED_ARROW_ID_OFFSET, variantBaseId } from '../src/core/registry/potions.ts';
 import { lootItemIds } from '../src/core/registry/loot.ts';
 import { fishingEntryIds } from '../src/core/registry/fishing.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
@@ -213,16 +213,10 @@ const many = (ids: readonly number[], reason: string): Exempt[] => ids.map((id) 
  */
 const INGREDIENT_BLOCKERS: readonly { item: number; reason: string }[] = [
   {
-    item: Item.SPIDER_EYE,
-    reason: '蜘蛛没做：原版蜘蛛眼由蜘蛛掉落，而生物整组里没有蜘蛛——它挡住剧毒，也挡住发酵蜘蛛眼（J26）',
-  },
-  {
-    item: Item.FERMENTED_SPIDER_EYE,
-    reason: '发酵蜘蛛眼的配方已按原版补上（蜘蛛眼 + 棕蘑菇 + 糖），但原料蜘蛛眼拿不到——它挡住缓慢 / 伤害 / 隐身（J26）',
-  },
-  {
+    // 批次 93 把蜘蛛眼接上了（蜘蛛 → 蜘蛛眼；发酵蜘蛛眼 → 缓慢/伤害/隐身），
+    // 这里只剩恶魂之泪一处——**这张表是"当前还缺什么"，不是"曾经缺什么"**
     item: Item.GHAST_TEAR,
-    reason: '恶魂没做：原版恶魂之泪由恶魂掉落——它挡住再生（J26）',
+    reason: '恶魂没做：原版恶魂之泪由恶魂掉落——它挡住再生（J26），而恶魂在 J15 的敌对生物清单里',
   },
 ];
 
@@ -258,7 +252,9 @@ for (const entry of POTION_ITEMS) {
 const BLOCKED_TIPPED: Exempt[] = [];
 for (const entry of TIPPED_ARROWS) {
   if (reach.has(entry.id)) continue;
-  const blocker = potionBlocker(entry.id);
+  // 药水箭的 id = 对应药水 id + 200（见 `TIPPED_ARROW_ID_OFFSET`），
+  // 所以"卡在哪"要问**它对应的那瓶药水**——直接拿箭的 id 去查酿造图什么也查不到
+  const blocker = potionBlocker(entry.id - TIPPED_ARROW_ID_OFFSET);
   BLOCKED_TIPPED.push({
     id: entry.id,
     reason: blocker
@@ -282,8 +278,6 @@ const EXEMPT: readonly Exempt[] = [
   //         剩下的断环是**原料型**的：蜘蛛眼 / 发酵蜘蛛眼 / 恶魂之泪（理由从酿造图算出来）
   ...BLOCKED_POTIONS,
   ...BLOCKED_TIPPED,
-  { id: Item.SPIDER_EYE, reason: INGREDIENT_BLOCKERS[0]!.reason },
-  { id: Item.FERMENTED_SPIDER_EYE, reason: INGREDIENT_BLOCKERS[1]!.reason },
 
   // ---- ② 染料里只剩黑色一条断链，灰色依赖它
   {
@@ -337,7 +331,9 @@ check(
 check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.length} 条 → ${exemptIds.size} 个 id`);
 // 把"缺口总数"钉死：哪天某条链补上了（或又断了一条），这里会当场变红，
 // 逼着人回来看白名单——**自清的清单需要一个会响的铃**
-equal('缺口总数（批次 92 之后：70 条 —— 药水链接上后从 124 掉下来的）', unreachable.length, 70);
+// 缺口一路在缩：批次 91 量出来是 124 条 → 92（下界要塞 + 烈焰人）70 条 → 93（蜘蛛）**20 条**。
+// 每次变化都从这里开始查（它是这套审计的"总分"）
+equal('缺口总数（批次 93 之后：20 条 —— 只剩再生线、黑灰染料、锁链甲与两件没做的生物掉落）', unreachable.length, 20);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));
@@ -347,17 +343,33 @@ check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entr
 console.log('\n[五、本批查到并修掉/记下的几件事]');
 
 // ① 酿造链：批次 91 量出"整族 112 件药水/药水箭一瓶都拿不到"，根因是**三处断环**
-//    （下界疣 / 烈焰粉 / 蜘蛛眼）。批次 92 把前两处接上了（下界要塞 + 烈焰人），
-//    于是同一张白名单里有一半自己变短了——这正是白名单该有的样子
+//    （下界疣 / 烈焰粉 / 蜘蛛眼）。批次 92 接上前两处（下界要塞 + 烈焰人），
+//    批次 93 接上第三处（蜘蛛 → 蜘蛛眼 → 发酵蜘蛛眼）——同一张白名单自己一路变短，
+//    这正是它该有的样子：**缺口清单是"当前还缺什么"，不是"曾经缺什么"**
 const drinkableReachable = POTION_ITEMS.filter((entry) => reach.has(entry.id)).length;
+const potionId = (key: string): number => POTION_ITEMS.find((entry) => entry.key === key)!.id;
 check(
-  `整族药水里已经能酿出 ${drinkableReachable} / ${POTION_ITEMS.length} 瓶（批次 92 接上了下界疣与烈焰粉）`,
+  `整族药水里已经能酿出 ${drinkableReachable} / ${POTION_ITEMS.length} 瓶`,
   drinkableReachable > 0 && drinkableReachable < POTION_ITEMS.length,
   String(drinkableReachable),
 );
 check('剩下的都断在**原料**上，而不是断在"第一件原料从哪来"（下界疣已通）', reach.has(Item.NETHER_WART));
 check('烈焰棒拿得到（烈焰人掉）', reach.has(Item.BLAZE_ROD));
 check('烈焰粉拿得到（1 根棒拆 2 份）', reach.has(Item.BLAZE_POWDER));
+check('蜘蛛眼拿得到（蜘蛛掉的，1/3 概率）', reach.has(Item.SPIDER_EYE));
+check('发酵蜘蛛眼拿得到（蜘蛛眼 + 棕蘑菇 + 糖）', reach.has(Item.FERMENTED_SPIDER_EYE));
+check(
+  '**剧毒** 药水能酿了（它的唯一原料就是蜘蛛眼）',
+  reach.has(potionId('poison')) && reach.has(potionId('poison_long')),
+);
+check(
+  '**缓慢 / 伤害 / 隐身** 三条线也跟着通了（都走发酵蜘蛛眼）',
+  ['slowness', 'harming', 'invisibility'].every((key) => reach.has(potionId(key))),
+);
+check(
+  '**再生** 仍然酿不出来——它还缺恶魂之泪（恶魂在 J15 的清单里，这是白名单的自清留下的最后一条药水线）',
+  !reach.has(potionId('regeneration')),
+);
 check(
   '酿造台现在做得出来了（3 圆石 + 烈焰粉，配方一直都在，缺的是原料）',
   RECIPES.some(

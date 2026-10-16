@@ -66,13 +66,14 @@ export function mobAppearanceKey(mob: Mob): string {
   return '';
 }
 
-type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal' | 'villager' | 'blaze';
+type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal' | 'villager' | 'blaze' | 'spider';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
   if (typeId === 'end_crystal') return 'crystal';
   if (typeId === 'blaze') return 'blaze';
   if (typeId === 'villager') return 'villager';
+  if (typeId === 'spider' || typeId === 'cave_spider') return 'spider';
   if (typeId === 'chicken') return 'bird';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   return 'humanoid';
@@ -98,6 +99,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return quadrupedBoxes(type);
     case 'bird':
       return birdBoxes(type);
+    case 'spider':
+      return spiderBoxes(type);
     default:
       return humanoidBoxes(type);
   }
@@ -272,6 +275,87 @@ function crystalBoxes(): BoxSpec[] {
     { width: 0.45, height: 0.45, depth: 0.45, x: 0, y: 1.15, z: 0, color: 'body' },
     { width: 0.45, height: 0.45, depth: 0.45, x: 0, y: -0.15, z: 0, color: 'body' },
   ];
+}
+
+/**
+ * 蜘蛛（批次 93）：**八条腿** + 两段身体 + 一颗小头 + 四只眼。
+ *
+ * ⚠️ 腿必须排在**最前面**：渲染器只认\"前 N 个部件参与摆动\"（`legCount`），
+ * 而且按 `i % 2` 交替相位——八条腿照这个规则动起来正好是那种"左右交替扒地"
+ * 的爬行感（相邻腿反相）。所以这张表是 [8 条腿, 胸口, 肚子, 头, 4 只眼]，
+ * 一共 15 个部件（实例容量按 64 只 × 16 个部件算的，够用）。
+ *
+ * 尺寸全部由 `type.width/height` 推出来，所以洞穴蜘蛛（0.7 × 0.5）
+ * 不用另写一份模型就会自动变小。
+ */
+function spiderBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const legHeight = h * 0.5;
+  const bodyY = legHeight * 0.9;
+  const boxes: BoxSpec[] = [];
+
+  // 八条腿：每侧四条，前后排开（z 从 +0.34 到 -0.34 倍体长）
+  for (let i = 0; i < 8; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const row = Math.floor(i / 2); // 0..3：从前往后
+    boxes.push({
+      width: w * 0.1,
+      height: legHeight,
+      depth: w * 0.09,
+      x: side * w * 0.42,
+      y: legHeight / 2,
+      z: (0.34 - row * 0.22) * h,
+      color: 'accent',
+    });
+  }
+
+  // 胸口（比肚子小一圈）+ 肚子（蜘蛛最显眼的那一块）
+  boxes.push({ width: w * 0.5, height: h * 0.5, depth: h * 0.62, x: 0, y: bodyY, z: h * 0.16, color: 'body' });
+  boxes.push({ width: w * 0.66, height: h * 0.6, depth: h * 0.8, x: 0, y: bodyY, z: -h * 0.3, color: 'body' });
+  // 头 + 四只眼（原版是 8 只，这个尺度下 4 只就够辨认了）
+  boxes.push({ width: w * 0.34, height: h * 0.36, depth: h * 0.34, x: 0, y: bodyY + h * 0.04, z: h * 0.62, color: 'body' });
+  for (let i = 0; i < 4; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const up = i < 2 ? 0 : 1;
+    boxes.push({
+      width: w * 0.07,
+      height: h * 0.07,
+      depth: h * 0.04,
+      x: side * w * 0.08,
+      y: bodyY + h * 0.04 + up * h * 0.09,
+      z: h * 0.79,
+      color: 'eye',
+    });
+  }
+  return boxes;
+}
+
+/**
+ * 一个模型里有几个部件参与"走路摆动/扇翅"。
+ *
+ * 收成一个函数（而不是在 `createVisual` 里写一串三元）：批次 92/93 连着加了
+ * 烈焰人（0）与蜘蛛（8），那段表达式已经长到一眼看不完；
+ * 而且它是**可断言的事实**，离线测试直接读它（见 `describeMobModel`）。
+ */
+function legCountOf(kind: ModelKind): number {
+  if (kind === 'quadruped') return 4;
+  if (kind === 'spider') return 8;
+  // 水晶与烈焰人不摆动：水晶是自转的、烈焰人那一圈火棒长在它自己身上
+  if (kind === 'crystal' || kind === 'blaze') return 0;
+  return 2;
+}
+
+/**
+ * 生物模型的"最小描述"（批次 93）：**骨架种类 / 部件数 / 摆动部件数**。
+ *
+ * 给离线测试用（与 `mobAppearanceKey` / `mobBodyColor` 同一个性质：
+ * 渲染器里能离线验的就是这些）——蜘蛛那"8 条腿"、"腿排在部件表最前面"
+ * 这两个约定最容易在改动里被破坏，而破坏了**看不出来**（腿还是会动，只是动错了）。
+ */
+export function describeMobModel(type: MobType): { kind: ModelKind; parts: number; legs: number } {
+  const kind = modelKindOf(type.id);
+  return { kind, parts: modelBoxes(kind, type).length, legs: legCountOf(kind) };
 }
 
 interface MobVisual {
@@ -467,9 +551,8 @@ export class MobRenderer {
       // 记下"生成这份规格时的外观版本"（见 update 里的重建判定）
       appearance: mobAppearanceKey(mob),
       specs,
-      // 参与"走路摆动/扇翅"的部件数：四足 4 条腿、人形/鸟/龙 2 条，水晶与烈焰人不摆动
-      //（烈焰人那一圈火棒在它自己身上，不该跟着"迈步"晃）
-      legCount: kind === 'quadruped' ? 4 : kind === 'crystal' || kind === 'blaze' ? 0 : 2,
+      // 参与"走路摆动/扇翅"的部件数（规则收在 `legCountOf` 里）
+      legCount: legCountOf(kind),
       spin: 0,
       partColors,
     };

@@ -22,7 +22,7 @@ import { Block, CROP_STAGES } from '../src/core/registry/blocks.ts';
 import { Item, dropFor, itemDef, possibleBlockDropIds } from '../src/core/registry/items.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
-import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
+import { ALL_HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
 import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
 import { fishingEntryIds } from '../src/core/registry/fishing.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
@@ -184,7 +184,11 @@ console.log('\n[可达性：计数型条目真的能凑齐]');
 
   const hunter = advancementById('minecraft:adventure/kill_a_mob')!;
   equal('"怪物猎人"要三种敌对生物', hunter.trigger.needCount, 3);
-  equal('目标池就是本批实现的三种', hunter.trigger.mobs?.length, 3);
+  // 目标池从生物表**派生**（批次 93）：表里加了蜘蛛/烈焰人之后它自己就宽了
+  // ——以前这里是手写的三种，加了新怪就会变成"打蜘蛛不算怪物"
+  equal('目标池就是全部敌对生物（比要求的 3 种宽）', hunter.trigger.mobs?.length, ALL_HOSTILE_MOBS.length);
+  check('池子确实比要求数宽（缺一种也不至于卡死）', (hunter.trigger.mobs?.length ?? 0) > hunter.trigger.needCount!);
+  check('蜘蛛与烈焰人都在池子里', ['spider', 'blaze', 'cave_spider'].every((id) => hunter.trigger.mobs?.includes(id) === true));
   check(
     '那三种都在生物表里（僵尸/骷髅/苦力怕）',
     (hunter.trigger.mobs ?? []).every((mob) => mobTypeById(mob) !== undefined),

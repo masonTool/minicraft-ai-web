@@ -84,8 +84,91 @@ export const BLAZE_TYPE: MobType = {
   eyeHeight: 1.5,
 };
 
+/**
+ * 蜘蛛（批次 93，J26 最后一条断环）。
+ *
+ * 它是**唯一掉蜘蛛眼**的生物，而蜘蛛眼是"剧毒"药水唯一的原料、也是
+ * "发酵蜘蛛眼 → 缓慢/伤害/隐身"那三条的起点；在这之前**整族药水**有 45 瓶
+ * 在生存里够不着（见 O14 的可达性审计与 TASKS 的 J26）。
+ *
+ * 三处招牌行为都有对应的数据字段（不是特判）：
+ *  - **会爬墙**（`climbing`）：贴着墙走的时候给一点向上速度，能翻过 2~3 格的墙
+ *    ——这是蜘蛛与僵尸之间最直观的区别；
+ *  - **亮处中立**（`neutralInLight: 11`）：原版亮度 ≥ 11 时不主动攻击
+ *    （白天、火把旁边它只会干瞪眼），但**被打过就会记仇**（见 `Mob.ANGER_SECONDS`）；
+ *  - **节肢家族**（`family: 'arthropod'`）：`节肢杀手` 附魔的第一个生效目标
+ *    （在那之前这个附魔没有任何生物能试）。
+ *
+ * 数值按原版：16 点生命、接触伤害 2、追击范围 16 格；
+ * 掉落**蛛丝 0~2**（100%）与**蜘蛛眼 1 个 / 1/3 概率**（原版）。
+ * ⚠️ 未做：爬墙时不减速（原版贴墙会慢一点）、宽体（1.4 格，能钻进 1 格宽的缝）。
+ */
+export const SPIDER_TYPE: MobType = {
+  id: 'spider',
+  name: '蜘蛛',
+  health: 16,
+  width: 1.4,
+  height: 0.9,
+  speed: 2.9,
+  hostile: true,
+  attackDamage: 2,
+  followRange: 16,
+  drops: [
+    { itemId: Item.STRING, min: 0, max: 2 },
+    // ⚠️ `min: 1, max: 1` + `chance: 1/3` 才是原版那 1/3：写成 `min: 0, max: 1`
+    // 会被"数量也掷一次"再除一半（实测 17%，见 `test:spider` 的统计断言）
+    { itemId: Item.SPIDER_EYE, min: 1, max: 1, chance: 1 / 3 },
+  ],
+  xp: 5,
+  family: 'arthropod',
+  climbing: true,
+  neutralInLight: 11,
+  bodyColor: 0x8a3b2a,
+  accentColor: 0x3f1a12,
+  eyeHeight: 0.7,
+};
+
+/**
+ * 洞穴蜘蛛（批次 93）：废弃矿井里的那种小蜘蛛。
+ *
+ * 与蜘蛛的差别只有三条，全都写在数据里：**更小**（0.7 × 0.5，能钻进 1 格高的缝）、
+ * **每次命中让对方中毒 7 秒**（`venom`，这是它比普通蜘蛛可怕的地方）、
+ * **不进自然生成表**（原版只从废弃矿井的刷怪笼里来，而矿井还没做——
+ * 所以它现在只能靠 `/summon` 或调试菜单见到，记在 TASKS J15）。
+ *
+ * 数值按原版：12 点生命、接触伤害 2、掉落同样是蛛丝 0~2 + 蜘蛛眼（1/3）。
+ */
+export const CAVE_SPIDER_TYPE: MobType = {
+  id: 'cave_spider',
+  name: '洞穴蜘蛛',
+  health: 12,
+  width: 0.7,
+  height: 0.5,
+  speed: 2.4,
+  hostile: true,
+  attackDamage: 2,
+  followRange: 16,
+  drops: [
+    { itemId: Item.STRING, min: 0, max: 2 },
+    // ⚠️ `min: 1, max: 1` + `chance: 1/3` 才是原版那 1/3：写成 `min: 0, max: 1`
+    // 会被"数量也掷一次"再除一半（实测 17%，见 `test:spider` 的统计断言）
+    { itemId: Item.SPIDER_EYE, min: 1, max: 1, chance: 1 / 3 },
+  ],
+  xp: 5,
+  family: 'arthropod',
+  climbing: true,
+  neutralInLight: 11,
+  naturalSpawn: false,
+  venom: { effect: 'poison', seconds: 7 },
+  bodyColor: 0x2f6f7a,
+  accentColor: 0x17343c,
+  eyeHeight: 0.4,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
+  SPIDER_TYPE,
+  CAVE_SPIDER_TYPE,
   {
     id: 'zombie',
     name: '僵尸',
@@ -254,8 +337,23 @@ export const REMOTE_PLAYER_TYPE: MobType = {
   eyeHeight: 1.62,
 };
 
-/** 敌对生物（生成与战斗判定用） */
-export const HOSTILE_MOBS: readonly MobType[] = MOB_TYPES.filter((type) => type.hostile);
+/**
+ * **会自然刷出来**的敌对生物（刷怪用）。
+ *
+ * ⚠️ 与"所有敌对生物"不是一回事（批次 93 起）：洞穴蜘蛛是敌对的，但原版它只从
+ * **废弃矿井的刷怪笼**里来，而矿井还没做——所以它 `naturalSpawn: false`、
+ * 不该被撒在野地里（与村民那条同一个坑：不筛这一道，`MobSpawner` 就会把它当普通怪刷）。
+ */
+export const HOSTILE_MOBS: readonly MobType[] = MOB_TYPES.filter(
+  (type) => type.hostile && type.naturalSpawn !== false,
+);
+/**
+ * **所有**敌对生物（含"不自然刷"的烈焰人、洞穴蜘蛛）。
+ *
+ * 给"击败一只敌对生物"这类进度用——原版那条不挑物种，而从刷怪笼里打出来的
+ * 烈焰人当然也算"怪物"。
+ */
+export const ALL_HOSTILE_MOBS: readonly MobType[] = MOB_TYPES.filter((type) => type.hostile);
 /**
  * 被动生物（**自然生成用**）。
  *

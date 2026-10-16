@@ -4745,6 +4745,19 @@ class App {
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       player: { x: this.physics.x, y: this.physics.y, z: this.physics.z },
       hurtPlayer: (amount, sourceX, sourceZ, cause) => this.damagePlayer(amount, sourceX, sourceZ, cause),
+      // 蜘蛛在亮处中立（批次 93）：亮度取"方块光与折算后的天光"的较大者，
+      // 与刷怪判据同一套折算（天光要按昼夜折算，否则夜里也算 15 → 蜘蛛永不打人）
+      lightAt: (x, y, z) =>
+        Math.max(
+          this.world.getBlockLight(x, y, z),
+          Math.round(this.world.getSkyLight(x, y, z) * this.solidMaterial.skyBrightnessValue),
+        ),
+      // 洞穴蜘蛛的中毒（批次 93）：实体层只报"该中毒了"，时长与免疫归生存模块。
+      // 走的是玩家状态效果那一套（`/effect` 与药水同一条路），所以"中毒不掉到死"
+      // 与"蜘蛛眼/牛奶能解"这些既有规则自动生效
+      afflictPlayer: (effect, seconds) => {
+        this.effects.apply(effect, seconds, 0);
+      },
       // 箭矢命中生物：实体层不持有生物列表，所以由这里从实体管理器里查
       hitMob: (box) => {
         for (const entity of this.entities.all) {
