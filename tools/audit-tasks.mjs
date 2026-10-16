@@ -229,6 +229,14 @@ if (!claimCommits) {
   }
 
   const claimTests = /vitest \+ (\d+) 套自建离线测试/.exec(readmeOut);
+  /**
+   * HANDOFF 里也写着同一个数（`npm test` 那一行的"**N 套**"）。
+   *
+   * ⚠️ 这条是补上的：批次 57 之前这里**只查了 README**，于是 HANDOFF 那个数从
+   * 56 一路漂到 62 都没人发现（列表长了、数字没跟着走）。**同一个事实写在两处，
+   * 自检就得查两处**——否则"锚点文档不会漂"这句话本身就在漂。
+   */
+  const claimHandoff = /\*\*(\d+) 套\*\*自建离线测试/.exec(handoff);
   if (declared === 0) {
     console.log('· 跳过离线测试套数核对（读不到 package.json）');
   } else if (!claimTests) {
@@ -237,8 +245,14 @@ if (!claimCommits) {
   } else if (Number(claimTests[1]) !== declared) {
     failed = true;
     console.log(`\n✗ README 的离线测试套数过期：写着 ${claimTests[1]} 套，package.json 里实际 ${declared} 套`);
+  } else if (!claimHandoff) {
+    failed = true;
+    console.log('\n✗ HANDOFF 里找不到"**N 套**自建离线测试"这一句');
+  } else if (Number(claimHandoff[1]) !== declared) {
+    failed = true;
+    console.log(`\n✗ HANDOFF 的离线测试套数过期：写着 ${claimHandoff[1]} 套，package.json 里实际 ${declared} 套`);
   } else {
-    console.log(`✓ README 的离线测试套数与 package.json 一致（${declared} 套）`);
+    console.log(`✓ README 与 HANDOFF 的离线测试套数都与 package.json 一致（${declared} 套）`);
   }
 }
 

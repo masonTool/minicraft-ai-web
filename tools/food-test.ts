@@ -89,6 +89,13 @@ const VANILLA: Record<string, readonly [number, number]> = {
   cookie: [2, 0.4],
   // ---- 批次 50（海带）：1 点饥饿 / 0.6 点饱和度（原版；单吃很亏，压成块当燃料才是它的用处）
   dried_kelp: [1, 0.6],
+  // ---- 批次 57（可疑的炖菜）：与蘑菇煲同一档，6 点饥饿 / 7.2 点饱和度；
+  // 差别只在"带哪个状态效果"（那张表在 `stew-test` 里逐个对照）
+  suspicious_stew_dandelion: [6, 7.2],
+  suspicious_stew_poppy: [6, 7.2],
+  suspicious_stew_blue_orchid: [6, 7.2],
+  suspicious_stew_oxeye_daisy: [6, 7.2],
+  suspicious_stew_cornflower: [6, 7.2],
 };
 
 equal('食物种类数', Object.keys(FOOD_TABLE).length, Object.keys(VANILLA).length);
