@@ -4226,6 +4226,90 @@ PAINTERS.jungle_sapling = saplingPainter([104, 168, 52]);
 PAINTERS.acacia_sapling = saplingPainter([122, 158, 70]);
 PAINTERS.dark_oak_sapling = saplingPainter([64, 106, 50]);
 
+/**
+ * 瓜藤（批次 77）：一根**越长越高**的茎，八个阶段一张图（同一套画法，只有高度与卷须不同）。
+ *
+ * 与甘蔗/竹子那种 `stalkPainter` 的差别：那两位是"一格一节"，而茎是**一株植物**——
+ * 所以要有一条主茎、两片叶子，第 7 阶段再点几个小花苞（"它已经能结果了"的唯一提示）。
+ * 结果的茎（`attached_*`）再在顶端画一颗**瓜色**的小果，一眼能看出"这株结过果了"。
+ */
+function stemPainter(tint: readonly [number, number, number], stage: number): Painter {
+  return (x, y, rng): RGBA => {
+    const stalk = (color: readonly [number, number, number], scale = 1): RGBA => [
+      clamp255(color[0] * scale + (rng() * 12 - 6)),
+      clamp255(color[1] * scale + (rng() * 12 - 6)),
+      clamp255(color[2] * scale + (rng() * 12 - 6)),
+      255,
+    ];
+    // 主茎：从底部往上，高度随阶段长高（第 0 阶段只有两格高）
+    const top = 15 - Math.round((stage / 7) * 8);
+    if (x >= 7 && x <= 8 && y >= top && y <= 15) return stalk(tint, 0.92);
+    // 两侧的叶子：阶段越大越靠上、越大
+    const leafTop = top + 2;
+    const spread = 1 + Math.round(stage / 3);
+    const dy = y - leafTop;
+    if (dy >= 0 && dy <= 1 + spread) {
+      const dx = Math.abs(x - 7.5);
+      if (dx >= 1 && dx <= 1.5 + spread) return stalk([tint[0] * 1.12, tint[1] * 1.12, tint[2] * 1.12], 1);
+    }
+    // 第 7 阶段点几个花苞（成熟了，随时会结果）
+    if (stage === 7 && (y === top || y === top + 1) && Math.abs(x - 7.5) <= 2) {
+      if ((x + y) % 3 === 0) return [clamp255(tint[0] * 1.5), clamp255(tint[1] * 1.35), clamp255(tint[2] * 0.7), 255];
+    }
+    return [0, 0, 0, 0];
+  };
+}
+
+/** 结果的茎：茎 + 顶端一颗**瓜色**的小果（原版会朝果实弯，这里用"顶上有一颗果"表达同一件事） */
+function attachedStemPainter(stemTint: readonly [number, number, number], fruit: readonly [number, number, number]): Painter {
+  const base = stemPainter(stemTint, 7);
+  return (x, y, rng): RGBA => {
+    if (y <= 5) {
+      const r = Math.hypot(x - 7.5, y - 3.2);
+      if (r < 2.6) {
+        const jitter = rng() * 14 - 7;
+        return [clamp255(fruit[0] + jitter), clamp255(fruit[1] + jitter), clamp255(fruit[2] + jitter), 255];
+      }
+      return [0, 0, 0, 0];
+    }
+    return base(x, y, rng);
+  };
+}
+
+/** 南瓜藤偏黄绿、西瓜藤偏青绿（原版两张图就是这个差别） */
+const PUMPKIN_STEM_TINT: readonly [number, number, number] = [122, 150, 60];
+const MELON_STEM_TINT: readonly [number, number, number] = [96, 156, 74];
+for (let stage = 0; stage < 8; stage++) {
+  PAINTERS[`pumpkin_stem_stage${stage}`] = stemPainter(PUMPKIN_STEM_TINT, stage);
+  PAINTERS[`melon_stem_stage${stage}`] = stemPainter(MELON_STEM_TINT, stage);
+}
+PAINTERS.attached_pumpkin_stem = attachedStemPainter(PUMPKIN_STEM_TINT, [214, 148, 42]);
+PAINTERS.attached_melon_stem = attachedStemPainter(MELON_STEM_TINT, [92, 158, 58]);
+
+/** 瓜类种子（批次 77）：与小麦种子同一套"几粒点阵"，只换颜色（南瓜籽奶白、西瓜籽近黑） */
+function seedsPainter(color: readonly [number, number, number]): Painter {
+  const dots: readonly (readonly [number, number])[] = [
+    [4, 4], [7, 3], [10, 5], [4, 8], [8, 7], [11, 9], [5, 11], [9, 12],
+  ];
+  return (x, y, rng): RGBA => {
+    const jitter = rng() * 14 - 7;
+    for (const [sx, sy] of dots) {
+      if (Math.abs(x - sx) <= 1 && Math.abs(y - sy) <= 1) {
+        return [
+          clamp255(color[0] + jitter),
+          clamp255(color[1] + jitter),
+          clamp255(color[2] + jitter),
+          255,
+        ];
+      }
+    }
+    return [0, 0, 0, 0];
+  };
+}
+
+PAINTERS.item_pumpkin_seeds = seedsPainter([236, 224, 186]);
+PAINTERS.item_melon_seeds = seedsPainter([62, 58, 44]);
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

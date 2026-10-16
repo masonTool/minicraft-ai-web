@@ -844,6 +844,9 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.STRING, count: 4 },
     ingredients: [woolId(0)],
   },
+  // 瓜类种子（批次 77）：原版都是无序配方——1 个南瓜出 4 颗南瓜籽、1 片西瓜出一颗西瓜籽
+  { kind: 'shapeless' as const, result: { id: Item.PUMPKIN_SEEDS, count: 4 }, ingredients: [Block.PUMPKIN] },
+  { kind: 'shapeless' as const, result: { id: Item.MELON_SEEDS, count: 1 }, ingredients: [Item.MELON_SLICE] },
   // 骨粉（批次 69）：原版就是"1 根骨头磨成 3 份"，不需要工作台之外的任何东西。
   // 骨头来自骷髅（生物掉落物这条链已经通了），所以骨粉是**可再生**的。
   {

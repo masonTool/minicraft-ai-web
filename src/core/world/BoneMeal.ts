@@ -30,9 +30,13 @@ import {
   Block,
   COCOA_STAGES,
   CROP_STAGES,
+  STEM_MAX_STAGE,
+  STEM_STAGES,
   berryStageOf,
   cocoaStageOf,
   cropOf,
+  stemKindOf,
+  stemStageOf,
 } from '../registry/blocks.ts';
 import { BAMBOO_MAX_HEIGHT } from '../tick/RandomTicks.ts';
 
@@ -117,6 +121,23 @@ export function fertilizeAt(
   if (cocoa >= 0) {
     if (cocoa >= COCOA_STAGES.length - 1) return null;
     const blockId = COCOA_STAGES[cocoa + 1]!;
+    world.setBlock(x, y, z, blockId);
+    return { x, y, z, blockId };
+  }
+
+  // ---- ⑤ 瓜藤（批次 77）：和作物一样 +2~5 阶、截到第 7 阶段
+  // ⚠️ **不会结果**：结果的判定要"看旁边那一格"，而这里的世界接口只有"读一格写一格"——
+  // 想让骨粉也能直接结果的话，得给它加一个"放方块并顺带改朝向"的口子。
+  // 原版也是这个口径：骨粉只催熟，结果发生在随机刻里。
+  const stemKind = stemKindOf(id);
+  if (stemKind) {
+    const stage = stemStageOf(id);
+    const stages = STEM_STAGES[stemKind]!;
+    if (stage < 0 || stage >= STEM_MAX_STAGE) return null; // 结果的茎 / 已成熟的茎：催不动（不消耗）
+    const span = BONE_MEAL_MAX_STAGES - BONE_MEAL_MIN_STAGES + 1;
+    const step = BONE_MEAL_MIN_STAGES + Math.floor(random() * span);
+    const next = Math.min(STEM_MAX_STAGE, stage + step);
+    const blockId = stages[next]!;
     world.setBlock(x, y, z, blockId);
     return { x, y, z, blockId };
   }

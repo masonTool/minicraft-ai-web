@@ -1976,6 +1976,81 @@ export function saplingTreeOf(blockId: number): TreeKind | null {
 /** 全部树苗 id（断言与遍历用，不手抄一份） */
 export const SAPLING_IDS: readonly number[] = [...SAPLING_ID_MAP.values()];
 
+
+// ---------------------------------------------------------------- 瓜藤与果实（批次 77，B48）
+
+/**
+ * 南瓜与西瓜的**茎**（原版 `pumpkin_stem` / `melon_stem`）。
+ *
+ * 与小麦那四种作物有三处不同，所以**不进** `CROP_STAGES`：
+ *  1. **八个阶段**（原版 0~7，作物只有 4 个）；
+ *  2. **成熟不等于收获**：第 7 阶段之后它还要在随机刻里"结果"——在**旁边**的土上放一个
+ *     南瓜/西瓜，自己变成**结果的茎**（`attached_*_stem`，朝向存在状态位里）；
+ *  3. **打掉给种子**（不是给果实）：果实是另外一格方块，自己去收。
+ */
+export const PUMPKIN_STEM_ID_START = 489;
+export const MELON_STEM_ID_START = 497;
+/** 结果的茎（各一个 id，朝向存在状态位里） */
+export const PUMPKIN_STEM_ATTACHED_ID = 505;
+export const MELON_STEM_ATTACHED_ID = 506;
+
+/** 茎最多长到第几阶段（原版 7，即 0~7 共 8 个） */
+export const STEM_MAX_STAGE = 7;
+
+export const STEM_STAGES: Readonly<Record<string, readonly number[]>> = {
+  pumpkin: Array.from({ length: STEM_MAX_STAGE + 1 }, (_, stage) => PUMPKIN_STEM_ID_START + stage),
+  melon: Array.from({ length: STEM_MAX_STAGE + 1 }, (_, stage) => MELON_STEM_ID_START + stage),
+};
+
+/** 结果的茎 → 它属于哪种瓜 */
+const ATTACHED_STEMS = new Map<number, string>([
+  [PUMPKIN_STEM_ATTACHED_ID, 'pumpkin'],
+  [MELON_STEM_ATTACHED_ID, 'melon'],
+]);
+
+const STEM_SPECS: readonly BlockSpec[] = [
+  ...STEM_STAGES.pumpkin!.map((id, stage) =>
+    plantSpec(id, `pumpkin_stem_stage${stage}`, `pumpkin_stem_stage${stage}`),
+  ),
+  ...STEM_STAGES.melon!.map((id, stage) =>
+    plantSpec(id, `melon_stem_stage${stage}`, `melon_stem_stage${stage}`),
+  ),
+  // 结果的茎：形状仍是十字面片，**朝向存在状态位里**（原版会朝果实弯，这里暂时只有一张贴图——
+  // 差异写进 TASKS B48：模型弯曲要另加一条"按朝向旋转的面片"渲染路径）
+  plantSpec(PUMPKIN_STEM_ATTACHED_ID, 'attached_pumpkin_stem', 'attached_pumpkin_stem'),
+  plantSpec(MELON_STEM_ATTACHED_ID, 'attached_melon_stem', 'attached_melon_stem'),
+];
+
+/** 这个 id 是茎的哪个阶段（不是则 -1）；结果的茎返回 -1（它不长了） */
+export function stemStageOf(id: number): number {
+  for (const stages of Object.values(STEM_STAGES)) {
+    const stage = stages.indexOf(id);
+    if (stage >= 0) return stage;
+  }
+  return -1;
+}
+
+/** 这个 id 是哪种茎（`pumpkin` / `melon`；不是茎返回 null）——**结果的茎也算** */
+export function stemKindOf(id: number): string | null {
+  for (const [kind, stages] of Object.entries(STEM_STAGES)) {
+    if (stages.includes(id)) return kind;
+  }
+  return ATTACHED_STEMS.get(id) ?? null;
+}
+
+/** 这是不是"已经结果的茎"（不再生长，但打掉仍给种子） */
+export function isAttachedStem(id: number): boolean {
+  return ATTACHED_STEMS.has(id);
+}
+
+/** 这种茎结果之后变成哪个 id */
+export function attachedStemId(kind: string): number | undefined {
+  for (const [attachedId, attachedKind] of ATTACHED_STEMS) {
+    if (attachedKind === kind) return attachedId;
+  }
+  return undefined;
+}
+
 const BARREL_SPECS: readonly BlockSpec[] = [
   {
     id: BARREL_ID,
@@ -2314,6 +2389,7 @@ const SPECS: readonly BlockSpec[] = [
   ...ENDER_CHEST_SPECS,
   ...SHULKER_BOX_SPECS,
   ...SAPLING_SPECS,
+  ...STEM_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2595,6 +2671,11 @@ export const Block = {
   ENDER_CHEST: ENDER_CHEST_ID,
   // ---- 潜影盒（批次 72，见 `SHULKER_BOX_SPECS`）：27 格，内容跟着**物品**走
   SHULKER_BOX: SHULKER_BOX_ID,
+  // ---- 瓜藤（批次 77，见 `STEM_SPECS`）：8 阶段 + 结果的茎
+  PUMPKIN_STEM_STAGE0: PUMPKIN_STEM_ID_START,
+  MELON_STEM_STAGE0: MELON_STEM_ID_START,
+  PUMPKIN_STEM_ATTACHED: PUMPKIN_STEM_ATTACHED_ID,
+  MELON_STEM_ATTACHED: MELON_STEM_ATTACHED_ID,
   // ---- 树苗（批次 75，见 `SAPLING_SPECS`）：一格就能长成一棵树
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
@@ -2920,6 +3001,10 @@ HARDNESS.set(Block.ENDER_CHEST, 22.5);
 HARDNESS.set(Block.SHULKER_BOX, 2);
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);
+// 瓜藤（批次 77）：与作物一样一碰就掉（茎与结果的茎都是）
+for (const stages of Object.values(STEM_STAGES)) for (const id of stages) HARDNESS.set(id, 0);
+HARDNESS.set(PUMPKIN_STEM_ATTACHED_ID, 0);
+HARDNESS.set(MELON_STEM_ATTACHED_ID, 0);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -3168,6 +3253,27 @@ for (let stage = 0; stage < 4; stage++) {
  * 作物生长就是"把当前阶段换成下一个 id"，所以这几张表是唯一的事实来源。
  * 三种作物共用同一套生长行为，只是 id 区间与掉落不同（见 `cropOf`）。
  */
+// ⚠️ 下面这一段必须在 `Block` 声明**之后**：它要用 `Block.PUMPKIN` 这些常量，
+// 而 `Block` 是个 `as const` 对象（在块作用域里，提前读会直接抛 TDZ）。
+// 同一份文件里也会踩这条坑——与"两个模块互相 import 时顶层读对方 const"是同一件事。
+
+/** 结出的果实方块 */
+export const STEM_FRUIT: Readonly<Record<string, number>> = {
+  pumpkin: Block.PUMPKIN,
+  melon: Block.MELON,
+};
+
+/**
+ * 结果能扎在哪：耕地、泥土、草方块（原版如此——果实长在**旁边**那一格的"地里"，
+ * 而不是茎自己那一格）。种子仍然只能种在**耕地**上（与小麦一致，见种植路径）。
+ */
+const FRUIT_SOIL = new Set<number>([Block.FARMLAND, Block.DIRT, Block.GRASS_BLOCK]);
+
+/** 旁边那一格能结果吗（那一格是空气、它下面是可以扎根的土） */
+export function canBearFruitAt(soilBelow: number, above: number): boolean {
+  return FRUIT_SOIL.has(soilBelow) && above === Block.AIR;
+}
+
 export const CROP_STAGES: Readonly<Record<string, readonly number[]>> = {
   wheat: [Block.WHEAT_STAGE0, Block.WHEAT_STAGE1, Block.WHEAT_STAGE2, Block.WHEAT_STAGE3],
   carrots: [Block.CARROTS_STAGE0, Block.CARROTS_STAGE1, Block.CARROTS_STAGE2, Block.CARROTS_STAGE3],

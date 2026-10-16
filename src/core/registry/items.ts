@@ -33,7 +33,10 @@ import {
   copperId,
   cropOf,
   wheatStageOf,
-  woolId, saplingId } from './blocks.ts';
+  STEM_STAGES,
+  saplingId,
+  woolId,
+} from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
 import { SHEARS_INFO, SHEARS_ITEM_ID, TOOL_SPECS, type ToolInfo } from './tools.ts';
@@ -194,6 +197,11 @@ export const Item = {
   // 骨粉（批次 69）：由骨头磨成（1 → 3），对着作物用能催长 2~5 个阶段；
   // 发射器也认得它（把"施肥"变成自动化）。堆肥桶满仓后产的也是它（后续批次）。
   BONE_MEAL: 1077,
+  // ---- 瓜类种子（批次 77，B48）
+  // 与小麦/甜菜根种子一样带 `block` 字段 → **种植路径是通用的**（按这个字段放下去），
+  // 所以加这两种种子不需要动主程序
+  PUMPKIN_SEEDS: 1078,
+  MELON_SEEDS: 1079,
   // ---- 食物（数值表在 `food.ts`，这里只占 id）
   COOKED_BEEF: 1040,
   COOKED_PORKCHOP: 1041,
@@ -319,6 +327,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // 甜菜根（B17）：第四种作物。种子只从村庄/矿井的战利品里来（原版也是这么来的）
   { id: Item.BEETROOT, name: 'minecraft:beetroot', tile: 'item_beetroot' },
   { id: Item.BEETROOT_SEEDS, name: 'minecraft:beetroot_seeds', tile: 'item_beetroot_seeds', block: Block.BEETROOTS_STAGE0 },
+  // 南瓜/西瓜种子（批次 77）：种下去是自己的**第 0 阶段茎**
+  { id: Item.PUMPKIN_SEEDS, name: 'minecraft:pumpkin_seeds', tile: 'item_pumpkin_seeds', block: Block.PUMPKIN_STEM_STAGE0 },
+  { id: Item.MELON_SEEDS, name: 'minecraft:melon_seeds', tile: 'item_melon_seeds', block: Block.MELON_STEM_STAGE0 },
   { id: Item.BEETROOT_SOUP, name: 'minecraft:beetroot_soup', tile: 'item_beetroot_soup', maxStack: 1 },
   // ---- 甜浆果与可可豆（批次 49）
   // 甜浆果：种下去就是**甜浆果丛**（`block` 指向第 0 阶段，与原版一致）
@@ -1317,6 +1328,20 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
  * 破坏方块后的掉落。返回 null 表示无掉落。
  * 注意：目前还不区分工具（例如石头无镐也应该有掉落），工具等级校验会在 G4 接入。
  */
+/**
+ * 瓜藤（批次 77）：茎（含结果的茎）打掉给 **1 颗自己那种种子**。
+ *
+ * ⚠️ 与小麦那四种作物不同：它们的"收获"走 `extraCropDrop`（成熟才给种子/果实），
+ * 而茎的成熟**不是**收获——第 7 阶段之后它还要去旁边**结果**，所以打掉只给种子；
+ * 果实是另**一格**方块、自己去收（原版正是这个结构）。
+ */
+for (const [kind, stages] of Object.entries(STEM_STAGES)) {
+  const seed = kind === 'pumpkin' ? Item.PUMPKIN_SEEDS : Item.MELON_SEEDS;
+  for (const id of stages) DROP_OVERRIDES.set(id, { id: seed, count: 1 });
+}
+DROP_OVERRIDES.set(Block.PUMPKIN_STEM_ATTACHED, { id: Item.PUMPKIN_SEEDS, count: 1 });
+DROP_OVERRIDES.set(Block.MELON_STEM_ATTACHED, { id: Item.MELON_SEEDS, count: 1 });
+
 export function dropFor(blockId: number): { id: number; count: number } | null {
   if (NO_DROP.has(blockId)) return null;
   const override = DROP_OVERRIDES.get(blockId);

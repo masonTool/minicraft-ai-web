@@ -18,7 +18,15 @@ import {
   BERRY_STAGES,
   Block,
   SAPLING_IDS,
+  STEM_FRUIT,
+  STEM_MAX_STAGE,
+  STEM_STAGES,
+  attachedStemId,
+  canBearFruitAt,
+  isAttachedStem,
   saplingTreeOf,
+  stemKindOf,
+  stemStageOf,
   COCOA_STAGES,
   CORAL_DEAD_VARIANT,
   CORAL_LIVE_VARIANT,
@@ -40,6 +48,7 @@ import {
   MAX_SNOW_LAYERS,
   facingOf,
   snowLayers,
+  withFacing,
   withSnowLayers,
   withVineSide,
   withVineUp,
@@ -229,6 +238,57 @@ const NEIGHBOURS: ReadonlyArray<readonly [number, number, number]> = [
  * ⚠️ 与"骨粉立刻长"共用一套种树代码，所以两种长法长出来的树**形状规则完全一致**
  * （只有随机盐不同时才会不一样）。
  */
+/**
+ * 瓜藤（批次 77，B48）：前八个阶段与作物走**同一条路**（耕地 + 光照 + 概率 → 涨一阶），
+ * 但第八阶段之后**不是收获，而是结果**——这是它与小麦那四种作物最大的不同：
+ *  1. 成熟（第 7 阶段）时，先随机挑一个水平方向，看旁边那一格"下面能扎根、上面是空气"；
+ *  2. 能就去那里放一个南瓜/西瓜，**自己变成"结果的茎"**（朝向写进状态位）；
+ *  3. 结果之后不再生长，打掉仍给种子（果实是另一格，自己去收）。
+ *
+ * ⚠️ 一次随机刻只试**一个**方向（原版也是这个量级）：所以"四面都空着"时也要等几轮才结果。
+ */
+function growStem(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const id = world.getBlock(x, y, z);
+  const kind = stemKindOf(id);
+  if (!kind || isAttachedStem(id)) return false;
+  if (world.getBlock(x, y - 1, z) !== Block.FARMLAND) return false;
+  if ((world.lightAt?.(x, y, z) ?? 15) < CROP_MIN_LIGHT) return false;
+
+  const stage = stemStageOf(id);
+  if (stage < 0) return false;
+  const chance = isHydrated(world, x, y - 1, z) ? CROP_GROW_CHANCE_WET : CROP_GROW_CHANCE_DRY;
+  if (random() >= chance) return false;
+
+  const stages = STEM_STAGES[kind]!;
+  if (stage < STEM_MAX_STAGE) {
+    world.setBlock(x, y, z, stages[stage + 1]!);
+    return true;
+  }
+
+  // ---- 成熟：去旁边结果
+  const dir = STEM_DIRECTIONS[Math.min(STEM_DIRECTIONS.length - 1, Math.floor(random() * STEM_DIRECTIONS.length))]!;
+  const nx = x + dir[0];
+  const nz = z + dir[1];
+  if (!canBearFruitAt(world.getBlock(nx, y - 1, nz), world.getBlock(nx, y, nz))) return false;
+  if (!world.setBlock(nx, y, nz, STEM_FRUIT[kind]!)) return false;
+  // 自己变成"结果的茎"：朝向那一面指向果实（贴图暂时不跟着弯，见 TASKS B48）
+  const attached = attachedStemId(kind)!;
+  if (world.setBlockWithState) {
+    world.setBlockWithState(x, y, z, attached, withFacing(0, dir[2] as Facing));
+  } else {
+    world.setBlock(x, y, z, attached);
+  }
+  return true;
+}
+
+/** 四个水平方向：`[dx, dz, facing]`（facing 是 `Facing` 的取值，用于写朝向） */
+const STEM_DIRECTIONS: readonly (readonly [number, number, number])[] = [
+  [0, -1, 0],
+  [1, 0, 1],
+  [0, 1, 2],
+  [-1, 0, 3],
+];
+
 function growSapling(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
   const id = world.getBlock(x, y, z);
   const kind = saplingTreeOf(id);
@@ -618,6 +678,10 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.SUGAR_CANE, makeCaneBehavior(true, CANE_MAX_HEIGHT)],
   // 树苗（批次 75）：6 种木材各一行（从 `SAPLING_IDS` 推出来——加木材时不会漏）
   ...SAPLING_IDS.map((id) => [id, growSapling] as [number, RandomTickBehavior]),
+  // 瓜藤（批次 77）：8 个阶段各一行；"结果的茎"不在表里（它不再生长）
+  ...Object.values(STEM_STAGES)
+    .flat()
+    .map((id) => [id, growStem] as [number, RandomTickBehavior]),
   [Block.BAMBOO, makeCaneBehavior(false, BAMBOO_MAX_HEIGHT)],
   [Block.CRIMSON_NYLIUM, makeNyliumBehavior(Block.CRIMSON_NYLIUM)],
   [Block.WARPED_NYLIUM, makeNyliumBehavior(Block.WARPED_NYLIUM)],
@@ -677,7 +741,7 @@ export const CROP_GROW_CHANCE_WET = 0.7;
  *     所以"雨打湿耕地"在这里的等价实现就是**把降雨也算进 `isHydrated`**；
  *     没有这一步，"雨打湿耕地"就只是一句空话。
  */
-function isHydrated(world: TickWorld, x: number, y: number, z: number): boolean {
+export function isHydrated(world: TickWorld, x: number, y: number, z: number): boolean {
   // 露天（天光 15）才算"淋到雨"——屋檐下的耕地不该因为下雨就变湿
   if (world.raining && (world.skyLightAt?.(x, y + 1, z) ?? 0) >= 15) return true;
   for (let dz = -4; dz <= 4; dz++) {
