@@ -1,5 +1,5 @@
 /**
- * 可投掷物实体（K4 尾巴）：雪球 / 鸡蛋 / 喷溅药水
+ * 可投掷物实体（K4 尾巴）：雪球 / 鸡蛋 / 喷溅药水 / 末影珍珠
  *
  * 与 `Arrow`（J9）共用同一套"重力 + 逐段命中"的骨架，但**行为上有三处不同**，
  * 所以是独立的一个类而不是给 Arrow 加参数：
@@ -8,7 +8,8 @@
  *  2. 重力更小：原版投掷物是 0.03 格/tick² ≈ **12 格/秒²**（箭是 0.05 ≈ 20），
  *     所以扔出来的抛物弧比射箭平；
  *  3. 命中后的效果按种类分流：雪球只推一下（原版 0 伤害）、
- *     鸡蛋 12.5% 孵出小鸡、喷溅药水找主程序结算"4 格范围内挂效果"。
+ *     鸡蛋 12.5% 孵出小鸡、喷溅药水找主程序结算"4 格范围内挂效果"、
+ *     **末影珍珠把扔它的人传到落点上**（批次 113）。
  *
  * 判定与 Arrow 一样自己分子步（每段 ≤0.4 格）：投掷物速度也有 30 格/秒，
  * 不分子步会直接穿过 0.4 格宽的鸡。
@@ -17,6 +18,7 @@
 import { Entity, entityIntersectsBox, type EntityContext } from './Entity.ts';
 import { boxAt } from '../physics/AABB.ts';
 import { moveBody, type MovingBody } from '../physics/EntityMotion.ts';
+import { blockDef } from '../registry/blocks.ts';
 
 /** 投掷物重力（原版 0.03 格/tick² ≈ 12 格/秒²） */
 const GRAVITY = 12;
@@ -50,7 +52,24 @@ export type ThrowableKind =
   | 'splash_potion'
   | 'lingering_potion'
   | 'small_fireball'
-  | 'large_fireball';
+  | 'large_fireball'
+  | 'ender_pearl';
+
+/**
+ * 末影珍珠落地的摔落伤害（批次 113，原版 5 点）。
+ *
+ * 原版走的是 `DamageSource.FALL`，所以**摔落保护附魔能减它**、创造模式不掉血——
+ * 这两件事都不是这里做的：实体层只报"珍珠落在哪"，扣血由主程序按摔落那条路走
+ * （见 `main.teleportByEnderPearl`）。
+ */
+export const ENDER_PEARL_FALL_DAMAGE = 5;
+/**
+ * 落点卡在方块里时**最多往上顶几格**（批次 113）。
+ *
+ * 原版把玩家放在珍珠落地那一点上、卡住就往上一格一格找；顶满这几格还不行就用原落点
+ * （宁可卡一下，也不要凭空把人挪走十几格）。
+ */
+export const ENDER_PEARL_LANDING_LIFT = 3;
 
 /**
  * 大火球（批次 94，恶魂）：直接命中 6 点、**命中后炸开一小片**（威力 1）。
@@ -235,10 +254,46 @@ export class Throwable extends Entity implements MovingBody {
         if (this.potionId !== undefined) ctx.spawnLingering?.(this.potionId, x, y, z);
         else ctx.playSound?.('splash', x, y, z);
         break;
+      case 'ender_pearl': {
+        // 末影珍珠（批次 113）：**把扔它的人传到落点上**（原版就是"人到珍珠落地的地方"）。
+        //
+        // 为什么由实体层算落点：它已经拿着 `ctx.getBlock`，而"要不要往上顶"是纯粹的
+        // 几何问题（见 `pearlLanding`）；"传过去之后掉 5 点血、响一声"归主程序。
+        //
+        // ⚠️ 这里**不判"是不是玩家扔的"**：投掷物只有两条来源（玩家与发射器），
+        // 而发射器**不放末影珍珠**（`registry/dispense.ts` 里没有它，`test:dispenser`
+        // 有一条断言盯着这件事）——原版那种珍珠没有主人、落地什么都不发生，
+        // 与其做一档"扔出去白扔"，不如让它根本不出现。
+        // 若哪天有人往发射器表里加了珍珠，那条断言会红，回来把这里补成"要认主人"。
+        const landing = this.pearlLanding(ctx);
+        ctx.teleportPlayer?.(landing.x, landing.y, landing.z);
+        break;
+      }
       default:
         break;
     }
 
     this.dead = true;
+  }
+
+  /**
+   * 末影珍珠的落点（批次 113）：从落点那一格起往**上**找最多 `ENDER_PEARL_LANDING_LIFT`
+   * 格，找到"这一格与上面一格都站得下人"为止（原版也是卡住就往上顶）。
+   *
+   * 为什么取"格心 + 0.5"：玩家/实体的坐标约定是"脚下那一格的格心"（与 `Mob` 一致，
+   * 见 `physics/EntityMotion.ts` 的用法），直接把珍珠的浮点坐标丢过去会让玩家半只脚
+   * 卡在方块里。
+   */
+  private pearlLanding(ctx: EntityContext): { x: number; y: number; z: number } {
+    const bx = Math.floor(this.x);
+    const bz = Math.floor(this.z);
+    let by = Math.floor(this.y);
+    for (let lift = 0; lift < ENDER_PEARL_LANDING_LIFT; lift++) {
+      const solid = blockDef(ctx.getBlock(bx, by, bz)).solid;
+      const headSolid = blockDef(ctx.getBlock(bx, by + 1, bz)).solid;
+      if (!solid && !headSolid) break;
+      by++;
+    }
+    return { x: bx + 0.5, y: by, z: bz + 0.5 };
   }
 }

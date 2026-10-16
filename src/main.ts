@@ -64,7 +64,12 @@ import {
   tickCloud,
   type PotionCloud,
 } from './core/survival/PotionCloud.ts';
-import { PLAYER_THROW_SPEED, Throwable, type ThrowableKind } from './core/entity/Throwable.ts';
+import {
+  ENDER_PEARL_FALL_DAMAGE,
+  PLAYER_THROW_SPEED,
+  Throwable,
+  type ThrowableKind,
+} from './core/entity/Throwable.ts';
 import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
@@ -4838,6 +4843,8 @@ class App {
       playerGazeAt: (x, y, z) => this.playerGazeAt(x, y, z),
       // 末影人淋雨（批次 112）：天光是"露天"的判据，与火焰被雨浇灭同源
       skyLightAt: (x, y, z) => this.world.getSkyLight(x, y, z),
+      // 末影珍珠落地（批次 113）：实体层只报"珍珠落在哪"，传人 + 摔落伤害在这里做
+      teleportPlayer: (x, y, z) => this.teleportByEnderPearl(x, y, z),
       // 下雨（下雪也算）：原版的雨只下在主世界，所以这里带上维度
       raining: this.weather.raining && this.dimension === Dimension.OVERWORLD,
       // 箭矢命中生物：实体层不持有生物列表，所以由这里从实体管理器里查
@@ -6216,11 +6223,14 @@ class App {
         ? 'snowball'
         : held === Item.EGG
           ? 'egg'
-          : potion?.splash === true
-            ? 'splash_potion'
-            : potion?.lingering === true
-              ? 'lingering_potion'
-              : null;
+          : // 末影珍珠（批次 113）：扔出去，落地时**把自己传过去**（代价 5 点摔落伤害）
+            held === Item.ENDER_PEARL
+            ? 'ender_pearl'
+            : potion?.splash === true
+              ? 'splash_potion'
+              : potion?.lingering === true
+                ? 'lingering_potion'
+                : null;
     if (kind === null) return false;
 
     // 先扣再扔：扔不出去（背包里其实没有）时什么都不该发生
@@ -6269,6 +6279,31 @@ class App {
         potionId: kind === 'splash_potion' || kind === 'lingering_potion' ? itemId : undefined,
       }),
     );
+  }
+
+  /**
+   * 末影珍珠落地（批次 113，B18/J13 的收尾）：把玩家放到落点，再结算那 5 点摔落伤害。
+   *
+   * 三件事，顺序与原版一致：
+   *  1. **先传过去**：落点已经由 `Throwable.pearlLanding` 吸附到"站得下人的一格"，
+   *     这里不再动坐标（实体层拿着 `getBlock`，判断适合它做）；
+   *  2. **再算伤害**：原版那 5 点走的是 `DamageSource.FALL`，所以这里也走**摔落**这一路
+   *     （`applyIncomingDamage(..., 'fall')`）——摔落保护附魔与抗性提升都能减它，
+   *     而创造模式（`flying`）**完全免疫**，与其它伤害同一个口径；
+   *  3. 音效与粒子：原版那一下有一声很特别的"啪"，我们借用传送门那一档
+   *     （`AudioEngine` 的 kind 是白名单，多编一个不存在的名字只会静默无声）。
+   */
+  private teleportByEnderPearl(x: number, y: number, z: number): void {
+    this.physics.teleport(x, y, z);
+    // 传过去可能一头扎进水里/岩浆/传送门：色罩与环境立刻重算一次（与传送门落地同一条）
+    this.applyEnvironment();
+    this.screenEffects.snap();
+    this.audio.play('portal');
+    this.particles.spawnPortal(x, y + 0.6, z, 16, 0.5);
+    this.vibrate(12);
+    // 创造模式（飞行）免疫伤害——与 `damagePlayer` 的口径一致
+    if (this.flying) return;
+    this.applyIncomingDamage(ENDER_PEARL_FALL_DAMAGE, 'fall');
   }
 
   /**

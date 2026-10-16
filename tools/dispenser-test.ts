@@ -194,6 +194,18 @@ console.log('\n[行为表：哪件物品算什么]');
     );
   }
 
+  // 末影珍珠**故意不进这张表**（批次 113）：原版发射器能放珍珠，但那样扔出去的珍珠
+  // **没有主人**、落地什么都不发生（白扔一颗）。本项目的珍珠落地会"把扔它的人传过去"，
+  // 而发射器这一路没有"人"可传——所以宁可不做这一档。
+  // ⚠️ 这是一条**给未来的人看的断言**：谁要是把珍珠加进发射器表，它会立刻红，
+  // 提醒回去把 `Throwable.impact` 里那段注释说的"要认主人"补上。
+  check(
+    '末影珍珠不在发射器行为表里（发射器扔出去的珍珠没有主人可传）',
+    dispenseBehaviorFor(Item.ENDER_PEARL) === undefined,
+    `实际 ${dispenseBehaviorFor(Item.ENDER_PEARL)?.action ?? '无'}`,
+  );
+  check('（对照）它仍然是个能右键扔的物品', itemDef(Item.ENDER_PEARL) !== undefined);
+
   // 工具类才磨损：打火石与剪刀各 1 点，其余不磨损（"减少一件"）
   equal('打火石用一次耗 1 点耐久', dispenseBehaviorFor(Item.FLINT_AND_STEEL)?.wear, 1);
   equal('剪刀用一次耗 1 点耐久', dispenseBehaviorFor(Item.SHEARS)?.wear, 1);

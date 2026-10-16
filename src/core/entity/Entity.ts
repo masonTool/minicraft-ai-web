@@ -86,6 +86,14 @@ export interface EntityContext {
    */
   playerGazeAt?: (x: number, y: number, z: number) => boolean;
   /**
+   * 把玩家传送到 (x,y,z)（批次 113，**末影珍珠**用：珍珠落地就把扔它的人传过去）。
+   *
+   * ⚠️ 这里只传"人到了哪"——**摔落伤害、音效、粒子全归主程序**
+   * （原版那 5 点走的是 `DamageSource.FALL`，所以"摔落保护能不能减"这类事
+   * 只有生存模块说了算，实体层不该掺和）。
+   */
+  teleportPlayer?: (x: number, y: number, z: number) => void;
+  /**
    * 那一格的**天光**等级（0~15，批次 112，末影人淋雨判据用）。
    *
    * ⚠️ 与 `lightAt` 不是一回事：`lightAt` 是天光与方块光的较大者

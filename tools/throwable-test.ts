@@ -1,11 +1,13 @@
 /**
- * 可投掷实体与喷溅药水离线测试（K4 尾巴）
+ * 可投掷实体与喷溅药水离线测试（K4 尾巴 + 批次 113 的末影珍珠）
  *
- * 覆盖五块：
+ * 覆盖六块：
  *  1. **物品与来源**：雪球/鸡蛋的注册、名字、贴图；雪块掉 4 雪球、4 雪球合成 1 块雪块；
  *     鸡会下蛋（鸡蛋的唯一来源）——"表里有、游戏里拿不到"是这一批最容易翻的车
  *  2. **投掷物实体**：重力、超时消失、撞方块/命中生物后的分流
  *     （雪球只推不伤、鸡蛋 1/8 孵小鸡、喷溅药水把爆心位置报给主程序）
+ *  2b. **末影珍珠**（批次 113）：落地把玩家传到**格心**、卡在方块里往上一格一格顶
+ *     （顶满就用原落点）、打在生物身上也传、**超时消失不传**、说明文字不过期
  *  3. **喷溅范围**（纯函数）：半径 4、时长按 `1 - 距离/4` 缩、瞬间效果不缩、半径外完全没有
  *  4. **生物侧的状态效果**：缓慢/速度改移速、中毒不致死、凋零致死、瞬间治疗/伤害立即结算
  *  5. **鸡下蛋的节奏**：5~10 分钟内一定下过一个蛋；幼体不下蛋
@@ -15,13 +17,15 @@
 
 import { Block } from '../src/core/registry/blocks.ts';
 import { CREATIVE_ITEMS, Item, dropFor, itemDef, maxStackOf } from '../src/core/registry/items.ts';
-import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
+import { hasDescription, itemDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { brewRecipeFor } from '../src/core/crafting/Brewing.ts';
 import { POTIONS, SPLASH_POTIONS, potionById, splashIdOf } from '../src/core/registry/potions.ts';
 import { SPLASH_RADIUS, isInstantEffect, splashEffectsAt, splashScale } from '../src/core/survival/SplashPotion.ts';
 import {
   EGG_CHICK_CHANCE,
+  ENDER_PEARL_FALL_DAMAGE,
+  ENDER_PEARL_LANDING_LIFT,
   PLAYER_THROW_SPEED,
   THROWABLE_LIFETIME,
   Throwable,
@@ -212,6 +216,107 @@ console.log('\n[投掷物：命中分流]');
   });
   advance(bottle2, makeCtx(world), 1);
   check('主程序没给 applySplash 时也不崩', bottle2.dead);
+}
+
+// ---------------------------------------------------------------- 2b. 末影珍珠（批次 113）
+
+console.log('\n[末影珍珠：落地把人传过去]');
+{
+  const world = makeWorld();
+
+  // ---- 物品侧
+  equal('末影珍珠 16 个一叠（原版）', maxStackOf(Item.ENDER_PEARL), 16);
+  check('图标在图集名单里', TILES.has(itemDef(Item.ENDER_PEARL)!.tile));
+  check('有说明', hasDescription(Item.ENDER_PEARL));
+  check(
+    '说明写了"扔出去会被传过去 + 5 点摔落伤害"',
+    itemDescription(Item.ENDER_PEARL).includes('传过去') && itemDescription(Item.ENDER_PEARL).includes('摔落'),
+    itemDescription(Item.ENDER_PEARL),
+  );
+  check(
+    '说明里那句"本项目还没有末影人"已经改掉（批次 112 之后它过期了）',
+    !itemDescription(Item.ENDER_PEARL).includes('还没有末影人'),
+  );
+  equal('摔落伤害是原版的 5 点', ENDER_PEARL_FALL_DAMAGE, 5);
+
+  // ---- 撞墙：把玩家传到落点
+  const teleports: { x: number; y: number; z: number }[] = [];
+  const ctx = makeCtx(world, { teleportPlayer: (x, y, z) => teleports.push({ x, y, z }) });
+  const pearl = new Throwable(0.5, 1, 0.5, { x: 30, y: 0, z: 0 }, {
+    kind: 'ender_pearl',
+    itemId: Item.ENDER_PEARL,
+  });
+  advance(pearl, ctx, 1);
+  check('珍珠撞墙后消失', pearl.dead);
+  equal('恰好传了一次', teleports.length, 1);
+  check('落点在墙前（人不会穿墙）', (teleports[0]?.x ?? 99) < 4, `x=${teleports[0]?.x}`);
+  check(
+    '落点是**格心**（.5），不是珍珠的浮点坐标（否则人会半只脚卡在方块里）',
+    Number.isInteger((teleports[0]?.x ?? 0) - 0.5) && Number.isInteger((teleports[0]?.z ?? 0) - 0.5),
+    `${teleports[0]?.x}, ${teleports[0]?.z}`,
+  );
+  equal('落点吸附到脚下那一层（地面在 y<0）', teleports[0]?.y, 0);
+
+  // ---- 落点卡在方块里：往上一格一格顶
+  const lifted: { x: number; y: number; z: number }[] = [];
+  const solidAt0 = makeCtx(world, {
+    getBlock: (_x, y) => (y === 0 ? Block.STONE : Block.AIR),
+    teleportPlayer: (x, y, z) => lifted.push({ x, y, z }),
+  });
+  const intoFloor = new Throwable(0.5, 0.5, 0.5, { x: 30, y: 0, z: 0 }, {
+    kind: 'ender_pearl',
+    itemId: Item.ENDER_PEARL,
+  });
+  advance(intoFloor, solidAt0, 1);
+  equal('落点那一格是实心时往上顶一格', lifted[0]?.y, 1);
+
+  // ---- 顶满仍然卡着：用原落点，不凭空把人挪走
+  const buried: { x: number; y: number; z: number }[] = [];
+  const allSolid = makeCtx(world, {
+    getBlock: (_x, y) => (y >= 0 && y <= 6 ? Block.STONE : Block.AIR),
+    teleportPlayer: (x, y, z) => buried.push({ x, y, z }),
+  });
+  const deep = new Throwable(0.5, 0.5, 0.5, { x: 30, y: 0, z: 0 }, {
+    kind: 'ender_pearl',
+    itemId: Item.ENDER_PEARL,
+  });
+  advance(deep, allSolid, 1);
+  equal(`顶满 ${ENDER_PEARL_LANDING_LIFT} 格还不行就用原落点（顶到 3）`, buried[0]?.y, ENDER_PEARL_LANDING_LIFT);
+
+  // ---- 打在生物身上：也照样传（原版就是"打到谁就传到他那儿"）
+  const zombie = new Mob(mobTypeById('zombie')!, 2, 1, 0.5);
+  const onMob: { x: number; y: number; z: number }[] = [];
+  const mobCtx = makeCtx(world, {
+    hitMob: () => zombie,
+    teleportPlayer: (x, y, z) => onMob.push({ x, y, z }),
+  });
+  const atMob = new Throwable(1.5, 1.4, 0.5, { x: 10, y: 0, z: 0 }, {
+    kind: 'ender_pearl',
+    itemId: Item.ENDER_PEARL,
+  });
+  atMob.tick(mobCtx, 0.02);
+  check('打在生物身上珍珠也消失', atMob.dead);
+  equal('也传一次（落点就在那一片）', onMob.length, 1);
+  check('落点横向落在生物附近 1 格内', Math.abs((onMob[0]?.x ?? 99) - 1.5) <= 1);
+
+  // ---- 飞太久自然消失：**不传**（没落地就没有"落点"这回事）
+  const timeoutTeleports: unknown[] = [];
+  const emptyCtx = makeCtx(emptyWorld(), { teleportPlayer: (x, y, z) => timeoutTeleports.push({ x, y, z }) });
+  const flying = new Throwable(0.5, 200, 0.5, { x: 5, y: 0, z: 0 }, {
+    kind: 'ender_pearl',
+    itemId: Item.ENDER_PEARL,
+  });
+  advance(flying, emptyCtx, THROWABLE_LIFETIME + 1);
+  check('没碰到任何东西的珍珠超时消失', flying.dead);
+  equal('超时消失不会把人传过去', timeoutTeleports.length, 0);
+
+  // ---- 主程序没给 teleportPlayer 时也不能崩（退化路径）
+  const noHook = new Throwable(0.5, 1, 0.5, { x: 30, y: 0, z: 0 }, {
+    kind: 'ender_pearl',
+    itemId: Item.ENDER_PEARL,
+  });
+  advance(noHook, makeCtx(world), 1);
+  check('主程序没给 teleportPlayer 时也不崩', noHook.dead);
 }
 
 // ---------------------------------------------------------------- 3. 喷溅范围
