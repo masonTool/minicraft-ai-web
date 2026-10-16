@@ -29,6 +29,69 @@
     return predicate();
   };
 
+  // ---------------------------------------------------------------- 主页必须"看得见、点得到"
+  //
+  // ⚠️ 这一组是给一个**真出现过**的 bug 设的门禁（A10 的回归，批次 85 潜伏到批次 102）：
+  //    `UnsupportedScreen` 那一层是 `position: fixed; inset: 0; z-index: 90` 的**不透明**
+  //    整屏底，而它的构造函数一上来就把它挂到 `<body>`（内容是空的）——
+  //    于是**支持 WebGL2 的正常路径**上，主页被一个空层整片盖黑、点不动任何东西，
+  //    而当时所有离线断言都不看"谁盖在谁上面"，一条都没红。
+  //
+  // 三条判据，一条比一条通用（都只量"用户看得见、点得到吗"，不写死实现）：
+  //   ① 菜单层有尺寸、有文字；
+  //   ② 视口中心那一刻，**最上层元素必须落在菜单里**（这就是"点得到"）；
+  //   ③ 不存在"铺满视口 + 不透明 + 拦点击 + **一个字都没有**"的层 —— A10 回归的形状。
+  {
+    const label = (el) =>
+      el
+        ? `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${
+            typeof el.className === 'string' && el.className.trim()
+              ? `.${el.className.trim().split(/\s+/).join('.')}`
+              : ''
+          }`
+        : '(空)';
+
+    // 启动页的菜单是 `#world-screen`（面板一律挂 body，见 index.html 的约定），
+    // `#overlay` 是它下面那层"点击进入游戏"。两个都试，取第一个可见且有内容的。
+    const menus = ['#world-screen', '#overlay'].map((s) => document.querySelector(s)).filter(Boolean);
+    const menu = menus.find((el) => {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && el.textContent.trim().length > 0;
+    });
+    const box = menu?.getBoundingClientRect();
+    check(
+      '启动页的菜单有尺寸',
+      !!box && box.width > 0 && box.height > 0,
+      menu ? `${label(menu)} ${Math.round(box.width)}x${Math.round(box.height)}` : '没有可见的菜单层',
+    );
+
+    const top = document.elementFromPoint(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2));
+    const onMenu = !!(top && menu && (top === menu || menu.contains(top)));
+    check('主页点得到（视口中心的最上层元素在菜单里）', onMenu, onMenu ? label(top) : `被 ${label(top)} 盖住了`);
+    if (!onMenu && top) {
+      const cs = getComputedStyle(top);
+      info(`盖住主页的是 ${label(top)}（position ${cs.position} / z-index ${cs.zIndex} / bg ${cs.backgroundImage.slice(0, 40)}）`);
+    }
+
+    // ③ 通用形状：空的不透明整屏层**永远不合理**（不管它叫什么名字、谁挂的）
+    const emptyCoverers = [];
+    for (const el of document.body.querySelectorAll('*')) {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
+      if (cs.position !== 'fixed' && cs.position !== 'absolute') continue;
+      if (cs.pointerEvents === 'none') continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < innerWidth * 0.95 || r.height < innerHeight * 0.95) continue;
+      const opaque = cs.backgroundImage !== 'none' || !/rgba?\([^)]*,\s*0\s*\)|transparent/.test(cs.backgroundColor);
+      if (!opaque) continue;
+      if (el.textContent.trim().length > 0) continue; // 有内容的是正常界面
+      emptyCoverers.push(`${label(el)}(z-index ${cs.zIndex})`);
+    }
+    check('没有"空的整屏不透明层"压在界面上（A10 回归的形状）', emptyCoverers.length === 0, emptyCoverers.join(' | '));
+  }
+
   // 0. 先进入一个世界：全新的浏览器会话里主菜单是空的，游戏不会自己开始
   //    （`window.__mc` 是 `startWorld` 里才挂上的，所以它同时也是"游戏起来了"的信号）
   if (typeof window.__mc === 'undefined') {

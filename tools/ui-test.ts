@@ -13,6 +13,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { UnsupportedScreen } from '../src/ui/UnsupportedScreen.ts';
 import {
   CARD_PAGE_SIZE_NARROW,
   CARD_PAGE_SIZE_WIDE,
@@ -351,6 +352,50 @@ console.log('\n[创造栏分类图标（批次 98，对齐基岩版的组织形�
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
+}
+
+console.log('\n[主页不能被"整屏层"盖住（批次 102，A10 的回归门禁）]');
+{
+  /**
+   * 这一节是给一个**真出现过**的 bug 设的门禁。
+   *
+   * `UnsupportedScreen`（A10）这一层是 `position: fixed; inset: 0; z-index: 90` 的
+   * **不透明**整屏底。原来的构造函数一上来就把它挂到 `<body>`，内容是空的；于是
+   * **支持 WebGL2 的正常路径**上也会留下一个空层，压住主菜单（`#overlay` 的 z-index 只有 5）
+   * ——**主页一打开全黑、点不动任何东西**。批次 85 潜伏到批次 102，中间所有离线断言
+   * 都不看"谁盖在谁上面"，一条都没红。
+   *
+   * 两条判据（缺一不可）：
+   *  ① **构造它不许碰 DOM**（这个测试跑在 Node 里，没有 `document`，碰了就会抛）；
+   *  ② CSS 上那一层**默认不铺满**，只能靠 `.visible` 显式打开。
+   * 真正的"看得见、点得到"由 `tools/ui-acceptance.js` 在浏览器里量（那是端到端的闸门）。
+   */
+  const parent = {
+    appended: [] as unknown[],
+    appendChild(node: unknown) {
+      parent.appended.push(node);
+      return node;
+    },
+  };
+  let constructed = true;
+  try {
+    new UnsupportedScreen(parent as unknown as HTMLElement);
+  } catch {
+    constructed = false;
+  }
+  check('构造 UnsupportedScreen 不碰 DOM（Node 里没有 document，碰了就会抛）', constructed);
+  equal('构造它不往父节点加任何东西（否则空层就上屏了）', String(parent.appended.length), '0');
+
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  check(
+    '整屏提示层默认不显示（少一句 display: none，一个空层就能把主页盖黑）',
+    compact.includes('.unsupported-screen { position: fixed; inset: 0; z-index: 90; display: none;'),
+  );
+  check(
+    '整屏提示层要显式 .visible 才铺满',
+    compact.includes('.unsupported-screen.visible { display: grid; }'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

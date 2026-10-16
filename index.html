@@ -1506,11 +1506,17 @@
          这里只给样式；内容由 ui/UnsupportedScreen.ts 填（见那边的注记：
          不用 alert——手机上会被拦，而且显示不了条目化建议） -->
     <style>
+      /* ⚠️ 默认 `display: none`（批次 102 修的 A10 回归）：
+         这一层是 `position: fixed; inset: 0; z-index: 90` 的**不透明**整屏底，
+         **挂上就盖住一切**。原来这里写的是 `display: grid`，于是一个**内容为空的**层
+         也会把主菜单（`#overlay` 的 z-index 只有 5）整片盖黑 —— 主页打不开任何东西。
+         现在只有 JS 加了 `.visible` 才铺满（见 `ui/UnsupportedScreen.ts`）。 */
       .unsupported-screen {
         position: fixed; inset: 0; z-index: 90;
-        display: grid; place-items: center;
+        display: none; place-items: center;
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
       }
+      .unsupported-screen.visible { display: grid; }
       .unsupported-panel {
         display: flex; flex-direction: column; gap: 12px;
         padding: 20px 22px; max-width: min(520px, 90vw);
