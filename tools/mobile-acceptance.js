@@ -36,9 +36,18 @@
 
   // ---------------------------------------------------------------- 0. 先进入世界
   // 全新浏览器会话里主菜单是空的、游戏不会自己开始（`window.__mc` 由 startWorld 挂上），
-  // 所以脚本自己点一下"创建并进入"——否则这一整套验收会在空页面上全红
+  // 所以脚本自己走一遍"进世界"——否则这一整套验收会在空页面上全红。
+  //
+  // ⚠️ 批次 108 起主菜单分层：主页「游戏」→ 二级页面里"进第一张存档"或"新建"。
+  // 三步都是同步的 DOM 切换（`setView` 切 class、`render()` 同步），不必等动画。
   if (typeof window.__mc === 'undefined') {
-    document.querySelector('#world-screen .world-primary')?.click();
+    document.querySelector('#world-screen .world-primary')?.click(); // 主页「游戏」
+    const firstSave = document.querySelector('#world-list .world-enter');
+    if (firstSave) firstSave.click();
+    else {
+      document.getElementById('world-new-button')?.click();
+      document.getElementById('world-create-button')?.click();
+    }
     const deadline = Date.now() + 90000;
     while (typeof window.__mc === 'undefined' && Date.now() < deadline) await sleep(250);
     if (typeof window.__mc === 'undefined') return '[FAIL] game did not start (window.__mc missing)';

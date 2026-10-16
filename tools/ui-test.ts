@@ -486,6 +486,34 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
 }
 
+console.log('\n[主菜单分层（批次 108）]');
+{
+  const source = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  // 首页**只留两颗按钮**（基岩版标题页就是"游戏 / 设置"）。
+  // 批次 107 那版有四颗，其中"开始游戏"会直接进最近玩的世界——用户当场反问
+  // "进入游戏，进入什么呢？"，所以这条断言防的就是那四颗回来。
+  check('首页第一颗是「游戏」', source.includes("play.textContent = '游戏';"));
+  // ⚠️ 防的是批次 107 那版：首页四颗按钮、其中"开始游戏"会**直接进最近玩的世界**
+  //（用户当场反问"进入游戏，进入什么呢？"）。`quickStart` 这个方法连同那颗按钮一起删掉了。
+  check('首页不再有"开始游戏"那颗一键入口', !source.includes("'开始游戏'") && !source.includes('quickStart'));
+  check('首页只 append 了「游戏」这一颗主按钮', /menu\.append\(play\);/.test(source));
+  // 二级页面回答"进哪个世界"：新建 + 存档列表
+  check('二级页有「＋ 新建世界」主入口', source.includes("newEntry.id = 'world-new-button';"));
+  check('二级页有存档列表（验收脚本按 id 找）', source.includes("this.listEl.id = 'world-list';"));
+  check('存档的"进入"按钮有专属类名（不再靠"第一个匹配"）', source.includes("enter.className = 'world-enter';"));
+  check('新建表单的提交按钮有专属 id', source.includes("createButton.id = 'world-create-button';"));
+  // 三个浏览器验收脚本都要走完这三步，一处漏了就会在主页上卡住
+  // （⚠️ 路径是 `../tools/`：测试被打包到 `.tmp/ui-test.mjs` 里跑，`import.meta.url`
+  //   的基准是那个临时文件，不是本文件——与上面 `../index.html` 同一个道理）
+  for (const script of ['ui-acceptance.js', 'mobile-acceptance.js', 'startup-acceptance.js']) {
+    const text = readFileSync(new URL(`../tools/${script}`, import.meta.url), 'utf8');
+    check(
+      `${script} 走完"游戏 → 新建世界 → 创建并进入"三步`,
+      text.includes('world-new-button') && text.includes('world-create-button') && text.includes('world-enter'),
+    );
+  }
+}
+
 console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
 {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');

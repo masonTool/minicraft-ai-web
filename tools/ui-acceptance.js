@@ -94,10 +94,21 @@
 
   // 0. 先进入一个世界：全新的浏览器会话里主菜单是空的，游戏不会自己开始
   //    （`window.__mc` 是 `startWorld` 里才挂上的，所以它同时也是"游戏起来了"的信号）
+  //
+  // ⚠️ 批次 108 起主菜单是**分层**的：主页只有「游戏」和「设置」两颗按钮，
+  //    "进哪个世界"在二级页面里回答。所以进世界要两步——有存档进第一张，
+  //    没有就「＋ 新建世界」→「创建并进入」。三步全是同步的 DOM 切换
+  //    （`setView` 只切 class、`render()` 是同步的），不必等动画。
   if (typeof window.__mc === 'undefined') {
-    document.querySelector('#world-screen .world-primary')?.click();
+    document.querySelector('#world-screen .world-primary')?.click(); // 主页「游戏」
+    const firstSave = document.querySelector('#world-list .world-enter');
+    if (firstSave) firstSave.click();
+    else {
+      document.getElementById('world-new-button')?.click();
+      document.getElementById('world-create-button')?.click();
+    }
     const started = await waitFor(() => typeof window.__mc !== 'undefined', 90000);
-    if (!started) return '[FAIL] game did not start (window.__mc missing after clicking 创建并进入)';
+    if (!started) return '[FAIL] game did not start (window.__mc missing after clicking 游戏 -> 新建世界 -> 创建并进入)';
   }
   const mc = window.__mc;
   await waitFor(() => mc.info.chunks > 0, 30000);

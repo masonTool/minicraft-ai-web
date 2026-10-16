@@ -226,6 +226,12 @@
       .world-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
       /* 列表在窄屏/世界多的时候自己滚，别把面板撑破 */
       .world-list { max-height: min(46vh, 320px); overflow-y: auto; }
+      /* 二级页面里"存档"那一行小标题（上面是「＋ 新建世界」主入口） */
+      .world-group-label {
+        margin: 14px 0 0; padding-top: 9px; font-size: 12px;
+        color: var(--accent-dim); letter-spacing: 1px;
+        border-top: 2px solid rgba(255, 255, 255, .12);
+      }
       .world-empty {
         padding: 14px; text-align: center; color: #8a8a8a;
         border: 1px dashed #ffffff33; border-radius: var(--radius-md);

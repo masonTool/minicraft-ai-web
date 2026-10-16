@@ -68,33 +68,27 @@ export class WorldScreen {
 
     const subtitle = document.createElement('div');
     subtitle.className = 'world-hint';
-    subtitle.textContent = '选择世界继续游玩，或者新建一个';
+    subtitle.textContent = '点「游戏」选存档或新建世界';
 
     const menu = document.createElement('div');
     menu.className = 'world-menu';
 
-    // "开始游戏"：一键通道——有存档直接进最近玩的那个，没有存档就用默认参数开一个。
-    // ⚠️ 它必须是**可见视图里的第一个 `.world-primary`**：浏览器验收脚本正是点它来进世界的
-    //（`document.querySelector('#world-screen .world-primary')`），少了这个语义那套脚本会全红。
-    const quick = document.createElement('button');
-    quick.type = 'button';
-    quick.className = 'world-primary';
-    quick.textContent = '开始游戏';
-    quick.addEventListener('click', () => this.quickStart());
+    // ⚠️ 首页**只有两颗按钮**（批次 108，对齐基岩版的标题页：一个"游戏"、一个"设置"）。
+    //
+    // 批次 107 这里写的是"开始游戏 / 选择世界 / 新建世界 / 设置"四颗，其中"开始游戏"
+    // 点下去会直接进最近玩的那个世界——用户当场就问了一句"进入游戏，进入什么呢？"。
+    // 这个反问是对的：**"进哪个世界"是个必须回答的问题，不该由程序员替玩家默认**。
+    // 现在"游戏"只做一件事：进二级页面，那里才有"新建世界"和存档列表。
+    //
+    // ⚠️ 它仍然必须是**可见视图里的第一个 `.world-primary`**：浏览器验收脚本从这里
+    // 开始"进世界"的三步（游戏 → 新建世界 → 创建并进入），少了这个语义那套脚本会全红。
+    const play = document.createElement('button');
+    play.type = 'button';
+    play.className = 'world-primary';
+    play.textContent = '游戏';
+    play.addEventListener('click', () => this.setView('worlds'));
 
-    const pick = document.createElement('button');
-    pick.type = 'button';
-    pick.className = 'world-secondary';
-    pick.textContent = '选择世界';
-    pick.addEventListener('click', () => this.setView('worlds'));
-
-    const createNew = document.createElement('button');
-    createNew.type = 'button';
-    createNew.className = 'world-secondary';
-    createNew.textContent = '新建世界';
-    createNew.addEventListener('click', () => this.setView('create'));
-
-    menu.append(quick, pick, createNew);
+    menu.append(play);
 
     // 设置入口：这里的设置是"这台设备的偏好"（画面/操作/声音），进游戏之前也能改
     if (this.actions.onSettings) {
@@ -109,17 +103,31 @@ export class WorldScreen {
     home.append(title, subtitle, menu);
 
     // ---------------------------------------------------------------- ② 世界列表
+    //
+    // 用户要的"新建游戏 / 使用存档"都在这一页：新建在最上（主入口），
+    // 下面就是存档列表（列表自己滚，世界再多也不撑破面板）。
     const worlds = this.makeView('worlds');
     this.listEl = document.createElement('div');
     this.listEl.className = 'world-list';
+    this.listEl.id = 'world-list';
 
     const newEntry = document.createElement('button');
     newEntry.type = 'button';
-    newEntry.className = 'world-secondary world-new-entry';
+    newEntry.className = 'world-primary';
+    newEntry.id = 'world-new-button';
     newEntry.textContent = '＋ 新建世界';
     newEntry.addEventListener('click', () => this.setView('create'));
 
-    worlds.append(this.makeNav('选择世界', () => this.setView('home')), this.listEl, newEntry);
+    const listLabel = document.createElement('div');
+    listLabel.className = 'world-group-label';
+    listLabel.textContent = '存档';
+
+    worlds.append(
+      this.makeNav('选择世界', () => this.setView('home')),
+      newEntry,
+      listLabel,
+      this.listEl,
+    );
 
     // ---------------------------------------------------------------- ③ 新建世界
     const create = this.makeView('create');
@@ -168,6 +176,7 @@ export class WorldScreen {
     const createButton = document.createElement('button');
     createButton.type = 'button';
     createButton.className = 'world-primary';
+    createButton.id = 'world-create-button';
     createButton.textContent = '创建并进入';
     createButton.addEventListener('click', () => this.createAndEnter());
 
@@ -277,7 +286,7 @@ export class WorldScreen {
     if (worlds.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'world-empty';
-      empty.textContent = '还没有世界——点下面「新建世界」就能开始。';
+      empty.textContent = '还没有存档——点上面「＋ 新建世界」开一个。';
       this.listEl.appendChild(empty);
       return;
     }
@@ -285,22 +294,6 @@ export class WorldScreen {
     for (const world of worlds) {
       this.listEl.appendChild(this.makeCard(world));
     }
-  }
-
-  /**
-   * 主页"开始游戏"：有存档进最近玩的那个；没有存档就用默认参数直接开一个。
-   *
-   * 后者是刻意的——主菜单第一颗按钮如果只是"跳到列表"，那就等于把选择又推给玩家
-   *（而且全新玩家点它只会看到一个空列表）。
-   */
-  private quickStart(): void {
-    const worlds = this.registry.list(); // 已按最近游玩倒序
-    const recent = worlds[0];
-    if (recent) {
-      this.actions.onEnter(recent);
-      return;
-    }
-    this.actions.onEnter(this.registry.create({}));
   }
 
   private makeCard(world: WorldSummary): HTMLDivElement {
@@ -330,6 +323,9 @@ export class WorldScreen {
 
     const enter = document.createElement('button');
     enter.type = 'button';
+    // 验收脚本按这个类名找"进这张存档"（`.world-card-actions button` 会把"删除"也算进来，
+    // 靠"第一个匹配"来定含义太脆）
+    enter.className = 'world-enter';
     enter.textContent = '进入';
     enter.addEventListener('click', () => this.actions.onEnter(world));
 

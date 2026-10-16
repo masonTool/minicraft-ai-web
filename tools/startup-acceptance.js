@@ -43,7 +43,7 @@
 
   // ---- 首次访问：等主菜单能点
   const menuOk = await waitFor(() => document.querySelector('#world-screen .world-primary'), 30000);
-  check('主菜单能点（30s 内出现"创建并进入"）', !!menuOk);
+  check('主菜单能点（30s 内出现「游戏」按钮）', !!menuOk);
   const bootMs = trace.bootMs;
   check(
     `首次访问到主菜单 ≤ ${BUDGET.bootMs}ms`,
@@ -51,12 +51,22 @@
     `实测 ${bootMs === null ? '—' : `${Math.round(bootMs)}ms`}`,
   );
 
-  // ---- 进世界：点"创建并进入"，等加载遮罩撤掉
+  // ---- 进世界：主页「游戏」→（有存档进第一张 / 没有就新建），等加载遮罩撤掉
+  //
+  // ⚠️ 批次 108 起主菜单分层（主页只有「游戏」「设置」两颗按钮），进世界是三步。
+  // 三步全是同步的 DOM 切换（`setView` 只切 class、`render()` 同步），
+  // 所以这里不插等待——启动耗时的预算很紧（playableMs ≤ 3000ms），别让脚本自己吃掉。
   if (typeof window.__mc === 'undefined') {
-    document.querySelector('#world-screen .world-primary')?.click();
+    document.querySelector('#world-screen .world-primary')?.click(); // 主页「游戏」
+    const firstSave = document.querySelector('#world-list .world-enter');
+    if (firstSave) firstSave.click();
+    else {
+      document.getElementById('world-new-button')?.click();
+      document.getElementById('world-create-button')?.click();
+    }
   }
   const started = await waitFor(() => typeof window.__mc !== 'undefined', 90000);
-  if (!started) return lines.concat('[FAIL] 点了"创建并进入"之后世界没起来（window.__mc 一直没出现）').join('\n');
+  if (!started) return lines.concat('[FAIL] 点了「游戏 → 新建世界 → 创建并进入」之后世界没起来（window.__mc 一直没出现）').join('\n');
 
   const playableOk = await waitFor(() => !document.getElementById('loading'), 60000);
   check('加载遮罩撤掉了（第一块地形画出来了）', playableOk);
