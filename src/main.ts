@@ -88,6 +88,7 @@ import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
+import { armAutoFullscreen } from './ui/Fullscreen.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
@@ -8203,6 +8204,9 @@ async function boot(): Promise<void> {
   // 启动耗时台账也挂出去：它是一个**读数的入口**（与 `__worldMenu` 同一类）
   (window as unknown as { __startup: typeof startupTrace }).__startup = startupTrace;
   menu.show();
+  // 进游戏首页就"默认全屏"（用户要求）。全屏请求必须在用户手势里，所以挂在
+  // 主菜单与开始遮罩的**第一次点击**上——点第一下时全屏已经进去了（见 ui/Fullscreen.ts）
+  armAutoFullscreen([menu.root, document.getElementById('overlay')]);
   startupTrace.mark(STARTUP_PHASES.bootMenu);
 }
 

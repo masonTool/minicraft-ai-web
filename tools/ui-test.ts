@@ -43,6 +43,7 @@ import {
   loadSettings,
 } from '../src/ui/SettingsScreen.ts';
 import { CREATIVE_TAB_ICONS, missingTabIcons } from '../src/ui/CreativeTabs.ts';
+import { armAutoFullscreen, isFullscreen } from '../src/ui/Fullscreen.ts';
 import { ITEM_CATEGORIES, itemDef, itemIconTile } from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 
@@ -455,6 +456,32 @@ console.log('\n[主页不能被"整屏层"盖住（批次 102，A10 的回归门
     '整屏提示层要显式 .visible 才铺满',
     compact.includes('.unsupported-screen.visible { display: grid; }'),
   );
+}
+
+console.log('\n[进游戏首页默认全屏]');
+{
+  // Node 里没有 document：这两个函数必须安静地退化，而不是抛（`boot()` 会在桌面上也调它）
+  check('没有 document 时 isFullscreen() 为假（不抛）', !isFullscreen());
+
+  // "第一次点击就进全屏"的关键是**一次性**：触发后必须摘掉监听，
+  // 否则每次点菜单按钮都再请求一次全屏（已经在全屏里时会被浏览器拒掉并抛）。
+  let handler: (() => void) | null = null;
+  const fake = {
+    addEventListener: (type: string, fn: () => void) => {
+      if (type === 'pointerdown') handler = fn;
+    },
+    removeEventListener: (type: string, fn: () => void) => {
+      if (type === 'pointerdown' && handler === fn) handler = null;
+    },
+  } as unknown as HTMLElement;
+
+  armAutoFullscreen([fake, null, undefined]);
+  check('装上了一次性的 pointerdown 监听', typeof handler === 'function');
+  (handler as unknown as () => void)();
+  check('触发后自己摘掉监听（不会每次点击都再请求一次全屏）', handler === null);
+
+  // 一个目标都没给时不该炸（`#overlay` 在某些外壳里可能不在）
+  check('没有目标时安静返回', typeof armAutoFullscreen([]) === 'function');
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
