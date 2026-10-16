@@ -744,6 +744,14 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.GLISTERING_MELON, count: 1 },
     ingredients: [Item.MELON_SLICE, ...Array<number>(8).fill(Item.GOLD_NUGGET)],
   },
+  // 烈焰粉（批次 92）：1 根烈焰棒 → 2 份（原版无序）。
+  // 它是**酿造台的燃料**，也是酿造台自己的配方原料（3 圆石 + 1 烈焰粉，见下面那条），
+  // 所以烈焰人没做出来之前，"整台机器 + 112 件药水"在生存里都是够不着的（O14 的白名单里记着）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.BLAZE_POWDER, count: 2 },
+    ingredients: [Item.BLAZE_ROD],
+  },
 
   // ---- 可疑的炖菜（批次 57，B17 收口）
   // 原版是**无序配方**：碗 + 红蘑菇 + 棕蘑菇 + **任意一朵花**，效果看用的是哪朵花。

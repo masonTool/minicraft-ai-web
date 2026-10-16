@@ -301,7 +301,8 @@ console.log('\n[战斗与掉落]');
 
 console.log('\n[生物表]');
 {
-  check('生物表包含 8 种生物（3 敌对 + 4 被动动物 + 村民）', MOB_TYPES.length === 8, `${MOB_TYPES.length}`);
+  // 批次 92 加了烈焰人（第 4 种敌对生物，也是第一种会飞的）
+  check('生物表包含 9 种生物（4 敌对 + 4 被动动物 + 村民）', MOB_TYPES.length === 9, `${MOB_TYPES.length}`);
   check('敌对生物有攻击力', MOB_TYPES.filter((t) => t.hostile).every((t) => t.attackDamage > 0));
   // 村民（J11，批次 88）是**刻意的例外**：原版杀掉村民什么都不掉也不给经验
   //（掉了就等于鼓励玩家屠村），所以它进不了"被动生物都有掉落"这条里

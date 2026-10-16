@@ -71,6 +71,8 @@ import { Villager } from './core/entity/Villager.ts';
 import { isVillagerFood, levelName, tradeBlocker, tradeSettlement } from './core/registry/villagerTrades.ts';
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
 import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
+import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
+import { spawnerDefFor } from './core/registry/spawners.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
@@ -564,6 +566,11 @@ function rodKey(x: number, y: number, z: number): string {
   return `${x},${y},${z}`;
 }
 
+/** 刷怪笼索引的键（与避雷针同一套写法；分开取名是为了让日志里看得出是哪一张索引） */
+function spawnerKey(x: number, y: number, z: number): string {
+  return `${x},${y},${z}`;
+}
+
 /**
  * "设备不支持 WebGL2"的约定错误消息（A10，批次 85）。
  *
@@ -882,6 +889,15 @@ class App {
    * 键是 `x,y,z`（与脉冲表同一套写法）。
    */
   private readonly lightningRods = new Set<string>();
+  /**
+   * 刷怪笼索引（批次 92）：键 `x,y,z`，值 = 距离下次生成还有几秒。
+   *
+   * 与避雷针同一套做法（区块加载时扫一遍、卸载时忘掉、放下/拆掉时维护），
+   * 理由是同一个：**每个笼子每帧去扫区块太贵**，而扫描只在"这一格刚变成笼子"时做一次。
+   * 倒计时直接放进 Map 的值里（而不是另开一张表）：两者永远同时存在，
+   * 分成两张表迟早会有一张忘了清。
+   */
+  private readonly spawners = new Map<string, number>();
   private readonly rodPulses = new RodPulses();
   /** 下一次打雷的倒计时（只在雷暴里走） */
   private strikeTimer = 0;
@@ -1132,6 +1148,8 @@ class App {
         fillLootChests(chunk, this.dimension, this.world.seed, this.world.containers);
         // 避雷针索引（批次 83）：区块一加载就扫出里面的避雷针，打雷时查询就是常数级
         this.scanRodsInChunk(chunk.cx, chunk.cz);
+        // 刷怪笼索引（批次 92）：同一个道理——下界要塞里的笼子在加载时登记，之后按倒计时生成
+        this.scanSpawnersInChunk(chunk.cx, chunk.cz);
         // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民。
         // 与上面两件事同一个位置、同一条理由：**方块已经在了，但还需要有人管一下**
         // （结构生成在 Worker 里，而 Worker 造不了实体）
@@ -1142,6 +1160,8 @@ class App {
       onChunkUnloaded: (cx, cz) => {
         // 区块走了，里面的避雷针也跟着忘掉（不然索引会一直长）
         this.forgetRodsInChunk(cx, cz);
+        // 刷怪笼同理：区块卸载之后就不该再对着它生成（也没法生成——方块读不到了）
+        this.forgetSpawnersInChunk(cx, cz);
         this.chunkRenderer.onChunkUnloaded(cx, cz);
         // 区块卸载时一并清掉落在该区块里的掉落物，避免未加载区域实体无限堆积
         this.entities.removeInChunk(cx, cz);
@@ -3389,6 +3409,7 @@ class App {
 
     // 避雷针（批次 83）：拆掉就从索引里去掉（不然打雷还会往一个空格子上劈）
     if (brokenId === Block.LIGHTNING_ROD) this.noteRodBroken(this.hit.x, this.hit.y, this.hit.z);
+    if (brokenId === Block.SPAWNER) this.noteSpawnerBroken(this.hit.x, this.hit.y, this.hit.z);
 
     // 告示牌（批次 80）：牌子没了，上面的字也要清掉——不清的话
     // "在同一个位置重新放一块牌子"会凭空继承上一块的字（而且存档里留着一份没有方块的文字）。
@@ -4138,6 +4159,104 @@ class App {
     this.lightningRods.delete(rodKey(x, y, z));
   }
 
+  // ---------------------------------------------------------------- 刷怪笼（批次 92）
+
+  /**
+   * 把一个区块里的刷怪笼扫进索引（区块加载时调一次）。
+   *
+   * ⚠️ **只在下界扫**：刷怪笼目前只出现在下界要塞里，而这一趟是全高度扫描
+   * （16×16×384 ≈ 10 万次读），主世界每加载一个区块白扫一遍不值当。
+   * 与 `populateVillage` 只在主世界跑是同一条讲究——**别把"碰巧没有"当成"不会发生"**。
+   */
+  private scanSpawnersInChunk(cx: number, cz: number): void {
+    if (this.dimension !== Dimension.NETHER) return;
+    const chunk = this.world.getChunk(cx, cz);
+    if (!chunk) return;
+    const originX = cx * 16;
+    const originZ = cz * 16;
+    for (let y = WORLD_MIN_Y; y <= WORLD_MAX_Y; y++) {
+      for (let lz = 0; lz < 16; lz++) {
+        for (let lx = 0; lx < 16; lx++) {
+          if (chunk.blocks[Chunk.index(lx, y, lz)] !== Block.SPAWNER) continue;
+          this.noteSpawner(originX + lx, y, originZ + lz);
+        }
+      }
+    }
+  }
+
+  /** 区块卸载：忘掉里面的刷怪笼（不然索引会一直长，而且会对着空洞刷怪） */
+  private forgetSpawnersInChunk(cx: number, cz: number): void {
+    const minX = cx * 16;
+    const minZ = cz * 16;
+    for (const key of [...this.spawners.keys()]) {
+      const [x, , z] = key.split(',').map(Number);
+      if (x! >= minX && x! < minX + 16 && z! >= minZ && z! < minZ + 16) this.spawners.delete(key);
+    }
+  }
+
+  /** 记下一个刷怪笼（区块扫描与"放下笼子"两条路径都走这里） */
+  private noteSpawner(x: number, y: number, z: number): void {
+    const def = spawnerDefFor(this.world.getBlock(x, y, z));
+    if (!def) return;
+    // 首次生成等半个周期：玩家刚走到笼子跟前就有一只飘出来，比"死等满 8 秒"更像原版
+    this.spawners.set(spawnerKey(x, y, z), def.interval * 0.5);
+  }
+
+  private noteSpawnerBroken(x: number, y: number, z: number): void {
+    this.spawners.delete(spawnerKey(x, y, z));
+  }
+
+  /**
+   * 每帧：给每个刷怪笼走倒计时，到点就按规则生成一只。
+   *
+   * "生成规则"全在 `core/world/SpawnerTicking.ts`（纯函数），这里只做三件它做不了的事：
+   * 读真世界、数**活着的实体**、造实体——与村民人口那一套完全同构。
+   */
+  private updateSpawners(dt: number): void {
+    if (this.spawners.size === 0) return;
+    const view: SpawnerWorldView = {
+      getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+      player: { x: this.physics.x, y: this.physics.y, z: this.physics.z },
+      mobsNear: (x, y, z, radius, mobId) => this.mobsNear(x, y, z, radius, mobId),
+    };
+
+    for (const [key, timer] of [...this.spawners]) {
+      const [x, y, z] = key.split(',').map(Number);
+      // 那一格已经不是笼子了（被拆掉/被炸掉）→ 直接忘掉
+      const def = spawnerDefFor(this.world.getBlock(x!, y!, z!));
+      if (!def) {
+        this.spawners.delete(key);
+        continue;
+      }
+      const next = timer - dt;
+      if (next > 0) {
+        this.spawners.set(key, next);
+        continue;
+      }
+      this.spawners.set(key, def.interval);
+
+      const plan = planSpawnerSpawn(view, def, { x: x!, y: y!, z: z! });
+      if (!plan) continue;
+      const type = mobTypeById(def.mobId);
+      if (!type) continue;
+      this.entities.spawn(createMob(type, plan.x + 0.5, plan.y, plan.z + 0.5));
+    }
+  }
+
+  /** 这一带已经有几只这种生物了（刷怪笼的"别越刷越多"用；与 `villagerNear` 同一个套路） */
+  private mobsNear(x: number, y: number, z: number, radius: number, mobId: string): number {
+    let count = 0;
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity.dead) continue;
+      if (entity.type.id !== mobId) continue;
+      if (Math.abs(entity.x - (x + 0.5)) > radius) continue;
+      if (Math.abs(entity.z - (z + 0.5)) > radius) continue;
+      if (Math.abs(entity.y - y) > radius) continue;
+      count++;
+    }
+    return count;
+  }
+
   /**
    * 每帧：脉冲倒计时 + 雷暴里的打雷节奏。
    *
@@ -4671,6 +4790,12 @@ class App {
       // 滞留药水摔碎 → 原地留一片云；末影龙吐息 → 吐一团血息云
       spawnLingering: (potionId, x, y, z) => this.spawnLingeringCloud(potionId, x, y, z),
       spawnDragonBreath: (x, y, z) => this.spawnDragonBreathCloud(x, y, z),
+      // 烈焰人的小火球（批次 92）：与投掷物走同一条通道（它就是 `Throwable` 里的一档），
+      // `itemId` 只用于兜底贴图（有专门的渲染分支，见 `EntityRenderer`）
+      spawnSmallFireball: (x, y, z, velocity) =>
+        this.spawnThrowable(x, y, z, velocity, 'small_fireball', Item.BLAZE_POWDER),
+      // 火球命中 → 点着玩家（伤害在投掷物那一层结算，点火是另一条路，见 `EntityContext`）
+      ignitePlayer: (seconds) => this.stats.ignite(seconds),
       // 隐身（K4 尾巴）：敌对生物看不见你就不追（原版隐形后 8 格内还是会被发现，
       // 这里简化成"完全不追"，见 TASKS K4 的差异记录）
       playerInvisible: this.effects.invisible,
@@ -6308,6 +6433,7 @@ class App {
 
       // 避雷针（批次 83）：放下就进索引（不必等区块重载——它在**当前**加载的区块里）
       if (blockId === Block.LIGHTNING_ROD) this.noteRodPlaced(x, y, z);
+      if (blockId === Block.SPAWNER) this.noteSpawner(x, y, z);
 
       // 进度（M7）：放下方块。"种下一颗种子"也走这条——种子是**方块物品**
       // （`Item.WHEAT_SEEDS` 的 `block` 就是 `WHEAT_STAGE0`），所以它本来就落在放置这条路上
@@ -6962,6 +7088,8 @@ class App {
       this.updateFishing(dt);
       // 雷电与避雷针（批次 83）：脉冲倒计时 + 雷暴里的打雷节奏
       this.updateLightning(dt);
+      // 刷怪笼（批次 92）：下界要塞里的笼子按倒计时生成烈焰人
+      this.updateSpawners(dt);
       // 告示牌上的字（B12）：每 0.25 秒对一次账。
       // 为什么要定期对账而不是"事件驱动"：会改变这趟结果的三件事里有两件**没有事件**——
       // ① 区块流式加载/卸载（玩家走过去）；② 那格的光照变了（太阳落了、旁边点了火把）。

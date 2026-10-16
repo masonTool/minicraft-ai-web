@@ -2675,6 +2675,62 @@ const WORKSTATION_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 下界疣（批次 92，J26 的断环之一）。
+ *
+ * 它是**唯一长在灵魂沙上的作物**，也是整条酿造链的**第一件原料**
+ * （原版：水瓶 + 下界疣 = 粗制的药水，其余每一瓶都从粗制的那瓶出发）。
+ * 在此之前它只是一件"登记了但拿不到"的物品——见 O14 的可达性审计：
+ * 那次审计量出"整族 112 件药水/药水箭在生存里一瓶都拿不到"，
+ * 根因就是这里（外加烈焰粉那半条）。
+ *
+ * 与小麦/甜菜那四种作物的三处不同：
+ *  1. **地基是灵魂沙**，不是耕地（所以它不进 `CROP_STAGES`——那张表的三处判定
+ *     都假设"下面是耕地"：`cropOf` / `growCrop` / `extraCropDrop`）；
+ *  2. **不需要光照**（原版在下界的洞里照样长），也不看"旁边有没有水"；
+ *  3. 形状单开一个 `nether_wart`：放置要求下方**必须是灵魂沙**（比 `cross` 的
+ *     "下方实心就行"更严），见 `interaction/Placement.ts`。
+ *
+ * 贴图 4 张、id 接着 546（织布机）往下排——方块表要求 id 从 0 起连续，
+ * `buildBlockTable` 会在启动时当场拦下错位。
+ */
+export const NETHER_WART_ID_START = 547;
+
+const NETHER_WART_SPECS: readonly BlockSpec[] = [0, 1, 2, 3].map((stage) => ({
+  id: NETHER_WART_ID_START + stage,
+  name: `minecraft:nether_wart_stage${stage}`,
+  tiles: [`nether_wart_stage${stage}`, `nether_wart_stage${stage}`, `nether_wart_stage${stage}`],
+  solid: false,
+  opaque: false,
+  lightOpacity: 0,
+  shape: 'nether_wart' as const,
+}));
+
+/**
+ * 刷怪笼（批次 92）：下界要塞里那一格"会自己出烈焰人"的笼子。
+ *
+ * 它是 K6"刷怪笼与刷怪规则"里一直缺的那一半（**方块本身**）：规则侧（主线程按
+ * 坐标定期生成生物）在 `core/world/SpawnerTicking.ts`，而"这一格出什么"写在
+ * `registry/spawners.ts` 那张表里（目前只有一行：刷怪笼 → 烈焰人）。
+ *
+ * ⚠️ 与原版的差距：笼子里**没有**那只旋转的小生物（E14 只覆盖了生物与掉落物），
+ * 也没有"玩家靠近才转"那套细节——外观是一张"铁栏杆"贴图。
+ * 贴图走半透明层（`translucent`）：笼子是**镂空**的，能透过它看见里面。
+ */
+export const SPAWNER_ID = 551;
+
+const SPAWNER_SPECS: readonly BlockSpec[] = [
+  {
+    id: SPAWNER_ID,
+    name: 'minecraft:spawner',
+    tiles: ['spawner', 'spawner', 'spawner'],
+    solid: true,
+    // 不透光但**不遮挡邻居**：这样隔着笼子能看见里面的方块，与原版观感一致
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -2730,6 +2786,8 @@ const SPECS: readonly BlockSpec[] = [
   ...BLACKSTONE_DECOR_SPECS,
   ...HANGING_SPECS,
   ...WORKSTATION_SPECS,
+  ...NETHER_WART_SPECS,
+  ...SPAWNER_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -3036,6 +3094,13 @@ export const Block = {
   FLETCHING_TABLE: FLETCHING_TABLE_ID,
   GRINDSTONE: GRINDSTONE_ID,
   LOOM: LOOM_ID,
+  // ---- 下界疣（批次 92）：长在灵魂沙上的作物，酿造链的第一件原料
+  NETHER_WART_STAGE0: NETHER_WART_ID_START,
+  NETHER_WART_STAGE1: NETHER_WART_ID_START + 1,
+  NETHER_WART_STAGE2: NETHER_WART_ID_START + 2,
+  NETHER_WART_STAGE3: NETHER_WART_ID_START + 3,
+  // 刷怪笼（批次 92）：下界要塞里出烈焰人的那一格
+  SPAWNER: SPAWNER_ID,
   CRACKED_POLISHED_BLACKSTONE_BRICKS: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
@@ -3329,6 +3394,16 @@ HARDNESS.set(Block.SWEET_BERRY_BUSH_STAGE3, 0);
 HARDNESS.set(Block.COCOA_STAGE0, 0.2);
 HARDNESS.set(Block.COCOA_STAGE1, 0.2);
 HARDNESS.set(Block.COCOA_STAGE2, 0.2);
+// 下界疣、刷怪笼（批次 92）
+HARDNESS.set(Block.SPAWNER, 5);
+// 下界疣：原版徒手一拍就掉（硬度 0），四个阶段都要登记
+// （不登记的话 `blockHardness` 的兜底是 3 —— 收个下界疣要挖 4.5 秒，见 `isHardnessRegistered`）
+// ⚠️ 这里按 id 算术展开，不能引用 `NETHER_WART_STAGES`：那张表在本文件**后面**才定义，
+// 而这一段是模块加载期执行的（`const` 的暂时性死区会当场抛）
+HARDNESS.set(Block.NETHER_WART_STAGE0, 0);
+HARDNESS.set(Block.NETHER_WART_STAGE1, 0);
+HARDNESS.set(Block.NETHER_WART_STAGE2, 0);
+HARDNESS.set(Block.NETHER_WART_STAGE3, 0);
 // 海带与海草（批次 50）：都是"一碰就掉"（硬度 0）；干海带块 0.5（原版，徒手可拆）
 HARDNESS.set(Block.KELP, 0);
 HARDNESS.set(Block.SEAGRASS, 0);
@@ -3679,6 +3754,29 @@ export const BERRY_STAGES: readonly number[] = [
   Block.SWEET_BERRY_BUSH_STAGE3,
 ];
 export const COCOA_STAGES: readonly number[] = [Block.COCOA_STAGE0, Block.COCOA_STAGE1, Block.COCOA_STAGE2];
+
+/**
+ * 下界疣的生长阶段表（批次 92）。
+ *
+ * 同样**不进 `CROP_STAGES`**：那张表的判定建立在"下面是耕地、旁边有水长得快"上，
+ * 而下界疣长在灵魂沙上、不看水也不看光照（原版在下界的洞里照样长）。
+ * 但它的**形状**要单独一套判定（下方必须是灵魂沙），所以连形状都单开了一个
+ * （见 `blockShapes.ts` 与 `interaction/Placement.ts`）。
+ */
+export const NETHER_WART_STAGES: readonly number[] = [
+  Block.NETHER_WART_STAGE0,
+  Block.NETHER_WART_STAGE1,
+  Block.NETHER_WART_STAGE2,
+  Block.NETHER_WART_STAGE3,
+];
+
+/** 成熟（可收获）的那一阶段 */
+export const NETHER_WART_RIPE_STAGE = NETHER_WART_STAGES.length - 1;
+
+/** 这个 id 是下界疣的第几阶段（不是则 -1） */
+export function netherWartStageOf(id: number): number {
+  return NETHER_WART_STAGES.indexOf(id);
+}
 
 /** 这个 id 是甜浆果丛的第几阶段（不是则 -1） */
 export function berryStageOf(id: number): number {

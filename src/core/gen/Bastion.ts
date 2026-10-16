@@ -36,13 +36,13 @@ export interface BastionWorld {
 }
 
 /**
- * 下界的结构种类（目前只有堡垒遗迹）。
+ * 下界的结构种类：堡垒遗迹 + 下界要塞（批次 92）。
  *
  * 为什么单独开一张表：`Structures.ts` 的 `STRUCTURE_KINDS` 是**主世界那套框架**的清单，
- * 覆盖面度台账（`audit:coverage`）数结构种类时要把它加上，否则"我们做了 8 种结构"这件事
- * 在台账里永远是 7——**指标漏了自己人会比数字错了更隐蔽**。
+ * 覆盖面度台账（`audit:coverage`）数结构种类时要把它加上，否则"我们做了几种结构"这件事
+ * 在台账里永远少算下界这两座——**指标漏了自己人会比数字错了更隐蔽**。
  */
-export const NETHER_STRUCTURE_KINDS = ['bastion_remnant'] as const;
+export const NETHER_STRUCTURE_KINDS = ['bastion_remnant', 'nether_fortress'] as const;
 
 /** 单元网格间距（区块）：24 区块 = 384 格一个单元 */
 export const BASTION_SPACING = 24;

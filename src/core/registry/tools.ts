@@ -358,6 +358,9 @@ for (let i = 0; i < DYE_COLORS.length; i++) EFFICIENT_TOOL.set(woolId(i), 'shear
 // 雪层：锹是加速工具（原版同一条：徒手也能撸掉，拿锹快得多），不进需求表
 EFFICIENT_TOOL.set(Block.SNOW, 'shovel');
 // 地毯：原版没有任何工具能加速，徒手最快——所以既不在需求表也不在加速表里
+// 刷怪笼（批次 92）：原版硬度 5、要镐（徒手挖得动但一无所获——它本来也不掉落，
+// 见 `items.ts` 的 `NO_DROP`）
+REQUIRED_TOOL.set(Block.SPAWNER, { tool: 'pickaxe', tier: 0 });
 // 陶瓦与混凝土（17 色 / 16 色）都需要镐
 // ⚠️ 原色陶瓦是 `Block.TERRACOTTA`（不在 `terracottaId(i)` 的范围里，见那个函数的注释）
 REQUIRED_TOOL.set(Block.TERRACOTTA, { tool: 'pickaxe', tier: 0 });

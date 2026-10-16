@@ -24,6 +24,7 @@ import {
   DEAD_CORAL_BLOCK_ID_START,
   DEAD_CORAL_FAN_ID_START,
   DEAD_CORAL_ID_START,
+  NETHER_WART_RIPE_STAGE,
   SIGN_IDS,
   STONE_VARIANT_IDS,
   WHEAT_STAGES,
@@ -35,6 +36,7 @@ import {
   carpetId,
   copperId,
   cropOf,
+  netherWartStageOf,
   wheatStageOf,
   STEM_STAGES,
   saplingId,
@@ -115,6 +117,13 @@ export const Item = {
   WATER_BOTTLE: 1171,
   NETHER_WART: 1172,
   BLAZE_POWDER: 1173,
+  /**
+   * 烈焰棒（批次 92）：id 取 1442 —— **接在现有最大 id 之后**（1441 是熟鲑鱼）。
+   *
+   * 为什么不挤在 1173 旁边靠"改号"腾位置：物品 id 进存档（容器里的每一格都按 id 存），
+   * 挪一个已有 id 会让老存档里的东西变成别的物品。新物品一律追加在末尾。
+   */
+  BLAZE_ROD: 1442,
   SUGAR: 1174,
   RABBIT_FOOT: 1190,
   MAGMA_CREAM: 1191,
@@ -330,8 +339,12 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // ---- 酿造（H10）：瓶子与材料
   { id: Item.GLASS_BOTTLE, name: 'minecraft:glass_bottle', tile: 'item_glass_bottle', maxStack: 16 },
   { id: Item.WATER_BOTTLE, name: 'minecraft:water_bottle', tile: 'item_water_bottle', maxStack: 1 },
-  { id: Item.NETHER_WART, name: 'minecraft:nether_wart', tile: 'item_nether_wart' },
+  // 下界疣（批次 92）：**可种**——`block` 指向第 0 阶段，种在灵魂沙上（原版唯一的种法）
+  { id: Item.NETHER_WART, name: 'minecraft:nether_wart', tile: 'item_nether_wart', block: Block.NETHER_WART_STAGE0 },
   { id: Item.BLAZE_POWDER, name: 'minecraft:blaze_powder', tile: 'item_blaze_powder' },
+  // 烈焰棒（批次 92）：1 根棒能拆成 2 份烈焰粉（原版），也是烈焰人唯一的掉落物。
+  // 它是**酿造台的燃料**（原版一份烈焰粉能酿 20 次），所以这条链断掉时整台机器都用不了
+  { id: Item.BLAZE_ROD, name: 'minecraft:blaze_rod', tile: 'item_blaze_rod' },
   { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
   { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
   { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },
@@ -972,6 +985,8 @@ const BREWING = new Set<number>([
   Item.WATER_BOTTLE,
   Item.NETHER_WART,
   Item.BLAZE_POWDER,
+  // 烈焰棒（批次 92）：燃料与"拆成烈焰粉"的原料，摆在酿造那一栏最顺手
+  Item.BLAZE_ROD,
   Item.SUGAR,
   Item.RABBIT_FOOT,
   Item.MAGMA_CREAM,
@@ -1073,6 +1088,9 @@ const NO_DROP = new Set<number>([
   Block.FERN,
   // 藤蔓（B11）：徒手/斧头打掉什么都不掉，只有剪刀或精准采集能完整带走（见 `CUTTABLE`）
   Block.VINE,
+  // 刷怪笼（批次 92）：原版要**精准采集**才拿得走（本项目没有附魔那一条路），
+  // 所以打掉就是什么都不掉——但它在创造物品栏里可以拿（`itemless` 没打开）
+  Block.SPAWNER,
 ]);
 
 // 6 种木材的树叶都不掉落方块本身（原版徒手破坏树叶只偶尔掉树苗与苹果）
@@ -1348,6 +1366,15 @@ export function wheatExtraSeeds(blockId: number, roll: () => number): number {
  * @returns 额外掉落物与数量；没有额外掉落返回 null
  */
 export function extraCropDrop(blockId: number, roll: () => number): { id: number; count: number } | null {
+  // 下界疣（批次 92）：**熟了才是"收获"**——原版成熟时掉 2~4 个，没熟只掉 1 个。
+  // 主掉落给 2（见下面的 `DROP_OVERRIDES`），这里再补 0~2，合起来就是 2~4
+  const wartStage = netherWartStageOf(blockId);
+  if (wartStage >= 0) {
+    if (wartStage < NETHER_WART_RIPE_STAGE) return null;
+    const extra = (roll() < 0.5 ? 1 : 0) + (roll() < 0.5 ? 1 : 0);
+    return extra > 0 ? { id: Item.NETHER_WART, count: extra } : null;
+  }
+
   // 甜浆果丛（批次 49）：主掉落 1~2 个，成熟后**额外**再给 0~1 个
   // （合起来 阶段2 是 1~2、阶段3 是 2~3，与原版一致）
   const berryStage = berryStageOf(blockId);
@@ -1396,6 +1423,12 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.COCOA_STAGE0, { id: Item.COCOA_BEANS, count: 1 }],
   [Block.COCOA_STAGE1, { id: Item.COCOA_BEANS, count: 2 }],
   [Block.COCOA_STAGE2, { id: Item.COCOA_BEANS, count: 3 }],
+  // 下界疣（批次 92）：没熟只掉 1 个（就像小麦没熟只能拿回种子），熟了主掉落 2 个 +
+  // `extraCropDrop` 再补 0~2（合起来 2~4，与原版一致）
+  [Block.NETHER_WART_STAGE0, { id: Item.NETHER_WART, count: 1 }],
+  [Block.NETHER_WART_STAGE1, { id: Item.NETHER_WART, count: 1 }],
+  [Block.NETHER_WART_STAGE2, { id: Item.NETHER_WART, count: 1 }],
+  [Block.NETHER_WART_STAGE3, { id: Item.NETHER_WART, count: 2 }],
   // 绊线（批次 55）：它没有物品（是用"线"放下来的），拆掉退回 1 根线（原版如此）
   [Block.TRIPWIRE, { id: Item.STRING, count: 1 }],
   // 甜菜（批次 48）：与小麦同一条规矩——没熟只拿回 1 粒种子，熟了才给甜菜根

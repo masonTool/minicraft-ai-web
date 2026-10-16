@@ -3229,6 +3229,82 @@ PAINTERS.loom_side = paintingPainter(WOOD_FRAME, [
 ]);
 
 PAINTERS.magma = MAGMA_PAINTER;
+
+/**
+ * 下界疣（批次 92）：4 个阶段。
+ *
+ * 原版是一株**紫红色的小瘤**：矮矮一根茎，上面顶着几颗越来越鼓的疙瘩。
+ * 画法与甜浆果丛同一个套路（下宽上窄的"丛形" + 固定的几颗果子），只是颜色走红紫系、
+ * 阶段越高**疙瘩越多越大**——玩家一眼就能看出"这株能收了"。
+ */
+function netherWartPainter(stage: number): Painter {
+  const height = 4 + stage * 3; // 4 / 7 / 10 / 13
+  const nodules = stage; // 第 0 阶段一颗都没有，越熟越多
+  const noduleX = [4, 11, 6, 9];
+  return (x, y, rng) => {
+    const jitter = rng() * 8 - 4;
+    const dy = 15 - y;
+    if (dy > height) return [0, 0, 0, 0];
+    const dx = Math.abs(x - 7.5);
+    // 茎：细，越往上越窄
+    const half = 1.5 + (height - dy) * 0.16;
+    if (dx > half) return [0, 0, 0, 0];
+    // 疙瘩：固定几个位置，阶段越高越多（第 3 阶段四颗全在）
+    if (nodules > 0 && dy >= 2 && dy <= 2 + stage * 2 + 1 && noduleX.slice(0, nodules).includes(x)) {
+      return [clamp255(178 + jitter), clamp255(42 + jitter), clamp255(58 + jitter), 255];
+    }
+    // 茎体：暗红紫，顶部略亮（新芽）
+    const base = 96 + stage * 10 + (dy > height - 3 ? 20 : 0);
+    return [clamp255(base + jitter + 24), clamp255(base * 0.32 + jitter), clamp255(base * 0.42 + jitter), 255];
+  };
+}
+
+for (let stage = 0; stage < 4; stage++) PAINTERS[`nether_wart_stage${stage}`] = netherWartPainter(stage);
+
+/** 烈焰棒（批次 92）：一根带弧度的金黄棒子，顶端偏橙（原版就是"烧红的棍子"） */
+PAINTERS.item_blaze_rod = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 从右下到左上的一条斜棒（3 像素宽），两端收窄
+  const center = 14 - (15 - y) * 0.75;
+  const dx = Math.abs(x - center);
+  if (dx > 1.6 || y < 2) return [0, 0, 0, 0];
+  const hot = y < 6; // 顶端更亮更橙
+  return hot
+    ? [clamp255(250 + jitter), clamp255(186 + jitter), clamp255(70 + jitter), 255]
+    : [clamp255(236 + jitter), clamp255(152 + jitter), clamp255(42 + jitter), 255];
+};
+
+/**
+ * 刷怪笼（批次 92）：一层**镂空**的铁栏杆。
+ *
+ * 边框 + 横竖各两条栏杆，其余像素透明——走实心层的 alphaTest 丢空（与展示框同一档），
+ * 于是隔着笼子能看见里面的方块。原版笼子里还有一只旋转的小生物（没做，见 E14）。
+ */
+PAINTERS.spawner = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  const onFrame = x <= 1 || x >= 14 || y <= 1 || y >= 14;
+  const onBar = x % 5 === 2 || y % 5 === 2;
+  if (!onFrame && !onBar) return [0, 0, 0, 0];
+  // 栏杆本体偏暗铁色，交点（边框四角与栏杆交叉处）亮一点，看着像立体的架子
+  const joint = onFrame && onBar;
+  const base = joint ? 92 : 66;
+  return [clamp255(base + jitter), clamp255(base + jitter), clamp255(base + 8 + jitter), 255];
+};
+
+/** 烈焰人的小火球（批次 92）：一团中心亮黄、边缘橙红的火（billboard 用） */
+PAINTERS.small_fireball = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const d = Math.hypot(dx, dy);
+  if (d > 6.5) return [0, 0, 0, 0];
+  if (d < 2.2) return [clamp255(254 + jitter), clamp255(238 + jitter), clamp255(150 + jitter), 255];
+  if (d < 4.2) return [clamp255(248 + jitter), clamp255(176 + jitter), clamp255(52 + jitter), 255];
+  // 外圈：暗一点的橙红，边缘再软一点（半透明收边，飞起来不像一个硬方块）
+  const alpha = d > 5.8 ? 140 : 235;
+  return [clamp255(206 + jitter), clamp255(82 + jitter), clamp255(28 + jitter), alpha];
+};
+
 PAINTERS.crimson_nylium = nyliumPainter([132, 40, 44], 'crim');
 PAINTERS.crimson_nylium_side = nyliumSidePainter([132, 40, 44], 'crims');
 PAINTERS.warped_nylium = nyliumPainter([44, 132, 124], 'warp');

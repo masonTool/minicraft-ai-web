@@ -112,6 +112,20 @@ export interface MobType {
    */
   naturalSpawn?: boolean;
   /**
+   * **会飞**（批次 92，烈焰人是第一种）：没有重力，AI 走 `flyAi` 那一套
+   * （悬停 + 逼近），地面那套寻路/游荡/繁殖全都不适用。
+   *
+   * 为什么要一个字段而不是在 `Mob` 里按 id 特判：与 `ranged`/`wool`/`feed`
+   * 同一个理由——"这种生物怎么动"是**数据**，行为只认数据
+   * （本项目为"按 id 字符串特判"交过学费，见批次 38 的门/活板门）。
+   */
+  flying?: boolean;
+  /**
+   * **免疫火焰伤害**（批次 92，烈焰人）：着火时不掉血（但照样会被点燃/显示火）。
+   * 与 `flying` 同理，这是数据而不是特判。
+   */
+  fireImmune?: boolean;
+  /**
    * 死亡时按**自己身上的颜色**掉羊毛（J8，羊用）。
    * 羊毛不在 `drops` 表里，因为颜色是每只动物各自的——写死在表里就只能掉白色的。
    * 被剪过的羊不掉羊毛（原版行为）。
@@ -211,6 +225,8 @@ export class Mob extends Entity {
   private rangedTimer = 0;
   private hurtTime = 0;
   private attackCooldown = 0;
+  /** 悬停相位（飞行生物上下浮动用，见 `flyAi`） */
+  protected hoverPhase = 0;
   /** 苦力怕的引信（秒）：贴到玩家身上开始点燃，1.5 秒后炸 */
   private fuse = 0;
   private jumpCooldown = 0;
@@ -282,8 +298,15 @@ export class Mob extends Entity {
 
     this.updateAi(ctx, dt);
 
-    this.vy -= GRAVITY * dt;
-    if (this.vy < -60) this.vy = -60;
+    if (this.type.flying) {
+      // 飞行生物（批次 92）：**没有重力**——`vy` 由 `flyAi` 直接给（悬停/升降）。
+      // 这里只做一点阻尼，免得"上一帧的上升速度"永远留着（那样它会一直往上飘）。
+      // ⚠️ 位置仍然走 `moveBody`：飞**不等于穿墙**（撞到方块照样被拦下）
+      this.vy *= Math.max(0, 1 - 2.5 * dt);
+    } else {
+      this.vy -= GRAVITY * dt;
+      if (this.vy < -60) this.vy = -60;
+    }
 
     moveBody(ctx.world, this, this.vx * dt, this.vy * dt, this.vz * dt);
 
@@ -370,6 +393,74 @@ export class Mob extends Entity {
     ctx.spawnDrop(Item.EGG, 1, this.x, this.y + this.height * 0.5, this.z);
   }
 
+  /**
+   * 飞行生物的 AI（批次 92，烈焰人是第一种）。子类覆盖它来加自己的招数。
+   *
+   * 默认行为：**悬停在玩家上方、靠到 2.5 格内就撞上去**；没在追人时原地上下浮动、
+   * 偶尔往一个随机方向飘几格。
+   *
+   * 目标点取"玩家头顶偏后一点"而不是玩家坐标本身：直接追坐标会把它挤进玩家身体里
+   * （两个碰撞盒互相推，看起来像在抖），偏出去 1.5 格之后就是原版那种"贴脸盘旋"。
+   *
+   * ⚠️ 这里只**改速度**，位置仍然由 `tick` 里的 `moveBody` 推进——
+   * 于是飞行不穿墙，撞到方块照样被拦下（撞墙时它会贴着墙滑，与原版差不多）。
+   */
+  protected flyAi(
+    ctx: EntityContext,
+    dt: number,
+    player: { x: number; y: number; z: number } | null,
+  ): void {
+    this.hoverPhase += dt * 2.4;
+    const bob = Math.sin(this.hoverPhase) * 0.35;
+
+    if (!player) {
+      // 没目标：上下浮动 + 偶尔往随机方向飘（不赶路，也不落地）
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        this.wanderTimer = 3 + Math.random() * 4;
+        this.wanderYaw = Math.random() * Math.PI * 2;
+      }
+      const drift = 4;
+      this.flyToward(
+        this.x + Math.sin(this.wanderYaw) * drift,
+        this.y + bob,
+        this.z + Math.cos(this.wanderYaw) * drift,
+        dt,
+      );
+      return;
+    }
+
+    const dx = player.x - this.x;
+    const dz = player.z - this.z;
+    const distance = Math.hypot(dx, dz) || 1;
+    const behind = 1.5;
+    this.flyToward(
+      player.x - (dx / distance) * behind,
+      player.y + this.type.height * 0.85 + bob,
+      player.z - (dz / distance) * behind,
+      dt,
+    );
+
+    if (distance < 2.5 && this.attackCooldown <= 0) {
+      this.attackCooldown = 1;
+      const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
+      ctx.hurtPlayer(damage, this.x, this.z);
+    }
+  }
+
+  /** 朝目标点平滑加速（飞行用；与末影龙那个 `steer` 同一个套路，收在基类里） */
+  protected flyToward(x: number, y: number, z: number, dt: number, speed = this.type.speed): void {
+    const dx = x - this.x;
+    const dy = y - this.y;
+    const dz = z - this.z;
+    const length = Math.hypot(dx, dy, dz) || 1;
+    const factor = Math.min(1, 3.5 * dt);
+    this.vx += ((dx / length) * speed - this.vx) * factor;
+    this.vy += ((dy / length) * speed - this.vy) * factor;
+    this.vz += ((dz / length) * speed - this.vz) * factor;
+    this.yaw = Math.atan2(this.vx, this.vz);
+  }
+
   private updateAi(ctx: EntityContext, dt: number): void {
     const player = ctx.player;
     const dx = player ? player.x - this.x : 0;
@@ -382,6 +473,14 @@ export class Mob extends Entity {
       player !== null &&
       ctx.playerInvisible !== true &&
       distanceSq <= this.type.followRange * this.type.followRange;
+
+    // 飞行生物（批次 92）：悬停 + 逼近，走 `flyAi` 那一套。
+    // 放在最前面是因为**下面每一条都假设它站在地上**（寻路要"能站人的格子"、
+    // 游荡要"避开落差"、繁殖要"走到配偶身边"）——飞行生物一条都不适用
+    if (this.type.flying) {
+      this.flyAi(ctx, dt, chasing ? player : null);
+      return;
+    }
 
     // 被手里的食物吸引：玩家拿着它爱吃的东西走近，它会跟着走（原版行为）。
     // 放在"求爱"之前：正在被引的时候不会乱跑，但求爱仍然优先（毕竟那是在办事）
@@ -706,6 +805,11 @@ export class Mob extends Entity {
   /** 着火伤害：每满 1 秒扣 1 点（原版 20 tick 一次），不参与无敌帧与击退 */
   private tickBurning(dt: number): void {
     if (this.burnTime <= 0) return;
+    // 免疫火焰的生物（烈焰人）：照样"被点燃"（渲染层会画火），但不掉血
+    if (this.type.fireImmune) {
+      this.burnTime -= dt;
+      return;
+    }
     this.burnTime -= dt;
     this.burnTick += dt;
     while (this.burnTick >= 1) {

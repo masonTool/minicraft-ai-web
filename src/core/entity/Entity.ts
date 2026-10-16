@@ -153,6 +153,26 @@ export interface EntityContext {
   spawnLingering?: (potionId: number, x: number, y: number, z: number) => void;
   /** 吐一团龙息云（K4 尾巴：末影龙的血息阶段调用） */
   spawnDragonBreath?: (x: number, y: number, z: number) => void;
+  /**
+   * 吐一颗**小火球**（批次 92，烈焰人用）。
+   *
+   * 与 `spawnArrow` 同一个理由：生物只负责"什么时候吐、朝哪个方向吐"，
+   * 火球怎么建、长什么样由主程序决定（它是 `Throwable` 里的一档）。
+   */
+  spawnSmallFireball?: (
+    x: number,
+    y: number,
+    z: number,
+    velocity: { x: number; y: number; z: number },
+  ) => void;
+  /**
+   * 点燃玩家（批次 92，小火球命中时用）。
+   *
+   * ⚠️ 与 `hurtPlayer` 分开：伤害与"点火"在生存模块里本来就是两条路
+   * （`PlayerStats.hurt` 与 `PlayerStats.ignite`），合成一个参数会让人以为
+   * "受伤就会着火"（岩浆是两者都有，而火球是分开结算的）。
+   */
+  ignitePlayer?: (seconds: number) => void;
 }
 
 let nextEntityId = 1;

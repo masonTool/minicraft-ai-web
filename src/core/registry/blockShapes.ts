@@ -170,6 +170,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'torch':
     case 'ladder':
     case 'cross':
+    // 下界疣（批次 92）：与 `cross` 同一种几何（两片交叉薄面、无碰撞），
+    // 差别只在**放置/支撑判据**（只认灵魂沙，见 `blockState.ts` 的形状注释）
+    case 'nether_wart':
     case 'flat':
     // 珊瑚扇（批次 51）：一片薄面，原版可以直接游过去
     case 'coral_fan':
@@ -362,6 +365,18 @@ function doorBox(state: number): LocalBox {
  * 网格化用它决定"要不要走贪心合并"，测试也用它算逐面基准值——
  * 两边共用一份判定，免得基准与实际实现悄悄跑偏（本轮就踩过一次）。
  */
+/**
+ * "十字薄面"那一类形状（`cross` 与下界疣）。
+ *
+ * 两者几何完全一样、**只有放置/支撑判据不同**（`cross` 要求下方实心，
+ * 下界疣只认灵魂沙）。凡是"按形状分派几何"的地方都该问这个函数而不是各自写
+ * `shape === 'cross'`——批次 92 加下界疣时，网格化那条路径就是靠它一处改到的
+ * （漏在这里的表现是"方块放下去了但看不见"）。
+ */
+export function isCrossShape(shape: BlockShape): boolean {
+  return shape === 'cross' || shape === 'nether_wart';
+}
+
 export function isFullBlockShape(shape: BlockShape, state: number): boolean {
   if (shape === 'cube') return true;
   // 水位为 0（水源）或下落中的液体高度是整格，海洋里绝大多数水都属于这一类
@@ -480,6 +495,8 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       return [paintingBox(state)];
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
+    // 下界疣（批次 92）同理：它也是十字薄面
+    case 'nether_wart':
       return [];
     default:
       return [FULL];

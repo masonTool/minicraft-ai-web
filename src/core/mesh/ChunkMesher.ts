@@ -33,6 +33,7 @@ import {
   canPaneConnectTo,
   canScaffoldConnectTo,
   canTripwireConnectTo,
+  isCrossShape,
   isFullBlockShape,
   meshBoxes,
   type LocalBox,
@@ -720,7 +721,8 @@ export function meshSection(
         };
 
         // ---- 植物（十字）：两片交叉薄面，单独走一条路径
-        if (def.shape === 'cross') {
+        // （`isCrossShape`：`cross` 与下界疣几何一样，见 `blockShapes.ts`）
+        if (isCrossShape(def.shape)) {
           emitCross(emit, x, y, z, worldY);
           continue;
         }

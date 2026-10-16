@@ -66,15 +66,41 @@ export function mobAppearanceKey(mob: Mob): string {
   return '';
 }
 
-type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal' | 'villager';
+type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal' | 'villager' | 'blaze';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
   if (typeId === 'end_crystal') return 'crystal';
+  if (typeId === 'blaze') return 'blaze';
   if (typeId === 'villager') return 'villager';
   if (typeId === 'chicken') return 'bird';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   return 'humanoid';
+}
+
+/**
+ * 按模型种类取部件表。
+ *
+ * 原先这里是**一串嵌套三元**：加第三种模型时就已经要数括号了，加烈焰人（第五种）
+ * 时干脆换成一个 switch——**"再往里塞一层三元"是这类代码开始出错的地方**。
+ */
+function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
+  switch (kind) {
+    case 'dragon':
+      return dragonBoxes(type);
+    case 'crystal':
+      return crystalBoxes();
+    case 'blaze':
+      return blazeBoxes(type);
+    case 'villager':
+      return villagerBoxes(type);
+    case 'quadruped':
+      return quadrupedBoxes(type);
+    case 'bird':
+      return birdBoxes(type);
+    default:
+      return humanoidBoxes(type);
+  }
 }
 
 interface BoxSpec {
@@ -201,6 +227,42 @@ function dragonBoxes(type: MobType): BoxSpec[] {
     { width: w * 0.3, height: h * 0.26, depth: h * 0.7, x: 0, y: h * 0.5, z: -h * 0.9, color: 'body' },
     { width: w * 0.16, height: h * 0.16, depth: h * 0.6, x: 0, y: h * 0.5, z: -h * 1.5, color: 'accent' },
   ];
+}
+
+/**
+ * 烈焰人（批次 92）：**一颗悬空的脑袋 + 底下一圈旋转的火棒**。
+ *
+ * 那圈棒子是它一眼可辨的特征（原版是 8 根，绕一圈一边转一边烧）。
+ * 这里画 8 根静态的：渲染器目前只有"摆腿/扇翅"两种逐部件动画
+ * （见 `MobRenderer.update` 的 `legCount` 那一段），给某一种生物加"绕轴自转"
+ * 要走一套新的动画通道——留给以后需要时再加（差异记在 TASKS J26）。
+ */
+function blazeBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const box: BoxSpec[] = [
+    // 脑袋（原版那颗方方的"火头"）
+    { width: w * 0.85, height: w * 0.85, depth: w * 0.85, x: 0, y: h * 0.62, z: 0, color: 'body' },
+    // 两只眼睛
+    { width: w * 0.16, height: w * 0.12, depth: w * 0.06, x: -w * 0.2, y: h * 0.66, z: w * 0.45, color: 'eye' },
+    { width: w * 0.16, height: w * 0.12, depth: w * 0.06, x: w * 0.2, y: h * 0.66, z: w * 0.45, color: 'eye' },
+  ];
+  // 底下一圈 8 根火棒（半径 w*0.38，长短交错，看着像在烧）
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const radius = w * 0.38;
+    const long = i % 2 === 0;
+    box.push({
+      width: w * 0.13,
+      height: long ? h * 0.3 : h * 0.22,
+      depth: w * 0.13,
+      x: Math.cos(angle) * radius,
+      y: h * 0.26,
+      z: Math.sin(angle) * radius,
+      color: long ? 'body' : 'accent',
+    });
+  }
+  return box;
 }
 
 /** 末地水晶：一块悬浮的发光方块 + 上下两个尖角 */
@@ -388,18 +450,7 @@ export class MobRenderer {
   private createVisual(mob: Mob): MobVisual {
     const type = mob.type;
     const kind = modelKindOf(type.id);
-    const specs =
-      kind === 'dragon'
-        ? dragonBoxes(type)
-        : kind === 'crystal'
-          ? crystalBoxes()
-          : kind === 'villager'
-            ? villagerBoxes(type)
-            : kind === 'humanoid'
-              ? humanoidBoxes(type)
-              : kind === 'quadruped'
-                ? quadrupedBoxes(type)
-                : birdBoxes(type);
+    const specs = modelBoxes(kind, type);
 
     const partColors = new Uint32Array(specs.length);
     // ⚠️ 主色与点缀色都走函数（不是 `type.bodyColor`）：羊的毛色与村民的长袍色
@@ -416,7 +467,9 @@ export class MobRenderer {
       // 记下"生成这份规格时的外观版本"（见 update 里的重建判定）
       appearance: mobAppearanceKey(mob),
       specs,
-      legCount: kind === 'quadruped' ? 4 : kind === 'crystal' ? 0 : 2,
+      // 参与"走路摆动/扇翅"的部件数：四足 4 条腿、人形/鸟/龙 2 条，水晶与烈焰人不摆动
+      //（烈焰人那一圈火棒在它自己身上，不该跟着"迈步"晃）
+      legCount: kind === 'quadruped' ? 4 : kind === 'crystal' || kind === 'blaze' ? 0 : 2,
       spin: 0,
       partColors,
     };

@@ -78,6 +78,8 @@ export class EntityRenderer {
   private readonly arrowGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly spriteGeometries = new Map<number, THREE.BufferGeometry>();
+  /** 按**贴图名**索引的 billboard 平面（批次 92：小火球这种没有物品的东西用） */
+  private readonly tileSpriteGeometries = new Map<string, THREE.BufferGeometry>();
   private readonly baseMaterial: THREE.ShaderMaterial;
   /** 按光照档位缓存的材质（0-15），同档位的实体共用 */
   private readonly materialByLevel: THREE.ShaderMaterial[] = [];
@@ -195,15 +197,23 @@ export class EntityRenderer {
   ): void {
     alive.add(throwable.id);
 
+    const fireball = throwable.kind === 'small_fireball';
+
     let mesh = this.throwableMeshes.get(throwable.id);
     if (!mesh) {
-      mesh = new THREE.Mesh(this.spriteGeometry(throwable.itemId), this.baseMaterial);
+      // 小火球（批次 92）用自己那张"火团"贴图，而不是物品图标——
+      // 它没有对应的物品，是烈焰人吐出来的（见 `entity/Blaze.ts`）
+      const geometry = fireball ? this.tileSpriteGeometry('small_fireball') : this.spriteGeometry(throwable.itemId);
+      mesh = new THREE.Mesh(geometry, this.baseMaterial);
       mesh.userData.billboard = true;
       this.throwableMeshes.set(throwable.id, mesh);
       this.object.add(mesh);
     }
 
-    if (lightAt) {
+    if (fireball) {
+      // **自发光**：火球是光源本身，不该跟着周围的光照变暗（原版它一路都亮着）
+      mesh.material = this.materialForLevel(15);
+    } else if (lightAt) {
       const light = lightAt(Math.floor(throwable.x), Math.floor(throwable.y + 0.1), Math.floor(throwable.z));
       if (light) {
         const level = Math.max(light.sky * this.skyLightFactor, light.block);
@@ -324,15 +334,35 @@ export class EntityRenderer {
     return geometry;
   }
 
+  /**
+   * 按**贴图名**取一张 billboard 平面（批次 92，小火球用）。
+   *
+   * `spriteGeometry` 是"按物品 id 找图标"，而小火球没有对应物品——
+   * 它是烈焰人吐出来的一团火。两张缓存分开存：物品 id 与贴图名可能撞号，
+   * 混用一份 Map 迟早会把某个物品的图标换成火团。
+   */
+  private tileSpriteGeometry(tile: string): THREE.BufferGeometry {
+    const cached = this.tileSpriteGeometries.get(tile);
+    if (cached) return cached;
+
+    const geometry = new THREE.PlaneGeometry(SPRITE_SIZE, SPRITE_SIZE);
+    applyFaceUvs(geometry, this.atlas, [tile]);
+
+    this.tileSpriteGeometries.set(tile, geometry);
+    return geometry;
+  }
+
   dispose(): void {
     for (const mesh of this.meshes.values()) this.object.remove(mesh);
     this.meshes.clear();
     for (const geometry of this.blockGeometries.values()) geometry.dispose();
     for (const geometry of this.arrowGeometries.values()) geometry.dispose();
     for (const geometry of this.spriteGeometries.values()) geometry.dispose();
+    for (const geometry of this.tileSpriteGeometries.values()) geometry.dispose();
     this.blockGeometries.clear();
     this.arrowGeometries.clear();
     this.spriteGeometries.clear();
+    this.tileSpriteGeometries.clear();
     for (const material of this.materialByLevel) material?.dispose();
     this.materialByLevel.length = 0;
     this.baseMaterial.dispose();

@@ -74,6 +74,10 @@ export function supportKindOf(id: number): SupportKind {
   // ⚠️ 仙人掌的形状是 `cactus`（不是 `cross`）：它同样要求下方是实心方块（原版是沙子）。
   // 这一类"形状名与判据不同名"的地方最容易漏——本批就是断言把仙人掌漏掉的那次抓出来的。
   if (def.shape === 'cross' || def.shape === 'flat' || def.shape === 'cactus') return 'solid';
+  // 下界疣（批次 92）：与 `cross` 同一档——下方（灵魂沙）没了就该掉。
+  // ⚠️ 放置侧比这里更严（只认灵魂沙），但**支撑判据只问"下面还实心吗"**：
+  // 灵魂沙被换成别的实心方块时，原版的wart是照样长着的（它也只在灵魂沙上生成）。
+  if (def.shape === 'nether_wart') return 'solid';
   // 贴附面（B14，批次 86）：展示框与画贴在墙上，墙没了就该掉下来。
   // ⚠️ 这一档只接了这两件：火把/梯子/藤蔓仍是 `'none'`（它们是同一类，
   // 但"藤蔓能同时挂好几面、梯子还能站人"这些差别要各自想过，见 TASKS B49）

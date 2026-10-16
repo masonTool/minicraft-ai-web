@@ -14,7 +14,7 @@
  * 不分子步会直接穿过 0.4 格宽的鸡。
  */
 
-import { Entity, type EntityContext } from './Entity.ts';
+import { Entity, entityIntersectsBox, type EntityContext } from './Entity.ts';
 import { boxAt } from '../physics/AABB.ts';
 import { moveBody, type MovingBody } from '../physics/EntityMotion.ts';
 
@@ -35,7 +35,16 @@ export const PLAYER_THROW_SPEED = 30;
 /** 鸡蛋砸出小鸡的概率（原版 1/8） */
 export const EGG_CHICK_CHANCE = 0.125;
 
-export type ThrowableKind = 'snowball' | 'egg' | 'splash_potion' | 'lingering_potion';
+/**
+ * 小火球（批次 92，烈焰人吐的）打中玩家的伤害与点燃时长（原版：5 点 + 5 秒）。
+ *
+ * 数值放在投掷物这一层而不是 `Blaze.ts`：**结算是这里做的**，
+ * 而"谁吐的、飞多快"才是生物那一层的事（见 `Blaze.ts` 的 `BLAZE_FIREBALL_SPEED`）。
+ */
+export const SMALL_FIREBALL_DAMAGE = 5;
+export const SMALL_FIREBALL_FIRE_SECONDS = 5;
+
+export type ThrowableKind = 'snowball' | 'egg' | 'splash_potion' | 'lingering_potion' | 'small_fireball';
 
 export interface ThrowableOptions {
   readonly kind: ThrowableKind;
@@ -91,7 +100,9 @@ export class Throwable extends Entity implements MovingBody {
     }
 
     const inWater = ctx.world.isLiquid(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z));
-    this.vy -= GRAVITY * dt;
+    // 小火球（批次 92）：**几乎没有重力**——原版它就是一条直线飞过去，
+    // 玩家在十几格外站着不动也能被直直打中（有重力的话它会先落地）
+    if (this.kind !== 'small_fireball') this.vy -= GRAVITY * dt;
     if (inWater) {
       const drag = Math.pow(WATER_DRAG, dt);
       this.vx *= drag;
@@ -133,6 +144,19 @@ export class Throwable extends Entity implements MovingBody {
    */
   private tryHitEntity(ctx: EntityContext): boolean {
     const box = boxAt(this.x, this.y, this.z, this.width, this.height);
+
+    // 小火球（批次 92）：它**只打玩家**（是烈焰人吐出来的），所以先查玩家。
+    // 其余投掷物都是玩家扔的，只查生物——两者方向相反，不该混成一条
+    if (this.kind === 'small_fireball') {
+      if (ctx.playerBox && entityIntersectsBox(this, ctx.playerBox)) {
+        ctx.hurtPlayer(SMALL_FIREBALL_DAMAGE, this.x, this.z, 'fire');
+        ctx.ignitePlayer?.(SMALL_FIREBALL_FIRE_SECONDS);
+        this.impact(ctx);
+        return true;
+      }
+      return false;
+    }
+
     const mob = ctx.hitMob?.(box) ?? null;
     if (!mob) return false;
 
@@ -173,6 +197,11 @@ export class Throwable extends Entity implements MovingBody {
         // 范围结算交给主程序（它才知道周围有谁），实体层只管"在哪炸"
         if (this.potionId !== undefined) ctx.applySplash?.(this.potionId, x, y, z);
         else ctx.playSound?.('splash', x, y, z);
+        break;
+      case 'small_fireball':
+        // 命中：原版小火球**不点燃方块**（只有火球那个大号才点），所以这里只出一声
+        // （项目里没有"火焰命中"那一声，借用箭命中；见 `Blaze.ts` 的同一处注记）
+        ctx.playSound?.('arrow_hit', x, y, z);
         break;
       case 'lingering_potion':
         // 滞留型不炸开，而是**在原地留下**一片云（K4 尾巴）：云的生命周期归主程序，

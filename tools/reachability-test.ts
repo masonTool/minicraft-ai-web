@@ -201,9 +201,71 @@ interface Exempt {
 
 const many = (ids: readonly number[], reason: string): Exempt[] => ids.map((id) => ({ id, reason }));
 
-/** 整族药水（饮用 / 喷溅 / 滞留）都断在同一处 */
-const POTION_CHAIN_BLOCKER =
-  '整条酿造链断在"下界疣"上：原版下界疣只长在下界要塞的灵魂沙上，而下界要塞还没做（TASKS 的 J26）';
+/**
+ * 药水那一族的理由**从酿造图里算出来**，不再手抄 45 个 id（批次 92 改的）。
+ *
+ * 批次 91 那版是"整族 84 瓶都断在下界疣上"，一整条理由套住全部；
+ * 批次 92 把下界疣与烈焰粉接上之后，**同一族里有一半能酿了、另一半仍断在蜘蛛眼上**
+ * ——手抄的清单这时候必然写错（要么多列、要么少列，而且都不会报错）。
+ * 所以改成：沿着 `BREW_RECIPES` 往回找"第一件拿不到的原料"，按原料给出理由。
+ * 哪天某个原料补上了，这一族会**自己**变短；而下面那条"缺口总数"断言会同时变红，
+ * 逼着人来看一眼（这就是白名单该有的自清方式）。
+ */
+const INGREDIENT_BLOCKERS: readonly { item: number; reason: string }[] = [
+  {
+    item: Item.SPIDER_EYE,
+    reason: '蜘蛛没做：原版蜘蛛眼由蜘蛛掉落，而生物整组里没有蜘蛛——它挡住剧毒，也挡住发酵蜘蛛眼（J26）',
+  },
+  {
+    item: Item.FERMENTED_SPIDER_EYE,
+    reason: '发酵蜘蛛眼的配方已按原版补上（蜘蛛眼 + 棕蘑菇 + 糖），但原料蜘蛛眼拿不到——它挡住缓慢 / 伤害 / 隐身（J26）',
+  },
+  {
+    item: Item.GHAST_TEAR,
+    reason: '恶魂没做：原版恶魂之泪由恶魂掉落——它挡住再生（J26）',
+  },
+];
+
+/** 一瓶药水（含喷溅/滞留）卡在哪件原料上；返回 null 表示这条链整个是通的 */
+function potionBlocker(id: number): { item: number; reason: string } | null {
+  const seen = new Set<number>();
+  const walk = (potion: number): number | null => {
+    if (seen.has(potion)) return null;
+    seen.add(potion);
+    for (const recipe of BREW_RECIPES) {
+      if (recipe.to !== potion) continue;
+      if (!reach.has(recipe.ingredient)) return recipe.ingredient;
+      const upstream = walk(recipe.from);
+      if (upstream !== null) return upstream;
+    }
+    return null;
+  };
+  const blocker = walk(id);
+  if (blocker === null) return null;
+  return INGREDIENT_BLOCKERS.find((entry) => entry.item === blocker) ?? null;
+}
+
+/** 仍然拿不到的药水 / 药水箭（各自带上"卡在哪"的理由） */
+const BLOCKED_POTIONS: Exempt[] = [];
+for (const entry of POTION_ITEMS) {
+  if (reach.has(entry.id)) continue;
+  const blocker = potionBlocker(entry.id);
+  BLOCKED_POTIONS.push({
+    id: entry.id,
+    reason: blocker ? `${entry.key}：${blocker.reason}` : `${entry.key}：酿造链上有一件原料拿不到`,
+  });
+}
+const BLOCKED_TIPPED: Exempt[] = [];
+for (const entry of TIPPED_ARROWS) {
+  if (reach.has(entry.id)) continue;
+  const blocker = potionBlocker(entry.id);
+  BLOCKED_TIPPED.push({
+    id: entry.id,
+    reason: blocker
+      ? `药水箭 = 滞留药水 + 8 支箭，而对应的滞留药水酿不出来（${blocker.reason}）`
+      : '药水箭 = 滞留药水 + 8 支箭，而对应的滞留药水酿不出来',
+  });
+}
 
 const BLACK_DYE = dyeIdByName('black');
 const GRAY_DYE = dyeIdByName('gray');
@@ -216,19 +278,12 @@ const CHAINMAIL_PIECES = [
 ];
 
 const EXEMPT: readonly Exempt[] = [
-  // ---- ① 酿造链的三个断环：下界要塞 / 烈焰人 / 蜘蛛（本批补上了"配方存在"，来源要内容）
-  { id: Item.NETHER_WART, reason: POTION_CHAIN_BLOCKER },
-  { id: Item.BLAZE_POWDER, reason: '烈焰人未实现：原版烈焰粉由烈焰棒（烈焰人掉落）拆成，而生物整组里没有烈焰人（J26）' },
-  ...many(POTION_ITEMS.map((entry) => entry.id), POTION_CHAIN_BLOCKER),
-  ...many(
-    TIPPED_ARROWS.map((entry) => entry.id),
-    `药水箭 = 滞留药水 + 8 支箭，而滞留药水同样酿不出来：${POTION_CHAIN_BLOCKER}`,
-  ),
-  { id: Item.SPIDER_EYE, reason: '蜘蛛未实现：原版蜘蛛眼由蜘蛛掉落，而生物整组里没有蜘蛛（J26）' },
-  {
-    id: Item.FERMENTED_SPIDER_EYE,
-    reason: '配方已按原版补上（蜘蛛眼 + 棕色蘑菇 + 糖），但原料蜘蛛眼拿不到（J26）',
-  },
+  // ---- ① 酿造链：下界疣与烈焰粉已在批次 92 接上（要塞 + 烈焰人），
+  //         剩下的断环是**原料型**的：蜘蛛眼 / 发酵蜘蛛眼 / 恶魂之泪（理由从酿造图算出来）
+  ...BLOCKED_POTIONS,
+  ...BLOCKED_TIPPED,
+  { id: Item.SPIDER_EYE, reason: INGREDIENT_BLOCKERS[0]!.reason },
+  { id: Item.FERMENTED_SPIDER_EYE, reason: INGREDIENT_BLOCKERS[1]!.reason },
 
   // ---- ② 染料里只剩黑色一条断链，灰色依赖它
   {
@@ -280,6 +335,9 @@ check(
   stale.map(nameOf).join(', '),
 );
 check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.length} 条 → ${exemptIds.size} 个 id`);
+// 把"缺口总数"钉死：哪天某条链补上了（或又断了一条），这里会当场变红，
+// 逼着人回来看白名单——**自清的清单需要一个会响的铃**
+equal('缺口总数（批次 92 之后：70 条 —— 药水链接上后从 124 掉下来的）', unreachable.length, 70);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));
@@ -288,21 +346,32 @@ check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entr
 
 console.log('\n[五、本批查到并修掉/记下的几件事]');
 
-// ① 整条酿造链：配方都在，原料全缺
+// ① 酿造链：批次 91 量出"整族 112 件药水/药水箭一瓶都拿不到"，根因是**三处断环**
+//    （下界疣 / 烈焰粉 / 蜘蛛眼）。批次 92 把前两处接上了（下界要塞 + 烈焰人），
+//    于是同一张白名单里有一半自己变短了——这正是白名单该有的样子
+const drinkableReachable = POTION_ITEMS.filter((entry) => reach.has(entry.id)).length;
 check(
-  `整族药水（${POTION_ITEMS.length} 瓶）在生存里一瓶都酿不出来`,
-  POTION_ITEMS.every((entry) => !reach.has(entry.id)),
-  `能拿到 ${POTION_ITEMS.filter((entry) => reach.has(entry.id)).length} 瓶`,
+  `整族药水里已经能酿出 ${drinkableReachable} / ${POTION_ITEMS.length} 瓶（批次 92 接上了下界疣与烈焰粉）`,
+  drinkableReachable > 0 && drinkableReachable < POTION_ITEMS.length,
+  String(drinkableReachable),
 );
-equal('药水箭 28 支同样一支都拿不到', TIPPED_ARROWS.filter((entry) => reach.has(entry.id)).length, 0);
-equal('药水箭的条数是 28（与饮用型一一对应）', TIPPED_ARROWS.length, 28);
+check('剩下的都断在**原料**上，而不是断在"第一件原料从哪来"（下界疣已通）', reach.has(Item.NETHER_WART));
+check('烈焰棒拿得到（烈焰人掉）', reach.has(Item.BLAZE_ROD));
+check('烈焰粉拿得到（1 根棒拆 2 份）', reach.has(Item.BLAZE_POWDER));
 check(
-  '酿造台也做不出来：配方要烈焰粉，而烈焰粉没有来源',
+  '酿造台现在做得出来了（3 圆石 + 烈焰粉，配方一直都在，缺的是原料）',
   RECIPES.some(
     (recipe) =>
       recipe.result.id === Block.BREWING_STAND &&
-      recipeIngredients(recipe).some((ingredient) => ingredient.id === Item.BLAZE_POWDER),
-  ) && !reach.has(Item.BLAZE_POWDER),
+      recipeIngredients(recipe).every((ingredient) => reach.has(ingredient.id)),
+  ),
+);
+equal('药水箭的条数是 28（与饮用型一一对应）', TIPPED_ARROWS.length, 28);
+const arrowReachable = TIPPED_ARROWS.filter((entry) => reach.has(entry.id)).length;
+check(
+  `药水箭能做出 ${arrowReachable} / ${TIPPED_ARROWS.length} 支（跟着饮用型走）`,
+  arrowReachable > 0 && arrowReachable < TIPPED_ARROWS.length,
+  String(arrowReachable),
 );
 
 // ② 红石粉：同一件东西注册了两份，酿造用的那份没有任何来源

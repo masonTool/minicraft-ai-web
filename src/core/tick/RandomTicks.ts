@@ -33,11 +33,14 @@ import {
   CROP_STAGES,
   JUNGLE_LOG_ID,
   KELP_MAX_HEIGHT,
+  NETHER_WART_RIPE_STAGE,
+  NETHER_WART_STAGES,
   berryStageOf,
   blockDef,
   cocoaStageOf,
   cropOf,
   isLiveCoral,
+  netherWartStageOf,
   Wood,
 } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
@@ -342,6 +345,24 @@ function berryBehavior(world: TickWorld, x: number, y: number, z: number, random
   if ((world.lightAt?.(x, y, z) ?? 15) < CROP_MIN_LIGHT) return false;
   if (random() >= BERRY_GROW_CHANCE) return false;
   return world.setBlock(x, y, z, BERRY_STAGES[stage + 1]!);
+}
+
+/**
+ * 下界疣（批次 92）：随机刻往前长一阶段。
+ *
+ * 与甜浆果丛那套的两处差别（都对原版）：
+ *  1. **不看光照**——原版下界疣在下界的洞里照样长（它是唯一不需要光的作物），
+ *     这一条很容易照抄 `berryBehavior` 时一起抄进来；
+ *  2. 地基是**灵魂沙**：本项目的放置侧只允许种在灵魂沙上，随机刻这里再判一次，
+ *     是为了防住"灵魂沙被换成别的方块"之后那株还接着长（与放置侧同一份判据的松散版，
+ *     见 `Support.ts` 那条注释）。
+ */
+function netherWartBehavior(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const stage = netherWartStageOf(world.getBlock(x, y, z));
+  if (stage < 0 || stage >= NETHER_WART_RIPE_STAGE) return false;
+  if (!isSolidGround(world.getBlock(x, y - 1, z))) return false;
+  if (random() >= NETHER_WART_GROW_CHANCE) return false;
+  return world.setBlock(x, y, z, NETHER_WART_STAGES[stage + 1]!);
 }
 
 /**
@@ -697,6 +718,9 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   // 只登记第 0 阶段的话长到第 1 阶段就再也不长了——与小麦那条同一个坑）
   ...BERRY_STAGES.map((id) => [id, berryBehavior] as const),
   ...COCOA_STAGES.map((id) => [id, cocoaBehavior] as const),
+  // 下界疣（批次 92）：4 个阶段都要登记（只登记第 0 阶段的话长一阶段就停了，
+  // 与小麦/甜浆果那条同一个坑）
+  ...NETHER_WART_STAGES.map((id) => [id, netherWartBehavior] as const),
   // 海带（批次 50）：顶端往上长、离开水枯萎。**海草不登记**——它是不生长的草丛
   [Block.KELP, kelpBehavior],
   // 珊瑚（批次 51）：活珊瑚离开水失活、失活珊瑚挨着活珊瑚复活。
@@ -720,6 +744,13 @@ export const CROP_MIN_LIGHT = 9;
  */
 export const BERRY_GROW_CHANCE = 0.25;
 export const COCOA_GROW_CHANCE = 0.25;
+/**
+ * 下界疣每命中一次随机刻就往前长一阶段的概率（批次 92）。
+ *
+ * 同样取 0.25：**这是为了单机验收**（原版下界疣一个阶段要等好几个随机刻）。
+ * 唯一不能动的是"它不需要光照"那一条——那是原版的机制，不是节奏。
+ */
+export const NETHER_WART_GROW_CHANCE = 0.25;
 /**
  * 随机刻命中时"长一节"的概率。
  *

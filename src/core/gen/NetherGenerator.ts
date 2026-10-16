@@ -20,6 +20,7 @@ import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { FeatureWriter, hashAt, PositionalRng } from './Features.ts';
 import { generateBastions } from './Bastion.ts';
+import { generateFortresses } from './NetherFortress.ts';
 
 /** 岩浆海面高度（原版下界岩浆海在 y=32） */
 export const NETHER_LAVA_LEVEL = 32;
@@ -384,7 +385,7 @@ export class NetherGenerator {
   }
 
   /**
-   * 下界的**结构**阶段（批次 82）：目前只有堡垒遗迹。
+   * 下界的**结构**阶段（批次 82 起，批次 92 加了要塞）。
    *
    * 为什么放在下界生成器里而不是复用 `Structures.ts`：那套框架的锚点是
    * `world.surfaceY()`——**主世界的地表**。下界没有"地表"这回事（地板与洞顶是两条噪声），
@@ -396,12 +397,17 @@ export class NetherGenerator {
    * 下界以前从来不写状态，这条通道是这一批才通的（见 `TerrainGenerator`）。
    */
   generateStructures(w: FeatureWriter, seed: number): void {
-    generateBastions(w, seed, {
-      floorAt: (x, z) => this.surfaceY(x, z),
-      ceilingAt: (x, z) => this.ceilingAt(x, z),
-      biomeAt: (x, z) => this.biomeAt(x, z),
+    const world = {
+      floorAt: (x: number, z: number) => this.surfaceY(x, z),
+      ceilingAt: (x: number, z: number) => this.ceilingAt(x, z),
+      biomeAt: (x: number, z: number) => this.biomeAt(x, z),
       basaltBiome: NetherBiome.BASALT_DELTAS,
-    });
+    };
+    generateBastions(w, seed, world);
+    // ⚠️ 顺序有讲究：**要塞在后**。两座结构各有各的单元网格与盐（同样的种子下位置无关），
+    // 万一候选点凑得很近，后写的会把先写的盖掉一点——让要塞（要长下界疣、要放刷怪笼）
+    // 占到完整的地盘，比"桥被切掉一截"要紧
+    generateFortresses(w, seed, world);
   }
 
   private decorateSource(w: FeatureWriter, sourceX: number, sourceZ: number): void {

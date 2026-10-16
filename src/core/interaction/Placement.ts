@@ -470,6 +470,14 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       return { state: 0 };
     }
 
+    case 'nether_wart': {
+      // 下界疣（批次 92）：**只认灵魂沙**（原版就是这条，也是它与 `cross` 的唯一差别）。
+      // 不收成"下方是实心方块"：那会让它长在泥土/石头上，
+      // 而"下界疣长在灵魂沙上"是玩家一眼就能看出对错的东西。
+      if (input.blockAt(0, -1, 0) !== Block.SOUL_SAND) return null;
+      return { state: 0 };
+    }
+
     case 'lily_pad': {
       // 睡莲必须"浮在水面上"：自己那一格是空气、下面那一格是水。
       //

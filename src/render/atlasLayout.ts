@@ -898,6 +898,19 @@ export const TILE_ORDER = [
   'loom_top', // 织机上绷着的经线
   'loom_bottom', // 织机底面（实心木板）
   'loom_side', // 侧面的立柱与线轴
+  // ---- 下界疣（批次 92）：4 个生长阶段各一张，外加烈焰棒图标
+  // 新贴图一律**追加在末尾**：图集按 `TILE_ORDER` 的下标算 UV，往中间插会让
+  // 所有后续贴图整体挪位（`test:mesh` 的顶点指纹会立刻变红——那是刻意的）
+  'nether_wart_stage0',
+  'nether_wart_stage1',
+  'nether_wart_stage2',
+  'nether_wart_stage3',
+  'item_blaze_rod',
+  // 刷怪笼（批次 92）：铁栏杆笼子，**中间镂空**（走 alphaTest 那一档，与展示框同理）
+  'spawner',
+  // 烈焰人的小火球（批次 92）：没有对应物品，只是飞在空中一团火
+  // （渲染时按贴图名取 billboard，见 `EntityRenderer.tileSpriteGeometry`）
+  'small_fireball',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

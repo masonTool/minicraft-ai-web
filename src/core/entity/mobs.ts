@@ -48,7 +48,44 @@ export const VILLAGER_TYPE: MobType = {
   eyeHeight: 1.74,
 };
 
+/**
+ * 烈焰人（批次 92，J26 的断环之一）。
+ *
+ * 它是**第一种会飞的生物**（`flying: true`），也是**唯一掉烈焰棒**的生物
+ * ——而烈焰棒 → 烈焰粉是酿造台的燃料、也是酿造台自己的配方原料，
+ * 所以在它出现之前"整族药水"在生存里都够不着（见 O14 的可达性审计）。
+ *
+ * 数值按原版：20 点生命、接触伤害 6（原版它就是"撞上去就掉血"）、
+ * 掉落 **0~1 根烈焰棒**（原版如此，抢夺能多掉）。⚠️ 以下是刻意的差异：
+ *  - **不进自然生成表**（`naturalSpawn: false`）：原版烈焰人只从**要塞的刷怪笼**
+ *    与要塞范围内的少量自然生成来，本项目的刷怪笼已经做了
+ *    （`registry/spawners.ts`），所以它由刷怪笼生成，而不是被撒在下界里
+ *    （与村民那条"不写这一条就会被撒在草地上"同一个坑）；
+ *  - **免疫火焰**（`fireImmune`）：拿火去打它不掉血；
+ *  - 它的火球是`Throwable` 里的一档（`small_fireball`），打中**掉 5 点血 + 点着 5 秒**。
+ */
+export const BLAZE_TYPE: MobType = {
+  id: 'blaze',
+  name: '烈焰人',
+  health: 20,
+  width: 0.6,
+  height: 1.8,
+  speed: 2.4,
+  hostile: true,
+  attackDamage: 6,
+  followRange: 32,
+  drops: [{ itemId: Item.BLAZE_ROD, min: 0, max: 1, chance: 0.5 }],
+  xp: 10,
+  naturalSpawn: false,
+  flying: true,
+  fireImmune: true,
+  bodyColor: 0xf2b53c,
+  accentColor: 0xc9801f,
+  eyeHeight: 1.5,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
+  BLAZE_TYPE,
   {
     id: 'zombie',
     name: '僵尸',
