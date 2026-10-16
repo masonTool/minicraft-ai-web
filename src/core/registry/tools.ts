@@ -22,6 +22,7 @@ import {
   Block,
   COPPER_STAGES,
   SHAPED_PARENTS,
+  STONE_VARIANT_PARENTS,
   Wood,
   WoodShaped,
   blockHardness,
@@ -30,6 +31,7 @@ import {
   isHandHarvestable,
   slabId,
   stairsId,
+  stoneVariantId,
   terracottaId,
   woolId,
 } from './blocks.ts';
@@ -360,6 +362,15 @@ for (let index = 0; index < SHAPED_PARENTS.length; index++) {
   if (!required) continue;
   REQUIRED_TOOL.set(slabId(index), required);
   REQUIRED_TOOL.set(stairsId(index), required);
+}
+
+// 石材家族的台阶/楼梯/墙（批次 41）同样跟随母方块：
+// 母方块要镐它们就要镐、母方块是几级镐它们就是几级（原版如此）。
+// 按父级**取**而不是重新手抄一张表——母方块换档时这里自动跟上。
+for (const [parent, name, kinds] of STONE_VARIANT_PARENTS) {
+  const required = REQUIRED_TOOL.get(parent);
+  if (!required) continue;
+  for (const kind of kinds) REQUIRED_TOOL.set(stoneVariantId(name, kind)!, required);
 }
 
 // ---- 加速表：斧头砍木、锹挖土

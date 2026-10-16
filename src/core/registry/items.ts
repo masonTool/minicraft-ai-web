@@ -15,6 +15,7 @@ import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
 import {
   Block,
   COPPER_STAGES,
+  STONE_VARIANT_IDS,
   WHEAT_STAGES,
   Wood,
   WoodShaped,
@@ -550,6 +551,9 @@ for (const ids of Object.values(WoodShaped)) {
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) BUILDING.add(copperId(stage, kind as 0 | 1 | 2 | 3));
 }
+
+// 石材家族的台阶/楼梯/墙（批次 41）：建材，归"建筑"
+for (const id of STONE_VARIANT_IDS) BUILDING.add(id);
 
 const NATURAL = new Set<number>([
   Block.GRASS_BLOCK,

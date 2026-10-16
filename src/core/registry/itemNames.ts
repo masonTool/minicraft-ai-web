@@ -147,6 +147,37 @@ for (const [base, cn] of Object.entries(STRUCTURE_BASES_CN)) {
   put(`${base}_stairs`, `${cn}楼梯`);
 }
 
+// 石材家族的变体（批次 41）：台阶 / 楼梯 / 墙的名字 = **母方块的中文名 + 后缀**。
+// ⚠️ 不能反过来"从变体名推母方块名"：`mossy_stone_bricks_stairs` 切出前缀会得到
+// `mossy_stone_bricks`（对），但 `end_stone_bricks_wall` 也是同理——真正容易错的是
+// 中文（"苔石砖楼梯" vs "苔石砖的楼梯"），所以这里显式列一张母方块中文名表。
+// 这张表与 `STRUCTURE_BASES_CN` 有 4 个重叠项（砂岩/深板岩砖/红砖块/磨制深板岩）：
+// 那批已经生成过台阶与楼梯的名字，这里再写一遍是**为了给它们补上"墙"的名字**——
+// 文字完全相同，覆盖是无害的（最怕的是两边写了不一样的中文，那就会看提交顺序变名字）。
+const STONE_VARIANT_PARENTS_CN: Record<string, string> = {
+  granite: '花岗岩',
+  diorite: '闪长岩',
+  andesite: '安山岩',
+  sandstone: '砂岩',
+  deepslate_bricks: '深板岩砖',
+  bricks: '红砖块',
+  polished_deepslate: '磨制深板岩',
+  mossy_cobblestone: '苔石',
+  mossy_stone_bricks: '苔石砖',
+  cobbled_deepslate: '深板岩圆石',
+  cut_sandstone: '切制砂岩',
+  smooth_sandstone: '平滑砂岩',
+  blackstone: '黑石',
+  nether_bricks: '下界砖块',
+  end_stone_bricks: '末地石砖',
+  purpur_block: '紫珀块',
+};
+for (const [base, cn] of Object.entries(STONE_VARIANT_PARENTS_CN)) {
+  put(`${base}_slab`, `${cn}台阶`);
+  put(`${base}_stairs`, `${cn}楼梯`);
+  put(`${base}_wall`, `${cn}墙`);
+}
+
 // 铜的四档（批次 40）：铜块 / 斑驳的铜块 / 锈蚀的铜块 / 氧化的铜块 + 切制铜家族。
 // 名字由 `COPPER_STAGES` 展开（与方块表同源），加一档氧化不会漏名字。
 // ⚠️ 中文名的语序不是"前缀 + 块"：斑驳的是"斑驳的铜块"、切制那支是"斑驳的切制铜"，

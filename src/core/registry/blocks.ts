@@ -485,9 +485,18 @@ export function stairsId(parentIndex: number): number {
   return STAIRS_ID_START + parentIndex;
 }
 
-/** 从基础定义里取母方块的贴图（此时 BLOCKS 还没构建，只能查 SPECS） */
+/**
+ * 从**基础定义**里取母方块的贴图（此时 `BLOCKS` 还没构建，只能查 `SPECS`）。
+ *
+ * ⚠️ 只查 `BASE_SPECS`，而且**查不到就抛错**：早先这里回退成 `['stone','stone','stone']`，
+ * 于是"母方块不在 BASE_SPECS 里"会变成"台阶/墙长着石头的贴图"——
+ * 方块表、名称、配方全都正常，只有外观错，属于最难查的一类。
+ * 需要查 160 号之后的方块用下面的 `tilesOfDefined`。
+ */
 function baseTiles(id: number): readonly [string, string, string] {
-  return BASE_SPECS.find((spec) => spec.id === id)?.tiles ?? ['stone', 'stone', 'stone'];
+  const spec = BASE_SPECS.find((candidate) => candidate.id === id);
+  if (!spec?.tiles) throw new Error(`baseTiles: 母方块 ${id} 不在 BASE_SPECS 里（该用 tilesOfDefined）`);
+  return spec.tiles;
 }
 
 /**
@@ -1193,6 +1202,126 @@ const COPPER_SPECS: readonly BlockSpec[] = COPPER_STAGES.flatMap((stage, index) 
   }),
 );
 
+// ---------------------------------------------------------------- 石材家族的变体（批次 41）
+
+/**
+ * 石材家族的"台阶 / 楼梯 / 墙"补齐（B16 的 A 档批量）。
+ *
+ * 这一族最能体现"表驱动"的威力：**形状全部现成**（`slab` / `stairs` / `wall` 三种形状
+ * 早在批次 30 之前就有了）、**贴图全部复用母方块**（`baseTiles(parent)`），
+ * 所以新增一个变体只需要在下面这张表里加一个词——方块、贴图、硬度、工具、分类、
+ * 中文名、配方七处会一起跟上（一处漏了都有断言兜着）。
+ *
+ * ⚠️ 为什么不用 `SHAPED_PARENTS` 那条现成的路：它的 slab/stairs id 区间（72~95）已经被
+ * 12 个母方块排满，再加一个母方块就会撞到后面的栅栏/装饰 id（见那边的注释）。
+ * 所以这一族**自己排一段 id**（351 起，追加式，不许往中间插）。
+ *
+ * ⚠️ 表里只列**原版确实有的**变体：原版对"錾制 / 裂纹"类不出变体，`cut_sandstone` 只有台阶、
+ * `smooth_sandstone` 没有墙、`purpur` 没有墙、`stone` 没有墙。**多造一个方块比少造一个更难查**
+ * （它看起来就是个正经方块），所以测试里专门有一条"这些变体不应该存在"。
+ */
+export const STONE_VARIANT_ID_START = 351;
+
+/** 截至这里已经建好的全部规格段（按定义顺序）——下面 `tilesOfDefined` 用它查母方块贴图 */
+const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
+  BASE_SPECS,
+  WOOL_SPECS,
+  WOOD_SPECS,
+  WOOD_SHAPED_SPECS,
+  COLORED_SPECS,
+  GLASS_AND_STONE_SPECS,
+  SHAPED_SPECS,
+  FUNCTIONAL_SHAPED_SPECS,
+  DECORATION_SPECS,
+  PRISMARINE_SPECS,
+  NETHER_SPECS,
+  END_SPECS,
+  REDSTONE_SPECS,
+  OPENABLE_SPECS,
+  FIRE_SPECS,
+  PORTAL_SPECS,
+  NETHERITE_SPECS,
+  LILY_PAD_SPECS,
+  CARPET_SPECS,
+  SNOW_SPECS,
+  CHAIN_SPECS,
+  VINE_SPECS,
+  COPPER_SPECS,
+];
+
+/**
+ * 在**所有已经定义好的**规格段里找母方块的贴图。
+ *
+ * 石材变体表的母方块横跨三段（`GLASS_AND_STONE_SPECS` 的 160~167、
+ * `NETHER_SPECS` 的 227/240、`END_SPECS` 的 247/248），所以不能只查 `BASE_SPECS`
+ * ——那会静默回退成石头贴图（"苔石墙长得像石头墙"）。
+ * 查不到直接抛错：注册期的错误就该在启动时炸。
+ */
+function tilesOfDefined(id: number): readonly [string, string, string] {
+  for (const specs of DEFINED_SPECS) {
+    const spec = specs.find((candidate) => candidate.id === id);
+    if (spec?.tiles) return spec.tiles;
+  }
+  throw new Error(`tilesOfDefined: 找不到方块 ${id} 的贴图（石材变体表里的 id 写错了？）`);
+}
+
+export type StoneVariantKind = 'slab' | 'stairs' | 'wall';
+
+/**
+ * [母方块 id, 命名前缀, 原版有的变体]。
+ *
+ * 母方块 id 这里只能写数字：本文件在 `Block` 枚举**之前**就要把这些方块拼进 `SPECS`。
+ * 代价是数字可能打错——所以套件里有一条断言核对"id 对应的方块名 == 登记名"。
+ */
+const STONE_VARIANT_FAMILIES: readonly (readonly [number, string, readonly StoneVariantKind[]])[] = [
+  [13, 'granite', ['slab', 'stairs', 'wall']],
+  [14, 'diorite', ['slab', 'stairs', 'wall']],
+  [15, 'andesite', ['slab', 'stairs', 'wall']],
+  [20, 'sandstone', ['wall']],
+  [68, 'deepslate_bricks', ['wall']],
+  [70, 'bricks', ['wall']],
+  [71, 'polished_deepslate', ['wall']],
+  [160, 'mossy_cobblestone', ['slab', 'stairs', 'wall']],
+  [161, 'mossy_stone_bricks', ['slab', 'stairs', 'wall']],
+  [164, 'cobbled_deepslate', ['slab', 'stairs', 'wall']],
+  [166, 'cut_sandstone', ['slab']],
+  [167, 'smooth_sandstone', ['slab', 'stairs']],
+  [227, 'blackstone', ['slab', 'stairs', 'wall']],
+  [240, 'nether_bricks', ['slab', 'stairs', 'wall']],
+  [247, 'end_stone_bricks', ['slab', 'stairs', 'wall']],
+  [248, 'purpur_block', ['slab', 'stairs']],
+];
+
+const STONE_VARIANT_MAP = new Map<string, number>();
+
+const STONE_VARIANT_SPECS: readonly BlockSpec[] = (() => {
+  const specs: BlockSpec[] = [];
+  let next = STONE_VARIANT_ID_START;
+  for (const [parent, name, kinds] of STONE_VARIANT_FAMILIES) {
+    // 母方块横跨好几段规格，所以查"全部已定义的段"而不是 `baseTiles`（它只认 BASE_SPECS）
+    const tiles = tilesOfDefined(parent);
+    for (const kind of kinds) {
+      const id = next++;
+      STONE_VARIANT_MAP.set(`${name}_${kind}`, id);
+      // 三种变体都是非完整方块：不遮挡邻居、不挡光（与 `SHAPED_SPECS` 同一套写法）
+      specs.push({ id, name: `minecraft:${name}_${kind}`, tiles, shape: kind, opaque: false, lightOpacity: 0 });
+    }
+  }
+  return specs;
+})();
+
+/** 母方块与它的变体（硬度表 / 工具表"跟随母方块"要用） */
+export const STONE_VARIANT_PARENTS: readonly (readonly [number, string, readonly StoneVariantKind[]])[] =
+  STONE_VARIANT_FAMILIES;
+
+/** 某个"母方块 + 变体"的 id；表里没有这个变体时返回 undefined */
+export function stoneVariantId(parentName: string, kind: StoneVariantKind): number | undefined {
+  return STONE_VARIANT_MAP.get(`${parentName}_${kind}`);
+}
+
+/** 全部石材变体的 id（套件、创造分类、配方批量遍历用） */
+export const STONE_VARIANT_IDS: readonly number[] = [...STONE_VARIANT_MAP.values()];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -1217,6 +1346,7 @@ const SPECS: readonly BlockSpec[] = [
   ...CHAIN_SPECS,
   ...VINE_SPECS,
   ...COPPER_SPECS,
+  ...STONE_VARIANT_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1579,6 +1709,9 @@ for (let index = 0; index < SHAPED_PARENTS.length; index++) {
   HARDNESS.set(stairsId(index), hardness);
 }
 
+// 石材家族的变体（批次 41）：硬度同样**跟随母方块**——但这一条必须写在
+// **全部母方块硬度登记完之后**（见文件末尾那一处，写在前面会拿到"还没登记 → 回退 1.5"）
+
 HARDNESS.set(Block.OAK_FENCE, 2);
 HARDNESS.set(Block.COBBLESTONE_WALL, 2);
 HARDNESS.set(Block.STONE_BRICK_WALL, 1.5);
@@ -1639,15 +1772,22 @@ for (let i = 0; i < DYE_COLORS.length; i++) {
   HARDNESS.set(concreteId(i), 1.8);
 }
 
-// 石材补全与砂岩变体
-HARDNESS.set(160, 2);
-HARDNESS.set(161, 1.5);
-HARDNESS.set(162, 1.5);
-HARDNESS.set(163, 3.5);
-HARDNESS.set(164, 3);
-HARDNESS.set(165, 0.8);
-HARDNESS.set(166, 0.8);
-HARDNESS.set(167, 0.8);
+// 石材补全与砂岩变体（批次 41 顺手把这里的**魔法数字**换成了 `Block` 常量，
+// 并把 cobbled_deepslate 的硬度从 3 修成原版的 3.5——变体的硬度由它推出来，
+// 母方块错一档，五个变体会跟着一起错）
+HARDNESS.set(Block.MOSSY_COBBLESTONE, 2);
+HARDNESS.set(Block.MOSSY_STONE_BRICKS, 1.5);
+HARDNESS.set(Block.CRACKED_STONE_BRICKS, 1.5);
+HARDNESS.set(Block.CRACKED_DEEPSLATE_BRICKS, 3.5);
+HARDNESS.set(Block.COBBLED_DEEPSLATE, 3.5);
+HARDNESS.set(Block.CHISELED_SANDSTONE, 0.8);
+HARDNESS.set(Block.CUT_SANDSTONE, 0.8);
+HARDNESS.set(Block.SMOOTH_SANDSTONE, 0.8);
+// 末地建材（此前没登记，一律落到默认的 3；紫珀实际是 1.5）
+HARDNESS.set(Block.END_STONE, 3);
+HARDNESS.set(Block.END_STONE_BRICKS, 3);
+HARDNESS.set(Block.PURPUR_BLOCK, 1.5);
+HARDNESS.set(Block.PURPUR_PILLAR, 1.5);
 
 // 粗金属块：硬度 5（原版），必须用镐
 HARDNESS.set(Block.RAW_COPPER_BLOCK, 5);
@@ -1714,6 +1854,18 @@ HARDNESS.set(Block.SHROOMLIGHT, 1);
 HARDNESS.set(Block.NETHER_BRICKS, 2);
 HARDNESS.set(Block.NETHER_QUARTZ_ORE, 3);
 HARDNESS.set(Block.ANCIENT_DEBRIS, 30);
+
+// 石材家族的变体（批次 41）：硬度**跟随母方块**（花岗岩台阶 = 花岗岩 = 1.5、
+// 苔石墙 = 苔石 = 2、深板岩圆石楼梯 = 3.5）。
+//
+// ⚠️ 这一条必须放在**所有母方块的硬度都登记完之后**：它读的是 `HARDNESS.get(parent)`，
+// 而 160~167 / 227 / 240 / 247 / 248 这些母方块是在本文件后半段才登记的
+// （踩过一次：循环写早了，变体全部拿到 `undefined → 1.5`，于是"苔石墙比苔石软"）。
+// 正确性由 `tools/stone-variant-test.ts` 的"硬度 = 母方块"逐条断言兜住。
+for (const [parentId, name, kinds] of STONE_VARIANT_PARENTS) {
+  const hardness = HARDNESS.get(parentId) ?? 1.5;
+  for (const kind of kinds) HARDNESS.set(stoneVariantId(name, kind)!, hardness);
+}
 
 /** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
 const HAND_HARVESTABLE = new Set<number>([

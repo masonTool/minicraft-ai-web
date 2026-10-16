@@ -14,6 +14,7 @@ import {
   COPPER_STAGES,
   GLASS_PANE_ID,
   SHAPED_PARENTS,
+  STONE_VARIANT_PARENTS,
   Wood,
   WoodShaped,
   carpetId,
@@ -22,6 +23,7 @@ import {
   stairsId,
   stainedGlassId,
   stainedGlassPaneId,
+  stoneVariantId,
   woolId,
 } from '../registry/blocks.ts';
 import { ARMOR_SPECS } from '../registry/armor.ts';
@@ -244,6 +246,33 @@ const COPPER_RECIPES: readonly Recipe[] = COPPER_STAGES.flatMap((_stage, stage):
     },
   ];
 });
+
+/**
+ * 石材家族的变体（批次 41）：每种变体一条原版配方 ——
+ * 台阶「3 个母方块横排 → 6 个」、楼梯「6 个摆成阶梯 → 4 个」、
+ * 墙「6 个摆成 2×3 → 6 个」（与 `cobblestone_wall` 那条同形）。
+ *
+ * 由 `STONE_VARIANT_PARENTS` 展开：加一个变体（往那张表里加一个词）就自动带上配方，
+ * 材料恒为**它自己的母方块**（花岗岩台阶只能用花岗岩做，与原版一致）。
+ */
+const STONE_VARIANT_RECIPES: readonly Recipe[] = STONE_VARIANT_PARENTS.flatMap(
+  ([parent, name, kinds]): Recipe[] =>
+    kinds.map((kind): Recipe => {
+      const id = stoneVariantId(name, kind)!;
+      if (kind === 'slab') {
+        return { kind: 'shaped', result: { id, count: 6 }, pattern: ['PPP'], key: { P: parent } };
+      }
+      if (kind === 'stairs') {
+        return {
+          kind: 'shaped',
+          result: { id, count: 4 },
+          pattern: ['P  ', 'PP ', 'PPP'],
+          key: { P: parent },
+        };
+      }
+      return { kind: 'shaped', result: { id, count: 6 }, pattern: ['PPP', 'PPP'], key: { P: parent } };
+    }),
+);
 
 /**
  * 木材家族：每种木头 3 条（原木→木板、木板→台阶、木板→楼梯）。
@@ -575,6 +604,7 @@ export const RECIPES: readonly Recipe[] = [
   ...WOOD_RECIPES,
   ...WOOD_SHAPED_RECIPES,
   ...COPPER_RECIPES,
+  ...STONE_VARIANT_RECIPES,
   ...PANE_RECIPES,
   ...TOOL_RECIPES,
   ...ARMOR_RECIPES,
