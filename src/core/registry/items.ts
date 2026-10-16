@@ -617,6 +617,8 @@ const FUNCTIONAL = new Set<number>([
   // 烟熏炉与高炉（批次 46）：熔炉的两个变体，同样是"右键打开的功能方块"
   Block.SMOKER,
   Block.BLAST_FURNACE,
+  // 营火（批次 47）：也是"右键打开的烤东西的地方"
+  Block.CAMPFIRE,
   Block.CHEST,
   Block.GLOWSTONE,
   // ---- 红石元件（都是"有信号才做事"的功能方块）

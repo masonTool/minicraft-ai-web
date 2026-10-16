@@ -378,8 +378,20 @@ export const CROP_MIN_LIGHT = 9;
 export const CROP_GROW_CHANCE_DRY = 0.35;
 export const CROP_GROW_CHANCE_WET = 0.7;
 
-/** 耕地是否被水浸润（下层的水平 4 格内有水；原版判定范围就是 4 格） */
+/**
+ * 耕地是否"湿润"（作物长得快）。
+ *
+ * 两条路（批次 47 补上第二条）：
+ *  1. **旁边有水**（下层水平 4 格内有水，原版判定范围就是 4 格）；
+ *  2. **正在下雨且这一列露天**——原版 `FarmlandBlock#randomTick` 里
+ *     "下雨时湿度不降反升"，效果就是雨天的作物长得快。
+ *     ⚠️ 本项目没有耕地湿度那个状态位（浇水与否是靠 `isHydrated` 现算的），
+ *     所以"雨打湿耕地"在这里的等价实现就是**把降雨也算进 `isHydrated`**；
+ *     没有这一步，"雨打湿耕地"就只是一句空话。
+ */
 function isHydrated(world: TickWorld, x: number, y: number, z: number): boolean {
+  // 露天（天光 15）才算"淋到雨"——屋檐下的耕地不该因为下雨就变湿
+  if (world.raining && (world.skyLightAt?.(x, y + 1, z) ?? 0) >= 15) return true;
   for (let dz = -4; dz <= 4; dz++) {
     for (let dx = -4; dx <= 4; dx++) {
       if (world.getBlock(x + dx, y, z + dz) === Block.WATER) return true;

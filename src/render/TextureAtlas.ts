@@ -839,6 +839,113 @@ PAINTERS.blast_furnace_side = (x, y, rng) => {
   return base;
 };
 
+// ---- 点燃时的火光（批次 47）
+//
+// 三座炉子共用一套"炉口在燃烧"的画法：**保留原来的炉身**、只把炉口换成
+// 由暗到亮的橙黄渐变（最里面最亮）。这样点亮前后的差别一眼能看出来，
+// 又不会让方块看起来换了一件东西。
+//
+// ⚠️ 立方体只有一个侧面贴图槽，所以点亮时**四个侧面一起亮**（原版只亮正面）。
+
+/** 一块"在燃烧的炉口"，由 y 决定亮度（越靠下越亮，像炉膛里的火） */
+function burningMouth(x: number, y: number, x0: number, x1: number, y0: number, y1: number, rng: () => number): [number, number, number, number] | null {
+  if (x < x0 || x > x1 || y < y0) return null;
+  if (y > y1) return null;
+  // 内部越靠中心越亮（距离炉口中心的比例）
+  const cx = (x0 + x1) / 2;
+  const inner = 1 - Math.min(1, Math.abs(x - cx) / Math.max(1, (x1 - x0) / 2));
+  const v = 0.55 + inner * 0.45 * (0.75 + (y - y0) / Math.max(1, y1 - y0) * 0.25);
+  const flicker = rng() * 0.12;
+  return [clamp255(252 * v + flicker * 40), clamp255(150 * v + flicker * 30), clamp255(48 * v), 255];
+}
+
+PAINTERS.furnace_front_on = (x, y, rng) => {
+  const mouth = burningMouth(x, y, 3, 12, 6, 12, rng);
+  if (mouth) return mouth;
+  return cobblestonePainter(x, y, rng);
+};
+
+PAINTERS.smoker_front_on = (x, y, rng) => {
+  const mouth = burningMouth(x, y, 4, 11, 6, 11, rng);
+  if (mouth) return mouth;
+  return PAINTERS.smoker_side(x, y, rng);
+};
+
+PAINTERS.blast_furnace_front_on = (x, y, rng) => {
+  // 高炉是"闷烧"：炉口更亮更白（温度更高）
+  const mouth = burningMouth(x, y, 2, 13, 6, 11, rng);
+  if (mouth) {
+    const hot = 0.75 + rng() * 0.25;
+    return [clamp255(252 * hot), clamp255(206 * hot), clamp255(120 * hot), 255];
+  }
+  return PAINTERS.blast_furnace_side(x, y, rng);
+};
+
+// ---- 营火（批次 47）
+//
+// 营火是"一堆柴"：侧面看到交叠的原木，顶面看到四根原木围成的一圈，
+// 点燃时那圈里是火焰。**不画动态**（本项目没有方块动画），但火焰用不规则的
+// 三色（白心 / 橙边 / 暗红）画出"在烧"的观感。
+
+/** 一根原木的横截面（顶面用）：深色树皮边 + 浅色木心 */
+function logRing(x: number, y: number, cx: number, cy: number, radius: number, rng: () => number): [number, number, number, number] | null {
+  const d = Math.hypot(x - cx, y - cy);
+  if (d > radius) return null;
+  const jitter = rng() * 12 - 6;
+  if (d > radius - 1.4) {
+    // 树皮
+    return [clamp255(112 + jitter), clamp255(78 + jitter), clamp255(42 + jitter), 255];
+  }
+  // 木心（年轮：中间稍深一点）
+  const shade = d < radius * 0.45 ? 0.86 : 1;
+  return [clamp255(178 * shade + jitter), clamp255(140 * shade + jitter), clamp255(92 * shade + jitter), 255];
+}
+
+PAINTERS.campfire_top = (x, y, rng) => {
+  // 四根原木围着一圈（四个角各一根，横竖各两根）
+  for (const [cx, cy] of [
+    [3.5, 3.5],
+    [11.5, 3.5],
+    [3.5, 11.5],
+    [11.5, 11.5],
+  ] as const) {
+    const ring = logRing(x, y, cx, cy, 3.6, rng);
+    if (ring) return ring;
+  }
+  // 中间是灰烬
+  const v = 62 + rng() * 16;
+  return [clamp255(v), clamp255(v * 0.96), clamp255(v * 0.92), 255];
+};
+
+PAINTERS.campfire_fire = (x, y, rng) => {
+  const center = Math.hypot(x - 7.5, y - 7.5);
+  // 火焰只铺在中间那圈（原木仍在四周）
+  if (center < 6.2) {
+    const t = rng();
+    const edge = center / 6.2;
+    if (t < 0.34) return [clamp255(252), clamp255(236), clamp255(180), 255]; // 白心
+    if (t < 0.72 || edge < 0.55) return [clamp255(250), clamp255(168 - edge * 30), clamp255(46), 255]; // 橙
+    return [clamp255(196), clamp255(72), clamp255(24), 255]; // 暗红边
+  }
+  return PAINTERS.campfire_top(x, y, rng);
+};
+
+PAINTERS.campfire_side = (x, y, rng) => {
+  // 侧面：两根交叠的原木（上下各一层），中间留一条缝给火。
+  // 上下两层各画一道木纹（沿着 x 每隔几格深一点），看着才像"圆木"而不是两条色带
+  const grain = x % 4 === 1 ? 0.86 : 1;
+  const jitter = rng() * 12 - 6;
+  if (y >= 2 && y <= 6) {
+    return [clamp255(150 * grain + jitter), clamp255(112 * grain + jitter), clamp255(64 * grain + jitter), 255];
+  }
+  if (y >= 10 && y <= 14) {
+    return [clamp255(124 * grain + jitter), clamp255(88 * grain + jitter), clamp255(48 * grain + jitter), 255];
+  }
+  // 中间的缝：能看到里面的火光（暗）或灰烬
+  const v = 58 + rng() * 14;
+  return [clamp255(v * 1.1), clamp255(v * 0.8), clamp255(v * 0.6), 255];
+};
+
 /** 高炉顶面：平滑石 + 中间一圈铁环与出气孔 */
 PAINTERS.blast_furnace_top = (x, y, rng) => {
   const base = layered(158, 4, 6)(x, y, rng);

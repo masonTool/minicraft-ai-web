@@ -43,6 +43,7 @@ import {
   SmithingTable,
 } from '../core/container/SmithingTable.ts';
 import { STONECUTTER_INPUT, Stonecutter } from '../core/container/Stonecutter.ts';
+import { CAMPFIRE_SIZE, Campfire } from '../core/container/Campfire.ts';
 import { smithingHint } from '../core/crafting/Smithing.ts';
 import {
   ENCHANT_ITEM_SLOT,
@@ -91,6 +92,8 @@ export type InventoryPanelMode =
   /** 烟熏炉与高炉（批次 46）：与 `furnace` 同一套布局，只是容器与标题不同 */
   | 'smoker'
   | 'blast_furnace'
+  /** 营火（批次 47）：4 个格子各自推进，烤好直接弹出来（没有产物槽） */
+  | 'campfire'
   /** 切石机（H11，批次 44）：一格输入 + 一列可选产物，点哪一项切哪一项 */
   | 'stonecutter'
   | 'brewing';
@@ -161,6 +164,11 @@ export class InventoryScreen {
   private readonly furnaceLayout: HTMLDivElement;
   /** 烟熏炉/高炉的"只吃什么"提示行（普通熔炉一直是空的） */
   private readonly furnaceHintEl: HTMLDivElement;
+  /** 营火（批次 47）：4 个格子 + 各自的进度条 + 提示行 */
+  private readonly campfireLayout: HTMLDivElement;
+  private readonly campfireSlots: HTMLDivElement[] = [];
+  private readonly campfireFills: HTMLElement[] = [];
+  private readonly campfireHintEl: HTMLDivElement;
   private readonly furnaceInputSlot: HTMLDivElement;
   private readonly furnaceFuelSlot: HTMLDivElement;
   private readonly furnaceOutputSlot: HTMLDivElement;
@@ -301,6 +309,26 @@ export class InventoryScreen {
     this.furnaceLayout.className = 'furnace-layout';
     this.furnaceHintEl = document.createElement('div');
     this.furnaceHintEl.className = 'anvil-cost';
+
+    // 营火：4 个"格子 + 进度条"的列（烤好的东西会自己弹出来，所以没有产物槽）
+    this.campfireLayout = document.createElement('div');
+    this.campfireLayout.className = 'campfire-grid';
+    for (let i = 0; i < CAMPFIRE_SIZE; i++) {
+      const slot = this.createSlot();
+      slot.dataset.key = `campfire:${i}`;
+      const track = document.createElement('div');
+      track.className = 'furnace-cook campfire-cook';
+      const fill = document.createElement('i');
+      track.appendChild(fill);
+      const col = document.createElement('div');
+      col.className = 'campfire-col';
+      col.append(slot, track);
+      this.campfireSlots.push(slot);
+      this.campfireFills.push(fill);
+      this.campfireLayout.appendChild(col);
+    }
+    this.campfireHintEl = document.createElement('div');
+    this.campfireHintEl.className = 'anvil-cost';
     this.furnaceInputSlot = this.createSlot();
     this.furnaceFuelSlot = this.createSlot();
     this.furnaceOutputSlot = this.createSlot();
@@ -621,6 +649,7 @@ export class InventoryScreen {
     this.clearBindings('anvil:');
     this.clearBindings('smithing:');
     this.clearBindings('stonecutter:');
+    this.clearBindings('campfire:');
     this.clearBindings('brewing:');
 
     // 熔炉 / 烟熏炉 / 高炉（批次 46）共用同一套布局：格子与燃料规则完全一样，
@@ -653,6 +682,23 @@ export class InventoryScreen {
 
       this.furnaceLayout.replaceChildren(left, middle, right);
       this.topArea.appendChild(this.furnaceLayout);
+      return;
+    }
+
+    if (this.mode === 'campfire') {
+      const campfire = this.activeContainer instanceof Campfire ? this.activeContainer : null;
+      for (let i = 0; i < CAMPFIRE_SIZE; i++) {
+        this.registerExisting(this.campfireSlots[i]!, `campfire:${i}`, campfire!, i);
+      }
+      this.campfireHintEl.textContent = '';
+      const side = document.createElement('div');
+      side.className = 'campfire-side';
+      side.append(this.buildLabel('放上最多 4 样食物（烤好会自己弹出来）'), this.campfireHintEl);
+      // 复用"左一块右一列"那条布局（与切石机同一套样式，窄屏会自动上下堆叠）
+      const layout = document.createElement('div');
+      layout.className = 'stonecutter-layout';
+      layout.append(this.campfireLayout, side);
+      this.topArea.appendChild(layout);
       return;
     }
 
@@ -1175,6 +1221,19 @@ export class InventoryScreen {
       this.furnaceHintEl.classList.toggle('bad', reason !== '');
     }
 
+    if (this.mode === 'campfire' && this.activeContainer instanceof Campfire) {
+      const campfire = this.activeContainer;
+      for (let i = 0; i < CAMPFIRE_SIZE; i++) {
+        this.campfireFills[i]!.style.width = `${Math.round(campfire.ratio(i) * 100)}%`;
+      }
+      // 提示只显示"第一条有意见的"：一列 4 条同样的抱怨没有意义
+      let reason = '';
+      for (let i = 0; i < CAMPFIRE_SIZE && reason === ''; i++) reason = campfire.rejectReason(i);
+      if (reason === '' && !campfire.lit) reason = '营火熄灭了（拿打火石右键可以重新点燃）';
+      this.campfireHintEl.textContent = reason;
+      this.campfireHintEl.classList.toggle('bad', reason !== '');
+    }
+
     if (this.mode === 'brewing' && this.activeContainer instanceof BrewingStand) {
       const stand = this.activeContainer;
       this.brewProgressEl.style.width = `${Math.round(stand.brewRatio * 100)}%`;
@@ -1459,6 +1518,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   furnace: '熔炉',
   smoker: '烟熏炉',
   blast_furnace: '高炉',
+  campfire: '营火',
   chest: '箱子',
   enchanting: '附魔台',
   anvil: '铁砧',

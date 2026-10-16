@@ -605,6 +605,14 @@ export const TILE_ORDER = [
   'smoker_side',
   'blast_furnace_top',
   'blast_furnace_side',
+  // ---- 点燃时的火光（批次 47）：三座炉子的炉口
+  'furnace_front_on',
+  'smoker_front_on',
+  'blast_furnace_front_on',
+  // ---- 营火（批次 47）：顶面（四根原木围一圈）/ 火焰 / 侧面（交叠的原木）
+  'campfire_top',
+  'campfire_fire',
+  'campfire_side',
   // ---- 红沙与红砂岩（批次 45）：与砂岩家族一一对应，只换色调
   'red_sand',
   'red_sandstone',

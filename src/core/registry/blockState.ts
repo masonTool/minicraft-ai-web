@@ -78,6 +78,13 @@ export type BlockShape =
    * 没有碰撞（穿得过去）、能攀爬、会自己往下长也会往旁边蔓延。
    */
   | 'vine'
+  /**
+   * 营火（H11，批次 47）：7/16 高的一堆柴，**能站上去**（原版可以踩、也可以用它做烟熏架）。
+   *
+   * 为什么单开一个形状而不是复用 `slab`：它的高度不是 0.5，而且"能不能站上去"
+   * 这条物理行为与贴图/碰撞的绑定方式和台阶不一样（台阶还有上下半与双层两个状态位）。
+   */
+  | 'campfire'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -224,6 +231,27 @@ export function delayOf(state: number): number {
 
 export function withDelay(state: number, delay: number): number {
   return (state & ~DELAY_MASK) | ((delay & 0b11) << 4);
+}
+
+// ---------------------------------------------------------------- 正在燃烧（炉子 / 营火）
+
+/**
+ * 这座炉子/营火**是不是正在燃烧**（批次 47）。
+ *
+ * 与门的 OPEN、拉杆的 POWERED 共用 bit3——沿用本文件开头那条设计
+ * （不同形状族不会同时出现在一个方块上）。
+ *
+ * 为什么需要一个状态位：烧着的时候要换贴图（炉口的火光）并**发光 13**，
+ * 而这两件事都只能由"方块状态"驱动（`stateTiles` / `stateLight` 都吃 state）。
+ * 这也正是红石灯那套机制的复用：`World#setStateAndUpdate` 会在状态改变后
+ * 自动重算光照并重网格化那块方块。
+ */
+export function isLitState(state: number): boolean {
+  return isPowered(state);
+}
+
+export function withLitState(state: number, lit: boolean): number {
+  return withPowered(state, lit);
 }
 
 // ---------------------------------------------------------------- 门

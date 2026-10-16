@@ -800,6 +800,13 @@
       .stonecutter-option canvas { width: 28px; height: 28px; image-rendering: pixelated; }
       .stonecutter-option:active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
 
+      /* ---------------- 营火（批次 47） ---------------- */
+      /* 4 个格子排成一行，每格下面一条自己的进度条 */
+      .campfire-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+      .campfire-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+      .campfire-cook { width: 42px; }
+      .campfire-side { display: flex; flex-direction: column; gap: 4px; min-width: 170px; flex: 1; }
+
       /* ---------------- 附魔台（H9） ---------------- */
       .enchant-layout { display: flex; gap: 14px; align-items: flex-start; }
       .enchant-col {

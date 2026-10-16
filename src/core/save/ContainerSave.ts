@@ -23,6 +23,7 @@ import { EnchantTable } from '../container/EnchantTable.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
 import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
+import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
 import type { ItemStack } from '../container/Inventory.ts';
 import { itemDef } from '../registry/items.ts';
 import { Dimension, isDimension, type DimensionId } from '../gen/Dimension.ts';
@@ -40,6 +41,7 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   brewing: BREW_SLOT_COUNT,
   smithing: SMITHING_SIZE,
   stonecutter: STONECUTTER_SIZE,
+  campfire: CAMPFIRE_SIZE,
 };
 
 export interface SerializedContainer {
@@ -64,6 +66,12 @@ export interface SerializedContainer {
      */
     station?: FurnaceStation;
   };
+  /** 营火的运转状态（点没点着、每格的进度） */
+  campfire?: {
+    lit: boolean;
+    /** 4 格的进度秒数（总耗时由配方算出来，所以不存） */
+    progress: number[];
+  };
   /** 酿造台的运转状态（燃料还能酿几次、当前进度） */
   brewing?: {
     fuelLeft: number;
@@ -86,6 +94,7 @@ export function kindOf(container: BlockContainer): ContainerKind {
   if (container instanceof Anvil) return 'anvil';
   if (container instanceof SmithingTable) return 'smithing';
   if (container instanceof Stonecutter) return 'stonecutter';
+  if (container instanceof Campfire) return 'campfire';
   return 'brewing';
 }
 
@@ -104,6 +113,7 @@ function containerFor(
   if (kind === 'anvil') return store.getOrCreateAnvil(dimension, x, y, z);
   if (kind === 'smithing') return store.getOrCreateSmithingTable(dimension, x, y, z);
   if (kind === 'stonecutter') return store.getOrCreateStonecutter(dimension, x, y, z);
+  if (kind === 'campfire') return store.getOrCreateCampfire(dimension, x, y, z);
   return store.getOrCreateBrewingStand(dimension, x, y, z);
 }
 
@@ -148,6 +158,10 @@ function hasContent(container: BlockContainer, kind: ContainerKind): boolean {
     // 只烧了一半的熔炉即使原料被拿走、也要把"燃烧剩余"留住，否则重新点火的节奏会抖
     return container.burnTimeLeft > 0 || container.cookProgress > 0 || container.storedExperience > 0;
   }
+  if (container instanceof Campfire) {
+    // 熄灭的营火里只要还有东西，也要写下来（否则读档后"架上的生肉"会消失）
+    return container.lit === false;
+  }
   if (container instanceof BrewingStand) {
     return container.brewProgress > 0 || container.fuelLeft > 0;
   }
@@ -182,6 +196,9 @@ export function serializeContainer(
       storedExperience: container.storedExperience,
       station: container.station,
     };
+  }
+  if (container instanceof Campfire) {
+    data.campfire = { lit: container.lit, progress: [...container.progressSeconds] };
   }
   if (container instanceof BrewingStand) {
     data.brewing = { fuelLeft: container.fuelLeft, brewProgress: container.brewProgress };
@@ -239,6 +256,13 @@ export function restoreContainers(store: BlockEntityStore, data: readonly Serial
       // 站台必须是三个已知值之一：外部数据里写了个乱七八糟的字符串时回退成普通熔炉，
       // 而不是让 `FURNACE_STATIONS[station]` 在 tick 里变成 undefined 再炸掉
       container.station = isFurnaceStation(state.station) ? state.station : 'furnace';
+    }
+    if (container instanceof Campfire) {
+      container.lit = entry.campfire?.lit !== false; // 旧存档/缺字段 → 点着（原版放下就是着着的）
+      const progress = Array.isArray(entry.campfire?.progress) ? entry.campfire!.progress : [];
+      for (let i = 0; i < CAMPFIRE_SIZE; i++) container.setProgress(i, numberOr(progress[i], 0));
+      // 总耗时是由配方推出来的，读档后重算一次（进度条立刻就是对的）
+      container.refreshTotals();
     }
     if (container instanceof BrewingStand && entry.brewing) {
       container.fuelLeft = numberOr(entry.brewing.fuelLeft, 0);

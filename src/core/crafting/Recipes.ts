@@ -181,6 +181,27 @@ const FURNACE_VARIANT_RECIPES: readonly Recipe[] = [
     pattern: ['III', 'IFI', 'SSS'],
     key: { I: Item.IRON_INGOT, F: Block.FURNACE, S: Block.SMOOTH_STONE },
   },
+  /**
+   * 营火（批次 47）：3 木棍 + 1 煤炭/木炭 + 3 原木（原版图案）。
+   *
+   * 与烟熏炉同一套"标签配方展开"：**6 种原木 × 2 种燃料 = 12 条**。
+   * ⚠️ 木炭那 6 条不能省：原版煤炭与木炭都能用，而**木炭是前期最容易拿到的那种**
+   *（挖不到煤的时候就是它），只认煤炭会变成"配方书里写着能做、手里却做不了"。
+   */
+  ...[
+    [Block.OAK_LOG, ...Object.values(Wood).map((ids) => ids.log)],
+  ].flatMap((logs) =>
+    logs.flatMap((log) =>
+      [Item.COAL, Item.CHARCOAL].map(
+        (fuel): Recipe => ({
+          kind: 'shaped',
+          result: { id: Block.CAMPFIRE, count: 1 },
+          pattern: [' S ', 'SCS', 'LLL'],
+          key: { S: Item.STICK, C: fuel, L: log },
+        }),
+      ),
+    ),
+  ),
 ];
 
 /**

@@ -19,6 +19,7 @@ import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
+import { Campfire } from '../container/Campfire.ts';
 import type { FurnaceStation } from '../crafting/Smelting.ts';
 import type { DimensionId } from '../gen/Dimension.ts';
 
@@ -29,8 +30,17 @@ export type BlockContainer =
   | Anvil
   | BrewingStand
   | SmithingTable
-  | Stonecutter;
-export type ContainerKind = 'furnace' | 'chest' | 'enchanting' | 'anvil' | 'brewing' | 'smithing' | 'stonecutter';
+  | Stonecutter
+  | Campfire;
+export type ContainerKind =
+  | 'furnace'
+  | 'chest'
+  | 'enchanting'
+  | 'anvil'
+  | 'brewing'
+  | 'smithing'
+  | 'stonecutter'
+  | 'campfire';
 
 interface Entry {
   dimension: DimensionId;
@@ -131,6 +141,25 @@ export class BlockEntityStore {
   getStonecutter(dimension: DimensionId, x: number, y: number, z: number): Stonecutter | undefined {
     const container = this.get(dimension, x, y, z);
     return container instanceof Stonecutter ? container : undefined;
+  }
+
+  getCampfire(dimension: DimensionId, x: number, y: number, z: number): Campfire | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Campfire ? container : undefined;
+  }
+
+  /**
+   * 取出（或新建）营火。
+   *
+   * ⚠️ 新建时**默认是点燃的**（原版放下就是点着的营火），
+   * 但已经存在的实例保留自己的 `lit` —— 熄灭过的营火重新打开界面不该自己又烧起来。
+   */
+  getOrCreateCampfire(dimension: DimensionId, x: number, y: number, z: number): Campfire {
+    const existing = this.getCampfire(dimension, x, y, z);
+    if (existing) return existing;
+    const campfire = new Campfire();
+    this.put({ dimension, x, y, z, container: campfire });
+    return campfire;
   }
 
   /** 切石机的输入格也按坐标存（与铁砧/锻造台同一个理由） */

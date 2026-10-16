@@ -35,8 +35,14 @@ export interface SmeltingRecipe {
 /** 普通熔炉的单次烧炼耗时 */
 export const SMELTING_TIME = 10;
 
-/** 三种炉子（H6 的烟熏炉与高炉在批次 46 落地） */
-export type FurnaceStation = 'furnace' | 'smoker' | 'blast_furnace';
+/**
+ * 四种"烤东西的地方"（H6 的烟熏炉与高炉在批次 46 落地，营火在批次 47）。
+ *
+ * ⚠️ 营火也是**站台**但不是炉子：它不要燃料、一次烤 4 个、烤好直接弹出来。
+ * 它之所以能复用这张表，是因为"只烤食物、而且很慢"这两条规则与炉子完全同源
+ * （`timeScale: 3` = 原版的 30 秒一个，是熔炉的 3 倍）。
+ */
+export type FurnaceStation = 'furnace' | 'smoker' | 'blast_furnace' | 'campfire';
 
 export interface StationDef {
   readonly cn: string;
@@ -52,10 +58,19 @@ export interface StationDef {
   readonly accepts: readonly SmeltKind[];
 }
 
+/** 拒绝提示里"它只吃什么"的文案（按归类拼出来，见 `stationRejectReason`） */
+const ACCEPTS_TEXT: Readonly<Record<SmeltKind, string>> = {
+  food: '食物（生肉、马铃薯…）',
+  metal: '矿物与金属（原矿、远古残骸…）',
+  none: '',
+};
+
 export const FURNACE_STATIONS: Readonly<Record<FurnaceStation, StationDef>> = {
   furnace: { cn: '熔炉', timeScale: 1, accepts: ['food', 'metal', 'none'] },
   smoker: { cn: '烟熏炉', timeScale: 0.5, accepts: ['food'] },
   blast_furnace: { cn: '高炉', timeScale: 0.5, accepts: ['metal'] },
+  // 营火：原版 600 tick = 30 秒一个（熔炉的 3 倍），而且只烤食物
+  campfire: { cn: '营火', timeScale: 3, accepts: ['food'] },
 };
 
 /** 全部熔炼配方（配方书要列出来，所以导出） */
@@ -150,10 +165,14 @@ export function stationRejectReason(itemId: number, station: FurnaceStation): st
   const recipe = RECIPE_BY_INPUT.get(itemId)!;
   const kind = recipe.kind ?? 'none';
   if (def.accepts.includes(kind)) return '';
-  // 说清"它只吃什么"，而不是干巴巴一句"烧不动"
-  return station === 'smoker'
-    ? '烟熏炉只烧食物（生肉、马铃薯…）'
-    : '高炉只烧矿物与金属（原矿、远古残骸…）';
+  // 说清"它只吃什么"，而不是干巴巴一句"烧不动"。
+  // 文案由站台的 `accepts` 推出来：加一种站台就自动有正确的提示语
+  const kinds = def.accepts
+    .filter((accepted) => accepted !== 'none')
+    .map((accepted) => ACCEPTS_TEXT[accepted])
+    .join('与');
+  const verb = station === 'campfire' ? '烤' : '烧';
+  return `${def.cn}只${verb}${kinds}`;
 }
 
 export const SMELTING_RECIPE_COUNT = SMELTING_RECIPES.length;

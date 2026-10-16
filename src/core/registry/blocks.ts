@@ -8,7 +8,7 @@
  */
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
-import { isPowered, type BlockShape } from './blockState.ts';
+import { isLitState, isPowered, type BlockShape } from './blockState.ts';
 
 export interface BlockDef {
   readonly id: number;
@@ -56,6 +56,21 @@ interface BlockSpec {
   stateTiles?: (state: number) => readonly [string, string, string];
   stateLight?: (state: number) => number;
   itemless?: boolean;
+}
+
+/**
+ * "点燃时换贴图"的通用写法（批次 47）。
+ *
+ * 顶面与底面不动、**侧面**换成点火贴图。三种炉子与营火共用它，
+ * 于是"点燃长什么样"只有一处实现（也保证它们的色温一致——都是炉火那种橙黄）。
+ */
+function litTiles(
+  state: number,
+  top: string,
+  side: string,
+  litSide: string,
+): readonly [string, string, string] {
+  return [top, top, isLitState(state) ? litSide : side];
 }
 
 const BASE_SPECS: readonly BlockSpec[] = [
@@ -160,7 +175,16 @@ const BASE_SPECS: readonly BlockSpec[] = [
 
   // ---- 功能方块
   { id: 43, name: 'minecraft:crafting_table', tiles: ['crafting_table_top', 'oak_planks', 'crafting_table_side'] },
-  { id: 44, name: 'minecraft:furnace', tiles: ['furnace_top', 'furnace_top', 'furnace_side'] },
+  {
+    id: 44,
+    name: 'minecraft:furnace',
+    tiles: ['furnace_top', 'furnace_top', 'furnace_side'],
+    // 点燃时换"炉口有火光"的贴图并发光 13（批次 47，与红石灯同一套机制）。
+    // ⚠️ 立方体方块只有一个"侧面"贴图槽，所以**四个侧面会一起亮**（原版只亮正面）；
+    // 这是"没有朝向状态"的代价，已记进 TASKS H6。
+    stateTiles: (state) => litTiles(state, 'furnace_top', 'furnace_side', 'furnace_front_on'),
+    stateLight: (state) => (isLitState(state) ? 13 : 0),
+  },
   { id: 45, name: 'minecraft:chest', tiles: ['chest_top', 'chest_top', 'chest_side'] },
 
   // ---- 石材家族
@@ -1298,16 +1322,52 @@ export const RED_SANDSTONE_VARIANT_ID_START = 416;
 export const SMOKER_ID = 422;
 export const BLAST_FURNACE_ID = 423;
 
+/**
+ * 营火（H11，批次 47）。
+ *
+ * 它是"炉子的第三种站台"，但有三处与三座炉子不同（都对齐原版）：
+ *  1. **不要燃料**——点着就一直烤；用锹右键熄灭、用打火石重新点燃；
+ *  2. **一次烤 4 个**（4 个格子同时推进），烤好的东西**直接弹出来**（没有产物槽）；
+ *  3. **慢**：原版 600 tick = 30 秒一个（熔炉的 3 倍），而且**只烤食物**。
+ *
+ * 形状单开一个 `campfire`（7/16 高的柴堆，能站上去），点燃时顶面变成火焰贴图并发光 15。
+ */
+export const CAMPFIRE_ID = 424;
+
+const CAMPFIRE_SPECS: readonly BlockSpec[] = [
+  {
+    id: CAMPFIRE_ID,
+    name: 'minecraft:campfire',
+    // 底面用原木的**横截面**（oak_log_top）：营火底下看到的就是木头的断面
+    tiles: ['campfire_top', 'oak_log_top', 'campfire_side'],
+    shape: 'campfire',
+    opaque: false,
+    lightOpacity: 0,
+    // 点燃时**顶面**变成火焰（三座炉子亮的是侧面——营火是"敞口"的，火光从上面看最明显）
+    stateTiles: (state) =>
+      isLitState(state)
+        ? ['campfire_fire', 'oak_log_top', 'campfire_side']
+        : ['campfire_top', 'oak_log_top', 'campfire_side'],
+    // 原版营火是 15 级光源（比炉子的 13 更亮：它是明火）
+    stateLight: (state) => (isLitState(state) ? 15 : 0),
+  },
+];
+
 const FURNACE_STATION_SPECS: readonly BlockSpec[] = [
   {
     id: SMOKER_ID,
     name: 'minecraft:smoker',
     tiles: ['smoker_top', 'smoker_top', 'smoker_side'],
+    // 点燃时的火光贴图与发光（批次 47，与熔炉同一套）
+    stateTiles: (state) => litTiles(state, 'smoker_top', 'smoker_side', 'smoker_front_on'),
+    stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
   {
     id: BLAST_FURNACE_ID,
     name: 'minecraft:blast_furnace',
     tiles: ['blast_furnace_top', 'blast_furnace_top', 'blast_furnace_side'],
+    stateTiles: (state) => litTiles(state, 'blast_furnace_top', 'blast_furnace_side', 'blast_furnace_front_on'),
+    stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
 ];
 
@@ -1505,6 +1565,7 @@ const SPECS: readonly BlockSpec[] = [
   ...STONECUTTER_SPECS,
   ...RED_SAND_SPECS,
   ...FURNACE_STATION_SPECS,
+  ...CAMPFIRE_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1733,6 +1794,8 @@ export const Block = {
   // ---- 熔炉的两个变体（批次 46，见 `SMOKER_ID` / `BLAST_FURNACE_ID`）
   SMOKER: SMOKER_ID,
   BLAST_FURNACE: BLAST_FURNACE_ID,
+  /** 营火（批次 47）：不要燃料、一次烤 4 个、只烤食物、烤好直接弹出来 */
+  CAMPFIRE: CAMPFIRE_ID,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1861,6 +1924,8 @@ const HARDNESS = new Map<number, number>([
   // 烟熏炉 3.5、高炉 3.5（原版三者同档，都要镐）
   [Block.SMOKER, 3.5],
   [Block.BLAST_FURNACE, 3.5],
+  // 营火 2（原版）：斧最快，徒手也能采
+  [Block.CAMPFIRE, 2],
   [Block.CHEST, 2.5],
 
   [Block.STONE_BRICKS, 1.5],
@@ -2083,6 +2148,8 @@ const HAND_HARVESTABLE = new Set<number>([
   // 木质方块徒手可采集；熔炉需要镐，所以不在列表里
   Block.CRAFTING_TABLE,
   Block.CHEST,
+  // 营火（批次 47）：徒手就能拆（斧只是更快）
+  Block.CAMPFIRE,
 ]);
 
 // 羊毛徒手即可采集（石材家族一律需要镐，不加入此表）

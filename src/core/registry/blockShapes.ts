@@ -39,6 +39,9 @@ const CACTUS_BOX: LocalBox = [0.0625, 0, 0.0625, 0.9375, 1, 0.9375];
 /** 贴地薄板的厚度（1/16 格，与原版红石粉/压力板一致）。睡莲也用这个厚度 */
 export const FLAT_HEIGHT = 0.0625;
 
+/** 营火的高度（原版 7/16 高：能站上去，也能一脚踩灭） */
+export const CAMPFIRE_HEIGHT = 0.4375;
+
 /** 栅栏/墙的连接判定回调：该方向是否有可连接的方块 */
 export type ConnectQuery = (facing: Facing) => boolean;
 
@@ -149,6 +152,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       // 雪层的高度就是"层数 / 8"：1 层是 1/8 格（能直接走上去，不需要跳），
       // 8 层正好是整格。碰撞与渲染共用这一份高度，所以"看着矮、撞着高"这类错不会出现。
       return [[0, 0, 0, 1, snowHeight(state), 1]];
+    case 'campfire':
+      // 营火是一堆 7/16 高的柴：能站上去（原版也能踩），所以它有碰撞
+      return [[0, 0, 0, 1, CAMPFIRE_HEIGHT, 1]];
     default:
       return [FULL];
   }
@@ -320,6 +326,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'lily_pad':
       // 睡莲与"贴地薄板"长得一样（都是 1/16 的一层），差别只在碰撞（见 `collisionBoxes`）
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
+    case 'campfire':
+      // 与碰撞盒同源（7/16 的柴堆）
+      return [[0, 0, 0, 1, CAMPFIRE_HEIGHT, 1]];
     case 'snow':
       // 高度随层数变化，与碰撞盒同源（见 `collisionBoxes`）
       return [[0, 0, 0, 1, snowHeight(state), 1]];

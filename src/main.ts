@@ -189,6 +189,9 @@ import { CHEST_SIZE } from './core/container/Chest.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from './core/container/BrewingStand.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
+import { CAMPFIRE_SIZE, Campfire } from './core/container/Campfire.ts';
+import { PrecipitationTicker } from './core/tick/Precipitation.ts';
+import { isLitState, withLitState } from './core/registry/blockState.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
 import { Arrow, type ArrowOptions } from './core/entity/Arrow.ts';
 import {
@@ -376,6 +379,8 @@ const STARTING_HOTBAR: readonly number[] = [
   // 开发期烟熏炉与高炉（批次 46）：旁边就有生肉与粗铁，放下就能对比"2 倍速"与"只吃什么"
   Block.SMOKER,
   Block.BLAST_FURNACE,
+  // 开发期营火（批次 47）：放下就点着，塞几块生肉就能看"30 秒弹一个"的节奏
+  Block.CAMPFIRE,
   // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
   Block.ANVIL,
   Block.IRON_BLOCK,
@@ -543,6 +548,17 @@ class App {
       this.scheduler.schedule(x, y, z, this.dimension, delay);
     },
   };
+  /**
+   * 区块级降水刻（批次 47）：下雪时**空气里自己长出第一层雪**。
+   * 它是独立的一刻（每 0.5 秒 6 个点），不走随机刻——理由见 `core/tick/Precipitation.ts`。
+   */
+  private readonly precipitation = new PrecipitationTicker({
+    snowingAt: (x, _y, z) => this.weather.raining && this.isSnowyColumn(x, z),
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+    skyLightAt: (x, y, z) => this.world.getSkyLight(x, y, z),
+    setBlockWithState: (x, y, z, id, state) => this.world.setBlockAndUpdate(x, y, z, id, state),
+  });
+
   /** 随机刻改动世界的累计次数（调试面板与验收用） */
   private randomTickChanges = 0;
   /** 流体流动改动的累计次数（验收用） */
@@ -2419,6 +2435,19 @@ class App {
       }
     }
 
+    // ---- 1.5) 营火重新点燃（批次 47）：原版就是拿打火石对着熄灭的营火点
+    if (this.world.getBlock(this.hit.x, this.hit.y, this.hit.z) === Block.CAMPFIRE) {
+      const campfire = this.world.containers.getOrCreateCampfire(this.dimension, this.hit.x, this.hit.y, this.hit.z);
+      if (!campfire.lit) {
+        campfire.lit = true;
+        this.world.setStateAndUpdate(this.hit.x, this.hit.y, this.hit.z, withLitState(this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z), true));
+        this.damageHeldTool();
+        this.audio.play('flint', { x, y, z });
+        this.hand.swing();
+        return true;
+      }
+    }
+
     // ---- 2) 普通火焰
     if (!igniteAt(this.world, x, y, z)) return false;
     this.damageHeldTool();
@@ -3160,7 +3189,7 @@ class App {
    * 而我们一次加载 489 个区块，全跑一遍（每段 3 次）会有上万次采样。
    * 半径取 3 个区块（7×7 = 49 个区块）已经足够让"视野内的世界活着"。
    */
-  private tickWorldBlocks(): void {
+  private tickWorldBlocks(dt: number): void {
     // 1) 计划刻：流体等延迟处理
     for (const pos of this.scheduler.advance()) this.runScheduledTick(pos);
 
@@ -3169,6 +3198,12 @@ class App {
     // 火焰浇灭要用"现在下不下雨"（I12）。放在 speed 判定之前，
     // 否则关掉随机刻时火焰连"被雨浇灭"都做不到（那是随机刻行为的一部分）
     this.tickWorld.raining = this.weather.raining;
+
+    // 3) 区块级降水刻（批次 47）：**与 randomTickSpeed 无关**——
+    // 它是天气的效果，不是"随机刻"，关掉随机刻（`/gamerule randomTickSpeed 0`）时
+    // 依然应该下雪（原版也是两套独立机制）
+    this.precipitation.tick(dt, this.physics.x, this.physics.y, this.physics.z);
+
     if (speed <= 0) return;
 
     const centerCx = toChunkCoord(this.physics.x);
@@ -3314,6 +3349,20 @@ class App {
     }
     if (hitBlock === Block.FURNACE) {
       this.inventoryScreen.openWith('furnace', this.world.containers.getOrCreateFurnace(this.dimension, x, y, z));
+      return true;
+    }
+    // 营火（批次 47）：右键打开放食物；手里拿着**锹**时右键是"熄灭"（原版行为）
+    if (hitBlock === Block.CAMPFIRE) {
+      const campfire = this.world.containers.getOrCreateCampfire(this.dimension, x, y, z);
+      if (this.heldTool?.type === 'shovel' && campfire.lit) {
+        campfire.lit = false;
+        this.world.setStateAndUpdate(x, y, z, withLitState(this.world.getBlockState(x, y, z), false));
+        this.damageHeldTool();
+        this.audio.play('break_grass', { x, y, z });
+        this.hand.swing();
+        return true;
+      }
+      this.inventoryScreen.openWith('campfire', campfire);
       return true;
     }
     // 烟熏炉与高炉（批次 46）：同一套界面与容器，站台从**方块**决定
@@ -3511,7 +3560,7 @@ class App {
   private dropContainerContents(x: number, y: number, z: number): void {
     const container = this.world.containers.get(this.dimension, x, y, z);
     if (!container) return;
-    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、锻造台 3、切石机 1、酿造台 5
+    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、锻造台 3、切石机 1、营火 4、酿造台 5
     const size = container instanceof Furnace
       ? FURNACE_SIZE
       : container instanceof EnchantTable
@@ -3522,9 +3571,11 @@ class App {
             ? SMITHING_SIZE
             : container instanceof Stonecutter
               ? STONECUTTER_SIZE
-              : container instanceof BrewingStand
-                ? BREW_SLOT_COUNT
-                : CHEST_SIZE;
+              : container instanceof Campfire
+                ? CAMPFIRE_SIZE
+                : container instanceof BrewingStand
+                  ? BREW_SLOT_COUNT
+                  : CHEST_SIZE;
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;
@@ -3545,15 +3596,50 @@ class App {
     const { x: px, y: py, z: pz } = this.physics;
     const rangeSq = 64 * 64;
     this.world.containers.forEach((container, x, y, z, dimension) => {
-      if (!(container instanceof Furnace) && !(container instanceof BrewingStand)) return;
+      if (!(container instanceof Furnace) && !(container instanceof BrewingStand) && !(container instanceof Campfire)) {
+        return;
+      }
       // 只 tick 当前维度的：另一个维度同坐标的熔炉不该在这里被推进
       if (dimension !== this.dimension) return;
       const dx = x + 0.5 - px;
       const dy = y + 0.5 - py;
       const dz = z + 0.5 - pz;
       if (dx * dx + dy * dy + dz * dz > rangeSq) return;
-      container.tick(dt);
+
+      if (container instanceof Campfire) {
+        const result = container.tick(dt);
+        // 烤好的东西**弹出来**（原版如此：营火没有产物槽，成品掉在柴堆上）
+        for (const entry of result.cooked) {
+          this.spawnDrop(entry.output.id, entry.output.count, x + 0.5, y + 0.7, z + 0.5);
+        }
+        this.syncLitState(x, y, z, container.lit, result.litChanged);
+        return;
+      }
+
+      const furnace = container as Furnace;
+      const furnaceResult = furnace.tick(dt);
+      // 烧起来/熄灭了就把方块状态同步过去：点火贴图与 13 级光都靠这一位（批次 47）
+      this.syncLitState(x, y, z, furnace.isLit, furnaceResult.litChanged);
     });
+  }
+
+  /**
+   * 把"这座炉子/营火在不在烧"同步到方块状态（批次 47）。
+   *
+   * 两条触发路径：
+   *  1. `litChanged`——刚刚点燃或刚熄灭（正常路径）；
+   *  2. **状态与容器对不上**——读档后的第一次 tick：容器里 `burnTimeLeft > 0`
+   *     （火还在烧）而方块还是"没点燃"的样子，这时要把状态补上。
+   *
+   * 只读写一次方块状态，且对不上的情况极少，所以这里是"每 tick 检查、几乎不写"。
+   */
+  private syncLitState(x: number, y: number, z: number, lit: boolean, litChanged: boolean): void {
+    const block = this.world.getBlock(x, y, z);
+    // 方块被换掉了（例如玩家把熔炉挖了但容器还在）就别写
+    if (stationOfBlock(block) === null && block !== Block.CAMPFIRE) return;
+    const state = this.world.getBlockState(x, y, z);
+    if (!litChanged && isLitState(state) === lit) return;
+    this.world.setStateAndUpdate(x, y, z, withLitState(state, lit));
   }
 
   /** 破坏进度条：只在真正挖掘时显示，创造模式瞬间破坏不显示 */
@@ -3898,12 +3984,21 @@ class App {
       }
       this.placeCooldown = PLACE_COOLDOWN;
       this.inventory.consume(blockId, 1);
+
+      // 营火（批次 47）：**放下就是点着的**（原版如此）。
+      // 这里要把容器建出来、并把点燃位写进方块状态——不建容器的话 tick 循环
+      // 根本不知道这一格存在（营火不烤东西、方块也一直显示成"没点着"）。
+      if (blockId === Block.CAMPFIRE) {
+        this.world.containers.getOrCreateCampfire(this.dimension, x, y, z);
+        this.world.setStateAndUpdate(x, y, z, withLitState(plan.state, true));
+      }
+
       // 触觉反馈：放下一块方块的轻震
       this.vibrate(6);
       this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.hand.swing();
       // 联机：把这次改动广播给队友
-      this.net.sendBlock(x, y, z, blockId, plan.state, this.dimension);
+      this.net.sendBlock(x, y, z, blockId, this.world.getBlockState(x, y, z), this.dimension);
       if (plan.extra) {
         const { dx, dy, dz, id, state } = plan.extra;
         this.net.sendBlock(x + dx, y + dy, z + dz, id, state, this.dimension);
@@ -4150,7 +4245,7 @@ class App {
       this.tickEffects();
       this.stats.tick(this.survivalEnvironment());
       this.tickPortal();
-      this.tickWorldBlocks();
+      this.tickWorldBlocks(TICK_SECONDS);
       // 摔落伤害只结算一次，避免同一帧的多个 tick 重复扣血
       this.pendingFallDistance = 0;
     }

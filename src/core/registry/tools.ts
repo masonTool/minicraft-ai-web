@@ -325,6 +325,8 @@ requirePickaxe(0, [
 ]);
 // 书架：原版是"斧更快、徒手也能采到"，所以只进加速表不进需求表
 EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');
+// 营火（批次 47）：同样是"斧更快、徒手也能采"（还常见于"用什么工具都能拆"）
+EFFICIENT_TOOL.set(Block.CAMPFIRE, 'axe');
 
 // 铜的四档 × 四种形状（批次 40）：原版要**石镐**（needs_stone_tool），全 16 个同档
 // （按表展开而不是从 `world/Copper.ts` 取：注册表层不该反向依赖 world 层）
