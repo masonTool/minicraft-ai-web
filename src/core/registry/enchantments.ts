@@ -119,8 +119,10 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'punch', name: '冲击', maxLevel: 2, targets: ['bow'], weight: 2, implemented: true },
   { id: 'flame', name: '火矢', maxLevel: 1, targets: ['bow'], weight: 2, implemented: true },
   { id: 'infinity', name: '无限', maxLevel: 1, targets: ['bow'], weight: 1, implemented: true },
-  { id: 'luck_of_the_sea', name: '海之眷顾', maxLevel: 3, targets: ['fishing_rod'], weight: 2 },
-  { id: 'lure', name: '诱饵', maxLevel: 3, targets: ['fishing_rod'], weight: 2 },
+  // 海之眷顾 / 诱饵（批次 81 随钓鱼接线）：前者改池子权重（`registry/fishing.ts`），
+  // 后者缩短等待时间（`survival/Fishing.ts` 的 `waitSecondsFor`）
+  { id: 'luck_of_the_sea', name: '海之眷顾', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
+  { id: 'lure', name: '诱饵', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
   { id: 'loyalty', name: '忠诚', maxLevel: 3, targets: ['trident'], weight: 5 },
   { id: 'impaling', name: '穿刺', maxLevel: 5, targets: ['trident'], weight: 2 },
   { id: 'riptide', name: '激流', maxLevel: 3, targets: ['trident'], weight: 2 },

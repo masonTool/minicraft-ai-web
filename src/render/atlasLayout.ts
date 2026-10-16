@@ -856,6 +856,15 @@ export const TILE_ORDER = [
   'bed_red_side',
   'bed_black_top',
   'bed_black_side',
+  // ---- 钓鱼（批次 81，G11）：钓竿 + 四种鱼 + 两种熟鱼。
+  // ⚠️ 四种鱼的图标由**同一支参数化画笔**生成（只差三个颜色），
+  // 手画四张只会让"某一种鱼的颜色画串了"没人发现——与珊瑚那批同一条教训
+  'item_fishing_rod',
+  'item_cod',
+  'item_salmon',
+  'item_tropical_fish',
+  'item_cooked_cod',
+  'item_cooked_salmon',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

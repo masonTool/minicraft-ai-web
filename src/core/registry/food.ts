@@ -16,7 +16,8 @@
  *
  * 与原版的已知差异：
  *  - 没有"进食减速"（原版吃的时候移速减到 1/3）与"吃完的饱嗝音效时长"
- *  - 没有河豚/蜘蛛眼这类带复杂副作用的食物（金胡萝卜已在批次 48 补上）
+ *  - 蜘蛛眼还没做（要"中毒"以外的具体数值；金胡萝卜已在批次 48 补上，
+ *    **河豚**已在批次 81 随钓鱼补上——它带三条必定触发的效果）
  *  - **可疑的炖菜没做**：原版是"同一样物品、效果取决于用了哪朵花"（靠物品 NBT 记），
  *    而本项目的 `ItemStack` 只有 damage/附魔/名字三个字段——做不了"一个 id 多种效果"，
  *    硬做只能写成一个固定效果（那就不叫可疑了）。等 H16 的物品 NBT 收尾再接
@@ -182,6 +183,25 @@ export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
   cooked_porkchop: { hunger: 8, saturationModifier: 0.8 },
   cooked_mutton: { hunger: 6, saturationModifier: 0.8 },
   cooked_chicken: { hunger: 6, saturationModifier: 0.6 },
+
+  // ---- 钓鱼（批次 81，G11）
+  // 四种生鱼都是"补得少"的那一档（原版 2/2/1/1 饥饿），熟鱼按原版翻倍多。
+  // 河豚是**唯一带副作用的鱼**：原版吃下去给剧毒 II 1:00 + 饥饿 III 0:15 + 反胃 II 0:15，
+  // 三个效果**必定触发**（不像腐肉那样掷概率）——所以它既是食物也是"别乱吃"的东西。
+  cod: { hunger: 2, saturationModifier: 0.1 },
+  salmon: { hunger: 2, saturationModifier: 0.1 },
+  tropical_fish: { hunger: 1, saturationModifier: 0.1 },
+  pufferfish: {
+    hunger: 1,
+    saturationModifier: 0.1,
+    effects: [
+      { id: 'poison', seconds: 60, amplifier: 1 },
+      { id: 'hunger', seconds: 15, amplifier: 2 },
+      { id: 'nausea', seconds: 15, amplifier: 1 },
+    ],
+  },
+  cooked_cod: { hunger: 5, saturationModifier: 0.6 },
+  cooked_salmon: { hunger: 6, saturationModifier: 0.8 },
 };
 
 /** 取某个注册名（可带 `minecraft:` 前缀）的食物数值 */

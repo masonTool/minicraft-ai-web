@@ -118,6 +118,11 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   { input: Item.PORKCHOP, output: { id: Item.COOKED_PORKCHOP, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
   { input: Item.MUTTON, output: { id: Item.COOKED_MUTTON, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
   { input: Item.CHICKEN, output: { id: Item.COOKED_CHICKEN, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
+  // 生鱼 → 熟鱼（批次 81，G11）：原版也是 0.35 经验、归 `food`（烟熏炉能烧）。
+  // ⚠️ **只有这两种鱼**：原版的热带鱼与河豚**不能烤**（烤了会变成什么？没有那样东西），
+  // 断言里专门钉住"它们不在表里"——顺手给它们加一条"看起来合理"的配方是最容易犯的错
+  { input: Item.COD, output: { id: Item.COOKED_COD, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
+  { input: Item.SALMON, output: { id: Item.COOKED_SALMON, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
 ];
 
 const RECIPE_BY_INPUT = new Map<number, SmeltingRecipe>(SMELTING_RECIPES.map((recipe) => [recipe.input, recipe]));

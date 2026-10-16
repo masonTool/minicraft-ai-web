@@ -212,6 +212,17 @@ export const Item = {
   APPLE: 1044,
   MELON_SLICE: 1045,
   GOLDEN_APPLE: 1046,
+  // ---- 钓鱼（批次 81，G11）
+  // 钓竿是**耐用品**（原版 64），但它既不是工具也不是盔甲：
+  // 与打火石同一条路——id 走 `ItemDef.durability`，附魔/铁砧走 `SPECIAL_ITEMS`。
+  // 1436 起是可疑的炖菜（1435）之后一直空着的一段，先用"已用 id 扫描"确认过。
+  FISHING_ROD: 1436,
+  COD: 1437,
+  SALMON: 1438,
+  /** 热带鱼：原版 2756 种花纹，这里一个 id 一件（没有物品 NBT） */
+  TROPICAL_FISH: 1439,
+  COOKED_COD: 1440,
+  COOKED_SALMON: 1441,
 } as const;
 
 /**
@@ -369,6 +380,22 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
     maxStack: 1,
     durability: 64,
   },
+  // ---- 钓鱼（批次 81，G11）：钓竿 + 四种鱼 + 两种熟鱼。
+  // ⚠️ **注册名必须是 `minecraft:fishing_rod`**：附魔表里的"诱饵/海之眷顾"
+  // 早就按这个名字登记了目标（`enchantments.ts` 的 targets: ['fishing_rod']），
+  // 名字写错会表现成"钓竿在附魔台里什么都附不了"，而且不报错。
+  {
+    id: Item.FISHING_ROD,
+    name: 'minecraft:fishing_rod',
+    tile: 'item_fishing_rod',
+    maxStack: 1,
+    durability: 64,
+  },
+  { id: Item.COD, name: 'minecraft:cod', tile: 'item_cod' },
+  { id: Item.SALMON, name: 'minecraft:salmon', tile: 'item_salmon' },
+  { id: Item.TROPICAL_FISH, name: 'minecraft:tropical_fish', tile: 'item_tropical_fish' },
+  { id: Item.COOKED_COD, name: 'minecraft:cooked_cod', tile: 'item_cooked_cod' },
+  { id: Item.COOKED_SALMON, name: 'minecraft:cooked_salmon', tile: 'item_cooked_salmon' },
   // ---- 下界合金（K8 尾巴）：远古残骸烧出来的碎片，与金锭合成下界合金锭
   { id: Item.NETHERITE_SCRAP, name: 'minecraft:netherite_scrap', tile: 'item_netherite_scrap' },
   { id: Item.NETHERITE_INGOT, name: 'minecraft:netherite_ingot', tile: 'item_netherite_ingot' },
@@ -519,6 +546,9 @@ export const MATERIAL_REPAIR_ITEM: Record<string, number> = {
 export const SPECIAL_ITEMS: Record<number, { kind: string; repair: string }> = {
   [Item.BOW]: { kind: 'bow', repair: 'wooden' },
   [Item.SHEARS]: { kind: 'shears', repair: 'iron' },
+  // 钓竿（批次 81）：`kind` 让附魔台能出"诱饵/海之眷顾/耐久/经验修补"，
+  // `repair` 让铁砧能用木板修它（原版也是木板）
+  [Item.FISHING_ROD]: { kind: 'fishing_rod', repair: 'wooden' },
 };
 
 /**
@@ -598,6 +628,8 @@ const TOOLS = new Set<number>([
   Item.BOW,
   Item.ARROW,
   ...TIPPED_ARROWS.map((entry) => entry.id),
+  // 钓竿（批次 81）：不可堆叠、有耐久、右键对着水面用——与打火石同一档
+  Item.FISHING_ROD,
 ]);
 
 /** 盔甲（20 件，由 ARMOR_SPECS 派生） */

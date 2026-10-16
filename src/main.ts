@@ -23,7 +23,7 @@ import {
 import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
-import { bookshelfPower } from './core/crafting/Enchanting.ts';
+import { bookshelfPower, pickEnchants } from './core/crafting/Enchanting.ts';
 import {
   isDrinkable,
   potionById,
@@ -161,6 +161,9 @@ import { BlockOverlay, DAMAGE_STAGES } from './render/BlockOverlay.ts';
 import { ParticleSystem } from './render/ParticleSystem.ts';
 import { HandRenderer } from './render/HandRenderer.ts';
 import { PlayerRenderer } from './render/PlayerRenderer.ts';
+// 平色（浮标那种）一律走 `srgbColor`：`new THREE.Color(hex)` 会做一次 sRGB→线性，
+// 而自定义 ShaderMaterial 是原样写帧缓冲的（见经验表 E15）
+import { srgbColor } from './render/srgb.ts';
 import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
@@ -235,6 +238,21 @@ import {
   sleepRefusal,
   type SleepMob,
 } from './core/survival/Sleep.ts';
+// 钓鱼（批次 81，G11）：规则（等待时间/咬钩窗口/状态机）在 survival，
+// 战利品表在 registry，这里只做"世界怎么飞、钓上来的东西怎么进背包"
+import {
+  advanceFishing,
+  beginCast,
+  castVelocity,
+  fishingBonuses,
+  reelFishing,
+  CAST_GRAVITY,
+  IDLE_FISHING,
+  MAX_CAST_DISTANCE,
+  type FishingLanding,
+  type FishingState,
+} from './core/survival/Fishing.ts';
+import { rollFishing } from './core/registry/fishing.ts';
 // 告示牌上的文字（B12，批次 80）：表格 + 编辑界面 + 渲染三件，
 // 都在主程序这一层接线（存储与规则在 `world/SignText.ts`，本身不碰 DOM/渲染）
 import {
@@ -476,6 +494,8 @@ const STARTING_HOTBAR: readonly number[] = [
   Item.ARROW,
   Item.STRING,
   Item.FLINT,
+  // 开发期钓竿（批次 81，G11）：出生点附近多半有水，走两步就能试抛竿
+  Item.FISHING_ROD,
   // 开发期铜的四档（批次 40）：四档铜块 + 切制铜，右键几下就能看到氧化与刮锈
   Block.COPPER_BLOCK,
   Block.EXPOSED_COPPER_BLOCK,
@@ -728,6 +748,18 @@ class App {
   private editingSign: { x: number; y: number; z: number } | null = null;
   /** 文字对账的节拍器（每 0.25 秒一次：区块加载/卸载、光照变化都会在这里被吸收） */
   private signSyncTimer = 0;
+  /**
+   * 钓鱼（批次 81，G11）。
+   *
+   * 浮标**不做成实体**：它没有碰撞、不参与战斗、也不需要联机同步，
+   * 只是"玩家手里这一竿的过程状态"——与 TNT 的引信（`PrimedTnt`）同一条取舍。
+   * 做成实体的话要动 `EntityManager` / 渲染器 / 存档三处，收益只有"别人能看见我的浮标"。
+   */
+  private fishing: FishingState = IDLE_FISHING;
+  /** 浮标的当前位置与速度（`flying` 阶段用；落水后位置固定） */
+  private bobber: { x: number; y: number; z: number; vx: number; vy: number; vz: number } | null = null;
+  /** 浮标的小方块（第一次抛竿时懒建） */
+  private bobberMesh: THREE.Mesh | null = null;
   /** 玩家名（联机时用服务端给的，单机固定"玩家"） */
   private playerName = '玩家';
   /** 难度（I7）：保存在世界里 */
@@ -2257,6 +2289,10 @@ class App {
    */
   private isCrosshairTarget(x: number, y: number, z: number): boolean {
     if (this.world.isSelectable(x, y, z)) return true;
+    // 两件事要"选中水面"（水本身是可以穿过的，默认选不中）：
+    //  - 放睡莲（B16）：落点是"水面正上方那一格空气"，所以要求上面是空气；
+    //  - 抛竿（批次 81）：只要那一格是水就够（浮标就落在这里）
+    if (this.heldItemId === Item.FISHING_ROD) return this.world.getBlock(x, y, z) === Block.WATER;
     if (this.selectedBlock !== Block.LILY_PAD) return false;
     if (this.world.getBlock(x, y, z) !== Block.WATER) return false;
     return this.world.getBlock(x, y + 1, z) === Block.AIR;
@@ -3457,6 +3493,168 @@ class App {
     });
     for (const pos of stale) this.signText.remove(this.dimension, pos.x, pos.y, pos.z);
     this.signRenderer.sync(items);
+  }
+
+  // ---------------------------------------------------------------- 钓鱼（批次 81，G11）
+
+  /**
+   * 右键：还没抛竿就抛，已经抛了就收。
+   *
+   * ⚠️ **不需要准星对着方块**（原版也不要求）：浮标朝你看的方向飞出去，
+   * 落在水里才有下文、落在岸上就自己收回来。若要求"准星必须指着水面"，
+   * 就会撞上那个 4.5 格的交互距离——而钓鱼本来就要往远处抛。
+   */
+  private useFishingRod(): void {
+    if (this.uiOpen || this.stats.dead) return;
+
+    // 已经抛出去了：这一下是收杆
+    if (this.fishing.phase !== 'idle') {
+      const { caught } = reelFishing(this.fishing);
+      this.fishing = IDLE_FISHING;
+      this.bobber = null;
+      this.hideBobber();
+      // 原版每次**收杆**都扣 1 点耐久——不管是钓到了还是空手（所以钓竿也是耗材）
+      this.damageHeldTool();
+      this.hand.swing();
+      if (caught) this.catchFish();
+      else this.audio.play('click');
+      return;
+    }
+
+    const bonuses = fishingBonuses(this.heldEnchants);
+    this.fishing = beginCast(Math.random, bonuses.lure);
+    const velocity = castVelocity(this.yaw, this.pitch);
+    this.bobber = {
+      x: this.physics.x,
+      y: this.physics.eyeY - 0.12,
+      z: this.physics.z,
+      vx: velocity.x,
+      vy: velocity.y,
+      vz: velocity.z,
+    };
+    this.showBobber();
+    this.audio.play('bow_shoot');
+    this.hand.swing();
+  }
+
+  /** 每帧推进浮标与状态机（flying → waiting → biting → 收杆或跑掉） */
+  private updateFishing(dt: number): void {
+    if (this.fishing.phase === 'idle' || !this.bobber) return;
+
+    // 手上换了东西 / 开了界面 / 死了 → 直接收回浮标（原版也会收回来）
+    if (this.heldItemId !== Item.FISHING_ROD || this.uiOpen || this.stats.dead) {
+      this.fishing = IDLE_FISHING;
+      this.bobber = null;
+      this.hideBobber();
+      return;
+    }
+
+    const bobber = this.bobber;
+    let landing: FishingLanding = null;
+
+    if (this.fishing.phase === 'flying') {
+      // 抛物线与投掷物同一组数（初速 30 格/秒、重力 12 格/秒²）
+      bobber.vy -= CAST_GRAVITY * dt;
+      bobber.x += bobber.vx * dt;
+      bobber.y += bobber.vy * dt;
+      bobber.z += bobber.vz * dt;
+
+      const bx = Math.floor(bobber.x);
+      const by = Math.floor(bobber.y);
+      const bz = Math.floor(bobber.z);
+      const id = this.world.getBlock(bx, by, bz);
+      if (id === Block.WATER) {
+        landing = 'water';
+        // 落在水面上：浮标停在这一格水的上表面（4/16 高的小方块露出水面一半）
+        bobber.x = bx + 0.5;
+        bobber.z = bz + 0.5;
+        bobber.y = by + 0.94;
+        bobber.vx = 0;
+        bobber.vy = 0;
+        bobber.vz = 0;
+      } else if (id !== Block.AIR) {
+        landing = 'blocked';
+      } else {
+        const dx = bobber.x - this.physics.x;
+        const dy = bobber.y - this.physics.eyeY;
+        const dz = bobber.z - this.physics.z;
+        if (Math.sqrt(dx * dx + dy * dy + dz * dz) > MAX_CAST_DISTANCE) landing = 'blocked';
+      }
+    }
+
+    const before = this.fishing;
+    this.fishing = advanceFishing(this.fishing, dt, landing);
+    const phase = this.fishing.phase;
+
+    if (before.phase !== phase) {
+      if (phase === 'waiting') {
+        this.audio.play('splash');
+        this.particles.spawnSplash(bobber.x, bobber.y, bobber.z, 0x4d84c8, 8);
+      } else if (phase === 'biting') {
+        // 咬钩：水花 + 提示（浮标同时会往下沉一点，见下面那段）
+        this.audio.play('splash');
+        this.particles.spawnSplash(bobber.x, bobber.y, bobber.z, 0x9fd4ff, 14);
+        this.chat.push('咬钩了！快收杆（2 秒内）', 'system');
+      } else if (phase === 'idle') {
+        this.bobber = null;
+        this.hideBobber();
+        if (before.phase === 'flying') this.chat.push('浮标没落在水里', 'error');
+        else if (before.phase === 'biting') this.chat.push('鱼跑了…', 'system');
+      }
+    }
+
+    if (this.bobber && this.bobberMesh) {
+      // 咬钩时浮标往下沉 0.12 格——这是玩家唯一的"该收杆了"的视觉信号
+      const dip = phase === 'biting' ? -0.12 : 0;
+      this.bobberMesh.position.set(this.bobber.x, this.bobber.y + dip, this.bobber.z);
+    }
+  }
+
+  /** 钓上来了：掷战利品、进背包（满了掉地上）、给经验、报一条消息 */
+  private catchFish(): void {
+    const bonuses = fishingBonuses(this.heldEnchants);
+    const caught = rollFishing(Math.random, bonuses.luck);
+    const stack: ItemStack = { id: caught.id, count: caught.count };
+    if (caught.enchantedBook) {
+      // 附魔书（宝藏池）：**现掷一条附魔**装进书里——原版钓上来的也是带附魔的书。
+      // 复用附魔台那套掷点（`kind: 'book'` 时它只出一条、且排除宝藏附魔）
+      const rolled = pickEnchants('book', 30, Math.random);
+      const enchants: Record<string, number> = {};
+      for (const entry of rolled) enchants[entry.id] = entry.level;
+      if (rolled.length > 0) stack.enchants = enchants;
+    }
+
+    const leftover = this.inventory.addStack(stack);
+    if (leftover > 0) this.spawnDrop(caught.id, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
+
+    // 原版每次钓上来给 1~6 点经验
+    this.awardXp(1 + Math.floor(Math.random() * 6));
+    this.audio.play('click');
+    const where = this.bobber;
+    if (where) this.particles.spawnSplash(where.x, where.y, where.z, 0x9fd4ff, 10);
+    this.refreshHotbar();
+
+    const label = itemLabel(caught.id);
+    const extra = Object.keys(stack.enchants ?? {}).length > 0 ? '（附魔书）' : '';
+    this.chat.push(`钓到了 ${label}${caught.count > 1 ? ` ×${caught.count}` : ''}${extra}`, 'system');
+  }
+
+  /** 建（或复用）浮标那个小方块：上白下红，与原版浮标同一个配色 */
+  private showBobber(): void {
+    if (!this.bobberMesh) {
+      const geometry = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+      // 盒子六个面：`BoxGeometry` 的顺序是 +x / −x / +y / −y / +z / −z，
+      // 所以"白顶"是第 3 个材质（其余五面红）——原版浮标就是红身白顶
+      const red = new THREE.MeshBasicMaterial({ color: srgbColor(0xd0403a) });
+      const white = new THREE.MeshBasicMaterial({ color: srgbColor(0xeceff2) });
+      this.bobberMesh = new THREE.Mesh(geometry, [red, red, white, red, red, red]);
+      this.scene.add(this.bobberMesh);
+    }
+    this.bobberMesh.visible = true;
+  }
+
+  private hideBobber(): void {
+    if (this.bobberMesh) this.bobberMesh.visible = false;
   }
 
   /**
@@ -5038,6 +5236,16 @@ class App {
       return;
     }
 
+    // 钓竿（批次 81，G11）：手里拿着钓竿时这一下是"抛竿 / 收杆"。
+    // 与投掷同一条理由放在这里——收杆那一刻玩家往往正看着浮标（准星对着水面），
+    // 而这种状态下"准星必须对着可交互方块"的老规矩会把它挡掉
+    if (this.heldItemId === Item.FISHING_ROD) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      this.useFishingRod();
+      return;
+    }
+
     // 没有命中方块就没什么可放/可交互的（投掷在上面已经处理过了）
     if (!this.hit) return;
 
@@ -5814,6 +6022,8 @@ class App {
       this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
       // 床（B13）：睡觉的计时与结算。用**真实输入**是为了让"跳跃键提前起床"能被读到
       this.updateSleep(dt, rawInput);
+      // 钓鱼（批次 81）：浮标飞行 / 等待咬钩 / 咬钩窗口，全在状态机里
+      this.updateFishing(dt);
       // 告示牌上的字（B12）：每 0.25 秒对一次账。
       // 为什么要定期对账而不是"事件驱动"：会改变这趟结果的三件事里有两件**没有事件**——
       // ① 区块流式加载/卸载（玩家走过去）；② 那格的光照变了（太阳落了、旁边点了火把）。
@@ -5917,6 +6127,11 @@ class App {
     this.blockOverlay.dispose();
     // 告示牌的文字平面与画布贴图（B12）：每块牌子一份材质，得逐块释放
     this.signRenderer.dispose();
+    // 浮标（批次 81）：懒建的，可能一次都没抛过竿
+    this.bobberMesh?.geometry.dispose();
+    const bobberMaterial = this.bobberMesh?.material;
+    if (Array.isArray(bobberMaterial)) for (const item of bobberMaterial) item.dispose();
+    else bobberMaterial?.dispose();
   }
 
   // ---------------------------------------------------------------- 开发调试接口
@@ -5931,6 +6146,33 @@ class App {
   /** 是否正在挖掘（按住左键/长按屏幕且对着可破坏方块）——验收脚本用 */
   get isBreaking(): boolean {
     return this.breakProgress > 0 && this.breakingKey !== '';
+  }
+
+  /**
+   * 钓鱼的状态（批次 81，G11）——验收脚本用。
+   *
+   * `phase` 是那四个状态之一（`idle` / `flying` / `waiting` / `biting`），
+   * `waitFor` 是这一竿要等多久、`timer` 是已经过去多久——"等到了没有"
+   * 不必靠盯着屏幕猜。
+   */
+  get fishingState(): {
+    phase: string;
+    timer: number;
+    waitFor: number;
+    bobber: { x: number; y: number; z: number } | null;
+  } {
+    return {
+      phase: this.fishing.phase,
+      timer: Number(this.fishing.timer.toFixed(3)),
+      waitFor: Number(this.fishing.waitFor.toFixed(3)),
+      bobber: this.bobber ? { x: this.bobber.x, y: this.bobber.y, z: this.bobber.z } : null,
+    };
+  }
+
+  /** 直接把浮标推到"咬钩"（验收脚本用，省掉 5~30 秒的等待） */
+  forceBite(): void {
+    if (this.fishing.phase !== 'waiting') return;
+    this.fishing = { phase: 'biting', timer: 0, waitFor: this.fishing.waitFor };
   }
 
   /**

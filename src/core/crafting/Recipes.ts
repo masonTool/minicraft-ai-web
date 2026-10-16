@@ -832,6 +832,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.FLINT_AND_STEEL, count: 1 },
     ingredients: [Item.IRON_INGOT, Item.FLINT],
   },
+  // 钓竿（批次 81，G11）：**3 木棍 + 2 线**（原版图案：木棍占左下那条斜线、线在右列的两格）
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.FISHING_ROD, count: 1 },
+    pattern: ['  S', ' S#', 'S #'],
+    key: { S: Item.STICK, '#': Item.STRING },
+  },
   // ---- 下界合金（K8 尾巴）
   // 下界合金锭：4 碎片 + 4 金锭（原版是无序配方，"4+4"这个配比就是它的全部难点）
   {

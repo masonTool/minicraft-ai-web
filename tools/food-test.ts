@@ -96,6 +96,15 @@ const VANILLA: Record<string, readonly [number, number]> = {
   suspicious_stew_blue_orchid: [6, 7.2],
   suspicious_stew_oxeye_daisy: [6, 7.2],
   suspicious_stew_cornflower: [6, 7.2],
+  // ---- 批次 81（钓鱼，G11）：四种生鱼 + 两种熟鱼。
+  // 熟鱼的数值翻得比生鱼多一档（原版：鳕鱼 2→5、鲑鱼 2→6），
+  // "钓上来先烤再吃"因此是划算的——这条关系在 fishing-test 里另有断言
+  cod: [2, 0.4],
+  salmon: [2, 0.4],
+  tropical_fish: [1, 0.2],
+  pufferfish: [1, 0.2],
+  cooked_cod: [5, 6],
+  cooked_salmon: [6, 9.6],
 };
 
 equal('食物种类数', Object.keys(FOOD_TABLE).length, Object.keys(VANILLA).length);

@@ -2369,6 +2369,94 @@ for (const [name, tint] of [
   PAINTERS[`item_suspicious_stew_${name}`] = soupPainter(tint as unknown as readonly [number, number, number], true);
 }
 
+// ---------------------------------------------------------------- 钓鱼（批次 81，G11）
+/**
+ * 鱼的通用画法：身体（椭圆）+ 尾巴（右侧三角）+ 背鳍 + 眼睛。
+ *
+ * 四种鱼只差三个颜色（身体 / 肚子 / 鳍），所以写成一支带参数的画笔——
+ * 手画四张只会让"某一种鱼的颜色画串了"没人发现（珊瑚那批的老教训）。
+ */
+function fishPainter(
+  body: readonly [number, number, number],
+  belly: readonly [number, number, number],
+  fin: readonly [number, number, number],
+): Painter {
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    const dx = x - 7.2;
+    const dy = y - 8.2;
+    // 尾巴：右侧张开的三角
+    if (x >= 11.5 && Math.abs(dy) <= (x - 11.5) * 1.1 + 0.6) {
+      return [clamp255(fin[0] * 0.9 + jitter), clamp255(fin[1] * 0.9 + jitter), clamp255(fin[2] * 0.9 + jitter), 255];
+    }
+    // 背鳍：身体上沿的一小片
+    if (dy < -1.6 && Math.abs(dx) < 2.6 && y > 3.5) {
+      return [clamp255(fin[0] * 1.05 + jitter), clamp255(fin[1] * 1.05 + jitter), clamp255(fin[2] * 1.05 + jitter), 255];
+    }
+    // 身体：椭圆（肚子在下半，颜色偏浅）
+    if ((dx * dx) / 32 + (dy * dy) / 7.5 > 1) return [0, 0, 0, 0];
+    const base = dy > 1 ? belly : body;
+    const shade = dy > 1 ? 1.06 : x < 7 ? 1.08 : 0.92;
+    // 眼睛（靠左前方）
+    if (Math.abs(dx + 4.2) < 1.1 && Math.abs(dy + 0.2) < 1.1) return [26, 26, 32, 255];
+    return [clamp255(base[0] * shade + jitter), clamp255(base[1] * shade + jitter), clamp255(base[2] * shade + jitter), 255];
+  };
+}
+
+/** 生鳕鱼：褐绿色的身体、米白的肚子 */
+PAINTERS.item_cod = fishPainter([176, 158, 120], [226, 214, 186], [186, 168, 132]);
+/** 生鲑鱼：橙红的身体（熟鲑鱼是同一个色系但更深，见下） */
+PAINTERS.item_salmon = fishPainter([196, 108, 82], [232, 176, 148], [168, 84, 66]);
+/** 热带鱼：亮橙黄 + 白肚子 + 青色的鳍（原版有很多花纹，这里取最经典那一种） */
+PAINTERS.item_tropical_fish = fishPainter([236, 156, 52], [246, 236, 214], [86, 198, 208]);
+/** 熟鳕鱼：整体偏棕（烤过的痕迹）+ 侧面几道焦痕 */
+PAINTERS.item_cooked_cod = (x, y, rng) => {
+  const pixel = fishPainter([156, 122, 78], [206, 176, 132], [150, 116, 74])(x, y, rng);
+  if (pixel[3] === 0) return pixel;
+  // 焦痕：两条斜线
+  if ((x + y) % 9 === 3) return [clamp255(pixel[0] * 0.68), clamp255(pixel[1] * 0.68), clamp255(pixel[2] * 0.68), 255];
+  return pixel;
+};
+/** 熟鲑鱼：更深的红棕 */
+PAINTERS.item_cooked_salmon = (x, y, rng) => {
+  const pixel = fishPainter([168, 86, 62], [216, 148, 118], [146, 70, 52])(x, y, rng);
+  if (pixel[3] === 0) return pixel;
+  if ((x + y) % 8 === 2) return [clamp255(pixel[0] * 0.72), clamp255(pixel[1] * 0.72), clamp255(pixel[2] * 0.72), 255];
+  return pixel;
+};
+/**
+ * 钓竿：斜着的木杆 + 绕过顶端的线（线在右侧垂下来）。
+ *
+ * 线用**白灰色**而不是纯白：纯白在浅色背景（背包格子的浅灰）上会看不见。
+ */
+PAINTERS.item_fishing_rod = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const along = x + y;
+  // 竿身：左下到右上的斜条（2 像素宽）
+  if (along >= 17 && along <= 21) {
+    const shade = x < 6 ? 0.85 : 1.1;
+    return [clamp255(150 * shade + jitter), clamp255(108 * shade + jitter), clamp255(62 * shade + jitter), 255];
+  }
+  if (along >= 22 && along <= 24) {
+    return [clamp255(120 + jitter), clamp255(84 + jitter), clamp255(48 + jitter), 255];
+  }
+  // 线：从竿尖（大约 12,5）往右下绕一圈再垂下来
+  const tipX = 13;
+  const tipY = 4;
+  const ddx = x - tipX;
+  const ddy = y - tipY;
+  const radius = Math.sqrt(ddx * ddx + ddy * ddy);
+  if (radius > 3.2 && radius < 4.4 && y >= tipY && x >= tipX - 1) {
+    return [clamp255(228 + jitter), clamp255(228 + jitter), clamp255(236 + jitter), 255];
+  }
+  // 浮标（右下角的小方块：白 + 红各一半）
+  if (x >= 12 && x <= 14 && y >= 11 && y <= 14) {
+    const top = y <= 12;
+    return top ? [232, 232, 236, 255] : [206, 62, 54, 255];
+  }
+  return [0, 0, 0, 0];
+};
+
 PAINTERS.item_mushroom_stew = soupPainter([154, 106, 62], true);
 /** 甜菜汤：深红色的汤 + 甜菜块 */
 PAINTERS.item_beetroot_soup = soupPainter([168, 46, 52], true);
