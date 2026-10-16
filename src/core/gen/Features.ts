@@ -20,6 +20,7 @@
  */
 
 import { Block, Wood, type WoodBlockIds } from '../registry/blocks.ts';
+import { withVineSide } from '../registry/blockState.ts';
 import { withSnowLayers } from '../registry/blockState.ts';
 import { Biome, type BiomeDef } from './Biome.ts';
 import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
@@ -292,6 +293,64 @@ export class FeatureWriter {
   }
 }
 
+// ---------------------------------------------------------------- 藤蔓（B11）
+
+/**
+ * 树干周围可以挂藤蔓的位置：`[dx, dz, 挂面]`。
+ *
+ * ⚠️ 挂面是**藤蔓自己的墙在哪一侧**：树干东边那一格的藤蔓，墙在它的西边（facing 3）。
+ * 这两个数是反的，写错的表现是"藤蔓长在树干里/浮在空中"，但方块本身看不出问题。
+ */
+const VINE_SPOTS_1X1: readonly (readonly [number, number, number])[] = [
+  [1, 0, 3],
+  [-1, 0, 1],
+  [0, -1, 2],
+  [0, 1, 0],
+];
+
+/** 2×2 树干（巨型丛林树）的外圈：四条边各两格 */
+const VINE_SPOTS_2X2: readonly (readonly [number, number, number])[] = [
+  [-1, 0, 1],
+  [-1, 1, 1],
+  [2, 0, 3],
+  [2, 1, 3],
+  [0, -1, 2],
+  [1, -1, 2],
+  [0, 2, 0],
+  [1, 2, 0],
+];
+
+/** 树干上每一节挂藤蔓的概率（原版丛林树也不是每节都挂满） */
+export const TREE_VINE_CHANCE = 0.35;
+
+/**
+ * 给树干挂藤蔓（B11）：丛林树的地标特征。
+ *
+ * 每个位置用**世界坐标哈希**决定挂不挂——地物会被重放 3×3 邻域，
+ * 一旦用了 `rng`（序列相关）或读了本区块数据，接缝上的藤蔓就会两边不一致
+ * （见文件头那条跨区块约定）。
+ */
+function hangVines(
+  w: FeatureWriter,
+  x: number,
+  z: number,
+  base: number,
+  top: number,
+  spots: readonly (readonly [number, number, number])[],
+  salt: number,
+): void {
+  for (let y = base + 1; y < top; y++) {
+    for (const [dx, dz, side] of spots) {
+      const vx = x + dx;
+      const vz = z + dz;
+      // `hashAt` 只有 (x, z, salt) 三个参数：把 y 拌进 salt 里得到一个三维纯函数
+      // （直接乘一个常数比 `^` 混合更直观，也不会与相邻 y 撞成同一个值）
+      if (hashAt(vx, vz, (salt ^ Math.imul(y, 0x27d4eb2d)) | 0) >= TREE_VINE_CHANCE) continue;
+      w.putState(vx, y, vz, Block.VINE, withVineSide(0, side as 0 | 1 | 2 | 3));
+    }
+  }
+}
+
 // ---------------------------------------------------------------- 树
 
 /** 11 种树 */
@@ -443,15 +502,16 @@ const PLANTERS: Record<TreeKind, Planter> = {
     w.put(x, top, z, wood.leaves);
   },
 
-  /** 丛林树：树高且树冠靠上 */
+  /** 丛林树：树高且树冠靠上，树干上挂藤蔓（原版丛林的地标） */
   jungle: (w, world, x, z, rng, wood) => {
     const base = w.groundAbove(world, x, z);
     const height = 6 + rng.int(5);
     const top = trunk(w, x, z, base, height, wood.log);
     blobCanopy(w, x, z, top, wood.leaves, rng, 2, 2);
+    hangVines(w, x, z, base, top, VINE_SPOTS_1X1, 0x71ae);
   },
 
-  /** 巨型丛林树：2×2 树干、20 格以上、多层宽树冠 */
+  /** 巨型丛林树：2×2 树干、20 格以上、多层宽树冠；外圈也挂藤蔓 */
   mega_jungle: (w, world, x, z, rng, wood) => {
     const base = w.groundAbove(world, x, z);
     const height = 16 + rng.int(10);
@@ -459,6 +519,7 @@ const PLANTERS: Record<TreeKind, Planter> = {
     blobCanopy(w, x + 1, z + 1, top, wood.leaves, rng, 3, 3);
     blobCanopy(w, x + 1, z + 1, top - 4, wood.leaves, rng, 2, 1);
     w.put(x + 1, top + 1, z + 1, wood.leaves);
+    hangVines(w, x, z, base, top, VINE_SPOTS_2X2, 0x71af);
   },
 
   /** 金合欢：树干斜着长一节，顶部一张扁平的伞 */
@@ -789,6 +850,10 @@ function isPlantable(w: FeatureWriter, x: number, y: number, z: number, ground: 
 /**
  * 直接种一棵指定种类的树（测试与调试用；x/z 为世界坐标）。
  * 与正式生成走完全相同的 Planter，因此测到的形状就是世界里长出来的形状。
+ *
+ * ⚠️ `states` 必须给：丛林树会在树干上挂**带挂面的藤蔓**（B11），
+ * 不给状态数组时 `putState` 会静默退化成普通写入——表现是"藤蔓全都悬空"，
+ * 而代码看起来毫无问题（与批次 37 雪层丢掉层数是同一个坑）。
  */
 export function plantTree(
   kind: TreeKind,
@@ -799,8 +864,9 @@ export function plantTree(
   x: number,
   z: number,
   salt = 1,
+  states: Uint8Array | null = null,
 ): void {
-  const writer = new FeatureWriter(blocks, cx, cz);
+  const writer = new FeatureWriter(blocks, cx, cz, states);
   PLANTERS[kind](writer, world, x, z, new PositionalRng(x, z, salt), woodFor(kind));
 }
 

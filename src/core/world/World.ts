@@ -16,7 +16,7 @@ import { heightToY, type HeightmapKind } from './Heightmap.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import type { WorldType } from '../gen/WorldType.ts';
 import { LightEngine } from '../light/LightEngine.ts';
-import { blockDef } from '../registry/blocks.ts';
+import { blockDef, isClimbableBlock } from '../registry/blocks.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
@@ -264,6 +264,15 @@ export class World {
   isSolid(worldX: number, worldY: number, worldZ: number): boolean {
     if (worldY < -64 || worldY >= 320) return false;
     return blockDef(this.getBlock(worldX, worldY, worldZ)).solid;
+  }
+
+  /**
+   * 这一格能不能攀爬（B11：梯子 / 藤蔓 / 锁链）。
+   * 物理层每帧都问，所以它必须是"一次查表"的便宜操作（`blockDef(id).shape` 判定）。
+   */
+  isClimbable(worldX: number, worldY: number, worldZ: number): boolean {
+    if (worldY < -64 || worldY >= 320) return false;
+    return isClimbableBlock(this.getBlock(worldX, worldY, worldZ));
   }
 
   /**

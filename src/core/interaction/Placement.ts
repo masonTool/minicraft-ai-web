@@ -12,6 +12,8 @@
  *          命中下表面（天花板）→ 不允许
  *  - 梯子：只能贴在有支撑的侧面
  *  - 门：需要下方有支撑 + 上方两格空间，朝外一侧朝向玩家
+ *  - 锁链（B11）：轴向由命中面决定（顶/底 → 竖直，侧面 → 沿那个水平轴）
+ *  - 藤蔓（B11）：挂在命中面反方向的邻居那一侧；落在已有藤蔓上时**再挂一面**
  */
 
 import { Block, blockDef } from '../registry/blocks.ts';
@@ -19,12 +21,15 @@ import {
   MAX_SNOW_LAYERS,
   facingFromYaw,
   snowLayers,
+  withAxis,
   withDoorHinge,
   withDoorUpper,
   withFacing,
   withSlabDouble,
   withSnowLayers,
   withTop,
+  withVineSide,
+  withVineUp,
   withWallMounted,
   type Facing,
 } from '../registry/blockState.ts';
@@ -44,6 +49,8 @@ export interface PlacementInput {
   sneaking: boolean;
   /** 查询相对位置的方块 id */
   blockAt(dx: number, dy: number, dz: number): number;
+  /** 查询相对位置的方块状态（藤蔓"再挂一面"要用；不提供时按 0 处理） */
+  stateAt?(dx: number, dy: number, dz: number): number;
   /** 射线命中的那个方块 id（台阶合并成双层时要用） */
   hitBlock: number;
   /** 命中方块当前的状态（判断它是不是已经叠了一层的台阶） */
@@ -60,6 +67,13 @@ export interface PlacementPlan {
    * 出现这个字段时，放置目标是**命中方块自身**而不是命中面外侧那一格。
    */
   mergeInto?: { state: number };
+  /**
+   * 与**落点那一格**已有的同种方块合并（藤蔓"再挂一面"）。
+   *
+   * 与 `mergeInto` 的差别：`mergeInto` 改的是**命中方块**（台阶叠双层、雪层叠高），
+   * 这里改的是命中面外侧那一格——它已经长着同一种藤蔓了，玩家只是想让它多挂一面。
+   */
+  mergeIntoTarget?: { state: number };
 }
 
 /** 水平法线 → 朝向（朝向指向法线的反方向，即"朝向墙壁"） */
@@ -120,6 +134,39 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       // 贴的那一面必须有实心方块
       if (!blockDef(input.blockAt(-nx, 0, -nz)).solid) return null;
       return { state: withFacing(0, facing) };
+    }
+
+    case 'chain': {
+      // 轴向由"点的是哪一面"决定：顶/底面 → 竖直，侧面 → 沿着那个水平轴横拉
+      if (ny !== 0) return { state: withAxis(0, 0) };
+      if (nx !== 0) return { state: withAxis(0, 1) };
+      return { state: withAxis(0, 2) };
+    }
+
+    case 'vine': {
+      // 藤蔓挂在**命中的那一面**上：挂面 = 命中面反方向的邻居那一侧
+      // （点方块南面 → 藤蔓落到南边那一格、贴在该格的北侧），与梯子同一套朝向语义。
+      let side: Facing | null = null;
+      let up = false;
+      if (ny > 0) return null; // 原版不允许在方块**顶面**上长藤蔓
+      if (ny < 0) up = true; // 点底面 → 挂在天花板底下
+      else side = facingFromNormal(nx, nz);
+
+      // 被点的那一格必须是实心的（藤蔓要有可附着的面）
+      if (!blockDef(input.hitBlock).solid) return null;
+
+      const target = input.blockAt(nx, ny, nz);
+      const existingState = input.stateAt?.(nx, ny, nz) ?? 0;
+
+      // 落点已经长着藤蔓 → 只是"再挂一面"（一个藤蔓方块能同时挂好几面）
+      if (target === input.blockId) {
+        const merged = up ? withVineUp(existingState, true) : withVineSide(existingState, side!, true);
+        if (merged === existingState) return null; // 这一面早挂过了，别白扣一个物品
+        return { state: 0, mergeIntoTarget: { state: merged } };
+      }
+      // 其余情况要求落点是空的（或流体）
+      if (target !== Block.AIR && !blockDef(target).liquid) return null;
+      return { state: up ? withVineUp(0, true) : withVineSide(0, side!, true) };
     }
 
     case 'door': {

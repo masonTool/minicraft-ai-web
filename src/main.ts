@@ -492,6 +492,9 @@ class App {
   private readonly tickWorld: TickWorld = {
     getBlock: (x, y, z) => this.world.getBlock(x, y, z),
     setBlock: (x, y, z, id) => this.world.setBlockAndUpdate(x, y, z, id),
+    // 藤蔓（B11）：读"挂了哪几面"、写"新的一节挂在哪一面"
+    getState: (x, y, z) => this.world.getBlockState(x, y, z),
+    setBlockWithState: (x, y, z, id, state) => this.world.setBlockAndUpdate(x, y, z, id, state),
     drop: (id, count, x, y, z) => this.spawnDrop(id, count, x, y, z),
     // 作物生长要判光照（H13）：取天光与方块光的较大者，与原版"作物看最亮的那一项"一致
     lightAt: (x, y, z) =>
@@ -3770,7 +3773,6 @@ class App {
     const z = this.hit.z + nz;
 
     const existing = this.world.getBlock(x, y, z);
-    if (existing !== Block.AIR && !blockDef(existing).liquid) return;
 
     // 按方块形状与命中面推导状态（台阶上下半、楼梯朝向、火把挂墙、门轴……）
     const plan = planPlacement({
@@ -3782,16 +3784,22 @@ class App {
       yaw: this.yaw,
       sneaking: sneak,
       blockAt: (dx, dy, dz) => this.world.getBlock(x + dx, y + dy, z + dz),
+      stateAt: (dx, dy, dz) => this.world.getBlockState(x + dx, y + dy, z + dz),
       hitBlock: this.world.getBlock(this.hit.x, this.hit.y, this.hit.z),
       hitState: this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z),
     });
     if (!plan) return;
 
-    // "与玩家碰撞"这条要在**拿到放置方案之后**才判：合并（台阶叠双层、雪层叠高）
-    // 改的是**命中方块自身**，压根不往 `(x,y,z)` 那一格放东西——
-    // 低头给脚下的雪层加一层时，`(x,y,z)` 正好是玩家站着的格子，
+    // 落点必须可写。两种例外：
+    //  - `mergeInto`：改的是**命中方块自身**（台阶叠双层、雪层叠高），不碰 (x,y,z)
+    //  - `mergeIntoTarget`：改的是**落点那一格**，而那一格本来就长着同一种藤蔓
+    //    （"再挂一面"），所以"必须是空气"这条不适用
+    if (!plan.mergeInto && !plan.mergeIntoTarget && existing !== Block.AIR && !blockDef(existing).liquid) return;
+
+    // "与玩家碰撞"这条同样要在**拿到放置方案之后**才判：合并类放置不往空格里放东西，
+    // 低头给脚下的雪层加一层时 `(x,y,z)` 正好是玩家站着的格子，
     // 先判就会得到"站着的时候永远叠不上去"（原版是能叠的）。
-    if (!plan.mergeInto && this.physics.blockIntersects(x, y, z)) return;
+    if (!plan.mergeInto && !plan.mergeIntoTarget && this.physics.blockIntersects(x, y, z)) return;
 
     // 台阶叠成双层 / 雪层叠高：改的是**命中方块自身**，不是命中面外侧那一格
     if (plan.mergeInto) {
@@ -3799,6 +3807,16 @@ class App {
       if (this.world.setBlockAndUpdate(hx, hy, hz, blockId, plan.mergeInto.state)) {
         this.placeCooldown = PLACE_COOLDOWN;
         this.inventory.consume(blockId, 1);
+      }
+      return;
+    }
+
+    // 藤蔓"再挂一面"：改的是**落点那一格**（它已经是同一种藤蔓了）
+    if (plan.mergeIntoTarget) {
+      if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.mergeIntoTarget.state)) {
+        this.placeCooldown = PLACE_COOLDOWN;
+        this.inventory.consume(blockId, 1);
+        this.net.sendBlock(x, y, z, blockId, plan.mergeIntoTarget.state, this.dimension);
       }
       return;
     }
@@ -4027,7 +4045,10 @@ class App {
     const p = this.physics;
 
     // ---- 下落高度：离开地面时记录最高点，落地那一 tick 结算摔落伤害
-    if (this.flying || p.inWater) {
+    //
+    // ⚠️ 攀爬（B11：梯子/藤蔓/锁链）必须一起清掉：贴着梯子往下滑**不算摔落**，
+    // 否则从梯子上溜下来会莫名其妙摔伤（`p.onClimbable` 就是为此加的状态）。
+    if (this.flying || p.inWater || p.onClimbable) {
       this.fallStartY = null;
     } else if (p.onGround) {
       if (this.fallStartY !== null) {

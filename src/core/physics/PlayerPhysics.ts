@@ -23,6 +23,16 @@ const GRAVITY = 32;
 const JUMP_VELOCITY = 8.95;
 const TERMINAL_VELOCITY = 78;
 
+// ---- 攀爬（B11：梯子 / 藤蔓 / 锁链）
+/** 按住跳跃时的上升速度（格/秒，≈ 原版爬梯） */
+const CLIMB_UP_SPEED = 2.35;
+/** 按住潜行时的下降速度 */
+const CLIMB_DOWN_SPEED = 1.2;
+/** 什么都不按时的下滑速度（原版是"慢慢往下溜"，不是自由落体） */
+const CLIMB_SLIDE_SPEED = 0.6;
+/** 攀爬时竖直速度的收敛加速度 */
+const CLIMB_ACCEL = 30;
+
 /** 单次步进的最大位移，超过就拆成多步，避免高速穿透薄墙 */
 const MAX_STEP = 0.4;
 
@@ -36,6 +46,13 @@ export interface PlayerInput {
 
 export interface PhysicsWorld extends CollisionWorld {
   isLiquid(x: number, y: number, z: number): boolean;
+  /**
+   * 这一格能不能攀爬（梯子 / 藤蔓 / 锁链）。
+   *
+   * 做成**可选**成员：老的 stub 世界（各种离线测试）不必为它改动，
+   * 不提供时一律按"不能攀爬"处理——与 `TickWorld` 的 `skyLightAt` / `raining` 同一个套路。
+   */
+  isClimbable?(x: number, y: number, z: number): boolean;
 }
 
 function approach(current: number, target: number, maxDelta: number): number {
@@ -54,6 +71,8 @@ export class PlayerPhysics {
 
   onGround = false;
   inWater = false;
+  /** 是否正贴着可攀爬方块（梯子 / 藤蔓 / 锁链，B11） */
+  onClimbable = false;
   /** 摔落起始高度；落地时用于计算摔落伤害（生存系统接入后使用） */
   fallStartY: number | null = null;
 
@@ -101,6 +120,16 @@ export class PlayerPhysics {
 
     this.inWater = world.isLiquid(Math.floor(this.x), Math.floor(this.y + 0.4), Math.floor(this.z));
 
+    // 攀爬（B11）：脚下那一格或身体中段那一格是梯子/藤蔓/锁链，就算"贴住了"。
+    // 采两个点是为了照顾"人站在梯子底部、身体只有上半段挨着"的情况。
+    const px = Math.floor(this.x);
+    const pz = Math.floor(this.z);
+    this.onClimbable =
+      !flying &&
+      !this.inWater &&
+      (world.isClimbable?.(px, Math.floor(this.y + 0.1), pz) === true ||
+        world.isClimbable?.(px, Math.floor(this.y + 1.0), pz) === true);
+
     const baseSpeed = flying
       ? input.sprint
         ? FLY_SPRINT_SPEED
@@ -122,6 +151,12 @@ export class PlayerPhysics {
       const vertical = (input.jump ? 1 : 0) - (input.sneak ? 1 : 0);
       this.vy = approach(this.vy, vertical * speed * 0.85, 90 * dt);
       this.onGround = false;
+      this.fallStartY = null;
+    } else if (this.onClimbable) {
+      // 攀爬：按跳跃往上、按潜行往下、什么都不按就慢慢往下滑（原版手感）
+      const target = input.jump ? CLIMB_UP_SPEED : input.sneak ? -CLIMB_DOWN_SPEED : -CLIMB_SLIDE_SPEED;
+      this.vy = approach(this.vy, target, CLIMB_ACCEL * dt);
+      // 贴在梯子上往下滑**不算摔落**：否则从梯子上溜下来会摔伤
       this.fallStartY = null;
     } else if (this.inWater) {
       this.vy -= GRAVITY * 0.25 * dt;

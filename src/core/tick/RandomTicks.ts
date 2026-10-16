@@ -16,6 +16,7 @@
 
 import { Block, CROP_STAGES, blockDef, cropOf, Wood } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
+import { FACING_OFFSET, withVineSide, withVineUp, vineSides, type Facing } from '../registry/blockState.ts';
 import { fireBehavior } from '../world/Fire.ts';
 
 /** 随机刻看到的世界 */
@@ -37,6 +38,13 @@ export interface TickWorld {
   skyLightAt?: (x: number, y: number, z: number) => number;
   /** 是否正在下雨（雨天露天的火焰会被浇灭）；不传当不下雨 */
   raining?: boolean;
+  /**
+   * 读方块状态（藤蔓要读"挂了哪几面"）。
+   * 与其它可选成员同一套路：不传当 0，离线测试不必搭一套状态数组。
+   */
+  getState?: (x: number, y: number, z: number) => number;
+  /** 写方块**并带上状态**（藤蔓蔓延要把挂面写进去）；不传时退化成 `setBlock` */
+  setBlockWithState?: (x: number, y: number, z: number, id: number, state: number) => boolean;
 }
 
 export interface TickChunkView {
@@ -202,6 +210,69 @@ function makeNyliumBehavior(nylium: number): RandomTickBehavior {
   };
 }
 
+// ---------------------------------------------------------------- 藤蔓（B11）
+
+/** 随机刻命中时"往下长一节"的概率（观感调出来的，不是原版数值） */
+export const VINE_GROW_DOWN_CHANCE = 0.35;
+/** 随机刻命中时"往旁边蔓延"的概率（比往下长更少见，否则一面墙会长满） */
+export const VINE_SPREAD_CHANCE = 0.12;
+
+/** 该格在 `side` 方向上有没有可攀附的面（实心方块，或已经长着的藤蔓） */
+function isVineSupport(world: TickWorld, x: number, y: number, z: number, side: Facing): boolean {
+  const [dx, dz] = FACING_OFFSET[side]!;
+  const neighbor = world.getBlock(x + dx, y, z + dz);
+  return blockDef(neighbor).solid || neighbor === Block.VINE;
+}
+
+/** 写一根带挂面的藤蔓（`setBlockWithState` 不可用时退化成普通写入） */
+function writeVine(world: TickWorld, x: number, y: number, z: number, state: number): boolean {
+  if (world.setBlockWithState) return world.setBlockWithState(x, y, z, Block.VINE, state);
+  return world.setBlock(x, y, z, Block.VINE);
+}
+
+/**
+ * 藤蔓（B11）：随机刻里做两件事——**往下长**与**往旁边蔓延**。
+ *
+ * 原版 `VineBlock#randomTick` 会朝 6 个方向找"能挂的地方"（还带朝向偏好），
+ * 这里取玩家最容易感知的两条：
+ *  1. **往下长**：下方是空气，且下方那一格在某个挂面方向上仍有墙 →
+ *     在下面接一节（沿用那一面）。天花板上的藤蔓则直接往下垂（`UP` 位）。
+ *  2. **往旁边蔓延**：随机挑一个水平方向，那一格是空气、且再往外一格是实心 →
+ *     挂到那面墙上（挂面是**反方向**：新藤蔓贴在原方块那一侧）。
+ *
+ * ⚠️ 与原版的差异（已记进 TASKS）：**支撑被拆掉之后藤蔓不会自己消失**——
+ * 那需要"方块变动时通知邻居"这条通道，本项目目前只有红石负载有这种回调。
+ */
+function vineBehavior(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const state = world.getState?.(x, y, z) ?? 0;
+  const sides = vineSides(state);
+  const up = (state & 0b10000) !== 0;
+  // 悬空的藤蔓（一个挂面都没有的脏数据）不蔓延：它下一趟就该被清理掉
+  if (sides.length === 0 && !up) return false;
+
+  // 1) 往下长
+  if (random() < VINE_GROW_DOWN_CHANCE && world.getBlock(x, y - 1, z) === Block.AIR) {
+    if (up) return writeVine(world, x, y - 1, z, withVineUp(0, true));
+    for (const side of sides) {
+      if (!isVineSupport(world, x, y - 1, z, side)) continue;
+      return writeVine(world, x, y - 1, z, withVineSide(0, side));
+    }
+  }
+
+  // 2) 往旁边蔓延
+  if (random() >= VINE_SPREAD_CHANCE) return false;
+  const side = ((random() * 4) | 0) as Facing;
+  const [dx, dz] = FACING_OFFSET[side]!;
+  const nx = x + dx;
+  const nz = z + dz;
+  if (world.getBlock(nx, y, nz) !== Block.AIR) return false;
+  // 新藤蔓挂在**原方块**那一侧 → 挂面是位移的反方向；
+  // `isVineSupport` 从新藤蔓那一格往回查，查到的正是原方块本身
+  const wallSide = ((side + 2) & 3) as Facing;
+  if (!isVineSupport(world, nx, y, nz, wallSide)) return false;
+  return writeVine(world, nx, y, nz, withVineSide(0, wallSide));
+}
+
 /** 方块 id → 随机刻行为 */
 export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.GRASS_BLOCK, grassBehavior],
@@ -217,6 +288,8 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.WARPED_NYLIUM, makeNyliumBehavior(Block.WARPED_NYLIUM)],
   // 火焰（I12）：蔓延 / 被水与雨浇灭 / 没燃料就熄灭
   [Block.FIRE, fireBehavior],
+  // 藤蔓（B11）：往下长 + 往旁边蔓延
+  [Block.VINE, vineBehavior],
 ]);
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */
