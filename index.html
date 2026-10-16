@@ -400,6 +400,45 @@
         0%, 100% { opacity: .55; transform: translateY(2px); }
         50% { opacity: 1; transform: translateY(-2px); }
       }
+      /* 告示牌编辑框（B12，批次 80）：四行输入 + 完成/取消。
+         层叠层取 12：要盖住背包（10）与聊天（8），但仍在提示框（60）之下。
+         挂 `<body>` 上（与所有面板一致），否则会被 `#overlay` / `#death` 盖住 */
+      .sign-editor {
+        position: fixed; inset: 0; z-index: 12;
+        display: grid; place-items: center;
+        background: rgba(0, 0, 0, .55);
+      }
+      .sign-editor.hidden { display: none; }
+      .sign-editor-panel {
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 14px 16px;
+        min-width: min(360px, 92vw); max-width: 92vw;
+        background: var(--panel-bg); color: var(--panel-text);
+        border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
+      }
+      .sign-editor-title { font-size: 14px; font-weight: 600; text-align: center; }
+      .sign-editor-rows { display: flex; flex-direction: column; gap: 6px; }
+      .sign-editor-row {
+        box-sizing: border-box; width: 100%;
+        padding: 7px 9px; font: inherit; font-size: 14px;
+        color: var(--field-text); background: var(--field-bg);
+        border: 2px solid var(--panel-edge-dark); border-radius: var(--slot-radius);
+        /* 手机上这四行是唯一的输入面，高度给足（低于 16px 会被 Safari 自动放大页面） */
+        min-height: 34px;
+      }
+      .sign-editor-row:focus { outline: none; background: #ffffff; border-color: #3a7d33; }
+      .sign-editor-hint { font-size: 12px; line-height: 1.5; color: var(--panel-text-muted); text-align: center; }
+      .sign-editor-buttons { display: flex; gap: 8px; }
+      .sign-editor-button {
+        flex: 1; padding: 9px 10px; font: inherit; font-size: 14px; cursor: pointer;
+        color: var(--btn-text); background: var(--btn-bg);
+        border: 2px solid var(--panel-edge-dark); border-radius: var(--btn-radius);
+        min-height: 38px;
+      }
+      .sign-editor-button:active { background: var(--btn-bg-down); transform: translateY(1px); }
+      .sign-editor-save { color: #fff; background: var(--btn-primary); }
+      .sign-editor-save:active { background: var(--btn-primary-down); }
+
       #loading {
         position: fixed; inset: 0; display: grid; place-items: center;
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);

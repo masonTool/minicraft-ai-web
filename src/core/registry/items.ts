@@ -23,6 +23,7 @@ import {
   DEAD_CORAL_BLOCK_ID_START,
   DEAD_CORAL_FAN_ID_START,
   DEAD_CORAL_ID_START,
+  SIGN_IDS,
   STONE_VARIANT_IDS,
   WHEAT_STAGES,
   Wood,
@@ -665,6 +666,9 @@ for (const id of [
 
 // 脚手架（批次 53）：搭东西用的——归"建筑"（原版也在"装饰/建筑"那一档）
 BUILDING.add(Block.SCAFFOLDING);
+
+// 告示牌（批次 80）：原版在"建筑方块"页里（与门/栅栏同一档），按族登记
+for (const id of SIGN_IDS) BUILDING.add(id);
 
 // 砂岩家族与红砂岩家族（批次 41 的漏登记 + 批次 45）：同样是建材。
 // ⚠️ `錾制/切制/平滑砂岩` 自批次 41 起一直**漏在这里**（只有"砂岩"本体登记了），

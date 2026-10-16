@@ -1,7 +1,7 @@
 /**
  * 存档（K1）：IndexedDB 持久化
  *
- * 存四样东西：
+ * 存五样东西：
  *   1. **meta**：世界种子、存档版本、创建时间、最后游玩时间——启动时先读它，
  *      种子不一致就说明"这是一个新世界"，不能把旧存档的改动叠到新地形上
  *   2. **player**：位置、朝向、维度、时间、生命/饥饿/氧气、背包与选中槽
@@ -10,6 +10,7 @@
  *   4. **containers**：箱子/熔炉/附魔台/铁砧/酿造台的内容与运转状态
  *      （C7 尾巴补上的第四样——在这之前容器内容**关掉页面就没了**，
  *      序列化本身在 `ContainerSave.ts`）
+ *   5. **signs**：告示牌上的文字（B12，批次 80；序列化在 `world/SignText.ts`）
  *
  * 为什么用 IndexedDB 而不是 localStorage：
  *   localStorage 只能存字符串且容量约 5MB，把二进制转 base64 还会再胖 33%；
@@ -20,16 +21,26 @@
 
 import { ChunkEdits, type SerializedEdits } from './ChunkEdits.ts';
 import type { SerializedContainer } from './ContainerSave.ts';
+import type { SerializedSign } from '../world/SignText.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 
 /** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_META = 'meta';
 import type { ItemStack } from '../container/Inventory.ts';
 
 const STORE_PLAYER = 'player';
 const STORE_CHUNKS = 'chunks';
 const STORE_CONTAINERS = 'containers';
+/**
+ * 告示牌上的文字（B12，批次 80）——第 5 个对象仓。
+ *
+ * 为什么单开一个仓而不是塞进 containers：容器那一份是"方块物品栏"，
+ * 而牌子装的是**几行文字**，两者的校验、脏数据容忍度、以后要加的字段都不一样
+ * （混在一起以后想给箱子加个字段，就得连带把牌子那条读法也改一遍）。
+ * 仓库版本从 2 升到 3：`onupgradeneeded` 会把缺的仓补建出来，老存档自动升级。
+ */
+const STORE_SIGNS = 'signs';
 
 /** 存档结构版本：改了字段含义就要 +1，并在加载时做迁移或丢弃 */
 export const SAVE_VERSION = 1;
@@ -159,6 +170,7 @@ export class SaveGame {
         if (!db.objectStoreNames.contains(STORE_PLAYER)) db.createObjectStore(STORE_PLAYER);
         if (!db.objectStoreNames.contains(STORE_CHUNKS)) db.createObjectStore(STORE_CHUNKS);
         if (!db.objectStoreNames.contains(STORE_CONTAINERS)) db.createObjectStore(STORE_CONTAINERS);
+        if (!db.objectStoreNames.contains(STORE_SIGNS)) db.createObjectStore(STORE_SIGNS);
       };
       const db = await promisify(request);
       const save = new SaveGame(db, worldId);
@@ -307,6 +319,26 @@ export class SaveGame {
   async savePlayer(player: PlayerSave): Promise<void> {
     await this.transaction(STORE_PLAYER, 'readwrite', (store) => {
       store.put(player, 'player');
+    });
+  }
+
+  /**
+   * 读告示牌上的文字（B12，批次 80）。
+   *
+   * 与容器同一条口径：**整份一次读写**——牌子数量以人为单位，
+   * 而"按坐标懒加载"会因为"加载那一刻还不知道有没有内容"而闪一下。
+   * 内容本身很小（每块牌子几十字节），整写省心、也不会漏。
+   */
+  async loadSigns(): Promise<SerializedSign[]> {
+    const value = await this.transaction(STORE_SIGNS, 'readonly', (store) =>
+      promisify(store.get('signs') as IDBRequest<SerializedSign[] | undefined>),
+    );
+    return value ?? [];
+  }
+
+  async saveSigns(signs: SerializedSign[]): Promise<void> {
+    await this.transaction(STORE_SIGNS, 'readwrite', (store) => {
+      store.put(signs, 'signs');
     });
   }
 

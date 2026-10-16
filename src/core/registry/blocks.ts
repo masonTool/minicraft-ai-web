@@ -2400,6 +2400,54 @@ export function isBed(blockId: number): boolean {
 /** 全部床的 id（断言与创造分类遍历用，不手抄 16 行） */
 export const BED_IDS: readonly number[] = DYE_COLORS.map((_color, index) => BED_ID_START + index);
 
+// ---------------------------------------------------------------- 告示牌（B12，批次 80）
+
+/**
+ * 告示牌：6 种木材各一个方块，**落地 / 挂墙共用同一个 id**（与火把、珊瑚扇同一套状态：
+ * `wallMounted` 记"是不是挂在墙上"、`facing` 记"字朝哪边"）。
+ *
+ * 原版把 `oak_sign` 与 `oak_wall_sign` 做成两个方块，而本项目从火把起就是
+ * "一个方块 + 一个贴墙位"——照做会白白多出一倍的 id、物品与配方
+ * （而且原版那两件的掉落物还是同一个）。
+ *
+ * 贴图**复用该木材的木板**：牌面与立柱都是同一张（原版的牌子本来就是木板做的），
+ * 所以这一批**一张新贴图都不用画**，与木制方块族"栅栏复用木板贴图"同一条做法。
+ */
+export const SIGN_ID_START = 523;
+
+const SIGN_ID_MAP = new Map<string, number>();
+
+const SIGN_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood, index) => {
+  const id = SIGN_ID_START + index;
+  SIGN_ID_MAP.set(wood.name, id);
+  const plank = `${wood.name}_planks`;
+  return {
+    id,
+    name: `minecraft:${wood.name}_sign`,
+    tiles: [plank, plank, plank] as const,
+    shape: 'sign' as const,
+    // 牌子**不挡路**（原版能从牌子里走过去）：没有碰撞盒（见 `blockShapes`），
+    // 也不算"支撑面"（不能拿它当垫脚去种花）——所以 `solid: false`
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  };
+});
+
+/** 某种木材的告示牌 id；未知木材返回 undefined */
+export function signId(woodName: string): number | undefined {
+  return SIGN_ID_MAP.get(woodName);
+}
+
+/** 这一格是不是告示牌（落地 / 挂墙都算） */
+export function isSign(blockId: number): boolean {
+  const index = blockId - SIGN_ID_START;
+  return index >= 0 && index < WOOD_TYPES.length;
+}
+
+/** 全部告示牌的 id（断言与创造分类遍历用） */
+export const SIGN_IDS: readonly number[] = WOOD_TYPES.map((_wood, index) => SIGN_ID_START + index);
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -2449,6 +2497,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SAPLING_SPECS,
   ...STEM_SPECS,
   ...BED_SPECS,
+  ...SIGN_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2739,6 +2788,8 @@ export const Block = {
   // ---- 床（B13，批次 79，见 `BED_SPECS`）：每个常量是**白色床**那一个，
   // 其余 15 色用 `+ i` 取（i 与 `DYE_COLORS` 同序），或用 `bedId(i)`
   BED: BED_ID_START,
+  /** 告示牌（B12，批次 80）：6 种木材依次排列，橡木是第一个（见 `SIGN_IDS`） */
+  OAK_SIGN: SIGN_ID_START,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
   SPRUCE_SAPLING: WOOD_SAPLING_ID_START + 2,
@@ -3012,6 +3063,8 @@ for (const ids of Object.values(WoodShaped)) {
   HARDNESS.set(ids.door, 3);
   HARDNESS.set(ids.trapdoor, 3);
 }
+// 告示牌（批次 80）：原版 1（木头档里最软的一批，徒手一拍就掉）
+for (const id of SIGN_IDS) HARDNESS.set(id, 1);
 HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
 // 锁链 5（原版，必须用镐）；藤蔓 0.2（原版，徒手一拍就掉，但只有剪刀/精准采集会掉下来）

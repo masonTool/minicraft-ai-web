@@ -172,6 +172,10 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'flat':
     // 珊瑚扇（批次 51）：一片薄面，原版可以直接游过去
     case 'coral_fan':
+    // 告示牌（批次 80）：原版告示牌**不挡路**（能从牌子里走过去），所以没有碰撞盒。
+    // 它仍然能被选中/破坏——射线判定走的是"这个形状能不能选中"，与碰撞无关
+    // （火把、植物、绊线都是这一档）
+    case 'sign':
       // 火把、梯子、植物、贴地薄板都没有碰撞体积（原版红石粉与压力板也不挡路）
       return [];
     case 'lily_pad':
@@ -451,6 +455,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       //  "某一面单独换贴图做不到时，用几何补"）。
       // 枕头的位置由 `facing` 算出来：床头那一格**远离床脚**的那一端。
       return isBedHead(state) ? [BED_BASE, bedPillowBox(state)] : [BED_BASE];
+    case 'sign':
+      // 告示牌（批次 80）：落地牌 = 立柱 + 牌面；挂墙牌 = 只有牌面（贴在靠墙那一侧）
+      return isWallMounted(state) ? [signBoardBox(state)] : [SIGN_POST, signBoardBox(state)];
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
@@ -490,6 +497,97 @@ function bedPillowBox(state: number): LocalBox {
     default: // 朝西
       return [0, y0, 0, BED_PILLOW_LENGTH, y1, 1];
   }
+}
+
+// ---------------------------------------------------------------- 告示牌（批次 80）
+
+/** 落地牌的立柱：2/16 见方、8/16 高（牌面接在它上面） */
+const SIGN_POST: LocalBox = [7 / 16, 0, 7 / 16, 9 / 16, 8 / 16, 9 / 16];
+
+/** 牌面的厚度（2/16，与立柱同宽——贴图都是一张木板，所以看不出拼接） */
+export const SIGN_BOARD_THICKNESS = 2 / 16;
+
+/** 落地牌的牌面高度范围（上半格） */
+const STANDING_BOARD_Y0 = 8 / 16;
+/** 挂墙牌的牌面高度范围（原版挂墙牌比落地牌低一点，约 4/16 起、8/16 高） */
+const WALL_BOARD_Y0 = 4 / 16;
+
+/**
+ * 牌面（写字的那块木板）的盒子。
+ *
+ * `facing` 记的是**字朝哪边**，所以：
+ *  - 落地牌：牌面**垂直于**那个方向（字朝北 → 板子立在南北之间，占满 x 宽度）；
+ *  - 挂墙牌：牌面贴在那面墙上，厚度落在**背对 `facing` 的那一侧**。
+ *
+ * 这个函数是"牌子的几何"唯一出处：网格化器拿它出盒子，
+ * `render/SignRenderer` 拿它算文字平面贴在哪（所以两者不会各自漂）。
+ */
+export function signBoardBox(state: number): LocalBox {
+  const facing = facingOf(state);
+  const t = SIGN_BOARD_THICKNESS;
+  if (isWallMounted(state)) {
+    const y0 = WALL_BOARD_Y0;
+    const y1 = WALL_BOARD_Y0 + 8 / 16;
+    switch (facing) {
+      case 0: // 字朝北 → 墙在南边
+        return [0, y0, 1 - t, 1, y1, 1];
+      case 2: // 字朝南 → 墙在北边
+        return [0, y0, 0, 1, y1, t];
+      case 1: // 字朝东 → 墙在西边
+        return [1 - t, y0, 0, 1, y1, 1];
+      default: // 字朝西 → 墙在东边
+        return [0, y0, 0, t, y1, 1];
+    }
+  }
+  // 落地牌：牌面居中对齐（厚度在中间那一小段），横向占满一格
+  const y0 = STANDING_BOARD_Y0;
+  const y1 = 1;
+  const half = (1 - t) / 2;
+  switch (facing) {
+    case 0: // 字朝北/南：板子在南北之间（薄的那一维是 z）
+    case 2:
+      return [0, y0, half, 1, y1, half + t];
+    default: // 朝东/西：薄的那一维是 x
+      return [half, y0, 0, half + t, y1, 1];
+  }
+}
+
+/** 文字平面离牌面外移的距离（格）：太小会与牌面 z-fighting，太大就"飘"出牌子 */
+export const SIGN_TEXT_OFFSET = 0.008;
+
+/** 文字平面的锚点：局部坐标 + 它该朝的法线（渲染层照着摆一块平面） */
+export interface SignTextAnchor {
+  x: number;
+  y: number;
+  z: number;
+  /** 法线的水平分量（指向牌面外侧） */
+  nx: number;
+  nz: number;
+}
+
+/**
+ * 牌面文字贴在哪儿、朝哪边。
+ *
+ * 这是**渲染层唯一需要知道的几何**：它从 `signBoardBox`（牌面盒子）与 `facing` 推出来，
+ * 所以"牌面在哪、字就贴在哪"只有一处实现——落地牌与挂墙牌也自动都成立
+ * （它们只差那个盒子）。放在注册表这一层而不是渲染层，是为了**能离线断言**
+ * （渲染层要 `document`，离线跑不起来）。
+ */
+export function signTextAnchor(state: number): SignTextAnchor {
+  const box = signBoardBox(state);
+  const [dx, dz] = FACING_OFFSET[facingOf(state)] ?? [0, -1];
+  const cx = (box[0] + box[3]) / 2;
+  const cy = (box[1] + box[4]) / 2;
+  const cz = (box[2] + box[5]) / 2;
+  // 沿法线方向的半厚度：法线必在 x 或 z 轴上，"薄"的那一维就是它
+  const half = dx !== 0 ? (box[3] - box[0]) / 2 : (box[5] - box[2]) / 2;
+  return {
+    x: cx + dx * (half + SIGN_TEXT_OFFSET),
+    y: cy,
+    z: cz + dz * (half + SIGN_TEXT_OFFSET),
+    nx: dx,
+    nz: dz,
+  };
 }
 
 // ---------------------------------------------------------------- 楼梯转角

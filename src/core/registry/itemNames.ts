@@ -141,6 +141,8 @@ for (const [wood, cn] of Object.entries(WOODS_CN)) {
   put(`${wood}_fence_gate`, `${cn}栅栏门`);
   put(`${wood}_door`, `${cn}门`);
   put(`${wood}_trapdoor`, `${cn}活板门`);
+  // 告示牌（批次 80）：同一个方块兼作落地牌与挂墙牌，所以名字只有一个
+  put(`${wood}_sign`, `${cn}告示牌`);
 }
 
 // 珊瑚一族（批次 51）：5 种 × 3 形 × 活/失活 = 30 条中文名，**由"种"表展开**。
@@ -831,6 +833,12 @@ const DESCRIPTIONS: Record<string, string> = {
 // 深层矿石统一补一句
 for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
   DESCRIPTIONS[`deepslate_${ore}_ore`] = `深层（深板岩层）的${cn}，掉落与普通${cn}相同。`;
+}
+
+// 告示牌（B12，批次 80）：6 种木材共用一段说明（差别只有木料颜色）
+for (const [wood, cn] of Object.entries(WOODS_CN)) {
+  DESCRIPTIONS[`${wood}_sign`] =
+    `${cn}告示牌：**能写四行字**（每行最多 15 字），右键牌子就能改。放置方式看**点在哪一面**：点方块**顶面** → **落地牌**（字朝你）；点**侧面** → **挂墙牌**（贴在墙上、字朝外）。牌子**不挡路**，能从它中间走过去；木头做的，会被火烧掉。`;
 }
 
 // 床（B13，批次 79）：16 色的说明是同一段（差别只有颜色，所以按配色表套模板）

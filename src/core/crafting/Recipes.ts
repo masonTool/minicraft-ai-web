@@ -25,10 +25,11 @@ import {
   stainedGlassId,
   stainedGlassPaneId,
   stoneVariantId,
+  signId,
   woolId,
 } from '../registry/blocks.ts';
 import { ARMOR_SPECS } from '../registry/armor.ts';
-import { DYE_COLORS } from '../registry/colors.ts';
+import { DYE_COLORS, WOOD_TYPES } from '../registry/colors.ts';
 import { Item, dyeItemId } from '../registry/items.ts';
 import { TOOL_SPECS } from '../registry/tools.ts';
 import { DRINKABLE, lingeringIdOf, tippedArrowIdOf } from '../registry/potions.ts';
@@ -416,6 +417,24 @@ const QUARTZ_AND_STONE_RECIPES: readonly Recipe[] = [
  * 木材家族：每种木头 3 条（原木→木板、木板→台阶、木板→楼梯）。
  * 由 Wood 表批量生成，加一种木头自动获得全套配方。
  */
+/**
+ * 告示牌（B12，批次 80）：6 块**同种**木板 + 1 根木棍 → **3 个**牌子（原版图案）。
+ *
+ * ⚠️ 与木制方块族同一条：材料必须是**同一种木材**（云杉木板做云杉告示牌），
+ * 所以按木材表展开而不是"任意木板"——写成任意木板会让玩家拿红木木板合出橡木牌子。
+ * 橡木那一份也在里面（`Block.OAK_PLANKS` 是基础方块，不在 `Wood` 表里，单独补一行）。
+ */
+const SIGN_RECIPES: readonly Recipe[] = WOOD_TYPES.map((wood): Recipe => {
+  // 橡木木板是基础方块（不在 `Wood` 表里），其余 5 种从木材表取
+  const planks = wood.name === 'oak' ? Block.OAK_PLANKS : Wood[wood.name]!.planks;
+  return {
+    kind: 'shaped',
+    result: { id: signId(wood.name)!, count: 3 },
+    pattern: ['PPP', 'PPP', ' S '],
+    key: { P: planks, S: Item.STICK },
+  };
+});
+
 const WOOD_RECIPES: readonly Recipe[] = Object.values(Wood).flatMap((ids) => [
   { kind: 'shapeless' as const, result: { id: ids.planks, count: 4 }, ingredients: [ids.log] },
   { kind: 'shaped' as const, result: { id: ids.slab, count: 6 }, pattern: ['PPP'], key: { P: ids.planks } },
@@ -949,6 +968,7 @@ export const RECIPES: readonly Recipe[] = [
   ...UTILITY_RECIPES,
   ...WOOD_RECIPES,
   ...WOOD_SHAPED_RECIPES,
+  ...SIGN_RECIPES,
   ...COPPER_RECIPES,
   ...STONE_VARIANT_RECIPES,
   ...QUARTZ_AND_STONE_RECIPES,

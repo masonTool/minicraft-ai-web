@@ -14,6 +14,7 @@
  *  - 门：需要下方有支撑 + 上方两格空间，朝外一侧朝向玩家
  *  - 锁链（B11）：轴向由命中面决定（顶/底 → 竖直，侧面 → 沿那个水平轴）
  *  - 藤蔓（B11）：挂在命中面反方向的邻居那一侧；落在已有藤蔓上时**再挂一面**
+ *  - 告示牌（B12，批次 80）：命中顶面 → 落地牌（字朝你）；命中侧面 → 挂墙牌（字朝外）
  */
 
 import { Block, JUNGLE_LOG_ID, blockDef } from '../registry/blocks.ts';
@@ -355,6 +356,29 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
         state: withBedHead(withFacing(0, head), false),
         extra: { dx, dy: 0, dz, id: input.blockId, state: withBedHead(withFacing(0, head), true) },
       };
+    }
+
+    case 'sign': {
+      // 告示牌（批次 80）：`facing` 记的是**字朝哪边**（两种站法共用这一个含义，
+      // 见 `blockState.ts` 的 `'sign'` 注释——落地牌没有墙可贴，所以这一族不能
+      // 沿用火把那套"贴着的那一面"）。
+      if (ny > 0) {
+        // 落地牌：下方要立得住（原版 `canPlaceAt` 要求下方能支撑），字朝放置者
+        if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+        return { state: withFacing(0, facingFromYaw(input.yaw)) };
+      }
+      if (ny < 0) return null; // 原版没有"挂在天花板上"的牌子
+      if (nx === 0 && nz === 0) return null;
+      // 挂墙牌：贴在被点的那面墙上，字朝**外**（= 命中面法线的正方向）。
+      // `facingFromNormal` 给的是"贴着的那一面"，所以这里 +2 取反——
+      // 换算写在这一处、并写清为什么（绊线钩那批的经验：同一字段两种含义时，
+      // 换算只能有一个出处）。
+      const towardWall = facingFromNormal(nx, nz);
+      if (towardWall === null) return null;
+      // 墙必须实心（原版 `canSurvive` 也是这条）
+      if (!blockDef(input.blockAt(nx, 0, nz)).solid) return null;
+      const outward = ((towardWall + 2) & 3) as Facing;
+      return { state: withWallMounted(withFacing(0, outward), true) };
     }
 
     case 'trapdoor': {

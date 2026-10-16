@@ -184,6 +184,20 @@ export type BlockShape =
    * （原版 bed 的 `facing` 正是"床头朝向"，见 `bedOtherHalf`）。
    */
   | 'bed'
+  /**
+   * 告示牌（B12，批次 80）：一块**木牌**，能写四行字。
+   *
+   * 两种站法**同一个方块**（与火把/珊瑚扇同一套状态）：
+   *  - **落地牌**（`wallMounted` 为假）：一根 2/16 的立柱 + 上面 8/16 的牌面；
+   *  - **挂墙牌**（`wallMounted` 为真）：只有牌面，贴在它靠着的那面墙上。
+   *
+   * `facing` 记的是**牌面朝外的那一边**（也就是"字朝哪边"、玩家从哪边能读）。
+   * 原版落地牌有 16 档旋转，这里用通用的 4 档（差异写进 TASKS B12）。
+   *
+   * ⚠️ **没有碰撞盒**：原版告示牌本来就不挡路（能从牌子里走过去），
+   * 所以 `collisionBoxes('sign')` 返回空——与火把/植物同一档。
+   */
+  | 'sign'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -919,6 +933,9 @@ export function describeState(shape: BlockShape, state: number): string {
       return SIX_FACING_NAMES[sixFacingOf(state)];
     case 'bed':
       return `${isBedHead(state) ? '床头' : '床脚'}·床头朝${FACING_NAMES[facingOf(state)]}`;
+    case 'sign':
+      // 告示牌（批次 80）：站牌 / 挂墙牌 + 字朝哪边
+      return `${isWallMounted(state) ? '挂墙' : '落地'}·字朝${FACING_NAMES[facingOf(state)]}`;
     default:
       return '';
   }

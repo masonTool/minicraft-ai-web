@@ -123,7 +123,7 @@ import {
 import { RecipeBook } from './ui/RecipeBook.ts';
 import { craftFromInventory } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
-import { itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
+import { itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
 import type { WorldType } from './core/gen/WorldType.ts';
 import { PARTICLE_DENSITY } from './ui/SettingsScreen.ts';
@@ -167,6 +167,7 @@ import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, isDimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, blockDef, woolId,
   isBed,
+  isSign,
   saplingTreeOf,
 } from './core/registry/blocks.ts';
 import {
@@ -234,6 +235,16 @@ import {
   sleepRefusal,
   type SleepMob,
 } from './core/survival/Sleep.ts';
+// 告示牌上的文字（B12，批次 80）：表格 + 编辑界面 + 渲染三件，
+// 都在主程序这一层接线（存储与规则在 `world/SignText.ts`，本身不碰 DOM/渲染）
+import {
+  SignTextStore,
+  restoreSigns,
+  serializeSigns,
+  signKey,
+} from './core/world/SignText.ts';
+import { SignEditor } from './ui/SignEditor.ts';
+import { SignRenderer, type SignRenderItem } from './render/SignRenderer.ts';
 import {
   CAKE_SLICES,
   cakeBites,
@@ -703,6 +714,20 @@ class App {
   private readonly hotbarSlots: HTMLDivElement[] = [];
   /** 聊天与命令输入（左下角消息栏 + 命令输入行） */
   private readonly chat = new ChatInput();
+  /**
+   * 告示牌上的文字（B12，批次 80）：一张"按坐标存"的表 + 编辑器 + 渲染器。
+   *
+   * 三件分开的理由与容器那一族一致：**规则**（几行、几个字、空牌子不写）在
+   * `world/SignText.ts`（纯逻辑、可离线断言），**界面**在 `ui/SignEditor.ts`，
+   * **画字**在 `render/SignRenderer.ts`——主程序只做三件事：右键打开、写进表、定期对账。
+   */
+  private readonly signText = new SignTextStore();
+  private readonly signEditor = new SignEditor();
+  private readonly signRenderer = new SignRenderer();
+  /** 正在编辑哪一块牌子（编辑器是模态，一次只会有一个） */
+  private editingSign: { x: number; y: number; z: number } | null = null;
+  /** 文字对账的节拍器（每 0.25 秒一次：区块加载/卸载、光照变化都会在这里被吸收） */
+  private signSyncTimer = 0;
   /** 玩家名（联机时用服务端给的，单机固定"玩家"） */
   private playerName = '玩家';
   /** 难度（I7）：保存在世界里 */
@@ -921,6 +946,14 @@ class App {
     this.scene.add(this.outline.object);
     this.blockOverlay = new BlockOverlay(atlas);
     this.scene.add(this.blockOverlay.object);
+    // 告示牌上的字（B12）：单独一个 Group，里面每块有字的牌子一个平面
+    this.scene.add(this.signRenderer.group);
+    this.signEditor.onSave = (lines) => this.applySignText(lines);
+    this.signEditor.onClose = () => {
+      this.editingSign = null;
+      // 与背包/配方书一样：关掉界面要把输入权交回去（重新锁指针、收起触摸层）
+      this.handleInventoryOpen(false);
+    };
 
     this.world.events = {
       onChunkLoaded: (chunk) => {
@@ -1274,6 +1307,13 @@ class App {
     const restoredContainers = restoreContainers(this.world.containers, containers);
     if (restoredContainers > 0) console.info(`[save] 已还原 ${restoredContainers} 个容器的内容`);
 
+    // 告示牌上的字（B12）：与容器同一条口径（整份一次读，脏数据逐条跳过）。
+    // 读到的字不会立刻显示——`syncSigns` 那趟对账要求"区块已加载 + 那一格还是牌子"
+    this.signText.clear();
+    const signs = await this.save.loadSigns();
+    const restoredSigns = restoreSigns(this.signText, signs);
+    if (restoredSigns > 0) console.info(`[save] 已还原 ${restoredSigns} 块告示牌上的文字`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -1387,6 +1427,8 @@ class App {
       await this.save.saveChunks(records);
       // 容器内容（C7 尾巴）：整份覆盖写，几十个容器而已，比维护"哪些脏了"省心
       await this.save.saveContainers(serializeContainers(this.world.containers));
+      // 告示牌上的字（B12）：同样整份覆盖写（空牌子不进表，所以通常只有几条）
+      await this.save.saveSigns(serializeSigns(this.signText));
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -1980,6 +2022,9 @@ class App {
       // 睡觉期间（B13）：只留跳跃键（提前起床），其余按键一律不处理——
       // 否则会在睡觉遮罩下面打开背包/配方书/聊天，而时间已经跳到天亮了
       if (this.sleeping && e.code !== 'Space') return;
+      // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
+      // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
+      if (this.signEditor.isOpen && e.code !== 'Escape') return;
       // Esc：打开/关闭暂停菜单（内含设置）。原版也是 Esc 唤出菜单而不是直接退出
       if (e.code === 'Escape' && !this.inventoryScreen.isOpen) {
         e.preventDefault();
@@ -2959,6 +3004,11 @@ class App {
       return;
     }
 
+    // 告示牌（批次 80）：牌子没了，上面的字也要清掉——不清的话
+    // "在同一个位置重新放一块牌子"会凭空继承上一块的字（而且存档里留着一份没有方块的文字）。
+    // 火焰/爆炸把牌子烧掉时走不到这里，由 `syncSigns` 那趟对账兜底（发现不是牌子就丢掉）
+    if (isSign(brokenId)) this.clearSignText(this.hit.x, this.hit.y, this.hit.z);
+
     // 潜影盒（批次 72）：内容**不**原地倒出来，而是跟着掉落的物品走（下一步用得上）。
     // 顺序要紧：先把内容取出来、再把容器从表里删掉，最后掉落时挂到物品上。
     const shulkerContents = brokenId === Block.SHULKER_BOX ? shulkerContentsOf(this.world.containers.getShulkerBox(this.dimension, this.hit.x, this.hit.y, this.hit.z)) : undefined;
@@ -3325,6 +3375,88 @@ class App {
     if (!this.sleeping) return false;
     this.wakeUp('你被惊醒了。');
     return true;
+  }
+
+  // ---------------------------------------------------------------- 告示牌上的字（B12，批次 80）
+
+  /**
+   * 右键牌子：打开编辑框。
+   *
+   * 标题里带上木料名（"橡木告示牌"），玩家才知道自己在改哪一块；
+   * 已有文字一次性填进去，改完点"完成"就写回同一格（原版也是这样反复编辑的）。
+   */
+  private openSignEditor(x: number, y: number, z: number, blockId: number): void {
+    this.editingSign = { x, y, z };
+    const existing = this.signText.get(this.dimension, x, y, z);
+    this.signEditor.show(existing, { title: `${itemLabel(blockId)}（右键可再改）` });
+    // 与背包/配方书同一个入口：释放指针锁、收起触摸层，打字不会被当成操作
+    this.handleInventoryOpen(true);
+  }
+
+  /**
+   * 编辑器点"完成"：写进表里（四行全空 = 擦掉），并立刻重画那一块牌子。
+   *
+   * ⚠️ 这里**不等**那 0.25 秒的对账节拍：玩家刚敲完字就应当看见字出现在牌子上。
+   */
+  private applySignText(lines: string[]): void {
+    const target = this.editingSign;
+    if (!target) return;
+    // ⚠️ 文字**不广播**给队友：联机协议目前只同步"哪一格变成了什么方块"
+    // （容器内容也不在协议里），要同步它得给协议加一条消息 + 服务端存一份。
+    // 这条差异写进了 TASKS B12（与"容器内容不同步"是同一个口径）。
+    this.signText.set(this.dimension, target.x, target.y, target.z, lines);
+    this.syncSigns();
+  }
+
+  /**
+   * 牌子被拆/被替换时清掉上面的字（返回是否真的清掉了一条）。
+   *
+   * 除了玩家破坏，爆炸与方块更新也会走到这里；即使某一处漏了，
+   * `syncSigns` 那趟对账也会发现"那一格已经不是牌子了"并补上（自愈）。
+   */
+  private clearSignText(x: number, y: number, z: number): void {
+    if (!this.signText.remove(this.dimension, x, y, z)) return;
+    this.syncSigns();
+  }
+
+  /**
+   * 文字与世界的**对账**（每 0.25 秒一次）。
+   *
+   * 三件事一起做，所以调用方只需要"定期喊一声"：
+   *  1. 这一维度、**区块已加载**、那一格还是牌子的 → 交给渲染器显示；
+   *  2. 那一格已经不是牌子了（被火烧掉、被 TNT 炸掉、被指令改掉）→ **丢掉文字**；
+   *  3. 其余（换维度、区块卸载）→ 渲染器自己会把多余的平面释放掉。
+   *
+   * 亮度取天光与方块光的较大者（屋里的牌子靠火把照亮，不能只算天光）。
+   */
+  private syncSigns(): void {
+    const items: SignRenderItem[] = [];
+    const stale: { x: number; y: number; z: number }[] = [];
+    this.signText.forEach((entry) => {
+      if (entry.dimension !== this.dimension) return;
+      const cx = toChunkCoord(entry.x);
+      const cz = toChunkCoord(entry.z);
+      // 区块没加载：这一刻既看不出牌子在不在，也没必要显示 → 跳过（下次对账再说）
+      if (!this.world.getChunk(cx, cz)) return;
+      if (!isSign(this.world.getBlock(entry.x, entry.y, entry.z))) {
+        stale.push({ x: entry.x, y: entry.y, z: entry.z });
+        return;
+      }
+      items.push({
+        key: signKey(entry.dimension, entry.x, entry.y, entry.z),
+        x: entry.x,
+        y: entry.y,
+        z: entry.z,
+        lines: entry.lines,
+        light: Math.max(
+          this.world.getSkyLight(entry.x, entry.y, entry.z),
+          this.world.getBlockLight(entry.x, entry.y, entry.z),
+        ),
+        state: this.world.getBlockState(entry.x, entry.y, entry.z),
+      });
+    });
+    for (const pos of stale) this.signText.remove(this.dimension, pos.x, pos.y, pos.z);
+    this.signRenderer.sync(items);
   }
 
   /**
@@ -4005,6 +4137,11 @@ class App {
     }
     if (hitShape === 'trapdoor' || hitShape === 'fence_gate') {
       this.toggleOpenable(x, y, z, hitBlock);
+      return true;
+    }
+    // 告示牌（B12，批次 80）：右键打开编辑框（按形状判定，落地/挂墙都算）
+    if (hitShape === 'sign') {
+      this.openSignEditor(x, y, z, hitBlock);
       return true;
     }
     if (hitBlock === Block.CRAFTING_TABLE) {
@@ -5677,6 +5814,14 @@ class App {
       this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
       // 床（B13）：睡觉的计时与结算。用**真实输入**是为了让"跳跃键提前起床"能被读到
       this.updateSleep(dt, rawInput);
+      // 告示牌上的字（B12）：每 0.25 秒对一次账。
+      // 为什么要定期对账而不是"事件驱动"：会改变这趟结果的三件事里有两件**没有事件**——
+      // ① 区块流式加载/卸载（玩家走过去）；② 那格的光照变了（太阳落了、旁边点了火把）。
+      this.signSyncTimer -= dt;
+      if (this.signSyncTimer <= 0) {
+        this.signSyncTimer = 0.25;
+        this.syncSigns();
+      }
       this.resolvePortalArrival();
 
       this.updateCamera(dt);
@@ -5770,6 +5915,8 @@ class App {
     this.world.dispose();
     this.outline.dispose();
     this.blockOverlay.dispose();
+    // 告示牌的文字平面与画布贴图（B12）：每块牌子一份材质，得逐块释放
+    this.signRenderer.dispose();
   }
 
   // ---------------------------------------------------------------- 开发调试接口
@@ -5784,6 +5931,21 @@ class App {
   /** 是否正在挖掘（按住左键/长按屏幕且对着可破坏方块）——验收脚本用 */
   get isBreaking(): boolean {
     return this.breakProgress > 0 && this.breakingKey !== '';
+  }
+
+  /**
+   * 告示牌的状态（B12，批次 80）——验收脚本用。
+   *
+   * `stored` 是存着的牌子数、`visible` 是**这一刻真的画在世界里**的平面数
+   * （两者不等很正常：远处区块没加载、或者玩家站得离牌子很远）。
+   */
+  get signState(): { stored: number; visible: number; editing: boolean } {
+    return { stored: this.signText.size, visible: this.signRenderer.count, editing: this.signEditor.isOpen };
+  }
+
+  /** 读某一块牌子上的字（验收脚本用；没写过返回 null） */
+  signLinesAt(x: number, y: number, z: number): readonly string[] | null {
+    return this.signText.get(this.dimension, Math.floor(x), Math.floor(y), Math.floor(z));
   }
 
   /**

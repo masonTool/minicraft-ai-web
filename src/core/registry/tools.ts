@@ -25,6 +25,7 @@ import {
   CORAL_KINDS,
   DEAD_CORAL_BLOCK_ID_START,
   SHAPED_PARENTS,
+  SIGN_IDS,
   STONE_VARIANT_PARENTS,
   Wood,
   WoodShaped,
@@ -449,6 +450,8 @@ for (const ids of Object.values(WoodShaped)) {
   EFFICIENT_TOOL.set(ids.door, 'axe');
   EFFICIENT_TOOL.set(ids.trapdoor, 'axe');
 }
+// 告示牌（批次 80）：原版归 `mineable/axe`——斧更快、徒手也能采（硬度 1）
+for (const id of SIGN_IDS) EFFICIENT_TOOL.set(id, 'axe');
 // 橡木是"基础方块"（id 5/6/7 与台阶楼梯 80/84），不在 Wood 表里，得单独登记
 EFFICIENT_TOOL.set(Block.OAK_LOG, 'axe');
 EFFICIENT_TOOL.set(Block.OAK_PLANKS, 'axe');

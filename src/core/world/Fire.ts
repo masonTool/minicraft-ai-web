@@ -21,6 +21,7 @@
 import {
   Block,
   SHAPED_PARENTS,
+  SIGN_IDS,
   Wood,
   WoodShaped,
   blockDef,
@@ -129,6 +130,12 @@ FLAMMABLE.add(Block.DRIED_KELP_BLOCK);
 
 // 脚手架（批次 53）：竹子 + 线做的，原版一点就着
 FLAMMABLE.add(Block.SCAFFOLDING);
+
+// 告示牌（批次 80）：木板做的，原版可燃。
+// ⚠️ 烧掉的那一格**不会**在这一处顺手清掉牌子上的字（火是随机刻里的 `setBlock`，
+// 拿不到文字表）；清理由主程序那趟"对账"负责——发现那一格已经不是牌子了就丢掉文字
+// （见 `main.ts` 的 `syncSigns`，爆炸/活塞/指令改方块也一并覆盖）
+for (const id of SIGN_IDS) FLAMMABLE.add(id);
 
 // 其余 5 种木材：原木 / 木板 / 树叶 / 台阶 / 楼梯
 for (const ids of Object.values(Wood)) {
