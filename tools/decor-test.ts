@@ -386,33 +386,36 @@ console.log('\n[真实地形抽样：10×10 区块]');
 {
   const stats: FeatureStats = { trees: 0, plants: 0, specials: 0 };
   const counts = new Map<number, number>();
-  const start = Date.now();
   const generator = new OverworldGenerator(20261014);
   const biomeHistogram = new Map<string, number>();
+
+  /**
+   * **相对基准**（批次 103，B103-5）：同一片区块**去掉地物与结构**再生成一遍
+   * （`OverworldGenerator.generate` 只做地形 + 地表规则 + 雕刻 + 含水层 + 矿石，
+   * 地物与结构在 `generateChunkBlocks` 里才是额外那一步）。
+   * 原来写的是"生成 100 区块耗时 < 3s"——绝对秒数在并行跑测试集时会因 CPU 争用
+   * 偶发变红（实测 1.7s / 3.9s），而且它压根没量到"地物"。
+   *
+   * ⚠️ 两遍测量**按行交替**，不是"先跑完 A 再跑完 B"：
+   * 争用是**随时间波动**的，"先后量"会让两边吃到不同的争用，比值照样会飘
+   * （实测同一份代码：空载 1.5 倍，负载下 3.26 倍）。按行交替之后争用被摊平到两边。
+   */
+  let elapsed = 0;
+  let baselineMs = 0;
   for (let cz = 0; cz < 10; cz++) {
+    const withFeatures = performance.now();
     for (let cx = 0; cx < 10; cx++) {
       const blocks = generateChunkBlocks(cx, cz, 20261014, Dimension.OVERWORLD, 'default', undefined, stats);
       for (const id of blocks) counts.set(id, (counts.get(id) ?? 0) + 1);
       const biome = generator.columnBiome(cx * 16 + 8, cz * 16 + 8).name;
       biomeHistogram.set(biome, (biomeHistogram.get(biome) ?? 0) + 1);
     }
-  }
-  const elapsed = Date.now() - start;
+    elapsed += performance.now() - withFeatures;
 
-  /**
-   * **相对基准**（批次 103，B103-5）：同一片区块**去掉地物与结构**再生成一遍
-   * （`OverworldGenerator.generate` 只做地形 + 地表规则 + 雕刻 + 含水层 + 矿石，
-   * 地物与结构在 `generateChunkBlocks` 里才是额外那一步）。
-   *
-   * 为什么不用绝对秒数：原来写的是"生成 100 区块耗时 < 3s"，而它在**并行跑测试集**时
-   * 会因 CPU 争用偶发变红（同一套代码实测 1.7s / 3.9s）。比值则与机器快慢、争用都无关，
-   * 而且它量的正是这条断言的本意：**地物没有把生成拖垮**。
-   */
-  const baselineStart = Date.now();
-  for (let cz = 0; cz < 10; cz++) {
+    const terrainOnly = performance.now();
     for (let cx = 0; cx < 10; cx++) generator.generate(cx, cz);
+    baselineMs += performance.now() - terrainOnly;
   }
-  const baselineMs = Date.now() - baselineStart;
   const featureRatio = elapsed / Math.max(baselineMs, 1);
 
   const named = (id: number) => blockDef(id).name.replace('minecraft:', '');
@@ -436,7 +439,8 @@ console.log('\n[真实地形抽样：10×10 区块]');
     .map(([name, count]) => `${name} ${count}`)
     .join(' · ');
   console.log(
-    `  100 区块耗时 ${elapsed}ms（含地物与结构）· 纯地形 ${baselineMs}ms · 地物开销 ${featureRatio.toFixed(2)} 倍`,
+    `  100 区块耗时 ${elapsed.toFixed(0)}ms（含地物与结构）· 纯地形 ${baselineMs.toFixed(0)}ms` +
+      ` · 地物开销 ${featureRatio.toFixed(2)} 倍`,
   );
   console.log(`  地物计数：树 ${stats.trees} · 植物 ${stats.plants} · 特殊 ${stats.specials}`);
   console.log(`  群系分布：${biomes}`);
@@ -452,7 +456,7 @@ console.log('\n[真实地形抽样：10×10 区块]');
   check(
     `地物与结构的开销 ≤ 纯地形的 3 倍（实测 ${featureRatio.toFixed(2)} 倍）`,
     featureRatio <= 3,
-    `含地物 ${elapsed}ms / 纯地形 ${baselineMs}ms`,
+    `含地物 ${elapsed.toFixed(0)}ms / 纯地形 ${baselineMs.toFixed(0)}ms`,
   );
 }
 

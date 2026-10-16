@@ -73,8 +73,16 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
    */
   const generator = new NetherGenerator(SEED);
 
-  const start = Date.now();
+  /**
+   * ⚠️ 三个数**按行交替**量（批次 103，B103-5），不是"先跑完 A 再跑完 B"：
+   * 并行跑测试集时 CPU 争用是**随时间波动**的，"先后量"会让两边吃到不同的争用，
+   * 比值照样会飘（`decor` 就是这么踩到的：空载 1.5 倍、负载下 3.26 倍）。
+   */
+  let elapsed = 0;
+  let terrainOnlyMs = 0;
+  let overworldMs = 0;
   for (let cz = 0; cz < SIZE; cz++) {
+    const rowStart = performance.now();
     for (let cx = 0; cx < SIZE; cx++) {
       const blocks = generateChunkBlocks(cx, cz, SEED, Dimension.NETHER);
       lava += countBlocks(blocks, Block.LAVA);
@@ -126,8 +134,18 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
         }
       }
     }
+    elapsed += performance.now() - rowStart;
+
+    // ① 纯地形（下界，不含菌菇树/荧石/堡垒遗迹）——只打印，见下面的说明
+    const terrainStart = performance.now();
+    for (let cx = 0; cx < SIZE; cx++) generator.generate(cx, cz);
+    terrainOnlyMs += performance.now() - terrainStart;
+
+    // ② 同一片区块的主世界生成——**断言用的基准**
+    const overworldStart = performance.now();
+    for (let cx = 0; cx < SIZE; cx++) generateChunkBlocks(cx, cz, SEED, Dimension.OVERWORLD);
+    overworldMs += performance.now() - overworldStart;
   }
-  const elapsed = Date.now() - start;
 
   /**
    * **两个参考数**（批次 103，B103-5）。原来的判据是"12×12 区块耗时 < 5s"，
@@ -141,24 +159,13 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
    *    "下界生成不该比主世界慢一个量级"是个有意义的说法，
    *    而两个数在同一进程、同一台机器上前后脚量出来，比值与机器快慢无关。
    */
-  const terrainStart = Date.now();
-  for (let cz = 0; cz < SIZE; cz++) {
-    for (let cx = 0; cx < SIZE; cx++) generator.generate(cx, cz);
-  }
-  const terrainOnlyMs = Date.now() - terrainStart;
-
-  const overworldStart = Date.now();
-  for (let cz = 0; cz < SIZE; cz++) {
-    for (let cx = 0; cx < SIZE; cx++) generateChunkBlocks(cx, cz, SEED, Dimension.OVERWORLD);
-  }
-  const overworldMs = Date.now() - overworldStart;
   const ratio = elapsed / Math.max(overworldMs, 1);
 
   const named = (id: number) => blockDef(id).name.replace('minecraft:', '');
   console.log(
-    `  ${SIZE}×${SIZE} 区块耗时 ${elapsed}ms（含地物与结构）· 纯地形 ${terrainOnlyMs}ms` +
+    `  ${SIZE}×${SIZE} 区块耗时 ${elapsed.toFixed(0)}ms（含地物与结构）· 纯地形 ${terrainOnlyMs.toFixed(0)}ms` +
       `（地物占 ${(elapsed / Math.max(terrainOnlyMs, 1)).toFixed(1)} 倍，正常）` +
-      ` · 同片主世界 ${overworldMs}ms → 下界 ÷ 主世界 = ${ratio.toFixed(2)} 倍`,
+      ` · 同片主世界 ${overworldMs.toFixed(0)}ms → 下界 ÷ 主世界 = ${ratio.toFixed(2)} 倍`,
   );
   console.log(`  岩浆 ${lava} · 洞窟空气 ${air} · 地板高度 ${Math.min(...floors)}~${Math.max(...floors)}（均值 ${(floors.reduce((a, b) => a + b, 0) / floors.length).toFixed(1)}）`);
   console.log(
@@ -197,7 +204,7 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
   check(
     `下界生成 ≤ 主世界的 3 倍（实测 ${ratio.toFixed(2)} 倍）`,
     ratio <= 3,
-    `下界 ${elapsed}ms / 主世界 ${overworldMs}ms`,
+    `下界 ${elapsed.toFixed(0)}ms / 主世界 ${overworldMs.toFixed(0)}ms`,
   );
 }
 
