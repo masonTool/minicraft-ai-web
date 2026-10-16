@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 309（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 310（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 267 项 —— 已完成 **145**、进行中 **63**、待办 59 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 267 项 —— 已完成 **147**、进行中 **63**、待办 57 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -66,6 +66,7 @@ npm run dev            # http://localhost:5173
 | 结构 | `core/gen/Structures.ts`：村庄/废弃矿井/要塞/地牢/沉船/海底神殿/林地府邸，间距+分离度+盐值放置框架。**结构里的箱子都挂着战利品表**（批次 35）：`lootChest()` 把"哪张表"写进箱子方块状态的 bits 4-7，箱内物品在区块载入时由主线程按坐标掷点填充——"钻进地牢打开箱子空空如也"这个从 J1 留下的洞终于补上了 |
 | 战利品表 | `core/registry/loot.ts`（**K10 / K8 尾巴**）：八张表（村庄 / 矿井 / 地牢 / 要塞图书馆 / 沉船补给 + 宝箱 / 府邸 / 末地城），模型是"轮次 + 权重 + 数量区间 + 空手项"（原版骨架的简化版）。填充在 `core/world/LootFill.ts`：**确定性**（随机源 = 世界种子 + 箱子坐标，竖直方向也参与）、**只填一次**（容器存在就跳过）、**玩家自己放的箱子不碰**（状态 0）。⚠️ 表序号与数组顺序绑定（`序号 = 下标 + 1`），新表只能往后加；`Chest.looted` 必须进存档（见经验表） |
 | 下界 | `core/gen/NetherGenerator.ts` + `Dimension.ts`：岩浆海 + 洞窟 + 5 个下界群系 + 菌菇树等；**下界传送门**是正式入口（见下方"下界传送门"一行），`N` 键只是调试用的临时切换 |
+| 床与睡觉 | **批次 79（B13 + I13）**：16 色床（`shape: 'bed'`，9/16 高、横跨两格，状态位 = 朝向 + 是不是床头）+ **睡觉**（`core/survival/Sleep.ts` 纯逻辑：夜里或雷暴才能睡、**水平 ±8 / 竖直 ±5** 内有敌对生物睡不着、睡满 1.5 秒再看一眼床边＝**被惊醒**、挨打会被拽起来）+ **跳夜**（`timeOfDay = 0`、清天气）+ **重生点**（床脚那一格、含维度、随玩家存档走；重生前校验床还在不在，不在就回世界出生点）。枕头是**几何**（床头那端一块 2/16 凸台），所以床头/床脚共用同一对贴图。⚠️ 睡觉时不摆躺下的姿势（视角停在原地），跳跃键可提前起床 |
 | 命令与规则 | `core/commands/Commands.ts`（16 条命令，解析层不碰 DOM）+ `ui/ChatInput.ts`（消息栏与输入行）、`core/world/Rules.ts`（难度与六条游戏规则） |
 | 状态效果 | `core/survival/StatusEffects.ts`（30 种，影响移速/跳跃/挖掘/伤害/氧气/视觉/HUD） |
 | 破坏反馈 | `render/BlockOverlay.ts`（10 阶段破坏裂纹 + 命中面高亮）、图集里的 `destroy_stage_*` 贴图 |
@@ -86,7 +87,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **75 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox** / **sapling** / **gourd** / **support**，当前全绿；
+| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **76 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox** / **sapling** / **gourd** / **support** / **bed**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数）、
@@ -103,13 +104,14 @@ npm run dev            # http://localhost:5173
 `B11~B20 / C8 / D20~D23 / E21~E23 / F9 / G9~G13 / H14~H17 / I13~I16 /
 J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ 条）。
 
-- 方块族：告示牌、床、地毯/雪层/花盆/锁链/藤蔓、装饰实体（画/物品展示框/盔甲架）
+- 方块族：告示牌、装饰实体（画/物品展示框/盔甲架）
+  —— 地毯/雪层/花盆/锁链/藤蔓/床**后续都已落地**（批次 37 / 39 / 52 / 79），只剩这两组
 - 1.17（洞穴与山崖）整块：紫水晶/蜡烛/滴水石/杜鹃与苔藓/发光地衣/发光浆果/细雪/望远镜/避雷针
 - 装备整组：下界合金/鞘翅/不死图腾/盾牌/弩/三叉戟/烟花/钓竿/末影珍珠
 - 运输整组：船/矿车/铁轨（**一条都没有**）
 - 功能方块整组：漏斗/木桶/投掷器/发射器/侦测器/音符盒/唱片机/讲台/堆肥桶/砂轮/织布机/制图台/制箭台/烟熏炉/高炉/营火/灯笼/信标/潮涌核心/避雷针
   （**锻造台**＝K8 尾巴、**切石机**＝批次 44 已落地，剩下的每个都是"一个方块一批"的量级）
-- 生存：**火方块根本不存在**（`Block.FIRE` 缺失 → 点火/蔓延/浇灭/火焰伤害全无）、睡觉与床、钓鱼
+- 生存：钓鱼（**火方块**＝批次 31、**睡觉与床**＝批次 79 都已落地）
 - 生物整组：末影人/凋灵/蜘蛛/史莱姆/烈焰人/恶魂/僵尸猪灵/疣猪兽/猪灵/潜行贝/守卫者系/掠夺者系/女巫/马系/猫系/狼/狐狸/熊猫/海龟/海豚/鱼/蝙蝠/山羊/美西螈…
 - 存档/多人：天气等世界状态不持久化、存档字段迁移框架、实体同步
 
@@ -120,7 +122,30 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**支撑没了、该掉的就掉**（批次 78，B49）——补上**放置侧的另一半**。
+**刚做完的**：**床 + 睡觉与重生点**（批次 79，B13 + I13）——**一次收掉两条**，
+也是"生存循环最后一个大缺口"（在此之前**夜里没事可做、死了只能回世界出生点**）。
+① 16 色床：`shape: 'bed'`（9/16 高，走上去不用跳）、状态位 = 朝向 + 是不是床头；
+**两半共用一个朝向**，所以"另一半在哪"是纯函数 `bedOtherHalf()`——判据只有一条。
+② **枕头是几何**：床头那端多一块 2/16 的小凸台，位置由朝向算出来
+（本项目没有"按朝向旋转贴图"的能力，与活塞/投掷器同一条取舍），
+床头/床脚因此**共用同一对贴图**（16 色 × 2 张）。
+③ 放置：床脚在落点、**床头朝玩家面朝的方向**（原版"枕头在你对面"）；床脚下面要有实心方块、
+床头那一格必须能写——**被占住就整张放不下**（否则会留下半张床）。
+④ 破坏按**形状**成对（与门同一条），整张只掉一次。
+⑤ **睡觉规则全在 `core/survival/Sleep.ts`**（纯函数，离线可断言）：夜里或**雷暴**才能睡、
+**水平 ±8 / 竖直 ±5** 内有敌对生物就睡不着（原版 `expand(8,5,8)` 那个盒子）、
+睡满 1.5 秒的演出**再看一眼床边**（这几秒里怪物靠近 = 原版那种**被惊醒**）、
+**挨打会被从床上拽起来**；提示按"最具体 → 最笼统"排序。
+⑥ 睡成之后：跳到**黎明**（`timeOfDay = 0`）、**清掉天气**（原版睡一觉会放晴）、
+重生点记在**床脚**那一格（含维度，随玩家存档走）。
+⑦ 重生前**校验床还在不在**（两半都得是同一种床），床没了回退世界出生点——
+顺带修掉一个老问题：**在下界死掉时只换了坐标、没换维度**（原来会"重生后被埋在下界的石头里"）。
+⚠️ 差异：**睡觉时不摆出躺下的姿势**（床 9/16、玩家 1.8，摆进去要另写一套姿态），
+睡觉期间人与"传送途中"一样被冻住、只推遮罩，视角停在原地；起床靠**跳跃键**提前起身。
+尺寸：方块 504 → **520**（可见方块）、物品 770 → **786**、配方 366 → **382**（+16 张床）；
+**76 套**离线测试里新增 `bed`（116 条）。
+
+再往前是**支撑没了、该掉的就掉**（批次 78，B49）——补上**放置侧的另一半**。
 疏漏巡检时确认：`Placement.ts` 早就挡住了"悬空放植物"，而**反过来**"支撑被拆掉之后上面那株还挂着"
 一直没做（TASKS 里只记了藤蔓那一条）。
 ① 规则收在 `world/Support.ts`（注入世界 + 纯函数）：`cross`/`flat`/**`cactus`** → 下方实心；
@@ -938,6 +963,11 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **同一件事的两个入口要共用判据** | 放置侧用 `blockDef(below).solid`、支撑侧也必须用它：不然会出现"能放上去但站不住"（或反过来）的怪状态，而这种不一致**只在少数方块上暴露**（比如耕地是整格还是 15/16 高）。断言里那条"逐格比对两边的结论"就是把这件事钉住的成本最低的做法（批次 78） |
 | **按名字枚举形状时，"名字不同但判据相同"的成员最容易漏** | 规则第一版写了 `cross` 与 `flat` 两类，结果**仙人掌**（形状名为 `cactus`）被漏掉——它的判据与 `cross` 完全一样。这类漏不会报错，只会表现为"拆了沙子，仙人掌不跟着掉"。**枚举一个集合时，先问"还有没有别的名字表达同一件事"**，并让断言覆盖到每个成员（批次 78） |
 
+| **"按朝向旋转贴图"做不到时，把朝向做成几何** | 床的枕头必须画在"床头那一端"，而那一端随 4 个朝向变——本项目的网格化器只有"顶/底/侧"三个贴图槽、没有 UV 旋转（活塞/投掷器/木桶都栽过同一条）。做法是**枕头 = 床头那端一块 2/16 的凸台**（`meshBoxes` 吃状态，位置按 `facing` 算）：贴图从 4 朝向 × 16 色 = 128 张降到 **32 张**，而且"哪头是床头"从上方一眼可见。**这类"外观随朝向变"的需求，先问能不能用几何表达**（批次 79） |
+| **判据只留一处，"两半"这种结构就不会脏** | 床横跨两格，于是有三处要问"另一半在哪"：放置（写两半）、成对破坏（拆一对）、重生点校验（两半都得是床）。判据写成纯函数 `bedOtherHalf(x,y,z,state)`，三处共用；断言里逐格比对"8 种状态（4 朝向 × 两半）互逆"。**同一件事有三个入口时，先把判据抽成纯函数再写第三个入口**（批次 79） |
+| **"只换坐标不换维度"是位移逻辑的经典漏项** | 写床重生点时顺手发现：`respawnPlayer` 在下界死掉只会把坐标换成主世界出生点的坐标，**维度还留在下界**（表现为"重生后被埋在下界石头里"）。凡是"重写重生/传送/回城这类位移逻辑"的批次，都要问一句"**维度跟着走了吗**"——这条与"攀爬要豁免摔落"（批次 39）是同一类：**新写一条位移路径，就要把它该带的上下文全部带齐**（批次 79） |
+| **"变化的东西"别写进不需要它的断言里** | 主题测试用正则抓**第一个** `@media (prefers-reduced-motion: reduce)` 块来核对令牌——我给 `#sleep` 单独加了一个这样的块，于是它抓到的是我那一小块，两条断言当场红。而文件末尾那条**全局**规则早就把所有元素的 `animation-duration` 压成 0 了。**加"看起来很规矩"的局部覆盖前，先确认全局那条管不管得到我**（批次 79） |
+
 ## 5. 待复核的悬案（下次接手优先看）
 
 非完整方块展示平台整体偏暗，而同处探针显示天光已是 15。怀疑**网格在光照收敛前就被烘焙**了。
@@ -992,7 +1022,8 @@ npm run agent:setup # 跨机器自检
 `connect(url,name)` / `disconnect()` / `netState` / `sendChat(text)` / `saveNow()` /
 `saveStatus` / `openSettings()` / `updateSettings(patch)` / `setCameraMode()` / `cycleCameraMode()` /
 `toggleRecipeBookForTest()` / `hoverHotbarForTest()` / `runCommand(text)` / `openChatForTest()` /
-`blockId(name)` / `simulateFrameTime(ms)` /
+`blockId(name)` / `simulateFrameTime(ms)` / `bedState`（批次 79：`sleeping` / `sleepSeconds` /
+`respawn`——验收脚本读重生点不必猜）/
 `teleport(x,y,z)` / `teleportForce` / `look(yawDeg,pitchDeg)` / `setTimeOfDay(t)` /
 `setDimension('overworld'|'nether'|'end')` / `toggleDimension()` /
 `__worldMenu`（主菜单：`fillNewWorldForm()` / `submitNewWorld()` / `render()`）/
