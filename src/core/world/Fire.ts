@@ -18,7 +18,17 @@
  *  - 不烧"自己脚下的支撑方块"（否则火焰会一路浮在空中）
  */
 
-import { Block, SHAPED_PARENTS, Wood, blockDef, carpetId, slabId, stairsId, woolId } from '../registry/blocks.ts';
+import {
+  Block,
+  SHAPED_PARENTS,
+  Wood,
+  WoodShaped,
+  blockDef,
+  carpetId,
+  slabId,
+  stairsId,
+  woolId,
+} from '../registry/blocks.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import type { RandomSource, RandomTickBehavior, TickWorld } from '../tick/RandomTicks.ts';
 
@@ -95,6 +105,14 @@ for (const ids of Object.values(Wood)) {
   FLAMMABLE.add(ids.leaves);
   FLAMMABLE.add(ids.slab);
   FLAMMABLE.add(ids.stairs);
+}
+// 木制方块族（批次 38）：每种木材的栅栏 / 栅栏门 / 门 / 活板门都可燃
+// —— 逐个木材补会漏掉"同一族的其它木材"（橡木那次就是这么漏的），所以整族一起登记
+for (const ids of Object.values(WoodShaped)) {
+  FLAMMABLE.add(ids.fence);
+  FLAMMABLE.add(ids.fenceGate);
+  FLAMMABLE.add(ids.door);
+  FLAMMABLE.add(ids.trapdoor);
 }
 // 橡木的台阶与楼梯：母方块是橡木木板（id 7），但它们的 id 是由 SHAPED_PARENTS 生成的，
 // 所以从 `slabId`/`stairsId` 反查而不是硬编码 80/84

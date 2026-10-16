@@ -131,6 +131,16 @@ for (const [wood, cn] of Object.entries(WOODS_CN)) {
   put(`${wood}_leaves`, `${cn}树叶`);
 }
 
+// 木制方块族（批次 38）：栅栏 / 栅栏门 / 门 / 活板门
+// 与方块表同源（都从木材表展开），加一种木材两边自动跟上——
+// 这正是"新加了方块却冒出英文 id"那条老毛病要防的地方
+for (const [wood, cn] of Object.entries(WOODS_CN)) {
+  put(`${wood}_fence`, `${cn}栅栏`);
+  put(`${wood}_fence_gate`, `${cn}栅栏门`);
+  put(`${wood}_door`, `${cn}门`);
+  put(`${wood}_trapdoor`, `${cn}活板门`);
+}
+
 // 台阶 / 楼梯
 for (const [base, cn] of Object.entries(STRUCTURE_BASES_CN)) {
   put(`${base}_slab`, `${cn}台阶`);

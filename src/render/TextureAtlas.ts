@@ -793,56 +793,66 @@ PAINTERS.ladder = (x, y, rng) => {
   return [clamp255(v * 1.06), clamp255(v * 0.78), clamp255(v * 0.44), 255];
 };
 
-/** 木门：木板底 + 竖边框 + 门把手 */
-PAINTERS.oak_door = (x, y, rng) => {
-  const base = layered(146, 6, 7, [1.05, 0.8, 0.48])(x, y, rng);
-  // 上下横档与左右竖框
-  if (y <= 1 || y >= 14 || x <= 1 || x >= 14 || (y >= 5 && y <= 6)) {
-    const v = 128 + (rng() * 10 - 5);
-    return [clamp255(v * 1.02), clamp255(v * 0.74), clamp255(v * 0.42), 255];
-  }
-  // 门把手
-  if (x >= 11 && x <= 12 && y >= 8 && y <= 9) {
-    const v = 178 + rng() * 24;
-    return [clamp255(v), clamp255(v * 0.94), clamp255(v * 0.66), 255];
-  }
-  return base;
-};
-
 /**
- * 活板门（批次 30）：木板打底 + 上下两道横档 + 四角铆钉。
- * 与门一样用 `layered(146, ...)`（同一块木板的底色），一眼能看出是"同一种木头做的"。
+ * 木门 / 活板门 / 栅栏门（批次 30 起，批次 38 扩到全部 6 种木材）。
+ *
+ * 底色取该木材的**木板色**（直接复用 `planksPainter`），深色横档按同一底色压暗，
+ * 金属件（门把手、角铁）用固定灰——所以 6 种木材一套代码生成。
+ * 橡木那三张也并了进来：以前是手写的三份 `layered(146, ...)`，
+ * 一旦要按木材展开，"同一族的其它木材"就必然漏掉（这个坑在木头家族上踩过一次）。
  */
-PAINTERS.oak_trapdoor = (x, y, rng) => {
-  const base = layered(146, 6, 7, [1.05, 0.8, 0.48])(x, y, rng);
-  // 横档：上沿与下沿各一条，比底色深一点
-  if (y <= 1 || y >= 14 || (y >= 7 && y <= 8)) {
-    const v = 132 + (rng() * 10 - 5);
-    return [clamp255(v * 1.02), clamp255(v * 0.74), clamp255(v * 0.42), 255];
-  }
-  // 四角的铁件
-  if ((x <= 1 || x >= 14) && (y <= 2 || y >= 13)) {
-    const v = 168 + rng() * 20;
-    return [clamp255(v), clamp255(v * 0.97), clamp255(v * 0.9), 255];
-  }
-  return base;
-};
+function woodDarkener(base: readonly [number, number, number]): (v: number) => RGBA {
+  return (v) => [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
+}
 
-/** 栅栏门（批次 30）：两根竖柱 + 两道横杆——与栅栏同一套木料，但中间是"门板" */
-PAINTERS.oak_fence_gate = (x, y, rng) => {
-  const base = layered(146, 6, 7, [1.05, 0.8, 0.48])(x, y, rng);
-  // 两根竖柱：左右各 2 像素
-  if (x <= 1 || x >= 14) {
-    const v = 128 + (rng() * 10 - 5);
-    return [clamp255(v * 1.02), clamp255(v * 0.74), clamp255(v * 0.42), 255];
-  }
-  // 两道横杆
-  if ((y >= 3 && y <= 4) || (y >= 11 && y <= 12)) {
-    const v = 140 + (rng() * 10 - 5);
-    return [clamp255(v * 1.02), clamp255(v * 0.76), clamp255(v * 0.44), 255];
-  }
-  return base;
-};
+/** 木门：木板底 + 上下横档与左右竖框 + 门把手 */
+function doorPainter(base: readonly [number, number, number]): Painter {
+  const planks = planksPainter(base);
+  const dark = woodDarkener(base);
+  return (x, y, rng) => {
+    if (y <= 1 || y >= 14 || x <= 1 || x >= 14 || (y >= 5 && y <= 6)) {
+      return dark(0.86 + rng() * 0.06);
+    }
+    // 门把手
+    if (x >= 11 && x <= 12 && y >= 8 && y <= 9) {
+      const v = 178 + rng() * 24;
+      return [clamp255(v), clamp255(v * 0.94), clamp255(v * 0.66), 255];
+    }
+    return planks(x, y, rng);
+  };
+}
+
+/** 活板门：木板打底 + 上下两道横档 + 四角铆钉 */
+function trapdoorPainter(base: readonly [number, number, number]): Painter {
+  const planks = planksPainter(base);
+  const dark = woodDarkener(base);
+  return (x, y, rng) => {
+    if (y <= 1 || y >= 14 || (y >= 7 && y <= 8)) return dark(0.88 + rng() * 0.06);
+    // 四角的铁件
+    if ((x <= 1 || x >= 14) && (y <= 2 || y >= 13)) {
+      const v = 168 + rng() * 20;
+      return [clamp255(v), clamp255(v * 0.97), clamp255(v * 0.9), 255];
+    }
+    return planks(x, y, rng);
+  };
+}
+
+/** 栅栏门：两根竖柱 + 两道横杆——与栅栏同一套木料，但中间是"门板" */
+function fenceGatePainter(base: readonly [number, number, number]): Painter {
+  const planks = planksPainter(base);
+  const dark = woodDarkener(base);
+  return (x, y, rng) => {
+    if (x <= 1 || x >= 14) return dark(0.88 + rng() * 0.06);
+    if ((y >= 3 && y <= 4) || (y >= 11 && y <= 12)) return dark(0.93 + rng() * 0.06);
+    return planks(x, y, rng);
+  };
+}
+
+for (const wood of WOOD_TYPES) {
+  PAINTERS[`${wood.name}_door`] = doorPainter(wood.wood);
+  PAINTERS[`${wood.name}_trapdoor`] = trapdoorPainter(wood.wood);
+  PAINTERS[`${wood.name}_fence_gate`] = fenceGatePainter(wood.wood);
+}
 
 /**
  * 火焰（I12）：三束高低不一的火苗，背景全透明（走 alpha 裁剪）。

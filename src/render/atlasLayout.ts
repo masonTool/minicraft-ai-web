@@ -596,6 +596,23 @@ export const TILE_ORDER = [
   'carpet_green',
   'carpet_red',
   'carpet_black',
+  // ---- 木制方块族（批次 38）：5 种木材 ×（门 / 活板门 / 栅栏门）。
+  // 栅栏不单独出贴图——它直接复用该木材的木板贴图（原版也是这个观感）
+  'spruce_door',
+  'spruce_trapdoor',
+  'spruce_fence_gate',
+  'birch_door',
+  'birch_trapdoor',
+  'birch_fence_gate',
+  'jungle_door',
+  'jungle_trapdoor',
+  'jungle_fence_gate',
+  'acacia_door',
+  'acacia_trapdoor',
+  'acacia_fence_gate',
+  'dark_oak_door',
+  'dark_oak_trapdoor',
+  'dark_oak_fence_gate',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

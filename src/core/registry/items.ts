@@ -12,7 +12,17 @@
 
 import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
 import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
-import { Block, WHEAT_STAGES, Wood, blockDef, carpetId, cropOf, wheatStageOf, woolId } from './blocks.ts';
+import {
+  Block,
+  WHEAT_STAGES,
+  Wood,
+  WoodShaped,
+  blockDef,
+  carpetId,
+  cropOf,
+  wheatStageOf,
+  woolId,
+} from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
 import { SHEARS_INFO, SHEARS_ITEM_ID, TOOL_SPECS, type ToolInfo } from './tools.ts';
@@ -521,6 +531,14 @@ const BUILDING = new Set<number>([
   Block.OAK_FENCE_GATE,
   Block.OAK_FENCE,
 ]);
+
+// 木制方块族（批次 38）：其余 5 种木材的四件也归"建筑"（按族登记，不逐个手抄）
+for (const ids of Object.values(WoodShaped)) {
+  BUILDING.add(ids.fence);
+  BUILDING.add(ids.fenceGate);
+  BUILDING.add(ids.door);
+  BUILDING.add(ids.trapdoor);
+}
 
 const NATURAL = new Set<number>([
   Block.GRASS_BLOCK,

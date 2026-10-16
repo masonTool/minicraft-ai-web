@@ -260,6 +260,101 @@ export const Wood: Readonly<Record<string, WoodBlockIds>> = Object.fromEntries(
   EXTRA_WOODS.map((wood) => [wood.name, WOOD_ID_MAP.get(wood.name)!]),
 );
 
+// ---------------------------------------------------------------- 木制方块族（栅栏 / 栅栏门 / 门 / 活板门）
+
+/**
+ * 木制方块族：每种木材的**栅栏 / 栅栏门 / 门 / 活板门**。
+ *
+ * 橡木那四件是历史方块（栅栏 96、门 99、活板门 289、栅栏门 290），保持原 id 不动；
+ * 其余 5 种木材接在**当前最大 id 之后**（313 起，每种连续 4 个）。
+ * 与 `WOOD_BLOCK_ID_START` 同样的理由：追加式布局，加木材不会打乱既有编号
+ * （存档里存的就是这些数字）。
+ *
+ * ⚠️ 这四件**形状全部是现成的**（`fence` / `fence_gate` / `door` / `trapdoor`），
+ * 贴图也只有门 / 活板门 / 栅栏门三张需要按木材配色生成（栅栏直接复用木板贴图）——
+ * 所以"补一族的其它木材"是纯表驱动的工作量，这也是 B16 批量推进的意义所在。
+ */
+export const WOOD_SHAPED_ID_START = 313;
+
+export interface WoodShapedIds {
+  readonly fence: number;
+  readonly fenceGate: number;
+  readonly door: number;
+  readonly trapdoor: number;
+}
+
+/** 橡木四件的历史 id（与 `Block` 枚举同源，这里写常量是为了在枚举定义之前就能用） */
+const OAK_WOOD_SHAPED: WoodShapedIds = { fence: 96, fenceGate: 290, door: 99, trapdoor: 289 };
+
+const WOOD_SHAPED_MAP = new Map<string, WoodShapedIds>();
+
+const WOOD_SHAPED_SPECS: readonly BlockSpec[] = (() => {
+  const specs: BlockSpec[] = [];
+  let base = WOOD_SHAPED_ID_START;
+  for (const wood of WOOD_TYPES) {
+    if (wood.name === 'oak') {
+      // 橡木沿用历史 id，不占新段
+      WOOD_SHAPED_MAP.set(wood.name, OAK_WOOD_SHAPED);
+      continue;
+    }
+    const ids: WoodShapedIds = { fence: base, fenceGate: base + 1, door: base + 2, trapdoor: base + 3 };
+    base += 4;
+    WOOD_SHAPED_MAP.set(wood.name, ids);
+
+    const plankTile = `${wood.name}_planks`;
+    const gateTile = `${wood.name}_fence_gate`;
+    const doorTile = `${wood.name}_door`;
+    const trapdoorTile = `${wood.name}_trapdoor`;
+    specs.push(
+      {
+        id: ids.fence,
+        name: `minecraft:${wood.name}_fence`,
+        tiles: [plankTile, plankTile, plankTile],
+        shape: 'fence',
+        opaque: false,
+        lightOpacity: 0,
+      },
+      {
+        id: ids.fenceGate,
+        name: `minecraft:${wood.name}_fence_gate`,
+        tiles: [gateTile, gateTile, gateTile],
+        shape: 'fence_gate',
+        opaque: false,
+        lightOpacity: 0,
+      },
+      {
+        id: ids.door,
+        name: `minecraft:${wood.name}_door`,
+        tiles: [doorTile, doorTile, doorTile],
+        shape: 'door',
+        opaque: false,
+        lightOpacity: 0,
+      },
+      {
+        id: ids.trapdoor,
+        name: `minecraft:${wood.name}_trapdoor`,
+        tiles: [trapdoorTile, trapdoorTile, trapdoorTile],
+        shape: 'trapdoor',
+        opaque: false,
+        lightOpacity: 0,
+      },
+    );
+  }
+  return specs;
+})();
+
+/** 某种木材的 4 件木制方块 id；未知木材返回 undefined */
+export function woodShaped(name: string): WoodShapedIds | undefined {
+  return WOOD_SHAPED_MAP.get(name);
+}
+
+/**
+ * 全部木材的木制方块 id（可燃表 / 工具加速表 / 创造分类 / 配方批量遍历用）。
+ * 含橡木——它的 id 是历史值，但"这一族"必须一起走，否则又会出现
+ * "云杉栅栏可燃、橡木栅栏不可燃"这种半残状态。
+ */
+export const WoodShaped: Readonly<Record<string, WoodShapedIds>> = Object.fromEntries(WOOD_SHAPED_MAP);
+
 // ---------------------------------------------------------------- 陶瓦与混凝土
 
 export const TERRACOTTA_ID_START = 127;
@@ -1022,6 +1117,7 @@ const SPECS: readonly BlockSpec[] = [
   ...LILY_PAD_SPECS,
   ...CARPET_SPECS,
   ...SNOW_SPECS,
+  ...WOOD_SHAPED_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1370,6 +1466,15 @@ HARDNESS.set(Block.OAK_DOOR, 3);
 // 活板门 3（与门同档）、栅栏门 2（与栅栏同档）——都是木头，原版如此
 HARDNESS.set(Block.OAK_TRAPDOOR, 3);
 HARDNESS.set(Block.OAK_FENCE_GATE, 2);
+
+// 木制方块族（批次 38）：其余 5 种木材的栅栏/栅栏门/门/活板门与橡木同档
+// （栅栏门与栅栏 2、活板门与门 3）——按族批量登记，不逐个手抄
+for (const ids of Object.values(WoodShaped)) {
+  HARDNESS.set(ids.fence, 2);
+  HARDNESS.set(ids.fenceGate, 2);
+  HARDNESS.set(ids.door, 3);
+  HARDNESS.set(ids.trapdoor, 3);
+}
 HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
 // 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
@@ -1520,6 +1625,14 @@ HAND_HARVESTABLE.add(Block.OAK_FENCE);
 HAND_HARVESTABLE.add(Block.OAK_DOOR);
 HAND_HARVESTABLE.add(Block.OAK_TRAPDOOR);
 HAND_HARVESTABLE.add(Block.OAK_FENCE_GATE);
+
+// 木制方块族（批次 38）：其余 5 种木材的四件也徒手可采（斧只是加速，见 tools.ts）
+for (const ids of Object.values(WoodShaped)) {
+  HAND_HARVESTABLE.add(ids.fence);
+  HAND_HARVESTABLE.add(ids.fenceGate);
+  HAND_HARVESTABLE.add(ids.door);
+  HAND_HARVESTABLE.add(ids.trapdoor);
+}
 HAND_HARVESTABLE.add(Block.TORCH);
 HAND_HARVESTABLE.add(Block.LADDER);
 

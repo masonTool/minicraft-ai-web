@@ -14,6 +14,7 @@ import {
   GLASS_PANE_ID,
   SHAPED_PARENTS,
   Wood,
+  WoodShaped,
   carpetId,
   slabId,
   stairsId,
@@ -151,15 +152,8 @@ const SHAPED_BLOCK_RECIPES: readonly Recipe[] = SHAPED_PARENTS.flatMap(([parentI
   },
 ]);
 
-/** 栅栏 / 墙 / 门 / 梯子 / 火把 */
+/** 墙 / 梯子 / 火把（栅栏与门类见 `WOOD_SHAPED_RECIPES`，那边按木材表展开） */
 const UTILITY_RECIPES: readonly Recipe[] = [
-  // 4 木板 + 2 木棍 → 3 栅栏
-  {
-    kind: 'shaped',
-    result: { id: Block.OAK_FENCE, count: 3 },
-    pattern: ['PSP', 'PSP'],
-    key: { P, S: Item.STICK },
-  },
   // 6 圆石 → 6 圆石墙
   {
     kind: 'shaped',
@@ -173,27 +167,6 @@ const UTILITY_RECIPES: readonly Recipe[] = [
     result: { id: Block.STONE_BRICK_WALL, count: 6 },
     pattern: ['BBB', 'BBB'],
     key: { B: Block.STONE_BRICKS },
-  },
-  // 6 木板竖排 2×3 → 3 扇门
-  {
-    kind: 'shaped',
-    result: { id: Block.OAK_DOOR, count: 3 },
-    pattern: ['PP', 'PP', 'PP'],
-    key: { P },
-  },
-  // 6 木板横铺 3×2 → 2 个活板门（原版配方）
-  {
-    kind: 'shaped',
-    result: { id: Block.OAK_TRAPDOOR, count: 2 },
-    pattern: ['PPP', 'PPP'],
-    key: { P },
-  },
-  // 2 木板 + 4 木棍 → 1 个栅栏门（原版的"两柱一门板"形状）
-  {
-    kind: 'shaped',
-    result: { id: Block.OAK_FENCE_GATE, count: 1 },
-    pattern: ['SPS', 'SPS'],
-    key: { P, S: Item.STICK },
   },
   // 7 木棍摆成 H 形 → 3 个梯子
   {
@@ -231,6 +204,50 @@ const WOOD_RECIPES: readonly Recipe[] = Object.values(Wood).flatMap((ids) => [
     key: { P: ids.planks },
   },
 ]);
+
+/**
+ * 木制方块族（批次 38）：每种木材 4 条——栅栏 / 栅栏门 / 门 / 活板门。
+ *
+ * 配方与原版一致，且**材料必须是同一种木材**（云杉木板做云杉门），
+ * 所以由木材表展开而不是手抄 24 条。橡木的四条以前是手写在 `UTILITY_RECIPES` 里的，
+ * 这一批并了过来——同一种东西只留一个出处，否则"改了配方忘了另一份"迟早发生。
+ *
+ * ⚠️ 不能两边都留：`matchRecipe` 取**首个匹配**，重复配方会让后一条永远合不出来。
+ */
+const WOOD_SHAPED_RECIPES: readonly Recipe[] = Object.entries(WoodShaped).flatMap(([name, ids]): Recipe[] => {
+  // 橡木的木板是基础方块（id 7），不在 `Wood` 表里
+  const planks = name === 'oak' ? Block.OAK_PLANKS : Wood[name]!.planks;
+  return [
+    // 4 木板 + 2 木棍 → 3 栅栏
+    {
+      kind: 'shaped' as const,
+      result: { id: ids.fence, count: 3 },
+      pattern: ['PSP', 'PSP'],
+      key: { P: planks, S: Item.STICK },
+    },
+    // 2 木板 + 4 木棍 → 1 栅栏门（原版的"两柱一门板"）
+    {
+      kind: 'shaped' as const,
+      result: { id: ids.fenceGate, count: 1 },
+      pattern: ['SPS', 'SPS'],
+      key: { P: planks, S: Item.STICK },
+    },
+    // 6 木板竖排 2×3 → 3 扇门
+    {
+      kind: 'shaped' as const,
+      result: { id: ids.door, count: 3 },
+      pattern: ['PP', 'PP', 'PP'],
+      key: { P: planks },
+    },
+    // 6 木板横铺 3×2 → 2 个活板门
+    {
+      kind: 'shaped' as const,
+      result: { id: ids.trapdoor, count: 2 },
+      pattern: ['PPP', 'PPP'],
+      key: { P: planks },
+    },
+  ];
+});
 
 /** 玻璃板：6 块玻璃横排两行 → 16 片；染色玻璃同理 */
 const PANE_RECIPES: readonly Recipe[] = [
@@ -498,6 +515,7 @@ export const RECIPES: readonly Recipe[] = [
   ...SHAPED_BLOCK_RECIPES,
   ...UTILITY_RECIPES,
   ...WOOD_RECIPES,
+  ...WOOD_SHAPED_RECIPES,
   ...PANE_RECIPES,
   ...TOOL_RECIPES,
   ...ARMOR_RECIPES,

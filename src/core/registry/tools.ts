@@ -22,6 +22,7 @@ import {
   Block,
   SHAPED_PARENTS,
   Wood,
+  WoodShaped,
   blockHardness,
   concreteId,
   isHandHarvestable,
@@ -373,6 +374,13 @@ for (const ids of Object.values(Wood)) {
   EFFICIENT_TOOL.set(ids.planks, 'axe');
   EFFICIENT_TOOL.set(ids.slab, 'axe');
   EFFICIENT_TOOL.set(ids.stairs, 'axe');
+}
+// 木制方块族（批次 38）：栅栏 / 栅栏门 / 门 / 活板门同样是"斧更快、徒手也能采"
+for (const ids of Object.values(WoodShaped)) {
+  EFFICIENT_TOOL.set(ids.fence, 'axe');
+  EFFICIENT_TOOL.set(ids.fenceGate, 'axe');
+  EFFICIENT_TOOL.set(ids.door, 'axe');
+  EFFICIENT_TOOL.set(ids.trapdoor, 'axe');
 }
 // 橡木是"基础方块"（id 5/6/7 与台阶楼梯 80/84），不在 Wood 表里，得单独登记
 EFFICIENT_TOOL.set(Block.OAK_LOG, 'axe');
