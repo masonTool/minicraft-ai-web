@@ -289,8 +289,8 @@ console.log('\n[未接效果的附魔要标出来]');
   const { UI_HINT_UNIMPLEMENTED, UNIMPLEMENTED_MARK } = await import('../src/core/crafting/Enchanting.ts');
   const implemented = ENCHANTMENTS.filter((def) => def.implemented === true);
   check(
-    '已接效果的附魔有 17 条（6 条第一批 + 7 条按类型/家族分流 + 4 条弓）',
-    implemented.length === 17 &&
+    '已接效果的附魔有 19 条（6 条第一批 + 7 条按类型/家族分流 + 4 条弓 + 2 条钓鱼）',
+    implemented.length === 19 &&
       [
         'efficiency',
         'fortune',
@@ -310,6 +310,9 @@ console.log('\n[未接效果的附魔要标出来]');
         'punch',
         'flame',
         'infinity',
+        // 钓竿的两条（批次 81）：诱饵在 `survival/Fishing.ts`、海之眷顾在 `registry/fishing.ts`
+        'lure',
+        'luck_of_the_sea',
       ].every((id) => implemented.some((def) => def.id === id)),
     implemented.map((def) => def.id).join(','),
   );
