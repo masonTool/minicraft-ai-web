@@ -914,8 +914,9 @@ export const TILE_ORDER = [
   // 蓝图：凋灵半血之后吐的那颗（批次 116），以及它的掉落物下界之星
   'wither_skull_blue',
   'item_nether_star',
-  // 三叉戟（批次 123，溺尸手里那件）
+  // 三叉戟（批次 123，溺尸手里那件）；幻翼膜（批次 126，幻翼掉的那一片）
   'item_trident',
+  'item_phantom_membrane',
   // 矿物块与信标（批次 117，K5）：信标的金字塔底座要用这三种块
   'gold_block',
   'diamond_block',
@@ -937,6 +938,16 @@ export const TILE_ORDER = [
   'item_ender_pearl',
   'item_ender_eye',
   'end_portal_frame_eye',
+  // 缓降药水那一族（批次 126，幻翼那一批）：饮用 / 喷溅 / 滞留 / 药水箭 各两档。
+  // 按上面那条规矩**追加在末尾**——往中间插会让后面所有贴图整体挪位
+  'item_potion_slow_falling',
+  'item_potion_slow_falling_long',
+  'item_potion_splash_slow_falling',
+  'item_potion_splash_slow_falling_long',
+  'item_potion_lingering_slow_falling',
+  'item_potion_lingering_slow_falling_long',
+  'item_tipped_arrow_slow_falling',
+  'item_tipped_arrow_slow_falling_long',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

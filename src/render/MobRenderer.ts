@@ -78,12 +78,16 @@ type ModelKind =
   | 'ghast'
   | 'wither'
   /** 史莱姆（批次 120）：一个果冻方块 + 里面那颗核 */
-  | 'slime';
+  | 'slime'
+  /** 幻翼（批次 126）：扁身子 + 两片长翼 + 尾巴 */
+  | 'phantom';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
   // 凋灵（批次 116）：三颗头 + 肋骨笼，与任何现有骨架都不同
   if (typeId === 'wither') return 'wither';
+  // 幻翼（批次 126）：扁平的飞行生物，与鸟（鸡）那种"小圆身子"差得远
+  if (typeId === 'phantom') return 'phantom';
   // 史莱姆（批次 120）：三档尺寸都是"果冻方块 + 内核"，所以三者的 id 共用一个骨架。
   // 岩浆怪（批次 121）也走这一个：原版它们的几何**一模一样**，区别只在贴图与颜色
   // （深红外壳 + 亮橙内核），所以没必要再开一个骨架
@@ -135,6 +139,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return slimeBoxes(type);
     case 'wither':
       return witherBoxes(type);
+    case 'phantom':
+      return phantomBoxes(type);
     default:
       return humanoidBoxes(type);
   }
@@ -460,6 +466,8 @@ function legCountOf(kind: ModelKind): number {
   // 凋灵（批次 116）：既没有腿也没有翅膀可摆（它整体在飘），所以是 0；
   // 史莱姆（批次 120）同理：整个身体就是一个方块，没有腿
   if (kind === 'crystal' || kind === 'blaze' || kind === 'ghast' || kind === 'wither' || kind === 'slime') return 0;
+  // 幻翼（批次 126）：它一直在飞，没有腿可摆
+  if (kind === 'phantom') return 0;
   return 2;
 }
 
@@ -499,6 +507,34 @@ function slimeBoxes(type: MobType): BoxSpec[] {
     // 内核：原版那颗更深色的立方体（体积小一半左右）
     { width: size * 0.55, height: size * 0.55, depth: size * 0.55, x: 0, y: size / 2, z: 0, color: 'accent' },
   ];
+}
+
+/**
+ * 幻翼（批次 126）：**扁身子 + 两片长翼 + 一条尾巴**。
+ *
+ * 原版它的辨识点就是"一对比身体还长的翅膀"和那张几乎占满整个头的嘴，
+ * 所以这里把翼做成两片**细长的平板**（前后各斜一点，静态下也看得出是翼），
+ * 头做成最前面那一块小方盒 + 两只发亮的眼睛（`eyeColor`，暗夜里就靠它认）。
+ */
+function phantomBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const bodyY = h * 0.5;
+  const boxes: BoxSpec[] = [
+    // 身子：扁而长（沿着"朝前"的方向拉长）
+    { width: w * 0.34, height: h * 0.8, depth: w * 0.62, x: 0, y: bodyY, z: 0, color: 'body' },
+    // 两片长翼：从身子两侧伸出去，向后掠
+    { width: w * 0.62, height: h * 0.16, depth: w * 0.5, x: -w * 0.44, y: bodyY + h * 0.12, z: -w * 0.12, color: 'accent' },
+    { width: w * 0.62, height: h * 0.16, depth: w * 0.5, x: w * 0.44, y: bodyY + h * 0.12, z: -w * 0.12, color: 'accent' },
+    // 头：最前面那一小块
+    { width: w * 0.26, height: h * 0.7, depth: w * 0.3, x: 0, y: bodyY + h * 0.1, z: w * 0.42, color: 'body' },
+    // 两只眼睛（发亮的青色，原版也是靠它认）
+    { width: w * 0.09, height: h * 0.22, depth: w * 0.05, x: -w * 0.08, y: bodyY + h * 0.2, z: w * 0.56, color: 'eye' },
+    { width: w * 0.09, height: h * 0.22, depth: w * 0.05, x: w * 0.08, y: bodyY + h * 0.2, z: w * 0.56, color: 'eye' },
+    // 尾巴：往后收成一小节
+    { width: w * 0.12, height: h * 0.3, depth: w * 0.36, x: 0, y: bodyY - h * 0.08, z: -w * 0.42, color: 'accent' },
+  ];
+  return boxes;
 }
 
 function ghastBoxes(type: MobType): BoxSpec[] {

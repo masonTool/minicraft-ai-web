@@ -323,7 +323,11 @@ import {
 } from './core/survival/Sleep.ts';
 // 亡灵被太阳晒（批次 124）：判据是纯函数（露天 + 白天 + 没下雨），
 // 而"哪些生物会烧"是每种生物自己的一位数据（`MobType.burnsInDaylight`）
-import { DAYLIGHT_BURN_SECONDS, sunBurns } from './core/world/Daylight.ts';
+import { DAYLIGHT_BURN_SECONDS, FULL_SKY_LIGHT, sunBurns } from './core/world/Daylight.ts';
+// 失眠与幻翼（批次 126，"连续三天不睡"才来的那只）：判据是纯逻辑，
+// 但它只跟**玩家自己的状态**有关（与地形无关），所以不走 `MobSpawner`
+import { PHANTOM_SPAWN_INTERVAL, phantomNightIsComing, phantomSpawnCount } from './core/survival/Insomnia.ts';
+import { PHANTOM_TYPE } from './core/entity/Phantom.ts';
 // 钓鱼（批次 81，G11）：规则（等待时间/咬钩窗口/状态机）在 survival，
 // 战利品表在 registry，这里只做"世界怎么飞、钓上来的东西怎么进背包"
 import {
@@ -897,6 +901,15 @@ class App {
   private bobber: { x: number; y: number; z: number; vx: number; vy: number; vz: number } | null = null;
   /** 世界过了几天（批次 84，月相按它取模）；随存档走，老存档按第 0 天算 */
   private dayCount = 0;
+  /**
+   * **连续多少天没睡**（批次 126，幻翼的依据）。睡着归零、每天日出 +1。
+   * 存进存档：它是"跨会话"的状态（睡了三天没睡的存档，进来当晚就该有幻翼）。
+   */
+  private daysWithoutSleep = 0;
+  /** 这一夜已经派过幻翼没有（一夜只派一批，免得刷成灾难） */
+  private phantomSpawnedTonight = false;
+  /** 派幻翼的节拍（秒）：攒够 `PHANTOM_SPAWN_INTERVAL` 才试一次 */
+  private phantomTimer = 0;
   /** 浮标的小方块（第一次抛竿时懒建） */
   private bobberMesh: THREE.Mesh | null = null;
   /**
@@ -1665,6 +1678,11 @@ class App {
     this.timeOfDay = data.timeOfDay;
     // 月相（批次 84）：老存档没有 dayCount → 第 0 天（满月），与 `moonPhaseFor(0)` 一条口径
     this.dayCount = Number.isFinite(data.dayCount) && (data.dayCount ?? 0) >= 0 ? Math.floor(data.dayCount!) : 0;
+    // 失眠（批次 126）：老存档没有这一项 → 0 天（刚睡过，不会立刻招来幻翼）
+    this.daysWithoutSleep =
+      Number.isFinite(data.daysWithoutSleep) && (data.daysWithoutSleep ?? 0) >= 0
+        ? Math.floor(data.daysWithoutSleep!)
+        : 0;
     this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
     // 天气（L6，批次 85）：老存档没有这个字段 → `restoreWeather` 回退默认晴天
     this.weather.restore(data.weather);
@@ -1727,6 +1745,7 @@ class App {
       flying: this.flying,
       timeOfDay: this.timeOfDay,
       dayCount: this.dayCount,
+      daysWithoutSleep: this.daysWithoutSleep,
       // 天气（L6，批次 85）：重开之后接着下，而不是每次重掷
       weather: this.weather.snapshot(),
       health: this.stats.health,
@@ -3901,6 +3920,8 @@ class App {
     this.timeOfDay = DAWN_TIME;
     // 睡到天亮 = 又过了一天（批次 84）：不推进的话"靠睡觉过日子"的玩家永远停在满月
     this.advanceDay();
+    // 但**睡过了就不算失眠**（批次 126）：先推进一天、再归零，所以"睡一觉"净效果是 0
+    this.daysWithoutSleep = 0;
     // 原版睡一觉会放晴（雷暴与雨一起停）
     this.weather.setKind('clear');
     this.bedSpawn = { x: bed.x, y: bed.y, z: bed.z, dimension: this.dimension };
@@ -3922,6 +3943,10 @@ class App {
   private advanceDay(): void {
     this.dayCount++;
     this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
+    // 失眠（批次 126）：又一天没睡；新的一夜可以再派一批幻翼
+    this.daysWithoutSleep++;
+    this.phantomSpawnedTonight = false;
+    this.phantomTimer = 0;
   }
 
   /** 收起睡觉遮罩、恢复行动 */
@@ -4921,6 +4946,45 @@ class App {
    * 生成只发生在已加载区块（未加载时 getBlock 返回空气，规则会自然拒绝），
    * 因此不需要额外的"是否加载"判断也不会刷到虚空中。
    */
+  /**
+   * 失眠与幻翼（批次 126）。
+   *
+   * 判据全在 `survival/Insomnia.ts`（纯函数）：**连着三天没睡 + 夜里 + 这一夜还没派过**。
+   * 满足之后每 25 秒试一次，而且要求玩家**头顶见天**（天光 15）——
+   * 原版幻翼是从天上下来的，所以"躲在洞里挖矿"是安全的，"在地表搭棚子"不是
+   * （它们会俯冲下来，棚子挡不住）。
+   *
+   * ⚠️ 这是本项目**第一条"与地形无关、只跟玩家状态有关"的刷怪**，所以它没有走
+   * `MobSpawner`（那套是按列扫地表找落脚点）——直接由主程序在玩家上方放几只。
+   */
+  private updateInsomnia(dt: number): void {
+    if (this.dimension !== Dimension.OVERWORLD) return;
+    if (!phantomNightIsComing(this.daysWithoutSleep, isNight(this.timeOfDay), this.phantomSpawnedTonight)) {
+      return;
+    }
+    // 头顶见天才会来：洞里、棚子下都不是 15
+    const headY = Math.floor(this.physics.y + 1.2);
+    if (this.world.getSkyLight(Math.floor(this.physics.x), headY, Math.floor(this.physics.z)) < FULL_SKY_LIGHT) {
+      return;
+    }
+
+    this.phantomTimer += dt;
+    if (this.phantomTimer < PHANTOM_SPAWN_INTERVAL) return;
+    this.phantomTimer = 0;
+    this.phantomSpawnedTonight = true;
+
+    const count = phantomSpawnCount(this.daysWithoutSleep);
+    for (let i = 0; i < count; i++) {
+      // 围着玩家摆一圈（它们一开场就在你头顶盘旋，见 `Phantom` 的 AI）
+      const angle = (i / count) * Math.PI * 2;
+      const x = this.physics.x + Math.cos(angle) * 6;
+      const z = this.physics.z + Math.sin(angle) * 6;
+      const y = Math.min(WORLD_MAX_Y - 4, this.physics.y + 22);
+      this.entities.spawn(createMob(PHANTOM_TYPE, x, y, z));
+    }
+    this.chat.push(`你已经连着 ${this.daysWithoutSleep} 天没合眼了……天上有东西在叫。`, 'system');
+  }
+
   private updateMobSpawning(dt: number): void {
     let hostileCount = 0;
     let passiveCount = 0;
@@ -5284,6 +5348,8 @@ class App {
     this.mobRenderer.update(mobs, this.camera, dt, sampleLight);
     this.updateEndBoss();
     this.updateMobSpawning(dt);
+    // 失眠（批次 126）：连着几夜不睡，天上就会有东西开始叫
+    this.updateInsomnia(dt);
     // 红石：按钮回弹、中继器延迟、压力板轮询都由它推进
     //
     // ⚠️ 引信推进（TNT）用**真实 dt**（不夹到 0.1）：卡顿一下就要真的少 4 秒引信，
@@ -5545,6 +5611,27 @@ class App {
   /** 验收脚本用：信标索引与光柱的现状（索引里几个、这一帧画了几根） */
   get beaconDebug(): { known: number; beams: number } {
     return { known: this.beacons.size, beams: this.beaconBeamRenderer.count };
+  }
+
+  /**
+   * 验收脚本用（批次 126）：把"几天没睡"直接设成 N。
+   *
+   * 走一遍真流程要**连着三个游戏日不睡觉**（每个游戏日 20 分钟），自动化等不起；
+   * 而"天上会不会下来东西"正是要人看着的东西。
+   */
+  setInsomniaForTest(days: number): void {
+    this.daysWithoutSleep = Math.max(0, Math.floor(days));
+    this.phantomSpawnedTonight = false;
+    this.phantomTimer = 0;
+  }
+
+  /** 验收脚本用：失眠现状（几天没睡 / 这一夜派过没有 / 场上几只幻翼） */
+  get insomniaState(): { days: number; spawnedTonight: boolean; phantoms: number } {
+    let phantoms = 0;
+    for (const entity of this.entities.all) {
+      if (entity instanceof Mob && entity.type.id === PHANTOM_TYPE.id && !entity.dead) phantoms++;
+    }
+    return { days: this.daysWithoutSleep, spawnedTonight: this.phantomSpawnedTonight, phantoms };
   }
 
   /** 验收脚本用：清空全部进度（做完验收别把"考试答案"留在存档里） */

@@ -93,6 +93,13 @@ export interface PlayerSave {
    */
   dayCount?: number;
   /**
+   * **连续多少天没睡**（批次 126，幻翼的依据）。睡着归零、每天日出 +1。
+   *
+   * 与 `dayCount` 一样：老存档没有这一项 → 当成 0 天（刚睡过，不会立刻招来幻翼），
+   * 不迁移、不改存档版本号。
+   */
+  daysWithoutSleep?: number;
+  /**
    * 天气（L6，批次 85）：`{ kind, seconds }` 两个数。
    *
    * ⚠️ 它放在**玩家存档**里其实有点别扭（天气是世界的属性，不是玩家的）——

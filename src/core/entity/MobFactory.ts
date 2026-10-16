@@ -17,6 +17,7 @@
 import { Blaze } from './Blaze.ts';
 import { Ghast } from './Ghast.ts';
 import { Mob, type MobType } from './Mob.ts';
+import { Phantom, PHANTOM_TYPE } from './Phantom.ts';
 import { Villager } from './Villager.ts';
 import { Wither, WITHER_TYPE } from './Wither.ts';
 import { BLAZE_TYPE, GHAST_TYPE, VILLAGER_TYPE } from './mobs.ts';
@@ -34,5 +35,8 @@ export function createMob(type: MobType, x: number, y: number, z: number): Mob {
   // 将来别的地方（命令、刷怪蛋、测试）要生成它时，不能各写一句 `new Mob(WITHER_TYPE)`
   // （那样会造出一只"只会悬停、什么都不吐"的凋灵，而它看起来一切正常）
   if (type.id === WITHER_TYPE.id) return new Wither(x, y, z);
+  // 幻翼（批次 126）：它的招牌是"盘旋之后一头扎下来"，所以也是一个子类
+  // （与烈焰人/恶魂同一条理由：`new Mob(PHANTOM_TYPE, …)` 会造出一只只会平移的鸟）
+  if (type.id === PHANTOM_TYPE.id) return new Phantom(x, y, z);
   return new Mob(type, x, y, z);
 }

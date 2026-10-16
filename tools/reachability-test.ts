@@ -378,7 +378,7 @@ check(
       recipeIngredients(recipe).every((ingredient) => reach.has(ingredient.id)),
   ),
 );
-equal('药水箭的条数是 28（与饮用型一一对应）', TIPPED_ARROWS.length, 28);
+equal('药水箭的条数是 30（与饮用型一一对应）', TIPPED_ARROWS.length, 30);
 const arrowReachable = TIPPED_ARROWS.filter((entry) => reach.has(entry.id)).length;
 equal('药水箭 28 / 28 支全能做（跟着饮用型走）', arrowReachable, TIPPED_ARROWS.length);
 

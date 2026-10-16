@@ -162,6 +162,13 @@ export const Item = {
    * ——与剪刀同一个做法，见那边"必须登记进 `TOOL_BY_ID`"的注记。
    */
   TRIDENT: 1447,
+  /**
+   * 幻翼膜（批次 126）：幻翼掉的那一片。
+   *
+   * 它的用途与原版一致：**缓降药水**（`Brewing` 的 `VARIANT_INGREDIENTS`）
+   * 与**修复鞘翅**（鞘翅还没做，见 B18）——所以它现在至少有一条真的路（药水）。
+   */
+  PHANTOM_MEMBRANE: 1450,
   SUGAR: 1174,
   RABBIT_FOOT: 1190,
   MAGMA_CREAM: 1191,
@@ -393,6 +400,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.SLIME_BALL, name: 'minecraft:slime_ball', tile: 'item_slime_ball' },
   // 三叉戟（批次 123）：**不可堆叠**（原版如此——它是一件武器，不是材料）
   { id: Item.TRIDENT, name: 'minecraft:trident', tile: 'item_trident', maxStack: 1 },
+  // 幻翼膜（批次 126）：一样是材料，可以堆叠
+  { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
   { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
   { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },

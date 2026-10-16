@@ -20,6 +20,8 @@ import type { MobType } from './Mob.ts';
 // 两个 boss（末影龙、凋灵）各自住在自己的模块里，但它们的掉落要算进
 // `DROPPING_MOB_TYPES`（见那里的注释）。两处都不引 `mobs.ts`，所以不成环
 import { DRAGON_TYPE } from './EndBoss.ts';
+// 幻翼（批次 126）自己一个模块：它有俯冲那一套动作（见 `Phantom.ts` 的文件头）
+import { PHANTOM_TYPE } from './Phantom.ts';
 import { WITHER_TYPE } from './Wither.ts';
 
 /**
@@ -704,6 +706,8 @@ export const MOB_TYPES: readonly MobType[] = [
   HUSK_TYPE,
   // 流浪者（批次 125）：雪原里的骷髅变体，箭上带"缓慢"
   STRAY_TYPE,
+  // 幻翼（批次 126）：天上那只"失眠怪"——**不进自然生成表**，只由失眠触发
+  PHANTOM_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

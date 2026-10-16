@@ -61,6 +61,8 @@ export const VARIANT_INGREDIENTS: Readonly<Record<string, number>> = {
   fire_resistance: Item.MAGMA_CREAM,
   night_vision: Item.GOLDEN_CARROT,
   poison: Item.SPIDER_EYE,
+  // 幻翼膜（批次 126，幻翼那一批）：它与上面那些的关系一样——材料有了来源，路才通
+  slow_falling: Item.PHANTOM_MEMBRANE,
 };
 
 /**

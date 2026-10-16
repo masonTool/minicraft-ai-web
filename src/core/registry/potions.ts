@@ -123,6 +123,13 @@ export const POTION_IDS = {
   harming_strong: 1217,
   invisibility: 1218,
   invisibility_long: 1219,
+  // ---- 缓降（批次 126，幻翼那一批）：幻翼膜酿出来的。
+  // ⚠️ id 要挑得让**它的四个派生段都空**（饮用 + 喷溅 +50 + 滞留 +100 + 药水箭 +200）：
+  // 1248 → 1298 / 1348 / 1448；1249 → 1299 / 1349 / 1449。
+  // 前面几段（1180~1219 / 1230~1269 / 1280~1319 / 1380~1419+）都排满了，
+  // 所以这一条从 1248 起，`test:brewing` 有一条断言盯着"四段互不撞车"
+  slow_falling: 1248,
+  slow_falling_long: 1249,
 } as const;
 
 /**
@@ -289,6 +296,16 @@ export const POTION_VARIANTS: readonly PotionVariant[] = [
     // 原版没有隐身 II
     baseId: POTION_IDS.invisibility,
     longId: POTION_IDS.invisibility_long,
+  },
+  {
+    key: 'slow_falling',
+    name: '缓降药水',
+    effect: 'slow_falling',
+    // 原版：缓降 1:30、延长 4:00，没有缓降 II
+    seconds: 90,
+    extended: 240,
+    baseId: POTION_IDS.slow_falling,
+    longId: POTION_IDS.slow_falling_long,
   },
 ];
 

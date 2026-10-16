@@ -110,13 +110,15 @@ const VANILLA: Record<
   // K4 尾巴补的两个效果：**都没有"粗制 + 材料"的配方**，只能从腐化链来
   harming: { effect: 'instant_damage', base: [1, 0], strong: [1, 1] },
   invisibility: { effect: 'invisibility', base: [180, 0], long: [480, 0] },
+  // 缓降（批次 126，幻翼那一批）：1:30 / 4:00，原版没有缓降 II
+  slow_falling: { effect: 'slow_falling', base: [90, 0], long: [240, 0] },
 };
 
 const expectedPotionCount =
   1 + // 粗制
   Object.values(VANILLA).reduce((sum, v) => sum + 1 + (v.long ? 1 : 0) + (v.strong ? 1 : 0), 0);
 // 表里是**三份**：饮用型 + 喷溅型（+50）+ 滞留型（+100），每种一一对应
-equal('饮用型药水条目总数（11 种效果 × 各自有的档位 + 粗制）', DRINKABLE.length, expectedPotionCount);
+equal('饮用型药水条目总数（12 种效果 × 各自有的档位 + 粗制）', DRINKABLE.length, expectedPotionCount);
 equal('药水条目总数（饮用 + 喷溅 + 滞留）', POTIONS.length, expectedPotionCount * 3);
 equal('喷溅型数量与饮用型一致', SPLASH_POTIONS.length, expectedPotionCount);
 equal('滞留型数量与饮用型一致', LINGERING_POTIONS.length, expectedPotionCount);

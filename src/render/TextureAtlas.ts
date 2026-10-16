@@ -3447,6 +3447,25 @@ PAINTERS.item_trident = (x, y, rng) => {
   return [0, 0, 0, 0];
 };
 
+/**
+ * 幻翼膜（批次 126）：一片**薄薄的暗青膜**——边缘半透、中间有几道筋。
+ *
+ * 它没有方块形态，所以四边留空（画成一个"飘着的小片"），
+ * 与其它材料物品同一个画法。
+ */
+PAINTERS.item_phantom_membrane = (x, y, rng) => {
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  // 一片略扁的椭圆（膜是软的，不是方的）
+  const inside = (dx * dx) / 30 + (dy * dy) / 20 <= 1;
+  if (!inside) return [0, 0, 0, 0];
+  const jitter = rng() * 12 - 6;
+  // 几道更深的筋：沿水平方向每 4 行一条
+  const rib = y % 4 === 0;
+  const base = (rib ? 62 : 104) + jitter;
+  return [clamp255(base * 0.72), clamp255(base + 18), clamp255(base + 22), 255];
+};
+
 /** 凋灵骷髅头的顶面（批次 115）：几道更深的骨缝，说明"这是个头"而不是一块石头 */
 PAINTERS.wither_skull_top = (x, y, rng) => {
   const jitter = rng() * 14 - 7;
