@@ -1282,6 +1282,35 @@ export const RED_SAND_ID_START = 411;
 /** 红砂岩家族变体的显式起点（见上面的注解：顺序分配会撞进写死的母方块段） */
 export const RED_SANDSTONE_VARIANT_ID_START = 416;
 
+// ---------------------------------------------------------------- 烟熏炉与高炉（批次 46）
+
+/**
+ * 烟熏炉与高炉（H6，批次 46）。
+ *
+ * 它们是**熔炉的两个变体**：原版三者的界面、格子布局、燃料规则完全一样，
+ * 区别只有两条——**只吃一类东西**（烟熏炉吃食物、高炉吃矿物与金属）
+ * 与**速度 2 倍**（10 秒 → 5 秒）。所以这一批的"方块"部分很薄，
+ * 真正的东西在 `crafting/Smelting.ts` 的站台过滤与 `container/Furnace.ts` 的站台上。
+ *
+ * ⚠️ 三种炉子的**点燃外观**都没做（本项目熔炉一直没有 LIT 状态位与点火贴图）：
+ * 方块贴图是静态的两张（顶 + 侧），炉子烧起来时看不出在烧。这条差异记在 TASKS H6 里。
+ */
+export const SMOKER_ID = 422;
+export const BLAST_FURNACE_ID = 423;
+
+const FURNACE_STATION_SPECS: readonly BlockSpec[] = [
+  {
+    id: SMOKER_ID,
+    name: 'minecraft:smoker',
+    tiles: ['smoker_top', 'smoker_top', 'smoker_side'],
+  },
+  {
+    id: BLAST_FURNACE_ID,
+    name: 'minecraft:blast_furnace',
+    tiles: ['blast_furnace_top', 'blast_furnace_top', 'blast_furnace_side'],
+  },
+];
+
 const RED_SAND_SPECS: readonly BlockSpec[] = [
   { id: 411, name: 'minecraft:red_sand', tiles: ['red_sand', 'red_sand', 'red_sand'] },
   {
@@ -1475,6 +1504,7 @@ const SPECS: readonly BlockSpec[] = [
   ...STONE_VARIANT_SPECS,
   ...STONECUTTER_SPECS,
   ...RED_SAND_SPECS,
+  ...FURNACE_STATION_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1700,6 +1730,9 @@ export const Block = {
   CHISELED_RED_SANDSTONE: 413,
   CUT_RED_SANDSTONE: 414,
   SMOOTH_RED_SANDSTONE: 415,
+  // ---- 熔炉的两个变体（批次 46，见 `SMOKER_ID` / `BLAST_FURNACE_ID`）
+  SMOKER: SMOKER_ID,
+  BLAST_FURNACE: BLAST_FURNACE_ID,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1825,6 +1858,9 @@ const HARDNESS = new Map<number, number>([
 
   [Block.CRAFTING_TABLE, 2.5],
   [Block.FURNACE, 3.5],
+  // 烟熏炉 3.5、高炉 3.5（原版三者同档，都要镐）
+  [Block.SMOKER, 3.5],
+  [Block.BLAST_FURNACE, 3.5],
   [Block.CHEST, 2.5],
 
   [Block.STONE_BRICKS, 1.5],

@@ -188,6 +188,7 @@ import {
 import { CHEST_SIZE } from './core/container/Chest.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from './core/container/BrewingStand.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
+import { stationOfBlock } from './core/crafting/Smelting.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
 import { Arrow, type ArrowOptions } from './core/entity/Arrow.ts';
 import {
@@ -372,6 +373,9 @@ const STARTING_HOTBAR: readonly number[] = [
   // 开发期红沙与红砂岩（批次 45）：红沙是恶地地表那一层，也是红砂岩家族的唯一起点
   Block.RED_SAND,
   Block.RED_SANDSTONE,
+  // 开发期烟熏炉与高炉（批次 46）：旁边就有生肉与粗铁，放下就能对比"2 倍速"与"只吃什么"
+  Block.SMOKER,
+  Block.BLAST_FURNACE,
   // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
   Block.ANVIL,
   Block.IRON_BLOCK,
@@ -3310,6 +3314,16 @@ class App {
     }
     if (hitBlock === Block.FURNACE) {
       this.inventoryScreen.openWith('furnace', this.world.containers.getOrCreateFurnace(this.dimension, x, y, z));
+      return true;
+    }
+    // 烟熏炉与高炉（批次 46）：同一套界面与容器，站台从**方块**决定
+    const station = stationOfBlock(hitBlock);
+    if (station) {
+      const furnace = this.world.containers.getOrCreateFurnace(this.dimension, x, y, z, station);
+      // 自愈：方块与容器记录的站台不一致时以**方块**为准
+      // （旧存档缺这个字段、或者同一格被换成另一种炉子）
+      if (furnace.station !== station) furnace.station = station;
+      this.inventoryScreen.openWith(station === 'smoker' ? 'smoker' : 'blast_furnace', furnace);
       return true;
     }
     if (hitBlock === Block.CHEST) {

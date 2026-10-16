@@ -8,17 +8,55 @@
 import { Block } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 
+/**
+ * 这条配方**能进哪种炉子**（批次 46 的烟熏炉与高炉要用）。
+ *
+ * 原版是两套独立配方表（`smoking` / `blasting`），这里给每条配方标一个归类、
+ * 三种炉子按它过滤——**表只有一张**，加配方时不会出现"只给熔炉加了、
+ * 烟熏炉那边漏了"这种事（漏了的表现是"烟熏炉里烧不动"，很难一眼看出是数据问题）。
+ */
+export type SmeltKind = 'food' | 'metal' | 'none';
+
 export interface SmeltingRecipe {
   readonly input: number;
   readonly output: { id: number; count: number };
-  /** 单次烧炼耗时（秒） */
+  /** 单次烧炼耗时（秒，**普通熔炉**的基准；烟熏炉与高炉按 `timeScale` 折算） */
   readonly time: number;
   /** 取出产物时获得的经验（原版量纲，经验球在后续版本接入） */
   readonly experience: number;
+  /**
+   * 归属：`food` = 烟熏炉专用、`metal` = 高炉专用、`none` = 只有普通熔炉能做。
+   * **省略即 `none`**（绝大多数配方本来就只属于熔炉，写满 20 多个 `kind: 'none'`
+   * 只会把真正有区别的那几条淹掉）。
+   */
+  readonly kind?: SmeltKind;
 }
 
 /** 普通熔炉的单次烧炼耗时 */
 export const SMELTING_TIME = 10;
+
+/** 三种炉子（H6 的烟熏炉与高炉在批次 46 落地） */
+export type FurnaceStation = 'furnace' | 'smoker' | 'blast_furnace';
+
+export interface StationDef {
+  readonly cn: string;
+  /**
+   * 耗时倍率：烟熏炉与高炉是原版的"2 倍速"（10 秒 → 5 秒）。
+   *
+   * ⚠️ 燃料的燃烧时长也按同一个倍率缩短：原版一份煤在烟熏炉里只烧 40 秒，
+   * 但因为每次烧炼只要一半时间，**一份燃料能烧的次数不变**（8 次）——
+   * 燃料的"性价比"不该因为换炉子而变，这是原版的语义。
+   */
+  readonly timeScale: number;
+  /** 吃哪些归类 */
+  readonly accepts: readonly SmeltKind[];
+}
+
+export const FURNACE_STATIONS: Readonly<Record<FurnaceStation, StationDef>> = {
+  furnace: { cn: '熔炉', timeScale: 1, accepts: ['food', 'metal', 'none'] },
+  smoker: { cn: '烟熏炉', timeScale: 0.5, accepts: ['food'] },
+  blast_furnace: { cn: '高炉', timeScale: 0.5, accepts: ['metal'] },
+};
 
 /** 全部熔炼配方（配方书要列出来，所以导出） */
 
@@ -26,10 +64,10 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 烤马铃薯（H13 续）：原版 0.35 经验
   // 矿物 → 金属锭
   // 烤马铃薯（H13 续）：原版 0.35 经验
-  { input: Item.POTATO, output: { id: Item.BAKED_POTATO, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
-  { input: Item.RAW_IRON, output: { id: Item.IRON_INGOT, count: 1 }, time: SMELTING_TIME, experience: 0.7 },
-  { input: Item.RAW_GOLD, output: { id: Item.GOLD_INGOT, count: 1 }, time: SMELTING_TIME, experience: 1 },
-  { input: Item.RAW_COPPER, output: { id: Item.COPPER_INGOT, count: 1 }, time: SMELTING_TIME, experience: 0.7 },
+  { input: Item.POTATO, output: { id: Item.BAKED_POTATO, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
+  { input: Item.RAW_IRON, output: { id: Item.IRON_INGOT, count: 1 }, time: SMELTING_TIME, experience: 0.7, kind: 'metal' },
+  { input: Item.RAW_GOLD, output: { id: Item.GOLD_INGOT, count: 1 }, time: SMELTING_TIME, experience: 1, kind: 'metal' },
+  { input: Item.RAW_COPPER, output: { id: Item.COPPER_INGOT, count: 1 }, time: SMELTING_TIME, experience: 0.7, kind: 'metal' },
 
   // 沙 → 玻璃
   { input: Block.SAND, output: { id: Block.GLASS, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
@@ -40,8 +78,9 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 原木 → 木炭
   { input: Block.OAK_LOG, output: { id: Item.CHARCOAL, count: 1 }, time: SMELTING_TIME, experience: 0.15 },
 
-  // 远古残骸 → 下界合金碎片（K8 尾巴）：原版 2 点经验，是整个下界合金链的第一环
-  { input: Block.ANCIENT_DEBRIS, output: { id: Item.NETHERITE_SCRAP, count: 1 }, time: SMELTING_TIME, experience: 2 },
+  // 远古残骸 → 下界合金碎片（K8 尾巴）：原版 2 点经验，是整个下界合金链的第一环。
+  // 归 `metal`：原版高炉**能**烧远古残骸（而且更快），这是高炉最有用的一条
+  { input: Block.ANCIENT_DEBRIS, output: { id: Item.NETHERITE_SCRAP, count: 1 }, time: SMELTING_TIME, experience: 2, kind: 'metal' },
 
   // 黏土球 → 红砖
   { input: Item.CLAY_BALL, output: { id: Item.BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.3 },
@@ -54,17 +93,67 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   { input: Block.SANDSTONE, output: { id: Block.SMOOTH_SANDSTONE, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
   { input: Block.RED_SANDSTONE, output: { id: Block.SMOOTH_RED_SANDSTONE, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
 
-  // 生肉 → 熟肉（经验值取自原版：生肉 0.35）
-  { input: Item.BEEF, output: { id: Item.COOKED_BEEF, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
-  { input: Item.PORKCHOP, output: { id: Item.COOKED_PORKCHOP, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
-  { input: Item.MUTTON, output: { id: Item.COOKED_MUTTON, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
-  { input: Item.CHICKEN, output: { id: Item.COOKED_CHICKEN, count: 1 }, time: SMELTING_TIME, experience: 0.35 },
+  // 生肉 → 熟肉（经验值取自原版：生肉 0.35）。归 `food`：这就是烟熏炉存在的理由
+  { input: Item.BEEF, output: { id: Item.COOKED_BEEF, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
+  { input: Item.PORKCHOP, output: { id: Item.COOKED_PORKCHOP, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
+  { input: Item.MUTTON, output: { id: Item.COOKED_MUTTON, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
+  { input: Item.CHICKEN, output: { id: Item.COOKED_CHICKEN, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
 ];
 
 const RECIPE_BY_INPUT = new Map<number, SmeltingRecipe>(SMELTING_RECIPES.map((recipe) => [recipe.input, recipe]));
 
-export function smeltingRecipeFor(itemId: number): SmeltingRecipe | undefined {
-  return RECIPE_BY_INPUT.get(itemId);
+/**
+ * 某种炉子能不能烧这个物品（batch 46：烟熏炉只吃食物、高炉只吃矿物与金属）。
+ *
+ * ⚠️ 默认站台是 `furnace`，所以**旧的调用处一个字都不用改**——
+ * 只有烟熏炉与高炉这两条新路径需要显式传站台。
+ */
+export function smeltingRecipeFor(itemId: number, station: FurnaceStation = 'furnace'): SmeltingRecipe | undefined {
+  const recipe = RECIPE_BY_INPUT.get(itemId);
+  if (!recipe) return undefined;
+  return FURNACE_STATIONS[station].accepts.includes(recipe.kind ?? 'none') ? recipe : undefined;
+}
+
+/** 这个物品在**普通熔炉**里有没有配方（不管哪种炉子都能用；界面提示用） */
+export function isSmeltable(itemId: number): boolean {
+  return RECIPE_BY_INPUT.has(itemId);
+}
+
+/**
+ * 方块 → 它对应哪种炉子（不是炉子返回 null）。
+ *
+ * 放在这里而不是 `main.ts`：右键打开要按它选界面模式，而套件也要断言
+ * "三种炉子的方块 id 与站台一一对应"——同一份映射不该在两个地方各写一遍。
+ */
+export function stationOfBlock(blockId: number): FurnaceStation | null {
+  if (blockId === Block.FURNACE) return 'furnace';
+  if (blockId === Block.SMOKER) return 'smoker';
+  if (blockId === Block.BLAST_FURNACE) return 'blast_furnace';
+  return null;
+}
+
+/**
+ * 这条配方在这座炉子里要烧多久（秒）。
+ * 烟熏炉与高炉是原版的 2 倍速，所以这里不能直接用 `recipe.time`。
+ */
+export function cookSeconds(recipe: SmeltingRecipe, station: FurnaceStation): number {
+  return recipe.time * FURNACE_STATIONS[station].timeScale;
+}
+
+/**
+ * 这座炉子为什么不干活（界面提示用）。
+ * 返回空字符串表示"没有意见"（有配方或没原料都不算问题）。
+ */
+export function stationRejectReason(itemId: number, station: FurnaceStation): string {
+  const def = FURNACE_STATIONS[station];
+  if (station === 'furnace' || !isSmeltable(itemId)) return '';
+  const recipe = RECIPE_BY_INPUT.get(itemId)!;
+  const kind = recipe.kind ?? 'none';
+  if (def.accepts.includes(kind)) return '';
+  // 说清"它只吃什么"，而不是干巴巴一句"烧不动"
+  return station === 'smoker'
+    ? '烟熏炉只烧食物（生肉、马铃薯…）'
+    : '高炉只烧矿物与金属（原矿、远古残骸…）';
 }
 
 export const SMELTING_RECIPE_COUNT = SMELTING_RECIPES.length;

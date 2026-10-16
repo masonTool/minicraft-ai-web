@@ -88,6 +88,9 @@ export type InventoryPanelMode =
   | 'enchanting'
   | 'anvil'
   | 'smithing'
+  /** 烟熏炉与高炉（批次 46）：与 `furnace` 同一套布局，只是容器与标题不同 */
+  | 'smoker'
+  | 'blast_furnace'
   /** 切石机（H11，批次 44）：一格输入 + 一列可选产物，点哪一项切哪一项 */
   | 'stonecutter'
   | 'brewing';
@@ -156,6 +159,8 @@ export class InventoryScreen {
   private readonly resultElement: HTMLDivElement;
   private readonly chestGrid: HTMLDivElement;
   private readonly furnaceLayout: HTMLDivElement;
+  /** 烟熏炉/高炉的"只吃什么"提示行（普通熔炉一直是空的） */
+  private readonly furnaceHintEl: HTMLDivElement;
   private readonly furnaceInputSlot: HTMLDivElement;
   private readonly furnaceFuelSlot: HTMLDivElement;
   private readonly furnaceOutputSlot: HTMLDivElement;
@@ -294,6 +299,8 @@ export class InventoryScreen {
     // 熔炉
     this.furnaceLayout = document.createElement('div');
     this.furnaceLayout.className = 'furnace-layout';
+    this.furnaceHintEl = document.createElement('div');
+    this.furnaceHintEl.className = 'anvil-cost';
     this.furnaceInputSlot = this.createSlot();
     this.furnaceFuelSlot = this.createSlot();
     this.furnaceOutputSlot = this.createSlot();
@@ -616,7 +623,9 @@ export class InventoryScreen {
     this.clearBindings('stonecutter:');
     this.clearBindings('brewing:');
 
-    if (this.mode === 'furnace') {
+    // 熔炉 / 烟熏炉 / 高炉（批次 46）共用同一套布局：格子与燃料规则完全一样，
+    // 区别只有"只吃哪一类东西"和"快一倍"——那两条由容器负责，界面只是标题与提示不同
+    if (isFurnaceMode(this.mode)) {
       const input = this.registerExisting(this.furnaceInputSlot, 'furnace:input', this.activeContainer!, FURNACE_INPUT);
       const fuel = this.registerExisting(this.furnaceFuelSlot, 'furnace:fuel', this.activeContainer!, FURNACE_FUEL);
       const output = this.registerExisting(
@@ -635,7 +644,14 @@ export class InventoryScreen {
       middle.className = 'furnace-middle';
       middle.appendChild(this.cookTrackElement());
 
-      this.furnaceLayout.replaceChildren(left, middle, output);
+      // 烟熏炉/高炉要写清"它只吃什么"：原版靠玩家自己知道，我们的界面里直接说明，
+      // 免得玩家把石头塞进烟熏炉、看着它不动以为是坏了
+      this.furnaceHintEl.textContent = '';
+      const right = document.createElement('div');
+      right.className = 'furnace-col';
+      right.append(this.buildLabel('产物'), output, this.furnaceHintEl);
+
+      this.furnaceLayout.replaceChildren(left, middle, right);
       this.topArea.appendChild(this.furnaceLayout);
       return;
     }
@@ -1147,12 +1163,16 @@ export class InventoryScreen {
       this.resultElement.classList.add('take-only');
     }
 
-    if (this.mode === 'furnace' && this.activeContainer instanceof Furnace) {
+    if (isFurnaceMode(this.mode) && this.activeContainer instanceof Furnace) {
       const furnace = this.activeContainer;
       const flameFill = this.flameEl.firstElementChild as HTMLElement | null;
       if (flameFill) flameFill.style.height = `${Math.round(furnace.burnRatio * 100)}%`;
       this.flameEl.classList.toggle('lit', furnace.isLit);
       this.cookFillEl.style.width = `${Math.round(furnace.cookRatio * 100)}%`;
+      // 原料槽里放的是"这座炉子不做的东西"时说明原因（烟熏炉里放石头、高炉里放沙子…）
+      const reason = furnace.rejectReason;
+      this.furnaceHintEl.textContent = reason;
+      this.furnaceHintEl.classList.toggle('bad', reason !== '');
     }
 
     if (this.mode === 'brewing' && this.activeContainer instanceof BrewingStand) {
@@ -1428,10 +1448,17 @@ export class InventoryScreen {
   }
 }
 
+/** 三种炉子共用一套布局（格子、火焰、进度条完全一样，见 `rebuildTopArea`） */
+function isFurnaceMode(mode: InventoryPanelMode): boolean {
+  return mode === 'furnace' || mode === 'smoker' || mode === 'blast_furnace';
+}
+
 const MODE_TITLES: Record<InventoryPanelMode, string> = {
   inventory: '物品栏',
   crafting: '工作台',
   furnace: '熔炉',
+  smoker: '烟熏炉',
+  blast_furnace: '高炉',
   chest: '箱子',
   enchanting: '附魔台',
   anvil: '铁砧',

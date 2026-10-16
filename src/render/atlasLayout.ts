@@ -600,6 +600,11 @@ export const TILE_ORDER = [
   'stonecutter_top',
   'stonecutter_bottom',
   'stonecutter_side',
+  // ---- 烟熏炉与高炉（批次 46）：各两张（顶 + 侧），底面复用顶面
+  'smoker_top',
+  'smoker_side',
+  'blast_furnace_top',
+  'blast_furnace_side',
   // ---- 红沙与红砂岩（批次 45）：与砂岩家族一一对应，只换色调
   'red_sand',
   'red_sandstone',

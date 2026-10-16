@@ -279,6 +279,9 @@ requirePickaxe(0, [
   Block.COBBLESTONE_WALL,
   Block.STONE_BRICK_WALL,
   Block.FURNACE,
+  // 烟熏炉与高炉（批次 46）：与熔炉同一档——要镐，但不挑等级
+  Block.SMOKER,
+  Block.BLAST_FURNACE,
   Block.COAL_ORE,
   Block.DEEPSLATE_COAL_ORE,
   Block.NETHER_QUARTZ_ORE,

@@ -11,7 +11,15 @@
 
 import type { ItemStack, SlotSource } from './Inventory.ts';
 import { maxStackOf } from '../registry/items.ts';
-import { fuelSeconds, smeltingRecipeFor, type SmeltingRecipe } from '../crafting/Smelting.ts';
+import {
+  FURNACE_STATIONS,
+  cookSeconds,
+  fuelSeconds,
+  smeltingRecipeFor,
+  stationRejectReason,
+  type FurnaceStation,
+  type SmeltingRecipe,
+} from '../crafting/Smelting.ts';
 
 export const FURNACE_INPUT = 0;
 export const FURNACE_FUEL = 1;
@@ -28,6 +36,15 @@ export interface FurnaceTickResult {
 export class Furnace implements SlotSource {
   private readonly slots: (ItemStack | null)[] = new Array<ItemStack | null>(FURNACE_SIZE).fill(null);
 
+  /**
+   * 这是哪一种炉子（批次 46）：普通熔炉 / 烟熏炉 / 高炉。
+   *
+   * ⚠️ **站台存在实例上，而不是靠方块 id 现查**：tick 循环是按容器实例推进的，
+   * 它手里只有 `Furnace`，拿不到"脚下那一格是哪个方块"；而"这炉子只吃食物"
+   * 这条规则必须参与每次 tick 的判定。站台同时也进存档，所以读档后不会变回普通熔炉。
+   */
+  station: FurnaceStation;
+
   burnTimeLeft = 0;
   /** 当前这批燃料的总时长，供 UI 计算火焰高度 */
   burnTimeTotal = 0;
@@ -36,6 +53,15 @@ export class Furnace implements SlotSource {
   storedExperience = 0;
 
   onChange: (() => void) | null = null;
+
+  constructor(station: FurnaceStation = 'furnace') {
+    this.station = station;
+  }
+
+  /** 这座炉子的中文名（界面标题与提示用） */
+  get stationName(): string {
+    return FURNACE_STATIONS[this.station].cn;
+  }
 
   get(index: number): ItemStack | null {
     if (index < 0 || index >= FURNACE_SIZE) return null;
@@ -52,11 +78,21 @@ export class Furnace implements SlotSource {
     return this.burnTimeLeft > 0;
   }
 
-  /** 当前配方（只看原料槽） */
+  /** 当前配方（只看原料槽；**按站台过滤**：烟熏炉只吃食物、高炉只吃矿物与金属） */
   private recipe(): SmeltingRecipe | undefined {
     const input = this.slots[FURNACE_INPUT];
     if (!input) return undefined;
-    return smeltingRecipeFor(input.id);
+    return smeltingRecipeFor(input.id, this.station);
+  }
+
+  /**
+   * 原料槽里那件东西**这座炉子吃不吃**（界面提示用）。
+   * 返回空字符串表示"能吃或者没意见"，否则是要显示给玩家的一句话。
+   */
+  get rejectReason(): string {
+    const input = this.slots[FURNACE_INPUT];
+    if (!input) return '';
+    return stationRejectReason(input.id, this.station);
   }
 
   /** 产物槽能否容纳该配方的产出 */
@@ -92,17 +128,21 @@ export class Furnace implements SlotSource {
       if (seconds > 0) {
         fuel!.count -= 1;
         if (fuel!.count <= 0) this.slots[FURNACE_FUEL] = null;
-        this.burnTimeLeft = seconds;
-        this.burnTimeTotal = seconds;
+        // ⚠️ 燃烧时长也按站台的倍率缩短：一份煤在烟熏炉里只烧 40 秒，
+        // 但每次烧炼只要一半时间，所以**一份燃料能烧的次数不变**（与熔炉一样是 8 次）
+        const burn = seconds * FURNACE_STATIONS[this.station].timeScale;
+        this.burnTimeLeft = burn;
+        this.burnTimeTotal = burn;
         changed = true;
       }
     }
 
     if (this.burnTimeLeft > 0 && recipe) {
-      this.cookTimeTotal = recipe.time;
+      const cookTime = cookSeconds(recipe, this.station);
+      this.cookTimeTotal = cookTime;
       this.cookProgress += dt;
       changed = true;
-      if (this.cookProgress >= recipe.time) {
+      if (this.cookProgress >= cookTime) {
         this.cookProgress = 0;
         this.produce(recipe);
       }

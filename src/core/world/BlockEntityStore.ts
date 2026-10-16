@@ -19,6 +19,7 @@ import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
+import type { FurnaceStation } from '../crafting/Smelting.ts';
 import type { DimensionId } from '../gen/Dimension.ts';
 
 export type BlockContainer =
@@ -65,10 +66,23 @@ export class BlockEntityStore {
     return container instanceof Chest ? container : undefined;
   }
 
-  getOrCreateFurnace(dimension: DimensionId, x: number, y: number, z: number): Furnace {
+  /**
+   * 取出（或新建）炉子。
+   *
+   * `station` 只影响**新建**：已经存在的实例保留它自己的站台——这一个入口同时服务
+   * 熔炉/烟熏炉/高炉三种方块，而站台是"这台炉子是什么"的一部分，
+   * 不该被"谁最后点了它一下"改写（读档恢复站台也是走这条路）。
+   */
+  getOrCreateFurnace(
+    dimension: DimensionId,
+    x: number,
+    y: number,
+    z: number,
+    station: FurnaceStation = 'furnace',
+  ): Furnace {
     const existing = this.getFurnace(dimension, x, y, z);
     if (existing) return existing;
-    const furnace = new Furnace();
+    const furnace = new Furnace(station);
     this.put({ dimension, x, y, z, container: furnace });
     return furnace;
   }

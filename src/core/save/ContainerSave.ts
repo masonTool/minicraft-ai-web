@@ -17,6 +17,7 @@
 
 import { CHEST_SIZE, Chest } from '../container/Chest.ts';
 import { FURNACE_SIZE, Furnace } from '../container/Furnace.ts';
+import type { FurnaceStation } from '../crafting/Smelting.ts';
 import { ANVIL_SIZE, Anvil } from '../container/Anvil.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
@@ -57,6 +58,11 @@ export interface SerializedContainer {
     cookProgress: number;
     cookTimeTotal: number;
     storedExperience: number;
+    /**
+     * 这是哪一种炉子（批次 46）。**旧存档没有这个字段**，缺省按普通熔炉读
+     * （烟熏炉与高炉是这一批才有的方块，老存档里不可能存在需要它们的容器）。
+     */
+    station?: FurnaceStation;
   };
   /** 酿造台的运转状态（燃料还能酿几次、当前进度） */
   brewing?: {
@@ -99,6 +105,11 @@ function containerFor(
   if (kind === 'smithing') return store.getOrCreateSmithingTable(dimension, x, y, z);
   if (kind === 'stonecutter') return store.getOrCreateStonecutter(dimension, x, y, z);
   return store.getOrCreateBrewingStand(dimension, x, y, z);
+}
+
+/** 存/读档里的站台字段是不是三个已知值之一 */
+function isFurnaceStation(value: unknown): value is FurnaceStation {
+  return value === 'furnace' || value === 'smoker' || value === 'blast_furnace';
 }
 
 /** 深拷贝一个栈（存档要的是快照，不能与背包里那个对象共用引用） */
@@ -169,6 +180,7 @@ export function serializeContainer(
       cookProgress: container.cookProgress,
       cookTimeTotal: container.cookTimeTotal,
       storedExperience: container.storedExperience,
+      station: container.station,
     };
   }
   if (container instanceof BrewingStand) {
@@ -224,6 +236,9 @@ export function restoreContainers(store: BlockEntityStore, data: readonly Serial
       container.cookProgress = numberOr(state.cookProgress, 0);
       container.cookTimeTotal = numberOr(state.cookTimeTotal, 0);
       container.storedExperience = numberOr(state.storedExperience, 0);
+      // 站台必须是三个已知值之一：外部数据里写了个乱七八糟的字符串时回退成普通熔炉，
+      // 而不是让 `FURNACE_STATIONS[station]` 在 tick 里变成 undefined 再炸掉
+      container.station = isFurnaceStation(state.station) ? state.station : 'furnace';
     }
     if (container instanceof BrewingStand && entry.brewing) {
       container.fuelLeft = numberOr(entry.brewing.fuelLeft, 0);

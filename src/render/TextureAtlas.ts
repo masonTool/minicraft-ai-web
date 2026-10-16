@@ -787,6 +787,72 @@ PAINTERS.cut_red_sandstone = (x, y, rng) => {
 };
 PAINTERS.smooth_red_sandstone = layered(198, 2, 3, [1.0, 0.71, 0.51]);
 
+// ---- 烟熏炉与高炉（批次 46）
+//
+// 三座炉子要"一眼分得开"：熔炉是圆石身（灰），烟熏炉是**木身 + 顶上冒烟口**，
+// 高炉是**平滑石与铁的厚实身**。原版也是靠这三套配色区分的。
+// ⚠️ 点燃时的火光外观三座炉子都没做（见 TASKS H6）。
+
+/** 烟熏炉侧面：圆石底座 + 木板包边 + 中间那个炉口（比熔炉多一层木头） */
+PAINTERS.smoker_side = (x, y, rng) => {
+  const base = layered(126, 8, 8)(x, y, rng);
+  // 上下两条木板包边（原版烟熏炉的侧面是"石炉 + 木框"）
+  if (y <= 2 || y >= 13) {
+    const wood = layered(146, 6, 6, [1.0, 0.76, 0.44])(x, y, rng);
+    return wood;
+  }
+  // 中间炉口：比熔炉更方、更小
+  if (x >= 4 && x <= 11 && y >= 6 && y <= 11) {
+    const v = 52 + rng() * 18;
+    return [clamp255(v * 1.15), clamp255(v * 0.92), clamp255(v * 0.76), 255];
+  }
+  return base;
+};
+
+/** 烟熏炉顶面：石顶 + 一块木格栅（"烟从这里出去"） */
+PAINTERS.smoker_top = (x, y, rng) => {
+  const base = layered(120, 8, 8)(x, y, rng);
+  if (x >= 2 && x <= 13 && y >= 2 && y <= 13) {
+    const wood = layered(138, 6, 6, [1.0, 0.74, 0.42])(x, y, rng);
+    // 格栅：每隔一格一道深缝
+    if (x % 4 === 0 || y % 4 === 0) {
+      return [clamp255(wood[0] * 0.66), clamp255(wood[1] * 0.66), clamp255(wood[2] * 0.66), 255];
+    }
+    return wood;
+  }
+  return base;
+};
+
+/** 高炉侧面：平滑石身 + 上下两道铁箍 + 中间的深色炉膛 */
+PAINTERS.blast_furnace_side = (x, y, rng) => {
+  const base = layered(164, 5, 6)(x, y, rng);
+  // 铁箍：上沿与下沿
+  if (y === 1 || y === 2 || y === 13 || y === 14) {
+    const jitter = rng() * 10 - 5;
+    return [clamp255(150 + jitter), clamp255(152 + jitter), clamp255(160 + jitter), 255];
+  }
+  // 炉膛：比熔炉更宽更矮（高炉是"闷烧"）
+  if (x >= 2 && x <= 13 && y >= 6 && y <= 11) {
+    const v = 40 + rng() * 16;
+    return [clamp255(v * 1.1), clamp255(v * 0.9), clamp255(v * 0.85), 255];
+  }
+  return base;
+};
+
+/** 高炉顶面：平滑石 + 中间一圈铁环与出气孔 */
+PAINTERS.blast_furnace_top = (x, y, rng) => {
+  const base = layered(158, 4, 6)(x, y, rng);
+  const distance = Math.hypot(x - 7.5, y - 7.5);
+  if (distance > 5.2) return base;
+  // 铁环
+  if (distance > 3.6) {
+    const jitter = rng() * 8 - 4;
+    return [clamp255(146 + jitter), clamp255(148 + jitter), clamp255(156 + jitter), 255];
+  }
+  const v = 62 + rng() * 14;
+  return [clamp255(v), clamp255(v), clamp255(v * 1.05), 255];
+};
+
 // 染色玻璃：16 张由配色表生成（玻璃板复用同一张，靠几何做薄片）
 for (const color of DYE_COLORS) {
   PAINTERS[`stained_glass_${color.name}`] = stainedGlassPainter(color.rgb);

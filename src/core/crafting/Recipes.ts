@@ -158,6 +158,32 @@ const CARPET_RECIPES: readonly Recipe[] = DYE_COLORS.map((_color, index) => ({
 }));
 
 /**
+ * 熔炉的两个变体（批次 46）：烟熏炉与高炉。
+ *
+ * ⚠️ 烟熏炉在原版是"**任意原木** + 熔炉"的标签配方，这里**按木材种类展开成 6 条**
+ * （橡木 + `Wood` 表的 5 种）——只写橡木会变成"配方书里写着能做、手里拿云杉原木却做不了"。
+ * 这也是本项目处理"标签配方"的既有做法（见 `WOOD_RECIPES`）。
+ *
+ * 高炉是固定配方：5 铁锭 + 1 熔炉 + 3 平滑石头（原版图案）。
+ */
+const FURNACE_VARIANT_RECIPES: readonly Recipe[] = [
+  ...[Block.OAK_LOG, ...Object.values(Wood).map((ids) => ids.log)].map(
+    (log): Recipe => ({
+      kind: 'shaped',
+      result: { id: Block.SMOKER, count: 1 },
+      pattern: [' L ', 'LFL', ' L '],
+      key: { L: log, F: Block.FURNACE },
+    }),
+  ),
+  {
+    kind: 'shaped',
+    result: { id: Block.BLAST_FURNACE, count: 1 },
+    pattern: ['III', 'IFI', 'SSS'],
+    key: { I: Item.IRON_INGOT, F: Block.FURNACE, S: Block.SMOOTH_STONE },
+  },
+];
+
+/**
  * 台阶与楼梯：由 12 个母方块批量生成，共 24 条。
  *  - 台阶：横排 3 个母方块 → 6 个台阶
  *  - 楼梯：阶梯状 6 个母方块 → 4 个楼梯（允许镜像，左右两侧的摆法都能合成）
@@ -670,6 +696,7 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
 
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
+  ...FURNACE_VARIANT_RECIPES,
   ...WOOL_RECIPES,
   ...CARPET_RECIPES,
   ...SHAPED_BLOCK_RECIPES,

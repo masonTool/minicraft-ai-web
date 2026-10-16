@@ -614,6 +614,9 @@ const NATURAL = new Set<number>([
 const FUNCTIONAL = new Set<number>([
   Block.CRAFTING_TABLE,
   Block.FURNACE,
+  // 烟熏炉与高炉（批次 46）：熔炉的两个变体，同样是"右键打开的功能方块"
+  Block.SMOKER,
+  Block.BLAST_FURNACE,
   Block.CHEST,
   Block.GLOWSTONE,
   // ---- 红石元件（都是"有信号才做事"的功能方块）
