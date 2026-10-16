@@ -61,38 +61,6 @@ const jobs = Math.max(1, Number(valueOf('--jobs')) || Math.max(1, cpus().length 
  */
 const NON_SUITE_KEYS = new Set(['test:unit', 'test:unit:watch', 'test:offline', 'test:offline:changed']);
 
-/**
- * **带绝对耗时预算的套件**：它们先单独跑（安静阶段），再跑其余。
- *
- * 为什么需要这个（批次 103 踩到的）：并行之后这几套会**偶发红灯**——
- * 同一个 `decor` 单独跑 1.7s（预算 3s），在 11 套同时跑时量到 3.9s。
- * 根因是"绝对耗时断言 vs CPU 争用"：每套虽然是单线程的，但 11 个 node 进程
- * 各自还有 JIT/GC 的后台线程，12 核也会被压满。
- *
- * ⚠️ 加进这个名单的判据必须**先确认它自己没变慢**：单跑一次看实测值是不是接近预算。
- * 这里挡的是"真的变慢了"，**不是**把预算调大——那是把闸门拆了。
- * ⚠️ 名单要与下面的注释、以及各套件里那条断言保持一致（改一处忘另一处，就会出现
- * "明明加进名单了还在红"）。
- */
-const QUIET_SUITES = new Set([
-  'perf', // 网格化单区块 < 120ms + 避雷针扫描微基准
-  'decor', // 生成 100 区块 < 3s
-  'nether', // 12×12 区块耗时 < 5s
-]);
-
-/**
- * 安静阶段的并发。1 = 完全不争用（实测这样这几套的耗时与单跑一致）。
- *
- * ⚠️ `structure`（16×16 区块 < 10s）**故意不在这里**：它是全轮的长杆（单跑 ~7s），
- * 串行反而把总耗时从 11s 抬到 19s；而它实测在并行下是 8.2s（争用系数只有 1.17），
- * 10s 的预算还够。**加进名单前先量一遍：争用系数高的才值得隔离。**
- *
- * 老实说代价：安静阶段 ~5.6s（三套串行），总耗时从 ~11s 涨到 ~14s。
- * 更彻底的做法是把这三条"绝对秒数"改成**相对量**（同一个进程里再生成一遍不放地物/结构的
- * 作对照，比值与机器无关）——那要动三个套件，留给后续（见 TASKS N8 的尾巴）。
- */
-const QUIET_JOBS = 1;
-
 // ------------------------------------------------------------------ 套件清单
 
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -330,19 +298,11 @@ const runBatch = async (list, concurrency) => {
   );
 };
 
-const quiet = suites.filter((s) => QUIET_SUITES.has(s.name));
-const rest = suites.filter((s) => !QUIET_SUITES.has(s.name));
-
 const t0 = Date.now();
-if (quiet.length > 0) {
-  // 安静阶段：带绝对耗时预算的套件先单独跑（见 `QUIET_SUITES` 的说明）
-  console.log(
-    `  安静阶段（并发 ${QUIET_JOBS}）：${quiet.map((s) => s.name).join(' ')}` +
-      `　—— 这几套带绝对耗时预算，不参与 CPU 争用`,
-  );
-  await runBatch(quiet, QUIET_JOBS);
-}
-await runBatch(rest, jobs);
+// ⚠️ 这里曾经有个"安静阶段"（把带绝对耗时预算的几套单独串行跑）——批次 103 的 B103-5
+// 把那些断言改成**比值**之后就不需要了：比值在同一次运行里量分子分母，与争用无关。
+// 见 `perf-bench.ts` / `decor-test.ts` / `nether-test.ts` 里各自的判据说明。
+await runBatch(suites, jobs);
 const wall = Date.now() - t0;
 
 // ------------------------------------------------------------------ 汇总
