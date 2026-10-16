@@ -58,6 +58,10 @@ export interface RedstoneWorld {
  * 而不是在文档里手抄一个迟早会漂的数字。
  */
 export function isRedstoneComponent(id: number): boolean {
+  // 门 / 活板门 / 栅栏门（批次 30 接进红石）：它们是红石**负载**（通电即开）。
+  // 批次 38 起按**形状**判定 —— 6 种木材的同一种门是同一件东西，
+  // 按 id 逐个列举必然漏（加一种木材就多 4 个方块）。
+  if (isOpenableShape(blockDef(id).shape)) return true;
   switch (id) {
     case Block.REDSTONE_WIRE:
     case Block.REDSTONE_TORCH:
@@ -74,14 +78,15 @@ export function isRedstoneComponent(id: number): boolean {
     case Block.STICKY_PISTON:
     case Block.PISTON_HEAD:
     case Block.OBSERVER:
-    // 门 / 活板门 / 栅栏门（批次 30）：它们是红石**负载**（通电即开）
-    case Block.OAK_DOOR:
-    case Block.OAK_TRAPDOOR:
-    case Block.OAK_FENCE_GATE:
       return true;
     default:
       return false;
   }
+}
+
+/** 这三种形状都是"能开合"的（通电即开、右键也能开） */
+export function isOpenableShape(shape: string): boolean {
+  return shape === 'door' || shape === 'trapdoor' || shape === 'fence_gate';
 }
 
 /** 红石粉的最大传播距离（原版 15 格） */
@@ -396,6 +401,13 @@ export class RedstoneEngine {
       const state = world.getState(nx, ny, nz);
       const input = this.inputStrength(world, strengths, nx, ny, nz);
 
+      // 门类负载（批次 30 接进红石；批次 38 起按形状覆盖全部木材：
+      // 原来写死 3 种橡木方块，云杉门通上红石根本不开）
+      if (isOpenableShape(blockDef(id).shape)) {
+        if (this.applyOpenableLoad(world, nx, ny, nz, id, state, blockDef(id).shape, input)) changed = true;
+        continue;
+      }
+
       switch (id) {
         case Block.REDSTONE_LAMP: {
           const shouldLight = input > 0;
@@ -418,46 +430,6 @@ export class RedstoneEngine {
               this.markDirty(nx, ny, nz);
               changed = true;
             }
-          }
-          break;
-        }
-        case Block.OAK_DOOR: {
-          // 门（批次 30 接进红石）：通电即开、断电即关。
-          //
-          // ⚠️ 门是**两格**的：红石通常只贴在下半格旁边，上半格自己的 `input` 是 0，
-          // 分开判就会得到"上半开着、下半关着"的半扇门。所以：
-          //  - 上半格直接跳过（由下半格负责改写两格）
-          //  - 下半格依据自己的输入决定开合，然后把上半格设成同一个开合状态
-          if (isDoorUpper(state)) break;
-          const upperId = world.getBlock(nx, ny + 1, nz);
-          const paired = upperId === Block.OAK_DOOR;
-          const wantOpen = input > 0;
-          if (isDoorOpen(state) === wantOpen) break;
-          world.setState(nx, ny, nz, withDoorOpen(state, wantOpen));
-          if (paired) {
-            // 上半格：保持"上"位、跟随下半格的开合
-            const upperState = withDoorOpen(world.getState(nx, ny + 1, nz), wantOpen);
-            world.setState(nx, ny + 1, nz, withDoorUpper(upperState, true));
-          }
-          this.markDirty(nx, ny, nz);
-          changed = true;
-          break;
-        }
-        case Block.OAK_TRAPDOOR: {
-          const wantOpen = input > 0;
-          if (isTrapdoorOpen(state) !== wantOpen) {
-            world.setState(nx, ny, nz, withTrapdoorOpen(state, wantOpen));
-            this.markDirty(nx, ny, nz);
-            changed = true;
-          }
-          break;
-        }
-        case Block.OAK_FENCE_GATE: {
-          const wantOpen = input > 0;
-          if (isFenceGateOpen(state) !== wantOpen) {
-            world.setState(nx, ny, nz, withFenceGateOpen(state, wantOpen));
-            this.markDirty(nx, ny, nz);
-            changed = true;
           }
           break;
         }
@@ -489,6 +461,56 @@ export class RedstoneEngine {
 
     void WIRE_RANGE;
     return changed;
+  }
+
+  /**
+   * 门类负载：通电即开、断电即关（门 / 活板门 / 栅栏门共用）。
+   *
+   * ⚠️ 门是**两格**的：红石通常只贴在下半格旁边，上半格自己的 `input` 是 0，
+   * 分开判就会得到"上半开着、下半关着"的半扇门。所以：
+   *  - 上半格直接跳过（由下半格负责改写两格）
+   *  - 下半格依据自己的输入决定开合，然后把上半格设成同一个开合状态
+   * 上半格还必须与下半格是**同一种门**，否则会出现"云杉门配橡木门"这种脏数据。
+   *
+   * @returns 是否改了东西（调用方据此置 `changed`）
+   */
+  private applyOpenableLoad(
+    world: RedstoneWorld,
+    x: number,
+    y: number,
+    z: number,
+    id: number,
+    state: number,
+    shape: string,
+    input: number,
+  ): boolean {
+    const wantOpen = input > 0;
+
+    if (shape === 'door') {
+      if (isDoorUpper(state)) return false;
+      const paired = world.getBlock(x, y + 1, z) === id;
+      if (isDoorOpen(state) === wantOpen) return false;
+      world.setState(x, y, z, withDoorOpen(state, wantOpen));
+      if (paired) {
+        // 上半格：保持"上"位、跟随下半格的开合
+        const upperState = withDoorOpen(world.getState(x, y + 1, z), wantOpen);
+        world.setState(x, y + 1, z, withDoorUpper(upperState, true));
+      }
+      this.markDirty(x, y, z);
+      return true;
+    }
+
+    if (shape === 'trapdoor') {
+      if (isTrapdoorOpen(state) === wantOpen) return false;
+      world.setState(x, y, z, withTrapdoorOpen(state, wantOpen));
+      this.markDirty(x, y, z);
+      return true;
+    }
+
+    if (isFenceGateOpen(state) === wantOpen) return false;
+    world.setState(x, y, z, withFenceGateOpen(state, wantOpen));
+    this.markDirty(x, y, z);
+    return true;
   }
 
   /**

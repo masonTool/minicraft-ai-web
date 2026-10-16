@@ -2526,7 +2526,8 @@ class App {
     this.damageHeldTool();
 
     // 门是两格高的整体：拆一半就把另一半一起带走（且整扇门只掉落一次）
-    if (brokenId === Block.OAK_DOOR) {
+    // 批次 38 起按形状判定（原来写死橡木门 → 云杉门拆一半会留下半扇悬空的门）
+    if (blockDef(brokenId).shape === 'door') {
       this.breakDoorPair(this.hit.x, this.hit.y, this.hit.z);
       this.breakProgress = 0;
       this.breakingKey = '';
@@ -2600,22 +2601,29 @@ class App {
     return this.entities.spawn(new Arrow(x, y, z, velocity, options));
   }
 
-  /** 开门/关门：上下两半必须同步切换，否则会出现"半扇门" */
+  /**
+   * 开门/关门（批次 38 起按**形状**判定，不再写死橡木）。
+   *
+   * 门是两格高的整体：上下两半必须是**同一种**门，且必须同步切换，
+   * 否则会出现"半扇门"。按形状判定之后，往木材表加一种木头、或以后加铁门，
+   * 这里都不用再动。
+   */
   private toggleDoor(x: number, y: number, z: number): void {
     const state = this.world.getBlockState(x, y, z);
     const baseY = isDoorUpper(state) ? y - 1 : y;
-    if (this.world.getBlock(x, baseY, z) !== Block.OAK_DOOR) return;
-    if (this.world.getBlock(x, baseY + 1, z) !== Block.OAK_DOOR) return;
+    const doorId = this.world.getBlock(x, baseY, z);
+    if (blockDef(doorId).shape !== 'door') return;
+    if (this.world.getBlock(x, baseY + 1, z) !== doorId) return;
 
     const baseState = this.world.getBlockState(x, baseY, z);
     const next = withDoorOpen(baseState, !isDoorOpen(baseState));
-    this.world.setBlockAndUpdate(x, baseY, z, Block.OAK_DOOR, next);
-    this.world.setBlockAndUpdate(x, baseY + 1, z, Block.OAK_DOOR, withDoorUpper(next, true));
+    this.world.setBlockAndUpdate(x, baseY, z, doorId, next);
+    this.world.setBlockAndUpdate(x, baseY + 1, z, doorId, withDoorUpper(next, true));
     this.audio.play('door', { x: x + 0.5, y: baseY + 0.5, z: z + 0.5 });
   }
 
   /**
-   * 活板门 / 栅栏门的开合（批次 30）。
+   * 活板门 / 栅栏门的开合（批次 30；批次 38 起按形状判定，不再写死橡木）。
    *
    * 两者都是**单格**方块，只需要翻自己的开关位（与门共用同一个位，见 `blockState.ts`）。
    * 与门一样播 `door` 音效——原版这三种的开合音是同一套木质声。
@@ -2623,7 +2631,7 @@ class App {
   private toggleOpenable(x: number, y: number, z: number, id: number): void {
     const state = this.world.getBlockState(x, y, z);
     const next =
-      id === Block.OAK_TRAPDOOR
+      blockDef(id).shape === 'trapdoor'
         ? withTrapdoorOpen(state, !isTrapdoorOpen(state))
         : withFenceGateOpen(state, !isFenceGateOpen(state));
     this.world.setBlockAndUpdate(x, y, z, id, next);
@@ -2637,12 +2645,15 @@ class App {
 
     for (let dy = 0; dy < 2; dy++) {
       const oy = baseY + dy;
-      if (this.world.getBlock(x, oy, z) !== Block.OAK_DOOR) continue;
+      const id = this.world.getBlock(x, oy, z);
+      // 上半格必须是同一种门（脏存档里可能只剩半扇）
+      if (blockDef(id).shape !== 'door') continue;
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
       this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
-      this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(Block.OAK_DOOR));
+      this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.flying || dy !== 0) continue;
-      const drop = dropFor(Block.OAK_DOOR);
+      // 掉落**这一种**门（原来写死 `dropFor(Block.OAK_DOOR)`，加别的木材就会掉错东西）
+      const drop = dropFor(id);
       if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5);
     }
   }
@@ -3235,13 +3246,14 @@ class App {
    */
   useFunctionalBlock(x: number, y: number, z: number): boolean {
     const hitBlock = this.world.getBlock(x, y, z);
+    const hitShape = blockDef(hitBlock).shape;
 
-    if (hitBlock === Block.OAK_DOOR) {
+    // 门 / 活板门 / 栅栏门：右键开合（按形状判定，批次 38 起覆盖全部 6 种木材）
+    if (hitShape === 'door') {
       this.toggleDoor(x, y, z);
       return true;
     }
-    // 活板门与栅栏门（批次 30）：右键开合，与门同一套手感
-    if (hitBlock === Block.OAK_TRAPDOOR || hitBlock === Block.OAK_FENCE_GATE) {
+    if (hitShape === 'trapdoor' || hitShape === 'fence_gate') {
       this.toggleOpenable(x, y, z, hitBlock);
       return true;
     }
