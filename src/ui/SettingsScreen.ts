@@ -227,7 +227,6 @@ export class SettingsScreen {
   /** 设置页那句提示 */
   private readonly settingsHintEl: HTMLElement;
   private readonly resumeButton: HTMLButtonElement;
-  private readonly closeButton: HTMLButtonElement;
   /** 两页 = 两个 section，同一份 DOM 用 `.active` 切换 */
   private readonly pages = new Map<PausePage, HTMLElement>();
   /** 一个分组 = 一个 section；默认四组一起显示，矮屏上由 CSS 只放行 `.active` 那一组 */
@@ -264,21 +263,15 @@ export class SettingsScreen {
     // 一页只放"几个主要按钮"（用户原话）。删除本世界是危险动作，单独排在最后。
     const menuPage = this.makePage('menu');
 
-    const menuHeader = document.createElement('div');
-    menuHeader.className = 'settings-header';
-
+    // 左槽留空（这一页没有"上一层"可回），标题仍然在正中间——
+    // 与设置页共用同一个三列骨架，切页时标题不会移位。
     const menuTitle = document.createElement('b');
     menuTitle.className = 'settings-title';
     menuTitle.textContent = '游戏已暂停';
+    const menuHeader = this.makeHeader(menuTitle, null);
 
     this.menuHintEl = document.createElement('div');
     this.menuHintEl.className = 'settings-hint';
-
-    // 右上角的 ✕（批次 104）：手机上既没有 Esc、也没地方点"空白"（面板整屏），
-    // 玩家需要一个"看得见就知道能关"的出口。形状与配方书、成就面板统一。
-    this.closeButton = this.makeCloseButton();
-
-    menuHeader.append(menuTitle, this.menuHintEl, this.closeButton);
 
     const actionsRow = document.createElement('div');
     actionsRow.className = 'pause-actions';
@@ -334,31 +327,22 @@ export class SettingsScreen {
     this.metaEl = document.createElement('div');
     this.metaEl.className = 'settings-hint settings-meta';
 
-    menuPage.append(menuHeader, actionsRow, this.metaEl);
+    menuPage.append(menuHeader, this.menuHintEl, actionsRow, this.metaEl);
 
     // ================================================================ ② 设置页
     const settingsPage = this.makePage('settings');
 
-    const header = document.createElement('div');
-    header.className = 'settings-header';
-
-    const backButton = document.createElement('button');
-    backButton.type = 'button';
-    backButton.className = 'settings-back';
-    backButton.textContent = '‹ 返回';
-    backButton.setAttribute('aria-label', '返回暂停菜单');
-    backButton.addEventListener('click', () => this.setPage('menu'));
-
+    // 左上角"‹ 返回"：从暂停菜单进来时回菜单页；从**主菜单**进来时没有菜单页可回，
+    // 那就等于关闭面板（位置与外观仍然统一——用户要的就是"统一"）。
     this.settingsTitleEl = document.createElement('b');
     this.settingsTitleEl.className = 'settings-title';
     this.settingsTitleEl.textContent = '设置';
+    const header = this.makeHeader(this.settingsTitleEl, '‹ 返回', () => this.backFromSettings());
 
     this.settingsHintEl = document.createElement('div');
     this.settingsHintEl.className = 'settings-hint';
 
-    header.append(backButton, this.settingsTitleEl, this.settingsHintEl);
-
-    // ---- 分组页签（矮屏手机显示，其余由 CSS 隐藏）
+    // ---- 分组页签（三端都是"左选项卡 + 右内容"）
     //
     // ⚠️ 刻意**不用** `role="tab"`：那套 ARIA 要求"一个 tab 配一个 tabpanel"，
     // 而桌面端四个 section 是同时显示的（页签只是隐藏的装饰）——两种模式下语义相反，
@@ -418,14 +402,13 @@ export class SettingsScreen {
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
     game.appendChild(this.makeResourcePackRow());
 
-    // 页签与内容裹一层：竖屏是"上面一排页签 + 下面内容"，
-    // **手机横屏**改成"左边一列页签 + 右边内容"（原版就是这样）——
-    // 换方向只切这一个容器的 `flex-direction`，两份 DOM 是不行的（改一处漏一处）。
+    // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
+    // 这一层留着是为了让"选项卡列"与"内容区"能各自独立收缩/滚动。
     const columns = document.createElement('div');
     columns.className = 'settings-columns';
     columns.append(tabs, body);
 
-    settingsPage.append(header, columns);
+    settingsPage.append(header, this.settingsHintEl, columns);
 
     this.root.append(panel);
     panel.append(menuPage, settingsPage);
@@ -451,15 +434,38 @@ export class SettingsScreen {
     return element;
   }
 
-  /** 标题栏右上角那颗 ✕（两页各一颗：切页时不用搬 DOM） */
-  private makeCloseButton(): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'settings-close';
-    button.textContent = '✕';
-    button.setAttribute('aria-label', '关闭设置');
-    button.addEventListener('click', () => this.actions.onResume());
-    return button;
+  /**
+   * 统一的标题栏（批次 110）：**三列栅格**（左槽 | 标题 | 右槽），标题永远居中。
+   *
+   * 两页共用同一个骨架：暂停菜单页左槽是空的（那一页有"继续游戏"当出口，
+   * 用户也说了"可能不需要关闭按钮"），设置页左槽是"‹ 返回"。
+   * 于是切页时唯一会动的只有左槽那颗键，标题一个字都不会移位。
+   *
+   * @param titleEl   标题节点（外面建好传进来：`setTitle` 要能改它）
+   * @param backLabel 左槽那颗"‹ 返回"的文案；传 `null` 就留一个空槽
+   */
+  private makeHeader(titleEl: HTMLElement, backLabel: string | null, onBack?: () => void): HTMLDivElement {
+    const header = document.createElement('div');
+    header.className = 'settings-header';
+
+    const left = document.createElement('div');
+    left.className = 'settings-header-slot';
+    if (backLabel !== null) {
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'settings-back';
+      back.textContent = backLabel;
+      back.setAttribute('aria-label', '返回上一层');
+      back.addEventListener('click', () => onBack?.());
+      left.appendChild(back);
+    }
+
+    // 右槽永远是空占位：它的唯一作用是让标题保持在正中间
+    const right = document.createElement('div');
+    right.className = 'settings-header-slot';
+
+    header.append(left, titleEl, right);
+    return header;
   }
 
   /** 切页：`menu`（暂停菜单）/ `settings`（设置项） */
@@ -476,6 +482,18 @@ export class SettingsScreen {
   /** 当前停在哪一页（验收脚本/调试用） */
   get page(): PausePage {
     return this.currentPage;
+  }
+
+  /**
+   * 设置页左上角"‹ 返回"点了之后去哪儿。
+   *
+   * 游戏里 → 回暂停菜单页（面板还开着）；**从主菜单打开**时没有"暂停"可言，
+   * 直接关掉面板（否则会看到一个标题写着"游戏已暂停"的菜单页——那是错的）。
+   * 位置与外观不变，只是这一步的落点随上下文走。
+   */
+  private backFromSettings(): void {
+    if (this.actions.onExitToMenu) this.setPage('menu');
+    else this.actions.onResume();
   }
 
   /**

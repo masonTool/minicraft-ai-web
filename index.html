@@ -72,6 +72,15 @@
         --mc-menu-bg: #232323;
         --mc-menu-overlay: rgba(0, 0, 0, .58);
 
+        /* ---- 暂停/设置面板的**固定尺寸**（批次 110） ----
+           用户要求"不管手机还是 PC，设置界面都是固定宽高、统一大小的"。
+           尺寸只在这两个变量里出现一次，暂停菜单页与设置页**共用**——
+           之前两页各写一套宽度，切页时面板会跳大小。
+           ⚠️ 仍用 `min(vw, 上限)` 而不是写死像素：手机上要收进视口，
+              "固定"指的是不随内容/页签变化（四周留出的一圈就是游戏区域）。 */
+        --panel-w: min(94vw, 640px);
+        --panel-h: min(88vh, 560px);
+
         /* ---- 面板 ---- */
         --panel-bg: var(--mc-panel);
         --panel-bg-dark: var(--mc-menu-bg);
@@ -658,51 +667,80 @@
         background: rgba(0, 0, 0, .55);
       }
       #settings-screen.hidden { display: none; }
+      /* ================================================================
+         暂停 / 设置面板：**固定尺寸 + 统一标题栏**（批次 110）
+         ================================================================
+         用户反馈："不管手机还是 PC，设置的界面应该是固定宽高的；不能这个界面一个
+         宽高、跳另一个界面又是一个宽高，应该是统一大小的；它都覆盖在游戏界面上，
+         然后有一点点外部的游戏区域；右上角统一加关闭按钮，或者左上角统一加返回按钮
+         （暂停那个界面有继续游戏，可能就不需要关闭按钮了）。"
+
+         之前的问题正是这两句：
+           · 批次 107~109 给"暂停菜单页"和"设置页"**各写了一套宽度**
+             （菜单页 `min(72vw,400px)`、设置页 `min(96vw,820px)`）——切页时面板会**跳大小**；
+           · 高度写的是 `auto`：内容多少就多高，换一个分组也跟着变。
+
+         现在：尺寸只出现在 `:root` 的 `--panel-w` / `--panel-h` 这一对变量里，
+         **两页共用**，高度是固定值（内容多就在内部滚动，面板本身不动）。
+         四周那圈"外部的游戏区域"就是视口减去面板尺寸后剩下的边距——所以**不写
+         `width: 100%`**，也不写 `inset: 0`。
+         ⚠️ "固定"指的是**不随内容/页签变化**，不是"写死像素"：手机上必须用
+           `min(vw, 上限)` 把面板收进视口，否则小屏会被裁掉。
+         ⚠️ 高度固定之后，"四组一次全展开"那套就不能用了（一屏放不下）；
+           所以**三端统一成"左选项卡 + 右内容、一次一组"**——每组最多 5 行，
+           任何屏幕都不用滚。这也是原版的样子。 */
       .settings-panel {
-        width: min(92vw, 420px); max-height: 88vh; overflow-y: auto;
+        width: var(--panel-w); max-width: var(--panel-w);
+        height: var(--panel-h); max-height: var(--panel-h);
         background: var(--mc-menu-bg); color: var(--mc-text-light);
-        /* 像素风（批次 108 起）：直角 + 斜角硬边；批次 109 把底色换成原版深灰 */
         border: 3px solid; border-color: var(--pixel-bevel-dark);
         border-radius: 0;
-        padding: 14px 16px 16px; font-size: 13px;
+        padding: 12px 14px; font-size: 13px;
         box-shadow: var(--panel-shadow);
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
-        /* 标题栏 / 页签 / 设置项 三段用 order 排，而不是靠 DOM 顺序：
-           同一份 DOM 要在两种排法之间切换（竖屏一列 / 横屏左选项卡右内容）。
-           为两种排法各建一套 DOM，迟早出现"这处改了那处没改"的漂移。 */
-        display: flex; flex-direction: column;
+        display: flex; flex-direction: column; overflow: hidden;
       }
-      /* ⚠️ 每一段都写 `flex: 0 0 auto`：面板是"flex 列 + overflow-y: auto"，
-         而 flex 项默认 `flex-shrink: 1`——不写的话内容会被**压缩**到不溢出，
-         于是既不出现滚动条、设置项又会溢出自己的盒子压到下面的存档信息上。
-         （触摸端把 `.settings-body` 改回 `flex: 1 1 auto`，那一块才是唯一滚动的区域。） */
-      .settings-header { display: flex; align-items: center; gap: 8px; order: 0; flex: 0 0 auto; }
-      .settings-panel b { font-size: 18px; display: block; letter-spacing: 1px; color: #fff; }
-      .settings-header b { flex: 1 1 auto; min-width: 0; }
-      /* 副标题挪进标题栏了，别再吃那 12px 的下边距 */
-      .settings-header .settings-hint { margin: 0; }
-      .settings-close {
-        flex: 0 0 auto; width: 40px; height: 34px;
-        font: inherit; font-size: 15px; line-height: 1; cursor: pointer;
+      /* 标题栏：**三列栅格**（左槽 | 标题 | 右槽），标题永远在正中间。
+         两页共用同一个骨架：暂停菜单页左槽是空的，设置页左槽是"‹ 返回"。
+         于是"换个界面"时唯一会动的只有左槽那颗键，标题一个字都不会移位。 */
+      .settings-header {
+        display: grid; grid-template-columns: 84px 1fr 84px;
+        align-items: center; gap: 8px; flex: 0 0 auto;
       }
-      /* 分组页签：默认（宽屏与高屏手机）隐藏——四组设置一次全展开，用不着分页；
-         横屏手机与矮屏才显示，那时它就是"左选项卡 + 右内容"或"一次一组"（见文件下半部分） */
-      .settings-tabs { display: none; order: 1; gap: 6px; flex: 0 0 auto; }
-      /* 页签 + 内容的外壳：竖屏/桌面是"上面一排页签、下面内容"；
-         **手机横屏**改成"左边一列页签、右边内容"（原版就是这样）——
-         换方向只切这一个容器的 flex-direction，不建两套 DOM。 */
-      .settings-columns { display: flex; flex-direction: column; }
+      .settings-header-slot { display: flex; min-width: 0; }
+      .settings-header-slot:last-child { justify-content: flex-end; }
+      .settings-title {
+        font-size: 17px; letter-spacing: 1px; color: #fff; text-align: center;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .settings-back {
+        padding: 0 10px; height: 32px; min-width: 76px;
+        font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+      }
+      .settings-hint { color: #a8a8a8; font-size: 12px; margin: 4px 0 8px; text-align: center; }
+      /* 页签 + 内容：**永远"左选项卡 + 右内容"**（原版就是左侧一列） */
+      .settings-columns { display: flex; flex-direction: row; gap: 12px; flex: 1 1 auto; min-height: 0; }
+      .settings-tabs { display: flex; flex-direction: column; flex: 0 0 104px; gap: 4px; }
       .settings-tab {
-        font: inherit; font-size: 13px; padding: 8px 12px; min-height: 38px;
-        flex: 1 1 auto; white-space: nowrap; cursor: pointer;
+        font: inherit; font-size: 13px; padding: 6px 8px; min-height: 34px;
+        text-align: left; white-space: nowrap; cursor: pointer; flex: 0 0 auto;
       }
       /* 当前分组：浅灰面 + 深字（原版"选中的那一项"就是反白的一块） */
       .settings-tab.active {
         background: var(--mc-panel); color: var(--mc-text);
         text-shadow: 1px 1px 0 rgba(255, 255, 255, .45);
       }
-      .settings-hint { color: #a8a8a8; font-size: 12px; margin: 4px 0 12px; }
-      .settings-title { font-size: 18px; display: block; letter-spacing: 1px; }
+      .settings-body {
+        flex: 1 1 auto; min-height: 0;
+        overflow-x: hidden; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 6px;
+      }
+      /* 一次只显示当前分组（组名写在左边的选项卡上，段内标题是重复信息） */
+      .settings-section { display: none; flex-direction: column; gap: 6px; }
+      .settings-section.active { display: flex; }
+      .settings-group { display: none; }
+      .settings-meta { flex: 0 0 auto; margin: 8px 0 0; }
+      .settings-row { display: grid; grid-template-columns: minmax(96px, auto) 1fr 52px; align-items: center; gap: 8px; }
 
       /* ---------------- 暂停菜单那一页（批次 108） ----------------
          同一份 DOM 的两页：`.pause-page.active` 才是当前这一页。
@@ -711,21 +749,17 @@
          一页上，用户的原话是"按钮非常大、又占了全屏、有点乱"。
          按钮的斜角与主菜单那套一致（亮左上 / 暗右下，按下时翻过来）。 */
       .pause-page { display: none; }
-      .pause-page.active { display: flex; flex-direction: column; flex: 0 0 auto; }
-      .pause-actions { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 0; }
+      .pause-page.active {
+        display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
+        overflow-x: hidden; overflow-y: hidden;
+      }
+      /* 菜单页的内容不是"一格滚动区"，它自己滚；设置页由里面的 `.settings-body` 滚 */
+      .pause-page[data-page='menu'].active { overflow-y: auto; }
+      /* 按钮列**在面板里垂直居中**：面板高度是固定的，不居中底下会空一大片 */
+      .pause-actions { display: flex; flex-direction: column; gap: 8px; margin: auto 0; }
       .pause-action {
-        font: inherit; font-size: 14px; padding: 9px; min-height: 40px; cursor: pointer;
+        font: inherit; font-size: 14px; padding: 9px; min-height: 42px; cursor: pointer;
       }
-      /* 设置页左上角的"‹ 返回"：与右上角的 ✕ 同款，宽一点（要装得下两个字） */
-      .settings-back {
-        flex: 0 0 auto; padding: 0 10px; height: 34px; min-width: 64px;
-        font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
-      }
-      /* 设置项按分组切成四段（与页签一一对应）：桌面全部显示，手机只显示 .active 那段 */
-      .settings-body { order: 3; display: flex; flex-direction: column; gap: 9px; flex: 0 0 auto; }
-      .settings-section { display: flex; flex-direction: column; gap: 9px; }
-      .settings-meta { order: 4; margin: 10px 0 0; flex: 0 0 auto; }
-      .settings-row { display: grid; grid-template-columns: 96px 1fr 56px; align-items: center; gap: 8px; }
       .settings-row i { font-style: normal; color: var(--mc-text-light); text-align: right; }
       /* ---------------- 循环切换控件（批次 109） ----------------
          ⚠️ 基岩版的设置界面里**没有复选框、也没有下拉框**：布尔项与"几选一"项
@@ -782,118 +816,38 @@
       .settings-panel input[type="file"]::file-selector-button:active { background: var(--mc-face-hover); }
       .settings-row input[type="file"] { font: inherit; font-size: 11px; color: #a8a8a8; }
 
-      /* ---------------- 手机端：设置面板改成"紧凑卡片"（批次 107） ----------------
-         ⚠️ 这一批**推翻了批次 104 的"整屏 + 分组分页"**——用户反馈：暂停菜单
-         "按钮非常大、又占了全屏、有点乱，设置内容该展示得更多"。整屏面板 + 46px 高的
-         页签与动作按钮把屏幕占满，而每一页里只有四五行设置，屏幕的绝大部分是空白。
-
-         现在的做法：回到**居中的卡片**（宽度与桌面同一档），把每一行压紧到 38px，
-         于是四组设置能在**一屏里全部看到**（不再分页、通常也不用滚）。
-         只有特别矮的屏（横屏手机，见下面 `@media (max-height: 560px)`）才退回
-         "分组页签 + 一次一组"——那时候一屏确实放不下。
+      /* ---------------- 触摸端：只放大热区，**不动面板尺寸**（批次 110） ----------------
+         ⚠️ 面板的宽高从批次 110 起由 `--panel-w` / `--panel-h` 统一给（两页共用、
+         固定值）。触摸端**不再自己写一套尺寸**——"换个界面就换一个宽高"正是从
+         `body.touch-mode .settings-panel { width: ... }` 这类规则来的。
+         这里只留两件事：把行高与热区放大到手指点得准。
          ⚠️ 判据用 `body.touch-mode` 而不是 `@media (max-width: 900px)`：
-         平板（1024×768 触摸屏）也该拿这套布局，而它不命中那个宽度断点。
-         ⚠️ 这里是"后出现、同优先级"的规则，会盖掉上面桌面那套——所以每一处
-         需要变的属性都要在这里**显式**写上（少了哪条就是哪一种"半手机半桌面"的怪界面）。 */
-      body.touch-mode #settings-screen { background: rgba(0, 0, 0, .55); }
-      body.touch-mode .settings-panel {
-        width: min(96vw, 520px); max-width: 520px;
-        height: auto; max-height: min(92vh, 760px);
-        padding: 14px 16px 12px;
-        border: 3px solid; border-color: var(--pixel-bevel-dark); border-radius: 0;
-        /* 唯一滚动的是里面那块设置区（见 `.settings-body`），面板自己不滚 */
-        overflow: hidden;
-      }
-      body.touch-mode .settings-header { flex: 0 0 auto; padding: 0 0 8px; gap: 8px; }
-      body.touch-mode .settings-close { width: 40px; height: 38px; font-size: 16px; }
-      /* 暂停菜单那几颗按钮：手机上给足热区（48px），并且**这一页自己滚**
-         （设置页的滚动区是里面那块 `.settings-body`，两页各滚各的） */
-      body.touch-mode .pause-action { min-height: 48px; font-size: 15px; }
-      body.touch-mode .pause-page.active { flex: 1 1 auto; min-height: 0; }
-      body.touch-mode .pause-page[data-page='menu'].active { overflow-y: auto; }
-      body.touch-mode .settings-back { height: 38px; padding: 0 12px; font-size: 14px; }
-      /* 设置项那一块是唯一的滚动区（标题栏与动作按钮都钉在上面） */
-      body.touch-mode .settings-body {
-        order: 2; flex: 1 1 auto; min-height: 0;
-        overflow-y: auto; padding: 0 2px 0 0;
-      }
-      /* 外壳也要能收缩，否则 `settings-body` 的 `min-height: 0` 无从生效 */
-      body.touch-mode .settings-columns { flex: 1 1 auto; min-height: 0; }
-      /* 四组一次全显示（分页只在矮屏上回来，见文件下半部分的媒体查询） */
-      body.touch-mode .settings-section { display: flex; }
-      body.touch-mode .settings-group { margin: 8px 0 0; padding-top: 6px; }
-      body.touch-mode .settings-meta { order: 3; padding: 0; margin: 8px 0 0; }
-      /* 行高压到 38px（原来 44px）：仍比桌面的 22px 好点得多，但四组能一屏放下 */
+         平板（1024×768 触摸屏）也该拿这套，而它不命中那个宽度断点。 */
       body.touch-mode .settings-row {
-        grid-template-columns: minmax(84px, auto) 1fr 54px; min-height: 38px;
+        grid-template-columns: minmax(86px, auto) 1fr 54px; min-height: 36px;
       }
-      body.touch-mode .settings-row input[type="range"] { height: 36px; }
+      body.touch-mode .settings-row input[type="range"] { height: 34px; }
       body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
         width: 16px; height: 26px; margin-top: -8px;
       }
-      body.touch-mode .settings-cycle { min-width: 104px; padding: 7px 10px; font-size: 13px; }
-
-      /* 矮屏（横屏手机）：一屏放不下四组设置，这时才退回"分组页签 + 一次一组"
-         （批次 104 的做法）。高屏手机上页签是多余的——四组本来就全看得见。 */
-      @media (max-height: 560px) {
-        body.touch-mode .settings-tabs { display: flex; flex: 0 0 auto; padding: 0 0 8px; }
-        body.touch-mode .settings-section { display: none; }
-        body.touch-mode .settings-section.active { display: flex; }
-        /* 页签上已经写着组名，段内的小标题在这时是重复信息 */
-        body.touch-mode .settings-group { display: none; }
-      }
+      body.touch-mode .settings-cycle { min-width: 100px; padding: 6px 8px; font-size: 13px; }
+      body.touch-mode .settings-tab { min-height: 40px; padding: 8px 10px; }
+      body.touch-mode .settings-tabs { flex: 0 0 88px; }
+      body.touch-mode .settings-back { height: 38px; font-size: 14px; }
+      body.touch-mode .pause-action { min-height: 46px; font-size: 15px; }
 
       /* ================================================================
          手机横屏：**本项目的主要场景**（批次 109）
          ================================================================
-         用户点明"我们的游戏在手机端是横屏的"，并问"为什么横屏下还会有那么高的
-         界面"。之前几批的适配默认是竖屏，横屏只是"顺带能看"：一个 520×343 的
-         竖条卡片摆在 844×390 的屏幕上，**屏幕宽度整整浪费一半**、高度几乎顶满。
-
-         原版基岩版在横屏下就是"**左侧一列选项卡 + 右侧设置项**"。这里照做，
-         并把行高压到 34px、暂停菜单的按钮压到 40px——横屏高度只有 ~390px，
-         省下来的每一像素都是"能不能一屏看完"。
-         ⚠️ 只对 `body.touch-mode` 生效：桌面端把窗口拉得很矮时不该突然变成两栏
-            （那条路径本来就有滚动，且 PC 端验收脚本按 1440×900 跑）。
-         ================================================================ */
+         用户点明"我们的游戏在手机端是横屏的"。横屏高度只有 ~390px，所以这里
+         只压**主菜单**（标题/按钮列）——设置与暂停面板的尺寸已经由
+         `--panel-w/--panel-h` 统一给（固定尺寸，横竖屏不再各写一套）。
+         ⚠️ 只对 `body.touch-mode` 生效：桌面端把窗口拉矮时不该突然换一套排法
+            （PC 端验收脚本按 1440×900 跑）。 */
       @media (orientation: landscape) and (max-height: 560px) {
-        /* ---- 设置：宽而矮的面板 + 左选项卡右内容 ---- */
-        body.touch-mode .settings-panel {
-          width: min(96vw, 820px); max-width: 820px;
-          max-height: 94vh; padding: 10px 12px;
-        }
-        body.touch-mode .settings-columns { flex-direction: row; gap: 12px; }
-        body.touch-mode .settings-tabs {
-          display: flex; flex-direction: column; flex: 0 0 108px;
-          gap: 4px; padding: 0;
-        }
-        body.touch-mode .settings-tab {
-          flex: 0 0 auto; min-height: 30px; padding: 4px 8px;
-          font-size: 12px; text-align: left;
-        }
-        body.touch-mode .settings-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 4px; }
-        body.touch-mode .settings-section { gap: 4px; }
-        body.touch-mode .settings-row {
-          min-height: 34px; grid-template-columns: minmax(104px, auto) 1fr 54px;
-        }
-        body.touch-mode .settings-row input[type="range"] { height: 30px; }
-        body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
-          width: 12px; height: 20px; margin-top: -5px;
-        }
-        body.touch-mode .settings-cycle { min-width: 86px; padding: 3px 6px; font-size: 12px; }
-        body.touch-mode .settings-header { padding-bottom: 6px; }
-        /* ‹ 返回 / ✕：横屏高度紧张，压到 36px（竖屏是 38px）。
-           再小就低于"手指点得准"的下限了——这两个键在面板顶角，值不回票价 */
-        body.touch-mode .settings-back,
-        body.touch-mode .settings-close { height: 36px; font-size: 13px; }
-
-        /* ---- 暂停菜单：一列按钮压到 40px，5 颗也不必滚 ---- */
-        body.touch-mode .pause-actions { gap: 6px; }
-        body.touch-mode .pause-action { min-height: 40px; font-size: 14px; padding: 6px; }
-        /* 菜单页不需要 820px 宽——一列按钮拉到 800px 很怪（原版那列约占屏宽 1/3）。
-           只有**设置页**需要那个宽度（左选项卡 + 右内容）。判据写在面板的
-           `data-page` 上（由 `setPage` 维护），比 `:has()` 可靠（老 WebView 没有 :has）。 */
-        body.touch-mode .settings-panel[data-page='menu'] { width: min(72vw, 400px); }
+        /* 横屏的面板高度只有 ~343px：把暂停菜单的按钮从 46px 收到 42px，
+           5 颗按钮 + 标题 + 存档信息刚好放得下（面板尺寸不变，只是里面排得更紧） */
+        body.touch-mode .pause-action { min-height: 42px; font-size: 14px; }
 
         /* ---- 主菜单：横屏宽度富余、高度紧张 ---- */
         body.touch-mode .world-panel { width: min(88vw, 620px); }
@@ -1782,7 +1736,7 @@
          这套值是原版反推的：面板 #c6c6c6 / 斜面 #fff + #555 / 描边 #000 /
          文字 #e0e0e0 / 阴影 #3f3f3f / 悬停 #ffffa0。 */
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
-          .world-card-actions button, .pause-action, .settings-back, .settings-close,
+          .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
           .inv-page-button, .overlay-go, .unsupported-button) {
         background: var(--btn-bg);
@@ -1793,14 +1747,14 @@
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
       }
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
-          .world-card-actions button, .pause-action, .settings-back, .settings-close,
+          .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
           .inv-page-button, .overlay-go, .unsupported-button):not(:disabled):hover {
         background: var(--mc-face-hover);
         color: var(--mc-text-hover);
       }
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
-          .world-card-actions button, .pause-action, .settings-back, .settings-close,
+          .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
           .inv-page-button, .overlay-go, .unsupported-button):not(:disabled):active {
         /* 斜面反转 = 凹进去（原版靠这个表达"按下了"，不靠位移） */

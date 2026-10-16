@@ -174,19 +174,20 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   for (const [label, needle] of [
     ['顶部暂停键容器', '#touch-pause {'],
     ['暂停键尺寸吃 --touch-scale（与"触摸按钮大小"同一个设置项）', '#touch-pause .touch-button { width: calc(52px * var(--touch-scale, 1));'],
-    // 手机端设置面板（批次 107 改成紧凑卡片，见 index.html 里那一段的说明）
-    ['手机端设置面板是紧凑卡片（不再占满全屏）', 'body.touch-mode .settings-panel { width: min(96vw, 520px); max-width: 520px; height: auto; max-height: min(92vh, 760px);'],
-    ['手机端四组设置一次全显示', 'body.touch-mode .settings-section { display: flex; }'],
     // 暂停菜单那一页（批次 108）：一页只放"几个主要按钮"，竖排
     ['暂停菜单的主按钮竖排', '.pause-actions { display: flex; flex-direction: column; gap: 8px;'],
-    ['手机上暂停按钮热区 48px', 'body.touch-mode .pause-action { min-height: 48px; font-size: 15px; }'],
-    ['设置页有 ‹ 返回（它是暂停菜单的二级页面）', '.settings-back { flex: 0 0 auto; padding: 0 10px; height: 34px;'],
-    ['暂停菜单那一页自己滚（设置页滚的是里面那块）', "body.touch-mode .pause-page[data-page='menu'].active { overflow-y: auto; }"],
-    ['矮屏才退回分组页签', 'body.touch-mode .settings-tabs { display: flex; flex: 0 0 auto; padding: 0 0 8px; }'],
+    ['手机上暂停按钮热区 46px', 'body.touch-mode .pause-action { min-height: 46px; font-size: 15px; }'],
+    ['设置页有 ‹ 返回（它在统一的标题栏左槽里）', '.settings-back { padding: 0 10px; height: 32px; min-width: 76px;'],
+    ['暂停菜单那一页自己滚（设置页滚的是里面那块）', ".pause-page[data-page='menu'].active { overflow-y: auto; }"],
     ['手机端不显示快捷栏序号（没有数字键）', 'body.touch-mode #hotbar .slot .index { display: none; }'],
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
+  // ⚠️ 批次 110：**触摸端不再自己写面板尺寸**——"换个界面就换一个宽高"正是从
+  //    `body.touch-mode .settings-panel { width: ... }` 这类规则来的，所以这条要反向断言。
+  //    （先剥掉注释：上面说明里正好引用了这句，不去掉会自己撞自己）
+  const cssOnly = html.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+  check('触摸端不再覆盖面板尺寸（尺寸只有 --panel-w/--panel-h 一处）', !cssOnly.includes('body.touch-mode .settings-panel {'));
 
   // ---- ⑤ 手机端不能出现键盘字母（用户直接提的一条：关界面用 ✕，不是字母 R）
   const recipeBook = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
@@ -507,7 +508,7 @@ console.log('\n[暂停菜单分两层（批次 108）]');
   check('暂停菜单有「设置」按钮（点进二级页）', source.includes("settingsButton.textContent = '设置';"));
   check('暂停菜单有「保存并退出到主菜单」', source.includes("exitToMenu.textContent = '保存并退出到主菜单';"));
   // 设置页有返回；「继续游戏」不该再和滑块挤在同一页上
-  check('设置页有 ‹ 返回', source.includes("backButton.textContent = '‹ 返回';"));
+  check('设置页有 ‹ 返回', source.includes("'‹ 返回'"));
   check('设置页上不再并排放着动作按钮', !source.includes("className = 'settings-buttons'"));
   // Esc / Android 返回键共用"退一层"这一个判据
   check('退一层收在 goBack() 里（返回"还开着吗"）', source.includes('goBack(): boolean') && source.includes("this.setPage('menu');\n      return true;"));
@@ -596,7 +597,7 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
   check('没有把分类标签的单行横向滚动一起锁掉', !!lockRule && !lockRule[0].includes('.inv-tabs'));
 }
 
-console.log('\n[手机横屏布局（批次 109，本项目的主要场景）]');
+console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 110）]');
 {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
@@ -604,37 +605,60 @@ console.log('\n[手机横屏布局（批次 109，本项目的主要场景）]')
   const landscape =
     /@media \(orientation: landscape\) and \(max-height: 560px\) \{([\s\S]*?)\n      \}/.exec(html)?.[1] ?? '';
 
-  // ⚠️ 用户点明"我们的游戏在手机端是横屏的"，还问"为什么横屏下还会有那么高的界面"。
-  //    所以横屏必须是一段**显式**的规则，而不是靠 `max-height: 560px` 顺带命中
-  //    （后者把"手机横屏"和"桌面矮窗口"混成了一类）。
-  check('有一段显式的"手机横屏"规则', landscape.length > 0);
-  // 横屏只有 ~390px 高：面板要**宽而矮**（原来是 520×343 的竖条，屏幕宽度浪费一半）
-  check('横屏：设置面板改宽而矮', landscape.includes('width: min(96vw, 820px); max-width: 820px;'));
-  check('横屏：设置改"左选项卡 + 右内容"', landscape.includes('body.touch-mode .settings-columns { flex-direction: row; gap: 12px; }'));
-  check('横屏：页签竖成一列（原版就是左侧一列）', landscape.includes('flex-direction: column; flex: 0 0 108px;'));
-  check('横屏：设置行高压到 34px', landscape.includes('body.touch-mode .settings-row {') && landscape.includes('min-height: 34px;'));
-  check('横屏：暂停菜单按钮压到 40px（5 颗一屏放得下）', landscape.includes('body.touch-mode .pause-action { min-height: 40px;'));
-  check('横屏：主菜单按钮收窄、标题缩小', landscape.includes('body.touch-mode .world-menu > * { width: min(100%, 240px); }'));
-  // 菜单页与设置页需要的宽度不一样：设置页 820px（左选项卡+右内容），菜单页一列按钮 400px
-  check('横屏：暂停菜单那一页单独收窄（按 data-page 区分）', landscape.includes(".settings-panel[data-page='menu'] { width: min(72vw, 400px); }"));
-  check('面板上真的写了 data-page（判据不能只存在于 CSS）', source.includes('this.panel.dataset.page = page;'));
-  // 每一条规则都挂在 `body.touch-mode` 上：桌面端把窗口拉矮时不该突然变成两栏
-  // （那条路径本来就有滚动，PC 验收脚本也按 1440×900 跑）
-  // 数"裸选择器"（以 `.` 开头的那种）：一条都不该有——每一条规则都要挂在
-  // `body.touch-mode` 上。（分组选择器一行里会出现两次 `body.touch-mode`，
-  // 所以不能拿"`{` 的个数"去比"前缀出现的次数"。）
+  // ⚠️ 用户反馈："不管手机还是 PC，设置的界面应该是固定宽高的；不能这个界面一个
+  //    宽高、跳另一个界面又是一个宽高，应该是统一大小的。"
+  //    根因就是批次 107~109 给两页各写了一套宽度（菜单页 400px、设置页 820px）。
+  check(
+    '面板尺寸只有一个出处（--panel-w / --panel-h）',
+    compact.includes('--panel-w: min(94vw, 640px);') && compact.includes('--panel-h: min(88vh, 560px);'),
+  );
+  check(
+    '两页共用这对尺寸，且高度是固定值（不再是 auto）',
+    compact.includes('.settings-panel { width: var(--panel-w); max-width: var(--panel-w); height: var(--panel-h); max-height: var(--panel-h);'),
+  );
+  // 反向断言：不许再出现"按页/按方向另写一套尺寸"
+  check('没有按页另写宽高', !/settings-panel\[data-page='menu'\] \{ width/.test(compact));
+  check('没有按方向另写宽高（横屏不再覆盖设置面板）', !landscape.includes('.settings-panel'));
+  check('面板不铺满（四周留出游戏区域）', !compact.includes('.settings-panel { width: 100%'));
+
+  // 统一标题栏：三列栅格 → 标题永远居中，两页共用同一个骨架
+  check('标题栏是三列栅格（左槽 | 标题 | 右槽）', compact.includes('.settings-header { display: grid; grid-template-columns: 84px 1fr 84px;'));
+  check(
+    '标题栏骨架只有一个（两页共用 makeHeader）',
+    source.includes('private makeHeader(titleEl: HTMLElement, backLabel: string | null, onBack?: () => void)') &&
+      (source.match(/this\.makeHeader\(/g) ?? []).length === 2,
+  );
+  // 用户点名："暂停那个界面有继续游戏，可能就不需要关闭按钮了" → ✕ 整个删掉
+  check('不再有 ✕ 关闭按钮', !compact.includes('.settings-close') && !source.includes('makeCloseButton'));
+  check('设置页左槽是 ‹ 返回', source.includes("this.makeHeader(this.settingsTitleEl, '‹ 返回'"));
+  // 从主菜单打开时"‹ 返回"直接关掉（否则会看到一个标题写着"游戏已暂停"的菜单页）
+  check(
+    '‹ 返回 的落点随上下文（游戏内回菜单页，主菜单里直接关）',
+    source.includes('private backFromSettings(): void') && source.includes('if (this.actions.onExitToMenu) this.setPage(\'menu\');'),
+  );
+  check('暂停菜单页左槽留空（标题仍然居中）', source.includes('this.makeHeader(menuTitle, null)'));
+
+  // 固定高度之后"四组一次全展开"放不下了 → 三端统一"左选项卡 + 右内容、一次一组"
+  check('三端统一：左选项卡 + 右内容', compact.includes('.settings-columns { display: flex; flex-direction: row; gap: 12px;'));
+  check(
+    '一次只显示当前分组（固定高度下永远不用滚）',
+    compact.includes('.settings-section { display: none; flex-direction: column; gap: 6px; }'),
+  );
+  check(
+    '页签永远显示（不再分"高屏隐藏/矮屏显示"）',
+    compact.includes('.settings-tabs { display: flex; flex-direction: column; flex: 0 0 104px; gap: 4px; }'),
+  );
+
+  // 横屏这一段现在只该管主菜单（尺寸已经统一，不该再按方向覆盖面板）
   const bareSelectors = landscape
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .split('\n')
     .filter((line) => /^\s*\.[a-z-]/.test(line));
   check('横屏里没有裸选择器（每条规则都挂在触摸端上）', bareSelectors.length === 0, bareSelectors.join(' / '));
-
-  // 竖屏与桌面那两套不能被这次改动顺手删掉
-  check(
-    '竖屏/高屏仍然保留"紧凑卡片 + 四组全展开"',
-    compact.includes('body.touch-mode .settings-panel { width: min(96vw, 520px); max-width: 520px;') &&
-      compact.includes('body.touch-mode .settings-section { display: flex; }'),
-  );
+  // 横屏只剩"主菜单"与"把按钮排紧一点"：**不许再碰面板尺寸**
+  check('横屏不再覆盖面板尺寸（只允许把里面的按钮排紧）', !landscape.includes('.settings-panel') && !landscape.includes('.settings-columns'));
+  check('横屏：暂停按钮收紧到 42px（面板尺寸不变）', landscape.includes('body.touch-mode .pause-action { min-height: 42px; font-size: 14px; }'));
+  check('横屏：主菜单按钮收窄、标题缩小', landscape.includes('body.touch-mode .world-menu > * { width: min(100%, 240px); }'));
 }
 
 console.log('\n[进游戏首页默认全屏]');
