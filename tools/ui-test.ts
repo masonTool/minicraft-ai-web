@@ -600,6 +600,7 @@ console.log('\n[手机横屏布局（批次 109，本项目的主要场景）]')
 {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
+  const source = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   const landscape =
     /@media \(orientation: landscape\) and \(max-height: 560px\) \{([\s\S]*?)\n      \}/.exec(html)?.[1] ?? '';
 
@@ -614,6 +615,9 @@ console.log('\n[手机横屏布局（批次 109，本项目的主要场景）]')
   check('横屏：设置行高压到 34px', landscape.includes('body.touch-mode .settings-row {') && landscape.includes('min-height: 34px;'));
   check('横屏：暂停菜单按钮压到 40px（5 颗一屏放得下）', landscape.includes('body.touch-mode .pause-action { min-height: 40px;'));
   check('横屏：主菜单按钮收窄、标题缩小', landscape.includes('body.touch-mode .world-menu > * { width: min(100%, 240px); }'));
+  // 菜单页与设置页需要的宽度不一样：设置页 820px（左选项卡+右内容），菜单页一列按钮 400px
+  check('横屏：暂停菜单那一页单独收窄（按 data-page 区分）', landscape.includes(".settings-panel[data-page='menu'] { width: min(72vw, 400px); }"));
+  check('面板上真的写了 data-page（判据不能只存在于 CSS）', source.includes('this.panel.dataset.page = page;'));
   // 每一条规则都挂在 `body.touch-mode` 上：桌面端把窗口拉矮时不该突然变成两栏
   // （那条路径本来就有滚动，PC 验收脚本也按 1440×900 跑）
   // 数"裸选择器"（以 `.` 开头的那种）：一条都不该有——每一条规则都要挂在

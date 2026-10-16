@@ -237,6 +237,8 @@ export class SettingsScreen {
   private activeGroup: SettingGroup = SETTING_GROUPS[0];
   /** 当前停在哪一页 */
   private currentPage: PausePage = 'menu';
+  /** 面板根节点（`setPage` 会把当前页写到它的 `data-page` 上，供 CSS 按页调宽度） */
+  private readonly panel: HTMLDivElement;
   /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
   private subtitleText = '按 Esc 继续游戏';
   /** "创造模式（飞行）"那个开关（非持久设置，见 `makeCreativeRow`） */
@@ -253,6 +255,9 @@ export class SettingsScreen {
 
     const panel = document.createElement('div');
     panel.className = 'settings-panel';
+    // 当前页写到面板的 `data-page` 上：横屏下"菜单页"与"设置页"需要的宽度不一样
+    //（设置页要左选项卡 + 右内容，得有 800px；菜单页只有一列按钮，拉那么长很怪）
+    this.panel = panel;
 
     // ================================================================ ① 暂停菜单
     //
@@ -460,6 +465,7 @@ export class SettingsScreen {
   /** 切页：`menu`（暂停菜单）/ `settings`（设置项） */
   setPage(page: PausePage): void {
     this.currentPage = page;
+    this.panel.dataset.page = page;
     for (const [key, element] of this.pages) element.classList.toggle('active', key === page);
     // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），进设置页时对一次账
     if (page === 'settings' && this.flyingToggle) {
