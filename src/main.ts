@@ -328,6 +328,8 @@ import {
 // 亡灵被太阳晒（批次 124）：判据是纯函数（露天 + 白天 + 没下雨），
 // 而"哪些生物会烧"是每种生物自己的一位数据（`MobType.burnsInDaylight`）
 import { DAYLIGHT_BURN_SECONDS, FULL_SKY_LIGHT, sunBurns } from './core/world/Daylight.ts';
+// 混凝土（批次 131）：粉末遇水凝固——规则是纯函数（`test:concrete` 逐条钉住）
+import { hardenAround } from './core/world/Concrete.ts';
 // 移动端降级策略（批次 130，TASKS N7）：动态分辨率 / 自适应视距 / 限帧 / 粒子总量。
 // 策略本身是**纯函数**（`test:perfpolicy` 逐条钉住），这里只负责把结果落到渲染器与粒子上
 import {
@@ -5923,6 +5925,9 @@ class App {
    */
   private updateFluid(x: number, y: number, z: number): void {
     if (fluidTick(this.fluidWorld, x, y, z)) this.fluidChanges++;
+    // 混凝土粉末遇到水就凝固（批次 131）：**水刚流动过**，所以"自己和六邻域"都查一遍
+    // （水摊开到的位置可能正好挨着粉末；粉末不会在水的正下方，所以两边都要看）
+    this.hardenConcreteAround(x, y, z);
   }
 
   /**
@@ -5931,6 +5936,35 @@ class App {
    */
   private wakeFluidsAround(x: number, y: number, z: number): void {
     wakeFluidAt(this.fluidWorld, x, y, z);
+    // 混凝土粉末遇水凝固（批次 131）：这里是"玩家放了/挖了方块"的公共出口，
+    // 所以"把粉末放在水边"这条路也在这里结算（原版也是放下去就凝固）
+    this.hardenConcreteAround(x, y, z);
+  }
+
+  /**
+   * 把 `(x, y, z)` 自己与六邻域里**挨着水的混凝土粉末**换成混凝土（批次 131）。
+   *
+   * 规则（哪六格算挨着、颜色怎么对应）全在 `core/world/Concrete.ts` 里，
+   * 这里只提供"怎么写回世界"：走 `setBlockAndUpdate`——它会重网格化并更新光照，
+   * 直接改数组的话玩家要盯着**凝固前那块**看到区块被重新网格化（看起来像"水浇了没反应"）。
+   */
+  private hardenConcreteAround(x: number, y: number, z: number): void {
+    const hardened = hardenAround(
+      {
+        getBlock: (bx, by, bz) => this.world.getBlock(bx, by, bz),
+        harden: (bx, by, bz, concrete) => {
+          this.world.setBlockAndUpdate(bx, by, bz, concrete, 0);
+          // 一簇白汽：原版凝固时也有一下"哧"的效果（音效见 M21）
+          this.particles.spawnSmoke(bx + 0.5, by + 0.5, bz + 0.5, 4, 0.3);
+        },
+      },
+      x,
+      y,
+      z,
+    );
+    if (hardened > 0) {
+      this.audio.play('splash', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    }
   }
 
   /**

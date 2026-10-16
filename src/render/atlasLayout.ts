@@ -948,6 +948,23 @@ export const TILE_ORDER = [
   'item_potion_lingering_slow_falling_long',
   'item_tipped_arrow_slow_falling',
   'item_tipped_arrow_slow_falling_long',
+  // 混凝土粉末（批次 131）：16 色，挨到水就凝固成混凝土
+  'concrete_powder_white',
+  'concrete_powder_orange',
+  'concrete_powder_magenta',
+  'concrete_powder_light_blue',
+  'concrete_powder_yellow',
+  'concrete_powder_lime',
+  'concrete_powder_pink',
+  'concrete_powder_gray',
+  'concrete_powder_light_gray',
+  'concrete_powder_cyan',
+  'concrete_powder_purple',
+  'concrete_powder_blue',
+  'concrete_powder_brown',
+  'concrete_powder_green',
+  'concrete_powder_red',
+  'concrete_powder_black',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

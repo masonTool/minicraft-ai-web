@@ -528,6 +528,11 @@ const BLOCK_MECHANISM_SOURCES: readonly { label: string; ids: readonly number[] 
   },
   { label: '红石线（红石粉放下就是它）', ids: [Block.REDSTONE_WIRE] },
   {
+    label: '混凝土（粉末遇水凝固，批次 131）',
+    // ⚠️ 只列**能做出粉末的那 14 种**：灰与黑缺染料（它们在白名单那一族里）
+    ids: DYE_COLORS.map((_color, i) => concreteId(i)).filter((_id, i) => i !== 7 && i !== 15),
+  },
+  {
     label: '铜的氧化档（`world/Copper.ts` 会自己往下氧化）',
     ids: [
       ...Array.from({ length: 3 }, (_u, stage) => copperId(stage + 1, 0)),
@@ -556,15 +561,25 @@ const idsNamed = (...names: string[]): number[] =>
 const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: string }[] = [
   // ⚠️ "粘性活塞（只差一件原料）"那一族在**批次 120** 删掉了：史莱姆做出来之后
   // 粘液球有了，"活塞 + 粘液球"那条配方也就成立了——白名单按规矩**补上了就删掉它**
+  // ⚠️ "混凝土 16 色"那一族在**批次 131** 删掉了：粉末方块 + 遇水凝固都做出来了，
+  // 那一族的 14 种（除灰/黑）现在真的拿得到。**灰与黑两种留在白名单里**，
+  // 但它们卡的是**染料**（鱿鱼与凋灵玫瑰），所以并入下面那一族（理由同源）
   {
-    label: '混凝土 16 色',
-    ids: Array.from({ length: 16 }, (_u, i) => concreteId(i)),
-    reason: '要"混凝土粉末"方块 + 遇水凝固两步，本项目只做到染色那一层（见 TASKS B52）',
-  },
-  {
-    label: '灰/黑两色的玻璃与陶瓦',
-    ids: idsNamed('gray_stained_glass', 'black_stained_glass', 'gray_stained_glass_pane', 'black_stained_glass_pane', 'gray_terracotta', 'black_terracotta'),
-    reason: '灰与黑染料拿不到（缺墨囊与凋灵玫瑰，见物品侧白名单），所以这两色的染色方块整族断在染料上',
+    label: '灰/黑两色的玻璃、陶瓦与混凝土',
+    ids: idsNamed(
+      'gray_stained_glass',
+      'black_stained_glass',
+      'gray_stained_glass_pane',
+      'black_stained_glass_pane',
+      'gray_terracotta',
+      'black_terracotta',
+      // 混凝土（批次 131）：粉末能合成了，但灰/黑两色**缺染料**（下面那两种粉末同理）
+      'gray_concrete',
+      'black_concrete',
+      'gray_concrete_powder',
+      'black_concrete_powder',
+    ),
+    reason: '灰与黑染料拿不到（缺墨囊与凋灵玫瑰，见物品侧白名单），所以这两色的整族断在染料上',
   },
   {
     label: '生成侧没写的几样',
@@ -683,11 +698,13 @@ const blockGaps: number[] = [];
   check('方块侧每条都写了理由（≥ 8 字）', BLOCK_EXEMPT.every((family) => family.reason.length >= 8));
   // 把缺口总数钉死（与物品侧同一个用法：链一断或一补就会红）。
   // 一路在缩：批次 118 量出来 **77** 条（10 族）→ 119 补配方后 **46** 条（7 族）
-  // → **120（史莱姆 → 粘液球 → 粘性活塞）后 45 条（6 族）**。
-  // 剩下的每一条都是"缺一整块内容"（史莱姆、鱿鱼、丛林竹子、珊瑚死亡机制、深色森林、混凝土粉末），
+  // → 120（史莱姆 → 粘液球 → 粘性活塞）后 45 条（6 族）
+  // → **131（混凝土粉末遇水凝固）后 33 条（5 族）**：混凝土那一族 14 种还掉，
+  //    但**灰/黑两色的混凝土与粉末**要留在白名单里（它们断在染料上，并入下面那一族）
+  // 剩下的每一条都是"缺一整块内容"（鱿鱼与墨囊、丛林竹子、珊瑚死亡机制、深色森林、生成侧没写的几件），
   // 而不是"某条链断在中间"——正是这一栏该有的样子
   equal(
-    '方块侧缺口总数（批次 120 之后：45 条）',
+    '方块侧缺口总数（批次 131 之后：33 条）',
     blockGaps.length,
     BLOCK_EXEMPT.reduce((sum, family) => sum + family.ids.length, 0),
   );

@@ -19,6 +19,7 @@ import {
   WoodShaped,
   bedId,
   carpetId,
+  concretePowderId,
   copperId,
   slabId,
   stairsId,
@@ -1329,6 +1330,26 @@ const REDSTONE_RECIPES: readonly Recipe[] = [
   { kind: 'shapeless' as const, result: { id: Block.WARPED_PLANKS, count: 4 }, ingredients: [Block.WARPED_STEM] },
 ];
 
+/**
+ * 混凝土粉末那 16 条（批次 131，B52 的最后一块）。
+ *
+ * 图案是原版那副**十字**：沙在四角、砾石在四边、染料在正中 → 8 份粉末。
+ * 粉末再**挨到水**就变成同色的混凝土（`world/Concrete.ts`）——混凝土本身没有配方，
+ * 所以这 16 条就是那 16 个混凝土的全部来源（方块侧可达性审计里挂了很久的那一族）。
+ */
+const CONCRETE_POWDER_RECIPES: readonly Recipe[] = DYE_COLORS.map(
+  (_color, index): Recipe => ({
+    kind: 'shaped' as const,
+    result: { id: concretePowderId(index), count: 8 },
+    pattern: ['SGS', 'GDG', 'SGS'],
+    key: {
+      S: Block.SAND,
+      G: Block.GRAVEL,
+      D: dyeItemId(index),
+    },
+  }),
+);
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...CONTAINER_RECIPES,
@@ -1354,6 +1375,7 @@ export const RECIPES: readonly Recipe[] = [
   LIGHTNING_ROD_RECIPE,
   ...HANGING_RECIPES,
   ...REDSTONE_RECIPES,
+  ...CONCRETE_POWDER_RECIPES,
 ];
 
 interface Normalized {

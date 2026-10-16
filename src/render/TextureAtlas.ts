@@ -411,6 +411,29 @@ function terracottaPainter(base: readonly [number, number, number]): Painter {
   };
 }
 
+/**
+ * 混凝土**粉末**（批次 131）：沙砾感的粗颗粒 + 一点染料色。
+ *
+ * 与混凝土的差别是"颗粒的粗细"：混凝土是纯色 + 极细杂点（几乎看不出颗粒），
+ * 粉末则用**更大的斑块**（4×4 分块取随机深浅）——原版那两兄弟也是这么分的，
+ * 而这一点在物品栏里（16 色挤在一起）就是"哪个是粉末"的唯一线索。
+ */
+function concretePowderPainter(base: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    // 每 4×4 一块的深浅，让颗粒看得见（与鹅卵石同一个做法，只是幅度小）
+    const key = (y >> 2) * 4 + (x >> 2);
+    const grain = (hashString(`powder${key}`) % 20) - 10;
+    const v = 1 + grain / 100 + (rng() * 0.1 - 0.05);
+    // 往沙色偏一点：粉末比它的成品"土"（原版也是）
+    return [
+      clamp255((base[0] * 0.9 + 40) * v),
+      clamp255((base[1] * 0.9 + 36) * v),
+      clamp255((base[2] * 0.9 + 30) * v),
+      255,
+    ];
+  };
+}
+
 /** 混凝土：纯色 + 极细杂点，与陶瓦的颗粒感形成对比 */
 function concretePainter(base: readonly [number, number, number]): Painter {
   return (_x, _y, rng) => {
@@ -1044,6 +1067,7 @@ PAINTERS.terracotta = terracottaPainter(TERRACOTTA_BASE);
 for (const color of DYE_COLORS) {
   PAINTERS[`terracotta_${color.name}`] = terracottaPainter(terracottaColor(color.rgb));
   PAINTERS[`concrete_${color.name}`] = concretePainter(color.rgb);
+  PAINTERS[`concrete_powder_${color.name}`] = concretePowderPainter(color.rgb);
 }
 
 // 羊毛与染料：16 色按配色表批量生成，避免手写 32 份几乎相同的代码

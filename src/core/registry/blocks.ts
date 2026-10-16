@@ -494,6 +494,13 @@ export const WoodShaped: Readonly<Record<string, WoodShapedIds>> = Object.fromEn
 
 export const TERRACOTTA_ID_START = 127;
 export const CONCRETE_ID_START = 144;
+/**
+ * 混凝土粉末（批次 131）：**挨到水就变成上面那 16 个混凝土**（颜色一一对应）。
+ *
+ * 放在 557 之后（那是当时的末尾）：方块 id 一路是"新族追加在末尾"，
+ * 往中间插会让存档里的 id 全部错位。
+ */
+export const CONCRETE_POWDER_ID_START = 558;
 
 /**
  * 陶瓦与混凝土：都是 16 色 + 陶瓦多一个原色。
@@ -519,6 +526,19 @@ const COLORED_SPECS: readonly BlockSpec[] = [
       tiles: [`concrete_${color.name}`, `concrete_${color.name}`, `concrete_${color.name}`],
     }),
   ),
+  // 混凝土**粉末**（批次 131）：16 色，挨到水就凝固成上面那种混凝土（见 `world/Concrete.ts`）。
+  // 它的贴图是"沙砾感的粉"，与混凝土那种纯色一眼分得开——原版也是这样区分这两兄弟的
+  ...DYE_COLORS.map(
+    (color, index): BlockSpec => ({
+      id: CONCRETE_POWDER_ID_START + index,
+      name: `minecraft:${color.name}_concrete_powder`,
+      tiles: [
+        `concrete_powder_${color.name}`,
+        `concrete_powder_${color.name}`,
+        `concrete_powder_${color.name}`,
+      ],
+    }),
+  ),
 ];
 
 /**
@@ -537,6 +557,11 @@ export function terracottaId(colorIndex: number): number {
 /** 第 index 种颜色的混凝土 id */
 export function concreteId(colorIndex: number): number {
   return CONCRETE_ID_START + colorIndex;
+}
+
+/** 第 index 种颜色的**混凝土粉末** id（与 `concreteId` 同色同序，见 `concreteForPowder`） */
+export function concretePowderId(colorIndex: number): number {
+  return CONCRETE_POWDER_ID_START + colorIndex;
 }
 
 // ---------------------------------------------------------------- 石材补全 / 玻璃
@@ -3517,6 +3542,8 @@ HARDNESS.set(Block.EMERALD_BLOCK, 5);
 HARDNESS.set(Block.BEACON, 3);
 // 粘液块（批次 120）：原版硬度 **0**（徒手一拍就碎，只是碎得"黏"）
 HARDNESS.set(Block.SLIME_BLOCK, 0);
+// 混凝土粉末（批次 131）：原版硬度 0.5（比混凝土的 1.8 软得多，徒手也能挖）
+for (let i = 0; i < 16; i++) HARDNESS.set(concretePowderId(i), 0.5);
 // 下界疣：原版徒手一拍就掉（硬度 0），四个阶段都要登记
 // （不登记的话 `blockHardness` 的兜底是 3 —— 收个下界疣要挖 4.5 秒，见 `isHardnessRegistered`）
 // ⚠️ 这里按 id 算术展开，不能引用 `NETHER_WART_STAGES`：那张表在本文件**后面**才定义，

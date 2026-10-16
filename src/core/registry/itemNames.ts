@@ -119,6 +119,7 @@ for (const [color, cn] of Object.entries(COLORS_CN)) {
   put(`${color}_bed`, `${cn}床`);
   put(`${color}_terracotta`, `${cn}陶瓦`);
   put(`${color}_concrete`, `${cn}混凝土`);
+  put(`${color}_concrete_powder`, `${cn}混凝土粉末`);
   put(`${color}_stained_glass`, `${cn}染色玻璃`);
   put(`${color}_stained_glass_pane`, `${cn}染色玻璃板`);
 }
@@ -937,6 +938,13 @@ DESCRIPTIONS.item_frame =
   '物品展示框：贴在**墙上**（点方块侧面放），框里能挂**任何一件东西**。右键空框 → 把手里那件挂上去（消耗 1 个）；右键有东西的框 → **转 45°**（转 8 次回到原位）；手里拿着别的东西右键 → **换一件**。拆框时挂着的那件会一起掉出来。⚠️ 与原版差异：**框里只挂 1 件**（不显示数量），方块类物品挂上去是**一张平面图标**（原版是立体小方块）。';
 DESCRIPTIONS.painting =
   '画：贴在**墙上**（点方块侧面放），挂上去的是**哪一幅随机**。⚠️ 与原版差异：本项目这一批只做了原版 1.18 里 **1×1 的 7 幅**（烤肉串 / 阿兹特克 / 阿尔班 / 阿兹特克II / 炸弹 / 植物 / 荒地），**多格拼贴的大画还没做**——所以不会出现"挂一幅 2×2 的大画"。';
+
+// 混凝土粉末（批次 131）：16 色共用一段说明（差别只有颜色，按配色表套模板）
+for (const [color, cn] of Object.entries(COLORS_CN)) {
+  DESCRIPTIONS[`${color}_concrete_powder`] =
+    `**挨到水就凝固**成${cn}**混凝土**——这是混凝土唯一的来源（原版它也做不出来）。` +
+    '合成：4 沙 + 4 砾石 + 1 染料 = 8 份（沙在四角、砾石在四边、染料在正中）。⚠️ 凝固之后回不去了。';
+}
 
 // 床（B13，批次 79）：16 色的说明是同一段（差别只有颜色，所以按配色表套模板）
 for (const [color, cn] of Object.entries(COLORS_CN)) {
