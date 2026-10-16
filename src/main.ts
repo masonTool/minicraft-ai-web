@@ -7,6 +7,15 @@
  *
  * 方块被修改后会先做增量光照修正，等光照队列排空再重刷网格，
  * 避免出现"光还没传过去就把顶点烘焙下来"的脏数据。
+ *
+ * **怎么读这个文件**（批次 101 把能搬走的都搬走了，剩下它就是"入口 + App 类"）：
+ *   · 调参常量 / 世界配置 / 纯工具 → `game/tuning.ts`
+ *   · 开发期初始物资两张表 → `game/startupKit.ts`
+ *   · 天空调色板 → `render/SkyPalette.ts`
+ *   · 其余全在下面的 `class App` 里，**按段落名 grep 定位，不要整份读**
+ *     （段落目录写在 `class App` 前面）
+ * ⚠️ 本文件是纯入口，**没有任何模块 import 它**（末尾 `void boot()`）——
+ * 所以往外搬东西不会牵动别处；反过来，要给别人用的东西也不该留在这里。
  */
 
 import * as THREE from 'three';
@@ -149,7 +158,6 @@ import { craftFromInventory } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
 import { itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
-import type { WorldType } from './core/gen/WorldType.ts';
 import { PARTICLE_DENSITY } from './ui/SettingsScreen.ts';
 import {
   CAMERA_MODE_LABELS,
@@ -200,9 +208,7 @@ import { Block, BLOCKS, blockDef, woolId,
 import {
   ARMOR_SLOT_BASE,
   ARMOR_SLOT_COUNT,
-  ARMOR_TYPES,
   armorInfoById,
-  armorItemId,
   armorTile,
   createArmorWearer,
 } from './core/registry/armor.ts';
@@ -214,13 +220,11 @@ import {
   lootingBonus,
   meleeDamage,
   toolInfoById,
-  toolItemId,
   type ToolInfo,
   canTill,
   tillableTo,
 } from './core/registry/tools.ts';
 import { OverworldGenerator, SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
-// 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子
 // 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子
 import { structureInstanceForTest } from './core/gen/Structures.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
@@ -246,14 +250,10 @@ import { fillShulkerBox, shulkerContentsOf } from './core/container/ShulkerBox.t
 import { Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
 import {
-  JUNGLE_LOG_ID,
   flowerPotIndexFor,
   pottedPlantItem,
   pottedPlantName,
-  stainedGlassId,
 } from './core/registry/blocks.ts';
-// 染料一律按**颜色名**查（批次 91 起）：写死下标会在配色表改动时静默做错颜色
-import { dyeIdByName } from './core/registry/items.ts';
 import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { Campfire } from './core/container/Campfire.ts';
 import type { DropperEnv } from './core/container/Dropper.ts';
@@ -363,261 +363,60 @@ import {
   extraCropDrop,
 } from './core/registry/items.ts';
 import { CAKE_SLICE_FOOD, canEat } from './core/registry/food.ts';
-
-/** 渲染距离（区块） */
-/** 视距默认值（玩家可在设置里改，见 `App.viewDistance`） */
-const VIEW_DISTANCE = 12;
-/** 每帧最多网格化的区块数，用于把加载耗时摊到多帧 */
-const MESH_BUDGET_PER_FRAME = 3;
-
-/** 游戏逻辑 tick（原版 20 次/秒），生存机制按这个节奏结算 */
-const TICK_SECONDS = 0.05;
-/** 随机刻的作用半径（区块）：原版是 128 格，这里取 3 个区块以免每 tick 做太多事 */
-const RANDOM_TICK_RADIUS = 3;
-
-/** 死亡后自动重生的等待时间（秒） */
-const RESPAWN_DELAY = 3;
-
-/**
- * 传送后等目的地区块加载的上限（帧；60fps 下 5 秒）。
- * 超时就把玩家直接放在目标坐标上——宁可落在地形里，也不要一直冻着出不来。
- */
-const PORTAL_ARRIVAL_TIMEOUT_FRAMES = 300;
-
-/** 玩家近战距离（原版约 3 格） */
-const ATTACK_RANGE = 3.2;
-/** 攻击冷却（原版满蓄力为 0.625 秒） */
-const ATTACK_COOLDOWN = 0.5;
-/**
- * 首次进入（没有存档、也没有世界清单）时用的默认种子。
- * 平时的种子由主菜单里的世界决定，见 `WorldConfig`。
- */
-const DEFAULT_WORLD_SEED = 20261014;
-/** 原版触及距离：生存 4.5 格 */
-const REACH = 4.5;
-/** 鼠标视角灵敏度（弧度/像素） */
-const MOUSE_SENSITIVITY = 0.0022;
-/**
- * 触摸视角灵敏度（弧度/像素）。
- * 比鼠标高：手指在屏幕上的一次拖动行程通常只有鼠标的 1/3 左右，
- * 用同样的系数会转得很吃力。
- */
-const TOUCH_SENSITIVITY = 0.0034;
-
-/**
- * 下界的雾颜色与视距。
- * 下界是被岩层包住的密闭空间，原版用很短的视距 + 暗红雾气表现"闷热的地下"，
- * 这里同样把雾拉近并换成暗红，同时关掉天空穹顶（那里没有天空）。
- */
-const NETHER_FOG = 0x3a1010;
-const NETHER_FOG_NEAR = 18;
-const NETHER_FOG_FAR = 84;
-/** 下界没有天光，场景亮度固定（岩浆与荧光石才是主要光源） */
-const NETHER_SKY_BRIGHTNESS = 0.38;
-/**
- * 末地的天空与雾。
- * 末地同样是"没有天光"的维度，但它不像下界那样密闭：外岛之间是开阔的虚空，
- * 所以雾拉得比下界远得多，背景是带紫的星空黑。
- */
-const END_SKY = 0x0a0714;
-const END_FOG = 0x140b22;
-const END_FOG_NEAR = 48;
-const END_FOG_FAR = 190;
-const END_SKY_BRIGHTNESS = 0.42;
-const END_MIN_BRIGHTNESS = 0.2;
-
-/**
- * 视线介质的雾与色罩（E16）。
- * 水下能看清十几格、颜色偏青蓝；岩浆里只能看清贴脸的两三格，橙红一片。
- */
-const WATER_FOG = 0x1b4a7a;
-const WATER_FOG_NEAR = 0.6;
-const WATER_FOG_FAR = 22;
-const LAVA_FOG = 0x8a2a05;
-const LAVA_FOG_NEAR = 0.2;
-const LAVA_FOG_FAR = 2.6;
-/** 粒子的最低亮度：夜里挖方块也要看得见碎块 */
-const PARTICLE_MIN_BRIGHTNESS = 0.3;
-/** 末影龙的出生点：盘旋圆上的一点（主岛在原点） */
-const DRAGON_SPAWN_X = 0;
-const DRAGON_SPAWN_Z = 46;
-/**
- * 下界的最低亮度下限。
- * 下界光照全靠方块光，而方块光的传播范围有限，远离光源就是纯黑；
- * 原版下界靠"维度环境光"把整片空间托起来，这里用同一个手段（抬高亮度下限）。
- */
-const NETHER_MIN_BRIGHTNESS = 0.24;
-
-/** 连续破坏/放置的最小间隔（秒） */
-const BREAK_COOLDOWN = 0.25;
-const PLACE_COOLDOWN = 0.22;
-/** 进食时的咀嚼间隔（秒）：每嚼一口晃一下手臂、响一声咀嚼音 */
-const CHEW_INTERVAL = 0.4;
-
-/**
- * 开发期初始物资：补齐各色基础方块，便于立刻验证玩法。
- * 生存模式（I1）接入后这里应当清空，改为从世界采集。
- */
-/** 界面打开时喂给物理的空输入，让玩家原地停住而不是保持上一帧的速度 */
-const IDLE_INPUT: PlayerInput = { forward: 0, strafe: 0, jump: false, sneak: false, sprint: false };
-
-/** 把多路输入相加后夹到 -1~1（键盘 + 触摸 + 手柄可能同时给出分量） */
-function clampUnit(value: number): number {
-  return value < -1 ? -1 : value > 1 ? 1 : value;
-}
-
-/**
- * 当前正在玩的世界（由主菜单选定）。
- * 没有它就没法知道该用哪个种子、哪种地形、往哪个存档库里存。
- */
-export interface WorldConfig {
-  id: string;
-  name: string;
-  seed: number;
-  worldType: WorldType;
-  /** 新建这个世界时选的难度（进世界后还能用 /difficulty 改） */
-  difficulty: Difficulty;
-}
-
-/**
- * **开发期必备的 12 件**（批次 94 加的）：与下面那张"各批验收物资"的表分开。
- *
- * 为什么要分开：背包只有 36 格，而 `STARTING_HOTBAR` 早就 70+ 件了——
- * 之前靠"倒序填"来保证"最新那一批拿得到"，副作用是**最基础的草/土/石被挤掉了**
- * （它们排在最前面，倒序填时最后才轮到）。那正好把最常用的几件弄丢了。
- *
- * 现在的填法：**先填这 12 件**（后面再从末尾倒着填验收物资时，同 id 会自动并进已占的格子，
- * 所以它们其实被"保护"住了），再倒序填其余——于是"地基"与"最新一批"两头都在，
- * 被牺牲的是中间那几批（旧的可以创造模式或 `/give` 补）。
- */
-const DEV_BASE_KIT: readonly number[] = [
-  Block.GRASS_BLOCK,
-  Block.DIRT,
-  Block.STONE,
-  Block.COBBLESTONE,
-  Block.OAK_PLANKS,
-  Block.OAK_LOG,
-  Block.GLASS,
-  Block.GLOWSTONE,
-  Block.CRAFTING_TABLE,
-  toolItemId('pickaxe', 'iron'),
-  toolItemId('axe', 'iron'),
-  toolItemId('sword', 'iron'),
-];
-
-const STARTING_HOTBAR: readonly number[] = [
-  Block.GRASS_BLOCK,
-  Block.DIRT,
-  Block.STONE,
-  Block.COBBLESTONE,
-  Block.OAK_PLANKS,
-  Block.OAK_LOG,
-  Block.OAK_LEAVES,
-  Block.GLASS,
-  Block.GLOWSTONE,
-  // 开发期工具：木镐/石镐/铁镐/钻石镐 + 斧/锹/剑，方便直接验收挖掘等级与伤害
-  toolItemId('pickaxe', 'wooden'),
-  toolItemId('pickaxe', 'stone'),
-  toolItemId('pickaxe', 'iron'),
-  toolItemId('pickaxe', 'diamond'),
-  toolItemId('axe', 'iron'),
-  toolItemId('shovel', 'iron'),
-  toolItemId('sword', 'iron'),
-  // 开发期盔甲：皮革/铁/钻石各一套，方便对比护甲条的档位与减伤
-  ...(['leather', 'iron', 'diamond'] as const).flatMap((material) => ARMOR_TYPES.map((type) => armorItemId(type, material))),
-  // 开发期下界合金（K8 尾巴）：锻造台 + 材料 + 远古残骸，配合上面的钻石装备就能走通"升级"这条链
-  Block.SMITHING_TABLE,
-  Item.NETHERITE_INGOT,
-  Block.ANCIENT_DEBRIS,
-  Block.NETHERITE_BLOCK,
-  // 开发期切石机（H11，批次 44）：本体 + 几种"能切出东西"的石料，
-  // 放下就能右键试"一进多选"（石板/楼梯/墙/深板岩瓦都在它的候选里）
-  Block.STONECUTTER,
-  Block.STONE,
-  Block.POLISHED_DEEPSLATE,
-  Block.QUARTZ_BLOCK,
-  // 开发期红沙与红砂岩（批次 45）：红沙是恶地地表那一层，也是红砂岩家族的唯一起点
-  Block.RED_SAND,
-  Block.RED_SANDSTONE,
-  // 开发期烟熏炉与高炉（批次 46）：旁边就有生肉与粗铁，放下就能对比"2 倍速"与"只吃什么"
-  Block.SMOKER,
-  Block.BLAST_FURNACE,
-  // 开发期营火（批次 47）：放下就点着，塞几块生肉就能看"30 秒弹一个"的节奏
-  Block.CAMPFIRE,
-  // 开发期食物与作物（批次 48）：种子 + 一碗一锅，落地就能试"种甜菜 → 煮汤"这条链
-  Item.BEETROOT_SEEDS,
-  Item.BEETROOT,
-  Item.BOWL,
-  Item.MUSHROOM_STEW,
-  Item.PUMPKIN_PIE,
-  // 开发期甜浆果与可可豆（批次 49）：对着**草方块**种浆果、对着**丛林原木侧面**种可可豆，
-  // 再把手里的曲奇喂给自己——一条链在三步之内能走完
-  Item.SWEET_BERRIES,
-  Item.COCOA_BEANS,
-  Item.COOKIE,
-  JUNGLE_LOG_ID,
-  // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
-  Block.ANVIL,
-  Block.IRON_BLOCK,
-  Item.IRON_INGOT,
-  Item.BOOK,
-  Block.ENCHANTING_TABLE,
-  Block.BOOKSHELF,
-  Item.LAPIS_LAZULI,
-  // 开发期弓与箭（J9）：一拉就能射
-  Item.BOW,
-  Item.ARROW,
-  Item.STRING,
-  Item.FLINT,
-  // 开发期钓竿（批次 81，G11）：出生点附近多半有水，走两步就能试抛竿
-  Item.FISHING_ROD,
-  // 开发期村民交易（批次 88，J11）：绿宝石 + 几样"村民收的东西" + 三个工作站方块，
-  // 放下工作站（堆肥桶/木桶/酿造台）再把村民叫过来，就能走通"认领职业 → 交易 → 升级"
-  Item.EMERALD,
-  Item.BREAD,
-  Item.WHEAT,
-  Item.CARROT,
-  Block.COMPOSTER,
-  Block.BARREL,
-  Block.BREWING_STAND,
-  // 开发期铜的四档（批次 40）：四档铜块 + 切制铜，右键几下就能看到氧化与刮锈
-  Block.COPPER_BLOCK,
-  Block.EXPOSED_COPPER_BLOCK,
-  Block.WEATHERED_COPPER_BLOCK,
-  Block.OXIDIZED_COPPER_BLOCK,
-  Block.CUT_COPPER,
-  // 开发期染料与染色族（批次 91）：三原色 + 两块被染过的方块，落地就能试"染料 → 染色"
-  dyeIdByName('red'),
-  dyeIdByName('blue'),
-  dyeIdByName('white'),
-  stainedGlassId(0),
-  Block.TERRACOTTA,
-  // 开发期下界要塞那一条链（批次 92）：灵魂沙 + 下界疣能当场种、刷怪笼能当场刷烈焰人、
-  // 烈焰棒/粉是酿造台的燃料与配方原料
-  Block.SOUL_SAND,
-  Item.NETHER_WART,
-  Block.NETHER_BRICKS,
-  Block.SPAWNER,
-  Item.BLAZE_ROD,
-  Item.BLAZE_POWDER,
-  // 开发期蜘蛛那一族（批次 93）：蜘蛛眼是"剧毒"唯一的原料，也是发酵蜘蛛眼的起点
-  Item.SPIDER_EYE,
-];
-
-/**
- * 避雷针索引与脉冲表共用的键（批次 83）：`x,y,z`。
- *
- * 放在模块级而不是类里：`RodPulses`（`world/Lightning.ts`）用的是同一套写法，
- * 两边必须逐字一致——写成两个地方，早晚会出现"索引里有、脉冲表里没有"这种错位。
- */
-function rodKey(x: number, y: number, z: number): string {
-  return `${x},${y},${z}`;
-}
-
-/** 刷怪笼索引的键（与避雷针同一套写法；分开取名是为了让日志里看得出是哪一张索引） */
-function spawnerKey(x: number, y: number, z: number): string {
-  return `${x},${y},${z}`;
-}
+// 调参常量 / 世界配置 / 纯工具：**批次 101 从本文件搬出去的**（详见各文件头）
+import {
+  ATTACK_COOLDOWN,
+  ATTACK_RANGE,
+  BREAK_COOLDOWN,
+  CHEW_INTERVAL,
+  DEFAULT_WORLD_SEED,
+  DRAGON_SPAWN_X,
+  DRAGON_SPAWN_Z,
+  END_FOG,
+  END_FOG_FAR,
+  END_FOG_NEAR,
+  END_MIN_BRIGHTNESS,
+  END_SKY,
+  END_SKY_BRIGHTNESS,
+  IDLE_INPUT,
+  LAVA_FOG,
+  LAVA_FOG_FAR,
+  LAVA_FOG_NEAR,
+  MESH_BUDGET_PER_FRAME,
+  MOUSE_SENSITIVITY,
+  NETHER_FOG,
+  NETHER_FOG_FAR,
+  NETHER_FOG_NEAR,
+  NETHER_MIN_BRIGHTNESS,
+  NETHER_SKY_BRIGHTNESS,
+  PARTICLE_MIN_BRIGHTNESS,
+  PLACE_COOLDOWN,
+  PORTAL_ARRIVAL_TIMEOUT_FRAMES,
+  RANDOM_TICK_RADIUS,
+  REACH,
+  RESPAWN_DELAY,
+  TICK_SECONDS,
+  TOUCH_SENSITIVITY,
+  VIEW_DISTANCE,
+  WATER_FOG,
+  WATER_FOG_FAR,
+  WATER_FOG_NEAR,
+  clampUnit,
+  rodKey,
+  spawnerKey,
+  type WorldConfig,
+} from './game/tuning.ts';
+// 开发期初始物资：每加一批功能都要往 STARTING_HOTBAR 末尾追加验收物资，单独放一份
+import { DEV_BASE_KIT, STARTING_HOTBAR } from './game/startupKit.ts';
+// 天空调色板与缓动（只被下面的"环境"一段用）
+import {
+  DAY_SKY,
+  FLASH_SKY,
+  NIGHT_SKY,
+  OVERCAST_SKY,
+  WHITE_SKY,
+  smoothstep,
+} from './render/SkyPalette.ts';
 
 /**
  * "设备不支持 WebGL2"的约定错误消息（A10，批次 85）。
@@ -636,6 +435,26 @@ const UNSUPPORTED_GL_ERROR = 'unsupported-gl';
  */
 let lastRendererFailure: GlSupportFail | null = null;
 
+/**
+ * ---------------------------------------------------------------- App 类的段落目录
+ *
+ * 这个类很长（约 7000 行），**不要整份读**。它内部按职责分了段，每段的开头都有一行
+ * `  // ---------------------------------------------------------------- <段落名>`
+ * 的标记，按名字 grep 就能定位（行号会漂，所以这里只列名字）：
+ *
+ *   下界传送门（K8） · 联机（K2） · 存档（K1） · 环境 · 快捷栏 · 输入 · 视角（F7） ·
+ *   方块交互 · 床与睡觉 · 告示牌上的字 · 物品展示框 · 成就 / 进度 · 村庄的人口 ·
+ *   雷电与避雷针 · 刷怪笼 · 钓鱼 · 聊天与命令 · 下界传送门（K8） · 出生点 · 生存 ·
+ *   主循环 · 开发调试接口
+ *
+ * ⚠️ 两个"下界传送门（K8）"是**故意的**（一处是门的状态与坐标换算、一处是交互），
+ * grep 会命中两处，两个都看一眼。
+ * ⚠️ 段落名是**导航用的锚点**：改动时别把标记行删掉，也别把内容搬到另一段不改标记——
+ * 那会让"按名字定位"这条路失效（比文件长更糟，因为没人知道该信谁）。
+ *
+ * 长度参考：`方块交互` 与 `聊天与命令` 两段加起来约占全类的一半。
+ * 真要动它们，先按段读；要**改结构**（拆类/拆模块）请当独立一批来做，别顺手拆。
+ */
 class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -8230,18 +8049,6 @@ class App {
 
 // ---------------------------------------------------------------- 启动与环境色
 
-const DAY_SKY = new THREE.Color(0x8fc7ff);
-const NIGHT_SKY = new THREE.Color(0x040814);
-/** 阴天：天空整体压成灰蓝 */
-const OVERCAST_SKY = new THREE.Color(0x5d6773);
-/** 闪电：瞬间的冷白 */
-const FLASH_SKY = new THREE.Color(0xd8e6ff);
-const WHITE_SKY = new THREE.Color(0xffffff);
-
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-}
 
 /**
  * 认领旧版单存档。
