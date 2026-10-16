@@ -147,6 +147,9 @@ function cloneStack(stack: ItemStack): ItemStack {
   if (stack.damage !== undefined) copy.damage = stack.damage;
   if (stack.enchants !== undefined) copy.enchants = { ...stack.enchants };
   if (stack.name !== undefined) copy.name = stack.name;
+  // ⚠️ 累积惩罚也要存（批次 63 补）：漏了它，读档后同一件装备在铁砧上会**变便宜**——
+  // "耐久/附魔/改名都搬了，只漏了最后加进来的那一项"是这类字段最容易犯的错
+  if (stack.repairCost !== undefined) copy.repairCost = stack.repairCost;
   return copy;
 }
 
@@ -268,6 +271,7 @@ export function restoreContainers(store: BlockEntityStore, data: readonly Serial
     const stacks = Array.isArray(entry.stacks) ? entry.stacks : [];
     for (let i = 0; i < count; i++) {
       const stack = stacks[i];
+      // 读档时逐项校验（`cloneStack` 只搬认识的那几项，脏字段自然被丢掉）
       container.set(i, isValidStack(stack) ? cloneStack(stack) : null);
     }
 

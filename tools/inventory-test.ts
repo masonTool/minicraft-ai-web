@@ -174,5 +174,48 @@ equal('副手槽为 40', OFFHAND_SLOT, 40);
   equal('优先放入快捷栏 0 号槽', inventory.get(0)?.id, Block.DIRT);
 }
 
+
+console.log('\n[背包：整栈存入（批次 63）]');
+{
+  // 附加数据要一起进背包
+  const inventory = new Inventory();
+  const pick = { id: Block.STONE, count: 1, name: '地基', damage: 3, enchants: { efficiency: 2 } };
+  equal('全部收下（剩余 0）', inventory.addStack(pick), 0);
+  equal('名字带进来了', inventory.get(0)?.name, '地基');
+  equal('耐久带进来了', inventory.get(0)?.damage, 3);
+  equal('附魔带进来了', inventory.get(0)?.enchants?.efficiency, 2);
+
+  // 只与"完全一样"的栈合并
+  const mixer = new Inventory();
+  mixer.addStack({ id: Block.STONE, count: 1 });
+  mixer.addStack({ id: Block.STONE, count: 1, name: '地基' });
+  equal('改过名的另占一格', mixer.get(1)?.name, '地基');
+  equal('普通那堆没被改名', mixer.get(0)?.name, undefined);
+  const plain = new Inventory();
+  plain.addStack({ id: Block.STONE, count: 1 });
+  plain.addStack({ id: Block.STONE, count: 2 });
+  equal('两份一样的会合并', plain.get(0)?.count, 3);
+  equal('只用一格', plain.findFirstEmpty?.() ?? 1, 1);
+
+  // 装不下时留在手上（返回值 = 剩余）
+  const small = new Inventory();
+  for (let i = 0; i < 36; i++) small.set(i, { id: Block.DIRT, count: 64 });
+  equal('一格都塞不下时全部剩着', small.addStack({ id: Block.STONE, count: 5 }), 5);
+  equal('背包没被改坏', small.get(0)?.id, Block.DIRT);
+
+  // 大堆要分摊到多个格子
+  const split = new Inventory();
+  split.addStack({ id: Block.STONE, count: 100 });
+  equal('100 个分成 64 + 36', `${split.get(0)?.count} + ${split.get(1)?.count}`, '64 + 36');
+
+  // moveTo 的合并也一样：改了名的不并进普通那堆
+  const drag = new Inventory();
+  drag.set(0, { id: Block.STONE, count: 1 });
+  drag.set(1, { id: Block.STONE, count: 1, name: '地基' });
+  drag.moveTo(1, 0);
+  equal('改名的那份没被并掉（换位）', drag.get(0)?.name, '地基');
+  equal('普通那份还在原处', drag.get(1)?.name, undefined);
+}
+
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
 process.exit(failed === 0 ? 0 : 1);

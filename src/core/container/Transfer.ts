@@ -38,7 +38,7 @@ import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, FURNACE_SIZE, Furnace } fr
 import { HOPPER_SIZE, Hopper } from './Hopper.ts';
 import { SMITHING_EQUIPMENT, SMITHING_MATERIAL, SMITHING_SIZE, SmithingTable } from './SmithingTable.ts';
 import { STONECUTTER_INPUT, STONECUTTER_SIZE, Stonecutter } from './Stonecutter.ts';
-import type { ItemStack } from './Inventory.ts';
+import { sameExtras, type ItemStack } from './Inventory.ts';
 import { fuelSeconds, smeltingRecipeFor } from '../crafting/Smelting.ts';
 import { maxStackOf } from '../registry/items.ts';
 import type { BlockContainer } from '../world/BlockEntityStore.ts';
@@ -90,23 +90,6 @@ export function containerSlotCount(container: BlockContainer): number {
   if (container instanceof Anvil) return ANVIL_SIZE;
   if (container instanceof EnchantTable) return ENCHANT_SLOT_COUNT;
   return 0;
-}
-
-/**
- * 两个栈的**附加数据**是否一致（耐久 / 附魔 / 改名 / 累积惩罚）。
- *
- * 合并判定必须连它一起比：只比 id 的话，"铁砧改过名的方块"并进普通那一堆
- * 就会**把名字弄丢**（自动搬运是无人值守的，丢了没人会当场发现）。
- */
-export function sameExtras(a: ItemStack, b: ItemStack): boolean {
-  if ((a.damage ?? 0) !== (b.damage ?? 0)) return false;
-  if ((a.repairCost ?? 0) !== (b.repairCost ?? 0)) return false;
-  if ((a.name ?? '') !== (b.name ?? '')) return false;
-  const from = a.enchants ?? {};
-  const to = b.enchants ?? {};
-  const keys = new Set([...Object.keys(from), ...Object.keys(to)]);
-  for (const key of keys) if ((from[key] ?? 0) !== (to[key] ?? 0)) return false;
-  return true;
 }
 
 /** 这一格还塞得下这个栈吗（空槽可以、同 id 且附加数据一致且未满也可以，其它不行） */

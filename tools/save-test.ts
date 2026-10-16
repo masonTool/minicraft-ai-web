@@ -214,7 +214,16 @@ console.log('\n[容器内容：序列化 → 反序列化]');
 
   const chest = store.getOrCreateChest('overworld', 10, 64, 10);
   chest.set(0, { id: Item.DIAMOND, count: 32 });
-  chest.set(26, { id: pickaxe, count: 1, damage: 517, enchants: { efficiency: 3 }, name: '挖挖挖' });
+  // ⚠️ 四项附加数据全都要有（批次 63 补齐 repairCost）：漏了累积惩罚，
+  // 读档后同一件装备在铁砧上会**变便宜**——"只漏了最后加进来的那一项"是这类字段的典型坑
+  chest.set(26, {
+    id: pickaxe,
+    count: 1,
+    damage: 517,
+    enchants: { efficiency: 3 },
+    name: '挖挖挖',
+    repairCost: 9,
+  });
 
   const furnace = store.getOrCreateFurnace('overworld', 11, 64, 10);
   furnace.set(0, { id: Item.RAW_IRON, count: 7 });
@@ -259,6 +268,7 @@ console.log('\n[容器内容：序列化 → 反序列化]');
   equal('箱子那格的耐久还在', chest2.get(26)?.damage, 517);
   equal('箱子那格的附魔还在', chest2.get(26)?.enchants?.efficiency, 3);
   equal('箱子那格的自定义名字还在', chest2.get(26)?.name, '挖挖挖');
+  equal('箱子那格的累积惩罚还在（否则修一次会变便宜）', chest2.get(26)?.repairCost, 9);
   equal('没放东西的格子还是空的', chest2.get(5), null);
 
   const furnace2 = restored.getFurnace('overworld', 11, 64, 10)!;

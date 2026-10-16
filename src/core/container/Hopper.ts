@@ -18,7 +18,8 @@
  */
 
 import type { ItemStack, SlotSource } from './Inventory.ts';
-import { peekTake, sameExtras, takeOne, tryInsertOne } from './Transfer.ts';
+import { sameExtras } from './Inventory.ts';
+import { peekTake, takeOne, tryInsertOne } from './Transfer.ts';
 import { maxStackOf } from '../registry/items.ts';
 import type { BlockContainer } from '../world/BlockEntityStore.ts';
 

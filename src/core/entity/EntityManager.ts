@@ -61,7 +61,8 @@ export class EntityManager {
       for (let j = i + 1; j < items.length; j++) {
         const other = items[j]!;
         if (other.dead || other.age < 0.5) continue;
-        if (other.itemId !== target.itemId) continue;
+        // ⚠️ 只比 id 会把"改了名的/带附魔的"并进普通那堆，名字与附魔静默丢掉（批次 63）
+        if (!other.sameAs(target)) continue;
 
         const dx = target.x - other.x;
         const dy = target.y - other.y;

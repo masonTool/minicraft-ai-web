@@ -54,7 +54,7 @@ import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob } from './core/entity/Mob.ts';
-import { entityIntersectsBox } from './core/entity/Entity.ts';
+import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { endPillarTops } from './core/gen/EndGenerator.ts';
@@ -191,7 +191,7 @@ import {
   withDoorUpper,
 } from './core/registry/blockState.ts';
 import {
-  TOTAL_SLOTS, HOTBAR_SIZE, Inventory, type ItemStack } from './core/container/Inventory.ts';
+  TOTAL_SLOTS, HOTBAR_SIZE, Inventory, stackExtras, type ItemStack } from './core/container/Inventory.ts';
 import { BrewingStand } from './core/container/BrewingStand.ts';
 import { Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
@@ -2982,8 +2982,21 @@ class App {
   }
 
   /** 生成一堆掉落物 */
-  private spawnDrop(itemId: number, count: number, x: number, y: number, z: number): void {
-    this.entities.spawn(new ItemEntity(itemId, count, x, y, z));
+  /**
+   * 生成一堆掉落物。
+   *
+   * `extras`（批次 63）供"带着耐久/附魔/改名掉下来"的路径用（破坏容器、投掷器吐出）——
+   * 不传就是普通白板（矿物、木棍、种子这些绝大多数掉落）。
+   */
+  private spawnDrop(
+    itemId: number,
+    count: number,
+    x: number,
+    y: number,
+    z: number,
+    extras?: DroppedExtras,
+  ): void {
+    this.entities.spawn(new ItemEntity(itemId, count, x, y, z, undefined, extras));
   }
 
   /**
@@ -3121,7 +3134,8 @@ class App {
     const context: EntityContext = {
       world: this.world,
       playerBox: this.physics.box(),
-      pickup: (itemId, count) => this.inventory.add(itemId, count),
+      // 批次 63：拾取要连附加数据一起收（原先只收 id + 数量 → "附魔镐掉地上捡起来变白板"）
+      pickup: (itemId, count, extras) => this.inventory.addStack({ id: itemId, count, ...extras }),
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       player: { x: this.physics.x, y: this.physics.y, z: this.physics.z },
       hurtPlayer: (amount, sourceX, sourceZ, cause) => this.damagePlayer(amount, sourceX, sourceZ, cause),
@@ -3907,7 +3921,7 @@ class App {
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;
-      this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.5, z + 0.5);
+      this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.5, z + 0.5, stackExtras(stack));
       container.set(i, null);
     }
     this.world.containers.remove(this.dimension, x, y, z);
@@ -4035,7 +4049,8 @@ class App {
       if (!inside) continue;
       entity.count -= 1;
       if (entity.count <= 0) entity.dead = true;
-      return { id: entity.itemId, count: 1 };
+      // 批次 63：整份栈吸进去（耐久/附魔/改名一起走）
+      return { id: entity.itemId, count: 1, ...entity.extras };
     }
     return null;
   }
@@ -4161,9 +4176,8 @@ class App {
    * 那一格若是实心方块（比如投掷器贴着墙），掉落物会卡在方块里、永远捡不到。
    * 初速朝朝向推一把，所以"吐出去"看得出来是往哪个方向飞的。
    *
-   * ⚠️ 已知缺口（记在 TASKS H16）：掉落物实体只带"物品 id + 数量"，
-   * 所以带耐久/附魔/改名的东西吐出来之后会掉这些字段——破坏容器时的掉落
-   * （`spawnDrop`）也是同一条限制，一起在"物品 NBT 收尾"里解决。
+   * ⚠️ 批次 63 起，掉落物实体**带的是整份栈**：耐久/附魔/改名跟着一起掉出去、捡回来还在
+   * （原先只带"物品 id + 数量"，这个"已知缺口"已经收掉）。
    */
   private ejectItem(
     stack: ItemStack,
@@ -4182,6 +4196,7 @@ class App {
         y + 0.5 + dy * 0.4,
         z + 0.5 + dz * 0.4,
         { x: dx * 2, y: 1.2 + dy * 2, z: dz * 2 },
+        stackExtras(stack),
       ),
     );
   }

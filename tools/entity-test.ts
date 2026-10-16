@@ -224,5 +224,51 @@ console.log('\n[实体管理器]');
   equal('清空', manager.count, 0);
 }
 
+
+console.log('\n[掉落物：带的是整份栈（批次 63）]');
+{
+  const plain = new ItemEntity(Block.STONE, 3, 0, 5, 0, { x: 0, y: 0, z: 0 });
+  equal('白板的整栈还原', JSON.stringify(plain.toStack()), JSON.stringify({ id: Block.STONE, count: 3 }));
+
+  const fancy = new ItemEntity(Block.STONE, 1, 0, 5, 0, { x: 0, y: 0, z: 0 }, {
+    name: '地基',
+    damage: 7,
+    enchants: { efficiency: 3 },
+    repairCost: 2,
+  });
+  const stack = fancy.toStack();
+  equal('名字跟着掉下来', stack.name, '地基');
+  equal('耐久跟着掉下来', stack.damage, 7);
+  equal('附魔跟着掉下来', stack.enchants?.efficiency, 3);
+  equal('累积惩罚也跟着（再修一次的代价不该变）', stack.repairCost, 2);
+
+  // 合并判定：只比 id 会把"改了名的"并进普通那堆
+  const plainB = new ItemEntity(Block.STONE, 1, 0, 5, 0, { x: 0, y: 0, z: 0 });
+  check('同 id 同附加数据 → 同一件东西', plain.sameAs(plainB));
+  check('同 id 不同名字 → 不是同一件东西', !plain.sameAs(fancy));
+  const otherEnchant = new ItemEntity(Block.STONE, 1, 0, 5, 0, { x: 0, y: 0, z: 0 }, { enchants: { efficiency: 4 } });
+  check('附魔等级不同 → 不是同一件东西', !fancy.sameAs(otherEnchant));
+  const same = new ItemEntity(Block.STONE, 5, 0, 5, 0, { x: 0, y: 0, z: 0 }, {
+    name: '地基',
+    damage: 7,
+    enchants: { efficiency: 3 },
+    repairCost: 2,
+  });
+  check('完全一样 → 同一件东西（可以并堆）', fancy.sameAs(same));
+
+  // 拾取时把附加数据一起交给背包（假上下文记录收到了什么）
+  let picked: { id: number; count: number; extras: unknown } | null = null;
+  const ctx = makeContext((itemId, count, extras) => {
+    picked = { id: itemId, count, extras };
+    return 0;
+  });
+  (ctx as { playerBox: unknown }).playerBox = boxAt(0, 5, 0, 1, 1.8, 1);
+  fancy.age = 1;
+  fancy.tick(ctx, 0.05);
+  equal('拾取回调收到了这一堆', picked !== null, true);
+  check('附加数据一起交出去了', JSON.stringify(picked?.extras) === JSON.stringify(fancy.extras));
+  check('收下之后就消失了', fancy.dead);
+}
+
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
 process.exit(failed === 0 ? 0 : 1);

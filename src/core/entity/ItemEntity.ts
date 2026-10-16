@@ -7,9 +7,13 @@
  *  - 存在 5 分钟（原版 6000 tick）后自然消失；
  *  - 掉落后有 0.5 秒拾取冷却，避免刚丢出去就被自己吸回来；
  *  - 玩家走近即被吸进背包，背包放不下时留在原地。
+ *
+ * ⚠️ 它携带的是**整份 `ItemStack`**（批次 63）：物品 id、数量，以及耐久/附魔/改名这些
+ * 附加数据。原先只存 id + 数量，于是"带着附魔的镐掉在地上 → 捡起来变成白板"
+ * （投掷器吐出来、破坏箱子掉落、落地再捡起，三条路径都中招）。
  */
 
-import { Entity, entityIntersectsBox, type EntityContext } from './Entity.ts';
+import { Entity, entityIntersectsBox, type DroppedExtras, type EntityContext } from './Entity.ts';
 import { moveBody, type MovingBody } from '../physics/EntityMotion.ts';
 
 const GRAVITY = 32;
@@ -23,6 +27,14 @@ export class ItemEntity extends Entity implements MovingBody {
   /** 渲染用的上下浮动相位，让每堆掉落物错开 */
   readonly bobPhase: number;
 
+  /**
+   * 附加数据（耐久/附魔/改名/累积惩罚）。没有就省略——绝大多数掉落物都是"白板"。
+   *
+   * 放在构造函数最后一个可选参数上，是为了**不破坏**那二十来个
+   * `new ItemEntity(id, count, x, y, z, velocity)` 的调用点（测试里用得最多）。
+   */
+  readonly extras: DroppedExtras;
+
   constructor(
     readonly itemId: number,
     public count: number,
@@ -30,8 +42,10 @@ export class ItemEntity extends Entity implements MovingBody {
     y: number,
     z: number,
     initialVelocity?: { x: number; y: number; z: number },
+    extras?: DroppedExtras,
   ) {
     super(x, y, z, 0.25, 0.25);
+    this.extras = extras ?? {};
     this.bobPhase = Math.random() * Math.PI * 2;
 
     if (initialVelocity) {
@@ -84,6 +98,24 @@ export class ItemEntity extends Entity implements MovingBody {
     this.tryPickup(ctx);
   }
 
+  /** 把这一堆还原成一个物品栈（主程序拾取/渲染文案都用它） */
+  toStack(): { id: number; count: number } & DroppedExtras {
+    return { id: this.itemId, count: this.count, ...this.extras };
+  }
+
+  /** 这一堆与另一堆是不是**同一件东西**（同 id + 同附加数据）——合并判定要用 */
+  sameAs(other: ItemEntity): boolean {
+    if (other.itemId !== this.itemId) return false;
+    const a = this.extras;
+    const b = other.extras;
+    if ((a.damage ?? 0) !== (b.damage ?? 0)) return false;
+    if ((a.repairCost ?? 0) !== (b.repairCost ?? 0)) return false;
+    if ((a.name ?? '') !== (b.name ?? '')) return false;
+    const keys = new Set([...Object.keys(a.enchants ?? {}), ...Object.keys(b.enchants ?? {})]);
+    for (const key of keys) if ((a.enchants?.[key] ?? 0) !== (b.enchants?.[key] ?? 0)) return false;
+    return true;
+  }
+
   private tryPickup(ctx: EntityContext): void {
     if (this.age < PICKUP_DELAY || !ctx.playerBox) return;
 
@@ -99,7 +131,7 @@ export class ItemEntity extends Entity implements MovingBody {
     };
     if (!entityIntersectsBox(this, reach)) return;
 
-    const leftover = ctx.pickup(this.itemId, this.count);
+    const leftover = ctx.pickup(this.itemId, this.count, this.extras);
     if (leftover <= 0) this.dead = true;
     else this.count = leftover;
   }

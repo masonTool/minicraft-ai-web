@@ -15,6 +15,25 @@ import type { PhysicsWorld } from '../physics/PlayerPhysics.ts';
  */
 export type EntityDamageCause = 'generic' | 'projectile' | 'explosion' | 'fire';
 
+/**
+ * 掉落物携带的**附加数据**（批次 63）。
+ *
+ * 为什么要单独定义一个结构类型，而不直接引 `container/Inventory.ts` 的 `ItemStack`：
+ * 与 `EntityDamageCause` 同一个理由——**实体层不该认识容器层**，
+ * 但两边的字段必须对得上（多一个少一个都会静默丢数据）。所以这里只写"形状"，
+ * 由 `ItemEntity.toStack()` 交给主程序拼成真正的 `ItemStack`。
+ */
+export interface DroppedExtras {
+  /** 工具/盔甲的耐久损耗 */
+  damage?: number;
+  /** 附魔（id → 等级） */
+  enchants?: Readonly<Record<string, number>>;
+  /** 铁砧改过的名字 */
+  name?: string;
+  /** 铁砧的累积惩罚（再修一次的代价） */
+  repairCost?: number;
+}
+
 export interface EntityContext {
   /** 碰撞与流体查询 */
   world: PhysicsWorld;
@@ -22,9 +41,12 @@ export interface EntityContext {
   playerBox: AABB | null;
   /**
    * 拾取回调：把物品放进玩家背包。
+   *
+   * ⚠️ 必须连 `extras` 一起收下（批次 63）：不然"掉在地上的附魔镐捡起来变成白板"——
+   * 这是"玩家东西凭空变化"的同一类问题（见 TASKS H16）。
    * @returns 未能放入的剩余数量（0 表示全部收下）
    */
-  pickup: (itemId: number, count: number) => number;
+  pickup: (itemId: number, count: number, extras?: DroppedExtras) => number;
   /** 读取方块 id（生物寻路用） */
   getBlock: (x: number, y: number, z: number) => number;
   /** 玩家位置（敌对生物追击用）；未加载时为 null */
@@ -70,8 +92,8 @@ export interface EntityContext {
    * 这样箭矢不必知道"生物是怎么存的"，也方便测试里塞桩。
    */
   hitMob?: (box: AABB) => Mob | null;
-  /** 生成掉落物实体（生物死亡掉落用） */
-  spawnDrop: (itemId: number, count: number, x: number, y: number, z: number) => void;
+  /** 生成掉落物实体（生物死亡掉落用；`extras` 供"带着附魔/耐久掉下来"的路径用） */
+  spawnDrop: (itemId: number, count: number, x: number, y: number, z: number, extras?: DroppedExtras) => void;
   /**
    * 找一只愿意配对的同类（J8）。
    * 实体层不持有生物列表，所以由主程序去实体管理器里找——

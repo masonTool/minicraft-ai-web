@@ -60,6 +60,31 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
   return extras;
 }
 
+/**
+ * 两份栈的**附加数据**是否一致（耐久 / 附魔 / 改名 / 累积惩罚）。
+ *
+ * 合并判定必须连它一起比：只比 id 的话，"铁砧改过名的石头"并进普通那堆就把名字弄丢了
+ * （自动搬运、掉落物拾取、箱子互拖都踩过同一个坑）。
+ *
+ * 放在这里而不是 `container/Transfer.ts`：`Inventory` 是这一层的**地基**，
+ * 搬运方与掉落物都要用它，而反过来（Inventory 依赖搬运方）会绕成一个环。
+ */
+export function sameExtras(a: Partial<ItemStack>, b: Partial<ItemStack>): boolean {
+  if ((a.damage ?? 0) !== (b.damage ?? 0)) return false;
+  if ((a.repairCost ?? 0) !== (b.repairCost ?? 0)) return false;
+  if ((a.name ?? '') !== (b.name ?? '')) return false;
+  const from = a.enchants ?? {};
+  const to = b.enchants ?? {};
+  const keys = new Set([...Object.keys(from), ...Object.keys(to)]);
+  for (const key of keys) if ((from[key] ?? 0) !== (to[key] ?? 0)) return false;
+  return true;
+}
+
+/** 两份栈是不是**同一件东西**（同 id + 同附加数据）——合并/堆叠判定用它 */
+export function sameStack(a: ItemStack, b: ItemStack): boolean {
+  return a.id === b.id && sameExtras(a, b);
+}
+
 export const HOTBAR_START = 0;
 export const HOTBAR_SIZE = 9;
 export const MAIN_START = 9;
@@ -97,14 +122,34 @@ export class Inventory implements SlotSource {
    *
    * @returns 未能放入的剩余数量
    */
+  /**
+   * 放入若干件物品（**白板**：不带耐久/附魔/改名）。
+   *
+   * 绝大多数调用点（合成产物、生物掉落、命令给东西）都是这一种，所以留着这个简写。
+   */
   add(itemId: number, count: number): number {
+    return this.addStack({ id: itemId, count });
+  }
+
+  /**
+   * 放入**一整份物品栈**（批次 63）：附加数据一起带进背包。
+   *
+   * 与 `add` 的两点差别：
+   *  1. 耐久 / 附魔 / 改名 / 累积惩罚原样带进去；
+   *  2. **只与"完全一样的栈"合并**——只比 id 的话，"改了名的石头"并进普通那堆
+   *     就把名字弄丢了（掉落物拾取、漏斗搬运、箱子互拖是同一个坑）。
+   *
+   * @returns 未能放入的剩余数量（0 表示全收下）
+   */
+  addStack(stack: ItemStack): number {
+    const count = stack.count;
     if (count <= 0) return 0;
-    const limit = maxStackOf(itemId);
+    const limit = maxStackOf(stack.id);
     let remaining = count;
 
     for (let i = 0; i < AUTO_FILL_SLOTS && remaining > 0; i++) {
       const slot = this.slots[i];
-      if (!slot || slot.id !== itemId) continue;
+      if (!slot || !sameStack(slot, stack)) continue;
       const room = limit - slot.count;
       if (room <= 0) continue;
       const moved = Math.min(room, remaining);
@@ -115,7 +160,7 @@ export class Inventory implements SlotSource {
     for (let i = 0; i < AUTO_FILL_SLOTS && remaining > 0; i++) {
       if (this.slots[i]) continue;
       const moved = Math.min(limit, remaining);
-      this.slots[i] = { id: itemId, count: moved };
+      this.slots[i] = { ...stackExtras(stack), id: stack.id, count: moved };
       remaining -= moved;
     }
 
@@ -217,8 +262,9 @@ export class Inventory implements SlotSource {
     if (!target) {
       this.slots[to] = source;
       this.slots[from] = null;
-    } else if (target.id === source.id && maxStackOf(target.id) > 1) {
-      // 只能堆叠的物品才合并；工具（maxStack 1）走下面的交换分支，
+    } else if (sameStack(target, source) && maxStackOf(target.id) > 1) {
+      // 只能堆叠的物品才合并，**而且必须"完全一样"**（批次 63：改了名的栈并进普通那堆
+      // 会把名字弄丢）；工具（maxStack 1）走下面的交换分支，
       // 否则两把同款工具互拖会变成"什么都没发生"
       const room = maxStackOf(target.id) - target.count;
       const moved = Math.min(room, source.count);
