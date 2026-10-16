@@ -42,6 +42,7 @@ import {
   SMITHING_RESULT,
   SmithingTable,
 } from '../core/container/SmithingTable.ts';
+import { STONECUTTER_INPUT, Stonecutter } from '../core/container/Stonecutter.ts';
 import { smithingHint } from '../core/crafting/Smithing.ts';
 import {
   ENCHANT_ITEM_SLOT,
@@ -87,6 +88,8 @@ export type InventoryPanelMode =
   | 'enchanting'
   | 'anvil'
   | 'smithing'
+  /** 切石机（H11，批次 44）：一格输入 + 一列可选产物，点哪一项切哪一项 */
+  | 'stonecutter'
   | 'brewing';
 
 export interface InventoryScreenHooks {
@@ -181,6 +184,12 @@ export class InventoryScreen {
   private readonly smithingResultSlot: HTMLDivElement;
   private readonly smithingHintEl: HTMLDivElement;
 
+  /** 切石机（H11，批次 44）：一格输入 + 一列可选产物（按钮）+ 提示行 */
+  private readonly stonecutterLayout: HTMLDivElement;
+  private readonly stonecutterInputSlot: HTMLDivElement;
+  private readonly stonecutterListEl: HTMLDivElement;
+  private readonly stonecutterHintEl: HTMLDivElement;
+
   /** 酿造台（H10）：3 个药水槽 + 材料槽 + 燃料槽 + 进度条 */
   private readonly brewingLayout: HTMLDivElement;
   private readonly brewBottleSlots: HTMLDivElement[] = [];
@@ -215,6 +224,11 @@ export class InventoryScreen {
   private readonly grids: Record<2 | 3, CraftingGrid>;
 
   private mode: InventoryPanelMode = 'inventory';
+  /**
+   * 切石机上一次渲染按钮时的输入物品 id（-1 = 空）。
+   * 用它决定"要不要重建那一列按钮"——见 `refreshStonecutter` 的注解。
+   */
+  private stonecutterInputId = -1;
   /** 当前打开的容器（熔炉/箱子/附魔台/铁砧/酿造台），类型由 `BlockEntityStore` 统一给出 */
   private activeContainer: BlockContainer | null = null;
   private containerDirty = false;
@@ -320,6 +334,16 @@ export class InventoryScreen {
     this.smithingResultSlot.dataset.key = 'smithing:result';
     this.smithingHintEl = document.createElement('div');
     this.smithingHintEl.className = 'anvil-cost';
+
+    // 切石机（H11，批次 44）：一格输入 + 一列"能切出什么"的按钮
+    this.stonecutterLayout = document.createElement('div');
+    this.stonecutterLayout.className = 'stonecutter-layout';
+    this.stonecutterInputSlot = this.createSlot();
+    this.stonecutterInputSlot.dataset.key = `stonecutter:${STONECUTTER_INPUT}`;
+    this.stonecutterListEl = document.createElement('div');
+    this.stonecutterListEl.className = 'stonecutter-list';
+    this.stonecutterHintEl = document.createElement('div');
+    this.stonecutterHintEl.className = 'anvil-cost';
 
     // 附魔台（H9）：物品槽 + 青金石槽 + 三个候选按钮
     this.enchantLayout = document.createElement('div');
@@ -589,6 +613,7 @@ export class InventoryScreen {
     this.clearBindings('enchant:');
     this.clearBindings('anvil:');
     this.clearBindings('smithing:');
+    this.clearBindings('stonecutter:');
     this.clearBindings('brewing:');
 
     if (this.mode === 'furnace') {
@@ -693,6 +718,32 @@ export class InventoryScreen {
       side.append(this.smithingHintEl);
       this.smithingLayout.replaceChildren(row, side);
       this.topArea.appendChild(this.smithingLayout);
+      return;
+    }
+
+    if (this.mode === 'stonecutter') {
+      const cutter = this.activeContainer instanceof Stonecutter ? this.activeContainer : null;
+      const input = this.registerExisting(
+        this.stonecutterInputSlot,
+        `stonecutter:${STONECUTTER_INPUT}`,
+        cutter!,
+        STONECUTTER_INPUT,
+      );
+      this.stonecutterHintEl.textContent = '';
+
+      const left = document.createElement('div');
+      left.className = 'stonecutter-col';
+      left.append(this.buildLabel('要切的石料'), input, this.stonecutterHintEl);
+
+      // 右侧那一列按钮由 `refreshStonecutter` 填：产物清单随输入格变化，
+      // 所以不能在重建上半区时一次性写死
+      this.stonecutterListEl.replaceChildren();
+      const right = document.createElement('div');
+      right.className = 'stonecutter-right';
+      right.append(this.buildLabel('能切出什么（点一下切一件）'), this.stonecutterListEl);
+
+      this.stonecutterLayout.replaceChildren(left, right);
+      this.topArea.appendChild(this.stonecutterLayout);
       return;
     }
 
@@ -1116,6 +1167,7 @@ export class InventoryScreen {
     if (this.mode === 'enchanting') this.refreshEnchantOptions();
     if (this.mode === 'anvil') this.refreshAnvil();
     if (this.mode === 'smithing') this.refreshSmithing();
+    if (this.mode === 'stonecutter') this.refreshStonecutter();
 
     if (this.held) {
       drawItemIcon(this.heldCanvas, this.atlas, this.held.id, 32);
@@ -1193,6 +1245,83 @@ export class InventoryScreen {
     this.held = result.output;
     this.smithingHintEl.textContent = '升级完成：附魔与耐久损耗都保留';
     this.smithingHintEl.classList.remove('bad');
+    this.refresh();
+  }
+
+  /**
+   * 刷新切石机：把"这个输入能切出什么"渲染成一列按钮（H11，批次 44）。
+   *
+   * ⚠️ 按钮**只在输入格的物品 id 变化时重建**（`stonecutterInputId` 记着上一次的值）。
+   * `refresh()` 会被背包/容器的每次变化触发，如果每次都重建 DOM，
+   * 触摸端"点一下"很容易落在刚被替换掉的那个按钮上——点了没反应，看起来像卡了。
+   */
+  private refreshStonecutter(): void {
+    const cutter = this.activeContainer;
+    if (!(cutter instanceof Stonecutter)) return;
+
+    const input = cutter.input;
+    const inputId = input?.id ?? -1;
+    if (inputId !== this.stonecutterInputId) {
+      this.stonecutterInputId = inputId;
+      this.stonecutterListEl.replaceChildren();
+      for (const offer of cutter.offers) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'stonecutter-option';
+        const canvas = document.createElement('canvas');
+        canvas.width = 28;
+        canvas.height = 28;
+        drawItemIcon(canvas, this.atlas, offer.output, 28);
+        const label = document.createElement('span');
+        label.textContent = offer.count > 1 ? `${itemLabel(offer.output)} ×${offer.count}` : itemLabel(offer.output);
+        button.append(canvas, label);
+        button.title = `1 个${itemLabel(inputId)} → ${offer.count} 个${itemLabel(offer.output)}`;
+        button.addEventListener('click', () => this.handleStonecutterCut(offer.output));
+        this.stonecutterListEl.appendChild(button);
+        // 让产物按钮也有悬停提示（与背包槽位共用同一套：`Tooltip.delegate` 只认
+        // 带 `data-tooltip` 的元素，所以这个属性必须设上，否则表里塞了数据也没人查）
+        button.dataset.tooltip = '';
+        this.tooltipStacks.set(button, { id: offer.output, count: offer.count });
+      }
+    }
+
+    const hint = this.stonecutterHintEl;
+    hint.classList.remove('bad');
+    if (!input) {
+      hint.textContent = '放进石料（石头 / 砂岩 / 深板岩 / 石英 / 铜块…）后会列出能切的东西';
+      return;
+    }
+    if (cutter.offers.length === 0) {
+      hint.textContent = `${itemLabel(input.id)} 切不出任何石头变体`;
+      hint.classList.add('bad');
+      return;
+    }
+    hint.textContent = `每次消耗 1 个${itemLabel(input.id)}（现有 ${input.count} 个）`;
+  }
+
+  /** 点某一项：切一件出来直接进背包（原版也是直接进背包，不用先拿到光标上） */
+  private handleStonecutterCut(outputId: number): void {
+    const cutter = this.activeContainer;
+    if (!(cutter instanceof Stonecutter)) return;
+    const offer = cutter.offers.find((candidate) => candidate.output === outputId);
+    if (!offer) return;
+    // 手上拿着东西时先拒绝：否则"背包满 → 产物落到光标 → 把手上的东西顶掉"会丢东西
+    if (this.held) {
+      this.rejectSlot(this.stonecutterListEl);
+      return;
+    }
+
+    const result = cutter.cut(outputId);
+    if (!result.ok) {
+      this.stonecutterHintEl.textContent = result.reason;
+      this.stonecutterHintEl.classList.add('bad');
+      return;
+    }
+    // 背包放不下就放到光标上（`add` 返回没塞进去的数量，不会静默吞掉产物）
+    const leftover = this.inventory.add(result.output.id, result.output.count);
+    if (leftover > 0) this.held = { id: result.output.id, count: leftover };
+    this.stonecutterHintEl.textContent = `切出 ${offer.count} 个${itemLabel(offer.output)}`;
+    this.stonecutterHintEl.classList.remove('bad');
     this.refresh();
   }
 
@@ -1307,6 +1436,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   enchanting: '附魔台',
   anvil: '铁砧',
   smithing: '锻造台',
+  stonecutter: '切石机',
   brewing: '酿造台',
 };
 

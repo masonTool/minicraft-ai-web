@@ -42,6 +42,7 @@ import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { ANVIL_SIZE, Anvil } from './core/container/Anvil.ts';
 import { SMITHING_SIZE, SmithingTable } from './core/container/SmithingTable.ts';
+import { STONECUTTER_SIZE, Stonecutter } from './core/container/Stonecutter.ts';
 import { EnchantTable } from './core/container/EnchantTable.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
@@ -362,6 +363,12 @@ const STARTING_HOTBAR: readonly number[] = [
   Item.NETHERITE_INGOT,
   Block.ANCIENT_DEBRIS,
   Block.NETHERITE_BLOCK,
+  // 开发期切石机（H11，批次 44）：本体 + 几种"能切出东西"的石料，
+  // 放下就能右键试"一进多选"（石板/楼梯/墙/深板岩瓦都在它的候选里）
+  Block.STONECUTTER,
+  Block.STONE,
+  Block.POLISHED_DEEPSLATE,
+  Block.QUARTZ_BLOCK,
   // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
   Block.ANVIL,
   Block.IRON_BLOCK,
@@ -3318,6 +3325,10 @@ class App {
       this.inventoryScreen.openWith('smithing', this.world.containers.getOrCreateSmithingTable(this.dimension, x, y, z));
       return true;
     }
+    if (hitBlock === Block.STONECUTTER) {
+      this.inventoryScreen.openWith('stonecutter', this.world.containers.getOrCreateStonecutter(this.dimension, x, y, z));
+      return true;
+    }
     if (hitBlock === Block.ENCHANTING_TABLE) {
       // 记下位置：书架加成要围着**这一台**数，而 `enchantContext` 是每次刷新时问的
       this.enchantTablePos = { x, y, z };
@@ -3483,7 +3494,7 @@ class App {
   private dropContainerContents(x: number, y: number, z: number): void {
     const container = this.world.containers.get(this.dimension, x, y, z);
     if (!container) return;
-    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、锻造台 3、酿造台 5
+    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、锻造台 3、切石机 1、酿造台 5
     const size = container instanceof Furnace
       ? FURNACE_SIZE
       : container instanceof EnchantTable
@@ -3492,9 +3503,11 @@ class App {
           ? ANVIL_SIZE
           : container instanceof SmithingTable
             ? SMITHING_SIZE
-            : container instanceof BrewingStand
-              ? BREW_SLOT_COUNT
-              : CHEST_SIZE;
+            : container instanceof Stonecutter
+              ? STONECUTTER_SIZE
+              : container instanceof BrewingStand
+                ? BREW_SLOT_COUNT
+                : CHEST_SIZE;
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;
