@@ -80,6 +80,32 @@ const CLIMB_SPEED = 3;
  */
 const ANGER_SECONDS = 10;
 
+/**
+ * 末影人的瞬移距离（格，原版 32）：受击逃脱、泡水淋雨逃开、空闲挪窝都按它来。
+ */
+export const TELEPORT_RANGE = 32;
+/**
+ * 一次瞬移最多试几个落点。试不到就**不瞬移**——宁可留在原地，
+ * 也不要为了"瞬移成功"而卡进石头里（那是比不瞬移严重得多的问题）。
+ */
+export const TELEPORT_ATTEMPTS = 16;
+/** 被注视激怒之后，瞬移到玩家附近多远（格）：原版是"贴到你身边再开打" */
+export const STARE_TELEPORT_MIN = 3;
+export const STARE_TELEPORT_MAX = 12;
+/**
+ * 受伤时瞬移的概率。
+ *
+ * ⚠️ 原版按**伤害来源**分：被弹射物打中必躲、被近战砍则还手（还有一半概率躲）。
+ * 本项目的 `hurt()` 不认识伤害来源（与蜘蛛那条"记仇"是同一处简化），
+ * 所以统一折成一半概率——既保留了"打一下它就闪掉"的手感，又不至于近战完全打不着。
+ */
+export const TELEPORT_ON_HURT_CHANCE = 0.5;
+/** 空闲时多久挪一次窝（秒）：原版末影人也是隔一阵子就出现在别处 */
+export const IDLE_TELEPORT_MIN = 12;
+export const IDLE_TELEPORT_MAX = 24;
+/** 泡水/淋雨的掉血间隔（秒，原版 20 tick = 1 秒掉 1 点） */
+export const WATER_DAMAGE_INTERVAL = 1;
+
 export interface MobDrop {
   itemId: number;
   min: number;
@@ -127,12 +153,15 @@ export interface MobType {
    */
   naturalSpawn?: boolean;
   /**
-   * **只在哪个维度自然刷**（默认主世界，批次 94）。
+   * **只在哪个（些）维度自然刷**（默认主世界，批次 94）。
    *
    * 恶魂是第一个用它的：原版它只在下界刷，而在此之前"自然刷怪"根本没有维度概念
    * ——`MobSpawner` 拿的就是"当前维度那份世界"，不写这一条恶魂会跑到主世界的夜里来。
+   *
+   * 批次 112 起允许写**一串**（末影人主世界与末地都刷）——与 `feed` 一样是
+   * "一个字段两种写法"，判定统一走 `mobs.ts` 的 `mobSpawnsIn`。
    */
-  dimension?: 'overworld' | 'nether' | 'end';
+  dimension?: 'overworld' | 'nether' | 'end' | readonly ('overworld' | 'nether' | 'end')[];
   /**
    * 自然刷出来时需要的**空腔尺寸**（宽 × 高，格；默认 1×2，也就是"两格高的空气"）。
    *
@@ -168,6 +197,33 @@ export interface MobType {
    * 亮度是**按坐标查**的，一个值装不下整片世界。
    */
   neutralInLight?: number;
+  /**
+   * **完全不主动攻击**（批次 112，末影人）：只有被激怒（`angerTimer`，来自"被注视"
+   * 或"被打过"）之后才会动手。
+   *
+   * 与 `neutralInLight` 的区别是**它不看亮度**：末影人白天夜里都一样中立
+   * （它在末地那种没有昼夜的地方也照样中立）。
+   */
+  neutral?: boolean;
+  /**
+   * **被玩家注视多远会激怒**（批次 112，末影人 64 格）。
+   *
+   * 判据交给上层（`EntityContext.playerGazeAt`）：实体层不持有相机，
+   * 而"玩家在看着哪一点"只有主程序算得出来（视线锥 + 视线是否被挡住）。
+   */
+  stareRange?: number;
+  /**
+   * **会瞬移**（批次 112，末影人）：受击（一半概率）/ 泡水淋雨 / 空闲时挪窝。
+   *
+   * 落点由 `Mob.teleportRandomly` 挑（要求能站人、不在水里岩浆里）。
+   */
+  teleports?: boolean;
+  /**
+   * **怕水**（批次 112，末影人）：泡在水里或淋雨时**每秒掉 1 点**，并瞬移逃开。
+   *
+   * "淋雨"的判据与"火焰被雨浇灭"完全同源（`raining` + 天光 15 = 头顶见天）。
+   */
+  waterSensitive?: boolean;
   /**
    * **打中玩家时附带的状态效果**（批次 93，洞穴蜘蛛的中毒）：原版洞穴蜘蛛每次命中
    * 让对方中毒 7 秒。写成一个字段，而不是让 `CaveSpider` 去覆盖近战逻辑——
@@ -207,6 +263,14 @@ export interface MobType {
   /** 渲染用的主色 / 点缀色 */
   bodyColor: number;
   accentColor: number;
+  /**
+   * **眼睛的颜色**（批次 112，末影人）。
+   *
+   * 不填就是人形模型里那份固定的近黑色（僵尸/骷髅/村民都这样，够用）——
+   * 但末影人全身纯黑，眼睛正是它唯一的辨识点（原版那两颗紫眼），
+   * 近黑的眼珠画在黑身上等于没有眼睛。
+   */
+  eyeColor?: number;
   /** 眼睛高度（渲染用） */
   eyeHeight: number;
 }
@@ -273,8 +337,12 @@ export class Mob extends Entity {
   /** 距离下一次放箭还有多久 */
   private rangedTimer = 0;
   private hurtTime = 0;
-  /** 记仇倒计时（批次 93）：>0 时"亮处中立"的蜘蛛照样追人 */
+  /** 记仇倒计时（批次 93）：>0 时"亮处中立"的蜘蛛照样追人；末影人也靠它 */
   private angerTimer = 0;
+  /** 泡水/淋雨的掉血计时（批次 112，末影人） */
+  private waterTimer = 0;
+  /** 空闲瞬移的计时（批次 112）；初值随机，免得一群末影人齐刷刷一起瞬移 */
+  private teleportTimer = IDLE_TELEPORT_MIN + Math.random() * (IDLE_TELEPORT_MAX - IDLE_TELEPORT_MIN);
   private attackCooldown = 0;
   /** 悬停相位（飞行生物上下浮动用，见 `flyAi`） */
   protected hoverPhase = 0;
@@ -345,6 +413,7 @@ export class Mob extends Entity {
     if (this.loveTimer > 0) this.loveTimer -= dt;
     if (this.breedCooldown > 0) this.breedCooldown -= dt;
     this.tickBurning(dt);
+    this.tickWaterFear(ctx, dt);
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
     // 效果要在 AI 之前结算：缓慢/速度影响的正是这一帧的移动速度
@@ -563,9 +632,27 @@ export class Mob extends Entity {
     // ⚠️ 但**被打过之后会记仇**（`angerTimer`）——不然白天戳它一下它还在发呆，
     // 看着就像"AI 坏了"
     const pacified =
-      this.type.neutralInLight !== undefined &&
       this.angerTimer <= 0 &&
-      (ctx.lightAt?.(this.x, this.y + this.height * 0.5, this.z) ?? 0) >= this.type.neutralInLight;
+      (this.type.neutral === true ||
+        (this.type.neutralInLight !== undefined &&
+          (ctx.lightAt?.(this.x, this.y + this.height * 0.5, this.z) ?? 0) >= this.type.neutralInLight));
+
+    // **被注视激怒**（批次 112，末影人）：玩家的准星落在它头上就翻脸。
+    // 放在 `chasing` 之前：激怒是**这一帧就要生效**的状态改变（原版也是瞪到就翻脸），
+    // 下一帧它就会走"追人"那条路。
+    if (
+      this.type.stareRange !== undefined &&
+      this.angerTimer <= 0 &&
+      player !== null &&
+      distanceSq <= this.type.stareRange * this.type.stareRange
+    ) {
+      const headY = this.y + this.type.eyeHeight;
+      if (ctx.playerGazeAt?.(this.x, headY, this.z) === true) {
+        this.angerTimer = ANGER_SECONDS;
+        // 原版：瞪回来之后**瞬移到你附近**再动手（"它怎么在我背后"的那一下）
+        this.teleportNear(ctx, player);
+      }
+    }
 
     // 隐身的玩家不会被盯上（K4 尾巴）：已经追到一半的会停下来（下一帧就不满足条件了）
     const chasing =
@@ -687,6 +774,17 @@ export class Mob extends Entity {
         this.wanderYaw = Math.random() * Math.PI * 2;
         // 四分之一的概率原地站一会儿
         this.idle = Math.random() < 0.25;
+      }
+
+      // 空闲时挪个窝（批次 112，末影人）：原版它就是"一会儿在这儿、一会儿在那儿"。
+      // ⚠️ 只在**没在追人**的时候挪——追人时那一下是"逃"或"扑"，见各调用点
+      if (this.type.teleports) {
+        this.teleportTimer -= dt;
+        if (this.teleportTimer <= 0) {
+          this.teleportTimer =
+            IDLE_TELEPORT_MIN + Math.random() * (IDLE_TELEPORT_MAX - IDLE_TELEPORT_MIN);
+          this.teleportRandomly(ctx);
+        }
       }
     }
 
@@ -946,6 +1044,117 @@ export class Mob extends Entity {
   }
 
   /**
+   * 怕水（批次 112，末影人）：泡在水里、或者**露天淋雨**时，每秒掉 1 点血，
+   * 并且每一次掉血都**瞬移逃开**（原版就是"被水一泡就闪走"）。
+   *
+   * 两条判据：
+   *  - 泡水：**脚部那一格是水**（原版的 `isInWater`）；
+   *  - 淋雨：`raining` 且**头顶直接见天**——这一条与"火焰被雨浇灭"用的是同一个判据
+   *    （`skyLightAt >= 15`，见 `Fire.ts`），所以"站在屋檐下就不会被淋"这两处是一致的。
+   *
+   * ⚠️ 与环境伤害（着火）同一条口径：**不走 `hurt()`**——那会被 0.5 秒的无敌帧
+   * 卡成"每 0.5 秒 1 点"，还会带上击退。这里直接扣血，并自己决定要不要瞬移。
+   */
+  private tickWaterFear(ctx: EntityContext, dt: number): void {
+    if (this.type.waterSensitive !== true || this.dead) return;
+    const x = Math.floor(this.x);
+    const y = Math.floor(this.y + 0.1);
+    const z = Math.floor(this.z);
+    const inWater = ctx.getBlock(x, y, z) === Block.WATER;
+    const inRain =
+      ctx.raining === true &&
+      (ctx.skyLightAt?.(x, Math.floor(this.y + this.height * 0.5), z) ?? 0) >= 15;
+
+    if (!inWater && !inRain) {
+      this.waterTimer = 0;
+      return;
+    }
+
+    this.waterTimer += dt;
+    if (this.waterTimer < WATER_DAMAGE_INTERVAL) return;
+    this.waterTimer -= WATER_DAMAGE_INTERVAL;
+
+    this.health -= 1;
+    this.hitFlash = 0.2;
+    if (this.health <= 0) {
+      this.health = 0;
+      this.dead = true;
+      // 掉落由 `tick` 末尾统一结算（与着火致死同一条路，见那里的注释）
+      return;
+    }
+    if (this.type.teleports) this.teleportRandomly(ctx);
+  }
+
+  /**
+   * 随机瞬移（批次 112，末影人）：在自己周围 `TELEPORT_RANGE` 格内找一个**能站人**的落点。
+   *
+   * 三条硬要求（缺一条就不瞬移，宁可留在原地）：
+   *  - 落点能站人（脚下实心 + 身体那几格通行，走 `Pathfinder.snapToGround`）——
+   *    这条顺带解决了两件事：**不会卡进石头里**，以及**不会瞬移到没加载的区块**
+   *    （未加载的区块读出来是空气，`canStandAt` 会判它脚下没有支撑）；
+   *  - 脚下不是水/岩浆（不然"怕水"会变成"反复把自己泡进水里"）；
+   *  - 落点在世界高度范围内（`snapToGround` 只管 ±6 格，跳不出去）。
+   *
+   * ⚠️ 方向是随机的（原版会挑"看得见玩家/背对玩家"的位置）——记在 TASKS J13。
+   *
+   * @returns 是否真的瞬移走了
+   */
+  teleportRandomly(ctx: EntityContext, minDistance = 8, maxDistance = TELEPORT_RANGE): boolean {
+    for (let attempt = 0; attempt < TELEPORT_ATTEMPTS; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = minDistance + Math.random() * (maxDistance - minDistance);
+      const x = Math.floor(this.x + Math.cos(angle) * distance);
+      const z = Math.floor(this.z + Math.sin(angle) * distance);
+      const y = Math.floor(this.y + (Math.random() * 12 - 6));
+      if (this.teleportTo(ctx, x, y, z)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * 瞬移到**玩家附近**（批次 112）：被注视激怒时用——原版是"瞪回来之后贴到你身边"。
+   *
+   * 与 `teleportRandomly` 的唯一区别是**落点围着目标转**，要求也一样（能站人、不在水里）。
+   */
+  teleportNear(ctx: EntityContext, target: { x: number; y: number; z: number }): boolean {
+    for (let attempt = 0; attempt < TELEPORT_ATTEMPTS; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = STARE_TELEPORT_MIN + Math.random() * (STARE_TELEPORT_MAX - STARE_TELEPORT_MIN);
+      const x = Math.floor(target.x + Math.cos(angle) * distance);
+      const z = Math.floor(target.z + Math.sin(angle) * distance);
+      const y = Math.floor(target.y + (Math.random() * 8 - 4));
+      if (this.teleportTo(ctx, x, y, z)) return true;
+    }
+    return false;
+  }
+
+  /** 瞬移到 (x,y,z) 那一列里最近能站人的一层；成功返回 true */
+  private teleportTo(ctx: EntityContext, x: number, y: number, z: number): boolean {
+    // 寻路器读的是"这一帧的方块采样器"（`tick` 里才刷新一份）。而瞬移**可能在 tick 之外**
+    // 被调用——玩家的攻击结算就是直接 `hurt()` 的——那时采样器还停在上一帧的坐标上，
+    // 甚至（刚生成、没 tick 过）还是 null：`snapToGround` 会把整个世界看成空气，
+    // 于是"每次都瞬移失败"。这里补一次，代价就是一次赋值。
+    this.sampleBlock = ctx.getBlock;
+    const spot = this.pathfinder.snapToGround(x, y, z, this.bodyBlocks);
+    if (!spot) return false;
+    const feet = ctx.getBlock(spot.x, spot.y, spot.z);
+    if (feet === Block.WATER || feet === Block.LAVA) return false;
+
+    this.x = spot.x + 0.5;
+    this.y = spot.y;
+    this.z = spot.z + 0.5;
+    this.vx = 0;
+    this.vy = 0;
+    this.vz = 0;
+    this.onGround = true;
+    // 旧路径作废：它是照着**旧位置**算的，留着会让它掉头往回走
+    this.path = [];
+    this.pathIndex = 0;
+    this.repathTimer = 0;
+    return true;
+  }
+
+  /**
    * 受到伤害：无敌帧内无效；否则扣血 + 击退 + 红闪，生命归零则标记死亡并把掉落物交给上层。
    * @param looting 击杀者的「抢夺」等级，只影响掉落数量（伤害加成在 `tools.ts#meleeDamage` 里算好）
    * @returns 是否真的受到了伤害
@@ -954,10 +1163,18 @@ export class Mob extends Entity {
     if (this.dead || this.hurtTime > 0 || amount <= 0) return false;
 
     this.hurtTime = HURT_COOLDOWN;
-    // 记仇（批次 93）：亮处中立的蜘蛛被打过之后就会还手，见 `ANGER_SECONDS`
+    // 记仇（批次 93）：亮处中立的蜘蛛被打过之后就会还手，见 `ANGER_SECONDS`。
+    // 末影人的"中立"也靠它——被砍一下就不再是那个站着不动的黑家伙了
     this.angerTimer = ANGER_SECONDS;
     this.hitFlash = 0.3;
     this.health -= amount;
+
+    // 挨打就闪（批次 112，末影人）：原版按伤害来源分（被箭射必躲、近战有概率躲），
+    // 我们的 `hurt()` 不认识来源，统一按 `TELEPORT_ON_HURT_CHANCE`。
+    // ⚠️ 放在扣血之后、死亡判定之前：打死它的那一下不该"瞬移走了"（那就永远打不死）
+    if (this.type.teleports && ctx && this.health > 0 && Math.random() < TELEPORT_ON_HURT_CHANCE) {
+      this.teleportRandomly(ctx);
+    }
 
     const length = Math.hypot(knockbackX, knockbackZ);
     if (length > 1e-4) {
@@ -1011,6 +1228,14 @@ export class Mob extends Entity {
   /** 调试用：当前是否在追击 */
   get chasingPath(): number {
     return this.path.length;
+  }
+
+  /**
+   * 是否处在"记仇"状态（批次 93 的蜘蛛与批次 112 的末影人都靠它）——
+   * 对末影人来说这就是"中立已被打破"。渲染层与离线测试直接读它。
+   */
+  get angry(): boolean {
+    return this.angerTimer > 0;
   }
 
   clampToWorld(): void {

@@ -10,8 +10,9 @@
  *  4. **状态位与贴图**：眼睛那一位不影响别的位；顶面按状态换图，两张贴图都在图集里；
  *  5. **传送与到达**：主世界 → 末地那一侧的 5×5 到达平台；末地 → **世界出生点**；
  *     平台是幂等的（重写不会越写越多）；
- *  6. **物品链**：末影之眼 = 末影珍珠 + 烈焰粉；珍珠的来源（要塞箱子）**期望产出 ≥ 12**
- *     ——这一条是"没有末影人也能凑齐一圈"的判据（见 `loot.ts` 的 `stronghold_portal`）。
+ *  6. **物品链**：末影之眼 = 末影珍珠 + 烈焰粉；珍珠的两个来源（**末影人**与要塞箱子）
+ *     都在，且箱子那一份已从"临时放大"**压回原版量**（批次 112 的收尾，
+ *     见 `loot.ts` 的 `stronghold_portal` 与那里的注释）。
  *
  * 运行：npm run test:endportal
  */
@@ -298,7 +299,10 @@ console.log('\n[六、末影之眼这一条链]');
   const want = [Item.ENDER_PEARL, Item.BLAZE_POWDER].sort((a, b) => a - b);
   equal('配方就是"末影珍珠 + 烈焰粉"（原版无序）', ids.join('+'), want.join('+'));
 
-  // 珍珠的来源：要塞传送门房那张表（没有末影人，所以这里是唯一来源）
+  // 珍珠的来源：要塞传送门房那张表 + **末影人**（批次 112 起）。
+  // 这里的断言是批次 111 留下的那条"警铃"的收尾：当时没有末影人，所以把箱子里的
+  // 珍珠临时放大到期望 ≥ 12 颗，并盯着"没有生物掉珍珠"这条理由；末影人一落地，
+  // 理由破了 → 本批把数量压回原版量，判据也换成"两个来源都在、且箱子不再是主力"。
   const table = LOOT_TABLES.find((entry) => entry.key === 'stronghold_portal');
   check('要塞传送门房有一张战利品表', table !== undefined);
   check('这张表能按名字查到序号（写进方块状态的就是它）', lootTableIndex('stronghold_portal') > 0);
@@ -308,18 +312,14 @@ console.log('\n[六、末影之眼这一条链]');
   const expectedRolls = (table!.rollsMin + table!.rollsMax) / 2;
   const expectedPearls = expectedRolls * (pearlEntry!.weight / totalWeight) * ((pearlEntry!.min + pearlEntry!.max) / 2);
   check(
-    `一个箱子的期望珍珠产出 ≥ 12（够凑一圈 12 只眼睛）：实测 ${expectedPearls.toFixed(1)} 颗`,
-    expectedPearls >= 12,
-    '这一条是"没有末影人也能凑齐一圈"的判据，改了数量就会红',
+    `箱子里的珍珠已压回原版量（2~3 颗、期望 ${expectedPearls.toFixed(1)} 颗/箱）`,
+    pearlEntry!.min === 2 && pearlEntry!.max === 3,
+    `实际 ${pearlEntry!.min}~${pearlEntry!.max}`,
   );
   check(
-    '珍珠条目写得比原版多（原版要塞是"上百个箱子各 2~3 颗"，我们只有这一处箱子）',
-    pearlEntry!.min >= 3 && pearlEntry!.max >= 5,
-  );
-  check(
-    '**没有末影人**这条理由仍然成立：生物表里没有任何生物掉末影珍珠',
-    [...MOB_TYPES, DRAGON_TYPE].every((type) => type.drops.every((drop) => drop.itemId !== Item.ENDER_PEARL)),
-    'J13 做出来之后，这条会红——那时就该把上面那张表的珍珠压回原版量',
+    '末影人接上了：生物表里**有**生物掉末影珍珠（批次 111 的警铃到此收声）',
+    [...MOB_TYPES, DRAGON_TYPE].some((type) => type.drops.some((drop) => drop.itemId === Item.ENDER_PEARL)),
+    '末影人在 MOB_TYPES 里且掉珍珠；这一条与上面"压回原版量"必须同时成立',
   );
 }
 

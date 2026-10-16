@@ -213,11 +213,64 @@ export const CAVE_SPIDER_TYPE: MobType = {
   eyeHeight: 0.4,
 };
 
+/**
+ * 末影人（批次 112，J13 的前一半）。
+ *
+ * 它是**唯一掉末影珍珠**的生物，而珍珠是末影之眼（12 只才点亮一圈末地传送门，
+ * 见 K9 / 批次 111）的原料。在它之前，珍珠只有"要塞传送门房的箱子"一个来源，
+ * 而那张表是**临时放大过的**（要塞只有一个箱子，却要凑够 12 颗）——
+ * 这一批把它压回原版量，珍珠的正经来源回到"打末影人"。
+ *
+ * 四处招牌行为各占一个数据字段（与 `flying`/`climbing` 同一套路，不是 id 特判）：
+ *  - **不主动攻击**（`neutral`）：只有被注视（`stareRange`）或被打过才会动手；
+ *  - **被注视激怒**（`stareRange: 64`）：准星落在它头上就激怒、并瞬移到玩家附近开打；
+ *  - **会瞬移**（`teleports`）：受击 / 泡水淋雨 / 空闲时挪窝（都走 `Mob.teleportRandomly`）；
+ *  - **怕水**（`waterSensitive`）：泡在水里或淋雨时**每秒掉 1 点**并瞬移逃开。
+ *
+ * 数值按原版：40 点生命（本项目最耐打的普通怪）、接触伤害 7（原版普通难度）、
+ * 追击 24 格、身高 2.9（三格高）、掉落 **0~1 末影珍珠**、击杀经验 5。
+ *
+ * ⚠️ 与原版的差异（都记在 TASKS J13）：
+ *  - **记仇只有 10 秒**（`Mob.ANGER_SECONDS`）：原版一旦被激怒会一直追到你离开；
+ *  - 瞬移是**随机方向**（原版会挑"看得见你 / 背对你"的位置，本项目不做视线挑选）；
+ *    而且"受伤必瞬移"被折成**一半概率**——本项目的 `hurt()` 不认识伤害来源，
+ *    无法区分"被箭射"（原版必躲）与"被近战砍"（原版会还手），见 TASKS J13；
+ *  - 它会被水逼得瞬移逃开，但**不会主动绕开水**（原版也不绕，但会隔着水站着）；
+ *  - 身高 2.9 走的仍是"≥ 1.2 格就算 2 格"这一档寻路判据，所以**两格高的缝也钻得进去**
+ *    （原版要 3 格）。自然生成时用 `spawnSpace` 要 3 格高，这条只影响寻路。
+ */
+export const ENDERMAN_TYPE: MobType = {
+  id: 'enderman',
+  name: '末影人',
+  health: 40,
+  width: 0.6,
+  height: 2.9,
+  speed: 2.5,
+  hostile: true,
+  attackDamage: 7,
+  followRange: 24,
+  drops: [{ itemId: Item.ENDER_PEARL, min: 0, max: 1 }],
+  xp: 5,
+  neutral: true,
+  stareRange: 64,
+  teleports: true,
+  waterSensitive: true,
+  // 主世界（夜里/洞里）与末地都刷。原版下界的诡异森林也有，本项目没有那个群系
+  dimension: ['overworld', 'end'],
+  spawnSpace: { width: 1, height: 3 },
+  // 全身纯黑，只有眼睛是紫的（原版那两颗）——`eyeColor` 这个字段就是为了它
+  bodyColor: 0x14141c,
+  accentColor: 0x0a0a10,
+  eyeColor: 0xcc00fa,
+  eyeHeight: 2.55,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
   SPIDER_TYPE,
   CAVE_SPIDER_TYPE,
+  ENDERMAN_TYPE,
   {
     id: 'zombie',
     name: '僵尸',
@@ -391,12 +444,17 @@ export const REMOTE_PLAYER_TYPE: MobType = {
  *
  * 抽成函数而不是在两处（刷怪器与测试）各写一遍 `?? 'overworld'`：
  * "默认主世界"这条口径只该有一处（本项目为"同一条判据写两遍"交过学费）。
+ *
+ * 批次 112 起 `dimension` 允许写**一串**（末影人主世界与末地都刷）——
+ * 与 `MobType.feed` 允许写一样或几样是同一个套路：**字段只有一处，怎么判只有这里**。
  */
 export function mobSpawnsIn(
   type: MobType,
   dimension: 'overworld' | 'nether' | 'end' | undefined,
 ): boolean {
-  return (type.dimension ?? 'overworld') === (dimension ?? 'overworld');
+  const list = type.dimension ?? 'overworld';
+  const here = dimension ?? 'overworld';
+  return typeof list === 'string' ? list === here : list.includes(here);
 }
 
 /**

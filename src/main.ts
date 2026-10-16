@@ -478,6 +478,15 @@ let lastRendererFailure: GlSupportFail | null = null;
  */
 type PortalArrivalKind = 'nether' | 'end' | 'spawn';
 
+/**
+ * "准星压在它身上"的视线锥余弦（约 5°），批次 112 的末影人被注视激怒用。
+ *
+ * 原版用的是"头部包围盒与视线射线相交"，等价于一个**随距离收窄角度**的锥；
+ * 这里用固定 5°（64 格外的横向误差约 5.6 格）——对"盯着它看"这件事够用，
+ * 而且不必为了一个判定去算包围盒求交。
+ */
+const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
+
 class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -2553,6 +2562,40 @@ class App {
     if (this.selectedBlock !== Block.LILY_PAD) return false;
     if (this.world.getBlock(x, y, z) !== Block.WATER) return false;
     return this.world.getBlock(x, y + 1, z) === Block.AIR;
+  }
+
+  /**
+   * 玩家是不是**正看着**这一点（批次 112，末影人被注视激怒用）。
+   *
+   * 两条判据（原版也是这两条）：
+   *  1. **视线锥**：这一点与视线方向的夹角 ≤ 5°（`GAZE_CONE_COS`）——大致就是"准星在它身上"；
+   *  2. **视线无遮挡**：眼睛到那一点之间没有实心方块——隔着墙瞪着它不该把它惹毛
+   *     （`raycastVoxels` 是选取方块用的那一支，这里把"实心"换成"挡视线"来问它）。
+   *
+   * ⚠️ 开着界面 / 躺着睡觉时一律返回 false：那不算"在看它"。
+   */
+  private playerGazeAt(x: number, y: number, z: number): boolean {
+    if (this.uiOpen || this.sleeping) return false;
+    const dx = x - this.physics.x;
+    const dy = y - this.physics.eyeY;
+    const dz = z - this.physics.z;
+    const distance = Math.hypot(dx, dy, dz);
+    if (distance < 1e-3) return true;
+
+    const [lookX, lookY, lookZ] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
+    if ((dx * lookX + dy * lookY + dz * lookZ) / distance < GAZE_CONE_COS) return false;
+
+    const blocked = raycastVoxels(
+      (bx, by, bz) => blockDef(this.world.getBlock(bx, by, bz)).solid,
+      this.physics.x,
+      this.physics.eyeY,
+      this.physics.z,
+      dx,
+      dy,
+      dz,
+      distance,
+    );
+    return blocked === null;
   }
 
   private updateInteraction(dt: number): void {
@@ -4791,6 +4834,12 @@ class App {
       afflictPlayer: (effect, seconds) => {
         this.effects.apply(effect, seconds, 0);
       },
+      // 末影人被注视激怒（批次 112）：实体层拿不到相机，所以由这里回答"玩家在看哪"
+      playerGazeAt: (x, y, z) => this.playerGazeAt(x, y, z),
+      // 末影人淋雨（批次 112）：天光是"露天"的判据，与火焰被雨浇灭同源
+      skyLightAt: (x, y, z) => this.world.getSkyLight(x, y, z),
+      // 下雨（下雪也算）：原版的雨只下在主世界，所以这里带上维度
+      raining: this.weather.raining && this.dimension === Dimension.OVERWORLD,
       // 箭矢命中生物：实体层不持有生物列表，所以由这里从实体管理器里查
       hitMob: (box) => {
         for (const entity of this.entities.all) {

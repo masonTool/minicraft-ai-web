@@ -78,6 +78,28 @@ export interface EntityContext {
    * "毒多久、有没有免疫、难度要不要打折"全归生存模块。
    */
   afflictPlayer?: (effect: 'poison', seconds: number) => void;
+  /**
+   * 玩家是不是**正看着这一点**（批次 112，末影人被注视激怒用）。
+   *
+   * 实体层不持有相机（也拿不到玩家的朝向），所以由主程序回答这个问题：
+   * 判据是**视线锥 + 视线无遮挡**两条。不传就当"没在看"。
+   */
+  playerGazeAt?: (x: number, y: number, z: number) => boolean;
+  /**
+   * 那一格的**天光**等级（0~15，批次 112，末影人淋雨判据用）。
+   *
+   * ⚠️ 与 `lightAt` 不是一回事：`lightAt` 是天光与方块光的较大者
+   * （"这里亮不亮"），而"露天淋不淋得到雨"要看**天光**（火把照亮的洞里不掉雨）。
+   * 判据与"火焰被雨浇灭"同源（`skyLight >= 15` = 头顶直接见天）。
+   */
+  skyLightAt?: (x: number, y: number, z: number) => number;
+  /**
+   * 现在**下不下雨**（批次 112，末影人怕雨用）。
+   *
+   * 传值而不是函数：这一项每帧都可能变，而上下文每帧都会新建
+   * （与 `playerInvisible` 同一个理由）。下雪也算降水（原版如此）。
+   */
+  raining?: boolean;
   /** 玩家位置（敌对生物追击用）；未加载时为 null */
   player: { x: number; y: number; z: number } | null;
   /**

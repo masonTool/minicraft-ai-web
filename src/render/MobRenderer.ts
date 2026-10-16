@@ -588,7 +588,14 @@ export class MobRenderer {
     const accentColor = mobAccentColor(mob);
     for (let i = 0; i < specs.length; i++) {
       const spec = specs[i]!;
-      partColors[i] = spec.color === 'body' ? bodyColor : spec.color === 'accent' ? accentColor : 0x14161c;
+      // `eye`：默认那份近黑色，除非这种生物自带 `eyeColor`
+      // （批次 112 末影人：全身纯黑，眼睛是它唯一的辨识点）
+      partColors[i] =
+        spec.color === 'body'
+          ? bodyColor
+          : spec.color === 'accent'
+            ? accentColor
+            : (type.eyeColor ?? 0x14161c);
     }
 
     return {
