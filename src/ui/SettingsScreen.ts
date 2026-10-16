@@ -27,6 +27,10 @@ import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './Tou
  */
 export type ParticleLevel = 'off' | 'reduced' | 'all';
 
+/** 帧率上限的可选值（批次 130）：0 = 不限 */
+export const FPS_CAPS: readonly number[] = [0, 30, 60];
+export const FPS_CAP_LABELS: Record<string, string> = { '0': '不限', '30': '30 帧', '60': '60 帧' };
+
 export const PARTICLE_LEVELS: readonly ParticleLevel[] = ['off', 'reduced', 'all'];
 
 export const PARTICLE_LEVEL_LABELS: Record<ParticleLevel, string> = {
@@ -66,7 +70,13 @@ export const SETTING_GROUP_LABELS: Record<SettingGroup, string> = {
 };
 
 /** 布尔型设置项（开关那种），单独取个名字给 makeToggle 用 */
-type BoolSettingKey = 'clouds' | 'invertY' | 'daylightCycle' | 'showDebug' | 'adaptiveViewDistance';
+type BoolSettingKey =
+  | 'clouds'
+  | 'invertY'
+  | 'daylightCycle'
+  | 'showDebug'
+  | 'adaptiveViewDistance'
+  | 'adaptiveResolution';
 
 export interface GameSettings {
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
@@ -95,6 +105,20 @@ export interface GameSettings {
    */
   adaptiveViewDistance: boolean;
   /**
+   * **自适应分辨率**（批次 130，N7）：掉帧时把渲染分辨率降下来（0.5~1 倍）。
+   *
+   * 它排在其他降级手段**前面**——"画面糊一点"比"视距短一截"更难被察觉，
+   * 而省下的开销一样多（都是填充率）。策略在 `core/world/PerfPolicy.ts`。
+   */
+  adaptiveResolution: boolean;
+  /**
+   * **帧率上限**（批次 130，N7）：0 = 不限、30、60。
+   *
+   * 限帧不改变画面，它省的是 GPU 与电池——手机上"能跑 60 但只给 30"通常比
+   * "忽快忽慢"更省电，玩家也更容易接受（原版基岩版也有同一项）。
+   */
+  maxFps: number;
+  /**
    * 触摸摇杆模式（批次 96，与基岩版的两档一致）：固定左下角 / 跟随手指出现。
    *
    * 两条都要有：固定靠位置形成肌肉记忆，动态对"躺着玩、单手玩"更宽容
@@ -122,6 +146,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   daylightCycle: true,
   showDebug: true,
   adaptiveViewDistance: true,
+  adaptiveResolution: true,
+  maxFps: 0,
   touchStick: 'fixed',
   touchScale: 1,
 };
@@ -150,6 +176,8 @@ export function loadSettings(): GameSettings {
       daylightCycle: parsed.daylightCycle !== false,
       showDebug: parsed.showDebug !== false,
       adaptiveViewDistance: parsed.adaptiveViewDistance !== false,
+      adaptiveResolution: parsed.adaptiveResolution !== false,
+      maxFps: FPS_CAPS.includes(parsed.maxFps as number) ? (parsed.maxFps as number) : DEFAULT_SETTINGS.maxFps,
       touchStick: STICK_MODES.includes(parsed.touchStick as StickMode)
         ? (parsed.touchStick as StickMode)
         : DEFAULT_SETTINGS.touchStick,
@@ -379,7 +407,17 @@ export class SettingsScreen {
       this.makeSlider('fov', '视野', '°', 60, 110, 1),
     );
     this.makeToggle(graphics, 'clouds', '云');
+    // 降级四件套（批次 130，N7）：手机上"掉帧时先牺牲什么"交给玩家自己定。
+    // 默认值刻意选成"手机优先"：两档自适应都开、帧率不限（能跑多少跑多少）
+    this.makeToggle(graphics, 'adaptiveResolution', '自适应分辨率');
     this.makeToggle(graphics, 'adaptiveViewDistance', '自适应视距');
+    this.makeSelect(
+      graphics,
+      'maxFps',
+      '帧率上限',
+      FPS_CAPS.map(String),
+      FPS_CAP_LABELS,
+    );
     this.makeSelect(graphics, 'particles', '粒子效果', PARTICLE_LEVELS, PARTICLE_LEVEL_LABELS);
 
     const controls = this.section('controls');
@@ -628,7 +666,7 @@ export class SettingsScreen {
    */
   private makeSelect<T extends string>(
     options: HTMLElement,
-    key: 'cameraMode' | 'particles' | 'touchStick',
+    key: 'cameraMode' | 'particles' | 'touchStick' | 'maxFps',
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
@@ -646,6 +684,8 @@ export class SettingsScreen {
         // 逐个分支赋值：`GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查
         if (key === 'cameraMode') this.settings.cameraMode = next as CameraMode;
         else if (key === 'particles') this.settings.particles = next as ParticleLevel;
+        // 帧率上限是**数字**（0/30/60），但选择行按字符串循环（见上面 `FPS_CAP_LABELS`）
+        else if (key === 'maxFps') this.settings.maxFps = Number(next);
         else this.settings.touchStick = next as StickMode;
         this.commit();
         return `‹ ${labels[next]} ›`;

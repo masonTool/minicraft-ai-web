@@ -11,6 +11,7 @@
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
     "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs",
+    "test:perfpolicy": "esbuild tools/perfpolicy-test.ts --bundle --platform=node --format=esm --outfile=.tmp/perfpolicy-test.mjs --log-level=error && node .tmp/perfpolicy-test.mjs",
     "test:pickblock": "esbuild tools/pickblock-test.ts --bundle --platform=node --format=esm --outfile=.tmp/pickblock-test.mjs --log-level=error && node .tmp/pickblock-test.mjs",
     "test:cursor": "esbuild tools/cursor-test.ts --bundle --platform=node --format=esm --outfile=.tmp/cursor-test.mjs --log-level=error && node .tmp/cursor-test.mjs",
     "test:quickmove": "esbuild tools/quickmove-test.ts --bundle --platform=node --format=esm --outfile=.tmp/quickmove-test.mjs --log-level=error && node .tmp/quickmove-test.mjs",

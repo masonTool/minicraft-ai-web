@@ -129,6 +129,8 @@ export class ParticleSystem {
 
   /** 当前存活粒子数（活跃粒子始终排在 [0, count)） */
   private count = 0;
+  /** 场上同时存在的粒子上限（批次 130；初值 = 池子大小，也就是"不限"） */
+  private maxAlive = PARTICLE_POOL;
 
   constructor() {
     const positions = new Float32Array(PARTICLE_POOL * 3);
@@ -181,6 +183,25 @@ export class ParticleSystem {
 
   get active(): number {
     return this.count;
+  }
+
+  /**
+   * **场上同时存在的粒子上限**（批次 130，N7 的"粒子总量"）。
+   *
+   * 与 `setDensity` 的分工：那一档管"**每次撒多少**"（挖掘碎屑 2 颗、爆炸 24 颗……），
+   * 这一条管"**场上最多同时存在多少**"。两者都要有：下雨 + 打怪 + 挖矿一起发生时，
+   * 密度那一档挡不住爆量——而粒子是**纯填充率**开销（手机 GPU 最怕的那一项）。
+   *
+   * 到顶之后**新粒子直接不生成**（不是踢掉旧的）：踢旧珠子会让正在看的那簇突然消失，
+   * 看起来像 bug；"雨里看不到新的水花"反而是玩家能接受的那种省。
+   */
+  setBudget(limit: number): void {
+    this.maxAlive = Math.max(0, Math.min(PARTICLE_POOL, Math.floor(limit)));
+  }
+
+  /** 当前上限（验收脚本读它） */
+  get budget(): number {
+    return this.maxAlive;
   }
 
   /**
@@ -254,6 +275,11 @@ export class ParticleSystem {
   ): void {
     // 密度只在这里生效：所有粒子都从 burst 走，调一处就够
     count = this.scaledCount(count);
+    // 再有**硬上限**兜一刀（批次 130，N7）：密度管"每次撒多少"、上限管"场上最多多少"。
+    // 一簇里塞不下就少撒几颗，而不是整簇都不撒——这样观感是"稀疏一点"，不是"没有效果"
+    const room = this.maxAlive - this.count;
+    if (room <= 0) return;
+    count = Math.min(count, room);
     if (count <= 0) return;
 
     const params = KINDS[kind];

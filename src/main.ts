@@ -328,6 +328,15 @@ import {
 // 亡灵被太阳晒（批次 124）：判据是纯函数（露天 + 白天 + 没下雨），
 // 而"哪些生物会烧"是每种生物自己的一位数据（`MobType.burnsInDaylight`）
 import { DAYLIGHT_BURN_SECONDS, FULL_SKY_LIGHT, sunBurns } from './core/world/Daylight.ts';
+// 移动端降级策略（批次 130，TASKS N7）：动态分辨率 / 自适应视距 / 限帧 / 粒子总量。
+// 策略本身是**纯函数**（`test:perfpolicy` 逐条钉住），这里只负责把结果落到渲染器与粒子上
+import {
+  frameIntervalMs,
+  initialPerfState,
+  particleBudgetFor,
+  perfPolicyStep,
+  type PerfState,
+} from './core/world/PerfPolicy.ts';
 // 失眠与幻翼（批次 126，"连续三天不睡"才来的那只）：判据是纯逻辑，
 // 但它只跟**玩家自己的状态**有关（与地形无关），所以不走 `MobSpawner`
 import { PHANTOM_SPAWN_INTERVAL, phantomNightIsComing, phantomSpawnCount } from './core/survival/Insomnia.ts';
@@ -1022,11 +1031,18 @@ class App {
    * 帧时间的指数滑动平均（毫秒）。
    * 用滑动平均而不是"上一帧耗时"：偶发的一次卡顿（GC、区块上传）不该触发降视距。
    */
-  private frameTimeAvg = 16.7;
+  /**
+   * 降级策略的状态：帧时间滑动平均 / 分辨率倍率 / 当前视距 / 冷却（批次 130）。
+   *
+   * 之前这三样是**散在三个字段里**（`frameTimeAvg` / `viewDistance` / `adaptiveCooldown`），
+   * 而策略本身写在主循环里——只能靠浏览器跑七秒才看得到。现在状态归 `PerfState`、
+   * 策略归 `perfPolicyStep`（纯函数），主程序只负责"把结果落下去"。
+   */
+  private perf: PerfState = initialPerfState(12);
   /** 调试用：把帧时间固定成这个值（毫秒），0 表示用真实值。验收脚本靠它稳定复现"掉帧" */
   private simulatedFrameTime = 0;
-  /** 自适应视距的冷却倒计时（秒）：避免帧率在阈值附近抖动时反复升降 */
-  private adaptiveCooldown = 3;
+  // ⚠️ 自适应视距的冷却（`adaptiveCooldown`）在**批次 130** 并进了 `this.perf.cooldown`：
+  // 分辨率与视距共用同一个冷却倒计时，这样"先降分辨率、再降视距"之间的间隔是统一的
   private netStatus = '未连接（按 L 联机）';
   private chatLine = '';
   private chatUntil = 0;
@@ -1298,6 +1314,10 @@ class App {
 
     // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
     this.viewDistance = this.settings.viewDistance;
+    // 粒子总量（批次 130，N7）：**启动时也要应用一次**——`applySettings` 只在"玩家改设置"
+    // 时被调用，不在这里补一刀的话，存档里那个"粒子效果：减半"要等玩家开一次设置才生效
+    this.particles.setBudget(particleBudgetFor(this.settings.particles));
+    this.perf = { ...this.perf, viewDistance: this.settings.viewDistance };
     this.audio.volume = this.settings.volume;
     this.lastStepX = this.physics.x;
     this.lastStepZ = this.physics.z;
@@ -1441,12 +1461,16 @@ class App {
     this.cameraMode = settings.cameraMode;
     this.viewDistance = settings.viewDistance;
     // 玩家手动改视距时把自适应冷却重置：否则刚拖完滑块又要等几秒才允许升降
-    this.adaptiveCooldown = 3;
+    // ⚠️ 分辨率的当前值**不重置**：它是"这台设备现在扛不扛得住"的记忆，
+    // 改一次视距就把它弹回 1.0 的话，弱机每次调设置都要重新掉一轮帧
+    this.perf = { ...this.perf, viewDistance: settings.viewDistance, cooldown: 3 };
     this.camera.fov = settings.fov;
     this.camera.far = settings.viewDistance * 16 + 32;
     this.camera.updateProjectionMatrix();
     this.audio.volume = settings.volume;
     this.particles.setDensity(PARTICLE_DENSITY[settings.particles]);
+    // 粒子总量（批次 130，N7）：与"密度"一起设，两条各管一头（见 ParticleSystem.setBudget）
+    this.particles.setBudget(particleBudgetFor(settings.particles));
     this.sky.setCloudsVisible(settings.clouds);
     // 触摸摇杆模式（批次 96）：没有触摸层时静默忽略（桌面端这个设置项不该报错）
     this.touch?.setStickMode(settings.touchStick);
@@ -7858,32 +7882,53 @@ class App {
   // ---------------------------------------------------------------- 主循环
 
   /**
-   * 自适应视距（K6）。
+   * 移动端降级策略（K6 的视距 + N7 的分辨率 / 限帧 / 粒子总量，批次 130）。
    *
-   * 手机长时间游玩会发热降频，帧率掉下去之后如果什么都不做，就只会越来越卡。
-   * 这里用帧时间滑动平均做迟滞控制：
-   *   平均帧时间 > 22ms（约 45fps）→ 降 1 区块，冷却 4 秒
-   *   平均帧时间 < 17ms（约 59fps）→ 升 1 区块，冷却 8 秒（升比降保守，避免抖动）
-   * 玩家设定的视距是上限：自适应只会往下调，不会超过玩家想要的范围。
+   * 每帧推进一步：帧时间滑动平均超过 22ms（约 45fps）就**先降分辨率**
+   * （0.5~1 倍，一次 0.1），分辨率到底了才继续降视距；有余量时**反过来**升
+   * （先把视距还回去，最后才把分辨率升满）。所有阈值、冷却、优先级都在
+   * `core/world/PerfPolicy.ts` 里，这里只把结果落下去。
+   *
+   * ⚠️ 玩家设定的视距是**上限**：自适应只在这个值以下活动，不会超过玩家的选择。
    */
-  private updateAdaptiveViewDistance(dt: number): void {
-    // 平滑系数 0.05：约 20 帧的时间常数，半秒内的抖动会被抹平
+  private updatePerfPolicy(dt: number): void {
+    // `simulateFrameTime` 会把帧时间固定成一个高值（验收脚本用它复现"掉帧"）
     const frameTime = this.simulatedFrameTime > 0 ? this.simulatedFrameTime : dt * 1000;
-    this.frameTimeAvg += (frameTime - this.frameTimeAvg) * 0.05;
-    if (!this.settings.adaptiveViewDistance) return;
+    const before = this.perf;
+    const { state, action } = perfPolicyStep(before, dt, frameTime, {
+      adaptiveResolution: this.settings.adaptiveResolution,
+      adaptiveViewDistance: this.settings.adaptiveViewDistance,
+      viewDistanceCap: this.settings.viewDistance,
+    });
+    this.perf = state;
+    if (action === null) return;
 
-    this.adaptiveCooldown -= dt;
-    if (this.adaptiveCooldown > 0) return;
-
-    const max = this.settings.viewDistance;
-    if (this.frameTimeAvg > 22 && this.viewDistance > 4) {
-      this.setViewDistance(this.viewDistance - 1);
-      this.adaptiveCooldown = 4;
-      console.info(`[perf] 帧时间 ${this.frameTimeAvg.toFixed(1)}ms，视距降到 ${this.viewDistance}`);
-    } else if (this.frameTimeAvg < 17 && this.viewDistance < max) {
-      this.setViewDistance(this.viewDistance + 1);
-      this.adaptiveCooldown = 8;
+    if (state.viewDistance !== before.viewDistance) {
+      this.setViewDistance(state.viewDistance);
+      console.info(
+        `[perf] 帧时间 ${state.frameTimeAvg.toFixed(1)}ms，视距 ${state.viewDistance}（上限 ${this.settings.viewDistance}）`,
+      );
     }
+    if (state.resolutionScale !== before.resolutionScale) {
+      this.applyResolutionScale();
+      console.info(`[perf] 渲染分辨率 ×${state.resolutionScale}（掉帧时先牺牲它）`);
+    }
+  }
+
+  /**
+   * 把分辨率倍率落到渲染器上（批次 130，N7 的"动态分辨率"）。
+   *
+   * ⚠️ `setSize` 的第三个参数是 `updateStyle`，**必须传 `false`**：传 true 的话 canvas 的
+   * CSS 尺寸也会被乘上倍率，画面会跟着缩放——那就不是"降分辨率省填充率"，
+   * 而是"把整个画面缩小了"（看起来像改了视口，不是像降了画质）。
+   */
+  private applyResolutionScale(): void {
+    const scale = this.perf.resolutionScale;
+    this.renderer.setPixelRatio(scale);
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    // 粒子的点尺寸是按"设备像素"算的（`setViewport` 拿的就是缓冲区高度），
+    // 所以分辨率一变要重新告诉它一次，否则粒子会跟着分辨率一起变大或变小
+    this.particles.setViewport(this.camera.fov, this.renderer.domElement.height);
   }
 
   /**
@@ -8026,6 +8071,14 @@ class App {
 
     const loop = () => {
       const now = performance.now();
+      // 限帧（批次 130，N7）：上限只决定"这一帧来得太早就不画"。
+      // ⚠️ 跳过时必须**继续排下一帧**（`requestAnimationFrame` 后再 return）——
+      // 直接 return 会让循环停住，画面就此冻住（最容易写错的一处）
+      const interval = frameIntervalMs(this.settings.maxFps);
+      if (interval > 0 && now - this.lastTime < interval) {
+        requestAnimationFrame(loop);
+        return;
+      }
       const dt = Math.min((now - this.lastTime) / 1000, 0.1);
       this.lastTime = now;
 
@@ -8080,7 +8133,7 @@ class App {
         const before = this.viewDistanceNow;
         // 帧时间吃紧（与自适应视距收缩同一条阈值 22ms）就先别往外涨：
         // 一边卡一边扩大范围，只会把"能玩"推得更远
-        this.startupRamp.advance(dt, this.viewDistance, this.frameTimeAvg > 22);
+        this.startupRamp.advance(dt, this.viewDistance, this.perf.frameTimeAvg > 22);
         if (this.viewDistanceNow !== before) {
           this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
         }
@@ -8137,7 +8190,7 @@ class App {
 
       this.updateGamepad(dt);
       this.tickAutoSave(dt);
-      this.updateAdaptiveViewDistance(dt);
+      this.updatePerfPolicy(dt);
       this.updateAudio(dt);
       this.net.tick(
         this.physics.x,
@@ -8743,6 +8796,10 @@ class App {
     skyVisible: boolean;
     /** 当前存活的粒子数（E13 验收用） */
     particles: number;
+    /** 粒子的硬上限（批次 130，N7；0 = 粒子关了） */
+    particleBudget: number;
+    /** 当前渲染分辨率倍率（批次 130，N7；1 = 基准） */
+    resolutionScale: number;
     /** 手持物品 id（空手为 null，E15 验收用） */
     handItem: number | null;
     /** 当前的视野色罩（E16 验收用） */
@@ -8817,6 +8874,10 @@ class App {
       dimension: this.dimension,
       skyVisible: this.sky.object.visible,
       particles: this.particles.active,
+      /** 粒子的**硬上限**（批次 130，N7）：与 `particles` 一起看才知道"到顶了没有" */
+      particleBudget: this.particles.budget,
+      /** 当前渲染分辨率倍率（批次 130，N7）：掉帧时它会先降 */
+      resolutionScale: this.perf.resolutionScale,
       handItem: this.hand.item ?? null,
       screenEffect: this.screenEffects.effect,
       recipeBookOpen: this.recipeBook.isOpen,
@@ -9071,14 +9132,36 @@ class App {
     viewDistance: number;
     fov: number;
     frameTimeAvg: number;
+    resolutionScale: number;
+    perfCooldown: number;
   } {
     return {
       open: this.settingsScreen.isOpen,
       settings: this.settingsScreen.snapshot(),
       viewDistance: this.viewDistance,
       fov: this.camera.fov,
-      frameTimeAvg: Number(this.frameTimeAvg.toFixed(2)),
+      frameTimeAvg: Number(this.perf.frameTimeAvg.toFixed(2)),
+      // 降级策略的现状（批次 130）：验收脚本据此断言"掉帧时分辨率先降"
+      resolutionScale: this.perf.resolutionScale,
+      perfCooldown: Number(this.perf.cooldown.toFixed(2)),
     };
+  }
+
+  /**
+   * 验收脚本用（批次 130）：在玩家旁边撒一批粒子，返回撒完之后的存活数。
+   *
+   * 存在的理由很具体：**粒子总量那个上限只有在"爆量"时才看得出来**，
+   * 而"爆炸 + 一堆方块被拆"在脚本里不好构造（要摆 TNT、要等引信）。
+   * 给一个直接撒的口子，`perf-acceptance.js` 就能真的压到上限。
+   */
+  spawnTestParticles(offsetX = 0): number {
+    const x = this.physics.x + offsetX;
+    const y = this.physics.y + 1;
+    const z = this.physics.z;
+    this.particles.spawnBlockBreak(x, y, z, 0xffffff, 24);
+    this.particles.spawnSmoke(x, y, z, 24, 0.4);
+    this.particles.spawnFlame(x, y, z, 1);
+    return this.particles.active;
   }
 
   /** 以编程方式改设置（等同于拖滑块） */
