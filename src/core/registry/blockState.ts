@@ -98,6 +98,22 @@ export type BlockShape =
    * 与藤蔓/梯子同一套朝向语义（`facing` 指向**贴着的那一面**）。
    */
   | 'cocoa'
+  /**
+   * 蛋糕（批次 52）：半格高的一块蛋糕，**宽度随吃掉的片数变窄**（原版就是越吃越小）。
+   *
+   * 为什么"一个方块 + 状态位"而不是 7 个 id：蛋糕是**同一个方块被一点点吃掉**，
+   * 不是"长大"——7 个 id 会让"吃着吃着换了个方块"这种语义渗透到存档与联机里
+   * （白名单里得写 7 行，掉落还要判"剩几片"）。片数放状态里，几何与贴图各读一次即可。
+   */
+  | 'cake'
+  /**
+   * 花盆（批次 52）：矮矮的一个盆，里面能种一株小植物。
+   *
+   * 盆里的**那株植物由状态位记着**（原版是方块实体 + 物品 NBT，本项目没有 NBT，
+   * 见 `POTTED_PLANTS`）：索引 0 = 空盆，1..N = 表里的第 N 种植物。
+   * 渲染时盆身走盒子、植物走十字薄面（`ChunkMesher` 里那一小段特判）。
+   */
+  | 'flower_pot'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -132,6 +148,45 @@ const POWERED_MASK = 0b1000;
  * 破坏时按 2 个台阶掉落（见 blocks.ts 的掉落表）。
  */
 const SLAB_DOUBLE_MASK = 0b1000000;
+
+// ---------------------------------------------------------------- 蛋糕与花盆（批次 52）
+//
+// 两者都用**低位**（bit0 起）存自己的"阶段/内容物"：它们的形状族与台阶/门/藤蔓
+// 不会同时出现在一个方块上，所以这些位可以重用（见文件开头那条设计）。
+// 蛋糕只要 3 位（0~6 片），花盆要 5 位（0 = 空盆 + 最多 31 种植物）。
+
+/** 一个蛋糕有几片（原版 7 片：吃满 7 次就没了） */
+export const CAKE_SLICES = 7;
+
+/** 蛋糕被吃掉几片（0~6；到 7 就是吃完了、方块消失） */
+const CAKE_BITES_MASK = 0b111;
+
+export function cakeBites(state: number): number {
+  return state & CAKE_BITES_MASK;
+}
+
+/**
+ * 写进食掉的片数。
+ *
+ * ⚠️ 夹到 **`CAKE_SLICES - 1`**（0~6），不是夹到掩码上限 7：
+ * "第 7 片"意味着这个方块已经该消失了，它**不该是一个合法的状态**
+ * （真出现 7，说明有代码忘了把方块换成空气——那是个 bug，不该在这里被合法化）。
+ */
+export function withCakeBites(state: number, bites: number): number {
+  const clamped = Math.max(0, Math.min(CAKE_SLICES - 1, bites));
+  return (state & ~CAKE_BITES_MASK) | clamped;
+}
+
+/** 花盆里装的是第几种植物（0 = 空盆；对应 `POTTED_PLANTS` 的下标 + 1） */
+const POTTED_PLANT_MASK = 0b11111;
+
+export function flowerPotPlant(state: number): number {
+  return state & POTTED_PLANT_MASK;
+}
+
+export function withFlowerPotPlant(state: number, plant: number): number {
+  return (state & ~POTTED_PLANT_MASK) | (Math.max(0, Math.min(POTTED_PLANT_MASK, plant)) & POTTED_PLANT_MASK);
+}
 
 // ---------------------------------------------------------------- 流体
 //
@@ -494,6 +549,12 @@ export function describeState(shape: BlockShape, state: number): string {
       const sides: string[] = vineSides(state).map((facing) => FACING_NAMES[facing]);
       if (hasVineUp(state)) sides.push('顶');
       return sides.length > 0 ? `挂${sides.join('/')}` : '悬空（应当消失）';
+    }
+    case 'cake':
+      return `已吃 ${cakeBites(state)} 片`;
+    case 'flower_pot': {
+      const plant = flowerPotPlant(state);
+      return plant === 0 ? '空盆' : `种着第 ${plant} 种植物`;
     }
     default:
       return '';

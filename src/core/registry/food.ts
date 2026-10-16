@@ -59,6 +59,18 @@ export function saturationFrom(food: FoodInfo): number {
 }
 
 /**
+ * **一片蛋糕**的数值（批次 52）：2 饥饿 / 0.4 饱和度（原版每片是 `nutrition 2`、
+ * `saturationModifier 0.1`，换算成点数 = 2 × 0.1 × 2 = 0.4）。
+ *
+ * ⚠️ 它**不在 `FOOD_TABLE` 里**：蛋糕是"能吃的方块"，而**它的物品不是食物**
+ * （原版手里拿着蛋糕长按不会啃掉自己，右键地面才是"放下"）。
+ * 一旦登记进 FOOD_TABLE，"手持蛋糕长按"也会走进食路径——那是与
+ * "放下去大家一起吃"完全不同的行为。所以这里给它一个**单独的一片数值**，
+ * 只有"右键地上那块蛋糕"这条路径会用它。
+ */
+export const CAKE_SLICE_FOOD: FoodInfo = { hunger: 2, saturationModifier: 0.1 };
+
+/**
  * 进食耗时（秒）。原版是 1.6 秒（32 tick），所有食物一样。
  * 放在这里而不是 main 里写死：离线测试要拿它验"吃满 1.6 秒才咽下去"。
  */

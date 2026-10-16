@@ -159,6 +159,18 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       return { state: withWallMounted(withFacing(0, facing), true) };
     }
 
+    case 'cake':
+      // 蛋糕（批次 52）：半格高的方块，只能放在实心方块**上面**（原版放不了天花板）
+      if (ny <= 0) return null;
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: 0 };
+
+    case 'flower_pot':
+      // 花盆同理（放下去时是**空盆**，里面的植物靠右键种，见 main 的交互）
+      if (ny <= 0) return null;
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: 0 };
+
     case 'ladder': {
       const facing = facingFromNormal(nx, nz);
       if (facing === null) return null;

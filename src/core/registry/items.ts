@@ -569,6 +569,10 @@ const ARMOR = new Set<number>(ARMOR_SPECS.map((spec) => spec.id));
 const FOODS = new Set<number>(
   BASE_NON_BLOCK_SPECS.filter((spec) => foodForName(spec.name) !== undefined).map((spec) => spec.id),
 );
+// 蛋糕（批次 52）：它是**方块**，却属于"食物"那一页——
+// 上面那条是从"非方块物品"里筛的，方块物品得单独登记（不然会掉进"自然"里，
+// 玩家在食物页翻不到它）。
+FOODS.add(Block.CAKE);
 
 const BUILDING = new Set<number>([
   Block.STONE,
@@ -699,6 +703,9 @@ const FUNCTIONAL = new Set<number>([
   Block.SMITHING_TABLE,
   // 切石机（H11，批次 44）：同样是"右键打开的工作台"
   Block.STONECUTTER,
+  // 花盆（批次 52）：原版把它摆在"装饰"页（1.19 起并进了功能页），
+  // 本项目没有装饰页——它是"右键往里种一株"的功能方块，与营火/熔炉同一类
+  Block.FLOWER_POT,
 ]);
 
 /** 自然装饰与下界方块（创造物品栏的"自然"分类） */

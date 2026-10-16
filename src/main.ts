@@ -189,11 +189,24 @@ import { CHEST_SIZE } from './core/container/Chest.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from './core/container/BrewingStand.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
-import { JUNGLE_LOG_ID } from './core/registry/blocks.ts';
+import {
+  JUNGLE_LOG_ID,
+  flowerPotIndexFor,
+  pottedPlantItem,
+  pottedPlantName,
+} from './core/registry/blocks.ts';
 import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { CAMPFIRE_SIZE, Campfire } from './core/container/Campfire.ts';
 import { PrecipitationTicker } from './core/tick/Precipitation.ts';
-import { isLitState, withLitState } from './core/registry/blockState.ts';
+import {
+  CAKE_SLICES,
+  cakeBites,
+  flowerPotPlant,
+  isLitState,
+  withCakeBites,
+  withFlowerPotPlant,
+  withLitState,
+} from './core/registry/blockState.ts';
 import { EntityManager } from './core/entity/EntityManager.ts';
 import { Arrow, type ArrowOptions } from './core/entity/Arrow.ts';
 import {
@@ -227,7 +240,7 @@ import {
   Item,
   extraCropDrop,
 } from './core/registry/items.ts';
-import { canEat } from './core/registry/food.ts';
+import { CAKE_SLICE_FOOD, canEat } from './core/registry/food.ts';
 
 /** 渲染距离（区块） */
 /** 视距默认值（玩家可在设置里改，见 `App.viewDistance`） */
@@ -2666,6 +2679,12 @@ class App {
       });
       if (drop) {
         this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+        // 花盆（批次 52）：拆盆时**里面那株植物也掉出来**（原版如此）——
+        // 不这么做，玩家会看到"拆一个盆，辛苦种的花没了"，而方块本身看不出问题
+        if (brokenId === Block.FLOWER_POT) {
+          const potted = pottedPlantItem(flowerPotPlant(brokenState));
+          if (potted !== undefined) this.spawnDrop(potted, 1, this.hit.x + 0.5, this.hit.y + 0.6, this.hit.z + 0.5);
+        }
         // 收成熟作物还会额外掉一份（小麦是种子、胡萝卜/马铃薯是果实）
         const extra = extraCropDrop(brokenId, Math.random);
         if (extra) {
@@ -2741,6 +2760,83 @@ class App {
         : withFenceGateOpen(state, !isFenceGateOpen(state));
     this.world.setBlockAndUpdate(x, y, z, id, next);
     this.audio.play('door', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+  }
+
+  /**
+   * 吃一片蛋糕（批次 52）。
+   *
+   * 原版：一共 7 片，**每片回 2 点饥饿 / 0.4 点饱和度**，吃完第 7 片方块消失；
+   * 饥饿满了就吃不下去（连"咬一口"都没有）。
+   *
+   * ⚠️ 数值取自 `CAKE_SLICE_FOOD`（food.ts），**不能**把 cake 登记进 `FOOD_TABLE`——
+   * 那会让"手持蛋糕长按"也能啃掉自己，而原版蛋糕物品是不能吃的（只能放下）。
+   */
+  private eatCakeSlice(x: number, y: number, z: number): boolean {
+    if (!canEat(CAKE_SLICE_FOOD, this.stats.food, MAX_FOOD)) return false;
+    const state = this.world.getBlockState(x, y, z);
+    const bites = cakeBites(state) + 1;
+
+    this.stats.eat(CAKE_SLICE_FOOD.hunger, saturationFrom(CAKE_SLICE_FOOD));
+    this.audio.play('eat');
+    this.hand.swing();
+    this.particles.spawnDigging(x + 0.5, y + 0.4, z + 0.5, this.blockParticleColor(Block.CAKE));
+    this.vibrate(8);
+
+    if (bites >= CAKE_SLICES) {
+      // 最后一片：整块蛋糕消失（原版吃完就没）
+      this.world.setBlockAndUpdate(x, y, z, Block.AIR);
+      this.net.sendBlock(x, y, z, Block.AIR, 0, this.dimension);
+    } else {
+      const next = withCakeBites(state, bites);
+      this.world.setStateAndUpdate(x, y, z, next);
+      this.net.sendBlock(x, y, z, Block.CAKE, next, this.dimension);
+    }
+    this.refreshHotbar();
+    return true;
+  }
+
+  /**
+   * 花盆的两种右键（批次 52）：**种进去** / **取出来**。
+   *
+   * 原版：手里拿着能种的植物右键 → 种进去（消耗 1 个）；空手右键 → 把里面的花取出来。
+   * 两种都不做时返回 false，让那一下回到"放置方块"的常规逻辑（原版也允许往花盆上摞方块）。
+   */
+  private useFlowerPot(x: number, y: number, z: number): boolean {
+    const state = this.world.getBlockState(x, y, z);
+    const plant = flowerPotPlant(state);
+    const held = this.heldItemId;
+
+    if (held !== undefined) {
+      const index = flowerPotIndexFor(held);
+      // 手里那个东西种不进花盆（比如一块石头）→ 交给放置逻辑
+      if (index === 0) return false;
+      // 盆里已经有花了：原版不许"换花"，得先取出来
+      if (plant !== 0) return false;
+      if (!this.inventory.consume(held, 1)) return false;
+      const next = withFlowerPotPlant(state, index);
+      this.world.setStateAndUpdate(x, y, z, next);
+      this.net.sendBlock(x, y, z, Block.FLOWER_POT, next, this.dimension);
+      this.audio.play('place', { x, y, z });
+      this.hand.swing();
+      this.refreshHotbar();
+      return true;
+    }
+
+    // 空手：把盆里的那株取出来（空盆空手什么都不做，但算"交互过了"）
+    if (plant === 0) return true;
+    const item = pottedPlantItem(plant);
+    if (item !== undefined) {
+      const leftover = this.inventory.add(item, 1);
+      if (leftover > 0) this.spawnDrop(item, leftover, x + 0.5, y + 0.6, z + 0.5);
+      this.chat.push(`从花盆里取出${pottedPlantName(plant)}`, 'system');
+    }
+    const next = withFlowerPotPlant(state, 0);
+    this.world.setStateAndUpdate(x, y, z, next);
+    this.net.sendBlock(x, y, z, Block.FLOWER_POT, next, this.dimension);
+    this.audio.play('break_grass', { x, y, z });
+    this.hand.swing();
+    this.refreshHotbar();
+    return true;
   }
 
   /**
@@ -3414,6 +3510,18 @@ class App {
       this.inventoryScreen.openWith('campfire', campfire);
       return true;
     }
+    // 蛋糕（批次 52）：**右键啃一片**（原版是"地上放一块，大家分着吃"）。
+    // 吃饱了返回 false —— 那一下照旧交给"放置"逻辑（可以往蛋糕上面放方块），
+    // 而不是白白吃掉一次右键
+    if (hitBlock === Block.CAKE) {
+      return this.eatCakeSlice(x, y, z);
+    }
+
+    // 花盆（批次 52）：手里拿着能种的植物 → 种进去；空手 → 把花取出来
+    if (hitBlock === Block.FLOWER_POT) {
+      return this.useFlowerPot(x, y, z);
+    }
+
     // 烟熏炉与高炉（批次 46）：同一套界面与容器，站台从**方块**决定
     const station = stationOfBlock(hitBlock);
     if (station) {

@@ -3594,6 +3594,78 @@ for (const kind of ['tube', 'brain', 'bubble', 'fire', 'horn']) {
   }
 }
 
+// ---------------------------------------------------------------- 蛋糕与花盆（批次 52）
+
+/**
+ * 蛋糕顶面：白色奶油 + 几颗红点（原版那种"奶油上摆着樱桃"的样子）。
+ * 蛋糕越吃越窄是靠**几何**缩的，贴图只有这一套三张（原版也是这样）。
+ */
+PAINTERS.cake_top = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  // 四角各内缩一点：蛋糕不是整格方块（这一层看起来要"圆"一点）
+  const edge = x < 1 || y < 1;
+  // 樱桃：四个固定位置
+  for (const [cx, cy] of [
+    [5, 5],
+    [10, 7],
+    [7, 11],
+  ] as const) {
+    if (Math.hypot(x - cx, y - cy) < 1.6) return [clamp255(196 + jitter), clamp255(58 + jitter), clamp255(58 + jitter), 255];
+  }
+  const shade = edge ? 0.9 : 1;
+  return [clamp255(246 * shade + jitter), clamp255(242 * shade + jitter), clamp255(228 * shade + jitter), 255];
+};
+
+/** 蛋糕底面：烤过的深色蛋糕底 */
+PAINTERS.cake_bottom = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const shade = (x + y) % 4 === 0 ? 0.86 : 1;
+  return [clamp255(166 * shade + jitter), clamp255(124 * shade + jitter), clamp255(78 * shade + jitter), 255];
+};
+
+/**
+ * 蛋糕侧面：上沿一圈奶油、下面是蛋糕体（原版侧面就是"奶油盖在蛋糕上"）。
+ * ⚠️ 贴图的**左侧**是"被切的那一面"（与被吃时从右往左缩的几何约定一致）。
+ */
+PAINTERS.cake_side = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  if (y < 4) {
+    // 顶层的奶油（下沿有一点起伏，看着像流下来）
+    const drip = y >= 3 && x % 5 === 2;
+    if (!drip) return [clamp255(246 + jitter), clamp255(242 + jitter), clamp255(228 + jitter), 255];
+  }
+  // 蛋糕体：斜向的孔洞（烤出来的气孔）
+  const pore = (x * 3 + y * 5) % 11 === 0;
+  const shade = pore ? 0.84 : 1;
+  return [clamp255(178 * shade + jitter), clamp255(132 * shade + jitter), clamp255(84 * shade + jitter), 255];
+};
+
+/**
+ * 花盆（陶土盆）：砖红色 + 上沿一圈厚边。
+ * 这一张同时用作**侧面与底面**（盆底在游戏里看不到）。
+ */
+PAINTERS.flower_pot = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  // 上沿（y < 3）：亮一圈厚边；下面是被烤出来的盆身
+  const rim = y < 3;
+  // 竖着的陶纹
+  const stripe = x % 4 === 0;
+  const shade = rim ? 1.12 : stripe ? 0.9 : 1;
+  return [clamp255(150 * shade + jitter), clamp255(88 * shade + jitter), clamp255(66 * shade + jitter), 255];
+};
+
+/** 花盆顶面：盆里那一层土（深褐色，带几粒亮色的颗粒） */
+PAINTERS.flower_pot_top = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 盆口那一圈陶沿（四周 2 像素）
+  if (x < 2 || y < 2 || x > 13 || y > 13) {
+    return [clamp255(150 + jitter), clamp255(88 + jitter), clamp255(66 + jitter), 255];
+  }
+  const grain = (x * 7 + y * 11) % 9 === 0;
+  const shade = grain ? 1.25 : 1;
+  return [clamp255(104 * shade + jitter), clamp255(72 * shade + jitter), clamp255(46 * shade + jitter), 255];
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

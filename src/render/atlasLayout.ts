@@ -725,6 +725,12 @@ export const TILE_ORDER = [
   'dead_horn_coral',
   'horn_coral_fan',
   'dead_horn_coral_fan',
+  // ---- 蛋糕与花盆（批次 52）：蛋糕三张（顶面奶油 / 底面 / 侧面那一圈）+ 花盆两张
+  'cake_top',
+  'cake_bottom',
+  'cake_side',
+  'flower_pot',
+  'flower_pot_top',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

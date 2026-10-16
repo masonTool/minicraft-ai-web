@@ -11,8 +11,10 @@
 
 import { blockDef } from './blocks.ts';
 import {
+  CAKE_SLICES,
   FACING_OFFSET,
   axisOf,
+  cakeBites,
   doorHinge,
   facingOf,
   fluidHeight,
@@ -150,6 +152,12 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'lily_pad':
       // 睡莲是"能站上去的薄板"：原版可以踩着一路走过水面，所以它**有**碰撞体积
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
+    case 'cake':
+      // 与渲染同源（半格高，宽度按吃掉的片数算）——不然会出现"看着还能吃、其实踩空了"
+      return [[0, 0, 0, cakeWidth(state), CAKE_HEIGHT, 1]];
+    case 'flower_pot':
+      // 盆身能站上去（原版花盆是实心的矮块），里面那株植物没有碰撞
+      return [FLOWER_POT_BOX];
     case 'snow':
       // 雪层的高度就是"层数 / 8"：1 层是 1/8 格（能直接走上去，不需要跳），
       // 8 层正好是整格。碰撞与渲染共用这一份高度，所以"看着矮、撞着高"这类错不会出现。
@@ -333,6 +341,12 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
     case 'coral_fan':
       return coralFanBoxes(state);
+    case 'cake':
+      // 蛋糕（批次 52）：半格高，**宽度随吃掉的片数变窄**（靠西侧那一端留着）
+      return [[0, 0, 0, cakeWidth(state), CAKE_HEIGHT, 1]];
+    case 'flower_pot':
+      // 花盆（批次 52）：四周内缩 2/16、高 6/16 的一个盆身（盆里的植物由网格化器另画）
+      return [FLOWER_POT_BOX];
     case 'campfire':
       // 与碰撞盒同源（7/16 的柴堆）
       return [[0, 0, 0, 1, CAMPFIRE_HEIGHT, 1]];
@@ -571,6 +585,30 @@ function vineBoxes(state: number): readonly LocalBox[] {
   if (hasVineUp(state)) boxes.push([0, 1 - t, 0, 1, 1, 1]);
   return boxes;
 }
+
+/** 蛋糕的高度（原版半格：能踩上去，但挡不住视线） */
+const CAKE_HEIGHT = 0.5;
+
+/**
+ * 蛋糕还剩多宽（批次 52）。
+ *
+ * 原版是一块**被切着吃**的蛋糕：每吃一片少 1/7。
+ * ⚠️ 吃的是**东侧**（留下靠西的那一端）——原版模型也是朝同一个方向缩，
+ * 但方向写反了在单机上根本看不出来（蛋糕照样越吃越小），
+ * 只有"和原版截图对照"才会发现整块蛋糕在反方向缩。这里与贴图约定一致：
+ * 贴图的左侧是蛋糕的"被切面"。
+ */
+function cakeWidth(state: number): number {
+  const bites = cakeBites(state);
+  // 吃满 CAKE_SLICES 片时方块就该消失了，留 1/7 只是兜底（脏存档里可能剩一块"0 宽"的蛋糕）
+  return Math.max(1 / CAKE_SLICES, 1 - bites / CAKE_SLICES);
+}
+
+/** 花盆盆身：四周内缩 1/8 格、高 6/16（原版花盆就是个矮矮的陶盆） */
+const FLOWER_POT_BOX: LocalBox = [0.125, 0, 0.125, 0.875, 0.375, 0.875];
+
+/** 花盆里那株植物画在盆沿之上（与 `blockShapes` 的盆身高度一致） */
+export const FLOWER_POT_RIM = 0.375;
 
 /** 珊瑚扇的厚度（1/16 格，与藤蔓/贴地薄板同一档） */
 const FAN_THICKNESS = 0.0625;

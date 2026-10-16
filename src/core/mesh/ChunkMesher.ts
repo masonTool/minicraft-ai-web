@@ -26,8 +26,9 @@
  */
 
 import * as THREE from 'three';
-import { Block, blockDef, blockTiles, type BlockDef } from '../registry/blocks.ts';
+import { Block, blockDef, blockTiles, pottedPlantTile, type BlockDef } from '../registry/blocks.ts';
 import {
+  FLOWER_POT_RIM,
   canConnectTo,
   canPaneConnectTo,
   isFullBlockShape,
@@ -35,7 +36,7 @@ import {
   type LocalBox,
   type ShapeContext,
 } from '../registry/blockShapes.ts';
-import { FACING_OFFSET, type Facing } from '../registry/blockState.ts';
+import { FACING_OFFSET, flowerPotPlant, type Facing } from '../registry/blockState.ts';
 import { Chunk, SECTION_HEIGHT, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 /**
  * 网格化只需要「贴图在图集中的起点」这一点信息，所以这里只依赖一个最小接口。
@@ -395,6 +396,13 @@ function emitFace(
   buf.idx.push(vertexBase, vertexBase + 1, vertexBase + 2, vertexBase + 2, vertexBase + 1, vertexBase + 3);
 }
 
+/** `emitCross` 的可选覆盖：贴图与竖直范围（花盆里的植物用到） */
+interface CrossOptions {
+  tile?: string;
+  y0?: number;
+  y1?: number;
+}
+
 /**
  * 植物（十字形状）：两片沿方块对角线竖立的薄面。
  *
@@ -402,10 +410,21 @@ function emitFace(
  * 这里直接输出两片四边形，并且**正反两面都输出**——从背面看过去必须可见，
  * 而且植物是双面可见的（原版用 cull=false 做到这一点，这里用反向绕序实现）。
  */
-function emitCross(e: EmitContext, x: number, y: number, z: number, worldY: number): void {
+function emitCross(
+  e: EmitContext,
+  x: number,
+  y: number,
+  z: number,
+  worldY: number,
+  options: CrossOptions = {},
+): void {
   const { buf, def, atlas, ctx, originX, originZ } = e;
-  const tiles = blockTiles(def.id, ctx.getBlockState(originX + x, worldY, originZ + z));
-  const [tileU, tileV] = atlas.tileOrigin(tiles[2]);
+  // 贴图默认取方块自己的（花草），花盆里那株会显式指定
+  const tile =
+    options.tile ?? blockTiles(def.id, ctx.getBlockState(originX + x, worldY, originZ + z))[2];
+  const y0 = options.y0 ?? 0;
+  const y1 = options.y1 ?? 1;
+  const [tileU, tileV] = atlas.tileOrigin(tile);
   const sky = ctx.getSkyLight(originX + x, worldY, originZ + z);
   const blk = ctx.getBlockLight(originX + x, worldY, originZ + z);
 
@@ -419,10 +438,10 @@ function emitCross(e: EmitContext, x: number, y: number, z: number, worldY: numb
     const vertexBase = buf.pos.length / 3;
     // 顶点顺序：左下 → 右下 → 右上 → 左上（贴图 v=0 在顶部，与图集绘制方向一致）
     const corners: readonly (readonly [number, number, number])[] = [
-      [x0, 0, z0],
-      [x1, 0, z1],
-      [x1, 1, z1],
-      [x0, 1, z0],
+      [x0, y0, z0],
+      [x1, y0, z1],
+      [x1, y1, z1],
+      [x0, y1, z0],
     ];
     for (let i = 0; i < 4; i++) {
       const corner = corners[i]!;
@@ -724,6 +743,15 @@ export function meshSection(
               : {};
 
         const boxes = meshBoxes(def.shape, chunk.getState(x, worldY, z), shapeCtx);
+
+        // 花盆里种的那株植物（批次 52）：盆身已经在下面按盒子输出，
+        // 这里再补两片十字薄面（贴图取 `POTTED_PLANTS`，画在盆沿之上）
+        if (def.shape === 'flower_pot') {
+          const plant = pottedPlantTile(flowerPotPlant(chunk.getState(x, worldY, z)));
+          if (plant !== null) {
+            emitCross(emit, x, y, z, worldY, { tile: plant, y0: FLOWER_POT_RIM, y1: 1 });
+          }
+        }
 
         for (const box of boxes) {
           for (const face of FACES) {

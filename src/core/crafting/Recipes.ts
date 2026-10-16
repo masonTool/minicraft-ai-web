@@ -617,6 +617,22 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // 写死的数字会让"可可豆做出浅蓝色染料"——这种错在界面上看着就像个恶作剧
   { kind: 'shapeless' as const, result: { id: dyeItemId(BROWN_DYE_INDEX), count: 1 }, ingredients: [Item.COCOA_BEANS] },
 
+  // ---- 蛋糕与花盆（批次 52）
+  // 蛋糕（原版图案）：一排牛奶 + 糖蛋糖 + 一排小麦。3 个牛奶桶**不退还**（原版也如此）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.CAKE, count: 1 },
+    pattern: ['MMM', 'SES', 'WWW'],
+    key: { M: Item.MILK_BUCKET, S: Item.SUGAR, E: Item.EGG, W: Item.WHEAT },
+  },
+  // 花盆（原版）：3 个红砖摆成 V 形 → 1 个花盆
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.FLOWER_POT, count: 1 },
+    pattern: ['B B', ' B '],
+    key: { B: Item.BRICK },
+  },
+
   // ---- 海带与干海带（批次 50）
   // 9 个干海带 ↔ 1 块干海带块（原版两向都有）。
   // 干海带块是本批唯一的"燃料"产出：**一块能烧 20 个东西**（见 `Smelting.ts` 的燃料表）

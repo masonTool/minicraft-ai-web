@@ -1569,6 +1569,49 @@ export function isDeadCoral(id: number): boolean {
   return CORAL_LIVE_VARIANT.has(id);
 }
 
+// ---------------------------------------------------------------- 蛋糕与花盆（批次 52）
+
+/**
+ * 蛋糕（批次 52）：**一个能被一片片吃掉的方块**。
+ *
+ * 原版蛋糕是"放置后右键吃、共 7 片、吃完消失"，所以它既是方块又是食物——
+ * 但**它的物品不是食物**（手里拿着蛋糕右键地面是"放下"，长按不会啃）。
+ * 因此这里**不把 cake 登记进 `FOOD_TABLE`**，而是单独给一片的数值
+ * （`CAKE_SLICE_FOOD`，见 `food.ts`）：一登记就会让"手持蛋糕长按"也能吃掉，
+ * 那是与"放下去大家一起吃"完全不同的行为。
+ */
+export const CAKE_ID = 469;
+
+/**
+ * 花盆（批次 52）：盆 + 里面那株植物。
+ *
+ * 原版用**方块实体**记"里面装的是什么"，本项目没有方块实体，也没有物品 NBT，
+ * 于是改用**状态位里的索引**（见 `POTTED_PLANTS`）：0 = 空盆，1..N = 第 N 种植物。
+ * 5 个状态位够放 31 种，目前 18 种（草/蕨/五朵花/两种蘑菇/枯木/仙人掌/竹子/
+ * 甜浆果丛/五色珊瑚扇——与原版花盆能放的那批一致）。
+ */
+export const FLOWER_POT_ID = 470;
+
+const CAKE_AND_POT_SPECS: readonly BlockSpec[] = [
+  {
+    id: CAKE_ID,
+    name: 'minecraft:cake',
+    // 顶面奶油、底面蛋糕底、侧面那一圈（原版蛋糕就是这三张）
+    tiles: ['cake_top', 'cake_bottom', 'cake_side'],
+    shape: 'cake',
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: FLOWER_POT_ID,
+    name: 'minecraft:flower_pot',
+    tiles: ['flower_pot_top', 'flower_pot', 'flower_pot'],
+    shape: 'flower_pot',
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const CAMPFIRE_SPECS: readonly BlockSpec[] = [
   {
     id: CAMPFIRE_ID,
@@ -1805,6 +1848,7 @@ const SPECS: readonly BlockSpec[] = [
   ...BERRY_AND_COCOA_SPECS,
   ...KELP_SPECS,
   ...CORAL_SPECS,
+  ...CAKE_AND_POT_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2060,7 +2104,73 @@ export const Block = {
   DEAD_CORAL: DEAD_CORAL_ID_START,
   CORAL_FAN: CORAL_FAN_ID_START,
   DEAD_CORAL_FAN: DEAD_CORAL_FAN_ID_START,
+  // ---- 蛋糕与花盆（批次 52，见 `CAKE_AND_POT_SPECS`）
+  CAKE: CAKE_ID,
+  FLOWER_POT: FLOWER_POT_ID,
 } as const;
+
+/** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
+export interface PottedPlant {
+  readonly itemId: number;
+  readonly tile: string;
+  readonly name: string;
+}
+
+/**
+ * 花盆能种的植物表（**顺序就是状态里的索引**，只能往后追加、不能插队）。
+ *
+ * ⚠️ 索引会写进存档与联机消息里：中间插一项会让老存档里"种着第 3 种"的花盆
+ * 突然变成另一种植物（玩家只会觉得"我的花被换了"）。所以新植物一律**追加到表尾**。
+ *
+ * 这一批与原版花盆能放的那批对齐：两种草、五朵花、两种蘑菇、枯木、仙人掌、竹子、
+ * 甜浆果丛，以及**五色珊瑚扇**（原版 1.13 起花盆也能放珊瑚扇——正好给水族箱用）。
+ * 树苗不在内（我们还没有树苗物品，见 TASKS B17）。
+ */
+export const POTTED_PLANTS: readonly PottedPlant[] = [
+  { itemId: Block.SHORT_GRASS, tile: 'short_grass', name: '矮草' },
+  { itemId: Block.FERN, tile: 'fern', name: '蕨' },
+  { itemId: Block.DANDELION, tile: 'dandelion', name: '蒲公英' },
+  { itemId: Block.POPPY, tile: 'poppy', name: '虞美人' },
+  { itemId: Block.BLUE_ORCHID, tile: 'blue_orchid', name: '兰花' },
+  { itemId: Block.OXEYE_DAISY, tile: 'oxeye_daisy', name: '雏菊' },
+  { itemId: Block.CORNFLOWER, tile: 'cornflower', name: '矢车菊' },
+  { itemId: Block.RED_MUSHROOM, tile: 'red_mushroom', name: '红蘑菇' },
+  { itemId: Block.BROWN_MUSHROOM, tile: 'brown_mushroom', name: '棕蘑菇' },
+  { itemId: Block.DEAD_BUSH, tile: 'dead_bush', name: '枯木' },
+  { itemId: Block.CACTUS, tile: 'cactus_side', name: '仙人掌' },
+  { itemId: Block.BAMBOO, tile: 'bamboo', name: '竹子' },
+  // 甜浆果丛的代表阶段（成熟那一个）：4 个 id 里挑一个最像"一丛"的
+  { itemId: Block.SWEET_BERRY_BUSH_STAGE3, tile: 'sweet_berry_bush_stage3', name: '甜浆果丛' },
+  ...CORAL_KINDS.map((kind, i) => ({
+    itemId: CORAL_FAN_ID_START + i,
+    tile: `${kind}_coral_fan`,
+    name: `${CORAL_KIND_CN[kind]}珊瑚扇`,
+  })),
+];
+
+/**
+ * 花盆里的植物该用哪张贴图（0 = 空盆 → null）。
+ * 渲染层（`ChunkMesher`）只认这一张表，不自己列第二份植物名单。
+ */
+export function pottedPlantTile(plant: number): string | null {
+  return POTTED_PLANTS[plant - 1]?.tile ?? null;
+}
+
+/** 这个物品能不能种进花盆（返回要写进状态的索引；不能种返回 0） */
+export function flowerPotIndexFor(itemId: number): number {
+  const index = POTTED_PLANTS.findIndex((entry) => entry.itemId === itemId);
+  return index < 0 ? 0 : index + 1;
+}
+
+/** 空手取出一株植物时该给回什么物品 */
+export function pottedPlantItem(plant: number): number | undefined {
+  return POTTED_PLANTS[plant - 1]?.itemId;
+}
+
+/** 花盆里的植物叫什么（提示框与聊天用） */
+export function pottedPlantName(plant: number): string {
+  return POTTED_PLANTS[plant - 1]?.name ?? '空盆';
+}
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
 export function woolId(colorIndex: number): number {
@@ -2263,6 +2373,9 @@ for (const start of [CORAL_BLOCK_ID_START, DEAD_CORAL_BLOCK_ID_START]) {
 for (const start of [CORAL_ID_START, DEAD_CORAL_ID_START, CORAL_FAN_ID_START, DEAD_CORAL_FAN_ID_START]) {
   for (let i = 0; i < CORAL_KINDS.length; i++) HARDNESS.set(start + i, 0);
 }
+// 蛋糕与花盆（批次 52）：蛋糕 0.5（原版，徒手拆得动）、花盆 0（一碰就掉）
+HARDNESS.set(Block.CAKE, 0.5);
+HARDNESS.set(Block.FLOWER_POT, 0);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2551,6 +2664,9 @@ HAND_HARVESTABLE.add(Block.DRIED_KELP_BLOCK);
 for (const start of [CORAL_ID_START, DEAD_CORAL_ID_START, CORAL_FAN_ID_START, DEAD_CORAL_FAN_ID_START]) {
   for (let i = 0; i < CORAL_KINDS.length; i++) HAND_HARVESTABLE.add(start + i);
 }
+// 蛋糕与花盆（批次 52）：徒手都能拆（原版都不需要工具）
+HAND_HARVESTABLE.add(Block.CAKE);
+HAND_HARVESTABLE.add(Block.FLOWER_POT);
 
 /**
  * 作物的生长阶段表（按顺序）。
