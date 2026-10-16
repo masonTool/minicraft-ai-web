@@ -1888,6 +1888,28 @@ const COMPOSTER_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 末影箱（批次 71，B44）：**27 格、跟着玩家走**的容器。
+ *
+ * 它与前面几件容器最大的不同是"内容不在这格方块上"：世界里的末影箱打开的都是
+ * **同一份属于玩家的内容**（原版也是），所以它**不进容器表**（那是按坐标存的），
+ * 内容存在玩家存档里（见 `PlayerSave.enderChest`）。
+ * 外观用**面级贴图**（批次 64）：那张"眼睛"贴在朝向那一面，放置时朝你。
+ */
+export const ENDER_CHEST_ID = 481;
+
+const ENDER_CHEST_SPECS: readonly BlockSpec[] = [
+  {
+    id: ENDER_CHEST_ID,
+    name: 'minecraft:ender_chest',
+    tiles: ['ender_chest_top', 'ender_chest_top', 'ender_chest_side'],
+    faceTile: nozzleTile('ender_chest_front'),
+    facesPlayer: true,
+    // 原版末影箱自己发亮 7（黑曜石底 + 那一圈末影气息）
+    light: 7,
+  },
+];
+
 const BARREL_SPECS: readonly BlockSpec[] = [
   {
     id: BARREL_ID,
@@ -2223,6 +2245,7 @@ const SPECS: readonly BlockSpec[] = [
   ...DISPENSER_SPECS,
   ...BARREL_SPECS,
   ...COMPOSTER_SPECS,
+  ...ENDER_CHEST_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2500,6 +2523,8 @@ export const Block = {
   BARREL: BARREL_ID,
   // ---- 堆肥桶（批次 70，见 `COMPOSTER_SPECS`）：等级存在状态位里，满了收骨粉
   COMPOSTER: COMPOSTER_ID,
+  // ---- 末影箱（批次 71，见 `ENDER_CHEST_SPECS`）：27 格，内容跟着玩家走
+  ENDER_CHEST: ENDER_CHEST_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2791,6 +2816,8 @@ HARDNESS.set(Block.DISPENSER, 3.5);
 HARDNESS.set(Block.BARREL, 2.5);
 // 堆肥桶（批次 70）：原版 0.6，斧头更快但**徒手就能挖**（与木桶同一条）
 HARDNESS.set(Block.COMPOSTER, 0.6);
+// 末影箱（批次 71）：原版 22.5（黑曜石那一档，挖起来很慢）+ 要**钻石镐**才掉（见 tools）
+HARDNESS.set(Block.ENDER_CHEST, 22.5);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);

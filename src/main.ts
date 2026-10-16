@@ -197,6 +197,8 @@ import {
 import {
   TOTAL_SLOTS, HOTBAR_SIZE, Inventory, stackExtras, type ItemStack } from './core/container/Inventory.ts';
 import { BrewingStand } from './core/container/BrewingStand.ts';
+// 末影箱（批次 71）：它**不进容器表**（那张表按坐标存），这里直接持有一份共享的 27 格
+import { EnderChest } from './core/world/EnderChest.ts';
 import { Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
 import {
@@ -697,6 +699,14 @@ class App {
   private saveCount = 0;
   /** 末影龙是否已被击败（会写进存档，决定重进末地要不要再生成 boss） */
   private dragonDefeated = false;
+
+  /**
+   * 末影箱（批次 71）：**一份 27 格，跟着玩家走**。
+   *
+   * ⚠️ 它**不进 `world.containers`**（那张表按坐标存），存档走玩家存档
+   * （`PlayerSave.enderChest`）——"跨坐标共享"这条规矩收在 `EnderChest` 里（可离线断言）。
+   */
+  private readonly enderChest = new EnderChest();
 
   /**
    * 联机（K2）：服务端只发种子与方块增量，地形各算各的。
@@ -1261,6 +1271,8 @@ class App {
     this.experience.restore(data.xp);
 
     this.inventory.restore(data.inventory);
+    // 末影箱（批次 71）：旧存档没有这个字段 → 空箱子（与 xp/effects 同一条处理）
+    this.enderChest.restore(data.enderChest);
     this.selectSlot(data.selectedSlot);
     this.refreshHotbar();
     this.inventoryScreen.refresh();
@@ -1290,6 +1302,8 @@ class App {
       air: this.stats.air,
       exhaustion: this.stats.exhaustion,
       inventory: this.inventory.serialize(),
+      // 末影箱跟着玩家走（批次 71）：与背包同一层，但它是"跨坐标"的那一份
+      enderChest: this.enderChest.slots(),
       selectedSlot: this.hotbarIndex,
       dragonDefeated: this.dragonDefeated,
       difficulty: this.difficulty,
@@ -3764,6 +3778,19 @@ class App {
       this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
       return true;
     }
+    // 末影箱（批次 71）：与箱子同一条"头顶压着就打不开"的规矩，但开的是**你自己的那一份**
+    if (hitBlock === Block.ENDER_CHEST) {
+      if (this.isCoveredAbove(x, y, z)) {
+        this.chat.push('末影箱上面压着方块，打不开（挪开它）', 'system');
+        return true;
+      }
+      // 开箱时冒一圈末影粒子（原版也有，而且是它唯一的"打开"反馈）
+      this.particles.spawnPortal(x + 0.5, y + 0.9, z + 0.5, 12, 0.5);
+      this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.inventoryScreen.openWith('ender_chest', this.enderChest.open());
+      return true;
+    }
+
     // 木桶（批次 61）：与箱子同 27 格，但**头顶压着方块照样能开**（原版就是靠这一条
     // 成为"塞进墙里"的首选）；另外原版它允许漏斗从**任何一面**取放，本项目本来就不按面限制
     if (hitBlock === Block.BARREL) {

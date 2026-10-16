@@ -4110,6 +4110,41 @@ function composterTop(filled: boolean): Painter {
 PAINTERS.composter_top = composterTop(false);
 PAINTERS.composter_ready = composterTop(true);
 
+/**
+ * 末影箱（批次 71）：黑洞石底子 + 正面那只**青绿色的眼睛**。
+ *
+ * 三张共用同一套底（深紫近黑、带一点点颗粒），差异只在**正面**：
+ * 中间偏上一只"眼睛"（外圈深青、瞳孔近白青），这是原版末影箱最好认的特征。
+ * 顶面再点一颗小的青绿斑，俯视时也能认出来（俯视看不到正面）。
+ */
+function enderStone(x: number, y: number, rng: () => number): [number, number, number, number] {
+  const jitter = rng() * 14 - 7;
+  // 稀疏的紫色颗粒（黑曜石那种"里面像有星点"的观感）
+  const fleck = hashString(`ender${x},${y}`) % 23 === 0;
+  const base = fleck ? [64, 40, 78] : [38, 26, 48];
+  return [clamp255(base[0]! + jitter), clamp255(base[1]! + jitter), clamp255(base[2]! + jitter), 255];
+}
+
+PAINTERS.ender_chest_top = (x, y, rng) => {
+  const base = enderStone(x, y, rng);
+  // 俯视时的那点气息：中间一小片青绿
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  if (r < 3.4) return [clamp255(36 + rng() * 24), clamp255(112 + rng() * 30), clamp255(104 + rng() * 26), 255];
+  return base;
+};
+
+PAINTERS.ender_chest_side = (x, y, rng) => enderStone(x, y, rng);
+
+PAINTERS.ender_chest_front = (x, y, rng) => {
+  // 正面那只眼睛：歪一点比正圆更像原版（原版是杏仁形）
+  const dx = (x - 7.5) / 5.4;
+  const dy = (y - 7.2) / 3.2;
+  const eye = dx * dx + dy * dy;
+  if (eye < 0.34) return [clamp255(206 + rng() * 20), clamp255(248), clamp255(238), 255]; // 瞳孔
+  if (eye < 1) return [clamp255(28 + rng() * 18), clamp255(120 + rng() * 26), clamp255(112 + rng() * 24), 255];
+  return enderStone(x, y, rng);
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

@@ -717,6 +717,8 @@ const FUNCTIONAL = new Set<number>([
   Block.BARREL,
   // 堆肥桶（批次 70）：右键塞可堆肥物 / 满了右键收骨粉
   Block.COMPOSTER,
+  // 末影箱（批次 71）：右键打开的 27 格容器（内容跟着玩家走，走到哪都是同一箱）
+  Block.ENDER_CHEST,
   Block.CHEST,
   Block.GLOWSTONE,
   // ---- 红石元件（都是"有信号才做事"的功能方块）

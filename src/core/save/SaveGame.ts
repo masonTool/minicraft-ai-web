@@ -25,6 +25,8 @@ import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 /** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
 const DB_VERSION = 2;
 const STORE_META = 'meta';
+import type { ItemStack } from '../container/Inventory.ts';
+
 const STORE_PLAYER = 'player';
 const STORE_CHUNKS = 'chunks';
 const STORE_CONTAINERS = 'containers';
@@ -70,6 +72,16 @@ export interface PlayerSave {
   effects?: Array<{ id: string; amplifier: number; ticks: number; ambient: boolean }>;
   /** 经验值与等级（I5）；旧存档没有时视为 0 级 */
   xp?: { level: number; progress: number; total: number; partial: number };
+  /**
+   * 末影箱（批次 71，B44）：**27 格，跟着玩家走**。
+   *
+   * 为什么放在玩家存档里而不是容器存档里：容器存档是**按坐标**存的
+   * （`dimension | x,y,z`），而末影箱的内容**不属于任何一格方块**——
+   * 世界里所有末影箱打开的都是同一份。原版也是"每个玩家一份"，
+   * 所以玩家存档正好是那条"非坐标"的通道，不需要给存档加新的 store。
+   * 旧存档没有这个字段 → 空箱子（与 `xp` / `effects` 同一条处理）。
+   */
+  enderChest?: (ItemStack | null)[];
 }
 
 /** 一个区块的存档记录 */

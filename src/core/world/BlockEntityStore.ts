@@ -76,6 +76,9 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   // （推方块时会连状态一起搬）。列进来是为了对齐原版（带方块实体的方块推不动），
   // 也免得以后有人以为"它能推"是个疏漏
   Block.COMPOSTER,
+  // 末影箱（批次 71）：内容是**玩家的**、不在这格方块上，推走其实不会丢东西；
+  // 列进来对齐原版（带方块实体的方块推不动），也免得以后被当成疏漏
+  Block.ENDER_CHEST,
   Block.BARREL,
   Block.BREWING_STAND,
   Block.ANVIL,

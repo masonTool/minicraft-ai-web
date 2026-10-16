@@ -153,6 +153,29 @@ function cloneStack(stack: ItemStack): ItemStack {
   return copy;
 }
 
+/**
+ * 把一组槽位转成可存档的形式（批次 71）：附加数据逐项**拷一份**，不把实例交出去。
+ *
+ * 抽出来是因为它有了第二个调用方——末影箱的内容存进**玩家存档**（见 `PlayerSave.enderChest`），
+ * 而"哪些字段要搬、空槽怎么写"只该有一处实现（漏一个字段的表现是"读档后附魔没了"）。
+ */
+export function serializeStacks(slots: readonly (ItemStack | null)[]): (ItemStack | null)[] {
+  return slots.map((stack) => (stack && !isEmptySlot(stack) ? cloneStack(stack) : null));
+}
+
+/**
+ * 读回一组槽位（长度按 `size` 补齐；脏数据、不认识的 id 一律丢掉）。
+ *
+ * ⚠️ 与 `serializeStacks` 成对：读档时**逐项校验**（`cloneStack` 只搬认识的那几项，
+ * 手改坏的字段自然被丢掉），而不是把存档里的对象直接挂进槽位。
+ */
+export function restoreStacks(raw: unknown, size: number): (ItemStack | null)[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const out: (ItemStack | null)[] = [];
+  for (let i = 0; i < size; i++) out.push(isValidStack(list[i]) ? cloneStack(list[i] as ItemStack) : null);
+  return out;
+}
+
 /** 这个栈是不是还能用（id 必须还认得出来；数量至少 1） */
 function isValidStack(stack: unknown): stack is ItemStack {
   if (!stack || typeof stack !== 'object') return false;
@@ -209,13 +232,9 @@ export function serializeContainer(
   if (!hasContent(container, kind)) return null;
 
   const count = SLOT_COUNTS[kind];
-  const stacks: (ItemStack | null)[] = [];
-  for (let i = 0; i < count; i++) {
-    const stack = container.get(i);
-    stacks.push(isEmptySlot(stack) ? null : cloneStack(stack as ItemStack));
-  }
-
-  const data: SerializedContainer = { kind, dimension, x, y, z, stacks };
+  const slots: (ItemStack | null)[] = [];
+  for (let i = 0; i < count; i++) slots.push(container.get(i));
+  const data: SerializedContainer = { kind, dimension, x, y, z, stacks: serializeStacks(slots) };
   if (container instanceof Furnace) {
     data.furnace = {
       burnTimeLeft: container.burnTimeLeft,
@@ -267,13 +286,9 @@ export function restoreContainers(store: BlockEntityStore, data: readonly Serial
     const dimension: DimensionId = isDimension(entry.dimension) ? entry.dimension : Dimension.OVERWORLD;
 
     const container = containerFor(store, kind, dimension, entry.x, entry.y, entry.z);
-    const count = SLOT_COUNTS[kind];
-    const stacks = Array.isArray(entry.stacks) ? entry.stacks : [];
-    for (let i = 0; i < count; i++) {
-      const stack = stacks[i];
-      // 读档时逐项校验（`cloneStack` 只搬认识的那几项，脏字段自然被丢掉）
-      container.set(i, isValidStack(stack) ? cloneStack(stack) : null);
-    }
+    // 读档时逐项校验（走与末影箱同一条 `restoreStacks`：认识的那几项才搬，脏数据丢掉）
+    const slots = restoreStacks(entry.stacks, SLOT_COUNTS[kind]);
+    for (let i = 0; i < slots.length; i++) container.set(i, slots[i] ?? null);
 
     if (container instanceof Furnace && entry.furnace) {
       const state = entry.furnace;

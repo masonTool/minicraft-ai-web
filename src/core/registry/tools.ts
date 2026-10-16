@@ -390,7 +390,7 @@ requirePickaxe(2, [
 
 // ---- 钻石镐（tier 3）：黑曜石、远古残骸与下界合金块
 // 下界合金块要钻石镐（原版如此）：想把它挖回去得先有钻石镐，和"想炼下界合金先要钻石镐"一致
-requirePickaxe(3, [Block.OBSIDIAN, Block.ANCIENT_DEBRIS, Block.NETHERITE_BLOCK]);
+requirePickaxe(3, [Block.OBSIDIAN, Block.ANCIENT_DEBRIS, Block.NETHERITE_BLOCK, Block.ENDER_CHEST]);
 
 // 台阶 / 楼梯跟随母方块：母方块要镐，它们也要
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {

@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 301（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 302（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 261 项 —— 已完成 **135**、进行中 **65**、待办 61 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 262 项 —— 已完成 **136**、进行中 **65**、待办 61 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -86,7 +86,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **70 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter**，当前全绿；
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **71 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数）、
@@ -120,8 +120,22 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**堆肥桶**（批次 70，B43 / H14 的第五件）——**骨粉的另一半**：
-骨粉把作物催熟，堆肥桶把"没用的作物"变回骨粉，于是**种地 → 收成 → 堆肥 → 骨粉 → 催熟**闭合了。
+**刚做完的**：**末影箱**（批次 71，B44 / H17 的第二件）——这一族**第一件"内容不属于坐标"**的容器。
+前面几件的内容都按坐标存（`BlockEntityStore` 的键是"维度 | x,y,z"），所以"哪一格"决定"看到哪一份"；
+末影箱相反：世界里**所有**末影箱打开的都是**同一份属于玩家的内容**。
+① **"非坐标"的通道**：内容进**玩家存档**（`PlayerSave.enderChest?`）——本项目现成的那一层，
+不用给 IndexedDB 加新 store、也不用动存档版本号（可选字段，旧存档没有 → 空箱子）。
+② **共享语义收在 `world/EnderChest.ts`**（不是主程序里散放一个 `Chest` 字段）：`open()` 永远同一实例、
+`slots()`/`restore()` 两个存档口——多这一层是为了**能被断言**（"跨坐标共享"离线测得到）。
+③ 方块：硬度 22.5、发光 7、要**钻石镐**（与黑曜石同档，木镐铁镐挖得动但一无所获）；
+外观三张贴图 + **面级贴图**（批次 64 的能力）：那只"眼睛"贴在朝向那一面，放置时朝你。
+④ 与箱子同一条"头顶压着就打不开"；开箱冒一圈末影粒子 + 传送门音效；**漏斗够不着它**（不进 `containerOfBlockAt`）。
+⑤ ⚠️ 配方与原版差异：原版要 **末影之眼**（末影珍珠 + 烈焰粉，两件都还没做）→ 这里用**一颗钻石**代替。
+⑥ 顺手把"一组槽位的存/读"抽成可复用的一对（`ContainerSave` 的 `serializeStacks` / `restoreStacks`）：
+末影箱是第二个调用方，而"哪些字段要搬、空槽怎么写"只该有一处实现。
+尺寸：方块 480 → **481**、物品 739（不变）、配方 362 → **363**；**71 套**离线测试里新增 `enderchest`（54 条）。
+
+再往前是**堆肥桶**（批次 70，B43）——**骨粉的另一半**，种地这条链闭合了。
 ① 形状：四面板条（2/16 厚、整格高）+ 2/16 厚桶底、**顶面敞口**（`shape: 'composter'`），
 轮廓**网格盒与碰撞盒是同一套**（桶沿能站、桶里也能站）——与漏斗"能从底下走过去"刻意不同。
 ② **内容物是"等级"而不是物品栏**：0~8 存**方块状态的低 4 位**（与蛋糕片数同一条约定），
@@ -769,6 +783,11 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **"失败"也必须有个返回值** | `compostStep` 有两种"没涨"：**掷失败了**（东西照样吃掉 → 返回等级本身）与**不能堆肥/桶已满**（别吃它 → 返回 `null`）。如果两种都返回 `null`，调用方就没法区分，要么白吃掉玩家不能堆肥的东西、要么拿能堆肥的东西反复试。**一个函数有几种"没成功"，就要有几种返回值**（区块 69 的"失败不消耗"也是同一件事的另一半）（批次 70） |
 | **概率表要能自己拦住重复登记** | 堆肥表和配方表、发射行为表一样是"手写 id 的表"。这类表最容易出的错不是漏写，而是**同一件东西被写进两档**（表按档位分组，加东西时会顺手塞一遍）——那会让概率悄悄变成"后写的那档"。做法是登记时**同 id 不同概率直接抛错**（同 id 同概率则允许），而不是默默覆盖（批次 70） |
 | **"我不核对数值"要写在表旁边** | 这一批的概率取自原版的分档，但**逐条没有真机核对**（本项目没有那条渠道）。如果只写"对齐原版"，下一个人会以为每条都核过；写清"档位关系按原版分法、逐条未核对"，他就能自己决定要不要复核，也敢在需要时改。**没验证的部分要明确标出来，别让它冒充已验证**（批次 70） |
+
+| **"内容挂在坐标上"是个默认，不是定理** | 这一族前面七件都按坐标存内容（键是"维度 | x,y,z"），一直到末影箱才撞上反例：它的内容属于**玩家**，不属于任何一格。识别出这一点之后，实现变得很轻——不用新 store、不用动存档版本号（玩家存档里加一个可选字段就够了），而且"破坏方块不掉内容、活塞推它不丢东西"这些性质**自动成立**（内容压根不在这儿）。**做容器前先问一句"这份内容属于谁"：属于坐标，还是属于玩家/世界**（批次 71） |
+| **抽一层薄薄的类，是为了让"规矩"能被断言** | "所有末影箱共享同一份"这条规矩如果只体现为主程序里的一个 `Chest` 字段，离线测试就碰不到它——只能靠手点两处末影箱。抽出 `EnderChest`（`open()` / `slots()` / `restore()`）之后，`open() 两次是同一个实例`、存档往返、脏数据丢弃全都能逐条钉住，主程序那边只剩一行 `this.enderChest.open()`。**"这条规矩能不能被断言"是决定要不要抽一层的好标准**（批次 71） |
+| **"一组槽位怎么存"只能有一处实现** | 末影箱需要一个"槽位数组 ↔ 存档"的转换，而容器存档里早就有一份（`cloneStack`/`isValidStack` 加一段循环）。再写一份的直接后果是"两处分别漏字段"（历史上前者漏过 `repairCost`）。做法是把那一段抽成 `serializeStacks` / `restoreStacks`，容器存档的读/写两侧也改走它们——**第二个调用方出现时，就是该抽的时候**（批次 71） |
+| **"加可选字段"让存档改动几乎零风险** | 末影箱的存档只做了两件事：`PlayerSave` 上加一个**可选**字段、读档时"没有就当空箱子"（与 `xp` / `effects` 同一个套路）。于是老存档不用迁移、版本号不用 +1、新存档也不必写额外的东西。**只要语义允许"缺字段 = 默认值"，就优先加可选字段而不是改版本**（批次 71） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 

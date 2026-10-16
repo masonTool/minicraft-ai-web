@@ -784,6 +784,10 @@ export const TILE_ORDER = [
   'composter_bottom',
   'composter_top',
   'composter_ready',
+  // 末影箱（批次 71）：黑洞石质感 + 正面那只"眼睛"（面级贴图贴到朝向那一面）
+  'ender_chest_top',
+  'ender_chest_side',
+  'ender_chest_front',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

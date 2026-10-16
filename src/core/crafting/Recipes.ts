@@ -884,6 +884,15 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     key: { C: Block.COBBLESTONE, B: Item.BOW },
   },
   {
+    // 末影箱（批次 71）：⚠️ **与原版的差异**——原版是 8 黑曜石 + 1 **末影之眼**，
+    // 而本项目还没有末影之眼（它要末影珍珠 + 烈焰粉，两件都还没做）。
+    // 这里用一颗钻石代替，保持"很贵、前期拿不到"的手感；等末影系物品做出来再换回去
+    kind: 'shaped' as const,
+    result: { id: Block.ENDER_CHEST, count: 1 },
+    pattern: ['OOO', 'ODO', 'OOO'],
+    key: { O: Block.OBSIDIAN, D: Item.DIAMOND },
+  },
+  {
     // 堆肥桶（批次 70）：原版图案 = **7 个木板台阶**（围一圈、中间空着）。
     // 与木桶不同，它**不需要**工作台之外的东西；四角的台阶也照原版给足 7 个
     kind: 'shaped' as const,
