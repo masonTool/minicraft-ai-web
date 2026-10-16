@@ -127,6 +127,9 @@ FLAMMABLE.add(Block.VINE);
 // —— 可燃与"能当燃料"在游戏里是两回事，但这里两样都登记才自洽
 FLAMMABLE.add(Block.DRIED_KELP_BLOCK);
 
+// 脚手架（批次 53）：竹子 + 线做的，原版一点就着
+FLAMMABLE.add(Block.SCAFFOLDING);
+
 // 其余 5 种木材：原木 / 木板 / 树叶 / 台阶 / 楼梯
 for (const ids of Object.values(Wood)) {
   FLAMMABLE.add(ids.log);

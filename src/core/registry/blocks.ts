@@ -1592,6 +1592,35 @@ export const CAKE_ID = 469;
  */
 export const FLOWER_POT_ID = 470;
 
+// ---------------------------------------------------------------- 脚手架（批次 53）
+
+/**
+ * 脚手架（`scaffolding`，id 471）：**底部一块板 + 四角柱**，能站上去、也能**攀爬**。
+ *
+ * 它一次性把三件事凑齐（都是"形状框架"里现成的能力）：
+ *  - **水平连接**：与栅栏/墙同一套"网格化时按邻居实时算"（四角柱在连成片时省略）
+ *  - **可站上去**：底部 1/8 格高的板（走上去不用跳，原版也是 1/8）
+ *  - **可攀爬**：`isClimbableBlock` 按**形状**判定 → 这里加一个形状就自动能爬
+ *
+ * ⚠️ 与原版的差异（已写进 TASKS B27）：原版脚手架的攀爬是"**往前走就往上爬**、松手停住"，
+ * 这里复用的是梯子那套"跳跃上升 / 潜行下降 / 松手缓缓下滑"（物理侧目前只有一套攀爬实现）；
+ * 原版"下方没有支撑就整体下落"也没做——改成**放置时就要求下方有支撑**
+ * （不然会多出一套"方块自己下落"的机制，与本项目的"地物/摆放都是静态的"不一致）。
+ */
+export const SCAFFOLDING_ID = 471;
+
+const SCAFFOLDING_SPECS: readonly BlockSpec[] = [
+  {
+    id: SCAFFOLDING_ID,
+    name: 'minecraft:scaffolding',
+    // 顶面是站人的木板、底面是木条、侧面是"带柱子的那一圈"
+    tiles: ['scaffolding_top', 'scaffolding_bottom', 'scaffolding_side'],
+    shape: 'scaffolding',
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const CAKE_AND_POT_SPECS: readonly BlockSpec[] = [
   {
     id: CAKE_ID,
@@ -1849,6 +1878,7 @@ const SPECS: readonly BlockSpec[] = [
   ...KELP_SPECS,
   ...CORAL_SPECS,
   ...CAKE_AND_POT_SPECS,
+  ...SCAFFOLDING_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2107,6 +2137,8 @@ export const Block = {
   // ---- 蛋糕与花盆（批次 52，见 `CAKE_AND_POT_SPECS`）
   CAKE: CAKE_ID,
   FLOWER_POT: FLOWER_POT_ID,
+  // ---- 脚手架（批次 53，见 `SCAFFOLDING_SPECS`）
+  SCAFFOLDING: SCAFFOLDING_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2376,6 +2408,8 @@ for (const start of [CORAL_ID_START, DEAD_CORAL_ID_START, CORAL_FAN_ID_START, DE
 // 蛋糕与花盆（批次 52）：蛋糕 0.5（原版，徒手拆得动）、花盆 0（一碰就掉）
 HARDNESS.set(Block.CAKE, 0.5);
 HARDNESS.set(Block.FLOWER_POT, 0);
+// 脚手架（批次 53）：0（原版一碰就掉——所以搭高之后拆底下一节会哗啦一下全掉）
+HARDNESS.set(Block.SCAFFOLDING, 0);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2667,6 +2701,8 @@ for (const start of [CORAL_ID_START, DEAD_CORAL_ID_START, CORAL_FAN_ID_START, DE
 // 蛋糕与花盆（批次 52）：徒手都能拆（原版都不需要工具）
 HAND_HARVESTABLE.add(Block.CAKE);
 HAND_HARVESTABLE.add(Block.FLOWER_POT);
+// 脚手架（批次 53）：徒手可采（原版不需要工具）
+HAND_HARVESTABLE.add(Block.SCAFFOLDING);
 
 /**
  * 作物的生长阶段表（按顺序）。
@@ -2751,7 +2787,8 @@ export function isHandHarvestable(id: number): boolean {
  */
 export function isClimbableBlock(id: number): boolean {
   const shape = blockDef(id).shape;
-  return shape === 'ladder' || shape === 'vine' || shape === 'chain';
+  // 脚手架（批次 53）：原版能顺着它往上爬——加一个形状，攀爬就自动跟上了
+  return shape === 'ladder' || shape === 'vine' || shape === 'chain' || shape === 'scaffolding';
 }
 
 // 注：破坏耗时的计算在 `tools.ts` 的 `breakSeconds`（需要工具的等级与速度），

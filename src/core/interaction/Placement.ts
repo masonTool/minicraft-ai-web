@@ -171,6 +171,18 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
       return { state: 0 };
 
+    case 'scaffolding': {
+      // 脚手架（批次 53）：**下面要有支撑**（实心方块或另一片脚手架），否则拒绝。
+      // 原版是"放下去之后自己往下掉到支撑上"，那需要一套"方块下落"的机制
+      // （本项目所有摆放都是静态的），所以这里改成"没支撑就不许放"——
+      // 玩家的操作结果一样（都是搭出一片有支撑的脚手架），少了一整套下落模拟。
+      // 允许从侧面放（`ny === 0`）：站在脚手架上往旁边那片方块的侧面右键，就能横向延伸
+      if (ny < 0) return null;
+      const below = input.blockAt(0, -1, 0);
+      if (!blockDef(below).solid && blockDef(below).shape !== 'scaffolding') return null;
+      return { state: 0 };
+    }
+
     case 'ladder': {
       const facing = facingFromNormal(nx, nz);
       if (facing === null) return null;

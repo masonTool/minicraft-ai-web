@@ -3666,6 +3666,52 @@ PAINTERS.flower_pot_top = (x, y, rng) => {
   return [clamp255(104 * shade + jitter), clamp255(72 * shade + jitter), clamp255(46 * shade + jitter), 255];
 };
 
+// ---------------------------------------------------------------- 脚手架（批次 53）
+
+/**
+ * 脚手架顶面：站人的那块木板（几条纵向竹板拼起来的样子）。
+ * 竹子做的建材，所以颜色走**竹黄**那一档。
+ */
+PAINTERS.scaffolding_top = (x, _y, rng) => {
+  const jitter = rng() * 12 - 6;
+  // 每 4 像素一条板缝（纵向），缝里深一点
+  const seam = x % 4 === 0;
+  const shade = seam ? 0.74 : 1;
+  return [clamp255(186 * shade + jitter), clamp255(168 * shade + jitter), clamp255(96 * shade + jitter), 255];
+};
+
+/** 脚手架底面：从下面看到的木条（比顶面暗一档） */
+PAINTERS.scaffolding_bottom = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const seam = (x + y) % 5 === 0;
+  const shade = seam ? 0.66 : 0.82;
+  return [clamp255(186 * shade + jitter), clamp255(168 * shade + jitter), clamp255(96 * shade + jitter), 255];
+};
+
+/**
+ * 脚手架侧面：上半段是空的（能看到里面的柱子），下半段是那块板的侧边。
+ *
+ * ⚠️ 这一张是**整格贴图**（盒子的每个面都用整张），所以"空"只能用透明像素表达：
+ * 板以上（y < 12/16 那一带）除了两侧柱子以外都是透明的——
+ * 否则从侧面看脚手架会像一个实心方块。
+ */
+PAINTERS.scaffolding_side = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 贴图的 y=0 在**上**：板占最下面 1/8（约 2 像素），上面那一大段只有两侧的柱子
+  const plankTop = Math.round(15 * (1 - 0.125));
+  if (y >= plankTop) {
+    // 板那一截：纵向竹板的侧边
+    const seam = x % 4 === 0;
+    const shade = seam ? 0.74 : 1;
+    return [clamp255(186 * shade + jitter), clamp255(168 * shade + jitter), clamp255(96 * shade + jitter), 255];
+  }
+  // 板以上：只有两侧的柱子（各 1/16 宽）
+  const pillar = x <= 0 || x >= 15;
+  if (!pillar) return [0, 0, 0, 0];
+  const shade = 0.88;
+  return [clamp255(186 * shade + jitter), clamp255(168 * shade + jitter), clamp255(96 * shade + jitter), 255];
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

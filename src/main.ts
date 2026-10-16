@@ -2642,10 +2642,11 @@ class App {
       return;
     }
 
-    // 海带与甘蔗都是"一整株往上叠"的东西：拆掉任意一节，上面那几节跟着断（原版行为）。
-    // 不这么做的话，水里会留一截从半空中长出来的海带、地上会立着一段悬空的甘蔗——
-    // 而方块本身看起来毫无问题。
-    if (brokenId === Block.KELP || brokenId === Block.SUGAR_CANE) {
+    // 海带 / 甘蔗 / 脚手架都是"一整柱往上叠"的东西：拆掉任意一节，上面那几节跟着断
+    // （原版行为，脚手架是"哗啦一下全掉"）。
+    // 不这么做的话，水里会留一截从半空中长出来的海带、地上会立着一段悬空的甘蔗、
+    // 半空中会挂着一片脚手架——而方块本身看起来毫无问题。
+    if (brokenId === Block.KELP || brokenId === Block.SUGAR_CANE || brokenId === Block.SCAFFOLDING) {
       this.breakColumn(this.hit.x, this.hit.y, this.hit.z, brokenId);
       this.breakProgress = 0;
       this.breakingKey = '';

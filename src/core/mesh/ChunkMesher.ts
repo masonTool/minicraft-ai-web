@@ -31,6 +31,7 @@ import {
   FLOWER_POT_RIM,
   canConnectTo,
   canPaneConnectTo,
+  canScaffoldConnectTo,
   isFullBlockShape,
   meshBoxes,
   type LocalBox,
@@ -717,8 +718,14 @@ export function meshSection(
         // 栅栏/墙的连接方向、楼梯的内角外角都按邻居**实时计算**，
         // 因此旁边放一个新方块后它们会自动长出新的一节 / 变成转角，
         // 不需要在方块变动时反过来更新四周方块的状态。
-        const needsConnect = def.shape === 'fence' || def.shape === 'wall' || def.shape === 'pane';
-        const connectProbe = def.shape === 'pane' ? canPaneConnectTo : canConnectTo;
+        const needsConnect =
+          def.shape === 'fence' || def.shape === 'wall' || def.shape === 'pane' || def.shape === 'scaffolding';
+        const connectProbe =
+          def.shape === 'pane'
+            ? canPaneConnectTo
+            : def.shape === 'scaffolding'
+              ? canScaffoldConnectTo // 脚手架只与脚手架相连（批次 53）
+              : canConnectTo;
 
         const shapeCtx: ShapeContext = needsConnect
           ? {

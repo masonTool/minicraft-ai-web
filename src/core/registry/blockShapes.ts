@@ -120,6 +120,11 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
         [0, 0, 0.5 - PANE_HALF, 1, 1, 0.5 + PANE_HALF],
         [0.5 - PANE_HALF, 0, 0, 0.5 + PANE_HALF, 1, 1],
       ];
+    case 'scaffolding':
+      // ⚠️ 碰撞**不随连接方向变化**（与栅栏同一条约定）：物理这边拿不到邻居，
+      // 所以四根角柱一律算上。渲染会按连接裁掉内部那些柱子——看着细、撞着也是细的，
+      // 差别只在于"相邻两片脚手架的交界处多撞一根柱"，走位时基本感觉不到
+      return [SCAFFOLD_PLATFORM, ...SCAFFOLD_PILLARS];
     case 'door':
       // ⚠️ 开着的门**没有碰撞体积**（原版可以直接穿过门洞）。
       // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
@@ -341,6 +346,8 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
     case 'coral_fan':
       return coralFanBoxes(state);
+    case 'scaffolding':
+      return scaffoldingBoxes(ctx.connect ?? NEVER_CONNECT);
     case 'cake':
       // 蛋糕（批次 52）：半格高，**宽度随吃掉的片数变窄**（靠西侧那一端留着）
       return [[0, 0, 0, cakeWidth(state), CAKE_HEIGHT, 1]];
@@ -610,6 +617,64 @@ const FLOWER_POT_BOX: LocalBox = [0.125, 0, 0.125, 0.875, 0.375, 0.875];
 /** 花盆里那株植物画在盆沿之上（与 `blockShapes` 的盆身高度一致） */
 export const FLOWER_POT_RIM = 0.375;
 
+// ---------------------------------------------------------------- 脚手架（批次 53）
+
+/** 脚手架底部那块板的厚度（1/8 格：能直接走上去，不用跳） */
+export const SCAFFOLD_PLATFORM_HEIGHT = 0.125;
+
+/** 柱子粗细（1/16 格） */
+const SCAFFOLD_PILLAR = 0.0625;
+
+/** 底部薄板：人站在它上面，所以碰撞与渲染都从它来 */
+const SCAFFOLD_PLATFORM: LocalBox = [0, 0, 0, 1, SCAFFOLD_PLATFORM_HEIGHT, 1];
+
+/** 四根角柱（固定那一份，碰撞盒用它；渲染会按连接裁掉内部那些） */
+const SCAFFOLD_PILLARS: readonly LocalBox[] = [
+  [0, SCAFFOLD_PLATFORM_HEIGHT, 0, SCAFFOLD_PILLAR, 1, SCAFFOLD_PILLAR],
+  [1 - SCAFFOLD_PILLAR, SCAFFOLD_PLATFORM_HEIGHT, 0, 1, 1, SCAFFOLD_PILLAR],
+  [0, SCAFFOLD_PLATFORM_HEIGHT, 1 - SCAFFOLD_PILLAR, SCAFFOLD_PILLAR, 1, 1],
+  [
+    1 - SCAFFOLD_PILLAR,
+    SCAFFOLD_PLATFORM_HEIGHT,
+    1 - SCAFFOLD_PILLAR,
+    1,
+    1,
+    1,
+  ],
+];
+
+/**
+ * 脚手架的渲染盒：底部薄板 + 若干角柱。
+ *
+ * 每个角柱看**它相邻那两个方向**有没有连着脚手架：两边都连着说明这个角落是两片脚手架的
+ * **内部交界**，柱子不用立（邻格的那根会顶在这里）——于是连成一片时只剩外圈的柱子，
+ * 与原版"脚手架连起来就是一整块平台"一致。
+ *
+ * 柱子是"角上一根 1/16 的小方柱"：玩家 0.6 格宽，走在中间不会撞到（原版也是这样）。
+ */
+function scaffoldingBoxes(connect: (facing: Facing) => boolean): readonly LocalBox[] {
+  const boxes: LocalBox[] = [SCAFFOLD_PLATFORM];
+  // [柱子左下角 x, z, 相邻的两个方向]：西北 / 东北 / 西南 / 东南
+  const corners: readonly (readonly [number, number, Facing, Facing])[] = [
+    [0, 0, 3, 0],
+    [1 - SCAFFOLD_PILLAR, 0, 1, 0],
+    [0, 1 - SCAFFOLD_PILLAR, 3, 2],
+    [1 - SCAFFOLD_PILLAR, 1 - SCAFFOLD_PILLAR, 1, 2],
+  ];
+  for (const [x0, z0, alongX, alongZ] of corners) {
+    if (connect(alongX) && connect(alongZ)) continue;
+    boxes.push([
+      x0,
+      SCAFFOLD_PLATFORM_HEIGHT,
+      z0,
+      x0 + SCAFFOLD_PILLAR,
+      1,
+      z0 + SCAFFOLD_PILLAR,
+    ]);
+  }
+  return boxes;
+}
+
 /** 珊瑚扇的厚度（1/16 格，与藤蔓/贴地薄板同一档） */
 const FAN_THICKNESS = 0.0625;
 
@@ -695,4 +760,14 @@ export function canPaneConnectTo(neighborId: number): boolean {
   const def = blockDef(neighborId);
   if (def.shape === 'pane') return true;
   return def.solid && def.opaque && def.shape === 'cube';
+}
+
+/**
+ * 脚手架的连接判定（批次 53）：**只与脚手架相连**。
+ *
+ * 与栅栏/玻璃板不同：脚手架不会"挂在墙边"（原版也一样），
+ * 所以这里不看实心方块，只看对面是不是脚手架。
+ */
+export function canScaffoldConnectTo(neighborId: number): boolean {
+  return neighborId !== 0 && blockDef(neighborId).shape === 'scaffolding';
 }

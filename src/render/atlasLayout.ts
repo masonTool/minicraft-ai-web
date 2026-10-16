@@ -731,6 +731,10 @@ export const TILE_ORDER = [
   'cake_side',
   'flower_pot',
   'flower_pot_top',
+  // ---- 脚手架（批次 53）：顶面站人的木板 / 底面的木条 / 侧面那一圈
+  'scaffolding_top',
+  'scaffolding_bottom',
+  'scaffolding_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

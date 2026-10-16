@@ -617,6 +617,15 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // 写死的数字会让"可可豆做出浅蓝色染料"——这种错在界面上看着就像个恶作剧
   { kind: 'shapeless' as const, result: { id: dyeItemId(BROWN_DYE_INDEX), count: 1 }, ingredients: [Item.COCOA_BEANS] },
 
+  // ---- 脚手架（批次 53）
+  // 原版：**6 根竹子 + 1 根线 → 6 个脚手架**（上下两排竹子、中间一根线）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.SCAFFOLDING, count: 6 },
+    pattern: ['BBB', ' S ', 'BBB'],
+    key: { B: Block.BAMBOO, S: Item.STRING },
+  },
+
   // ---- 蛋糕与花盆（批次 52）
   // 蛋糕（原版图案）：一排牛奶 + 糖蛋糖 + 一排小麦。3 个牛奶桶**不退还**（原版也如此）
   {
