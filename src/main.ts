@@ -39,6 +39,8 @@ import { runDispenseAction, type DispenseContext } from './core/world/Dispense.t
 import { fertilizeAt, type BoneMealWorld } from './core/world/BoneMeal.ts';
 // 树苗与树（批次 75）：树的形状复用区块生成那套 Planter，这里只提供"写进活世界"的 writer
 import { growTreeAt, type TreeWorld } from './core/world/TreeGrowth.ts';
+// 支撑没了、该掉的就掉（批次 78，B49）：判据在 `Support.ts`（纯函数 + 注入世界）
+import { sweepUnsupported, type SupportWorld } from './core/world/Support.ts';
 import type { TreeKind } from './core/gen/Features.ts';
 // 堆肥（批次 70）：什么能堆肥、几分概率在 `registry/compost.ts`（纯数据 + 纯函数）
 import { compostStep } from './core/registry/compost.ts';
@@ -2683,6 +2685,27 @@ class App {
     this.net.sendBlock(x, y, z, Block.COMPOSTER, state, this.dimension);
   }
 
+  /** 收支撑只要"读一格、写一格" */
+  private readonly supportWorld: SupportWorld = {
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+    setBlock: (x, y, z, blockId) => this.world.setBlockAndUpdate(x, y, z, blockId),
+  };
+
+  /**
+   * 把"立不住"的东西收掉（批次 78，B49）：掉落走与玩家挖掘同一条 `spawnDrop`、
+   * 每一格都广播给队友（否则队友那边看到的是"沙子没了、甘蔗还在"）。
+   *
+   * ⚠️ 起点是**被移除那一格的上面**（见 `sweepUnsupported` 的注释）。
+   */
+  private sweepUnsupportedAbove(x: number, y: number, z: number): void {
+    sweepUnsupported(this.supportWorld, x, y, z, (cx, cy, cz, id) => {
+      const drop = dropFor(id);
+      if (drop) this.spawnDrop(drop.id, drop.count, cx + 0.5, cy + 0.5, cz + 0.5);
+      this.net.sendBlock(cx, cy, cz, Block.AIR, 0, this.dimension);
+      this.particles.spawnBlockBreak(cx + 0.5, cy + 0.5, cz + 0.5, this.blockParticleColor(id), 4);
+    });
+  }
+
   /**
    * 骨粉要写世界：`setBlock` 必须走**带光照/网格/增量存档**的那条路
    * （直接写区块数据的话，作物长高了但画面与存档都不动）。
@@ -2884,6 +2907,9 @@ class App {
     if (brokenId === Block.SHULKER_BOX) this.world.containers.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
+    // 支撑没了，该掉的就掉（批次 78，B49）：从这一格的**上面**一路往上收——
+    // 拆掉甘蔗下面那格沙子，整根甘蔗要一节节掉完（只收一格的话上面几节会悬空）
+    this.sweepUnsupportedAbove(this.hit.x, this.hit.y + 1, this.hit.z);
     // 敲掉黑曜石 → 检查旁边的传送门还立不立得住（K8）：框一破，那一整片门方块跟着熄灭
     if (brokenId === Block.OBSIDIAN) this.breakPortalsBeside(this.hit.x, this.hit.y, this.hit.z);
     this.particles.spawnBlockBreak(
@@ -3278,6 +3304,8 @@ class App {
           }
           if (this.world.setBlockAndUpdate(bx, by, bz, Block.AIR)) {
             broken++;
+            // 炸掉脚下那格，上面的植物同样该掉（批次 78，B49）：与玩家破坏走同一个收尾
+            this.sweepUnsupportedAbove(bx, by + 1, bz);
             // 炸完要唤醒周围的水（挖掉水底会让水重新流）
             this.wakeFluidsAround(bx, by, bz);
           }

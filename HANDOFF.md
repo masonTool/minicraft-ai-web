@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 308（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 309（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 266 项 —— 已完成 **144**、进行中 **63**、待办 59 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 267 项 —— 已完成 **145**、进行中 **63**、待办 59 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -86,7 +86,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **74 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox** / **sapling** / **gourd**，当前全绿；
+| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **75 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox** / **sapling** / **gourd** / **support**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数）、
@@ -120,7 +120,21 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**南瓜与西瓜的种植**（批次 77，B48 / H13 的最后一项）——**茎的成熟不是收获，而是"去旁边结果"**。
+**刚做完的**：**支撑没了、该掉的就掉**（批次 78，B49）——补上**放置侧的另一半**。
+疏漏巡检时确认：`Placement.ts` 早就挡住了"悬空放植物"，而**反过来**"支撑被拆掉之后上面那株还挂着"
+一直没做（TASKS 里只记了藤蔓那一条）。
+① 规则收在 `world/Support.ts`（注入世界 + 纯函数）：`cross`/`flat`/**`cactus`** → 下方实心；
+水里的植物 → 水或同种植物；睡莲 → 下方是水；`torch`/`ladder` → **暂不处理**（贴附面那一类）。
+⚠️ **与放置侧共用同一条判据**（`blockDef(below).solid`）——断言里有一条**逐格比对两边结论**。
+② **连锁**：从被拆那一格的**上面**一路往上收：拆掉甘蔗下面那格沙子，整根甘蔗要**一节节掉完**。
+③ 触发点：玩家破坏 + **爆炸**（TNT）各接一次；掉落走 `spawnDrop`、逐格广播给队友。
+④ ⚠️ 还没接：活塞推动、以及那条更宽的"方块变动通知邻居"（藤蔓/梯子/火把这类**贴附面**
+仍然要它，B11 那条差异还在）；沙砾/沙子"自己下落"也没做。
+⑤ 顺手抓到的真疏漏：**仙人掌的形状是 `cactus` 而不是 `cross`**——最初那版规则按名字枚举形状，
+于是把仙人掌漏了（断言当场红）。
+尺寸：方块 506 / 物品 747 / 配方 366（都不变）；**75 套**离线测试里新增 `support`（54 条）。
+
+再往前是**南瓜与西瓜的种植**（批次 77，B48）——8 阶段茎 + 结果 + 骨粉催熟。
 ① 18 个新方块：两种茎各 **8 个阶段**（原版 0~7，比小麦多一倍）+ 两个"结果的茎"
 （朝向存在状态位里）；都是十字面片、硬度 0、徒手可采。
 ② 种子：`PUMPKIN_SEEDS` / `MELON_SEEDS` **带 `block` 字段指向第 0 阶段茎**——项目里种植路径是
@@ -919,6 +933,10 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **通用字段能省掉一整条链路** | 新种子没有改主程序，因为种子物品上本来就有 `block` 字段（种下去变成哪个方块），种植路径是按它走的。于是"加一种种子"退化成"加一个物品 + 一个配方"。**加同类东西之前先找"现成的通用字段"**——找不到时再考虑改流程，而不是一上来就写一条新分支（批次 77） |
 | **"能结果"与"能不能催"共用一层时，要写明"哪一件做不到"** | 骨粉那一行很容易顺手写成"瓜藤也能结果"，但 `BoneMeal.ts` 的世界接口只有"读一格、写一格"，而结果要读**旁边**那一格——所以它**结构上**做不到。做法是照原版口径只催熟、并把这个限制写进注释与断言（"成熟 ≠ 结果：骨粉不会让它结果"）。**接口拿不到的信息，就是这一层做不到的事**，把它写成断言比写成注释更难被忽略（批次 77） |
 | **"18 个方块"里最贵的不是方块** | 这一批 18 个新方块本身是循环生成的（`plantSpec` + 阶段表），真正花时间的是**跟着它们走的那几处**：贴图（18 张）、中文名（18 条，被"每件物品都有中文名"那条断言当场挡下）、掉落覆盖、硬度、阶段/种类映射、结果判据……**加一族方块时，先列出"跟着它走的东西有几处"，再动手**（批次 77） |
+
+| **"放置时挡住"不等于"事后管住"** | 悬空放置早就被 `Placement.ts` 挡住了，于是"植物悬空"看起来已经解决——但玩家**拆掉脚下的方块**之后，同一株植物还挂在半空。两条判据是同一件事的两半：**一条管"能不能放"，一条管"还在不在"**；只做前一半时，缺陷只在"先放好、再拆支撑"这条路径上出现，很难随手碰到。**加放置规则时顺手问一句"它被拆掉支撑之后会怎样"**（批次 78） |
+| **同一件事的两个入口要共用判据** | 放置侧用 `blockDef(below).solid`、支撑侧也必须用它：不然会出现"能放上去但站不住"（或反过来）的怪状态，而这种不一致**只在少数方块上暴露**（比如耕地是整格还是 15/16 高）。断言里那条"逐格比对两边的结论"就是把这件事钉住的成本最低的做法（批次 78） |
+| **按名字枚举形状时，"名字不同但判据相同"的成员最容易漏** | 规则第一版写了 `cross` 与 `flat` 两类，结果**仙人掌**（形状名为 `cactus`）被漏掉——它的判据与 `cross` 完全一样。这类漏不会报错，只会表现为"拆了沙子，仙人掌不跟着掉"。**枚举一个集合时，先问"还有没有别的名字表达同一件事"**，并让断言覆盖到每个成员（批次 78） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 
