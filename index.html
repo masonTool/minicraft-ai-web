@@ -1294,6 +1294,35 @@
 
     <div id="loading">正在生成世界…</div>
 
+    <!-- 设备不支持时的整屏提示（A10）：判定在 core/render/webglSupport.ts，
+         这里只给样式；内容由 ui/UnsupportedScreen.ts 填（见那边的注记：
+         不用 alert——手机上会被拦，而且显示不了条目化建议） -->
+    <style>
+      .unsupported-screen {
+        position: fixed; inset: 0; z-index: 90;
+        display: grid; place-items: center;
+        background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
+      }
+      .unsupported-panel {
+        display: flex; flex-direction: column; gap: 12px;
+        padding: 20px 22px; max-width: min(520px, 90vw);
+        color: #e8eaee; background: rgba(28, 32, 40, .96);
+        border: 2px solid #3a4150; border-radius: 8px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+      }
+      .unsupported-title { font-size: 17px; font-weight: 600; }
+      .unsupported-reason { font-size: 14px; line-height: 1.6; color: #c8ccd4; }
+      .unsupported-advice { margin: 0; padding-left: 20px; }
+      .unsupported-advice li { font-size: 13px; line-height: 1.7; color: #b6bcc6; }
+      .unsupported-button {
+        align-self: flex-start; padding: 9px 16px; font: inherit; font-size: 14px;
+        color: #fff; background: #3a7d33; border: 2px solid #2b5c26;
+        border-radius: 6px; cursor: pointer; min-height: 38px;
+      }
+      .unsupported-button:active { background: #2f6a2a; }
+      .unsupported-code { font-size: 12px; color: #7d848f; }
+    </style>
+
     <script type="module" src="/src/main.ts"></script>
     <script type="module">
       // Service Worker 只在构建产物里注册：开发时注册会把 vite 的开发资源缓存住，

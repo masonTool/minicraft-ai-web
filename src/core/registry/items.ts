@@ -668,7 +668,7 @@ const BUILDING = new Set<number>([
   Block.OAK_FENCE,
   // 黑石家族（批次 82）：三块都是建材（黑石本身早就在石材那批里登记过）
   Block.POLISHED_BLACKSTONE,
-  Block.BLACKSTONE_BRICKS,
+  Block.POLISHED_BLACKSTONE_BRICKS,
   Block.GILDED_BLACKSTONE,
 ]);
 

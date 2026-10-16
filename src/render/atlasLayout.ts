@@ -867,10 +867,13 @@ export const TILE_ORDER = [
   'item_cooked_salmon',
   // ---- 黑石家族（K8 收尾，批次 82）：堡垒遗迹的三块建材
   'polished_blackstone',
-  'blackstone_bricks',
   'gilded_blackstone',
   // ---- 避雷针（批次 83）：一根铜色的杆（形状由 `lightningRodBox` 表达）
   'lightning_rod',
+  // ---- 黑石家族的装饰性补齐（批次 85，B50）：三张（台阶/楼梯/墙复用母方块贴图）
+  'polished_blackstone_bricks',
+  'chiseled_polished_blackstone',
+  'cracked_polished_blackstone_bricks',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

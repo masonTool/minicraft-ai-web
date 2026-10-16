@@ -184,6 +184,9 @@ const STONE_VARIANT_PARENTS_CN: Record<string, string> = {
   cut_sandstone: '切制砂岩',
   smooth_sandstone: '平滑砂岩',
   blackstone: '黑石',
+  // 批次 85：黑石家族的变体词干（台/楼梯/墙由这一行派生出 6 个名字）
+  polished_blackstone: '磨制黑石',
+  polished_blackstone_bricks: '磨制黑石砖',
   nether_bricks: '下界砖块',
   end_stone_bricks: '末地石砖',
   purpur_block: '紫珀块',
@@ -417,10 +420,15 @@ const EXPLICIT: Record<string, string> = {
   // `STONE_VARIANT_PARENTS_CN`**——那张表是"变体名的词干"，只会派生出台阶/楼梯/墙，
   // 写在那里等于三条死数据（而"每件物品都有中文名"那条断言正是抓这个的）
   polished_blackstone: '磨制黑石',
-  blackstone_bricks: '黑石砖',
   gilded_blackstone: '鎏金黑石',
   // 避雷针（批次 83）
   lightning_rod: '避雷针',
+  // 黑石家族的装饰性补齐（批次 85）
+  chiseled_polished_blackstone: '錾制磨制黑石',
+  cracked_polished_blackstone_bricks: '裂纹磨制黑石砖',
+  // ⚠️ 母方块**自己**也要一个名字（上面那张 `STONE_VARIANT_PARENTS_CN` 只管派生
+  // "台阶/楼梯/墙"三个名字；方块本身的名字走的是这张表）
+  polished_blackstone_bricks: '磨制黑石砖',
   magma_block: '岩浆块',
   crimson_nylium: '绯红菌岩',
   warped_nylium: '诡异菌岩',
@@ -804,7 +812,9 @@ const DESCRIPTIONS: Record<string, string> = {
   // 黑石家族（批次 82）：堡垒遗迹的建材。说明写清"它从哪来"——
   // 这三块都不在合成链的主干上，玩家第一次见它们多半是在下界的堡垒里
   polished_blackstone: '黑石打磨之后的样子，堡垒遗迹的墙面与地面都是它。4 块黑石能合成 4 块。',
-  blackstone_bricks: '黑石砖（4 块磨制黑石合成 4 块），堡垒遗迹的主墙体。',
+  polished_blackstone_bricks: '磨制黑石砖（4 块磨制黑石合成 4 块），堡垒遗迹的主墙体；它还有台阶、楼梯与墙。',
+  chiseled_polished_blackstone: '带花纹的磨制黑石（2 块磨制黑石台阶合成 1 块），堡垒遗迹里的装饰墙面。',
+  cracked_polished_blackstone_bricks: '裂了缝的磨制黑石砖：**只能把磨制黑石砖丢进熔炉烧出来**（原版没有合成配方）。',
   lightning_rod: '**被雷劈中的那 0.4 秒输出 15 级红石信号**。雷暴里它会把附近（128 格内）的雷**引到自己身上**——所以它是"给屋顶装一根，家里就不会被烧"的那件东西。贴在方块上、朝外伸 6/16（六向都能挂）。⚠️ 与原版差异：本项目不会氧化（原版的四档铜）。',
   gilded_blackstone: '嵌着金块的黑石，堡垒遗迹里最值钱的那几块：**挖掉掉 2~5 个金粒**（带精准采集才掉它自己），所以进堡垒先找它。',
   iron_ore: '用石镐以上才能挖动，掉落粗铁。',

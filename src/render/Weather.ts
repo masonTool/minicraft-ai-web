@@ -9,8 +9,18 @@
  */
 
 import * as THREE from 'three';
+import {
+  DEFAULT_WEATHER,
+  restoreWeather,
+  tickWeather,
+  weatherSecondsFor,
+  type WeatherKind,
+  type WeatherState,
+} from '../core/world/WeatherState.ts';
 
-export type WeatherKind = 'clear' | 'rain' | 'thunder';
+// 天气种类的字符串联合**定义在 `core/world/WeatherState.ts`**（那里是纯逻辑、能离线断言），
+// 这里只是把它转出去，让老的 `import { type WeatherKind } from './render/Weather.ts'` 继续能用
+export type { WeatherKind } from '../core/world/WeatherState.ts';
 
 const PARTICLE_COUNT = 3200;
 /** 活动盒的水平半径与竖向高度（格） */
@@ -20,6 +30,10 @@ const HEIGHT = 24;
 const RAIN_SPEED = 22;
 const SNOW_SPEED = 3.2;
 
+/**
+ * 天气的**状态与转换规则**在 `core/world/WeatherState.ts`（纯逻辑、可离线断言、可进存档），
+ * 这里只负责"把它画出来"：粒子雨雪、雷暴的闪光、以及每帧推进那一小份状态。
+ */
 export class Weather {
   readonly object = new THREE.Group();
 
@@ -28,9 +42,8 @@ export class Weather {
   private readonly material: THREE.PointsMaterial;
   private readonly points: THREE.Points;
 
-  private kind: WeatherKind = 'clear';
-  /** 当前天气的剩余秒数 */
-  private timer = 600;
+  /** 当前天气（种类 + 剩余秒数）；进存档的就是它（L6，批次 85） */
+  private state: WeatherState = { ...DEFAULT_WEATHER };
   private snowy = false;
   private flashValue = 0;
   private flashTimer = 8;
@@ -60,11 +73,27 @@ export class Weather {
   }
 
   get current(): WeatherKind {
-    return this.kind;
+    return this.state.kind;
   }
 
   get raining(): boolean {
-    return this.kind !== 'clear';
+    return this.state.kind !== 'clear';
+  }
+
+  /** 当前天气还有多少秒（验收脚本与调试面板用） */
+  get remaining(): number {
+    return this.state.seconds;
+  }
+
+  /** 进存档的那一份（L6）：种类 + 剩余秒数 —— 就这两个数 */
+  snapshot(): WeatherState {
+    return { ...this.state };
+  }
+
+  /** 读档恢复（L6）：脏数据由 `restoreWeather` 兜住，**不抛错** */
+  restore(raw: unknown): void {
+    this.state = restoreWeather(raw);
+    this.applyKind(this.state.kind);
   }
 
   /** 闪电强度 0-1，供环境亮度叠加 */
@@ -72,36 +101,27 @@ export class Weather {
     return this.flashValue;
   }
 
-  /** 调试 / 命令用：直接切换天气 */
+  /** 调试 / 命令用：直接切换天气（剩余时长按这一种天气的区间取） */
   setKind(kind: WeatherKind): void {
-    this.kind = kind;
+    this.state = { kind, seconds: weatherSecondsFor(Math.random, kind) };
+    this.applyKind(kind);
+  }
+
+  /** 换种类时要做的视觉副作用（可见性 + 雷暴闪光） */
+  private applyKind(kind: WeatherKind): void {
     this.points.visible = kind !== 'clear';
     if (kind === 'thunder') this.flashTimer = 1 + Math.random() * 3;
     else this.flashValue = 0;
-  }
-
-  private planNext(): void {
-    if (this.kind === 'clear') {
-      // 晴天结束：多半转雨，其中一部分是雷暴
-      if (Math.random() < 0.55) this.setKind(Math.random() < 0.3 ? 'thunder' : 'rain');
-      this.timer = 480 + Math.random() * 480;
-      return;
-    }
-    this.setKind('clear');
-    this.timer = 480 + Math.random() * 480;
   }
 
   /**
    * @param snowy 玩家所在地表是否是寒冷群系（决定下雪还是下雨）
    */
   update(dt: number, cameraPosition: THREE.Vector3, snowy: boolean): void {
-    this.timer -= dt;
-    if (this.timer <= 0) {
-      const previous = this.kind;
-      this.planNext();
-      // 雨天本身持续 2~5 分钟，晴天 8~16 分钟
-      if (previous === 'clear' && this.kind !== 'clear') this.timer = 120 + Math.random() * 180;
-    }
+    // 状态推进只有一行：到点了就换成下一种（规则在 `WeatherState.ts` 里）
+    const next = tickWeather(this.state, dt, Math.random);
+    if (next.kind !== this.state.kind) this.applyKind(next.kind);
+    this.state = next;
 
     if (this.snowy !== snowy) {
       this.snowy = snowy;
@@ -111,7 +131,7 @@ export class Weather {
     }
 
     // ---- 闪电（只在雷暴时）
-    if (this.kind === 'thunder') {
+    if (this.state.kind === 'thunder') {
       this.flashTimer -= dt;
       if (this.flashTimer <= 0) {
         this.flashValue = 0.85 + Math.random() * 0.15;

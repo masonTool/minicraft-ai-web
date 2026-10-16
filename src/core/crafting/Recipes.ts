@@ -972,6 +972,13 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
  */
 const BLACKSTONE_RECIPES: readonly Recipe[] = [
   {
+    // 錾制磨制黑石（批次 85）：原版 = 2 块磨制黑石台阶
+    kind: 'shaped' as const,
+    result: { id: Block.CHISELED_POLISHED_BLACKSTONE, count: 1 },
+    pattern: ['S', 'S'],
+    key: { S: stoneVariantId('polished_blackstone', 'slab')! },
+  },
+  {
     kind: 'shaped' as const,
     result: { id: Block.POLISHED_BLACKSTONE, count: 4 },
     pattern: ['BB', 'BB'],
@@ -979,7 +986,7 @@ const BLACKSTONE_RECIPES: readonly Recipe[] = [
   },
   {
     kind: 'shaped' as const,
-    result: { id: Block.BLACKSTONE_BRICKS, count: 4 },
+    result: { id: Block.POLISHED_BLACKSTONE_BRICKS, count: 4 },
     pattern: ['PP', 'PP'],
     key: { P: Block.POLISHED_BLACKSTONE },
   },

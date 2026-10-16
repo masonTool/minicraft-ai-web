@@ -2825,20 +2825,6 @@ const POLISHED_BLACKSTONE_PAINTER: Painter = (x, y, rng) => {
   return [clamp255(38 * v), clamp255(32 * v), clamp255(36 * v), 255];
 };
 
-/** 黑石砖（批次 82）：黑石配色的砖缝纹理（复用通用砖画笔的画法，只是底色调深） */
-const BLACKSTONE_BRICKS_PAINTER: Painter = (x, y, rng) => {
-  const row = y >> 2;
-  const offset = (row % 2) * 4;
-  const mortar = y % 4 === 3 || (x + offset) % 8 === 7;
-  if (mortar) {
-    // 砖缝比砖更暗（与石头那套"缝更亮"相反——黑石砖的缝在阴影里）
-    const v = 0.62 + rng() * 0.08;
-    return [clamp255(38 * v), clamp255(32 * v), clamp255(36 * v), 255];
-  }
-  const v = 1.1 + (rng() * 0.16 - 0.08);
-  return [clamp255(40 * v), clamp255(34 * v), clamp255(38 * v), 255];
-};
-
 /**
  * 鎏金黑石（批次 82）：黑石底 + 嵌在里面的金块。
  *
@@ -2983,8 +2969,61 @@ PAINTERS.smooth_basalt = SMOOTH_BASALT_PAINTER;
 PAINTERS.blackstone = BLACKSTONE_PAINTER;
 // 黑石家族（K8 收尾，批次 82）：堡垒遗迹的三块建材
 PAINTERS.polished_blackstone = POLISHED_BLACKSTONE_PAINTER;
-PAINTERS.blackstone_bricks = BLACKSTONE_BRICKS_PAINTER;
 PAINTERS.gilded_blackstone = GILDED_BLACKSTONE_PAINTER;
+// ---- 黑石家族的装饰性补齐（批次 85，B50）
+/**
+ * 通用"砖"画笔：底色的砖 + 更暗的缝（批次 85）。
+ *
+ * 与批次的砖画笔是同一种画法，只是底色可传——
+ * 磨制黑石砖、裂纹磨制黑石砖都要用它，所以抽出来；**没有去改那张老画笔**，
+ * 因为它是"黑石砖"这个具体方块的贴图，混用参数会让两处风格漂移。
+ */
+function bricksPainter(base: readonly [number, number, number], mortar: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const row = y >> 2;
+    const offset = (row % 2) * 4;
+    const isMortar = y % 4 === 3 || (x + offset) % 8 === 7;
+    const tint = isMortar ? mortar : base;
+    const v = isMortar ? 0.94 + (rng() * 0.08 - 0.04) : 1 + (rng() * 0.14 - 0.07);
+    return [clamp255(tint[0] * v), clamp255(tint[1] * v), clamp255(tint[2] * v), 255];
+  };
+}
+
+/**
+ * 磨制黑石砖：磨制黑石 + 黑石砖的**结合**。
+ *
+ * 原版的这张贴图与黑石砖用的是同一套砖缝，只是色调更接近磨制黑石（更亮、更平）。
+ * 所以这里直接拿砖画笔、把底色换成磨制黑石那一档——**两张贴图看起来是一家人才对**
+ * （新画一张风格不同的，"砖"就变成两种东西了）。
+ */
+PAINTERS.polished_blackstone_bricks = bricksPainter([46, 40, 44], [30, 26, 30]);
+/**
+ * 錾制磨制黑石：中间一个"图案"（原版是个带缺口的花纹）。
+ * 图案用**位置判据**画（十字 + 四角），不掷随机数——"錾"就是工整的意思。
+ */
+PAINTERS.chiseled_polished_blackstone = (x, _y, rng) => {
+  const v = 1 + (rng() * 0.08 - 0.04);
+  // 边框 + 中间的十字与四角（工整的几何图案）
+  const border = x === 0 || x === 15 || (_y === 0 || _y === 15);
+  const pattern =
+    (x >= 6 && x <= 9 && _y >= 2 && _y <= 13) ||
+    (_y >= 6 && _y <= 9 && x >= 2 && x <= 13) ||
+    ((x === 4 || x === 11) && (_y === 4 || _y === 11));
+  if (border) return [clamp255(26 * v), clamp255(22 * v), clamp255(25 * v), 255];
+  if (pattern) return [clamp255(30 * v), clamp255(26 * v), clamp255(29 * v), 255];
+  return [clamp255(44 * v), clamp255(38 * v), clamp255(42 * v), 255];
+};
+/**
+ * 裂纹磨制黑石砖：黑石砖 + 几条裂纹。
+ * 裂纹用位置哈希决定走向，所以**每一块砖的裂纹都不一样**，但同一块永远一样。
+ */
+PAINTERS.cracked_polished_blackstone_bricks = (x, y, rng) => {
+  const base = bricksPainter([46, 40, 44], [30, 26, 30])(x, y, rng);
+  // 三条斜裂纹：`(x + y) % 7` 之类会画成规整的斜线，这里让每条裂纹自己有个偏移
+  const crack = (x * 3 + y * 5 + (hashString(`crack${x >> 3},${y >> 3}`) % 5)) % 11 === 0;
+  if (!crack) return base;
+  return [clamp255(base[0] * 0.55), clamp255(base[1] * 0.55), clamp255(base[2] * 0.55), 255];
+};
 PAINTERS.magma = MAGMA_PAINTER;
 PAINTERS.crimson_nylium = nyliumPainter([132, 40, 44], 'crim');
 PAINTERS.crimson_nylium_side = nyliumSidePainter([132, 40, 44], 'crims');

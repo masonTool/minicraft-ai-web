@@ -135,7 +135,7 @@ function makeRegion(): Region {
 }
 
 const TILES = new Set<string>(TILE_ORDER);
-const NEW_BLOCKS = [Block.POLISHED_BLACKSTONE, Block.BLACKSTONE_BRICKS, Block.GILDED_BLACKSTONE];
+const NEW_BLOCKS = [Block.POLISHED_BLACKSTONE, Block.POLISHED_BLACKSTONE_BRICKS, Block.GILDED_BLACKSTONE];
 
 // ---------------------------------------------------------------- 1. 三块建材
 
@@ -146,7 +146,7 @@ console.log('\n[三块建材：注册表]');
   equal('接着告示牌（6 种木材到 528）往下排', Block.POLISHED_BLACKSTONE, Block.OAK_SIGN + 6);
 
   const names = NEW_BLOCKS.map((id) => blockDef(id).name);
-  equal('注册名与顺序一致（磨制黑石 / 黑石砖 / 鎏金黑石）', names.join(','), 'minecraft:polished_blackstone,minecraft:blackstone_bricks,minecraft:gilded_blackstone');
+  equal('注册名与顺序一致（磨制黑石 / 黑石砖 / 鎏金黑石）', names.join(','), 'minecraft:polished_blackstone,minecraft:polished_blackstone_bricks,minecraft:gilded_blackstone');
 
   const cubes = NEW_BLOCKS.filter((id) => blockDef(id).shape !== undefined && blockDef(id).shape !== 'cube');
   check('三块都是整块方块（没有形状特例）', cubes.length === 0, cubes.join(','));
@@ -182,7 +182,7 @@ console.log('\n[鎏金黑石：掉 2~5 个金粒]');
   equal('掷 0.99 → 上限 5 个', drop(0.99)?.count, 5);
   equal('掉的是金粒', drop(0)?.id, Item.GOLD_NUGGET);
   equal('另外两块没有区间掉落（走"掉自己"的默认规则）',
-    `${rangeDropFor(Block.POLISHED_BLACKSTONE, 0)},${rangeDropFor(Block.BLACKSTONE_BRICKS, 0)}`, 'null,null');
+    `${rangeDropFor(Block.POLISHED_BLACKSTONE, 0)},${rangeDropFor(Block.POLISHED_BLACKSTONE_BRICKS, 0)}`, 'null,null');
 
   const items = new Map<number, number>();
   const rolls = lcg(7);
@@ -197,7 +197,7 @@ console.log('\n[鎏金黑石：掉 2~5 个金粒]');
   check('时运**不改**鎏金黑石（它不在时运表里）', fortuneMultiplier(Block.GILDED_BLACKSTONE, 3, 0.5) === 1);
   check('另外两块掉自己（`dropFor` 的默认规则）',
     dropFor(Block.POLISHED_BLACKSTONE)?.id === Block.POLISHED_BLACKSTONE &&
-      dropFor(Block.BLACKSTONE_BRICKS)?.id === Block.BLACKSTONE_BRICKS);
+      dropFor(Block.POLISHED_BLACKSTONE_BRICKS)?.id === Block.POLISHED_BLACKSTONE_BRICKS);
 }
 
 console.log('\n[配方：两块建材各一条，鎏金黑石没有配方]');
@@ -217,7 +217,7 @@ console.log('\n[配方：两块建材各一条，鎏金黑石没有配方]');
   const polished = grid(2, ['BB', 'BB'], { B: Block.BLACKSTONE });
   equal('4 黑石 → 4 磨制黑石', matchRecipe(polished, 2)?.id, Block.POLISHED_BLACKSTONE);
   equal('产量 4', matchRecipe(polished, 2)?.count, 4);
-  equal('4 磨制黑石 → 4 黑石砖', matchRecipe(grid(2, ['PP', 'PP'], { P: Block.POLISHED_BLACKSTONE }), 2)?.id, Block.BLACKSTONE_BRICKS);
+  equal('4 磨制黑石 → 4 黑石砖', matchRecipe(grid(2, ['PP', 'PP'], { P: Block.POLISHED_BLACKSTONE }), 2)?.id, Block.POLISHED_BLACKSTONE_BRICKS);
 
   // "没有任何配方产出鎏金黑石"——原版也没有，它只能在下界的堡垒里挖到
   const gildedRecipes = RECIPES.filter((recipe) => recipe.result.id === Block.GILDED_BLACKSTONE);
@@ -348,12 +348,12 @@ console.log('\n[布局：桥 + 宝库 + 箱子 + 鎏金黑石]');
   equal('桥面靠边是黑石', at(instance.x, instance.y, instance.z + 2), Block.BLACKSTONE);
 
   // 栏杆：两侧各 2 格高
-  equal('栏杆是黑石砖', at(instance.x + 1, instance.y + 1, instance.z + 3), Block.BLACKSTONE_BRICKS);
-  check('栏杆有 2 格高', at(instance.x + 1, instance.y + 2, instance.z + 3) === Block.BLACKSTONE_BRICKS);
+  equal('栏杆是黑石砖', at(instance.x + 1, instance.y + 1, instance.z + 3), Block.POLISHED_BLACKSTONE_BRICKS);
+  check('栏杆有 2 格高', at(instance.x + 1, instance.y + 2, instance.z + 3) === Block.POLISHED_BLACKSTONE_BRICKS);
 
   // 宝库：地板磨制黑石、墙体黑石砖、门洞是空气
   equal('宝库地板是磨制黑石', at(instance.x + 10, instance.y, instance.z), Block.POLISHED_BLACKSTONE);
-  equal('宝库墙体是黑石砖', at(instance.x + 12, instance.y + 2, instance.z), Block.BLACKSTONE_BRICKS);
+  equal('宝库墙体是黑石砖', at(instance.x + 12, instance.y + 2, instance.z), Block.POLISHED_BLACKSTONE_BRICKS);
   equal('宝库门洞是空气（能走进去）', at(instance.x + 7, instance.y + 2, instance.z), Block.AIR);
 
   // 箱子：位置与状态

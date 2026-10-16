@@ -19,6 +19,7 @@
  */
 
 import {
+  BLACKSTONE_VARIANT_ID_START,
   BLOCKS,
   Block,
   MORE_STONE_ID_START,
@@ -91,9 +92,10 @@ console.log('\n[表：26 个母方块 / 59 个变体]');
 {
   // 批次 41 立表时是 16 个母方块 / 36 个变体；批次 42 追加 7 个母方块 / 17 个变体；
   // 批次 45 再追加 3 个（红砂岩家族）/ 6 个变体
-  equal('家族数', STONE_VARIANT_PARENTS.length, 26);
-  equal('变体总数', VARIANT_COUNT, 59);
-  equal('变体 id 数', STONE_VARIANT_IDS.length, 59);
+  // 批次 41 立表时 16 个母方块 / 36 个变体；42 追加 7/17；45 追加 3/6；85（B50）追加 2/6
+  equal('家族数', STONE_VARIANT_PARENTS.length, 28);
+  equal('变体总数', VARIANT_COUNT, 65);
+  equal('变体 id 数', STONE_VARIANT_IDS.length, 65);
 
   // 母方块名对得上（表里只能写数字 id，这一条专门防"数字抄错")
   for (const [parent, name] of STONE_VARIANT_PARENTS) {
@@ -101,12 +103,13 @@ console.log('\n[表：26 个母方块 / 59 个变体]');
   }
 
   /**
-   * 变体的 id 分成**两段**：351~403（批次 41/42）+ 416~421（批次 45 的红砂岩家族）。
+   * 变体的 id 分成**三段**：351~403（批次 41/42）、416~421（批次 45 的红砂岩家族）、
+   * 533~538（批次 85 的黑石家族）。
    *
    * ⚠️ 为什么不接着排：404~415 是**写死的母方块常量**（石英家族 404~409、
-   * 切石机 410、红砂岩家族 411~415）。往变体表末尾追加家族时，顺序分配会直接撞进这一段
-   * ——所以变体表支持"显式起点"这一列，第二段就是从 416 起。
-   * 这一组断言就是守住"两段 + 保留段"这三个区间不重叠。
+   * 切石机 410、红砂岩家族 411~415），422 之后又被烟熏炉那一批占掉了
+   * ——所以变体表支持"显式起点"这一列，每一段新家族都从写好的起点开始。
+   * 这一组断言守住"三段 + 保留段"这些区间不重叠、每段各自连续。
    */
   const RESERVED_IDS: readonly number[] = [
     ...Array.from({ length: 6 }, (_v, i) => MORE_STONE_ID_START + i), // 404~409 石英家族
@@ -118,19 +121,30 @@ console.log('\n[表：26 个母方块 / 59 个变体]');
     STONE_VARIANT_IDS.every((id) => !RESERVED_IDS.includes(id)),
   );
 
-  const firstWave = STONE_VARIANT_IDS.filter((id) => id < MORE_STONE_ID_START).sort((a, b) => a - b);
-  const secondWave = STONE_VARIANT_IDS.filter((id) => id >= RED_SANDSTONE_VARIANT_ID_START).sort((a, b) => a - b);
-  equal(
-    `第一段 ${STONE_VARIANT_ID_START}~403 连续排下来`,
-    firstWave.join(','),
-    Array.from({ length: firstWave.length }, (_v, i) => STONE_VARIANT_ID_START + i).join(','),
-  );
-  equal(
-    `第二段从显式起点 ${RED_SANDSTONE_VARIANT_ID_START} 连续排下来（${secondWave.length} 个）`,
-    secondWave.join(','),
-    Array.from({ length: secondWave.length }, (_v, i) => RED_SANDSTONE_VARIANT_ID_START + i).join(','),
-  );
-  equal('两段加起来正好是全部变体', firstWave.length + secondWave.length, VARIANT_COUNT);
+  // 三段各自的起点（都写死在注册表里，这里只按区间核对连续性与"不重叠"）
+  const SEGMENTS: readonly (readonly [string, number])[] = [
+    ['批次 41/42', STONE_VARIANT_ID_START],
+    ['批次 45 红砂岩', RED_SANDSTONE_VARIANT_ID_START],
+    ['批次 85 黑石', BLACKSTONE_VARIANT_ID_START],
+  ];
+  let seen = 0;
+  for (const [label, start] of SEGMENTS) {
+    const wave = STONE_VARIANT_IDS.filter((id) => id >= start && id < start + 64 && !STONE_VARIANT_IDS.some((other) => other < start && other >= id))
+      .sort((a, b) => a - b);
+    // 只取"从 start 起连续的那一段"：遇到第一个断点就停
+    const run: number[] = [];
+    for (const id of wave) {
+      if (id !== start + run.length) break;
+      run.push(id);
+    }
+    equal(
+      `${label}：从显式起点 ${start} 连续排下来（${run.length} 个）`,
+      run.join(','),
+      Array.from({ length: run.length }, (_v, i) => start + i).join(','),
+    );
+    seen += run.length;
+  }
+  equal('三段加起来正好是全部变体', seen, VARIANT_COUNT);
   check(
     '每个 id 都能在方块表里按下标取到',
     STONE_VARIANT_IDS.every((id) => BLOCKS[id] !== undefined && BLOCKS[id]!.id === id),
@@ -221,7 +235,7 @@ console.log('\n[分类与中文名]');
   check('全部归"建筑"分类', STONE_VARIANT_IDS.every((id) => categoryOf(id) === 'building'));
 
   const labels = STONE_VARIANT_IDS.map((id) => itemLabel(id));
-  equal('59 个中文名两两不同', new Set(labels).size, 59);
+  equal(`${VARIANT_COUNT} 个中文名两两不同`, new Set(labels).size, VARIANT_COUNT);
   // 失败时把"哪几个没名字"直接打出来（漏一条中文名是靠肉眼看不出来的）
   const missingLabel = STONE_VARIANT_IDS.filter((id) => {
     const label = itemLabel(id);
@@ -278,9 +292,9 @@ console.log('\n[配方：每种变体一条，材料是它自己的母方块]');
   );
 
   equal(
-    '59 个变体各有且只有 1 条配方',
+    `${VARIANT_COUNT} 个变体各有且只有 1 条配方`,
     RECIPES.filter((recipe) => STONE_VARIANT_IDS.includes(recipe.result.id)).length,
-    59,
+    VARIANT_COUNT,
   );
 }
 

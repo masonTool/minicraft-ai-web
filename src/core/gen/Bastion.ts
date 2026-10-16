@@ -135,7 +135,7 @@ export function bastionIntersects(instance: BastionInstance, cx: number, cz: num
  * ⚠️ 黑石台阶（原版桥面两侧的排水沟用它）通过 `stoneVariantId` 取，
  * 取不到时退回黑石——注册表里那个变体是批量生成的，不该让结构生成因为它的存在与否而崩。
  */
-const BRICKS = Block.BLACKSTONE_BRICKS;
+const BRICKS = Block.POLISHED_BLACKSTONE_BRICKS;
 const POLISHED = Block.POLISHED_BLACKSTONE;
 const BLACKSTONE = Block.BLACKSTONE;
 const GILDED = Block.GILDED_BLACKSTONE;

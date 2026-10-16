@@ -275,6 +275,9 @@ import {
   signKey,
 } from './core/world/SignText.ts';
 import { SignEditor } from './ui/SignEditor.ts';
+// 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
+import { UnsupportedScreen } from './ui/UnsupportedScreen.ts';
+import { probeBrowserGl, rendererFailure, type GlSupportFail } from './core/render/webglSupport.ts';
 import { SignRenderer, type SignRenderItem } from './render/SignRenderer.ts';
 import {
   CAKE_SLICES,
@@ -526,6 +529,23 @@ const STARTING_HOTBAR: readonly number[] = [
 function rodKey(x: number, y: number, z: number): string {
   return `${x},${y},${z}`;
 }
+
+/**
+ * "设备不支持 WebGL2"的约定错误消息（A10，批次 85）。
+ *
+ * 为什么不定义一个错误类：这个信号只在一处产生、一处消费（`boot` 里捕获），
+ * 用消息字符串就够了；**但必须是常量**——两处各写一遍字符串，改一处就失效，
+ * 而症状是"白屏"（最难查的那一类）。
+ */
+const UNSUPPORTED_GL_ERROR = 'unsupported-gl';
+
+/**
+ * 渲染器创建失败的原因（A10，批次 85）：构造函数里记下、`boot` 里读出来显示。
+ *
+ * ⚠️ 为什么放在模块级而不是实例字段上：**构造函数抛异常时实例根本不存在**，
+ * 上层拿不到任何东西——只能靠这个"最后一份失败原因"。
+ */
+let lastRendererFailure: GlSupportFail | null = null;
 
 class App {
   private readonly renderer: THREE.WebGLRenderer;
@@ -969,7 +989,16 @@ class App {
     // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
     // 塞进 #vitals 那个 flex 列会被挤到别的地方
     this.xpHud = new XpHud(document.getElementById('hud') ?? container);
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    // 渲染器创建兜底（A10，批次 85）：即使前面探测到了 WebGL2，真正创建时也可能失败
+    // （显存不足、上下文数量到顶——手机上真实发生过）。失败时**给一块能看懂的界面**，
+    // 而不是让 `new WebGLRenderer` 那行红字把整页留成白屏
+    try {
+      this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      lastRendererFailure = rendererFailure(message);
+      throw new Error(UNSUPPORTED_GL_ERROR);
+    }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
@@ -1410,6 +1439,8 @@ class App {
     // 月相（批次 84）：老存档没有 dayCount → 第 0 天（满月），与 `moonPhaseFor(0)` 一条口径
     this.dayCount = Number.isFinite(data.dayCount) && (data.dayCount ?? 0) >= 0 ? Math.floor(data.dayCount!) : 0;
     this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
+    // 天气（L6，批次 85）：老存档没有这个字段 → `restoreWeather` 回退默认晴天
+    this.weather.restore(data.weather);
     this.stats.health = data.health;
     this.stats.food = data.food;
     this.stats.saturation = data.saturation;
@@ -1466,6 +1497,8 @@ class App {
       flying: this.flying,
       timeOfDay: this.timeOfDay,
       dayCount: this.dayCount,
+      // 天气（L6，批次 85）：重开之后接着下，而不是每次重掷
+      weather: this.weather.snapshot(),
       health: this.stats.health,
       food: this.stats.food,
       saturation: this.stats.saturation,
@@ -7132,6 +7165,18 @@ async function boot(): Promise<void> {
   const deathEl = document.getElementById('death');
   if (!container || !debugEl || !overlayEl || !vitalsEl || !deathEl) throw new Error('缺少必要的 DOM 节点');
 
+  // ---- 设备能力预检（A10，批次 85）：**在生成图集/地形之前**就问一句。
+  // 图集要画上百张画布、地形要起 worker 池——这些在不支持的设备上全是白做的，
+  // 而且它们失败起来五花八门（比"直接告诉玩家 WebGL2 不可用"难查得多）
+  const unsupported = new UnsupportedScreen();
+  const support = probeBrowserGl();
+  if (!support.ok) {
+    console.warn(`[gl] 设备不支持：${support.kind} —— ${support.reason}`);
+    document.getElementById('loading')?.remove();
+    unsupported.show(support);
+    return;
+  }
+
   const atlas = new TextureAtlas();
   const registry = new WorldRegistry();
   await adoptLegacyWorld(registry);
@@ -7142,13 +7187,27 @@ async function boot(): Promise<void> {
     // （打开失败会返回 null，游戏照常可玩，只是不保存）
     const save = await SaveGame.open(world.id);
     registry.update(world.id, { lastPlayed: Date.now() });
-    const app = new App(container, debugEl, overlayEl, atlas, vitalsEl, deathEl, save, {
-      id: world.id,
-      name: world.name,
-      seed: world.seed,
-      worldType: world.worldType,
-      difficulty: world.difficulty,
-    });
+    let app: App;
+    try {
+      app = new App(container, debugEl, overlayEl, atlas, vitalsEl, deathEl, save, {
+        id: world.id,
+        name: world.name,
+        seed: world.seed,
+        worldType: world.worldType,
+        difficulty: world.difficulty,
+      });
+    } catch (error) {
+      // 预检过了、但真正创建渲染器时还是失败（显存不足/上下文到顶）：
+      // 走同一块界面，别把白屏留给玩家（A10，批次 85）
+      if (error instanceof Error && error.message === UNSUPPORTED_GL_ERROR) {
+        document.getElementById('loading')?.remove();
+        unsupported.show(
+          lastRendererFailure ?? rendererFailure('无法创建 WebGL2 绘图上下文'),
+        );
+        return;
+      }
+      throw error;
+    }
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
     app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
     app.onWorldDeleted = (id) => registry.remove(id);

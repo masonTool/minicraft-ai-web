@@ -70,6 +70,15 @@ export interface PlayerSave {
    * 老存档没有这个字段 → 当成第 0 天（满月），不迁移、不改存档版本号。
    */
   dayCount?: number;
+  /**
+   * 天气（L6，批次 85）：`{ kind, seconds }` 两个数。
+   *
+   * ⚠️ 它放在**玩家存档**里其实有点别扭（天气是世界的属性，不是玩家的）——
+   * 但难度与游戏规则当年也是这么放的（见上面那两条），所以这里跟着既有口径走：
+   * **一处放世界状态，好过两处各放一半**。以后要挪进世界元数据时，
+   * `restoreWeather` 已经能容忍"字段缺失"，迁移只要挪一行。
+   */
+  weather?: { kind: string; seconds: number };
   health: number;
   food: number;
   saturation: number;

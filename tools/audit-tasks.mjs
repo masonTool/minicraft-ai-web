@@ -18,11 +18,20 @@
  *      已经漂过一次：P1~P9 全部标着"未开始"，而实际早就完成大半）
  *   5. 核对 HANDOFF 的"提交总数"与 `git rev-list --count HEAD`
  *
- * 用法：`npm run audit:tasks`
+ * 用法：`npm run audit:tasks`（`--print` 只检查不写回 README，给 `npm run check` 用）
  */
 
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+
+/**
+ * `--print` = **只检查、不改文件**。
+ *
+ * 为什么需要这个开关：本脚本默认会**顺手把 README 的路线图状态列改对**（那是它的设计），
+ * 但 `npm run check` 是"门禁"——门禁改文件是件很吓人的事（跑完发现工作区脏了，
+ * 还得去想是谁改的）。所以门禁走 `--print`：**过期就非零退出**，改不改由人决定。
+ */
+const printOnly = process.argv.includes('--print');
 
 const TASK_FILE = new URL('../TASKS.md', import.meta.url);
 const HANDOFF_FILE = new URL('../HANDOFF.md', import.meta.url);
@@ -184,9 +193,13 @@ for (const [phase] of Object.entries(PHASE_SECTIONS)) {
   }
 }
 if (rewrote > 0) {
-  writeFileSync(README_FILE, readmeOut);
   failed = true;
-  console.log(`\n✗ README 的路线图状态列已按 TASKS 自动重写（${rewrote} 行），请重新暂存后提交`);
+  if (printOnly) {
+    console.log(`\n✗ README 的路线图状态列过期（${rewrote} 行，--print 模式不写回）：跑一次 npm run audit:tasks 重写后再提交`);
+  } else {
+    writeFileSync(README_FILE, readmeOut);
+    console.log(`\n✗ README 的路线图状态列已按 TASKS 自动重写（${rewrote} 行），请重新暂存后提交`);
+  }
 } else {
   console.log('✓ README 路线图状态与本表一致');
 }

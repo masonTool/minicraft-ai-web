@@ -2210,6 +2210,15 @@ const RED_SAND_SPECS: readonly BlockSpec[] = [
  */
 export const STONE_VARIANT_ID_START = 351;
 
+/**
+ * 黑石家族的变体段起点（批次 85，B50）。
+ *
+ * ⚠️ 为什么必须写死：变体段是**追加式**的（不许往中间插），而这一族是**最后加的**——
+ * 它的位置在告示牌（523）与避雷针（532）之后，只能显式指定起点。
+ * 用"游标接着排"会让 id 落到 422 附近，与烟熏炉那一批撞车（存档里存的就是这些数字）。
+ */
+export const BLACKSTONE_VARIANT_ID_START = 533;
+
 /** 截至这里已经建好的全部规格段（按定义顺序）——下面 `tilesOfDefined` 用它查母方块贴图 */
 const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
   BASE_SPECS,
@@ -2270,7 +2279,13 @@ export type StoneVariantKind = 'slab' | 'stairs' | 'wall';
  * （不写的话会从 404 接着排，直接撞进写死的石英家族与切石机）。
  */
 const STONE_VARIANT_FAMILIES: readonly (
-  readonly [number, string, readonly StoneVariantKind[], number?]
+  readonly [
+    number,
+    string,
+    readonly StoneVariantKind[],
+    (number | undefined)?,
+    (readonly [string, string, string] | undefined)?,
+  ]
 )[] = [
   [13, 'granite', ['slab', 'stairs', 'wall']],
   [14, 'diorite', ['slab', 'stairs', 'wall']],
@@ -2303,6 +2318,15 @@ const STONE_VARIANT_FAMILIES: readonly (
   [412, 'red_sandstone', ['slab', 'stairs', 'wall'], RED_SANDSTONE_VARIANT_ID_START],
   [414, 'cut_red_sandstone', ['slab']],
   [415, 'smooth_red_sandstone', ['slab', 'stairs']],
+  // ---- 批次 85 追加（B50）：黑石家族的装饰性补齐。这两行就是全部改动——
+  // 台阶/楼梯/墙的方块、硬度、工具、中文名、分类、配方都会自动跟上。
+  //
+  // ⚠️ 贴图这一列**必须显式给**：黑石家族是批次 82 才加进来的，它的规格段
+  // （`BLACKSTONE_FAMILY_SPECS`）声明在 `DEFINED_SPECS` **之后**，
+  // 而这张表在 `STONE_VARIANT_SPECS` 那个 IIFE 里就被求值了——按 id 去查会拿到 undefined
+  // （症状是"找不到方块 529 的贴图"）。贴图就是三个字符串，直接写下来最省事也最清楚
+  [529, 'polished_blackstone', ['slab', 'stairs', 'wall'], BLACKSTONE_VARIANT_ID_START, ['polished_blackstone', 'polished_blackstone', 'polished_blackstone']],
+  [530, 'polished_blackstone_bricks', ['slab', 'stairs', 'wall'], undefined, ['polished_blackstone_bricks', 'polished_blackstone_bricks', 'polished_blackstone_bricks']],
 ];
 
 const STONE_VARIANT_MAP = new Map<string, number>();
@@ -2310,11 +2334,12 @@ const STONE_VARIANT_MAP = new Map<string, number>();
 const STONE_VARIANT_SPECS: readonly BlockSpec[] = (() => {
   const specs: BlockSpec[] = [];
   let next = STONE_VARIANT_ID_START;
-  for (const [parent, name, kinds, explicitStart] of STONE_VARIANT_FAMILIES) {
+  for (const [parent, name, kinds, explicitStart, explicitTiles] of STONE_VARIANT_FAMILIES) {
     // 显式起点：把游标跳到这一段该在的位置（批次 45 的红砂岩家族用它避开写死的母方块段）
     if (explicitStart !== undefined) next = explicitStart;
-    // 母方块横跨好几段规格，所以查"全部已定义的段"而不是 `baseTiles`（它只认 BASE_SPECS）
-    const tiles = tilesOfDefined(parent);
+    // 母方块横跨好几段规格，所以查"全部已定义的段"而不是 `baseTiles`（它只认 BASE_SPECS）；
+    // 晚定义的那几族直接把贴图写在表里（见上面那段的注记）
+    const tiles = explicitTiles ?? tilesOfDefined(parent);
     for (const kind of kinds) {
       const id = next++;
       STONE_VARIANT_MAP.set(`${name}_${kind}`, id);
@@ -2462,8 +2487,21 @@ export const SIGN_IDS: readonly number[] = WOOD_TYPES.map((_wood, index) => SIGN
 // ⚠️ 起点是 **529**：告示牌占了 523~528（6 种木材），接着往下排才是对的。
 // 挑 id 时踩过"靠印象选一个空档"的坑（批次 48），所以这里写明了它接着谁
 export const POLISHED_BLACKSTONE_ID = 529;
-export const BLACKSTONE_BRICKS_ID = 530;
+/**
+ * 磨制黑石砖（批次 82 落地，**批次 85 改名**）。
+ *
+ * ⚠️ 原版**没有** `blackstone_bricks` 这个方块——那一条是批次 82 起名时按"黑石砖"直译的，
+ * 而原版的 id 与中文名都是**磨制黑石砖**（`polished_blackstone_bricks`）。
+ * 这一批（B50）要给它补台阶/楼梯/墙，名字对不上会让"变体复用母方块贴图/配方"
+ * 那套表驱动**找不到母方块**（`stoneVariantId('polished_blackstone_bricks', 'slab')` 返回 undefined），
+ * 所以顺手改回原版的名字。**id 530 没动**（存档里存的就是它）。
+ */
+export const POLISHED_BLACKSTONE_BRICKS_ID = 530;
 export const GILDED_BLACKSTONE_ID = 531;
+/** 錾制磨制黑石（批次 85，B50）：接在黑石变体段（533~538）之后 */
+export const CHISELED_POLISHED_BLACKSTONE_ID = 539;
+/** 裂纹磨制黑石砖（批次 85，B50）：**只能烧出来**（原版如此，没有合成配方） */
+export const CRACKED_POLISHED_BLACKSTONE_BRICKS_ID = 540;
 
 const BLACKSTONE_FAMILY_SPECS: readonly BlockSpec[] = [
   {
@@ -2472,9 +2510,9 @@ const BLACKSTONE_FAMILY_SPECS: readonly BlockSpec[] = [
     tiles: ['polished_blackstone', 'polished_blackstone', 'polished_blackstone'],
   },
   {
-    id: BLACKSTONE_BRICKS_ID,
-    name: 'minecraft:blackstone_bricks',
-    tiles: ['blackstone_bricks', 'blackstone_bricks', 'blackstone_bricks'],
+    id: POLISHED_BLACKSTONE_BRICKS_ID,
+    name: 'minecraft:polished_blackstone_bricks',
+    tiles: ['polished_blackstone_bricks', 'polished_blackstone_bricks', 'polished_blackstone_bricks'],
   },
   {
     // 鎏金黑石：深色石头里嵌着金块。**它是一件"矿石"而不是装饰**——
@@ -2512,6 +2550,30 @@ const LIGHTNING_ROD_SPEC: BlockSpec = {
   solid: false,
   opaque: false,
 };
+
+/**
+ * 黑石家族的"装饰性补齐"（批次 85，B50）：錾制与裂纹两块。
+ *
+ * ⚠️ 裂纹磨制黑石砖**没有合成配方**——原版只有"把黑石砖丢进熔炉烧"这一条路
+ * （见 `Smelting.ts`），所以它的说明里写的是"烧出来"，而断言里专门钉住
+ * "它不出现在任何合成配方的产物里"。
+ */
+const BLACKSTONE_DECOR_SPECS: readonly BlockSpec[] = [
+  {
+    id: CHISELED_POLISHED_BLACKSTONE_ID,
+    name: 'minecraft:chiseled_polished_blackstone',
+    tiles: ['chiseled_polished_blackstone', 'chiseled_polished_blackstone', 'chiseled_polished_blackstone'],
+  },
+  {
+    id: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
+    name: 'minecraft:cracked_polished_blackstone_bricks',
+    tiles: [
+      'cracked_polished_blackstone_bricks',
+      'cracked_polished_blackstone_bricks',
+      'cracked_polished_blackstone_bricks',
+    ],
+  },
+];
 
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
@@ -2565,6 +2627,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SIGN_SPECS,
   ...BLACKSTONE_FAMILY_SPECS,
   LIGHTNING_ROD_SPEC,
+  ...BLACKSTONE_DECOR_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2859,9 +2922,11 @@ export const Block = {
   OAK_SIGN: SIGN_ID_START,
   // ---- 黑石家族（K8 收尾，批次 82）：堡垒遗迹的建材
   POLISHED_BLACKSTONE: POLISHED_BLACKSTONE_ID,
-  BLACKSTONE_BRICKS: BLACKSTONE_BRICKS_ID,
+  POLISHED_BLACKSTONE_BRICKS: POLISHED_BLACKSTONE_BRICKS_ID,
   GILDED_BLACKSTONE: GILDED_BLACKSTONE_ID,
   LIGHTNING_ROD: LIGHTNING_ROD_ID,
+  CHISELED_POLISHED_BLACKSTONE: CHISELED_POLISHED_BLACKSTONE_ID,
+  CRACKED_POLISHED_BLACKSTONE_BRICKS: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
   SPRUCE_SAPLING: WOOD_SAPLING_ID_START + 2,
@@ -3319,10 +3384,13 @@ HARDNESS.set(Block.SMOOTH_BASALT, 1.25);
 HARDNESS.set(Block.BLACKSTONE, 1.5);
 // 黑石家族（批次 82）：原版三块都是 1.5（与黑石同一档）
 HARDNESS.set(Block.POLISHED_BLACKSTONE, 1.5);
-HARDNESS.set(Block.BLACKSTONE_BRICKS, 1.5);
+HARDNESS.set(Block.POLISHED_BLACKSTONE_BRICKS, 1.5);
 HARDNESS.set(Block.GILDED_BLACKSTONE, 1.5);
 // 避雷针（批次 83）：原版硬度 3、徒手挖不动（要镐）
 HARDNESS.set(Block.LIGHTNING_ROD, 3);
+// 黑石家族的两块装饰（批次 85）：与黑石同档 1.5
+HARDNESS.set(Block.CHISELED_POLISHED_BLACKSTONE, 1.5);
+HARDNESS.set(Block.CRACKED_POLISHED_BLACKSTONE_BRICKS, 1.5);
 HARDNESS.set(Block.MAGMA_BLOCK, 0.5);
 HARDNESS.set(Block.CRIMSON_NYLIUM, 0.4);
 HARDNESS.set(Block.WARPED_NYLIUM, 0.4);

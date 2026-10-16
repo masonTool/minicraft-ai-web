@@ -123,6 +123,11 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 断言里专门钉住"它们不在表里"——顺手给它们加一条"看起来合理"的配方是最容易犯的错
   { input: Item.COD, output: { id: Item.COOKED_COD, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
   { input: Item.SALMON, output: { id: Item.COOKED_SALMON, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
+
+  // 磨制黑石砖 → 裂纹磨制黑石砖（批次 85，B50）：原版**只有这一条路**
+  // （裂纹砖没有合成配方），所以它归 `none`：烟熏炉/高炉都不该接它
+  // （它们只吃食物/矿物，而这是建材）
+  { input: Block.POLISHED_BLACKSTONE_BRICKS, output: { id: Block.CRACKED_POLISHED_BLACKSTONE_BRICKS, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
 ];
 
 const RECIPE_BY_INPUT = new Map<number, SmeltingRecipe>(SMELTING_RECIPES.map((recipe) => [recipe.input, recipe]));
