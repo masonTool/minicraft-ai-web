@@ -20,7 +20,7 @@
 
 import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
 import { Chunk } from '../src/core/world/Chunk.ts';
-import { Block, BLOCKS, blockDef, blockTiles, blockHardness } from '../src/core/registry/blocks.ts';
+import { Block, BLOCKS, blockDef, blockTiles, blockHardness, faceTileOn } from '../src/core/registry/blocks.ts';
 import {
   facingOf,
   sixFacingOffset,
@@ -267,12 +267,14 @@ console.log('\n[贪心通道：有正脸的方块不参与合并]');
   }
 
   equal('2×2 石头被合并成 6 个大面（12 个三角形）', block2x2(Block.STONE, 0), 12);
-  // 熔炉不进贪心通道：4 个方块各输出自己的面、只剔掉内部相邻的那些
-  //  → 外层 4+4（四条侧边）+ 4（顶）+ 4（底）= 16 个四边形 = 32 个三角形（石头的 2.7 倍）
-  equal('2×2 熔炉**没有**被合并（16 个四边形 / 32 个三角形）', block2x2(Block.FURNACE, 0), 32);
+  // ⚠️ 这条断言在批次 64 写的是"熔炉**没有**被合并（32 个三角形）"——那时带正脸的方块
+  // 被整块挡在贪心通道之外。批次 76（O11）让合并键把**贴图**算进去之后它们照样合并，
+  // 于是这条断言**翻面**：与石头一样 12 个三角形。这正是那种"刻意留着、会在优化落地时
+  // 逼你回来改"的断言。
+  equal('2×2 同向熔炉**也**被合并（与石头一样 12 个三角形）', block2x2(Block.FURNACE, 0), 12);
   check(
-    '两者的差别就是"有没有被合并"（32 > 12，且石头那边是 6 个整面）',
-    block2x2(Block.FURNACE, 0) > block2x2(Block.STONE, 0),
+    '两者的差别就是"有没有被合并"（现在两边一样，说明熔炉也吃到了合并）',
+    block2x2(Block.FURNACE, 0) === block2x2(Block.STONE, 0),
   );
 }
 
@@ -371,6 +373,59 @@ console.log('\n[贴图：新加的三张未点火炉口在图集里]');
     );
   }
   equal('熔炉的硬度没被这一批改到（对照）', blockHardness(Block.FURNACE), 3.5);
+}
+
+console.log('\n[O11：合并键要比面级贴图（批次 76）]');
+{
+  const O11_Y = 64;
+  // 贴图名走**注册表判定**（上文已经逐面验过 `faceTile`）；这一节只量"合并行为"——
+  // 网格输出里的 uv 是**贴图内**的局部坐标（0~1），拿它认贴图会被误导
+  const NORTH: readonly [number, number, number] = [0, 0, -1];
+
+  /** 一排熔炉（逐个指定朝向）；返回三角形数与"正脸那张贴图出现了几次" */
+  function furnaceRow(facings: readonly number[]): { triangles: number; fronts: number } {
+    const chunk = new Chunk(0, 0);
+    for (let i = 0; i < facings.length; i++) {
+      chunk.set(2 + i, O11_Y, 8, Block.FURNACE);
+      chunk.setState(2 + i, O11_Y, 8, withFacing(0, facings[i]! as 0 | 1 | 2 | 3));
+    }
+    const ctx: MeshContext = {
+      getBlock: (wx, wy, wz) => {
+        if (wx < 0 || wx >= 16 || wz < 0 || wz >= 16) return Block.AIR;
+        return chunk.get(wx, wy, wz);
+      },
+      getBlockState: (wx, wy, wz) =>
+        wx < 0 || wx >= 16 || wz < 0 || wz >= 16 ? 0 : chunk.getState(wx, wy, wz),
+      getSkyLight: () => 15,
+      getBlockLight: () => 0,
+    };
+    const geometry = meshSection(chunk, Chunk.sectionOf(O11_Y), atlasStub, ctx).solid!;
+    // "正面用的是正脸那张、其余面用侧面那张"由注册表判定（与网格化同一条 `faceTileOn`）
+    const fronts = facings.filter(
+      (facing) => faceTileOn(Block.FURNACE, withFacing(0, facing as 0 | 1 | 2 | 3), NORTH, 2) === 'furnace_front',
+    ).length;
+    return { triangles: geometry.index!.count / 3, fronts };
+  }
+
+  // 三台**同向**熔炉：侧面各并成一张大面（逐盒的话是 3×6×2 = 36 个三角形）
+  const same = furnaceRow([0, 0, 0]);
+  equal('同向三连熔炉被合并到 12 个三角形（与石头一样）', same.triangles, 12);
+  equal('三台的正脸都朝着它自己那一面（3 台各 1 面）', same.fronts, 3);
+
+  // 朝向**不同**的邻居：正面那一面的贴图不同 → 合并键不同 → 不会并到一起
+  const mixed = furnaceRow([0, 2, 0]);
+  check(`朝向不同的邻居不会被并成一张（${mixed.triangles} > ${same.triangles}）`, mixed.triangles > same.triangles);
+  equal('朝向不同时，只有朝北的那两台在北面是正脸', mixed.fronts, 2);
+
+  // 四台同向：合并之后仍然是 12（大面把整排盖住）
+  equal('四台同向也是 12（整排只输出外层的 6 个大面）', furnaceRow([1, 1, 1, 1]).triangles, 12);
+
+  // 对照：同一条判据下，非正面那一面**必须**不是正脸（免得上面那个计数是空的）
+  // ⚠️ `faceTileOn` 的第四个参数是**贴图槽位**（0 顶 / 1 底 / 2 侧，与 `face.tile` 同一套），
+  // 不是 FACES 数组的下标——传错会静默回退到 `tiles[0]`（本批就写错过一次，被断言抓住）
+  equal('朝北时"南面"不是正脸（对照）', faceTileOn(Block.FURNACE, withFacing(0, 0), [0, 0, 1], 2), 'furnace_side');
+  equal('朝南时"南面"才是正脸（朝向确实跟着状态走）', faceTileOn(Block.FURNACE, withFacing(0, 2), [0, 0, 1], 2), 'furnace_front');
+  equal('朝北时"北面"是正脸', faceTileOn(Block.FURNACE, withFacing(0, 0), NORTH, 2), 'furnace_front');
 }
 
 console.log(`\n面级贴图测试：${passed} 通过 / ${failed} 失败`);

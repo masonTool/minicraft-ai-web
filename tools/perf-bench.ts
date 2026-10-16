@@ -18,6 +18,7 @@ import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { Chunk, SECTION_COUNT, WORLD_MIN_Y, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
 import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
+import { withFacing } from '../src/core/registry/blockState.ts';
 import {
   HEIGHT_DIRTY,
   computeColumn,
@@ -155,6 +156,70 @@ console.log('\n[网格化指纹]');
   // 这个常量在"改成无分配版 greedyMesh"之前记录过一次（-15756b7a），
   // 改完之后必须一模一样——网格化快了但画错了是最糟的结果
   check('指纹与记录的常量一致（优化不许改变任何顶点）', checksum === '-15756b7a', `实际 ${checksum}`);
+}
+
+// ---------------------------------------------------------------- 1.6 摆一片炉子（O11 的样本）
+
+/**
+ * 为什么单独一个样本：**自然地形里没有带正脸的方块**（熔炉/活塞/侦测器/木桶/末影箱/潜影盒
+ * 都是玩家摆出来的），所以 1.5 那个指纹对"面级贴图能不能合并"这类改动**完全不敏感**——
+ * 当年只测地形，于是"带正脸的方块整块退出贪心通道"这件事一直没有被量到
+ * （批次 64 留下的 O11，批次 76 收掉）。
+ */
+console.log('\n[带正脸的方块：一片 16×16 的同向熔炉]');
+
+/** 一格几何的指纹（与 1.5 同一套混合方式，只是只算一格） */
+function geometryChecksum(geometry: { index?: { count: number } | null; getAttribute: (name: string) => { array: ArrayLike<number> } | undefined } | null): string {
+  let hash = 0;
+  if (!geometry) return '0';
+  hash = mix(hash, geometry.index?.count ?? 0);
+  for (const name of ['position', 'uv', 'aLight']) {
+    const attribute = geometry.getAttribute(name);
+    if (!attribute) continue;
+    const array = attribute.array as Float32Array;
+    for (let i = 0; i < array.length; i++) hash = mix(hash, Math.round(array[i]! * 1000));
+  }
+  return hash.toString(16);
+}
+
+{
+  const FURNACE_Y = 64;
+  const scene = new Chunk(0, 0);
+  for (let z = 0; z < 16; z++) {
+    for (let x = 0; x < 16; x++) {
+      scene.set(x, FURNACE_Y, z, Block.FURNACE);
+      // 全部朝北：**同向**才该合并得最狠（朝向不同就不该并到一起，见 face-tile-test）
+      scene.setState(x, FURNACE_Y, z, withFacing(0, 0));
+    }
+  }
+  const sceneCtx: MeshContext = {
+    getBlock: (x, y, z) => {
+      if (x < 0 || x >= 16 || z < 0 || z >= 16) return Block.AIR;
+      return scene.get(x, y, z);
+    },
+    getBlockState: (x, y, z) => (x < 0 || x >= 16 || z < 0 || z >= 16 ? 0 : scene.getState(x, y, z)),
+    getSkyLight: () => 15,
+    getBlockLight: () => 0,
+  };
+
+  const start = performance.now();
+  const meshed = meshSection(scene, Chunk.sectionOf(FURNACE_Y), atlasStub, sceneCtx).solid!;
+  const meshMs = performance.now() - start;
+
+  const triangles = meshed.index!.count / 3;
+  // 逐盒（不合并）那一版应该输出多少：这一片是"一层"方块，所以
+  //   上下两面全露（256×2）+ 四条边上各自的侧面（4×16）= 576 个四边形 = 1152 个三角形
+  const boxPathTriangles = 1152;
+  console.log(`  256 台熔炉：${meshMs.toFixed(2)} ms · ${triangles} 个三角形（逐盒约 ${boxPathTriangles}）`);
+  console.log(`  这一格的顶点指纹：${geometryChecksum(meshed)}`);
+
+  check(
+    `一片同向熔炉确实吃到了合并（${triangles} 远小于逐盒的 ${boxPathTriangles}）`,
+    triangles * 10 < boxPathTriangles,
+  );
+  // ⚠️ 这个常量与 1.5 的性质不同：它**会因为网格化策略变化而变**（正是 O11 的目的），
+  // 改合并策略时重跑一次、把新值钉上；它同时也能抓住"炉子又掉队回逐盒通道"这类回退
+  check('一片熔炉的指纹与记录的常量一致', geometryChecksum(meshed) === '789fc544', `实际 ${geometryChecksum(meshed)}`);
 }
 
 // ---------------------------------------------------------------- 2. 高度图

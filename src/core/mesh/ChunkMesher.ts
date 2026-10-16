@@ -26,7 +26,7 @@
  */
 
 import * as THREE from 'three';
-import { Block, blockDef, blockTiles, pottedPlantTile, type BlockDef } from '../registry/blocks.ts';
+import { Block, blockDef, blockTiles, faceTileOn, pottedPlantTile, type BlockDef } from '../registry/blocks.ts';
 import {
   FLOWER_POT_RIM,
   canConnectTo,
@@ -370,11 +370,9 @@ function emitFace(
   precomputed?: readonly CornerLight[],
 ): void {
   const { buf, def, isTranslucent, atlas, ctx, originX, originZ, sampleBlock } = e;
-  // 贴图按**状态**取：红石灯亮/灭是两套贴图，统一走 blockTiles
+  // 贴图按**状态**取，面级贴图优先（两者都在 `faceTileOn` 里，与贪心通道共用同一条判定）
   const state = ctx.getBlockState(originX + x, worldY, originZ + z);
-  const tiles = blockTiles(def.id, state);
-  // 面级贴图（批次 64）：有正脸的方块（熔炉家族）**这一面**单独一张，其余面回退到 tiles
-  const tile = def.faceTile?.(state, face.dir) ?? tiles[face.tile];
+  const tile = faceTileOn(def.id, state, face.dir, face.tile);
   const [tileU, tileV] = atlas.tileOrigin(tile);
   const [bx0, by0, bz0, bx1, by1, bz1] = box;
 
@@ -565,17 +563,20 @@ function greedyMesh(
           const id = chunk.get(x, worldY, z);
           if (id === Block.AIR) continue;
           const def = blockDef(id);
-          if (!isFullBlockShape(def.shape, chunk.getState(x, worldY, z))) continue;
-          // **有正脸的方块不进贪心通道**（批次 64）：贪心合并的前提是"这些格子这一面的
-          // 贴图一样"，而面级贴图正好破坏这个前提。它们改走逐盒通道（面数不多，代价可忽略）。
-          if (def.faceTile) continue;
+          const state = chunk.getState(x, worldY, z);
+          if (!isFullBlockShape(def.shape, state)) continue;
+          // 带正脸的方块（熔炉/活塞/侦测器/木桶/末影箱/潜影盒，批次 76）也**进**贪心通道了：
+          // 合并键里本来就比了贴图，所以"同一面两侧贴图不同"这件事**自动**不会并到一起
+          // （朝北的炉子与朝南的炉子，正面那一面的贴图不同 → 键不同 → 各成一组）。
+          // 批次 64 当年是整块跳过它们，那让"摆一片炉子"完全用不上合并——
+          // 而炉子恰好是最常被摆成一片的方块之一。
 
           // 面剔除：邻居不透明则本面不可见；同种半透明方块之间的内部面也剔除
           const neighborId = sampleBlock(x + face.dir[0], y + face.dir[1], z + face.dir[2]);
           if (blockDef(neighborId).opaque) continue;
           if (neighborId === id && def.translucent) continue;
 
-          const tile = blockTiles(id, ctx.getBlockState(originX + x, worldY, originZ + z))[face.tile];
+          const tile = faceTileOn(id, ctx.getBlockState(originX + x, worldY, originZ + z), face.dir, face.tile);
           const layerId = layerOf(id);
           // 四个角直接写进复用对象，不走 `face.corners.map(...)`（那会每面多分配 1 个数组）
           const corners = face.corners;
@@ -702,10 +703,10 @@ export function meshSection(
 
         const def = blockDef(id);
         // 完整立方体（含满格的流体）已经在上面的贪心网格化里处理过。
-        // ⚠️ **有正脸的方块除外**（批次 64）：它们在贪心通道里被显式跳过（每一面的贴图不一样，
-        // 不能合并），所以必须由这里接手——两条通道的判据要**成对**改，
-        // 只改一处的结果是"这个方块一个面都不输出"（方块直接看不见了）。
-        if (isFullBlockShape(def.shape, chunk.getState(x, worldY, z)) && !def.faceTile) continue;
+        // ⚠️ 批次 76（O11）之后**连带正脸的方块也归贪心通道**（合并键里比了贴图，不会并错），
+        // 所以这里的判据回到"整格就跳过"。两条通道的判据必须**成对**改——
+        // 只改一处的结果是"这个方块一个面都不输出"（方块直接看不见了，批次 64 的原坑）。
+        if (isFullBlockShape(def.shape, chunk.getState(x, worldY, z))) continue;
 
         const emit: EmitContext = {
           buf: buffers[layerOf(id)],

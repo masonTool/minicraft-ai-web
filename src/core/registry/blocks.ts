@@ -2749,6 +2749,27 @@ export function blockTiles(id: number, state: number): readonly [string, string,
   return def.stateTiles ? def.stateTiles(state) : def.tiles;
 }
 
+/**
+ * 某一面到底用哪张贴图（批次 76，O11）：**唯一一处判定**。
+ *
+ * 顺序是"先问面级贴图、再回退到按状态取的通用贴图"——
+ *  - 熔炉家族（面级贴图）：**朝向那一面**是正脸，其余面回退；
+ *  - 红石灯这类：`stateTiles` 按状态换整套贴图（与面无关）。
+ *
+ * ⚠️ 抽出来的原因：这条规则同时被**贪心通道**与**逐盒通道**用到，
+ * 两处各写一遍的话，"面级贴图"这个能力以后加新用法时必然只改一处
+ * （批次 64 已经栽过一次：只改了贪心通道，熔炉一个面都不输出、整块看不见了）。
+ */
+export function faceTileOn(
+  id: number,
+  state: number,
+  faceDir: readonly [number, number, number],
+  faceIndex: number,
+): string {
+  const def = BLOCKS[id] ?? BLOCKS[0]!;
+  return def.faceTile?.(state, faceDir) ?? blockTiles(id, state)[faceIndex] ?? def.tiles[0]!;
+}
+
 /** 按状态取发光等级（红石灯亮时为 15） */
 export function emitLightWithState(id: number, state: number): number {
   const def = BLOCKS[id] ?? BLOCKS[0]!;
