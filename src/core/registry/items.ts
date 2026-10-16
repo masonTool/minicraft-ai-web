@@ -710,6 +710,8 @@ const FUNCTIONAL = new Set<number>([
   Block.DAYLIGHT_DETECTOR,
   // 绊线钩（批次 55）：同页。⚠️ 绊线本身**没有物品**（`itemless`），不在这里登记
   Block.TRIPWIRE_HOOK,
+  // TNT（批次 56）：红石元件，同页
+  Block.TNT,
   // 花盆（批次 52）：原版把它摆在"装饰"页（1.19 起并进了功能页），
   // 本项目没有装饰页——它是"右键往里种一株"的功能方块，与营火/熔炉同一类
   Block.FLOWER_POT,

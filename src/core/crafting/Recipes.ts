@@ -623,6 +623,15 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // 写死的数字会让"可可豆做出浅蓝色染料"——这种错在界面上看着就像个恶作剧
   { kind: 'shapeless' as const, result: { id: dyeItemId(BROWN_DYE_INDEX), count: 1 }, ingredients: [Item.COCOA_BEANS] },
 
+  // ---- TNT（批次 56）
+  // 原版：**5 个火药（四角 + 中心）+ 4 个沙**（十字位置）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.TNT, count: 1 },
+    pattern: ['GSG', 'SGS', 'GSG'],
+    key: { G: Item.GUNPOWDER, S: Block.SAND },
+  },
+
   // ---- 绊线钩（批次 55）
   // 原版：铁锭 / 木棍 / 木板 竖着摆 → **2 个**绊线钩
   {

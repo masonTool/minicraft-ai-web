@@ -243,6 +243,23 @@ export function withDisarmed(state: number, disarmed: boolean): number {
   return disarmed ? state | DISARMED_MASK : state & ~DISARMED_MASK;
 }
 
+/**
+ * TNT 引信闪烁的"相位"（批次 56）。
+ *
+ * 与门的门轴 / 阳光传感器的反向 / 绊线的剪断共用 bit4（不同形状族可以重用位）。
+ * 引信期间每 0.2 秒翻一次，`stateTiles` 据此在"正常贴图"与"发白贴图"之间换——
+ * 这就是原版那种"一闪一闪"（原版是实体渲染时叠白，我们只能换贴图）。
+ */
+const FLASH_MASK = 0b10000;
+
+export function isFlash(state: number): boolean {
+  return (state & FLASH_MASK) !== 0;
+}
+
+export function withFlash(state: number, on: boolean): number {
+  return on ? state | FLASH_MASK : state & ~FLASH_MASK;
+}
+
 /** 绊线钩的"线接上了没有"（bit0；渲染与调试要用，触发判定也要它） */
 const TRIPWIRE_ATTACHED_MASK = 0b1;
 

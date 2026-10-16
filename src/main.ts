@@ -67,6 +67,7 @@ import {
 } from './core/tick/RandomTicks.ts';
 import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
 import { scrapeResult } from './core/world/Copper.ts';
+import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
 import { FIRE_IGNITE_SECONDS, burnsOnContact, igniteAt } from './core/world/Fire.ts';
 import {
@@ -464,6 +465,17 @@ class App {
     // 阳光传感器（批次 54）：红石引擎里唯一一个要看**光照**的元件
     getSkyLight: (x, y, z) => this.world.getSkyLight(x, y, z),
   };
+  /**
+   * TNT 的引信（批次 56）：点燃之后"闪 4 秒再炸"，这份状态跨帧存在这里。
+   * 它需要一个很小的世界接口（读写方块与状态），爆炸本身是回调 → 走既有的 `explodeAt`。
+   */
+  private readonly primedTnt = new PrimedTnt();
+  private readonly tntWorld: TntWorld = {
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+    getState: (x, y, z) => this.world.getBlockState(x, y, z),
+    setBlock: (x, y, z, id, state) => this.world.setBlockAndUpdate(x, y, z, id, state),
+    setState: (x, y, z, state) => this.world.setStateAndUpdate(x, y, z, state),
+  };
   /** 末影龙血条（触摸端也共用；元素不存在时为 null） */
   private bossBarEl: HTMLElement | null = null;
   private bossFillEl: HTMLElement | null = null;
@@ -561,6 +573,10 @@ class App {
     blockLightAt: (x, y, z) => this.world.getBlockLight(x, y, z),
     // "这里正在下雪吗"＝正在降水 **且** 这一列是寒冷群系（原版就是按列判的）
     snowingAt: (x, _y, z) => this.weather.raining && this.isSnowyColumn(x, z),
+    // TNT（批次 56）：火或岩浆挨着就要点着（随机刻里判，点燃走引信表）
+    igniteTnt: (x, y, z) => {
+      this.primedTnt.prime(this.tntWorld, x, y, z);
+    },
     // `raining` 每 tick 现写（见 `tickWorldBlocks`）——天气是变量，
     // 用 getter 会拿到 `this` 指向对象本身而不是 App 实例
     raining: false,
@@ -776,6 +792,10 @@ class App {
     },
   ) {
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType);
+    // TNT（批次 56）：红石引擎只负责"判定这里通电了"，点火交给拿着引信表的那一方
+    this.redstone.onTntIgnite = (x, y, z) => {
+      this.primedTnt.prime(this.tntWorld, x, y, z);
+    };
     this.deathEl = deathEl;
     this.vitalsHud = new VitalsHud(vitalsEl);
     // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
@@ -2443,6 +2463,16 @@ class App {
     const y = this.hit.y + this.hit.ny;
     const z = this.hit.z + this.hit.nz;
 
+    // ---- 0) TNT（批次 56）：对着 TNT 用打火石 = 点燃引信（原版行为）
+    if (this.world.getBlock(this.hit.x, this.hit.y, this.hit.z) === Block.TNT) {
+      if (this.primedTnt.prime(this.tntWorld, this.hit.x, this.hit.y, this.hit.z)) {
+        this.damageHeldTool();
+        this.hand.swing();
+        this.refreshHotbar();
+        return true;
+      }
+    }
+
     // ---- 1) 先试传送门（只有对着黑曜石点才有意义）
     if (this.world.getBlock(this.hit.x, this.hit.y, this.hit.z) === Block.OBSIDIAN) {
       const result = ignitePortal(this.portalWorld, x, y, z);
@@ -3029,6 +3059,12 @@ class App {
           const id = this.world.getBlock(bx, by, bz);
           if (id === Block.AIR) continue;
           if (id === Block.BEDROCK || id === Block.OBSIDIAN) continue;
+          // TNT（批次 56）：爆炸范围内的 TNT 是**被点燃**而不是被炸掉的（原版行为），
+          // 于是"一片 TNT"会像多米诺骨牌一样挨个炸开（串联反应）
+          if (id === Block.TNT) {
+            this.primedTnt.prime(this.tntWorld, bx, by, bz);
+            continue;
+          }
           if (this.world.setBlockAndUpdate(bx, by, bz, Block.AIR)) {
             broken++;
             // 炸完要唤醒周围的水（挖掉水底会让水重新流）
@@ -3123,6 +3159,12 @@ class App {
     this.updateEndBoss();
     this.updateMobSpawning(dt);
     // 红石：按钮回弹、中继器延迟、压力板轮询都由它推进
+    //
+    // ⚠️ 引信推进（TNT）用**真实 dt**（不夹到 0.1）：卡顿一下就要真的少 4 秒引信，
+    // 否则一次长卡顿会让 TNT 多闪好一会儿（红石那边夹 dt 是因为它是逻辑结算，
+    // 而这里是"时间流逝"。两条不同的取舍，写在各自旁边）
+    const tntDt = Math.min(dt, 0.5);
+    this.primedTnt.update(tntDt, this.tntWorld, (x, y, z, power) => this.explodeAt(x, y, z, power));
     this.redstone.tick(this.redstoneWorld, Math.min(dt, 0.1));
   }
 

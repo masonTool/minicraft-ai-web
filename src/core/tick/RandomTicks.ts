@@ -71,6 +71,14 @@ export interface TickWorld {
    */
   blockLightAt?: (x: number, y: number, z: number) => number;
   /**
+   * 点燃一格 TNT（批次 56）：火焰/岩浆挨着 TNT 时要把它点着。
+   *
+   * 为什么走回调而不是直接改方块状态：**引信不在方块状态里**（它是一张运行时表，
+   * 见 `core/world/PrimedTnt.ts`），所以"点燃"这件事得由拿着那张表的人来做。
+   * 不传就当"点不着"（离线测试不必为了它搭一套引信）。
+   */
+  igniteTnt?: (x: number, y: number, z: number) => void;
+  /**
    * 该点是否正在**下雪**（下雨 + 该列是寒冷群系）。
    * 原版是"雨天在寒冷群系按列下雪"，所以判据是**按位置**的，
    * 一个全局的 `raining` 不够用（雨地里不该积雪）。
@@ -400,6 +408,28 @@ function kelpBehavior(world: TickWorld, x: number, y: number, z: number, random:
   return world.setBlock(x, y + 1, z, id);
 }
 
+// ---------------------------------------------------------------- TNT（批次 56）
+
+/**
+ * TNT：旁边有**火或岩浆**就点燃（原版行为：火焰与岩浆都能引燃 TNT）。
+ *
+ * 为什么放在随机刻里：本项目没有原版那套"方块更新"（火方块每一次燃烧结算都会
+ * 通知邻居），凡是"被旁边的方块点着"这类逻辑都走随机刻（与草方块蔓延、雪层融化同一档）。
+ * 代价是"火挨着 TNT"要等它自己被抽到才点着（原版几乎立刻）。
+ */
+function tntBehavior(world: TickWorld, x: number, y: number, z: number): boolean {
+  const ignite = world.igniteTnt;
+  if (!ignite) return false;
+  for (const [dx, dy, dz] of NEIGHBORS_6) {
+    const neighbor = world.getBlock(x + dx, y + dy, z + dz);
+    if (neighbor === Block.FIRE || neighbor === Block.LAVA) {
+      ignite(x, y, z);
+      return true;
+    }
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------- 珊瑚（批次 51）
 
 /**
@@ -570,6 +600,8 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   // 于是"漏掉一种珊瑚"这件事在结构上就不可能发生
   ...[...CORAL_DEAD_VARIANT.keys()].map((id) => [id, coralSurviveBehavior] as const),
   ...[...CORAL_LIVE_VARIANT.keys()].map((id) => [id, coralReviveBehavior] as const),
+  // TNT（批次 56）：旁边有火或岩浆就点着（点燃本身走 `igniteTnt` 回调）
+  [Block.TNT, tntBehavior],
 ]);
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */

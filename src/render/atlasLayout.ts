@@ -743,6 +743,12 @@ export const TILE_ORDER = [
   'tripwire',
   'tripwire_hook',
   'tripwire_hook_powered',
+  // ---- TNT（批次 56）：正常三张 + 引信中"发白"的两张（闪烁靠状态翻相位换贴图）
+  'tnt_top',
+  'tnt_bottom',
+  'tnt_side',
+  'tnt_primed_top',
+  'tnt_primed_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

@@ -8,7 +8,7 @@
  */
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
-import { isInverted, isLitState, isPowered, type BlockShape } from './blockState.ts';
+import { isFlash, isInverted, isLitState, isPowered, type BlockShape } from './blockState.ts';
 
 export interface BlockDef {
   readonly id: number;
@@ -1639,6 +1639,36 @@ export const TRIPWIRE_HOOK_ID = 474;
 /** 两个钩子之间最多隔多少格（原版 40） */
 export const TRIPWIRE_MAX_LENGTH = 40;
 
+/**
+ * TNT（批次 56）：**引信 + 爆炸**，红石元件表里最"暴力"的一件。
+ *
+ * 三件要盯住的事：
+ *  - **三种点燃方式**：打火石右键 / 红石信号 / 旁边的火与岩浆（随机刻）
+ *  - **引信 4 秒**（原版），期间**一闪一闪**（状态位里翻一个"闪相位"）
+ *  - **爆炸走既有的 `explodeAt`**（苦力怕那条路，威力 4，原版 TNT 就是这个数）
+ *
+ * ⚠️ 与原版的差异：原版引信中的 TNT 是一个**实体**（会掉下去、能被推动），
+ * 这里仍然是**方块**（靠状态位 + 运行时引信表），所以它不会在半空中掉下去。
+ * 理由：实体要走渲染那条路（新模型 + 实体渲染器），而"爆炸"这件事本身就是我们要的；
+ * 这条差异记在 TASKS B30 里。
+ */
+export const TNT_ID = 475;
+
+const TNT_SPECS: readonly BlockSpec[] = [
+  {
+    id: TNT_ID,
+    name: 'minecraft:tnt',
+    // 正常是红白相间的炸药块；"闪"的那一相位换成发白的那两张（原版引信中就是白闪）
+    tiles: ['tnt_top', 'tnt_bottom', 'tnt_side'],
+    // 引信中：`powered` = 已点燃（与红石系统共用同一位），`flash` = 这一相位要发白
+    stateTiles: (state) =>
+      isPowered(state) && isFlash(state)
+        ? ['tnt_primed_top', 'tnt_primed_top', 'tnt_primed_side']
+        : ['tnt_top', 'tnt_bottom', 'tnt_side'],
+    shape: 'cube',
+  },
+];
+
 const TRIPWIRE_SPECS: readonly BlockSpec[] = [
   {
     id: TRIPWIRE_ID,
@@ -1953,6 +1983,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SCAFFOLDING_SPECS,
   ...DAYLIGHT_DETECTOR_SPECS,
   ...TRIPWIRE_SPECS,
+  ...TNT_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2218,6 +2249,8 @@ export const Block = {
   // ---- 绊线与绊线钩（批次 55，见 `TRIPWIRE_SPECS`）
   TRIPWIRE: TRIPWIRE_ID,
   TRIPWIRE_HOOK: TRIPWIRE_HOOK_ID,
+  // ---- TNT（批次 56，见 `TNT_SPECS`）
+  TNT: TNT_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2494,6 +2527,8 @@ HARDNESS.set(Block.DAYLIGHT_DETECTOR, 0.2);
 // 绊线与绊线钩（批次 55）：都是 0（原版一碰就掉）
 HARDNESS.set(Block.TRIPWIRE, 0);
 HARDNESS.set(Block.TRIPWIRE_HOOK, 0);
+// TNT（批次 56）：0（原版徒手一碰就掉）
+HARDNESS.set(Block.TNT, 0);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2792,6 +2827,8 @@ HAND_HARVESTABLE.add(Block.DAYLIGHT_DETECTOR);
 // 绊线与绊线钩（批次 55）：徒手可采
 HAND_HARVESTABLE.add(Block.TRIPWIRE);
 HAND_HARVESTABLE.add(Block.TRIPWIRE_HOOK);
+// TNT（批次 56）：徒手可采（拆下来还能用）
+HAND_HARVESTABLE.add(Block.TNT);
 
 /**
  * 作物的生长阶段表（按顺序）。

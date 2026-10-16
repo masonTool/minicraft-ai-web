@@ -97,6 +97,8 @@ export function isRedstoneComponent(id: number): boolean {
     // 绊线与绊线钩（批次 55）：两者都要是元件，洪泛才能把一条回路连成一片
     case Block.TRIPWIRE:
     case Block.TRIPWIRE_HOOK:
+    // TNT（批次 56）：通电就点燃（它是"负载"，但点燃的后果在引信表那边）
+    case Block.TNT:
       return true;
     default:
       return false;
@@ -172,6 +174,18 @@ export class RedstoneEngine {
   private readonly dirtySet = new Set<string>();
   /** 统计：本次会话算过多少次电路（调试面板用） */
   updates = 0;
+
+  /** 已经"因为通电而点燃"的 TNT（上升沿判定用） */
+  private readonly tntPrimed = new Set<string>();
+
+  /**
+   * TNT 被红石点燃时的回调（批次 56）。
+   *
+   * ⚠️ 为什么是回调而不是引擎自己点燃：**引信不在方块状态里**——它是一张运行时表
+   * （`core/world/PrimedTnt.ts`），写那张表的只能是拿着它的人（main）。
+   * 引擎只负责"判定这里通电了"，点火这件事交给外面。
+   */
+  onTntIgnite?: (x: number, y: number, z: number) => void;
 
   /** 玩家右键拉杆：开 ↔ 关 */
   toggleLever(world: RedstoneWorld, x: number, y: number, z: number): boolean {
@@ -657,6 +671,21 @@ export class RedstoneEngine {
               this.markDirty(nx, ny, nz);
               changed = true;
             }
+          }
+          break;
+        }
+        case Block.TNT: {
+          // TNT（批次 56）：通电就点燃。⚠️ 用**上升沿**判定（与中继器同一套路）——
+          // 每轮重算都调一次的话，`markDirty` 会把自己反复排进队列，
+          // 一路烧到 `MAX_ITERATIONS`（点燃本身是幂等的，所以表现只是"白算 8 轮"）
+          const tntKey = keyOf(nx, ny, nz);
+          const wasPrimed = this.tntPrimed.has(tntKey);
+          if (input > 0 && !wasPrimed) {
+            this.tntPrimed.add(tntKey);
+            this.onTntIgnite?.(nx, ny, nz);
+          } else if (input <= 0 && wasPrimed) {
+            // 断电后允许再点一次（比如玩家又放了一块 TNT 在那个位置）
+            this.tntPrimed.delete(tntKey);
           }
           break;
         }

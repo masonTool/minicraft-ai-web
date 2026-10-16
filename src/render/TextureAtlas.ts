@@ -3802,6 +3802,57 @@ function tripwireHook(inverted: boolean): Painter {
 PAINTERS.tripwire_hook = tripwireHook(false);
 PAINTERS.tripwire_hook_powered = tripwireHook(true);
 
+// ---------------------------------------------------------------- TNT（批次 56）
+
+/**
+ * TNT 侧面：一圈红白相间的炸药块（原版就是"红底 + 白字 TNT"）。
+ * 这里的"字"用**三条白杠**表示（16×16 画不出清晰的字母，杠比糊字好看）。
+ */
+function tntSide(primed: boolean): Painter {
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    const base = primed ? [248, 236, 236] : [196, 58, 50];
+    // 中间那条白带 + 杠（"TNT" 的样子）
+    const band = y >= 4 && y <= 11;
+    const bar = band && ((x >= 3 && x <= 5 && y >= 6 && y <= 9) || (x >= 7 && x <= 9 && y >= 6 && y <= 9) || (x >= 11 && x <= 13 && y >= 6 && y <= 9));
+    if (band) {
+      const white = primed ? [255, 255, 255] : [238, 232, 220];
+      const shade = bar ? 0.82 : 1;
+      return [clamp255(white[0]! * shade + jitter), clamp255(white[1]! * shade + jitter), clamp255(white[2]! * shade + jitter), 255];
+    }
+    const shade = (x + y) % 4 === 0 ? 0.9 : 1;
+    return [clamp255(base[0]! * shade + jitter), clamp255(base[1]! * shade + jitter), clamp255(base[2]! * shade + jitter), 255];
+  };
+}
+
+PAINTERS.tnt_side = tntSide(false);
+PAINTERS.tnt_primed_side = tntSide(true);
+
+/** 顶面：一圈红边围着中间的白色"引信口" */
+function tntTop(primed: boolean): Painter {
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    const center = Math.hypot(x - 7.5, y - 7.5) < 4.2;
+    if (center) {
+      const shade = primed ? 1 : 0.94;
+      return [clamp255(240 * shade + jitter), clamp255(236 * shade + jitter), clamp255(224 * shade + jitter), 255];
+    }
+    const base = primed ? [246, 230, 230] : [186, 54, 46];
+    const shade = (x * 3 + y * 5) % 7 === 0 ? 0.88 : 1;
+    return [clamp255(base[0]! * shade + jitter), clamp255(base[1]! * shade + jitter), clamp255(base[2]! * shade + jitter), 255];
+  };
+}
+
+PAINTERS.tnt_top = tntTop(false);
+PAINTERS.tnt_primed_top = tntTop(true);
+
+/** 底面：与侧面同一套配色，但没有白带（原版底面就是纯红） */
+PAINTERS.tnt_bottom = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const shade = (x + y) % 5 === 0 ? 0.88 : 1;
+  return [clamp255(186 * shade + jitter), clamp255(54 * shade + jitter), clamp255(46 * shade + jitter), 255];
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;
