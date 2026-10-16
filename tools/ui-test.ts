@@ -33,8 +33,15 @@ import { iconBackingScale } from '../src/ui/ItemIcon.ts';
 import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
 import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
 import { BackButton } from '../src/ui/BackButton.ts';
-import { STICK_MODES, STICK_MODE_LABELS } from '../src/ui/TouchControls.ts';
-import { DEFAULT_SETTINGS, TOUCH_SCALE_MAX, TOUCH_SCALE_MIN, loadSettings } from '../src/ui/SettingsScreen.ts';
+import { STICK_MODES, STICK_MODE_LABELS, isTouchUi } from '../src/ui/TouchControls.ts';
+import {
+  DEFAULT_SETTINGS,
+  SETTING_GROUP_LABELS,
+  SETTING_GROUPS,
+  TOUCH_SCALE_MAX,
+  TOUCH_SCALE_MIN,
+  loadSettings,
+} from '../src/ui/SettingsScreen.ts';
 import { CREATIVE_TAB_ICONS, missingTabIcons } from '../src/ui/CreativeTabs.ts';
 import { ITEM_CATEGORIES, itemDef, itemIconTile } from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
@@ -129,7 +136,58 @@ console.log('\n[触摸按钮图标]');
     check(`${name} 有中文说明（aria-label 用）`, (TOUCH_ICON_LABELS[name] ?? '').length > 0);
     svgs.add(svg);
   }
-  equal('六个图标互不相同（不会有两个按钮长一样）', svgs.size, TOUCH_ICON_NAMES.length);
+  equal('七个图标互不相同（不会有两个按钮长一样）', svgs.size, TOUCH_ICON_NAMES.length);
+}
+
+// ---------------------------------------------------------------- 2.5 手机端操作界面
+
+console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化 / 设置分页]');
+{
+  // ---- ① 手机端"设置/暂停"必须有入口（原来只有 PC 的 Esc，手机上打不开）
+  check('图标集里有 pause（顶部暂停键）', TOUCH_ICON_NAMES.includes('pause'));
+  check('pause 有中文说明（aria-label 用）', (TOUCH_ICON_LABELS.pause ?? '').length > 0);
+
+  // ---- ② 触摸判据只有一处：`isTouchUi()` 读的是 <body class="touch-mode">
+  //      （构造在触摸层**之前**的面板也要拿到正确答案，所以它同时兜底 `isTouchDevice()`）
+  {
+    const globals = globalThis as unknown as { document?: unknown };
+    const hadDocument = 'document' in globals;
+    const previousDocument = globals.document;
+    globals.document = { body: { classList: { contains: (name: string) => name === 'touch-mode' } } };
+    check('body.touch-mode 时 isTouchUi() 为真', isTouchUi());
+    globals.document = { body: { classList: { contains: () => false } } };
+    check('没有标记、又不在触摸设备上时为假', !isTouchUi());
+    if (hadDocument) globals.document = previousDocument;
+    else delete globals.document;
+  }
+
+  // ---- ③ 设置分组：页签与 section 一一对应（漏一组 = 有一页设置永远看不到）
+  equal('四个分组（图形/操作/声音/游戏）', SETTING_GROUPS.length, 4);
+  check('每个分组都有中文名', SETTING_GROUPS.every((group) => (SETTING_GROUP_LABELS[group] ?? '').length > 0));
+  equal('分组名不重复', new Set(SETTING_GROUPS.map((group) => SETTING_GROUP_LABELS[group])).size, SETTING_GROUPS.length);
+
+  // ---- ④ CSS 守卫（少哪一条就是哪一种"半手机半桌面"的怪界面）
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  for (const [label, needle] of [
+    ['顶部暂停键容器', '#touch-pause {'],
+    ['暂停键尺寸吃 --touch-scale（与"触摸按钮大小"同一个设置项）', '#touch-pause .touch-button { width: calc(52px * var(--touch-scale, 1));'],
+    ['手机端设置面板整屏', 'body.touch-mode .settings-panel { width: 100%; max-width: none; height: 100%; max-height: none;'],
+    ['手机端显示分组页签', 'body.touch-mode .settings-tabs { display: flex;'],
+    ['手机端一次只显示一组（消除长滚动）', 'body.touch-mode .settings-section.active { display: flex; }'],
+    ['手机端隐藏页签上已写过的分类小标题', 'body.touch-mode .settings-group { display: none; }'],
+    ['手机端不显示快捷栏序号（没有数字键）', 'body.touch-mode #hotbar .slot .index { display: none; }'],
+  ] as const) {
+    check(`index.html 里有"${label}"`, compact.includes(needle), needle);
+  }
+
+  // ---- ⑤ 手机端不能出现键盘字母（用户直接提的一条：关界面用 ✕，不是字母 R）
+  const recipeBook = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const inventory = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const settings = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  check('配方书的关闭键在手机上是 ✕（PC 才写 "关闭 (R)"）', recipeBook.includes("isTouchUi() ? '✕' : '关闭 (R)'"));
+  check('背包标题栏不在手机上说 "配方书 (R)"', inventory.includes("touchDevice ? '配方书' : '配方书 (R)'"));
+  check('设置面板的副标题在手机上不提 Esc', settings.includes("isTouchUi() ? '改动立即生效"));
 }
 
 // ---------------------------------------------------------------- 3. HTML 外壳
