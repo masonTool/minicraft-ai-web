@@ -3142,6 +3142,92 @@ PAINTERS.painting_wasteland = paintingPainter([228, 206, 156], [
   [11, 11, 4, 2, [176, 146, 88]],
 ]);
 
+// ---- 村民的工作站四件（J23，批次 90）
+// 四个都是"木架 + 一件工具"的思路：一眼能分出谁是谁（村里认领职业时靠它认路）。
+const WOOD_FRAME: readonly [number, number, number] = [156, 118, 74];
+const WOOD_FRAME_DARK: readonly [number, number, number] = [122, 92, 58];
+const WOOD_FRAME_LIGHT: readonly [number, number, number] = [186, 148, 100];
+
+/** 讲台：顶面摊开的书（两侧是木台），侧面木框 + 露出来的书脊 */
+PAINTERS.lectern_top = paintingPainter(WOOD_FRAME_LIGHT, [
+  [0, 0, 16, 3, WOOD_FRAME],
+  [0, 13, 16, 3, WOOD_FRAME],
+  [2, 3, 12, 10, [242, 238, 228]],
+  [2, 3, 12, 1, [214, 208, 196]],
+  [7, 3, 1, 10, [198, 190, 178]],
+  [4, 5, 3, 1, [96, 96, 104]],
+  [4, 7, 5, 1, [96, 96, 104]],
+  [4, 9, 4, 1, [96, 96, 104]],
+  [10, 5, 3, 1, [96, 96, 104]],
+  [10, 7, 5, 1, [96, 96, 104]],
+]);
+PAINTERS.lectern_side = paintingPainter(WOOD_FRAME_DARK, [
+  [0, 0, 16, 4, WOOD_FRAME],
+  [0, 10, 16, 6, WOOD_FRAME],
+  [0, 4, 16, 1, WOOD_FRAME_LIGHT],
+  [4, 4, 8, 7, [242, 238, 228]],
+  [4, 4, 1, 7, [214, 208, 196]],
+]);
+
+/** 制箭台：顶面是石板 + 燧石 + 羽毛（做箭的两样），侧面木板 + 一列工具 */
+PAINTERS.fletching_table_top = paintingPainter(WOOD_FRAME_LIGHT, [
+  [0, 0, 16, 16, [176, 176, 172]],
+  [1, 1, 14, 14, [156, 156, 152]],
+  [3, 3, 5, 6, [72, 72, 78]],
+  [3, 3, 5, 1, [102, 102, 110]],
+  [10, 2, 3, 6, [238, 238, 232]],
+  [9, 8, 6, 3, [206, 152, 72]],
+  [9, 8, 6, 1, [232, 186, 108]],
+]);
+PAINTERS.fletching_table_side = paintingPainter(WOOD_FRAME, [
+  [0, 0, 16, 5, WOOD_FRAME_LIGHT],
+  [2, 6, 3, 8, [72, 72, 78]],
+  [7, 6, 2, 8, [206, 152, 72]],
+  [11, 6, 2, 8, [238, 238, 232]],
+]);
+
+/** 砂轮：顶面是石转轮（同心圆 + 轴），侧面木架 + 摇柄 */
+PAINTERS.grindstone_top = paintingPainter(WOOD_FRAME, [
+  [2, 2, 12, 12, [126, 126, 130]],
+  [3, 3, 10, 10, [150, 150, 154]],
+  [6, 6, 4, 4, [104, 104, 108]],
+  [7, 0, 2, 16, WOOD_FRAME_DARK],
+  [0, 7, 16, 2, WOOD_FRAME_DARK],
+]);
+PAINTERS.grindstone_side = paintingPainter(WOOD_FRAME_DARK, [
+  [0, 0, 16, 3, WOOD_FRAME],
+  [2, 3, 12, 7, [150, 150, 154]],
+  [2, 3, 12, 1, [176, 176, 180]],
+  [6, 10, 4, 2, WOOD_FRAME_LIGHT],
+  [11, 4, 4, 2, WOOD_FRAME_LIGHT],
+  [0, 12, 16, 4, WOOD_FRAME],
+]);
+
+/** 织布机：顶面绷着经线，侧面立柱 + 线轴，底面实心木板 */
+PAINTERS.loom_top = paintingPainter(WOOD_FRAME_LIGHT, [
+  [1, 1, 14, 14, WOOD_FRAME],
+  [2, 2, 12, 11, [226, 226, 218]],
+  [3, 2, 1, 11, [190, 190, 182]],
+  [5, 2, 1, 11, [190, 190, 182]],
+  [7, 2, 1, 11, [190, 190, 182]],
+  [9, 2, 1, 11, [190, 190, 182]],
+  [11, 2, 1, 11, [190, 190, 182]],
+  [2, 8, 12, 2, [188, 96, 96]],
+]);
+PAINTERS.loom_bottom = paintingPainter(WOOD_FRAME_DARK, [
+  [0, 0, 16, 16, WOOD_FRAME],
+  [1, 1, 14, 14, WOOD_FRAME_DARK],
+]);
+PAINTERS.loom_side = paintingPainter(WOOD_FRAME, [
+  [0, 0, 16, 3, WOOD_FRAME_LIGHT],
+  [1, 3, 2, 12, WOOD_FRAME_DARK],
+  [13, 3, 2, 12, WOOD_FRAME_DARK],
+  [4, 4, 8, 8, [226, 226, 218]],
+  [5, 5, 6, 1, [190, 190, 182]],
+  [5, 7, 6, 1, [190, 190, 182]],
+  [5, 9, 6, 1, [190, 190, 182]],
+]);
+
 PAINTERS.magma = MAGMA_PAINTER;
 PAINTERS.crimson_nylium = nyliumPainter([132, 40, 44], 'crim');
 PAINTERS.crimson_nylium_side = nyliumSidePainter([132, 40, 44], 'crims');

@@ -18,8 +18,11 @@
  * 运行：npm run test:villager
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
+import { Block, blockDef, blockTiles } from '../src/core/registry/blocks.ts';
 import { Item, dropFor, itemDef, possibleBlockDropIds } from '../src/core/registry/items.ts';
+import { hasDescription, missingBlockNames } from '../src/core/registry/itemNames.ts';
+import { efficientToolType, harvestRequirement } from '../src/core/registry/tools.ts';
+import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import { lootItemIds } from '../src/core/registry/loot.ts';
@@ -40,6 +43,7 @@ import {
   VILLAGER_IDLE_ROBE,
   VILLAGER_LEVELS,
   VILLAGER_SKIN_COLOR,
+  WORKSTATION_BLOCKS,
   WORKSTATION_SCAN_RANGE,
   findWorkstationNear,
   isVillagerFood,
@@ -72,6 +76,8 @@ function equal(label: string, actual: unknown, expected: unknown): void {
   check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
+const TILES = new Set<string>(TILE_ORDER);
+
 /** 假背包：只记"某件东西有几个" */
 function bag(counts: Record<number, number>): { countOf(itemId: number): number } {
   return { countOf: (itemId: number) => counts[itemId] ?? 0 };
@@ -86,7 +92,7 @@ function world(blocks: Record<string, number>): (x: number, y: number, z: number
 
 console.log('\n[职业表：7 种工作站已经实现的职业]');
 {
-  equal('职业数', PROFESSION_COUNT, 7);
+  equal('职业数（批次 90 补齐到 11）', PROFESSION_COUNT, 11);
   const ids = PROFESSIONS.map((profession) => profession.id);
   equal('id 不重复', new Set(ids).size, ids.length);
   equal('名字不重复', new Set(PROFESSIONS.map((p) => p.name)).size, PROFESSIONS.length);
@@ -95,8 +101,28 @@ console.log('\n[职业表：7 种工作站已经实现的职业]');
   equal('工作站不撞车（两个职业不能共用一个方块）', new Set(stations).size, stations.length);
   const badStations = PROFESSIONS.filter((p) => !isWorkstation(p.workstation));
   check('每个工作站都认得出来', badStations.length === 0);
-  equal('认领反查与表一致', professionForWorkstation(Block.COMPOSTER)?.id, 'farmer');
+  equal('认领反查与表一致（农民 ← 堆肥桶）', professionForWorkstation(Block.COMPOSTER)?.id, 'farmer');
+  // 批次 90（J23）补齐的四种：方块与职业是同一批加的，这条断言把"配错对"钉住
+  equal('图书管理员 ← 讲台', professionForWorkstation(Block.LECTERN)?.id, 'librarian');
+  equal('制箭师 ← 制箭台', professionForWorkstation(Block.FLETCHING_TABLE)?.id, 'fletcher');
+  equal('武器匠 ← 砂轮', professionForWorkstation(Block.GRINDSTONE)?.id, 'weaponsmith');
+  equal('牧羊人 ← 织布机', professionForWorkstation(Block.LOOM)?.id, 'shepherd');
+  check('村庄能摆的工作站清单跟着变长（村庄会自动摆上新的四种）', WORKSTATION_BLOCKS.length === PROFESSIONS.length);
+  check('清单里没有重复方块', new Set(WORKSTATION_BLOCKS).size === WORKSTATION_BLOCKS.length);
   equal('普通方块不是工作站', professionForWorkstation(Block.STONE), undefined);
+
+  // 四个新方块的"注册表三件套"：贴图在名单里、有中文名与说明、能徒手/按工具采到
+  const newBlocks = [Block.LECTERN, Block.FLETCHING_TABLE, Block.GRINDSTONE, Block.LOOM];
+  const tiles = newBlocks.flatMap((id) => blockTiles(id, 0));
+  check('四个新方块的贴图都在图集名单里', tiles.every((tile) => TILES.has(tile)), tiles.join(','));
+  check('四个新方块都有中文名', newBlocks.every((id) => !missingBlockNames().includes(String(blockDef(id).name).replace('minecraft:', ''))));
+  check('四个新方块都有说明', newBlocks.every((id) => hasDescription(id)));
+  // 工具表：砂轮是石头做的（要镐），三件木制的徒手也能采、斧更快
+  equal('砂轮的加速工具是镐', efficientToolType(Block.GRINDSTONE), 'pickaxe');
+  equal('讲台的加速工具是斧', efficientToolType(Block.LECTERN), 'axe');
+  equal('制箭台的加速工具是斧', efficientToolType(Block.FLETCHING_TABLE), 'axe');
+  equal('织布机的加速工具是斧', efficientToolType(Block.LOOM), 'axe');
+  check('四件都真的能采到（砂轮要镐、其余三件徒手即可）', harvestRequirement(Block.GRINDSTONE)?.tool === 'pickaxe' && harvestRequirement(Block.LECTERN) === undefined);
   check('isWorkstation 对石头是假', !isWorkstation(Block.STONE));
 
   const robe = new Set(PROFESSIONS.map((p) => p.robeColor));
@@ -140,7 +166,7 @@ console.log('\n[职业表：规模]');
   const total = PROFESSIONS.reduce((sum, p) => sum + totalOfferCount(p), 0);
   console.log(`  共 ${total} 条交易（${PROFESSIONS.map((p) => `${p.name} ${totalOfferCount(p)}`).join(' / ')}）`);
   check('每种职业至少 5 条交易', PROFESSIONS.every((p) => totalOfferCount(p) >= 5));
-  check('总量至少 35 条', total >= 35, String(total));
+  check('总量至少 60 条', total >= 60, String(total));
 }
 
 // ---------------------------------------------------------------- 2. 可达性

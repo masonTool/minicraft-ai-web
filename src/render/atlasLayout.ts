@@ -888,6 +888,16 @@ export const TILE_ORDER = [
   'painting_bomb',
   'painting_plant',
   'painting_wasteland',
+  // ---- 村民的工作站四件（J23，批次 90）：各 2~3 面
+  'lectern_top', // 摊开的书
+  'lectern_side', // 木框 + 书脊
+  'fletching_table_top', // 石板上的燧石与羽毛
+  'fletching_table_side', // 木板 + 一列工具
+  'grindstone_top', // 转轮（砂轮的石盘）
+  'grindstone_side', // 木架 + 摇柄
+  'loom_top', // 织机上绷着的经线
+  'loom_bottom', // 织机底面（实心木板）
+  'loom_side', // 侧面的立柱与线轴
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

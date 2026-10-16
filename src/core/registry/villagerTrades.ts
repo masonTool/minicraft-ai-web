@@ -18,8 +18,11 @@
  *  - **不做价格浮动**（原版买多了会涨价）：固定价才好断言，也免得玩家觉得"被宰"。
  */
 
-import { Block } from './blocks.ts';
-import { Item } from './items.ts';
+import { Block, bedId, carpetId, woolId } from './blocks.ts';
+import { DYE_COLORS } from './colors.ts';
+import { Item, dyeItemId } from './items.ts';
+// 武器匠卖的是**工具/武器**（原版也是），所以这里要按"种类 × 材质"算 id
+import { toolItemId } from './tools.ts';
 
 /** 职业 id（原版名字） */
 export type VillagerProfessionId =
@@ -29,7 +32,12 @@ export type VillagerProfessionId =
   | 'cleric'
   | 'stonemason'
   | 'fisherman'
-  | 'toolsmith';
+  | 'toolsmith'
+  // 批次 90（J23）补齐的 4 个：方块与职业是同一批加的
+  | 'librarian'
+  | 'fletcher'
+  | 'weaponsmith'
+  | 'shepherd';
 
 /** 一条交易里村民收的东西（1~2 样） */
 export interface TradeCost {
@@ -88,15 +96,27 @@ export function isVillagerFood(itemId: number): boolean {
 
 /** 没认领工作站时的长袍色（原版是"失业者"的褐色外衣） */
 export const VILLAGER_IDLE_ROBE = 0x8a7150;
+/**
+ * 棕色染料在配色表里的下标（牧羊人收染料那一条用它）。
+ * ⚠️ 按名字查而不是写死 0：配色表一调顺序，写死的数字会悄悄变成"收白色染料"，
+ * 而白色染料在本项目**没有来源**（症状是"这条交易永远做不了"）。
+ */
+const BROWN_DYE_INDEX = DYE_COLORS.findIndex((color) => color.name === 'brown');
 /** 村民的皮肤色（手臂与头用它；与"长袍"分开才能看出那是手） */
 export const VILLAGER_SKIN_COLOR = 0xd6a27a;
 
 /**
- * 7 个职业（原版 15 种里，**工作站方块已经实现了**的那 7 种）。
+ * 11 个职业（原版 15 种里，**工作站方块已经实现了**的那 11 种）。
  *
- * 少的那几种不是"忘了"，是**它们的正门还没开**：
- *  图书管理员（讲台）、制箭师（制箭台）、武器匠（砂轮）、牧羊人（织布机）、皮匠（炼药锅）
- * —— 5 个工作站方块都还没做，见 TASKS J22（先有方块，再谈职业）。
+ * 批次 90（J23）补齐了 4 个：图书管理员（讲台）、制箭师（制箭台）、
+ * 武器匠（砂轮）、牧羊人（织布机）——它们的方块是同一批加的
+ * （`blocks.ts` 的 `WORKSTATION_SPECS`，村庄会自动把它们摆进屋里）。
+ *
+ * 还剩 4 种没做，各卡在不同的前置上（不是"忘了"）：
+ *  - **皮匠**（炼药锅）：等 G13 的炼药锅（装水/落地接雨那套方块交互）；
+ *  - **制图师**（制图台）、**牧师之外的"神职人员"**、**箭匠之外的…**：
+ *    制图台、以及原版那几种需要**未实现内容**的职业（例如"信标/铃"那一类装饰方块）。
+ *    真要做，判据是"先有方块，再谈职业"（这也是这一批的口径）。
  */
 export const PROFESSIONS: readonly VillagerProfession[] = [
   {
@@ -209,6 +229,81 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
       [{ cost: [{ id: Item.EMERALD, count: 2 }], result: { id: Block.ANVIL, count: 1 }, maxUses: 8, xp: 10 }],
       [{ cost: [{ id: Item.EMERALD, count: 3 }], result: { id: Item.BUCKET, count: 1 }, maxUses: 8, xp: 15 }],
       [{ cost: [{ id: Item.EMERALD, count: 5 }], result: { id: Block.SMITHING_TABLE, count: 2 }, maxUses: 8, xp: 30 }],
+    ],
+  },
+  {
+    // 图书管理员（J23，批次 90）：收纸张与书，卖书架与玻璃。
+    // ⚠️ 原版大师那一条卖的是**现掷一条附魔的附魔书**——本项目暂时不行
+    // （交易表的产物只有 `{id, count}`，装不下"附魔"这一层数据，记在 TASKS J23）
+    id: 'librarian',
+    name: '图书管理员',
+    workstation: Block.LECTERN,
+    robeColor: 0xf2efe4,
+    levels: [
+      [
+        { cost: [{ id: Item.PAPER, count: 24 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 2 },
+        { cost: [{ id: Item.EMERALD, count: 1 }], result: { id: Block.BOOKSHELF, count: 1 }, maxUses: 12, xp: 2 },
+      ],
+      [{ cost: [{ id: Item.BOOK, count: 4 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 5 }],
+      [{ cost: [{ id: Item.EMERALD, count: 1 }], result: { id: Block.GLASS, count: 4 }, maxUses: 12, xp: 10 }],
+      [{ cost: [{ id: Item.EMERALD, count: 2 }], result: { id: Item.PAPER, count: 16 }, maxUses: 12, xp: 15 }],
+      [{ cost: [{ id: Item.EMERALD, count: 5 }], result: { id: Block.BOOKSHELF, count: 3 }, maxUses: 8, xp: 30 }],
+    ],
+  },
+  {
+    // 制箭师（J23，批次 90）：收木棍/燧石/羽毛（做箭的那几样），卖弓与箭
+    id: 'fletcher',
+    name: '制箭师',
+    workstation: Block.FLETCHING_TABLE,
+    robeColor: 0x9c6b3f,
+    levels: [
+      [
+        { cost: [{ id: Item.STICK, count: 32 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 2 },
+        { cost: [{ id: Item.EMERALD, count: 1 }], result: { id: Item.ARROW, count: 16 }, maxUses: 12, xp: 2 },
+      ],
+      [{ cost: [{ id: Item.FLINT, count: 26 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 5 }],
+      [{ cost: [{ id: Item.EMERALD, count: 2 }], result: { id: Item.BOW, count: 1 }, maxUses: 8, xp: 10 }],
+      [{ cost: [{ id: Item.FEATHER, count: 20 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 15 }],
+      [{ cost: [{ id: Item.EMERALD, count: 1 }], result: { id: Item.ARROW, count: 32 }, maxUses: 8, xp: 30 }],
+    ],
+  },
+  {
+    // 武器匠（J23，批次 90）：收煤炭与铁锭，卖**铁制武器**（工具/武器的 id 按
+    // "种类 × 材质"算，见 `registry/tools.ts`）。价格是本项目定的（见文件头）
+    id: 'weaponsmith',
+    name: '武器匠',
+    workstation: Block.GRINDSTONE,
+    robeColor: 0x4a5a6a,
+    levels: [
+      [
+        { cost: [{ id: Item.COAL, count: 15 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 2 },
+        { cost: [{ id: Item.EMERALD, count: 3 }], result: { id: toolItemId('axe', 'iron'), count: 1 }, maxUses: 8, xp: 2 },
+      ],
+      [{ cost: [{ id: Item.IRON_INGOT, count: 4 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 5 }],
+      [{ cost: [{ id: Item.EMERALD, count: 7 }], result: { id: toolItemId('sword', 'iron'), count: 1 }, maxUses: 8, xp: 10 }],
+      [{ cost: [{ id: Item.EMERALD, count: 4 }], result: { id: toolItemId('pickaxe', 'iron'), count: 1 }, maxUses: 8, xp: 15 }],
+      [{ cost: [{ id: Item.EMERALD, count: 8 }], result: { id: toolItemId('sword', 'diamond'), count: 1 }, maxUses: 4, xp: 30 }],
+    ],
+  },
+  {
+    // 牧羊人（J23，批次 90）：收羊毛与染料，卖剪刀、床、画、地毯。
+    // ⚠️ 卖"画"这一条原版在（Bedrock 的牧羊人就有），本项目正好接上批次 86 的画
+    id: 'shepherd',
+    name: '牧羊人',
+    workstation: Block.LOOM,
+    robeColor: 0x6f7f4a,
+    levels: [
+      [
+        { cost: [{ id: woolId(0), count: 18 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 2 },
+        { cost: [{ id: Item.EMERALD, count: 2 }], result: { id: Item.SHEARS, count: 1 }, maxUses: 8, xp: 2 },
+      ],
+      // 收染料：⚠️ 本项目目前**只有棕色染料有来源**（可可豆 → 棕色染料，
+      // 见 `Recipes` 里那条），其余 15 色的染料还没有配方（花不能制成染料），
+      // 所以这里收的是棕色。等哪天补上"花 → 染料"，这一条按颜色展开即可
+      [{ cost: [{ id: dyeItemId(BROWN_DYE_INDEX), count: 12 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 5 }],
+      [{ cost: [{ id: Item.EMERALD, count: 3 }], result: { id: bedId(0), count: 1 }, maxUses: 8, xp: 10 }],
+      [{ cost: [{ id: Item.EMERALD, count: 2 }], result: { id: Block.PAINTING, count: 1 }, maxUses: 8, xp: 15 }],
+      [{ cost: [{ id: Item.EMERALD, count: 1 }], result: { id: carpetId(0), count: 8 }, maxUses: 8, xp: 30 }],
     ],
   },
 ];

@@ -325,6 +325,8 @@ requirePickaxe(0, [
   Block.SMITHING_TABLE,
   // 切石机（H11，批次 44）：同样是"要镐但不挑等级"的工作台
   Block.STONECUTTER,
+  // 砂轮（J23，批次 90）：石头做的转轮，原版同样"要镐、不限等级"
+  Block.GRINDSTONE,
   // 锁链（B11）：原版同样是"要镐、不限等级"（徒手挖得动但什么都不掉）
   Block.CHAIN,
   // 石英家族、深板岩瓦、红色下界砖（批次 42）：原版都要镐，且不限等级。
@@ -432,6 +434,11 @@ for (const id of [
   Block.BARREL,
   // 堆肥桶（批次 70）：木制桶，斧头更快（原版也是）
   Block.COMPOSTER,
+  // 工作站四件里的三件木制的（J23，批次 90）：斧头更快、徒手也能采
+  // （砂轮是石头做的，走下面的"要镐"那一档）
+  Block.LECTERN,
+  Block.FLETCHING_TABLE,
+  Block.LOOM,
   Block.PUMPKIN,
   Block.MELON,
   Block.BAMBOO,

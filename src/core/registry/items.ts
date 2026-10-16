@@ -803,6 +803,11 @@ const FUNCTIONAL = new Set<number>([
   Block.SMITHING_TABLE,
   // 切石机（H11，批次 44）：同样是"右键打开的工作台"
   Block.STONECUTTER,
+  // 村民的工作站四件（J23，批次 90）：与锻造台/切石机同页（都是"村里的工作台"）
+  Block.LECTERN,
+  Block.FLETCHING_TABLE,
+  Block.GRINDSTONE,
+  Block.LOOM,
   // 阳光传感器（批次 54）：红石元件，与拉杆/中继器同页
   Block.DAYLIGHT_DETECTOR,
   // 绊线钩（批次 55）：同页。⚠️ 绊线本身**没有物品**（`itemless`），不在这里登记

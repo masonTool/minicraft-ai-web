@@ -2623,6 +2623,50 @@ const HANGING_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 村民的"工作站"方块（J23，批次 90）：讲台 / 制箭台 / 砂轮 / 织布机。
+ *
+ * 这四个与切石机、锻造台、木桶、堆肥桶是**同一类东西**：一个实心方块，
+ * 村民认领它就得到对应职业（`registry/villagerTrades.ts` 的 `PROFESSIONS`）。
+ * 所以它们的"存在理由"是**给村子里的职业开门**——村庄里摆什么，住的就是谁
+ * （批次 89 的人口规则会自己把它们摆进屋里，见 `WORKSTATION_BLOCKS`）。
+ *
+ * ⚠️ 四个都**只是工作站，还没有自己的界面**（原版各自的界面是另一条活）：
+ * 讲台能放书读、砂轮能修装备、织布机能做旗帜图案——都记在 TASKS J25。
+ * 制箭台在原版**本来就没有功能**（纯装饰 + 认领），所以它不需要补。
+ *
+ * ⚠️ id 接着 542（画）往下排：方块表要求 id 从 0 起连续，
+ * `buildBlockTable` 会在启动时当场拦下错位，所以**不能挑空档**。
+ */
+export const LECTERN_ID = 543;
+export const FLETCHING_TABLE_ID = 544;
+export const GRINDSTONE_ID = 545;
+export const LOOM_ID = 546;
+
+const WORKSTATION_SPECS: readonly BlockSpec[] = [
+  {
+    id: LECTERN_ID,
+    name: 'minecraft:lectern',
+    // 顶面：摊开的书；侧面：木框 + 书脊
+    tiles: ['lectern_top', 'lectern_top', 'lectern_side'],
+  },
+  {
+    id: FLETCHING_TABLE_ID,
+    name: 'minecraft:fletching_table',
+    tiles: ['fletching_table_top', 'fletching_table_top', 'fletching_table_side'],
+  },
+  {
+    id: GRINDSTONE_ID,
+    name: 'minecraft:grindstone',
+    tiles: ['grindstone_top', 'grindstone_top', 'grindstone_side'],
+  },
+  {
+    id: LOOM_ID,
+    name: 'minecraft:loom',
+    tiles: ['loom_top', 'loom_bottom', 'loom_side'],
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -2677,6 +2721,7 @@ const SPECS: readonly BlockSpec[] = [
   LIGHTNING_ROD_SPEC,
   ...BLACKSTONE_DECOR_SPECS,
   ...HANGING_SPECS,
+  ...WORKSTATION_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2978,6 +3023,11 @@ export const Block = {
   // ---- 墙上挂东西（B14，批次 86）：展示框 + 画（只做 1×1 的 7 幅）
   ITEM_FRAME: ITEM_FRAME_ID,
   PAINTING: PAINTING_ID,
+  // ---- 村民的工作站（J23，批次 90）：给另外四种职业开门
+  LECTERN: LECTERN_ID,
+  FLETCHING_TABLE: FLETCHING_TABLE_ID,
+  GRINDSTONE: GRINDSTONE_ID,
+  LOOM: LOOM_ID,
   CRACKED_POLISHED_BLACKSTONE_BRICKS: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
@@ -3337,6 +3387,12 @@ HARDNESS.set(Block.IRON_BLOCK, 5);
 HARDNESS.set(Block.NETHERITE_BLOCK, 50);
 // 锻造台 2.5（原版），斧最快、徒手也能采
 HARDNESS.set(Block.SMITHING_TABLE, 2.5);
+// 工作站四件（J23，批次 90）：讲台/制箭台/织布机 2.5（木头档，斧最快）、
+// 砂轮 2.0（石头档，要镐——见 tools.ts 的 REQUIRED_TOOL）
+HARDNESS.set(Block.LECTERN, 2.5);
+HARDNESS.set(Block.FLETCHING_TABLE, 2.5);
+HARDNESS.set(Block.GRINDSTONE, 2);
+HARDNESS.set(Block.LOOM, 2.5);
 // 切石机 3.5（原版与石头同档），要镐
 HARDNESS.set(Block.STONECUTTER, 3.5);
 

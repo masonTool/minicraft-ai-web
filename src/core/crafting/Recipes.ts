@@ -43,6 +43,9 @@ const BROWN_DYE_INDEX = DYE_COLORS.findIndex((color) => color.name === 'brown');
  */
 const OAK_SLAB_INDEX = SHAPED_PARENTS.findIndex(([, name]) => name === 'oak_planks');
 
+/** 石台阶在 `SHAPED_PARENTS` 里的下标（砂轮配方要 1 个）——同样按名字查，不写死数字 */
+const STONE_SLAB_INDEX = SHAPED_PARENTS.findIndex(([, name]) => name === 'stone');
+
 export interface RecipeResult {
   id: number;
   count: number;
@@ -876,6 +879,36 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Block.STONECUTTER, count: 1 },
     pattern: [' I ', 'SSS'],
     key: { I: Item.IRON_INGOT, S: Block.STONE },
+  },
+  // ---- 村民的工作站四件（J23，批次 90）：材料与图案都照原版（wiki 上的那几组），
+  // 只是把"任意木板/任意木台阶"落到橡木这一种上（本项目的老规矩：标签配方展开成一格一种）
+  // 讲台：3 木台阶 + 1 书架
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.LECTERN, count: 1 },
+    pattern: ['.B.', 'SSS'],
+    key: { B: Block.BOOKSHELF, S: slabId(OAK_SLAB_INDEX) },
+  },
+  // 制箭台：2 燧石 + 2 木板（上排木板、下排燧石）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.FLETCHING_TABLE, count: 1 },
+    pattern: ['PP', 'FF'],
+    key: { P: Block.OAK_PLANKS, F: Item.FLINT },
+  },
+  // 砂轮：2 木棍 + 2 木板 + 1 石台阶（原版就是这三样）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.GRINDSTONE, count: 1 },
+    pattern: ['.S.', 'PSP', '.T.'],
+    key: { S: Item.STICK, P: Block.OAK_PLANKS, T: slabId(STONE_SLAB_INDEX) },
+  },
+  // 织布机：2 线 + 2 木板
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.LOOM, count: 1 },
+    pattern: ['PP', 'SS'],
+    key: { P: Block.OAK_PLANKS, S: Item.STRING },
   },
   // ⚠️ 下界合金的**工具与盔甲没有配方**：它们只能在锻造台上、由对应的钻石装备 + 1 个
   // 下界合金锭升级而来（见 `core/crafting/Smithing.ts`），与原版一致。
