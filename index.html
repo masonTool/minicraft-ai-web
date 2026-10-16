@@ -1163,6 +1163,25 @@
       .touch-button.jump { width: 76px; height: 76px; font-size: 19px; }
       .touch-button.jump svg { width: 52%; height: 52%; }
 
+      /* 飞行时的升降提示（批次 96）：飞起来之后"跳跃/潜行"这两颗键的含义变成了
+         上升/下降，不提示就只能靠试（基岩版也在这两颗键上画箭头）。
+         用伪元素画：不往按钮里塞文字节点（读屏与验收脚本看到的仍然只有图标）。 */
+      #touch-ui.flying .touch-button.jump::after,
+      #touch-ui.flying .touch-button[data-icon="sneak"]::after {
+        position: absolute; left: 50%; transform: translateX(-50%);
+        font-size: 11px; line-height: 1; color: rgba(255, 255, 255, .92);
+        text-shadow: 0 0 3px rgba(0, 0, 0, .8);
+      }
+      #touch-ui.flying .touch-button.jump::after { content: '▲'; top: 4px; }
+      #touch-ui.flying .touch-button[data-icon="sneak"]::after { content: '▼'; bottom: 3px; }
+      .touch-button { position: relative; }
+
+      /* 动态摇杆（批次 96）：平时隐形待命，按下才出现在手指下面。
+         ⚠️ 只改透明度、不改 display：`beginDynamicStick` 要靠 getBoundingClientRect
+         拿到半径与中心（display: none 下这个矩形全是 0，摇杆会"按下去就死"）。 */
+      #touch-stick.dynamic { opacity: 0; }
+      #touch-stick.dynamic.active { opacity: 1; }
+
       #touch-hint {
         position: absolute; left: 50%; bottom: 214px; transform: translateX(-50%);
         padding: 7px 14px; border-radius: 16px;

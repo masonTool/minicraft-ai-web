@@ -10,6 +10,7 @@
  */
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
+import { STICK_MODES, STICK_MODE_LABELS, type StickMode } from './TouchControls.ts';
 
 /**
  * 粒子效果强度。
@@ -62,6 +63,13 @@ export interface GameSettings {
    * 移动端长时间游玩容易发热降频，这个开关能避免越玩越卡。
    */
   adaptiveViewDistance: boolean;
+  /**
+   * 触摸摇杆模式（批次 96，与基岩版的两档一致）：固定左下角 / 跟随手指出现。
+   *
+   * 两条都要有：固定靠位置形成肌肉记忆，动态对"躺着玩、单手玩"更宽容
+   * （不用先去找那个圈，左下随便一按就是摇杆）。
+   */
+  touchStick: StickMode;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -76,6 +84,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   daylightCycle: true,
   showDebug: true,
   adaptiveViewDistance: true,
+  touchStick: 'fixed',
 };
 
 const STORAGE_KEY = 'bedrock-settings';
@@ -102,6 +111,9 @@ export function loadSettings(): GameSettings {
       daylightCycle: parsed.daylightCycle !== false,
       showDebug: parsed.showDebug !== false,
       adaptiveViewDistance: parsed.adaptiveViewDistance !== false,
+      touchStick: STICK_MODES.includes(parsed.touchStick as StickMode)
+        ? (parsed.touchStick as StickMode)
+        : DEFAULT_SETTINGS.touchStick,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -219,6 +231,8 @@ export class SettingsScreen {
 
     options.appendChild(this.makeGroup('操作'));
     this.makeSelect(options, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
+    // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异，所以给两档自己挑
+    this.makeSelect(options, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
     options.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05));
     this.makeToggle(options, 'invertY', '反转上下视角');
 
@@ -295,7 +309,7 @@ export class SettingsScreen {
    */
   private makeSelect<T extends string>(
     options: HTMLElement,
-    key: 'cameraMode' | 'particles',
+    key: 'cameraMode' | 'particles' | 'touchStick',
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
@@ -319,7 +333,8 @@ export class SettingsScreen {
     select.addEventListener('change', () => {
       // 逐个分支赋值：`GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查
       if (key === 'cameraMode') this.settings.cameraMode = select.value as CameraMode;
-      else this.settings.particles = select.value as ParticleLevel;
+      else if (key === 'particles') this.settings.particles = select.value as ParticleLevel;
+      else this.settings.touchStick = select.value as StickMode;
       this.commit();
     });
 

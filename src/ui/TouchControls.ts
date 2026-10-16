@@ -26,6 +26,29 @@ const LONG_PRESS_MS = 220;
 const TAP_MOVE_SLOP = 12;
 /** 摇杆推到该比例以上自动疾跑 */
 const SPRINT_THRESHOLD = 0.92;
+/**
+ * 双击跳跃起飞（批次 96，基岩版的创造模式手势）。
+ *
+ * 两次"按下跳跃键"的间隔小于它就算双击 → 切换飞行。原版手机上就是这么起飞的；
+ * 有了它"飞行"按钮就不必常驻（见 M18 的待办）。按住跳跃仍然是"往上跳/往上飞"，
+ * 所以判定只看两次**按下**的时间差。
+ */
+const DOUBLE_TAP_MS = 320;
+/**
+ * 动态摇杆的"左手拇指区"（批次 96）：屏幕左下这块区域按下时，摇杆**出现在手指下面**，
+ * 而不是固定在角落里（基岩版的"摇杆跟随"模式对大拇指落点更宽容：不用先去找那个圈）。
+ * 取值按"竖屏手机左手拇指的自然落点"：横向 45% 以内、纵向 40% 以下那块。
+ */
+const DYNAMIC_STICK_ZONE = { maxX: 0.45, minY: 0.4 } as const;
+
+/** 摇杆的两种模式（与基岩版一致） */
+export type StickMode = 'fixed' | 'dynamic';
+/** 设置界面要遍历它（与 `CAMERA_MODES` / `PARTICLE_LEVELS` 同一个套路） */
+export const STICK_MODES: readonly StickMode[] = ['fixed', 'dynamic'];
+export const STICK_MODE_LABELS: Record<StickMode, string> = {
+  fixed: '固定（左下角）',
+  dynamic: '跟随手指',
+};
 
 export interface TouchActions {
   /** 切换人称视角（F7）：第一人称 → 背后 → 正面 → … */
@@ -97,6 +120,9 @@ export class TouchControls {
 
   private enabled = false;
   private sneaking = false;
+  private stickMode: StickMode = 'fixed';
+  /** 上一次"按下跳跃键"的时刻（双击起飞用） */
+  private lastJumpDown = 0;
 
   constructor(
     host: HTMLElement,
@@ -127,6 +153,16 @@ export class TouchControls {
     this.bindHoldButton(jump, (down) => {
       this.jumpHeld = down;
     });
+    // 双击跳跃起飞（基岩版手势）：只判"两次按下的间隔"，不影响按住上升
+    jump.addEventListener('pointerdown', () => {
+      const now = performance.now();
+      if (now - this.lastJumpDown <= DOUBLE_TAP_MS) {
+        this.lastJumpDown = 0;
+        this.actions.onToggleFly();
+        return;
+      }
+      this.lastJumpDown = now;
+    });
 
     this.sneakButton = this.makeIconButton('sneak', () => {
       this.sneaking = !this.sneaking;
@@ -147,7 +183,8 @@ export class TouchControls {
     // ---- 操作提示（首次进入时显示，动一下摇杆就淡出）
     this.hint = document.createElement('div');
     this.hint.id = 'touch-hint';
-    this.hint.textContent = '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏 · 右下图标：聊天/视角/飞行/潜行/背包/跳跃';
+    this.hint.textContent =
+      '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏 · 双击跳跃起飞 · 长按物品看详情';
 
     this.object.append(this.lookSurface, this.stickBase, buttons, this.hint);
     host.appendChild(this.object);
@@ -197,6 +234,20 @@ export class TouchControls {
 
   setFlying(flying: boolean): void {
     this.flyButton.classList.toggle('on', flying);
+    // 飞行时给整层挂个标记：跳跃/潜行键上会浮出"上升/下降"的小箭头
+    //（基岩版也这么提示——飞起来之后那两颗键的含义变了，不提示就只能靠试）
+    this.object.classList.toggle('flying', flying);
+  }
+
+  /**
+   * 摇杆模式：`fixed` 固定在左下角；`dynamic` 在左下拇指区**按下即出现在手指下**。
+   *
+   * 与基岩版的两档一致：固定模式靠位置形成肌肉记忆，动态模式对"躺着玩 / 单手玩"更宽容。
+   */
+  setStickMode(mode: StickMode): void {
+    this.stickMode = mode;
+    this.stickBase.classList.toggle('dynamic', mode === 'dynamic');
+    if (mode === 'fixed') this.resetStick();
   }
 
   /** 同步潜行状态（键盘切换时按钮也要跟着变） */
@@ -255,24 +306,59 @@ export class TouchControls {
     button.addEventListener('pointercancel', release);
   }
 
-  private bindStick(): void {
-    const update = (event: PointerEvent) => {
-      const dx = event.clientX - this.stickCenterX;
-      const dy = event.clientY - this.stickCenterY;
-      const distance = Math.hypot(dx, dy);
-      // 归一化到 -1~1：超出摇杆半径就截断，手指拖远也不会加速
-      const clamped = Math.min(distance, this.stickRadius);
-      const ratio = distance === 0 ? 0 : clamped / distance;
-      const nx = distance === 0 ? 0 : (dx / distance) * ratio * (distance / this.stickRadius);
-      const ny = distance === 0 ? 0 : (dy / distance) * ratio * (distance / this.stickRadius);
+  /** 这一点在不在"左手拇指区"里（动态摇杆用） */
+  private isInStickZone(event: PointerEvent): boolean {
+    const x = event.clientX / Math.max(1, window.innerWidth);
+    const y = event.clientY / Math.max(1, window.innerHeight);
+    return x <= DYNAMIC_STICK_ZONE.maxX && y >= DYNAMIC_STICK_ZONE.minY;
+  }
 
-      this.stickKnob.style.transform = `translate(${nx * this.stickRadius}px, ${ny * this.stickRadius}px)`;
-      // 屏幕上方为前进，所以取负
-      this.forward = -ny;
-      this.strafe = nx;
-      if (distance > TAP_MOVE_SLOP) this.dismissHint();
+  /**
+   * 动态摇杆：把摇杆搬到手指下面并接管这根手指。
+   *
+   * ⚠️ 半径沿用固定模式那个圈（`stickRadius`）而不是按落点重算：手指落点各不相同，
+   * 半径若跟着变，同样的拖动距离会得到不同的速度（"忽快忽慢"比"位置固定"更难受）。
+   * 移动/抬起的事件挂在**视角面**上——手指根本不在那个圈里，挂在圈上收不到。
+   */
+  private beginDynamicStick(event: PointerEvent): void {
+    // 半径按元素实测（动态模式下它是 `opacity: 0` 但**仍然可测量**——这也是
+    // 这里不能用 `display: none` 的原因：那个矩形会变成 0，摇杆"按下去就死"）
+    const rect = this.stickBase.getBoundingClientRect();
+    const radius = rect.width > 0 ? rect.width / 2 : this.stickRadius;
+    this.stickRadius = radius;
+    this.stickBase.style.left = `${event.clientX - radius}px`;
+    this.stickBase.style.top = `${event.clientY - radius}px`;
+    this.stickBase.style.bottom = 'auto';
+    this.stickBase.classList.add('active');
+    this.stickCenterX = event.clientX;
+    this.stickCenterY = event.clientY;
+    this.stickPointer = event.pointerId;
+    capturePointer(this.lookSurface, event.pointerId);
+    this.dismissHint();
+
+    const move = (moveEvent: PointerEvent): void => {
+      if (moveEvent.pointerId !== this.stickPointer) return;
+      moveEvent.preventDefault();
+      this.applyStick(moveEvent);
     };
+    const release = (upEvent: PointerEvent): void => {
+      if (upEvent.pointerId !== this.stickPointer) return;
+      upEvent.preventDefault();
+      this.lookSurface.removeEventListener('pointermove', move);
+      this.lookSurface.removeEventListener('pointerup', release);
+      this.lookSurface.removeEventListener('pointercancel', release);
+      this.resetStick();
+      // 抬手之后摇杆回到"隐形待命"，下次按下再出现在新位置
+      this.stickBase.style.left = '';
+      this.stickBase.style.top = '';
+      this.stickBase.style.bottom = '';
+    };
+    this.lookSurface.addEventListener('pointermove', move);
+    this.lookSurface.addEventListener('pointerup', release);
+    this.lookSurface.addEventListener('pointercancel', release);
+  }
 
+  private bindStick(): void {
     this.stickBase.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       const rect = this.stickBase.getBoundingClientRect();
@@ -282,13 +368,13 @@ export class TouchControls {
       this.stickPointer = event.pointerId;
       capturePointer(this.stickBase, event.pointerId);
       this.stickBase.classList.add('active');
-      update(event);
+      this.applyStick(event);
     });
 
     this.stickBase.addEventListener('pointermove', (event) => {
       if (event.pointerId !== this.stickPointer) return;
       event.preventDefault();
-      update(event);
+      this.applyStick(event);
     });
 
     const release = (event: PointerEvent) => {
@@ -298,6 +384,27 @@ export class TouchControls {
     };
     this.stickBase.addEventListener('pointerup', release);
     this.stickBase.addEventListener('pointercancel', release);
+  }
+
+  /**
+   * 摇杆位移 → 输入分量（固定与动态两种模式共用）。
+   *
+   * 归一化到 -1~1 且**超出半径截断**：手指拖远不会加速（基岩版也是这个手感）。
+   */
+  private applyStick(event: PointerEvent): void {
+    const dx = event.clientX - this.stickCenterX;
+    const dy = event.clientY - this.stickCenterY;
+    const distance = Math.hypot(dx, dy);
+    const clamped = Math.min(distance, this.stickRadius);
+    const ratio = distance === 0 ? 0 : clamped / distance;
+    const nx = distance === 0 ? 0 : (dx / distance) * ratio * (distance / this.stickRadius);
+    const ny = distance === 0 ? 0 : (dy / distance) * ratio * (distance / this.stickRadius);
+
+    this.stickKnob.style.transform = `translate(${nx * this.stickRadius}px, ${ny * this.stickRadius}px)`;
+    // 屏幕上方为前进，所以取负
+    this.forward = -ny;
+    this.strafe = nx;
+    if (distance > TAP_MOVE_SLOP) this.dismissHint();
   }
 
   private resetStick(): void {
@@ -312,6 +419,12 @@ export class TouchControls {
     this.lookSurface.addEventListener('pointerdown', (event) => {
       if (!this.enabled) return;
       event.preventDefault();
+      // 动态摇杆（批次 96）：左下拇指区按下 = 走（基岩版的组织方式：左手管走、右手管看）。
+      // 接管之后这根手指不再参与视角，也不再触发轻点/长按
+      if (this.stickMode === 'dynamic' && this.stickPointer === null && this.isInStickZone(event)) {
+        this.beginDynamicStick(event);
+        return;
+      }
       // 同时只跟一根手指，第二根手指不参与视角，避免多点触控时视角乱飘
       if (this.lookPointer !== null) return;
 

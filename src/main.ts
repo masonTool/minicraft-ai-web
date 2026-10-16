@@ -80,6 +80,7 @@ import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
+import { BackButton } from './ui/BackButton.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
@@ -864,6 +865,29 @@ class App {
   private touchPlaceRequest = false;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
+  /**
+   * Android 返回键 / 侧滑返回 = 关界面（批次 96，对齐基岩版）。
+   *
+   * 手机上**没有 Esc**：原来关界面只有"点空白处"，而系统的返回手势会直接退出页面
+   * （PWA 里等于退出游戏）——想关背包反而把游戏关了。
+   */
+  private readonly backButton = new BackButton({
+    pushState: () => {
+      try {
+        window.history.pushState({ mcUi: true }, '');
+      } catch {
+        // 某些内嵌浏览器禁用 history（隐私模式/iframe），忽略：退回"只能点空白处关"
+      }
+    },
+    back: () => {
+      try {
+        window.history.back();
+      } catch {
+        /* 同上 */
+      }
+    },
+    closeTopUi: () => this.closeTopUi(),
+  });
   private readonly hotbarSlots: HTMLDivElement[] = [];
   /** 聊天与命令输入（左下角消息栏 + 命令输入行） */
   private readonly chat = new ChatInput();
@@ -1330,6 +1354,10 @@ class App {
     // 批次 95 起也靠它决定"快捷栏能不能点、槽位要不要放大"）——
     // 用类名而不是 `@media (pointer: coarse)`，是为了与"操作层是否存在"共用**同一个判据**
     this.touch = isTouchDevice() ? this.createTouchControls() : null;
+    // 返回键守卫（批次 96）：手机上"返回"先关界面，界面全关完才轮到浏览器（= 退出页面）。
+    // 挂在 `popstate` 上而不是 `beforeunload`：前者能拿到"用户想后退"这件事，
+    // 又不至于把"刷新/关标签页"也拦下来
+    window.addEventListener('popstate', () => this.backButton.onBrowserBack());
 
     this.bindEvents();
     // 没有存档时直接按出生点请求区块；
@@ -1383,6 +1411,39 @@ class App {
    * 视距会影响相机的远裁剪面与雾的距离，改完必须 `updateProjectionMatrix()`，
    * 否则会出现"看得更远了但远处被裁掉"的割裂感。
    */
+  /**
+   * 现在有没有界面开着（返回键守卫与"逐层关"共用）。
+   *
+   * 只算**游戏内**的面板：主菜单（`WorldScreen`）与宽高比提示（`UnsupportedScreen`）
+   * 不算——在那两个界面上按返回，玩家想干的正是"退出页面"。
+   */
+  private isAnyUiOpen(): boolean {
+    return (
+      this.signEditor.isOpen ||
+      this.chat.isOpen ||
+      this.recipeBook.isOpen ||
+      this.advancementScreen.isOpen ||
+      this.inventoryScreen.isOpen ||
+      this.settingsScreen.isOpen
+    );
+  }
+
+  /**
+   * 关掉**最上面那一层**界面，返回"关掉之后还有没有界面开着"。
+   *
+   * 顺序按"谁盖在谁上面"排（后开的在上面）：告示牌 → 聊天 → 配方书 → 成就 → 背包 → 设置。
+   * 与 `uiOpen` 那套不同，这里必须一次只关一层——不然"按一下返回"会把界面全关掉。
+   */
+  private closeTopUi(): boolean {
+    if (this.signEditor.isOpen) this.signEditor.close();
+    else if (this.chat.isOpen) this.chat.close();
+    else if (this.recipeBook.isOpen) this.recipeBook.hide();
+    else if (this.advancementScreen.isOpen) this.advancementScreen.hide();
+    else if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
+    else if (this.settingsScreen.isOpen) this.closeSettings();
+    return this.isAnyUiOpen();
+  }
+
   private applySettings(settings: GameSettings): void {
     this.cameraMode = settings.cameraMode;
     this.viewDistance = settings.viewDistance;
@@ -1394,6 +1455,8 @@ class App {
     this.audio.volume = settings.volume;
     this.particles.setDensity(PARTICLE_DENSITY[settings.particles]);
     this.sky.setCloudsVisible(settings.clouds);
+    // 触摸摇杆模式（批次 96）：没有触摸层时静默忽略（桌面端这个设置项不该报错）
+    this.touch?.setStickMode(settings.touchStick);
     this.debugEl.style.display = settings.showDebug ? '' : 'none';
     this.applyEnvironment();
     // 视距变化后立刻按新的范围请求/卸载区块
@@ -7174,6 +7237,10 @@ class App {
       this.updateLightning(dt);
       // 刷怪笼（批次 92）：下界要塞里的笼子按倒计时生成烈焰人
       this.updateSpawners(dt);
+      // 返回键守卫（批次 96）：界面开/关是**每帧对账**的——面板有六个、关闭路径更多
+      //（点空白、点按钮、被别处挤掉），在每处各调一次迟早漏掉一个（漏掉就是"返回键突然失灵"）。
+      // 与告示牌/展示框那两处"定期对账"同一个理由：**判据只有一处，就不会漂**
+      this.backButton.sync(this.isAnyUiOpen());
       // 告示牌上的字（B12）：每 0.25 秒对一次账。
       // 为什么要定期对账而不是"事件驱动"：会改变这趟结果的三件事里有两件**没有事件**——
       // ① 区块流式加载/卸载（玩家走过去）；② 那格的光照变了（太阳落了、旁边点了火把）。

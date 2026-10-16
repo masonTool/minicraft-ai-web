@@ -31,6 +31,9 @@ import { TOUCH_ICON_LABELS, TOUCH_ICON_NAMES, touchIconSvg } from '../src/ui/Tou
 import { iconBackingScale } from '../src/ui/ItemIcon.ts';
 import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
 import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
+import { BackButton } from '../src/ui/BackButton.ts';
+import { STICK_MODES, STICK_MODE_LABELS } from '../src/ui/TouchControls.ts';
+import { DEFAULT_SETTINGS, loadSettings } from '../src/ui/SettingsScreen.ts';
 
 let passed = 0;
 let failed = 0;
@@ -198,6 +201,95 @@ console.log('\n[手机端物品显示与提示（批次 95 体检）]');
   const nameRule = /#selected-item-name \{([^}]*)\}/.exec(compact)?.[1] ?? '';
   check('物品名浮标不吃手势（pointer-events: none）', nameRule.includes('pointer-events: none'), nameRule.slice(0, 60));
   check('物品名浮标贴在快捷栏上方（用了底部安全区）', nameRule.includes('safe-area-inset-bottom'));
+}
+
+console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全关完才轮到浏览器]');
+{
+  /** 一个可断言的假浏览器：`history` 只有"压一条/退一格"两个动作 */
+  function makeHarness(panels: number) {
+    let open = panels;
+    const log: string[] = [];
+    const back = new BackButton({
+      pushState: () => log.push('push'),
+      back: () => log.push('back'),
+      closeTopUi: () => {
+        log.push('close');
+        open = Math.max(0, open - 1);
+        return open > 0;
+      },
+    });
+    return { back, log, state: () => open };
+  }
+
+  // ① 打开界面 → 压一条历史；界面自己关掉 → 把那条历史收回去（不留"假条目"）
+  const one = makeHarness(1);
+  one.back.sync(true);
+  equal('打开界面时压一条历史', one.log.join(','), 'push');
+  one.back.sync(true);
+  equal('保持开着不再压（不会攒一堆）', one.log.join(','), 'push');
+  one.back.sync(false);
+  equal('界面关掉时把历史收回去', one.log.join(','), 'push,back');
+  equal('守卫撤掉', String(one.back.isGuarded), 'false');
+
+  // ② 按返回 → 关掉最上面那一层；还有别的层就继续守着
+  const two = makeHarness(2);
+  two.back.sync(true);
+  two.back.onBrowserBack();
+  equal('有界面时按返回：关一层、下面还有就重新守着', two.log.join(','), 'push,close,push');
+  equal('守卫还在', String(two.back.isGuarded), 'true');
+  two.back.onBrowserBack();
+  equal('再按返回：关最后一层', two.log.join(','), 'push,close,push,close');
+  equal('全关完 → 守卫撤掉（下一次返回交给浏览器）', String(two.back.isGuarded), 'false');
+
+  // ③ 没界面时按返回 → 什么都不做（= 让浏览器退出页面）
+  const none = makeHarness(0);
+  none.back.onBrowserBack();
+  equal('没界面时不拦返回', none.log.join(','), '');
+
+  // ④ 玩家自己关完界面之后，历史里不该留下"按好几下才退得出去"的假条目
+  const manual = makeHarness(1);
+  manual.back.sync(true);
+  manual.back.sync(false);
+  const before = manual.log.length;
+  manual.back.onBrowserBack();
+  equal('关完之后的返回交给浏览器（我们不再插手）', manual.log.length, before);
+}
+
+console.log('\n[动态摇杆与飞行提示（批次 96）]');
+{
+  equal('摇杆两档（与基岩版一致）', STICK_MODES.join(','), 'fixed,dynamic');
+  check('两档都有中文名', STICK_MODES.every((mode) => STICK_MODE_LABELS[mode].length > 0));
+  equal('默认固定（肌肉记忆优先）', DEFAULT_SETTINGS.touchStick, 'fixed');
+
+  // 设置项要能读回：动态模式必须**真的被存下来**（不然滑一下又回到固定）
+  const saved = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => void saved.set(key, value),
+  };
+  const globals = globalThis as unknown as { localStorage?: unknown; window?: unknown };
+  const hadLocalStorage = 'localStorage' in globals;
+  const previous = globals.localStorage;
+  globals.localStorage = storage;
+  storage.setItem('bedrock-settings', JSON.stringify({ touchStick: 'dynamic' }));
+  equal('读回来是动态模式', loadSettings().touchStick, 'dynamic');
+  storage.setItem('bedrock-settings', JSON.stringify({ touchStick: '胡说' }));
+  equal('非法取值回退到默认', loadSettings().touchStick, DEFAULT_SETTINGS.touchStick);
+  if (hadLocalStorage) globals.localStorage = previous;
+  else delete globals.localStorage;
+
+  // CSS：动态摇杆靠透明度隐藏（不能 display: none——那样量出来的矩形是 0），
+  // 飞行提示用伪元素画（不往按钮里塞文字节点）
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  for (const [label, needle] of [
+    ['动态摇杆平时隐形', '#touch-stick.dynamic { opacity: 0; }'],
+    ['动态摇杆按下现身', '#touch-stick.dynamic.active { opacity: 1; }'],
+    ['飞行时跳跃键画上升箭头', "#touch-ui.flying .touch-button.jump::after { content: '▲';"],
+    ['飞行时潜行键画下降箭头', "#touch-ui.flying .touch-button[data-icon=\"sneak\"]::after { content: '▼';"],
+  ] as const) {
+    check(`index.html 里有"${label}"`, compact.includes(needle), needle);
+  }
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
