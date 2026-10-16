@@ -18,6 +18,7 @@ import { Block, CROP_STAGES, blockDef, cropOf, Wood } from '../registry/blocks.t
 import { Item } from '../registry/items.ts';
 import { FACING_OFFSET, withVineSide, withVineUp, vineSides, type Facing } from '../registry/blockState.ts';
 import { fireBehavior } from '../world/Fire.ts';
+import { COPPER_IDS, copperWeatherBehavior } from '../world/Copper.ts';
 
 /** 随机刻看到的世界 */
 export interface TickWorld {
@@ -290,6 +291,8 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.FIRE, fireBehavior],
   // 藤蔓（B11）：往下长 + 往旁边蔓延
   [Block.VINE, vineBehavior],
+  // 铜的氧化（批次 40）：16 个铜方块都要登记——随机刻是按"当前这个 id"查行为的
+  ...COPPER_IDS.map((id) => [id, copperWeatherBehavior] as const),
 ]);
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */

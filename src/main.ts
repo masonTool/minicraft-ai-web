@@ -65,6 +65,7 @@ import {
   type TickWorld,
 } from './core/tick/RandomTicks.ts';
 import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
+import { scrapeResult } from './core/world/Copper.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
 import { FIRE_IGNITE_SECONDS, igniteAt } from './core/world/Fire.ts';
 import {
@@ -374,6 +375,12 @@ const STARTING_HOTBAR: readonly number[] = [
   Item.ARROW,
   Item.STRING,
   Item.FLINT,
+  // 开发期铜的四档（批次 40）：四档铜块 + 切制铜，右键几下就能看到氧化与刮锈
+  Block.COPPER_BLOCK,
+  Block.EXPOSED_COPPER_BLOCK,
+  Block.WEATHERED_COPPER_BLOCK,
+  Block.OXIDIZED_COPPER_BLOCK,
+  Block.CUT_COPPER,
 ];
 
 class App {
@@ -2335,6 +2342,29 @@ class App {
   }
 
   /**
+   * 刮铜（批次 40）：手上是**斧头**、准星对着氧化过的铜方块 → 退一档（刮掉一层锈）。
+   *
+   * 判定与原版一致：
+   *  - 必须是斧头（镐/锹没用）；
+   *  - 目标得是**能退档**的铜（新铜、以及已经刮干净的新铜都刮不动）；
+   *  - 成功时消耗 1 点斧头耐久。
+   * 判定本身是纯函数（`Copper.ts#scrapeResult`），所以能离线断言。
+   */
+  private scrapeCopper(x: number, y: number, z: number): boolean {
+    if (this.heldTool?.type !== 'axe') return false;
+    const target = this.world.getBlock(x, y, z);
+    const scraped = scrapeResult(target);
+    if (scraped === undefined) return false;
+
+    this.world.setBlockAndUpdate(x, y, z, scraped);
+    this.net.sendBlock(x, y, z, scraped, 0, this.dimension);
+    this.audio.play('break_stone', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.damageHeldTool();
+    this.hand.swing();
+    return true;
+  }
+
+  /**
    * 打火石（I12 / K8）：手上是打火石、准星对着方块 → 先试着**点门**，再试着**点火**。
    *
    * 顺序与原版一致（命中黑曜石先试 `PortalShape`，成了就 `return SUCCESS`）：
@@ -3744,6 +3774,12 @@ class App {
 
     // 锄头耕地（H13）：拿着锄头右键泥土/草方块 → 变成耕地，不放置方块
     if (this.tillSoil(this.hit.x, this.hit.y, this.hit.z)) {
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
+    // 斧头刮铜（批次 40）：手上是斧头、准星对着锈了的铜 → 刮掉一层
+    if (this.scrapeCopper(this.hit.x, this.hit.y, this.hit.z)) {
       this.placeCooldown = PLACE_COOLDOWN;
       return;
     }
