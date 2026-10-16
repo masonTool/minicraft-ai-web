@@ -14,6 +14,8 @@
  * 这样放一个邻居方块后，栅栏会自动长出新的一节，不需要额外的状态同步逻辑。
  */
 
+import { PAINTING_VARIANT_LIMIT, paintingName } from './paintings.ts';
+
 /** 朝向：0=北(-Z)、1=东(+X)、2=南(+Z)、3=西(-X) */
 export type Facing = 0 | 1 | 2 | 3;
 
@@ -206,6 +208,29 @@ export type BlockShape =
    * 要按这个朝向算落点，而不是简单地"打在这一格的顶上"。
    */
   | 'lightning_rod'
+  /**
+   * 物品展示框（B14，批次 86）：贴在墙上的一块**中间镂空**的板子，
+   * 框里能挂一件物品（挂的是什么存在 `world/ItemFrame.ts` 那张按坐标的表里，
+   * 与告示牌上的字同一条路——方块状态只有一个字节，装不下"id + 数量 + 耐久 + 附魔"）。
+   *
+   * 朝向只用通用 `facing` 两位，语义沿用**梯子/火把那一套**：
+   * `facing` 指向**贴着的那一面墙**（贴墙牌那种"指向外面"是另一套，
+   * 这里要的几何是"贴在墙上"，所以取贴墙那一套；朝外方向用
+   * `outwardFacingOf` 换算，只有一处出处）。
+   *
+   * 无碰撞（原版能走进去）。
+   */
+  | 'item_frame'
+  /**
+   * 画（B14，批次 86）：贴在墙上的**一整面**薄板，贴图就是那幅画。
+   *
+   * 本项目这一批只做原版 1.18 里 **1×1** 的 7 幅（见 `registry/paintings.ts`），
+   * 所以它只占一格、不需要跨格占用那套机制。
+   * "哪一幅"放在状态位 bit3-5（3 位，7 幅用不满），朝向同样是"贴着的那一面墙"。
+   *
+   * 无碰撞（原版画是一层贴图，能穿过去）。
+   */
+  | 'painting'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -440,6 +465,32 @@ export function isTop(state: number): boolean {
 
 export function withTop(state: number, top: boolean): number {
   return top ? state | TOP_MASK : state & ~TOP_MASK;
+}
+
+/**
+ * "贴在墙上的那一族"的**朝外方向**（B14，批次 86）。
+ *
+ * 本项目绝大多数贴墙方块（火把 / 梯子 / 藤蔓 / 珊瑚扇 / 绊线钩 / 展示框 / 画）
+ * 的 `facing` 都指向**贴着的那一面墙**，而画框这类几何真正需要的是
+ * "板子朝哪边露出来"——也就是它的反方向。
+ *
+ * 换算只有这一处出处（告示牌那批的经验：同一个字段两种含义时，
+ * 换算散开写必然有一处写反），并且写起来是 `+2 & 3`（Facing 四向的对面）。
+ */
+export function outwardFacingOf(state: number): Facing {
+  return ((facingOf(state) + 2) & 3) as Facing;
+}
+
+/**
+ * 贴墙那一族的**支撑格**相对偏移（B14，批次 86）。
+ *
+ * `facing` 指向贴着的那一面墙，所以支撑就在 `FACING_OFFSET[facing]` 那一格。
+ * 与几何（`blockShapes` 的 `wallPlateBox`）、放置规则（`Placement` 里那句
+ * `blockAt(-nx, 0, -nz)`）读的是同一个字段，所以"贴在哪一面 / 靠哪一面站住"
+ * 不会各说各话。
+ */
+export function wallSupportOffset(state: number): readonly [number, number] {
+  return FACING_OFFSET[facingOf(state)] ?? FACING_OFFSET[0]!;
 }
 
 /** 由玩家水平朝向推方块朝向（原版放置时取玩家面朝的相反方向） */
@@ -892,6 +943,32 @@ export function bedFootPos(
   return isBedHead(state) ? bedOtherHalf(x, y, z, state) : [x, y, z];
 }
 
+// ---------------------------------------------------------------- 画（B14，批次 86）
+
+/**
+ * "墙上挂的是哪一幅画"占 **bit3-5**。
+ *
+ * 借用 bit3（`POWERED` / `WALL_MOUNT`）与 bit4-5：画属于**自己的形状族**
+ * （一个方块只会是画，不会同时是门/雪层/红石元件），沿用文件开头那条设计。
+ *
+ * 7 幅用不满 8 档，但上限按 `PAINTING_VARIANT_LIMIT` 夹住而不是按掩码——
+ * 表以后长到第 9 幅时，`withPaintingVariant` 会当场夹回 7，
+ * 而不是悄悄把状态溢到别的字段上（那种 bug 表现为"画着画着变成另一幅"）。
+ */
+const PAINTING_VARIANT_SHIFT = 3;
+const PAINTING_VARIANT_MASK = 0b111 << PAINTING_VARIANT_SHIFT;
+
+/** 这一格挂的是第几幅画（0 起的下标，对应 `PAINTING_VARIANTS`） */
+export function paintingVariantOf(state: number): number {
+  return (state & PAINTING_VARIANT_MASK) >> PAINTING_VARIANT_SHIFT;
+}
+
+/** 写"挂第几幅画"（夹到表的合法范围） */
+export function withPaintingVariant(state: number, index: number): number {
+  const clamped = Math.max(0, Math.min(PAINTING_VARIANT_LIMIT - 1, Math.floor(index) || 0));
+  return (state & ~PAINTING_VARIANT_MASK) | (clamped << PAINTING_VARIANT_SHIFT);
+}
+
 // ---------------------------------------------------------------- 调试
 
 export function describeState(shape: BlockShape, state: number): string {
@@ -944,6 +1021,12 @@ export function describeState(shape: BlockShape, state: number): string {
     case 'sign':
       // 告示牌（批次 80）：站牌 / 挂墙牌 + 字朝哪边
       return `${isWallMounted(state) ? '挂墙' : '落地'}·字朝${FACING_NAMES[facingOf(state)]}`;
+    case 'item_frame':
+      // 展示框（B14，批次 86）：贴在朝向那一面墙上
+      return `贴${FACING_NAMES[facingOf(state)]}墙`;
+    case 'painting':
+      // 画（B14）：贴墙 + 挂的是哪一幅
+      return `贴${FACING_NAMES[facingOf(state)]}墙·${paintingName(paintingVariantOf(state))}`;
     default:
       return '';
   }

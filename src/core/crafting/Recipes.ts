@@ -1000,6 +1000,35 @@ const LIGHTNING_ROD_RECIPE: Recipe = {
   key: { C: Item.COPPER_INGOT },
 };
 
+/**
+ * 展示框与画（B14，批次 86）。
+ *
+ * **展示框**：8 根木棍围一圈 + 1 张皮革（原版图案，皮革在正中）。
+ * 木棍与皮革都是早期就能拿到的东西，所以这确实是"随手能做的装饰"。
+ *
+ * **画**：8 根木棍围一圈 + 1 块**羊毛**（原版图案；羊毛在正中）。
+ * ⚠️ 原版这一条是**标签配方**（任意颜色的羊毛都行），这里按"标签配方展开成 N 条"
+ * 的既有做法**展开成 16 条**（一种羊毛一条）——只写白羊毛会变成
+ * "配方书里写着能做、手里拿着红羊毛却做不了"（烟熏炉那批踩过同一个坑）。
+ * 16 条配方看起来多，但它们本来就是同一条配方的 16 种写法。
+ */
+const HANGING_RECIPES: readonly Recipe[] = [
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.ITEM_FRAME, count: 1 },
+    pattern: ['SSS', 'SLS', 'SSS'],
+    key: { S: Item.STICK, L: Item.LEATHER },
+  },
+  ...DYE_COLORS.map(
+    (_color, index): Recipe => ({
+      kind: 'shaped',
+      result: { id: Block.PAINTING, count: 1 },
+      pattern: ['SSS', 'SWS', 'SSS'],
+      key: { S: Item.STICK, W: woolId(index) },
+    }),
+  ),
+];
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...CONTAINER_RECIPES,
@@ -1022,6 +1051,7 @@ export const RECIPES: readonly Recipe[] = [
   ...ENCHANT_RECIPES,
   ...BLACKSTONE_RECIPES,
   LIGHTNING_ROD_RECIPE,
+  ...HANGING_RECIPES,
 ];
 
 interface Normalized {

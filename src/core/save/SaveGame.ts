@@ -11,6 +11,7 @@
  *      （C7 尾巴补上的第四样——在这之前容器内容**关掉页面就没了**，
  *      序列化本身在 `ContainerSave.ts`）
  *   5. **signs**：告示牌上的文字（B12，批次 80；序列化在 `world/SignText.ts`）
+ *   6. **frames**：物品展示框里挂着的东西（B14，批次 86；序列化在 `world/ItemFrame.ts`）
  *
  * 为什么用 IndexedDB 而不是 localStorage：
  *   localStorage 只能存字符串且容量约 5MB，把二进制转 base64 还会再胖 33%；
@@ -22,10 +23,11 @@
 import { ChunkEdits, type SerializedEdits } from './ChunkEdits.ts';
 import type { SerializedContainer } from './ContainerSave.ts';
 import type { SerializedSign } from '../world/SignText.ts';
+import type { SerializedFrame } from '../world/ItemFrame.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 
 /** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_META = 'meta';
 import type { ItemStack } from '../container/Inventory.ts';
 
@@ -41,6 +43,15 @@ const STORE_CONTAINERS = 'containers';
  * 仓库版本从 2 升到 3：`onupgradeneeded` 会把缺的仓补建出来，老存档自动升级。
  */
 const STORE_SIGNS = 'signs';
+/**
+ * 物品展示框里挂着的东西（B14，批次 86）——第 6 个对象仓。
+ *
+ * 与牌子上的字同一类"按坐标存的运行时数据"，也就照它单开一个仓：
+ * 装的是**物品**而不是文字，校验规则（id 要能在物品表里查到、数量夹到 1~64、
+ * 耐久/附魔/名字要原样带回来）与牌子的"四行文字"完全不是一回事。
+ * 仓库版本从 3 升到 4，老存档自动补建。
+ */
+const STORE_FRAMES = 'frames';
 
 /** 存档结构版本：改了字段含义就要 +1，并在加载时做迁移或丢弃 */
 export const SAVE_VERSION = 1;
@@ -185,6 +196,7 @@ export class SaveGame {
         if (!db.objectStoreNames.contains(STORE_CHUNKS)) db.createObjectStore(STORE_CHUNKS);
         if (!db.objectStoreNames.contains(STORE_CONTAINERS)) db.createObjectStore(STORE_CONTAINERS);
         if (!db.objectStoreNames.contains(STORE_SIGNS)) db.createObjectStore(STORE_SIGNS);
+        if (!db.objectStoreNames.contains(STORE_FRAMES)) db.createObjectStore(STORE_FRAMES);
       };
       const db = await promisify(request);
       const save = new SaveGame(db, worldId);
@@ -348,6 +360,24 @@ export class SaveGame {
       promisify(store.get('signs') as IDBRequest<SerializedSign[] | undefined>),
     );
     return value ?? [];
+  }
+
+  /**
+   * 读展示框里挂着的东西（B14，批次 86）。
+   *
+   * 与容器/牌子同一条：**整份一次读写**——框数以人为单位，整写省心也不会漏。
+   */
+  async loadFrames(): Promise<SerializedFrame[]> {
+    const value = await this.transaction(STORE_FRAMES, 'readonly', (store) =>
+      promisify(store.get('frames') as IDBRequest<SerializedFrame[] | undefined>),
+    );
+    return value ?? [];
+  }
+
+  async saveFrames(frames: SerializedFrame[]): Promise<void> {
+    await this.transaction(STORE_FRAMES, 'readwrite', (store) => {
+      store.put(frames, 'frames');
+    });
   }
 
   async saveSigns(signs: SerializedSign[]): Promise<void> {

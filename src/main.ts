@@ -40,7 +40,7 @@ import { fertilizeAt, type BoneMealWorld } from './core/world/BoneMeal.ts';
 // 树苗与树（批次 75）：树的形状复用区块生成那套 Planter，这里只提供"写进活世界"的 writer
 import { growTreeAt, type TreeWorld } from './core/world/TreeGrowth.ts';
 // 支撑没了、该掉的就掉（批次 78，B49）：判据在 `Support.ts`（纯函数 + 注入世界）
-import { sweepUnsupported, type SupportWorld } from './core/world/Support.ts';
+import { sweepHangingsAround, sweepUnsupported, type SupportWorld } from './core/world/Support.ts';
 import type { TreeKind } from './core/gen/Features.ts';
 // 堆肥（批次 70）：什么能堆肥、几分概率在 `registry/compost.ts`（纯数据 + 纯函数）
 import { compostStep } from './core/registry/compost.ts';
@@ -279,6 +279,16 @@ import { SignEditor } from './ui/SignEditor.ts';
 import { UnsupportedScreen } from './ui/UnsupportedScreen.ts';
 import { probeBrowserGl, rendererFailure, type GlSupportFail } from './core/render/webglSupport.ts';
 import { SignRenderer, type SignRenderItem } from './render/SignRenderer.ts';
+// 物品展示框里挂着的东西（B14，批次 86）：与告示牌上的字同一条结构——
+// 表 + 渲染器两件，主程序只做"右键放/取/转、定期对账、随存档走"
+import {
+  ItemFrameStore,
+  frameKey,
+  restoreFrames,
+  serializeFrames,
+  type FrameEntry,
+} from './core/world/ItemFrame.ts';
+import { ItemFrameRenderer, type FrameRenderItem } from './render/ItemFrameRenderer.ts';
 import {
   CAKE_SLICES,
   cakeBites,
@@ -795,6 +805,15 @@ class App {
   /** 文字对账的节拍器（每 0.25 秒一次：区块加载/卸载、光照变化都会在这里被吸收） */
   private signSyncTimer = 0;
   /**
+   * 物品展示框（B14，批次 86）：一张"按坐标存挂着什么"的表 + 一个渲染器。
+   *
+   * 与告示牌同构，只是**装的是一整件物品**（id + 数量 + 耐久 + 附魔 + 名字），
+   * 规则在 `world/ItemFrame.ts`（纯逻辑、可离线断言），这里只做接线。
+   * 渲染器要图集（物品图标从图集取 UV），所以在构造函数里建。
+   */
+  private readonly itemFrames = new ItemFrameStore();
+  private readonly itemFrameRenderer: ItemFrameRenderer;
+  /**
    * 钓鱼（批次 81，G11）。
    *
    * 浮标**不做成实体**：它没有碰撞、不参与战斗、也不需要联机同步，
@@ -1049,6 +1068,10 @@ class App {
     this.scene.add(this.blockOverlay.object);
     // 告示牌上的字（B12）：单独一个 Group，里面每块有字的牌子一个平面
     this.scene.add(this.signRenderer.group);
+    // 展示框里挂着的东西（B14）：同样单独一个 Group，里面每个框一个子节点
+    // （外层节点管框面朝哪边、子节点管物品自己的 45° 旋转）
+    this.itemFrameRenderer = new ItemFrameRenderer(atlas);
+    this.scene.add(this.itemFrameRenderer.group);
     this.signEditor.onSave = (lines) => this.applySignText(lines);
     this.signEditor.onClose = () => {
       this.editingSign = null;
@@ -1419,6 +1442,13 @@ class App {
     const restoredSigns = restoreSigns(this.signText, signs);
     if (restoredSigns > 0) console.info(`[save] 已还原 ${restoredSigns} 块告示牌上的文字`);
 
+    // 展示框里挂着的东西（B14）：与告示牌同一条（整份一次读、脏数据逐条跳过）。
+    // 读到的不会立刻显示——`syncFrames` 那趟对账要求"区块已加载 + 那一格还是框"
+    this.itemFrames.clear();
+    const frames = await this.save.loadFrames();
+    const restoredFrames = restoreFrames(this.itemFrames, frames);
+    if (restoredFrames > 0) console.info(`[save] 已还原 ${restoredFrames} 个展示框里挂着的东西`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -1542,6 +1572,8 @@ class App {
       await this.save.saveContainers(serializeContainers(this.world.containers));
       // 告示牌上的字（B12）：同样整份覆盖写（空牌子不进表，所以通常只有几条）
       await this.save.saveSigns(serializeSigns(this.signText));
+      // 展示框里挂着的东西（B14）：同一条（空框不进表）
+      await this.save.saveFrames(serializeFrames(this.itemFrames));
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -2895,10 +2927,14 @@ class App {
     this.net.sendBlock(x, y, z, Block.COMPOSTER, state, this.dimension);
   }
 
-  /** 收支撑只要"读一格、写一格" */
+  /**
+   * 收支撑只要"读一格、写一格"，加上**读状态**（B14 起）：
+   * 展示框与画的支撑是"朝向那一侧的墙"，不看 `facing` 就不知道墙在哪一格。
+   */
   private readonly supportWorld: SupportWorld = {
     getBlock: (x, y, z) => this.world.getBlock(x, y, z),
     setBlock: (x, y, z, blockId) => this.world.setBlockAndUpdate(x, y, z, blockId),
+    getState: (x, y, z) => this.world.getBlockState(x, y, z),
   };
 
   /**
@@ -2914,6 +2950,41 @@ class App {
       this.net.sendBlock(cx, cy, cz, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(cx + 0.5, cy + 0.5, cz + 0.5, this.blockParticleColor(id), 4);
     });
+  }
+
+  /**
+   * 墙没了，挂在它上面的东西跟着掉（B14，批次 86）：展示框与画。
+   *
+   * 与 `sweepUnsupportedAbove` 是一对（一个管"站着的"、一个管"贴着的"），
+   * 调用点也在一起：玩家破坏与爆炸之后各来一次。
+   *
+   * 展示框要多做一件事：**先把框里挂着的东西还回去**（它不在方块状态里，
+   * 掉方块不会自动带走它），否则"拆了框，里面那把附魔剑凭空消失"。
+   */
+  private sweepHangings(x: number, y: number, z: number): void {
+    sweepHangingsAround(this.supportWorld, x, y, z, (hx, hy, hz, id) => {
+      // 框里那件东西（画没有内容，这个调用对它自然为空转）
+      this.dropFrameContents(hx, hy, hz);
+      const drop = dropFor(id);
+      if (drop) this.spawnDrop(drop.id, drop.count, hx + 0.5, hy + 0.5, hz + 0.5);
+      this.net.sendBlock(hx, hy, hz, Block.AIR, 0, this.dimension);
+      this.particles.spawnBlockBreak(hx + 0.5, hy + 0.5, hz + 0.5, this.blockParticleColor(id), 4);
+    });
+  }
+
+  /**
+   * 把某一格里展示框挂着的东西**取出来**（掉在地上）并清掉表里的那条。
+   *
+   * 调用点有三处：拆框、墙没了导致框掉下来、以及定期对账发现"那一格已经不是框了"。
+   * 三处走同一个方法，才不会出现"某一条路径把物品吞了"。
+   */
+  private dropFrameContents(x: number, y: number, z: number): void {
+    const entry = this.itemFrames.get(this.dimension, x, y, z);
+    if (!entry) return;
+    this.itemFrames.remove(this.dimension, x, y, z);
+    // `stackExtras` 把耐久/附魔/改名/累积惩罚/内容物原样搬过去——
+    // 于是"挂着的那把附魔剑"掉出来还是那一把（与容器倒空走同一个出处）
+    this.spawnDrop(entry.item.id, entry.item.count, x + 0.5, y + 0.5, z + 0.5, stackExtras(entry.item));
   }
 
   /**
@@ -3129,6 +3200,17 @@ class App {
     // 火焰/爆炸把牌子烧掉时走不到这里，由 `syncSigns` 那趟对账兜底（发现不是牌子就丢掉）
     if (isSign(brokenId)) this.clearSignText(this.hit.x, this.hit.y, this.hit.z);
 
+    // 展示框（B14）：框拆了，**里面挂着的那件东西也要还给玩家**——
+    // 它不在方块状态里，不管的话就是"拆一个框，里面那把附魔剑凭空消失"
+    // （框本身掉不掉由下面的常规掉落管；这里只管里面的东西）
+    //
+    // ⚠️ 创造模式**不掉**（与原版一致，也与下面"创造模式不产生掉落"那一条同源）：
+    // 直接把条目清掉即可，否则创造模式拆几个框就能刷出一堆东西
+    if (brokenId === Block.ITEM_FRAME) {
+      if (this.flying) this.itemFrames.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
+      else this.dropFrameContents(this.hit.x, this.hit.y, this.hit.z);
+    }
+
     // 潜影盒（批次 72）：内容**不**原地倒出来，而是跟着掉落的物品走（下一步用得上）。
     // 顺序要紧：先把内容取出来、再把容器从表里删掉，最后掉落时挂到物品上。
     const shulkerContents = brokenId === Block.SHULKER_BOX ? shulkerContentsOf(this.world.containers.getShulkerBox(this.dimension, this.hit.x, this.hit.y, this.hit.z)) : undefined;
@@ -3138,6 +3220,8 @@ class App {
     // 支撑没了，该掉的就掉（批次 78，B49）：从这一格的**上面**一路往上收——
     // 拆掉甘蔗下面那格沙子，整根甘蔗要一节节掉完（只收一格的话上面几节会悬空）
     this.sweepUnsupportedAbove(this.hit.x, this.hit.y + 1, this.hit.z);
+    // 墙没了，挂在它上面的展示框与画跟着掉（B14；与上面那条一对）
+    this.sweepHangings(this.hit.x, this.hit.y, this.hit.z);
     // 敲掉黑曜石 → 检查旁边的传送门还立不立得住（K8）：框一破，那一整片门方块跟着熄灭
     if (brokenId === Block.OBSIDIAN) this.breakPortalsBeside(this.hit.x, this.hit.y, this.hit.z);
     this.particles.spawnBlockBreak(
@@ -3590,6 +3674,91 @@ class App {
     });
     for (const pos of stale) this.signText.remove(this.dimension, pos.x, pos.y, pos.z);
     this.signRenderer.sync(items);
+  }
+
+  // ---------------------------------------------------------------- 物品展示框（B14，批次 86）
+
+  /**
+   * 右键展示框（三种用法，与原版同一套手感）：
+   *  - **空框 + 手上有东西** → 挂上去（消耗 1 个）；
+   *  - **有东西 + 空手** → 转 45°（转 8 次回到原位）；
+   *  - **有东西 + 手上有别的东西** → 换一件（旧的还给你，放不下就掉在框下）。
+   *
+   * ⚠️ 第三条是**本项目定的口径**（原版对"手上有东西"的框只做旋转）——
+   * 手机上想换一幅"挂着的画/挂着的剑"只有拆框重放这一条路太别扭，
+   * 所以把"换"接上；这条差异记在 TASKS B14。
+   *
+   * @returns 是否消费了这次右键（展示框**总是**消费：不然点框会把方块放到框那一格上）
+   */
+  private useItemFrame(x: number, y: number, z: number): boolean {
+    const held = this.inventory.get(this.hotbarIndex);
+    const entry = this.itemFrames.get(this.dimension, x, y, z);
+
+    // 空手：有东西就转一格；空框空手什么也不做（但这一次右键算用掉了）
+    if (!held) {
+      if (!entry) return true;
+      this.itemFrames.rotate(this.dimension, x, y, z);
+      this.audio.play('click', { x, y, z });
+      this.hand.swing();
+      this.syncFrames();
+      return true;
+    }
+
+    // 手上有东西：先把旧的取下来（还给你），再把手上这一件挂上去。
+    // ⚠️ 顺序要紧：`consume` 之后手上那一份就没了，所以快照要在它之前取
+    const snapshot: ItemStack = { ...stackExtras(held), id: held.id, count: 1 };
+    if (!this.inventory.consume(held.id, 1)) return false;
+    if (entry) {
+      const leftover = this.inventory.addStack(entry.item);
+      if (leftover > 0) this.spawnDrop(entry.item.id, leftover, x + 0.5, y - 0.2, z + 0.5, stackExtras(entry.item));
+    }
+    this.itemFrames.set(this.dimension, x, y, z, snapshot, entry?.rotation ?? 0);
+    this.audio.play('place', { x, y, z });
+    this.hand.swing();
+    this.refreshHotbar();
+    this.syncFrames();
+    return true;
+  }
+
+  /**
+   * 框里挂着什么与世界的**对账**（每 0.25 秒一次，与牌子的文字同一拍）。
+   *
+   * 三件事：
+   *  1. 这一维度、**区块已加载**、那一格还是展示框的 → 交给渲染器画；
+   *  2. 那一格已经不是框了（被火烧掉 / 被指令改掉 / 脏存档）→ **把挂着的东西还回去**再清掉条目；
+   *  3. 其余（换维度、区块卸载）→ 渲染器自己把多余的子节点释放掉。
+   *
+   * ⚠️ 第 2 条的"还回去"与告示牌不同：牌子上的字丢了就是丢了，
+   * 而框里可能挂着一把附魔剑——**宁可掉在地上，也不能静默吞掉**。
+   * 玩家自己拆框走的是破坏那条路（那里已经取过一次），条目早没了，所以不会掉两份。
+   */
+  private syncFrames(): void {
+    const items: FrameRenderItem[] = [];
+    const stale: FrameEntry[] = [];
+    this.itemFrames.forEach((entry) => {
+      if (entry.dimension !== this.dimension) return;
+      // 区块没加载：这一刻既看不出框在不在，也没必要显示 → 跳过（下次对账再说）
+      if (!this.world.getChunk(toChunkCoord(entry.x), toChunkCoord(entry.z))) return;
+      if (this.world.getBlock(entry.x, entry.y, entry.z) !== Block.ITEM_FRAME) {
+        stale.push(entry);
+        return;
+      }
+      items.push({
+        key: frameKey(entry.dimension, entry.x, entry.y, entry.z),
+        x: entry.x,
+        y: entry.y,
+        z: entry.z,
+        itemId: entry.item.id,
+        rotation: entry.rotation,
+        light: Math.max(
+          this.world.getSkyLight(entry.x, entry.y, entry.z),
+          this.world.getBlockLight(entry.x, entry.y, entry.z),
+        ),
+        state: this.world.getBlockState(entry.x, entry.y, entry.z),
+      });
+    });
+    for (const entry of stale) this.dropFrameContents(entry.x, entry.y, entry.z);
+    this.itemFrameRenderer.sync(items);
   }
 
   // ---------------------------------------------------------------- 雷电与避雷针（批次 83）
@@ -4092,6 +4261,8 @@ class App {
             broken++;
             // 炸掉脚下那格，上面的植物同样该掉（批次 78，B49）：与玩家破坏走同一个收尾
             this.sweepUnsupportedAbove(bx, by + 1, bz);
+            // 墙被炸掉时，挂在上面的展示框与画也跟着掉（B14，批次 86）
+            this.sweepHangings(bx, by, bz);
             // 炸完要唤醒周围的水（挖掉水底会让水重新流）
             this.wakeFluidsAround(bx, by, bz);
           }
@@ -4589,6 +4760,9 @@ class App {
       this.openSignEditor(x, y, z, hitBlock);
       return true;
     }
+    // 物品展示框（B14，批次 86）：右键 = 挂上去 / 转 45° / 换一件。
+    // 画（`painting`）没有交互：右键点它继续走放置逻辑（原版画也没有交互）
+    if (hitShape === 'item_frame') return this.useItemFrame(x, y, z);
     if (hitBlock === Block.CRAFTING_TABLE) {
       this.inventoryScreen.openWith('crafting');
       return true;
@@ -6285,6 +6459,9 @@ class App {
       if (this.signSyncTimer <= 0) {
         this.signSyncTimer = 0.25;
         this.syncSigns();
+        // 展示框里挂着的东西（B14）：同一个节拍对账（两件事的"必须重新看世界一眼"
+        // 的理由完全一样：区块流式加载/卸载、光照变化都没有事件）
+        this.syncFrames();
       }
       this.resolvePortalArrival();
 
@@ -6386,6 +6563,7 @@ class App {
     this.blockOverlay.dispose();
     // 告示牌的文字平面与画布贴图（B12）：每块牌子一份材质，得逐块释放
     this.signRenderer.dispose();
+    this.itemFrameRenderer.dispose();
     // 浮标（批次 81）：懒建的，可能一次都没抛过竿
     this.bobberMesh?.geometry.dispose();
     const bobberMaterial = this.bobberMesh?.material;
@@ -6482,6 +6660,27 @@ class App {
   /** 读某一块牌子上的字（验收脚本用；没写过返回 null） */
   signLinesAt(x: number, y: number, z: number): readonly string[] | null {
     return this.signText.get(this.dimension, Math.floor(x), Math.floor(y), Math.floor(z));
+  }
+
+  /**
+   * 展示框的状态（B14，批次 86）——验收脚本用。
+   *
+   * `stored` 是挂着东西的框数、`visible` 是**这一刻真的画在世界里**的框数
+   * （两者不等很正常：远处区块没加载）。
+   */
+  get frameState(): { stored: number; visible: number } {
+    return { stored: this.itemFrames.size, visible: this.itemFrameRenderer.count };
+  }
+
+  /** 读某一格里展示框挂着的东西（验收脚本用；空框返回 null） */
+  frameItemAt(
+    x: number,
+    y: number,
+    z: number,
+  ): { id: number; count: number; rotation: number } | null {
+    const entry = this.itemFrames.get(this.dimension, Math.floor(x), Math.floor(y), Math.floor(z));
+    if (!entry) return null;
+    return { id: entry.item.id, count: entry.item.count, rotation: entry.rotation };
   }
 
   /**

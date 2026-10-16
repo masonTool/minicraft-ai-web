@@ -15,11 +15,15 @@ import {
   isInverted,
   isLitState,
   isPowered,
+  paintingVariantOf,
   sixFacingOf,
   sixFacingOpposite,
   sixFacingOffset,
   type BlockShape,
 } from './blockState.ts';
+// 画（B14，批次 86）：贴图按"哪一幅"换，而"哪一幅"的表在 `paintings.ts` 里
+// （那是纯数据、不引任何模块，所以这里引它不会成环）
+import { paintingTile } from './paintings.ts';
 
 export interface BlockDef {
   readonly id: number;
@@ -2575,6 +2579,50 @@ const BLACKSTONE_DECOR_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 物品展示框与画（B14，批次 86）——"墙上挂东西"的两件套。
+ *
+ * 两者都是**贴墙的薄板**，都不挡路、都不遮光，而且都用同一套状态语义
+ * （`facing` 指向贴着的那一面墙，见 `blockState.ts` 的 `'item_frame'` 注释）。
+ * 它们的不同只在"中间有没有洞、贴图怎么来"：
+ *
+ *  - **展示框**：整面板子 + 一张**中间镂空**的贴图（框环画在贴图里），
+ *    框里那件物品由 `render/ItemFrameRenderer.ts` 单独画（那是运行时数据）；
+ *  - **画**：整面薄板，贴图按**状态位里的变体号**换（7 幅，走 `stateTiles`）。
+ *
+ * ⚠️ id 接着 540 往下排（541 / 542）：方块表要求 id 从 0 起连续
+ * （`buildBlockTable` 会在启动时当场拦下错位），所以**不能挑空档**。
+ */
+export const ITEM_FRAME_ID = 541;
+export const PAINTING_ID = 542;
+
+const HANGING_SPECS: readonly BlockSpec[] = [
+  {
+    id: ITEM_FRAME_ID,
+    name: 'minecraft:item_frame',
+    shape: 'item_frame',
+    tiles: ['item_frame', 'item_frame', 'item_frame'],
+    // 框里能不能挂东西与方块无关（挂在墙上的是一块空心板），所以没有额外状态位
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: PAINTING_ID,
+    name: 'minecraft:painting',
+    shape: 'painting',
+    // 默认贴图（状态为 0 时用）就是第一幅画；其余在 `stateTiles` 里按变体号换
+    tiles: [paintingTile(0), paintingTile(0), paintingTile(0)],
+    stateTiles: (state) => {
+      const tile = paintingTile(paintingVariantOf(state));
+      return [tile, tile, tile];
+    },
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -2628,6 +2676,7 @@ const SPECS: readonly BlockSpec[] = [
   ...BLACKSTONE_FAMILY_SPECS,
   LIGHTNING_ROD_SPEC,
   ...BLACKSTONE_DECOR_SPECS,
+  ...HANGING_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2926,6 +2975,9 @@ export const Block = {
   GILDED_BLACKSTONE: GILDED_BLACKSTONE_ID,
   LIGHTNING_ROD: LIGHTNING_ROD_ID,
   CHISELED_POLISHED_BLACKSTONE: CHISELED_POLISHED_BLACKSTONE_ID,
+  // ---- 墙上挂东西（B14，批次 86）：展示框 + 画（只做 1×1 的 7 幅）
+  ITEM_FRAME: ITEM_FRAME_ID,
+  PAINTING: PAINTING_ID,
   CRACKED_POLISHED_BLACKSTONE_BRICKS: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
@@ -3202,6 +3254,10 @@ for (const ids of Object.values(WoodShaped)) {
 }
 // 告示牌（批次 80）：原版 1（木头档里最软的一批，徒手一拍就掉）
 for (const id of SIGN_IDS) HARDNESS.set(id, 1);
+// 展示框与画（B14，批次 86）：原版**一拍就掉**（两者都不是"挖"下来的，
+// 打一下整件掉出来），所以硬度 0 与火把/绊线同一档
+HARDNESS.set(Block.ITEM_FRAME, 0);
+HARDNESS.set(Block.PAINTING, 0);
 HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
 // 锁链 5（原版，必须用镐）；藤蔓 0.2（原版，徒手一拍就掉，但只有剪刀/精准采集会掉下来）

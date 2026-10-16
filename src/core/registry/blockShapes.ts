@@ -28,6 +28,7 @@ import {
   isTop,
   isTrapdoorOpen,
   isWallMounted,
+  outwardFacingOf,
   sixFacingOf,
   sixFacingOffset,
   snowHeight,
@@ -181,6 +182,11 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'lightning_rod':
       // 避雷针（批次 83）：2/16 细杆，**有碰撞**（原版能站在上面、也能挡路）
       return [lightningRodBox(state)];
+    case 'item_frame':
+    case 'painting':
+      // 展示框与画（B14，批次 86）：原版两者都不挡路（能直接走过去/穿过去），
+      // 所以**没有碰撞盒**——它们仍然能被选中与破坏（射线判定不看碰撞盒）
+      return [];
     case 'lily_pad':
       // 睡莲是"能站上去的薄板"：原版可以踩着一路走过水面，所以它**有**碰撞体积
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
@@ -464,6 +470,14 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'lightning_rod':
       // 避雷针（批次 83）：一根细杆（碰撞与渲染同一个盒子，所以"看着是杆、踩着也是杆"）
       return [lightningRodBox(state)];
+    case 'item_frame':
+      // 展示框（B14，批次 86）：墙上的一块板，中间镂空**靠贴图**（框环画在贴图里）。
+      // 用"整面 + 透明中孔"而不是"四个木条盒子"：原版的框就是一圈木边 + 中间的洞，
+      // 一个盒子 + 一张带透明通道的贴图就够了，也不必为 4 个朝向各摆一次木条
+      return [itemFrameBox(state)];
+    case 'painting':
+      // 画（B14）：整面 1/16 薄板，贴图按状态换（哪一幅画）
+      return [paintingBox(state)];
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
@@ -632,6 +646,94 @@ export function signTextAnchor(state: number): SignTextAnchor {
     x: cx + dx * (half + SIGN_TEXT_OFFSET),
     y: cy,
     z: cz + dz * (half + SIGN_TEXT_OFFSET),
+    nx: dx,
+    nz: dz,
+  };
+}
+
+// ---------------------------------------------------------------- 物品展示框与画（B14，批次 86）
+
+/** 展示框板子的厚度（2/16，与告示牌牌面同档） */
+export const ITEM_FRAME_THICKNESS = 2 / 16;
+/** 画的厚度（1/16：就是一层面） */
+export const PAINTING_THICKNESS = 1 / 16;
+/**
+ * 框里那件物品的基准边长（7/16）。
+ *
+ * 洞口是 8/16（贴图里的木条占 2..13 那一圈），物品取 7/16 是为了**留一道缝**：
+ * 正好 8/16 的话，物品的边会与框的木条严丝合缝，转 45° 时看起来像"卡进框里"。
+ */
+export const ITEM_FRAME_ITEM_SIZE = 7 / 16;
+
+/**
+ * 贴墙薄板的盒子：**贴着 `facing` 那一侧的整面墙**，厚度 `t`。
+ *
+ * 两个方块共用它（展示框与画只差厚度），所以"贴哪一面、薄的那一维是哪个"
+ * 只有一处实现——写反的表现是"框嵌进墙里、只露出一层贴图"。
+ *
+ * 与梯子/珊瑚扇同一套：`facing` 指向**贴着的那一面墙**。
+ */
+function wallPlateBox(state: number, thickness: number): LocalBox {
+  const t = thickness;
+  switch (facingOf(state)) {
+    case 0: // 墙在北边 → 板子贴在 z 小的那一侧
+      return [0, 0, 0, 1, 1, t];
+    case 1: // 墙在东边
+      return [1 - t, 0, 0, 1, 1, 1];
+    case 2: // 墙在南边
+      return [0, 0, 1 - t, 1, 1, 1];
+    default: // 墙在西边
+      return [0, 0, 0, t, 1, 1];
+  }
+}
+
+/** 展示框的板子：整面 + 镂空靠贴图（框环画在 16×16 贴图里，中间透明） */
+export function itemFrameBox(state: number): LocalBox {
+  return wallPlateBox(state, ITEM_FRAME_THICKNESS);
+}
+
+/** 画的板子：整面 1/16 薄板，贴图就是那幅画 */
+export function paintingBox(state: number): LocalBox {
+  return wallPlateBox(state, PAINTING_THICKNESS);
+}
+
+/** 框里那件物品该摆在哪、朝哪边（渲染层唯一需要知道的几何） */
+export interface FrameItemAnchor {
+  /** 局部坐标（相对这一格） */
+  x: number;
+  y: number;
+  z: number;
+  /** 朝外法线的水平分量（指向框面外，玩家看得到的那一侧） */
+  nx: number;
+  nz: number;
+}
+
+/** 物品平面离框面再往外挪多少（格）：太小会与框的后壁 z-fighting */
+export const FRAME_ITEM_OFFSET = 0.012;
+
+/**
+ * 框里那件物品的挂点。
+ *
+ * 与告示牌的 `signTextAnchor` 同一个做法：几何放注册表这一层，
+ * 渲染层只做 `position.set` / `rotation.y = atan2(nx, nz)`，
+ * 于是"物品一定挂在框的正面"这条能**离线断言**（渲染层要 `document`，跑不了测试）。
+ *
+ * 位置 = 这一格的中心 + 沿**朝外法线**外移（**板子的厚度 + 一点余量**）。
+ * ⚠️ 外移量必须是"整块板厚"而不是"半块板厚"：板子是贴着墙的那 2/16，
+ * 半厚会把物品摆在板子**里面**（在洞口那一层），看着像嵌进墙里（这一条是靠断言
+ * `depth > ITEM_FRAME_THICKNESS` 抓出来的——第一版写的就是半厚）。
+ *
+ * 立方体物品要再往外挪半个身位（见 `ItemFrameRenderer.place`）：平面物品薄，
+ * 贴着框面正好；而方块体要是也贴着框面，它有一半会埋进板子与墙里。
+ */
+export function itemFrameItemAnchor(state: number): FrameItemAnchor {
+  const outward = outwardFacingOf(state);
+  const [dx, dz] = FACING_OFFSET[outward] ?? [0, -1];
+  const offset = ITEM_FRAME_THICKNESS + FRAME_ITEM_OFFSET;
+  return {
+    x: 0.5 + dx * offset,
+    y: 0.5,
+    z: 0.5 + dz * offset,
     nx: dx,
     nz: dz,
   };

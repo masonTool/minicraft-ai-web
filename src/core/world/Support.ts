@@ -12,7 +12,8 @@
  *  | `flat` | 下方是**实心方块** | 红石线、铁轨、雪层 |
  *  | 水里的植物（`waterPlant`） | 那一格是水，或下方是水/同一种植物 | 海带、海草、珊瑚丛 |
  *  | 睡莲 | 下方是水 | 睡莲 |
- *  | `torch` / `ladder` | **暂不处理**（贴附面那一类：要看它贴的是哪一面，见 TASKS B49） | 火把、梯子、藤蔓 |
+ *  | **贴附面**（`wall`） | **朝向那一侧的方块必须实心**（B14 接的：展示框、画） | 展示框、画 |
+ *  | `torch` / `ladder` / `vine` | **暂不处理**（同属贴附面那一类，各自的差别要单独想过，见 TASKS B49） | 火把、梯子、藤蔓 |
  *
  * 两条设计：
  *  1. **与放置侧共用"什么算支撑"的判据**（`blockDef(below).solid`）——放得下和立得住必须是同一套，
@@ -26,11 +27,19 @@
  */
 
 import { Block, blockDef } from '../registry/blocks.ts';
+import { wallSupportOffset } from '../registry/blockState.ts';
 
-/** 只读一格、写一格（与 `BoneMeal.ts` / `Dispense.ts` 同一路注入方式） */
+/**
+ * 只读一格、写一格（与 `BoneMeal.ts` / `Dispense.ts` 同一路注入方式）。
+ *
+ * `getState` 是可选的：只有**贴附面那一类**（展示框 / 画）需要知道方块朝向
+ * （要按 `facing` 算出支撑在哪一格）。不传它就"不碰贴附类"——
+ * 于是老的测试桩（只实现两个方法）照旧能用，不必为了新功能全体改一遍。
+ */
 export interface SupportWorld {
   getBlock(x: number, y: number, z: number): number;
   setBlock(x: number, y: number, z: number, blockId: number): void;
+  getState?(x: number, y: number, z: number): number;
 }
 
 /** 这一类方块的支撑是什么 */
@@ -43,7 +52,12 @@ export type SupportKind =
   | 'waterOrSelf'
   /** 睡莲：下方是水 */
   | 'waterBelow'
-  /** 不处理（贴附面那一类，见文件头） */
+  /**
+   * **贴附面**（B14，批次 86）：朝向那一侧（`facing` 指向贴着的那一面墙）必须是实心方块。
+   * 目前只有展示框与画走这一档——火把/梯子/藤蔓还是 `'none'`（见文件头那条"暂不处理"）。
+   */
+  | 'wall'
+  /** 不处理（贴附面那一类里还没接的那些，见文件头） */
   | 'none';
 
 /**
@@ -60,6 +74,10 @@ export function supportKindOf(id: number): SupportKind {
   // ⚠️ 仙人掌的形状是 `cactus`（不是 `cross`）：它同样要求下方是实心方块（原版是沙子）。
   // 这一类"形状名与判据不同名"的地方最容易漏——本批就是断言把仙人掌漏掉的那次抓出来的。
   if (def.shape === 'cross' || def.shape === 'flat' || def.shape === 'cactus') return 'solid';
+  // 贴附面（B14，批次 86）：展示框与画贴在墙上，墙没了就该掉下来。
+  // ⚠️ 这一档只接了这两件：火把/梯子/藤蔓仍是 `'none'`（它们是同一类，
+  // 但"藤蔓能同时挂好几面、梯子还能站人"这些差别要各自想过，见 TASKS B49）
+  if (def.shape === 'item_frame' || def.shape === 'painting') return 'wall';
   // `torch` / `ladder` / 其它：**暂不处理**（贴附面那一类要看状态里的朝向）
   return 'none';
 }
@@ -82,6 +100,13 @@ export function supportIsValid(world: SupportWorld, x: number, y: number, z: num
   const below = world.getBlock(x, y - 1, z);
 
   if (kind === 'solid') return isSolidSupport(below);
+  if (kind === 'wall') {
+    // 拿不到状态（老的测试桩）时按"立得住"处理：宁可不收，也不要凭空拆东西
+    const getState = world.getState;
+    if (!getState) return true;
+    const [dx, dz] = wallSupportOffset(getState(x, y, z));
+    return isSolidSupport(world.getBlock(x + dx, y, z + dz));
+  }
   if (kind === 'waterBelow') return below === Block.WATER;
   if (kind === 'water') {
     // 那一格自己（水草在水里）或下方是水
@@ -118,6 +143,52 @@ export function sweepUnsupported(
     if (supportIsValid(world, x, cy, z)) break;
     world.setBlock(x, cy, z, Block.AIR);
     onChange?.(x, cy, z, id);
+    removed++;
+  }
+  return removed;
+}
+
+/** 六个面的邻居偏移（`sweepHangingsAround` 用；顺序固定，便于断言） */
+const FACE_NEIGHBORS: readonly (readonly [number, number, number])[] = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1],
+];
+
+/**
+ * 某一格被移除之后，检查**它六个面上的邻居**里有没有"贴附面掉了"的方块
+ * （展示框 / 画），掉了就一并移除。
+ *
+ * 为什么是"扫邻居"而不是像 `sweepUnsupported` 那样"往上扫"：
+ * 贴附类方块的支撑在**侧面**，被拆掉的那一格与它**相邻**（不是上下关系），
+ * 所以从被拆那一格出发看六个面才是对的。
+ *
+ * ⚠️ 调用时机必须是"那一格**已经**变成空气之后"——`supportIsValid` 读的是
+ * 世界里的现状（与 `sweepUnsupportedAbove` 同一条约定）。
+ *
+ * @param onChange 每移除一格回调一次（掉落物、联机广播、粒子由调用方决定）
+ * @returns 移除了几格
+ */
+export function sweepHangingsAround(
+  world: SupportWorld,
+  x: number,
+  y: number,
+  z: number,
+  onChange?: (x: number, y: number, z: number, blockId: number) => void,
+): number {
+  let removed = 0;
+  for (const [dx, dy, dz] of FACE_NEIGHBORS) {
+    const hx = x + dx;
+    const hy = y + dy;
+    const hz = z + dz;
+    const id = world.getBlock(hx, hy, hz);
+    if (id === Block.AIR) continue;
+    if (supportIsValid(world, hx, hy, hz)) continue;
+    world.setBlock(hx, hy, hz, Block.AIR);
+    onChange?.(hx, hy, hz, id);
     removed++;
   }
   return removed;

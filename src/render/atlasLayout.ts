@@ -874,6 +874,20 @@ export const TILE_ORDER = [
   'polished_blackstone_bricks',
   'chiseled_polished_blackstone',
   'cracked_polished_blackstone_bricks',
+  // ---- 墙上挂东西（B14，批次 86）
+  // 展示框：**中间镂空**的一张（框环画在 2..13 这一圈上，中间透明）。
+  // 走实心层的 alphaTest 丢弃中间那片，于是能透过框看到墙——
+  // 所以它**不需要**进半透明层（叶子/藤蔓那一档也是这么做的）。
+  'item_frame',
+  // 画：1×1 的 7 幅各一张（顺序与 `registry/paintings.ts` 的 `PAINTING_VARIANTS` 一致；
+  // 两边错位的表现是"挂着烤肉串、显示的是炸弹"，测试里逐条反查过）
+  'painting_kebab',
+  'painting_aztec',
+  'painting_alban',
+  'painting_aztec2',
+  'painting_bomb',
+  'painting_plant',
+  'painting_wasteland',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

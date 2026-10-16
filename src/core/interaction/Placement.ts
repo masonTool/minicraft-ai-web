@@ -18,6 +18,7 @@
  */
 
 import { Block, JUNGLE_LOG_ID, blockDef } from '../registry/blocks.ts';
+import { pickPaintingVariant } from '../registry/paintings.ts';
 import {
   FACING_OFFSET,
   MAX_SNOW_LAYERS,
@@ -33,6 +34,7 @@ import {
   withSlabDouble,
   withSnowLayers,
   withTop,
+  withPaintingVariant,
   withVineSide,
   withVineUp,
   withWallMounted,
@@ -60,6 +62,13 @@ export interface PlacementInput {
   hitBlock: number;
   /** 命中方块当前的状态（判断它是不是已经叠了一层的台阶） */
   hitState: number;
+  /**
+   * 随机源（默认 `Math.random`）：目前只有**画**用得上——挂上去是哪一幅是随机的。
+   *
+   * 与钓鱼那批同一条经验：随机源**注入**，于是"挑出来的变体一定在合法范围里"
+   * 能离线断言；调用方（主程序）传 `Math.random`，测试传固定序列。
+   */
+  random?: () => number;
 }
 
 export interface PlacementPlan {
@@ -384,6 +393,26 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       if (!blockDef(input.blockAt(nx, 0, nz)).solid) return null;
       const outward = ((towardWall + 2) & 3) as Facing;
       return { state: withWallMounted(withFacing(0, outward), true) };
+    }
+
+    case 'item_frame':
+    case 'painting': {
+      // 展示框与画（B14，批次 86）：**只能贴在水平侧面上**（原版也是——
+      // 地板与天花板挂不了画）。朝向沿用梯子那一套（`facing` 指向贴着的那一面墙），
+      // 所以几何、渲染锚点、"墙没了要掉下来"三处都读同一个字段。
+      //
+      // "墙必须实心"这条与梯子/挂墙牌同源：`blockAt` 是相对**落点那一格**查的，
+      // 所以贴着的那面墙在 `-normal` 方向。
+      if (ny !== 0) return null;
+      const facing = facingFromNormal(nx, nz);
+      if (facing === null) return null;
+      if (!blockDef(input.blockAt(-nx, 0, -nz)).solid) return null;
+      if (def.shape === 'painting') {
+        // 挂上去是哪一幅：单格画在 7 幅里随机挑一幅（多格拼贴还没做，见 `paintings.ts`）
+        const variant = pickPaintingVariant(input.random ?? Math.random);
+        return { state: withPaintingVariant(withFacing(0, facing), variant) };
+      }
+      return { state: withFacing(0, facing) };
     }
 
     case 'trapdoor': {
