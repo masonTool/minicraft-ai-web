@@ -371,8 +371,11 @@ function emitFace(
 ): void {
   const { buf, def, isTranslucent, atlas, ctx, originX, originZ, sampleBlock } = e;
   // 贴图按**状态**取：红石灯亮/灭是两套贴图，统一走 blockTiles
-  const tiles = blockTiles(def.id, ctx.getBlockState(originX + x, worldY, originZ + z));
-  const [tileU, tileV] = atlas.tileOrigin(tiles[face.tile]);
+  const state = ctx.getBlockState(originX + x, worldY, originZ + z);
+  const tiles = blockTiles(def.id, state);
+  // 面级贴图（批次 64）：有正脸的方块（熔炉家族）**这一面**单独一张，其余面回退到 tiles
+  const tile = def.faceTile?.(state, face.dir) ?? tiles[face.tile];
+  const [tileU, tileV] = atlas.tileOrigin(tile);
   const [bx0, by0, bz0, bx1, by1, bz1] = box;
 
   const vertexBase = buf.pos.length / 3;
@@ -563,6 +566,9 @@ function greedyMesh(
           if (id === Block.AIR) continue;
           const def = blockDef(id);
           if (!isFullBlockShape(def.shape, chunk.getState(x, worldY, z))) continue;
+          // **有正脸的方块不进贪心通道**（批次 64）：贪心合并的前提是"这些格子这一面的
+          // 贴图一样"，而面级贴图正好破坏这个前提。它们改走逐盒通道（面数不多，代价可忽略）。
+          if (def.faceTile) continue;
 
           // 面剔除：邻居不透明则本面不可见；同种半透明方块之间的内部面也剔除
           const neighborId = sampleBlock(x + face.dir[0], y + face.dir[1], z + face.dir[2]);
@@ -695,8 +701,11 @@ export function meshSection(
         if (id === Block.AIR) continue;
 
         const def = blockDef(id);
-        // 完整立方体（含满格的流体）已经在上面的贪心网格化里处理过
-        if (isFullBlockShape(def.shape, chunk.getState(x, worldY, z))) continue;
+        // 完整立方体（含满格的流体）已经在上面的贪心网格化里处理过。
+        // ⚠️ **有正脸的方块除外**（批次 64）：它们在贪心通道里被显式跳过（每一面的贴图不一样，
+        // 不能合并），所以必须由这里接手——两条通道的判据要**成对**改，
+        // 只改一处的结果是"这个方块一个面都不输出"（方块直接看不见了）。
+        if (isFullBlockShape(def.shape, chunk.getState(x, worldY, z)) && !def.faceTile) continue;
 
         const emit: EmitContext = {
           buf: buffers[layerOf(id)],

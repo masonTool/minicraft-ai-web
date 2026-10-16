@@ -148,8 +148,8 @@ console.log('\n[注册与外观]');
   check('有物品说明', hasDescription(DISP));
   equal('形状是 dispenser（整格铁壳 + 挡板）', blockDef(DISP).shape, 'dispenser');
   check('是整格方块（不透明、挡光）', blockDef(DISP).opaque);
-  equal('顶与底共用同一张', blockDef(DISP).tiles[0], blockDef(DISP).tiles[1]);
-  equal('一共只用到两种贴图', new Set(blockDef(DISP).tiles).size, 2);
+  equal('五个非挡板面共用同一张外壳', blockDef(DISP).tiles[0], blockDef(DISP).tiles[2]);
+  equal('外壳只有一张', new Set(blockDef(DISP).tiles).size, 1);
   const missing = blockDef(DISP).tiles.filter((tile) => !TILES.has(tile));
   check('两张贴图都在图集里', missing.length === 0, `缺少 ${missing.join(', ')}`);
 

@@ -8,7 +8,15 @@
  */
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
-import { isFlash, isInverted, isLitState, isPowered, type BlockShape } from './blockState.ts';
+import {
+  isFlash,
+  isInverted,
+  isLitState,
+  isPowered,
+  sixFacingOf,
+  sixFacingOffset,
+  type BlockShape,
+} from './blockState.ts';
 
 export interface BlockDef {
   readonly id: number;
@@ -31,6 +39,20 @@ export interface BlockDef {
   readonly shape: BlockShape;
   /** 按状态取贴图（红石灯亮/灭这类）；不填则一律用 tiles */
   readonly stateTiles?: (state: number) => readonly [string, string, string];
+  /**
+   * **面级贴图**（批次 64）：给指定朝向的那一面单独一张，其它面回退到 `tiles`。
+   *
+   * 参数给的是**面的外法线**（与网格化器 `FACES` 的 `dir` 一致），
+   * 而不是面的下标——这样"哪一面是正面"这件事不必让调用方知道 FACES 的排列顺序
+   * （顺序一改，按下标写的那份映射就会静默错位）。
+   * 返回 `undefined` 表示"这一面没有特殊，用普通贴图"。
+   */
+  readonly faceTile?: (state: number, faceDir: readonly [number, number, number]) => string | undefined;
+  /**
+   * 放置时**正脸朝放置者**（原版熔炉家族就是取玩家朝向的反方向）。
+   * 用它的方块同时应当有 `faceTile`，否则"朝向"看不出来。
+   */
+  readonly facesPlayer?: boolean;
   /** 按状态取发光等级（红石灯亮时 15）；不填则一律用 light */
   readonly stateLight?: (state: number) => number;
   /**
@@ -64,24 +86,41 @@ interface BlockSpec {
   translucent?: boolean;
   shape?: BlockShape;
   stateTiles?: (state: number) => readonly [string, string, string];
+  faceTile?: (state: number, faceDir: readonly [number, number, number]) => string | undefined;
+  facesPlayer?: boolean;
   stateLight?: (state: number) => number;
   itemless?: boolean;
   waterPlant?: boolean;
 }
 
 /**
- * "点燃时换贴图"的通用写法（批次 47）。
- *
- * 顶面与底面不动、**侧面**换成点火贴图。三种炉子与营火共用它，
- * 于是"点燃长什么样"只有一处实现（也保证它们的色温一致——都是炉火那种橙黄）。
+ * 凸口/挡板那一面的贴图（批次 64）：朝向那一面用 `nozzle`，其余五面返回 undefined。
+ * 与 `frontTile` 同一套判据，只是不随"点着没点着"变化。
  */
-function litTiles(
-  state: number,
-  top: string,
-  side: string,
-  litSide: string,
-): readonly [string, string, string] {
-  return [top, top, isLitState(state) ? litSide : side];
+function nozzleTile(nozzle: string) {
+  return (state: number, faceDir: readonly [number, number, number]): string | undefined => {
+    // ⚠️ 用**六向**朝向：投掷器/发射器朝上/朝下时，"上下"记在另一个位上
+    // （`facingOf` 只读水平那两位，朝下的凸口会被算成"朝北"）
+    const offset = sixFacingOffset(sixFacingOf(state));
+    return faceDir[0] === offset[0] && faceDir[1] === offset[1] && faceDir[2] === offset[2]
+      ? nozzle
+      : undefined;
+  };
+}
+
+/**
+ * "正脸"贴图（批次 64）：只有**朝向那一面**用 `front`（点着时用 `frontLit`），
+ * 其余五面返回 undefined（由网格化器回退到普通贴图）。
+ *
+ * 判据用的是面的**外法线**与朝向的偏移量比对——朝向 `facing` 指的就是"正脸朝哪边"
+ * （与投掷器/发射器的"凸口朝哪边"同一套语义）。
+ */
+function frontTile(front: string, frontLit: string) {
+  return (state: number, faceDir: readonly [number, number, number]): string | undefined => {
+    const offset = sixFacingOffset(sixFacingOf(state));
+    if (faceDir[0] !== offset[0] || faceDir[1] !== offset[1] || faceDir[2] !== offset[2]) return undefined;
+    return isLitState(state) ? frontLit : front;
+  };
 }
 
 const BASE_SPECS: readonly BlockSpec[] = [
@@ -190,10 +229,11 @@ const BASE_SPECS: readonly BlockSpec[] = [
     id: 44,
     name: 'minecraft:furnace',
     tiles: ['furnace_top', 'furnace_top', 'furnace_side'],
-    // 点燃时换"炉口有火光"的贴图并发光 13（批次 47，与红石灯同一套机制）。
-    // ⚠️ 立方体方块只有一个"侧面"贴图槽，所以**四个侧面会一起亮**（原版只亮正面）；
-    // 这是"没有朝向状态"的代价，已记进 TASKS H6。
-    stateTiles: (state) => litTiles(state, 'furnace_top', 'furnace_side', 'furnace_front_on'),
+    // 正面（批次 64，O10 的第一步）：未点 = 炉口黑洞、点着 = 有火光，**只亮正面**。
+    // 在此之前四个侧面会一起亮（那时立方体只有一个"侧面"贴图槽），
+    // 现在靠面级贴图 + `facing` 状态区分正反面（放置时正脸朝你）。
+    faceTile: frontTile('furnace_front', 'furnace_front_on'),
+    facesPlayer: true,
     stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
   { id: 45, name: 'minecraft:chest', tiles: ['chest_top', 'chest_top', 'chest_side'] },
@@ -1713,8 +1753,10 @@ const DROPPER_SPECS: readonly BlockSpec[] = [
   {
     id: DROPPER_ID,
     name: 'minecraft:dropper',
-    // 顶/底两面同一张（原版投掷器的上下也是一个模子出来的）
-    tiles: ['dropper_top', 'dropper_top', 'dropper_side'],
+    // 五个非凸口面都是外壳铁皮，**凸口那一面**用"管子口"贴图（批次 64 面级贴图）。
+    // 原先钉在顶/底两面：朝下放时碰巧对，朝侧面放就完全看不出管子口（管子口只存在于几何上）
+    tiles: ['dropper_side', 'dropper_side', 'dropper_side'],
+    faceTile: nozzleTile('dropper_top'),
     shape: 'dropper',
   },
 ];
@@ -1735,7 +1777,9 @@ const DISPENSER_SPECS: readonly BlockSpec[] = [
   {
     id: DISPENSER_ID,
     name: 'minecraft:dispenser',
-    tiles: ['dispenser_top', 'dispenser_top', 'dispenser_side'],
+    // 与投掷器同一条：**挡板那一面**用"挡板"贴图，其余五面是外壳
+    tiles: ['dispenser_side', 'dispenser_side', 'dispenser_side'],
+    faceTile: nozzleTile('dispenser_top'),
     shape: 'dispenser',
   },
 ];
@@ -1858,14 +1902,16 @@ const FURNACE_STATION_SPECS: readonly BlockSpec[] = [
     name: 'minecraft:smoker',
     tiles: ['smoker_top', 'smoker_top', 'smoker_side'],
     // 点燃时的火光贴图与发光（批次 47，与熔炉同一套）
-    stateTiles: (state) => litTiles(state, 'smoker_top', 'smoker_side', 'smoker_front_on'),
+    faceTile: frontTile('smoker_front', 'smoker_front_on'),
+    facesPlayer: true,
     stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
   {
     id: BLAST_FURNACE_ID,
     name: 'minecraft:blast_furnace',
     tiles: ['blast_furnace_top', 'blast_furnace_top', 'blast_furnace_side'],
-    stateTiles: (state) => litTiles(state, 'blast_furnace_top', 'blast_furnace_side', 'blast_furnace_front_on'),
+    faceTile: frontTile('blast_furnace_front', 'blast_furnace_front_on'),
+    facesPlayer: true,
     stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
 ];
@@ -2456,6 +2502,8 @@ function buildBlockTable(): readonly BlockDef[] {
       translucent: spec.translucent ?? false,
       shape: spec.shape ?? 'cube',
       stateTiles: spec.stateTiles,
+      faceTile: spec.faceTile,
+      facesPlayer: spec.facesPlayer ?? false,
       stateLight: spec.stateLight,
       itemless: spec.itemless ?? false,
       waterPlant: spec.waterPlant ?? false,

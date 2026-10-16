@@ -131,8 +131,8 @@ console.log('\n[注册与外观]');
   check('两张贴图都在图集里（顶/底一面、四个侧面一面）', missing.length === 0, `缺少 ${missing.join(', ')}`);
   // 贴图表固定是 [顶, 底, 侧] 三格，但投掷器的顶/底共用一张
   // ——**没有"正面"那一张**：本项目网格化器按面朝向取贴图，朝向靠几何凸口表示
-  equal('顶与底共用同一张', blockDef(DROPPER).tiles[0], blockDef(DROPPER).tiles[1]);
-  equal('一共只用到两种贴图', new Set(blockDef(DROPPER).tiles).size, 2);
+  equal('五个非凸口面共用同一张外壳', blockDef(DROPPER).tiles[0], blockDef(DROPPER).tiles[2]);
+  equal('外壳只有一张', new Set(blockDef(DROPPER).tiles).size, 1);
 
   const def = itemDef(DROPPER);
   check('有对应的物品', def !== undefined);

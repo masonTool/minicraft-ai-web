@@ -109,6 +109,11 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
     if (def.shape === 'cross') return { state: 0 };
   }
 
+  // 正脸朝放置者（批次 64）：熔炉家族（原版取玩家朝向的反方向），
+  // 与投掷器/发射器的"凸口朝你"同一套语义。放在形状分派**之前**，
+  // 与上面那条"水里的植物"同一个位置——这类规则与形状无关。
+  if (def.facesPlayer) return { state: withFacing(0, facingFromYaw(input.yaw)) };
+
   switch (def.shape) {
     case 'slab': {
       // 命中同一个台阶的竖直面 → 合并成双层（原版行为）

@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 294（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 295（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 254 项 —— 已完成 **127**、进行中 **65**、待办 62 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 255 项 —— 已完成 **128**、进行中 **66**、待办 61 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -86,7 +86,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **67 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest**，当前全绿；
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **68 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
@@ -119,7 +119,23 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**掉落物带完整栈**（批次 63，B37 / H16 的第一块）——把"整份 `ItemStack`"贯穿到底。
+**刚做完的**：**面级贴图**（批次 64，O10 的第一步）——补上"某一面单独一张贴图"的能力。
+在此之前网格化器只有 `[顶, 底, 侧]` 三个槽，代价记在四处：熔炉没有正面（而且**四个侧面一起亮**）、
+投掷器与发射器的凸口只能靠几何表示、活塞/观察者不表示朝向、木桶盖子只能朝上。
+① **能力**：`BlockSpec.faceTile(state, faceDir)`——按面的**外法线**返回一张贴图，其余面回退 `tiles`
+（用外法线而不是面下标：注册表不该知道网格化器 `FACES` 的排列顺序，顺序一改按下标写的映射就静默错位）；
+另加 `facesPlayer`（放置时正脸朝放置者）。
+② **三个炉子**：正脸不烧是 `furnace_front`（黑洞）、点着是 `furnace_front_on`（火光），**只亮这一面**；
+放置时正脸朝你。⚠️ 面级贴图要用**六向**朝向（`sixFacingOf`）——投掷器朝下时"下"记在另一个位上，
+只读水平两位会把朝下的凸口算成"朝北"（被断言抓到）。
+③ **投掷器/发射器**：凸口那一面改用管子口/挡板贴图，其余五面统一成外壳（原先那张钉在顶/底两面，
+朝侧面放就完全看不出来）。
+④ **网格化器两条通道要成对改**：贪心通道跳过有正脸的方块，**同时**逐盒通道要接手它们
+（它原本也跳过整格方块）——只改一处的结果是"这个方块**一个面都不输出**、直接看不见"。
+这批的断言是"**真的网格化一遍再读每面用了哪张贴图**"，所以第一次跑就抓到了。
+尺寸：方块 479 / 物品 738 / 配方 360（都不变）；**68 套**离线测试里新增 `face`（57 条）。
+
+再往前是**掉落物带完整栈**（批次 63，B37 / H16 的第一块）——把"整份 `ItemStack`"贯穿到掉落与拾取。
 原先 `ItemEntity` 只带"物品 id + 数量"，于是**带耐久/附魔/改名的东西一落地就洗成白板**：
 投掷器吐出来、破坏容器时的掉落、落地后再捡起（连漏斗从地上吸也丢），三条路径都中招。
 ① `ItemEntity` 加可选的 `extras`（耐久/附魔/改名/**累积惩罚**）+ `toStack()` + `sameAs()`
@@ -653,6 +669,11 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **字段一多，就一定会漏一个** | 补 `repairCost` 时又发现存档那边也漏了它（`cloneStack` 搬了耐久/附魔/名字）。这已经是同一个坑第三次（`stackExtras` 当初就是为它抽出来的）：**把"要搬哪些字段"收成一个函数/一个类型，剩下的地方一律调用它**，而不是每处各写一遍 `if (x !== undefined)`。批次 63 顺手把 `sameExtras`/`sameStack` 也收进 `Inventory.ts`（地基），让搬运方与掉落物都从那里取（批次 63） |
 | **加可选参数 > 改签名** | `ItemEntity` 的 `extras` 放在构造函数**最后且可选**，于是二十来个 `new ItemEntity(id, count, x, y, z, velocity)` 的调用点（多数在测试里）**一行都不用改**。"加一个可选参数"与"改签名再修一堆调用点"在工作量上是两个量级，而表达力几乎一样；改签名只在"旧写法在语义上就该消失"时才值得（批次 63） |
 | **跨层用一个"形状"而不是一个类** | 实体层不该认识容器层的 `ItemStack`，但掉落物又必须携带那几个字段。做法是照项目里 `EntityDamageCause` 的老例：在实体层声明一个**结构类型** `DroppedExtras`（字段必须对得上，但不产生依赖）。判据是"这层是不是只需要那几个字段的形状"——是，就用结构类型；需要行为，才引真正的类（批次 63） |
+
+| **"注册表正确"不等于"画得出来"** | `faceTile` 接好之后，注册表那边（六个面里恰好一个正脸）**全对**，但真去网格化一遍，`result.solid` 直接是 `null`——因为网格化器有两条通道（贪心 / 逐盒），原来**成对**地"跳过整格方块 / 跳过非整格方块"，我只改了贪心那一条，于是有正脸的整格方块**两条都不收**，一个面都不输出（方块直接看不见）。**判据成对的地方，改一处等于两条都错**；而且这类错**只有真跑一遍才看得见**——所以这批的断言是"给图集灌唯一 UV，网格化之后逐面读回来"，而不是只查注册表（批次 64） |
+| **"按名字找那一面"比"按序号找那一面"稳** | 面级贴图一开始想按**面的下标**（0..5）返回，但那要求注册表知道网格化器内部 `FACES` 的排列顺序——顺序一改（比如为了 GPU 缓存友好重排）映射就**静默错位**，而"贴图贴错面"没人会立刻发现。改成按**外法线**比对：注册表只知道"正面朝哪边"（它本来就有 `facing`），网格化器知道每一面的法线，两边用几何量对接（批次 64） |
+| **"一个位放两件事"会在第二个消费者处爆掉** | 漏斗那批把"第五个方向"塞进 bit0（`TOP_MASK`）、投掷器那批把它提升成"六向朝向"的共享编码——这一批立刻吃到代价：`facingOf(state)` 只读水平那两位，于是**朝下的投掷器**算出来的朝向是"朝北"，管子口贴到了北面。修法是把面级贴图统一走 `sixFacingOf`。**共享编码提级时，要把新语义的读法一起改**（`facingOf` 与 `sixFacingOf` 并存本身就容易写错，值得留意）（批次 64） |
+| **改动会波及"渲染结果"时，把断言下沉到渲染结果** | 这一批改的是网格化器，而它的输出（顶点/索引/贴图）以前只被"三角形数"和**顶点指纹**这类总量断言覆盖。给图集灌一个"贴图名 → 唯一 UV"的桩之后，就能对**具体某一面用了哪张贴图**下断言——能力类改动应当尽量做到这一点：先造一个"能被读出来的可观察量"，再断言（批次 64） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 

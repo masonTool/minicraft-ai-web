@@ -605,6 +605,10 @@ export const TILE_ORDER = [
   'smoker_side',
   'blast_furnace_top',
   'blast_furnace_side',
+  // ---- 炉子的正脸（批次 64，O10）：不烧时是黑洞、点着时是火光
+  'furnace_front',
+  'smoker_front',
+  'blast_furnace_front',
   // ---- 点燃时的火光（批次 47）：三座炉子的炉口
   'furnace_front_on',
   'smoker_front_on',

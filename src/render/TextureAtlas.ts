@@ -859,6 +859,29 @@ function burningMouth(x: number, y: number, x0: number, x1: number, y0: number, 
   return [clamp255(252 * v + flicker * 40), clamp255(150 * v + flicker * 30), clamp255(48 * v), 255];
 }
 
+/**
+ * 炉口（**未点**，批次 64）：一块暗洞。
+ *
+ * 原版的炉子在没烧的时候，正脸就是一个黑洞——"有没有火"是它唯一的状态信息。
+ * 三个炉子共用这个画法（洞口大小不同），与 `burningMouth` 是同一套几何。
+ */
+function darkMouth(x: number, y: number, x0: number, x1: number, y0: number, y1: number, rng: () => number, base: RGBA): RGBA {
+  if (x < x0 || x > x1 || y < y0 || y > y1) return base;
+  const cx = (x0 + x1) / 2;
+  const inner = 1 - Math.min(1, Math.abs(x - cx) / Math.max(1, (x1 - x0) / 2));
+  // 洞里：靠中心更黑、上沿略有一点反光（看得出是"凹进去"的）
+  const v = 0.54 - inner * 0.3 + rng() * 0.06;
+  return [clamp255(52 * v), clamp255(48 * v), clamp255(46 * v), 255];
+}
+
+PAINTERS.furnace_front = (x, y, rng) =>
+  darkMouth(x, y, 3, 12, 6, 12, rng, cobblestonePainter(x, y, rng));
+
+PAINTERS.smoker_front = (x, y, rng) => darkMouth(x, y, 4, 11, 6, 11, rng, PAINTERS.smoker_side(x, y, rng));
+
+PAINTERS.blast_furnace_front = (x, y, rng) =>
+  darkMouth(x, y, 2, 13, 6, 11, rng, PAINTERS.blast_furnace_side(x, y, rng));
+
 PAINTERS.furnace_front_on = (x, y, rng) => {
   const mouth = burningMouth(x, y, 3, 12, 6, 12, rng);
   if (mouth) return mouth;

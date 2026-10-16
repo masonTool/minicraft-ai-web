@@ -381,20 +381,35 @@ console.log('\n[点燃状态位：贴图与发光都跟着它走]');
   check('默认状态是"没点燃"', !isLitState(0));
   check('往返读写一致', isLitState(withLitState(0, true)) && !isLitState(withLitState(withLitState(0, true), false)));
 
-  // 贴图：三座炉子点亮时侧面换成炉口火光图，营火亮的是顶面
+  // 贴图：
+  //  · 三座炉子（批次 64 起）：**只有正脸那一面**随点燃变化（`faceTile`），其余五面不动；
+  //  · 营火：亮的是**顶面**（它是敞口的，没有"正脸"这回事）。
   const litOf = (id: number) => blockTiles(id, withLitState(0, true));
   const unlitOf = (id: number) => blockTiles(id, 0);
-  equal('熔炉点亮 → 侧面换成 furnace_front_on', litOf(Block.FURNACE)[2], 'furnace_front_on');
-  equal('熔炉没点亮 → 还是 furnace_side', unlitOf(Block.FURNACE)[2], 'furnace_side');
-  equal('烟熏炉点亮 → smoker_front_on', litOf(Block.SMOKER)[2], 'smoker_front_on');
-  equal('高炉点亮 → blast_furnace_front_on', litOf(Block.BLAST_FURNACE)[2], 'blast_furnace_front_on');
+  // 朝向朝北（facing=0 → 外法线 [0,0,-1]）时的正脸贴图
+  const NORTH: readonly [number, number, number] = [0, 0, -1];
+  const front = (id: number, lit: boolean) => blockDef(id).faceTile?.(lit ? withLitState(0, true) : 0, NORTH);
+  equal('熔炉点亮 → 正脸是 furnace_front_on', front(Block.FURNACE, true), 'furnace_front_on');
+  equal('熔炉没点亮 → 正脸是 furnace_front（黑洞）', front(Block.FURNACE, false), 'furnace_front');
+  equal('烟熏炉点亮 → 正脸 smoker_front_on', front(Block.SMOKER, true), 'smoker_front_on');
+  equal('高炉点亮 → 正脸 blast_furnace_front_on', front(Block.BLAST_FURNACE, true), 'blast_furnace_front_on');
+  equal('侧脸不随点燃变化', front(Block.FURNACE, true) === front(Block.FURNACE, false), false);
+  check('背朝北时没有正脸（回退到普通贴图）', blockDef(Block.FURNACE).faceTile?.(0, [0, 0, 1]) === undefined);
+  check('顶面也没有正脸', blockDef(Block.FURNACE).faceTile?.(0, [0, 1, 0]) === undefined);
+  equal(
+    '（锅炉家族的）侧面贴图不再随点燃变（原先四个侧面会一起亮）',
+    `${litOf(Block.FURNACE)[2]}/${unlitOf(Block.FURNACE)[2]}`,
+    'furnace_side/furnace_side',
+  );
   equal('营火点亮 → **顶面**是火焰（它是敞口的）', litOf(Block.CAMPFIRE)[0], 'campfire_fire');
   equal('营火没点亮 → 顶面是柴堆', unlitOf(Block.CAMPFIRE)[0], 'campfire_top');
   check('顶面不随点燃变化（只有炉口那一面变）', litOf(Block.FURNACE)[0] === unlitOf(Block.FURNACE)[0]);
+  check('炉子家族没有 `stateTiles`（改走面级贴图了）', [Block.FURNACE, Block.SMOKER, Block.BLAST_FURNACE].every((id) => blockDef(id).stateTiles === undefined));
   for (const id of [Block.FURNACE, Block.SMOKER, Block.BLAST_FURNACE, Block.CAMPFIRE]) {
+    const faces = [blockDef(id).faceTile?.(0, NORTH), blockDef(id).faceTile?.(withLitState(0, true), NORTH)];
     check(
       '点火贴图都在图集里',
-      litOf(id).every((tile) => TILE_ORDER.includes(tile as never)) &&
+      faces.every((tile) => tile === undefined || TILE_ORDER.includes(tile as never)) &&
         blockDef(id).tiles.every((tile) => TILE_ORDER.includes(tile as never)),
     );
   }
