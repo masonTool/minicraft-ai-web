@@ -3865,6 +3865,62 @@ PAINTERS.tnt_bottom = (x, y, rng) => {
   return [clamp255(186 * shade + jitter), clamp255(54 * shade + jitter), clamp255(46 * shade + jitter), 255];
 };
 
+// ---------------------------------------------------------------- 漏斗（批次 58）
+
+/** 漏斗的铁皮基色（原版那套"深灰金属"）：外面亮一点、管道内壁暗一点 */
+const HOPPER_METAL = { r: 118, g: 118, b: 122 };
+
+/** 一小段"金属拉丝"：每 4 像素一条暗线，让大面积平色不至于糊成一块 */
+function hopperMetalShade(x: number, y: number): number {
+  if (x % 4 === 0) return 0.9;
+  if (y % 8 === 3) return 0.94;
+  return 1;
+}
+
+function hopperMetal(x: number, y: number, jitter: number, scale: number): [number, number, number, number] {
+  const shade = hopperMetalShade(x, y) * scale;
+  return [
+    clamp255(HOPPER_METAL.r * shade + jitter),
+    clamp255(HOPPER_METAL.g * shade + jitter),
+    clamp255(HOPPER_METAL.b * shade + jitter),
+    255,
+  ];
+}
+
+/**
+ * 顶面：碗口那圈铁皮 + 中间一个**黑洞**（原版 `hopper_top` 就是"四周有纹、中间黑"）。
+ *
+ * 洞的大小按几何来：管子是 4/16 见方，所以洞口取中间 4 像素——玩家俯视时
+ * "洞正对着管子"这件事看得出来。
+ */
+PAINTERS.hopper_top = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const inHole = x >= 6 && x <= 9 && y >= 6 && y <= 9;
+  if (inHole) {
+    const shade = (x + y) % 3 === 0 ? 0.5 : 1;
+    return [clamp255(28 * shade), clamp255(28 * shade), clamp255(32 * shade), 255];
+  }
+  // 洞口外一圈更暗的"内壁"（视觉上把洞口围出来，不然只是平面上一个方块）
+  const nearHole = x >= 5 && x <= 10 && y >= 5 && y <= 10;
+  return hopperMetal(x, y, jitter, nearHole ? 0.82 : 1);
+};
+
+/** 管子内壁：整体暗一档 + 中间 4×4 的口是纯黑（从下往上看就是管子口） */
+PAINTERS.hopper_inside = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  const inHole = x >= 6 && x <= 9 && y >= 6 && y <= 9;
+  if (inHole) return [16, 16, 18, 255];
+  return hopperMetal(x, y, jitter, 0.72);
+};
+
+/** 外壳：四条边更暗（原版漏斗外面那圈"铆边"），中间是拉丝铁皮 */
+PAINTERS.hopper_side = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const edge = x === 0 || x === 15 || y === 0 || y === 15;
+  if (edge) return hopperMetal(x, y, jitter, 0.7);
+  return hopperMetal(x, y, jitter, 1);
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

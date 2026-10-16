@@ -147,6 +147,17 @@ export type BlockShape =
    * 这里为了全项目一套语义反过来记，换算收在 `tripwireWireDirection` 里）。
    */
   | 'tripwire_hook'
+  /**
+   * 漏斗（批次 58，H14 的第一件容器类功能方块）：上面一个 6/16 高的"碗口"，
+   * 往下逐级收窄成 4/16 见方的管子，管子**朝下或朝四个水平方向**（状态里记着）。
+   *
+   * 几何用一个"逐级收窄的盒子塔"近似原版那个斜面锥体（见 `blockShapes.ts`）：
+   * 原版是一个斜的漏斗面，而本项目只画轴对齐盒子——四级台阶式收窄在 16 像素的
+   * 尺度上看起来就是漏斗（这也是花盆"盆身 + 植物"那套叠加几何的继续）。
+   *
+   * 碰撞只算"碗口那一圈"（从 6/16 往上）：管子不挡路，所以**能从漏斗底下走过去**。
+   */
+  | 'hopper'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -625,6 +636,69 @@ export function hasAnyVineSide(state: number): boolean {
   return vineSideCount(state) > 0;
 }
 
+// ---------------------------------------------------------------- 漏斗（批次 58）
+
+/**
+ * 漏斗的输出方向（H14 的第一件容器类功能方块）。
+ *
+ * 原版有 **5 个**朝向：朝下 + 四个水平方向。而本项目一个状态只有 8 位、
+ * `FACING` 只占 2 位（4 个方向），所以第五个方向借用 **bit0（`TOP_MASK`）**：
+ *
+ *   bit0 = 1             → 输出**朝下**（此时 FACING 位保持 0，不是"朝北"）
+ *   bit0 = 0 + FACING    → 输出朝北 / 东 / 南 / 西
+ *   bit3（`POWERED`）    → 被红石**锁定**（原版：通着电的漏斗不搬运，也不吸东西）
+ *
+ * 借用 bit0 与文件开头那条约定一致（不同形状族可以共用位）：
+ * 漏斗这一族既不用 TOP 也不用 WALL_MOUNT。`describeState` 里也按上面这套读，
+ * 所以调试面板上看到的是"朝下 / 朝东"而不是"上半"。
+ */
+export type HopperOutput = 'down' | Facing;
+
+export function hopperOutputOf(state: number): HopperOutput {
+  return (state & TOP_MASK) !== 0 ? 'down' : facingOf(state);
+}
+
+export function withHopperOutput(state: number, output: HopperOutput): number {
+  if (output === 'down') return withFacing(state | TOP_MASK, 0);
+  return withFacing(state & ~TOP_MASK, output);
+}
+
+/** 输出方向的单位偏移（供搬运逻辑与渲染共用，别再各写一份） */
+export function hopperOutputOffset(output: HopperOutput): readonly [number, number, number] {
+  switch (output) {
+    case 'down':
+      return [0, -1, 0];
+    case 0:
+      return [0, 0, -1]; // 北
+    case 1:
+      return [1, 0, 0]; // 东
+    case 2:
+      return [0, 0, 1]; // 南
+    default:
+      return [-1, 0, 0]; // 西
+  }
+}
+
+export const HOPPER_OUTPUT_NAMES: Readonly<Record<'down' | 0 | 1 | 2 | 3, string>> = {
+  down: '朝下',
+  0: '朝北',
+  1: '朝东',
+  2: '朝南',
+  3: '朝西',
+};
+
+/**
+ * 被红石锁定的漏斗（原版行为：通着电就**既不推也不吸**）。
+ * 状态位与拉杆/红石灯的 `POWERED` 共用——引擎只负责判定"这里通电了"。
+ */
+export function isHopperLocked(state: number): boolean {
+  return isPowered(state);
+}
+
+export function withHopperLocked(state: number, locked: boolean): number {
+  return withPowered(state, locked);
+}
+
 // ---------------------------------------------------------------- 调试
 
 export function describeState(shape: BlockShape, state: number): string {
@@ -664,6 +738,8 @@ export function describeState(shape: BlockShape, state: number): string {
       return `${isDisarmed(state) ? '已剪断' : '待触发'}·${isPowered(state) ? '已触发' : '没触发'}`;
     case 'tripwire_hook':
       return `${FACING_NAMES[tripwireWireDirection(state)]}向的线·${isTripwireAttached(state) ? '已接上' : '没接上'}·${isPowered(state) ? '有信号' : '没信号'}`;
+    case 'hopper':
+      return `${HOPPER_OUTPUT_NAMES[hopperOutputOf(state)]}${isHopperLocked(state) ? '·已锁定' : ''}`;
     default:
       return '';
   }

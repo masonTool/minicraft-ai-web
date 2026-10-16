@@ -17,6 +17,7 @@ import { BrewingStand } from '../container/BrewingStand.ts';
 import { Chest } from '../container/Chest.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
+import { Hopper } from '../container/Hopper.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
 import { Campfire } from '../container/Campfire.ts';
@@ -31,7 +32,8 @@ export type BlockContainer =
   | BrewingStand
   | SmithingTable
   | Stonecutter
-  | Campfire;
+  | Campfire
+  | Hopper;
 export type ContainerKind =
   | 'furnace'
   | 'chest'
@@ -40,7 +42,8 @@ export type ContainerKind =
   | 'brewing'
   | 'smithing'
   | 'stonecutter'
-  | 'campfire';
+  | 'campfire'
+  | 'hopper';
 
 interface Entry {
   dimension: DimensionId;
@@ -198,6 +201,27 @@ export class BlockEntityStore {
     const stand = new BrewingStand();
     this.put({ dimension, x, y, z, container: stand });
     return stand;
+  }
+
+  getHopper(dimension: DimensionId, x: number, y: number, z: number): Hopper | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Hopper ? container : undefined;
+  }
+
+  /**
+   * 取出（或新建）漏斗。
+   *
+   * ⚠️ 与其它容器不同：漏斗**必须在放下方块时就把容器建出来**
+   * （见 main 的放置收尾）。原因有两个：
+   *  1. tick 循环是按容器表推的——没建容器就没有任何东西在搬运；
+   *  2. 另一个漏斗要往它里面推东西时，得先"看得到"它。
+   */
+  getOrCreateHopper(dimension: DimensionId, x: number, y: number, z: number): Hopper {
+    const existing = this.getHopper(dimension, x, y, z);
+    if (existing) return existing;
+    const hopper = new Hopper();
+    this.put({ dimension, x, y, z, container: hopper });
+    return hopper;
   }
 
   remove(dimension: DimensionId, x: number, y: number, z: number): void {

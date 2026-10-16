@@ -18,6 +18,8 @@ import {
   doorHinge,
   facingOf,
   fluidHeight,
+  hopperOutputOf,
+  hopperOutputOffset,
   hasVineUp,
   isDoorOpen,
   isFenceGateOpen,
@@ -182,6 +184,10 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'cocoa':
       // 可可豆荚：贴着原木那一面的一个小盒子（原版能踩上去，所以它有碰撞）
       return cocoaBoxes(state);
+    case 'hopper':
+      // 漏斗（批次 58）：只算碗口与收窄那两段——管子不挡路，
+      // 所以玩家能**从漏斗底下走过去**（原版也能）
+      return hopperCollisionBoxes();
     default:
       return [FULL];
   }
@@ -381,6 +387,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'cocoa':
       // 与碰撞盒同源（挂在原木侧面的豆荚）
       return cocoaBoxes(state);
+    case 'hopper':
+      // 漏斗（批次 58）：碗口 + 两级收窄 + 管子（管子朝哪边由状态决定）
+      return hopperBoxes(state);
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
@@ -861,6 +870,62 @@ function tripwireHookBoxes(state: number): readonly LocalBox[] {
         [t, 0, 0.5 - t, t + reach, t, 0.5 + t],
       ];
   }
+}
+
+// ---------------------------------------------------------------- 漏斗（批次 58）
+
+/**
+ * 漏斗的几何（H14 的第一件容器类功能方块）。
+ *
+ * 原版是一个**斜面漏斗**：上面 6/16 高的碗口，往下斜着收成一个 4/16 见方的管子。
+ * 本项目只画轴对齐盒子（与花盆"盆身 + 植物"同一套折中），所以用**四级收窄**去近似：
+ *
+ *   y ∈ [10/16, 1]     整格宽      碗口外沿（顶面那张贴图上就是"洞里一个洞"）
+ *   y ∈ [ 8/16, 10/16] 内缩 2/16   第一级斜面
+ *   y ∈ [ 6/16,  8/16] 内缩 4/16   第二级斜面
+ *   y ∈ [ 0,     6/16] 4/16 见方   管子：朝下时居中，朝水平方向时**贴到那一侧**
+ *
+ * 碰撞**只算前三段**（从 6/16 往上）：管子不挡路，所以能从漏斗底下走过去。
+ * 这也解释了为什么它比"整格方块"矮——玩家走上去不用跳（与台阶同一个手感）。
+ */
+const HOPPER_BOWL: LocalBox = [0, 0.625, 0, 1, 1, 1];
+const HOPPER_MID_A: LocalBox = [0.125, 0.5, 0.125, 0.875, 0.625, 0.875];
+const HOPPER_MID_B: LocalBox = [0.25, 0.375, 0.25, 0.75, 0.5, 0.75];
+
+/** 管子截面边长（4/16） */
+export const HOPPER_TUBE_WIDTH = 0.25;
+/** 管子顶端高度（6/16，正好接上第二级斜面的底） */
+export const HOPPER_TUBE_TOP = 0.375;
+
+/** 管子那一段的盒子：朝下居中，朝水平方向贴到对应的那一侧 */
+function hopperTubeBox(state: number): LocalBox {
+  const lo = 0.5 - HOPPER_TUBE_WIDTH / 2;
+  const hi = 0.5 + HOPPER_TUBE_WIDTH / 2;
+  const [dx, , dz] = hopperOutputOffset(hopperOutputOf(state));
+  if (dx === 0 && dz === 0) return [lo, 0, lo, hi, HOPPER_TUBE_TOP, hi];
+  if (dx !== 0) {
+    return dx > 0
+      ? [1 - HOPPER_TUBE_WIDTH, 0, lo, 1, HOPPER_TUBE_TOP, hi]
+      : [0, 0, lo, HOPPER_TUBE_WIDTH, HOPPER_TUBE_TOP, hi];
+  }
+  return dz > 0
+    ? [lo, 0, 1 - HOPPER_TUBE_WIDTH, hi, HOPPER_TUBE_TOP, 1]
+    : [lo, 0, 0, hi, HOPPER_TUBE_TOP, HOPPER_TUBE_WIDTH];
+}
+
+/** 渲染盒：碗口 + 两级收窄 + 管子 */
+export function hopperBoxes(state: number): readonly LocalBox[] {
+  return [HOPPER_BOWL, HOPPER_MID_A, HOPPER_MID_B, hopperTubeBox(state)];
+}
+
+/**
+ * 碰撞盒：只有前三段。
+ *
+ * 与渲染盒分开是为了"能从漏斗底下穿过去"——与绊线/藤蔓那种"渲染有、碰撞没有"
+ * 同一个方向，只是这里**部分**不挡路。
+ */
+export function hopperCollisionBoxes(): readonly LocalBox[] {
+  return [HOPPER_BOWL, HOPPER_MID_A, HOPPER_MID_B];
 }
 
 /**

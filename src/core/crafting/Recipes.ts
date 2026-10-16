@@ -846,8 +846,24 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   },
 ];
 
+/**
+ * 容器类功能方块（批次 58）：漏斗。
+ *
+ * 原版图案是 **5 个铁锭围住 1 个箱子**（中间那格是箱子）。
+ * 记在 TASKS H14 下：木桶 / 投掷器 / 发射器与它同一族，后续按同样方式往这里加。
+ */
+const CONTAINER_RECIPES: readonly Recipe[] = [
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.HOPPER, count: 1 },
+    pattern: ['I I', 'ICI', ' I '],
+    key: { I: Item.IRON_INGOT, C: Block.CHEST },
+  },
+];
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
+  ...CONTAINER_RECIPES,
   ...FURNACE_VARIANT_RECIPES,
   ...WOOL_RECIPES,
   ...CARPET_RECIPES,

@@ -755,6 +755,10 @@ export const TILE_ORDER = [
   'tnt_side',
   'tnt_primed_top',
   'tnt_primed_side',
+  // ---- 漏斗（批次 58）：碗口（顶面，中间一个洞）/ 管子内壁（底面）/ 外壳铁皮（侧面）
+  'hopper_top',
+  'hopper_inside',
+  'hopper_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

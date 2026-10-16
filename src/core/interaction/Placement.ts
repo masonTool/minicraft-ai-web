@@ -25,6 +25,7 @@ import {
   withDoorHinge,
   withDoorUpper,
   withFacing,
+  withHopperOutput,
   withSlabDouble,
   withSnowLayers,
   withTop,
@@ -198,6 +199,26 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       // 贴的那一面必须有实心方块
       if (!blockDef(input.blockAt(-nx, 0, -nz)).solid) return null;
       return { state: withFacing(0, facing) };
+    }
+
+    case 'hopper': {
+      // 漏斗的朝向（批次 58）：**嘴朝着被点的那个方块**——点顶面 → 朝下（正对着
+      // 被点方块，这是"漏斗放进箱子"最常用的摆法），点侧面 → 朝那个水平方向。
+      //
+      // 换算关系：`normal` 是命中面**向外的法线**，而"嘴朝被点的方块"就是它的反方向；
+      // 而 `facingFromNormal` 返回的正是"指向被点方块那一侧"的水平朝向（与梯子/火把
+      // 那套"朝向 = 贴着的那一面"一致），所以侧面直接用它。
+      //
+      // **潜行**时改成"嘴朝你面朝的方向"（原版就是用潜行来指定朝向的）；
+      // 点底面时"朝被点方块"等于**朝上**，而漏斗没有朝上这一档 → 退化成朝下。
+      if (input.sneaking) {
+        const look = ((facingFromYaw(input.yaw) + 2) & 3) as Facing;
+        return { state: withHopperOutput(0, ny < 0 ? 'down' : look) };
+      }
+      // 点顶面 → 朝下；点底面 → "朝被点方块"是朝上（没有这一档）→ 也落回朝下
+      if (ny !== 0) return { state: withHopperOutput(0, 'down') };
+      const facing = facingFromNormal(nx, nz);
+      return { state: withHopperOutput(0, facing ?? 'down') };
     }
 
     case 'chain': {

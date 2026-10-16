@@ -1669,6 +1669,33 @@ const TNT_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 漏斗（批次 58）：H14 里"容器类功能方块"的第一件，也是本项目**第一件会自己搬东西**的方块。
+ *
+ * 它同时是三件事的合体，这也是为什么它单独一批：
+ *  1. 一个**五向朝向**的方块（朝下 + 四个水平方向，状态位见 `blockState.ts` 的
+ *     `hopperOutput` 一段：第五个方向借用了 bit0）；
+ *  2. 一个**容器**（5 格，走 `container/Hopper.ts`）；
+ *  3. 一条**每 0.4 秒推/拉一件**的节奏，并在**通电时被锁定**（红石负载）。
+ *
+ * ⚠️ 三张贴图：顶面（碗口里那个洞）、底面（**管子内壁**）、侧面（外壳的铁皮）。
+ * 底面用"内壁"是因为漏斗底下能看见的正是管子口——
+ * 这与营火"底面用原木横截面"是同一类取舍。
+ */
+export const HOPPER_ID = 476;
+
+const HOPPER_SPECS: readonly BlockSpec[] = [
+  {
+    id: HOPPER_ID,
+    name: 'minecraft:hopper',
+    tiles: ['hopper_top', 'hopper_inside', 'hopper_side'],
+    shape: 'hopper',
+    // 漏斗不是整格方块：上面的碗口 6/16 高，下面的管子不挡路（见 `blockShapes`）
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const TRIPWIRE_SPECS: readonly BlockSpec[] = [
   {
     id: TRIPWIRE_ID,
@@ -1984,6 +2011,7 @@ const SPECS: readonly BlockSpec[] = [
   ...DAYLIGHT_DETECTOR_SPECS,
   ...TRIPWIRE_SPECS,
   ...TNT_SPECS,
+  ...HOPPER_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2251,6 +2279,8 @@ export const Block = {
   TRIPWIRE_HOOK: TRIPWIRE_HOOK_ID,
   // ---- TNT（批次 56，见 `TNT_SPECS`）
   TNT: TNT_ID,
+  // ---- 漏斗（批次 58，见 `HOPPER_SPECS`）：会自己搬东西的容器方块
+  HOPPER: HOPPER_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2529,6 +2559,8 @@ HARDNESS.set(Block.TRIPWIRE, 0);
 HARDNESS.set(Block.TRIPWIRE_HOOK, 0);
 // TNT（批次 56）：0（原版徒手一碰就掉）
 HARDNESS.set(Block.TNT, 0);
+// 漏斗（批次 58）：3（原版与铁块同一档，必须用镐）
+HARDNESS.set(Block.HOPPER, 3);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);

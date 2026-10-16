@@ -40,10 +40,6 @@ import { PLAYER_THROW_SPEED, Throwable, type ThrowableKind } from './core/entity
 import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
-import { ANVIL_SIZE, Anvil } from './core/container/Anvil.ts';
-import { SMITHING_SIZE, SmithingTable } from './core/container/SmithingTable.ts';
-import { STONECUTTER_SIZE, Stonecutter } from './core/container/Stonecutter.ts';
-import { EnchantTable } from './core/container/EnchantTable.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
@@ -149,7 +145,7 @@ import { PlayerRenderer } from './render/PlayerRenderer.ts';
 import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
-import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, type DimensionId } from './core/gen/Dimension.ts';
+import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, isDimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, blockDef, woolId } from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
@@ -186,9 +182,8 @@ import {
 } from './core/registry/blockState.ts';
 import {
   TOTAL_SLOTS, HOTBAR_SIZE, Inventory, type ItemStack } from './core/container/Inventory.ts';
-import { CHEST_SIZE } from './core/container/Chest.ts';
-import { BREW_SLOT_COUNT, BrewingStand } from './core/container/BrewingStand.ts';
-import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
+import { BrewingStand } from './core/container/BrewingStand.ts';
+import { Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
 import {
   JUNGLE_LOG_ID,
@@ -197,12 +192,18 @@ import {
   pottedPlantName,
 } from './core/registry/blocks.ts';
 import { collisionBoxes } from './core/registry/blockShapes.ts';
-import { CAMPFIRE_SIZE, Campfire } from './core/container/Campfire.ts';
+import { Campfire } from './core/container/Campfire.ts';
+import { Hopper, type HopperEnv } from './core/container/Hopper.ts';
+import { containerSlotCount } from './core/container/Transfer.ts';
+import type { BlockContainer } from './core/world/BlockEntityStore.ts';
 import { PrecipitationTicker } from './core/tick/Precipitation.ts';
 import {
   CAKE_SLICES,
   cakeBites,
   flowerPotPlant,
+  hopperOutputOffset,
+  hopperOutputOf,
+  isHopperLocked,
   isLitState,
   withCakeBites,
   withFlowerPotPlant,
@@ -1097,7 +1098,11 @@ class App {
         state ?? 0,
       );
       // 已经加载出来的区块立即生效
-      if (this.world.isLoaded(x, z)) this.world.setBlockAndUpdate(x, y, z, id, state ?? 0);
+      if (this.world.isLoaded(x, z)) {
+        this.world.setBlockAndUpdate(x, y, z, id, state ?? 0);
+        // 队友放下的漏斗也要有容器，否则"看着是漏斗、就是不搬东西"（见 `ensureBlockEntityAt`）
+        this.ensureBlockEntityAt(x, y, z, id, dimension);
+      }
     }
 
     for (const player of players) {
@@ -1133,7 +1138,8 @@ class App {
     if (!this.world.isLoaded(x, z)) return;
     // 走 setBlockAndUpdate：光照与网格会跟着更新，也会被记进增量存档
     this.world.setBlockAndUpdate(x, y, z, id, state);
-    void dimension;
+    // 队友放的漏斗：这里补建容器（维度按消息里带的那个，不是"我当前所在的维度"）
+    this.ensureBlockEntityAt(x, y, z, id, dimension);
   }
 
   /** 连接服务器（也可以在控制台直接调：mc.connect('ws://192.168.1.5:8787', '小明')） */
@@ -3614,6 +3620,12 @@ class App {
       this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
       return true;
     }
+    // 漏斗（批次 58）：右键打开 5 格。⚠️ 打开界面时**不暂停搬运**（原版也照搬）——
+    // 所以能看着东西一格一格往里进，这也是调试搬运逻辑最直观的方式
+    if (hitBlock === Block.HOPPER) {
+      this.inventoryScreen.openWith('hopper', this.world.containers.getOrCreateHopper(this.dimension, x, y, z));
+      return true;
+    }
     if (hitBlock === Block.BREWING_STAND) {
       this.inventoryScreen.openWith('brewing', this.world.containers.getOrCreateBrewingStand(this.dimension, x, y, z));
       return true;
@@ -3803,27 +3815,31 @@ class App {
   }
 
   /**
+   * 方块被放进世界之后，把**跟着方块走的容器**补建出来（批次 58）。
+   *
+   * 为什么要单独一个入口：漏斗这类方块**必须**在"放下"那一刻就进容器表
+   * （tick 循环是按容器表推进的），而"方块出现"有几条路径——玩家放置、联机同步、
+   * 控制台调试 API。只在玩家放置那条路径上建容器的话，另外两条会得到
+   * "看着是漏斗、其实永远不会搬东西"的**假漏斗**（方块本身完全正常，最难查）。
+   *
+   * 目前只有漏斗需要它：其余容器都是"打开界面时按需创建"的。
+   */
+  private ensureBlockEntityAt(x: number, y: number, z: number, blockId: number, dimension?: string): void {
+    if (blockId !== Block.HOPPER) return;
+    const target: DimensionId = isDimension(dimension) ? dimension : this.dimension;
+    this.world.containers.getOrCreateHopper(target, x, y, z);
+  }
+
+  /**
    * 破坏容器方块时把内容物倒出来（原地生成掉落物）。
    */
   private dropContainerContents(x: number, y: number, z: number): void {
     const container = this.world.containers.get(this.dimension, x, y, z);
     if (!container) return;
-    // 各容器自己的格数：熔炉 3、箱子 27、附魔台 2、铁砧 3、锻造台 3、切石机 1、营火 4、酿造台 5
-    const size = container instanceof Furnace
-      ? FURNACE_SIZE
-      : container instanceof EnchantTable
-        ? 2
-        : container instanceof Anvil
-          ? ANVIL_SIZE
-          : container instanceof SmithingTable
-            ? SMITHING_SIZE
-            : container instanceof Stonecutter
-              ? STONECUTTER_SIZE
-              : container instanceof Campfire
-                ? CAMPFIRE_SIZE
-                : container instanceof BrewingStand
-                  ? BREW_SLOT_COUNT
-                  : CHEST_SIZE;
+    // 各容器自己的格数收在 `Transfer.containerSlotCount` 一处
+    // （批次 58 之前这里是一条 8 层的三元链，加一种容器就得再嵌一层——
+    //  漏斗这种"一加就是新容器"的方块迟早会漏）
+    const size = containerSlotCount(container);
     for (let i = 0; i < size; i++) {
       const stack = container.get(i);
       if (!stack) continue;
@@ -3844,15 +3860,27 @@ class App {
     const { x: px, y: py, z: pz } = this.physics;
     const rangeSq = 64 * 64;
     this.world.containers.forEach((container, x, y, z, dimension) => {
-      if (!(container instanceof Furnace) && !(container instanceof BrewingStand) && !(container instanceof Campfire)) {
-        return;
-      }
+      const tickable =
+        container instanceof Furnace ||
+        container instanceof BrewingStand ||
+        container instanceof Campfire ||
+        container instanceof Hopper;
+      if (!tickable) return;
       // 只 tick 当前维度的：另一个维度同坐标的熔炉不该在这里被推进
       if (dimension !== this.dimension) return;
       const dx = x + 0.5 - px;
       const dy = y + 0.5 - py;
       const dz = z + 0.5 - pz;
       if (dx * dx + dy * dy + dz * dz > rangeSq) return;
+
+      if (container instanceof Hopper) {
+        // 锁定状态从**方块状态**读（红石引擎负责写它），缓存进容器供界面显示
+        const block = this.world.getBlock(x, y, z);
+        if (block !== Block.HOPPER) return;
+        container.locked = isHopperLocked(this.world.getBlockState(x, y, z));
+        container.tick(dt, this.hopperEnv(x, y, z));
+        return;
+      }
 
       if (container instanceof Campfire) {
         const result = container.tick(dt);
@@ -3869,6 +3897,77 @@ class App {
       // 烧起来/熄灭了就把方块状态同步过去：点火贴图与 13 级光都靠这一位（批次 47）
       this.syncLitState(x, y, z, furnace.isLit, furnaceResult.litChanged);
     });
+  }
+
+  /**
+   * 漏斗搬东西时要问外界的三个问题（批次 58）。
+   *
+   * 为什么走回调而不是让 `Hopper` 直接拿世界：容器与方块表都在主线程这一侧，
+   * 而 `Hopper` 是纯数据 + 规则（离线测试直接喂假环境就能钉住搬运顺序），
+   * 这与"引擎只判定通电、点火交给引信表"是同一条分工。
+   */
+  private hopperEnv(x: number, y: number, z: number): HopperEnv {
+    const [dx, dy, dz] = hopperOutputOffset(hopperOutputOf(this.world.getBlockState(x, y, z)));
+    return {
+      target: () => this.containerOfBlockAt(x + dx, y + dy, z + dz),
+      above: () => this.containerOfBlockAt(x, y + 1, z),
+      suck: () => this.suckItemAbove(x, y, z),
+    };
+  }
+
+  /**
+   * 这一格的容器（**没有就建出来**）。
+   *
+   * "建出来"这条很关键：箱子/熔炉的容器本来是**打开界面时才懒创建**的，
+   * 于是"漏斗往一个从没打开过的箱子里推东西"会找不到目标、整条自动化哑掉。
+   * 空容器几乎没有代价（面板打开时用的就是同一个实例），所以这里一律按需创建。
+   *
+   * @returns 不是容器方块时返回 null
+   */
+  private containerOfBlockAt(x: number, y: number, z: number): BlockContainer | null {
+    // 未加载的区块不建容器：那会让区块一卸载就漏出一堆"看不见的容器"
+    if (!this.world.isLoaded(x, z)) return null;
+    const block = this.world.getBlock(x, y, z);
+    const store = this.world.containers;
+    const dimension = this.dimension;
+
+    if (block === Block.CHEST) return store.getOrCreateChest(dimension, x, y, z);
+    if (block === Block.HOPPER) return store.getOrCreateHopper(dimension, x, y, z);
+    if (block === Block.BREWING_STAND) return store.getOrCreateBrewingStand(dimension, x, y, z);
+    if (block === Block.ANVIL) return store.getOrCreateAnvil(dimension, x, y, z);
+    if (block === Block.SMITHING_TABLE) return store.getOrCreateSmithingTable(dimension, x, y, z);
+    if (block === Block.STONECUTTER) return store.getOrCreateStonecutter(dimension, x, y, z);
+    if (block === Block.ENCHANTING_TABLE) return store.getOrCreateEnchantTable(dimension, x, y, z);
+    if (block === Block.CAMPFIRE) return store.getOrCreateCampfire(dimension, x, y, z);
+    // 三种炉子：站台由**方块**决定（与右键打开界面时同一套，避免同一个炉子两种结论）
+    const station = stationOfBlock(block);
+    if (station) return store.getOrCreateFurnace(dimension, x, y, z, station);
+    return null;
+  }
+
+  /**
+   * 吸走漏斗**头顶那一格**里的一件掉落物（返回取到的物品；没有就 null）。
+   *
+   * 判定盒 = 头顶那一格，但下沿放宽到碗口（+6/16）：东西落在漏斗口上时也该被吸走，
+   * 否则"扔在漏斗上不管用、得扔进旁边那一格"这种手感与原版对不上。
+   */
+  private suckItemAbove(x: number, y: number, z: number): ItemStack | null {
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof ItemEntity) || entity.dead) continue;
+      const inside = entityIntersectsBox(entity, {
+        minX: x,
+        minY: y + 0.375,
+        minZ: z,
+        maxX: x + 1,
+        maxY: y + 2,
+        maxZ: z + 1,
+      });
+      if (!inside) continue;
+      entity.count -= 1;
+      if (entity.count <= 0) entity.dead = true;
+      return { id: entity.itemId, count: 1 };
+    }
+    return null;
   }
 
   /**
@@ -4253,6 +4352,10 @@ class App {
         this.world.containers.getOrCreateCampfire(this.dimension, x, y, z);
         this.world.setStateAndUpdate(x, y, z, withLitState(plan.state, true));
       }
+
+      // 漏斗（批次 58）：放下就必须把容器建出来（tick 循环是按容器表推的）。
+      // 与联机同步、控制台 API 那两条路径共用同一个入口，免得只有手动放置能用
+      this.ensureBlockEntityAt(x, y, z, blockId);
 
       // 触觉反馈：放下一块方块的轻震
       this.vibrate(6);
@@ -5512,7 +5615,10 @@ class App {
 
   /** 直接放置方块（自动化测试用）；可带状态 */
   place(x: number, y: number, z: number, blockId: number, state = 0): boolean {
-    return this.world.setBlockAndUpdate(x, y, z, blockId, state);
+    const ok = this.world.setBlockAndUpdate(x, y, z, blockId, state);
+    // 与玩家放置走同一条收尾：漏斗在这里也必须把容器建出来（否则脚本摆的漏斗是死的）
+    if (ok) this.ensureBlockEntityAt(x, y, z, blockId);
+    return ok;
   }
 
   /**

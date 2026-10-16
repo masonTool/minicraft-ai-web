@@ -99,6 +99,8 @@ export function isRedstoneComponent(id: number): boolean {
     case Block.TRIPWIRE_HOOK:
     // TNT（批次 56）：通电就点燃（它是"负载"，但点燃的后果在引信表那边）
     case Block.TNT:
+    // 漏斗（批次 58）：通电就**锁定**（不推也不吸）——这是原版的"漏斗闸门"玩法
+    case Block.HOPPER:
       return true;
     default:
       return false;
@@ -671,6 +673,18 @@ export class RedstoneEngine {
               this.markDirty(nx, ny, nz);
               changed = true;
             }
+          }
+          break;
+        }
+        case Block.HOPPER: {
+          // 漏斗（批次 58）：**通电即锁定**。引擎只把"锁没锁"写进状态位
+          // （`isHopperLocked` 与红石灯共用 POWERED 位），搬运本身在容器那边——
+          // 两者以方块状态为界，与"引擎只判定通电、点火交给引信表"是同一条分工。
+          const shouldLock = input > 0;
+          if (isPowered(state) !== shouldLock) {
+            world.setState(nx, ny, nz, withPowered(state, shouldLock));
+            this.markDirty(nx, ny, nz);
+            changed = true;
           }
           break;
         }

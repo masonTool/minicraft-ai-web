@@ -44,6 +44,7 @@ import {
 } from '../core/container/SmithingTable.ts';
 import { STONECUTTER_INPUT, Stonecutter } from '../core/container/Stonecutter.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../core/container/Campfire.ts';
+import { HOPPER_SIZE, Hopper } from '../core/container/Hopper.ts';
 import { smithingHint } from '../core/crafting/Smithing.ts';
 import {
   ENCHANT_ITEM_SLOT,
@@ -96,6 +97,8 @@ export type InventoryPanelMode =
   | 'campfire'
   /** 切石机（H11，批次 44）：一格输入 + 一列可选产物，点哪一项切哪一项 */
   | 'stonecutter'
+  /** 漏斗（批次 58）：5 格排成一行，内容由方块自己每 0.4 秒搬一次 */
+  | 'hopper'
   | 'brewing';
 
 export interface InventoryScreenHooks {
@@ -196,6 +199,10 @@ export class InventoryScreen {
   private readonly smithingMaterialSlot: HTMLDivElement;
   private readonly smithingResultSlot: HTMLDivElement;
   private readonly smithingHintEl: HTMLDivElement;
+
+  /** 漏斗（批次 58）：5 格排成一行 + 一行动态提示（锁定/节奏） */
+  private readonly hopperGrid: HTMLDivElement;
+  private readonly hopperHintEl: HTMLDivElement;
 
   /** 切石机（H11，批次 44）：一格输入 + 一列可选产物（按钮）+ 提示行 */
   private readonly stonecutterLayout: HTMLDivElement;
@@ -303,6 +310,12 @@ export class InventoryScreen {
     // 箱子 3×9
     this.chestGrid = document.createElement('div');
     this.chestGrid.className = 'inv-grid inv-chest';
+
+    // 漏斗（批次 58）：5 格排成一行（原版界面也是一排 5 个）
+    this.hopperGrid = document.createElement('div');
+    this.hopperGrid.className = 'inv-grid inv-hopper';
+    this.hopperHintEl = document.createElement('div');
+    this.hopperHintEl.className = 'anvil-cost';
 
     // 熔炉
     this.furnaceLayout = document.createElement('div');
@@ -651,6 +664,7 @@ export class InventoryScreen {
     this.clearBindings('stonecutter:');
     this.clearBindings('campfire:');
     this.clearBindings('brewing:');
+    this.clearBindings('hopper:');
 
     // 熔炉 / 烟熏炉 / 高炉（批次 46）共用同一套布局：格子与燃料规则完全一样，
     // 区别只有"只吃哪一类东西"和"快一倍"——那两条由容器负责，界面只是标题与提示不同
@@ -837,6 +851,18 @@ export class InventoryScreen {
 
       this.enchantLayout.replaceChildren(left, right);
       this.topArea.appendChild(this.enchantLayout);
+      return;
+    }
+
+    if (this.mode === 'hopper') {
+      this.hopperGrid.replaceChildren();
+      for (let i = 0; i < HOPPER_SIZE; i++) {
+        this.hopperGrid.appendChild(this.registerSlot(`hopper:${i}`, this.activeContainer!, i));
+      }
+      this.hopperHintEl.textContent = '';
+      this.topArea.appendChild(this.buildLabel('漏斗（5 格）'));
+      this.topArea.appendChild(this.hopperGrid);
+      this.topArea.appendChild(this.hopperHintEl);
       return;
     }
 
@@ -1243,6 +1269,16 @@ export class InventoryScreen {
       this.brewFuelTextEl.classList.toggle('bad', left <= 0);
     }
 
+    if (this.mode === 'hopper' && this.activeContainer instanceof Hopper) {
+      // 锁定时必须写出来：原版是"漏斗自己不动"，玩家看不到任何别的反馈，
+      // 只会以为漏斗坏了（这是 H14 第一批必踩的困惑）
+      const locked = this.activeContainer.locked;
+      this.hopperHintEl.textContent = locked
+        ? '被红石信号锁定：不推也不吸（断开信号就继续）'
+        : '每 0.4 秒搬一件：推给朝向那一格，再从头顶的容器或掉落物吸一件';
+      this.hopperHintEl.classList.toggle('bad', locked);
+    }
+
     if (this.mode === 'enchanting') this.refreshEnchantOptions();
     if (this.mode === 'anvil') this.refreshAnvil();
     if (this.mode === 'smithing') this.refreshSmithing();
@@ -1525,6 +1561,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   smithing: '锻造台',
   stonecutter: '切石机',
   brewing: '酿造台',
+  hopper: '漏斗',
 };
 
 /** 创造物品栏的搜索匹配：中文名、英文 id、数字 id 都认 */

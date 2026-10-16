@@ -359,6 +359,9 @@ requirePickaxe(
   ],
 );
 
+// 漏斗（批次 58）：原版与铁块同一档，**木质镐就能挖**（徒手挖得动但一无所获）
+requirePickaxe(0, [Block.HOPPER]);
+
 // ---- 石镐（tier 1）：铁/铜/青金石矿与粗金属块
 requirePickaxe(1, [
   Block.IRON_ORE,

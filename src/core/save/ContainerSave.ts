@@ -24,6 +24,7 @@ import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
 import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
+import { HOPPER_SIZE, Hopper } from '../container/Hopper.ts';
 import type { ItemStack } from '../container/Inventory.ts';
 import { itemDef } from '../registry/items.ts';
 import { Dimension, isDimension, type DimensionId } from '../gen/Dimension.ts';
@@ -42,6 +43,7 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   smithing: SMITHING_SIZE,
   stonecutter: STONECUTTER_SIZE,
   campfire: CAMPFIRE_SIZE,
+  hopper: HOPPER_SIZE,
 };
 
 export interface SerializedContainer {
@@ -95,6 +97,7 @@ export function kindOf(container: BlockContainer): ContainerKind {
   if (container instanceof SmithingTable) return 'smithing';
   if (container instanceof Stonecutter) return 'stonecutter';
   if (container instanceof Campfire) return 'campfire';
+  if (container instanceof Hopper) return 'hopper';
   return 'brewing';
 }
 
@@ -114,6 +117,7 @@ function containerFor(
   if (kind === 'smithing') return store.getOrCreateSmithingTable(dimension, x, y, z);
   if (kind === 'stonecutter') return store.getOrCreateStonecutter(dimension, x, y, z);
   if (kind === 'campfire') return store.getOrCreateCampfire(dimension, x, y, z);
+  if (kind === 'hopper') return store.getOrCreateHopper(dimension, x, y, z);
   return store.getOrCreateBrewingStand(dimension, x, y, z);
 }
 
@@ -154,6 +158,10 @@ function hasContent(container: BlockContainer, kind: ContainerKind): boolean {
   // 被战利品表填过的箱子：即使被玩家掏空了也必须写下来，
   // 否则读档后它会被当成"还没填过"，再走进一次填充逻辑 → 箱子自己长回来（无限刷矿物）
   if (container instanceof Chest && container.looted) return true;
+  // 漏斗（批次 58）：**空的也必须写**。tick 循环是按容器表推的——
+  // 空漏斗不写进存档，读档后它就不在表里，于是"漏斗链"整条静默停摆
+  // （方块还在、看着没坏，就是不搬东西）。数量最多是玩家放的漏斗个数，代价可忽略。
+  if (container instanceof Hopper) return true;
   if (container instanceof Furnace) {
     // 只烧了一半的熔炉即使原料被拿走、也要把"燃烧剩余"留住，否则重新点火的节奏会抖
     return container.burnTimeLeft > 0 || container.cookProgress > 0 || container.storedExperience > 0;

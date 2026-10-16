@@ -701,6 +701,8 @@ const FUNCTIONAL = new Set<number>([
   Block.BLAST_FURNACE,
   // 营火（批次 47）：也是"右键打开的烤东西的地方"
   Block.CAMPFIRE,
+  // 漏斗（批次 58）：既是容器（右键打开 5 格），也是红石负载（通电即锁定）
+  Block.HOPPER,
   Block.CHEST,
   Block.GLOWSTONE,
   // ---- 红石元件（都是"有信号才做事"的功能方块）

@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 287（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 289（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 246 项 —— 已完成 **120**、进行中 **63**、待办 63 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 247 项 —— 已完成 **121**、进行中 **65**、待办 61 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -86,7 +86,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **62 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew**，当前全绿；
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **63 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
@@ -119,7 +119,20 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**可疑的炖菜**（批次 57，B17 收口）——**5 碗按花分**
+**刚做完的**：**漏斗**（批次 58，B32 / H14 的第一件）——本项目**第一件会自己搬东西**的方块。
+三件事一批做完：① **五向朝向**（朝下 + 东南西北；`FACING` 只有 2 位，第五个方向借 bit0，
+编码收在 `blockState` 的 `hopperOutputOf` / `withHopperOutput` / `hopperOutputOffset` 三处）；
+② **每 0.4 秒一轮、先推后拉**的搬运（`container/Hopper.ts`：自己不为空先往**朝向那一格**推一件，
+自己没满再从**头顶**的容器拉一件、再吸一件头顶的掉落物；放下时冷却就是满值）；
+③ **红石锁定**（通电即不推也不吸；引擎只写 `POWERED` 位，搬运那边只读状态）。
+配套三件"不做就会静默出错"的接线，比漏斗本身更值得记：
+`container/Transfer.ts` 的**可塞格子策略表**（熔炉不塞产物槽、燃料槽只吃燃料、营火只吃食物、
+附魔台一概不收、从炉子里取件只取产物槽）、**放下方块时就把容器建出来** +
+**空漏斗也写进存档**（tick 循环按容器表推，差一步就是"方块都在、就是不搬"）、
+以及 `blockShapes` 的 `hopper` 形状（碗口 + 两级收窄 + 管子；**碰撞只算碗口**，能从底下走过去）。
+尺寸：方块 476、物品 738、配方 357；**63 套**离线测试里新增 `hopper`（112 条断言）。
+
+再往前是**可疑的炖菜**（批次 57，B17 收口）——**5 碗按花分**
 （`suspicious_stew_dandelion` / `_poppy` / `_blue_orchid` / `_oxeye_daisy` / `_cornflower`）：
 数值与蘑菇煲同一档（6 饥饿 / 0.6 饱和度修饰值），各带**一个**状态效果——
 蒲公英与兰花 → 饱和、虞美人 → 夜视、雏菊 → 生命恢复、矢车菊 → 跳跃提升（时长抄原版那张表）；
@@ -519,6 +532,12 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **造测试世界时要给足空间，否则会被上一条规则抢先拦住** | 断"海带封顶 26 格"时，我用的是"海底 40、水面 63"那片海——26 格的海带顶早就**冲出水面**了，于是先命中的是"长出去会顶到水面，不许长"，看起来像"封顶没生效"，其实是另一条规则在起作用。**一条断言被同类的另一条规则抢先命中时，失败信息会指向完全无关的地方**；给专门的用例准备专门的深度（这里用 33 格深的深海）比盯着实现猜快得多（批次 50） |
 | **断言要覆盖"按状态取的那几张图"，文案也要盯着** | 营火的底面贴图写成了 `oak_log`（真名是 `oak_log_side`）——**方块表、中文名、配方全都正常，只有底面会渲染成缺省图**；抓出它的正是"点火贴图与本体贴图都要在图集里"这条断言（原有关断言只查了 `tiles`，没查 `stateTiles`）。同一批还有一条：营火拒绝提示最初复用了高炉的文案（"只烧矿物与金属"），是"提示里要出现'只烤食物'"这条断言把它顶回来的。**提示语也是行为，别让它比代码更晚知道真相**（批次 47） |
 
+| **"有没有这个机制"要连"它的目录入口是不是全在"一起看** | 漏斗是本项目第一件"每帧按容器表推进"的新方块，于是它踩到的都是**接线类**的坑，而且全都不报错：① `BlockEntityStore` 里的容器默认是**打开界面时才懒创建**的 → 没人在"放下漏斗"那一刻建容器，tick 循环就永远看不到它；② 存档的 `hasContent` 规则是"空容器不写" → 空漏斗读档后**不在容器表里**，整条漏斗链静默停摆（方块都在、看着没坏、就是不搬）。两处都改成"漏斗特批"。**新加一类"需要每 tick 被推进"的实体时，先数一遍它的生命周期入口：放下时建、读档时建、卸载时清**（批次 58） |
+| **两个模块互相 import 时，顶层不能读对方的 const** | `Transfer.ts` 要认出 `Hopper`（`instanceof`），`Hopper.ts` 又要调 `Transfer.tryInsertOne`——环。ESM 允许环，但**模块顶层读到的可能是未初始化的绑定**（`const` 会直接 ReferenceError，`let`/类引用则会静默变成 `undefined`）。做法是把跨模块的读取**全部收进函数体**（`acceptingSlots` 里 `range(HOPPER_SIZE)`），顶层只留 `instanceof` 这种"调用时才求值"的写法（批次 58） |
+| **给"自动搬运"用的判定函数，别用界面提示那一个** | 判断"营火能不能烤这件东西"时最顺手的是 `stationRejectReason`（界面上就显示它）。但它对**根本没有配方**的东西返回空串（语义是"没意见"），于是石头被判成"能烤"、漏斗把石头塞进了营火。自动化路径要的是**存在性判定**（`smeltingRecipeFor(...) !== undefined`），界面文案才是"给个理由"（批次 58） |
+| **一条 8 层的三元链就是一颗定时炸弹** | 破坏容器方块时"这个容器有几格"原先写成 `Furnace ? 3 : EnchantTable ? 2 : Anvil ? 3 : …` 的嵌套三元链。漏斗这种"一批就是新容器"的方块一来，它必然被漏掉（症状：拆掉漏斗时 5 格里的东西**凭空消失**）。收成 `Transfer.containerSlotCount()` 一处之后，加容器只改那张表（批次 58） |
+| **"能不能塞"与"塞得下"是两件事** | 自动搬运最容易出的错不是"漏了某个容器"，而是"塞进了不该塞的格子"：炉子**产物槽**、营火里**不是食物的东西**、燃料槽里的**石头**。这些规则各写在各处，加一种容器就得把漏斗的逻辑再翻一遍——所以做成一张**策略表**（`acceptingSlots` + `kindAccepts`），漏斗只认 `BlockContainer`（批次 58） |
+
 ## 5. 待复核的悬案（下次接手优先看）
 
 非完整方块展示平台整体偏暗，而同处探针显示天光已是 15。怀疑**网格在光照收敛前就被烘焙**了。
@@ -532,6 +551,19 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 Service Worker 只在生产模式注册（开发时注册会把 vite 的开发资源缓存住，改代码看不到效果——
 这是 PWA 开发最常见的坑）。验收：`sh tools/pwa-check.sh`。
 缓存策略：导航请求网络优先、静态资源缓存优先 + 后台更新。
+
+**GitHub Pages 已经接好**（2026-10-16）：线上地址
+`https://masontool.github.io/minicraft-ai-web/`，工作流 `.github/workflows/deploy-pages.yml`
+在推 `main` 时自动 `npm ci` + `npm run build` + 发布 `dist`。
+仓库侧只需做**一次**设置：`Settings → Pages → Build and deployment → Source = GitHub Actions`
+（不改这一步的话工作流会跑完但不生效，线上 404——这是最常踩的一处）。
+三条与"能不能在子路径下跑起来"有关的约定：
+`vite.config.ts` 的 `base` 必须是相对值 `'./'`（Pages 上项目位于 `/<repo>/`）、
+`index.html` 与 `manifest.webmanifest` 里的路径同样全是相对的、
+项目没用 `SharedArrayBuffer` 因此不需要 Pages 无法自定义的 COOP/COEP 响应头。
+⚠️ **联机在 Pages 上默认不可用**：`defaultServerUrl()` 给的是 `ws://<当前域名>:8787`，
+而 Pages 是 HTTPS 页面，浏览器会直接拦掉这种混合内容；要玩联机得自己跑 `npm run server`
+并挂 `wss://` 反向代理，再在控制台 `mc.connect('wss://你的域名', '昵称')`。
 
 **想套壳成 App 时**（本项目没装这些依赖，按需再加）：
 
