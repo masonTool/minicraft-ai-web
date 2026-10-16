@@ -233,20 +233,17 @@ export class OverworldGenerator {
 
     // 复用 climateGrid 的第 0 槽位：地物装饰发生在 generate() 全部结束之后
     this.sampleClimate(x, z, 0);
-    const offset = this.offsetSpline.apply(this.climateGrid[0]!);
     const factor = this.factorSpline.apply(this.climateGrid[1]!);
-    const jaggedness = this.jaggednessSpline.apply(this.climateGrid[1]!);
-    const pv = peaksAndValleys(this.climateGrid[2]!);
-
-    let surface = SEA_LEVEL + offset * 96 + pv * factor * 40;
-    if (jaggedness > 0.001) surface += jaggedness * Math.abs(this.ridgeNoise.getValue(x, 0, z)) * 46;
+    // ⚠️ 与 `densityAt` 共用同一份公式（N9 之前这里是另一份、少了 relief 与夹紧）
+    const surface = this.targetSurface(x, z, 0, factor);
     const spread = (0.5 + factor * 0.85) * 26;
     let estimate = surface;
     for (let i = 0; i < 2; i++) estimate = surface + this.detail3d.getValue(x, estimate, z) * spread;
 
+    const topLevel = GRID_Y - 2;
     const densityAt = (gy: number): number => this.densityAt(x, WORLD_MIN_Y + gy * CELL_Y, z, 0);
 
-    const startLevel = Math.min(GRID_Y - 2, Math.max(0, Math.ceil((estimate + 48 - WORLD_MIN_Y) / CELL_Y)));
+    const startLevel = Math.min(topLevel, Math.max(0, Math.ceil((estimate + 48 - WORLD_MIN_Y) / CELL_Y)));
     let found = -1;
     for (let gy = startLevel; gy >= 0; gy--) {
       if (densityAt(gy) > 0) {
@@ -255,7 +252,7 @@ export class OverworldGenerator {
       }
     }
     if (found < 0) {
-      for (let gy = GRID_Y - 2; gy >= 0; gy--) {
+      for (let gy = topLevel; gy >= 0; gy--) {
         if (densityAt(gy) > 0) {
           found = gy;
           break;
@@ -263,6 +260,20 @@ export class OverworldGenerator {
       }
     }
     if (found < 0) return SEA_LEVEL;
+
+    /**
+     * ⚠️ N9 修的那一步（**别删**）：上面那段只在"起点落在**地表之上**"时才给出正确答案。
+     *
+     * 起点是 `estimate + 48`，而 `estimate` 只是"解析式 + 两次不动点迭代"的**近似**——
+     * 它完全可能落在**实心地形内部**。那种情况下第一段循环的第一次采样就命中
+     * "密度 > 0"，于是 `found` 停在**地形内部某一层**而不是地表，返回一个偏低的高度
+     * （症状：树埋进山体、地表规则铺错一层）。
+     *
+     * 所以找到之后要**再往上走到这一段的上沿**。
+     * 常见情况（起点在地表之上）这一段一次循环都不进，与原来的行为完全一致；
+     * 单独修这一处，`npm run test:terrain` 的判据 1 从 60.9% 降到 60.2%。
+     */
+    while (found + 1 <= topLevel && densityAt(found + 1) > 0) found++;
 
     const d0 = densityAt(found);
     const d1 = densityAt(found + 1);
@@ -274,6 +285,33 @@ export class OverworldGenerator {
     if (this.surfaceYCache.size > 16384) this.surfaceYCache.clear();
     this.surfaceYCache.set(key, y);
     return y;
+  }
+
+  /**
+   * **仅供测试与调试**：某一列在粗网格上的"实心段"分布（单位：格，`[顶, 底]` 成对，
+   * 从高到低）。
+   *
+   * 为什么要有它（N9）：实测一列**最多能有 4 段互相隔开的实心块**（平均 1.5 段）——
+   * 也就是说密度场在竖直方向被切得很碎（一层薄片、空气、再一层），
+   * 而地表高度是按"往下扫到的第一段"推出来的，**扫到哪一段就决定了树长在哪**。
+   * 这是"碎"在竖直方向的另一半，光看水平高差（判据 1）看不出来。
+   *
+   * 命名照 `structureInstanceForTest` 的先例（测试面向的公开入口）。
+   */
+  densityRunsAt(x: number, z: number): Array<[number, number]> {
+    this.sampleClimate(x, z, 0);
+    const runs: Array<[number, number]> = [];
+    let top: number | null = null;
+    for (let gy = GRID_Y - 2; gy >= 0; gy--) {
+      const solid = this.densityAt(x, WORLD_MIN_Y + gy * CELL_Y, z, 0) > 0;
+      if (solid && top === null) top = WORLD_MIN_Y + gy * CELL_Y;
+      else if (!solid && top !== null) {
+        runs.push([top, WORLD_MIN_Y + (gy + 1) * CELL_Y]);
+        top = null;
+      }
+    }
+    if (top !== null) runs.push([top, WORLD_MIN_Y]);
+    return runs;
   }
 
   /**
@@ -330,23 +368,10 @@ export class OverworldGenerator {
    */
   private densityAt(x: number, y: number, z: number, slot: number): number {
     const grid = this.climateGrid;
-    const continent = grid[slot]!;
-    const erosion = grid[slot + 1]!;
-    const weirdness = grid[slot + 2]!;
+    const factor = this.factorSpline.apply(grid[slot + 1]!);
 
-    const offset = this.offsetSpline.apply(continent);
-    const factor = this.factorSpline.apply(erosion);
-    const jaggedness = this.jaggednessSpline.apply(erosion);
-    const pv = peaksAndValleys(weirdness);
-
-    // 目标地表高度。
-    // `amplified` 世界把三项起伏都乘一个倍率：山更高、峡谷更深（原版放大化的观感），
-    // 同时把高度夹在世界高度之内，免得山尖顶出上限、出现"被切平"的怪地形。
-    const relief = this.reliefScale;
-    let surface = SEA_LEVEL + offset * 96 * relief;
-    surface += pv * factor * 40 * relief;
-    if (jaggedness > 0.001) surface += jaggedness * Math.abs(this.ridgeNoise.getValue(x, 0, z)) * 46 * relief;
-    if (surface > WORLD_MAX_Y - 12) surface = WORLD_MAX_Y - 12;
+    // 目标地表高度（与地物落点**共用同一份公式**，见 `targetSurface`）
+    const surface = this.targetSurface(x, z, slot, factor);
 
     // 竖直梯度 + 三维细节
     const gradient = (surface - y) / 26;
@@ -356,6 +381,36 @@ export class OverworldGenerator {
     // 深处强制实心，避免出现大片浮空岛（洞穴由 D10 的雕刻器另行挖出）
     if (y < surface - 34) density = Math.max(density, 1);
     return density;
+  }
+
+  /**
+   * 该列的目标地表高度（N9）。
+   *
+   * **为什么必须是一个方法**：这条式子在 N9 之前有**两份**——
+   * `densityAt` 里一份、`nodeSurfaceY` 里一份，而后者少了 `* relief` 与上限夹紧。
+   * 后果不是"差一点"，是**结构性**的：`nodeSurfaceY` 拿它当"往下扫的起点"
+   * （先估一个高度，再从那一层往下找第一个密度 > 0 的层），起点落在真实地表**之下**时，
+   * 第一次采样就命中密度 > 0，于是**返回一个偏低的地表高度**。
+   * 于是地物落点与真正的地形分家（树浮在半空/埋进山体），而**只有放大化世界会踩到**
+   * （`reliefScale` 默认 1，两项恰好相等）——这类"只在某个世界类型下错"的 bug 最难查。
+   *
+   * ⚠️ `factor` 由调用方传入：它是**唯一**同时被"地表高度"与"三维细节系数"用到的量，
+   * 传进来可以避免每个采样点多算一次样条（`densityAt` 每区块要跑 1225 次）。
+   */
+  private targetSurface(x: number, z: number, slot: number, factor: number): number {
+    const grid = this.climateGrid;
+    const offset = this.offsetSpline.apply(grid[slot]!);
+    const jaggedness = this.jaggednessSpline.apply(grid[slot + 1]!);
+    const pv = peaksAndValleys(grid[slot + 2]!);
+
+    // `amplified` 世界把三项起伏都乘一个倍率：山更高、峡谷更深（原版放大化的观感），
+    // 同时把高度夹在世界高度之内，免得山尖顶出上限、出现"被切平"的怪地形。
+    const relief = this.reliefScale;
+    let surface = SEA_LEVEL + offset * 96 * relief;
+    surface += pv * factor * 40 * relief;
+    if (jaggedness > 0.001) surface += jaggedness * Math.abs(this.ridgeNoise.getValue(x, 0, z)) * 46 * relief;
+    if (surface > WORLD_MAX_Y - 12) surface = WORLD_MAX_Y - 12;
+    return surface;
   }
 
   generate(cx: number, cz: number, out?: BlockArray): BlockArray {
