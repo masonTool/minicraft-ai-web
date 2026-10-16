@@ -289,8 +289,8 @@ console.log('\n[未接效果的附魔要标出来]');
   const { UI_HINT_UNIMPLEMENTED, UNIMPLEMENTED_MARK } = await import('../src/core/crafting/Enchanting.ts');
   const implemented = ENCHANTMENTS.filter((def) => def.implemented === true);
   check(
-    '已接效果的附魔有 13 条（第一批 6 条 + 按伤害类型/生物家族分流的 7 条）',
-    implemented.length === 13 &&
+    '已接效果的附魔有 17 条（6 条第一批 + 7 条按类型/家族分流 + 4 条弓）',
+    implemented.length === 17 &&
       [
         'efficiency',
         'fortune',
@@ -305,12 +305,18 @@ console.log('\n[未接效果的附魔要标出来]');
         'bane_of_arthropods',
         'looting',
         'mending',
+        // 弓的四条：效果在 `core/entity/Bow.ts` 里，曾经漏标 implemented
+        'power',
+        'punch',
+        'flame',
+        'infinity',
       ].every((id) => implemented.some((def) => def.id === id)),
     implemented.map((def) => def.id).join(','),
   );
   equal('已接效果的附魔不带标记', optionLabel([{ id: 'efficiency', level: 3 }]), '效率 III');
   equal('亡灵杀手已接效果，所以不带标记', optionLabel([{ id: 'smite', level: 2 }]), '亡灵杀手 II');
-  equal('未接效果的附魔带 * 标记', optionLabel([{ id: 'power', level: 2 }]), `力量 II${UNIMPLEMENTED_MARK}`);
+  equal('力量已接效果（弓），所以不带标记', optionLabel([{ id: 'power', level: 2 }]), '力量 II');
+  equal('未接效果的附魔带 * 标记', optionLabel([{ id: 'thorns', level: 3 }]), `荆棘 III${UNIMPLEMENTED_MARK}`);
   check('界面图例会说明这个标记', UI_HINT_UNIMPLEMENTED.includes(UNIMPLEMENTED_MARK));
 }
 

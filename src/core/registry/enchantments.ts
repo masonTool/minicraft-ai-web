@@ -109,11 +109,16 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'mending', name: '经验修补', maxLevel: 1, targets: ALL_GEAR, weight: 2, treasure: true, implemented: true },
   { id: 'vanishing_curse', name: '消失诅咒', maxLevel: 1, targets: ALL_GEAR, weight: 1, treasure: true },
 
-  // ---- 远程与其它（物品本身还没做，先登记，等弓/三叉戟/钓竿落地）
-  { id: 'power', name: '力量', maxLevel: 5, targets: ['bow'], weight: 10 },
-  { id: 'punch', name: '冲击', maxLevel: 2, targets: ['bow'], weight: 2 },
-  { id: 'flame', name: '火矢', maxLevel: 1, targets: ['bow'], weight: 2 },
-  { id: 'infinity', name: '无限', maxLevel: 1, targets: ['bow'], weight: 1 },
+  // ---- 弓（J9 落地后四条全部接线）
+  // ⚠️ 这四条曾经漏标 `implemented`：效果在 `core/entity/Bow.ts` 里早就按它们算了
+  // （`arrowDamageAt` 取力量、`knockbackStrength` 取冲击、火矢点燃、无限不耗箭），
+  // 但界面上仍按"效果未实现"标着 `*` —— 玩家附了一把力量 V 的弓，却被界面告知"这条没效果"。
+  // 教训：`implemented` 是**一列手写的数据**，接线时要跟着改；覆盖度台账（`audit:coverage`）
+  // 现在把"已接线条数"当众数出来，这类漂移会直接体现在百分比上。
+  { id: 'power', name: '力量', maxLevel: 5, targets: ['bow'], weight: 10, implemented: true },
+  { id: 'punch', name: '冲击', maxLevel: 2, targets: ['bow'], weight: 2, implemented: true },
+  { id: 'flame', name: '火矢', maxLevel: 1, targets: ['bow'], weight: 2, implemented: true },
+  { id: 'infinity', name: '无限', maxLevel: 1, targets: ['bow'], weight: 1, implemented: true },
   { id: 'luck_of_the_sea', name: '海之眷顾', maxLevel: 3, targets: ['fishing_rod'], weight: 2 },
   { id: 'lure', name: '诱饵', maxLevel: 3, targets: ['fishing_rod'], weight: 2 },
   { id: 'loyalty', name: '忠诚', maxLevel: 3, targets: ['trident'], weight: 5 },
