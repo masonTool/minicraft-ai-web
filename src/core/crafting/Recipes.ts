@@ -14,6 +14,7 @@ import {
   GLASS_PANE_ID,
   SHAPED_PARENTS,
   Wood,
+  carpetId,
   slabId,
   stairsId,
   stainedGlassId,
@@ -116,6 +117,18 @@ const WOOL_RECIPES: readonly Recipe[] = DYE_COLORS.map((_color, index) => ({
   kind: 'shapeless' as const,
   result: { id: woolId(index), count: 1 },
   ingredients: [woolId(0), dyeItemId(index)],
+}));
+
+/**
+ * 地毯（批次 37）：2 个同色羊毛 → 3 块地毯（原版配方）。
+ *
+ * 与羊毛染色一样按配色表批量生成，16 条。颜色**必须一一对应**：
+ * 写成"任意羊毛 → 任意地毯"虽然也能用，但玩家拿红羊毛合出橙地毯会以为是自己看错了。
+ */
+const CARPET_RECIPES: readonly Recipe[] = DYE_COLORS.map((_color, index) => ({
+  kind: 'shapeless' as const,
+  result: { id: carpetId(index), count: 3 },
+  ingredients: [woolId(index), woolId(index)],
 }));
 
 /**
@@ -372,6 +385,14 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Block.SNOW_BLOCK, count: 1 },
     ingredients: [Item.SNOWBALL, Item.SNOWBALL, Item.SNOWBALL, Item.SNOWBALL],
   },
+  // ---- 雪层（批次 37）：3 块雪块横排 → 6 层雪（原版配方）。
+  // 反过来 4 层雪合成 1 块雪块——原版**没有**这条，所以这里也不做（雪块只能由雪球合成）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.SNOW, count: 6 },
+    pattern: ['SSS'],
+    key: { S: Block.SNOW_BLOCK },
+  },
   // ---- 药水箭（K4 最后一步）：滞留药水 + 8 支箭 → 8 支药水箭（原版配方，1 瓶出 8 支）
   // 由药水表展开而不是手写 28 条：漏写一条只会表现成"某种药水箭合不出来"，不报错。
   // ⚠️ 必须用**滞留型**（不是饮用型/喷溅型）——这一条由断言盯着。
@@ -473,6 +494,7 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...WOOL_RECIPES,
+  ...CARPET_RECIPES,
   ...SHAPED_BLOCK_RECIPES,
   ...UTILITY_RECIPES,
   ...WOOD_RECIPES,

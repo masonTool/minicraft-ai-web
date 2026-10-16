@@ -16,11 +16,14 @@
 
 import { Block, blockDef } from '../registry/blocks.ts';
 import {
+  MAX_SNOW_LAYERS,
   facingFromYaw,
+  snowLayers,
   withDoorHinge,
   withDoorUpper,
   withFacing,
   withSlabDouble,
+  withSnowLayers,
   withTop,
   withWallMounted,
   type Facing,
@@ -150,6 +153,28 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
     case 'fence_gate':
       // 栅栏门只有朝向：门板横在朝向的**垂直方向**上（与栅栏连成一线）
       return { state: withFacing(0, facingFromYaw(input.yaw)) };
+
+    case 'flat': {
+      // 红石粉 / 压力板 / 地毯：原版一律要求"下方有实心方块"，不能贴在墙上或天花板上。
+      // 这条以前是漏的（走 default 分支就无条件返回 state 0），于是能在墙上放一片
+      // 悬空的红石粉——外观上它就平贴在方块侧面，看着就不对。
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: 0 };
+    }
+
+    case 'snow': {
+      // 雪层：对着**已有雪层的顶面**再放一层 → 叠高（原版最多 8 层）。
+      // 这是"同一格越叠越高"，与台阶的"上下半合并"一样属于**改命中方块自身**，
+      // 所以走 `mergeInto`（放置目标不是命中面外侧那一格）。
+      if (ny > 0 && input.hitBlock === input.blockId) {
+        const layers = snowLayers(input.hitState);
+        if (layers >= MAX_SNOW_LAYERS) return null; // 已经是整格高度，叠不上去了
+        return { state: 0, mergeInto: { state: withSnowLayers(input.hitState, layers + 1) } };
+      }
+      // 其余情况：与地毯/红石粉同一条规矩——下方要有实心方块，新放的是 1 层
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: withSnowLayers(0, 1) };
+    }
 
     case 'lily_pad': {
       // 睡莲必须"浮在水面上"：自己那一格是空气、下面那一格是水。

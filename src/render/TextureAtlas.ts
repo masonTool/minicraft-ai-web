@@ -197,6 +197,24 @@ function woolPainter(rgb: readonly [number, number, number]): Painter {
   };
 }
 
+/**
+ * 地毯：羊毛的织面去掉绒毛起伏，**四周一圈深色包边**。
+ *
+ * 地毯与羊毛在贴图上必须是**一眼能分开**的两样东西：地毯是 1/16 的薄片、平铺在地上，
+ * 照抄羊毛的"细密噪点"会让它看起来像"矮一点的羊毛块"。原版地毯的识别特征就是
+ * 边上一圈略深的织边，这里照此实现（外圈 ×0.8，内部只留很轻的织纹）。
+ */
+function carpetPainter(rgb: readonly [number, number, number]): Painter {
+  const woven = woolPainter(rgb);
+  return (x, y, rng) => {
+    const [r, g, b] = woven(x, y, rng);
+    const edge = x === 0 || y === 0 || x === 15 || y === 15;
+    const inner = x === 1 || y === 1 || x === 14 || y === 14;
+    const shade = edge ? 0.78 : inner ? 0.93 : 1.0;
+    return [clamp255(r * shade), clamp255(g * shade), clamp255(b * shade), 255];
+  };
+}
+
 /** 砖块纹理：按 4×8 交错砌块 + 灰缝 */
 function brickPainter(base: [number, number, number]): Painter {
   return (x, y, rng) => {
@@ -743,6 +761,11 @@ for (const color of DYE_COLORS) {
 for (const color of DYE_COLORS) {
   PAINTERS[`wool_${color.name}`] = woolPainter(color.rgb);
   PAINTERS[`dye_${color.name}`] = dyePainter(color.rgb);
+}
+
+// 地毯（批次 37）：同样 16 色批量生成——它是"羊毛族的薄片"，配色与羊毛同源
+for (const color of DYE_COLORS) {
+  PAINTERS[`carpet_${color.name}`] = carpetPainter(color.rgb);
 }
 
 /** 火把：木柄 + 顶端火焰 */

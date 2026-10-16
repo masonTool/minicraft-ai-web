@@ -305,6 +305,9 @@ EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');
 // 原版"必须用剪刀"体现在掉落表里，破坏耗时不受影响（徒手拆羊毛仍是正常的 1.2 秒，
 // 只是什么都不掉）。放进 REQUIRED_TOOL 会让徒手耗时变成 4 秒，手感直接变差。
 for (let i = 0; i < DYE_COLORS.length; i++) EFFICIENT_TOOL.set(woolId(i), 'shears');
+// 雪层：锹是加速工具（原版同一条：徒手也能撸掉，拿锹快得多），不进需求表
+EFFICIENT_TOOL.set(Block.SNOW, 'shovel');
+// 地毯：原版没有任何工具能加速，徒手最快——所以既不在需求表也不在加速表里
 // 陶瓦与混凝土（17 色 / 16 色）都需要镐
 for (let i = 0; i <= DYE_COLORS.length; i++) REQUIRED_TOOL.set(terracottaId(i), { tool: 'pickaxe', tier: 0 });
 for (let i = 0; i < DYE_COLORS.length; i++) REQUIRED_TOOL.set(concreteId(i), { tool: 'pickaxe', tier: 0 });

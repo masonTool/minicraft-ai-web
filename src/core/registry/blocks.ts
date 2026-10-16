@@ -948,6 +948,60 @@ const LILY_PAD_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 地毯与雪层（批次 37）
+//
+// 这一批是"方块族批量推进"（B16）的第一块：地毯按 16 色配色表生成，
+// 雪层则给"雪原＝一片白"这件事补上真正的地表装饰（D14 / K11 的尾巴）。
+
+/** 地毯 id 起始值：16 色连续排列，顺序与 DYE_COLORS 一致 */
+export const CARPET_ID_START = 296;
+
+/** 雪层（1~8 层，层数存在方块状态里；见 `blockState.ts#snowLayers`） */
+export const SNOW_LAYER_ID = 312;
+
+/**
+ * 地毯（16 色）。
+ *
+ * 形状**直接复用"贴地薄板" `flat`**（1/16 高、无碰撞）：原版地毯本来就不挡路，
+ * 与红石粉 / 压力板是同一套几何与同一套物理，所以不必新开形状。
+ * ——与睡莲那条经验正好相反：睡莲"几何相同但能站上去"，物理不同，才必须拆成 `lily_pad`。
+ *
+ * `solid: false` 是必须的：`World.collisionAt` 见到 `!def.solid` 直接返回 null，
+ * 而地毯在原版确实踩得过去（它的碰撞盒本来就是空的）。
+ */
+const CARPET_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
+  id: CARPET_ID_START + index,
+  name: `minecraft:${color.name}_carpet`,
+  tiles: [`carpet_${color.name}`, `carpet_${color.name}`, `carpet_${color.name}`],
+  shape: 'flat' as const,
+  solid: false,
+  opaque: false,
+  lightOpacity: 0,
+}));
+
+/**
+ * 雪层（B11 / K11）。
+ *
+ * 与"一个生长阶段一个 id"的小麦不同，雪层是**一个方块 + 状态位**：
+ * 8 个阶段共用同一张贴图（`snow`），变的只有几何高度，
+ * 而几何本来就吃状态（`meshBoxes(shape, state)`）——不需要为了 8 种高度多出 8 个 id。
+ *
+ * - **有碰撞**（所以 `solid` 保持默认 true，`collisionAt` 才会去算形状盒），
+ *   高度 = 层数/8：1 层只有 1/8 格（直接走上去），8 层正好整格
+ * - 不遮挡邻居（`opaque: false`、`lightOpacity: 0`）：雪层压在地上不该让草皮变暗
+ * - 破坏掉落 **1 个雪球**（原版：不精准采集就掉雪球，与层数无关），精准采集掉自身
+ */
+const SNOW_SPECS: readonly BlockSpec[] = [
+  {
+    id: SNOW_LAYER_ID,
+    name: 'minecraft:snow',
+    tiles: ['snow', 'snow', 'snow'],
+    shape: 'snow' as const,
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -966,6 +1020,8 @@ const SPECS: readonly BlockSpec[] = [
   ...PORTAL_SPECS,
   ...NETHERITE_SPECS,
   ...LILY_PAD_SPECS,
+  ...CARPET_SPECS,
+  ...SNOW_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1153,11 +1209,18 @@ export const Block = {
   SMITHING_TABLE: 294,
   /** 睡莲（B16）：水面上的平铺叶片，id 接在最大 id 之后 */
   LILY_PAD: 295,
+  /** 雪层（B11）：层数在状态里（1~8 层），id 单独一个 */
+  SNOW: SNOW_LAYER_ID,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
 export function woolId(colorIndex: number): number {
   return WOOL_ID_START + colorIndex;
+}
+
+/** 第 index 种颜色的地毯方块 id（顺序与 DYE_COLORS 一致） */
+export function carpetId(colorIndex: number): number {
+  return CARPET_ID_START + colorIndex;
 }
 
 /** 按 id 索引的方块定义表 */
@@ -1287,6 +1350,10 @@ const HARDNESS = new Map<number, number>([
 
 // 羊毛：16 种颜色硬度相同
 for (let i = 0; i < DYE_COLORS.length; i++) HARDNESS.set(woolId(i), 0.8);
+
+// 地毯：比羊毛薄得多，原版硬度 0.1（一拍就掉）；雪层同样是 0.1
+for (let i = 0; i < DYE_COLORS.length; i++) HARDNESS.set(carpetId(i), 0.1);
+HARDNESS.set(Block.SNOW, 0.1);
 
 // 台阶 / 楼梯的硬度跟随母方块（原版行为）
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {
@@ -1438,6 +1505,10 @@ const HAND_HARVESTABLE = new Set<number>([
 
 // 羊毛徒手即可采集（石材家族一律需要镐，不加入此表）
 for (let i = 0; i < DYE_COLORS.length; i++) HAND_HARVESTABLE.add(woolId(i));
+
+// 地毯与雪层也是徒手就能采（原版地毯随手一抓、雪层用手也能撸掉，锹只是加速）
+for (let i = 0; i < DYE_COLORS.length; i++) HAND_HARVESTABLE.add(carpetId(i));
+HAND_HARVESTABLE.add(Block.SNOW);
 
 // 台阶 / 楼梯的"徒手可采集"跟随母方块；木质与火把梯子一律徒手可采
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {

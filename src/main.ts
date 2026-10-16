@@ -3759,7 +3759,6 @@ class App {
 
     const existing = this.world.getBlock(x, y, z);
     if (existing !== Block.AIR && !blockDef(existing).liquid) return;
-    if (this.physics.blockIntersects(x, y, z)) return;
 
     // 按方块形状与命中面推导状态（台阶上下半、楼梯朝向、火把挂墙、门轴……）
     const plan = planPlacement({
@@ -3776,7 +3775,13 @@ class App {
     });
     if (!plan) return;
 
-    // 台阶叠成双层：改的是**命中方块自身**，不是命中面外侧那一格
+    // "与玩家碰撞"这条要在**拿到放置方案之后**才判：合并（台阶叠双层、雪层叠高）
+    // 改的是**命中方块自身**，压根不往 `(x,y,z)` 那一格放东西——
+    // 低头给脚下的雪层加一层时，`(x,y,z)` 正好是玩家站着的格子，
+    // 先判就会得到"站着的时候永远叠不上去"（原版是能叠的）。
+    if (!plan.mergeInto && this.physics.blockIntersects(x, y, z)) return;
+
+    // 台阶叠成双层 / 雪层叠高：改的是**命中方块自身**，不是命中面外侧那一格
     if (plan.mergeInto) {
       const { x: hx, y: hy, z: hz } = this.hit;
       if (this.world.setBlockAndUpdate(hx, hy, hz, blockId, plan.mergeInto.state)) {

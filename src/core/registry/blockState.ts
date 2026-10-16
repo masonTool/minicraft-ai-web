@@ -49,6 +49,18 @@ export type BlockShape =
    * 而不是在物理里特判"这个方块是不是睡莲"。
    */
   | 'lily_pad'
+  /**
+   * 雪层（B11）：1~8 层，高度 = 层数/8，**层数存在方块状态里**。
+   *
+   * 与 `slab` 的区别不只是"能叠 8 层"：雪层是**同一格越叠越高**（不是上下半）。
+   * 它占的 3 个状态位（bit5-7）与门的"上半格"、台阶的"双层"重合——
+   * 沿用本文件开头那条设计：不同形状族不会出现在同一个方块上，所以可以共用位。
+   *
+   * 为什么"一个方块 + 状态位"，而不是像小麦那样"一个阶段一个 id"：
+   * 小麦的贴图按 id 静态查（`blockDef(id).tiles`），而雪层 8 个阶段**共用同一张贴图**，
+   * 变的只有几何高度——而几何本来就吃状态（`meshBoxes(shape, state)`）。
+   */
+  | 'snow'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -301,6 +313,34 @@ export function withChestLoot(state: number, index: number): number {
   return (state & ~CHEST_LOOT_MASK) | (clamped << CHEST_LOOT_SHIFT);
 }
 
+// ---------------------------------------------------------------- 雪层（B11）
+
+/**
+ * 雪层的层数占 bit5-7（与门的"上半格"、台阶的"双层"共用位，见文件开头的说明）。
+ * 存的是 **层数 - 1**：0 表示 1 层（刚放下的那一格），7 表示 8 层（满格高度）。
+ */
+const SNOW_LAYERS_SHIFT = 5;
+const SNOW_LAYERS_MASK = 0b111 << SNOW_LAYERS_SHIFT;
+
+/** 雪层最多 8 层（原版），8 层时高度正好是整格 */
+export const MAX_SNOW_LAYERS = 8;
+
+/** 雪层有几层（1~8；状态里存的是层数-1，所以这里要 +1） */
+export function snowLayers(state: number): number {
+  return ((state & SNOW_LAYERS_MASK) >> SNOW_LAYERS_SHIFT) + 1;
+}
+
+/** 设置雪层数（自动夹紧到 1~8） */
+export function withSnowLayers(state: number, layers: number): number {
+  const clamped = Math.max(1, Math.min(MAX_SNOW_LAYERS, Math.round(layers)));
+  return (state & ~SNOW_LAYERS_MASK) | ((clamped - 1) << SNOW_LAYERS_SHIFT);
+}
+
+/** 雪层的渲染/碰撞高度（层数 / 8） */
+export function snowHeight(state: number): number {
+  return snowLayers(state) / MAX_SNOW_LAYERS;
+}
+
 // ---------------------------------------------------------------- 调试
 
 export function describeState(shape: BlockShape, state: number): string {
@@ -319,6 +359,8 @@ export function describeState(shape: BlockShape, state: number): string {
       return `贴${FACING_NAMES[facingOf(state)]}${isTop(state) ? '·上半' : '·下半'}${isTrapdoorOpen(state) ? '·开' : '·关'}`;
     case 'fence_gate':
       return `${FACING_NAMES[facingOf(state)]}${isFenceGateOpen(state) ? '·开' : '·关'}`;
+    case 'snow':
+      return `${snowLayers(state)} 层`;
     default:
       return '';
   }

@@ -110,10 +110,11 @@ function put(id: string, name: string): void {
   NAMES.set(id, name);
 }
 
-// 染料系：16 × 6 = 96 条
+// 染料系：16 × 7 = 112 条
 for (const [color, cn] of Object.entries(COLORS_CN)) {
   put(`${color}_dye`, `${cn}染料`);
   put(`${color}_wool`, `${cn}羊毛`);
+  put(`${color}_carpet`, `${cn}地毯`);
   put(`${color}_terracotta`, `${cn}陶瓦`);
   put(`${color}_concrete`, `${cn}混凝土`);
   put(`${color}_stained_glass`, `${cn}染色玻璃`);
@@ -205,6 +206,8 @@ const EXPLICIT: Record<string, string> = {
   clay: '黏土块',
   sandstone: '砂岩',
   snow_block: '雪块',
+  // 雪层（批次 37）：与"雪块"是两样东西——它是 1~8 层的薄雪，用锹铲或徒手撸
+  snow: '雪',
   ice: '冰',
   packed_ice: '浮冰',
   obsidian: '黑曜石',
@@ -552,6 +555,7 @@ const DESCRIPTIONS: Record<string, string> = {
   brown_mushroom: '能做蘑菇煲，在暗处生长。',
   dead_bush: '沙漠与恶地的枯木，可以当燃料。',
   snow_block: '雪做的方块，会融化（附近有热源时）。',
+  snow: '薄薄一层雪：最多叠 8 层（叠满就是整格高），徒手也能撸掉，拿锹更快；破坏掉 1 个雪球。',
   ice: '光滑的冰面，走在上面会打滑。',
   gravel: '会掉落的方块；也是村庄道路的铺装材料。',
   sand: '会掉落的方块，能烧成玻璃。',

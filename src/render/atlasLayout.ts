@@ -578,6 +578,24 @@ export const TILE_ORDER = [
   'anvil_top',
   'anvil_side',
   'iron_block',
+  // ---- 地毯（批次 37）：16 色，顺序与 DYE_COLORS 一致（必须与 `wool_*` 保持一致，
+  // 两边错位就会出现"红色地毯长得像橙色地毯"这种最难查的错）
+  'carpet_white',
+  'carpet_orange',
+  'carpet_magenta',
+  'carpet_light_blue',
+  'carpet_yellow',
+  'carpet_lime',
+  'carpet_pink',
+  'carpet_gray',
+  'carpet_light_gray',
+  'carpet_cyan',
+  'carpet_purple',
+  'carpet_blue',
+  'carpet_brown',
+  'carpet_green',
+  'carpet_red',
+  'carpet_black',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

@@ -5,9 +5,19 @@
  * 覆盖：碰撞盒几何、按命中面推导状态、非法放置的拒绝、以及相关配方。
  */
 
-import { Block, SHAPED_PARENTS, blockDef, slabId, stairsId } from '../src/core/registry/blocks.ts';
+import {
+  Block,
+  SHAPED_PARENTS,
+  blockDef,
+  blockHardness,
+  carpetId,
+  slabId,
+  stairsId,
+  woolId,
+} from '../src/core/registry/blocks.ts';
 import { FLAT_HEIGHT, collisionBoxes, isFullBlockShape, meshBoxes, stairsShape } from '../src/core/registry/blockShapes.ts';
 import {
+  MAX_SNOW_LAYERS,
   facingFromYaw,
   facingOf,
   isDoorOpen,
@@ -17,15 +27,19 @@ import {
   isTop,
   isTrapdoorOpen,
   isWallMounted,
+  snowHeight,
+  snowLayers,
   withFacing,
   withFenceGateOpen,
   withSlabDouble,
+  withSnowLayers,
   withTop,
   withTrapdoorOpen,
 } from '../src/core/registry/blockState.ts';
 import { planPlacement } from '../src/core/interaction/Placement.ts';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
-import { CREATIVE_ITEMS, categoryOf } from '../src/core/registry/items.ts';
+import { CREATIVE_ITEMS, Item, blockDrops, categoryOf } from '../src/core/registry/items.ts';
+import { DYE_COLORS } from '../src/core/registry/colors.ts';
 import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
 
 let passed = 0;
@@ -539,6 +553,113 @@ console.log('\n[睡莲（B16）：形状与放置]');
   check('自己那一格是水放不了（叶片会被同一格的水面盖住）', place(Block.WATER, Block.WATER) === null);
   check('自己那一格是实体方块也放不了', place(Block.STONE, Block.WATER) === null);
   equal('放下时状态为 0（睡莲没有状态位）', place(Block.AIR, Block.WATER)?.state, 0);
+}
+
+console.log('\n[地毯（批次 37）：16 色 + 复用 flat 形状]');
+{
+  equal('地毯共 16 种', DYE_COLORS.length, 16);
+  equal('第 0 种地毯就是 id 起始值', carpetId(0), blockDef(carpetId(0)).id);
+  check('每种颜色都有地毯方块', DYE_COLORS.every((_c, i) => blockDef(carpetId(i)).name.endsWith('_carpet')));
+
+  // 几何与物理都复用 `flat`：地毯在原版不挡路，与红石粉/压力板一致
+  equal('地毯用 flat 形状（不新开形状）', blockDef(carpetId(0)).shape, 'flat');
+  equal('地毯没有碰撞（踩得过去）', collisionBoxes('flat', 0).length, 0);
+  equal('地毯渲染盒就是 1/16 的薄板', meshBoxes('flat', 0)[0]![4], FLAT_HEIGHT);
+  check('地毯不是整格（不参与贪心合并成全高）', !isFullBlockShape('flat', 0));
+  equal('地毯硬度 0.1（一拍就掉）', blockHardness(carpetId(0)), 0.1);
+
+  // 放置：**下方必须有实心方块**（这条以前是漏的，红石粉能悬在墙面上）
+  const placeCarpet = (below: number) =>
+    planPlacement({
+      blockId: carpetId(0),
+      normal: [0, 1, 0],
+      hitX: 0.5,
+      hitY: 64,
+      hitZ: 0.5,
+      yaw: 0,
+      sneaking: false,
+      blockAt: (_dx, dy) => (dy === -1 ? below : Block.AIR),
+      hitBlock: below,
+      hitState: 0,
+    });
+  check('地面上能放地毯', placeCarpet(Block.STONE) !== null);
+  check('悬空放不了（下方是空气）', placeCarpet(Block.AIR) === null);
+  check('下方是水也放不了', placeCarpet(Block.WATER) === null);
+
+  // 配方：2 个同色羊毛 → 3 块地毯，且**颜色一一对应**（0 = 空格，与 Block.AIR 同一个值）
+  const grid = (a: number, b: number) => [a, b, 0, 0];
+  equal('2 红羊毛 → 3 红地毯', matchRecipe(grid(woolId(14), woolId(14)), 2)?.id, carpetId(14));
+  equal('产量是 3', matchRecipe(grid(woolId(14), woolId(14)), 2)?.count, 3);
+  equal('白羊毛合出的是白地毯（不会串色）', matchRecipe(grid(woolId(0), woolId(0)), 2)?.id, carpetId(0));
+  equal('两种颜色的羊毛合不出来', matchRecipe(grid(woolId(0), woolId(1)), 2), null);
+}
+
+console.log('\n[雪层（批次 37）：1~8 层的高度]');
+{
+  equal('雪层默认 1 层', snowLayers(0), 1);
+  equal('1 层高度 = 1/8', snowHeight(0), 0.125);
+  equal('装到 8 层的状态是满高', snowHeight(withSnowLayers(0, 8)), 1);
+
+  // 状态位往返：层数存的是"层数 - 1"，最容易写成 off-by-one
+  let state = 0;
+  for (let layers = 1; layers <= MAX_SNOW_LAYERS; layers++) {
+    state = withSnowLayers(0, layers);
+    equal(`装 ${layers} 层读回来还是 ${layers}`, snowLayers(state), layers);
+  }
+  equal('超过 8 层被夹到 8', snowLayers(withSnowLayers(0, 99)), MAX_SNOW_LAYERS);
+  equal('少于 1 层被夹到 1', snowLayers(withSnowLayers(0, -5)), 1);
+
+  // 碰撞与渲染共用同一个高度：不会出现"看着矮、撞着高"
+  equal('1 层碰撞盒高度 = 1/8', collisionBoxes('snow', 0)[0]![4], 0.125);
+  equal('4 层碰撞盒高度 = 1/2', collisionBoxes('snow', withSnowLayers(0, 4))[0]![4], 0.5);
+  equal('8 层是整格高', collisionBoxes('snow', withSnowLayers(0, 8))[0]![4], 1);
+  equal(
+    '渲染盒高度与碰撞盒一致',
+    meshBoxes('snow', withSnowLayers(0, 3))[0]![4],
+    collisionBoxes('snow', withSnowLayers(0, 3))[0]![4],
+  );
+  check('雪层的碰撞盒从 y=0 贴地开始', collisionBoxes('snow', withSnowLayers(0, 2))[0]![1] === 0);
+  check('1 层雪不是整格（不会被贪心合并）', !isFullBlockShape('snow', 0));
+
+  // 放置：叠高（mergeInto 改命中方块自身）、封顶 8 层、没支撑放不了
+  const placeSnow = (normal: readonly [number, number, number], below: number, hitState = 0) =>
+    planPlacement({
+      blockId: Block.SNOW,
+      normal,
+      hitX: 0.5,
+      hitY: 64,
+      hitZ: 0.5,
+      yaw: 0,
+      sneaking: false,
+      blockAt: (_dx, dy) => (dy === -1 ? below : Block.AIR),
+      hitBlock: Block.SNOW,
+      hitState,
+    });
+  const merge = placeSnow([0, 1, 0], Block.STONE, withSnowLayers(0, 3));
+  check('对着 3 层雪的顶面再放 → 叠高而不是新放一格', merge?.mergeInto !== undefined);
+  equal('叠到 4 层', merge?.mergeInto ? snowLayers(merge.mergeInto.state) : -1, 4);
+  check('已经 8 层就叠不上去了', placeSnow([0, 1, 0], Block.STONE, withSnowLayers(0, 8)) === null);
+  equal('从侧面放是"新的一层 1 层"', snowLayers(placeSnow([1, 0, 0], Block.STONE)?.state ?? -1), 1);
+  check('下方没有实心方块放不了', placeSnow([1, 0, 0], Block.AIR) === null);
+
+  // 掉落：不管几层都只掉 1 个雪球（原版），精准采集掉自身
+  const dropCtx = { shears: false, silkTouch: false, fortune: 0, doubleSlab: false, roll: () => 0.5 };
+  equal('雪层 → 1 个雪球', blockDrops(Block.SNOW, dropCtx)?.count, 1);
+  equal('掉的确实是雪球（不是雪层自身）', blockDrops(Block.SNOW, dropCtx)?.id, Item.SNOWBALL);
+  equal('精准采集 → 掉落雪层自身', blockDrops(Block.SNOW, { ...dropCtx, silkTouch: true })?.id, Block.SNOW);
+
+  // 注册与文案
+  equal('雪层的中文名', itemLabel(Block.SNOW), '雪');
+  check('说明里写清"最多 8 层"', itemTooltip(Block.SNOW).description.includes('8 层'));
+  equal('雪层归"自然"分类（跟着雪块/冰）', categoryOf(Block.SNOW), 'natural');
+  check('雪层在创造物品栏里', CREATIVE_ITEMS.includes(Block.SNOW));
+  equal('地毯归"羊毛与染料"分类', categoryOf(carpetId(0)), 'wool');
+
+  // 配方：3 块雪块横排 → 6 层雪（3 格宽，所以只能在**工作台**上合成）
+  const snowRecipe = matchRecipe([Block.SNOW_BLOCK, Block.SNOW_BLOCK, Block.SNOW_BLOCK, 0, 0, 0, 0, 0, 0], 3);
+  equal('3 雪块 → 6 层雪', snowRecipe?.id, Block.SNOW);
+  equal('产量 6', snowRecipe?.count, 6);
+  equal('竖排三块合不出来（原版就是横排）', matchRecipe([Block.SNOW_BLOCK, 0, Block.SNOW_BLOCK, 0, Block.SNOW_BLOCK, 0, 0, 0, 0], 3), null);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

@@ -21,6 +21,7 @@ import {
   isTop,
   isTrapdoorOpen,
   isWallMounted,
+  snowHeight,
   type BlockShape,
   type Facing,
 } from './blockState.ts';
@@ -135,6 +136,10 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'lily_pad':
       // 睡莲是"能站上去的薄板"：原版可以踩着一路走过水面，所以它**有**碰撞体积
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
+    case 'snow':
+      // 雪层的高度就是"层数 / 8"：1 层是 1/8 格（能直接走上去，不需要跳），
+      // 8 层正好是整格。碰撞与渲染共用这一份高度，所以"看着矮、撞着高"这类错不会出现。
+      return [[0, 0, 0, 1, snowHeight(state), 1]];
     default:
       return [FULL];
   }
@@ -300,6 +305,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'lily_pad':
       // 睡莲与"贴地薄板"长得一样（都是 1/16 的一层），差别只在碰撞（见 `collisionBoxes`）
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
+    case 'snow':
+      // 高度随层数变化，与碰撞盒同源（见 `collisionBoxes`）
+      return [[0, 0, 0, 1, snowHeight(state), 1]];
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];

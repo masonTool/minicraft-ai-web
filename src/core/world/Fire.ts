@@ -18,7 +18,7 @@
  *  - 不烧"自己脚下的支撑方块"（否则火焰会一路浮在空中）
  */
 
-import { Block, SHAPED_PARENTS, Wood, blockDef, slabId, stairsId, woolId } from '../registry/blocks.ts';
+import { Block, SHAPED_PARENTS, Wood, blockDef, carpetId, slabId, stairsId, woolId } from '../registry/blocks.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import type { RandomSource, RandomTickBehavior, TickWorld } from '../tick/RandomTicks.ts';
 
@@ -82,8 +82,11 @@ const FLAMMABLE = new Set<number>([
   Block.WARPED_WART_BLOCK,
 ]);
 
-// 16 色羊毛（原版燃烧速度最快的一类）
-for (let i = 0; i < DYE_COLORS.length; i++) FLAMMABLE.add(woolId(i));
+// 16 色羊毛（原版燃烧速度最快的一类）与 16 色地毯（同一族的薄片，原版也一样易燃）
+for (let i = 0; i < DYE_COLORS.length; i++) {
+  FLAMMABLE.add(woolId(i));
+  FLAMMABLE.add(carpetId(i));
+}
 
 // 其余 5 种木材：原木 / 木板 / 树叶 / 台阶 / 楼梯
 for (const ids of Object.values(Wood)) {

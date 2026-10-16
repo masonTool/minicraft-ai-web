@@ -12,7 +12,7 @@
 
 import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
 import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
-import { Block, WHEAT_STAGES, Wood, blockDef, cropOf, wheatStageOf, woolId } from './blocks.ts';
+import { Block, WHEAT_STAGES, Wood, blockDef, carpetId, cropOf, wheatStageOf, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
 import { SHEARS_INFO, SHEARS_ITEM_ID, TOOL_SPECS, type ToolInfo } from './tools.ts';
@@ -531,6 +531,8 @@ const NATURAL = new Set<number>([
   Block.OAK_LOG,
   Block.OAK_LEAVES,
   Block.SNOW_BLOCK,
+  // 雪层（批次 37）：跟着"雪块/冰"放"自然"分类，别掉进"矿石与材料"里
+  Block.SNOW,
   Block.ICE,
   Block.PACKED_ICE,
   Block.OBSIDIAN,
@@ -662,10 +664,11 @@ const ORES = new Set<number>([
   Block.NETHERITE_BLOCK,
 ]);
 
-/** 16 色羊毛 + 16 种染料 */
+/** 16 色羊毛 + 16 色地毯 + 16 种染料（地毯是羊毛族的薄片，摆在同一个分类里最好找） */
 const WOOL_AND_DYE = new Set<number>();
 for (let index = 0; index < DYE_COLORS.length; index++) {
   WOOL_AND_DYE.add(woolId(index));
+  WOOL_AND_DYE.add(carpetId(index));
   WOOL_AND_DYE.add(dyeItemId(index));
 }
 
@@ -1004,6 +1007,9 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.CLAY, { id: Item.CLAY_BALL, count: 4 }],
   // 雪块一次掉 4 个雪球（原版行为）——雪球在生存里的唯一来源
   [Block.SNOW_BLOCK, { id: Item.SNOWBALL, count: 4 }],
+  // 雪层：不管叠了几层都只掉 **1 个雪球**（原版如此，层数不进掉落数量），
+  // 想要"整块带走"得用精准采集（走 `silkTakes`，轮不到这里）
+  [Block.SNOW, { id: Item.SNOWBALL, count: 1 }],
   // 西瓜块掉西瓜片（原版 3~7 片，取中值 5）
   [Block.MELON, { id: Item.MELON_SLICE, count: 5 }],
 
