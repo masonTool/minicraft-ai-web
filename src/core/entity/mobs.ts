@@ -567,7 +567,8 @@ export const ZOMBIE_PIGLIN_TYPE: MobType = {
  *    ——这是"没有个体装备层"的直接后果，换算到掉落上就是那 1.275%；
  *  - **不做"僵尸溺水变溺尸"**（那要一条"泡水满一定时长就转换"的通道，见 TASKS J15）；
  *  - **不掉钓竿**（原版带钓竿的那种会掉，本项目没有那件装备）；
- *  - **白天不会烧**（本项目还没有"亡灵白天着火"这条机制，僵尸也一样）。
+ *  - 它**白天也会被晒着烧**（批次 124 之前本项目没有这条机制，僵尸也一样；
+ *    现在亡灵家族都有，见 `world/Daylight.ts`）。
  */
 export const DROWNED_TYPE: MobType = {
   id: 'drowned',
@@ -587,6 +588,8 @@ export const DROWNED_TYPE: MobType = {
   ],
   xp: 5,
   family: 'undead',
+  // 露天晒太阳会烧（批次 124；它平时泡在水里，所以"上岸"才是它的死因）
+  burnsInDaylight: true,
   // 隔着几格扔三叉戟（原版它也会贴上来打，所以 keepDistance 很小）
   ranged: { range: 12, cooldown: 2.5, speed: 28, keepDistance: 3, spread: 0.1 },
   throwsTrident: true,
@@ -594,6 +597,44 @@ export const DROWNED_TYPE: MobType = {
   dimension: 'overworld',
   bodyColor: 0x3f6f5f,
   accentColor: 0x2a4f44,
+  eyeHeight: 1.74,
+};
+
+/**
+ * 尸壳（批次 124，J15 的下一只）——僵尸的**沙漠变体**。
+ *
+ * 它单独立一条的原因是**两条"别处没有"的行为**，而且它们互相解释：
+ *  - **打中你会让你饥饿**（`venom: hunger`，7 秒）：沙漠里没水没吃的，
+ *    被打一下就开始掉饱食度——这是它比僵尸难受的地方；
+ *  - **白天在太阳底下不会烧**（不写 `burnsInDaylight`，而僵尸/骷髅/溺尸都写了）。
+ *
+ * ⚠️ **这一条是批次 124 顺手补的前置**：本项目在此之前**没有"亡灵白天着火"这条机制**，
+ * 于是尸壳做出来只是"一只普通的僵尸"——补上之后它才有招牌
+ * （这也让它能在沙漠白天活动，与"沙漠白天没有阴影"对得上）。
+ *
+ * 数值与僵尸同：20 血 / 接触 3 / 追击 24 / 腐肉 0~2 / 经验 5 / 亡灵家族。
+ */
+export const HUSK_TYPE: MobType = {
+  id: 'husk',
+  name: '尸壳',
+  health: 20,
+  width: 0.6,
+  height: 1.95,
+  speed: 2.35,
+  hostile: true,
+  attackDamage: 3,
+  followRange: 24,
+  drops: [{ itemId: Item.ROTTEN_FLESH, min: 0, max: 2, chance: 0.8 }],
+  xp: 5,
+  family: 'undead',
+  // 命中让玩家饥饿（原版 7 秒）
+  venom: { effect: 'hunger', seconds: 7 },
+  // ⚠️ **故意不写** `burnsInDaylight`：尸壳在白天照样活动，这正是它的招牌
+  // 只在沙漠里刷（原版它的生成表只挂在沙漠与沙漠丘陵上）
+  spawnBiome: 'desert',
+  dimension: 'overworld',
+  bodyColor: 0x8a7a5c,
+  accentColor: 0x5d5140,
   eyeHeight: 1.74,
 };
 
@@ -616,6 +657,8 @@ export const MOB_TYPES: readonly MobType[] = [
   ZOMBIE_PIGLIN_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
+  // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿
+  HUSK_TYPE,
   {
     id: 'zombie',
     name: '僵尸',
@@ -629,6 +672,8 @@ export const MOB_TYPES: readonly MobType[] = [
     drops: [{ itemId: Item.ROTTEN_FLESH, min: 0, max: 2, chance: 0.8 }],
     xp: 5,
     family: 'undead',
+    // 露天晒太阳会烧（批次 124：这条规则一直到尸壳那一批才补上）
+    burnsInDaylight: true,
     bodyColor: 0x2f6b45,
     accentColor: 0x1f4a30,
     eyeHeight: 1.74,
@@ -646,6 +691,8 @@ export const MOB_TYPES: readonly MobType[] = [
     drops: [{ itemId: Item.BONE, min: 0, max: 2, chance: 0.85 }],
     xp: 5,
     family: 'undead',
+    // 白天的太阳同样烧骷髅（原版如此，见批次 124 的 `world/Daylight.ts`）
+    burnsInDaylight: true,
     // 原版骷髅：约 16 格射程、每 2 秒一箭、贴到 5 格内会后退
     ranged: { range: 16, cooldown: 2, speed: 34, keepDistance: 5, spread: 0.12 },
     bodyColor: 0xd9d9d1,

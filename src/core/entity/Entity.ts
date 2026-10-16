@@ -8,6 +8,9 @@
 import type { Mob, MobType } from './Mob.ts';
 import type { AABB } from '../physics/AABB.ts';
 import type { PhysicsWorld } from '../physics/PlayerPhysics.ts';
+// 只引类型：`afflictPlayer` 的效果名跟着状态效果表走（见那一行的注记）。
+// type-only import 不会把生存模块拖进实体层的运行时依赖里
+import type { EffectId } from '../survival/StatusEffects.ts';
 
 /**
  * 实体层能报出来的伤害类型（是 `PlayerStats.DamageCause` 的子集，那边才是权威定义）。
@@ -77,7 +80,14 @@ export interface EntityContext {
    * 与 `hurtPlayer` 同一个分工：实体层只描述"**该中毒了**"，
    * "毒多久、有没有免疫、难度要不要打折"全归生存模块。
    */
-  afflictPlayer?: (effect: 'poison' | 'wither', seconds: number) => void;
+  /**
+   * 给玩家挂一个状态效果（批次 93 洞穴蜘蛛的中毒；批次 124 尸壳的饥饿）。
+   *
+   * ⚠️ 值域跟着 `StatusEffects` 的 `EffectId` 走（**不再手抄一份小的**）：
+   * 抄一份的后果是"每加一种新效果就要改三处签名"，而漏改的那处是**编译期**才发现——
+   * 这一批的饥饿就是这么撞上来的。
+   */
+  afflictPlayer?: (effect: EffectId, seconds: number) => void;
   /**
    * 玩家是不是**正看着这一点**（批次 112，末影人被注视激怒用）。
    *

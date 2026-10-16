@@ -316,10 +316,14 @@ import { PrecipitationTicker } from './core/tick/Precipitation.ts';
 import {
   DAWN_TIME,
   SLEEP_SECONDS,
+  isNight,
   monstersNearBed,
   sleepRefusal,
   type SleepMob,
 } from './core/survival/Sleep.ts';
+// 亡灵被太阳晒（批次 124）：判据是纯函数（露天 + 白天 + 没下雨），
+// 而"哪些生物会烧"是每种生物自己的一位数据（`MobType.burnsInDaylight`）
+import { DAYLIGHT_BURN_SECONDS, sunBurns } from './core/world/Daylight.ts';
 // 钓鱼（批次 81，G11）：规则（等待时间/咬钩窗口/状态机）在 survival，
 // 战利品表在 registry，这里只做"世界怎么飞、钓上来的东西怎么进背包"
 import {
@@ -4962,6 +4966,9 @@ class App {
       // "这一列在不在某个区域里"（批次 115 要塞 / 批次 120 史莱姆区块）：
       // 两者都是"算出来的"，只有主程序答得上来，见 `inZone`
       inZone: (kind, x, z) => this.inZone(kind, x, z),
+      // "这一列是什么群系"（批次 124，尸壳只要沙漠）：同样是"算出来的"，
+      // 只有主程序答得上来（它拿着种子与生成器，见 `biomeNameAt`）
+      biomeAt: (x, z) => this.biomeNameAt(x, z),
       // 月亮相位影响史莱姆的刷怪密度（批次 120）：`MoonPhase` 里那个函数一直等着史莱姆
       spawnWeightScale: (type) =>
         type.spawnZone === 'slime_chunk' ? this.slimeSpawnFactorNow() : 1,
@@ -5249,6 +5256,22 @@ class App {
         // 放在这一层（而不是 Mob 内部）是因为"当前这一格是不是火"要读世界
         if (!entity.dead) {
           if (this.mobInFire(entity)) entity.ignite(FIRE_IGNITE_SECONDS);
+          // **亡灵被太阳晒**（批次 124）：露天（头顶天光 15）+ 白天 + 没下雨 → 点着 8 秒。
+          // 判据在纯函数里（`world/Daylight.ts`），而**尸壳故意没写** `burnsInDaylight`
+          // ——它就是这么在沙漠里白天活动的（这一条是尸壳那一批的前置）
+          if (
+            sunBurns(entity.type.burnsInDaylight, {
+              skyLight: this.world.getSkyLight(
+                Math.floor(entity.x),
+                Math.floor(entity.y + entity.height),
+                Math.floor(entity.z),
+              ),
+              isDay: !isNight(this.timeOfDay),
+              raining: this.weather.raining,
+            })
+          ) {
+            entity.ignite(DAYLIGHT_BURN_SECONDS);
+          }
           // 岩浆块（批次 121）：站在上面每秒 1 点火焰伤害——原版如此，
           // 所以岩浆块能当刷怪塔里那把"刀"（抗火的岩浆怪反而不掉血）
           entity.tickMagmaBlock(context, this.standsOnMagmaBlock(entity.x, entity.y, entity.z), dt);
@@ -8435,6 +8458,22 @@ class App {
   }
 
   /** 该列地表是否为雪 / 冰（决定降水形态） */
+  /**
+   * 这一列是什么群系（批次 124，尸壳的"只在沙漠刷"用）；非主世界返回 null。
+   *
+   * ⚠️ 生成器**惰性建一次就留着**：`new OverworldGenerator(seed)` 要铺一整套噪声，
+   * 而刷怪每 2 秒就会问几次（`biomeAt` 本身只是一次气候噪声查询，很便宜）。
+   * 与 `nearestVillageForTest` 那种"一次性算个坐标"的用法不同——那个只跑一次，可以现场建。
+   */
+  private biomeNameAt(x: number, z: number): string | null {
+    if (this.dimension !== Dimension.OVERWORLD) return null;
+    this.biomeGenerator ??= new OverworldGenerator(this.worldConfig.seed);
+    return this.biomeGenerator.biomeAt(x, z).name;
+  }
+
+  /** 群系查询用的生成器（批次 124；见 `biomeNameAt`） */
+  private biomeGenerator: OverworldGenerator | null = null;
+
   private isSnowyColumn(x: number, z: number): boolean {
     for (let y = 200; y >= 0; y--) {
       const id = this.world.getBlock(x, y, z);
