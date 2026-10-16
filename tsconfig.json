@@ -16,6 +16,11 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
+    // 增量编译：`npm run check` 与 `npm run build` 一轮里要跑 2 次 tsc
+    // （`tsconfig.json` 一次 + `tsconfig.tools.json` 一次），
+    // 缓存放进 `.tmp/`（已 gitignore），第二次以后只重算改动过的文件。
+    "incremental": true,
+    "tsBuildInfoFile": "./.tmp/tsconfig.tsbuildinfo",
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true
   },

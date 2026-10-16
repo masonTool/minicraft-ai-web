@@ -1,5 +1,16 @@
+import process from 'node:process';
 import { defineConfig } from 'vite';
 
+/**
+ * ⚠️ 环境变量走**显式导入** `node:process`，而不是全局 `process`：
+ * 主 `tsconfig.json` 刻意写了 `"types": []`（应用侧不该看见 Node 全局，
+ * 否则"浏览器里没有 process"这类错要等到运行时才发现）。
+ * 只有这一处例外——构建配置本来就跑在 Node 里。
+ *
+ * sourcemap 用环境变量而不是 `--mode`：`--mode` 会连带改 `NODE_ENV`
+ * 与 `import.meta.env.PROD/DEV`，那样"快构建"和"正式构建"产物就不一样了，
+ * 检查也就失去意义。这里**只差 sourcemap 一项**。
+ */
 export default defineConfig({
   // 相对 base：产物不写死 `/assets/...`，因此在域名根目录（自建服务器）和
   // 子路径（GitHub Pages 的 `/<repo>/`、任意静态托管的子目录）下都能直接跑。
@@ -11,7 +22,10 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    sourcemap: true,
+    // sourcemap 比产物本身还大、构建时间也接近翻倍。
+    // 内循环（`npm run build:fast`，只验"能不能出包"）用 `SOURCEMAP=0` 关掉；
+    // 默认开启——发布到 Pages 的产物要靠它排错。
+    sourcemap: process.env.SOURCEMAP !== '0',
   },
   worker: {
     format: 'es',

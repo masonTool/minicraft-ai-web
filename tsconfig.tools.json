@@ -20,6 +20,9 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    // ⚠️ 必须与主配置用**不同的** buildinfo：这一份 include 了 tools/tests，
+    // 共用同一个缓存文件会让两次检查互相判定为"脏"，反而每次都全量。
+    "tsBuildInfoFile": "./.tmp/tsconfig.tools.tsbuildinfo",
     // 主配置刻意写了 `"types": []`（应用侧不该看见 Node 全局），
     // 而离线测试要用 `process.argv` / `process.exit` 报结果——所以这一份显式加上 node。
     // ⚠️ 只加在**这一份**里：往主配置里加会让 `src` 也能看见 `process`，
