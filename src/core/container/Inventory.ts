@@ -12,7 +12,7 @@
  */
 
 import { ARMOR_SLOT_BASE, armorSlotAccepts } from '../registry/armor.ts';
-import { maxStackOf } from '../registry/items.ts';
+import { itemDef, maxStackOf } from '../registry/items.ts';
 
 export interface ItemStack {
   id: number;
@@ -34,6 +34,94 @@ export interface ItemStack {
    * 下次操作要多花这么多级。不带这个字段表示"没用过铁砧"（0）。
    */
   repairCost?: number;
+  /**
+   * **内容物**（批次 72，潜影盒）：装在物品里的若干格东西（空格为 `null`）。
+   *
+   * 这是"物品携带数据"里最重的一项——前面几项（耐久/附魔/改名）都是几个数，
+   * 而这一项是**一整个容器**：潜影盒被挖下来时把内容一起带走、放下时再倒回方块里。
+   * 因此它有两处刻意的限制：
+   *  1. **只嵌一层**：原版禁止把潜影盒放进潜影盒，所以不需要递归的嵌套结构，
+   *     校验与深拷贝都只做一层（下面是 `copyContents` / `sameContents`）；
+   *  2. 与其它附加数据一样走"可选字段"：普通方块/材料不带它，存档里不会多出一片 `contents: []`。
+   */
+  contents?: (ItemStack | null)[];
+}
+
+/**
+ * 把一份**外部数据**（存档、手改过的库、旧版本）校验着读成一个栈；
+ * 认不出来的一律丢掉，返回 `null` 表示"这一格什么都没有"。
+ *
+ * ⚠️ 这是全项目**唯一**一处"栈的字段白名单"（批次 72 收口）：
+ * 以前 `Inventory.restore` 与 `ContainerSave` 各写了一份，于是每次加新字段
+ * （耐久 → 附魔 → 改名 → 累积惩罚 → 内容物）都要在**两处**补一遍——
+ * 这一批就真的漏了一处：潜影盒的 `contents` 在物品栏读档时被丢掉
+ * （表现是"盒子里存着东西，重进游戏空了"，而盒子的其它字段全都正常）。
+ *
+ * @param depth 允许嵌几层内容物：原版禁止"盒装盒"，所以默认 1 层（内层再带 contents 会被丢掉）
+ */
+export function restoreStack(raw: unknown, depth = 1): ItemStack | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const candidate = raw as Partial<ItemStack>;
+  if (typeof candidate.id !== 'number' || typeof candidate.count !== 'number') return null;
+  if (candidate.count <= 0) return null;
+  // 物品被删过的旧存档：留着这个 id 只会让"背包里出现一件空白"，直接丢掉
+  if (itemDef(candidate.id) === undefined) return null;
+
+  const stack: ItemStack = { id: candidate.id, count: candidate.count };
+  // 旧存档没有 damage 字段；顺手夹紧非法值，避免坏存档把工具直接判成"已损坏"
+  if (typeof candidate.damage === 'number' && candidate.damage > 0) stack.damage = Math.floor(candidate.damage);
+  // 附魔同理：只收"看起来像附魔表"的对象，坏存档不会把整件物品读崩
+  if (candidate.enchants && typeof candidate.enchants === 'object') {
+    const enchants: Record<string, number> = {};
+    for (const [id, level] of Object.entries(candidate.enchants)) {
+      if (typeof level === 'number' && level > 0) enchants[id] = Math.floor(level);
+    }
+    if (Object.keys(enchants).length > 0) stack.enchants = enchants;
+  }
+  // 改名与累积惩罚同理：只收合法值
+  if (typeof candidate.name === 'string' && candidate.name.length > 0) stack.name = candidate.name.slice(0, 64);
+  if (typeof candidate.repairCost === 'number' && candidate.repairCost > 0) {
+    stack.repairCost = Math.floor(candidate.repairCost);
+  }
+  // 内容物（潜影盒）：**只嵌一层**；空盒子不带这个字段（存档里不会多出一片空数组）
+  if (depth > 0 && Array.isArray(candidate.contents)) {
+    const inner = candidate.contents.map((item) => restoreStack(item, depth - 1));
+    if (inner.some((item) => item !== null)) stack.contents = inner;
+  }
+  return stack;
+}
+
+/**
+ * 深拷一份内容物（潜影盒那类"物品里装着东西"的栈要用）。
+ *
+ * 抽出来的理由与 `stackExtras` 一样：它是**嵌套结构**，每处各写一遍必然会漏一层，
+ * 而漏掉的表现是"读档后箱子里空了"或者"改背包顺手改了存档里的那份"。
+ */
+export function copyContents(contents: readonly (ItemStack | null)[]): (ItemStack | null)[] {
+  return contents.map((inner) => (inner ? { id: inner.id, count: inner.count, ...stackExtras(inner) } : null));
+}
+
+/** 两份内容物是否完全一样（合并判定用：装了不同东西的两个潜影盒**不能并堆**） */
+export function sameContents(
+  a: readonly (ItemStack | null)[] | undefined,
+  b: readonly (ItemStack | null)[] | undefined,
+): boolean {
+  if (a === undefined && b === undefined) return true;
+  if (a === undefined || b === undefined) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i] ?? null;
+    const right = b[i] ?? null;
+    if (left === null || right === null) {
+      if (left !== right) return false;
+      continue;
+    }
+    // 里面那一层要连**数量**与附加数据一起比：
+    // 只比 id 的话，"装着 1 颗钻石"与"装着 2 颗钻石"会被当成同一个盒子
+    if (left.count !== right.count) return false;
+    if (!sameStack(left, right)) return false;
+  }
+  return true;
 }
 
 /**
@@ -57,6 +145,8 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
   if (stack.enchants !== undefined) extras.enchants = { ...stack.enchants };
   if (stack.name !== undefined) extras.name = stack.name;
   if (stack.repairCost !== undefined) extras.repairCost = stack.repairCost;
+  // 内容物要**深拷**（潜影盒）：直接交引用的话，改背包里的那份会顺手改到"已经取出的快照"
+  if (stack.contents !== undefined) extras.contents = copyContents(stack.contents);
   return extras;
 }
 
@@ -70,6 +160,9 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
  * 搬运方与掉落物都要用它，而反过来（Inventory 依赖搬运方）会绕成一个环。
  */
 export function sameExtras(a: Partial<ItemStack>, b: Partial<ItemStack>): boolean {
+  // 内容物（潜影盒）必须先比：只比 id 的话，两个"装着不同东西"的潜影盒会被并堆，
+  // 结果是一整箱东西凭空消失（无人值守的自动搬运也会这么做）
+  if (!sameContents(a.contents, b.contents)) return false;
   if ((a.damage ?? 0) !== (b.damage ?? 0)) return false;
   if ((a.repairCost ?? 0) !== (b.repairCost ?? 0)) return false;
   if ((a.name ?? '') !== (b.name ?? '')) return false;
@@ -214,28 +307,8 @@ export class Inventory implements SlotSource {
 
   /** 从存档恢复槽位（长度不符时按能恢复的部分恢复） */
   restore(data: ReadonlyArray<ItemStack | null>): void {
-    for (let i = 0; i < TOTAL_SLOTS; i++) {
-      const stack = data[i];
-      if (!stack || stack.count <= 0) {
-        this.slots[i] = null;
-        continue;
-      }
-      const restored: ItemStack = { id: stack.id, count: stack.count };
-      // 旧存档没有 damage 字段；顺手夹紧非法值，避免坏存档把工具直接判成"已损坏"
-      if (typeof stack.damage === 'number' && stack.damage > 0) restored.damage = stack.damage;
-      // 附魔同理：只收"看起来像附魔表"的对象，坏存档不会把整件物品读崩
-      if (stack.enchants && typeof stack.enchants === 'object') {
-        const enchants: Record<string, number> = {};
-        for (const [id, level] of Object.entries(stack.enchants)) {
-          if (typeof level === 'number' && level > 0) enchants[id] = Math.floor(level);
-        }
-        if (Object.keys(enchants).length > 0) restored.enchants = enchants;
-      }
-      // 改名与累积惩罚同理：只收合法值，坏存档不会把整件物品读崩
-      if (typeof stack.name === 'string' && stack.name.length > 0) restored.name = stack.name.slice(0, 64);
-      if (typeof stack.repairCost === 'number' && stack.repairCost > 0) restored.repairCost = Math.floor(stack.repairCost);
-      this.slots[i] = restored;
-    }
+    // 逐格走**唯一**那一处字段白名单（`restoreStack`）：加新字段时不会再漏掉背包这一路
+    for (let i = 0; i < TOTAL_SLOTS; i++) this.slots[i] = restoreStack(Array.isArray(data) ? data[i] : null);
     this.notify();
   }
 

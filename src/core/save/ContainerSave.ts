@@ -26,10 +26,11 @@ import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
 import { BARREL_SIZE, Barrel } from '../container/Barrel.ts';
 import { DISPENSER_SIZE, Dispenser } from '../container/Dispenser.ts';
+import { ShulkerBox } from '../container/ShulkerBox.ts';
 import { DROPPER_SIZE, Dropper } from '../container/Dropper.ts';
 import { HOPPER_SIZE, Hopper } from '../container/Hopper.ts';
-import type { ItemStack } from '../container/Inventory.ts';
-import { itemDef } from '../registry/items.ts';
+// ⚠️ 栈的字段白名单只有一处（`restoreStack` / `stackExtras`），存与读都走它们
+import { restoreStack, stackExtras, type ItemStack } from '../container/Inventory.ts';
 import { Dimension, isDimension, type DimensionId } from '../gen/Dimension.ts';
 import type { BlockContainer, BlockEntityStore, ContainerKind } from '../world/BlockEntityStore.ts';
 
@@ -50,6 +51,9 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   dropper: DROPPER_SIZE,
   dispenser: DISPENSER_SIZE,
   barrel: BARREL_SIZE,
+  // ⚠️ 用 `CHEST_SIZE` 而不是 `SHULKER_BOX_SIZE`：后者在互相 import 的模块里
+  // 于本模块初始化时可能还是 undefined（见 ShulkerBox.ts 里的说明）
+  shulker_box: CHEST_SIZE,
 };
 
 export interface SerializedContainer {
@@ -96,8 +100,9 @@ export interface SerializedContainer {
 
 /** 容器实例 → 种类 */
 export function kindOf(container: BlockContainer): ContainerKind {
-  // ⚠️ 与发射器同一条教训：木桶是箱子的**子类**，必须先判子类
+  // ⚠️ 与发射器同一条教训：木桶/潜影盒都是箱子的**子类**，必须先判子类
   if (container instanceof Barrel) return 'barrel';
+  if (container instanceof ShulkerBox) return 'shulker_box';
   if (container instanceof Chest) return 'chest';
   if (container instanceof Furnace) return 'furnace';
   if (container instanceof EnchantTable) return 'enchanting';
@@ -124,6 +129,7 @@ function containerFor(
 ): BlockContainer {
   if (kind === 'chest') return store.getOrCreateChest(dimension, x, y, z);
   if (kind === 'barrel') return store.getOrCreateBarrel(dimension, x, y, z);
+  if (kind === 'shulker_box') return store.getOrCreateShulkerBox(dimension, x, y, z);
   if (kind === 'furnace') return store.getOrCreateFurnace(dimension, x, y, z);
   if (kind === 'enchanting') return store.getOrCreateEnchantTable(dimension, x, y, z);
   if (kind === 'anvil') return store.getOrCreateAnvil(dimension, x, y, z);
@@ -143,14 +149,7 @@ function isFurnaceStation(value: unknown): value is FurnaceStation {
 
 /** 深拷贝一个栈（存档要的是快照，不能与背包里那个对象共用引用） */
 function cloneStack(stack: ItemStack): ItemStack {
-  const copy: ItemStack = { id: stack.id, count: stack.count };
-  if (stack.damage !== undefined) copy.damage = stack.damage;
-  if (stack.enchants !== undefined) copy.enchants = { ...stack.enchants };
-  if (stack.name !== undefined) copy.name = stack.name;
-  // ⚠️ 累积惩罚也要存（批次 63 补）：漏了它，读档后同一件装备在铁砧上会**变便宜**——
-  // "耐久/附魔/改名都搬了，只漏了最后加进来的那一项"是这类字段最容易犯的错
-  if (stack.repairCost !== undefined) copy.repairCost = stack.repairCost;
-  return copy;
+  return { id: stack.id, count: stack.count, ...stackExtras(stack) };
 }
 
 /**
@@ -172,19 +171,11 @@ export function serializeStacks(slots: readonly (ItemStack | null)[]): (ItemStac
 export function restoreStacks(raw: unknown, size: number): (ItemStack | null)[] {
   const list = Array.isArray(raw) ? raw : [];
   const out: (ItemStack | null)[] = [];
-  for (let i = 0; i < size; i++) out.push(isValidStack(list[i]) ? cloneStack(list[i] as ItemStack) : null);
+  // `restoreStack` 已经校验并烤过一份了（它本身就是"读出干净数据"的那一处）
+  for (let i = 0; i < size; i++) out.push(restoreStack(list[i]));
   return out;
 }
 
-/** 这个栈是不是还能用（id 必须还认得出来；数量至少 1） */
-function isValidStack(stack: unknown): stack is ItemStack {
-  if (!stack || typeof stack !== 'object') return false;
-  const candidate = stack as Partial<ItemStack>;
-  if (typeof candidate.id !== 'number' || typeof candidate.count !== 'number') return false;
-  if (candidate.count <= 0) return false;
-  // 物品被删过的旧存档：留着这个 id 只会让"背包里出现一件空白"，直接丢掉
-  return itemDef(candidate.id) !== undefined;
-}
 
 function isEmptySlot(stack: ItemStack | null): boolean {
   return stack === null || stack.count <= 0;

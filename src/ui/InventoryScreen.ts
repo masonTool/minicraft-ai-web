@@ -95,6 +95,8 @@ export type InventoryPanelMode =
   | 'barrel'
   /** 末影箱（批次 71）：同一套 27 格；它的内容是**玩家的那一份**（跨坐标共享） */
   | 'ender_chest'
+  /** 潜影盒（批次 72）：同一套 27 格；它的内容会**跟着物品走**（挖下来带走） */
+  | 'shulker_box'
   | 'enchanting'
   | 'anvil'
   | 'smithing'
@@ -686,6 +688,7 @@ export class InventoryScreen {
     this.clearBindings('chest:');
     this.clearBindings('barrel:');
     this.clearBindings('ender_chest:');
+    this.clearBindings('shulker_box:');
     this.clearBindings('enchant:');
     this.clearBindings('anvil:');
     this.clearBindings('smithing:');
@@ -909,13 +912,25 @@ export class InventoryScreen {
       return;
     }
 
-    if (this.mode === 'chest' || this.mode === 'barrel' || this.mode === 'ender_chest') {
+    if (
+      this.mode === 'chest' ||
+      this.mode === 'barrel' ||
+      this.mode === 'ender_chest' ||
+      this.mode === 'shulker_box'
+    ) {
       // 箱子 / 木桶 / 末影箱共用这一套 27 格（3×9），只有标题与提示不同
       this.chestGrid.replaceChildren();
       for (let i = 0; i < CHEST_SIZE; i++) {
         this.chestGrid.appendChild(this.registerSlot(`${this.mode}:${i}`, this.activeContainer!, i));
       }
-      const title = this.mode === 'barrel' ? '木桶' : this.mode === 'ender_chest' ? '末影箱' : '箱子';
+      const title =
+        this.mode === 'barrel'
+          ? '木桶'
+          : this.mode === 'ender_chest'
+            ? '末影箱'
+            : this.mode === 'shulker_box'
+              ? '潜影盒'
+              : '箱子';
       this.topArea.appendChild(this.buildLabel(title));
       this.topArea.appendChild(this.chestGrid);
       return;
@@ -1633,6 +1648,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   chest: '箱子',
   barrel: '木桶',
   ender_chest: '末影箱',
+  shulker_box: '潜影盒',
   enchanting: '附魔台',
   anvil: '铁砧',
   smithing: '锻造台',

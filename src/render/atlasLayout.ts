@@ -788,6 +788,10 @@ export const TILE_ORDER = [
   'ender_chest_top',
   'ender_chest_side',
   'ender_chest_front',
+  // 潜影盒（批次 72）：顶面（带紫贝的"壳脊"）/ 底面 / 侧面（两半合缝）
+  'shulker_top',
+  'shulker_bottom',
+  'shulker_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

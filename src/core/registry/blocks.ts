@@ -1910,6 +1910,24 @@ const ENDER_CHEST_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 潜影盒（批次 72，B45）：27 格，**内容物跟着物品走**。
+ *
+ * 与箱子/木桶的区别不在格数，而在"内容住在哪"：这三者的内容都在方块上，
+ * 但潜影盒**挖下来时会把内容一起带走**（装进掉落的物品里）、放下时再倒回方块里，
+ * 所以它是这一族里唯一"内容物进物品数据"的那一件（走 `ItemStack.contents`）。
+ * 外观是整格方块 + 紫贝色的上下两半（见三张贴图）。
+ */
+export const SHULKER_BOX_ID = 482;
+
+const SHULKER_BOX_SPECS: readonly BlockSpec[] = [
+  {
+    id: SHULKER_BOX_ID,
+    name: 'minecraft:shulker_box',
+    tiles: ['shulker_top', 'shulker_bottom', 'shulker_side'],
+  },
+];
+
 const BARREL_SPECS: readonly BlockSpec[] = [
   {
     id: BARREL_ID,
@@ -2246,6 +2264,7 @@ const SPECS: readonly BlockSpec[] = [
   ...BARREL_SPECS,
   ...COMPOSTER_SPECS,
   ...ENDER_CHEST_SPECS,
+  ...SHULKER_BOX_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2525,6 +2544,8 @@ export const Block = {
   COMPOSTER: COMPOSTER_ID,
   // ---- 末影箱（批次 71，见 `ENDER_CHEST_SPECS`）：27 格，内容跟着玩家走
   ENDER_CHEST: ENDER_CHEST_ID,
+  // ---- 潜影盒（批次 72，见 `SHULKER_BOX_SPECS`）：27 格，内容跟着**物品**走
+  SHULKER_BOX: SHULKER_BOX_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2818,6 +2839,8 @@ HARDNESS.set(Block.BARREL, 2.5);
 HARDNESS.set(Block.COMPOSTER, 0.6);
 // 末影箱（批次 71）：原版 22.5（黑曜石那一档，挖起来很慢）+ 要**钻石镐**才掉（见 tools）
 HARDNESS.set(Block.ENDER_CHEST, 22.5);
+// 潜影盒（批次 72）：原版 2（要镐，但木质镐就够——见 tools.ts）
+HARDNESS.set(Block.SHULKER_BOX, 2);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);

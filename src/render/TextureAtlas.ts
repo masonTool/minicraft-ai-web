@@ -4145,6 +4145,54 @@ PAINTERS.ender_chest_front = (x, y, rng) => {
   return enderStone(x, y, rng);
 };
 
+/**
+ * 潜影盒（批次 72）：紫贝色的"盒子"，三张面各司其职。
+ *
+ *  - **顶面**：一圈壳脊（四个斜角的深色棱）+ 中间的圆盖（原版俯视就是这个样子）；
+ *  - **底面**：平一些的壳面（带细棱）；
+ *  - **侧面**：上下两半的**合缝**（原版潜影盒侧面中间有一道缝，像盖子盖在盒身上），
+ *    下半略暗一点，看起来有"盖上"的感觉。
+ */
+function shulkerShell(
+  x: number,
+  y: number,
+  rng: () => number,
+  base: readonly [number, number, number],
+  scale: number,
+): RGBA {
+  const v = (1 + rng() * 0.1 - 0.05) * scale;
+  const fleck = hashString(`shulker${x},${y}`) % 17 === 0;
+  const tint = fleck ? 0.82 : 1;
+  return [
+    clamp255(base[0] * v * tint),
+    clamp255(base[1] * v * tint),
+    clamp255(base[2] * v * tint),
+    255,
+  ];
+}
+
+PAINTERS.shulker_top = (x, y, rng) => {
+  const SHELL: readonly [number, number, number] = [150, 108, 158];
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  // 中间的圆盖（比周围亮一点，像一枚扣在上面的壳）
+  if (r < 4.6) return shulkerShell(x, y, rng, SHELL, 1.12);
+  // 四条斜棱：壳脊
+  const ridge = Math.abs(x - y) <= 1 || Math.abs(x + y - 15) <= 1;
+  if (ridge) return shulkerShell(x, y, rng, SHELL, 0.72);
+  return shulkerShell(x, y, rng, SHELL, 0.94);
+};
+
+PAINTERS.shulker_bottom = (x, y, rng) => shulkerShell(x, y, rng, [138, 100, 146], 0.9);
+
+PAINTERS.shulker_side = (x, y, rng) => {
+  const SHELL: readonly [number, number, number] = [150, 108, 158];
+  // 中间那道合缝（盖子与盒身的分界）：上下各压暗一像素，看起来是"盖上的"
+  if (y === 6 || y === 9) return shulkerShell(x, y, rng, SHELL, 0.62);
+  const half = y < 6 ? 1.06 : 0.96;
+  const col = x % 8 === 0 ? 0.9 : 1;
+  return shulkerShell(x, y, rng, SHELL, half * col);
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

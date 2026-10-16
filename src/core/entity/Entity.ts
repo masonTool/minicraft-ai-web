@@ -32,6 +32,23 @@ export interface DroppedExtras {
   name?: string;
   /** 铁砧的累积惩罚（再修一次的代价） */
   repairCost?: number;
+  /**
+   * 内容物（潜影盒，批次 72）：挖下来时跟着**掉落物**一起走、捡起来再进背包。
+   *
+   * 与 `ItemStack.contents` 同一形状（**只嵌一层**）：实体层照旧不引容器层的类型，
+   * 所以这里只写"形状"，由 `ItemEntity.toStack()` 交给主程序拼成真正的 `ItemStack`。
+   */
+  contents?: (DroppedStack | null)[];
+}
+
+/** 内容物里那一层（同样只写形状，不引容器层） */
+export interface DroppedStack {
+  id: number;
+  count: number;
+  damage?: number;
+  enchants?: Readonly<Record<string, number>>;
+  name?: string;
+  repairCost?: number;
 }
 
 export interface EntityContext {

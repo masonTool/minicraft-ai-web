@@ -17,6 +17,7 @@ import { BrewingStand } from '../container/BrewingStand.ts';
 import { Barrel } from '../container/Barrel.ts';
 import { Chest } from '../container/Chest.ts';
 import { Dispenser } from '../container/Dispenser.ts';
+import { ShulkerBox } from '../container/ShulkerBox.ts';
 import { Dropper } from '../container/Dropper.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
@@ -53,7 +54,8 @@ export type ContainerKind =
   | 'hopper'
   | 'dropper'
   | 'dispenser'
-  | 'barrel';
+  | 'barrel'
+  | 'shulker_box';
 
 /**
  * **带方块实体的方块**（= 装得下东西的方块）的 id 名单。
@@ -79,6 +81,8 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   // 末影箱（批次 71）：内容是**玩家的**、不在这格方块上，推走其实不会丢东西；
   // 列进来对齐原版（带方块实体的方块推不动），也免得以后被当成疏漏
   Block.ENDER_CHEST,
+  // 潜影盒（批次 72）：内容在方块上（被挖走时才进物品），所以活塞一样推不动
+  Block.SHULKER_BOX,
   Block.BARREL,
   Block.BREWING_STAND,
   Block.ANVIL,
@@ -328,6 +332,25 @@ export class BlockEntityStore {
     const barrel = new Barrel();
     this.put({ dimension, x, y, z, container: barrel });
     return barrel;
+  }
+
+  getShulkerBox(dimension: DimensionId, x: number, y: number, z: number): ShulkerBox | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof ShulkerBox ? container : undefined;
+  }
+
+  /**
+   * 取出（或新建）潜影盒。
+   *
+   * ⚠️ 与箱子/木桶一样是**打开界面时按需创建**的；放下方块时也会建一个
+   * （因为物品里可能带着内容，见 `main` 的放置路径）。
+   */
+  getOrCreateShulkerBox(dimension: DimensionId, x: number, y: number, z: number): ShulkerBox {
+    const existing = this.getShulkerBox(dimension, x, y, z);
+    if (existing) return existing;
+    const box = new ShulkerBox();
+    this.put({ dimension, x, y, z, container: box });
+    return box;
   }
 
   remove(dimension: DimensionId, x: number, y: number, z: number): void {

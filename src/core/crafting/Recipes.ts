@@ -884,6 +884,16 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     key: { C: Block.COBBLESTONE, B: Item.BOW },
   },
   {
+    // 潜影盒（批次 72）：⚠️ **与原版的差异**——原版是 1 箱子 + 2 **潜影贝壳**
+    // （末地城的潜影贝掉落），本项目还没有潜影贝这件生物/物品。
+    // 这里用 4 块**末地石**代替（同样是末地来的、也同样是"硬壳"的意象），
+    // 等末地城那一块做出来再换回原版图案
+    kind: 'shaped' as const,
+    result: { id: Block.SHULKER_BOX, count: 1 },
+    pattern: ['EEE', 'ECE', 'EEE'],
+    key: { E: Block.END_STONE, C: Block.CHEST },
+  },
+  {
     // 末影箱（批次 71）：⚠️ **与原版的差异**——原版是 8 黑曜石 + 1 **末影之眼**，
     // 而本项目还没有末影之眼（它要末影珍珠 + 烈焰粉，两件都还没做）。
     // 这里用一颗钻石代替，保持"很贵、前期拿不到"的手感；等末影系物品做出来再换回去

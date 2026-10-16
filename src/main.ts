@@ -199,6 +199,8 @@ import {
 import { BrewingStand } from './core/container/BrewingStand.ts';
 // 末影箱（批次 71）：它**不进容器表**（那张表按坐标存），这里直接持有一份共享的 27 格
 import { EnderChest } from './core/world/EnderChest.ts';
+// 潜影盒（批次 72）：内容跟着物品走——"取成物品能带的形式"与"倒回方块"两个口
+import { fillShulkerBox, shulkerContentsOf } from './core/container/ShulkerBox.ts';
 import { Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
 import {
@@ -2837,6 +2839,10 @@ class App {
       return;
     }
 
+    // 潜影盒（批次 72）：内容**不**原地倒出来，而是跟着掉落的物品走（下一步用得上）。
+    // 顺序要紧：先把内容取出来、再把容器从表里删掉，最后掉落时挂到物品上。
+    const shulkerContents = brokenId === Block.SHULKER_BOX ? shulkerContentsOf(this.world.containers.getShulkerBox(this.dimension, this.hit.x, this.hit.y, this.hit.z)) : undefined;
+    if (brokenId === Block.SHULKER_BOX) this.world.containers.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
     // 敲掉黑曜石 → 检查旁边的传送门还立不立得住（K8）：框一破，那一整片门方块跟着熄灭
@@ -2862,7 +2868,9 @@ class App {
         roll: Math.random,
       });
       if (drop) {
-        this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+        // 潜影盒（批次 72）：掉出来的**那一份物品带着内容物**——捡起来再放下，东西还在
+        const extras = drop.id === Block.SHULKER_BOX && shulkerContents ? { contents: shulkerContents } : undefined;
+        this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5, extras);
         // 花盆（批次 52）：拆盆时**里面那株植物也掉出来**（原版如此）——
         // 不这么做，玩家会看到"拆一个盆，辛苦种的花没了"，而方块本身看不出问题
         if (brokenId === Block.FLOWER_POT) {
@@ -3778,6 +3786,19 @@ class App {
       this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
       return true;
     }
+    // 潜影盒（批次 72）：与箱子同一条"头顶压着就打不开"的规矩，27 格
+    if (hitBlock === Block.SHULKER_BOX) {
+      if (this.isCoveredAbove(x, y, z)) {
+        this.chat.push('潜影盒上面压着方块，打不开（挪开它）', 'system');
+        return true;
+      }
+      this.inventoryScreen.openWith(
+        'shulker_box',
+        this.world.containers.getOrCreateShulkerBox(this.dimension, x, y, z),
+      );
+      return true;
+    }
+
     // 末影箱（批次 71）：与箱子同一条"头顶压着就打不开"的规矩，但开的是**你自己的那一份**
     if (hitBlock === Block.ENDER_CHEST) {
       if (this.isCoveredAbove(x, y, z)) {
@@ -4034,6 +4055,8 @@ class App {
       return;
     }
     if (blockId === Block.DISPENSER) this.world.containers.getOrCreateDispenser(target, x, y, z);
+    // 潜影盒（批次 72）：放下时也要建（物品里可能带着内容，见放置路径）
+    if (blockId === Block.SHULKER_BOX) this.world.containers.getOrCreateShulkerBox(target, x, y, z);
   }
 
   /**
@@ -4145,6 +4168,8 @@ class App {
     if (block === Block.HOPPER) return store.getOrCreateHopper(dimension, x, y, z);
     if (block === Block.DROPPER) return store.getOrCreateDropper(dimension, x, y, z);
     if (block === Block.DISPENSER) return store.getOrCreateDispenser(dimension, x, y, z);
+    // 潜影盒：漏斗**可以**往里塞（原版也是如此，与末影箱相反）
+    if (block === Block.SHULKER_BOX) return store.getOrCreateShulkerBox(dimension, x, y, z);
     if (block === Block.BREWING_STAND) return store.getOrCreateBrewingStand(dimension, x, y, z);
     if (block === Block.ANVIL) return store.getOrCreateAnvil(dimension, x, y, z);
     if (block === Block.SMITHING_TABLE) return store.getOrCreateSmithingTable(dimension, x, y, z);
@@ -4723,6 +4748,9 @@ class App {
       return;
     }
 
+    // 手上那一份完整栈（放置**之前**取：潜影盒的内容就在它身上，consume 之后就拿不到了）
+    const held = this.inventory.get(this.hotbarIndex);
+
     if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.state)) {
       if (plan.extra) {
         const { dx, dy, dz, id, state } = plan.extra;
@@ -4730,6 +4758,14 @@ class App {
       }
       this.placeCooldown = PLACE_COOLDOWN;
       this.inventory.consume(blockId, 1);
+
+      // 潜影盒（批次 72）：物品里带着的内容**倒回方块**（原版如此）。
+      // 空盒子也照样建一个容器——放着不管的话，第一次打开界面才建，
+      // 而"被漏斗塞东西"这条路径会先撞上"这一格没有容器"
+      if (blockId === Block.SHULKER_BOX) {
+        const box = this.world.containers.getOrCreateShulkerBox(this.dimension, x, y, z);
+        fillShulkerBox(box, held?.contents);
+      }
 
       // 营火（批次 47）：**放下就是点着的**（原版如此）。
       // 这里要把容器建出来、并把点燃位写进方块状态——不建容器的话 tick 循环

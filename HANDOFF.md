@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 302（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 303（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 262 项 —— 已完成 **136**、进行中 **65**、待办 61 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 263 项 —— 已完成 **139**、进行中 **63**、待办 61 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -86,7 +86,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **71 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest**，当前全绿；
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **72 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数）、
@@ -120,7 +120,26 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**末影箱**（批次 71，B44 / H17 的第二件）——这一族**第一件"内容不属于坐标"**的容器。
+**刚做完的**：**潜影盒**（批次 72，B45）——**H14 与 H17 就此全部收口**，也是 H16 的第一块试金石。
+这一件做的是"**内容物跟着物品走**"：箱子/木桶/末影箱的内容都住在方块上，潜影盒**挖下来时把内容
+一起带走**（装进掉落的物品里）、**放下时再倒回方块**。于是 H14 那一族最后成了**三种"内容住在哪"**
+的完整对照：**住在格子上**（箱子/木桶/漏斗/投掷器/发射器）、**住在玩家存档里**（末影箱）、
+**住在物品里**（潜影盒）；驱动方式也齐了（按节奏搬 / 按信号吐 / 按信号"用" / 每用一次掷一次攒进度）。
+① 数据模型：`ItemStack.contents?: (ItemStack|null)[]`，**只嵌一层**（原版禁止盒装盒）、可选字段。
+② 两个口收在 `container/ShulkerBox.ts`（`shulkerContentsOf` / `fillShulkerBox`），`main` 只剩两次调用。
+③ **合并判定连内容物一起比**（逐格比数量 + 附加数据）：只比 id 的话，"装 1 颗钻石"与"装 2 颗钻石"
+会被并堆、一整盒东西凭空消失。
+④ ⚠️ **顺手修掉一个真缺口，并把"新字段要补 N 处"的老毛病一次收掉**：`Inventory.restore` 与
+`ContainerSave` 各自维护一份"栈的字段白名单"，于是新加的 `contents` 在**物品栏读档时被丢掉**
+（盒子里存着东西、重进游戏空了，其它字段全正常）。现在全项目只剩**一处** `restoreStack(raw, depth)`，
+写档侧统一走 `stackExtras`（`cloneStack` 退化成三行）——同一个坑踩过三次（耐久 → `repairCost` →
+`contents`），至此"加字段要补哪几处"变成一处。
+⑤ ⚠️ **又踩了一次"模块互相 import 时读对方顶层 const"**（批次 58 写过一次）：`SHULKER_BOX_SIZE`
+定义在 `ShulkerBox.ts`，而 `ContainerSave` 与它互相引用，初始化顺序不对时读到的是 `undefined`
+（格数表里潜影盒那一格没了）。修法是格数**从 `CHEST_SIZE` 派生**、读的那一侧直接读 `CHEST_SIZE`。
+尺寸：方块 481 → **482**、物品 739（不变）、配方 363 → **364**；**72 套**离线测试里新增 `shulkerbox`（66 条）。
+
+再往前是**末影箱**（批次 71，B44）——第一件"内容不属于坐标"的容器。
 前面几件的内容都按坐标存（`BlockEntityStore` 的键是"维度 | x,y,z"），所以"哪一格"决定"看到哪一份"；
 末影箱相反：世界里**所有**末影箱打开的都是**同一份属于玩家的内容**。
 ① **"非坐标"的通道**：内容进**玩家存档**（`PlayerSave.enderChest?`）——本项目现成的那一层，
@@ -788,6 +807,11 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **抽一层薄薄的类，是为了让"规矩"能被断言** | "所有末影箱共享同一份"这条规矩如果只体现为主程序里的一个 `Chest` 字段，离线测试就碰不到它——只能靠手点两处末影箱。抽出 `EnderChest`（`open()` / `slots()` / `restore()`）之后，`open() 两次是同一个实例`、存档往返、脏数据丢弃全都能逐条钉住，主程序那边只剩一行 `this.enderChest.open()`。**"这条规矩能不能被断言"是决定要不要抽一层的好标准**（批次 71） |
 | **"一组槽位怎么存"只能有一处实现** | 末影箱需要一个"槽位数组 ↔ 存档"的转换，而容器存档里早就有一份（`cloneStack`/`isValidStack` 加一段循环）。再写一份的直接后果是"两处分别漏字段"（历史上前者漏过 `repairCost`）。做法是把那一段抽成 `serializeStacks` / `restoreStacks`，容器存档的读/写两侧也改走它们——**第二个调用方出现时，就是该抽的时候**（批次 71） |
 | **"加可选字段"让存档改动几乎零风险** | 末影箱的存档只做了两件事：`PlayerSave` 上加一个**可选**字段、读档时"没有就当空箱子"（与 `xp` / `effects` 同一个套路）。于是老存档不用迁移、版本号不用 +1、新存档也不必写额外的东西。**只要语义允许"缺字段 = 默认值"，就优先加可选字段而不是改版本**（批次 71） |
+
+| **"加一个字段"的成本，取决于白名单有几份** | 这一批又差点栽在同一个坑上：`Inventory.restore` 与 `ContainerSave` 各写了一份"栈的字段白名单"，于是 `contents` 在物品栏读档时被丢掉（盒子里存着东西、重进游戏空了）。这是同一条经验第三次（耐久 → `repairCost` → `contents`）——**前两次都是"补上漏掉的那一处"，这一次改成"把两处并成一处"**（`restoreStack` + `stackExtras`）。教训不是"记得补全"，而是**别让白名单存在第二份**（批次 72） |
+| **同一个坑踩第二次，就该加一条断言而不是再写一段注释** | "两个模块互相 import 时顶层读对方 const 会读到 undefined"这条，批次 58 写在经验表里了；这一批又踩（`SHULKER_BOX_SIZE` 被读成 undefined，格数表里没有潜影盒）。区别在于这次**断言先红**：`equal(SLOT_COUNTS.shulker_box, SHULKER_BOX_SIZE)` 直接把它变成了可见的失败。**把"已知陷阱"写成断言，比写进注释更能拦住下一次**（批次 72） |
+| **"跟着物品走"要先问"跟着谁走"** | 三种容器内容归属值得对照着看：格子（箱子）、玩家存档（末影箱）、物品（潜影盒）。识别出"潜影盒的内容属于物品"之后，实现就变成两处调用（取出/倒回），而"挖下来带走、放下取回、掉在地上也不丢"这些性质**自动成立**——因为它们都由同一条"整份栈"的通道承载（批次 63 打通的）。**新容器的第一问是"这份内容属于谁"**（批次 72） |
+| **深拷 + 只嵌一层，是两个不同的决定** | `contents` 既要**深拷**（否则"改背包顺手改了存档"），又要**限一层**（原版禁止盒装盒，所以校验与拷贝都不必递归）。两件事分开写清之后，比较函数也跟着简单：逐格比数量与附加数据就够，不用写递归。**限制数据形状（只嵌一层）常常比支持任意嵌套省掉一整类麻烦**（批次 72） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 
