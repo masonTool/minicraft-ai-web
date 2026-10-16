@@ -34,9 +34,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-17 · 提交总数 422（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-17 · 提交总数 424（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 286 项 —— 已完成 **166**、进行中 **71**、待办 49 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 286 项 —— 已完成 **167**、进行中 **70**、待办 49 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -177,6 +177,9 @@ npm run agent:setup        # 跨机器自检
 手机上按它给的坐标 `/tp` 过去就能看到村民）/
 `nearestStrongholdForTest()`（批次 114：最近的**要塞**在哪——末影之眼飞向的就是它，
 要塞间距 96 区块 = 1536 格，靠走是走不到的）/
+`summonWitherForTest()` / `witherState`（批次 116：直接放一只凋灵出来 / 它的
+`health` `phase` `shielded`）/ `buildWitherAltarForTest()`（摆好 4 块灵魂沙 + 3 颗头
+并**走玩家那条判定**召唤——走一遍真流程要先凑齐 3 颗头，自动化等不起）/
 `toggleAdvancementsForTest()` / `grantAdvancementForTest(id)` / `resetAdvancementsForTest()`（验收用）/
 `fishingState`（批次 81：`phase` / `timer` / `waitFor` / `bobber`）/
 `forceBite()`（把浮标直接推到咬钩，省掉 5~30 秒的等待）/
