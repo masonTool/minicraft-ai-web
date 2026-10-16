@@ -175,6 +175,13 @@ export interface EntityContext {
    * 收 id 而不是 `MobType`：实体层不能引 `mobs.ts`（会成环），见 `MobType.splitsInto`。
    */
   spawnMob?: (typeId: string, x: number, y: number, z: number) => void;
+  /**
+   * **让附近的同类一起记仇**（批次 122，僵尸猪灵的群体激怒）。
+   *
+   * 实体层没有"周围有谁"的视野（它只认识自己与玩家），所以这一扫归主程序。
+   * 参数带 `typeId`：原版只有**同种**会跟着翻脸——旁边的恶魂看着同伴挨打并不生气。
+   */
+  provokeNearby?: (x: number, y: number, z: number, radius: number, typeId: string) => void;
   /** 冒爱心粒子（J8：求爱与繁殖成功时）。`scale` 用来让"没找到对象"时少冒几颗 */
   spawnHearts?: (x: number, y: number, z: number, scale?: number) => void;
   /**

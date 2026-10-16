@@ -271,6 +271,15 @@ export interface MobType {
    */
   neutral?: boolean;
   /**
+   * **挨打时会惊动多大范围里的同类**（批次 122，僵尸猪灵 32 格）——"群体激怒"。
+   *
+   * 原版僵尸猪灵平时不主动打人，但你打了其中一只，**周围 32 格里的同类会一起翻脸**。
+   * 这条只写半径、不写"怎么找同类"：实体层没有"周围有谁"的视野，
+   * 扫描交给 `EntityContext.provokeNearby`（主程序拿着实体表）。
+   * 不写 = 不传播（本项目里目前只有僵尸猪灵有这一条）。
+   */
+  angerRadius?: number;
+  /**
    * **被玩家注视多远会激怒**（批次 112，末影人 64 格）。
    *
    * 判据交给上层（`EntityContext.playerGazeAt`）：实体层不持有相机，
@@ -1089,6 +1098,7 @@ export class Mob extends Entity {
 
   /**
    * 被杀死时分裂（批次 120，史莱姆）：大/中史莱姆倒下会原地分裂出 2~4 只**更小的**，
+
    * 只有最小的那一档才掉粘液球（原版就是这么设计的，所以"打一只大史莱姆"要打三遍）。
    *
    * ⚠️ 只在 `diedFromDamage` 时分裂：**自然消失**（离玩家 96 格被清场）也会把
@@ -1352,6 +1362,13 @@ export class Mob extends Entity {
     // 记仇（批次 93）：亮处中立的蜘蛛被打过之后就会还手，见 `ANGER_SECONDS`。
     // 末影人的"中立"也靠它——被砍一下就不再是那个站着不动的黑家伙了
     this.angerTimer = ANGER_SECONDS;
+    // **群体激怒**（批次 122，僵尸猪灵）：同伴挨打，附近的同类一起翻脸。
+    // 扫描交给主程序（实体层没有"周围有谁"的视野）——这里只报"我这儿被打了一下"。
+    // ⚠️ 与蜘蛛那条同一个已知简化：`hurt()` 不认识"谁打的"，
+    // 所以**被烧、被摔、站在岩浆块上**也会惊动同类（原版只有玩家打的才算）
+    if (this.type.angerRadius !== undefined) {
+      ctx?.provokeNearby?.(this.x, this.y, this.z, this.type.angerRadius, this.type.id);
+    }
     this.hitFlash = 0.3;
     this.health -= amount;
 
@@ -1426,8 +1443,46 @@ export class Mob extends Entity {
     return this.angerTimer > 0;
   }
 
+  /**
+   * **激怒它**（批次 122，僵尸猪灵的群体激怒用）。
+   *
+   * 与"自己挨了一下"（`hurt` 里那条）是同一个状态，只是入口多了一个：
+   * 原版僵尸猪灵会被**同类的遭遇**惊到，于是同伴挨打时它也跟着翻脸。
+   * 这一条由主程序在 `provokeNearby` 里逐个调用（见 `MobType.angerRadius`）。
+   */
+  provoke(): void {
+    if (this.dead) return;
+    this.angerTimer = ANGER_SECONDS;
+  }
+
   clampToWorld(): void {
     this.vx = clamp(this.vx, -20, 20);
     this.vz = clamp(this.vz, -20, 20);
   }
+}
+
+/**
+ * **群体激怒要惊动哪些同伴**（批次 122，僵尸猪灵）——纯函数，所以能离线断言。
+ *
+ * 三条判据与原版一致：
+ *  1. **同种**才惊动（旁边的恶魂看着同伴挨打并不生气）；
+ *  2. 半径按**三维距离**（原版是 32 格的球，不是"平面 32 格"）；
+ *  3. 已经死了的不算（`dead` 的那些马上要被回收）。
+ *
+ * ⚠️ 抽成纯函数的原因是**它值得被测**：主程序那一扫如果漏了"同种"这一条，
+ * 症状是"打一只猪灵，旁边的僵尸也一起追你"——那种错很难在真机上察觉
+ * （玩家只会觉得"这下界怎么这么凶"）。见 `EntityContext.provokeNearby`。
+ */
+export function provokedBy<T extends { x: number; y: number; z: number; dead: boolean; type: MobType }>(
+  entities: readonly T[],
+  x: number,
+  y: number,
+  z: number,
+  radius: number,
+  typeId: string,
+): T[] {
+  return entities.filter(
+    (entity) =>
+      !entity.dead && entity.type.id === typeId && Math.hypot(entity.x - x, entity.y - y, entity.z - z) <= radius,
+  );
 }

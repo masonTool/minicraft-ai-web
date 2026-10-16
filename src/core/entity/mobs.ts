@@ -502,6 +502,54 @@ export const MAGMA_CUBE_SMALL_TYPE: MobType = {
   eyeHeight: 0.35,
 };
 
+/**
+ * 僵尸猪灵（批次 122，J15 的下一只）。
+ *
+ * 它是**本项目的第三只下界生物**，也是第一只**平时不打人**的敌对生物：
+ *  - **中立**（`neutral`）：你不惹它，它从你身边走过去；
+ *  - **群体激怒**（`angerRadius: 32`）：你打了其中一只，**周围 32 格里的同类一起翻脸**
+ *    ——这是它最出名的地方（在本项目里，"记仇"那套状态从批次 93 就有了，
+ *    这一批只是让**它能在同类之间传播**，见 `EntityContext.provokeNearby`）；
+ *  - **掉落里有一条金子的路**：腐肉 0~1、**金粒 0~1**、金锭 2.5%、金剑 8.5%
+ *    （金粒 9 个换 1 锭那条配方早就在，所以这一批把"在下界攒金子"这条读法接上了）。
+ *
+ * 数值按原版（普通难度）：20 血、接触伤害 **8**（比僵尸的 3 高得多——它拿着金剑）、
+ * 追击 24、亡灵家族（**亡灵杀手**对它有效）、击杀经验 5。
+ *
+ * ⚠️ 与原版的差异：**它不掉自己手里的那把金剑的附魔版本**（原版那把剑可能带附魔）；
+ * **不做"僵尸猪灵怕水/在下界之外变僵尸"**那类转换；模型是通用人形（看不到手里的金剑，
+ * 与凋灵骷髅那条同一个取舍）；**被火烧/摔伤也会惊动同类**（`hurt()` 不认识伤害来源，
+ * 与蜘蛛那条已知简化同源）。
+ */
+export const ZOMBIE_PIGLIN_TYPE: MobType = {
+  id: 'zombie_piglin',
+  name: '僵尸猪灵',
+  health: 20,
+  width: 0.6,
+  height: 1.95,
+  speed: 2.1,
+  hostile: true,
+  attackDamage: 8,
+  followRange: 24,
+  drops: [
+    // 原版三档掉落：腐肉与金粒各 0~1，金锭 2.5%，手里那把金剑 8.5%
+    { itemId: Item.ROTTEN_FLESH, min: 0, max: 1 },
+    { itemId: Item.GOLD_NUGGET, min: 0, max: 1 },
+    // ⚠️ 概率项写成 `min:1,max:1,chance`（写成 0~1 会被"数量也掷一次"再砍一半）
+    { itemId: Item.GOLD_INGOT, min: 1, max: 1, chance: 0.025 },
+    { itemId: toolItemId('sword', 'golden'), min: 1, max: 1, chance: 0.085 },
+  ],
+  xp: 5,
+  family: 'undead',
+  // 平时中立（不主动攻击），挨打才翻脸——见 `MobType.neutral` 与 `provoke`
+  neutral: true,
+  angerRadius: 32,
+  dimension: 'nether',
+  bodyColor: 0x6a9a72,
+  accentColor: 0x3f6b4a,
+  eyeHeight: 1.74,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -517,6 +565,8 @@ export const MOB_TYPES: readonly MobType[] = [
   MAGMA_CUBE_BIG_TYPE,
   MAGMA_CUBE_TYPE,
   MAGMA_CUBE_SMALL_TYPE,
+  // 僵尸猪灵（批次 122）：第一只"平时不打人、打了会招来一群"的敌对生物
+  ZOMBIE_PIGLIN_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

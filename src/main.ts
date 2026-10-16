@@ -78,7 +78,7 @@ import { enchantLevel } from './core/registry/enchantments.ts';
 import { Sky } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
-import { MATE_SEARCH_RANGE, Mob } from './core/entity/Mob.ts';
+import { MATE_SEARCH_RANGE, Mob, provokedBy } from './core/entity/Mob.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
 // 村民（J11，批次 88）：造生物的工厂 + 实体本体 + 那一层的纯数据（职业 / 交易表）
@@ -5126,6 +5126,14 @@ class App {
       teleportPlayer: (x, y, z) => this.teleportByEnderPearl(x, y, z),
       // 末影之眼碎掉（批次 114）：紫色涡旋（与传送门/末影箱/珍珠传送同一套粒子）
       spawnPortalParticles: (x, y, z, count, spread) => this.particles.spawnPortal(x, y, z, count, spread),
+      // 僵尸猪灵的**群体激怒**（批次 122）：同类挨打，半径内的同伴一起翻脸。
+      // 这一扫必须由主程序做——实体层没有"周围有谁"的视野（见 `EntityContext.provokeNearby`）
+      provokeNearby: (x, y, z, radius, typeId) => {
+        // "该惊动谁"是纯函数（`provokedBy`）：只算同种、按三维距离、跳过已死的——
+        // 那三条都值得离线断言，写在主程序里就只能靠肉眼看了
+        const mobs = this.entities.all.filter((entity): entity is Mob => entity instanceof Mob);
+        for (const mob of provokedBy(mobs, x, y, z, radius, typeId)) mob.provoke();
+      },
       // 史莱姆分裂（批次 120）：按**种类 id** 放一只出来——实体层不能引生物表（会成环），
       // 所以由这里查表；不与 `spawnBaby` 合用是因为那个会 `makeBaby()`（分裂出的不是幼崽）
       spawnMob: (typeId, x, y, z) => {

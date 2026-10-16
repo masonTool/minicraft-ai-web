@@ -124,7 +124,8 @@
     "test:beacon": "esbuild tools/beacon-test.ts --bundle --platform=node --format=esm --outfile=.tmp/beacon-test.mjs --log-level=error && node .tmp/beacon-test.mjs",
     "test:genregistry": "esbuild tools/genregistry-test.ts --bundle --platform=node --format=esm --outfile=.tmp/genregistry-test.mjs --log-level=error && node .tmp/genregistry-test.mjs",
     "test:slime": "esbuild tools/slime-test.ts --bundle --platform=node --format=esm --outfile=.tmp/slime-test.mjs --log-level=error && node .tmp/slime-test.mjs",
-    "test:magma": "esbuild tools/magma-test.ts --bundle --platform=node --format=esm --outfile=.tmp/magma-test.mjs --log-level=error && node .tmp/magma-test.mjs"
+    "test:magma": "esbuild tools/magma-test.ts --bundle --platform=node --format=esm --outfile=.tmp/magma-test.mjs --log-level=error && node .tmp/magma-test.mjs",
+    "test:piglin": "esbuild tools/piglin-test.ts --bundle --platform=node --format=esm --outfile=.tmp/piglin-test.mjs --log-level=error && node .tmp/piglin-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

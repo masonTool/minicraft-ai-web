@@ -312,13 +312,15 @@ console.log('\n[维度与空腔（批次 94）]');
   const open: Spawned[] = [];
   runCycles(new MobSpawner(), makeContext({ sky: 0, block: 0, dimension: 'nether', airBox: true, spawned: open }));
   check('下界里有一片 4×4 空腔 → 刷得出恶魂', open.some((entry) => entry.type.id === 'ghast'), open.map((e) => e.type.id).join(','));
-  // ⚠️ 批次 121 起下界有**两种**自然刷的敌对生物了（恶魂 + 大岩浆怪）：
-  // 这条原本写的是"只刷恶魂这一种"——那时岩浆怪还没做，现在按**集合**断言
+  // ⚠️ 下界自然刷的敌对生物一路在长：原本只有恶魂 → 批次 121 加了大岩浆怪 →
+  // 批次 122 又加了僵尸猪灵。所以这条按**集合**断言（写死一只或两只都会过期）
   const netherKinds = [...new Set(open.map((entry) => entry.type.id))].sort();
   check('大岩浆怪确实会刷（批次 121 起下界的第二只）', open.some((entry) => entry.type.id === 'magma_cube_big'));
+  check('僵尸猪灵也会刷（批次 122 起下界的第三只）', open.some((entry) => entry.type.id === 'zombie_piglin'));
   check(
-    '下界里只刷下界那两种（主世界的怪一只都不来）',
-    netherKinds.length > 0 && netherKinds.every((id) => id === 'ghast' || id === 'magma_cube_big'),
+    '下界里只刷下界那三只（主世界的怪一只都不来）',
+    netherKinds.length > 0 &&
+      netherKinds.every((id) => id === 'ghast' || id === 'magma_cube_big' || id === 'zombie_piglin'),
     netherKinds.join(','),
   );
 }
