@@ -34,7 +34,7 @@ npm run check:fast     # typecheck + 单测 + 只跑被本次改动命中的离�
 npm run build:fast     # 只验"能不能出包"（关 sourcemap，产物内容与正式构建一致）
 
 # —— 提交前（全量，约 10s）——
-npm run check          # typecheck + 93 套离线测试 + 三张台账，任一失败即非零退出
+npm run check          # typecheck + 94 套离线测试 + 三张台账，任一失败即非零退出
 ```
 
 单套调试仍可直接跑老命令（`npm run test:reach`、`npm run test:perf` …）；
