@@ -1,7 +1,7 @@
 # 接手必读 · HANDOFF
 
 > 这是「Minecraft 基岩版 1.18 复刻（Web / WebGL2）」的进度交接文档。
-> **换电脑、换会话、换人接手，都先读这一份**（只有 180 行左右，读完再按需展开），
+> **换电脑、换会话、换人接手，都先读这一份**（整份读完再按需展开，不用挑），
 > 再读 `.codebuddy/auto-continue.md`（推进队列）和 [TASKS.md](./TASKS.md)（长期总表）。
 > 会话聊天记录本身不随仓库走，能带走的关键上下文都沉淀在下面。
 >
@@ -191,7 +191,7 @@ npm run agent:setup        # 跨机器自检
 | 随仓库走（git 跟踪） | 只在本机（已 gitignore） |
 | --- | --- |
 | `TASKS.md`、`HANDOFF.md`、`AGENTS.md`、`README.md`、`docs/`、`src/`、`tools/` | `node_modules/`、`dist/`、`.tmp/`（构建与测试产物，含 `*.tsbuildinfo`） |
-| `.codebuddy/auto-continue.md`（推进队列）、`.codebuddy/hooks/`、`.codebuddy/settings.json` | `.codebuddy/auto-continue.state.json`、`.codebuddy/auto-continue.log` |
+| `.codebuddy/auto-continue.md`（推进队列）、`.codebuddy/auto-continue-archive.md`（批次 1~95 的历史）、`.codebuddy/hooks/`、`.codebuddy/settings.json` | `.codebuddy/auto-continue.state.json`、`.codebuddy/auto-continue.log` |
 | `.codebuddy/memory/`（AI 记忆的版本化副本，`npm run agent:setup` 恢复到本机） | 截图 `shot-*.png`、`.codebuddy/auto-continue.off` |
 
 **唯一的外部依赖：git 远程仓库。** 没有远程，代码就只存在当前这台机器上，换电脑拿不到。
