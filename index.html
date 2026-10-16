@@ -352,7 +352,10 @@
       }
       #recipe-book.hidden { display: none; }
       .recipe-panel {
-        width: min(96vw, 780px); max-height: 90vh; overflow-y: auto;
+        /* 批次 111：与设置/暂停面板**共用同一套固定尺寸**（用户上一轮要的"统一大小"）
+           ——原来配方书是 min(96vw,780px) × 90vh，成就又是另一套，三块面板三个尺寸。 */
+        width: var(--panel-w); max-width: var(--panel-w);
+        height: var(--panel-h); max-height: var(--panel-h); overflow-y: auto;
         background: var(--panel-bg);
         border: 3px solid; border-color: var(--pixel-bevel);
         border-radius: var(--panel-radius);
@@ -1210,8 +1213,20 @@
       .enchant-status.bad { color: #7a2020; }
       .enchant-hint { font-size: 11px; color: #5a5a5a; margin-top: 2px; }
 
-      /* ---------------- 盔甲与副手（36-40 号槽） ---------------- */
-      .inv-grid.inv-armor { grid-template-columns: repeat(5, 42px); }
+      /* ---------------- 玩家那一块的两列（批次 111，对齐原版） ----------------
+         原版物品栏：**左栏是盔甲 4 格竖排 + 副手**，右栏是"合成 / 容器 + 3×9 主背包
+         + 9 快捷栏"。原来我们是竖着堆五段、每段还带一行文字标签（「主背包 / 快捷栏 /
+         盔甲与副手」）——原版没有这些字，靠位置和一道缝就能分清。
+         ⚠️ 两列用 fixed 的 grid-column/row 定位而不是 DOM 顺序：`topArea`
+         （随模式切换的合成/箱子/熔炉）在构造函数里先于装备列被建出来。 */
+      .inv-body { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+      .inv-gear { grid-column: 1; grid-row: 1; }
+      .inv-main { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 4px; }
+      /* 快捷栏与主背包之间空一道缝（原版这两排是紧挨着的，靠缝区分） */
+      .inv-main .inv-hotbar { margin-top: 5px; }
+
+      /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
+      .inv-grid.inv-armor { grid-template-columns: 42px; }
       /* 空槽里写"头/胸/腿/靴/副"：触摸端没有悬停提示，只能靠槽位自己说明 */
       .inv-slot-hint {
         position: absolute; inset: 0; display: grid; place-items: center;
@@ -1282,7 +1297,8 @@
       .inv-tabs { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
       /* 分页条：PC 与手机共用；只有一页时整条隐藏（`hidden` 由界面加） */
       .inv-pager { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 8px 0 2px; }
-      .inv-armor, .inv-chest { justify-content: center; }
+      /* ⚠️ 装备列是"左栏竖排"，不能再居中（居中会让它在自己那一列里左右飘） */
+      .inv-chest { justify-content: center; }
       .inv-pager.hidden { display: none; }
       .inv-page-button {
         font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; cursor: pointer;
@@ -1426,12 +1442,13 @@
         will-change: transform;
       }
 
-      /* 右下那一簇（批次 107 起只有"潜行 + 跳跃"两颗，按基岩版）：
-         一列、右对齐——跳跃在下（拇指最常够到、也最大），潜行在它上面。
+      /* 右下那一簇（批次 107 起只有"潜行 + 跳跃"两颗，批次 111 对齐原版排法）：
+         **一排右对齐——跳跃在右（最大、拇指最常够到），潜行在它左边**。
+         原版手机默认布局就是这样（原来我们排成了上下两行，和原版不一致）。
          背包与聊天不在这里，它们在快捷栏两侧（见下面 `.touch-side-btn`）。 */
       #touch-buttons {
         position: absolute; right: 20px; bottom: 96px;
-        display: flex; flex-direction: column; align-items: flex-end;
+        display: flex; flex-direction: row; align-items: flex-end;
         gap: calc(12px * var(--touch-scale, 1));
         pointer-events: none;
       }
@@ -1579,7 +1596,8 @@
         #adv-toasts { max-width: 88vw; }
         .inv-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 2px; }
         .inv-grid .inv-slot { width: auto; aspect-ratio: 1; }
-        .inv-grid.inv-armor { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        /* 装备仍是"竖排一列"（窄屏下占满这一列宽） */
+        .inv-grid.inv-armor { grid-template-columns: minmax(0, 1fr); }
         /* 漏斗：窄屏也保持一排 5 格（继承上面那条 9 列规则会把它拉成两行） */
         .inv-grid.inv-hopper { grid-template-columns: repeat(5, minmax(0, 1fr)); }
         /* 投掷器/发射器：窄屏保持 3 列（否则会被上面那条 9 列规则拉成一行） */
@@ -1715,7 +1733,9 @@
       }
       #advancements.hidden { display: none; }
       .adv-panel {
-        width: min(96vw, 760px); max-height: 90vh; overflow-y: auto;
+        /* 批次 111：同上——与设置/暂停/配方书共用一套固定尺寸 */
+        width: var(--panel-w); max-width: var(--panel-w);
+        height: var(--panel-h); max-height: var(--panel-h); overflow-y: auto;
         background: var(--panel-bg);
         border: 3px solid; border-color: var(--pixel-bevel);
         border-radius: var(--panel-radius);

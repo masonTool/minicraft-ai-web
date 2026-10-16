@@ -224,6 +224,9 @@ export class InventoryScreen {
   private readonly root: HTMLDivElement;
   private readonly panel: HTMLDivElement;
   private readonly titleEl: HTMLElement;
+  /** 玩家那一块的两列：左=装备竖排，右=合成/容器 + 主背包 + 快捷栏 */
+  private readonly playerBody: HTMLDivElement;
+  private readonly mainColumn: HTMLDivElement;
   private readonly topArea: HTMLDivElement;
   private readonly creativeSection: HTMLDivElement;
   private readonly heldElement: HTMLDivElement;
@@ -436,10 +439,24 @@ export class InventoryScreen {
     header.appendChild(closeButton);
     this.panel.appendChild(header);
 
+    // ---- 玩家那一块（批次 111，对齐原版）：**装备竖排在左、其余在右**
+    //
+    // 原版（Java 与基岩版手机都是）物品栏的左栏是"盔甲 4 格竖排 + 副手"，
+    // 右栏才是"合成 / 容器 + 3×9 主背包 + 9 快捷栏"。原来我们是竖着堆成五段、
+    // 还各带一行文字标签（「主背包 / 快捷栏 / 盔甲与副手」）——原版没有这些字，
+    // 靠位置与间距就能分清。这里改成"两列 + 无标签"。
+    // ⚠️ 两列用固定的 grid-column 定位，而不是靠 DOM 顺序：`topArea`（随模式切换的
+    // 合成/箱子/熔炉）是在下面几行里建的，顺序上先于装备列。
+    this.playerBody = document.createElement('div');
+    this.playerBody.className = 'inv-body';
+    this.mainColumn = document.createElement('div');
+    this.mainColumn.className = 'inv-main';
+    this.playerBody.appendChild(this.mainColumn);
+
     // ---- 上半部分：随模式切换
     this.topArea = document.createElement('div');
     this.topArea.className = 'inv-top';
-    this.panel.appendChild(this.topArea);
+    this.mainColumn.appendChild(this.topArea);
 
     // 2×2 / 3×3 合成区的结果槽（点击行为由 createSlot 内的统一监听按 key 分发）
     this.resultElement = this.createSlot();
@@ -584,16 +601,18 @@ export class InventoryScreen {
     cookTrack.className = 'furnace-cook';
     cookTrack.appendChild(this.cookFillEl);
 
-    // ---- 玩家背包
-    this.panel.appendChild(this.buildLabel('主背包'));
-    this.panel.appendChild(this.buildGrid(MAIN_START, MAIN_SIZE, 'inv-grid', 'inv'));
+    // ---- 玩家背包（右栏）：3×9 主背包 + 9 快捷栏，**不再带文字标签**
+    // （原版靠一道缝区分这两排；标签是我们自己加的，用户要求照原版来）
+    this.mainColumn.appendChild(this.buildGrid(MAIN_START, MAIN_SIZE, 'inv-grid', 'inv'));
+    this.mainColumn.appendChild(this.buildGrid(HOTBAR_START, HOTBAR_SIZE, 'inv-grid inv-hotbar', 'inv'));
 
-    this.panel.appendChild(this.buildLabel('快捷栏'));
-    this.panel.appendChild(this.buildGrid(HOTBAR_START, HOTBAR_SIZE, 'inv-grid inv-hotbar', 'inv'));
-
-    // ---- 玩家装备（4 格盔甲 + 1 格副手）；空槽显示部位提示字，触摸端才知道该放哪
-    this.panel.appendChild(this.buildLabel('盔甲与副手'));
-    this.panel.appendChild(this.buildArmorGrid());
+    // ---- 玩家装备（左栏，4 格盔甲 + 1 格副手）竖排；
+    // 空槽显示部位提示字（头/胸/腿/靴/副），触摸端才知道该放哪
+    const gear = document.createElement('div');
+    gear.className = 'inv-gear';
+    gear.appendChild(this.buildArmorGrid());
+    this.playerBody.appendChild(gear);
+    this.panel.appendChild(this.playerBody);
 
     this.creativeSection = document.createElement('div');
     this.buildCreativeSection();

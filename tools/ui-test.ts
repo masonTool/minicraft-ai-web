@@ -224,7 +224,8 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     ['窄屏分类标签单行滚动', 'flex-wrap: nowrap'],
     // 尺寸都走 `--touch-scale`（批次 98）：默认 1× 下与写死像素完全一致
     // 右下那一簇（批次 107）：一列右对齐，跳跃在下
-    ['右下按钮簇是一列右对齐', '#touch-buttons { position: absolute; right: 20px; bottom: 96px;'],
+    // 右下那一簇（批次 111 对齐原版）：一排、右对齐——跳跃在右、潜行在它左边
+    ['右下按钮簇是一排右对齐（跳跃在右）', '#touch-buttons { position: absolute; right: 20px; bottom: 96px; display: flex; flex-direction: row; align-items: flex-end;'],
     // 快捷栏两侧的背包/聊天：挂进 #hotbar 内并绝对定位（不参与那 9 格的宽度计算）
     ['背包/聊天按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
     ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
@@ -694,6 +695,28 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
 {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
+  // 背包那一块（批次 111）：装备竖排在左、主背包/快捷栏在右，且**不再有文字标签**
+  check(
+    '背包改"左装备 / 右背包"两列',
+    compact.includes('.inv-body { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }') &&
+      compact.includes('.inv-gear { grid-column: 1; grid-row: 1; }') &&
+      compact.includes('.inv-main { grid-column: 2; grid-row: 1;'),
+  );
+  check('装备格竖排成一一列（原版位置）', compact.includes('.inv-grid.inv-armor { grid-template-columns: 42px; }'));
+  check('快捷栏与主背包之间留一道缝', compact.includes('.inv-main .inv-hotbar { margin-top: 5px; }'));
+  // 成就与配方书也共用同一套固定尺寸（原来三块面板三个尺寸）
+  check(
+    '成就/配方书与设置面板共用同一套固定尺寸',
+    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 3,
+  );
+  // 文字标签是原来我们自己加的（原版没有），这次按用户要求去掉
+  const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  check(
+    '「主背包 / 快捷栏 / 盔甲与副手」三行文字标签已去掉',
+    !invSource.includes("buildLabel('主背包')") &&
+      !invSource.includes("buildLabel('快捷栏')") &&
+      !invSource.includes("buildLabel('盔甲与副手')"),
+  );
   // 用户："首页的按钮要对齐，符合正常的按钮大小"。
   // 根因：首页按钮被单独收窄到 280px（横屏 240px），而二级页是满宽——两页对不齐。
   check('首页按钮不再被单独收窄', !compact.includes('.world-menu > * { width'));
