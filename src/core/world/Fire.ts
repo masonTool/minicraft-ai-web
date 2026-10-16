@@ -123,6 +123,10 @@ for (let i = 0; i < DYE_COLORS.length; i++) {
 // 藤蔓（B11）：原版会烧，而且容易把火带到树冠上
 FLAMMABLE.add(Block.VINE);
 
+// 干海带块（批次 50）：原版是可燃的（不然"当燃料"这件事就说不通）
+// —— 可燃与"能当燃料"在游戏里是两回事，但这里两样都登记才自洽
+FLAMMABLE.add(Block.DRIED_KELP_BLOCK);
+
 // 其余 5 种木材：原木 / 木板 / 树叶 / 台阶 / 楼梯
 for (const ids of Object.values(Wood)) {
   FLAMMABLE.add(ids.log);

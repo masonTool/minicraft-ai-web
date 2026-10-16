@@ -617,6 +617,12 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // 写死的数字会让"可可豆做出浅蓝色染料"——这种错在界面上看着就像个恶作剧
   { kind: 'shapeless' as const, result: { id: dyeItemId(BROWN_DYE_INDEX), count: 1 }, ingredients: [Item.COCOA_BEANS] },
 
+  // ---- 海带与干海带（批次 50）
+  // 9 个干海带 ↔ 1 块干海带块（原版两向都有）。
+  // 干海带块是本批唯一的"燃料"产出：**一块能烧 20 个东西**（见 `Smelting.ts` 的燃料表）
+  { kind: 'shapeless' as const, result: { id: Block.DRIED_KELP_BLOCK, count: 1 }, ingredients: Array<number>(9).fill(Item.DRIED_KELP) },
+  { kind: 'shapeless' as const, result: { id: Item.DRIED_KELP, count: 9 }, ingredients: [Block.DRIED_KELP_BLOCK] },
+
   // 金胡萝卜：8 金粒围 1 胡萝卜（原版图案）——金粒这一批刚补上，这条链才成立
   {
     kind: 'shaped' as const,

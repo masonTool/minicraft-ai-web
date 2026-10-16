@@ -127,6 +127,10 @@ export const Item = {
   SWEET_BERRIES: 1427,
   COCOA_BEANS: 1428,
   COOKIE: 1429,
+  // ---- 海带与干海带（批次 50）：
+  // 海带与海草**本身就是方块**（id 436/437，物品 id 与方块 id 同源，见上面的方块物品循环），
+  // 只有"干海带"是纯粹的非方块物品（海带烧一下出来的那个）
+  DRIED_KELP: 1430,
   REDSTONE_DUST: 1198,
   GLOWSTONE_DUST: 1199,
   // ---- 投掷物（K4 尾巴）：雪球与鸡蛋，原版都是 16 个一堆。
@@ -299,6 +303,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // 可可豆：种在**丛林原木侧面**（`block` 指向第 0 阶段，朝向由放置规则算出来）
   { id: Item.COCOA_BEANS, name: 'minecraft:cocoa_beans', tile: 'item_cocoa_beans', block: Block.COCOA_STAGE0 },
   { id: Item.COOKIE, name: 'minecraft:cookie', tile: 'item_cookie' },
+  // ---- 海带与干海带（批次 50）：干海带是食物（1 饥饿 / 0.6 饱和度，数值在 food.ts），
+  // 也是"干海带块"的唯一材料（9 ↔ 1）
+  { id: Item.DRIED_KELP, name: 'minecraft:dried_kelp', tile: 'item_dried_kelp' },
   { id: Item.REDSTONE_DUST, name: 'minecraft:redstone_ingredient', tile: 'item_redstone_ingredient' },
   { id: Item.GLOWSTONE_DUST, name: 'minecraft:glowstone_dust_ingredient', tile: 'item_glowstone_dust_ingredient' },
   // ---- 药水（H10）：不可堆叠，一次一瓶
@@ -644,6 +651,8 @@ const NATURAL = new Set<number>([
   Block.ANDESITE,
   Block.TUFF,
   Block.CALCITE,
+  // 干海带块（批次 50）：跟"雪块/冰"一样是"自然材料方块"，别掉进"矿石与材料"
+  Block.DRIED_KELP_BLOCK,
 ]);
 
 const FUNCTIONAL = new Set<number>([
@@ -695,6 +704,9 @@ const DECORATION_AND_NETHER = new Set<number>([
   Block.CACTUS,
   Block.DEAD_BUSH,
   Block.BAMBOO,
+  // 海带与海草（批次 50）：植物，归"自然"
+  Block.KELP,
+  Block.SEAGRASS,
   Block.NETHERRACK,
   Block.SOUL_SAND,
   Block.SOUL_SOIL,
@@ -986,6 +998,10 @@ export function silkTouchDropsSelf(blockId: number): boolean {
  */
 const SHEARS_ONLY = new Set<number>();
 for (let i = 0; i < DYE_COLORS.length; i++) SHEARS_ONLY.add(woolId(i));
+// 海草（批次 50）：原版的掉落判定也**只认剪刀**（徒手拔掉什么都不掉，
+// 精准采集同样不给——原版海草的 `getDrops` 里只判 `tool.is(ShearsItem)`），
+// 所以它进这张表而不是 `CUTTABLE`。羊毛与海草是这张表里唯一的两种。
+SHEARS_ONLY.add(Block.SEAGRASS);
 
 /**
  * "剪刀与精准采集都能完整带走"的方块。
@@ -1002,7 +1018,7 @@ const CUTTABLE = new Set<number>([
 ]);
 for (const ids of Object.values(Wood)) CUTTABLE.add(ids.leaves);
 
-/** 这个方块是不是"不剪就一无所获"（只有羊毛） */
+/** 这个方块是不是"不剪就一无所获"（羊毛与海草——原版的掉落判定都只认剪刀） */
 export function requiresShears(blockId: number): boolean {
   return SHEARS_ONLY.has(blockId);
 }

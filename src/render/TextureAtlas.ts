@@ -3405,6 +3405,99 @@ PAINTERS.item_quartz = lump(
   4.2,
 );
 
+// ---------------------------------------------------------------- 海带与海草（批次 50）
+
+/**
+ * 海带：一根从下往上略微摆动的**深绿长茎**，两侧交替长出细长的叶。
+ *
+ * 它走 `cross` 形状（两片交叉薄面），所以贴图要**画满整格高度**——
+ * 一株海带是由好几格这样的方块叠起来的，接缝处茎要对得上（`x` 固定在中间那 2~3 像素，
+ * 于是上下两格的茎连成一条线，看不出是"一节一节的方块"）。
+ */
+PAINTERS.kelp = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  // 主茎：中间 2 像素宽，略带 S 形摆动（下宽上窄）
+  const sway = Math.sin(y * 0.42) * 1.1;
+  const halfStem = 1.2 - (15 - y) * 0.03;
+  if (Math.abs(x - 7.5 - sway) <= halfStem) {
+    const shade = y < 8 ? 0.85 : 1.0;
+    return [clamp255(40 * shade + jitter), clamp255(96 * shade + jitter), clamp255(44 * shade + jitter), 255];
+  }
+  // 叶片：左右交替，每 4 像素一节往外伸
+  const leafRow = (15 - y) % 4;
+  if (leafRow < 2 && y > 1 && y < 15) {
+    const side = ((15 - y) / 4 | 0) % 2 === 0 ? -1 : 1;
+    const reach = (2 - leafRow) * 1.6;
+    const d = (x - 7.5 - sway) * side;
+    if (d > halfStem && d <= halfStem + reach) {
+      return [clamp255(58 + jitter), clamp255(126 + jitter), clamp255(56 + jitter), 255];
+    }
+  }
+  return [0, 0, 0, 0];
+};
+
+/**
+ * 海草：比海带矮得多的一撮细叶（`3~4` 片），最上面断开——
+ * 一眼能看出"它不长高"，也就不会被误当成海带的幼苗。
+ */
+PAINTERS.seagrass = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  const top = 2 + ((x * 7) % 4); // 每片叶子的高度不同
+  if (y < top || y > 15) return [0, 0, 0, 0];
+  // 四片叶子分布在 x = 3 / 6 / 9 / 12 附近，越靠边的越短
+  for (const [cx, len] of [
+    [3, 9],
+    [6.5, 13],
+    [9.5, 12],
+    [13, 8],
+  ] as const) {
+    if (Math.abs(x - cx) > 0.9) continue;
+    if (y < 15 - len) continue;
+    const shade = y < 8 ? 1.05 : 0.88;
+    return [clamp255(52 * shade + jitter), clamp255(118 * shade + jitter), clamp255(50 * shade + jitter), 255];
+  }
+  return [0, 0, 0, 0];
+};
+
+/** 干海带块：晒干的海带压成的一摞——顶面是横竖交错的编织纹 */
+PAINTERS.dried_kelp_top = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 编织：每 4 像素一条，横竖各一组，交点更亮
+  const weave = (Math.floor(x / 4) + Math.floor(y / 4)) % 2 === 0;
+  const onSeam = x % 4 === 0 || y % 4 === 0;
+  const base = weave ? 96 : 74;
+  const shade = onSeam ? 0.82 : 1;
+  return [clamp255(base * shade * 0.86 + jitter), clamp255(base * shade + jitter), clamp255(base * shade * 0.5 + jitter), 255];
+};
+
+/** 干海带块侧面：一层层横着压出来的干海带（原版侧面就是这种"摞起来"的观感） */
+PAINTERS.dried_kelp_side = (_x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 每 5 像素一层，层与层之间有一条深缝
+  const layer = Math.floor(y / 5);
+  const seam = y % 5 === 0;
+  const base = 84 + (layer % 2) * 10;
+  const shade = seam ? 0.72 : 1;
+  return [clamp255(base * shade * 0.86 + jitter), clamp255(base * shade + jitter), clamp255(base * shade * 0.5 + jitter), 255];
+};
+
+/** 干海带（物品图标）：一片对折的深绿干叶片，边缘发褐（晒干的样子） */
+PAINTERS.item_dried_kelp = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  // 一片斜着的长叶：中心线从左上到右下
+  const center = 3.4 + (y / 15) * 8.2;
+  const d = Math.abs(x - center);
+  if (d > 4.6) return [0, 0, 0, 0];
+  if (d > 3.6) {
+    // 边缘：发褐（晒焦的那一圈）
+    return [clamp255(96 + jitter), clamp255(74 + jitter), clamp255(30 + jitter), 255];
+  }
+  // 中间：深绿，折线那一侧更深（对折的暗面）
+  const fold = x - center;
+  const shade = fold < -0.8 ? 0.74 : fold > 1.2 ? 1.06 : 0.92;
+  return [clamp255(46 * shade + jitter), clamp255(84 * shade + jitter), clamp255(40 * shade + jitter), 255];
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

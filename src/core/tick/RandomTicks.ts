@@ -20,6 +20,7 @@ import {
   COCOA_STAGES,
   CROP_STAGES,
   JUNGLE_LOG_ID,
+  KELP_MAX_HEIGHT,
   berryStageOf,
   blockDef,
   cocoaStageOf,
@@ -351,6 +352,51 @@ function vineBehavior(world: TickWorld, x: number, y: number, z: number, random:
   return writeVine(world, nx, y, nz, withVineSide(0, wallSide));
 }
 
+// ---------------------------------------------------------------- 海带（批次 50）
+
+/**
+ * 随机刻命中时"往上长一节"的概率（观感值）。
+ * 与甘蔗取同一个量级：原版的真实节奏要等十几分钟，单机验收时看不到它长。
+ */
+export const KELP_GROW_CHANCE = 0.2;
+
+/**
+ * 海带（批次 50）：**只由顶端**往上长，且**离开水就枯萎**。
+ *
+ * 这一条与甘蔗那套 `makeCaneBehavior` 的三个差别：
+ *  1. "上面那一格"要的是**水**（不是空气）——海带长在水里，新的一节占掉的是一格水；
+ *  2. 还要再往上看一格：那格也得是水，否则长出去的那一节会**正好顶到水面**，
+ *     下一 tick 就因为"上方不是水"而枯死——一长一死来回抖，看着像抽搐。
+ *     要求"上方两格都是水"就等于"顶端永远停在水面下 1 格"，与原版一致；
+ *  3. **脱水即枯萎**：顶端上方不再是水（水被放干、被方块填掉）→ 整格毁掉并掉 1 个海带。
+ *     原版海带离开水就是这么死的；没有这条，堵住的水塘里会留着一株悬空的海带。
+ *
+ * "我是不是顶端"由**上方那一格是不是自己**现算，而不是存状态位——
+ * 与甘蔗同一条判据（原版那是 `kelp` 与 `kelp_plant` 两个方块，这里合成一个 id）。
+ */
+function kelpBehavior(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const id = world.getBlock(x, y, z);
+  const above = world.getBlock(x, y + 1, z);
+  // 上面还有一节海带 → 我不是顶端，交给顶端那格处理（否则一节一节同时长会重复）
+  if (above === id) return false;
+
+  // 脱水：顶端不在水里 → 枯萎（掉海带，与原版"海带离开水就毁"一致）
+  if (above !== Block.WATER) {
+    if (!world.setBlock(x, y, z, Block.AIR)) return false;
+    world.drop?.(id, 1, x, y, z);
+    return true;
+  }
+
+  // 顶端上面那一格也得是水：否则长出去立刻枯死（见上面的注解 2）
+  if (world.getBlock(x, y + 2, z) !== Block.WATER) return false;
+
+  let height = 1;
+  while (height < 64 && world.getBlock(x, y - height, z) === id) height++;
+  if (height >= KELP_MAX_HEIGHT) return false;
+  if (random() >= KELP_GROW_CHANCE) return false;
+  return world.setBlock(x, y + 1, z, id);
+}
+
 // ---------------------------------------------------------------- 雪层（K11 收尾）
 
 /** 一次随机刻让雪层长高一层的概率（观感值：原版是"每个区块每 tick 抽几个点"的另一套节奏） */
@@ -424,6 +470,8 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   // 只登记第 0 阶段的话长到第 1 阶段就再也不长了——与小麦那条同一个坑）
   ...BERRY_STAGES.map((id) => [id, berryBehavior] as const),
   ...COCOA_STAGES.map((id) => [id, cocoaBehavior] as const),
+  // 海带（批次 50）：顶端往上长、离开水枯萎。**海草不登记**——它是不生长的草丛
+  [Block.KELP, kelpBehavior],
 ]);
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */

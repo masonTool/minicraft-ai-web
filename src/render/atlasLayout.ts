@@ -686,6 +686,12 @@ export const TILE_ORDER = [
   'deepslate_tiles',
   'red_nether_bricks',
   'item_quartz',
+  // ---- 海带与海草（批次 50）：两张水下植物 + 干海带块的顶/侧 + 干海带图标
+  'kelp',
+  'seagrass',
+  'dried_kelp_top',
+  'dried_kelp_side',
+  'item_dried_kelp',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

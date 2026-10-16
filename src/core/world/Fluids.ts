@@ -58,7 +58,12 @@ export function flowDelay(id: number): number {
   return id === LAVA ? LAVA_DELAY : WATER_DELAY;
 }
 
-/** 这一格能不能被液体占据（空气，或者可被冲掉的非固体方块，如草与花） */
+/**
+ * 这一格能不能被液体占据（空气，或者可被冲掉的非固体方块，如草与花）。
+ *
+ * 两类**冲不掉**的非固体方块：水里的植物（海带/海草，批次 50——它们本来就长在水里，
+ * 被水当成"可替换方块"覆盖掉就成了一放下去就消失）与传送门方块（K8）。
+ */
 export function canFlowInto(world: FluidWorld, x: number, y: number, z: number): boolean {
   const id = world.getBlock(x, y, z);
   if (id === Block.AIR) return true;
@@ -66,6 +71,10 @@ export function canFlowInto(world: FluidWorld, x: number, y: number, z: number):
   // 传送门（K8）冲不掉：原版水也进不了门方块，否则一条水流就能把一座门冲散
   if (id === Block.NETHER_PORTAL) return false;
   const def = blockDef(id);
+  // 水里的植物（批次 50：海带与海草）冲不掉：它们**就是长在水里的**，
+  // 而它们是"非固体"，照着下面的规则会被旁边的水当成可替换方块直接覆盖掉——
+  // 表现是"海带刚放下去就没了"，而放置逻辑与掉落全都正常。
+  if (def.waterPlant) return false;
   return !def.solid;
 }
 

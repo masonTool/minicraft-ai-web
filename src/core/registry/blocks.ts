@@ -40,6 +40,16 @@ export interface BlockDef {
    * 会自动多出一件"可放置的火焰"，玩家能在背包里拿到它——与 I12 的设计不符。
    */
   readonly itemless: boolean;
+  /**
+   * 长在水里的植物（批次 50 的海带与海草）。
+   *
+   * 本项目的水是**流体方块**（`Block.WATER` 占着那一格），所以"水里的植物"
+   * 必须是"把水那一格换成植物"——这就是它需要的两条特殊待遇：
+   *  1. **放置**：落点那一格必须是水（而不是空气），见 `Placement.ts`
+   *  2. **不许被水冲走**：`Fluids.canFlowInto` 见到它就返回 false
+   *     （否则旁边一格水会把它当"可替换方块"直接覆盖掉，海带一放下去就没了）
+   */
+  readonly waterPlant: boolean;
 }
 
 interface BlockSpec {
@@ -56,6 +66,7 @@ interface BlockSpec {
   stateTiles?: (state: number) => readonly [string, string, string];
   stateLight?: (state: number) => number;
   itemless?: boolean;
+  waterPlant?: boolean;
 }
 
 /**
@@ -1401,6 +1412,57 @@ const BERRY_AND_COCOA_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 海带与海草（批次 50）
+
+/**
+ * 海带与海草（B17 的最后一样"要地物"的食物）。
+ *
+ * 这两样是 B17 里**唯一卡在"水里能长的植物"**的两件：本项目的水是流体方块
+ * （水占着那一格），所以"种在水里"意味着**植物替换掉那一格水**——
+ * 之前没有任何方块这么干过（睡莲是"水面正上方那一格空气"），
+ * 于是需要一条新通道，见 `FeatureWriter#putInWater` 与 `BlockDef.waterPlant`。
+ *
+ * 三件东西的差别：
+ *  - **海带**（`kelp`）：从海底往上长的一株（随机刻里由**顶端**长高，封顶 26 格——
+ *    与甘蔗"只由顶端长高"同一套做法），**脱水即枯萎**（上方不再是水就整格毁掉并掉 1 个海带）。
+ *    ⚠️ 原版是 `kelp`（顶端）与 `kelp_plant`（茎）两个方块，这里合成**一个 id**：
+ *    "我是不是顶端"由"上方那一格是不是自己"现算（与甘蔗同一条判据），
+ *    省掉一个 id 与一整套"顶端 vs 茎"的同步逻辑，代价是两者共用一张贴图。
+ *  - **海草**（`seagrass`）：海底的草，不生长、**徒手拔不掉**（只有剪刀才会掉自身，
+ *    与原版一致——原版海草的掉落判定就只认剪刀）。
+ *  - **干海带块**（`dried_kelp_block`）：9 个干海带压成一块，**当燃料能烧 20 个东西**
+ *    （200 秒，比煤炭的 80 秒还耐烧，这是原版数据）。
+ */
+export const KELP_ID = 436;
+export const SEAGRASS_ID = 437;
+export const DRIED_KELP_BLOCK_ID = 438;
+
+/**
+ * 海带的最高长度（原版 `KelpBlock` 的 `MAX_HEIGHT` 是 26）。
+ *
+ * ⚠️ 放在这里而不是 `RandomTicks.ts`（生长行为那一侧）或 `Features.ts`（生成那一侧）：
+ * **两边都要用它**（随机刻封顶、世界生成时裁高度），而 `Features.ts` 会被 Web Worker 直接引用，
+ * 让它 import `RandomTicks` 会把火焰/铜/物品注册表整包拖进 Worker。数据放注册表、
+ * 两边各自引用，就不会有第二个 26 悄悄漂开。
+ */
+export const KELP_MAX_HEIGHT = 26;
+
+/** 长在水里的植物统一用 `cross` 形状（两片交叉薄面、无碰撞），只是多一个 `waterPlant` 标记 */
+function waterPlantSpec(id: number, name: string, tile: string): BlockSpec {
+  return { ...plantSpec(id, name, tile), waterPlant: true };
+}
+
+const KELP_SPECS: readonly BlockSpec[] = [
+  waterPlantSpec(KELP_ID, 'kelp', 'kelp'),
+  waterPlantSpec(SEAGRASS_ID, 'seagrass', 'seagrass'),
+  {
+    id: DRIED_KELP_BLOCK_ID,
+    name: 'minecraft:dried_kelp_block',
+    // 顶面是编织纹、侧面是横着压出来的一层层（底面孔位复用侧面：整块方块，不必为底面再画一张）
+    tiles: ['dried_kelp_top', 'dried_kelp_side', 'dried_kelp_side'],
+  },
+];
+
 const CAMPFIRE_SPECS: readonly BlockSpec[] = [
   {
     id: CAMPFIRE_ID,
@@ -1635,6 +1697,7 @@ const SPECS: readonly BlockSpec[] = [
   ...CAMPFIRE_SPECS,
   ...BEETROOT_SPECS,
   ...BERRY_AND_COCOA_SPECS,
+  ...KELP_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1878,6 +1941,10 @@ export const Block = {
   COCOA_STAGE0: COCOA_ID_START,
   COCOA_STAGE1: 434,
   COCOA_STAGE2: 435,
+  // ---- 海带与海草（批次 50，见 `KELP_SPECS`）：方块本身**替换掉那一格水**
+  KELP: KELP_ID,
+  SEAGRASS: SEAGRASS_ID,
+  DRIED_KELP_BLOCK: DRIED_KELP_BLOCK_ID,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1920,6 +1987,7 @@ function buildBlockTable(): readonly BlockDef[] {
       stateTiles: spec.stateTiles,
       stateLight: spec.stateLight,
       itemless: spec.itemless ?? false,
+      waterPlant: spec.waterPlant ?? false,
     });
   }
   return table;
@@ -2069,6 +2137,10 @@ HARDNESS.set(Block.SWEET_BERRY_BUSH_STAGE3, 0);
 HARDNESS.set(Block.COCOA_STAGE0, 0.2);
 HARDNESS.set(Block.COCOA_STAGE1, 0.2);
 HARDNESS.set(Block.COCOA_STAGE2, 0.2);
+// 海带与海草（批次 50）：都是"一碰就掉"（硬度 0）；干海带块 0.5（原版，徒手可拆）
+HARDNESS.set(Block.KELP, 0);
+HARDNESS.set(Block.SEAGRASS, 0);
+HARDNESS.set(Block.DRIED_KELP_BLOCK, 0.5);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2347,6 +2419,11 @@ for (let stage = 0; stage < 4; stage++) {
 }
 // 可可豆（批次 49）：徒手可采
 for (let stage = 0; stage < 3; stage++) HAND_HARVESTABLE.add(Block.COCOA_STAGE0 + stage);
+// 海带与海草（批次 50）：徒手都能拔（海草徒手拔下来**什么都不掉**——
+// 那条规则在掉落表里（`SHEARS_ONLY`），不在这里；这里只管"挖得动"）
+HAND_HARVESTABLE.add(Block.KELP);
+HAND_HARVESTABLE.add(Block.SEAGRASS);
+HAND_HARVESTABLE.add(Block.DRIED_KELP_BLOCK);
 
 /**
  * 作物的生长阶段表（按顺序）。

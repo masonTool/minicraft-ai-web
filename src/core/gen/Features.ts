@@ -19,7 +19,7 @@
  * 该模块必须保持"纯函数 + 无 DOM 依赖"，因为它会被 Web Worker 直接引用。
  */
 
-import { Block, JUNGLE_LOG_ID, Wood, type WoodBlockIds } from '../registry/blocks.ts';
+import { Block, JUNGLE_LOG_ID, KELP_MAX_HEIGHT, Wood, blockDef, type WoodBlockIds } from '../registry/blocks.ts';
 import { withVineSide } from '../registry/blockState.ts';
 import { withFacing, withSnowLayers, type Facing } from '../registry/blockState.ts';
 import { Biome, type BiomeDef } from './Biome.ts';
@@ -185,6 +185,22 @@ export class FeatureWriter {
     return true;
   }
 
+  /**
+   * **把水换成植物**（批次 50：海带与海草）。
+   *
+   * 这是"水里能长的植物"需要的那条新通道：`put` 只认空气与可替换方块，
+   * 而海带的落点那一格是**水**（流体方块占着它），所以照着 `put` 写会一格都种不下去。
+   * 这里反过来只认水：**那一格不是水就什么都不做**——
+   * 于是"海底没水的地方（沙滩上、干涸的坑里）"自然就长不出海带，不必再写一遍地形判断。
+   */
+  putInWater(worldX: number, worldY: number, worldZ: number, id: number): boolean {
+    if (this.get(worldX, worldY, worldZ) !== Block.WATER) return false;
+    const x = worldX - this.originX;
+    const z = worldZ - this.originZ;
+    this.blocks[Chunk.index(x, worldY, z)] = id;
+    return true;
+  }
+
   /** 强制写入（结构建造用，会覆盖既有方块） */
   fill(worldX: number, worldY: number, worldZ: number, id: number): boolean {
     if (worldY < WORLD_MIN_Y || worldY >= WORLD_MAX_Y) return false;
@@ -267,6 +283,40 @@ export class FeatureWriter {
       return this.get(worldX, y + 1, worldZ) === Block.AIR ? y + 1 : -1;
     }
     return -1;
+  }
+
+  /**
+   * 该列**海底正上方那一格水**的 y（海带/海草的落点）；这一列没有水就返回 -1。
+   *
+   * 与 `waterSurfaceAbove`（睡莲找"水面正上方那一格空气"）正好相反：这里要的是**最下面**
+   * 那一格水——它的下面就是海底（实心且不是流体），海带从那里往上长。
+   *
+   * 海底下面几格允许是任何实心方块：原版的海底是沙/砂砾/石头/泥土（深海多半是砂砾），
+   * 所以这里不能像花草那样只认 `SOIL`/`SANDY`（只认那两种的话深海海带会一根都长不出来）。
+   *
+   * 扫描范围取地表附近上下各 4 格：`surfaceY` 是粗网格估算，允许有 1~3 格误差。
+   */
+  waterFloorAbove(world: FeatureWorld, worldX: number, worldZ: number, depth = 4): number {
+    if (!this.owns(worldX, worldZ)) return -1;
+    const expect = world.surfaceY(worldX, worldZ) + 1;
+    for (let dy = 0; dy <= depth; dy++) {
+      const y = expect - dy;
+      if (this.isWaterOverFloor(worldX, y, worldZ)) return y;
+    }
+    for (let dy = 1; dy <= depth; dy++) {
+      const y = expect + dy;
+      if (this.isWaterOverFloor(worldX, y, worldZ)) return y;
+    }
+    return -1;
+  }
+
+  /** 这一格是不是"水，且下面躺着实心海底"（海带/海草的着床点） */
+  private isWaterOverFloor(worldX: number, worldY: number, worldZ: number): boolean {
+    if (this.get(worldX, worldY, worldZ) !== Block.WATER) return false;
+    const floor = this.get(worldX, worldY - 1, worldZ);
+    if (floor === OUTSIDE) return false;
+    const def = blockDef(floor);
+    return def.solid && !def.liquid;
   }
 
   /**
@@ -661,6 +711,15 @@ interface BiomeFeature {
    * 只会让这张表更难读。
    */
   berries?: number;
+  /**
+   * 海底长海带的密度（批次 50）：**省略 = 0**（只有海洋那一族写它）。
+   *
+   * 与原版一致的是"哪些群系有"：**冷水海洋没有海带**（原版 kelp 只在普通/深海/暖水海洋生成），
+   * 而海草四海皆有。
+   */
+  kelp?: number;
+  /** 海底长海草的密度（批次 50）：**省略 = 0** */
+  seagrass?: number;
 }
 
 const NO_FLOWERS: readonly number[] = [];
@@ -683,10 +742,26 @@ const EMPTY_FEATURE: BiomeFeature = {
  * ⚠️ 必须覆盖全部群系 id；下面的启动校验会拦住漏配的群系。
  */
 export const BIOME_FEATURES: Record<number, BiomeFeature> = {
-  [Biome.DEEP_OCEAN]: EMPTY_FEATURE,
-  [Biome.OCEAN]: { ...EMPTY_FEATURE, special: 'sugar_cane', specialDensity: 0.002 },
-  [Biome.FROZEN_OCEAN]: EMPTY_FEATURE,
-  [Biome.WARM_OCEAN]: { ...EMPTY_FEATURE, special: 'sugar_cane', specialDensity: 0.004 },
+  // ---- 海洋（批次 50）：海底的海带林与海草
+  // 密度是**按列**的（0.12 ≈ 每区块 30 列有海带；一株约 20 节长）。
+  // 深海最密（原版深海的海带最壮观）、普通海洋次之；
+  // **冷水海洋没有海带**（原版 kelp 不生成在冰冻海洋里），只有稀疏一点的海草；
+  // 暖水海洋原版也没有海带（那里是珊瑚），所以只给海草。
+  [Biome.DEEP_OCEAN]: { ...EMPTY_FEATURE, kelp: 0.12, seagrass: 0.25 },
+  [Biome.OCEAN]: {
+    ...EMPTY_FEATURE,
+    special: 'sugar_cane',
+    specialDensity: 0.002,
+    kelp: 0.08,
+    seagrass: 0.22,
+  },
+  [Biome.FROZEN_OCEAN]: { ...EMPTY_FEATURE, seagrass: 0.15 },
+  [Biome.WARM_OCEAN]: {
+    ...EMPTY_FEATURE,
+    special: 'sugar_cane',
+    specialDensity: 0.004,
+    seagrass: 0.2,
+  },
   [Biome.BEACH]: { ...EMPTY_FEATURE, special: 'sugar_cane', specialDensity: 0.02 },
   [Biome.STONY_SHORE]: EMPTY_FEATURE,
 
@@ -816,6 +891,8 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     mushrooms: 0.012,
     // 睡莲（原版就是沼泽的招牌景物；密度按列算，0.05 ≈ 每区块十几片）
     lilyPads: 0.05,
+    // 沼泽的浅水里也有海草（原版如此），比海洋稀疏得多
+    seagrass: 0.1,
     special: 'sugar_cane',
     specialDensity: 0.02,
   },
@@ -949,6 +1026,10 @@ export interface FeatureStats {
   berries?: number;
   /** 树干上挂出的可可豆荚数（批次 49） */
   cocoa?: number;
+  /** 海底长出的海带格数（批次 50：一株有好几节，所以这是"格数"不是"株数"） */
+  kelp?: number;
+  /** 海底长出的海草数（批次 50） */
+  seagrass?: number;
 }
 
 /**
@@ -1106,6 +1187,62 @@ function decorateLocal(w: FeatureWriter, world: FeatureWorld, seed: number, stat
         const y = w.waterSurfaceAbove(world, wx, wz);
         if (y < 0) continue;
         if (w.put(wx, y, wz, Block.LILY_PAD) && stats) stats.plants++;
+      }
+    }
+  }
+
+  // ---- 海底的海带与海草（批次 50）：**唯一一批"把水换成植物"的地物**
+  //
+  // 落点是"海底正上方那一格水"，写入走 `putInWater`（只认水）——
+  // 所以海底没水的地方（沙滩、干涸的坑）自然长不出来，不必再写一遍地形判断。
+  //
+  // 顺序上**先海带后海草**：海带的每一节都要求那一格还是水，
+  // 若先撒海草，被海草占住的那一列就再也长不出海带了（原版两者共存，
+  // 但"海底立着海带、脚边铺着海草"比"海底全是海草"更像原版观感）。
+  //
+  // 只写本区块拥有的列（`waterFloorAbove` 内部就判了）——与甘蔗/睡莲同一条规矩：
+  // 越过区块边界的写入一律不做，否则拥有者与邻居会算出两种结论。
+  const kelp = config.kelp ?? 0;
+  if (kelp > 0) {
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        const wx = originX + x;
+        const wz = originZ + z;
+        if (hashAt(wx, wz, seed ^ 0x4ae1) >= kelp) continue;
+        const base = w.waterFloorAbove(world, wx, wz);
+        if (base < 0) continue;
+        // 只种在"上面还有水"的地方（至少 2 格深）：**一格深的浅水整片就这一格水**，
+        // 换成海带之后水就没了——睡莲（要求下方是水）会长在水面以外的位置、
+        // 看起来像浮在半空。顺带也挡住"1 格小水洼里长海草"这种不像原版的画面。
+        if (w.get(wx, base + 1, wz) !== Block.WATER) continue;
+        // 顶端停在水面下 1~3 格（原版海带林就是这样：密而不到顶），
+        // 高度再由哈希决定，于是同一片海里既有贴底的短株也有高到快出水面的长株
+        const gap = 1 + Math.floor(hashAt(wx, wz, seed ^ 0x9c17) * 3);
+        const top = SEA_LEVEL - gap;
+        let height = top - base + 1;
+        if (height > KELP_MAX_HEIGHT) height = KELP_MAX_HEIGHT;
+        let placed = 0;
+        for (let h = 0; h < height; h++) {
+          if (!w.putInWater(wx, base + h, wz, Block.KELP)) break;
+          placed++;
+        }
+        if (placed > 0 && stats) stats.kelp = (stats.kelp ?? 0) + placed;
+      }
+    }
+  }
+
+  const seagrass = config.seagrass ?? 0;
+  if (seagrass > 0) {
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        const wx = originX + x;
+        const wz = originZ + z;
+        if (hashAt(wx, wz, seed ^ 0x5ea9) >= seagrass) continue;
+        const y = w.waterFloorAbove(world, wx, wz);
+        if (y < 0) continue;
+        // 与海带同一条：一格深的浅水不种（见上面那段注解）
+        if (w.get(wx, y + 1, wz) !== Block.WATER) continue;
+        if (w.putInWater(wx, y, wz, Block.SEAGRASS) && stats) stats.seagrass = (stats.seagrass ?? 0) + 1;
       }
     }
   }

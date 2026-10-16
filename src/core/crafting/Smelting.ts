@@ -100,6 +100,11 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 黏土球 → 红砖
   { input: Item.CLAY_BALL, output: { id: Item.BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.3 },
 
+  // 海带 → 干海带（批次 50）：原版 0.1 经验。
+  // 归 `none`（只有普通熔炉能做）：原版的烟熏炉只烧**食物**，而海带不是食物——
+  // 干海带才是。所以"海带 → 干海带"这条不能进烟熏炉，也不能进营火
+  { input: Block.KELP, output: { id: Item.DRIED_KELP, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
+
   // 石英块 → 平滑石英（批次 42，原版：平滑石英只能这么来）
   { input: Block.QUARTZ_BLOCK, output: { id: Block.SMOOTH_QUARTZ, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
 
@@ -191,6 +196,9 @@ const FUELS = new Map<number, number>([
   [Block.CHEST, 15],
   [Block.OAK_LEAVES, 5],
   [Item.STICK, 5],
+  // 干海带块（批次 50）：原版 4001 tick ≈ 200 秒 = **能烧 20 个东西**，
+  // 比煤炭（80 秒 = 8 个）还耐烧——这就是"海带农场"在原版里的意义（可再生燃料）
+  [Block.DRIED_KELP_BLOCK, 200],
 ]);
 
 /** 返回该物品作为燃料的可燃烧秒数；0 表示不能当燃料 */

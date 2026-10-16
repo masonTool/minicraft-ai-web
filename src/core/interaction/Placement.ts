@@ -89,6 +89,20 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
   const def = blockDef(input.blockId);
   const [nx, ny, nz] = input.normal;
 
+  // ---- 水里的植物（批次 50：海带与海草）
+  //
+  // 判据走方块定义上的 `waterPlant` 而不是某个 id：这一族以后还会加（珊瑚、海龟蛋…）。
+  //
+  // 与其它植物（`cross`）的区别就在这里：普通植物要求"落点是空气 + 下方是实心"，
+  // 而水里的植物**落点必须是水**（它替换掉那一格水），下方可以是实心方块
+  // （海底）或**同一种植物**（在已有的海带上再续一节，原版就是这样种出高海带的）。
+  if (def.waterPlant) {
+    if (input.blockAt(0, 0, 0) !== Block.WATER) return null;
+    const below = input.blockAt(0, -1, 0);
+    if (!blockDef(below).solid && below !== input.blockId) return null;
+    return { state: 0 };
+  }
+
   switch (def.shape) {
     case 'slab': {
       // 命中同一个台阶的竖直面 → 合并成双层（原版行为）

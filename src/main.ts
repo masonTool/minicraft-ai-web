@@ -190,6 +190,7 @@ import { BREW_SLOT_COUNT, BrewingStand } from './core/container/BrewingStand.ts'
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
 import { JUNGLE_LOG_ID } from './core/registry/blocks.ts';
+import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { CAMPFIRE_SIZE, Campfire } from './core/container/Campfire.ts';
 import { PrecipitationTicker } from './core/tick/Precipitation.ts';
 import { isLitState, withLitState } from './core/registry/blockState.ts';
@@ -2628,6 +2629,16 @@ class App {
       return;
     }
 
+    // 海带是一整株：拆掉任意一节，上面那几节跟着断（原版行为）。
+    // 不这么做的话，水里会留下一截从半空中长出来的海带——而方块本身看起来毫无问题。
+    if (brokenId === Block.KELP) {
+      this.breakKelpColumn(this.hit.x, this.hit.y, this.hit.z);
+      this.breakProgress = 0;
+      this.breakingKey = '';
+      this.breakCooldown = BREAK_COOLDOWN;
+      return;
+    }
+
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
     // 敲掉黑曜石 → 检查旁边的传送门还立不立得住（K8）：框一破，那一整片门方块跟着熄灭
@@ -2729,6 +2740,30 @@ class App {
         : withFenceGateOpen(state, !isFenceGateOpen(state));
     this.world.setBlockAndUpdate(x, y, z, id, next);
     this.audio.play('door', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+  }
+
+  /**
+   * 拆掉一整株海带（批次 50）。
+   *
+   * 从被拆的那一格往上，凡是海带都一起变成空气——原版拆海带的任意一节都会让上面几节断掉。
+   * 与门"整扇只掉一次"不同，海带是**每一节各掉 1 个**（原版如此，所以高海带一次能收一把）。
+   *
+   * 顺带唤醒流体：海带占的那一格本来是水，拔掉之后水里多了一个洞，
+   * 不唤醒的话那一格会一直空着（原版里海水会立刻合上）。
+   */
+  private breakKelpColumn(x: number, y: number, z: number): void {
+    for (let oy = y; oy < 320; oy++) {
+      const id = this.world.getBlock(x, oy, z);
+      if (id !== Block.KELP) break;
+      this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
+      this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
+      this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
+      // 创造模式不产生掉落（与原版一致）
+      if (this.flying) continue;
+      const drop = dropFor(id);
+      if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, oy + 0.5, z + 0.5);
+    }
+    this.wakeFluidsAround(x, y, z);
   }
 
   /** 拆掉整扇门（上下两半一起），整扇只掉落一次 */
@@ -3970,7 +4005,13 @@ class App {
     // "与玩家碰撞"这条同样要在**拿到放置方案之后**才判：合并类放置不往空格里放东西，
     // 低头给脚下的雪层加一层时 `(x,y,z)` 正好是玩家站着的格子，
     // 先判就会得到"站着的时候永远叠不上去"（原版是能叠的）。
-    if (!plan.mergeInto && !plan.mergeIntoTarget && this.physics.blockIntersects(x, y, z)) return;
+    //
+    // ⚠️ 但对**完全没有碰撞体的方块**（花、火把、藤蔓、水里的海带……）这一条不适用：
+    // 它们放下去也挡不住人，原版同样允许把它们放进自己站着的那一格。
+    // 海带正是这种情形——玩家多半是"浮在海底上方那一格、往脚下种"，先判会得到
+    // "怎么点都种不下去"，而放置规则本身没有任何问题（判据用形状的碰撞盒，不看 id）。
+    const collides = collisionBoxes(blockDef(blockId).shape, plan.state).length > 0;
+    if (!plan.mergeInto && !plan.mergeIntoTarget && collides && this.physics.blockIntersects(x, y, z)) return;
 
     // 台阶叠成双层 / 雪层叠高：改的是**命中方块自身**，不是命中面外侧那一格
     if (plan.mergeInto) {
