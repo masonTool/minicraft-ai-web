@@ -17,7 +17,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { BLOCKS, Block } from '../src/core/registry/blocks.ts';
+import { BLOCKS, Block, blockDef } from '../src/core/registry/blocks.ts';
 import { CREATIVE_ITEMS } from '../src/core/registry/items.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
 import { BIOMES } from '../src/core/gen/Biome.ts';
@@ -74,7 +74,23 @@ const SPEC = {
   locales: 2,
 } as const;
 
-const redstoneElements = BLOCKS.filter((_, id) => isRedstoneComponent(id)).length;
+/**
+ * 红石"元件种类"。
+ *
+ * ⚠️ 不能直接数 `isRedstoneComponent` 命中的**方块 id**：门 / 活板门 / 栅栏门是按形状判定的，
+ * 6 种木材的同一种门会被数成 18 种元件（加一种木材就 +3），覆盖率会凭空涨到 100%——
+ * 那是"分母不动、分子注水"，比手抄一个错数字更糟。所以这三类按**形状**各算 1 种，
+ * 其余元件按 id 数（它们没有"颜色变体"）。
+ */
+const openableShapes = new Set<string>();
+let redstoneKinds = 0;
+for (let id = 0; id < BLOCKS.length; id++) {
+  if (!isRedstoneComponent(id)) continue;
+  const shape = blockDef(id).shape;
+  if (shape === 'door' || shape === 'trapdoor' || shape === 'fence_gate') openableShapes.add(shape);
+  else redstoneKinds++;
+}
+const redstoneElements = redstoneKinds + openableShapes.size;
 const implementedEnchants = ENCHANTMENTS.filter((def) => def.implemented === true).length;
 /**
  * "可见方块"：排除空气与两种流体。
