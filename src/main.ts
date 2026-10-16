@@ -247,7 +247,10 @@ import {
   flowerPotIndexFor,
   pottedPlantItem,
   pottedPlantName,
+  stainedGlassId,
 } from './core/registry/blocks.ts';
+// 染料一律按**颜色名**查（批次 91 起）：写死下标会在配色表改动时静默做错颜色
+import { dyeIdByName } from './core/registry/items.ts';
 import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { Campfire } from './core/container/Campfire.ts';
 import type { DropperEnv } from './core/container/Dropper.ts';
@@ -473,6 +476,32 @@ export interface WorldConfig {
   difficulty: Difficulty;
 }
 
+/**
+ * **开发期必备的 12 件**（批次 94 加的）：与下面那张"各批验收物资"的表分开。
+ *
+ * 为什么要分开：背包只有 36 格，而 `STARTING_HOTBAR` 早就 70+ 件了——
+ * 之前靠"倒序填"来保证"最新那一批拿得到"，副作用是**最基础的草/土/石被挤掉了**
+ * （它们排在最前面，倒序填时最后才轮到）。那正好把最常用的几件弄丢了。
+ *
+ * 现在的填法：**先填这 12 件**（后面再从末尾倒着填验收物资时，同 id 会自动并进已占的格子，
+ * 所以它们其实被"保护"住了），再倒序填其余——于是"地基"与"最新一批"两头都在，
+ * 被牺牲的是中间那几批（旧的可以创造模式或 `/give` 补）。
+ */
+const DEV_BASE_KIT: readonly number[] = [
+  Block.GRASS_BLOCK,
+  Block.DIRT,
+  Block.STONE,
+  Block.COBBLESTONE,
+  Block.OAK_PLANKS,
+  Block.OAK_LOG,
+  Block.GLASS,
+  Block.GLOWSTONE,
+  Block.CRAFTING_TABLE,
+  toolItemId('pickaxe', 'iron'),
+  toolItemId('axe', 'iron'),
+  toolItemId('sword', 'iron'),
+];
+
 const STARTING_HOTBAR: readonly number[] = [
   Block.GRASS_BLOCK,
   Block.DIRT,
@@ -554,6 +583,22 @@ const STARTING_HOTBAR: readonly number[] = [
   Block.WEATHERED_COPPER_BLOCK,
   Block.OXIDIZED_COPPER_BLOCK,
   Block.CUT_COPPER,
+  // 开发期染料与染色族（批次 91）：三原色 + 两块被染过的方块，落地就能试"染料 → 染色"
+  dyeIdByName('red'),
+  dyeIdByName('blue'),
+  dyeIdByName('white'),
+  stainedGlassId(0),
+  Block.TERRACOTTA,
+  // 开发期下界要塞那一条链（批次 92）：灵魂沙 + 下界疣能当场种、刷怪笼能当场刷烈焰人、
+  // 烈焰棒/粉是酿造台的燃料与配方原料
+  Block.SOUL_SAND,
+  Item.NETHER_WART,
+  Block.NETHER_BRICKS,
+  Block.SPAWNER,
+  Item.BLAZE_ROD,
+  Item.BLAZE_POWDER,
+  // 开发期蜘蛛那一族（批次 93）：蜘蛛眼是"剧毒"唯一的原料，也是发酵蜘蛛眼的起点
+  Item.SPIDER_EYE,
 ];
 
 /**
@@ -1266,7 +1311,8 @@ class App {
     // 症状是"这一批的东西按说明试不出来"。
     // 倒序之后"最新那一批一定拿得到"，旧的靠创造模式或命令补。
     const skipped: string[] = [];
-    for (const itemId of [...STARTING_HOTBAR].reverse()) {
+    // 先"地基"（见 `DEV_BASE_KIT`），再倒序填各批验收物资
+    for (const itemId of [...DEV_BASE_KIT, ...[...STARTING_HOTBAR].reverse()]) {
       if (this.inventory.add(itemId, 64) > 0) skipped.push(itemLabel(itemId));
     }
     if (skipped.length > 0) {

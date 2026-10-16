@@ -258,6 +258,9 @@ console.log('\n[洞穴蜘蛛：更小、有毒、不自然刷]');
   equal('**命中让对方中毒 7 秒**（原版）', CAVE_SPIDER_TYPE.venom?.seconds, 7);
   equal('毒的类型是中毒', CAVE_SPIDER_TYPE.venom?.effect, 'poison');
   check('**不进自然生成表**（原版只从废弃矿井的刷怪笼来，矿井还没做）', CAVE_SPIDER_TYPE.naturalSpawn === false);
+  // ⚠️ 这两条是"少了点什么"，第一版抄蜘蛛时抄错了（原版洞穴蜘蛛既不会爬墙、也不看亮度）
+  check('**不会爬墙**（原版如此：垫两格就能躲开它）', CAVE_SPIDER_TYPE.climbing !== true);
+  check('**亮处也不中立**（矿井里见到就打，与亮度无关）', CAVE_SPIDER_TYPE.neutralInLight === undefined);
   check('所以它不在"会自然刷"的敌对表里', !HOSTILE_MOBS.includes(CAVE_SPIDER_TYPE));
   check('但它在"所有敌对生物"那一档里（击杀类进度要算它）', ALL_HOSTILE_MOBS.includes(CAVE_SPIDER_TYPE));
   check('所有敌对表里既有蜘蛛也有洞穴蜘蛛（吸血/烈焰人也算）', ALL_HOSTILE_MOBS.length === HOSTILE_MOBS.length + 2);
