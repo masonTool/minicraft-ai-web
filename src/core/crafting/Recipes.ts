@@ -168,6 +168,13 @@ const UTILITY_RECIPES: readonly Recipe[] = [
     pattern: ['BBB', 'BBB'],
     key: { B: Block.STONE_BRICKS },
   },
+  // 1 铁锭 + 2 铁粒 → 1 根锁链（B11；原版是竖着「粒-锭-粒」）
+  {
+    kind: 'shaped',
+    result: { id: Block.CHAIN, count: 1 },
+    pattern: ['N', 'I', 'N'],
+    key: { N: Item.IRON_NUGGET, I: Item.IRON_INGOT },
+  },
   // 7 木棍摆成 H 形 → 3 个梯子
   {
     kind: 'shaped',
@@ -387,6 +394,9 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     key: { I: Item.IRON_INGOT },
   },
   { kind: 'shapeless' as const, result: { id: Item.IRON_INGOT, count: 9 }, ingredients: [Block.IRON_BLOCK] },
+  // 铁锭 ↔ 铁粒（B11，原版两向都有）：9 粒合成 1 锭，1 锭拆成 9 粒
+  { kind: 'shapeless' as const, result: { id: Item.IRON_INGOT, count: 1 }, ingredients: [Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET] },
+  { kind: 'shapeless' as const, result: { id: Item.IRON_NUGGET, count: 9 }, ingredients: [Item.IRON_INGOT] },
   // ---- 酿造（H10）：3 玻璃 → 3 玻璃瓶（原版）
   {
     kind: 'shaped' as const,

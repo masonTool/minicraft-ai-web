@@ -613,6 +613,11 @@ export const TILE_ORDER = [
   'dark_oak_door',
   'dark_oak_trapdoor',
   'dark_oak_fence_gate',
+  // ---- 锁链与藤蔓（批次 39，B11 收口）：锁链只有中间那一条，四周透明
+  'chain',
+  'vine',
+  // 铁粒（B11）：锁链的原料
+  'item_iron_nugget',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

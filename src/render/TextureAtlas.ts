@@ -595,6 +595,16 @@ const PAINTERS: Record<string, Painter> = {
     ],
     'iironi',
   ),
+  // 铁粒（B11）：比铁锭小一圈的"一粒铁"，锁链的原料
+  item_iron_nugget: lump(
+    [
+      [216, 216, 220],
+      [180, 180, 186],
+      [140, 140, 148],
+    ],
+    'inugget',
+    3.4,
+  ),
   item_gold_ingot: ingot(
     [
       [252, 232, 120],
@@ -781,6 +791,47 @@ PAINTERS.torch = (x, y, rng) => {
   if (centered > 1.6 || y > 14) return [0, 0, 0, 0];
   const v = 148 - centered * 20 + (rng() * 12 - 6);
   return [clamp255(v * 1.05), clamp255(v * 0.78), clamp255(v * 0.44), 255];
+};
+
+/**
+ * 锁链（B11）：中间一串铁环，四周透明（alphaTest 会裁掉，看着就是一根细链）。
+ *
+ * 贴图必须**只画中间那几像素**：方块形状是 3/16 粗的细柱（`chain`），
+ * 画满整张贴图会变成一根方柱。
+ */
+PAINTERS.chain = (x, y, rng) => {
+  const dx = Math.abs(x - 7.5);
+  const phase = y % 4;
+  // 链身：4 像素宽，每 4 像素一个"亮-暗-亮-空"的循环，才像一环扣一环
+  if (dx <= 1.6) {
+    const shade = phase === 0 ? 0.72 : phase === 3 ? 0.86 : 1.06;
+    const v = 122 * shade + (rng() * 10 - 5);
+    return [clamp255(v), clamp255(v * 0.98), clamp255(v * 1.04), 255];
+  }
+  // 环的侧耳：每 4 像素在两侧各点一格，链节才看得出来
+  if (dx <= 2.6 && (phase === 1 || phase === 2)) {
+    const v = 98 + rng() * 12;
+    return [clamp255(v), clamp255(v * 0.98), clamp255(v * 1.04), 255];
+  }
+  return [0, 0, 0, 0];
+};
+
+/**
+ * 藤蔓（B11）：一条垂下来的叶串——中间是较深的藤茎，两侧是散开的叶子，背景全透明。
+ *
+ * 与树叶画笔的差别：树叶是"均匀颗粒"，藤蔓必须是**竖着的一条**，
+ * 否则挂在墙上看起来像一丛草。透明度只用 0 / 255（走 alphaTest 的镂空通道）。
+ */
+PAINTERS.vine = (x, y, rng) => {
+  const dist = Math.abs(x - 7.5);
+  // 越靠边越稀：边缘列有 85% 的像素被镂空，中间几乎不镂空
+  const edge = dist / 7.5;
+  if ((hashString(`vineedge${x},${y}`) % 100) / 100 < edge * 0.85) return [0, 0, 0, 0];
+  if ((hashString(`vinehole${x},${y}`) % 9) === 0) return [0, 0, 0, 0];
+  const stem = dist <= 2;
+  const base = stem ? [62, 100, 46] : [82, 142, 60];
+  const v = 1 + (rng() * 0.3 - 0.15);
+  return [clamp255(base[0]! * v), clamp255(base[1]! * v), clamp255(base[2]! * v), 255];
 };
 
 /** 梯子：两侧立杆 + 若干横档 */

@@ -142,6 +142,8 @@ export const Item = {
   // ---- 下界合金（K8 尾巴）：远古残骸烧成碎片，4 碎片 + 4 金锭 = 1 锭
   NETHERITE_SCRAP: 1155,
   NETHERITE_INGOT: 1156,
+  /** 铁粒（B11）：锁链的原料。1 铁锭 ↔ 9 铁粒（原版两向都有） */
+  IRON_NUGGET: 1157,
   // ---- 弓与箭（J9）
   FLINT: 1072,
   STRING: 1073,
@@ -201,6 +203,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.EMERALD, name: 'minecraft:emerald', tile: 'item_emerald' },
   { id: Item.STICK, name: 'minecraft:stick', tile: 'item_stick' },
   { id: Item.IRON_INGOT, name: 'minecraft:iron_ingot', tile: 'item_iron_ingot' },
+  // 铁粒（B11）：锁链的原料；原版由铁锭拆成 9 粒，也能 9 粒合成 1 锭
+  { id: Item.IRON_NUGGET, name: 'minecraft:iron_nugget', tile: 'item_iron_nugget' },
   { id: Item.GOLD_INGOT, name: 'minecraft:gold_ingot', tile: 'item_gold_ingot' },
   { id: Item.COPPER_INGOT, name: 'minecraft:copper_ingot', tile: 'item_copper_ingot' },
   { id: Item.CHARCOAL, name: 'minecraft:charcoal', tile: 'item_charcoal' },
@@ -664,6 +668,8 @@ const ORES = new Set<number>([
   Item.RAW_COPPER,
   Item.RAW_GOLD,
   Item.IRON_INGOT,
+  // 铁粒跟着铁锭归"矿石与材料"（B11）
+  Item.IRON_NUGGET,
   Item.GOLD_INGOT,
   Item.COPPER_INGOT,
   Item.REDSTONE,
@@ -777,6 +783,8 @@ const NO_DROP = new Set<number>([
   // 草与蕨类：原版徒手破坏不掉落任何东西（只有用剪刀才会掉落草方块本身）
   Block.SHORT_GRASS,
   Block.FERN,
+  // 藤蔓（B11）：徒手/斧头打掉什么都不掉，只有剪刀或精准采集能完整带走（见 `CUTTABLE`）
+  Block.VINE,
 ]);
 
 // 6 种木材的树叶都不掉落方块本身（原版徒手破坏树叶只偶尔掉树苗与苹果；
@@ -889,15 +897,19 @@ const SHEARS_ONLY = new Set<number>();
 for (let i = 0; i < DYE_COLORS.length; i++) SHEARS_ONLY.add(woolId(i));
 
 /**
- * 树叶：剪刀与**精准采集**都能完整带走（原版两样都行）。
- * 和羊毛的区别就在这里——羊毛只认剪刀，精准采集对它无效。
+ * "剪刀与精准采集都能完整带走"的方块。
+ *
+ * 和羊毛的区别就在这里——羊毛只认剪刀，精准采集对它无效（见 `SHEARS_ONLY`）。
+ * 树叶与藤蔓属于这一类（原版两样都行）。
  */
-const LEAVES = new Set<number>([
+const CUTTABLE = new Set<number>([
   // 橡木是"基础方块"，不在 `Wood` 表里，得单独写一行
   // （踩过一次：批量注册时漏掉橡木，表现为"砍云杉有加速、砍橡木没有"）
   Block.OAK_LEAVES,
+  // 藤蔓（B11）：剪刀或精准采集都能把它整根摘下来
+  Block.VINE,
 ]);
-for (const ids of Object.values(Wood)) LEAVES.add(ids.leaves);
+for (const ids of Object.values(Wood)) CUTTABLE.add(ids.leaves);
 
 /** 这个方块是不是"不剪就一无所获"（只有羊毛） */
 export function requiresShears(blockId: number): boolean {
@@ -938,8 +950,8 @@ export function blockDrops(blockId: number, ctx: DropContext): { id: number; cou
     return { id: drop.id, count: base * fortuneMultiplier(blockId, ctx.fortune, ctx.roll()) };
   };
 
-  // 1) 剪刀：羊毛与树叶都能"完整带走"（原版剪刀就是这两样的专用工具）
-  const shearsTakes = ctx.shears && (SHEARS_ONLY.has(blockId) || LEAVES.has(blockId));
+  // 1) 剪刀：羊毛、树叶与藤蔓都能"完整带走"（原版剪刀就是这几样的专用工具）
+  const shearsTakes = ctx.shears && (SHEARS_ONLY.has(blockId) || CUTTABLE.has(blockId));
   // 2) 精准采集：能"完整带走"的都生效，但**对羊毛无效**——
   //    原版羊毛的掉落判定只认剪刀（`is(WOOL) && tool.is(ShearsItem)`），
   //    写成"精准采集也能拿羊毛"是个很容易漏掉的偏差

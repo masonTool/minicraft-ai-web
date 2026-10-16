@@ -12,9 +12,11 @@
 import { blockDef } from './blocks.ts';
 import {
   FACING_OFFSET,
+  axisOf,
   doorHinge,
   facingOf,
   fluidHeight,
+  hasVineUp,
   isDoorOpen,
   isFenceGateOpen,
   isSlabDouble,
@@ -22,6 +24,7 @@ import {
   isTrapdoorOpen,
   isWallMounted,
   snowHeight,
+  vineSides,
   type BlockShape,
   type Facing,
 } from './blockState.ts';
@@ -127,6 +130,12 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       return fenceGateBoxes(state);
     case 'cactus':
       return [CACTUS_BOX];
+    case 'chain':
+      // 锁链有碰撞，但只有 3/16 粗：站在它正中间会撞到，偏一点就走过去了
+      return chainBoxes(state);
+    case 'vine':
+      // 藤蔓没有碰撞（原版可以穿过去）——它是"挂在墙上的一层叶子"
+      return [];
     case 'torch':
     case 'ladder':
     case 'cross':
@@ -299,6 +308,12 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       return torchBoxes(state);
     case 'ladder':
       return ladderBoxes(state);
+    case 'chain':
+      // 与碰撞盒共用同一份几何（免得"看着细、撞着粗"）
+      return chainBoxes(state);
+    case 'vine':
+      // 每个挂面一片 1/16 厚的薄片（最多 5 片：四个侧面 + 顶面）
+      return vineBoxes(state);
     case 'cactus':
       return [CACTUS_BOX];
     case 'flat':
@@ -481,6 +496,61 @@ function torchBoxes(state: number): readonly LocalBox[] {
   const cx = 0.5 + d[0] * 0.32;
   const cz = 0.5 + d[1] * 0.32;
   return [[cx - half, 0.1875, cz - half, cx + half, 0.8125, cz + half]];
+}
+
+/**
+ * 锁链（B11）：3/16 粗的细柱，方向由轴向决定。
+ *
+ * 原版 `ChainBlock` 的碰撞盒是 `box(6.5, 0, 6.5, 9.5, 16, 9.5)`——就是 3/16 见方，
+ * 所以照抄这个尺寸：站着不动撞得到，偏一格就走过去了。
+ */
+const CHAIN_HALF = 3 / 32;
+
+function chainBoxes(state: number): readonly LocalBox[] {
+  const lo = 0.5 - CHAIN_HALF;
+  const hi = 0.5 + CHAIN_HALF;
+  switch (axisOf(state)) {
+    case 1:
+      return [[0, lo, lo, 1, hi, hi]];
+    case 2:
+      return [[lo, lo, 0, hi, hi, 1]];
+    default:
+      return [[lo, 0, lo, hi, 1, hi]];
+  }
+}
+
+/**
+ * 藤蔓（B11）：每个挂面一片 1/16 厚的薄片。
+ *
+ * 与原版的差别（已记录到 TASKS）：原版是一张**平面四边形**，这里用 1/16 厚的薄盒
+ * （与梯子同一套路），代价是薄片的侧边也会露出来一点点。
+ * 好处是几何完全走现有的"盒子"通道，网格化器不用为它开一条新路径。
+ */
+const VINE_THICKNESS = 1 / 16;
+
+function vineBoxes(state: number): readonly LocalBox[] {
+  const t = VINE_THICKNESS;
+  const boxes: LocalBox[] = [];
+  for (const facing of vineSides(state)) {
+    switch (facing) {
+      case 0:
+        // 北面：墙在自己北边（-Z），薄片贴在 z ∈ [0, 1/16]
+        boxes.push([0, 0, 0, 1, 1, t]);
+        break;
+      case 1:
+        boxes.push([1 - t, 0, 0, 1, 1, 1]);
+        break;
+      case 2:
+        boxes.push([0, 0, 1 - t, 1, 1, 1]);
+        break;
+      default:
+        boxes.push([0, 0, 0, t, 1, 1]);
+        break;
+    }
+  }
+  // 顶面：挂在天花板底下的一层
+  if (hasVineUp(state)) boxes.push([0, 1 - t, 0, 1, 1, 1]);
+  return boxes;
 }
 
 /** 梯子：贴在朝向那一侧的薄片 */

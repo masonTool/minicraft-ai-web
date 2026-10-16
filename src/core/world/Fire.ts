@@ -98,6 +98,9 @@ for (let i = 0; i < DYE_COLORS.length; i++) {
   FLAMMABLE.add(carpetId(i));
 }
 
+// 藤蔓（B11）：原版会烧，而且容易把火带到树冠上
+FLAMMABLE.add(Block.VINE);
+
 // 其余 5 种木材：原木 / 木板 / 树叶 / 台阶 / 楼梯
 for (const ids of Object.values(Wood)) {
   FLAMMABLE.add(ids.log);

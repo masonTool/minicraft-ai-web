@@ -298,6 +298,8 @@ requirePickaxe(0, [
   Block.IRON_BLOCK,
   // 锻造台（K8 尾巴）：原版要镐但对等级没有要求——任何镐都能采到
   Block.SMITHING_TABLE,
+  // 锁链（B11）：原版同样是"要镐、不限等级"（徒手挖得动但什么都不掉）
+  Block.CHAIN,
 ]);
 // 书架：原版是"斧更快、徒手也能采到"，所以只进加速表不进需求表
 EFFICIENT_TOOL.set(Block.BOOKSHELF, 'axe');
@@ -351,6 +353,9 @@ for (let index = 0; index < SHAPED_PARENTS.length; index++) {
 }
 
 // ---- 加速表：斧头砍木、锹挖土
+// 藤蔓（B11）：原版归 `mineable/axe`（斧头更快），但它掉不掉取决于剪刀/精准采集，
+// 所以只进加速表、不进需求表——与羊毛"剪刀"那条同一个道理（见下面羊毛那段的注解）
+EFFICIENT_TOOL.set(Block.VINE, 'axe');
 for (const id of [
   Block.OAK_FENCE,
   Block.OAK_DOOR,

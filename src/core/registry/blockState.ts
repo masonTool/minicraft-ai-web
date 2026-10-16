@@ -61,6 +61,23 @@ export type BlockShape =
    * 变的只有几何高度——而几何本来就吃状态（`meshBoxes(shape, state)`）。
    */
   | 'snow'
+  /**
+   * 锁链（B11）：一根细柱，**轴向存在状态里**（竖直挂着 / 沿 X 横拉 / 沿 Z 横拉）。
+   *
+   * 为什么需要状态：原木也是"柱状"，但它是整格立方体，朝向只影响贴图、不影响几何；
+   * 锁链只有 3/16 粗，轴向会同时改变碰撞盒与渲染盒，所以必须落进状态。
+   *
+   * 基岩版（本项目的复刻目标）里**锁链可以攀爬**，所以它同时是"可攀爬方块"之一。
+   */
+  | 'chain'
+  /**
+   * 藤蔓（B11）：贴在方块某一面（或天花板底下）的薄片，**可以同时挂好几面**。
+   *
+   * 与原版一致：4 个水平面 + 顶面各占一个状态位，所以"一个藤蔓方块"能同时挂住
+   * 相邻的两个墙面——这正是它与梯子的差别（梯子只有 1 个朝向）。
+   * 没有碰撞（穿得过去）、能攀爬、会自己往下长也会往旁边蔓延。
+   */
+  | 'vine'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -341,6 +358,75 @@ export function snowHeight(state: number): number {
   return snowLayers(state) / MAX_SNOW_LAYERS;
 }
 
+// ---------------------------------------------------------------- 锁链：轴向
+//
+// 用 bit0-1：锁链这一族既不用 TOP 也不用 FACING/WALL_MOUNT，直接借低位即可——
+// 与文件开头那条约定一致（**不同形状族可以共用位**，因为一个方块只会属于一族）。
+
+/** 柱状方块的轴向：0 = 竖直（Y）、1 = 沿 X、2 = 沿 Z */
+export type Axis = 0 | 1 | 2;
+
+const AXIS_MASK = 0b11;
+
+export const AXIS_NAMES: readonly string[] = ['竖直', '沿 X', '沿 Z'];
+
+export function axisOf(state: number): Axis {
+  return (state & AXIS_MASK) as Axis;
+}
+
+export function withAxis(state: number, axis: Axis): number {
+  return (state & ~AXIS_MASK) | (axis & AXIS_MASK);
+}
+
+// ---------------------------------------------------------------- 藤蔓：五个挂面
+//
+// 位分配：bit0-3 = 北(-Z) / 东(+X) / 南(+Z) / 西(-X)，bit4 = 顶面（挂在天花板底下）。
+// 藤蔓这一族不用 TOP/FACING/WALL_MOUNT，所以这 5 位都可以借。
+//
+// ⚠️ 语义："挂着北面"＝藤蔓贴在格子的北侧（墙在自己的北边），
+// 与 `Facing` 的方向语义一致（0=北、1=东、2=南、3=西）。
+
+const VINE_BIT_BY_FACING: readonly number[] = [0b1, 0b10, 0b100, 0b1000];
+const VINE_UP_BIT = 0b10000;
+
+export function hasVineSide(state: number, facing: Facing): boolean {
+  return (state & VINE_BIT_BY_FACING[facing]!) !== 0;
+}
+
+export function withVineSide(state: number, facing: Facing, on = true): number {
+  const bit = VINE_BIT_BY_FACING[facing]!;
+  return on ? state | bit : state & ~bit;
+}
+
+export function hasVineUp(state: number): boolean {
+  return (state & VINE_UP_BIT) !== 0;
+}
+
+export function withVineUp(state: number, on = true): number {
+  return on ? state | VINE_UP_BIT : state & ~VINE_UP_BIT;
+}
+
+/** 挂了几个面（0 = 什么都不挂，这样的藤蔓随时该消失） */
+export function vineSideCount(state: number): number {
+  let count = hasVineUp(state) ? 1 : 0;
+  for (const bit of VINE_BIT_BY_FACING) if ((state & bit) !== 0) count++;
+  return count;
+}
+
+/** 全部水平挂面（渲染与"该不该消失"的判定用） */
+export function vineSides(state: number): readonly Facing[] {
+  const out: Facing[] = [];
+  for (let facing = 0; facing < 4; facing++) {
+    if ((state & VINE_BIT_BY_FACING[facing]!) !== 0) out.push(facing as Facing);
+  }
+  return out;
+}
+
+/** 这个状态里有没有"挂着北/东/南/西/顶"其中任意一面 */
+export function hasAnyVineSide(state: number): boolean {
+  return vineSideCount(state) > 0;
+}
+
 // ---------------------------------------------------------------- 调试
 
 export function describeState(shape: BlockShape, state: number): string {
@@ -361,6 +447,13 @@ export function describeState(shape: BlockShape, state: number): string {
       return `${FACING_NAMES[facingOf(state)]}${isFenceGateOpen(state) ? '·开' : '·关'}`;
     case 'snow':
       return `${snowLayers(state)} 层`;
+    case 'chain':
+      return AXIS_NAMES[axisOf(state)] ?? '';
+    case 'vine': {
+      const sides: string[] = vineSides(state).map((facing) => FACING_NAMES[facing]);
+      if (hasVineUp(state)) sides.push('顶');
+      return sides.length > 0 ? `挂${sides.join('/')}` : '悬空（应当消失）';
+    }
     default:
       return '';
   }

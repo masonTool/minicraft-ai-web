@@ -1097,6 +1097,47 @@ const SNOW_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 锁链与藤蔓（B11 收口）
+
+/**
+ * 锁链（B11）：3/16 粗的细柱，**轴向存在状态里**（竖着挂 / 沿 X / 沿 Z）。
+ *
+ * - **有碰撞**：原版 `ChainBlock` 的盒子是 3/16 见方（`box(6.5,0,6.5,9.5,16,9.5)`），照抄
+ * - 不遮挡邻居、不挡光（挂在天花板上的锁链不该让下面变暗）
+ * - **可以攀爬**（基岩版特性——本项目复刻的是基岩版，见 `PlayerPhysics` 的攀爬分支）
+ * - 硬度 5、**必须用镐**（原版 `requiresCorrectToolForDrops`：徒手挖得动但什么都不掉）
+ */
+const CHAIN_SPECS: readonly BlockSpec[] = [
+  {
+    id: 333,
+    name: 'minecraft:chain',
+    tiles: ['chain', 'chain', 'chain'],
+    shape: 'chain',
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
+/**
+ * 藤蔓（B11）：贴在方块侧面或天花板底下的薄片，**一个方块能同时挂 5 面**。
+ *
+ * - **没有碰撞**（原版穿得过去）、不遮挡邻居、不挡光
+ * - **可以攀爬**（与梯子一样：按跳跃往上、按潜行往下）
+ * - 硬度 0.2；**只有剪刀或精准采集才掉自身**，徒手/斧头打掉什么都不掉（原版规则）
+ * - 可燃（原版藤蔓会烧）
+ */
+const VINE_SPECS: readonly BlockSpec[] = [
+  {
+    id: 334,
+    name: 'minecraft:vine',
+    tiles: ['vine', 'vine', 'vine'],
+    shape: 'vine',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -1118,6 +1159,8 @@ const SPECS: readonly BlockSpec[] = [
   ...CARPET_SPECS,
   ...SNOW_SPECS,
   ...WOOD_SHAPED_SPECS,
+  ...CHAIN_SPECS,
+  ...VINE_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1303,6 +1346,10 @@ export const Block = {
   /** 下界合金（K8 尾巴）：储物方块与锻造台 */
   NETHERITE_BLOCK: 293,
   SMITHING_TABLE: 294,
+  /** 锁链（B11）：3/16 粗的细柱，可攀爬；悬挂式告示牌以后会挂在它上面 */
+  CHAIN: 333,
+  /** 藤蔓（B11）：可攀爬、能蔓延，一个方块能同时挂 5 面 */
+  VINE: 334,
   /** 睡莲（B16）：水面上的平铺叶片，id 接在最大 id 之后 */
   LILY_PAD: 295,
   /** 雪层（B11）：层数在状态里（1~8 层），id 单独一个 */
@@ -1477,6 +1524,9 @@ for (const ids of Object.values(WoodShaped)) {
 }
 HARDNESS.set(Block.TORCH, 0);
 HARDNESS.set(Block.LADDER, 0.4);
+// 锁链 5（原版，必须用镐）；藤蔓 0.2（原版，徒手一拍就掉，但只有剪刀/精准采集会掉下来）
+HARDNESS.set(Block.CHAIN, 5);
+HARDNESS.set(Block.VINE, 0.2);
 // 附魔台 5（必须钻石镐）、书架 1.5（斧更快，徒手也能采）
 HARDNESS.set(Block.FARMLAND, 0.6);
 HARDNESS.set(Block.BREWING_STAND, 0.5);
@@ -1633,6 +1683,10 @@ for (const ids of Object.values(WoodShaped)) {
   HAND_HARVESTABLE.add(ids.door);
   HAND_HARVESTABLE.add(ids.trapdoor);
 }
+
+// 藤蔓（B11）：徒手能打掉（什么都不掉），剪刀才是"采下来"的工具——见 items.ts 的掉落表。
+// 锁链不在这里：它**必须用镐**，登记在 tools.ts 的 REQUIRED_TOOL 里。
+HAND_HARVESTABLE.add(Block.VINE);
 HAND_HARVESTABLE.add(Block.TORCH);
 HAND_HARVESTABLE.add(Block.LADDER);
 
@@ -1748,6 +1802,18 @@ export function blockHardness(id: number): number {
 
 export function isHandHarvestable(id: number): boolean {
   return HAND_HARVESTABLE.has(id);
+}
+
+/**
+ * 这一格能不能攀爬（B11）：梯子 / 藤蔓 / 锁链。
+ *
+ * 锁链可攀爬是**基岩版**特性（本项目复刻的正是基岩版；Java 版不行）。
+ * 按**形状**判定而不是列方块 id：加一种木材、以后加铁梯子都自动跟上——
+ * 这正是"同族方块的行为一律按形状判定"那条经验（批次 38 踩过）。
+ */
+export function isClimbableBlock(id: number): boolean {
+  const shape = blockDef(id).shape;
+  return shape === 'ladder' || shape === 'vine' || shape === 'chain';
 }
 
 // 注：破坏耗时的计算在 `tools.ts` 的 `breakSeconds`（需要工具的等级与速度），
