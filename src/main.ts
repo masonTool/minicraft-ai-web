@@ -509,6 +509,10 @@ class App {
     // 火焰被雨浇灭要判"露不露天"（I12）：这里必须是**天光**，
     // 方块光会被火焰自己的 15 级照满，拿它当判据等于"在洞里也在下雨"
     skyLightAt: (x, y, z) => this.world.getSkyLight(x, y, z),
+    // 雪层融化只看**方块光**（K11）：白天的天光不会把雪晒化
+    blockLightAt: (x, y, z) => this.world.getBlockLight(x, y, z),
+    // "这里正在下雪吗"＝正在降水 **且** 这一列是寒冷群系（原版就是按列判的）
+    snowingAt: (x, _y, z) => this.weather.raining && this.isSnowyColumn(x, z),
     // `raining` 每 tick 现写（见 `tickWorldBlocks`）——天气是变量，
     // 用 getter 会拿到 `this` 指向对象本身而不是 App 实例
     raining: false,

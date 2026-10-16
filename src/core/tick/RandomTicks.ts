@@ -16,7 +16,16 @@
 
 import { Block, CROP_STAGES, blockDef, cropOf, Wood } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
-import { FACING_OFFSET, withVineSide, withVineUp, vineSides, type Facing } from '../registry/blockState.ts';
+import {
+  FACING_OFFSET,
+  MAX_SNOW_LAYERS,
+  snowLayers,
+  withSnowLayers,
+  withVineSide,
+  withVineUp,
+  vineSides,
+  type Facing,
+} from '../registry/blockState.ts';
 import { fireBehavior } from '../world/Fire.ts';
 import { COPPER_IDS, copperWeatherBehavior } from '../world/Copper.ts';
 
@@ -39,6 +48,18 @@ export interface TickWorld {
   skyLightAt?: (x: number, y: number, z: number) => number;
   /** 是否正在下雨（雨天露天的火焰会被浇灭）；不传当不下雨 */
   raining?: boolean;
+  /**
+   * 该点的**方块光**（0~15）。
+   * 雪层融化只看方块光（原版 `getBrightness(BLOCK, pos) > 11`）——
+   * 白天的天光 15 **不会**把雪晒化，所以不能复用 `lightAt`（它是天光与方块光的较大者）。
+   */
+  blockLightAt?: (x: number, y: number, z: number) => number;
+  /**
+   * 该点是否正在**下雪**（下雨 + 该列是寒冷群系）。
+   * 原版是"雨天在寒冷群系按列下雪"，所以判据是**按位置**的，
+   * 一个全局的 `raining` 不够用（雨地里不该积雪）。
+   */
+  snowingAt?: (x: number, y: number, z: number) => boolean;
   /**
    * 读方块状态（藤蔓要读"挂了哪几面"）。
    * 与其它可选成员同一套路：不传当 0，离线测试不必搭一套状态数组。
@@ -274,6 +295,54 @@ function vineBehavior(world: TickWorld, x: number, y: number, z: number, random:
   return writeVine(world, nx, y, nz, withVineSide(0, wallSide));
 }
 
+// ---------------------------------------------------------------- 雪层（K11 收尾）
+
+/** 一次随机刻让雪层长高一层的概率（观感值：原版是"每个区块每 tick 抽几个点"的另一套节奏） */
+export const SNOW_ACCUMULATE_CHANCE = 0.12;
+/** 融化阈值：**方块光**大于它就融化（原版 `> 11`，正好是"火把旁边会化、萤石会化"） */
+export const SNOW_MELT_LIGHT = 11;
+
+/**
+ * 雪层（K11 收尾）：下雪时越积越高、被方块光烤到时融化。
+ *
+ * 两条规则都对齐原版语义：
+ *  1. **融化**：方块光 > 11 → **减一层**（只剩 1 层就整块消失），并且**掉 1 个雪球**
+ *     （原版 `SnowLayerBlock#randomTick` 里是先 `dropResources` 再移除）。
+ *     ⚠️ 只看方块光：白天的天光 15 不会把雪晒化——这是"雪在白天不化"的原因。
+ *  2. **积雪**：正在下雪（雨天 + 寒冷群系）+ **露天**（天光 15，说明头顶没遮挡）→ 长高一层，
+ *     封顶 `MAX_SNOW_LAYERS`（8 层 = 整格）。
+ *
+ * ⚠️ 与原版的差异（已记进 TASKS）：原版的"新雪"是**区块级降水刻**（`tickChunk` 里随机取点，
+ * 空气处直接铺一层），本项目没有那条通道，所以**只有已经存在的雪层会越积越高**；
+ * "光秃秃的地面自己长出第一层雪"要等区块级降水刻落地（见 TASKS K11）。
+ */
+function snowBehavior(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const layers = snowLayers(world.getState?.(x, y, z) ?? 0);
+
+  // 1) 融化（只看方块光）
+  const blockLight = world.blockLightAt?.(x, y, z) ?? 0;
+  if (blockLight > SNOW_MELT_LIGHT) {
+    if (layers <= 1) {
+      world.setBlock(x, y, z, Block.AIR);
+    } else if (world.setBlockWithState) {
+      world.setBlockWithState(x, y, z, Block.SNOW, withSnowLayers(0, layers - 1));
+    } else {
+      world.setBlock(x, y, z, Block.SNOW);
+    }
+    // 原版融化会掉雪球（所以"火把边上铲雪"是能收集到雪球的）
+    world.drop?.(Item.SNOWBALL, 1, x, y, z);
+    return true;
+  }
+
+  // 2) 积雪：下雪 + 露天 + 没到满格
+  if (layers >= MAX_SNOW_LAYERS) return false;
+  if (world.snowingAt?.(x, y, z) !== true) return false;
+  if ((world.skyLightAt?.(x, y, z) ?? 0) < 15) return false; // 15 = 头顶直接见天
+  if (random() >= SNOW_ACCUMULATE_CHANCE) return false;
+  if (world.setBlockWithState) return world.setBlockWithState(x, y, z, Block.SNOW, withSnowLayers(0, layers + 1));
+  return world.setBlock(x, y, z, Block.SNOW);
+}
+
 /** 方块 id → 随机刻行为 */
 export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.GRASS_BLOCK, grassBehavior],
@@ -293,6 +362,8 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.VINE, vineBehavior],
   // 铜的氧化（批次 40）：16 个铜方块都要登记——随机刻是按"当前这个 id"查行为的
   ...COPPER_IDS.map((id) => [id, copperWeatherBehavior] as const),
+  // 雪层（K11 收尾）：下雪时越积越高、被方块光烤到时融化
+  [Block.SNOW, snowBehavior],
 ]);
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */
