@@ -42,15 +42,32 @@
         --panel-edge-dark: #565656;
         --panel-text: #2b2b2b;
         --panel-text-muted: #5a5a5a;
-        --panel-shadow: 0 14px 44px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .55);
-        --panel-radius: 6px;
+        /* 硬投影（批次 108）：原来是 44px 的柔光，跟"像素风"是两种语言；
+           现在是一圈 2px 硬描边 + 一块不带模糊的偏移，像贴纸一样贴在画面上 */
+        --panel-shadow: 0 8px 0 rgba(0, 0, 0, .35), 0 0 0 2px rgba(0, 0, 0, .55);
+        --panel-radius: 0;
+
+        /* ---- 像素斜角（批次 108） ----
+           原版 GUI 里**没有一个圆角、也没有柔和投影**：面板与按钮都是直角，
+           四周是一圈"左上亮、右下暗"的硬边，按下去时斜角翻过来（像被按进去）。
+           这两个变量就是那圈斜角的四边颜色，用法：`border-color: var(--pixel-bevel)`。
+           ⚠️ 直角是靠把下面那几个 `--*-radius` 全设成 0 实现的，**不要**在这里写
+           `border-radius: 0 !important`——触摸端那几颗圆形按钮、准星、血条图标
+           本来就是圆的，一刀切会把它们也压成方块。 */
+        --pixel-bevel: var(--panel-edge-light) var(--panel-edge-dark) var(--panel-edge-dark) var(--panel-edge-light);
+        --pixel-bevel-in: var(--panel-edge-dark) var(--panel-edge-light) var(--panel-edge-light) var(--panel-edge-dark);
+        /* 深色面板（主菜单 / 暂停菜单）用同一套斜角，四色整体压暗一档 */
+        --pixel-bevel-dark: #6f7480 #0a0b0e #0a0b0e #6f7480;
+        /* 深色底**上面**的按钮（主菜单那几颗）：亮边用白色半透明，暗边用黑色半透明 */
+        --pixel-bevel-on-dark: rgba(255, 255, 255, .42) rgba(0, 0, 0, .62) rgba(0, 0, 0, .62) rgba(255, 255, 255, .42);
+        --pixel-bevel-on-dark-in: rgba(0, 0, 0, .62) rgba(255, 255, 255, .42) rgba(255, 255, 255, .42) rgba(0, 0, 0, .62);
 
         /* ---- 槽位 ---- */
         --slot-bg: #8b8b8b;
         --slot-bg-hover: #9e9e9e;
         --slot-edge-light: #ffffff;
         --slot-edge-dark: #373737;
-        --slot-radius: 3px;
+        --slot-radius: 0;
 
         /* ---- 按钮 ---- */
         --btn-bg: linear-gradient(#b8b8b8, #a0a0a0);
@@ -60,7 +77,7 @@
         --btn-danger: linear-gradient(#c96a6a, #7d3a3a);
         --btn-danger-down: linear-gradient(#6d3232, #b05f5f);
         --btn-text: #1c1c1c;
-        --btn-radius: 4px;
+        --btn-radius: 0;
 
         /* ---- 输入框 ---- */
         --field-bg: #f2f2f2;
@@ -91,10 +108,12 @@
         --warn: #e8d24c;
         --danger: #ff8a7a;
 
-        /* ---- 圆角与时长 ---- */
-        --radius-sm: 3px;
-        --radius-md: 6px;
-        --radius-lg: 10px;
+        /* ---- 圆角与时长 ----
+           ⚠️ 三个圆角全为 0（批次 108）：这是"像素风"最省事也最有效的一刀——
+           所有走令牌的面板/卡片/按钮/槽位瞬间变成直角，不必逐个去改字面量。 */
+        --radius-sm: 0;
+        --radius-md: 0;
+        --radius-lg: 0;
         --dur-fast: .12s;
         --dur-med: .22s;
         --ease: cubic-bezier(.2, .7, .3, 1);
@@ -172,11 +191,14 @@
       #world-screen.hidden { display: none; }
       .world-panel {
         width: min(94vw, 560px);
-        background: linear-gradient(#212228f2, #17181cf7);
-        border: 1px solid #ffffff24; border-radius: var(--radius-lg);
+        /* 像素风（批次 108）：不透明底色 + 直角 + "左上亮、右下暗"的斜角。
+           原来的 `backdrop-filter: blur(6px)` 去掉了——磨砂玻璃和像素风是两种语言，
+           而且在低端安卓上那是一层真实的离屏合成开销。 */
+        background: linear-gradient(#212228, #17181c);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        border-radius: 0;
         padding: 18px 20px 16px; font-size: 13px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .06);
-        backdrop-filter: blur(6px);
+        box-shadow: 0 8px 0 rgba(0, 0, 0, .45), 0 0 0 2px #000;
       }
       .world-title {
         font-size: 21px; display: block; letter-spacing: 1px;
@@ -276,7 +298,7 @@
       .recipe-panel {
         width: min(96vw, 780px); max-height: 90vh; overflow-y: auto;
         background: var(--panel-bg);
-        border: 3px solid var(--panel-edge-dark);
+        border: 3px solid; border-color: var(--pixel-bevel);
         border-radius: var(--panel-radius);
         padding: 12px 14px; color: var(--panel-text); font-size: 13px;
         box-shadow: var(--panel-shadow);
@@ -438,6 +460,7 @@
         padding: 14px 16px;
         min-width: min(360px, 92vw); max-width: 92vw;
         background: var(--panel-bg); color: var(--panel-text);
+        border: 3px solid; border-color: var(--pixel-bevel);
         border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
       }
       .sign-editor-title { font-size: 14px; font-weight: 600; text-align: center; }
@@ -598,10 +621,11 @@
       .settings-panel {
         width: min(92vw, 420px); max-height: 88vh; overflow-y: auto;
         background: linear-gradient(#232429, #17181c); color: #eee;
-        border-radius: var(--radius-lg);
+        /* 像素风（批次 108）：直角 + 斜角硬边（与主菜单面板同一套） */
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        border-radius: 0;
         padding: 16px 18px 18px; font-size: 13px;
-        border: 1px solid #ffffff24;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .06);
+        box-shadow: 0 8px 0 rgba(0, 0, 0, .45), 0 0 0 2px #000;
         /* 标题栏 / 页签 / 设置项 / 动作按钮 / 存档信息 五段用 order 排，而不是靠 DOM 顺序：
            同一份 DOM 要在两种排法之间切换——桌面是"按钮在上、四组连着列"，
            手机是"页签在上、设置项居中、动作按钮垫底"。为两种排法各建一套 DOM，
@@ -620,11 +644,14 @@
       .settings-close {
         flex: 0 0 auto; width: 40px; height: 36px;
         font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
-        color: #e8e8e8; background: rgba(255, 255, 255, .1);
-        border: 1px solid #ffffff33; border-radius: var(--btn-radius);
-        transition: background var(--dur-fast) var(--ease);
+        color: rgba(255, 255, 255, .9); background: #33343b;
+        /* 像素斜角：与面板同色系，只是亮边更亮一档（深色底上要看得见立体感） */
+        border: 2px solid;
+        border-color: rgba(255, 255, 255, .38) rgba(0, 0, 0, .55) rgba(0, 0, 0, .55) rgba(255, 255, 255, .38);
+        border-radius: 0;
+        transition: transform var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease);
       }
-      .settings-close:active { background: rgba(255, 255, 255, .24); }
+      .settings-close:active { transform: translateY(1px); filter: brightness(.9); }
       /* 分组页签：默认（宽屏与高屏手机）隐藏——四组设置一次全展开，用不着分页；
          只有矮屏手机上才显示，那时它就是"一次只看一组"的分页（见文件下半部分） */
       .settings-tabs { display: none; order: 1; gap: 6px; flex: 0 0 auto; }
@@ -659,40 +686,53 @@
       .settings-row input[type="checkbox"] {
         justify-self: start;
         appearance: none; -webkit-appearance: none;
-        width: 44px; height: 24px; border-radius: 999px;
-        background: #3a3b42; border: 1px solid #ffffff26;
+        width: 46px; height: 24px;
+        /* 未打开时是"凹"的：斜角反过来用（左上暗、右下亮） */
+        border: 2px solid; border-color: var(--pixel-bevel-in);
+        background: #2a2b31;
         position: relative; cursor: pointer; margin: 0;
         transition: background var(--dur-fast) var(--ease);
       }
       .settings-row input[type="checkbox"]::after {
-        content: ''; position: absolute; top: 2px; left: 2px;
-        width: 18px; height: 18px; border-radius: 50%;
+        content: ''; position: absolute; top: 1px; left: 1px;
+        width: 18px; height: 18px;
         background: #d8d8d8;
         transition: transform var(--dur-med) var(--ease), background var(--dur-fast) var(--ease);
       }
-      .settings-row input[type="checkbox"]:checked { background: var(--accent); }
-      .settings-row input[type="checkbox"]:checked::after { transform: translateX(20px); background: #fff; }
+      .settings-row input[type="checkbox"]:checked {
+        background: var(--accent); border-color: var(--pixel-bevel);
+      }
+      .settings-row input[type="checkbox"]:checked::after { transform: translateX(23px); background: #fff; }
       /* ---------------- 滑杆（range 自绘） ---------------- */
+      /* 像素风（批次 108）：滑轨是"凹进去"的一条硬边槽，滑块是一块**方块**。
+         用 inset 硬阴影而不是 border：border 会把 track 撑高，thumb 的
+         `margin-top` 就对不上了（那条 -5px 是靠 20 与 10 的差算出来的）。 */
       .settings-row input[type="range"] {
         appearance: none; -webkit-appearance: none;
         width: 100%; height: 22px; background: transparent; cursor: pointer;
       }
       .settings-row input[type="range"]::-webkit-slider-runnable-track {
-        height: 6px; border-radius: 3px;
-        background: #3a3b42; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .6);
+        height: 10px;
+        background: #2a2b31;
+        box-shadow: inset 2px 2px 0 rgba(0, 0, 0, .55), inset -2px -2px 0 rgba(255, 255, 255, .12);
       }
       .settings-row input[type="range"]::-webkit-slider-thumb {
         appearance: none; -webkit-appearance: none;
-        width: 16px; height: 16px; border-radius: 50%;
+        width: 12px; height: 20px;
         margin-top: -5px; background: var(--accent);
-        border: 2px solid #e8ffe0; box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+        border: none;
+        box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .45), inset -2px -2px 0 rgba(0, 0, 0, .45),
+                    0 0 0 2px rgba(0, 0, 0, .6);
       }
       .settings-row input[type="range"]::-moz-range-track {
-        height: 6px; border-radius: 3px; background: #3a3b42;
+        height: 10px; background: #2a2b31;
+        box-shadow: inset 2px 2px 0 rgba(0, 0, 0, .55), inset -2px -2px 0 rgba(255, 255, 255, .12);
       }
       .settings-row input[type="range"]::-moz-range-thumb {
-        width: 14px; height: 14px; border-radius: 50%;
-        background: var(--accent); border: 2px solid #e8ffe0;
+        width: 12px; height: 20px; border: none;
+        background: var(--accent);
+        box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .45), inset -2px -2px 0 rgba(0, 0, 0, .45),
+                    0 0 0 2px rgba(0, 0, 0, .6);
       }
       /* 分类小标题：设置项变多之后需要分组，否则一长条看不清 */
       .settings-group {
@@ -710,7 +750,8 @@
 
       .settings-row select.settings-select {
         grid-column: 2 / 4; width: 100%; padding: 4px 6px; font: inherit; font-size: 12px;
-        background: #2a2a2d; color: #eee; border: 1px solid #ffffff33; border-radius: 3px;
+        background: #2a2a2d; color: #eee;
+        border: 2px solid; border-color: var(--pixel-bevel-in); border-radius: 0;
       }
 
       /* ---------------- 手机端：设置面板改成"紧凑卡片"（批次 107） ----------------
@@ -731,7 +772,7 @@
         width: min(96vw, 520px); max-width: 520px;
         height: auto; max-height: min(92vh, 760px);
         padding: 14px 16px 12px;
-        border: 1px solid #ffffff24; border-radius: var(--radius-lg);
+        border: 3px solid; border-color: var(--pixel-bevel-dark); border-radius: 0;
         /* 唯一滚动的是里面那块设置区（见 `.settings-body`），面板自己不滚 */
         overflow: hidden;
       }
@@ -759,11 +800,12 @@
       }
       body.touch-mode .settings-row input[type="range"] { height: 36px; }
       body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
-        width: 20px; height: 20px; margin-top: -7px;
+        width: 16px; height: 24px; margin-top: -7px;
       }
-      body.touch-mode .settings-row input[type="checkbox"] { width: 46px; height: 26px; }
+      body.touch-mode .settings-row input[type="checkbox"] { width: 50px; height: 26px; }
       body.touch-mode .settings-row input[type="checkbox"]::after { width: 20px; height: 20px; }
-      body.touch-mode .settings-row input[type="checkbox"]:checked::after { transform: translateX(20px); }
+      /* 50 - 2×2(边框) - 1(左) - 20(滑块) = 25：滑到底时右边正好留 1px */
+      body.touch-mode .settings-row input[type="checkbox"]:checked::after { transform: translateX(25px); }
       body.touch-mode .settings-row select.settings-select { font-size: 13px; padding: 6px; }
 
       /* 矮屏（横屏手机）：一屏放不下四组设置，这时才退回"分组页签 + 一次一组"
@@ -939,7 +981,8 @@
 
       .inv-panel {
         background: var(--panel-bg);
-        border: 3px solid var(--panel-edge-dark);
+        /* 像素斜角（批次 108）：左上亮、右下暗的一圈硬边，直角 */
+        border: 3px solid; border-color: var(--pixel-bevel);
         border-radius: var(--panel-radius);
         padding: 14px 16px;
         /* 贴合内容：固定 660px 时"主背包"右边会空出一大片灰（看着像没排好版） */
@@ -1563,7 +1606,7 @@
       .adv-panel {
         width: min(96vw, 760px); max-height: 90vh; overflow-y: auto;
         background: var(--panel-bg);
-        border: 3px solid var(--panel-edge-dark);
+        border: 3px solid; border-color: var(--pixel-bevel);
         border-radius: var(--panel-radius);
         padding: 12px 14px; color: var(--panel-text); font-size: 13px;
         box-shadow: var(--panel-shadow);
@@ -1633,6 +1676,63 @@
       .adv-toast.challenge .adv-toast-label { color: #dcb0f0; }
       .adv-toast-name { font-size: 12px; }
 
+      /* ================================================================
+         像素风收口（批次 108）
+         ================================================================
+         上面那些"走令牌"的元素（面板 / 槽位 / 按钮圆角 / 阴影）已经跟着 :root 里的
+         `--*-radius: 0` 与新的 `--panel-shadow` 变成直角 + 硬边了。这一节收的是
+         **没走令牌的字面量**：深色菜单里那几颗按钮的斜角，以及一批写了具体圆角的
+         提示条 / 标签 / 底衬。
+
+         ⚠️ 为什么是一条长选择器列表，而不是 `* { border-radius: 0 !important }`：
+         准星、触摸端那几颗圆形按钮、血条图标本来就是圆的，一刀切会把它们也压成方块。
+         列清单虽然长，但每一处都能一眼判断"该不该方"。
+         ================================================================ */
+      :is(.world-primary, .world-secondary, .world-mini, .world-back,
+          .world-card-actions button, .settings-buttons button,
+          .overlay-go, .unsupported-button) {
+        border: 2px solid;
+        border-color: var(--pixel-bevel-on-dark);
+        border-radius: 0;
+        box-shadow: none;
+      }
+      :is(.world-primary, .world-secondary, .world-mini, .world-back,
+          .world-card-actions button, .settings-buttons button,
+          .overlay-go, .unsupported-button):not(:disabled):active {
+        border-color: var(--pixel-bevel-on-dark-in);
+      }
+      /* 输入类控件（主菜单的新建表单）：凹进去的一圈硬边 */
+      .world-input, .chat-input {
+        border: 2px solid; border-color: var(--pixel-bevel-on-dark-in);
+        border-radius: 0;
+      }
+      /* 其余写着具体圆角的方框（提示条 / 标签 / 底衬 / 聊天记录） */
+      :is(#debug, #overlay kbd, .inv-header kbd, .inv-label::before, .inv-panel kbd,
+          #item-tooltip, .adv-badge, .adv-toast, #chat .chat-line, .chat-send,
+          #xp-bar, #xp-fill, #xp-level, #boss-bar, #break-progress,
+          #selected-item-name, #touch-hint, .unsupported-panel,
+          #chat, .chat-log, .sign-editor-hint) {
+        border-radius: 0;
+      }
+      #item-tooltip { box-shadow: 0 6px 0 rgba(0, 0, 0, .4), 0 0 0 2px rgba(0, 0, 0, .55); }
+      .adv-toast { box-shadow: 0 4px 0 rgba(0, 0, 0, .4); }
+
+      /* ---------------- 界面不许横向滑动（批次 108） ----------------
+         ⚠️ 这是一个**真出现过**的问题：用户反馈"界面能左右晃"。
+         根因是 `overflow-y: auto` 会把另一轴的 `visible` **计算成 auto**
+         （CSS 规范里那条"一个轴非 visible、另一个轴 visible 就变 auto"），
+         于是只要有一条内容比容器宽 1px，整屏就能被左右拖动。
+         这几层都是"整屏遮罩 + 竖着滚"，横着一律锁死；
+         `overscroll-behavior: contain` 再挡住"滚到头把页面一起拖走"的连锁效果。 */
+      :is(#world-screen, #settings-screen, #inventory-screen, #advancements,
+          #recipe-book, #chat, #sign-editor, .adv-panel, .inv-panel, .recipe-panel,
+          .settings-panel, .world-panel, .world-list, .settings-body) {
+        overflow-x: hidden;
+        overscroll-behavior: contain;
+      }
+      /* ⚠️ 刻意**不**包含 `.inv-tabs`：那一行分类标签是"单行横向滚动"的
+         （窄屏上一个都换行不下），锁掉就不会滚了（见 `ui-test` 里那条断言）。 */
+
       /* ---------------- 减少动效（无障碍） ----------------
          系统里开了"减少动态效果"就把动画与过渡全部关掉：
          前庭功能敏感的人不该被面板缩放、脉冲这类动画晃到。
@@ -1675,11 +1775,13 @@
           <kbd>左键</kbd> 破坏 · <kbd>右键</kbd> 放置 · <kbd>1</kbd>-<kbd>9</kbd> 切换方块 ·
           <kbd>F</kbd> 创造/飞行 · <kbd>V</kbd> 切换人称视角 · <kbd>Esc/E</kbd> 菜单与背包
         </div>
-        <!-- 触屏：手势说明 -->
+        <!-- 触屏：手势说明（批次 107 改过一次按钮布局，这里的措辞要跟着改，
+             否则玩家会去找一颗不存在的"视角/飞行"键） -->
         <div class="overlay-help touch-only">
           左摇杆移动 · 拖动屏幕转视角<br />
           轻点放置 / 交互 · 长按破坏<br />
-          右下角图标依次是：聊天 · 视角 · 飞行 · 潜行 · 背包 · 跳跃
+          右下角是跳跃与潜行 · 背包在快捷栏右边、聊天在左边<br />
+          双击跳跃起飞（创造模式）· 视角与飞行在暂停菜单的设置里
         </div>
       </div>
     </div>

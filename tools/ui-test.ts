@@ -486,6 +486,42 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
 }
 
+console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+
+  // ① 直角：令牌是唯一口径，逐条钉住（漏一条就会出现"面板直、按钮圆"的混搭）
+  for (const token of ['--panel-radius: 0;', '--slot-radius: 0;', '--btn-radius: 0;', '--radius-sm: 0;', '--radius-md: 0;', '--radius-lg: 0;']) {
+    check(`圆角令牌压平：${token}`, compact.includes(token));
+  }
+  // ② 像素斜角：四边颜色的令牌 + 三个使用点（浅色面板 / 深色面板 / 深色底上的按钮）
+  check(
+    '定义了对角斜角令牌（左上亮、右下暗）',
+    compact.includes('--pixel-bevel: var(--panel-edge-light) var(--panel-edge-dark) var(--panel-edge-dark) var(--panel-edge-light);'),
+  );
+  check(
+    '浅色面板（背包/配方书/成就/告示牌）用浅色斜角',
+    compact.includes('border: 3px solid; border-color: var(--pixel-bevel);'),
+  );
+  check(
+    '深色面板（主菜单/暂停菜单）用深色斜角',
+    compact.includes('border: 3px solid; border-color: var(--pixel-bevel-dark); border-radius: 0;'),
+  );
+  check('深色底上的按钮用半透明斜角', compact.includes('border-color: var(--pixel-bevel-on-dark);'));
+  // ③ 投影变硬（像素风不要 44px 的柔光）
+  check('面板投影是硬边而不是柔光', compact.includes('--panel-shadow: 0 8px 0 rgba(0, 0, 0, .35), 0 0 0 2px rgba(0, 0, 0, .55);'));
+  // ④ 开关/滑杆不再是胶囊与圆点（这两处是最容易被当成"遗留下来的老样式"的地方）
+  check('开关的滑块是方块', !/checkbox"\]::after \{[^}]*border-radius: 50%/.test(compact));
+  check('滑杆的滑块是方块', !/range"\]::-webkit-slider-thumb \{[^}]*border-radius: 50%/.test(compact));
+
+  // ⑤ "界面能左右滑"是一条真出现过的 bug：`overflow-y: auto` 会把另一轴
+  //    的 `visible` 计算成 `auto`，于是整屏能被左右拖动。锁死这条规则不能被删掉。
+  const lockRule = /:is\(#world-screen[\s\S]*?\) \{[^}]*overflow-x: hidden; overscroll-behavior: contain; \}/.exec(compact);
+  check('整屏遮罩锁死横向滚动', !!lockRule);
+  check('没有把分类标签的单行横向滚动一起锁掉', !!lockRule && !lockRule[0].includes('.inv-tabs'));
+}
+
 console.log('\n[进游戏首页默认全屏]');
 {
   // Node 里没有 document：这两个函数必须安静地退化，而不是抛（`boot()` 会在桌面上也调它）
