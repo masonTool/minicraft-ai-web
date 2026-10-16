@@ -451,6 +451,8 @@ console.log('\n[触发种类：没有"只有代码没有数据"的死支路]');
     'fish',
     'sleep',
     'dragon',
+    // 与村民交易（批次 88，J11 接上来的）
+    'trade',
   ];
   const unused = expected.filter((kind) => !used.has(kind));
   check('每一种触发条件都有条目在用', unused.length === 0, unused.join(','));

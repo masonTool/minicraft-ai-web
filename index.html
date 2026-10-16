@@ -862,6 +862,26 @@
       .stonecutter-option canvas { width: 28px; height: 28px; image-rendering: pixelated; }
       .stonecutter-option:active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
 
+      /* ---------------- 村民交易（J11，批次 88） ---------------- */
+      /* 一条交易 = [他收的] → [他给的] + 剩余次数：比原版那套"两个收货格"更适合手指 */
+      .trade-info { display: flex; flex-direction: column; gap: 4px; min-width: 150px; flex: 1; }
+      .trade-level { display: flex; flex-direction: column; gap: 2px; }
+      .trade-who { font-size: 14px; color: var(--panel-text); }
+      .trade-xp { font-size: 12px; color: #4a4a4a; }
+      .trade-list { flex-direction: column; align-items: stretch; }
+      .trade-option { flex-wrap: wrap; }
+      /* 交易两边的图标都小一号（一屏要放 6~8 条） */
+      .trade-option canvas { width: 24px; height: 24px; }
+      .trade-cost, .trade-gain { display: flex; align-items: center; gap: 2px; }
+      .trade-cost span, .trade-gain span { font-size: 12px; }
+      .trade-arrow { color: #3a3a3a; padding: 0 2px; }
+      .trade-uses { margin-left: auto; font-size: 11px; color: #4a4a4a; }
+      .trade-note { flex-basis: 100%; font-size: 11px; color: #8a3a3a; }
+      /* 材料不够 / 次数用完：整条压暗（**不用 disabled**——禁用的按钮收不到悬停提示，
+         而"为什么不能点"正是玩家最需要看到的；点击时也给提示） */
+      .trade-option.blocked { filter: brightness(.82); }
+      .trade-option.blocked .trade-gain { opacity: .6; }
+
       /* ---------------- 营火（批次 47） ---------------- */
       /* 4 个格子排成一行，每格下面一条自己的进度条 */
       .campfire-grid { display: flex; gap: 8px; flex-wrap: wrap; }

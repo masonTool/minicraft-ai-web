@@ -80,7 +80,7 @@ export interface EntityContext {
    * 取值必须是音频模块里真实存在的 kind（多写一个不存在的名字会在运行时静默无声）。
    */
   playSound?: (
-    kind: 'fuse' | 'explode' | 'bow_shoot' | 'arrow_hit' | 'break_glass' | 'splash',
+    kind: 'fuse' | 'explode' | 'bow_shoot' | 'arrow_hit' | 'break_glass' | 'splash' | 'mob_villager',
     x: number,
     y: number,
     z: number,

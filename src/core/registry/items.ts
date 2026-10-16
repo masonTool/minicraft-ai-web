@@ -1430,3 +1430,28 @@ export function dropFor(blockId: number): { id: number; count: number } | null {
   if (itemDef(blockId) === undefined) return null;
   return { id: blockId, count: 1 };
 }
+
+/**
+ * 挖方块**有可能**掉出来的全部物品 id（含替换掉落、区间掉落与稀有掉落）。
+ *
+ * `dropFor()` 只回答"这一格挖掉掉什么"这一件事，而有三类掉落不在它的答案里：
+ * 砂砾掉燧石（`REPLACE_DROPS`）、鎏金黑石掉金粒（`COUNT_RANGE_DROPS`）、
+ * **树叶掉苹果/树苗**（`RARE_DROPS`，那是"额外再掉一份"）。
+ *
+ * 存在的理由与 `fishingEntryIds()` 一样：给**可达性断言**用。
+ * 反查"某某东西拿得到吗"时漏掉这几张表，就会把苹果误判成拿不到
+ * ——而苹果明明能从树叶里刷出来（批次 88 做村民交易时当场踩到）。
+ */
+export function possibleBlockDropIds(): Set<number> {
+  const ids = new Set<number>();
+  for (const blockId of Object.values(Block)) {
+    const drop = dropFor(blockId);
+    if (drop) ids.add(drop.id);
+  }
+  for (const entry of REPLACE_DROPS.values()) ids.add(entry.id);
+  for (const entry of COUNT_RANGE_DROPS.values()) ids.add(entry.id);
+  for (const list of RARE_DROPS.values()) {
+    for (const entry of list) ids.add(entry.id);
+  }
+  return ids;
+}

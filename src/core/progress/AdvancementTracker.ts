@@ -116,6 +116,8 @@ export class AdvancementTracker {
         return !trigger.ids || trigger.ids.includes(event.block) ? String(event.block) : null;
       case 'fish':
         return !trigger.ids || trigger.ids.includes(event.item) ? String(event.item) : null;
+      case 'trade':
+        return '';
       case 'kill':
         return !trigger.mobs || trigger.mobs.includes(event.mob) ? event.mob : null;
       case 'breed':

@@ -301,9 +301,15 @@ console.log('\n[战斗与掉落]');
 
 console.log('\n[生物表]');
 {
-  check('生物表包含 7 种生物（3 敌对 + 4 被动）', MOB_TYPES.length === 7, `${MOB_TYPES.length}`);
+  check('生物表包含 8 种生物（3 敌对 + 4 被动动物 + 村民）', MOB_TYPES.length === 8, `${MOB_TYPES.length}`);
   check('敌对生物有攻击力', MOB_TYPES.filter((t) => t.hostile).every((t) => t.attackDamage > 0));
-  check('被动生物不掉落空表', MOB_TYPES.filter((t) => !t.hostile).every((t) => t.drops.length > 0));
+  // 村民（J11，批次 88）是**刻意的例外**：原版杀掉村民什么都不掉也不给经验
+  //（掉了就等于鼓励玩家屠村），所以它进不了"被动生物都有掉落"这条里
+  check(
+    '被动动物都有掉落，村民没有（原版如此）',
+    MOB_TYPES.filter((t) => !t.hostile && t.id !== 'villager').every((t) => t.drops.length > 0) &&
+      MOB_TYPES.find((t) => t.id === 'villager')!.drops.length === 0,
+  );
   check('所有生物都有正的生命与尺寸', MOB_TYPES.every((t) => t.health > 0 && t.width > 0 && t.height > 0));
 }
 

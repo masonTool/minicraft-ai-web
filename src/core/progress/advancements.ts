@@ -57,6 +57,13 @@ export type ProgressEvent =
   | { readonly kind: 'dimension'; readonly dimension: string }
   /** 钓上来一件东西 */
   | { readonly kind: 'fish'; readonly item: number }
+  /**
+   * 与村民成交一笔（J11，批次 88）。
+   *
+   * 不带任何字段：原版那条"这是什么？"就是"做过一次交易"，
+   * 将来要加"用某种东西换"再在这里补 `item`（那时才需要它）。
+   */
+  | { readonly kind: 'trade' }
   /** 睡了一觉（睡到天亮） */
   | { readonly kind: 'sleep' }
   /** 末影龙倒地 */
@@ -364,6 +371,16 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     desc: '在床上睡到天亮（天黑后右键床）',
     icon: Block.BED,
     trigger: { kind: 'sleep' },
+  },
+  {
+    // 与村民交易（J11，批次 88）：原版 `adventure/trade`（"这是什么？"）
+    id: 'minecraft:adventure/trade',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '这是什么？',
+    desc: '与村民成交一笔交易（先给他一个工作站认领职业）',
+    icon: Item.EMERALD,
+    trigger: { kind: 'trade' },
   },
   {
     id: 'minecraft:adventure/breed_an_animal',

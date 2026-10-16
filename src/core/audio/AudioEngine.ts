@@ -46,7 +46,14 @@ export type SoundKind =
    * 单开一种而不是复用 `click`：达成是**值得记住的一刻**，
    * 与"点了什么"共用一声会让玩家分不清（这条与本项目的"音效要能分辨"同一个理由）。
    */
-  | 'achievement';
+  | 'achievement'
+  /** 村民的"嗯…"（J11，批次 88）：低沉的喉音，认领职业与闲着时都会来一声 */
+  | 'mob_villager'
+  /**
+   * 成交（J11）：一声干脆的双音"叮"。
+   * 不复用 `click`：成交是"钱货两清"，手感要更实在一点（而且它总与进度/升级挨着响）。
+   */
+  | 'trade';
 
 interface SoundSpec {
   /** 声音总时长（秒） */
@@ -113,6 +120,10 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   // 达成进度（M7）：清亮的双音铃（正弦 + 很高的中心频率，没有噪声成分——
   // 一耳朵就与"破坏方块"那一族区分开）。滑音就是从低音"滑"到高音的那一下。
   achievement: { duration: 0.9, gain: 0.42, noise: 0, freqFrom: 880, freqTo: 1568, type: 'sine', filter: 4200, filterQ: 0.7, attack: 0.01, release: 0.85 },
+  // 村民的"嗯…"（J11，批次 88）：低沉的喉音，带一点抖动（原版是那句著名的 huh）
+  mob_villager: { duration: 0.5, gain: 0.34, noise: 0.12, freqFrom: 300, freqTo: 210, type: 'sawtooth', filter: 1100, filterQ: 2.2, attack: 0.05, release: 0.44, thump: 95 },
+  // 成交（J11）：两声干脆的"叮"（原版是硬币落袋；这里用两个高音短音代替）
+  trade: { duration: 0.26, gain: 0.34, noise: 0.08, freqFrom: 1200, freqTo: 1800, type: 'triangle', filter: 5200, filterQ: 1.6, attack: 0.002, release: 0.24 },
 };
 
 /**

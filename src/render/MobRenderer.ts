@@ -16,7 +16,9 @@
 import * as THREE from 'three';
 import { BABY_SCALE, type Mob } from '../core/entity/Mob.ts';
 import type { MobType } from '../core/entity/Mob.ts';
+import { Villager } from '../core/entity/Villager.ts';
 import { DYE_COLORS } from '../core/registry/colors.ts';
+import { VILLAGER_IDLE_ROBE, VILLAGER_SKIN_COLOR } from '../core/registry/villagerTrades.ts';
 
 /** 剪过毛的羊露出的贴身皮色（原版是把羊毛那层隐藏掉，我们只有一份颜色可用） */
 export const SHEARED_BODY_COLOR = 0xd9c3ad;
@@ -24,11 +26,14 @@ export const SHEARED_BODY_COLOR = 0xd9c3ad;
 /**
  * 一只生物身上那层该用什么颜色（导出是为了能离线断言）。
  *
- * 目前只有羊会变：
- *  - 没剪过 → 用羊毛的颜色（`DYE_COLORS[woolColor]`，默认白色，与原版 81% 白羊一致）
- *  - 剪过   → 换成贴身皮色，玩家一眼能看出"这只已经剪了"
+ * 两种生物会变：
+ *  - **羊**：没剪过 → 用羊毛的颜色（`DYE_COLORS[woolColor]`，默认白色，与原版 81% 白羊一致）；
+ *    剪过 → 换成贴身皮色，玩家一眼能看出"这只已经剪了"
+ *  - **村民**（J11）：主色是**皮肤**（头与手），长袍的颜色走 `mobAccentColor`
+ *    （认领职业后换成职业色）
  */
 export function mobBodyColor(mob: Mob): number {
+  if (mob instanceof Villager) return VILLAGER_SKIN_COLOR;
   if (!mob.type.wool) return mob.type.bodyColor;
   if (mob.sheared) return SHEARED_BODY_COLOR;
   const dye = DYE_COLORS[mob.woolColor];
@@ -37,11 +42,36 @@ export function mobBodyColor(mob: Mob): number {
   return (r << 16) | (g << 8) | b;
 }
 
-type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal';
+/**
+ * 点缀色（村民的长袍、羊与牛的角/腿色都在这儿）。
+ *
+ * 村民是唯一**会随状态变化**的一处：无业是褐色外衣，认领了工作站就换成职业色
+ * ——站在村里一眼能认出谁是农民、谁是牧师（原版靠衣服 + 徽章，我们只有颜色）。
+ */
+export function mobAccentColor(mob: Mob): number {
+  if (mob instanceof Villager) return mob.profession?.robeColor ?? VILLAGER_IDLE_ROBE;
+  return mob.type.accentColor;
+}
+
+/**
+ * 外观版本（变了就重建模型）。
+ *
+ * 羊是"剪没剪"、村民是"哪个职业"——这都是**同一只生物身上的状态**，
+ * 而模型的颜色是在 `createVisual` 里定死的。不收成一个字符串的话，
+ * 加第二种"会变色的生物"就得再写一处 if（本项目的坑之一）。
+ */
+export function mobAppearanceKey(mob: Mob): string {
+  if (mob.type.wool) return mob.sheared ? 'sheared' : 'woolly';
+  if (mob instanceof Villager) return mob.appearanceKey;
+  return '';
+}
+
+type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal' | 'villager';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
   if (typeId === 'end_crystal') return 'crystal';
+  if (typeId === 'villager') return 'villager';
   if (typeId === 'chicken') return 'bird';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   return 'humanoid';
@@ -75,6 +105,39 @@ function humanoidBoxes(type: MobType): BoxSpec[] {
     { width: headSize, height: headSize, depth: headSize, x: 0, y: headY, z: 0, color: 'body' },
     { width: w * 0.16, height: w * 0.1, depth: w * 0.06, x: -headSize * 0.22, y: headY + headSize * 0.1, z: headSize * 0.5, color: 'eye' },
     { width: w * 0.16, height: w * 0.1, depth: w * 0.06, x: headSize * 0.22, y: headY + headSize * 0.1, z: headSize * 0.5, color: 'eye' },
+  ];
+}
+
+/**
+ * 村民（J11，批次 88）：人形 + **大鼻子** + **抱在胸前的双臂**。
+ *
+ * 这两处是"一眼认出这是村民"的关键（原版那个 8×10×8 的脑袋上最显眼的就是鼻子）。
+ * 颜色分工：`body` = 皮肤（头/手/鼻子）、`accent` = 长袍（躯干/腿/袖口）——
+ * 长袍色按职业换，见 `mobAccentColor`。
+ */
+function villagerBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const legHeight = type.height * 0.42;
+  const bodyHeight = type.height * 0.36;
+  const bodyY = legHeight + bodyHeight / 2;
+  const headSize = w * 0.82;
+  const headY = legHeight + bodyHeight + headSize / 2;
+
+  return [
+    // 两条腿（长袍下摆）
+    { width: w * 0.3, height: legHeight, depth: w * 0.3, x: -w * 0.22, y: legHeight / 2, z: 0, color: 'accent' },
+    { width: w * 0.3, height: legHeight, depth: w * 0.3, x: w * 0.22, y: legHeight / 2, z: 0, color: 'accent' },
+    // 躯干
+    { width: w, height: bodyHeight, depth: w * 0.5, x: 0, y: bodyY, z: 0, color: 'accent' },
+    // 抱在胸前的一条胳膊（原版村民双手交叠；做成一根横在胸前的方块最省事也最像）
+    { width: w * 0.92, height: w * 0.16, depth: w * 0.22, x: 0, y: bodyY + bodyHeight * 0.12, z: w * 0.34, color: 'accent' },
+    // 头（皮肤色）
+    { width: headSize, height: headSize, depth: headSize * 0.92, x: 0, y: headY, z: 0, color: 'body' },
+    // 大鼻子：贴在脸的正中间、往前伸
+    { width: w * 0.22, height: w * 0.3, depth: w * 0.26, x: 0, y: headY - headSize * 0.04, z: headSize * 0.5, color: 'body' },
+    // 双眼（在鼻子两侧）
+    { width: w * 0.14, height: w * 0.09, depth: w * 0.06, x: -headSize * 0.26, y: headY + headSize * 0.14, z: headSize * 0.48, color: 'eye' },
+    { width: w * 0.14, height: w * 0.09, depth: w * 0.06, x: headSize * 0.26, y: headY + headSize * 0.14, z: headSize * 0.48, color: 'eye' },
   ];
 }
 
@@ -158,8 +221,8 @@ interface MobVisual {
   spin: number;
   /** 逐部件颜色（0xRRGGBB，预解析好避免每帧重算） */
   partColors: Uint32Array;
-  /** 生成这份规格时羊剪没剪（变了就整份重建，见 `update`） */
-  sheared?: boolean;
+  /** 生成这份规格时的"外观版本"（羊剪没剪 / 村民是哪个职业，见 `mobAppearanceKey`） */
+  appearance?: string;
 }
 
 /** 实例容量：约 64 只生物 × 最多 16 个部件。超出会被截断并打印一次警告 */
@@ -229,15 +292,16 @@ export class MobRenderer {
       if (mob.dead) continue;
 
       let visual = this.visuals.get(mob.id);
-      // 羊毛剪了/长回来了：颜色是在 `createVisual` 里定死的，所以整份规格重建一次。
-      // 只对"身体颜色会变"的生物（羊）做这件事，别的生物不受影响。
-      if (visual && mob.type.wool && visual.sheared !== mob.sheared) {
+      // 外观变了（羊毛剪了/长回来了、村民认领了职业）就整份重建一次：
+      // 颜色是在 `createVisual` 里定死的，不重建就会"剪了毛还是那只白羊"
+      const appearance = mobAppearanceKey(mob);
+      if (visual && visual.appearance !== appearance) {
         this.visuals.delete(mob.id);
         visual = undefined;
       }
       if (!visual) {
         visual = this.createVisual(mob);
-        visual.sheared = mob.sheared;
+        visual.appearance = appearance;
         this.visuals.set(mob.id, visual);
       }
 
@@ -329,23 +393,28 @@ export class MobRenderer {
         ? dragonBoxes(type)
         : kind === 'crystal'
           ? crystalBoxes()
-          : kind === 'humanoid'
-            ? humanoidBoxes(type)
-            : kind === 'quadruped'
-              ? quadrupedBoxes(type)
-              : birdBoxes(type);
+          : kind === 'villager'
+            ? villagerBoxes(type)
+            : kind === 'humanoid'
+              ? humanoidBoxes(type)
+              : kind === 'quadruped'
+                ? quadrupedBoxes(type)
+                : birdBoxes(type);
 
     const partColors = new Uint32Array(specs.length);
+    // ⚠️ 主色与点缀色都走函数（不是 `type.bodyColor`）：羊的毛色与村民的长袍色
+    // 都是**跟着状态变**的，直接读种类表就会永远是默认那一份
     const bodyColor = mobBodyColor(mob);
+    const accentColor = mobAccentColor(mob);
     for (let i = 0; i < specs.length; i++) {
       const spec = specs[i]!;
-      partColors[i] = spec.color === 'body' ? bodyColor : spec.color === 'accent' ? type.accentColor : 0x14161c;
+      partColors[i] = spec.color === 'body' ? bodyColor : spec.color === 'accent' ? accentColor : 0x14161c;
     }
 
     return {
       kind,
-      // 记下"生成这份规格时羊剪没剪"（见 update 里的重建判定）
-      sheared: mob.sheared,
+      // 记下"生成这份规格时的外观版本"（见 update 里的重建判定）
+      appearance: mobAppearanceKey(mob),
       specs,
       legCount: kind === 'quadruped' ? 4 : kind === 'crystal' ? 0 : 2,
       spin: 0,

@@ -65,6 +65,10 @@ import { MobRenderer } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob } from './core/entity/Mob.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
+// 村民（J11，批次 88）：造生物的工厂 + 实体本体 + 那一层的纯数据（职业 / 交易表）
+import { createMob } from './core/entity/MobFactory.ts';
+import { Villager } from './core/entity/Villager.ts';
+import { isVillagerFood, levelName, tradeBlocker, tradeSettlement } from './core/registry/villagerTrades.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
@@ -528,6 +532,15 @@ const STARTING_HOTBAR: readonly number[] = [
   Item.FLINT,
   // 开发期钓竿（批次 81，G11）：出生点附近多半有水，走两步就能试抛竿
   Item.FISHING_ROD,
+  // 开发期村民交易（批次 88，J11）：绿宝石 + 几样"村民收的东西" + 三个工作站方块，
+  // 放下工作站（堆肥桶/木桶/酿造台）再把村民叫过来，就能走通"认领职业 → 交易 → 升级"
+  Item.EMERALD,
+  Item.BREAD,
+  Item.WHEAT,
+  Item.CARROT,
+  Block.COMPOSTER,
+  Block.BARREL,
+  Block.BREWING_STAND,
   // 开发期铜的四档（批次 40）：四档铜块 + 切制铜，右键几下就能看到氧化与刮锈
   Block.COPPER_BLOCK,
   Block.EXPOSED_COPPER_BLOCK,
@@ -1142,6 +1155,8 @@ class App {
         onOpenRecipes: () => this.openRecipeBook(),
         // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口
         onOpenAdvancements: () => this.openAdvancements(),
+        // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
+        onTrade: (villager, index) => void this.performTrade(villager, index),
         // 熔炉产物被取空时结算烧炼经验（I5）
         onFurnaceXp: (amount) => this.awardXp(amount),
         // 铁砧（H8）：同样只需要等级与扣等级的出口
@@ -1214,8 +1229,25 @@ class App {
       onOpenAdvancements: () => this.toggleAdvancements(),
     });
 
-    // 开发期初始物资（见 STARTING_HOTBAR 注释）
-    for (const blockId of STARTING_HOTBAR) this.inventory.add(blockId, 64);
+    // 开发期初始物资（见 STARTING_HOTBAR 注释）。
+    //
+    // ⚠️ **倒序填**（批次 88 修正）：背包只有 36 格，而这张单子早就超过 36 件了
+    // （每一件都是各自的物品 id，没法互相合并）。正序填的话，**最后写进去的那些**
+    // ——也就是最近几批新加的验收物资——会被 `add` 静默丢掉（返回值一直没人看），
+    // 症状是"这一批的东西按说明试不出来"。
+    // 倒序之后"最新那一批一定拿得到"，旧的靠创造模式或命令补。
+    const skipped: string[] = [];
+    for (const itemId of [...STARTING_HOTBAR].reverse()) {
+      if (this.inventory.add(itemId, 64) > 0) skipped.push(itemLabel(itemId));
+    }
+    if (skipped.length > 0) {
+      // 不静默：控制台留全量，聊天里只列前几件（不然开局刷满一屏）
+      console.info(`[dev] 开发期物资有 ${skipped.length} 件放不进背包（36 格）：${skipped.join('、')}`);
+      this.chat.push(
+        `开发期物资超出背包，这 ${skipped.length} 件没放进来：${skipped.slice(0, 6).join('、')}${skipped.length > 6 ? ' 等' : ''}`,
+        'system',
+      );
+    }
 
     // 触摸操作层：只在手势设备上创建，桌面端完全不引入这套 DOM
     this.touch = isTouchDevice() ? this.createTouchControls() : null;
@@ -2771,6 +2803,9 @@ class App {
     const mob = this.mobUnderCrosshair();
     if (!mob || mob.dead) return false;
     const held = this.heldItemId;
+    // 村民（J11）：空手也**有交互**（打开交易界面）——所以它必须排在
+    // "手上没东西就返回 false"那一条之前
+    if (mob instanceof Villager) return this.useOnVillager(mob, held);
     if (held === undefined) return false;
     if (held === Item.SHEARS && this.shearMob(mob) > 0) {
       // 剪刀也要掉耐久（原版每剪一次 -1）
@@ -2779,6 +2814,83 @@ class App {
     }
     if (held === Item.BUCKET && this.milkMob(mob)) return true;
     return this.feedMob(mob, held);
+  }
+
+  /**
+   * 对村民右键（J11，批次 88）：**喂饭**还是**做买卖**，看手上拿的是什么。
+   *
+   * 与原版一致：手上有他爱吃的东西（面包/胡萝卜/马铃薯/甜菜根）→ 喂他（进入求爱，
+   * 幼崽则加速长大）；**其余情况**（空手、拿着别的东西）→ 打开交易界面。
+   * 这两条的顺序不能反：拿着面包却弹交易界面，玩家就永远喂不上。
+   */
+  private useOnVillager(villager: Villager, held: number | undefined): boolean {
+    // 喂饭：走的是**与牛羊完全同一条** `feedMob`（爱心、音效、扣物品都在那儿）
+    if (held !== undefined && isVillagerFood(held)) {
+      if (this.feedMob(villager, held)) {
+        this.hand.swing();
+        return true;
+      }
+    }
+    // 做买卖：主程序只负责"开界面"，扣与给全在 `performTrade` 里
+    this.inventoryScreen.openTrade(villager);
+    return true;
+  }
+
+  /**
+   * 成交一条交易（J11）。
+   *
+   * 顺序与原版一致：**先扣材料、再给东西、最后记经验**。
+   * 扣与给都是"全有或全无"：`tradeBlocker` 先挡一道（材料不够就不动手），
+   * 所以不会出现"扣了一半发现有一样不够"的半途状态。
+   *
+   * ⚠️ 产物放不进背包时**掉在村民脚边**（原版是留在产物格里等你腾地方）——
+   * 本项目没有收货格，所以宁可"掉出来"，也不能凭空吞掉
+   * （与"空瓶退回""汤碗退回"同一条规矩）。
+   */
+  private performTrade(villager: Villager, index: number): boolean {
+    const offer = villager.offers[index];
+    if (!offer || villager.dead) return false;
+    const blocker = tradeBlocker(offer, this.inventory);
+    if (blocker) {
+      this.chat.push(`交易不成：${blocker}`, 'system');
+      return false;
+    }
+
+    const settlement = tradeSettlement(offer);
+    for (const cost of settlement.take) {
+      if (!this.inventory.consume(cost.id, cost.count)) return false;
+    }
+    const leftover = this.inventory.add(settlement.give.id, settlement.give.count);
+    if (leftover > 0) {
+      this.spawnDrop(
+        settlement.give.id,
+        leftover,
+        villager.x,
+        villager.y + villager.type.height * 0.5,
+        villager.z,
+      );
+    }
+
+    offer.uses++;
+    const levels = villager.addTradeXp(offer.xp);
+    this.audio.play('trade', { x: villager.x, y: villager.y, z: villager.z });
+    this.particles.spawnHearts(villager.x, villager.y + villager.type.height, villager.z, 0.5);
+    if (levels > 0) {
+      // 升级：新交易已经在 `addTradeXp` 里追加进 `offers`，这里只报喜
+      const profession = villager.profession;
+      this.chat.push(
+        `村民升级了：${profession?.name ?? '村民'} → ${levelName(villager.level)}（解锁了新的交易）`,
+        'system',
+      );
+      this.audio.play('achievement', { x: villager.x, y: villager.y, z: villager.z });
+      this.particles.spawnSmoke(villager.x, villager.y + 1.2, villager.z, 6, 0.3);
+    }
+
+    this.refreshHotbar();
+    this.inventoryScreen.refresh();
+    // 进度（M7）：与村民交易（原版 `adventure/trade`）
+    this.reportProgress({ kind: 'trade' });
+    return true;
   }
 
   /**
@@ -2939,8 +3051,10 @@ class App {
     if (!this.inventory.consume(itemId, 1)) return false;
 
     this.particles.spawnHearts(mob.x, mob.y + mob.type.height, mob.z, result === 'grow' ? 0.6 : 1);
-    // 牛羊猪鸡都吃这几样，用各自家族的叫声最贴切；没有的用通用的"吃掉"音
-    this.audio.play(result === 'grow' ? 'mob_sheep' : 'eat', { x: mob.x, y: mob.y, z: mob.z });
+    // 牛羊猪鸡都吃这几样，用各自家族的叫声最贴切；没有的用通用的"吃掉"音。
+    // 村民（J11）用它自己的"嗯…"——喂他面包却听见羊叫会很出戏
+    const sound = mob instanceof Villager ? 'mob_villager' : result === 'grow' ? 'mob_sheep' : 'eat';
+    this.audio.play(sound, { x: mob.x, y: mob.y, z: mob.z });
     this.refreshHotbar();
     return true;
   }
@@ -4354,7 +4468,7 @@ class App {
       getSurfaceBlockY: (x, z) => this.world.getSurfaceBlockY(x, z),
       player,
       spawn: (type, x, y, z) => {
-        this.entities.spawn(new Mob(type, x, y, z));
+        this.entities.spawn(createMob(type, x, y, z));
       },
       hostileCount,
       passiveCount,
@@ -4485,7 +4599,7 @@ class App {
       // 拿着食物能把动物引过来（传函数，不传值：上下文是缓存住的）
       heldItemId: () => this.heldItemId,
       spawnBaby: (type, x, y, z) => {
-        const baby = new Mob(type, x, y, z);
+        const baby = createMob(type, x, y, z);
         baby.makeBaby();
         this.entities.spawn(baby);
         // 原版生小动物有"噗"的一声，这里用一个短促的烟雾 + 移动音效代替
@@ -4500,7 +4614,7 @@ class App {
       hatchChicken: (x, y, z) => {
         const chicken = mobTypeById('chicken');
         if (!chicken) return;
-        const baby = new Mob(chicken, x, y, z);
+        const baby = createMob(chicken, x, y, z);
         baby.makeBaby();
         this.entities.spawn(baby);
         this.particles.spawnSmoke(x, y + 0.2, z, 6, 0.24);
@@ -4588,6 +4702,69 @@ class App {
   toggleAdvancementsForTest(): boolean {
     this.toggleAdvancements();
     return this.advancementScreen.isOpen;
+  }
+
+  /**
+   * 验收脚本用（J11）：最近的村民是谁、现在能做什么。
+   *
+   * 手机上的验收脚本没法"用准星对准村民再点一下"，所以要有一个**不依赖瞄头**的入口
+   * （与 `toggleRecipeBookForTest` 同一个理由）。
+   */
+  villagerNearby(maxDistance = 16): {
+    id: number;
+    distance: number;
+    profession: string | null;
+    level: number;
+    xp: number;
+    offers: Array<{ result: number; count: number; uses: number; maxUses: number }>;
+  } | null {
+    let best: Villager | null = null;
+    let bestDistance = Infinity;
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Villager) || entity.dead) continue;
+      const distance = Math.hypot(entity.x - this.physics.x, entity.z - this.physics.z);
+      if (distance > maxDistance || distance >= bestDistance) continue;
+      best = entity;
+      bestDistance = distance;
+    }
+    if (!best) return null;
+    return { id: best.id, distance: bestDistance, ...best.tradeSummary };
+  }
+
+  /** 验收脚本用（J11）：打开最近那个村民的交易界面（不必瞄准） */
+  openTradeNearbyForTest(maxDistance = 16): boolean {
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Villager) || entity.dead) continue;
+      if (Math.hypot(entity.x - this.physics.x, entity.z - this.physics.z) > maxDistance) continue;
+      this.inventoryScreen.openTrade(entity);
+      return this.inventoryScreen.currentMode === 'trade';
+    }
+    return false;
+  }
+
+  /** 验收脚本用（J11）：替最近的村民成交第 `index` 条交易（返回是否成交） */
+  tradeNearbyForTest(index: number, maxDistance = 16): boolean {
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Villager) || entity.dead) continue;
+      if (Math.hypot(entity.x - this.physics.x, entity.z - this.physics.z) > maxDistance) continue;
+      return this.performTrade(entity, index);
+    }
+    return false;
+  }
+
+  /** 验收脚本用（J11）：直接让最近的村民认领某一种职业（省掉"摆工作站再等他扫"） */
+  employNearbyVillagerForTest(professionId: string, maxDistance = 16): boolean {
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Villager) || entity.dead) continue;
+      if (Math.hypot(entity.x - this.physics.x, entity.z - this.physics.z) > maxDistance) continue;
+      const ok = entity.assignProfession(professionId as Parameters<Villager['assignProfession']>[0], null);
+      if (ok) {
+        this.inventoryScreen.refresh();
+        this.chat.push(`（调试）村民已认领职业：${levelName(entity.level)}`, 'system');
+      }
+      return ok;
+    }
+    return false;
   }
 
   /**
@@ -4754,7 +4931,7 @@ class App {
       summon: (name, x, y, z) => {
         const type = mobTypeById(name);
         if (!type) return false;
-        this.entities.spawn(new Mob(type, x + 0.5, y, z + 0.5));
+        this.entities.spawn(createMob(type, x + 0.5, y, z + 0.5));
         return true;
       },
       killNearby: (radius) => {
@@ -7117,7 +7294,7 @@ class App {
       }
     }
 
-    this.entities.spawn(new Mob(type, x + 0.5, spawnY, z + 0.5));
+    this.entities.spawn(createMob(type, x + 0.5, spawnY, z + 0.5));
     return true;
   }
 
@@ -7242,6 +7419,11 @@ class App {
     /** 配方书是否打开（验收用） */
     recipeBookOpen: boolean;
     /** 成就面板是否打开、以及与它相关的四个数（M7 验收用） */
+    /** 村民交易（J11）的验收读数：界面开没开 + 最近的村民是谁 */
+    trade: {
+      open: boolean;
+      villager: ReturnType<App['villagerNearby']>;
+    };
     advancements: {
       open: boolean;
       /** 面板里当前画了多少行（DOM 里真的有多少行） */
@@ -7299,6 +7481,11 @@ class App {
         earned: this.advancements.earnedCount,
         total: this.advancements.totalCount,
         ids: this.advancements.serialize().earned,
+      },
+      // 村民交易（J11）：界面开着没有、最近的村民是谁、他能做什么
+      trade: {
+        open: this.inventoryScreen.currentMode === 'trade',
+        villager: this.villagerNearby(64),
       },
       chatOpen: this.chat.isOpen,
       difficulty: this.difficulty,

@@ -43,6 +43,9 @@ import {
   SmithingTable,
 } from '../core/container/SmithingTable.ts';
 import { STONECUTTER_INPUT, Stonecutter } from '../core/container/Stonecutter.ts';
+// 村民交易（J11，批次 88）：职业/交易表在注册表那一层（纯数据），界面只读不算
+import { Villager } from '../core/entity/Villager.ts';
+import { levelName, tradeBlocker } from '../core/registry/villagerTrades.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../core/container/Campfire.ts';
 import { Dispenser } from '../core/container/Dispenser.ts';
 import { DROPPER_SIZE, Dropper } from '../core/container/Dropper.ts';
@@ -113,7 +116,16 @@ export type InventoryPanelMode =
   | 'dropper'
   /** 发射器（批次 60）：与投掷器**同一套九宫格**，只是"动之前先看是什么" */
   | 'dispenser'
-  | 'brewing';
+  | 'brewing'
+  /**
+   * 与村民交易（J11，批次 88）。
+   *
+   * ⚠️ 它是**唯一一个不需要容器**的"界面模式"：原版那套要玩家把两堆东西
+   * 放进收货格、再从产物格拿走，而在触屏上拖两堆东西是最难受的一步
+   * （本项目在手机上验收）。所以口径改成：**点一条交易直接从背包结算**
+   * （与切石机"点一下切一件"同源），界面只带着一个 `activeVillager`。
+   */
+  | 'trade';
 
 export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
@@ -126,6 +138,14 @@ export interface InventoryScreenHooks {
    * 别处进去（背包是唯一常开的入口），配方书当初也是这么挂上去的。
    */
   onOpenAdvancements?: () => void;
+  /**
+   * 成交一条交易（J11，批次 88）。
+   *
+   * 界面只负责"点到了第几条"，扣材料、给东西、给村民经验、报进度、播声音
+   * 全在主程序（它才是那个握着背包、进度与音频的人）。
+   * 与切石机那条一样：**界面不碰物品**，避免"扣了没给"这种半途状态。
+   */
+  onTrade?: (villager: Villager, offerIndex: number) => void;
   /**
    * 从熔炉里取走产物、且产物槽被取空时结算烧炼经验（I5）。
    * 界面只负责"发现这件事发生了"，攒了多少、给谁加由主程序决定。
@@ -239,6 +259,19 @@ export class InventoryScreen {
   private readonly stonecutterListEl: HTMLDivElement;
   private readonly stonecutterHintEl: HTMLDivElement;
 
+  /**
+   * 村民交易（J11，批次 88）：左边是他本人的状态（职业/等级/经验），右边是一列交易。
+   *
+   * 按钮里存着"这一条的价格与产物"两张小图标 + 一行说明，
+   * 每次刷新**只更新文字与可用状态**（重建 DOM 会让手指点在已经被换掉的元素上——
+   * 切石机那批踩过，见 `stonecutterInputId` 的注解）。
+   */
+  private readonly tradeLayout: HTMLDivElement;
+  private readonly tradeInfoEl: HTMLDivElement;
+  private readonly tradeLevelEl: HTMLDivElement;
+  private readonly tradeListEl: HTMLDivElement;
+  private readonly tradeHintEl: HTMLDivElement;
+
   /** 酿造台（H10）：3 个药水槽 + 材料槽 + 燃料槽 + 进度条 */
   private readonly brewingLayout: HTMLDivElement;
   private readonly brewBottleSlots: HTMLDivElement[] = [];
@@ -278,6 +311,18 @@ export class InventoryScreen {
    * 用它决定"要不要重建那一列按钮"——见 `refreshStonecutter` 的注解。
    */
   private stonecutterInputId = -1;
+  /**
+   * 交易列表上一次渲染时的"指纹"（村民 id + 职业 + 等级）。
+   *
+   * 与 `stonecutterInputId` 同一条理由：**只有指纹变了才重建按钮**，
+   * 其余刷新（背包变化、次数变化）只改文字与禁用状态——
+   * 在触屏上重建 DOM 会让"手指刚落下、元素已经被换掉"变成一次空点击。
+   */
+  private tradeFingerprint = '';
+  /** 交易列表里每个按钮的两个可变文字节点（剩余次数 / 材料提示） */
+  private readonly tradeRows: Array<{ uses: HTMLElement; note: HTMLElement }> = [];
+  /** 当前正在交易的村民（`trade` 模式专有；其余模式为 null） */
+  private activeVillager: Villager | null = null;
   /** 当前打开的容器（熔炉/箱子/附魔台/铁砧/酿造台），类型由 `BlockEntityStore` 统一给出 */
   private activeContainer: BlockContainer | null = null;
   private containerDirty = false;
@@ -437,6 +482,18 @@ export class InventoryScreen {
     this.stonecutterListEl.className = 'stonecutter-list';
     this.stonecutterHintEl = document.createElement('div');
     this.stonecutterHintEl.className = 'anvil-cost';
+
+    // 村民交易（J11，批次 88）：左边是他的状态，右边是一列交易（没有收货格）
+    this.tradeLayout = document.createElement('div');
+    this.tradeLayout.className = 'stonecutter-layout';
+    this.tradeInfoEl = document.createElement('div');
+    this.tradeInfoEl.className = 'trade-info';
+    this.tradeLevelEl = document.createElement('div');
+    this.tradeLevelEl.className = 'trade-level';
+    this.tradeListEl = document.createElement('div');
+    this.tradeListEl.className = 'stonecutter-list trade-list';
+    this.tradeHintEl = document.createElement('div');
+    this.tradeHintEl.className = 'anvil-cost';
 
     // 附魔台（H9）：物品槽 + 青金石槽 + 三个候选按钮
     this.enchantLayout = document.createElement('div');
@@ -873,6 +930,27 @@ export class InventoryScreen {
       return;
     }
 
+    if (this.mode === 'trade') {
+      // 左侧：他本人的信息（职业 / 等级 / 还差多少经验）+ 一句操作方法
+      this.tradeInfoEl.replaceChildren();
+      this.tradeInfoEl.append(this.buildLabel('村民'), this.tradeLevelEl, this.tradeHintEl);
+      this.tradeHintEl.textContent = '点一条交易直接从背包结算（材料要带在身上）';
+      this.tradeHintEl.classList.remove('bad');
+
+      // 右侧：一列交易。按钮由 `refreshTrade` 填——
+      // 它们随职业与等级变化，而且**只在指纹变了时重建**
+      this.tradeListEl.replaceChildren();
+      this.tradeRows.length = 0;
+      this.tradeFingerprint = '';
+      const right = document.createElement('div');
+      right.className = 'stonecutter-right';
+      right.append(this.buildLabel('他能做什么（点一下成交）'), this.tradeListEl);
+
+      this.tradeLayout.replaceChildren(this.tradeInfoEl, right);
+      this.topArea.appendChild(this.tradeLayout);
+      return;
+    }
+
     if (this.mode === 'enchanting') {
       const table = this.activeContainer instanceof EnchantTable ? this.activeContainer : null;
       const item = this.registerExisting(this.enchantItemSlot, 'enchant:item', table!, ENCHANT_ITEM_SLOT);
@@ -1252,6 +1330,8 @@ export class InventoryScreen {
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = mode;
       this.activeContainer = container ?? null;
+      // 打开别的界面就不再"与这个村民交易"了（他是一个实体，不是容器）
+      this.activeVillager = null;
 
       if (this.activeContainer) {
         this.activeContainer.onChange = () => {
@@ -1284,6 +1364,8 @@ export class InventoryScreen {
     if (!this.open) return;
     this.returnHeldToInventory();
     if (this.activeContainer) this.activeContainer.onChange = null;
+    // 交易界面关掉之后不再抓着这个村民（他下一秒可能就走进怪堆里死了）
+    this.activeVillager = null;
     this.open = false;
     this.root.classList.add('hidden');
     this.hooks.onOpenChange?.(false);
@@ -1390,6 +1472,7 @@ export class InventoryScreen {
     if (this.mode === 'anvil') this.refreshAnvil();
     if (this.mode === 'smithing') this.refreshSmithing();
     if (this.mode === 'stonecutter') this.refreshStonecutter();
+    if (this.mode === 'trade') this.refreshTrade();
 
     if (this.held) {
       drawItemIcon(this.heldCanvas, this.atlas, this.held.id, 32);
@@ -1477,6 +1560,158 @@ export class InventoryScreen {
    * `refresh()` 会被背包/容器的每次变化触发，如果每次都重建 DOM，
    * 触摸端"点一下"很容易落在刚被替换掉的那个按钮上——点了没反应，看起来像卡了。
    */
+  /**
+   * 打开某个村民的交易界面（J11）。
+   *
+   * 与 `openWith` 分开写的原因：交易**不需要容器**（点一条直接从背包结算），
+   * 所以这里只记一个 `activeVillager`，而不是往 `activeContainer` 里塞一个假容器
+   * ——假容器会被存档那一层当成"这一格有东西"。
+   */
+  openTrade(villager: Villager): void {
+    if (this.mode !== 'trade' || this.activeVillager !== villager) {
+      for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
+      this.mode = 'trade';
+      this.activeContainer = null;
+      this.activeVillager = villager;
+      this.rebuildTopArea();
+    }
+    this.titleEl.textContent = MODE_TITLES.trade;
+    this.creativeSection.style.display = 'none';
+    this.openPanel();
+  }
+
+  /**
+   * 刷新交易列表（J11）。
+   *
+   * 两段：
+   *  1. **指纹变了**（换村民 / 认领了职业 / 升级）→ 重建按钮与图标；
+   *  2. 每次都做 → 更新"剩余次数"与"材料够不够"的文字与禁用状态。
+   *
+   * 这样"背包一变就刷新"不会把手指底下的按钮换掉（切石机那批的教训）。
+   */
+  private refreshTrade(): void {
+    const villager = this.activeVillager;
+    if (!villager) return;
+
+    const fingerprint = `${villager.id}:${villager.professionId ?? '-'}:${villager.level}`;
+    if (fingerprint !== this.tradeFingerprint) {
+      this.tradeFingerprint = fingerprint;
+      this.tradeListEl.replaceChildren();
+      this.tradeRows.length = 0;
+
+      if (villager.offers.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'trade-note';
+        empty.textContent = '他还没有工作——在他附近放一个工作站（堆肥桶 / 高炉 / 烟熏炉 / 酿造台 / 切石机 / 木桶 / 锻造台），他过几秒就会认领。';
+        this.tradeListEl.appendChild(empty);
+      }
+
+      for (let index = 0; index < villager.offers.length; index++) {
+        const offer = villager.offers[index]!;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'stonecutter-option trade-option';
+        button.addEventListener('click', () => this.handleTradeClick(index));
+
+        // 左半：他收的东西（1~2 样，逐样一个小图标 + 数量）
+        const costs = document.createElement('span');
+        costs.className = 'trade-cost';
+        for (const cost of offer.cost) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 24;
+          canvas.height = 24;
+          drawItemIcon(canvas, this.atlas, cost.id, 24);
+          const label = document.createElement('span');
+          label.textContent = `×${cost.count}`;
+          costs.append(canvas, label);
+        }
+
+        const arrow = document.createElement('span');
+        arrow.className = 'trade-arrow';
+        arrow.textContent = '→';
+
+        // 右半：他给的东西
+        const gain = document.createElement('span');
+        gain.className = 'trade-gain';
+        const gainCanvas = document.createElement('canvas');
+        gainCanvas.width = 24;
+        gainCanvas.height = 24;
+        drawItemIcon(gainCanvas, this.atlas, offer.result.id, 24);
+        const gainLabel = document.createElement('span');
+        gainLabel.textContent =
+          offer.result.count > 1 ? `${itemLabel(offer.result.id)} ×${offer.result.count}` : itemLabel(offer.result.id);
+        gain.append(gainCanvas, gainLabel);
+
+        const uses = document.createElement('span');
+        uses.className = 'trade-uses';
+        const note = document.createElement('span');
+        note.className = 'trade-note';
+
+        button.append(costs, arrow, gain, uses, note);
+        // 悬停提示：产物那一段显示它是什么（与背包槽位共用同一套 tooltip）
+        button.dataset.tooltip = '';
+        this.tooltipStacks.set(button, { id: offer.result.id, count: offer.result.count });
+        this.tradeListEl.appendChild(button);
+        this.tradeRows.push({ uses, note });
+      }
+    }
+
+    // ---- 每次都更新：剩余次数 / 能不能做
+    for (let index = 0; index < villager.offers.length; index++) {
+      const offer = villager.offers[index]!;
+      const row = this.tradeRows[index];
+      const button = this.tradeListEl.children[index] as HTMLElement | undefined;
+      if (!row || !button) continue;
+      const blocker = tradeBlocker(offer, this.inventory);
+      row.uses.textContent = `${offer.maxUses - offer.uses} / ${offer.maxUses}`;
+      row.note.textContent = blocker ?? '';
+      button.classList.toggle('blocked', blocker !== null);
+      // 用 aria-disabled 而不是 disabled：禁用的按钮收不到悬停提示，
+      // 而"为什么这条不能点"正是玩家最需要看到的东西
+      button.setAttribute('aria-disabled', blocker !== null ? 'true' : 'false');
+    }
+
+    // ---- 左侧：职业与等级
+    const profession = villager.profession;
+    const progress = villager.tradeXpProgress;
+    this.tradeLevelEl.replaceChildren();
+    const who = document.createElement('div');
+    who.className = 'trade-who';
+    who.textContent = profession ? `${profession.name} · ${levelName(villager.level)}` : '无业游民';
+    const xp = document.createElement('div');
+    xp.className = 'trade-xp';
+    xp.textContent =
+      profession === null
+        ? '认领一个工作站就能开始做生意'
+        : progress.next === 0
+          ? `交易经验 ${villager.tradeXp}（已经是大师）`
+          : `交易经验 ${villager.tradeXp}（再 ${progress.next - progress.current} 点升级）`;
+    this.tradeLevelEl.append(who, xp);
+  }
+
+  /** 点某一条交易：界面只做"能不能点"的即时反馈，成交由主程序执行 */
+  private handleTradeClick(index: number): void {
+    const villager = this.activeVillager;
+    if (!villager) return;
+    // 手上拿着东西时先拒绝（与切石机同一条：产物会与光标上的东西打架）
+    if (this.held) {
+      this.rejectSlot(this.tradeListEl);
+      return;
+    }
+    const offer = villager.offers[index];
+    if (!offer) return;
+    const blocker = tradeBlocker(offer, this.inventory);
+    if (blocker) {
+      this.tradeHintEl.textContent = blocker;
+      this.tradeHintEl.classList.add('bad');
+      return;
+    }
+    this.tradeHintEl.textContent = '';
+    this.tradeHintEl.classList.remove('bad');
+    this.hooks.onTrade?.(villager, index);
+    this.refresh();
+  }
+
   private refreshStonecutter(): void {
     const cutter = this.activeContainer;
     if (!(cutter instanceof Stonecutter)) return;
@@ -1672,6 +1907,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   stonecutter: '切石机',
   brewing: '酿造台',
   hopper: '漏斗',
+  trade: '与村民交易',
   dropper: '投掷器',
   dispenser: '发射器',
 };

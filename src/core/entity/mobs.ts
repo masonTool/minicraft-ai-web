@@ -10,7 +10,43 @@
  */
 
 import { Item } from '../registry/items.ts';
+// 村民（J11）：爱吃什么、皮肤与长袍的底色都放在职业表那一层（纯数据）
+import { VILLAGER_FOODS, VILLAGER_IDLE_ROBE, VILLAGER_SKIN_COLOR } from '../registry/villagerTrades.ts';
 import type { MobType } from './Mob.ts';
+
+/**
+ * 村民（J11，批次 88）。**单独一个常量**（而不是只写在数组里）：
+ * `Villager` 这个子类与"造生物的工厂"都要拿它当"这一只是村民"的判据，
+ * 而按 id 字符串比对的写法迟早会在某处拼错一个字母（那是静的、不会报错的错）。
+ *
+ * ⚠️ 三处与原版的差异，都写在数据里：
+ *  - `naturalSpawn: false`：原版村民只随**村庄**出现，本项目还没有村庄结构，
+ *    所以不进自然生成表（靠命令/刷怪蛋/繁殖）——不写这一条，`PASSIVE_MOBS`
+ *    会把它当普通动物撒在草地上；
+ *  - `feed` 是四样（面包/胡萝卜/马铃薯/甜菜根），比牛羊那种"一样"多一点，
+ *    所以 `MobType.feed` 允许写数组；
+ *  - 长袍颜色放在 `accentColor`（无业时的褐色），**认领职业之后由渲染层换成职业色**
+ *    （`MobRenderer` 的 `mobAccentColor`）——一个物种一份 `MobType` 才不会被
+ *    "给每个职业各注册一种村民"把生物表的分子注水。
+ */
+export const VILLAGER_TYPE: MobType = {
+  id: 'villager',
+  name: '村民',
+  health: 20,
+  width: 0.6,
+  height: 1.95,
+  speed: 1.35,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 0,
+  feed: VILLAGER_FOODS,
+  naturalSpawn: false,
+  bodyColor: VILLAGER_SKIN_COLOR,
+  accentColor: VILLAGER_IDLE_ROBE,
+  eyeHeight: 1.74,
+};
 
 export const MOB_TYPES: readonly MobType[] = [
   {
@@ -148,6 +184,7 @@ export const MOB_TYPES: readonly MobType[] = [
     accentColor: 0xd94f2b,
     eyeHeight: 0.6,
   },
+  VILLAGER_TYPE,
 ];
 
 const BY_ID = new Map<string, MobType>(MOB_TYPES.map((type) => [type.id, type]));
@@ -182,5 +219,12 @@ export const REMOTE_PLAYER_TYPE: MobType = {
 
 /** 敌对生物（生成与战斗判定用） */
 export const HOSTILE_MOBS: readonly MobType[] = MOB_TYPES.filter((type) => type.hostile);
-/** 被动生物 */
-export const PASSIVE_MOBS: readonly MobType[] = MOB_TYPES.filter((type) => !type.hostile);
+/**
+ * 被动生物（**自然生成用**）。
+ *
+ * ⚠️ 与"所有非敌对生物"不是一回事：村民也是被动的，但它不该被撒在草地上
+ * （见 `MobType.naturalSpawn` 的注释）。所以这里多筛一道。
+ */
+export const PASSIVE_MOBS: readonly MobType[] = MOB_TYPES.filter(
+  (type) => !type.hostile && type.naturalSpawn !== false,
+);

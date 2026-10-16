@@ -100,12 +100,17 @@ export interface MobType {
   /**
    * 喂什么能繁殖（J8）。留空表示这种生物不参与繁殖（敌对生物都是空的）。
    *
-   * ⚠️ 与原版的差异：原版是小麦（牛羊）/胡萝卜（猪）/种子（鸡），
-   * 但**耕作系统还没做**，这些作物在游戏里根本不存在（连小麦物品都没有）。
-   * 所以先用现有的植物性物品代替，等 H6/H7 耕作落地后把这里换回原版即可——
-   * 换的只是这一行数据，繁殖逻辑不用动。
+   * 可以写**一样**（牛羊是小麦）也可以写**几样**（村民吃面包/胡萝卜/马铃薯/甜菜根，
+   * J11 批次 88 起）——判定统一走 `mobEats()`，所以"哪些算爱吃"只有一处。
    */
-  feed?: number;
+  feed?: number | readonly number[];
+  /**
+   * 会不会**自然刷出来**（默认会）。村民是第一个"不刷"的：
+   * 原版它们只随村庄生成，而本项目还没有村庄（见 TASKS J22），
+   * 所以村民只能靠命令/刷怪蛋/繁殖出现——不写这一条，`PASSIVE_MOBS` 会把它
+   * 当成普通动物撒在草地上（那看起来就像 bug）。
+   */
+  naturalSpawn?: boolean;
   /**
    * 死亡时按**自己身上的颜色**掉羊毛（J8，羊用）。
    * 羊毛不在 `drops` 表里，因为颜色是每只动物各自的——写死在表里就只能掉白色的。
@@ -145,6 +150,17 @@ export interface MobType {
 
 function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
+}
+
+/**
+ * 这种生物吃不吃这一件（`feed` 允许写一样或几样）。
+ *
+ * 抽出来是因为有两个消费方（`updateAi` 里"被手上的食物引过来"与 `feed()` 里"喂它"），
+ * 两处各写一遍判定，迟早出现"拿着胡萝卜它跟过来、喂它却说不吃"这种自相矛盾。
+ */
+export function mobEats(type: MobType, itemId: number): boolean {
+  if (type.feed === undefined) return false;
+  return typeof type.feed === 'number' ? type.feed === itemId : type.feed.includes(itemId);
 }
 
 export class Mob extends Entity {
@@ -373,7 +389,7 @@ export class Mob extends Entity {
     if (!chasing && player && this.type.feed !== undefined) {
       const bait = ctx.heldItemId?.();
       const distance = Math.sqrt(distanceSq);
-      if (bait !== undefined && bait === this.type.feed && distance < TEMPT_RANGE) {
+      if (bait !== undefined && mobEats(this.type, bait) && distance < TEMPT_RANGE) {
         const length = Math.max(1e-4, distance);
         // 挨到 1.6 格以内就停下（否则会一直顶着玩家推）
         if (distance > TEMPT_FOLLOW_STOP) {
@@ -633,7 +649,7 @@ export class Mob extends Entity {
    *          `null` = 这东西它不吃 / 已经吃饱了 / 刚繁殖完还在冷却
    */
   feed(itemId: number): 'grow' | 'love' | null {
-    if (this.dead || this.type.feed === undefined || this.type.feed !== itemId) return null;
+    if (this.dead || !mobEats(this.type, itemId)) return null;
 
     if (this.baby) {
       // 原版每喂一次缩短 10% 的成长时间；这里改成固定减少 1/10 的总额
