@@ -87,6 +87,7 @@ import {
   slicePage,
 } from './ItemPager.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
+import { CREATIVE_TAB_ICONS } from './CreativeTabs.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
 
 export type InventoryPanelMode =
@@ -626,8 +627,17 @@ export class InventoryScreen {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'inv-tab';
-      button.textContent = CATEGORY_LABELS[category];
       button.dataset.category = category;
+      // 图标 + 文字（批次 98，对齐基岩版）：图标是**注册表里的真实物品**
+      // （砖块/羊毛/镐/苹果…），窄屏可以只留图标——十个 38px 的方块刚好一行放得下，
+      // 不用再横向滚。文字用 span 包着是为了能在窄屏单独隐藏它
+      const icon = document.createElement('canvas');
+      icon.className = 'inv-tab-icon';
+      drawItemIcon(icon, this.atlas, CREATIVE_TAB_ICONS[category], 18);
+      const label = document.createElement('span');
+      label.className = 'inv-tab-label';
+      label.textContent = CATEGORY_LABELS[category];
+      button.append(icon, label);
       button.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         this.creativeCategory = category;

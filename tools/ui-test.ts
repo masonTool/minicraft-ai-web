@@ -34,6 +34,9 @@ import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
 import { BackButton } from '../src/ui/BackButton.ts';
 import { STICK_MODES, STICK_MODE_LABELS } from '../src/ui/TouchControls.ts';
 import { DEFAULT_SETTINGS, TOUCH_SCALE_MAX, TOUCH_SCALE_MIN, loadSettings } from '../src/ui/SettingsScreen.ts';
+import { CREATIVE_TAB_ICONS, missingTabIcons } from '../src/ui/CreativeTabs.ts';
+import { ITEM_CATEGORIES, itemDef, itemIconTile } from '../src/core/registry/items.ts';
+import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;
@@ -147,7 +150,8 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     ['桌面键盘提示在触屏隐藏', 'body.touch-mode .desktop-only'],
     ['竖屏断点', '@media (orientation: portrait)'],
     ['窄屏分类标签单行滚动', 'flex-wrap: nowrap'],
-    ['横屏六个按钮排 3 列', 'repeat(3, 54px)'],
+    // 尺寸都走 `--touch-scale`（批次 98）：默认 1× 下与写死像素完全一致
+    ['横屏六个按钮排 3 列', 'repeat(3, calc(54px * var(--touch-scale, 1)))'],
     // 切石机（H11，批次 44）：候选列表与候选按钮的样式被误删时这里会红
     ['切石机候选列表', '.stonecutter-list'],
     ['切石机候选按钮', '.stonecutter-option'],
@@ -261,6 +265,22 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
   check('两档都有中文名', STICK_MODES.every((mode) => STICK_MODE_LABELS[mode].length > 0));
   equal('默认固定（肌肉记忆优先）', DEFAULT_SETTINGS.touchStick, 'fixed');
   equal('按钮大小默认 1×（不改任何既有尺寸）', DEFAULT_SETTINGS.touchScale, 1);
+  // ⚠️ 触摸相关的每一处尺寸都必须乘 `--touch-scale`：竖屏/横屏那两段媒体查询里
+  // 原来写死了像素值（同优先级、后出现 → 会盖掉带变量的那条），
+  // 于是"触摸按钮大小"在手机上等于没接线（拉滑块毫无反应）。这条断言盯的就是它
+  {
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    const blocks = [...html.matchAll(/(#touch-stick[^{]*|#touch-buttons|.touch-button\.[a-z]+|.touch-button)\s*\{([^}]*)\}/g)];
+    const offenders: string[] = [];
+    for (const [, selector, body] of blocks) {
+      for (const line of (body ?? '').split(';')) {
+        if (!/(width|height|grid-template-columns|gap)\s*:/.test(line)) continue;
+        if (line.includes('var(--touch-scale')) continue;
+        offenders.push(`${selector!.trim()}: ${line.trim()}`);
+      }
+    }
+    check('触摸按钮/摇杆的尺寸全部吃 --touch-scale', offenders.length === 0, offenders.join(' | '));
+  }
   check(
     `按钮大小可调范围合理（${TOUCH_SCALE_MIN}~${TOUCH_SCALE_MAX}）`,
     TOUCH_SCALE_MIN >= 0.8 && TOUCH_SCALE_MAX <= 1.5 && TOUCH_SCALE_MIN < DEFAULT_SETTINGS.touchScale,
@@ -297,6 +317,37 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
     ['触摸按钮尺寸吃变量', '.touch-button { width: calc(62px * var(--touch-scale, 1));'],
     ['跳跃键尺寸吃变量', 'width: calc(76px * var(--touch-scale, 1));'],
     ['摇杆尺寸吃变量', 'width: calc(132px * var(--touch-scale, 1));'],
+  ] as const) {
+    check(`index.html 里有"${label}"`, compact.includes(needle), needle);
+  }
+}
+
+console.log('\n[创造栏分类图标（批次 98，对齐基岩版的组织形式）]');
+{
+  equal('每个分类都配了图标（漏一个就是界面上一个空白标签）', missingTabIcons(ITEM_CATEGORIES).join(','), '');
+  const categories = Object.keys(CREATIVE_TAB_ICONS) as (keyof typeof CREATIVE_TAB_ICONS)[];
+  equal('图标表没有多余项（多一个说明分类被删了但图标没跟着删）', String(categories.length), String(ITEM_CATEGORIES.length));
+
+  const tiles = new Set<string>(TILE_ORDER);
+  const bad: string[] = [];
+  for (const category of ITEM_CATEGORIES) {
+    const itemId = CREATIVE_TAB_ICONS[category];
+    // 图标必须是**真实存在的物品**，而且它那张贴图得在图集里（否则标签上是一片空白）
+    if (!itemDef(itemId)) {
+      bad.push(`${category}:物品不存在`);
+      continue;
+    }
+    if (!tiles.has(itemIconTile(itemId))) bad.push(`${category}:贴图不在图集`);
+  }
+  check('图标的物品都存在、贴图都在图集里', bad.length === 0, bad.join(', '));
+
+  // CSS：窄屏只留图标（十个分类一行放得下），宽屏图标 + 文字
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  for (const [label, needle] of [
+    ['标签里有图标尺寸', '.inv-tab-icon { width: 18px; height: 18px; image-rendering: pixelated;'],
+    ['标签是图标+文字横排', 'display: inline-flex; align-items: center; gap: 4px;'],
+    ['窄屏只留图标', '.inv-tab-label { display: none; }'],
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }

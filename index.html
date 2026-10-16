@@ -1019,9 +1019,12 @@
       .inv-page-label { font-size: 12px; color: #3a3a3a; min-width: 108px; text-align: center; }
       .inv-tab {
         font: inherit; font-size: 12px; padding: 3px 9px; cursor: pointer;
+        /* 图标 + 文字横排（批次 98）：图标是注册表里的真实物品，尺寸交给 `.inv-tab-icon` */
+        display: inline-flex; align-items: center; gap: 4px;
         background: #a8a8a8; color: #2b2b2b;
         border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
+      .inv-tab-icon { width: 18px; height: 18px; image-rendering: pixelated; flex: 0 0 auto; }
       .inv-tab.active { background: #dcdec4; border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
       .inv-tab:active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
       .inv-search {
@@ -1257,9 +1260,13 @@
           max-width: 100%; padding-bottom: 2px;
         }
         .inv-tab {
-          font-size: 13px; padding: 7px 12px; min-height: 38px;
+          /* 窄屏只按图标算宽度（批次 98）：十个分类的图标排一行正好放得下——
+             文字标签加起来要四百多像素，手机上必须横向滚才能换分类。
+             文字仍然留在 DOM 里（读屏与搜索能读到），只是不显示 */
+          font-size: 13px; padding: 7px 10px; min-height: 38px;
           white-space: nowrap; flex: 0 0 auto;
         }
+        .inv-tab-label { display: none; }
         /* 物品网格自己滚：翻页条因此始终留在视野里（不用滚到底才能翻页） */
         .inv-grid.inv-creative { max-height: 46vh; overflow-y: auto; }
         /* 翻页键要够大：手机上 44px 是可用下限 */
@@ -1275,17 +1282,31 @@
 
       /* 竖屏手机：摇杆与按钮簇都往上收一点，给屏幕中间留出视野 */
       @media (orientation: portrait) and (max-width: 900px) {
+        /* ⚠️ 这里的尺寸**必须**乘 `--touch-scale`：竖屏手机是最常见的场景，
+           而这几条规则会盖掉上面那些（同优先级、后出现）——不乘的话
+           "触摸按钮大小"这个设置项在手机上等于没接线（批次 98 顺手修） */
         #touch-stick {
           left: 18px; bottom: calc(104px + env(safe-area-inset-bottom, 0px));
-          width: 124px; height: 124px;
+          width: calc(124px * var(--touch-scale, 1));
+          height: calc(124px * var(--touch-scale, 1));
         }
-        #touch-stick .knob { width: 52px; height: 52px; }
+        #touch-stick .knob {
+          width: calc(52px * var(--touch-scale, 1));
+          height: calc(52px * var(--touch-scale, 1));
+        }
         #touch-buttons {
           right: 14px; bottom: calc(104px + env(safe-area-inset-bottom, 0px));
-          grid-template-columns: repeat(2, 58px); gap: 10px;
+          grid-template-columns: repeat(2, calc(58px * var(--touch-scale, 1)));
+          gap: calc(10px * var(--touch-scale, 1));
         }
-        .touch-button { width: 58px; height: 58px; }
-        .touch-button.jump { width: 70px; height: 70px; }
+        .touch-button {
+          width: calc(58px * var(--touch-scale, 1));
+          height: calc(58px * var(--touch-scale, 1));
+        }
+        .touch-button.jump {
+          width: calc(70px * var(--touch-scale, 1));
+          height: calc(70px * var(--touch-scale, 1));
+        }
         #touch-hint {
           bottom: calc(322px + env(safe-area-inset-bottom, 0px));
           max-width: 88vw; white-space: normal; text-align: center;
@@ -1295,14 +1316,29 @@
       /* 横屏手机：摇杆与按钮再往下、缩小一点，避免遮挡视野中心。
          六个按钮在横屏改成 **3 列 × 2 行**——竖着排三行会盖住准星那一带 */
       @media (max-height: 480px) {
-        #touch-stick { width: 108px; height: 108px; bottom: 70px; left: 16px; }
-        #touch-stick .knob { width: 46px; height: 46px; }
+        #touch-stick {
+          width: calc(108px * var(--touch-scale, 1));
+          height: calc(108px * var(--touch-scale, 1));
+          bottom: 70px; left: 16px;
+        }
+        #touch-stick .knob {
+          width: calc(46px * var(--touch-scale, 1));
+          height: calc(46px * var(--touch-scale, 1));
+        }
         #touch-buttons {
           bottom: calc(70px + env(safe-area-inset-bottom, 0px));
-          grid-template-columns: repeat(3, 54px); gap: 10px;
+          grid-template-columns: repeat(3, calc(54px * var(--touch-scale, 1)));
+          gap: calc(10px * var(--touch-scale, 1));
         }
-        .touch-button { width: 54px; height: 54px; font-size: 15px; }
-        .touch-button.jump { width: 64px; height: 64px; }
+        .touch-button {
+          width: calc(54px * var(--touch-scale, 1));
+          height: calc(54px * var(--touch-scale, 1));
+          font-size: 15px;
+        }
+        .touch-button.jump {
+          width: calc(64px * var(--touch-scale, 1));
+          height: calc(64px * var(--touch-scale, 1));
+        }
         #touch-hint { bottom: calc(178px + env(safe-area-inset-bottom, 0px)); }
       }
 
