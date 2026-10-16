@@ -19,6 +19,7 @@
  * 铁粒金粒都还没有（见 TASKS B18 / J 系列），用同类替代品顶上，并在下方逐条注明。
  */
 
+import { Block } from './blocks.ts';
 import { Item } from './items.ts';
 import { armorItemId } from './armor.ts';
 import { toolItemId } from './tools.ts';
@@ -212,6 +213,55 @@ export const LOOT_TABLES: readonly LootTable[] = [
       entry(Item.GOLDEN_APPLE, 1, 1, 2),
       entry(toolItemId('sword', 'diamond'), 1, 1, 1),
       empty(3),
+    ],
+  },
+  // ---- 堡垒遗迹（K8 收尾，批次 82）：下界唯一一座"值得为箱子跑一趟"的建筑。
+  // 原版它有三张表（treasure / other / bridge），这里两张：本项目的堡垒是**一种**布局，
+  // 而"用不到的表不要写"（空挂着的表没人维护，还会让人以为有别的房间）
+  {
+    key: 'bastion_treasure',
+    name: '堡垒遗迹（宝库）',
+    rollsMin: 3,
+    rollsMax: 4,
+    entries: [
+      // 原版这张表的主角是**下界合金锭**（1 个、权重极低）与**两个金块**
+      entry(Item.NETHERITE_INGOT, 1, 1, 2),
+      entry(Item.DIAMOND, 1, 3, 5),
+      entry(Item.GOLD_INGOT, 3, 9, 6),
+      entry(Item.GOLD_NUGGET, 5, 12, 6),
+      entry(Item.QUARTZ, 4, 10, 5),
+      entry(Block.GILDED_BLACKSTONE, 1, 3, 4),
+      entry(Item.MAGMA_CREAM, 1, 3, 3),
+      entry(Item.GOLDEN_APPLE, 1, 1, 3),
+      entry(armorItemId('leggings', 'golden'), 1, 1, 2),
+      entry(Item.ARROW, 4, 12, 3),
+      entry(Block.OBSIDIAN, 1, 3, 2),
+      empty(4),
+      // ⚠️ 差异：原版这张表还有**附魔金苹果**、**猪灵音乐唱片（Pigstep）**、
+      // **下界合金剑**——本项目没有附魔金苹果、没有唱片机/唱片、也没有"带附魔的装备"
+      // 这种掉落（`LootEntry` 表达不了附魔），只能少放几样，**不拿别的东西顶替**
+    ],
+  },
+  {
+    key: 'bastion_other',
+    name: '堡垒遗迹（杂物）',
+    rollsMin: 2,
+    rollsMax: 3,
+    entries: [
+      entry(Item.ARROW, 6, 12, 6),
+      entry(Item.STRING, 1, 6, 5),
+      entry(Item.LEATHER, 1, 3, 4),
+      entry(Item.GOLD_NUGGET, 2, 6, 5),
+      entry(Item.QUARTZ, 2, 6, 4),
+      entry(Item.GLOWSTONE_DUST, 1, 4, 3),
+      entry(Item.MAGMA_CREAM, 1, 2, 2),
+      entry(armorItemId('chestplate', 'chainmail'), 1, 1, 2),
+      entry(Item.GOLD_INGOT, 1, 3, 2),
+      entry(Item.BONE, 2, 6, 3),
+      entry(Item.IRON_INGOT, 1, 3, 2),
+      empty(5),
+      // ⚠️ 差异：原版有**灵魂疾行附魔书**、**铁粒/金粒**以外的金属粒、
+      // 以及**旗帜图案**，这几样本项目都还没有
     ],
   },
 ];

@@ -115,8 +115,20 @@ export function generateChunkBlocks(
   }
 
   if (dimension === Dimension.NETHER) {
-    // 下界不写方块状态：地物全是整块方块，没有门/楼梯
-    return netherGeneratorFor(seed).generate(cx, cz, out);
+    const nether = netherGeneratorFor(seed);
+    const blocks = nether.generate(cx, cz, out);
+    // 堡垒遗迹（批次 82）：**下界第一次要写方块状态**——箱子要把"哪张战利品表"
+    // 写进 bits 4-7（`withChestLoot`）。以前这里连 `states` 都不传，
+    // "写了也不报错、只是静默丢掉"是批次 37 踩过的同一个坑（雪层那次）
+    generationStates.fill(0);
+    statesUsed = false;
+    nether.generateStructures(
+      new FeatureWriter(blocks, cx, cz, generationStates, () => {
+        statesUsed = true;
+      }),
+      seed,
+    );
+    return blocks;
   }
 
   if (dimension === Dimension.END) {

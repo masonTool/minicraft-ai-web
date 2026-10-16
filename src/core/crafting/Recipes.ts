@@ -964,6 +964,27 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
   },
 ];
 
+/**
+ * 黑石家族（K8 收尾，批次 82）：两块建材各一条 2×2 配方。
+ *
+ * **鎏金黑石没有配方**（原版也没有）：它只能在下界的堡垒遗迹里挖到，
+ * 这是它值得跑一趟的全部理由；给了配方就等于把它变成"随手能造的东西"。
+ */
+const BLACKSTONE_RECIPES: readonly Recipe[] = [
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.POLISHED_BLACKSTONE, count: 4 },
+    pattern: ['BB', 'BB'],
+    key: { B: Block.BLACKSTONE },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.BLACKSTONE_BRICKS, count: 4 },
+    pattern: ['PP', 'PP'],
+    key: { P: Block.POLISHED_BLACKSTONE },
+  },
+];
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...CONTAINER_RECIPES,
@@ -984,6 +1005,7 @@ export const RECIPES: readonly Recipe[] = [
   ...ARMOR_RECIPES,
   ...FOOD_RECIPES,
   ...ENCHANT_RECIPES,
+  ...BLACKSTONE_RECIPES,
 ];
 
 interface Normalized {

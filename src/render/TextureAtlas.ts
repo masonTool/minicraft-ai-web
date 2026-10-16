@@ -2803,6 +2803,50 @@ const BLACKSTONE_PAINTER: Painter = (x, y, rng) => {
   const v = 1 + (rng() * 0.12 - 0.06) + (crack ? -0.28 : 0);
   return [clamp255(38 * v), clamp255(32 * v), clamp255(36 * v), 255];
 };
+/**
+ * 磨制黑石（批次 82）：黑石去掉杂纹、磨光之后的平面（比黑石亮一点点、无裂纹）。
+ * 与黑石同一套色（38/32/36），差别只有"均匀"这一件事。
+ */
+const POLISHED_BLACKSTONE_PAINTER: Painter = (x, y, rng) => {
+  // 极淡的两条分割线（原版磨制石材靠这个读出来"It's polished"）
+  const line = x === 7 || y === 7;
+  const v = (line ? 0.88 : 1.04) + (rng() * 0.06 - 0.03);
+  return [clamp255(38 * v), clamp255(32 * v), clamp255(36 * v), 255];
+};
+
+/** 黑石砖（批次 82）：黑石配色的砖缝纹理（复用通用砖画笔的画法，只是底色调深） */
+const BLACKSTONE_BRICKS_PAINTER: Painter = (x, y, rng) => {
+  const row = y >> 2;
+  const offset = (row % 2) * 4;
+  const mortar = y % 4 === 3 || (x + offset) % 8 === 7;
+  if (mortar) {
+    // 砖缝比砖更暗（与石头那套"缝更亮"相反——黑石砖的缝在阴影里）
+    const v = 0.62 + rng() * 0.08;
+    return [clamp255(38 * v), clamp255(32 * v), clamp255(36 * v), 255];
+  }
+  const v = 1.1 + (rng() * 0.16 - 0.08);
+  return [clamp255(40 * v), clamp255(34 * v), clamp255(38 * v), 255];
+};
+
+/**
+ * 鎏金黑石（批次 82）：黑石底 + 嵌在里面的金块。
+ *
+ * 金斑的位置用**位置哈希**而不是随机数：同一个坐标永远同一张图（贴图只画一次，
+ * 但"看起来是随机分布的"这件事由哈希保证），而且不同区块的同一块方块长得一样。
+ */
+const GILDED_BLACKSTONE_PAINTER: Painter = (x, y, rng) => {
+  const cell = hashString(`gb${x >> 1},${y >> 1}`) % 100;
+  if (cell < 22) {
+    // 金斑：1~2 像素的小块，边缘偏暗（金属的立体感）
+    const edge = x % 2 === 0 || y % 2 === 0;
+    const v = edge ? 0.82 : 1.05;
+    return [clamp255(232 * v), clamp255(176 * v), clamp255(52 * v), 255];
+  }
+  const crack = hashString(`gbc${x},${y}`) % 17 === 0;
+  const v = 1 + (rng() * 0.12 - 0.06) + (crack ? -0.26 : 0);
+  return [clamp255(40 * v), clamp255(34 * v), clamp255(38 * v), 255];
+};
+
 /** 岩浆块：暗色底 + 明亮裂纹（自发光 3） */
 const MAGMA_PAINTER: Painter = (x, y, rng) => {
   const key = (y >> 1) * 8 + (x >> 1);
@@ -2926,6 +2970,10 @@ PAINTERS.basalt_side = BASALT_SIDE_PAINTER;
 PAINTERS.basalt_top = BASALT_TOP_PAINTER;
 PAINTERS.smooth_basalt = SMOOTH_BASALT_PAINTER;
 PAINTERS.blackstone = BLACKSTONE_PAINTER;
+// 黑石家族（K8 收尾，批次 82）：堡垒遗迹的三块建材
+PAINTERS.polished_blackstone = POLISHED_BLACKSTONE_PAINTER;
+PAINTERS.blackstone_bricks = BLACKSTONE_BRICKS_PAINTER;
+PAINTERS.gilded_blackstone = GILDED_BLACKSTONE_PAINTER;
 PAINTERS.magma = MAGMA_PAINTER;
 PAINTERS.crimson_nylium = nyliumPainter([132, 40, 44], 'crim');
 PAINTERS.crimson_nylium_side = nyliumSidePainter([132, 40, 44], 'crims');

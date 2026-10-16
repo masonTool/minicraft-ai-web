@@ -666,6 +666,10 @@ const BUILDING = new Set<number>([
   Block.OAK_TRAPDOOR,
   Block.OAK_FENCE_GATE,
   Block.OAK_FENCE,
+  // 黑石家族（批次 82）：三块都是建材（黑石本身早就在石材那批里登记过）
+  Block.POLISHED_BLACKSTONE,
+  Block.BLACKSTONE_BRICKS,
+  Block.GILDED_BLACKSTONE,
 ]);
 
 // 木制方块族（批次 38）：其余 5 种木材的四件也归"建筑"（按族登记，不逐个手抄）
@@ -1060,6 +1064,28 @@ const REPLACE_DROPS = new Map<number, { id: number; rate: number }>([
 ]);
 
 /**
+ * 「数量是区间」的掉落（批次 82）。
+ *
+ * 目前只有**鎏金黑石**（原版：挖掉掉 2~5 个金粒，带精准采集则掉它自己）。
+ * 与 `DROP_OVERRIDES`（固定数量）分开：那张表的每一项都是"1 个换 1 个"的关系，
+ * 掺进随机数量以后就没法一眼看出"哪几样会掉一堆"。
+ *
+ * ⚠️ **时运不影响它**（原版也不影响）：`fortuneMultiplier` 只认 `FORTUNE_BLOCKS`
+ * 那几张矿石表，而鎏金黑石不在里面——所以这里只管区间本身。
+ */
+const COUNT_RANGE_DROPS = new Map<number, { id: number; min: number; max: number }>([
+  [Block.GILDED_BLACKSTONE, { id: Item.GOLD_NUGGET, min: 2, max: 5 }],
+]);
+
+/** 掉落数量是区间的方块：`roll ∈ [0,1)` 决定落在区间的哪一格 */
+export function rangeDropFor(blockId: number, roll: number): { id: number; count: number } | null {
+  const entry = COUNT_RANGE_DROPS.get(blockId);
+  if (!entry) return null;
+  const span = entry.max - entry.min + 1;
+  return { id: entry.id, count: entry.min + Math.floor(roll * span) };
+}
+
+/**
  * 概率掉落表：方块 → 掉落物与概率。
  * 目前只有"树叶 0.5% 掉苹果"（原版数值，橡木与深色橡木才有；这里 6 种树叶都给，
  * 因为树苗还没做，否则苹果就只能靠创造模式拿了）。
@@ -1198,8 +1224,9 @@ export interface DropContext {
  *   3. 羊毛没剪 → 一无所有。**必须在常规掉落之前拦**，
  *      否则会顺着"方块掉自身"的默认规则漏出来，剪刀就白做了
  *   4. 概率替换（砂砾 10% 掉燧石）——是**顶替**原掉落，不是额外掉一份
- *   5. 常规掉落表
- *   6. 额外概率掉落（树叶 0.5% 掉苹果）
+ *   5. 区间数量掉落（鎏金黑石 2~5 个金粒，批次 82）
+ *   6. 常规掉落表
+ *   7. 额外概率掉落（树叶 0.5% 掉苹果）
  * 最后再乘双层台阶与时运。
  *
  * 原先这 5 条规则挤在 `main` 破坏分支的 10 行里，加"剪刀"这条时已经看不清顺序了。
@@ -1236,8 +1263,12 @@ export function blockDrops(blockId: number, ctx: DropContext): { id: number; cou
   const deadCoral = CORAL_DEAD_VARIANT.get(blockId);
   if (deadCoral !== undefined) return scale({ id: deadCoral, count: 1 });
 
-  // 5~7) 概率替换 → 常规掉落 → 额外概率掉落
-  const drop = replaceDropFor(blockId, ctx.roll()) ?? dropFor(blockId) ?? rareDropFor(blockId, ctx.roll());
+  // 5~8) 概率替换 → **区间数量掉落**（鎏金黑石 2~5 金粒）→ 常规掉落 → 额外概率掉落
+  const drop =
+    replaceDropFor(blockId, ctx.roll()) ??
+    rangeDropFor(blockId, ctx.roll()) ??
+    dropFor(blockId) ??
+    rareDropFor(blockId, ctx.roll());
   return drop ? scale(drop) : null;
 }
 

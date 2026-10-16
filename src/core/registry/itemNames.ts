@@ -412,6 +412,13 @@ const EXPLICIT: Record<string, string> = {
   basalt: '玄武岩',
   smooth_basalt: '平滑玄武岩',
   blackstone: '黑石',
+  // ---- 黑石家族（K8 收尾，批次 82）：堡垒遗迹的三块建材。
+  // ⚠️ 名字必须走 `put`（这张 EXPLICIT 表就是干这个的），**不能写进
+  // `STONE_VARIANT_PARENTS_CN`**——那张表是"变体名的词干"，只会派生出台阶/楼梯/墙，
+  // 写在那里等于三条死数据（而"每件物品都有中文名"那条断言正是抓这个的）
+  polished_blackstone: '磨制黑石',
+  blackstone_bricks: '黑石砖',
+  gilded_blackstone: '鎏金黑石',
   magma_block: '岩浆块',
   crimson_nylium: '绯红菌岩',
   warped_nylium: '诡异菌岩',
@@ -792,6 +799,11 @@ const DESCRIPTIONS: Record<string, string> = {
   melon: '西瓜片：吃下能恢复饥饿值。',
   pumpkin: '可以做成雕刻南瓜，也能做南瓜派。',
   coal_ore: '用镐挖出煤炭；深层也有分布。',
+  // 黑石家族（批次 82）：堡垒遗迹的建材。说明写清"它从哪来"——
+  // 这三块都不在合成链的主干上，玩家第一次见它们多半是在下界的堡垒里
+  polished_blackstone: '黑石打磨之后的样子，堡垒遗迹的墙面与地面都是它。4 块黑石能合成 4 块。',
+  blackstone_bricks: '黑石砖（4 块磨制黑石合成 4 块），堡垒遗迹的主墙体。',
+  gilded_blackstone: '嵌着金块的黑石，堡垒遗迹里最值钱的那几块：**挖掉掉 2~5 个金粒**（带精准采集才掉它自己），所以进堡垒先找它。',
   iron_ore: '用石镐以上才能挖动，掉落粗铁。',
   copper_ore: '用石镐以上才能挖动，掉落粗铜。',
   gold_ore: '用铁镐以上才能挖动，掉落粗金。',

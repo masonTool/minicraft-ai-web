@@ -304,6 +304,11 @@ requirePickaxe(0, [
   Block.SMOOTH_BASALT,
   Block.BLACKSTONE,
   Block.NETHER_BRICKS,
+  // 黑石家族（批次 82）：与黑石同一档——要镐，但不挑等级。
+  // 鎏金黑石也在这一档：它掉的是金粒，但**还是得用镐**（原版如此）
+  Block.POLISHED_BLACKSTONE,
+  Block.BLACKSTONE_BRICKS,
+  Block.GILDED_BLACKSTONE,
   // 红石元件里需要镐的那几个
   Block.REDSTONE_LAMP,
   Block.PISTON,

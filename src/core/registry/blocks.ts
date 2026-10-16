@@ -2448,6 +2448,44 @@ export function isSign(blockId: number): boolean {
 /** 全部告示牌的 id（断言与创造分类遍历用） */
 export const SIGN_IDS: readonly number[] = WOOD_TYPES.map((_wood, index) => SIGN_ID_START + index);
 
+// ---------------------------------------------------------------- 黑石家族（K8 收尾，批次 82）
+
+/**
+ * 堡垒遗迹要用的三个黑石家族方块（原版的堡垒遗迹就是这套建材）：
+ * **磨制黑石**（墙与地面）、**黑石砖**（主墙体）、**鎏金黑石**（点缀，拆了掉金粒）。
+ *
+ * ⚠️ 本项目的黑石本身（`Block.BLACKSTONE`，id 227）**早就在**（恶地/石料家族那批），
+ * 连它的台阶/楼梯/墙都有——缺的只是"更精细的三块"。所以这一批只加这三个，
+ * 而不是再补一整套变体（原版还有磨制黑石砖、錾制/裂纹磨制黑石、以及它们的三件套，
+ * 那些属于"装饰性补齐"，记在 TASKS B50）。
+ */
+// ⚠️ 起点是 **529**：告示牌占了 523~528（6 种木材），接着往下排才是对的。
+// 挑 id 时踩过"靠印象选一个空档"的坑（批次 48），所以这里写明了它接着谁
+export const POLISHED_BLACKSTONE_ID = 529;
+export const BLACKSTONE_BRICKS_ID = 530;
+export const GILDED_BLACKSTONE_ID = 531;
+
+const BLACKSTONE_FAMILY_SPECS: readonly BlockSpec[] = [
+  {
+    id: POLISHED_BLACKSTONE_ID,
+    name: 'minecraft:polished_blackstone',
+    tiles: ['polished_blackstone', 'polished_blackstone', 'polished_blackstone'],
+  },
+  {
+    id: BLACKSTONE_BRICKS_ID,
+    name: 'minecraft:blackstone_bricks',
+    tiles: ['blackstone_bricks', 'blackstone_bricks', 'blackstone_bricks'],
+  },
+  {
+    // 鎏金黑石：深色石头里嵌着金块。**它是一件"矿石"而不是装饰**——
+    // 拆掉掉 2~5 个金粒（见 `items.ts` 的 `COUNT_RANGE_DROPS`），
+    // 所以堡垒遗迹里它是玩家真正会去撬的那几块
+    id: GILDED_BLACKSTONE_ID,
+    name: 'minecraft:gilded_blackstone',
+    tiles: ['gilded_blackstone', 'gilded_blackstone', 'gilded_blackstone'],
+  },
+];
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -2498,6 +2536,7 @@ const SPECS: readonly BlockSpec[] = [
   ...STEM_SPECS,
   ...BED_SPECS,
   ...SIGN_SPECS,
+  ...BLACKSTONE_FAMILY_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2790,6 +2829,10 @@ export const Block = {
   BED: BED_ID_START,
   /** 告示牌（B12，批次 80）：6 种木材依次排列，橡木是第一个（见 `SIGN_IDS`） */
   OAK_SIGN: SIGN_ID_START,
+  // ---- 黑石家族（K8 收尾，批次 82）：堡垒遗迹的建材
+  POLISHED_BLACKSTONE: POLISHED_BLACKSTONE_ID,
+  BLACKSTONE_BRICKS: BLACKSTONE_BRICKS_ID,
+  GILDED_BLACKSTONE: GILDED_BLACKSTONE_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
   SPRUCE_SAPLING: WOOD_SAPLING_ID_START + 2,
@@ -3245,6 +3288,10 @@ HARDNESS.set(Block.SOUL_SOIL, 0.5);
 HARDNESS.set(Block.BASALT, 1.25);
 HARDNESS.set(Block.SMOOTH_BASALT, 1.25);
 HARDNESS.set(Block.BLACKSTONE, 1.5);
+// 黑石家族（批次 82）：原版三块都是 1.5（与黑石同一档）
+HARDNESS.set(Block.POLISHED_BLACKSTONE, 1.5);
+HARDNESS.set(Block.BLACKSTONE_BRICKS, 1.5);
+HARDNESS.set(Block.GILDED_BLACKSTONE, 1.5);
 HARDNESS.set(Block.MAGMA_BLOCK, 0.5);
 HARDNESS.set(Block.CRIMSON_NYLIUM, 0.4);
 HARDNESS.set(Block.WARPED_NYLIUM, 0.4);

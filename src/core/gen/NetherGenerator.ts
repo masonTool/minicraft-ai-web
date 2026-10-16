@@ -8,7 +8,7 @@
  *
  * 与原版的差距（已记录到 TASKS.md）：
  *  - 群系用"极坐标分区"近似原版的 multi_noise（5 个下界群系都会出现，但边界形状不同）；
- *  - 没有下界要塞、堡垒遗迹、废弃传送门（结构系统只做了主世界的 7 种）；
+ *  - **堡垒遗迹**（批次 82）做了；仍没有下界要塞与废弃传送门；
  *  - 洞穴形态是"噪声团块"，不是原版的噪声洞穴雕刻器。
  *
  * 该模块必须保持"纯函数 + 无 DOM 依赖"，因为它会被 Web Worker 直接引用。
@@ -19,6 +19,7 @@ import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { FeatureWriter, hashAt, PositionalRng } from './Features.ts';
+import { generateBastions } from './Bastion.ts';
 
 /** 岩浆海面高度（原版下界岩浆海在 y=32） */
 export const NETHER_LAVA_LEVEL = 32;
@@ -374,11 +375,33 @@ export class NetherGenerator {
    */
   private decorate(blocks: BlockArray, cx: number, cz: number, originX: number, originZ: number): void {
     const writer = new FeatureWriter(blocks, cx, cz);
+
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
         this.decorateSource(writer, originX + dx * CHUNK_SIZE_X, originZ + dz * CHUNK_SIZE_Z);
       }
     }
+  }
+
+  /**
+   * 下界的**结构**阶段（批次 82）：目前只有堡垒遗迹。
+   *
+   * 为什么放在下界生成器里而不是复用 `Structures.ts`：那套框架的锚点是
+   * `world.surfaceY()`——**主世界的地表**。下界没有"地表"这回事（地板与洞顶是两条噪声），
+   * 所以结构那边要的三个查询（地板/洞顶/群系）只有生成器自己知道。
+   * 放置机制（单元网格 + 世界坐标哈希 + 3×3 重放）是照抄过来的，规则完全一致。
+   *
+   * ⚠️ 必须在**地物之后**调用：结构要覆盖地形与菌菇树（否则堡垒里会长出一棵树）。
+   * ⚠️ 调用方要把**方块状态**通道接上（箱子要把"哪张战利品表"写进状态里）——
+   * 下界以前从来不写状态，这条通道是这一批才通的（见 `TerrainGenerator`）。
+   */
+  generateStructures(w: FeatureWriter, seed: number): void {
+    generateBastions(w, seed, {
+      floorAt: (x, z) => this.surfaceY(x, z),
+      ceilingAt: (x, z) => this.ceilingAt(x, z),
+      biomeAt: (x, z) => this.biomeAt(x, z),
+      basaltBiome: NetherBiome.BASALT_DELTAS,
+    });
   }
 
   private decorateSource(w: FeatureWriter, sourceX: number, sourceZ: number): void {

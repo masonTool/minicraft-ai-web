@@ -865,6 +865,10 @@ export const TILE_ORDER = [
   'item_tropical_fish',
   'item_cooked_cod',
   'item_cooked_salmon',
+  // ---- 黑石家族（K8 收尾，批次 82）：堡垒遗迹的三块建材
+  'polished_blackstone',
+  'blackstone_bricks',
+  'gilded_blackstone',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];
