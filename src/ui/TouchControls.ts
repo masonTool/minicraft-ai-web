@@ -53,6 +53,14 @@ export const STICK_MODE_LABELS: Record<StickMode, string> = {
 export interface TouchActions {
   /** 切换人称视角（F7）：第一人称 → 背后 → 正面 → … */
   onCycleView: () => void;
+  /**
+   * 打开暂停 / 设置菜单（批次 104，屏幕上方正中那颗键）。
+   *
+   * 这一颗之前**根本没有**：PC 上按 Esc 唤出暂停菜单，而手机上既没有 Esc，
+   * 操作层里也没有对应的入口——玩家在手机上打不开设置（音量、视距、灵敏度都改不了），
+   * 想退出当前世界也只能靠"返回键退出页面"。基岩版手机就在这个位置放一颗暂停键。
+   */
+  onOpenPause: () => void;
   /** 轻点：放置方块或与目标方块交互 */
   onTap(): void;
   /** 长按开始 / 结束：破坏方块 */
@@ -88,6 +96,22 @@ export function isTouchDevice(): boolean {
   return coarse && hasTouch;
 }
 
+/**
+ * 当前这套界面是不是"触摸那套"（批次 104）。
+ *
+ * 判据是 `<body class="touch-mode">`——**与"触摸操作层到底建没建"共用同一个标记**
+ * （批次 95 定的规矩：不要再各写一遍 `matchMedia`，那正是"设置项写了但只在
+ * 一部分设备上接线"的成因）。但那条标记是 `createTouchControls()` 挂的，
+ * 而不少面板（背包标题栏、设置面板）**比它先构造**，所以这里把
+ * `isTouchDevice()` 也算进来——两者取或，先构造的面板也能拿到正确答案。
+ *
+ * 用途：同一块面板上"手机看什么、PC 看什么"的分叉（键盘字母提示只该出现在 PC 上）。
+ */
+export function isTouchUi(): boolean {
+  if (typeof document !== 'undefined' && document.body?.classList.contains('touch-mode')) return true;
+  return isTouchDevice();
+}
+
 export class TouchControls {
   /** 挂到 HUD 上的根元素 */
   readonly object: HTMLDivElement;
@@ -98,6 +122,8 @@ export class TouchControls {
   private readonly hint: HTMLDivElement;
   private readonly flyButton: HTMLButtonElement;
   private readonly sneakButton: HTMLButtonElement;
+  /** 顶部中央的暂停键（批次 104）：手机上打开暂停/设置菜单的唯一入口 */
+  private readonly pauseButton: HTMLButtonElement;
 
   /** 累积的视角增量（像素），由主循环取走 */
   private lookX = 0;
@@ -180,13 +206,24 @@ export class TouchControls {
 
     buttons.append(chat, view, this.flyButton, this.sneakButton, inventory, jump);
 
+    // ---- 顶部中央的暂停键（批次 104）
+    //
+    // ⚠️ **不放进 `#touch-buttons`**：右下那一簇是"右手拇指够得着的操作键"
+    //（走、跳、潜行、飞、背包、聊天），暂停是"管理"类动作，混在一起既容易误触、
+    // 也让拇指区变拥挤；而且验收脚本正是按"右下角 6 颗"来量热区与重叠的。
+    this.pauseButton = this.makeIconButton('pause', () => this.actions.onOpenPause());
+    this.pauseButton.classList.add('pause');
+    const pauseBar = document.createElement('div');
+    pauseBar.id = 'touch-pause';
+    pauseBar.appendChild(this.pauseButton);
+
     // ---- 操作提示（首次进入时显示，动一下摇杆就淡出）
     this.hint = document.createElement('div');
     this.hint.id = 'touch-hint';
     this.hint.textContent =
       '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏 · 双击跳跃起飞 · 长按物品看详情';
 
-    this.object.append(this.lookSurface, this.stickBase, buttons, this.hint);
+    this.object.append(this.lookSurface, this.stickBase, buttons, pauseBar, this.hint);
     host.appendChild(this.object);
   }
 

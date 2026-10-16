@@ -1220,6 +1220,8 @@ class App {
         this.leftDown = false;
       },
       onToggleInventory: () => this.inventoryScreen.toggle(),
+      // 暂停 / 设置（批次 104）：手机上原来没有入口，只能按 Esc（手机没有）或退出页面
+      onOpenPause: () => this.toggleSettings(),
       onCycleView: () => this.cycleCameraMode(),
       onToggleFly: () => this.setFlying(!this.flying),
       // 潜行状态由操作层自己维护并出现在 input 里，这里只做一次提示同步

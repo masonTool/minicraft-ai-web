@@ -1207,6 +1207,46 @@
       }
       #touch-hint.fade { opacity: 0; }
 
+      /* ---------------- 顶部暂停键（批次 104） ----------------
+         基岩版手机在屏幕**上方正中**放一颗暂停键，点开就是暂停/设置菜单。
+         本项目此前没有这一颗：PC 靠 Esc，而手机既没有 Esc、操作层里也没入口——
+         手机上打不开设置（音量/视距/灵敏度都改不了），想换世界只能退出页面。
+         ⚠️ 尺寸同样乘 `--touch-scale`（与右下那一簇共用"触摸按钮大小"这个设置项）。 */
+      #touch-pause {
+        position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px));
+        transform: translateX(-50%);
+        pointer-events: none;
+      }
+      #touch-pause .touch-button {
+        width: calc(52px * var(--touch-scale, 1));
+        height: calc(52px * var(--touch-scale, 1));
+        background: rgba(0, 0, 0, .34);
+        border-color: rgba(255, 255, 255, .42);
+      }
+
+      /* 顶部那一行现在被暂停键占着：血条与调试信息往下让一格，免得叠在一起 */
+      body.touch-mode #boss-bar { top: calc(64px + env(safe-area-inset-top, 0px)); }
+      /* 调试信息在手机上收窄（它是开发用的面板，不该挤到屏幕中间的暂停键） */
+      body.touch-mode #debug { max-width: 34vw; }
+
+      /* 手机端不显示快捷栏上的 1~9 序号：那是"按键盘数字键切槽"的提示，
+         手机上没有这些键，留着只是噪音（基岩版手机也不显示）。 */
+      body.touch-mode #hotbar .slot .index { display: none; }
+
+      /* 面板里那几个"小字按钮"在手机上要放大到能点得到（44px 是平台下限）：
+         背包标题栏的"配方书/成就"原来只有 12px 字 + 3px 内边距，手机上很难点 */
+      body.touch-mode .inv-recipes-btn { min-height: 44px; padding: 8px 14px; font-size: 14px; }
+      body.touch-mode .recipe-close,
+      body.touch-mode .adv-close { min-width: 48px; min-height: 44px; font-size: 17px; padding: 8px 12px; }
+
+      /* 主菜单（世界列表 / 新建世界）同理：这几个按钮原是按鼠标尺寸做的（高约 30px），
+         手机上点"进入/删除"经常点到隔壁。手机上统一抬到 44px。 */
+      body.touch-mode .world-card-actions button,
+      body.touch-mode .world-mini,
+      body.touch-mode .world-secondary { min-height: 44px; padding: 8px 14px; }
+      body.touch-mode .world-primary { min-height: 52px; }
+      body.touch-mode .world-input { padding: 10px 10px; font-size: 14px; }
+
       /* ---------------- 小屏适配 ----------------
          目标：竖屏/横屏手机都能操作，且界面不溢出、热区够大。 */
       @media (max-width: 900px), (max-height: 560px) {

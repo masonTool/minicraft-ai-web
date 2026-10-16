@@ -114,8 +114,9 @@ console.log('\n[物品分页：页码夹取与切片]');
 
 console.log('\n[触摸按钮图标]');
 {
-  equal('六个图标（聊天/视角/飞行/潜行/背包/跳跃）', TOUCH_ICON_NAMES.length, 6);
-  for (const name of ['chat', 'view', 'fly', 'sneak', 'inventory', 'jump'] as const) {
+  // 批次 104：右下那一簇是 6 颗，另加**顶部中央的暂停键**（基岩版手机也在那个位置）
+  equal('七个图标（右下六颗 + 顶部暂停）', TOUCH_ICON_NAMES.length, 7);
+  for (const name of ['chat', 'view', 'fly', 'sneak', 'inventory', 'jump', 'pause'] as const) {
     check(`图标集里有 ${name}`, TOUCH_ICON_NAMES.includes(name));
   }
 
