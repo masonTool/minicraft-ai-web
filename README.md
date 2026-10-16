@@ -17,7 +17,7 @@ P9 支持加载玩家自备的资源包（`.mcpack`）。
 npm install
 npm run dev        # 开发服务器 http://localhost:5173
 npm run typecheck  # 类型检查
-npm test           # 先过 tools 的类型检查，再跑 vitest + 88 套自建离线测试（含可达性审计）
+npm test           # 先过 tools 的类型检查，再跑 vitest + 89 套自建离线测试（含可达性审计）
 npm run build      # 生产构建
 npm run audit:tasks  # 锚点文档自检（进度口径、编号、README 路线图同步）
 npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率并写回 TASKS §1
