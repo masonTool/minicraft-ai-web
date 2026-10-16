@@ -105,9 +105,11 @@ src/
     tick/         计划刻/随机刻调度
   render/         渲染（体素材质、图集、区块/实体/手部/玩家模型、粒子、天空天气）
   ui/             界面（背包、配方书、悬浮提示、设置、聊天、虚拟摇杆、状态 HUD、主菜单）
+  game/           入口层的非类代码（调参常量、开发期初始物资）
   net/            WebSocket 多人（客户端）
   worker/         区块生成与网格化的 Worker
-  main.ts         应用入口
+  main.ts         应用入口（纯入口 + `App` 类；**按段落名 grep 定位，不要整份读**）
+docs/             HANDOFF 的历史归档与"已定论的经验"（按需读，不是每轮必读）
 server/           联机用的 Node WebSocket 服务端
 tools/            离线测试与自检脚本（每个 test:* 一个）
 tests/            vitest 用例（光照、生成、碰撞、资源包）
