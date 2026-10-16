@@ -9,7 +9,24 @@
  * 运行：npm run test:decor
  */
 
-import { Block, BLOCKS, blockDef, isHandHarvestable, slabId, woolId } from '../src/core/registry/blocks.ts';
+import { Block, BLOCKS, CROP_STAGES, blockDef, cropOf, isHandHarvestable, slabId, woolId } from '../src/core/registry/blocks.ts';
+import { RANDOM_TICK_BEHAVIORS } from '../src/core/tick/RandomTicks.ts';
+import { LOOT_TABLES } from '../src/core/registry/loot.ts';
+import { matchRecipe } from '../src/core/crafting/Recipes.ts';
+
+/** 构造 size×size 的扁平网格，'·' 表示空（合成配方断言用） */
+function grid(size: 2 | 3, rows: readonly string[], legend: Record<string, number>): number[] {
+  const cells = new Array<number>(size * size).fill(0);
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r]!;
+    for (let c = 0; c < row.length; c++) {
+      const ch = row[c]!;
+      if (ch === '·') continue;
+      cells[r * size + c] = legend[ch] ?? 0;
+    }
+  }
+  return cells;
+}
 import { breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
 import {
   CREATIVE_ITEMS,
@@ -22,6 +39,7 @@ import {
   itemDef,
   requiresShears,
   GRASS_SEED_CHANCE,
+  categoryOf,
 } from '../src/core/registry/items.ts';
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
@@ -471,6 +489,67 @@ console.log('\n[小麦与种子（H13）]');
   let seeds = 0;
   for (let i = 0; i < 20000; i++) if (blockDrops(Block.SHORT_GRASS, { ...plain, roll: Math.random })) seeds++;
   check(`20000 次拔草掉了 ${seeds} 次种子（期望约 2500）`, Math.abs(seeds / 20000 - 0.125) < 0.01, (seeds / 20000).toFixed(4));
+}
+
+console.log('\n[甜菜（批次 48，第四种作物）]');
+{
+  const plain: DropContext = { shears: false, silkTouch: false, fortune: 0, doubleSlab: false, roll: () => 0.5 };
+  equal('甜菜有 4 个生长阶段', CROP_STAGES.beetroots?.length, 4);
+  equal('第 0 阶段属于甜菜', cropOf(Block.BEETROOTS_STAGE0)?.crop, 'beetroots');
+  equal('第 3 阶段是成熟的', cropOf(Block.BEETROOTS_STAGE3)?.ripe, true);
+  check('前 3 个阶段都没熟', [Block.BEETROOTS_STAGE0, Block.BEETROOTS_STAGE1, Block.BEETROOTS_STAGE2].every((id) => cropOf(id)?.ripe === false));
+  for (let stage = 0; stage < 4; stage++) {
+    check(`第 ${stage} 阶段登记了随机刻行为（否则长不动）`, RANDOM_TICK_BEHAVIORS.has(Block.BEETROOTS_STAGE0 + stage));
+  }
+
+  // 掉落：与小麦同一条规矩
+  equal('未熟甜菜只掉 1 粒种子', blockDrops(Block.BEETROOTS_STAGE1, plain)?.id, Item.BEETROOT_SEEDS);
+  equal('未熟甜菜掉的数量是 1', blockDrops(Block.BEETROOTS_STAGE2, plain)?.count, 1);
+  equal('成熟甜菜掉 1 个甜菜根', blockDrops(Block.BEETROOTS_STAGE3, plain)?.id, Item.BEETROOT);
+  equal('成熟甜菜掉 1 个（不是一堆）', blockDrops(Block.BEETROOTS_STAGE3, plain)?.count, 1);
+  equal('成熟甜菜额外掉 2 粒种子（两次掷点都命中）', extraCropDrop(Block.BEETROOTS_STAGE3, () => 0)?.id, Item.BEETROOT_SEEDS);
+  equal('未熟甜菜没有额外掉落', extraCropDrop(Block.BEETROOTS_STAGE2, () => 0), null);
+  let beetSeeds = 0;
+  for (let i = 0; i < 20000; i++) beetSeeds += extraCropDrop(Block.BEETROOTS_STAGE3, Math.random)?.count ?? 0;
+  const beetAvg = beetSeeds / 20000;
+  check(`20000 次收甜菜平均额外 ${beetAvg.toFixed(2)} 粒种子（期望 1.0）`, Math.abs(beetAvg - 1) < 0.06, beetAvg.toFixed(3));
+
+  // 能种：种子的 `block` 指向第 0 阶段（种植逻辑靠这个字段）
+  equal('甜菜种子能种出甜菜', itemDef(Item.BEETROOT_SEEDS)?.block, Block.BEETROOTS_STAGE0);
+  check('甜菜徒手就能收', [0, 1, 2, 3].every((stage) => isHandHarvestable(Block.BEETROOTS_STAGE0 + stage)));
+  check('贴图都在图集里', [0, 1, 2, 3].every((stage) => TILES.includes(`beetroots_stage${stage}`)));
+
+  // 种子与食物本身
+  equal('甜菜种子的中文名', itemLabel(Item.BEETROOT_SEEDS), '甜菜种子');
+  equal('甜菜根的中文名', itemLabel(Item.BEETROOT), '甜菜根');
+  check('两者都有中文说明', hasDescription(Item.BEETROOT_SEEDS) && hasDescription(Item.BEETROOT));
+  equal('甜菜根归"食物"分类', categoryOf(Item.BEETROOT), 'food');
+  check('种子与甜菜都在创造物品栏里', CREATIVE_ITEMS.includes(Item.BEETROOT_SEEDS) && CREATIVE_ITEMS.includes(Item.BEETROOT));
+
+  // 来源：原版甜菜种子只从村庄/矿井的箱子里来
+  const seedTables = LOOT_TABLES.filter((table) => table.entries.some((entry) => entry.id === Item.BEETROOT_SEEDS)).map((table) => table.key);
+  check(`甜菜种子进了战利品表（${seedTables.join('、')}）`, seedTables.length >= 2, seedTables.join('、'));
+}
+
+console.log('\n[食物与杂物（批次 48）]');
+{
+  // 碗：蘑菇煲/甜菜汤的容器（原版 3 木板 → 4 碗）
+  equal('碗的中文名', itemLabel(Item.BOWL), '碗');
+  equal('4 个碗的配方产量', matchRecipe(grid(3, ['P·P', '·P·'], { P: Block.OAK_PLANKS }), 3)?.count, 4);
+  equal('碗的产物', matchRecipe(grid(3, ['P·P', '·P·'], { P: Block.OAK_PLANKS }), 3)?.id, Item.BOWL);
+  equal('蘑菇煲：红蘑菇 + 棕蘑菇 + 碗', matchRecipe([Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Item.BOWL, 0], 2)?.id, Item.MUSHROOM_STEW);
+  equal('南瓜派：南瓜 + 糖 + 蛋', matchRecipe([Block.PUMPKIN, Item.SUGAR, Item.EGG, 0], 2)?.id, Item.PUMPKIN_PIE);
+  equal('金胡萝卜：8 金粒围 1 胡萝卜', matchRecipe(grid(3, ['NNN', 'NCN', 'NNN'], { N: Item.GOLD_NUGGET, C: Item.CARROT }), 3)?.id, Item.GOLDEN_CARROT);
+  equal('9 金粒 → 1 金锭', matchRecipe(grid(3, ['NNN', 'NNN', 'NNN'], { N: Item.GOLD_NUGGET }), 3)?.id, Item.GOLD_INGOT);
+  equal('1 金锭 → 9 金粒', matchRecipe([Item.GOLD_INGOT, 0, 0, 0], 2)?.count, 9);
+  equal('金粒的中文名', itemLabel(Item.GOLD_NUGGET), '金粒');
+  check(
+    '新物品的图标都在图集里',
+    [Item.BOWL, Item.MUSHROOM_STEW, Item.PUMPKIN_PIE, Item.BEETROOT_SOUP, Item.GOLD_NUGGET].every((id) =>
+      TILES.includes(itemDef(id)!.tile),
+    ),
+  );
+  check('新物品都有中文说明', [Item.BOWL, Item.MUSHROOM_STEW, Item.PUMPKIN_PIE, Item.BEETROOT_SOUP, Item.GOLD_NUGGET].every((id) => hasDescription(id)));
 }
 
 console.log('\n[睡莲（B16）]');

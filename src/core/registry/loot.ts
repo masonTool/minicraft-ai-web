@@ -83,6 +83,8 @@ export const LOOT_TABLES: readonly LootTable[] = [
       entry(Item.IRON_INGOT, 1, 2, 2),
       entry(Item.EMERALD, 1, 2, 2), // 原版村庄里绿宝石是硬通货
       entry(Item.WHEAT_SEEDS, 1, 3, 3),
+      // 甜菜种子（批次 48）：原版村庄的田里就有，这里放进村庄小屋与矿井的箱子
+      entry(Item.BEETROOT_SEEDS, 1, 3, 2),
       empty(6),
     ],
   },
@@ -99,6 +101,7 @@ export const LOOT_TABLES: readonly LootTable[] = [
       entry(Item.STRING, 1, 3, 3),
       entry(Item.BONE, 1, 4, 3),
       entry(Item.WHEAT_SEEDS, 1, 3, 3),
+      entry(Item.BEETROOT_SEEDS, 1, 3, 2),
       entry(Item.DIAMOND, 1, 1, 1),
       entry(Item.GOLDEN_APPLE, 1, 1, 1),
       entry(toolItemId('pickaxe', 'iron'), 1, 1, 1),

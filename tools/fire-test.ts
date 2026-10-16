@@ -28,7 +28,10 @@ import {
   isFlammable,
   isTouchingWater,
   flammableCount,
+  CAMPFIRE_IGNITE_SECONDS,
+  burnsOnContact,
 } from '../src/core/world/Fire.ts';
+import { withLitState } from '../src/core/registry/blockState.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 
@@ -361,6 +364,20 @@ console.log('\n[打火石]');
     roll: () => 0,
   });
   equal('精准采集也拿不到火焰', fireDrops, null);
+}
+
+console.log('\n[营火也会烫人（批次 48）]');
+{
+  equal('站在点着的营火上被点燃 5 秒（原版）', CAMPFIRE_IGNITE_SECONDS, 5);
+  check('火方块会点着贴着它的实体', burnsOnContact(Block.FIRE, 0));
+  check('岩浆也会', burnsOnContact(Block.LAVA, 0));
+  check('**点着的**营火会', burnsOnContact(Block.CAMPFIRE, withLitState(0, true)));
+  check('熄灭的营火不会（同一个方块的两种状态）', !burnsOnContact(Block.CAMPFIRE, 0));
+  check('石头不会', !burnsOnContact(Block.STONE, 0));
+  check('水不会', !burnsOnContact(Block.WATER, 0));
+  check('三座炉子都不会（烧的是里面，不是炉壳）', [Block.FURNACE, Block.SMOKER, Block.BLAST_FURNACE].every((id) => !burnsOnContact(id, withLitState(0, true))));
+  // 与"火方块被水浇灭"那套规则不冲突：营火是独立方块，判据只有"点着没点着"
+  check('营火点着时与火方块走同一条路（都是"贴上去就烧"）', burnsOnContact(Block.CAMPFIRE, withLitState(0, true)) === burnsOnContact(Block.FIRE, 0));
 }
 
 console.log(`\n火焰测试：${passed} 通过 / ${failed} 失败`);

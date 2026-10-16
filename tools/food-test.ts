@@ -24,7 +24,7 @@ import {
   itemDef,
   rareDropFor,
 } from '../src/core/registry/items.ts';
-import { EAT_SECONDS, FOOD_TABLE, canEat, saturationFrom } from '../src/core/registry/food.ts';
+import { EAT_SECONDS, FOOD_TABLE, canEat, foodForName, saturationFrom } from '../src/core/registry/food.ts';
 import { itemLabel } from '../src/core/registry/itemNames.ts';
 import { MAX_FOOD, MAX_HEALTH, MAX_SATURATION, PlayerStats } from '../src/core/survival/PlayerStats.ts';
 import { StatusEffects } from '../src/core/survival/StatusEffects.ts';
@@ -78,6 +78,12 @@ const VANILLA: Record<string, readonly [number, number]> = {
   baked_potato: [5, 6],
   // 牛奶：不回饥饿也不回饱和度，只清效果（J8）——它是"饮品"，不是食物
   milk_bucket: [0, 0],
+  // ---- 批次 48 补齐（B17）
+  golden_carrot: [6, 14.4],
+  mushroom_stew: [6, 7.2],
+  beetroot_soup: [6, 7.2],
+  pumpkin_pie: [8, 4.8],
+  beetroot: [1, 1.2],
 };
 
 equal('食物种类数', Object.keys(FOOD_TABLE).length, Object.keys(VANILLA).length);
@@ -235,6 +241,45 @@ console.log('\n[吃下去的效果]');
   hungry.eat(2, 0);
   hungry.eat(2, 0);
   equal('吃两次西瓜片累计 +4', hungry.food, 4);
+}
+
+console.log('\n[批次 48 补齐的食物：数值与原版对齐]');
+{
+  // 原版 1.18 的 (hunger, saturationModifier)
+  const expect: readonly (readonly [string, number, number])[] = [
+    ['golden_carrot', 6, 1.2],
+    ['mushroom_stew', 6, 0.6],
+    ['beetroot_soup', 6, 0.6],
+    ['pumpkin_pie', 8, 0.3],
+    ['beetroot', 1, 0.6],
+  ];
+  for (const [name, hunger, modifier] of expect) {
+    const food = foodForName(name);
+    equal(`${name} 的饥饿点`, food?.hunger, hunger);
+    equal(`${name} 的饱和度修饰值`, food?.saturationModifier, modifier);
+    // 实际补的饱和度 = hunger × modifier × 2（原版 FoodData#eat）
+    if (food) {
+      equal(
+        `${name} 实际补 ${hunger * modifier * 2} 点饱和度`,
+        saturationFrom(food),
+        hunger * modifier * 2,
+      );
+    }
+  }
+
+  check('蘑菇煲比生蘑菇顶饱得多（这是"做成汤"的意义）', foodForName('mushroom_stew')!.hunger > foodForName('beetroot')!.hunger);
+  check('甜菜汤比生甜菜根顶饱得多', foodForName('beetroot_soup')!.hunger > foodForName('beetroot')!.hunger);
+  check('金胡萝卜是"饥饿满也能吃"的功能性食物', foodForName('golden_carrot')!.alwaysEdible === true);
+  check('汤与派都不是 alwaysEdible（普通食物）', foodForName('mushroom_stew')!.alwaysEdible !== true && foodForName('pumpkin_pie')!.alwaysEdible !== true);
+
+  // 每一样都要能在"饥饿没满"时吃下去
+  check(
+    '五样新食物都吃得了',
+    expect.every(([name]) => canEat(foodForName(name)!, 10, 20)),
+  );
+  // 可疑的炖菜**故意没做**：原版是"同一样物品、效果看用了哪朵花"（靠物品 NBT），
+  // 我们的 ItemStack 只有 damage/附魔/名字，做不了"一个 id 多种效果"
+  equal('可疑的炖菜没有登记（要等物品 NBT，见 food.ts 的差异说明）', foodForName('suspicious_stew'), undefined);
 }
 
 console.log(`\n食物测试：${passed} 通过 / ${failed} 失败`);

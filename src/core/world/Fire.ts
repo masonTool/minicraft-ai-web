@@ -29,6 +29,7 @@ import {
   stairsId,
   woolId,
 } from '../registry/blocks.ts';
+import { isLitState } from '../registry/blockState.ts';
 import { DYE_COLORS } from '../registry/colors.ts';
 import type { RandomSource, RandomTickBehavior, TickWorld } from '../tick/RandomTicks.ts';
 
@@ -39,6 +40,27 @@ export const FIRE_IGNITE_SECONDS = 8;
 /** 着火伤害：每 20 tick（1 秒）1 点，无视无敌帧（对齐原版） */
 export const FIRE_DAMAGE = 1;
 export const FIRE_DAMAGE_INTERVAL_TICKS = 20;
+
+/**
+ * 站在**点着的营火**上被点燃的秒数（原版 5 秒，比火方块短）。
+ *
+ * 营火不是"火焰方块"（它是一块 7/16 高的柴堆，能站上去做烟熏架），
+ * 但它同样会点燃踩上去的实体。这里只把"会不会点着"这条判定做成纯函数，
+ * 伤害交给既有的着火机制（`PlayerStats.ignite` / `Mob.ignite`）——
+ * 不新开一套伤害，也就自然继承了"水能灭火、抗火免疫、雨能浇灭"这些既有规则。
+ */
+export const CAMPFIRE_IGNITE_SECONDS = 5;
+
+/**
+ * 这一格会不会点燃**贴着它**的实体（脚或身体所在格）。
+ *
+ * 三种：火焰、岩浆、**点着的营火**（熄灭的不算）。
+ * 判据按"方块 + 状态"而不是只按 id：营火点着与熄灭是同一个方块的两种状态。
+ */
+export function burnsOnContact(blockId: number, state: number): boolean {
+  if (blockId === Block.FIRE || blockId === Block.LAVA) return true;
+  return blockId === Block.CAMPFIRE && isLitState(state);
+}
 
 /** 随机刻命中后蔓延出去的概率（未命中就只是"烧着不动"） */
 export const FIRE_SPREAD_CHANCE = 0.25;

@@ -587,6 +587,30 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // 铁锭 ↔ 铁粒（B11，原版两向都有）：9 粒合成 1 锭，1 锭拆成 9 粒
   { kind: 'shapeless' as const, result: { id: Item.IRON_INGOT, count: 1 }, ingredients: [Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET] },
   { kind: 'shapeless' as const, result: { id: Item.IRON_NUGGET, count: 9 }, ingredients: [Item.IRON_INGOT] },
+  // ---- 食物与杂物（批次 48，B17）
+  // 金锭 ↔ 金粒（与铁粒同一套两向配方）
+  { kind: 'shapeless' as const, result: { id: Item.GOLD_INGOT, count: 1 }, ingredients: Array<number>(9).fill(Item.GOLD_NUGGET) },
+  { kind: 'shapeless' as const, result: { id: Item.GOLD_NUGGET, count: 9 }, ingredients: [Item.GOLD_INGOT] },
+  // 碗：3 木板摆成 V 形 → 4 个（原版图案）。蘑菇煲 / 甜菜汤都要它
+  { kind: 'shaped' as const, result: { id: Item.BOWL, count: 4 }, pattern: ['P P', ' P '], key: { P: Block.OAK_PLANKS } },
+  // 蘑菇煲：红蘑菇 + 棕蘑菇 + 碗（原版无序）
+  { kind: 'shapeless' as const, result: { id: Item.MUSHROOM_STEW, count: 1 }, ingredients: [Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Item.BOWL] },
+  // 甜菜汤：6 个甜菜根 + 碗（原版无序）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.BEETROOT_SOUP, count: 1 },
+    ingredients: [Item.BEETROOT, Item.BEETROOT, Item.BEETROOT, Item.BEETROOT, Item.BEETROOT, Item.BEETROOT, Item.BOWL],
+  },
+  // 南瓜派：南瓜 + 糖 + 蛋（原版无序）——三样本项目都已经有
+  { kind: 'shapeless' as const, result: { id: Item.PUMPKIN_PIE, count: 1 }, ingredients: [Block.PUMPKIN, Item.SUGAR, Item.EGG] },
+  // 金胡萝卜：8 金粒围 1 胡萝卜（原版图案）——金粒这一批刚补上，这条链才成立
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.GOLDEN_CARROT, count: 1 },
+    pattern: ['NNN', 'NCN', 'NNN'],
+    key: { N: Item.GOLD_NUGGET, C: Item.CARROT },
+  },
+
   // ---- 酿造（H10）：3 玻璃 → 3 玻璃瓶（原版）
   {
     kind: 'shaped' as const,

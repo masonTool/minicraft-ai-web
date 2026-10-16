@@ -1334,6 +1334,20 @@ export const BLAST_FURNACE_ID = 423;
  */
 export const CAMPFIRE_ID = 424;
 
+/**
+ * 甜菜（B17，批次 48）：第四种作物。
+ *
+ * 与小麦/胡萝卜/马铃薯共用同一套生长行为与阶段表（`CROP_STAGES`），
+ * 所以新增一种作物要动的地方很少：**4 行 `plantSpec` + 一张阶段表 + 掉落表**。
+ * 种子只从村庄与矿井的战利品里来（原版也只有这几条来源，见 `loot.ts`）。
+ */
+const BEETROOT_SPECS: readonly BlockSpec[] = [
+  plantSpec(425, 'beetroots_stage0', 'beetroots_stage0'),
+  plantSpec(426, 'beetroots_stage1', 'beetroots_stage1'),
+  plantSpec(427, 'beetroots_stage2', 'beetroots_stage2'),
+  plantSpec(428, 'beetroots_stage3', 'beetroots_stage3'),
+];
+
 const CAMPFIRE_SPECS: readonly BlockSpec[] = [
   {
     id: CAMPFIRE_ID,
@@ -1566,6 +1580,7 @@ const SPECS: readonly BlockSpec[] = [
   ...RED_SAND_SPECS,
   ...FURNACE_STATION_SPECS,
   ...CAMPFIRE_SPECS,
+  ...BEETROOT_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1796,6 +1811,11 @@ export const Block = {
   BLAST_FURNACE: BLAST_FURNACE_ID,
   /** 营火（批次 47）：不要燃料、一次烤 4 个、只烤食物、烤好直接弹出来 */
   CAMPFIRE: CAMPFIRE_ID,
+  // ---- 甜菜（批次 48，B17 的第四种作物）
+  BEETROOTS_STAGE0: 425,
+  BEETROOTS_STAGE1: 426,
+  BEETROOTS_STAGE2: 427,
+  BEETROOTS_STAGE3: 428,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -2251,6 +2271,7 @@ for (let stage = 0; stage < 4; stage++) HAND_HARVESTABLE.add(Block.WHEAT_STAGE0 
 for (let stage = 0; stage < 4; stage++) {
   HAND_HARVESTABLE.add(Block.CARROTS_STAGE0 + stage);
   HAND_HARVESTABLE.add(Block.POTATOES_STAGE0 + stage);
+  HAND_HARVESTABLE.add(Block.BEETROOTS_STAGE0 + stage);
 }
 
 /**
@@ -2263,6 +2284,7 @@ export const CROP_STAGES: Readonly<Record<string, readonly number[]>> = {
   wheat: [Block.WHEAT_STAGE0, Block.WHEAT_STAGE1, Block.WHEAT_STAGE2, Block.WHEAT_STAGE3],
   carrots: [Block.CARROTS_STAGE0, Block.CARROTS_STAGE1, Block.CARROTS_STAGE2, Block.CARROTS_STAGE3],
   potatoes: [Block.POTATOES_STAGE0, Block.POTATOES_STAGE1, Block.POTATOES_STAGE2, Block.POTATOES_STAGE3],
+  beetroots: [Block.BEETROOTS_STAGE0, Block.BEETROOTS_STAGE1, Block.BEETROOTS_STAGE2, Block.BEETROOTS_STAGE3],
 };
 
 /** 小麦的阶段表（保留这个名字：调用点很多，而且它是最常用的一张） */

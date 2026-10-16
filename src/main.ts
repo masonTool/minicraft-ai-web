@@ -68,7 +68,7 @@ import {
 import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
 import { scrapeResult } from './core/world/Copper.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
-import { FIRE_IGNITE_SECONDS, igniteAt } from './core/world/Fire.ts';
+import { FIRE_IGNITE_SECONDS, burnsOnContact, igniteAt } from './core/world/Fire.ts';
 import {
   PORTAL_COOLDOWN_TICKS,
   PORTAL_CREATIVE_IGNITE_TICKS,
@@ -381,6 +381,12 @@ const STARTING_HOTBAR: readonly number[] = [
   Block.BLAST_FURNACE,
   // 开发期营火（批次 47）：放下就点着，塞几块生肉就能看"30 秒弹一个"的节奏
   Block.CAMPFIRE,
+  // 开发期食物与作物（批次 48）：种子 + 一碗一锅，落地就能试"种甜菜 → 煮汤"这条链
+  Item.BEETROOT_SEEDS,
+  Item.BEETROOT,
+  Item.BOWL,
+  Item.MUSHROOM_STEW,
+  Item.PUMPKIN_PIE,
   // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
   Block.ANVIL,
   Block.IRON_BLOCK,
@@ -3506,7 +3512,9 @@ class App {
   private mobInFire(entity: { x: number; y: number; z: number; height: number }): boolean {
     const bx = Math.floor(entity.x);
     const bz = Math.floor(entity.z);
-    if (this.world.getBlock(bx, Math.floor(entity.y + 0.1), bz) === Block.FIRE) return true;
+    const fy = Math.floor(entity.y + 0.1);
+    // 火、岩浆、以及**点着的营火**（批次 48）：生物踩上去同样会烧起来
+    if (burnsOnContact(this.world.getBlock(bx, fy, bz), this.world.getBlockState(bx, fy, bz))) return true;
     return this.world.getBlock(bx, Math.floor(entity.y + entity.height * 0.5), bz) === Block.FIRE;
   }
 
@@ -4281,14 +4289,21 @@ class App {
   private survivalEnvironment(): SurvivalEnvironment {
     const p = this.physics;
     const eye = this.world.getBlock(Math.floor(p.x), Math.floor(p.eyeY), Math.floor(p.z));
-    const feet = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 0.15), Math.floor(p.z));
+    const feetX = Math.floor(p.x);
+    const feetY = Math.floor(p.y + 0.15);
+    const feetZ = Math.floor(p.z);
+    const feet = this.world.getBlock(feetX, feetY, feetZ);
     const body = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 1.0), Math.floor(p.z));
 
     return {
       eyeInWater: eye === Block.WATER,
       inLava: feet === Block.LAVA || body === Block.LAVA,
-      // 站在火里（I12）：脚或身体所在格是火焰 → 被点燃 + 每秒掉血
-      inFire: feet === Block.FIRE || body === Block.FIRE,
+      // 站在火里（I12）：脚或身体所在格是火焰 → 被点燃 + 每秒掉血。
+      // 批次 48 起也包含**点着的营火**（熄灭的不算）——它同样会烫脚
+      inFire:
+        feet === Block.FIRE ||
+        body === Block.FIRE ||
+        burnsOnContact(feet, this.world.getBlockState(feetX, feetY, feetZ)),
       // 仙人掌还没进方块表，先保持关闭（加了之后这里改成四邻检测）
       onCactus: false,
       suffocating: body !== Block.AIR && blockDef(body).opaque,

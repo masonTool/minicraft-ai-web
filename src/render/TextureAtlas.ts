@@ -2067,6 +2067,146 @@ for (const kind of ['carrots', 'potatoes'] as const) {
   for (let stage = 0; stage < 4; stage++) PAINTERS[`${kind}_stage${stage}`] = rootCropPainter(kind, stage);
 }
 
+/**
+ * 甜菜（批次 48）：第 4 种作物。地上部分是**偏红梗的叶丛**（原版甜菜的叶柄是紫红的，
+ * 这是它与胡萝卜/马铃薯最容易分辨的地方），成熟时从土里露出一圈深红的根。
+ */
+function beetrootPainter(stage: number): Painter {
+  const height = 3 + stage * 3;
+  const ripe = stage === 3;
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    const dy = 15 - y;
+    if (dy > height) return [0, 0, 0, 0];
+    // 成熟：土面那一行露出一截深红的根
+    if (ripe && dy <= 2 && x >= 5 && x <= 10) {
+      return [clamp255(150 + jitter), clamp255(48 + jitter), clamp255(52 + jitter), 255];
+    }
+    const dx = Math.abs(x - 7.5);
+    const half = 1.6 + (height - dy) * 0.2;
+    if (dx > half) return [0, 0, 0, 0];
+    // 中间的叶柄画成紫红（甜菜的招牌色），两侧叶子是深绿
+    if (dx < 0.9) {
+      return [clamp255(126 + jitter), clamp255(52 + jitter), clamp255(66 + jitter), 255];
+    }
+    const green = 88 + stage * 16;
+    return [clamp255(green * 0.5 + jitter), clamp255(green + jitter), clamp255(green * 0.44 + jitter), 255];
+  };
+}
+
+for (let stage = 0; stage < 4; stage++) PAINTERS[`beetroots_stage${stage}`] = beetrootPainter(stage);
+
+// ---- 食物与杂物（批次 48）
+//
+// 三只碗（空碗 / 蘑菇煲 / 甜菜汤）共用同一套"木碗 + 里面一汪汤"的画法，
+// 只有汤的颜色不同——这样一眼就能看出它们是同一类东西。
+
+/** 木碗：一个 U 形（外圈木头、里面掏空） */
+function bowlPixel(x: number, y: number): boolean {
+  const distance = Math.hypot(x - 7.5, y - 7.5);
+  if (distance > 6.4) return false;
+  // 上半部分只留碗壁（左右两条），下半部分是碗底
+  if (y < 7) return distance > 4.6;
+  return distance > 3.4;
+}
+
+/** 碗壁的木头颜色 */
+function bowlWood(y: number, rng: () => number): [number, number, number, number] {
+  const jitter = rng() * 10 - 5;
+  const shade = y < 8 ? 1.06 : 0.9;
+  return [clamp255(162 * shade + jitter), clamp255(120 * shade + jitter), clamp255(66 * shade + jitter), 255];
+}
+
+/** 汤：碗里那一汪（`tint` 是汤色） */
+function soupPainter(tint: readonly [number, number, number], withBits: boolean): Painter {
+  return (x, y, rng) => {
+    if (bowlPixel(x, y)) return bowlWood(y, rng);
+    const distance = Math.hypot(x - 7.5, y - 7.5);
+    // 碗内：y 5~10 的那一汪
+    if (distance > 3.6 || y < 5 || y > 10) return [0, 0, 0, 0];
+    const jitter = rng() * 10 - 5;
+    // 汤面上的料（蘑菇块 / 甜菜块）：几个固定的亮点
+    if (withBits && (x % 5 === 2 && y % 4 === 2)) {
+      const shade = 1.25;
+      return [clamp255(tint[0] * shade + jitter), clamp255(tint[1] * shade + jitter), clamp255(tint[2] * shade + jitter), 255];
+    }
+    const shade = y < 7 ? 1.1 : 0.92;
+    return [clamp255(tint[0] * shade + jitter), clamp255(tint[1] * shade + jitter), clamp255(tint[2] * shade + jitter), 255];
+  };
+}
+
+/** 空碗：里面什么都没有 */
+PAINTERS.item_bowl = (x, y, rng) => (bowlPixel(x, y) ? bowlWood(y, rng) : [0, 0, 0, 0]);
+/** 蘑菇煲：棕褐色的汤 + 蘑菇块 */
+PAINTERS.item_mushroom_stew = soupPainter([154, 106, 62], true);
+/** 甜菜汤：深红色的汤 + 甜菜块 */
+PAINTERS.item_beetroot_soup = soupPainter([168, 46, 52], true);
+
+/** 金粒：一小块金子（用同一套"碎块"画笔，与铁粒成对） */
+PAINTERS.item_gold_nugget = lump(
+  [
+    [252, 214, 96],
+    [230, 178, 58],
+    [190, 138, 36],
+  ],
+  'gnugget',
+  4.4,
+);
+
+/** 甜菜种子：几粒红褐色的小种子 */
+PAINTERS.item_beetroot_seeds = lump(
+  [
+    [162, 116, 78],
+    [132, 92, 58],
+    [104, 68, 42],
+  ],
+  'bseed',
+  4.2,
+);
+
+/** 甜菜根：上面一丛绿叶 + 底下一颗深红的圆根 + 一根须 */
+PAINTERS.item_beetroot = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 根：椭圆，中心 (7.5, 10)，半轴 4.6 × 5.2
+  const rx = (x - 7.5) / 4.6;
+  const ry = (y - 10) / 5.2;
+  if (rx * rx + ry * ry <= 1) {
+    const shade = rx * rx < 0.25 ? 1.1 : 0.88;
+    return [clamp255(158 * shade + jitter), clamp255(48 * shade + jitter), clamp255(54 * shade + jitter), 255];
+  }
+  // 须：正下方一根细线
+  if (x === 7 || x === 8) {
+    if (y > 14) return [clamp255(120 + jitter), clamp255(58 + jitter), clamp255(56 + jitter), 255];
+  }
+  // 叶：上方左右各一束
+  if (y <= 5) {
+    const dx = Math.abs(x - 7.5);
+    const half = 1.2 + (5 - y) * 0.7;
+    if (dx <= half + 1.6 && dx >= half - 1.6) {
+      if (dx < 1.0) return [clamp255(122 + jitter), clamp255(50 + jitter), clamp255(64 + jitter), 255];
+      return [clamp255(70 + jitter), clamp255(120 + jitter), clamp255(52 + jitter), 255];
+    }
+  }
+  return [0, 0, 0, 0];
+};
+
+/** 南瓜派：圆形的派，外圈是酥皮、里面是橙黄的南瓜馅，切了一刀 */
+PAINTERS.item_pumpkin_pie = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const distance = Math.hypot(x - 7.5, y - 8.5);
+  if (distance > 6.6) return [0, 0, 0, 0];
+  // 外圈酥皮
+  if (distance > 5.0) {
+    return [clamp255(206 + jitter), clamp255(158 + jitter), clamp255(92 + jitter), 255];
+  }
+  // 切痕：从中心往右上的一条
+  if (Math.abs((x - 7.5) - (8.5 - y)) < 0.9 && x > 7.5) {
+    return [clamp255(196 + jitter), clamp255(146 + jitter), clamp255(84 + jitter), 255];
+  }
+  const shade = y < 8 ? 1.08 : 0.94;
+  return [clamp255(226 * shade + jitter), clamp255(142 * shade + jitter), clamp255(52 * shade + jitter), 255];
+};
+
 /** 纸：略微歪斜的白色薄片 + 一道折角 */
 PAINTERS.item_paper = (x, y, rng) => {
   const jitter = rng() * 8 - 4;

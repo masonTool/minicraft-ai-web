@@ -16,7 +16,10 @@
  *
  * 与原版的已知差异：
  *  - 没有"进食减速"（原版吃的时候移速减到 1/3）与"吃完的饱嗝音效时长"
- *  - 没有金胡萝卜/河豚这类带复杂副作用（伤害/反胃）的食物
+ *  - 没有河豚/蜘蛛眼这类带复杂副作用的食物（金胡萝卜已在批次 48 补上）
+ *  - **可疑的炖菜没做**：原版是"同一样物品、效果取决于用了哪朵花"（靠物品 NBT 记），
+ *    而本项目的 `ItemStack` 只有 damage/附魔/名字三个字段——做不了"一个 id 多种效果"，
+ *    硬做只能写成一个固定效果（那就不叫可疑了）。等 H16 的物品 NBT 收尾再接
  *  - 蜂蜜瓶（要玻璃瓶）、蛋糕（要放置逻辑）暂缺
  */
 
@@ -80,6 +83,16 @@ export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
     ],
   },
   melon_slice: { hunger: 2, saturationModifier: 0.3 },
+  // ---- 批次 48 补齐（B17）
+  // 金胡萝卜：数值取自原版（6 饥饿 / 1.2 修饰值），而且**饥饿满时也能吃**
+  golden_carrot: { hunger: 6, saturationModifier: 1.2, alwaysEdible: true },
+  // 蘑菇煲 / 甜菜汤：原版都是 6 饥饿 / 0.6
+  mushroom_stew: { hunger: 6, saturationModifier: 0.6 },
+  beetroot_soup: { hunger: 6, saturationModifier: 0.6 },
+  // 南瓜派：原版 8 饥饿 / 0.3（南瓜 + 糖 + 蛋）
+  pumpkin_pie: { hunger: 8, saturationModifier: 0.3 },
+  // 甜菜根：原版 1 饥饿 / 0.6（只适合做汤）
+  beetroot: { hunger: 1, saturationModifier: 0.6 },
   // 牛奶：不回饥饿也不回饱和度，只清除所有状态效果（原版行为）
   // 面包（3 小麦）：原版 5 点饥饿 / 6 点饱和度
   bread: { hunger: 5, saturationModifier: 0.6 },

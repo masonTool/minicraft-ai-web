@@ -613,6 +613,19 @@ export const TILE_ORDER = [
   'campfire_top',
   'campfire_fire',
   'campfire_side',
+  // ---- 甜菜（批次 48，B17 的第四种作物）：4 个生长阶段
+  'beetroots_stage0',
+  'beetroots_stage1',
+  'beetroots_stage2',
+  'beetroots_stage3',
+  // ---- 食物与杂物（批次 48）：金粒 / 碗 / 蘑菇煲 / 甜菜汤 / 甜菜根 / 甜菜种子 / 南瓜派
+  'item_gold_nugget',
+  'item_bowl',
+  'item_mushroom_stew',
+  'item_beetroot_soup',
+  'item_beetroot',
+  'item_beetroot_seeds',
+  'item_pumpkin_pie',
   // ---- 红沙与红砂岩（批次 45）：与砂岩家族一一对应，只换色调
   'red_sand',
   'red_sandstone',

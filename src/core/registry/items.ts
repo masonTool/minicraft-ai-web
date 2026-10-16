@@ -110,6 +110,18 @@ export const Item = {
   GLISTERING_MELON: 1195,
   PUFFERFISH: 1196,
   GOLDEN_CARROT: 1197,
+  // ---- 食物与杂物补齐（批次 48）
+  // ⚠️ 这一段排在**所有药水段之后**（药水占 1180~1189 / 1200~1219，加上喷溅·滞留·药水箭
+  // 的偏移一直排到 1419）。最初写成 1200~1206，启动时被"物品 id 重复注册"那道防线
+  // 当场拦下（撞的是 `potion_swiftness_long`，再撞 `potion_awkward`）——
+  // 那条防线的意义正在于此：否则药水会被整件覆盖，玩家只会看到"捡起金粒显示成药水"
+  GOLD_NUGGET: 1420,
+  BOWL: 1421,
+  MUSHROOM_STEW: 1422,
+  PUMPKIN_PIE: 1423,
+  BEETROOT: 1424,
+  BEETROOT_SEEDS: 1425,
+  BEETROOT_SOUP: 1426,
   REDSTONE_DUST: 1198,
   GLOWSTONE_DUST: 1199,
   // ---- 投掷物（K4 尾巴）：雪球与鸡蛋，原版都是 16 个一堆。
@@ -264,6 +276,18 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.GLISTERING_MELON, name: 'minecraft:glistering_melon_slice', tile: 'item_glistering_melon_slice' },
   { id: Item.PUFFERFISH, name: 'minecraft:pufferfish', tile: 'item_pufferfish' },
   { id: Item.GOLDEN_CARROT, name: 'minecraft:golden_carrot', tile: 'item_golden_carrot' },
+  // ---- 食物与杂物补齐（批次 48，B17）
+  // 金粒：原版由 1 金锭拆成 9 粒，也是**金胡萝卜**的原料（此前金胡萝卜只能当酿造材料，
+  // 因为"8 金粒"这条配方缺原料——这是那批"第一件原料从哪来"里最便宜的一个缺口）
+  { id: Item.GOLD_NUGGET, name: 'minecraft:gold_nugget', tile: 'item_gold_nugget' },
+  // 碗：原版"3 木板 → 4 碗"，蘑菇煲 / 甜菜汤 / 兔肉煲都要它
+  { id: Item.BOWL, name: 'minecraft:bowl', tile: 'item_bowl' },
+  { id: Item.MUSHROOM_STEW, name: 'minecraft:mushroom_stew', tile: 'item_mushroom_stew' },
+  { id: Item.PUMPKIN_PIE, name: 'minecraft:pumpkin_pie', tile: 'item_pumpkin_pie' },
+  // 甜菜根（B17）：第四种作物。种子只从村庄/矿井的战利品里来（原版也是这么来的）
+  { id: Item.BEETROOT, name: 'minecraft:beetroot', tile: 'item_beetroot' },
+  { id: Item.BEETROOT_SEEDS, name: 'minecraft:beetroot_seeds', tile: 'item_beetroot_seeds', block: Block.BEETROOTS_STAGE0 },
+  { id: Item.BEETROOT_SOUP, name: 'minecraft:beetroot_soup', tile: 'item_beetroot_soup' },
   { id: Item.REDSTONE_DUST, name: 'minecraft:redstone_ingredient', tile: 'item_redstone_ingredient' },
   { id: Item.GLOWSTONE_DUST, name: 'minecraft:glowstone_dust_ingredient', tile: 'item_glowstone_dust_ingredient' },
   // ---- 药水（H10）：不可堆叠，一次一瓶
@@ -1063,6 +1087,12 @@ export function extraCropDrop(blockId: number, roll: () => number): { id: number
     const seeds = wheatExtraSeeds(blockId, roll);
     return seeds > 0 ? { id: Item.WHEAT_SEEDS, count: seeds } : null;
   }
+  // 甜菜（批次 48）：熟了额外掉 0~2 粒种子（种子只有村庄/矿井那两条来源，
+  // 让它自己接得上才有意义——否则"种一次就绝后"）
+  if (crop.crop === 'beetroots') {
+    const seeds = (roll() < 0.5 ? 1 : 0) + (roll() < 0.5 ? 1 : 0);
+    return seeds > 0 ? { id: Item.BEETROOT_SEEDS, count: seeds } : null;
+  }
   // 胡萝卜/马铃薯：0~1 个，两次掷点拼出 0~2，期望 1（主掉落 2 + 额外 1 ≈ 原版 1~4 的中值）
   const extra = (roll() < 0.5 ? 1 : 0) + (roll() < 0.5 ? 1 : 0);
   if (extra <= 0) return null;
@@ -1077,6 +1107,11 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.WHEAT_STAGE1, { id: Item.WHEAT_SEEDS, count: 1 }],
   [Block.WHEAT_STAGE2, { id: Item.WHEAT_SEEDS, count: 1 }],
   [Block.WHEAT_STAGE3, { id: Item.WHEAT, count: 1 }],
+  // 甜菜（批次 48）：与小麦同一条规矩——没熟只拿回 1 粒种子，熟了才给甜菜根
+  [Block.BEETROOTS_STAGE0, { id: Item.BEETROOT_SEEDS, count: 1 }],
+  [Block.BEETROOTS_STAGE1, { id: Item.BEETROOT_SEEDS, count: 1 }],
+  [Block.BEETROOTS_STAGE2, { id: Item.BEETROOT_SEEDS, count: 1 }],
+  [Block.BEETROOTS_STAGE3, { id: Item.BEETROOT, count: 1 }],
   // 胡萝卜/马铃薯（H13 续）：没熟只掉 1 个自己（能再种回去），熟了才给果实
   [Block.CARROTS_STAGE0, { id: Item.CARROT, count: 1 }],
   [Block.CARROTS_STAGE1, { id: Item.CARROT, count: 1 }],
