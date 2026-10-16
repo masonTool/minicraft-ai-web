@@ -3056,6 +3056,18 @@ PAINTERS.piston_top = PISTON_TOP_PAINTER;
 PAINTERS.piston_side = PISTON_SIDE_PAINTER;
 PAINTERS.sticky_piston_top = STICKY_PISTON_TOP_PAINTER;
 PAINTERS.piston_head = PISTON_HEAD_PAINTER;
+/**
+ * 侦测器背面（批次 65）：石壳 + 一颗**红点**——那是它的输出面
+ * （引擎里 `componentOutput` 给的就是"看的对面"）。
+ */
+PAINTERS.observer_back = (x, y, rng) => {
+  const v = 1 + (rng() * 0.1 - 0.05);
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  if (r < 2.6) return [clamp255(178 * v), clamp255(52 * v), clamp255(40 * v), 255];
+  if (r < 3.6) return [clamp255(120 * v), clamp255(40 * v), clamp255(32 * v), 255];
+  return [clamp255(104 * v), clamp255(104 * v), clamp255(112 * v), 255];
+};
+
 PAINTERS.observer_top = OBSERVER_TOP_PAINTER;
 PAINTERS.observer_side = OBSERVER_SIDE_PAINTER;
 

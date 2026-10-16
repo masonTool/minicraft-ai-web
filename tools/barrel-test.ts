@@ -19,6 +19,7 @@
 
 import { Block, SHAPED_PARENTS, blockDef, blockHardness, slabId } from '../src/core/registry/blocks.ts';
 import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
+import { withSixFacing } from '../src/core/registry/blockState.ts';
 import { Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { canHarvest, efficientToolType, harvestRequirement } from '../src/core/registry/tools.ts';
@@ -76,9 +77,11 @@ console.log('\n[注册与外观]');
   check('碰撞/渲染都是整格', isFullBlockShape(blockDef(BARREL).shape, 0));
 
   const tiles = blockDef(BARREL).tiles;
-  equal('三张面各用一张贴图（顶/底/侧）', new Set(tiles).size, 3);
-  equal('顶面是那张带箍的盖子', tiles[0], 'barrel_top');
-  equal('侧面是竖板条 + 铁箍那张', tiles[2], 'barrel_side');
+  // 批次 65 起盖子与桶底走**面级贴图**（盖子朝哪一面由 `facing` 决定，可以朝任意一面），
+  // 所以 `tiles` 里只剩桶身那一张；"盖子/桶底贴在哪一面"由 `face-tile-test` 逐面断言
+  equal('桶身只有一张（竖板条 + 铁箍）', new Set(tiles).size, 1);
+  equal('桶身就是那张竖板条', tiles[0], 'barrel_side');
+  equal('盖子走面级贴图（朝上面时顶面就是它）', blockDef(BARREL).faceTile?.(withSixFacing(0, 'up'), [0, 1, 0]), 'barrel_top');
   const missing = tiles.filter((tile) => !TILES.has(tile));
   check('三张贴图都在图集里', missing.length === 0, `缺少 ${missing.join(', ')}`);
 

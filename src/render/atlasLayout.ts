@@ -307,6 +307,8 @@ export const TILE_ORDER = [
   'piston_head',
   'observer_top',
   'observer_side',
+  // 侦测器背面（批次 65）：输出面那颗红点
+  'observer_back',
   // 破坏裂纹（10 个阶段）：每一阶段比上一阶段多露出一段裂纹
   'destroy_stage_0',
   'destroy_stage_1',

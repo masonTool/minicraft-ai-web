@@ -114,6 +114,15 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
   // 与上面那条"水里的植物"同一个位置——这类规则与形状无关。
   if (def.facesPlayer) return { state: withFacing(0, facingFromYaw(input.yaw)) };
 
+  // 正脸沿**命中面法线**（批次 65，六向）：木桶的盖子——点顶面 → 盖朝上、点底面 → 盖朝下，
+  // 点侧面 → 朝放置者（原版是"最近看向方向的反面"，常见手势下结果一致且不必知道俯仰角）。
+  // ⚠️ 给六向的方块**不能**是"逻辑只读水平朝向"的那一族（熔炉/活塞/侦测器用 `facesPlayer`）。
+  if (def.facesNormal) {
+    if (ny > 0) return { state: withSixFacing(0, 'up') };
+    if (ny < 0) return { state: withSixFacing(0, 'down') };
+    return { state: withSixFacing(0, facingFromYaw(input.yaw)) };
+  }
+
   switch (def.shape) {
     case 'slab': {
       // 命中同一个台阶的竖直面 → 合并成双层（原版行为）

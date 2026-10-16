@@ -14,6 +14,7 @@ import {
   isLitState,
   isPowered,
   sixFacingOf,
+  sixFacingOpposite,
   sixFacingOffset,
   type BlockShape,
 } from './blockState.ts';
@@ -51,8 +52,19 @@ export interface BlockDef {
   /**
    * 放置时**正脸朝放置者**（原版熔炉家族就是取玩家朝向的反方向）。
    * 用它的方块同时应当有 `faceTile`，否则"朝向"看不出来。
+   *
+   * ⚠️ **只给水平四向**：熔炉/活塞/侦测器这些方块的逻辑读的是水平朝向
+   * （`facingOf` 只读那两位，`FACING_OFFSET` 也只有四向），写成六向会让它们静默读错。
    */
   readonly facesPlayer?: boolean;
+  /**
+   * 放置时正脸**沿命中面的法线**（**六向**：点顶面 → 朝上、点底面 → 朝下）。
+   *
+   * 木桶用它（原版木桶的盖子朝向是"最近看向方向的反面"，而"点在哪个面上"
+   * 在常见手势下给出的结果一致，且不需要俯仰角）。与 `facesPlayer` 互斥使用：
+   * 一个要六向、一个要四向，混用正是上面那条警告的来源。
+   */
+  readonly facesNormal?: boolean;
   /** 按状态取发光等级（红石灯亮时 15）；不填则一律用 light */
   readonly stateLight?: (state: number) => number;
   /**
@@ -88,9 +100,41 @@ interface BlockSpec {
   stateTiles?: (state: number) => readonly [string, string, string];
   faceTile?: (state: number, faceDir: readonly [number, number, number]) => string | undefined;
   facesPlayer?: boolean;
+  facesNormal?: boolean;
   stateLight?: (state: number) => number;
   itemless?: boolean;
   waterPlant?: boolean;
+}
+
+/**
+ * 木桶的两个端面（批次 65）：**盖子**在朝向那一面、**桶底**在它的对面，其余四面是桶身。
+ *
+ * 只给"盖子"一张是不够的：盖子朝侧面时，对面那一面在原版里是桶底（不是桶身），
+ * 而"哪一面是桶底"靠 `tiles` 的固定槽位表达不出来（槽位是"顶/底/侧"，不是"朝向的对面"）。
+ */
+function barrelFace(state: number, faceDir: readonly [number, number, number]): string | undefined {
+  const facing = sixFacingOf(state);
+  const lid = sixFacingOffset(facing);
+  if (faceDir[0] === lid[0] && faceDir[1] === lid[1] && faceDir[2] === lid[2]) return 'barrel_top';
+  const bottom = sixFacingOffset(sixFacingOpposite(facing));
+  if (faceDir[0] === bottom[0] && faceDir[1] === bottom[1] && faceDir[2] === bottom[2]) return 'barrel_bottom';
+  return undefined;
+}
+
+/**
+ * 侦测器的三张面（批次 65）：**看的那一面**是眼、**输出那一面**是红点、其余四面是石壳。
+ *
+ * 这张贴图分工与引擎里的语义严格对应：`facing` = 看的那一面（`componentOutput` 用
+ * `FACING_OFFSET[facing]` 判定"被观察的方块"），而输出给的是 `facing + 2`（对面）。
+ * 所以"眼 / 红点"绝不能贴反——贴反了玩家会以为它看反了。
+ */
+function observerFace(state: number, faceDir: readonly [number, number, number]): string | undefined {
+  const facing = sixFacingOf(state);
+  const front = sixFacingOffset(facing);
+  if (faceDir[0] === front[0] && faceDir[1] === front[1] && faceDir[2] === front[2]) return 'observer_top';
+  const back = sixFacingOffset(sixFacingOpposite(facing));
+  if (faceDir[0] === back[0] && faceDir[1] === back[1] && faceDir[2] === back[2]) return 'observer_back';
+  return undefined;
 }
 
 /**
@@ -928,7 +972,11 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   {
     id: 267,
     name: 'minecraft:piston',
-    tiles: ['piston_top', 'piston_top', 'piston_side'],
+    // 批次 65：推板（`piston_top`）只贴在**推出方向那一面**，其余五面是活塞身。
+    // 在此之前推板同时贴在顶面与底面（那时没有朝向贴图能力，只能"上下都画一个"）
+    tiles: ['piston_side', 'piston_side', 'piston_side'],
+    faceTile: nozzleTile('piston_top'),
+    facesPlayer: true,
   },
   {
     id: 268,
@@ -938,12 +986,19 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
   {
     id: 269,
     name: 'minecraft:sticky_piston',
-    tiles: ['sticky_piston_top', 'piston_top', 'piston_side'],
+    tiles: ['piston_side', 'piston_side', 'piston_side'],
+    faceTile: nozzleTile('sticky_piston_top'),
+    facesPlayer: true,
   },
   {
     id: 270,
     name: 'minecraft:observer',
-    tiles: ['observer_top', 'observer_top', 'observer_side'],
+    // 批次 65：**眼**贴在"看的那一面"（引擎里 `facing` 指的就是它）、
+    // **红点**贴在对面的"输出面"（`componentOutput` 给的正是 `facing + 2`），其余四面是石壳。
+    // 在此之前那只眼贴在顶面与底面——而侦测器看哪边完全看不出来
+    tiles: ['observer_side', 'observer_side', 'observer_side'],
+    faceTile: observerFace,
+    facesPlayer: true,
   },
   // ---- 附魔与书架（H9）
   {
@@ -1799,7 +1854,12 @@ const BARREL_SPECS: readonly BlockSpec[] = [
   {
     id: BARREL_ID,
     name: 'minecraft:barrel',
-    tiles: ['barrel_top', 'barrel_bottom', 'barrel_side'],
+    // 批次 65：盖子（`barrel_top`）贴在**朝向那一面**（原版木桶的盖子可以朝任意一面），
+    // 底面是 `barrel_bottom`、其余四面是木桶身。放置时盖子"远离你点的那一面"（六向）。
+    // ⚠️ 木桶的朝向**只影响外观**：它不吃红石、也不按面限制漏斗（原版允许任意面取放）。
+    tiles: ['barrel_side', 'barrel_side', 'barrel_side'],
+    faceTile: barrelFace,
+    facesNormal: true,
   },
 ];
 
@@ -2504,6 +2564,7 @@ function buildBlockTable(): readonly BlockDef[] {
       stateTiles: spec.stateTiles,
       faceTile: spec.faceTile,
       facesPlayer: spec.facesPlayer ?? false,
+      facesNormal: spec.facesNormal ?? false,
       stateLight: spec.stateLight,
       itemless: spec.itemless ?? false,
       waterPlant: spec.waterPlant ?? false,

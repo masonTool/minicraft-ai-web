@@ -697,6 +697,24 @@ export function sixFacingOffset(facing: SixFacing): readonly [number, number, nu
   }
 }
 
+/** 六向朝向的**对面**（侦测器的"眼"与"红点"用得上：看的那面与输出那面） */
+export function sixFacingOpposite(facing: SixFacing): SixFacing {
+  switch (facing) {
+    case 'up':
+      return 'down';
+    case 'down':
+      return 'up';
+    case 0:
+      return 2;
+    case 1:
+      return 3;
+    case 2:
+      return 0;
+    default:
+      return 1;
+  }
+}
+
 export const SIX_FACING_NAMES: Readonly<Record<SixFacing, string>> = {
   up: '朝上',
   down: '朝下',

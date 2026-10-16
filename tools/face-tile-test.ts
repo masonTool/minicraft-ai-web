@@ -27,6 +27,8 @@ import {
   withFacing,
   withLitState,
   withSixFacing,
+  sixFacingOf,
+  sixFacingOpposite,
 } from '../src/core/registry/blockState.ts';
 import { planPlacement, type PlacementInput } from '../src/core/interaction/Placement.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
@@ -120,13 +122,42 @@ console.log('\n[能力：某一面单独一张贴图]');
   equal('它们的三张贴图照旧读得出来', blockTiles(Block.FURNACE, 0).length, 3);
 
   // 判据是"面的外法线 == 朝向的偏移量"：六个面里**恰好一个**是正脸
-  for (const id of [...FURNACES, Block.DROPPER, Block.DISPENSER]) {
+  for (const id of [...FURNACES, Block.DROPPER, Block.DISPENSER, Block.PISTON, Block.STICKY_PISTON]) {
     const hits = FACE_OFFSETS.filter((dir) => blockDef(id).faceTile?.(withFacing(0, 2), dir) !== undefined);
     equal(`${blockDef(id).name}：六个面里恰好一个正脸`, hits.length, 1);
     check(
       `${blockDef(id).name}：正脸就是朝向那一面（不是背面）`,
       hits[0] !== undefined && hits[0].join(',') === sixFacingOffset(2).join(','),
     );
+  }
+
+  // 木桶也有两张端面：盖子（朝向那一面）与桶底（它的对面）
+  {
+    const lid = blockDef(Block.BARREL).faceTile?.(withSixFacing(0, 1), sixFacingOffset(1));
+    const bottom = blockDef(Block.BARREL).faceTile?.(withSixFacing(0, 1), sixFacingOffset(sixFacingOpposite(1)));
+    const others = FACE_OFFSETS.filter(
+      (dir) => blockDef(Block.BARREL).faceTile?.(withSixFacing(0, 1), dir) !== undefined,
+    );
+    equal('木桶：两个端面各是一张（盖子 + 桶底）', others.length, 2);
+    equal('朝向那一面是盖子', lid, 'barrel_top');
+    equal('它的对面是桶底', bottom, 'barrel_bottom');
+  }
+
+  // 侦测器有**两张**特殊面：看的那一面是眼、输出那一面是红点（互为对面）
+  {
+    const special = FACE_OFFSETS.filter((dir) => blockDef(Block.OBSERVER).faceTile?.(withFacing(0, 1), dir) !== undefined);
+    equal('侦测器：六个面里恰好两张特殊面（眼 + 红点）', special.length, 2);
+    equal(
+      '一张是朝向那一面（眼）',
+      blockDef(Block.OBSERVER).faceTile?.(withFacing(0, 1), sixFacingOffset(1)),
+      'observer_top',
+    );
+    equal(
+      '另一张是它的对面（红点 = 输出面）',
+      blockDef(Block.OBSERVER).faceTile?.(withFacing(0, 1), sixFacingOffset(sixFacingOpposite(1))),
+      'observer_back',
+    );
+    equal('其余四面是石壳', blockDef(Block.OBSERVER).faceTile?.(withFacing(0, 1), [0, 1, 0]) ?? 'none', 'none');
   }
 
   // 不变量：声明"正脸朝玩家"的方块必须同时有办法**看出**朝向
@@ -184,6 +215,30 @@ console.log('\n[网格化结果：每个面用的是哪张贴图]');
   equal('朝下的发射器：底面是挡板', meshFaces(Block.DISPENSER, withSixFacing(0, 'down')).tiles[2], 'dispenser_top');
   equal('朝西的发射器：-X 面是挡板', meshFaces(Block.DISPENSER, withFacing(0, 3)).tiles[0], 'dispenser_top');
 
+  // ---- 活塞（批次 65）：推板只贴在推出方向那一面
+  const pistonEast = meshFaces(Block.PISTON, withFacing(0, 1));
+  equal('朝东的活塞：+X 面是推板', pistonEast.tiles[1], 'piston_top');
+  equal('其余五面是活塞身', pistonEast.tiles.filter((tile) => tile === 'piston_side').length, 5);
+  equal('朝东的粘性活塞：+X 面是黏液推板', meshFaces(Block.STICKY_PISTON, withFacing(0, 1)).tiles[1], 'sticky_piston_top');
+
+  // ---- 侦测器（批次 65）：眼在"看的那一面"、红点在输出那一面
+  const observer = meshFaces(Block.OBSERVER, withFacing(0, 0));
+  equal('朝北的侦测器：北面是眼', observer.tiles[4], 'observer_top');
+  equal('南面（输出面）是红点', observer.tiles[5], 'observer_back');
+  equal('其余四面是石壳', observer.tiles.filter((tile) => tile === 'observer_side').length, 4);
+  const observerUp = meshFaces(Block.OBSERVER, withSixFacing(0, 'up'));
+  equal('朝上的侦测器：顶面是眼（六向贴图是通的）', observerUp.tiles[3], 'observer_top');
+  equal('朝上的侦测器：底面是红点', observerUp.tiles[2], 'observer_back');
+
+  // ---- 木桶（批次 65）：盖子与桶底各在一面
+  const barrelUp = meshFaces(Block.BARREL, withSixFacing(0, 'up'));
+  equal('盖朝上的木桶：顶面是盖子', barrelUp.tiles[3], 'barrel_top');
+  equal('盖朝上的木桶：底面是桶底', barrelUp.tiles[2], 'barrel_bottom');
+  equal('盖朝上的木桶：四面是桶身', barrelUp.tiles.filter((tile) => tile === 'barrel_side').length, 4);
+  const barrelEast = meshFaces(Block.BARREL, withSixFacing(0, 1));
+  equal('盖朝东的木桶：+X 面是盖子', barrelEast.tiles[1], 'barrel_top');
+  equal('盖朝东的木桶：-X 面（对面）是桶底', barrelEast.tiles[0], 'barrel_bottom');
+
   // ---- 对照：普通方块六个面都用同一张（没被这项能力影响到）
   const stone = meshFaces(Block.STONE, 0);
   equal('石头的六面都是 stone', new Set(stone.tiles).size, 1);
@@ -240,6 +295,38 @@ console.log('\n[放置：正脸朝放置者]');
     '正脸朝玩家**与潜行无关**（它不像漏斗那样用潜行指定朝向）',
     facingOf(planPlacement(placement(Block.FURNACE, { sneaking: true }))!.state) === 2,
   );
+
+  // ---- 活塞与侦测器：**水平四向**（引擎只认水平：`facingOf` + `FACING_OFFSET`）
+  for (const id of [Block.PISTON, Block.STICKY_PISTON, Block.OBSERVER]) {
+    const plan = planPlacement(placement(id, { yaw: -Math.PI / 2 }))!;
+    equal(`${blockDef(id).name}：看向东 → 朝向朝西`, facingOf(plan.state), 3);
+    check(
+      `${blockDef(id).name}：写进去的是**水平**朝向（不含"上下"那一位）`,
+      sixFacingOf(plan.state) === facingOf(plan.state),
+    );
+  }
+  equal('活塞看向北 → 朝南（朝着你）', facingOf(planPlacement(placement(Block.PISTON, {}))!.state), 2);
+  equal('侦测器同一套', facingOf(planPlacement(placement(Block.OBSERVER, {}))!.state), 2);
+
+  // ---- 木桶：盖子沿命中面法线（六向）
+  const barrelPlan = (overrides: Partial<PlacementInput>) => sixFacingOf(planPlacement(placement(Block.BARREL, overrides))!.state);
+  equal('点顶面 → 盖朝上', barrelPlan({ normal: [0, 1, 0] }), 'up');
+  equal('点底面 → 盖朝下', barrelPlan({ normal: [0, -1, 0] }), 'down');
+  equal('点北面 → 盖朝南（朝外）', barrelPlan({ normal: [0, 0, -1] }), 2);
+  // 水平那三个面都按"朝放置者"算（与熔炉同一套，对齐原版"最近看向方向的反面"），
+  // **不是**"离被点的方块远"——点西面时玩家看向北，所以盖朝南
+  equal('点侧面 → 盖朝放置者（与看向哪边一致）', barrelPlan({ normal: [-1, 0, 0] }), 2);
+  check(
+    '木桶的朝向是**六向**（与活塞那族刻意不同）',
+    sixFacingOf(planPlacement(placement(Block.BARREL, { normal: [0, 1, 0] }))!.state) !== facingOf(planPlacement(placement(Block.BARREL, { normal: [0, 1, 0] }))!.state),
+  );
+
+  // 不变量：一条规则只服务一种方向数（四向的方块绝不能被写成六向）
+  const mixed = [];
+  for (let id = 1; id < BLOCKS.length; id++) {
+    if (blockDef(id).facesPlayer && blockDef(id).facesNormal) mixed.push(blockDef(id).name);
+  }
+  check('没有方块同时声明两种朝向规则', mixed.length === 0, mixed.join(', '));
 
   // 朝向必须真的落在 0~3（别写进别的位）
   const state = planPlacement(placement(Block.FURNACE, { yaw: Math.PI }))!.state;
