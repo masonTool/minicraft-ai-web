@@ -28,7 +28,7 @@ npm run dev            # http://localhost:5173
 
 - 时间：2026-10-16 · 提交总数 225（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 238 项 —— 已完成 **111**、进行中 **62**、待办 65 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 238 项 —— 已完成 **112**、进行中 **62**、待办 64 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -59,6 +59,7 @@ npm run dev            # http://localhost:5173
 | 铜的氧化 | **批次 40**（B21）：**4 档 × 4 种形状 = 16 个方块**（铜块 / 切制铜 / 切制铜台阶 / 切制铜楼梯 × 新铜·斑驳·锈蚀·氧化），id 从 335 起每档连续 4 个，所以"下一档/上一档"就是 `id ± 4`（`core/world/Copper.ts`）。机制：随机刻按 5.68% 的判定门槛推进，**旁边有更锈的铜就直接推进**（锈会传染），没有起点时只有 10% 的自启动概率；**斧头右键刮锈**退一档（消耗 1 点耐磨）。硬度 3、要石镐；配方 17 条，且只有**新铜**能由 9 铜锭合成（锈是放出来的、不是做出来的）。⚠️ 涂蜡没做：它要蜜蜡，而蜜蜡只能从蜂巢来（蜜蜂未做） |
 | 锁链、藤蔓与攀爬 | **批次 39**（B7 收口）：`Block.CHAIN`（3/16 细柱，**轴向在状态里**、必须用镐、**基岩版可攀爬**）与 `Block.VINE`（**一个方块最多挂 5 面**：bit0-3 四个水平面 + bit4 顶面；无碰撞、能攀爬、只有剪刀/精准采集才掉、可燃、随机刻往下长与往旁边蔓延、**丛林树干天然挂着**）。放置新增 `mergeIntoTarget`（"再挂一面"改的是**落点那一格**，与改命中方块自身的 `mergeInto` 是两件事）。**顺带补上一件一直缺着的机制——攀爬**：`World.isClimbable` 按形状判定（梯子/藤蔓/锁链），`PlayerPhysics` 里按跳跃上升 2.35、潜行下降 1.2、不按键慢慢滑 0.6；梯子的说明从 H13 起就写着"可以上下攀爬"，但物理里从来没有这条分支——同一批还修掉"贴着梯子往下滑会算摔落伤害" |
 | 地毯与雪层 | **批次 37**：地毯 16 色（`CARPET_ID_START` 起、配方"2 同色羊毛 → 3 块"、进"羊毛与染料"分类，形状**复用 `flat`**——原版地毯本来就不挡路，与红石粉同几何同物理）；雪层（`Block.SNOW`，**一个方块 + 状态位**：bit5-7 存层数-1，1~8 层、高度 = 层数/8、碰撞与渲染共用同一份高度，对着已有雪层顶面放置会**叠高**、掉落恒为 1 个雪球、精准采集掉自身、配方 3 雪块横排 → 6 层）。**雪原地表铺雪**走 `BiomeFeature.snowCover`（雪原 0.85 / 雪林 0.55 / 雪坡 0.75），把 D14 的尾巴收掉了 |
+| 积雪与融化（K11） | **批次 43**：雪层的两条动态行为——**下雪越积越高**（随机刻里，正在下雪＋该列寒冷群系＋露天＋12% 概率 → +1 层，封顶 8 层）与**方块光 > 11 融化**（火把/岩浆旁减一层，只剩 1 层则整块消失并掉 1 个雪球）。为此给随机刻加了两条可选通道：`blockLightAt`（融化**只看方块光**：白天的天光 15 晒不化雪，因此不能复用 `lightAt`）与 `snowingAt`（按位置判"这里在下雪"，全局 `raining` 在雨地里会误判）。⚠️ 原版的"新雪"来自**区块级降水刻**（`tickChunk` 随机取点铺雪），本项目没有那条通道，所以只有**已存在的雪层**会越积越高 |
 | 移动端 | 触摸操作层（虚拟摇杆、长按破坏）、响应式 UI、PWA 全屏元信息、Pointer Events 统一输入 |
 | 地物 | `core/gen/Features.ts`：11 种树 + 花草/蘑菇/甘蔗/南瓜/西瓜/仙人掌 + **睡莲**（B16：唯一"落在水面上"的地物，落点靠 `FeatureWriter#waterSurfaceAbove` 找"水面正上方那一格空气"），23 群系地物表；跨区块重放 3×3 邻域保证树冠不断 |
 | 睡莲与薄板形状 | **B16**：`Block.LILY_PAD`（id 295）+ 新形状 `lily_pad`（`blockShapes.ts`：与"贴地薄板" `flat` **同几何**（1/16 一层）但**有碰撞**——原版能站在睡莲上；`flat` 那批（红石粉/按钮/压力板）不挡路）。走半透明层（叶片四角透明，靠 alpha 混合）、硬度 0、徒手可采、掉落自身、无配方；放置要求"自己那格是空气 + 下面是水"，且**命中水面时一律按上表面算落点**（`main.ts#updatePlacing` 的 `onWaterSurface` + `isCrosshairTarget` 让准星能选中水面那一格） |
@@ -85,7 +86,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **52 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone**，当前全绿；
+| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **53 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数） |
@@ -117,7 +118,11 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**石英与更多石材**（批次 42，B23）——再补 **23 个方块**
+**刚做完的**：**下雪积雪与雪层融化**（批次 43，K11 收尾）——挂了两批的尾巴收掉了：
+下雪时雪层**越积越高**（封顶 8 层），**方块光 > 11**（火把/岩浆旁）时**融化**并掉雪球。
+为此给随机刻加了 `blockLightAt` 与 `snowingAt` 两条可选通道
+（融化只看方块光——白天的天光不会晒化雪；积雪要按列判寒冷群系）。
+再往前是**石英与更多石材**（批次 42，B23）——再补 **23 个方块**
 （石英家族 4 个母方块 + 深板岩瓦 + 红色下界砖，外加 17 个台阶/楼梯/墙），
 并**补上石英链的断环**：下界石英这个物品此前根本不存在（矿石掉的是方块本身），
 所以石英家族一直没有原料；现在"矿石 → 下界石英 → 石英块 → 石英柱/錾制/平滑石英"整条链成立。
