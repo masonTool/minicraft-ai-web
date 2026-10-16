@@ -55,7 +55,6 @@ const TILE_INDEX = new Map<string, number>(TILE_ORDER.map((name, index) => [name
 const atlasStub: TileUvSource = { tileOrigin: (tile) => [TILE_INDEX.get(tile) ?? -1, 0] };
 
 /** 网格化器 `FACES` 的顺序：-X / +X / -Y / +Y / -Z / +Z */
-const FACE_NAMES = ['-X', '+X', '-Y', '+Y', '-Z(北)', '+Z(南)'] as const;
 const FACE_OFFSETS: readonly (readonly [number, number, number])[] = [
   [-1, 0, 0],
   [1, 0, 0],

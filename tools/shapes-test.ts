@@ -26,7 +26,6 @@ import {
   isFenceGateOpen,
   isSlabDouble,
   isTop,
-  isTrapdoorOpen,
   isWallMounted,
   snowHeight,
   snowLayers,
@@ -122,6 +121,9 @@ console.log('\n[放置规则：台阶]');
     yaw: 0,
     sneaking: false,
     blockAt: () => 0,
+    // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+    hitBlock: Block.AIR,
+    hitState: 0,
   };
 
   const onTop = planPlacement({ ...base, normal: [0, 1, 0], hitY: 64.0 });
@@ -149,6 +151,9 @@ console.log('\n[放置规则：楼梯朝向]');
       yaw,
       sneaking: false,
       blockAt: () => 0,
+      // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+      hitBlock: Block.AIR,
+      hitState: 0,
     })!;
 
   // yaw=0 看向北(-Z)，原版放置时方块朝向南(2)
@@ -165,6 +170,9 @@ console.log('\n[放置规则：楼梯朝向]');
     yaw: 0,
     sneaking: false,
     blockAt: () => 0,
+    // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+    hitBlock: Block.AIR,
+    hitState: 0,
   })!;
   equal('命中底面 → 倒置楼梯', isTop(upsideDown.state), true);
 }
@@ -181,6 +189,9 @@ console.log('\n[放置规则：火把]');
       yaw: 0,
       sneaking: false,
       blockAt: (dx, dy) => (dy === -1 ? below : dx !== 0 || dy !== 0 ? 1 : 0),
+      // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+      hitBlock: Block.AIR,
+      hitState: 0,
     });
 
   const floor = torches([0, 1, 0], Block.STONE);
@@ -210,6 +221,9 @@ console.log('\n[放置规则：梯子]');
       yaw: 0,
       sneaking: false,
       blockAt: () => wall,
+      // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+      hitBlock: Block.AIR,
+      hitState: 0,
     });
 
   check('实心墙面上可以放梯子', ladder([0, 0, 1], Block.STONE) !== null);
@@ -229,7 +243,10 @@ console.log('\n[放置规则：门]');
       hitZ: 10.9,
       yaw: 0,
       sneaking: false,
-      blockAt: (dx, dy) => (dy === -1 ? below : dy === 1 ? above : 0),
+      blockAt: (_dx, dy) => (dy === -1 ? below : dy === 1 ? above : 0),
+      // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+      hitBlock: Block.AIR,
+      hitState: 0,
     });
 
   const ok = door(Block.STONE, 0);
@@ -313,6 +330,9 @@ console.log('\n[活板门与栅栏门（批次 30）]');
       yaw,
       sneaking: false,
       blockAt: () => 0,
+      // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+      hitBlock: Block.AIR,
+      hitState: 0,
     });
   const onTopFace = place([0, 1, 0], 0);
   equal('对着顶面放 → 贴地（下半）', onTopFace ? isTop(onTopFace.state) : true, false);
@@ -329,6 +349,9 @@ console.log('\n[活板门与栅栏门（批次 30）]');
     yaw: Math.PI / 2,
     sneaking: false,
     blockAt: () => 0,
+    // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+    hitBlock: Block.AIR,
+    hitState: 0,
   });
   equal('栅栏门默认是关着的', gate ? isFenceGateOpen(gate.state) : true, false);
   equal('栅栏门朝向跟随玩家', gate ? facingOf(gate.state) : -1, facingFromYaw(Math.PI / 2));
@@ -424,6 +447,9 @@ console.log('\n[B4b 台阶：放置时合并]');
     yaw: 0,
     sneaking: false,
     blockAt: () => 0,
+    // 命中那一格：桩里一律"空气/无状态"（台阶合并与双击判定的输入）
+    hitBlock: Block.AIR,
+    hitState: 0,
   };
 
   // 命中同一个台阶的顶面 → 合并成双层
@@ -665,7 +691,13 @@ console.log('\n[雪层（批次 37）：1~8 层的高度]');
 
 console.log('\n[可可豆与植物支撑（批次 49）]');
 {
-  const place = (blockId: number, normal: readonly [number, number, number], hit: number, below = Block.STONE, hitState = 0) =>
+  const place = (
+    blockId: number,
+    normal: readonly [number, number, number],
+    hit: number,
+    below: number = Block.STONE,
+    hitState: number = 0,
+  ) =>
     planPlacement({
       blockId,
       normal,

@@ -2668,6 +2668,42 @@
 - [x] 文档收口（TASKS B45 + **H14 / H17 标完成** + H16 那条试金石、HANDOFF 经验表 +4 与进度口径、
       README、队列、三张台账）
 
+## 批次 73：O6 收口 —— 离线测试也过类型检查（244 → 0）
+
+- [x] **Infra**：devDependency 加 `@types/node`；`tsconfig.tools.json` 显式
+      `"types": ["node"]`（主配置刻意 `"types": []`，**只能加在工具这一份**）
+      → 一次清掉 81 条 Node 全局错误
+- [x] **方块数组 63 处**：测试里手写 `Uint8Array`，而 `BlockArray` 是 `Uint16Array`
+      （两种数组索引读法一样 → **静默错**）；改的时候跳过 `states` 那几处（它们确实是 Uint8）
+- [x] **桩对象少实现成员 24 处**：`CommandContext` / `EntityContext` / `DispenseContext` 的桩各少几个
+      方法——"断言的输入悄悄少了一块，而测试全绿"，把接口要的都补上
+- [x] **顺手抓到的真问题**（这一类比那 244 条本身更值）：
+      · `tests/collision.test.ts` 的 `Block.SLAB` / `Block.STAIRS` / `Block.GLASS_PANE` **早就没有**了
+        （半砖/台阶现在由 `slabId(i)` / `stairsId(i)` 算）→ 那段断言一直在给 `undefined` 算形状
+      · `inventory-test` 的 `plain.findFirstEmpty?.() ?? 1` 是**恒真空断言**（方法不存在）
+      · `save-test` 的 `Item.STONE` 是 `undefined`（石头是**方块**）
+      · `tool-test` / `chain-vine-test` 的**重复导入**
+      · `command-test` 结尾的 `Object.assign(FakeWorld.prototype, …)` 补丁多余且会**盖掉类实现**
+      · `spawn-test` 从错误的模块取 `MobType`（它在 `Mob.ts`）
+      · 参数被默认值窄化成字面量（`surfaceBlock = Block.GRASS_BLOCK`、`below = Block.STONE`）
+- [x] **接线**：`npm test` 第一道门 = `typecheck:tools`；`npm run build` 也过它
+- [x] 全量验证：`typecheck` ✓、`typecheck:tools` **0 条** ✓、`npm test` 全绿（72 套 / 7720 条，**一条断言都没改行为**）✓
+- [x] 文档收口（TASKS O6 标完成 + 五笔明细、HANDOFF 经验表 +3 与进度口径、README 命令说明、队列）
+
+> **批次 73 已完成并提交。** 队列在此清空 —— 下一批任务由用户指定后再写入。
+>
+> 这一批**没有动游戏内容**（方块 482 / 物品 739 / 配方 364 一个没变），
+> 产出是"测试自己也被类型检查"这条门禁 + 顺手修掉的 4 处假绿断言/过时常量。
+>
+> 下一批候选（按优先级）：
+> 1. **告示牌（B12）**：⚠️ 建议**拆两批**——先"方块 + 文字数据 + 存档 + 编辑界面"，
+>    再"3D 文字渲染"（要新引入"每块牌子一张动态贴图"的渲染路径）
+> 2. **末影系物品链 + 潜影贝壳**（末影珍珠 / 烈焰粉 / 末影之眼 / 潜影贝）：
+>    补完之后末影箱与潜影盒的配方就能换回原版（两处差异都记在差异台账里）
+> 3. **骨粉的"催熟"扩面**（B42 记的那批：树苗/甘蔗/竹子/海带/甜浆果丛/可可豆/草与花）
+> 4. **O11 贪心网格化认面级贴图**（批次 66 立的：现在面级贴图方块整块退出贪心通道）
+> 5. **海龟与海龟蛋** / **蜂蜜瓶 + 蜜蜂蜂巢**（B17 最后一条 + J21，都要连着做生物）
+
 > **批次 72 已完成并提交。** 队列在此清空 —— 下一批任务由用户指定后再写入。
 >
 > 这一批做成的东西：**潜影盒**（内容跟着物品走 + 白名单收成一处），共 **66 条**新断言；

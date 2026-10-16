@@ -40,7 +40,7 @@ import { matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { BIOME_FEATURES, SEA_LEVEL, decorate, type FeatureWorld } from '../src/core/gen/Features.ts';
 import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../src/core/world/Chunk.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
 
 let passed = 0;
 let failed = 0;
@@ -98,7 +98,7 @@ const pass = () => 0;
 const fail = () => KELP_GROW_CHANCE + 0.01;
 
 /** 海底在 floorY、水面一直到 y=63 的一整块海 */
-function oceanChunk(floorY = 40, surfaceBlock = Block.SAND): Uint8Array {
+function oceanChunk(floorY: number = 40, surfaceBlock: number = Block.SAND): BlockArray {
   const blocks = new Uint16Array(CHUNK_VOLUME);
   for (let y = -64; y <= floorY; y++) {
     const id = y === floorY ? surfaceBlock : Block.STONE;
@@ -120,7 +120,7 @@ function flatWorld(surfaceY: number, biomeId: number): FeatureWorld {
   return { surfaceY: () => surfaceY, columnBiome: () => biome };
 }
 
-function countBlocks(blocks: Uint8Array, ids: readonly number[]): number {
+function countBlocks(blocks: BlockArray, ids: readonly number[]): number {
   let count = 0;
   for (const id of blocks) if (ids.includes(id)) count++;
   return count;

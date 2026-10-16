@@ -36,11 +36,17 @@ const world: PhysicsWorld = {
   isLiquid: () => false,
 };
 
-function makeContext(pickup: (id: number, count: number) => number = () => 0): EntityContext {
+function makeContext(pickup: EntityContext['pickup'] = () => 0): EntityContext {
   return {
     world,
     playerBox: null,
     pickup,
+    // 下面四项对"掉落物"这套断言用不上，但**接口要求**它们存在：
+    // 桩对象少实现几个方法时 `npm test` 照样绿（这正是 O6 要修的盲区）
+    getBlock: () => 0,
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
   };
 }
 
@@ -132,7 +138,15 @@ console.log('\n[掉落物：水中上浮]');
     collisionAt: (_x, y) => (y < -10 ? 'full' : null),
     isLiquid: (_x, y) => y < 5,
   };
-  const ctx: EntityContext = { world: waterWorld, playerBox: null, pickup: () => 0 };
+  const ctx: EntityContext = {
+    world: waterWorld,
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: () => 0,
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+  };
   const item = new ItemEntity(Block.SAND, 1, 0.5, -5, 0.5, { x: 0, y: -3, z: 0 });
   advance(item, ctx, 1);
   check('水中速度被限制住（上浮而非下坠）', item.vy > -0.1, `vy=${item.vy.toFixed(3)}`);
@@ -262,11 +276,14 @@ console.log('\n[掉落物：带的是整份栈（批次 63）]');
     picked = { id: itemId, count, extras };
     return 0;
   });
-  (ctx as { playerBox: unknown }).playerBox = boxAt(0, 5, 0, 1, 1.8, 1);
+  (ctx as { playerBox: unknown }).playerBox = boxAt(0, 5, 0, 1, 1.8);
   fancy.age = 1;
   fancy.tick(ctx, 0.05);
   equal('拾取回调收到了这一堆', picked !== null, true);
-  check('附加数据一起交出去了', JSON.stringify(picked?.extras) === JSON.stringify(fancy.extras));
+  check(
+    '附加数据一起交出去了',
+    JSON.stringify((picked as { extras?: unknown } | null)?.extras) === JSON.stringify(fancy.extras),
+  );
   check('收下之后就消失了', fancy.dead);
 }
 

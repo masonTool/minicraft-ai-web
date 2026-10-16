@@ -8,7 +8,8 @@
  */
 
 import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
-import { MOB_TYPES, type MobType } from '../src/core/entity/mobs.ts';
+import { MOB_TYPES } from '../src/core/entity/mobs.ts';
+import type { MobType } from '../src/core/entity/Mob.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 
 let passed = 0;

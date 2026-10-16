@@ -42,8 +42,8 @@ function check(name: string, condition: boolean, detail = ''): void {
   }
 }
 
-function equal(name: string, actual: unknown, expected: unknown): void {
-  check(name, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+function equal(name: string, actual: unknown, expected: unknown, detail = ''): void {
+  check(name, Object.is(actual, expected), detail || `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
 /** 用集合表示实心方块的测试世界 */

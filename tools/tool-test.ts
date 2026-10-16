@@ -10,7 +10,7 @@
  * 运行：npm run test:tool
  */
 
-import { Block, WHEAT_STAGES, blockHardness, slabId } from '../src/core/registry/blocks.ts';
+import { Block, WHEAT_STAGES, blockHardness, slabId, woolId } from '../src/core/registry/blocks.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import {
   Item,
@@ -20,8 +20,7 @@ import {
 } from '../src/core/registry/items.ts';
 import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
 import { offeringFor } from '../src/core/crafting/Enchanting.ts';
-import { isHandHarvestable, efficientToolType, harvestRequirement, toolInfoById } from '../src/core/registry/tools.ts';
-import { Block, woolId } from '../src/core/registry/blocks.ts';
+import { isHandHarvestable } from '../src/core/registry/tools.ts';
 import {
   ALL_TOOL_MATERIALS,
   NETHERITE_TOOL_ITEM_START,
@@ -39,8 +38,7 @@ import {
   canTill,
   tillableTo,
 } from '../src/core/registry/tools.ts';
-import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
-import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { RECIPES, matchRecipe} from '../src/core/crafting/Recipes.ts';
 import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
 import { Inventory } from '../src/core/container/Inventory.ts';
 

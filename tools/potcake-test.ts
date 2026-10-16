@@ -17,7 +17,6 @@
 
 import { isHandHarvestable } from '../src/core/registry/tools.ts';
 import {
-  BLOCKS,
   Block,
   CAKE_ID,
   FLOWER_POT_ID,

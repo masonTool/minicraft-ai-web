@@ -17,7 +17,7 @@
  * 运行：npm run test:enderchest
  */
 
-import { Block, SHAPED_PARENTS, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
+import { Block, blockDef, blockHardness, blockTiles } from '../src/core/registry/blocks.ts';
 import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
 import { Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
@@ -83,7 +83,7 @@ console.log('\n[方块与外观]');
   equal('侧面另一张', tiles[2], 'ender_chest_side');
   const missing = [...tiles, 'ender_chest_front'].filter((tile) => !TILES.has(tile));
   check('用到的贴图都在图集里（含正面那只眼睛）', missing.length === 0, missing.join(', '));
-  check('声明了"正面朝放置者"', blockDef(ENDER).facesPlayer);
+  check('声明了"正面朝放置者"', blockDef(ENDER).facesPlayer === true);
   const front = blockDef(ENDER).faceTile;
   const NORTH: readonly [number, number, number] = [0, 0, -1];
   equal('正面（朝北时）是那只眼睛', front?.(0, NORTH), 'ender_chest_front');

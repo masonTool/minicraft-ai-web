@@ -79,7 +79,7 @@ const meshCtx: MeshContext = {
   },
   getBlockState: () => 0,
   // 光照只影响 AO/顶点亮度，不影响顶点数；这里给个便宜的近似（地表以上 15、以下 0）
-  getSkyLight: (x, y, z) => (y >= 63 ? 15 : 0),
+  getSkyLight: (_x, y, _z) => (y >= 63 ? 15 : 0),
   getBlockLight: () => 0,
 };
 

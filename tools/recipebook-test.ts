@@ -304,7 +304,10 @@ console.log('\n[摆放位置：每条配方都画得出来，而且画得对]');
     if (!layout.text || layout.text.length === 0) emptyText++;
     if (layout.grid === 2 !== (layout.station === 'inventory')) wrongStation++;
     if (layout.kind === 'shapeless') {
-      if (layout.items.length !== recipe.ingredients.length) wrongCount++;
+      // ⚠️ `continue` 只能由 `layout.kind` 决定：写成 `layout.kind === 'shapeless' && recipe.kind === …`
+      // 时，`continue` 之后 TS 收窄不了 layout（还有"无序配方 vs 有序配方"那种组合没排除），
+      // 于是下面读 `layout.cells`（有形状那支的字段）会被判成不存在
+      if (recipe.kind === 'shapeless' && layout.items.length !== recipe.ingredients.length) wrongCount++;
       continue;
     }
     // 格子数 = grid²（空格也占位）

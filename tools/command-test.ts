@@ -14,7 +14,6 @@ import {
   DIFFICULTY_LABELS,
   DIFFICULTIES,
   executeCommand,
-  findCommand,
   isSelfTarget,
   isValidMob,
   parseCommand,
@@ -77,7 +76,9 @@ class FakeWorld implements CommandContext {
   creative = true;
   time = 0;
   weather: 'clear' | 'rain' | 'thunder' = 'clear';
-  difficulty: Difficulty = 'normal';
+  // ⚠️ 字段名必须与接口的**方法名**错开：接口里 `difficulty` / `gameRules` 是方法，
+  // 桩对象再写一个同名字段就会正面相撞（而运行时 `ctx.difficulty` 拿到值还是函数都"能跑"）
+  difficultyValue: Difficulty = 'normal';
   rules: GameRules = { ...DEFAULT_GAME_RULES };
   inventory = new Map<number, number>();
   blocks = new Map<string, number>();
@@ -98,7 +99,7 @@ class FakeWorld implements CommandContext {
     this.pos = { x, y, z, dimension: dimension ?? this.pos.dimension };
     return true;
   }
-  give(): number {
+  give(_itemName: string, _count: number): number {
     throw new Error('give 应该由测试覆盖');
   }
   clearInventory(): number {
@@ -152,20 +153,18 @@ class FakeWorld implements CommandContext {
   setWeather(kind: 'clear' | 'rain' | 'thunder'): void {
     this.weather = kind;
   }
-  difficulty_(): Difficulty {
-    return this.difficulty;
+  difficulty(): Difficulty {
+    return this.difficultyValue;
   }
   setDifficulty(value: Difficulty): void {
-    this.difficulty = value;
+    this.difficultyValue = value;
   }
-  rules_(): GameRules {
+  gameRules(): GameRules {
     return this.rules;
   }
   setGameRule<K extends keyof GameRules>(key: K, value: GameRules[K]): void {
     this.rules[key] = value;
   }
-  // 命令上下文接口要求的名字（与上面两个内部方法对应）
-  difficulty_impl = this.difficulty_;
   summon(name: string, x: number, y: number, z: number): boolean {
     if (!isValidMob(name)) return false;
     this.mobs.push({ type: name, x, y, z });
@@ -209,15 +208,10 @@ class FakeWorld implements CommandContext {
   }
 }
 
-// 把接口里的方法名补上（类里为了可读性用了带后缀的内部名）
-Object.assign(FakeWorld.prototype, {
-  difficulty(this: FakeWorld) {
-    return this.difficulty;
-  },
-  gameRules(this: FakeWorld) {
-    return this.rules;
-  },
-});
+// ⚠️ 这里原本有一段 `Object.assign(FakeWorld.prototype, {...})` 的补丁：把接口要求的方法名
+// 补到原型上（因为类里当初用的是 `difficulty_` / `rules_` 这种带后缀的名字）。现在类里
+// **直接就叫** `difficulty()` / `gameRules()`，补丁不但多余，还会盖掉类上的实现——
+// 于是改名之后它静静地读到了一个不存在的字段，断言全绿变全红（O6 顺带收掉）。
 
 function run(input: string, world = new FakeWorld()): { out: Recorder; world: FakeWorld } {
   const out = new Recorder();
@@ -309,7 +303,7 @@ console.log('\n[给物品与清背包]');
 
 console.log('\n[时间与天气]');
 {
-  const { out, world } = run('/time set night');
+  const { world } = run('/time set night');
   check('/time set night → 0.5', world.time === 0.5);
   run('/time set noon', world);
   check('/time set noon → 0.25', world.time === 0.25);
@@ -326,11 +320,11 @@ console.log('\n[时间与天气]');
 console.log('\n[难度与游戏规则]');
 {
   const { world, out } = run('/difficulty hard');
-  check('/difficulty 生效', world.difficulty === 'hard' && out.lastInfo.includes('困难'));
+  check('/difficulty 生效', world.difficulty() === 'hard' && out.lastInfo.includes('困难'));
   const bad = run('/difficulty 地狱');
   check('非法难度报错并列出可选值', bad.out.lastError.includes('peaceful'));
   const peaceful = run('/difficulty peaceful');
-  check('和平难度可用', peaceful.world.difficulty === 'peaceful');
+  check('和平难度可用', peaceful.world.difficulty() === 'peaceful');
 
   const rule = run('/gamerule keepInventory true');
   check('布尔规则可设置', rule.world.rules.keepInventory === true && rule.out.lastInfo.includes('true'));

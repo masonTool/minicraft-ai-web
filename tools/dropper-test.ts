@@ -326,7 +326,7 @@ console.log('\n[随机挑一格：蓄水池抽样]');
   const firstPick = new Dropper(() => 0.999);
   firstPick.set(0, one(Block.STONE));
   firstPick.set(4, one(Block.DIRT));
-  const firstOut: { id: number }[] = [];
+  const firstOut: { id: number; count: number }[] = [];
   firstPick.serve(envOf({ ejected: firstOut }));
   equal('随机数靠上限时挑第一个非空槽', firstOut[0]?.id, Block.STONE);
 
@@ -334,7 +334,7 @@ console.log('\n[随机挑一格：蓄水池抽样]');
   lastPick.set(0, one(Block.STONE));
   lastPick.set(4, one(Block.DIRT));
   lastPick.set(8, one(Block.SAND));
-  const lastOut: { id: number }[] = [];
+  const lastOut: { id: number; count: number }[] = [];
   lastPick.serve(envOf({ ejected: lastOut }));
   equal('随机数贴近 0 时挑最后一个非空槽', lastOut[0]?.id, Block.SAND);
 

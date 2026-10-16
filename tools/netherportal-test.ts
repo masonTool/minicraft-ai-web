@@ -36,7 +36,6 @@ import {
   findPortalShape,
   findPortalSite,
   ignitePortal,
-  portalCenter,
   portalFrame,
   portalInterior,
   portalTarget,
@@ -382,7 +381,7 @@ console.log('\n[框被拆掉之后清门]');
   const removed = clearBrokenPortalsAround(world, -1, 63, 0);
   equal('框破了之后整片门被清掉（6 格）', removed.length, 6);
   check('门内已经没有门方块', portalInterior(FRAME).every(([x, y, z]) => world.getBlock(x, y, z) === Block.AIR));
-  check('返回的是被清掉的坐标（联机要广播）', removed.every(([x, y, z]) => x <= 1 && y >= 64 && y <= 66));
+  check('返回的是被清掉的坐标（联机要广播）', removed.every(([x, y]) => x <= 1 && y >= 64 && y <= 66));
 
   // 框还完整时不该被清
   const intact = new FakeWorld();

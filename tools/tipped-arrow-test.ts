@@ -61,7 +61,6 @@ function close(label: string, actual: number, expected: number, epsilon = 1e-6):
 }
 
 const TILES = new Set<string>(TILE_ORDER);
-const poison = potionById(POTION_IDS.poison)!;
 
 // ---------------------------------------------------------------- 1. 物品层
 

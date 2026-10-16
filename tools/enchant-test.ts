@@ -368,9 +368,8 @@ console.log('\n[K3-3 精准采集：掉方块自身]');
 
 console.log('\n[K3-4 锋利：近战伤害]');
 {
-  const { meleeDamage } = await import('../src/core/registry/tools.ts');
+  const { meleeDamage, toolInfoById } = await import('../src/core/registry/tools.ts');
   const ironSword = toolItemId('sword', 'iron');
-  const { toolInfoById } = await import('../src/core/registry/tools.ts');
   const base = toolInfoById(ironSword)!.attack;
   equal('没有锋利时就是武器基础伤害', meleeDamage(base), base);
   equal('锋利 I 加 1.0（0.5×1 + 0.5）', meleeDamage(base, { sharpness: 1 }), base + 1);
@@ -515,7 +514,6 @@ console.log('\n[K3-10 经验修补]');
   const { applyMending, isMendable, MENDING_DURABILITY_PER_XP } = await import('../src/core/crafting/Repair.ts');
   const { toolItemId } = await import('../src/core/registry/tools.ts');
   const pick = toolItemId('pickaxe', 'diamond');
-  const { toolInfoById } = await import('../src/core/registry/tools.ts');
   equal('1 点经验换 2 点耐久', MENDING_DURABILITY_PER_XP, 2);
   equal('没损耗的物品不算可修', isMendable({ id: pick, count: 1 }), false);
 

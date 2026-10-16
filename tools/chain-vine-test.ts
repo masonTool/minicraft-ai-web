@@ -24,7 +24,7 @@ import {
   isClimbableBlock,
 } from '../src/core/registry/blocks.ts';
 import { isHandHarvestable, breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
-import { blockDrops, CREATIVE_ITEMS, Item, dropFor, maxStackOf, itemDef } from '../src/core/registry/items.ts';
+import { blockDrops, CREATIVE_ITEMS, Item, maxStackOf, itemDef } from '../src/core/registry/items.ts';
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { isFlammable } from '../src/core/world/Fire.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
@@ -33,13 +33,10 @@ import {
   hasVineSide,
   hasVineUp,
   withAxis,
-  withFacing,
   withVineSide,
   withVineUp,
   vineSideCount,
   vineSides,
-  facingOf,
-  type Facing,
 } from '../src/core/registry/blockState.ts';
 import { collisionBoxes, isFullBlockShape, meshBoxes } from '../src/core/registry/blockShapes.ts';
 import { planPlacement } from '../src/core/interaction/Placement.ts';

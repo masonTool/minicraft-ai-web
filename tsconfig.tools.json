@@ -8,10 +8,23 @@
 // 桩对象 `FakeWorld` 少实现了三个方法，`npx tsc --noEmit` 依然是绿的，
 // 直到运行到这个测试才报错。
 //
-// 现状：`npm run typecheck:tools` 还有一批**历史遗留**错误（Node 全局、桩对象过时、
-// `Uint16Array`/`Uint8Array` 之类的窄化），见 TASKS 的 O6。这份配置先以"可量化"的方式
-// 留在仓库里（跑一次就知道还剩多少条），清到 0 之后再并进 `npm test`。
+// **现状（O6 已收口）**：`npm run typecheck:tools` 是 0 条错误，并且已经并进
+// `npm test`（第一道）与 `npm run build`——测试里再出现类型问题会在跑断言之前就失败。
+// 清掉的那批历史遗留长这样，留在这里给后来的脚本当参考：
+//  · Node 全局（`process`）缺 `@types/node`：主配置刻意 `"types": []`，所以只有这一份显式加 node；
+//  · 桩对象比接口**少实现几个方法**（`CommandContext` / `EntityContext` / `DispenseContext`），
+//    运行时不报错、断言照样绿——这正是"测试从来没被 tsc 检查过"最贵的一类损失；
+//  · 方块数组一律是 `BlockArray`（Uint16），测试里手写 `Uint8Array` 会静默地被当成另一种东西；
+//  · 还有几处**恒真的空断言**（调不存在的方法 + `?? 默认值`）与**早就没有的方块常量**
+//    （`Block.SLAB` / `Block.GLASS_PANE` / `Item.STONE`），见 TASKS O6 的记录。
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // 主配置刻意写了 `"types": []`（应用侧不该看见 Node 全局），
+    // 而离线测试要用 `process.argv` / `process.exit` 报结果——所以这一份显式加上 node。
+    // ⚠️ 只加在**这一份**里：往主配置里加会让 `src` 也能看见 `process`，
+    // 于是"浏览器里没有 process"这类错误要等到运行时才发现。
+    "types": ["node"]
+  },
   "include": ["tools", "tests", "src"]
 }

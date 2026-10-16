@@ -166,7 +166,7 @@ console.log('\n[与箱子的差别：箱子怕压、木桶不怕]');
 
 console.log('\n[活塞：与箱子一样推不动]');
 {
-  check('在"活塞推不动"的名单里', CONTAINER_BLOCKS.has(BARREL), true);
+  check('在"活塞推不动"的名单里', CONTAINER_BLOCKS.has(BARREL));
   check('活塞推不动木桶（推走会把里面的东西留在原地）', !canPush(BARREL));
   check('活塞照样推不动箱子', !canPush(Block.CHEST));
 }

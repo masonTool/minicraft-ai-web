@@ -120,6 +120,8 @@ function fakeContext(
     primeOk?: boolean;
     igniteOk?: boolean;
     shearCount?: number;
+    /** 骨粉那一档（批次 69 加的行为）：默认失败，本套断言不关心它的细节 */
+    fertilizeOk?: boolean;
   } = {},
 ): { ctx: DispenseContext; arrows: { x: number; y: number; z: number; velocity: Shot['velocity']; options: DispenseArrowOptions }[]; shots: Shot[]; sounds: string[] } {
   const arrows: { x: number; y: number; z: number; velocity: Shot['velocity']; options: DispenseArrowOptions }[] = [];
@@ -132,6 +134,8 @@ function fakeContext(
     primeTnt: () => options.primeOk ?? true,
     igniteFire: () => options.igniteOk ?? true,
     shearAt: () => options.shearCount ?? 0,
+    // 批次 69 新增：骨粉那一档（本套断言不触发它，但接口要求存在）
+    fertilizeAt: () => options.fertilizeOk ?? false,
     playSound: (kind) => sounds.push(kind),
   };
   return { ctx, arrows, shots, sounds };
@@ -228,7 +232,9 @@ console.log('\n[执行器：射 / 扔 / 点燃 / 点火 / 剪]');
 {
   const arrow = dispenseBehaviorFor(Item.ARROW)!;
   const snowball = dispenseBehaviorFor(Item.SNOWBALL)!;
-  const potion = dispenseBehaviorFor(SPLASH_POTIONS[0]!.id)!;
+  // ⚠️ `dispenseBehaviorFor` 给的是**行为**（没有 id）：要问"扔出去的是哪一瓶"得留着条目本身
+  const potionItem = SPLASH_POTIONS[0]!;
+  const potion = dispenseBehaviorFor(potionItem.id)!;
   const tnt = dispenseBehaviorFor(Block.TNT)!;
   const flint = dispenseBehaviorFor(Item.FLINT_AND_STEEL)!;
   const shears = dispenseBehaviorFor(Item.SHEARS)!;
@@ -258,9 +264,9 @@ console.log('\n[执行器：射 / 扔 / 点燃 / 点火 / 剪]');
   equal('朝下扔也带抬头量（否则砸在自己脚下）', snowRun.shots[0]!.velocity.y, -DISPENSER_THROW_SPEED + DISPENSER_THROW_LIFT);
 
   const potionRun = fakeContext();
-  check('药水砸出去了', runDispenseAction(potion, one(potion.id), 0, 64, 0, 1, 0, 0, potionRun.ctx));
+  check('药水砸出去了', runDispenseAction(potion, one(potionItem.id), 0, 64, 0, 1, 0, 0, potionRun.ctx));
   equal('扔的是喷溅药水', potionRun.shots[0]!.kind, 'splash_potion');
-  equal('扔出去的是这一瓶', potionRun.shots[0]!.itemId, potion.id);
+  equal('扔出去的是这一瓶', potionRun.shots[0]!.itemId, potionItem.id);
 
   // ---- TNT：对面是 TNT 才点；不是就卡住（东西留着）
   const tntHit = fakeContext({ blockAt: () => Block.TNT });
@@ -389,7 +395,7 @@ console.log('\n[容器：与投掷器共用一套，只是身份不同]');
 console.log('\n[存档与活塞]');
 {
   equal('存档里的格数表认识发射器', SLOT_COUNTS.dispenser, DISPENSER_SIZE);
-  check('在"活塞推不动"的名单里', CONTAINER_BLOCKS.has(DISP), true);
+  check('在"活塞推不动"的名单里', CONTAINER_BLOCKS.has(DISP));
   check('活塞推不动发射器', !canPush(DISP));
   check('活塞推不动投掷器', !canPush(Block.DROPPER));
 

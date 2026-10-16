@@ -23,7 +23,13 @@ import {
 } from '../src/core/gen/Structures.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../src/core/world/Chunk.ts';
+import {
+  type BlockArray,
+  CHUNK_SIZE_X,
+  CHUNK_SIZE_Z,
+  CHUNK_VOLUME,
+  Chunk,
+} from '../src/core/world/Chunk.ts';
 
 const SEED = 20261014;
 
@@ -175,8 +181,8 @@ console.log('\n[确定性与顺序无关]');
   const region: Array<[number, number]> = [];
   for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) region.push([cx, cz]);
 
-  const build = (order: Array<[number, number]>): Map<string, Uint8Array> => {
-    const out = new Map<string, Uint8Array>();
+  const build = (order: Array<[number, number]>): Map<string, BlockArray> => {
+    const out = new Map<string, BlockArray>();
     for (const [cx, cz] of order) out.set(`${cx},${cz}`, generateChunkBlocks(cx, cz, SEED));
     return out;
   };

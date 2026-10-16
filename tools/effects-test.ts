@@ -13,7 +13,6 @@ import {
   EFFECTS,
   EFFECT_LABELS,
   StatusEffects,
-  effectLabel,
   resolveEffect,
   romanLevel,
   type EffectId,

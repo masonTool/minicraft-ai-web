@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 303（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 304（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 263 项 —— 已完成 **139**、进行中 **63**、待办 61 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 263 项 —— 已完成 **140**、进行中 **63**、待办 60 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -86,7 +86,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **72 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox**，当前全绿；
+| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **72 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数）、
@@ -120,7 +120,26 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**潜影盒**（批次 72，B45）——**H14 与 H17 就此全部收口**，也是 H16 的第一块试金石。
+**刚做完的**：**O6 收口——离线测试自己也要过类型检查**（批次 73）。这一条不是新方块，而是把
+"测试从来没被 `tsc` 看过"这个盲区堵上：`npm run typecheck:tools` 从 **244 条**清到 **0**，
+并把它**并进了 `npm test`（第一道门）与 `npm run build`**——以后测试里的类型问题会在跑断言之前失败。
+四笔账，每一笔都能说清"为什么会攒下来"：
+① **Node 全局 81 处**（`process` 缺 `@types/node`）：主配置刻意 `"types": []`，只在
+`tsconfig.tools.json` 里显式加 `"types": ["node"]`。⚠️ 只能加在工具那一份：往主配置加会让
+`src` 也看见 `process`，"浏览器里没有 process"要等运行时才发现。
+② **方块数组 63 处**：测试手写 `Uint8Array`，而 `BlockArray` 是 `Uint16Array`。两种数组索引读法
+一模一样，所以**它是静默的**（"状态数组"和"方块数组"混着传也照样绿）。改的时候特意跳过 `states`
+那几处（它们确实是 Uint8）。
+③ **桩对象少实现成员 24 处**：`CommandContext` / `EntityContext` / `DispenseContext` 的桩各少几个
+方法。这类最贵——**断言的输入悄悄少了一块，而测试全绿**。
+④ **零散但都是真问题**：`tests/collision.test.ts` 里 `Block.SLAB` / `Block.GLASS_PANE` 这些常量
+**早就没有了**（半砖/台阶现在是算出来的），那段"遍历形状算碰撞盒"的断言一直在给 `undefined`
+算形状、永远不抛错；`inventory-test` 的 `plain.findFirstEmpty?.() ?? 1` 是**恒真空断言**；
+`save-test` 的 `Item.STONE` 是 `undefined`（石头是方块不是物品）；`tool-test` 有**重复导入**；
+`command-test` 结尾那段 `Object.assign(FakeMachine...)` 补丁盖掉了类上的实现，改名后静默读错字段。
+尺寸没变（方块 482 / 物品 739 / 配方 364）；**72 套**离线断言仍全绿（7720 条，一条没改行为）。
+
+再往前是**潜影盒**（批次 72，B45）——H14 / H17 全部收口。
 这一件做的是"**内容物跟着物品走**"：箱子/木桶/末影箱的内容都住在方块上，潜影盒**挖下来时把内容
 一起带走**（装进掉落的物品里）、**放下时再倒回方块**。于是 H14 那一族最后成了**三种"内容住在哪"**
 的完整对照：**住在格子上**（箱子/木桶/漏斗/投掷器/发射器）、**住在玩家存档里**（末影箱）、
@@ -812,6 +831,10 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **同一个坑踩第二次，就该加一条断言而不是再写一段注释** | "两个模块互相 import 时顶层读对方 const 会读到 undefined"这条，批次 58 写在经验表里了；这一批又踩（`SHULKER_BOX_SIZE` 被读成 undefined，格数表里没有潜影盒）。区别在于这次**断言先红**：`equal(SLOT_COUNTS.shulker_box, SHULKER_BOX_SIZE)` 直接把它变成了可见的失败。**把"已知陷阱"写成断言，比写进注释更能拦住下一次**（批次 72） |
 | **"跟着物品走"要先问"跟着谁走"** | 三种容器内容归属值得对照着看：格子（箱子）、玩家存档（末影箱）、物品（潜影盒）。识别出"潜影盒的内容属于物品"之后，实现就变成两处调用（取出/倒回），而"挖下来带走、放下取回、掉在地上也不丢"这些性质**自动成立**——因为它们都由同一条"整份栈"的通道承载（批次 63 打通的）。**新容器的第一问是"这份内容属于谁"**（批次 72） |
 | **深拷 + 只嵌一层，是两个不同的决定** | `contents` 既要**深拷**（否则"改背包顺手改了存档"），又要**限一层**（原版禁止盒装盒，所以校验与拷贝都不必递归）。两件事分开写清之后，比较函数也跟着简单：逐格比数量与附加数据就够，不用写递归。**限制数据形状（只嵌一层）常常比支持任意嵌套省掉一整类麻烦**（批次 72） |
+
+| **"没被检查过的代码"会慢慢长出三类东西：空断言、过时常量、少实现的桩** | O6 把 244 条类型错误清完，最值钱的不是那 244 条本身，而是顺手抓出来的三种"看起来绿、其实没在检查"：① **恒真空断言**（`x.findFirstEmpty?.() ?? 1` 两边永远相等）；② **引用早就没了的常量**（`Block.SLAB` 传进 `collisionBoxes` 得到 `undefined`，而断言只要求"不抛错"，于是永远通过）；③ **桩对象比接口少几个方法**（测试的输入少了一块，没人发现）。**能动的时候顺手把它们变成跑得动的检查，比多写十条新断言更值**（批次 73） |
+| **"加类型检查"的价值在于它检查的是测试本身** | 应用侧一直有 `tsc --noEmit`，但 `tools/` 与 `tests/` 只经 esbuild 剥类型——于是**测试可以对着不存在的 API 写断言**（`Item.STONE`、`layout.cells` 的窄化、`(name, count) => number` 赋给 `() => number`）。把工具侧并进 `npm test` 之后，"测试写错"与"代码写错"在同一道门里被拦下。**测试是安全网，安全网自己也需要被检查**（批次 73） |
+| **`"types": []` 是刻意的，别顺手改成全局可见** | 主 `tsconfig.json` 写 `"types": []` 是有意的：应用侧不该看见 `process`/`Buffer` 这类 Node 全局（浏览器里没有）。工具侧要 `process.argv`/`process.exit` 报结果，所以只在 `tsconfig.tools.json` 里加 `"types": ["node"]`。**"哪一层能看见什么"应当是配置里显式写出来的**，而不是靠"装了什么 @types 就自动可见"（批次 73） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 

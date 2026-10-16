@@ -69,7 +69,7 @@ import {
 import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../src/core/world/Chunk.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
 
 let passed = 0;
 let failed = 0;
@@ -113,14 +113,14 @@ check(
 check(
   '每个物品的图标都在图集名单里',
   CREATIVE_ITEMS.every((entry) => {
-    const def = itemDef(typeof entry === 'number' ? entry : entry.id);
+    const def = itemDef(entry);
     return def === undefined || TILES.includes(def.tile);
   }),
   CREATIVE_ITEMS.filter((entry) => {
-    const def = itemDef(typeof entry === 'number' ? entry : entry.id);
+    const def = itemDef(entry);
     return def !== undefined && !TILES.includes(def.tile);
   })
-    .map((entry) => itemDef(typeof entry === 'number' ? entry : entry.id)!.tile)
+    .map((entry) => itemDef(entry)!.tile)
     .join(' '),
 );
 check('图集贴图无重名', new Set(TILE_ORDER).size === TILE_ORDER.length);
@@ -211,7 +211,7 @@ function flatWorld(surfaceY = 64, biomeId: number = Biome.PLAINS): FeatureWorld 
 }
 
 /** 铺一层平地（y ≤ surfaceY 为石头，最上面一层为指定地表方块） */
-function flatChunk(surfaceY = 64, surfaceBlock = Block.GRASS_BLOCK): Uint8Array {
+function flatChunk(surfaceY: number = 64, surfaceBlock: number = Block.GRASS_BLOCK): BlockArray {
   const blocks = new Uint16Array(CHUNK_VOLUME);
   for (let y = -64; y <= surfaceY; y++) {
     const id = y === surfaceY ? surfaceBlock : Block.STONE;
@@ -223,7 +223,7 @@ function flatChunk(surfaceY = 64, surfaceBlock = Block.GRASS_BLOCK): Uint8Array 
 }
 
 /** 整个区块里最高的非空气方块 */
-function topOf(blocks: Uint8Array): number {
+function topOf(blocks: BlockArray): number {
   for (let y = 319; y >= -64; y--) {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) if (blocks[Chunk.index(x, y, z)] !== Block.AIR) return y;
@@ -233,7 +233,7 @@ function topOf(blocks: Uint8Array): number {
 }
 
 /** 整个区块里最低的"地物方块"（排除地面与石头） */
-function lowestOf(blocks: Uint8Array, surfaceY: number): number {
+function lowestOf(blocks: BlockArray, surfaceY: number): number {
   for (let y = surfaceY + 1; y < 320; y++) {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) if (blocks[Chunk.index(x, y, z)] !== Block.AIR) return y;
@@ -243,20 +243,20 @@ function lowestOf(blocks: Uint8Array, surfaceY: number): number {
 }
 
 /** 造一个"已经装饰过"的平坦区块（省掉到处重复的三行） */
-function flatAfterDecorate(biome: number, seed: number, surfaceY = 63): Uint8Array {
+function flatAfterDecorate(biome: number, seed: number, surfaceY = 63): BlockArray {
   const chunk = flatChunk(surfaceY);
   decorate(chunk, 0, 0, flatWorld(surfaceY, biome), seed);
   return chunk;
 }
 
-function countBlocks(blocks: Uint8Array, ids: readonly number[]): number {
+function countBlocks(blocks: BlockArray, ids: readonly number[]): number {
   let count = 0;
   for (const id of blocks) if (ids.includes(id)) count++;
   return count;
 }
 
 /** 统计某列范围内的方块（局部 x 范围） */
-function countInColumns(blocks: Uint8Array, xFrom: number, xTo: number, ids: readonly number[]): number {
+function countInColumns(blocks: BlockArray, xFrom: number, xTo: number, ids: readonly number[]): number {
   let count = 0;
   for (let z = 0; z < CHUNK_SIZE_Z; z++) {
     for (let x = xFrom; x <= xTo; x++) {
@@ -306,7 +306,7 @@ console.log('\n[跨区块一致性：树冠不会被区块边界切断]');
 
   // (2) 同一棵树被两个区块各自重放时，树冠的**绝对高度**必须完全一致，否则接缝处会错位。
   //     取镜像的两列比较：拥有者的世界 x=13（树在 x=15，偏移 -2）与邻居的世界 x=17（偏移 +2）。
-  const leafColumn = (blocks: Uint8Array, x: number): string => {
+  const leafColumn = (blocks: BlockArray, x: number): string => {
     const ys: number[] = [];
     for (let y = 65; y < 319; y++) if (leafIds.includes(blocks[Chunk.index(x, y, 8)]!)) ys.push(y);
     return ys.join(',');
@@ -721,7 +721,7 @@ console.log('\n[睡莲（B16）]');
    * 一小片水塘：y=63 是地面、y=64 是水（水面正上方 y=65 是空气）。
    * 睡莲应该只出现在 y=65。
    */
-  function pondChunk(): Uint8Array {
+  function pondChunk(): BlockArray {
     const blocks = flatChunk(63);
     for (let z = 2; z < 12; z++) {
       for (let x = 2; x < 12; x++) blocks[Chunk.index(x, 64, z)] = Block.WATER;

@@ -37,8 +37,6 @@ import {
   kindOf,
   restoreContainers,
   serializeContainers,
-  restoreStacks,
-  serializeStacks,
   type SerializedContainer,
 } from '../src/core/save/ContainerSave.ts';
 import { BlockEntityStore, CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
@@ -102,8 +100,8 @@ console.log('\n[方块与外观]');
 
 console.log('\n[容器：27 格，与箱子同一套]');
 {
-  equal('27 格', SHULKER_BOX_SIZE, CHEST_SIZE);
   const box = new ShulkerBox();
+  equal('27 格', SHULKER_BOX_SIZE, CHEST_SIZE);
   check('潜影盒**就是**箱子（子类）——按 Chest 判定的地方自动覆盖', box instanceof Chest);
   equal('格数被认出来', containerSlotCount(box), 27);
   equal('27 格全可塞（漏斗灌得进来，与原版一致）', acceptingSlots(box).length, 27);
@@ -205,7 +203,6 @@ console.log('\n[合并：装了不同东西的盒子不能并堆]');
   check('"空盒子"与"装了东西的盒子"也不是同一件', !sameStack(a, emptyBox));
   check('两个空盒子是同一件', sameStack(emptyBox, emptyBox2));
 
-  const box = new ShulkerBox();
   const target = new ShulkerBox();
   target.set(0, { id: BOX, count: 1, contents: [one(Item.DIAMOND, 1)] });
   equal('工具箱往盒子里塞"内容不同的盒子"时不会并堆', tryInsertOne(target, { id: BOX, count: 1, contents: [one(Item.DIAMOND, 9)] }), true);

@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { GLASS_PANE_ID, Block, blockDef, slabId, stairsId } from '../src/core/registry/blocks.ts';
 import { collisionBoxes, type LocalBox } from '../src/core/registry/blockShapes.ts';
 import { withDoorOpen, withFacing, withTop } from '../src/core/registry/blockState.ts';
 
@@ -104,14 +104,14 @@ describe('方块形状与碰撞盒', () => {
     const shapes = new Set<string>();
     for (const id of [
       Block.STONE,
-      Block.SLAB,
-      Block.STAIRS,
+      slabId(0),
+      stairsId(0),
       Block.OAK_DOOR,
       Block.OAK_FENCE,
       Block.TORCH,
       Block.SHORT_GRASS,
       Block.LADDER,
-      Block.GLASS_PANE,
+      GLASS_PANE_ID,
       Block.CACTUS,
       Block.REDSTONE_WIRE,
     ]) {

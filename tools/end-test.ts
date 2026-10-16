@@ -13,12 +13,12 @@
  * 运行：npm run test:end
  */
 
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { Block } from '../src/core/registry/blocks.ts';
 import { chestLootIndex } from '../src/core/registry/blockState.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { END_BIOME_NAMES, EndGenerator } from '../src/core/gen/EndGenerator.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../src/core/world/Chunk.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
 
 const SEED = 20261014;
 
@@ -35,15 +35,13 @@ function check(label: string, condition: boolean, detail = ''): void {
   }
 }
 
-function countBlocks(blocks: Uint8Array, id: number): number {
+function countBlocks(blocks: BlockArray, id: number): number {
   let count = 0;
   for (const value of blocks) if (value === id) count++;
   return count;
 }
 
 const gen = new EndGenerator(SEED);
-const named = (id: number) => blockDef(id).name.replace('minecraft:', '');
-
 // ---------------------------------------------------------------- 1. 主岛
 
 console.log('\n[主岛与黑曜石柱]');

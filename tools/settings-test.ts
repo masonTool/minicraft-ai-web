@@ -191,7 +191,9 @@ console.log('\n[下拉框的选项]');
   check('粒子选项数量是 3', PARTICLE_LEVELS.length === 3);
   check(
     '每个设置项都有默认值（新增字段忘了给默认值会在这里暴露）',
-    Object.keys(DEFAULT_SETTINGS).every((key) => (DEFAULT_SETTINGS as Record<string, unknown>)[key] !== undefined),
+    Object.keys(DEFAULT_SETTINGS).every(
+      (key) => (DEFAULT_SETTINGS as unknown as Record<string, unknown>)[key] !== undefined,
+    ),
   );
 }
 

@@ -470,7 +470,7 @@ console.log('\n[红沙与红砂岩（批次 45）：原料链闭合]');
   // ---- 六个变体：id 从显式起点排（这一段不在 351~403 里）
   equal(
     '红砂岩三件套的 id 从 416 连着排',
-    ['slab', 'stairs', 'wall'].map((kind) => stoneVariantId('red_sandstone', kind)).join(','),
+    (['slab', 'stairs', 'wall'] as const).map((kind) => stoneVariantId('red_sandstone', kind)).join(','),
     [RED_SANDSTONE_VARIANT_ID_START, RED_SANDSTONE_VARIANT_ID_START + 1, RED_SANDSTONE_VARIANT_ID_START + 2].join(','),
   );
   equal('切制红砂岩只有台阶（原版没有它的楼梯与墙）', stoneVariantId('cut_red_sandstone', 'stairs'), undefined);

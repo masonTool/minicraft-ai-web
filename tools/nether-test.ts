@@ -15,7 +15,7 @@ import { Block, blockDef } from '../src/core/registry/blocks.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { NETHER_BIOME_NAMES, NetherBiome, NetherGenerator } from '../src/core/gen/NetherGenerator.ts';
 import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk } from '../src/core/world/Chunk.ts';
+import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
 
 const SEED = 20261014;
 
@@ -32,13 +32,13 @@ function check(label: string, condition: boolean, detail = ''): void {
   }
 }
 
-function countBlocks(blocks: Uint8Array, id: number): number {
+function countBlocks(blocks: BlockArray, id: number): number {
   let count = 0;
   for (const value of blocks) if (value === id) count++;
   return count;
 }
 
-function heightRangeCount(blocks: Uint8Array, y0: number, y1: number, ids: readonly number[]): number {
+function heightRangeCount(blocks: BlockArray, y0: number, y1: number, ids: readonly number[]): number {
   let count = 0;
   for (let y = y0; y <= y1; y++) {
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
@@ -209,7 +209,7 @@ console.log('\n[跨区块一致性与确定性]');
   // 同一棵菌菇树（世界坐标 x=15 贴着区块边界）分别用"拥有者"和"右侧邻居"的写入器种一遍：
   // 树干只落在拥有者那边，树冠由邻居补上，且两侧算出的高度必须一致。
   const stemIds = [Block.CRIMSON_STEM, Block.WARPED_STEM];
-  const wartIds = [Block.NETHER_WART_BLOCK, Block.WARPED_WART_BLOCK];
+  const wartIds: readonly number[] = [Block.NETHER_WART_BLOCK, Block.WARPED_WART_BLOCK];
   const generator = new NetherGenerator(SEED);
 
   const ownerChunk = new Uint16Array(CHUNK_VOLUME);
@@ -224,7 +224,7 @@ console.log('\n[跨区块一致性与确定性]');
     `邻居区块疣块 ${heightRangeCount(neighbourChunk, 33, 100, wartIds)}`,
   );
 
-  const wartColumn = (blocks: Uint8Array, x: number): string => {
+  const wartColumn = (blocks: BlockArray, x: number): string => {
     const ys: number[] = [];
     for (let y = 33; y < 120; y++) if (wartIds.includes(blocks[Chunk.index(x, y, 8)]!)) ys.push(y);
     return ys.join(',');

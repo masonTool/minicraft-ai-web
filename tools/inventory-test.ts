@@ -195,7 +195,10 @@ console.log('\n[背包：整栈存入（批次 63）]');
   plain.addStack({ id: Block.STONE, count: 1 });
   plain.addStack({ id: Block.STONE, count: 2 });
   equal('两份一样的会合并', plain.get(0)?.count, 3);
-  equal('只用一格', plain.findFirstEmpty?.() ?? 1, 1);
+  // ⚠️ 这里原来写的是 `plain.findFirstEmpty?.() ?? 1`：**方法根本不存在**，
+  // 于是 `?.()` 静默短路、`?? 1` 兜底，断言永远成立（O6 扫出来的空断言）。
+  // 真要问的是"合并之后只用了一格"——直接看第二格是不是空的
+  equal('只用一格（第二格还是空的）', plain.get(1), null);
 
   // 装不下时留在手上（返回值 = 剩余）
   const small = new Inventory();

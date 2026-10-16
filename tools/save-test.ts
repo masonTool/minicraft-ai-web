@@ -330,7 +330,7 @@ console.log('\n[容器内容：空容器与脏数据]');
   equal('完全空的容器一个都不写', serializeContainers(store).length, 0);
 
   const withItem = new BlockEntityStore();
-  withItem.getOrCreateChest('overworld', 0, 64, 0).set(3, { id: Item.STONE, count: 1 });
+  withItem.getOrCreateChest('overworld', 0, 64, 0).set(3, { id: Block.STONE, count: 1 });
   equal('有东西的容器才写', serializeContainers(withItem).length, 1);
 
   // 只烧了一半的熔炉：即使三格都空了，"燃烧剩余"也要留住（否则重新点火的节奏会抖）

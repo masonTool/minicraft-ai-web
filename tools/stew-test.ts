@@ -166,7 +166,11 @@ console.log('\n[配方：碗 + 两种蘑菇 + 那朵花]');
 
   // 换花就换碗：用虞美人做出来的**不是**蒲公英那碗
   const withPoppy = matchRecipe([Item.BOWL, Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Block.POPPY], 2);
-  check('换一朵花 → 得到的是那一朵对应的那碗', withPoppy?.id === Item.SUSPICIOUS_STEW_POPPY && withPoppy.id !== Item.SUSPICIOUS_STEW_DANDELION);
+  check(
+    '换一朵花 → 得到的是那一朵对应的那碗',
+    withPoppy?.id === Item.SUSPICIOUS_STEW_POPPY &&
+      withPoppy.id !== (Item.SUSPICIOUS_STEW_DANDELION as number),
+  );
   equal('缺蘑菇做不出来（对照）', matchRecipe([Item.BOWL, Block.RED_MUSHROOM, Block.POPPY, 0], 2), null);
   equal('缺碗做不出来（对照）', matchRecipe([Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Block.POPPY, 0], 2), null);
 

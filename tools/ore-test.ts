@@ -13,7 +13,14 @@
 
 import { ORE_BLOCKS } from '../src/core/gen/OreGenerator.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_HEIGHT, WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
+import {
+  type BlockArray,
+  CHUNK_SIZE_X,
+  CHUNK_SIZE_Z,
+  Chunk,
+  WORLD_HEIGHT,
+  WORLD_MIN_Y,
+} from '../src/core/world/Chunk.ts';
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
 
 const label = (id: number): string => blockDef(id).name.replace('minecraft:', '');
@@ -126,14 +133,14 @@ console.log('\n[跨区块写入]');
 {
   const generator = new OverworldGenerator(SEED);
 
-  const grid = new Map<string, Uint8Array>();
+  const grid = new Map<string, BlockArray>();
   for (let cx = 0; cx < 3; cx++) {
     for (let cz = 0; cz < 2; cz++) {
       grid.set(`${cx},${cz}`, generator.generate(cx, cz));
     }
   }
 
-  const isOre = (blocks: Uint8Array, x: number, y: number, z: number): boolean =>
+  const isOre = (blocks: BlockArray, x: number, y: number, z: number): boolean =>
     ORE_BLOCKS.has(blocks[Chunk.index(x, y, z)]!);
 
   let touchingX = 0;

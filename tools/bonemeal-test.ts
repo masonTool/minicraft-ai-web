@@ -78,7 +78,6 @@ function lcg(seed: number): () => number {
 }
 
 const WHEAT = CROP_STAGES.wheat!;
-const CARROTS = CROP_STAGES.carrots!;
 /** 一格小麦（第 0 阶段）在 (0, 64, 0)、下面是有耕地的世界 */
 function wheatWorld(stage = 0): FakeWorld {
   return new FakeWorld().at(0, 63, 0, Block.FARMLAND).at(0, 64, 0, WHEAT[stage]!);
