@@ -131,6 +131,22 @@ export type BlockShape =
    * 输出强度本身**不占状态位**——它每次重算时按天光现算（与红石粉强度同一个道理）。
    */
   | 'daylight_detector'
+  /**
+   * 绊线（批次 55）：贴着地面的一根细线，**踩上去就触发**（本身没有碰撞）。
+   *
+   * 线沿哪个方向延伸**不写状态**：网格化时按邻居实时算（与栅栏同一套），
+   * 东西向有邻居就画一条沿 X 的线、南北向有邻居就画一条沿 Z 的线、都没有就画个小十字。
+   * 状态位只放"通电了没"（`powered`）与"被剪断了没"（`disarmed`）。
+   */
+  | 'tripwire'
+  /**
+   * 绊线钩（批次 55）：贴在墙上的一个钩子，两根朝向相对的钩子 + 中间的绊线组成一条回路。
+   *
+   * 朝向沿用本项目那套（`facing` 指向**贴着的那一面墙**，与梯子/藤蔓/珊瑚扇一致）；
+   * "线往哪边延伸"是它的**反方向**（原版把朝向记成"线延伸的方向"，
+   * 这里为了全项目一套语义反过来记，换算收在 `tripwireWireDirection` 里）。
+   */
+  | 'tripwire_hook'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -208,6 +224,42 @@ export function isInverted(state: number): boolean {
 
 export function withInverted(state: number, inverted: boolean): number {
   return inverted ? state | INVERTED_MASK : state & ~INVERTED_MASK;
+}
+
+/**
+ * 绊线被"剪断"了（批次 55）。
+ *
+ * 与门的门轴 / 阳光传感器的反向模式共用 bit4：三者属于不同形状族，
+ * 同一个方块只会是其中一种（沿用本文件开头那条设计）。
+ * 剪断之后线还在、也还连着，但**踩上去不再触发**（原版用剪刀右键剪断）。
+ */
+const DISARMED_MASK = 0b10000;
+
+export function isDisarmed(state: number): boolean {
+  return (state & DISARMED_MASK) !== 0;
+}
+
+export function withDisarmed(state: number, disarmed: boolean): number {
+  return disarmed ? state | DISARMED_MASK : state & ~DISARMED_MASK;
+}
+
+/** 绊线钩的"线接上了没有"（bit0；渲染与调试要用，触发判定也要它） */
+const TRIPWIRE_ATTACHED_MASK = 0b1;
+
+export function isTripwireAttached(state: number): boolean {
+  return (state & TRIPWIRE_ATTACHED_MASK) !== 0;
+}
+
+export function withTripwireAttached(state: number, attached: boolean): number {
+  return attached ? state | TRIPWIRE_ATTACHED_MASK : state & ~TRIPWIRE_ATTACHED_MASK;
+}
+
+/**
+ * 绊线钩的"线往哪边延伸"：**朝向的反方向**（本项目的 `facing` 一律指向贴着的那一面墙）。
+ * 返回 Facing（0 北 / 1 东 / 2 南 / 3 西）。
+ */
+export function tripwireWireDirection(state: number): Facing {
+  return ((facingOf(state) + 2) & 3) as Facing;
 }
 
 /** 花盆里装的是第几种植物（0 = 空盆；对应 `POTTED_PLANTS` 的下标 + 1） */
@@ -591,6 +643,10 @@ export function describeState(shape: BlockShape, state: number): string {
     }
     case 'daylight_detector':
       return `${isInverted(state) ? '反向（天黑通电）' : '白天通电'}·${isPowered(state) ? '正在输出' : '没有输出'}`;
+    case 'tripwire':
+      return `${isDisarmed(state) ? '已剪断' : '待触发'}·${isPowered(state) ? '已触发' : '没触发'}`;
+    case 'tripwire_hook':
+      return `${FACING_NAMES[tripwireWireDirection(state)]}向的线·${isTripwireAttached(state) ? '已接上' : '没接上'}·${isPowered(state) ? '有信号' : '没信号'}`;
     default:
       return '';
   }

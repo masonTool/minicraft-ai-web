@@ -3756,6 +3756,52 @@ PAINTERS.daylight_detector_side = (_x, y, rng) => {
   return [clamp255(232 * shade + jitter), clamp255(228 * shade + jitter), clamp255(216 * shade + jitter), 255];
 };
 
+// ---------------------------------------------------------------- 绊线与绊线钩（批次 55）
+
+/**
+ * 绊线：**贴在盒子底面的一条细线**（盒子里只有 1/16 高、2/16 宽，其余透明）。
+ * 线沿着盒子长边走，所以贴图上就是一条横线 + 每隔几像素的"结"。
+ */
+PAINTERS.tripwire = (_x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  if (y > 2) return [0, 0, 0, 0];
+  // 线本身（深灰，原版绊线是暗色的细绳）
+  const shade = y < 1 ? 0.86 : 1;
+  return [clamp255(150 * shade + jitter), clamp255(138 * shade + jitter), clamp255(120 * shade + jitter), 255];
+};
+
+/**
+ * 绊线钩：一块木底板 + 一个铁环（原版就是"木板 + 铁钩"的样子）。
+ * `powered` 那张把铁环画成红色——这样"线接上了没、触发了没"一眼能看出来。
+ */
+function tripwireHook(inverted: boolean): Painter {
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    // 铁环：中间偏上一圈
+    const distance = Math.hypot(x - 7.5, y - 7.5 * 1.0);
+    if (distance > 3.6 && distance < 5.6) {
+      const red = inverted ? 1 : 0.55;
+      return [
+        clamp255((inverted ? 196 : 172) * red + jitter),
+        clamp255((inverted ? 60 : 168) * red + jitter),
+        clamp255((inverted ? 52 : 160) * red + jitter),
+        255,
+      ];
+    }
+    // 底板：下半部分的木纹
+    if (y >= 9) {
+      const stripe = x % 4 === 0;
+      const shade = stripe ? 0.82 : 1;
+      return [clamp255(162 * shade + jitter), clamp255(126 * shade + jitter), clamp255(78 * shade + jitter), 255];
+    }
+    // 其它地方透明（钩子是镂空的）
+    return [0, 0, 0, 0];
+  };
+}
+
+PAINTERS.tripwire_hook = tripwireHook(false);
+PAINTERS.tripwire_hook_powered = tripwireHook(true);
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

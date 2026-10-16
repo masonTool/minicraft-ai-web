@@ -2766,6 +2766,31 @@ class App {
   }
 
   /**
+   * 手持**线**右键方块顶面 → 在那一格铺一段绊线（批次 55）。
+   *
+   * 原版绊线**没有物品**（`itemless`），只能用线放下来——所以这条交互不在"放置方块"那条路上
+   * （线不是方块物品，`selectedBlock` 是 undefined），必须和点火一样单独接一处。
+   */
+  private placeTripwire(): boolean {
+    if (this.heldItemId !== Item.STRING) return false;
+    if (!this.hit || this.hit.ny <= 0) return false;
+    const x = this.hit.x;
+    const y = this.hit.y + 1;
+    const z = this.hit.z;
+    if (this.world.getBlock(x, y, z) !== Block.AIR) return false;
+    if (!this.world.setBlockAndUpdate(x, y, z, Block.TRIPWIRE)) return false;
+    // 创造模式不扣线（与"创造不掉落"同一条规矩）
+    if (!this.flying) {
+      this.inventory.consume(Item.STRING, 1);
+      this.refreshHotbar();
+    }
+    this.net.sendBlock(x, y, z, Block.TRIPWIRE, 0, this.dimension);
+    this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.hand.swing();
+    return true;
+  }
+
+  /**
    * 吃一片蛋糕（批次 52）。
    *
    * 原版：一共 7 片，**每片回 2 点饥饿 / 0.4 点饱和度**，吃完第 7 片方块消失；
@@ -3573,6 +3598,13 @@ class App {
     if (hitBlock === Block.DAYLIGHT_DETECTOR) {
       return this.redstone.toggleInverted(this.redstoneWorld, x, y, z);
     }
+    // 绊线（批次 55）：拿**剪刀**右键把它剪断（剪断后不再触发，但回路还连着）
+    if (hitBlock === Block.TRIPWIRE && this.heldTool?.type === 'shears') {
+      if (!this.redstone.disarmTripwire(this.redstoneWorld, x, y, z)) return true;
+      this.damageHeldTool();
+      this.hand.swing();
+      return true;
+    }
     if (hitBlock === Block.STONE_BUTTON || hitBlock === Block.OAK_BUTTON) {
       return this.redstone.pressButton(this.redstoneWorld, x, y, z);
     }
@@ -4073,6 +4105,13 @@ class App {
     // 打火石点火（I12）：放在放置之前——它本身不是方块物品，`selectedBlock` 是 undefined，
     // 落到下面的放置分支就什么都不做
     if (this.igniteWithFlint()) {
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
+    // 手持**线**右键方块顶面 → 铺一段绊线（批次 55）。原版绊线没有物品，
+    // 只能这么放；所以它和点火一样，必须在"放置方块"那条路**之前**单独接一处
+    if (this.placeTripwire()) {
       this.placeCooldown = PLACE_COOLDOWN;
       return;
     }

@@ -32,6 +32,7 @@ import {
   canConnectTo,
   canPaneConnectTo,
   canScaffoldConnectTo,
+  canTripwireConnectTo,
   isFullBlockShape,
   meshBoxes,
   type LocalBox,
@@ -719,13 +720,19 @@ export function meshSection(
         // 因此旁边放一个新方块后它们会自动长出新的一节 / 变成转角，
         // 不需要在方块变动时反过来更新四周方块的状态。
         const needsConnect =
-          def.shape === 'fence' || def.shape === 'wall' || def.shape === 'pane' || def.shape === 'scaffolding';
+          def.shape === 'fence' ||
+          def.shape === 'wall' ||
+          def.shape === 'pane' ||
+          def.shape === 'scaffolding' ||
+          def.shape === 'tripwire';
         const connectProbe =
           def.shape === 'pane'
             ? canPaneConnectTo
             : def.shape === 'scaffolding'
               ? canScaffoldConnectTo // 脚手架只与脚手架相连（批次 53）
-              : canConnectTo;
+              : def.shape === 'tripwire'
+                ? canTripwireConnectTo // 绊线只与绊线/钩子相连（批次 55）
+                : canConnectTo;
 
         const shapeCtx: ShapeContext = needsConnect
           ? {

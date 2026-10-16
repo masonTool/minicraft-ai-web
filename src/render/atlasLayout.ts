@@ -739,6 +739,10 @@ export const TILE_ORDER = [
   'daylight_detector_top',
   'daylight_detector_inverted_top',
   'daylight_detector_side',
+  // ---- 绊线与绊线钩（批次 55）：线 + 钩子（未触发/已触发两张）
+  'tripwire',
+  'tripwire_hook',
+  'tripwire_hook_powered',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

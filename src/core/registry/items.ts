@@ -708,6 +708,8 @@ const FUNCTIONAL = new Set<number>([
   Block.STONECUTTER,
   // 阳光传感器（批次 54）：红石元件，与拉杆/中继器同页
   Block.DAYLIGHT_DETECTOR,
+  // 绊线钩（批次 55）：同页。⚠️ 绊线本身**没有物品**（`itemless`），不在这里登记
+  Block.TRIPWIRE_HOOK,
   // 花盆（批次 52）：原版把它摆在"装饰"页（1.19 起并进了功能页），
   // 本项目没有装饰页——它是"右键往里种一株"的功能方块，与营火/熔炉同一类
   Block.FLOWER_POT,
@@ -1195,6 +1197,8 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.COCOA_STAGE0, { id: Item.COCOA_BEANS, count: 1 }],
   [Block.COCOA_STAGE1, { id: Item.COCOA_BEANS, count: 2 }],
   [Block.COCOA_STAGE2, { id: Item.COCOA_BEANS, count: 3 }],
+  // 绊线（批次 55）：它没有物品（是用"线"放下来的），拆掉退回 1 根线（原版如此）
+  [Block.TRIPWIRE, { id: Item.STRING, count: 1 }],
   // 甜菜（批次 48）：与小麦同一条规矩——没熟只拿回 1 粒种子，熟了才给甜菜根
   [Block.BEETROOTS_STAGE0, { id: Item.BEETROOT_SEEDS, count: 1 }],
   [Block.BEETROOTS_STAGE1, { id: Item.BEETROOT_SEEDS, count: 1 }],

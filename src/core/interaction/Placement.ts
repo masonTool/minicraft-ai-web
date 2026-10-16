@@ -183,6 +183,15 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       return { state: 0 };
     }
 
+    case 'tripwire_hook': {
+      // 绊线钩（批次 55）：**只能贴在侧面**（原版不能放地上/天花板下）。
+      // 朝向沿用本项目那套（指向贴着的那一面墙），线往它的反方向延伸
+      if (ny !== 0) return null;
+      const facing = facingFromNormal(nx, nz);
+      if (facing === null) return null;
+      return { state: withFacing(0, facing as Facing) };
+    }
+
     case 'ladder': {
       const facing = facingFromNormal(nx, nz);
       if (facing === null) return null;

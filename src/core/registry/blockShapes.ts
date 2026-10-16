@@ -128,6 +128,12 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'daylight_detector':
       // 与渲染同源（6/16 高的板：能站上去）
       return [DAYLIGHT_PLATE];
+    case 'tripwire':
+      // 绊线**没有碰撞**：踩上去只是触发，不会被绊住（原版如此）
+      return [];
+    case 'tripwire_hook':
+      // 只有贴墙那块底板挡路（钩子那根太细，原版也不挡）——取渲染盒的第 0 个
+      return [tripwireHookBoxes(state)[0]!];
     case 'door':
       // ⚠️ 开着的门**没有碰撞体积**（原版可以直接穿过门洞）。
       // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
@@ -354,6 +360,12 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'daylight_detector':
       // 阳光传感器（批次 54）：一块 6/16 高的板子（原版就是一块平板，走上去不用跳）
       return [DAYLIGHT_PLATE];
+    case 'tripwire':
+      // 绊线（批次 55）：细线，方向按邻居实时算；没有碰撞
+      return tripwireBoxes(ctx.connect ?? NEVER_CONNECT);
+    case 'tripwire_hook':
+      // 绊线钩（批次 55）：底板 + 小钩子（朝向决定它们贴在哪一面）
+      return tripwireHookBoxes(state);
     case 'cake':
       // 蛋糕（批次 52）：半格高，**宽度随吃掉的片数变窄**（靠西侧那一端留着）
       return [[0, 0, 0, cakeWidth(state), CAKE_HEIGHT, 1]];
@@ -769,6 +781,86 @@ export function canPaneConnectTo(neighborId: number): boolean {
   const def = blockDef(neighborId);
   if (def.shape === 'pane') return true;
   return def.solid && def.opaque && def.shape === 'cube';
+}
+
+/**
+ * 绊线的连接判定（批次 55）：相邻是绊线或绊线钩就算连上。
+ *
+ * 与脚手架同一条思路：**这一族有自己的"连谁"**（原版绊线只和绊线/钩子连，
+ * 不会像栅栏那样挂在实心方块边）。网格化时用它决定线是沿 X 还是沿 Z 画。
+ */
+export function canTripwireConnectTo(neighborId: number): boolean {
+  if (neighborId === 0) return false;
+  const shape = blockDef(neighborId).shape;
+  return shape === 'tripwire' || shape === 'tripwire_hook';
+}
+
+/** 绊线的粗细：贴着地面的 1/16 细线（2/16 宽） */
+const TRIPWIRE_HEIGHT = 0.0625;
+const TRIPWIRE_HALF_WIDTH = 0.0625;
+
+/**
+ * 绊线的渲染盒（批次 55）：一条细线，**方向由邻居决定**（东西向 / 南北向 / 都没连时一个小十字）。
+ *
+ * 原版也是这个画法：两端连上钩子的那段是一条直线，孤零零一段则是一个小十字。
+ * 线**没有碰撞**——踩上去只是触发，不会被绊住（原版如此）。
+ */
+function tripwireBoxes(connect: (facing: Facing) => boolean): readonly LocalBox[] {
+  const alongX = connect(1) || connect(3);
+  const alongZ = connect(0) || connect(2);
+  const boxes: LocalBox[] = [];
+  if (alongX) {
+    boxes.push([0, 0, 0.5 - TRIPWIRE_HALF_WIDTH, 1, TRIPWIRE_HEIGHT, 0.5 + TRIPWIRE_HALF_WIDTH]);
+  }
+  if (alongZ) {
+    boxes.push([0.5 - TRIPWIRE_HALF_WIDTH, 0, 0, 0.5 + TRIPWIRE_HALF_WIDTH, TRIPWIRE_HEIGHT, 1]);
+  }
+  // 一段孤立的线（还没接到钩子）：画个小十字，这样"放下来了但没接上"一眼能看出来
+  if (boxes.length === 0) {
+    boxes.push([
+      0.5 - TRIPWIRE_HALF_WIDTH,
+      0,
+      0.5 - TRIPWIRE_HALF_WIDTH,
+      0.5 + TRIPWIRE_HALF_WIDTH,
+      TRIPWIRE_HEIGHT,
+      0.5 + TRIPWIRE_HALF_WIDTH,
+    ]);
+  }
+  return boxes;
+}
+
+/**
+ * 绊线钩的渲染盒（批次 55）：贴着墙的一块小底板 + 一根伸进格子里的小钩子。
+ *
+ * 朝向沿用本项目那套（`facing` 指向**贴着的那一面墙**），所以"钩子往哪边伸"
+ * 是朝向的反方向——线也是往那边延伸的（见 `tripwireWireDirection`）。
+ */
+function tripwireHookBoxes(state: number): readonly LocalBox[] {
+  const t = 0.0625; // 底板厚 1/16
+  const half = 0.125; // 底板宽 4/16（一半）
+  const reach = 0.375; // 钩子伸进格子 6/16
+  switch (facingOf(state)) {
+    case 0: // 贴北墙：底板在北侧，钩子往南伸
+      return [
+        [0.5 - half, 0, 0, 0.5 + half, 0.375, t],
+        [0.5 - t, 0, t, 0.5 + t, t, t + reach],
+      ];
+    case 1: // 贴东墙
+      return [
+        [1 - t, 0, 0.5 - half, 1, 0.375, 0.5 + half],
+        [1 - t - reach, 0, 0.5 - t, 1 - t, t, 0.5 + t],
+      ];
+    case 2: // 贴南墙
+      return [
+        [0.5 - half, 0, 1 - t, 0.5 + half, 0.375, 1],
+        [0.5 - t, 0, 1 - t - reach, 0.5 + t, t, 1 - t],
+      ];
+    default: // 贴西墙（3）
+      return [
+        [0, 0, 0.5 - half, t, 0.375, 0.5 + half],
+        [t, 0, 0.5 - t, t + reach, t, 0.5 + t],
+      ];
+  }
 }
 
 /**

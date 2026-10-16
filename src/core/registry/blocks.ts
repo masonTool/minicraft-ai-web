@@ -1621,6 +1621,50 @@ export const SCAFFOLDING_ID = 471;
  */
 export const DAYLIGHT_DETECTOR_ID = 472;
 
+/**
+ * 绊线与绊线钩（批次 55）：一对**成对使用**的红石元件。
+ *
+ * 两根**朝向相对**的绊线钩 + 中间的若干格绊线 = 一条回路；任何实体踩到线上，
+ * 两个钩子都会输出 15 级信号（这就是"矿车/生物踩到就开门"那套）。
+ *
+ * 三个关键点：
+ *  - **绊线没有物品**（`itemless`）：原版是用**线**右键方块顶面放下来的，
+ *    所以它的掉落也是 1 根线（见 `items.ts` 的掉落覆盖表）
+ *  - **线的方向不写状态**：网格化时按邻居实时算（与栅栏同一套）
+ *  - **剪断**（`disarmed`）：剪刀右键剪断之后线还在、还连着，但**不再触发**
+ */
+export const TRIPWIRE_ID = 473;
+export const TRIPWIRE_HOOK_ID = 474;
+
+/** 两个钩子之间最多隔多少格（原版 40） */
+export const TRIPWIRE_MAX_LENGTH = 40;
+
+const TRIPWIRE_SPECS: readonly BlockSpec[] = [
+  {
+    id: TRIPWIRE_ID,
+    name: 'minecraft:tripwire',
+    tiles: ['tripwire', 'tripwire', 'tripwire'],
+    shape: 'tripwire',
+    opaque: false,
+    lightOpacity: 0,
+    // 原版绊线**没有物品**：只能拿线右键方块顶面放下来（见 main 的交互）
+    itemless: true,
+  },
+  {
+    id: TRIPWIRE_HOOK_ID,
+    name: 'minecraft:tripwire_hook',
+    // 通电时换一张（原版钩子"拉起来"的样子，这里用颜色区分）
+    tiles: ['tripwire_hook', 'tripwire_hook', 'tripwire_hook'],
+    stateTiles: (state) =>
+      isPowered(state)
+        ? ['tripwire_hook_powered', 'tripwire_hook_powered', 'tripwire_hook_powered']
+        : ['tripwire_hook', 'tripwire_hook', 'tripwire_hook'],
+    shape: 'tripwire_hook',
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const DAYLIGHT_DETECTOR_SPECS: readonly BlockSpec[] = [
   {
     id: DAYLIGHT_DETECTOR_ID,
@@ -1908,6 +1952,7 @@ const SPECS: readonly BlockSpec[] = [
   ...CAKE_AND_POT_SPECS,
   ...SCAFFOLDING_SPECS,
   ...DAYLIGHT_DETECTOR_SPECS,
+  ...TRIPWIRE_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2170,6 +2215,9 @@ export const Block = {
   SCAFFOLDING: SCAFFOLDING_ID,
   // ---- 阳光传感器（批次 54，见 `DAYLIGHT_DETECTOR_SPECS`）
   DAYLIGHT_DETECTOR: DAYLIGHT_DETECTOR_ID,
+  // ---- 绊线与绊线钩（批次 55，见 `TRIPWIRE_SPECS`）
+  TRIPWIRE: TRIPWIRE_ID,
+  TRIPWIRE_HOOK: TRIPWIRE_HOOK_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2443,6 +2491,9 @@ HARDNESS.set(Block.FLOWER_POT, 0);
 HARDNESS.set(Block.SCAFFOLDING, 0);
 // 阳光传感器（批次 54）：0.2（原版）
 HARDNESS.set(Block.DAYLIGHT_DETECTOR, 0.2);
+// 绊线与绊线钩（批次 55）：都是 0（原版一碰就掉）
+HARDNESS.set(Block.TRIPWIRE, 0);
+HARDNESS.set(Block.TRIPWIRE_HOOK, 0);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2738,6 +2789,9 @@ HAND_HARVESTABLE.add(Block.FLOWER_POT);
 HAND_HARVESTABLE.add(Block.SCAFFOLDING);
 // 阳光传感器（批次 54）：徒手可采（原版斧头更快，但不要求工具）
 HAND_HARVESTABLE.add(Block.DAYLIGHT_DETECTOR);
+// 绊线与绊线钩（批次 55）：徒手可采
+HAND_HARVESTABLE.add(Block.TRIPWIRE);
+HAND_HARVESTABLE.add(Block.TRIPWIRE_HOOK);
 
 /**
  * 作物的生长阶段表（按顺序）。

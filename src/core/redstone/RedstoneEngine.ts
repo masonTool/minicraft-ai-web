@@ -20,15 +20,20 @@
  */
 
 import { Block, blockDef } from '../registry/blocks.ts';
+import { TRIPWIRE_MAX_LENGTH } from '../registry/blocks.ts';
 import {
   FACING_OFFSET,
   facingOf,
+  isDisarmed,
   isDoorOpen,
   isDoorUpper,
   isFenceGateOpen,
   isInverted,
   isPowered,
   isTrapdoorOpen,
+  isTripwireAttached,
+  tripwireWireDirection,
+  withDisarmed,
   withDoorOpen,
   withDoorUpper,
   withFacing,
@@ -36,6 +41,7 @@ import {
   withInverted,
   withPowered,
   withTrapdoorOpen,
+  withTripwireAttached,
 } from '../registry/blockState.ts';
 import { WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 
@@ -88,6 +94,9 @@ export function isRedstoneComponent(id: number): boolean {
     case Block.OBSERVER:
     // 阳光传感器（批次 54）：按天光强度输出的**可变量电源**
     case Block.DAYLIGHT_DETECTOR:
+    // 绊线与绊线钩（批次 55）：两者都要是元件，洪泛才能把一条回路连成一片
+    case Block.TRIPWIRE:
+    case Block.TRIPWIRE_HOOK:
       return true;
     default:
       return false;
@@ -153,6 +162,11 @@ export class RedstoneEngine {
    * 变了才登记重算（不然每个传感器每秒都要拉着整片电路重算一遍）。
    */
   private readonly daylightOutputs = new Map<string, number>();
+  /**
+   * 绊线回路上的每格绊线：位置 → 上次看到的"有没有实体"（批次 55）。
+   * 与压力板同一套路：实体踩线**不会**产生方块变化事件，只能每 0.1 秒主动看一次。
+   */
+  private readonly tripwireEntity = new Map<string, boolean>();
   /** 待重新计算的位置（tick 里批量处理，避免一次改动触发多次全量重算） */
   private readonly dirty: string[] = [];
   private readonly dirtySet = new Set<string>();
@@ -164,6 +178,20 @@ export class RedstoneEngine {
     if (world.getBlock(x, y, z) !== Block.LEVER) return false;
     const state = world.getState(x, y, z);
     if (!world.setState(x, y, z, withPowered(state, !isPowered(state)))) return false;
+    this.markDirty(x, y, z);
+    this.flush(world);
+    return true;
+  }
+
+  /**
+   * 玩家拿**剪刀右键绊线**（批次 55）：把它剪断（`disarmed`）。
+   * 剪断之后线还在、回路也还连着，但踩上去不再触发——原版就是用剪刀剪的。
+   */
+  disarmTripwire(world: RedstoneWorld, x: number, y: number, z: number): boolean {
+    if (world.getBlock(x, y, z) !== Block.TRIPWIRE) return false;
+    const state = world.getState(x, y, z);
+    if (isDisarmed(state)) return false;
+    if (!world.setState(x, y, z, withDisarmed(state, true))) return false;
     this.markDirty(x, y, z);
     this.flush(world);
     return true;
@@ -277,6 +305,8 @@ export class RedstoneEngine {
     if (this.plateTimer <= 0) {
       this.plateTimer = 0.1;
       if (this.pollPressurePlates(world)) changed = true;
+      // 绊线（批次 55）：与压力板同一节奏看"线上有没有实体"
+      if (this.pollTripwires(world)) changed = true;
     }
 
     // 阳光传感器：每秒复查（原版 20 tick）。天光随时间与天气变，
@@ -319,6 +349,74 @@ export class RedstoneEngine {
     }
     this.flushing = false;
     this.updates++;
+  }
+
+  /**
+   * 扫一条绊线回路（批次 55）：从这根钩子出发，沿着"线延伸的方向"往前走。
+   *
+   * @returns `path` 沿途的绊线格、`attached` 是不是接到了**另一根朝向相对的钩子**、
+   *          `powered` 有没有被触发（接上了 + 至少有一格**没被剪断**的线上有实体）
+   *
+   * ⚠️ 三个容易漏的判据：
+   *  1. 对面的钩子必须**朝向相对**——朝向一致的两根钩子不算一条回路（原版如此）
+   *  2. 中间**必须全是绊线**：中间夹了别的方块就断了（原版不会"隔空触发"）
+   *  3. **被剪断的那一格不算触发**，但也不打断回路（原版剪断的是"这一格的触发"）
+   */
+  private scanTripwire(
+    world: RedstoneWorld,
+    x: number,
+    y: number,
+    z: number,
+    state: number,
+  ): { path: Node[]; attached: boolean; powered: boolean } {
+    const [dx, dz] = FACING_OFFSET[tripwireWireDirection(state)]!;
+    const path: Node[] = [];
+    let attached = false;
+    let cx = x + dx;
+    let cz = z + dz;
+    for (let step = 0; step < TRIPWIRE_MAX_LENGTH; step++) {
+      const id = world.getBlock(cx, y, cz);
+      if (id === Block.TRIPWIRE) {
+        path.push({ x: cx, y, z: cz });
+        cx += dx;
+        cz += dz;
+        continue;
+      }
+      if (id === Block.TRIPWIRE_HOOK) {
+        // 对面的钩子要朝回来（朝向 = 贴着的那一面，所以正好相差 180°）
+        const other = tripwireWireDirection(world.getState(cx, y, cz));
+        attached = other === ((tripwireWireDirection(state) + 2) & 3);
+      }
+      break;
+    }
+    const powered =
+      attached &&
+      path.some((node) => !isDisarmed(world.getState(node.x, node.y, node.z)) && world.hasEntityAt(node.x, node.y, node.z));
+    return { path, attached, powered };
+  }
+
+  /**
+   * 绊线的实体轮询（批次 55）：与压力板同一节奏（10Hz）。
+   *
+   * 为什么必须轮询：实体踩到线**不会**产生方块变化事件，电路没有别的机会知道。
+   * 只有"这一格的实体状态变了"才登记重算——而重算会顺着洪泛把整条回路（含两根钩子）
+   * 重新算一遍，于是两个钩子都会跟着亮。
+   */
+  private pollTripwires(world: RedstoneWorld): boolean {
+    let changed = false;
+    for (const [key, previous] of [...this.tripwireEntity]) {
+      const [x, y, z] = parseKey(key);
+      if (world.getBlock(x, y, z) !== Block.TRIPWIRE || !world.isLoaded(x, z)) {
+        this.tripwireEntity.delete(key);
+        continue;
+      }
+      const pressed = world.hasEntityAt(x, y, z);
+      if (pressed === previous) continue;
+      this.tripwireEntity.set(key, pressed);
+      this.markDirty(x, y, z);
+      changed = true;
+    }
+    return changed;
   }
 
   /**
@@ -407,6 +505,34 @@ export class RedstoneEngine {
           strengths.set(key, 15);
           sources.push({ x: nx, y: ny, z: nz });
           break;
+        case Block.TRIPWIRE_HOOK: {
+          // 绊线钩（批次 55）：两根**朝向相对**的钩子 + 中间若干格绊线 = 一条回路；
+          // 线上有实体时两个钩子都输出 15。判定全在 `scanTripwire` 里（纯读世界）
+          const scan = this.scanTripwire(world, nx, ny, nz, state);
+          // 状态位写回：`attached`（线接上了没）与 `powered`（触发没）都要给渲染看
+          if (isTripwireAttached(state) !== scan.attached || isPowered(state) !== scan.powered) {
+            world.setState(
+              nx,
+              ny,
+              nz,
+              withPowered(withTripwireAttached(state, scan.attached), scan.powered),
+            );
+          }
+          // 登记进"要看实体"的名单（每 0.1 秒复查一次），并顺手把当前状态记下来
+          for (const node of scan.path) this.tripwireEntity.set(keyOf(node.x, node.y, node.z), world.hasEntityAt(node.x, node.y, node.z));
+          // 顺带把链上每一格绊线的 `powered` 位也写上（原版绊线自己也有 POWERED 状态）
+          for (const node of scan.path) {
+            const wireState = world.getState(node.x, node.y, node.z);
+            if (isPowered(wireState) !== scan.powered) {
+              world.setState(node.x, node.y, node.z, withPowered(wireState, scan.powered));
+            }
+          }
+          if (scan.powered) {
+            strengths.set(key, 15);
+            sources.push({ x: nx, y: ny, z: nz });
+          }
+          break;
+        }
         case Block.DAYLIGHT_DETECTOR: {
           // 阳光传感器（批次 54）：**输出强度按天光现算**，并把结果写进 strengths，
           // 于是"贴在它旁边的粉"与"紧贴的负载"都按这个强度走（与红石块同一条路，
