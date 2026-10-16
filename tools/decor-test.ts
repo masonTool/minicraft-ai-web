@@ -398,6 +398,23 @@ console.log('\n[真实地形抽样：10×10 区块]');
     }
   }
   const elapsed = Date.now() - start;
+
+  /**
+   * **相对基准**（批次 103，B103-5）：同一片区块**去掉地物与结构**再生成一遍
+   * （`OverworldGenerator.generate` 只做地形 + 地表规则 + 雕刻 + 含水层 + 矿石，
+   * 地物与结构在 `generateChunkBlocks` 里才是额外那一步）。
+   *
+   * 为什么不用绝对秒数：原来写的是"生成 100 区块耗时 < 3s"，而它在**并行跑测试集**时
+   * 会因 CPU 争用偶发变红（同一套代码实测 1.7s / 3.9s）。比值则与机器快慢、争用都无关，
+   * 而且它量的正是这条断言的本意：**地物没有把生成拖垮**。
+   */
+  const baselineStart = Date.now();
+  for (let cz = 0; cz < 10; cz++) {
+    for (let cx = 0; cx < 10; cx++) generator.generate(cx, cz);
+  }
+  const baselineMs = Date.now() - baselineStart;
+  const featureRatio = elapsed / Math.max(baselineMs, 1);
+
   const named = (id: number) => blockDef(id).name.replace('minecraft:', '');
   const interesting = [
     Block.OAK_LOG,
@@ -418,7 +435,9 @@ console.log('\n[真实地形抽样：10×10 区块]');
     .sort((a, b) => b[1] - a[1])
     .map(([name, count]) => `${name} ${count}`)
     .join(' · ');
-  console.log(`  100 区块耗时 ${elapsed}ms（含地物）`);
+  console.log(
+    `  100 区块耗时 ${elapsed}ms（含地物与结构）· 纯地形 ${baselineMs}ms · 地物开销 ${featureRatio.toFixed(2)} 倍`,
+  );
   console.log(`  地物计数：树 ${stats.trees} · 植物 ${stats.plants} · 特殊 ${stats.specials}`);
   console.log(`  群系分布：${biomes}`);
   console.log(`  方块统计：${rows}`);
@@ -428,7 +447,13 @@ console.log('\n[真实地形抽样：10×10 区块]');
   const grass = counts.get(Block.SHORT_GRASS) ?? 0;
   check('抽样区域里长出了草', grass > 30, `草 ${grass}`);
   check('树干真的写进了方块（不是只统计了数量）', (counts.get(Block.OAK_LOG) ?? 0) > 100, `原木 ${counts.get(Block.OAK_LOG)}`);
-  check('生成 100 区块耗时 < 3s（地物没有把生成拖垮）', elapsed < 3000, `${elapsed}ms`);
+  // 判据是**比值**（批次 103，B103-5）：见上面 `featureRatio` 的说明。
+  // 要挡的是"地物把生成拖垮"这种退化（例如每棵树都去扫一遍全区块）。
+  check(
+    `地物与结构的开销 ≤ 纯地形的 3 倍（实测 ${featureRatio.toFixed(2)} 倍）`,
+    featureRatio <= 3,
+    `含地物 ${elapsed}ms / 纯地形 ${baselineMs}ms`,
+  );
 }
 
 console.log('\n[破坏掉落：剪刀 / 精准采集 / 时运 / 替换]');
