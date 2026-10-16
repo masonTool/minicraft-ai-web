@@ -17,7 +17,7 @@ P9 支持加载玩家自备的资源包（`.mcpack`）。
 npm install
 npm run dev        # 开发服务器 http://localhost:5173
 npm run typecheck  # 类型检查
-npm test           # 先过 tools 的类型检查，再跑 vitest + 84 套自建离线测试
+npm test           # 先过 tools 的类型检查，再跑 vitest + 85 套自建离线测试
 npm run build      # 生产构建
 npm run audit:tasks  # 锚点文档自检（进度口径、编号、README 路线图同步）
 npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率并写回 TASKS §1
@@ -26,7 +26,8 @@ npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率�
 操作：`W/A/S/D` 移动 · `Space` 跳跃/上升 · `Shift` 潜行/下降 · `Ctrl` 疾跑 ·
 鼠标左键挖掘/攻击 · 右键放置/使用 · `1`-`9` 切快捷栏 · `E` 背包 · `R` 配方书 ·
 `T`（或 `/`）聊天与命令 · `F` 切换飞行 · `V` 切人称 · `N` 切维度 · `L` 连/断联机 ·
-`Esc` 暂停菜单（内含设置）。触摸端另有虚拟摇杆与按钮（`ui/TouchControls.ts`）。
+`J` 成就 / 进度 · `Esc` 暂停菜单（内含设置与成就）。触摸端另有虚拟摇杆与按钮
+（`ui/TouchControls.ts`），成就的入口在背包标题栏上。
 
 ## 发布（GitHub Pages）
 

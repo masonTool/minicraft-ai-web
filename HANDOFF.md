@@ -28,7 +28,7 @@ npm run dev            # http://localhost:5173
 
 - 时间：2026-10-16 · 提交总数 326（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 269 项 —— 已完成 **155**、进行中 **65**、待办 49 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 269 项 —— 已完成 **155**、进行中 **66**、待办 48 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -75,6 +75,7 @@ npm run dev            # http://localhost:5173
 | 避雷针与雷电 | **批次 83**：`core/world/Lightning.ts` —— 红石元件表里**最后一件纯机制件**，也是第三种"输出由外部世界决定"的电源（①阳光传感器看天光 ②绊线看实体 ③它看**打雷**）。雷暴里每 4~16 秒打一次；**128 格内有避雷针就打离玩家最近的那一根**，否则落在玩家周围 8~32 格的地表；伤害 10 点（无视护甲，`'lightning'` 是第一个进 `ARMOR_BYPASS_CAUSES` 的外部伤害）、地面被劈中会点火。被劈中的 **0.4 秒**输出 15 级红石：脉冲表挂主程序（与 TNT 引信同一条取舍），引擎通过注入的 `isRodPowered?()` 问一句，**过期那一刻由主程序主动喊重算**。避雷针的方块本身：铜色细杆、六向朝向（贴哪一面就往那一面伸 6/16）、要镐、硬度 3、配方 = 3 个铜锭竖排。避雷针位置**建索引**（区块加载时扫一次 + 放下/拆掉维护），打雷查询才是常数级。⚠️ 差异：不会氧化、不引雷化生物（猪/村民/苦力怕那三种转化都要那几族生物）、不打"最高点"、视觉是一根粒子柱 |
 | 告示牌 | **批次 80（B12）**：6 种木材 × 落地/挂墙（同一个 id：`wallMounted` + `facing`）+ **四行文字**（每行 15 字）。文字存在 `core/world/SignText.ts`（键 `维度\|x,y,z`，与容器同一条），编辑界面是 `ui/SignEditor.ts`（四行输入 + 完成/取消，手机上会唤起虚拟键盘），**画到世界上**由 `render/SignRenderer.ts` 负责——每块有字的牌子一块 256×64 画布（`CanvasTexture`）+ 一块平面，位置由 `signTextAnchor()` 推出来，亮度取"天光与方块光的较大者"。随存档走（`signs` 仓）；`main` 每 0.25 秒对一次账：**那一格已经不是牌子了就丢掉文字**（火/爆炸/指令改方块都兜得住）。⚠️ 差异：没有悬挂式、落地牌只有 4 档朝向、**联机不广播文字**（与容器内容同一个口径）、字只画正面 |
 | 物品展示框与画 | **批次 86（B14 的前两件）**：`Block.ITEM_FRAME`（id 541，贴墙整面板 + **中间镂空的贴图**，框环靠贴图、无碰撞）与 `Block.PAINTING`（id 542，1/16 薄板，**7 幅 1×1 的画**按状态位 bit3-5 换贴图，放置时随机挑一幅）。**框里挂着的东西**走 `core/world/ItemFrame.ts`（与告示牌同一套"按坐标存"的表 + 键带维度 + 空框不进表；物品合法性交给容器存档的 `restoreStack`，所以耐久/附魔/改名/潜影盒内容物全留住），渲染在 `render/ItemFrameRenderer.ts`（**不用 CanvasTexture**——物品图标本来就在图集里：按物品 id 缓存几何体、按光照档缓存材质，斜挂按 1/√2 缩小）。右键 = 挂上去 / 转 45° / 换一件；**墙没了就掉**（`Support.ts` 新增 `'wall'` 档 + `sweepHangingsAround` 扫六个面）。存档第 6 个对象仓 `frames`（DB_VERSION 3 → 4）。⚠️ 差异：只做 1×1 的 7 幅画（多格拼贴与盔甲架见 B51）、框里只挂 1 件、7 幅画是自绘近似图、"手上有东西右键=换一件"是本项目口径、挂着的物品联机不广播 |
+| 成就 / 进度 | **批次 87（M7）**：条件**全是数据**（`core/progress/advancements.ts`，25 条，id 用原版全名），判定是纯类 `AdvancementTracker`（父没达成子拿不到 / 同一件事只报一次 / 计数型数"不同种类"）。10 种触发条件全部挂在已有事件上，其中 `obtain` 收在**背包这一条通道**（变化 + 每秒兜底对账）→ 挖到/合成/烧出/从箱子取/钓上/生物掉落全算数。存档第 7 仓 `advancements`（DB_VERSION 4 → 5，读时剪断链）。界面 `ui/AdvancementScreen.ts`（五页签 + 树状缩进 + 未解锁显示 `???`）与 `ui/AdvancementToast.ts`（卡片 + 聊天记录 + `achievement` 音效）；入口：暂停菜单 / 背包标题栏"成就 (J)" / `J` 键。⚠️ 只做 25 条（依赖村民/蜜蜂/信标/鞘翅/要塞的不编不顶替）、进世界会对一次背包（已有物资算已达成，那一趟不弹卡片）、未解锁条目仍显示位置与说明、进度联机不广播、没有 `/advancement` 命令 |
 | 床与睡觉 | **批次 79（B13 + I13）**：16 色床（`shape: 'bed'`，9/16 高、横跨两格，状态位 = 朝向 + 是不是床头）+ **睡觉**（`core/survival/Sleep.ts` 纯逻辑：夜里或雷暴才能睡、**水平 ±8 / 竖直 ±5** 内有敌对生物睡不着、睡满 1.5 秒再看一眼床边＝**被惊醒**、挨打会被拽起来）+ **跳夜**（`timeOfDay = 0`、清天气）+ **重生点**（床脚那一格、含维度、随玩家存档走；重生前校验床还在不在，不在就回世界出生点）。枕头是**几何**（床头那端一块 2/16 凸台），所以床头/床脚共用同一对贴图。⚠️ 睡觉时不摆躺下的姿势（视角停在原地），跳跃键可提前起床 |
 | 命令与规则 | `core/commands/Commands.ts`（16 条命令，解析层不碰 DOM）+ `ui/ChatInput.ts`（消息栏与输入行）、`core/world/Rules.ts`（难度与六条游戏规则） |
 | 状态效果 | `core/survival/StatusEffects.ts`（30 种，影响移速/跳跃/挖掘/伤害/氧气/视觉/HUD） |
@@ -96,7 +97,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **84 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox** / **sapling** / **gourd** / **support** / **bed** / **sign** / **fishing** / **bastion** / **lightning** / **moon** / **gl** / **weather** / **frame**，当前全绿；
+| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **85 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox** / **sapling** / **gourd** / **support** / **bed** / **sign** / **fishing** / **bastion** / **lightning** / **moon** / **gl** / **weather** / **frame** / **advancement**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数）、
@@ -132,7 +133,31 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**"墙上挂东西"的前两件**（批次 86，B14）——物品展示框与画。
+**刚做完的**：**成就 / 进度系统**（批次 87，M7）——覆盖度台账里那唯一一行 **0%** 的东西。
+挑它的理由：它是"整块未做"里最大的一块，而且它**验证一条本项目的架构主张**——
+"事件处只报一声，其余全是数据"到底能不能撑起一整个系统。
+① **条件是数据**（`core/progress/advancements.ts`，25 条）：每条一行——原版 id、
+   父条目、分类、中文标题与说明、图标、触发条件。加一条进度 = 加一行数据。
+   判定在 `AdvancementTracker`（纯类）：**父没达成子拿不到**、**同一件事只报一次**、
+   **计数型数的是"不同种类"而不是次数**（"怪物猎人"要僵尸/骷髅/苦力怕各一只）。
+② **触发条件只有 10 种，全部挂在已有事件上**：`obtain`（背包里出现过——占了一大半，
+   原版也是 `inventory_changed` 占大半）、`eat`、`place`（含种下种子）、`kill`、`breed`、
+   `dimension`、`fish`、`sleep`、`dragon`、`auto`。`obtain` 收在**一条通道**上
+   （背包变化 + 每秒兜底对账），于是"挖到/合成/烧出/从箱子取/钓上/生物掉落"六条路全算数。
+③ **可达性有断言**（`tools/advancement-test.ts`）：每条 `obtain` 的目标都要能从
+   "合成/熔炼/方块掉落/生物掉落/钓鱼"里查到，`needCount` 不许超过目标池
+   （否则**永远达不成而且不报错**）——酿造那批"水瓶只能在创造模式里拿"的教训第二次应用。
+   这一批还顺手查出：**末地没有正门**（只有 `N` 键能进，已记进 TASKS K9）。
+④ **存档第 7 个对象仓**（DB_VERSION 4 → 5）：整份覆盖写、读的时候逐条校验 + **剪掉断链**。
+⑤ **界面**：五个分类页签（写 "3 / 12"）、按树的深度缩进、未解锁只显示 `???`（说明留着）、
+   达成时弹卡片 + 写一条聊天记录 + 一声新音效（`achievement`）。入口三处：
+   暂停菜单、**背包标题栏的"成就 (J)"**（手机唯一顺手的入口）、`J` 键。
+⑥ 顺手修掉一个旧缺口：`dragonDefeated` **一直躺在存档里却没人写过**——
+   "打完龙退出重进，龙又回来了"。
+尺寸：方块 / 物品 / 配方都不变；**85 套**离线测试（新增 `advancement` 114 条），覆盖度
+**成就 0% → 25%**（25 / 100，剩下的是依赖村民/蜜蜂/信标/鞘翅/要塞那一批）。
+
+再往前是**"墙上挂东西"的前两件**（批次 86，B14）——物品展示框与画。
 挑它的理由：它从批次 82 起就一直在候选表第 1 位；而且它正好检验一条已经铺好的通道——
 "**方块负责占位、运行时数据放进按坐标存的表**"（告示牌搭的）换成一个更重的东西
 （"几行文字" → "一整件物品"）还成不成立。
@@ -1199,6 +1224,9 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **名字即接口（第三次）** | 批次 82 给"磨制黑石砖"起名 `blackstone_bricks`（按中文直译），而原版没有这个方块——**名字错了不会报错**，直到这一批要给它补台阶/楼梯/墙：表驱动那套按 `polished_blackstone_bricks` 找母方块，找不到（症状是"变体没贴图、也没配方"）。改名**一个 id 都没动**（存档里存的是数字），所以代价只是改几处字符串。凡是要"让表驱动认出来"的东西，名字必须与原版逐字一致（批次 80 的钓竿、81 的附魔目标、85 的这一处） |
 | **"回退默认值"要回退成一个**能继续跑**的值** | 天气的脏数据回退看起来怎么写都行，但回退成"晴天、剩 0 秒"是错的：`tickWeather` 下一帧就发现"到点了"，于是立刻换一次天气——玩家读档瞬间看到天气跳变。所以回退要给**这一种天气的合理时长**（`weatherSecondsFor(random, kind)`），断言里专门有一条"不回退成 0 秒"（批次 85） |
 
+| **"能达成的进度"要用断言反查一遍，不能凭写法"看起来能达成"** | 进度表里最容易出的错不是逻辑错，而是**目标拿不到**：写一条"获得烈焰棒"，而烈焰人还没实现；或者 `needCount: 3` 而目标池只列了两种——两种都**不报错、不崩、也不会有人发现**，玩家只是永远拿不到那一条。做法：拿四张表（合成 / 熔炼 / 方块掉落 / 生物掉落 + 钓鱼）反查每个 `obtain` 目标，再断言 `needCount ≤ 目标池`。这条断言当场就抓出了"末地没有正门"（`story/enter_the_end` 只能靠调试键拿）（批次 87） |
+| **事件驱动的进度会漏掉"顺序反了"的那一半** | `obtain` 类的进度挂在"背包变了"上，但有一半的情形**根本不会改背包**：东西早就在背包里，而它的父条目刚刚才达成（先捡到钻石甲、之后才烧出铁锭）。只挂 `onChange` 的话这一条永远不解锁，而且看起来一切正常。兜底办法是**每秒对一次账**（幂等：已达成的条目直接跳过），既便宜又能自愈——老存档丢了进度也能靠背包长回来（批次 87） |
+| **"顺手修的那个洞"往往就在新功能的判据旁边** | 接"击杀末影龙"这条进度时要去报事件，才发现 `dragonDefeated` 这个字段**从建档起就躺在存档里、从来没有人写过它**——表现是"打完龙退出重进，龙又回来了"。新功能要读的每一个状态，都值得问一句"**谁写它**"；只读不写的字段就是一条没接上的线（批次 87） |
 | **"一件物品的合法形状"只能有一处出处** | 展示框里挂着的是**一整件物品**（id + 数量 + 耐久 + 附魔 + 改名 + 潜影盒内容物），校验本该照抄容器存档那一套。第一版我手写了一遍字段校验——那就是第二份真相，漏一个字段的**表现是"读档之后附魔没了"**：不报错、也不影响任何别的断言，只有玩家的剑会变白板。改成直接调用 `restoreStack(raw, 1)`（它连内容物那一层都深拷）之后，`normalizeFrameItem` 只剩一句"数量夹到 1~64"。**凡是"外部数据 → 内部结构"的转换已经存在一份，就别写第二份**（批次 86） |
 | **"贴着的"与"站着的"是两种几何关系，扫描方向不一样** | "支撑没了要掉"这条（批次 78）是**从被拆那一格往上扫**——因为甘蔗/海带是**一柱**。而展示框/画**贴在侧面**：被拆的那一格与它是**相邻**关系，往上扫一格都扫不到（症状是"墙没了，画还挂在半空"）。所以另开了 `sweepHangingsAround`（扫被拆那一格的**六个面**）。**判据：支撑与它是什么关系——"在下面/在上面"就往下/往上连锁扫，"在旁边"就要扫邻居**（批次 86） |
 | **"没做完"要写成清单里的一条，而不是脑子里的一句** | 原版"墙上挂东西"是三件套，这一批只做了展示框与画（画还只做了 26 幅里 1×1 的 7 幅——多格拼贴要跨格占用，而方块状态只有一个字节）。剩下的一半（盔甲架 + 19 幅大画）当场立成 **B51** 并写清"卡在哪一步"，B14 也标成 `[~]` 而不是 `[x]`。**部分完成时最危险的不是丢功能，而是这件事在文档里看起来做完了**（批次 86） |
@@ -1261,6 +1289,8 @@ npm run agent:setup # 跨机器自检
 `respawn`——验收脚本读重生点不必猜）/ `signState`（批次 80：`stored` / `visible` / `editing`）/
 `signLinesAt(x,y,z)`（读某块牌子上的字）/
 `frameState`（批次 86：`stored` / `visible`）/ `frameItemAt(x,y,z)`（读某格里展示框挂着的东西）/
+`debugState.advancements`（批次 87：`open` / `rows` / `earned` / `total` / `ids`）/
+`toggleAdvancementsForTest()` / `grantAdvancementForTest(id)` / `resetAdvancementsForTest()`（验收用）/
 `fishingState`（批次 81：`phase` / `timer` / `waitFor` / `bobber`）/
 `forceBite()`（把浮标直接推到咬钩，省掉 5~30 秒的等待）/
 `teleport(x,y,z)` / `teleportForce` / `look(yawDeg,pitchDeg)` / `setTimeOfDay(t)` /
