@@ -212,12 +212,10 @@ const many = (ids: readonly number[], reason: string): Exempt[] => ids.map((id) 
  * 逼着人来看一眼（这就是白名单该有的自清方式）。
  */
 const INGREDIENT_BLOCKERS: readonly { item: number; reason: string }[] = [
-  {
-    // 批次 93 把蜘蛛眼接上了（蜘蛛 → 蜘蛛眼；发酵蜘蛛眼 → 缓慢/伤害/隐身），
-    // 这里只剩恶魂之泪一处——**这张表是"当前还缺什么"，不是"曾经缺什么"**
-    item: Item.GHAST_TEAR,
-    reason: '恶魂没做：原版恶魂之泪由恶魂掉落——它挡住再生（J26），而恶魂在 J15 的敌对生物清单里',
-  },
+  // ⚠️ **空表不是"这条机制没用了"**：批次 91 量出"整族 112 件药水拿不到"、
+  // 92 接上下界疣与烈焰粉、93 接上蜘蛛眼、94 接上恶魂之泪——到这里**84 瓶全通**。
+  // 这张表留着是因为"哪条链断了"这件事随时可能再发生（改一条配方、动一次掉落表），
+  // 而机制还在：`potionBlocker()` 会自己把断掉的那些列出来。
 ];
 
 /** 一瓶药水（含喷溅/滞留）卡在哪件原料上；返回 null 表示这条链整个是通的 */
@@ -295,9 +293,8 @@ const EXEMPT: readonly Exempt[] = [
     '锁链甲原版没有配方（材料与图案都与铁甲完全相同，给了配方就会和铁甲撞车），只能靠穿甲的怪物掉落或与盔甲匠交易；本项目两样都没有（TASKS 的 B53）',
   ),
 
-  // ---- ④ 没有该生物
-  { id: Item.RABBIT_FOOT, reason: '兔子未实现：原版兔子脚由兔子掉落（J26）' },
-  { id: Item.GHAST_TEAR, reason: '恶魂未实现：原版恶魂之泪由恶魂掉落（J26）' },
+  // ---- ④ 没有该生物（恶魂已在批次 94 做掉，这里只剩兔子）
+  { id: Item.RABBIT_FOOT, reason: '兔子未实现：原版兔子脚由兔子掉落（J15/J16 的生物整组）' },
 
   // ---- ⑤ 旧 id（保留只为存档兼容）
   {
@@ -333,7 +330,10 @@ check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.le
 // 逼着人回来看白名单——**自清的清单需要一个会响的铃**
 // 缺口一路在缩：批次 91 量出来是 124 条 → 92（下界要塞 + 烈焰人）70 条 → 93（蜘蛛）**20 条**。
 // 每次变化都从这里开始查（它是这套审计的"总分"）
-equal('缺口总数（批次 93 之后：20 条 —— 只剩再生线、黑灰染料、锁链甲与两件没做的生物掉落）', unreachable.length, 20);
+// 缺口一路在缩：批次 91 是 124 条 → 92（要塞+烈焰人）70 → 93（蜘蛛）20 → 94（恶魂）**7 条**。
+// 剩下这 7 条都不是"某条链断在中间"，而是**内容本身还没做**（黑/灰染料要鱿鱼与凋灵、
+// 锁链甲要么靠怪物穿甲要么靠盔甲匠、兔子脚要兔子、旧 id 只留存档兼容）
+equal('缺口总数（批次 94 之后：7 条 —— 药水那一族整族通了）', unreachable.length, 7);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));
@@ -346,13 +346,11 @@ console.log('\n[五、本批查到并修掉/记下的几件事]');
 //    （下界疣 / 烈焰粉 / 蜘蛛眼）。批次 92 接上前两处（下界要塞 + 烈焰人），
 //    批次 93 接上第三处（蜘蛛 → 蜘蛛眼 → 发酵蜘蛛眼）——同一张白名单自己一路变短，
 //    这正是它该有的样子：**缺口清单是"当前还缺什么"，不是"曾经缺什么"**
+// 从"一瓶都酿不出来"（批次 91）到"整族全通"（批次 94）：中间接上了下界疣、烈焰粉、
+// 蜘蛛眼、恶魂之泪四处来源，而白名单每一次都**自己**缩短
 const drinkableReachable = POTION_ITEMS.filter((entry) => reach.has(entry.id)).length;
 const potionId = (key: string): number => POTION_ITEMS.find((entry) => entry.key === key)!.id;
-check(
-  `整族药水里已经能酿出 ${drinkableReachable} / ${POTION_ITEMS.length} 瓶`,
-  drinkableReachable > 0 && drinkableReachable < POTION_ITEMS.length,
-  String(drinkableReachable),
-);
+equal('**整族药水都能酿出来了**（84 / 84 瓶）', drinkableReachable, POTION_ITEMS.length);
 check('剩下的都断在**原料**上，而不是断在"第一件原料从哪来"（下界疣已通）', reach.has(Item.NETHER_WART));
 check('烈焰棒拿得到（烈焰人掉）', reach.has(Item.BLAZE_ROD));
 check('烈焰粉拿得到（1 根棒拆 2 份）', reach.has(Item.BLAZE_POWDER));
@@ -367,8 +365,8 @@ check(
   ['slowness', 'harming', 'invisibility'].every((key) => reach.has(potionId(key))),
 );
 check(
-  '**再生** 仍然酿不出来——它还缺恶魂之泪（恶魂在 J15 的清单里，这是白名单的自清留下的最后一条药水线）',
-  !reach.has(potionId('regeneration')),
+  '**再生**也能酿了（恶魂之泪来自恶魂）——J26 那几条断环至此全部接通',
+  reach.has(potionId('regeneration')) && reach.has(Item.GHAST_TEAR) && reach.has(Item.GUNPOWDER),
 );
 check(
   '酿造台现在做得出来了（3 圆石 + 烈焰粉，配方一直都在，缺的是原料）',
@@ -380,11 +378,7 @@ check(
 );
 equal('药水箭的条数是 28（与饮用型一一对应）', TIPPED_ARROWS.length, 28);
 const arrowReachable = TIPPED_ARROWS.filter((entry) => reach.has(entry.id)).length;
-check(
-  `药水箭能做出 ${arrowReachable} / ${TIPPED_ARROWS.length} 支（跟着饮用型走）`,
-  arrowReachable > 0 && arrowReachable < TIPPED_ARROWS.length,
-  String(arrowReachable),
-);
+equal('药水箭 28 / 28 支全能做（跟着饮用型走）', arrowReachable, TIPPED_ARROWS.length);
 
 // ② 红石粉：同一件东西注册了两份，酿造用的那份没有任何来源
 equal('红石矿石掉的是红石粉（1004）', dropFor(Block.REDSTONE_ORE)?.id, Item.REDSTONE);
@@ -449,11 +443,12 @@ check(
 
 // ⑤ 兔子脚 / 恶魂之泪：理由要能机器验证——真的没有那种生物在掉它
 check(
-  '"没有该生物"这条理由仍然成立（生物表里没有任何东西掉兔子脚 / 恶魂之泪）',
-  [...MOB_TYPES, DRAGON_TYPE].every(
-    (type) =>
-      type.drops.every((drop) => drop.itemId !== Item.RABBIT_FOOT && drop.itemId !== Item.GHAST_TEAR),
-  ),
+  '"没有该生物"这条理由仍然成立（生物表里没有任何东西掉兔子脚）',
+  [...MOB_TYPES, DRAGON_TYPE].every((type) => type.drops.every((drop) => drop.itemId !== Item.RABBIT_FOOT)),
+);
+check(
+  '（批次 94 之后）恶魂之泪有来源了：恶魂在生物表里且掉它',
+  MOB_TYPES.some((type) => type.id === 'ghast' && type.drops.some((drop) => drop.itemId === Item.GHAST_TEAR)),
 );
 
 // ---------------------------------------------------------------- 六、方块侧（只判能判的那一小类）

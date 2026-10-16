@@ -178,6 +178,19 @@ export interface EntityContext {
     velocity: { x: number; y: number; z: number },
   ) => void;
   /**
+   * 吐一颗**大火球**（批次 94，恶魂用）。
+   *
+   * 与 `spawnSmallFireball` 分成两个钩子（而不是加个 `power` 参数）：
+   * 它们的**结算**根本不同——小火球只打玩家，大火球命中要**炸开一片**，
+   * 而"炸"这件事只有主程序做得了（它才知道世界与周围有谁）。
+   */
+  spawnLargeFireball?: (
+    x: number,
+    y: number,
+    z: number,
+    velocity: { x: number; y: number; z: number },
+  ) => void;
+  /**
    * 点燃玩家（批次 92，小火球命中时用）。
    *
    * ⚠️ 与 `hurtPlayer` 分开：伤害与"点火"在生存模块里本来就是两条路

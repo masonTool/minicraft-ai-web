@@ -103,6 +103,50 @@ export const BLAZE_TYPE: MobType = {
  * 掉落**蛛丝 0~2**（100%）与**蜘蛛眼 1 个 / 1/3 概率**（原版）。
  * ⚠️ 未做：爬墙时不减速（原版贴墙会慢一点）、宽体（1.4 格，能钻进 1 格宽的缝）。
  */
+/**
+ * 恶魂（批次 94，J26 的最后一块）。
+ *
+ * 它是**唯一掉恶魂之泪**的生物，而恶魂之泪是"再生"药水唯一的原料——
+ * 接上它，J26 那三条断环就全通了（批次 91 量出的"整族药水拿不到"正式收口）。
+ *
+ * 三处招牌行为：
+ *  - **又大又慢**（4×4 的碰撞盒、移动速度只有 2.2）：它是本项目里最大的生物；
+ *  - **保持距离**（`Ghast.ts` 里自己的飞行 AI）：与烈焰人不同，它**不贴身**，
+ *    太近就往后退——原版它就是远远地吊着打，贴上去反而打不着；
+ *  - **发射大火球**：命中会**炸开一小片**（原版 ghast 火球能拆方块、也会点火），
+ *    与烈焰人那种"只打人不伤地形"的小火球是两回事。
+ *
+ * 数值按原版：10 点生命（很脆，两箭就死）、没有近战（`attackDamage: 0`——
+ * 它的伤害全在火球上）、掉落 **0~1 恶魂之泪**与 **0~2 火药**、击杀经验 5。
+ * ⚠️ 与原版的差异：不做"火球被玩家打回去"（原版能用箭/雪球把它打回，
+ * 那是它最出名的一招），也不做发射前的红闪与音效。
+ */
+export const GHAST_TYPE: MobType = {
+  id: 'ghast',
+  name: '恶魂',
+  health: 10,
+  width: 4,
+  height: 4,
+  speed: 2.2,
+  hostile: true,
+  // 原版恶魂**不近战**：撞到人也不掉血，伤害全在火球上
+  attackDamage: 0,
+  followRange: 48,
+  drops: [
+    { itemId: Item.GHAST_TEAR, min: 0, max: 1 },
+    { itemId: Item.GUNPOWDER, min: 0, max: 2 },
+  ],
+  xp: 5,
+  flying: true,
+  fireImmune: true,
+  // 只在下界自然刷（原版如此）；空腔要 4×4，否则半截会卡在岩层里
+  dimension: 'nether',
+  spawnSpace: { width: 4, height: 4 },
+  bodyColor: 0xf2eee4,
+  accentColor: 0xb9b3a6,
+  eyeHeight: 2.6,
+};
+
 export const SPIDER_TYPE: MobType = {
   id: 'spider',
   name: '蜘蛛',
@@ -171,6 +215,7 @@ export const CAVE_SPIDER_TYPE: MobType = {
 
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
+  GHAST_TYPE,
   SPIDER_TYPE,
   CAVE_SPIDER_TYPE,
   {
@@ -340,6 +385,19 @@ export const REMOTE_PLAYER_TYPE: MobType = {
   accentColor: 0xe2b48c,
   eyeHeight: 1.62,
 };
+
+/**
+ * 这种生物会不会在某个维度自然刷（批次 94，默认主世界）。
+ *
+ * 抽成函数而不是在两处（刷怪器与测试）各写一遍 `?? 'overworld'`：
+ * "默认主世界"这条口径只该有一处（本项目为"同一条判据写两遍"交过学费）。
+ */
+export function mobSpawnsIn(
+  type: MobType,
+  dimension: 'overworld' | 'nether' | 'end' | undefined,
+): boolean {
+  return (type.dimension ?? 'overworld') === (dimension ?? 'overworld');
+}
 
 /**
  * **会自然刷出来**的敌对生物（刷怪用）。

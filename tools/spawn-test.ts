@@ -45,6 +45,13 @@ function makeContext(
     spawned: Spawned[];
     hostile?: number;
     passive?: number;
+    /** 当前维度（批次 94）：恶魂只在下界刷 */
+    dimension?: 'overworld' | 'nether' | 'end';
+    /**
+     * 换成"七格高的空腔"地形（批次 94）：恶魂要的 4×4×4 空腔在默认那种
+     * "两格空气 + 一格半实心"的分层世界里根本不存在。
+     */
+    airBox?: boolean;
     /** 调用了多少次世界查询（用来钉住"刷怪不再逐格扫描"，见文件末尾） */
     counts?: { block: number; surface: number };
   },
@@ -52,6 +59,7 @@ function makeContext(
   return {
     getBlock: (_x, y) => {
       if (options.counts) options.counts.block++;
+      if (options.airBox) return ((y % 8) + 8) % 8 === 0 ? Block.STONE : Block.AIR;
       const phase = ((y % 4) + 4) % 4;
       if (phase === 0) return y === 64 ? Block.GRASS_BLOCK : Block.STONE;
       if (phase === 1 || phase === 2) return Block.AIR;
@@ -68,6 +76,7 @@ function makeContext(
       return 64;
     },
     player: options.player ?? { x: 0.5, y: 65, z: 0.5 },
+    dimension: options.dimension,
     spawn: (type, x, y, z) => options.spawned.push({ type, x, y, z }),
     hostileCount: options.hostile ?? 0,
     passiveCount: options.passive ?? 0,
@@ -193,6 +202,31 @@ console.log('\n[生物表覆盖]');
   const ids = new Set(MOB_TYPES.map((t) => t.id));
   check('包含 3 种敌对生物', ['zombie', 'skeleton', 'creeper'].every((id) => ids.has(id)));
   check('包含 4 种被动生物', ['cow', 'pig', 'sheep', 'chicken'].every((id) => ids.has(id)));
+}
+
+console.log('\n[维度与空腔（批次 94）]');
+{
+  // ① 主世界：恶魂写着 `dimension: 'nether'`，不管怎么刷都不该出现
+  const overworld: Spawned[] = [];
+  runCycles(new MobSpawner(), makeContext({ sky: 5, block: 0, spawned: overworld }));
+  check('主世界不刷恶魂', overworld.every((entry) => entry.type.id !== 'ghast'), overworld.map((e) => e.type.id).join(','));
+  check('主世界仍然刷僵尸那些（对照组）', overworld.some((entry) => entry.type.id === 'zombie'));
+
+  // ② 下界 + 默认地形（最高只有两格空）：恶魂 4×4 的身子放不下，一只都不该刷出来
+  const tight: Spawned[] = [];
+  runCycles(new MobSpawner(), makeContext({ sky: 0, block: 0, dimension: 'nether', spawned: tight }));
+  check(
+    '下界里空间不够时刷不出恶魂（4×4 的身子会卡在岩层里）',
+    tight.every((entry) => entry.type.id !== 'ghast'),
+    tight.map((e) => e.type.id).join(','),
+  );
+  check('下界里也不刷主世界的生物（僵尸不会跑到下界来）', tight.every((entry) => entry.type.id !== 'zombie'));
+
+  // ③ 下界 + 七格高的空腔：刷得出来，而且落点自带那片空腔
+  const open: Spawned[] = [];
+  runCycles(new MobSpawner(), makeContext({ sky: 0, block: 0, dimension: 'nether', airBox: true, spawned: open }));
+  check('下界里有一片 4×4 空腔 → 刷得出恶魂', open.some((entry) => entry.type.id === 'ghast'), open.map((e) => e.type.id).join(','));
+  check('下界里只刷恶魂这一种（这一刻，别的都写着主世界）', open.every((entry) => entry.type.id === 'ghast'), open.map((e) => e.type.id).join(','));
 }
 
 console.log(`\n生成测试：${passed} 通过 / ${failed} 失败\n`);

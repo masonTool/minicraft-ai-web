@@ -197,13 +197,19 @@ export class EntityRenderer {
   ): void {
     alive.add(throwable.id);
 
-    const fireball = throwable.kind === 'small_fireball';
+    // 两种火球（批次 94 加大火球）：都自发光、都用自己的贴图
+    const fireball = throwable.kind === 'small_fireball' || throwable.kind === 'large_fireball';
+    const largeFireball = throwable.kind === 'large_fireball';
 
     let mesh = this.throwableMeshes.get(throwable.id);
     if (!mesh) {
       // 小火球（批次 92）用自己那张"火团"贴图，而不是物品图标——
       // 它没有对应的物品，是烈焰人吐出来的（见 `entity/Blaze.ts`）
-      const geometry = fireball ? this.tileSpriteGeometry('small_fireball') : this.spriteGeometry(throwable.itemId);
+      const geometry = largeFireball
+        ? this.tileSpriteGeometry('large_fireball')
+        : fireball
+          ? this.tileSpriteGeometry('small_fireball')
+          : this.spriteGeometry(throwable.itemId);
       mesh = new THREE.Mesh(geometry, this.baseMaterial);
       mesh.userData.billboard = true;
       this.throwableMeshes.set(throwable.id, mesh);

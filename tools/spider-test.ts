@@ -300,7 +300,8 @@ console.log('\n[工厂与模型]');
   check('别的生物还是老骨架（僵尸是人形、牛是四足、烈焰人不摆动）', describeMobModel(mobTypeById('zombie')!).kind === 'humanoid');
   equal('牛仍然是四足 4 条腿', describeMobModel(mobTypeById('cow')!).legs, 4);
   equal('烈焰人仍然不摆腿', describeMobModel(mobTypeById('blaze')!).legs, 0);
-  check('生物表里 11 种，其中 6 种敌对', MOB_TYPES.length === 11 && ALL_HOSTILE_MOBS.length === 6);
+  // 批次 94 起：11 → 12 种（加了恶魂），敌对 6 → 7（蜘蛛/洞穴蜘蛛/烈焰人/恶魂/僵尸/骷髅/苦力怕）
+  check('生物表里 12 种，其中 7 种敌对', MOB_TYPES.length === 12 && ALL_HOSTILE_MOBS.length === 7, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
 }
 
 console.log(`\n蜘蛛测试：${passed} 通过 / ${failed} 失败`);

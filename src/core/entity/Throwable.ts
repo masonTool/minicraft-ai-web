@@ -44,7 +44,24 @@ export const EGG_CHICK_CHANCE = 0.125;
 export const SMALL_FIREBALL_DAMAGE = 5;
 export const SMALL_FIREBALL_FIRE_SECONDS = 5;
 
-export type ThrowableKind = 'snowball' | 'egg' | 'splash_potion' | 'lingering_potion' | 'small_fireball';
+export type ThrowableKind =
+  | 'snowball'
+  | 'egg'
+  | 'splash_potion'
+  | 'lingering_potion'
+  | 'small_fireball'
+  | 'large_fireball';
+
+/**
+ * 大火球（批次 94，恶魂）：直接命中 6 点、**命中后炸开一小片**（威力 1）。
+ *
+ * 与小锤球（烈焰人那颗）的差别不只是数字：小火球**只打人、不伤地形**，
+ * 大火球是"拆方块 + 点火"的那一种（原版恶魂火球能把下界要塞拆出洞来）。
+ * 与 `SMALL_FIREBALL_*` 一样，数值留在结算这一层，`Ghast.ts` 只管"谁吐的、飞多快"。
+ */
+export const LARGE_FIREBALL_DAMAGE = 6;
+export const LARGE_FIREBALL_FIRE_SECONDS = 5;
+export const LARGE_FIREBALL_POWER = 1;
 
 export interface ThrowableOptions {
   readonly kind: ThrowableKind;
@@ -102,7 +119,8 @@ export class Throwable extends Entity implements MovingBody {
     const inWater = ctx.world.isLiquid(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z));
     // 小火球（批次 92）：**几乎没有重力**——原版它就是一条直线飞过去，
     // 玩家在十几格外站着不动也能被直直打中（有重力的话它会先落地）
-    if (this.kind !== 'small_fireball') this.vy -= GRAVITY * dt;
+    // 两种火球都**不受重力**（原版它们是一条直线飞出去的）
+    if (this.kind !== 'small_fireball' && this.kind !== 'large_fireball') this.vy -= GRAVITY * dt;
     if (inWater) {
       const drag = Math.pow(WATER_DRAG, dt);
       this.vx *= drag;
@@ -147,10 +165,11 @@ export class Throwable extends Entity implements MovingBody {
 
     // 小火球（批次 92）：它**只打玩家**（是烈焰人吐出来的），所以先查玩家。
     // 其余投掷物都是玩家扔的，只查生物——两者方向相反，不该混成一条
-    if (this.kind === 'small_fireball') {
+    if (this.kind === 'small_fireball' || this.kind === 'large_fireball') {
       if (ctx.playerBox && entityIntersectsBox(this, ctx.playerBox)) {
-        ctx.hurtPlayer(SMALL_FIREBALL_DAMAGE, this.x, this.z, 'fire');
-        ctx.ignitePlayer?.(SMALL_FIREBALL_FIRE_SECONDS);
+        const large = this.kind === 'large_fireball';
+        ctx.hurtPlayer(large ? LARGE_FIREBALL_DAMAGE : SMALL_FIREBALL_DAMAGE, this.x, this.z, 'fire');
+        ctx.ignitePlayer?.(large ? LARGE_FIREBALL_FIRE_SECONDS : SMALL_FIREBALL_FIRE_SECONDS);
         this.impact(ctx);
         return true;
       }
@@ -202,6 +221,13 @@ export class Throwable extends Entity implements MovingBody {
         // 命中：原版小火球**不点燃方块**（只有火球那个大号才点），所以这里只出一声
         // （项目里没有"火焰命中"那一声，借用箭命中；见 `Blaze.ts` 的同一处注记）
         ctx.playSound?.('arrow_hit', x, y, z);
+        break;
+      case 'large_fireball':
+        // 命中：**炸开一小片**（原版 ghast 火球能拆方块、也会点火）。
+        // 爆炸本身（方块破坏 + 范围内伤害）归主程序，实体层只报"在哪炸"——
+        // 与溅射药水那条"范围结算交给主程序"是同一个分工
+        ctx.explode?.(x, y, z, LARGE_FIREBALL_POWER);
+        ctx.playSound?.('explode', x, y, z);
         break;
       case 'lingering_potion':
         // 滞留型不炸开，而是**在原地留下**一片云（K4 尾巴）：云的生命周期归主程序，

@@ -301,9 +301,18 @@ console.log('\n[战斗与掉落]');
 
 console.log('\n[生物表]');
 {
-  // 批次 92 加了烈焰人（第一种会飞的），批次 93 加了蜘蛛与洞穴蜘蛛（第一种节肢、第一种会爬墙的）
-  check('生物表包含 11 种生物（6 敌对 + 4 被动动物 + 村民）', MOB_TYPES.length === 11, `${MOB_TYPES.length}`);
-  check('敌对生物有攻击力', MOB_TYPES.filter((t) => t.hostile).every((t) => t.attackDamage > 0));
+  // 批次 92 加了烈焰人（第一种会飞的），93 加了蜘蛛与洞穴蜘蛛（第一种节肢、第一种会爬墙的），
+  // 94 加了恶魂（第一种只在下界刷的、第一种"不近战"的）
+  check('生物表包含 12 种生物（6 敌对 + 4 被动动物 + 村民）', MOB_TYPES.length === 12, `${MOB_TYPES.length}`);
+  check(
+    '敌对生物要么有攻击力、要么另有一条伤害通道',
+    // ⚠️ 恶魂是**刻意的例外**（批次 94）：原版它不近战（撞到人也不掉血），
+    // 伤害全在大火球上——所以判据不是"attackDamage > 0"，而是
+    // "有攻击力 **或** 会吐会炸的东西（`shootsFireballs` 那类）"
+    MOB_TYPES.filter((t) => t.hostile).every(
+      (t) => t.attackDamage > 0 || t.id === 'ghast' || t.id === 'blaze',
+    ),
+  );
   // 村民（J11，批次 88）是**刻意的例外**：原版杀掉村民什么都不掉也不给经验
   //（掉了就等于鼓励玩家屠村），所以它进不了"被动生物都有掉落"这条里
   check(

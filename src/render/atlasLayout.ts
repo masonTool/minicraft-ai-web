@@ -911,6 +911,7 @@ export const TILE_ORDER = [
   // 烈焰人的小火球（批次 92）：没有对应物品，只是飞在空中一团火
   // （渲染时按贴图名取 billboard，见 `EntityRenderer.tileSpriteGeometry`）
   'small_fireball',
+  'large_fireball',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

@@ -66,7 +66,7 @@ export function mobAppearanceKey(mob: Mob): string {
   return '';
 }
 
-type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal' | 'villager' | 'blaze' | 'spider';
+type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal' | 'villager' | 'blaze' | 'spider' | 'ghast';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
@@ -74,6 +74,7 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'blaze') return 'blaze';
   if (typeId === 'villager') return 'villager';
   if (typeId === 'spider' || typeId === 'cave_spider') return 'spider';
+  if (typeId === 'ghast') return 'ghast';
   if (typeId === 'chicken') return 'bird';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   return 'humanoid';
@@ -101,6 +102,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return birdBoxes(type);
     case 'spider':
       return spiderBoxes(type);
+    case 'ghast':
+      return ghastBoxes(type);
     default:
       return humanoidBoxes(type);
   }
@@ -341,8 +344,9 @@ function spiderBoxes(type: MobType): BoxSpec[] {
 function legCountOf(kind: ModelKind): number {
   if (kind === 'quadruped') return 4;
   if (kind === 'spider') return 8;
-  // 水晶与烈焰人不摆动：水晶是自转的、烈焰人那一圈火棒长在它自己身上
-  if (kind === 'crystal' || kind === 'blaze') return 0;
+  // 水晶/烈焰人/恶魂不摆动：水晶自转、烈焰人的火棒长在它自己身上、
+  // 恶魂那九条触手是垂直挂着的（按 `i % 2` 前后摆反而会像在走路）
+  if (kind === 'crystal' || kind === 'blaze' || kind === 'ghast') return 0;
   return 2;
 }
 
@@ -356,6 +360,47 @@ function legCountOf(kind: ModelKind): number {
 export function describeMobModel(type: MobType): { kind: ModelKind; parts: number; legs: number } {
   const kind = modelKindOf(type.id);
   return { kind, parts: modelBoxes(kind, type).length, legs: legCountOf(kind) };
+}
+
+/**
+ * 恶魂（批次 94）：**一个大方盒 + 九条垂下来的触手**，全是白的。
+ *
+ * 那九条触手（3×3 排）是它一眼可辨的特征；脸上是"两条浓眉 + 两只眼"
+ * ——原版那张脸有点凶，别画成一双圆眼睛（那就成了雪人）。
+ *
+ * ⚠️ 所有部件都落在 `0..height` 之内（触手挂到脚底以上）：
+ * 挂到脚底以下的话，它会看起来"悬空在海面下"，而碰撞盒只有 4 格高。
+ */
+function ghastBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const bodyBottom = h * 0.36;
+  const bodyHeight = h - bodyBottom;
+  const boxes: BoxSpec[] = [
+    { width: w, height: bodyHeight, depth: w, x: 0, y: bodyBottom + bodyHeight / 2, z: 0, color: 'body' },
+    // 两条浓眉（原版的表情就靠它）
+    { width: w * 0.34, height: h * 0.05, depth: h * 0.04, x: -w * 0.19, y: bodyBottom + bodyHeight * 0.72, z: w * 0.5, color: 'eye' },
+    { width: w * 0.34, height: h * 0.05, depth: h * 0.04, x: w * 0.19, y: bodyBottom + bodyHeight * 0.72, z: w * 0.5, color: 'eye' },
+    // 眼睛（在眉毛下面一点点）
+    { width: w * 0.13, height: h * 0.1, depth: h * 0.04, x: -w * 0.19, y: bodyBottom + bodyHeight * 0.56, z: w * 0.5, color: 'eye' },
+    { width: w * 0.13, height: h * 0.1, depth: h * 0.04, x: w * 0.19, y: bodyBottom + bodyHeight * 0.56, z: w * 0.5, color: 'eye' },
+  ];
+  // 九条触手：3×3 排布挂在身体底面（原版正是 9 条）
+  const tentacleHeight = h * 0.4;
+  for (let i = 0; i < 9; i++) {
+    const col = (i % 3) - 1;
+    const row = Math.floor(i / 3) - 1;
+    boxes.push({
+      width: w * 0.2,
+      height: tentacleHeight,
+      depth: w * 0.2,
+      x: col * w * 0.3,
+      y: h * 0.18,
+      z: row * w * 0.3,
+      color: 'accent',
+    });
+  }
+  return boxes;
 }
 
 interface MobVisual {

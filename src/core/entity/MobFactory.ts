@@ -15,9 +15,10 @@
  */
 
 import { Blaze } from './Blaze.ts';
+import { Ghast } from './Ghast.ts';
 import { Mob, type MobType } from './Mob.ts';
 import { Villager } from './Villager.ts';
-import { BLAZE_TYPE, VILLAGER_TYPE } from './mobs.ts';
+import { BLAZE_TYPE, GHAST_TYPE, VILLAGER_TYPE } from './mobs.ts';
 
 export function createMob(type: MobType, x: number, y: number, z: number): Mob {
   if (type.id === VILLAGER_TYPE.id) return new Villager(x, y, z);
@@ -25,5 +26,7 @@ export function createMob(type: MobType, x: number, y: number, z: number): Mob {
   // 与村民同一个理由：`new Mob(BLAZE_TYPE, …)` 会造出一只"只会撞人"的烈焰人，
   // 而且看起来一切正常（贴图、名字、掉落都对），只有打起来才发现它不吐火
   if (type.id === BLAZE_TYPE.id) return new Blaze(x, y, z);
+  // 恶魂（批次 94）：同样有自己的一套（保持距离 + 大火球）
+  if (type.id === GHAST_TYPE.id) return new Ghast(x, y, z);
   return new Mob(type, x, y, z);
 }

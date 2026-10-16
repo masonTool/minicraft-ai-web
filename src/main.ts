@@ -4679,6 +4679,8 @@ class App {
       // 地表高度走高度图（C6）：被动刷怪原来每 2 秒要扫掉几千次 getBlock
       getSurfaceBlockY: (x, z) => this.world.getSurfaceBlockY(x, z),
       player,
+      // 维度（批次 94）：只刷"这个维度会刷"的生物（恶魂只在下界、村民不刷……）
+      dimension: this.dimension,
       spawn: (type, x, y, z) => {
         this.entities.spawn(createMob(type, x, y, z));
       },
@@ -4853,6 +4855,10 @@ class App {
       // `itemId` 只用于兜底贴图（有专门的渲染分支，见 `EntityRenderer`）
       spawnSmallFireball: (x, y, z, velocity) =>
         this.spawnThrowable(x, y, z, velocity, 'small_fireball', Item.BLAZE_POWDER),
+      // 恶魂的大火球（批次 94）：同一个通道，另一档。它与小火球的区别在**结算**那一层
+      // （命中要炸开一片，见 `Throwable.impact`），所以是两个钩子而不是一个带参数的
+      spawnLargeFireball: (x, y, z, velocity) =>
+        this.spawnThrowable(x, y, z, velocity, 'large_fireball', Item.BLAZE_POWDER),
       // 火球命中 → 点着玩家（伤害在投掷物那一层结算，点火是另一条路，见 `EntityContext`）
       ignitePlayer: (seconds) => this.stats.ignite(seconds),
       // 隐身（K4 尾巴）：敌对生物看不见你就不追（原版隐形后 8 格内还是会被发现，

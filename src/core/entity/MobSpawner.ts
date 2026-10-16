@@ -21,7 +21,7 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { HOSTILE_MOBS, PASSIVE_MOBS } from './mobs.ts';
+import { HOSTILE_MOBS, PASSIVE_MOBS, mobSpawnsIn } from './mobs.ts';
 import type { MobType } from './Mob.ts';
 
 export interface SpawnContext {
@@ -41,6 +41,14 @@ export interface SpawnContext {
   /** 当前生物数量（用于上限控制） */
   hostileCount: number;
   passiveCount: number;
+  /**
+   * 当前维度（批次 94）。不填按主世界算。
+   *
+   * 加这一条之前，"自然刷怪"根本没有维度概念——`ctx` 拿的就是当前维度那份世界，
+   * 于是**任何**写进 `HOSTILE_MOBS` 的生物都会在主世界的夜里冒出来
+   * （恶魂这种"只在下界"的就会跑到草地上）。现在按 `MobType.dimension` 过滤。
+   */
+  dimension?: 'overworld' | 'nether' | 'end';
 }
 
 /** 生成尝试间隔（秒） */
@@ -100,6 +108,9 @@ export class MobSpawner {
    */
   private trySpawnHostile(ctx: SpawnContext): number {
     const player = ctx.player!;
+    // 只挑"这个维度会刷"的（`MobType.dimension`，批次 94）
+    const candidates = HOSTILE_MOBS.filter((type) => mobSpawnsIn(type, ctx.dimension));
+    if (candidates.length === 0) return 0;
     // 在 16~48 格的环形范围里挑一个区块（太近会"眼前刷怪"，太远玩家看不到）
     const { x: sampleX, z: sampleZ } = this.randomAround(player, HOSTILE_MIN_DISTANCE, HOSTILE_MAX_DISTANCE);
     const chunkX = sampleX >> 4;
@@ -117,12 +128,17 @@ export class MobSpawner {
       if (distance < HOSTILE_MIN_DISTANCE || distance > HOSTILE_MAX_DISTANCE) continue;
       const y = startY + Math.floor(this.random() * span);
 
-      if (!this.canSpawnAt(ctx, x, y, z)) continue;
+      // 先挑种类，再按**它自己的**规矩验位置（批次 94）：
+      // 走地生物要求"脚下实心 + 两格空"，会飞的只要"空腔够大"
+      //（恶魂是飘在岩浆上方的，脚下有没有方块与它无关）
+      const type = this.pick(candidates);
+      if (!type) continue;
+      if (!type.flying && !this.canSpawnAt(ctx, x, y, z)) continue;
+      if (!this.canFitBox(ctx, type, x, y, z)) continue;
       // 光照条件：方块光 0（完全黑暗）且天光 ≤ 7（洞里或夜里）
       if (ctx.getBlockLight(x, y, z) > 0) continue;
       if (ctx.getSkyLight(x, y, z) > 7) continue;
 
-      const type = this.pick(HOSTILE_MOBS);
       ctx.spawn(type, x + 0.5, y, z + 0.5);
       this.spawnedHostile++;
       spawned++;
@@ -144,6 +160,8 @@ export class MobSpawner {
    */
   private trySpawnPassive(ctx: SpawnContext): number {
     const player = ctx.player!;
+    const candidates = PASSIVE_MOBS.filter((type) => mobSpawnsIn(type, ctx.dimension));
+    if (candidates.length === 0) return 0;
     const top = Math.min(WORLD_MAX_Y - 2, Math.floor(player.y) + 12);
 
     for (let attempt = 0; attempt < 16; attempt++) {
@@ -158,12 +176,33 @@ export class MobSpawner {
       // 光照条件：白天户外（天光 ≥ 9）
       if (ctx.getSkyLight(x, surfaceY + 1, z) < 9) continue;
 
-      const type = this.pick(PASSIVE_MOBS);
+      const type = this.pick(candidates);
+      if (!type) continue;
       ctx.spawn(type, x + 0.5, surfaceY + 1, z + 0.5);
       this.spawnedPassive++;
       return 1;
     }
     return 0;
+  }
+
+  /**
+   * 这种生物要的**空腔**够不够（批次 94）。
+   *
+   * 默认 1×2（就是"两格高的空气"，与 `canSpawnAt` 的老判据一致）；
+   * 宽体生物（恶魂 4×4）要查周围那几列——不然它有一半会卡在岩层里。
+   * 以"这一格"为中心向四周展开：偶数宽度时中心偏一格，够用即可。
+   */
+  private canFitBox(ctx: SpawnContext, type: MobType, x: number, y: number, z: number): boolean {
+    const space = type.spawnSpace ?? { width: 1, height: 2 };
+    const half = Math.floor((space.width - 1) / 2);
+    for (let dy = 0; dy < space.height; dy++) {
+      for (let dz = -half; dz <= half; dz++) {
+        for (let dx = -half; dx <= half; dx++) {
+          if (ctx.getBlock(x + dx, y + dy, z + dz) !== Block.AIR) return false;
+        }
+      }
+    }
+    return true;
   }
 
   /**

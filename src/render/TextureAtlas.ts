@@ -3305,6 +3305,23 @@ PAINTERS.small_fireball = (x, y, rng) => {
   return [clamp255(206 + jitter), clamp255(82 + jitter), clamp255(28 + jitter), alpha];
 };
 
+/**
+ * 恶魂的大火球（批次 94）：比小火球**更大更白**（原版那颗是"火球"，
+ * 尺寸与亮度都压过烈焰人那颗），所以单独一张贴图而不是把小火球放大——
+ * 放大只会让像素变糊，看不出"这是另一种东西"。
+ */
+PAINTERS.large_fireball = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const d = Math.hypot(dx, dy);
+  if (d > 7.4) return [0, 0, 0, 0];
+  if (d < 3.4) return [clamp255(255), clamp255(246 + jitter), clamp255(206 + jitter), 255];
+  if (d < 5.6) return [clamp255(252 + jitter), clamp255(190 + jitter), clamp255(72 + jitter), 255];
+  const alpha = d > 6.8 ? 150 : 240;
+  return [clamp255(212 + jitter), clamp255(96 + jitter), clamp255(30 + jitter), alpha];
+};
+
 PAINTERS.crimson_nylium = nyliumPainter([132, 40, 44], 'crim');
 PAINTERS.crimson_nylium_side = nyliumSidePainter([132, 40, 44], 'crims');
 PAINTERS.warped_nylium = nyliumPainter([44, 132, 124], 'warp');
