@@ -9,7 +9,19 @@
  * 运行：npm run test:decor
  */
 
-import { Block, BLOCKS, CROP_STAGES, blockDef, cropOf, isHandHarvestable, slabId, woolId } from '../src/core/registry/blocks.ts';
+import {
+  Block,
+  BLOCKS,
+  CROP_STAGES,
+  JUNGLE_LOG_ID,
+  berryStageOf,
+  blockDef,
+  cocoaStageOf,
+  cropOf,
+  isHandHarvestable,
+  slabId,
+  woolId,
+} from '../src/core/registry/blocks.ts';
 import { RANDOM_TICK_BEHAVIORS } from '../src/core/tick/RandomTicks.ts';
 import { LOOT_TABLES } from '../src/core/registry/loot.ts';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
@@ -45,7 +57,7 @@ import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { DYE_COLORS } from '../src/core/registry/colors.ts';
-import { snowLayers } from '../src/core/registry/blockState.ts';
+import { FACING_OFFSET, facingOf, snowLayers } from '../src/core/registry/blockState.ts';
 import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
 import {
   BIOME_FEATURES,
@@ -229,6 +241,13 @@ function lowestOf(blocks: Uint8Array, surfaceY: number): number {
     }
   }
   return 320;
+}
+
+/** 造一个"已经装饰过"的平坦区块（省掉到处重复的三行） */
+function flatAfterDecorate(biome: number, seed: number, surfaceY = 63): Uint8Array {
+  const chunk = flatChunk(surfaceY);
+  decorate(chunk, 0, 0, flatWorld(surfaceY, biome), seed);
+  return chunk;
 }
 
 function countBlocks(blocks: Uint8Array, ids: readonly number[]): number {
@@ -550,6 +569,136 @@ console.log('\n[食物与杂物（批次 48）]');
     ),
   );
   check('新物品都有中文说明', [Item.BOWL, Item.MUSHROOM_STEW, Item.PUMPKIN_PIE, Item.BEETROOT_SOUP, Item.GOLD_NUGGET].every((id) => hasDescription(id)));
+}
+
+console.log('\n[甜浆果丛与可可豆（批次 49）]');
+{
+  const plain: DropContext = { shears: false, silkTouch: false, fortune: 0, doubleSlab: false, roll: () => 0.9 };
+
+  // ---- 掉落：甜浆果丛随成熟度多给，可可豆按成熟度 1/2/3
+  equal('未熟的甜浆果丛也掉甜浆果', blockDrops(Block.SWEET_BERRY_BUSH_STAGE0, plain)?.id, Item.SWEET_BERRIES);
+  equal('第 0 阶段只给 1 个', blockDrops(Block.SWEET_BERRY_BUSH_STAGE0, plain)?.count, 1);
+  equal('第 1 阶段还是 1 个', blockDrops(Block.SWEET_BERRY_BUSH_STAGE1, plain)?.count, 1);
+  equal('成熟的丛主掉落 2 个', blockDrops(Block.SWEET_BERRY_BUSH_STAGE3, plain)?.count, 2);
+  equal('第 0 阶段没有额外掉落', extraCropDrop(Block.SWEET_BERRY_BUSH_STAGE0, () => 0), null);
+  equal('第 1 阶段没有额外掉落', extraCropDrop(Block.SWEET_BERRY_BUSH_STAGE1, () => 0), null);
+  equal('第 2 阶段额外掉甜浆果', extraCropDrop(Block.SWEET_BERRY_BUSH_STAGE2, () => 0)?.id, Item.SWEET_BERRIES);
+  equal('第 2 阶段最多额外 1 个（只有第一次掷点算）', extraCropDrop(Block.SWEET_BERRY_BUSH_STAGE2, () => 0)?.count, 1);
+  equal('第 2 阶段掷点都不中就没有额外', extraCropDrop(Block.SWEET_BERRY_BUSH_STAGE2, () => 0.9), null);
+  equal('成熟的丛额外最多 2 个', extraCropDrop(Block.SWEET_BERRY_BUSH_STAGE3, () => 0)?.count, 2);
+  equal('可可豆第 0 阶段掉 1 个', blockDrops(Block.COCOA_STAGE0, plain)?.count, 1);
+  equal('可可豆第 1 阶段掉 2 个', blockDrops(Block.COCOA_STAGE1, plain)?.count, 2);
+  equal('可可豆成熟掉 3 个（原版按成熟度 1/2/3）', blockDrops(Block.COCOA_STAGE2, plain)?.count, 3);
+  equal('掉的确实是可可豆', blockDrops(Block.COCOA_STAGE2, plain)?.id, Item.COCOA_BEANS);
+
+  // ---- 注册与文案
+  equal('甜浆果的中文名', itemLabel(Item.SWEET_BERRIES), '甜浆果');
+  equal('可可豆的中文名', itemLabel(Item.COCOA_BEANS), '可可豆');
+  equal('曲奇的中文名', itemLabel(Item.COOKIE), '曲奇');
+  check(
+    '三样新物品都有中文说明',
+    [Item.SWEET_BERRIES, Item.COCOA_BEANS, Item.COOKIE].every((id) => hasDescription(id)),
+  );
+  check(
+    '甜浆果丛的四个阶段都有中文名',
+    [0, 1, 2, 3].every((stage) => itemLabel(Block.SWEET_BERRY_BUSH_STAGE0 + stage).includes('甜浆果丛')),
+  );
+  check('可可豆的三个阶段都有中文名', [0, 1, 2].every((stage) => itemLabel(Block.COCOA_STAGE0 + stage).includes('可可果')));
+  check(
+    '新贴图都在图集里',
+    [0, 1, 2, 3].every((stage) => TILES.includes(`sweet_berry_bush_stage${stage}`)) &&
+      [0, 1, 2].every((stage) => TILES.includes(`cocoa_stage${stage}`)) &&
+      ['item_sweet_berries', 'item_cocoa_beans', 'item_cookie'].every((tile) => TILES.includes(tile)),
+  );
+  equal('甜浆果归"食物"分类', categoryOf(Item.SWEET_BERRIES), 'food');
+  equal('曲奇归"食物"分类', categoryOf(Item.COOKIE), 'food');
+  equal('可可豆归"羊毛与染料"分类（它是棕色染料的原料）', categoryOf(Item.COCOA_BEANS), 'wool');
+  check(
+    '甜浆果与可可豆都能种（种子的 block 指向第 0 阶段）',
+    itemDef(Item.SWEET_BERRIES)?.block === Block.SWEET_BERRY_BUSH_STAGE0 &&
+      itemDef(Item.COCOA_BEANS)?.block === Block.COCOA_STAGE0,
+  );
+  check(
+    '三样都在创造物品栏里',
+    [Item.SWEET_BERRIES, Item.COCOA_BEANS, Item.COOKIE, Block.SWEET_BERRY_BUSH_STAGE0].every((id) =>
+      CREATIVE_ITEMS.includes(id),
+    ),
+  );
+
+  // ---- 配方：曲奇 8 块、可可豆做棕色染料
+  equal('2 小麦 + 1 可可豆 → 曲奇', matchRecipe([Item.WHEAT, Item.WHEAT, Item.COCOA_BEANS, 0], 2)?.id, Item.COOKIE);
+  equal('一次出 8 块曲奇（原版）', matchRecipe([Item.WHEAT, Item.WHEAT, Item.COCOA_BEANS, 0], 2)?.count, 8);
+  const brownDye = matchRecipe([Item.COCOA_BEANS, 0, 0, 0], 2);
+  equal('1 可可豆 → 棕色染料（不是别的颜色）', itemLabel(brownDye!.id), '棕色染料');
+  equal('棕色染料的数量是 1', brownDye?.count, 1);
+
+  // ---- 世界生成：针叶林长丛
+  let bushes = 0;
+  let allGrounded = true;
+  const stagesSeen = new Set<number>();
+  for (let seed = 1; seed <= 3; seed++) {
+    const chunk = flatChunk(63);
+    decorate(chunk, 0, 0, flatWorld(63, Biome.TAIGA), seed);
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        for (let y = -64; y < 320; y++) {
+          const stage = berryStageOf(chunk[Chunk.index(x, y, z)]!);
+          if (stage < 0) continue;
+          bushes++;
+          stagesSeen.add(stage);
+          if (!blockDef(chunk[Chunk.index(x, y - 1, z)]!).solid) allGrounded = false;
+        }
+      }
+    }
+  }
+  // 实测 3 个种子共 28 丛（每区块 3~16 丛）：密度 0.1 的哈希位置里，
+  // 一部分被草/花/树占掉了，剩下的才是丛——这就是"看着稀疏、但随处可见"的观感
+  check(`3 个种子的针叶林长出 ${bushes} 丛甜浆果（期望 20+）`, bushes > 20, `实际 ${bushes}`);
+  check('每一丛都站在实心方块上', allGrounded);
+  check(`生成时各阶段都有（出现 ${[...stagesSeen].sort().join('/')}）`, stagesSeen.size >= 3);
+  equal('平原不长甜浆果丛', countBlocks(flatAfterDecorate(Biome.PLAINS, 7), [Block.SWEET_BERRY_BUSH_STAGE0, Block.SWEET_BERRY_BUSH_STAGE0 + 3]), 0);
+  check('针叶林的配置里开了 berries', (BIOME_FEATURES[Biome.TAIGA]!.berries ?? 0) > 0);
+  check('雪针叶林也开了', (BIOME_FEATURES[Biome.SNOWY_TAIGA]!.berries ?? 0) > 0);
+  check('沙漠没开（沙漠不会有浆果丛）', (BIOME_FEATURES[Biome.DESERT]!.berries ?? 0) === 0);
+
+  // 顺序：雪不能盖在丛上（先长丛、再铺雪）
+  const snowyChunk = flatChunk(63);
+  decorate(snowyChunk, 0, 0, flatWorld(63, Biome.SNOWY_TAIGA), 5, undefined, new Uint8Array(CHUNK_VOLUME), () => {});
+  let bushWithSnow = 0;
+  for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+    for (let x = 0; x < CHUNK_SIZE_X; x++) {
+      for (let y = -64; y < 320; y++) {
+        if (berryStageOf(snowyChunk[Chunk.index(x, y, z)]!) < 0) continue;
+        if (snowyChunk[Chunk.index(x, y + 1, z)] === Block.SNOW) bushWithSnow++;
+      }
+    }
+  }
+  equal('雪不会盖在甜浆果丛上（先长丛再铺雪）', bushWithSnow, 0);
+
+  // 丛林树：树干上挂可可豆，且每一个都贴着丛林原木
+  let cocoaTotal = 0;
+  let podsChecked = 0;
+  let allAttached = true;
+  for (let seed = 1; seed <= 3; seed++) {
+    const chunk = flatChunk(63);
+    const states = new Uint8Array(CHUNK_VOLUME);
+    const local: FeatureStats = { trees: 0, plants: 0, specials: 0 };
+    decorate(chunk, 0, 0, flatWorld(63, Biome.JUNGLE), seed, local, states, () => {});
+    cocoaTotal += local.cocoa ?? 0;
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        for (let y = -64; y < 320; y++) {
+          if (cocoaStageOf(chunk[Chunk.index(x, y, z)]!) < 0) continue;
+          podsChecked++;
+          const offset = FACING_OFFSET[facingOf(states[Chunk.index(x, y, z)] ?? 0)]!;
+          if (chunk[Chunk.index(x + offset[0], y, z + offset[1])] !== JUNGLE_LOG_ID) allAttached = false;
+        }
+      }
+    }
+  }
+  check(`3 个种子的丛林里长出 ${podsChecked} 个可可豆荚`, podsChecked > 0, `实际 ${podsChecked}`);
+  check('每一个豆荚都贴着自己的丛林原木（朝向与原木位置一致）', allAttached);
+  check(`统计口径记上了（${cocoaTotal} 个）`, cocoaTotal === podsChecked);
 }
 
 console.log('\n[睡莲（B16）]');

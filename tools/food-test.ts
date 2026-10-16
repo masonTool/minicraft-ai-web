@@ -84,6 +84,9 @@ const VANILLA: Record<string, readonly [number, number]> = {
   beetroot_soup: [6, 7.2],
   pumpkin_pie: [8, 4.8],
   beetroot: [1, 1.2],
+  // ---- 批次 49
+  sweet_berries: [2, 0.4],
+  cookie: [2, 0.4],
 };
 
 equal('食物种类数', Object.keys(FOOD_TABLE).length, Object.keys(VANILLA).length);

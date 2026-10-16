@@ -10,12 +10,14 @@
  * 运行：npm run test:tick
  */
 
-import { Block, blockDef, Wood } from '../src/core/registry/blocks.ts';
+import { Block, JUNGLE_LOG_ID, blockDef, Wood } from '../src/core/registry/blocks.ts';
 import { Item } from '../src/core/registry/items.ts';
 import {
+  facingOf,
   fluidHeight,
   fluidLevel,
   isFallingFluid,
+  withFacing,
   withFallingFluid,
   withFluidLevel,
 } from '../src/core/registry/blockState.ts';
@@ -87,12 +89,25 @@ class FakeWorld implements TickWorld, FluidWorld {
     this.set(x, y, z, id, state);
     return true;
   }
+  /**
+   * 带状态的写入（批次 49 之后必须实现）：可可豆"长大一阶段"要**保留朝向**，
+   * 而随机刻行为在没有这个方法时会退化成 `setBlock`（状态清零）。
+   */
+  setBlockWithState(x: number, y: number, z: number, id: number, state: number): boolean {
+    this.set(x, y, z, id, state);
+    return true;
+  }
   schedule(x: number, y: number, z: number, delayTicks: number): void {
     this.scheduled.push({ x, y, z, delay: delayTicks });
   }
   drop(itemId: number, count: number, x: number, y: number, z: number): void {
     this.dropped.push({ id: itemId, x, y, z });
     void count;
+  }
+  /** 该点光照（默认 15 = 全亮；生长类行为会读它） */
+  light = 15;
+  lightAt(): number {
+    return this.light;
   }
 }
 
@@ -444,6 +459,83 @@ console.log('\n[小麦生长（H13）]');
   cells.set(key(6, 64, 0), Block.WATER);
   cells.set(key(3, 64, 0), Block.FARMLAND);
   equal('旁边有水时同一个掷点就长了（湿润耕地长得快）', randomTickBlock(world, 3, 65, 0, () => 0.5), true);
+}
+
+console.log('\n[甜浆果丛与可可豆的生长（批次 49）]');
+{
+  const berryBehavior = RANDOM_TICK_BEHAVIORS.get(Block.SWEET_BERRY_BUSH_STAGE0)!;
+  const cocoaBehavior = RANDOM_TICK_BEHAVIORS.get(Block.COCOA_STAGE0)!;
+  const pass = () => 0; // 一定过概率门
+  const fail = () => 0.99; // 一定不过
+
+  // ---- 甜浆果丛：长在草/泥土上，随机刻往前一阶段
+  const berryWorld = new FakeWorld();
+  berryWorld.set(0, 63, 0, Block.GRASS_BLOCK);
+  berryWorld.set(0, 64, 0, Block.SWEET_BERRY_BUSH_STAGE0);
+  check('甜浆果丛命一次随机刻就长一阶段', berryBehavior(berryWorld, 0, 64, 0, pass));
+  equal('长到了第 1 阶段', berryWorld.getBlock(0, 64, 0), Block.SWEET_BERRY_BUSH_STAGE1);
+
+  // 概率门没过就原地不动
+  const unlucky = new FakeWorld();
+  unlucky.set(0, 63, 0, Block.DIRT);
+  unlucky.set(0, 64, 0, Block.SWEET_BERRY_BUSH_STAGE2);
+  check('没过概率门就不长', !berryBehavior(unlucky, 0, 64, 0, fail));
+  equal('还是第 2 阶段', unlucky.getBlock(0, 64, 0), Block.SWEET_BERRY_BUSH_STAGE2);
+
+  // 成熟（第 3 阶段）之后不再长
+  const ripe = new FakeWorld();
+  ripe.set(0, 63, 0, Block.DIRT);
+  ripe.set(0, 64, 0, Block.SWEET_BERRY_BUSH_STAGE3);
+  check('成熟之后不再长', !berryBehavior(ripe, 0, 64, 0, pass));
+
+  // 悬空不长（脚下是空气）
+  const floating = new FakeWorld();
+  floating.set(0, 64, 0, Block.SWEET_BERRY_BUSH_STAGE0);
+  check('脚下没有方块就不长', !berryBehavior(floating, 0, 64, 0, pass));
+
+  // 太暗不长（光照 8 < 9）
+  const dark = new FakeWorld();
+  dark.set(0, 63, 0, Block.DIRT);
+  dark.set(0, 64, 0, Block.SWEET_BERRY_BUSH_STAGE0);
+  dark.light = 8;
+  check('光照不够不长（与作物同一条）', !berryBehavior(dark, 0, 64, 0, pass));
+  dark.light = 15;
+  check('光照够了就长', berryBehavior(dark, 0, 64, 0, pass));
+
+  // ---- 可可豆：挂在丛林原木上，长大时**朝向必须原样保留**
+  const cocoa = new FakeWorld();
+  // 原木在 (0,64,1)（南边），豆荚挂在它北侧 → 朝向是"南"（2），朝向指向贴着的那一面
+  cocoa.set(0, 64, 1, JUNGLE_LOG_ID);
+  cocoa.set(0, 64, 0, Block.COCOA_STAGE0, withFacing(0, 2));
+  check('可可豆命一次随机刻就长一阶段', cocoaBehavior(cocoa, 0, 64, 0, pass));
+  equal('长到了第 1 阶段', cocoa.getBlock(0, 64, 0), Block.COCOA_STAGE1);
+  equal('⚠️ 朝向没有丢（否则豆荚会转到北面）', facingOf(cocoa.getState(0, 64, 0)), 2);
+
+  // 成熟之后不再长
+  const cocoaRipe = new FakeWorld();
+  cocoaRipe.set(0, 64, 1, JUNGLE_LOG_ID);
+  cocoaRipe.set(0, 64, 0, Block.COCOA_STAGE2, withFacing(0, 2));
+  check('可可豆成熟之后不再长', !cocoaBehavior(cocoaRipe, 0, 64, 0, pass));
+
+  // 原木被拆掉就不长了
+  const orphan = new FakeWorld();
+  orphan.set(0, 64, 0, Block.COCOA_STAGE0, withFacing(0, 2));
+  check('贴着的原木没了就不长', !cocoaBehavior(orphan, 0, 64, 0, pass));
+
+  // 四个朝向都对得上：每面向哪一边就找哪一边的原木
+  const facings: readonly (readonly [number, number, number])[] = [
+    [0, 0, -1], // 朝北：原木在北边
+    [1, 1, 0], // 朝东
+    [2, 0, 1], // 朝南
+    [3, -1, 0], // 朝西
+  ];
+  for (const [facing, dx, dz] of facings) {
+    const w = new FakeWorld();
+    w.set(dx, 64, dz, JUNGLE_LOG_ID);
+    w.set(0, 64, 0, Block.COCOA_STAGE0, withFacing(0, facing as 0 | 1 | 2 | 3));
+    check(`朝向 ${facing} 能找到自己贴着的原木`, cocoaBehavior(w, 0, 64, 0, pass));
+    equal(`朝向 ${facing} 长到了第 1 阶段`, w.getBlock(0, 64, 0), Block.COCOA_STAGE1);
+  }
 }
 
 console.log(`\nTick 测试：${passed} 通过 / ${failed} 失败`);

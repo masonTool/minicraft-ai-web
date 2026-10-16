@@ -7,6 +7,7 @@
 
 import {
   Block,
+  JUNGLE_LOG_ID,
   SHAPED_PARENTS,
   blockDef,
   blockHardness,
@@ -660,6 +661,50 @@ console.log('\n[雪层（批次 37）：1~8 层的高度]');
   equal('3 雪块 → 6 层雪', snowRecipe?.id, Block.SNOW);
   equal('产量 6', snowRecipe?.count, 6);
   equal('竖排三块合不出来（原版就是横排）', matchRecipe([Block.SNOW_BLOCK, 0, Block.SNOW_BLOCK, 0, Block.SNOW_BLOCK, 0, 0, 0, 0], 3), null);
+}
+
+console.log('\n[可可豆与植物支撑（批次 49）]');
+{
+  const place = (blockId: number, normal: readonly [number, number, number], hit: number, below = Block.STONE, hitState = 0) =>
+    planPlacement({
+      blockId,
+      normal,
+      hitX: 0.5,
+      hitY: 64,
+      hitZ: 0.5,
+      yaw: 0,
+      sneaking: false,
+      blockAt: (dx, dy) => (dy === -1 && dx === 0 ? below : Block.AIR),
+      hitBlock: hit,
+      hitState,
+    });
+
+  // ---- 可可豆：只能挂在丛林原木的水平侧面
+  equal('贴在丛林原木东侧 → 朝向西（3）', facingOf(place(Block.COCOA_STAGE0, [1, 0, 0], JUNGLE_LOG_ID)!.state), 3);
+  equal('贴在丛林原木北侧 → 朝向南（2）', facingOf(place(Block.COCOA_STAGE0, [0, 0, -1], JUNGLE_LOG_ID)!.state), 2);
+  equal(
+    '贴在丛林原木南侧 → 朝向被记为南北向的那一面',
+    facingOf(place(Block.COCOA_STAGE0, [0, 0, 1], JUNGLE_LOG_ID)!.state),
+    0,
+  );
+  check('挂在原木顶面不行（原版只能挂侧面）', place(Block.COCOA_STAGE0, [0, 1, 0], JUNGLE_LOG_ID) === null);
+  check('挂在原木底面不行', place(Block.COCOA_STAGE0, [0, -1, 0], JUNGLE_LOG_ID) === null);
+  check('贴在别的方块侧面不行（只认丛林原木）', place(Block.COCOA_STAGE0, [1, 0, 0], Block.OAK_LOG) === null);
+  check('贴在石头上也不行', place(Block.COCOA_STAGE0, [1, 0, 0], Block.STONE) === null);
+
+  // 几何：豆荚贴着那一面，且**有碰撞**（原版能踩上去）
+  equal('朝向 0（贴北面）的渲染盒贴在北侧', meshBoxes('cocoa', withFacing(0, 0))[0]![2], 0);
+  equal('朝向 2（贴南面）的渲染盒贴在南侧', meshBoxes('cocoa', withFacing(0, 2))[0]![5], 1);
+  equal('碰撞盒与渲染盒同源', collisionBoxes('cocoa', withFacing(0, 1))[0]![3], meshBoxes('cocoa', withFacing(0, 1))[0]![3]);
+  check('可可豆不是整格（不参与贪心合并）', !isFullBlockShape('cocoa', 0));
+
+  // ---- 植物（cross）必须有支撑：这条以前是漏的，花能悬空放
+  check('地面上能放甜浆果丛', place(Block.SWEET_BERRY_BUSH_STAGE0, [0, 1, 0], Block.GRASS_BLOCK) !== null);
+  check('悬空放不了甜浆果丛（下方是空气）', place(Block.SWEET_BERRY_BUSH_STAGE0, [0, 1, 0], Block.GRASS_BLOCK, Block.AIR) === null);
+  check('水里也放不了', place(Block.SWEET_BERRY_BUSH_STAGE0, [0, 1, 0], Block.GRASS_BLOCK, Block.WATER) === null);
+  check('花也一样：悬空放不了（修掉了"花浮在半空"）', place(Block.DANDELION, [0, 1, 0], Block.GRASS_BLOCK, Block.AIR) === null);
+  check('花有支撑就能放', place(Block.DANDELION, [0, 1, 0], Block.GRASS_BLOCK) !== null);
+  equal('甜浆果丛没有碰撞（能走过去）', collisionBoxes('cross', 0).length, 0);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
