@@ -73,6 +73,20 @@ const BUDGETS = {
    */
   roughShare: { default: 60, amplified: 68 },
   /**
+   * 判据 1b：**陆地内部**（相邻两侧都在海平面上）相邻列高差的**平均**（格）。**越小越好。**
+   * 这是"山碎不碎"的**纯**指标 —— 判据 1 被海岸污染了（见 `splitAdjacentDiffStats`）。
+   * 写下这批（批次 106）时的实测：default **16.11** / amplified **21.81**
+   */
+  landRoughMean: { default: 17, amplified: 23 },
+  /**
+   * 判据 1c：**海岸**（一侧在海上、一侧在陆上）相邻列高差的**平均**（格）。**越小越好。**
+   * 量的是"海有多深、岸有多陡"：批次 105 实测深海列实心只到 y≈-20~-45
+   * （比海平面低 80~110 格，原版约 y=30~50），于是岸成了一道墙。
+   * 写下这批（批次 106）时的实测：default **40.18** / amplified **65.25**
+   * （同一批还量到最低点 y=**-64**，也就是世界底部 —— 深海海床比海平面低 127 格）
+   */
+  coastMeanDrop: { default: 42, amplified: 68 },
+  /**
    * 判据 2：最大连通高地的采样点数。**越大越好（"一整片山"）。**
    * 调前 → 调后：default 2787 → **3201**、amplified 4456 → **6331**（占高地 93%）
    */
@@ -138,38 +152,87 @@ interface DiffStats {
   samples: number;
 }
 
-/** 相邻列（左右 / 前后）高差的分布 */
-function adjacentDiffStats(heights: Float32Array, n: number): DiffStats {
-  const diffs: number[] = [];
+/** 一组高差 → 统计量（排序会就地做） */
+function statsOf(diffs: number[]): DiffStats {
+  diffs.sort((a, b) => a - b);
   let sum = 0;
   let max = 0;
   let rough = 0;
+  for (const d of diffs) {
+    sum += d;
+    if (d > max) max = d;
+    if (d >= 8) rough++;
+  }
+  const samples = diffs.length;
+  return {
+    mean: samples === 0 ? 0 : sum / samples,
+    p95: samples === 0 ? 0 : diffs[Math.floor(samples * 0.95)]!,
+    max,
+    roughShare: samples === 0 ? 0 : (rough / samples) * 100,
+    samples,
+  };
+}
+
+/** 相邻列（左右 / 前后）高差的分布 */
+function adjacentDiffStats(heights: Float32Array, n: number): DiffStats {
+  const diffs: number[] = [];
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
       const h = heights[j * n + i]!;
-      if (i + 1 < n) {
-        const d = Math.abs(h - heights[j * n + i + 1]!);
-        diffs.push(d);
-        sum += d;
-        if (d > max) max = d;
-        if (d >= 8) rough++;
-      }
-      if (j + 1 < n) {
-        const d = Math.abs(h - heights[(j + 1) * n + i]!);
-        diffs.push(d);
-        sum += d;
-        if (d > max) max = d;
-        if (d >= 8) rough++;
-      }
+      if (i + 1 < n) diffs.push(Math.abs(h - heights[j * n + i + 1]!));
+      if (j + 1 < n) diffs.push(Math.abs(h - heights[(j + 1) * n + i]!));
     }
   }
-  diffs.sort((a, b) => a - b);
+  return statsOf(diffs);
+}
+
+/**
+ * 相邻列高差，**按"两边是陆还是海"拆开**（批次 106，B105-4 / TASKS N10）。
+ *
+ * 为什么必须拆：判据 1（整体比例）把两件完全不同的东西混在一起量了——
+ * 实测（批次 105）海岸只占 14% 的相邻对，却贡献约 **31%** 的幅度
+ * （岸 40 格 vs 陆地内部 16 格）。于是照判据 1 调参会把"岸太陡"当成"山太碎"，
+ * 调错方向。拆开之后：
+ *   · `land`  —— 陆地内部的粗糙度（这才是用户说的"山碎不碎"）
+ *   · `coast` —— 海岸坡度（海床 → 陆地的落差，量的是"海有多深、岸有多陡"）
+ *   · `sea`   —— 海底自身的起伏
+ */
+interface SplitDiffStats {
+  land: DiffStats;
+  sea: DiffStats;
+  coast: DiffStats;
+  /** 陆地列占比（%） */
+  landShare: number;
+}
+
+function splitAdjacentDiffStats(heights: Float32Array, n: number, seaLevel: number): SplitDiffStats {
+  const landDiffs: number[] = [];
+  const seaDiffs: number[] = [];
+  const coastDiffs: number[] = [];
+  let landCells = 0;
+
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const h = heights[j * n + i]!;
+      if (h >= seaLevel) landCells++;
+      const push = (a: number, b: number): void => {
+        const d = Math.abs(a - b);
+        const landA = a >= seaLevel;
+        const landB = b >= seaLevel;
+        if (landA && landB) landDiffs.push(d);
+        else if (!landA && !landB) seaDiffs.push(d);
+        else coastDiffs.push(d);
+      };
+      if (i + 1 < n) push(h, heights[j * n + i + 1]!);
+      if (j + 1 < n) push(h, heights[(j + 1) * n + i]!);
+    }
+  }
+
   return {
-    mean: sum / diffs.length,
-    p95: diffs[Math.floor(diffs.length * 0.95)] ?? 0,
-    max,
-    roughShare: (rough / diffs.length) * 100,
-    samples: diffs.length,
+    land: statsOf(landDiffs),
+    sea: statsOf(seaDiffs),
+    coast: statsOf(coastDiffs),
+    landShare: (landCells / (n * n)) * 100,
   };
 }
 
@@ -233,6 +296,32 @@ for (const worldType of worldTypes) {
     `相邻列高差 ≥8 格的比例 ≤ ${BUDGETS.roughShare[worldType]}%（越少越"像山脊"）`,
     stats.roughShare <= BUDGETS.roughShare[worldType],
     `实测 ${stats.roughShare.toFixed(1)}%（预算按"不许变差"设，见 BUDGETS 注释）`,
+  );
+
+  // ---- 判据 1b / 1c：把上面那条**拆成"陆地内部"与"海岸"两件事**
+  //
+  // 判据 1 把"山有多碎"和"海有多深、岸有多陡"混在一起量了：实测海岸只占 14% 的
+  // 相邻对、却贡献约 31% 的幅度。不拆开的话，以后照判据 1 调参会**调错方向**
+  // （把"岸太陡"当成"山太碎"去削山）。详见 `splitAdjacentDiffStats` 的注释。
+  const split = splitAdjacentDiffStats(grid.heights, N, SEA_LEVEL);
+  const deepest = Math.min(...grid.heights);
+  console.log(
+    `  拆开看：陆地列占 ${split.landShare.toFixed(0)}%（最低点 y=${deepest}）· ` +
+      `陆地内部 平均 ${split.land.mean.toFixed(2)} / ≥8 格占 ${split.land.roughShare.toFixed(1)}%（${split.land.samples} 对）`,
+  );
+  console.log(
+    `      海岸（陆↔海）平均落差 ${split.coast.mean.toFixed(2)} · p95 ${split.coast.p95} · 最大 ${split.coast.max}` +
+      `（${split.coast.samples} 对）· 海底内部 平均 ${split.sea.mean.toFixed(2)}`,
+  );
+  check(
+    `陆地内部的相邻列高差平均 ≤ ${BUDGETS.landRoughMean[worldType]} 格（这才是"山碎不碎"）`,
+    split.land.mean <= BUDGETS.landRoughMean[worldType],
+    `实测 ${split.land.mean.toFixed(2)} 格`,
+  );
+  check(
+    `海岸（陆↔海）平均落差 ≤ ${BUDGETS.coastMeanDrop[worldType]} 格（量"海有多深、岸有多陡"）`,
+    split.coast.mean <= BUDGETS.coastMeanDrop[worldType],
+    `实测 ${split.coast.mean.toFixed(2)} 格`,
   );
 
   // ---- 判据 2：山体连通面积
@@ -343,7 +432,8 @@ for (const worldType of worldTypes) {
     );
   }
 
-  // ---- 判据 5：确定性（判据本身必须可复现，否则调参没法比）
+  // ---- 判据 6：确定性（判据本身必须可复现，否则调参没法比）
+  // ⚠️ 原来这里也写着"判据 5"（与上面那条重号），批次 106 顺手改成 6。
   {
     const again = new OverworldGenerator(SEED, worldType);
     let same = true;
