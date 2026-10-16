@@ -67,6 +67,8 @@ export interface DispenseContext {
   igniteFire(x: number, y: number, z: number): boolean;
   /** 剪那一格里的生物；@returns 剪下来几份（0 = 那里没有能剪的） */
   shearAt(x: number, y: number, z: number): number;
+  /** 给那一格施肥（骨粉，批次 69）；那一格不是生长期的作物就返回 false */
+  fertilizeAt(x: number, y: number, z: number): boolean;
   /** 音效（`bow_shoot` = 射/扔出去、`flint` = 打火石那两下） */
   playSound(kind: 'bow_shoot' | 'flint', x: number, y: number, z: number): void;
 }
@@ -156,6 +158,13 @@ export function runDispenseAction(
     case 'shear-entity': {
       // 剪不动（那一格没有羊 / 是只猪）也算失败：东西留着，玩家自己去腾地方
       return ctx.shearAt(fx, fy, fz) > 0;
+    }
+
+    case 'fertilize': {
+      // 骨粉（批次 69）：催凸口**正对的那一格**里的作物。
+      // 那一格不是生长期的作物（石头、成熟的小麦…）就整件事取消、**这一份骨粉不消耗**——
+      // 与"对面不是 TNT 时点不着火"同一个口径（原版也是失败就什么都不发生）。
+      return ctx.fertilizeAt(fx, fy, fz);
     }
   }
 }

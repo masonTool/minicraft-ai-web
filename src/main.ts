@@ -35,6 +35,8 @@ import {
 import { dispenseBehaviorFor } from './core/registry/dispense.ts';
 // 发射行为的**执行器**：判定抽出去才能离线断言（见该模块文件头）
 import { runDispenseAction, type DispenseContext } from './core/world/Dispense.ts';
+// 骨粉（批次 69）：判定在 `BoneMeal.ts` 里（纯函数），这里只负责把它接到世界与背包上
+import { fertilizeAt, type BoneMealWorld } from './core/world/BoneMeal.ts';
 import { splashEffectsAt } from './core/survival/SplashPotion.ts';
 import {
   DRAGON_BREATH_COLLECT_SHRINK,
@@ -2605,6 +2607,45 @@ class App {
   }
 
   /**
+   * 骨粉要写世界：`setBlock` 必须走**带光照/网格/增量存档**的那条路
+   * （直接写区块数据的话，作物长高了但画面与存档都不动）。
+   */
+  private readonly boneMealWorld: BoneMealWorld = {
+    getBlock: (bx, by, bz) => this.world.getBlock(bx, by, bz),
+    setBlock: (bx, by, bz, blockId) => this.world.setBlockAndUpdate(bx, by, bz, blockId),
+  };
+
+  /**
+   * 给一格施肥（批次 69）：玩家右键作物、发射器对着作物，走的都是这一条。
+   *
+   * @returns 成功了吗（false = 那一格不能催：不是作物 / 已经成熟）
+   */
+  fertilizeBlockAt(x: number, y: number, z: number): boolean {
+    if (!fertilizeAt(this.boneMealWorld, x, y, z, Math.random)) return false;
+    // 世界改动要广播（与放方块走同一条），否则队友那边作物还在原来的阶段
+    this.net.sendBlock(x, y, z, this.world.getBlock(x, y, z), this.world.getBlockState(x, y, z), this.dimension);
+    // 淡绿的碎屑（原版骨粉那圈粒子）
+    this.particles.spawnSplash(x + 0.5, y + 0.4, z + 0.5, 0xc8f0a0, 10);
+    this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    return true;
+  }
+
+  /**
+   * 手上的骨粉对着作物右键：催长并把这一份**消耗掉**。
+   *
+   * ⚠️ 失败时**不消耗**（对着石头、对着已经成熟的小麦用，什么都不发生）——
+   * 原版也是这个口径，玩家不会因为"点到旁边的方块"白扔一份。
+   */
+  private fertilizeWithBoneMeal(): boolean {
+    if (this.heldItemId !== Item.BONE_MEAL || !this.hit) return false;
+    if (!this.fertilizeBlockAt(this.hit.x, this.hit.y, this.hit.z)) return false;
+    this.inventory.consume(Item.BONE_MEAL, 1);
+    this.hand.swing();
+    this.refreshHotbar();
+    return true;
+  }
+
+  /**
    * 用剪刀剪一只羊的毛，@returns 剪下来几份（0 = 这只剪不动：猪/牛，或者刚剪过还没长）。
    *
    * ⚠️ 这里**不碰工具耐久**：玩家是手上的剪刀、发射器（批次 60）是容器里那把，
@@ -4138,6 +4179,8 @@ class App {
         const mob = this.shearableMobAt(bx, by, bz);
         return mob ? this.shearMob(mob) : 0;
       },
+      // 骨粉（批次 69）：与玩家右键走**同一个**方法，两条路径不会各自漂
+      fertilizeAt: (bx, by, bz) => this.fertilizeBlockAt(bx, by, bz),
       playSound: (kind, sx, sy, sz) => this.audio.play(kind, { x: sx, y: sy, z: sz }),
     };
   }
@@ -4503,6 +4546,13 @@ class App {
     // 打火石点火（I12）：放在放置之前——它本身不是方块物品，`selectedBlock` 是 undefined，
     // 落到下面的放置分支就什么都不做
     if (this.igniteWithFlint()) {
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
+    // 骨粉（批次 69）：对着作物右键 → 催长 2~5 个阶段。
+    // 放在放置之前：骨粉不是方块物品，落到下面的放置分支只会什么都不做
+    if (this.fertilizeWithBoneMeal()) {
       this.placeCooldown = PLACE_COOLDOWN;
       return;
     }

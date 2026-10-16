@@ -844,6 +844,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.STRING, count: 4 },
     ingredients: [woolId(0)],
   },
+  // 骨粉（批次 69）：原版就是"1 根骨头磨成 3 份"，不需要工作台之外的任何东西。
+  // 骨头来自骷髅（生物掉落物这条链已经通了），所以骨粉是**可再生**的。
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.BONE_MEAL, count: 3 },
+    ingredients: [Item.BONE],
+  },
 ];
 
 /**

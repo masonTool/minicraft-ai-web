@@ -1221,6 +1221,19 @@ PAINTERS.item_bone = lump(
   'ibone',
   4.4,
 );
+/**
+ * 骨粉（批次 69）：一小堆**细粉**——比骨头矮而散、比火药亮。
+ * 用同一个 `lump` 画法，靠"半径更大 + 颜色更浅 + 两色颗粒"区分。
+ */
+PAINTERS.item_bone_meal = lump(
+  [
+    [242, 240, 230],
+    [214, 212, 200],
+    [232, 230, 214],
+  ],
+  'ibonemeal',
+  6.2,
+);
 PAINTERS.item_gunpowder = lump(
   [
     [112, 112, 118],

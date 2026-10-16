@@ -4,8 +4,8 @@
  * 发射器 = 投掷器 + **一张发射行为表**（`registry/dispense.ts`）+ **一个执行器**
  * （`world/Dispense.ts`）。所以断言分三层，每层盯一件不同的事：
  *
- *  1. **表**：哪件物品算什么、有没有指向不存在的物品、缺的那几项（水桶/骨粉）有没有被
- *     偷偷"假装支持"；
+ *  1. **表**：哪件物品算什么、有没有指向不存在的物品、缺的那几项（装液体的桶、船、矿车…）
+ *     有没有被偷偷"假装支持"（骨粉原本也在这张名单里，**批次 69 已经接上"施肥"那一档**）；
  *  2. **执行器**：射/扔/点燃/点火/剪这五种动作各自"用成功/失败"的判据，
  *     以及**出膛点与初速**（这些数字是玩家手感，必须钉住）；
  *  3. **容器与登记**：9 格、与投掷器共用容器（子类）、存档里的种类、红石脉冲、
@@ -204,9 +204,9 @@ console.log('\n[行为表：哪件物品算什么]');
   const dangling = dispenseBehaviors().filter((entry) => itemDef(entry.id) === undefined);
   check('表里没有指向不存在物品的条目', dangling.length === 0, dangling.map((entry) => entry.id).join(', '));
   equal(
-    `表里的条数（箭 1 + 药水箭 ${TIPPED_ARROWS.length} + 雪球 1 + 鸡蛋 1 + 喷溅 ${SPLASH_POTIONS.length} + 滞留 ${LINGERING_POTIONS.length} + TNT 1 + 打火石 1 + 剪刀 1）`,
+    `表里的条数（箭 1 + 药水箭 ${TIPPED_ARROWS.length} + 雪球 1 + 鸡蛋 1 + 喷溅 ${SPLASH_POTIONS.length} + 滞留 ${LINGERING_POTIONS.length} + TNT 1 + 打火石 1 + 剪刀 1 + 骨粉 1）`,
     dispenseBehaviorCount(),
-    6 + TIPPED_ARROWS.length + SPLASH_POTIONS.length + LINGERING_POTIONS.length,
+    7 + TIPPED_ARROWS.length + SPLASH_POTIONS.length + LINGERING_POTIONS.length,
   );
 
   // 表里没有的 → 与投掷器一样吐出去
@@ -217,7 +217,9 @@ console.log('\n[行为表：哪件物品算什么]');
   // ⚠️ 明说"缺什么"：原版有、本项目还没物品的那几项不能被假装支持
   equal('空桶没有行为（本项目没有装液体的桶 → 原版"倒出水/岩浆"做不了）', dispenseBehaviorFor(Item.BUCKET), undefined);
   equal('牛奶桶没有行为', dispenseBehaviorFor(Item.MILK_BUCKET), undefined);
-  equal('骨头没有行为（骨粉这件物品本身还没有 → 原版"催熟"做不了）', dispenseBehaviorFor(Item.BONE), undefined);
+  // 骨粉（批次 69）已经接上了：表里那一档叫 `fertilize`，细节在 `bonemeal-test.ts` 里逐条验
+  equal('骨粉有行为（给凸口那一格的作物施肥）', dispenseBehaviorFor(Item.BONE_MEAL)?.action, 'fertilize');
+  equal('骨头本身没有行为（发射的是骨粉，不是骨头）', dispenseBehaviorFor(Item.BONE), undefined);
 }
 
 // ---------------------------------------------------------------- 3. 执行器

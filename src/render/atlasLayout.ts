@@ -396,6 +396,8 @@ export const TILE_ORDER = [
   //      图标全部回退成 tile 0，几种掉落物在背包里长得一模一样）
   'item_rotten_flesh',
   'item_bone',
+  // 骨粉（批次 69）：一小堆细粉
+  'item_bone_meal',
   'item_gunpowder',
   'item_beef',
   'item_porkchop',

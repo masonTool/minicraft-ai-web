@@ -191,6 +191,10 @@ export const Item = {
   STRING: 1073,
   ARROW: 1075,
   BOW: 1076,
+  // ---- 农业用材料（H13）
+  // 骨粉（批次 69）：由骨头磨成（1 → 3），对着作物用能催长 2~5 个阶段；
+  // 发射器也认得它（把"施肥"变成自动化）。堆肥桶满仓后产的也是它（后续批次）。
+  BONE_MEAL: 1077,
   // ---- 食物（数值表在 `food.ts`，这里只占 id）
   COOKED_BEEF: 1040,
   COOKED_PORKCHOP: 1041,
@@ -272,6 +276,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.FLINT, name: 'minecraft:flint', tile: 'item_flint' },
   { id: Item.STRING, name: 'minecraft:string', tile: 'item_string' },
   { id: Item.ARROW, name: 'minecraft:arrow', tile: 'item_arrow' },
+  // 分类落在"矿石与材料"（不在任何一套集合里的材料都归那里，与骨头/火药同档）
+  { id: Item.BONE_MEAL, name: 'minecraft:bone_meal', tile: 'item_bone_meal' },
   // 药水箭（K4 最后一步）：28 支，id = 饮用型 + 200，贴图与名字都由药水表生成
   ...TIPPED_ARROWS.map((entry) => ({ id: entry.id, name: `minecraft:${entry.key}`, tile: `item_${entry.key}`, maxStack: 64 })),
   // ---- 投掷物（K4 尾巴）：扔出去的是这两个 + 喷溅药水
