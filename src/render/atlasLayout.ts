@@ -920,6 +920,9 @@ export const TILE_ORDER = [
   'emerald_block',
   'beacon',
   'beacon_top',
+  // 史莱姆那一族（批次 120）：粘液块与它掉的那个球
+  'slime_block',
+  'item_slime_ball',
   // 烈焰人的小火球（批次 92）：没有对应物品，只是飞在空中一团火
   // （渲染时按贴图名取 billboard，见 `EntityRenderer.tileSpriteGeometry`）
   'small_fireball',

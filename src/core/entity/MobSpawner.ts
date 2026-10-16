@@ -50,14 +50,23 @@ export interface SpawnContext {
    */
   dimension?: 'overworld' | 'nether' | 'end';
   /**
-   * 这一列**在不在某种结构里**（批次 115，凋灵骷髅只要塞）。
+   * 这一列**在不在某个"区域"里**（批次 115：凋灵骷髅只要塞；批次 120：史莱姆只要
+   * 史莱姆区块）。
    *
-   * 实体层不知道结构在哪（那是"算出来的"，见 `gen/NetherFortress.ts`），
-   * 所以由主程序回答。不传就当"不在任何结构里"——于是带 `spawnStructure`
-   * 的生物在没接这个钩子的地方（离线测试、未来的别的调用方）一只都不会刷，
-   * 而不是被撒得到处都是。
+   * 实体层不知道结构在哪、也不知道哪个区块是史莱姆区块（两者都是"算出来的"，
+   * 见 `gen/NetherFortress.ts` 与 `world/Slime.ts`），所以由主程序回答。
+   * 不传就当"不在任何区域里"——于是带 `spawnZone` 的生物在没接这个钩子的地方
+   * （离线测试、未来的别的调用方）一只都不会刷，而不是被撒得到处都是。
    */
-  inStructure?: (kind: string, x: number, z: number) => boolean;
+  inZone?: (kind: string, x: number, z: number) => boolean;
+  /**
+   * 这一种生物此刻的**刷怪权重倍率**（批次 120，史莱姆的月亮相位用）。
+   *
+   * 刷怪是"先按种类均匀抽一次、再验位置"，所以想让某种生物**变稀**，
+   * 最省事的做法是抽中之后再丢一次骰子：`random() > scale` 就跳过。
+   * 不传按 1 算（不影响任何现有生物）。
+   */
+  spawnWeightScale?: (type: MobType) => number;
 }
 
 /** 生成尝试间隔（秒） */
@@ -142,16 +151,22 @@ export class MobSpawner {
       //（恶魂是飘在岩浆上方的，脚下有没有方块与它无关）
       const type = this.pick(candidates);
       if (!type) continue;
-      // 结构限定（批次 115，凋灵骷髅只要塞）：不接钩子就一只都不刷，
-      // 理由见 `SpawnContext.inStructure` 的注释
-      if (type.spawnStructure !== undefined && !(ctx.inStructure?.(type.spawnStructure, x, z) ?? false)) {
-        continue;
-      }
+      // 区域限定（批次 115 凋灵骷髅只要塞；批次 120 史莱姆只要史莱姆区块）：
+      // 不接钩子就一只都不刷，理由见 `SpawnContext.inZone` 的注释
+      if (type.spawnZone !== undefined && !(ctx.inZone?.(type.spawnZone, x, z) ?? false)) continue;
+      // 高度限定（批次 120，史莱姆 y<40；原版就是这条把它压在地下）
+      if (type.spawnMaxY !== undefined && y > type.spawnMaxY) continue;
+      // 按种类丢一次骰子（批次 120）：月亮越满，史莱姆越密——不接钩子按 1 算
+      const scale = ctx.spawnWeightScale?.(type) ?? 1;
+      if (scale <= 0 || (scale < 1 && this.random() > scale)) continue;
       if (!type.flying && !this.canSpawnAt(ctx, x, y, z)) continue;
       if (!this.canFitBox(ctx, type, x, y, z)) continue;
-      // 光照条件：方块光 0（完全黑暗）且天光 ≤ 7（洞里或夜里）
-      if (ctx.getBlockLight(x, y, z) > 0) continue;
-      if (ctx.getSkyLight(x, y, z) > 7) continue;
+      // 光照条件：方块光 0（完全黑暗）且天光 ≤ 7（洞里或夜里）。
+      // ⚠️ `ignoreLight` 的生物（史莱姆）不走这一条：原版它在史莱姆区块里白天也刷
+      if (type.ignoreLight !== true) {
+        if (ctx.getBlockLight(x, y, z) > 0) continue;
+        if (ctx.getSkyLight(x, y, z) > 7) continue;
+      }
 
       ctx.spawn(type, x + 0.5, y, z + 0.5);
       this.spawnedHostile++;

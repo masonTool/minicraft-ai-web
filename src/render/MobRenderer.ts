@@ -76,12 +76,16 @@ type ModelKind =
   | 'blaze'
   | 'spider'
   | 'ghast'
-  | 'wither';
+  | 'wither'
+  /** 史莱姆（批次 120）：一个果冻方块 + 里面那颗核 */
+  | 'slime';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
   // 凋灵（批次 116）：三颗头 + 肋骨笼，与任何现有骨架都不同
   if (typeId === 'wither') return 'wither';
+  // 史莱姆（批次 120）：三档尺寸都是"果冻方块 + 内核"，所以三者的 id 共用一个骨架
+  if (typeId === 'slime' || typeId === 'slime_big' || typeId === 'slime_small') return 'slime';
   if (typeId === 'end_crystal') return 'crystal';
   if (typeId === 'blaze') return 'blaze';
   if (typeId === 'villager') return 'villager';
@@ -116,6 +120,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return spiderBoxes(type);
     case 'ghast':
       return ghastBoxes(type);
+    case 'slime':
+      return slimeBoxes(type);
     case 'wither':
       return witherBoxes(type);
     default:
@@ -440,8 +446,9 @@ function legCountOf(kind: ModelKind): number {
   if (kind === 'spider') return 8;
   // 水晶/烈焰人/恶魂不摆动：水晶自转、烈焰人的火棒长在它自己身上、
   // 恶魂那九条触手是垂直挂着的（按 `i % 2` 前后摆反而会像在走路）
-  // 凋灵（批次 116）：既没有腿也没有翅膀可摆（它整体在飘），所以是 0
-  if (kind === 'crystal' || kind === 'blaze' || kind === 'ghast' || kind === 'wither') return 0;
+  // 凋灵（批次 116）：既没有腿也没有翅膀可摆（它整体在飘），所以是 0；
+  // 史莱姆（批次 120）同理：整个身体就是一个方块，没有腿
+  if (kind === 'crystal' || kind === 'blaze' || kind === 'ghast' || kind === 'wither' || kind === 'slime') return 0;
   return 2;
 }
 
@@ -466,6 +473,23 @@ export function describeMobModel(type: MobType): { kind: ModelKind; parts: numbe
  * ⚠️ 所有部件都落在 `0..height` 之内（触手挂到脚底以上）：
  * 挂到脚底以下的话，它会看起来"悬空在海面下"，而碰撞盒只有 4 格高。
  */
+/**
+ * 史莱姆（批次 120）：**一个果冻方块 + 里面那颗核**（原版就是"外壳 + 内核"两层）。
+ *
+ * 与其它生物不同的地方是它**没有头、没有腿**（整个身体就是一个立方体），
+ * 所以这里两份盒子就是全部——外面那层用主色、里面那颗核用点缀色，
+ * 从任何角度看都是一坨半透明的绿果冻。
+ */
+function slimeBoxes(type: MobType): BoxSpec[] {
+  const size = Math.min(type.width, type.height);
+  return [
+    // 外壳：整个身体
+    { width: size, height: size, depth: size, x: 0, y: size / 2, z: 0, color: 'body' },
+    // 内核：原版那颗更深色的立方体（体积小一半左右）
+    { width: size * 0.55, height: size * 0.55, depth: size * 0.55, x: 0, y: size / 2, z: 0, color: 'accent' },
+  ];
+}
+
 function ghastBoxes(type: MobType): BoxSpec[] {
   const w = type.width;
   const h = type.height;

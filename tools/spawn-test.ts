@@ -8,6 +8,8 @@
  */
 
 import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
+// 史莱姆那条高度线（批次 120）：断言里按它比，别写死 40
+import { SLIME_SPAWN_MAX_Y } from '../src/core/world/Slime.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
 import type { MobType } from '../src/core/entity/Mob.ts';
 import { Block } from '../src/core/registry/blocks.ts';
@@ -54,8 +56,8 @@ function makeContext(
     airBox?: boolean;
     /** 调用了多少次世界查询（用来钉住"刷怪不再逐格扫描"，见文件末尾） */
     counts?: { block: number; surface: number };
-    /** "这一列在不在某种结构里"（批次 115）：不传就当不在任何结构里 */
-    inStructure?: (kind: string, x: number, z: number) => boolean;
+    /** "这一列在不在某种结构里"（批次 115）：不传就当不在任何区域里 */
+    inZone?: (kind: string, x: number, z: number) => boolean;
   },
 ): SpawnContext {
   return {
@@ -79,7 +81,7 @@ function makeContext(
     },
     player: options.player ?? { x: 0.5, y: 65, z: 0.5 },
     dimension: options.dimension,
-    ...(options.inStructure ? { inStructure: options.inStructure } : {}),
+    ...(options.inZone ? { inZone: options.inZone } : {}),
     spawn: (type, x, y, z) => options.spawned.push({ type, x, y, z }),
     hostileCount: options.hostile ?? 0,
     passiveCount: options.passive ?? 0,
@@ -128,7 +130,7 @@ console.log('\n[结构限定：凋灵骷髅只要塞]');
   const outside: Spawned[] = [];
   runCycles(
     new MobSpawner(),
-    makeContext({ ...netherDark, spawned: outside, inStructure: () => false }),
+    makeContext({ ...netherDark, spawned: outside, inZone: () => false }),
     60,
   );
   check(
@@ -146,7 +148,7 @@ console.log('\n[结构限定：凋灵骷髅只要塞]');
   const inside: Spawned[] = [];
   runCycles(
     new MobSpawner(),
-    makeContext({ ...netherDark, spawned: inside, inStructure: (kind) => kind === 'nether_fortress' }),
+    makeContext({ ...netherDark, spawned: inside, inZone: (kind) => kind === 'nether_fortress' }),
     60,
   );
   check('要塞里 → 凋灵骷髅会刷', inside.some((s) => s.type.id === 'wither_skeleton'));
@@ -156,7 +158,7 @@ console.log('\n[结构限定：凋灵骷髅只要塞]');
   const noHook: Spawned[] = [];
   runCycles(new MobSpawner(), makeContext({ ...netherDark, spawned: noHook }), 60);
   check(
-    '没接 inStructure 钩子时也不刷（"不传就当不在任何结构里"）',
+    '没接 inZone 钩子时也不刷（"不传就当不在任何区域里"）',
     noHook.every((s) => s.type.id !== 'wither_skeleton'),
   );
 
@@ -166,6 +168,36 @@ console.log('\n[结构限定：凋灵骷髅只要塞]');
     [...outside, ...inside].every((s) => s.type.dimension === 'nether'),
     [...new Set([...outside, ...inside].map((s) => s.type.id))].join(','),
   );
+}
+
+console.log('\n[史莱姆：史莱姆区块 + y<40 + 不看光照（批次 120）]');
+{
+  // ⚠️ 白天（天光 15）：普通敌对生物**一只都不该刷**（它们要黑暗），
+  // 而史莱姆不看光照——所以这一节只要出现"别的生物"，就说明 ignoreLight 泄漏给了别人
+  const bright = { sky: 15, block: 0, dimension: 'overworld' as const, airBox: true };
+
+  const outside: Spawned[] = [];
+  runCycles(new MobSpawner(), makeContext({ ...bright, spawned: outside, inZone: () => false }), 60);
+  check('不在史莱姆区块 → 白天一只敌对都不刷', outside.length === 0, `${outside.length} 只`);
+
+  const inside: Spawned[] = [];
+  runCycles(
+    new MobSpawner(),
+    makeContext({ ...bright, spawned: inside, inZone: (kind) => kind === 'slime_chunk' }),
+    60,
+  );
+  check('在史莱姆区块里 → 白天也刷史莱姆（原版如此）', inside.some((s) => s.type.id === 'slime_big'), `${inside.length} 只`);
+  check(
+    '而且**只**刷史莱姆（光照那一条没被一起放开）',
+    inside.length > 0 && inside.every((s) => s.type.id === 'slime_big'),
+    [...new Set(inside.map((s) => s.type.id))].join(',') || '一只都没有',
+  );
+  check(
+    `刷出来的都在 y ≤ ${SLIME_SPAWN_MAX_Y}（原版那条高度线）`,
+    inside.every((s) => s.y <= SLIME_SPAWN_MAX_Y),
+    [...new Set(inside.map((s) => s.y))].join(','),
+  );
+  check('中/小两档不会自然刷（它们只从分裂里出现）', inside.every((s) => s.type.id !== 'slime' && s.type.id !== 'slime_small'));
 }
 
 console.log('\n[被动生物：地面与光照规则]');

@@ -517,14 +517,15 @@ console.log('\n[红石元件的配方（批次 119 按原版补）]');
   equal('红石块能拆回 9 份红石', matchRecipe([Block.REDSTONE_BLOCK], 2)?.count, 9);
   equal('拆回来的是红石粉', matchRecipe([Block.REDSTONE_BLOCK], 2)?.id, Item.REDSTONE);
 
-  // ---- 刻意不做的那一条：粘性活塞要粘液球，而史莱姆还没做（TASKS J16）。
-  // 这条断言是**给未来的人看的**：谁为了"补全"而编一个替代配方，它会红
+  // ---- 粘性活塞：批次 119 时这里写的是"**没有**配方"（原版要粘液球，而史莱姆还没做，
+  // 宁缺勿编）。**批次 120 把史莱姆做出来了**，所以这条断言按计划翻面：
+  // 现在它必须**有**配方，而且原料就是"活塞 + 粘液球"（原版那一条）
+  check('粘性活塞有配方了（批次 120 补上史莱姆之后）', recipeFor(Block.STICKY_PISTON) !== undefined);
   check(
-    '粘性活塞**没有**配方（原版要粘液球，史莱姆还没做——宁缺勿编）',
-    recipeFor(Block.STICKY_PISTON) === undefined,
-    '有配方了：要么史莱姆做出来了，要么有人编了个原版没有的配方',
+    '原料是"1 活塞 + 1 粘液球"（原版那一条）',
+    countOf(Block.STICKY_PISTON, Block.PISTON) === 1 && countOf(Block.STICKY_PISTON, Item.SLIME_BALL) === 1,
   );
-  check('（前置）活塞本身有配方（所以粘性活塞只差粘液球那一件）', recipeFor(Block.PISTON) !== undefined);
+  check('（前置）活塞本身也有配方', recipeFor(Block.PISTON) !== undefined);
 
   // ---- 顺带补的三件（同一批审计量出来的）
   equal('闪长岩：2 圆石 + 2 石英 → 2 个', matchRecipe([Block.COBBLESTONE, Item.QUARTZ, Item.QUARTZ, Block.COBBLESTONE], 2)?.id, Block.DIORITE);

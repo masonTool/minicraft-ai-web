@@ -163,7 +163,7 @@ console.log('\n[凋灵骷髅：类型与数据]');
   // 生成口径
   check('进"会自然刷的敌对生物"表（否则一只都不会出现）', HOSTILE_MOBS.some((type) => type.id === 'wither_skeleton'));
   equal('只在下界刷', WITHER_SKELETON_TYPE.dimension, 'nether');
-  equal('而且**只要塞里面**刷', WITHER_SKELETON_TYPE.spawnStructure, 'nether_fortress');
+  equal('而且**只要塞里面**刷', WITHER_SKELETON_TYPE.spawnZone, 'nether_fortress');
 }
 
 // ---------------------------------------------------------------- 2. 命中真的挂凋零

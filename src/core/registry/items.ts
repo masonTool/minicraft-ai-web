@@ -147,6 +147,13 @@ export const Item = {
    * 免得玩家拿着它到处试。
    */
   NETHER_STAR: 1445,
+  /**
+   * 黏液球（批次 120，J16 的史莱姆那一族）：史莱姆掉的那一颗。
+   *
+   * 它的用途正是这一批要还掉的那笔账：**粘性活塞**（活塞 + 黏液球）与**黏液块**
+   * ——在那之前粘性活塞一直挂在可达性审计的白名单上（"要黏液球，而史莱姆还没做"）。
+   */
+  SLIME_BALL: 1446,
   SUGAR: 1174,
   RABBIT_FOOT: 1190,
   MAGMA_CREAM: 1191,
@@ -374,6 +381,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.ENDER_EYE, name: 'minecraft:ender_eye', tile: 'item_ender_eye' },
   // 下界之星（批次 116，J14）：凋灵唯一的掉落，可堆 64（原版如此）
   { id: Item.NETHER_STAR, name: 'minecraft:nether_star', tile: 'item_nether_star' },
+  // 黏液球（批次 120）：史莱姆掉的那一颗；9 颗压一块黏液块（原版双向）
+  { id: Item.SLIME_BALL, name: 'minecraft:slime_ball', tile: 'item_slime_ball' },
   { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
   { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
   { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },

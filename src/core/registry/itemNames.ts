@@ -630,6 +630,7 @@ const EXPLICIT: Record<string, string> = {
   diamond_block: '钻石块',
   emerald_block: '绿宝石块',
   beacon: '信标',
+  slime_ball: '黏液球',
   sugar: '糖',
   // 药水的名字与说明**不在这里写**：24 瓶全部由 `potions.ts` 的变体表生成（见文件后半段），
   // 否则"改了表的时长、忘了改文案"这类漂移没人能发现
@@ -910,7 +911,8 @@ const DESCRIPTIONS: Record<string, string> = {
   note_block: '在上面放乐器演奏会发出不同的声音。',
   rail: '铁轨：矿车在上面行驶。',
   powered_rail: '动力铁轨：通电后给矿车加速。',
-  slime_block: '能弹跳，也能粘住方块一起被活塞推动。',
+  slime_block: '**落在上面会被弹起来**（不摔伤），跳上去会再弹一下——是电梯与摔落保护的老办法。⚠️ 原版它还会"粘住方块一起被活塞推动"，本项目还没做那一条。',
+  slime_ball: '**史莱姆**掉的那一颗（打最小的那一档才掉：大、中史莱姆被杀时会先分裂成更小的）。9 颗压一块**黏液块**；它也是**粘性活塞**缺的那件原料。',
   honey_block: '能粘住方块，但不会让人弹跳。',
 };
 

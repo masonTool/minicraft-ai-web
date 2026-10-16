@@ -2763,6 +2763,26 @@ export const DIAMOND_BLOCK_ID = 554;
 export const EMERALD_BLOCK_ID = 555;
 /** 信标（批次 117，K5） */
 export const BEACON_ID = 556;
+/** 粘液块（批次 120，J16 的史莱姆那一族） */
+export const SLIME_BLOCK_ID = 557;
+
+/**
+ * 粘液块（批次 120）：绿色半透明的一整块，**落在上面会被弹起来**（弹跳那一段在
+ * `world/Slime.ts` + 主程序的落地判定里）。
+ *
+ * ⚠️ 与原版的差异：**活塞推它不会带走相邻方块**（原版那套"粘性方块"要活塞推动时
+ * 连带检查六个面，本项目还没做——记在 TASKS J16）。所以它的说明里只写了"能弹跳"。
+ */
+const SLIME_BLOCK_SPECS: readonly BlockSpec[] = [
+  {
+    id: SLIME_BLOCK_ID,
+    name: 'minecraft:slime_block',
+    tiles: ['slime_block', 'slime_block', 'slime_block'],
+    // 它挡光但不像石头那样遮住邻居（原版粘液块是半透明的）
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
 
 /**
  * 矿物块与信标（批次 117，K5 信标那一批）。
@@ -2870,6 +2890,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SPAWNER_SPECS,
   ...SKULL_SPECS,
   ...MINERAL_AND_BEACON_SPECS,
+  ...SLIME_BLOCK_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -3190,6 +3211,8 @@ export const Block = {
   DIAMOND_BLOCK: DIAMOND_BLOCK_ID,
   EMERALD_BLOCK: EMERALD_BLOCK_ID,
   BEACON: BEACON_ID,
+  // 粘液块（批次 120）：史莱姆掉的那条链的终点
+  SLIME_BLOCK: SLIME_BLOCK_ID,
   CRACKED_POLISHED_BLACKSTONE_BRICKS: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
@@ -3492,6 +3515,8 @@ HARDNESS.set(Block.GOLD_BLOCK, 3);
 HARDNESS.set(Block.DIAMOND_BLOCK, 5);
 HARDNESS.set(Block.EMERALD_BLOCK, 5);
 HARDNESS.set(Block.BEACON, 3);
+// 粘液块（批次 120）：原版硬度 **0**（徒手一拍就碎，只是碎得"黏"）
+HARDNESS.set(Block.SLIME_BLOCK, 0);
 // 下界疣：原版徒手一拍就掉（硬度 0），四个阶段都要登记
 // （不登记的话 `blockHardness` 的兜底是 3 —— 收个下界疣要挖 4.5 秒，见 `isHardnessRegistered`）
 // ⚠️ 这里按 id 算术展开，不能引用 `NETHER_WART_STAGES`：那张表在本文件**后面**才定义，

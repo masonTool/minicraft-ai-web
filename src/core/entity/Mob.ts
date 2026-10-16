@@ -81,6 +81,20 @@ const CLIMB_SPEED = 3;
 const ANGER_SECONDS = 10;
 
 /**
+ * 跳跃式移动（批次 120，史莱姆）的三个数：
+ *  - `HOP_SPEED` 是**起跳那一瞬间**给的向上速度（原版约 0.42 格/tick ≈ 8 格/秒的初速，
+ *    这里取小一点：本项目的地形更密，跳太高会一直撞天花板）；
+ *  - 两次跳跃之间隔 `HOP_INTERVAL_MIN~MAX` 秒的**落地时间**（它只在落地时倒数，
+ *    所以"跳一次 → 落地歇一下 → 再跳"这个节奏是天然的）。
+ */
+const HOP_SPEED = 4.2;
+const HOP_INTERVAL_MIN = 0.55;
+const HOP_INTERVAL_MAX = 1.4;
+/** 分裂出几只（原版 2~4） */
+const SPLIT_COUNT_MIN = 2;
+const SPLIT_COUNT_MAX = 4;
+
+/**
  * 末影人的瞬移距离（格，原版 32）：受击逃脱、泡水淋雨逃开、空闲挪窝都按它来。
  */
 export const TELEPORT_RANGE = 32;
@@ -172,15 +186,30 @@ export interface MobType {
    */
   boss?: boolean;
   /**
-   * **只在某个结构里自然刷**（批次 115，凋灵骷髅用）：填结构的键
-   * （现在只有 `'nether_fortress'`，以后要塞里的蠹虫、末地城的潜影贝也能用它）。
+   * **只在某个"区域"里自然刷**（批次 115 起：凋灵骷髅只要塞；批次 120 起：史莱姆只要
+   * 史莱姆区块）。
    *
-   * 为什么不是一个坐标范围：结构的位置是**算出来**的（`gen/NetherFortress.ts`），
-   * 而"这一格在不在要塞里"这个问题只有主程序答得上来（它拿着种子与实例）。
-   * 所以这里只写"哪一种结构"，判定交给 `SpawnContext.inStructure`——
-   * 与 `dimension` 那条"只写维度、判定交给刷怪器"是同一个分工。
+   * 名字从 `spawnStructure` 改成 `spawnZone`（批次 120）：这一条判据后来多了一个用户
+   * ——**史莱姆区块**不是"结构"，却同样满足"位置是算出来的、只有主程序答得上来"。
+   * 与其再加一个字段（`spawnStructure` + `spawnChunkKind` 两套判据各写一遍），
+   * 不如认下这一层抽象：**区域 = 一个由主程序判定的名字**（`'nether_fortress'` /
+   * `'slime_chunk'` …），实体层只认识名字，判定交给 `SpawnContext.inZone`。
    */
-  spawnStructure?: string;
+  spawnZone?: string;
+  /**
+   * **只在某个高度以下自然刷**（批次 120，史莱姆 y<40）。不填 = 不限。
+   *
+   * 原版史莱姆只在 y<40 刷（这样它们不会出现在地表），而敌对刷怪那条循环是从
+   * `WORLD_MIN_Y+6` 扫到 `HOSTILE_MAX_Y` 的——不写这一条，史莱姆会在山顶冒出来。
+   */
+  spawnMaxY?: number;
+  /**
+   * **刷出来时不看光照**（批次 120，史莱姆）。
+   *
+   * 敌对刷怪的通用判据是"方块光 0 且天光 ≤7"（洞里或夜里），而原版的史莱姆在
+   * **史莱姆区块**里白天也照刷——所以这一条是"这一种生物不走那条通用判据"的开关。
+   */
+  ignoreLight?: boolean;
   /**
    * 自然刷出来时需要的**空腔尺寸**（宽 × 高，格；默认 1×2，也就是"两格高的空气"）。
    *
@@ -208,6 +237,21 @@ export interface MobType {
    * 有重力、走寻路那一套，只是额外能顺着墙往上爬。
    */
   climbing?: boolean;
+  /**
+   * **跳跃式移动**（批次 120，史莱姆）：不走路，而是"蓄力 → 朝目标跳一下 →
+   * 空中不转向"。见 `Mob.hopMove`。
+   */
+  hops?: boolean;
+  /**
+   * **被杀死时分裂成什么**（批次 120，史莱姆）：填**下一档更小那一种**的 `id`。
+   *
+   * 为什么是 id 字符串而不是 `MobType` 引用：`mobs.ts` 引 `Mob.ts`（类型定义），
+   * 反过来引就成环了。填 id、由主程序查表（`mobTypeById`）是这一层既有的做法
+   * （`MobType.feed` 填的也是 id）。
+   */
+  splitsInto?: string;
+  /** 分裂出几只（原版 2~4）；不填按 `[2, 4]` */
+  splitsCount?: readonly [number, number];
   /**
    * **光照够亮就中立**（批次 93，蜘蛛）：亮度 ≥ 这个值时不主动攻击玩家
    * （原版蜘蛛的招牌行为——白天或火把旁边它只会干瞪眼）。
@@ -361,6 +405,8 @@ export class Mob extends Entity {
   private hurtTime = 0;
   /** 记仇倒计时（批次 93）：>0 时"亮处中立"的蜘蛛照样追人；末影人也靠它 */
   private angerTimer = 0;
+  /** 下一次起跳还要等多久（批次 120，跳跃式移动的生物用；只在**落地**时倒数） */
+  private hopTimer = 0;
   /** 泡水/淋雨的掉血计时（批次 112，末影人） */
   private waterTimer = 0;
   /** 空闲瞬移的计时（批次 112）；初值随机，免得一群末影人齐刷刷一起瞬移 */
@@ -471,7 +517,25 @@ export class Mob extends Entity {
       this.lootDropped = true;
       this.dropLoot(ctx);
     }
+
+    // 史莱姆的分裂（批次 120）：**不挂在掉落的守卫上**——`hurt()` 那条路会自己
+    // 当场结算掉落（把 `lootDropped` 置真），挂在同一个条件里就永远不会分裂
+    if (this.dead && !this.splitDone) {
+      this.splitDone = true;
+      this.splitIntoChildren(ctx);
+    }
   }
+
+  /** 分裂是否已结算（与 `lootDropped` 分开：两条路的触发时机不同，见 `tick` 末尾） */
+  private splitDone = false;
+  /**
+   * 它是**被打死**的吗（批次 120）。
+   *
+   * 只有"被打死"才会分裂：自然消失（离玩家 96 格被清场）也会把 `dead` 置真，
+   * 那时候分裂等于在没人看的地方凭空生一堆史莱姆。
+   * 被火烧死、被水泡死都算"打死"（原版那两种也会分裂），所以三处都要置它。
+   */
+  private diedFromDamage = false;
 
   /** 掉落是否已结算（防止死亡与着火两条路径重复掉一份） */
   private lootDropped = false;
@@ -754,14 +818,19 @@ export class Mob extends Entity {
     }
 
     if (chasing && player) {
-      this.repathTimer -= dt;
-      if (this.repathTimer <= 0 || this.path.length === 0) {
-        this.repathTimer = 0.5 + Math.random() * 0.4;
-        this.path =
-          this.pathfinder.find(this.x, this.y, this.z, player.x, player.y, player.z, {
-            heightBlocks: this.bodyBlocks,
-          }) ?? [];
-        this.pathIndex = 0;
+      // ⚠️ **跳跃式移动的生物完全不寻路**（批次 120，史莱姆）：它一跳一跳地靠近，
+      // 跳不过去就再跳，不会绕路——所以这里连 A* 都不必跑（那是最贵的一段）。
+      // 与"不撞墙"那条取舍一起记在 TASKS J16：原版史莱姆也是撞墙时反复跳。
+      if (this.type.hops !== true) {
+        this.repathTimer -= dt;
+        if (this.repathTimer <= 0 || this.path.length === 0) {
+          this.repathTimer = 0.5 + Math.random() * 0.4;
+          this.path =
+            this.pathfinder.find(this.x, this.y, this.z, player.x, player.y, player.z, {
+              heightBlocks: this.bodyBlocks,
+            }) ?? [];
+          this.pathIndex = 0;
+        }
       }
 
       if (this.type.id === 'creeper') {
@@ -884,6 +953,13 @@ export class Mob extends Entity {
     let targetVx = 0;
     let targetVz = 0;
 
+    // 跳跃式移动（批次 120，史莱姆）：这种生物**不走寻路**（它一跳一跳地靠近，
+    // 跳不过去就算了），所以直接把这一帧交给 `hopMove` 并跳过下面那三条分支
+    if (this.type.hops === true) {
+      this.hopMove(chasing, dt);
+      return;
+    }
+
     if (this.type.ranged || this.moveDirX !== 0 || this.moveDirZ !== 0) {
       // 远程生物（保持距离）与求爱中的生物（走向配偶）：方向由 AI 直接给，不走寻路
       targetVx = this.moveDirX * speed;
@@ -945,6 +1021,64 @@ export class Mob extends Entity {
     const factor = Math.min(1, accel * dt);
     this.vx += (targetVx - this.vx) * factor;
     this.vz += (targetVz - this.vz) * factor;
+  }
+
+  /**
+   * 跳跃式移动（批次 120，史莱姆）。
+   *
+   * 原版史莱姆的移动就是"原地蓄力 → 朝目标跳一下"，本项目照做，四条规矩：
+   *  - **落地**时把水平速度收掉（它不会滑行，落地是"啪"一下停住）并开始计时；
+   *  - 计时到点就起跳：`vy = HOP_SPEED`、水平速度朝目标（追人时朝玩家，否则朝游荡方向）；
+   *  - **空中不转向**——这是"跳跃式"与"走路"最大的手感差别：跳出去就直着飞，
+   *    玩家往旁边一闪就躲开了（原版也是这个手感）；
+   *  - 没在追人时朝 `wanderYaw` 跳（与走路的游荡共用同一个方向，不必另开一套）。
+   *
+   * ⚠️ 它**完全不走寻路**：跳不过去就再跳一次，不会绕路。原版史莱姆也不会绕
+   * （它们撞墙时只是反复跳）。差异记在 TASKS J16。
+   */
+  private hopMove(chasing: boolean, dt: number): void {
+    if (this.onGround) {
+      const stop = Math.min(1, 12 * dt);
+      this.vx -= this.vx * stop;
+      this.vz -= this.vz * stop;
+      this.hopTimer -= dt;
+      if (this.hopTimer > 0) return;
+      this.hopTimer = HOP_INTERVAL_MIN + Math.random() * (HOP_INTERVAL_MAX - HOP_INTERVAL_MIN);
+
+      // 方向：追人时用 AI 给的朝向（`chaseDir*`，与"会爬墙的生物直推"读的是同一份），
+      // 否则朝游荡方向
+      const chasingDir = this.chaseDirX !== 0 || this.chaseDirZ !== 0;
+      const yaw =
+        chasing && chasingDir ? Math.atan2(this.chaseDirZ, this.chaseDirX) : this.wanderYaw;
+      const speed = (chasing ? this.type.speed : this.type.speed * 0.6) * this.effects.moveSpeedMultiplier();
+      this.vx = Math.cos(yaw) * speed;
+      this.vz = Math.sin(yaw) * speed;
+      this.vy = HOP_SPEED;
+      this.onGround = false;
+      this.jumpCooldown = 0.3;
+      return;
+    }
+    // 空中：**什么都不做**（不转向、不加力）——这一条正是"跳出去就直着飞"的来源
+  }
+
+  /**
+   * 被杀死时分裂（批次 120，史莱姆）：大/中史莱姆倒下会原地分裂出 2~4 只**更小的**，
+   * 只有最小的那一档才掉粘液球（原版就是这么设计的，所以"打一只大史莱姆"要打三遍）。
+   *
+   * ⚠️ 只在 `diedFromDamage` 时分裂：**自然消失**（离玩家 96 格被清场）也会把
+   * `dead` 置真，那时候分裂等于"在没人看的地方凭空生一堆史莱姆"。
+   */
+  private splitIntoChildren(ctx: EntityContext): void {
+    const next = this.type.splitsInto;
+    if (next === undefined || !this.diedFromDamage) return;
+    if (!ctx.spawnMob) return;
+    const [min, max] = this.type.splitsCount ?? [SPLIT_COUNT_MIN, SPLIT_COUNT_MAX];
+    const count = min + Math.floor(Math.random() * (max - min + 1));
+    for (let i = 0; i < count; i++) {
+      // 散开一点，免得几只叠在同一格里互相卡住
+      const angle = (i / count) * Math.PI * 2;
+      ctx.spawnMob(next, this.x + Math.cos(angle) * 0.7, this.y, this.z + Math.sin(angle) * 0.7);
+    }
   }
 
   /** 沿 (vx, vz) 方向走出 0.7 格后是否会踏空 */
@@ -1059,6 +1193,8 @@ export class Mob extends Entity {
       if (this.health <= 0) {
         this.health = 0;
         this.dead = true;
+        // 烧死也算"被打死"（原版史莱姆被火烧死照样分裂）
+        this.diedFromDamage = true;
         return;
       }
     }
@@ -1101,6 +1237,8 @@ export class Mob extends Entity {
     if (this.health <= 0) {
       this.health = 0;
       this.dead = true;
+      // 淋雨/泡水致死同样算"被打死"（与着火那条口径一致，见 `diedFromDamage`）
+      this.diedFromDamage = true;
       // 掉落由 `tick` 末尾统一结算（与着火致死同一条路，见那里的注释）
       return;
     }
@@ -1209,6 +1347,8 @@ export class Mob extends Entity {
     if (this.health <= 0) {
       this.health = 0;
       this.dead = true;
+      // 被打死 → 允许分裂（批次 120，见 `diedFromDamage`）
+      this.diedFromDamage = true;
       this.lootDropped = true;
       this.dropLoot(ctx, looting);
     }

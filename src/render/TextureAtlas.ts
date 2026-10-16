@@ -3364,6 +3364,31 @@ function mineralPainter(tint: readonly [number, number, number]): Painter {
   };
 }
 
+/**
+ * 粘液块（批次 120）：半透明的绿。
+ *
+ * ⚠️ **不带 alpha**（本项目的方块贴图一旦有 alpha 就要走透明那一套渲染），
+ * 所以"果冻感"靠花纹表达：每 4×4 一格深色边（与原版粘液块的花纹同一个意思）。
+ */
+PAINTERS.slime_block = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const edge = x % 4 === 0 || y % 4 === 0;
+  const base = (edge ? 96 : 138) + jitter;
+  return [clamp255(base * 0.52), clamp255(base + 22), clamp255(base * 0.68), 255];
+};
+
+/** 粘液球（批次 120）：一颗亮绿的球，左上有一点高光（果冻反光的样子） */
+PAINTERS.item_slime_ball = (x, y, rng) => {
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const distance = Math.hypot(dx, dy);
+  if (distance > 6.4) return [0, 0, 0, 0];
+  const jitter = rng() * 12 - 6;
+  const highlight = Math.hypot(dx + 2.2, dy + 2.2) < 2.1;
+  const base = (highlight ? 214 : distance > 5 ? 108 : 160) + jitter;
+  return [clamp255(base * 0.5), clamp255(base + 24), clamp255(base * 0.66), 255];
+};
+
 PAINTERS.gold_block = mineralPainter([1.0, 0.83, 0.28]);
 PAINTERS.diamond_block = mineralPainter([0.52, 0.94, 0.94]);
 PAINTERS.emerald_block = mineralPainter([0.32, 0.92, 0.44]);

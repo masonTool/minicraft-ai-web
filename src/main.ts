@@ -114,7 +114,14 @@ import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
 // 雷电与避雷针（批次 83）：规则（落点选择 / 杆头坐标 / 脉冲表）在 `world/Lightning.ts`，
 // 主程序只做"世界里的副作用"（伤害、点火、粒子、给电路重算）
-import { MOON_PHASE_COUNT, moonPhaseFor, moonPhaseName } from './core/world/MoonPhase.ts';
+import {
+  MOON_PHASE_COUNT,
+  moonPhaseFor,
+  moonPhaseName,
+  slimeSpawnFactor,
+} from './core/world/MoonPhase.ts';
+// 史莱姆（批次 120）：史莱姆区块与粘液块的弹跳，两条都是纯函数
+import { isSlimeChunk, slimeBounceVelocity } from './core/world/Slime.ts';
 import {
   LIGHTNING_DAMAGE,
   LIGHTNING_DAMAGE_RADIUS,
@@ -4942,8 +4949,12 @@ class App {
       },
       hostileCount,
       passiveCount,
-      // "这一列在不在要塞里"（批次 115）：只有主程序答得上来，见 `inStructure`
-      inStructure: (kind, x, z) => this.inStructure(kind, x, z),
+      // "这一列在不在某个区域里"（批次 115 要塞 / 批次 120 史莱姆区块）：
+      // 两者都是"算出来的"，只有主程序答得上来，见 `inZone`
+      inZone: (kind, x, z) => this.inZone(kind, x, z),
+      // 月亮相位影响史莱姆的刷怪密度（批次 120）：`MoonPhase` 里那个函数一直等着史莱姆
+      spawnWeightScale: (type) =>
+        type.spawnZone === 'slime_chunk' ? this.slimeSpawnFactorNow() : 1,
     };
     this.mobSpawner.update(dt, ctx);
   }
@@ -4958,10 +4969,37 @@ class App {
    * ⚠️ 只在"真的抽到了那只会结构限定的生物"时才走到这里（`MobSpawner` 里先筛维度、
    * 再抽种类、最后才问结构），所以那点噪声开销落在每两秒一次的概率上。
    */
-  private inStructure(kind: string, x: number, z: number): boolean {
+  /**
+   * 脚下是粘液块吗、该弹多高（批次 120）。
+   *
+   * 三个容易踩的地方，都写在这里：
+   *  1. **读 `lastLandingSpeed` 而不是 `p.vy`**：落地那一瞬间物理层已经把 `vy` 清零了，
+   *     读 `p.vy` 会永远得到 0（"看起来对、其实永远不弹"）；
+   *  2. **它是一次性的**：读完就清掉——站在粘液块上不动时，`onGround` 每帧都真，
+   *     不清的话会拿同一份旧速度反复弹（人会在原地抖）；
+   *  3. **弹跳的数值算在 `world/Slime.ts`**（`slimeBounceVelocity` 是纯函数，
+   *     所以"多高会弹、多慢就不弹"能在离线测试里断言）。
+   */
+  private slimeBounce(): number {
+    const p = this.physics;
+    if (p.lastLandingSpeed <= 0) return 0;
+    const speed = p.lastLandingSpeed;
+    p.lastLandingSpeed = 0;
+    const below = this.world.getBlock(Math.floor(p.x), Math.floor(p.y - 0.2), Math.floor(p.z));
+    if (below !== Block.SLIME_BLOCK) return 0;
+    return slimeBounceVelocity(-speed);
+  }
+
+  private inZone(kind: string, x: number, z: number): boolean {
+    if (kind === 'slime_chunk') return isSlimeChunk(this.worldConfig.seed, x, z);
     if (kind !== 'nether_fortress') return false;
     this.netherStructureWorld ??= new NetherGenerator(this.worldConfig.seed).structureWorld();
     return fortressAt(x, z, this.worldConfig.seed, this.netherStructureWorld) !== null;
+  }
+
+  /** 当前月相的史莱姆刷怪倍率（批次 120）：`MoonPhase` 里那个函数一直等着史莱姆 */
+  private slimeSpawnFactorNow(): number {
+    return slimeSpawnFactor(moonPhaseFor(this.dayCount));
   }
 
   /**
@@ -5088,6 +5126,15 @@ class App {
       teleportPlayer: (x, y, z) => this.teleportByEnderPearl(x, y, z),
       // 末影之眼碎掉（批次 114）：紫色涡旋（与传送门/末影箱/珍珠传送同一套粒子）
       spawnPortalParticles: (x, y, z, count, spread) => this.particles.spawnPortal(x, y, z, count, spread),
+      // 史莱姆分裂（批次 120）：按**种类 id** 放一只出来——实体层不能引生物表（会成环），
+      // 所以由这里查表；不与 `spawnBaby` 合用是因为那个会 `makeBaby()`（分裂出的不是幼崽）
+      spawnMob: (typeId, x, y, z) => {
+        const type = mobTypeById(typeId);
+        if (!type) return;
+        this.entities.spawn(createMob(type, x, y, z));
+        this.particles.spawnFlame(x, y + 0.2, z, 0x8fdc5a, 6);
+        this.audio.play('step', { x, y, z });
+      },
       // 凋灵吐骷髅头（批次 116）：与火球走同一条通道（它也是 `Throwable` 里的一档）
       //（`itemId` 给的是那颗头的方块 id：渲染器会按 kind 换成骷髅头那两张贴图，
       //  这个 id 只是"万一走到通用分支时别渲染成一团空白"的兜底，与小火球传烈焰粉同一条）
@@ -7429,6 +7476,21 @@ class App {
     if (this.flying || p.inWater || p.onClimbable) {
       this.fallStartY = null;
     } else if (p.onGround) {
+      // 粘液块（批次 120）：落在它上面**不摔伤、还会弹起来**，所以这里排在"记摔落高度"
+      // 之前——弹了就当场清掉高度，`pendingFallDistance` 也一并归零（不摔伤）
+      const bounce = this.slimeBounce();
+      if (bounce > 0) {
+        p.vy = bounce;
+        p.onGround = false;
+        this.fallStartY = null;
+        this.pendingFallDistance = 0;
+        // 那一下"啪"：用一簇绿色的火花代替（原版有专门的粘液音效，本项目还没有，
+        // 见 TASKS M21）
+        this.particles.spawnFlame(p.x, p.y + 0.1, p.z, 0x8fdc5a, 6);
+        this.audio.play('step', { x: p.x, y: p.y, z: p.z });
+        this.vibrate(8);
+        return;
+      }
       if (this.fallStartY !== null) {
         const distance = this.fallStartY - p.y;
         if (distance > 3) this.pendingFallDistance = distance;

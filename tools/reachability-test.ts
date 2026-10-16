@@ -554,11 +554,8 @@ const idsNamed = (...names: string[]): number[] =>
  * 理由写清楚"原版是怎么拿到的、本项目缺哪一环"——它们是下一批的待办清单。
  */
 const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: string }[] = [
-  {
-    label: '粘性活塞（只差一件原料）',
-    ids: idsNamed('sticky_piston'),
-    reason: '原版是"活塞 + 粘液球"，而史莱姆还没做（TASKS J16）——不编替代配方，缺的就是那一件',
-  },
+  // ⚠️ "粘性活塞（只差一件原料）"那一族在**批次 120** 删掉了：史莱姆做出来之后
+  // 粘液球有了，"活塞 + 粘液球"那条配方也就成立了——白名单按规矩**补上了就删掉它**
   {
     label: '混凝土 16 色',
     ids: Array.from({ length: 16 }, (_u, i) => concreteId(i)),
@@ -685,11 +682,12 @@ const blockGaps: number[] = [];
   check('方块侧白名单没有重复 id', exempted.size === BLOCK_EXEMPT.reduce((sum, f) => sum + f.ids.length, 0));
   check('方块侧每条都写了理由（≥ 8 字）', BLOCK_EXEMPT.every((family) => family.reason.length >= 8));
   // 把缺口总数钉死（与物品侧同一个用法：链一断或一补就会红）。
-  // 一路在缩：批次 118 量出来 **77** 条（10 族）→ 119 给红石元件与那几件补上配方后 **46** 条（7 族）。
+  // 一路在缩：批次 118 量出来 **77** 条（10 族）→ 119 补配方后 **46** 条（7 族）
+  // → **120（史莱姆 → 粘液球 → 粘性活塞）后 45 条（6 族）**。
   // 剩下的每一条都是"缺一整块内容"（史莱姆、鱿鱼、丛林竹子、珊瑚死亡机制、深色森林、混凝土粉末），
   // 而不是"某条链断在中间"——正是这一栏该有的样子
   equal(
-    '方块侧缺口总数（批次 119 之后：46 条）',
+    '方块侧缺口总数（批次 120 之后：45 条）',
     blockGaps.length,
     BLOCK_EXEMPT.reduce((sum, family) => sum + family.ids.length, 0),
   );

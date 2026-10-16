@@ -318,10 +318,104 @@ export const WITHER_SKELETON_TYPE: MobType = {
   // 下界 + **只要塞里面**（`spawnStructure`）：原版就是"要塞限定"，
   // 所以要进"会自然刷"那张表（`naturalSpawn` 保持默认的 true）
   dimension: 'nether',
-  spawnStructure: 'nether_fortress',
+  spawnZone: 'nether_fortress',
   bodyColor: 0x3c3c3c,
   accentColor: 0x1c1c1c,
   eyeHeight: 1.74,
+};
+
+/**
+ * 史莱姆三档（批次 120，J16 的一小块）——**大 / 中 / 小各是一种生物**。
+ *
+ * 它是**唯一掉黏液球**的生物，而黏液球是**粘性活塞**与**黏液块**的原料：
+ * 在那之前粘性活塞一直挂在可达性审计的白名单上（"要黏液球，而史莱姆还没做"）。
+ *
+ * 三档的差别**全在表里**（与"蜘蛛 / 洞穴蜘蛛"同一套做法：差的是数据，不是逻辑）：
+ *  - **大**（2.0 格宽、16 血、伤害 4）被打死 → 分裂出 2~4 只**中**；
+ *  - **中**（1.0 格宽、4 血、伤害 2）被打死 → 分裂出 2~4 只**小**；
+ *  - **小**（0.5 格宽、1 血、**不主动攻击**）被打死 → 掉 **0~2 黏液球**。
+ *    ⚠️ 这正是原版的设计：**打一只大史莱姆要打三遍**才拿得到黏液球。
+ *
+ * 移动是**跳跃式**的（`hops`）：蓄力 → 朝目标跳一下 → 空中不转向，所以它一跳一跳地
+ * 逼近，玩家往旁边一闪就躲开了（见 `Mob.hopMove`）。
+ *
+ * 自然生成**只刷大那一档**，而且要同时满足原版那两条：
+ *  - **史莱姆区块**（`spawnZone: 'slime_chunk'`，约 1/10 的区块，见 `world/Slime.ts`）；
+ *  - **y < 40**（`spawnMaxY`）且**不看光照**（`ignoreLight`：原版在史莱姆区块里白天也刷）。
+ *  再叠上月亮相位——越满刷得越多（`MoonPhase.slimeSpawnFactor`，主程序接成刷怪权重）。
+ *
+ * ⚠️ 与原版的差异（记在 TASKS J16）：中/小两档**不会自然刷**（原版三档都会刷，
+ * 本项目只让"大"当自然刷的那一档，靠分裂产生另两档——这样地表附近不会突然出现一堆小家伙）；
+ * 它**不绕路**（跳不过去就反复跳，原版也差不多）；跳起来**不会砸到玩家更高**。
+ */
+export const SLIME_BIG_TYPE: MobType = {
+  id: 'slime_big',
+  name: '史莱姆（大）',
+  health: 16,
+  width: 2,
+  height: 2,
+  speed: 2.2,
+  hostile: true,
+  attackDamage: 4,
+  followRange: 16,
+  drops: [],
+  xp: 4,
+  hops: true,
+  splitsInto: 'slime',
+  dimension: 'overworld',
+  spawnZone: 'slime_chunk',
+  spawnMaxY: 40,
+  ignoreLight: true,
+  spawnSpace: { width: 2, height: 2 },
+  bodyColor: 0x63b04a,
+  accentColor: 0x3f7a30,
+  eyeHeight: 1.4,
+};
+
+/** 史莱姆（中）：自然刷的那一档是"大"，这一档只从分裂里出现（见上面那段注记） */
+export const SLIME_TYPE: MobType = {
+  id: 'slime',
+  name: '史莱姆',
+  health: 4,
+  width: 1,
+  height: 1,
+  speed: 1.8,
+  hostile: true,
+  attackDamage: 2,
+  followRange: 16,
+  drops: [],
+  xp: 2,
+  hops: true,
+  splitsInto: 'slime_small',
+  naturalSpawn: false,
+  dimension: 'overworld',
+  bodyColor: 0x63b04a,
+  accentColor: 0x3f7a30,
+  eyeHeight: 0.7,
+};
+
+/**
+ * 史莱姆（小）：**不主动攻击**（原版最小的那一档只是蹦来蹦去），
+ * 杀了它才掉黏液球——所以它是"黏液球农场"的最后一环。
+ */
+export const SLIME_SMALL_TYPE: MobType = {
+  id: 'slime_small',
+  name: '史莱姆（小）',
+  health: 1,
+  width: 0.5,
+  height: 0.5,
+  speed: 1.4,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 16,
+  drops: [{ itemId: Item.SLIME_BALL, min: 0, max: 2 }],
+  xp: 1,
+  hops: true,
+  naturalSpawn: false,
+  dimension: 'overworld',
+  bodyColor: 0x63b04a,
+  accentColor: 0x3f7a30,
+  eyeHeight: 0.35,
 };
 
 export const MOB_TYPES: readonly MobType[] = [
@@ -331,6 +425,10 @@ export const MOB_TYPES: readonly MobType[] = [
   CAVE_SPIDER_TYPE,
   ENDERMAN_TYPE,
   WITHER_SKELETON_TYPE,
+  // 史莱姆三档（批次 120）：只有"大"会自然刷，中/小从分裂里出现
+  SLIME_BIG_TYPE,
+  SLIME_TYPE,
+  SLIME_SMALL_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

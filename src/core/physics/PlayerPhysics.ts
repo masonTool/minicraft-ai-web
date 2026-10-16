@@ -75,6 +75,14 @@ export class PlayerPhysics {
   onClimbable = false;
   /** 摔落起始高度；落地时用于计算摔落伤害（生存系统接入后使用） */
   fallStartY: number | null = null;
+  /**
+   * 上一次落地时的**下落速度**（正数，格/秒；批次 120）。
+   *
+   * 存在的理由很具体：粘液块要按"撞上去有多快"决定弹多高，而落地那一瞬间
+   * `vy` 会被清零（见 `moveY`），所以只能在清之前记一份。
+   * 只有主程序读它（弹跳那一段），别的地方别拿它当"当前速度"。
+   */
+  lastLandingSpeed = 0;
 
   readonly width = 0.6;
   readonly height = 1.8;
@@ -287,7 +295,9 @@ export class PlayerPhysics {
       // 撞到天花板
       this.y = Math.floor(this.y + this.height) - this.height - 1e-4;
     } else {
-      // 落地
+      // 落地：**先记下落速度再清零**（批次 120）——粘液块要按"撞上去有多快"决定弹多高，
+      // 而清零之后这一帧就再也读不到它了（`lastLandingSpeed` 只有主程序读）
+      this.lastLandingSpeed = -this.vy;
       this.y = Math.floor(this.y) + 1 + 1e-4;
       this.onGround = true;
     }

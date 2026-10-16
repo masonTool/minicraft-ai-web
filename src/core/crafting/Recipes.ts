@@ -1190,7 +1190,7 @@ const HANGING_RECIPES: readonly Recipe[] = [
  * 所以补完之后"在生存里搭一个红石电路"整条路是通的。
  *
  * ⚠️ 两处保留的差异：
- *  - **粘性活塞不做**：原版是"活塞 + 粘液球"，而史莱姆还没做（TASKS J16）——
+ *  - **粘性活塞不做**：原版是"活塞 + 黏液球"，而史莱姆还没做（TASKS J16）——
  *    与其编一个原版没有的替代配方，不如让白名单里留着它一条（理由写清是缺哪一件）；
  *  - **侦测器按 1.16 的图案**（6 圆石 + 2 红石 + 1 石英）：原版后来改过一次配方，
  *    这里取的是"石英在中间那一行右侧"这一版。
@@ -1245,6 +1245,21 @@ const REDSTONE_RECIPES: readonly Recipe[] = [
     pattern: ['CCC', 'RRQ', 'CCC'],
     key: { C: Block.COBBLESTONE, R: Item.REDSTONE, Q: Item.QUARTZ },
   },
+  // ---- 黏液球那条链（批次 120）：史莱姆做出来之后，这两条才做得出来
+  // 粘性活塞：1 活塞 + 1 黏液球（原版；这也是可达性审计白名单里最后一条"缺原料"的元件）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Block.STICKY_PISTON, count: 1 },
+    ingredients: [Block.PISTON, Item.SLIME_BALL],
+  },
+  // 黏液块 ↔ 9 黏液球（与原版一致：既是弹跳方块，也是储物）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.SLIME_BLOCK, count: 1 },
+    pattern: ['SSS', 'SSS', 'SSS'],
+    key: { S: Item.SLIME_BALL },
+  },
+  { kind: 'shapeless' as const, result: { id: Item.SLIME_BALL, count: 9 }, ingredients: [Block.SLIME_BLOCK] },
   // 按钮：1 石头 / 1 木板（无序）
   { kind: 'shapeless' as const, result: { id: Block.STONE_BUTTON, count: 1 }, ingredients: [Block.STONE] },
   { kind: 'shapeless' as const, result: { id: Block.OAK_BUTTON, count: 1 }, ingredients: [Block.OAK_PLANKS] },

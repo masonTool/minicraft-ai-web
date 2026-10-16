@@ -167,6 +167,14 @@ export interface EntityContext {
   heldItemId?: () => number | undefined;
   /** 生成一只幼体（J8 繁殖用） */
   spawnBaby?: (type: MobType, x: number, y: number, z: number) => void;
+  /**
+   * 按**种类 id** 生成一只生物（批次 120，史莱姆分裂用）。
+   *
+   * 与 `spawnBaby` 的分工：那个是"生幼崽"（会 `makeBaby()` + 冒爱心 + 记进度），
+   * 而这个只是**放一只出来**——分裂出的小史莱姆不是"幼崽"，是另一档尺寸的正常个体。
+   * 收 id 而不是 `MobType`：实体层不能引 `mobs.ts`（会成环），见 `MobType.splitsInto`。
+   */
+  spawnMob?: (typeId: string, x: number, y: number, z: number) => void;
   /** 冒爱心粒子（J8：求爱与繁殖成功时）。`scale` 用来让"没找到对象"时少冒几颗 */
   spawnHearts?: (x: number, y: number, z: number, scale?: number) => void;
   /**
