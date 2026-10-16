@@ -20,6 +20,7 @@
  */
 
 import { Block, Wood, type WoodBlockIds } from '../registry/blocks.ts';
+import { withSnowLayers } from '../registry/blockState.ts';
 import { Biome, type BiomeDef } from './Biome.ts';
 import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 
@@ -163,6 +164,23 @@ export class FeatureWriter {
     const x = worldX - this.originX;
     const z = worldZ - this.originZ;
     this.blocks[Chunk.index(x, worldY, z)] = id;
+    return true;
+  }
+
+  /**
+   * 与 `put` 相同，但**顺带写方块状态**（雪层的层数用它）。
+   *
+   * 为什么不直接用 `fillState`：那是"强制写入"，会盖掉已经长出来的草与花；
+   * 雪层要的是"还有空地就铺一层"，所以保留 `put` 的可替换判定。
+   */
+  putState(worldX: number, worldY: number, worldZ: number, id: number, state: number): boolean {
+    if (!this.put(worldX, worldY, worldZ, id)) return false;
+    if (this.states && state !== 0) {
+      const x = worldX - this.originX;
+      const z = worldZ - this.originZ;
+      this.states[Chunk.index(x, worldY, z)] = state;
+      this.onStateWrite?.();
+    }
     return true;
   }
 
@@ -523,6 +541,12 @@ interface BiomeFeature {
   special?: 'cactus' | 'pumpkin' | 'melon' | 'sugar_cane' | 'dead_bush' | 'bamboo';
   /** 特殊地物密度 */
   specialDensity: number;
+  /**
+   * 地表铺雪层的密度（批次 37）：**省略 = 0**（只有雪原那一族写它）。
+   * 与 `lilyPads` 同一个理由：给十几个跟雪无关的群系各补一个 `snowCover: 0`
+   * 只会让这张表更难读。
+   */
+  snowCover?: number;
 }
 
 const NO_FLOWERS: readonly number[] = [];
@@ -618,6 +642,8 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     flowerKinds: NO_FLOWERS,
     mushrooms: 0,
     specialDensity: 0,
+    // 雪原：几乎每列都盖上薄雪（原版就是"一片白"，密度低于 0.8 会露出成片的草绿）
+    snowCover: 0.85,
   },
   [Biome.SNOWY_TAIGA]: {
     trees: [['spruce', 3], ['mega_spruce', 1]],
@@ -627,6 +653,7 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     flowerKinds: NO_FLOWERS,
     mushrooms: 0,
     specialDensity: 0,
+    snowCover: 0.65,
   },
   [Biome.DESERT]: {
     trees: [],
@@ -696,6 +723,8 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     ...EMPTY_FEATURE,
     trees: [['spruce', 1]],
     treeDensity: 0.004,
+    // 雪坡：坡度大、草木少，但仍然是一层薄雪（原版的雪坡就是"白雪 + 零星云杉"）
+    snowCover: 0.75,
   },
   [Biome.GROVE]: {
     trees: [['spruce', 1]],
@@ -705,6 +734,8 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     flowerKinds: NO_FLOWERS,
     mushrooms: 0,
     specialDensity: 0,
+    // 雪林（山地那一档）：树多、雪稍薄
+    snowCover: 0.55,
   },
   [Biome.BADLANDS]: {
     trees: [],
@@ -788,6 +819,8 @@ export interface FeatureStats {
   trees: number;
   plants: number;
   specials: number;
+  /** 地表雪层数（批次 37；可选字段，老的统计脚本不必改） */
+  snow?: number;
 }
 
 /**
@@ -806,8 +839,18 @@ export function decorate(
   world: FeatureWorld,
   seed: number,
   stats?: FeatureStats,
+  /**
+   * 可选的方块状态数组与回调（批次 37）。
+   *
+   * 地物里唯一需要写状态的方块是**雪层**（层数在状态里）。
+   * 早先这里只传 blocks，于是"雪层写状态"这一步会被静默丢掉——
+   * 表现是"雪原地表全是 1 层的雪"，而代码看起来一点问题都没有
+   * （`fillState` 在没有 states 时会退化成普通写入）。
+   */
+  states: Uint8Array | null = null,
+  onStateWrite?: () => void,
 ): void {
-  const writer = new FeatureWriter(blocks, cx, cz);
+  const writer = new FeatureWriter(blocks, cx, cz, states, onStateWrite);
 
   // (1) 树：多块结构，树冠会伸进邻居，所以必须重放 3×3 邻域，
   //     并且所有坐标只依赖世界坐标（见文件头的约定）。
@@ -932,6 +975,28 @@ function decorateLocal(w: FeatureWriter, world: FeatureWorld, seed: number, stat
         if (!isPlantable(w, wx, y, wz, SOIL)) continue;
         const red = hashAt(wx, wz, seed ^ 0x9a9a) < 0.5;
         if (w.put(wx, y, wz, red ? Block.RED_MUSHROOM : Block.BROWN_MUSHROOM) && stats) stats.plants++;
+      }
+    }
+  }
+
+  // ---- 地表雪层（批次 37）：雪原的"一片白"靠这一层
+  //
+  // 排在草花与蘑菇**之后**：雪层是"铺在地面上"的，不该把已经长出来的草与花盖掉
+  // （`w.put` 只写可替换的格子，所以顺序在这里就是规则）。
+  // 层数用列哈希给 1~3 层：全是 1 层会显得太平（但**不会**长到 4 层以上——
+  // 满地"半格高的雪"会让雪原变得不好走）。
+  if (config.snowCover && config.snowCover > 0) {
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        const wx = originX + x;
+        const wz = originZ + z;
+        if (hashAt(wx, wz, seed ^ 0x5c0a) >= config.snowCover) continue;
+        const y = w.surfaceAbove(wx, wz, world.surfaceY(wx, wz) + 1);
+        if (!isPlantableAt(w.get(wx, y, wz))) continue;
+        const layers = 1 + Math.floor(hashAt(wx, wz, seed ^ 0x5c0b) * 3);
+        if (w.putState(wx, y, wz, Block.SNOW, withSnowLayers(0, layers))) {
+          if (stats) stats.snow = (stats.snow ?? 0) + 1;
+        }
       }
     }
   }

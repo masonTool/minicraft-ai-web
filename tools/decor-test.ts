@@ -26,6 +26,8 @@ import {
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { recipesForResult } from '../src/core/crafting/RecipeBook.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { DYE_COLORS } from '../src/core/registry/colors.ts';
+import { snowLayers } from '../src/core/registry/blockState.ts';
 import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
 import {
   BIOME_FEATURES,
@@ -93,6 +95,25 @@ check(
     .join(' '),
 );
 check('图集贴图无重名', new Set(TILE_ORDER).size === TILE_ORDER.length);
+
+// 地毯（批次 37）：16 色的**贴图顺序必须与羊毛一一对应**。
+// 这两份清单分别写在 `atlasLayout.ts`（图集顺序）与 `blocks.ts`（方块定义）里，
+// 错位的结果是"红色地毯长得像橙色地毯"——这种错看起来哪边都没毛病，
+// 所以这里按名字逐色对一遍（羊毛的顺序本身由 `DYE_COLORS` 定）。
+{
+  const woolOrder = DYE_COLORS.map((color) => `wool_${color.name}`);
+  const carpetOrder = DYE_COLORS.map((color) => `carpet_${color.name}`);
+  check('地毯的 16 张贴图都在图集里', carpetOrder.every((tile) => TILES.includes(tile)));
+  /** 图集里这 16 张的**下标顺序**是否与 DYE_COLORS 一致（手写的清单最容易在这里错位） */
+  const ascending = (tiles: readonly string[]): boolean => {
+    const indices = tiles.map((tile) => TILES.indexOf(tile));
+    return indices.every((index, i) => index >= 0 && (i === 0 || index > indices[i - 1]!));
+  };
+  check('图集里羊毛按配色表顺序排列（基准）', ascending(woolOrder));
+  check('图集里地毯也按配色表顺序排列（否则会串色）', ascending(carpetOrder));
+  check('地毯与羊毛是两套贴图（不复用同一张）', carpetOrder.every((tile) => !woolOrder.includes(tile)));
+  check('雪层复用雪块的贴图（8 个阶段共用一张）', blockDef(Block.SNOW).tiles.every((tile) => tile === 'snow'));
+}
 
 console.log('\n[装饰方块]');
 for (const [name, id, shape] of [
@@ -506,6 +527,54 @@ console.log('\n[睡莲（B16）]');
   decorate(plains, 0, 0, flatWorld(63, Biome.PLAINS), 7);
   check('平原的水塘里不长睡莲（只有沼泽配了它）', countBlocks(plains, [Block.LILY_PAD]) === 0);
   check('沼泽的配置里确实开了睡莲', (BIOME_FEATURES[Biome.SWAMP]!.lilyPads ?? 0) > 0);
+}
+
+console.log('\n[雪层（批次 37）：雪原地表铺雪]');
+{
+  equal('注册名', blockDef(Block.SNOW).name, 'minecraft:snow');
+  equal('中文名是"雪"', itemLabel(Block.SNOW), '雪');
+  equal('形状是 snow（高度随层数变）', blockDef(Block.SNOW).shape, 'snow');
+  check('不遮挡邻居', !blockDef(Block.SNOW).opaque);
+  equal('不透光（雪层压在地上不该让草皮变暗）', blockDef(Block.SNOW).lightOpacity, 0);
+  check('徒手可采集', isHandHarvestable(Block.SNOW));
+  equal('破坏掉 1 个雪球', dropFor(Block.SNOW)?.id, Item.SNOWBALL);
+  equal('雪层不自带发光', blockDef(Block.SNOW).light, 0);
+  check('有中文说明', hasDescription(Block.SNOW));
+
+  // 平坦的雪原：地面 y=63，雪应该只落在 y=64（层数写在**方块状态**里）
+  let snowBlocks = 0;
+  const layersSeen = new Set<number>();
+  const misplaced: string[] = [];
+  for (let seed = 1; seed <= 4; seed++) {
+    const chunk = flatChunk(63);
+    const states = new Uint8Array(CHUNK_VOLUME);
+    decorate(chunk, 0, 0, flatWorld(63, Biome.SNOWY_PLAINS), seed, undefined, states, () => {});
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        for (let y = -64; y < 320; y++) {
+          if (chunk[Chunk.index(x, y, z)] !== Block.SNOW) continue;
+          snowBlocks++;
+          if (y !== 64) misplaced.push(`${x},${y},${z}`);
+          layersSeen.add(snowLayers(states[Chunk.index(x, 64, z)] ?? 0));
+        }
+      }
+    }
+  }
+  // 256 列 × 密度 0.85 × 4 个种子 ≈ 870 格（草与树会占掉一些，所以只查下限）
+  check(`4 个种子的雪原长出 ${snowBlocks} 层雪（期望 500+）`, snowBlocks > 500, `实际 ${snowBlocks}`);
+  check('雪都落在地面正上方那一格', misplaced.length === 0, misplaced.slice(0, 3).join(' '));
+  check(
+    `层数在 1~3 之间（实测出现过 ${[...layersSeen].sort((a, b) => a - b).join('/')}）`,
+    layersSeen.size > 1 && [...layersSeen].every((layers) => layers >= 1 && layers <= 3),
+  );
+
+  // 群系约束：只有雪原那一族配了它
+  const plains = flatChunk(63);
+  decorate(plains, 0, 0, flatWorld(63, Biome.PLAINS), 7);
+  check('平原不长雪层（只有雪原那一族配了它）', countBlocks(plains, [Block.SNOW]) === 0);
+  check('雪原的配置里确实开了 snowCover', (BIOME_FEATURES[Biome.SNOWY_PLAINS]!.snowCover ?? 0) > 0);
+  check('雪林与雪坡也配了', (BIOME_FEATURES[Biome.GROVE]!.snowCover ?? 0) > 0 && (BIOME_FEATURES[Biome.SNOWY_SLOPES]!.snowCover ?? 0) > 0);
+  check('热带群系都没配（不会在丛林里下雪）', (BIOME_FEATURES[Biome.JUNGLE]!.snowCover ?? 0) === 0);
 }
 
 console.log(`\n装饰策略测试：${passed} 通过 / ${failed} 失败`);

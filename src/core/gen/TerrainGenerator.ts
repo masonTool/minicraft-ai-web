@@ -135,10 +135,16 @@ export function generateChunkBlocks(
   const generator = generatorFor(seed, worldType);
   const blocks = generator.generate(cx, cz, out);
 
-  decorate(blocks, cx, cz, generator, seed, stats);
-
+  // 地物阶段也要能写方块状态：**雪层**的层数就存在状态里（批次 37）。
+  // 这条通道早先没有接（只传了 blocks），"雪层写状态"会被静默丢掉。
   generationStates.fill(0);
   statesUsed = false;
+  decorate(blocks, cx, cz, generator, seed, stats, generationStates, () => {
+    statesUsed = true;
+  });
+
+  // ⚠️ 这里**不能**再 `generationStates.fill(0)`：地物刚写进去的雪层状态会被抹掉
+  // （结构只写门/楼梯这类"新放的方块"的状态，不会与雪层冲突）。清零已经在上面做过一次。
   const writer = new FeatureWriter(blocks, cx, cz, generationStates, () => {
     statesUsed = true;
   });
