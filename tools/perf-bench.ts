@@ -18,6 +18,7 @@ import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { Chunk, SECTION_COUNT, WORLD_MIN_Y, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
 import { StartupRamp } from '../src/core/world/StartupRamp.ts';
+import { STARTUP_PHASES, StartupTrace } from '../src/game/startupTrace.ts';
 import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
 import { withFacing } from '../src/core/registry/blockState.ts';
 import {
@@ -455,6 +456,51 @@ console.log('\n[开新世界的启动成本（批次 100）]');
     `${oldMs.toFixed(3)}ms → ${newMs.toFixed(3)}ms`,
   );
   check('两次扫描的次数上限都是每区块 98304 格（下界/末地不再扫：那里不打雷）', volume === 98304);
+}
+
+console.log('\n[启动耗时台账（N8 的判据，批次 103）]');
+{
+  /**
+   * 台账本身是纯逻辑（时钟注入），所以能在离线断言 —— 这与 `StartupRamp` 同一套写法。
+   * 真机上量到的两个数由 `tools/startup-check.sh` 在浏览器里取（那里才有 `performance`）。
+   *
+   * 这里只断言**台账自己的语义**，因为它是验收脚本与文档共同引用的读数入口：
+   * 名字取错/分段算错，会让"优化到底有没有用"这件事重新变成凭感觉。
+   */
+  let clock = 1000;
+  const trace = new StartupTrace(() => clock);
+  const advance = (ms: number) => {
+    clock += ms;
+  };
+
+  advance(120);
+  trace.mark(STARTUP_PHASES.bootBegin);
+  advance(40);
+  trace.mark(STARTUP_PHASES.bootGl);
+  advance(310);
+  trace.mark(STARTUP_PHASES.bootAtlas);
+  advance(90);
+  trace.mark(STARTUP_PHASES.bootMenu);
+  advance(500);
+  trace.mark(STARTUP_PHASES.worldBegin);
+  advance(30);
+  trace.mark(STARTUP_PHASES.worldConstructed);
+  advance(260);
+  trace.mark(STARTUP_PHASES.worldPlayable);
+
+  equal('bootMs = 图集 + 菜单前其它（440）', String(trace.bootMs), '440');
+  equal('playableMs = 进世界到第一块地形（290）', String(trace.playableMs), '290');
+  equal('分段：图集 310', String(trace.between(STARTUP_PHASES.bootGl, STARTUP_PHASES.bootAtlas)), '310');
+  // 相对台账起点（构造那一刻）算：bootBegin 是在起点之后 120ms 打的
+  check('同名的点只记第一次（重入不把数字弄脏）', trace.mark(STARTUP_PHASES.bootBegin) === 120);
+  check('没打过的点返回 null', trace.at('boot:nonexistent') === null);
+  check('缺一端的区间返回 null', trace.between('boot:begin', 'boot:nonexistent') === null);
+  check(
+    '台账按发生顺序记（验收脚本照这个顺序打印明细）',
+    trace.marks.map((m) => m.name).join(',') ===
+      'boot:begin,boot:gl,boot:atlas,boot:menu,world:begin,world:constructed,world:playable',
+    trace.marks.map((m) => m.name).join(','),
+  );
 }
 
 console.log(`\n性能基准：${passed} 通过 / ${failed} 失败`);

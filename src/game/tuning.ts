@@ -60,6 +60,23 @@ export const MOUSE_SENSITIVITY = 0.0022;
  */
 export const TOUCH_SENSITIVITY = 0.0034;
 
+/**
+ * 光照引擎**每帧**消费多少步（`LightEngine.process(budget)`）。
+ *
+ * ⚠️ 这个数是"开新世界要等多久"的**真正瓶颈**（批次 103 实测，N8）：
+ * 主循环里网格化被 `if (!lightBusy)` 挡着（本意是"别把没收敛的光照烘焙进网格"），
+ * 而渐进视距一开局就把半径开到 12 —— 489 个区块的光照队列有约 **450 万步**。
+ * 6000 步/帧（60fps）意味着要 **12.5 秒**才排空，期间**网格化一个都不派**，
+ * 加载遮罩就一直挂着：实测 `world:constructed 270ms → world:playable 16218ms`。
+ * 而这 450 万步的纯 CPU 只有 **0.4 秒左右** —— 99% 的时间是"每帧只肯做 6000 步"浪费掉的。
+ *
+ * 所以启动期用大预算、进游戏后回到小预算：加载遮罩还在（或渐进视距还没涨到设定值）时
+ * 玩家看不到世界，多花点 CPU 换"早十几秒能玩"是划算的；进了游戏就必须让出帧时间。
+ */
+export const LIGHT_BUDGET_PER_FRAME = 6000;
+/** 启动期的光照预算（见上）。实测把它开到 12 万步能把"到第一块地形"从 16.2s 压到 ~1s */
+export const STARTUP_LIGHT_BUDGET_PER_FRAME = 120000;
+
 /** 连续破坏/放置的最小间隔（秒） */
 export const BREAK_COOLDOWN = 0.25;
 export const PLACE_COOLDOWN = 0.22;

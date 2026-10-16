@@ -401,6 +401,8 @@ import {
   WATER_FOG,
   WATER_FOG_FAR,
   WATER_FOG_NEAR,
+  LIGHT_BUDGET_PER_FRAME,
+  STARTUP_LIGHT_BUDGET_PER_FRAME,
   clampUnit,
   rodKey,
   spawnerKey,
@@ -408,6 +410,8 @@ import {
 } from './game/tuning.ts';
 // 开发期初始物资：每加一批功能都要往 STARTING_HOTBAR 末尾追加验收物资，单独放一份
 import { DEV_BASE_KIT, STARTING_HOTBAR } from './game/startupKit.ts';
+// 启动耗时台账（N8 的判据，批次 103）：量"首次访问等多久"与"进世界等多久"两个数
+import { STARTUP_PHASES, startupTrace } from './game/startupTrace.ts';
 // 天空调色板与缓动（只被下面的"环境"一段用）
 import {
   DAY_SKY,
@@ -1946,6 +1950,7 @@ class App {
     if (this.loadingCleared) return;
     if (this.chunkRenderer.chunkMeshCount === 0) return;
     this.loadingCleared = true;
+    startupTrace.mark(STARTUP_PHASES.worldPlayable);
     document.getElementById('loading')?.remove();
   }
 
@@ -7095,6 +7100,7 @@ class App {
         if (this.viewDistanceNow !== before) {
           this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
         }
+        if (this.startupRamp.done) startupTrace.mark(STARTUP_PHASES.worldRampFull);
       }
       // 返回键守卫（批次 96）：界面开/关是**每帧对账**的——面板有六个、关闭路径更多
       //（点空白、点按钮、被别处挤掉），在每处各调一次迟早漏掉一个（漏掉就是"返回键突然失灵"）。
@@ -7162,7 +7168,19 @@ class App {
       const centerCz = toChunkCoord(this.physics.z);
       this.refreshWorld(centerCx, centerCz);
 
-      const lightBusy = this.world.processLighting(6000);
+      /**
+       * 光照预算：启动期开大（批次 103，N8）。
+       *
+       * ⚠️ 网格化被 `if (!lightBusy)` 挡着，而渐进视距一开局就把半径开到 12 ——
+       * 489 个区块的光照队列约 450 万步，6000 步/帧要 **12.5 秒**才排空，
+       * 期间网格化一个都不派、加载遮罩一直挂着（实测 16.2s 才能玩）。
+       * 启动期（遮罩还在 / 渐进视距还没涨完）玩家看不到世界，把 CPU 花在光照上是划算的。
+       * 见 `game/tuning.ts` 的 `STARTUP_LIGHT_BUDGET_PER_FRAME`。
+       */
+      const inStartup = !this.loadingCleared || !this.startupRamp.done;
+      const lightBusy = this.world.processLighting(
+        inStartup ? STARTUP_LIGHT_BUDGET_PER_FRAME : LIGHT_BUDGET_PER_FRAME,
+      );
 
       // 光照收敛后再重刷一次方块改动过的区块，避免烘焙进未收敛的光照
       if (!lightBusy && this.pendingSettle.length > 0) {
@@ -7718,8 +7736,22 @@ class App {
     playerModelVisible: boolean;
     /** 相机与玩家的距离（第一人称恒为 0，F7 验收用） */
     cameraDistance: number;
+    /**
+     * 启动耗时台账（N8 的判据，批次 103）：两个玩家真正等得着的数字
+     * —— 首次访问到主菜单 `bootMs`、点进世界到能玩 `playableMs`。
+     */
+    startup: {
+      bootMs: number | null;
+      playableMs: number | null;
+      marks: readonly { name: string; at: number }[];
+    };
   } {
     return {
+      startup: {
+        bootMs: startupTrace.bootMs,
+        playableMs: startupTrace.playableMs,
+        marks: startupTrace.marks,
+      },
       cameraMode: this.cameraMode,
       playerModelVisible: this.playerRenderer.visible,
       cameraDistance: Math.hypot(
@@ -8067,6 +8099,7 @@ async function adoptLegacyWorld(registry: WorldRegistry): Promise<void> {
 }
 
 async function boot(): Promise<void> {
+  startupTrace.mark(STARTUP_PHASES.bootBegin);
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
   const overlayEl = document.getElementById('overlay');
@@ -8086,15 +8119,19 @@ async function boot(): Promise<void> {
     return;
   }
 
+  startupTrace.mark(STARTUP_PHASES.bootGl);
   const atlas = new TextureAtlas();
+  startupTrace.mark(STARTUP_PHASES.bootAtlas);
   const registry = new WorldRegistry();
   await adoptLegacyWorld(registry);
 
   const startWorld = async (world: WorldSummary): Promise<void> => {
+    startupTrace.mark(STARTUP_PHASES.worldBegin);
     menu.hide();
     // 先开存档库再建世界：存档里有玩家位置与维度，世界要先知道该从哪生成
     // （打开失败会返回 null，游戏照常可玩，只是不保存）
     const save = await SaveGame.open(world.id);
+    startupTrace.mark(STARTUP_PHASES.worldSave);
     registry.update(world.id, { lastPlayed: Date.now() });
     let app: App;
     try {
@@ -8117,6 +8154,7 @@ async function boot(): Promise<void> {
       }
       throw error;
     }
+    startupTrace.mark(STARTUP_PHASES.worldConstructed);
     // 存档后把统计回写到世界清单，主菜单下次打开就是最新的
     app.onSaved = (info) => registry.update(world.id, { lastPlayed: Date.now(), ...info });
     app.onWorldDeleted = (id) => registry.remove(id);
@@ -8160,7 +8198,10 @@ async function boot(): Promise<void> {
 
   // 开发调试入口：验收脚本用它建世界、看列表
   (window as unknown as { __worldMenu: WorldScreen }).__worldMenu = menu;
+  // 启动耗时台账也挂出去：它是一个**读数的入口**（与 `__worldMenu` 同一类）
+  (window as unknown as { __startup: typeof startupTrace }).__startup = startupTrace;
   menu.show();
+  startupTrace.mark(STARTUP_PHASES.bootMenu);
 }
 
 void boot();
