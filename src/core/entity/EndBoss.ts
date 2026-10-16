@@ -36,6 +36,8 @@ export const DRAGON_TYPE: MobType = {
   drops: [{ itemId: Block.DRAGON_EGG, min: 1, max: 1 }],
   // 龙的 `hurt` 是自己写的（带无敌帧），经验在那里显式结算，不走 Mob.dropLoot
   xp: ENDER_DRAGON_XP,
+  // boss（批次 116）：不会因为玩家跑远而消失（那会让"打赢了也白打"）
+  boss: true,
   bodyColor: 0x15121c,
   accentColor: 0x2f2647,
   eyeHeight: 3,

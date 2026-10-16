@@ -68,8 +68,7 @@ import { isStonecuttingInput, stonecuttingOffers } from '../src/core/crafting/St
 import { POTION_ITEMS, TIPPED_ARROWS, TIPPED_ARROW_ID_OFFSET, variantBaseId } from '../src/core/registry/potions.ts';
 import { lootItemIds } from '../src/core/registry/loot.ts';
 import { fishingEntryIds } from '../src/core/registry/fishing.ts';
-import { MOB_TYPES } from '../src/core/entity/mobs.ts';
-import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
+import { DROPPING_MOB_TYPES, MOB_TYPES } from '../src/core/entity/mobs.ts';
 import { PROFESSIONS } from '../src/core/registry/villagerTrades.ts';
 import { DYE_COLORS } from '../src/core/registry/colors.ts';
 
@@ -118,7 +117,7 @@ const hit = (channel: string, id: number, why: string): void => {
 };
 
 for (const id of possibleBlockDropIds()) hit('方块掉落', id, '方块掉落（含概率替换掉落）');
-for (const type of [...MOB_TYPES, DRAGON_TYPE]) {
+for (const type of DROPPING_MOB_TYPES) {
   for (const drop of type.drops) hit('生物掉落', drop.itemId, `生物掉落（${type.id}）`);
 }
 for (const id of fishingEntryIds()) hit('钓鱼', id, '钓鱼');
@@ -444,7 +443,7 @@ check(
 // ⑤ 兔子脚 / 恶魂之泪：理由要能机器验证——真的没有那种生物在掉它
 check(
   '"没有该生物"这条理由仍然成立（生物表里没有任何东西掉兔子脚）',
-  [...MOB_TYPES, DRAGON_TYPE].every((type) => type.drops.every((drop) => drop.itemId !== Item.RABBIT_FOOT)),
+  DROPPING_MOB_TYPES.every((type) => type.drops.every((drop) => drop.itemId !== Item.RABBIT_FOOT)),
 );
 check(
   '（批次 94 之后）恶魂之泪有来源了：恶魂在生物表里且掉它',

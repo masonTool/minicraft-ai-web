@@ -200,6 +200,10 @@ export class EntityRenderer {
     // 两种火球（批次 94 加大火球）：都自发光、都用自己的贴图
     const fireball = throwable.kind === 'small_fireball' || throwable.kind === 'large_fireball';
     const largeFireball = throwable.kind === 'large_fireball';
+    // 凋灵骷髅头（批次 116）：与火球同一条路——**用自己的贴图**，而不是物品图标。
+    // 黑色那颗用的是凋灵骷髅头**方块的那张脸**（同一个东西长得一样，没必要再画一张）；
+    // 蓝色那颗是单独一张（原版靠颜色区分两档）
+    const witherSkull = throwable.kind === 'wither_skull' || throwable.kind === 'wither_skull_blue';
 
     let mesh = this.throwableMeshes.get(throwable.id);
     if (!mesh) {
@@ -209,7 +213,9 @@ export class EntityRenderer {
         ? this.tileSpriteGeometry('large_fireball')
         : fireball
           ? this.tileSpriteGeometry('small_fireball')
-          : this.spriteGeometry(throwable.itemId);
+          : witherSkull
+            ? this.tileSpriteGeometry(throwable.kind === 'wither_skull_blue' ? 'wither_skull_blue' : 'wither_skull')
+            : this.spriteGeometry(throwable.itemId);
       mesh = new THREE.Mesh(geometry, this.baseMaterial);
       mesh.userData.billboard = true;
       this.throwableMeshes.set(throwable.id, mesh);

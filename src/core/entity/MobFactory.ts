@@ -18,6 +18,7 @@ import { Blaze } from './Blaze.ts';
 import { Ghast } from './Ghast.ts';
 import { Mob, type MobType } from './Mob.ts';
 import { Villager } from './Villager.ts';
+import { Wither, WITHER_TYPE } from './Wither.ts';
 import { BLAZE_TYPE, GHAST_TYPE, VILLAGER_TYPE } from './mobs.ts';
 
 export function createMob(type: MobType, x: number, y: number, z: number): Mob {
@@ -28,5 +29,10 @@ export function createMob(type: MobType, x: number, y: number, z: number): Mob {
   if (type.id === BLAZE_TYPE.id) return new Blaze(x, y, z);
   // 恶魂（批次 94）：同样有自己的一套（保持距离 + 大火球）
   if (type.id === GHAST_TYPE.id) return new Ghast(x, y, z);
+  // 凋灵（批次 116）：boss，整体覆盖 tick（飞行 + 三阶段 + 吐骷髅头）。
+  // ⚠️ 写在**这一个**工厂里而不是"召唤处自己 new"：与村民/烈焰人同一条理由——
+  // 将来别的地方（命令、刷怪蛋、测试）要生成它时，不能各写一句 `new Mob(WITHER_TYPE)`
+  // （那样会造出一只"只会悬停、什么都不吐"的凋灵，而它看起来一切正常）
+  if (type.id === WITHER_TYPE.id) return new Wither(x, y, z);
   return new Mob(type, x, y, z);
 }

@@ -3311,6 +3311,41 @@ PAINTERS.wither_skull = (x, y, rng) => {
   return [clamp255(base), clamp255(base), clamp255(base + 6), 255];
 };
 
+/**
+ * 蓝色的凋灵骷髅头（批次 116）：与黑色的同一张脸，只是整颗**染成蓝白**。
+ *
+ * 它是凋灵半血之后吐的那一颗（伤害更高、凋零更久），所以必须一眼看出区别——
+ * 原版也是靠颜色区分的（黑/蓝）。
+ */
+PAINTERS.wither_skull_blue = (x, y, rng) => {
+  const jitter = rng() * 16 - 8;
+  const eye = y >= 5 && y <= 7 && ((x >= 3 && x <= 5) || (x >= 10 && x <= 12));
+  if (eye) return [16, 30, 54, 255];
+  const mouth = (y === 10 || y === 11) && x >= 4 && x <= 11 && x % 2 === 0;
+  if (mouth) return [30, 52, 86, 255];
+  const edge = x <= 1 || x >= 14 || y <= 1 || y >= 14;
+  const base = (edge ? 96 : 132) + jitter;
+  return [clamp255(base * 0.62), clamp255(base * 0.86), clamp255(base + 40), 255];
+};
+
+/** 下界之星（批次 116）：一颗发白的四角星，中间亮、边缘淡 */
+PAINTERS.item_nether_star = (x, y, rng) => {
+  const dx = Math.abs(x - 7.5);
+  const dy = Math.abs(y - 7.5);
+  // 四角星的判据：横向或纵向离中心近，越靠边越窄
+  const spike = dx < 1.6 || dy < 1.6;
+  const reach = dx + dy;
+  if (spike && reach < 7.6) {
+    const glow = clamp255(250 - reach * 14 + rng() * 14);
+    return [glow, clamp255(glow * 0.97), clamp255(glow * 0.8), 255];
+  }
+  // 斜向的四个短角：淡一些
+  if (Math.abs(dx - dy) < 1.4 && reach < 6.2) {
+    return [clamp255(224 + rng() * 16), clamp255(220 + rng() * 16), clamp255(186 + rng() * 16), 255];
+  }
+  return [0, 0, 0, 0];
+};
+
 /** 凋灵骷髅头的顶面（批次 115）：几道更深的骨缝，说明"这是个头"而不是一块石头 */
 PAINTERS.wither_skull_top = (x, y, rng) => {
   const jitter = rng() * 14 - 7;

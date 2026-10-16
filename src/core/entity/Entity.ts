@@ -228,6 +228,20 @@ export interface EntityContext {
     velocity: { x: number; y: number; z: number },
   ) => void;
   /**
+   * 吐一颗**凋灵骷髅头**（批次 116，凋灵用）。
+   *
+   * `blue` 是原版那两档：黑色的 5 点伤害 + 凋零 10 秒，蓝色（半血之后）的
+   * 8 点 + 凋零 40 秒。与火球那两个钩子同一个理由：**结算是投掷物那一层的事**，
+   * 生物只负责"什么时候吐、朝哪吐"（`Throwable` 里那两个 kind 就是它）。
+   */
+  spawnWitherSkull?: (
+    x: number,
+    y: number,
+    z: number,
+    velocity: { x: number; y: number; z: number },
+    blue: boolean,
+  ) => void;
+  /**
    * 点燃玩家（批次 92，小火球命中时用）。
    *
    * ⚠️ 与 `hurtPlayer` 分开：伤害与"点火"在生存模块里本来就是两条路

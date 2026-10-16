@@ -17,6 +17,10 @@ import { toolItemId } from '../registry/tools.ts';
 // 村民（J11）：爱吃什么、皮肤与长袍的底色都放在职业表那一层（纯数据）
 import { VILLAGER_FOODS, VILLAGER_IDLE_ROBE, VILLAGER_SKIN_COLOR } from '../registry/villagerTrades.ts';
 import type { MobType } from './Mob.ts';
+// 两个 boss（末影龙、凋灵）各自住在自己的模块里，但它们的掉落要算进
+// `DROPPING_MOB_TYPES`（见那里的注释）。两处都不引 `mobs.ts`，所以不成环
+import { DRAGON_TYPE } from './EndBoss.ts';
+import { WITHER_TYPE } from './Wither.ts';
 
 /**
  * 村民（J11，批次 88）。**单独一个常量**（而不是只写在数组里）：
@@ -464,6 +468,16 @@ export const MOB_TYPES: readonly MobType[] = [
   },
   VILLAGER_TYPE,
 ];
+
+/**
+ * **所有会掉东西的生物**：普通生物表 + 两个 boss（末影龙、凋灵）。
+ *
+ * 为什么要单独列一份：两个 boss 都**故意不在 `MOB_TYPES` 里**（它们不该被自然刷），
+ * 但它们的掉落当然算"来源"——审计（`test:reach`）与"这件东西有来源吗"那些断言
+ * 都得走这一份。少列一只 boss 的症状很具体：**凋灵掉的下界之星被判成"拿不到"**
+ * （批次 116 就是这么发现的，当时那份清单是 `[...MOB_TYPES, DRAGON_TYPE]`）。
+ */
+export const DROPPING_MOB_TYPES: readonly MobType[] = [...MOB_TYPES, DRAGON_TYPE, WITHER_TYPE];
 
 const BY_ID = new Map<string, MobType>(MOB_TYPES.map((type) => [type.id, type]));
 

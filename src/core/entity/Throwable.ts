@@ -24,6 +24,18 @@ import { Item } from '../registry/items.ts';
 
 /** 投掷物重力（原版 0.03 格/tick² ≈ 12 格/秒²） */
 const GRAVITY = 12;
+/**
+ * **不受重力**的那几档：两种火球与两种凋灵骷髅头。
+ *
+ * 原版它们都是"一条直线飞出去"的（有重力的投掷物在十几格外就打不着人了），
+ * 收成一个表而不是在 `tick` 里堆四个比较——下一档"不受重力的东西"加一行就行。
+ */
+const NO_GRAVITY_KINDS: ReadonlySet<ThrowableKind> = new Set<ThrowableKind>([
+  'small_fireball',
+  'large_fireball',
+  'wither_skull',
+  'wither_skull_blue',
+]);
 /** 水中阻力（与箭一致） */
 const WATER_DRAG = 0.36;
 /** 存在时长上限（秒）：扔出去一直没碰到东西（比如对着天空扔）就自然消失 */
@@ -56,7 +68,22 @@ export type ThrowableKind =
   | 'small_fireball'
   | 'large_fireball'
   | 'ender_pearl'
-  | 'ender_eye';
+  | 'ender_eye'
+  /** 凋灵吐的**黑色**骷髅头（批次 116）：5 点伤害 + 凋零 10 秒，不拆地形 */
+  | 'wither_skull'
+  /** 凋灵半血之后吐的**蓝色**骷髅头：8 点伤害 + 凋零 40 秒（原版就是"更疼更久"） */
+  | 'wither_skull_blue';
+
+/** 凋灵骷髅头的两种档位（数值按原版，放在结算这一层：`Wither.ts` 只管"谁吐的、飞多快"） */
+export const WITHER_SKULL_DAMAGE = 5;
+export const WITHER_SKULL_WITHER_SECONDS = 10;
+export const BLUE_WITHER_SKULL_DAMAGE = 8;
+export const BLUE_WITHER_SKULL_WITHER_SECONDS = 40;
+
+/** 这一档是不是"凋灵骷髅头"（两种颜色同属一档行为） */
+export function isWitherSkull(kind: ThrowableKind): boolean {
+  return kind === 'wither_skull' || kind === 'wither_skull_blue';
+}
 
 /**
  * 末影珍珠落地的摔落伤害（批次 113，原版 5 点）。
@@ -190,7 +217,7 @@ export class Throwable extends Entity implements MovingBody {
     if (this.kind === 'ender_eye' && this.target) {
       // 朝要塞飘（自带"往上飘"那一下），所以不叠重力
       this.steerEye(dt);
-    } else if (this.kind !== 'small_fireball' && this.kind !== 'large_fireball') {
+    } else if (!NO_GRAVITY_KINDS.has(this.kind)) {
       this.vy -= GRAVITY * dt;
     }
     if (inWater) {
@@ -238,13 +265,28 @@ export class Throwable extends Entity implements MovingBody {
 
     const box = boxAt(this.x, this.y, this.z, this.width, this.height);
 
-    // 小火球（批次 92）：它**只打玩家**（是烈焰人吐出来的），所以先查玩家。
-    // 其余投掷物都是玩家扔的，只查生物——两者方向相反，不该混成一条
-    if (this.kind === 'small_fireball' || this.kind === 'large_fireball') {
+    // 火球与凋灵骷髅头**都只打玩家**（它们都是生物吐出来的），所以先查玩家。
+    // 其余投掷物都是玩家扔的，只查生物——两者方向相反，不该混成一条。
+    // 两种颜色/两种大小的差别各自在这一段里（火球是"伤害 + 点燃"，
+    // 骷髅头是"伤害 + 凋零"）
+    if (this.kind === 'small_fireball' || this.kind === 'large_fireball' || isWitherSkull(this.kind)) {
       if (ctx.playerBox && entityIntersectsBox(this, ctx.playerBox)) {
-        const large = this.kind === 'large_fireball';
-        ctx.hurtPlayer(large ? LARGE_FIREBALL_DAMAGE : SMALL_FIREBALL_DAMAGE, this.x, this.z, 'fire');
-        ctx.ignitePlayer?.(large ? LARGE_FIREBALL_FIRE_SECONDS : SMALL_FIREBALL_FIRE_SECONDS);
+        if (isWitherSkull(this.kind)) {
+          const blue = this.kind === 'wither_skull_blue';
+          // ⚠️ `cause` 取 `projectile`：它确实是弹射物，于是"弹射物保护"能减它
+          // （原版那颗的伤害类型更接近魔法，本项目没有那一档）
+          ctx.hurtPlayer(
+            blue ? BLUE_WITHER_SKULL_DAMAGE : WITHER_SKULL_DAMAGE,
+            this.x,
+            this.z,
+            'projectile',
+          );
+          ctx.afflictPlayer?.('wither', blue ? BLUE_WITHER_SKULL_WITHER_SECONDS : WITHER_SKULL_WITHER_SECONDS);
+        } else {
+          const large = this.kind === 'large_fireball';
+          ctx.hurtPlayer(large ? LARGE_FIREBALL_DAMAGE : SMALL_FIREBALL_DAMAGE, this.x, this.z, 'fire');
+          ctx.ignitePlayer?.(large ? LARGE_FIREBALL_FIRE_SECONDS : SMALL_FIREBALL_FIRE_SECONDS);
+        }
         this.impact(ctx);
         return true;
       }
@@ -309,6 +351,13 @@ export class Throwable extends Entity implements MovingBody {
         // 实体层同样只报"在哪摔的"
         if (this.potionId !== undefined) ctx.spawnLingering?.(this.potionId, x, y, z);
         else ctx.playSound?.('splash', x, y, z);
+        break;
+      case 'wither_skull':
+      case 'wither_skull_blue':
+        // 凋灵骷髅头（批次 116）：命中处只出一声——伤害与凋零在 `tryHitEntity` 里
+        // 已经结算过了。⚠️ **不炸地形**（原版蓝色那颗能拆方块，本项目不做：
+        // 拆地形是"苦力怕/大火球"那两档的语义，混进来会让下界到处是洞）
+        ctx.playSound?.('arrow_hit', x, y, z);
         break;
       case 'ender_eye':
         // 末影之眼（批次 114）：落地时**八成掉回地上**（原版 0.8），两成碎掉。

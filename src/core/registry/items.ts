@@ -139,6 +139,14 @@ export const Item = {
    * 在它出现之前，生存里进末地的唯一办法是调试键 `N`（见 TASKS K9）。
    */
   ENDER_EYE: 1444,
+  /**
+   * 下界之星（批次 116，J14 的后半）：**凋灵唯一的掉落**。
+   *
+   * 原版它的用途是**信标**（信标还没做，见 TASKS G/«信标与地图»那一组），
+   * 所以这一件现在是"打完凋灵的战利品"，暂时没有下游——这一点写进了说明文字，
+   * 免得玩家拿着它到处试。
+   */
+  NETHER_STAR: 1445,
   SUGAR: 1174,
   RABBIT_FOOT: 1190,
   MAGMA_CREAM: 1191,
@@ -361,10 +369,11 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // 它是**酿造台的燃料**（原版一份烈焰粉能酿 20 次），所以这条链断掉时整台机器都用不了
   { id: Item.BLAZE_ROD, name: 'minecraft:blaze_rod', tile: 'item_blaze_rod' },
   // 末影系（批次 111，K9）：珍珠与眼睛。可堆 16 / 64 与原版一致
-  //（眼睛**不做成扔出去找要塞的投掷物**：本项目还没有"带飞行轨迹的投掷物"这一档，
-  // 差异记在 TASKS K9）
+  //（眼睛在批次 114 起**也**能扔出去找要塞了，见 `mobs.ts` 与 TASKS K9）
   { id: Item.ENDER_PEARL, name: 'minecraft:ender_pearl', tile: 'item_ender_pearl', maxStack: 16 },
   { id: Item.ENDER_EYE, name: 'minecraft:ender_eye', tile: 'item_ender_eye' },
+  // 下界之星（批次 116，J14）：凋灵唯一的掉落，可堆 64（原版如此）
+  { id: Item.NETHER_STAR, name: 'minecraft:nether_star', tile: 'item_nether_star' },
   { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
   { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
   { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },

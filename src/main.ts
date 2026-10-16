@@ -247,6 +247,13 @@ import { OverworldGenerator, SEA_LEVEL } from './core/gen/OverworldGenerator.ts'
 // 凋灵骷髅"只要塞里面刷"（批次 115）：要塞的位置要算，而算它需要下界的洞顶/地板/群系
 import { NetherGenerator } from './core/gen/NetherGenerator.ts';
 import { fortressAt, type FortressWorld } from './core/gen/NetherFortress.ts';
+// 凋灵（批次 116，J14）：召唤仪式（纯逻辑）+ boss 本体
+import { Wither, WITHER_TYPE } from './core/entity/Wither.ts';
+import {
+  consumeSummonSkulls,
+  witherPatternAt,
+  type WitherSummonWorld,
+} from './core/world/WitherSummon.ts';
 // 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子。
 // `nearestStronghold`（批次 114）是"最近的要塞"的**轻量**版本：要塞是地下结构，
 // 位置不看地形，所以末影之眼每次出手都算得起（见那个函数的注释）
@@ -551,6 +558,8 @@ class App {
   /** 末影龙血条（触摸端也共用；元素不存在时为 null） */
   private bossBarEl: HTMLElement | null = null;
   private bossFillEl: HTMLElement | null = null;
+  /** 血条上那行字（末影龙 / 凋灵共用一条，见 `updateBossBar`） */
+  private bossTitleEl: HTMLElement | null = null;
   /** 下界的背景色（暗红雾） */
   private readonly netherBackground = new THREE.Color(NETHER_FOG);
   /** 末地的背景色（星空黑） */
@@ -615,6 +624,12 @@ class App {
     getBlock: (x, y, z) => this.world.getBlock(x, y, z),
     getState: (x, y, z) => this.world.getBlockState(x, y, z),
     // 走 setBlockAndUpdate：光照、网格与增量存档都会跟着更新
+    setBlock: (x, y, z, id, state) => this.world.setBlockAndUpdate(x, y, z, id, state),
+  };
+
+  /** 凋灵召唤仪式看到的世界（批次 116，与 `portalWorld` 同一个适配器写法） */
+  private readonly witherSummonWorld: WitherSummonWorld = {
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
     setBlock: (x, y, z, id, state) => this.world.setBlockAndUpdate(x, y, z, id, state),
   };
   /** 生物渲染 */
@@ -1073,6 +1088,7 @@ class App {
     this.playerRenderer = new PlayerRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
     this.bossBarEl = document.getElementById('boss-bar');
     this.bossFillEl = document.getElementById('boss-fill');
+    this.bossTitleEl = document.querySelector('#boss-bar b');
     this.applyEnvironment();
 
     // 网格化放在独立 Worker 池里：地形生成的 Worker 忙于长任务，混在一起会互相拖慢。
@@ -4705,8 +4721,13 @@ class App {
       if (!(entity instanceof Mob)) continue;
       if (entity.type.hostile) {
         hostileCount++;
-        // 敌对生物离玩家太远就消失，避免远处无限堆积
-        if (Math.hypot(entity.x - player.x, entity.z - player.z) > MOB_DESPAWN_DISTANCE) {
+        // 敌对生物离玩家太远就消失，避免远处无限堆积。
+        // ⚠️ **boss 不消失**（批次 116）：玩家跑远一趟回来发现凋灵没了、星星也拿不到，
+        // 那是事故（末影龙一直也有这个问题，这条顺手一起修了，见 `MobType.boss`）
+        if (
+          entity.type.boss !== true &&
+          Math.hypot(entity.x - player.x, entity.z - player.z) > MOB_DESPAWN_DISTANCE
+        ) {
           entity.dead = true;
         }
       } else {
@@ -4879,6 +4900,18 @@ class App {
       teleportPlayer: (x, y, z) => this.teleportByEnderPearl(x, y, z),
       // 末影之眼碎掉（批次 114）：紫色涡旋（与传送门/末影箱/珍珠传送同一套粒子）
       spawnPortalParticles: (x, y, z, count, spread) => this.particles.spawnPortal(x, y, z, count, spread),
+      // 凋灵吐骷髅头（批次 116）：与火球走同一条通道（它也是 `Throwable` 里的一档）
+      //（`itemId` 给的是那颗头的方块 id：渲染器会按 kind 换成骷髅头那两张贴图，
+      //  这个 id 只是"万一走到通用分支时别渲染成一团空白"的兜底，与小火球传烈焰粉同一条）
+      spawnWitherSkull: (x, y, z, velocity, blue) =>
+        this.spawnThrowable(
+          x,
+          y,
+          z,
+          velocity,
+          blue ? 'wither_skull_blue' : 'wither_skull',
+          Block.WITHER_SKELETON_SKULL,
+        ),
       // 下雨（下雪也算）：原版的雨只下在主世界，所以这里带上维度
       raining: this.weather.raining && this.dimension === Dimension.OVERWORLD,
       // 箭矢命中生物：实体层不持有生物列表，所以由这里从实体管理器里查
@@ -5147,6 +5180,46 @@ class App {
    */
   nearestStrongholdForTest(): { x: number; y: number; z: number; distance: number } | null {
     return nearestStronghold(this.worldConfig.seed, this.physics.x, this.physics.z);
+  }
+
+  /**
+   * 验收脚本用（批次 116）：直接放一只凋灵出来。
+   *
+   * 走一遍真流程要"下界要塞里打凋灵骷髅凑 3 颗头（2.5% 掉率）"——自动化等不起，
+   * 所以与"搭一座点亮的末地传送门"同一个用途。**召唤仪式**那条路另有
+   * `buildWitherAltarForTest()`（它走的是与玩家摆放完全同源的那条判定）。
+   */
+  summonWitherForTest(distance = 8): { x: number; y: number; z: number } {
+    const wither = createMob(WITHER_TYPE, this.physics.x + distance, this.physics.y + 6, this.physics.z);
+    this.entities.spawn(wither);
+    return { x: wither.x, y: wither.y, z: wither.z };
+  }
+
+  /** 验收脚本用：场上那只凋灵的状态（不在场时 null）——血条、阶段与护盾都读得到 */
+  get witherState(): { health: number; phase: number; shielded: boolean } | null {
+    const wither = this.aliveWither();
+    if (!wither) return null;
+    return { health: wither.health, phase: wither.phase, shielded: wither.shielded };
+  }
+
+  /**
+   * 验收脚本用：在玩家旁边摆一套 **4 块灵魂沙 + 3 颗头**（摆完就会召唤）。
+   *
+   * ⚠️ 最后一颗头走的是"与玩家放置完全同一条路"（`trySummonWither`），
+   * 所以它验的是真的那套判定，而不是脚本自己另判一遍。
+   */
+  buildWitherAltarForTest(): { x: number; y: number; z: number } {
+    const x = Math.floor(this.physics.x) + 3;
+    const y = Math.floor(this.physics.y);
+    const z = Math.floor(this.physics.z);
+    // T 形：横向三块沙 + 中间下面再一块
+    for (let i = -1; i <= 1; i++) this.world.setBlockAndUpdate(x + i, y - 1, z, Block.SOUL_SAND, 0);
+    this.world.setBlockAndUpdate(x, y - 2, z, Block.SOUL_SAND, 0);
+    // 前两颗头直接写，最后一颗走召唤判定那条路（于是它会真的触发召唤）
+    for (let i = -1; i <= 0; i++) this.world.setBlockAndUpdate(x + i, y, z, Block.WITHER_SKELETON_SKULL, 0);
+    this.world.setBlockAndUpdate(x + 1, y, z, Block.WITHER_SKELETON_SKULL, 0);
+    this.trySummonWither(x + 1, y, z);
+    return { x, y, z };
   }
 
   /** 验收脚本用：清空全部进度（做完验收别把"考试答案"留在存档里） */
@@ -5864,16 +5937,44 @@ class App {
       this.reportProgress({ kind: 'dragon' });
     }
 
-    // 血条
-    if (this.bossBarEl && this.bossFillEl) {
-      const dragon = this.endDragon;
-      const show = this.dimension === Dimension.END && dragon !== null && !dragon.dead;
-      this.bossBarEl.classList.toggle('on', show);
-      if (show && dragon) {
-        const ratio = Math.max(0, Math.min(1, dragon.health / DRAGON_TYPE.health));
-        this.bossFillEl.style.width = `${(ratio * 100).toFixed(1)}%`;
-      }
+    // 血条：龙与凋灵**共用一条**（同一时刻只可能有一个人在用：龙在末地、
+    // 凋灵在主世界/下界，而它们在各自的维度里才显示）
+    this.updateBossBar();
+  }
+
+  /**
+   * boss 血条（批次 116：从"只认末影龙"改成"龙与凋灵共用一条"）。
+   *
+   * 三种状态各有各的样子：末影龙是紫色、凋灵是暗红、凋灵的**护盾期**闪蓝
+   * （那 5 秒打它不掉血，玩家必须看得出来，否则会以为"打不动是 bug"）。
+   */
+  private updateBossBar(): void {
+    if (!this.bossBarEl || !this.bossFillEl) return;
+    const dragon = this.endDragon;
+    const wither = this.aliveWither();
+    const showDragon = this.dimension === Dimension.END && dragon !== null && !dragon.dead;
+    const showWither = wither !== null;
+    const show = showDragon || showWither;
+    this.bossBarEl.classList.toggle('on', show);
+    this.bossBarEl.classList.toggle('wither', showWither);
+    this.bossBarEl.classList.toggle('shielded', showWither && wither!.shielded);
+    if (!show) return;
+
+    const maxHealth = showWither ? WITHER_TYPE.health : DRAGON_TYPE.health;
+    const health = showWither ? wither!.health : dragon!.health;
+    const ratio = Math.max(0, Math.min(1, health / maxHealth));
+    this.bossFillEl.style.width = `${(ratio * 100).toFixed(1)}%`;
+
+    const title = showWither ? WITHER_TYPE.name : DRAGON_TYPE.name;
+    if (this.bossTitleEl && this.bossTitleEl.textContent !== title) this.bossTitleEl.textContent = title;
+  }
+
+  /** 场上活着的凋灵（血条与调试接口用；一只就够——原版可以同时有好多只，这里取第一只） */
+  private aliveWither(): Wither | null {
+    for (const entity of this.entities.all) {
+      if (entity instanceof Wither && !entity.dead) return entity;
     }
+    return null;
   }
 
   /**
@@ -6723,6 +6824,8 @@ class App {
       // 避雷针（批次 83）：放下就进索引（不必等区块重载——它在**当前**加载的区块里）
       if (blockId === Block.LIGHTNING_ROD) this.noteRodPlaced(x, y, z);
       if (blockId === Block.SPAWNER) this.noteSpawner(x, y, z);
+      // 凋灵骷髅头（批次 116）：摆上去之后看看"4 块灵魂沙 + 3 颗头"齐了没有
+      if (blockId === Block.WITHER_SKELETON_SKULL) this.trySummonWither(x, y, z);
 
       // 进度（M7）：放下方块。"种下一颗种子"也走这条——种子是**方块物品**
       // （`Item.WHEAT_SEEDS` 的 `block` 就是 `WHEAT_STAGE0`），所以它本来就落在放置这条路上
@@ -6762,6 +6865,34 @@ class App {
   }
 
   // ---------------------------------------------------------------- 下界传送门（K8）
+
+  /**
+   * 摆上一颗凋灵骷髅头之后，看看这套仪式齐了没有（批次 116，J14）。
+   *
+   * 三行摆法都在 `core/world/WitherSummon.ts`（纯逻辑，可离线断言）；
+   * 这里只做它做不了的三件事：**把三颗头清掉**（原版召唤成功时头会消失）、
+   * 广播给队友、造出凋灵。
+   *
+   * ⚠️ "头没清干净就不召唤"是**故意的**：清不掉只有一种可能——那几格所在的区块
+   * 没加载好。这种时候宁可这次不算数（玩家再戳一下），也不要把凋灵放出来而头还在，
+   * 那样下一次摆头会再造一只。
+   */
+  private trySummonWither(x: number, y: number, z: number): void {
+    const layout = witherPatternAt(this.witherSummonWorld, x, y, z);
+    if (!layout) return;
+    if (consumeSummonSkulls(this.witherSummonWorld, layout) !== layout.skulls.length) return;
+
+    for (const skull of layout.skulls) {
+      this.net.sendBlock(skull.x, skull.y, skull.z, Block.AIR, 0, this.dimension);
+      this.particles.spawnSmoke(skull.x + 0.5, skull.y + 0.3, skull.z + 0.5, 8, 0.3);
+    }
+    this.audio.play('explode', { x, y, z });
+    this.particles.spawnSmoke(layout.center.x + 0.5, layout.center.y + 0.5, layout.center.z + 0.5, 40, 0.8);
+    // 凋灵生成在**中间那颗头**刚刚让出来的那一格（原版也是"从 T 形里长出来"）
+    const wither = createMob(WITHER_TYPE, layout.center.x + 0.5, layout.center.y, layout.center.z + 0.5);
+    this.entities.spawn(wither);
+    this.chat.push('凋灵被唤醒了', 'system');
+  }
 
   /** 玩家脚下或身体所在的那一格是不是传送门方块 */
   private playerInPortal(): boolean {

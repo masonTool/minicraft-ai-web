@@ -24,8 +24,7 @@ import { itemLabel } from '../src/core/registry/itemNames.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
 import { recipeIngredients } from '../src/core/crafting/RecipeBook.ts';
 import { LOOT_TABLES, lootTableIndex } from '../src/core/registry/loot.ts';
-import { MOB_TYPES } from '../src/core/entity/mobs.ts';
-import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
+import { DROPPING_MOB_TYPES } from '../src/core/entity/mobs.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import {
@@ -318,7 +317,7 @@ console.log('\n[六、末影之眼这一条链]');
   );
   check(
     '末影人接上了：生物表里**有**生物掉末影珍珠（批次 111 的警铃到此收声）',
-    [...MOB_TYPES, DRAGON_TYPE].some((type) => type.drops.some((drop) => drop.itemId === Item.ENDER_PEARL)),
+    DROPPING_MOB_TYPES.some((type) => type.drops.some((drop) => drop.itemId === Item.ENDER_PEARL)),
     '末影人在 MOB_TYPES 里且掉珍珠；这一条与上面"压回原版量"必须同时成立',
   );
 }

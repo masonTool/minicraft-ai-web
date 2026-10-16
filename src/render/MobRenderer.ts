@@ -66,10 +66,22 @@ export function mobAppearanceKey(mob: Mob): string {
   return '';
 }
 
-type ModelKind = 'humanoid' | 'quadruped' | 'bird' | 'dragon' | 'crystal' | 'villager' | 'blaze' | 'spider' | 'ghast';
+type ModelKind =
+  | 'humanoid'
+  | 'quadruped'
+  | 'bird'
+  | 'dragon'
+  | 'crystal'
+  | 'villager'
+  | 'blaze'
+  | 'spider'
+  | 'ghast'
+  | 'wither';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
+  // 凋灵（批次 116）：三颗头 + 肋骨笼，与任何现有骨架都不同
+  if (typeId === 'wither') return 'wither';
   if (typeId === 'end_crystal') return 'crystal';
   if (typeId === 'blaze') return 'blaze';
   if (typeId === 'villager') return 'villager';
@@ -104,9 +116,91 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return spiderBoxes(type);
     case 'ghast':
       return ghastBoxes(type);
+    case 'wither':
+      return witherBoxes(type);
     default:
       return humanoidBoxes(type);
   }
+}
+
+/**
+ * 凋灵（批次 116）：**三颗头 + 一副肋骨笼**。
+ *
+ * 三颗头是它一眼可辨的特征（原版中间那颗稍大），肋骨笼用三根横向的骨条表示——
+ * 与恶魂那九条触手同一个做法：**用几个盒子把"这是什么"说清楚**，
+ * 而不是去追原版的模型零件（本项目所有的生物都是这样）。
+ *
+ * ⚠️ 所有部件都落在 `0..height` 之内（与恶魂那条一样：挂出去会看起来悬空）。
+ */
+function witherBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  // 三颗头并排在最上面（中间那颗大一点）
+  const headY = h - w * 0.42;
+  const headSize = w * 0.46;
+  const boxes: BoxSpec[] = [
+    { width: headSize, height: headSize, depth: headSize, x: 0, y: headY, z: 0, color: 'body' },
+    {
+      width: headSize * 0.86,
+      height: headSize * 0.86,
+      depth: headSize * 0.86,
+      x: -w * 0.52,
+      y: headY - headSize * 0.08,
+      z: 0,
+      color: 'body',
+    },
+    {
+      width: headSize * 0.86,
+      height: headSize * 0.86,
+      depth: headSize * 0.86,
+      x: w * 0.52,
+      y: headY - headSize * 0.08,
+      z: 0,
+      color: 'body',
+    },
+  ];
+  // 每颗头一对眼睛（暗红，纯黑身上唯一的辨识点）
+  for (const [ox, oy, size] of [
+    [0, headY, headSize],
+    [-w * 0.52, headY - headSize * 0.08, headSize * 0.86],
+    [w * 0.52, headY - headSize * 0.08, headSize * 0.86],
+  ] as const) {
+    for (const sx of [-1, 1] as const) {
+      boxes.push({
+        width: size * 0.22,
+        height: size * 0.16,
+        depth: size * 0.1,
+        x: ox + sx * size * 0.2,
+        y: oy + size * 0.05,
+        z: size * 0.46,
+        color: 'eye',
+      });
+    }
+  }
+  // 肋骨笼：三根横向的骨条 + 中间那根脊骨
+  const ribY = h * 0.34;
+  const ribSpan = w * 1.25;
+  for (let i = 0; i < 3; i++) {
+    boxes.push({
+      width: ribSpan,
+      height: h * 0.07,
+      depth: w * 0.42,
+      x: 0,
+      y: ribY + i * h * 0.13,
+      z: 0,
+      color: 'accent',
+    });
+  }
+  boxes.push({
+    width: w * 0.2,
+    height: h * 0.42,
+    depth: w * 0.2,
+    x: 0,
+    y: h * 0.32,
+    z: 0,
+    color: 'body',
+  });
+  return boxes;
 }
 
 interface BoxSpec {
@@ -346,7 +440,8 @@ function legCountOf(kind: ModelKind): number {
   if (kind === 'spider') return 8;
   // 水晶/烈焰人/恶魂不摆动：水晶自转、烈焰人的火棒长在它自己身上、
   // 恶魂那九条触手是垂直挂着的（按 `i % 2` 前后摆反而会像在走路）
-  if (kind === 'crystal' || kind === 'blaze' || kind === 'ghast') return 0;
+  // 凋灵（批次 116）：既没有腿也没有翅膀可摆（它整体在飘），所以是 0
+  if (kind === 'crystal' || kind === 'blaze' || kind === 'ghast' || kind === 'wither') return 0;
   return 2;
 }
 

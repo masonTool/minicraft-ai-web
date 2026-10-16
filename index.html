@@ -1009,6 +1009,16 @@
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, .75);
         overflow: hidden;
       }
+      /* 凋灵（批次 116）：同一条血条，只是配色偏暗红——一眼能分出"现在打的是谁" */
+      #boss-bar.wither i s {
+        background: linear-gradient(#e0665a, #7a1a14);
+        box-shadow: 0 0 10px rgba(214, 80, 60, .6);
+      }
+      /* 护盾期（转阶段那 5 秒）：血条闪蓝，说明"现在打它不掉血" */
+      #boss-bar.shielded i s {
+        background: linear-gradient(#8fd8ff, #2f7fbf);
+        box-shadow: 0 0 10px rgba(120, 200, 255, .7);
+      }
       #boss-bar i s {
         display: block; height: 100%; width: 100%;
         background: linear-gradient(#f56cf5, #b02ab0);
