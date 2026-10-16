@@ -65,6 +65,14 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
   const surfaceHistogram = new Map<number, number>();
   const markers = new Map<number, number>();
 
+  /**
+   * ⚠️ 生成器**在循环外建一次**（批次 103，B103-5 顺手修的）：原来写在最内层，
+   * 144 个区块就构造 144 次（每次都要建一堆噪声表），而那些构造时间被算进了"生成耗时"
+   * ——这条断言原来量到的东西里有一半是它自己造出来的噪声。
+   * `biomeAt` / `floorAt` / `ceilingAt` 都是只读查询，复用同一个实例是安全的。
+   */
+  const generator = new NetherGenerator(SEED);
+
   const start = Date.now();
   for (let cz = 0; cz < SIZE; cz++) {
     for (let cx = 0; cx < SIZE; cx++) {
@@ -77,7 +85,6 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
       // 底部基岩
       bedrockTop += heightRangeCount(blocks, -64, -60, [Block.BEDROCK]);
 
-      const generator = new NetherGenerator(SEED);
       for (let z = 0; z < CHUNK_SIZE_Z; z += 4) {
         for (let x = 0; x < CHUNK_SIZE_X; x += 4) {
           const wx = cx * 16 + x;
@@ -122,8 +129,37 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
   }
   const elapsed = Date.now() - start;
 
+  /**
+   * **两个参考数**（批次 103，B103-5）。原来的判据是"12×12 区块耗时 < 5s"，
+   * 那种绝对秒数在并行跑测试集时会因 CPU 争用偶发变红（同一套实测 3.3s / 10.4s）。
+   *
+   * ① **纯地形**（`NetherGenerator.generate`，不含菌菇树/荧石/堡垒遗迹）：只打印。
+   *    它是"下界地形本身有多便宜"的参照——实测只要 ~1.5ms/区块，
+   *    所以下界的开销几乎全在地物与结构上。**只打印不断言**：6~7 倍是它的正常水平，
+   *    拿它当预算没有意义（没有"应该几倍"这回事）。
+   * ② **同一片区块的主世界生成**：**这才是断言用的基准**。
+   *    "下界生成不该比主世界慢一个量级"是个有意义的说法，
+   *    而两个数在同一进程、同一台机器上前后脚量出来，比值与机器快慢无关。
+   */
+  const terrainStart = Date.now();
+  for (let cz = 0; cz < SIZE; cz++) {
+    for (let cx = 0; cx < SIZE; cx++) generator.generate(cx, cz);
+  }
+  const terrainOnlyMs = Date.now() - terrainStart;
+
+  const overworldStart = Date.now();
+  for (let cz = 0; cz < SIZE; cz++) {
+    for (let cx = 0; cx < SIZE; cx++) generateChunkBlocks(cx, cz, SEED, Dimension.OVERWORLD);
+  }
+  const overworldMs = Date.now() - overworldStart;
+  const ratio = elapsed / Math.max(overworldMs, 1);
+
   const named = (id: number) => blockDef(id).name.replace('minecraft:', '');
-  console.log(`  ${SIZE}×${SIZE} 区块耗时 ${elapsed}ms`);
+  console.log(
+    `  ${SIZE}×${SIZE} 区块耗时 ${elapsed}ms（含地物与结构）· 纯地形 ${terrainOnlyMs}ms` +
+      `（地物占 ${(elapsed / Math.max(terrainOnlyMs, 1)).toFixed(1)} 倍，正常）` +
+      ` · 同片主世界 ${overworldMs}ms → 下界 ÷ 主世界 = ${ratio.toFixed(2)} 倍`,
+  );
   console.log(`  岩浆 ${lava} · 洞窟空气 ${air} · 地板高度 ${Math.min(...floors)}~${Math.max(...floors)}（均值 ${(floors.reduce((a, b) => a + b, 0) / floors.length).toFixed(1)}）`);
   console.log(
     `  群系分布：${[...biomeHistogram.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => `${name} ${count}`).join(' · ')}`,
@@ -156,7 +192,13 @@ console.log('\n[地形形态：岩浆海 / 洞顶 / 洞窟]');
   check('有荧石与菌光体（洞里的光源）', (markers.get(Block.GLOWSTONE) ?? 0) > 20 || (markers.get(Block.SHROOMLIGHT) ?? 0) > 20);
   check('有石英矿', (markers.get(Block.NETHER_QUARTZ_ORE) ?? 0) > 100, `石英 ${markers.get(Block.NETHER_QUARTZ_ORE)}`);
   check('有远古残骸（稀有）', (markers.get(Block.ANCIENT_DEBRIS) ?? 0) > 0, `远古残骸 ${markers.get(Block.ANCIENT_DEBRIS)}`);
-  check('12×12 区块耗时 < 5s', elapsed < 5000, `${elapsed}ms`);
+  // 判据是**跨维度比值**（批次 103，B103-5）：见上面那两个参考数的说明。
+  // 要挡的是"下界生成慢到比主世界高一个量级"这种退化。
+  check(
+    `下界生成 ≤ 主世界的 3 倍（实测 ${ratio.toFixed(2)} 倍）`,
+    ratio <= 3,
+    `下界 ${elapsed}ms / 主世界 ${overworldMs}ms`,
+  );
 }
 
 // ---------------------------------------------------------------- 2. 群系地表正确性
