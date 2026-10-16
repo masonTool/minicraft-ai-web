@@ -44,7 +44,9 @@ import {
 } from '../core/container/SmithingTable.ts';
 import { STONECUTTER_INPUT, Stonecutter } from '../core/container/Stonecutter.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../core/container/Campfire.ts';
+import { Dispenser } from '../core/container/Dispenser.ts';
 import { DROPPER_SIZE, Dropper } from '../core/container/Dropper.ts';
+import { DEFAULT_DISPENSE_CN, dispenseBehaviorFor } from '../core/registry/dispense.ts';
 import { HOPPER_SIZE, Hopper } from '../core/container/Hopper.ts';
 import { smithingHint } from '../core/crafting/Smithing.ts';
 import {
@@ -103,6 +105,8 @@ export type InventoryPanelMode =
   | 'hopper'
   /** 投掷器（批次 59）：3×3 九格，内容由红石脉冲往外吐（界面里只存货与朝向） */
   | 'dropper'
+  /** 发射器（批次 60）：与投掷器**同一套九宫格**，只是"动之前先看是什么" */
+  | 'dispenser'
   | 'brewing';
 
 export interface InventoryScreenHooks {
@@ -208,9 +212,13 @@ export class InventoryScreen {
   private readonly hopperGrid: HTMLDivElement;
   private readonly hopperHintEl: HTMLDivElement;
 
-  /** 投掷器（批次 59）：3×3 + 一行动态提示（朝向/触发方式） */
-  private readonly dropperGrid: HTMLDivElement;
-  private readonly dropperHintEl: HTMLDivElement;
+  /**
+   * 投掷器（批次 59）与发射器（批次 60）**共用**这一套九宫格：
+   * 两者都是 9 格、都是红石脉冲触发，差别只在"吐之前看不看"——
+   * 分成两个元素只会让两份布局代码慢慢漂开。
+   */
+  private readonly nineGrid: HTMLDivElement;
+  private readonly nineHintEl: HTMLDivElement;
 
   /** 切石机（H11，批次 44）：一格输入 + 一列可选产物（按钮）+ 提示行 */
   private readonly stonecutterLayout: HTMLDivElement;
@@ -325,11 +333,11 @@ export class InventoryScreen {
     this.hopperHintEl = document.createElement('div');
     this.hopperHintEl.className = 'anvil-cost';
 
-    // 投掷器（批次 59）：3×3（原版投掷器界面就是九宫格）
-    this.dropperGrid = document.createElement('div');
-    this.dropperGrid.className = 'inv-grid inv-dropper';
-    this.dropperHintEl = document.createElement('div');
-    this.dropperHintEl.className = 'anvil-cost';
+    // 投掷器（批次 59）与发射器（批次 60）：3×3（原版这两兄弟的界面都是九宫格）
+    this.nineGrid = document.createElement('div');
+    this.nineGrid.className = 'inv-grid inv-nine';
+    this.nineHintEl = document.createElement('div');
+    this.nineHintEl.className = 'anvil-cost';
 
     // 熔炉
     this.furnaceLayout = document.createElement('div');
@@ -680,6 +688,7 @@ export class InventoryScreen {
     this.clearBindings('brewing:');
     this.clearBindings('hopper:');
     this.clearBindings('dropper:');
+    this.clearBindings('dispenser:');
 
     // 熔炉 / 烟熏炉 / 高炉（批次 46）共用同一套布局：格子与燃料规则完全一样，
     // 区别只有"只吃哪一类东西"和"快一倍"——那两条由容器负责，界面只是标题与提示不同
@@ -881,15 +890,16 @@ export class InventoryScreen {
       return;
     }
 
-    if (this.mode === 'dropper') {
-      this.dropperGrid.replaceChildren();
+    if (this.mode === 'dropper' || this.mode === 'dispenser') {
+      const isDispenser = this.mode === 'dispenser';
+      this.nineGrid.replaceChildren();
       for (let i = 0; i < DROPPER_SIZE; i++) {
-        this.dropperGrid.appendChild(this.registerSlot(`dropper:${i}`, this.activeContainer!, i));
+        this.nineGrid.appendChild(this.registerSlot(`${this.mode}:${i}`, this.activeContainer!, i));
       }
-      this.dropperHintEl.textContent = '';
-      this.topArea.appendChild(this.buildLabel('投掷器（9 格）'));
-      this.topArea.appendChild(this.dropperGrid);
-      this.topArea.appendChild(this.dropperHintEl);
+      this.nineHintEl.textContent = '';
+      this.topArea.appendChild(this.buildLabel(isDispenser ? '发射器（9 格）' : '投掷器（9 格）'));
+      this.topArea.appendChild(this.nineGrid);
+      this.topArea.appendChild(this.nineHintEl);
       return;
     }
 
@@ -1309,10 +1319,31 @@ export class InventoryScreen {
     if (this.mode === 'dropper' && this.activeContainer instanceof Dropper) {
       // 空投掷器必须明说：玩家拿红石试半天，看不出"是空的"还是"坏了"
       const facing = SIX_FACING_NAMES[this.activeContainer.facing];
-      this.dropperHintEl.textContent = this.activeContainer.isEmpty
+      this.nineHintEl.textContent = this.activeContainer.isEmpty
         ? `${facing}吐 · 里面是空的：红石脉冲不会吐任何东西`
         : `${facing}吐：每来一次红石**脉冲**（拉杆两次、按钮、红石钟）吐一件；对面是容器就塞进去，不是容器就掉在地上`;
-      this.dropperHintEl.classList.toggle('bad', this.activeContainer.isEmpty);
+      this.nineHintEl.classList.toggle('bad', this.activeContainer.isEmpty);
+    }
+
+    if (this.mode === 'dispenser' && this.activeContainer instanceof Dispenser) {
+      // 发射器的提示要说清"哪几件会被用掉"：混装时玩家根本猜不到下一件是射出去还是掉地上
+      const facing = SIX_FACING_NAMES[this.activeContainer.facing];
+      if (this.activeContainer.isEmpty) {
+        this.nineHintEl.textContent = `${facing}用 · 里面是空的：红石脉冲不会做任何事`;
+        this.nineHintEl.classList.add('bad');
+      } else {
+        let recognized = 0;
+        for (let i = 0; i < DROPPER_SIZE; i++) {
+          const stack = this.activeContainer.get(i);
+          if (stack && dispenseBehaviorFor(stack.id)) recognized++;
+        }
+        const head = `${facing}用：每来一次红石脉冲用掉一件`;
+        this.nineHintEl.textContent =
+          recognized > 0
+            ? `${head}——里面 ${recognized} 格是它认得的（会射出去/砸出去/点燃/剪毛），其余当掉落物吐出去`
+            : `${head}——这一箱它一样都不认得，全都当掉落物吐出去（${DEFAULT_DISPENSE_CN}）`;
+        this.nineHintEl.classList.remove('bad');
+      }
     }
 
     if (this.mode === 'enchanting') this.refreshEnchantOptions();
@@ -1599,6 +1630,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   brewing: '酿造台',
   hopper: '漏斗',
   dropper: '投掷器',
+  dispenser: '发射器',
 };
 
 /** 创造物品栏的搜索匹配：中文名、英文 id、数字 id 都认 */

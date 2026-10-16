@@ -170,6 +170,7 @@ export type BlockShape =
    * 所以朝向靠**轮廓**（凸口伸出来的那一小块）来认，界面里另有文字写着朝哪边。
    */
   | 'dropper'
+  | 'dispenser'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -795,6 +796,9 @@ export function describeState(shape: BlockShape, state: number): string {
       return `${HOPPER_OUTPUT_NAMES[hopperOutputOf(state)]}${isHopperLocked(state) ? '·已锁定' : ''}`;
     case 'dropper':
       // 投掷器没有"锁定"这回事：通电就吐一件，断电什么也不做
+      return SIX_FACING_NAMES[sixFacingOf(state)];
+    case 'dispenser':
+      // 发射器（批次 60）：与投掷器同一套状态（朝向 + 通电位），读法也就一样
       return SIX_FACING_NAMES[sixFacingOf(state)];
     default:
       return '';

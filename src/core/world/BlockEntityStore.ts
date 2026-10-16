@@ -15,6 +15,7 @@
 import { Anvil } from '../container/Anvil.ts';
 import { BrewingStand } from '../container/BrewingStand.ts';
 import { Chest } from '../container/Chest.ts';
+import { Dispenser } from '../container/Dispenser.ts';
 import { Dropper } from '../container/Dropper.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
@@ -36,7 +37,8 @@ export type BlockContainer =
   | Stonecutter
   | Campfire
   | Hopper
-  | Dropper;
+  | Dropper
+  | Dispenser;
 export type ContainerKind =
   | 'furnace'
   | 'chest'
@@ -47,7 +49,8 @@ export type ContainerKind =
   | 'stonecutter'
   | 'campfire'
   | 'hopper'
-  | 'dropper';
+  | 'dropper'
+  | 'dispenser';
 
 /**
  * **带方块实体的方块**（= 装得下东西的方块）的 id 名单。
@@ -65,6 +68,7 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   Block.CHEST,
   Block.HOPPER,
   Block.DROPPER,
+  Block.DISPENSER,
   Block.BREWING_STAND,
   Block.ANVIL,
   Block.SMITHING_TABLE,
@@ -274,6 +278,26 @@ export class BlockEntityStore {
     const dropper = new Dropper();
     this.put({ dimension, x, y, z, container: dropper });
     return dropper;
+  }
+
+  getDispenser(dimension: DimensionId, x: number, y: number, z: number): Dispenser | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Dispenser ? container : undefined;
+  }
+
+  /**
+   * 取出（或新建）发射器。
+   *
+   * ⚠️ 与投掷器一样是"放下方块时就建、信号来了直接取"（它也不靠容器表 tick）。
+   * 注意 `getDropper` 用 `instanceof Dropper`，**发射器是它的子类所以也认**——
+   * 这就是"加子类不会漏掉任何一处按 Dropper 判定的地方"的来源。
+   */
+  getOrCreateDispenser(dimension: DimensionId, x: number, y: number, z: number): Dispenser {
+    const existing = this.getDispenser(dimension, x, y, z);
+    if (existing) return existing;
+    const dispenser = new Dispenser();
+    this.put({ dimension, x, y, z, container: dispenser });
+    return dispenser;
   }
 
   remove(dimension: DimensionId, x: number, y: number, z: number): void {

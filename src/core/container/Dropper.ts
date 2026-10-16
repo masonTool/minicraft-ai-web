@@ -101,6 +101,54 @@ export class Dropper implements SlotSource {
   }
 
   /**
+   * 随机挑一格**但不取走**（批次 60：发射器要先看看是什么，才知道该做什么）。
+   *
+   * 投掷器用不到它——它闭着眼吐；发射器必须"先看再决定"：箭要射、TNT 要点、
+   * 打火石要"用一下但不吐出去"。所以这里把"随机挑格子"这一步单独开出来，
+   * 与 `serve` 共用同一个蓄水池抽样（不会有第二套"随机"悄悄漂移）。
+   */
+  peekRandom(): { slot: number; stack: ItemStack } | null {
+    const slot = this.randomSlot();
+    if (slot < 0) return null;
+    return { slot, stack: this.slots[slot]! };
+  }
+
+  /**
+   * 取走指定格的一件（返回副本，与 `serve` 交给外面的东西逐字段一致）。
+   *
+   * 空格返回 null —— 调用方不用自己判"这一格还在不在"。
+   */
+  takeAt(slot: number): ItemStack | null {
+    const stack = this.slots[slot];
+    if (!stack) return null;
+    const taken: ItemStack = { id: stack.id, count: 1, ...extrasOf(stack) };
+    stack.count -= 1;
+    if (stack.count <= 0) this.slots[slot] = null;
+    this.onChange?.();
+    return taken;
+  }
+
+  /**
+   * 消耗指定格那件东西的**耐久**（批次 60：打火石这类"用了但没吐出去"的行为）。
+   *
+   * @param durability 这件东西的耐久上限（由调用方从物品表取，容器不必认识工具表）
+   * @returns 这件东西还在不在（归零就是整件消失）
+   */
+  wearAt(slot: number, amount: number, durability: number): boolean {
+    const stack = this.slots[slot];
+    if (!stack) return false;
+    const damage = (stack.damage ?? 0) + amount;
+    if (damage >= durability) {
+      this.slots[slot] = null;
+      this.onChange?.();
+      return false;
+    }
+    stack.damage = damage;
+    this.onChange?.();
+    return true;
+  }
+
+  /**
    * 随机挑一个非空槽（**蓄水池抽样**，与原版 `DispenserBlock#getRandomSlot` 同一套）。
    *
    * 为什么不是"在非空槽里均匀取一个下标"：那种写法要先数一遍非空槽、再取第二个随机数，
@@ -129,37 +177,29 @@ export class Dropper implements SlotSource {
    */
   serve(env: DropperEnv): DropperServeResult {
     const result: DropperServeResult = { served: null, intoContainer: false, blocked: false };
-    const index = this.randomSlot();
-    if (index < 0) return result;
-
-    const stack = this.slots[index]!;
+    const pick = this.peekRandom();
+    if (!pick) return result;
     const target = env.target();
 
     if (target) {
       // `tryInsertOne` 是"能塞才改"的：它返回 false 时目标容器没有任何副作用，
       // 所以"塞不进"这一支不需要先问一遍、也不需要回滚
-      if (!tryInsertOne(target, stack)) {
+      if (!tryInsertOne(target, pick.stack)) {
         // 对面是容器但收不下：卡住（原版不会改吐到地上，得玩家自己去腾地方）
         result.blocked = true;
         return result;
       }
-      const served: ItemStack = { id: stack.id, count: 1, ...extrasOf(stack) };
-      stack.count -= 1;
-      if (stack.count <= 0) this.slots[index] = null;
+      result.served = this.takeAt(pick.slot);
       this.servedCount++;
-      this.onChange?.();
-      result.served = served;
       result.intoContainer = true;
       return result;
     }
 
-    // 对面不是容器：吐成掉落物
-    const ejected: ItemStack = { id: stack.id, count: 1, ...extrasOf(stack) };
-    stack.count -= 1;
-    if (stack.count <= 0) this.slots[index] = null;
+    // 对面不是容器：吐成掉落物（先扣自己的，再交给外面生成实体——生成不会失败）
+    const ejected = this.takeAt(pick.slot);
+    if (!ejected) return result;
     this.servedCount++;
     env.eject(ejected);
-    this.onChange?.();
     result.served = ejected;
     return result;
   }

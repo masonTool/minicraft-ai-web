@@ -481,10 +481,11 @@ console.log('\n[配方：7 圆石围 1 红石粉]');
   equal('做出 1 个', matchRecipe(cells, 3)?.count, 1);
   equal('中间换圆石做不出（对照）', matchRecipe([C, C, C, C, C, C, C, C, C], 3), null);
   equal('少一个圆石做不出（对照）', matchRecipe([C, C, C, C, R, C, C, Block.AIR, C], 3), null);
+  // 批次 60 起发射器也在表里了：中间那格决定兄弟俩谁出来
   equal(
-    '中间换成弓做出的是发射器（不是投掷器）——这一档还没实现，所以现在合不出来',
-    matchRecipe([C, C, C, C, Item.BOW, C, C, C, C], 3),
-    null,
+    '中间换成弓 → 出来的是发射器（不是投掷器）',
+    matchRecipe([C, C, C, C, Item.BOW, C, C, C, C], 3)?.id,
+    Block.DISPENSER,
   );
 }
 

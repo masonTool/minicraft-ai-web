@@ -24,6 +24,7 @@ import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
 import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
+import { DISPENSER_SIZE, Dispenser } from '../container/Dispenser.ts';
 import { DROPPER_SIZE, Dropper } from '../container/Dropper.ts';
 import { HOPPER_SIZE, Hopper } from '../container/Hopper.ts';
 import type { ItemStack } from '../container/Inventory.ts';
@@ -46,6 +47,7 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   campfire: CAMPFIRE_SIZE,
   hopper: HOPPER_SIZE,
   dropper: DROPPER_SIZE,
+  dispenser: DISPENSER_SIZE,
 };
 
 export interface SerializedContainer {
@@ -100,6 +102,9 @@ export function kindOf(container: BlockContainer): ContainerKind {
   if (container instanceof Stonecutter) return 'stonecutter';
   if (container instanceof Campfire) return 'campfire';
   if (container instanceof Hopper) return 'hopper';
+  // ⚠️ 顺序要紧：发射器是投掷器的**子类**，先判子类，否则发射器会被存成投掷器
+  // （读档时会新建一个投掷器实例顶掉它，界面标题与行为就都错了）
+  if (container instanceof Dispenser) return 'dispenser';
   if (container instanceof Dropper) return 'dropper';
   return 'brewing';
 }
@@ -122,6 +127,7 @@ function containerFor(
   if (kind === 'campfire') return store.getOrCreateCampfire(dimension, x, y, z);
   if (kind === 'hopper') return store.getOrCreateHopper(dimension, x, y, z);
   if (kind === 'dropper') return store.getOrCreateDropper(dimension, x, y, z);
+  if (kind === 'dispenser') return store.getOrCreateDispenser(dimension, x, y, z);
   return store.getOrCreateBrewingStand(dimension, x, y, z);
 }
 

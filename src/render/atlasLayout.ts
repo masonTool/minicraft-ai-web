@@ -764,6 +764,9 @@ export const TILE_ORDER = [
   // 朝向靠几何轮廓（凸口）表示——见 `dropperBoxes`
   'dropper_top',
   'dropper_side',
+  // 发射器（批次 60）：同一套底子、另一套纹路（块 + 上下加强筋）
+  'dispenser_top',
+  'dispenser_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

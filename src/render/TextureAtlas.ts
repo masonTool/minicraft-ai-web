@@ -3955,6 +3955,33 @@ PAINTERS.dropper_side = (x, y, rng) => {
   return metalPlate(x, y, jitter, 1);
 };
 
+/**
+ * 发射器顶/底（批次 60）：与投掷器同一套底子，但中间那圈**大一圈、多两道凹槽**——
+ * 两兄弟长得像，靠"口的大小 + 侧面纹路"区分（见 `blocks.ts` 里那段说明）。
+ */
+PAINTERS.dispenser_top = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const ring = x === 0 || x === 15 || y === 0 || y === 15;
+  if (ring) return metalPlate(x, y, jitter, 0.66);
+  // 挡板（几何上 7/16 见方）：这里画成"带两道凹槽"的圆盘
+  const inPlate = x >= 5 && x <= 10 && y >= 5 && y <= 10;
+  if (inPlate) {
+    const groove = x === 5 && (y === 6 || y === 9);
+    return metalPlate(x, y, jitter * 0.5, groove ? 0.5 : 0.6);
+  }
+  return metalPlate(x, y, jitter, 1);
+};
+
+/** 发射器侧面：拉丝铁皮 + 上下两条加强筋（与投掷器的四角铆钉区分开） */
+PAINTERS.dispenser_side = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const rib = y === 3 || y === 12;
+  if (rib) return metalPlate(x, y, jitter, 0.58);
+  const edge = x === 0 || x === 15 || y === 0 || y === 15;
+  if (edge) return metalPlate(x, y, jitter, 0.7);
+  return metalPlate(x, y, jitter, 1);
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

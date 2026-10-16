@@ -846,8 +846,8 @@
       .inv-chest { grid-template-columns: repeat(9, 42px); }
       /* 漏斗（批次 58）：5 格排成一行（原版界面就是这样一条） */
       .inv-hopper { grid-template-columns: repeat(5, 42px); }
-      /* 投掷器（批次 59）：3×3 九宫格（原版投掷器界面） */
-      .inv-dropper { grid-template-columns: repeat(3, 42px); justify-content: start; }
+      /* 投掷器与发射器（批次 59/60）：3×3 九宫格（原版这两兄弟的界面都是九宫格） */
+      .inv-nine { grid-template-columns: repeat(3, 42px); justify-content: start; }
 
       /* ---------------- 熔炉 ---------------- */
       .furnace-layout {
@@ -1088,8 +1088,8 @@
         .inv-grid.inv-armor { grid-template-columns: repeat(5, minmax(0, 1fr)); }
         /* 漏斗：窄屏也保持一排 5 格（继承上面那条 9 列规则会把它拉成两行） */
         .inv-grid.inv-hopper { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-        /* 投掷器：窄屏保持 3 列（否则会被上面那条 9 列规则拉成一行） */
-        .inv-grid.inv-dropper { grid-template-columns: repeat(3, 46px); justify-content: start; }
+        /* 投掷器/发射器：窄屏保持 3 列（否则会被上面那条 9 列规则拉成一行） */
+        .inv-grid.inv-nine { grid-template-columns: repeat(3, 46px); justify-content: start; }
         .inv-grid.inv-creative { grid-template-columns: repeat(8, minmax(0, 1fr)); }
         .inv-grid.inv-creative .inv-slot { width: auto; }
         .inv-craft-grid.size-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

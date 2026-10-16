@@ -106,6 +106,7 @@ export function isRedstoneComponent(id: number): boolean {
     // 投掷器（批次 59）：通电的**上升沿**吐一件出去（它是"负载"，
     // 但吐出什么、吐到哪去都在容器那边，引擎只负责判定脉冲）
     case Block.DROPPER:
+    case Block.DISPENSER:
       return true;
     default:
       return false;
@@ -708,7 +709,8 @@ export class RedstoneEngine {
           }
           break;
         }
-        case Block.DROPPER: {
+        case Block.DROPPER:
+        case Block.DISPENSER: {
           // 投掷器（批次 59）：**上升沿**吐一件。与 TNT 同一套判定（见下面那段注释：
           // 每轮重算都调一次的话，`markDirty` 会把自己反复排进队列）。
           // ⚠️ 吐出去之后**不改方块状态**：投掷器没有"吐过了"这一位（原版那个

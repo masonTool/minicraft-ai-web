@@ -17,7 +17,7 @@ P9 支持加载玩家自备的资源包（`.mcpack`）。
 npm install
 npm run dev        # 开发服务器 http://localhost:5173
 npm run typecheck  # 类型检查
-npm test           # vitest + 64 套自建离线测试
+npm test           # vitest + 65 套自建离线测试
 npm run build      # 生产构建
 npm run audit:tasks  # 锚点文档自检（进度口径、编号、README 路线图同步）
 npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率并写回 TASKS §1
@@ -63,7 +63,7 @@ Settings → Pages → Build and deployment → Source = GitHub Actions
 
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
-| **P0** 工程基建 | 仓库、TS + Vite、渲染管线打通（方块 → 区块 → 网格化 → 图集 → 相机） | 🔶 已完成 19 / 共 36 |
+| **P0** 工程基建 | 仓库、TS + Vite、渲染管线打通（方块 → 区块 → 网格化 → 图集 → 相机） | 🔶 已完成 20 / 共 37 |
 | **P1** 体素引擎核心 | 完整方块注册表、区块调度与流式加载、贪心网格化、Web Worker 生成、光照引擎 | 🔶 已完成 37 / 共 52 |
 | **P2** 地形生成 1.18 | 多噪声群系源、7 个密度函数、样条插值、地表规则、洞穴/峡谷、含水层、矿物 Y 分布、地物 | 🔶 已完成 17 / 共 26 |
 | **P3** 玩家与交互 | AABB 物理、疾跑/潜行/游泳/摔伤、射线选块、破坏耗时与工具等级、方块掉落 | 🔶 已完成 9 / 共 25 |

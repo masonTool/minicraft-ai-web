@@ -242,6 +242,19 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       return { state: withSixFacing(0, facingFromYaw(input.yaw)) };
     }
 
+    case 'dispenser': {
+      // 发射器（批次 60）：与投掷器**逐个字一样**——原版这两兄弟本来也是同一套
+      // `getStateForPlacement`（凸口朝放它的人），潜行则是本项目给"手动指定"留的口子
+      // （点顶面 → 朝下、点底面 → 朝上）。两处写两遍是有意的：它们是**两个方块的规则**，
+      // 以后原版要是给其中一个加了限制，这里能各自改。
+      if (input.sneaking) {
+        if (ny > 0) return { state: withSixFacing(0, 'down') };
+        if (ny < 0) return { state: withSixFacing(0, 'up') };
+        return { state: withSixFacing(0, facingFromNormal(nx, nz) ?? facingFromYaw(input.yaw)) };
+      }
+      return { state: withSixFacing(0, facingFromYaw(input.yaw)) };
+    }
+
     case 'chain': {
       // 轴向由"点的是哪一面"决定：顶/底面 → 竖直，侧面 → 沿着那个水平轴横拉
       if (ny !== 0) return { state: withAxis(0, 0) };

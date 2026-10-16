@@ -194,6 +194,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       // 投掷器（批次 59）：**整格碰撞**（原版也是）——那个 2/16 的小凸口撞不到，
       // 所以它的渲染盒比碰撞盒多出来一小块（见 `dropperBoxes`）
       return [FULL];
+    case 'dispenser':
+      // 发射器（批次 60）：同样是整格碰撞（凸口/挡板撞不到）
+      return [FULL];
     default:
       return [FULL];
   }
@@ -399,6 +402,11 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'dropper':
       // 投掷器（批次 59）：整格铁壳 + 朝哪边就往哪边伸出的那个小凸口
       return dropperBoxes(state);
+    case 'dispenser':
+      // 发射器（批次 60）：整格铁壳 + 朝哪边就往哪边伸出的一块**扁挡板**
+      // （原版靠正面那张"带孔的圈"贴图区分两兄弟，本项目做不出"只有正面不同"，
+      //  所以改用几何：细管 vs 宽挡板）
+      return dispenserBoxes(state);
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
@@ -971,6 +979,28 @@ function dropperNozzleBox(state: number): LocalBox {
 /** 渲染盒：整格铁壳 + 凸口（凸口里外各伸 2/16） */
 export function dropperBoxes(state: number): readonly LocalBox[] {
   return [FULL, dropperNozzleBox(state)];
+}
+
+/** 发射器那块挡板：比投掷器的细管**宽一倍、扁一半**（7/16 见方、1/16 厚） */
+const DISPENSER_PLATE_WIDTH = 0.4375;
+const DISPENSER_PLATE_DEPTH = 0.0625;
+
+/** 发射器朝那一面伸出的挡板（里外各伸 1/16） */
+export function dispenserPlateBox(state: number): LocalBox {
+  const lo = 0.5 - DISPENSER_PLATE_WIDTH / 2;
+  const hi = 0.5 + DISPENSER_PLATE_WIDTH / 2;
+  const [dx, dy, dz] = sixFacingOffset(sixFacingOf(state));
+  if (dy > 0) return [lo, 1 - DISPENSER_PLATE_DEPTH, lo, hi, 1 + DISPENSER_PLATE_DEPTH, hi];
+  if (dy < 0) return [lo, -DISPENSER_PLATE_DEPTH, lo, hi, DISPENSER_PLATE_DEPTH, hi];
+  if (dx > 0) return [1 - DISPENSER_PLATE_DEPTH, lo, lo, 1 + DISPENSER_PLATE_DEPTH, hi, hi];
+  if (dx < 0) return [-DISPENSER_PLATE_DEPTH, lo, lo, DISPENSER_PLATE_DEPTH, hi, hi];
+  if (dz > 0) return [lo, lo, 1 - DISPENSER_PLATE_DEPTH, hi, hi, 1 + DISPENSER_PLATE_DEPTH];
+  return [lo, lo, -DISPENSER_PLATE_DEPTH, hi, hi, DISPENSER_PLATE_DEPTH];
+}
+
+/** 渲染盒：整格铁壳 + 挡板 */
+export function dispenserBoxes(state: number): readonly LocalBox[] {
+  return [FULL, dispenserPlateBox(state)];
 }
 
 /**

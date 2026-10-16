@@ -869,6 +869,13 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     pattern: ['CCC', 'CRC', 'CCC'],
     key: { C: Block.COBBLESTONE, R: Item.REDSTONE },
   },
+  {
+    // 发射器（批次 60）：原版就是"中间换成弓"（其余七格与投掷器逐格相同）
+    kind: 'shaped' as const,
+    result: { id: Block.DISPENSER, count: 1 },
+    pattern: ['CCC', 'CBC', 'CCC'],
+    key: { C: Block.COBBLESTONE, B: Item.BOW },
+  },
 ];
 
 export const RECIPES: readonly Recipe[] = [

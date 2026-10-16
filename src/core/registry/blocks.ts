@@ -1719,6 +1719,27 @@ const DROPPER_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 发射器（批次 60）：投掷器的"表哥"——同一个容器、同一套触发、同一套朝向。
+ *
+ * 差别只有两处：
+ *  1. **吐之前先看是什么**：认得的（箭/雪球/鸡蛋/药水/TNT/打火石/剪刀）就"用"它，
+ *     不认得的才当掉落物吐出去（行为表见 `registry/dispense.ts`）；
+ *  2. 长得不一样：凸口是一块**宽而扁的挡板**（而不是投掷器那根细管），
+ *     贴图也是另一套（本项目网格化器按面朝向取贴图，做不出"只有正面不同"的效果，
+ *     所以两兄弟的身份靠**几何 + 纹理**一起表示——见 `dispenserBoxes`）。
+ */
+export const DISPENSER_ID = 478;
+
+const DISPENSER_SPECS: readonly BlockSpec[] = [
+  {
+    id: DISPENSER_ID,
+    name: 'minecraft:dispenser',
+    tiles: ['dispenser_top', 'dispenser_top', 'dispenser_side'],
+    shape: 'dispenser',
+  },
+];
+
 const TRIPWIRE_SPECS: readonly BlockSpec[] = [
   {
     id: TRIPWIRE_ID,
@@ -2036,6 +2057,7 @@ const SPECS: readonly BlockSpec[] = [
   ...TNT_SPECS,
   ...HOPPER_SPECS,
   ...DROPPER_SPECS,
+  ...DISPENSER_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2307,6 +2329,8 @@ export const Block = {
   HOPPER: HOPPER_ID,
   // ---- 投掷器（批次 59，见 `DROPPER_SPECS`）：通电就朝朝向吐一件
   DROPPER: DROPPER_ID,
+  // ---- 发射器（批次 60，见 `DISPENSER_SPECS`）：通电就朝朝向"用"一件
+  DISPENSER: DISPENSER_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2589,6 +2613,7 @@ HARDNESS.set(Block.TNT, 0);
 HARDNESS.set(Block.HOPPER, 3);
 // 投掷器（批次 59）：3.5（原版与熔炉/发射器同一档，必须用镐但**不限等级**）
 HARDNESS.set(Block.DROPPER, 3.5);
+HARDNESS.set(Block.DISPENSER, 3.5);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);

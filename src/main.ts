@@ -24,7 +24,17 @@ import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower } from './core/crafting/Enchanting.ts';
-import { isDrinkable, potionById, potionTint, type PotionEntry } from './core/registry/potions.ts';
+import {
+  isDrinkable,
+  potionById,
+  potionTint,
+  tippedArrowById,
+  type PotionEntry,
+} from './core/registry/potions.ts';
+// 发射器的**发射行为表**（批次 60）：投掷器与发射器只差这一张表
+import { dispenseBehaviorFor } from './core/registry/dispense.ts';
+// 发射行为的**执行器**：判定抽出去才能离线断言（见该模块文件头）
+import { runDispenseAction, type DispenseContext } from './core/world/Dispense.ts';
 import { splashEffectsAt } from './core/survival/SplashPotion.ts';
 import {
   DRAGON_BREATH_COLLECT_SHRINK,
@@ -2421,7 +2431,11 @@ class App {
     if (!mob || mob.dead) return false;
     const held = this.heldItemId;
     if (held === undefined) return false;
-    if (held === Item.SHEARS && this.shearMob(mob)) return true;
+    if (held === Item.SHEARS && this.shearMob(mob) > 0) {
+      // 剪刀也要掉耐久（原版每剪一次 -1）
+      this.damageHeldTool();
+      return true;
+    }
     if (held === Item.BUCKET && this.milkMob(mob)) return true;
     return this.feedMob(mob, held);
   }
@@ -2590,18 +2604,22 @@ class App {
     return true;
   }
 
-  /** 用剪刀剪一只羊的毛 */
-  private shearMob(mob: Mob): boolean {
+  /**
+   * 用剪刀剪一只羊的毛，@returns 剪下来几份（0 = 这只剪不动：猪/牛，或者刚剪过还没长）。
+   *
+   * ⚠️ 这里**不碰工具耐久**：玩家是手上的剪刀、发射器（批次 60）是容器里那把，
+   * 两条路径各自结算（原版每剪一次 -1，两边都掉）。把它们混进这个函数里，
+   * 发射器剪羊毛就会去磨玩家手上的东西。
+   */
+  private shearMob(mob: Mob): number {
     const count = mob.shear();
-    if (count <= 0) return false;
+    if (count <= 0) return 0;
 
     this.spawnDrop(woolId(mob.woolColor), count, mob.x, mob.y + 0.6, mob.z);
     this.audio.play('shear');
     this.particles.spawnSmoke(mob.x, mob.y + 0.7, mob.z, 8, 0.22);
-    // 剪刀也要掉耐久（原版每剪一次 -1）
-    this.damageHeldTool();
     this.refreshHotbar();
-    return true;
+    return count;
   }
 
   private updateAttacking(dt: number): void {
@@ -3635,10 +3653,18 @@ class App {
       return true;
     }
     // 投掷器（批次 59）：右键打开 9 格（3×3）。它的"动作"是红石脉冲，界面里只看存货
-    if (hitBlock === Block.DROPPER) {
-      const dropper = this.world.containers.getOrCreateDropper(this.dimension, x, y, z);
-      dropper.facing = sixFacingOf(this.world.getBlockState(x, y, z));
-      this.inventoryScreen.openWith('dropper', dropper);
+    if (hitBlock === Block.DROPPER || hitBlock === Block.DISPENSER) {
+      // 两兄弟同一套 9 格界面（标题不同），朝向都要缓存给提示行用
+      const facing = sixFacingOf(this.world.getBlockState(x, y, z));
+      if (hitBlock === Block.DROPPER) {
+        const dropper = this.world.containers.getOrCreateDropper(this.dimension, x, y, z);
+        dropper.facing = facing;
+        this.inventoryScreen.openWith('dropper', dropper);
+      } else {
+        const dispenser = this.world.containers.getOrCreateDispenser(this.dimension, x, y, z);
+        dispenser.facing = facing;
+        this.inventoryScreen.openWith('dispenser', dispenser);
+      }
       return true;
     }
     if (hitBlock === Block.BREWING_STAND) {
@@ -3848,7 +3874,11 @@ class App {
     // 投掷器（批次 59）同样在放下时就建容器：它的**界面**与"被别的容器推东西进来"
     // 都要求这一格在容器表里看得见（它自己不靠容器表 tick，所以少建一次也不会停摆——
     // 但"放下就能打开界面"这条手感与漏斗保持一致）
-    if (blockId === Block.DROPPER) this.world.containers.getOrCreateDropper(target, x, y, z);
+    if (blockId === Block.DROPPER) {
+      this.world.containers.getOrCreateDropper(target, x, y, z);
+      return;
+    }
+    if (blockId === Block.DISPENSER) this.world.containers.getOrCreateDispenser(target, x, y, z);
   }
 
   /**
@@ -3958,6 +3988,7 @@ class App {
     if (block === Block.CHEST) return store.getOrCreateChest(dimension, x, y, z);
     if (block === Block.HOPPER) return store.getOrCreateHopper(dimension, x, y, z);
     if (block === Block.DROPPER) return store.getOrCreateDropper(dimension, x, y, z);
+    if (block === Block.DISPENSER) return store.getOrCreateDispenser(dimension, x, y, z);
     if (block === Block.BREWING_STAND) return store.getOrCreateBrewingStand(dimension, x, y, z);
     if (block === Block.ANVIL) return store.getOrCreateAnvil(dimension, x, y, z);
     if (block === Block.SMITHING_TABLE) return store.getOrCreateSmithingTable(dimension, x, y, z);
@@ -3996,24 +4027,103 @@ class App {
   }
 
   /**
-   * 投掷器收到一个红石**上升沿**：吐一件（批次 59）。
+   * 红石**上升沿**：投掷器吐一件 / 发射器"用"一件（批次 59、60）。
    *
-   * 只在这一次调用里做完三件事——确认方块还在、拿到容器、`serve` 一次。
-   * 抽成独立方法而不是写在回调里，是为了让"信号 → 吐东西"这条链在调试面板/断言
+   * 两者共用这一条入口，因为**触发方式完全一样**（见 `RedstoneEngine` 里那两行 case）。
+   * 抽成独立方法而不是写在回调里，是为了让"信号 → 动作"这条链在调试面板/断言
    * 里也能直接调（自动化脚本不必真去搭一条红石钟）。
    */
   dispenseFrom(x: number, y: number, z: number): void {
     // 位置被换掉了（信号在队列里排队期间方块没了）——静默跳过
-    if (!this.world.isLoaded(x, z) || this.world.getBlock(x, y, z) !== Block.DROPPER) return;
-    const container = this.world.containers.getOrCreateDropper(this.dimension, x, y, z);
-    // 朝向缓存进容器，界面才写得出"朝北"（见 `Dropper.facing`）
-    container.facing = sixFacingOf(this.world.getBlockState(x, y, z));
-    container.serve(this.dropperEnv(x, y, z));
+    if (!this.world.isLoaded(x, z)) return;
+    const block = this.world.getBlock(x, y, z);
+    if (block !== Block.DROPPER && block !== Block.DISPENSER) return;
+
+    const facing = sixFacingOf(this.world.getBlockState(x, y, z));
+    const [dx, dy, dz] = sixFacingOffset(facing);
+
+    // 投掷器：闭着眼吐一件（对面是容器就塞进去、不是就吐成掉落物）
+    if (block === Block.DROPPER) {
+      const container = this.world.containers.getOrCreateDropper(this.dimension, x, y, z);
+      // 朝向缓存进容器，界面才写得出"朝北"（见 `Dropper.facing`）
+      container.facing = facing;
+      container.serve(this.dropperEnv(x, y, z, dx, dy, dz));
+      return;
+    }
+
+    // 发射器：先看手里是什么，再决定"用它"还是"吐出去"
+    const container = this.world.containers.getOrCreateDispenser(this.dimension, x, y, z);
+    container.facing = facing;
+    const pick = container.peekRandom();
+    if (!pick) return; // 空的：什么也不做（原版连音效都没有）
+
+    const behavior = dispenseBehaviorFor(pick.stack.id);
+    if (!behavior) {
+      // 表里没有这一件：与投掷器**逐字一样**（同一个 `serve`，两条出口不必各写一遍）
+      container.serve(this.dropperEnv(x, y, z, dx, dy, dz));
+      return;
+    }
+
+    // ⚠️ 次序：**先确认用得出去，再扣东西**。用不出去（对面不是 TNT、那一格点不着火…）
+    // 就整件事取消，物品留在原地——原版也是"失败就什么都不发生"。
+    if (!runDispenseAction(behavior, pick.stack, x, y, z, dx, dy, dz, this.dispenseContext())) return;
+    // 工具类（打火石/剪刀）是"磨一点耐久"，其余是"少一件"
+    if (behavior.wear) container.wearAt(pick.slot, behavior.wear, durabilityOf(pick.stack.id));
+    else container.takeAt(pick.slot);
+    container.servedCount++;
   }
 
-  /** 投掷器吐一次要问外界的两个问题：朝向那一格是不是容器、不是容器时往哪扔 */
-  private dropperEnv(x: number, y: number, z: number): DropperEnv {
-    const [dx, dy, dz] = sixFacingOffset(sixFacingOf(this.world.getBlockState(x, y, z)));
+  /**
+   * 把主程序的能力交给发射执行器（`core/world/Dispense.ts`）。
+   *
+   * 这一层只做"翻译"：把世界、实体、音效包成执行器认得的那几个方法。
+   * 判定逻辑（射/扔/点燃/点火/剪、失败时留不留东西）都在执行器里，
+   * 所以它能在离线测试里被逐条钉住——这里是唯一需要"真世界"的地方。
+   */
+  private dispenseContext(): DispenseContext {
+    return {
+      blockAt: (bx, by, bz) => this.world.getBlock(bx, by, bz),
+      shootArrow: (ax, ay, az, velocity, options) => {
+        // 药水箭：命中时挂 1/8 时长效果的依据（普通箭没有这个字段）
+        const potionId = tippedArrowById(options.itemId)?.potionId;
+        this.spawnArrow(ax, ay, az, velocity, {
+          // ⚠️ `fromPlayer: false`：发射器射出的箭**会打到玩家**（只有玩家自己射的箭才不打自己）
+          fromPlayer: false,
+          damage: options.damage,
+          pickable: options.pickable,
+          itemId: options.itemId,
+          ...(potionId === undefined ? {} : { potionId }),
+        });
+      },
+      throwProjectile: (ax, ay, az, velocity, kind, itemId) => {
+        this.spawnThrowable(ax, ay, az, velocity, kind, itemId);
+      },
+      primeTnt: (bx, by, bz) => this.primedTnt.prime(this.tntWorld, bx, by, bz),
+      igniteFire: (bx, by, bz) => {
+        if (!igniteAt(this.world, bx, by, bz)) return false;
+        // 联机：火也要广播（与玩家拿打火石点火走同一条）
+        this.net.sendBlock(bx, by, bz, Block.FIRE, 0, this.dimension);
+        return true;
+      },
+      shearAt: (bx, by, bz) => {
+        const mob = this.shearableMobAt(bx, by, bz);
+        return mob ? this.shearMob(mob) : 0;
+      },
+      playSound: (kind, sx, sy, sz) => this.audio.play(kind, { x: sx, y: sy, z: sz }),
+    };
+  }
+
+  /** 某一格里有没有可以剪的生物（原版发射器剪的就是凸口那一格里的羊） */
+  private shearableMobAt(x: number, y: number, z: number): Mob | null {
+    const box = { minX: x, minY: y, minZ: z, maxX: x + 1, maxY: y + 1, maxZ: z + 1 };
+    for (const entity of this.entities.all) {
+      if (entity instanceof Mob && !entity.dead && entityIntersectsBox(entity, box)) return entity;
+    }
+    return null;
+  }
+
+  /** 吐一件要问外界的两个问题：朝向那一格是不是容器、不是容器时往哪扔 */
+  private dropperEnv(x: number, y: number, z: number, dx: number, dy: number, dz: number): DropperEnv {
     return {
       target: () => this.containerOfBlockAt(x + dx, y + dy, z + dz),
       eject: (stack) => this.ejectItem(stack, x, y, z, dx, dy, dz),
@@ -4117,18 +4227,13 @@ class App {
     const dirZ = -Math.cos(this.yaw) * cosPitch;
 
     // 出手点在眼睛前下方一点（与射箭一致），避免刚出手就撞上自己脚边的方块
-    this.entities.spawn(
-      new Throwable(
-        this.physics.x + dirX * 0.4,
-        this.physics.eyeY - 0.1,
-        this.physics.z + dirZ * 0.4,
-        { x: dirX * PLAYER_THROW_SPEED, y: dirY * PLAYER_THROW_SPEED, z: dirZ * PLAYER_THROW_SPEED },
-        {
-          kind,
-          itemId: held,
-          potionId: kind === 'splash_potion' || kind === 'lingering_potion' ? held : undefined,
-        },
-      ),
+    this.spawnThrowable(
+      this.physics.x + dirX * 0.4,
+      this.physics.eyeY - 0.1,
+      this.physics.z + dirZ * 0.4,
+      { x: dirX * PLAYER_THROW_SPEED, y: dirY * PLAYER_THROW_SPEED, z: dirZ * PLAYER_THROW_SPEED },
+      kind,
+      held,
     );
 
     this.audio.play('bow_shoot');
@@ -4136,6 +4241,29 @@ class App {
     this.vibrate(8);
     this.refreshHotbar();
     return true;
+  }
+
+  /**
+   * 扔出一件投掷物（玩家投掷与**发射器**共用同一条实现，批次 60）。
+   *
+   * 抽出来的理由与 `spawnArrow` 一样：投掷物的种类、药水 id 与"初速从哪来"只有一份，
+   * 玩家与发射器不会各自漂移（发射器那一路只是初速方向不同）。
+   */
+  spawnThrowable(
+    x: number,
+    y: number,
+    z: number,
+    velocity: { x: number; y: number; z: number },
+    kind: ThrowableKind,
+    itemId: number,
+  ): void {
+    this.entities.spawn(
+      new Throwable(x, y, z, velocity, {
+        kind,
+        itemId,
+        potionId: kind === 'splash_potion' || kind === 'lingering_potion' ? itemId : undefined,
+      }),
+    );
   }
 
   /**
