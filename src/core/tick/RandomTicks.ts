@@ -134,7 +134,8 @@ const LEAF_DECAY_DISTANCE = 4;
 const GRASS_SPREAD_TRIES = 3;
 /** 甘蔗 / 竹子的高度上限 */
 const CANE_MAX_HEIGHT = 3;
-const BAMBOO_MAX_HEIGHT = 12;
+/** 竹子的高度上限（骨粉催竹也用它——同一个数字只能有一处） */
+export const BAMBOO_MAX_HEIGHT = 12;
 
 function isOpaque(id: number): boolean {
   return id !== Block.AIR && blockDef(id).opaque;

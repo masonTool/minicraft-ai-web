@@ -2693,12 +2693,16 @@ class App {
    * @returns 成功了吗（false = 那一格不能催：不是作物 / 已经成熟）
    */
   fertilizeBlockAt(x: number, y: number, z: number): boolean {
-    if (!fertilizeAt(this.boneMealWorld, x, y, z, Math.random)) return false;
+    // ⚠️ 改动的那一格**不一定是我们点的那一格**：对着草方块撒骨粉长出来的是**旁边**的草/花。
+    // 所以广播与粒子都按返回的坐标走——按"点的那一格"发的话，队友那边什么都看不到
+    const changed = fertilizeAt(this.boneMealWorld, x, y, z, Math.random);
+    if (!changed) return false;
+    const { x: cx, y: cy, z: cz } = changed;
     // 世界改动要广播（与放方块走同一条），否则队友那边作物还在原来的阶段
-    this.net.sendBlock(x, y, z, this.world.getBlock(x, y, z), this.world.getBlockState(x, y, z), this.dimension);
+    this.net.sendBlock(cx, cy, cz, this.world.getBlock(cx, cy, cz), this.world.getBlockState(cx, cy, cz), this.dimension);
     // 淡绿的碎屑（原版骨粉那圈粒子）
-    this.particles.spawnSplash(x + 0.5, y + 0.4, z + 0.5, 0xc8f0a0, 10);
-    this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.particles.spawnSplash(cx + 0.5, cy + 0.4, cz + 0.5, 0xc8f0a0, 10);
+    this.audio.play('place', { x: cx + 0.5, y: cy + 0.5, z: cz + 0.5 });
     return true;
   }
 
