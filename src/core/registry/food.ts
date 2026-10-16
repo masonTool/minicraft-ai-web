@@ -93,6 +93,10 @@ export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
   pumpkin_pie: { hunger: 8, saturationModifier: 0.3 },
   // 甜菜根：原版 1 饥饿 / 0.6（只适合做汤）
   beetroot: { hunger: 1, saturationModifier: 0.6 },
+  // 甜浆果（批次 49）：原版 2 饥饿 / 0.1（吃一把也就垫垫肚子）
+  sweet_berries: { hunger: 2, saturationModifier: 0.1 },
+  // 曲奇（批次 49）：原版 2 饥饿 / 0.1
+  cookie: { hunger: 2, saturationModifier: 0.1 },
   // 牛奶：不回饥饿也不回饱和度，只清除所有状态效果（原版行为）
   // 面包（3 小麦）：原版 5 点饥饿 / 6 点饱和度
   bread: { hunger: 5, saturationModifier: 0.6 },

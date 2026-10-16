@@ -19,6 +19,7 @@ import {
   WHEAT_STAGES,
   Wood,
   WoodShaped,
+  berryStageOf,
   blockDef,
   carpetId,
   copperId,
@@ -122,6 +123,10 @@ export const Item = {
   BEETROOT: 1424,
   BEETROOT_SEEDS: 1425,
   BEETROOT_SOUP: 1426,
+  // ---- 甜浆果与可可豆（批次 49，B17 最后两种"要地物"的食物）
+  SWEET_BERRIES: 1427,
+  COCOA_BEANS: 1428,
+  COOKIE: 1429,
   REDSTONE_DUST: 1198,
   GLOWSTONE_DUST: 1199,
   // ---- 投掷物（K4 尾巴）：雪球与鸡蛋，原版都是 16 个一堆。
@@ -288,6 +293,12 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.BEETROOT, name: 'minecraft:beetroot', tile: 'item_beetroot' },
   { id: Item.BEETROOT_SEEDS, name: 'minecraft:beetroot_seeds', tile: 'item_beetroot_seeds', block: Block.BEETROOTS_STAGE0 },
   { id: Item.BEETROOT_SOUP, name: 'minecraft:beetroot_soup', tile: 'item_beetroot_soup' },
+  // ---- 甜浆果与可可豆（批次 49）
+  // 甜浆果：种下去就是**甜浆果丛**（`block` 指向第 0 阶段，与原版一致）
+  { id: Item.SWEET_BERRIES, name: 'minecraft:sweet_berries', tile: 'item_sweet_berries', block: Block.SWEET_BERRY_BUSH_STAGE0 },
+  // 可可豆：种在**丛林原木侧面**（`block` 指向第 0 阶段，朝向由放置规则算出来）
+  { id: Item.COCOA_BEANS, name: 'minecraft:cocoa_beans', tile: 'item_cocoa_beans', block: Block.COCOA_STAGE0 },
+  { id: Item.COOKIE, name: 'minecraft:cookie', tile: 'item_cookie' },
   { id: Item.REDSTONE_DUST, name: 'minecraft:redstone_ingredient', tile: 'item_redstone_ingredient' },
   { id: Item.GLOWSTONE_DUST, name: 'minecraft:glowstone_dust_ingredient', tile: 'item_glowstone_dust_ingredient' },
   // ---- 药水（H10）：不可堆叠，一次一瓶
@@ -773,6 +784,8 @@ for (let index = 0; index < DYE_COLORS.length; index++) {
   WOOL_AND_DYE.add(carpetId(index));
   WOOL_AND_DYE.add(dyeItemId(index));
 }
+// 可可豆（批次 49）：它是棕色染料的原料，摆在染料旁边比扔进"矿石与材料"好找
+WOOL_AND_DYE.add(Item.COCOA_BEANS);
 
 /**
  * 酿造与药水（K4 尾巴）：**84 瓶药水** + 瓶子 + 材料 + 酿造台本身。
@@ -1078,6 +1091,15 @@ export function wheatExtraSeeds(blockId: number, roll: () => number): number {
  * @returns 额外掉落物与数量；没有额外掉落返回 null
  */
 export function extraCropDrop(blockId: number, roll: () => number): { id: number; count: number } | null {
+  // 甜浆果丛（批次 49）：主掉落 1~2 个，成熟后**额外**再给 0~1 个
+  // （合起来 阶段2 是 1~2、阶段3 是 2~3，与原版一致）
+  const berryStage = berryStageOf(blockId);
+  if (berryStage >= 0) {
+    if (berryStage < 2) return null;
+    const extra = (roll() < 0.5 ? 1 : 0) + (berryStage >= 3 && roll() < 0.5 ? 1 : 0);
+    return extra > 0 ? { id: Item.SWEET_BERRIES, count: extra } : null;
+  }
+
   const crop = cropOf(blockId);
   if (!crop || !crop.ripe) {
     // 未熟的胡萝卜/马铃薯只会掉回 1 个自己（主掉落已经处理），没有额外
@@ -1107,6 +1129,16 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.WHEAT_STAGE1, { id: Item.WHEAT_SEEDS, count: 1 }],
   [Block.WHEAT_STAGE2, { id: Item.WHEAT_SEEDS, count: 1 }],
   [Block.WHEAT_STAGE3, { id: Item.WHEAT, count: 1 }],
+  // 甜浆果丛（批次 49）：无论哪个阶段都掉甜浆果（原版如此：果子没了也不至于一无所有），
+  // 数量随阶段涨，见下面的 `extraCropDrop`
+  [Block.SWEET_BERRY_BUSH_STAGE0, { id: Item.SWEET_BERRIES, count: 1 }],
+  [Block.SWEET_BERRY_BUSH_STAGE1, { id: Item.SWEET_BERRIES, count: 1 }],
+  [Block.SWEET_BERRY_BUSH_STAGE2, { id: Item.SWEET_BERRIES, count: 1 }],
+  [Block.SWEET_BERRY_BUSH_STAGE3, { id: Item.SWEET_BERRIES, count: 2 }],
+  // 可可豆（批次 49）：1 / 2 / 3 个（原版按成熟度给 1~3，没有随机）
+  [Block.COCOA_STAGE0, { id: Item.COCOA_BEANS, count: 1 }],
+  [Block.COCOA_STAGE1, { id: Item.COCOA_BEANS, count: 2 }],
+  [Block.COCOA_STAGE2, { id: Item.COCOA_BEANS, count: 3 }],
   // 甜菜（批次 48）：与小麦同一条规矩——没熟只拿回 1 粒种子，熟了才给甜菜根
   [Block.BEETROOTS_STAGE0, { id: Item.BEETROOT_SEEDS, count: 1 }],
   [Block.BEETROOTS_STAGE1, { id: Item.BEETROOT_SEEDS, count: 1 }],

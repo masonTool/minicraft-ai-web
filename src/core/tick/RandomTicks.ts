@@ -14,11 +14,23 @@
  * 同一位置重复计划只保留最早的一次（与原版一致）。
  */
 
-import { Block, CROP_STAGES, blockDef, cropOf, Wood } from '../registry/blocks.ts';
+import {
+  BERRY_STAGES,
+  Block,
+  COCOA_STAGES,
+  CROP_STAGES,
+  JUNGLE_LOG_ID,
+  berryStageOf,
+  blockDef,
+  cocoaStageOf,
+  cropOf,
+  Wood,
+} from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 import {
   FACING_OFFSET,
   MAX_SNOW_LAYERS,
+  facingOf,
   snowLayers,
   withSnowLayers,
   withVineSide,
@@ -206,6 +218,50 @@ function makeCaneBehavior(needsWater: boolean, maxHeight: number): RandomTickBeh
   };
 }
 
+/**
+ * 甜浆果丛（批次 49）：随机刻往前长一阶段。
+ *
+ * 与小麦/甜菜那套 `growCrop` 的三点差别：**不要求下面是耕地**（原版长在草与泥土上）、
+ * **不要求"成熟"之外的东西**、**光照要求相同**（太暗不长，这一条与作物一致）。
+ */
+function berryBehavior(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const stage = berryStageOf(world.getBlock(x, y, z));
+  if (stage < 0 || stage >= BERRY_STAGES.length - 1) return false;
+  if (!isSolidGround(world.getBlock(x, y - 1, z))) return false;
+  if ((world.lightAt?.(x, y, z) ?? 15) < CROP_MIN_LIGHT) return false;
+  if (random() >= BERRY_GROW_CHANCE) return false;
+  return world.setBlock(x, y, z, BERRY_STAGES[stage + 1]!);
+}
+
+/**
+ * 可可豆（批次 49）：随机刻往前长一阶段。
+ *
+ * ⚠️ 换阶段是换**方块 id**，而朝向存在状态里——所以必须把原状态一起带过去
+ * （`setBlockWithState`）。要是走普通的 `setBlock`，豆荚会在长大的一瞬间
+ * **转到北面**（状态被清零），看起来像"长着长着掉了个头"。
+ *
+ * 另外要求"还贴着丛林原木"：原版被拆掉原木后豆荚会自己掉下来，
+ * 这里简化为"不再生长"（掉落实现在 `blockDrops` 之外，见 TASKS 里记的差异）。
+ */
+function cocoaBehavior(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const stage = cocoaStageOf(world.getBlock(x, y, z));
+  if (stage < 0 || stage >= COCOA_STAGES.length - 1) return false;
+
+  const state = world.getState?.(x, y, z) ?? 0;
+  const offset = FACING_OFFSET[facingOf(state)]!;
+  if (world.getBlock(x + offset[0], y, z + offset[1]) !== JUNGLE_LOG_ID) return false;
+  if (random() >= COCOA_GROW_CHANCE) return false;
+
+  const next = COCOA_STAGES[stage + 1]!;
+  if (world.setBlockWithState) return world.setBlockWithState(x, y, z, next, state);
+  return world.setBlock(x, y, z, next);
+}
+
+/** 实心地面（甜浆果丛的着床判定：草/泥土/灰化土都属于这一类） */
+function isSolidGround(id: number): boolean {
+  return id !== Block.AIR && blockDef(id).solid;
+}
+
 function hasAdjacentWater(world: TickWorld, x: number, y: number, z: number): boolean {
   return (
     world.getBlock(x + 1, y, z) === Block.WATER ||
@@ -364,10 +420,23 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   ...COPPER_IDS.map((id) => [id, copperWeatherBehavior] as const),
   // 雪层（K11 收尾）：下雪时越积越高、被方块光烤到时融化
   [Block.SNOW, snowBehavior],
+  // 甜浆果丛 / 可可豆（批次 49）：随机刻往前长一阶段（4 个 / 3 个 id 都要登记，
+  // 只登记第 0 阶段的话长到第 1 阶段就再也不长了——与小麦那条同一个坑）
+  ...BERRY_STAGES.map((id) => [id, berryBehavior] as const),
+  ...COCOA_STAGES.map((id) => [id, cocoaBehavior] as const),
 ]);
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */
 export const CROP_MIN_LIGHT = 9;
+
+/**
+ * 甜浆果丛 / 可可豆每命中一次随机刻就往前长一阶段的概率（批次 49）。
+ *
+ * 取 0.25 与甘蔗同一个量级：单机验收时"能看见它长"，而不是按原版那种
+ * 十几分钟才等到一次的真实节奏（原版靠 stats 与随机刻密度控制，这里调快）。
+ */
+export const BERRY_GROW_CHANCE = 0.25;
+export const COCOA_GROW_CHANCE = 0.25;
 /**
  * 随机刻命中时"长一节"的概率。
  *

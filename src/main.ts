@@ -189,6 +189,7 @@ import { CHEST_SIZE } from './core/container/Chest.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from './core/container/BrewingStand.ts';
 import { FURNACE_SIZE, Furnace } from './core/container/Furnace.ts';
 import { stationOfBlock } from './core/crafting/Smelting.ts';
+import { JUNGLE_LOG_ID } from './core/registry/blocks.ts';
 import { CAMPFIRE_SIZE, Campfire } from './core/container/Campfire.ts';
 import { PrecipitationTicker } from './core/tick/Precipitation.ts';
 import { isLitState, withLitState } from './core/registry/blockState.ts';
@@ -387,6 +388,12 @@ const STARTING_HOTBAR: readonly number[] = [
   Item.BOWL,
   Item.MUSHROOM_STEW,
   Item.PUMPKIN_PIE,
+  // 开发期甜浆果与可可豆（批次 49）：对着**草方块**种浆果、对着**丛林原木侧面**种可可豆，
+  // 再把手里的曲奇喂给自己——一条链在三步之内能走完
+  Item.SWEET_BERRIES,
+  Item.COCOA_BEANS,
+  Item.COOKIE,
+  JUNGLE_LOG_ID,
   // 开发期附魔与铁砧一条链：铁砧本体 + 修它要用的铁块/铁锭 + 附魔台要用的书/青金石
   Block.ANVIL,
   Block.IRON_BLOCK,

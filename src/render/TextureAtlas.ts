@@ -2096,6 +2096,131 @@ function beetrootPainter(stage: number): Painter {
 
 for (let stage = 0; stage < 4; stage++) PAINTERS[`beetroots_stage${stage}`] = beetrootPainter(stage);
 
+/**
+ * 甜浆果丛（批次 49）：一丛带刺的矮灌木，**越熟越高、果子越多**。
+ *
+ * 原版甜浆果丛的识别特征是"叶子细、果子红"，而且成熟时能看到一圈红点；
+ * 这里就按这两条画：`stage >= 2` 才开始挂果（与"只有成熟才结甜浆果"这条规则对上）。
+ */
+function berryBushPainter(stage: number): Painter {
+  const height = 5 + stage * 3; // 5 / 8 / 11 / 14
+  const berryCount = stage >= 2 ? stage - 1 : 0; // 阶段2 一颗、阶段3 两颗
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    const dy = 15 - y;
+    if (dy > height) return [0, 0, 0, 0];
+    const dx = Math.abs(x - 7.5);
+    // 丛形：下面宽、上面窄（越熟越铺得开）
+    const half = 2.4 + (height - dy) * 0.18;
+    if (dx > half) return [0, 0, 0, 0];
+    // 果子：挂在固定的两个位置（左右各一颗），成熟度不够就没有
+    if (berryCount > 0) {
+      const berryX = berryCount > 1 ? [3, 12] : [4];
+      if (berryX.includes(x) && dy >= 3 && dy <= 6) {
+        return [clamp255(196 + jitter), clamp255(38 + jitter), clamp255(48 + jitter), 255];
+      }
+    }
+    // 枝叶：深绿，越上面越亮（新芽）
+    const green = 86 + stage * 14 + (dy > height - 3 ? 26 : 0);
+    return [clamp255(green * 0.42 + jitter), clamp255(green + jitter), clamp255(green * 0.38 + jitter), 255];
+  };
+}
+
+for (let stage = 0; stage < 4; stage++) PAINTERS[`sweet_berry_bush_stage${stage}`] = berryBushPainter(stage);
+
+/**
+ * 可可豆荚（批次 49）：挂在原木侧面的一个椭圆豆荚，**越熟越黄**。
+ *
+ * 三个阶段的贴图共用一个画法，只有颜色与大小不同——
+ * 未熟偏青绿、半熟偏黄绿、成熟偏橙黄（原版就是从绿到橙的那三档）。
+ */
+function cocoaPainter(stage: number): Painter {
+  const colors: readonly (readonly [number, number, number])[] = [
+    [104, 140, 62], // 未熟：青绿
+    [156, 148, 54], // 半熟：黄绿
+    [196, 132, 34], // 成熟：橙黄
+  ];
+  const [r, g, b] = colors[stage]!;
+  const halfWidth = 5 + stage; // 5 / 6 / 7
+  return (x, y, rng) => {
+    const jitter = rng() * 12 - 6;
+    // 椭圆（荚的形状）：中心 (7.5, 8)，横向半轴随成熟变大
+    const rx = (x - 7.5) / halfWidth;
+    const ry = (y - 8) / 7;
+    if (rx * rx + ry * ry > 1) return [0, 0, 0, 0];
+    // 中缝：成熟后有一条纵向深色的沟（原版豆荚中间那道棱）
+    if (stage === 2 && Math.abs(x - 7.5) < 0.6) {
+      return [clamp255(r * 0.62 + jitter), clamp255(g * 0.62 + jitter), clamp255(b * 0.62 + jitter), 255];
+    }
+    const shade = y < 8 ? 1.1 : 0.9;
+    return [clamp255(r * shade + jitter), clamp255(g * shade + jitter), clamp255(b * shade + jitter), 255];
+  };
+}
+
+for (let stage = 0; stage < 3; stage++) PAINTERS[`cocoa_stage${stage}`] = cocoaPainter(stage);
+
+// ---- 甜浆果 / 可可豆 / 曲奇（批次 49 的物品图标）
+
+/** 甜浆果：几颗红果 + 两片叶子（与"丛上挂的果子"同色，一眼对得上） */
+PAINTERS.item_sweet_berries = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 三颗果子：左、中、右
+  for (const [cx, cy] of [
+    [5, 9.5],
+    [10, 9.5],
+    [7.5, 6],
+  ] as const) {
+    const d = Math.hypot(x - cx, y - cy);
+    if (d <= 2.6) {
+      const shade = d < 1.2 ? 1.14 : 0.88;
+      return [clamp255(198 * shade + jitter), clamp255(40 * shade + jitter), clamp255(50 * shade + jitter), 255];
+    }
+  }
+  // 叶子：左上角一片
+  if (y >= 2 && y <= 5 && x >= 2 && x <= 8 && x - y < 4) {
+    return [clamp255(64 + jitter), clamp255(122 + jitter), clamp255(52 + jitter), 255];
+  }
+  return [0, 0, 0, 0];
+};
+
+/** 可可豆：三颗深棕色的豆子（豆荚里剥出来的那种） */
+PAINTERS.item_cocoa_beans = (x, y, rng) => {
+  const jitter = rng() * 12 - 6;
+  for (const [cx, cy, rx] of [
+    [5.5, 10, 3.2],
+    [10.5, 10.5, 3.0],
+    [8, 5.5, 2.8],
+  ] as const) {
+    const d = Math.hypot((x - cx) / rx, (y - cy) / (rx * 0.86));
+    if (d <= 1) {
+      const shade = d < 0.5 ? 1.16 : 0.9;
+      return [clamp255(126 * shade + jitter), clamp255(78 * shade + jitter), clamp255(42 * shade + jitter), 255];
+    }
+  }
+  return [0, 0, 0, 0];
+};
+
+/** 曲奇：一块圆饼干 + 几粒深色巧克力豆 */
+PAINTERS.item_cookie = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const distance = Math.hypot(x - 7.5, y - 8);
+  if (distance > 6.2) return [0, 0, 0, 0];
+  // 巧克力豆：固定的几个点
+  for (const [cx, cy] of [
+    [5, 6],
+    [10, 6.5],
+    [7, 10.5],
+    [11, 10],
+  ] as const) {
+    if (Math.hypot(x - cx, y - cy) < 1.5) {
+      return [clamp255(74 + jitter), clamp255(46 + jitter), clamp255(30 + jitter), 255];
+    }
+  }
+  // 边缘略深（烤过的圈）
+  const shade = distance > 5 ? 0.86 : 1;
+  return [clamp255(206 * shade + jitter), clamp255(158 * shade + jitter), clamp255(96 * shade + jitter), 255];
+};
+
 // ---- 食物与杂物（批次 48）
 //
 // 三只碗（空碗 / 蘑菇煲 / 甜菜汤）共用同一套"木碗 + 里面一汪汤"的画法，

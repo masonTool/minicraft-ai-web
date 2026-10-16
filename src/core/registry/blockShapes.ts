@@ -155,6 +155,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'campfire':
       // 营火是一堆 7/16 高的柴：能站上去（原版也能踩），所以它有碰撞
       return [[0, 0, 0, 1, CAMPFIRE_HEIGHT, 1]];
+    case 'cocoa':
+      // 可可豆荚：贴着原木那一面的一个小盒子（原版能踩上去，所以它有碰撞）
+      return cocoaBoxes(state);
     default:
       return [FULL];
   }
@@ -332,6 +335,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'snow':
       // 高度随层数变化，与碰撞盒同源（见 `collisionBoxes`）
       return [[0, 0, 0, 1, snowHeight(state), 1]];
+    case 'cocoa':
+      // 与碰撞盒同源（挂在原木侧面的豆荚）
+      return cocoaBoxes(state);
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
@@ -574,6 +580,29 @@ function ladderBoxes(state: number): readonly LocalBox[] {
       return [[0, 0, 1 - thickness, 1, 1, 1]];
     default:
       return [[0, 0, 0, thickness, 1, 1]];
+  }
+}
+
+/**
+ * 可可豆荚（批次 49）：贴着原木那一面的一个盒子。
+ *
+ * 尺寸取原版成熟期的近似值（**三个生长阶段共用同一份尺寸**）——
+ * 本项目里"阶段"是三个不同的方块 id，而几何只能看到状态、看不到 id，
+ * 所以做不到"豆荚随成熟变大"。这条差异很小（豆荚本来就只有 7/16 厚），
+ * 记在 TASKS 里；要做得更细就得像雪层那样把阶段压进状态位。
+ */
+function cocoaBoxes(state: number): readonly LocalBox[] {
+  const depth = 0.4375; // 7/16：从原木面伸出多少
+  const inner = 0.25; // 左右各留 1/4
+  switch (facingOf(state)) {
+    case 0: // 贴在北面
+      return [[inner, 0.25, 0, 1 - inner, 0.8125, depth]];
+    case 1: // 东
+      return [[1 - depth, 0.25, inner, 1, 0.8125, 1 - inner]];
+    case 2: // 南
+      return [[inner, 0.25, 1 - depth, 1 - inner, 0.8125, 1]];
+    default: // 西
+      return [[0, 0.25, inner, depth, 0.8125, 1 - inner]];
   }
 }
 

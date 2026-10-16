@@ -618,6 +618,18 @@ export const TILE_ORDER = [
   'beetroots_stage1',
   'beetroots_stage2',
   'beetroots_stage3',
+  // ---- 甜浆果丛与可可豆（批次 49）：4 个生长阶段 / 3 个成熟度
+  'sweet_berry_bush_stage0',
+  'sweet_berry_bush_stage1',
+  'sweet_berry_bush_stage2',
+  'sweet_berry_bush_stage3',
+  'cocoa_stage0',
+  'cocoa_stage1',
+  'cocoa_stage2',
+  // ---- 甜浆果 / 可可豆 / 曲奇（批次 49）
+  'item_sweet_berries',
+  'item_cocoa_beans',
+  'item_cookie',
   // ---- 食物与杂物（批次 48）：金粒 / 碗 / 蘑菇煲 / 甜菜汤 / 甜菜根 / 甜菜种子 / 南瓜派
   'item_gold_nugget',
   'item_bowl',

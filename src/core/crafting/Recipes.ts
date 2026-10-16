@@ -32,6 +32,9 @@ import { Item, dyeItemId } from '../registry/items.ts';
 import { TOOL_SPECS } from '../registry/tools.ts';
 import { DRINKABLE, lingeringIdOf, tippedArrowIdOf } from '../registry/potions.ts';
 
+/** 配色表里"棕色"的下标（可可豆做棕色染料用；按名字查，不写死数字） */
+const BROWN_DYE_INDEX = DYE_COLORS.findIndex((color) => color.name === 'brown');
+
 export interface RecipeResult {
   id: number;
   count: number;
@@ -603,6 +606,17 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   },
   // 南瓜派：南瓜 + 糖 + 蛋（原版无序）——三样本项目都已经有
   { kind: 'shapeless' as const, result: { id: Item.PUMPKIN_PIE, count: 1 }, ingredients: [Block.PUMPKIN, Item.SUGAR, Item.EGG] },
+  // 曲奇（批次 49）：2 小麦 + 1 可可豆 → **8 个**（原版无序配方，一次出一堆）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.COOKIE, count: 8 },
+    ingredients: [Item.WHEAT, Item.WHEAT, Item.COCOA_BEANS],
+  },
+  // 棕色染料（批次 49）：1 个可可豆 → 1 个棕色染料（原版；可可豆在 1.14 之后只用来做染料与曲奇）
+  // ⚠️ 下标**按名字查**而不是写死数字：配色表的下标一改（或中间插一种颜色），
+  // 写死的数字会让"可可豆做出浅蓝色染料"——这种错在界面上看着就像个恶作剧
+  { kind: 'shapeless' as const, result: { id: dyeItemId(BROWN_DYE_INDEX), count: 1 }, ingredients: [Item.COCOA_BEANS] },
+
   // 金胡萝卜：8 金粒围 1 胡萝卜（原版图案）——金粒这一批刚补上，这条链才成立
   {
     kind: 'shaped' as const,

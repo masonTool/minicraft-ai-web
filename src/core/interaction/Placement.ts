@@ -16,7 +16,7 @@
  *  - 藤蔓（B11）：挂在命中面反方向的邻居那一侧；落在已有藤蔓上时**再挂一面**
  */
 
-import { Block, blockDef } from '../registry/blocks.ts';
+import { Block, JUNGLE_LOG_ID, blockDef } from '../registry/blocks.ts';
 import {
   MAX_SNOW_LAYERS,
   facingFromYaw,
@@ -221,6 +221,28 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       // 其余情况：与地毯/红石粉同一条规矩——下方要有实心方块，新放的是 1 层
       if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
       return { state: withSnowLayers(0, 1) };
+    }
+
+    case 'cocoa': {
+      // 可可豆只能挂在**丛林原木的水平侧面**上（原版如此：丛林树的树干）
+      if (ny !== 0) return null;
+      const facing = facingFromNormal(nx, nz);
+      if (facing === null) return null;
+      if (input.hitBlock !== JUNGLE_LOG_ID) return null;
+      const target = input.blockAt(nx, ny, nz);
+      if (target !== Block.AIR && !blockDef(target).liquid) return null;
+      return { state: withFacing(0, facing) };
+    }
+
+    case 'cross': {
+      // 植物（花 / 草 / 甘蔗 / 竹子 / 甜浆果丛…）要站在**实心方块**上。
+      //
+      // ⚠️ 这条以前是漏的：`cross` 走 `default` 分支无条件返回状态 0，
+      // 于是花可以悬空放在半空里（看着像浮在空中）。原版的判定更细
+      // （花只认草/泥土/灰化土那几种），这里先收成"下方是实心方块"——
+      // 比原版宽松一点，但把"悬空放植物"这条明显不对的行为挡住了。
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: 0 };
     }
 
     case 'lily_pad': {

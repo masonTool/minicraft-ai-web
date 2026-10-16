@@ -1348,6 +1348,59 @@ const BEETROOT_SPECS: readonly BlockSpec[] = [
   plantSpec(428, 'beetroots_stage3', 'beetroots_stage3'),
 ];
 
+// ---------------------------------------------------------------- 甜浆果丛与可可豆（批次 49）
+
+/**
+ * 甜浆果丛与可可豆（B17，批次 49）。
+ *
+ * 这两样是 B17 里最后两种"**能靠玩家自己走通**"的食物来源，
+ * 也是同一种结构：**一个能种的植物 → 结出食物**。
+ *
+ * 甜浆果丛：4 个生长阶段（与小麦/甜菜同一套"一个阶段一个 id"的做法），
+ * 长在草/泥土上，**不需要耕地**——所以它不走 `growCrop` 那套判定，
+ * 自己有一条随机刻行为（见 `RandomTicks.ts` 的 `berryBehavior`）。
+ *
+ * 可可豆：原版是**挂在丛林原木侧面**的豆荚，所以它有朝向状态
+ * （`facing` = 贴着哪一面），3 个生长阶段各占一个 id。
+ */
+export const SWEET_BERRY_BUSH_ID_START = 429;
+export const COCOA_ID_START = 433;
+
+const BERRY_AND_COCOA_SPECS: readonly BlockSpec[] = [
+  plantSpec(429, 'sweet_berry_bush_stage0', 'sweet_berry_bush_stage0'),
+  plantSpec(430, 'sweet_berry_bush_stage1', 'sweet_berry_bush_stage1'),
+  plantSpec(431, 'sweet_berry_bush_stage2', 'sweet_berry_bush_stage2'),
+  plantSpec(432, 'sweet_berry_bush_stage3', 'sweet_berry_bush_stage3'),
+  // 可可豆荚：形状挂在原木侧面，朝向存在状态里
+  {
+    id: 433,
+    name: 'minecraft:cocoa_stage0',
+    tiles: ['cocoa_stage0', 'cocoa_stage0', 'cocoa_stage0'],
+    shape: 'cocoa',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 434,
+    name: 'minecraft:cocoa_stage1',
+    tiles: ['cocoa_stage1', 'cocoa_stage1', 'cocoa_stage1'],
+    shape: 'cocoa',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 435,
+    name: 'minecraft:cocoa_stage2',
+    tiles: ['cocoa_stage2', 'cocoa_stage2', 'cocoa_stage2'],
+    shape: 'cocoa',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const CAMPFIRE_SPECS: readonly BlockSpec[] = [
   {
     id: CAMPFIRE_ID,
@@ -1581,6 +1634,7 @@ const SPECS: readonly BlockSpec[] = [
   ...FURNACE_STATION_SPECS,
   ...CAMPFIRE_SPECS,
   ...BEETROOT_SPECS,
+  ...BERRY_AND_COCOA_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1816,6 +1870,14 @@ export const Block = {
   BEETROOTS_STAGE1: 426,
   BEETROOTS_STAGE2: 427,
   BEETROOTS_STAGE3: 428,
+  // ---- 甜浆果丛与可可豆（批次 49）
+  SWEET_BERRY_BUSH_STAGE0: SWEET_BERRY_BUSH_ID_START,
+  SWEET_BERRY_BUSH_STAGE1: 430,
+  SWEET_BERRY_BUSH_STAGE2: 431,
+  SWEET_BERRY_BUSH_STAGE3: 432,
+  COCOA_STAGE0: COCOA_ID_START,
+  COCOA_STAGE1: 434,
+  COCOA_STAGE2: 435,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1999,6 +2061,14 @@ HARDNESS.set(Block.LADDER, 0.4);
 // 锁链 5（原版，必须用镐）；藤蔓 0.2（原版，徒手一拍就掉，但只有剪刀/精准采集会掉下来）
 HARDNESS.set(Block.CHAIN, 5);
 HARDNESS.set(Block.VINE, 0.2);
+// 甜浆果丛与可可豆（批次 49）：原版都是"一碰就掉"（甜浆果丛 0、可可果 0.2）
+HARDNESS.set(Block.SWEET_BERRY_BUSH_STAGE0, 0);
+HARDNESS.set(Block.SWEET_BERRY_BUSH_STAGE1, 0);
+HARDNESS.set(Block.SWEET_BERRY_BUSH_STAGE2, 0);
+HARDNESS.set(Block.SWEET_BERRY_BUSH_STAGE3, 0);
+HARDNESS.set(Block.COCOA_STAGE0, 0.2);
+HARDNESS.set(Block.COCOA_STAGE1, 0.2);
+HARDNESS.set(Block.COCOA_STAGE2, 0.2);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2272,7 +2342,11 @@ for (let stage = 0; stage < 4; stage++) {
   HAND_HARVESTABLE.add(Block.CARROTS_STAGE0 + stage);
   HAND_HARVESTABLE.add(Block.POTATOES_STAGE0 + stage);
   HAND_HARVESTABLE.add(Block.BEETROOTS_STAGE0 + stage);
+  // 甜浆果丛（批次 49）：徒手就能采（原版也是，它连工具都不认）
+  HAND_HARVESTABLE.add(Block.SWEET_BERRY_BUSH_STAGE0 + stage);
 }
+// 可可豆（批次 49）：徒手可采
+for (let stage = 0; stage < 3; stage++) HAND_HARVESTABLE.add(Block.COCOA_STAGE0 + stage);
 
 /**
  * 作物的生长阶段表（按顺序）。
@@ -2286,6 +2360,34 @@ export const CROP_STAGES: Readonly<Record<string, readonly number[]>> = {
   potatoes: [Block.POTATOES_STAGE0, Block.POTATOES_STAGE1, Block.POTATOES_STAGE2, Block.POTATOES_STAGE3],
   beetroots: [Block.BEETROOTS_STAGE0, Block.BEETROOTS_STAGE1, Block.BEETROOTS_STAGE2, Block.BEETROOTS_STAGE3],
 };
+
+/**
+ * 甜浆果丛与可可豆的生长阶段表（批次 49）。
+ *
+ * 它们**不进 `CROP_STAGES`**：那张表是"种在耕地上的作物"，
+ * `cropOf` / `growCrop` / `extraCropDrop` 三处都假设"下面是耕地、收获给种子"。
+ * 甜浆果丛长在草上、可可豆挂在原木上，判定与掉落都不一样，各自一张表更清楚。
+ */
+export const BERRY_STAGES: readonly number[] = [
+  Block.SWEET_BERRY_BUSH_STAGE0,
+  Block.SWEET_BERRY_BUSH_STAGE1,
+  Block.SWEET_BERRY_BUSH_STAGE2,
+  Block.SWEET_BERRY_BUSH_STAGE3,
+];
+export const COCOA_STAGES: readonly number[] = [Block.COCOA_STAGE0, Block.COCOA_STAGE1, Block.COCOA_STAGE2];
+
+/** 这个 id 是甜浆果丛的第几阶段（不是则 -1） */
+export function berryStageOf(id: number): number {
+  return BERRY_STAGES.indexOf(id);
+}
+
+/** 这个 id 是可可豆的第几阶段（不是则 -1） */
+export function cocoaStageOf(id: number): number {
+  return COCOA_STAGES.indexOf(id);
+}
+
+/** 丛林原木的 id（可可豆只能挂在它上面；丛林树与巨型丛林树共用同一种原木） */
+export const JUNGLE_LOG_ID: number = Wood.jungle!.log;
 
 /** 小麦的阶段表（保留这个名字：调用点很多，而且它是最常用的一张） */
 export const WHEAT_STAGES: readonly number[] = CROP_STAGES.wheat!;

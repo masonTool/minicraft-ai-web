@@ -19,9 +19,9 @@
  * 该模块必须保持"纯函数 + 无 DOM 依赖"，因为它会被 Web Worker 直接引用。
  */
 
-import { Block, Wood, type WoodBlockIds } from '../registry/blocks.ts';
+import { Block, JUNGLE_LOG_ID, Wood, type WoodBlockIds } from '../registry/blocks.ts';
 import { withVineSide } from '../registry/blockState.ts';
-import { withSnowLayers } from '../registry/blockState.ts';
+import { withFacing, withSnowLayers, type Facing } from '../registry/blockState.ts';
 import { Biome, type BiomeDef } from './Biome.ts';
 import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 
@@ -351,6 +351,53 @@ function hangVines(
   }
 }
 
+/**
+ * 在一棵丛林树的树干上挂可可豆（批次 49）。
+ *
+ * 判据只有一条：**旁边那一格是不是丛林原木**——不去问"这棵树多高、是 1×1 还是 2×2"。
+ * 这么做有三个好处：1×1 与 2×2 共用一段代码；跨区块的树干也能正确挂上；
+ * 而且**绝不会挂到别的东西上**（树冠/藤蔓占着的格子 `isPlantableAt` 会挡住）。
+ *
+ * 概率用 `hashAt` 拌进 y，因此是**位置纯函数**，邻居区块算出来的结论一致。
+ *
+ * `base` 是树干最下面那一格（树的地面高度 + 1），豆荚只挂它往上 2~19 格。
+ */
+function hangCocoa(w: FeatureWriter, x: number, z: number, base: number, seed: number): number {
+  let placed = 0;
+  for (let y = base + 2; y < base + 20; y++) {
+    // 2×2 树干：从"候选列"的四个格子出发（1×1 时后三个自然查不到原木）
+    for (let ox = 0; ox <= 1; ox++) {
+      for (let oz = 0; oz <= 1; oz++) {
+        for (const [dx, dz, side] of COCOA_SIDES) {
+          if (w.get(x + ox + dx, y, z + oz + dz) !== JUNGLE_LOG_ID) continue;
+          if (!isPlantableAt(w.get(x + ox, y, z + oz))) continue;
+          if (hashAt(x + ox, z + oz, (seed ^ 0x71b0 ^ Math.imul(y, 0x27d4eb2d)) | 0) >= COCOA_CHANCE) continue;
+          if (w.putState(x + ox, y, z + oz, Block.COCOA_STAGE0, withFacing(0, side as Facing))) placed++;
+        }
+      }
+    }
+  }
+  return placed;
+}
+
+/**
+ * 每个"外侧格子"相对它的四个方向：**原木在哪个方向** + 该记的朝向。
+ *
+ * ⚠️ 朝向必须指向**原木那一侧**（与梯子/藤蔓同一套语义：`facing` 指向贴着的那一面），
+ * 而 `FACING_OFFSET` 是 [北(0,-1)、东(1,0)、南(0,1)、西(-1,0)]，
+ * 所以"原木在东边"要记 **1**、不是 3。第一版写反了（写成"面朝外"），
+ * 断言里那条"每个豆荚都贴着自己的原木"当场抓住了它。
+ */
+const COCOA_SIDES: readonly (readonly [number, number, number])[] = [
+  [1, 0, 1],
+  [-1, 0, 3],
+  [0, 1, 2],
+  [0, -1, 0],
+];
+
+/** 每个可挂点位上"长出豆荚"的概率（原版丛林树上的豆荚不多，稀疏反而更像） */
+const COCOA_CHANCE = 0.22;
+
 // ---------------------------------------------------------------- 树
 
 /** 11 种树 */
@@ -608,6 +655,12 @@ interface BiomeFeature {
    * 只会让这张表更难读。
    */
   snowCover?: number;
+  /**
+   * 地表长甜浆果丛的密度（批次 49）：**省略 = 0**（只有针叶林那一族写它）。
+   * 与 `lilyPads` / `snowCover` 同一个理由：给二十几个跟它无关的群系各补一个 0
+   * 只会让这张表更难读。
+   */
+  berries?: number;
 }
 
 const NO_FLOWERS: readonly number[] = [];
@@ -694,6 +747,9 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     mushrooms: 0.008,
     special: 'pumpkin',
     specialDensity: 0.001,
+    // 针叶林（批次 49）：甜浆果丛是这一族的招牌地物
+    // （0.1 ≈ 每区块十几丛；实测 0.06 只有个位数，看着太稀）
+    berries: 0.1,
   },
   [Biome.SNOWY_PLAINS]: {
     trees: [['spruce', 1]],
@@ -715,6 +771,8 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     mushrooms: 0,
     specialDensity: 0,
     snowCover: 0.65,
+    // 雪针叶林：雪多、浆果略少
+    berries: 0.07,
   },
   [Biome.DESERT]: {
     trees: [],
@@ -887,6 +945,10 @@ export interface FeatureStats {
   specials: number;
   /** 地表雪层数（批次 37；可选字段，老的统计脚本不必改） */
   snow?: number;
+  /** 地表甜浆果丛数（批次 49） */
+  berries?: number;
+  /** 树干上挂出的可可豆荚数（批次 49） */
+  cocoa?: number;
 }
 
 /**
@@ -970,6 +1032,24 @@ function decorateTrees(
       if (stats && w.owns(wx, wz)) stats.trees++;
     }
   }
+
+  // ---- 可可豆（批次 49）：**在树都长完之后**单独挂一遍
+  //
+  // ⚠️ 为什么不在树种里顺手挂（第一版就是这么写的，测试当场发现每区块会丢 1 个）：
+  // 树冠是**强制写入**（`fill`），先挂上去的豆荚会被后一棵树的树冠盖掉。
+  // 单独一趟还顺带解决了 2×2 树干（巨型丛林）外圈的挂点问题——
+  // 判据只是"旁边那一格是不是丛林原木"，与树怎么长出来的无关。
+  for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+    for (let x = 0; x < CHUNK_SIZE_X; x++) {
+      const wx = originX + x;
+      const wz = originZ + z;
+      if (!isTreePosition(wx, wz, seed, config.treeDensity)) continue;
+      const groundY = world.surfaceY(wx, wz) + 1;
+      if (groundY <= SEA_LEVEL) continue;
+      const placed = hangCocoa(w, wx, wz, groundY, seed);
+      if (stats && placed > 0) stats.cocoa = (stats.cocoa ?? 0) + placed;
+    }
+  }
 }
 
 /** 只处理本区块自己的单列地物 */
@@ -1041,6 +1121,28 @@ function decorateLocal(w: FeatureWriter, world: FeatureWorld, seed: number, stat
         if (!isPlantable(w, wx, y, wz, SOIL)) continue;
         const red = hashAt(wx, wz, seed ^ 0x9a9a) < 0.5;
         if (w.put(wx, y, wz, red ? Block.RED_MUSHROOM : Block.BROWN_MUSHROOM) && stats) stats.plants++;
+      }
+    }
+  }
+
+  // ---- 地表甜浆果丛（批次 49）：针叶林的地面特征
+  //
+  // 排在雪层**之前**：先长丛、再铺雪，这样雪不会盖在丛上
+  // （`isPlantableAt` 只认空气与可替换方块，丛不是，所以顺序在这里就是规则）。
+  if (config.berries && config.berries > 0) {
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        const wx = originX + x;
+        const wz = originZ + z;
+        if (hashAt(wx, wz, seed ^ 0xbe11) >= config.berries) continue;
+        const y = w.surfaceAbove(wx, wz, world.surfaceY(wx, wz) + 1);
+        // 与草花同一条判定（避让树冠、藤蔓、已经长出来的花草）
+        if (!isPlantable(w, wx, y, wz, SOIL)) continue;
+        // 生成时随机成熟度（原版世界里的丛是各个阶段混着的）
+        const stage = Math.floor(hashAt(wx, wz, seed ^ 0xbe12) * 4);
+        if (w.put(wx, y, wz, Block.SWEET_BERRY_BUSH_STAGE0 + Math.min(3, Math.max(0, stage)))) {
+          if (stats) stats.berries = (stats.berries ?? 0) + 1;
+        }
       }
     }
   }
