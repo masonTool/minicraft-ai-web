@@ -113,12 +113,25 @@ const meshCtx: MeshContext = {
   }
 
   const perChunk = meshMs / chunks.size;
-  console.log(`  生成：${(generateMs / chunks.size).toFixed(1)} ms/区块`);
+  const generatePerChunk = generateMs / chunks.size;
+  const ratio = perChunk / Math.max(generatePerChunk, 0.001);
+  console.log(`  生成：${generatePerChunk.toFixed(1)} ms/区块`);
   console.log(`  网格化：${perChunk.toFixed(1)} ms/区块（${sections} 个非空 section，跳掉 ${emptySections} 个空段）`);
   console.log(`  三角形：平均 ${Math.round(triangles / chunks.size)} 个/区块`);
+  console.log(`  网格化 ÷ 生成 = ${ratio.toFixed(2)} 倍`);
 
-  // 只给一个很宽松的门槛：抓"慢了十倍"这种量级的退化，不跟机器较劲
-  check(`网格化单区块 < 120 ms（实测 ${perChunk.toFixed(1)}）`, perChunk < 120);
+  /**
+   * 判据用**比值**、不用绝对秒数（批次 103，B103-5）。
+   *
+   * 原来写的是"网格化单区块 < 120ms"——那个数在**并行跑测试集**时会因 CPU 争用偶发变红
+   * （同一段代码实测出现过 16.4 / 17.8 / 42.1 / 235.0 ms）。
+   * 而"网格化 ÷ 生成"这两个数是在**同一台机器、同一批区块、前后脚**量出来的：
+   * 争用/机器快慢会**同时**作用在分子分母上，比值本身稳定。
+   *
+   * 要挡的东西没变：**网格化比生成慢一个数量级**这种退化（生成 ~11ms/区块是已知基准）。
+   * 实测比值 1.4~4.0，预算 8 倍（留下约 2 倍余量）。
+   */
+  check(`网格化单区块 ≤ 生成的 8 倍（实测 ${ratio.toFixed(2)} 倍）`, ratio <= 8);
 }
 
 // ---------------------------------------------------------------- 1.5 网格化结果的指纹
