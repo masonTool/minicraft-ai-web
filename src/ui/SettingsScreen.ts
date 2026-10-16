@@ -34,6 +34,10 @@ export const PARTICLE_DENSITY: Record<ParticleLevel, number> = {
   all: 1,
 };
 
+/** 触摸按钮 / 摇杆的大小倍率范围（批次 97）：0.8× 到 1.4× */
+export const TOUCH_SCALE_MIN = 0.8;
+export const TOUCH_SCALE_MAX = 1.4;
+
 /** 布尔型设置项（开关那种），单独取个名字给 makeToggle 用 */
 type BoolSettingKey = 'clouds' | 'invertY' | 'daylightCycle' | 'showDebug' | 'adaptiveViewDistance';
 
@@ -70,6 +74,13 @@ export interface GameSettings {
    * （不用先去找那个圈，左下随便一按就是摇杆）。
    */
   touchStick: StickMode;
+  /**
+   * 触摸按钮与摇杆的大小倍率（批次 97，基岩版设置里有同一项）。
+   *
+   * 手机上"按钮多大才顺手"因人而异（大拇指粗细、屏幕大小、拿姿），
+   * 而且 44px 只是下限——基岩版把这个选择权交给玩家，我们也给。
+   */
+  touchScale: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -85,6 +96,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   showDebug: true,
   adaptiveViewDistance: true,
   touchStick: 'fixed',
+  touchScale: 1,
 };
 
 const STORAGE_KEY = 'bedrock-settings';
@@ -114,6 +126,7 @@ export function loadSettings(): GameSettings {
       touchStick: STICK_MODES.includes(parsed.touchStick as StickMode)
         ? (parsed.touchStick as StickMode)
         : DEFAULT_SETTINGS.touchStick,
+      touchScale: clampNumber(parsed.touchScale, TOUCH_SCALE_MIN, TOUCH_SCALE_MAX, DEFAULT_SETTINGS.touchScale),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -233,6 +246,8 @@ export class SettingsScreen {
     this.makeSelect(options, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异，所以给两档自己挑
     this.makeSelect(options, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
+    // 触摸按钮大小（批次 97）：手机上线 44px 只是下限，多大才顺手因人而异
+    this.makeSlider('touchScale', '触摸按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100);
     options.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05));
     this.makeToggle(options, 'invertY', '反转上下视角');
 

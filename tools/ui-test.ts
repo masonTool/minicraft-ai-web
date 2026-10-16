@@ -33,7 +33,7 @@ import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
 import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
 import { BackButton } from '../src/ui/BackButton.ts';
 import { STICK_MODES, STICK_MODE_LABELS } from '../src/ui/TouchControls.ts';
-import { DEFAULT_SETTINGS, loadSettings } from '../src/ui/SettingsScreen.ts';
+import { DEFAULT_SETTINGS, TOUCH_SCALE_MAX, TOUCH_SCALE_MIN, loadSettings } from '../src/ui/SettingsScreen.ts';
 
 let passed = 0;
 let failed = 0;
@@ -260,6 +260,12 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
   equal('摇杆两档（与基岩版一致）', STICK_MODES.join(','), 'fixed,dynamic');
   check('两档都有中文名', STICK_MODES.every((mode) => STICK_MODE_LABELS[mode].length > 0));
   equal('默认固定（肌肉记忆优先）', DEFAULT_SETTINGS.touchStick, 'fixed');
+  equal('按钮大小默认 1×（不改任何既有尺寸）', DEFAULT_SETTINGS.touchScale, 1);
+  check(
+    `按钮大小可调范围合理（${TOUCH_SCALE_MIN}~${TOUCH_SCALE_MAX}）`,
+    TOUCH_SCALE_MIN >= 0.8 && TOUCH_SCALE_MAX <= 1.5 && TOUCH_SCALE_MIN < DEFAULT_SETTINGS.touchScale,
+    `${TOUCH_SCALE_MIN}~${TOUCH_SCALE_MAX}`,
+  );
 
   // 设置项要能读回：动态模式必须**真的被存下来**（不然滑一下又回到固定）
   const saved = new Map<string, string>();
@@ -287,6 +293,10 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
     ['动态摇杆按下现身', '#touch-stick.dynamic.active { opacity: 1; }'],
     ['飞行时跳跃键画上升箭头', "#touch-ui.flying .touch-button.jump::after { content: '▲';"],
     ['飞行时潜行键画下降箭头', "#touch-ui.flying .touch-button[data-icon=\"sneak\"]::after { content: '▼';"],
+    // 按钮大小（批次 97）：尺寸必须走 CSS 变量，否则设置里的滑块拖了没反应
+    ['触摸按钮尺寸吃变量', '.touch-button { width: calc(62px * var(--touch-scale, 1));'],
+    ['跳跃键尺寸吃变量', 'width: calc(76px * var(--touch-scale, 1));'],
+    ['摇杆尺寸吃变量', 'width: calc(132px * var(--touch-scale, 1));'],
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }

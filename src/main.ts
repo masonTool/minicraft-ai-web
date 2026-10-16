@@ -1457,6 +1457,8 @@ class App {
     this.sky.setCloudsVisible(settings.clouds);
     // 触摸摇杆模式（批次 96）：没有触摸层时静默忽略（桌面端这个设置项不该报错）
     this.touch?.setStickMode(settings.touchStick);
+    // 触摸按钮/摇杆大小（批次 97）：改一个 CSS 变量，摇杆与按钮一起缩放
+    document.documentElement.style.setProperty('--touch-scale', String(settings.touchScale));
     this.debugEl.style.display = settings.showDebug ? '' : 'none';
     this.applyEnvironment();
     // 视距变化后立刻按新的范围请求/卸载区块

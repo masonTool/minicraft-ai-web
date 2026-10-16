@@ -1127,7 +1127,11 @@
 
       #touch-stick {
         position: absolute; left: 22px; bottom: 96px;
-        width: 132px; height: 132px; border-radius: 50%;
+        /* 尺寸乘 `--touch-scale`（批次 97）：设置里的"触摸按钮大小"直接改这个变量，
+           摇杆与按钮一起缩放（分别调会更乱：两者的比例本来就是配好的） */
+        width: calc(132px * var(--touch-scale, 1));
+        height: calc(132px * var(--touch-scale, 1));
+        border-radius: 50%;
         background: rgba(255, 255, 255, .13);
         border: 2px solid rgba(255, 255, 255, .3);
         pointer-events: auto; touch-action: none;
@@ -1136,7 +1140,9 @@
       }
       #touch-stick.active { background: rgba(255, 255, 255, .22); }
       #touch-stick .knob {
-        width: 56px; height: 56px; border-radius: 50%;
+        width: calc(56px * var(--touch-scale, 1));
+        height: calc(56px * var(--touch-scale, 1));
+        border-radius: 50%;
         background: rgba(255, 255, 255, .55);
         border: 2px solid rgba(255, 255, 255, .8);
         will-change: transform;
@@ -1144,11 +1150,15 @@
 
       #touch-buttons {
         position: absolute; right: 20px; bottom: 96px;
-        display: grid; grid-template-columns: repeat(2, 62px); gap: 12px;
+        display: grid;
+        grid-template-columns: repeat(2, calc(62px * var(--touch-scale, 1)));
+        gap: calc(12px * var(--touch-scale, 1));
         pointer-events: none;
       }
       .touch-button {
-        width: 62px; height: 62px; border-radius: 50%; padding: 0;
+        width: calc(62px * var(--touch-scale, 1));
+        height: calc(62px * var(--touch-scale, 1));
+        border-radius: 50%; padding: 0;
         display: grid; place-items: center;
         font: inherit; font-size: 17px; color: #fff;
         background: rgba(255, 255, 255, .16);
@@ -1160,7 +1170,11 @@
       /* 图标是内联 SVG：跟着按钮缩放，颜色用 currentColor 与按钮文字同色 */
       .touch-button svg { width: 58%; height: 58%; display: block; fill: currentColor; }
       .touch-button.on { background: rgba(140, 220, 140, .38); border-color: rgba(200, 255, 200, .8); }
-      .touch-button.jump { width: 76px; height: 76px; font-size: 19px; }
+      .touch-button.jump {
+        width: calc(76px * var(--touch-scale, 1));
+        height: calc(76px * var(--touch-scale, 1));
+        font-size: 19px;
+      }
       .touch-button.jump svg { width: 52%; height: 52%; }
 
       /* 飞行时的升降提示（批次 96）：飞起来之后"跳跃/潜行"这两颗键的含义变成了
