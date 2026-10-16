@@ -130,6 +130,32 @@ console.log('\n[index.html：设计令牌与美化规则]');
   const missing = tokens.filter((token) => !html.includes(`${token}:`));
   check(`设计令牌齐全（${tokens.length} 个）`, missing.length === 0, missing.join(', '));
 
+  // ---- 原版调色板（批次 109）----
+  // 用户反馈"像素风这个配色和颜色好像也不太对"。这条门禁把原版反推出来的那几个
+  // 关键色值钉住：改成"好看一点的灰"很容易，但那就不再是原版了。
+  const palette: [string, string][] = [
+    ['面板面（经典 GUI 灰）', '--mc-panel: #c6c6c6;'],
+    ['槽位/按钮面', '--mc-face: #8b8b8b;'],
+    ['斜面高光', '--mc-edge-light: #ffffff;'],
+    ['斜面阴影', '--mc-edge-dark: #555555;'],
+    ['外描边（纯黑）', '--mc-outline: #000000;'],
+    ['浅底文字', '--mc-text: #3f3f3f;'],
+    ['深底文字', '--mc-text-light: #e0e0e0;'],
+    ['悬停文字（原版是文字变黄）', '--mc-text-hover: #ffffa0;'],
+    ['禁用文字', '--mc-text-disabled: #a0a0a0;'],
+    ['文字阴影', '--mc-text-shadow: #3f3f3f;'],
+  ];
+  for (const [label, needle] of palette) {
+    check(`原版调色板：${label}`, html.includes(needle), needle);
+  }
+  // 原版**没有主色按钮**：主按钮与普通按钮同一个灰面（绿色只留给聊天发送键）
+  check(
+    '原版没有"主色按钮"（"游戏"与"设置"是同一个灰）',
+    html.includes('--btn-primary: var(--mc-face);') && html.includes('--btn-danger: var(--mc-face);'),
+  );
+  // 原版文本框是黑底白字
+  check('输入框是原版的黑底白字', html.includes('--field-bg: #000000;') && html.includes('--field-text: var(--mc-text-light);'));
+
   // 组件真的用上了令牌（而不是又写回硬编码色值）
   const usages = (html.match(/var\(--/g) ?? []).length;
   check(`组件大量引用令牌（实测 ${usages} 处）`, usages >= 60, '令牌层被绕过了？');
@@ -147,7 +173,8 @@ console.log('\n[index.html：设计令牌与美化规则]');
     ['面板入场动画', '@keyframes panel-in'],
     ['低血量脉冲', 'low-health-pulse'],
     ['滑杆自绘', "input[type=\"range\"]::-webkit-slider-thumb"],
-    ['开关自绘', "input[type=\"checkbox\"]:checked"],
+    // 批次 109：开关不再是"自绘 checkbox"——基岩版设置项是"‹ 开 ›/‹ 关 ›"的循环按钮
+    ['开关/循环切换控件', '.settings-cycle'],
     ['加载页进度条', 'loading-sweep'],
     ['滚动条配色', 'scrollbar-color'],
   ] as const) {

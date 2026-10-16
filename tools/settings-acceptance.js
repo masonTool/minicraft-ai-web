@@ -58,9 +58,25 @@
     sliders.length >= 4,
     `${sliders.length}`,
   );
-  const toggles = panel.querySelectorAll('input[type="checkbox"]');
-  check('toggles present (clouds/adaptive/invertY/daylight/debug/creative)', toggles.length >= 5, `${toggles.length}`);
-  check('selects present (camera/particles/stick)', panel.querySelectorAll('select').length >= 3, `${panel.querySelectorAll('select').length}`);
+  // ⚠️ 批次 109 起开关与下拉都换成了原版的"循环按钮"（`‹ 开 ›` / `‹ 中 ›`）：
+  //   基岩版设置界面里既没有复选框也没有下拉框，所以这里按 `.settings-cycle` 数。
+  const cycles = panel.querySelectorAll('.settings-cycle');
+  check('cycle buttons present (toggles + choices)', cycles.length >= 8, `${cycles.length}`);
+  check(
+    'no native checkbox/select left (they cannot be pixel-styled)',
+    panel.querySelectorAll('input[type="checkbox"], select').length === 0,
+    `${panel.querySelectorAll('input[type="checkbox"], select').length}`,
+  );
+  const cycleText = [...cycles].map((b) => b.textContent ?? '').join(' | ');
+  check('cycle buttons show the原版 arrow form', /\u2039 .+ \u203a/.test(cycleText), cycleText.slice(0, 60));
+  // 点一下真的会换值（拿"云"那一项试：开 ↔ 关）
+  const cloudButton = [...cycles].find((b) => (b.textContent ?? '').includes('开') || (b.textContent ?? '').includes('关'));
+  if (cloudButton) {
+    const before = cloudButton.textContent;
+    cloudButton.click();
+    await sleep(60);
+    check('tapping a toggle really flips it', cloudButton.textContent !== before, `${before} -> ${cloudButton.textContent}`);
+  }
 
   // ---- "‹ 返回"回到暂停菜单（面板**还开着**：这一层只是退一级）
   const back = panel.querySelector('.settings-back');

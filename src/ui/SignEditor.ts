@@ -78,7 +78,8 @@ export class SignEditor {
 
     const saveButton = document.createElement('button');
     saveButton.type = 'button';
-    saveButton.className = 'sign-editor-button sign-editor-save';
+    // 原版的"完成"就是一颗普通灰按钮（批次 109 去掉了绿色主按钮那一套）
+    saveButton.className = 'sign-editor-button';
     saveButton.textContent = '完成';
     saveButton.addEventListener('click', () => this.save());
 

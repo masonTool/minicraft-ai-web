@@ -240,7 +240,7 @@ export class SettingsScreen {
   /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
   private subtitleText = '按 Esc 继续游戏';
   /** "创造模式（飞行）"那个开关（非持久设置，见 `makeCreativeRow`） */
-  private flyingToggle: HTMLInputElement | null = null;
+  private flyingToggle: HTMLButtonElement | null = null;
 
   constructor(
     host: HTMLElement,
@@ -413,7 +413,14 @@ export class SettingsScreen {
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
     game.appendChild(this.makeResourcePackRow());
 
-    settingsPage.append(header, tabs, body);
+    // 页签与内容裹一层：竖屏是"上面一排页签 + 下面内容"，
+    // **手机横屏**改成"左边一列页签 + 右边内容"（原版就是这样）——
+    // 换方向只切这一个容器的 `flex-direction`，两份 DOM 是不行的（改一处漏一处）。
+    const columns = document.createElement('div');
+    columns.className = 'settings-columns';
+    columns.append(tabs, body);
+
+    settingsPage.append(header, columns);
 
     this.root.append(panel);
     panel.append(menuPage, settingsPage);
@@ -456,7 +463,7 @@ export class SettingsScreen {
     for (const [key, element] of this.pages) element.classList.toggle('active', key === page);
     // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），进设置页时对一次账
     if (page === 'settings' && this.flyingToggle) {
-      this.flyingToggle.checked = this.actions.isFlying?.() ?? false;
+      this.flyingToggle.textContent = SettingsScreen.onOff(this.actions.isFlying?.() ?? false);
     }
   }
 
@@ -555,8 +562,45 @@ export class SettingsScreen {
   }
 
   /**
-   * 造一个下拉选择设置项。
-   * 视角模式这种"就那么几个选项"的设置用下拉最省地方，也比滑块直观。
+   * 造一个原版的"循环切换"行（批次 109）。
+   *
+   * ⚠️ 基岩版的设置界面里**没有下拉框、也没有复选框**：所有"几个选项里挑一个"的
+   * 设置项都是同一颗灰按钮，点一下换下一个值（显示成 `‹ 中 ›`），布尔项就是 `开 / 关`。
+   * 这不是我们的发明——用户点名要"跟他做的一模一样"，而且它顺带省掉了手机上
+   * "点开下拉框、再点一个选项"那一步（原生 `<select>` 在手机上还是系统弹层，
+   * 完全无法做像素风）。
+   *
+   * @param read   当前值 → 按钮上显示的文字
+   * @param cycle  点一下 → 换到下一个值，返回新的显示文字
+   */
+  private makeCycleRow(host: HTMLElement, label: string, read: () => string, cycle: () => string): HTMLButtonElement {
+    const row = document.createElement('label');
+    row.className = 'settings-row';
+
+    const name = document.createElement('span');
+    name.textContent = label;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-cycle';
+    button.textContent = read();
+    button.addEventListener('click', () => {
+      button.textContent = cycle();
+    });
+
+    row.append(name, button);
+    host.appendChild(row);
+    return button;
+  }
+
+  /** 布尔项的按钮文字：原版就是写"开 / 关"两个字 */
+  private static onOff(value: boolean): string {
+    return value ? '‹ 开 ›' : '‹ 关 ›';
+  }
+
+  /**
+   * 造一个循环切换的设置项（视角 / 粒子效果 / 触摸摇杆）。
+   * 选项只有两三个，用循环按钮比下拉框直观，也才是原版的样子。
    */
   private makeSelect<T extends string>(
     options: HTMLElement,
@@ -564,34 +608,25 @@ export class SettingsScreen {
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
-  ): HTMLSelectElement {
-    const row = document.createElement('label');
-    row.className = 'settings-row';
-
-    const name = document.createElement('span');
-    name.textContent = label;
-
-    const select = document.createElement('select');
-    select.className = 'settings-select';
-    for (const value of values) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = labels[value];
-      select.appendChild(option);
-    }
-    select.value = this.settings[key];
-
-    select.addEventListener('change', () => {
-      // 逐个分支赋值：`GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查
-      if (key === 'cameraMode') this.settings.cameraMode = select.value as CameraMode;
-      else if (key === 'particles') this.settings.particles = select.value as ParticleLevel;
-      else this.settings.touchStick = select.value as StickMode;
-      this.commit();
-    });
-
-    row.append(name, select);
-    options.appendChild(row);
-    return select;
+  ): HTMLButtonElement {
+    const current = (): T => {
+      const value = this.settings[key] as T;
+      return values.includes(value) ? value : values[0]!;
+    };
+    return this.makeCycleRow(
+      options,
+      label,
+      () => `‹ ${labels[current()]} ›`,
+      () => {
+        const next = values[(values.indexOf(current()) + 1) % values.length]!;
+        // 逐个分支赋值：`GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查
+        if (key === 'cameraMode') this.settings.cameraMode = next as CameraMode;
+        else if (key === 'particles') this.settings.particles = next as ParticleLevel;
+        else this.settings.touchStick = next as StickMode;
+        this.commit();
+        return `‹ ${labels[next]} ›`;
+      },
+    );
   }
 
   /** 资源包导入行（.mcpack / .zip） */
@@ -626,45 +661,30 @@ export class SettingsScreen {
    * 按当前状态刷新、切一下立刻生效，不落盘。
    */
   private makeCreativeRow(): void {
-    const row = document.createElement('label');
-    row.className = 'settings-row';
-
-    const name = document.createElement('span');
-    name.textContent = '创造模式';
-
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = this.actions.isFlying?.() ?? false;
-    input.addEventListener('change', () => {
-      this.actions.onToggleFly?.();
-      // 以真实状态为准回填（切换可能被拒绝/立刻被别的逻辑改回去）
-      input.checked = this.actions.isFlying?.() ?? input.checked;
-    });
-
-    const hint = document.createElement('i');
-    hint.textContent = '飞行';
-
-    row.append(name, input, hint);
-    this.flyingToggle = input;
-    this.section('game').appendChild(row);
+    this.flyingToggle = this.makeCycleRow(
+      this.section('game'),
+      '创造模式（飞行）',
+      () => SettingsScreen.onOff(this.actions.isFlying?.() ?? false),
+      () => {
+        this.actions.onToggleFly?.();
+        // 以真实状态为准回填（切换可能被拒绝/立刻被别的逻辑改回去）
+        return SettingsScreen.onOff(this.actions.isFlying?.() ?? false);
+      },
+    );
   }
 
-  /** 造一个开关设置项 */
-  private makeToggle(options: HTMLElement, key: BoolSettingKey, label: string): HTMLInputElement {
-    const row = document.createElement('label');
-    row.className = 'settings-row';
-    const name = document.createElement('span');
-    name.textContent = label;
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = this.settings[key];
-    input.addEventListener('change', () => {
-      this.settings[key] = input.checked;
-      this.commit();
-    });
-    row.append(name, input);
-    options.appendChild(row);
-    return input;
+  /** 造一个开关设置项（原版形态：一颗"‹ 开 ›/‹ 关 ›"的灰按钮，点一下切换） */
+  private makeToggle(options: HTMLElement, key: BoolSettingKey, label: string): HTMLButtonElement {
+    return this.makeCycleRow(
+      options,
+      label,
+      () => SettingsScreen.onOff(this.settings[key]),
+      () => {
+        this.settings[key] = !this.settings[key];
+        this.commit();
+        return SettingsScreen.onOff(this.settings[key]);
+      },
+    );
   }
 
   private commit(): void {

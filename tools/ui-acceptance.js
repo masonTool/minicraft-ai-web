@@ -290,10 +290,28 @@
     check('tooltip has an enchant row', !!tip?.querySelector('.tooltip-enchant'));
     check('tooltip durability row carries a mini bar', !!tip?.querySelector('.tooltip-durability .dur-bar'));
 
-    // 设计令牌真的生效：面板背景来自 `--panel-bg`（渐变），而不是被写死的色值
+    // 设计令牌真的生效：面板背景必须与 `--panel-bg` 解析出来的**完全一致**，
+    // 而不是被某处写死的色值盖住。
+    // ⚠️ 批次 109 起原版面板是**纯色** `#c6c6c6`（不再是渐变），所以这里不能只认
+    // `backgroundImage.includes('gradient')`。改成拿同一个令牌造一个探针元素对比——
+    // 这个判据对"令牌改成纯色/渐变/图片"都成立，比盯住某一种渲染结果牢靠。
     const panelStyle = getComputedStyle(document.querySelector('.inv-panel'));
-    check('theme tokens reach the panel', panelStyle.backgroundImage.includes('gradient'), panelStyle.backgroundImage.slice(0, 48));
-    info(`panel background: ${panelStyle.backgroundImage.slice(0, 48)}…`);
+    const probe = document.createElement('div');
+    probe.style.background = 'var(--panel-bg)';
+    probe.style.position = 'absolute';
+    probe.style.left = '-9999px';
+    document.body.appendChild(probe);
+    const probeStyle = getComputedStyle(probe);
+    const tokenBg = getComputedStyle(document.documentElement).getPropertyValue('--panel-bg').trim();
+    check(
+      'theme tokens reach the panel',
+      panelStyle.backgroundColor === probeStyle.backgroundColor &&
+        panelStyle.backgroundImage === probeStyle.backgroundImage &&
+        panelStyle.backgroundColor !== 'rgba(0, 0, 0, 0)',
+      `--panel-bg: ${tokenBg} -> ${panelStyle.backgroundColor}`,
+    );
+    probe.remove();
+    info(`panel background: ${panelStyle.backgroundColor}`);
   }
 
   // ------------------------------------------- 3.6 配方书：摆放位置与分页

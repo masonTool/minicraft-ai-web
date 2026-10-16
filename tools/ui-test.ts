@@ -180,7 +180,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
     // 暂停菜单那一页（批次 108）：一页只放"几个主要按钮"，竖排
     ['暂停菜单的主按钮竖排', '.pause-actions { display: flex; flex-direction: column; gap: 8px;'],
     ['手机上暂停按钮热区 48px', 'body.touch-mode .pause-action { min-height: 48px; font-size: 15px; }'],
-    ['设置页有 ‹ 返回（它是暂停菜单的二级页面）', '.settings-back { flex: 0 0 auto; padding: 0 10px; height: 36px;'],
+    ['设置页有 ‹ 返回（它是暂停菜单的二级页面）', '.settings-back { flex: 0 0 auto; padding: 0 10px; height: 34px;'],
     ['暂停菜单那一页自己滚（设置页滚的是里面那块）', "body.touch-mode .pause-page[data-page='menu'].active { overflow-y: auto; }"],
     ['矮屏才退回分组页签', 'body.touch-mode .settings-tabs { display: flex; flex: 0 0 auto; padding: 0 0 8px; }'],
     ['手机端不显示快捷栏序号（没有数字键）', 'body.touch-mode #hotbar .slot .index { display: none; }'],
@@ -485,7 +485,10 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
 
   // 搬走之后必须**在设置里有对应入口**，否则这两项在手机上等于消失
   const settingsSource = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
-  check('设置面板补了"创造模式（飞行）"开关', settingsSource.includes("name.textContent = '创造模式'"));
+  check(
+    '设置面板补了"创造模式（飞行）"开关',
+    settingsSource.includes("'创造模式（飞行）'") && settingsSource.includes('private makeCreativeRow'),
+  );
   check('设置面板里的"视角"下拉还在', settingsSource.includes("this.makeSelect(controls, 'cameraMode', '视角'"));
   check(
     '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
@@ -569,18 +572,65 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
     '深色面板（主菜单/暂停菜单）用深色斜角',
     compact.includes('border: 3px solid; border-color: var(--pixel-bevel-dark); border-radius: 0;'),
   );
-  check('深色底上的按钮用半透明斜角', compact.includes('border-color: var(--pixel-bevel-on-dark);'));
   // ③ 投影变硬（像素风不要 44px 的柔光）
-  check('面板投影是硬边而不是柔光', compact.includes('--panel-shadow: 0 8px 0 rgba(0, 0, 0, .35), 0 0 0 2px rgba(0, 0, 0, .55);'));
-  // ④ 开关/滑杆不再是胶囊与圆点（这两处是最容易被当成"遗留下来的老样式"的地方）
-  check('开关的滑块是方块', !/checkbox"\]::after \{[^}]*border-radius: 50%/.test(compact));
-  check('滑杆的滑块是方块', !/range"\]::-webkit-slider-thumb \{[^}]*border-radius: 50%/.test(compact));
+  check('面板投影是硬边而不是柔光', compact.includes('--panel-shadow: 0 0 0 2px var(--mc-outline);'));
+  // ④ 原版那套按钮画法（批次 109）：灰面 + 黑描边 + inset 白/深斜面 + 文字阴影
+  check(
+    '界面按钮统一成原版画法（灰面 + 黑描边 + 斜面）',
+    compact.includes('border: 2px solid var(--mc-outline);') &&
+      compact.includes('box-shadow: inset 2px 2px 0 var(--mc-edge-light), inset -2px -2px 0 var(--mc-edge-dark);'),
+  );
+  check(
+    '按下时斜面反转（原版靠这个表达"按下了"，不靠位移）',
+    compact.includes('box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);'),
+  );
+  // ⑤ 开关/滑杆不再是胶囊与圆点（这两处是最容易被当成"遗留下来的老样式"的地方）
+  check('滑块是方块而不是圆点', !/range"\]::-webkit-slider-thumb \{[^}]*border-radius: 50%/.test(compact));
+  check('设置项没有再用原生 checkbox/select', !compact.includes('input[type="checkbox"]') && !compact.includes('settings-select'));
+  check('开关/几选一都走 .settings-cycle（原版形态）', compact.includes('.settings-cycle {'));
 
   // ⑤ "界面能左右滑"是一条真出现过的 bug：`overflow-y: auto` 会把另一轴
   //    的 `visible` 计算成 `auto`，于是整屏能被左右拖动。锁死这条规则不能被删掉。
   const lockRule = /:is\(#world-screen[\s\S]*?\) \{[^}]*overflow-x: hidden; overscroll-behavior: contain; \}/.exec(compact);
   check('整屏遮罩锁死横向滚动', !!lockRule);
   check('没有把分类标签的单行横向滚动一起锁掉', !!lockRule && !lockRule[0].includes('.inv-tabs'));
+}
+
+console.log('\n[手机横屏布局（批次 109，本项目的主要场景）]');
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  const landscape =
+    /@media \(orientation: landscape\) and \(max-height: 560px\) \{([\s\S]*?)\n      \}/.exec(html)?.[1] ?? '';
+
+  // ⚠️ 用户点明"我们的游戏在手机端是横屏的"，还问"为什么横屏下还会有那么高的界面"。
+  //    所以横屏必须是一段**显式**的规则，而不是靠 `max-height: 560px` 顺带命中
+  //    （后者把"手机横屏"和"桌面矮窗口"混成了一类）。
+  check('有一段显式的"手机横屏"规则', landscape.length > 0);
+  // 横屏只有 ~390px 高：面板要**宽而矮**（原来是 520×343 的竖条，屏幕宽度浪费一半）
+  check('横屏：设置面板改宽而矮', landscape.includes('width: min(96vw, 820px); max-width: 820px;'));
+  check('横屏：设置改"左选项卡 + 右内容"', landscape.includes('body.touch-mode .settings-columns { flex-direction: row; gap: 12px; }'));
+  check('横屏：页签竖成一列（原版就是左侧一列）', landscape.includes('flex-direction: column; flex: 0 0 108px;'));
+  check('横屏：设置行高压到 34px', landscape.includes('body.touch-mode .settings-row {') && landscape.includes('min-height: 34px;'));
+  check('横屏：暂停菜单按钮压到 40px（5 颗一屏放得下）', landscape.includes('body.touch-mode .pause-action { min-height: 40px;'));
+  check('横屏：主菜单按钮收窄、标题缩小', landscape.includes('body.touch-mode .world-menu > * { width: min(100%, 240px); }'));
+  // 每一条规则都挂在 `body.touch-mode` 上：桌面端把窗口拉矮时不该突然变成两栏
+  // （那条路径本来就有滚动，PC 验收脚本也按 1440×900 跑）
+  // 数"裸选择器"（以 `.` 开头的那种）：一条都不该有——每一条规则都要挂在
+  // `body.touch-mode` 上。（分组选择器一行里会出现两次 `body.touch-mode`，
+  // 所以不能拿"`{` 的个数"去比"前缀出现的次数"。）
+  const bareSelectors = landscape
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => /^\s*\.[a-z-]/.test(line));
+  check('横屏里没有裸选择器（每条规则都挂在触摸端上）', bareSelectors.length === 0, bareSelectors.join(' / '));
+
+  // 竖屏与桌面那两套不能被这次改动顺手删掉
+  check(
+    '竖屏/高屏仍然保留"紧凑卡片 + 四组全展开"',
+    compact.includes('body.touch-mode .settings-panel { width: min(96vw, 520px); max-width: 520px;') &&
+      compact.includes('body.touch-mode .settings-section { display: flex; }'),
+  );
 }
 
 console.log('\n[进游戏首页默认全屏]');
