@@ -142,6 +142,9 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     ['竖屏断点', '@media (orientation: portrait)'],
     ['窄屏分类标签单行滚动', 'flex-wrap: nowrap'],
     ['横屏六个按钮排 3 列', 'repeat(3, 54px)'],
+    // 切石机（H11，批次 44）：候选列表与候选按钮的样式被误删时这里会红
+    ['切石机候选列表', '.stonecutter-list'],
+    ['切石机候选按钮', '.stonecutter-option'],
   ] as const) {
     check(`index.html 里有"${label}"`, html.includes(needle), needle);
   }
