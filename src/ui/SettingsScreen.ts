@@ -10,7 +10,7 @@
  */
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
-import { STICK_MODES, STICK_MODE_LABELS, type StickMode } from './TouchControls.ts';
+import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './TouchControls.ts';
 
 /**
  * 粒子效果强度。
@@ -37,6 +37,25 @@ export const PARTICLE_DENSITY: Record<ParticleLevel, number> = {
 /** 触摸按钮 / 摇杆的大小倍率范围（批次 97）：0.8× 到 1.4× */
 export const TOUCH_SCALE_MIN = 0.8;
 export const TOUCH_SCALE_MAX = 1.4;
+
+/**
+ * 设置项的分组（批次 104）。
+ *
+ * 分组不只是排版：**手机上它就是页签**——一次只显示一组，每组不超过 4 行，
+ * 于是整个"设置"一屏放得下、**不用滚**。原来 11 个设置项排成一长条，
+ * 手机上要滚三屏才看得到"音量"（用户反馈的正是这件事；基岩版手机也是分页的）。
+ * 桌面端不显示页签，四组按原来的样子连着列出来（宽屏一屏放得下，不需要多一层点击）。
+ */
+export const SETTING_GROUPS = ['graphics', 'controls', 'sound', 'game'] as const;
+
+export type SettingGroup = (typeof SETTING_GROUPS)[number];
+
+export const SETTING_GROUP_LABELS: Record<SettingGroup, string> = {
+  graphics: '图形',
+  controls: '操作',
+  sound: '声音',
+  game: '游戏',
+};
 
 /** 布尔型设置项（开关那种），单独取个名字给 makeToggle 用 */
 type BoolSettingKey = 'clouds' | 'invertY' | 'daylightCycle' | 'showDebug' | 'adaptiveViewDistance';
@@ -174,6 +193,14 @@ export class SettingsScreen {
   private readonly titleEl: HTMLElement;
   private readonly subtitleEl: HTMLElement;
   private readonly resumeButton: HTMLButtonElement;
+  private readonly closeButton: HTMLButtonElement;
+  /** 一个分组 = 一个 section；手机端一次只显示一个（见 `setActiveGroup`） */
+  private readonly sections = new Map<SettingGroup, HTMLElement>();
+  private readonly tabs = new Map<SettingGroup, HTMLButtonElement>();
+  /** 当前页签（手机端生效；桌面端四组全显示，这个值只是"下次打开停在哪一页"） */
+  private activeGroup: SettingGroup = SETTING_GROUPS[0];
+  /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
+  private subtitleText = '按 Esc 继续游戏';
 
   constructor(
     host: HTMLElement,
@@ -187,12 +214,44 @@ export class SettingsScreen {
     const panel = document.createElement('div');
     panel.className = 'settings-panel';
 
+    // ---- 标题栏：标题 + 副标题 + 关闭 ✕
+    const header = document.createElement('div');
+    header.className = 'settings-header';
+
     this.titleEl = document.createElement('b');
     this.titleEl.textContent = '设置与暂停';
 
     this.subtitleEl = document.createElement('div');
     this.subtitleEl.className = 'settings-hint';
-    this.subtitleEl.textContent = '按 Esc 继续游戏';
+
+    // 右上角的 ✕（批次 104）：手机上既没有 Esc、也没地方点"空白"（面板是整屏的），
+    // 玩家需要一个"看得见就知道能关"的出口。形状与配方书、成就面板统一。
+    this.closeButton = document.createElement('button');
+    this.closeButton.type = 'button';
+    this.closeButton.className = 'settings-close';
+    this.closeButton.textContent = '✕';
+    this.closeButton.setAttribute('aria-label', '关闭设置');
+    this.closeButton.addEventListener('click', () => this.actions.onResume());
+
+    header.append(this.titleEl, this.subtitleEl, this.closeButton);
+
+    // ---- 分组页签（手机端显示，桌面端由 CSS 隐藏）
+    //
+    // ⚠️ 刻意**不用** `role="tab"`：那套 ARIA 要求"一个 tab 配一个 tabpanel"，
+    // 而桌面端四个 section 是同时显示的（页签只是隐藏的装饰）——两种模式下语义相反，
+    // 挂上 tab 角色反而会让读屏念出错误的层级。用 `aria-pressed` 就够表达"当前选中哪个"。
+    const tabs = document.createElement('div');
+    tabs.className = 'settings-tabs';
+    for (const group of SETTING_GROUPS) {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'settings-tab';
+      tab.dataset.group = group;
+      tab.textContent = SETTING_GROUP_LABELS[group];
+      tab.addEventListener('click', () => this.setActiveGroup(group));
+      this.tabs.set(group, tab);
+      tabs.appendChild(tab);
+    }
 
     // ---- 操作按钮
     const buttons = document.createElement('div');
@@ -229,50 +288,91 @@ export class SettingsScreen {
     if (!this.actions.onExitToMenu) exitToMenu.style.display = 'none';
     if (!this.actions.onDeleteWorld) deleteWorld.style.display = 'none';
 
-    // ---- 设置项（分类成组：图形 / 操作 / 声音 / 游戏；太长的一列没人看得完）
-    const options = document.createElement('div');
-    options.className = 'settings-options';
+    // ---- 设置项（按分组切成 section：每组的行数不多，一屏放得下）
+    const body = document.createElement('div');
+    body.className = 'settings-body';
+    for (const group of SETTING_GROUPS) {
+      const section = document.createElement('section');
+      section.className = 'settings-section';
+      section.dataset.group = group;
+      // 分类小标题只在桌面端显示（手机端页签上已经写着组名了，再来一行纯属占地方）
+      section.appendChild(this.makeGroup(SETTING_GROUP_LABELS[group]));
+      this.sections.set(group, section);
+      body.appendChild(section);
+    }
 
-    options.appendChild(this.makeGroup('图形'));
-    options.append(
+    const graphics = this.section('graphics');
+    graphics.append(
       this.makeSlider('viewDistance', '视距', ' 区块', 4, 16, 1),
       this.makeSlider('fov', '视野', '°', 60, 110, 1),
     );
-    this.makeToggle(options, 'clouds', '云');
-    this.makeToggle(options, 'adaptiveViewDistance', '自适应视距');
-    this.makeSelect(options, 'particles', '粒子效果', PARTICLE_LEVELS, PARTICLE_LEVEL_LABELS);
+    this.makeToggle(graphics, 'clouds', '云');
+    this.makeToggle(graphics, 'adaptiveViewDistance', '自适应视距');
+    this.makeSelect(graphics, 'particles', '粒子效果', PARTICLE_LEVELS, PARTICLE_LEVEL_LABELS);
 
-    options.appendChild(this.makeGroup('操作'));
-    this.makeSelect(options, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
+    const controls = this.section('controls');
+    this.makeSelect(controls, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异，所以给两档自己挑
-    this.makeSelect(options, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
+    this.makeSelect(controls, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
     // 触摸按钮大小（批次 97）：手机上线 44px 只是下限，多大才顺手因人而异
-    this.makeSlider('touchScale', '触摸按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100);
-    options.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05));
-    this.makeToggle(options, 'invertY', '反转上下视角');
+    controls.append(this.makeSlider('touchScale', '触摸按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100));
+    controls.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05));
+    this.makeToggle(controls, 'invertY', '反转上下视角');
 
-    options.appendChild(this.makeGroup('声音'));
-    options.append(this.makeSlider('volume', '音量', '%', 0, 100, 1, 100));
+    const sound = this.section('sound');
+    sound.append(this.makeSlider('volume', '音量', '%', 0, 100, 1, 100));
 
-    options.appendChild(this.makeGroup('游戏'));
-    this.makeToggle(options, 'daylightCycle', '昼夜循环');
-    this.makeToggle(options, 'showDebug', '调试信息');
-    options.appendChild(this.makeResourcePackRow());
+    const game = this.section('game');
+    this.makeToggle(game, 'daylightCycle', '昼夜循环');
+    this.makeToggle(game, 'showDebug', '调试信息');
+    game.appendChild(this.makeResourcePackRow());
 
     this.metaEl = document.createElement('div');
-    this.metaEl.className = 'settings-hint';
+    this.metaEl.className = 'settings-hint settings-meta';
 
     this.root.append(panel);
-    panel.append(this.titleEl, this.subtitleEl, buttons, options, this.metaEl);
+    panel.append(header, tabs, body, buttons, this.metaEl);
     host.appendChild(this.root);
 
-    // 点面板外的区域 = 继续游戏（与原版"点空白关闭"一致）
+    this.setActiveGroup(SETTING_GROUPS[0]);
+    this.renderSubtitle();
+
+    // 点面板外的区域 = 继续游戏（与原版"点空白关闭"一致）。
+    // ⚠️ 这条只对桌面生效：触摸端面板是整屏的（`body.touch-mode`），没有"外面"可点。
     this.root.addEventListener('pointerdown', (event) => {
       if (event.target === this.root) this.actions.onResume();
     });
   }
 
-  /** 分类标题 */
+  /** 取某个分组的容器（设置项都往它里面塞） */
+  private section(group: SettingGroup): HTMLElement {
+    const element = this.sections.get(group);
+    if (!element) throw new Error(`未定义的分组：${group}`);
+    return element;
+  }
+
+  /**
+   * 切到某个分组。
+   *
+   * 桌面端四组全都可见，所以这个调用在桌面上只影响"下次打开停在哪一页"；
+   * 手机上由 CSS 只放行 `.settings-section.active` 那一组——一次一屏，不用滚。
+   */
+  setActiveGroup(group: SettingGroup): void {
+    this.activeGroup = group;
+    for (const [key, section] of this.sections) section.classList.toggle('active', key === group);
+    for (const [key, tab] of this.tabs) {
+      const on = key === group;
+      tab.classList.toggle('active', on);
+      tab.setAttribute('aria-pressed', String(on));
+    }
+  }
+
+  /** 当前分组（验收脚本/调试用） */
+  get activeSection(): SettingGroup {
+    return this.activeGroup;
+  }
+
+  /** 分类标题（只在桌面端显示；手机端页签上已经写着组名） */
   private makeGroup(label: string): HTMLDivElement {
     const group = document.createElement('div');
     group.className = 'settings-group';
@@ -415,8 +515,20 @@ export class SettingsScreen {
    */
   setTitle(title: string, subtitle: string, resumeLabel = '继续游戏'): void {
     this.titleEl.textContent = title;
-    this.subtitleEl.textContent = subtitle;
+    this.subtitleText = subtitle;
+    this.renderSubtitle();
     this.resumeButton.textContent = resumeLabel;
+  }
+
+  /**
+   * 副标题：桌面端保留"按 Esc 继续游戏"这类键盘提示；触摸端换成不含键盘的说法
+   *（批次 104：手机上没有 Esc，"按 Esc"只会让人去找一个不存在的键）。
+   *
+   * 渲染时机放在 `show()` 而不是构造那一刻：`<body class="touch-mode">` 是
+   * 触摸操作层建立时挂上的，比这个面板**晚**（主菜单里那个设置面板更晚）。
+   */
+  private renderSubtitle(): void {
+    this.subtitleEl.textContent = isTouchUi() ? '改动立即生效 · 点右上角 ✕ 返回' : this.subtitleText;
   }
 
   get isOpen(): boolean {
@@ -425,6 +537,7 @@ export class SettingsScreen {
 
   show(): void {
     this.open = true;
+    this.renderSubtitle();
     this.root.classList.remove('hidden');
   }
 

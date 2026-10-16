@@ -580,10 +580,42 @@
         padding: 16px 18px 18px; font-size: 13px;
         border: 1px solid #ffffff24;
         box-shadow: 0 20px 60px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .06);
+        /* 标题栏 / 页签 / 设置项 / 动作按钮 / 存档信息 五段用 order 排，而不是靠 DOM 顺序：
+           同一份 DOM 要在两种排法之间切换——桌面是"按钮在上、四组连着列"，
+           手机是"页签在上、设置项居中、动作按钮垫底"。为两种排法各建一套 DOM，
+           迟早出现"手机上改了、桌面上没改"的漂移（这个仓库已经吃过几次这种亏）。 */
+        display: flex; flex-direction: column;
       }
+      /* ⚠️ 每一段都写 `flex: 0 0 auto`：面板是"flex 列 + overflow-y: auto"，
+         而 flex 项默认 `flex-shrink: 1`——不写的话内容会被**压缩**到不溢出，
+         于是既不出现滚动条、设置项又会溢出自己的盒子压到下面的存档信息上。
+         （触摸端把 `.settings-body` 改回 `flex: 1 1 auto`，那一块才是唯一滚动的区域。） */
+      .settings-header { display: flex; align-items: center; gap: 8px; order: 0; flex: 0 0 auto; }
       .settings-panel b { font-size: 19px; display: block; letter-spacing: 1px; }
+      .settings-header b { flex: 1 1 auto; min-width: 0; }
+      /* 副标题挪进标题栏了，别再吃那 12px 的下边距 */
+      .settings-header .settings-hint { margin: 0; }
+      .settings-close {
+        flex: 0 0 auto; width: 40px; height: 36px;
+        font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+        color: #e8e8e8; background: rgba(255, 255, 255, .1);
+        border: 1px solid #ffffff33; border-radius: var(--btn-radius);
+        transition: background var(--dur-fast) var(--ease);
+      }
+      .settings-close:active { background: rgba(255, 255, 255, .24); }
+      /* 分组页签：桌面隐藏、手机显示（手机上它就是"分页"，一次只看一组 → 不用滚） */
+      .settings-tabs { display: none; order: 1; gap: 6px; flex: 0 0 auto; }
+      .settings-tab {
+        font: inherit; font-size: 13px; padding: 8px 12px; min-height: 40px;
+        flex: 1 1 auto; white-space: nowrap; cursor: pointer;
+        background: var(--btn-bg); color: var(--btn-text);
+        border: 2px solid;
+        border-color: var(--panel-edge-light) var(--panel-edge-dark) var(--panel-edge-dark) var(--panel-edge-light);
+        border-radius: var(--btn-radius);
+      }
+      .settings-tab.active { background: var(--btn-primary); color: #fff; }
       .settings-hint { color: #9a9a9a; font-size: 12px; margin: 4px 0 12px; }
-      .settings-buttons { display: flex; gap: 8px; margin-bottom: 14px; }
+      .settings-buttons { display: flex; gap: 8px; margin-bottom: 14px; order: 2; flex: 0 0 auto; }
       .settings-buttons button {
         flex: 1; padding: 10px; font: inherit; font-size: 13px; cursor: pointer;
         background: var(--btn-primary); color: #fff;
@@ -592,7 +624,10 @@
       }
       .settings-buttons button.danger { background: var(--btn-danger); }
       .settings-buttons button:active { transform: translateY(1px); filter: brightness(.92); }
-      .settings-options { display: flex; flex-direction: column; gap: 9px; }
+      /* 设置项按分组切成四段（与页签一一对应）：桌面全部显示，手机只显示 .active 那段 */
+      .settings-body { order: 3; display: flex; flex-direction: column; gap: 9px; flex: 0 0 auto; }
+      .settings-section { display: flex; flex-direction: column; gap: 9px; }
+      .settings-meta { order: 4; margin: 10px 0 0; flex: 0 0 auto; }
       .settings-row { display: grid; grid-template-columns: 96px 1fr 56px; align-items: center; gap: 8px; }
       .settings-row i { font-style: normal; color: #9a9a9a; text-align: right; }
       /* ---------------- 开关（checkbox 自绘） ----------------
@@ -654,6 +689,57 @@
         grid-column: 2 / 4; width: 100%; padding: 4px 6px; font: inherit; font-size: 12px;
         background: #2a2a2d; color: #eee; border: 1px solid #ffffff33; border-radius: 3px;
       }
+
+      /* ---------------- 手机端：设置面板整屏 + 分组页签（批次 104） ----------------
+         基岩版手机上的设置就是**整屏、按分组分页**（图形 / 操作 / 声音 / 游戏）。
+         本项目原来在手机上也是那张 420px 的居中卡片、11 个设置项排成一长条：
+         手机上要滚三屏才够得着"音量"，而且"继续游戏"一直被推到看不到的地方。
+         页签化之后每个分组不超过 4 行，一屏一页，滚动手势彻底用不上。
+         ⚠️ 判据用 `body.touch-mode` 而不是 `@media (max-width: 900px)`：
+         平板（1024×768 触摸屏）也该拿这套整屏布局，而它不命中那个宽度断点。
+         ⚠️ 这里是"后出现、同优先级"的规则，会盖掉上面桌面那套——所以每一处
+         需要变的属性都要在这里**显式**写上（少了哪条就是哪一种"半手机半桌面"的怪界面）。 */
+      body.touch-mode #settings-screen { background: #17181c; }
+      body.touch-mode .settings-panel {
+        width: 100%; max-width: none; height: 100%; max-height: none;
+        border: none; border-radius: 0; padding: 0;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        overflow: hidden;
+        /* 整屏面板再"淡入放大"会显得晃（它本来就占满屏幕），直接免掉 */
+        animation: none;
+      }
+      body.touch-mode .settings-header { flex: 0 0 auto; padding: 12px 14px 6px; gap: 10px; }
+      body.touch-mode .settings-close { width: 48px; height: 44px; font-size: 18px; }
+      body.touch-mode .settings-tabs { display: flex; flex: 0 0 auto; padding: 0 14px 8px; }
+      /* 只有设置项那一块滚动（标题栏/页签/动作按钮都钉住），
+         再加上"一次只显示一组"，实际上滚不动——这正是用户要的"减少滚动"。 */
+      body.touch-mode .settings-body {
+        order: 2; flex: 1 1 auto; min-height: 0;
+        overflow-y: auto; padding: 4px 14px 8px;
+      }
+      body.touch-mode .settings-section { display: none; }
+      body.touch-mode .settings-section.active { display: flex; }
+      /* 页签上已经写着组名，段内那行小标题在手机上是重复信息 */
+      body.touch-mode .settings-group { display: none; }
+      body.touch-mode .settings-buttons {
+        order: 3; flex: 0 0 auto; flex-wrap: wrap;
+        padding: 8px 14px 4px; margin-bottom: 0;
+      }
+      body.touch-mode .settings-buttons button { flex: 1 1 44%; min-height: 46px; font-size: 15px; }
+      body.touch-mode .settings-meta { order: 4; padding: 0 14px; margin: 6px 0 0; }
+      /* 行高与控件都放大到"手指点得准"（44px 是平台下限，原来滑杆只有 22px 高） */
+      body.touch-mode .settings-row {
+        grid-template-columns: minmax(88px, auto) 1fr 58px; min-height: 44px;
+      }
+      body.touch-mode .settings-row input[type="range"] { height: 44px; }
+      body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
+        width: 24px; height: 24px; margin-top: -9px;
+      }
+      body.touch-mode .settings-row input[type="checkbox"] { width: 52px; height: 30px; }
+      body.touch-mode .settings-row input[type="checkbox"]::after { width: 24px; height: 24px; }
+      body.touch-mode .settings-row input[type="checkbox"]:checked::after { transform: translateX(22px); }
+      body.touch-mode .settings-row select.settings-select { font-size: 14px; padding: 8px; }
 
       /* ---------------- 状态效果 HUD ---------------- */
       #effects-hud {
