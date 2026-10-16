@@ -87,6 +87,8 @@ const VANILLA: Record<string, readonly [number, number]> = {
   // ---- 批次 49
   sweet_berries: [2, 0.4],
   cookie: [2, 0.4],
+  // ---- 批次 50（海带）：1 点饥饿 / 0.6 点饱和度（原版；单吃很亏，压成块当燃料才是它的用处）
+  dried_kelp: [1, 0.6],
 };
 
 equal('食物种类数', Object.keys(FOOD_TABLE).length, Object.keys(VANILLA).length);
