@@ -312,7 +312,15 @@ console.log('\n[维度与空腔（批次 94）]');
   const open: Spawned[] = [];
   runCycles(new MobSpawner(), makeContext({ sky: 0, block: 0, dimension: 'nether', airBox: true, spawned: open }));
   check('下界里有一片 4×4 空腔 → 刷得出恶魂', open.some((entry) => entry.type.id === 'ghast'), open.map((e) => e.type.id).join(','));
-  check('下界里只刷恶魂这一种（这一刻，别的都写着主世界）', open.every((entry) => entry.type.id === 'ghast'), open.map((e) => e.type.id).join(','));
+  // ⚠️ 批次 121 起下界有**两种**自然刷的敌对生物了（恶魂 + 大岩浆怪）：
+  // 这条原本写的是"只刷恶魂这一种"——那时岩浆怪还没做，现在按**集合**断言
+  const netherKinds = [...new Set(open.map((entry) => entry.type.id))].sort();
+  check('大岩浆怪确实会刷（批次 121 起下界的第二只）', open.some((entry) => entry.type.id === 'magma_cube_big'));
+  check(
+    '下界里只刷下界那两种（主世界的怪一只都不来）',
+    netherKinds.length > 0 && netherKinds.every((id) => id === 'ghast' || id === 'magma_cube_big'),
+    netherKinds.join(','),
+  );
 }
 
 console.log(`\n生成测试：${passed} 通过 / ${failed} 失败\n`);

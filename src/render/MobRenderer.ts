@@ -84,8 +84,19 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
   // 凋灵（批次 116）：三颗头 + 肋骨笼，与任何现有骨架都不同
   if (typeId === 'wither') return 'wither';
-  // 史莱姆（批次 120）：三档尺寸都是"果冻方块 + 内核"，所以三者的 id 共用一个骨架
-  if (typeId === 'slime' || typeId === 'slime_big' || typeId === 'slime_small') return 'slime';
+  // 史莱姆（批次 120）：三档尺寸都是"果冻方块 + 内核"，所以三者的 id 共用一个骨架。
+  // 岩浆怪（批次 121）也走这一个：原版它们的几何**一模一样**，区别只在贴图与颜色
+  // （深红外壳 + 亮橙内核），所以没必要再开一个骨架
+  if (
+    typeId === 'slime' ||
+    typeId === 'slime_big' ||
+    typeId === 'slime_small' ||
+    typeId === 'magma_cube' ||
+    typeId === 'magma_cube_big' ||
+    typeId === 'magma_cube_small'
+  ) {
+    return 'slime';
+  }
   if (typeId === 'end_crystal') return 'crystal';
   if (typeId === 'blaze') return 'blaze';
   if (typeId === 'villager') return 'villager';

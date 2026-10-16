@@ -418,6 +418,90 @@ export const SLIME_SMALL_TYPE: MobType = {
   eyeHeight: 0.35,
 };
 
+/**
+ * 岩浆怪三档（批次 121，J15 的下一只）。
+ *
+ * 它基本上是**史莱姆的孪生兄弟**：同一个骨架（一个方块 + 内核）、同一套跳跃式移动、
+ * 同一条分裂链——所以这一批没有新机制，只是**填数据**（这正是批次 120 那几个字段的用处：
+ * `hops` / `splitsInto` / `spawnSpace`）。与本体的三处差别：
+ *  - **免疫火焰**（`fireImmune`：它自己就是岩浆做的，掉进岩浆里也不会烧起来）；
+ *  - **三档都掉岩浆膏**（0~1；史莱姆只有最小那一档掉黏液球）——原版就如此，
+ *    所以"打死哪一档"都有收获；
+ *  - 只在下界刷（`dimension: 'nether'`，与烈焰人/恶魂同一条）。
+ *
+ * ⚠️ 与原版的差异（记在 TASKS J15）：**不做天然护甲**（原版岩浆怪有 3 点护甲，
+ * 本项目生物没有护甲这一档——所以它在数值上比原版脆）；
+ * **跳到玩家身上不会额外点着火**（原版岩浆怪的接触伤害本身就是火焰伤害，
+ * 这里用普通的接触伤害 + "免疫火"表达，避免"被打一下还着火"这种雪上加霜的体验）；
+ * 中/小两档同样**不自然刷**（只让"大"那一档当自然刷的那一档，与史莱姆同一个取舍）。
+ */
+export const MAGMA_CUBE_BIG_TYPE: MobType = {
+  id: 'magma_cube_big',
+  name: '岩浆怪（大）',
+  health: 16,
+  width: 2,
+  height: 2,
+  speed: 2.2,
+  hostile: true,
+  attackDamage: 6,
+  followRange: 16,
+  drops: [{ itemId: Item.MAGMA_CREAM, min: 0, max: 1 }],
+  xp: 4,
+  hops: true,
+  fireImmune: true,
+  splitsInto: 'magma_cube',
+  dimension: 'nether',
+  spawnSpace: { width: 2, height: 2 },
+  bodyColor: 0x8f3a14,
+  accentColor: 0xff7a24,
+  eyeHeight: 1.4,
+};
+
+/** 岩浆怪（中）：与史莱姆一样，自然刷的是"大"那一档，它从分裂里出现 */
+export const MAGMA_CUBE_TYPE: MobType = {
+  id: 'magma_cube',
+  name: '岩浆怪',
+  health: 4,
+  width: 1,
+  height: 1,
+  speed: 1.8,
+  hostile: true,
+  attackDamage: 4,
+  followRange: 16,
+  drops: [{ itemId: Item.MAGMA_CREAM, min: 0, max: 1 }],
+  xp: 2,
+  hops: true,
+  fireImmune: true,
+  splitsInto: 'magma_cube_small',
+  naturalSpawn: false,
+  dimension: 'nether',
+  bodyColor: 0x8f3a14,
+  accentColor: 0xff7a24,
+  eyeHeight: 0.7,
+};
+
+/** 岩浆怪（小）：最小的那一档也一样凶（原版 2 点伤害），只是更脆 */
+export const MAGMA_CUBE_SMALL_TYPE: MobType = {
+  id: 'magma_cube_small',
+  name: '岩浆怪（小）',
+  health: 1,
+  width: 0.5,
+  height: 0.5,
+  speed: 1.4,
+  hostile: true,
+  attackDamage: 2,
+  followRange: 16,
+  drops: [{ itemId: Item.MAGMA_CREAM, min: 0, max: 1 }],
+  xp: 1,
+  hops: true,
+  fireImmune: true,
+  naturalSpawn: false,
+  dimension: 'nether',
+  bodyColor: 0x8f3a14,
+  accentColor: 0xff7a24,
+  eyeHeight: 0.35,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -429,6 +513,10 @@ export const MOB_TYPES: readonly MobType[] = [
   SLIME_BIG_TYPE,
   SLIME_TYPE,
   SLIME_SMALL_TYPE,
+  // 岩浆怪三档（批次 121）：同一个取舍——只有"大"自然刷，另两档从分裂里来
+  MAGMA_CUBE_BIG_TYPE,
+  MAGMA_CUBE_TYPE,
+  MAGMA_CUBE_SMALL_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

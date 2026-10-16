@@ -70,6 +70,14 @@ export interface SurvivalEnvironment {
   inFire?: boolean;
   /** 身体贴着仙人掌 */
   onCactus: boolean;
+  /**
+   * **脚底下踩着岩浆块**（批次 121，原版：每秒 1 点**火焰伤害**）。
+   *
+   * 与 `onCactus` 分开写，因为两者的判据不同：仙人掌是"身体**贴着**它"，
+   * 岩浆块是"**站在它上面**"（它自己就是那一格地面）。也不同于 `inFire`：
+   * 岩浆块**不会把人点着**，只是持续烫——所以"抗火"能挡它（走 `'fire'` 那条 source）。
+   */
+  onMagma?: boolean;
   /** 身体被不透明方块压住（窒息） */
   suffocating: boolean;
   /** 本 tick 的落地高度（未落地为 0） */
@@ -138,6 +146,8 @@ export class PlayerStats {
   private drownTickTimer = 0;
   private lavaTickTimer = 0;
   private fireTickTimer = 0;
+  /** 岩浆块的烫伤计时（批次 121）：攒够 20 tick（= 1 秒）掉 1 点 */
+  private magmaBlockTimer = 0;
 
   /**
    * 着火剩余秒数（站在火里 / 被点燃后持续掉血）。
@@ -338,6 +348,20 @@ export class PlayerStats {
       }
     } else {
       this.lavaTickTimer = 0;
+    }
+
+    // 岩浆块（批次 121）：站在上面**每秒 1 点火焰伤害**。
+    // ⚠️ 与岩浆那条的差别是"节奏"：岩浆是每 0.5 秒 4 点，岩浆块是每秒 1 点；
+    // 走 `'fire'` 这条 source，所以**抗火能挡**（原版也如此）——
+    // 也正因为如此，这里不能像岩浆那样每 tick 直接扣，得自己数 20 tick
+    if (env.onMagma && !env.fireImmune) {
+      this.magmaBlockTimer++;
+      if (this.magmaBlockTimer >= 20) {
+        this.magmaBlockTimer = 0;
+        this.damage(1, 'fire');
+      }
+    } else {
+      this.magmaBlockTimer = 0;
     }
 
     if (env.onCactus) this.damage(1, 'cactus');

@@ -177,6 +177,35 @@ console.log('\n[岩浆与虚空]');
   const suffocating = new PlayerStats();
   runTicks(suffocating, 1, env({ suffocating: true }));
   check('窒息扣 1 点', suffocating.health === MAX_HEALTH - 1, `生命 ${suffocating.health}`);
+
+  // 岩浆块（批次 121）：站在上面每秒 1 点**火焰伤害**。
+  // ⚠️ 与岩浆那条的节奏不同（那里是 0.5 秒 4 点），所以前 19 tick 一滴都不掉
+  const onMagma = new PlayerStats();
+  // ⚠️ 长跑那几条要**关掉自然回血**（`naturalRegeneration: false`）：
+  // 吃饱时每 0.5 秒回 1 点，比岩浆块的 1 点/秒还快——不关掉的话，
+  // "站三秒扣 4 点"会被回血抵掉，看起来像"只扣了 1 点"（第一版就踩到了）
+  const magmaEnv = (extra: Partial<SurvivalEnvironment> = {}): SurvivalEnvironment =>
+    env({ onMagma: true, naturalRegeneration: false, ...extra });
+  runTicks(onMagma, 19, magmaEnv());
+  check('岩浆块前 19 tick 不结算（每秒一次）', onMagma.health === MAX_HEALTH, `生命 ${onMagma.health}`);
+  runTicks(onMagma, 1, magmaEnv());
+  check('岩浆块每秒扣 1 点', onMagma.health === MAX_HEALTH - 1, `生命 ${onMagma.health}`);
+  runTicks(onMagma, 60, magmaEnv());
+  check('站三秒就是 4 点（第 1 秒那次也在内）', onMagma.health === MAX_HEALTH - 4, `生命 ${onMagma.health}`);
+
+  // 抗火挡得住（走的是 `'fire'` 那条 source——与岩浆同一个口径）
+  const fireProof = new PlayerStats();
+  runTicks(fireProof, 100, env({ onMagma: true, fireImmune: true }));
+  check('抗火效果能挡住岩浆块（原版也如此）', fireProof.health === MAX_HEALTH, `生命 ${fireProof.health}`);
+
+  // 走开之后计时器归零：否则"站一下、走开、再站上去"会立刻又挨一次
+  const stepped = new PlayerStats();
+  runTicks(stepped, 19, env({ onMagma: true }));
+  runTicks(stepped, 1, env());
+  runTicks(stepped, 1, env({ onMagma: true }));
+  check('离开岩浆块会重置计时（再站上去要重新数满一秒）', stepped.health === MAX_HEALTH, `生命 ${stepped.health}`);
+  runTicks(stepped, 19, env({ onMagma: true }));
+  check('数满之后照常扣 1 点', stepped.health === MAX_HEALTH - 1, `生命 ${stepped.health}`);
 }
 
 console.log('\n[创造模式与重生]');

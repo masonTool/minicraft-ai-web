@@ -263,11 +263,11 @@ console.log('\n[洞穴蜘蛛：更小、有毒、不自然刷]');
   check('**亮处也不中立**（矿井里见到就打，与亮度无关）', CAVE_SPIDER_TYPE.neutralInLight === undefined);
   check('所以它不在"会自然刷"的敌对表里', !HOSTILE_MOBS.includes(CAVE_SPIDER_TYPE));
   check('但它在"所有敌对生物"那一档里（击杀类进度要算它）', ALL_HOSTILE_MOBS.includes(CAVE_SPIDER_TYPE));
-  // "不自然刷、但算敌对"的那几档：洞穴蜘蛛、烈焰人，以及批次 120 的中史莱姆
-  // （它只从大史莱姆分裂里出现，`naturalSpawn: false`）
+  // "不自然刷、但算敌对"的那几档：洞穴蜘蛛、烈焰人，以及**史莱姆与岩浆怪的中/小两档**
+  // （它们只从分裂里出现，`naturalSpawn: false`）——批次 121 起一共 5 种
   check(
-    '所有敌对表比"会自然刷的"多 3 种（洞穴蜘蛛 / 烈焰人 / 中史莱姆）',
-    ALL_HOSTILE_MOBS.length === HOSTILE_MOBS.length + 3,
+    '所有敌对表比"会自然刷的"多 5 种（洞穴蜘蛛 / 烈焰人 / 中史莱姆 / 中岩浆怪 / 小岩浆怪）',
+    ALL_HOSTILE_MOBS.length === HOSTILE_MOBS.length + 5,
     `${ALL_HOSTILE_MOBS.length} vs ${HOSTILE_MOBS.length}`,
   );
 
@@ -308,7 +308,7 @@ console.log('\n[工厂与模型]');
   equal('烈焰人仍然不摆腿', describeMobModel(mobTypeById('blaze')!).legs, 0);
   // 批次 94 起：11 → 12 种（加了恶魂）；批次 112 起 12 → 13 种、敌对 7 → 8（加了末影人）；
   // 批次 115 起 13 → 14 种、敌对 8 → 9（加了凋灵骷髅）
-  check('生物表里 17 种，其中 11 种敌对（史莱姆大/中敌对、小不敌对）', MOB_TYPES.length === 17 && ALL_HOSTILE_MOBS.length === 11, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
+  check('生物表里 20 种，其中 14 种敌对（史莱姆与岩浆怪各三档、最小的史莱姆不敌对）', MOB_TYPES.length === 20 && ALL_HOSTILE_MOBS.length === 14, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
 }
 
 console.log(`\n蜘蛛测试：${passed} 通过 / ${failed} 失败`);

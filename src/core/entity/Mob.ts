@@ -93,6 +93,8 @@ const HOP_INTERVAL_MAX = 1.4;
 /** 分裂出几只（原版 2~4） */
 const SPLIT_COUNT_MIN = 2;
 const SPLIT_COUNT_MAX = 4;
+/** 站在岩浆块上多久掉一次血（秒；原版每秒 1 点） */
+const MAGMA_DAMAGE_INTERVAL = 1;
 
 /**
  * 末影人的瞬移距离（格，原版 32）：受击逃脱、泡水淋雨逃开、空闲挪窝都按它来。
@@ -528,6 +530,30 @@ export class Mob extends Entity {
 
   /** 分裂是否已结算（与 `lootDropped` 分开：两条路的触发时机不同，见 `tick` 末尾） */
   private splitDone = false;
+  /** 岩浆块上掉血的计时（批次 121）：攒够 1 秒掉 1 点（见 `tickMagmaBlock`） */
+  private magmaBlockTimer = 0;
+
+  /**
+   * 站在**岩浆块**上（批次 121）：每秒掉 1 点血——原版就是 1 点/秒，而且是**火焰伤害**，
+   * 所以抗火的生物一滴都不掉（这也是"拿岩浆块做刷怪塔"的原理）。
+   *
+   * 为什么 `onMagma` 由主程序算好传进来，而不是在这里自己读世界：同一个判据**玩家那边
+   * 也要用**（`survivalEnvironment` 的 `onMagma`），写在主程序里才能保证两处同源——
+   * 否则哪天"站在哪一格算踩着岩浆块"改了，会变成"玩家掉血、怪不掉"这种半对的状态。
+   * 而"每秒一次"需要一个定时器，定时器是实体的状态（与着火、淋雨同一条）。
+   */
+  tickMagmaBlock(ctx: EntityContext, onMagma: boolean, dt: number): void {
+    if (this.dead || this.type.fireImmune === true || !onMagma) {
+      this.magmaBlockTimer = 0;
+      return;
+    }
+    this.magmaBlockTimer += dt;
+    while (this.magmaBlockTimer >= MAGMA_DAMAGE_INTERVAL) {
+      this.magmaBlockTimer -= MAGMA_DAMAGE_INTERVAL;
+      // 击退源传**自己脚下**：算出来是零向量，于是只掉血不被推
+      this.hurt(1, this.x, this.z, ctx);
+    }
+  }
   /**
    * 它是**被打死**的吗（批次 120）。
    *

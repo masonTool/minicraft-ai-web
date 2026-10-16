@@ -1260,6 +1260,22 @@ const REDSTONE_RECIPES: readonly Recipe[] = [
     key: { S: Item.SLIME_BALL },
   },
   { kind: 'shapeless' as const, result: { id: Item.SLIME_BALL, count: 9 }, ingredients: [Block.SLIME_BLOCK] },
+
+  // ---- 岩浆膏那条链（批次 121）：岩浆怪做出来之后，这两条才做得出来
+  // 岩浆膏：1 烈焰粉 + 1 黏液球（原版）。⚠️ 它同时是**抗火药水**的酿造原料
+  // （`Brewing.ts` 里的 `fire_resistance: Item.MAGMA_CREAM` 一直等着它有来源）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.MAGMA_CREAM, count: 1 },
+    ingredients: [Item.BLAZE_POWDER, Item.SLIME_BALL],
+  },
+  // 岩浆块：2×2 的岩浆膏（原版；它是发光方块，也是刷怪塔里那把"刀"）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.MAGMA_BLOCK, count: 1 },
+    pattern: ['MM', 'MM'],
+    key: { M: Item.MAGMA_CREAM },
+  },
   // 按钮：1 石头 / 1 木板（无序）
   { kind: 'shapeless' as const, result: { id: Block.STONE_BUTTON, count: 1 }, ingredients: [Block.STONE] },
   { kind: 'shapeless' as const, result: { id: Block.OAK_BUTTON, count: 1 }, ingredients: [Block.OAK_PLANKS] },

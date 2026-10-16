@@ -5225,7 +5225,12 @@ class App {
       if (entity instanceof Mob) {
         // 站在火里的生物会被点燃（I12）：原版生物走进火里同样会烧起来。
         // 放在这一层（而不是 Mob 内部）是因为"当前这一格是不是火"要读世界
-        if (!entity.dead && this.mobInFire(entity)) entity.ignite(FIRE_IGNITE_SECONDS);
+        if (!entity.dead) {
+          if (this.mobInFire(entity)) entity.ignite(FIRE_IGNITE_SECONDS);
+          // 岩浆块（批次 121）：站在上面每秒 1 点火焰伤害——原版如此，
+          // 所以岩浆块能当刷怪塔里那把"刀"（抗火的岩浆怪反而不掉血）
+          entity.tickMagmaBlock(context, this.standsOnMagmaBlock(entity.x, entity.y, entity.z), dt);
+        }
         mobs.push(entity);
       }
     }
@@ -6184,6 +6189,18 @@ class App {
    * 这只生物的脚下或身体所在格是不是火（I12）。
    * 只有两格要查（原版也是判实体 AABB 覆盖到的方块），不必扫整个包围盒。
    */
+  /**
+   * (x, y, z) 处的实体**脚底下那一格**是不是岩浆块（批次 121）。
+   *
+   * 玩家与生物**共用这一个算式**：两处各写一遍的话，哪天"站在哪一格算踩着岩浆块"改了，
+   * 就会变成"玩家掉血、怪不掉"这种**半对**的状态——它不会报错、也没人会报 bug，
+   * 只会让人以为"岩浆块怎么不烫怪"（末影之眼那批在位置公式上踩过同一条，见
+   * `structureCellOrigin` 的注记）。
+   */
+  private standsOnMagmaBlock(x: number, y: number, z: number): boolean {
+    return this.world.getBlock(Math.floor(x), Math.floor(y - 0.1), Math.floor(z)) === Block.MAGMA_BLOCK;
+  }
+
   private mobInFire(entity: { x: number; y: number; z: number; height: number }): boolean {
     const bx = Math.floor(entity.x);
     const bz = Math.floor(entity.z);
@@ -7574,6 +7591,9 @@ class App {
         burnsOnContact(feet, this.world.getBlockState(feetX, feetY, feetZ)),
       // 仙人掌还没进方块表，先保持关闭（加了之后这里改成四邻检测）
       onCactus: false,
+      // 岩浆块（批次 121）：脚底下那一格是岩浆块 → 每秒 1 点火焰伤害。
+      // 与生物那边**共用同一个算式**（`standsOnMagmaBlock`），见那里的注记
+      onMagma: this.standsOnMagmaBlock(p.x, p.y, p.z),
       suffocating: body !== Block.AIR && blockDef(body).opaque,
       fallDistance: this.pendingFallDistance,
       y: p.y,
