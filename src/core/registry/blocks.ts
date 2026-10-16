@@ -992,6 +992,10 @@ const REDSTONE_SPECS: readonly BlockSpec[] = [
     id: 268,
     name: 'minecraft:piston_head',
     tiles: ['piston_head', 'piston_head', 'piston_head'],
+    // 批次 68：活塞头是**技术方块**（活塞伸出时才出现），原版**没有对应物品**——
+    // 不给它物品，背包里就不会出现"一个孤零零的活塞头"、也无法凭空放出来。
+    // 朝向由活塞写进去（六向，见 B40），贴图/几何都跟着它走。
+    itemless: true,
   },
   {
     id: 269,

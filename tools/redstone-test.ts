@@ -16,6 +16,7 @@
  */
 
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { itemDef } from '../src/core/registry/items.ts';
 import {
   isDoorOpen,
   isDoorUpper,
@@ -33,6 +34,10 @@ import { CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
 
 let passed = 0;
 let failed = 0;
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
 
 function check(label: string, condition: boolean, detail = ''): void {
   if (condition) {
@@ -325,6 +330,13 @@ console.log('\n[粘性活塞：收回时把方块拉回来]');
   step(engine, world, 0.1);
   check('收回时木板被拉回活塞前方', world.getBlock(2, Y, 0) === Block.OAK_PLANKS, `实际 ${world.getBlock(2, Y, 0)}`);
   check('更前面那格变成空气', world.getBlock(3, Y, 0) === Block.AIR);
+}
+
+console.log('\n[活塞头：技术方块（批次 68）]');
+{
+  equal('活塞头没有对应物品（背包里拿不到）', itemDef(Block.PISTON_HEAD), undefined);
+  equal('普通活塞有物品（对照）', itemDef(Block.PISTON)?.block, Block.PISTON);
+  equal('活塞头仍然推得动/放得下（它只是没有物品）', blockDef(Block.PISTON_HEAD).shape, 'cube');
 }
 
 // ---------------------------------------------------------------- 6.5 竖直方向（批次 66）
