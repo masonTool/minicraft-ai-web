@@ -39,12 +39,12 @@ export const TOUCH_SCALE_MIN = 0.8;
 export const TOUCH_SCALE_MAX = 1.4;
 
 /**
- * 设置项的分组（批次 104）。
+ * 设置项的分组（批次 104，批次 107 调整过呈现方式）。
  *
- * 分组不只是排版：**手机上它就是页签**——一次只显示一组，每组不超过 4 行，
- * 于是整个"设置"一屏放得下、**不用滚**。原来 11 个设置项排成一长条，
- * 手机上要滚三屏才看得到"音量"（用户反馈的正是这件事；基岩版手机也是分页的）。
- * 桌面端不显示页签，四组按原来的样子连着列出来（宽屏一屏放得下，不需要多一层点击）。
+ * 分组本身仍是排版的关键：每组一个小标题，相邻两组之间有一条分隔线，
+ * 一长条 16 行设置因此可读。批次 104 曾让手机端"一组一页"（页签），
+ * 批次 107 改成"四组一次全展开 + 行高压紧"（更符合"展示得更多"的反馈）；
+ * 只有矮屏（横屏手机）放不下时才退回页签分页——判据见 index.html。
  */
 export const SETTING_GROUPS = ['graphics', 'controls', 'sound', 'game'] as const;
 
@@ -203,7 +203,7 @@ export class SettingsScreen {
   private readonly subtitleEl: HTMLElement;
   private readonly resumeButton: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
-  /** 一个分组 = 一个 section；手机端一次只显示一个（见 `setActiveGroup`） */
+  /** 一个分组 = 一个 section；默认四组一起显示，矮屏上由 CSS 只放行 `.active` 那一组 */
   private readonly sections = new Map<SettingGroup, HTMLElement>();
   private readonly tabs = new Map<SettingGroup, HTMLButtonElement>();
   /** 当前页签（手机端生效；桌面端四组全显示，这个值只是"下次打开停在哪一页"） */
@@ -366,10 +366,10 @@ export class SettingsScreen {
   }
 
   /**
-   * 切到某个分组。
+   * 切到某个分组（页签）。
    *
-   * 桌面端四组全都可见，所以这个调用在桌面上只影响"下次打开停在哪一页"；
-   * 手机上由 CSS 只放行 `.settings-section.active` 那一组——一次一屏，不用滚。
+   * 默认四组全都可见，所以这个调用平时只影响"矮屏上停在哪一页"；
+   * 只有矮屏（横屏手机）由 CSS 只放行 `.settings-section.active` 那一组。
    */
   setActiveGroup(group: SettingGroup): void {
     this.activeGroup = group;

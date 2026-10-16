@@ -625,7 +625,8 @@
         transition: background var(--dur-fast) var(--ease);
       }
       .settings-close:active { background: rgba(255, 255, 255, .24); }
-      /* 分组页签：桌面隐藏、手机显示（手机上它就是"分页"，一次只看一组 → 不用滚） */
+      /* 分组页签：默认（宽屏与高屏手机）隐藏——四组设置一次全展开，用不着分页；
+         只有矮屏手机上才显示，那时它就是"一次只看一组"的分页（见文件下半部分） */
       .settings-tabs { display: none; order: 1; gap: 6px; flex: 0 0 auto; }
       .settings-tab {
         font: inherit; font-size: 13px; padding: 8px 12px; min-height: 40px;
@@ -712,56 +713,68 @@
         background: #2a2a2d; color: #eee; border: 1px solid #ffffff33; border-radius: 3px;
       }
 
-      /* ---------------- 手机端：设置面板整屏 + 分组页签（批次 104） ----------------
-         基岩版手机上的设置就是**整屏、按分组分页**（图形 / 操作 / 声音 / 游戏）。
-         本项目原来在手机上也是那张 420px 的居中卡片、11 个设置项排成一长条：
-         手机上要滚三屏才够得着"音量"，而且"继续游戏"一直被推到看不到的地方。
-         页签化之后每个分组不超过 4 行，一屏一页，滚动手势彻底用不上。
+      /* ---------------- 手机端：设置面板改成"紧凑卡片"（批次 107） ----------------
+         ⚠️ 这一批**推翻了批次 104 的"整屏 + 分组分页"**——用户反馈：暂停菜单
+         "按钮非常大、又占了全屏、有点乱，设置内容该展示得更多"。整屏面板 + 46px 高的
+         页签与动作按钮把屏幕占满，而每一页里只有四五行设置，屏幕的绝大部分是空白。
+
+         现在的做法：回到**居中的卡片**（宽度与桌面同一档），把每一行压紧到 38px，
+         于是四组设置能在**一屏里全部看到**（不再分页、通常也不用滚）。
+         只有特别矮的屏（横屏手机，见下面 `@media (max-height: 560px)`）才退回
+         "分组页签 + 一次一组"——那时候一屏确实放不下。
          ⚠️ 判据用 `body.touch-mode` 而不是 `@media (max-width: 900px)`：
-         平板（1024×768 触摸屏）也该拿这套整屏布局，而它不命中那个宽度断点。
+         平板（1024×768 触摸屏）也该拿这套布局，而它不命中那个宽度断点。
          ⚠️ 这里是"后出现、同优先级"的规则，会盖掉上面桌面那套——所以每一处
          需要变的属性都要在这里**显式**写上（少了哪条就是哪一种"半手机半桌面"的怪界面）。 */
-      body.touch-mode #settings-screen { background: #17181c; }
+      body.touch-mode #settings-screen { background: rgba(0, 0, 0, .55); }
       body.touch-mode .settings-panel {
-        width: 100%; max-width: none; height: 100%; max-height: none;
-        border: none; border-radius: 0; padding: 0;
-        padding-top: env(safe-area-inset-top, 0px);
-        padding-bottom: env(safe-area-inset-bottom, 0px);
+        width: min(96vw, 520px); max-width: 520px;
+        height: auto; max-height: min(92vh, 760px);
+        padding: 14px 16px 12px;
+        border: 1px solid #ffffff24; border-radius: var(--radius-lg);
+        /* 唯一滚动的是里面那块设置区（见 `.settings-body`），面板自己不滚 */
         overflow: hidden;
-        /* 整屏面板再"淡入放大"会显得晃（它本来就占满屏幕），直接免掉 */
-        animation: none;
       }
-      body.touch-mode .settings-header { flex: 0 0 auto; padding: 12px 14px 6px; gap: 10px; }
-      body.touch-mode .settings-close { width: 48px; height: 44px; font-size: 18px; }
-      body.touch-mode .settings-tabs { display: flex; flex: 0 0 auto; padding: 0 14px 8px; }
-      /* 只有设置项那一块滚动（标题栏/页签/动作按钮都钉住），
-         再加上"一次只显示一组"，实际上滚不动——这正是用户要的"减少滚动"。 */
+      body.touch-mode .settings-header { flex: 0 0 auto; padding: 0 0 8px; gap: 8px; }
+      body.touch-mode .settings-close { width: 40px; height: 38px; font-size: 16px; }
+      /* 动作按钮放在**最上面**：四组设置全展开之后，"继续游戏"若被推到最底下
+         就得先滚一段才够得着——那正是原来最难受的一件事 */
+      body.touch-mode .settings-buttons {
+        order: 1; flex: 0 0 auto; flex-wrap: wrap; gap: 6px;
+        padding: 0 0 8px; margin-bottom: 0;
+      }
+      body.touch-mode .settings-buttons button { flex: 1 1 44%; min-height: 40px; font-size: 13px; }
+      /* 设置项那一块是唯一的滚动区（标题栏与动作按钮都钉在上面） */
       body.touch-mode .settings-body {
         order: 2; flex: 1 1 auto; min-height: 0;
-        overflow-y: auto; padding: 4px 14px 8px;
+        overflow-y: auto; padding: 0 2px 0 0;
       }
-      body.touch-mode .settings-section { display: none; }
-      body.touch-mode .settings-section.active { display: flex; }
-      /* 页签上已经写着组名，段内那行小标题在手机上是重复信息 */
-      body.touch-mode .settings-group { display: none; }
-      body.touch-mode .settings-buttons {
-        order: 3; flex: 0 0 auto; flex-wrap: wrap;
-        padding: 8px 14px 4px; margin-bottom: 0;
-      }
-      body.touch-mode .settings-buttons button { flex: 1 1 44%; min-height: 46px; font-size: 15px; }
-      body.touch-mode .settings-meta { order: 4; padding: 0 14px; margin: 6px 0 0; }
-      /* 行高与控件都放大到"手指点得准"（44px 是平台下限，原来滑杆只有 22px 高） */
+      /* 四组一次全显示（分页只在矮屏上回来，见文件下半部分的媒体查询） */
+      body.touch-mode .settings-section { display: flex; }
+      body.touch-mode .settings-group { margin: 8px 0 0; padding-top: 6px; }
+      body.touch-mode .settings-meta { order: 3; padding: 0; margin: 8px 0 0; }
+      /* 行高压到 38px（原来 44px）：仍比桌面的 22px 好点得多，但四组能一屏放下 */
       body.touch-mode .settings-row {
-        grid-template-columns: minmax(88px, auto) 1fr 58px; min-height: 44px;
+        grid-template-columns: minmax(84px, auto) 1fr 54px; min-height: 38px;
       }
-      body.touch-mode .settings-row input[type="range"] { height: 44px; }
+      body.touch-mode .settings-row input[type="range"] { height: 36px; }
       body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
-        width: 24px; height: 24px; margin-top: -9px;
+        width: 20px; height: 20px; margin-top: -7px;
       }
-      body.touch-mode .settings-row input[type="checkbox"] { width: 52px; height: 30px; }
-      body.touch-mode .settings-row input[type="checkbox"]::after { width: 24px; height: 24px; }
-      body.touch-mode .settings-row input[type="checkbox"]:checked::after { transform: translateX(22px); }
-      body.touch-mode .settings-row select.settings-select { font-size: 14px; padding: 8px; }
+      body.touch-mode .settings-row input[type="checkbox"] { width: 46px; height: 26px; }
+      body.touch-mode .settings-row input[type="checkbox"]::after { width: 20px; height: 20px; }
+      body.touch-mode .settings-row input[type="checkbox"]:checked::after { transform: translateX(20px); }
+      body.touch-mode .settings-row select.settings-select { font-size: 13px; padding: 6px; }
+
+      /* 矮屏（横屏手机）：一屏放不下四组设置，这时才退回"分组页签 + 一次一组"
+         （批次 104 的做法）。高屏手机上页签是多余的——四组本来就全看得见。 */
+      @media (max-height: 560px) {
+        body.touch-mode .settings-tabs { display: flex; flex: 0 0 auto; padding: 0 0 8px; }
+        body.touch-mode .settings-section { display: none; }
+        body.touch-mode .settings-section.active { display: flex; }
+        /* 页签上已经写着组名，段内的小标题在这时是重复信息 */
+        body.touch-mode .settings-group { display: none; }
+      }
 
       /* ---------------- 状态效果 HUD ---------------- */
       #effects-hud {

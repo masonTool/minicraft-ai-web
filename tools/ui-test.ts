@@ -174,10 +174,11 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   for (const [label, needle] of [
     ['顶部暂停键容器', '#touch-pause {'],
     ['暂停键尺寸吃 --touch-scale（与"触摸按钮大小"同一个设置项）', '#touch-pause .touch-button { width: calc(52px * var(--touch-scale, 1));'],
-    ['手机端设置面板整屏', 'body.touch-mode .settings-panel { width: 100%; max-width: none; height: 100%; max-height: none;'],
-    ['手机端显示分组页签', 'body.touch-mode .settings-tabs { display: flex;'],
-    ['手机端一次只显示一组（消除长滚动）', 'body.touch-mode .settings-section.active { display: flex; }'],
-    ['手机端隐藏页签上已写过的分类小标题', 'body.touch-mode .settings-group { display: none; }'],
+    // 手机端设置面板（批次 107 改成紧凑卡片，见 index.html 里那一段的说明）
+    ['手机端设置面板是紧凑卡片（不再占满全屏）', 'body.touch-mode .settings-panel { width: min(96vw, 520px); max-width: 520px; height: auto; max-height: min(92vh, 760px);'],
+    ['手机端四组设置一次全显示', 'body.touch-mode .settings-section { display: flex; }'],
+    ['动作按钮钉在设置之前（"继续游戏"不必滚）', 'body.touch-mode .settings-buttons { order: 1;'],
+    ['矮屏才退回分组页签', 'body.touch-mode .settings-tabs { display: flex; flex: 0 0 auto; padding: 0 0 8px; }'],
     ['手机端不显示快捷栏序号（没有数字键）', 'body.touch-mode #hotbar .slot .index { display: none; }'],
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
