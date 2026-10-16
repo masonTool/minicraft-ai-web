@@ -178,12 +178,32 @@
         box-shadow: 0 20px 60px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .06);
         backdrop-filter: blur(6px);
       }
-      .world-panel > b {
+      .world-title {
         font-size: 21px; display: block; letter-spacing: 1px;
         text-shadow: 0 2px 12px rgba(120, 180, 255, .25);
       }
+      /* ---------------- 主菜单的三个层级（批次 106） ----------------
+         同一份 DOM 切成"主页 / 世界列表 / 新建世界"三节，一次只放行一节。
+         原来把存档列表 + 四行新建表单 + 设置按钮全摞在一屏里，面板很高、
+         手机上得滚；分层之后每一屏都只有三两行，且"返回"永远在同一处。 */
+      .world-view { display: none; }
+      .world-view.active { display: flex; flex-direction: column; }
+      /* 二级页面顶部：‹ 返回 + 标题 */
+      .world-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+      .world-nav-title { font-size: 17px; letter-spacing: 1px; }
+      .world-back {
+        font: inherit; font-size: 12px; cursor: pointer; flex: 0 0 auto;
+        padding: 6px 10px; color: #eee; background: #33333a;
+        border: 1px solid #ffffff26; border-radius: var(--btn-radius);
+        transition: transform var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease);
+      }
+      .world-back:active { transform: translateY(1px); filter: brightness(.92); }
+      /* 主页那几颗入口：竖着一列，宽度统一（手机上单手点得到） */
+      .world-menu { display: flex; flex-direction: column; gap: 9px; margin-top: 4px; }
       .world-hint { color: #9a9a9a; font-size: 12px; margin: 6px 0 12px; }
-      .world-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+      .world-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+      /* 列表在窄屏/世界多的时候自己滚，别把面板撑破 */
+      .world-list { max-height: min(46vh, 320px); overflow-y: auto; }
       .world-empty {
         padding: 14px; text-align: center; color: #8a8a8a;
         border: 1px dashed #ffffff33; border-radius: var(--radius-md);
@@ -236,12 +256,14 @@
       }
       .world-mini { background: #4a4a52; color: #eee; font-size: 12px; }
       .world-primary {
-        margin-top: 4px; padding: 11px; font-size: 14px; font-weight: 700; letter-spacing: 1px;
+        padding: 11px; font-size: 14px; font-weight: 700; letter-spacing: 1px;
         background: var(--btn-primary); color: #fff; border: none;
         box-shadow: 0 6px 18px rgba(58, 125, 51, .35);
       }
+      /* ⚠️ 不再写 `margin-top`：主页那几颗入口的间距交给 `.world-menu` 的 `gap`，
+         写了 margin 会在"列表页底部那颗新建键"上多出一截空隙 */
       .world-secondary {
-        width: 100%; margin-top: 8px; padding: 8px; font: inherit; font-size: 13px;
+        width: 100%; padding: 9px; font: inherit; font-size: 13px;
         background: #33333a; color: #eee;
       }
 
@@ -1329,9 +1351,12 @@
          手机上点"进入/删除"经常点到隔壁。手机上统一抬到 44px。 */
       body.touch-mode .world-card-actions button,
       body.touch-mode .world-mini,
-      body.touch-mode .world-secondary { min-height: 44px; padding: 8px 14px; }
+      body.touch-mode .world-secondary,
+      body.touch-mode .world-back { min-height: 44px; padding: 8px 14px; }
       body.touch-mode .world-primary { min-height: 52px; }
       body.touch-mode .world-input { padding: 10px 10px; font-size: 14px; }
+      /* 二级页面的"‹ 返回"固定在左上、标题跟着它，拇指区一眼就能找到出口 */
+      body.touch-mode .world-nav { margin-bottom: 14px; }
 
       /* ---------------- 小屏适配 ----------------
          目标：竖屏/横屏手机都能操作，且界面不溢出、热区够大。 */

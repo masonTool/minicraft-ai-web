@@ -1,9 +1,14 @@
 /**
- * 主菜单（世界列表 + 新建世界）
+ * 主菜单（分层：主页 → 世界列表 / 新建世界）
  *
  * 启动时先出这个界面，而不是直接冲进世界：这样才有地方"选存档、开新世界、删世界"。
- * 界面刻意做得很朴素（一列卡片 + 一个新建表单），因为它是**进游戏之前唯一必须过的一道门**，
- * 手机上也要能单手点。
+ *
+ * ⚠️ **为什么是三层而不是一层**（用户反馈：原来全塞在一屏，太高太复杂）：
+ * 基岩版的主菜单是"标题页几个按钮 → 点进去才是世界列表 → 再点才是新建表单"，
+ * 层层进入。一层里既有存档列表又有四行新建表单再加设置按钮，一屏装不下、
+ * 手机上还得滚；层与层分开之后每一屏都很矮，且"返回"的位置固定。
+ * 三个视图共用同一个面板（同一份 DOM 用 `.active` 切换），不建三套 DOM——
+ * 两套 DOM 迟早"一处改了、另一处没改"（这个仓库吃过几次这种亏）。
  *
  * 职责边界：只负责"列表怎么画、点了返回什么"，真实的增删改都在 `WorldRegistry` 里，
  * 进世界的动作交回给调用方（`main.ts` 的 boot）。这样这个模块在 Node 里也能测。
@@ -22,6 +27,13 @@ export interface WorldScreenActions {
   onSettings?: () => void;
 }
 
+/**
+ * 主菜单的三个层级（对齐基岩版的"标题页 → 世界列表 → 新建世界"）。
+ * 导出常量而不是写死字面量：验收脚本与断言按名字读它，改名时不会两边漂。
+ */
+export const WORLD_VIEWS = ['home', 'worlds', 'create'] as const;
+export type WorldView = (typeof WORLD_VIEWS)[number];
+
 export class WorldScreen {
   readonly root: HTMLDivElement;
   private readonly listEl: HTMLDivElement;
@@ -30,6 +42,9 @@ export class WorldScreen {
   private readonly typeSelect: HTMLSelectElement;
   /** 新建世界时的难度（I7）：进世界后还能用 /difficulty 改 */
   private readonly difficultySelect: HTMLSelectElement;
+  /** 三个视图各自的那一节（同一份 DOM 用 `.active` 切换，见文件头注释） */
+  private readonly views = new Map<WorldView, HTMLElement>();
+  private currentView: WorldView = 'home';
   private open = false;
 
   constructor(
@@ -44,24 +59,72 @@ export class WorldScreen {
     const panel = document.createElement('div');
     panel.className = 'world-panel';
 
+    // ---------------------------------------------------------------- ① 主页
+    const home = this.makeView('home');
+
     const title = document.createElement('b');
+    title.className = 'world-title';
     title.textContent = 'Bedrock 1.18 Web';
 
     const subtitle = document.createElement('div');
     subtitle.className = 'world-hint';
     subtitle.textContent = '选择世界继续游玩，或者新建一个';
 
-    // ---- 世界列表
+    const menu = document.createElement('div');
+    menu.className = 'world-menu';
+
+    // "开始游戏"：一键通道——有存档直接进最近玩的那个，没有存档就用默认参数开一个。
+    // ⚠️ 它必须是**可见视图里的第一个 `.world-primary`**：浏览器验收脚本正是点它来进世界的
+    //（`document.querySelector('#world-screen .world-primary')`），少了这个语义那套脚本会全红。
+    const quick = document.createElement('button');
+    quick.type = 'button';
+    quick.className = 'world-primary';
+    quick.textContent = '开始游戏';
+    quick.addEventListener('click', () => this.quickStart());
+
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'world-secondary';
+    pick.textContent = '选择世界';
+    pick.addEventListener('click', () => this.setView('worlds'));
+
+    const createNew = document.createElement('button');
+    createNew.type = 'button';
+    createNew.className = 'world-secondary';
+    createNew.textContent = '新建世界';
+    createNew.addEventListener('click', () => this.setView('create'));
+
+    menu.append(quick, pick, createNew);
+
+    // 设置入口：这里的设置是"这台设备的偏好"（画面/操作/声音），进游戏之前也能改
+    if (this.actions.onSettings) {
+      const settings = document.createElement('button');
+      settings.type = 'button';
+      settings.className = 'world-secondary';
+      settings.textContent = '设置';
+      settings.addEventListener('click', () => this.actions.onSettings?.());
+      menu.append(settings);
+    }
+
+    home.append(title, subtitle, menu);
+
+    // ---------------------------------------------------------------- ② 世界列表
+    const worlds = this.makeView('worlds');
     this.listEl = document.createElement('div');
     this.listEl.className = 'world-list';
 
-    // ---- 新建世界
+    const newEntry = document.createElement('button');
+    newEntry.type = 'button';
+    newEntry.className = 'world-secondary world-new-entry';
+    newEntry.textContent = '＋ 新建世界';
+    newEntry.addEventListener('click', () => this.setView('create'));
+
+    worlds.append(this.makeNav('选择世界', () => this.setView('home')), this.listEl, newEntry);
+
+    // ---------------------------------------------------------------- ③ 新建世界
+    const create = this.makeView('create');
     const form = document.createElement('div');
     form.className = 'world-new';
-
-    const formTitle = document.createElement('div');
-    formTitle.className = 'settings-group';
-    formTitle.textContent = '新建世界';
 
     this.nameInput = document.createElement('input');
     this.nameInput.type = 'text';
@@ -102,11 +165,11 @@ export class WorldScreen {
     }
     this.difficultySelect.value = 'normal';
 
-    const create = document.createElement('button');
-    create.type = 'button';
-    create.className = 'world-primary';
-    create.textContent = '创建并进入';
-    create.addEventListener('click', () => this.createAndEnter());
+    const createButton = document.createElement('button');
+    createButton.type = 'button';
+    createButton.className = 'world-primary';
+    createButton.textContent = '创建并进入';
+    createButton.addEventListener('click', () => this.createAndEnter());
 
     // 种子框里回车也直接创建（手输种子是最常见的动作）
     this.seedInput.addEventListener('keydown', (event) => {
@@ -117,31 +180,52 @@ export class WorldScreen {
     });
 
     form.append(
-      formTitle,
       this.makeRow('世界名称', this.nameInput, null),
       this.makeRow('世界种子', this.seedInput, reroll),
       this.makeRow('世界类型', this.typeSelect, null),
       this.makeRow('难度', this.difficultySelect, null),
-      create,
+      createButton,
     );
 
     const hint = document.createElement('div');
     hint.className = 'world-hint';
     hint.textContent = '相同的种子会生成相同的地形；超平坦世界只有一层草地。';
 
-    panel.append(title, subtitle, this.listEl, form, hint);
+    create.append(this.makeNav('新建世界', () => this.setView('home')), form, hint);
 
-    // 设置入口：这里的设置是"这台设备的偏好"（画面/操作/声音），进游戏之前也能改
-    if (this.actions.onSettings) {
-      const settings = document.createElement('button');
-      settings.type = 'button';
-      settings.className = 'world-secondary';
-      settings.textContent = '设置';
-      settings.addEventListener('click', () => this.actions.onSettings?.());
-      panel.append(settings);
-    }
+    panel.append(home, worlds, create);
     this.root.append(panel);
     host.appendChild(this.root);
+
+    this.setView('home');
+  }
+
+  /** 建一个视图节，登记到 `views` 里 */
+  private makeView(view: WorldView): HTMLElement {
+    const element = document.createElement('section');
+    element.className = 'world-view';
+    element.dataset.view = view;
+    this.views.set(view, element);
+    return element;
+  }
+
+  /** 二级页面顶部的"‹ 返回 + 标题"那一行 */
+  private makeNav(title: string, onBack: () => void): HTMLDivElement {
+    const nav = document.createElement('div');
+    nav.className = 'world-nav';
+
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'world-back';
+    back.textContent = '‹ 返回';
+    back.addEventListener('click', onBack);
+
+    const label = document.createElement('b');
+    label.className = 'world-nav-title';
+    label.textContent = title;
+
+    nav.append(back, label);
+    return nav;
   }
 
   /** 一行"标签 + 控件（+ 右侧小按钮）" */
@@ -159,10 +243,25 @@ export class WorldScreen {
     return this.open;
   }
 
+  /** 当前停在哪个层级（验收脚本/调试用） */
+  get view(): WorldView {
+    return this.currentView;
+  }
+
+  /**
+   * 切层级。进"世界列表"时顺手重画列表（删除/新建之后要靠它刷新）。
+   */
+  setView(view: WorldView): void {
+    this.currentView = view;
+    for (const [key, element] of this.views) element.classList.toggle('active', key === view);
+    if (view === 'worlds') this.render();
+  }
+
   show(): void {
     this.open = true;
+    // 每次回主菜单都落在主页：从世界里退出来时，玩家多半是要"再选一个"或"继续"
+    this.setView('home');
     this.root.classList.remove('hidden');
-    this.render();
   }
 
   hide(): void {
@@ -178,7 +277,7 @@ export class WorldScreen {
     if (worlds.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'world-empty';
-      empty.textContent = '还没有世界——在下面新建一个就能开始。';
+      empty.textContent = '还没有世界——点下面「新建世界」就能开始。';
       this.listEl.appendChild(empty);
       return;
     }
@@ -186,6 +285,22 @@ export class WorldScreen {
     for (const world of worlds) {
       this.listEl.appendChild(this.makeCard(world));
     }
+  }
+
+  /**
+   * 主页"开始游戏"：有存档进最近玩的那个；没有存档就用默认参数直接开一个。
+   *
+   * 后者是刻意的——主菜单第一颗按钮如果只是"跳到列表"，那就等于把选择又推给玩家
+   *（而且全新玩家点它只会看到一个空列表）。
+   */
+  private quickStart(): void {
+    const worlds = this.registry.list(); // 已按最近游玩倒序
+    const recent = worlds[0];
+    if (recent) {
+      this.actions.onEnter(recent);
+      return;
+    }
+    this.actions.onEnter(this.registry.create({}));
   }
 
   private makeCard(world: WorldSummary): HTMLDivElement {
@@ -264,8 +379,9 @@ export class WorldScreen {
     return this.typeSelect.value as WorldType;
   }
 
-  /** 验收脚本用：填表但不提交 */
+  /** 验收脚本用：填表但不提交（顺带切到新建页，否则填的是看不见的表单） */
   fillNewWorldForm(name: string, seed: string, worldType: WorldType, difficulty: Difficulty = 'normal'): void {
+    this.setView('create');
     this.nameInput.value = name;
     this.seedInput.value = seed;
     this.typeSelect.value = worldType;
