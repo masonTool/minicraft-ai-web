@@ -16,7 +16,9 @@
  */
 
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
-import { itemDef } from '../src/core/registry/items.ts';
+import { Item, itemDef } from '../src/core/registry/items.ts';
+// 配方（批次 119）：这一节要断言"红石元件的配方就是原版那一条"
+import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
 import {
   isDoorOpen,
   isDoorUpper,
@@ -458,6 +460,79 @@ console.log('\n[推动规则]');
   check('熔炉推不动', !canPush(Block.FURNACE));
   check('漏斗推不动', !canPush(Block.HOPPER));
   check('投掷器推不动', !canPush(Block.DROPPER));
+}
+
+// ---------------------------------------------------------------- 生存可得性：配方（批次 119）
+//
+// 由来：E13 把红石**行为**做全了（充能、延迟、比较、推拉），但这些元件**一件都没有配方**
+// ——批次 118 的方块侧可达性审计把这件事量了出来（"红石元件 13 件一件都没配方，
+// 只能从创造模式拿"），批次 119 按原版补齐。
+//
+// 这一节盯的是"补上的就是原版那一条"，免得将来有人为了省事换原料
+// （换原料不会让任何别的测试变红，但会让"做一个活塞"这件事的手感悄悄变味）。
+
+console.log('\n[红石元件的配方（批次 119 按原版补）]');
+{
+  /** 某个产物的配方（找第一条） */
+  const recipeFor = (resultId: number) =>
+    RECIPES.find((recipe) => recipe.result.id === resultId);
+
+  /** 那条配方里用了几份某种原料（无序配方也认） */
+  const countOf = (resultId: number, itemId: number): number => {
+    const recipe = recipeFor(resultId);
+    if (!recipe) return -1;
+    if (recipe.kind === 'shapeless') {
+      return recipe.ingredients.filter((id) => id === itemId).length;
+    }
+    return [...recipe.pattern.join('')].filter((ch) => ch !== ' ' && recipe.key[ch] === itemId).length;
+  };
+
+  const expectRecipe = (resultId: number, counts: readonly [number, number][]): void => {
+    const recipe = recipeFor(resultId);
+    if (!recipe) {
+      check(`${blockDef(resultId).name} 有配方`, false, '没找到');
+      return;
+    }
+    const wrong = counts.filter(([itemId, count]) => countOf(resultId, itemId) !== count);
+    check(
+      `${blockDef(resultId).name} 的原料是原版那几样`,
+      wrong.length === 0,
+      wrong.map(([itemId, count]) => `${itemDef(itemId)?.name ?? itemId} 期望 ${count} 实际 ${countOf(resultId, itemId)}`).join('；'),
+    );
+  };
+
+  expectRecipe(Block.LEVER, [[Block.COBBLESTONE, 1], [Item.STICK, 1]]);
+  expectRecipe(Block.REDSTONE_TORCH, [[Item.REDSTONE, 1], [Item.STICK, 1]]);
+  expectRecipe(Block.REDSTONE_LAMP, [[Item.REDSTONE, 4], [Block.GLOWSTONE, 1]]);
+  expectRecipe(Block.REPEATER, [[Block.STONE, 6], [Block.REDSTONE_TORCH, 2]]);
+  expectRecipe(Block.COMPARATOR, [[Block.REDSTONE_TORCH, 3], [Item.QUARTZ, 1], [Block.STONE, 3]]);
+  expectRecipe(Block.PISTON, [[Block.OAK_PLANKS, 3], [Block.COBBLESTONE, 4], [Item.IRON_INGOT, 1], [Item.REDSTONE, 1]]);
+  expectRecipe(Block.OBSERVER, [[Block.COBBLESTONE, 6], [Item.REDSTONE, 2], [Item.QUARTZ, 1]]);
+  expectRecipe(Block.STONE_BUTTON, [[Block.STONE, 1]]);
+  expectRecipe(Block.OAK_BUTTON, [[Block.OAK_PLANKS, 1]]);
+  expectRecipe(Block.STONE_PRESSURE_PLATE, [[Block.STONE, 2]]);
+  expectRecipe(Block.OAK_PRESSURE_PLATE, [[Block.OAK_PLANKS, 2]]);
+  expectRecipe(Block.REDSTONE_BLOCK, [[Item.REDSTONE, 9]]);
+  // 红石块拆回 9 份红石（原版两向都有，与铁块那套同一条）
+  equal('红石块能拆回 9 份红石', matchRecipe([Block.REDSTONE_BLOCK], 2)?.count, 9);
+  equal('拆回来的是红石粉', matchRecipe([Block.REDSTONE_BLOCK], 2)?.id, Item.REDSTONE);
+
+  // ---- 刻意不做的那一条：粘性活塞要粘液球，而史莱姆还没做（TASKS J16）。
+  // 这条断言是**给未来的人看的**：谁为了"补全"而编一个替代配方，它会红
+  check(
+    '粘性活塞**没有**配方（原版要粘液球，史莱姆还没做——宁缺勿编）',
+    recipeFor(Block.STICKY_PISTON) === undefined,
+    '有配方了：要么史莱姆做出来了，要么有人编了个原版没有的配方',
+  );
+  check('（前置）活塞本身有配方（所以粘性活塞只差粘液球那一件）', recipeFor(Block.PISTON) !== undefined);
+
+  // ---- 顺带补的三件（同一批审计量出来的）
+  equal('闪长岩：2 圆石 + 2 石英 → 2 个', matchRecipe([Block.COBBLESTONE, Item.QUARTZ, Item.QUARTZ, Block.COBBLESTONE], 2)?.id, Block.DIORITE);
+  equal('闪长岩一次出 2 个', matchRecipe([Block.COBBLESTONE, Item.QUARTZ, Item.QUARTZ, Block.COBBLESTONE], 2)?.count, 2);
+  equal('安山岩：2 闪长岩 + 2 圆石 → 2 个', matchRecipe([Block.DIORITE, Block.COBBLESTONE, Block.COBBLESTONE, Block.DIORITE], 2)?.count, 2);
+  equal('粗铁块能拆回 9 粗铁', matchRecipe([Block.RAW_IRON_BLOCK], 2)?.count, 9);
+  equal('绯红菌柄 → 4 绯红木板', matchRecipe([Block.CRIMSON_STEM], 2)?.count, 4);
+  equal('诡异菌柄 → 4 诡异木板', matchRecipe([Block.WARPED_STEM], 2)?.id, Block.WARPED_PLANKS);
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);

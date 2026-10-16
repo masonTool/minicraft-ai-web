@@ -555,23 +555,9 @@ const idsNamed = (...names: string[]): number[] =>
  */
 const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: string }[] = [
   {
-    label: '红石元件',
-    ids: idsNamed(
-      'lever',
-      'piston',
-      'sticky_piston',
-      'observer',
-      'repeater',
-      'comparator',
-      'redstone_torch',
-      'redstone_lamp',
-      'redstone_block',
-      'stone_button',
-      'oak_button',
-      'stone_pressure_plate',
-      'oak_pressure_plate',
-    ),
-    reason: 'E13 把红石**行为**做全了，但这些元件一件都没有配方（原版全都有）：整套只能从创造模式里拿',
+    label: '粘性活塞（只差一件原料）',
+    ids: idsNamed('sticky_piston'),
+    reason: '原版是"活塞 + 粘液球"，而史莱姆还没做（TASKS J16）——不编替代配方，缺的就是那一件',
   },
   {
     label: '混凝土 16 色',
@@ -584,36 +570,15 @@ const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: st
     reason: '灰与黑染料拿不到（缺墨囊与凋灵玫瑰，见物品侧白名单），所以这两色的染色方块整族断在染料上',
   },
   {
-    label: '闪长岩 / 安山岩那一族',
-    ids: idsNamed(
-      'diorite',
-      'andesite',
-      'polished_diorite',
-      'polished_diorite_slab',
-      'polished_diorite_stairs',
-      'diorite_slab',
-      'diorite_stairs',
-      'diorite_wall',
-      'andesite_slab',
-      'andesite_stairs',
-      'andesite_wall',
-    ),
-    reason: '原版有配方（2 圆石 + 2 石英 → 闪长岩、2 圆石 + 2 闪长岩 → 安山岩），本项目没补；生成侧也不写它们',
-  },
-  {
     label: '生成侧没写的几样',
-    ids: idsNamed('calcite', 'ice', 'packed_ice', 'smooth_basalt', 'nether_sprouts', 'cracked_deepslate_bricks'),
-    reason: '世界生成里没有它们（原版分别在山地/冰原/玄武岩三角洲/诡异森林/深层洞穴），也没有配方',
+    // ⚠️ 裂纹深板岩砖**不在**这一族了：批次 119 按原版补上了"深板岩砖 → 熔炼 → 裂纹"那条
+    ids: idsNamed('calcite', 'ice', 'packed_ice', 'smooth_basalt', 'nether_sprouts'),
+    reason: '世界生成里没有它们（原版分别在山地/冰原/玄武岩三角洲/诡异森林），也没有配方',
   },
   {
     label: '竹子与脚手架',
     ids: idsNamed('bamboo', 'scaffolding'),
     reason: '竹子生成侧没写（原版长在丛林），脚手架那条配方因此永远做不出来',
-  },
-  {
-    label: '绯红 / 诡异木板',
-    ids: idsNamed('crimson_planks', 'warped_planks'),
-    reason: '原版从菌柄合成（1 菌柄 → 4 木板），本项目只生成了菌柄与菌岩，没补那条配方',
   },
   {
     label: '深色橡木树叶',
@@ -640,11 +605,6 @@ const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: st
       'dead_horn_coral_fan',
     ),
     reason: '原版是活珊瑚离水之后变的，本项目没有"珊瑚死亡"这条机制（放上去永远是活的）',
-  },
-  {
-    label: '缺配方的那几件（含被它拖累的高炉）',
-    ids: idsNamed('smooth_stone', 'smooth_stone_slab', 'smooth_stone_stairs', 'raw_iron_block', 'blast_furnace'),
-    reason: '原版有明确的配方（石头熔炼 → 平滑石头、9 粗铁 → 粗铁块），本项目没补；**高炉是被平滑石头拖累的**（它自己的配方在，原料却做不出来）',
   },
 ];
 
@@ -724,9 +684,12 @@ const blockGaps: number[] = [];
   check('方块侧白名单里没有"其实已经拿得到"的条目（补上了就删掉它）', stale.length === 0, namesOfBlocks(stale));
   check('方块侧白名单没有重复 id', exempted.size === BLOCK_EXEMPT.reduce((sum, f) => sum + f.ids.length, 0));
   check('方块侧每条都写了理由（≥ 8 字）', BLOCK_EXEMPT.every((family) => family.reason.length >= 8));
-  // 把缺口总数钉死（与物品侧同一个用法：链一断或一补就会红）
+  // 把缺口总数钉死（与物品侧同一个用法：链一断或一补就会红）。
+  // 一路在缩：批次 118 量出来 **77** 条（10 族）→ 119 给红石元件与那几件补上配方后 **46** 条（7 族）。
+  // 剩下的每一条都是"缺一整块内容"（史莱姆、鱿鱼、丛林竹子、珊瑚死亡机制、深色森林、混凝土粉末），
+  // 而不是"某条链断在中间"——正是这一栏该有的样子
   equal(
-    '方块侧缺口总数（批次 118 第一次量出来）',
+    '方块侧缺口总数（批次 119 之后：46 条）',
     blockGaps.length,
     BLOCK_EXEMPT.reduce((sum, family) => sum + family.ids.length, 0),
   );

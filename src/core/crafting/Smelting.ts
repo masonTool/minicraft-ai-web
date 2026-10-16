@@ -131,6 +131,18 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   { input: Item.COD, output: { id: Item.COOKED_COD, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
   { input: Item.SALMON, output: { id: Item.COOKED_SALMON, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'food' },
 
+  // 石头 → 平滑石头 / 深板岩砖 → 裂纹深板岩砖（批次 119）：这两条也是
+  // **批次 118 的方块侧审计**量出来的缺口——原版有明确配方（熔炼），本项目漏了。
+  // 平滑石头是"平滑石头台阶/楼梯"的母方块，缺了它那一族连着做不出来；
+  // 归 `none`：原版的烟熏炉只吃食物、高炉只吃矿物与金属，而这两样是建材
+  { input: Block.STONE, output: { id: Block.SMOOTH_STONE, count: 1 }, time: SMELTING_TIME, experience: 0.1 },
+  {
+    input: Block.DEEPSLATE_BRICKS,
+    output: { id: Block.CRACKED_DEEPSLATE_BRICKS, count: 1 },
+    time: SMELTING_TIME,
+    experience: 0.1,
+  },
+
   // 磨制黑石砖 → 裂纹磨制黑石砖（批次 85，B50）：原版**只有这一条路**
   // （裂纹砖没有合成配方），所以它归 `none`：烟熏炉/高炉都不该接它
   // （它们只吃食物/矿物，而这是建材）

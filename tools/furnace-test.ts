@@ -76,7 +76,10 @@ equal('煤炭可燃 80 秒', fuelSeconds(Item.COAL), 80);
 equal('木棍可燃 5 秒', fuelSeconds(Item.STICK), 5);
 equal('木板可燃 15 秒', fuelSeconds(Block.OAK_PLANKS), 15);
 equal('石头不能当燃料', fuelSeconds(Block.STONE), 0);
-equal('石头没有烧炼配方', smeltingRecipeFor(Block.STONE), undefined);
+// ⚠️ 这一条原本拿**石头**当"没有配方的样本"，而批次 119 按原版补上了
+// "石头 → 平滑石头"（方块侧可达性审计量出来的缺口），所以样本换成泥土
+equal('泥土没有烧炼配方', smeltingRecipeFor(Block.DIRT), undefined);
+equal('石头能烧成平滑石头（批次 119 按原版补的）', smeltingRecipeFor(Block.STONE)?.output.id, Block.SMOOTH_STONE);
 
 console.log('\n[熔炉：空炉不工作]');
 {
@@ -228,10 +231,11 @@ console.log('\n[三种炉子：站台与它吃的东西]');
   check('烟熏炉拒绝粗铁时说明了"只烧食物"', stationRejectReason(Item.RAW_IRON, 'smoker').includes('只烧食物'));
   check('高炉拒绝沙子时说明了"只烧矿物"', stationRejectReason(Block.SAND, 'blast_furnace').includes('只烧矿物'));
   equal('能烧的时候没有意见', stationRejectReason(Item.BEEF, 'smoker'), '');
-  equal('熔炉从不挑食', stationRejectReason(Block.STONE, 'furnace'), '');
-  // 石头的特殊之处：**它本来就没有烧炼配方**，三种炉子都不该多嘴
-  // （提示只在"能烧、但这座炉子不做"的时候出现，否则玩家会以为石头本该能烧）
-  equal('石头没有配方，烟熏炉也不多嘴', stationRejectReason(Block.STONE, 'smoker'), '');
+  equal('熔炉从不挑食', stationRejectReason(Block.DIRT, 'furnace'), '');
+  // 泥土的特殊之处：**它本来就没有烧炼配方**，三种炉子都不该多嘴
+  // （提示只在"能烧、但这座炉子不做"的时候出现，否则玩家会以为泥土本该能烧）
+  // ⚠️ 样本从石头换成泥土：石头在批次 119 有了"→ 平滑石头"这条配方（见上面那条）
+  equal('泥土没有配方，烟熏炉也不多嘴', stationRejectReason(Block.DIRT, 'smoker'), '');
 }
 
 console.log('\n[烟熏炉：只烧食物、快一倍]');

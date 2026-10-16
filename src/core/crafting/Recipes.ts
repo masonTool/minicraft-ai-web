@@ -1178,6 +1178,126 @@ const HANGING_RECIPES: readonly Recipe[] = [
   ),
 ];
 
+/**
+ * 红石元件与那几件"原版有配方、本项目没补"的东西（批次 119）。
+ *
+ * 由来是**可达性审计查出来的**（批次 118 的方块侧量出 10 族 77 个缺口）：
+ * 其中最扎眼的一条是——**E13 把红石行为做全了**（充能、延迟、比较、推拉……），
+ * 可这些元件**一件都没有配方**，生存模式里只能靠创造模式拿。
+ * 这一批按原版把配方补齐，白名单里相应的几族随之删掉。
+ *
+ * 原料全是早期就能拿到的东西（圆石 / 木棍 / 红石 / 石英 / 铁锭 / 木板），
+ * 所以补完之后"在生存里搭一个红石电路"整条路是通的。
+ *
+ * ⚠️ 两处保留的差异：
+ *  - **粘性活塞不做**：原版是"活塞 + 粘液球"，而史莱姆还没做（TASKS J16）——
+ *    与其编一个原版没有的替代配方，不如让白名单里留着它一条（理由写清是缺哪一件）；
+ *  - **侦测器按 1.16 的图案**（6 圆石 + 2 红石 + 1 石英）：原版后来改过一次配方，
+ *    这里取的是"石英在中间那一行右侧"这一版。
+ */
+const REDSTONE_RECIPES: readonly Recipe[] = [
+  // 拉杆：1 圆石 + 1 木棍
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.LEVER, count: 1 },
+    pattern: ['S', 'C'],
+    key: { S: Item.STICK, C: Block.COBBLESTONE },
+  },
+  // 红石火把：1 红石 + 1 木棍
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.REDSTONE_TORCH, count: 1 },
+    pattern: ['R', 'S'],
+    key: { R: Item.REDSTONE, S: Item.STICK },
+  },
+  // 红石灯：4 红石围着 1 荧石
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.REDSTONE_LAMP, count: 1 },
+    pattern: [' R ', 'RGR', ' R '],
+    key: { R: Item.REDSTONE, G: Block.GLOWSTONE },
+  },
+  // 中继器：3 石头上下两排 + 2 红石火把（左右各一）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.REPEATER, count: 1 },
+    pattern: ['SSS', 'T T', 'SSS'],
+    key: { S: Block.STONE, T: Block.REDSTONE_TORCH },
+  },
+  // 比较器：3 红石火把（上中、左、右）+ 1 石英（中）+ 3 石头（底）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.COMPARATOR, count: 1 },
+    pattern: [' T ', 'TQT', 'SSS'],
+    key: { T: Block.REDSTONE_TORCH, Q: Item.QUARTZ, S: Block.STONE },
+  },
+  // 活塞：3 木板 + 4 圆石 + 1 铁锭 + 1 红石
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.PISTON, count: 1 },
+    pattern: ['PPP', 'CIC', 'CRC'],
+    key: { P: Block.OAK_PLANKS, C: Block.COBBLESTONE, I: Item.IRON_INGOT, R: Item.REDSTONE },
+  },
+  // 侦测器（1.16 图案）：6 圆石 + 2 红石 + 1 石英
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.OBSERVER, count: 1 },
+    pattern: ['CCC', 'RRQ', 'CCC'],
+    key: { C: Block.COBBLESTONE, R: Item.REDSTONE, Q: Item.QUARTZ },
+  },
+  // 按钮：1 石头 / 1 木板（无序）
+  { kind: 'shapeless' as const, result: { id: Block.STONE_BUTTON, count: 1 }, ingredients: [Block.STONE] },
+  { kind: 'shapeless' as const, result: { id: Block.OAK_BUTTON, count: 1 }, ingredients: [Block.OAK_PLANKS] },
+  // 压力板：2 石头 / 2 木板
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.STONE_PRESSURE_PLATE, count: 1 },
+    pattern: ['SS'],
+    key: { S: Block.STONE },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.OAK_PRESSURE_PLATE, count: 1 },
+    pattern: ['PP'],
+    key: { P: Block.OAK_PLANKS },
+  },
+  // 红石块 ↔ 9 红石（与原版一致：既是信号源，也是储物方块）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.REDSTONE_BLOCK, count: 1 },
+    pattern: ['RRR', 'RRR', 'RRR'],
+    key: { R: Item.REDSTONE },
+  },
+  { kind: 'shapeless' as const, result: { id: Item.REDSTONE, count: 9 }, ingredients: [Block.REDSTONE_BLOCK] },
+
+  // ---- 顺带补上的三件（同一批审计量出来的，原版都有明确配方）
+  // 闪长岩：2 圆石 + 2 石英 → 2 个
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.DIORITE, count: 2 },
+    pattern: ['CQ', 'QC'],
+    key: { C: Block.COBBLESTONE, Q: Item.QUARTZ },
+  },
+  // 安山岩：2 闪长岩 + 2 圆石 → 2 个
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.ANDESITE, count: 2 },
+    pattern: ['DC', 'CD'],
+    key: { D: Block.DIORITE, C: Block.COBBLESTONE },
+  },
+  // 粗铁块 ↔ 9 粗铁（与铁块那套同一条）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.RAW_IRON_BLOCK, count: 1 },
+    pattern: ['RRR', 'RRR', 'RRR'],
+    key: { R: Item.RAW_IRON },
+  },
+  { kind: 'shapeless' as const, result: { id: Item.RAW_IRON, count: 9 }, ingredients: [Block.RAW_IRON_BLOCK] },
+  // 绯红 / 诡异木板：1 菌柄 → 4 木板（原版）
+  { kind: 'shapeless' as const, result: { id: Block.CRIMSON_PLANKS, count: 4 }, ingredients: [Block.CRIMSON_STEM] },
+  { kind: 'shapeless' as const, result: { id: Block.WARPED_PLANKS, count: 4 }, ingredients: [Block.WARPED_STEM] },
+];
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...CONTAINER_RECIPES,
@@ -1202,6 +1322,7 @@ export const RECIPES: readonly Recipe[] = [
   ...BLACKSTONE_RECIPES,
   LIGHTNING_ROD_RECIPE,
   ...HANGING_RECIPES,
+  ...REDSTONE_RECIPES,
 ];
 
 interface Normalized {
