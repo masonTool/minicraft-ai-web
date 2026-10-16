@@ -92,19 +92,30 @@ const BUDGETS = {
    */
   largestHighland: { default: 3100, amplified: 6200 },
   /**
-   * 判据 3：最大群系斑块的采样点数。**越大越好（"成片的树林"）。**
-   * 调前 → 调后：default 512 → **793**、amplified 659 → **1116**
+   * 判据 3：最大的**陆地**群系斑块的采样点数。**越大越好（"成片的树林"）。**
+   *
+   * ⚠️ 批次 106（B105-5）**按陆/海拆开之后才发现这条一直量错了东西**：
+   * 原来量的是"全体里最大的那块斑块"，而放大化世界里那一块是**海洋**斑块
+   * （deep_ocean 连成一片，**1116** 点），**陆地**最大的只有 **778** 点 ——
+   * 也就是说"成片的树林"这个诉求**从来没有被真正量到过**。
+   * 现在断言落在陆地上，预算也按陆地的实测值重新校准。
+   * 写下这批（批次 106）时的实测：default 陆地 775 / 海洋 642、
+   * amplified 陆地 778 / 海洋 1116。
    */
-  largestBiomePatch: { default: 770, amplified: 1090 },
+  largestBiomePatch: { default: 750, amplified: 750 },
   /**
    * 判据 4：每一列的平均实心段数（理想 1 段 = 一整块地形）。**越小越好。**
    * 调前 → 调后：default 1.57 → **1.56**、amplified 1.45 → **1.45**（最多都是 4 段）。
+   * ⚠️ 批次 106（B105-5）按陆/海拆开后的实测：default 陆地 **1.60**（海洋 1.49）、
+   * amplified 陆地 **1.38**（海洋 1.59）—— 放大化反而是**陆地比海洋好**，
+   * 所以混在一起量会把两者的走向搅在一起。预算按陆地重新校准。
+   *
    * ⚠️ 这一条**几乎没动**：它量的是"密度场在竖直方向被切了几刀"，
    * 而 N9-a 调的是三维细节与几个气候噪声的**八度权重**、并按离地表的距离衰减
    * （衰减在 0.5 处封底，不能封到 0——封 0 会造出"死区"，判据 1 反而变差，见
    *  `OverworldGenerator.DETAIL_FADE_FLOOR` 的注释）。要再往下压得动别的旋钮。
    */
-  meanRuns: { default: 1.6, amplified: 1.49 },
+  meanRuns: { default: 1.65, amplified: 1.45 },
   /**
    * 判据 5：能落地（脚下实心 + 头顶有空间）的列占比（%）。**越大越好。**
    * 调前 → 调后：default 45.5% → **46.4%**、amplified 35.4% → **42.4%**
@@ -343,12 +354,25 @@ for (const worldType of worldTypes) {
     `实测 ${largest}`,
   );
 
-  // ---- 判据 3：群系斑块尺寸
-  const patches = componentSizes(
+  // ---- 判据 3：群系斑块尺寸（**按陆 / 海分开**，批次 106，B105-5）
+  //
+  // ⚠️ 原来只量"全体里最大的那一块斑块"，而最大的一块**多半是海洋群系**
+  // （深海/冻洋能连成一大片）—— 那**不是**用户说的"成片的树林"。
+  // 更要紧的是它的**口径受海陆比例影响**：抬深海床会让陆地列从 69% 变成 63%，
+  // 斑块大小跟着漂，于是分不清"真变差"与"口径漂移"
+  // （批次 106 试的三条治"海太深"的路全撞在这上面，见 TASKS N10）。
+  // 拆开之后，断言落在**陆地**那块上（那才对应"树林成片"），海洋那块只打印。
+  const landPatches = componentSizes(
     N,
-    () => true,
+    (i) => grid.heights[i]! >= SEA_LEVEL,
     (i) => grid.biomes[i]!,
   );
+  const seaPatches = componentSizes(
+    N,
+    (i) => grid.heights[i]! < SEA_LEVEL,
+    (i) => grid.biomes[i]!,
+  );
+  const patches = landPatches;
   const frequent = new Map<number, number>();
   for (let i = 0; i < N * N; i++) frequent.set(grid.biomes[i]!, (frequent.get(grid.biomes[i]!) ?? 0) + 1);
   const biomeSummary = [...frequent.entries()]
@@ -357,13 +381,15 @@ for (const worldType of worldTypes) {
     .map(([slot, count]) => `${grid.names[slot] ?? '?'} ${((count / (N * N)) * 100).toFixed(0)}%`)
     .join(' · ');
   console.log(
-    `  群系：${patches.length} 个斑块，最大 ${patches[0] ?? 0} 点、` +
-      `中位数 ${patches[Math.floor(patches.length / 2)] ?? 0} 点；面积前四 ${biomeSummary}`,
+    `  群系斑块（陆地）：${landPatches.length} 块，最大 ${landPatches[0] ?? 0} 点、` +
+      `中位数 ${landPatches[Math.floor(landPatches.length / 2)] ?? 0} 点` +
+      ` ｜（海洋）：${seaPatches.length} 块，最大 ${seaPatches[0] ?? 0} 点`,
   );
+  console.log(`  群系面积前四：${biomeSummary}`);
   check(
-    `最大群系斑块 ≥ ${BUDGETS.largestBiomePatch[worldType]} 点（"成片"的树林）`,
+    `最大**陆地**群系斑块 ≥ ${BUDGETS.largestBiomePatch[worldType]} 点（"成片"的树林）`,
     (patches[0] ?? 0) >= BUDGETS.largestBiomePatch[worldType],
-    `实测 ${patches[0] ?? 0}`,
+    `实测陆地最大 ${patches[0] ?? 0} 点（海洋最大 ${seaPatches[0] ?? 0}）`,
   );
 
   // ---- 判据 4：密度场在**竖直方向**的碎法（每一列有几段互相隔开的实心块）
@@ -374,23 +400,36 @@ for (const worldType of worldTypes) {
   //      （所以这个数直接关系到"树浮空 / 埋进山体"）；
   //   ② 那些薄片就是玩家眼里的"浮空碎块"。
   // 理想值是 **1 段**（一整块地形）。段数越多 = 越碎。
+  //
+  // ⚠️ 与判据 3 同样的问题（批次 106，B105-5）：全体平均里混着**海洋列**，
+  // 而海洋列是"水 + 海床"，本来就与陆地的形状不同；更要紧的是口径受**海陆比例**影响。
+  // 所以按陆/海分开，断言落在**陆地**上。
   {
-    const runCounts: number[] = [];
+    const landRuns: number[] = [];
+    const seaRuns: number[] = [];
     for (let j = 0; j <= N; j += 8) {
       for (let i = 0; i <= N; i += 8) {
-        runCounts.push(gen.densityRunsAt(i * STEP, j * STEP).length);
+        const x = i * STEP;
+        const z = j * STEP;
+        const runs = gen.densityRunsAt(x, z).length;
+        if (gen.surfaceY(x, z) >= SEA_LEVEL) landRuns.push(runs);
+        else seaRuns.push(runs);
       }
     }
-    const mean = runCounts.reduce((a, b) => a + b, 0) / runCounts.length;
-    const maxRuns = Math.max(...runCounts);
-    const single = (runCounts.filter((c) => c <= 1).length / runCounts.length) * 100;
+    const meanOf = (a: number[]): number => (a.length === 0 ? 0 : a.reduce((p, q) => p + q, 0) / a.length);
+    const maxOf = (a: number[]): number => (a.length === 0 ? 0 : Math.max(...a));
+    const singleShare = (a: number[]): number =>
+      a.length === 0 ? 0 : (a.filter((c) => c <= 1).length / a.length) * 100;
+    const land = meanOf(landRuns);
     console.log(
-      `  每列实心段数：平均 ${mean.toFixed(2)} 段 · 最多 ${maxRuns} 段 · 只有 1 段的占 ${single.toFixed(0)}%（${runCounts.length} 列）`,
+      `  每列实心段数（陆地）：平均 ${land.toFixed(2)} 段 · 最多 ${maxOf(landRuns)} 段 · ` +
+        `只有 1 段的占 ${singleShare(landRuns).toFixed(0)}%（${landRuns.length} 列）` +
+        ` ｜（海洋）：平均 ${meanOf(seaRuns).toFixed(2)} 段（${seaRuns.length} 列）`,
     );
     check(
-      `每列实心段数平均 ≤ ${BUDGETS.meanRuns[worldType]} 段（理想 1 段 = 一整块地形）`,
-      mean <= BUDGETS.meanRuns[worldType],
-      `实测平均 ${mean.toFixed(2)} / 最多 ${maxRuns}`,
+      `陆地每列实心段数平均 ≤ ${BUDGETS.meanRuns[worldType]} 段（理想 1 段 = 一整块地形）`,
+      land <= BUDGETS.meanRuns[worldType],
+      `实测陆地平均 ${land.toFixed(2)} / 最多 ${maxOf(landRuns)}`,
     );
   }
 
