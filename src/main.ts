@@ -1278,7 +1278,9 @@ class App {
     else if (this.recipeBook.isOpen) this.recipeBook.hide();
     else if (this.advancementScreen.isOpen) this.advancementScreen.hide();
     else if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
-    else if (this.settingsScreen.isOpen) this.closeSettings();
+    // 暂停菜单分两层（批次 108）：先"设置页 → 菜单页"，回到菜单页时它**还开着**，
+    // 所以这里不能直接 closeSettings()——`goBack` 会自己决定（必要时才真关）
+    else if (this.settingsScreen.isOpen) this.settingsScreen.goBack();
     return this.isAnyUiOpen();
   }
 
@@ -2266,10 +2268,13 @@ class App {
         this.closeAdvancements();
         return;
       }
-      // Esc：打开/关闭暂停菜单（内含设置）。原版也是 Esc 唤出菜单而不是直接退出
+      // Esc：打开/关闭暂停菜单（内含设置）。原版也是 Esc 唤出菜单而不是直接退出。
+      // ⚠️ 批次 108 起暂停菜单分两层（菜单页 / 设置页）：Esc 是"退一层"，
+      // 在设置页先回菜单、再按一次才回到游戏（`goBack` 把这条判断收在一处）。
       if (e.code === 'Escape' && !this.inventoryScreen.isOpen) {
         e.preventDefault();
-        this.toggleSettings();
+        if (this.settingsScreen.isOpen) this.settingsScreen.goBack();
+        else this.openSettings();
         return;
       }
       if (e.code === 'Tab') e.preventDefault();

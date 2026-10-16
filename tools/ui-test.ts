@@ -177,7 +177,11 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
     // 手机端设置面板（批次 107 改成紧凑卡片，见 index.html 里那一段的说明）
     ['手机端设置面板是紧凑卡片（不再占满全屏）', 'body.touch-mode .settings-panel { width: min(96vw, 520px); max-width: 520px; height: auto; max-height: min(92vh, 760px);'],
     ['手机端四组设置一次全显示', 'body.touch-mode .settings-section { display: flex; }'],
-    ['动作按钮钉在设置之前（"继续游戏"不必滚）', 'body.touch-mode .settings-buttons { order: 1;'],
+    // 暂停菜单那一页（批次 108）：一页只放"几个主要按钮"，竖排
+    ['暂停菜单的主按钮竖排', '.pause-actions { display: flex; flex-direction: column; gap: 8px;'],
+    ['手机上暂停按钮热区 48px', 'body.touch-mode .pause-action { min-height: 48px; font-size: 15px; }'],
+    ['设置页有 ‹ 返回（它是暂停菜单的二级页面）', '.settings-back { flex: 0 0 auto; padding: 0 10px; height: 36px;'],
+    ['暂停菜单那一页自己滚（设置页滚的是里面那块）', "body.touch-mode .pause-page[data-page='menu'].active { overflow-y: auto; }"],
     ['矮屏才退回分组页签', 'body.touch-mode .settings-tabs { display: flex; flex: 0 0 auto; padding: 0 0 8px; }'],
     ['手机端不显示快捷栏序号（没有数字键）', 'body.touch-mode #hotbar .slot .index { display: none; }'],
   ] as const) {
@@ -190,7 +194,10 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   const settings = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   check('配方书的关闭键在手机上是 ✕（PC 才写 "关闭 (R)"）', recipeBook.includes("isTouchUi() ? '✕' : '关闭 (R)'"));
   check('背包标题栏不在手机上说 "配方书 (R)"', inventory.includes("touchDevice ? '配方书' : '配方书 (R)'"));
-  check('设置面板的副标题在手机上不提 Esc', settings.includes("isTouchUi() ? '改动立即生效"));
+  check(
+    '设置面板的提示在手机上不提 Esc（改成"点 ‹ 返回"）',
+    settings.includes("touch ? '改动立即生效") && settings.includes('点 ‹ 返回'),
+  );
 }
 
 // ---------------------------------------------------------------- 3. HTML 外壳
@@ -483,6 +490,32 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check(
     '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
     !settingsSource.includes("key: 'flying'") && settingsSource.includes('private makeCreativeRow'),
+  );
+}
+
+console.log('\n[暂停菜单分两层（批次 108）]');
+{
+  const source = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  // 两页 = 同一份 DOM 的两个 `.pause-page`，切页只切 `.active`（没有重建、没有动画）
+  check('定义了两页（menu / settings）', source.includes("export const PAUSE_PAGES = ['menu', 'settings'] as const;"));
+  check('切页只切 class（不重建 DOM）', source.includes("element.classList.toggle('active', key === page);"));
+  // 用户点名要的"几个主要按钮"：继续游戏 / 设置 / 保存并退出
+  check('暂停菜单有「继续游戏」', source.includes("this.resumeButton.textContent = '继续游戏';"));
+  check('暂停菜单有「设置」按钮（点进二级页）', source.includes("settingsButton.textContent = '设置';"));
+  check('暂停菜单有「保存并退出到主菜单」', source.includes("exitToMenu.textContent = '保存并退出到主菜单';"));
+  // 设置页有返回；「继续游戏」不该再和滑块挤在同一页上
+  check('设置页有 ‹ 返回', source.includes("backButton.textContent = '‹ 返回';"));
+  check('设置页上不再并排放着动作按钮', !source.includes("className = 'settings-buttons'"));
+  // Esc / Android 返回键共用"退一层"这一个判据
+  check('退一层收在 goBack() 里（返回"还开着吗"）', source.includes('goBack(): boolean') && source.includes("this.setPage('menu');\n      return true;"));
+  // 从主菜单打开时没有"暂停"可言，直接进设置页
+  check('从主菜单打开直接进设置页', source.includes("page ?? (this.actions.onExitToMenu ? 'menu' : 'settings')"));
+  // 主程序三条路径都要走 goBack（Esc / Android 返回键 / 关最上层界面）
+  const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('Esc 走 goBack（设置页 → 菜单页 → 继续游戏）', main.includes('this.settingsScreen.goBack();'));
+  check(
+    'Android 返回键也走 goBack（先退到菜单页，再按一次才真的关）',
+    /closeTopUi\(\): boolean \{[\s\S]*?settingsScreen\.goBack\(\)/.test(main),
   );
 }
 

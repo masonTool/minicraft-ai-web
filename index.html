@@ -671,15 +671,42 @@
       }
       .settings-tab.active { background: var(--btn-primary); color: #fff; }
       .settings-hint { color: #9a9a9a; font-size: 12px; margin: 4px 0 12px; }
-      .settings-buttons { display: flex; gap: 8px; margin-bottom: 14px; order: 2; flex: 0 0 auto; }
-      .settings-buttons button {
-        flex: 1; padding: 10px; font: inherit; font-size: 13px; cursor: pointer;
-        background: var(--btn-primary); color: #fff;
-        border: 1px solid #ffffff26; border-radius: var(--btn-radius);
+      .settings-title { font-size: 19px; display: block; letter-spacing: 1px; }
+
+      /* ---------------- 暂停菜单那一页（批次 108） ----------------
+         同一份 DOM 的两页：`.pause-page.active` 才是当前这一页。
+         暂停菜单那几颗按钮**竖着一列**——一页只放"几个主要按钮"。
+         原来"继续游戏/成就/保存并回到主菜单/删除本世界"和十几行设置并排挤在
+         一页上，用户的原话是"按钮非常大、又占了全屏、有点乱"。
+         按钮的斜角与主菜单那套一致（亮左上 / 暗右下，按下时翻过来）。 */
+      .pause-page { display: none; }
+      .pause-page.active { display: flex; flex-direction: column; flex: 0 0 auto; }
+      .pause-actions { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 0; }
+      .pause-action {
+        font: inherit; font-size: 14px; padding: 10px; min-height: 42px; cursor: pointer;
+        color: #e8e8e8; background: linear-gradient(#3a3b42, #2a2b31);
+        border: 2px solid;
+        border-color: rgba(255, 255, 255, .34) rgba(0, 0, 0, .6) rgba(0, 0, 0, .6) rgba(255, 255, 255, .34);
+        border-radius: 0;
         transition: transform var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease);
       }
-      .settings-buttons button.danger { background: var(--btn-danger); }
-      .settings-buttons button:active { transform: translateY(1px); filter: brightness(.92); }
+      .pause-action.primary { background: var(--btn-primary); color: #fff; }
+      .pause-action.danger { background: var(--btn-danger); color: #fff; }
+      .pause-action:not(:disabled):active {
+        transform: translateY(1px); filter: brightness(.92);
+        border-color: rgba(0, 0, 0, .6) rgba(255, 255, 255, .34) rgba(255, 255, 255, .34) rgba(0, 0, 0, .6);
+      }
+      /* 设置页左上角的"‹ 返回"：与右上角的 ✕ 同款，宽一点（要装得下两个字） */
+      .settings-back {
+        flex: 0 0 auto; padding: 0 10px; height: 36px; min-width: 64px;
+        font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+        color: rgba(255, 255, 255, .9); background: #33343b;
+        border: 2px solid;
+        border-color: rgba(255, 255, 255, .38) rgba(0, 0, 0, .55) rgba(0, 0, 0, .55) rgba(255, 255, 255, .38);
+        border-radius: 0;
+        transition: transform var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease);
+      }
+      .settings-back:active { transform: translateY(1px); filter: brightness(.9); }
       /* 设置项按分组切成四段（与页签一一对应）：桌面全部显示，手机只显示 .active 那段 */
       .settings-body { order: 3; display: flex; flex-direction: column; gap: 9px; flex: 0 0 auto; }
       .settings-section { display: flex; flex-direction: column; gap: 9px; }
@@ -784,13 +811,12 @@
       }
       body.touch-mode .settings-header { flex: 0 0 auto; padding: 0 0 8px; gap: 8px; }
       body.touch-mode .settings-close { width: 40px; height: 38px; font-size: 16px; }
-      /* 动作按钮放在**最上面**：四组设置全展开之后，"继续游戏"若被推到最底下
-         就得先滚一段才够得着——那正是原来最难受的一件事 */
-      body.touch-mode .settings-buttons {
-        order: 1; flex: 0 0 auto; flex-wrap: wrap; gap: 6px;
-        padding: 0 0 8px; margin-bottom: 0;
-      }
-      body.touch-mode .settings-buttons button { flex: 1 1 44%; min-height: 40px; font-size: 13px; }
+      /* 暂停菜单那几颗按钮：手机上给足热区（48px），并且**这一页自己滚**
+         （设置页的滚动区是里面那块 `.settings-body`，两页各滚各的） */
+      body.touch-mode .pause-action { min-height: 48px; font-size: 15px; }
+      body.touch-mode .pause-page.active { flex: 1 1 auto; min-height: 0; }
+      body.touch-mode .pause-page[data-page='menu'].active { overflow-y: auto; }
+      body.touch-mode .settings-back { height: 38px; padding: 0 12px; font-size: 14px; }
       /* 设置项那一块是唯一的滚动区（标题栏与动作按钮都钉在上面） */
       body.touch-mode .settings-body {
         order: 2; flex: 1 1 auto; min-height: 0;

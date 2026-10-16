@@ -1,9 +1,17 @@
 /**
- * 设置与暂停菜单（K3）
+ * 暂停菜单与设置（K3）
  *
- * 一个面板承担两件事：**暂停菜单**（继续 / 设置 / 存档信息 / 新世界）
- * 与**设置项**（视距 / 视野 / 音量 / 灵敏度 / 调试信息）。
- * 合成一个面板而不是两个：手机屏幕小，弹出两层界面既挡视野又难返回。
+ * **一个面板、两页**（批次 108）：
+ *  - `menu`：暂停菜单——继续游戏 / 设置 / 成就 / 保存并退出到主菜单 / 删除本世界，
+ *    外加一行存档信息。一页只放"几个主要按钮"，这是用户明确要的；
+ *  - `settings`：设置项——视距 / 视野 / 音量 / 灵敏度 / 触摸 / 视角 / 调试信息…
+ *    左上角一颗 `‹ 返回` 回暂停菜单。
+ *
+ * 为什么是同一份 DOM 的两页、而不是两个面板：这个面板在**两处**被用
+ *（游戏里的暂停菜单、主菜单里的"设置"），两套 DOM 迟早出现"这处改了那处没改"；
+ * 而两页共用标题栏/关闭键/页签/滚动区的样式，也省了一批重复的 CSS。
+ * 页面切换只切 `.active`，没有动画、没有重建，所以 Esc / Android 返回键
+ * 都是同步的（见 `goBack`）。
  *
  * 设置存在 localStorage 里（与 K1 的世界存档分开）：
  * 设置是"这台设备的偏好"，换世界也不该丢；而世界存档属于某个种子。
@@ -194,20 +202,41 @@ export interface SettingsActions {
   isFlying?: () => boolean;
 }
 
+/**
+ * 暂停菜单的两个页面（批次 108）。
+ *
+ * `menu` = 暂停菜单（继续游戏 / 设置 / 保存并退出…），`settings` = 设置项那一页。
+ *
+ * ⚠️ 批次 107 及以前这两件事挤在**同一页**上：一打开就是一堆滑块，最上面还并排着
+ * "继续游戏/成就/保存并回到主菜单/删除本世界"四颗按钮。用户的原话是
+ * "你现在做的是把几个按钮和设置整合到了一起……应该是几个主要按钮，
+ * 然后设置是应该有一个设置按钮，点击设置按钮进入之后"——所以拆成两层。
+ */
+export const PAUSE_PAGES = ['menu', 'settings'] as const;
+export type PausePage = (typeof PAUSE_PAGES)[number];
+
 export class SettingsScreen {
   readonly root: HTMLDivElement;
   private open = false;
   private readonly sliders = new Map<keyof GameSettings, HTMLInputElement>();
   private readonly metaEl: HTMLDivElement;
-  private readonly titleEl: HTMLElement;
-  private readonly subtitleEl: HTMLElement;
+  /** 设置页的标题（`setTitle` 改的是它：主菜单里打开时是"设置"） */
+  private readonly settingsTitleEl: HTMLElement;
+  /** 暂停菜单那句提示（触摸端换成不含键盘的说法） */
+  private readonly menuHintEl: HTMLElement;
+  /** 设置页那句提示 */
+  private readonly settingsHintEl: HTMLElement;
   private readonly resumeButton: HTMLButtonElement;
   private readonly closeButton: HTMLButtonElement;
+  /** 两页 = 两个 section，同一份 DOM 用 `.active` 切换 */
+  private readonly pages = new Map<PausePage, HTMLElement>();
   /** 一个分组 = 一个 section；默认四组一起显示，矮屏上由 CSS 只放行 `.active` 那一组 */
   private readonly sections = new Map<SettingGroup, HTMLElement>();
   private readonly tabs = new Map<SettingGroup, HTMLButtonElement>();
   /** 当前页签（手机端生效；桌面端四组全显示，这个值只是"下次打开停在哪一页"） */
   private activeGroup: SettingGroup = SETTING_GROUPS[0];
+  /** 当前停在哪一页 */
+  private currentPage: PausePage = 'menu';
   /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
   private subtitleText = '按 Esc 继续游戏';
   /** "创造模式（飞行）"那个开关（非持久设置，见 `makeCreativeRow`） */
@@ -225,28 +254,106 @@ export class SettingsScreen {
     const panel = document.createElement('div');
     panel.className = 'settings-panel';
 
-    // ---- 标题栏：标题 + 副标题 + 关闭 ✕
+    // ================================================================ ① 暂停菜单
+    //
+    // 一页只放"几个主要按钮"（用户原话）。删除本世界是危险动作，单独排在最后。
+    const menuPage = this.makePage('menu');
+
+    const menuHeader = document.createElement('div');
+    menuHeader.className = 'settings-header';
+
+    const menuTitle = document.createElement('b');
+    menuTitle.className = 'settings-title';
+    menuTitle.textContent = '游戏已暂停';
+
+    this.menuHintEl = document.createElement('div');
+    this.menuHintEl.className = 'settings-hint';
+
+    // 右上角的 ✕（批次 104）：手机上既没有 Esc、也没地方点"空白"（面板整屏），
+    // 玩家需要一个"看得见就知道能关"的出口。形状与配方书、成就面板统一。
+    this.closeButton = this.makeCloseButton();
+
+    menuHeader.append(menuTitle, this.menuHintEl, this.closeButton);
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'pause-actions';
+
+    this.resumeButton = document.createElement('button');
+    this.resumeButton.type = 'button';
+    this.resumeButton.id = 'pause-resume';
+    this.resumeButton.className = 'pause-action primary';
+    this.resumeButton.textContent = '继续游戏';
+    this.resumeButton.addEventListener('click', () => this.actions.onResume());
+
+    const settingsButton = document.createElement('button');
+    settingsButton.type = 'button';
+    settingsButton.id = 'pause-settings';
+    settingsButton.className = 'pause-action';
+    settingsButton.textContent = '设置';
+    settingsButton.addEventListener('click', () => this.setPage('settings'));
+
+    // 成就 / 进度（M7）：原版基岩版的暂停菜单里就有这一项
+    const achievements = document.createElement('button');
+    achievements.type = 'button';
+    achievements.id = 'pause-achievements';
+    achievements.className = 'pause-action';
+    achievements.textContent = '成就';
+    achievements.addEventListener('click', () => this.actions.onOpenAdvancements?.());
+    achievements.style.display = this.actions.onOpenAdvancements ? '' : 'none';
+
+    // 用户点名的"保存档退出"：退出前主程序会落一次盘（`exitToMenu` 里已经这么做了）
+    const exitToMenu = document.createElement('button');
+    exitToMenu.type = 'button';
+    exitToMenu.id = 'pause-exit';
+    exitToMenu.className = 'pause-action';
+    exitToMenu.textContent = '保存并退出到主菜单';
+    exitToMenu.addEventListener('click', () => this.actions.onExitToMenu?.());
+
+    const deleteWorld = document.createElement('button');
+    deleteWorld.type = 'button';
+    deleteWorld.id = 'pause-delete';
+    deleteWorld.className = 'pause-action danger';
+    deleteWorld.textContent = '删除本世界';
+    deleteWorld.addEventListener('click', () => {
+      if (confirm('确定要删除这个世界吗？存档会一起删掉，无法恢复。')) this.actions.onDeleteWorld?.();
+    });
+
+    // "退出/删除"只在游戏里有意义；主菜单打开这个面板时（没有当前世界）就藏起来。
+    // ⚠️ 用 style.display 而不是 .hidden 类：`.hidden` 只对面板根节点写了样式，
+    // 加在按钮上没有任何效果。
+    if (!this.actions.onExitToMenu) exitToMenu.style.display = 'none';
+    if (!this.actions.onDeleteWorld) deleteWorld.style.display = 'none';
+
+    actionsRow.append(this.resumeButton, settingsButton, achievements, exitToMenu, deleteWorld);
+
+    this.metaEl = document.createElement('div');
+    this.metaEl.className = 'settings-hint settings-meta';
+
+    menuPage.append(menuHeader, actionsRow, this.metaEl);
+
+    // ================================================================ ② 设置页
+    const settingsPage = this.makePage('settings');
+
     const header = document.createElement('div');
     header.className = 'settings-header';
 
-    this.titleEl = document.createElement('b');
-    this.titleEl.textContent = '设置与暂停';
+    const backButton = document.createElement('button');
+    backButton.type = 'button';
+    backButton.className = 'settings-back';
+    backButton.textContent = '‹ 返回';
+    backButton.setAttribute('aria-label', '返回暂停菜单');
+    backButton.addEventListener('click', () => this.setPage('menu'));
 
-    this.subtitleEl = document.createElement('div');
-    this.subtitleEl.className = 'settings-hint';
+    this.settingsTitleEl = document.createElement('b');
+    this.settingsTitleEl.className = 'settings-title';
+    this.settingsTitleEl.textContent = '设置';
 
-    // 右上角的 ✕（批次 104）：手机上既没有 Esc、也没地方点"空白"（面板是整屏的），
-    // 玩家需要一个"看得见就知道能关"的出口。形状与配方书、成就面板统一。
-    this.closeButton = document.createElement('button');
-    this.closeButton.type = 'button';
-    this.closeButton.className = 'settings-close';
-    this.closeButton.textContent = '✕';
-    this.closeButton.setAttribute('aria-label', '关闭设置');
-    this.closeButton.addEventListener('click', () => this.actions.onResume());
+    this.settingsHintEl = document.createElement('div');
+    this.settingsHintEl.className = 'settings-hint';
 
-    header.append(this.titleEl, this.subtitleEl, this.closeButton);
+    header.append(backButton, this.settingsTitleEl, this.settingsHintEl);
 
-    // ---- 分组页签（手机端显示，桌面端由 CSS 隐藏）
+    // ---- 分组页签（矮屏手机显示，其余由 CSS 隐藏）
     //
     // ⚠️ 刻意**不用** `role="tab"`：那套 ARIA 要求"一个 tab 配一个 tabpanel"，
     // 而桌面端四个 section 是同时显示的（页签只是隐藏的装饰）——两种模式下语义相反，
@@ -263,41 +370,6 @@ export class SettingsScreen {
       this.tabs.set(group, tab);
       tabs.appendChild(tab);
     }
-
-    // ---- 操作按钮
-    const buttons = document.createElement('div');
-    buttons.className = 'settings-buttons';
-
-    this.resumeButton = document.createElement('button');
-    this.resumeButton.type = 'button';
-    this.resumeButton.textContent = '继续游戏';
-    this.resumeButton.addEventListener('click', () => this.actions.onResume());
-
-    const exitToMenu = document.createElement('button');
-    exitToMenu.type = 'button';
-    exitToMenu.textContent = '保存并回到主菜单';
-
-    const deleteWorld = document.createElement('button');
-    deleteWorld.type = 'button';
-    deleteWorld.className = 'danger';
-    deleteWorld.textContent = '删除本世界';
-    deleteWorld.addEventListener('click', () => {
-      if (confirm('确定要删除这个世界吗？存档会一起删掉，无法恢复。')) this.actions.onDeleteWorld?.();
-    });
-
-    // 成就 / 进度（M7）：原版基岩版的暂停菜单里就有这一项，放在"继续游戏"后面
-    const achievements = document.createElement('button');
-    achievements.type = 'button';
-    achievements.textContent = '成就';
-    achievements.addEventListener('click', () => this.actions.onOpenAdvancements?.());
-    achievements.style.display = this.actions.onOpenAdvancements ? '' : 'none';
-
-    buttons.append(this.resumeButton, achievements, exitToMenu, deleteWorld);
-    exitToMenu.addEventListener('click', () => this.actions.onExitToMenu?.());
-    // "回到主菜单/删除世界"只在游戏里有意义；主菜单打开这个面板时（没有当前世界）就藏起来。
-    // ⚠️ 用 style.display 而不是 .hidden 类：`.hidden` 只对面板根节点写了样式，加在按钮上没有任何效果。
-    if (!this.actions.onExitToMenu) exitToMenu.style.display = 'none';
-    if (!this.actions.onDeleteWorld) deleteWorld.style.display = 'none';
 
     // ---- 设置项（按分组切成 section：每组的行数不多，一屏放得下）
     const body = document.createElement('div');
@@ -341,14 +413,14 @@ export class SettingsScreen {
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
     game.appendChild(this.makeResourcePackRow());
 
-    this.metaEl = document.createElement('div');
-    this.metaEl.className = 'settings-hint settings-meta';
+    settingsPage.append(header, tabs, body);
 
     this.root.append(panel);
-    panel.append(header, tabs, body, buttons, this.metaEl);
+    panel.append(menuPage, settingsPage);
     host.appendChild(this.root);
 
     this.setActiveGroup(SETTING_GROUPS[0]);
+    this.setPage('menu');
     this.renderSubtitle();
 
     // 点面板外的区域 = 继续游戏（与原版"点空白关闭"一致）。
@@ -356,6 +428,56 @@ export class SettingsScreen {
     this.root.addEventListener('pointerdown', (event) => {
       if (event.target === this.root) this.actions.onResume();
     });
+  }
+
+  /** 建一页（`menu` / `settings`），登记到 `pages` 里 */
+  private makePage(page: PausePage): HTMLDivElement {
+    const element = document.createElement('div');
+    element.className = 'pause-page';
+    element.dataset.page = page;
+    this.pages.set(page, element);
+    return element;
+  }
+
+  /** 标题栏右上角那颗 ✕（两页各一颗：切页时不用搬 DOM） */
+  private makeCloseButton(): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-close';
+    button.textContent = '✕';
+    button.setAttribute('aria-label', '关闭设置');
+    button.addEventListener('click', () => this.actions.onResume());
+    return button;
+  }
+
+  /** 切页：`menu`（暂停菜单）/ `settings`（设置项） */
+  setPage(page: PausePage): void {
+    this.currentPage = page;
+    for (const [key, element] of this.pages) element.classList.toggle('active', key === page);
+    // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），进设置页时对一次账
+    if (page === 'settings' && this.flyingToggle) {
+      this.flyingToggle.checked = this.actions.isFlying?.() ?? false;
+    }
+  }
+
+  /** 当前停在哪一页（验收脚本/调试用） */
+  get page(): PausePage {
+    return this.currentPage;
+  }
+
+  /**
+   * 退一层：在"设置"页 → 回暂停菜单（面板还开着）；在暂停菜单 → 调 `onResume`（真的关掉）。
+   *
+   * 返回"还开着吗"。Esc、Android 返回键、以及面板的关闭路径都只需要问这一句，
+   * 不必各自去判断"现在停在哪一页"——**判据只有一处，就不会漂**。
+   */
+  goBack(): boolean {
+    if (this.currentPage === 'settings') {
+      this.setPage('menu');
+      return true;
+    }
+    this.actions.onResume();
+    return false;
   }
 
   /** 取某个分组的容器（设置项都往它里面塞） */
@@ -560,32 +682,40 @@ export class SettingsScreen {
    * @param resumeLabel "继续游戏"那行按钮的文字（主菜单里改成"返回"更贴切）
    */
   setTitle(title: string, subtitle: string, resumeLabel = '继续游戏'): void {
-    this.titleEl.textContent = title;
+    this.settingsTitleEl.textContent = title;
     this.subtitleText = subtitle;
     this.renderSubtitle();
     this.resumeButton.textContent = resumeLabel;
   }
 
   /**
-   * 副标题：桌面端保留"按 Esc 继续游戏"这类键盘提示；触摸端换成不含键盘的说法
-   *（批次 104：手机上没有 Esc，"按 Esc"只会让人去找一个不存在的键）。
+   * 两句提示各管一页：暂停菜单那页说"怎么继续游戏"，设置页那页说"改动立即生效、怎么回去"。
+   * 触摸端一律换成不含键盘的说法（批次 104：手机上没有 Esc，"按 Esc"只会让人
+   * 去找一个不存在的键）。
    *
    * 渲染时机放在 `show()` 而不是构造那一刻：`<body class="touch-mode">` 是
    * 触摸操作层建立时挂上的，比这个面板**晚**（主菜单里那个设置面板更晚）。
    */
   private renderSubtitle(): void {
-    this.subtitleEl.textContent = isTouchUi() ? '改动立即生效 · 点右上角 ✕ 返回' : this.subtitleText;
+    const touch = isTouchUi();
+    this.menuHintEl.textContent = touch ? '点 ✕ 或系统返回键继续游戏' : this.subtitleText;
+    this.settingsHintEl.textContent = touch ? '改动立即生效 · 点 ‹ 返回 回菜单' : '改动立即生效 · 按 Esc 返回菜单';
   }
 
   get isOpen(): boolean {
     return this.open;
   }
 
-  show(): void {
+  /**
+   * 打开面板。
+   *
+   * 默认进"暂停菜单"那页；**从主菜单打开时**（没给 `onExitToMenu`，也就是没有当前世界）
+   * 直接进"设置"页——那个场景下没有"暂停"可言。
+   */
+  show(page?: PausePage): void {
     this.open = true;
     this.renderSubtitle();
-    // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），打开面板时对一次账
-    if (this.flyingToggle) this.flyingToggle.checked = this.actions.isFlying?.() ?? false;
+    this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
   }
 
