@@ -4,7 +4,11 @@
  * 运行：npm run test:furnace
  */
 
-import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
+import { Block, blockDef, blockHardness, blockTiles, emitLightWithState } from '../src/core/registry/blocks.ts';
+import { CAMPFIRE_HEIGHT, collisionBoxes, isFullBlockShape } from '../src/core/registry/blockShapes.ts';
+import { isLitState, withLitState, withPowered } from '../src/core/registry/blockState.ts';
+import { CAMPFIRE_SIZE, Campfire } from '../src/core/container/Campfire.ts';
+import { breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
 import { CREATIVE_ITEMS, Item, categoryOf } from '../src/core/registry/items.ts';
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { harvestRequirement } from '../src/core/registry/tools.ts';
@@ -366,6 +370,173 @@ console.log('\n[烟熏炉与高炉的方块与配方]');
     matchRecipe(grid(3, ['III', 'IFI', 'SSS'], { I: Item.IRON_INGOT, F: Block.FURNACE, S: Block.SMOOTH_STONE }), 3)?.id,
     Block.BLAST_FURNACE,
   );
+}
+
+// ---------------------------------------------------------------- 点燃外观（批次 47）
+
+console.log('\n[点燃状态位：贴图与发光都跟着它走]');
+{
+  // 点燃位与红石元件的"通电位"共用 bit3——沿用项目里"不同形状族共用状态位"的设计
+  check('点燃位就是通电位（共用 bit3）', isLitState(withPowered(0, true)) && withLitState(0, true) === withPowered(0, true));
+  check('默认状态是"没点燃"', !isLitState(0));
+  check('往返读写一致', isLitState(withLitState(0, true)) && !isLitState(withLitState(withLitState(0, true), false)));
+
+  // 贴图：三座炉子点亮时侧面换成炉口火光图，营火亮的是顶面
+  const litOf = (id: number) => blockTiles(id, withLitState(0, true));
+  const unlitOf = (id: number) => blockTiles(id, 0);
+  equal('熔炉点亮 → 侧面换成 furnace_front_on', litOf(Block.FURNACE)[2], 'furnace_front_on');
+  equal('熔炉没点亮 → 还是 furnace_side', unlitOf(Block.FURNACE)[2], 'furnace_side');
+  equal('烟熏炉点亮 → smoker_front_on', litOf(Block.SMOKER)[2], 'smoker_front_on');
+  equal('高炉点亮 → blast_furnace_front_on', litOf(Block.BLAST_FURNACE)[2], 'blast_furnace_front_on');
+  equal('营火点亮 → **顶面**是火焰（它是敞口的）', litOf(Block.CAMPFIRE)[0], 'campfire_fire');
+  equal('营火没点亮 → 顶面是柴堆', unlitOf(Block.CAMPFIRE)[0], 'campfire_top');
+  check('顶面不随点燃变化（只有炉口那一面变）', litOf(Block.FURNACE)[0] === unlitOf(Block.FURNACE)[0]);
+  for (const id of [Block.FURNACE, Block.SMOKER, Block.BLAST_FURNACE, Block.CAMPFIRE]) {
+    check(
+      '点火贴图都在图集里',
+      litOf(id).every((tile) => TILE_ORDER.includes(tile as never)) &&
+        blockDef(id).tiles.every((tile) => TILE_ORDER.includes(tile as never)),
+    );
+  }
+
+  // 发光：炉子 13、营火 15（原版），没点燃时 0
+  equal('熔炉点燃发光 13', emitLightWithState(Block.FURNACE, withLitState(0, true)), 13);
+  equal('烟熏炉点燃发光 13', emitLightWithState(Block.SMOKER, withLitState(0, true)), 13);
+  equal('高炉点燃发光 13', emitLightWithState(Block.BLAST_FURNACE, withLitState(0, true)), 13);
+  equal('营火点燃发光 15（明火比炉子亮）', emitLightWithState(Block.CAMPFIRE, withLitState(0, true)), 15);
+  equal('没点燃不发光', emitLightWithState(Block.FURNACE, 0), 0);
+  equal('红石灯那条老规矩没被影响', emitLightWithState(Block.REDSTONE_LAMP, withPowered(0, true)), 15);
+}
+
+// ---------------------------------------------------------------- 营火（批次 47）
+
+console.log('\n[营火：不要燃料、一次烤 4 个、烤好弹出来]');
+{
+  equal('营火站台的中文名', FURNACE_STATIONS.campfire.cn, '营火');
+  equal('营火 30 秒一份（熔炉的 3 倍）', cookSeconds(smeltingRecipeFor(Item.BEEF, 'campfire')!, 'campfire'), 30);
+  check('营火烤牛肉', smeltingRecipeFor(Item.BEEF, 'campfire') !== undefined);
+  equal('营火不烤粗铁', smeltingRecipeFor(Item.RAW_IRON, 'campfire'), undefined);
+  equal('营火不烤沙子', smeltingRecipeFor(Block.SAND, 'campfire'), undefined);
+  equal('营火不接受"只属于熔炉"的配方', smeltingRecipeFor(Block.COBBLESTONE, 'campfire'), undefined);
+
+  const campfire = new Campfire();
+  check('放下就是点着的', campfire.lit);
+  equal('4 个格子', CAMPFIRE_SIZE, 4);
+  equal('空着时没在烤', campfire.cooking, false);
+
+  campfire.set(0, { id: Item.BEEF, count: 2 });
+  campfire.set(2, { id: Item.CHICKEN, count: 1 });
+  equal('放了两样东西', campfire.get(0)?.id, Item.BEEF);
+  equal('空着的格子还是空的', campfire.get(1), null);
+
+  // 烤 30 秒 → 两格各出一条
+  const cooked = campfire.tick(30).cooked;
+  equal('一次 tick 里两格都烤好了', cooked.length, 2);
+  equal('第 0 格出的是熟牛肉', cooked.find((entry) => entry.slot === 0)?.output.id, Item.COOKED_BEEF);
+  equal('第 2 格出的是熟鸡肉', cooked.find((entry) => entry.slot === 2)?.output.id, Item.COOKED_CHICKEN);
+  equal('原料各少了一个（牛肉还剩 1）', campfire.get(0)?.count, 1);
+  equal('鸡肉烤完就空了', campfire.get(2), null);
+  equal('进度清零', campfire.ratio(0), 0);
+
+  // 30 秒之前不会烤好
+  const slow = new Campfire();
+  slow.set(0, { id: Item.BEEF, count: 1 });
+  slow.tick(25);
+  equal('25 秒还没好', slow.get(0)?.id, Item.BEEF);
+  check('进度条走到 5/6 左右', Math.abs(slow.ratio(0) - 25 / 30) < 0.02, `实际 ${slow.ratio(0).toFixed(3)}`);
+
+  // 换料就重新计时
+  slow.set(0, { id: Item.PORKCHOP, count: 1 });
+  equal('换料后进度归零', slow.ratio(0), 0);
+
+  // 非食物：不烤，而且要说清楚
+  const wrongFood = new Campfire();
+  wrongFood.set(1, { id: Block.SAND, count: 8 });
+  equal('沙子在营火上不烤', wrongFood.tick(60).cooked.length, 0);
+  // 文案由站台的 accepts 推出来：营火是"只烤食物"（不是"只烧"——那是炉子的说法）
+  check('提示里说明它只烤食物', wrongFood.rejectReason(1).includes('只烤食物'));
+  equal('沙子还在架子上（没被吃掉）', wrongFood.get(1)?.count, 8);
+
+  // 熄灭：停止烤制、进度回退
+  const out = new Campfire();
+  out.set(0, { id: Item.BEEF, count: 1 });
+  out.tick(20);
+  out.lit = false;
+  const before = out.ratio(0);
+  out.tick(2);
+  check('熄灭后进度开始回退', out.ratio(0) < before);
+  out.tick(60);
+  equal('熄灭后一直不产出', out.get(0)?.id, Item.BEEF);
+  equal('进度退到 0', out.ratio(0), 0);
+
+  /**
+   * 与炉子的关键差别：**不要燃料**。
+   * 同一份生肉放在熔炉里（没有燃料）永远烤不出来，放在营火上 30 秒就好——
+   * 这是"营火不需要燃料"这个设计的核心断言。
+   */
+  const emptyFurnace = new Furnace();
+  emptyFurnace.set(FURNACE_INPUT, { id: Item.BEEF, count: 1 });
+  advance(emptyFurnace, 60);
+  equal('没有燃料的熔炉烤不出东西', emptyFurnace.get(FURNACE_OUTPUT), null);
+  const noFuelCampfire = new Campfire();
+  noFuelCampfire.set(0, { id: Item.BEEF, count: 1 });
+  equal('营火不要燃料也能烤出来', noFuelCampfire.tick(30).cooked.length, 1);
+}
+
+console.log('\n[营火：方块、配方与存档]');
+{
+  equal('营火的注册名', blockDef(Block.CAMPFIRE).name, 'minecraft:campfire');
+  equal('中文名', itemLabel(Block.CAMPFIRE), '营火');
+  equal('形状是 campfire（7/16 高的柴堆，能站上去）', blockDef(Block.CAMPFIRE).shape, 'campfire');
+  equal('硬度 2', blockHardness(Block.CAMPFIRE), 2);
+  check('徒手就能挖（斧只是更快）', canHarvest(Block.CAMPFIRE, null));
+  check('拿斧更快', breakSeconds(Block.CAMPFIRE, makeToolInfo('axe', 'iron')) < breakSeconds(Block.CAMPFIRE, null));
+  equal('归"功能方块"分类', categoryOf(Block.CAMPFIRE), 'functional');
+  check('在创造物品栏里', CREATIVE_ITEMS.includes(Block.CAMPFIRE));
+  check('有中文说明（写明不要燃料、怎么熄灭）', hasDescription(Block.CAMPFIRE));
+  check('不是整格（不参与贪心合并）', !isFullBlockShape('campfire', 0));
+  equal('能站上去：碰撞盒就是那个 7/16 的柴堆', collisionBoxes('campfire', 0)[0]![4], CAMPFIRE_HEIGHT);
+
+  // 配方：6 种原木 × 2 种燃料 = 12 条
+  const campfireRecipes = RECIPES.filter((recipe) => recipe.result.id === Block.CAMPFIRE);
+  equal('营火有 12 条配方（6 原木 × 煤炭/木炭）', campfireRecipes.length, 12);
+  equal(
+    '3 木棍 + 1 煤炭 + 3 原木 → 营火',
+    matchRecipe(grid(3, ['·S·', 'SCS', 'LLL'], { S: Item.STICK, C: Item.COAL, L: Block.OAK_LOG }), 3)?.id,
+    Block.CAMPFIRE,
+  );
+  equal(
+    '木炭那一份也认（前期最容易拿到的就是它）',
+    matchRecipe(grid(3, ['·S·', 'SCS', 'LLL'], { S: Item.STICK, C: Item.CHARCOAL, L: Block.OAK_LOG }), 3)?.id,
+    Block.CAMPFIRE,
+  );
+
+  // 存档：熄灭的营火也要写下来（否则读档后自己又烧起来了）
+  const store = new BlockEntityStore();
+  const saved = store.getOrCreateCampfire(Dimension.OVERWORLD, 5, 70, 5);
+  saved.set(0, { id: Item.BEEF, count: 3 });
+  saved.tick(10);
+  saved.lit = false;
+  const data = serializeContainers(store);
+  equal('营火写进了存档', data.length, 1);
+  equal('种类是 campfire', data[0]!.kind, 'campfire');
+  equal('熄灭状态也写下来了', data[0]!.campfire?.lit, false);
+  equal('4 格都写下来了', data[0]!.stacks.length, 4);
+
+  const restored = new BlockEntityStore();
+  restoreContainers(restored, JSON.parse(JSON.stringify(data)));
+  const back = restored.getCampfire(Dimension.OVERWORLD, 5, 70, 5);
+  equal('读回来还是熄灭的', back?.lit, false);
+  equal('架子上的生肉还在', back?.get(0)?.count, 3);
+  check('进度也恢复了（不是从 0 开始）', (back?.ratio(0) ?? 0) > 0);
+
+  // 空着但熄灭的营火也要写（否则读档后又自己烧起来了）
+  const emptyStore = new BlockEntityStore();
+  emptyStore.getOrCreateCampfire(Dimension.OVERWORLD, 1, 64, 1).lit = false;
+  equal('空着但熄灭的营火会写存档', serializeContainers(emptyStore).length, 1);
+  const litOnlyStore = new BlockEntityStore();
+  litOnlyStore.getOrCreateCampfire(Dimension.OVERWORLD, 2, 64, 2);
+  equal('空着且点着的营火不写存档（默认就是点着的）', serializeContainers(litOnlyStore).length, 0);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

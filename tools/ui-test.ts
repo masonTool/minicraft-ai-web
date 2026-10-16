@@ -145,6 +145,9 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 切石机（H11，批次 44）：候选列表与候选按钮的样式被误删时这里会红
     ['切石机候选列表', '.stonecutter-list'],
     ['切石机候选按钮', '.stonecutter-option'],
+    // 营火（批次 47）：4 格 + 每格自己的进度条
+    ['营火格子排布', '.campfire-grid'],
+    ['营火进度条', '.campfire-cook'],
   ] as const) {
     check(`index.html 里有"${label}"`, html.includes(needle), needle);
   }

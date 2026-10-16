@@ -23,6 +23,12 @@ import {
   SNOW_MELT_LIGHT,
   type TickWorld,
 } from '../src/core/tick/RandomTicks.ts';
+import {
+  PRECIPITATION_ATTEMPTS,
+  PRECIPITATION_INTERVAL,
+  PrecipitationTicker,
+} from '../src/core/tick/Precipitation.ts';
+import { WHEAT_STAGES } from '../src/core/registry/blocks.ts';
 
 let passed = 0;
 let failed = 0;
@@ -96,6 +102,9 @@ class SnowWorld implements TickWorld {
   snowingAt(): boolean {
     return this.snowing;
   }
+
+  /** 耕地"被雨浸润"那条用的（批次 47） */
+  raining = false;
 }
 
 /** 固定随机序列 */
@@ -223,6 +232,98 @@ console.log('\n[状态往返：层数写在状态里]');
     equal(`第 ${layers} 层的状态能读回来`, snowLayers(state), layers);
   }
   check('层数会被夹在 1~8 之间', snowLayers(withSnowLayers(0, 99)) === MAX_SNOW_LAYERS);
+}
+
+console.log('\n[区块级降水刻：空气里自己长出第一层雪（批次 47）]');
+{
+  equal('每 0.5 秒跑一批', PRECIPITATION_INTERVAL, 0.5);
+  equal('每批 6 个样点', PRECIPITATION_ATTEMPTS, 6);
+
+  /** 一片"地面在 y=63、上面全是空气"的雪原，随机源固定在中心点 */
+  const makeWorld = () => {
+    const world = new SnowWorld();
+    world.skyLight = 15;
+    world.snowing = true;
+    // 地平面：y<=63 是石头，之上是空气（SnowWorld 默认取不到就是 0 = 空气）
+    return world;
+  };
+  /** 每个样点都落在 (0, 64, 0)——`random = 0.5` 时偏移量正好是 0 */
+  const center = () => 0.5;
+
+  // 1) 三个必要条件都满足 → 放下一层雪
+  const world = makeWorld();
+  world.set(0, 63, 0, Block.STONE);
+  const ticker = new PrecipitationTicker(world, center);
+  equal('不到间隔不取样', ticker.tick(0.4, 0, 64, 0), 0);
+  equal('到点放下一层雪', ticker.tick(0.2, 0, 64, 0), 1);
+  equal('放下的是雪层', world.getBlock(0, 64, 0), Block.SNOW);
+  equal('而且只有 1 层（不是整格）', snowLayers(world.getState(0, 64, 0)), 1);
+  equal('再跑一批不会重复放（那一格已经不是空气了）', ticker.tick(0.5, 0, 64, 0), 0);
+
+  // 2) 四个必要条件缺一不可
+  const cases: readonly (readonly [string, (w: SnowWorld) => void])[] = [
+    ['不露天（天光 14）不落雪', (w) => (w.skyLight = 14)],
+    ['这一列没在下雪就不落雪', (w) => (w.snowing = false)],
+    ['悬空（下方没有支撑）不落雪', () => {}],
+    ['那一格已经有方块了（不覆盖）', (w) => w.set(0, 64, 0, Block.STONE)],
+  ];
+  for (const [label, mutate] of cases) {
+    const w = makeWorld();
+    if (label !== '悬空（下方没有支撑）不落雪') w.set(0, 63, 0, Block.STONE);
+    mutate(w);
+    equal(label, ticker.tick(0.5, 0, 64, 0), 0);
+  }
+  // 悬空的那条单独再确认一次（上面的循环里它是"忘了放地面"）
+  const floating = makeWorld();
+  equal('悬空空中的空气格不落雪', new PrecipitationTicker(floating, center).tick(0.5, 0, 64, 0), 0);
+
+  // 3) 累积补跑：卡顿一下（dt 很大）要补上该跑的那几批，而不是永远落后
+  const burst = makeWorld();
+  burst.set(0, 63, 0, Block.STONE);
+  const burstTicker = new PrecipitationTicker(burst, center);
+  // 1.1 秒 = 两批（2 × 0.5），第二批那一格已经有雪 → 只算第一批的 1 层
+  equal('1.1 秒补跑两批', burstTicker.tick(1.1, 0, 64, 0), 1);
+  equal('累计计数也记下来了', burstTicker.placed, 1);
+
+  // 4) 一批最多 PRECIPITATION_ATTEMPTS 层（每批 6 个样点）
+  const many = new SnowWorld();
+  many.skyLight = 15;
+  many.snowing = true;
+  // 随机源让样点散开：横竖都往正方向偏（每批的 6 个点各不相同）
+  let counter = 0;
+  const spread = () => 0.9 - (counter++ % 6) * 0.06;
+  const manyTicker = new PrecipitationTicker(many, spread);
+  const placedInOneBatch = manyTicker.tick(0.5, 0, 64, 0);
+  check(`一批最多 ${PRECIPITATION_ATTEMPTS} 层（实测 ${placedInOneBatch}）`, placedInOneBatch <= PRECIPITATION_ATTEMPTS);
+}
+
+console.log('\n[雨打湿耕地（批次 47）]');
+{
+  // 耕地"湿润"的两条路：旁边有水、或者**正在下雨且露天**（原版 farmland 的 randomTick 就是这么写的）
+  const growWheat = RANDOM_TICK_BEHAVIORS.get(WHEAT_STAGES[0]!)!;
+  /** 干地（没有水）：只有"在下雨"这一个变量 */
+  const dryField = (raining: boolean, skyLight: number) => {
+    const world = new SnowWorld();
+    world.set(0, 63, 0, Block.FARMLAND);
+    world.set(0, 64, 0, WHEAT_STAGES[0]!);
+    world.raining = raining;
+    world.skyLight = skyLight;
+    return world;
+  };
+  // 随机值 0.5：干旱概率 0.35 → 不长；湿润概率 0.7 → 长
+  const roll = () => 0.5;
+
+  const rainy = dryField(true, 15);
+  check('下雨 + 露天 → 小麦按"湿润"概率生长', growWheat(rainy, 0, 64, 0, roll));
+  equal('长到了下一阶段', rainy.getBlock(0, 64, 0), WHEAT_STAGES[1]);
+
+  const sunny = dryField(false, 15);
+  check('不下雨 → 同一随机值下不生长（走的是"干旱"概率）', !growWheat(sunny, 0, 64, 0, roll));
+  equal('还是原来那一段', sunny.getBlock(0, 64, 0), WHEAT_STAGES[0]);
+
+  // 屋檐下（天光不足）即使下雨也不算淋到雨
+  const roofed = dryField(true, 8);
+  check('下雨但在屋檐下（天光 8）→ 不算湿润', !growWheat(roofed, 0, 64, 0, roll));
 }
 
 console.log(`\n雪层天气行为测试：${passed} 通过 / ${failed} 失败`);
