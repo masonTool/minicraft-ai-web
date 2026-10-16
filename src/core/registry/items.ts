@@ -1545,6 +1545,31 @@ export function dropFor(blockId: number): { id: number; count: number } | null {
  * 反查"某某东西拿得到吗"时漏掉这几张表，就会把苹果误判成拿不到
  * ——而苹果明明能从树叶里刷出来（批次 88 做村民交易时当场踩到）。
  */
+/**
+ * 挖方块能掉出来的、**不是它自己**的那些物品：石头 → 圆石、草方块 → 泥土、
+ * 树叶 → 树苗/苹果、砂砾 → 燧石……
+ *
+ * 与 `possibleBlockDropIds()` 的差别只有一个字——**"自己"那一份不算**：
+ * 那张表是给**物品侧**审计用的捷径（"某个方块物品拿得到"在物品侧是前提），
+ * 而**方块侧**审计恰恰要把"掉自己"排除掉：留着它，任何方块都能自证拿得到，
+ * 于是"一个配方都没有的方块"也被放过（染色玻璃、混凝土就是这么藏的）。
+ *
+ * 存在的理由与 `fishingEntryIds()` 一样：给可达性审计用（批次 118，TASKS B52）。
+ */
+export function nonSelfBlockDropIds(): Set<number> {
+  const ids = new Set<number>();
+  for (const def of BLOCKS) {
+    const drop = dropFor(def.id);
+    if (drop && drop.id !== def.id) ids.add(drop.id);
+  }
+  for (const entry of REPLACE_DROPS.values()) ids.add(entry.id);
+  for (const entry of COUNT_RANGE_DROPS.values()) ids.add(entry.id);
+  for (const list of RARE_DROPS.values()) {
+    for (const entry of list) ids.add(entry.id);
+  }
+  return ids;
+}
+
 export function possibleBlockDropIds(): Set<number> {
   const ids = new Set<number>();
   // ⚠️ 遍历的是**整张方块表**（`BLOCKS`），不是 `Object.values(Block)`：

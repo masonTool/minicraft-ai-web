@@ -121,7 +121,8 @@
     "test:endportal": "esbuild tools/endportal-test.ts --bundle --platform=node --format=esm --outfile=.tmp/endportal-test.mjs --log-level=error && node .tmp/endportal-test.mjs",
     "test:enderman": "esbuild tools/enderman-test.ts --bundle --platform=node --format=esm --outfile=.tmp/enderman-test.mjs --log-level=error && node .tmp/enderman-test.mjs",
     "test:wither": "esbuild tools/wither-test.ts --bundle --platform=node --format=esm --outfile=.tmp/wither-test.mjs --log-level=error && node .tmp/wither-test.mjs",
-    "test:beacon": "esbuild tools/beacon-test.ts --bundle --platform=node --format=esm --outfile=.tmp/beacon-test.mjs --log-level=error && node .tmp/beacon-test.mjs"
+    "test:beacon": "esbuild tools/beacon-test.ts --bundle --platform=node --format=esm --outfile=.tmp/beacon-test.mjs --log-level=error && node .tmp/beacon-test.mjs",
+    "test:genregistry": "esbuild tools/genregistry-test.ts --bundle --platform=node --format=esm --outfile=.tmp/genregistry-test.mjs --log-level=error && node .tmp/genregistry-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

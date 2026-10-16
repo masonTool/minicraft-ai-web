@@ -23,14 +23,12 @@
  *    免得理由随代码漂走却没人发现。
  *
  * ⚠️ 两处口径，都是**故意**的：
- *  1. **方块物品一律当成拿得到**（`possibleBlockDropIds()` 里的自掉也在内）。
+ *  1. **物品侧把"方块物品"一律当成拿得到**（`possibleBlockDropIds()` 里的自掉也在内）。
  *     不这么假设的话，"甘蔗 → 糖""原木 → 木炭"这些会被误判成不可达。
- *     代价是**方块侧基本没判**：方块"掉自己"就是一条来源，于是任何方块都能自证拿得到——
- *     染色玻璃、混凝土、彩色陶瓦这些**一个配方都没有**的方块就是这么被放过的。
- *     要用"世界生成"当判据，而本项目**没有一张世界生成登记表**；用 `generateChunkBlocks`
- *     采样只能当线索（实测 196 个区块漏掉了黑橡木、方解石、冰这些确实会生成的方块，
- *     拿它当判据会得到 142 条假警报）。所以本批只判能判的那一小类
- *     （染色玻璃 / 彩色陶瓦 16 色必须有配方），其余交给 TASKS 的 B52。
+ *     ——**方块侧不再走这条捷径**（批次 118，TASKS B52 收口）：那一侧换成
+ *     "**世界生成 + 配方 + 掉落（不含掉自己）**"，判据是 `core/gen/GenerationSources.ts`
+ *     那张登记表（它由 `test:genregistry` 用"每个群系采一片、每种结构生成一个实例"对账）。
+ *     于是"染色玻璃/混凝土/红石元件"这类**一个来源都没有**的方块藏不住了：见第七节。
  *  2. **工具等级不影响判定**（"石镐才挖得动钻石矿"不在这套里算）：
  *     那要连工具一起进闭包，而工具本身的材质链是另一棵树，混进来只会让失败信息变糊。
  *
@@ -41,7 +39,9 @@ import {
   Block,
   BLOCKS,
   blockDef,
+  carpetId,
   concreteId,
+  copperId,
   stainedGlassId,
   terracottaId,
   woolId,
@@ -56,6 +56,7 @@ import {
   dyeItemId,
   isLegacyItem,
   itemDef,
+  nonSelfBlockDropIds,
   possibleBlockDropIds,
 } from '../src/core/registry/items.ts';
 import { armorItemId } from '../src/core/registry/armor.ts';
@@ -69,6 +70,8 @@ import { POTION_ITEMS, TIPPED_ARROWS, TIPPED_ARROW_ID_OFFSET, variantBaseId } fr
 import { lootItemIds } from '../src/core/registry/loot.ts';
 import { fishingEntryIds } from '../src/core/registry/fishing.ts';
 import { DROPPING_MOB_TYPES, MOB_TYPES } from '../src/core/entity/mobs.ts';
+// 世界生成登记表（B52，批次 118）：方块侧的"种子"就是它——那张表由 `test:genregistry` 对账
+import { generatedBlockIds } from '../src/core/gen/GenerationSources.ts';
 import { PROFESSIONS } from '../src/core/registry/villagerTrades.ts';
 import { DYE_COLORS } from '../src/core/registry/colors.ts';
 
@@ -481,6 +484,253 @@ check(
   DYE_COLORS.every((_color, index) => !hasRecipeFor(concreteId(index))),
 );
 check('原色陶瓦不是 `terracottaId(0)`（那是白色——荒地色带差一格就是这里踩的）', blockDef(terracottaId(0)).name === 'minecraft:white_terracotta');
+
+// ---------------------------------------------------------------- 六、方块侧（B52，批次 118）
+
+console.log('\n[七、方块侧：生成 + 配方 + 掉落（不再拿"掉自己"当来源，批次 118）]');
+
+/**
+ * 方块侧的白名单（一族一条）。与物品侧同一套规矩：**漏一条就红、补上了就红**。
+ *
+ * 与上面那份（按 id 逐条）不同，这里按**族**收：缺口多半是"16 色染色玻璃"
+ * 这种整族一起缺的，逐条抄 16 遍只会让清单变成噪声。
+ */
+/**
+ * **机制型方块**（不在任何掉落表 / 配方表里，只存在于交互与主循环里）。
+ *
+ * 与物品侧那四条机制来源（挤奶、鸡下蛋、空瓶接龙息、空瓶装水）是同一个性质：
+ * 它们**确实是生存里拿得到的**，只是没有任何一张数据表会写它们——不列在这里，
+ * 整套方块侧审计会多出几十条假警报（耕地、作物、铜的氧化档、羊毛……）。
+ */
+const BLOCK_MECHANISM_SOURCES: readonly { label: string; ids: readonly number[] }[] = [
+  {
+    label: '耕地与四种作物（种下去就是第 0 阶）',
+    ids: [
+      Block.FARMLAND,
+      ...Array.from({ length: 4 }, (_u, i) => Block.WHEAT_STAGE0 + i),
+      ...Array.from({ length: 4 }, (_u, i) => Block.CARROTS_STAGE0 + i),
+      ...Array.from({ length: 4 }, (_u, i) => Block.POTATOES_STAGE0 + i),
+      ...Array.from({ length: 4 }, (_u, i) => Block.BEETROOTS_STAGE0 + i),
+    ],
+  },
+  {
+    label: '瓜藤（南瓜/西瓜，含"结果之后"那一阶——它是单独的 id，不跟在八个阶段后面）',
+    ids: [
+      ...Array.from({ length: 8 }, (_u, i) => Block.PUMPKIN_STEM_STAGE0 + i),
+      ...Array.from({ length: 8 }, (_u, i) => Block.MELON_STEM_STAGE0 + i),
+      // "结果之后"的那两阶（它们是单独的 id：`PUMPKIN_STEM_ATTACHED_ID` / `MELON_STEM_ATTACHED_ID`）
+      ...BLOCKS.filter(
+        (def) =>
+          def !== undefined &&
+          (def.name === 'minecraft:attached_pumpkin_stem' || def.name === 'minecraft:attached_melon_stem'),
+      ).map((def) => def.id),
+    ],
+  },
+  { label: '红石线（红石粉放下就是它）', ids: [Block.REDSTONE_WIRE] },
+  {
+    label: '铜的氧化档（`world/Copper.ts` 会自己往下氧化）',
+    ids: [
+      ...Array.from({ length: 3 }, (_u, stage) => copperId(stage + 1, 0)),
+      ...Array.from({ length: 3 }, (_u, stage) => copperId(stage + 1, 1)),
+      ...Array.from({ length: 3 }, (_u, stage) => copperId(stage + 1, 2)),
+      ...Array.from({ length: 3 }, (_u, stage) => copperId(stage + 1, 3)),
+    ],
+  },
+  {
+    label: '羊毛与地毯（羊身上剪/掉，颜色是每只羊自己的——所以它不在 `MobType.drops` 里）',
+    ids: [
+      ...Array.from({ length: 16 }, (_u, i) => woolId(i)),
+      ...Array.from({ length: 16 }, (_u, i) => carpetId(i)),
+    ],
+  },
+];
+
+/** 按方块名取 id（白名单按族写，用名字比用 id 好读也好核对） */
+const idsNamed = (...names: string[]): number[] =>
+  BLOCKS.filter((def) => def !== undefined && names.includes(def.name.replace('minecraft:', ''))).map((def) => def.id);
+
+/**
+ * 方块侧的缺口白名单（一族一条）。每一条都是**这一批量出来的真缺口**，
+ * 理由写清楚"原版是怎么拿到的、本项目缺哪一环"——它们是下一批的待办清单。
+ */
+const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: string }[] = [
+  {
+    label: '红石元件',
+    ids: idsNamed(
+      'lever',
+      'piston',
+      'sticky_piston',
+      'observer',
+      'repeater',
+      'comparator',
+      'redstone_torch',
+      'redstone_lamp',
+      'redstone_block',
+      'stone_button',
+      'oak_button',
+      'stone_pressure_plate',
+      'oak_pressure_plate',
+    ),
+    reason: 'E13 把红石**行为**做全了，但这些元件一件都没有配方（原版全都有）：整套只能从创造模式里拿',
+  },
+  {
+    label: '混凝土 16 色',
+    ids: Array.from({ length: 16 }, (_u, i) => concreteId(i)),
+    reason: '要"混凝土粉末"方块 + 遇水凝固两步，本项目只做到染色那一层（见 TASKS B52）',
+  },
+  {
+    label: '灰/黑两色的玻璃与陶瓦',
+    ids: idsNamed('gray_stained_glass', 'black_stained_glass', 'gray_stained_glass_pane', 'black_stained_glass_pane', 'gray_terracotta', 'black_terracotta'),
+    reason: '灰与黑染料拿不到（缺墨囊与凋灵玫瑰，见物品侧白名单），所以这两色的染色方块整族断在染料上',
+  },
+  {
+    label: '闪长岩 / 安山岩那一族',
+    ids: idsNamed(
+      'diorite',
+      'andesite',
+      'polished_diorite',
+      'polished_diorite_slab',
+      'polished_diorite_stairs',
+      'diorite_slab',
+      'diorite_stairs',
+      'diorite_wall',
+      'andesite_slab',
+      'andesite_stairs',
+      'andesite_wall',
+    ),
+    reason: '原版有配方（2 圆石 + 2 石英 → 闪长岩、2 圆石 + 2 闪长岩 → 安山岩），本项目没补；生成侧也不写它们',
+  },
+  {
+    label: '生成侧没写的几样',
+    ids: idsNamed('calcite', 'ice', 'packed_ice', 'smooth_basalt', 'nether_sprouts', 'cracked_deepslate_bricks'),
+    reason: '世界生成里没有它们（原版分别在山地/冰原/玄武岩三角洲/诡异森林/深层洞穴），也没有配方',
+  },
+  {
+    label: '竹子与脚手架',
+    ids: idsNamed('bamboo', 'scaffolding'),
+    reason: '竹子生成侧没写（原版长在丛林），脚手架那条配方因此永远做不出来',
+  },
+  {
+    label: '绯红 / 诡异木板',
+    ids: idsNamed('crimson_planks', 'warped_planks'),
+    reason: '原版从菌柄合成（1 菌柄 → 4 木板），本项目只生成了菌柄与菌岩，没补那条配方',
+  },
+  {
+    label: '深色橡木树叶',
+    ids: idsNamed('dark_oak_leaves'),
+    reason: '本项目没有深色森林群系，林地府邸只写木板/台阶/原木——那片树的叶子无从获得',
+  },
+  {
+    label: '死珊瑚',
+    ids: idsNamed(
+      'dead_tube_coral_block',
+      'dead_brain_coral_block',
+      'dead_bubble_coral_block',
+      'dead_fire_coral_block',
+      'dead_horn_coral_block',
+      'dead_tube_coral',
+      'dead_brain_coral',
+      'dead_bubble_coral',
+      'dead_fire_coral',
+      'dead_horn_coral',
+      'dead_tube_coral_fan',
+      'dead_brain_coral_fan',
+      'dead_bubble_coral_fan',
+      'dead_fire_coral_fan',
+      'dead_horn_coral_fan',
+    ),
+    reason: '原版是活珊瑚离水之后变的，本项目没有"珊瑚死亡"这条机制（放上去永远是活的）',
+  },
+  {
+    label: '缺配方的那几件（含被它拖累的高炉）',
+    ids: idsNamed('smooth_stone', 'smooth_stone_slab', 'smooth_stone_stairs', 'raw_iron_block', 'blast_furnace'),
+    reason: '原版有明确的配方（石头熔炼 → 平滑石头、9 粗铁 → 粗铁块），本项目没补；**高炉是被平滑石头拖累的**（它自己的配方在，原料却做不出来）',
+  },
+];
+
+/** 一串方块 id 报成名字（报缺口用；方块名与物品名同源） */
+const namesOfBlocks = (ids: readonly number[]): string =>
+  ids.map((id) => (blockDef(id)?.name ?? String(id)).replace('minecraft:', '')).join(', ');
+
+const blockGaps: number[] = [];
+{
+  // ① 种子：**世界生成**（`GenerationSources`，由 `test:genregistry` 对账过）
+  //    + 生物/钓鱼/战利品/机制的掉落（**不含"方块掉自己"**——那正是这套要拆掉的那条循环）
+  const blockReach = new Set<number>(generatedBlockIds());
+  for (const type of DROPPING_MOB_TYPES) for (const drop of type.drops) blockReach.add(drop.itemId);
+  for (const id of fishingEntryIds()) blockReach.add(id);
+  for (const id of lootItemIds()) blockReach.add(id);
+  for (const entry of MECHANISM_SOURCES) blockReach.add(entry.id);
+  // **挖方块的替换掉落**（石头 → 圆石、树叶 → 树苗/苹果……，**不含"掉自己"**）
+  for (const id of nonSelfBlockDropIds()) blockReach.add(id);
+  // **机制型方块**（不在任何表里，只存在于交互/主循环里）：与物品侧那四条同一个性质
+  for (const entry of BLOCK_MECHANISM_SOURCES) for (const id of entry.ids) blockReach.add(id);
+  const seeded = blockReach.size;
+
+  // ② 传播：配方表与物品侧**同一套**，只是"方块原料"要走方块侧闭包、物品原料走物品侧闭包
+  for (let changed = true; changed; ) {
+    changed = false;
+    const add = (id: number): void => {
+      if (blockReach.has(id)) return;
+      blockReach.add(id);
+      changed = true;
+    };
+    const have = (id: number): boolean =>
+      id >= BLOCK_ITEM_ID_LIMIT ? reach.has(id) : blockReach.has(id);
+
+    for (const recipe of RECIPES) {
+      if (recipeIngredients(recipe).every((entry) => have(entry.id))) add(recipe.result.id);
+    }
+    for (const recipe of SMELTING_RECIPES) if (have(recipe.input)) add(recipe.output.id);
+    for (const def of BLOCKS) {
+      if (!isStonecuttingInput(def.id) || !blockReach.has(def.id)) continue;
+      for (const offer of stonecuttingOffers(def.id)) add(offer.output);
+    }
+    for (const profession of PROFESSIONS) {
+      for (const level of profession.levels) {
+        for (const spec of level) {
+          if (spec.cost.every((cost) => have(cost.id))) add(spec.result.id);
+        }
+      }
+    }
+    for (let id = 0; id < BLOCK_ITEM_ID_LIMIT; id++) {
+      const upgraded = netheriteUpgradeOf(id);
+      if (upgraded !== undefined && blockReach.has(id)) add(upgraded);
+    }
+  }
+
+  for (let id = 1; id < BLOCK_ITEM_ID_LIMIT; id++) {
+    if (BLOCKS[id] === undefined || ITEMS[id] === undefined) continue;
+    if (!blockReach.has(id)) blockGaps.push(id);
+  }
+
+  console.log(`  · 种子 ${seeded} 个方块，闭包后 ${blockReach.size} 个（缺口 ${blockGaps.length} 个）`);
+  check('方块侧闭包收敛（与物品侧一样不加轮数上限就会跑飞）', blockReach.size > seeded);
+  check('**钻石块拿得到**（本批刚补的：生成侧没有，但有配方）', blockReach.has(Block.DIAMOND_BLOCK));
+  check('**信标拿得到**（配方：玻璃 + 下界之星 + 黑曜石）', blockReach.has(Block.BEACON));
+  check('**深板岩拿得到**（生成侧：地下的主干方块）', blockReach.has(Block.DEEPSLATE));
+  check('**磨制黑石拿得到**（堡垒遗迹生成）', blockReach.has(Block.POLISHED_BLACKSTONE));
+  check('（对照）空 id 不会被算成缺口', !blockGaps.includes(Block.AIR));
+}
+
+{
+  const exempted = new Set<number>();
+  for (const family of BLOCK_EXEMPT) for (const id of family.ids) exempted.add(id);
+  const notInLedger = blockGaps.filter((id) => !exempted.has(id));
+  check('方块侧的缺口都写进了白名单', notInLedger.length === 0, namesOfBlocks(notInLedger));
+  // "白名单里的每一条都仍然拿不到"由上面那份 `blockGaps` 反过来保证：
+  // 把白名单里**已经不算缺口**的挑出来，就是该删的条目
+  const stale = [...exempted].filter((id) => !blockGaps.includes(id));
+  check('方块侧白名单里没有"其实已经拿得到"的条目（补上了就删掉它）', stale.length === 0, namesOfBlocks(stale));
+  check('方块侧白名单没有重复 id', exempted.size === BLOCK_EXEMPT.reduce((sum, f) => sum + f.ids.length, 0));
+  check('方块侧每条都写了理由（≥ 8 字）', BLOCK_EXEMPT.every((family) => family.reason.length >= 8));
+  // 把缺口总数钉死（与物品侧同一个用法：链一断或一补就会红）
+  equal(
+    '方块侧缺口总数（批次 118 第一次量出来）',
+    blockGaps.length,
+    BLOCK_EXEMPT.reduce((sum, family) => sum + family.ids.length, 0),
+  );
+}
 
 // ---------------------------------------------------------------- 汇总
 
