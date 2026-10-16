@@ -124,6 +124,21 @@ export const Item = {
    * 挪一个已有 id 会让老存档里的东西变成别的物品。新物品一律追加在末尾。
    */
   BLAZE_ROD: 1442,
+  /**
+   * 末影珍珠（批次 111，K9）：**末地正门的第一件原料**。
+   *
+   * 原版它只从末影人来（J13 还没做），所以本项目的来源是**要塞传送门房的战利品箱**
+   * ——原版要塞的走廊箱子里本来就有 2~3 颗。数量差异写在 `loot.ts` 的那张表里。
+   * 顺带一条：它也是"末影之眼"的原料，而 12 只眼睛才够点亮一圈框架。
+   */
+  ENDER_PEARL: 1443,
+  /**
+   * 末影之眼（批次 111，K9）：**往末地传送门框架里按的那一件东西**。
+   *
+   * 原版配方：1 末影珍珠 + 1 烈焰粉（无序）。它是"末地没有正门"这件事的钥匙——
+   * 在它出现之前，生存里进末地的唯一办法是调试键 `N`（见 TASKS K9）。
+   */
+  ENDER_EYE: 1444,
   SUGAR: 1174,
   RABBIT_FOOT: 1190,
   MAGMA_CREAM: 1191,
@@ -345,6 +360,11 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // 烈焰棒（批次 92）：1 根棒能拆成 2 份烈焰粉（原版），也是烈焰人唯一的掉落物。
   // 它是**酿造台的燃料**（原版一份烈焰粉能酿 20 次），所以这条链断掉时整台机器都用不了
   { id: Item.BLAZE_ROD, name: 'minecraft:blaze_rod', tile: 'item_blaze_rod' },
+  // 末影系（批次 111，K9）：珍珠与眼睛。可堆 16 / 64 与原版一致
+  //（眼睛**不做成扔出去找要塞的投掷物**：本项目还没有"带飞行轨迹的投掷物"这一档，
+  // 差异记在 TASKS K9）
+  { id: Item.ENDER_PEARL, name: 'minecraft:ender_pearl', tile: 'item_ender_pearl', maxStack: 16 },
+  { id: Item.ENDER_EYE, name: 'minecraft:ender_eye', tile: 'item_ender_eye' },
   { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
   { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
   { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },

@@ -451,6 +451,19 @@ check(
   MOB_TYPES.some((type) => type.id === 'ghast' && type.drops.some((drop) => drop.itemId === Item.GHAST_TEAR)),
 );
 
+// ⑥ 末地正门这一条链（K9，批次 111）：眼睛 → 12 只 → 点亮一圈框架。
+// 这里是"全程拿得到"的那一半；"一个要塞的箱子够不够凑一圈"由 `test:endportal` 判
+check('末影珍珠拿得到（要塞传送门房的战利品箱；末影人 J13 还没做）', reach.has(Item.ENDER_PEARL));
+check('末影之眼拿得到（1 珍珠 + 1 烈焰粉，两件原料都有来源）', reach.has(Item.ENDER_EYE));
+check(
+  '末影之眼这条配方"真的做得出来"（原料自己都在闭包里，而不是只看配方存不存在）',
+  RECIPES.some(
+    (recipe) =>
+      recipe.result.id === Item.ENDER_EYE &&
+      recipeIngredients(recipe).every((ingredient) => reach.has(ingredient.id)),
+  ),
+);
+
 // ---------------------------------------------------------------- 六、方块侧（只判能判的那一小类）
 
 console.log('\n[六、方块侧：只判"一眼是玩家造的"那两族]');

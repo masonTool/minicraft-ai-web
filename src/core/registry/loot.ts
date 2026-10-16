@@ -264,6 +264,36 @@ export const LOOT_TABLES: readonly LootTable[] = [
       // 以及**旗帜图案**，这几样本项目都还没有
     ],
   },
+  // ---- 末地正门（K9 收口，批次 111）：**要塞传送门房**的那一个箱子。
+  //
+  // 为什么珍珠这么多：原版的末影珍珠**主要靠末影人掉**，要塞箱子只是零头
+  // （`stronghold_corridor` 里 2~3 颗）；而本项目还没有末影人（J13），
+  // 点亮一圈框架却要 **12 只末影之眼 = 12 颗珍珠**。要塞在本项目里又只是一座
+  // 小结构（原版要塞有上百个走廊箱子，我们只有一个传送门房箱子），
+  // 所以**把珍珠集中放进这一处**：期望产出刻意做到 ≥ 12 颗
+  // （`tools/endportal-test.ts` 有一条断言盯着这个数）。
+  // ⚠️ **末影人一落地就把这里压回原版量**——它记在 TASKS K9 里，
+  // 不是"永久的替代品"，而是"J13 还没做"期间的唯一来源。
+  {
+    key: 'stronghold_portal',
+    name: '要塞传送门房',
+    rollsMin: 5,
+    rollsMax: 7,
+    entries: [
+      entry(Item.ENDER_PEARL, 4, 6, 60),
+      entry(Item.IRON_INGOT, 1, 5, 8),
+      entry(Item.GOLD_INGOT, 1, 3, 6),
+      entry(Item.REDSTONE, 4, 9, 5),
+      entry(Item.COAL, 3, 8, 5),
+      entry(Item.BREAD, 1, 3, 4),
+      entry(Item.APPLE, 1, 3, 4),
+      entry(Item.DIAMOND, 1, 3, 3),
+      entry(toolItemId('pickaxe', 'iron'), 1, 1, 3),
+      entry(toolItemId('sword', 'iron'), 1, 1, 3),
+      entry(Item.GOLDEN_APPLE, 1, 1, 2),
+      empty(6),
+    ],
+  },
 ];
 
 /** 序号 1 起的表（0 = 这一格没有战利品表，是玩家自己放的箱子） */

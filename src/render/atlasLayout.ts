@@ -912,6 +912,14 @@ export const TILE_ORDER = [
   // （渲染时按贴图名取 billboard，见 `EntityRenderer.tileSpriteGeometry`）
   'small_fireball',
   'large_fireball',
+  // ---- 末影系（批次 111，K9）：
+  //  · 珍珠与眼睛两件物品图标；
+  //  · 末地传送门框架**插了眼**的那一张顶面（空格子只剩一个凹槽，见 TextureAtlas）。
+  //    空框架与"有眼睛"必须是两张贴图：原版所有框架的顶面都有那个方形凹槽，
+  //    空的时候是暗的、插了眼才亮——一张贴图表达不了这两种状态。
+  'item_ender_pearl',
+  'item_ender_eye',
+  'end_portal_frame_eye',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

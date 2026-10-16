@@ -752,6 +752,14 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.BLAZE_POWDER, count: 2 },
     ingredients: [Item.BLAZE_ROD],
   },
+  // 末影之眼（批次 111，K9）：1 末影珍珠 + 1 烈焰粉（原版无序配方）。
+  // 这条配方是"末地正门"的最后一环：珍珠来自要塞箱子、烈焰粉来自烈焰人，
+  // 两者都在生存里拿得到之后，玩家才第一次能**自己**点亮末地传送门
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.ENDER_EYE, count: 1 },
+    ingredients: [Item.ENDER_PEARL, Item.BLAZE_POWDER],
+  },
 
   // ---- 可疑的炖菜（批次 57，B17 收口）
   // 原版是**无序配方**：碗 + 红蘑菇 + 棕蘑菇 + **任意一朵花**，效果看用的是哪朵花。

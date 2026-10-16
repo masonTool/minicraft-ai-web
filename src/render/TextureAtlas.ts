@@ -3412,15 +3412,69 @@ const DRAGON_EGG_PAINTER: Painter = (x, y, rng) => {
   if (blotch) return [clamp255(96 * v), clamp255(42 * v), clamp255(96 * v), 255];
   return [clamp255(24 * v), clamp255(16 * v), clamp255(28 * v), 255];
 };
-/** 末地传送门框架：淡绿石框 + 中央的黄色"眼睛" */
+/**
+ * 末地传送门框架（**空格子**）：淡绿石框 + 中央那个方形**凹槽**。
+ *
+ * ⚠️ 批次 111 之前这里画的是一颗**黄眼睛**——于是"什么眼睛都没插"的框架
+ * 看起来也像已经插满了（12 格长得一模一样，"还差几只"这件事在画面上读不出来）。
+ * 现在按原版拆成两张贴图：空槽（这一张）与插了眼（`end_portal_frame_eye`），
+ * 由**方块状态**选，见 `blocks.ts` 的 `stateTiles`。
+ */
 const END_PORTAL_FRAME_PAINTER: Painter = (x, y, rng) => {
-  const eye = x >= 5 && x <= 10 && y >= 5 && y <= 10;
-  if (eye) {
-    const v = 1 + (rng() * 0.1 - 0.05);
-    return [clamp255(226 * v), clamp255(212 * v), clamp255(96 * v), 255];
+  const inSocket = x >= 4 && x <= 11 && y >= 4 && y <= 11;
+  if (inSocket) {
+    const rim = x === 4 || x === 11 || y === 4 || y === 11;
+    const v = 0.86 + (rng() * 0.1 - 0.05);
+    // 凹槽：外圈是阴影边，里面是更暗的空底
+    return rim
+      ? [clamp255(96 * v), clamp255(106 * v), clamp255(84 * v), 255]
+      : [clamp255(124 * v), clamp255(134 * v), clamp255(108 * v), 255];
   }
   const v = 0.94 + (rng() * 0.12 - 0.06);
   return [clamp255(158 * v), clamp255(174 * v), clamp255(132 * v), 255];
+};
+
+/** 末地传送门框架（**插了眼**）：同一个凹槽里亮着一颗绿黄色的眼睛（中间是深色瞳孔） */
+const END_PORTAL_FRAME_EYE_PAINTER: Painter = (x, y, rng) => {
+  if (x >= 5 && x <= 10 && y >= 5 && y <= 10) {
+    const pupil = x >= 7 && x <= 8 && y >= 7 && y <= 8;
+    const v = 1 + (rng() * 0.1 - 0.05);
+    return pupil
+      ? [clamp255(64 * v), clamp255(92 * v), clamp255(58 * v), 255]
+      : [clamp255(198 * v), clamp255(232 * v), clamp255(122 * v), 255];
+  }
+  if (x >= 4 && x <= 11 && y >= 4 && y <= 11) {
+    const v = 0.88 + (rng() * 0.1 - 0.05);
+    return [clamp255(108 * v), clamp255(118 * v), clamp255(94 * v), 255];
+  }
+  const v = 0.94 + (rng() * 0.12 - 0.06);
+  return [clamp255(158 * v), clamp255(174 * v), clamp255(132 * v), 255];
+};
+
+/** 末影珍珠（批次 111）：青绿色的球 + 左上角一片高光 */
+PAINTERS.item_ender_pearl = (x, y, rng) => {
+  const dx = (x - 7.5) / 5.2;
+  const dy = (y - 7.8) / 5.2;
+  const d = dx * dx + dy * dy;
+  if (d > 1) return [0, 0, 0, 0];
+  const jitter = rng() * 16 - 8;
+  if (x + y < 9) return [clamp255(188 + jitter), clamp255(244 + jitter), clamp255(218 + jitter), 255];
+  return d > 0.72
+    ? [clamp255(26 + jitter), clamp255(108 + jitter), clamp255(96 + jitter), 255]
+    : [clamp255(58 + jitter), clamp255(190 + jitter), clamp255(166 + jitter), 255];
+};
+
+/** 末影之眼（批次 111）：珍珠底 + 中间一道竖直的深色瞳孔（原版那颗眼睛的样子） */
+PAINTERS.item_ender_eye = (x, y, rng) => {
+  const dx = (x - 7.5) / 5.4;
+  const dy = (y - 7.8) / 5.4;
+  if (dx * dx + dy * dy > 1) return [0, 0, 0, 0];
+  const jitter = rng() * 16 - 8;
+  if (Math.abs(x - 7.5) < 1.4 && y >= 5 && y <= 11) {
+    return [clamp255(28 + jitter), clamp255(76 + jitter), clamp255(70 + jitter), 255];
+  }
+  if (x + y < 10) return [clamp255(184 + jitter), clamp255(242 + jitter), clamp255(214 + jitter), 255];
+  return [clamp255(52 + jitter), clamp255(176 + jitter), clamp255(150 + jitter), 255];
 };
 /** 末地传送门：深紫黑底 + 星点（自发光 15） */
 const END_PORTAL_PAINTER: Painter = (x, y, rng) => {
@@ -3466,6 +3520,7 @@ PAINTERS.chorus_flower = CHORUS_FLOWER_PAINTER;
 PAINTERS.end_rod = END_ROD_PAINTER;
 PAINTERS.dragon_egg = DRAGON_EGG_PAINTER;
 PAINTERS.end_portal_frame = END_PORTAL_FRAME_PAINTER;
+PAINTERS.end_portal_frame_eye = END_PORTAL_FRAME_EYE_PAINTER;
 PAINTERS.end_portal = END_PORTAL_PAINTER;
 
 // ---- 红石元件
