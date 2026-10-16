@@ -541,6 +541,46 @@
         box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
       }
 
+      /* 信标界面（K5，批次 117）：主效果一行 + 次级效果一行，**点一下就生效**。
+         与告示牌编辑器同一套写法（DOM 在 TS 里建、样式在这儿、Esc 收起） */
+      .beacon-screen {
+        position: fixed; inset: 0; z-index: 12;
+        display: grid; place-items: center;
+        background: rgba(0, 0, 0, .55);
+      }
+      .beacon-screen.hidden { display: none; }
+      .beacon-screen-panel {
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 14px 16px;
+        min-width: min(420px, 92vw); max-width: 92vw;
+        background: var(--panel-bg); color: var(--panel-text);
+        border: 3px solid; border-color: var(--pixel-bevel);
+        border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
+      }
+      .beacon-screen-title { font-size: 14px; font-weight: 600; text-align: center; }
+      .beacon-screen-summary { font-size: 12px; text-align: center; color: var(--panel-text-muted); }
+      /* 没有金字塔时把那行字染暖一点：玩家第一眼要看到的是"它现在不工作" */
+      .beacon-screen-summary-off { color: #d08a6a; }
+      .beacon-screen-caption { font-size: 12px; color: var(--panel-text-muted); margin-bottom: 4px; }
+      .beacon-screen-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .beacon-screen-button {
+        padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer;
+        color: var(--btn-text); background: var(--btn-bg);
+        border: 2px solid var(--mc-outline); border-radius: 0;
+        box-shadow: inset 2px 2px 0 var(--mc-edge-light), inset -2px -2px 0 var(--mc-edge-dark);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+        min-height: 36px;
+      }
+      .beacon-screen-button:active {
+        background: var(--mc-face-hover);
+        box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
+      }
+      /* 够不到的能力置灰（原版也是灰的）：点不动比"点了没反应"清楚 */
+      .beacon-screen-button:disabled { opacity: .45; cursor: default; }
+      .beacon-screen-button-on { background: #3a7d33; color: #fff; }
+      .beacon-screen-hint { font-size: 12px; line-height: 1.5; color: var(--panel-text-muted); }
+      .beacon-screen-done { margin-top: 2px; }
+
       #loading {
         position: fixed; inset: 0; display: grid; place-items: center;
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);

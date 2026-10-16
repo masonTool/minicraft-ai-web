@@ -914,6 +914,12 @@ export const TILE_ORDER = [
   // 蓝图：凋灵半血之后吐的那颗（批次 116），以及它的掉落物下界之星
   'wither_skull_blue',
   'item_nether_star',
+  // 矿物块与信标（批次 117，K5）：信标的金字塔底座要用这三种块
+  'gold_block',
+  'diamond_block',
+  'emerald_block',
+  'beacon',
+  'beacon_top',
   // 烈焰人的小火球（批次 92）：没有对应物品，只是飞在空中一团火
   // （渲染时按贴图名取 billboard，见 `EntityRenderer.tileSpriteGeometry`）
   'small_fireball',

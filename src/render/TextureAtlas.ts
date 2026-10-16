@@ -3346,6 +3346,59 @@ PAINTERS.item_nether_star = (x, y, rng) => {
   return [0, 0, 0, 0];
 };
 
+/**
+ * 矿物块（批次 117，K5）：整块同色，但每 4×4 小格有一圈**更亮的边**。
+ *
+ * 原版的矿物块就是这种**规整**的斑纹（不是噪声），所以这里也不用 `noisy`：
+ * 4 的周期正好把 16×16 切成 16 个小格，远看是"一块块压出来的金属"。
+ */
+function mineralPainter(tint: readonly [number, number, number]): Painter {
+  return (x, y, rng) => {
+    const cx = x % 4;
+    const cy = y % 4;
+    const edge = cx === 0 || cx === 3 || cy === 0 || cy === 3;
+    const corner = (cx === 0 || cx === 3) && (cy === 0 || cy === 3);
+    const jitter = rng() * 8 - 4;
+    const v = (corner ? 182 : edge ? 236 : 206) + jitter;
+    return [clamp255(v * tint[0]), clamp255(v * tint[1]), clamp255(v * tint[2]), 255];
+  };
+}
+
+PAINTERS.gold_block = mineralPainter([1.0, 0.83, 0.28]);
+PAINTERS.diamond_block = mineralPainter([0.52, 0.94, 0.94]);
+PAINTERS.emerald_block = mineralPainter([0.32, 0.92, 0.44]);
+
+/**
+ * 信标（批次 117，K5）的**侧面**：底下一截黑曜石、上面是玻璃身、中间透出那颗星。
+ *
+ * 原版是三段实体几何，这里按本项目的画法压进一张贴图（见 `blocks.ts` 的
+ * `MINERAL_AND_BEACON_SPECS` 注记）——所以"星"只画在正面那几格上，
+ * 从侧面看它就是一颗发亮的核。
+ */
+PAINTERS.beacon = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  // 底下 4 行：黑曜石底盘
+  if (y >= 12) return [clamp255(26 + jitter), clamp255(20 + jitter), clamp255(40 + jitter), 255];
+  // 玻璃身的边框（外圈与底盘上沿各深一档）
+  const frame = x === 0 || x === 15 || y === 3 || y === 11;
+  // 中间那颗星：淡青发亮（原版信标里就是它）
+  if (x >= 6 && x <= 9 && y >= 6 && y <= 9) {
+    return [clamp255(198 + jitter), clamp255(238 + jitter), clamp255(242 + jitter), 255];
+  }
+  const base = frame ? 104 : 140;
+  return [clamp255(base * 0.7), clamp255(base * 0.9), clamp255(base + 26), 255];
+};
+
+/** 信标的**顶面**：一圈玻璃口，正中是那道光的出口 */
+PAINTERS.beacon_top = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  const inner = x >= 5 && x <= 10 && y >= 5 && y <= 10;
+  if (inner) return [clamp255(216 + jitter), clamp255(246 + jitter), clamp255(250 + jitter), 255];
+  const frame = x <= 1 || x >= 14 || y <= 1 || y >= 14;
+  const base = frame ? 100 : 136;
+  return [clamp255(base * 0.7), clamp255(base * 0.9), clamp255(base + 26), 255];
+};
+
 /** 凋灵骷髅头的顶面（批次 115）：几道更深的骨缝，说明"这是个头"而不是一块石头 */
 PAINTERS.wither_skull_top = (x, y, rng) => {
   const jitter = rng() * 14 - 7;

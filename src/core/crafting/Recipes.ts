@@ -698,6 +698,22 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // 铁锭 ↔ 铁粒（B11，原版两向都有）：9 粒合成 1 锭，1 锭拆成 9 粒
   { kind: 'shapeless' as const, result: { id: Item.IRON_INGOT, count: 1 }, ingredients: [Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET, Item.IRON_NUGGET] },
   { kind: 'shapeless' as const, result: { id: Item.IRON_NUGGET, count: 9 }, ingredients: [Item.IRON_INGOT] },
+  // ---- 矿物块与信标（批次 117，K5）
+  // 金/钻石/绿宝石块与铁块同一套（9 个原料压一块、也能拆回去）——
+  // 它们不只是储物方块：**信标的金字塔底座要用它们**
+  { kind: 'shaped' as const, result: { id: Block.GOLD_BLOCK, count: 1 }, pattern: ['III', 'III', 'III'], key: { I: Item.GOLD_INGOT } },
+  { kind: 'shapeless' as const, result: { id: Item.GOLD_INGOT, count: 9 }, ingredients: [Block.GOLD_BLOCK] },
+  { kind: 'shaped' as const, result: { id: Block.DIAMOND_BLOCK, count: 1 }, pattern: ['III', 'III', 'III'], key: { I: Item.DIAMOND } },
+  { kind: 'shapeless' as const, result: { id: Item.DIAMOND, count: 9 }, ingredients: [Block.DIAMOND_BLOCK] },
+  { kind: 'shaped' as const, result: { id: Block.EMERALD_BLOCK, count: 1 }, pattern: ['III', 'III', 'III'], key: { I: Item.EMERALD } },
+  { kind: 'shapeless' as const, result: { id: Item.EMERALD, count: 9 }, ingredients: [Block.EMERALD_BLOCK] },
+  // 信标（原版图案）：上面 5 格玻璃、中间一颗下界之星、底下 3 块黑曜石
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.BEACON, count: 1 },
+    pattern: ['GGG', 'GNG', 'OOO'],
+    key: { G: Block.GLASS, N: Item.NETHER_STAR, O: Block.OBSIDIAN },
+  },
   // ---- 食物与杂物（批次 48，B17）
   // 金锭 ↔ 金粒（与铁粒同一套两向配方）
   { kind: 'shapeless' as const, result: { id: Item.GOLD_INGOT, count: 1 }, ingredients: Array<number>(9).fill(Item.GOLD_NUGGET) },

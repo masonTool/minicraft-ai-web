@@ -194,16 +194,30 @@ import { NetClient, defaultServerUrl } from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import type { NetPlayerState } from './net/NetClient.ts';
 import {
+  beaconPrimary,
+  beaconRegen,
   delayOf,
   hasEndPortalEye,
   isFenceGateOpen,
   isTrapdoorOpen,
   portalAxis,
+  withBeaconPrimary,
+  withBeaconRegen,
   withDelay,
   withEndPortalEye,
   withFenceGateOpen,
   withTrapdoorOpen,
 } from './core/registry/blockState.ts';
+// 信标（K5，批次 117）：等级/范围/效果是纯逻辑（`world/Beacon.ts`），
+// 界面与光柱各自一份（与告示牌的"文字表 / 编辑框 / 渲染器"三件套同构）
+import {
+  BEACON_REGEN_MIN_LEVEL,
+  beaconEffects,
+  beaconLevel,
+  beaconRange,
+} from './core/world/Beacon.ts';
+import { BeaconScreen } from './ui/BeaconScreen.ts';
+import { BeaconBeamRenderer } from './render/BeaconBeamRenderer.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
@@ -807,6 +821,23 @@ class App {
    */
   private readonly signText = new SignTextStore();
   private readonly signEditor = new SignEditor();
+  /** 信标界面（K5，批次 117）：右键信标打开 */
+  private readonly beaconScreen = new BeaconScreen();
+  /** 信标的光柱（K5）：运行时实体，不烘进区块网格 */
+  private readonly beaconBeamRenderer = new BeaconBeamRenderer();
+  /**
+   * 场上已知的信标（K5，批次 117）：键是 `beaconKey(维度, x, y, z)`。
+   *
+   * 与避雷针/刷怪笼那两张索引同一套：**区块加载时扫出来、卸载时忘掉**，
+   * 放置/破坏时随手登记——因为光柱得逐帧画、效果得每秒挂，
+   * 而这些都要先知道"附近哪儿有信标"。
+   *
+   * 里面存的 `level` 是**金字塔等级缓存**（每秒重算一次：最贵的四级要读 164 格，
+   * 不能每帧算），`beams` 那一份则按维度过滤后逐帧同步给渲染器。
+   */
+  private readonly beacons = new Map<string, { level: number; refresh: number }>();
+  /** 信标效果的节拍（秒）：攒够 1 秒给范围内的玩家挂一次 */
+  private beaconEffectTimer = 0;
   private readonly signRenderer = new SignRenderer();
   /** 正在编辑哪一块牌子（编辑器是模态，一次只会有一个） */
   private editingSign: { x: number; y: number; z: number } | null = null;
@@ -1119,6 +1150,15 @@ class App {
       this.handleInventoryOpen(false);
     };
 
+    // 信标（K5，批次 117）：界面里点一下就把那条效果写进**方块状态**（见
+    // `applyBeaconChoice`），关掉时把输入权交回去；光柱的组挂在场景里、逐帧 sync
+    this.beaconScreen.onChoose = (primary, regen) => this.applyBeaconChoice(primary, regen);
+    this.beaconScreen.onClose = () => {
+      this.editingBeacon = null;
+      this.handleInventoryOpen(false);
+    };
+    this.scene.add(this.beaconBeamRenderer.group);
+
     this.world.events = {
       onChunkLoaded: (chunk) => {
         // 结构箱的战利品（K8 尾巴）：方块状态里写着"哪张表"，在这里按表掷点填进容器。
@@ -1128,6 +1168,8 @@ class App {
         this.scanRodsInChunk(chunk.cx, chunk.cz);
         // 刷怪笼索引（批次 92）：同一个道理——下界要塞里的笼子在加载时登记，之后按倒计时生成
         this.scanSpawnersInChunk(chunk.cx, chunk.cz);
+        // 信标索引（K5，批次 117）：光柱要逐帧画、效果要每秒挂，所以先知道"哪儿有信标"
+        this.scanBeaconsInChunk(chunk.cx, chunk.cz);
         // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民。
         // 与上面两件事同一个位置、同一条理由：**方块已经在了，但还需要有人管一下**
         // （结构生成在 Worker 里，而 Worker 造不了实体）
@@ -1140,6 +1182,8 @@ class App {
         this.forgetRodsInChunk(cx, cz);
         // 刷怪笼同理：区块卸载之后就不该再对着它生成（也没法生成——方块读不到了）
         this.forgetSpawnersInChunk(cx, cz);
+        // 信标（K5，批次 117）：区块走了就别再画它的光柱（下次加载会重新扫出来）
+        this.forgetBeaconsInChunk(cx, cz);
         this.chunkRenderer.onChunkUnloaded(cx, cz);
         // 区块卸载时一并清掉落在该区块里的掉落物，避免未加载区域实体无限堆积
         this.entities.removeInChunk(cx, cz);
@@ -1334,6 +1378,7 @@ class App {
   private isAnyUiOpen(): boolean {
     return (
       this.signEditor.isOpen ||
+      this.beaconScreen.isOpen ||
       this.chat.isOpen ||
       this.recipeBook.isOpen ||
       this.advancementScreen.isOpen ||
@@ -1350,6 +1395,7 @@ class App {
    */
   private closeTopUi(): boolean {
     if (this.signEditor.isOpen) this.signEditor.close();
+    else if (this.beaconScreen.isOpen) this.beaconScreen.close();
     else if (this.chat.isOpen) this.chat.close();
     else if (this.recipeBook.isOpen) this.recipeBook.hide();
     else if (this.advancementScreen.isOpen) this.advancementScreen.hide();
@@ -4268,6 +4314,148 @@ class App {
     this.lightningRods.delete(rodKey(x, y, z));
   }
 
+  // ---------------------------------------------------------------- 信标（K5，批次 117）
+
+  /** 信标索引的键（**带维度**：三个维度共用同一套坐标，见 `BlockEntityStore` 那条教训） */
+  private beaconKey(x: number, y: number, z: number): string {
+    return `${this.dimension},${x},${y},${z}`;
+  }
+
+  /**
+   * 把一个区块里的信标扫进索引（区块加载时调一次）。
+   *
+   * 与避雷针 / 刷怪笼那两趟同一个手法：**对扁平数组做一趟线性扫描、空的 section 跳过**
+   * （三重循环 + `Chunk.index()` 在开局那 400 个区块上是四千万次调用）。
+   * 唯一不同的是**不限定维度**：信标主世界 / 下界 / 末地都能摆
+   * （避雷针只为闪电服务，所以那趟只在主世界跑）。
+   */
+  private scanBeaconsInChunk(cx: number, cz: number): void {
+    const chunk = this.world.getChunk(cx, cz);
+    if (!chunk) return;
+    const originX = cx * 16;
+    const originZ = cz * 16;
+    const blocks = chunk.blocks;
+    for (let section = 0; section < SECTION_COUNT; section++) {
+      if (chunk.sectionIsEmpty(section)) continue;
+      const from = Chunk.index(0, Math.max(WORLD_MIN_Y, Chunk.sectionMinY(section)), 0);
+      const to = Math.min(blocks.length, from + 16 * 16 * 16);
+      for (let i = from; i < to; i++) {
+        if (blocks[i] !== Block.BEACON) continue;
+        this.noteBeacon(originX + (i & 15), (i >> 8) + WORLD_MIN_Y, originZ + ((i >> 4) & 15));
+      }
+    }
+  }
+
+  /** 区块卸载：忘掉里面的信标（光柱不必再画，效果也没法算——方块读不到了） */
+  private forgetBeaconsInChunk(cx: number, cz: number): void {
+    const minX = cx * 16;
+    const minZ = cz * 16;
+    for (const key of [...this.beacons.keys()]) {
+      const [, sx, , sz] = key.split(',');
+      const x = Number(sx);
+      const z = Number(sz);
+      if (x >= minX && x < minX + 16 && z >= minZ && z < minZ + 16) this.beacons.delete(key);
+    }
+  }
+
+  /** 记下一座信标（区块扫描与"放下信标"两条路径都走这里），顺手算一次等级 */
+  private noteBeacon(x: number, y: number, z: number): void {
+    this.beacons.set(this.beaconKey(x, y, z), { level: beaconLevel(this.world, x, y, z), refresh: 0 });
+  }
+
+  /**
+   * 每帧推进信标（K5，批次 117）：**光柱逐帧同步、效果每秒挂一次**。
+   *
+   * 金字塔等级每秒重算一次——最贵的四级要读 164 格，不能每帧算；光柱按缓存画，
+   * 所以"刚搭好的金字塔"最多一秒后亮起来（可以接受）。
+   * 效果的范围判据走**三维距离**（原版是球），离开范围后效果还能留几秒
+   * （时长 3 秒、每秒刷一次，见 `beaconEffects`）。
+   */
+  private updateBeacons(dt: number): void {
+    const beams: { x: number; y: number; z: number }[] = [];
+    const px = this.physics.x + 0.5;
+    const py = this.physics.y;
+    const pz = this.physics.z + 0.5;
+
+    this.beaconEffectTimer -= dt;
+    const refresh = this.beaconEffectTimer <= 0;
+    if (refresh) this.beaconEffectTimer = 1;
+
+    for (const [key, entry] of [...this.beacons]) {
+      const [dimension, sx, sy, sz] = key.split(',');
+      if (dimension !== this.dimension) continue;
+      const x = Number(sx);
+      const y = Number(sy);
+      const z = Number(sz);
+      // 那一格已经不是信标了（被挖掉/被炸掉）→ 直接忘掉
+      if (this.world.getBlock(x, y, z) !== Block.BEACON) {
+        this.beacons.delete(key);
+        continue;
+      }
+      if (refresh) entry.level = beaconLevel(this.world, x, y, z);
+      if (entry.level <= 0) continue;
+
+      // 光柱：只要它亮着就画——**远处的光柱也该看得见**，所以不看玩家在不在范围内
+      beams.push({ x, y, z });
+
+      if (!refresh) continue;
+      if (Math.hypot(px - x, py - y, pz - z) > beaconRange(entry.level)) continue;
+      const state = this.world.getBlockState(x, y, z);
+      for (const spec of beaconEffects(entry.level, beaconPrimary(state), beaconRegen(state))) {
+        this.effects.apply(spec.effect, spec.seconds, spec.amplifier);
+      }
+    }
+
+    this.beaconBeamRenderer.sync(beams);
+  }
+
+  /** 右键信标：打开界面（把金字塔等级与当前选择读给它） */
+  private openBeaconScreen(x: number, y: number, z: number): void {
+    const state = this.world.getBlockState(x, y, z);
+    this.editingBeacon = { x, y, z };
+    this.beaconScreen.show({
+      level: beaconLevel(this.world, x, y, z),
+      primary: beaconPrimary(state),
+      regen: beaconRegen(state),
+    });
+    // 与背包/告示牌同一个入口：释放指针锁、收起触摸层
+    this.handleInventoryOpen(true);
+  }
+
+  /**
+   * 界面里选了效果（K5，批次 117）：写进信标那一格的**方块状态**。
+   *
+   * 写状态而不是"记在内存里"：状态跟着区块数据一起存档（见 `blockState.ts` 的注记），
+   * 于是"退出重进信标还记得你选了什么"不需要另开一条存档通道——与箱子记战利品表同一套路。
+   *
+   * ⚠️ 够不到的能力**在这里也拦一道**（界面会把按钮置灰，但传进来的是外部数据）：
+   * 没有金字塔时选主效果会写成"选了也没用"（等级 0 不挂效果），三级以下要生命恢复会被丢掉。
+   */
+  private applyBeaconChoice(primary: number, regen: boolean): void {
+    const target = this.editingBeacon;
+    if (!target) return;
+    const { x, y, z } = target;
+    if (this.world.getBlock(x, y, z) !== Block.BEACON) return;
+
+    const level = beaconLevel(this.world, x, y, z);
+    const current = this.world.getBlockState(x, y, z);
+    const next = withBeaconRegen(
+      withBeaconPrimary(current, primary),
+      regen && level >= BEACON_REGEN_MIN_LEVEL,
+    );
+    this.world.setStateAndUpdate(x, y, z, next);
+    this.net.sendBlock(x, y, z, Block.BEACON, next, this.dimension);
+
+    const entry = this.beacons.get(this.beaconKey(x, y, z));
+    if (entry) entry.level = level;
+    this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    // 立刻按新状态刷一遍界面：选中的那一条要马上变绿（否则玩家会以为没点上）
+    this.beaconScreen.show({ level, primary: beaconPrimary(next), regen: beaconRegen(next) });
+  }
+
+  /** 正在编辑的那座信标（界面点"效果"时要写哪一格） */
+  private editingBeacon: { x: number; y: number; z: number } | null = null;
+
   // ---------------------------------------------------------------- 刷怪笼（批次 92）
 
   /**
@@ -5222,6 +5410,46 @@ class App {
     return { x, y, z };
   }
 
+  /**
+   * 验收脚本用（K5，批次 117）：在玩家旁边搭一座信标 + **指定等级**的金字塔。
+   *
+   * 走一遍真流程要凑 5 块玻璃 + 3 块黑曜石 + 1 颗下界之星（先打凋灵）+ 若干矿物块，
+   * 自动化验收等不起；而"光柱亮不亮、界面能不能选、效果挂没挂上"正是要人看的地方。
+   * @param level 金字塔几级（0 = 只放信标，用来验"没有底座时不工作"）
+   */
+  buildBeaconForTest(level = 4): { x: number; y: number; z: number } {
+    const x = Math.floor(this.physics.x) + 4;
+    const y = Math.floor(this.physics.y) + 6;
+    const z = Math.floor(this.physics.z);
+    for (let layer = 1; layer <= level; layer++) {
+      for (let dz = -layer; dz <= layer; dz++) {
+        for (let dx = -layer; dx <= layer; dx++) {
+          this.world.setBlockAndUpdate(x + dx, y - layer, z + dz, Block.IRON_BLOCK, 0);
+        }
+      }
+    }
+    this.world.setBlockAndUpdate(x, y, z, Block.BEACON, 0);
+    // 登记进索引：光柱下一刻就会亮（走的是与"玩家自己放下"同一条路）
+    this.noteBeacon(x, y, z);
+    return { x, y, z };
+  }
+
+  /** 验收脚本用：某座信标现在的等级与选中的效果（那一格不是信标时 null） */
+  beaconStateAt(x: number, y: number, z: number): { level: number; primary: number; regen: boolean } | null {
+    if (this.world.getBlock(x, y, z) !== Block.BEACON) return null;
+    const state = this.world.getBlockState(x, y, z);
+    return {
+      level: beaconLevel(this.world, x, y, z),
+      primary: beaconPrimary(state),
+      regen: beaconRegen(state),
+    };
+  }
+
+  /** 验收脚本用：信标索引与光柱的现状（索引里几个、这一帧画了几根） */
+  get beaconDebug(): { known: number; beams: number } {
+    return { known: this.beacons.size, beams: this.beaconBeamRenderer.count };
+  }
+
   /** 验收脚本用：清空全部进度（做完验收别把"考试答案"留在存档里） */
   resetAdvancementsForTest(): void {
     this.advancements.clear();
@@ -5597,6 +5825,11 @@ class App {
     // 物品展示框（B14，批次 86）：右键 = 挂上去 / 转 45° / 换一件。
     // 画（`painting`）没有交互：右键点它继续走放置逻辑（原版画也没有交互）
     if (hitShape === 'item_frame') return this.useItemFrame(x, y, z);
+    // 信标（K5，批次 117）：右键打开效果面板（**没有物品格**，见 `ui/BeaconScreen.ts`）
+    if (hitBlock === Block.BEACON) {
+      this.openBeaconScreen(x, y, z);
+      return true;
+    }
     if (hitBlock === Block.CRAFTING_TABLE) {
       this.inventoryScreen.openWith('crafting');
       return true;
@@ -6824,6 +7057,8 @@ class App {
       // 避雷针（批次 83）：放下就进索引（不必等区块重载——它在**当前**加载的区块里）
       if (blockId === Block.LIGHTNING_ROD) this.noteRodPlaced(x, y, z);
       if (blockId === Block.SPAWNER) this.noteSpawner(x, y, z);
+      // 信标（K5，批次 117）：放下就登记（顺手算一次等级，光柱下一刻就亮）
+      if (blockId === Block.BEACON) this.noteBeacon(x, y, z);
       // 凋灵骷髅头（批次 116）：摆上去之后看看"4 块灵魂沙 + 3 颗头"齐了没有
       if (blockId === Block.WITHER_SKELETON_SKULL) this.trySummonWither(x, y, z);
 
@@ -7603,6 +7838,8 @@ class App {
       this.updateLightning(dt);
       // 刷怪笼（批次 92）：下界要塞里的笼子按倒计时生成烈焰人
       this.updateSpawners(dt);
+      // 信标（K5，批次 117）：光柱逐帧同步、效果每秒挂一次
+      this.updateBeacons(dt);
       // 启动期的渐进视距（批次 100）：涨一格就重新按新的范围请求区块。
       // 帧率吃紧时先不涨（自适应视距那一套会把视距往下压，边卡边涨只会雪上加霜）
       if (!this.startupRamp.done) {
@@ -7752,6 +7989,7 @@ class App {
     // 告示牌的文字平面与画布贴图（B12）：每块牌子一份材质，得逐块释放
     this.signRenderer.dispose();
     this.itemFrameRenderer.dispose();
+    this.beaconBeamRenderer.dispose();
     // 浮标（批次 81）：懒建的，可能一次都没抛过竿
     this.bobberMesh?.geometry.dispose();
     const bobberMaterial = this.bobberMesh?.material;

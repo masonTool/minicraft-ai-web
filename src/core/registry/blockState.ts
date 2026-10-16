@@ -663,6 +663,43 @@ export function portalAxis(state: number): 'x' | 'z' {
   return portalAxisIsZ(state) ? 'z' : 'x';
 }
 
+// ---------------------------------------------------------------- 信标（K5，批次 117）
+
+/**
+ * 信标选中的**主效果**（bits 4-6）与**生命恢复开关**（bit7）。
+ *
+ * 为什么把玩家的选择写进**方块状态**、而不是另开一张"坐标 → 效果"的表：
+ * 状态跟着区块数据一起存档（箱子的战利品表序号、刷怪笼出的生物都是这个理由），
+ * 所以"退出重进之后信标还记得你选了什么"不需要多一条存档通道。
+ *
+ * 下标 `0` 表示"还没选"，`1~5` 与 `world/Beacon.ts` 的 `BEACON_POWERS` 顺序一一对应
+ * ——那两处**必须同序**，`test:beacon` 有一条断言盯着它。
+ *
+ * ⚠️ bits 4-7 与箱子的"战利品表序号"是同一段：这是允许的——**一格只有一种方块**，
+ * 状态字节的含义由"那一格放的是什么"决定（沿用文件头那条"各形状族用自己的位"的约定）。
+ */
+const BEACON_PRIMARY_SHIFT = 4;
+const BEACON_PRIMARY_MASK = 0b111;
+/** 生命恢复那一位（bit7）：只有三级以上的金字塔能用它 */
+const BEACON_REGEN_BIT = 0b1 << 7;
+
+export function beaconPrimary(state: number): number {
+  return (state >> BEACON_PRIMARY_SHIFT) & BEACON_PRIMARY_MASK;
+}
+
+export function withBeaconPrimary(state: number, index: number): number {
+  const mask = BEACON_PRIMARY_MASK << BEACON_PRIMARY_SHIFT;
+  return (state & ~mask) | ((index & BEACON_PRIMARY_MASK) << BEACON_PRIMARY_SHIFT);
+}
+
+export function beaconRegen(state: number): boolean {
+  return (state & BEACON_REGEN_BIT) !== 0;
+}
+
+export function withBeaconRegen(state: number, on: boolean): number {
+  return on ? state | BEACON_REGEN_BIT : state & ~BEACON_REGEN_BIT;
+}
+
 // ---------------------------------------------------------------- 末地传送门框架（K9，批次 111）
 
 /**

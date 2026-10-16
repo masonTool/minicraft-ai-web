@@ -2757,6 +2757,48 @@ const SKULL_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/** 金块 / 钻石块 / 绿宝石块（批次 117）：信标金字塔要用的三种"矿物块" */
+export const GOLD_BLOCK_ID = 553;
+export const DIAMOND_BLOCK_ID = 554;
+export const EMERALD_BLOCK_ID = 555;
+/** 信标（批次 117，K5） */
+export const BEACON_ID = 556;
+
+/**
+ * 矿物块与信标（批次 117，K5 信标那一批）。
+ *
+ * 为什么**这一批才补三种矿物块**：信标的金字塔底座要用它们（原版底座可以是
+ * 铁块 / 金块 / 钻石块 / 绿宝石块 / 下界合金块，还能混着摆）——而在此之前本项目
+ * 只有铁块与下界合金块，**金/钻石/绿宝石连储物方块都没有**（也没有"9 锭换 1 块"的配方）。
+ * 所以它们不是"顺手加的装饰"，是信标的前置。
+ *
+ * 信标本身是完整立方体（`cube`）：原版它由"黑曜石底盘 + 玻璃身 + 里面的星"三截组成，
+ * 本项目按既有画法把这三截画进 16×16 贴图（见 `TextureAtlas` 的 `beacon`）——
+ * 不额外做几何，观感与其它方块一致，网格化那边也少一个分支。
+ * 它是**光源**（原版信标亮度 15）而且不挡光（那圈玻璃）。
+ */
+const MINERAL_AND_BEACON_SPECS: readonly BlockSpec[] = [
+  { id: GOLD_BLOCK_ID, name: 'minecraft:gold_block', tiles: ['gold_block', 'gold_block', 'gold_block'] },
+  {
+    id: DIAMOND_BLOCK_ID,
+    name: 'minecraft:diamond_block',
+    tiles: ['diamond_block', 'diamond_block', 'diamond_block'],
+  },
+  {
+    id: EMERALD_BLOCK_ID,
+    name: 'minecraft:emerald_block',
+    tiles: ['emerald_block', 'emerald_block', 'emerald_block'],
+  },
+  {
+    id: BEACON_ID,
+    name: 'minecraft:beacon',
+    tiles: ['beacon_top', 'beacon_top', 'beacon'],
+    opaque: false,
+    lightOpacity: 0,
+    light: 15,
+  },
+];
+
 const SPAWNER_SPECS: readonly BlockSpec[] = [
   {
     id: SPAWNER_ID,
@@ -2827,6 +2869,7 @@ const SPECS: readonly BlockSpec[] = [
   ...NETHER_WART_SPECS,
   ...SPAWNER_SPECS,
   ...SKULL_SPECS,
+  ...MINERAL_AND_BEACON_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -3142,6 +3185,11 @@ export const Block = {
   SPAWNER: SPAWNER_ID,
   // 凋灵骷髅头（批次 115）：战利品 + 召唤材料，形状是 `head`
   WITHER_SKELETON_SKULL: WITHER_SKELETON_SKULL_ID,
+  // 矿物块与信标（批次 117，K5）
+  GOLD_BLOCK: GOLD_BLOCK_ID,
+  DIAMOND_BLOCK: DIAMOND_BLOCK_ID,
+  EMERALD_BLOCK: EMERALD_BLOCK_ID,
+  BEACON: BEACON_ID,
   CRACKED_POLISHED_BLACKSTONE_BRICKS: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
@@ -3439,6 +3487,11 @@ HARDNESS.set(Block.COCOA_STAGE2, 0.2);
 HARDNESS.set(Block.SPAWNER, 5);
 // 凋灵骷髅头（批次 115）：原版硬度 1（徒手一秒多就能挖下来）
 HARDNESS.set(Block.WITHER_SKELETON_SKULL, 1);
+// 矿物块与信标（批次 117，K5）：硬度按原版（金块 3 / 钻石块与绿宝石块 5 / 信标 3）
+HARDNESS.set(Block.GOLD_BLOCK, 3);
+HARDNESS.set(Block.DIAMOND_BLOCK, 5);
+HARDNESS.set(Block.EMERALD_BLOCK, 5);
+HARDNESS.set(Block.BEACON, 3);
 // 下界疣：原版徒手一拍就掉（硬度 0），四个阶段都要登记
 // （不登记的话 `blockHardness` 的兜底是 3 —— 收个下界疣要挖 4.5 秒，见 `isHardnessRegistered`）
 // ⚠️ 这里按 id 算术展开，不能引用 `NETHER_WART_STAGES`：那张表在本文件**后面**才定义，

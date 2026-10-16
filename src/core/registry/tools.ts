@@ -407,6 +407,14 @@ requirePickaxe(2, [
 // 下界合金块要钻石镐（原版如此）：想把它挖回去得先有钻石镐，和"想炼下界合金先要钻石镐"一致
 requirePickaxe(3, [Block.OBSIDIAN, Block.ANCIENT_DEBRIS, Block.NETHERITE_BLOCK, Block.ENDER_CHEST]);
 
+// ---- 矿物块与信标（批次 117，K5 信标那一批的开采口径）
+// 矿物块**跟随它那种矿石的档位**：铁块要石镐（与铁矿同档），
+// 金/钻石/绿宝石块要铁镐（与它们各自的矿石同档）——原版 1.17 起就是这么归的
+requirePickaxe(1, [Block.IRON_BLOCK, Block.GOLD_BLOCK]);
+requirePickaxe(2, [Block.DIAMOND_BLOCK, Block.EMERALD_BLOCK]);
+// 信标：原版木质镐就能挖下来（它是"打凋灵换来"的东西，不该再用工具档位卡一道）
+requirePickaxe(0, [Block.BEACON]);
+
 // 台阶 / 楼梯跟随母方块：母方块要镐，它们也要
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {
   const parent = SHAPED_PARENTS[index]![0];
