@@ -100,7 +100,11 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
     if (input.blockAt(0, 0, 0) !== Block.WATER) return null;
     const below = input.blockAt(0, -1, 0);
     if (!blockDef(below).solid && below !== input.blockId) return null;
-    return { state: 0 };
+    // `cross` 形状（海带/海草/珊瑚丛）没有额外状态，落点定下来就能放；
+    // **其余形状要继续走下面的 switch** 求自己的状态——珊瑚扇（批次 51）的
+    // "落地还是贴墙、贴哪一面"就在那个 case 里。原先这里一律 `return { state: 0 }`，
+    // 表现是"贴墙放珊瑚扇，结果它躺在地上"
+    if (def.shape === 'cross') return { state: 0 };
   }
 
   switch (def.shape) {
@@ -137,6 +141,19 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
         return { state: 0 };
       }
       if (ny < 0) return null; // 原版不允许把火把挂在天花板上
+      const facing = facingFromNormal(nx, nz);
+      if (facing === null) return null;
+      return { state: withWallMounted(withFacing(0, facing), true) };
+    }
+
+    case 'coral_fan': {
+      // 珊瑚扇（批次 51）：与火把同一套"落地 / 贴墙"，但落点还要是水
+      // （它是水里的植物，占了那一格水——这条由上面的 `waterPlant` 分支管着）
+      if (ny > 0) {
+        if (input.blockAt(0, -1, 0) === 0) return null;
+        return { state: 0 };
+      }
+      if (ny < 0) return null;
       const facing = facingFromNormal(nx, nz);
       if (facing === null) return null;
       return { state: withWallMounted(withFacing(0, facing), true) };

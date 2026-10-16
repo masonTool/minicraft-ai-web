@@ -143,6 +143,8 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'ladder':
     case 'cross':
     case 'flat':
+    // 珊瑚扇（批次 51）：一片薄面，原版可以直接游过去
+    case 'coral_fan':
       // 火把、梯子、植物、贴地薄板都没有碰撞体积（原版红石粉与压力板也不挡路）
       return [];
     case 'lily_pad':
@@ -329,6 +331,8 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'lily_pad':
       // 睡莲与"贴地薄板"长得一样（都是 1/16 的一层），差别只在碰撞（见 `collisionBoxes`）
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
+    case 'coral_fan':
+      return coralFanBoxes(state);
     case 'campfire':
       // 与碰撞盒同源（7/16 的柴堆）
       return [[0, 0, 0, 1, CAMPFIRE_HEIGHT, 1]];
@@ -566,6 +570,34 @@ function vineBoxes(state: number): readonly LocalBox[] {
   // 顶面：挂在天花板底下的一层
   if (hasVineUp(state)) boxes.push([0, 1 - t, 0, 1, 1, 1]);
   return boxes;
+}
+
+/** 珊瑚扇的厚度（1/16 格，与藤蔓/贴地薄板同一档） */
+const FAN_THICKNESS = 0.0625;
+
+/**
+ * 珊瑚扇（批次 51）：**一片** 1/16 厚的薄面。
+ *
+ * 两种摆法，与火把同一套状态语义（`wallMounted` + `facing`）：
+ *  - **落地**（state 0）：贴在自己所在那一格的**底面**（原版的 floor 变体就是躺在地上的一片）
+ *  - **贴墙**（wallMounted）：贴在"朝向"那一侧的墙面上（facing 指向被贴的方块）
+ *
+ * ⚠️ 贴墙时薄片要在**朝向那一侧**，与藤蔓/梯子同一条约定（写反的表现是
+ * "扇子长在墙里面"——方块看着正常，贴图穿进墙里）。
+ */
+function coralFanBoxes(state: number): readonly LocalBox[] {
+  const t = FAN_THICKNESS;
+  if (!isWallMounted(state)) return [[0, 0, 0, 1, t, 1]];
+  switch (facingOf(state)) {
+    case 0:
+      return [[0, 0, 0, 1, 1, t]];
+    case 1:
+      return [[1 - t, 0, 0, 1, 1, 1]];
+    case 2:
+      return [[0, 0, 1 - t, 1, 1, 1]];
+    default:
+      return [[0, 0, 0, t, 1, 1]];
+  }
 }
 
 /** 梯子：贴在朝向那一侧的薄片 */

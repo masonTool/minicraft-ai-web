@@ -1463,6 +1463,112 @@ const KELP_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 珊瑚一族（批次 51）
+
+/**
+ * 珊瑚（1.13 海洋更新的主角，暖水海洋海底）。
+ *
+ * **五"种" × 三"形" × 活/失活 = 30 个方块**，全部由下面这一小段循环展开：
+ *  - **珊瑚块**（`tube_coral_block`，固体方块）：珊瑚礁的主体
+ *  - **珊瑚**（`tube_coral`，`cross` 形状的丛）：长在珊瑚块上/海底
+ *  - **珊瑚扇**（`tube_coral_fan`，`coral_fan` 形状的薄片）：能贴墙、也能落在方块顶上
+ *
+ * 活珊瑚与失活珊瑚是**两套 id**（原版如此）。这一族最要紧的两条机制都在
+ * `RandomTicks.ts` 里：**离开水就失活**、**挨着活珊瑚会复活**；
+ * 掉落那条在 `items.ts`：**活珊瑚不用精准采集只掉失活版**。
+ *
+ * 为什么用循环展开而不是手抄 30 行：这一族的"三形 × 五色"必然要一起改
+ * （贴图、掉落、失活映射、生成都用同一套名字），手抄的版本一定会漏掉某一格，
+ * 而漏掉的那一格看起来与其他格子毫无区别（就像"少了一种木材的门"）。
+ */
+export const CORAL_BLOCK_ID_START = 439;
+export const DEAD_CORAL_BLOCK_ID_START = 444;
+export const CORAL_ID_START = 449;
+export const DEAD_CORAL_ID_START = 454;
+export const CORAL_FAN_ID_START = 459;
+export const DEAD_CORAL_FAN_ID_START = 464;
+
+/** 珊瑚的五"种"（原版顺序：管 / 脑 / 气泡 / 火 / 鹿角） */
+export const CORAL_KINDS = ['tube', 'brain', 'bubble', 'fire', 'horn'] as const;
+export type CoralKind = (typeof CORAL_KINDS)[number];
+
+/** 五种珊瑚的中文译名（方块名与物品名共用同一套） */
+export const CORAL_KIND_CN: Record<CoralKind, string> = {
+  tube: '管',
+  brain: '脑',
+  bubble: '气泡',
+  fire: '火',
+  horn: '鹿角',
+};
+
+/** 珊瑚扇：能贴墙也能落地，几何与火把同一套状态（"贴哪一面"写在状态里） */
+function coralFanSpec(id: number, name: string, tile: string): BlockSpec {
+  return {
+    id,
+    name: `minecraft:${name}`,
+    tiles: [tile, tile, tile],
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+    shape: 'coral_fan',
+    // 与海带/海草同一条：它占了那一格水，所以放置要落在水里、水也冲不走它
+    waterPlant: true,
+  };
+}
+
+const CORAL_SPECS: BlockSpec[] = [];
+for (let i = 0; i < CORAL_KINDS.length; i++) {
+  const kind = CORAL_KINDS[i]!;
+  const blockTile = `${kind}_coral_block`;
+  const deadBlockTile = `dead_${kind}_coral_block`;
+  // 珊瑚块（活/失活）：固体方块，走默认 cube
+  CORAL_SPECS.push({
+    id: CORAL_BLOCK_ID_START + i,
+    name: `minecraft:${blockTile}`,
+    tiles: [blockTile, blockTile, blockTile],
+  });
+  CORAL_SPECS.push({
+    id: DEAD_CORAL_BLOCK_ID_START + i,
+    name: `minecraft:${deadBlockTile}`,
+    tiles: [deadBlockTile, deadBlockTile, deadBlockTile],
+  });
+  // 珊瑚丛（活/失活）：与花草同一种 cross 植物，只是长在水里
+  CORAL_SPECS.push({ ...waterPlantSpec(CORAL_ID_START + i, `${kind}_coral`, `${kind}_coral`) });
+  CORAL_SPECS.push({ ...waterPlantSpec(DEAD_CORAL_ID_START + i, `dead_${kind}_coral`, `dead_${kind}_coral`) });
+  // 珊瑚扇（活/失活）
+  CORAL_SPECS.push(coralFanSpec(CORAL_FAN_ID_START + i, `${kind}_coral_fan`, `${kind}_coral_fan`));
+  CORAL_SPECS.push(coralFanSpec(DEAD_CORAL_FAN_ID_START + i, `dead_${kind}_coral_fan`, `dead_${kind}_coral_fan`));
+}
+
+/** 珊瑚一族的"活 ↔ 失活"对照（掉落要用、失活与复活两条机制也要用） */
+export const CORAL_DEAD_VARIANT = new Map<number, number>();
+export const CORAL_LIVE_VARIANT = new Map<number, number>();
+for (const [liveStart, deadStart] of [
+  [CORAL_BLOCK_ID_START, DEAD_CORAL_BLOCK_ID_START],
+  [CORAL_ID_START, DEAD_CORAL_ID_START],
+  [CORAL_FAN_ID_START, DEAD_CORAL_FAN_ID_START],
+] as const) {
+  for (let i = 0; i < CORAL_KINDS.length; i++) {
+    CORAL_DEAD_VARIANT.set(liveStart + i, deadStart + i);
+    CORAL_LIVE_VARIANT.set(deadStart + i, liveStart + i);
+  }
+}
+
+/**
+ * 这一格是不是"活珊瑚"（变色都用它）。
+ *
+ * ⚠️ 判据是"**在活珊瑚那张表里**"，而不是"是珊瑚族但不是失活的"：
+ * 后者要求先判断"是不是珊瑚族"，那就得再维护一张族表——两张表迟早会不一样。
+ */
+export function isLiveCoral(id: number): boolean {
+  return CORAL_DEAD_VARIANT.has(id);
+}
+
+/** 这一格是不是"失活珊瑚"（同样只看表） */
+export function isDeadCoral(id: number): boolean {
+  return CORAL_LIVE_VARIANT.has(id);
+}
+
 const CAMPFIRE_SPECS: readonly BlockSpec[] = [
   {
     id: CAMPFIRE_ID,
@@ -1698,6 +1804,7 @@ const SPECS: readonly BlockSpec[] = [
   ...BEETROOT_SPECS,
   ...BERRY_AND_COCOA_SPECS,
   ...KELP_SPECS,
+  ...CORAL_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1945,6 +2052,14 @@ export const Block = {
   KELP: KELP_ID,
   SEAGRASS: SEAGRASS_ID,
   DRIED_KELP_BLOCK: DRIED_KELP_BLOCK_ID,
+  // ---- 珊瑚（批次 51，见 `CORAL_SPECS`）：每个常量是那一族的**第一个**（管珊瑚），
+  // 其余四种用 `+ i` 取（i = 0..4，顺序见 `CORAL_KINDS`）
+  CORAL_BLOCK: CORAL_BLOCK_ID_START,
+  DEAD_CORAL_BLOCK: DEAD_CORAL_BLOCK_ID_START,
+  CORAL: CORAL_ID_START,
+  DEAD_CORAL: DEAD_CORAL_ID_START,
+  CORAL_FAN: CORAL_FAN_ID_START,
+  DEAD_CORAL_FAN: DEAD_CORAL_FAN_ID_START,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -2141,6 +2256,13 @@ HARDNESS.set(Block.COCOA_STAGE2, 0.2);
 HARDNESS.set(Block.KELP, 0);
 HARDNESS.set(Block.SEAGRASS, 0);
 HARDNESS.set(Block.DRIED_KELP_BLOCK, 0.5);
+// 珊瑚（批次 51）：珊瑚块 1.5（原版，与石砖同档），珊瑚丛/珊瑚扇 0（一碰就掉）
+for (const start of [CORAL_BLOCK_ID_START, DEAD_CORAL_BLOCK_ID_START]) {
+  for (let i = 0; i < CORAL_KINDS.length; i++) HARDNESS.set(start + i, 1.5);
+}
+for (const start of [CORAL_ID_START, DEAD_CORAL_ID_START, CORAL_FAN_ID_START, DEAD_CORAL_FAN_ID_START]) {
+  for (let i = 0; i < CORAL_KINDS.length; i++) HARDNESS.set(start + i, 0);
+}
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2424,6 +2546,11 @@ for (let stage = 0; stage < 3; stage++) HAND_HARVESTABLE.add(Block.COCOA_STAGE0 
 HAND_HARVESTABLE.add(Block.KELP);
 HAND_HARVESTABLE.add(Block.SEAGRASS);
 HAND_HARVESTABLE.add(Block.DRIED_KELP_BLOCK);
+// 珊瑚（批次 51）：**珊瑚块不在这里**（要镐，登记在 `tools.ts` 的 REQUIRED_TOOL 里），
+// 珊瑚丛与珊瑚扇是"一碰就掉"的植物（徒手可采，与花草同档）
+for (const start of [CORAL_ID_START, DEAD_CORAL_ID_START, CORAL_FAN_ID_START, DEAD_CORAL_FAN_ID_START]) {
+  for (let i = 0; i < CORAL_KINDS.length; i++) HAND_HARVESTABLE.add(start + i);
+}
 
 /**
  * 作物的生长阶段表（按顺序）。

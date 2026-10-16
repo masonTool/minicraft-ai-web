@@ -14,7 +14,15 @@ import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
 import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
 import {
   Block,
+  CORAL_BLOCK_ID_START,
+  CORAL_DEAD_VARIANT,
+  CORAL_FAN_ID_START,
+  CORAL_ID_START,
+  CORAL_KINDS,
   COPPER_STAGES,
+  DEAD_CORAL_BLOCK_ID_START,
+  DEAD_CORAL_FAN_ID_START,
+  DEAD_CORAL_ID_START,
   STONE_VARIANT_IDS,
   WHEAT_STAGES,
   Wood,
@@ -655,6 +663,12 @@ const NATURAL = new Set<number>([
   Block.DRIED_KELP_BLOCK,
 ]);
 
+// 珊瑚块（批次 51，活 + 失活共 10 件）：海底的自然方块，与"雪块/冰"同一档归"自然"。
+// 按族登记而不是手抄 10 行——"新加一种颜色却忘了分类"是这一族最容易犯的错
+for (const start of [CORAL_BLOCK_ID_START, DEAD_CORAL_BLOCK_ID_START]) {
+  for (let i = 0; i < CORAL_KINDS.length; i++) NATURAL.add(start + i);
+}
+
 const FUNCTIONAL = new Set<number>([
   Block.CRAFTING_TABLE,
   Block.FURNACE,
@@ -742,6 +756,12 @@ const DECORATION_AND_NETHER = new Set<number>([
   Block.END_PORTAL_FRAME,
   Block.END_PORTAL,
 ]);
+
+// 珊瑚与珊瑚扇（批次 51，活 + 失活共 20 件）：海底的植物，与海带/海草同一档归"自然"。
+// 同样按族登记（见上面的珊瑚块那段）
+for (const start of [CORAL_ID_START, DEAD_CORAL_ID_START, CORAL_FAN_ID_START, DEAD_CORAL_FAN_ID_START]) {
+  for (let i = 0; i < CORAL_KINDS.length; i++) DECORATION_AND_NETHER.add(start + i);
+}
 
 /** 矿石与材料：所有矿石（含深板岩变体）与加工产物 */
 const ORES = new Set<number>([
@@ -1074,6 +1094,14 @@ export function blockDrops(blockId: number, ctx: DropContext): { id: number; cou
 
   // 4) 羊毛没剪就一无所有（注意要在"常规掉落"之前拦，否则会顺着"方块掉自身"漏出来）
   if (SHEARS_ONLY.has(blockId)) return null;
+
+  // 4.5) 活珊瑚（批次 51）：没有精准采集就只掉**失活版本**——
+  //      原版活珊瑚块/丛/扇的掉落判定就是"带精准采集给活的，否则给灰的"，
+  //      所以"想搬走活珊瑚"必须专门准备一把精准采集的镐/剪刀。
+  //      ⚠️ 这一条必须排在**精准采集之后**（上面那条已经把活珊瑚自身返回了），
+  //      并且排在常规掉落之前——否则会掉出"活的珊瑚块"，精准采集就白做了。
+  const deadCoral = CORAL_DEAD_VARIANT.get(blockId);
+  if (deadCoral !== undefined) return scale({ id: deadCoral, count: 1 });
 
   // 5~7) 概率替换 → 常规掉落 → 额外概率掉落
   const drop = replaceDropFor(blockId, ctx.roll()) ?? dropFor(blockId) ?? rareDropFor(blockId, ctx.roll());

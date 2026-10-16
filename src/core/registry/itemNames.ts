@@ -14,7 +14,7 @@
  * 文案是给界面用的，两者改动的理由和频率都不一样。
  */
 
-import { BLOCKS, COPPER_STAGES } from './blocks.ts';
+import { BLOCKS, COPPER_STAGES, CORAL_KIND_CN } from './blocks.ts';
 import {
   CATEGORY_LABELS,
   categoryOf,
@@ -139,6 +139,18 @@ for (const [wood, cn] of Object.entries(WOODS_CN)) {
   put(`${wood}_fence_gate`, `${cn}栅栏门`);
   put(`${wood}_door`, `${cn}门`);
   put(`${wood}_trapdoor`, `${cn}活板门`);
+}
+
+// 珊瑚一族（批次 51）：5 种 × 3 形 × 活/失活 = 30 条中文名，**由"种"表展开**。
+// 与方块表（`CORAL_SPECS`）同一套命名规则：少写一种就会冒出英文 id，
+// 而"某一格显示 tube_coral_fan"这种事只有玩家看得见
+for (const [kind, cn] of Object.entries(CORAL_KIND_CN)) {
+  put(`${kind}_coral_block`, `${cn}珊瑚块`);
+  put(`dead_${kind}_coral_block`, `失活的${cn}珊瑚块`);
+  put(`${kind}_coral`, `${cn}珊瑚`);
+  put(`dead_${kind}_coral`, `失活的${cn}珊瑚`);
+  put(`${kind}_coral_fan`, `${cn}珊瑚扇`);
+  put(`dead_${kind}_coral_fan`, `失活的${cn}珊瑚扇`);
 }
 
 // 台阶 / 楼梯
@@ -734,6 +746,23 @@ const DESCRIPTIONS: Record<string, string> = {
 // 深层矿石统一补一句
 for (const [ore, cn] of Object.entries(ORE_NAMES_CN)) {
   DESCRIPTIONS[`deepslate_${ore}_ore`] = `深层（深板岩层）的${cn}，掉落与普通${cn}相同。`;
+}
+
+// 珊瑚一族（批次 51）：30 件的说明按"形 × 活/失活"**四套模板**套上"种"的中文名——
+// 一个一个手写 30 段必然出现"某一种的文案写的是另一种的颜色"
+for (const [kind, cn] of Object.entries(CORAL_KIND_CN)) {
+  DESCRIPTIONS[`${kind}_coral_block`] =
+    `${cn}珊瑚块：活着的珊瑚，**贴着水才活着**——离开水会慢慢变成失活的珊瑚块（灰白）。挖它要带镐；**不用精准采集挖到的就是失活版**。暖水海洋的海底成片长着它。`;
+  DESCRIPTIONS[`dead_${kind}_coral_block`] =
+    `失活的${cn}珊瑚块：活珊瑚离开水之后留下的灰白骨架。泡在水里、且**六面挨着活珊瑚**时会慢慢复活（原版机制）。也可以当建材。`;
+  DESCRIPTIONS[`${kind}_coral`] =
+    `活着的${cn}珊瑚（丛）：长在海底珊瑚块上的小株，一碰就掉、徒手可采。**离开水会失活**；想要活的带回家，得用**精准采集**的镐。`;
+  DESCRIPTIONS[`dead_${kind}_coral`] =
+    `失活的${cn}珊瑚丛：灰白的珊瑚骸骨。泡在水里、挨着活珊瑚会复活。`;
+  DESCRIPTIONS[`${kind}_coral_fan`] =
+    `${cn}珊瑚扇：一片薄薄的扇形珊瑚，能**落在方块顶上、也能贴在侧面**（与火把一样）。种在水里、徒手可采；**离开水会失活**。`;
+  DESCRIPTIONS[`dead_${kind}_coral_fan`] =
+    `失活的${cn}珊瑚扇：灰白的扇形骸骨。贴在水里挨着活珊瑚会慢慢复活。`;
 }
 
 // 铜的四档（批次 40）：说明写清"会氧化、斧头能刮、刮了会退一档"

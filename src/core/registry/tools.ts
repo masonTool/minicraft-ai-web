@@ -21,6 +21,9 @@
 import {
   Block,
   COPPER_STAGES,
+  CORAL_BLOCK_ID_START,
+  CORAL_KINDS,
+  DEAD_CORAL_BLOCK_ID_START,
   SHAPED_PARENTS,
   STONE_VARIANT_PARENTS,
   Wood,
@@ -346,6 +349,15 @@ EFFICIENT_TOOL.set(Block.SNOW, 'shovel');
 // 陶瓦与混凝土（17 色 / 16 色）都需要镐
 for (let i = 0; i <= DYE_COLORS.length; i++) REQUIRED_TOOL.set(terracottaId(i), { tool: 'pickaxe', tier: 0 });
 for (let i = 0; i < DYE_COLORS.length; i++) REQUIRED_TOOL.set(concreteId(i), { tool: 'pickaxe', tier: 0 });
+// 珊瑚块（批次 51）：原版的珊瑚块与失活珊瑚块都**必须用镐**（硬度 1.5，与石砖同档），
+// 徒手挖得动但一无所获。⚠️ 珊瑚丛与珊瑚扇**不在这里**——它们是植物（一碰就掉、徒手可采）
+requirePickaxe(
+  0,
+  [
+    ...CORAL_KINDS.map((_, i) => CORAL_BLOCK_ID_START + i),
+    ...CORAL_KINDS.map((_, i) => DEAD_CORAL_BLOCK_ID_START + i),
+  ],
+);
 
 // ---- 石镐（tier 1）：铁/铜/青金石矿与粗金属块
 requirePickaxe(1, [

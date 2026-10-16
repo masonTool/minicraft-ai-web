@@ -18,6 +18,8 @@ import {
   BERRY_STAGES,
   Block,
   COCOA_STAGES,
+  CORAL_DEAD_VARIANT,
+  CORAL_LIVE_VARIANT,
   CROP_STAGES,
   JUNGLE_LOG_ID,
   KELP_MAX_HEIGHT,
@@ -25,6 +27,7 @@ import {
   blockDef,
   cocoaStageOf,
   cropOf,
+  isLiveCoral,
   Wood,
 } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
@@ -397,6 +400,95 @@ function kelpBehavior(world: TickWorld, x: number, y: number, z: number, random:
   return world.setBlock(x, y + 1, z, id);
 }
 
+// ---------------------------------------------------------------- 珊瑚（批次 51）
+
+/**
+ * 失活珊瑚"挨着活珊瑚就复活"的概率（原版这条没有公开数值，取一个能看出来、又不刷屏的值）。
+ *
+ * 复活是本项目里**唯一一条"方块变回另一种 id"的升级路径**（铜的氧化只往前走不回头），
+ * 所以它得稀疏一点：不然把一株活珊瑚放在一片失活珊瑚旁边，半分钟就全绿了。
+ */
+export const CORAL_REVIVE_CHANCE = 0.12;
+
+/** 六个面（活珊瑚判"泡不泡在水里"、失活珊瑚判"挨没挨着活珊瑚"都用它） */
+const NEIGHBORS_6: readonly (readonly [number, number, number])[] = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1],
+];
+
+/**
+ * 这一格珊瑚还"泡在水里"吗。
+ *
+ * 两种形状两种判据（原版也是这样）：
+ *  - **珊瑚块**（固体）：看**六个面里有没有一格水**——原版珊瑚块贴着水才活着
+ *  - **珊瑚丛 / 珊瑚扇**（水里的植物）：看**上面那一格是不是水**——
+ *    它们自己就占了那一格水（`waterPlant`），所以"水还在不在"只能看上面那格
+ *
+ * ⚠️ 由此带来一条与原版的差异：**一格深的浅水**里种下的珊瑚丛/扇会失活
+ * （上面是空气），原版则一直活着（它是 waterlogged）。这条与海带是同一条规则的取舍：
+ * 我们的水是独立方块，没有"水浸"这一层语义（详见 TASKS B15 的差异记录）。
+ */
+function coralInWater(world: TickWorld, id: number, x: number, y: number, z: number): boolean {
+  if (blockDef(id).waterPlant) return isWaterLike(world.getBlock(x, y + 1, z));
+  for (const [dx, dy, dz] of NEIGHBORS_6) {
+    if (isWaterLike(world.getBlock(x + dx, y + dy, z + dz))) return true;
+  }
+  return false;
+}
+
+/**
+ * 这一格算不算"水"：水本身，**或者长在水里的植物**（`waterPlant`）。
+ *
+ * ⚠️ 为什么水里的植物要算水：我们的模型里没有"水浸"（waterlogged）这一层语义——
+ * 珊瑚丛/海带/海草是**替换掉那一格水**存在的。于是"珊瑚块顶上长了一株珊瑚丛"这种情况，
+ * 如果只认 `Block.WATER`，那颗珊瑚块的六个面就一格水都看不到、下一 tick 就发灰了——
+ * 而原版里那株珊瑚丛是 waterlogged 的，珊瑚块活得好好的。
+ * 把水里的植物当作"水"来认，正是补上这一层语义。
+ */
+function isWaterLike(id: number): boolean {
+  return id === Block.WATER || blockDef(id).waterPlant;
+}
+
+/** 六面里有没有活珊瑚（复活的条件之一） */
+function hasLiveCoralNeighbor(world: TickWorld, x: number, y: number, z: number): boolean {
+  for (const [dx, dy, dz] of NEIGHBORS_6) {
+    if (isLiveCoral(world.getBlock(x + dx, y + dy, z + dz))) return true;
+  }
+  return false;
+}
+
+/**
+ * 活珊瑚：**离开水就失活**（原地变成对应的失活版本，不是消失）。
+ *
+ * 这是 1.13 珊瑚最标志性的一条：把它挖上岸、或者把水放干，珊瑚先变灰、
+ * 然后再挖下来的就是失活版本（原版"活珊瑚必须精准采集"那条掉落规则正是为此存在）。
+ *
+ * 本项目用随机刻结算（原版是方块更新时立刻判）——所以"刚放上岸"的那一下还看不出变化，
+ * 要等它自己被抽到；这一条与海带枯萎是同一取舍。
+ */
+function coralSurviveBehavior(world: TickWorld, x: number, y: number, z: number): boolean {
+  const id = world.getBlock(x, y, z);
+  const dead = CORAL_DEAD_VARIANT.get(id);
+  if (dead === undefined) return false;
+  if (coralInWater(world, id, x, y, z)) return false;
+  return world.setBlock(x, y, z, dead);
+}
+
+/** 失活珊瑚：泡在水里 + 六面挨着活珊瑚 → 有机会复活 */
+function coralReviveBehavior(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const id = world.getBlock(x, y, z);
+  const live = CORAL_LIVE_VARIANT.get(id);
+  if (live === undefined) return false;
+  if (!hasLiveCoralNeighbor(world, x, y, z)) return false;
+  if (!coralInWater(world, id, x, y, z)) return false;
+  if (random() >= CORAL_REVIVE_CHANCE) return false;
+  return world.setBlock(x, y, z, live);
+}
+
 // ---------------------------------------------------------------- 雪层（K11 收尾）
 
 /** 一次随机刻让雪层长高一层的概率（观感值：原版是"每个区块每 tick 抽几个点"的另一套节奏） */
@@ -472,6 +564,12 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   ...COCOA_STAGES.map((id) => [id, cocoaBehavior] as const),
   // 海带（批次 50）：顶端往上长、离开水枯萎。**海草不登记**——它是不生长的草丛
   [Block.KELP, kelpBehavior],
+  // 珊瑚（批次 51）：活珊瑚离开水失活、失活珊瑚挨着活珊瑚复活。
+  // ⚠️ 30 个珊瑚方块**全部**要登记（5 种 × 3 形 × 活/失活），且"活"与"失活"是**两个不同行为**——
+  // 照 id 手抄 30 行必然漏；这里从 `CORAL_DEAD_VARIANT` 那张映射表展开，
+  // 于是"漏掉一种珊瑚"这件事在结构上就不可能发生
+  ...[...CORAL_DEAD_VARIANT.keys()].map((id) => [id, coralSurviveBehavior] as const),
+  ...[...CORAL_LIVE_VARIANT.keys()].map((id) => [id, coralReviveBehavior] as const),
 ]);
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */

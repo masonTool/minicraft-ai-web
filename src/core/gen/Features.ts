@@ -19,9 +19,20 @@
  * 该模块必须保持"纯函数 + 无 DOM 依赖"，因为它会被 Web Worker 直接引用。
  */
 
-import { Block, JUNGLE_LOG_ID, KELP_MAX_HEIGHT, Wood, blockDef, type WoodBlockIds } from '../registry/blocks.ts';
+import {
+  Block,
+  CORAL_BLOCK_ID_START,
+  CORAL_FAN_ID_START,
+  CORAL_ID_START,
+  CORAL_KINDS,
+  JUNGLE_LOG_ID,
+  KELP_MAX_HEIGHT,
+  Wood,
+  blockDef,
+  type WoodBlockIds,
+} from '../registry/blocks.ts';
 import { withVineSide } from '../registry/blockState.ts';
-import { withFacing, withSnowLayers, type Facing } from '../registry/blockState.ts';
+import { withFacing, withSnowLayers, withWallMounted, type Facing } from '../registry/blockState.ts';
 import { Biome, type BiomeDef } from './Biome.ts';
 import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../world/Chunk.ts';
 
@@ -193,11 +204,19 @@ export class FeatureWriter {
    * 这里反过来只认水：**那一格不是水就什么都不做**——
    * 于是"海底没水的地方（沙滩上、干涸的坑里）"自然就长不出海带，不必再写一遍地形判断。
    */
-  putInWater(worldX: number, worldY: number, worldZ: number, id: number): boolean {
+  putInWater(worldX: number, worldY: number, worldZ: number, id: number, state = 0): boolean {
     if (this.get(worldX, worldY, worldZ) !== Block.WATER) return false;
     const x = worldX - this.originX;
     const z = worldZ - this.originZ;
-    this.blocks[Chunk.index(x, worldY, z)] = id;
+    const index = Chunk.index(x, worldY, z);
+    this.blocks[index] = id;
+    // 珊瑚扇（批次 51）的"贴哪一面"写在状态里——这也是**地物第二次写方块状态**
+    // （第一次是雪层）。⚠️ 状态数组没传时要照旧退化成普通写入，
+    // 否则"没有状态的地物通道"会因为这里而整片不生成（`fillState` 那一课）
+    if (this.states && state !== 0) {
+      this.states[index] = state;
+      this.onStateWrite?.();
+    }
     return true;
   }
 
@@ -447,6 +466,20 @@ const COCOA_SIDES: readonly (readonly [number, number, number])[] = [
 
 /** 每个可挂点位上"长出豆荚"的概率（原版丛林树上的豆荚不多，稀疏反而更像） */
 const COCOA_CHANCE = 0.22;
+
+/**
+ * 珊瑚扇向外挑的四个方向：`[相对珊瑚块的偏移, 扇子该记的朝向]`（批次 51）。
+ *
+ * ⚠️ 朝向要指向**被贴着的珊瑚块那一侧**（与藤蔓/可可豆同一套语义）：
+ * 扇子在珊瑚块的**东边**，说明它贴的是自己**西边**那面墙，所以要记 3（西）。
+ * 写反的表现是"扇子穿进珊瑚块里"——方块本身看着正常。
+ */
+const CORAL_FAN_SIDES: readonly (readonly [number, number, number])[] = [
+  [1, 0, 3],
+  [-1, 0, 1],
+  [0, 1, 0],
+  [0, -1, 2],
+];
 
 // ---------------------------------------------------------------- 树
 
@@ -720,6 +753,12 @@ interface BiomeFeature {
   kelp?: number;
   /** 海底长海草的密度（批次 50）：**省略 = 0** */
   seagrass?: number;
+  /**
+   * 海底长珊瑚礁的密度（批次 51）：**省略 = 0**（只有暖水海洋写它）。
+   *
+   * 原版珊瑚只长在**暖水海洋**（冷水/普通海洋没有），所以这里只给那一个群系配值。
+   */
+  coral?: number;
 }
 
 const NO_FLOWERS: readonly number[] = [];
@@ -761,6 +800,8 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     special: 'sugar_cane',
     specialDensity: 0.004,
     seagrass: 0.2,
+    // 珊瑚礁（批次 51）：原版**只有暖水海洋**有珊瑚，这里也是唯一配了 `coral` 的群系
+    coral: 0.1,
   },
   [Biome.BEACH]: { ...EMPTY_FEATURE, special: 'sugar_cane', specialDensity: 0.02 },
   [Biome.STONY_SHORE]: EMPTY_FEATURE,
@@ -1030,6 +1071,8 @@ export interface FeatureStats {
   kelp?: number;
   /** 海底长出的海草数（批次 50） */
   seagrass?: number;
+  /** 暖水海洋长出的珊瑚格数（批次 51：珊瑚块 + 珊瑚 + 珊瑚扇都算） */
+  coral?: number;
 }
 
 /**
@@ -1243,6 +1286,58 @@ function decorateLocal(w: FeatureWriter, world: FeatureWorld, seed: number, stat
         // 与海带同一条：一格深的浅水不种（见上面那段注解）
         if (w.get(wx, y + 1, wz) !== Block.WATER) continue;
         if (w.putInWater(wx, y, wz, Block.SEAGRASS) && stats) stats.seagrass = (stats.seagrass ?? 0) + 1;
+      }
+    }
+  }
+
+  // ---- 暖水海洋的珊瑚礁（批次 51）
+  //
+  // 一丛珊瑚礁 = **1~3 节珊瑚块**（把水换成实心方块） + 顶上的一株珊瑚/一片珊瑚扇 +
+  // 侧面偶尔贴着珊瑚块长的珊瑚扇。这三样都用 `putInWater`（只认水）写入，
+  // 所以"海底没水 / 一格深"的地方自然长不出来，不必再判一次地形。
+  //
+  // 颜色（五种）与"顶上放丛还是扇"都取位置哈希——同一片海里相邻的珊瑚颜色会不同，
+  // 与原版"一丛一色、丛丛不同"的观感一致。
+  const coral = config.coral ?? 0;
+  if (coral > 0) {
+    for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+      for (let x = 0; x < CHUNK_SIZE_X; x++) {
+        const wx = originX + x;
+        const wz = originZ + z;
+        if (hashAt(wx, wz, seed ^ 0xc04a) >= coral) continue;
+        const base = w.waterFloorAbove(world, wx, wz);
+        if (base < 0) continue;
+        // 与海带同一条：至少 2 格深（一格深的水换成珊瑚块之后就没有水了）
+        if (w.get(wx, base + 1, wz) !== Block.WATER) continue;
+
+        const kind = Math.floor(hashAt(wx, wz, seed ^ 0x1c01) * CORAL_KINDS.length);
+        const blocks = 1 + Math.floor(hashAt(wx, wz, seed ^ 0x2c02) * 3);
+        let top = base - 1;
+        let placed = 0;
+        for (let h = 0; h < blocks; h++) {
+          if (!w.putInWater(wx, base + h, wz, CORAL_BLOCK_ID_START + kind)) break;
+          top = base + h;
+          placed++;
+        }
+        if (placed === 0) continue;
+
+        // 顶上：珊瑚丛（多数）或珊瑚扇（少数）——原版礁石上两样都常见
+        const above = top + 1;
+        if (hashAt(wx, wz, seed ^ 0x3c03) < 0.62) {
+          if (w.putInWater(wx, above, wz, CORAL_ID_START + kind)) placed++;
+        } else if (w.putInWater(wx, above, wz, CORAL_FAN_ID_START + kind)) {
+          placed++; // 落在方块顶上：状态 0（floor 变体）
+        }
+
+        // 侧面：偶尔贴着珊瑚块的四个方向各贴一片扇子
+        for (const [dx, dz, facing] of CORAL_FAN_SIDES) {
+          if (w.get(wx + dx, top, wz + dz) !== Block.WATER) continue;
+          if (hashAt(wx + dx, wz + dz, seed ^ 0x4c04) >= 0.22) continue;
+          if (w.putInWater(wx + dx, top, wz + dz, CORAL_FAN_ID_START + kind, withWallMounted(withFacing(0, facing as Facing), true))) {
+            placed++;
+          }
+        }
+        if (stats) stats.coral = (stats.coral ?? 0) + placed;
       }
     }
   }

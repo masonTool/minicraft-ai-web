@@ -3498,6 +3498,102 @@ PAINTERS.item_dried_kelp = (x, y, rng) => {
   return [clamp255(46 * shade + jitter), clamp255(84 * shade + jitter), clamp255(40 * shade + jitter), 255];
 };
 
+// ---------------------------------------------------------------- 珊瑚一族（批次 51）
+
+/**
+ * 五种珊瑚的基色（贴图用的近似值，量级对齐原版观感：
+ * 管=粉、脑=品红、气泡=紫、火=红、鹿角=黄）。
+ */
+const CORAL_COLORS: Record<string, readonly [number, number, number]> = {
+  tube: [228, 96, 142],
+  brain: [206, 88, 182],
+  bubble: [158, 100, 212],
+  fire: [204, 66, 66],
+  horn: [204, 180, 88],
+};
+
+/** 失活珊瑚：一律灰白（原版那种"珊瑚骸骨"） */
+const DEAD_CORAL_COLOR: readonly [number, number, number] = [152, 150, 146];
+
+function coralColor(kind: string, dead: boolean): readonly [number, number, number] {
+  return dead ? DEAD_CORAL_COLOR : (CORAL_COLORS[kind] ?? DEAD_CORAL_COLOR);
+}
+
+/** 把基色按亮度缩放、再加一点随机噪点 */
+function coralShade(color: readonly [number, number, number], shade: number, jitter: number): RGBA {
+  return [clamp255(color[0] * shade + jitter), clamp255(color[1] * shade + jitter), clamp255(color[2] * shade + jitter), 255];
+}
+
+/**
+ * 珊瑚块：整块的多孔珊瑚（基色 + 一道道深色孔洞）。
+ *
+ * 失活的版本把颜色换成灰白、**对比度调低**（原版的失活珊瑚就是"灰得看不出原来是什么颜色"），
+ * 于是五张失活贴图远看几乎一样——这正是原版的观感。
+ */
+function coralBlockPainter(kind: string, dead: boolean): Painter {
+  return (x, y, rng) => {
+    const color = coralColor(kind, dead);
+    const jitter = (rng() * 2 - 1) * (dead ? 5 : 9);
+    // 孔洞：斜向的格子里挖几个（确定性图案，不是每像素乱撒——珊瑚块是有"骨架"的）
+    const pore = ((x * 3 + y * 5) % 11 === 0) || ((x * 5 - y * 3 + 33) % 17 === 0);
+    const ridge = (x + y) % 4 === 0;
+    const shade = pore ? (dead ? 0.78 : 0.62) : ridge ? 1.08 : 1;
+    return coralShade(color, shade, jitter);
+  };
+}
+
+/**
+ * 珊瑚丛（`cross` 形状）：从底部中心往上分叉的一小株，四周透明。
+ *
+ * 形状画满整格高度（与花草同一档），下面那一格是珊瑚块时看着就是"从块里长出来的"。
+ */
+function coralTuftPainter(kind: string, dead: boolean): Painter {
+  return (x, y, rng) => {
+    if (y < 2 || y > 15) return [0, 0, 0, 0];
+    // 主干：中下部分；三个分叉：越往上越往两边散
+    const stem = Math.abs(x - 7.5) <= 1.4 && y >= 9;
+    const left = Math.abs(x - (7.5 - (15 - y) * 0.55)) <= 1.1 && y <= 11;
+    const right = Math.abs(x - (7.5 + (15 - y) * 0.55)) <= 1.1 && y <= 11;
+    const top = Math.abs(x - 7.5) <= 1.0 && y >= 3;
+    if (!stem && !left && !right && !top) return [0, 0, 0, 0];
+    const jitter = (rng() * 2 - 1) * (dead ? 6 : 12);
+    // 顶端亮、根部暗（有个体积感）
+    return coralShade(coralColor(kind, dead), y < 8 ? 1.12 : 0.9, jitter);
+  };
+}
+
+/**
+ * 珊瑚扇（`coral_fan` 形状）：一片扇面（从下边中心往上放射，带放射状的棱）。
+ *
+ * 透明像素很多（扇面之外都是空的），这也是它走独立形状而不是 `cross` 的原因：
+ * 十字形的两片薄面画不出"一片扇子"。
+ */
+function coralFanPainter(kind: string, dead: boolean): Painter {
+  return (x, y, rng) => {
+    const dx = x - 7.5;
+    const dy = 15 - y;
+    const radius = Math.hypot(dx, dy * 1.15);
+    if (radius > 7.4) return [0, 0, 0, 0];
+    // 扇骨：按角度分条，奇数条亮一点（原版扇面就是一条条放射的棱）
+    const angle = Math.atan2(dy, dx) + Math.PI;
+    const rib = Math.floor((angle / Math.PI) * 7) % 2 === 0;
+    const jitter = (rng() * 2 - 1) * (dead ? 5 : 10);
+    const shade = (rib ? 1.1 : 0.88) * (radius > 6.2 ? 0.86 : 1);
+    return coralShade(coralColor(kind, dead), shade, jitter);
+  };
+}
+
+// 30 张贴图按"五种色 × 三个形态工厂 × 活/失活"展开——
+// 与方块表（`CORAL_SPECS`）同一套命名规则，加一种颜色时两边一起长
+for (const kind of ['tube', 'brain', 'bubble', 'fire', 'horn']) {
+  for (const dead of [false, true]) {
+    const prefix = dead ? `dead_${kind}` : kind;
+    PAINTERS[`${prefix}_coral_block`] = coralBlockPainter(kind, dead);
+    PAINTERS[`${prefix}_coral`] = coralTuftPainter(kind, dead);
+    PAINTERS[`${prefix}_coral_fan`] = coralFanPainter(kind, dead);
+  }
+}
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

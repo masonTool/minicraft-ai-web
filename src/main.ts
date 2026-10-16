@@ -2629,10 +2629,11 @@ class App {
       return;
     }
 
-    // 海带是一整株：拆掉任意一节，上面那几节跟着断（原版行为）。
-    // 不这么做的话，水里会留下一截从半空中长出来的海带——而方块本身看起来毫无问题。
-    if (brokenId === Block.KELP) {
-      this.breakKelpColumn(this.hit.x, this.hit.y, this.hit.z);
+    // 海带与甘蔗都是"一整株往上叠"的东西：拆掉任意一节，上面那几节跟着断（原版行为）。
+    // 不这么做的话，水里会留一截从半空中长出来的海带、地上会立着一段悬空的甘蔗——
+    // 而方块本身看起来毫无问题。
+    if (brokenId === Block.KELP || brokenId === Block.SUGAR_CANE) {
+      this.breakColumn(this.hit.x, this.hit.y, this.hit.z, brokenId);
       this.breakProgress = 0;
       this.breakingKey = '';
       this.breakCooldown = BREAK_COOLDOWN;
@@ -2743,18 +2744,18 @@ class App {
   }
 
   /**
-   * 拆掉一整株海带（批次 50）。
+   * 拆掉一整"柱"往上叠的植物（批次 50 的海带 + 批次 51 顺带接上甘蔗）。
    *
-   * 从被拆的那一格往上，凡是海带都一起变成空气——原版拆海带的任意一节都会让上面几节断掉。
-   * 与门"整扇只掉一次"不同，海带是**每一节各掉 1 个**（原版如此，所以高海带一次能收一把）。
+   * 从被拆的那一格往上，凡是**同一种**方块都一起变成空气——原版拆海带/甘蔗的任意一节
+   * 都会让上面几节断掉。与门"整扇只掉一次"不同，这里**每一节各掉 1 个**
+   * （原版如此，所以高海带/高甘蔗一次能收一把）。
    *
    * 顺带唤醒流体：海带占的那一格本来是水，拔掉之后水里多了一个洞，
-   * 不唤醒的话那一格会一直空着（原版里海水会立刻合上）。
+   * 不唤醒的话那一格会一直空着（原版里海水会立刻合上）。甘蔗不在水里，唤醒了也无害。
    */
-  private breakKelpColumn(x: number, y: number, z: number): void {
+  private breakColumn(x: number, y: number, z: number, id: number): void {
     for (let oy = y; oy < 320; oy++) {
-      const id = this.world.getBlock(x, oy, z);
-      if (id !== Block.KELP) break;
+      if (this.world.getBlock(x, oy, z) !== id) break;
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
       this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
