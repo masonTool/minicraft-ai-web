@@ -4193,6 +4193,39 @@ PAINTERS.shulker_side = (x, y, rng) => {
   return shulkerShell(x, y, rng, SHELL, half * col);
 };
 
+/**
+ * 树苗（批次 75）：一小截茎 + 一坨叶色——**同一套画法、六种叶色**。
+ *
+ * 与花/草共用"十字面片"的渲染路径，所以只要一张图看得出"这是棵小树"就够：
+ * 茎取固定的木色，冠按木材的叶色，边缘带一点噪声起伏（免得六张看起来像同一个色块）。
+ */
+function saplingPainter(leaf: readonly [number, number, number]): Painter {
+  return (x, y, rng): RGBA => {
+    // 茎：中间两列、下半截
+    if (x >= 7 && x <= 8 && y >= 9) return [124, 96, 62, 255];
+    const dx = x - 7.5;
+    const dy = (y - 6.2) * 1.15;
+    const r = Math.hypot(dx, dy);
+    const wobble = 0.74 + (hashString(`sap${Math.round(Math.atan2(dy, dx) * 10)}`) % 40) / 100;
+    if (r > 4.7 * wobble) return [0, 0, 0, 0];
+    const jitter = rng() * 14 - 7;
+    const shade = 0.82 + 0.32 * (1 - r / 6);
+    return [
+      clamp255(leaf[0] * shade + jitter),
+      clamp255(leaf[1] * shade + jitter),
+      clamp255(leaf[2] * shade + jitter),
+      255,
+    ];
+  };
+}
+
+PAINTERS.oak_sapling = saplingPainter([92, 152, 62]);
+PAINTERS.birch_sapling = saplingPainter([132, 178, 96]);
+PAINTERS.spruce_sapling = saplingPainter([62, 108, 84]);
+PAINTERS.jungle_sapling = saplingPainter([104, 168, 52]);
+PAINTERS.acacia_sapling = saplingPainter([122, 158, 70]);
+PAINTERS.dark_oak_sapling = saplingPainter([64, 106, 50]);
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

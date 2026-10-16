@@ -196,7 +196,10 @@ console.log('\n[获取途径]');
   check('石头没有常规掉落，也不会概率掉苹果', dropFor(Block.STONE)?.id !== Item.APPLE && rareDropFor(Block.STONE, 0) === null);
   equal('树叶掷点 0 掉苹果（原版 0.5%）', rareDropFor(Block.OAK_LEAVES, 0)?.id, Item.APPLE);
   equal('树叶掷点 0.0049 仍然掉', rareDropFor(Block.OAK_LEAVES, 0.0049)?.id, Item.APPLE);
-  check('掷点 0.005 正好等于概率阈值时不掉（左闭右开）', rareDropFor(Block.OAK_LEAVES, 0.005) === null);
+  // ⚠️ 批次 75 起这张表是**累计区间**（苹果 0~0.5%、树苗 0.5%~5.5%）：
+  // 掷到 0.005 正好跨过苹果那一段，落到**树苗**那一段（不再是"什么都不掉"）
+  equal('掷点 0.005 跨过苹果那一段 → 轮到树苗', rareDropFor(Block.OAK_LEAVES, 0.005)?.id, Block.OAK_SAPLING);
+  equal('掷点 0.055 及以上 → 什么都不掉（左闭右开）', rareDropFor(Block.OAK_LEAVES, 0.055), null);
   check(
     '6 种追加木材的树叶也能掉苹果',
     Object.values(Wood).every((ids) => rareDropFor(ids.leaves, 0)?.id === Item.APPLE),

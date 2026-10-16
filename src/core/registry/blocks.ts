@@ -8,6 +8,7 @@
  */
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
+import type { TreeKind } from '../gen/Features.ts';
 import {
   isComposterReady,
   isFlash,
@@ -1928,6 +1929,53 @@ const SHULKER_BOX_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+
+// ---------------------------------------------------------------- 树苗（批次 75，B47）
+
+/**
+ * 一棵树苗能长成哪种树（**这是 B47 唯一一处"树苗 → 树"的映射**）。
+ *
+ * 键是木材名（与 `Wood` 同源），值是 `Features.ts` 里的树种名。
+ * ⚠️ 原版还有两处"2×2 才能长"的规矩（深色橡木与巨型丛林）：本项目的树苗**一格就能长**，
+ * 树形仍按各木材的 Planter 长（深色橡木会长成一棵单干的"大树"）——这条差异写在 TASKS B47。
+ */
+const SAPLING_TREES: Readonly<Record<string, TreeKind>> = {
+  oak: 'oak',
+  birch: 'birch',
+  spruce: 'spruce',
+  jungle: 'jungle',
+  acacia: 'acacia',
+  dark_oak: 'dark_oak',
+};
+
+/** 树苗族从 483 起（接在潜影盒 482 之后，每种木材一个，与 `WOOD_TYPES` 同序） */
+export const WOOD_SAPLING_ID_START = 483;
+
+const SAPLING_ID_MAP = new Map<string, number>();
+const SAPLING_TREE_MAP = new Map<number, TreeKind>();
+
+const SAPLING_SPECS: readonly BlockSpec[] = WOOD_TYPES.map((wood, index) => {
+  const id = WOOD_SAPLING_ID_START + index;
+  SAPLING_ID_MAP.set(wood.name, id);
+  const kind = SAPLING_TREES[wood.name];
+  if (!kind) throw new Error(`composter: 木材 ${wood.name} 没有对应的树种（见 SAPLING_TREES）`);
+  SAPLING_TREE_MAP.set(id, kind);
+  return plantSpec(id, `${wood.name}_sapling`, `${wood.name}_sapling`);
+});
+
+/** 某种木材的树苗 id（未知木材返回 undefined） */
+export function saplingId(woodName: string): number | undefined {
+  return SAPLING_ID_MAP.get(woodName);
+}
+
+/** 这一格树苗会长成哪种树；不是树苗返回 null */
+export function saplingTreeOf(blockId: number): TreeKind | null {
+  return SAPLING_TREE_MAP.get(blockId) ?? null;
+}
+
+/** 全部树苗 id（断言与遍历用，不手抄一份） */
+export const SAPLING_IDS: readonly number[] = [...SAPLING_ID_MAP.values()];
+
 const BARREL_SPECS: readonly BlockSpec[] = [
   {
     id: BARREL_ID,
@@ -2265,6 +2313,7 @@ const SPECS: readonly BlockSpec[] = [
   ...COMPOSTER_SPECS,
   ...ENDER_CHEST_SPECS,
   ...SHULKER_BOX_SPECS,
+  ...SAPLING_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2546,6 +2595,13 @@ export const Block = {
   ENDER_CHEST: ENDER_CHEST_ID,
   // ---- 潜影盒（批次 72，见 `SHULKER_BOX_SPECS`）：27 格，内容跟着**物品**走
   SHULKER_BOX: SHULKER_BOX_ID,
+  // ---- 树苗（批次 75，见 `SAPLING_SPECS`）：一格就能长成一棵树
+  OAK_SAPLING: WOOD_SAPLING_ID_START,
+  BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
+  SPRUCE_SAPLING: WOOD_SAPLING_ID_START + 2,
+  JUNGLE_SAPLING: WOOD_SAPLING_ID_START + 3,
+  ACACIA_SAPLING: WOOD_SAPLING_ID_START + 4,
+  DARK_OAK_SAPLING: WOOD_SAPLING_ID_START + 5,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2841,6 +2897,8 @@ HARDNESS.set(Block.COMPOSTER, 0.6);
 HARDNESS.set(Block.ENDER_CHEST, 22.5);
 // 潜影盒（批次 72）：原版 2（要镐，但木质镐就够——见 tools.ts）
 HARDNESS.set(Block.SHULKER_BOX, 2);
+// 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
+for (const id of SAPLING_IDS) HARDNESS.set(id, 0);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);

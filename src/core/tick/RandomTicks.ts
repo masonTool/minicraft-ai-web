@@ -17,6 +17,8 @@
 import {
   BERRY_STAGES,
   Block,
+  SAPLING_IDS,
+  saplingTreeOf,
   COCOA_STAGES,
   CORAL_DEAD_VARIANT,
   CORAL_LIVE_VARIANT,
@@ -31,6 +33,8 @@ import {
   Wood,
 } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
+// 树苗长成树（批次 75）：形状复用区块生成那套 Planter，这里只提供"写进活世界"的 writer
+import { growTreeAt } from '../world/TreeGrowth.ts';
 import {
   FACING_OFFSET,
   MAX_SNOW_LAYERS,
@@ -133,6 +137,10 @@ const LEAF_DECAY_DISTANCE = 4;
 /** 草能够蔓延的范围（原版是随机挑 3 个方向各试一次） */
 const GRASS_SPREAD_TRIES = 3;
 /** 甘蔗 / 竹子的高度上限 */
+/** 树苗长成树的概率（每个随机刻）——原版约 1/7，这里取同一个量级 */
+export const SAPLING_GROW_CHANCE = 1 / 7;
+/** 树苗生长要求的最低光照（原版 9）：黑屋子里种不出树 */
+export const SAPLING_MIN_LIGHT = 9;
 const CANE_MAX_HEIGHT = 3;
 /** 竹子的高度上限（骨粉催竹也用它——同一个数字只能有一处） */
 export const BAMBOO_MAX_HEIGHT = 12;
@@ -214,6 +222,36 @@ const NEIGHBOURS: ReadonlyArray<readonly [number, number, number]> = [
  * 这样不会出现"一节一节同时长"导致的重复。
  * 甘蔗还要求旁边有水（原版如此），竹子不要求。
  */
+/**
+ * 树苗长成树（批次 75）：随机刻命中就调用**与骨粉同一个入口**（`world/TreeGrowth`）。
+ *
+ * 三条与原版一致：**光照 ≥ 9**、**脚下是土/草**、概率命中。
+ * ⚠️ 与"骨粉立刻长"共用一套种树代码，所以两种长法长出来的树**形状规则完全一致**
+ * （只有随机盐不同时才会不一样）。
+ */
+function growSapling(world: TickWorld, x: number, y: number, z: number, random: RandomSource): boolean {
+  const id = world.getBlock(x, y, z);
+  const kind = saplingTreeOf(id);
+  if (!kind) return false;
+  if ((world.lightAt?.(x, y, z) ?? 15) < SAPLING_MIN_LIGHT) return false;
+  if (!SAPLING_SOIL.has(world.getBlock(x, y - 1, z))) return false;
+  if (random() >= SAPLING_GROW_CHANCE) return false;
+
+  // 随机刻的世界与活世界只差"能不能写"：`TickWorld` 的 `setBlock` 就是 `setBlockAndUpdate`
+  const changes = growTreeAt(
+    { getBlock: (bx, by, bz) => world.getBlock(bx, by, bz), setBlock: (bx, by, bz, bid) => world.setBlock(bx, by, bz, bid) },
+    x,
+    y,
+    z,
+    id,
+    kind,
+  );
+  return changes !== null;
+}
+
+/** 树苗能种在哪（与地物生成用的是同一份判断：草与泥土） */
+const SAPLING_SOIL = new Set<number>([Block.GRASS_BLOCK, Block.DIRT]);
+
 function makeCaneBehavior(needsWater: boolean, maxHeight: number): RandomTickBehavior {
   return (world, x, y, z, random) => {
     const id = world.getBlock(x, y, z);
@@ -578,6 +616,8 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
     .flat()
     .map((id) => [id, growCrop] as [number, RandomTickBehavior]),
   [Block.SUGAR_CANE, makeCaneBehavior(true, CANE_MAX_HEIGHT)],
+  // 树苗（批次 75）：6 种木材各一行（从 `SAPLING_IDS` 推出来——加木材时不会漏）
+  ...SAPLING_IDS.map((id) => [id, growSapling] as [number, RandomTickBehavior]),
   [Block.BAMBOO, makeCaneBehavior(false, BAMBOO_MAX_HEIGHT)],
   [Block.CRIMSON_NYLIUM, makeNyliumBehavior(Block.CRIMSON_NYLIUM)],
   [Block.WARPED_NYLIUM, makeNyliumBehavior(Block.WARPED_NYLIUM)],

@@ -792,6 +792,13 @@ export const TILE_ORDER = [
   'shulker_top',
   'shulker_bottom',
   'shulker_side',
+  // 树苗（批次 75）：6 种木材各一张（同一套画法、叶色不同）
+  'oak_sapling',
+  'birch_sapling',
+  'spruce_sapling',
+  'jungle_sapling',
+  'acacia_sapling',
+  'dark_oak_sapling',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

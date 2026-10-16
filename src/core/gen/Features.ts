@@ -99,8 +99,13 @@ export interface FeatureWorld {
 /** `get()` 在区块之外时的返回值（真实方块 id 最大 245，不会冲突） */
 export const OUTSIDE = -1;
 
-/** 可以被地物覆盖的方块（植物的"可替换"集合） */
-function isReplaceable(id: number): boolean {
+/**
+ * 可以被地物覆盖的方块（植物的"可替换"集合）。
+ *
+ * 导出给活世界的 writer 用（`world/TreeGrowth.ts`）：`put` 的判据必须是**同一个**，
+ * 否则"世界里长出来的树"与"生成时的树"会在"能不能盖住草/雪/藤蔓"上给出不同答案。
+ */
+export function isReplaceable(id: number): boolean {
   if (id === Block.AIR) return true;
   const shape = BLOCK_SHAPES_AS_REPLACEABLE;
   return shape.has(id);
@@ -400,7 +405,7 @@ export const TREE_VINE_CHANCE = 0.35;
  * （见文件头那条跨区块约定）。
  */
 function hangVines(
-  w: FeatureWriter,
+  w: TreeWriter,
   x: number,
   z: number,
   base: number,
@@ -431,7 +436,7 @@ function hangVines(
  *
  * `base` 是树干最下面那一格（树的地面高度 + 1），豆荚只挂它往上 2~19 格。
  */
-function hangCocoa(w: FeatureWriter, x: number, z: number, base: number, seed: number): number {
+function hangCocoa(w: TreeWriter, x: number, z: number, base: number, seed: number): number {
   let placed = 0;
   for (let y = base + 2; y < base + 20; y++) {
     // 2×2 树干：从"候选列"的四个格子出发（1×1 时后三个自然查不到原木）
@@ -497,8 +502,30 @@ export type TreeKind =
   | 'swamp_oak'
   | 'bamboo';
 
+/**
+ * 种一棵树需要 writer 做的几件事（**结构类型**，不是 `FeatureWriter` 本身）。
+ *
+ * 抽出来的原因：区块生成用的是 `FeatureWriter`（写进**区块数组**），而"树苗长成树"
+ * 要写进**活世界**——两者只有接口相同、实现完全不同。收成结构类型之后，
+ * 11 个树的计划器一行不用改就能给两边的 writer 用（与批次 63 的 `DroppedExtras` 同一手法）。
+ *
+ * ⚠️ 这里是**计划器真的用到**的那几个方法（`put` / `putState` / `fill` / `fillDown` /
+ * `groundAbove` / `get`）。少写一个的后果不是编译错，而是运行时"树少了一截"——
+ * 所以宁可多列一个 `get`（计划器别处可能读回来判断）。
+ */
+export interface TreeWriter {
+  get(worldX: number, worldY: number, worldZ: number): number;
+  put(worldX: number, worldY: number, worldZ: number, id: number): boolean;
+  putState(worldX: number, worldY: number, worldZ: number, id: number, state: number): boolean;
+  fill(worldX: number, worldY: number, worldZ: number, id: number): boolean;
+  fillDown(worldX: number, worldY: number, worldZ: number, id: number, depth?: number): void;
+  groundAbove(world: FeatureWorld, worldX: number, worldZ: number): number;
+  /** 这一列是不是"归我管"（区块生成里用于裁掉写到邻居的部分；活世界恒为 true） */
+  owns(worldX: number, worldZ: number): boolean;
+}
+
 type Planter = (
-  w: FeatureWriter,
+  w: TreeWriter,
   world: FeatureWorld,
   x: number,
   z: number,
@@ -516,7 +543,7 @@ type Planter = (
  * 高度偏高时用 fillDown 往下补一截。两者都只影响树干自身，
  * 树冠的绝对高度在区块之间始终一致（跨区块接缝靠的就是这一点）。
  */
-function trunk(w: FeatureWriter, x: number, z: number, base: number, height: number, log: number): number {
+function trunk(w: TreeWriter, x: number, z: number, base: number, height: number, log: number): number {
   for (let i = 0; i < height; i++) w.fill(x, base + i, z, log);
   // 只在拥有该列时补一截树干：采样高度可能偏高，补到真实地面以免树悬空
   w.fillDown(x, base - 1, z, log, 10);
@@ -524,7 +551,7 @@ function trunk(w: FeatureWriter, x: number, z: number, base: number, height: num
 }
 
 /** 2×2 树干（巨型云杉 / 深色橡木 / 巨型丛林） */
-function trunk2x2(w: FeatureWriter, x: number, z: number, base: number, height: number, log: number): number {
+function trunk2x2(w: TreeWriter, x: number, z: number, base: number, height: number, log: number): number {
   for (let i = 0; i < height; i++) {
     for (let dx = 0; dx <= 1; dx++) {
       for (let dz = 0; dz <= 1; dz++) w.fill(x + dx, base + i, z + dz, log);
@@ -537,7 +564,7 @@ function trunk2x2(w: FeatureWriter, x: number, z: number, base: number, height: 
 }
 
 /** 团状树冠：以 (x, top, z) 为中心，radius 逐层收缩，角上随机剔除 */
-function blobCanopy(w: FeatureWriter, x: number, z: number, top: number, leaf: number, rng: PositionalRng, radius = 2, layers = 2): void {
+function blobCanopy(w: TreeWriter, x: number, z: number, top: number, leaf: number, rng: PositionalRng, radius = 2, layers = 2): void {
   for (let dy = 0; dy >= -layers; dy--) {
     const r = dy === 0 ? Math.max(1, radius - 1) : radius;
     for (let dx = -r; dx <= r; dx++) {
@@ -552,7 +579,7 @@ function blobCanopy(w: FeatureWriter, x: number, z: number, top: number, leaf: n
 }
 
 /** 扁平的"伞状"树冠（金合欢 / 深色橡木 / 沼泽橡木用） */
-function flatCanopy(w: FeatureWriter, x: number, z: number, top: number, leaf: number, rng: PositionalRng, radius: number): void {
+function flatCanopy(w: TreeWriter, x: number, z: number, top: number, leaf: number, rng: PositionalRng, radius: number): void {
   for (let dy = 0; dy >= -1; dy--) {
     const r = dy === 0 ? radius : radius + 1;
     for (let dx = -r; dx <= r; dx++) {
@@ -567,7 +594,7 @@ function flatCanopy(w: FeatureWriter, x: number, z: number, top: number, leaf: n
 }
 
 /** 圆锥形树冠（云杉：越往上越窄，分两层重复） */
-function coneCanopy(w: FeatureWriter, x: number, z: number, top: number, leaf: number, height: number, rng: PositionalRng): void {
+function coneCanopy(w: TreeWriter, x: number, z: number, top: number, leaf: number, height: number, rng: PositionalRng): void {
   let r = 0;
   for (let dy = 0; dy < height; dy++) {
     const layer = Math.floor(dy / 2);
@@ -1031,6 +1058,32 @@ function isPlantable(w: FeatureWriter, x: number, y: number, z: number, ground: 
  * 不给状态数组时 `putState` 会静默退化成普通写入——表现是"藤蔓全都悬空"，
  * 而代码看起来毫无问题（与批次 37 雪层丢掉层数是同一个坑）。
  */
+/**
+ * 把某一种树种进**任意 writer**（区块生成、离线测试、活世界都可以）。
+ *
+ * 与 `plantTree` 的关系：那个是"种进区块数组"的便捷包装（测试与调试用），
+ * 这个是最小实现——活世界那边的 writer 由 `world/TreeGrowth.ts` 提供。
+ */
+export function plantTreeInto(
+  w: TreeWriter,
+  world: FeatureWorld,
+  kind: TreeKind,
+  x: number,
+  z: number,
+  salt = 1,
+): void {
+  PLANTERS[kind](w, world, x, z, new PositionalRng(x, z, salt), woodFor(kind));
+}
+
+/**
+ * 直接种一棵指定种类的树（测试与调试用；x/z 为世界坐标）。
+ *
+ * 与正式生成走完全相同的 Planter，因此测到的形状就是世界里长出来的形状。
+ *
+ * ⚠️ `states` 必须给：丛林树会在树干上挂**带挂面的藤蔓**（B11），
+ * 不给状态数组时 `putState` 会静默退化成普通写入——表现是"藤蔓全都悬空"，
+ * 而代码看起来毫无问题（与批次 37 雪层丢掉层数是同一个坑）。
+ */
 export function plantTree(
   kind: TreeKind,
   blocks: BlockArray,
@@ -1459,7 +1512,7 @@ const OAK_BLOCKS: WoodBlockIds = {
 };
 
 /** 树种的木料方块 */
-function woodFor(kind: TreeKind): WoodBlockIds {
+export function woodFor(kind: TreeKind): WoodBlockIds {
   switch (kind) {
     case 'birch':
       return Wood.birch!;

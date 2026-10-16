@@ -37,6 +37,9 @@ import { dispenseBehaviorFor } from './core/registry/dispense.ts';
 import { runDispenseAction, type DispenseContext } from './core/world/Dispense.ts';
 // 骨粉（批次 69）：判定在 `BoneMeal.ts` 里（纯函数），这里只负责把它接到世界与背包上
 import { fertilizeAt, type BoneMealWorld } from './core/world/BoneMeal.ts';
+// 树苗与树（批次 75）：树的形状复用区块生成那套 Planter，这里只提供"写进活世界"的 writer
+import { growTreeAt, type TreeWorld } from './core/world/TreeGrowth.ts';
+import type { TreeKind } from './core/gen/Features.ts';
 // 堆肥（批次 70）：什么能堆肥、几分概率在 `registry/compost.ts`（纯数据 + 纯函数）
 import { compostStep } from './core/registry/compost.ts';
 import { splashEffectsAt } from './core/survival/SplashPotion.ts';
@@ -160,7 +163,9 @@ import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
 import { Chunk } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, isDimension, type DimensionId } from './core/gen/Dimension.ts';
-import { Block, BLOCKS, blockDef, woolId } from './core/registry/blocks.ts';
+import { Block, BLOCKS, blockDef, woolId,
+  saplingTreeOf,
+} from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
   ARMOR_SLOT_COUNT,
@@ -2693,6 +2698,12 @@ class App {
    * @returns 成功了吗（false = 那一格不能催：不是作物 / 已经成熟）
    */
   fertilizeBlockAt(x: number, y: number, z: number): boolean {
+    // ---- 树苗（批次 75）：骨粉把它**直接长成一棵树**（与随机刻走同一套种树代码）。
+    // 这一段必须在 `fertilizeAt` 之前：树的生长要写几十格，而 `BoneMeal.ts` 只会"读一格写一格"，
+    // 它是刻意保持纯净的（那是它能被离线断言的原因）
+    const treeKind = saplingTreeOf(this.world.getBlock(x, y, z));
+    if (treeKind) return this.growSaplingNow(x, y, z, treeKind);
+
     // ⚠️ 改动的那一格**不一定是我们点的那一格**：对着草方块撒骨粉长出来的是**旁边**的草/花。
     // 所以广播与粒子都按返回的坐标走——按"点的那一格"发的话，队友那边什么都看不到
     const changed = fertilizeAt(this.boneMealWorld, x, y, z, Math.random);
@@ -2703,6 +2714,30 @@ class App {
     // 淡绿的碎屑（原版骨粉那圈粒子）
     this.particles.spawnSplash(cx + 0.5, cy + 0.4, cz + 0.5, 0xc8f0a0, 10);
     this.audio.play('place', { x: cx + 0.5, y: cy + 0.5, z: cz + 0.5 });
+    return true;
+  }
+
+  /** 种树只要"读一格、写一格"（`TreeGrowth` 的 writer 要求） */
+  private readonly treeWorld: TreeWorld = {
+    getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+    setBlock: (x, y, z, blockId, state) => this.world.setBlockAndUpdate(x, y, z, blockId, state ?? 0),
+  };
+
+  /**
+   * 让一格树苗立刻长成树（骨粉）。@returns 长出来了吗（没长出来时**不消耗**这一份骨粉）
+   *
+   * ⚠️ 一棵树是几十格一起变的：**每一格都要广播**（`TreeGrowth` 返回改动清单）。
+   * 只广播"树苗那一格"的话，队友那边看到的是"树苗没了、树没有"。
+   */
+  private growSaplingNow(x: number, y: number, z: number, kind: TreeKind): boolean {
+    const changes = growTreeAt(this.treeWorld, x, y, z, this.world.getBlock(x, y, z), kind, 1);
+    if (!changes) return false;
+    for (const change of changes) {
+      this.net.sendBlock(change.x, change.y, change.z, change.blockId, change.state, this.dimension);
+    }
+    this.particles.spawnSplash(x + 0.5, y + 0.5, z + 0.5, 0xa8e08a, 14);
+    this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.refreshWorld(toChunkCoord(x), toChunkCoord(z), true);
     return true;
   }
 

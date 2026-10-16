@@ -33,8 +33,7 @@ import {
   copperId,
   cropOf,
   wheatStageOf,
-  woolId,
-} from './blocks.ts';
+  woolId, saplingId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
 import { SHEARS_INFO, SHEARS_ITEM_ID, TOOL_SPECS, type ToolInfo } from './tools.ts';
@@ -757,6 +756,13 @@ const FUNCTIONAL = new Set<number>([
 /** 自然装饰与下界方块（创造物品栏的"自然"分类） */
 const DECORATION_AND_NETHER = new Set<number>([
   Block.SHORT_GRASS,
+  // 树苗（批次 75）：与草/花同一栏
+  Block.OAK_SAPLING,
+  Block.BIRCH_SAPLING,
+  Block.SPRUCE_SAPLING,
+  Block.JUNGLE_SAPLING,
+  Block.ACACIA_SAPLING,
+  Block.DARK_OAK_SAPLING,
   Block.FERN,
   Block.DANDELION,
   Block.POPPY,
@@ -963,8 +969,7 @@ const NO_DROP = new Set<number>([
   Block.VINE,
 ]);
 
-// 6 种木材的树叶都不掉落方块本身（原版徒手破坏树叶只偶尔掉树苗与苹果；
-// 苹果走下面的 `rareDropFor`，树苗暂缺）
+// 6 种木材的树叶都不掉落方块本身（原版徒手破坏树叶只偶尔掉树苗与苹果）
 for (const ids of Object.values(Wood)) NO_DROP.add(ids.leaves);
 
 /**
@@ -974,9 +979,12 @@ for (const ids of Object.values(Wood)) NO_DROP.add(ids.leaves);
  * @param roll 本帧掷出的随机数（0~1）
  */
 export function rareDropFor(blockId: number, roll: number): { id: number; count: number } | null {
-  const chance = RARE_DROPS.get(blockId);
-  if (chance === undefined || roll >= chance.rate) return null;
-  return { id: chance.id, count: 1 };
+  const entries = RARE_DROPS.get(blockId);
+  if (!entries) return null;
+  // 一次掷点、按**累计区间**取第一段落：这样一张表能放好几样（苹果 + 树苗），
+  // 而调用方只需要掷一次（原版是对每样各掷一次，这里刻意简化，概率已按累计写好）
+  for (const entry of entries) if (roll < entry.upTo) return { id: entry.id, count: 1 };
+  return null;
 }
 
 /**
@@ -1003,10 +1011,29 @@ const REPLACE_DROPS = new Map<number, { id: number; rate: number }>([
  * 目前只有"树叶 0.5% 掉苹果"（原版数值，橡木与深色橡木才有；这里 6 种树叶都给，
  * 因为树苗还没做，否则苹果就只能靠创造模式拿了）。
  */
-const RARE_DROPS = new Map<number, { id: number; rate: number }>([
-  [Block.OAK_LEAVES, { id: Item.APPLE, rate: 0.005 }],
-  ...Object.values(Wood).map(
-    (ids) => [ids.leaves, { id: Item.APPLE, rate: 0.005 }] as [number, { id: number; rate: number }],
+/**
+ * 树叶的"概率掉落"（批次 75）：**累计区间**，一次掷点决定掉什么。
+ *
+ * 原版是"苹果 0.5%、树苗 5% 各自独立掷"（可能同时掉两样）；这里把树苗的区间接在苹果之后，
+ * 于是总概率 5.5%、两者互斥。⚠️ 这是一处刻意的简化（记在 TASKS B47）：
+ * 实现只有一次掷点，而"能拿到树苗"这件事对玩家来说没有区别。
+ */
+/** 某种木材的树叶掉落表：苹果 0.5%，再往上到 5.5% 是**这一种木材的**树苗 */
+function leafDropsFor(woodName: string, fallbackSapling: number): readonly { id: number; upTo: number }[] {
+  return [
+    { id: Item.APPLE, upTo: 0.005 },
+    { id: saplingId(woodName) ?? fallbackSapling, upTo: 0.055 },
+  ];
+}
+
+const RARE_DROPS = new Map<number, readonly { id: number; upTo: number }[]>([
+  [Block.OAK_LEAVES, leafDropsFor('oak', Block.OAK_SAPLING)],
+  ...Object.entries(Wood).map(
+    ([name, ids]) =>
+      [ids.leaves, leafDropsFor(name, Block.OAK_SAPLING)] as [
+        number,
+        readonly { id: number; upTo: number }[],
+      ],
   ),
 ]);
 

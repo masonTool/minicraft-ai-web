@@ -26,9 +26,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 305（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 306（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 264 项 —— 已完成 **141**、进行中 **63**、待办 60 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
+- 进度口径：`TASKS.md` 共 265 项 —— 已完成 **142**、进行中 **63**、待办 60 条（其中 55 条是需求审计新补的**整组**缺口，见下方审计记录）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -86,7 +86,7 @@ npm run dev            # http://localhost:5173
 | 食物与进食 | `core/registry/food.ts`：12 种食物（数值保留原版"饥饿点 + 饱和度修饰值"两个数，补量按原版 `hunger × modifier × 2` 换算）；按住使用键 1.6 秒进食、每 0.4 秒咀嚼一次；饥饿满只有金苹果能吃；腐肉 80% / 生鸡肉 30% 给"饥饿"效果。获取：树叶 0.5% 掉苹果、西瓜块掉 5 片西瓜片、4 条生肉 → 熟肉熔炼、8 金锭 + 苹果 = 金苹果 |
 | 说明与配方 | `core/registry/itemNames.ts`（**每一件物品都有中文名**——条数见 TASKS §1 覆盖度台账，其中 271 件写了专门说明；装备/食物/药水的文案由数据表生成，不手抄）、`ui/Tooltip.ts`（悬停提示）、`core/crafting/RecipeBook.ts` + `ui/RecipeBook.ts`（配方书与一键合成，**181 条配方 + 12 条熔炼**） |；**配方书会画摆放位置**（批次 29）：`core/crafting/RecipeLayout.ts` 把配方算成"每个格子放什么"（形状配方按最小包围盒铺进 2×2/3×3、空格也画；无序配方明说"摆哪一格都行"；并标出 2×2 → 背包 / 3×3 → 工作台），列表跟着**分页**（宽屏 18 / 窄屏 8 张）——181 张卡片带 1348 个摆放格要 435ms，分页后重建 5ms
 | 粒子与手持 | `render/ParticleSystem.ts`（池化、单 draw call、六类粒子）、`render/HandRenderer.ts`（独立场景叠画的手持物品与手臂）、`render/ScreenEffects.ts`（水下/岩浆整屏色罩） |
-| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **72 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox**，当前全绿；
+| 测试 | `npm test` = **`typecheck:tools`（先过工具侧类型检查，见 O6）** + `test:unit`（vitest，4 个文件 8 组：光照引擎 / 生成的确定性 / 存档增量编解码 / 方块形状与碰撞盒 / 区块下标与坐标换算 / 图集 tile 名匹配 / 资源包 zip 解析 / 音效材质映射）+ **73 套**自建离线测试：inventory / crafting / furnace / entity / shapes / biome / aquifer / ore / mesh / survival / mob / spawn / combat / decor / structure / audio / nether / end / endboss / redstone / save / net / render / viewmode / world / settings / recipebook / commands / effects / tick / tool / armor / food / xp / enchant / anvil / projectile / **brewing** / **throwable** / **potioncloud** / **perf** / **ui** / **tipped** / **theme** / **fire** / **portal** / **netherite** / **loot** / **wood** / **climb** / **copper** / **stone** / **snow** / **stonecutter** / **kelp** / **coral** / **potcake** / **scaffold** / **daylight** / **tripwire** / **tnt** / **stew** / **hopper** / **dropper** / **dispenser** / **barrel** / **harvest** / **face** / **bonemeal** / **composter** / **enderchest** / **shulkerbox** / **sapling**，当前全绿；
 + **真浏览器验收脚本**（要 dev server）：`tools/mobile-check.sh`（M17 触控层 14 条）、
   **`tools/ui-check.sh`**（界面适配 26 条 × 三种视口：430×932 / 844×390 / 1440×900）、
   `tools/net-check.sh` 等；两个验收脚本都能在**全新浏览器会话**里自己点"创建并进入"（不依赖已有存档）`npm run audit:tasks` 自检锚点文档（进度口径、编号连续性、README 路线图同步、提交总数、离线测试套数）、
@@ -120,7 +120,24 @@ J13~J21 / K10~K12 / L6~L7 / M20~M23 / N7 / O7~O8`（待办从 13 条涨到 50+ �
 待办总览（2026-10-16 梳理；**逐维度的真实覆盖率见 TASKS §1 覆盖度台账**，
 详细口径以 `TASKS.md` 的 `[ ]` / `[~]` 为准）：
 
-**刚做完的**：**骨粉催熟扩面**（批次 74，B46）——把批次 69 那句"只做四种耕地作物"补齐。
+**刚做完的**：**树苗与树**（批次 75，B47 / B17 的尾巴）——**把区块生成那套造树搬到活世界**。
+这一件的关键不是"加 6 个方块"，而是**换一支 writer**：
+① `Features.ts` 里 11 个树种的 Planter **一行没改**，只是把 writer 参数从 `FeatureWriter`
+（写区块数组）放宽成一个**结构类型** `TreeWriter`（`put`/`putState`/`fill`/`fillDown`/
+`groundAbove`/`owns`/`get`）——一套树形两边用（与批次 63 的 `DroppedExtras` 同一手法）。
+② `world/TreeGrowth.ts` 提供"写进活世界"的那一支：走 `setBlockAndUpdate`（光照+网格跟着更），
+并**记下改动过的每一格**——一棵树是几十格一起变，联机要按这份清单广播（只广播树苗那一格的话，
+队友那边看到的是"树苗没了、树也没有"）。
+③ **先清掉树苗那一格**：树的落点是"这一列地表之上第一格"，树苗正占着它；不清的话树长高一格。
+④ **空跑一遍再真写**：树干那一列放不下就**干脆不长**（树苗放回、骨粉不消耗）。不做这一步的话，
+树干被石头拦住而树冠照旧落在空气里——一棵**浮在空中的树冠**（空跑与真写同盐，两次逐格一致）。
+⑤ 6 种树苗（483~488，与 `WOOD_TYPES` 同序）：`cross` 形状、硬度 0、一拍就掉、**一格就能长**。
+⑥ 树叶掉树苗：`RARE_DROPS` 从"一格一档"改成**累计区间**（苹果 0~0.5%、树苗到 5.5%）。
+⑦ 随机刻也会长（光照 ≥ 9、脚下土/草、概率 1/7），与骨粉**共用同一个入口**，
+所以两种长法长出来的树形状规则完全一致。
+尺寸：方块 482 → **488**、物品 739 → **745**、配方 364（不变）；**73 套**离线测试新增 `sapling`（88 条）。
+
+再往前是**骨粉催熟扩面**（批次 74，B46）——作物/浆果可可豆/竹子/草与花。
 现在骨粉是一张**规则表**：耕地作物 **+2~5 阶**（截到成熟）、甜浆果丛与可可豆 **+1 阶**、
 竹子**往上长 1 节**（上限常量从 `RandomTicks` 导出，一个数字只有一处）、
 草方块在附近随机长出一株**矮草或花**（原版里矮草更常见，用"表里出现三次"近似那个权重）。
@@ -857,6 +874,11 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 | **"未接上的部分"要写成会翻面的断言** | 批次 69 留了两条 `check('甜浆果丛还不能催（原版可以）', …)`。它们不是"暂时这样"，而是**留了一个会在接上时逼你回来改的钉子**——这一批接上时它立刻红了，翻面之后还顺带补出了"确认那真的是它的一阶段"的对照断言。**把"还没做"写成断言而不是注释，等于给自己留了个闹钟**（批次 74） |
 | **"什么不能做"和"什么能做"一样要断言** | 骨粉能催的东西有四种"长法"，而**不能催的更多**：甘蔗、仙人掌、藤蔓、蘑菇在原版里就是不响应的（"骨粉能催一切"是最常见的想当然）。断言里逐条钉住这几样返回 `null`——这样以后有人"顺手加一条"时，至少要先想明白为什么原版不做（批次 74） |
 | **数字的第二个用处 = 该导出的信号** | 竹子的 12 节上限原本只是 `RandomTicks` 里的一个私有常量；骨粉催竹也要用它，于是导出成 `BAMBOO_MAX_HEIGHT`。**同一个数字出现第二处用处时就该导出来**，否则两边会各自漂（"自然长到 12 节、骨粉能催到 15 节"这种不一致很难被玩家说清、但一定会被感觉到）（批次 74） |
+
+| **"换一支 writer"比"再写一套"便宜一个数量级** | 树苗长成树要的是"在活世界里造一棵树"，而造树的 11 种形状早就写在区块生成里了。做法不是复制一遍，而是把 Planter 的参数从 `FeatureWriter` 放宽成**结构类型** `TreeWriter`——于是同一套形状代码同时服务"生成时"与"活世界"（后者只要实现那几个方法）。**做同类第二遍之前，先问"能不能只换实现、不换算法"**（批次 75） |
+| **"记录改动"是活世界与生成世界的核心差别** | 生成时写进区块数组、没人需要知道"改了哪几格"；活世界里每一格都要**广播**（联机）、要更新光照与网格。所以活世界的 writer 多带一个"改动清单"——它同时成了断言的抓手（"一共改了多少格""有没有重复"）与联机的输入。**把"副作用清单"当返回值交出去，比让每个调用方自己猜改了哪儿可靠**（批次 75） |
+| **"先空跑一遍"能拦住一整类"半成品状态"** | 树干那一列被石头挡住时，真写下去的结果是"树干缺一截、树冠照旧落在空气里"——一棵浮空树冠，而且**看起来像渲染 bug**。做法是先用同一套计划器**空跑**（一个方块都不写）拿到"打算怎么写"，确认树干列放得下再真写；两次用同一个随机盐，结果逐格一致。**凡是"多步写入、中途可能失败"的操作，都值得先空跑一遍**（批次 75） |
+| **结构类型让"同一算法、两套实现"成为可能，代价是接口要写准** | `TreeWriter` 只列了计划器真正用到的方法。少列一个的后果不是编译错，而是运行时"树少了一截"（比如 `putState` 少列，丛林树的藤蔓会静默消失——这正是 `plantTree` 注释里早写过一次的坑）。所以接口宁可按"计划器全文用到的方法"逐个核对，也不要凭印象写（批次 75） |
 
 ## 5. 待复核的悬案（下次接手优先看）
 
