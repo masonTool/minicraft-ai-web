@@ -125,6 +125,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       // 所以四根角柱一律算上。渲染会按连接裁掉内部那些柱子——看着细、撞着也是细的，
       // 差别只在于"相邻两片脚手架的交界处多撞一根柱"，走位时基本感觉不到
       return [SCAFFOLD_PLATFORM, ...SCAFFOLD_PILLARS];
+    case 'daylight_detector':
+      // 与渲染同源（6/16 高的板：能站上去）
+      return [DAYLIGHT_PLATE];
     case 'door':
       // ⚠️ 开着的门**没有碰撞体积**（原版可以直接穿过门洞）。
       // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
@@ -348,6 +351,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       return coralFanBoxes(state);
     case 'scaffolding':
       return scaffoldingBoxes(ctx.connect ?? NEVER_CONNECT);
+    case 'daylight_detector':
+      // 阳光传感器（批次 54）：一块 6/16 高的板子（原版就是一块平板，走上去不用跳）
+      return [DAYLIGHT_PLATE];
     case 'cake':
       // 蛋糕（批次 52）：半格高，**宽度随吃掉的片数变窄**（靠西侧那一端留着）
       return [[0, 0, 0, cakeWidth(state), CAKE_HEIGHT, 1]];
@@ -616,6 +622,9 @@ const FLOWER_POT_BOX: LocalBox = [0.125, 0, 0.125, 0.875, 0.375, 0.875];
 
 /** 花盆里那株植物画在盆沿之上（与 `blockShapes` 的盆身高度一致） */
 export const FLOWER_POT_RIM = 0.375;
+
+/** 阳光传感器那块板（6/16 高，批次 54） */
+const DAYLIGHT_PLATE: LocalBox = [0, 0, 0, 1, 0.375, 1];
 
 // ---------------------------------------------------------------- 脚手架（批次 53）
 

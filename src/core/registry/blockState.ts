@@ -123,6 +123,14 @@ export type BlockShape =
    * 固定按 4 根柱子算，与栅栏现在的做法相同。
    */
   | 'scaffolding'
+  /**
+   * 阳光传感器（批次 54）：一块 6/16 高的板子，**按天光强度输出红石信号**。
+   *
+   * 两个状态位：`powered`（当前有没有输出，渲染与调试要用）与 `inverted`
+   * （反向模式：把 15 − 天光 当输出，也就是"天黑才通电"）。
+   * 输出强度本身**不占状态位**——它每次重算时按天光现算（与红石粉强度同一个道理）。
+   */
+  | 'daylight_detector'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -184,6 +192,22 @@ export function cakeBites(state: number): number {
 export function withCakeBites(state: number, bites: number): number {
   const clamped = Math.max(0, Math.min(CAKE_SLICES - 1, bites));
   return (state & ~CAKE_BITES_MASK) | clamped;
+}
+
+/**
+ * 阳光传感器的"反向模式"（批次 54）。
+ *
+ * 与门的"门轴"共用 bit4：两者属于不同的形状族，同一个方块只会是其中一种
+ * （沿用本文件开头那条设计）。
+ */
+const INVERTED_MASK = 0b10000;
+
+export function isInverted(state: number): boolean {
+  return (state & INVERTED_MASK) !== 0;
+}
+
+export function withInverted(state: number, inverted: boolean): number {
+  return inverted ? state | INVERTED_MASK : state & ~INVERTED_MASK;
 }
 
 /** 花盆里装的是第几种植物（0 = 空盆；对应 `POTTED_PLANTS` 的下标 + 1） */
@@ -565,6 +589,8 @@ export function describeState(shape: BlockShape, state: number): string {
       const plant = flowerPotPlant(state);
       return plant === 0 ? '空盆' : `种着第 ${plant} 种植物`;
     }
+    case 'daylight_detector':
+      return `${isInverted(state) ? '反向（天黑通电）' : '白天通电'}·${isPowered(state) ? '正在输出' : '没有输出'}`;
     default:
       return '';
   }

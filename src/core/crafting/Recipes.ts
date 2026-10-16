@@ -35,6 +35,12 @@ import { DRINKABLE, lingeringIdOf, tippedArrowIdOf } from '../registry/potions.t
 /** 配色表里"棕色"的下标（可可豆做棕色染料用；按名字查，不写死数字） */
 const BROWN_DYE_INDEX = DYE_COLORS.findIndex((color) => color.name === 'brown');
 
+/**
+ * 橡木台阶在 `SHAPED_PARENTS` 里的下标（阳光传感器配方要"3 个木台阶"）。
+ * ⚠️ 同样**按名字查**：那张变体表一旦调整顺序，写死的数字会让配方悄悄变成"石头台阶"。
+ */
+const OAK_SLAB_INDEX = SHAPED_PARENTS.findIndex(([, name]) => name === 'oak_planks');
+
 export interface RecipeResult {
   id: number;
   count: number;
@@ -616,6 +622,15 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // ⚠️ 下标**按名字查**而不是写死数字：配色表的下标一改（或中间插一种颜色），
   // 写死的数字会让"可可豆做出浅蓝色染料"——这种错在界面上看着就像个恶作剧
   { kind: 'shapeless' as const, result: { id: dyeItemId(BROWN_DYE_INDEX), count: 1 }, ingredients: [Item.COCOA_BEANS] },
+
+  // ---- 阳光传感器（批次 54）
+  // 原版：3 玻璃 + 3 下界石英 + 3 木台阶（一排一层）。台阶按名字查，不写死下标
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.DAYLIGHT_DETECTOR, count: 1 },
+    pattern: ['GGG', 'QQQ', 'SSS'],
+    key: { G: Block.GLASS, Q: Item.QUARTZ, S: slabId(OAK_SLAB_INDEX) },
+  },
 
   // ---- 脚手架（批次 53）
   // 原版：**6 根竹子 + 1 根线 → 6 个脚手架**（上下两排竹子、中间一根线）

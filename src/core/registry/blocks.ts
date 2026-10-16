@@ -8,7 +8,7 @@
  */
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
-import { isLitState, isPowered, type BlockShape } from './blockState.ts';
+import { isInverted, isLitState, isPowered, type BlockShape } from './blockState.ts';
 
 export interface BlockDef {
   readonly id: number;
@@ -1609,6 +1609,34 @@ export const FLOWER_POT_ID = 470;
  */
 export const SCAFFOLDING_ID = 471;
 
+/**
+ * 阳光传感器（`daylight_detector`，id 472）：**按天光强度输出红石信号**的电源。
+ *
+ * 它是本项目第一个"**强度可变**的电源"（拉杆/按钮/红石块都是 0 或 15）：
+ * 输出 = 所在格的天光等级（0~15），反向模式 = 15 − 天光。
+ * 强度**不写状态位**——每次重算时按天光现算（与红石粉强度同一个道理），
+ * 状态位里只放"有没有输出"（渲染用）与"是不是反向模式"。
+ *
+ * ⚠️ 它需要一条新的世界能力：`RedstoneWorld.getSkyLight`（引擎本来只认方块与状态）。
+ */
+export const DAYLIGHT_DETECTOR_ID = 472;
+
+const DAYLIGHT_DETECTOR_SPECS: readonly BlockSpec[] = [
+  {
+    id: DAYLIGHT_DETECTOR_ID,
+    name: 'minecraft:daylight_detector',
+    // 反向模式换的是**顶面**那张（原版就是同一块板、顶面换个颜色）
+    tiles: ['daylight_detector_top', 'daylight_detector_side', 'daylight_detector_side'],
+    stateTiles: (state) =>
+      isInverted(state)
+        ? ['daylight_detector_inverted_top', 'daylight_detector_side', 'daylight_detector_side']
+        : ['daylight_detector_top', 'daylight_detector_side', 'daylight_detector_side'],
+    shape: 'daylight_detector',
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const SCAFFOLDING_SPECS: readonly BlockSpec[] = [
   {
     id: SCAFFOLDING_ID,
@@ -1879,6 +1907,7 @@ const SPECS: readonly BlockSpec[] = [
   ...CORAL_SPECS,
   ...CAKE_AND_POT_SPECS,
   ...SCAFFOLDING_SPECS,
+  ...DAYLIGHT_DETECTOR_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2139,6 +2168,8 @@ export const Block = {
   FLOWER_POT: FLOWER_POT_ID,
   // ---- 脚手架（批次 53，见 `SCAFFOLDING_SPECS`）
   SCAFFOLDING: SCAFFOLDING_ID,
+  // ---- 阳光传感器（批次 54，见 `DAYLIGHT_DETECTOR_SPECS`）
+  DAYLIGHT_DETECTOR: DAYLIGHT_DETECTOR_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2410,6 +2441,8 @@ HARDNESS.set(Block.CAKE, 0.5);
 HARDNESS.set(Block.FLOWER_POT, 0);
 // 脚手架（批次 53）：0（原版一碰就掉——所以搭高之后拆底下一节会哗啦一下全掉）
 HARDNESS.set(Block.SCAFFOLDING, 0);
+// 阳光传感器（批次 54）：0.2（原版）
+HARDNESS.set(Block.DAYLIGHT_DETECTOR, 0.2);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2703,6 +2736,8 @@ HAND_HARVESTABLE.add(Block.CAKE);
 HAND_HARVESTABLE.add(Block.FLOWER_POT);
 // 脚手架（批次 53）：徒手可采（原版不需要工具）
 HAND_HARVESTABLE.add(Block.SCAFFOLDING);
+// 阳光传感器（批次 54）：徒手可采（原版斧头更快，但不要求工具）
+HAND_HARVESTABLE.add(Block.DAYLIGHT_DETECTOR);
 
 /**
  * 作物的生长阶段表（按顺序）。

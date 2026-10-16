@@ -26,12 +26,14 @@ import {
   isDoorOpen,
   isDoorUpper,
   isFenceGateOpen,
+  isInverted,
   isPowered,
   isTrapdoorOpen,
   withDoorOpen,
   withDoorUpper,
   withFacing,
   withFenceGateOpen,
+  withInverted,
   withPowered,
   withTrapdoorOpen,
 } from '../registry/blockState.ts';
@@ -49,6 +51,12 @@ export interface RedstoneWorld {
   isLoaded(x: number, z: number): boolean;
   /** 该格是否有玩家/生物（压力板用） */
   hasEntityAt(x: number, y: number, z: number): boolean;
+  /**
+   * 该格的天光等级（0~15）。**只有阳光传感器用**（批次 54）：
+   * 它是唯一一个"输出强度取决于天气/时间"的电源。
+   * 不传就当 0（室内/夜里）——离线测试不必为了它搭一套光照。
+   */
+  getSkyLight?(x: number, y: number, z: number): number;
 }
 
 /**
@@ -78,6 +86,8 @@ export function isRedstoneComponent(id: number): boolean {
     case Block.STICKY_PISTON:
     case Block.PISTON_HEAD:
     case Block.OBSERVER:
+    // 阳光传感器（批次 54）：按天光强度输出的**可变量电源**
+    case Block.DAYLIGHT_DETECTOR:
       return true;
     default:
       return false;
@@ -99,6 +109,17 @@ const MAX_ITERATIONS = 8;
 const BUTTON_DURATION = { stone: 1, oak: 1.5 } as const;
 /** 侦测器脉冲宽度（秒，原版 2 红石刻） */
 const OBSERVER_PULSE = 0.2;
+
+/**
+ * 阳光传感器的输出强度（批次 54）：白天 = 天光等级，反向模式 = 15 − 天光。
+ *
+ * 抽成纯函数是为了能被离线测试直接钉住（原版这两条就是全部规则：
+ * 晴天正午 15、夜里 0；反向模式刚好反过来）。
+ */
+export function daylightOutput(skyLight: number, inverted: boolean): number {
+  const level = Math.max(0, Math.min(15, skyLight));
+  return inverted ? 15 - level : level;
+}
 
 /** 一个节点的坐标 */
 interface Node {
@@ -124,6 +145,14 @@ export class RedstoneEngine {
   private readonly repeaterOutput = new Map<string, boolean>();
   /** 压力板的状态缓存（避免每帧都改状态触发重网格化） */
   private readonly plateState = new Map<string, boolean>();
+  /**
+   * 阳光传感器：位置 → 上次算出的输出强度（批次 54）。
+   *
+   * 为什么要记下来：它的输出取决于**外部世界**（天光随时间与天气变），
+   * 而不是取决于电路——所以得每隔一秒主动复查一次"强度变了没有"，
+   * 变了才登记重算（不然每个传感器每秒都要拉着整片电路重算一遍）。
+   */
+  private readonly daylightOutputs = new Map<string, number>();
   /** 待重新计算的位置（tick 里批量处理，避免一次改动触发多次全量重算） */
   private readonly dirty: string[] = [];
   private readonly dirtySet = new Set<string>();
@@ -135,6 +164,21 @@ export class RedstoneEngine {
     if (world.getBlock(x, y, z) !== Block.LEVER) return false;
     const state = world.getState(x, y, z);
     if (!world.setState(x, y, z, withPowered(state, !isPowered(state)))) return false;
+    this.markDirty(x, y, z);
+    this.flush(world);
+    return true;
+  }
+
+  /**
+   * 玩家右键阳光传感器（批次 54）：在"白天通电"与"反向（天黑通电）"之间切换。
+   *
+   * 与拉杆同一套（改状态 + 登记重算），区别是这里改的是 `inverted` 位，
+   * 而输出强度是**重算时按天光现算**的，所以改完必须立刻重算一次。
+   */
+  toggleInverted(world: RedstoneWorld, x: number, y: number, z: number): boolean {
+    if (world.getBlock(x, y, z) !== Block.DAYLIGHT_DETECTOR) return false;
+    const state = world.getState(x, y, z);
+    if (!world.setState(x, y, z, withInverted(state, !isInverted(state)))) return false;
     this.markDirty(x, y, z);
     this.flush(world);
     return true;
@@ -235,10 +279,25 @@ export class RedstoneEngine {
       if (this.pollPressurePlates(world)) changed = true;
     }
 
+    // 阳光传感器：每秒复查（原版 20 tick）。天光随时间与天气变，
+    // 而这件事**不会**产生任何方块变化事件，所以只能主动看
+    this.daylightTimer -= dt;
+    if (this.daylightTimer <= 0) {
+      this.daylightTimer = 1;
+      if (this.pollDaylight(world)) changed = true;
+    }
+
     if (this.dirty.length > 0 || changed) this.flush(world);
   }
 
   private plateTimer = 0;
+  /**
+   * 阳光传感器的复查倒计时（秒）。
+   * 初值是 **1**（而不是 0）：引擎刚建好时不必立刻复查一次——
+   * 传感器第一次被算到（放置时就走重算）就已经把强度记下来了。
+   * 从 0 开始的话"进游戏第一帧"就会多跑一次全量求解。
+   */
+  private daylightTimer = 1;
 
   /** 处理所有待重算的位置 */
   private flush(world: RedstoneWorld): void {
@@ -260,6 +319,30 @@ export class RedstoneEngine {
     }
     this.flushing = false;
     this.updates++;
+  }
+
+  /**
+   * 阳光传感器的周期性复查（批次 54）。
+   *
+   * 只有"输出强度真的变了"的位置才登记重算——否则一个传感器每秒都会把整片电路重算一遍
+   * （原版也是"强度变了才发更新"）。方块被挖掉/换成别的、或所在区块已卸载时，
+   * 顺手把记录清掉（这就是这份名单的"垃圾回收"）。
+   */
+  private pollDaylight(world: RedstoneWorld): boolean {
+    let changed = false;
+    for (const [key, previous] of [...this.daylightOutputs]) {
+      const [x, y, z] = parseKey(key);
+      if (world.getBlock(x, y, z) !== Block.DAYLIGHT_DETECTOR || !world.isLoaded(x, z)) {
+        this.daylightOutputs.delete(key);
+        continue;
+      }
+      const strength = daylightOutput(world.getSkyLight?.(x, y, z) ?? 0, isInverted(world.getState(x, y, z)));
+      if (strength === previous) continue;
+      this.daylightOutputs.set(key, strength);
+      this.markDirty(x, y, z);
+      changed = true;
+    }
+    return changed;
   }
 
   /** 压力板轮询：踩上去就通电（原版是实体碰撞事件，这里用 AABB 查询近似） */
@@ -324,6 +407,24 @@ export class RedstoneEngine {
           strengths.set(key, 15);
           sources.push({ x: nx, y: ny, z: nz });
           break;
+        case Block.DAYLIGHT_DETECTOR: {
+          // 阳光传感器（批次 54）：**输出强度按天光现算**，并把结果写进 strengths，
+          // 于是"贴在它旁边的粉"与"紧贴的负载"都按这个强度走（与红石块同一条路，
+          // 只是强度不是 15）。
+          const strength = daylightOutput(world.getSkyLight?.(nx, ny, nz) ?? 0, isInverted(state));
+          this.daylightOutputs.set(key, strength);
+          if (strength > 0) {
+            strengths.set(key, strength);
+            sources.push({ x: nx, y: ny, z: nz });
+          }
+          // `powered` 位跟着输出走（渲染与调试要看"现在有没有输出"）。
+          // ⚠️ 这里改的是**自己**的状态，所以**不能** markDirty 自己——
+          // 那会让下一轮迭代又重算一次自己，白转一圈（强度已经算完了）
+          if (isPowered(state) !== (strength > 0)) {
+            world.setState(nx, ny, nz, withPowered(state, strength > 0));
+          }
+          break;
+        }
         case Block.REPEATER:
         case Block.COMPARATOR:
         case Block.OBSERVER: {

@@ -706,6 +706,8 @@ const FUNCTIONAL = new Set<number>([
   Block.SMITHING_TABLE,
   // 切石机（H11，批次 44）：同样是"右键打开的工作台"
   Block.STONECUTTER,
+  // 阳光传感器（批次 54）：红石元件，与拉杆/中继器同页
+  Block.DAYLIGHT_DETECTOR,
   // 花盆（批次 52）：原版把它摆在"装饰"页（1.19 起并进了功能页），
   // 本项目没有装饰页——它是"右键往里种一株"的功能方块，与营火/熔炉同一类
   Block.FLOWER_POT,

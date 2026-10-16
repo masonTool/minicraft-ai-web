@@ -735,6 +735,10 @@ export const TILE_ORDER = [
   'scaffolding_top',
   'scaffolding_bottom',
   'scaffolding_side',
+  // ---- 阳光传感器（批次 54）：顶面（白天/反向两张）+ 侧面
+  'daylight_detector_top',
+  'daylight_detector_inverted_top',
+  'daylight_detector_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

@@ -3712,6 +3712,50 @@ PAINTERS.scaffolding_side = (x, y, rng) => {
   return [clamp255(186 * shade + jitter), clamp255(168 * shade + jitter), clamp255(96 * shade + jitter), 255];
 };
 
+// ---------------------------------------------------------------- 阳光传感器（批次 54）
+
+/**
+ * 阳光传感器顶面：深蓝的"太阳能板"，中间嵌着一格小窗。
+ * 由 `daylightPanel(inverted)` 生成两张（正常 / 反向模式的颜色不同）。
+ */
+function daylightPanel(inverted: boolean): Painter {
+  return (x, y, rng) => {
+    const jitter = rng() * 10 - 5;
+    // 石英边框（外面一圈 1 像素）
+    if (x === 0 || y === 0 || x === 15 || y === 15) {
+      return [clamp255(232 + jitter), clamp255(228 + jitter), clamp255(216 + jitter), 255];
+    }
+    // 中间的小窗（左右两侧各留一格深色，中间那条浅色）
+    if (x === 7 || x === 8) {
+      const shade = inverted ? 1.4 : 0.8;
+      return [
+        clamp255((inverted ? 96 : 60) * shade + jitter),
+        clamp255((inverted ? 60 : 110) * shade + jitter),
+        clamp255((inverted ? 140 : 168) * shade + jitter),
+        255,
+      ];
+    }
+    // 板面：正常模式是深蓝，反向模式是紫
+    const base = inverted ? [104, 62, 132] : [38, 74, 128];
+    const shade = (x + y) % 5 === 0 ? 0.86 : 1;
+    return [clamp255(base[0]! * shade + jitter), clamp255(base[1]! * shade + jitter), clamp255(base[2]! * shade + jitter), 255];
+  };
+}
+
+PAINTERS.daylight_detector_top = daylightPanel(false);
+PAINTERS.daylight_detector_inverted_top = daylightPanel(true);
+
+/** 侧面：石英的白色 + 底部一条木边（原版就是"石英板压在三块台阶上"的样子） */
+PAINTERS.daylight_detector_side = (_x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  if (y >= 12) {
+    // 木头那一圈
+    return [clamp255(162 + jitter), clamp255(128 + jitter), clamp255(78 + jitter), 255];
+  }
+  const shade = y < 1 ? 0.92 : 1;
+  return [clamp255(232 * shade + jitter), clamp255(228 * shade + jitter), clamp255(216 * shade + jitter), 255];
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

@@ -461,6 +461,8 @@ class App {
     setState: (x, y, z, state) => this.world.setStateAndUpdate(x, y, z, state),
     isLoaded: (x, z) => this.world.isLoaded(x, z),
     hasEntityAt: (x, y, z) => this.hasEntityAt(x, y, z),
+    // 阳光传感器（批次 54）：红石引擎里唯一一个要看**光照**的元件
+    getSkyLight: (x, y, z) => this.world.getSkyLight(x, y, z),
   };
   /** 末影龙血条（触摸端也共用；元素不存在时为 null） */
   private bossBarEl: HTMLElement | null = null;
@@ -3567,6 +3569,10 @@ class App {
 
     // ---- 红石元件：拉杆开关、按钮按下
     if (hitBlock === Block.LEVER) return this.redstone.toggleLever(this.redstoneWorld, x, y, z);
+    // 阳光传感器（批次 54）：右键在"白天通电"与"反向（天黑通电）"之间切换（原版行为）
+    if (hitBlock === Block.DAYLIGHT_DETECTOR) {
+      return this.redstone.toggleInverted(this.redstoneWorld, x, y, z);
+    }
     if (hitBlock === Block.STONE_BUTTON || hitBlock === Block.OAK_BUTTON) {
       return this.redstone.pressButton(this.redstoneWorld, x, y, z);
     }
