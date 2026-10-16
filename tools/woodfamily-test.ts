@@ -24,10 +24,9 @@ import {
   WoodShaped,
   blockDef,
   blockHardness,
-  isHandHarvestable,
   woodShaped,
 } from '../src/core/registry/blocks.ts';
-import { breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
+import { isHandHarvestable, breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
 import { CREATIVE_ITEMS, Item, categoryOf, dropFor } from '../src/core/registry/items.ts';
 import { itemLabel } from '../src/core/registry/itemNames.ts';
 import { WOOD_TYPES } from '../src/core/registry/colors.ts';

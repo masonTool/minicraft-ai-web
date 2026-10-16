@@ -31,7 +31,6 @@ import {
   blockHardness,
   concreteId,
   copperId,
-  isHandHarvestable,
   slabId,
   stairsId,
   stoneVariantId,
@@ -230,7 +229,7 @@ export interface HarvestRequirement {
  * 必须用正确工具（且等级够）才会掉落的方块。
  *
  * 对应原版的 `requiresCorrectToolForDrops`：等级不够时**挖得动但一无所获**。
- * 不在表里的方块一律按「徒手可采集」（见 `isHandHarvestable`）判断，
+ * **不在表里 = 徒手就能采到**（`isHandHarvestable` 就是这么派生的），
  * 这样木质方块、泥土、玻璃这些"斧/锹能加速但徒手也能捡"的方块不用逐个登记。
  */
 const REQUIRED_TOOL = new Map<number, HarvestRequirement>();
@@ -474,9 +473,24 @@ export function efficientToolType(blockId: number): ToolType | undefined {
  * 用这把手上的工具能不能"采到"这个方块（决定是否掉落）。
  * 等级不够 / 工具类型不对 → false（原版：挖得动但什么都不掉）。
  */
+/**
+ * 这个方块**徒手就能采到**吗（批次 62）。
+ *
+ * ⚠️ 这条判定的**唯一事实来源是"要求工具"那张表**：原版里"徒手能采"就等于
+ * "没有 `requiresCorrectToolForDrops`"。所以这里**由表派生**，而不是另写一张手写清单——
+ * 批次 61 的探针正是被那种"两张手写表必须同时正确"的设计咬到：
+ * `canHarvest` 的兜底原来查一张手写的徒手表，于是**既不在需求表、又没写进徒手表**的
+ * 方块（红石粉/拉杆/活塞/酿造台/海晶灯/龙蛋…共 20 个）**拿什么挖都不掉**，
+ * 而创造模式不产生掉落，所以一直没被发现。
+ */
+export function isHandHarvestable(blockId: number): boolean {
+  return !REQUIRED_TOOL.has(blockId);
+}
+
 export function canHarvest(blockId: number, tool?: ToolInfo | null): boolean {
   const required = REQUIRED_TOOL.get(blockId);
-  if (!required) return isHandHarvestable(blockId);
+  // 没要求工具 = 一定采得到（原来这里查那张手写的徒手表，漏登记就"挖了什么都不掉"）
+  if (!required) return true;
   if (!tool || tool.type !== required.tool) return false;
   return tool.tier >= required.tier;
 }

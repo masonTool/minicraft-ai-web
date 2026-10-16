@@ -11,6 +11,7 @@
  * 运行：npm run test:tripwire
  */
 
+import { isHandHarvestable } from '../src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
@@ -19,7 +20,6 @@ import {
   TRIPWIRE_MAX_LENGTH,
   blockDef,
   blockHardness,
-  isHandHarvestable,
 } from '../src/core/registry/blocks.ts';
 import {
   facingOf,

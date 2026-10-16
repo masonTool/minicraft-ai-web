@@ -12,11 +12,11 @@
  * 运行：npm run test:kelp
  */
 
+import { isHandHarvestable } from '../src/core/registry/tools.ts';
 import {
   Block,
   KELP_MAX_HEIGHT,
   blockDef,
-  isHandHarvestable,
 } from '../src/core/registry/blocks.ts';
 import { collisionBoxes } from '../src/core/registry/blockShapes.ts';
 import {

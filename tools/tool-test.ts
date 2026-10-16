@@ -10,7 +10,7 @@
  * 运行：npm run test:tool
  */
 
-import { Block, WHEAT_STAGES, blockHardness, isHandHarvestable, slabId } from '../src/core/registry/blocks.ts';
+import { Block, WHEAT_STAGES, blockHardness, slabId } from '../src/core/registry/blocks.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import {
   Item,
@@ -20,7 +20,7 @@ import {
 } from '../src/core/registry/items.ts';
 import { itemLabel, itemTooltip } from '../src/core/registry/itemNames.ts';
 import { offeringFor } from '../src/core/crafting/Enchanting.ts';
-import { efficientToolType, harvestRequirement, toolInfoById } from '../src/core/registry/tools.ts';
+import { isHandHarvestable, efficientToolType, harvestRequirement, toolInfoById } from '../src/core/registry/tools.ts';
 import { Block, woolId } from '../src/core/registry/blocks.ts';
 import {
   ALL_TOOL_MATERIALS,

@@ -15,6 +15,7 @@
  * 运行：npm run test:potcake
  */
 
+import { isHandHarvestable } from '../src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
@@ -24,7 +25,6 @@ import {
   blockDef,
   blockHardness,
   flowerPotIndexFor,
-  isHandHarvestable,
   pottedPlantItem,
   pottedPlantName,
   pottedPlantTile,

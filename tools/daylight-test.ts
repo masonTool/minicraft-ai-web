@@ -14,13 +14,13 @@
  * 运行：npm run test:daylight
  */
 
+import { isHandHarvestable } from '../src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
   DAYLIGHT_DETECTOR_ID,
   blockDef,
   blockHardness,
-  isHandHarvestable,
 } from '../src/core/registry/blocks.ts';
 import {
   isInverted,

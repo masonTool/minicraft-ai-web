@@ -18,7 +18,6 @@ import {
   blockDef,
   cocoaStageOf,
   cropOf,
-  isHandHarvestable,
   slabId,
   woolId,
 } from '../src/core/registry/blocks.ts';
@@ -39,7 +38,7 @@ function grid(size: 2 | 3, rows: readonly string[], legend: Record<string, numbe
   }
   return cells;
 }
-import { breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
+import { isHandHarvestable, breakSeconds, makeToolInfo } from '../src/core/registry/tools.ts';
 import {
   CREATIVE_ITEMS,
   Item,

@@ -30,12 +30,11 @@ import {
   blockDef,
   blockHardness,
   isDeadCoral,
-  isHandHarvestable,
   isLiveCoral,
 } from '../src/core/registry/blocks.ts';
 import { FACING_OFFSET, facingOf, isWallMounted } from '../src/core/registry/blockState.ts';
 import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { canHarvest, harvestRequirement, makeToolInfo } from '../src/core/registry/tools.ts';
+import { isHandHarvestable, canHarvest, harvestRequirement, makeToolInfo } from '../src/core/registry/tools.ts';
 import {
   CREATIVE_ITEMS,
   blockDrops,

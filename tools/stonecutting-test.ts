@@ -14,11 +14,10 @@ import {
   Block,
   BLOCKS,
   blockDef,
-  isHandHarvestable,
   slabId,
   stairsId,
 } from '../src/core/registry/blocks.ts';
-import { breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
+import { isHandHarvestable, breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
 import {
   isStonecuttingInput,

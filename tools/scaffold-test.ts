@@ -14,6 +14,7 @@
  * 运行：npm run test:scaffold
  */
 
+import { isHandHarvestable } from '../src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
@@ -21,7 +22,6 @@ import {
   blockDef,
   blockHardness,
   isClimbableBlock,
-  isHandHarvestable,
 } from '../src/core/registry/blocks.ts';
 import {
   SCAFFOLD_PLATFORM_HEIGHT,

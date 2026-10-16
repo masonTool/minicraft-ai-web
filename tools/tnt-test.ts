@@ -15,13 +15,13 @@
  * 运行：npm run test:tnt
  */
 
+import { isHandHarvestable } from '../src/core/registry/tools.ts';
 import {
   BLOCKS,
   Block,
   TNT_ID,
   blockDef,
   blockHardness,
-  isHandHarvestable,
 } from '../src/core/registry/blocks.ts';
 import { isFlash, isPowered, withFacing, withFlash, withPowered } from '../src/core/registry/blockState.ts';
 import {

@@ -22,9 +22,8 @@ import {
   blockDef,
   blockHardness,
   isClimbableBlock,
-  isHandHarvestable,
 } from '../src/core/registry/blocks.ts';
-import { breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
+import { isHandHarvestable, breakSeconds, canHarvest, makeToolInfo } from '../src/core/registry/tools.ts';
 import { blockDrops, CREATIVE_ITEMS, Item, dropFor, maxStackOf, itemDef } from '../src/core/registry/items.ts';
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { isFlammable } from '../src/core/world/Fire.ts';

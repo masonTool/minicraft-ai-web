@@ -2787,161 +2787,98 @@ for (const [parentId, name, kinds] of STONE_VARIANT_PARENTS) {
   for (const kind of kinds) HARDNESS.set(stoneVariantId(name, kind)!, hardness);
 }
 
-/** 徒手就能采集的方块（决定挖掘耗时用哪条公式，对齐原版） */
-const HAND_HARVESTABLE = new Set<number>([
-  Block.DIRT,
-  Block.GRASS_BLOCK,
-  Block.SAND,
-  // 红沙（批次 45）：与沙子同一条——徒手就能挖、拿锹更快（不放进需求表）
-  Block.RED_SAND,
-  Block.GRAVEL,
-  Block.CLAY,
-  Block.SNOW_BLOCK,
-  Block.OAK_LOG,
-  Block.OAK_PLANKS,
-  Block.OAK_LEAVES,
-  Block.GLASS,
-  Block.ICE,
-  Block.PACKED_ICE,
-  Block.GLOWSTONE,
-  // 木质方块徒手可采集；熔炉需要镐，所以不在列表里
-  Block.CRAFTING_TABLE,
-  Block.CHEST,
-  // 木桶（批次 61）：与箱子同一条（⚠️ 漏了这一行它就**挖了什么都不掉**——
-  // 既不在需求表里、又不在徒手表里，`canHarvest` 两边都不认。批次 61 的断言
-  // "徒手就能采到"就是专门拦这个的）
-  Block.BARREL,
-  // 营火（批次 47）：徒手就能拆（斧只是更快）
-  Block.CAMPFIRE,
-]);
+// ---------------------------------------------------------------- 硬度补登（批次 62 / O9 收尾）
+//
+// 为什么要有这一段：`blockHardness` 的兜底是 **3**，于是"没登记"与"登记成 3"从外面看
+// 一模一样。批次 61 写木桶时顺手用探针扫了一遍，发现**一批方块静默地拿到了 3**：
+//   · 成熟作物徒手要 **4.5 秒**才掉（原版硬度 0：一碰就掉）——农业那条链基本没法用；
+//   · 红石粉 / 拉杆 / 活塞这些徒手要 **15 秒**（原版 0~1.5 秒），而且当时**什么都掉不出来**。
+// 下面把"落回默认值"的方块按原版**逐族补上**，并留一条断言（`tools/harvest-test.ts`）
+// 遍历全表盯着"每个有物品的方块都显式登记过硬度"——以后加方块忘了写，测试就会红。
 
-// 羊毛徒手即可采集（石材家族一律需要镐，不加入此表）
-for (let i = 0; i < DYE_COLORS.length; i++) HAND_HARVESTABLE.add(woolId(i));
-
-// 地毯与雪层也是徒手就能采（原版地毯随手一抓、雪层用手也能撸掉，锹只是加速）
-for (let i = 0; i < DYE_COLORS.length; i++) HAND_HARVESTABLE.add(carpetId(i));
-HAND_HARVESTABLE.add(Block.SNOW);
-
-// 台阶 / 楼梯的"徒手可采集"跟随母方块；木质与火把梯子一律徒手可采
-for (let index = 0; index < SHAPED_PARENTS.length; index++) {
-  if (!HAND_HARVESTABLE.has(SHAPED_PARENTS[index]![0])) continue;
-  HAND_HARVESTABLE.add(slabId(index));
-  HAND_HARVESTABLE.add(stairsId(index));
-}
-HAND_HARVESTABLE.add(Block.OAK_FENCE);
-HAND_HARVESTABLE.add(Block.OAK_DOOR);
-HAND_HARVESTABLE.add(Block.OAK_TRAPDOOR);
-HAND_HARVESTABLE.add(Block.OAK_FENCE_GATE);
-
-// 木制方块族（批次 38）：其余 5 种木材的四件也徒手可采（斧只是加速，见 tools.ts）
-for (const ids of Object.values(WoodShaped)) {
-  HAND_HARVESTABLE.add(ids.fence);
-  HAND_HARVESTABLE.add(ids.fenceGate);
-  HAND_HARVESTABLE.add(ids.door);
-  HAND_HARVESTABLE.add(ids.trapdoor);
-}
-
-// 藤蔓（B11）：徒手能打掉（什么都不掉），剪刀才是"采下来"的工具——见 items.ts 的掉落表。
-// 锁链不在这里：它**必须用镐**，登记在 tools.ts 的 REQUIRED_TOOL 里。
-HAND_HARVESTABLE.add(Block.VINE);
-HAND_HARVESTABLE.add(Block.TORCH);
-HAND_HARVESTABLE.add(Block.LADDER);
-
-// 木材家族全部徒手可采集
-for (const ids of Object.values(Wood)) {
-  HAND_HARVESTABLE.add(ids.log);
-  HAND_HARVESTABLE.add(ids.planks);
-  HAND_HARVESTABLE.add(ids.leaves);
-  HAND_HARVESTABLE.add(ids.slab);
-  HAND_HARVESTABLE.add(ids.stairs);
-}
-
-// 玻璃与玻璃板徒手可采集（石材补全与砂岩变体需要镐，不加入）
-HAND_HARVESTABLE.add(GLASS_PANE_ID);
-for (let i = 0; i < DYE_COLORS.length; i++) {
-  HAND_HARVESTABLE.add(stainedGlassId(i));
-  HAND_HARVESTABLE.add(stainedGlassPaneId(i));
-}
-
-/**
- * 自然装饰与下界方块里徒手可采集的部分。
- * 海晶石家族、黑石、下界砖、石英矿、远古残骸都需要镐（原版），故意不加入。
- */
+// ---- 地下：深板岩与矿石（原版：深板岩 3，**深板岩矿 4.5**，其余矿石 3，下界石英矿 3）
+HARDNESS.set(Block.DEEPSLATE, 3);
 for (const id of [
-  Block.SHORT_GRASS,
-  Block.FERN,
-  Block.DANDELION,
-  Block.POPPY,
-  Block.BLUE_ORCHID,
-  Block.OXEYE_DAISY,
-  Block.CORNFLOWER,
-  Block.RED_MUSHROOM,
-  Block.BROWN_MUSHROOM,
-  Block.SUGAR_CANE,
-  Block.DEAD_BUSH,
-  Block.BAMBOO,
-  // 睡莲徒手就能采（原版不需要任何工具）
-  Block.LILY_PAD,
-  Block.PUMPKIN,
-  Block.MELON,
-  Block.CACTUS,
-  Block.NETHERRACK,
-  Block.SOUL_SAND,
-  Block.SOUL_SOIL,
-  Block.MAGMA_BLOCK,
-  Block.CRIMSON_NYLIUM,
-  Block.WARPED_NYLIUM,
-  Block.CRIMSON_STEM,
-  Block.WARPED_STEM,
-  Block.CRIMSON_PLANKS,
-  Block.WARPED_PLANKS,
-  Block.CRIMSON_FUNGUS,
-  Block.WARPED_FUNGUS,
-  Block.CRIMSON_ROOTS,
-  Block.WARPED_ROOTS,
-  Block.NETHER_SPROUTS,
-  Block.NETHER_WART_BLOCK,
-  Block.WARPED_WART_BLOCK,
-  Block.SHROOMLIGHT,
+  Block.COAL_ORE,
+  Block.IRON_ORE,
+  Block.COPPER_ORE,
+  Block.GOLD_ORE,
+  Block.REDSTONE_ORE,
+  Block.LAPIS_ORE,
+  Block.DIAMOND_ORE,
+  Block.EMERALD_ORE,
+  Block.NETHER_QUARTZ_ORE,
 ]) {
-  HAND_HARVESTABLE.add(id);
+  HARDNESS.set(id, 3);
+}
+for (const id of [
+  Block.DEEPSLATE_COAL_ORE,
+  Block.DEEPSLATE_IRON_ORE,
+  Block.DEEPSLATE_COPPER_ORE,
+  Block.DEEPSLATE_GOLD_ORE,
+  Block.DEEPSLATE_REDSTONE_ORE,
+  Block.DEEPSLATE_LAPIS_ORE,
+  Block.DEEPSLATE_DIAMOND_ORE,
+  Block.DEEPSLATE_EMERALD_ORE,
+]) {
+  HARDNESS.set(id, 4.5);
 }
 
-// 书架徒手也能采（原版如此）；附魔台要镐，所以**不进**这张表
-HAND_HARVESTABLE.add(Block.BOOKSHELF);
-HAND_HARVESTABLE.add(Block.FARMLAND);
-for (let stage = 0; stage < 4; stage++) HAND_HARVESTABLE.add(Block.WHEAT_STAGE0 + stage);
+// ---- 末地一族（原版：末地石与末地石砖 3，紫颂 0.4，末地烛 0.1，龙蛋 3，
+//      传送门框与传送门**挖不动**（-1，创造模式物品））
+for (const id of [Block.END_STONE, Block.END_STONE_BRICKS]) HARDNESS.set(id, 3);
+for (const kind of ['slab', 'stairs', 'wall'] as const) {
+  HARDNESS.set(stoneVariantId('end_stone_bricks', kind)!, 3);
+}
+HARDNESS.set(Block.CHORUS_PLANT, 0.4);
+HARDNESS.set(Block.CHORUS_FLOWER, 0.4);
+HARDNESS.set(Block.END_ROD, 0.1);
+HARDNESS.set(Block.DRAGON_EGG, 3);
+HARDNESS.set(Block.END_PORTAL_FRAME, -1);
+HARDNESS.set(Block.END_PORTAL, -1);
+
+// ---- 红石元件（原版：粉/火把/中继器/比较器 **0**（一碰就掉），
+//      拉杆/按钮/压力板 0.5，红石灯 0.3，活塞 1.5，红石块 5，侦测器 3）
+for (const id of [Block.REDSTONE_WIRE, Block.REDSTONE_TORCH, Block.REPEATER, Block.COMPARATOR]) {
+  HARDNESS.set(id, 0);
+}
+for (const id of [
+  Block.LEVER,
+  Block.STONE_BUTTON,
+  Block.OAK_BUTTON,
+  Block.STONE_PRESSURE_PLATE,
+  Block.OAK_PRESSURE_PLATE,
+]) {
+  HARDNESS.set(id, 0.5);
+}
+HARDNESS.set(Block.REDSTONE_LAMP, 0.3);
+HARDNESS.set(Block.PISTON, 1.5);
+HARDNESS.set(Block.STICKY_PISTON, 1.5);
+HARDNESS.set(Block.PISTON_HEAD, 1.5);
+HARDNESS.set(Block.OBSERVER, 3);
+HARDNESS.set(Block.REDSTONE_BLOCK, 5);
+// 漏斗（批次 58）：原版与铁块同档
+HARDNESS.set(Block.HOPPER, 3);
+
+// ---- 作物（原版硬度 0：一碰就能收，这是"种地"手感的前提）
 for (let stage = 0; stage < 4; stage++) {
-  HAND_HARVESTABLE.add(Block.CARROTS_STAGE0 + stage);
-  HAND_HARVESTABLE.add(Block.POTATOES_STAGE0 + stage);
-  HAND_HARVESTABLE.add(Block.BEETROOTS_STAGE0 + stage);
-  // 甜浆果丛（批次 49）：徒手就能采（原版也是，它连工具都不认）
-  HAND_HARVESTABLE.add(Block.SWEET_BERRY_BUSH_STAGE0 + stage);
+  HARDNESS.set(Block.WHEAT_STAGE0 + stage, 0);
+  HARDNESS.set(Block.CARROTS_STAGE0 + stage, 0);
+  HARDNESS.set(Block.POTATOES_STAGE0 + stage, 0);
+  HARDNESS.set(Block.BEETROOTS_STAGE0 + stage, 0);
 }
-// 可可豆（批次 49）：徒手可采
-for (let stage = 0; stage < 3; stage++) HAND_HARVESTABLE.add(Block.COCOA_STAGE0 + stage);
-// 海带与海草（批次 50）：徒手都能拔（海草徒手拔下来**什么都不掉**——
-// 那条规则在掉落表里（`SHEARS_ONLY`），不在这里；这里只管"挖得动"）
-HAND_HARVESTABLE.add(Block.KELP);
-HAND_HARVESTABLE.add(Block.SEAGRASS);
-HAND_HARVESTABLE.add(Block.DRIED_KELP_BLOCK);
-// 珊瑚（批次 51）：**珊瑚块不在这里**（要镐，登记在 `tools.ts` 的 REQUIRED_TOOL 里），
-// 珊瑚丛与珊瑚扇是"一碰就掉"的植物（徒手可采，与花草同档）
-for (const start of [CORAL_ID_START, DEAD_CORAL_ID_START, CORAL_FAN_ID_START, DEAD_CORAL_FAN_ID_START]) {
-  for (let i = 0; i < CORAL_KINDS.length; i++) HAND_HARVESTABLE.add(start + i);
+
+// ---- 门与活板门（原版木门/活板门 3；含橡木——它的 id 是历史值但这一族要一起走）
+for (const ids of Object.values(WoodShaped)) {
+  HARDNESS.set(ids.door, 3);
+  HARDNESS.set(ids.trapdoor, 3);
 }
-// 蛋糕与花盆（批次 52）：徒手都能拆（原版都不需要工具）
-HAND_HARVESTABLE.add(Block.CAKE);
-HAND_HARVESTABLE.add(Block.FLOWER_POT);
-// 脚手架（批次 53）：徒手可采（原版不需要工具）
-HAND_HARVESTABLE.add(Block.SCAFFOLDING);
-// 阳光传感器（批次 54）：徒手可采（原版斧头更快，但不要求工具）
-HAND_HARVESTABLE.add(Block.DAYLIGHT_DETECTOR);
-// 绊线与绊线钩（批次 55）：徒手可采
-HAND_HARVESTABLE.add(Block.TRIPWIRE);
-HAND_HARVESTABLE.add(Block.TRIPWIRE_HOOK);
-// TNT（批次 56）：徒手可采（拆下来还能用）
-HAND_HARVESTABLE.add(Block.TNT);
+
+// ---- 铜（4 档氧化 × 4 种形状，原版都是 3）
+for (let stage = 0; stage < 4; stage++) {
+  for (const kind of [0, 1, 2, 3] as const) HARDNESS.set(copperId(stage, kind), 3);
+}
+
 
 /**
  * 作物的生长阶段表（按顺序）。
@@ -3013,8 +2950,16 @@ export function blockHardness(id: number): number {
   return HARDNESS.get(id) ?? 3;
 }
 
-export function isHandHarvestable(id: number): boolean {
-  return HAND_HARVESTABLE.has(id);
+/**
+ * 这个方块的硬度**显式登记过**吗（批次 62）。
+ *
+ * 存在的理由：`blockHardness` 的兜底是 3，而"没登记"与"登记成 3"从外面看一模一样——
+ * 结果是一批方块静默地拿到了 3（成熟作物 4.5 秒才能收、红石粉 15 秒……）。
+ * 现在由 `tools/harvest-test.ts` 遍历全表断言"每个有物品的方块都登记过"，
+ * 这条兜底就只用于"真的忘了登记"时给出一个不至于崩掉的值。
+ */
+export function isHardnessRegistered(id: number): boolean {
+  return HARDNESS.has(id);
 }
 
 /**
