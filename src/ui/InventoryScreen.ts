@@ -32,8 +32,12 @@ import {
   MAIN_START,
   type ItemStack,
   type SlotSource,
+  stackExtras,
 } from '../core/container/Inventory.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
+// 快速移动（批次 127）：Shift+左键的规则是纯逻辑（`core/container/QuickMove.ts`），
+// 界面只负责把"哪一格 / 开着哪个容器 / 容器多少格"交给它
+import { PLAYER_FILL_ORDER, fitCount, quickMove } from '../core/container/QuickMove.ts';
 import { CHEST_SIZE } from '../core/container/Chest.ts';
 import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, Anvil } from '../core/container/Anvil.ts';
 import {
@@ -1106,7 +1110,8 @@ export class InventoryScreen {
 
       // 鼠标：左键 / 右键语义保持不变
       if (event.pointerType === 'mouse') {
-        this.activateSlot(key, event.button);
+        // Shift+左键 = 快速移动（批次 127，对齐原版）；触摸端没有 Shift，走下面的长按那套
+        this.activateSlot(key, event.button, event.shiftKey);
         return;
       }
 
@@ -1153,10 +1158,68 @@ export class InventoryScreen {
     });
   }
 
-  /** 统一的槽位激活入口（左键 = 0，右键 = 2） */
-  private activateSlot(key: string, button: number): void {
+  /**
+   * 统一的槽位激活入口（左键 = 0，右键 = 2）。
+   *
+   * **Shift+左键 = 快速移动**（批次 127，对齐原版）：普通槽走 `quickMoveSlot`，
+   * 合成结果走"一次做完"（`handleResultClick(true)`）。
+   * 触摸端没有 Shift 键，所以长按那套（右键语义）完全不受影响。
+   */
+  private activateSlot(key: string, button: number, shift = false): void {
+    if (shift && button === 0) {
+      if (key === 'craft:result') this.handleResultClick(true);
+      else this.quickMoveSlot(key);
+      return;
+    }
     if (key === 'craft:result') this.handleResultClick();
     else this.handleSlotClick(key, button);
+  }
+
+  /**
+   * **Shift+左键**：把这一格整叠搬到"它该去的地方"（批次 127，对齐原版）。
+   *
+   * 规则全在 `core/container/QuickMove.ts`（纯逻辑、可断言）：背包 ↔ 容器、
+   * 快捷栏 ↔ 主背包、盔甲直接穿上、装不下就不动。这里只做三件事：
+   * **把"哪一格 / 开着哪个容器 / 容器多少格"交出去**、刷新界面、守住"只取不放"的槽位。
+   */
+  private quickMoveSlot(key: string): void {
+    const binding = this.bindings.get(key);
+    if (!binding) return;
+    const { source, index, takeOnly } = binding;
+
+    // 只取不放的槽（熔炉/酿造台/切石机的产物）：原版 Shift 就是"整叠收走"。
+    // 走既有那条路（它会结算烧炼经验），再把光标上的东西塞回背包
+    if (takeOnly) {
+      this.handleSlotClick(key, 0);
+      this.storeHeld();
+      return;
+    }
+
+    const container = this.mode === 'inventory' ? null : this.activeContainer;
+    // 容器有多少格：**按注册进界面的绑定数一遍**（各族容器格数不一样，
+    // 界面这边不用再抄一份常量表——抄一份就多一处会漂的地方）
+    let containerSize = 0;
+    if (container) {
+      for (const other of this.bindings.values()) if (other.source === container) containerSize++;
+    }
+
+    const result = quickMove(this.inventory, container, containerSize, source, index);
+    if (!result.moved) return;
+    this.refresh();
+  }
+
+  /**
+   * 把光标上拿着的东西放回背包（**只做这一件事**）。
+   *
+   * 与 `returnHeldToInventory` 的区别：那个是"关界面 / 点界面外"用的，
+   * 顺带还会把合成网格里的东西倒回背包；这里不能那么干——
+   * Shift+点一个槽位不该把工作台上的材料也一起收走。
+   */
+  private storeHeld(): void {
+    if (!this.held) return;
+    const leftover = this.inventory.addStack(this.held);
+    this.held = leftover > 0 ? { id: this.held.id, count: leftover, ...stackExtras(this.held) } : null;
+    this.refresh();
   }
 
   /**
@@ -1306,11 +1369,36 @@ export class InventoryScreen {
     this.refresh();
   }
 
-  /** 点合成结果槽：合成一次，产物优先放到光标上 */
-  private handleResultClick(): void {
+  /**
+   * 点合成结果槽：合成一次，产物优先放到光标上。
+   *
+   * `shift = true`（批次 127）是原版的"**一次做完**"：一直取产物，
+   * 直到**材料用完**或**背包塞不下**（原版就是这两条终止条件），产物直接进背包。
+   *
+   * ⚠️ 顺序要紧：**先问装不装得下、再取产物**——反过来的话，背包满时那一次
+   * 会白吃掉一份材料而产物掉在地上。
+   */
+  private handleResultClick(shift = false): void {
     const grid = this.crafting;
     const product = grid.result;
     if (!product) return;
+
+    // Shift：一次做完（材料用完 / 背包塞不下就停）
+    if (shift) {
+      let crafted = 0;
+      while (grid.result) {
+        const next = grid.result;
+        if (fitCount(next, this.inventory, PLAYER_FILL_ORDER) < next.count) break;
+        if (!grid.takeResult()) break;
+        this.inventory.add(next.id, next.count);
+        crafted++;
+        // 保底：正经配方都到不了 64 次，只为防"产物又能当原料"那种配方死循环
+        if (crafted >= 64) break;
+      }
+      if (crafted > 0) this.inventory.notify();
+      this.refresh();
+      return;
+    }
 
     const taken: ItemStack = { id: product.id, count: product.count };
     if (!grid.takeResult()) return;
