@@ -178,6 +178,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'sign':
       // 火把、梯子、植物、贴地薄板都没有碰撞体积（原版红石粉与压力板也不挡路）
       return [];
+    case 'lightning_rod':
+      // 避雷针（批次 83）：2/16 细杆，**有碰撞**（原版能站在上面、也能挡路）
+      return [lightningRodBox(state)];
     case 'lily_pad':
       // 睡莲是"能站上去的薄板"：原版可以踩着一路走过水面，所以它**有**碰撞体积
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
@@ -458,6 +461,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'sign':
       // 告示牌（批次 80）：落地牌 = 立柱 + 牌面；挂墙牌 = 只有牌面（贴在靠墙那一侧）
       return isWallMounted(state) ? [signBoardBox(state)] : [SIGN_POST, signBoardBox(state)];
+    case 'lightning_rod':
+      // 避雷针（批次 83）：一根细杆（碰撞与渲染同一个盒子，所以"看着是杆、踩着也是杆"）
+      return [lightningRodBox(state)];
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
@@ -549,6 +555,47 @@ export function signBoardBox(state: number): LocalBox {
       return [0, y0, half, 1, y1, half + t];
     default: // 朝东/西：薄的那一维是 x
       return [half, y0, 0, half + t, y1, 1];
+  }
+}
+
+// ---------------------------------------------------------------- 避雷针（批次 83）
+
+/** 避雷针的杆粗（2/16 见方，原版） */
+export const ROD_THICKNESS = 2 / 16;
+/** 杆从贴着的那一面伸出来多长（原版 6/16） */
+export const ROD_LENGTH = 6 / 16;
+
+/**
+ * 避雷针的盒子：**从贴着的那一面**伸出来的一根细杆。
+ *
+ * 朝向用共享的六向编码，语义是"**指向伸出方向**"：
+ *  - 朝上（贴在方块顶上）：杆立在 y ∈ [0, 6/16]
+ *  - 朝下（贴在天花板下）：杆吊在 y ∈ [1−6/16, 1]
+ *  - 朝东：杆在 x ∈ [1−6/16, 1]（贴在西边那块方块上，往东伸）
+ * 四个水平朝向同理。**杆的最后 2/16 是"杆头"**——闪电就打在那儿
+ * （见 `world/Lightning.ts` 的 `rodTip()`）。
+ */
+export function lightningRodBox(state: number): LocalBox {
+  const t = ROD_THICKNESS;
+  const l = ROD_LENGTH;
+  const lo = (1 - t) / 2;
+  const hi = lo + t;
+  switch (sixFacingOf(state)) {
+    case 'up':
+      return [lo, 0, lo, hi, l, hi];
+    case 'down':
+      return [lo, 1 - l, lo, hi, 1, hi];
+    // ⚠️ `SixFacing` 的水平四向是**数字**（`Facing` = 0..3，见 `FACING_OFFSET`），
+    // 只有竖直那两档是字符串 'up' / 'down'——别照着名字写 'east'/'west'（类型会当场拦下）
+    case 1: // 东：贴在西边那块方块上，往东伸
+      return [1 - l, lo, lo, 1, hi, hi];
+    case 3: // 西
+      return [0, lo, lo, l, hi, hi];
+    case 2: // 南
+      return [lo, lo, 1 - l, hi, hi, 1];
+    case 0: // 北
+    default:
+      return [lo, lo, 0, hi, hi, l];
   }
 }
 

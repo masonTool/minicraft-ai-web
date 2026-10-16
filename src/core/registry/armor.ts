@@ -195,6 +195,9 @@ export const ARMOR_BYPASS_CAUSES: ReadonlySet<string> = new Set([
   'void',
   'suffocate',
   'poison',
+  // 雷击（批次 83）：原版雷击**无视护甲**（`#bypasses_armor` 里有它），
+  // 所以穿一身钻石甲站在避雷针旁边也会被劈掉 5 颗心
+  'lightning',
 ]);
 
 // ---------------------------------------------------------------- 背包访问

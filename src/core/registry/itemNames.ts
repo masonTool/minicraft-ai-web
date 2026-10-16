@@ -419,6 +419,8 @@ const EXPLICIT: Record<string, string> = {
   polished_blackstone: '磨制黑石',
   blackstone_bricks: '黑石砖',
   gilded_blackstone: '鎏金黑石',
+  // 避雷针（批次 83）
+  lightning_rod: '避雷针',
   magma_block: '岩浆块',
   crimson_nylium: '绯红菌岩',
   warped_nylium: '诡异菌岩',
@@ -803,6 +805,7 @@ const DESCRIPTIONS: Record<string, string> = {
   // 这三块都不在合成链的主干上，玩家第一次见它们多半是在下界的堡垒里
   polished_blackstone: '黑石打磨之后的样子，堡垒遗迹的墙面与地面都是它。4 块黑石能合成 4 块。',
   blackstone_bricks: '黑石砖（4 块磨制黑石合成 4 块），堡垒遗迹的主墙体。',
+  lightning_rod: '**被雷劈中的那 0.4 秒输出 15 级红石信号**。雷暴里它会把附近（128 格内）的雷**引到自己身上**——所以它是"给屋顶装一根，家里就不会被烧"的那件东西。贴在方块上、朝外伸 6/16（六向都能挂）。⚠️ 与原版差异：本项目不会氧化（原版的四档铜）。',
   gilded_blackstone: '嵌着金块的黑石，堡垒遗迹里最值钱的那几块：**挖掉掉 2~5 个金粒**（带精准采集才掉它自己），所以进堡垒先找它。',
   iron_ore: '用石镐以上才能挖动，掉落粗铁。',
   copper_ore: '用石镐以上才能挖动，掉落粗铜。',

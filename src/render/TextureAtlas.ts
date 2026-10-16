@@ -2457,6 +2457,17 @@ PAINTERS.item_fishing_rod = (x, y, rng) => {
   return [0, 0, 0, 0];
 };
 
+// 避雷针（批次 83）：铜色的细杆——贴图只要"铜的质感"，
+// 形状（2/16 × 6/16 的杆）由 `blockShapes` 的 `lightningRodBox` 表达
+PAINTERS.lightning_rod = (x, _y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 杆身占中间那 6 像素宽的一条（竖着的纹理，看着像一根杆）
+  if (x < 5 || x > 10) return [0, 0, 0, 0];
+  // 靠左的一侧亮一点（一条高光），靠右压暗，模拟铜的圆杆
+  const shade = x <= 6 ? 1.12 : x >= 10 ? 0.84 : 1;
+  return [clamp255(196 * shade + jitter), clamp255(120 * shade + jitter), clamp255(72 * shade + jitter), 255];
+};
+
 PAINTERS.item_mushroom_stew = soupPainter([154, 106, 62], true);
 /** 甜菜汤：深红色的汤 + 甜菜块 */
 PAINTERS.item_beetroot_soup = soupPainter([168, 46, 52], true);

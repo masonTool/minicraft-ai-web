@@ -84,6 +84,18 @@ import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts'
 import { scrapeResult } from './core/world/Copper.ts';
 import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
+// 雷电与避雷针（批次 83）：规则（落点选择 / 杆头坐标 / 脉冲表）在 `world/Lightning.ts`，
+// 主程序只做"世界里的副作用"（伤害、点火、粒子、给电路重算）
+import {
+  LIGHTNING_DAMAGE,
+  LIGHTNING_DAMAGE_RADIUS,
+  RodPulses,
+  STRIKE_INTERVAL_MAX,
+  STRIKE_INTERVAL_MIN,
+  pickStrike,
+  rodTipPoint,
+  shouldIgnite,
+} from './core/world/Lightning.ts';
 import { FIRE_IGNITE_SECONDS, burnsOnContact, igniteAt } from './core/world/Fire.ts';
 import {
   PORTAL_COOLDOWN_TICKS,
@@ -166,7 +178,7 @@ import { PlayerRenderer } from './render/PlayerRenderer.ts';
 import { srgbColor } from './render/srgb.ts';
 import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
-import { Chunk } from './core/world/Chunk.ts';
+import { Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, isDimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, blockDef, woolId,
   isBed,
@@ -504,6 +516,16 @@ const STARTING_HOTBAR: readonly number[] = [
   Block.CUT_COPPER,
 ];
 
+/**
+ * 避雷针索引与脉冲表共用的键（批次 83）：`x,y,z`。
+ *
+ * 放在模块级而不是类里：`RodPulses`（`world/Lightning.ts`）用的是同一套写法，
+ * 两边必须逐字一致——写成两个地方，早晚会出现"索引里有、脉冲表里没有"这种错位。
+ */
+function rodKey(x: number, y: number, z: number): string {
+  return `${x},${y},${z}`;
+}
+
 class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -536,8 +558,11 @@ class App {
     setState: (x, y, z, state) => this.world.setStateAndUpdate(x, y, z, state),
     isLoaded: (x, z) => this.world.isLoaded(x, z),
     hasEntityAt: (x, y, z) => this.hasEntityAt(x, y, z),
-    // 阳光传感器（批次 54）：红石引擎里唯一一个要看**光照**的元件
+    // 阳光传感器（批次 54）：红石引擎里唯二要看**外部世界的量**的元件之一
     getSkyLight: (x, y, z) => this.world.getSkyLight(x, y, z),
+    // 避雷针（批次 83）：另一个——"被雷劈中的那 0.4 秒"由上面的脉冲表拿着，
+    // 引擎每轮问一句就够了（与阳光传感器问天光完全同一条）
+    isRodPowered: (x, y, z) => this.rodPulses.isPowered(x, y, z),
   };
   /**
    * TNT 的引信（批次 56）：点燃之后"闪 4 秒再炸"，这份状态跨帧存在这里。
@@ -760,6 +785,18 @@ class App {
   private bobber: { x: number; y: number; z: number; vx: number; vy: number; vz: number } | null = null;
   /** 浮标的小方块（第一次抛竿时懒建） */
   private bobberMesh: THREE.Mesh | null = null;
+  /**
+   * 避雷针的位置索引（批次 83）与它们的脉冲表。
+   *
+   * 为什么要索引：打雷时要问"玩家 128 格内有没有避雷针"，而**按区块扫一遍**
+   * （16×16×384 ≈ 10 万次读）每打一次雷做一次太贵。索引在**区块加载时建**（一次 10 万次读，
+   * 摊掉）、放下/拆掉时维护，于是打雷那一瞬间的查询是常数级的。
+   * 键是 `x,y,z`（与脉冲表同一套写法）。
+   */
+  private readonly lightningRods = new Set<string>();
+  private readonly rodPulses = new RodPulses();
+  /** 下一次打雷的倒计时（只在雷暴里走） */
+  private strikeTimer = 0;
   /** 玩家名（联机时用服务端给的，单机固定"玩家"） */
   private playerName = '玩家';
   /** 难度（I7）：保存在世界里 */
@@ -992,10 +1029,14 @@ class App {
         // 结构箱的战利品（K8 尾巴）：方块状态里写着"哪张表"，在这里按表掷点填进容器。
         // 放在网格化之前也没关系——箱子内容不影响渲染
         fillLootChests(chunk, this.dimension, this.world.seed, this.world.containers);
+        // 避雷针索引（批次 83）：区块一加载就扫出里面的避雷针，打雷时查询就是常数级
+        this.scanRodsInChunk(chunk.cx, chunk.cz);
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
         this.refreshLoadingState();
       },
       onChunkUnloaded: (cx, cz) => {
+        // 区块走了，里面的避雷针也跟着忘掉（不然索引会一直长）
+        this.forgetRodsInChunk(cx, cz);
         this.chunkRenderer.onChunkUnloaded(cx, cz);
         // 区块卸载时一并清掉落在该区块里的掉落物，避免未加载区域实体无限堆积
         this.entities.removeInChunk(cx, cz);
@@ -3040,6 +3081,9 @@ class App {
       return;
     }
 
+    // 避雷针（批次 83）：拆掉就从索引里去掉（不然打雷还会往一个空格子上劈）
+    if (brokenId === Block.LIGHTNING_ROD) this.noteRodBroken(this.hit.x, this.hit.y, this.hit.z);
+
     // 告示牌（批次 80）：牌子没了，上面的字也要清掉——不清的话
     // "在同一个位置重新放一块牌子"会凭空继承上一块的字（而且存档里留着一份没有方块的文字）。
     // 火焰/爆炸把牌子烧掉时走不到这里，由 `syncSigns` 那趟对账兜底（发现不是牌子就丢掉）
@@ -3493,6 +3537,156 @@ class App {
     });
     for (const pos of stale) this.signText.remove(this.dimension, pos.x, pos.y, pos.z);
     this.signRenderer.sync(items);
+  }
+
+  // ---------------------------------------------------------------- 雷电与避雷针（批次 83）
+
+  /** 把一个区块里的避雷针扫进索引（区块加载时调一次，摊掉 10 万次读） */
+  private scanRodsInChunk(cx: number, cz: number): void {
+    const chunk = this.world.getChunk(cx, cz);
+    if (!chunk) return;
+    const originX = cx * 16;
+    const originZ = cz * 16;
+    for (let y = WORLD_MIN_Y; y <= WORLD_MAX_Y; y++) {
+      for (let lz = 0; lz < 16; lz++) {
+        for (let lx = 0; lx < 16; lx++) {
+          if (chunk.blocks[Chunk.index(lx, y, lz)] !== Block.LIGHTNING_ROD) continue;
+          this.lightningRods.add(rodKey(originX + lx, y, originZ + lz));
+        }
+      }
+    }
+  }
+
+  /** 区块卸载：忘掉里面的避雷针（不然索引会一直长） */
+  private forgetRodsInChunk(cx: number, cz: number): void {
+    const minX = cx * 16;
+    const minZ = cz * 16;
+    for (const key of [...this.lightningRods]) {
+      const [x, , z] = key.split(',').map(Number);
+      if (x! >= minX && x! < minX + 16 && z! >= minZ && z! < minZ + 16) this.lightningRods.delete(key);
+    }
+  }
+
+  /** 放下/拆掉避雷针时维护索引（不必等区块重载） */
+  private noteRodPlaced(x: number, y: number, z: number): void {
+    this.lightningRods.add(rodKey(x, y, z));
+  }
+
+  private noteRodBroken(x: number, y: number, z: number): void {
+    this.lightningRods.delete(rodKey(x, y, z));
+  }
+
+  /**
+   * 每帧：脉冲倒计时 + 雷暴里的打雷节奏。
+   *
+   * ⚠️ 脉冲**熄灭的那一刻**要主动喊一次重算——电路不会自己知道"外部世界的量变了"
+   * （与阳光传感器每秒复查是同一条经验：`外部世界会变的量必须有人主动去看`）。
+   */
+  private updateLightning(dt: number): void {
+    for (const pos of this.rodPulses.tick(dt)) {
+      this.redstone.onBlockChanged(this.redstoneWorld, pos.x, pos.y, pos.z);
+    }
+
+    // 只在雷暴里打雷（下雨不打）
+    if (this.weather.current !== 'thunder') {
+      this.strikeTimer = 0;
+      return;
+    }
+    this.strikeTimer -= dt;
+    if (this.strikeTimer > 0) return;
+    this.strikeTimer = STRIKE_INTERVAL_MIN + Math.random() * (STRIKE_INTERVAL_MAX - STRIKE_INTERVAL_MIN);
+    this.strikeLightning();
+  }
+
+  /**
+   * 打一次雷。
+   *
+   * 落点由 `pickStrike` 决定（128 格内有避雷针就打它），y 由这里补：
+   * 避雷针那格就是它自己，否则按那一列找地表（**打地表**是原版的观感）。
+   */
+  private strikeLightning(): void {
+    const player = { x: this.physics.x, y: this.physics.y, z: this.physics.z };
+    const rods = [...this.lightningRods].map((key) => {
+      const [x, y, z] = key.split(',').map(Number);
+      return { x: x!, y: y!, z: z! };
+    });
+    const target = pickStrike(Math.random, player, rods);
+    if (!target) return;
+
+    let y = target.y;
+    if (!target.rod) {
+      const surface = this.surfaceYAt(target.x, target.z);
+      if (surface === null) return; // 那一列还没加载：这一雷就当没打（不要凭空落到虚空里）
+      y = surface;
+    }
+
+    const state = this.world.getBlockState(target.x, target.y, target.z);
+    const tip = target.rod
+      ? rodTipPoint(target.x, target.y, target.z, state)
+      : { x: target.x + 0.5, y: y + 1, z: target.z + 0.5 };
+
+    // ---- 演出：一道竖直的亮柱 + 雷声（原版是分叉模型，这里用粒子柱近似）
+    this.spawnLightningBolt(tip);
+    this.audio.play('thunder', { x: tip.x, y: tip.y, z: tip.z });
+
+    // ---- 避雷针：给 0.4 秒的红石脉冲（原版 8 tick），并**立刻**让电路重算一次
+    if (target.rod) {
+      this.rodPulses.pulse(target.x, target.y, target.z);
+      this.redstone.onBlockChanged(this.redstoneWorld, target.x, target.y, target.z);
+    } else {
+      // ---- 地面被劈中：点火（只有"空气 + 下面是实心"那一格才点，与 `Fire.ts` 同一条判据）
+      const below = this.world.getBlock(target.x, y - 1, target.z);
+      const here = this.world.getBlock(target.x, y, target.z);
+      if (shouldIgnite(here, below)) {
+        this.world.setBlockAndUpdate(target.x, y, target.z, Block.FIRE);
+        this.net.sendBlock(target.x, y, target.z, Block.FIRE, 0, this.dimension);
+      }
+    }
+
+    // ---- 伤害：以落点为中心 ±3 格（玩家与生物都算，**无视护甲**——原版如此）
+    const radius = LIGHTNING_DAMAGE_RADIUS;
+    const px = this.physics.x;
+    const py = this.physics.y + 0.9;
+    const pz = this.physics.z;
+    if (
+      Math.abs(px - tip.x) <= radius + 0.5 &&
+      Math.abs(py - tip.y) <= radius + 0.5 &&
+      Math.abs(pz - tip.z) <= radius + 0.5
+    ) {
+      // `'lightning'` 是这张表里**唯一无视护甲**的伤害（原版雷击不受护甲减免）
+      this.damagePlayer(LIGHTNING_DAMAGE, tip.x, tip.z, 'lightning');
+    }
+    const context = this.lastEntityContext;
+    if (context) {
+      for (const entity of this.entities.all) {
+        if (entity.dead) continue;
+        if (Math.abs(entity.x - tip.x) > radius) continue;
+        if (Math.abs(entity.y - tip.y) > radius) continue;
+        if (Math.abs(entity.z - tip.z) > radius) continue;
+        if (!(entity instanceof Mob)) continue;
+        entity.hurt(LIGHTNING_DAMAGE, entity.x - tip.x, entity.z - tip.z, context);
+      }
+    }
+  }
+
+  /** 一道闪电的观感：从落点往上拉起一根粒子柱（越高越稀） */
+  private spawnLightningBolt(tip: { x: number; y: number; z: number }): void {
+    for (let i = 0; i < 14; i++) {
+      const y = tip.y + i * 1.2;
+      this.particles.spawnFlame(tip.x, y, tip.z, 0xdfe8ff, 2);
+    }
+    this.particles.spawnSmoke(tip.x, tip.y, tip.z, 10, 0.5);
+  }
+
+  /** 某一列的地表方块高度（没加载返回 null）——雷要打在地上，不能打进虚空 */
+  private surfaceYAt(x: number, z: number): number | null {
+    if (!this.world.isLoaded(x, z)) return null;
+    for (let y = WORLD_MAX_Y; y >= WORLD_MIN_Y; y--) {
+      const id = this.world.getBlock(x, y, z);
+      if (id === Block.AIR || id === Block.WATER) continue;
+      return y;
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------- 钓鱼（批次 81，G11）
@@ -5386,6 +5580,9 @@ class App {
       this.placeCooldown = PLACE_COOLDOWN;
       this.inventory.consume(blockId, 1);
 
+      // 避雷针（批次 83）：放下就进索引（不必等区块重载——它在**当前**加载的区块里）
+      if (blockId === Block.LIGHTNING_ROD) this.noteRodPlaced(x, y, z);
+
       // 潜影盒（批次 72）：物品里带着的内容**倒回方块**（原版如此）。
       // 空盒子也照样建一个容器——放着不管的话，第一次打开界面才建，
       // 而"被漏斗塞东西"这条路径会先撞上"这一格没有容器"
@@ -6024,6 +6221,8 @@ class App {
       this.updateSleep(dt, rawInput);
       // 钓鱼（批次 81）：浮标飞行 / 等待咬钩 / 咬钩窗口，全在状态机里
       this.updateFishing(dt);
+      // 雷电与避雷针（批次 83）：脉冲倒计时 + 雷暴里的打雷节奏
+      this.updateLightning(dt);
       // 告示牌上的字（B12）：每 0.25 秒对一次账。
       // 为什么要定期对账而不是"事件驱动"：会改变这趟结果的三件事里有两件**没有事件**——
       // ① 区块流式加载/卸载（玩家走过去）；② 那格的光照变了（太阳落了、旁边点了火把）。
@@ -6146,6 +6345,26 @@ class App {
   /** 是否正在挖掘（按住左键/长按屏幕且对着可破坏方块）——验收脚本用 */
   get isBreaking(): boolean {
     return this.breakProgress > 0 && this.breakingKey !== '';
+  }
+
+  /**
+   * 避雷针与雷电的状态（批次 83）——验收脚本用。
+   *
+   * `rods` 是索引里记着几根避雷针、`pulsing` 是此刻在输出信号的根数、
+   * `strikeIn` 是下一次打雷还有几秒（只在雷暴里走）。
+   */
+  get lightningState(): { rods: number; pulsing: number; strikeIn: number; thunder: boolean } {
+    return {
+      rods: this.lightningRods.size,
+      pulsing: this.rodPulses.activeCount,
+      strikeIn: Number(Math.max(0, this.strikeTimer).toFixed(2)),
+      thunder: this.weather.current === 'thunder',
+    };
+  }
+
+  /** 立刻在这里打一道雷（验收脚本用，省掉"等雷暴"） */
+  strikeLightningNow(): void {
+    this.strikeLightning();
   }
 
   /**

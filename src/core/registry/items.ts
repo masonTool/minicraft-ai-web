@@ -803,6 +803,8 @@ const FUNCTIONAL = new Set<number>([
   Block.TRIPWIRE_HOOK,
   // TNT（批次 56）：红石元件，同页
   Block.TNT,
+  // 避雷针（批次 83）：它按"被雷劈"输出信号，是纯正的红石元件，与阳光传感器同页
+  Block.LIGHTNING_ROD,
   // 花盆（批次 52）：原版把它摆在"装饰"页（1.19 起并进了功能页），
   // 本项目没有装饰页——它是"右键往里种一株"的功能方块，与营火/熔炉同一类
   Block.FLOWER_POT,

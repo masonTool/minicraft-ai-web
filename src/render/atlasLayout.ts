@@ -869,6 +869,8 @@ export const TILE_ORDER = [
   'polished_blackstone',
   'blackstone_bricks',
   'gilded_blackstone',
+  // ---- 避雷针（批次 83）：一根铜色的杆（形状由 `lightningRodBox` 表达）
+  'lightning_rod',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

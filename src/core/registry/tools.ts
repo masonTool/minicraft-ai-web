@@ -310,6 +310,8 @@ requirePickaxe(0, [
   Block.BLACKSTONE_BRICKS,
   Block.GILDED_BLACKSTONE,
   // 红石元件里需要镐的那几个
+  // 避雷针（批次 83）：铜做的，要镐但不挑等级（与铜块同档）
+  Block.LIGHTNING_ROD,
   Block.REDSTONE_LAMP,
   Block.PISTON,
   Block.STICKY_PISTON,

@@ -22,6 +22,7 @@ import { CREATIVE_ITEMS } from '../src/core/registry/items.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
 import { BIOMES } from '../src/core/gen/Biome.ts';
 import { STRUCTURE_KINDS } from '../src/core/gen/Structures.ts';
+import { NETHER_STRUCTURE_KINDS } from '../src/core/gen/Bastion.ts';
 import { ENCHANTMENTS } from '../src/core/registry/enchantments.ts';
 import { EFFECTS } from '../src/core/survival/StatusEffects.ts';
 import { DRINKABLE } from '../src/core/registry/potions.ts';
@@ -149,9 +150,11 @@ const rows: readonly Row[] = [
   {
     label: '结构',
     spec: SPEC.structures,
-    now: STRUCTURE_KINDS.length,
+    // 下界的结构（堡垒遗迹）走自己的放置系统，不在 `STRUCTURE_KINDS` 里——
+    // 台账要连它一起数，否则"做了 8 种"这件事在这里永远是 7
+    now: STRUCTURE_KINDS.length + NETHER_STRUCTURE_KINDS.length,
     basis: '原版 1.18 主世界+下界+末地可探索结构约 30 种',
-    gap: '神殿/哨塔/海底遗迹/堡垒遗迹/化石/冰屋',
+    gap: '神殿/哨塔/海底遗迹/化石/冰屋/下界要塞',
   },
   {
     label: '树种（地物）',
@@ -214,7 +217,7 @@ const rows: readonly Row[] = [
     spec: SPEC.redstone,
     now: redstoneElements,
     basis: '原版 1.18 参与充能/传导/负载的元件（同族木材只算一种）',
-    gap: '音符盒/目标方块/发射器/投掷器/漏斗/四种铁轨/TNT/红石矿石/避雷针/测重压力板/陷阱箱',
+    gap: '音符盒/目标方块/四种铁轨/红石矿石/测重压力板/陷阱箱',
   },
   {
     label: '维度',

@@ -68,6 +68,15 @@ export interface RedstoneWorld {
    * 不传就当 0（室内/夜里）——离线测试不必为了它搭一套光照。
    */
   getSkyLight?(x: number, y: number, z: number): number;
+  /**
+   * 这一格避雷针**此刻**是否被雷劈中（批次 83）。
+   *
+   * 与 `getSkyLight` 同一条口径：**引擎只做判定，外部世界的量交给注入的接口**。
+   * "被劈中"是一段 8 tick 的脉冲，由主程序拿着引信表（`world/Lightning.ts` 的 `RodPulses`）
+   * 逐帧递减，到点后主动喊一次 `onBlockChanged` 让电路重算。
+   * 不传就当"没被劈"（离线测试不必为了它搭一套天气）。
+   */
+  isRodPowered?(x: number, y: number, z: number): boolean;
 }
 
 /**
@@ -110,6 +119,10 @@ export function isRedstoneComponent(id: number): boolean {
     // 但吐出什么、吐到哪去都在容器那边，引擎只负责判定脉冲）
     case Block.DROPPER:
     case Block.DISPENSER:
+    // 避雷针（批次 83）：被雷劈中的那 8 tick 输出 15。
+    // 它是**第三种"外部世界决定输出"的电源**（前两种是阳光传感器与绊线），
+    // 所以"有没有被劈"同样通过注入的接口问（`isRodPowered?`），引擎自己不产生事件
+    case Block.LIGHTNING_ROD:
       return true;
     default:
       return false;
@@ -568,6 +581,18 @@ export class RedstoneEngine {
             }
           }
           if (scan.powered) {
+            strengths.set(key, 15);
+            sources.push({ x: nx, y: ny, z: nz });
+          }
+          break;
+        }
+        case Block.LIGHTNING_ROD: {
+          // 避雷针（批次 83）：被劈中的 8 tick 里输出 15（原版 8 tick = 0.4 秒）。
+          // 与阳光传感器一样，**两头都要写**：来时点亮、脉冲结束后自动灭——
+          // 只写"亮"的话，掉电之后那个 powered 位会永远留着（方块表上看不出来）
+          const powered = world.isRodPowered?.(nx, ny, nz) === true;
+          if (isPowered(state) !== powered) world.setState(nx, ny, nz, withPowered(state, powered));
+          if (powered) {
             strengths.set(key, 15);
             sources.push({ x: nx, y: ny, z: nz });
           }

@@ -53,6 +53,11 @@ export type DamageCause =
   | 'explosion'
   /** 弹射物（箭矢）：弹射物保护要靠它区分；骷髅目前还是近战，暂时没有来源 */
   | 'projectile'
+  /**
+   * 雷击（批次 83）：**无视护甲**（原版 `#bypasses_armor` 里有 lightning_bolt），
+   * 所以它同时是"第一个进了 `ARMOR_BYPASS_CAUSES` 的外部伤害"。
+   */
+  | 'lightning'
   | 'generic';
 
 /** 每 tick 从主循环传入的环境快照 */

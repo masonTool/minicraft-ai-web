@@ -31,6 +31,8 @@ export type SoundKind =
   | 'shear'
   /** 打火石点火：铁片刮擦的"擦"声（I12） */
   | 'flint'
+  /** 雷声（批次 83）：低频长噪声，远远地滚过来 */
+  | 'thunder'
   /** 传送门：低频的"嗡"（进出传送门时响一声，K8） */
   | 'portal'
   | 'mob_zombie'
@@ -80,6 +82,7 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   fall: { duration: 0.24, gain: 0.45, noise: 0.5, freqFrom: 140, freqTo: 70, type: 'triangle', filter: 700, filterQ: 0.9, attack: 0.002, release: 0.22, thump: 55 },
   door: { duration: 0.4, gain: 0.4, noise: 0.55, freqFrom: 160, freqTo: 240, type: 'sawtooth', filter: 800, filterQ: 3.5, attack: 0.01, release: 0.36 },
   explode: { duration: 1.1, gain: 0.7, noise: 1, freqFrom: 120, freqTo: 40, type: 'triangle', filter: 500, filterQ: 0.5, attack: 0.002, release: 1.05, thump: 45 },
+  thunder: { duration: 1.8, gain: 0.85, noise: 1, freqFrom: 120, freqTo: 48, type: 'sine', filter: 320, filterQ: 0.5, attack: 0.02, release: 1.7 },
   splash: { duration: 0.5, gain: 0.4, noise: 1, freqFrom: 900, freqTo: 300, type: 'triangle', filter: 2200, filterQ: 0.5, attack: 0.004, release: 0.46 },
   click: { duration: 0.07, gain: 0.3, noise: 0.15, freqFrom: 900, freqTo: 700, type: 'square', filter: 3000, filterQ: 1, attack: 0.001, release: 0.06 },
   // 咀嚼声：短促的低频噪声，进食过程中每嚼一口响一次

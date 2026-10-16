@@ -985,6 +985,14 @@ const BLACKSTONE_RECIPES: readonly Recipe[] = [
   },
 ];
 
+/** 避雷针（批次 83）：3 个铜锭竖着排（原版图案） */
+const LIGHTNING_ROD_RECIPE: Recipe = {
+  kind: 'shaped',
+  result: { id: Block.LIGHTNING_ROD, count: 1 },
+  pattern: ['C', 'C', 'C'],
+  key: { C: Item.COPPER_INGOT },
+};
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...CONTAINER_RECIPES,
@@ -1006,6 +1014,7 @@ export const RECIPES: readonly Recipe[] = [
   ...FOOD_RECIPES,
   ...ENCHANT_RECIPES,
   ...BLACKSTONE_RECIPES,
+  LIGHTNING_ROD_RECIPE,
 ];
 
 interface Normalized {

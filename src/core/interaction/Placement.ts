@@ -133,6 +133,11 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
   // 点侧面 → 朝放置者（原版是"最近看向方向的反面"，常见手势下结果一致且不必知道俯仰角）。
   // ⚠️ 给六向的方块**不能**是"逻辑只读水平朝向"的那一族（熔炉/活塞/侦测器用 `facesPlayer`）。
   if (def.facesNormal) {
+    // ⚠️ 避雷针（批次 83）还要过一道"挂不挂得住"：它贴在命中的那一面上，
+    // 所以**背后那一格必须是实心**（原版也是挂不住就不给放）。
+    // 与火把那条不一样：火把要么落地要么贴墙，而避雷针可能**贴在天花板上朝下**，
+    // 这时支撑在**上面**——所以判据只能写"沿法线反方向退一格"，不能写"下方"。
+    if (def.shape === 'lightning_rod' && !blockDef(input.blockAt(-nx, -ny, -nz)).solid) return null;
     if (ny > 0) return { state: withSixFacing(0, 'up') };
     if (ny < 0) return { state: withSixFacing(0, 'down') };
     return { state: withSixFacing(0, facingFromYaw(input.yaw)) };

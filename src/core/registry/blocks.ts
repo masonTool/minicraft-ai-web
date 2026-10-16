@@ -2486,6 +2486,33 @@ const BLACKSTONE_FAMILY_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 避雷针（批次 83，B15 的一部分 + 红石元件表收口）。
+ *
+ * 它是"红石元件表里最后一件纯机制件"：**输出不由玩家开关决定，而由天气决定**——
+ * 前面两种"外部世界决定输出"的电源是阳光传感器（看天光）与绊线（看实体），
+ * 这是第三种（看打雷）。所以它的朝向必须精确记下来：**闪电打在它身上**，
+ * 而"打在哪儿"要按它伸出那一面算（见 `world/Lightning.ts`）。
+ *
+ * 六向朝向走共享编码 `sixFacing`（与漏斗/投掷器/木桶同一套），
+ * 放置规则复用 `facesNormal`（贴在命中的那一面上）。
+ * ⚠️ 原版的避雷针会**氧化**（四档铜）——本项目不做（记在 TASKS B15）。
+ */
+export const LIGHTNING_ROD_ID = 532;
+
+const LIGHTNING_ROD_SPEC: BlockSpec = {
+  id: LIGHTNING_ROD_ID,
+  name: 'minecraft:lightning_rod',
+  shape: 'lightning_rod',
+  tiles: ['lightning_rod', 'lightning_rod', 'lightning_rod'],
+  // 贴在命中的那一面上（六向），与木桶同一条规则
+  facesNormal: true,
+  // 铜做的、不挡光、不算实心（2/16 细杆）
+  lightOpacity: 0,
+  solid: false,
+  opaque: false,
+};
+
 const SPECS: readonly BlockSpec[] = [
   ...BASE_SPECS,
   ...WOOL_SPECS,
@@ -2537,6 +2564,7 @@ const SPECS: readonly BlockSpec[] = [
   ...BED_SPECS,
   ...SIGN_SPECS,
   ...BLACKSTONE_FAMILY_SPECS,
+  LIGHTNING_ROD_SPEC,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2833,6 +2861,7 @@ export const Block = {
   POLISHED_BLACKSTONE: POLISHED_BLACKSTONE_ID,
   BLACKSTONE_BRICKS: BLACKSTONE_BRICKS_ID,
   GILDED_BLACKSTONE: GILDED_BLACKSTONE_ID,
+  LIGHTNING_ROD: LIGHTNING_ROD_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
   SPRUCE_SAPLING: WOOD_SAPLING_ID_START + 2,
@@ -3292,6 +3321,8 @@ HARDNESS.set(Block.BLACKSTONE, 1.5);
 HARDNESS.set(Block.POLISHED_BLACKSTONE, 1.5);
 HARDNESS.set(Block.BLACKSTONE_BRICKS, 1.5);
 HARDNESS.set(Block.GILDED_BLACKSTONE, 1.5);
+// 避雷针（批次 83）：原版硬度 3、徒手挖不动（要镐）
+HARDNESS.set(Block.LIGHTNING_ROD, 3);
 HARDNESS.set(Block.MAGMA_BLOCK, 0.5);
 HARDNESS.set(Block.CRIMSON_NYLIUM, 0.4);
 HARDNESS.set(Block.WARPED_NYLIUM, 0.4);
