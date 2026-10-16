@@ -51,8 +51,13 @@ export interface RedstoneWorld {
   hasEntityAt(x: number, y: number, z: number): boolean;
 }
 
-/** 参与红石计算的方块（洪泛时只走这些，避免把整片地形都搜一遍） */
-function isRedstoneComponent(id: number): boolean {
+/**
+ * 参与红石计算的方块（洪泛时只走这些，避免把整片地形都搜一遍）。
+ *
+ * 导出是为了让"红石元件有多少种"这个数**量得出来**（`tools/coverage-report.ts` 扫全表），
+ * 而不是在文档里手抄一个迟早会漂的数字。
+ */
+export function isRedstoneComponent(id: number): boolean {
   switch (id) {
     case Block.REDSTONE_WIRE:
     case Block.REDSTONE_TORCH:

@@ -498,8 +498,6 @@ const PLANTERS: Record<TreeKind, Planter> = {
   },
 };
 
-
-
 // ---------------------------------------------------------------- 各群系的地物配置
 
 interface BiomeFeature {
@@ -775,20 +773,13 @@ export function plantTree(
   PLANTERS[kind](writer, world, x, z, new PositionalRng(x, z, salt), woodFor(kind));
 }
 
-/** 11 种树的清单（测试遍历用） */
-export const TREE_KINDS: readonly TreeKind[] = [
-  'oak',
-  'big_oak',
-  'birch',
-  'spruce',
-  'mega_spruce',
-  'jungle',
-  'mega_jungle',
-  'acacia',
-  'dark_oak',
-  'swamp_oak',
-  'bamboo',
-];
+/**
+ * 11 种树的清单（测试遍历用 + 覆盖度台账用）。
+ *
+ * **从 `PLANTERS` 的键推出来**，不再手抄一份：手抄的那份在加树种时必然漏改，
+ * 而"漏了哪一种"这种错在小样本里看不出来（树照样长，只是少一种）。
+ */
+export const TREE_KINDS: readonly TreeKind[] = Object.keys(PLANTERS) as TreeKind[];
 
 /**
  * 一个区块的地物总数统计（供测试与调试面板使用）
