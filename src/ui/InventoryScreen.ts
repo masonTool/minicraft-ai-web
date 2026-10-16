@@ -38,6 +38,15 @@ import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 // 快速移动（批次 127）：Shift+左键的规则是纯逻辑（`core/container/QuickMove.ts`），
 // 界面只负责把"哪一格 / 开着哪个容器 / 容器多少格"交给它
 import { PLAYER_FILL_ORDER, fitCount, quickMove } from '../core/container/QuickMove.ts';
+// 光标上那几件事（批次 128）：双击收集 / 拖拽分配 / 数字键换槽 / 丢出——
+// 规则同样在纯模块里，界面只交坐标（见 `core/container/CursorActions.ts`）
+import {
+  distributeEvenly,
+  dropCount,
+  gatherSameItems,
+  placeOneEach,
+  swapWithSlot,
+} from '../core/container/CursorActions.ts';
 import { CHEST_SIZE } from '../core/container/Chest.ts';
 import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, Anvil } from '../core/container/Anvil.ts';
 import {
@@ -171,6 +180,13 @@ export interface InventoryScreenHooks {
     playerLevel: number;
     consumeLevels: (levels: number) => boolean;
   };
+  /**
+   * **把手上/某一格的东西丢进世界**（批次 128，Q / Ctrl+Q / 点界面外）。
+   *
+   * 界面不知道玩家站在哪、也没法造掉落物实体，所以只报"丢哪件、丢几件"，
+   * 真正生成掉落物的是主程序（它握着 `spawnDrop`）。
+   */
+  onDrop?: (itemId: number, count: number) => void;
 }
 
 interface SlotBinding {
@@ -193,6 +209,9 @@ const CONTAINER_REFRESH_INTERVAL = 0.1;
  *     于是在合成格上按住不动就是"连续放材料"（批量放置），在箱子里按住就是"连续取一个"。
  * 桌面鼠标完全不走这条路径，行为与原来一致。
  */
+/** 双击的判定窗口（毫秒，批次 128）：同一格在这个窗口内点第二下 = 双击收集 */
+const DOUBLE_CLICK_MS = 400;
+
 export const TOUCH_LONG_PRESS_MS = 260;
 const TOUCH_REPEAT_MS = 170;
 
@@ -336,6 +355,14 @@ export class InventoryScreen {
 
   private held: ItemStack | null = null;
   private open = false;
+  /** 鼠标**悬停**在哪一格（批次 128：数字键 1-9 / F 作用在它上面） */
+  private hovered: { key: string; source: SlotSource; index: number } | null = null;
+  /** 这一次拖拽经过的槽位（批次 128：左键均分 / 右键每格一个） */
+  private dragSlots: { source: SlotSource; index: number }[] = [];
+  /** 拖拽用的按键（0 = 左、2 = 右；松手后应用分配） */
+  private dragButton: 0 | 2 | null = null;
+  /** 上一次点的是哪一格 + 什么时候（批次 128：双击收集） */
+  private lastClick: { key: string; at: number } | null = null;
 
   constructor(
     private readonly atlas: TextureAtlas,
@@ -1110,7 +1137,16 @@ export class InventoryScreen {
 
       // 鼠标：左键 / 右键语义保持不变
       if (event.pointerType === 'mouse') {
-        // Shift+左键 = 快速移动（批次 127，对齐原版）；触摸端没有 Shift，走下面的长按那套
+        // **拖拽分配**（批次 128，对齐原版）：按下先记起点，经过的槽位由 `mouseenter`
+        // 收集，松手时统一结算。普通点击（没经过别的槽）什么都不多做
+        if (event.button === 0 || event.button === 2) {
+          const binding = this.bindings.get(key);
+          if (binding) {
+            this.dragButton = event.button === 0 ? 0 : 2;
+            this.dragSlots = [{ source: binding.source, index: binding.index }];
+          }
+        }
+        // Shift+左键 = 快速移动（批次 127）；触摸端没有 Shift，走下面的长按那套
         this.activateSlot(key, event.button, event.shiftKey);
         return;
       }
@@ -1134,6 +1170,15 @@ export class InventoryScreen {
   ): HTMLDivElement {
     slot.dataset.key = key;
     this.bindings.set(key, { element: slot, source, index, takeOnly });
+    // 悬停（批次 128）：数字键 1-9 / F 作用在"鼠标悬停的那一格"上；
+    // 拖拽时经过的槽位也在这里收集（松手时统一结算分配）
+    slot.addEventListener('mouseenter', () => {
+      this.hovered = { key, source, index };
+      if (this.dragButton !== null) this.dragSlots.push({ source, index });
+    });
+    slot.addEventListener('mouseleave', () => {
+      if (this.hovered?.key === key) this.hovered = null;
+    });
     return slot;
   }
 
@@ -1146,16 +1191,101 @@ export class InventoryScreen {
       this.heldElement.style.top = `${event.clientY}px`;
     });
 
+    // 松手：把这一趟拖过的槽位结算掉（批次 128）
+    document.addEventListener('pointerup', () => {
+      const button = this.dragButton;
+      const slots = this.dragSlots;
+      this.dragButton = null;
+      this.dragSlots = [];
+      // 只经过起点那一格 = 普通点击，已经由 `pointerdown` 处理过了
+      if (button === null || slots.length <= 1) return;
+      this.held = button === 0 ? distributeEvenly(this.held, slots) : placeOneEach(this.held, slots);
+      this.refresh();
+    });
+
+    // 点界面外：**把手上的东西丢进世界**（批次 128，对齐原版；
+    // 原来是"放回背包"，那与原版不符——原版是直接丢出去）
     this.root.addEventListener('pointerdown', (event) => {
       if (event.target !== this.root) return;
       event.preventDefault();
-      this.returnHeldToInventory();
+      if (this.held) {
+        this.hooks.onDrop?.(this.held.id, this.held.count);
+        this.held = null;
+      }
+      this.refresh();
     });
 
     document.addEventListener('keydown', (event) => {
-      if (event.code !== 'Escape') return;
-      this.close();
+      if (!this.open) return;
+      if (event.code === 'Escape') {
+        this.close();
+        return;
+      }
+      // 数字键 1-9 / F：与快捷栏 / 副手交换（批次 128，作用在悬停的那一格）
+      const swapKey = swapKeyOf(event);
+      if (swapKey !== null) {
+        if (this.hovered && swapWithSlot(this.inventory, this.hovered, swapKey)) this.refresh();
+        return;
+      }
+      // Q / Ctrl+Q：丢 1 件 / 丢整叠（批次 128）
+      if (event.code === 'KeyQ') {
+        event.preventDefault();
+        this.dropFromCursor(event.ctrlKey || event.metaKey);
+      }
     });
+  }
+
+  /**
+   * **丢出**（批次 128，原版 Q / Ctrl+Q）：**悬停的那一格优先**，其次光标上拿着的那一叠。
+   *
+   * 真正生成掉落物的是主程序（`hooks.onDrop`）——界面不知道玩家站在哪。
+   * ⚠️ 主程序没接这个钩子时**什么都不做**：宁可丢不出去，也不能把东西凭空吃掉。
+   */
+  private dropFromCursor(wholeStack: boolean): void {
+    const binding = this.hovered ? this.bindings.get(this.hovered.key) : undefined;
+    const stack = binding ? binding.source.get(binding.index) : this.held;
+    const count = dropCount(stack, wholeStack);
+    if (!stack || count <= 0 || !this.hooks.onDrop) return;
+    this.hooks.onDrop(stack.id, count);
+    if (binding) {
+      binding.source.set(binding.index, stack.count > count ? { ...stack, count: stack.count - count } : null);
+    } else if (this.held) {
+      this.held = this.held.count > count ? { ...this.held, count: this.held.count - count } : null;
+    }
+    this.refresh();
+  }
+
+  /**
+   * **双击收集**（批次 128，原版）：把点中那一格**所在的那个容器**里的同类物品
+   * 凑满一整堆抓到光标上（凑不满就凑多少算多少）。
+   *
+   * @returns 有没有真的收集到（false → 退回普通点击）
+   */
+  private gatherFrom(binding: SlotBinding): boolean {
+    const source = binding.source;
+    const first = source.get(binding.index);
+    const itemId = this.held?.id ?? first?.id;
+    if (itemId === undefined) return false;
+    const extras = this.held ? stackExtras(this.held) : first ? stackExtras(first) : {};
+    // 先像普通左键那样"把点中的那一叠拿起来"，再从整个容器里凑同类
+    if (!this.held && first) {
+      this.held = first;
+      source.set(binding.index, null);
+    }
+    const before = this.held?.count ?? 0;
+    this.held = gatherSameItems(source, this.slotCountFor(source), itemId, this.held, extras);
+    if ((this.held?.count ?? 0) === before) return false;
+    this.refresh();
+    return true;
+  }
+
+  /** 某个来源一共有多少格（按注册进界面的绑定数一遍，与快速移动那边同一个做法） */
+  private slotCountFor(source: SlotSource): number {
+    let max = 0;
+    for (const binding of this.bindings.values()) {
+      if (binding.source === source) max = Math.max(max, binding.index + 1);
+    }
+    return max;
   }
 
   /**
@@ -1166,6 +1296,15 @@ export class InventoryScreen {
    * 触摸端没有 Shift 键，所以长按那套（右键语义）完全不受影响。
    */
   private activateSlot(key: string, button: number, shift = false): void {
+    // **双击收集**（批次 128）：同一格在 400ms 内点第二下 → 把容器里的同类凑满一整堆。
+    // ⚠️ 放在最前面：双击的那一下不该再按"普通左键"走一遍（那会先把光标上的东西放下）
+    const now = performance.now();
+    const isDouble = this.lastClick?.key === key && now - this.lastClick.at <= DOUBLE_CLICK_MS;
+    this.lastClick = { key, at: now };
+    if (button === 0 && !shift && isDouble) {
+      const binding = this.bindings.get(key);
+      if (binding && !binding.takeOnly && this.gatherFrom(binding)) return;
+    }
     if (shift && button === 0) {
       if (key === 'craft:result') this.handleResultClick(true);
       else this.quickMoveSlot(key);
@@ -2025,4 +2164,14 @@ function matchesQuery(itemId: number, query: string): boolean {
   if (itemLabel(itemId).includes(query)) return true;
   if (itemName(itemId).toLowerCase().includes(lower)) return true;
   return String(itemId) === query;
+}
+
+/** 数字键 / F：把 `KeyboardEvent` 归一成 `CursorActions.slotForKey` 认的键（批次 128） */
+function swapKeyOf(event: KeyboardEvent): string | null {
+  if (event.code === 'KeyF') return 'f';
+  if (event.code.startsWith('Digit')) {
+    const digit = event.code.slice('Digit'.length);
+    if (digit >= '1' && digit <= '9') return digit;
+  }
+  return null;
 }

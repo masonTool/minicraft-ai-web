@@ -1234,6 +1234,9 @@ class App {
         onTrade: (villager, index) => void this.performTrade(villager, index),
         // 熔炉产物被取空时结算烧炼经验（I5）
         onFurnaceXp: (amount) => this.awardXp(amount),
+        // 丢出（批次 128）：Q / Ctrl+Q / 点界面外 —— 界面只报"丢哪件、丢几件"，
+        // 真正造掉落物的是这里（它才知道玩家站在哪）
+        onDrop: (itemId, count) => this.spawnDrop(itemId, count, this.physics.x, this.physics.y + 1.2, this.physics.z),
         // 铁砧（H8）：同样只需要等级与扣等级的出口
         anvilContext: () => ({
           playerLevel: this.experience.level,
