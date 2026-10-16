@@ -58,8 +58,16 @@ class TestClient {
     return this.mailbox.splice(index, 1)[0];
   }
 
-  /** 等待某类型消息出现（最多 timeout 毫秒） */
-  async wait(type, timeout = 1500) {
+  /**
+   * 等待某类型消息出现（最多 timeout 毫秒）。
+   *
+   * ⚠️ 默认超时从 1500 提到 4000（批次 99）：**刚 spawn 起来的服务端**要等
+   * Node 起进程 + 绑端口 + 建 handler，机器一忙就可能超过 1.5 秒——
+   * 于是"Alice 收到 welcome"偶发红、连带四条依赖它的断言一起红（重跑又绿）。
+   * 门禁"时红时绿"比慢一秒危险得多：它会让人养成**习惯性重跑**，
+   * 那个习惯一养成，真红也会被当成偶发。
+   */
+  async wait(type, timeout = 4000) {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
       const message = this.take(type);
@@ -92,7 +100,7 @@ server.stderr.on('data', (chunk) => {
 
 // 等服务端监听端口
 let listening = false;
-for (let i = 0; i < 50 && !listening; i++) {
+for (let i = 0; i < 100 && !listening; i++) {
   await sleep(100);
   listening = serverOutput.includes('已启动');
 }
@@ -101,19 +109,32 @@ check('服务端启动成功', listening, serverOutput.trim().split('\n').slice(
 try {
   // ---------------------------------------------------------------- 加入与广播
   console.log('\n[加入 / 位置广播]');
+  /**
+   * 加入并等 welcome。
+   *
+   * 为什么要"重发一次"：`join` 可能在服务端的连接 handler 完全就绪之前发出去，
+   * 那条消息就**永远没人接**（不是服务端的 bug，而是"测试比服务端快"）。
+   * 第一次等 2.5 秒还没回就重发一次 join——真实玩家重连也是这个行为。
+   */
+  async function joinAndWaitWelcome(client, name, x, y, z) {
+    await client.ready();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      client.send({ t: 'join', name, x, y, z });
+      const welcome = await client.wait('welcome', attempt === 0 ? 2500 : 4000);
+      if (welcome) return welcome;
+    }
+    return null;
+  }
+
   const alice = new TestClient('Alice');
-  await alice.ready();
-  alice.send({ t: 'join', name: 'Alice', x: 10, y: 70, z: 20 });
-  const welcomeA = await alice.wait('welcome');
+  const welcomeA = await joinAndWaitWelcome(alice, 'Alice', 10, 70, 20);
   check('Alice 收到 welcome', welcomeA !== null);
   check('welcome 带服务端种子', welcomeA?.seed === 20261014, `${welcomeA?.seed}`);
   check('welcome 带自己的 id', welcomeA?.id === 1, `${welcomeA?.id}`);
   check('welcome 初始玩家表只含自己', (welcomeA?.players ?? []).length === 1, `${welcomeA?.players?.length}`);
 
   const bob = new TestClient('Bob');
-  await bob.ready();
-  bob.send({ t: 'join', name: 'Bob', x: -5, y: 70, z: 8 });
-  const welcomeB = await bob.wait('welcome');
+  const welcomeB = await joinAndWaitWelcome(bob, 'Bob', -5, 70, 8);
   check('Bob 收到 welcome 且能看到 Alice', (welcomeB?.players ?? []).some((p) => p.name === 'Alice'), JSON.stringify(welcomeB?.players));
 
   const aliceSeesBob = await alice.wait('player');
@@ -145,13 +166,13 @@ try {
   check('广播里带 by（发送者 id）', blockMessage?.by === 1, `${blockMessage?.by}`);
 
   alice.send({ t: 'block', x: 101, y: 65, z: -50, id: 259, state: 6, dimension: 'overworld' });
-  await sleep(100);
+  // 等 Bob 真的收到这条广播再让 Carol 加入：`await sleep(100)` 也有"服务端还没处理完"
+  // 的风险（那时 Carol 的 welcome 里就少一条改动，而且是**偶发**的）
+  await bob.wait('block');
 
   // 新玩家加入：应当在 welcome 里拿到**已有的方块改动**（这是"区块同步"的全部内容）
   const carol = new TestClient('Carol');
-  await carol.ready();
-  carol.send({ t: 'join', name: 'Carol', x: 0, y: 80, z: 0 });
-  const welcomeC = await carol.wait('welcome');
+  const welcomeC = await joinAndWaitWelcome(carol, 'Carol', 0, 80, 0);
   check('新玩家拿到玩家列表', (welcomeC?.players ?? []).length === 3, `${welcomeC?.players?.length}`);
   check(
     '新玩家拿到历史方块改动（含状态）',
@@ -183,8 +204,12 @@ try {
   check('未知消息类型会被回错误', unknownType !== null, JSON.stringify(unknownType));
 
   alice.send({ t: 'block', x: 'abc', y: 1, z: 1, id: 1 });
-  await sleep(80);
-  check('非法坐标不会写进世界快照', true);
+  // ⚠️ 这里原来写的是 `check('非法坐标不会写进世界快照', true)`——**永远为真**，
+  // 什么也没验（标题说了它没做的事）。真正的判据是"新玩家拿到的快照里没有它"。
+  const dave = new TestClient('Dave');
+  const welcomeD = await joinAndWaitWelcome(dave, 'Dave', 3, 70, 3);
+  check('非法坐标不会写进世界快照', welcomeD !== null && !(welcomeD.edits ?? []).some((e) => e[3] === 1 && e[0] === 1));
+  dave.close();
 
   check('服务端仍然活着', server.exitCode === null, `exitCode=${server.exitCode}`);
 
