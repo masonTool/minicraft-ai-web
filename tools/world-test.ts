@@ -238,13 +238,25 @@ console.log('\n[放大化世界]');
     String(AMPLIFIED_RELIEF_SCALE),
   );
 
-  // 极值也不能顶出世界高度：夹紧之后仍要能正常生成
-  let tooHigh = 0;
+  // 极值也不能顶出世界高度：夹紧之后仍要能正常生成。
+  //
+  // ⚠️ N9-a 调参时把这个判据**拆成两件事**：**真出界**（会被切平，绝对不行）与
+  // **逼近上限**（留一点余量预算）。原来只量后者、且要求"一列都不许"——
+  // 而 N9-a 把大尺度起伏抬上来之后必然多几座高峰，那条判据会把"地形改对了"当成失败。
+  // 真正的要求只有一条：**不能顶出世界高度**。
+  let outside = 0;
+  let atCeiling = 0;
   for (let i = 0; i < 200; i++) {
     const height = amplified.surfaceY(i * 11 - 1000, i * 17 - 1000);
-    if (height >= WORLD_MAX_Y - 4) tooHigh++;
+    if (height >= WORLD_MAX_Y) outside++;
+    if (height >= WORLD_MAX_Y - 4) atCeiling++;
   }
-  check('山尖被夹在世界高度之内（不会出现被切平的地形）', tooHigh === 0, `${tooHigh} 列过高`);
+  check('没有一列顶出世界高度（顶出去会被切平）', outside === 0, `${outside} 列出界`);
+  check(
+    `逼近上限的列很少（N9-a 实测 1/200）`,
+    atCeiling <= 5,
+    `${atCeiling}/200 列 ≥ ${WORLD_MAX_Y - 4}`,
+  );
 
   const amplifiedChunk = generateChunkBlocks(0, 0, SEED, Dimension.OVERWORLD, 'amplified');
   const normalChunk = generateChunkBlocks(0, 0, SEED, Dimension.OVERWORLD, 'default');

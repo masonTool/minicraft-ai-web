@@ -67,30 +67,36 @@ const HIGH_GROUND = SEA_LEVEL + 20;
 const BUDGETS = {
   /**
    * 判据 1：相邻网格节点高差 ≥ 8 格的比例（%）。**越小越好。**
-   * 写下这批时的实测：default 60.2 / amplified 71.8（平均 23.45 / 39.10 格，最大 243 / 343）
+   * 调前（批次 101，只修了公式分家）→ 调后（批次 102，N9-a 调参）：
+   *   default    60.2% → **58.3%**（平均 23.45 → 18.98 格，最大 243 → 234）
+   *   amplified  71.8% → **66.0%**（平均 39.10 → 27.48 格）
    */
-  roughShare: { default: 62, amplified: 74 },
+  roughShare: { default: 60, amplified: 68 },
   /**
    * 判据 2：最大连通高地的采样点数。**越大越好（"一整片山"）。**
-   * 写下这批时的实测：default 2787 / amplified 4456
+   * 调前 → 调后：default 2787 → **3201**、amplified 4456 → **6331**（占高地 93%）
    */
-  largestHighland: { default: 2700, amplified: 4300 },
+  largestHighland: { default: 3100, amplified: 6200 },
   /**
    * 判据 3：最大群系斑块的采样点数。**越大越好（"成片的树林"）。**
-   * 写下这批时的实测：default 512 / amplified 659
+   * 调前 → 调后：default 512 → **793**、amplified 659 → **1116**
    */
-  largestBiomePatch: { default: 500, amplified: 640 },
+  largestBiomePatch: { default: 770, amplified: 1090 },
   /**
    * 判据 4：每一列的平均实心段数（理想 1 段 = 一整块地形）。**越小越好。**
-   * 写下这批时的实测：default 1.57（最多 4 段）/ amplified 1.45（最多 3 段）
+   * 调前 → 调后：default 1.57 → **1.56**、amplified 1.45 → **1.45**（最多都是 4 段）。
+   * ⚠️ 这一条**几乎没动**：它量的是"密度场在竖直方向被切了几刀"，
+   * 而 N9-a 调的是三维细节与几个气候噪声的**八度权重**、并按离地表的距离衰减
+   * （衰减在 0.5 处封底，不能封到 0——封 0 会造出"死区"，判据 1 反而变差，见
+   *  `OverworldGenerator.DETAIL_FADE_FLOOR` 的注释）。要再往下压得动别的旋钮。
    */
-  meanRuns: { default: 1.65, amplified: 1.55 },
+  meanRuns: { default: 1.6, amplified: 1.49 },
   /**
    * 判据 5：能落地（脚下实心 + 头顶有空间）的列占比（%）。**越大越好。**
-   * 写下这批时的实测：default 45.5 / amplified 35.4 —— **一半以上站不住**，
-   * 这正是"树浮在半空 / 埋进山体"的来源，也是 N9 的 a/b 两项要一起抬上去的数。
+   * 调前 → 调后：default 45.5% → **46.4%**、amplified 35.4% → **42.4%**
+   * （放大化涨得多，因为它的起伏原本更容易把落点甩到空中/山体里）。
    */
-  usableLanding: { default: 44, amplified: 34 },
+  usableLanding: { default: 45, amplified: 41 },
 };
 
 interface Grid {

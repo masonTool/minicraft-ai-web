@@ -54,6 +54,26 @@ const CHANNELS = 5;
 const DEEPSLATE_TOP = 0;
 const DEEPSLATE_FULL = -8;
 
+/**
+ * 三维细节的**贴地衰减**（N9-a）：离目标地表越近，`detail3d` 的权重越小。
+ *
+ * 为什么需要它：`detail3d` 的幅度是按"山"的尺度折算的（×26 后最大 ±47 格），
+ * 而它的频率是 4~32 格那一档 —— **幅度按山的尺度、频率按 4 格的尺度**，
+ * 于是相邻几格的地表高度能差十几格，看起来是一片尖刺而不是山脊（这就是 N9 的"碎"）。
+ * 衰减之后，玩家看到的形状更多由**二维样条那张面**决定（那是按山的尺度做的），
+ * 三维细节退到它该在的地方：深处（悬崖/悬垂/洞穴口）。
+ *
+ * ⚠️⚠️ **下限不能是 0**：第一版把正地表处的权重设成 0，结果**判据 1 反而从 60.2% 涨到 65.8%** ——
+ * 因为那会造出一个"死区"：`|R| < 24` 的节点解出来**恰好落在二维样条面上**、
+ * `|R| > 24` 的节点跳到 `surface + R`，相邻节点之间于是出现**硬跳变**。
+ * 有下限（这里是 0.5）就没有阈值，权重随距离连续变化。
+ *
+ * ⚠️ 这两个数就是"碎 ↔ 平"的旋钮，改它们必须重跑 `npm run test:terrain`
+ * 并把 BUDGETS 跟着改紧（见 TASKS N9 的 a 项）。
+ */
+const DETAIL_FADE_FLOOR = 0.5;
+const DETAIL_FADE_BLOCKS = 24;
+
 /** 稳定种子混合，用于给子生成器派生独立随机流 */
 function mixSeed(seed: number, salt: number): number {
   let h = Math.imul(seed | 0, 0x27d4eb2d) ^ Math.imul(salt | 0, 0x165667b1);
@@ -115,14 +135,58 @@ export class OverworldGenerator {
     this.reliefScale = this.worldType === 'amplified' ? AMPLIFIED_RELIEF_SCALE : 1;
     const random = new Random(seed);
 
-    // firstOctave / amplitudes 采用官方 overworld 的公开参数
-    this.continents = new DoublePerlinNoise(random, -9, [1, 1, 2, 2, 2, 1, 1, 1, 1]);
-    this.erosion = new DoublePerlinNoise(random, -9, [1, 1, 0, 1, 1]);
-    this.ridges = new DoublePerlinNoise(random, -7, [1, 2, 1, 0, 0, 0]);
+    /**
+     * 气候噪声的 firstOctave / amplitudes 取自官方 overworld 的公开参数，
+     * **但 N9-a 把几个高频档的权重压下去了**（`octave > 0` 那几档是 2~32 格的波长）。
+     *
+     * 为什么：按空间尺度分解实测（`default`，各尺度上的平均高差，单位格）——
+     *
+     *   | 项 | 4格 | 8格 | 16格 | 32格 | 64格 | 128格 | 256格 |
+     *   | --- | --- | --- | --- | --- | --- | --- | --- |
+     *   | offset（大陆度×96） | 7.5 | 9.8 | 14.7 | **15.5** | 14.6 | 8.3 | 7.1 |
+     *   | pv（峰谷×起伏×40） | 11.0 | 17.4 | 22.9 | **24.0** | 22.1 | 15.9 | 14.3 |
+     *   | jag（山脊×46） | 4.5 | 6.3 | 6.9 | 0 | 0 | 0 | 0 |
+     *
+     * 也就是说**起伏的峰值落在 16~32 格那一档、振幅 ±30 格** ——
+     * 这是"每隔十几格就有一座小山包"，玩家看到的就是"碎"，而不是"一整片山"。
+     * 把 2~32 格那几档压掉之后（归一化按方差，能量会自动挪到大尺度），
+     * 同样的总落差会摊到 128~512 格上 —— 那才是"整片山"。
+     *
+     * ⚠️ **只改数值，不改"哪几档非零"**：`DoublePerlinNoise`/`NormalNoise` 每个非零振幅
+     * 消耗一次 `random`，改了非零的个数会让后面所有噪声整体错位（世界跟着变），
+     * 那就不是"只调了这几档"了。
+     */
+    this.continents = new DoublePerlinNoise(random, -9, [1, 1, 2, 2, 2, 1, 0.3, 0.1, 0.03]);
+    this.erosion = new DoublePerlinNoise(random, -9, [1, 1, 0, 1, 0.3]);
+    // 山脊那一路的基准波长 128 → **256 格**（`-7 → -8`）：峰谷本来就该是几百格一座
+    this.ridges = new DoublePerlinNoise(random, -8, [1, 2, 1, 0, 0, 0]);
     this.temperature = new DoublePerlinNoise(random, -10, [1.5, 0, 1, 0, 0, 0]);
     this.humidity = new DoublePerlinNoise(random, -8, [1, 1, 0, 0, 0, 0]);
-    this.detail3d = new NormalNoise(random, -5, [1, 1, 1, 0.6, 0.3]);
-    this.ridgeNoise = new NormalNoise(random, -3, [1, 0.7]);
+    /**
+     * 三维细节噪声：制造悬崖、洞穴口、悬垂。
+     *
+     * N9-a 调过两处（**只动幅度值与首八度，振幅个数保持 5 个非零不变**）：
+     *  - 首八度 `-5 → -4`：基准波长 32 格 → **64 格**（"山脊要的是 16~64 格的起伏"）；
+     *  - 幅度 `[1,1,1,0.6,0.3] → [1,1,0.6,0.15,0.05]`：把高频那两档压下去
+     *    （原来 4 格与 2 格那一档还带着 0.6/0.3 的权重，而密度粗网格在 XZ 上每 4 格采一次、
+     *    在 Y 上每 8 格采一次 —— 2~4 格的东西**采不到，只会走样**）。
+     *
+     * ⚠️ **非零振幅的个数不能变**：`NormalNoise` 每个非零振幅消耗一次 `random`，
+     * 而 `ridgeNoise` 用的是同一条流 —— 改个数会让后面的噪声整体错位（世界跟着变），
+     * 那就不是"只调了 detail3d"了。`valueFactor` 按方差归一化，所以压高频**不会让整体变平**，
+     * 只是把能量挪到低频。
+     */
+    this.detail3d = new NormalNoise(random, -4, [1, 1, 0.6, 0.15, 0.05]);
+    /**
+     * 山脊噪声：制造尖锐山峰。
+     *
+     * N9-a：首八度 `-3 → -5`（基准波长 **8 格 → 32 格**）。
+     * 原来 8 格与 4 格那一档要乘以最大 46 格的高度 —— 也就是说**每隔 4 格地形就上下跳几十格**，
+     * 这正是"碎"的主力（实测把它留在 8 格时，光压平 `detail3d` 反而让判据 1 从 60.2% 涨到 65.8%：
+     * 尖刺换了个来源，看得更清楚了）。
+     * 非零振幅仍是 2 个，`random` 的消耗次数不变，所以后面的噪声（含水层/洞穴另用独立流）不错位。
+     */
+    this.ridgeNoise = new NormalNoise(random, -5, [1, 0.7]);
 
     // 大陆度 → 高度偏移。
     // 校准目标：偏移 ≈ 0 时地表刚好落在海平面附近（即海岸线），
@@ -376,7 +440,10 @@ export class OverworldGenerator {
     // 竖直梯度 + 三维细节
     const gradient = (surface - y) / 26;
     const detail = this.detail3d.getValue(x, y, z);
-    let density = gradient + detail * (0.5 + factor * 0.85);
+    // N9-a：**离地表越近，三维细节压得越平**（下限 `DETAIL_FADE_FLOOR`，不能是 0）
+    const taper =
+      DETAIL_FADE_FLOOR + (1 - DETAIL_FADE_FLOOR) * Math.min(1, Math.abs(surface - y) / DETAIL_FADE_BLOCKS);
+    let density = gradient + detail * (0.5 + factor * 0.85) * taper;
 
     // 深处强制实心，避免出现大片浮空岛（洞穴由 D10 的雕刻器另行挖出）
     if (y < surface - 34) density = Math.max(density, 1);
