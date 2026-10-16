@@ -4059,6 +4059,57 @@ PAINTERS.barrel_side = (x, y, rng) => {
   return barrelShade(barrelPlanks(x, y, rng), x % 4 === 0 ? 0.8 : 1);
 };
 
+/**
+ * 堆肥桶（批次 70）：桶身 / 桶底 / 顶面 / 满仓。
+ *
+ * 四张都由**橡木木板**那张画法派生（与木桶同一套底子），靠"箍"和中间那个**暗口**区分：
+ *  - 桶身：竖板条 + 上下两道铁箍（原版堆肥桶就是一圈板条箍起来的）；
+ *  - 桶底：普通木板（看不见，但省一张贴图不值得）；
+ *  - 顶面：外面一圈板条框、**中间是暗口**——从上往下看就能看见"这桶是空的"；
+ *  - 满仓：同一圈框，中间换成**棕色的堆肥**（冒不出头，与桶沿齐平）。
+ */
+const composterPlanks = planksPainter([150, 118, 72]);
+
+/** 桶身上的那两道箍（与木桶同一档颜色，木桶家族看起来才像一家） */
+function composterRing(y: number): boolean {
+  return y === 2 || y === 13;
+}
+
+PAINTERS.composter_side = (x, y, rng) => {
+  const base = composterPlanks(x, y, rng);
+  if (composterRing(y)) return [clamp255(base[0] * 0.62), clamp255(base[1] * 0.62), clamp255(base[2] * 0.62), 255];
+  return [clamp255(base[0] * (x % 4 === 0 ? 0.82 : 1)), clamp255(base[1] * (x % 4 === 0 ? 0.82 : 1)), clamp255(base[2] * (x % 4 === 0 ? 0.82 : 1)), 255];
+};
+
+PAINTERS.composter_bottom = (x, y, rng) => {
+  const base = composterPlanks(x, y, rng);
+  return [clamp255(base[0] * 0.94), clamp255(base[1] * 0.94), clamp255(base[2] * 0.94), 255];
+};
+
+/** 顶面：板条框（2 像素）+ 中间暗口；`filled` = 满仓时画棕色堆肥 */
+function composterTop(filled: boolean): Painter {
+  return (x, y, rng) => {
+    const rim = x <= 1 || x >= 14 || y <= 1 || y >= 14;
+    if (rim) {
+      const base = composterPlanks(x, y, rng);
+      return [clamp255(base[0] * 1.06), clamp255(base[1] * 1.06), clamp255(base[2] * 1.06), 255];
+    }
+    if (!filled) {
+      // 暗口：越靠里越黑（看得出是个凹进去的桶）
+      const depth = Math.min(x - 1, 14 - x, y - 1, 14 - y) / 6;
+      const v = 0.34 - Math.min(0.22, depth * 0.22) + rng() * 0.05;
+      return [clamp255(74 * v), clamp255(62 * v), clamp255(48 * v), 255];
+    }
+    // 满仓：棕色堆肥，带颗粒感（看得出"里面有东西了"）
+    const grain = rng();
+    const v = 1 + grain * 0.16 - 0.08;
+    return [clamp255(96 * v), clamp255(70 * v), clamp255(42 * v), 255];
+  };
+}
+
+PAINTERS.composter_top = composterTop(false);
+PAINTERS.composter_ready = composterTop(true);
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

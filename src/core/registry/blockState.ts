@@ -31,6 +31,8 @@ export type BlockShape =
   | 'fence_gate'
   | 'torch'
   | 'ladder'
+  /** 堆肥桶（批次 70）：四面板条 + 2/16 桶底，顶面敞口 */
+  | 'composter'
   | 'pane'
   /** 十字交叉的两片薄面：草、花、蘑菇、甘蔗这类植物（无碰撞、双面可见） */
   | 'cross'
@@ -211,6 +213,38 @@ const SLAB_DOUBLE_MASK = 0b1000000;
 // 两者都用**低位**（bit0 起）存自己的"阶段/内容物"：它们的形状族与台阶/门/藤蔓
 // 不会同时出现在一个方块上，所以这些位可以重用（见文件开头那条设计）。
 // 蛋糕只要 3 位（0~6 片），花盆要 5 位（0 = 空盆 + 最多 31 种植物）。
+
+// ---------------------------------------------------------------- 堆肥桶（批次 70）
+//
+// 堆肥桶的"内容物"是一个 0~8 的等级（原版 8 级满），用**低 4 位**：
+// 与蛋糕片数/花盆植物同一条约定——形状族不会同时在同一个方块上，那些位可以重用。
+// 等级 8 = 满，可以收 1 份骨粉；收完清零。
+
+/** 一个堆肥桶要几级才满（原版 8） */
+export const COMPOSTER_MAX_LEVEL = 8;
+
+/** 堆肥等级占低 4 位（0~8，够用；8 就是满） */
+const COMPOST_LEVEL_MASK = 0b1111;
+
+export function composterLevelOf(state: number): number {
+  return state & COMPOST_LEVEL_MASK;
+}
+
+/**
+ * 写入堆肥等级。
+ *
+ * ⚠️ 与蛋糕片数同一条：夹到 **0~`COMPOSTER_MAX_LEVEL`**（不是掩码上限 15）——
+ * 超过 8 的等级不是一个合法状态，真出现说明有代码忘了在这里拦。
+ */
+export function withComposterLevel(state: number, level: number): number {
+  const clamped = Math.max(0, Math.min(COMPOSTER_MAX_LEVEL, Math.floor(level)));
+  return (state & ~COMPOST_LEVEL_MASK) | clamped;
+}
+
+/** 满了吗（满了才能收骨粉） */
+export function isComposterReady(state: number): boolean {
+  return composterLevelOf(state) >= COMPOSTER_MAX_LEVEL;
+}
 
 /** 一个蛋糕有几片（原版 7 片：吃满 7 次就没了） */
 export const CAKE_SLICES = 7;

@@ -37,6 +37,8 @@ import { dispenseBehaviorFor } from './core/registry/dispense.ts';
 import { runDispenseAction, type DispenseContext } from './core/world/Dispense.ts';
 // 骨粉（批次 69）：判定在 `BoneMeal.ts` 里（纯函数），这里只负责把它接到世界与背包上
 import { fertilizeAt, type BoneMealWorld } from './core/world/BoneMeal.ts';
+// 堆肥（批次 70）：什么能堆肥、几分概率在 `registry/compost.ts`（纯数据 + 纯函数）
+import { compostStep } from './core/registry/compost.ts';
 import { splashEffectsAt } from './core/survival/SplashPotion.ts';
 import {
   DRAGON_BREATH_COLLECT_SHRINK,
@@ -214,9 +216,12 @@ import {
   CAKE_SLICES,
   cakeBites,
   flowerPotPlant,
+  composterLevelOf,
+  COMPOSTER_MAX_LEVEL,
   hopperOutputOffset,
   hopperOutputOf,
   isHopperLocked,
+  withComposterLevel,
   sixFacingOf,
   sixFacingOffset,
   isLitState,
@@ -2607,6 +2612,57 @@ class App {
   }
 
   /**
+   * 用一次堆肥桶（批次 70）：没满就塞一件、满了就收骨粉。
+   *
+   * 两种情形共用这一条入口，因为原版就是"右键同一个方块，看它满没满决定做什么"：
+   *  - **没满**：手里那件是可堆肥的 → 掷一次（`compostStep`）。掷失败也算吃掉了这一件
+   *    （原版如此——不然玩家可以拿一件反复试），掷成功涨一级；
+   *    手里那件不能堆肥 → 什么都不做（**不吃**，也不出音效）。
+   *  - **满了**：收 1 份骨粉、桶清零。背包放不下就掉在桶边（原版也是掉出来）。
+   *
+   * ⚠️ 为什么不做成"界面"：原版堆肥桶没有界面，全部交互就是右键——做成界面会让
+   * "往里扔东西"变成"开箱再拖"，与手感不符，也白白多一套 UI。
+   */
+  private useComposter(x: number, y: number, z: number): boolean {
+    const state = this.world.getBlockState(x, y, z);
+    const level = composterLevelOf(state);
+
+    // ---- 满了：收骨粉（手里拿什么都能收，原版如此）
+    if (level >= COMPOSTER_MAX_LEVEL) {
+      this.setComposterLevel(x, y, z, withComposterLevel(state, 0));
+      const leftover = this.inventory.addStack({ id: Item.BONE_MEAL, count: 1 });
+      // 背包满了就掉出来（与合成/烧炼那几处的口径一致：不给玩家凭空吞掉）
+      if (leftover > 0) this.spawnDrop(Item.BONE_MEAL, leftover, x + 0.5, y + 1.05, z + 0.5);
+      this.audio.play('place', { x: x + 0.5, y: y + 0.9, z: z + 0.5 });
+      this.particles.spawnSplash(x + 0.5, y + 1.0, z + 0.5, 0xc8f0a0, 8);
+      this.hand.swing();
+      this.refreshHotbar();
+      return true;
+    }
+
+    // ---- 没满：手里那件能堆肥吗
+    const held = this.heldItemId;
+    if (held === undefined) return false;
+    const next = compostStep(level, held, Math.random);
+    if (next === null) return false; // 不能堆肥（或桶满了）：什么都不做，也不吃掉
+    this.inventory.consume(held, 1);
+    this.setComposterLevel(x, y, z, withComposterLevel(state, next));
+    // 成功的粒子/音效与"没涨"分开：玩家能一眼看出这次成没成（原版也有反馈）
+    const grew = next > level;
+    this.audio.play('place', { x: x + 0.5, y: y + 0.9, z: z + 0.5 });
+    this.particles.spawnBlockBreak(x, y + 0.9, z, this.blockParticleColor(Block.COMPOSTER), grew ? 6 : 3);
+    this.hand.swing();
+    this.refreshHotbar();
+    return true;
+  }
+
+  /** 写堆肥等级：走带光照/网格/增量存档的那条路，并广播给队友 */
+  private setComposterLevel(x: number, y: number, z: number, state: number): void {
+    this.world.setBlockAndUpdate(x, y, z, Block.COMPOSTER, state);
+    this.net.sendBlock(x, y, z, Block.COMPOSTER, state, this.dimension);
+  }
+
+  /**
    * 骨粉要写世界：`setBlock` 必须走**带光照/网格/增量存档**的那条路
    * （直接写区块数据的话，作物长高了但画面与存档都不动）。
    */
@@ -3713,6 +3769,10 @@ class App {
     if (hitBlock === Block.BARREL) {
       this.inventoryScreen.openWith('barrel', this.world.containers.getOrCreateBarrel(this.dimension, x, y, z));
       return true;
+    }
+    // 堆肥桶（批次 70）：右键塞一件可堆肥的东西 / 满了右键收骨粉（**不打开界面**，原版也没有界面）
+    if (hitBlock === Block.COMPOSTER) {
+      return this.useComposter(x, y, z);
     }
     // 漏斗（批次 58）：右键打开 5 格。⚠️ 打开界面时**不暂停搬运**（原版也照搬）——
     // 所以能看着东西一格一格往里进，这也是调试搬运逻辑最直观的方式

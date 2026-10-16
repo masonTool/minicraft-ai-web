@@ -779,6 +779,11 @@ export const TILE_ORDER = [
   'barrel_top',
   'barrel_bottom',
   'barrel_side',
+  // 堆肥桶（批次 70）：桶身板条 / 桶底 / 顶面（板条框 + 暗口）、满仓时换成"堆肥满仓"
+  'composter_side',
+  'composter_bottom',
+  'composter_top',
+  'composter_ready',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

@@ -72,6 +72,10 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   Block.HOPPER,
   Block.DROPPER,
   Block.DISPENSER,
+  // 堆肥桶（批次 70）：内容物是个**等级**、不是物品栏，所以推走其实不会丢东西
+  // （推方块时会连状态一起搬）。列进来是为了对齐原版（带方块实体的方块推不动），
+  // 也免得以后有人以为"它能推"是个疏漏
+  Block.COMPOSTER,
   Block.BARREL,
   Block.BREWING_STAND,
   Block.ANVIL,

@@ -884,6 +884,14 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     key: { C: Block.COBBLESTONE, B: Item.BOW },
   },
   {
+    // 堆肥桶（批次 70）：原版图案 = **7 个木板台阶**（围一圈、中间空着）。
+    // 与木桶不同，它**不需要**工作台之外的东西；四角的台阶也照原版给足 7 个
+    kind: 'shaped' as const,
+    result: { id: Block.COMPOSTER, count: 1 },
+    pattern: ['SSS', 'S S', 'SSS'],
+    key: { S: slabId(OAK_SLAB_INDEX) },
+  },
+  {
     // 木桶（批次 61）：原版图案 = 6 块木板 + 上下两个**木板台阶**（左右两列各 3 块）
     kind: 'shaped' as const,
     result: { id: Block.BARREL, count: 1 },

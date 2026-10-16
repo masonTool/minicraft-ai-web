@@ -9,6 +9,7 @@
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import {
+  isComposterReady,
   isFlash,
   isInverted,
   isLitState,
@@ -1864,6 +1865,29 @@ const DISPENSER_SPECS: readonly BlockSpec[] = [
  */
 export const BARREL_ID = 479;
 
+/**
+ * 堆肥桶（批次 70，B43）：四面板条围一圈 + 2/16 厚的桶底（`shape: 'composter'`）。
+ *
+ * 它的"内容物"不是物品栏，而是一个 **0~8 的等级**（原版 8 级满），存在**方块状态**里
+ * （低 4 位，见 `blockState` 的 `composterLevelOf`）——所以它不需要方块实体，
+ * 也不进容器表；**满仓时顶面换成另一张贴图**（"这桶满没满"唯一看得见的地方）。
+ */
+export const COMPOSTER_ID = 480;
+
+const COMPOSTER_SPECS: readonly BlockSpec[] = [
+  {
+    id: COMPOSTER_ID,
+    name: 'minecraft:composter',
+    tiles: ['composter_top', 'composter_bottom', 'composter_side'],
+    // 满仓：顶面换成"堆肥满仓"那张（桶底与桶身不动）
+    stateTiles: (state) =>
+      isComposterReady(state)
+        ? ['composter_ready', 'composter_bottom', 'composter_side']
+        : ['composter_top', 'composter_bottom', 'composter_side'],
+    shape: 'composter' as const,
+  },
+];
+
 const BARREL_SPECS: readonly BlockSpec[] = [
   {
     id: BARREL_ID,
@@ -2198,6 +2222,7 @@ const SPECS: readonly BlockSpec[] = [
   ...DROPPER_SPECS,
   ...DISPENSER_SPECS,
   ...BARREL_SPECS,
+  ...COMPOSTER_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2473,6 +2498,8 @@ export const Block = {
   DISPENSER: DISPENSER_ID,
   // ---- 木桶（批次 61，见 `BARREL_SPECS`）：27 格容器，上面压着方块就打不开
   BARREL: BARREL_ID,
+  // ---- 堆肥桶（批次 70，见 `COMPOSTER_SPECS`）：等级存在状态位里，满了收骨粉
+  COMPOSTER: COMPOSTER_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2762,6 +2789,8 @@ HARDNESS.set(Block.DROPPER, 3.5);
 HARDNESS.set(Block.DISPENSER, 3.5);
 // 木桶（批次 61）：原版 2.5，比箱子"难挖一点"但一样**徒手就能挖掉**（只进加速表）
 HARDNESS.set(Block.BARREL, 2.5);
+// 堆肥桶（批次 70）：原版 0.6，斧头更快但**徒手就能挖**（与木桶同一条）
+HARDNESS.set(Block.COMPOSTER, 0.6);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);

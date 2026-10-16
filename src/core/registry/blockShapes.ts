@@ -197,9 +197,31 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'dispenser':
       // 发射器（批次 60）：同样是整格碰撞（凸口/挡板撞不到）
       return [FULL];
+    case 'composter':
+      // 堆肥桶（批次 70）：**桶壁 + 桶底**（中间是空的，能看见里面的堆肥）
+      return composterBoxes();
     default:
       return [FULL];
   }
+}
+
+/**
+ * 堆肥桶（批次 70）：四面板条（2/16 厚、整格高）+ 2/16 厚的桶底。
+ *
+ * ⚠️ 这里**网格盒与碰撞盒是同一套**（原版也是）：桶沿能站、桶里也能站
+ * （站在桶底那张 2/16 的板上），所以它不像漏斗那样"能从底下走过去"。
+ * 顶面敞口是刻意的：从上往下看能看见桶底那张贴图（空着 = 暗口、满了 = 堆肥），
+ * 这正是"这个桶有几分满"唯一能看见的地方。
+ */
+function composterBoxes(): readonly LocalBox[] {
+  const t = 2 / 16;
+  return [
+    [0, 0, 0, 1, t, 1], // 桶底
+    [0, 0, 0, t, 1, 1], // 西壁
+    [1 - t, 0, 0, 1, 1, 1], // 东壁
+    [t, 0, 0, 1 - t, 1, t], // 北壁
+    [t, 0, 1 - t, 1 - t, 1, 1], // 南壁
+  ];
 }
 
 /** 楼梯上半层的那半格：位于朝向的反侧（朝向指向高的一面） */
@@ -407,6 +429,10 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       // （原版靠正面那张"带孔的圈"贴图区分两兄弟，本项目做不出"只有正面不同"，
       //  所以改用几何：细管 vs 宽挡板）
       return dispenserBoxes(state);
+    case 'composter':
+      // 堆肥桶（批次 70）：四面板条围一圈 + 2/16 厚的桶底；**顶面是敞口的**
+      // （空着时从上面能看见桶底那张"暗口"贴图，满了换成"堆肥满仓"那张）
+      return composterBoxes();
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
