@@ -20,8 +20,10 @@
  * 该模块必须保持"纯函数 + 无 DOM 依赖"，因为它会被 Web Worker 直接引用。
  */
 
-import { Block, stairsId, Wood } from '../registry/blocks.ts';
+import { Block, bedId, stairsId, Wood } from '../registry/blocks.ts';
 import {
+  bedOtherHalf,
+  withBedHead,
   withChestLoot,
   withDoorHinge,
   withDoorOpen,
@@ -31,6 +33,8 @@ import {
   type Facing,
 } from '../registry/blockState.ts';
 import { lootTableIndex } from '../registry/loot.ts';
+// 村庄要往屋里摆工作站（J22）：那张清单从职业表派生，不另抄一份
+import { WORKSTATION_BLOCKS } from '../registry/villagerTrades.ts';
 import { Biome } from './Biome.ts';
 import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld, OUTSIDE } from './Features.ts';
 
@@ -459,18 +463,21 @@ function buildVillage(w: FeatureWriter, s: StructureInstance, world: FeatureWorl
   torch(w, s.x + 2, wellY + 3, s.z, 0);
 
   // ---- 房屋：绕中心散布（角度 + 半径抖动，避免重叠）
+  //
+  // ⚠️ 撒候选的数量是"想要的房子数 × 3"（批次 89 改）：原来是**只撒 houses 个**、
+  // 能成几个算几个，而"间距 13 格 + 高差不超过 6 + 必须在海平面以上"三条一起卡下来，
+  // **山坡上的村庄经常只剩 1 栋房子**——村庄里住几个人全靠房子数（一张床一个人），
+  // 于是"走到一个村庄，只见一个村民"。改成多撒候选、够了就停之后，
+  // 实测（随机种子上 12 个村庄）从平均 1 栋提到 **2 栋**、最好的 4 栋
+  // （`test:village` 直接数房子与床；要更多就得放宽高差或铺第二圈，那是另一条活的量级）。
   const houses = 4 + s.rng.int(4);
   const placed: Array<{ x: number; z: number; r: number }> = [];
-  for (let i = 0; i < houses; i++) {
-    const angle = (i / houses) * Math.PI * 2 + s.rng.next() * 0.6;
-    const distance = 12 + s.rng.int(11);
-    let hx = s.x + Math.round(Math.cos(angle) * distance);
-    let hz = s.z + Math.round(Math.sin(angle) * distance);
-    let blocked = false;
-    for (const other of placed) {
-      if (Math.abs(other.x - hx) < 14 && Math.abs(other.z - hz) < 14) blocked = true;
-    }
-    if (blocked) continue;
+  for (let attempt = 0; attempt < houses * 3 && placed.length < houses; attempt++) {
+    const angle = (attempt / (houses * 3)) * Math.PI * 2 + s.rng.next() * 0.8;
+    const distance = 11 + s.rng.int(12);
+    const hx = s.x + Math.round(Math.cos(angle) * distance);
+    const hz = s.z + Math.round(Math.sin(angle) * distance);
+    if (placed.some((other) => Math.abs(other.x - hx) < 13 && Math.abs(other.z - hz) < 13)) continue;
     // 房屋必须建在陆地上，且地面不能太陡
     const hGround = world.surfaceY(hx, hz);
     if (hGround < SEA_LEVEL || Math.abs(hGround - ground) > 6) continue;
@@ -503,6 +510,30 @@ function buildVillage(w: FeatureWriter, s: StructureInstance, world: FeatureWorl
   }
 }
 
+/**
+ * 在村庄房屋里放一张床（J22，批次 89）。
+ *
+ * 床是**两格**的东西，而且"哪一半是床头"写在状态位里，所以这里必须走
+ * `bedOtherHalf` 那套纯函数算另一半——自己手写 `x + 1` 的话，朝向一改就会
+ * 得到"两半方向不一致"的鬼床（而症状只是"睡下去位置不对"）。
+ *
+ * @param facing 床头朝哪边（0 北 / 1 东 / 2 南 / 3 西）
+ */
+function villageBed(
+  w: FeatureWriter,
+  x: number,
+  y: number,
+  z: number,
+  facing: Facing,
+  colorIndex: number,
+): void {
+  const foot = withFacing(0, facing);
+  const id = bedId(colorIndex);
+  w.fillState(x, y, z, id, foot);
+  const [hx, , hz] = bedOtherHalf(x, y, z, foot);
+  w.fillState(hx, y, hz, id, withBedHead(foot, true));
+}
+
 /** 一栋村庄房屋：地基 → 木墙 → 门窗 → 坡屋顶 */
 function buildHouse(w: FeatureWriter, x: number, floorY: number, z: number, rng: PositionalRng, palette: VillagePalette): void {
   const width = rng.chance(0.5) ? 7 : 9;
@@ -523,6 +554,14 @@ function buildHouse(w: FeatureWriter, x: number, floorY: number, z: number, rng:
 
   // 四面墙：木墙 + 四角原木
   walls(w, x0, base, z0, x1, base + wallHeight, z1, palette.wall);
+  // ⚠️ `walls()` 是"空心盒"那套：它会把**底面与顶面也填成整块**（见它的实现）。
+  // 房屋要的只是"四面墙"，所以把底面那层（y=base）的屋内格子清回来——
+  // 不清的话屋里会凭空多出一层 1 格高的地板，后果有三条，全都很难从截图看出来
+  // （批次 89 做"村庄住上人"时才发现，见 TASKS O13）：
+  //   ① 玩家进不去门（门口比屋外高两格，得跳）；
+  //   ② 地上的箱子**埋在那层地板里**（原版村庄的箱子就在地上）；
+  //   ③ 村民只有 2 格净空（他们身高 1.95，头顶就是天花板）。
+  clear(w, x0 + 1, base, z0 + 1, x1 - 1, base, z1 - 1);
   for (let y = base; y <= base + wallHeight; y++) {
     for (const [cx, cz] of [
       [x0, z0],
@@ -566,9 +605,17 @@ function buildHouse(w: FeatureWriter, x: number, floorY: number, z: number, rng:
     }
   }
 
-  // 室内：一盏火把 + 一张箱子
+  // 室内：一盏火把 + 一张箱子 + **一张床 + 一个工作站**（J22，批次 89）。
+  //
+  // ⚠️ 床与工作站是"这栋房子里住着人"的**唯一凭据**：主线程在区块加载时
+  // 扫的就是它们（见 `core/world/VillagePopulation.ts`）——屋里没床，村庄就是空村。
+  // 所以这两样不是装饰，是**功能方块**，位置也不能被别的家具挤掉。
   torch(w, x0 + 1, base + 1, z0 + 1, 0);
   lootChest(w, x1 - 1, base, z1 - 2, 'village_house');
+  // 床贴着西墙、在火把那盏灯的南边（错开一格，免得火把正好悬在枕头上面）
+  villageBed(w, x0 + 1, base, z0 + 2, 2, rng.int(16));
+  // 工作站贴着东墙（与箱子隔开一格，免得"打开箱子挡着认领"）
+  w.fill(x1 - 1, base, z0 + 1, rng.pick(WORKSTATION_BLOCKS));
 }
 
 // ---------------------------------------------------------------- 废弃矿井

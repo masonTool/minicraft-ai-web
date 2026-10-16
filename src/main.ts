@@ -69,6 +69,8 @@ import { mobTypeById } from './core/entity/mobs.ts';
 import { createMob } from './core/entity/MobFactory.ts';
 import { Villager } from './core/entity/Villager.ts';
 import { isVillagerFood, levelName, tradeBlocker, tradeSettlement } from './core/registry/villagerTrades.ts';
+// 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
+import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
@@ -212,7 +214,10 @@ import {
   canTill,
   tillableTo,
 } from './core/registry/tools.ts';
-import { SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
+import { OverworldGenerator, SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
+// 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子
+// 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子
+import { structureInstanceForTest } from './core/gen/Structures.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 import { planPlacement } from './core/interaction/Placement.ts';
@@ -1127,6 +1132,10 @@ class App {
         fillLootChests(chunk, this.dimension, this.world.seed, this.world.containers);
         // 避雷针索引（批次 83）：区块一加载就扫出里面的避雷针，打雷时查询就是常数级
         this.scanRodsInChunk(chunk.cx, chunk.cz);
+        // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民。
+        // 与上面两件事同一个位置、同一条理由：**方块已经在了，但还需要有人管一下**
+        // （结构生成在 Worker 里，而 Worker 造不了实体）
+        this.populateVillage(chunk.cx, chunk.cz);
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
         this.refreshLoadingState();
       },
@@ -4054,6 +4063,44 @@ class App {
     else this.openAdvancements();
   }
 
+  // ---------------------------------------------------------------- 村庄的人口（J22，批次 89）
+
+  /**
+   * 区块加载之后：把这一片村庄里的**床**变成村民（一张床 = 一个村民）。
+   *
+   * 规则与判据在 `core/world/VillagePopulation.ts`（纯函数、可离线断言），
+   * 这里只做三件它做不了的事：读真世界、看**活着的实体**（防重复刷）、造实体。
+   *
+   * ⚠️ 只在主世界刷：下界/末地的区块里不会有床，但**别把这条依赖留在"碰巧"上**
+   * （以后加个"下界的床"或者编辑器的指令方块，就会在主线程造出不该有的村民）。
+   */
+  private populateVillage(cx: number, cz: number): void {
+    if (this.dimension !== Dimension.OVERWORLD) return;
+    const view: VillageWorldView = {
+      getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+      getState: (x, y, z) => this.world.getBlockState(x, y, z),
+      villagerNear: (x, y, z, radius) => this.villagerNear(x, y, z, radius),
+    };
+    for (const plan of planVillagePopulation(view, cx, cz)) {
+      const villager = new Villager(plan.x + 0.5, plan.y, plan.z + 0.5);
+      // 身边有工作站就直接认领（村庄里"这栋房子摆什么，住的就是谁"）——
+      // 认领的是**哪一格**也一并记下来，与 J11 那套"认领工作站"是同一份数据
+      if (plan.professionId !== null) villager.assignProfession(plan.professionId, plan.workstation);
+      this.entities.spawn(villager);
+    }
+  }
+
+  /** 这一格附近有没有活着的村民（`planVillagePopulation` 的"别刷第二遍"用） */
+  private villagerNear(x: number, y: number, z: number, radius: number): boolean {
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Villager) || entity.dead) continue;
+      if (Math.abs(entity.x - (x + 0.5)) > radius || Math.abs(entity.z - (z + 0.5)) > radius) continue;
+      if (Math.abs(entity.y - y) > radius) continue;
+      return true;
+    }
+    return false;
+  }
+
   // ---------------------------------------------------------------- 雷电与避雷针（批次 83）
 
   /** 把一个区块里的避雷针扫进索引（区块加载时调一次，摊掉 10 万次读） */
@@ -4785,6 +4832,45 @@ class App {
       this.advancementScreen.refresh();
     }
     return granted;
+  }
+
+  /**
+   * 验收脚本用（J22）：离玩家最近的那个村庄在哪。
+   *
+   * 村庄每 32 个区块（512 格）才有一个，手机上"自己走到一个村庄"可能要走十几分钟，
+   * 所以给验收留一个"直接告诉你坐标"的口子——拿到坐标就能 `/tp` 过去看村民。
+   *
+   * ⚠️ 村庄的**坐标是算出来的**（`structureInstanceForTest`，与 Worker 里用的是同一份
+   * 确定性放置逻辑），所以它和世界里真的有的那个村庄一定对得上；
+   * 不这么做的话就要"扫一片地形找房子"，那是几十万次读方块。
+   *
+   * ⚠️ 试过把它改成动态 import（想让首屏少下一点）：**没省下来**——整个结构生成模块
+   * 本来就在主包里（`OverworldGenerator` 那一路），切成动态反而多出一个小的分片。
+   * 记在这里，免得下一个人再试一遍（体积的真实增量来自村庄内容本身，不是这个入口）。
+   */
+  nearestVillageForTest(maxCells = 4): { x: number; y: number; z: number; distance: number } | null {
+    const generator = new OverworldGenerator(this.worldConfig.seed);
+    // 单元网格的间距是 32 **区块** = 512 格
+    const cellX = Math.floor(this.physics.x / 512);
+    const cellZ = Math.floor(this.physics.z / 512);
+    let best: { x: number; y: number; z: number; distance: number } | null = null;
+    for (let dz = -maxCells; dz <= maxCells; dz++) {
+      for (let dx = -maxCells; dx <= maxCells; dx++) {
+        const instance = structureInstanceForTest(
+          'village',
+          cellX + dx,
+          cellZ + dz,
+          generator,
+          this.worldConfig.seed,
+        );
+        if (!instance) continue;
+        const distance = Math.hypot(instance.x - this.physics.x, instance.z - this.physics.z);
+        if (!best || distance < best.distance) {
+          best = { x: instance.x, y: instance.y, z: instance.z, distance };
+        }
+      }
+    }
+    return best;
   }
 
   /** 验收脚本用：清空全部进度（做完验收别把"考试答案"留在存档里） */

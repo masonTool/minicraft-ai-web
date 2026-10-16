@@ -225,6 +225,17 @@ export function professionForWorkstation(blockId: number): VillagerProfession | 
   return PROFESSIONS.find((profession) => profession.workstation === blockId);
 }
 
+/**
+ * **能被放进村庄里**的工作站方块（去重，顺序与职业表一致）。
+ *
+ * 生成的村庄要往屋里摆工作站（J22），而它必须只摆"有职业的那几种"——
+ * 摆一个没人认领的方块，村民就永远是白丁。所以那张清单**从这个表派生出来**，
+ * 不另抄一份：J23 补上另外 5 个工作站时，村庄里的种类会跟着自动变多。
+ */
+export const WORKSTATION_BLOCKS: readonly number[] = [
+  ...new Set(PROFESSIONS.map((profession) => profession.workstation)),
+];
+
 /** 这个方块是不是某一种工作站（村民在村里找的就是它们） */
 export function isWorkstation(blockId: number): boolean {
   return professionForWorkstation(blockId) !== undefined;
