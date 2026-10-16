@@ -422,10 +422,26 @@ console.log('\n[开新世界的启动成本（批次 100）]');
   equal('两种写法找到同一格（换写法不能换结果）', newScan(), expected);
   equal('旧写法也是这一格（对照）', oldScan(), expected);
 
+  /**
+   * 计时（N9-a/批次 102 改的写法）：**先热身，再取多批里的最小值**。
+   *
+   * 为什么不能只跑一批：原来这里是"20 轮 / 单批"，总共才 ~3ms —— 这么短的一段
+   * 完全被 JIT 预热与调度噪声支配。批次 102 就撞到过假红灯：
+   * 同一段代码在 `npm run check` 里量出 **0.353ms → 0.763ms**（判定要求 ≤1.2 倍），
+   * 而机器空下来重跑 6 次是稳定的 0.15ms / 0.08ms。
+   *
+   * 取**最小值**的道理：负载只会让某一段变慢、不会让它变快，
+   * 所以"最好的一批"最接近真实成本——这样这道闸门才只在**真的变慢**时才红。
+   */
   const time = (fn: () => void, rounds: number): number => {
-    const start = performance.now();
-    for (let i = 0; i < rounds; i++) fn();
-    return (performance.now() - start) / rounds;
+    for (let i = 0; i < 5; i++) fn(); // 热身：让 JIT 先把这段编好
+    let best = Infinity;
+    for (let batch = 0; batch < 5; batch++) {
+      const start = performance.now();
+      for (let i = 0; i < rounds; i++) fn();
+      best = Math.min(best, (performance.now() - start) / rounds);
+    }
+    return best;
   };
   const oldMs = time(() => oldScan(), 20);
   const newMs = time(() => newScan(), 20);
