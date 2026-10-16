@@ -46,6 +46,16 @@ import { BIOME_TABLE, Biome } from '../src/core/gen/Biome.ts';
 import { columnSurface } from '../src/core/gen/SurfaceRules.ts';
 import { terracottaId } from '../src/core/registry/blocks.ts';
 
+/** 荒地色带允许出现的方块名（与 `SurfaceRules.BADLANDS_BANDS` 的注释一一对应） */
+const BADLANDS_BAND_NAMES: ReadonlySet<string> = new Set([
+  'minecraft:terracotta',
+  'minecraft:orange_terracotta',
+  'minecraft:yellow_terracotta',
+  'minecraft:light_gray_terracotta',
+  'minecraft:brown_terracotta',
+  'minecraft:magenta_terracotta',
+]);
+
 let passed = 0;
 let failed = 0;
 
@@ -539,7 +549,19 @@ console.log('\n[红沙与红砂岩（批次 45）：原料链闭合]');
   equal('恶地地表是红沙（原来铺的是陶瓦）', surface.surface, Block.RED_SAND);
   equal('次表层还是陶瓦（恶地的招牌没丢）', surface.subSurface, badlands.subSurface);
   check('往下仍然是彩色陶瓦色带', surface.deepBands !== null && surface.deepBands.length > 0);
-  check('色带里全是陶瓦（没有被红沙污染）', surface.deepBands!.every((id) => id >= terracottaId(0)));
+  check('色带里全是陶瓦（没有被红沙污染）', surface.deepBands!.every((id) => id >= Block.TERRACOTTA));
+  // ⚠️ 这一条是批次 91 加的：色带以前**整体差一格**（`terracottaId` 把原色当成了下标 0，
+  // 于是"橙"画成白色、"黄"画成浅蓝），而上面那条">= 原色陶瓦"的范围检查完全看不出来。
+  // 这里按**方块名**断言色带就是注释里写的那几种颜色
+  const bandNames = new Set(surface.deepBands!.map((id) => blockDef(id).name));
+  check(
+    '色带就是原版那几种颜色（橙/黄/原色/浅灰/棕/品红）',
+    bandNames.size > 0 &&
+      [...bandNames].every((name) => BADLANDS_BAND_NAMES.has(name)) &&
+      bandNames.has('minecraft:orange_terracotta'),
+    [...bandNames].join(','),
+  );
+  check('`terracottaId(1)` 是橙色陶瓦（0-based 颜色下标，原色不在里面）', blockDef(terracottaId(1)).name === 'minecraft:orange_terracotta');
   // 别的群系不受影响
   equal('沙漠地表仍是沙子', columnSurface(BIOME_TABLE[Biome.DESERT]!, 70, 63, 12, 34).surface, Block.SAND);
 }

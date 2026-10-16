@@ -26,16 +26,51 @@ import {
   stainedGlassPaneId,
   stoneVariantId,
   signId,
+  terracottaId,
   woolId,
 } from '../registry/blocks.ts';
 import { ARMOR_SPECS } from '../registry/armor.ts';
 import { DYE_COLORS, WOOD_TYPES } from '../registry/colors.ts';
-import { Item, dyeItemId } from '../registry/items.ts';
+import { Item, dyeIdByName, dyeItemId } from '../registry/items.ts';
 import { TOOL_SPECS } from '../registry/tools.ts';
 import { DRINKABLE, lingeringIdOf, tippedArrowIdOf } from '../registry/potions.ts';
 
-/** 配色表里"棕色"的下标（可可豆做棕色染料用；按名字查，不写死数字） */
-const BROWN_DYE_INDEX = DYE_COLORS.findIndex((color) => color.name === 'brown');
+/**
+ * 染料来源（批次 91）。
+ *
+ * 背景：这一批做可达性审计时发现——**16 种染料里只有棕色拿得到**，
+ * 而羊毛/地毯/床的染色配方全都以染料为原料，于是"16 色羊毛"整族在生存里是死的
+ * （创造模式能直接拿染料，所以这个洞一直没被踩到）。
+ *
+ * 逐条对齐原版 1.18：
+ *  - **花 → 染料**：蒲公英→黄、虞美人→红、兰花→浅蓝、雏菊→浅灰、矢车菊→蓝；
+ *  - **材料 → 染料**：骨粉→白、青金石→蓝、甜菜根→红（熔炼仙人掌→绿在 `Smelting.ts`）；
+ *  - **混合**（原版每次产 2 个）：红+黄→橙、蓝+红→紫、红+白→粉、蓝+白→浅蓝、
+ *    蓝+绿→青、绿+白→黄绿、紫+粉→品红。
+ *
+ * ⚠️ **黑色与灰色故意不在表里**：原版黑色只从墨囊（鱿鱼）与凋零玫瑰（凋灵）来，
+ * 两样都没有；灰色在原版唯一的路就是"黑 + 白"。宁可不给，也不拿别的东西顶替
+ * （记在 TASKS 的 J26 里，与药水链那几个断环同一批）。
+ */
+const DYE_SOURCE_RECIPES: readonly Recipe[] = [
+  // 花与材料（原版都是 1:1 的无序配方）
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('white'), count: 1 }, ingredients: [Item.BONE_MEAL] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('yellow'), count: 1 }, ingredients: [Block.DANDELION] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('red'), count: 1 }, ingredients: [Block.POPPY] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('red'), count: 1 }, ingredients: [Item.BEETROOT] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('light_blue'), count: 1 }, ingredients: [Block.BLUE_ORCHID] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('light_gray'), count: 1 }, ingredients: [Block.OXEYE_DAISY] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('blue'), count: 1 }, ingredients: [Block.CORNFLOWER] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('blue'), count: 1 }, ingredients: [Item.LAPIS_LAZULI] },
+  // 混合（原版产 2 个）
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('orange'), count: 2 }, ingredients: [dyeIdByName('red'), dyeIdByName('yellow')] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('purple'), count: 2 }, ingredients: [dyeIdByName('blue'), dyeIdByName('red')] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('pink'), count: 2 }, ingredients: [dyeIdByName('red'), dyeIdByName('white')] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('light_blue'), count: 2 }, ingredients: [dyeIdByName('blue'), dyeIdByName('white')] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('cyan'), count: 2 }, ingredients: [dyeIdByName('blue'), dyeIdByName('green')] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('lime'), count: 2 }, ingredients: [dyeIdByName('green'), dyeIdByName('white')] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('magenta'), count: 2 }, ingredients: [dyeIdByName('purple'), dyeIdByName('pink')] },
+];
 
 /**
  * 橡木台阶在 `SHAPED_PARENTS` 里的下标（阳光传感器配方要"3 个木台阶"）。
@@ -512,6 +547,35 @@ const PANE_RECIPES: readonly Recipe[] = [
 ];
 
 /**
+ * 染色玻璃与彩色陶瓦（批次 91）：原版都是"8 个底料围一圈 + 1 个染料在中间 → 8 个"。
+ *
+ * ⚠️ 这两族此前**一个配方都没有**——而染色玻璃板的配方（上面那张表）却以染色玻璃为原料，
+ * 等于"能做出玻璃板、做不出玻璃"。做可达性审计时，方块侧用"掉自己"当来源，
+ * 于是这类"玩家造的、却没有任何配方"的方块全被放过了（见 TASKS 的 B53）。
+ *
+ * 混凝土**不在这里**：它要先做混凝土粉末、再遇水凝固，那需要 16 个新方块，
+ * 归 B53 那一批（这里宁可不做，也不给一条走不通的假配方）。
+ */
+const DYE_COLOR_RECIPES: readonly Recipe[] = [
+  ...DYE_COLORS.map(
+    (_color, index): Recipe => ({
+      kind: 'shaped',
+      result: { id: stainedGlassId(index), count: 8 },
+      pattern: ['GGG', 'GDG', 'GGG'],
+      key: { G: Block.GLASS, D: dyeItemId(index) },
+    }),
+  ),
+  ...DYE_COLORS.map(
+    (_color, index): Recipe => ({
+      kind: 'shaped',
+      result: { id: terracottaId(index), count: 8 },
+      pattern: ['TTT', 'TDT', 'TTT'],
+      key: { T: Block.TERRACOTTA, D: dyeItemId(index) },
+    }),
+  ),
+];
+
+/**
  * 工具与武器：5 种类 × 5 材质 = 25 条，图案与原版一致。
  * 材质只影响"头部材料"，手柄一律是木棍。
  */
@@ -659,7 +723,27 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // 棕色染料（批次 49）：1 个可可豆 → 1 个棕色染料（原版；可可豆在 1.14 之后只用来做染料与曲奇）
   // ⚠️ 下标**按名字查**而不是写死数字：配色表的下标一改（或中间插一种颜色），
   // 写死的数字会让"可可豆做出浅蓝色染料"——这种错在界面上看着就像个恶作剧
-  { kind: 'shapeless' as const, result: { id: dyeItemId(BROWN_DYE_INDEX), count: 1 }, ingredients: [Item.COCOA_BEANS] },
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('brown'), count: 1 }, ingredients: [Item.COCOA_BEANS] },
+
+  // ---- 染料来源（批次 91）：**在这之前 16 种染料里只有棕色拿得到**
+  // 而羊毛/地毯/床的染色配方全都以染料为原料，于是"16 色羊毛"整族在生存里是死的——
+  // 创造模式能直接拿染料，所以这个洞一直没被踩到（做可达性审计才浮出来）。
+  ...DYE_SOURCE_RECIPES,
+
+  // ---- 酿造材料（批次 91）：原版配方，两样此前都没有，
+  // 于是"剧毒/治疗/隐身/伤害"四条药水线在数据上就是断的（原料是蜘蛛眼，见 TASKS 的 J26）
+  // 发酵蜘蛛眼：蜘蛛眼 + 棕色蘑菇 + 糖（原版无序）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.FERMENTED_SPIDER_EYE, count: 1 },
+    ingredients: [Item.SPIDER_EYE, Block.BROWN_MUSHROOM, Item.SUGAR],
+  },
+  // 闪烁的西瓜片：西瓜片 + 8 个金粒（原版无序）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.GLISTERING_MELON, count: 1 },
+    ingredients: [Item.MELON_SLICE, ...Array<number>(8).fill(Item.GOLD_NUGGET)],
+  },
 
   // ---- 可疑的炖菜（批次 57，B17 收口）
   // 原版是**无序配方**：碗 + 红蘑菇 + 棕蘑菇 + **任意一朵花**，效果看用的是哪朵花。
@@ -1069,6 +1153,7 @@ export const RECIPES: readonly Recipe[] = [
   ...WOOL_RECIPES,
   ...CARPET_RECIPES,
   ...BED_RECIPES,
+  ...DYE_COLOR_RECIPES,
   ...SHAPED_BLOCK_RECIPES,
   ...UTILITY_RECIPES,
   ...WOOD_RECIPES,

@@ -359,7 +359,9 @@ for (let i = 0; i < DYE_COLORS.length; i++) EFFICIENT_TOOL.set(woolId(i), 'shear
 EFFICIENT_TOOL.set(Block.SNOW, 'shovel');
 // 地毯：原版没有任何工具能加速，徒手最快——所以既不在需求表也不在加速表里
 // 陶瓦与混凝土（17 色 / 16 色）都需要镐
-for (let i = 0; i <= DYE_COLORS.length; i++) REQUIRED_TOOL.set(terracottaId(i), { tool: 'pickaxe', tier: 0 });
+// ⚠️ 原色陶瓦是 `Block.TERRACOTTA`（不在 `terracottaId(i)` 的范围里，见那个函数的注释）
+REQUIRED_TOOL.set(Block.TERRACOTTA, { tool: 'pickaxe', tier: 0 });
+for (let i = 0; i < DYE_COLORS.length; i++) REQUIRED_TOOL.set(terracottaId(i), { tool: 'pickaxe', tier: 0 });
 for (let i = 0; i < DYE_COLORS.length; i++) REQUIRED_TOOL.set(concreteId(i), { tool: 'pickaxe', tier: 0 });
 // 珊瑚块（批次 51）：原版的珊瑚块与失活珊瑚块都**必须用镐**（硬度 1.5，与石砖同档），
 // 徒手挖得动但一无所获。⚠️ 珊瑚丛与珊瑚扇**不在这里**——它们是植物（一碰就掉、徒手可采）

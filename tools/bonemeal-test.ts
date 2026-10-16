@@ -14,7 +14,7 @@
  */
 
 import { Block, CROP_STAGES, berryStageOf, cocoaStageOf, cropOf } from '../src/core/registry/blocks.ts';
-import { Item, categoryOf, itemDef, maxStackOf } from '../src/core/registry/items.ts';
+import { Item, categoryOf, dyeIdByName, itemDef, maxStackOf } from '../src/core/registry/items.ts';
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
@@ -105,7 +105,11 @@ console.log('\n[配方：1 根骨头 → 3 份骨粉]');
   equal('放进 1 根骨头 → 出 3 份骨粉', matchRecipe([Item.BONE], 3)?.id, Item.BONE_MEAL);
   equal('出 3 份', matchRecipe([Item.BONE], 3)?.count, 3);
   equal('放进 2 根骨头合不出来（原版是 1 → 3）', matchRecipe([Item.BONE, Item.BONE], 3), null);
-  equal('骨粉自己不能再合成骨粉（对照）', matchRecipe([Item.BONE_MEAL], 3), null);
+  // ⚠️ 这条对照以前是"骨粉自己合不出任何东西"。批次 91 补上原版的
+  // 「1 骨粉 → 1 白色染料」之后，它变成了一条**有产物**的配方——所以对照改成
+  // "骨粉自己合不出骨粉"（真正要防的是那种"能把骨粉循环起来"的自食配方）
+  equal('骨粉自己合不出骨粉（对照）', matchRecipe([Item.BONE_MEAL], 3)?.id === Item.BONE_MEAL, false);
+  equal('骨粉单独进合成台只出白色染料（原版：白色染料的来源就是骨粉）', matchRecipe([Item.BONE_MEAL], 3)?.id, dyeIdByName('white'));
   check('骨头仍然没有发射行为（发射的是骨粉，不是骨头）', dispenseBehaviorFor(Item.BONE) === undefined);
 }
 

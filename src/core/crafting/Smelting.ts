@@ -6,7 +6,7 @@
  */
 
 import { Block } from '../registry/blocks.ts';
-import { Item } from '../registry/items.ts';
+import { Item, dyeIdByName } from '../registry/items.ts';
 
 /**
  * 这条配方**能进哪种炉子**（批次 46 的烟熏炉与高炉要用）。
@@ -73,6 +73,9 @@ export const FURNACE_STATIONS: Readonly<Record<FurnaceStation, StationDef>> = {
   campfire: { cn: '营火', timeScale: 3, accepts: ['food'] },
 };
 
+/** 绿色染料的物品 id（按颜色名查，不写死下标） */
+const GREEN_DYE_ID = dyeIdByName('green');
+
 /** 全部熔炼配方（配方书要列出来，所以导出） */
 
 export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
@@ -99,6 +102,10 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
 
   // 黏土球 → 红砖
   { input: Item.CLAY_BALL, output: { id: Item.BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.3 },
+
+  // 仙人掌 → 绿色染料（批次 91）：原版**唯一的绿色染料来源**（熔炼 1 经验）。
+  // 归 `none`：烟熏炉只吃食物、高炉只吃矿物，而这是染料
+  { input: Block.CACTUS, output: { id: GREEN_DYE_ID, count: 1 }, time: SMELTING_TIME, experience: 1 },
 
   // 海带 → 干海带（批次 50）：原版 0.1 经验。
   // 归 `none`（只有普通熔炉能做）：原版的烟熏炉只烧**食物**，而海带不是食物——

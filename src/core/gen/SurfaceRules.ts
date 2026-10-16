@@ -22,11 +22,11 @@ import { Biome, type BiomeDef } from './Biome.ts';
 const BADLANDS_BANDS: readonly number[] = [
   terracottaId(1), // 橙
   terracottaId(4), // 黄
-  terracottaId(0), // 原色
+  Block.TERRACOTTA, // 原色（⚠️ 不是 `terracottaId(0)`：那是白色，见 `terracottaId` 的注释）
   terracottaId(8), // 浅灰
   terracottaId(12), // 棕
   terracottaId(2), // 品红
-  terracottaId(0),
+  Block.TERRACOTTA,
 ];
 
 /** 每层色带的厚度（方块数）。原版色带大致是 1-3 格，这里取 2 格并让列间有偏移 */

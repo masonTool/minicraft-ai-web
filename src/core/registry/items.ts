@@ -13,6 +13,7 @@
 import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
 import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
 import {
+  BLOCKS,
   Block,
   CORAL_BLOCK_ID_START,
   CORAL_DEAD_VARIANT,
@@ -242,6 +243,19 @@ export const MOB_DROP_ITEM_START = 1060;
 /** 第 index 种染料的物品 id */
 export function dyeItemId(colorIndex: number): number {
   return DYE_ITEM_START + colorIndex;
+}
+
+/**
+ * 按**颜色名**取染料物品 id（`'white'` / `'light_gray'` …）。
+ *
+ * 配方与熔炼表里一律走这个名字查询，别写死下标：配色表的下标一改
+ * （或中间插一种颜色），写死的数字就会让"可可豆做出浅蓝色染料"。
+ * 名字写错时**当场抛**——返回 -1 的话配方只会安静地指向 `undefined`。
+ */
+export function dyeIdByName(colorName: string): number {
+  const index = DYE_COLORS.findIndex((color) => color.name === colorName);
+  if (index < 0) throw new Error(`染料配色表里没有这种颜色：${colorName}`);
+  return dyeItemId(index);
 }
 
 interface NonBlockItemSpec {
@@ -967,7 +981,8 @@ const BREWING = new Set<number>([
   Item.GLISTERING_MELON,
   Item.PUFFERFISH,
   Item.GOLDEN_CARROT,
-  Item.REDSTONE_DUST,
+  // ⚠️ 这里**不放** `Item.REDSTONE_DUST`：它是旧 id（见 `LEGACY_ITEM_IDS`），
+  // 酿造的延长用的是 `Item.REDSTONE`（红石粉），两者在界面里出现两次只会让人犯迷糊
   Item.GLOWSTONE_DUST,
   Item.DRAGON_BREATH,
   Block.BREWING_STAND,
@@ -1013,12 +1028,33 @@ export const PLACEABLE_ITEMS: readonly number[] = ITEMS.filter(
 ).map((item) => item.id);
 
 /**
+ * **旧 id（保留只为存档兼容）**：注册表已经不再产出它、界面里也不再出现它，
+ * 但 id 不能删——`ITEMS` 是按 id 下标索引的，删一个会让它后面所有物品的 id 整体前移，
+ * 而存档里存的全是数字（把"钻石"读成"煤"就是这么来的）。
+ *
+ * 目前只有一件：`Item.REDSTONE_DUST`（1198）。它与 `Item.REDSTONE`（1004）**是同一件东西**
+ * （红石矿石掉的是 1004），当初做酿造延长时又单独注册了一份"红石粉"，而那份没有任何来源
+ * ——"延长药水"这条链因此在生存里走不到，创造模式里却能从物品栏里直接拿到，所以一直没被察觉。
+ * 现在统一到 1004，旧 id 只留给存档（酿造台里躺着 1198 也照旧能酿，见 `Brewing.ts`）。
+ *
+ * 判据留给可达性断言（`tools/reachability-test.ts`）：**旧 id 必须"确实拿不到"**，
+ * 一旦它又能拿到了，说明有人把它接回了某张表，那条断言会当场报出来。
+ */
+export const LEGACY_ITEM_IDS: ReadonlySet<number> = new Set<number>([Item.REDSTONE_DUST]);
+
+/** 是不是"旧 id"（界面不展示、`/give` 的名字索引里也不收） */
+export function isLegacyItem(itemId: number): boolean {
+  return LEGACY_ITEM_IDS.has(itemId);
+}
+
+/**
  * 创造物品栏展示的全部物品。
  * 必须包含非方块物品（染料、金属锭、宝石……），否则这些物品在创造模式下根本拿不到。
+ * 旧 id（`LEGACY_ITEM_IDS`）**排除在外**：同一件东西在栏里出现两次，玩家只会以为是自己看错了。
  */
-export const CREATIVE_ITEMS: readonly number[] = ITEMS.filter((item): item is ItemDef => item !== undefined).map(
-  (item) => item.id,
-);
+export const CREATIVE_ITEMS: readonly number[] = ITEMS.filter(
+  (item): item is ItemDef => item !== undefined && !isLegacyItem(item.id),
+).map((item) => item.id);
 
 // ---------------------------------------------------------------- 掉落表
 
@@ -1449,8 +1485,12 @@ export function dropFor(blockId: number): { id: number; count: number } | null {
  */
 export function possibleBlockDropIds(): Set<number> {
   const ids = new Set<number>();
-  for (const blockId of Object.values(Block)) {
-    const drop = dropFor(blockId);
+  // ⚠️ 遍历的是**整张方块表**（`BLOCKS`），不是 `Object.values(Block)`：
+  // `Block` 那个对象只有"手写常量"，木材家族 / 床的 16 色 / 画这些**按表生成**的 id
+  // 根本不在里面——用对象枚举会让它们全被算成"拿不到"（批次 91 做可达性审计时踩到，
+  // 152 个"拿不到的方块"里有一大半是这么来的假警报）
+  for (const def of BLOCKS) {
+    const drop = dropFor(def.id);
     if (drop) ids.add(drop.id);
   }
   for (const entry of REPLACE_DROPS.values()) ids.add(entry.id);

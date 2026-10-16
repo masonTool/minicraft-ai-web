@@ -520,9 +520,17 @@ const COLORED_SPECS: readonly BlockSpec[] = [
   ),
 ];
 
-/** 第 index 种颜色的陶瓦 id（0 为原色陶瓦，1-16 对应 DYE_COLORS） */
+/**
+ * 第 index 种颜色的陶瓦 id（与 `concreteId` / `woolId` 同一套 0-based 口径）。
+ *
+ * ⚠️ **原色陶瓦是 `Block.TERRACOTTA`，不是 `terracottaId(0)`**：原色那一格排在
+ * 16 种颜色**之前**（127），所以 `terracottaId(0)` = 128 = **白色**陶瓦。
+ * 上一版这里是 `TERRACOTTA_ID_START + colorIndex`（把原色当成了下标 0），
+ * 于是荒地的色带按颜色名写的那几行整体差一格——"橙"画出的是白色、
+ * "黄"画出的是浅蓝色（批次 91 修；`SurfaceRules` 的注释一直是对的，错的是下标）。
+ */
 export function terracottaId(colorIndex: number): number {
-  return TERRACOTTA_ID_START + colorIndex;
+  return TERRACOTTA_ID_START + 1 + colorIndex;
 }
 
 /** 第 index 种颜色的混凝土 id */
@@ -3406,9 +3414,10 @@ for (const ids of Object.values(Wood)) {
 }
 
 // 陶瓦 1.25、混凝土 1.8（都需要镐，不进徒手可采集表）
-HARDNESS.set(terracottaId(0), 1.25);
+// ⚠️ 原色陶瓦单独设：它是 `Block.TERRACOTTA`，不在 `terracottaId(i)` 的范围内（见那个函数的注释）
+HARDNESS.set(Block.TERRACOTTA, 1.25);
 for (let i = 0; i < DYE_COLORS.length; i++) {
-  HARDNESS.set(terracottaId(i + 1), 1.25);
+  HARDNESS.set(terracottaId(i), 1.25);
   HARDNESS.set(concreteId(i), 1.8);
 }
 

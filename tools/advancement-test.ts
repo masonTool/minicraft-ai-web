@@ -19,7 +19,7 @@
  */
 
 import { Block, CROP_STAGES } from '../src/core/registry/blocks.ts';
-import { Item, dropFor, itemDef } from '../src/core/registry/items.ts';
+import { Item, dropFor, itemDef, possibleBlockDropIds } from '../src/core/registry/items.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
@@ -146,10 +146,12 @@ console.log('\n[可达性：进度的目标在生存里真的拿得到]');
   const obtainable = new Set<number>();
   for (const recipe of RECIPES) obtainable.add(recipe.result.id);
   for (const recipe of SMELTING_RECIPES) obtainable.add(recipe.output.id);
-  for (const blockId of Object.values(Block)) {
-    const drop = dropFor(blockId);
-    if (drop) obtainable.add(drop.id);
-  }
+  // ⚠️ 用 `possibleBlockDropIds()`，**不是** `Object.values(Block)`：
+  // `Block` 那个对象只有手写常量，木材家族 / 床的 16 色 / 画这些按表生成的方块不在里面；
+  // 而且燧石（砂砾）、苹果（树叶）、金粒（鎏金黑石）这些"概率替换掉落"只在
+  // `possibleBlockDropIds()` 里。这里漏一路，断言就会把能拿到的东西判成拿不到
+  // （批次 91 的可达性审计把这条判据统一了，两处共用同一份表）
+  for (const id of possibleBlockDropIds()) obtainable.add(id);
   for (const type of [...MOB_TYPES, DRAGON_TYPE]) {
     for (const drop of type.drops) obtainable.add(drop.itemId);
   }

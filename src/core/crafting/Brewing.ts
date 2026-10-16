@@ -103,7 +103,7 @@ function buildRecipes(): BrewIngredient[] {
       recipes.push({ ingredient, from: POTION_IDS.awkward, to: variant.baseId });
     }
     if (variant.longId !== undefined) {
-      recipes.push({ ingredient: Item.REDSTONE_DUST, from: variant.baseId, to: variant.longId });
+      recipes.push({ ingredient: Item.REDSTONE, from: variant.baseId, to: variant.longId });
     }
     if (variant.strongId !== undefined) {
       recipes.push({ ingredient: Item.GLOWSTONE_DUST, from: variant.baseId, to: variant.strongId });
@@ -141,11 +141,30 @@ function buildRecipes(): BrewIngredient[] {
 
 /** 查这条配方；没有配方返回 null */
 export function brewRecipeFor(ingredient: number, bottle: number): BrewIngredient | null {
+  const canonical = canonicalIngredient(ingredient);
   for (const recipe of BREW_RECIPES) {
-    if (recipe.ingredient === ingredient && recipe.from === bottle) return recipe;
+    if (recipe.ingredient === canonical && recipe.from === bottle) return recipe;
   }
   return null;
 }
+
+/**
+ * 旧 id 归一（批次 91）。
+ *
+ * `Item.REDSTONE_DUST`（1198）与 `Item.REDSTONE`（1004）**在注册表里是同一件东西的两份**：
+ * 前者是当初做酿延时单独加的"红石粉"，但它**没有任何来源**——
+ * 红石矿石掉的是 1004，于是"延长药水"这条链在生存里走不到
+ * （创造模式里能从物品栏直接拿 1198，所以一直没被发现；做可达性审计才翻出来）。
+ *
+ * 现在统一到 1004，旧 id 只保留给**存档兼容**：老存档里可能正躺在酿造台的槽里，
+ * 这里把它归一到 1004，玩家的那台机器照旧能酿。
+ */
+function canonicalIngredient(ingredient: number): number {
+  return ingredient === LEGACY_REDSTONE_DUST ? Item.REDSTONE : ingredient;
+}
+
+/** 已被 1004 取代的旧"红石粉" id（`Item.REDSTONE_DUST`，见 `items.ts` 的 `LEGACY_ITEM_IDS`） */
+const LEGACY_REDSTONE_DUST = Item.REDSTONE_DUST;
 
 /**
  * 这一槽当前能不能开酿（三个槽只要有任意一个能酿，整台就开始走 20 秒）。
