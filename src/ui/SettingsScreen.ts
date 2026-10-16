@@ -132,6 +132,13 @@ export interface SettingsActions {
   onChange: (settings: GameSettings) => void;
   /** 导入资源包（.mcpack / .zip） */
   onResourcePack?: (file: File) => void;
+  /**
+   * 打开成就 / 进度面板（M7，批次 87）。
+   *
+   * 原版把"成就"就放在暂停菜单里（基岩版的暂停菜单第一项），这里照做；
+   * 手机上没有 Esc，所以那个按钮同时也在背包标题栏上挂着（`InventoryScreenHooks`）。
+   */
+  onOpenAdvancements?: () => void;
 }
 
 export class SettingsScreen {
@@ -183,7 +190,14 @@ export class SettingsScreen {
       if (confirm('确定要删除这个世界吗？存档会一起删掉，无法恢复。')) this.actions.onDeleteWorld?.();
     });
 
-    buttons.append(this.resumeButton, exitToMenu, deleteWorld);
+    // 成就 / 进度（M7）：原版基岩版的暂停菜单里就有这一项，放在"继续游戏"后面
+    const achievements = document.createElement('button');
+    achievements.type = 'button';
+    achievements.textContent = '成就';
+    achievements.addEventListener('click', () => this.actions.onOpenAdvancements?.());
+    achievements.style.display = this.actions.onOpenAdvancements ? '' : 'none';
+
+    buttons.append(this.resumeButton, achievements, exitToMenu, deleteWorld);
     exitToMenu.addEventListener('click', () => this.actions.onExitToMenu?.());
     // "回到主菜单/删除世界"只在游戏里有意义；主菜单打开这个面板时（没有当前世界）就藏起来。
     // ⚠️ 用 style.display 而不是 .hidden 类：`.hidden` 只对面板根节点写了样式，加在按钮上没有任何效果。

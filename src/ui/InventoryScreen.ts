@@ -120,6 +120,13 @@ export interface InventoryScreenHooks {
   /** 打开配方书（背包标题栏上的按钮） */
   onOpenRecipes?: () => void;
   /**
+   * 打开成就 / 进度面板（M7，批次 87）。
+   *
+   * 为什么挂在背包标题栏上：手机上**没有 Esc 键**，暂停菜单在触屏上只能靠
+   * 别处进去（背包是唯一常开的入口），配方书当初也是这么挂上去的。
+   */
+  onOpenAdvancements?: () => void;
+  /**
    * 从熔炉里取走产物、且产物槽被取空时结算烧炼经验（I5）。
    * 界面只负责"发现这件事发生了"，攒了多少、给谁加由主程序决定。
    */
@@ -317,6 +324,16 @@ export class InventoryScreen {
       recipes.textContent = '配方书 (R)';
       recipes.addEventListener('click', () => this.hooks.onOpenRecipes?.());
       header.appendChild(recipes);
+    }
+    // 成就（M7）：与配方书并排。手机上这条是**唯一**的入口（没有 Esc、也没有暂停键）
+    if (this.hooks.onOpenAdvancements) {
+      const achievements = document.createElement('button');
+      achievements.type = 'button';
+      achievements.className = 'inv-recipes-btn';
+      achievements.dataset.role = 'advancements';
+      achievements.textContent = '成就 (J)';
+      achievements.addEventListener('click', () => this.hooks.onOpenAdvancements?.());
+      header.appendChild(achievements);
     }
     this.panel.appendChild(header);
 

@@ -289,6 +289,12 @@ import {
   type FrameEntry,
 } from './core/world/ItemFrame.ts';
 import { ItemFrameRenderer, type FrameRenderItem } from './render/ItemFrameRenderer.ts';
+// 成就 / 进度（M7，批次 87）：数据与判定在 core/progress/*（纯逻辑），
+// 这里只做"在事件处报一声 + 弹提示 + 面板入口 + 随存档走"四件事
+import { AdvancementTracker } from './core/progress/AdvancementTracker.ts';
+import type { AdvancementDef, ProgressEvent } from './core/progress/advancements.ts';
+import { AdvancementScreen } from './ui/AdvancementScreen.ts';
+import { AdvancementToast } from './ui/AdvancementToast.ts';
 import {
   CAKE_SLICES,
   cakeBites,
@@ -814,6 +820,28 @@ class App {
   private readonly itemFrames = new ItemFrameStore();
   private readonly itemFrameRenderer: ItemFrameRenderer;
   /**
+   * 成就 / 进度（M7，批次 87）。
+   *
+   * 判定全在 `core/progress/AdvancementTracker.ts`（纯逻辑、可离线断言）；
+   * 这里只做四件事：**在事件处报一声**、**弹提示**、**面板入口**、**随存档走**。
+   */
+  private readonly advancements = new AdvancementTracker();
+  private readonly advancementScreen: AdvancementScreen;
+  private readonly advancementToast: AdvancementToast;
+  /**
+   * 进度系统"上岗"了没有（世界与存档都读完）。
+   *
+   * ⚠️ 进世界之前背包里已经塞着**开发期初始物资**（见 `STARTING_HOTBAR`）：
+   * 上岗时会对着背包对一次账（"已经拿在手里的算已达成"），而那一趟**不弹卡片**
+   * ——否则创建世界的一瞬间会噼里啪啦跳出六七张"进度已达成"，
+   * 看着像出了 bug。之后的每一次达成都会正常弹。
+   */
+  private progressReady = false;
+  /** 进世界那一趟对账时不弹卡片（只写一条汇总的聊天记录） */
+  private suppressProgressToasts = false;
+  /** 背包对账的节拍器（每 1 秒一次，见 `reconcileObtainProgress`） */
+  private progressReconcileTimer = 0;
+  /**
    * 钓鱼（批次 81，G11）。
    *
    * 浮标**不做成实体**：它没有碰撞、不参与战斗、也不需要联机同步，
@@ -1112,6 +1140,8 @@ class App {
       {
         onOpenChange: (open) => this.handleInventoryOpen(open),
         onOpenRecipes: () => this.openRecipeBook(),
+        // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口
+        onOpenAdvancements: () => this.openAdvancements(),
         // 熔炉产物被取空时结算烧炼经验（I5）
         onFurnaceXp: (amount) => this.awardXp(amount),
         // 铁砧（H8）：同样只需要等级与扣等级的出口
@@ -1133,6 +1163,10 @@ class App {
     this.recipeBook = new RecipeBook(document.body, atlas, this.inventory, {
       onCraft: (recipe) => this.craftFromBook(recipe),
     });
+    // 成就面板与达成提示（M7，批次 87）：同样挂 <body>（见上面那条 z-index 的注记），
+    // 点外框关闭；提示卡是 HUD 性质的东西，挂 body 才不会被打包进 #app 的层叠上下文
+    this.advancementScreen = new AdvancementScreen(document.body, atlas, this.advancements);
+    this.advancementToast = new AdvancementToast(document.body, atlas);
 
     // 难度先按"新建世界时选的"来；如果存档里有玩家数据，loadPlayer 会再用存档的覆盖
     this.difficulty = this.worldConfig.difficulty;
@@ -1155,6 +1189,10 @@ class App {
     this.inventory.onChange = () => {
       this.refreshHotbar();
       this.inventoryScreen.refresh();
+      // 背包一变就对一次进度的账（M7）：**大部分进度看的是"背包里有没有过"**，
+      // 挖到/合成/烧出/从箱子里取出/钓上来全都走这一条通道——
+      // 于是主程序不需要在五个地方各报一次"玩家拿到了什么"
+      this.reconcileObtainProgress();
     };
 
     // 护甲：把背包（36-39 号槽）当作护甲提供者接给生存系统。
@@ -1172,6 +1210,8 @@ class App {
       onDeleteWorld: () => void this.deleteCurrentWorld(),
       onChange: (settings) => this.applySettings(settings),
       onResourcePack: (file) => void this.loadResourcePack(file),
+      // 成就（M7）：暂停菜单里点"成就"→ 面板叠在它上面（面板自己会接管 uiOpen）
+      onOpenAdvancements: () => this.toggleAdvancements(),
     });
 
     // 开发期初始物资（见 STARTING_HOTBAR 注释）
@@ -1449,6 +1489,14 @@ class App {
     const restoredFrames = restoreFrames(this.itemFrames, frames);
     if (restoredFrames > 0) console.info(`[save] 已还原 ${restoredFrames} 个展示框里挂着的东西`);
 
+    // 成就 / 进度（M7）：它不属于任何坐标，是纯玩家状态，所以**读的时机比别的紧**——
+    // 必须在 `inventory.restore`（下面）**之前**读进来，否则"读档回填背包"那一串
+    // `add` 会先跑一遍 `onChange`（虽然有 `progressReady` 挡着，但顺序清楚更好读）。
+    // 真正开放报事件是在 `armProgress()`（背包回填完、基线扫过之后）
+    const progress = await this.save.loadAdvancements();
+    const restoredProgress = this.advancements.restore(progress);
+    if (restoredProgress > 0) console.info(`[save] 已还原 ${restoredProgress} 条成就进度`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -1506,6 +1554,9 @@ class App {
     this.selectSlot(data.selectedSlot);
     this.refreshHotbar();
     this.inventoryScreen.refresh();
+
+    // 进度系统上岗：背包已经回填完，此刻的东西记成基线（不补发），再点亮根条目
+    this.armProgress();
 
     // 跳过自动出生点定位，否则会被拉回默认出生点
     this.spawnResolved = true;
@@ -1574,6 +1625,8 @@ class App {
       await this.save.saveSigns(serializeSigns(this.signText));
       // 展示框里挂着的东西（B14）：同一条（空框不进表）
       await this.save.saveFrames(serializeFrames(this.itemFrames));
+      // 成就 / 进度（M7）：整份覆盖写（`serialize` 按表的顺序排，diff 稳定）
+      await this.save.saveAdvancements(this.advancements.serialize());
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -2170,6 +2223,12 @@ class App {
       // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
       // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
       if (this.signEditor.isOpen && e.code !== 'Escape') return;
+      // Esc：**先关成就面板**（它可能叠在暂停菜单上面），再轮到暂停菜单
+      if (e.code === 'Escape' && this.advancementScreen.isOpen) {
+        e.preventDefault();
+        this.closeAdvancements();
+        return;
+      }
       // Esc：打开/关闭暂停菜单（内含设置）。原版也是 Esc 唤出菜单而不是直接退出
       if (e.code === 'Escape' && !this.inventoryScreen.isOpen) {
         e.preventDefault();
@@ -2188,6 +2247,14 @@ class App {
       if (e.code === 'KeyR') {
         e.preventDefault();
         this.toggleRecipeBook();
+        return;
+      }
+      // J：成就 / 进度面板。原版把它放在暂停菜单里（本项目的暂停菜单里也有一个按钮），
+      // 这里另给一个热键——它是个"随时想看"的东西，翻菜单太绕。
+      // 同样放在 uiOpen 判断之前：面板开着的时候也要能按 J 关掉
+      if (e.code === 'KeyJ') {
+        e.preventDefault();
+        this.toggleAdvancements();
         return;
       }
       // T / 斜杠：打开聊天与命令输入（原版就是这两个键）
@@ -2532,6 +2599,8 @@ class App {
   /** 咽下这一份：扣 1 个、补饥饿与饱和度、结算附加效果（腐肉的饥饿就靠这里） */
   private eatFood(itemId: number, food: FoodInfo): void {
     if (!this.inventory.consume(itemId, 1)) return;
+    // 进度（M7）：吃下的是**哪一件**（"均衡饮食"数的是种类，所以必须把 id 报上去）
+    this.reportProgress({ kind: 'eat', item: itemId });
     // 牛奶的回饥饿是 0，但**清效果**才是它的正事，所以照走同一条路
     this.stats.eat(food.hunger, saturationFrom(food));
     // 汤类食物喝完**退回空碗**（批次 57 补上；原版把这件事做成"物品的容器剩余物"）。
@@ -3110,6 +3179,9 @@ class App {
     if (mob.dead) {
       // 死亡的烟：原版生物死时会冒一团烟
       this.particles.spawnSmoke(mob.x, mob.y + 0.5, mob.z, 10, 0.32);
+      // 进度（M7）：击杀。报的是**生物种类 id**而不是这一只——
+      // 计数型进度（"怪物猎人"要三种）靠它去重，报成个体就永远凑不齐三种
+      this.reportProgress({ kind: 'kill', mob: mob.type.id });
     } else {
       // 暴击火花（原版暴击是星星状的白色粒子）
       this.particles.spawnCrit(mob.x, mob.y + 0.7, mob.z, critical ? 8 : 4);
@@ -3528,6 +3600,9 @@ class App {
     // 睡醒回血在原版是"睡觉直接回满"以外的效果（1.18 只有饥饿够时自然回复），
     // 这里不额外加血——只做"跳过夜晚 + 重生点"，避免凭空多一条回血规则
     this.wakeUp('天亮了。重生点已设置在这张床上。');
+    // 进度（M7）：睡到天亮才算"甜美的梦"（被怪物惊醒、提前起床都不算——
+    // 报事件的位置就在这个"真的跳到了黎明"的分支里）
+    this.reportProgress({ kind: 'sleep' });
   }
 
   /**
@@ -3759,6 +3834,110 @@ class App {
     });
     for (const entry of stale) this.dropFrameContents(entry.x, entry.y, entry.z);
     this.itemFrameRenderer.sync(items);
+  }
+
+  // ---------------------------------------------------------------- 成就 / 进度（M7，批次 87）
+
+  /**
+   * 进度系统**上岗**（世界与存档都读完、玩家落位之后）。三件事：
+   *
+   *  1. 进度已经在读档时进了 `AdvancementTracker`（脏数据逐条跳过由它自己管）；
+   *  2. **对着背包对一次账**：已经拿在手里的东西算已达成（自愈——
+   *     存档丢了、或者这条进度是本批新加的，都能靠背包把自己补回来）；
+   *     这一趟不弹卡片（见字段注释），只写一条汇总；
+   *  3. 点亮根条目（`story/root`，`kind: 'auto'`）。原版也是进世界就点亮它。
+   *
+   * **只在这里**开启 `progressReady`：在那之前背包变动一律不报事件
+   * （读档回填背包的那一串 `add` 会走同一条 `onChange` 通道）。
+   */
+  private armProgress(): void {
+    this.progressReady = true;
+    this.suppressProgressToasts = true;
+    const before = this.advancements.earnedCount;
+    this.reportProgress({ kind: 'auto' });
+    this.reconcileObtainProgress();
+    // 进世界那一趟不弹卡片（否则"创建世界"会当场跳出好几张）——
+    // 但**要留一句话**，不然玩家在面板里看到一堆"已达成"会以为是 bug
+    const gained = this.advancements.earnedCount - before;
+    if (gained > 0) this.chat.push(`对了一次背包：已达成 ${gained} 条进度（详情按 J 看）`, 'system');
+    this.suppressProgressToasts = false;
+  }
+
+  /**
+   * **背包对账**：把此刻背包里的东西各报一次 `obtain`。
+   *
+   * 为什么把"拿到东西"收在这一条通道上：原版的大半进度用的就是 `inventory_changed`
+   * 触发器，而本项目的"挖到 / 合成 / 烧出 / 从箱子里取 / 钓上来 / 从生物身上掉"
+   * 六条路最后都会落到背包上，所以**一处就够**——不必在六个地方各报一次，
+   * 那样迟早漏一处（"漏斗搬进来的不算数"这种）。
+   *
+   * 三个调用点：背包变化时（立刻，手感要紧）、**每秒一次**（兜底：
+   * "东西早就在背包里、但它的父条目刚刚才达成"这种顺序也能自己长回来）、
+   * 以及进世界那一趟（见 `armProgress`）。
+   *
+   * 重复报没有代价：`handle` 对已达成的条目直接跳过，而带附魔的那一条
+   * **本来就要每次报**（判据是"手里有没有一件附魔过的"，与"见没见过这种物品"无关）。
+   */
+  private reconcileObtainProgress(): void {
+    if (!this.progressReady) return;
+    const events: ProgressEvent[] = [];
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
+      const stack = this.inventory.get(i);
+      if (!stack) continue;
+      events.push(
+        stack.enchants
+          ? { kind: 'obtain', item: stack.id, enchanted: true }
+          : { kind: 'obtain', item: stack.id },
+      );
+    }
+    if (events.length > 0) this.reportProgress(...events);
+  }
+
+  /**
+   * 报一批"发生了什么"：能达成的达成，然后**三处一起给反馈**——
+   * 弹提示卡、写一条聊天记录、播一声铃。
+   *
+   * ⚠️ 写聊天栏不是冗余：手机上玩家可能正低头挖矿，弹窗错过就永远看不到了
+   * （提示卡 4.5 秒后自己消失），聊天记录会留着。
+   */
+  private reportProgress(...events: ProgressEvent[]): void {
+    if (!this.progressReady) return;
+    const unlocked: AdvancementDef[] = [];
+    for (const event of events) unlocked.push(...this.advancements.handle(event));
+    if (unlocked.length === 0) return;
+
+    for (const def of unlocked) {
+      if (!this.suppressProgressToasts) {
+        this.advancementToast.push(def);
+        this.chat.push(`${def.challenge ? '挑战完成' : '进度已达成'}：${def.title}——${def.desc}`, 'system');
+        this.audio.play('achievement');
+      }
+    }
+    // 面板开着就当场重画（不然玩家会看到"列表里还是灰的"）
+    this.advancementScreen.refresh();
+  }
+
+  /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
+  private openAdvancements(): void {
+    if (this.advancementScreen.isOpen) return;
+    this.advancementScreen.show();
+    this.handleInventoryOpen(true);
+  }
+
+  private closeAdvancements(): void {
+    this.advancementScreen.hide();
+    // uiOpen 交回给"还在开着的那个界面"（与配方书同一条：两个面板可以叠着开）。
+    // ⚠️ 暂停菜单（设置面板）也要算进来：从暂停菜单里点开成就、关掉之后
+    // 人还站在暂停菜单上，这时候把 uiOpen 交成 false 会顺手把指针锁回去、
+    // 玩家就在菜单背后继续走动了
+    this.handleInventoryOpen(
+      this.inventoryScreen.isOpen || this.recipeBook.isOpen || this.settingsScreen.isOpen,
+    );
+  }
+
+  private toggleAdvancements(): void {
+    if (this.advancementScreen.isOpen) this.closeAdvancements();
+    else this.openAdvancements();
   }
 
   // ---------------------------------------------------------------- 雷电与避雷针（批次 83）
@@ -4043,6 +4222,10 @@ class App {
     const leftover = this.inventory.addStack(stack);
     if (leftover > 0) this.spawnDrop(caught.id, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
 
+    // 进度（M7）：钓上来（"腥味十足"）。报的是**钓上来那件东西**，
+    // 所以以后要加"用桶钓一条鱼"这类条目，只要在表里写 ids 就行
+    this.reportProgress({ kind: 'fish', item: caught.id });
+
     // 原版每次钓上来给 1~6 点经验
     this.awardXp(1 + Math.floor(Math.random() * 6));
     this.audio.play('click');
@@ -4308,6 +4491,8 @@ class App {
         // 原版生小动物有"噗"的一声，这里用一个短促的烟雾 + 移动音效代替
         this.audio.play('step', { x, y, z });
         this.particles.spawnSmoke(x, y + 0.3, z, 6, 0.28);
+        // 进度（M7）：繁殖（喂两只同类生幼崽）
+        this.reportProgress({ kind: 'breed', mob: type.id });
       },
       spawnHearts: (x, y, z, scale) => this.particles.spawnHearts(x, y, z, scale),
       awardXp: (amount) => this.awardXp(amount),
@@ -4392,6 +4577,43 @@ class App {
   toggleRecipeBookForTest(): boolean {
     this.toggleRecipeBook();
     return this.recipeBook.isOpen;
+  }
+
+  /**
+   * 验收脚本用：打开/关闭成就面板（M7）。
+   *
+   * 手机上没有键盘，所以脚本要能绕开按键直接开面板——与 `toggleRecipeBookForTest`
+   * 一个道理：**验收要能测到那条路径，就得有个不依赖键鼠的入口**。
+   */
+  toggleAdvancementsForTest(): boolean {
+    this.toggleAdvancements();
+    return this.advancementScreen.isOpen;
+  }
+
+  /**
+   * 验收脚本用：**直接授予**某条进度（不走触发条件）。
+   *
+   * 用途有两个：把面板的三种状态（已达成/可达成/未解锁）都摆出来看一眼；
+   * 以及"读档之后进度还在不在"这类断言（授予 → `saveNow()` → 读档 → 再查）。
+   * 返回是否真的授予了（没这条 id 或已经达成过都是 false）。
+   */
+  grantAdvancementForTest(id: string): boolean {
+    const granted = this.advancements.grant(id);
+    if (granted) {
+      const def = this.advancements.defs.find((item) => item.id === id);
+      if (def) {
+        this.advancementToast.push(def);
+        this.chat.push(`进度已达成：${def.title}——${def.desc}`, 'system');
+      }
+      this.advancementScreen.refresh();
+    }
+    return granted;
+  }
+
+  /** 验收脚本用：清空全部进度（做完验收别把"考试答案"留在存档里） */
+  resetAdvancementsForTest(): void {
+    this.advancements.clear();
+    this.advancementScreen.refresh();
   }
 
   /** 验收脚本用：模拟鼠标悬停在某个快捷栏槽位上，检查提示框内容 */
@@ -5041,6 +5263,14 @@ class App {
       this.endDragon.crystalCount = crystals;
     }
 
+    // 龙倒地（M7 批次 87 顺手接上的）：`dragonDefeated` 这个字段**一直在存档里躺着，
+    // 却从来没有人写过它**——症状是"打完龙，退出重进末地，龙又回来了"。
+    // 这里在"上一帧还活着、这一帧死了"的瞬间记一次账（进度也要一条，所以顺手修掉）。
+    if (this.endDragon?.dead && !this.dragonDefeated) {
+      this.dragonDefeated = true;
+      this.reportProgress({ kind: 'dragon' });
+    }
+
     // 血条
     if (this.bossBarEl && this.bossFillEl) {
       const dragon = this.endDragon;
@@ -5059,6 +5289,8 @@ class App {
    */
   private spawnEndBoss(): void {
     if (this.endDragon && !this.endDragon.dead) return;
+    // 已经打过了就不再长回来（`dragonDefeated` 随存档走；原版是"复活要重新放水晶"）
+    if (this.dragonDefeated) return;
 
     const dragon = new Dragon(DRAGON_SPAWN_X, DRAGON_CRUISE_Y, DRAGON_SPAWN_Z, 0);
     this.entities.spawn(dragon);
@@ -5782,6 +6014,8 @@ class App {
       if (this.world.setBlockAndUpdate(hx, hy, hz, blockId, plan.mergeInto.state)) {
         this.placeCooldown = PLACE_COOLDOWN;
         this.inventory.consume(blockId, 1);
+        // 进度（M7）：合并类放置也算"放下了这个方块"（雪层叠高、台阶叠双层）
+        this.reportProgress({ kind: 'place', block: blockId });
       }
       return;
     }
@@ -5792,6 +6026,8 @@ class App {
         this.placeCooldown = PLACE_COOLDOWN;
         this.inventory.consume(blockId, 1);
         this.net.sendBlock(x, y, z, blockId, plan.mergeIntoTarget.state, this.dimension);
+        // 进度（M7）：藤蔓"再挂一面"同样是放下
+        this.reportProgress({ kind: 'place', block: blockId });
       }
       return;
     }
@@ -5809,6 +6045,10 @@ class App {
 
       // 避雷针（批次 83）：放下就进索引（不必等区块重载——它在**当前**加载的区块里）
       if (blockId === Block.LIGHTNING_ROD) this.noteRodPlaced(x, y, z);
+
+      // 进度（M7）：放下方块。"种下一颗种子"也走这条——种子是**方块物品**
+      // （`Item.WHEAT_SEEDS` 的 `block` 就是 `WHEAT_STAGE0`），所以它本来就落在放置这条路上
+      this.reportProgress({ kind: 'place', block: blockId });
 
       // 潜影盒（批次 72）：物品里带着的内容**倒回方块**（原版如此）。
       // 空盒子也照样建一个容器——放着不管的话，第一次打开界面才建，
@@ -6389,7 +6629,14 @@ class App {
     if (this.save?.hasSave) {
       void this.loadSaveState().then((restored) => {
         if (restored) console.info('[save] 已恢复上次的进度');
+        // 兜底：读档半路失败（存档坏了/没有玩家数据）时 `loadSaveState` 里那个
+        // `armProgress()` 不会被执行，进度系统就永远不上岗——这里再补一次（`armProgress`
+        // 自己幂等：重扫基线、重报一次 auto，已经达成的条目不会再弹）
+        else this.armProgress();
       });
+    } else {
+      // 新世界：没有存档要读，进度系统直接上岗（背包里此刻是开发期初始物资 → 记账为基线）
+      this.armProgress();
     }
 
     // 切后台/关页面前补一次保存：移动端切走随时可能被系统回收
@@ -6462,6 +6709,14 @@ class App {
         // 展示框里挂着的东西（B14）：同一个节拍对账（两件事的"必须重新看世界一眼"
         // 的理由完全一样：区块流式加载/卸载、光照变化都没有事件）
         this.syncFrames();
+      }
+      // 背包对账（M7）：每秒一次。**不是**为了"发现新东西"（那个由 `onChange` 立刻管），
+      // 而是兜底"东西早就在背包里、而它的父条目刚刚才达成"这类顺序问题——
+      // 这类问题不改背包，所以逐条事件驱动的写法会永远错过
+      this.progressReconcileTimer -= dt;
+      if (this.progressReconcileTimer <= 0) {
+        this.progressReconcileTimer = 1;
+        this.reconcileObtainProgress();
       }
       this.resolvePortalArrival();
 
@@ -6548,6 +6803,7 @@ class App {
 
   dispose(): void {
     this.recipeBook.dispose();
+    this.advancementScreen.dispose();
     this.tooltip.dispose();
     this.mobRenderer.dispose();
     this.playerRenderer.dispose();
@@ -6747,6 +7003,10 @@ class App {
     if (dimension === Dimension.END) this.spawnEndBoss();
     this.applyEnvironment();
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+    // 进度（M7）：进入某维度。"第一次踏进下界/末地"这类条目全靠它——
+    // 放在**这个方法里**而不是"按 N 键"那处：传送门、命令、调试接口全都走这里，
+    // 少一处就漏一种进法（本项目的"两条路径共用同一套逻辑"）
+    this.reportProgress({ kind: 'dimension', dimension });
   }
 
   /**
@@ -6981,6 +7241,16 @@ class App {
     screenEffect: ScreenEffect;
     /** 配方书是否打开（验收用） */
     recipeBookOpen: boolean;
+    /** 成就面板是否打开、以及与它相关的四个数（M7 验收用） */
+    advancements: {
+      open: boolean;
+      /** 面板里当前画了多少行（DOM 里真的有多少行） */
+      rows: number;
+      earned: number;
+      total: number;
+      /** 已达成的 id（验收脚本直接对表） */
+      ids: string[];
+    };
     /** 聊天/命令输入框是否打开（验收用） */
     chatOpen: boolean;
     /** 当前难度与游戏规则（验收用） */
@@ -7023,6 +7293,13 @@ class App {
       handItem: this.hand.item ?? null,
       screenEffect: this.screenEffects.effect,
       recipeBookOpen: this.recipeBook.isOpen,
+      advancements: {
+        open: this.advancementScreen.isOpen,
+        rows: this.advancementScreen.renderedRowCount,
+        earned: this.advancements.earnedCount,
+        total: this.advancements.totalCount,
+        ids: this.advancements.serialize().earned,
+      },
       chatOpen: this.chat.isOpen,
       difficulty: this.difficulty,
       gameRules: { ...this.rules },

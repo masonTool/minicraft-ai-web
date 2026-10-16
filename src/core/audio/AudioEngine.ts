@@ -40,7 +40,13 @@ export type SoundKind =
   | 'mob_creeper'
   | 'mob_cow'
   | 'mob_sheep'
-  | 'fuse';
+  | 'fuse'
+  /**
+   * 达成进度（M7，批次 87）：原版是一声"叮——叮"的双音铃声。
+   * 单开一种而不是复用 `click`：达成是**值得记住的一刻**，
+   * 与"点了什么"共用一声会让玩家分不清（这条与本项目的"音效要能分辨"同一个理由）。
+   */
+  | 'achievement';
 
 interface SoundSpec {
   /** 声音总时长（秒） */
@@ -104,6 +110,9 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   mob_sheep: { duration: 0.6, gain: 0.36, noise: 0.25, freqFrom: 380, freqTo: 300, type: 'sawtooth', filter: 1400, filterQ: 1.3, attack: 0.05, release: 0.55 },
   // 苦力怕引信：持续的嘶嘶声，音调缓慢上扬（原版点火音的辨识度全靠它）
   fuse: { duration: 1.4, gain: 0.34, noise: 1, freqFrom: 1500, freqTo: 2600, type: 'triangle', filter: 3200, filterQ: 1.1, attack: 0.08, release: 1.3 },
+  // 达成进度（M7）：清亮的双音铃（正弦 + 很高的中心频率，没有噪声成分——
+  // 一耳朵就与"破坏方块"那一族区分开）。滑音就是从低音"滑"到高音的那一下。
+  achievement: { duration: 0.9, gain: 0.42, noise: 0, freqFrom: 880, freqTo: 1568, type: 'sine', filter: 4200, filterQ: 0.7, attack: 0.01, release: 0.85 },
 };
 
 /**

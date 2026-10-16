@@ -12,6 +12,7 @@
  *      序列化本身在 `ContainerSave.ts`）
  *   5. **signs**：告示牌上的文字（B12，批次 80；序列化在 `world/SignText.ts`）
  *   6. **frames**：物品展示框里挂着的东西（B14，批次 86；序列化在 `world/ItemFrame.ts`）
+ *   7. **advancements**：成就/进度（M7，批次 87；序列化在 `progress/AdvancementTracker.ts`）
  *
  * 为什么用 IndexedDB 而不是 localStorage：
  *   localStorage 只能存字符串且容量约 5MB，把二进制转 base64 还会再胖 33%；
@@ -24,10 +25,11 @@ import { ChunkEdits, type SerializedEdits } from './ChunkEdits.ts';
 import type { SerializedContainer } from './ContainerSave.ts';
 import type { SerializedSign } from '../world/SignText.ts';
 import type { SerializedFrame } from '../world/ItemFrame.ts';
+import type { SerializedAdvancements } from '../progress/AdvancementTracker.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 
 /** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const STORE_META = 'meta';
 import type { ItemStack } from '../container/Inventory.ts';
 
@@ -52,6 +54,15 @@ const STORE_SIGNS = 'signs';
  * 仓库版本从 3 升到 4，老存档自动补建。
  */
 const STORE_FRAMES = 'frames';
+/**
+ * 成就 / 进度（M7，批次 87）——第 7 个对象仓。
+ *
+ * 内容只有"达成了哪些 id + 计数型进度集"，**整份覆盖写**（条数以十计，比按条写省心）；
+ * 与容器/牌子不同的一点：它**不属于任何坐标**，是纯玩家状态——
+ * 所以它跟着玩家走（以后做多人时"每个人的进度"也是这一份结构的扩展口）。
+ * 仓库版本从 4 升到 5，老存档自动补建。
+ */
+const STORE_ADVANCEMENTS = 'advancements';
 
 /** 存档结构版本：改了字段含义就要 +1，并在加载时做迁移或丢弃 */
 export const SAVE_VERSION = 1;
@@ -197,6 +208,7 @@ export class SaveGame {
         if (!db.objectStoreNames.contains(STORE_CONTAINERS)) db.createObjectStore(STORE_CONTAINERS);
         if (!db.objectStoreNames.contains(STORE_SIGNS)) db.createObjectStore(STORE_SIGNS);
         if (!db.objectStoreNames.contains(STORE_FRAMES)) db.createObjectStore(STORE_FRAMES);
+        if (!db.objectStoreNames.contains(STORE_ADVANCEMENTS)) db.createObjectStore(STORE_ADVANCEMENTS);
       };
       const db = await promisify(request);
       const save = new SaveGame(db, worldId);
@@ -377,6 +389,24 @@ export class SaveGame {
   async saveFrames(frames: SerializedFrame[]): Promise<void> {
     await this.transaction(STORE_FRAMES, 'readwrite', (store) => {
       store.put(frames, 'frames');
+    });
+  }
+
+  /**
+   * 读成就/进度（M7，批次 87）：**整份一次读**，脏数据逐条跳过由调用方处理
+   * （`AdvancementTracker.restore` 自己会校验 id、剪掉断链——判定与容错都在纯逻辑那一层，
+   * 存档这一层只管搬运）。
+   */
+  async loadAdvancements(): Promise<SerializedAdvancements | null> {
+    const value = await this.transaction(STORE_ADVANCEMENTS, 'readonly', (store) =>
+      promisify(store.get('advancements') as IDBRequest<SerializedAdvancements | undefined>),
+    );
+    return value ?? null;
+  }
+
+  async saveAdvancements(progress: SerializedAdvancements): Promise<void> {
+    await this.transaction(STORE_ADVANCEMENTS, 'readwrite', (store) => {
+      store.put(progress, 'advancements');
     });
   }
 

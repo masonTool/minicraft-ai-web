@@ -34,6 +34,7 @@ import { DIMENSION_CYCLE } from '../src/core/gen/Dimension.ts';
 import { ORE_BLOCKS } from '../src/core/gen/OreGenerator.ts';
 import { TREE_KINDS } from '../src/core/gen/Features.ts';
 import { isRedstoneComponent } from '../src/core/redstone/RedstoneEngine.ts';
+import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
 
 const TASKS_FILE = new URL('../TASKS.md', import.meta.url);
 const START_MARK = '<!-- coverage:start -->';
@@ -243,9 +244,12 @@ const rows: readonly Row[] = [
   {
     label: '成就 / 进度',
     spec: SPEC.advancements,
-    now: 0,
+    // ⚠️ 数的是**条目本身的条数**，不是"能不能拿到"：原版那张表里
+    // 有一大半挂在未实现的内容上（村民交易、蜜蜂、信标、鞘翅…），
+    // 本项目按"能用现有事件判定"的条目一条条补（M7 的差异记录里有清单）
+    now: ADVANCEMENTS.length,
     basis: '原版 1.18 进度条目量级（约 100+）',
-    gap: '整块未做（M7）',
+    gap: '依赖未实现内容的那些（村民/蜜蜂/信标/鞘翅/要塞/刷怪笼…）',
   },
   {
     label: '界面语言',

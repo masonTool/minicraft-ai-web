@@ -122,16 +122,18 @@
       }
 
       /* 面板内滚动条：默认的白色粗条在灰色面板上非常突兀 */
-      .inv-panel, .recipe-panel, .settings-panel, .world-panel, #inv-creative {
+      .inv-panel, .recipe-panel, .settings-panel, .world-panel, .adv-panel, #inv-creative {
         scrollbar-width: thin;
         scrollbar-color: #7a7a7a transparent;
       }
       .inv-panel::-webkit-scrollbar, .recipe-panel::-webkit-scrollbar,
-      .settings-panel::-webkit-scrollbar, .world-panel::-webkit-scrollbar {
+      .settings-panel::-webkit-scrollbar, .world-panel::-webkit-scrollbar,
+      .adv-panel::-webkit-scrollbar {
         width: 8px;
       }
       .inv-panel::-webkit-scrollbar-thumb, .recipe-panel::-webkit-scrollbar-thumb,
-      .settings-panel::-webkit-scrollbar-thumb, .world-panel::-webkit-scrollbar-thumb {
+      .settings-panel::-webkit-scrollbar-thumb, .world-panel::-webkit-scrollbar-thumb,
+      .adv-panel::-webkit-scrollbar-thumb {
         background: #7a7a7a; border-radius: 4px;
       }
       /* 层级约定（从小到大）：遮罩(5) < 死亡(6) < 背包(10) < 配方书(20) < 主菜单(40) < 设置(50)。
@@ -1143,6 +1145,10 @@
           max-width: 96vw; max-height: 92vh; padding: 10px;
           border-width: 2px;
         }
+        /* 成就面板同理（批次 87）：手机上几乎全屏，行高留够点按尺寸 */
+        .adv-panel { max-width: 96vw; max-height: 92vh; padding: 10px; border-width: 2px; }
+        .adv-row { min-height: 48px; }
+        #adv-toasts { max-width: 88vw; }
         .inv-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 2px; }
         .inv-grid .inv-slot { width: auto; aspect-ratio: 1; }
         .inv-grid.inv-armor { grid-template-columns: repeat(5, minmax(0, 1fr)); }
@@ -1225,7 +1231,7 @@
         from { opacity: 0; transform: scale(.97) translateY(6px); }
         to { opacity: 1; transform: none; }
       }
-      .inv-panel, .recipe-panel, .settings-panel, .world-panel {
+      .inv-panel, .recipe-panel, .settings-panel, .world-panel, .adv-panel {
         animation: panel-in var(--dur-med) var(--ease);
       }
       /* 低血量脉冲：血少了要让 HUD 自己"跳"一下，而不是等玩家发现数字变小了 */
@@ -1234,6 +1240,90 @@
         50% { transform: translateX(-50%) scale(1.06); filter: drop-shadow(0 0 6px rgba(224, 80, 60, .8)); }
       }
       #vitals.low-health { animation: low-health-pulse 1s ease-in-out infinite; }
+
+      /* ---------------- 成就 / 进度（M7，批次 87） ----------------
+         面板与配方书同一套灰色金属；列表是**竖着的树**（缩进），
+         未解锁的行整行压暗 + 标题显示 `???`（说明留着——那是"怎么做"，不是秘密）。 */
+      #advancements {
+        /* z-index 55：**要在暂停菜单（设置，50）之上**——暂停菜单里点"成就"
+           就是这个顺序；其余的按文件开头那条层级约定排 */
+        position: fixed; inset: 0; z-index: 55; display: flex;
+        align-items: center; justify-content: center;
+        background: rgba(0, 0, 0, .45);
+      }
+      #advancements.hidden { display: none; }
+      .adv-panel {
+        width: min(96vw, 760px); max-height: 90vh; overflow-y: auto;
+        background: var(--panel-bg);
+        border: 3px solid var(--panel-edge-dark);
+        border-radius: var(--panel-radius);
+        padding: 12px 14px; color: var(--panel-text); font-size: 13px;
+        box-shadow: var(--panel-shadow);
+      }
+      .adv-header {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        padding-bottom: 8px; border-bottom: 2px solid #9a9a9a; margin-bottom: 8px;
+      }
+      .adv-header b { font-size: 15px; }
+      .adv-summary { color: #4a4a4a; font-size: 11px; }
+      .adv-close {
+        margin-left: auto; font: inherit; font-size: 12px; padding: 6px 12px; cursor: pointer;
+        background: #a8a8a8; color: #222; border: 2px solid;
+        border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      /* 分类页签：手机上会横向挤到 6 个，所以允许换行（不滚动，滚动条在手机上是另一种麻烦） */
+      .adv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+      .adv-tab {
+        font: inherit; font-size: 11px; padding: 5px 9px; cursor: pointer;
+        background: #a8a8a8; color: #222; border: 2px solid;
+        border-color: #d8d8d8 #6a6a6a #6a6a6a #d8d8d8; border-radius: 3px;
+      }
+      .adv-tab.active { background: #7fa06f; border-color: #dfe9d8 #47603c #47603c #dfe9d8; }
+      .adv-list { display: flex; flex-direction: column; gap: 5px; }
+      .adv-empty { padding: 18px; text-align: center; color: #5a5a5a; }
+      .adv-row {
+        display: flex; align-items: center; gap: 9px;
+        padding: 6px 8px; background: #b4b4b4;
+        border: 2px solid; border-color: #d8d8d8 #7a7a7a #7a7a7a #d8d8d8;
+        border-radius: var(--radius-sm); min-height: 44px;
+      }
+      .adv-row[data-state='earned'] { background: #b9c9b0; }
+      .adv-row[data-state='locked'] { background: #9a9a9a; }
+      .adv-icon { width: 30px; height: 30px; flex: 0 0 30px; image-rendering: pixelated; }
+      .adv-row[data-state='locked'] .adv-icon { filter: grayscale(1) brightness(.62); }
+      .adv-main { flex: 1; min-width: 0; }
+      .adv-title { font-size: 13px; }
+      .adv-desc { font-size: 11px; color: #4a4a4a; }
+      .adv-row[data-state='locked'] .adv-title,
+      .adv-row[data-state='locked'] .adv-desc { color: #3d3d3d; }
+      .adv-badge {
+        flex: 0 0 auto; font-size: 10px; padding: 3px 7px; border-radius: 3px;
+        background: #6f6f6f; color: #f2f2f2;
+      }
+      .adv-row[data-state='earned'] .adv-badge { background: #3a7d33; }
+      .adv-row[data-state='available'] .adv-badge { background: #7a6a33; }
+
+      /* 达成提示（原版那张小卡片）：右上角，最新的在最上面 */
+      #adv-toasts {
+        position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: 10px;
+        z-index: 24; display: flex; flex-direction: column; gap: 6px;
+        pointer-events: none; max-width: min(78vw, 320px);
+      }
+      .adv-toast {
+        display: flex; align-items: center; gap: 8px;
+        padding: 7px 10px; border-radius: 4px;
+        background: linear-gradient(#2b2b30, #1b1b20);
+        border: 2px solid #57a04a; color: #f0f0f0;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .55);
+        opacity: 1; transition: opacity var(--dur-med) var(--ease);
+      }
+      .adv-toast.challenge { border-color: #a545d0; }
+      .adv-toast.hiding { opacity: 0; }
+      .adv-toast-icon { width: 26px; height: 26px; image-rendering: pixelated; }
+      .adv-toast-text { min-width: 0; }
+      .adv-toast-label { font-size: 10px; color: #a8e39b; }
+      .adv-toast.challenge .adv-toast-label { color: #dcb0f0; }
+      .adv-toast-name { font-size: 12px; }
 
       /* ---------------- 减少动效（无障碍） ----------------
          系统里开了"减少动态效果"就把动画与过渡全部关掉：
