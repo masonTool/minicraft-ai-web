@@ -3291,6 +3291,34 @@ PAINTERS.spawner = (x, y, rng) => {
   return [clamp255(base + jitter), clamp255(base + jitter), clamp255(base + 8 + jitter), 255];
 };
 
+/**
+ * 凋灵骷髅头（批次 115）：炭灰色的头骨，两个黑洞洞的眼窝 + 一排牙。
+ *
+ * 它同时是**四个侧面**（本项目不存朝向，见 `blocks.ts` 的 `SKULL_SPECS`）：
+ * 所以脸要画在正中间、左右留出"后脑勺"的余量——从任何一面看都是一张脸。
+ */
+PAINTERS.wither_skull = (x, y, rng) => {
+  const jitter = rng() * 16 - 8;
+  // 眼窝：5~7 行、两侧各三格（黑色，比头骨本身暗得多）
+  const eye = y >= 5 && y <= 7 && ((x >= 3 && x <= 5) || (x >= 10 && x <= 12));
+  if (eye) return [10, 10, 12, 255];
+  // 嘴：10~11 行的一排牙（隔一格留一颗，看着像咬合）
+  const mouth = (y === 10 || y === 11) && x >= 4 && x <= 11 && x % 2 === 0;
+  if (mouth) return [24, 24, 28, 255];
+  // 头骨本体：偏冷灰，边缘（1 格内缩）稍暗，做出一点体积感
+  const edge = x <= 1 || x >= 14 || y <= 1 || y >= 14;
+  const base = (edge ? 54 : 74) + jitter;
+  return [clamp255(base), clamp255(base), clamp255(base + 6), 255];
+};
+
+/** 凋灵骷髅头的顶面（批次 115）：几道更深的骨缝，说明"这是个头"而不是一块石头 */
+PAINTERS.wither_skull_top = (x, y, rng) => {
+  const jitter = rng() * 14 - 7;
+  const seam = x === 7 || x === 8 || y === 7 || y === 8;
+  const base = (seam ? 46 : 78) + jitter;
+  return [clamp255(base), clamp255(base), clamp255(base + 6), 255];
+};
+
 /** 烈焰人的小火球（批次 92）：一团中心亮黄、边缘橙红的火（billboard 用） */
 PAINTERS.small_fireball = (x, y, rng) => {
   const jitter = rng() * 12 - 6;

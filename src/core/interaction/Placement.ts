@@ -216,6 +216,14 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
       return { state: 0 };
 
+    case 'head':
+      // 头（批次 115，凋灵骷髅头）：只能放在实心方块**上面**（原版还能挂墙上，
+      // 那需要"贴哪一面"那套状态，而本项目不存头的朝向，见 `blocks.ts` 的 `SKULL_SPECS`）。
+      // 召唤凋灵正是"把 3 个头摆在灵魂沙上"，所以这一条就是仪式成立的前提
+      if (ny <= 0) return null;
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: 0 };
+
     case 'scaffolding': {
       // 脚手架（批次 53）：**下面要有支撑**（实心方块或另一片脚手架），否则拒绝。
       // 原版是"放下去之后自己往下掉到支撑上"，那需要一套"方块下落"的机制

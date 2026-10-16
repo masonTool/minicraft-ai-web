@@ -54,6 +54,8 @@ function makeContext(
     airBox?: boolean;
     /** 调用了多少次世界查询（用来钉住"刷怪不再逐格扫描"，见文件末尾） */
     counts?: { block: number; surface: number };
+    /** "这一列在不在某种结构里"（批次 115）：不传就当不在任何结构里 */
+    inStructure?: (kind: string, x: number, z: number) => boolean;
   },
 ): SpawnContext {
   return {
@@ -77,6 +79,7 @@ function makeContext(
     },
     player: options.player ?? { x: 0.5, y: 65, z: 0.5 },
     dimension: options.dimension,
+    ...(options.inStructure ? { inStructure: options.inStructure } : {}),
     spawn: (type, x, y, z) => options.spawned.push({ type, x, y, z }),
     hostileCount: options.hostile ?? 0,
     passiveCount: options.passive ?? 0,
@@ -112,6 +115,57 @@ console.log('\n[敌对生物：光照规则]');
   check('天光 8 就不再刷敌对生物', above.every((s) => !s.type.hostile), `其中敌对 ${above.filter((s) => s.type.hostile).length} 只`);
 
   check('刷出的都是敌对生物', dark.every((s) => s.type.hostile), [...new Set(dark.map((s) => s.type.id))].join(','));
+}
+
+console.log('\n[结构限定：凋灵骷髅只要塞]');
+{
+  // ⚠️ 用 `airBox`（七格高的空腔）：下界的另一只敌对生物是**恶魂**，
+  // 它要 4×4 的空腔，默认那种"两格空气一层石头"的地形里它一只都刷不出来
+  // ——不这么铺，这条测试会变成"下界里两只怪都不出"，把结构过滤的功劳记到维度上
+  const netherDark = { sky: 0, block: 0, dimension: 'nether' as const, airBox: true };
+
+  // 不在要塞里：一只凋灵骷髅都不许出现，但恶魂照刷
+  const outside: Spawned[] = [];
+  runCycles(
+    new MobSpawner(),
+    makeContext({ ...netherDark, spawned: outside, inStructure: () => false }),
+    60,
+  );
+  check(
+    '不在要塞里 → 一只凋灵骷髅都没有',
+    outside.every((s) => s.type.id !== 'wither_skeleton'),
+    outside.filter((s) => s.type.id === 'wither_skeleton').length + ' 只',
+  );
+  check(
+    '（前置）别的下界生物照刷（恶魂）',
+    outside.some((s) => s.type.id === 'ghast'),
+    [...new Set(outside.map((s) => s.type.id))].join(',') || '一只都没有',
+  );
+
+  // 在要塞里：会刷出来
+  const inside: Spawned[] = [];
+  runCycles(
+    new MobSpawner(),
+    makeContext({ ...netherDark, spawned: inside, inStructure: (kind) => kind === 'nether_fortress' }),
+    60,
+  );
+  check('要塞里 → 凋灵骷髅会刷', inside.some((s) => s.type.id === 'wither_skeleton'));
+  check('别的下界生物照刷（不是"只刷凋灵骷髅"）', inside.some((s) => s.type.id !== 'wither_skeleton'));
+
+  // 没接钩子（离线、未来的别的调用方）：宁可一只不刷，也不要撒满下界
+  const noHook: Spawned[] = [];
+  runCycles(new MobSpawner(), makeContext({ ...netherDark, spawned: noHook }), 60);
+  check(
+    '没接 inStructure 钩子时也不刷（"不传就当不在任何结构里"）',
+    noHook.every((s) => s.type.id !== 'wither_skeleton'),
+  );
+
+  // 钩子只对"要结构"的生物生效：主世界的怪不该跟着跑到下界来
+  check(
+    '钩子不影响维度过滤（下界里刷不出来僵尸）',
+    [...outside, ...inside].every((s) => s.type.dimension === 'nether'),
+    [...new Set([...outside, ...inside].map((s) => s.type.id))].join(','),
+  );
 }
 
 console.log('\n[被动生物：地面与光照规则]');

@@ -77,7 +77,7 @@ export interface EntityContext {
    * 与 `hurtPlayer` 同一个分工：实体层只描述"**该中毒了**"，
    * "毒多久、有没有免疫、难度要不要打折"全归生存模块。
    */
-  afflictPlayer?: (effect: 'poison', seconds: number) => void;
+  afflictPlayer?: (effect: 'poison' | 'wither', seconds: number) => void;
   /**
    * 玩家是不是**正看着这一点**（批次 112，末影人被注视激怒用）。
    *

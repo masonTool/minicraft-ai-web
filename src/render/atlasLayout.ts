@@ -908,6 +908,9 @@ export const TILE_ORDER = [
   'item_blaze_rod',
   // 刷怪笼（批次 92）：铁栏杆笼子，**中间镂空**（走 alphaTest 那一档，与展示框同理）
   'spawner',
+  // 凋灵骷髅头（批次 115）：侧面（画着脸）与顶面
+  'wither_skull',
+  'wither_skull_top',
   // 烈焰人的小火球（批次 92）：没有对应物品，只是飞在空中一团火
   // （渲染时按贴图名取 billboard，见 `EntityRenderer.tileSpriteGeometry`）
   'small_fireball',

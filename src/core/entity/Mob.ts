@@ -163,6 +163,16 @@ export interface MobType {
    */
   dimension?: 'overworld' | 'nether' | 'end' | readonly ('overworld' | 'nether' | 'end')[];
   /**
+   * **只在某个结构里自然刷**（批次 115，凋灵骷髅用）：填结构的键
+   * （现在只有 `'nether_fortress'`，以后要塞里的蠹虫、末地城的潜影贝也能用它）。
+   *
+   * 为什么不是一个坐标范围：结构的位置是**算出来**的（`gen/NetherFortress.ts`），
+   * 而"这一格在不在要塞里"这个问题只有主程序答得上来（它拿着种子与实例）。
+   * 所以这里只写"哪一种结构"，判定交给 `SpawnContext.inStructure`——
+   * 与 `dimension` 那条"只写维度、判定交给刷怪器"是同一个分工。
+   */
+  spawnStructure?: string;
+  /**
    * 自然刷出来时需要的**空腔尺寸**（宽 × 高，格；默认 1×2，也就是"两格高的空气"）。
    *
    * 恶魂 4×4 的体型如果按默认判据刷，会有很大概率**半截卡在岩层里**
@@ -225,11 +235,14 @@ export interface MobType {
    */
   waterSensitive?: boolean;
   /**
-   * **打中玩家时附带的状态效果**（批次 93，洞穴蜘蛛的中毒）：原版洞穴蜘蛛每次命中
-   * 让对方中毒 7 秒。写成一个字段，而不是让 `CaveSpider` 去覆盖近战逻辑——
-   * 那样会与"接触伤害"的冷却、击退、`attackBonus` 三处各分一份（迟早漂）。
+   * **打中玩家时附带的状态效果**（批次 93 洞穴蜘蛛的中毒；批次 115 起凋灵骷髅也用它）。
+   *
+   * 值域跟着 `StatusEffects` 走：现在只用到 `poison`（7 秒）与 `wither`（10 秒）两种——
+   * 它们是这个游戏里仅有的两种"持续掉血"效果，而带这两种的生物各只有一种。
+   * ⚠️ 凋零与中毒的区别**不在这一层**：中毒停在 1 点血、凋零能致死，
+   * 那是 `StatusEffects` 里 `damageCause` 决定的（见那边的注释）。
    */
-  venom?: { effect: 'poison'; seconds: number };
+  venom?: { effect: 'poison' | 'wither'; seconds: number };
   /**
    * 死亡时按**自己身上的颜色**掉羊毛（J8，羊用）。
    * 羊毛不在 `drops` 表里，因为颜色是每只动物各自的——写死在表里就只能掉白色的。

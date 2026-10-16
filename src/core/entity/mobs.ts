@@ -10,6 +10,10 @@
  */
 
 import { Item } from '../registry/items.ts';
+// 凋灵骷髅头（批次 115）：它既是方块也是掉落物，所以这里要引方块表
+import { Block } from '../registry/blocks.ts';
+// 石剑（批次 115）：原版凋灵骷髅拿着它，剑本身也能掉
+import { toolItemId } from '../registry/tools.ts';
 // 村民（J11）：爱吃什么、皮肤与长袍的底色都放在职业表那一层（纯数据）
 import { VILLAGER_FOODS, VILLAGER_IDLE_ROBE, VILLAGER_SKIN_COLOR } from '../registry/villagerTrades.ts';
 import type { MobType } from './Mob.ts';
@@ -265,12 +269,64 @@ export const ENDERMAN_TYPE: MobType = {
   eyeHeight: 2.55,
 };
 
+/**
+ * 凋灵骷髅（批次 115，J14 的前置）。
+ *
+ * 它是**唯一掉凋灵骷髅头**的生物，而 3 颗头是召唤凋灵的必需材料
+ * （4 块灵魂沙摆成 T + 顶上 3 个头）——所以在它出现之前，凋灵这件事根本没有入口。
+ *
+ * 与骷髅的差别**全在数据里**（两条加法 + 一条改口粮）：
+ *  - **命中让对方凋零 10 秒**（`venom: { effect: 'wither' }`）：这是它比普通骷髅可怕的地方，
+ *    也是"凋零"这个状态效果的第一个来源（⚠️ 与中毒的区别不在这一层：
+ *    中毒停在 1 点血，**凋零能致死**，那是 `StatusEffects` 里 `damageCause` 决定的）；
+ *  - **近战**（没有 `ranged`）：原版它拿着石剑贴身砍，不像骷髅那样射箭；
+ *  - **只在下界要塞里刷**（`spawnStructure: 'nether_fortress'`，见 `MobSpawner`）：
+ *    原版就是"要塞限定"，撒满整个下界会让下界变成绞肉机。
+ *
+ * 数值按原版：20 点生命、接触伤害 8（普通难度，石剑的加成已含在内）、
+ * 追击 16 格、击杀经验 5。掉落：煤炭 0~1（原版）、骨头 0~2、
+ * **凋灵骷髅头 1 个 / 2.5%**、石剑 1 把 / 8.5%。
+ * ⚠️ 与原版的差异：模型**看不到手里的石剑**（本项目不画生物手上的东西），
+ * 所以"它有剑"只体现在伤害数字与那条掉落上。
+ */
+export const WITHER_SKELETON_TYPE: MobType = {
+  id: 'wither_skeleton',
+  name: '凋灵骷髅',
+  health: 20,
+  width: 0.6,
+  height: 1.95,
+  speed: 2.4,
+  hostile: true,
+  attackDamage: 8,
+  followRange: 16,
+  drops: [
+    { itemId: Item.COAL, min: 0, max: 1 },
+    { itemId: Item.BONE, min: 0, max: 2 },
+    // ⚠️ `min: 1, max: 1` + `chance` 才是原版那颗头的 2.5%：写成 `min: 0, max: 1`
+    // 会被"数量也掷一次"再砍一半（这是蜘蛛眼那条踩过的同一个坑，见 `test:spider`）
+    { itemId: Block.WITHER_SKELETON_SKULL, min: 1, max: 1, chance: 0.025 },
+    // 原版它拿着石剑：剑本身也能掉（8.5%）
+    { itemId: toolItemId('sword', 'stone'), min: 1, max: 1, chance: 0.085 },
+  ],
+  xp: 5,
+  family: 'undead',
+  venom: { effect: 'wither', seconds: 10 },
+  // 下界 + **只要塞里面**（`spawnStructure`）：原版就是"要塞限定"，
+  // 所以要进"会自然刷"那张表（`naturalSpawn` 保持默认的 true）
+  dimension: 'nether',
+  spawnStructure: 'nether_fortress',
+  bodyColor: 0x3c3c3c,
+  accentColor: 0x1c1c1c,
+  eyeHeight: 1.74,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
   SPIDER_TYPE,
   CAVE_SPIDER_TYPE,
   ENDERMAN_TYPE,
+  WITHER_SKELETON_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

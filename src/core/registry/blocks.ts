@@ -2730,6 +2730,33 @@ const NETHER_WART_SPECS: readonly BlockSpec[] = [0, 1, 2, 3].map((stage) => ({
  */
 export const SPAWNER_ID = 551;
 
+export const WITHER_SKELETON_SKULL_ID = 552;
+
+/**
+ * 凋灵骷髅头（批次 115，J14 的前置）。
+ *
+ * 它有两个身份，这里都实现了：
+ *  - **战利品**：凋灵骷髅 2.5% 掉一个（原版数值），可以放在地上当装饰；
+ *  - **召唤材料**：4 块灵魂沙摆成 T + 顶上 3 个头 = 凋灵（仪式那一半在下一批）。
+ *
+ * 形状是 `head`（8/16 立方体贴在顶面正中，能站上去也能从旁边走过），
+ * 所以它**不是** `cube`——原版那颗头占不满一格。
+ *
+ * ⚠️ 与原版的差异：**不存朝向**（原版会按放置方向把脸转过来）。本项目的状态位
+ * 已被 `TOP_MASK` 那套"不同形状族共用位"的约定占着，而"头朝哪"这件事只影响观感，
+ * 不值得为它占一位——脸朝 -Z，四个侧面共用同一张贴图，从哪边看都是那张脸。
+ */
+const SKULL_SPECS: readonly BlockSpec[] = [
+  {
+    id: WITHER_SKELETON_SKULL_ID,
+    name: 'minecraft:wither_skeleton_skull',
+    tiles: ['wither_skull_top', 'wither_skull', 'wither_skull'],
+    shape: 'head',
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 const SPAWNER_SPECS: readonly BlockSpec[] = [
   {
     id: SPAWNER_ID,
@@ -2799,6 +2826,7 @@ const SPECS: readonly BlockSpec[] = [
   ...WORKSTATION_SPECS,
   ...NETHER_WART_SPECS,
   ...SPAWNER_SPECS,
+  ...SKULL_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -3112,6 +3140,8 @@ export const Block = {
   NETHER_WART_STAGE3: NETHER_WART_ID_START + 3,
   // 刷怪笼（批次 92）：下界要塞里出烈焰人的那一格
   SPAWNER: SPAWNER_ID,
+  // 凋灵骷髅头（批次 115）：战利品 + 召唤材料，形状是 `head`
+  WITHER_SKELETON_SKULL: WITHER_SKELETON_SKULL_ID,
   CRACKED_POLISHED_BLACKSTONE_BRICKS: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
@@ -3407,6 +3437,8 @@ HARDNESS.set(Block.COCOA_STAGE1, 0.2);
 HARDNESS.set(Block.COCOA_STAGE2, 0.2);
 // 下界疣、刷怪笼（批次 92）
 HARDNESS.set(Block.SPAWNER, 5);
+// 凋灵骷髅头（批次 115）：原版硬度 1（徒手一秒多就能挖下来）
+HARDNESS.set(Block.WITHER_SKELETON_SKULL, 1);
 // 下界疣：原版徒手一拍就掉（硬度 0），四个阶段都要登记
 // （不登记的话 `blockHardness` 的兜底是 3 —— 收个下界疣要挖 4.5 秒，见 `isHardnessRegistered`）
 // ⚠️ 这里按 id 算术展开，不能引用 `NETHER_WART_STAGES`：那张表在本文件**后面**才定义，

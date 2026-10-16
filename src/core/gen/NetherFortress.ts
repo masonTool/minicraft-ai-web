@@ -16,8 +16,9 @@
  *  - 原版要塞由一堆"拼图零件"随机拼（走廊/十字口/楼梯/阳台/烈焰人房间），
  *    这里**只有一种手写布局**（一条中轴走廊 + 一间大厅 + 两座塔）；
  *  - 原版是**悬在岩浆海上方的桥**，这里落在地板上（与堡垒遗迹同一个取舍）；
- *  - 原版要塞里还有凋灵骷髅、岩浆怪、战利品箱（`nether_bridge` 表），这些都没有：
- *    前者是没做的生物，箱子要新增一张战利品表（见 K10）。
+ *  - 原版要塞里还有**凋灵骷髅**（批次 115 已接上：它是"只在要塞里自然刷"的，
+ *    判据见 `fortressAt`）、岩浆怪与战利品箱（`nether_bridge` 表）——
+ *    后两者还没有：岩浆怪是没做的生物，箱子要新增一张战利品表（见 K10）。
  *
  * 该模块必须保持"纯函数 + 无 DOM 依赖"，因为它会被 Web Worker 直接引用。
  */
@@ -339,6 +340,43 @@ export function generateFortresses(w: FeatureWriter, seed: number, world: Fortre
       buildFortress(w, instance);
     }
   }
+}
+
+/**
+ * (x, z) 这一列在不在某座下界要塞里（批次 115，凋灵骷髅的刷怪判据）。
+ *
+ * 为什么要问"在不在要塞里"而不是"离要塞多远"：这一句要每 2 秒跑几十次
+ * （`MobSpawner` 的敌对刷怪循环），所以判据必须是**几个网格数的比较**——
+ * 而"最近的要塞在哪"那种做法每次都要算 9 个候选（每个 candidate 要三次噪声查询，
+ * 见 `fortressCandidate`）。这里的做法是：先按单元反推出"覆盖这一格的那几个单元"，
+ * 逐个算实例（同一份公式！），再看这一格的半径内有没有它。
+ *
+ * ⚠️ **必须复用 `fortressCandidate`**：一旦自己重写一遍"单元 + 哈希"的位置公式，
+ * 就会出现"生物刷在要塞外面"或"要塞里一只都不刷"——两边都"没错"、只是对不上
+ * （末影之眼那批在 `Structures.ts` 踩过同一条，那里抽成了 `structureCellOrigin`）。
+ *
+ * @returns 命中时返回那座要塞（调用方若只关心真假，忽略返回值即可）
+ */
+export function fortressAt(
+  x: number,
+  z: number,
+  seed: number,
+  world: FortressWorld,
+): FortressInstance | null {
+  const cellSize = FORTRESS_SPACING * 16;
+  const baseCellX = Math.floor(x / cellSize);
+  const baseCellZ = Math.floor(z / cellSize);
+  // 半径 18 格远小于单元（352 格），所以只需看这一格所在的单元与它相邻的八个
+  for (let dcz = -1; dcz <= 1; dcz++) {
+    for (let dcx = -1; dcx <= 1; dcx++) {
+      const instance = fortressCandidate(baseCellX + dcx, baseCellZ + dcz, seed, world);
+      if (!instance) continue;
+      if (Math.abs(instance.x - x) > FORTRESS_RADIUS) continue;
+      if (Math.abs(instance.z - z) > FORTRESS_RADIUS) continue;
+      return instance;
+    }
+  }
+  return null;
 }
 
 /** 测试用：直接求某个单元里的实例（不经过区块裁剪，见 `structureInstanceForTest`） */

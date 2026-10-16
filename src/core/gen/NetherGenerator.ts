@@ -20,7 +20,7 @@ import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { FeatureWriter, hashAt, PositionalRng } from './Features.ts';
 import { generateBastions } from './Bastion.ts';
-import { generateFortresses } from './NetherFortress.ts';
+import { generateFortresses, type FortressWorld } from './NetherFortress.ts';
 
 /** 岩浆海面高度（原版下界岩浆海在 y=32） */
 export const NETHER_LAVA_LEVEL = 32;
@@ -396,13 +396,25 @@ export class NetherGenerator {
    * ⚠️ 调用方要把**方块状态**通道接上（箱子要把"哪张战利品表"写进状态里）——
    * 下界以前从来不写状态，这条通道是这一批才通的（见 `TerrainGenerator`）。
    */
-  generateStructures(w: FeatureWriter, seed: number): void {
-    const world = {
+  /**
+   * 下界结构（堡垒遗迹 / 要塞）那套"锚点查询"：地板 / 洞顶 / 群系。
+   *
+   * 抽成一个方法而不是写死在 `generateStructures` 里，是因为**主线程也要问同一个问题**：
+   * "这一列在不在要塞里"（批次 115 的凋灵骷髅只在要塞里刷，见 `main.inStructure`）。
+   * 两边各写一遍这三条查询的话，一旦有一处写错，症状是"生物刷在要塞外面"
+   * 或者"要塞里一只都不刷"——两边都"没错"、只是对不上（末影之眼那批踩过同一条）。
+   */
+  structureWorld(): FortressWorld {
+    return {
       floorAt: (x: number, z: number) => this.surfaceY(x, z),
       ceilingAt: (x: number, z: number) => this.ceilingAt(x, z),
       biomeAt: (x: number, z: number) => this.biomeAt(x, z),
       basaltBiome: NetherBiome.BASALT_DELTAS,
     };
+  }
+
+  generateStructures(w: FeatureWriter, seed: number): void {
+    const world = this.structureWorld();
     generateBastions(w, seed, world);
     // ⚠️ 顺序有讲究：**要塞在后**。两座结构各有各的单元网格与盐（同样的种子下位置无关），
     // 万一候选点凑得很近，后写的会把先写的盖掉一点——让要塞（要长下界疣、要放刷怪笼）

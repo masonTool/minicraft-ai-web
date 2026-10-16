@@ -227,10 +227,22 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       // 床（批次 79）：9/16 高的一整块（能站上去，也能沿着床走）。
       // 与渲染同源，所以"看着是张床、踩着是张床"
       return [[0, 0, 0, 1, BED_HEIGHT, 1]];
+    case 'head':
+      // 头（批次 115）：8/16 见方、8/16 高的一块，贴在顶面正中。
+      // 原版能站上去，也能从旁边走过去（不挡路），所以碰撞与渲染共用同一份盒子
+      return [HEAD_BOX];
     default:
       return [FULL];
   }
 }
+
+/**
+ * 头（批次 115）：8/16 见方、8/16 高，水平居中、贴在方块底面上。
+ *
+ * 与渲染**共用这一个常量**——"看着是一颗头、踩着还是一颗头"这件事只能有一份数据
+ * （本项目为"碰撞与渲染各写一遍"交过学费：床、营火都在这上面踩过）。
+ */
+const HEAD_BOX: LocalBox = [4 / 16, 0, 4 / 16, 12 / 16, 8 / 16, 12 / 16];
 
 /**
  * 堆肥桶（批次 70）：四面板条（2/16 厚、整格高）+ 2/16 厚的桶底。
@@ -472,6 +484,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       // 堆肥桶（批次 70）：四面板条围一圈 + 2/16 厚的桶底；**顶面是敞口的**
       // （空着时从上面能看见桶底那张"暗口"贴图，满了换成"堆肥满仓"那张）
       return composterBoxes();
+    case 'head':
+      // 头（批次 115）：与碰撞盒共用同一份几何（见 `HEAD_BOX` 的注释）
+      return [HEAD_BOX];
     case 'bed':
       // 床（批次 79）：9/16 的床体 + **床头那一端**多一块 2/16 高的枕头。
       // 枕头用几何而不是贴图表达朝向：本项目没有"按朝向旋转贴图"的能力

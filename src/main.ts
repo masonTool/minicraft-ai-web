@@ -244,6 +244,9 @@ import {
   tillableTo,
 } from './core/registry/tools.ts';
 import { OverworldGenerator, SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
+// 凋灵骷髅"只要塞里面刷"（批次 115）：要塞的位置要算，而算它需要下界的洞顶/地板/群系
+import { NetherGenerator } from './core/gen/NetherGenerator.ts';
+import { fortressAt, type FortressWorld } from './core/gen/NetherFortress.ts';
 // 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子。
 // `nearestStronghold`（批次 114）是"最近的要塞"的**轻量**版本：要塞是地下结构，
 // 位置不看地形，所以末影之眼每次出手都算得起（见那个函数的注释）
@@ -618,6 +621,13 @@ class App {
   private readonly mobRenderer: MobRenderer;
   /** 生物生成规则 */
   private readonly mobSpawner = new MobSpawner();
+  /**
+   * 下界那套"锚点查询"（批次 115）：只用来回答"这一列在不在要塞里"（见 `inStructure`）。
+   *
+   * 懒建——主世界/末地玩一整天都不会用到它；也不用留生成器本身的引用，
+   * 那几个闭包已经把生成器拴住了。
+   */
+  private netherStructureWorld: FortressWorld | null = null;
   private readonly domeTop = new THREE.Color();
   private readonly domeHorizon = new THREE.Color();
   /** 玩家所在地表是否为寒冷群系（决定下雪还是下雨），每秒复查一次 */
@@ -4723,8 +4733,26 @@ class App {
       },
       hostileCount,
       passiveCount,
+      // "这一列在不在要塞里"（批次 115）：只有主程序答得上来，见 `inStructure`
+      inStructure: (kind, x, z) => this.inStructure(kind, x, z),
     };
     this.mobSpawner.update(dt, ctx);
+  }
+
+  /**
+   * 这一列在不在某种结构里（批次 115，凋灵骷髅只要塞）。
+   *
+   * 要塞的位置是**算出来**的（与 Worker 用同一份公式），而"算"需要下界的
+   * 洞顶/地板/群系——只有 `NetherGenerator` 答得上来。所以这里**懒建一个并留着**：
+   * 本模块里带状态的东西越少越好，但每 2 秒 new 一个生成器显然是更糟的选择。
+   *
+   * ⚠️ 只在"真的抽到了那只会结构限定的生物"时才走到这里（`MobSpawner` 里先筛维度、
+   * 再抽种类、最后才问结构），所以那点噪声开销落在每两秒一次的概率上。
+   */
+  private inStructure(kind: string, x: number, z: number): boolean {
+    if (kind !== 'nether_fortress') return false;
+    this.netherStructureWorld ??= new NetherGenerator(this.worldConfig.seed).structureWorld();
+    return fortressAt(x, z, this.worldConfig.seed, this.netherStructureWorld) !== null;
   }
 
   /**
