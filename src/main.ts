@@ -65,6 +65,8 @@ import {
   type PotionCloud,
 } from './core/survival/PotionCloud.ts';
 import {
+  ENDER_EYE_RISE,
+  ENDER_EYE_SPEED,
   ENDER_PEARL_FALL_DAMAGE,
   PLAYER_THROW_SPEED,
   Throwable,
@@ -242,8 +244,10 @@ import {
   tillableTo,
 } from './core/registry/tools.ts';
 import { OverworldGenerator, SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
-// 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子
-import { structureInstanceForTest } from './core/gen/Structures.ts';
+// 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子。
+// `nearestStronghold`（批次 114）是"最近的要塞"的**轻量**版本：要塞是地下结构，
+// 位置不看地形，所以末影之眼每次出手都算得起（见那个函数的注释）
+import { nearestStronghold, structureInstanceForTest } from './core/gen/Structures.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 import { planPlacement } from './core/interaction/Placement.ts';
@@ -4845,6 +4849,8 @@ class App {
       skyLightAt: (x, y, z) => this.world.getSkyLight(x, y, z),
       // 末影珍珠落地（批次 113）：实体层只报"珍珠落在哪"，传人 + 摔落伤害在这里做
       teleportPlayer: (x, y, z) => this.teleportByEnderPearl(x, y, z),
+      // 末影之眼碎掉（批次 114）：紫色涡旋（与传送门/末影箱/珍珠传送同一套粒子）
+      spawnPortalParticles: (x, y, z, count, spread) => this.particles.spawnPortal(x, y, z, count, spread),
       // 下雨（下雪也算）：原版的雨只下在主世界，所以这里带上维度
       raining: this.weather.raining && this.dimension === Dimension.OVERWORLD,
       // 箭矢命中生物：实体层不持有生物列表，所以由这里从实体管理器里查
@@ -5102,6 +5108,17 @@ class App {
       }
     }
     return best;
+  }
+
+  /**
+   * 验收脚本用（批次 114）：离玩家最近的那座**要塞**在哪。
+   *
+   * 与 `nearestVillageForTest` 是同一个用途、同一个理由（"找到它"这件事本身要走上
+   * 十几分钟，验收等不起）——区别是要塞的坐标**不必起生成器**：它是地下结构，
+   * 位置不看地形（见 `nearestStronghold`）。末影之眼飞的就是这一个点。
+   */
+  nearestStrongholdForTest(): { x: number; y: number; z: number; distance: number } | null {
+    return nearestStronghold(this.worldConfig.seed, this.physics.x, this.physics.z);
   }
 
   /** 验收脚本用：清空全部进度（做完验收别把"考试答案"留在存档里） */
@@ -6226,12 +6243,28 @@ class App {
           : // 末影珍珠（批次 113）：扔出去，落地时**把自己传过去**（代价 5 点摔落伤害）
             held === Item.ENDER_PEARL
             ? 'ender_pearl'
-            : potion?.splash === true
-              ? 'splash_potion'
-              : potion?.lingering === true
-                ? 'lingering_potion'
-                : null;
+            : // 末影之眼（批次 114）：朝最近的要塞飞，用来**找要塞**
+              held === Item.ENDER_EYE
+              ? 'ender_eye'
+              : potion?.splash === true
+                ? 'splash_potion'
+                : potion?.lingering === true
+                  ? 'lingering_potion'
+                  : null;
     if (kind === null) return false;
+
+    // 末影之眼有两件事要做（批次 114）：**按进末地传送门框架**（K9 的正门）与
+    // **扔出去找要塞**。投掷这一层排在"功能方块"之前，所以对着框架时必须**让位**——
+    // 否则同一个手势会把想按下去的那只眼睛扔出去（玩家第一下就会踩到）。
+    // 判据只有"准星在框架上"：手里拿着眼睛又对着框架时，"按下去"是唯一说得通的意图
+    // （想扔就朝别处扔）——所以这里连潜行都不必判。
+    if (
+      kind === 'ender_eye' &&
+      this.hit !== null &&
+      this.world.getBlock(this.hit.x, this.hit.y, this.hit.z) === Block.END_PORTAL_FRAME
+    ) {
+      return false;
+    }
 
     // 先扣再扔：扔不出去（背包里其实没有）时什么都不该发生
     if (!this.inventory.consume(held, 1)) return false;
@@ -6241,14 +6274,22 @@ class App {
     const dirY = Math.sin(this.pitch);
     const dirZ = -Math.cos(this.yaw) * cosPitch;
 
+    // 末影之眼要飞向哪儿（只有主世界有答案；见 `nearestStrongholdTarget`）
+    const target = kind === 'ender_eye' ? this.nearestStrongholdTarget() : undefined;
+
     // 出手点在眼睛前下方一点（与射箭一致），避免刚出手就撞上自己脚边的方块
     this.spawnThrowable(
       this.physics.x + dirX * 0.4,
       this.physics.eyeY - 0.1,
       this.physics.z + dirZ * 0.4,
-      { x: dirX * PLAYER_THROW_SPEED, y: dirY * PLAYER_THROW_SPEED, z: dirZ * PLAYER_THROW_SPEED },
+      // 末影之眼：**初速朝要塞**（原版就是这样——扔出去它自己拐向要塞，
+      // 手上的朝向只决定出手的那一刻位置）；其余投掷物照旧沿视线飞
+      target
+        ? this.eyeLaunchVelocity(target)
+        : { x: dirX * PLAYER_THROW_SPEED, y: dirY * PLAYER_THROW_SPEED, z: dirZ * PLAYER_THROW_SPEED },
       kind,
       held,
+      target,
     );
 
     this.audio.play('bow_shoot');
@@ -6271,14 +6312,46 @@ class App {
     velocity: { x: number; y: number; z: number },
     kind: ThrowableKind,
     itemId: number,
+    target?: { x: number; y: number; z: number },
   ): void {
     this.entities.spawn(
       new Throwable(x, y, z, velocity, {
         kind,
         itemId,
         potionId: kind === 'splash_potion' || kind === 'lingering_potion' ? itemId : undefined,
+        // ⚠️ 发射器那一档**没有目标**：它不放末影之眼（连珍珠都不放，见 `test:dispenser`）
+        target,
       }),
     );
+  }
+
+  /**
+   * 末影之眼的出手方向（批次 114）：**朝要塞**，再带一点上升。
+   *
+   * 原版把"投掷点 → 要塞"的归一化方向（含竖直分量）直接当初始速度，再叠一个每 tick
+   * +0.15 的上升；这里只取**水平方向**，竖直那一下由 `ENDER_EYE_RISE` 固定——
+   * 因为本项目的要塞都在地下（-35~20 格），照原版那个归一化方向会先一头扎进土里。
+   */
+  private eyeLaunchVelocity(target: { x: number; y: number; z: number }): {
+    x: number;
+    y: number;
+    z: number;
+  } {
+    const dx = target.x - this.physics.x;
+    const dz = target.z - this.physics.z;
+    const length = Math.max(1e-4, Math.hypot(dx, dz));
+    return { x: (dx / length) * ENDER_EYE_SPEED, y: ENDER_EYE_RISE, z: (dz / length) * ENDER_EYE_SPEED };
+  }
+
+  /**
+   * 末影之眼该飞向哪儿（批次 114）：**最近的要塞**。
+   *
+   * @returns 不在主世界时 undefined——要塞是主世界的结构，在下界/末地扔眼睛是白扔
+   *          （那种情况下眼睛按普通投掷物落下，与原版"找不到目标就掉在地上"一致）
+   */
+  private nearestStrongholdTarget(): { x: number; y: number; z: number } | undefined {
+    if (this.dimension !== Dimension.OVERWORLD) return undefined;
+    return nearestStronghold(this.worldConfig.seed, this.physics.x, this.physics.z) ?? undefined;
   }
 
   /**

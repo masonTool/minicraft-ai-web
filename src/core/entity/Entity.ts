@@ -170,6 +170,13 @@ export interface EntityContext {
   /** 冒爱心粒子（J8：求爱与繁殖成功时）。`scale` 用来让"没找到对象"时少冒几颗 */
   spawnHearts?: (x: number, y: number, z: number, scale?: number) => void;
   /**
+   * 冒一圈紫色粒子（批次 114，末影之眼碎掉时用）。
+   *
+   * 用**名字描述观感**而不是"给末影之眼用的粒子"：传送门、末影箱打开、珍珠传送
+   * 用的都是同一套紫色涡旋，将来别的地方要用也直接复用（与 `spawnHearts` 同一个性质）。
+   */
+  spawnPortalParticles?: (x: number, y: number, z: number, count?: number, spread?: number) => void;
+  /**
    * 射出一支箭（J9，骷髅用）。
    * 与 `spawnDrop` 同理：生物只负责"什么时候射、往哪射"，
    * 箭怎么建、飞出去长什么样由主程序决定。

@@ -276,6 +276,69 @@ function emptyCounts(): Record<string, number> {
 
 // ---------------------------------------------------------------- 候选点求解
 
+/**
+ * 单元里候选点的**平面位置**（只由种子与单元决定，**不看地形**）。
+ *
+ * 抽出来是为了"末影之眼找最近的要塞"（批次 114，`nearestStronghold`）：
+ * 那一次查询发生在**主线程**、又要连着算 9 个单元，若每个都去问一次地表高度
+ * （那是整套噪声路由器），扔一只眼睛就会卡一下。要塞是地下结构，位置本来就不看地形。
+ *
+ * ⚠️ 位置公式只能有这一份：`candidateFor` 也走它，否则"眼睛指的地方"与
+ * "真的生成出来的要塞"会悄悄错开——那是最难查的一类 bug（两个地方都"没错"）。
+ */
+export function structureCellOrigin(
+  kind: StructureKind,
+  cellX: number,
+  cellZ: number,
+  seed: number,
+): { x: number; z: number } | null {
+  const def = STRUCTURE_DEFS.find((entry) => entry.kind === kind);
+  if (!def) return null;
+  const cellSize = def.spacing * 16;
+  const margin = def.separation * 16;
+  const inner = Math.max(16, cellSize - margin * 2);
+  return {
+    x: cellX * cellSize + margin + Math.floor(hashAt(cellX, cellZ, seed ^ def.salt) * inner),
+    z: cellZ * cellSize + margin + Math.floor(hashAt(cellX + 7919, cellZ - 104729, seed ^ def.salt) * inner),
+  };
+}
+
+/**
+ * 离 (x,z) **最近的那一座要塞**（批次 114，末影之眼的导航）。
+ *
+ * ⚠️ 这里**不看地形**：要塞是地下结构（`biomes: []`、有 `undergroundY`），
+ * 位置与高度只由"种子 + 单元"决定——所以主线程拿着种子就能算，不必像
+ * `nearestVillageForTest` 那样先起一个 `OverworldGenerator`（那一步是真花钱的）。
+ *
+ * 只扫 ±1 个单元：候选点一定落在单元的**中间那一半**（margin 384 格、单元 1536 格），
+ * 所以最近的那一座不会跑出相邻格。`chance: 1` 意味着每个单元都有一座要塞
+ * （原版是全世界 3 座，本项目按格铺开——差异记在 TASKS D15/K9）。
+ */
+export function nearestStronghold(
+  seed: number,
+  x: number,
+  z: number,
+): { x: number; y: number; z: number; distance: number } | null {
+  const def = STRUCTURE_DEFS.find((entry) => entry.kind === 'stronghold');
+  if (!def) return null;
+  const cellSize = def.spacing * 16;
+  const cellX = Math.floor(x / cellSize);
+  const cellZ = Math.floor(z / cellSize);
+  let best: { x: number; y: number; z: number; distance: number } | null = null;
+
+  for (let dcx = -1; dcx <= 1; dcx++) {
+    for (let dcz = -1; dcz <= 1; dcz++) {
+      const origin = structureCellOrigin('stronghold', cellX + dcx, cellZ + dcz, seed);
+      if (!origin) continue;
+      // 高度走结构表里那一份（与真生成时同一个函数，见 `undergroundY`）
+      const y = def.undergroundY ? def.undergroundY(origin.x, origin.z, seed) : 0;
+      const distance = Math.hypot(origin.x - x, origin.z - z);
+      if (!best || distance < best.distance) best = { x: origin.x, y, z: origin.z, distance };
+    }
+  }
+  return best;
+}
+
 /** 该单元的候选结构实例；没有候选返回 null */
 function candidateFor(
   def: StructureDef,
@@ -284,12 +347,9 @@ function candidateFor(
   world: FeatureWorld,
   seed: number,
 ): StructureInstance | null {
-  const cellSize = def.spacing * 16;
-  const margin = def.separation * 16;
-  const inner = Math.max(16, cellSize - margin * 2);
-
-  const x = cellX * cellSize + margin + Math.floor(hashAt(cellX, cellZ, seed ^ def.salt) * inner);
-  const z = cellZ * cellSize + margin + Math.floor(hashAt(cellX + 7919, cellZ - 104729, seed ^ def.salt) * inner);
+  const origin = structureCellOrigin(def.kind, cellX, cellZ, seed);
+  if (!origin) return null;
+  const { x, z } = origin;
 
   if (hashAt(x, z, seed ^ (def.salt + 0x5a5a)) > def.chance) return null;
 

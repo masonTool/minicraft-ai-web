@@ -24,6 +24,10 @@ import { POTIONS, SPLASH_POTIONS, potionById, splashIdOf } from '../src/core/reg
 import { SPLASH_RADIUS, isInstantEffect, splashEffectsAt, splashScale } from '../src/core/survival/SplashPotion.ts';
 import {
   EGG_CHICK_CHANCE,
+  ENDER_EYE_DROP_CHANCE,
+  ENDER_EYE_LIFETIME,
+  ENDER_EYE_RISE,
+  ENDER_EYE_SPEED,
   ENDER_PEARL_FALL_DAMAGE,
   ENDER_PEARL_LANDING_LIFT,
   PLAYER_THROW_SPEED,
@@ -317,6 +321,125 @@ console.log('\n[末影珍珠：落地把人传过去]');
   });
   advance(noHook, makeCtx(world), 1);
   check('主程序没给 teleportPlayer 时也不崩', noHook.dead);
+}
+
+// ---------------------------------------------------------------- 2c. 末影之眼（批次 114）
+
+console.log('\n[末影之眼：朝要塞飞]');
+{
+  const target = { x: 400, y: 30, z: 0 };
+  const sky = makeCtx(emptyWorld(), {});
+
+  // ---- 物品侧：说明必须把**两件事**都写出来（按进框架 / 扔出去找要塞）
+  check(
+    '说明写了"按进框架"与"飞向最近的要塞"两件事',
+    itemDescription(Item.ENDER_EYE).includes('框架') && itemDescription(Item.ENDER_EYE).includes('要塞'),
+    itemDescription(Item.ENDER_EYE),
+  );
+  check('末影之眼已登记（手上有它才谈得上扔）', itemDef(Item.ENDER_EYE) !== undefined);
+  equal('眼睛能堆叠 64', maxStackOf(Item.ENDER_EYE), 64);
+
+  // ---- 朝目标飘 + 先上升
+  const eye = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: ENDER_EYE_RISE, z: 0 }, {
+    kind: 'ender_eye',
+    itemId: Item.ENDER_EYE,
+    target,
+  });
+  equal('出手时记下了目标（渲染与测试都读它）', eye.target?.x, 400);
+  advance(eye, sky, 1);
+  check('朝要塞飞（x 在一秒里走出去十几格）', eye.x > 8, `x=${eye.x.toFixed(1)}`);
+  check('先上升（不叠重力）', eye.y > 70.5, `y=${eye.y.toFixed(2)}`);
+  advance(eye, sky, 1);
+  check('上升速度会衰减（弧线压平，不是一直窜）', eye.vy < ENDER_EYE_RISE, `vy=${eye.vy.toFixed(2)}`);
+  check('水平速度收敛到设计值附近', Math.abs(eye.vx - ENDER_EYE_SPEED) < 1, `vx=${eye.vx.toFixed(2)}`);
+
+  // ---- 朝反方向扔：也会拐回来（原版就是"它自己指向要塞"）
+  const back = new Throwable(0.5, 70, 0.5, { x: -ENDER_EYE_SPEED, y: ENDER_EYE_RISE, z: 0 }, {
+    kind: 'ender_eye',
+    itemId: Item.ENDER_EYE,
+    target,
+  });
+  advance(back, sky, 0.6);
+  check('朝反方向扔出去也会自己拐向要塞', back.vx > 0, `vx=${back.vx.toFixed(2)}`);
+
+  // ---- 已经很近了：只往上飘（原版那个"就在脚下了"的信号）
+  const near = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: ENDER_EYE_RISE, z: 0 }, {
+    kind: 'ender_eye',
+    itemId: Item.ENDER_EYE,
+    target: { x: 5, y: 30, z: 0 },
+  });
+  advance(near, sky, 1);
+  check('离要塞 15 格以内就不再往前飘', near.x < 5, `x=${near.x.toFixed(2)}`);
+  check('但它还在往上飘（"挖下去"的信号）', near.y > 70.5, `y=${near.y.toFixed(2)}`);
+
+  // ---- 飞够时间就落地
+  const timed = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: ENDER_EYE_RISE, z: 0 }, {
+    kind: 'ender_eye',
+    itemId: Item.ENDER_EYE,
+    target,
+  });
+  advance(timed, sky, ENDER_EYE_LIFETIME - 0.5);
+  check(`${ENDER_EYE_LIFETIME} 秒内一直在飞（还没落地）`, !timed.dead);
+  advance(timed, sky, 1);
+  check('飞够时间就落地（原版约 4 秒）', timed.dead);
+  check('落地时飞出去三四十格（够看出方向）', timed.x > 25 && timed.x < 60, `x=${timed.x.toFixed(1)}`);
+
+  // ---- 落地：八成掉回地上，两成碎掉
+  const realRandom = Math.random;
+  try {
+    const drops: number[] = [];
+    const sounds: string[] = [];
+    const particles: number[] = [];
+    const landed = makeCtx(emptyWorld(), {
+      spawnDrop: (itemId) => drops.push(itemId),
+      playSound: (kind) => sounds.push(kind),
+      spawnPortalParticles: () => particles.push(1),
+    });
+    Math.random = () => 0.5; // < 0.8 → 掉回地上
+    const lucky = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: 0, z: 0 }, {
+      kind: 'ender_eye',
+      itemId: Item.ENDER_EYE,
+      target: { x: 5, y: 30, z: 0 },
+    });
+    advance(lucky, landed, ENDER_EYE_LIFETIME + 0.5);
+    equal('八成：眼睛掉回地上（这是"能一路扔着找"的前提）', drops.length, 1);
+    equal('掉的就是末影之眼', drops[0], Item.ENDER_EYE);
+    equal('掉回地上时不放碎裂粒子', particles.length, 0);
+
+    Math.random = () => 0.95; // ≥ 0.8 → 碎掉
+    const broken = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: 0, z: 0 }, {
+      kind: 'ender_eye',
+      itemId: Item.ENDER_EYE,
+      target: { x: 5, y: 30, z: 0 },
+    });
+    advance(broken, landed, ENDER_EYE_LIFETIME + 0.5);
+    equal('两成：碎掉，什么都不留', drops.length, 1);
+    check('碎掉时有声音', sounds.includes('break_glass'), sounds.join(','));
+    equal('碎掉时冒一圈紫色粒子', particles.length, 1);
+  } finally {
+    Math.random = realRandom;
+  }
+  close('掉落概率是原版的 0.8', ENDER_EYE_DROP_CHANCE, 0.8);
+
+  // ---- 穿过生物（原版它是"指路的东西"，不会打在谁身上）
+  const zombie = new Mob(mobTypeById('zombie')!, 1, 70, 0.5);
+  const through = new Throwable(0.5, 70, 0.5, { x: ENDER_EYE_SPEED, y: 0, z: 0 }, {
+    kind: 'ender_eye',
+    itemId: Item.ENDER_EYE,
+    target,
+  });
+  const zombieCtx = makeCtx(emptyWorld(), { hitMob: () => zombie });
+  advance(through, zombieCtx, 0.5);
+  check('撞到生物也不落地（穿过它继续飞）', !through.dead);
+  check('生物也没被推（它只是路过）', zombie.vx === 0);
+
+  // ---- 没有目标（下界/末地扔）：按普通投掷物受重力落下
+  const noTarget = new Throwable(0.5, 70, 0.5, { x: 10, y: 0, z: 0 }, {
+    kind: 'ender_eye',
+    itemId: Item.ENDER_EYE,
+  });
+  advance(noTarget, sky, 0.5);
+  check('没有目标时受重力（不会诡异地一直往上飘）', noTarget.vy < -5, `vy=${noTarget.vy.toFixed(2)}`);
 }
 
 // ---------------------------------------------------------------- 3. 喷溅范围

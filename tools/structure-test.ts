@@ -18,6 +18,7 @@ import { FeatureWriter, type FeatureWorld } from '../src/core/gen/Features.ts';
 import {
   STRUCTURE_KINDS,
   generateStructures,
+  nearestStronghold,
   structureInstanceForTest,
   type StructureKind,
 } from '../src/core/gen/Structures.ts';
@@ -373,6 +374,77 @@ check(
     123,
   ].every((id) => BLOCKS[id] !== undefined),
 );
+
+// ---------------------------------------------------------------- 7b. 最近的要塞（批次 114）
+//
+// 末影之眼要找的就是这个点，而它是**主线程**算出来的（`nearestStronghold`，不看地形）。
+// 所以这里要盯死一件事：**那一份"不看地形"的公式与真生成用的公式是同一个**
+// （`structureCellOrigin`）——两边一旦错开，眼睛就会指着空地，而两边都"没错"。
+
+console.log('\n[最近的要塞：末影之眼的导航点]');
+{
+  const stronghold = findInstance('stronghold', gen);
+  check('在 ±4 个单元里找得到一座要塞', stronghold !== null);
+
+  if (stronghold) {
+    const cellSize = 96 * 16; // 要塞：间距 96 区块
+    const cellX = Math.floor(stronghold.x / cellSize);
+    const cellZ = Math.floor(stronghold.z / cellSize);
+    // 从要塞旁边偏一点问"最近的要塞"：答案必须是它
+    const qx = stronghold.x + 40;
+    const qz = stronghold.z + 40;
+    const near = nearestStronghold(SEED, qx, qz);
+    check('问得出最近的要塞', near !== null);
+    check(
+      '坐标与 `structureInstanceForTest` 逐位一致（同一条 `structureCellOrigin`）',
+      near !== null && near.x === stronghold.x && near.z === stronghold.z,
+      `眼睛指 (${near?.x},${near?.z})，实际在 (${stronghold.x},${stronghold.z})`,
+    );
+    check(
+      '高度也用结构表里那一个（不是另一套算法）',
+      near !== null && near.y === stronghold.y,
+      `眼睛给 y=${near?.y}，实例是 y=${stronghold.y}`,
+    );
+
+    // "扫 ±1 个单元就够"这条论证要验：把 ±2 的 25 个单元都算一遍，不许有更近的
+    let best: { x: number; y: number; z: number; distance: number } | null = null;
+    let count = 0;
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const instance = structureInstanceForTest('stronghold', cellX + dx, cellZ + dz, gen, SEED);
+        if (!instance) continue;
+        count++;
+        const distance = Math.hypot(instance.x - qx, instance.z - qz);
+        if (!best || distance < best.distance) {
+          best = { x: instance.x, y: instance.y, z: instance.z, distance };
+        }
+      }
+    }
+    check('±2 个单元里每个单元都有一座要塞（chance: 1）', count === 25, `实际 ${count} 座`);
+    check(
+      '扫 ±1 与扫 ±2 得到的是同一座（"候选点落在单元中间那一半"这条论证）',
+      best !== null && near !== null && best.x === near.x && best.z === near.z,
+      `±1 → (${near?.x},${near?.z})，±2 → (${best?.x},${best?.z})`,
+    );
+    check('报出来的距离与手算一致', best !== null && near !== null && Math.abs(near.distance - best.distance) < 1e-9);
+
+    // 换几个问点再验一遍（不能只在"恰好是它"的那一个点成立）
+    let mismatches = 0;
+    for (const offset of [0, 300, 600, -300, -600, 1200]) {
+      const probe = nearestStronghold(SEED, qx + offset, qz + offset);
+      if (!probe) {
+        mismatches++;
+        continue;
+      }
+      // 问点所在的单元里那座要塞，必须与返回的一致
+      const probeCellX = Math.floor(probe.x / cellSize);
+      const probeCellZ = Math.floor(probe.z / cellSize);
+      const instance = structureInstanceForTest('stronghold', probeCellX, probeCellZ, gen, SEED);
+      if (!instance || instance.x !== probe.x || instance.z !== probe.z || instance.y !== probe.y) mismatches++;
+    }
+    check('换 6 个问点，答案都与真生成的要塞对得上', mismatches === 0, `${mismatches} 个对不上`);
+  }
+}
 
 // FeatureWriter 也要能脱离 Worker 独立使用：拿一个已知的地牢实例，手工生成它所在的区块
 {
