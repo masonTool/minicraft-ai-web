@@ -24,6 +24,7 @@ import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
 import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
+import { DROPPER_SIZE, Dropper } from '../container/Dropper.ts';
 import { HOPPER_SIZE, Hopper } from '../container/Hopper.ts';
 import type { ItemStack } from '../container/Inventory.ts';
 import { itemDef } from '../registry/items.ts';
@@ -44,6 +45,7 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   stonecutter: STONECUTTER_SIZE,
   campfire: CAMPFIRE_SIZE,
   hopper: HOPPER_SIZE,
+  dropper: DROPPER_SIZE,
 };
 
 export interface SerializedContainer {
@@ -98,6 +100,7 @@ export function kindOf(container: BlockContainer): ContainerKind {
   if (container instanceof Stonecutter) return 'stonecutter';
   if (container instanceof Campfire) return 'campfire';
   if (container instanceof Hopper) return 'hopper';
+  if (container instanceof Dropper) return 'dropper';
   return 'brewing';
 }
 
@@ -118,6 +121,7 @@ function containerFor(
   if (kind === 'stonecutter') return store.getOrCreateStonecutter(dimension, x, y, z);
   if (kind === 'campfire') return store.getOrCreateCampfire(dimension, x, y, z);
   if (kind === 'hopper') return store.getOrCreateHopper(dimension, x, y, z);
+  if (kind === 'dropper') return store.getOrCreateDropper(dimension, x, y, z);
   return store.getOrCreateBrewingStand(dimension, x, y, z);
 }
 
@@ -162,6 +166,9 @@ function hasContent(container: BlockContainer, kind: ContainerKind): boolean {
   // 空漏斗不写进存档，读档后它就不在表里，于是"漏斗链"整条静默停摆
   // （方块还在、看着没坏，就是不搬东西）。数量最多是玩家放的漏斗个数，代价可忽略。
   if (container instanceof Hopper) return true;
+  // ⚠️ 投掷器（批次 59）**不需要**上面那条特批：它不被容器表驱动（红石上升沿才吐），
+  // 空投掷器不写进存档也不会停摆——信号来时 `getOrCreateDropper` 按需建一个空的即可。
+  // 这一行是"故意的缺席"，写在这里免得以后有人照着漏斗抄一遍。
   if (container instanceof Furnace) {
     // 只烧了一半的熔炉即使原料被拿走、也要把"燃烧剩余"留住，否则重新点火的节奏会抖
     return container.burnTimeLeft > 0 || container.cookProgress > 0 || container.storedExperience > 0;

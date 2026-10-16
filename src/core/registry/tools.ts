@@ -285,6 +285,8 @@ requirePickaxe(0, [
   // 烟熏炉与高炉（批次 46）：与熔炉同一档——要镐，但不挑等级
   Block.SMOKER,
   Block.BLAST_FURNACE,
+  // 投掷器（批次 59）：与熔炉同一档——要镐，但不挑等级（原版发射器也是这一档）
+  Block.DROPPER,
   Block.COAL_ORE,
   Block.DEEPSLATE_COAL_ORE,
   Block.NETHER_QUARTZ_ORE,

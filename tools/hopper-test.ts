@@ -14,7 +14,7 @@
  * 运行：npm run test:hopper
  */
 
-import { Block, BLOCKS, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
+import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
 import { describeState, hopperOutputOf, hopperOutputOffset, withHopperLocked, withHopperOutput } from '../src/core/registry/blockState.ts';
 import { collisionBoxes, isFullBlockShape, meshBoxes } from '../src/core/registry/blockShapes.ts';
 import { planPlacement, type PlacementInput } from '../src/core/interaction/Placement.ts';
@@ -94,7 +94,8 @@ function envOf(options: {
 console.log('\n[注册与外观]');
 {
   equal('方块 id 是 476（接在 TNT 后面）', Block.HOPPER, 476);
-  equal('它是注册表里的最后一个方块', BLOCKS.length - 1, Block.HOPPER);
+  // ⚠️ 别用 `BLOCKS.length - 1` 判"最后一个"：每加一个方块它都会红
+  equal('id 紧接在 TNT 之后（475 → 476）', Block.HOPPER, Block.TNT + 1);
   equal('注册名', blockDef(Block.HOPPER).name, 'minecraft:hopper');
   equal('中文名', itemLabel(Block.HOPPER), '漏斗');
   check('有物品说明', hasDescription(Block.HOPPER));

@@ -703,6 +703,8 @@ const FUNCTIONAL = new Set<number>([
   Block.CAMPFIRE,
   // 漏斗（批次 58）：既是容器（右键打开 5 格），也是红石负载（通电即锁定）
   Block.HOPPER,
+  // 投掷器（批次 59）：9 格容器 + 红石触发（通电吐一件）——与漏斗同一类"两种身份"
+  Block.DROPPER,
   Block.CHEST,
   Block.GLOWSTONE,
   // ---- 红石元件（都是"有信号才做事"的功能方块）

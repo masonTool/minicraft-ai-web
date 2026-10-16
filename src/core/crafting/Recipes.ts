@@ -847,10 +847,14 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
 ];
 
 /**
- * 容器类功能方块（批次 58）：漏斗。
+ * 容器类功能方块（批次 58 起）：漏斗、投掷器。
  *
- * 原版图案是 **5 个铁锭围住 1 个箱子**（中间那格是箱子）。
- * 记在 TASKS H14 下：木桶 / 投掷器 / 发射器与它同一族，后续按同样方式往这里加。
+ * 原版图案：
+ *  - 漏斗 = **5 个铁锭围住 1 个箱子**（中间那格是箱子）；
+ *  - 投掷器 = **7 个圆石围住 1 个红石粉**（中间那格是红石粉）；
+ *  - 发射器（下一批）= 7 个圆石围住 1 个**弓**——与投掷器只差中间那一格。
+ *
+ * 记在 TASKS H14 下：木桶 / 发射器与它们同一族，后续按同样方式往这里加。
  */
 const CONTAINER_RECIPES: readonly Recipe[] = [
   {
@@ -858,6 +862,12 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     result: { id: Block.HOPPER, count: 1 },
     pattern: ['I I', 'ICI', ' I '],
     key: { I: Item.IRON_INGOT, C: Block.CHEST },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.DROPPER, count: 1 },
+    pattern: ['CCC', 'CRC', 'CCC'],
+    key: { C: Block.COBBLESTONE, R: Item.REDSTONE },
   },
 ];
 

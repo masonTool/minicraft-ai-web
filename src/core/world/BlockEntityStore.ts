@@ -15,12 +15,14 @@
 import { Anvil } from '../container/Anvil.ts';
 import { BrewingStand } from '../container/BrewingStand.ts';
 import { Chest } from '../container/Chest.ts';
+import { Dropper } from '../container/Dropper.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 import { Hopper } from '../container/Hopper.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
 import { Campfire } from '../container/Campfire.ts';
+import { Block } from '../registry/blocks.ts';
 import type { FurnaceStation } from '../crafting/Smelting.ts';
 import type { DimensionId } from '../gen/Dimension.ts';
 
@@ -33,7 +35,8 @@ export type BlockContainer =
   | SmithingTable
   | Stonecutter
   | Campfire
-  | Hopper;
+  | Hopper
+  | Dropper;
 export type ContainerKind =
   | 'furnace'
   | 'chest'
@@ -43,7 +46,36 @@ export type ContainerKind =
   | 'smithing'
   | 'stonecutter'
   | 'campfire'
-  | 'hopper';
+  | 'hopper'
+  | 'dropper';
+
+/**
+ * **带方块实体的方块**（= 装得下东西的方块）的 id 名单。
+ *
+ * 存在的理由：原版里"活塞推不动任何带方块实体的方块"，而本项目的容器是**按坐标**
+ * 存在 `BlockEntityStore` 里的——活塞把箱子推走一格，箱子那一格的容器还留在原地，
+ * 表现就是"推一下箱子，里面的钻石全没了"。所以 `canPush` 要认得出这些方块
+ * （批次 59 补上；在此之前只有箱子/熔炉/漏斗/投掷器以外的判断——投掷器因为形状不是
+ * `cube` 而碰巧推不动，其余几个则一直能被推走）。
+ *
+ * ⚠️ **加新的容器方块时，这里必须补一行**（另一处是 main 的 `containerOfBlockAt`）。
+ * 漏了的表现是"活塞把一整箱东西推到隔壁，箱子空了"——静默、且不可逆。
+ */
+export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
+  Block.CHEST,
+  Block.HOPPER,
+  Block.DROPPER,
+  Block.BREWING_STAND,
+  Block.ANVIL,
+  Block.SMITHING_TABLE,
+  Block.STONECUTTER,
+  Block.ENCHANTING_TABLE,
+  Block.CAMPFIRE,
+  // 三种炉子：站台不同，但都是按坐标存着的容器
+  Block.FURNACE,
+  Block.SMOKER,
+  Block.BLAST_FURNACE,
+]);
 
 interface Entry {
   dimension: DimensionId;
@@ -222,6 +254,26 @@ export class BlockEntityStore {
     const hopper = new Hopper();
     this.put({ dimension, x, y, z, container: hopper });
     return hopper;
+  }
+
+  getDropper(dimension: DimensionId, x: number, y: number, z: number): Dropper | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Dropper ? container : undefined;
+  }
+
+  /**
+   * 取出（或新建）投掷器。
+   *
+   * ⚠️ 与漏斗的差别：投掷器**不靠容器表自己动**（它是红石上升沿推一下），
+   * 所以"空投掷器没进容器表"不会让它停摆——主程序在信号来的时候按需创建即可。
+   * 这里仍然提供 getOrCreate，是给"放下方块/界面/断言"三处一个统一入口。
+   */
+  getOrCreateDropper(dimension: DimensionId, x: number, y: number, z: number): Dropper {
+    const existing = this.getDropper(dimension, x, y, z);
+    if (existing) return existing;
+    const dropper = new Dropper();
+    this.put({ dimension, x, y, z, container: dropper });
+    return dropper;
   }
 
   remove(dimension: DimensionId, x: number, y: number, z: number): void {

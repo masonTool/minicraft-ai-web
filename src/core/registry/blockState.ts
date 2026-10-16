@@ -158,6 +158,18 @@ export type BlockShape =
    * 碰撞只算"碗口那一圈"（从 6/16 往上）：管子不挡路，所以**能从漏斗底下走过去**。
    */
   | 'hopper'
+  /**
+   * 投掷器（批次 59，H14 的第二件容器类功能方块）：一个铁壳正方体 + 朝向那一面的
+   * 一个小凸口（4/16 见方、伸出 2/16）。
+   *
+   * 它的「朝向」是**六向**（朝上 / 朝下 + 四个水平方向），比漏斗多一个"朝上"——
+   * 编码与漏斗共用（见下文的 `sixFacingOf` 一段）。
+   *
+   * ⚠️ 凸口是**几何**上的朝向提示，不是贴图：本项目的网格化器按**面朝向**取贴图
+   * （顶/底/侧三张），没有"某一面单独用另一张"的能力——活塞、观察者也是同一个取舍。
+   * 所以朝向靠**轮廓**（凸口伸出来的那一小块）来认，界面里另有文字写着朝哪边。
+   */
+  | 'dropper'
   /** 流体（水/岩浆）：渲染高度随液面等级变化，无碰撞 */
   | 'fluid';
 
@@ -639,33 +651,38 @@ export function hasAnyVineSide(state: number): boolean {
 // ---------------------------------------------------------------- 漏斗（批次 58）
 
 /**
- * 漏斗的输出方向（H14 的第一件容器类功能方块）。
+ * **六向朝向**：朝上 / 朝下 + 四个水平方向（投掷器与发射器用）。
  *
- * 原版有 **5 个**朝向：朝下 + 四个水平方向。而本项目一个状态只有 8 位、
- * `FACING` 只占 2 位（4 个方向），所以第五个方向借用 **bit0（`TOP_MASK`）**：
+ * 一个状态只有 8 位，而 `FACING` 只占 2 位（4 个方向），所以竖直的两档只能借
+ * **bit0（`TOP_MASK`）**——借法与文件开头那条约定一致（不同形状族可以共用位）：
  *
- *   bit0 = 1             → 输出**朝下**（此时 FACING 位保持 0，不是"朝北"）
- *   bit0 = 0 + FACING    → 输出朝北 / 东 / 南 / 西
- *   bit3（`POWERED`）    → 被红石**锁定**（原版：通着电的漏斗不搬运，也不吸东西）
+ *   top = 0 + FACING    → 朝北 / 东 / 南 / 西
+ *   top = 1 + FACING=0  → **朝下**
+ *   top = 1 + FACING=1  → **朝上**
+ *   （top = 1 + FACING=2/3 是空闲组合，别用）
  *
- * 借用 bit0 与文件开头那条约定一致（不同形状族可以共用位）：
- * 漏斗这一族既不用 TOP 也不用 WALL_MOUNT。`describeState` 里也按上面这套读，
- * 所以调试面板上看到的是"朝下 / 朝东"而不是"上半"。
+ * ⚠️ 漏斗（5 向：没有朝上）**共用这套编码**，它的 `hopperOutput*` 三个函数就是
+ * 这里的薄包装——两族方块都借 bit0 表示"朝下"，所以漏斗的存档与状态语义没变。
+ * `describeState` 也按这套读，调试面板上看到的是"朝下 / 朝东"而不是"上半"。
  */
-export type HopperOutput = 'down' | Facing;
+export type SixFacing = 'up' | 'down' | Facing;
 
-export function hopperOutputOf(state: number): HopperOutput {
-  return (state & TOP_MASK) !== 0 ? 'down' : facingOf(state);
+export function sixFacingOf(state: number): SixFacing {
+  if ((state & TOP_MASK) === 0) return facingOf(state);
+  return facingOf(state) === 1 ? 'up' : 'down';
 }
 
-export function withHopperOutput(state: number, output: HopperOutput): number {
-  if (output === 'down') return withFacing(state | TOP_MASK, 0);
-  return withFacing(state & ~TOP_MASK, output);
+export function withSixFacing(state: number, facing: SixFacing): number {
+  if (facing === 'up') return withFacing(state | TOP_MASK, 1);
+  if (facing === 'down') return withFacing(state | TOP_MASK, 0);
+  return withFacing(state & ~TOP_MASK, facing);
 }
 
-/** 输出方向的单位偏移（供搬运逻辑与渲染共用，别再各写一份） */
-export function hopperOutputOffset(output: HopperOutput): readonly [number, number, number] {
-  switch (output) {
+/** 朝向的单位偏移（搬运/射出/几何三处共用，别再各写一份） */
+export function sixFacingOffset(facing: SixFacing): readonly [number, number, number] {
+  switch (facing) {
+    case 'up':
+      return [0, 1, 0];
     case 'down':
       return [0, -1, 0];
     case 0:
@@ -677,6 +694,42 @@ export function hopperOutputOffset(output: HopperOutput): readonly [number, numb
     default:
       return [-1, 0, 0]; // 西
   }
+}
+
+export const SIX_FACING_NAMES: Readonly<Record<SixFacing, string>> = {
+  up: '朝上',
+  down: '朝下',
+  0: '朝北',
+  1: '朝东',
+  2: '朝南',
+  3: '朝西',
+};
+
+/** 竖直两档的判定（投掷器/发射器"往下倒"与"往上抛"是两条不同的落点规则） */
+export function isVerticalFacing(facing: SixFacing): boolean {
+  return facing === 'up' || facing === 'down';
+}
+
+/**
+ * 漏斗的输出方向（H14 的第一件容器类功能方块）。
+ *
+ * 原版有 **5 个**朝向（朝下 + 四个水平方向）——就是上面六向去掉"朝上"，
+ * 编码完全共用，所以这里只是把 `up` 折回 `down` 的薄包装。
+ * 顺带记着：bit3（`POWERED`）表示被红石**锁定**（通着电的漏斗既不推也不吸）。
+ */
+export type HopperOutput = 'down' | Facing;
+
+export function hopperOutputOf(state: number): HopperOutput {
+  const output = sixFacingOf(state);
+  return output === 'up' ? 'down' : output;
+}
+
+export function withHopperOutput(state: number, output: HopperOutput): number {
+  return withSixFacing(state, output);
+}
+
+export function hopperOutputOffset(output: HopperOutput): readonly [number, number, number] {
+  return sixFacingOffset(output);
 }
 
 export const HOPPER_OUTPUT_NAMES: Readonly<Record<'down' | 0 | 1 | 2 | 3, string>> = {
@@ -740,6 +793,9 @@ export function describeState(shape: BlockShape, state: number): string {
       return `${FACING_NAMES[tripwireWireDirection(state)]}向的线·${isTripwireAttached(state) ? '已接上' : '没接上'}·${isPowered(state) ? '有信号' : '没信号'}`;
     case 'hopper':
       return `${HOPPER_OUTPUT_NAMES[hopperOutputOf(state)]}${isHopperLocked(state) ? '·已锁定' : ''}`;
+    case 'dropper':
+      // 投掷器没有"锁定"这回事：通电就吐一件，断电什么也不做
+      return SIX_FACING_NAMES[sixFacingOf(state)];
     default:
       return '';
   }

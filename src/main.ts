@@ -193,6 +193,7 @@ import {
 } from './core/registry/blocks.ts';
 import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { Campfire } from './core/container/Campfire.ts';
+import type { DropperEnv } from './core/container/Dropper.ts';
 import { Hopper, type HopperEnv } from './core/container/Hopper.ts';
 import { containerSlotCount } from './core/container/Transfer.ts';
 import type { BlockContainer } from './core/world/BlockEntityStore.ts';
@@ -204,6 +205,8 @@ import {
   hopperOutputOffset,
   hopperOutputOf,
   isHopperLocked,
+  sixFacingOf,
+  sixFacingOffset,
   isLitState,
   withCakeBites,
   withFlowerPotPlant,
@@ -796,6 +799,11 @@ class App {
     // TNT（批次 56）：红石引擎只负责"判定这里通电了"，点火交给拿着引信表的那一方
     this.redstone.onTntIgnite = (x, y, z) => {
       this.primedTnt.prime(this.tntWorld, x, y, z);
+    };
+    // 投掷器（批次 59）：引擎只负责"判定这里来了一个上升沿"，吐什么、
+    // 吐到哪去（塞进对面的容器还是掉在地上）都在容器与实体那一侧
+    this.redstone.onDispense = (x, y, z) => {
+      this.dispenseFrom(x, y, z);
     };
     this.deathEl = deathEl;
     this.vitalsHud = new VitalsHud(vitalsEl);
@@ -3626,6 +3634,13 @@ class App {
       this.inventoryScreen.openWith('hopper', this.world.containers.getOrCreateHopper(this.dimension, x, y, z));
       return true;
     }
+    // 投掷器（批次 59）：右键打开 9 格（3×3）。它的"动作"是红石脉冲，界面里只看存货
+    if (hitBlock === Block.DROPPER) {
+      const dropper = this.world.containers.getOrCreateDropper(this.dimension, x, y, z);
+      dropper.facing = sixFacingOf(this.world.getBlockState(x, y, z));
+      this.inventoryScreen.openWith('dropper', dropper);
+      return true;
+    }
     if (hitBlock === Block.BREWING_STAND) {
       this.inventoryScreen.openWith('brewing', this.world.containers.getOrCreateBrewingStand(this.dimension, x, y, z));
       return true;
@@ -3825,9 +3840,15 @@ class App {
    * 目前只有漏斗需要它：其余容器都是"打开界面时按需创建"的。
    */
   private ensureBlockEntityAt(x: number, y: number, z: number, blockId: number, dimension?: string): void {
-    if (blockId !== Block.HOPPER) return;
     const target: DimensionId = isDimension(dimension) ? dimension : this.dimension;
-    this.world.containers.getOrCreateHopper(target, x, y, z);
+    if (blockId === Block.HOPPER) {
+      this.world.containers.getOrCreateHopper(target, x, y, z);
+      return;
+    }
+    // 投掷器（批次 59）同样在放下时就建容器：它的**界面**与"被别的容器推东西进来"
+    // 都要求这一格在容器表里看得见（它自己不靠容器表 tick，所以少建一次也不会停摆——
+    // 但"放下就能打开界面"这条手感与漏斗保持一致）
+    if (blockId === Block.DROPPER) this.world.containers.getOrCreateDropper(target, x, y, z);
   }
 
   /**
@@ -3925,6 +3946,9 @@ class App {
    * @returns 不是容器方块时返回 null
    */
   private containerOfBlockAt(x: number, y: number, z: number): BlockContainer | null {
+    // ⚠️ 新增一种容器方块时，**两处**要一起改：这里（按方块取容器）与
+    // `BlockEntityStore.CONTAINER_BLOCKS`（活塞推不动的名单）。
+    // 漏了后者的表现是"活塞把一整箱东西推走一格，东西全留在原地不见了"。
     // 未加载的区块不建容器：那会让区块一卸载就漏出一堆"看不见的容器"
     if (!this.world.isLoaded(x, z)) return null;
     const block = this.world.getBlock(x, y, z);
@@ -3933,6 +3957,7 @@ class App {
 
     if (block === Block.CHEST) return store.getOrCreateChest(dimension, x, y, z);
     if (block === Block.HOPPER) return store.getOrCreateHopper(dimension, x, y, z);
+    if (block === Block.DROPPER) return store.getOrCreateDropper(dimension, x, y, z);
     if (block === Block.BREWING_STAND) return store.getOrCreateBrewingStand(dimension, x, y, z);
     if (block === Block.ANVIL) return store.getOrCreateAnvil(dimension, x, y, z);
     if (block === Block.SMITHING_TABLE) return store.getOrCreateSmithingTable(dimension, x, y, z);
@@ -3968,6 +3993,63 @@ class App {
       return { id: entity.itemId, count: 1 };
     }
     return null;
+  }
+
+  /**
+   * 投掷器收到一个红石**上升沿**：吐一件（批次 59）。
+   *
+   * 只在这一次调用里做完三件事——确认方块还在、拿到容器、`serve` 一次。
+   * 抽成独立方法而不是写在回调里，是为了让"信号 → 吐东西"这条链在调试面板/断言
+   * 里也能直接调（自动化脚本不必真去搭一条红石钟）。
+   */
+  dispenseFrom(x: number, y: number, z: number): void {
+    // 位置被换掉了（信号在队列里排队期间方块没了）——静默跳过
+    if (!this.world.isLoaded(x, z) || this.world.getBlock(x, y, z) !== Block.DROPPER) return;
+    const container = this.world.containers.getOrCreateDropper(this.dimension, x, y, z);
+    // 朝向缓存进容器，界面才写得出"朝北"（见 `Dropper.facing`）
+    container.facing = sixFacingOf(this.world.getBlockState(x, y, z));
+    container.serve(this.dropperEnv(x, y, z));
+  }
+
+  /** 投掷器吐一次要问外界的两个问题：朝向那一格是不是容器、不是容器时往哪扔 */
+  private dropperEnv(x: number, y: number, z: number): DropperEnv {
+    const [dx, dy, dz] = sixFacingOffset(sixFacingOf(this.world.getBlockState(x, y, z)));
+    return {
+      target: () => this.containerOfBlockAt(x + dx, y + dy, z + dz),
+      eject: (stack) => this.ejectItem(stack, x, y, z, dx, dy, dz),
+    };
+  }
+
+  /**
+   * 把一件东西从投掷器的凸口**吐出来**（朝向那一格不是容器时）。
+   *
+   * 落点取朝向那一格的**中心、再往回收 0.4 格**：正好放在那一格中心的话，
+   * 那一格若是实心方块（比如投掷器贴着墙），掉落物会卡在方块里、永远捡不到。
+   * 初速朝朝向推一把，所以"吐出去"看得出来是往哪个方向飞的。
+   *
+   * ⚠️ 已知缺口（记在 TASKS H16）：掉落物实体只带"物品 id + 数量"，
+   * 所以带耐久/附魔/改名的东西吐出来之后会掉这些字段——破坏容器时的掉落
+   * （`spawnDrop`）也是同一条限制，一起在"物品 NBT 收尾"里解决。
+   */
+  private ejectItem(
+    stack: ItemStack,
+    x: number,
+    y: number,
+    z: number,
+    dx: number,
+    dy: number,
+    dz: number,
+  ): void {
+    this.entities.spawn(
+      new ItemEntity(
+        stack.id,
+        stack.count,
+        x + 0.5 + dx * 0.4,
+        y + 0.5 + dy * 0.4,
+        z + 0.5 + dz * 0.4,
+        { x: dx * 2, y: 1.2 + dy * 2, z: dz * 2 },
+      ),
+    );
   }
 
   /**

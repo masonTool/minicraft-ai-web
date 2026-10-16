@@ -10,12 +10,12 @@
  *  6. 活塞：通电伸出（前方生成活塞头）、断电收回
  *  7. 粘性活塞：收回时把前面的方块拉回来
  *  8. 侦测器：前方方块发生变化时发一个短脉冲，脉冲结束后自动熄灭
- *  9. 推动规则：基岩/黑曜石/活塞推不动，实体方块能推
+ *  9. 推动规则：基岩/黑曜石/活塞/容器推不动，实体方块能推
  *
  * 运行：npm run test:redstone
  */
 
-import { Block } from '../src/core/registry/blocks.ts';
+import { Block, blockDef } from '../src/core/registry/blocks.ts';
 import {
   isDoorOpen,
   isDoorUpper,
@@ -27,6 +27,7 @@ import {
   withFacing,
 } from '../src/core/registry/blockState.ts';
 import { RedstoneEngine, canPush, wirePowerOf, type RedstoneWorld } from '../src/core/redstone/RedstoneEngine.ts';
+import { CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
 
 let passed = 0;
 let failed = 0;
@@ -362,6 +363,20 @@ console.log('\n[推动规则]');
   check('空气不需要推', !canPush(Block.AIR));
   check('水推不动', !canPush(Block.WATER));
   check('红石粉（非整方块）推不动', !canPush(Block.REDSTONE_WIRE));
+
+  // 容器一律推不动（批次 59 补）：容器按**坐标**存在 BlockEntityStore 里，
+  // 推走一格等于把东西留在原地——"推一下箱子，里面的钻石全没了"。
+  // 断言直接遍历名单，所以以后往 CONTAINER_BLOCKS 加方块时这里自动跟着覆盖
+  const pushableContainers = [...CONTAINER_BLOCKS].filter((id) => canPush(id));
+  check(
+    `容器方块一律推不动（名单里 ${CONTAINER_BLOCKS.size} 个）`,
+    pushableContainers.length === 0,
+    pushableContainers.map((id) => blockDef(id).name).join(', '),
+  );
+  check('箱子推不动', !canPush(Block.CHEST));
+  check('熔炉推不动', !canPush(Block.FURNACE));
+  check('漏斗推不动', !canPush(Block.HOPPER));
+  check('投掷器推不动', !canPush(Block.DROPPER));
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);

@@ -1696,6 +1696,29 @@ const HOPPER_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 投掷器（批次 59）：H14 的第二件，也是本项目**第一件"自己吐东西"**的方块。
+ *
+ * 与漏斗的分工（原版那套）：
+ *  - 漏斗是**按节奏**搬（每 0.4 秒，先推后拉），投掷器是**按信号**搬（红石上升沿吐一件）；
+ *  - 漏斗朝**被点的那个方块**，投掷器**朝玩家**（原版 `getStateForPlacement` 就是反过来取玩家朝向）；
+ *  - 漏斗朝向是 5 向（没有朝上），投掷器是 **6 向**（可以朝上/朝下，只是手持放置只会给水平四向）。
+ *
+ * 它本身是整格铁壳（`opaque` 默认 true），朝向靠**几何上的小凸口**表示——
+ * 见 `blockShapes.ts` 的 `dropperBoxes` 与 `blockState.ts` 的 `sixFacing` 一段。
+ */
+export const DROPPER_ID = 477;
+
+const DROPPER_SPECS: readonly BlockSpec[] = [
+  {
+    id: DROPPER_ID,
+    name: 'minecraft:dropper',
+    // 顶/底两面同一张（原版投掷器的上下也是一个模子出来的）
+    tiles: ['dropper_top', 'dropper_top', 'dropper_side'],
+    shape: 'dropper',
+  },
+];
+
 const TRIPWIRE_SPECS: readonly BlockSpec[] = [
   {
     id: TRIPWIRE_ID,
@@ -2012,6 +2035,7 @@ const SPECS: readonly BlockSpec[] = [
   ...TRIPWIRE_SPECS,
   ...TNT_SPECS,
   ...HOPPER_SPECS,
+  ...DROPPER_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2281,6 +2305,8 @@ export const Block = {
   TNT: TNT_ID,
   // ---- 漏斗（批次 58，见 `HOPPER_SPECS`）：会自己搬东西的容器方块
   HOPPER: HOPPER_ID,
+  // ---- 投掷器（批次 59，见 `DROPPER_SPECS`）：通电就朝朝向吐一件
+  DROPPER: DROPPER_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2561,6 +2587,8 @@ HARDNESS.set(Block.TRIPWIRE_HOOK, 0);
 HARDNESS.set(Block.TNT, 0);
 // 漏斗（批次 58）：3（原版与铁块同一档，必须用镐）
 HARDNESS.set(Block.HOPPER, 3);
+// 投掷器（批次 59）：3.5（原版与熔炉/发射器同一档，必须用镐但**不限等级**）
+HARDNESS.set(Block.DROPPER, 3.5);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);

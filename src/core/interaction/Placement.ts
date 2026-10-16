@@ -26,6 +26,7 @@ import {
   withDoorUpper,
   withFacing,
   withHopperOutput,
+  withSixFacing,
   withSlabDouble,
   withSnowLayers,
   withTop,
@@ -219,6 +220,26 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       if (ny !== 0) return { state: withHopperOutput(0, 'down') };
       const facing = facingFromNormal(nx, nz);
       return { state: withHopperOutput(0, facing ?? 'down') };
+    }
+
+    case 'dropper': {
+      // 投掷器的朝向（批次 59）。两种摆法：
+      //
+      // ① **普通放置 = 凸口朝你**（原版 `getStateForPlacement` 就是取玩家朝向的反方向：
+      //    熔炉的正面、投掷器的口都朝放它的人）。所以这里直接用 `facingFromYaw`
+      //    （它算出来的正是"指向玩家那一侧"，含队友/朝向口径见 `blockState` 里的说明）。
+      // ② **潜行 = 手动指定**（本项目自定，沿用漏斗"用潜行挑朝向"的手感）：凸口朝
+      //    **被点的那个方块**——点顶面 → 朝下（把投掷器架在箱子上是最常用的摆法）、
+      //    点底面 → **朝上**、点侧面 → 朝那个水平方向。
+      //    ⚠️ 原版只有活塞能做出朝上/朝下的投掷器（手持放置一律是水平四向），
+      //    本项目没有"活塞推方块实体"这条路，所以把这两档开给潜行放置——
+      //    否则"朝下投入箱子"这种最常见的用法根本没有办法摆出来（差异记在 TASKS）。
+      if (input.sneaking) {
+        if (ny > 0) return { state: withSixFacing(0, 'down') };
+        if (ny < 0) return { state: withSixFacing(0, 'up') };
+        return { state: withSixFacing(0, facingFromNormal(nx, nz) ?? facingFromYaw(input.yaw)) };
+      }
+      return { state: withSixFacing(0, facingFromYaw(input.yaw)) };
     }
 
     case 'chain': {

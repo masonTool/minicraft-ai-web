@@ -27,6 +27,8 @@ import {
   isTop,
   isTrapdoorOpen,
   isWallMounted,
+  sixFacingOf,
+  sixFacingOffset,
   snowHeight,
   vineSides,
   type BlockShape,
@@ -188,6 +190,10 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       // 漏斗（批次 58）：只算碗口与收窄那两段——管子不挡路，
       // 所以玩家能**从漏斗底下走过去**（原版也能）
       return hopperCollisionBoxes();
+    case 'dropper':
+      // 投掷器（批次 59）：**整格碰撞**（原版也是）——那个 2/16 的小凸口撞不到，
+      // 所以它的渲染盒比碰撞盒多出来一小块（见 `dropperBoxes`）
+      return [FULL];
     default:
       return [FULL];
   }
@@ -390,6 +396,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'hopper':
       // 漏斗（批次 58）：碗口 + 两级收窄 + 管子（管子朝哪边由状态决定）
       return hopperBoxes(state);
+    case 'dropper':
+      // 投掷器（批次 59）：整格铁壳 + 朝哪边就往哪边伸出的那个小凸口
+      return dropperBoxes(state);
     // 植物由网格化器单独输出两片交叉薄面（见 ChunkMesher 的 emitCross），不走盒子路径
     case 'cross':
       return [];
@@ -926,6 +935,42 @@ export function hopperBoxes(state: number): readonly LocalBox[] {
  */
 export function hopperCollisionBoxes(): readonly LocalBox[] {
   return [HOPPER_BOWL, HOPPER_MID_A, HOPPER_MID_B];
+}
+
+/**
+ * 投掷器（批次 59）：一个铁壳正方体 + **朝向那一面的小凸口**。
+ *
+ * 为什么要有那个凸口：投掷器的朝向是它唯一的"状态信息"，而本项目的网格化器
+ * 按**面朝向**取贴图（顶/底/侧三张，见 `emitFace`），没有"某一面单独用另一张"的能力
+ * （活塞、观察者也是同一个取舍）。于是朝向只能靠**几何轮廓**表示：
+ * 凸口伸出去的那 2/16 从侧面看就是"嘴朝哪边"。
+ *
+ * ⚠️ 凸口**里外各 2/16**（不是从铁壳表面长出来）：起点刻意缩进铁壳内部，
+ * 否则它的里侧那一面与铁壳的外表面**共面**，会 z-fighting 闪烁。
+ *
+ * 碰撞是**整格**（原版投掷器也是整格碰撞）：凸口只有 2/16，玩家撞不到它，
+ * 所以碰撞与渲染在这里**刻意不同源**——与漏斗（管子不挡路）是同一个方向，
+ * 只是漏斗是"渲染有、碰撞没有"，这里是"渲染比碰撞多出来一小块"。
+ */
+const DROPPER_NOZZLE_WIDTH = 0.25;
+const DROPPER_NOZZLE_DEPTH = 0.125;
+
+/** 凸口那一段：朝上/朝下时在格子的上/下边，朝水平方向时贴到对应的那一侧 */
+function dropperNozzleBox(state: number): LocalBox {
+  const lo = 0.5 - DROPPER_NOZZLE_WIDTH / 2;
+  const hi = 0.5 + DROPPER_NOZZLE_WIDTH / 2;
+  const [dx, dy, dz] = sixFacingOffset(sixFacingOf(state));
+  if (dy > 0) return [lo, 1 - DROPPER_NOZZLE_DEPTH, lo, hi, 1 + DROPPER_NOZZLE_DEPTH, hi];
+  if (dy < 0) return [lo, -DROPPER_NOZZLE_DEPTH, lo, hi, DROPPER_NOZZLE_DEPTH, hi];
+  if (dx > 0) return [1 - DROPPER_NOZZLE_DEPTH, lo, lo, 1 + DROPPER_NOZZLE_DEPTH, hi, hi];
+  if (dx < 0) return [-DROPPER_NOZZLE_DEPTH, lo, lo, DROPPER_NOZZLE_DEPTH, hi, hi];
+  if (dz > 0) return [lo, lo, 1 - DROPPER_NOZZLE_DEPTH, hi, hi, 1 + DROPPER_NOZZLE_DEPTH];
+  return [lo, lo, -DROPPER_NOZZLE_DEPTH, hi, hi, DROPPER_NOZZLE_DEPTH];
+}
+
+/** 渲染盒：整格铁壳 + 凸口（凸口里外各伸 2/16） */
+export function dropperBoxes(state: number): readonly LocalBox[] {
+  return [FULL, dropperNozzleBox(state)];
 }
 
 /**

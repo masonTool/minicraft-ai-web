@@ -759,6 +759,11 @@ export const TILE_ORDER = [
   'hopper_top',
   'hopper_inside',
   'hopper_side',
+  // ---- 投掷器（批次 59）：铁壳顶面（带铆边）/ 铁壳侧面（带四角铆钉）
+  // ⚠️ 没有"正面"那一张：本项目网格化器按**面朝向**取贴图（顶/底/侧），
+  // 朝向靠几何轮廓（凸口）表示——见 `dropperBoxes`
+  'dropper_top',
+  'dropper_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

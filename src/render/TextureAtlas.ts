@@ -3865,26 +3865,36 @@ PAINTERS.tnt_bottom = (x, y, rng) => {
   return [clamp255(186 * shade + jitter), clamp255(54 * shade + jitter), clamp255(46 * shade + jitter), 255];
 };
 
-// ---------------------------------------------------------------- 漏斗（批次 58）
+// ---------------------------------------------------------------- 铁壳容器（漏斗 / 投掷器）
 
-/** 漏斗的铁皮基色（原版那套"深灰金属"）：外面亮一点、管道内壁暗一点 */
-const HOPPER_METAL = { r: 118, g: 118, b: 122 };
+/**
+ * 铁皮基色（原版那套"深灰金属"）：外面亮一点、管道内壁暗一点。
+ *
+ * 漏斗（批次 58）与投掷器（批次 59）在原版里是同一族的铁壳方块，
+ * 所以**共用这一套画笔**——两族的差别只在"哪个位置画什么"。
+ */
+const METAL_BASE = { r: 118, g: 118, b: 122 };
 
 /** 一小段"金属拉丝"：每 4 像素一条暗线，让大面积平色不至于糊成一块 */
-function hopperMetalShade(x: number, y: number): number {
+function metalShade(x: number, y: number): number {
   if (x % 4 === 0) return 0.9;
   if (y % 8 === 3) return 0.94;
   return 1;
 }
 
-function hopperMetal(x: number, y: number, jitter: number, scale: number): [number, number, number, number] {
-  const shade = hopperMetalShade(x, y) * scale;
+function metalPlate(x: number, y: number, jitter: number, scale: number): [number, number, number, number] {
+  const shade = metalShade(x, y) * scale;
   return [
-    clamp255(HOPPER_METAL.r * shade + jitter),
-    clamp255(HOPPER_METAL.g * shade + jitter),
-    clamp255(HOPPER_METAL.b * shade + jitter),
+    clamp255(METAL_BASE.r * shade + jitter),
+    clamp255(METAL_BASE.g * shade + jitter),
+    clamp255(METAL_BASE.b * shade + jitter),
     255,
   ];
+}
+
+/** 四角铆钉（铁壳方块共用的"这是金属机械"标记） */
+function isRivet(x: number, y: number): boolean {
+  return (x === 2 || x === 13) && (y === 2 || y === 13);
 }
 
 /**
@@ -3902,7 +3912,7 @@ PAINTERS.hopper_top = (x, y, rng) => {
   }
   // 洞口外一圈更暗的"内壁"（视觉上把洞口围出来，不然只是平面上一个方块）
   const nearHole = x >= 5 && x <= 10 && y >= 5 && y <= 10;
-  return hopperMetal(x, y, jitter, nearHole ? 0.82 : 1);
+  return metalPlate(x, y, jitter, nearHole ? 0.82 : 1);
 };
 
 /** 管子内壁：整体暗一档 + 中间 4×4 的口是纯黑（从下往上看就是管子口） */
@@ -3910,15 +3920,39 @@ PAINTERS.hopper_inside = (x, y, rng) => {
   const jitter = rng() * 8 - 4;
   const inHole = x >= 6 && x <= 9 && y >= 6 && y <= 9;
   if (inHole) return [16, 16, 18, 255];
-  return hopperMetal(x, y, jitter, 0.72);
+  return metalPlate(x, y, jitter, 0.72);
 };
 
 /** 外壳：四条边更暗（原版漏斗外面那圈"铆边"），中间是拉丝铁皮 */
 PAINTERS.hopper_side = (x, y, rng) => {
   const jitter = rng() * 10 - 5;
   const edge = x === 0 || x === 15 || y === 0 || y === 15;
-  if (edge) return hopperMetal(x, y, jitter, 0.7);
-  return hopperMetal(x, y, jitter, 1);
+  if (edge) return metalPlate(x, y, jitter, 0.7);
+  return metalPlate(x, y, jitter, 1);
+};
+
+/**
+ * 投掷器顶面（批次 59）：整片铁皮 + 内缩一圈的**铆边** + 中间那圈"投口"。
+ *
+ * 中间那圈对着几何上的凸口（4/16 见方），俯视时能看出"这是个会吐东西的口"；
+ * 顶/底两面都用它（底面看不见，但省一张贴图不值得）。
+ */
+PAINTERS.dropper_top = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  const ring = x === 1 || x === 14 || y === 1 || y === 14;
+  if (ring) return metalPlate(x, y, jitter, 0.68);
+  const inBore = x >= 6 && x <= 9 && y >= 6 && y <= 9;
+  if (inBore) return metalPlate(x, y, jitter * 0.5, 0.62);
+  return metalPlate(x, y, jitter, 1);
+};
+
+/** 投掷器侧面：拉丝铁皮 + 四角铆钉（与箱子/铁块那种"板"区分开） */
+PAINTERS.dropper_side = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  if (isRivet(x, y)) return metalPlate(x, y, jitter, 0.55);
+  const edge = x === 0 || x === 15 || y === 0 || y === 15;
+  if (edge) return metalPlate(x, y, jitter, 0.72);
+  return metalPlate(x, y, jitter, 1);
 };
 
 export class TextureAtlas {

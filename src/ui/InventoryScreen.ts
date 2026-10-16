@@ -44,6 +44,7 @@ import {
 } from '../core/container/SmithingTable.ts';
 import { STONECUTTER_INPUT, Stonecutter } from '../core/container/Stonecutter.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../core/container/Campfire.ts';
+import { DROPPER_SIZE, Dropper } from '../core/container/Dropper.ts';
 import { HOPPER_SIZE, Hopper } from '../core/container/Hopper.ts';
 import { smithingHint } from '../core/crafting/Smithing.ts';
 import {
@@ -71,6 +72,7 @@ import {
   type ItemCategory,
 } from '../core/registry/items.ts';
 import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
+import { SIX_FACING_NAMES } from '../core/registry/blockState.ts';
 import {
   NARROW_MAX_WIDTH,
   clampPage,
@@ -99,6 +101,8 @@ export type InventoryPanelMode =
   | 'stonecutter'
   /** 漏斗（批次 58）：5 格排成一行，内容由方块自己每 0.4 秒搬一次 */
   | 'hopper'
+  /** 投掷器（批次 59）：3×3 九格，内容由红石脉冲往外吐（界面里只存货与朝向） */
+  | 'dropper'
   | 'brewing';
 
 export interface InventoryScreenHooks {
@@ -203,6 +207,10 @@ export class InventoryScreen {
   /** 漏斗（批次 58）：5 格排成一行 + 一行动态提示（锁定/节奏） */
   private readonly hopperGrid: HTMLDivElement;
   private readonly hopperHintEl: HTMLDivElement;
+
+  /** 投掷器（批次 59）：3×3 + 一行动态提示（朝向/触发方式） */
+  private readonly dropperGrid: HTMLDivElement;
+  private readonly dropperHintEl: HTMLDivElement;
 
   /** 切石机（H11，批次 44）：一格输入 + 一列可选产物（按钮）+ 提示行 */
   private readonly stonecutterLayout: HTMLDivElement;
@@ -316,6 +324,12 @@ export class InventoryScreen {
     this.hopperGrid.className = 'inv-grid inv-hopper';
     this.hopperHintEl = document.createElement('div');
     this.hopperHintEl.className = 'anvil-cost';
+
+    // 投掷器（批次 59）：3×3（原版投掷器界面就是九宫格）
+    this.dropperGrid = document.createElement('div');
+    this.dropperGrid.className = 'inv-grid inv-dropper';
+    this.dropperHintEl = document.createElement('div');
+    this.dropperHintEl.className = 'anvil-cost';
 
     // 熔炉
     this.furnaceLayout = document.createElement('div');
@@ -665,6 +679,7 @@ export class InventoryScreen {
     this.clearBindings('campfire:');
     this.clearBindings('brewing:');
     this.clearBindings('hopper:');
+    this.clearBindings('dropper:');
 
     // 熔炉 / 烟熏炉 / 高炉（批次 46）共用同一套布局：格子与燃料规则完全一样，
     // 区别只有"只吃哪一类东西"和"快一倍"——那两条由容器负责，界面只是标题与提示不同
@@ -863,6 +878,18 @@ export class InventoryScreen {
       this.topArea.appendChild(this.buildLabel('漏斗（5 格）'));
       this.topArea.appendChild(this.hopperGrid);
       this.topArea.appendChild(this.hopperHintEl);
+      return;
+    }
+
+    if (this.mode === 'dropper') {
+      this.dropperGrid.replaceChildren();
+      for (let i = 0; i < DROPPER_SIZE; i++) {
+        this.dropperGrid.appendChild(this.registerSlot(`dropper:${i}`, this.activeContainer!, i));
+      }
+      this.dropperHintEl.textContent = '';
+      this.topArea.appendChild(this.buildLabel('投掷器（9 格）'));
+      this.topArea.appendChild(this.dropperGrid);
+      this.topArea.appendChild(this.dropperHintEl);
       return;
     }
 
@@ -1279,6 +1306,15 @@ export class InventoryScreen {
       this.hopperHintEl.classList.toggle('bad', locked);
     }
 
+    if (this.mode === 'dropper' && this.activeContainer instanceof Dropper) {
+      // 空投掷器必须明说：玩家拿红石试半天，看不出"是空的"还是"坏了"
+      const facing = SIX_FACING_NAMES[this.activeContainer.facing];
+      this.dropperHintEl.textContent = this.activeContainer.isEmpty
+        ? `${facing}吐 · 里面是空的：红石脉冲不会吐任何东西`
+        : `${facing}吐：每来一次红石**脉冲**（拉杆两次、按钮、红石钟）吐一件；对面是容器就塞进去，不是容器就掉在地上`;
+      this.dropperHintEl.classList.toggle('bad', this.activeContainer.isEmpty);
+    }
+
     if (this.mode === 'enchanting') this.refreshEnchantOptions();
     if (this.mode === 'anvil') this.refreshAnvil();
     if (this.mode === 'smithing') this.refreshSmithing();
@@ -1562,6 +1598,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   stonecutter: '切石机',
   brewing: '酿造台',
   hopper: '漏斗',
+  dropper: '投掷器',
 };
 
 /** 创造物品栏的搜索匹配：中文名、英文 id、数字 id 都认 */

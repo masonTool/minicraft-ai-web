@@ -21,6 +21,8 @@
 
 import { Block, blockDef } from '../registry/blocks.ts';
 import { TRIPWIRE_MAX_LENGTH } from '../registry/blocks.ts';
+// 容器方块推不动（推走会把里面的东西留在原地，见 `canPush` 的注释）
+import { CONTAINER_BLOCKS } from '../world/BlockEntityStore.ts';
 import {
   FACING_OFFSET,
   facingOf,
@@ -101,6 +103,9 @@ export function isRedstoneComponent(id: number): boolean {
     case Block.TNT:
     // 漏斗（批次 58）：通电就**锁定**（不推也不吸）——这是原版的"漏斗闸门"玩法
     case Block.HOPPER:
+    // 投掷器（批次 59）：通电的**上升沿**吐一件出去（它是"负载"，
+    // 但吐出什么、吐到哪去都在容器那边，引擎只负责判定脉冲）
+    case Block.DROPPER:
       return true;
     default:
       return false;
@@ -188,6 +193,21 @@ export class RedstoneEngine {
    * 引擎只负责"判定这里通电了"，点火这件事交给外面。
    */
   onTntIgnite?: (x: number, y: number, z: number) => void;
+
+  /** 已经"因为通电而吐过一件"的投掷器（上升沿判定用，与 TNT 同一套路） */
+  private readonly dropperPrimed = new Set<string>();
+
+  /**
+   * 投掷器/发射器被红石**脉冲**触发时的回调（批次 59）。
+   *
+   * 为什么是上升沿而不是"通电期间一直吐"：原版投掷器**每收到一次上升沿吐一件**，
+   * 通着电不再来脉冲就什么都不做——这正是"红石钟 → 自动投喂机"那套玩法的前提。
+   * 所以这里和 TNT 一样记一个"已经吐过"的集合，只在 `0 → 1` 的那一刻回调一次。
+   *
+   * ⚠️ 为什么是回调而不是引擎自己吐：容器（9 格里装了什么）与掉落物实体都不在
+   * 引擎这一侧——引擎只负责判定"这里来了一个上升沿"，吐这件事交给 main。
+   */
+  onDispense?: (x: number, y: number, z: number) => void;
 
   /** 玩家右键拉杆：开 ↔ 关 */
   toggleLever(world: RedstoneWorld, x: number, y: number, z: number): boolean {
@@ -688,6 +708,22 @@ export class RedstoneEngine {
           }
           break;
         }
+        case Block.DROPPER: {
+          // 投掷器（批次 59）：**上升沿**吐一件。与 TNT 同一套判定（见下面那段注释：
+          // 每轮重算都调一次的话，`markDirty` 会把自己反复排进队列）。
+          // ⚠️ 吐出去之后**不改方块状态**：投掷器没有"吐过了"这一位（原版那个
+          // `triggered` 只是给客户端看红石粒子用的，行为上不读它）。
+          const dropperKey = keyOf(nx, ny, nz);
+          const wasFired = this.dropperPrimed.has(dropperKey);
+          if (input > 0 && !wasFired) {
+            this.dropperPrimed.add(dropperKey);
+            this.onDispense?.(nx, ny, nz);
+          } else if (input <= 0 && wasFired) {
+            // 断电后允许下一次脉冲再来一次（红石钟就是这么把它变成自动投喂机的）
+            this.dropperPrimed.delete(dropperKey);
+          }
+          break;
+        }
         case Block.TNT: {
           // TNT（批次 56）：通电就点燃。⚠️ 用**上升沿**判定（与中继器同一套路）——
           // 每轮重算都调一次的话，`markDirty` 会把自己反复排进队列，
@@ -965,7 +1001,13 @@ function parseKey(key: string): [number, number, number] {
   return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
 }
 
-/** 活塞能推动的方块：实心整方块，且不是基岩/黑曜石/活塞自身 */
+/**
+ * 活塞能推动的方块：实心整方块，且不是基岩/黑曜石/活塞自身，**也不是容器**。
+ *
+ * ⚠️ "容器推不动"这条（批次 59 补）对齐原版的"活塞推不动带方块实体的方块"：
+ * 本项目的容器是按**坐标**存的，推走一格等于把东西留在原地——
+ * 表现是"推一下箱子，里面的钻石全没了"。名单见 `BlockEntityStore.CONTAINER_BLOCKS`。
+ */
 export function canPush(id: number): boolean {
   if (id === Block.AIR) return false;
   if (
@@ -977,6 +1019,7 @@ export function canPush(id: number): boolean {
   ) {
     return false;
   }
+  if (CONTAINER_BLOCKS.has(id)) return false;
   const def = blockDef(id);
   return def.solid && def.shape === 'cube' && !def.liquid;
 }

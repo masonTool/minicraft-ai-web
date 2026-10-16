@@ -1,22 +1,23 @@
 /**
- * 容器之间"搬一件"的通用规则（批次 58，漏斗的地基）
+ * 容器之间"搬一件"的通用规则（批次 58，漏斗与投掷器的地基）
  *
- * 漏斗要往**任何**容器里塞东西、也要从**任何**容器里拿东西，而"哪些格子能塞"
- * 恰恰是各容器自己的事：
+ * 漏斗要往**任何**容器里塞东西、也要从**任何**容器里拿东西，投掷器（批次 59）
+ * 同样要"往朝向那一格的容器里塞一件"，而"哪些格子能塞"恰恰是各容器自己的事：
  *  - 熔炉**不能往产物槽里塞**（塞进去的东西会被当成烧出来的，还能顺手刷经验）；
  *  - 切石机只有一格输入；营火只吃食物；酿造台是"3 瓶 + 材料 + 燃料"；
  *  - 铁砧 / 锻造台有产物槽，同样不能塞。
  *
- * 这些规则写成**一张表 + 几个纯函数**，而不是在漏斗里 `instanceof` 一串：
- * 漏斗的搬运逻辑因此只认 `BlockContainer`，新增一种容器时只改这里的表
+ * 这些规则写成**一张表 + 几个纯函数**，而不是在搬运方那边 `instanceof` 一串：
+ * 搬运逻辑因此只认 `BlockContainer`，新增一种容器时只改这里的表
  * （漏改的表现很隐蔽：漏斗把东西塞进了不该塞的格子）。
  *
- * ⚠️ 与本模块相互引用：`Hopper.ts` 要调用这里的 `tryInsertOne` / `peekTake`，
- * 这里也要认出 `Hopper` 这个类型。因此**本模块顶层不能读 Hopper 的任何值**
- * （`HOPPER_SIZE` 只在函数体里用），否则两个模块谁先加载就会把谁读成 undefined。
+ * ⚠️ 与本模块相互引用：`Hopper.ts` / `Dropper.ts` 要调用这里的
+ * `tryInsertOne` / `peekTake`，这里也要认出它们的类型。因此**本模块顶层不能读
+ * 那两个模块的任何值**（`HOPPER_SIZE` / `DROPPER_SIZE` 都只在函数体里用），
+ * 否则两个模块谁先加载就会把谁读成 undefined——这是 ESM 循环里最隐蔽的一种坑。
  *
  * ⚠️ 与原版的差异（记在 TASKS H14）：
- *  1. 附魔台**不接受**漏斗输入（原版对漏斗是关着的）；
+ *  1. 附魔台**不接受**自动输入（原版对漏斗是关着的）；
  *  2. 从**炉子**里取件只取产物槽。原版按"第一个非空槽"取（连原料、燃料都抽得走），
  *     这里刻意收紧：不然"漏斗摆在炉子下面自动收成品"会先把刚放进去的矿石抽回来。
  */
@@ -31,6 +32,7 @@ import {
 } from './BrewingStand.ts';
 import { CAMPFIRE_SIZE, Campfire } from './Campfire.ts';
 import { CHEST_SIZE, Chest } from './Chest.ts';
+import { DROPPER_SIZE, Dropper } from './Dropper.ts';
 import { EnchantTable } from './EnchantTable.ts';
 import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, FURNACE_SIZE, Furnace } from './Furnace.ts';
 import { HOPPER_SIZE, Hopper } from './Hopper.ts';
@@ -63,6 +65,8 @@ export function acceptingSlots(container: BlockContainer): readonly number[] {
   if (container instanceof Chest) return ALL_CHEST_SLOTS;
   // ⚠️ 这一行是函数体里读 `HOPPER_SIZE`（见文件头关于相互引用的说明）
   if (container instanceof Hopper) return range(HOPPER_SIZE);
+  // 投掷器（批次 59）：9 格全可塞（原版漏斗往投掷器里灌就是往第一个空格灌）
+  if (container instanceof Dropper) return range(DROPPER_SIZE);
   if (container instanceof Furnace) return [FURNACE_INPUT, FURNACE_FUEL];
   if (container instanceof Campfire) return ALL_CAMPFIRE_SLOTS;
   if (container instanceof BrewingStand) return BREWING_SLOTS;
@@ -77,6 +81,7 @@ export function acceptingSlots(container: BlockContainer): readonly number[] {
 export function containerSlotCount(container: BlockContainer): number {
   if (container instanceof Chest) return CHEST_SIZE;
   if (container instanceof Hopper) return HOPPER_SIZE;
+  if (container instanceof Dropper) return DROPPER_SIZE;
   if (container instanceof Furnace) return FURNACE_SIZE;
   if (container instanceof Campfire) return CAMPFIRE_SIZE;
   if (container instanceof BrewingStand) return BREW_SLOT_COUNT;
@@ -126,13 +131,6 @@ function kindAccepts(container: BlockContainer, slot: number, itemId: number): b
   if (container instanceof Campfire) return smeltingRecipeFor(itemId, 'campfire') !== undefined;
   if (container instanceof Furnace && slot === FURNACE_FUEL) return fuelSeconds(itemId) > 0;
   return true;
-}
-
-/** 目标容器还有没有任何一格能收下这个栈（不产生副作用） */
-export function canAccept(container: BlockContainer, stack: ItemStack): boolean {
-  return acceptingSlots(container).some(
-    (slot) => slotHasRoom(container, slot, stack) && kindAccepts(container, slot, stack.id),
-  );
 }
 
 /**
