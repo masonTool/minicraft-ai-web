@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-16 · 提交总数 400（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-16 · 提交总数 403（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 286 项 —— 已完成 **164**、进行中 **71**、待办 51 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -180,7 +180,8 @@ npm run agent:setup        # 跨机器自检
 `forceBite()`（把浮标直接推到咬钩，省掉 5~30 秒的等待）/
 `teleport(x,y,z)` / `teleportForce` / `look(yawDeg,pitchDeg)` / `setTimeOfDay(t)` /
 `setDimension('overworld'|'nether'|'end')` / `toggleDimension()` /
-`__worldMenu`（主菜单：`fillNewWorldForm()` / `submitNewWorld()` / `render()`）/
+`__worldMenu`（主菜单：`fillNewWorldForm()` / `submitNewWorld()` / `render()` /
+`setView('home'|'worlds'|'create')` —— 批次 108 起主菜单是分层的）/
 `probe(x,y,z)`（方块 + 天光 + 方块光）/ `probeState` / `column(x,z)` / `sampleColumns(x0,z0,step)` /
 `place(x,y,z,blockId,state)` / `dropItem(itemId,count,x,y,z)`，另有 info / 实体列表等。
 
