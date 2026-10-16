@@ -617,6 +617,8 @@ const FUNCTIONAL = new Set<number>([
   Block.OBSERVER,
   // 锻造台（K8 尾巴）：和铁砧一样是"右键打开的工作台"
   Block.SMITHING_TABLE,
+  // 切石机（H11，批次 44）：同样是"右键打开的工作台"
+  Block.STONECUTTER,
 ]);
 
 /** 自然装饰与下界方块（创造物品栏的"自然"分类） */

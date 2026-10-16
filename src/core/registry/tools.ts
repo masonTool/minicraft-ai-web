@@ -302,6 +302,8 @@ requirePickaxe(0, [
   Block.IRON_BLOCK,
   // 锻造台（K8 尾巴）：原版要镐但对等级没有要求——任何镐都能采到
   Block.SMITHING_TABLE,
+  // 切石机（H11，批次 44）：同样是"要镐但不挑等级"的工作台
+  Block.STONECUTTER,
   // 锁链（B11）：原版同样是"要镐、不限等级"（徒手挖得动但什么都不掉）
   Block.CHAIN,
   // 石英家族、深板岩瓦、红色下界砖（批次 42）：原版都要镐，且不限等级。

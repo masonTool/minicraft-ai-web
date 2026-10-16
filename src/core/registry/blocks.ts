@@ -1234,6 +1234,28 @@ const MORE_STONE_SPECS: readonly BlockSpec[] = [
   { id: 409, name: 'minecraft:red_nether_bricks', tiles: ['red_nether_bricks', 'red_nether_bricks', 'red_nether_bricks'] },
 ];
 
+// ---------------------------------------------------------------- 切石机（批次 44）
+
+/**
+ * 切石机（H11）。
+ *
+ * 原版把它做成"整块方块 + 台面上一条锯片"，**没有状态**（没有朝向、没有开关），
+ * 所以这里就是一个普通的 cube：id 接在最大 id（409）之后。
+ *
+ * id 写成常量、不用"末尾接着排"：方块总数每批都在涨，
+ * 而存档里存的就是这个数字（与 `MORE_STONE_ID_START` 同一条理由）。
+ */
+export const STONECUTTER_ID = 410;
+
+const STONECUTTER_SPECS: readonly BlockSpec[] = [
+  {
+    id: STONECUTTER_ID,
+    name: 'minecraft:stonecutter',
+    // 贴图顺序与 BlockSpec.tiles 一致：[顶面, 底面, 侧面]
+    tiles: ['stonecutter_top', 'stonecutter_bottom', 'stonecutter_side'],
+  },
+];
+
 // ---------------------------------------------------------------- 石材家族的变体（批次 41）
 
 /**
@@ -1390,6 +1412,7 @@ const SPECS: readonly BlockSpec[] = [
   ...COPPER_SPECS,
   ...MORE_STONE_SPECS,
   ...STONE_VARIANT_SPECS,
+  ...STONECUTTER_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -1607,6 +1630,8 @@ export const Block = {
   LILY_PAD: 295,
   /** 雪层（B11）：层数在状态里（1~8 层），id 单独一个 */
   SNOW: SNOW_LAYER_ID,
+  /** 切石机（H11）：整块方块，没有状态；右键打开"一进多选"的界面 */
+  STONECUTTER: STONECUTTER_ID,
 } as const;
 
 /** 第 index 种颜色的羊毛方块 id（顺序与 DYE_COLORS 一致） */
@@ -1805,6 +1830,8 @@ HARDNESS.set(Block.IRON_BLOCK, 5);
 HARDNESS.set(Block.NETHERITE_BLOCK, 50);
 // 锻造台 2.5（原版），斧最快、徒手也能采
 HARDNESS.set(Block.SMITHING_TABLE, 2.5);
+// 切石机 3.5（原版与石头同档），要镐
+HARDNESS.set(Block.STONECUTTER, 3.5);
 
 // 木材家族：原木与木板 2.0、树叶 0.2，台阶楼梯跟随木板
 for (const ids of Object.values(Wood)) {

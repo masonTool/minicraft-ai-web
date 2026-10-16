@@ -18,10 +18,18 @@ import { Chest } from '../container/Chest.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
+import { Stonecutter } from '../container/Stonecutter.ts';
 import type { DimensionId } from '../gen/Dimension.ts';
 
-export type BlockContainer = Furnace | Chest | EnchantTable | Anvil | BrewingStand | SmithingTable;
-export type ContainerKind = 'furnace' | 'chest' | 'enchanting' | 'anvil' | 'brewing' | 'smithing';
+export type BlockContainer =
+  | Furnace
+  | Chest
+  | EnchantTable
+  | Anvil
+  | BrewingStand
+  | SmithingTable
+  | Stonecutter;
+export type ContainerKind = 'furnace' | 'chest' | 'enchanting' | 'anvil' | 'brewing' | 'smithing' | 'stonecutter';
 
 interface Entry {
   dimension: DimensionId;
@@ -104,6 +112,20 @@ export class BlockEntityStore {
   getEnchantTable(dimension: DimensionId, x: number, y: number, z: number): EnchantTable | undefined {
     const container = this.get(dimension, x, y, z);
     return container instanceof EnchantTable ? container : undefined;
+  }
+
+  getStonecutter(dimension: DimensionId, x: number, y: number, z: number): Stonecutter | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Stonecutter ? container : undefined;
+  }
+
+  /** 切石机的输入格也按坐标存（与铁砧/锻造台同一个理由） */
+  getOrCreateStonecutter(dimension: DimensionId, x: number, y: number, z: number): Stonecutter {
+    const existing = this.getStonecutter(dimension, x, y, z);
+    if (existing) return existing;
+    const cutter = new Stonecutter();
+    this.put({ dimension, x, y, z, container: cutter });
+    return cutter;
   }
 
   /**

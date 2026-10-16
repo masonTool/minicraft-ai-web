@@ -629,6 +629,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     pattern: ['II', 'PP', 'PP'],
     key: { I: Item.IRON_INGOT, P: Block.OAK_PLANKS },
   },
+  // ---- 切石机（H11，批次 44）：1 铁锭 + 3 石头（原版图案：铁锭在上一排中间、三块石头一排）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.STONECUTTER, count: 1 },
+    pattern: [' I ', 'SSS'],
+    key: { I: Item.IRON_INGOT, S: Block.STONE },
+  },
   // ⚠️ 下界合金的**工具与盔甲没有配方**：它们只能在锻造台上、由对应的钻石装备 + 1 个
   // 下界合金锭升级而来（见 `core/crafting/Smithing.ts`），与原版一致。
   // ⚠️ 与 原版 的差异：原版是 4 线 → 1 羊毛，方向相反。

@@ -2882,6 +2882,55 @@ PAINTERS.smooth_quartz = SMOOTH_QUARTZ_PAINTER;
 PAINTERS.deepslate_tiles = DEEPSLATE_TILES_PAINTER;
 // 红色下界砖：与下界砖同一套砖缝画笔，只是底色换成暗红（原版就是"红砖版下界砖"）
 PAINTERS.red_nether_bricks = brickPainter([92, 28, 30]);
+
+// ---- 切石机（批次 44，H11）
+//
+// 三张图的分工与原版一致：**顶面画锯片**（这是它的招牌：远远看一眼就知道是切石机）、
+// 侧面画"石台 + 一道出料槽"，底面就是一块素石（原版底面确实是普通的平滑石）。
+// 三张都用同一套石材底色，只是顶面加了一条铁锯片。
+
+/** 石材的底色（切石机的三张图共用，保证"这是个石头做的方块"）。 */
+const STONECUTTER_BASE = layered(124, 8, 6);
+
+/**
+ * 锯片：一条横贯顶面的铁锯条 + 齿。
+ *
+ * ⚠️ 齿画在**下沿**（`y === 9`）而不是上沿：从上往下看的时候，
+ * 锯条是"压"在石台上的，齿朝下才不会看着像悬空的一根棍。
+ */
+function sawBlade(x: number, y: number, rng: () => number): [number, number, number, number] {
+  const jitter = rng() * 10 - 5;
+  // 锯条本体：y 6~8 一条横向铁条，两端留 1 像素
+  if (y >= 6 && y <= 8 && x >= 1 && x <= 14) {
+    const shade = y === 7 ? 1.12 : 0.92;
+    return [clamp255(168 * shade + jitter), clamp255(170 * shade + jitter), clamp255(178 * shade + jitter), 255];
+  }
+  // 锯齿：下沿每隔一格凸出一颗
+  if (y === 9 && x >= 2 && x <= 13 && x % 2 === 0) {
+    return [clamp255(150 + jitter), clamp255(152 + jitter), clamp255(160 + jitter), 255];
+  }
+  return STONECUTTER_BASE(x, y, rng);
+}
+
+/** 顶面：石材 + 锯片 + 一条凹槽（原版顶面就是"石台上一把锯"） */
+PAINTERS.stonecutter_top = (x, y, rng) => sawBlade(x, y, rng);
+
+/** 底面：素石（不画任何结构） */
+PAINTERS.stonecutter_bottom = (x, y, rng) => STONECUTTER_BASE(x, y, rng);
+
+/** 侧面：石材 + 上沿凸出的一条石檐 + 中间一道出料槽 */
+PAINTERS.stonecutter_side = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  // 上沿（y 0~1）是台面边缘，亮一点，看着像"有厚度"
+  if (y <= 1) return [clamp255(150 + jitter), clamp255(150 + jitter), clamp255(154 + jitter), 255];
+  // 出料槽：y 8~10 的横向深色缝（切下来的东西从这里出来）
+  if (y >= 8 && y <= 10) {
+    const edge = y === 8 || y === 10;
+    const shade = edge ? 0.72 : 0.56;
+    return [clamp255(124 * shade + jitter), clamp255(124 * shade + jitter), clamp255(128 * shade + jitter), 255];
+  }
+  return STONECUTTER_BASE(x, y, rng);
+};
 /** 下界石英（物品图标）：一小堆奶白的碎晶 */
 PAINTERS.item_quartz = lump(
   [

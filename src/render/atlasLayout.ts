@@ -596,6 +596,10 @@ export const TILE_ORDER = [
   'carpet_green',
   'carpet_red',
   'carpet_black',
+  // ---- 切石机（批次 44，H11）：顶面（锯片）/ 底面（素石）/ 侧面（石台 + 出料槽）
+  'stonecutter_top',
+  'stonecutter_bottom',
+  'stonecutter_side',
   // ---- 木制方块族（批次 38）：5 种木材 ×（门 / 活板门 / 栅栏门）。
   // 栅栏不单独出贴图——它直接复用该木材的木板贴图（原版也是这个观感）
   'spruce_door',
