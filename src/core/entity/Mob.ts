@@ -15,7 +15,7 @@ import { Entity, type EntityContext } from './Entity.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
 import { Block, blockDef, woolId } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
-import { StatusEffects } from '../survival/StatusEffects.ts';
+import { StatusEffects, type EffectId } from '../survival/StatusEffects.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 
 /** 与玩家一致的常量（原版数值） */
@@ -303,6 +303,14 @@ export interface MobType {
    */
   throwsTrident?: boolean;
   /**
+   * **它射出的箭命中玩家时挂什么效果**（批次 125，流浪者的"缓慢 30 秒"）。
+   *
+   * ⚠️ 与 `venom` 分开：那一条是**近战命中**时挂的（蜘蛛/凋灵骷髅/尸壳），
+   * 而流浪者根本不会贴上来打——它的招牌全在**箭**上。箭的效果由 `Arrow` 在
+   * 命中玩家那一支里结算（见 `ArrowOptions.effect`），所以必须是单独一根数据线。
+   */
+  arrowEffect?: { effect: EffectId; seconds: number };
+  /**
    * **只在水中自然刷**（批次 123，溺尸）。
    *
    * 刷怪器默认要求"脚下实心 + 两格空气"，而溺尸要**站在水里**（原版它在水中生成、
@@ -311,17 +319,21 @@ export interface MobType {
    */
   spawnInWater?: boolean;
   /**
-   * **只在某个群系里自然刷**（批次 124，尸壳只要沙漠）。
+   * **只在某几个群系里自然刷**（批次 124 尸壳只要沙漠；批次 125 流浪者要三种雪原）。
    *
-   * 填**群系名**（`gen/Biome.ts` 里那个 `desert`），由 `SpawnContext.biomeAt` 判定——
-   * 与 `spawnZone`／`spawnInWater` 同一个分工：实体层不认识世界，只写"要哪一种"。
-   * 不填 = 不限群系（绝大多数生物如此）。
+   * 填**群系名**（`gen/Biome.ts` 里那些 `desert` / `snowy_plains`），
+   * 由 `SpawnContext.biomeAt` 判定——与 `spawnZone`／`spawnInWater` 同一个分工：
+   * 实体层不认识世界，只写"要哪几种"。不填 = 不限群系（绝大多数生物如此）。
+   *
+   * ⚠️ 是**一组**而不是一个：流浪者要在雪原/积雪针叶林/雪坡三处刷，
+   * 而"某个生物能在哪些群系刷"本来就是一对多（批次 124 时只有一个用户，
+   * 写成单个字符串；批次 125 一撞上多群系就顺手改成一组，免得再开第二个字段）。
    *
    * ⚠️ 原版的做法是"生物群系带生成表"（每个群系列出会刷什么），本项目反过来：
-   * **生物自己写它在哪个群系刷**。差别在多群系生物上（原版列一次、本项目每个群系写一遍），
-   * 而本项目只有尸壳一个用户，反着写更省事、也更好读"尸壳到底在哪刷"。
+   * **生物自己写它在哪些群系刷**。差别只在"谁列一遍"，而反着写更好读
+   * ——"流浪者到底在哪刷"一行就看得到。
    */
-  spawnBiome?: string;
+  spawnBiomes?: readonly string[];
   /**
    * **露天晒太阳会烧起来**（批次 124，亡灵家族）。
    *
@@ -1028,8 +1040,16 @@ export class Mob extends Entity {
           y: aimY * ranged.speed,
           z: (aimX * sin + aimZ * cos) * ranged.speed,
         },
-        // 力量/虚弱同样作用于远程伤害（原版也如此）
-        { fromPlayer: false, damage: Math.max(0, this.type.attackDamage + this.effects.attackBonus()) },
+        // 力量/虚弱同样作用于远程伤害（原版也如此）。
+        // `effect` 是流浪者那一条（批次 125）：箭上带什么效果是**这一箭的属性**，
+        // 所以在发射那一刻就交给 `Arrow`，而不是命中时再回来问是谁射的
+        {
+          fromPlayer: false,
+          damage: Math.max(0, this.type.attackDamage + this.effects.attackBonus()),
+          ...(this.type.arrowEffect === undefined
+            ? {}
+            : { effect: { effect: this.type.arrowEffect.effect, seconds: this.type.arrowEffect.seconds } }),
+        },
       );
     }
     ctx.playSound?.('bow_shoot', this.x, this.y, this.z);

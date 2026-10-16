@@ -90,7 +90,7 @@ console.log('\n[尸壳：僵尸的沙漠变体]');
   equal('掉的就是腐肉', HUSK_TYPE.drops[0]?.itemId, Item.ROTTEN_FLESH);
   check('在"会自然刷的敌对生物"表里', HOSTILE_MOBS.includes(HUSK_TYPE));
   check('生物表里有它', MOB_TYPES.includes(HUSK_TYPE) && mobTypeById('husk') !== undefined);
-  equal('只刷在沙漠（`spawnBiome`）', HUSK_TYPE.spawnBiome, 'desert');
+  equal('只刷在沙漠（`spawnBiomes`：一组群系名）', HUSK_TYPE.spawnBiomes?.join(','), 'desert');
   equal('只刷在主世界', HUSK_TYPE.dimension, 'overworld');
 
   // 两条招牌

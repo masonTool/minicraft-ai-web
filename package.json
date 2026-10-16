@@ -127,7 +127,8 @@
     "test:magma": "esbuild tools/magma-test.ts --bundle --platform=node --format=esm --outfile=.tmp/magma-test.mjs --log-level=error && node .tmp/magma-test.mjs",
     "test:piglin": "esbuild tools/piglin-test.ts --bundle --platform=node --format=esm --outfile=.tmp/piglin-test.mjs --log-level=error && node .tmp/piglin-test.mjs",
     "test:drowned": "esbuild tools/drowned-test.ts --bundle --platform=node --format=esm --outfile=.tmp/drowned-test.mjs --log-level=error && node .tmp/drowned-test.mjs",
-    "test:husk": "esbuild tools/husk-test.ts --bundle --platform=node --format=esm --outfile=.tmp/husk-test.mjs --log-level=error && node .tmp/husk-test.mjs"
+    "test:husk": "esbuild tools/husk-test.ts --bundle --platform=node --format=esm --outfile=.tmp/husk-test.mjs --log-level=error && node .tmp/husk-test.mjs",
+    "test:stray": "esbuild tools/stray-test.ts --bundle --platform=node --format=esm --outfile=.tmp/stray-test.mjs --log-level=error && node .tmp/stray-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

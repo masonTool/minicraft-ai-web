@@ -16,6 +16,7 @@
 import { Entity, entityIntersectsBox, type EntityContext } from './Entity.ts';
 import { Item } from '../registry/items.ts';
 import { tippedArrowEffectsOf } from '../survival/TippedArrow.ts';
+import type { EffectId } from '../survival/StatusEffects.ts';
 import { boxAt } from '../physics/AABB.ts';
 import { moveBody, type MovingBody } from '../physics/EntityMotion.ts';
 
@@ -56,6 +57,14 @@ export interface ArrowOptions {
    * （见 `survival/TippedArrow.ts`）。普通箭不传。
    */
   potionId?: number;
+  /**
+   * **这一箭命中玩家时挂的效果**（批次 125，流浪者的箭挂"缓慢"）。
+   *
+   * 与 `potionId` 那条的分工：药水箭是"命中**生物**挂 1/8 时长的药水效果"
+   * （玩家射出去的），而这一条是"**怪物射玩家的箭**带上一种效果"——
+   * 方向相反、时长也是原版的整时长（流浪者 30 秒），所以是两根数据线而不是一条。
+   */
+  effect?: { effect: EffectId; seconds: number };
 }
 
 /** 补全默认值之后的选项（内部用，避免到处写 `?? 1`） */
@@ -67,6 +76,7 @@ interface ResolvedArrowOptions {
   pickable: boolean;
   itemId: number;
   potionId?: number;
+  effect?: { effect: EffectId; seconds: number };
 }
 
 export class Arrow extends Entity implements MovingBody {
@@ -100,6 +110,7 @@ export class Arrow extends Entity implements MovingBody {
       pickable: options.pickable ?? true,
       itemId: options.itemId ?? Item.ARROW,
       ...(options.potionId === undefined ? {} : { potionId: options.potionId }),
+      ...(options.effect === undefined ? {} : { effect: options.effect }),
     };
     this.updateDirection();
   }
@@ -195,6 +206,11 @@ export class Arrow extends Entity implements MovingBody {
     // 玩家：只有"不是玩家自己射的"才会打玩家（骷髅的箭）
     if (!this.options.fromPlayer && ctx.playerBox && entityIntersectsBox(this, ctx.playerBox)) {
       ctx.hurtPlayer(this.options.damage, this.x, this.z, 'projectile');
+      // 流浪者的箭（批次 125）：伤害之后再挂一条效果（原版是"缓慢 I / 30 秒"）。
+      // ⚠️ 效果挂在**玩家**这一支上：怪物射的箭只打玩家，所以这里就是它的全部去处
+      if (this.options.effect) {
+        ctx.afflictPlayer?.(this.options.effect.effect, this.options.effect.seconds);
+      }
       this.dead = true;
       return true;
     }

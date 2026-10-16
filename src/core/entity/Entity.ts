@@ -217,7 +217,15 @@ export interface EntityContext {
     y: number,
     z: number,
     velocity: { x: number; y: number; z: number },
-    options: { fromPlayer: boolean; damage: number; knockback?: number; fireSeconds?: number; pickable?: boolean },
+    options: {
+      fromPlayer: boolean;
+      damage: number;
+      knockback?: number;
+      fireSeconds?: number;
+      pickable?: boolean;
+      /** 命中玩家时挂的效果（批次 125，流浪者的箭；见 `ArrowOptions.effect`） */
+      effect?: { effect: EffectId; seconds: number };
+    },
   ) => void;
   /**
    * 孵出一只小鸡（K4 尾巴：鸡蛋命中时 1/8 概率）。

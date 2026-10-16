@@ -631,10 +631,53 @@ export const HUSK_TYPE: MobType = {
   venom: { effect: 'hunger', seconds: 7 },
   // ⚠️ **故意不写** `burnsInDaylight`：尸壳在白天照样活动，这正是它的招牌
   // 只在沙漠里刷（原版它的生成表只挂在沙漠与沙漠丘陵上）
-  spawnBiome: 'desert',
+  spawnBiomes: ['desert'],
   dimension: 'overworld',
   bodyColor: 0x8a7a5c,
   accentColor: 0x5d5140,
+  eyeHeight: 1.74,
+};
+
+/**
+ * 流浪者（批次 125，J15 的下一只）——骷髅的**雪原变体**，也是"变体三部曲"的第三只
+ * （僵尸 → 尸壳、僵尸 → 溺尸、骷髅 → 流浪者）。
+ *
+ * 它的招牌只有一条，但很显眼：**它射出的箭命中玩家会让玩家"缓慢"**（原版 30 秒）——
+ * 也就是说它的威胁不在伤害（与骷髅同为 2 点），而在**追不上它、也跑不掉**。
+ *
+ * 所以这一批多了两根数据线：
+ *  - `arrowEffect`（**箭**命中玩家挂什么效果）：与 `venom`（近战命中挂效果）分开，
+ *    因为流浪者根本不会贴上来打——它的全部威胁都在箭上；
+ *  - `spawnBiomes`（**一组**群系）：骷髅满地都是，而流浪者只在这几处雪原
+ *    （批次 124 那根数据线原本只能填一个群系名，这里一撞上多群系就改成了一组）。
+ *
+ * ⚠️ 与原版的差异：**白天照样会烧**（与骷髅同一条，见 `world/Daylight.ts`）；
+ * **不掉箭与弓**（与骷髅同一个已有差异：本项目的骷髅只掉骨头）
+ */
+export const STRAY_TYPE: MobType = {
+  id: 'stray',
+  name: '流浪者',
+  health: 20,
+  width: 0.6,
+  height: 1.95,
+  speed: 2.4,
+  hostile: true,
+  attackDamage: 2,
+  followRange: 24,
+  drops: [{ itemId: Item.BONE, min: 0, max: 2, chance: 0.85 }],
+  xp: 5,
+  family: 'undead',
+  // 白天照样被晒着烧（与骷髅同一条规则）
+  burnsInDaylight: true,
+  // 与骷髅同一套射击参数（原版两者的射程与节奏一样）
+  ranged: { range: 16, cooldown: 2, speed: 34, keepDistance: 5, spread: 0.12 },
+  // **招牌**：箭命中玩家 → 缓慢 I / 30 秒（原版）
+  arrowEffect: { effect: 'slowness', seconds: 30 },
+  // 三处雪原 + 冻洋的冰面（原版流浪者的生成表就是这几处）
+  spawnBiomes: ['snowy_plains', 'snowy_taiga', 'snowy_slopes', 'frozen_ocean'],
+  dimension: 'overworld',
+  bodyColor: 0xa8c0bb,
+  accentColor: 0x6f8a86,
   eyeHeight: 1.74,
 };
 
@@ -659,6 +702,8 @@ export const MOB_TYPES: readonly MobType[] = [
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿
   HUSK_TYPE,
+  // 流浪者（批次 125）：雪原里的骷髅变体，箭上带"缓慢"
+  STRAY_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

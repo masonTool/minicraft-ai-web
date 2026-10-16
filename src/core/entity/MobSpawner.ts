@@ -60,10 +60,10 @@ export interface SpawnContext {
    */
   inZone?: (kind: string, x: number, z: number) => boolean;
   /**
-   * 这一列的**群系名**（批次 124，尸壳用；`gen/Biome.ts` 里的 `desert` 这种）。
+   * 这一列的**群系名**（批次 124，尸壳与流浪者用；`gen/Biome.ts` 里的 `desert` 这种）。
    *
-   * 与 `inZone` 同一分工：实体层不认识世界，只写"要哪一种群系"。
-   * 不接钩子时带 `spawnBiome` 的生物**一只都不刷**（宁可少刷，也不要撒到全世界）。
+   * 与 `inZone` 同一分工：实体层不认识世界，只写"要哪几种群系"。
+   * 不接钩子时带 `spawnBiomes` 的生物**一只都不刷**（宁可少刷，也不要撒到全世界）。
    */
   biomeAt?: (x: number, z: number) => string | null;
   /**
@@ -161,9 +161,12 @@ export class MobSpawner {
       // 区域限定（批次 115 凋灵骷髅只要塞；批次 120 史莱姆只要史莱姆区块）：
       // 不接钩子就一只都不刷，理由见 `SpawnContext.inZone` 的注释
       if (type.spawnZone !== undefined && !(ctx.inZone?.(type.spawnZone, x, z) ?? false)) continue;
-      // 群系限定（批次 124，尸壳只要沙漠）：不接钩子同样一只都不刷，
+      // 群系限定（批次 124 尸壳只要沙漠；批次 125 流浪者要三种雪原）：不接钩子一只都不刷，
       // 理由与 `spawnZone` 那条一样——宁可少刷，也不要撒到全世界
-      if (type.spawnBiome !== undefined && ctx.biomeAt?.(x, z) !== type.spawnBiome) continue;
+      if (type.spawnBiomes !== undefined) {
+        const biome = ctx.biomeAt?.(x, z) ?? null;
+        if (biome === null || !type.spawnBiomes.includes(biome)) continue;
+      }
       // 高度限定（批次 120，史莱姆 y<40；原版就是这条把它压在地下）
       if (type.spawnMaxY !== undefined && y > type.spawnMaxY) continue;
       // 按种类丢一次骰子（批次 120）：月亮越满，史莱姆越密——不接钩子按 1 算
