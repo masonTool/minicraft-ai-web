@@ -72,7 +72,15 @@ export type ThrowableKind =
   /** 凋灵吐的**黑色**骷髅头（批次 116）：5 点伤害 + 凋零 10 秒，不拆地形 */
   | 'wither_skull'
   /** 凋灵半血之后吐的**蓝色**骷髅头：8 点伤害 + 凋零 40 秒（原版就是"更疼更久"） */
-  | 'wither_skull_blue';
+  | 'wither_skull_blue'
+  /**
+   * 三叉戟（批次 123）：玩家扔的砸生物、**溺尸扔的砸玩家**——它不像雪球/火球那样
+   * "只打一边"，所以额外带一个 `fromPlayer`（见 `ThrowableOptions`）。
+   */
+  | 'trident';
+
+/** 三叉戟的投掷伤害（原版 8 点；与"近战 9"是两回事） */
+export const TRIDENT_THROW_DAMAGE = 8;
 
 /** 凋灵骷髅头的两种档位（数值按原版，放在结算这一层：`Wither.ts` 只管"谁吐的、飞多快"） */
 export const WITHER_SKULL_DAMAGE = 5;
@@ -154,6 +162,14 @@ export interface ThrowableOptions {
    * 实体层只负责"朝那儿飞"。不填就是普通投掷物（在下界/末地扔眼睛就是这样）。
    */
   readonly target?: { x: number; y: number; z: number };
+  /**
+   * **这是玩家扔的吗**（批次 123，三叉戟用；缺省 true）。
+   *
+   * 其余投掷物不需要它——它们的"打谁"由**种类**就定死了（雪球只打生物、
+   * 火球与凋灵骷髅头只打玩家）。三叉戟是第一个**两边都可能**的：
+   * 玩家扔它砸生物，**溺尸扔它砸玩家**（原版溺尸的招牌就是隔着水扔三叉戟）。
+   */
+  readonly fromPlayer?: boolean;
 }
 
 export class Throwable extends Entity implements MovingBody {
@@ -162,6 +178,8 @@ export class Throwable extends Entity implements MovingBody {
   readonly potionId: number | undefined;
   /** 飞行目标（只有末影之眼用；见 `ThrowableOptions.target`） */
   readonly target: { x: number; y: number; z: number } | undefined;
+  /** 是不是玩家扔的（只有三叉戟读它；见 `ThrowableOptions.fromPlayer`） */
+  readonly fromPlayer: boolean;
 
   /** 飞行方向（渲染用；命中后速度归零，所以得单独存一份） */
   dirX = 0;
@@ -180,6 +198,7 @@ export class Throwable extends Entity implements MovingBody {
     this.itemId = options.itemId;
     this.potionId = options.potionId;
     this.target = options.target;
+    this.fromPlayer = options.fromPlayer !== false;
     this.vx = velocity.x;
     this.vy = velocity.y;
     this.vz = velocity.z;
@@ -293,8 +312,25 @@ export class Throwable extends Entity implements MovingBody {
       return false;
     }
 
+    // 三叉戟（批次 123）：**溺尸扔的砸玩家**（玩家扔的那一支走下面"砸生物"那条）。
+    // 它是唯一一个"两边都可能"的投掷物，所以按 `fromPlayer` 分流而不是按种类
+    if (this.kind === 'trident' && !this.fromPlayer) {
+      if (ctx.playerBox && entityIntersectsBox(this, ctx.playerBox)) {
+        ctx.hurtPlayer(TRIDENT_THROW_DAMAGE, this.x, this.z, 'projectile');
+        this.impact(ctx);
+        return true;
+      }
+      return false;
+    }
+
     const mob = ctx.hitMob?.(box) ?? null;
     if (!mob) return false;
+
+    // 三叉戟（玩家那一支）：直接结算伤害。⚠️ 走 `mob.hurt` 而不是 `push`——
+    // 雪球那一条是"0 伤害只推一下"，而三叉戟是**实打实的武器**
+    if (this.kind === 'trident') {
+      mob.hurt(TRIDENT_THROW_DAMAGE, this.x, this.z, ctx);
+    }
 
     // 雪球：原版**0 伤害**，只把目标推一下（所以走 `push` 而不是 `hurt(0)`——
     // 后者的语义是"没造成伤害"，连挨打动画都不会有）
@@ -369,6 +405,13 @@ export class Throwable extends Entity implements MovingBody {
           ctx.playSound?.('break_glass', x, y, z);
           ctx.spawnPortalParticles?.(x, y + 0.3, z, 12, 0.4);
         }
+        break;
+      case 'trident':
+        // 三叉戟（批次 123）：**落地就掉回地上**（原版扔出去的三叉戟能捡回来，
+        // 所以它不像箭那样"插在方块上"——这里简化成"原地掉一份"，效果一样、状态少一层）。
+        // 溺尸扔的那一支也掉：原版如此，于是"捡它扔的"也是拿到三叉戟的一条路
+        ctx.spawnDrop(this.itemId, 1, x, y, z);
+        ctx.playSound?.('arrow_hit', x, y, z);
         break;
       case 'ender_pearl': {
         // 末影珍珠（批次 113）：**把扔它的人传到落点上**（原版就是"人到珍珠落地的地方"）。

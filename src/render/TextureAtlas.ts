@@ -3424,6 +3424,29 @@ PAINTERS.beacon_top = (x, y, rng) => {
   return [clamp255(base * 0.7), clamp255(base * 0.9), clamp255(base + 26), 255];
 };
 
+/**
+ * 三叉戟（批次 123）：一根深色杆 + 三根亮色的齿。
+ *
+ * 原版它是"深海青"那种发暗的金属色，所以这里用**深底 + 亮齿**的对比让它一眼认出来
+ * （与弓箭那类"细长物件"同一个画法：杆占中间两列、齿在顶上张开）。
+ */
+PAINTERS.item_trident = (x, y, rng) => {
+  const jitter = rng() * 10 - 5;
+  // 杆：中间两列、从 y=7 到底（不画满整格，留一点阴影）
+  const shaft = x >= 7 && x <= 8 && y >= 7 && y <= 14;
+  if (shaft) return [clamp255(58 + jitter), clamp255(96 + jitter), clamp255(104 + jitter), 255];
+  // 三根齿：左中右各一根（中间的更高）
+  const left = x >= 3 && x <= 4 && y >= 1 && y <= 6;
+  const middle = x >= 7 && x <= 8 && y >= 0 && y <= 5;
+  const right = x >= 11 && x <= 12 && y >= 1 && y <= 6;
+  // 横梁：把三根齿连起来（y = 6 那一行）
+  const bar = y === 6 && x >= 3 && x <= 12;
+  if (left || middle || right || bar) {
+    return [clamp255(126 + jitter), clamp255(196 + jitter), clamp255(202 + jitter), 255];
+  }
+  return [0, 0, 0, 0];
+};
+
 /** 凋灵骷髅头的顶面（批次 115）：几道更深的骨缝，说明"这是个头"而不是一块石头 */
 PAINTERS.wither_skull_top = (x, y, rng) => {
   const jitter = rng() * 14 - 7;

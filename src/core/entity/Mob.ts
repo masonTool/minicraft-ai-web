@@ -293,6 +293,24 @@ export interface MobType {
    */
   teleports?: boolean;
   /**
+   * **远程攻击扔的是三叉戟**（批次 123，溺尸）。
+   *
+   * 与 `ranged` 配合用：`ranged` 决定"多远、多久一次、多快"，这一位只决定**扔的是什么**
+   * （`true` → `ctx.spawnTrident`，否则 `ctx.spawnArrow`）。弹道那段是共用的——
+   * 原版溺尸扔三叉戟与骷髅射箭的瞄准也确实是同一套。
+   *
+   * ⚠️ 只有同时写了 `ranged` 才有意义（它是远程攻击那条分支里的一个分流）。
+   */
+  throwsTrident?: boolean;
+  /**
+   * **只在水中自然刷**（批次 123，溺尸）。
+   *
+   * 刷怪器默认要求"脚下实心 + 两格空气"，而溺尸要**站在水里**（原版它在水中生成、
+   * 或者由溺水的僵尸变来）。这一位把那条判据换成"脚与头都是**水**"——
+   * 所以它不需要"脚下一格实心"（海面附近、水柱中间都能刷）。
+   */
+  spawnInWater?: boolean;
+  /**
    * **怕水**（批次 112，末影人）：泡在水里或淋雨时**每秒掉 1 点**，并瞬移逃开。
    *
    * "淋雨"的判据与"火焰被雨浇灭"完全同源（`raining` + 天光 15 = 头顶见天）。
@@ -967,18 +985,31 @@ export class Mob extends Entity {
     const cos = Math.cos(spread);
     const sin = Math.sin(spread);
 
-    ctx.spawnArrow?.(
-      this.x,
-      eyeY,
-      this.z,
-      {
+    // ⚠️ 这一段的方向算完之后才分流（批次 123）：**拿三叉戟的生物扔三叉戟**，
+    // 其余远程生物扔箭。两者的弹道、散布、出手点共用上面那几行——差别只在"扔的是什么"。
+    // ⚠️ 分流要**只有一个出口**：第一版是把新的 if/else 加在原来那句 `spawnArrow` **下面**
+    // （两句都留着），于是骷髅每次冷却都会射两箭（3 秒 4 发）——`test:mob` 那条
+    // "3 秒最多两箭"当场就红了
+    if (this.type.throwsTrident === true) {
+      ctx.spawnTrident?.(this.x, eyeY, this.z, {
         x: (aimX * cos - aimZ * sin) * ranged.speed,
         y: aimY * ranged.speed,
         z: (aimX * sin + aimZ * cos) * ranged.speed,
-      },
-      // 力量/虚弱同样作用于远程伤害（原版也如此）
-      { fromPlayer: false, damage: Math.max(0, this.type.attackDamage + this.effects.attackBonus()) },
-    );
+      });
+    } else {
+      ctx.spawnArrow?.(
+        this.x,
+        eyeY,
+        this.z,
+        {
+          x: (aimX * cos - aimZ * sin) * ranged.speed,
+          y: aimY * ranged.speed,
+          z: (aimX * sin + aimZ * cos) * ranged.speed,
+        },
+        // 力量/虚弱同样作用于远程伤害（原版也如此）
+        { fromPlayer: false, damage: Math.max(0, this.type.attackDamage + this.effects.attackBonus()) },
+      );
+    }
     ctx.playSound?.('bow_shoot', this.x, this.y, this.z);
   }
 

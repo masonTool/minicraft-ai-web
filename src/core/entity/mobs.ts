@@ -550,6 +550,53 @@ export const ZOMBIE_PIGLIN_TYPE: MobType = {
   eyeHeight: 1.74,
 };
 
+/**
+ * 溺尸（批次 123，J15 的下一只）——僵尸的**水生变体**，也是**三叉戟的唯一来源**。
+ *
+ * 三处招牌：
+ *  - **在水里生成**（`spawnInWater`）：刷怪器那两条通用判据（脚下实心 + 两格空气）
+ *    对它不适用，它要的是"脚与头都是水"；
+ *  - **扔三叉戟**（`ranged` + `throwsTrident`）：弹道与骷髅射箭共用同一段瞄准，
+ *    区别只在"扔出去的是什么"——玩家被它砸中掉 8 点（走 `'projectile'` 那条伤害）；
+ *  - **掉三叉戟**：原版是"15% 的溺尸带着三叉戟，带的那种被玩家打死时 8.5% 掉落"，
+ *    等价于**每只溺尸 1.275%**——本项目没有"个体带什么装备"这一层，
+ *    所以直接把那个乘积写成掉落概率（见下面那条注记）。
+ *
+ * ⚠️ 与原版的差异：
+ *  - **每只溺尸都会扔三叉戟**（原版只有约 15% 带），所以本项目的溺尸比原版凶
+ *    ——这是"没有个体装备层"的直接后果，换算到掉落上就是那 1.275%；
+ *  - **不做"僵尸溺水变溺尸"**（那要一条"泡水满一定时长就转换"的通道，见 TASKS J15）；
+ *  - **不掉钓竿**（原版带钓竿的那种会掉，本项目没有那件装备）；
+ *  - **白天不会烧**（本项目还没有"亡灵白天着火"这条机制，僵尸也一样）。
+ */
+export const DROWNED_TYPE: MobType = {
+  id: 'drowned',
+  name: '溺尸',
+  health: 20,
+  width: 0.6,
+  height: 1.95,
+  speed: 2.1,
+  hostile: true,
+  attackDamage: 3,
+  followRange: 24,
+  drops: [
+    { itemId: Item.ROTTEN_FLESH, min: 0, max: 2, chance: 0.8 },
+    // ⚠️ 1.275% = 原版的 15%（带三叉戟）× 8.5%（带的那种掉三叉戟），
+    // 写成 `min:1,max:1,chance`（不然数量也掷一次，概率会被砍半）
+    { itemId: Item.TRIDENT, min: 1, max: 1, chance: 0.01275 },
+  ],
+  xp: 5,
+  family: 'undead',
+  // 隔着几格扔三叉戟（原版它也会贴上来打，所以 keepDistance 很小）
+  ranged: { range: 12, cooldown: 2.5, speed: 28, keepDistance: 3, spread: 0.1 },
+  throwsTrident: true,
+  spawnInWater: true,
+  dimension: 'overworld',
+  bodyColor: 0x3f6f5f,
+  accentColor: 0x2a4f44,
+  eyeHeight: 1.74,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -567,6 +614,8 @@ export const MOB_TYPES: readonly MobType[] = [
   MAGMA_CUBE_SMALL_TYPE,
   // 僵尸猪灵（批次 122）：第一只"平时不打人、打了会招来一群"的敌对生物
   ZOMBIE_PIGLIN_TYPE,
+  // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
+  DROWNED_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

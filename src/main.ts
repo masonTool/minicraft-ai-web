@@ -2374,7 +2374,17 @@ class App {
   private targetToolHint(blockId: number): string {
     const required = harvestRequirement(blockId);
     if (!required || canHarvest(blockId, this.heldTool)) return '';
-    const toolName = { pickaxe: '镐', axe: '斧', shovel: '锹', hoe: '锄', sword: '剑', shears: '剪刀' }[required.tool];
+    const toolName = {
+      pickaxe: '镐',
+      axe: '斧',
+      shovel: '锹',
+      hoe: '锄',
+      sword: '剑',
+      shears: '剪刀',
+      // 三叉戟（批次 123）：它的采集档位与徒手相同，所以这句话基本不会出现——
+      // 但类型上它是 `ToolType` 的一员，得有个名字
+      trident: '三叉戟',
+    }[required.tool];
     const tierName = ['木', '石', '铁', '钻石', '下界合金'][required.tier] ?? '';
     return `   ⚠ 需要${tierName}${toolName}才掉落`;
   }
@@ -5210,6 +5220,10 @@ class App {
       // （命中要炸开一片，见 `Throwable.impact`），所以是两个钩子而不是一个带参数的
       spawnLargeFireball: (x, y, z, velocity) =>
         this.spawnThrowable(x, y, z, velocity, 'large_fireball', Item.BLAZE_POWDER),
+      // 溺尸扔三叉戟（批次 123）：与玩家扔的是**同一档**投掷物（`'trident'`），
+      // 差别只在 `fromPlayer: false`——于是它砸玩家而不是砸生物
+      spawnTrident: (x, y, z, velocity) =>
+        this.spawnThrowable(x, y, z, velocity, 'trident', Item.TRIDENT, undefined, false),
       // 火球命中 → 点着玩家（伤害在投掷物那一层结算，点火是另一条路，见 `EntityContext`）
       ignitePlayer: (seconds) => this.stats.ignite(seconds),
       // 隐身（K4 尾巴）：敌对生物看不见你就不追（原版隐形后 8 格内还是会被发现，
@@ -6680,7 +6694,11 @@ class App {
             : // 末影之眼（批次 114）：朝最近的要塞飞，用来**找要塞**
               held === Item.ENDER_EYE
               ? 'ender_eye'
-              : potion?.splash === true
+              : // 三叉戟（批次 123）：右键扔出去（8 点伤害，落地会掉回地上——所以能捡回来）。
+                // 它同时是**近战武器**（9 点），那条走的是 `heldTool`（见 `TRIDENT_INFO`）
+                held === Item.TRIDENT
+                ? 'trident'
+                : potion?.splash === true
                 ? 'splash_potion'
                 : potion?.lingering === true
                   ? 'lingering_potion'
@@ -6747,6 +6765,7 @@ class App {
     kind: ThrowableKind,
     itemId: number,
     target?: { x: number; y: number; z: number },
+    fromPlayer = true,
   ): void {
     this.entities.spawn(
       new Throwable(x, y, z, velocity, {
@@ -6755,6 +6774,8 @@ class App {
         potionId: kind === 'splash_potion' || kind === 'lingering_potion' ? itemId : undefined,
         // ⚠️ 发射器那一档**没有目标**：它不放末影之眼（连珍珠都不放，见 `test:dispenser`）
         target,
+        // 三叉戟靠它分流（玩家扔的砸生物、溺尸扔的砸玩家，见 `ThrowableOptions.fromPlayer`）
+        fromPlayer,
       }),
     );
   }

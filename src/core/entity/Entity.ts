@@ -182,6 +182,12 @@ export interface EntityContext {
    * 参数带 `typeId`：原版只有**同种**会跟着翻脸——旁边的恶魂看着同伴挨打并不生气。
    */
   provokeNearby?: (x: number, y: number, z: number, radius: number, typeId: string) => void;
+  /**
+   * 扔一支**三叉戟**（批次 123，溺尸用）——它是生物扔的，所以会**砸玩家**
+   * （玩家自己扔的那一支走 `main.throwHeld` 里那条路，两者共用 `Throwable` 的同一档，
+   * 差别只在 `fromPlayer`）。
+   */
+  spawnTrident?: (x: number, y: number, z: number, velocity: { x: number; y: number; z: number }) => void;
   /** 冒爱心粒子（J8：求爱与繁殖成功时）。`scale` 用来让"没找到对象"时少冒几颗 */
   spawnHearts?: (x: number, y: number, z: number, scale?: number) => void;
   /**

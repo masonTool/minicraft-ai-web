@@ -159,8 +159,15 @@ export class MobSpawner {
       // 按种类丢一次骰子（批次 120）：月亮越满，史莱姆越密——不接钩子按 1 算
       const scale = ctx.spawnWeightScale?.(type) ?? 1;
       if (scale <= 0 || (scale < 1 && this.random() > scale)) continue;
-      if (!type.flying && !this.canSpawnAt(ctx, x, y, z)) continue;
-      if (!this.canFitBox(ctx, type, x, y, z)) continue;
+      // 水生生物（批次 123，溺尸）：**脚与头都是水**就算合格——
+      // `canSpawnAt`（要脚下实心）与 `canFitBox`（要空气）两条对它都不适用，
+      // 所以这里是一分为二而不是"再加一条判据"
+      if (type.spawnInWater === true) {
+        if (!this.canSpawnInWater(ctx, x, y, z)) continue;
+      } else {
+        if (!type.flying && !this.canSpawnAt(ctx, x, y, z)) continue;
+        if (!this.canFitBox(ctx, type, x, y, z)) continue;
+      }
       // 光照条件：方块光 0（完全黑暗）且天光 ≤ 7（洞里或夜里）。
       // ⚠️ `ignoreLight` 的生物（史莱姆）不走这一条：原版它在史莱姆区块里白天也刷
       if (type.ignoreLight !== true) {
@@ -221,6 +228,18 @@ export class MobSpawner {
    * 宽体生物（恶魂 4×4）要查周围那几列——不然它有一半会卡在岩层里。
    * 以"这一格"为中心向四周展开：偶数宽度时中心偏一格，够用即可。
    */
+  /**
+   * 水生生物的落点（批次 123，溺尸）：**脚与头所在的两格都是水**。
+   *
+   * 为什么不像 `canSpawnAt` 那样要求"脚下一格实心"：原版的溺尸在水柱中间、
+   * 甚至在**水面附近**就会生成（不是贴着海床走），要求脚下实心会把绝大多数水下位置排除掉
+   * （深海里"脚下实心"往往是几十格以下）。
+   */
+  private canSpawnInWater(ctx: SpawnContext, x: number, y: number, z: number): boolean {
+    if (y <= WORLD_MIN_Y + 1 || y + 1 >= WORLD_MAX_Y) return false;
+    return ctx.getBlock(x, y, z) === Block.WATER && ctx.getBlock(x, y + 1, z) === Block.WATER;
+  }
+
   private canFitBox(ctx: SpawnContext, type: MobType, x: number, y: number, z: number): boolean {
     const space = type.spawnSpace ?? { width: 1, height: 2 };
     const half = Math.floor((space.width - 1) / 2);

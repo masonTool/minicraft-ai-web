@@ -154,6 +154,14 @@ export const Item = {
    * ——在那之前粘性活塞一直挂在可达性审计的白名单上（"要黏液球，而史莱姆还没做"）。
    */
   SLIME_BALL: 1446,
+  /**
+   * 三叉戟（批次 123）：**溺尸**手里那件，也是它的掉落。
+   *
+   * 原版它做不出来（只能从溺尸身上捡），所以这里也没有配方；
+   * 属性（近战 9 / 耐久 250）登记在 `tools.ts` 的 `TRIDENT_INFO` 里
+   * ——与剪刀同一个做法，见那边"必须登记进 `TOOL_BY_ID`"的注记。
+   */
+  TRIDENT: 1447,
   SUGAR: 1174,
   RABBIT_FOOT: 1190,
   MAGMA_CREAM: 1191,
@@ -383,6 +391,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.NETHER_STAR, name: 'minecraft:nether_star', tile: 'item_nether_star' },
   // 黏液球（批次 120）：史莱姆掉的那一颗；9 颗压一块黏液块（原版双向）
   { id: Item.SLIME_BALL, name: 'minecraft:slime_ball', tile: 'item_slime_ball' },
+  // 三叉戟（批次 123）：**不可堆叠**（原版如此——它是一件武器，不是材料）
+  { id: Item.TRIDENT, name: 'minecraft:trident', tile: 'item_trident', maxStack: 1 },
   { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
   { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
   { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },

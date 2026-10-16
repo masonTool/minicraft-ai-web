@@ -49,7 +49,12 @@ import { enchantLevel } from './enchantments.ts';
  * 注意 `shears` **不在** `TOOL_KINDS` 里：剪刀只有铁的一种，而 `TOOL_KINDS` 是用来
  * 「5 种类 × 5 材质」叉乘生成 25 件工具的。剪刀单独注册（见 `SHEARS_INFO`）。
  */
-export type ToolType = 'pickaxe' | 'axe' | 'shovel' | 'hoe' | 'sword' | 'shears';
+/**
+ * ⚠️ `'shears'` 与 `'trident'` **不在 `TOOL_KINDS` 里**（那一份只放"5 种类 × 5 材质"
+ * 那套叉乘，用来算物品 id）——它们各有自己的 id，单独登记进 `TOOL_BY_ID`。
+ * 往 `TOOL_KINDS` 里加东西会**整体挪动**已有工具的物品 id（存档会错位）。
+ */
+export type ToolType = 'pickaxe' | 'axe' | 'shovel' | 'hoe' | 'sword' | 'shears' | 'trident';
 
 /** 工具材质（原版 `golden_*`，写成 gold 会和矿物 id 混） */
 export type ToolMaterial = 'wooden' | 'stone' | 'iron' | 'golden' | 'diamond' | 'netherite';
@@ -68,7 +73,19 @@ export interface ToolInfo {
 }
 
 /** 工具种类顺序（决定物品 id，不要改动顺序） */
-export const TOOL_KINDS: readonly ToolType[] = ['pickaxe', 'axe', 'shovel', 'hoe', 'sword'];
+/**
+ * **参与"种类 × 材质"叉乘**的那 5 种（它们决定物品 id 的排布，见 `toolItemId`）。
+ *
+ * ⚠️ 类型上排掉了 `'shears'` 与 `'trident'`：这两件各有自己的 id、单独登记进
+ * `TOOL_BY_ID`，**不能**混进这一份——往这里加一项会让所有工具的 id 整体挪位（存档错乱）。
+ */
+export const TOOL_KINDS: readonly Exclude<ToolType, 'shears' | 'trident'>[] = [
+  'pickaxe',
+  'axe',
+  'shovel',
+  'hoe',
+  'sword',
+];
 /**
  * **可合成**的 5 种材质，也决定物品 id 的排布。
  *
@@ -90,7 +107,13 @@ export const TOOL_ITEM_START = 1100;
 export const NETHERITE_TOOL_ITEM_START = 1270;
 
 /** 第 (kind, material) 种工具的物品 id */
-export function toolItemId(kind: ToolType, material: ToolMaterial): number {
+/**
+ * 由"种类 + 材质"算出物品 id。
+ *
+ * 参数排掉 `'shears'` 与 `'trident'`：那两件不在 `TOOL_KINDS` 里（各有自己的 id），
+ * 传进来会算出**别的工具**的 id（`indexOf` 返回 -1，一乘一加就落到前面去了）。
+ */
+export function toolItemId(kind: Exclude<ToolType, 'shears' | 'trident'>, material: ToolMaterial): number {
   if (material === 'netherite') return NETHERITE_TOOL_ITEM_START + TOOL_KINDS.indexOf(kind);
   return TOOL_ITEM_START + TOOL_KINDS.indexOf(kind) * TOOL_MATERIALS.length + TOOL_MATERIALS.indexOf(material);
 }
@@ -112,8 +135,13 @@ const MATERIAL_STATS: Record<ToolMaterial, MaterialStat> = {
   netherite: { tier: 4, speed: 9, durability: 2031 },
 };
 
-/** 攻击伤害表（原版 1.18 的显示值，已含徒手 1 点） */
-const ATTACK_BY_KIND: Record<ToolType, Record<ToolMaterial, number>> = {
+/**
+ * 攻击伤害表（原版 1.18 的显示值，已含徒手 1 点）。
+ *
+ * ⚠️ 类型里排掉了 `'trident'`：它不是"种类 × 材质"叉乘出来的（原版也不能合成），
+ * 属性写在 `TRIDENT_INFO` 那一份里（批次 123）。
+ */
+const ATTACK_BY_KIND: Record<Exclude<ToolType, 'trident'>, Record<ToolMaterial, number>> = {
   sword: { wooden: 4, stone: 5, iron: 6, golden: 4, diamond: 7, netherite: 8 },
   axe: { wooden: 7, stone: 9, iron: 9, golden: 7, diamond: 9, netherite: 10 },
   pickaxe: { wooden: 2, stone: 3, iron: 4, golden: 2, diamond: 5, netherite: 6 },
@@ -123,8 +151,12 @@ const ATTACK_BY_KIND: Record<ToolType, Record<ToolMaterial, number>> = {
   shears: { wooden: 1, stone: 1, iron: 1, golden: 1, diamond: 1, netherite: 1 },
 };
 
-/** 组装一件工具的完整属性 */
-export function makeToolInfo(kind: ToolType, material: ToolMaterial): ToolInfo {
+/**
+ * 组装一件工具的完整属性。
+ *
+ * 参数排掉 `'trident'`：它不走这张表（见 `ATTACK_BY_KIND` 与 `TRIDENT_INFO`）。
+ */
+export function makeToolInfo(kind: Exclude<ToolType, 'trident'>, material: ToolMaterial): ToolInfo {
   const stat = MATERIAL_STATS[material];
   return {
     type: kind,
@@ -195,10 +227,37 @@ export const SHEARS_INFO: ToolInfo = {
  */
 export const SHEARS_ITEM_ID = 1150;
 
+/**
+ * 三叉戟（批次 123，溺尸那一批）。
+ *
+ * 它**不是**"5 种类 × 5 材质"那套的成员（原版也做不出来，只能从溺尸手里捡），
+ * 所以像剪刀一样单独登记：
+ *  - 近战 **9 点**——比下界合金剑的 8 还高一点，代价是没有横扫、也不能修；
+ *  - 耐久 250（与铁制工具同档）；
+ *  - 采集档位与徒手相同（`tier: 0` / `speed: 1`）：原版拿它挖石头并不比手快。
+ *
+ * ⚠️ 必须登记进 `TOOL_BY_ID`：否则 `main.heldTool` 会把它当成"手上没东西"，
+ * 近战伤害、附魔分类、耐久消耗三处都会把它漏掉（剪刀那条注释写过同一个坑）。
+ * 也正因为如此，这两个常量要写在 `TOOL_BY_ID` **之前**（`const` 不提升）。
+ */
+export const TRIDENT_INFO: ToolInfo = {
+  type: 'trident',
+  material: 'iron',
+  tier: 0,
+  speed: 1,
+  durability: 250,
+  attack: 9,
+};
+
+/** 三叉戟的物品 id */
+export const TRIDENT_ITEM_ID = 1447;
+
 const TOOL_BY_ID = new Map<number, ToolInfo>([
   ...TOOL_SPECS.map((spec) => [spec.id, spec.tool] as [number, ToolInfo]),
   // 剪刀不在 TOOL_SPECS 里（那套是 5 种类 × 5 材质的叉乘），单独登记
   [SHEARS_ITEM_ID, SHEARS_INFO],
+  // 三叉戟同理（批次 123）
+  [TRIDENT_ITEM_ID, TRIDENT_INFO],
 ]);
 
 /**

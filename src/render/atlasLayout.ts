@@ -914,6 +914,8 @@ export const TILE_ORDER = [
   // 蓝图：凋灵半血之后吐的那颗（批次 116），以及它的掉落物下界之星
   'wither_skull_blue',
   'item_nether_star',
+  // 三叉戟（批次 123，溺尸手里那件）
+  'item_trident',
   // 矿物块与信标（批次 117，K5）：信标的金字塔底座要用这三种块
   'gold_block',
   'diamond_block',
