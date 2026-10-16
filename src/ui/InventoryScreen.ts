@@ -91,6 +91,8 @@ export type InventoryPanelMode =
   | 'crafting'
   | 'furnace'
   | 'chest'
+  /** 木桶（批次 61）：与箱子**同一套 27 格**，只是标题不同（方块规则不同：木桶不怕压） */
+  | 'barrel'
   | 'enchanting'
   | 'anvil'
   | 'smithing'
@@ -680,6 +682,7 @@ export class InventoryScreen {
     this.clearBindings('craft:');
     this.clearBindings('furnace:');
     this.clearBindings('chest:');
+    this.clearBindings('barrel:');
     this.clearBindings('enchant:');
     this.clearBindings('anvil:');
     this.clearBindings('smithing:');
@@ -903,12 +906,13 @@ export class InventoryScreen {
       return;
     }
 
-    if (this.mode === 'chest') {
+    if (this.mode === 'chest' || this.mode === 'barrel') {
+      // 箱子与木桶共用这一套 27 格（3×9），只有标题不同
       this.chestGrid.replaceChildren();
       for (let i = 0; i < CHEST_SIZE; i++) {
-        this.chestGrid.appendChild(this.registerSlot(`chest:${i}`, this.activeContainer!, i));
+        this.chestGrid.appendChild(this.registerSlot(`${this.mode}:${i}`, this.activeContainer!, i));
       }
-      this.topArea.appendChild(this.buildLabel('箱子'));
+      this.topArea.appendChild(this.buildLabel(this.mode === 'barrel' ? '木桶' : '箱子'));
       this.topArea.appendChild(this.chestGrid);
       return;
     }
@@ -1623,6 +1627,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   blast_furnace: '高炉',
   campfire: '营火',
   chest: '箱子',
+  barrel: '木桶',
   enchanting: '附魔台',
   anvil: '铁砧',
   smithing: '锻造台',

@@ -24,6 +24,7 @@ import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
 import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
+import { BARREL_SIZE, Barrel } from '../container/Barrel.ts';
 import { DISPENSER_SIZE, Dispenser } from '../container/Dispenser.ts';
 import { DROPPER_SIZE, Dropper } from '../container/Dropper.ts';
 import { HOPPER_SIZE, Hopper } from '../container/Hopper.ts';
@@ -48,6 +49,7 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   hopper: HOPPER_SIZE,
   dropper: DROPPER_SIZE,
   dispenser: DISPENSER_SIZE,
+  barrel: BARREL_SIZE,
 };
 
 export interface SerializedContainer {
@@ -94,6 +96,8 @@ export interface SerializedContainer {
 
 /** 容器实例 → 种类 */
 export function kindOf(container: BlockContainer): ContainerKind {
+  // ⚠️ 与发射器同一条教训：木桶是箱子的**子类**，必须先判子类
+  if (container instanceof Barrel) return 'barrel';
   if (container instanceof Chest) return 'chest';
   if (container instanceof Furnace) return 'furnace';
   if (container instanceof EnchantTable) return 'enchanting';
@@ -119,6 +123,7 @@ function containerFor(
   z: number,
 ): BlockContainer {
   if (kind === 'chest') return store.getOrCreateChest(dimension, x, y, z);
+  if (kind === 'barrel') return store.getOrCreateBarrel(dimension, x, y, z);
   if (kind === 'furnace') return store.getOrCreateFurnace(dimension, x, y, z);
   if (kind === 'enchanting') return store.getOrCreateEnchantTable(dimension, x, y, z);
   if (kind === 'anvil') return store.getOrCreateAnvil(dimension, x, y, z);

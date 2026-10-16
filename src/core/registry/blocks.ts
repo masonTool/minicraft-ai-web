@@ -1740,6 +1740,25 @@ const DISPENSER_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 木桶（批次 61）：与箱子同为 27 格的容器，差别有两条（都是原版规则）：
+ *  1. **上面压着方块就打不开**（见 main 的右键判定）——这是它最常见的用法：
+ *     把木桶塞进墙里、天花板上，只留一个侧面露出来；
+ *  2. 箱子**只能水平成对**、木桶**不能**（本项目还没有双箱子，这条先记着）。
+ *
+ * 它是整格方块（走贪心网格化），三张面各用一张贴图：顶面是**带箍的盖子**、
+ * 底面是普通木板、四个侧面是**竖板条 + 两道铁箍**——木桶的身份一眼看得出来。
+ */
+export const BARREL_ID = 479;
+
+const BARREL_SPECS: readonly BlockSpec[] = [
+  {
+    id: BARREL_ID,
+    name: 'minecraft:barrel',
+    tiles: ['barrel_top', 'barrel_bottom', 'barrel_side'],
+  },
+];
+
 const TRIPWIRE_SPECS: readonly BlockSpec[] = [
   {
     id: TRIPWIRE_ID,
@@ -2058,6 +2077,7 @@ const SPECS: readonly BlockSpec[] = [
   ...HOPPER_SPECS,
   ...DROPPER_SPECS,
   ...DISPENSER_SPECS,
+  ...BARREL_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -2331,6 +2351,8 @@ export const Block = {
   DROPPER: DROPPER_ID,
   // ---- 发射器（批次 60，见 `DISPENSER_SPECS`）：通电就朝朝向"用"一件
   DISPENSER: DISPENSER_ID,
+  // ---- 木桶（批次 61，见 `BARREL_SPECS`）：27 格容器，上面压着方块就打不开
+  BARREL: BARREL_ID,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -2614,6 +2636,8 @@ HARDNESS.set(Block.HOPPER, 3);
 // 投掷器（批次 59）：3.5（原版与熔炉/发射器同一档，必须用镐但**不限等级**）
 HARDNESS.set(Block.DROPPER, 3.5);
 HARDNESS.set(Block.DISPENSER, 3.5);
+// 木桶（批次 61）：原版 2.5，比箱子"难挖一点"但一样**徒手就能挖掉**（只进加速表）
+HARDNESS.set(Block.BARREL, 2.5);
 // 铜的四档 × 四种形状：硬度 3（原版铜块就是 3.0，台阶与楼梯同档）
 for (let stage = 0; stage < COPPER_STAGES.length; stage++) {
   for (let kind = 0; kind < 4; kind++) HARDNESS.set(copperId(stage, kind as 0 | 1 | 2 | 3), 3);
@@ -2783,6 +2807,10 @@ const HAND_HARVESTABLE = new Set<number>([
   // 木质方块徒手可采集；熔炉需要镐，所以不在列表里
   Block.CRAFTING_TABLE,
   Block.CHEST,
+  // 木桶（批次 61）：与箱子同一条（⚠️ 漏了这一行它就**挖了什么都不掉**——
+  // 既不在需求表里、又不在徒手表里，`canHarvest` 两边都不认。批次 61 的断言
+  // "徒手就能采到"就是专门拦这个的）
+  Block.BARREL,
   // 营火（批次 47）：徒手就能拆（斧只是更快）
   Block.CAMPFIRE,
 ]);

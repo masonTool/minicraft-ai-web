@@ -3643,7 +3643,20 @@ class App {
       return true;
     }
     if (hitBlock === Block.CHEST) {
+      // 原版规则（`ChestBlock#isBlockedChestByBlock`）：**头顶若是"挡满光"的方块就打不开**。
+      // 判据用 `lightOpacity >= 15` 而不是 `opaque`：树叶（opaque 但只挡 1 级光）与玻璃
+      // （0 级）在原版都不挡箱子，用 opaque 会误伤它们。
+      if (this.isCoveredAbove(x, y, z)) {
+        this.chat.push('箱子上面压着方块，打不开（挪开它，或者换成**木桶**——木桶不怕压）', 'system');
+        return true;
+      }
       this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
+      return true;
+    }
+    // 木桶（批次 61）：与箱子同 27 格，但**头顶压着方块照样能开**（原版就是靠这一条
+    // 成为"塞进墙里"的首选）；另外原版它允许漏斗从**任何一面**取放，本项目本来就不按面限制
+    if (hitBlock === Block.BARREL) {
+      this.inventoryScreen.openWith('barrel', this.world.containers.getOrCreateBarrel(this.dimension, x, y, z));
       return true;
     }
     // 漏斗（批次 58）：右键打开 5 格。⚠️ 打开界面时**不暂停搬运**（原版也照搬）——
@@ -3986,6 +3999,7 @@ class App {
     const dimension = this.dimension;
 
     if (block === Block.CHEST) return store.getOrCreateChest(dimension, x, y, z);
+    if (block === Block.BARREL) return store.getOrCreateBarrel(dimension, x, y, z);
     if (block === Block.HOPPER) return store.getOrCreateHopper(dimension, x, y, z);
     if (block === Block.DROPPER) return store.getOrCreateDropper(dimension, x, y, z);
     if (block === Block.DISPENSER) return store.getOrCreateDispenser(dimension, x, y, z);
@@ -4111,6 +4125,16 @@ class App {
       },
       playSound: (kind, sx, sy, sz) => this.audio.play(kind, { x: sx, y: sy, z: sz }),
     };
+  }
+
+  /**
+   * 这一格的**头顶**是不是被"挡满光的方块"压住了（原版箱子打不开的判据）。
+   *
+   * 用 `lightOpacity >= 15`（而不是 `opaque`）：树叶在原版带 `opaque` 标记但只挡 1 级光，
+   * 玻璃挡 0 级——这两个在原版都**不挡**箱子，用 `opaque` 会误伤。
+   */
+  private isCoveredAbove(x: number, y: number, z: number): boolean {
+    return blockDef(this.world.getBlock(x, y + 1, z)).lightOpacity >= 15;
   }
 
   /** 某一格里有没有可以剪的生物（原版发射器剪的就是凸口那一格里的羊） */

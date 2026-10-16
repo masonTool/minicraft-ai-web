@@ -3982,6 +3982,35 @@ PAINTERS.dispenser_side = (x, y, rng) => {
   return metalPlate(x, y, jitter, 1);
 };
 
+/**
+ * 木桶（批次 61）：三张面都由**橡木木板**那张画法派生（`planksPainter`，与 `oak_planks` 同源），
+ * 再叠上"箍"与"竖板条"——这样木桶看起来就是"木板桶"，不会与别的木材串味。
+ */
+const barrelPlanks = planksPainter(WOOD_TYPES.find((wood) => wood.name === 'oak')?.wood ?? [150, 118, 72]);
+
+function barrelShade(base: RGBA, factor: number): RGBA {
+  return [clamp255(base[0] * factor), clamp255(base[1] * factor), clamp255(base[2] * factor), 255];
+}
+
+/** 顶面：木板 + **一圈铁箍**（盖子），中间一道横缝 */
+PAINTERS.barrel_top = (x, y, rng) => {
+  const rim = x <= 1 || x >= 14 || y <= 1 || y >= 14;
+  if (rim) return metalPlate(x, y, rng() * 10 - 5, 0.5);
+  const base = barrelPlanks(x, y, rng);
+  const seam = y === 7 || y === 8;
+  return barrelShade(base, seam ? 0.78 : 1);
+};
+
+/** 底面：普通木板（原版底面也是木板；看不见，但省一张贴图不值得） */
+PAINTERS.barrel_bottom = (x, y, rng) => barrelShade(barrelPlanks(x, y, rng), 0.94);
+
+/** 侧面：**竖板条 + 两道铁箍**——木桶的身份一眼看得出来 */
+PAINTERS.barrel_side = (x, y, rng) => {
+  const hoop = y === 2 || y === 13;
+  if (hoop) return metalPlate(x, y, rng() * 10 - 5, 0.52);
+  return barrelShade(barrelPlanks(x, y, rng), x % 4 === 0 ? 0.8 : 1);
+};
+
 export class TextureAtlas {
   readonly texture: THREE.Texture;
   readonly canvas: HTMLCanvasElement;

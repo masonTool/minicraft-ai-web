@@ -421,6 +421,8 @@ for (const id of [
   Block.LADDER,
   Block.CRAFTING_TABLE,
   Block.CHEST,
+  // 木桶（批次 61）：与箱子一样"斧头更快，但徒手也能挖下来"
+  Block.BARREL,
   Block.PUMPKIN,
   Block.MELON,
   Block.BAMBOO,

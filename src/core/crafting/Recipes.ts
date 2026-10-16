@@ -876,6 +876,13 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     pattern: ['CCC', 'CBC', 'CCC'],
     key: { C: Block.COBBLESTONE, B: Item.BOW },
   },
+  {
+    // 木桶（批次 61）：原版图案 = 6 块木板 + 上下两个**木板台阶**（左右两列各 3 块）
+    kind: 'shaped' as const,
+    result: { id: Block.BARREL, count: 1 },
+    pattern: ['PSP', 'P P', 'PSP'],
+    key: { P: Block.OAK_PLANKS, S: slabId(OAK_SLAB_INDEX) },
+  },
 ];
 
 export const RECIPES: readonly Recipe[] = [

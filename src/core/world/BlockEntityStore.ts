@@ -14,6 +14,7 @@
 
 import { Anvil } from '../container/Anvil.ts';
 import { BrewingStand } from '../container/BrewingStand.ts';
+import { Barrel } from '../container/Barrel.ts';
 import { Chest } from '../container/Chest.ts';
 import { Dispenser } from '../container/Dispenser.ts';
 import { Dropper } from '../container/Dropper.ts';
@@ -38,7 +39,8 @@ export type BlockContainer =
   | Campfire
   | Hopper
   | Dropper
-  | Dispenser;
+  | Dispenser
+  | Barrel;
 export type ContainerKind =
   | 'furnace'
   | 'chest'
@@ -50,7 +52,8 @@ export type ContainerKind =
   | 'campfire'
   | 'hopper'
   | 'dropper'
-  | 'dispenser';
+  | 'dispenser'
+  | 'barrel';
 
 /**
  * **带方块实体的方块**（= 装得下东西的方块）的 id 名单。
@@ -69,6 +72,7 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   Block.HOPPER,
   Block.DROPPER,
   Block.DISPENSER,
+  Block.BARREL,
   Block.BREWING_STAND,
   Block.ANVIL,
   Block.SMITHING_TABLE,
@@ -298,6 +302,25 @@ export class BlockEntityStore {
     const dispenser = new Dispenser();
     this.put({ dimension, x, y, z, container: dispenser });
     return dispenser;
+  }
+
+  getBarrel(dimension: DimensionId, x: number, y: number, z: number): Barrel | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Barrel ? container : undefined;
+  }
+
+  /**
+   * 取出（或新建）木桶。
+   *
+   * ⚠️ 木桶与箱子一样是**打开界面时按需创建**的（它不 tick、也不靠容器表推进），
+   * 所以放下时不必建：`getOrCreateBarrel` 会在"右键"与"别的容器往它里面塞东西"时被调到。
+   */
+  getOrCreateBarrel(dimension: DimensionId, x: number, y: number, z: number): Barrel {
+    const existing = this.getBarrel(dimension, x, y, z);
+    if (existing) return existing;
+    const barrel = new Barrel();
+    this.put({ dimension, x, y, z, container: barrel });
+    return barrel;
   }
 
   remove(dimension: DimensionId, x: number, y: number, z: number): void {

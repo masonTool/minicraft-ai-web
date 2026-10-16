@@ -767,6 +767,10 @@ export const TILE_ORDER = [
   // 发射器（批次 60）：同一套底子、另一套纹路（块 + 上下加强筋）
   'dispenser_top',
   'dispenser_side',
+  // 木桶（批次 61）：顶面是带箍的盖子、底面是木板、侧面是竖板条 + 两道铁箍
+  'barrel_top',
+  'barrel_bottom',
+  'barrel_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

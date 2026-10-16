@@ -707,6 +707,8 @@ const FUNCTIONAL = new Set<number>([
   Block.DROPPER,
   // 发射器（批次 60）：与投掷器一样是"右键打开的 9 格容器 + 红石触发"
   Block.DISPENSER,
+  // 木桶（批次 61）：右键打开的 27 格容器（与箱子同一类）
+  Block.BARREL,
   Block.CHEST,
   Block.GLOWSTONE,
   // ---- 红石元件（都是"有信号才做事"的功能方块）
