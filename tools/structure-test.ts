@@ -280,14 +280,46 @@ console.log('\n[真实地形抽样：16×16 区块]');
 {
   const counts = new Map<number, number>();
   const size = 16;
-  const start = Date.now();
+
+  /**
+   * ⚠️ 判据改成**相对量**（批次 103，B103-6；套路见 B103-5）。
+   *
+   * 原来写的是"16×16 区块耗时 < 10s"，但它量到的东西里**大头不是生成**——
+   * 那个 `counts` 统计要对 256 个区块、每个 98304 格做一遍 `Map.set`（约 2500 万次），
+   * 它自己就能吃掉几秒。绝对秒数在并行跑测试集时还会因 CPU 争用偶发变红。
+   *
+   * 现在：
+   *  · **只量生成**（统计扫描挪到计时之外）；
+   *  · 纯地形对照**紧跟在同一格之后**量（连续两行取样），
+   *    这样争用对两边的影响几乎相同——"先后量"的比值在负载下会飘，见 B103-5。
+   */
+  let generateMs = 0;
+  let terrainMs = 0;
+  let terrainSamples = 0;
   for (let cz = -8; cz < size - 8; cz++) {
     for (let cx = -8; cx < size - 8; cx++) {
+      const genStart = performance.now();
       const blocks = generateChunkBlocks(cx, cz, SEED);
+      generateMs += performance.now() - genStart;
       for (const id of blocks) counts.set(id, (counts.get(id) ?? 0) + 1);
+
+      // 纯地形对照（`OverworldGenerator.generate`：地形 + 地表规则 + 雕刻 + 含水层 + 矿石，
+      // 结构与地物是 `generateChunkBlocks` 里额外那一步）。
+      // ⚠️ 取样**跨整个区域间隔取**（每 4 行一行），不要只取最前面两行：
+      // 那两行恰好没有结构，比值恒等于 1.00 —— 一条永远绿的判据等于没有判据。
+      // 注意"结构没落在这里"不代表没花钱：`generateStructures` 对**每个区块**都要跑一遍
+      // 放置判定，所以放置逻辑的退化会体现在每一个区块上。
+      if (((cz + 8) & 3) === 0) {
+        const terrainStart = performance.now();
+        gen.generate(cx, cz);
+        terrainMs += performance.now() - terrainStart;
+        terrainSamples++;
+      }
     }
   }
-  const elapsed = Date.now() - start;
+  const perChunk = generateMs / (size * size);
+  const terrainPerChunk = terrainMs / Math.max(terrainSamples, 1);
+  const ratio = perChunk / Math.max(terrainPerChunk, 0.001);
 
   const markers: Array<readonly [string, number]> = [
     ['矿井栅栏', Block.OAK_FENCE],
@@ -297,14 +329,24 @@ console.log('\n[真实地形抽样：16×16 区块]');
     ['要塞黑曜石', Block.OBSIDIAN],
     ['村庄门', Block.OAK_DOOR],
   ];
-  console.log(`  ${size}×${size} 区块耗时 ${elapsed}ms`);
+  console.log(
+    `  ${size}×${size} 区块生成 ${generateMs.toFixed(0)}ms（${perChunk.toFixed(1)} ms/区块）` +
+      ` · 纯地形 ${terrainPerChunk.toFixed(1)} ms/区块（${terrainSamples} 区块抽样，每 4 行一行）` +
+      ` → 结构与地物占 ${ratio.toFixed(2)} 倍`,
+  );
   console.log(`  结构建材：${markers.map(([name, id]) => `${name} ${counts.get(id) ?? 0}`).join(' · ')}`);
 
   const mineshaft = counts.get(Block.OAK_FENCE) ?? 0;
   check('真实世界里出现了废弃矿井', mineshaft > 20, `栅栏 ${mineshaft}`);
   const kindsSeen = markers.filter(([, id]) => (counts.get(id) ?? 0) > 0).length;
   console.log(`  这片区域里出现的结构种类（按建材判定）：${kindsSeen}`);
-  check(`${size}×${size} 区块耗时 < 10s`, elapsed < 10000, `${elapsed}ms`);
+  // 判据是**比值**（批次 103，B103-6）：见上面那段说明。
+  // 要挡的是"结构生成把地形拖垮"这种退化（例如每个结构都去扫一遍全区块）。
+  check(
+    `结构与地物的开销 ≤ 纯地形的 3 倍（实测 ${ratio.toFixed(2)} 倍）`,
+    ratio <= 3,
+    `${perChunk.toFixed(1)} ms/区块 vs 纯地形 ${terrainPerChunk.toFixed(1)} ms/区块`,
+  );
 }
 
 // ---------------------------------------------------------------- 5. 定义表自检
