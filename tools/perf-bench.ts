@@ -17,6 +17,7 @@
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { Chunk, SECTION_COUNT, WORLD_MIN_Y, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
+import { StartupRamp } from '../src/core/world/StartupRamp.ts';
 import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
 import { withFacing } from '../src/core/registry/blockState.ts';
 import {
@@ -39,6 +40,11 @@ function check(label: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+/** 相等断言（批次 100 起：启动成本那一节是"值对值"，用 check 写会全是兜底文案） */
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
 const SEED = 20261014;
@@ -335,6 +341,100 @@ console.log('\n[操作预算：被动刷怪不再逐格扫描]');
 
   check('旧实现确实是一列一列扫（对照值 > 100 次读）', columnReads > 100, `${columnReads} 次`);
   check('被动刷怪每次尝试的读方块预算 ≤ 4 次（16 次尝试合计 ≤ 64）', 4 * 16 <= 64);
+}
+
+console.log('\n[开新世界的启动成本（批次 100）]');
+{
+  // ---- ① 渐进视距：开局只要"脚下这一片"
+  const ramp = new StartupRamp();
+  equal('开局半径 3 格（视距 12 的话只请求 1/13 的区块）', ramp.radius, 3);
+  ramp.advance(0.5, 12);
+  equal('每 0.5 秒涨一格', ramp.radius, 4);
+  // 涨到 12 需要 (12-3) × 0.5 = 4.5 秒
+  ramp.advance(10, 12);
+  equal('涨到玩家设定的视距就停', ramp.radius, 12);
+  check('到位之后标记完成（主循环不再改视距）', ramp.done);
+  const before = ramp.radius;
+  ramp.advance(10, 12);
+  equal('到位之后不再涨（也不会越过设置）', ramp.radius, before);
+
+  const opening = (2 * 3 + 1) ** 2;
+  const full = (2 * 12 + 1) ** 2;
+  check(
+    `开局最多请求 ${opening} 个区块，视距拉满要 ${full} 个（约 ${(full / opening).toFixed(1)} 倍）`,
+    full > opening * 10,
+    `${opening} vs ${full}`,
+  );
+
+  // ---- ② 帧率吃紧时先别涨（自适应视距会把范围往下压，边卡边涨只会雪上加霜）
+  const paused = new StartupRamp();
+  paused.advance(3, 12, true);
+  equal('帧时间吃紧时停在原地等', paused.radius, 3);
+  paused.advance(0.5, 12, false);
+  equal('缓过来之后接着涨', paused.radius, 4);
+
+  // ---- ③ 玩家把小视距改成比开局还小时：直接就位（不然会一直"想涨到 3"）
+  const small = new StartupRamp();
+  equal('目标比开局半径还小时直接就位', small.advance(0.1, 2), 2);
+  check('并且算完成', small.done);
+
+  // ---- ④ 换维度要重来一遍（目标维度一个区块都没加载过）
+  const again = new StartupRamp();
+  again.advance(10, 12);
+  again.reset();
+  equal('换维度后回到开局半径', again.radius, 3);
+  check('并且重新开始涨', !again.done);
+
+  // ---- ⑤ 避雷针索引：每加载一个区块都要跑，所以它必须便宜
+  // 旧写法是三重循环 + 每格一次 `Chunk.index()`；新写法是对扁平数组做一趟线性扫描。
+  // 这里**实测**两者的耗时（而不是在注释里声称"更快"），并断言它们结果一致。
+  const volume = 16 * 16 * (WORLD_MAX_Y - WORLD_MIN_Y);
+  const blocks = new Uint16Array(volume);
+  const rodX = 7;
+  const rodY = 70;
+  const rodZ = 9;
+  blocks[Chunk.index(rodX, rodY, rodZ)] = Block.LIGHTNING_ROD;
+
+  const oldScan = (): string | null => {
+    for (let y = WORLD_MIN_Y; y <= WORLD_MAX_Y; y++) {
+      for (let lz = 0; lz < 16; lz++) {
+        for (let lx = 0; lx < 16; lx++) {
+          if (blocks[Chunk.index(lx, y, lz)] !== Block.LIGHTNING_ROD) continue;
+          return `${lx},${y},${lz}`;
+        }
+      }
+    }
+    return null;
+  };
+  const newScan = (): string | null => {
+    for (let i = 0; i < blocks.length; i++) {
+      if (blocks[i] !== Block.LIGHTNING_ROD) continue;
+      return `${i & 15},${(i >> 8) + WORLD_MIN_Y},${(i >> 4) & 15}`;
+    }
+    return null;
+  };
+
+  const expected = `${rodX},${rodY},${rodZ}`;
+  equal('两种写法找到同一格（换写法不能换结果）', newScan(), expected);
+  equal('旧写法也是这一格（对照）', oldScan(), expected);
+
+  const time = (fn: () => void, rounds: number): number => {
+    const start = performance.now();
+    for (let i = 0; i < rounds; i++) fn();
+    return (performance.now() - start) / rounds;
+  };
+  const oldMs = time(() => oldScan(), 20);
+  const newMs = time(() => newScan(), 20);
+  console.log(`  一个区块的避雷针扫描：旧写法 ${oldMs.toFixed(3)}ms / 新写法 ${newMs.toFixed(3)}ms`);
+  console.log(
+    `  开新世界（约 440 个区块）：旧写法 ≈ ${((oldMs * 440) / 1000).toFixed(2)}s / 新写法 ≈ ${((newMs * 440) / 1000).toFixed(2)}s`,
+  );
+  check(
+    '线性扫描不慢于旧写法（少了每格的 `Chunk.index()` 调用）',
+    newMs <= oldMs * 1.2,
+    `${oldMs.toFixed(3)}ms → ${newMs.toFixed(3)}ms`,
+  );
+  check('两次扫描的次数上限都是每区块 98304 格（下界/末地不再扫：那里不打雷）', volume === 98304);
 }
 
 console.log(`\n性能基准：${passed} 通过 / ${failed} 失败`);

@@ -81,6 +81,7 @@ import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from '.
 import { WorldScreen } from './ui/WorldScreen.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
+import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
@@ -189,7 +190,7 @@ import { PlayerRenderer } from './render/PlayerRenderer.ts';
 import { srgbColor } from './render/srgb.ts';
 import { ScreenEffects, type ScreenEffect } from './render/ScreenEffects.ts';
 import { World, toChunkCoord } from './core/world/World.ts';
-import { Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from './core/world/Chunk.ts';
+import { Chunk, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from './core/world/Chunk.ts';
 import { DIMENSION_CYCLE, DIMENSION_LABELS, Dimension, isDimension, type DimensionId } from './core/gen/Dimension.ts';
 import { Block, BLOCKS, blockDef, woolId,
   isBed,
@@ -865,6 +866,13 @@ class App {
   private touchPlaceRequest = false;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
+  /**
+   * 启动期的渐进视距（批次 100）：开局先只请求 3 格半径，之后每 0.5 秒往外涨一格。
+   *
+   * 见 `core/world/StartupRamp.ts` 的文件头：开新世界原来是一次性把整个视距
+   * （半径 12 ≈ 440 个区块）全派出去，那几秒的 CPU 就是"创建世界很慢"的来源。
+   */
+  private readonly startupRamp = new StartupRamp();
   /**
    * Android 返回键 / 侧滑返回 = 关界面（批次 96，对齐基岩版）。
    *
@@ -2101,7 +2109,14 @@ class App {
     if (!force && centerCx === this.lastCenterCx && centerCz === this.lastCenterCz) return;
     this.lastCenterCx = centerCx;
     this.lastCenterCz = centerCz;
-    this.world.update(centerCx, centerCz, this.viewDistance);
+    // 启动期用**渐进视距**（批次 100）：`startupRamp` 涨到玩家设定的视距之前，
+    // 只按当前那一圈请求区块——先把"脚下这一片"做出来，别让玩家等整个视距
+    this.world.update(centerCx, centerCz, this.viewDistanceNow);
+  }
+
+  /** 这一帧的生效视距（区块）：启动期是逐格涨的，涨到位之后就是玩家的设置值 */
+  private get viewDistanceNow(): number {
+    return Math.min(this.viewDistance, this.startupRamp.radius);
   }
 
   /**
@@ -4258,14 +4273,26 @@ class App {
   private scanRodsInChunk(cx: number, cz: number): void {
     const chunk = this.world.getChunk(cx, cz);
     if (!chunk) return;
+    // ⚠️ 这里是**每加载一个区块**都要跑的（开新世界时一次 400+ 个区块），
+    // 所以它必须便宜。原来写的是三重循环 + 每格一次 `Chunk.index()` 调用：
+    // 16×16×384 = **98304 次**带函数调用的读取，一个区块都嫌多，一次开局就是四千万次。
+    // 现在改成对扁平数组做**一趟线性扫描**（下标换算直接按位算，见 `Chunk.index` 的公式：
+    // `i = ((y - MIN_Y) << 8) | (z << 4) | x`），并且**只在主世界扫**
+    // （避雷针只为闪电服务，而下界与末地根本不打雷）。
+    if (this.dimension !== Dimension.OVERWORLD) return;
     const originX = cx * 16;
     const originZ = cz * 16;
-    for (let y = WORLD_MIN_Y; y <= WORLD_MAX_Y; y++) {
-      for (let lz = 0; lz < 16; lz++) {
-        for (let lx = 0; lx < 16; lx++) {
-          if (chunk.blocks[Chunk.index(lx, y, lz)] !== Block.LIGHTNING_ROD) continue;
-          this.lightningRods.add(rodKey(originX + lx, y, originZ + lz));
-        }
+    const blocks = chunk.blocks;
+    // 再借一手 `fillLootChests` 的做法：**空的 section 直接跳过**。
+    // 自然地形里大多数 section 是空的（16³ 一格都没有），跳过它们之后
+    // 这趟扫描只在"真的有方块的那几段"上跑（一个 section 4096 格）
+    for (let section = 0; section < SECTION_COUNT; section++) {
+      if (chunk.sectionIsEmpty(section)) continue;
+      const from = Chunk.index(0, Math.max(WORLD_MIN_Y, Chunk.sectionMinY(section)), 0);
+      const to = Math.min(blocks.length, from + 16 * 16 * 16);
+      for (let i = from; i < to; i++) {
+        if (blocks[i] !== Block.LIGHTNING_ROD) continue;
+        this.lightningRods.add(rodKey(originX + (i & 15), (i >> 8) + WORLD_MIN_Y, originZ + ((i >> 4) & 15)));
       }
     }
   }
@@ -7239,6 +7266,17 @@ class App {
       this.updateLightning(dt);
       // 刷怪笼（批次 92）：下界要塞里的笼子按倒计时生成烈焰人
       this.updateSpawners(dt);
+      // 启动期的渐进视距（批次 100）：涨一格就重新按新的范围请求区块。
+      // 帧率吃紧时先不涨（自适应视距那一套会把视距往下压，边卡边涨只会雪上加霜）
+      if (!this.startupRamp.done) {
+        const before = this.viewDistanceNow;
+        // 帧时间吃紧（与自适应视距收缩同一条阈值 22ms）就先别往外涨：
+        // 一边卡一边扩大范围，只会把"能玩"推得更远
+        this.startupRamp.advance(dt, this.viewDistance, this.frameTimeAvg > 22);
+        if (this.viewDistanceNow !== before) {
+          this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+        }
+      }
       // 返回键守卫（批次 96）：界面开/关是**每帧对账**的——面板有六个、关闭路径更多
       //（点空白、点按钮、被别处挤掉），在每处各调一次迟早漏掉一个（漏掉就是"返回键突然失灵"）。
       // 与告示牌/展示框那两处"定期对账"同一个理由：**判据只有一处，就不会漂**
@@ -7532,6 +7570,9 @@ class App {
    *   不传就按维度挑一个"空中高度"，等物理自己落地）
    */
   setDimension(dimension: DimensionId, landing?: { x: number; y: number; z: number }): void {
+    // 换维度按"重新开局"处理：目标维度的区块一个都没加载过，
+    // 一次性请求整个视距会同样卡住（批次 100 的渐进视距在这儿也要生效）
+    this.startupRamp.reset();
     if (dimension === this.dimension) return;
     this.dimension = dimension;
     this.world.setDimension(dimension);
