@@ -10,6 +10,7 @@
  */
 
 import * as THREE from 'three';
+import { MOON_PHASE_COUNT, moonShape } from '../core/world/MoonPhase.ts';
 
 const DOME_RADIUS = 180;
 const CELESTIAL_DISTANCE = 150;
@@ -133,6 +134,71 @@ function cloudTexture(): THREE.Texture {
   return texture;
 }
 
+/**
+ * 月亮贴图（批次 84，月相）：按 `moonShape()` 给的几何画 8 张（`Sky` 只负责画）。
+ *
+ * 画法三步（与 `MoonPhase.ts` 的注释一一对应）：
+ *  1. 整盘铺**暗色**（新月那种"地球照"的淡轮廓，不是纯黑——纯黑在夜空里会像挖了个洞）；
+ *  2. 画**亮的那半边**；
+ *  3. 用一个横半径 `ellipseRx` 的椭圆**加（凸月）或减（残月）**一块。
+ *
+ * 边界都落在"画法本身"上：满月 rx=1 加 → 整盘亮；新月 rx=1 减 → 整盘暗；弦月 rx=0 → 正好一半。
+ */
+function moonTexture(phase: number): THREE.Texture {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const shape = moonShape(phase);
+  const r = size / 2 - 2;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  if (ctx) {
+    const disc = (fill: string): void => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+    };
+    const DARK = 'rgba(64,70,92,0.85)';
+    const LIT = 'rgba(238,242,252,1)';
+
+    // 外圈柔光（原版的月亮边缘有一点毛边）
+    const glow = ctx.createRadialGradient(cx, cy, r * 0.86, cx, cy, r * 1.12);
+    glow.addColorStop(0, shape.lit > 0.05 ? 'rgba(226,234,248,0.55)' : 'rgba(180,188,210,0.28)');
+    glow.addColorStop(1, 'rgba(200,214,238,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, size, size);
+
+    // 1) 整盘暗色
+    disc(DARK);
+
+    // 2) 亮的那半边
+    const rightSide = shape.litHalf === 'right';
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, rightSide ? -Math.PI / 2 : Math.PI / 2, rightSide ? Math.PI / 2 : (Math.PI * 3) / 2);
+    ctx.closePath();
+    ctx.fillStyle = LIT;
+    ctx.fill();
+    ctx.restore();
+
+    // 3) 椭圆补/挖（rx = 0 时这一笔画不出东西，正好是"上下弦"）
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, r * shape.ellipseRx, r, 0, 0, Math.PI * 2);
+    ctx.clip();
+    disc(shape.ellipseMode === 'add' ? LIT : DARK);
+    ctx.restore();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.NoColorSpace;
+  return texture;
+}
+
 export class Sky {
   readonly object = new THREE.Group();
 
@@ -144,6 +210,10 @@ export class Sky {
   private readonly cloudMesh: THREE.Mesh;
   /** 云是否可见（设置里可以关掉：省一点填充率，也能看清远处地形） */
   private cloudsVisible = true;
+  /** 8 张月相贴图（批次 84）：懒建，第一次用到哪一张就画哪一张 */
+  private readonly moonTextures: (THREE.Texture | null)[] = new Array(MOON_PHASE_COUNT).fill(null);
+  /** 现在挂的是哪一个相（避免每帧重复设 map） */
+  private moonPhase = -1;
 
   constructor() {
     // ---- 渐变穹顶
@@ -252,6 +322,32 @@ export class Sky {
     this.cloudMesh.visible = visible;
   }
 
+  /**
+   * 换月相（批次 84）：8 张贴图**懒建**（第一次用到哪一个相就画哪一个），
+   * 所以"进游戏时是第 3 天"也只会画那一张，另外 7 张等见到再说。
+   *
+   * ⚠️ 只换 `map` 不重建材质：一张贴图 64×64，一天才换一次——重建材质会让
+   * 着色器编译在切相那一帧卡一下（这就是"按需懒建 + 只换 map"的理由）。
+   */
+  setMoonPhase(phase: number): void {
+    const index = ((Math.floor(phase) % MOON_PHASE_COUNT) + MOON_PHASE_COUNT) % MOON_PHASE_COUNT;
+    if (index === this.moonPhase) return;
+    this.moonPhase = index;
+    let texture = this.moonTextures[index];
+    if (!texture) {
+      texture = moonTexture(index);
+      this.moonTextures[index] = texture;
+    }
+    const material = this.moon.material as THREE.MeshBasicMaterial;
+    material.map = texture;
+    material.needsUpdate = true;
+  }
+
+  /** 当前画的是哪个相（调试面板与验收脚本用；-1 = 还没设过） */
+  get currentMoonPhase(): number {
+    return this.moonPhase;
+  }
+
   update(timeOfDay: number, cameraPosition: THREE.Vector3, dt: number): void {
     this.object.position.copy(cameraPosition);
 
@@ -284,6 +380,8 @@ export class Sky {
   }
 
   dispose(): void {
+    // 8 张月相贴图（懒建，可能一张都还没画过）
+    for (const texture of this.moonTextures) texture?.dispose();
     this.object.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (mesh.geometry) mesh.geometry.dispose();

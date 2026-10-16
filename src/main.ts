@@ -86,6 +86,7 @@ import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
 // 雷电与避雷针（批次 83）：规则（落点选择 / 杆头坐标 / 脉冲表）在 `world/Lightning.ts`，
 // 主程序只做"世界里的副作用"（伤害、点火、粒子、给电路重算）
+import { MOON_PHASE_COUNT, moonPhaseFor, moonPhaseName } from './core/world/MoonPhase.ts';
 import {
   LIGHTNING_DAMAGE,
   LIGHTNING_DAMAGE_RADIUS,
@@ -783,6 +784,8 @@ class App {
   private fishing: FishingState = IDLE_FISHING;
   /** 浮标的当前位置与速度（`flying` 阶段用；落水后位置固定） */
   private bobber: { x: number; y: number; z: number; vx: number; vy: number; vz: number } | null = null;
+  /** 世界过了几天（批次 84，月相按它取模）；随存档走，老存档按第 0 天算 */
+  private dayCount = 0;
   /** 浮标的小方块（第一次抛竿时懒建） */
   private bobberMesh: THREE.Mesh | null = null;
   /**
@@ -1404,6 +1407,9 @@ class App {
     this.pitch = data.pitch;
     this.setFlying(data.flying);
     this.timeOfDay = data.timeOfDay;
+    // 月相（批次 84）：老存档没有 dayCount → 第 0 天（满月），与 `moonPhaseFor(0)` 一条口径
+    this.dayCount = Number.isFinite(data.dayCount) && (data.dayCount ?? 0) >= 0 ? Math.floor(data.dayCount!) : 0;
+    this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
     this.stats.health = data.health;
     this.stats.food = data.food;
     this.stats.saturation = data.saturation;
@@ -1459,6 +1465,7 @@ class App {
       dimension: this.dimension,
       flying: this.flying,
       timeOfDay: this.timeOfDay,
+      dayCount: this.dayCount,
       health: this.stats.health,
       food: this.stats.food,
       saturation: this.stats.saturation,
@@ -3395,6 +3402,8 @@ class App {
     }
 
     this.timeOfDay = DAWN_TIME;
+    // 睡到天亮 = 又过了一天（批次 84）：不推进的话"靠睡觉过日子"的玩家永远停在满月
+    this.advanceDay();
     // 原版睡一觉会放晴（雷暴与雨一起停）
     this.weather.setKind('clear');
     this.bedSpawn = { x: bed.x, y: bed.y, z: bed.z, dimension: this.dimension };
@@ -3402,6 +3411,17 @@ class App {
     // 睡醒回血在原版是"睡觉直接回满"以外的效果（1.18 只有饥饿够时自然回复），
     // 这里不额外加血——只做"跳过夜晚 + 重生点"，避免凭空多一条回血规则
     this.wakeUp('天亮了。重生点已设置在这张床上。');
+  }
+
+  /**
+   * 新的一天（批次 84）：天数 +1、月相推进一格。
+   *
+   * 月相是"**8 天一个循环**"的纯函数（`moonPhaseFor(dayCount)`），所以这里不存"当前相"，
+   * 只存天数——存档里存派生值迟早会与天数不同步（"第 10 天显示新月"这种）。
+   */
+  private advanceDay(): void {
+    this.dayCount++;
+    this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
   }
 
   /** 收起睡觉遮罩、恢复行动 */
@@ -6122,6 +6142,8 @@ class App {
     const facing = ['北 (-Z)', '东 (+X)', '南 (+Z)', '西 (-X)'][Math.round(-this.yaw / (Math.PI / 2)) & 3]!;
     const clockHours = (this.timeOfDay * 24 + 6) % 24;
     const clock = `${String(Math.floor(clockHours)).padStart(2, '0')}:${String(Math.floor((clockHours % 1) * 60)).padStart(2, '0')}`;
+    // 月相（批次 84）：第 N 天（满月起步，8 天一轮）
+    const moon = `${moonPhaseName(moonPhaseFor(this.dayCount))}(第 ${this.dayCount} 天)`;
 
     const feetLight = this.world.getBlockLight(Math.floor(p.x), Math.floor(p.y + 0.5), Math.floor(p.z));
     const target = this.hit
@@ -6134,7 +6156,7 @@ class App {
     if (this.touch) {
       this.debugEl.textContent =
         `${this.fps} fps   ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\n` +
-        `${this.flying ? '创造(飞行)' : '生存'}   ${clock}   ${DIMENSION_LABELS[this.dimension]}   朝向 ${facing.slice(0, 1)}\n` +
+        `${this.flying ? '创造(飞行)' : '生存'}   ${clock}   ${moon}\n` +
         `持有 ${this.heldName}${armorPoints > 0 ? `   护甲 ${armorPoints}` : ''}`;
       return;
     }
@@ -6143,7 +6165,7 @@ class App {
       `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   难度: ${DIFFICULTY_LABELS[this.difficulty]}   模式: ${this.flying ? '创造(飞行)' : '生存'}   维度: ${DIMENSION_LABELS[this.dimension]}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
+      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${DIFFICULTY_LABELS[this.difficulty]}   模式: ${this.flying ? '创造(飞行)' : '生存'}   维度: ${DIMENSION_LABELS[this.dimension]}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
@@ -6238,7 +6260,12 @@ class App {
       this.updateInteraction(dt);
 
       // 昼夜循环可以在设置里关掉（时间停在当前时刻，截图对比/搭建筑时有用）
-      if (this.settings.daylightCycle) this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
+      if (this.settings.daylightCycle) {
+        const before = this.timeOfDay;
+        this.timeOfDay = (this.timeOfDay + dt / this.dayLengthSeconds) % 1;
+        // 跨过午夜 = 新的一天：月相往前推一格（批次 84）。判据就是"取模之后变小了"
+        if (this.timeOfDay < before) this.advanceDay();
+      }
 
       // 寒冷群系下雪：每秒复查一次地表方块即可
       this.snowCheckTimer -= dt;
@@ -6360,6 +6387,21 @@ class App {
       strikeIn: Number(Math.max(0, this.strikeTimer).toFixed(2)),
       thunder: this.weather.current === 'thunder',
     };
+  }
+
+  /**
+   * 月相（批次 84）——验收脚本与调试面板用：天数、相号、名字、亮面比例。
+   * 读它就不必去猜"第几天该是什么月亮"。
+   */
+  get moonState(): { day: number; phase: number; name: string; cycle: number } {
+    const phase = moonPhaseFor(this.dayCount);
+    return { day: this.dayCount, phase, name: moonPhaseName(phase), cycle: MOON_PHASE_COUNT };
+  }
+
+  /** 直接跳到第 N 天（验收脚本用，省掉"等 20 分钟"） */
+  setDayCount(day: number): void {
+    this.dayCount = Math.max(0, Math.floor(day));
+    this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
   }
 
   /** 立刻在这里打一道雷（验收脚本用，省掉"等雷暴"） */

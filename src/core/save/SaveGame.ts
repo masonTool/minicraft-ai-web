@@ -65,6 +65,11 @@ export interface PlayerSave {
   dimension: string;
   flying: boolean;
   timeOfDay: number;
+  /**
+   * 世界已经过了几天（批次 84，月相用）：从开服算起的**整天数**，第 0 天是满月。
+   * 老存档没有这个字段 → 当成第 0 天（满月），不迁移、不改存档版本号。
+   */
+  dayCount?: number;
   health: number;
   food: number;
   saturation: number;
