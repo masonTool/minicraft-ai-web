@@ -19,6 +19,8 @@ import { maxStackOf } from '../registry/items.ts';
 import {
   HOTBAR_SIZE,
   HOTBAR_START,
+  MAIN_SIZE,
+  MAIN_START,
   OFFHAND_SLOT,
   type Inventory,
   type ItemStack,
@@ -26,6 +28,9 @@ import {
   sameStack,
   stackExtras,
 } from './Inventory.ts';
+// Shift+双击要按**与快速移动同一套规矩**搬（先并同类、再找空位），
+// 所以复用那边的 `transferStack` 与两份顺序表——各写一遍迟早会分叉
+import { HOTBAR_ORDER, MAIN_ORDER, PLAYER_FILL_ORDER, transferStack } from './QuickMove.ts';
 
 /** "光标上那一叠"在规则层的表示（`null` = 空手） */
 export type HeldStack = ItemStack | null;
@@ -170,4 +175,65 @@ export function slotForKey(key: string): number | null {
 export function dropCount(stack: HeldStack, wholeStack: boolean): number {
   if (!stack || stack.count <= 0) return 0;
   return wholeStack ? stack.count : 1;
+}
+
+/**
+ * **Shift+双击**（批次 129）：把点中那一格**所属的那一类东西整批**搬到"另一边"。
+ *
+ * 原版那两条（Wiki 的 Inventory 表）：开着方块时在**玩家背包 ↔ 方块**之间搬，
+ * 没开时在**快捷栏 ↔ 主背包**之间搬。方向由"你点的是哪一侧"决定：
+ *  - 点的是**容器**里的东西 → 全部搬进玩家背包（先快捷栏、再主背包）；
+ *  - 点的是**玩家背包**里的东西 → 全搬进容器；没开容器时快捷栏 ↔ 主背包互相搬。
+ *
+ * @returns 一共搬了多少件（0 = 一件都没搬动，界面据此不刷新）
+ */
+export function moveAllOfTypeBetween(
+  inventory: Inventory,
+  container: SlotSource | null,
+  containerSize: number,
+  source: SlotSource,
+  index: number,
+): number {
+  const first = source.get(index);
+  if (!first) return 0;
+  const itemId = first.id;
+
+  // 目标一侧 + 该按哪个顺序往里放，以及**从哪一段扫**。
+  //
+  // ⚠️ "扫哪一段"与"放进哪里"必须**互不重叠**：没开容器时两边都在同一个背包里
+  // （快捷栏 ↔ 主背包），如果扫的区间包含了刚放进去的那几格，就会**反复搬自己刚搬过去的
+  // 东西**——第一版就是这样，`moved` 数出来 114（20+30+64）、东西还被搬乱了。
+  let target: SlotSource;
+  let order: readonly number[];
+  let from: number;
+  let to: number;
+  if (container !== null && source === container) {
+    target = inventory;
+    order = PLAYER_FILL_ORDER;
+    from = 0;
+    to = containerSize - 1;
+  } else if (container !== null) {
+    target = container;
+    order = Array.from({ length: containerSize }, (_u, i) => i);
+    from = 0;
+    to = MAIN_START + MAIN_SIZE - 1; // 只扫"背包存储"那 36 格（盔甲/副手不参与）
+  } else {
+    const inHotbar = index >= HOTBAR_START && index < HOTBAR_START + HOTBAR_SIZE;
+    const inMain = index >= MAIN_START && index < MAIN_START + MAIN_SIZE;
+    target = inventory;
+    order = inHotbar ? MAIN_ORDER : inMain ? HOTBAR_ORDER : PLAYER_FILL_ORDER;
+    // 点快捷栏 → 扫快捷栏；点主背包 → 扫主背包；点盔甲/副手 → 扫整个存储区
+    from = inHotbar ? HOTBAR_START : inMain ? MAIN_START : 0;
+    to = inHotbar ? HOTBAR_START + HOTBAR_SIZE - 1 : inMain ? MAIN_START + MAIN_SIZE - 1 : MAIN_START + MAIN_SIZE - 1;
+  }
+
+  // 逐格搬：**从后往前**扫（搬空时会写回 null，倒着扫不会跳格）
+  let moved = 0;
+  for (let i = to; i >= from; i--) {
+    const stack = source.get(i);
+    if (!stack || stack.id !== itemId) continue;
+    const { remaining } = transferStack(source, i, stack, target, order);
+    moved += stack.count - remaining;
+  }
+  return moved;
 }

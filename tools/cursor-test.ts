@@ -11,6 +11,7 @@ import { Block } from '../src/core/registry/blocks.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
 import {
   Inventory,
+  MAIN_START,
   OFFHAND_SLOT,
   type ItemStack,
   type SlotSource,
@@ -19,6 +20,7 @@ import {
   distributeEvenly,
   dropCount,
   gatherSameItems,
+  moveAllOfTypeBetween,
   placeOneEach,
   slotForKey,
   swapWithSlot,
@@ -222,6 +224,83 @@ console.log('\n[Q / Ctrl+Q：丢 1 件 / 丢整叠]');
   equal('Ctrl+Q：丢整叠', dropCount(stone(10), true), 10);
   equal('空手时丢 0 件（界面据此什么都不做）', dropCount(null, false), 0);
   equal('空手 + Ctrl+Q 也是 0', dropCount(null, true), 0);
+}
+
+
+// ---------------------------------------------------------------- 6. Shift+双击：整批搬
+
+console.log('\n[Shift+双击：把同一类整批搬到另一边]');
+{
+  // 没开容器：点主背包里的石头 → 全搬到快捷栏
+  {
+    const inv = new Inventory();
+    inv.set(MAIN_START + 1, stone(20));
+    inv.set(MAIN_START + 5, stone(30));
+    inv.set(MAIN_START + 9, dirt(64));
+    const moved = moveAllOfTypeBetween(inv, null, 0, inv, MAIN_START + 1);
+    equal('搬了 50 件（同类两格都搬走）', moved, 50);
+    equal('落进快捷栏第一格（先快捷栏）', inv.get(0)?.count, 50);
+    equal('原格都空了', `${inv.get(MAIN_START + 1) ?? 'null'},${inv.get(MAIN_START + 5) ?? 'null'}`, 'null,null');
+    equal('（对照）别的东西一点没动', inv.get(MAIN_START + 9)?.count, 64);
+  }
+
+  // 没开容器：点快捷栏里的石头 → 全搬到主背包
+  {
+    const inv = new Inventory();
+    inv.set(0, stone(10));
+    inv.set(3, stone(10));
+    const moved = moveAllOfTypeBetween(inv, null, 0, inv, 0);
+    equal('搬了 20 件', moved, 20);
+    equal('落进主背包第一格（快捷栏 → 主背包）', inv.get(MAIN_START)?.count, 20);
+    equal('快捷栏两格都空了', `${inv.get(0) ?? 'null'},${inv.get(3) ?? 'null'}`, 'null,null');
+  }
+
+  // 开着容器：点容器里的东西 → 全搬进玩家背包（先快捷栏）
+  {
+    const inv = new Inventory();
+    const chest = makeContainer(27, (i) => (i === 2 ? stone(40) : i === 7 ? stone(20) : null));
+    const moved = moveAllOfTypeBetween(inv, chest, 27, chest, 2);
+    equal('搬了 60 件', moved, 60);
+    equal('落进快捷栏第一格', inv.get(0)?.count, 60);
+    equal('箱子那两格空了', `${chest.get(2) ?? 'null'},${chest.get(7) ?? 'null'}`, 'null,null');
+  }
+
+  // 开着容器：点玩家背包里的东西 → 全搬进容器
+  {
+    const inv = new Inventory();
+    const chest = makeContainer(27);
+    inv.set(0, stone(5));
+    inv.set(MAIN_START, stone(5));
+    const moved = moveAllOfTypeBetween(inv, chest, 27, inv, 0);
+    equal('搬了 10 件', moved, 10);
+    equal('落进箱子第一格', chest.get(0)?.count, 10);
+    equal('玩家背包两格都空了', `${inv.get(0) ?? 'null'},${inv.get(MAIN_START) ?? 'null'}`, 'null,null');
+  }
+
+  // 装不下就搬一部分（不丢东西）
+  {
+    const inv = new Inventory();
+    const chest = makeContainer(27, () => dirt(64));
+    chest.set(4, stone(60));
+    inv.set(0, stone(20));
+    const moved = moveAllOfTypeBetween(inv, chest, 27, inv, 0);
+    equal('只搬走塞得下的 4 件', moved, 4);
+    equal('箱子那一格满了', chest.get(4)?.count, 64);
+    equal('玩家背包里还剩 16 件', inv.get(0)?.count, 16);
+  }
+
+  // 空格 → 一件都不搬（界面据此不刷新）
+  {
+    const inv = new Inventory();
+    equal('空格 → 返回 0', moveAllOfTypeBetween(inv, null, 0, inv, 5), 0);
+  }
+
+  // 盔甲槽与副手不参与（原版也只搬"背包与方块"那一侧）
+  {
+    const inv = new Inventory();
+    inv.set(36, stone(1));
+    equal('盔甲槽里的同类不参与整批搬', moveAllOfTypeBetween(inv, null, 0, inv, 36), 0);
+  }
 }
 
 console.log(`\n光标交互测试：${passed} 通过 / ${failed} 失败`);

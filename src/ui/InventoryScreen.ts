@@ -44,6 +44,7 @@ import {
   distributeEvenly,
   dropCount,
   gatherSameItems,
+  moveAllOfTypeBetween,
   placeOneEach,
   swapWithSlot,
 } from '../core/container/CursorActions.ts';
@@ -1305,6 +1306,12 @@ export class InventoryScreen {
       const binding = this.bindings.get(key);
       if (binding && !binding.takeOnly && this.gatherFrom(binding)) return;
     }
+    // **Shift+双击**（批次 129）：把点中那一格**所属的那一类**整批搬到另一边
+    // （开着方块时是玩家背包 ↔ 方块，没开时是快捷栏 ↔ 主背包）
+    if (button === 0 && shift && isDouble) {
+      const binding = this.bindings.get(key);
+      if (binding && !binding.takeOnly && this.moveAllOfTypeFrom(binding)) return;
+    }
     if (shift && button === 0) {
       if (key === 'craft:result') this.handleResultClick(true);
       else this.quickMoveSlot(key);
@@ -1334,17 +1341,40 @@ export class InventoryScreen {
       return;
     }
 
-    const container = this.mode === 'inventory' ? null : this.activeContainer;
-    // 容器有多少格：**按注册进界面的绑定数一遍**（各族容器格数不一样，
-    // 界面这边不用再抄一份常量表——抄一份就多一处会漂的地方）
-    let containerSize = 0;
-    if (container) {
-      for (const other of this.bindings.values()) if (other.source === container) containerSize++;
-    }
-
-    const result = quickMove(this.inventory, container, containerSize, source, index);
+    const { container, size } = this.activeContainerInfo();
+    const result = quickMove(this.inventory, container, size, source, index);
     if (!result.moved) return;
     this.refresh();
+  }
+
+  /**
+   * **Shift+双击**：把这一类整批搬到另一边（批次 129，对齐原版）。
+   *
+   * 规则在 `CursorActions.moveAllOfTypeBetween`（纯函数）：方向由"点的是哪一侧"决定
+   * ——点容器里的东西就全搬进玩家背包，点玩家背包里的就全搬进容器；没开容器时两边都往对面搬。
+   *
+   * @returns 有没有真的搬动（false → 退回 Shift+单击那条路）
+   */
+  private moveAllOfTypeFrom(binding: SlotBinding): boolean {
+    const { container, size } = this.activeContainerInfo();
+    const moved = moveAllOfTypeBetween(this.inventory, container, size, binding.source, binding.index);
+    if (moved <= 0) return false;
+    this.refresh();
+    return true;
+  }
+
+  /**
+   * 当前开着哪个容器、它有多少格（快速移动与 Shift+双击都要用）。
+   *
+   * 格数是**按注册进界面的绑定数一遍**：各族容器格数不一样（箱子 27、熔炉 3、酿造台 5……），
+   * 界面这边不用再抄一份常量表——抄一份就多一处会漂的地方。
+   */
+  private activeContainerInfo(): { container: SlotSource | null; size: number } {
+    const container = this.mode === 'inventory' ? null : this.activeContainer;
+    if (!container) return { container: null, size: 0 };
+    let size = 0;
+    for (const other of this.bindings.values()) if (other.source === container) size++;
+    return { container, size };
   }
 
   /**

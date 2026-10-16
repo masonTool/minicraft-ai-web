@@ -281,6 +281,10 @@ import {
 import { nearestStronghold, structureInstanceForTest } from './core/gen/Structures.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
+// 中键拾取方块（批次 129）：三条规则是纯函数（`test:pickblock` 逐条钉住）
+import { applyPickBlock, pickItemFor, planPickBlock } from './core/interaction/PickBlock.ts';
+// 快捷栏的起点与大小：`planPickBlock` 返回的是**背包下标**，切选中格要减掉起点
+import { HOTBAR_START } from './core/container/Inventory.ts';
 import { planPlacement } from './core/interaction/Placement.ts';
 import {
   isDoorOpen,
@@ -2522,6 +2526,12 @@ class App {
 
       document.addEventListener('mousedown', (e) => {
         if (!this.locked) return;
+        // **中键拾取方块**（批次 129）：按一下就结算，不需要按住（原版也如此）
+        if (e.button === 1) {
+          e.preventDefault();
+          this.pickBlock();
+          return;
+        }
         if (e.button === 0) this.leftDown = true;
         if (e.button === 2) this.rightDown = true;
       });
@@ -8477,6 +8487,30 @@ class App {
     this.flying = value;
     // 触摸端的"飞"按钮需要跟着亮/灭
     this.touch?.setFlying(value);
+  }
+
+  /**
+   * **中键拾取方块**（批次 129，对齐原版）：把准星指着的方块塞进快捷栏。
+   *
+   * 三条规则（在哪儿找、找不到怎么办）全在 `core/interaction/PickBlock.ts` 里，
+   * 这里只做三件事：读出准星那一格、把结果落到背包、必要时**切选中格**。
+   *
+   * ⚠️ 创造模式的门径是本项目的口径：**能飞 = 创造**（`isCreative` 那个钩子也是这么写的），
+   * 所以"凭空给一份"只在飞行时发生。
+   */
+  private pickBlock(): void {
+    const hit = this.hit;
+    if (!hit) return;
+    const itemId = pickItemFor(this.world.getBlock(hit.x, hit.y, hit.z));
+    if (itemId === null) return;
+
+    const plan = planPickBlock(this.inventory, itemId, this.hotbarIndex, this.flying);
+    if (!plan) return;
+    applyPickBlock(this.inventory, plan);
+    // `'select'` 与另外两档都要"把手移到那一格"——原版拾取之后手上就是它
+    if (plan.kind === 'select') this.selectSlot(plan.slot - HOTBAR_START);
+    else this.selectSlot(plan.to - HOTBAR_START);
+    this.inventory.notify();
   }
 
   selectSlot(index: number): void {

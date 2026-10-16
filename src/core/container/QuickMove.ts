@@ -54,9 +54,9 @@ export interface QuickMoveResult {
 }
 
 /** 主背包的顺序（9 → 35） */
-const MAIN_ORDER: readonly number[] = Array.from({ length: MAIN_SIZE }, (_u, i) => MAIN_START + i);
+export const MAIN_ORDER: readonly number[] = Array.from({ length: MAIN_SIZE }, (_u, i) => MAIN_START + i);
 /** 快捷栏的顺序（0 → 8） */
-const HOTBAR_ORDER: readonly number[] = Array.from({ length: HOTBAR_SIZE }, (_u, i) => HOTBAR_START + i);
+export const HOTBAR_ORDER: readonly number[] = Array.from({ length: HOTBAR_SIZE }, (_u, i) => HOTBAR_START + i);
 /** **方块 → 玩家背包**：先快捷栏、再主背包（原版顺序） */
 export const PLAYER_FILL_ORDER: readonly number[] = [...HOTBAR_ORDER, ...MAIN_ORDER];
 
@@ -82,9 +82,12 @@ export function fitCount(stack: ItemStack, target: SlotSource, order: readonly n
 /**
  * 把 `from[index]` 那一叠**尽量并进** `to` 的 `order` 里（先并同类、再找空位）。
  *
+ * 导出给同层的 `CursorActions` 用（Shift+双击要按同一套规矩搬一"类"东西）——
+ * 两边各写一遍的话，"先并同类再找空位"这种细节迟早会分叉。
+ *
  * @returns 还剩下多少件没放下（0 = 全放下了）
  */
-function fillInto(
+export function transferStack(
   from: SlotSource,
   index: number,
   stack: ItemStack,
@@ -159,7 +162,7 @@ export function quickMove(
 
   // ---- ① 源是容器的格子：搬进玩家背包
   if (container !== null && source === container) {
-    const { remaining, landing } = fillInto(source, index, stack, inventory, PLAYER_FILL_ORDER);
+    const { remaining, landing } = transferStack(source, index, stack, inventory, PLAYER_FILL_ORDER);
     return settled(stack.count, remaining, inventory, landing);
   }
 
@@ -177,7 +180,7 @@ export function quickMove(
     }
     if (canWear) {
       if (worn) {
-        const { remaining } = fillInto(dummy(worn), 0, worn, inventory, PLAYER_FILL_ORDER);
+        const { remaining } = transferStack(dummy(worn), 0, worn, inventory, PLAYER_FILL_ORDER);
         // 上面那一步已经确认装得下，所以 `remaining` 一定是 0（留一条断言给测试）
         if (remaining !== 0) return { moved: false, count: 0, target: null };
       }
@@ -194,7 +197,7 @@ export function quickMove(
   // ②.2 开着容器：搬进容器（按格子自然顺序）；装不下就留在原处（不"顺手塞回自己背包"）
   if (container !== null) {
     const order = Array.from({ length: containerSize }, (_u, i) => i);
-    const { remaining, landing } = fillInto(source, index, stack, container, order);
+    const { remaining, landing } = transferStack(source, index, stack, container, order);
     return settled(stack.count, remaining, container, landing);
   }
 
@@ -205,7 +208,7 @@ export function quickMove(
   if (inHotbar) order = MAIN_ORDER;
   else if (inMain) order = HOTBAR_ORDER;
   else order = PLAYER_FILL_ORDER;
-  const { remaining, landing } = fillInto(source, index, stack, inventory, order);
+  const { remaining, landing } = transferStack(source, index, stack, inventory, order);
   return settled(stack.count, remaining, inventory, landing);
 }
 
