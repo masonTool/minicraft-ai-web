@@ -240,12 +240,38 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
 
-  // 开始遮罩：两套提示都要在（按设备切换）
-  check('开始遮罩同时有键盘提示与手势提示', html.includes('overlay-help desktop-only') && html.includes('overlay-help touch-only'));
-  check('开始遮罩上有一个"进入游戏"按钮样式', html.includes('.overlay-go'));
-  // 触屏提示里不能再出现 <kbd>（手机上没有键盘）
-  const touchBlock = /<div class="overlay-help touch-only">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
-  check('触屏提示里没有键盘按键', touchBlock.length > 0 && !touchBlock.includes('<kbd>'), touchBlock.slice(0, 40));
+  // "点击进入游戏"那层遮罩（批次 111 整个删掉）：DOM、样式、文案一处都不该留。
+  // ⚠️ 先剥掉注释——说明"这层已经删掉"的注释里正好会提到这些字眼。
+  const htmlNoComments = html.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '');
+  check(
+    '开始遮罩已经删干净',
+    !htmlNoComments.includes('id="overlay"') && !htmlNoComments.includes('.overlay-go') && !htmlNoComments.includes('点击进入游戏'),
+  );
+
+  // 按键/手势说明搬到了暂停菜单底部（标记在 SettingsScreen.ts 里，不再是 HTML 外壳）
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  check(
+    '暂停菜单底部同时有键盘提示与手势提示',
+    settingsSrc.includes("help.className = 'pause-help'") &&
+      settingsSrc.includes("keys.className = 'desktop-only'") &&
+      settingsSrc.includes("gestures.className = 'touch-only'"),
+  );
+  // 触屏那套提示里不能再出现 <kbd>（手机上没有键盘）
+  const gestureBlock = /gestures\.innerHTML =([\s\S]*?);\n/.exec(settingsSrc)?.[1] ?? '';
+  check('触屏提示里没有键盘按键', gestureBlock.length > 0 && !gestureBlock.includes('<kbd>'), gestureBlock.slice(0, 40));
+
+  // 点空白关闭（批次 111 按用户要求删掉）：三个面板里都不许再有这条
+  const noBackdropClose = ['SettingsScreen', 'AdvancementScreen', 'RecipeBook'].every((name) => {
+    const source = readFileSync(new URL(`../src/ui/${name}.ts`, import.meta.url), 'utf8');
+    return !source.includes('event.target === this.root');
+  });
+  check('三个面板都不再用"点空白关闭"', noBackdropClose);
+  // 删掉它之后每个面板必须还有**看得见**的出口
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  check('背包补上了关闭键（它原来根本没有）', invSrc.includes("closeButton.className = 'inv-close'") && html.includes('.inv-close {'));
+  // ⚠️ 只查**提示文案那一句**（注释里会解释"原来写的是错的"，会撞到自己）
+  const invHint = /hint\.innerHTML = touchDevice([\s\S]*?);\n/.exec(invSrc)?.[1] ?? '';
+  check('背包提示不再说"点空白处关闭"（那句话本来就是错的）', invHint.length > 0 && !invHint.includes('点空白'));
 }
 
 console.log('\n[手机端物品显示与提示（批次 95 体检）]');
@@ -661,7 +687,22 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   // 横屏只剩"主菜单"与"把按钮排紧一点"：**不许再碰面板尺寸**
   check('横屏不再覆盖面板尺寸（只允许把里面的按钮排紧）', !landscape.includes('.settings-panel') && !landscape.includes('.settings-columns'));
   check('横屏：暂停按钮收紧到 42px（面板尺寸不变）', landscape.includes('body.touch-mode .pause-action { min-height: 42px; font-size: 14px; }'));
-  check('横屏：主菜单按钮收窄、标题缩小', landscape.includes('body.touch-mode .world-menu > * { width: min(100%, 240px); }'));
+  check('横屏：主菜单标题缩小、按钮高度统一到 44px', landscape.includes('body.touch-mode .world-title { font-size: 20px; }') && landscape.includes('body.touch-mode .world-primary { min-height: 44px;'));
+}
+
+console.log('\n[按钮尺寸对齐（批次 111）]');
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  // 用户："首页的按钮要对齐，符合正常的按钮大小"。
+  // 根因：首页按钮被单独收窄到 280px（横屏 240px），而二级页是满宽——两页对不齐。
+  check('首页按钮不再被单独收窄', !compact.includes('.world-menu > * { width'));
+  check('标题页那一片收到 360px（接近原版那一列的宽度）', compact.includes('.world-panel { width: min(92vw, 360px);'));
+  // 用户："暂停界面按钮可以窄一点"（面板 760 宽，一列按钮拉满太宽）
+  check(
+    '暂停菜单的按钮列收到 300px 并居中',
+    compact.includes('.pause-actions { display: flex; flex-direction: column; gap: 8px; margin: auto; width: 100%; max-width: 300px;'),
+  );
 }
 
 console.log('\n[进游戏首页默认全屏]');

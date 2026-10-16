@@ -115,10 +115,8 @@ export class RecipeBook {
     this.root.append(panel);
     host.appendChild(this.root);
 
-    // 点面板外关闭
-    this.root.addEventListener('pointerdown', (event) => {
-      if (event.target === this.root) this.hide();
-    });
+    // ⚠️ 批次 111 删掉了"点面板外关闭"（用户要求"不要点击空白关闭，就用关闭按钮"）：
+    // 这里的出口是标题栏右上角的 ✕（`.recipe-close`）。
   }
 
   get isOpen(): boolean {

@@ -355,7 +355,26 @@ export class SettingsScreen {
     this.metaEl = document.createElement('div');
     this.metaEl.className = 'settings-hint settings-meta';
 
-    menuPage.append(menuHeader, this.menuHintEl, actionsRow, this.metaEl);
+    // 按键 / 手势说明（批次 111）：原来它挂在"点击进入游戏"那层遮罩上，
+    // 遮罩按用户要求删掉之后搬到这里——按 Esc（或点顶部的暂停键）就能查，
+    // 而且不再挡着"进去就是世界"这一步。两段按设备切换（`body.touch-mode`）。
+    const help = document.createElement('div');
+    help.className = 'pause-help';
+    const keys = document.createElement('div');
+    keys.className = 'desktop-only';
+    keys.innerHTML =
+      '<kbd>WASD</kbd> 移动 · <kbd>Space</kbd> 跳跃 · <kbd>Shift</kbd> 潜行/下降 · <kbd>Ctrl</kbd> 疾跑<br />' +
+      '<kbd>左键</kbd> 破坏 · <kbd>右键</kbd> 放置 · <kbd>1-9</kbd> 换方块 · <kbd>F</kbd> 飞行 · ' +
+      '<kbd>V</kbd> 视角 · <kbd>Esc/E</kbd> 菜单与背包';
+    const gestures = document.createElement('div');
+    gestures.className = 'touch-only';
+    gestures.innerHTML =
+      '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏<br />' +
+      '右下角是跳跃与潜行 · 背包在快捷栏右边、聊天在左边<br />' +
+      '双击跳跃起飞（创造模式）· 视角与飞行在「设置」里';
+    help.append(keys, gestures);
+
+    menuPage.append(menuHeader, this.menuHintEl, actionsRow, this.metaEl, help);
 
     // ================================================================ ② 设置页
     const settingsPage = this.makePage('settings');
@@ -456,11 +475,9 @@ export class SettingsScreen {
     this.setPage('menu');
     this.renderSubtitle();
 
-    // 点面板外的区域 = 继续游戏（与原版"点空白关闭"一致）。
-    // ⚠️ 这条只对桌面生效：触摸端面板是整屏的（`body.touch-mode`），没有"外面"可点。
-    this.root.addEventListener('pointerdown', (event) => {
-      if (event.target === this.root) this.actions.onResume();
-    });
+    // ⚠️ 批次 111 删掉了"点空白处关闭"：用户要求"不要点击空白关闭，就用关闭按钮"。
+    // 出口仍然齐全：暂停菜单页有「继续游戏」，设置页有「‹ 返回」，
+    // 面板内每次只有一个出口，也就不会出现"手滑点到面板外把菜单关了"。
   }
 
   /** 建一页（`menu` / `settings`），登记到 `pages` 里 */

@@ -398,8 +398,10 @@ export class InventoryScreen {
     const hint = document.createElement('span');
     // 触摸端没有左右键之分，提示改成"轻点"的说法，免得玩家找不到右键
     const touchDevice = isTouchUi();
+    // ⚠️ 原来这里写着"点空白处关闭"——**那是错的**：面板外的 pointerdown 实际是
+    // "把手上的东西丢出去"（批次 128 对齐原版），根本不会关界面（批次 111 顺手修掉）
     hint.innerHTML = touchDevice
-      ? '点空白处关闭 · 轻点拿起 / 再轻点放下，点空槽可放下一个'
+      ? '轻点拿起 / 再轻点放下 · 点空槽放下一个 · 长按看详情'
       : '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭 · 左键整叠 / 右键单个';
     header.append(this.titleEl, hint);
     if (this.hooks.onOpenRecipes) {
@@ -422,6 +424,16 @@ export class InventoryScreen {
       achievements.addEventListener('click', () => this.hooks.onOpenAdvancements?.());
       header.appendChild(achievements);
     }
+    // 关闭键（批次 111，用户："不要点击空白关闭，就用关闭按钮"）。
+    // ⚠️ 背包原来**根本没有关闭键**：手机上的出口只有"再点一次快捷栏旁边那颗背包键"
+    // （没人猜得到）或 Android 返回手势。与配方书/成就的关闭键同一套外观、同样在右上。
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'inv-close';
+    closeButton.textContent = touchDevice ? '✕' : '关闭 (E)';
+    closeButton.setAttribute('aria-label', '关闭背包');
+    closeButton.addEventListener('click', () => this.close());
+    header.appendChild(closeButton);
     this.panel.appendChild(header);
 
     // ---- 上半部分：随模式切换

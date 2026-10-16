@@ -261,8 +261,13 @@
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
       }
       #world-screen.hidden { display: none; }
-      /* 标题页那一片：**没有边框、没有底色**，只有内边距 */
-      .world-panel { width: min(94vw, 520px); padding: 0; font-size: 13px; }
+      /* 标题页那一片：**没有边框、没有底色**，只有内边距。
+         ⚠️ 宽度是个"按钮尺寸"问题（批次 111，用户："首页的按钮要对齐，符合正常的
+         按钮大小"）：原来首页按钮被单独收窄到 280px（横屏 240px），而二级页面的按钮
+         是满宽（面板 520px）——同一套菜单里两页按钮宽度不同，看着就是"没对齐"。
+         现在面板收窄到 360px（接近原版标题页那一列的宽度），**首页与二级页的所有
+         按钮都满宽**，左边缘也和存档卡片对齐。 */
+      .world-panel { width: min(92vw, 360px); padding: 0; font-size: 13px; }
       .world-title {
         display: block; text-align: center;
         font-size: 24px; letter-spacing: 2px; color: #fff;
@@ -282,10 +287,9 @@
         padding: 6px 10px; background: var(--btn-bg); color: var(--btn-text);
         transition: transform var(--dur-fast) var(--ease);
       }
-      /* 主页那几列入口：竖着一列、居中、**宽度与间距都统一**（原版的标题页就是这样，
-         按钮宽约 200~300px 居中排一列，而不是拉满整屏） */
-      .world-menu { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 14px; }
-      .world-menu > * { width: min(100%, 280px); }
+      /* 主页那几列入口：竖着一列、**满宽**（批次 111：不再单独收窄，
+         否则和二级页面的按钮对不齐——面板本身已经只有 360px 了） */
+      .world-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
       .world-hint { color: #a8a8a8; font-size: 12px; margin: 6px 0 0; text-align: center; }
       .world-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
       /* 列表在窄屏/世界多的时候自己滚，别把面板撑破 */
@@ -431,34 +435,32 @@
         background: #a8a8a8; color: #2b2b2b; border: 2px solid;
         border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
+      /* 背包的关闭键（批次 111）——**它原来根本不存在**：手机上唯一的出路是
+         "点空白"或 Android 返回手势（很多玩家不知道后者），而用户点名要求
+         "不要点击空白关闭，就用关闭按钮"。形状与配方书/成就的关闭键统一。 */
+      .inv-close {
+        margin-left: auto;
+        font: inherit; font-size: 12px; padding: 6px 12px; cursor: pointer;
+        background: #a8a8a8; color: #2b2b2b; border: 2px solid;
+        border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
 
-      #overlay {
-        /* z-index 要低于所有面板（背包 10 / 配方书 20 / 主菜单 40）：遮罩只是"开始前的一层"，
-           面板打开时不该被它挡住 */
-        position: fixed; inset: 0; z-index: 5; display: grid; place-items: center;
-        background: radial-gradient(circle at 50% 40%, rgba(20, 28, 38, .72), rgba(0, 0, 0, .82) 70%);
-        color: #fff; cursor: pointer;
-        font-size: 15px; text-align: center; line-height: 1.9;
-        backdrop-filter: blur(2px);
+      /* 开始遮罩 `#overlay`（"点击进入游戏"）已在批次 111 整块删除：原版没有这一层，
+         进去就是世界。原来它上面那份**按键/手势说明**搬到了暂停菜单底部，
+         样式改叫 `.pause-help`（`kbd` 的样式保留给那份说明用）。 */
+      .settings-panel kbd {
+        display: inline-block; padding: 1px 6px;
+        background: #ffffff22; border: 1px solid #ffffff44; font-size: 12px;
       }
-      #overlay.hidden { display: none; }
-      #overlay b { font-size: 22px; display: block; margin-bottom: 10px; }
-      #overlay kbd {
-        display: inline-block; padding: 1px 6px; border-radius: 3px;
-        background: #ffffff22; border: 1px solid #ffffff44; font-size: 13px;
+      .pause-help {
+        flex: 0 0 auto; margin: 10px 0 0; padding-top: 8px;
+        border-top: 2px solid rgba(255, 255, 255, .14);
+        font-size: 11px; line-height: 1.8; color: #a8a8a8; text-align: center;
       }
-      /* 开始遮罩上的"进入游戏"：手机上直接点屏幕也能进，这里是给人看的按钮 */
-      .overlay-go {
-        display: inline-block; margin: 4px 0 12px; padding: 10px 22px;
-        font-size: 16px; border-radius: 6px;
-        background: #3a7d33; border: 1px solid #ffffff44;
-      }
-      .overlay-help { font-size: 13px; line-height: 2; color: #d8d8d8; }
       /* 触屏提示默认隐藏，桌面键盘提示默认显示；`body.touch-mode` 由主程序按设备加上 */
       .touch-only { display: none; }
       body.touch-mode .touch-only { display: block; }
       body.touch-mode .desktop-only { display: none; }
-      body.touch-mode #overlay { line-height: 2.1; }
       #death {
         position: fixed; inset: 0; z-index: 6; display: grid; place-items: center;
         /* 红色渐晕：中间还能看清世界，四周压暗（纯色遮罩会把画面糊成一片红） */
@@ -801,8 +803,14 @@
       }
       /* 菜单页的内容不是"一格滚动区"，它自己滚；设置页由里面的 `.settings-body` 滚 */
       .pause-page[data-page='menu'].active { overflow-y: auto; }
-      /* 按钮列**在面板里垂直居中**：面板高度是固定的，不居中底下会空一大片 */
-      .pause-actions { display: flex; flex-direction: column; gap: 8px; margin: auto 0; }
+      /* 按钮列**在面板里垂直居中**：面板高度是固定的，不居中底下会空一大片。
+         ⚠️ 宽度收到 300px（批次 111，用户："暂停界面按钮可以窄一点"）：
+         面板宽 760px，一列按钮拉到满宽太宽——原版那一列只占面板的一小半。
+         `margin: auto` 的上下 auto 负责垂直居中，左右 auto 负责水平居中。 */
+      .pause-actions {
+        display: flex; flex-direction: column; gap: 8px;
+        margin: auto; width: 100%; max-width: 300px;
+      }
       .pause-action {
         font: inherit; font-size: 14px; padding: 9px; min-height: 42px; cursor: pointer;
       }
@@ -897,12 +905,13 @@
         /* 横屏的面板高度只有 ~343px：把暂停菜单的按钮从 46px 收到 42px，
            5 颗按钮 + 标题 + 存档信息刚好放得下（面板尺寸不变，只是里面排得更紧） */
         body.touch-mode .pause-action { min-height: 42px; font-size: 14px; }
+        /* 那一小段按键/手势说明在横屏下藏起来（高度实在不够，它会顶出滚动条）——
+           PC 竖屏/宽屏都能看到，触屏玩家本来也不需要键盘对照表 */
+        body.touch-mode .pause-help { display: none; }
 
         /* ---- 主菜单：横屏宽度富余、高度紧张 ---- */
-        body.touch-mode .world-panel { width: min(88vw, 620px); }
         body.touch-mode .world-title { font-size: 20px; }
         body.touch-mode .world-menu { gap: 8px; margin-top: 10px; }
-        body.touch-mode .world-menu > * { width: min(100%, 240px); }
         body.touch-mode .world-primary { min-height: 44px; font-size: 14px; }
         body.touch-mode .world-secondary { min-height: 44px; }
       }
@@ -1527,6 +1536,7 @@
          背包标题栏的"配方书/成就"原来只有 12px 字 + 3px 内边距，手机上很难点 */
       body.touch-mode .inv-recipes-btn { min-height: 44px; padding: 8px 14px; font-size: 14px; }
       body.touch-mode .recipe-close,
+      body.touch-mode .inv-close,
       body.touch-mode .adv-close { min-width: 48px; min-height: 44px; font-size: 17px; padding: 8px 12px; }
 
       /* 主菜单（世界列表 / 新建世界）同理：这几个按钮原是按鼠标尺寸做的（高约 30px），
@@ -1606,7 +1616,6 @@
         .inv-page-button { min-height: 44px; padding: 10px 16px; font-size: 14px; }
         .inv-page-label { font-size: 12px; min-width: 96px; }
         .chat-send { min-height: 42px; padding: 10px 18px; font-size: 14px; }
-        .overlay-go { display: block; margin: 10px auto 12px; padding: 14px 26px; font-size: 17px; }
 
         /* 世界列表的"名称 + 输入框 + 随机"三列在窄屏挤成一团，改成两行 */
         .world-row { grid-template-columns: 1fr auto; }
@@ -1797,7 +1806,7 @@
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
-          .inv-page-button, .overlay-go, .unsupported-button) {
+          .inv-page-button, .inv-close, .unsupported-button) {
         background: var(--btn-bg);
         color: var(--btn-text);
         border: 2px solid var(--mc-outline);
@@ -1808,14 +1817,14 @@
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
-          .inv-page-button, .overlay-go, .unsupported-button):not(:disabled):hover {
+          .inv-page-button, .inv-close, .unsupported-button):not(:disabled):hover {
         background: var(--mc-face-hover);
         color: var(--mc-text-hover);
       }
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
-          .inv-page-button, .overlay-go, .unsupported-button):not(:disabled):active {
+          .inv-page-button, .inv-close, .unsupported-button):not(:disabled):active {
         /* 斜面反转 = 凹进去（原版靠这个表达"按下了"，不靠位移） */
         box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
         color: var(--mc-text-hover);
@@ -1889,27 +1898,12 @@
       <div id="hotbar"></div>
     </div>
 
-    <div id="overlay">
-      <div>
-        <b>Bedrock 1.18 Web</b>
-        <span class="overlay-go">点击进入游戏</span>
-        <!-- 桌面端：键盘提示（触屏上这串字只会误导——手机没有这些键） -->
-        <div class="overlay-help desktop-only">
-          <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动 ·
-          <kbd>Space</kbd> 跳跃 · <kbd>Shift</kbd> 潜行/下降 · <kbd>Ctrl</kbd> 疾跑<br />
-          <kbd>左键</kbd> 破坏 · <kbd>右键</kbd> 放置 · <kbd>1</kbd>-<kbd>9</kbd> 切换方块 ·
-          <kbd>F</kbd> 创造/飞行 · <kbd>V</kbd> 切换人称视角 · <kbd>Esc/E</kbd> 菜单与背包
-        </div>
-        <!-- 触屏：手势说明（批次 107 改过一次按钮布局，这里的措辞要跟着改，
-             否则玩家会去找一颗不存在的"视角/飞行"键） -->
-        <div class="overlay-help touch-only">
-          左摇杆移动 · 拖动屏幕转视角<br />
-          轻点放置 / 交互 · 长按破坏<br />
-          右下角是跳跃与潜行 · 背包在快捷栏右边、聊天在左边<br />
-          双击跳跃起飞（创造模式）· 视角与飞行在暂停菜单的设置里
-        </div>
-      </div>
-    </div>
+    <!-- ⚠️ 这里原来有一层 `#overlay`（"Bedrock 1.18 Web / 点击进入游戏"那块遮罩）。
+         批次 111 按用户要求整块删掉了："进入游戏不要有那个点击进入游戏的流程"。
+         原版也没有这一层——点完"游戏"进去就是世界，指针锁由"点一下画面"完成
+         （`renderer.domElement` 的 click 早就接好了）。
+         原来遮罩上那份**按键/手势说明**没有丢：它移到了暂停菜单底部
+         （见 `ui/SettingsScreen.ts` 的 `.pause-help`），按 Esc 就能查。 -->
 
     <div id="death" class="hidden"><div><b>你死了！</b>正在重生…</div></div>
 

@@ -51,9 +51,10 @@
           }`
         : '(空)';
 
-    // 启动页的菜单是 `#world-screen`（面板一律挂 body，见 index.html 的约定），
-    // `#overlay` 是它下面那层"点击进入游戏"。两个都试，取第一个可见且有内容的。
-    const menus = ['#world-screen', '#overlay'].map((s) => document.querySelector(s)).filter(Boolean);
+    // 启动页的菜单是 `#world-screen`（面板一律挂 body，见 index.html 的约定）。
+    // ⚠️ 批次 111 之前这里还会试 `#overlay`（"点击进入游戏"那层遮罩），按用户要求
+    // 那层已经整个删掉了——进游戏就是世界，所以现在只有 `#world-screen` 一个候选。
+    const menus = ['#world-screen'].map((s) => document.querySelector(s)).filter(Boolean);
     const menu = menus.find((el) => {
       const cs = getComputedStyle(el);
       if (cs.display === 'none' || cs.visibility === 'hidden') return false;
@@ -376,11 +377,17 @@
   mc.toggleInventory();
   await sleep(200);
 
-  // 触屏模式下开始遮罩要显示手势说明（键盘提示在手机上是误导）
-  const desktopHelp = document.querySelector('#overlay .desktop-only');
-  const touchHelp = document.querySelector('#overlay .touch-only');
+  // 按键/手势说明（批次 111 从"开始遮罩"搬到了暂停菜单底部）：触屏上要显示手势、
+  // 藏掉键盘对照表（手机没有那些键）
+  mc.openSettings();
+  await sleep(200);
+  const desktopHelp = document.querySelector('.pause-help .desktop-only');
+  const touchHelp = document.querySelector('.pause-help .touch-only');
   check('touch devices get gesture help, not keyboard hints', !!touchHelp && !!desktopHelp && getComputedStyle(touchHelp).display !== 'none' && getComputedStyle(desktopHelp).display === 'none',
     `touch-help ${touchHelp ? getComputedStyle(touchHelp).display : 'missing'} | keyboard-help ${desktopHelp ? getComputedStyle(desktopHelp).display : 'missing'}`);
+  // 关掉暂停菜单，回到"世界还在跑"的状态（后面的断言依赖它）
+  mc.closeSettings();
+  await sleep(120);
 
   return lines.join('\n');
 })();

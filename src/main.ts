@@ -1094,7 +1094,6 @@ class App {
   constructor(
     container: HTMLElement,
     private readonly debugEl: HTMLElement,
-    private readonly overlayEl: HTMLElement,
     private readonly atlas: TextureAtlas,
     vitalsEl: HTMLElement,
     deathEl: HTMLElement,
@@ -1274,7 +1273,7 @@ class App {
       this.tooltip,
     );
     // 挂到 <body> 上而不是 #app：面板的 z-index 只在同一个层叠上下文里比较，
-    // 放进 #app 就会被 DOM 更靠后的遮罩（#overlay / #death）盖住
+    // 放进 #app 就会被 DOM 更靠后的遮罩（#death / #sleep）盖住
     this.recipeBook = new RecipeBook(document.body, atlas, this.inventory, {
       onCraft: (recipe) => this.craftFromBook(recipe),
     });
@@ -1494,8 +1493,6 @@ class App {
         : '存档：不可用（浏览器未提供 IndexedDB）',
     );
     this.settingsScreen.show();
-    // 能按 Esc 说明玩家已经在玩了，"点击进入游戏"的遮罩没必要再挡着菜单
-    this.overlayEl.classList.add('hidden');
     this.handleInventoryOpen(true);
     // 打开界面时释放指针锁，否则鼠标被锁住点不到按钮
     if (document.pointerLockElement) document.exitPointerLock();
@@ -2525,13 +2522,12 @@ class App {
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
 
-    if (this.touch) {
-      // 触摸端不用指针锁：点一下遮罩就开始玩
-      this.overlayEl.addEventListener('pointerdown', () => this.overlayEl.classList.add('hidden'));
-    } else {
+    // 触摸端不需要指针锁（拖动即转视角），所以只有桌面端接这套
+    // ⚠️ 批次 111 把"点击进入游戏"那层遮罩删掉之后，PC 进世界的第一步就是**点一下画面**
+    // ——`requestPointerLock()` 必须在用户手势的调用栈里，这一下点击就是那个手势。
+    if (!this.touch) {
       document.addEventListener('pointerlockchange', () => {
         this.locked = document.pointerLockElement === this.renderer.domElement;
-        this.overlayEl.classList.toggle('hidden', this.locked);
         if (!this.locked) {
           this.keys.clear();
           this.leftDown = false;
@@ -2540,7 +2536,6 @@ class App {
       });
 
       const requestLock = () => void this.renderer.domElement.requestPointerLock();
-      this.overlayEl.addEventListener('click', requestLock);
       this.renderer.domElement.addEventListener('click', requestLock);
 
       document.addEventListener('mousemove', (e) => {
@@ -6024,8 +6019,6 @@ class App {
     this.inventoryScreen.close();
     this.recipeBook.show();
     this.handleInventoryOpen(true);
-    // 与暂停菜单一样：能打开界面说明玩家已经在玩了，"点击进入游戏"的遮罩没必要再挡着
-    this.overlayEl.classList.add('hidden');
   }
 
   /** R 键：开/关配方书。关掉时要把 uiOpen 交回给背包（背包可能还开着） */
@@ -9274,10 +9267,9 @@ async function boot(): Promise<void> {
   startupTrace.mark(STARTUP_PHASES.bootBegin);
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
-  const overlayEl = document.getElementById('overlay');
   const vitalsEl = document.getElementById('vitals');
   const deathEl = document.getElementById('death');
-  if (!container || !debugEl || !overlayEl || !vitalsEl || !deathEl) throw new Error('缺少必要的 DOM 节点');
+  if (!container || !debugEl || !vitalsEl || !deathEl) throw new Error('缺少必要的 DOM 节点');
 
   // ---- 设备能力预检（A10，批次 85）：**在生成图集/地形之前**就问一句。
   // 图集要画上百张画布、地形要起 worker 池——这些在不支持的设备上全是白做的，
@@ -9307,7 +9299,7 @@ async function boot(): Promise<void> {
     registry.update(world.id, { lastPlayed: Date.now() });
     let app: App;
     try {
-      app = new App(container, debugEl, overlayEl, atlas, vitalsEl, deathEl, save, {
+      app = new App(container, debugEl, atlas, vitalsEl, deathEl, save, {
         id: world.id,
         name: world.name,
         seed: world.seed,
@@ -9374,8 +9366,9 @@ async function boot(): Promise<void> {
   (window as unknown as { __startup: typeof startupTrace }).__startup = startupTrace;
   menu.show();
   // 进游戏首页就"默认全屏"（用户要求）。全屏请求必须在用户手势里，所以挂在
-  // 主菜单与开始遮罩的**第一次点击**上——点第一下时全屏已经进去了（见 ui/Fullscreen.ts）
-  armAutoFullscreen([menu.root, document.getElementById('overlay')]);
+  // 主菜单的**第一次点击**上——点第一下时全屏已经进去了（见 ui/Fullscreen.ts）。
+  // ⚠️ 批次 111 删掉了"点击进入游戏"那层遮罩，所以这里只剩主菜单一个触发点。
+  armAutoFullscreen([menu.root]);
   startupTrace.mark(STARTUP_PHASES.bootMenu);
 }
 
