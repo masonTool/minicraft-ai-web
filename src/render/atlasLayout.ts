@@ -635,6 +635,12 @@ export const TILE_ORDER = [
   'item_bowl',
   'item_mushroom_stew',
   'item_beetroot_soup',
+  // 可疑的炖菜（批次 57）：五碗（汤色按花来，见 TextureAtlas）
+  'item_suspicious_stew_dandelion',
+  'item_suspicious_stew_poppy',
+  'item_suspicious_stew_blue_orchid',
+  'item_suspicious_stew_oxeye_daisy',
+  'item_suspicious_stew_cornflower',
   'item_beetroot',
   'item_beetroot_seeds',
   'item_pumpkin_pie',

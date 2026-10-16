@@ -623,6 +623,35 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   // 写死的数字会让"可可豆做出浅蓝色染料"——这种错在界面上看着就像个恶作剧
   { kind: 'shapeless' as const, result: { id: dyeItemId(BROWN_DYE_INDEX), count: 1 }, ingredients: [Item.COCOA_BEANS] },
 
+  // ---- 可疑的炖菜（批次 57，B17 收口）
+  // 原版是**无序配方**：碗 + 红蘑菇 + 棕蘑菇 + **任意一朵花**，效果看用的是哪朵花。
+  // 项目里没有物品 NBT，所以按花分成 5 条配方 / 5 个 id（见 items.ts 的注释）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.SUSPICIOUS_STEW_DANDELION, count: 1 },
+    ingredients: [Item.BOWL, Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Block.DANDELION],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.SUSPICIOUS_STEW_POPPY, count: 1 },
+    ingredients: [Item.BOWL, Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Block.POPPY],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.SUSPICIOUS_STEW_BLUE_ORCHID, count: 1 },
+    ingredients: [Item.BOWL, Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Block.BLUE_ORCHID],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.SUSPICIOUS_STEW_OXEYE_DAISY, count: 1 },
+    ingredients: [Item.BOWL, Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Block.OXEYE_DAISY],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.SUSPICIOUS_STEW_CORNFLOWER, count: 1 },
+    ingredients: [Item.BOWL, Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Block.CORNFLOWER],
+  },
+
   // ---- TNT（批次 56）
   // 原版：**5 个火药（四角 + 中心）+ 4 个沙**（十字位置）
   {

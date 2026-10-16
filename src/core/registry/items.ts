@@ -139,6 +139,14 @@ export const Item = {
   // 海带与海草**本身就是方块**（id 436/437，物品 id 与方块 id 同源，见上面的方块物品循环），
   // 只有"干海带"是纯粹的非方块物品（海带烧一下出来的那个）
   DRIED_KELP: 1430,
+  // ---- 可疑的炖菜（批次 57，B17 收口）：
+  // ⚠️ 原版是**一个物品 + NBT**，本项目没有物品 NBT → 按"用了哪朵花"分成 5 个 id
+  // （展示名统一是"可疑的炖菜（花名）"，见 itemNames）
+  SUSPICIOUS_STEW_DANDELION: 1431,
+  SUSPICIOUS_STEW_POPPY: 1432,
+  SUSPICIOUS_STEW_BLUE_ORCHID: 1433,
+  SUSPICIOUS_STEW_OXEYE_DAISY: 1434,
+  SUSPICIOUS_STEW_CORNFLOWER: 1435,
   REDSTONE_DUST: 1198,
   GLOWSTONE_DUST: 1199,
   // ---- 投掷物（K4 尾巴）：雪球与鸡蛋，原版都是 16 个一堆。
@@ -299,12 +307,14 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.GOLD_NUGGET, name: 'minecraft:gold_nugget', tile: 'item_gold_nugget' },
   // 碗：原版"3 木板 → 4 碗"，蘑菇煲 / 甜菜汤 / 兔肉煲都要它
   { id: Item.BOWL, name: 'minecraft:bowl', tile: 'item_bowl' },
-  { id: Item.MUSHROOM_STEW, name: 'minecraft:mushroom_stew', tile: 'item_mushroom_stew' },
+  // ⚠️ 三种汤**不可堆叠**（原版 max stack = 1）：它们是"碗装的东西"，
+  // 能堆 64 的话"一碗一碗喝"这件事就没有手感了。批次 57 顺手把这条补上
+  { id: Item.MUSHROOM_STEW, name: 'minecraft:mushroom_stew', tile: 'item_mushroom_stew', maxStack: 1 },
   { id: Item.PUMPKIN_PIE, name: 'minecraft:pumpkin_pie', tile: 'item_pumpkin_pie' },
   // 甜菜根（B17）：第四种作物。种子只从村庄/矿井的战利品里来（原版也是这么来的）
   { id: Item.BEETROOT, name: 'minecraft:beetroot', tile: 'item_beetroot' },
   { id: Item.BEETROOT_SEEDS, name: 'minecraft:beetroot_seeds', tile: 'item_beetroot_seeds', block: Block.BEETROOTS_STAGE0 },
-  { id: Item.BEETROOT_SOUP, name: 'minecraft:beetroot_soup', tile: 'item_beetroot_soup' },
+  { id: Item.BEETROOT_SOUP, name: 'minecraft:beetroot_soup', tile: 'item_beetroot_soup', maxStack: 1 },
   // ---- 甜浆果与可可豆（批次 49）
   // 甜浆果：种下去就是**甜浆果丛**（`block` 指向第 0 阶段，与原版一致）
   { id: Item.SWEET_BERRIES, name: 'minecraft:sweet_berries', tile: 'item_sweet_berries', block: Block.SWEET_BERRY_BUSH_STAGE0 },
@@ -314,6 +324,13 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // ---- 海带与干海带（批次 50）：干海带是食物（1 饥饿 / 0.6 饱和度，数值在 food.ts），
   // 也是"干海带块"的唯一材料（9 ↔ 1）
   { id: Item.DRIED_KELP, name: 'minecraft:dried_kelp', tile: 'item_dried_kelp' },
+  // ---- 可疑的炖菜（批次 57）：5 个 id 的贴图各不相同（汤色按花来），
+  // 于是"背包里哪一碗是哪朵花做的"一眼能看出来——这比原版"看得出效果但看不出花"更好读
+  { id: Item.SUSPICIOUS_STEW_DANDELION, name: 'minecraft:suspicious_stew_dandelion', tile: 'item_suspicious_stew_dandelion', maxStack: 1 },
+  { id: Item.SUSPICIOUS_STEW_POPPY, name: 'minecraft:suspicious_stew_poppy', tile: 'item_suspicious_stew_poppy', maxStack: 1 },
+  { id: Item.SUSPICIOUS_STEW_BLUE_ORCHID, name: 'minecraft:suspicious_stew_blue_orchid', tile: 'item_suspicious_stew_blue_orchid', maxStack: 1 },
+  { id: Item.SUSPICIOUS_STEW_OXEYE_DAISY, name: 'minecraft:suspicious_stew_oxeye_daisy', tile: 'item_suspicious_stew_oxeye_daisy', maxStack: 1 },
+  { id: Item.SUSPICIOUS_STEW_CORNFLOWER, name: 'minecraft:suspicious_stew_cornflower', tile: 'item_suspicious_stew_cornflower', maxStack: 1 },
   { id: Item.REDSTONE_DUST, name: 'minecraft:redstone_ingredient', tile: 'item_redstone_ingredient' },
   { id: Item.GLOWSTONE_DUST, name: 'minecraft:glowstone_dust_ingredient', tile: 'item_glowstone_dust_ingredient' },
   // ---- 药水（H10）：不可堆叠，一次一瓶

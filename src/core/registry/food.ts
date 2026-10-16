@@ -45,6 +45,14 @@ export interface FoodInfo {
   readonly alwaysEdible?: boolean;
   readonly effects?: readonly FoodEffect[];
   /**
+   * 喝完**退回一个空碗**（批次 57：汤类食物的共同行为）。
+   *
+   * 原版把这件事做成"物品的容器剩余物"（`craftingRemainingItem`）：碗是装汤的东西，
+   * 喝完了碗还在。这里用一个语义标记 + main 里一处发放——表里不写"退回哪个物品"，
+   * 免得 `food.ts` 反过来依赖 `items.ts`（那是个循环）。
+   */
+  readonly returnsBowl?: boolean;
+  /**
    * 喝完清除**所有**状态效果（J8 的牛奶）。
    *
    * 牛奶在原版不回饥饿也不回饱和度，纯粹是"洗掉身上的效果"，
@@ -99,8 +107,45 @@ export const FOOD_TABLE: Readonly<Record<string, FoodInfo>> = {
   // 金胡萝卜：数值取自原版（6 饥饿 / 1.2 修饰值），而且**饥饿满时也能吃**
   golden_carrot: { hunger: 6, saturationModifier: 1.2, alwaysEdible: true },
   // 蘑菇煲 / 甜菜汤：原版都是 6 饥饿 / 0.6
-  mushroom_stew: { hunger: 6, saturationModifier: 0.6 },
-  beetroot_soup: { hunger: 6, saturationModifier: 0.6 },
+  mushroom_stew: { hunger: 6, saturationModifier: 0.6, returnsBowl: true },
+  beetroot_soup: { hunger: 6, saturationModifier: 0.6, returnsBowl: true },
+  // ---- 可疑的炖菜（批次 57，B17 收口）
+  //
+  // ⚠️ 原版是**一个物品 + NBT**（"用了哪朵花"记在 NBT 里），本项目还没有物品 NBT，
+  // 所以按"用了哪朵花"分成 **5 个 id**（注册名后缀是花名，展示名统一是"可疑的炖菜（花名）"）。
+  // 数值与原版一致：6 饥饿 / 0.6 饱和度修饰值（与蘑菇煲同一档），外加**一个状态效果**。
+  // 花 ↔ 效果的对应按原版（wiki 的 Suspicious Stew 表）逐个抄下来，
+  // 持续时间也是原版的（饱和只有 0.35 秒——它本来就是"补一点饱和度"的效果）。
+  suspicious_stew_dandelion: {
+    hunger: 6,
+    saturationModifier: 0.6,
+    returnsBowl: true,
+    effects: [{ id: 'saturation', seconds: 0.35, amplifier: 0 }],
+  },
+  suspicious_stew_poppy: {
+    hunger: 6,
+    saturationModifier: 0.6,
+    returnsBowl: true,
+    effects: [{ id: 'night_vision', seconds: 5, amplifier: 0 }],
+  },
+  suspicious_stew_blue_orchid: {
+    hunger: 6,
+    saturationModifier: 0.6,
+    returnsBowl: true,
+    effects: [{ id: 'saturation', seconds: 0.35, amplifier: 0 }],
+  },
+  suspicious_stew_oxeye_daisy: {
+    hunger: 6,
+    saturationModifier: 0.6,
+    returnsBowl: true,
+    effects: [{ id: 'regeneration', seconds: 8, amplifier: 0 }],
+  },
+  suspicious_stew_cornflower: {
+    hunger: 6,
+    saturationModifier: 0.6,
+    returnsBowl: true,
+    effects: [{ id: 'jump_boost', seconds: 6, amplifier: 0 }],
+  },
   // 南瓜派：原版 8 饥饿 / 0.3（南瓜 + 糖 + 蛋）
   pumpkin_pie: { hunger: 8, saturationModifier: 0.3 },
   // 甜菜根：原版 1 饥饿 / 0.6（只适合做汤）

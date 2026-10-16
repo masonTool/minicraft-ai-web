@@ -2238,6 +2238,14 @@ class App {
     if (!this.inventory.consume(itemId, 1)) return;
     // 牛奶的回饥饿是 0，但**清效果**才是它的正事，所以照走同一条路
     this.stats.eat(food.hunger, saturationFrom(food));
+    // 汤类食物喝完**退回空碗**（批次 57 补上；原版把这件事做成"物品的容器剩余物"）。
+    // 背包满了就掉在地上——与"空瓶退回"那条同一条规矩，不能凭空消失
+    if (food.returnsBowl === true) {
+      const leftover = this.inventory.add(Item.BOWL, 1);
+      if (leftover > 0) {
+        this.spawnDrop(Item.BOWL, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
+      }
+    }
     if (food.clearsEffects === true) {
       this.effects.clear();
       this.chat.push('喝下牛奶，身上的状态效果被清除', 'system');

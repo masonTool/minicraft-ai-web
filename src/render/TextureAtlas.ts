@@ -2263,6 +2263,18 @@ function soupPainter(tint: readonly [number, number, number], withBits: boolean)
 /** 空碗：里面什么都没有 */
 PAINTERS.item_bowl = (x, y, rng) => (bowlPixel(x, y) ? bowlWood(y, rng) : [0, 0, 0, 0]);
 /** 蘑菇煲：棕褐色的汤 + 蘑菇块 */
+// 可疑的炖菜（批次 57）：五碗用同一个碗，**汤色按花来**——
+// 这样"哪一碗是哪朵花煮的"在背包里一眼能看出来（原版看不出，只能靠 NBT 提示）
+for (const [name, tint] of [
+  ['dandelion', [214, 196, 96]],
+  ['poppy', [198, 62, 58]],
+  ['blue_orchid', [96, 150, 216]],
+  ['oxeye_daisy', [226, 220, 198]],
+  ['cornflower', [78, 96, 190]],
+] as const) {
+  PAINTERS[`item_suspicious_stew_${name}`] = soupPainter(tint as unknown as readonly [number, number, number], true);
+}
+
 PAINTERS.item_mushroom_stew = soupPainter([154, 106, 62], true);
 /** 甜菜汤：深红色的汤 + 甜菜块 */
 PAINTERS.item_beetroot_soup = soupPainter([168, 46, 52], true);
