@@ -28,10 +28,14 @@ import {
   withDoorHinge,
   withDoorOpen,
   withDoorUpper,
+  withEndPortalEye,
   withFacing,
   withWallMounted,
   type Facing,
 } from '../registry/blockState.ts';
+// 末地传送门框架那一圈的布局只有一处出处（`world/EndPortal.ts`）：
+// 生成端与"按眼睛时怎么判圈齐了"读的是同一张表，两边不会漂
+import { END_PORTAL_RING } from '../world/EndPortal.ts';
 import { lootTableIndex } from '../registry/loot.ts';
 // 村庄要往屋里摆工作站（J22）：那张清单从职业表派生，不另抄一份
 import { WORKSTATION_BLOCKS } from '../registry/villagerTrades.ts';
@@ -748,17 +752,40 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
   clear(w, fX + 5, y, s.z + 2, fX + 7, y + 3, fZ + 6);
   box(w, fX + 5, y - 1, s.z + 2, fX + 7, y - 1, fZ + 6, brick);
 
-  // 传送门房（走廊尽头）：黑曜石传送门框 + 岩浆池 + 台阶
+  // 传送门房（走廊尽头，K9 批次 111 改成**真的**末地传送门）：
+  // 12 格末地传送门框架围成一圈 + 中间的岩浆池。圈齐了（12 只末影之眼）
+  // 中间的 3×3 才会亮起来——在此之前这里只是一堵"用黑曜石比划出来的假门"。
+  //
+  // 布局与原版一致：框架圈在**地面上那一层**，中间 3×3 是空的、底下往下两层是岩浆
+  //（原版传送门房就是"一座架在岩浆池上的门"）。
   const pX = startX + 38;
   const pZ = s.z;
   clear(w, pX - 5, y, pZ - 5, pX + 5, y + 6, pZ + 5);
   box(w, pX - 5, y - 1, pZ - 5, pX + 5, y - 1, pZ + 5, brick);
   mottled(pX - 5, y, pZ - 5, pX + 5, y + 6, pZ + 5);
-  // 3×3 的黑曜石传送门（末地传送门方块暂无，用黑曜石框表现）
-  walls(w, pX - 1, y, pZ - 3, pX + 1, y + 4, pZ - 3, Block.OBSIDIAN);
-  clear(w, pX, y, pZ - 2, pX, y + 3, pZ - 2);
-  box(w, pX - 3, y - 2, pZ + 2, pX + 3, y - 1, pZ + 4, Block.LAVA);
-  box(w, pX - 3, y, pZ + 2, pX + 3, y, pZ + 4, Block.STONE_BRICKS);
+
+  // 中心 3×3 的岩浆池：先把池子**包起来**再灌岩浆
+  // （要塞是地下结构，池底周围可能是洞穴——不包的话岩浆会顺着洞流走，
+  //  原版的传送门房也是"一圈石砖围着一个池子"）
+  box(w, pX - 2, y - 2, pZ - 2, pX + 2, y - 1, pZ + 2, brick);
+  box(w, pX - 1, y - 2, pZ - 1, pX + 1, y - 1, pZ + 1, Block.LAVA);
+  clear(w, pX - 1, y, pZ - 1, pX + 1, y, pZ + 1);
+
+  // 12 格框架（5×5 去掉四角，见 `world/EndPortal.ts` 的唯一一份布局表）。
+  // 每格有 10% 的概率**出生时就带着眼睛**（原版数值）——
+  // 所以"这一座要塞还差几只"每次都不一样
+  for (const [dx, dz] of END_PORTAL_RING) {
+    w.fillState(
+      pX + dx,
+      y,
+      pZ + dz,
+      Block.END_PORTAL_FRAME,
+      rng.chance(0.1) ? withEndPortalEye(0, true) : 0,
+    );
+  }
+
+  // 传送门房的那一个箱子（K9）：末影珍珠在这里（表见 `loot.ts` 的 `stronghold_portal`）
+  lootChest(w, pX - 4, y, pZ + 4, 'stronghold_portal');
   for (const dx of [-4, 4]) {
     for (const dz of [-4, 4]) w.fill(pX + dx, y, pZ + dz, Block.TORCH);
   }

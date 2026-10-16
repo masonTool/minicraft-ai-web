@@ -654,6 +654,28 @@ export function portalAxis(state: number): 'x' | 'z' {
   return portalAxisIsZ(state) ? 'z' : 'x';
 }
 
+// ---------------------------------------------------------------- 末地传送门框架（K9，批次 111）
+
+/**
+ * 这一格末地传送门框架里**有没有插着末影之眼**（bit0）。
+ *
+ * 借用 `TOP_MASK`：框架是完整立方体（`cube`），不用"上半"那一位——沿用文件开头
+ * 那条约定（不同形状族可以共用位）。
+ *
+ * 为什么值得单独占一位（而不是"眼睛画在贴图里"）：原版那 12 格框架的贴图**本来就分两种**
+ * （空的凹槽 / 亮着的眼睛），而"还差几只眼睛"是玩家站在传送门房前唯一要读的信息。
+ * 它同时也是激活判据本身（12 格全为真 → 中间 3×3 亮起来，见 `world/EndPortal.ts`）。
+ */
+const END_PORTAL_EYE_MASK = 0b1;
+
+export function hasEndPortalEye(state: number): boolean {
+  return (state & END_PORTAL_EYE_MASK) !== 0;
+}
+
+export function withEndPortalEye(state: number, eye: boolean): number {
+  return eye ? state | END_PORTAL_EYE_MASK : state & ~END_PORTAL_EYE_MASK;
+}
+
 // ---------------------------------------------------------------- 箱子（结构战利品）
 
 /**

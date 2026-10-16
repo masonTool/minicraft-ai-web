@@ -117,7 +117,8 @@
     "test:reach": "esbuild tools/reachability-test.ts --bundle --platform=node --format=esm --outfile=.tmp/reachability-test.mjs --log-level=error && node .tmp/reachability-test.mjs",
     "test:fortress": "esbuild tools/fortress-test.ts --bundle --platform=node --format=esm --outfile=.tmp/fortress-test.mjs --log-level=error && node .tmp/fortress-test.mjs",
     "test:spider": "esbuild tools/spider-test.ts --bundle --platform=node --format=esm --outfile=.tmp/spider-test.mjs --log-level=error && node .tmp/spider-test.mjs",
-    "test:ghast": "esbuild tools/ghast-test.ts --bundle --platform=node --format=esm --outfile=.tmp/ghast-test.mjs --log-level=error && node .tmp/ghast-test.mjs"
+    "test:ghast": "esbuild tools/ghast-test.ts --bundle --platform=node --format=esm --outfile=.tmp/ghast-test.mjs --log-level=error && node .tmp/ghast-test.mjs",
+    "test:endportal": "esbuild tools/endportal-test.ts --bundle --platform=node --format=esm --outfile=.tmp/endportal-test.mjs --log-level=error && node .tmp/endportal-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

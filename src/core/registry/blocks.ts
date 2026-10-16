@@ -10,6 +10,7 @@
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { TreeKind } from '../gen/Features.ts';
 import {
+  hasEndPortalEye,
   isComposterReady,
   isFlash,
   isInverted,
@@ -875,7 +876,17 @@ const END_SPECS: readonly BlockSpec[] = [
     shape: 'cross',
   },
   { id: 253, name: 'minecraft:dragon_egg', tiles: ['dragon_egg', 'dragon_egg', 'dragon_egg'] },
-  { id: 254, name: 'minecraft:end_portal_frame', tiles: ['end_portal_frame', 'end_portal_frame', 'end_portal_frame'] },
+  {
+    id: 254,
+    name: 'minecraft:end_portal_frame',
+    // 插了眼的那一格**顶面换一张**（凹槽里亮起一颗眼睛）。侧/底面始终是石框：
+    // 眼睛只画在顶面上——原版就是这样（框架是一块"朝上的凹槽"）
+    tiles: ['end_portal_frame', 'end_portal_frame', 'end_portal_frame'],
+    stateTiles: (state) =>
+      hasEndPortalEye(state)
+        ? ['end_portal_frame_eye', 'end_portal_frame', 'end_portal_frame']
+        : ['end_portal_frame', 'end_portal_frame', 'end_portal_frame'],
+  },
   {
     id: 255,
     name: 'minecraft:end_portal',

@@ -139,6 +139,15 @@ import {
   type PortalWorld,
 } from './core/world/NetherPortal.ts';
 import {
+  END_PORTAL_RING,
+  END_PORTAL_WAIT_TICKS,
+  activateEndPortalAt,
+  buildEndArrivalPlatform,
+  clearBrokenEndPortalsAround,
+  endPortalCells,
+  endPortalTarget,
+} from './core/world/EndPortal.ts';
+import {
   StatusEffects,
   effectLabel,
   effectTone,
@@ -179,10 +188,12 @@ import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import type { NetPlayerState } from './net/NetClient.ts';
 import {
   delayOf,
+  hasEndPortalEye,
   isFenceGateOpen,
   isTrapdoorOpen,
   portalAxis,
   withDelay,
+  withEndPortalEye,
   withFenceGateOpen,
   withTrapdoorOpen,
 } from './core/registry/blockState.ts';
@@ -460,6 +471,13 @@ let lastRendererFailure: GlSupportFail | null = null;
  * 长度参考：`方块交互` 与 `聊天与命令` 两段加起来约占全类的一半。
  * 真要动它们，先按段读；要**改结构**（拆类/拆模块）请当独立一批来做，别顺手拆。
  */
+
+/**
+ * 传送途中的三种"到达"（批次 111）——见 `pendingArrival` 的说明。
+ * 放在类外：`resolvePortalArrival` 是唯一的分派处，类型也应当摆在能被它读到的位置。
+ */
+type PortalArrivalKind = 'nether' | 'end' | 'spawn';
+
 class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -550,12 +568,26 @@ class App {
   /** 传送后的冷却（tick）：300 = 15 秒，免得一落地就被传回去 */
   private portalCooldownTicks = 0;
   /**
+   * 末地传送门的落地计时（K9，批次 111）：末地传送门是**碰到就传**
+   * （原版如此，不像下界门要站 4 秒），所以只等 1 tick 让物理先站定。
+   */
+  private endPortalTicks = 0;
+  /**
    * 传送途中：维度已经切过去了、正在等目的地的区块加载。
    *
    * 不为 null 时**冻结玩家物理**——新区块还没生成出来，`getBlock` 一律返回空气，
    * 不冻住的话玩家会在"空"世界里一直往下掉。加载完就把玩家放进目的地那座门里。
+   *
+   * `kind` 区分三种"到达"（批次 111 起）：
+   *  - `nether`：另一头找一座旧门、没有就照着原样新建一座（K8 那一套）
+   *  - `end`：末地那一侧先补出 5×5 黑曜石到达平台，再把人放上去
+   *  - `spawn`：从末地回主世界，落在**世界出生点**（末地传送门只有一个方向的"正门"）
    */
-  private pendingArrival: (PortalTarget & { axis: PortalAxis; frames: number }) | null = null;
+  private pendingArrival: (PortalTarget & {
+    axis: PortalAxis;
+    frames: number;
+    kind: PortalArrivalKind;
+  }) | null = null;
 
   /** 传送门逻辑看到的世界（`PortalWorld` 接口） */
   private readonly portalWorld: PortalWorld = {
@@ -1838,9 +1870,12 @@ class App {
    */
   private applyMediumEnvironment(): void {
     // 站在传送门里（或正在传送的等待期）时，紫色色罩**优先于**水下/岩浆色罩：
-    // 原版门的紫色是盖在一切之上的，否则在门里看水面会变成一片青色
+    // 原版门的紫色是盖在一切之上的，否则在门里看水面会变成一片青色。
+    // 末地传送门（批次 111）走同一条色罩：原版两扇门都是那片紫。
     const effect =
-      this.pendingArrival !== null || this.playerInPortal() ? 'portal' : this.eyeMedium();
+      this.pendingArrival !== null || this.playerInPortal() || this.playerInEndPortal()
+        ? 'portal'
+        : this.eyeMedium();
     this.screenEffects.set(effect);
 
     if (effect === 'water') {
@@ -3421,6 +3456,9 @@ class App {
     this.sweepHangings(this.hit.x, this.hit.y, this.hit.z);
     // 敲掉黑曜石 → 检查旁边的传送门还立不立得住（K8）：框一破，那一整片门方块跟着熄灭
     if (brokenId === Block.OBSIDIAN) this.breakPortalsBeside(this.hit.x, this.hit.y, this.hit.z);
+    // 敲掉末地传送门框架（K9，批次 111）：圈破了，中间那 3×3 跟着灭
+    //（框架在原版是"不可破坏"的，所以这条只在创造模式/爆炸这类路径上走得到）
+    if (brokenId === Block.END_PORTAL_FRAME) this.breakEndPortalsBeside(this.hit.x, this.hit.y, this.hit.z);
     this.particles.spawnBlockBreak(
       this.hit.x + 0.5,
       this.hit.y + 0.5,
@@ -5554,7 +5592,61 @@ class App {
       return true;
     }
 
+    // 末地传送门框架（K9，批次 111）：手上是**末影之眼**就按一只进去；
+    // 空了手/别的东西时什么也不做（返回 false 让"往框架顶上放方块"照旧可行）。
+    // 放在最后一条是因为它只在"手上正好是末影之眼"时才截胡
+    if (hitBlock === Block.END_PORTAL_FRAME && this.heldItemId === Item.ENDER_EYE) {
+      return this.insertEnderEye(x, y, z);
+    }
+
     return false;
+  }
+
+  /**
+   * 往末地传送门框架里按一只末影之眼（K9，批次 111）。
+   *
+   * 三件事，顺序都有理由：
+   *  1. **已经插着眼睛的框架**：不消耗、不报错，但顺手跑一次"圈齐了没"——
+   *     这是一条**自愈**路径（老存档、结构生成时随机预置满了一圈、被别的手段改过状态的），
+   *     逻辑本身与"按下最后一只眼睛"完全同源（`activateEndPortalAt`）；
+   *  2. 插眼睛：改**这一格**的方块状态（`withEndPortalEye`），并广播给队友；
+   *  3. 插完再问一次圈齐了没：齐了就把中间 3×3 点亮（9 格逐个广播）。
+   *
+   * ⚠️ 眼睛**只进不出**：原版拿不回框架里的眼睛（想拿回来只能把框架敲掉，
+   * 而框架在原版是"不可破坏"的）——所以这里不做"空手取出"。
+   */
+  private insertEnderEye(x: number, y: number, z: number): boolean {
+    const state = this.world.getBlockState(x, y, z);
+    if (hasEndPortalEye(state)) {
+      // 自愈：圈齐了却没亮（理论上只有脏存档会遇到），顺手点亮
+      this.lightEndPortalIfComplete(x, y, z);
+      return false;
+    }
+    if (!this.inventory.consume(Item.ENDER_EYE, 1)) return false;
+
+    const next = withEndPortalEye(state, true);
+    this.world.setStateAndUpdate(x, y, z, next);
+    this.net.sendBlock(x, y, z, Block.END_PORTAL_FRAME, next, this.dimension);
+    this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.particles.spawnPortal(x + 0.5, y + 1.1, z + 0.5, 8, 0.4);
+    this.hand.swing();
+    this.refreshHotbar();
+    this.lightEndPortalIfComplete(x, y, z);
+    return true;
+  }
+
+  /** 这一格框架所在的圈如果齐了就点亮中间的 3×3（并把那 9 格广播出去） */
+  private lightEndPortalIfComplete(x: number, y: number, z: number): void {
+    const activation = activateEndPortalAt(this.portalWorld, x, y, z);
+    if (!activation || activation.filled === 0) return;
+    const [cx, cy, cz] = activation.center;
+    for (const [px, py, pz] of endPortalCells(cx, cy, cz)) {
+      this.net.sendBlock(px, py, pz, Block.END_PORTAL, 0, this.dimension);
+    }
+    this.audio.play('portal', { x: cx + 0.5, y: cy + 0.5, z: cz + 0.5 });
+    this.particles.spawnPortal(cx + 0.5, cy + 0.6, cz + 0.5, 40, 1.2);
+    // 进度（M7）不在这里报：`story/enter_the_end` 由 `setDimension` 的维度事件给
+    //（人真的踏进去才算——原版也是"进去"才算，不是"点亮"）
   }
 
   /**
@@ -6495,6 +6587,20 @@ class App {
     return this.world.getBlock(x, Math.floor(p.y + 1), z) === Block.NETHER_PORTAL;
   }
 
+  /**
+   * 玩家脚下或身体所在的那一格是不是**末地传送门**方块（K9，批次 111）。
+   *
+   * 与 `playerInPortal` 是同一套判据、只换了方块——**不复用**它是因为两者的
+   * 后续行为完全不同（一个是站 4 秒建门，一个是碰到就传）。
+   */
+  private playerInEndPortal(): boolean {
+    const p = this.physics;
+    const x = Math.floor(p.x);
+    const z = Math.floor(p.z);
+    if (this.world.getBlock(x, Math.floor(p.y + 0.2), z) === Block.END_PORTAL) return true;
+    return this.world.getBlock(x, Math.floor(p.y + 1), z) === Block.END_PORTAL;
+  }
+
   /** 玩家正站在哪座门上（用来让目的地的新门与它同朝向）；找不到就当沿 X 轴 */
   private currentPortalAxis(): PortalAxis {
     const p = this.physics;
@@ -6542,16 +6648,62 @@ class App {
 
     // 先记下这次传送（落地要等目的地的区块加载出来），再切维度：
     // `setDimension` 会清空区块并按新位置重新流式加载
-    this.pendingArrival = { ...target, axis, frames: 0 };
+    this.pendingArrival = { ...target, axis, frames: 0, kind: 'nether' };
     this.setDimension(target.dimension, target);
+  }
+
+  /**
+   * 末地传送门（K9，批次 111）的落地计时。
+   *
+   * 原版末地传送门是**碰到就传**（不像下界门要站 4 秒、也没有"点燃"这回事），
+   * 所以这里只等 `END_PORTAL_WAIT_TICKS`（1 tick）——留这一 tick 是为了让它与下界门
+   * 共用同一套"传送冷却 + 落地区块等待"的机制，而不是另起一条路。
+   */
+  private tickEndPortal(): void {
+    if (this.portalCooldownTicks > 0) {
+      this.endPortalTicks = 0;
+      return;
+    }
+    if (this.pendingArrival) return;
+    if (!this.playerInEndPortal()) {
+      this.endPortalTicks = 0;
+      return;
+    }
+    this.endPortalTicks++;
+    if (this.endPortalTicks >= END_PORTAL_WAIT_TICKS) this.travelThroughEndPortal();
+  }
+
+  /**
+   * 踏进末地传送门：去哪由 `endPortalTarget` 算
+   * （**末地 → 世界出生点**，其它 → 末地的 5×5 到达平台）。
+   *
+   * 落地不在这里做：先切维度、由 `resolvePortalArrival` 等区块到了再放人
+   * （与下界门同一条路——新区块没加载出来时 `getBlock` 一律是空气，人会在"空世界"里往下掉）。
+   */
+  private travelThroughEndPortal(): void {
+    const p = this.physics;
+    const [sx, sy, sz] = this.spawnPoint;
+    const target = endPortalTarget(this.dimension, { x: sx, y: sy, z: sz });
+    const toEnd = target.dimension === Dimension.END;
+    this.endPortalTicks = 0;
+    this.audio.play('portal');
+    this.particles.spawnPortal(p.x, p.y + 0.6, p.z, 14, 0.5);
+    this.pendingArrival = { ...target, axis: 'x', frames: 0, kind: toEnd ? 'end' : 'spawn' };
+    this.setDimension(target.dimension, target);
+    // 末地传送门只有"主世界 → 末地"这一侧是正门，回来时落的是**世界出生点**：
+    // 与原版一致，但玩家第一次遇到会意外，所以给一句话
+    if (!toEnd) this.chat.push('末地传送门把你送回了世界出生点', 'system');
   }
 
   /**
    * 目的地落地：区块加载完之后调用（每帧一次）。
    *
-   * 优先找**已有的门**（16 格半径），找不到就照着目标点**新建一座 2×3 的门**。
-   * 两者都不成（比如目标点整根柱子都是实心岩石）时就直接把人放在目标坐标上——
-   * 宁可落在地形里，也不要让人卡在"传送中"出不来。
+   * 三种到达（`pendingArrival.kind`，批次 111 起）：
+   *  - `nether`：优先找**已有的门**（16 格半径），找不到就照着目标点**新建一座 2×3 的门**。
+   *    两者都不成（比如目标点整根柱子都是实心岩石）时就直接把人放在目标坐标上——
+   *    宁可落在地形里，也不要让人卡在"传送中"出不来；
+   *  - `end`：把末地那一侧的 5×5 黑曜石**到达平台**补出来，再把人放在正中；
+   *  - `spawn`：从末地回主世界，直接落在**世界出生点**（没有门要找、也没有门要建）。
    */
   private resolvePortalArrival(): void {
     const pending = this.pendingArrival;
@@ -6568,8 +6720,24 @@ class App {
       // 区块迟迟不来也不能永远等着（否则玩家会一直被冻住）
       if (pending.frames < PORTAL_ARRIVAL_TIMEOUT_FRAMES) return;
       this.pendingArrival = null;
+      // 末地那一侧就算区块没来也先补平台：那块平台悬在虚空上，不补的话人一落地就掉下去
+      if (pending.kind === 'end') buildEndArrivalPlatform(this.portalWorld);
       this.physics.teleport(pending.x, pending.y, pending.z);
       this.portalCooldownTicks = PORTAL_COOLDOWN_TICKS;
+      return;
+    }
+
+    if (pending.kind === 'end' || pending.kind === 'spawn') {
+      this.pendingArrival = null;
+      this.portalCooldownTicks = PORTAL_COOLDOWN_TICKS;
+      this.portalTicks = 0;
+      this.endPortalTicks = 0;
+      // 末地那一侧先补平台：玩家站在虚空上方落地会直接掉下去
+      if (pending.kind === 'end') buildEndArrivalPlatform(this.portalWorld);
+      this.physics.teleport(pending.x, pending.y, pending.z);
+      this.particles.spawnPortal(pending.x, pending.y + 0.6, pending.z, 12, 0.4);
+      this.applyEnvironment();
+      this.screenEffects.snap();
       return;
     }
 
@@ -6601,6 +6769,22 @@ class App {
     const removed = clearBrokenPortalsAround(this.portalWorld, x, y, z);
     if (removed.length === 0) return;
 
+    for (const [px, py, pz] of removed) {
+      this.net.sendBlock(px, py, pz, Block.AIR, 0, this.dimension);
+      this.particles.spawnPortal(px + 0.5, py + 0.5, pz + 0.5, 4, 0.3);
+    }
+    this.audio.play('portal', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+  }
+
+  /**
+   * 拆掉一格末地传送门框架之后清场（K9，批次 111）。
+   *
+   * 与 `breakPortalsBeside` 同一条做法：破坏方块时主动查一次附近还留着的门方块，
+   * 圈不完整就整片清掉，并把改动广播给队友。
+   */
+  private breakEndPortalsBeside(x: number, y: number, z: number): void {
+    const removed = clearBrokenEndPortalsAround(this.portalWorld, x, y, z);
+    if (removed.length === 0) return;
     for (const [px, py, pz] of removed) {
       this.net.sendBlock(px, py, pz, Block.AIR, 0, this.dimension);
       this.particles.spawnPortal(px + 0.5, py + 0.5, pz + 0.5, 4, 0.3);
@@ -6723,6 +6907,7 @@ class App {
       this.tickEffects();
       this.stats.tick(this.survivalEnvironment());
       this.tickPortal();
+      this.tickEndPortal();
       this.tickWorldBlocks(TICK_SECONDS);
       // 摔落伤害只结算一次，避免同一帧的多个 tick 重复扣血
       this.pendingFallDistance = 0;
@@ -7305,6 +7490,36 @@ class App {
   /** 立刻在这里打一道雷（验收脚本用，省掉"等雷暴"） */
   strikeLightningNow(): void {
     this.strikeLightning();
+  }
+
+  /**
+   * 末地传送门的状态（批次 111，K9）——验收脚本用。
+   *
+   * `inPortal` 是"脚下那一格是不是末地传送门方块"、`ticks` 是已经站了几 tick
+   * （碰到就传：攒到 `END_PORTAL_WAIT_TICKS` 就送走）。
+   */
+  get endPortalState(): { inPortal: boolean; ticks: number } {
+    return { inPortal: this.playerInEndPortal(), ticks: this.endPortalTicks };
+  }
+
+  /**
+   * 在玩家**北边 6 格**搭一座已经点亮的末地传送门（验收脚本用）。
+   *
+   * 为什么要有它：走一遍真流程要"找到要塞 → 翻出 12 颗珍珠 → 合成 12 只眼睛"，
+   * 自动化验收等不起；而这一段正好是**唯一**需要人工才能验证的地方。
+   * 返回圈心坐标（中心那 3×3 就在这一层）——脚本 `teleport` 过去就会被送进末地。
+   *
+   * ⚠️ 它会**直接改方块**（不消耗任何物品），是给开发与验收用的后门，不是玩法。
+   */
+  buildEndPortalForTest(): { x: number; y: number; z: number } {
+    const cx = Math.floor(this.physics.x);
+    const cy = Math.floor(this.physics.y);
+    const cz = Math.floor(this.physics.z) - 6;
+    for (const [dx, dz] of END_PORTAL_RING) {
+      this.world.setBlockAndUpdate(cx + dx, cy, cz + dz, Block.END_PORTAL_FRAME, withEndPortalEye(0, true));
+    }
+    activateEndPortalAt(this.portalWorld, cx, cy, cz - 2);
+    return { x: cx + 0.5, y: cy, z: cz + 0.5 };
   }
 
   /**
