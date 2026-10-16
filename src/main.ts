@@ -1158,6 +1158,9 @@ class App {
       onResourcePack: (file) => void this.loadResourcePack(file),
       // 成就（M7）：暂停菜单里点"成就"→ 面板叠在它上面（面板自己会接管 uiOpen）
       onOpenAdvancements: () => this.toggleAdvancements(),
+      // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
+      onToggleFly: () => this.setFlying(!this.flying),
+      isFlying: () => this.flying,
     });
 
     // 开发期初始物资（见 STARTING_HOTBAR 注释）。
@@ -1223,7 +1226,8 @@ class App {
       onToggleInventory: () => this.inventoryScreen.toggle(),
       // 暂停 / 设置（批次 104）：手机上原来没有入口，只能按 Esc（手机没有）或退出页面
       onOpenPause: () => this.toggleSettings(),
-      onCycleView: () => this.cycleCameraMode(),
+      // 飞行仍然可以被"双击跳跃"触发；"视角"与"创造飞行"的显式开关都搬进了
+      // 设置面板（批次 107：右下那一簇只留跳/潜，见 ui/TouchControls.ts）
       onToggleFly: () => this.setFlying(!this.flying),
       // 潜行状态由操作层自己维护并出现在 input 里，这里只做一次提示同步
       onToggleSneak: () => undefined,

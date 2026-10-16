@@ -122,9 +122,10 @@ console.log('\n[物品分页：页码夹取与切片]');
 
 console.log('\n[触摸按钮图标]');
 {
-  // 批次 104：右下那一簇是 6 颗，另加**顶部中央的暂停键**（基岩版手机也在那个位置）
-  equal('七个图标（右下六颗 + 顶部暂停）', TOUCH_ICON_NAMES.length, 7);
-  for (const name of ['chat', 'view', 'fly', 'sneak', 'inventory', 'jump', 'pause'] as const) {
+  // 批次 107：右下那一簇精简成"潜行 + 跳跃"，背包/聊天搬到快捷栏两侧
+  //（`view`/`fly` 两个图标随之作废：视角与"创造飞行"都搬进了设置面板）
+  equal('五个图标（右下两颗 + 快捷栏两侧两颗 + 顶部暂停）', TOUCH_ICON_NAMES.length, 5);
+  for (const name of ['chat', 'sneak', 'inventory', 'jump', 'pause'] as const) {
     check(`图标集里有 ${name}`, TOUCH_ICON_NAMES.includes(name));
   }
 
@@ -137,7 +138,7 @@ console.log('\n[触摸按钮图标]');
     check(`${name} 有中文说明（aria-label 用）`, (TOUCH_ICON_LABELS[name] ?? '').length > 0);
     svgs.add(svg);
   }
-  equal('七个图标互不相同（不会有两个按钮长一样）', svgs.size, TOUCH_ICON_NAMES.length);
+  equal('图标互不相同（不会有两个按钮长一样）', svgs.size, TOUCH_ICON_NAMES.length);
 }
 
 // ---------------------------------------------------------------- 2.5 手机端操作界面
@@ -196,6 +197,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
 console.log('\n[index.html：手机端与 PC 端的布局规则]');
 {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
 
   // 安全区：底部贴边的 HUD 必须让开"home 横条"
   const safeAreaCount = (html.match(/env\(safe-area-inset-bottom/g) ?? []).length;
@@ -212,7 +214,12 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     ['竖屏断点', '@media (orientation: portrait)'],
     ['窄屏分类标签单行滚动', 'flex-wrap: nowrap'],
     // 尺寸都走 `--touch-scale`（批次 98）：默认 1× 下与写死像素完全一致
-    ['横屏六个按钮排 3 列', 'repeat(3, calc(54px * var(--touch-scale, 1)))'],
+    // 右下那一簇（批次 107）：一列右对齐，跳跃在下
+    ['右下按钮簇是一列右对齐', '#touch-buttons { position: absolute; right: 20px; bottom: 96px;'],
+    // 快捷栏两侧的背包/聊天：挂进 #hotbar 内并绝对定位（不参与那 9 格的宽度计算）
+    ['背包/聊天按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
+    ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
+    ['聊天摆快捷栏左侧', '#touch-hotbar-chat { left: auto; right: calc(100% + 8px); }'],
     // 切石机（H11，批次 44）：候选列表与候选按钮的样式被误删时这里会红
     ['切石机候选列表', '.stonecutter-list'],
     ['切石机候选按钮', '.stonecutter-option'],
@@ -220,7 +227,8 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     ['营火格子排布', '.campfire-grid'],
     ['营火进度条', '.campfire-cook'],
   ] as const) {
-    check(`index.html 里有"${label}"`, html.includes(needle), needle);
+    // 用压过空白的版本比对：断言里可以跨行引用一整段规则，不用把换行也抄进来
+    check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
 
   // 开始遮罩：两套提示都要在（按设备切换）
@@ -455,6 +463,25 @@ console.log('\n[主页不能被"整屏层"盖住（批次 102，A10 的回归门
   check(
     '整屏提示层要显式 .visible 才铺满',
     compact.includes('.unsupported-screen.visible { display: grid; }'),
+  );
+}
+
+console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
+{
+  const source = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
+  // 右下那一簇只剩"潜行 + 跳跃"；背包/聊天挂到快捷栏两侧（挂进 #hotbar 内部并绝对定位）
+  check('右下按钮簇只放潜行与跳跃', source.includes('buttons.append(this.sneakButton, jump);'));
+  check('背包/聊天挂进快捷栏（不参与那 9 格的宽度计算）', source.includes("document.getElementById('hotbar')"));
+  check('触摸层里不再有"飞行"按钮（已搬进设置面板）', !source.includes("makeIconButton('fly'"));
+  check('触摸层里不再有"切换视角"按钮（已搬进设置面板）', !source.includes("makeIconButton('view'"));
+
+  // 搬走之后必须**在设置里有对应入口**，否则这两项在手机上等于消失
+  const settingsSource = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  check('设置面板补了"创造模式（飞行）"开关', settingsSource.includes("name.textContent = '创造模式'"));
+  check('设置面板里的"视角"下拉还在', settingsSource.includes("this.makeSelect(controls, 'cameraMode', '视角'"));
+  check(
+    '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
+    !settingsSource.includes("key: 'flying'") && settingsSource.includes('private makeCreativeRow'),
   );
 }
 

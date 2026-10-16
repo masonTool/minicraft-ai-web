@@ -106,8 +106,30 @@
   await sleep(300);
 
   // ---------------------------------------------------------------- 1. 图标按钮
-  const buttons = [...document.querySelectorAll('#touch-buttons .touch-button')];
-  check('six touch buttons (chat/view/fly/sneak/inventory/jump)', buttons.length === 6, `${buttons.length} buttons`);
+  //
+  // 批次 107 起按基岩版重新分位：右下那一簇只有"潜行 + 跳跃"，
+  // 背包与聊天挂到快捷栏两侧（`#touch-hotbar-inventory` / `#touch-hotbar-chat`）。
+  const buttons = [...document.querySelectorAll('.touch-button')];
+  const cluster = [...document.querySelectorAll('#touch-buttons .touch-button')];
+  check('right cluster is sneak + jump only', cluster.length === 2, `${cluster.length} buttons`);
+  check(
+    'right cluster icons are jump,sneak',
+    cluster.map((button) => button.dataset.icon).sort().join(',') === 'jump,sneak',
+    cluster.map((button) => button.dataset.icon).join(','),
+  );
+
+  const sideButtons = ['touch-hotbar-inventory', 'touch-hotbar-chat'].map((id) => document.getElementById(id));
+  check(
+    'inventory & chat sit next to the hotbar',
+    sideButtons.every(Boolean),
+    sideButtons.map((el) => (el ? el.id : 'MISSING')).join(' | '),
+  );
+  const badSide = sideButtons.filter((el) => {
+    if (!el) return true;
+    const r = el.getBoundingClientRect();
+    return r.width < 44 || r.height < 44 || r.left < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1;
+  });
+  check('side buttons are tappable (>= 44px) and on screen', badSide.length === 0, badSide.map((el) => el?.id ?? 'MISSING').join(', '));
 
   const noText = buttons.filter((button) => button.textContent.trim().length === 0);
   check('buttons render icons, not text', noText.length === buttons.length, `${noText.length}/${buttons.length} have no text node`);

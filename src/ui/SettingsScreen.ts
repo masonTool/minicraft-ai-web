@@ -183,6 +183,15 @@ export interface SettingsActions {
    * 手机上没有 Esc，所以那个按钮同时也在背包标题栏上挂着（`InventoryScreenHooks`）。
    */
   onOpenAdvancements?: () => void;
+  /**
+   * 切换创造模式（飞行）（批次 107）。
+   *
+   * 手机端右下那一簇原来有一颗"飞行"键，批次 107 精简掉之后它搬到这里
+   *（基岩版手机也把这类开关放在暂停菜单/设置里）。两个回调都传了才显示这一行。
+   */
+  onToggleFly?: () => void;
+  /** 当前是不是在飞（决定那一行的开关亮不亮） */
+  isFlying?: () => boolean;
 }
 
 export class SettingsScreen {
@@ -201,6 +210,8 @@ export class SettingsScreen {
   private activeGroup: SettingGroup = SETTING_GROUPS[0];
   /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
   private subtitleText = '按 Esc 继续游戏';
+  /** "创造模式（飞行）"那个开关（非持久设置，见 `makeCreativeRow`） */
+  private flyingToggle: HTMLInputElement | null = null;
 
   constructor(
     host: HTMLElement,
@@ -325,6 +336,9 @@ export class SettingsScreen {
     const game = this.section('game');
     this.makeToggle(game, 'daylightCycle', '昼夜循环');
     this.makeToggle(game, 'showDebug', '调试信息');
+    // 创造模式（飞行）：手机端右下那一簇精简之后，这是唯一的**显式**开关
+    //（双击跳跃仍然能用，那是手势）
+    if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
     game.appendChild(this.makeResourcePackRow());
 
     this.metaEl = document.createElement('div');
@@ -481,6 +495,38 @@ export class SettingsScreen {
     return row;
   }
 
+  /**
+   * "创造模式（飞行）"开关（批次 107）。
+   *
+   * ⚠️ 它**不是** `GameSettings` 里的一项：飞行是"当前世界里的状态"，而设置面板里
+   * 其余各项都是"这台设备的偏好"（存 localStorage、换个世界也跟着走）。把它塞进
+   * `saveSettings` 会让"上次开过飞行"这种临时状态跨世界粘住。所以它只在打开面板时
+   * 按当前状态刷新、切一下立刻生效，不落盘。
+   */
+  private makeCreativeRow(): void {
+    const row = document.createElement('label');
+    row.className = 'settings-row';
+
+    const name = document.createElement('span');
+    name.textContent = '创造模式';
+
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = this.actions.isFlying?.() ?? false;
+    input.addEventListener('change', () => {
+      this.actions.onToggleFly?.();
+      // 以真实状态为准回填（切换可能被拒绝/立刻被别的逻辑改回去）
+      input.checked = this.actions.isFlying?.() ?? input.checked;
+    });
+
+    const hint = document.createElement('i');
+    hint.textContent = '飞行';
+
+    row.append(name, input, hint);
+    this.flyingToggle = input;
+    this.section('game').appendChild(row);
+  }
+
   /** 造一个开关设置项 */
   private makeToggle(options: HTMLElement, key: BoolSettingKey, label: string): HTMLInputElement {
     const row = document.createElement('label');
@@ -538,6 +584,8 @@ export class SettingsScreen {
   show(): void {
     this.open = true;
     this.renderSubtitle();
+    // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），打开面板时对一次账
+    if (this.flyingToggle) this.flyingToggle.checked = this.actions.isFlying?.() ?? false;
     this.root.classList.remove('hidden');
   }
 

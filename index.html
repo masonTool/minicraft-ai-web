@@ -1259,10 +1259,12 @@
         will-change: transform;
       }
 
+      /* 右下那一簇（批次 107 起只有"潜行 + 跳跃"两颗，按基岩版）：
+         一列、右对齐——跳跃在下（拇指最常够到、也最大），潜行在它上面。
+         背包与聊天不在这里，它们在快捷栏两侧（见下面 `.touch-side-btn`）。 */
       #touch-buttons {
         position: absolute; right: 20px; bottom: 96px;
-        display: grid;
-        grid-template-columns: repeat(2, calc(62px * var(--touch-scale, 1)));
+        display: flex; flex-direction: column; align-items: flex-end;
         gap: calc(12px * var(--touch-scale, 1));
         pointer-events: none;
       }
@@ -1330,6 +1332,28 @@
         height: calc(52px * var(--touch-scale, 1));
         background: rgba(0, 0, 0, .34);
         border-color: rgba(255, 255, 255, .42);
+      }
+
+      /* ---------------- 快捷栏两侧的背包 / 聊天（批次 107） ----------------
+         基岩版手机把"背包"放在**快捷栏右边**、"聊天"放在左边，而不是混进右手
+         那一簇操作键里。这里挂进 `#hotbar` 内部并用绝对定位：
+         ① 快捷栏自己就是定位父元素，"贴着它两端"不用算任何像素；
+         ② 它们**不参与那一行 9 个格子的宽度计算**（竖屏手机上 9 × 44px ≈ 408px
+            已经把 430px 的屏宽占满，再往行里塞按钮必然溢出）。
+         默认摆在快捷栏**两端上方**；屏幕够宽时按基岩版摆到左右两侧。 */
+      #hotbar .touch-side-btn {
+        position: absolute; bottom: calc(100% + 4px);
+        width: calc(44px * var(--touch-scale, 1));
+        height: calc(44px * var(--touch-scale, 1));
+        background: rgba(0, 0, 0, .34);
+        border-color: rgba(255, 255, 255, .42);
+      }
+      #touch-hotbar-inventory { right: 0; }
+      #touch-hotbar-chat { left: 0; }
+      @media (min-width: 760px) {
+        #hotbar .touch-side-btn { bottom: 0; }
+        #touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }
+        #touch-hotbar-chat { left: auto; right: calc(100% + 8px); }
       }
 
       /* 顶部那一行现在被暂停键占着：血条与调试信息往下让一格，免得叠在一起 */
@@ -1446,8 +1470,10 @@
           height: calc(52px * var(--touch-scale, 1));
         }
         #touch-buttons {
-          right: 14px; bottom: calc(104px + env(safe-area-inset-bottom, 0px));
-          grid-template-columns: repeat(2, calc(58px * var(--touch-scale, 1)));
+          /* ⚠️ bottom 抬到 132px（原来 104px）：快捷栏右上角现在还挂着背包键
+             （`#touch-hotbar-inventory`，占底部 65~109px），按原值两者会叠在一起。
+             留到 132 之后，即使"触摸按钮大小"拉到 1.4× 也不会撞上 */
+          right: 14px; bottom: calc(132px + env(safe-area-inset-bottom, 0px));
           gap: calc(10px * var(--touch-scale, 1));
         }
         .touch-button {
@@ -1465,7 +1491,8 @@
       }
 
       /* 横屏手机：摇杆与按钮再往下、缩小一点，避免遮挡视野中心。
-         六个按钮在横屏改成 **3 列 × 2 行**——竖着排三行会盖住准星那一带 */
+         ⚠️ 横屏屏幕宽（≥ 760px 命中上面那条），所以背包/聊天是摆在快捷栏**左右两侧**的，
+         不再需要为它们留出"上方"的空间——这一簇仍然只有"潜行 + 跳跃"两颗 */
       @media (max-height: 480px) {
         #touch-stick {
           width: calc(108px * var(--touch-scale, 1));
@@ -1478,7 +1505,6 @@
         }
         #touch-buttons {
           bottom: calc(70px + env(safe-area-inset-bottom, 0px));
-          grid-template-columns: repeat(3, calc(54px * var(--touch-scale, 1)));
           gap: calc(10px * var(--touch-scale, 1));
         }
         .touch-button {

@@ -10,7 +10,8 @@
  *  - 屏幕任意处拖动：转动视角
  *  - 轻点：放置方块 / 与方块交互（开箱子、开门、开工作台）
  *  - 长按：持续破坏方块（松手停止）
- *  - 右下角按钮：跳跃 / 潜行（切换）/ 飞行（切换）/ 背包
+ *  - 右下角按钮：跳跃 / 潜行（切换）；飞行时这两颗的含义变成上升/下降
+ *  - 快捷栏两侧：右边背包、左边聊天（基岩版就是这两个位置）
  *
  * 轻点与长按的区分靠"按下时长 + 位移"两个条件：位移超过阈值就算转视角，
  * 时长超过阈值就升级成长按破坏。这样手指略微抖动不会误判。
@@ -51,8 +52,6 @@ export const STICK_MODE_LABELS: Record<StickMode, string> = {
 };
 
 export interface TouchActions {
-  /** 切换人称视角（F7）：第一人称 → 背后 → 正面 → … */
-  onCycleView: () => void;
   /**
    * 打开暂停 / 设置菜单（批次 104，屏幕上方正中那颗键）。
    *
@@ -120,8 +119,15 @@ export class TouchControls {
   private readonly stickBase: HTMLDivElement;
   private readonly stickKnob: HTMLDivElement;
   private readonly hint: HTMLDivElement;
-  private readonly flyButton: HTMLButtonElement;
   private readonly sneakButton: HTMLButtonElement;
+  /**
+   * 挂在快捷栏两侧的背包/聊天（批次 107）。
+   *
+   * ⚠️ 它们**不在 `this.object`（#touch-ui）里面**——而是挂进了 `#hotbar`，
+   * 所以"隐藏操作层"时要单独把它们收起来（否则打开背包面板时那颗"背包"键
+   * 还浮在快捷栏边上）。
+   */
+  private readonly sideButtons: HTMLButtonElement[] = [];
   /** 顶部中央的暂停键（批次 104）：手机上打开暂停/设置菜单的唯一入口 */
   private readonly pauseButton: HTMLButtonElement;
 
@@ -170,7 +176,12 @@ export class TouchControls {
     this.stickBase.appendChild(this.stickKnob);
     this.bindStick();
 
-    // ---- 右下按钮簇（**图标而不是文字**：手机端五个单字不好认，图标才有一眼可读性）
+    // ---- 右下按钮簇（**图标而不是文字**：手机端单字不好认，图标才有一眼可读性）
+    //
+    // 批次 107 精简成**两颗**：基岩版手机上右手这一簇本来就是"跳 + 潜行"，
+    // 其余入口各有各的位置——**背包在快捷栏右边、聊天在快捷栏左边**
+    //（见 `mountHotbarSideButtons`），**视角与"创造飞行"在设置里**
+    //（原来那六颗把拇指区塞得很满，还容易误触）。
     const buttons = document.createElement('div');
     buttons.id = 'touch-buttons';
 
@@ -196,21 +207,15 @@ export class TouchControls {
       this.actions.onToggleSneak();
     });
 
-    this.flyButton = this.makeIconButton('fly', () => this.actions.onToggleFly());
-
-    const inventory = this.makeIconButton('inventory', () => this.actions.onToggleInventory());
-    // 手机上没有 V 键，给一个按钮循环切换人称视角
-    const view = this.makeIconButton('view', () => this.actions.onCycleView());
-    // 手机上也没有 T 与 /，聊天与命令必须有个入口
-    const chat = this.makeIconButton('chat', () => this.actions.onOpenChat());
-
-    buttons.append(chat, view, this.flyButton, this.sneakButton, inventory, jump);
+    // 潜行在上、跳跃在下（跳跃更大、也是拇指最常够到的位置）。
+    // 飞行时这两颗键的含义变成"上升/下降"，箭头由 CSS 伪元素画（见 index.html）。
+    buttons.append(this.sneakButton, jump);
 
     // ---- 顶部中央的暂停键（批次 104）
     //
     // ⚠️ **不放进 `#touch-buttons`**：右下那一簇是"右手拇指够得着的操作键"
-    //（走、跳、潜行、飞、背包、聊天），暂停是"管理"类动作，混在一起既容易误触、
-    // 也让拇指区变拥挤；而且验收脚本正是按"右下角 6 颗"来量热区与重叠的。
+    //（走、跳、潜行），暂停是"管理"类动作，混在一起既容易误触、
+    // 也让拇指区变拥挤；而且验收脚本正是按"右下角那几颗"来量热区与重叠的。
     this.pauseButton = this.makeIconButton('pause', () => this.actions.onOpenPause());
     this.pauseButton.classList.add('pause');
     const pauseBar = document.createElement('div');
@@ -221,10 +226,38 @@ export class TouchControls {
     this.hint = document.createElement('div');
     this.hint.id = 'touch-hint';
     this.hint.textContent =
-      '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏 · 双击跳跃起飞 · 长按物品看详情';
+      '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏 · 双击跳跃起飞 · 背包与聊天在快捷栏两侧';
 
     this.object.append(this.lookSurface, this.stickBase, buttons, pauseBar, this.hint);
     host.appendChild(this.object);
+
+    // 背包/聊天要挂进快捷栏，而快捷栏不在这一层里（见方法注释）——放在最后挂
+    this.mountHotbarSideButtons();
+  }
+
+  /**
+   * 背包 / 聊天挂到**快捷栏两侧**（批次 107，对齐基岩版）。
+   *
+   * ⚠️ 挂进 `#hotbar` **内部**并绝对定位，而不是放进 `#touch-buttons`：
+   *  ① 快捷栏自己就是定位父元素，"贴着它的左右两端"不用算任何像素；
+   *  ② 它们不参与那一行 9 个格子的宽度计算——窄屏竖屏手机上 9 × 44px
+   *     已经把屏宽占满（约 408px / 430px），再往行里塞按钮就会溢出。
+   *
+   * 位置由 CSS 决定：屏幕够宽时摆在快捷栏左右两侧，竖屏手机退回"两端上方"
+   *（`@media (min-width: 760px)` 那一段，见 index.html）。
+   */
+  private mountHotbarSideButtons(): void {
+    const host = document.getElementById('hotbar') ?? this.object;
+    for (const [icon, id, action] of [
+      ['chat', 'touch-hotbar-chat', () => this.actions.onOpenChat()],
+      ['inventory', 'touch-hotbar-inventory', () => this.actions.onToggleInventory()],
+    ] as const) {
+      const button = this.makeIconButton(icon, action);
+      button.id = id;
+      button.classList.add('touch-side-btn');
+      this.sideButtons.push(button);
+      host.appendChild(button);
+    }
   }
 
   // ---------------------------------------------------------------- 对外接口
@@ -236,6 +269,8 @@ export class TouchControls {
   /** 打开界面时隐藏操作层并清空输入，避免"界面开着人还在走" */
   set visible(value: boolean) {
     this.object.classList.toggle('hidden', !value);
+    // 快捷栏两侧那两颗不在操作层里（见 `sideButtons` 的注释），单独收放
+    for (const button of this.sideButtons) button.style.display = value ? '' : 'none';
     if (value) return;
     this.resetStick();
     this.cancelLook();
@@ -270,7 +305,6 @@ export class TouchControls {
   }
 
   setFlying(flying: boolean): void {
-    this.flyButton.classList.toggle('on', flying);
     // 飞行时给整层挂个标记：跳跃/潜行键上会浮出"上升/下降"的小箭头
     //（基岩版也这么提示——飞起来之后那两颗键的含义变了，不提示就只能靠试）
     this.object.classList.toggle('flying', flying);
