@@ -363,18 +363,18 @@
          ⚠️ 两块面板各是一层 `inset: 0` 的整屏遮罩，所以"并排"必须把它们**真的分成
            左右两半**（各自覆盖一半），否则上面那层遮罩会把下面那半边的点击全吃掉。
          ================================================================ */
-      @media (min-width: 1280px) {
-        body.split-ui #recipe-book {
-          right: auto; width: 52%;
-          /* 两块遮罩挨在一起，压暗的深浅要一致，否则中间会显出一道缝 */
-          background: rgba(0, 0, 0, .55);
-        }
-        body.split-ui #inventory-screen { left: auto; width: 48%; }
-        /* 并排时它是"侧栏"而不是对话框：收窄到 600，高度沿用同一套令牌 */
-        body.split-ui .recipe-panel {
-          width: min(100%, 600px); max-width: 600px;
-          height: var(--panel-h); max-height: var(--panel-h);
-        }
+      /* 批次 142：并排不再绑死 min-width 媒体查询——由 JS 打 body.classic-ui
+         （设置可强制经典/携带版；auto 时仍按 ≥1280 打这个类） */
+      body.classic-ui.split-ui #recipe-book {
+        right: auto; width: 52%;
+        /* 两块遮罩挨在一起，压暗的深浅要一致，否则中间会显出一道缝 */
+        background: rgba(0, 0, 0, .55);
+      }
+      body.classic-ui.split-ui #inventory-screen { left: auto; width: 48%; }
+      /* 并排时它是"侧栏"而不是对话框：收窄到 600，高度沿用同一套令牌 */
+      body.classic-ui.split-ui .recipe-panel {
+        width: min(100%, 600px); max-width: 600px;
+        height: var(--panel-h); max-height: var(--panel-h);
       }
       .recipe-panel {
         /* 批次 111：与设置/暂停面板**共用同一套固定尺寸**（用户上一轮要的"统一大小"）
@@ -1869,15 +1869,26 @@
         #touch-hint { bottom: calc(178px + env(safe-area-inset-bottom, 0px)); }
       }
 
-      /* ---------------- 面板入场（批次 28） ----------------
-         所有面板打开时淡入 + 微微放大：原来是一瞬间"啪"地出现，尤其手机上
-         会让人分不清"是刚打开还是本来就开着"。 */
+      /* ---------------- 面板入场（批次 28 → 142 改底部滑入） ----------------
+         基岩版 Wiki：「从屏幕底部淡入并上移」。关闭走 panel-out。 */
       @keyframes panel-in {
-        from { opacity: 0; transform: scale(.97) translateY(6px); }
+        from { opacity: 0; transform: translateY(28%); }
         to { opacity: 1; transform: none; }
+      }
+      @keyframes panel-out {
+        from { opacity: 1; transform: none; }
+        to { opacity: 0; transform: translateY(28%); }
       }
       .inv-panel, .recipe-panel, .settings-panel, .world-panel, .adv-panel {
         animation: panel-in var(--dur-med) var(--ease);
+      }
+      .inv-panel.panel-out, .recipe-panel.panel-out {
+        animation: panel-out var(--dur-med) var(--ease) forwards;
+      }
+      /* 创造整屏：只留创造网格 + 快捷栏（批次 142） */
+      .inv-panel.creative-ui .inv-body { width: 100%; }
+      .inv-panel.creative-ui .inv-creative {
+        max-height: min(58vh, 420px);
       }
       /* 低血量脉冲：血少了要让 HUD 自己"跳"一下，而不是等玩家发现数字变小了 */
       @keyframes low-health-pulse {

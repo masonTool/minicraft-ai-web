@@ -324,6 +324,20 @@ export class InventoryScreen {
    * 仅在「非经典视口 + 玩家物品栏模式」下生效；经典 UI 三块同时显示。
    */
   private pocketTab: PocketInventoryTab = 'inventory';
+  /**
+   * 创造模式里正在看「生存背包」而不是创造物品网格（批次 142）。
+   * 基岩版创造栏与生存栏是两套界面，用按钮互切。
+   */
+  private creativeSurvival = false;
+  /** 创造 ↔ 生存背包 的切换按钮 */
+  private creativeToggleBtn: HTMLButtonElement | null = null;
+  /** 关面板动画进行中，避免连点重复结算 */
+  private closing = false;
+  /**
+   * 触摸端最近一次"从哪一格拿起"（批次 142）：装不下时多余按 Wiki 回到来源格，
+   * 而不是留在光标上。
+   */
+  private touchOrigin: { source: SlotSource; index: number; itemId: number } | null = null;
   private readonly creativeSection: HTMLDivElement;
   private readonly heldElement: HTMLDivElement;
   private readonly heldCanvas: HTMLCanvasElement;
@@ -535,6 +549,17 @@ export class InventoryScreen {
       }
     }
     header.append(this.pocketRecipeBar, this.titleEl, hint);
+    // 创造模式：创造物品栏 ↔ 生存背包（批次 142；基岩版是两套界面）
+    const creativeToggle = document.createElement('button');
+    creativeToggle.type = 'button';
+    creativeToggle.className = 'inv-recipes-btn inv-creative-toggle hidden';
+    creativeToggle.dataset.role = 'creative-toggle';
+    creativeToggle.addEventListener('click', () => {
+      this.creativeSurvival = !this.creativeSurvival;
+      this.applyInventoryChrome();
+    });
+    this.creativeToggleBtn = creativeToggle;
+    header.appendChild(creativeToggle);
     if (this.hooks.onOpenRecipes) {
       const recipes = document.createElement('button');
       recipes.type = 'button';
@@ -796,7 +821,7 @@ export class InventoryScreen {
     this.bindEvents();
     this.inventory.onChange = () => this.refresh();
     this.rebuildTopArea();
-    this.applyPocketLayout();
+    this.applyInventoryChrome();
     this.refresh();
   }
 
@@ -936,30 +961,45 @@ export class InventoryScreen {
     this.narrowQuery?.addEventListener('change', () => this.renderCreativeGrid());
   }
 
-  /**
-   * 创造物品栏只在创造模式 + 玩家物品栏模式下显示（批次 139）。
-   * Wiki：「创造模式物品栏只能在创造模式打开」。
-   */
-  private updateCreativeVisibility(): void {
-    const show = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
-    this.creativeSection.style.display = show ? '' : 'none';
-  }
-
   /** 携带版底栏切页（批次 140） */
   private setPocketTab(tab: PocketInventoryTab): void {
     if (this.pocketTab === tab) return;
     this.pocketTab = tab;
-    this.applyPocketLayout();
+    this.applyInventoryChrome();
   }
 
   /**
-   * 经典 UI vs 携带版分标签页（批次 140）。
+   * 统一排布：创造整屏 / 携带版分页 / 经典两列（批次 140 + 142）。
    *
-   * Wiki「携带版 UI」：合成 / 盔甲 / 物品栏互斥；左上打开配方书分类；
-   * **快捷栏无论哪一页都可见**。经典视口（≥1280）维持左盔甲 + 右合成 + 主背包一次全显。
-   * 容器模式不做三页签（外部物品栏是另一套图）。
+   * 创造模式默认是**整屏创造物品栏 + 快捷栏**（基岩版形态），按「生存背包」
+   * 才露出合成/盔甲/主背包那一套。
    */
-  private applyPocketLayout(): void {
+  private applyInventoryChrome(): void {
+    const creative = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
+    if (!creative) this.creativeSurvival = false;
+    const showCreativeItems = creative && !this.creativeSurvival;
+
+    this.creativeSection.style.display = showCreativeItems ? '' : 'none';
+    this.panel.classList.toggle('creative-ui', showCreativeItems);
+    if (this.creativeToggleBtn) {
+      this.creativeToggleBtn.classList.toggle('hidden', !creative);
+      this.creativeToggleBtn.textContent = this.creativeSurvival ? '创造物品' : '生存背包';
+    }
+
+    if (showCreativeItems) {
+      this.pocketTabsEl.classList.add('hidden');
+      this.pocketRecipeBar.classList.add('hidden');
+      if (this.recipesBtn) this.recipesBtn.classList.add('hidden');
+      this.panel.classList.remove('pocket-ui');
+      this.panel.dataset.pocketTab = '';
+      this.gearEl.style.display = 'none';
+      this.topArea.style.display = 'none';
+      this.mainGridEl.style.display = 'none';
+      this.hotbarGridEl.style.display = '';
+      return;
+    }
+
+    // —— 生存布局（含创造模式下的「生存背包」）——
     const pocket = this.mode === 'inventory' && !isClassicUi(this.viewportWidth);
     this.panel.classList.toggle('pocket-ui', pocket);
     this.pocketTabsEl.classList.toggle('hidden', !pocket);
@@ -986,6 +1026,15 @@ export class InventoryScreen {
       const button = child as HTMLElement;
       button.classList.toggle('active', button.dataset.tab === tab);
     }
+  }
+
+  /** @deprecated 用 applyInventoryChrome；保留别名以免漏改 */
+  private applyPocketLayout(): void {
+    this.applyInventoryChrome();
+  }
+
+  private updateCreativeVisibility(): void {
+    this.applyInventoryChrome();
   }
 
   /**
@@ -1051,14 +1100,20 @@ export class InventoryScreen {
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        // 中键 = 复制满组到光标（批次 139，对齐创造「选取即复制」的桌面用法）
-        if (event.button === 1) {
-          this.held = { id: itemId, count: maxStackOf(itemId) };
-          this.hooks.onMove?.();
-          this.refresh();
-          return;
+        // 创造选取 = **先拿到光标**（批次 142，对齐基岩/Java 创造）：
+        // 左键/中键满组、右键 1 个（同类可累加到堆叠上限）。不再直接 inventory.add。
+        const max = maxStackOf(itemId);
+        if (event.button === 2) {
+          if (this.held?.id === itemId) {
+            this.held = { ...this.held, count: Math.min(max, this.held.count + 1) };
+          } else {
+            this.held = { id: itemId, count: 1 };
+          }
+        } else {
+          this.held = { id: itemId, count: max };
         }
-        this.inventory.add(itemId, event.button === 2 ? 1 : maxStackOf(itemId));
+        this.hooks.onMove?.();
+        this.refresh();
       });
       this.creativeGrid.appendChild(slot);
     }
@@ -1866,8 +1921,7 @@ export class InventoryScreen {
   /**
    * 松手结算：按选中的数量把这一格拆开，**选中的那份放到光标上**。
    *
-   * 之后就是既有的"光标拿着东西"那套：点空格放下、点同类合并，
-   * 目标格装不下的部分留在光标上（Wiki 说的是"留在来源格"，见 TASKS H19 的差异注记）。
+   * 记下 `touchOrigin`：目标格装不下时多余按 Wiki 回到来源格（批次 142）。
    */
   private commitSplit(): void {
     const split = this.split;
@@ -1881,9 +1935,34 @@ export class InventoryScreen {
     if (!taken) return;
     split.source.set(split.index, rest);
     this.held = taken;
+    this.touchOrigin = { source: split.source, index: split.index, itemId: taken.id };
     if (split.source === this.inventory) this.inventory.notify();
     this.refresh();
     this.hooks.onMove?.();
+  }
+
+  /**
+   * 触摸端：把光标上装不下的同类送回来源格（Wiki「触摸操作」）。
+   * 只在同类 / 来源空时动手；交换后光标上是别的东西则不动。
+   */
+  private returnHeldToTouchOrigin(): void {
+    if (!this.held || !this.touchOrigin || !isTouchUi()) return;
+    if (this.held.id !== this.touchOrigin.itemId) return;
+    const { source, index } = this.touchOrigin;
+    const there = source.get(index);
+    if (!there) {
+      source.set(index, this.held);
+      this.held = null;
+    } else if (there.id === this.held.id) {
+      const room = maxStackOf(there.id) - there.count;
+      const moved = Math.min(room, this.held.count);
+      if (moved <= 0) return;
+      there.count += moved;
+      this.held.count -= moved;
+      if (this.held.count <= 0) this.held = null;
+      if (source === this.inventory) this.inventory.notify();
+    }
+    if (!this.held) this.touchOrigin = null;
   }
 
   /** 清掉长按相关的定时器（抬起 / 取消 / 开始新手势时调用） */
@@ -1939,6 +2018,7 @@ export class InventoryScreen {
     }
     const { source, index, takeOnly } = binding;
     const slot = source.get(index);
+    const hadHeld = this.held !== null;
 
     if (this.held && !takeOnly) {
       // 盔甲槽只吃对应部位：不匹配就整次操作作废（既不放下也不交换）
@@ -1995,9 +2075,15 @@ export class InventoryScreen {
         } else {
           this.held = slot;
           source.set(index, null);
+          // 触摸短按拿起：记下来源，装不下时多余要送回去（批次 142）
+          if (isTouchUi()) this.touchOrigin = { source, index, itemId: slot.id };
         }
       }
     }
+
+    // 触摸：放下后光标还有同类剩余 → 回源格（Wiki；桌面鼠标仍留光标）
+    if (hadHeld && this.held && this.held.count > 0) this.returnHeldToTouchOrigin();
+    if (!this.held) this.touchOrigin = null;
 
     // 熔炉产物被取空 → 结算攒下的烧炼经验（原版也是"整槽取走才给"）
     if (takeOnly && source instanceof Furnace && source.get(FURNACE_OUTPUT) === null) {
@@ -2093,8 +2179,7 @@ export class InventoryScreen {
     }
 
     this.titleEl.textContent = MODE_TITLES[mode];
-    this.updateCreativeVisibility();
-    this.applyPocketLayout();
+    this.applyInventoryChrome();
     this.openPanel();
   }
 
@@ -2105,8 +2190,14 @@ export class InventoryScreen {
 
   openPanel(): void {
     if (this.open) return;
+    this.closing = false;
     this.open = true;
     this.root.classList.remove('hidden');
+    // 重新触发底部滑入（关掉再开时 animation 不会自动重跑）
+    this.panel.classList.remove('panel-out');
+    this.panel.style.animation = 'none';
+    void this.panel.offsetWidth;
+    this.panel.style.animation = '';
     this.refresh();
     this.hooks.onOpenChange?.(true);
   }
@@ -2148,12 +2239,37 @@ export class InventoryScreen {
 
   close(): void {
     this.clearTouchPress();
-    if (!this.open) return;
+    if (!this.open || this.closing) return;
     this.returnHeldToInventory();
     this.returnCraftingToInventory();
     if (this.activeContainer) this.activeContainer.onChange = null;
     // 交易界面关掉之后不再抓着这个村民（他下一秒可能就走进怪堆里死了）
     this.activeVillager = null;
+    this.touchOrigin = null;
+    // 底部滑出（批次 142，对齐基岩版「屏幕动画」）；减弱动效时直接关
+    const reduce =
+      typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !this.panel.isConnected) {
+      this.finishClose();
+      return;
+    }
+    this.closing = true;
+    this.panel.classList.remove('panel-in-restart');
+    this.panel.classList.add('panel-out');
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      this.panel.removeEventListener('animationend', finish);
+      this.panel.classList.remove('panel-out');
+      this.finishClose();
+    };
+    this.panel.addEventListener('animationend', finish);
+    window.setTimeout(finish, 400);
+  }
+
+  private finishClose(): void {
+    this.closing = false;
     this.open = false;
     this.root.classList.add('hidden');
     this.hooks.onOpenChange?.(false);
@@ -2272,7 +2388,7 @@ export class InventoryScreen {
     }
 
     // 飞行开关可能在背包开着时切换（F / 触摸起飞）——创造区要跟着显隐
-    this.updateCreativeVisibility();
+    this.applyInventoryChrome();
     this.refreshPlayerPreview();
   }
 
@@ -2391,8 +2507,7 @@ export class InventoryScreen {
       this.rebuildTopArea();
     }
     this.titleEl.textContent = MODE_TITLES.trade;
-    this.updateCreativeVisibility();
-    this.applyPocketLayout();
+    this.applyInventoryChrome();
     this.openPanel();
   }
 

@@ -178,7 +178,12 @@ import {
   type GameRules,
 } from './core/world/Rules.ts';
 import { RecipeBook } from './ui/RecipeBook.ts';
-import { craftFromInventory, isClassicUi, type RecipeBookTab } from './core/crafting/RecipeBook.ts';
+import {
+  craftFromInventory,
+  isClassicUi,
+  setUiProfile,
+  type RecipeBookTab,
+} from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
 import { itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
@@ -1326,6 +1331,9 @@ class App {
     this.particles.setBudget(particleBudgetFor(this.settings.particles));
     this.perf = { ...this.perf, viewDistance: this.settings.viewDistance };
     this.audio.volume = this.settings.volume;
+    // 界面配置（批次 142）：启动时就要生效，否则第一帧还按默认 auto
+    setUiProfile(this.settings.uiProfile);
+    this.updateUiProfileClass();
     this.lastStepX = this.physics.x;
     this.lastStepZ = this.physics.z;
     this.settingsScreen = new SettingsScreen(document.body, this.settings, {
@@ -1484,6 +1492,12 @@ class App {
     // 触摸按钮/摇杆大小（批次 97）：改一个 CSS 变量，摇杆与按钮一起缩放
     document.documentElement.style.setProperty('--touch-scale', String(settings.touchScale));
     this.debugEl.style.display = settings.showDebug ? '' : 'none';
+    // 界面配置（批次 142）：经典 / 携带版 / 自动
+    setUiProfile(settings.uiProfile);
+    this.updateUiProfileClass();
+    if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
+    if (this.recipeBook.isOpen) this.recipeBook.render();
+    this.updateSplitUi();
     this.applyEnvironment();
     // 视距变化后立刻按新的范围请求/卸载区块
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
@@ -1522,16 +1536,23 @@ class App {
   }
 
   /**
-   * 经典 UI / 携带版 UI 的切换（批次 134）。
+   * 经典 UI / 携带版 UI（批次 134 → 142）。
    *
-   * 基岩版两种都有（Wiki「物品栏 → 配方书」两种截图都列了）：
-   * **经典 UI** 是"左边配方书 + 右边物品栏"并排；**携带版 UI**（手机）是配方书
-   * 整屏盖在背包上。我们按屏幕宽度自动选——宽度判据交给 CSS
-   *（`body.split-ui` 那一组规则只在 `min-width: 1280px` 生效），
-   * 这里只负责如实打上这个类。
+   * **经典 UI** = 左配方书 + 右物品栏并排；**携带版** = 配方书整屏。
+   * 批次 142 起：`body.classic-ui` 由设置里的界面配置决定（不再只靠 CSS 媒体查询），
+   * `split-ui` 仍表示"两块都开着"。
    */
+  private updateUiProfileClass(): void {
+    document.body.classList.toggle('classic-ui', isClassicUi(window.innerWidth));
+  }
+
   private updateSplitUi(): void {
-    document.body.classList.toggle('split-ui', this.recipeBook.isOpen && this.inventoryScreen.isOpen);
+    this.updateUiProfileClass();
+    const classic = isClassicUi(window.innerWidth);
+    document.body.classList.toggle(
+      'split-ui',
+      classic && this.recipeBook.isOpen && this.inventoryScreen.isOpen,
+    );
   }
 
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
@@ -2590,6 +2611,9 @@ class App {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      // auto 界面配置下转屏会跨过经典/携带断点
+      this.updateSplitUi();
+      if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     });
   }
 

@@ -51,14 +51,40 @@ export type RecipeBookTab = (typeof RECIPE_BOOK_TABS)[number];
  */
 export const CLASSIC_UI_MIN_WIDTH = 1280;
 
+/**
+ * 界面配置（批次 142，对齐基岩版「视频选项 → UI」）：
+ * - `auto`：按宽度（≥1280 → 经典，否则携带版）
+ * - `classic` / `pocket`：强制，不看宽度
+ */
+export type UiProfile = 'auto' | 'classic' | 'pocket';
+export const UI_PROFILES = ['auto', 'classic', 'pocket'] as const;
+export const UI_PROFILE_LABELS: Record<UiProfile, string> = {
+  auto: '自动',
+  classic: '经典 UI',
+  pocket: '携带版 UI',
+};
+
+/** 当前生效的界面配置（由主程序 `applySettings` 写入） */
+let activeUiProfile: UiProfile = 'auto';
+
+export function setUiProfile(profile: UiProfile): void {
+  activeUiProfile = UI_PROFILES.includes(profile) ? profile : 'auto';
+}
+
+export function getUiProfile(): UiProfile {
+  return activeUiProfile;
+}
+
 /** 该视口走经典 UI（并排）还是携带版 UI（整屏） */
-export function isClassicUi(width: number): boolean {
+export function isClassicUi(width: number, profile: UiProfile = activeUiProfile): boolean {
+  if (profile === 'classic') return true;
+  if (profile === 'pocket') return false;
   return width >= CLASSIC_UI_MIN_WIDTH;
 }
 
 /** 该视口下标签栏的排列顺序（转屏会变，界面按它重排 `order`） */
-export function recipeBookTabsFor(width: number): readonly RecipeBookTab[] {
-  return isClassicUi(width) ? RECIPE_BOOK_TABS : RECIPE_BOOK_TABS_POCKET;
+export function recipeBookTabsFor(width: number, profile: UiProfile = activeUiProfile): readonly RecipeBookTab[] {
+  return isClassicUi(width, profile) ? RECIPE_BOOK_TABS : RECIPE_BOOK_TABS_POCKET;
 }
 
 export const RECIPE_BOOK_TAB_LABELS: Record<RecipeBookTab, string> = {

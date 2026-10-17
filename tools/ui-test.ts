@@ -398,7 +398,9 @@ console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克�
   check('有销毁格 DOM', invSrc.includes("dataset.role = 'creative-destroy'") && invSrc.includes('creative-destroy'));
   check('销毁格左键整叠 / 右键一个', invSrc.includes('destroyHeld(event.button === 2 ? 1 : null)'));
   check('销毁格 CSS 在', css.includes('.inv-creative-destroy-row') && css.includes('.inv-slot.creative-destroy'));
-  check('创造格中键克隆到光标', /event\.button === 1/.test(invSrc) && /this\.held = \{ id: itemId, count: maxStackOf\(itemId\) \}/.test(invSrc));
+  check('创造格选取上光标（左满组/右一个）', invSrc.includes('创造选取') && invSrc.includes('this.held = { id: itemId, count: max }'));
+  check('创造整屏排布（creative-ui）', invSrc.includes("classList.toggle('creative-ui'") && invSrc.includes('showCreativeItems'));
+  check('创造 ↔ 生存背包可切换', invSrc.includes("dataset.role = 'creative-toggle'"));
 }
 
 console.log('\n[携带版分标签页（批次 140）]');
@@ -889,6 +891,7 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   const bookUi = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
   const creativeSrc = readFileSync(new URL('../src/ui/CreativeTabs.ts', import.meta.url), 'utf8');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
 
@@ -991,18 +994,21 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('说明行会说出缺哪样材料', bookUi.includes('材料不足${missing'));
   check('没点着任何一格时说明行也有默认文案', bookUi.includes('this.resetDetail()') && bookUi.includes('点一格：材料会摆进右边的合成格'));
 
-  // ---- 经典 UI：配方书与背包并排（批次 134，用户给的截图就是经典 UI）
+  // ---- 经典 UI：配方书与背包并排（批次 134 → 142：改由 body.classic-ui 控制）
   check(
-    '并排只在屏幕够宽时生效（窄屏退回携带版 UI 的整屏）',
-    compact.includes('@media (min-width: 1280px) { body.split-ui #recipe-book { right: auto; width: 52%;'),
+    '并排走 body.classic-ui（设置可强制，不再只靠媒体查询）',
+    compact.includes('body.classic-ui.split-ui #recipe-book { right: auto; width: 52%;'),
   );
   check(
     '两块遮罩各占一半（否则上面那层会把下面半边的点击吃掉）',
-    compact.includes('body.split-ui #inventory-screen { left: auto; width: 48%; }'),
+    compact.includes('body.classic-ui.split-ui #inventory-screen { left: auto; width: 48%; }'),
   );
-  check('并排时配方书收窄成侧栏（600px）', compact.includes('body.split-ui .recipe-panel {'));
-  check('main 里有 updateSplitUi（按"两块都开着"打类）', mainSrc.includes('document.body.classList.toggle(\'split-ui\', this.recipeBook.isOpen && this.inventoryScreen.isOpen)'));
+  check('并排时配方书收窄成侧栏（600px）', compact.includes('body.classic-ui.split-ui .recipe-panel {'));
+  check('main 按 classic + 两块都开着打 split-ui', mainSrc.includes('classic && this.recipeBook.isOpen && this.inventoryScreen.isOpen'));
   check('背包开关时刷新并排状态', /handleInventoryOpen\(open: boolean\): void \{[\s\S]{0,200}this\.updateSplitUi\(\);/.test(mainSrc));
+  check('设置有界面配置 uiProfile', settingsSrc.includes('uiProfile') && settingsSrc.includes("'界面配置'"));
+  check('底部滑入/滑出动画', compact.includes('@keyframes panel-out') && compact.includes('translateY(28%)'));
+  check('触摸多余回源格', inventorySrc.includes('returnHeldToTouchOrigin') && inventorySrc.includes('touchOrigin'));
 
   // ---- 标签栏图标（Wiki："配方书的标签栏与创造分类相同"）
   check('四个实体标签栏复用了创造栏的真实物品图标', creativeSrc.includes('export const RECIPE_TAB_ICONS'));
