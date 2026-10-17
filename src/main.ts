@@ -6257,6 +6257,8 @@ class App {
 
   /** R 键：开/关配方书。关掉时要把 uiOpen 交回给背包（背包可能还开着） */
   private toggleRecipeBook(): void {
+    // 批次 166：创造模式不提供配方（拥有所有方块，看配方没有意义），R 键也不该开它
+    if (this.flying) return;
     if (this.recipeBook.isOpen) {
       this.closeRecipeBook();
       this.handleInventoryOpen(this.inventoryScreen.isOpen);

@@ -690,7 +690,12 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
     invSrc.includes('if (canCraft(this.inventory, recipe).ok) {') && invSrc.includes('fillCraftingGrid(this.inventory, this.crafting, recipe);'),
   );
   // 创造模式下点物品同样要把配方摆出来
-  check('创造栏点物品也展示配方', invSrc.includes('this.showRecipeFor(itemId);\n        this.hooks.onMove?.();'));
+  // 批次 166 改口径：**创造模式根本不显示配方**（拥有所有方块，看配方没意义），
+  // 点物品就只是"拿起它"——创造栏那个调用点保留，但 `showRecipeFor` 会提前返回
+  check(
+    '创造模式点物品不展示配方（showRecipeFor 先挡掉创造模式）',
+    /private showRecipeFor\(itemId: number\): void \{[\s\S]{0,400}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) return;/.test(invSrc),
+  );
   // 空槽不可选中：按下那一层"沉下去"只给有东西的格子
   check('空槽不给选中反馈', invSrc.includes('if (this.tooltipStacks.has(slot)) this.markPressing(slot);'));
   // 丢物：面板与快捷栏 dock 之外的空处都算"界面外"（只认 root 时点两栏之间的缝没反应）

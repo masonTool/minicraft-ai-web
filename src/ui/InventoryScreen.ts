@@ -1399,8 +1399,12 @@ export class InventoryScreen {
   /** 把一件东西的配方摆进右栏的合成格（材料够就摆实物，不够就画出来、缺的红底） */
   private showRecipeFor(itemId: number): void {
     if (this.pocketTab !== 'crafting') return;
-    const recipe = recipesForResult(itemId)[0];
+    // 批次 166：**创造模式不显示配方**——创造模式拥有所有方块，
+    // "这件东西由什么组装"没有任何意义；点物品就只是"拿起它"。
+    // 顺手把可能残留的配方预览收掉（从生存切过来时它可能还画在合成格里）。
     this.clearCraftGhost();
+    if (this.hooks.isCreative?.() ?? false) return;
+    const recipe = recipesForResult(itemId)[0];
     if (!recipe || recipeGridSize(recipe) > this.crafting.size) return;
     if (canCraft(this.inventory, recipe).ok) {
       fillCraftingGrid(this.inventory, this.crafting, recipe);
