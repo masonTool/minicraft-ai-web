@@ -10,6 +10,7 @@
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { TreeKind } from '../gen/Features.ts';
 import {
+  cauldronLevelOf,
   hasEndPortalEye,
   isComposterReady,
   isFlash,
@@ -1951,6 +1952,30 @@ const COMPOSTER_SPECS: readonly BlockSpec[] = [
  */
 export const NOTE_BLOCK_ID = 574;
 
+/**
+ * 炼药锅（批次 176，G13）。
+ *
+ * 水位 0~3 存在**方块状态低 2 位**（`blockState.cauldronLevelOf`），
+ * 所以它同样不需要方块实体。形状**借用堆肥桶那一副**（四面板条 + 薄桶底）：
+ * 原版炼药锅是铁皮三格高的锅，在 16×16 里与"木桶"的轮廓几乎一样，
+ * 单独写一套几何只是在重复同四条板条——差异记在 TASKS G13。
+ */
+export const CAULDRON_ID = 575;
+
+const CAULDRON_SPECS: readonly BlockSpec[] = [
+  {
+    id: CAULDRON_ID,
+    name: 'minecraft:cauldron',
+    tiles: ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
+    // 有水时顶面换成"水面"那张（空锅是"看得到桶底"的暗口）
+    stateTiles: (state) =>
+      cauldronLevelOf(state) > 0
+        ? ['cauldron_water', 'cauldron_bottom', 'cauldron_side']
+        : ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
+    shape: 'composter' as const,
+  },
+];
+
 const NOTE_BLOCK_SPECS: readonly BlockSpec[] = [
   {
     id: NOTE_BLOCK_ID,
@@ -2923,6 +2948,7 @@ const SPECS: readonly BlockSpec[] = [
   ...BARREL_SPECS,
   ...COMPOSTER_SPECS,
   ...NOTE_BLOCK_SPECS,
+  ...CAULDRON_SPECS,
   ...ENDER_CHEST_SPECS,
   ...SHULKER_BOX_SPECS,
   ...SAPLING_SPECS,
@@ -3218,6 +3244,8 @@ export const Block = {
   COMPOSTER: COMPOSTER_ID,
   // ---- 音符盒（批次 173，见 `NOTE_BLOCK_SPECS`）：音高存在状态位里，右击响一声
   NOTE_BLOCK: NOTE_BLOCK_ID,
+  // ---- 炼药锅（批次 176，见 `CAULDRON_SPECS`）：水位 0~3 存在状态位里
+  CAULDRON: CAULDRON_ID,
   // ---- 末影箱（批次 71，见 `ENDER_CHEST_SPECS`）：27 格，内容跟着玩家走
   ENDER_CHEST: ENDER_CHEST_ID,
   // ---- 潜影盒（批次 72，见 `SHULKER_BOX_SPECS`）：27 格，内容跟着**物品**走
@@ -3611,6 +3639,8 @@ HARDNESS.set(Block.BARREL, 2.5);
 HARDNESS.set(Block.COMPOSTER, 0.6);
 // 音符盒（批次 173）：原版 0.8，斧头更快、徒手也能挖（与木桶/堆肥桶同一条）
 HARDNESS.set(Block.NOTE_BLOCK, 0.8);
+// 炼药锅（批次 176）：原版 2，要**镐**（铁皮做的，这个进需求表而不只是加速表）
+HARDNESS.set(Block.CAULDRON, 2);
 // 末影箱（批次 71）：原版 22.5（黑曜石那一档，挖起来很慢）+ 要**钻石镐**才掉（见 tools）
 HARDNESS.set(Block.ENDER_CHEST, 22.5);
 // 潜影盒（批次 72）：原版 2（要镐，但木质镐就够——见 tools.ts）

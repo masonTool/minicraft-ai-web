@@ -312,6 +312,14 @@ import { HOTBAR_START } from './core/container/Inventory.ts';
 import { planPlacement } from './core/interaction/Placement.ts';
 // 刷怪蛋（批次 174）：手里那件是蛋就生成对应生物（`spawnEggMobOf` 查不到就返回 undefined）
 import { spawnEggMobOf } from './core/registry/spawnEggs.ts';
+// 炼药锅与桶装水（批次 176，G13）：规则是纯函数，"改方块 + 换手里的东西"在主程序
+import {
+  bucketFluidAt,
+  drainCauldronToBottle,
+  drainCauldronToBucket,
+  fillCauldron,
+  isBucketSource,
+} from './core/world/Cauldron.ts';
 import {
   isDoorOpen,
   isDoorUpper,
@@ -6467,6 +6475,130 @@ class App {
   }
 
   /**
+   * 手里那一件换成另一件（桶 ⇄ 装满的桶、瓶子 ⇄ 水瓶）。
+   *
+   * ⚠️ 与"消耗一个"不是一回事：这里要求**同类物品**，并且**数量要正确**——
+   * 拿 16 个空桶去舀水，结果必须是"1 个水桶 + 15 个空桶"，而不是把 16 个都变成水桶。
+   * 多出来的那件先塞回背包，塞不下就掉脚边（与拾取失败同一条处理）。
+   */
+  private exchangeHeld(consumeId: number, giveId: number): void {
+    const slot = this.hotbarIndex;
+    const stack = this.inventory.get(slot);
+    if (!stack || stack.id !== consumeId) return;
+    if (stack.count > 1) {
+      this.inventory.set(slot, { ...stack, count: stack.count - 1 });
+      const leftover = this.inventory.addStack({ id: giveId, count: 1 });
+      if (leftover > 0) {
+        this.spawnDrop(giveId, leftover, this.physics.x, this.physics.y + 1, this.physics.z);
+      }
+    } else {
+      this.inventory.set(slot, { id: giveId, count: 1 });
+    }
+    this.refreshHotbar();
+  }
+
+  /**
+   * 拿空桶对着**水源**右击：装成水桶 / 岩浆桶（批次 176，G13）。
+   *
+   * ⚠️ 只认**水源**（`fluidLevel === 0` 且不是瀑布那一节）——流水装不起来，这是原版规则，
+   * 也是"拿桶舀河"与"拿桶舀流水"手感不同的根源（见 `world/Cauldron.ts` 的 `isBucketSource`）。
+   */
+  private fillBucketFrom(): boolean {
+    if (this.heldItemId !== Item.BUCKET || !this.hit) return false;
+    const { x, y, z } = this.hit;
+    const blockId = this.world.getBlock(x, y, z);
+    if (!isBucketSource(blockId, this.world.getBlockState(x, y, z))) return false;
+    const fluid = bucketFluidAt(blockId);
+    if (!fluid) return false;
+
+    this.exchangeHeld(Item.BUCKET, fluid === 'water' ? Item.WATER_BUCKET : Item.LAVA_BUCKET);
+    this.audio.play(fluid === 'water' ? 'splash' : 'flint', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    if (fluid === 'water') this.particles.spawnSplash(x + 0.5, y + 1, z + 0.5, 0x9fd4ff, 8);
+    this.hand.swing();
+    return true;
+  }
+
+  /**
+   * 拿水桶 / 岩浆桶对着方块右击：在**贴着的那一格**放一格**水源**，桶变回空桶。
+   *
+   * 目标格沿用放置方块那套"命中面法线"（`hit.nx/ny/nz`），所以倒水的落点和放方块完全一致。
+   * 只往**空气或液体**里倒（往石头里倒水没有意义，原版也会拒绝）。
+   */
+  private pourBucket(): boolean {
+    const held = this.heldItemId;
+    if ((held !== Item.WATER_BUCKET && held !== Item.LAVA_BUCKET) || !this.hit) return false;
+
+    const target = {
+      x: this.hit.x + this.hit.nx,
+      y: this.hit.y + this.hit.ny,
+      z: this.hit.z + this.hit.nz,
+    };
+    const existing = this.world.getBlock(target.x, target.y, target.z);
+    const replaceable = existing === Block.AIR || existing === Block.WATER || existing === Block.LAVA;
+    if (!replaceable) return false;
+
+    const liquid = held === Item.WATER_BUCKET ? Block.WATER : Block.LAVA;
+    // 状态 0 = **水源**：倒出去的永远是源头，不是"接着流"
+    if (!this.world.setBlockAndUpdate(target.x, target.y, target.z, liquid, 0)) return false;
+
+    // 创造模式不回收桶（原版也是"桶还在手里"），生存里变回空桶
+    if (!this.flying) this.exchangeHeld(held, Item.BUCKET);
+    this.audio.play(liquid === Block.WATER ? 'splash' : 'flint', {
+      x: target.x + 0.5,
+      y: target.y + 0.5,
+      z: target.z + 0.5,
+    });
+    if (liquid === Block.WATER) this.particles.spawnSplash(target.x + 0.5, target.y + 1, target.z + 0.5, 0x9fd4ff, 10);
+    else this.particles.spawnFlame(target.x + 0.5, target.y + 1, target.z + 0.5, 0xff9a1f, 4);
+    this.hand.swing();
+    return true;
+  }
+
+  /**
+   * 炼药锅（批次 176，G13）：**水桶灌满 / 空桶从满锅舀 / 玻璃瓶舀一瓶**。
+   *
+   * 三条规则的判定全在 `world/Cauldron.ts`（纯函数），这里只负责"改方块 + 换手里的东西"。
+   */
+  private useCauldron(x: number, y: number, z: number): boolean {
+    const state = this.world.getBlockState(x, y, z);
+    const held = this.heldItemId;
+
+    // ① 水桶 → 灌满（原版：一桶就是一整锅，不按"量"折算）
+    if (held === Item.WATER_BUCKET) {
+      this.world.setStateAndUpdate(x, y, z, fillCauldron(state));
+      if (!this.flying) this.exchangeHeld(Item.WATER_BUCKET, Item.BUCKET);
+      this.audio.play('splash', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.particles.spawnSplash(x + 0.5, y + 0.9, z + 0.5, 0x9fd4ff, 6);
+      this.hand.swing();
+      return true;
+    }
+
+    // ② 空桶 → 从**满锅**里舀回一桶（不满舀不出来，见 `drainCauldronToBucket`）
+    if (held === Item.BUCKET) {
+      const drained = drainCauldronToBucket(state);
+      if (drained === null) return false;
+      this.world.setStateAndUpdate(x, y, z, drained);
+      this.exchangeHeld(Item.BUCKET, Item.WATER_BUCKET);
+      this.audio.play('splash', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.hand.swing();
+      return true;
+    }
+
+    // ③ 玻璃瓶 → 舀一瓶水（每舀一瓶掉一级；这也是"水瓶"在生存里的第一条路）
+    if (held === Item.GLASS_BOTTLE) {
+      const drained = drainCauldronToBottle(state);
+      if (drained === null) return false;
+      this.world.setStateAndUpdate(x, y, z, drained);
+      this.exchangeHeld(Item.GLASS_BOTTLE, Item.WATER_BOTTLE);
+      this.audio.play('splash', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.hand.swing();
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * 音符盒（批次 173，G9）：**潜行右击换音高、普通右击演奏**。
    *
    * 单独一个方法（而不是塞进 `useFunctionalBlock`）是因为它要**知道有没有潜行**：
@@ -6665,6 +6797,9 @@ class App {
     // 没有这一步，酿造链在生存模式下根本走不通：水瓶只能在创造模式里拿。
     // ⚠️ 桶装水与炼药锅还没做，所以"水桶"那条路仍然不通。
     if (hitBlock === Block.WATER) return this.fillWaterBottle();
+
+    // ---- 炼药锅（批次 176，G13）：倒水 / 舀水 / 舀一瓶
+    if (hitBlock === Block.CAULDRON) return this.useCauldron(x, y, z);
 
     // ---- 红石元件：拉杆开关、按钮按下
     if (hitBlock === Block.LEVER) {
@@ -7666,6 +7801,14 @@ class App {
       return;
     }
 
+    // ---- 装桶（批次 176，G13）：拿空桶对着**水源**右击就装满。
+    // 排在功能方块之前：对着炼药锅/水面都不该先被"功能方块"截走（锅自己那条在下面处理）。
+    if (this.fillBucketFrom()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
     if (!sneak && this.useFunctionalBlock(this.hit.x, this.hit.y, this.hit.z)) {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;
@@ -7680,6 +7823,12 @@ class App {
     if (this.useOnEntity()) {
       this.placeCooldown = PLACE_COOLDOWN * 2;
       this.touchPlaceRequest = false;
+      return;
+    }
+
+    // 倒水 / 倒岩浆（批次 176，G13）：水桶不是方块物品，落到下面的放置分支只会什么都不做
+    if (this.pourBucket()) {
+      this.placeCooldown = PLACE_COOLDOWN * 2;
       return;
     }
 

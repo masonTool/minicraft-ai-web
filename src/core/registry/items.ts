@@ -246,6 +246,14 @@ export const Item = {
   // ---- 桶与牛奶（J8）
   BUCKET: 1151,
   MILK_BUCKET: 1152,
+  /**
+   * 水桶 / 岩浆桶（批次 176，G13）。
+   *
+   * ⚠️ id 取 **1472/1473**（追加在末尾）而不是挤进 1154：物品 id 进存档，
+   * 挪一个已有 id 会让老存档里的东西变成别的物品（这条规矩见 `BLAZE_ROD` 那段）。
+   */
+  WATER_BUCKET: 1472,
+  LAVA_BUCKET: 1473,
   /** 打火石（I12）：耐用品，对着方块右键点燃火焰。原版耐久 64 */
   FLINT_AND_STEEL: 1153,
   // ---- 下界合金（K8 尾巴）：远古残骸烧成碎片，4 碎片 + 4 金锭 = 1 锭
@@ -466,6 +474,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // ---- 桶（可堆 16，与原版一致）与牛奶桶（一次性的"饮品"，不可堆）
   { id: Item.BUCKET, name: 'minecraft:bucket', tile: 'item_bucket', maxStack: 16 },
   { id: Item.MILK_BUCKET, name: 'minecraft:milk_bucket', tile: 'item_milk_bucket', maxStack: 1 },
+  // 水桶 / 岩浆桶（批次 176）：不可堆叠（原版也是——里面装着东西）
+  { id: Item.WATER_BUCKET, name: 'minecraft:water_bucket', tile: 'item_water_bucket', maxStack: 1 },
+  { id: Item.LAVA_BUCKET, name: 'minecraft:lava_bucket', tile: 'item_lava_bucket', maxStack: 1 },
   // ---- 打火石（I12）：铁锭 + 燧石；耐久 64（原版），对着方块面右键点燃火焰
   {
     id: Item.FLINT_AND_STEEL,

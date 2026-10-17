@@ -1524,14 +1524,24 @@ const BUCKET_TEMPLATE: readonly string[] = [
   '................',
 ];
 
-function bucketPainter(withMilk: boolean): Painter {
+/**
+ * 桶里的液体颜色（批次 176 起由参数给，而不是"有没有牛奶"这一个布尔）。
+ *
+ * 三种桶共用同一副铁皮形状：空桶没有 `W` 像素、牛奶是白、水是青蓝、岩浆是橙红。
+ * 这样加"细雪桶"时只多一行颜色，不用再抄一份带模板的画笔。
+ */
+type BucketFill = readonly [number, number, number];
+
+function bucketPainter(fill: BucketFill | null): Painter {
   return (x, y, rng) => {
     const pixel = BUCKET_TEMPLATE[y]?.[x] ?? '.';
     if (pixel === '.') return [0, 0, 0, 0];
     const jitter = rng() * 12 - 6;
     if (pixel === 'W') {
-      if (!withMilk) return [0, 0, 0, 0];
-      return [clamp255(246 + jitter), clamp255(246 + jitter), clamp255(240 + jitter), 255];
+      if (!fill) return [0, 0, 0, 0];
+      // 液体也分左右明暗，否则桶里那块颜色是平的、看着像贴纸
+      const shade = x < 8 ? 1.1 : 0.9;
+      return [clamp255(fill[0] * shade + jitter), clamp255(fill[1] * shade + jitter), clamp255(fill[2] * shade + jitter), 255];
     }
     // 铁皮：左亮右暗，桶才有圆柱感
     const shade = x < 8 ? 1.12 : 0.86;
@@ -1539,8 +1549,48 @@ function bucketPainter(withMilk: boolean): Painter {
   };
 }
 
-PAINTERS.item_bucket = bucketPainter(false);
-PAINTERS.item_milk_bucket = bucketPainter(true);
+PAINTERS.item_bucket = bucketPainter(null);
+PAINTERS.item_milk_bucket = bucketPainter([246, 246, 240]);
+// 水桶 / 岩浆桶（批次 176，G13）：同形状、只换液体颜色
+PAINTERS.item_water_bucket = bucketPainter([70, 120, 220]);
+PAINTERS.item_lava_bucket = bucketPainter([226, 108, 28]);
+
+// ---- 炼药锅（批次 176，G13）：铁皮桶身 / 桶底 / 空锅口（看得到锅底）/ 水面
+/**
+ * 炼药锅的四张脸。
+ *
+ * 与堆肥桶那套板条的区别只在**材质**：锅身是铁的（冷灰 + 上下两道箍），
+ * 空锅口是一圈铁沿 + 里面发黑的锅底，有水时顶面换成"水面 + 铁沿"。
+ */
+function cauldronIron(y: number, rng: () => number, shade = 1): [number, number, number, number] {
+  const jitter = rng() * 10 - 5;
+  // 上下两道箍（原版炼药锅最明显的特征）
+  const band = y === 3 || y === 12 ? 1.14 : 1;
+  const base = 132 * shade * band;
+  return [clamp255(base + jitter), clamp255(base + 2 + jitter), clamp255(base + 8 + jitter), 255];
+}
+
+PAINTERS.cauldron_side = (x, y, rng) => {
+  // 左亮右暗（圆柱感）+ 中间一道竖着的接缝
+  const shade = x < 8 ? 1.08 : 0.9;
+  return cauldronIron(y, rng, x === 7 ? 0.82 : shade);
+};
+PAINTERS.cauldron_bottom = (_x, y, rng) => cauldronIron(y, rng, 0.78);
+/** 空锅：一圈铁沿 + 里面越深越黑（看得出锅是空的） */
+PAINTERS.cauldron_top = (x, y, rng) => {
+  const inset = x >= 2 && x <= 13 && y >= 2 && y <= 13;
+  if (!inset) return cauldronIron(y, rng, 1.1);
+  const depth = Math.min(x - 2, 13 - x, y - 2, 13 - y) / 5;
+  const v = 0.34 - Math.min(0.2, depth * 0.2) + rng() * 0.04;
+  return [clamp255(52 * v), clamp255(56 * v), clamp255(64 * v), 255];
+};
+/** 有水：同样的铁沿，里面是青蓝的水面（带一点点波纹） */
+PAINTERS.cauldron_water = (x, y, rng) => {
+  const inset = x >= 2 && x <= 13 && y >= 2 && y <= 13;
+  if (!inset) return cauldronIron(y, rng, 1.1);
+  const wave = Math.sin((x + y) * 0.9) * 10;
+  return [clamp255(58 + wave), clamp255(108 + wave), clamp255(196 + wave), 255];
+};
 
 // ---- 弓与箭（J9）
 /** 燧石：深灰的尖锐石块（画成一块带斜面的碎石） */

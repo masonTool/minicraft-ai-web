@@ -1113,6 +1113,13 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     key: { P: Block.OAK_PLANKS, R: Item.REDSTONE },
   },
   {
+    // 炼药锅（批次 176，G13）：原版 = **7 个铁锭**（U 形：三面锅壁 + 锅底那一排）
+    kind: 'shaped' as const,
+    result: { id: Block.CAULDRON, count: 1 },
+    pattern: ['I I', 'I I', 'III'],
+    key: { I: Item.IRON_INGOT },
+  },
+  {
     // 木桶（批次 61）：原版图案 = 6 块木板 + 上下两个**木板台阶**（左右两列各 3 块）
     kind: 'shaped' as const,
     result: { id: Block.BARREL, count: 1 },

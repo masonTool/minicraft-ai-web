@@ -1155,3 +1155,25 @@ export function noteFrequency(pitch: number): number {
   const clamped = Math.max(0, Math.min(NOTE_BLOCK_MAX_PITCH, pitch));
   return 185 * Math.pow(2, clamped / 12);
 }
+
+// ---------------------------------------------------------------- 炼药锅（批次 176，G13）
+//
+// 水位是 **0~3 级**（原版炼药锅正好 3 级满），存在**低 2 位**里。
+// 与堆肥桶/音符盒同一个套路：不需要方块实体，也不进容器表；
+// 贴图按"有没有水"切换（`cauldron_top` / `cauldron_water`），所以网格化那边只认状态位。
+
+/** 炼药锅要几级才满（原版 3） */
+export const CAULDRON_MAX_LEVEL = 3;
+
+/** 水位占低 2 位 */
+const CAULDRON_LEVEL_MASK = 0b11;
+
+export function cauldronLevelOf(state: number): number {
+  return state & CAULDRON_LEVEL_MASK;
+}
+
+/** 写入水位（夹到 0~3，不是夹到掩码上限 3——这里正好一样，但语义要统一） */
+export function withCauldronLevel(state: number, level: number): number {
+  const clamped = Math.max(0, Math.min(CAULDRON_MAX_LEVEL, Math.floor(level)));
+  return (state & ~CAULDRON_LEVEL_MASK) | clamped;
+}

@@ -420,6 +420,8 @@ EFFICIENT_TOOL.set(Block.SNOW, 'shovel');
 // 刷怪笼（批次 92）：原版硬度 5、要镐（徒手挖得动但一无所获——它本来也不掉落，
 // 见 `items.ts` 的 `NO_DROP`）
 REQUIRED_TOOL.set(Block.SPAWNER, { tool: 'pickaxe', tier: 0 });
+// 炼药锅（批次 176）：铁皮做的，原版要镐且**任意档都行**（tier 0 = 木镐就够）
+REQUIRED_TOOL.set(Block.CAULDRON, { tool: 'pickaxe', tier: 0 });
 // 陶瓦与混凝土（17 色 / 16 色）都需要镐
 // ⚠️ 原色陶瓦是 `Block.TERRACOTTA`（不在 `terracottaId(i)` 的范围里，见那个函数的注释）
 REQUIRED_TOOL.set(Block.TERRACOTTA, { tool: 'pickaxe', tier: 0 });

@@ -991,6 +991,13 @@ export const TILE_ORDER = [
   'spawn_egg_sheep',
   'spawn_egg_chicken',
   'spawn_egg_villager',
+  // 炼药锅与水桶（批次 176，G13）：锅身 / 桶底 / 空锅口 / 水面；两张物品图标
+  'cauldron_side',
+  'cauldron_bottom',
+  'cauldron_top',
+  'cauldron_water',
+  'item_water_bucket',
+  'item_lava_bucket',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

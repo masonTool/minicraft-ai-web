@@ -137,7 +137,8 @@
     "test:stray": "esbuild tools/stray-test.ts --bundle --platform=node --format=esm --outfile=.tmp/stray-test.mjs --log-level=error && node .tmp/stray-test.mjs",
     "test:phantom": "esbuild tools/phantom-test.ts --bundle --platform=node --format=esm --outfile=.tmp/phantom-test.mjs --log-level=error && node .tmp/phantom-test.mjs",
     "test:note": "esbuild tools/note-test.ts --bundle --platform=node --format=esm --outfile=.tmp/note-test.mjs --log-level=warning && node .tmp/note-test.mjs",
-    "test:border": "esbuild tools/border-test.ts --bundle --platform=node --format=esm --outfile=.tmp/border-test.mjs --log-level=warning && node .tmp/border-test.mjs"
+    "test:border": "esbuild tools/border-test.ts --bundle --platform=node --format=esm --outfile=.tmp/border-test.mjs --log-level=warning && node .tmp/border-test.mjs",
+    "test:bucket": "esbuild tools/bucket-test.ts --bundle --platform=node --format=esm --outfile=.tmp/bucket-test.mjs --log-level=warning && node .tmp/bucket-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"
