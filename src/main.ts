@@ -1301,7 +1301,7 @@ class App {
         isCreative: () => this.flying,
         // 丢出（批次 128）：Q / Ctrl+Q / 点界面外 —— 界面只报"丢哪件、丢几件"，
         // 真正造掉落物的是这里（它才知道玩家站在哪）
-        onDrop: (itemId, count) => this.spawnDrop(itemId, count, this.physics.x, this.physics.y + 1.2, this.physics.z),
+        onDrop: (itemId, count) => this.dropInFrontOfPlayer(itemId, count),
         // 铁砧（H8）：同样只需要等级与扣等级的出口
         anvilContext: () => ({
           playerLevel: this.experience.level,
@@ -5126,6 +5126,27 @@ class App {
     extras?: DroppedExtras,
   ): void {
     this.entities.spawn(new ItemEntity(itemId, count, x, y, z, undefined, extras));
+  }
+
+  /** 丢出物品时离玩家多远（格）：要大于拾取范围（碰撞盒 0.6 + 0.7 ≈ 1.0） */
+  private static readonly DROP_AHEAD = 1.5;
+
+  /**
+   * 把物品丢在**玩家身前一点**（批次 161）。
+   *
+   * ⚠️ 原来丢的位置就是玩家自己脚下（`physics.x / y+1.2 / z`）：掉落物有 0.5 秒
+   * 拾取冷却，一过就被"站在原地的自己"吸回背包——玩家的观感是"点了丢出，东西没了"。
+   * 往前推 1.5 格就落到了拾取范围之外（那圈范围是碰撞盒外扩 0.7）。
+   * 朝向用视角那条唯一口径（`lookDirection` 的水平分量），不另抄一份三角函数。
+   */
+  private dropInFrontOfPlayer(itemId: number, count: number): void {
+    const [dirX, , dirZ] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
+    // 只取水平分量并归一：抬头/低头时水平长度会变短，不归一的话丢不远
+    const length = Math.hypot(dirX, dirZ) || 1;
+    const ahead = App.DROP_AHEAD;
+    const x = this.physics.x + (dirX / length) * ahead;
+    const z = this.physics.z + (dirZ / length) * ahead;
+    this.spawnDrop(itemId, count, x, this.physics.y + 1.0, z);
   }
 
   /**

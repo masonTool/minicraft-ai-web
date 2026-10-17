@@ -765,6 +765,21 @@ console.log('\n[合成产物直接进背包（批次 160）]');
   );
 }
 
+console.log('\n[丢出口袋要在拾取范围之外（批次 161）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const itemSrc = readFileSync(new URL('../src/core/entity/ItemEntity.ts', import.meta.url), 'utf8');
+
+  // 站在原地点"界面外丢出"时，东西原来就丢在自己脚下：0.5 秒冷却一过就被自己吸回去
+  check('掉落物有 0.5 秒拾取冷却（所以不能丢在脚下）', itemSrc.includes('const PICKUP_DELAY = 0.5;'));
+  check(
+    '丢到身前 1.5 格（在"碰撞盒 + 0.7"那圈拾取范围之外）',
+    mainSrc.includes('private static readonly DROP_AHEAD = 1.5;') &&
+      mainSrc.includes('private dropInFrontOfPlayer(itemId: number, count: number): void {'),
+  );
+  check('朝向复用 lookDirection 的水平分量（不另抄一份三角函数）', mainSrc.includes('const [dirX, , dirZ] = PlayerPhysics.lookDirection(this.yaw, this.pitch);'));
+}
+
 console.log('\n[玩家预览占位（批次 141）]');
 {
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
