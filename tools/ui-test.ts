@@ -754,5 +754,40 @@ console.log('\n[进游戏首页默认全屏]');
   check('没有目标时安静返回', typeof armAutoFullscreen([]) === 'function');
 }
 
+console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物品栏」）]');
+{
+  const inventorySrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const bookUi = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+
+  // ---- 配方书：点一条配方 = **把材料摆进合成格**（原版主交互）
+  check('配方书的动作接口有 onFill（摆进合成格）', bookUi.includes('onFill: (recipe: Recipe) => boolean'));
+  check('卡片可点，且标了 dataset.role（验收脚本要能找到它）', bookUi.includes("card.dataset.role = 'fill'"));
+  check('可点的卡片才给 fillable（有按下/悬停反馈）', bookUi.includes("card.classList.add('fillable')") && compact.includes('.recipe-card.fillable:active'));
+  check('3×3 的配方在背包里不可点（要站到工作台前）', bookUi.includes('entry.gridSize <= 2'));
+  check('点卡片时不会抢那颗"合成"按钮的事', bookUi.includes("closest('.recipe-craft')"));
+  check('main 把 onFill 接上了', mainSrc.includes('onFill: (recipe) => this.fillFromBook(recipe)'));
+  check('fillFromBook 摆好后收起配方书（露出摆好的合成格）', /private fillFromBook[\s\S]{0,400}this\.recipeBook\.hide\(\)/.test(mainSrc));
+  // 打开配方书**不能**再关背包：关界面会把格子里的东西倒回背包，刚摆的立刻被清掉
+  check(
+    '打开配方书不再先关背包（否则摆好的立刻被倒回去）',
+    !/private openRecipeBook[\s\S]{0,200}inventoryScreen\.close\(\)/.test(mainSrc),
+  );
+
+  // ---- 物品栏：Wiki「物品管理」里那几条
+  // 关界面时合成格里的残留回到背包（原版："关闭界面时，合成格中残留的物品会自动回到背包"）
+  check('关背包时把合成格里的东西退回背包', inventorySrc.includes('this.returnCraftingToInventory();'));
+  check('放不下的留在格子里（不凭空消失）', /returnCraftingToInventory[\s\S]{0,500}addStack\(stack\) > 0\) continue/.test(inventorySrc));
+  // 左键点暗处全部丢出、右键只丢一个
+  check('右键点空白只丢 1 个（左键才全丢）', inventorySrc.includes('event.button === 2 ? 1 : this.held.count'));
+  // 这几条原版规则本来就在（钉住，防止以后被改掉）
+  check('右键点格子拿一半', inventorySrc.includes('button === 2') || inventorySrc.includes('halfOf'));
+  check('Shift+左键 = 快速移动', inventorySrc.includes('this.quickMoveSlot(key)'));
+  check('双击 = 收集同类', inventorySrc.includes('this.gatherFrom(binding)'));
+  check('拖拽分配 / 每格一个', inventorySrc.includes('distributeEvenly(this.held, slots)') && inventorySrc.includes('placeOneEach(this.held, slots)'));
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

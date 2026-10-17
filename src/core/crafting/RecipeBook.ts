@@ -1,16 +1,19 @@
 /**
  * 配方书（数据层）
  *
- * 界面要回答三个问题，这里把它们做成纯函数，方便离线测试：
+ * 界面要回答四个问题，这里把它们做成纯函数，方便离线测试：
  *  1. **一条配方要什么材料**（几个格子、每个格子几个）——形状配方要数 pattern 里的字符
  *  2. **背包里够不够**（缺什么、缺几个）——材料可能分散在 36 个槽位里
- *  3. **怎么直接合成**（从背包扣材料、把产物塞回背包）——不经过合成台界面
+ *  3. **把配方摆进合成格**（`fillCraftingGrid`，批次 132）——**原版配方书点一条配方
+ *     就是做这件事**：材料从背包挪进格子，摆法看得见、还能自己改，最后由输出格取成品
+ *  4. **一键直接合成**（`craftFromInventory`）——不经过格子，给"批量做"留的快捷方式
  *
- * 为什么不复用 `CraftingGrid`：那是"玩家手动摆格子"的模型（有摆放、拿回、结果槽），
- * 配方书要的是"知道配方就能一键做出来"，直接对背包做加减更简单也更不容易出错。
+ * ⚠️ 第 3 条是**主交互**、第 4 条是**便捷**，两者都要有：只有 4 会看不见摆放过程
+ *（与原版不符），只有 3 则"能做 5 次"要来回点五遍。
  */
 
 import type { Inventory } from '../container/Inventory.ts';
+import type { CraftingGrid } from './CraftingGrid.ts';
 import { RECIPES, type Recipe, type RecipeResult } from './Recipes.ts';
 import { itemLabel } from '../registry/itemNames.ts';
 import { itemName } from '../registry/items.ts';
@@ -91,6 +94,93 @@ export function craftFromInventory(inventory: Inventory, recipe: Recipe): Recipe
   }
   inventory.add(recipe.result.id, recipe.result.count);
   return recipe.result;
+}
+
+/**
+ * 把一条配方**摆进合成格**（批次 132，对齐原版）。
+ *
+ * ⚠️ 原版配方书的交互不是"点一下直接出成品"，而是**把材料摆进合成格**：
+ * 摆完之后摆法看得见、还能自己改，最后点输出格取成品。
+ * 上面那个 `craftFromInventory` 是"一键扣料出成品"，看不见摆放过程——
+ * 它仍然有用（批量合成），但**点配方**这件事该按原版来。
+ *
+ * 规则：
+ *  1. 配方放不进当前格子（背包里只有 2×2，3×3 要站到工作台前）→ 整条不动，返回 false；
+ *  2. 材料不够 → 整条不动，返回 false（不留"摆了一半"的脏状态）；
+ *  3. 摆之前把格子里的旧东西**还回背包**（原版点配方时就是这么做的）；
+ *     背包放不下就原样退回、中止本次填充——**绝不吞掉玩家的东西**；
+ *  4. 形状配方摆在**左上角**：`matchRecipe` 会先把网格归一化（裁掉空的边），
+ *     所以摆在哪个角都认，左上角是最直观的。
+ */
+export function fillCraftingGrid(inventory: Inventory, grid: CraftingGrid, recipe: Recipe): boolean {
+  if (recipeGridSize(recipe) > grid.size) return false;
+  if (!canCraft(inventory, recipe).ok) return false;
+
+  const cells = grid.size * grid.size;
+  const backup = Array.from({ length: cells }, (_, index) => grid.get(index));
+  const restore = (): void => {
+    for (let index = 0; index < cells; index++) grid.set(index, backup[index] ?? null);
+  };
+
+  // ① 格子里的旧东西先还回背包（`addStack` 返回**放不下的剩余**）
+  for (const stack of backup) {
+    if (stack && inventory.addStack(stack) > 0) {
+      restore();
+      return false;
+    }
+  }
+  for (let index = 0; index < cells; index++) grid.set(index, null);
+
+  // ② 按配方摆放。中途 `consume` 失败理论上到不了（`canCraft` 已经确认过），
+  //    真到了就整条回滚：把已经放进去的还给背包，再把格子恢复原样。
+  const placement = recipePlacement(recipe, grid.size);
+  for (let i = 0; i < placement.length; i++) {
+    const [index, id] = placement[i]!;
+    if (!inventory.consume(id, 1)) {
+      for (let j = 0; j < i; j++) {
+        const [doneIndex, doneId] = placement[j]!;
+        grid.set(doneIndex, null);
+        inventory.add(doneId, 1);
+      }
+      restore();
+      return false;
+    }
+    grid.set(index, { id, count: 1 });
+  }
+
+  grid.recompute();
+  return true;
+}
+
+/**
+ * 一条配方摆进格子后的"哪一格放什么"。
+ *
+ * 形状配方按 `pattern` 的字符顺序摆在**左上角**（超出格子的部分直接跳过——
+ * 调用方已经用 `recipeGridSize` 挡过）；无序配方按材料顺序依次填。
+ */
+export function recipePlacement(recipe: Recipe, size: 2 | 3): Array<[number, number]> {
+  const placement: Array<[number, number]> = [];
+
+  if (recipe.kind === 'shapeless') {
+    recipe.ingredients.forEach((id, index) => {
+      if (index >= size * size) return;
+      placement.push([index, id]);
+    });
+    return placement;
+  }
+
+  recipe.pattern.forEach((line, row) => {
+    let col = 0;
+    for (const char of line) {
+      const column = col;
+      col += 1;
+      if (char === ' ' || row >= size || column >= size) continue;
+      const id = recipe.key[char];
+      if (id === undefined) continue;
+      placement.push([row * size + column, id]);
+    }
+  });
+  return placement;
 }
 
 /** 一次能合成几份（按最缺的那种材料算） */

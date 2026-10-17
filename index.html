@@ -386,6 +386,14 @@
         border-radius: var(--radius-sm);
       }
       .recipe-card.craftable { background: #b9c9b0; }
+      /* 可点的卡片（批次 132）：点它 = **把材料摆进合成格**（原版主交互）。
+         给一点"能按下去"的反馈：光标 + 按下时斜角翻过来（与全站按钮同一套语言）。 */
+      .recipe-card.fillable { cursor: pointer; }
+      .recipe-card.fillable:hover { background: #c7d6bd; }
+      .recipe-card.fillable:active {
+        border-color: #7a7a7a #d8d8d8 #d8d8d8 #7a7a7a;
+        transform: translateY(1px);
+      }
       .recipe-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
       /* ---------------- 摆放位置（批次 29） ----------------

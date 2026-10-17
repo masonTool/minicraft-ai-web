@@ -32,12 +32,15 @@ import {
   buildRecipeEntries,
   canCraft,
   craftFromInventory,
+  fillCraftingGrid,
   matchesRecipe,
   maxCraftable,
   recipeGridSize,
   recipeIngredients,
+  recipePlacement,
   recipesForResult,
 } from '../src/core/crafting/RecipeBook.ts';
+import { CraftingGrid } from '../src/core/crafting/CraftingGrid.ts';
 import { Inventory } from '../src/core/container/Inventory.ts';
 
 let passed = 0;
@@ -337,6 +340,90 @@ console.log('\n[摆放位置：每条配方都画得出来，而且画得对]');
   equal('整行整列的空白会被裁掉', trimPattern(['   ', ' A ', '   ']).join('|'), 'A');
   equal('保留内部空格', trimPattern(['AB', ' B']).join('|'), 'AB| B');
   equal('全空图案裁成空数组', trimPattern(['  ', '  ']).length, 0);
+}
+
+// ---------------------------------------------------------------- 摆进合成格
+//
+// 批次 132：**原版配方书点一条配方做的事是"把材料摆进合成格"**（中文 Wiki
+//「物品栏 → 配方书」："点击配方 → 自动把材料摆入合成格"）。原来我们只有
+// `craftFromInventory` 那条"一键扣料出成品"的路径，看不见摆放过程。
+
+console.log('\n[配方书：把配方摆进合成格（批次 132）]');
+{
+  const planks = Block.OAK_PLANKS;
+  const stick = Item.STICK;
+
+  // 一条 2×2 的形状配方：4 个木板 → 工作台
+  const table = craftingTable;
+  const grid = new CraftingGrid(2);
+  const inventory = new Inventory();
+  inventory.add(planks, 8);
+
+  check('摆之前格子里没有东西', grid.get(0) === null && grid.get(3) === null);
+  const placed = fillCraftingGrid(inventory, grid, table);
+  check('摆成功', placed);
+  equal('4 个木板都摆进了格子（形状配方：每个字符一格）', [0, 1, 2, 3].filter((i) => grid.get(i)?.id === planks).length, 4);
+  equal('背包里扣掉了 4 个木板', inventory.countOf(planks), 4);
+  check('输出格认得这条配方', grid.result?.id === Block.CRAFTING_TABLE, String(grid.result?.id));
+  equal('产物数量与原版一致', grid.result?.count, 1);
+
+  // 材料不够：**一点都不许动**（不留"摆了一半"的脏状态）
+  const poor = new Inventory();
+  poor.add(planks, 3);
+  const poorGrid = new CraftingGrid(2);
+  poorGrid.set(0, { id: stick, count: 1 });
+  check('材料不够时整条不动（返回 false）', !fillCraftingGrid(poor, poorGrid, table));
+  equal('材料没被扣', poor.countOf(planks), 3);
+  equal('格子里原有的东西也没动', poorGrid.get(0)?.id, stick);
+
+  // 3×3 的配方摆不进 2×2（背包里只有 2×2，原版也只在背包里列 2×2 能做的）
+  const pickaxe = RECIPES.find((r) => recipeGridSize(r) === 3)!;
+  const smallGrid = new CraftingGrid(2);
+  const richInventory = new Inventory();
+  for (const ingredient of recipeIngredients(pickaxe)) richInventory.add(ingredient.id, ingredient.count);
+  check('3×3 的配方摆不进背包的 2×2', !fillCraftingGrid(richInventory, smallGrid, pickaxe));
+  equal('而且一个材料都没扣', richInventory.countOf(recipeIngredients(pickaxe)[0]!.id), recipeIngredients(pickaxe)[0]!.count);
+
+  // 格子里原有的东西：摆新的之前先还回背包（原版行为）
+  const leftoverInventory = new Inventory();
+  leftoverInventory.add(planks, 8);
+  const leftoverGrid = new CraftingGrid(2);
+  leftoverGrid.set(0, { id: stick, count: 5 });
+  check('摆之前把旧东西还回背包', fillCraftingGrid(leftoverInventory, leftoverGrid, table));
+  equal('旧的那一叠回到了背包', leftoverInventory.countOf(stick), 5);
+  equal('新配方占满了四格', [0, 1, 2, 3].filter((i) => leftoverGrid.get(i)?.id === planks).length, 4);
+
+  // 背包塞满、旧东西放不回去 → 中止本次填充并把格子恢复原样（绝不吞东西）
+  const full = new Inventory();
+  for (let slot = 0; slot < 36; slot++) full.add(slot % 2 === 0 ? Block.DIRT : Block.STONE, 64);
+  const fullGrid = new CraftingGrid(2);
+  fullGrid.set(0, { id: stick, count: 3 });
+  const before = full.countOf(stick);
+  check('背包放不下旧东西时中止填充', !fillCraftingGrid(full, fullGrid, table));
+  equal('格子恢复原样', fullGrid.get(0)?.id, stick);
+  equal('背包没多也没少', full.countOf(stick), before);
+  equal('没多出产物', full.countOf(Block.CRAFTING_TABLE), 0);
+
+  // 无序配方：按材料顺序依次填
+  const shapeless = RECIPES.find((r) => r.kind === 'shapeless' && recipeGridSize(r) === 2);
+  if (shapeless) {
+    const placement = recipePlacement(shapeless, 2);
+    equal('无序配方按顺序填格', placement.map(([index]) => index).join(','), placement.map((_, i) => i).join(','));
+  }
+
+  // 形状配方摆在**左上角**（`matchRecipe` 会先归一化，摆在哪个角都认）
+  const placement = recipePlacement(table, 2);
+  equal('形状配方从左上角开始摆', placement[0]?.[0], 0);
+  equal('摆出来的格子数与材料数一致', placement.length, recipeIngredients(table).reduce((sum, i) => sum + i.count, 0));
+
+  // 2×2 的图案摆进 3×3 的左上角（站在工作台前时就是这样）
+  const bigGrid = new CraftingGrid(3);
+  const bigInventory = new Inventory();
+  bigInventory.add(planks, 8);
+  check('2×2 的配方在 3×3 里也摆得下', fillCraftingGrid(bigInventory, bigGrid, table));
+  equal('摆在左上角（下标 0）', bigGrid.get(0)?.id, planks);
+  equal('右下角空着', bigGrid.get(8), null);
+  check('3×3 里也认得出这条配方', bigGrid.result?.id === Block.CRAFTING_TABLE);
 }
 
 function labelOfUnknown(id: number): boolean {

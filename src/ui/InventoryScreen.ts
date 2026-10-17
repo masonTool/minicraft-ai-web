@@ -35,6 +35,10 @@ import {
   stackExtras,
 } from '../core/container/Inventory.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
+// 配方书点一条配方 = **把材料摆进合成格**（批次 132，对齐原版）。
+// 规则在 `core/crafting/RecipeBook.ts` 里（纯逻辑、可断言），界面只负责"摆哪一格"。
+import { fillCraftingGrid } from '../core/crafting/RecipeBook.ts';
+import type { Recipe } from '../core/crafting/Recipes.ts';
 // 快速移动（批次 127）：Shift+左键的规则是纯逻辑（`core/container/QuickMove.ts`），
 // 界面只负责把"哪一格 / 开着哪个容器 / 容器多少格"交给它
 import { PLAYER_FILL_ORDER, fitCount, quickMove } from '../core/container/QuickMove.ts';
@@ -1236,13 +1240,17 @@ export class InventoryScreen {
     });
 
     // 点界面外：**把手上的东西丢进世界**（批次 128，对齐原版；
-    // 原来是"放回背包"，那与原版不符——原版是直接丢出去）
+    // 原来是"放回背包"，那与原版不符——原版是直接丢出去）。
+    // ⚠️ 批次 132 按 Wiki「物品管理」补上按键之分：**左键全部丢出、右键只丢一个**
+    //（原文："左键点击物品栏界面中暗色的无内容处会将鼠标上的物品全部丢出。
+    // 按右键则只会丢出一个。"）
     this.root.addEventListener('pointerdown', (event) => {
       if (event.target !== this.root) return;
       event.preventDefault();
       if (this.held) {
-        this.hooks.onDrop?.(this.held.id, this.held.count);
-        this.held = null;
+        const count = event.button === 2 ? 1 : this.held.count;
+        this.hooks.onDrop?.(this.held.id, count);
+        this.held = count >= this.held.count ? null : { ...this.held, count: this.held.count - count };
       }
       this.refresh();
     });
@@ -1666,10 +1674,44 @@ export class InventoryScreen {
     this.hooks.onOpenChange?.(true);
   }
 
+  /**
+   * 把一条配方**摆进合成格**（批次 132，对齐原版）。
+   *
+   * 原版配方书点一条配方做的事就是这个：材料从背包挪进格子、摆法看得见、还能自己改，
+   * 最后由输出格取成品。摆的是**当前正显示的那个格子**（背包里 2×2、工作台前 3×3），
+   * 所以站在工作台前时 2×2 的配方会摆到 3×3 的左上角——与原版一致。
+   *
+   * @returns 摆成功了没（材料不够 / 这条配方放不进当前格子 → false，界面上一动不动）
+   */
+  fillFromRecipe(recipe: Recipe): boolean {
+    if (!fillCraftingGrid(this.inventory, this.crafting, recipe)) return false;
+    this.refresh();
+    return true;
+  }
+
+  /**
+   * 关界面时把**合成格里的残留**还给背包（批次 132，对齐原版）。
+   *
+   * 原版规则：关掉物品栏时，合成格里的东西自动回到背包，背包满了就掉到地上。
+   * 我们这条路径上**没有"掉到地上"**（那要主程序知道玩家站在哪、朝向哪），
+   * 所以放不下的那几格**留在格子里**——宁可玩家下次打开还看见它，
+   * 也不能让它凭空消失。工作台/箱子那些界面由各自的容器负责，这里只动玩家自己的格子。
+   */
+  private returnCraftingToInventory(): void {
+    const grid = this.grids[2];
+    for (let index = 0; index < grid.size * grid.size; index++) {
+      const stack = grid.get(index);
+      if (!stack) continue;
+      if (this.inventory.addStack(stack) > 0) continue;
+      grid.set(index, null);
+    }
+  }
+
   close(): void {
     this.clearTouchPress();
     if (!this.open) return;
     this.returnHeldToInventory();
+    this.returnCraftingToInventory();
     if (this.activeContainer) this.activeContainer.onChange = null;
     // 交易界面关掉之后不再抓着这个村民（他下一秒可能就走进怪堆里死了）
     this.activeVillager = null;

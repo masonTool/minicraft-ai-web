@@ -1276,6 +1276,7 @@ class App {
     // 放进 #app 就会被 DOM 更靠后的遮罩（#death / #sleep）盖住
     this.recipeBook = new RecipeBook(document.body, atlas, this.inventory, {
       onCraft: (recipe) => this.craftFromBook(recipe),
+      onFill: (recipe) => this.fillFromBook(recipe),
     });
     // 成就面板与达成提示（M7，批次 87）：同样挂 <body>（见上面那条 z-index 的注记），
     // 点外框关闭；提示卡是 HUD 性质的东西，挂 body 才不会被打包进 #app 的层叠上下文
@@ -6014,9 +6015,18 @@ class App {
     if (result.food > 0 || result.saturation > 0) this.stats.eat(result.food, result.saturation);
   }
 
-  /** 打开配方书（背包里的按钮与 R 键都走这里） */
+  /**
+   * 打开配方书（背包里的按钮与 R 键都走这里）。
+   *
+   * ⚠️ 批次 132 起**不再先把背包关掉**：原版的配方书就是背包界面的一部分
+   *（中文 Wiki「物品栏 → 配方书」：点一条配方，材料被摆进合成格，
+   * 抬起头就能看见摆法）。原来关掉背包有两个坏处：
+   *  ① "摆进合成格"这件事玩家根本看不见；
+   *  ② 关界面会把格子里的东西倒回背包——刚摆好的立刻被清掉。
+   */
   private openRecipeBook(): void {
-    this.inventoryScreen.close();
+    // 背包没开着就顺手打开（原版的配方书本来就在背包界面里）
+    if (!this.inventoryScreen.isOpen) this.inventoryScreen.openWith('inventory');
     this.recipeBook.show();
     this.handleInventoryOpen(true);
   }
@@ -6040,6 +6050,23 @@ class App {
     if (!result) return false;
     this.refreshHotbar();
     this.inventoryScreen.refresh();
+    this.audio.play('click');
+    return true;
+  }
+
+  /**
+   * 配方书里**点一条配方**：把材料摆进合成格（批次 132，对齐原版）。
+   *
+   * 摆好之后收起配方书——背包就在下面，摆好的格子与输出格一眼可见，
+   * 点输出格取成品（`handleResultClick` 那套原版规则已经在跑）。
+   *
+   * 与上面 `craftFromBook` 的分工：**这个才是原版的主交互**，
+   * 那个"一键合成"留着给"能做 5 次"这类批量场景。
+   */
+  private fillFromBook(recipe: Recipe): boolean {
+    if (!this.inventoryScreen.fillFromRecipe(recipe)) return false;
+    this.recipeBook.hide();
+    this.handleInventoryOpen(this.inventoryScreen.isOpen);
     this.audio.play('click');
     return true;
   }

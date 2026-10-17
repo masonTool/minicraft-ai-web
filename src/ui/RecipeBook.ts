@@ -1,10 +1,12 @@
 /**
  * 配方书（界面）
  *
- * 一个覆盖式面板：列出所有配方、每条显示"产物 + 需要的材料"，材料够就能一键合成。
- * 与原版"配方书"的区别：原版是把它摆在背包旁边、点了只**填充**合成格；
- * 这里直接一步做出来（扣材料、给产物），因为本项目的背包界面本来就复杂，
- * 再叠一层"填充格子"的交互不如一键来得直接。
+ * 一个覆盖式面板：列出所有配方、每条显示"产物 + 摆法 + 材料够不够"。
+ *
+ * ⚠️ 交互在批次 132 按原版改过（用户拿中文 Wiki「物品栏 → 配方书」当参考）：
+ * **点一条配方 = 把材料摆进合成格**，摆法看得见、还能自己改，最后点输出格取成品。
+ * 原来那版是"点一下直接扣料出成品"，看不见摆放过程——与 Wiki 描述不符。
+ * 那颗"合成"按钮留着（原版没有它），给"这条能做 5 次"这种批量场景用。
  *
  * 数据都在 `core/crafting/RecipeBook.ts` 里（纯函数，可离线测），这里只管画。
  */
@@ -23,6 +25,14 @@ import { isTouchUi } from './TouchControls.ts';
 export interface RecipeBookActions {
   /** 合成一次；返回是否成功（材料不够时返回 false） */
   onCraft: (recipe: Recipe) => boolean;
+  /**
+   * 把材料**摆进合成格**（批次 132，对齐原版）；返回是否摆成功。
+   *
+   * ⚠️ 这是**主交互**：原版配方书点一条配方就是"把材料摆进合成格"，
+   * 摆法看得见、还能自己改，最后点输出格取成品（见中文 Wiki「物品栏 → 配方书」）。
+   * `onCraft` 那条一键合成留着给"批量做"用。
+   */
+  onFill: (recipe: Recipe) => boolean;
 }
 
 export class RecipeBook {
@@ -281,6 +291,24 @@ export class RecipeBook {
     main.append(ingredients, meta);
 
     card.append(main, craft);
+
+    // ---- 点卡片 = **把材料摆进合成格**（批次 132，对齐原版）
+    //
+    // 原版（中文 Wiki「物品栏 → 配方书」）：点一条配方就把材料摆进合成格，
+    // 摆法看得见、还能自己改，最后由输出格取成品。所以可点的判据是
+    // "材料够 + 这条配方放得进当前的格子"——3×3 的要站到工作台前，
+    // 在背包里点了也没地方摆（原版背包里的配方书同样只列 2×2 能做的）。
+    if (entry.craftable && entry.gridSize <= 2) {
+      card.classList.add('fillable');
+      card.dataset.role = 'fill';
+      card.addEventListener('pointerdown', (event) => {
+        // 点在那颗"合成"按钮上时别抢它的事（它是另一条路径：一键做完）
+        if ((event.target as HTMLElement).closest('.recipe-craft')) return;
+        event.preventDefault();
+        this.actions.onFill(entry.recipe);
+      });
+    }
+
     // 摆放说明挂在 title/aria 上：读屏与鼠标悬停都能拿到"每个格子放什么"
     card.setAttribute('aria-label', `${itemLabel(entry.result.id)}：${layout.text}`);
     card.title = layout.text;
