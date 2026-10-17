@@ -269,7 +269,8 @@ import {
   canTill,
   tillableTo,
 } from './core/registry/tools.ts';
-import { OverworldGenerator, SEA_LEVEL } from './core/gen/OverworldGenerator.ts';
+import { OverworldGenerator } from './core/gen/OverworldGenerator.ts';
+import { findSafeSpawn, planSpawnRegion } from './core/world/SpawnPoint.ts';
 // 凋灵骷髅"只要塞里面刷"（批次 115）：要塞的位置要算，而算它需要下界的洞顶/地板/群系
 import { NetherGenerator } from './core/gen/NetherGenerator.ts';
 import { fortressAt, type FortressWorld } from './core/gen/NetherFortress.ts';
@@ -1096,6 +1097,10 @@ class App {
   private lastCenterCx = Number.NaN;
   private lastCenterCz = Number.NaN;
   private spawnResolved = false;
+  private spawnSearchX = 0;
+  private spawnSearchZ = 0;
+  /** 读档完成前不能让“新世界出生点”抢先覆盖存档坐标。 */
+  private waitingForSaveRestore = false;
   private loadingCleared = false;
 
   constructor(
@@ -1116,6 +1121,7 @@ class App {
     },
   ) {
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType);
+    this.waitingForSaveRestore = Boolean(save?.hasSave);
     // TNT（批次 56）：红石引擎只负责"判定这里通电了"，点火交给拿着引信表的那一方
     this.redstone.onTntIgnite = (x, y, z) => {
       this.primedTnt.prime(this.tntWorld, x, y, z);
@@ -1392,7 +1398,7 @@ class App {
     // 没有存档时直接按出生点请求区块；
     // 有存档时先不请求 —— 读档要先装载"方块增量"，否则先加载进来的区块
     // 会以未修改的自然地形生成，之后还要回炉重算光照与网格（会在玩家眼前闪一下）
-    if (!this.save?.hasSave) this.refreshWorld(0, 0, true);
+    if (!this.save?.hasSave) this.prepareNewWorldSpawn();
   }
 
   /**
@@ -2191,17 +2197,32 @@ class App {
     this.world.update(centerCx, centerCz, this.viewDistanceNow);
   }
 
+  /** 预选一片值得加载的陆地；读档失败时也走这里，不能把玩家留在空世界。 */
+  private prepareNewWorldSpawn(): void {
+    // 原点恰在大海时，小视距永远加载不到陆地，安全出生点也就无从复核。
+    this.biomeGenerator = new OverworldGenerator(this.worldConfig.seed, this.worldConfig.worldType);
+    const region = planSpawnRegion(
+      (x, z) => this.biomeGenerator!.surfaceY(x, z),
+      (x, z) => this.biomeGenerator!.biomeAt(x, z).name,
+    );
+    this.spawnSearchX = region.x;
+    this.spawnSearchZ = region.z;
+    this.physics.teleport(region.x + 0.5, 80, region.z + 0.5);
+    this.refreshWorld(toChunkCoord(region.x), toChunkCoord(region.z), true);
+  }
+
   /** 这一帧的生效视距（区块）：启动期是逐格涨的，涨到位之后就是玩家的设置值 */
   private get viewDistanceNow(): number {
     return Math.min(this.viewDistance, this.startupRamp.radius);
   }
 
   /**
-   * 只要第一块地形完成网格化就撤掉加载遮罩。
+   * 第一块地形完成网格化、且玩家已经放到安全地面后才撤掉加载遮罩。
    * 注意：必须在主循环里检查——区块"加载完成"时还没有网格，只监听加载事件会永远等不到。
    */
   private refreshLoadingState(): void {
     if (this.loadingCleared) return;
+    if (!this.spawnResolved) return;
     if (this.chunkRenderer.chunkMeshCount === 0) return;
     this.loadingCleared = true;
     startupTrace.mark(STARTUP_PHASES.worldPlayable);
@@ -7737,50 +7758,33 @@ class App {
   // ---------------------------------------------------------------- 出生点
 
   /**
-   * 在世界刚加载出一片区域时，就近寻找一块高于海平面的陆地作为出生点，
-   * 避免玩家出生在深海里。
+   * 在已加载区域寻找一块自然、平坦、头顶无阻挡的陆地。
+   * 平整度优先，其次偏向平原 / 草甸 / 森林 / 丛林，避免出生在树冠、悬崖和裸山尖。
    */
   private tryResolveSpawn(): void {
-    if (this.spawnResolved) return;
-    if (this.world.chunks.size < 9) return;
+    if (this.spawnResolved || this.waitingForSaveRestore) return;
+    if (this.world.chunks.size < 21) return;
 
-    for (let radius = 0; radius <= 96; radius += 4) {
-      const candidates: Array<[number, number]> =
-        radius === 0
-          ? [[0, 0]]
-          : [
-              [radius, 0],
-              [-radius, 0],
-              [0, radius],
-              [0, -radius],
-              [radius, radius],
-              [-radius, -radius],
-              [radius, -radius],
-              [-radius, radius],
-            ];
-      for (const [dx, dz] of candidates) {
-        const ground = this.groundHeight(dx, dz);
-        if (ground >= SEA_LEVEL + 1) {
-          this.physics.teleport(dx + 0.5, ground + 1.2, dz + 0.5);
-          this.spawnPoint = [dx + 0.5, ground + 1.2, dz + 0.5];
-          this.lastPlayerX = dx + 0.5;
-          this.lastPlayerZ = dz + 0.5;
-          this.lastCenterCx = Number.NaN;
-          this.lastCenterCz = Number.NaN;
-          this.spawnResolved = true;
-          return;
-        }
-      }
-    }
-  }
+    const radius = Math.max(16, Math.min(96, this.viewDistanceNow * 16 - 4));
+    const spawn = findSafeSpawn(
+      this.world,
+      (x, z) => this.biomeNameAt(x, z),
+      this.spawnSearchX,
+      this.spawnSearchZ,
+      radius,
+    );
+    if (!spawn) return;
 
-  /** 该列最高固体（跳过水）的 y 坐标 */
-  private groundHeight(x: number, z: number): number {
-    for (let y = 200; y >= 0; y--) {
-      const id = this.world.getBlock(x, y, z);
-      if (id !== 0 && id !== Block.WATER) return y;
-    }
-    return -999;
+    this.physics.teleport(spawn.x, spawn.y, spawn.z);
+    this.spawnPoint = [spawn.x, spawn.y, spawn.z];
+    this.lastPlayerX = spawn.x;
+    this.lastPlayerZ = spawn.z;
+    this.fallStartY = null;
+    this.pendingFallDistance = 0;
+    this.lastCenterCx = Number.NaN;
+    this.lastCenterCz = Number.NaN;
+    this.spawnResolved = true;
+    this.refreshWorld(toChunkCoord(spawn.x), toChunkCoord(spawn.z), true);
   }
 
   // ---------------------------------------------------------------- 生存
@@ -8175,13 +8179,22 @@ class App {
   start(): void {
     // 读档是异步的：先让世界跑起来（玩家看到创建中的世界），读完再恢复位置与背包
     if (this.save?.hasSave) {
-      void this.loadSaveState().then((restored) => {
-        if (restored) console.info('[save] 已恢复上次的进度');
-        // 兜底：读档半路失败（存档坏了/没有玩家数据）时 `loadSaveState` 里那个
-        // `armProgress()` 不会被执行，进度系统就永远不上岗——这里再补一次（`armProgress`
-        // 自己幂等：重扫基线、重报一次 auto，已经达成的条目不会再弹）
-        else this.armProgress();
-      });
+      void this.loadSaveState()
+        .then((restored) => {
+          this.waitingForSaveRestore = false;
+          if (restored) console.info('[save] 已恢复上次的进度');
+          else {
+            // 种子不匹配、缺玩家数据：当新世界安全进入，而不是停在未请求任何区块的临时坐标。
+            this.prepareNewWorldSpawn();
+            this.armProgress();
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('[save] 读档失败，按新世界进入', error);
+          this.waitingForSaveRestore = false;
+          this.prepareNewWorldSpawn();
+          this.armProgress();
+        });
     } else {
       // 新世界：没有存档要读，进度系统直接上岗（背包里此刻是开发期初始物资 → 记账为基线）
       this.armProgress();
@@ -8232,9 +8245,9 @@ class App {
 
       const rawInput = this.uiOpen ? IDLE_INPUT : this.collectInput();
       const wasOnGround = this.physics.onGround;
-      if (this.pendingArrival) {
+      if (!this.spawnResolved || this.pendingArrival) {
         // 传送途中：目的地的区块还没流出来，`getBlock` 一律返回空气。
-        // 这里把玩家"冻"在原地（速度清零、不跑物理），等 `resolvePortalArrival` 把人放进门里
+        // 新世界安全落点解析前也一样：玩家还在临时高度，绝不能先累计摔落或环境伤害。
         this.physics.vx = 0;
         this.physics.vy = 0;
         this.physics.vz = 0;
@@ -8248,7 +8261,9 @@ class App {
       } else {
         this.physics.update(this.world, rawInput, this.yaw, dt, this.flying, this.effects.moveSpeedMultiplier(), this.effects.jumpMultiplier());
       }
-      this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
+      if (this.spawnResolved && !this.pendingArrival) {
+        this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
+      }
       // 床（B13）：睡觉的计时与结算。用**真实输入**是为了让"跳跃键提前起床"能被读到
       this.updateSleep(dt, rawInput);
       // 钓鱼（批次 81）：浮标飞行 / 等待咬钩 / 咬钩窗口，全在状态机里
@@ -8778,7 +8793,7 @@ class App {
    */
   private biomeNameAt(x: number, z: number): string | null {
     if (this.dimension !== Dimension.OVERWORLD) return null;
-    this.biomeGenerator ??= new OverworldGenerator(this.worldConfig.seed);
+    this.biomeGenerator ??= new OverworldGenerator(this.worldConfig.seed, this.worldConfig.worldType);
     return this.biomeGenerator.biomeAt(x, z).name;
   }
 

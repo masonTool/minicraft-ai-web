@@ -450,7 +450,13 @@ console.log('\n[真实地形抽样：10×10 区块]');
   check('抽样区域里长出了树', stats.trees > 20, `树 ${stats.trees}`);
   const grass = counts.get(Block.SHORT_GRASS) ?? 0;
   check('抽样区域里长出了草', grass > 30, `草 ${grass}`);
-  check('树干真的写进了方块（不是只统计了数量）', (counts.get(Block.OAK_LOG) ?? 0) > 100, `原木 ${counts.get(Block.OAK_LOG)}`);
+  // 不能只数橡木：同一片抽样区的主要群系可能随地形参数变成雪坡 / 针叶林，
+  // `stats.trees` 会统计云杉，但旧断言只盯 OAK_LOG，会把真实存在的树误报成失败。
+  const logBlocks = [...counts].reduce(
+    (sum, [id, count]) => sum + (blockDef(id).name.endsWith('_log') ? count : 0),
+    0,
+  );
+  check('树干真的写进了方块（不是只统计了数量）', logBlocks > 100, `各类原木 ${logBlocks}`);
   // 判据是**比值**（批次 103，B103-5）：见上面 `featureRatio` 的说明。
   // 要挡的是"地物把生成拖垮"这种退化（例如每棵树都去扫一遍全区块）。
   check(

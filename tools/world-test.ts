@@ -24,6 +24,8 @@ import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { OverworldGenerator, SEA_LEVEL } from '../src/core/gen/OverworldGenerator.ts';
 import { Chunk, CHUNK_SIZE_X, CHUNK_SIZE_Z, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
+import { findSafeSpawn, naturalGroundY, planSpawnRegion, type SpawnSearchWorld } from '../src/core/world/SpawnPoint.ts';
+import { Block } from '../src/core/registry/blocks.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, dbNameFor } from '../src/core/save/WorldRegistry.ts';
 import { relativeTime } from '../src/ui/WorldScreen.ts';
 
@@ -276,7 +278,45 @@ console.log('\n[放大化世界]');
   check('切回默认类型拿到的还是默认地形（缓存没串）', sameAsNormal);
 }
 
-// ---------------------------------------------------------------- 6. 时间文案
+// ---------------------------------------------------------------- 6. 安全出生点
+
+console.log('\n[安全出生点]');
+{
+  const heights = new Map<string, number>();
+  const extras = new Map<string, number>();
+  for (let z = -16; z <= 16; z++) {
+    for (let x = -16; x <= 16; x++) heights.set(`${x},${z}`, 70);
+  }
+  // 原点附近造一条陡沟；它离中心最近，但不应该胜过稍远的平地。
+  heights.set('0,0', 76);
+  heights.set('2,0', 68);
+  // 树冠是固体，但不能被识别成自然地面。
+  extras.set('8,79,8', Block.OAK_LEAVES);
+
+  const mock: SpawnSearchWorld = {
+    isLoaded: (x, z) => Math.abs(x) <= 16 && Math.abs(z) <= 16,
+    getBlock: (x, y, z) => extras.get(`${x},${y},${z}`) ?? (y <= (heights.get(`${x},${z}`) ?? -65) ? Block.GRASS_BLOCK : Block.AIR),
+    isSolid(x, y, z) {
+      const id = this.getBlock(x, y, z);
+      return id !== Block.AIR && id !== Block.WATER && id !== Block.LAVA;
+    },
+  };
+
+  check('树冠不会被当成出生地面', naturalGroundY(mock, 8, 8) === 70);
+  const spawn = findSafeSpawn(mock, (x) => (x >= 6 ? 'plains' : 'desert'), 0, 0, 14);
+  check('能在已加载区域找到出生点', spawn !== null);
+  check('拒绝中心陡沟并优先植被丰富的平地', spawn !== null && spawn.roughness === 0 && spawn.biome === 'plains');
+  check('出生高度恰在地表上方', spawn !== null && spawn.groundY === 70 && Math.abs(spawn.y - 71.01) < 1e-6);
+
+  const region = planSpawnRegion(
+    (x) => (Math.abs(x) < 12 ? 40 : 72),
+    (x) => (x >= 16 ? 'forest' : 'desert'),
+    32,
+  );
+  check('原点在海里时会预选附近的植被陆地', region.x >= 16);
+}
+
+// ---------------------------------------------------------------- 7. 时间文案
 
 console.log('\n[相对时间]');
 {
