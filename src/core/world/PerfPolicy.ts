@@ -227,6 +227,63 @@ export function perfPolicyStep(
   return { state: next, action: null };
 }
 
+// ---------------------------------------------------------------- 雾的平滑
+
+/**
+ * 雾半径的**收缩**速率（区块/秒）。
+ *
+ * 视距变小（掉帧被降级、或玩家自己调小）时，雾要**立刻**涌上来。快，是因为
+ * 随后被卸载的那一圈必须"已经在雾里"——慢一步玩家就看见地形突然少一圈。
+ */
+export const FOG_SHRINK_CHUNKS_PER_SEC = 4;
+/**
+ * 雾半径的**扩张**速率（区块/秒），刻意比收缩慢得多。
+ *
+ * 视距变大时先发区块请求，等那一圈真的画好了雾才推过去——新地形于是"从雾里浮出来"，
+ * 而不是在空地上一块块长出来。
+ */
+export const FOG_GROW_CHUNKS_PER_SEC = 1.2;
+/**
+ * 扩张时最多等"远处区块就绪"多久（秒）。
+ *
+ * ⚠️ 这个兜底必须有：玩家一直在挖方块时网格队列几乎永远非空，只认就绪的话雾会
+ * **永远**推不出去，表现为"视距变大了但画面一直灰蒙蒙"。
+ */
+export const FOG_GROW_WAIT_LIMIT = 5;
+
+/**
+ * 雾半径朝目标推进一步（纯函数，可离线断言）。
+ *
+ * 为什么抽出来：视距是**整数**、一跳就是一整圈（16 格），而雾是连续量。让连续量
+ * **滞后于**离散量，"视距变了"在画面上就从"跳一格"变成"雾涌上来 / 雾散开"——
+ * 而"收缩快、扩张慢且要等就绪"这几条不对称的规则，写在主循环里只能靠眼睛看。
+ *
+ * @param ready 目标那一圈的区块是否已经画好（为 false 时扩张会被挡住，但有等待上限）
+ * @param waited 已经等了多久（秒），由调用方存着并回传
+ */
+export function fogRadiusStep(
+  current: number,
+  target: number,
+  dt: number,
+  ready: boolean,
+  waited: number,
+): { radius: number; waited: number } {
+  // 0 = 还没初始化（第一帧直接对齐），dt<=0 = 只是"重算一次"、不推进动画
+  if (current <= 0) return { radius: target, waited };
+  if (dt <= 0) return { radius: current, waited };
+
+  const diff = target - current;
+  if (Math.abs(diff) < 1e-3) return { radius: target, waited: 0 };
+
+  if (diff < 0) {
+    return { radius: Math.max(target, current - FOG_SHRINK_CHUNKS_PER_SEC * dt), waited: 0 };
+  }
+
+  const nextWaited = ready ? 0 : waited + dt;
+  if (!ready && nextWaited < FOG_GROW_WAIT_LIMIT) return { radius: current, waited: nextWaited };
+  return { radius: Math.min(target, current + FOG_GROW_CHUNKS_PER_SEC * dt), waited: nextWaited };
+}
+
 /**
  * 限帧：这一帧该不该跳过（毫秒）。
  *

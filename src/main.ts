@@ -341,6 +341,7 @@ import {
   MOBILE_VIEW_DISTANCE,
   RESOLUTION_MIN,
   effectivePixelRatio,
+  fogRadiusStep,
   frameIntervalMs,
   initialPerfState,
   particleBudgetFor,
@@ -1970,13 +1971,16 @@ class App {
   /**
    * 把时间换算成天空亮度与天空颜色，推给材质与场景。
    * 因为光照等级是烘焙在顶点属性里的，这里每帧只改 uniform，开销可以忽略。
+   *
+   * @param dt 秒。只有主循环会传（用来推进雾的平滑）；其它调用点（换维度 / 传送 /
+   *           改时间 / 改天气）传 0，表示"只是重算一次，不推进动画"。
    */
-  private applyEnvironment(): void {
-    this.applyDimensionEnvironment();
+  private applyEnvironment(dt = 0): void {
+    this.applyDimensionEnvironment(dt);
     this.applyMediumEnvironment();
   }
 
-  private applyDimensionEnvironment(): void {
+  private applyDimensionEnvironment(dt = 0): void {
     if (this.dimension === Dimension.NETHER) {
       // 下界：没有昼夜与天气，只有暗红雾气 + 固定亮度
       //
@@ -2057,9 +2061,11 @@ class App {
     this.sky.setSunGlow(Math.max(0, 1 - Math.abs(sunHeight) * 3.2) * (1 - overcast) * 0.9);
     this.sky.setCloudAppearance(daylight, overcast);
 
-    // 启动期雾墙跟着当前渐进视距向外推，避免加载半径还在 3 区块时就把
-    // 最终 12 区块的空缺全部暴露出来，远处地形会在雾里逐渐显现而不是逐块弹出。
-    const fogFar = (this.viewDistanceNow * 16 - 6) * (1 - overcast * 0.45);
+    // 雾不再直接等于视距，而是**滞后于**它（见 `updateFogRadius`）：
+    // 雾推过去之前，那一圈的区块早就画好了，于是新地形是"从雾里浮出来"，
+    // 而不是在空地上一块块长出来。启动期的渐进视距走的也是同一条路。
+    this.updateFogRadius(dt);
+    const fogFar = this.fogRadius * 16 * (1 - overcast * 0.45);
     const fogNear = fogFar * 0.72;
     this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
     this.translucentMaterial.setFog(this.skyColor, fogNear, fogFar);
@@ -2215,6 +2221,37 @@ class App {
   /** 这一帧的生效视距（区块）：启动期是逐格涨的，涨到位之后就是玩家的设置值 */
   private get viewDistanceNow(): number {
     return Math.min(this.viewDistance, this.startupRamp.radius);
+  }
+
+  /**
+   * 雾的当前半径（区块，**连续量**）。
+   *
+   * 区块请求半径是整数、一跳就是一整圈（16 格），而雾是连续的。让连续量**滞后于**
+   * 离散量，"视距变了"就从"跳一格"变成"雾涌上来 / 雾散开"。0 表示还没初始化。
+   */
+  private fogRadius = 0;
+  /** 雾在等"远处区块就绪"上已经耗了多久（秒），用于 `FOG_GROW_WAIT_LIMIT` 那个兜底 */
+  private fogWait = 0;
+
+  /**
+   * 雾半径平滑跟随视距（批次 157 的第二件事：别让地形一块一块地弹出来）。
+   *
+   * 两个方向**刻意不对称**：
+   *  - **收缩要快**：掉帧时立刻把远处收进雾里，玩家看到的是"雾涌上来"；
+   *    随后被卸载的那一圈此刻已经在雾里了，所以看不见它消失；
+   *  - **扩张要慢、而且要等**：视距变大时先发区块请求，等那一圈真的画好了才推雾——
+   *    新地形于是"从雾里浮出来"，而不是在空地上逐块长出来。
+   *
+   * ⚠️ 就绪门控必须配一个等待上限：玩家一直在挖方块时网格队列几乎永远非空，
+   * 只认就绪的话雾会**永远**推不出去（表现为"视距变大了但一直灰蒙蒙"）。
+   */
+  private updateFogRadius(dt: number): void {
+    // "就绪"的判据：目标那一圈既没有待生成的、也没有待网格化的。
+    // 网格队列在挖方块时几乎永远非空，所以 `fogRadiusStep` 里配了等待上限。
+    const ready = this.world.pendingCount === 0 && this.chunkRenderer.queueLength === 0;
+    const next = fogRadiusStep(this.fogRadius, this.viewDistanceNow, dt, ready, this.fogWait);
+    this.fogRadius = next.radius;
+    this.fogWait = next.waited;
   }
 
   /**
@@ -8196,7 +8233,7 @@ class App {
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
-      `视距: ${this.viewDistance}${this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance ? `（自适应，上限 ${this.settings.viewDistance}）` : ''} 区块   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
+      `视距: ${this.viewDistance}${this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance ? `（自适应，上限 ${this.settings.viewDistance}）` : ''} 区块   雾: ${this.fogRadius.toFixed(1)}   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
       `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}   护甲: ${armorPoints}\n` +
       `经验: ${this.experience.level} 级 ${this.experience.progress}/${this.experience.toNext}（累计 ${this.experience.total}）\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
@@ -8361,7 +8398,8 @@ class App {
         this.weather.update(dt, this.camera.position, this.snowyHere);
         this.sky.update(this.timeOfDay, this.camera.position, dt);
       }
-      this.applyEnvironment();
+      // 只有主循环传 dt：雾的平滑要按真实时间推进（其它调用点只是"重算一次"）
+      this.applyEnvironment(dt);
 
       this.updateGamepad(dt);
       this.tickAutoSave(dt);
@@ -8658,6 +8696,10 @@ class App {
     this.lastCenterCx = Number.NaN;
     this.lastCenterCz = Number.NaN;
     this.weather.setKind('clear');
+    // 换维度等于"换一片全新的地形"，雾要重新从近处散开（否则会先看见一片空白再逐块弹出）。
+    // ⚠️ 下界与末地用的是各自的固定雾，这一处只影响回到主世界时那一下。
+    this.fogRadius = Math.min(this.fogRadius, 1);
+    this.fogWait = 0;
     if (dimension === Dimension.END) this.spawnEndBoss();
     this.applyEnvironment();
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);

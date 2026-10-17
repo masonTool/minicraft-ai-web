@@ -24,7 +24,11 @@ import {
   MOBILE_PIXEL_RATIO_CAP,
   MOBILE_RESOLUTION_MIN,
   MOBILE_VIEW_DISTANCE_MAX,
+  FOG_GROW_CHUNKS_PER_SEC,
+  FOG_GROW_WAIT_LIMIT,
+  FOG_SHRINK_CHUNKS_PER_SEC,
   effectivePixelRatio,
+  fogRadiusStep,
   frameIntervalMs,
   initialPerfState,
   particleBudgetFor,
@@ -276,6 +280,44 @@ console.log('\n[手机光照预算不能沿用桌面的启动档]');
     MOBILE_STARTUP_LIGHT_BUDGET_PER_FRAME * 4 <= STARTUP_LIGHT_BUDGET_PER_FRAME,
   );
   check('手机游玩预算低于桌面', MOBILE_LIGHT_BUDGET_PER_FRAME < LIGHT_BUDGET_PER_FRAME);
+}
+
+// ---------------------------------------------------------------- 8. 雾滞后于视距
+
+console.log('\n[雾滞后于视距：收缩快、扩张慢、而且要等远处画好]');
+{
+  // 第一帧直接对齐（否则开局雾会从 0 慢慢涨上来，等于"先看一片白再看见世界"）
+  equal('未初始化时直接对齐目标', fogRadiusStep(0, 6, 1 / 60, true, 0).radius, 6);
+  equal('dt=0 只是重算一次、不推进动画', fogRadiusStep(6, 12, 0, true, 0).radius, 6);
+
+  // 收缩：4 区块/秒，而且是连续的（不是一跳到底）
+  check('收缩 0.5 秒收 2 格', Math.abs(fogRadiusStep(8, 6, 0.5, true, 0).radius - 6) < 1e-9, `${fogRadiusStep(8, 6, 0.5, true, 0).radius}`);
+  check('收缩是连续的（0.25 秒只收 1 格）', Math.abs(fogRadiusStep(8, 6, 0.25, true, 0).radius - 7) < 1e-9, `${fogRadiusStep(8, 6, 0.25, true, 0).radius}`);
+  check('收缩比扩张快（方向不对称是刻意的）', FOG_SHRINK_CHUNKS_PER_SEC > FOG_GROW_CHUNKS_PER_SEC);
+
+  // 扩张：1.2 区块/秒
+  check(
+    '扩张 1 秒只推 1.2 格',
+    Math.abs(fogRadiusStep(6, 8, 1, true, 0).radius - 7.2) < 1e-9,
+    `${fogRadiusStep(6, 8, 1, true, 0).radius}`,
+  );
+
+  // 扩张要等就绪：远处没画好就推雾 = 让玩家看见空地上逐块长出地形
+  const blocked = fogRadiusStep(6, 8, 1, false, 0);
+  equal('远处还没画好时雾不推', blocked.radius, 6);
+  check('等待计时在累加', blocked.waited > 0, `${blocked.waited}`);
+
+  // 但不能永远等：等待上限到了就强制推进
+  check(
+    '等过上限之后强制推进（否则一直挖方块就永远灰蒙蒙）',
+    fogRadiusStep(6, 8, 1, false, FOG_GROW_WAIT_LIMIT).radius > 6,
+    `${fogRadiusStep(6, 8, 1, false, FOG_GROW_WAIT_LIMIT).radius}`,
+  );
+
+  // 边界：到目标就停，两个方向都不冲过去
+  equal('已经到目标就不动', fogRadiusStep(8, 8, 1, true, 0).radius, 8);
+  equal('扩张不会冲过目标', fogRadiusStep(7.9, 8, 1, true, 0).radius, 8);
+  equal('收缩不会冲过目标', fogRadiusStep(4.1, 4, 1, true, 0).radius, 4);
 }
 
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);
