@@ -86,6 +86,10 @@
              手机竖屏 430×932 → 13 / 156px（受 vw/vh 限制，面板仍收得进屏幕） */
         --panel-w: min(94vw, 760px);
         --panel-h: min(88vh, 620px);
+        /* 携带版背包自己的固定基准：所有单窗共用；双窗只横向再加一块同高区域。
+           视口放不下时只做同倍率约束，不再按页签分别改宽高。 */
+        --inv-pocket-w: min(calc(100vw - 88px), 568px);
+        --inv-pocket-h: min(calc(100dvh - 72px), 318px);
 
         /* ---- 面板 ---- */
         --panel-bg: var(--mc-panel);
@@ -459,7 +463,7 @@
       body.split-ui:not(.classic-ui) .recipe-panel,
       body.split-ui:not(.classic-ui) .inv-panel {
         width: min(96%, var(--panel-w)); max-width: min(96%, var(--panel-w));
-        height: min(86dvh, var(--panel-h)); max-height: min(86dvh, var(--panel-h));
+        height: var(--inv-pocket-h); max-height: var(--inv-pocket-h);
         overflow: hidden; box-sizing: border-box;
       }
       body.split-ui:not(.classic-ui) .recipe-panel {
@@ -1340,7 +1344,9 @@
       }
       /* 合成并排：箱子页签挂在配方书根节点左下（Wiki 左板底） */
       #recipe-book.has-pocket-inv-tab {
-        position: relative;
+        /* 仍须保持 fixed + inset:0。此前改成 relative 后根节点会塌成内容高度，
+           左板贴到屏幕顶，右板仍垂直居中，于是两边一高一低。 */
+        position: fixed;
       }
       #recipe-book.has-pocket-inv-tab > .inv-pocket-inv-tab {
         position: absolute; left: 4px; bottom: 10px; z-index: 3;
@@ -1364,7 +1370,12 @@
         width: 36px; height: 36px; flex: 0 0 auto;
       }
       /* 携带版左右板共用右板的关闭键；左板不重复标题、说明和关闭键。 */
-      body.split-ui:not(.classic-ui) .recipe-header,
+      body.split-ui:not(.classic-ui) .recipe-header {
+        display: flex; min-height: 24px; padding: 0 0 5px; margin: 0 0 6px;
+        flex: 0 0 auto;
+      }
+      body.split-ui:not(.classic-ui) .recipe-header .recipe-hint,
+      body.split-ui:not(.classic-ui) .recipe-header .recipe-close,
       body.split-ui:not(.classic-ui) .recipe-detail { display: none; }
       /* 搜索框只属于放大镜（全部）分类；建筑/装备/物品/自然直接从物品格开始。 */
       body.split-ui:not(.classic-ui) .recipe-panel:not([data-tab='all']) .recipe-controls {
@@ -1615,9 +1626,10 @@
         min-width: 0;
         /* 普通背包按 9×44px 槽位反推宽度，不再继承通用 760px 设置面板。
            9 格 × 44 + 8 条 2px 缝 + 内边距/边框 ≈ 438px。 */
-        width: min(calc(100vw - 88px), 438px);
-        max-width: min(calc(100vw - 88px), 438px);
-        height: auto;
+        width: var(--inv-pocket-w);
+        max-width: var(--inv-pocket-w);
+        height: var(--inv-pocket-h);
+        max-height: var(--inv-pocket-h);
         /* 给底栏 dock 留出垂直空间 */
         max-height: min(72vh, calc(100vh - 72px));
         flex: 0 1 auto;
@@ -1648,7 +1660,7 @@
         grid-column: 1; grid-row: auto; width: 100%; min-width: 0;
       }
       /* 主背包/快捷栏才是 9 列；合成 2×2、盔甲竖列不要被这条盖掉 */
-      .inv-panel.pocket-ui .inv-main .inv-grid,
+      .inv-panel.pocket-ui .inv-main > .inv-grid,
       .inv-hotbar-dock .inv-hotbar {
         grid-template-columns: repeat(9, 44px);
         gap: 2px;
@@ -1658,12 +1670,18 @@
         max-width: 100%;
         margin: 0 auto;
       }
-      .inv-panel.pocket-ui .inv-main .inv-grid .inv-slot,
+      .inv-personal-title {
+        display: none; width: 100%; color: #3a3a3a;
+        font-size: 12px; line-height: 16px; text-align: left;
+      }
+      .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-personal-title,
+      .inv-panel.pocket-ui.workbench-ui .inv-personal-title { display: block; }
+      .inv-panel.pocket-ui .inv-main > .inv-grid .inv-slot,
       .inv-hotbar-dock .inv-slot {
         width: 44px; height: 44px; min-width: 44px;
         max-width: 44px; max-height: 44px; justify-self: center;
       }
-      .inv-panel.pocket-ui .inv-main .inv-grid .inv-slot canvas,
+      .inv-panel.pocket-ui .inv-main > .inv-grid .inv-slot canvas,
       .inv-hotbar-dock .inv-slot canvas {
         width: 36px; height: 36px; max-width: 36px; max-height: 36px;
       }
@@ -1671,9 +1689,17 @@
         grid-template-columns: repeat(2, minmax(36px, 42px));
         gap: 4px; width: auto;
       }
+      .inv-panel.pocket-ui .inv-craft-grid.size-3 {
+        grid-template-columns: repeat(3, 36px);
+        gap: 2px; width: max-content;
+      }
       .inv-panel.pocket-ui .inv-craft-grid.size-2 .inv-slot {
         width: 42px; height: 42px; max-width: 42px; max-height: 42px;
       }
+      .inv-panel.pocket-ui .inv-craft-grid.size-3 .inv-slot {
+        width: 36px; height: 36px; max-width: 36px; max-height: 36px;
+      }
+      .inv-panel.pocket-ui.workbench-ui .inv-craft { margin: 0; }
       .inv-panel.pocket-ui .inv-grid.inv-armor {
         grid-template-columns: minmax(0, 40px);
       }
@@ -1705,17 +1731,42 @@
 
       /* 合成页：居中 2×2，不撑高到溢出 */
       .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-body {
-        place-content: center; justify-items: center;
+        place-content: start center; justify-items: center;
       }
       .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-top {
         width: auto; max-width: 100%; display: flex; justify-content: center;
       }
+      /* 世界里的工作台：3×3 合成在上、玩家物品栏在下；不是单独一块 760px 通用面板。 */
+      .inv-panel.pocket-ui.workbench-ui .inv-body {
+        display: grid; grid-template-columns: 1fr; align-content: start;
+      }
+      .inv-panel.pocket-ui.workbench-ui .inv-main {
+        width: 100%; max-width: 100%;
+      }
       /* Wiki 携带版合成：2×2 在上 → 箭头朝下 → 产物在下 */
       .inv-panel.pocket-ui .inv-craft.inv-craft-vertical {
-        flex-direction: column; gap: 8px; align-items: center;
+        flex-direction: column; gap: 2px; align-items: center;
+        margin: 0;
+      }
+      /* 2×2 合成页还要在同高右窗里完整露出 3×9 个人仓库；
+         保持基岩版“上方材料 → 下方产物”的纵向语义，只压缩示意格，不缩玩家物品格。 */
+      .inv-panel.pocket-ui .inv-craft.inv-craft-vertical .inv-craft-grid.size-2 {
+        grid-template-columns: repeat(2, 30px);
+        gap: 2px;
+      }
+      .inv-panel.pocket-ui .inv-craft.inv-craft-vertical .inv-craft-grid.size-2 .inv-slot {
+        width: 30px; height: 30px; min-width: 30px;
+        max-width: 30px; max-height: 30px;
+      }
+      .inv-panel.pocket-ui .inv-craft.inv-craft-vertical .inv-craft-grid.size-2 .inv-slot canvas {
+        width: 28px; height: 28px; max-width: 28px; max-height: 28px;
+      }
+      .inv-panel.pocket-ui .inv-craft.inv-craft-vertical > .inv-slot {
+        width: 32px; height: 32px; min-width: 32px;
+        max-width: 32px; max-height: 32px;
       }
       .inv-panel.pocket-ui .inv-craft.inv-craft-vertical .inv-arrow {
-        font-size: 18px; line-height: 1; transform: none;
+        font-size: 14px; line-height: 1; transform: none;
       }
       /* ⚠️ 不要对 .inv-main 设 display:none——topArea（2×2 合成）就在 .inv-main 里 */
       .inv-panel.pocket-ui .inv-creative-section {
@@ -1724,9 +1775,10 @@
       }
       /* 携带版创造：分类已在左轨；面板内只留搜索 + 网格 + 销毁 */
       .inv-panel.creative-ui.pocket-ui {
-        width: min(calc(100vw - 88px), 568px);
-        max-width: min(calc(100vw - 88px), 568px);
-        max-height: min(68vh, calc(100vh - 78px));
+        width: var(--inv-pocket-w);
+        max-width: var(--inv-pocket-w);
+        height: var(--inv-pocket-h);
+        max-height: var(--inv-pocket-h);
       }
       .inv-panel.creative-ui.pocket-ui .inv-creative-section {
         display: flex; flex-direction: column; gap: 6px;
@@ -2168,19 +2220,16 @@
       }
       /* 携带版背包按槽位内容定尺寸；通用设置面板的 760×620 固定框不能套在这里。 */
       body.touch-mode .inv-panel.pocket-ui:not(.creative-ui) {
-        width: min(calc(100vw - 88px), 438px);
-        max-width: min(calc(100vw - 88px), 438px);
-        height: auto;
+        width: var(--inv-pocket-w);
+        max-width: var(--inv-pocket-w);
+        height: var(--inv-pocket-h);
+        max-height: var(--inv-pocket-h);
       }
       body.touch-mode .inv-panel.creative-ui.pocket-ui {
-        width: min(calc(100vw - 88px), 568px);
-        max-width: min(calc(100vw - 88px), 568px);
-      }
-      /* 盔甲页同时放 9×44px 主背包与 104px 装备区，不能沿用普通背包的 438px：
-         内容宽约 412 + 8 + 104px，再加内边距/边框后需要 562px。 */
-      body.touch-mode .inv-panel.pocket-ui[data-pocket-tab='armor'] {
-        width: min(calc(100vw - 88px), 568px);
-        max-width: min(calc(100vw - 88px), 568px);
+        width: var(--inv-pocket-w);
+        max-width: var(--inv-pocket-w);
+        height: var(--inv-pocket-h);
+        max-height: var(--inv-pocket-h);
       }
       body.touch-mode .inv-panel:not(.pocket-ui) {
         overflow-x: hidden;
@@ -2199,16 +2248,33 @@
       /* 并排时两块都不得超出半屏 */
       body.touch-mode.split-ui:not(.classic-ui) .recipe-panel,
       body.touch-mode.split-ui:not(.classic-ui) .inv-panel {
-        width: min(48vw, var(--panel-w));
-        max-width: min(48vw, var(--panel-w));
-        /* 合成左右板与携带版参考保持等高；底部快捷栏覆盖在板沿之外。 */
-        height: min(86dvh, var(--panel-h));
-        max-height: min(86dvh, var(--panel-h));
+        width: min(48vw, var(--inv-pocket-w));
+        max-width: min(48vw, var(--inv-pocket-w));
+        /* 双窗只是横向增加区域：高度继续沿用单窗唯一变量。 */
+        height: var(--inv-pocket-h);
+        max-height: var(--inv-pocket-h);
       }
       body.touch-mode.split-ui:not(.classic-ui) .recipe-panel {
         /* 左侧 40px 留给分类轨，灰框本体止于半屏分界线。 */
-        width: min(calc(50vw - 40px), var(--panel-w));
-        max-width: min(calc(50vw - 40px), var(--panel-w));
+        width: min(calc(50vw - 40px), var(--inv-pocket-w));
+        max-width: min(calc(50vw - 40px), var(--inv-pocket-w));
+      }
+      /* 844px 横屏时半屏装不下 9×44：只在双窗约束槽位，同一页内仍保持九列和顺序。
+         单窗继续使用 44px，避免为了工作台把普通背包也缩小。 */
+      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui .inv-main {
+        width: 100%;
+      }
+      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui .inv-main > .inv-grid {
+        --split-slot: min(44px, calc((50vw - 80px) / 9));
+        grid-template-columns: repeat(9, var(--split-slot));
+      }
+      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui .inv-main > .inv-grid .inv-slot {
+        width: var(--split-slot); height: var(--split-slot);
+        min-width: 0; max-width: var(--split-slot); max-height: var(--split-slot);
+      }
+      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui .inv-main .inv-grid .inv-slot canvas {
+        width: min(36px, calc(var(--split-slot) - 6px));
+        height: min(36px, calc(var(--split-slot) - 6px));
       }
       /* 说明文字在矮屏上占一整行还不参与操作——竖屏可留，横屏矮屏直接藏 */
       body.touch-mode .inv-header-hint { font-size: 11px; line-height: 1.35; max-width: 100%; }
@@ -2224,6 +2290,15 @@
         min-height: 0;
       }
       @media (orientation: landscape) and (max-height: 500px) {
+        /* 横屏携带版底部快捷栏占 76px：面板顶对齐后，318px 高的固定窗刚好停在
+           快捷栏上沿；继续垂直居中会让快捷栏压住个人仓库最后一行。 */
+        body.touch-mode #inventory-screen .inv-shell {
+          align-self: start;
+        }
+        body.touch-mode.split-ui:not(.classic-ui) #recipe-book {
+          align-items: start;
+          padding-top: 0;
+        }
         body.touch-mode .inv-header-hint,
         body.touch-mode .recipe-hint { display: none; }
         body.touch-mode .inv-panel.creative-ui:not(.pocket-ui) .inv-creative {
@@ -2285,9 +2360,9 @@
         .inv-grid.inv-nine { grid-template-columns: repeat(3, 46px); justify-content: start; }
         .inv-grid.inv-creative { grid-template-columns: repeat(8, minmax(0, 1fr)); }
         .inv-grid.inv-creative .inv-slot { width: auto; }
-        .inv-craft-grid.size-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .inv-craft-grid.size-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .inv-craft .inv-slot { width: 46px; }
+        .inv-craft-grid.size-2 { grid-template-columns: repeat(2, 42px); width: max-content; }
+        .inv-craft-grid.size-3 { grid-template-columns: repeat(3, 38px); width: max-content; }
+        .inv-craft .inv-slot { width: 42px; }
         /* 面板内允许纵向拖动滚动，其余手势交给操作层 */
         .inv-panel { touch-action: pan-y; }
         .inv-slot { -webkit-tap-highlight-color: transparent; }

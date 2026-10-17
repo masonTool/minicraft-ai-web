@@ -1292,6 +1292,7 @@ class App {
     // 挂到 <body> 上而不是 #app：面板的 z-index 只在同一个层叠上下文里比较，
     // 放进 #app 就会被 DOM 更靠后的遮罩（#death / #sleep）盖住
     this.recipeBook = new RecipeBook(document.body, atlas, this.inventory, {
+      gridSize: () => (this.inventoryScreen.currentMode === 'crafting' ? 3 : 2),
       onCraft: (recipe) => this.craftFromBook(recipe),
       onFill: (recipe) => this.fillFromBook(recipe),
     });

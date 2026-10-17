@@ -323,6 +323,8 @@ export class InventoryScreen {
   private readonly playerPreviewEl: HTMLCanvasElement;
   /** 主背包 3×9（携带版「物品栏」页） */
   private readonly mainGridEl: HTMLDivElement;
+  /** 合成页里标清下半区是玩家自己的 3×9 仓库，不是配方候选区 */
+  private readonly personalInventoryTitleEl: HTMLDivElement;
   /** 快捷栏：携带版**无论哪一页都可见**（Wiki 原文） */
   private readonly hotbarGridEl: HTMLDivElement;
   /** 经典 UI 标题栏上的「配方书」文字按钮；携带版改用左上图标条 */
@@ -793,13 +795,17 @@ export class InventoryScreen {
     cookTrack.className = 'furnace-cook';
     cookTrack.appendChild(this.cookFillEl);
 
-    // ---- 玩家背包（右栏）：3×9 主背包 + 9 快捷栏，**不再带文字标签**
-    // （原版靠一道缝区分这两排；标签是我们自己加的，用户要求照原版来）
+    // ---- 玩家背包（右栏）：3×9 主背包 + 9 快捷栏。
+    // 平常仍靠位置区分；合成双窗里要显式写「物品栏」，否则左侧配方候选与
+    // 右侧玩家仓库的语义很容易看反（尤其触摸端没有悬停提示）。
     // 携带版分页（批次 140）要单独显隐主背包，快捷栏则**始终留下**
+    this.personalInventoryTitleEl = document.createElement('div');
+    this.personalInventoryTitleEl.className = 'inv-personal-title';
+    this.personalInventoryTitleEl.textContent = '物品栏';
     this.mainGridEl = this.buildGrid(MAIN_START, MAIN_SIZE, 'inv-grid', 'inv');
     this.hotbarGridEl = this.buildGrid(HOTBAR_START, HOTBAR_SIZE, 'inv-grid inv-hotbar', 'inv');
     // 经典：快捷栏在面板内；携带版由 applyInventoryChrome 挪到 hotbarDock
-    this.mainColumn.append(this.mainGridEl, this.hotbarGridEl);
+    this.mainColumn.append(this.personalInventoryTitleEl, this.mainGridEl, this.hotbarGridEl);
 
     // ---- 玩家装备（左栏，4 格盔甲 + 1 格副手）竖排；
     // 空槽显示部位提示字（头/胸/腿/靴/副），触摸端才知道该放哪
@@ -1086,7 +1092,9 @@ export class InventoryScreen {
 
     this.creativeSection.style.display = showCreativeItems ? '' : 'none';
     this.panel.classList.toggle('creative-ui', showCreativeItems);
-    const pocket = this.mode === 'inventory' && pocketWidth;
+    const workbenchPocket = this.mode === 'crafting' && pocketWidth;
+    const pocket = (this.mode === 'inventory' || workbenchPocket) && pocketWidth;
+    this.panel.classList.toggle('workbench-ui', workbenchPocket);
     // 经典 / 非携带：保留文字切换；携带版创造用左轨分类 + 箱子互切
     if (this.creativeToggleBtn) {
       this.creativeToggleBtn.classList.toggle('hidden', !creative || pocket);
@@ -1142,13 +1150,36 @@ export class InventoryScreen {
       return;
     }
 
+    // 真工作台（右键世界里的工作台）：左边是配方书，右边是 3×3 合成区，
+    // 右下继续显示玩家自己的 3×9 仓库。此前它绕过携带版壳，退回 760px 通用面板，
+    // 而且配方书不会自动打开；在手机横屏上既过大，也不像基岩版工作台。
+    if (workbenchPocket) {
+      this.panel.dataset.pocketTab = 'crafting';
+      this.pocketTabsEl.classList.add('hidden');
+      this.pocketRecipeBar.classList.add('hidden');
+      this.railLeft.classList.add('hidden');
+      this.railRight.classList.add('hidden');
+      this.topArea.style.display = '';
+      this.gearEl.style.display = 'none';
+      this.mainGridEl.style.display = '';
+      this.hotbarGridEl.style.display = '';
+      this.syncCraftArrow(false);
+      this.placeHotbar(true);
+      this.syncPocketBodyClass(true);
+      this.restoreInvTabToRail();
+      return;
+    }
+
     const tab = this.pocketTab;
     this.panel.dataset.pocketTab = tab;
     // 合成页：只留 2×2（配方书在左侧并排）；盔甲页：左主背包 + 右装备（Wiki 图）
     // 物品栏页：主背包铺满；快捷栏始终在屏幕底 dock
     this.topArea.style.display = tab === 'crafting' ? '' : 'none';
     this.gearEl.style.display = tab === 'armor' ? '' : 'none';
-    this.mainGridEl.style.display = tab === 'inventory' || tab === 'armor' ? '' : 'none';
+    // 合成页下半区就是玩家自己的仓库；原来这里整块隐藏，留下大片空白，
+    // 也让人误以为左侧配方候选就是“我的物品”。
+    this.mainGridEl.style.display =
+      tab === 'inventory' || tab === 'armor' || tab === 'crafting' ? '' : 'none';
     this.hotbarGridEl.style.display = '';
     this.syncCraftArrow(tab === 'crafting');
     // 合成并排：左半配方书自带分类页签；箱子页签挪到配方书左下（Wiki）
@@ -2418,6 +2449,11 @@ export class InventoryScreen {
     }
     this.applyInventoryChrome();
     this.openPanel();
+    // 基岩版工作台默认把配方书摊在左侧。必须等背包先 open，
+    // 否则主程序的 openRecipeBook 会把模式改回普通 inventory。
+    if (mode === 'crafting' && !isClassicUi(this.viewportWidth)) {
+      this.hooks.onOpenRecipes?.('all');
+    }
   }
 
   toggle(): void {

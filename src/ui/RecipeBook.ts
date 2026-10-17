@@ -51,6 +51,8 @@ const SEARCH_TAB_ICON =
   '</svg>';
 
 export interface RecipeBookActions {
+  /** 当前合成区能容纳 2×2 还是 3×3；工作台打开时必须允许 3×3 配方。 */
+  gridSize: () => 2 | 3;
   /**
    * 一键做完（按住 Shift 点格子才走这条）；返回是否成功（材料不够时返回 false）。
    *
@@ -422,8 +424,9 @@ export class RecipeBook {
       cell.appendChild(badge);
     }
 
-    // 3×3 要工作台，2×2 在背包里就能摆——原版背包里的配方书同样只让摆 2×2
-    const usable = entry.craftable && entry.gridSize <= 2;
+    // 普通背包只允许 2×2；站在工作台前时允许 3×3。
+    // 之前这里写死 <=2，导致工作台虽然画了 3×3 格，左侧所有 3×3 配方仍然点不动。
+    const usable = entry.craftable && entry.gridSize <= this.actions.gridSize();
     cell.classList.add(entry.craftable ? 'on' : 'locked');
     if (entry.gridSize > 2) cell.classList.add('needs-table');
     if (usable) cell.classList.add('fillable');
@@ -460,7 +463,11 @@ export class RecipeBook {
         .join('、');
       return `${head} · ${layoutText} · 材料不足${missing ? `（缺 ${missing}）` : ''}`;
     }
-    if (entry.gridSize > 2) return `${head} · ${layoutText} · 需要工作台 3×3`;
+    // “需要工作台”只在当前确实还是 2×2 时提示；进入工作台后同一条 3×3
+    // 配方已经可填格，应像普通可合成配方一样显示可制作次数。
+    if (entry.gridSize > this.actions.gridSize()) {
+      return `${head} · ${layoutText} · 需要工作台 3×3`;
+    }
     return entry.maxCraftable > 1
       ? `${head} · ${layoutText} · 可做 ${entry.maxCraftable} 次`
       : `${head} · ${layoutText}`;

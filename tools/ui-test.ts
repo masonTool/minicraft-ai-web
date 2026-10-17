@@ -444,8 +444,26 @@ console.log('\n[携带版分标签页（批次 140）]');
   check('携带版主背包与快捷栏固定 9×44px', css.includes('grid-template-columns: repeat(9, 44px)'));
   check('快捷栏 dock 固定到整屏底部', css.includes('position: fixed; left: 0; right: 0; bottom: 0;') && css.includes('width: 100vw;'));
   check(
-    '盔甲页为 9 列背包 + 装备区单独加宽',
-    css.includes(".inv-panel.pocket-ui[data-pocket-tab='armor']") && css.includes('568px'),
+    '单窗各页共用同一组固定背包尺寸',
+    css.includes('--inv-pocket-w:') &&
+      css.includes('--inv-pocket-h:') &&
+      css.includes('width: var(--inv-pocket-w);') &&
+      css.includes('height: var(--inv-pocket-h);'),
+  );
+  check('携带版不再按页签写 height:auto', !/inv-panel\.pocket-ui[^}]*height:\s*auto/.test(css));
+  check(
+    '配方书挂箱子页签后仍保持 fixed（双窗不会左高右低）',
+    css.includes('#recipe-book.has-pocket-inv-tab') && css.includes('position: fixed;'),
+  );
+  check(
+    '合成页下方显示玩家自己的主背包',
+    invSrc.includes("tab === 'inventory' || tab === 'armor' || tab === 'crafting'"),
+  );
+  check(
+    '工作台携带版自动打开配方书并沿用双窗壳',
+    invSrc.includes("mode === 'crafting' && !isClassicUi(this.viewportWidth)") &&
+      invSrc.includes("this.hooks.onOpenRecipes?.('all')") &&
+      invSrc.includes("classList.toggle('workbench-ui', workbenchPocket)"),
   );
   check('携带版创造栏是 10 列 44px 槽位', css.includes('grid-template-columns: repeat(10, 44px)'));
   check(
@@ -967,7 +985,16 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('配方书的动作接口有 onFill（摆进合成格）', bookUi.includes('onFill: (recipe: Recipe) => boolean'));
   check('一格配方标了 dataset.role（验收脚本要能找到它）', bookUi.includes("cell.dataset.role = 'fill'"));
   check('能点的格子才给 fillable（有按下/悬停反馈）', bookUi.includes("cell.classList.add('fillable')") && compact.includes('.recipe-cell.fillable:active'));
-  check('3×3 的配方在背包里不可点（要站到工作台前）', bookUi.includes('entry.gridSize <= 2'));
+  check(
+    '3×3 配方只在工作台可点（可用网格尺寸来自当前界面）',
+    bookUi.includes('gridSize: () => 2 | 3') &&
+      bookUi.includes('entry.gridSize <= this.actions.gridSize()') &&
+      mainSrc.includes("currentMode === 'crafting' ? 3 : 2"),
+  );
+  check(
+    '进入工作台后 3×3 配方不再误报“需要工作台”',
+    bookUi.includes('entry.gridSize > this.actions.gridSize()'),
+  );
   // 一键做完改成 Shift+点：原版没有"合成"按钮这条路径，不该再占用版面
   check('一键做完改成 Shift+点（版面里没有这颗按钮）', bookUi.includes('event.shiftKey') && !compact.includes('.recipe-craft {'));
   check('main 把 onFill 接上了', mainSrc.includes('onFill: (recipe) => this.fillFromBook(recipe)'));
