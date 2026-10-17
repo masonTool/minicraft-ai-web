@@ -148,6 +148,14 @@ export interface EntityContext {
    */
   awardXp?: (amount: number) => void;
   /**
+   * **生成经验球**（批次 170，I16）：生物死亡 / 挖矿时把 `amount` 拆成几个球掉在 (x,y,z)。
+   *
+   * ⚠️ 与 `awardXp` 是两个钩子，不是一件事：这个是**生成**（要位置），那个是**记账**
+   * （玩家把球吸到手上的那一刻）。合成一个之后，"经验从哪掉出来"就变成不可测的了
+   * ——而那正是原版与"直接进账"最大的差别（死亡要掉球）。
+   */
+  spawnXpOrbs?: (amount: number, x: number, y: number, z: number) => void;
+  /**
    * 对玩家造成伤害（生物攻击用，第二个参数是伤害来源的水平位置，用于击退方向）。
    *
    * `cause` 用**字符串字面量联合**而不是直接引 `PlayerStats.DamageCause`：

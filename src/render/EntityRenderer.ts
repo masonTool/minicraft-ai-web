@@ -19,6 +19,7 @@ import type { TextureAtlas } from './TextureAtlas.ts';
 import { applyFaceUvs, blockFaceTiles } from './atlasMesh.ts';
 import { Arrow } from '../core/entity/Arrow.ts';
 import { ItemEntity } from '../core/entity/ItemEntity.ts';
+import { XpOrb } from '../core/entity/XpOrb.ts';
 import { itemDef } from '../core/registry/items.ts';
 import { Throwable } from '../core/entity/Throwable.ts';
 import type { Entity } from '../core/entity/Entity.ts';
@@ -74,6 +75,9 @@ export class EntityRenderer {
   private readonly meshes = new Map<number, THREE.Mesh>();
   private readonly arrowMeshes = new Map<number, THREE.Mesh>();
   private readonly throwableMeshes = new Map<number, THREE.Mesh>();
+  /** 经验球（批次 170，I16）：用 `Sprite`（永远朝向镜头），与掉落物那套平面分开存 */
+  private readonly orbSprites = new Map<number, THREE.Sprite>();
+  private orbMaterial: THREE.SpriteMaterial | null = null;
   /** 箭的几何体按**物品 id** 缓存：药水箭各有自己的贴图（箭头上染了药水颜色） */
   private readonly arrowGeometries = new Map<number, THREE.BufferGeometry>();
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
@@ -130,6 +134,10 @@ export class EntityRenderer {
         this.syncArrow(entity, alive, lightAt);
         continue;
       }
+      if (entity instanceof XpOrb) {
+        this.syncOrb(entity, alive);
+        continue;
+      }
       if (entity instanceof Throwable) {
         this.syncThrowable(entity, alive, camera, lightAt);
         continue;
@@ -180,6 +188,68 @@ export class EntityRenderer {
       this.object.remove(mesh);
       this.throwableMeshes.delete(id);
     }
+    for (const [id, sprite] of [...this.orbSprites]) {
+      if (alive.has(id)) continue;
+      this.object.remove(sprite);
+      this.orbSprites.delete(id);
+    }
+  }
+
+  /**
+   * 经验球（批次 170，I16）。
+   *
+   * ⚠️ 刻意**不进图集**：为一颗 16×16 的发光圆点加一张贴图、再处理 UV 与图集排布，
+   * 比直接画一张 canvas 贵得多——与信标光柱同一个取舍（见 `BeaconBeamRenderer`）。
+   * 球越大越亮也越大（原版按档位分颜色/尺寸）：大球一眼看得出"这一坨值钱"。
+   */
+  private syncOrb(orb: XpOrb, alive: Set<number>): void {
+    alive.add(orb.id);
+
+    let sprite = this.orbSprites.get(orb.id);
+    if (!sprite) {
+      sprite = new THREE.Sprite(this.sharedOrbMaterial());
+      this.orbSprites.set(orb.id, sprite);
+      this.object.add(sprite);
+    }
+
+    const scale = 0.24 + Math.min(0.2, Math.log2(orb.amount + 1) * 0.035);
+    sprite.scale.set(scale, scale, 1);
+
+    // 吸附阶段不需要浮动（正在飞），自由状态才上下晃
+    const bob = Math.sin(this.elapsed * 3 + orb.bobPhase) * 0.04;
+    sprite.position.set(orb.x, orb.y + 0.12 + bob, orb.z);
+  }
+
+  /** 全部经验球共用一份材质（一张 16×16 的径向渐变点） */
+  private sharedOrbMaterial(): THREE.SpriteMaterial {
+    if (this.orbMaterial) return this.orbMaterial;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 16;
+    const context = canvas.getContext('2d');
+    if (context) {
+      const gradient = context.createRadialGradient(8, 8, 0, 8, 8, 8);
+      // 中心近白偏黄、外圈转绿再透明：原版那颗球就是这个配色
+      gradient.addColorStop(0, 'rgba(255, 255, 210, 1)');
+      gradient.addColorStop(0.45, 'rgba(198, 255, 90, 0.95)');
+      gradient.addColorStop(1, 'rgba(120, 220, 40, 0)');
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 16, 16);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    this.orbMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      // 球是自发光的：不参与雾与色调映射，远处也一眼看得见
+      fog: false,
+      toneMapped: false,
+    });
+    return this.orbMaterial;
   }
 
   /**
@@ -367,6 +437,13 @@ export class EntityRenderer {
   dispose(): void {
     for (const mesh of this.meshes.values()) this.object.remove(mesh);
     this.meshes.clear();
+    for (const sprite of this.orbSprites.values()) this.object.remove(sprite);
+    this.orbSprites.clear();
+    if (this.orbMaterial) {
+      this.orbMaterial.map?.dispose();
+      this.orbMaterial.dispose();
+      this.orbMaterial = null;
+    }
     for (const geometry of this.blockGeometries.values()) geometry.dispose();
     for (const geometry of this.arrowGeometries.values()) geometry.dispose();
     for (const geometry of this.spriteGeometries.values()) geometry.dispose();

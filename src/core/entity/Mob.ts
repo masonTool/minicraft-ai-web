@@ -1490,8 +1490,13 @@ export class Mob extends Entity {
     if (this.type.wool && !this.sheared) {
       ctx.spawnDrop(woolId(this.woolColor), 1, this.x, this.y + this.height * 0.5, this.z);
     }
-    // 击杀经验（原版数值）；经验球实体还没做，直接进账
-    if (this.type.xp > 0) ctx.awardXp?.(this.type.xp);
+    // 击杀经验（原版数值）：批次 170 起**掉成一地球**（I16），玩家要走过去吸；
+    // 没接 `spawnXpOrbs` 的调用方（离线测试的桩）退回"直接进账"，免得经验凭空消失
+    if (this.type.xp > 0) {
+      const xp = this.type.xp;
+      if (ctx.spawnXpOrbs) ctx.spawnXpOrbs(xp, this.x, this.y + this.height * 0.5, this.z);
+      else ctx.awardXp?.(xp);
+    }
   }
 
   /** 与玩家的水平距离（战斗判定用） */

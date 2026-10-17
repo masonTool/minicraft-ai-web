@@ -7,6 +7,7 @@
 
 import type { Entity, EntityContext } from './Entity.ts';
 import { ItemEntity } from './ItemEntity.ts';
+import { XpOrb } from './XpOrb.ts';
 import { maxStackOf } from '../registry/items.ts';
 
 /** 掉落物合并的判定半径（平方），约等于原版的 0.5 格 */
@@ -39,6 +40,45 @@ export class EntityManager {
     }
 
     this.mergeItemEntities();
+    this.mergeXpOrbs();
+  }
+
+  /**
+   * 经验球靠近就并成一个（批次 170，I16）。
+   *
+   * 原版也并；这里更有必要——打一群僵尸能掉二三十个球，不并会让实体表越来越长，
+   * 而每个球在渲染层是**一个 sprite**。
+   */
+  private mergeXpOrbs(): void {
+    if (this.list.length < 2 || this.list.length > MERGE_SCAN_LIMIT) return;
+
+    const orbs: XpOrb[] = [];
+    for (const entity of this.list) {
+      if (entity instanceof XpOrb) orbs.push(entity);
+    }
+    if (orbs.length < 2) return;
+
+    for (let i = 0; i < orbs.length; i++) {
+      const target = orbs[i]!;
+      if (target.dead || target.age < 0.5) continue;
+
+      for (let j = i + 1; j < orbs.length; j++) {
+        const other = orbs[j]!;
+        if (other.dead || other.age < 0.5) continue;
+
+        const dx = target.x - other.x;
+        const dy = target.y - other.y;
+        const dz = target.z - other.z;
+        if (dx * dx + dy * dy + dz * dz > MERGE_RADIUS_SQ) continue;
+
+        target.amount += other.amount;
+        other.dead = true;
+      }
+    }
+
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      if (this.list[i]!.dead) this.list.splice(i, 1);
+    }
   }
 
   /**

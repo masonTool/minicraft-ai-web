@@ -238,8 +238,10 @@ export class Dragon extends Mob {
         const count = drop.min + Math.floor(Math.random() * (drop.max - drop.min + 1));
         if (count > 0 && ctx) ctx.spawnDrop(drop.itemId, count, this.x, this.y + this.height * 0.5, this.z);
       }
-      // 12000 点会连升好多级（原版也是这么设计的），Experience.add 用 while 处理
-      ctx?.awardXp?.(ENDER_DRAGON_XP);
+      // 12000 点会连升好多级（原版也是这么设计的）。批次 170 起掉成一地球（I16）：
+      // `splitXpOrbs` 会把它拆成一串 3073/1207/617… 的球，而不是一个巨球
+      if (ctx?.spawnXpOrbs) ctx.spawnXpOrbs(ENDER_DRAGON_XP, this.x, this.y + 2, this.z);
+      else ctx?.awardXp?.(ENDER_DRAGON_XP);
     }
     return true;
   }

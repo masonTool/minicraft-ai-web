@@ -165,7 +165,8 @@ export class Wither extends Mob {
     this.dead = true;
     const drop = this.type.drops[0];
     if (drop && ctx) ctx.spawnDrop(drop.itemId, drop.min, this.x, this.y + 1, this.z);
-    ctx?.awardXp?.(this.type.xp);
+    if (ctx?.spawnXpOrbs) ctx.spawnXpOrbs(this.type.xp, this.x, this.y + 1, this.z);
+    else ctx?.awardXp?.(this.type.xp);
     // 原版凋灵倒下时会炸一次（本项目不拆地形，只炸人）
     ctx?.explode?.(this.x, this.y, this.z, WITHER_DEATH_BLAST_POWER);
     return true;

@@ -437,6 +437,7 @@ import {
   knockbackStrength,
 } from './core/entity/Bow.ts';
 import { ItemEntity } from './core/entity/ItemEntity.ts';
+import { XpOrb, splitXpOrbs } from './core/entity/XpOrb.ts';
 import type { EntityContext } from './core/entity/Entity.ts';
 import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
@@ -1307,7 +1308,8 @@ class App {
         // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
         onTrade: (villager, index) => void this.performTrade(villager, index),
         // 熔炉产物被取空时结算烧炼经验（I5）
-        onFurnaceXp: (amount) => this.awardXp(amount),
+        // 熔炉经验（原版取出产物时给）：炉子就在身旁，掉在玩家脚下即可
+        onFurnaceXp: (amount) => this.spawnXpOrbs(amount, this.physics.x, this.physics.y + 0.5, this.physics.z),
         // 背包里搬动东西的一声"咔"（H19 ⑪，批次 138）：界面只报"动过了"，
         // 播不播、多大声由音频引擎那边统一按音量设置决定
         onMove: () => this.audio.play('item_move'),
@@ -2492,8 +2494,10 @@ class App {
   /**
    * 记账一处经验（I5）。
    *
-   * 所有来源都走这里：击杀生物（`EntityContext.awardXp`）、挖矿、熔炉取出产物。
-   * 经验球实体还没做，所以是**直接进账**；`Experience.add` 自己处理连升多级与小数余数。
+   * ⚠️ 批次 170（I16）起这里是**记账**那一半：只有在玩家把经验球吸到手时才调它
+   * （`EntityContext.awardXp` → 由 `XpOrb` 触发）。"经验从哪掉出来"是另一个钩子
+   * `spawnXpOrbs`——两个分开，否则"死亡要掉球"这件事就没法断定了。
+   * `Experience.add` 自己处理连升多级与小数余数。
    */
   private awardXp(amount: number): void {
     if (amount <= 0) return;
@@ -2503,6 +2507,20 @@ class App {
     const remaining = amount - used;
     if (remaining > 0) this.experience.add(remaining);
     if (used > 0) this.refreshHotbar();
+  }
+
+  /**
+   * 把一团经验**掉成几个球**（批次 170，I16）。
+   *
+   * 拆档是纯函数（`splitXpOrbs`：10 → 7+3、龙的 12000 → 3073+3073+…+247…），
+   * 这里只负责建实体。调用点给的都是"这件事发生在哪"：
+   * 挖矿是那一格的格心、熔炉与钓鱼是玩家脚下（它们本来就没有明确的掉落点）。
+   */
+  private spawnXpOrbs(amount: number, x: number, y: number, z: number): void {
+    if (amount <= 0) return;
+    for (const size of splitXpOrbs(amount)) {
+      this.entities.spawn(new XpOrb(size, x, y, z));
+    }
   }
 
   /**
@@ -3866,8 +3884,12 @@ class App {
     }
 
     // 挖矿经验（I5）：只有部分矿石给（煤 0~2、钻石/绿宝石 3~7…），
-    // 与掉落无关——铁矿挖出来有粗铁但**不给**经验，与原版一致；创造模式不给
-    if (!this.flying) this.awardXp(rollBlockXp(brokenId, Math.random()));
+    // 与掉落无关——铁矿挖出来有粗铁但**不给**经验，与原版一致；创造模式不给。
+    // 批次 170 起掉成球（I16）：位置就是刚挖掉那一格的格心
+    if (!this.flying) {
+      const xp = rollBlockXp(brokenId, Math.random());
+      this.spawnXpOrbs(xp, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+    }
 
     // 挖掘消耗疲劳值（原版 0.005/方块）
     this.stats.addExhaustion(0.005);
@@ -5054,8 +5076,8 @@ class App {
     // 所以以后要加"用桶钓一条鱼"这类条目，只要在表里写 ids 就行
     this.reportProgress({ kind: 'fish', item: caught.id });
 
-    // 原版每次钓上来给 1~6 点经验
-    this.awardXp(1 + Math.floor(Math.random() * 6));
+    // 原版每次钓上来给 1~6 点经验（批次 170 起掉成球，落在玩家脚下）
+    this.spawnXpOrbs(1 + Math.floor(Math.random() * 6), this.physics.x, this.physics.y + 0.5, this.physics.z);
     this.audio.play('click');
     const where = this.bobber;
     if (where) this.particles.spawnSplash(where.x, where.y, where.z, 0x9fd4ff, 10);
@@ -5494,7 +5516,9 @@ class App {
         this.reportProgress({ kind: 'breed', mob: type.id });
       },
       spawnHearts: (x, y, z, scale) => this.particles.spawnHearts(x, y, z, scale),
+      // 记账（球吸到手时）与生成（生物死亡）是两个钩子，见 `XpOrb` / `EntityContext`
       awardXp: (amount) => this.awardXp(amount),
+      spawnXpOrbs: (amount, x, y, z) => this.spawnXpOrbs(amount, x, y, z),
       // 鸡蛋砸出小鸡（K4 尾巴）：与 `spawnBaby` 同一个套路，只是不走求爱那一套
       hatchChicken: (x, y, z) => {
         const chicken = mobTypeById('chicken');
@@ -8099,15 +8123,17 @@ class App {
   }
 
   /**
-   * 死亡掉经验（I5）。
+   * 死亡掉经验（I5 + I16）。
    *
-   * 原版是掉一地经验球、可以跑回去捡；本项目还没有经验球实体，
-   * 所以这里**只是清零**（`keepInventory` 打开时连经验一起保留，与原版一致）。
-   * 这不是 bug，是"经验球"那一项还没做——见 TASKS I5 的待补说明。
+   * 原版是**掉一地经验球、可以跑回去捡**；批次 170 之前本项目只是清零
+   * （那时没有经验球实体）。现在按原版那条公式掉：`min(等级 × 7, 100)` 点，
+   * 散在死亡点；`keepInventory` 打开时连经验一起保留（与原版一致）。
    */
   private dropExperienceOnDeath(): void {
     if (this.rules.keepInventory) return;
+    const dropped = Math.min(this.experience.level * 7, 100);
     this.experience.reset();
+    if (dropped > 0) this.spawnXpOrbs(dropped, this.physics.x, this.physics.y + 0.5, this.physics.z);
   }
 
   /**
