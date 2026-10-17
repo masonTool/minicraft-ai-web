@@ -1260,7 +1260,7 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
     '一次只显示当前分组（固定高度下永远不用滚）',
     compact.includes('.settings-section { display: none; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));'),
   );
-  // 批次 160：用户"视频里面这个选项里面有多个按钮，只是很短的空间，可以适当让它们并排"
+  // 批次 167：用户"视频里面这个选项里面有多个按钮，只是很短的空间，可以适当让它们并排"
   check(
     '分组内容两列并排（窄屏自动退回一列）',
     compact.includes('.settings-section.active { display: grid; }') &&
@@ -1304,7 +1304,7 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   check('装备格竖排成一一列（原版位置）', compact.includes('.inv-grid.inv-armor { grid-template-columns: 42px; }'));
   check('快捷栏与主背包之间留一道缝', compact.includes('.inv-main .inv-hotbar { margin-top: 5px; }'));
   // 成就 / 配方书 / 设置 / 主菜单：直接吃 --panel-*；触摸背包用 min(vw/dvh, --panel-*) 夹紧
-  // （批次 160：主菜单也并进来了——用户"首页两个按钮点下去应该是同一个固定大小的框"）
+  // （批次 167：主菜单也并进来了——用户"首页两个按钮点下去应该是同一个固定大小的框"）
   check(
     '成就/配方书/设置/主菜单共用同一套固定尺寸',
     (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 4,
@@ -1318,7 +1318,7 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
       !invSource.includes("buildLabel('盔甲与副手')"),
   );
   // 用户："首页的按钮要对齐，符合正常的按钮大小"。
-  // ⚠️ 批次 160 改了口径：盒子统一到 `--panel-w` 之后，按钮**不能**再拉满
+  // ⚠️ 批次 167 改了口径：盒子统一到 `--panel-w` 之后，按钮**不能**再拉满
   //    （760px 一条长条既不像原版那一列，也和二级页对不上），所以宽度收到 320 居中、
   //    首页/世界列表/新建世界共用同一条规则。
   check('首页按钮不再被单独收窄', !compact.includes('.world-menu > * { width'));
@@ -1387,7 +1387,7 @@ console.log('\n[进游戏首页默认全屏]');
     mainSrc.includes('isTouchDevice() ? !this.loadingCleared : !this.loadingCleared || !this.startupRamp.done'),
   );
 
-  // ---- 批次 160：用户"能不能在加载的时候自动进入（全屏横屏）"
+  // ---- 批次 167：用户"能不能在加载的时候自动进入（全屏横屏）"
   //
   // 浏览器规范要求手势，所以这里能钉死的是三件事：① boot 里**真的试着**要了一次；
   // ② 被拒时那网挂在 `document` 的捕获阶段、并且覆盖点击/触摸/键盘；
@@ -1419,7 +1419,7 @@ console.log('\n[进游戏首页默认全屏]');
   check('viewport 用交互键盘不缩排版的写法', htmlHead.includes('interactive-widget=resizes-content'));
 }
 
-console.log('\n[加载遮罩只属于"进世界"（批次 160）]');
+console.log('\n[加载遮罩只属于"进世界"（批次 167）]');
 {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');

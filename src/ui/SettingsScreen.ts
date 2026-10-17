@@ -609,7 +609,7 @@ export class SettingsScreen {
     scale = 1,
   ): HTMLLabelElement {
     const row = document.createElement('label');
-    // `.wide` = 跨满两列（批次 160）：分组现在是两列栅格，滑杆压到半栏就只剩百来像素，
+    // `.wide` = 跨满两列（批次 167）：分组现在是两列栅格，滑杆压到半栏就只剩百来像素，
     // 拖起来很别扭；而开关/选择那类"很短"的项正好两两并排。
     row.className = 'settings-row wide';
 

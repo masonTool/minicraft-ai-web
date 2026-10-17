@@ -2291,7 +2291,7 @@ class App {
    * 第一块地形完成网格化、且玩家已经放到安全地面后才撤掉加载遮罩。
    * 注意：必须在主循环里检查——区块"加载完成"时还没有网格，只监听加载事件会永远等不到。
    *
-   * 批次 160：遮罩不再写在 HTML 里（那样首屏就会显示"正在生成世界…"），
+   * 批次 167：遮罩不再写在 HTML 里（那样首屏就会显示"正在生成世界…"），
    * 它由 `showLoading()` 在**进世界那一刻**挂出来，这里只负责撤掉。
    */
   private refreshLoadingState(): void {
@@ -9600,7 +9600,7 @@ async function boot(): Promise<void> {
     // 主菜单设置即使当前隐藏，也仍占着 `#settings-screen`；不移除会与 App 内实例重复 id。
     menuSettings?.destroy();
     menuSettings = null;
-    // ⚠️ 遮罩**只在这一刻**挂出来（批次 160）：从这一行起才真的在"生成世界"。
+    // ⚠️ 遮罩**只在这一刻**挂出来（批次 167）：从这一行起才真的在"生成世界"。
     // 放得这么早是有意的——`SaveGame.open()` 要等 IndexedDB，手机上可能是几百毫秒的空白。
     showLoading(WORLD_LOADING_TEXT);
     // 安装引导只在主菜单上有意义；进世界之后它会压在触摸按钮上
@@ -9678,7 +9678,7 @@ async function boot(): Promise<void> {
   (window as unknown as { __startup: typeof startupTrace }).__startup = startupTrace;
   menu.show();
   // 进游戏首页就"默认全屏 + 横屏"（用户要求）。浏览器不允许页面一加载就全屏，
-  // 所以这里分三层（批次 160，用户："能不能在加载的时候自动进入"）：
+  // 所以这里分三层（批次 167，用户："能不能在加载的时候自动进入"）：
   //  ① 已装成 PWA 立刻锁横屏；② 立刻**试着**进全屏（PWA / X5 内核里真能成）；
   //  ③ 被拒时把"第一次交互"挂到 document 上（点任意地方、按键都算），
   //     竖屏手机会先盖一层提示，点它就是那一次手势。

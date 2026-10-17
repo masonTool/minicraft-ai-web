@@ -91,10 +91,10 @@
              PC 1440×900   → 340 / 140px（约 24% / 16%）
              手机横屏 844×390 → 42 / 23px（5% / 6%）
              手机竖屏 430×932 → 13 / 156px（受 vw/dvh 限制，面板仍收得进屏幕）
-           ⚠️ 高度用 `dvh` 而不是 `vh`（批次 160）：手机浏览器地址栏收起/展开时，
+           ⚠️ 高度用 `dvh` 而不是 `vh`（批次 167）：手机浏览器地址栏收起/展开时，
               `vh` 永远是"最大的那个视口"，面板底边会被地址栏咬掉一截
               （主菜单也吃这一对尺寸了，所以这件事从"设置面板"升级成"整个菜单"）。
-           ⚠️ 主菜单（首页/世界列表/新建世界）也从批次 160 起吃这一对——
+           ⚠️ 主菜单（首页/世界列表/新建世界）也从批次 167 起吃这一对——
               用户："首页两个按钮点下去应该是弹出一个固定大小的框，不是一大一小。" */
         --panel-w: min(94vw, 760px);
         --panel-h: min(88dvh, 620px);
@@ -295,7 +295,7 @@
         mix-blend-mode: multiply;
       }
       #world-screen.hidden { display: none; }
-      /* 主菜单的那**一个盒子**（批次 160）。
+      /* 主菜单的那**一个盒子**（批次 167）。
          ⚠️ 用户反馈："首页两个按钮点击之后应该是弹出来一个固定大小的框，
          而不是当前的一个大一个小。"——根因就是这里给每个视图各写了一套宽度
          （首页 400 / 世界列表 720 / 新建世界 620），而"设置"又是另一对
@@ -359,7 +359,7 @@
          原来把存档列表 + 四行新建表单 + 设置按钮全摞在一屏里，面板很高、
          手机上得滚；分层之后每一屏都只有三两行，且"返回"永远在同一处。 */
       .world-view { display: none; }
-      /* 视图要**撑满那个固定盒子**（批次 160）：盒子高度是固定值，
+      /* 视图要**撑满那个固定盒子**（批次 167）：盒子高度是固定值，
          所以每一节自己负责"里面怎么排"，而不是让盒子随内容长高。 */
       .world-view.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
       /* 首页没有框，内容在盒子正中（否则固定高度下会顶在上面、下面空一大片） */
@@ -380,7 +380,7 @@
         margin-top: 20px; text-align: center; font-size: 10px;
         color: rgba(255,255,255,.65);
       }
-      /* ---------------- 「添加到主屏幕」引导（批次 160） ----------------
+      /* ---------------- 「添加到主屏幕」引导（批次 167） ----------------
          用户要的是"加载时就自动全屏横屏"，而浏览器只允许**用户手势**里请求全屏；
          标签页里唯一零点击的路径是"装成 App"（manifest 已经是 fullscreen + landscape）。
          所以没装的时候在主菜单底下提示一次，点「添加」走浏览器自己的安装框。
@@ -459,7 +459,7 @@
       /* 危险操作 = **红字**（原版没有红色按钮），底还是那颗灰按钮 */
       .world-card-actions button.danger,
       .pause-action.danger { color: var(--mc-text-danger); }
-      /* 新建世界表单：**两列并排**（批次 160）。
+      /* 新建世界表单：**两列并排**（批次 167）。
          用户："创建新世界的时候，每一个栏目的编辑框都太长了，可以适当地去并排。"
          `auto-fit` + 260px 下限：宽盒子（PC / 横屏手机）两列、窄屏（竖屏手机）一列。
          名称｜种子 一排、类型｜难度 一排，"创建并进入"跨满两列。 */
@@ -476,7 +476,7 @@
       }
       .world-input:focus { border-color: var(--mc-edge-light); }
       .world-mini { font-size: 12px; }
-      /* 主菜单的主按钮：**同宽、居中**（批次 160）。
+      /* 主菜单的主按钮：**同宽、居中**（批次 167）。
          盒子统一到 760 宽之后，按钮不能再拉满（那会成一条长条，也不像原版标题页那一列）；
          而首页 / 世界列表 / 新建世界用的是同一列按钮，所以宽度只能有一处——
          `align-self`（flex 列）与 `justify-self`（表单栅格）各管一个方向，两个都写。 */
@@ -989,7 +989,7 @@
         display: flex; flex-direction: column; gap: 6px;
       }
       /* 一次只显示当前分组（组名写在左边的选项卡上，段内标题是重复信息）。
-         ⚠️ 批次 160：分组内容改成**两列并排**——用户原话"在视频里面这个选项里面有
+         ⚠️ 批次 167：分组内容改成**两列并排**——用户原话"在视频里面这个选项里面有
          多个按钮，它只是很短的空间，你可以适当地让它们并排"。
          `auto-fit` + 230px 下限：宽窗口（PC / 横屏手机）自动两列、窄屏退回一列，
          不用另写断点。滑杆行带 `.settings-row.wide` 跨满两列（压到半栏不好拖）。 */
@@ -997,7 +997,7 @@
       .settings-section.active { display: grid; }
       .settings-group { display: none; }
       .settings-meta { flex: 0 0 auto; margin: 8px 0 0; }
-      /* 行内三列压紧（批次 160）：标签不再吃 96px、值列 52 → 44，行高由内容+`min-height` 定 */
+      /* 行内三列压紧（批次 167）：标签不再吃 96px、值列 52 → 44，行高由内容+`min-height` 定 */
       .settings-row { display: grid; grid-template-columns: minmax(78px, auto) minmax(0, 1fr) 44px; align-items: center; gap: 6px; min-width: 0; min-height: 32px; }
       /* 滑杆 / 文件选择这类"越长越好用"的行占满两列 */
       .settings-row.wide { grid-column: 1 / -1; }
@@ -1099,7 +1099,7 @@
       body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
         width: 16px; height: 26px; margin-top: -8px;
       }
-      /* 批次 160：两列并排之后每格只有 ~300px，循环按钮再占 100px 就挤了（热区仍够 34px） */
+      /* 批次 167：两列并排之后每格只有 ~300px，循环按钮再占 100px 就挤了（热区仍够 34px） */
       body.touch-mode .settings-cycle { min-width: 88px; padding: 6px 8px; font-size: 13px; }
       body.touch-mode .settings-tab { min-height: 40px; padding: 8px 10px; }
       body.touch-mode .settings-tabs { flex: 0 0 88px; }
@@ -1131,7 +1131,7 @@
         body.touch-mode .world-secondary { min-height: 44px; }
 
         /* ---- 设置：横屏只有 ~343px 高，一屏放完全靠"更紧的行 + 更密的列" ----
-           （批次 160。面板尺寸仍然不变，只是里面的行压到 30px、循环按钮再收一档） */
+           （批次 167。面板尺寸仍然不变，只是里面的行压到 30px、循环按钮再收一档） */
         body.touch-mode .settings-row { min-height: 30px; }
         body.touch-mode .settings-cycle { min-width: 80px; padding: 3px 6px; font-size: 12px; }
         body.touch-mode .settings-hint { margin: 2px 0 6px; font-size: 11px; }
@@ -3019,7 +3019,7 @@
          手机上没有 Esc 之类的键，跳跃键是唯一可靠的入口 -->
     <div id="sleep" class="hidden"><div><b>Zzz…</b>天快亮了<br />跳跃键可以提前起床</div></div>
 
-    <!-- ⚠️ 这里原来是一个写死的加载节点（`#loading`，文案"正在生成世界…"，批次 160 删掉）。
+    <!-- ⚠️ 这里原来是一个写死的加载节点（`#loading`，文案"正在生成世界…"，批次 167 删掉）。
          它从 `boot()` 第一行就在屏幕上，而那段文案说的是**当时还没发生的事**
          （那时只是在做 GL 预检、画图集、读存档库）——用户的原话：
          "首次加载这个页面的时候，它会显示一个地图生成中的东西……地图生成是在创建游戏
