@@ -377,6 +377,25 @@
         background: #a8a8a8; color: #222; border: 2px solid;
         border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
+      /* ---------------- 配方书的标签栏（批次 133，对齐基岩版） ----------------
+         Wiki「物品栏 → 配方书」：基岩版把配方按标签栏展示（建筑 / 装备 / 物品 / 自然 /
+         全部），而且"合成配方书的标签栏与创造分类相同"。这一行同时放
+         "仅显示可合成"那个筛选项（贴着右端）。样式与面板上其它按钮一致。 */
+      .recipe-tabs {
+        display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+        margin: 0 0 8px;
+      }
+      .recipe-tab, .recipe-filter {
+        font: inherit; font-size: 12px; padding: 4px 9px; cursor: pointer;
+        background: #a8a8a8; color: #2b2b2b; border: 2px solid;
+        border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      /* 当前页签 / 已打开的筛选：反白 + 斜角翻过来（"按下去"的那一块） */
+      .recipe-tab.active, .recipe-filter.on {
+        background: #6f6f6f; color: #f2f2f2;
+        border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+      }
+      .recipe-filter { margin-left: auto; }
       .recipe-list { display: flex; flex-direction: column; gap: 6px; }
       .recipe-empty { padding: 20px; text-align: center; color: #5a5a5a; }
       .recipe-card {
@@ -1563,6 +1582,10 @@
       body.touch-mode .recipe-close,
       body.touch-mode .inv-close,
       body.touch-mode .adv-close { min-width: 48px; min-height: 44px; font-size: 17px; padding: 8px 12px; }
+      /* 配方书的标签栏（批次 133）：手机上热区放到 40px——页签是"翻配方"的主入口，
+         比每张卡片上那颗"合成"用得更频繁 */
+      body.touch-mode .recipe-tab,
+      body.touch-mode .recipe-filter { min-height: 40px; padding: 8px 11px; font-size: 13px; }
 
       /* 主菜单（世界列表 / 新建世界）同理：这几个按钮原是按鼠标尺寸做的（高约 30px），
          手机上点"进入/删除"经常点到隔壁。手机上统一抬到 44px。 */

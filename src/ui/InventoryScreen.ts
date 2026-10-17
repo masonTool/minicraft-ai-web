@@ -1329,6 +1329,28 @@ export class InventoryScreen {
   }
 
   /**
+   * 双击该不该退化成"快速移动"（批次 133，基岩版规则）。
+   *
+   * Wiki「物品管理 → 便捷鼠标操作」原文："在基岩版中，当双击的物品已满一组、
+   * 没有其他物品来补充成一组或不可堆叠时，该物品将会快速移动至其他地方（若有），
+   * 效果与按⇧ Shift+左键一致。"——三种情形都在下面这一处判完。
+   */
+  private shouldQuickMoveOnDouble(binding: SlotBinding): boolean {
+    const stack = binding.source.get(binding.index);
+    if (!stack) return false;
+    const capacity = maxStackOf(stack.id);
+    if (capacity <= 1) return true; // 不可堆叠（工具 / 盔甲）：双击就是搬运
+    if (stack.count >= capacity) return true; // 已经满一组，没什么可补的
+    // 同一个容器里还有没有同类：有 → 双击的语义是"凑满一整堆"，不能抢走去做快速移动
+    const total = this.slotCountFor(binding.source);
+    for (let index = 0; index < total; index++) {
+      if (index === binding.index) continue;
+      if (binding.source.get(index)?.id === stack.id) return false;
+    }
+    return true;
+  }
+
+  /**
    * 统一的槽位激活入口（左键 = 0，右键 = 2）。
    *
    * **Shift+左键 = 快速移动**（批次 127，对齐原版）：普通槽走 `quickMoveSlot`，
@@ -1343,7 +1365,17 @@ export class InventoryScreen {
     this.lastClick = { key, at: now };
     if (button === 0 && !shift && isDouble) {
       const binding = this.bindings.get(key);
-      if (binding && !binding.takeOnly && this.gatherFrom(binding)) return;
+      if (binding && !binding.takeOnly) {
+        // **基岩版规则**（Wiki「物品管理 → 便捷鼠标操作」）：双击那一叠"已经满一组、
+        // 没有同类可补、或根本不可堆叠"时，双击**退化成快速移动**（等同 Shift+左键）。
+        // ⚠️ 必须在 `gatherFrom` **之前**判：它会先把那一叠抓到光标上，
+        // 等它返回 false 时物品已经在鼠标上了，那时再改语义就晚了。
+        if (this.shouldQuickMoveOnDouble(binding)) {
+          this.quickMoveSlot(key);
+          return;
+        }
+        if (this.gatherFrom(binding)) return;
+      }
     }
     // **Shift+双击**（批次 129）：把点中那一格**所属的那一类**整批搬到另一边
     // （开着方块时是玩家背包 ↔ 方块，没开时是快捷栏 ↔ 主背包）

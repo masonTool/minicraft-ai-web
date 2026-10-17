@@ -14,7 +14,7 @@
  */
 
 import { Block, woolId } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { CREATIVE_ITEMS, Item, categoryOf, type ItemCategory } from '../src/core/registry/items.ts';
 import {
   blockLabel,
   hasDescription,
@@ -29,12 +29,15 @@ import { RECIPES, type Recipe } from '../src/core/crafting/Recipes.ts';
 import { recipeLayout, stationLabel, trimPattern } from '../src/core/crafting/RecipeLayout.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import {
+  RECIPE_BOOK_TABS,
+  RECIPE_BOOK_TAB_LABELS,
   buildRecipeEntries,
   canCraft,
   craftFromInventory,
   fillCraftingGrid,
   matchesRecipe,
   maxCraftable,
+  recipeBookTab,
   recipeGridSize,
   recipeIngredients,
   recipePlacement,
@@ -424,6 +427,50 @@ console.log('\n[配方书：把配方摆进合成格（批次 132）]');
   equal('摆在左上角（下标 0）', bigGrid.get(0)?.id, planks);
   equal('右下角空着', bigGrid.get(8), null);
   check('3×3 里也认得出这条配方', bigGrid.result?.id === Block.CRAFTING_TABLE);
+}
+
+// ---------------------------------------------------------------- 标签栏
+//
+// 批次 133：Wiki「物品栏 → 配方书」写明基岩版按标签栏展示，且
+// "合成配方书的标签栏与创造分类相同"——建筑 / 装备 / 物品 / 自然 / 全部。
+
+console.log('\n[配方书：标签栏（批次 133，对齐基岩版）]');
+{
+  equal('五个标签栏，顺序照基岩版（全部在最前）', RECIPE_BOOK_TABS.join(','), 'all,building,equipment,items,nature');
+  for (const tab of RECIPE_BOOK_TABS) {
+    check(`标签栏「${tab}」有中文名`, (RECIPE_BOOK_TAB_LABELS[tab] ?? '').length > 0);
+  }
+
+  // 归类是拿创造分类**归并**的（两边的分类不能各说各话）
+  const pick = (category: ItemCategory): number =>
+    CREATIVE_ITEMS.find((item) => categoryOf(item) === category) ?? -1;
+  equal('建筑类 → 建筑页', recipeBookTab(pick('building')), 'building');
+  equal('工具类 → 装备页', recipeBookTab(pick('tools')), 'equipment');
+  equal('盔甲类 → 装备页', recipeBookTab(pick('armor')), 'equipment');
+  equal('功能方块 → 物品页', recipeBookTab(pick('functional')), 'items');
+  equal('矿石与材料 → 物品页', recipeBookTab(pick('ores')), 'items');
+  equal('酿造与药水 → 物品页', recipeBookTab(pick('brewing')), 'items');
+  equal('自然 → 自然页', recipeBookTab(pick('natural')), 'nature');
+  equal('羊毛与染料 → 自然页', recipeBookTab(pick('wool')), 'nature');
+  equal('草方块 → 自然页', recipeBookTab(Block.GRASS_BLOCK), 'nature');
+
+  // Wiki 把食物拆在两页："装备 - 包含…熟食"、"自然 - 包含…生食"。
+  // 判据借熔炼表（`kind: 'food'` 那几条就是"生肉 → 熟肉"）。
+  const cooked = SMELTING_RECIPES.find((recipe) => recipe.kind === 'food');
+  if (cooked) {
+    equal('熟食（某条 food 熔炼的产物）→ 装备页', recipeBookTab(cooked.output.id), 'equipment');
+    equal('生食（同一条的原料）→ 自然页', recipeBookTab(cooked.input), 'nature');
+  }
+
+  // 每条配方都落在某一栏里，且**没有空页签**（空页签点进去只有一行"这一栏里没有…"）
+  const all = buildRecipeEntries(new Inventory());
+  equal('每条配方都有标签栏', all.filter((entry) => !RECIPE_BOOK_TABS.includes(entry.tab)).length, 0);
+  equal(
+    '没有空页签',
+    RECIPE_BOOK_TABS.filter((tab) => tab !== 'all' && !all.some((entry) => entry.tab === tab)).join(','),
+    '',
+  );
+  equal('页面上的归属与 `recipeBookTab` 一致', all.filter((entry) => entry.tab !== recipeBookTab(entry.result.id)).length, 0);
 }
 
 function labelOfUnknown(id: number): boolean {

@@ -15,8 +15,61 @@
 import type { Inventory } from '../container/Inventory.ts';
 import type { CraftingGrid } from './CraftingGrid.ts';
 import { RECIPES, type Recipe, type RecipeResult } from './Recipes.ts';
+import { SMELTING_RECIPES } from './Smelting.ts';
 import { itemLabel } from '../registry/itemNames.ts';
-import { itemName } from '../registry/items.ts';
+import { categoryOf, itemName } from '../registry/items.ts';
+
+// ---------------------------------------------------------------- 配方书的标签栏
+//
+// 批次 133：**基岩版的配方书是按标签栏分的**（中文 Wiki「物品栏 → 配方书」）：
+//   建筑 / 装备 / 物品 / 自然 / 全部
+// 并写明"合成配方书的标签栏与创造分类相同"。所以这里拿 `categoryOf`（创造分类）
+// 做一次**归并**，而不是另立一套分类表——另立一套迟早与创造栏漂移
+//（同一桶混凝土在两边归进不同页，玩家就得记两套）。
+
+/** 配方书的五个标签栏（顺序照基岩版：全部在最前，它也是"携带版UI"的第一个） */
+export const RECIPE_BOOK_TABS = ['all', 'building', 'equipment', 'items', 'nature'] as const;
+export type RecipeBookTab = (typeof RECIPE_BOOK_TABS)[number];
+
+export const RECIPE_BOOK_TAB_LABELS: Record<RecipeBookTab, string> = {
+  all: '全部',
+  building: '建筑',
+  equipment: '装备',
+  items: '物品',
+  nature: '自然',
+};
+
+/**
+ * 这件食物算不算"熟食"（是某条 `kind: 'food'` 熔炼配方的产物）。
+ *
+ * Wiki 把食物拆到了两页里："装备 - 包含战斗用品、部分工具和**熟食**"、
+ * "自然 - 包含自然方块、农作物、染料和**生食**"。判据直接借熔炼表
+ *（"生肉 → 熟肉"那几条的 `kind` 就是 `food`），不另写一张生熟表。
+ */
+function isCookedFood(itemId: number): boolean {
+  return SMELTING_RECIPES.some((recipe) => recipe.kind === 'food' && recipe.output.id === itemId);
+}
+
+/** 一件产物属于哪个标签栏（拿创造分类归并，见上面那段说明） */
+export function recipeBookTab(resultId: number): RecipeBookTab {
+  switch (categoryOf(resultId)) {
+    case 'building':
+      return 'building';
+    case 'tools':
+    case 'armor':
+      return 'equipment';
+    case 'natural':
+    case 'wool':
+      return 'nature';
+    case 'food':
+      return isCookedFood(resultId) ? 'equipment' : 'nature';
+    case 'functional':
+    case 'ores':
+    case 'brewing':
+    default:
+      return 'items';
+  }
+}
 
 /** 一条配方需要的材料（同类合并、已排序） */
 export interface Ingredient {
@@ -201,6 +254,8 @@ export interface RecipeEntry {
   craftable: boolean;
   /** 最多能做几份（材料够时 ≥1） */
   maxCraftable: number;
+  /** 属于哪个标签栏（批次 133；界面按它分页） */
+  tab: RecipeBookTab;
 }
 
 /**
@@ -218,6 +273,7 @@ export function buildRecipeEntries(source: CountSource, recipes: readonly Recipe
       gridSize: recipeGridSize(recipe),
       craftable: craftability.ok,
       maxCraftable: maxCraftable(source, recipe),
+      tab: recipeBookTab(recipe.result.id),
     };
   });
 

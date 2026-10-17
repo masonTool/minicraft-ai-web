@@ -787,6 +787,20 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('Shift+左键 = 快速移动', inventorySrc.includes('this.quickMoveSlot(key)'));
   check('双击 = 收集同类', inventorySrc.includes('this.gatherFrom(binding)'));
   check('拖拽分配 / 每格一个', inventorySrc.includes('distributeEvenly(this.held, slots)') && inventorySrc.includes('placeOneEach(this.held, slots)'));
+  // 基岩版那条"双击已满一组/无同类可补/不可堆叠 → 快速移动"（批次 133）
+  check('双击在三种情形下退化成快速移动', inventorySrc.includes('private shouldQuickMoveOnDouble('));
+  check(
+    '退化判断在 gatherFrom **之前**（否则物品已经被抓到光标上了）',
+    inventorySrc.indexOf('this.shouldQuickMoveOnDouble(binding)') < inventorySrc.indexOf('this.gatherFrom(binding)) return;'),
+  );
+
+  // ---- 配方书：标签栏 + 「仅显示可合成」（批次 133，Wiki「物品栏 → 配方书」）
+  check('配方书按标签栏分行', bookUi.includes('for (const tab of RECIPE_BOOK_TABS)'));
+  check('页签上带条数（免得点进去才发现是空的）', bookUi.includes('RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）'));
+  check('有「仅显示可合成」筛选', bookUi.includes("this.filterButton.dataset.role = 'craftable-filter'"));
+  check('筛选默认关（默认藏掉大半会让人以为配方丢了）', bookUi.includes('private onlyCraftable = false'));
+  check('空列表会说清为什么空（是筛掉了还是这一栏本来就没有）', bookUi.includes('关掉「仅显示可合成」可以看到全部'));
+  check('标签栏与筛选按钮的样式在（含选中态）', compact.includes('.recipe-tabs {') && compact.includes('.recipe-tab.active, .recipe-filter.on'));
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

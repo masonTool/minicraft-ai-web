@@ -16,3 +16,6 @@ coverage/
 .codebuddy/auto-continue.off
 .codebuddy/auto-continue.log
 shot-*.png
+
+# 参考资料（本地存档的网页 / 截图；4.7MB 的 mhtml 进仓库会永久留在历史里）
+references/

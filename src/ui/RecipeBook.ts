@@ -12,7 +12,14 @@
  */
 
 import type { Inventory } from '../core/container/Inventory.ts';
-import { buildRecipeEntries, matchesRecipe, type RecipeEntry } from '../core/crafting/RecipeBook.ts';
+import {
+  RECIPE_BOOK_TABS,
+  RECIPE_BOOK_TAB_LABELS,
+  buildRecipeEntries,
+  matchesRecipe,
+  type RecipeBookTab,
+  type RecipeEntry,
+} from '../core/crafting/RecipeBook.ts';
 import { recipeLayout, stationLabel, type RecipeLayout } from '../core/crafting/RecipeLayout.ts';
 import { cardPageSizeFor, clampPage, pageCount, pageLabel, slicePage } from './ItemPager.ts';
 import { SMELTING_RECIPES, SMELTING_TIME } from '../core/crafting/Smelting.ts';
@@ -53,6 +60,19 @@ export class RecipeBook {
   private readonly prevButton: HTMLButtonElement;
   private readonly nextButton: HTMLButtonElement;
   private readonly pageLabel: HTMLSpanElement;
+  /** 标签栏（批次 133）：基岩版就是"建筑 / 装备 / 物品 / 自然 / 全部" */
+  private readonly tabsEl: HTMLDivElement;
+  /** 「仅显示可合成」开关 */
+  private readonly filterButton: HTMLButtonElement;
+  private tab: RecipeBookTab = 'all';
+  /**
+   * 「仅显示可合成」（批次 133）。
+   *
+   * 默认**关**：Wiki「配方书」一节的措辞是"配方书…会显示玩家拥有所需材料的相关
+   * 合成配方"，但基岩版实际是"列出已解锁的配方、能做的排在前面（材料不足的灰着）"。
+   * 默认藏掉大半会让人以为"我的配方丢了"，所以做成开关，打开就只看能做的。
+   */
+  private onlyCraftable = false;
 
   constructor(
     host: HTMLElement,
@@ -101,6 +121,41 @@ export class RecipeBook {
 
     header.append(title, this.summaryEl, this.searchEl, close);
 
+    // ---- 标签栏（批次 133，对齐基岩版）
+    //
+    // Wiki「物品栏 → 配方书」写得很明确：基岩版的配方书按标签栏展示，且
+    // "合成配方书的标签栏与创造分类相同"——建筑 / 装备 / 物品 / 自然 / 全部。
+    // 分类归并在 `core/crafting/RecipeBook.ts` 的 `recipeBookTab()` 里（纯函数、可断言）。
+    this.tabsEl = document.createElement('div');
+    this.tabsEl.className = 'recipe-tabs';
+
+    for (const tab of RECIPE_BOOK_TABS) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'recipe-tab';
+      button.dataset.tab = tab;
+      button.textContent = RECIPE_BOOK_TAB_LABELS[tab];
+      button.addEventListener('click', () => {
+        this.tab = tab;
+        // 换了标签栏等于换了一份列表，页码当然要回到第 1 页（与改搜索词同一个道理）
+        this.page = 0;
+        this.render();
+      });
+      this.tabsEl.appendChild(button);
+    }
+
+    // 「仅显示可合成」：Wiki 在配方书那一节提到的筛选项，摆在标签栏那一行的右端
+    this.filterButton = document.createElement('button');
+    this.filterButton.type = 'button';
+    this.filterButton.className = 'recipe-filter';
+    this.filterButton.dataset.role = 'craftable-filter';
+    this.filterButton.addEventListener('click', () => {
+      this.onlyCraftable = !this.onlyCraftable;
+      this.page = 0;
+      this.render();
+    });
+    this.tabsEl.appendChild(this.filterButton);
+
     // ---- 配方列表
     this.listEl = document.createElement('div');
     this.listEl.className = 'recipe-list';
@@ -121,7 +176,7 @@ export class RecipeBook {
     this.nextButton.dataset.role = 'next';
     this.pagerEl.append(this.prevButton, this.pageLabel, this.nextButton);
 
-    panel.append(header, this.listEl, this.pagerEl, this.smeltingEl);
+    panel.append(header, this.tabsEl, this.listEl, this.pagerEl, this.smeltingEl);
     this.root.append(panel);
     host.appendChild(this.root);
 
@@ -154,11 +209,18 @@ export class RecipeBook {
     else this.show();
   }
 
-  /** 重建配方列表（打开、搜索、合成之后都要调：合成会改变"能不能做"） */
+  /** 重建配方列表（打开、搜索、换标签栏、切筛选、合成之后都要调：合成会改变"能不能做"） */
   render(): void {
-    const entries = buildRecipeEntries(this.inventory).filter((entry) => matchesRecipe(entry.recipe, this.query));
+    const all = buildRecipeEntries(this.inventory);
+    // 先过"筛选"那一层（仅显示可合成 + 搜索词），再按标签栏切。
+    // 标签栏上的条数也跟着筛选走——筛完之后哪一栏还有东西，一眼就能看出来。
+    const base = all.filter(
+      (entry) => (!this.onlyCraftable || entry.craftable) && matchesRecipe(entry.recipe, this.query),
+    );
+    const entries = this.tab === 'all' ? base : base.filter((entry) => entry.tab === this.tab);
     this.entryCount = entries.length;
 
+    this.renderTabs(base);
     const craftable = entries.filter((entry) => entry.craftable).length;
     this.summaryEl.textContent = `共 ${entries.length} 条 · 现在能做 ${craftable} 条`;
 
@@ -172,7 +234,11 @@ export class RecipeBook {
     if (entries.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'recipe-empty';
-      empty.textContent = '没有匹配的配方';
+      // 空列表要说清"为什么空"：是筛掉了，还是这一栏本来就没有——
+      // 否则玩家只会以为配方书坏了（"仅显示可合成"默认关着，所以多半是搜索/标签栏的问题）
+      empty.textContent = this.onlyCraftable
+        ? '现在没有能做的配方（关掉「仅显示可合成」可以看到全部）'
+        : '这一栏里没有匹配的配方';
       this.listEl.appendChild(empty);
     } else {
       for (const entry of visible) this.listEl.appendChild(this.makeCard(entry));
@@ -180,6 +246,29 @@ export class RecipeBook {
 
     this.renderPager(entries.length, pageSize);
     this.renderSmelting();
+  }
+
+  /**
+   * 刷新标签栏与"仅显示可合成"的状态（批次 133）。
+   *
+   * 每个页签上带**条数**（`建筑（57）`）：配方书有 180 多条、五个页签，
+   * 不写条数就得一页一页点进去才知道哪一栏是空的。
+   */
+  private renderTabs(base: readonly RecipeEntry[]): void {
+    const counts = new Map<RecipeBookTab, number>([['all', base.length]]);
+    for (const entry of base) counts.set(entry.tab, (counts.get(entry.tab) ?? 0) + 1);
+
+    for (const button of this.tabsEl.querySelectorAll<HTMLButtonElement>('.recipe-tab')) {
+      const tab = button.dataset.tab as RecipeBookTab;
+      const on = tab === this.tab;
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-pressed', String(on));
+      button.textContent = `${RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）`;
+    }
+
+    this.filterButton.classList.toggle('on', this.onlyCraftable);
+    this.filterButton.setAttribute('aria-pressed', String(this.onlyCraftable));
+    this.filterButton.textContent = this.onlyCraftable ? '仅显示可合成 ✓' : '仅显示可合成';
   }
 
   /** 翻页条：与创造物品栏共用 `.inv-pager` 那套样式（一处样式，两处使用） */
