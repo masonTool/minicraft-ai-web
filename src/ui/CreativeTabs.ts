@@ -42,3 +42,20 @@ export const CREATIVE_TAB_ICONS: Record<ItemCategory, number> = {
 export function missingTabIcons(categories: readonly ItemCategory[]): ItemCategory[] {
   return categories.filter((category) => CREATIVE_TAB_ICONS[category] === undefined);
 }
+
+/**
+ * **配方书**标签栏的图标（批次 134）。
+ *
+ * Wiki 说得很直接："合成配方书的标签栏与创造分类相同"，所以这里复用创造栏那几件
+ * 物品，而不是另画一套。"全部"那一栏在基岩版经典 UI 里是一个**放大镜**（它是
+ * "搜索配方 + 列出全部"的入口），而图集里没有"放大镜"这件物品，所以由界面那边
+ * 贴一个内联 SVG（见 `ui/RecipeBook.ts` 的 `SEARCH_TAB_ICON`）。
+ */
+export const RECIPE_TAB_ICONS: Record<'building' | 'equipment' | 'items' | 'nature', number> = {
+  building: Block.BRICKS,
+  // 装备那一栏在基岩版里是"剑 + 盔甲"，我们取一把镐（工具与武器共用的那件）
+  equipment: toolItemId('pickaxe', 'iron'),
+  // 物品那一栏是"功能方块、交通、红石、原材料"，工作台是这一族里最有辨识度的
+  items: Block.CRAFTING_TABLE,
+  nature: Block.GRASS_BLOCK,
+};

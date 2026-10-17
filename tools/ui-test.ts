@@ -758,6 +758,7 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
 {
   const inventorySrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   const bookUi = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const creativeSrc = readFileSync(new URL('../src/ui/CreativeTabs.ts', import.meta.url), 'utf8');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
@@ -801,6 +802,25 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('筛选默认关（默认藏掉大半会让人以为配方丢了）', bookUi.includes('private onlyCraftable = false'));
   check('空列表会说清为什么空（是筛掉了还是这一栏本来就没有）', bookUi.includes('关掉「仅显示可合成」可以看到全部'));
   check('标签栏与筛选按钮的样式在（含选中态）', compact.includes('.recipe-tabs {') && compact.includes('.recipe-tab.active, .recipe-filter.on'));
+
+  // ---- 经典 UI：配方书与背包并排（批次 134，用户给的截图就是经典 UI）
+  check(
+    '并排只在屏幕够宽时生效（窄屏退回携带版 UI 的整屏）',
+    compact.includes('@media (min-width: 1280px) { body.split-ui #recipe-book { right: auto; width: 52%;'),
+  );
+  check(
+    '两块遮罩各占一半（否则上面那层会把下面半边的点击吃掉）',
+    compact.includes('body.split-ui #inventory-screen { left: auto; width: 48%; }'),
+  );
+  check('并排时配方书收窄成侧栏（600px）', compact.includes('body.split-ui .recipe-panel {'));
+  check('main 里有 updateSplitUi（按"两块都开着"打类）', mainSrc.includes('document.body.classList.toggle(\'split-ui\', this.recipeBook.isOpen && this.inventoryScreen.isOpen)'));
+  check('背包开关时刷新并排状态', /handleInventoryOpen\(open: boolean\): void \{[\s\S]{0,200}this\.updateSplitUi\(\);/.test(mainSrc));
+
+  // ---- 标签栏图标（Wiki："配方书的标签栏与创造分类相同"）
+  check('四个实体标签栏复用了创造栏的真实物品图标', creativeSrc.includes('export const RECIPE_TAB_ICONS'));
+  check('"全部"那一栏用放大镜（图集里没有这件物品 → 内联 SVG）', bookUi.includes('SEARCH_TAB_ICON') && bookUi.includes('<svg'));
+  check('图标与文字分层（整块 textContent 会把 canvas/svg 抹掉）', bookUi.includes("button.querySelector('.recipe-tab-label')"));
+  check('合成区有"合成"标题（截图里就有，其它分组原版没有标题）', inventorySrc.includes("this.buildLabel('合成')"));
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

@@ -351,6 +351,31 @@
         display: grid; place-items: center; background: rgba(0, 0, 0, .6);
       }
       #recipe-book.hidden { display: none; }
+      /* ================================================================
+         经典 UI：配方书与背包**并排**（批次 134）
+         ================================================================
+         用户给的截图是基岩版**经典 UI**：左边配方书、右边玩家物品栏，两块并排，
+         谁也不盖谁。我们原来是"配方书整屏盖在背包上"——那是基岩版的**携带版 UI**
+         （手机上就是它，Wiki 里两种都写了）。
+         所以按基岩版自己的规则切换：**屏幕放得下就并排，放不下退回整屏**。
+         判据全在媒体查询里（1280px ≈ 600 的配方书 + 约 460 的背包 + 两侧留边），
+         窄屏下 `body.split-ui` 这个类等于没写。
+         ⚠️ 两块面板各是一层 `inset: 0` 的整屏遮罩，所以"并排"必须把它们**真的分成
+           左右两半**（各自覆盖一半），否则上面那层遮罩会把下面那半边的点击全吃掉。
+         ================================================================ */
+      @media (min-width: 1280px) {
+        body.split-ui #recipe-book {
+          right: auto; width: 52%;
+          /* 两块遮罩挨在一起，压暗的深浅要一致，否则中间会显出一道缝 */
+          background: rgba(0, 0, 0, .55);
+        }
+        body.split-ui #inventory-screen { left: auto; width: 48%; }
+        /* 并排时它是"侧栏"而不是对话框：收窄到 600，高度沿用同一套令牌 */
+        body.split-ui .recipe-panel {
+          width: min(100%, 600px); max-width: 600px;
+          height: var(--panel-h); max-height: var(--panel-h);
+        }
+      }
       .recipe-panel {
         /* 批次 111：与设置/暂停面板**共用同一套固定尺寸**（用户上一轮要的"统一大小"）
            ——原来配方书是 min(96vw,780px) × 90vh，成就又是另一套，三块面板三个尺寸。 */
@@ -390,6 +415,12 @@
         background: #a8a8a8; color: #2b2b2b; border: 2px solid;
         border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
+      /* 页签 = 图标 + 文字（批次 134，对齐截图里那一排）；
+         图标用真实物品（`drawItemIcon` 画的 canvas）或放大镜 SVG */
+      .recipe-tab { display: inline-flex; align-items: center; gap: 5px; }
+      .recipe-tab-icon { width: 16px; height: 16px; flex: 0 0 16px; image-rendering: pixelated; }
+      .recipe-tab-icon svg { display: block; }
+      .recipe-tab-label { white-space: nowrap; }
       /* 当前页签 / 已打开的筛选：反白 + 斜角翻过来（"按下去"的那一块） */
       .recipe-tab.active, .recipe-filter.on {
         background: #6f6f6f; color: #f2f2f2;

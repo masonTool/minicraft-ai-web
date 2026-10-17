@@ -1516,9 +1516,24 @@ class App {
     else this.openSettings();
   }
 
+  /**
+   * 经典 UI / 携带版 UI 的切换（批次 134）。
+   *
+   * 基岩版两种都有（Wiki「物品栏 → 配方书」两种截图都列了）：
+   * **经典 UI** 是"左边配方书 + 右边物品栏"并排；**携带版 UI**（手机）是配方书
+   * 整屏盖在背包上。我们按屏幕宽度自动选——宽度判据交给 CSS
+   *（`body.split-ui` 那一组规则只在 `min-width: 1280px` 生效），
+   * 这里只负责如实打上这个类。
+   */
+  private updateSplitUi(): void {
+    document.body.classList.toggle('split-ui', this.recipeBook.isOpen && this.inventoryScreen.isOpen);
+  }
+
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
   private handleInventoryOpen(open: boolean): void {
     this.uiOpen = open;
+    // 背包的开合也决定"配方书要不要并排显示"（背包不开着就没有并排可言）
+    this.updateSplitUi();
     this.keys.clear();
     this.leftDown = false;
     this.rightDown = false;

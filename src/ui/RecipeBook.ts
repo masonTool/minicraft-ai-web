@@ -28,6 +28,19 @@ import type { Recipe } from '../core/crafting/Recipes.ts';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { drawItemIcon } from './ItemIcon.ts';
 import { isTouchUi } from './TouchControls.ts';
+import { RECIPE_TAB_ICONS } from './CreativeTabs.ts';
+
+/**
+ * "全部"那一栏的放大镜图标（批次 134）。
+ *
+ * 基岩版经典 UI 的配方书最右侧就是一颗放大镜（它的语义是"搜索配方 + 列出全部
+ * 已解锁配方"）。图集里没有"放大镜"这件物品，所以这一处用内联 SVG——
+ * 其余四栏都复用创造栏的真实物品图标（见 `CreativeTabs.ts`）。
+ */
+const SEARCH_TAB_ICON =
+  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">' +
+  '<path fill="currentColor" d="M10 2.6a7.4 7.4 0 1 0 4.4 13.35l4.32 4.32 1.7-1.7-4.32-4.32A7.4 7.4 0 0 0 10 2.6zm0 2.4a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>' +
+  '</svg>';
 
 export interface RecipeBookActions {
   /** 合成一次；返回是否成功（材料不够时返回 false） */
@@ -134,7 +147,28 @@ export class RecipeBook {
       button.type = 'button';
       button.className = 'recipe-tab';
       button.dataset.tab = tab;
-      button.textContent = RECIPE_BOOK_TAB_LABELS[tab];
+
+      // 图标（批次 134，对齐截图纸质界面的那一排）：Wiki 说"合成配方书的标签栏与
+      // 创造分类相同"，所以复用创造栏那几件物品；"全部"那一栏在经典 UI 里是**放大镜**，
+      // 而图集里没有这件物品 → 内联一个 SVG。
+      if (tab === 'all') {
+        const glyph = document.createElement('span');
+        glyph.className = 'recipe-tab-icon';
+        glyph.innerHTML = SEARCH_TAB_ICON;
+        button.appendChild(glyph);
+      } else {
+        const canvas = document.createElement('canvas');
+        canvas.className = 'recipe-tab-icon';
+        canvas.width = 16;
+        canvas.height = 16;
+        drawItemIcon(canvas, this.atlas, RECIPE_TAB_ICONS[tab], 16);
+        button.appendChild(canvas);
+      }
+
+      const label = document.createElement('span');
+      label.className = 'recipe-tab-label';
+      button.appendChild(label);
+
       button.addEventListener('click', () => {
         this.tab = tab;
         // 换了标签栏等于换了一份列表，页码当然要回到第 1 页（与改搜索词同一个道理）
@@ -263,7 +297,9 @@ export class RecipeBook {
       const on = tab === this.tab;
       button.classList.toggle('active', on);
       button.setAttribute('aria-pressed', String(on));
-      button.textContent = `${RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）`;
+      // ⚠️ 只改文字那一层：图标是 canvas / svg，整个 `textContent` 覆盖会把它们抹掉
+      const label = button.querySelector('.recipe-tab-label');
+      if (label) label.textContent = `${RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）`;
     }
 
     this.filterButton.classList.toggle('on', this.onlyCraftable);

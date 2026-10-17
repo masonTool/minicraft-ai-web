@@ -1132,6 +1132,10 @@ export class InventoryScreen {
     const layout = document.createElement('div');
     layout.className = 'inv-craft';
     layout.append(material, arrow, this.resultElement);
+    // 原版（截图纸质界面也一样）在合成区上方写着"合成"——它是**分组标题**。
+    // ⚠️ 只补这一个：装备那一列、主背包与快捷栏在原版里都没有标题
+    //（批次 132 刚把「主背包 / 快捷栏 / 盔甲与副手」三行字去掉，别又加回来）。
+    this.topArea.appendChild(this.buildLabel('合成'));
     this.topArea.appendChild(layout);
   }
 
