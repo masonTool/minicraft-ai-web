@@ -75,7 +75,7 @@ import {
 import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
-import { Sky } from './render/Sky.ts';
+import { Sky, cameraFarFor } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, provokedBy } from './core/entity/Mob.ts';
@@ -1166,8 +1166,15 @@ class App {
     this.skyColor = new THREE.Color(0x8fc7ff);
     this.scene.background = this.skyColor;
 
-    const fogFar = this.viewDistance * 16;
-    this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, fogFar + 32);
+    // 远裁面用 `cameraFarFor`：它保证罩得住天空层（穹顶半径 180）。
+    // 只按"视距×16+32"算的话，手机上（视距 6~8）会小于穹顶半径，
+    // 结果屏幕正中会被裁出一个颜色不同的圆洞
+    this.camera = new THREE.PerspectiveCamera(
+      72,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      cameraFarFor(this.viewDistance),
+    );
     this.camera.rotation.order = 'YXZ';
 
     // 贴图尺寸与内缩交给着色器：贪心网格化合并出的大四边形要沿面平铺贴图
@@ -1376,7 +1383,7 @@ class App {
       const view = Math.min(this.viewDistance, MOBILE_VIEW_DISTANCE);
       this.viewDistance = view;
       this.perf = { ...this.perf, viewDistance: view, resolutionScale: MOBILE_INITIAL_RESOLUTION };
-      this.camera.far = view * 16 + 32;
+      this.camera.far = cameraFarFor(view);
       this.camera.updateProjectionMatrix();
       this.applyEnvironment();
       this.applyResolutionScale();
@@ -1536,7 +1543,8 @@ class App {
     // 改一次视距就把它弹回 1.0 的话，弱机每次调设置都要重新掉一轮帧
     this.perf = { ...this.perf, viewDistance: settings.viewDistance, cooldown: 3 };
     this.camera.fov = settings.fov;
-    this.camera.far = settings.viewDistance * 16 + 32;
+    // ⚠️ 这一处也要走 `cameraFarFor`：它是最容易被漏掉的一处（改设置时重算远裁面）
+    this.camera.far = cameraFarFor(settings.viewDistance);
     this.camera.updateProjectionMatrix();
     this.audio.volume = settings.volume;
     this.particles.setDensity(PARTICLE_DENSITY[settings.particles]);
@@ -8273,7 +8281,7 @@ class App {
   private setViewDistance(distance: number): void {
     if (distance === this.viewDistance) return;
     this.viewDistance = distance;
-    this.camera.far = distance * 16 + 32;
+    this.camera.far = cameraFarFor(distance);
     this.camera.updateProjectionMatrix();
     this.applyEnvironment();
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);

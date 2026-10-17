@@ -1239,14 +1239,18 @@ export class InventoryScreen {
       return true;
     };
     if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);
+    return this.ownedItemIds().filter(byCategory);
+  }
 
+  /** 背包里出现过的物品 id（去重；按槽位 0-40 的顺序，快捷栏在前） */
+  private ownedItemIds(): number[] {
     const owned: number[] = [];
     for (let i = 0; i < TOTAL_SLOTS; i++) {
       const stack = this.inventory.get(i);
       if (!stack || owned.includes(stack.id)) continue;
       owned.push(stack.id);
     }
-    return owned.filter(byCategory);
+    return owned;
   }
 
   /**
@@ -1316,9 +1320,12 @@ export class InventoryScreen {
     if (items.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
+      // 空列表要说清"为什么空"：是这一栏本来就没有，还是筛掉了。
+      // 顺带把"背包里一共有几件不同的东西"报出来——这一栏被弄成过"永远空"，
+      // 有这行数字就能一眼分清"背包空"还是"过滤坏了"。
       empty.textContent = this.showUnowned
         ? '这一栏里没有匹配的物品'
-        : '这一栏里你还没有东西（打开配方按钮可以看全部）';
+        : `这一栏里你还没有东西（背包里共 ${this.ownedItemIds().length} 件不同的东西 · 打开配方按钮可以看全部）`;
       fragment.appendChild(empty);
     }
 
@@ -1735,9 +1742,16 @@ export class InventoryScreen {
     }
   }
 
-  /** 把配方书从背左栏还回整屏那一层（关背包 / 切到容器界面时） */
+  /**
+   * 把配方书还回整屏那一层（关背包 / 切到容器界面时）。
+   *
+   * ⚠️ 批次 165：**这里绝不能动 `categoryHostEl` 的 display**。
+   * 这行是批次 157 留下的（那时这个元素还是"配方书的落脚点"，关掉时要连落脚点一起藏）。
+   * 批次 159 把它改成了"物品分类"那一栏，显隐完全由 `leftPane` 决定——
+   * 而 `applyInventoryChrome()` 里恰好先显示、后调这里，
+   * 于是**分类栏刚显示出来就被它藏掉**：生存模式点分类永远是空的。
+   */
   private detachRecipeBook(): void {
-    this.categoryHostEl.style.display = 'none';
     this.hooks.onRecipeHost?.(null);
   }
 

@@ -820,6 +820,29 @@ console.log('\n[创造模式不给配方入口（批次 163）]');
   );
 }
 
+console.log('\n[分类栏永远空：detachRecipeBook 顺手把它藏了（批次 165）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+
+  // ⚠️ 真事故：`detachRecipeBook()` 是批次 157 留下的（那时这个元素还是"配方书落脚点"），
+  // 里面有一句 `categoryHostEl.style.display = 'none'`；而 `applyInventoryChrome()`
+  // 恰好**先显示分类栏、后调 detachRecipeBook** → 刚显示就被藏掉，
+  // 生存模式点分类**永远是空的**（连着几轮都以为是数据源的问题）。
+  check(
+    'detachRecipeBook 不再顺手把分类栏藏掉',
+    !/detachRecipeBook\(\): void \{[\s\S]{0,200}categoryHostEl\.style\.display/.test(invSrc),
+  );
+  check(
+    '分类栏的显隐只由 leftPane 决定',
+    invSrc.includes("this.categoryHostEl.style.display = leftPane === 'category' ? 'flex' : 'none';"),
+  );
+  // 空列表要能分清"背包空"还是"过滤坏了"：把背包里不同物品的件数报出来
+  check(
+    '空栏的提示里有"背包里共 N 件"',
+    invSrc.includes('private ownedItemIds(): number[]') && invSrc.includes('背包里共 ${this.ownedItemIds().length} 件不同的东西'),
+  );
+}
+
 console.log('\n[玩家预览占位（批次 141）]');
 {
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');

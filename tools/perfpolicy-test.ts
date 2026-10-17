@@ -9,6 +9,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { SKY_MAX_RADIUS, cameraFarFor } from '../src/render/Sky.ts';
 
 import {
   LIGHT_BUDGET_PER_FRAME,
@@ -413,6 +414,28 @@ console.log('\n[接线：雾的推进不能假设渲染层已经建好]');
     '缺少守卫会在开世界第一帧崩',
   );
   check('守卫在前、读 queueLength 在后', method.indexOf('!this.chunkRenderer') < method.indexOf('queueLength'));
+}
+
+// ---------------------------------------------------------------- 11. 远裁面必须罩得住天空
+
+console.log('\n[远裁面罩得住天空层（"屏幕正中那个圆洞"的来源）]');
+{
+  // ⚠️ 这一条对应用户实际看到的现象："视角正中有一个很明显的圆形边缘，
+  // 白天偏白、平视时偏暗"。根因：穹顶半径 180 且**球心就在相机上**，
+  // 而远裁面原本按"视距×16+32"算 —— 视距 8 时只有 160，正前方那块天空被裁掉，
+  // 露出的是 scene.background 的纯色（周围才是穹顶渐变）。
+  // 桌面视距 12 得 224，本来就罩得住，所以它只在小视距（手机）下出现。
+  for (const vd of [4, 5, 6, 8, 12, 16]) {
+    check(
+      `视距 ${vd}：远裁面罩得住天空层`,
+      cameraFarFor(vd) > SKY_MAX_RADIUS,
+      `${cameraFarFor(vd)} > ${SKY_MAX_RADIUS}`,
+    );
+  }
+  equal('视距 12（桌面）仍由地形那一式决定，不引入回归', cameraFarFor(12), 12 * 16 + 32);
+  equal('视距 16 同样不回归', cameraFarFor(16), 16 * 16 + 32);
+  equal('小视距时由"罩住天空"那一式兜底', cameraFarFor(4), SKY_MAX_RADIUS + 32);
+  check('日月（150）也在范围内', cameraFarFor(6) > 150, `${cameraFarFor(6)}`);
 }
 
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);

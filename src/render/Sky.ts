@@ -14,6 +14,30 @@ import { MOON_PHASE_COUNT, moonShape } from '../core/world/MoonPhase.ts';
 
 const DOME_RADIUS = 180;
 const CELESTIAL_DISTANCE = 150;
+
+/**
+ * 天空层里**最远**的那个半径（穹顶 180、星星 170、日月 150）。
+ *
+ * ⚠️ 相机的远裁面必须罩得住它。穹顶的球心就在相机上（`Sky.update` 里
+ * `object.position.copy(cameraPosition)`），所以一旦 `camera.far` 小于它，
+ * 被裁掉的必定是**屏幕正中间**那一块——表现是"视角正中有一个很明显的圆形边缘、
+ * 颜色与周围不一样"（中心露出的是 `scene.background` 那个纯色，周围才是穹顶的渐变色）。
+ */
+export const SKY_MAX_RADIUS = DOME_RADIUS;
+
+/**
+ * 某个视距对应的相机远裁面。
+ *
+ * 取两式的较大者：`视距×16 + 32`（地形最远画到视距那一圈）与 `SKY_MAX_RADIUS + 32`。
+ *
+ * ⚠️ 后一式不能省：视距 4~8 时前一式只有 96~160，**比穹顶半径还小**，天空会在
+ * 屏幕正中缺一块（视距 6 时连日月都在 150 处，一样被裁掉）。桌面视距 12 得 224，
+ * 本来就罩得住 —— 所以这个洞**只在小视距下出现**，手机上必有。
+ */
+export function cameraFarFor(viewDistance: number): number {
+  const terrain = Math.max(0, Number.isFinite(viewDistance) ? viewDistance : 0) * 16 + 32;
+  return Math.max(terrain, SKY_MAX_RADIUS + 32);
+}
 /** 原版主世界云层高度 */
 export const CLOUD_HEIGHT = 192;
 const CLOUD_PLANE_SIZE = 900;
