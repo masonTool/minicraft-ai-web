@@ -68,9 +68,9 @@ export const SETTING_GROUPS = ['graphics', 'controls', 'sound', 'game'] as const
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
 export const SETTING_GROUP_LABELS: Record<SettingGroup, string> = {
-  graphics: '图形',
-  controls: '操作',
-  sound: '声音',
+  graphics: '视频',
+  controls: '控制',
+  sound: '音频',
   game: '游戏',
 };
 
@@ -349,22 +349,13 @@ export class SettingsScreen {
     exitToMenu.textContent = '保存并退出到主菜单';
     exitToMenu.addEventListener('click', () => this.actions.onExitToMenu?.());
 
-    const deleteWorld = document.createElement('button');
-    deleteWorld.type = 'button';
-    deleteWorld.id = 'pause-delete';
-    deleteWorld.className = 'pause-action danger';
-    deleteWorld.textContent = '删除本世界';
-    deleteWorld.addEventListener('click', () => {
-      if (confirm('确定要删除这个世界吗？存档会一起删掉，无法恢复。')) this.actions.onDeleteWorld?.();
-    });
-
-    // "退出/删除"只在游戏里有意义；主菜单打开这个面板时（没有当前世界）就藏起来。
+    // "退出"只在游戏里有意义；主菜单打开这个面板时（没有当前世界）就藏起来。
+    // 删除世界只放在世界列表：原生基岩版暂停菜单也不会把不可逆删除混进日常按钮。
     // ⚠️ 用 style.display 而不是 .hidden 类：`.hidden` 只对面板根节点写了样式，
     // 加在按钮上没有任何效果。
     if (!this.actions.onExitToMenu) exitToMenu.style.display = 'none';
-    if (!this.actions.onDeleteWorld) deleteWorld.style.display = 'none';
 
-    actionsRow.append(this.resumeButton, settingsButton, achievements, exitToMenu, deleteWorld);
+    actionsRow.append(this.resumeButton, settingsButton, achievements, exitToMenu);
 
     this.metaEl = document.createElement('div');
     this.metaEl.className = 'settings-hint settings-meta';
@@ -575,8 +566,13 @@ export class SettingsScreen {
    */
   goBack(): boolean {
     if (this.currentPage === 'settings') {
-      this.setPage('menu');
-      return true;
+      // 游戏内：退到暂停菜单；主菜单进入：直接关设置，不能露出「游戏已暂停」。
+      if (this.actions.onExitToMenu) {
+        this.setPage('menu');
+        return true;
+      }
+      this.actions.onResume();
+      return false;
     }
     this.actions.onResume();
     return false;

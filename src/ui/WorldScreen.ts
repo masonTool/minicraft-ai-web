@@ -36,7 +36,9 @@ export type WorldView = (typeof WORLD_VIEWS)[number];
 
 export class WorldScreen {
   readonly root: HTMLDivElement;
+  private readonly panel: HTMLDivElement;
   private readonly listEl: HTMLDivElement;
+  private readonly worldCountEl: HTMLSpanElement;
   private readonly nameInput: HTMLInputElement;
   private readonly seedInput: HTMLInputElement;
   private readonly typeSelect: HTMLSelectElement;
@@ -58,17 +60,24 @@ export class WorldScreen {
 
     const panel = document.createElement('div');
     panel.className = 'world-panel';
+    this.panel = panel;
 
     // ---------------------------------------------------------------- ① 主页
     const home = this.makeView('home');
 
-    const title = document.createElement('b');
+    const title = document.createElement('div');
     title.className = 'world-title';
-    title.textContent = 'Bedrock 1.18 Web';
+    const logo = document.createElement('strong');
+    logo.className = 'world-logo';
+    logo.textContent = 'MINECRAFT';
+    const edition = document.createElement('span');
+    edition.className = 'world-edition';
+    edition.textContent = '基岩版 1.18 · WEB EDITION';
+    title.append(logo, edition);
 
     const subtitle = document.createElement('div');
     subtitle.className = 'world-hint';
-    subtitle.textContent = '点「游戏」选存档或新建世界';
+    subtitle.textContent = '原生生存、创造与多世界存档';
 
     const menu = document.createElement('div');
     menu.className = 'world-menu';
@@ -100,7 +109,16 @@ export class WorldScreen {
       menu.append(settings);
     }
 
-    home.append(title, subtitle, menu);
+    const splash = document.createElement('div');
+    splash.className = 'world-splash';
+    splash.textContent = 'WebGL2!';
+    splash.setAttribute('aria-hidden', 'true');
+
+    const footer = document.createElement('div');
+    footer.className = 'world-footer';
+    footer.textContent = '非官方 Web 复刻 · 存档保存在此设备';
+
+    home.append(title, splash, subtitle, menu, footer);
 
     // ---------------------------------------------------------------- ② 世界列表
     //
@@ -120,10 +138,13 @@ export class WorldScreen {
 
     const listLabel = document.createElement('div');
     listLabel.className = 'world-group-label';
-    listLabel.textContent = '存档';
+    listLabel.append('世界');
+    this.worldCountEl = document.createElement('span');
+    this.worldCountEl.className = 'world-count';
+    listLabel.appendChild(this.worldCountEl);
 
     worlds.append(
-      this.makeNav('选择世界', () => this.setView('home')),
+      this.makeNav('游戏', () => this.setView('home')),
       newEntry,
       listLabel,
       this.listEl,
@@ -200,7 +221,7 @@ export class WorldScreen {
     hint.className = 'world-hint';
     hint.textContent = '相同的种子会生成相同的地形；超平坦世界只有一层草地。';
 
-    create.append(this.makeNav('新建世界', () => this.setView('home')), form, hint);
+    create.append(this.makeNav('创建新世界', () => this.setView('worlds')), form, hint);
 
     panel.append(home, worlds, create);
     this.root.append(panel);
@@ -262,6 +283,7 @@ export class WorldScreen {
    */
   setView(view: WorldView): void {
     this.currentView = view;
+    this.panel.dataset.view = view;
     for (const [key, element] of this.views) element.classList.toggle('active', key === view);
     if (view === 'worlds') this.render();
   }
@@ -282,6 +304,7 @@ export class WorldScreen {
   render(): void {
     this.listEl.textContent = '';
     const worlds = this.registry.list();
+    this.worldCountEl.textContent = ` ${worlds.length}`;
 
     if (worlds.length === 0) {
       const empty = document.createElement('div');
@@ -302,6 +325,11 @@ export class WorldScreen {
 
     const info = document.createElement('div');
     info.className = 'world-card-info';
+
+    const thumbnail = document.createElement('div');
+    thumbnail.className = 'world-card-thumb';
+    thumbnail.dataset.worldType = world.worldType;
+    thumbnail.setAttribute('aria-hidden', 'true');
 
     const name = document.createElement('div');
     name.className = 'world-card-name';
@@ -341,7 +369,7 @@ export class WorldScreen {
     });
 
     buttons.append(enter, remove);
-    card.append(info, buttons);
+    card.append(thumbnail, info, buttons);
     return card;
   }
 

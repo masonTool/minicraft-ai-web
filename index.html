@@ -254,11 +254,24 @@
         position: fixed; inset: 0; z-index: 40;
         overflow-x: hidden; overflow-y: auto;
         display: grid; place-items: center; padding: 16px 12px;
-        background-color: var(--mc-menu-bg);
-        background-image: repeating-conic-gradient(#2b2b2b 0% 25%, #262626 0% 50%);
-        background-size: 8px 8px;
+        /* 基岩版标题页是全屏世界氛围，不是一块平灰棋盘。这里不用外部图片：
+           多层硬边渐变画出远山/草地/天空，离线 PWA 也能稳定显示。 */
+        background-color: #637f92;
+        background-image:
+          linear-gradient(180deg, rgba(12, 23, 32, .12), rgba(6, 12, 8, .70)),
+          linear-gradient(153deg, transparent 0 47%, #3d5635 48% 58%, transparent 59%),
+          linear-gradient(207deg, transparent 0 52%, #2e4831 53% 66%, transparent 67%),
+          linear-gradient(180deg, #769ab0 0 52%, #526c50 53% 69%, #243326 70% 100%);
+        background-size: cover;
         color: var(--mc-text-light);
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
+      }
+      #world-screen::before {
+        content: ''; position: fixed; inset: 0; pointer-events: none;
+        background:
+          repeating-linear-gradient(90deg, transparent 0 31px, rgba(0,0,0,.05) 32px),
+          repeating-linear-gradient(0deg, transparent 0 31px, rgba(0,0,0,.04) 32px);
+        mix-blend-mode: multiply;
       }
       #world-screen.hidden { display: none; }
       /* 标题页那一片：**没有边框、没有底色**，只有内边距。
@@ -267,11 +280,52 @@
          是满宽（面板 520px）——同一套菜单里两页按钮宽度不同，看着就是"没对齐"。
          现在面板收窄到 360px（接近原版标题页那一列的宽度），**首页与二级页的所有
          按钮都满宽**，左边缘也和存档卡片对齐。 */
-      .world-panel { width: min(92vw, 360px); padding: 0; font-size: 13px; }
+      .world-panel {
+        position: relative; z-index: 1;
+        width: min(92vw, 400px); padding: 0; font-size: 13px;
+        transition: width var(--dur-med) var(--ease);
+      }
+      .world-panel[data-view='worlds'] { width: min(94vw, 720px); }
+      .world-panel[data-view='create'] {
+        width: min(94vw, 620px);
+        max-height: calc(100dvh - 24px);
+        padding: 14px 16px;
+        overflow-y: auto;
+        background: rgba(22, 22, 22, .82);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+      }
       .world-title {
-        display: block; text-align: center;
-        font-size: 24px; letter-spacing: 2px; color: #fff;
-        text-shadow: 2px 2px 0 var(--mc-text-shadow);
+        position: relative;
+        display: flex; flex-direction: column; align-items: center;
+        text-align: center; color: #fff;
+      }
+      .world-logo {
+        font-size: clamp(42px, 8vw, 72px); line-height: .85;
+        letter-spacing: -2px; color: #e7e7e7;
+        -webkit-text-stroke: 2px #161616;
+        text-shadow:
+          0 3px 0 #8a8a8a,
+          0 6px 0 #343434,
+          4px 8px 0 rgba(0,0,0,.55);
+      }
+      .world-edition {
+        margin-top: 10px; padding: 3px 10px;
+        font-size: 12px; letter-spacing: 2px;
+        color: #f5f5f5; background: #446b32;
+        border: 2px solid #1d3215;
+        text-shadow: 1px 1px 0 #111;
+      }
+      .world-splash {
+        position: absolute; left: calc(50% + 92px); top: 64px;
+        color: #fff85b; font-size: 16px; font-weight: 700;
+        transform: rotate(-12deg);
+        text-shadow: 2px 2px 0 #3b3700;
+        animation: world-splash 1.3s ease-in-out infinite alternate;
+      }
+      @keyframes world-splash {
+        from { transform: rotate(-12deg) scale(.96); }
+        to { transform: rotate(-12deg) scale(1.06); }
       }
       /* ---------------- 主菜单的三个层级（批次 106） ----------------
          同一份 DOM 切成"主页 / 世界列表 / 新建世界"三节，一次只放行一节。
@@ -289,17 +343,24 @@
       }
       /* 主页那几列入口：竖着一列、**满宽**（批次 111：不再单独收窄，
          否则和二级页面的按钮对不齐——面板本身已经只有 360px 了） */
-      .world-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-      .world-hint { color: #a8a8a8; font-size: 12px; margin: 6px 0 0; text-align: center; }
+      .world-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+      .world-hint { color: #e0e0e0; font-size: 12px; margin: 10px 0 0; text-align: center; }
+      .world-footer {
+        margin-top: 20px; text-align: center; font-size: 10px;
+        color: rgba(255,255,255,.65);
+      }
       .world-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
       /* 列表在窄屏/世界多的时候自己滚，别把面板撑破 */
       .world-list { max-height: min(46vh, 300px); overflow-x: hidden; overflow-y: auto; }
       /* 二级页面里"存档"那一行小标题（上面是「＋ 新建世界」主入口） */
       .world-group-label {
-        margin: 12px 0 6px; padding-top: 8px; font-size: 12px;
-        color: #a8a8a8; letter-spacing: 1px;
-        border-top: 2px solid rgba(255, 255, 255, .14);
+        display: flex; justify-content: space-between; align-items: center;
+        margin: 12px 0 6px; padding: 8px 10px; font-size: 13px;
+        color: #fff; letter-spacing: 1px;
+        background: rgba(0,0,0,.55);
+        border-bottom: 3px solid #4f8b37;
       }
+      .world-count { color: #bdbdbd; font-size: 11px; }
       .world-empty {
         padding: 12px; text-align: center; color: #a8a8a8;
         border: 2px dashed rgba(255, 255, 255, .22);
@@ -314,6 +375,23 @@
         transition: background var(--dur-fast) var(--ease);
       }
       .world-card:hover { background: rgba(255, 255, 255, .10); }
+      .world-card-thumb {
+        position: relative; width: 72px; height: 44px; flex: 0 0 auto;
+        overflow: hidden; border: 2px solid #111;
+        background:
+          linear-gradient(180deg, #7297ad 0 52%, #527842 53% 66%, #704d30 67%);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.20);
+      }
+      .world-card-thumb::after {
+        content: ''; position: absolute; left: 16px; right: 4px; bottom: 0; height: 18px;
+        background: #527842; box-shadow: -16px 8px 0 #704d30;
+      }
+      .world-card-thumb[data-world-type='flat'] {
+        background: linear-gradient(180deg, #7297ad 0 62%, #527842 63% 72%, #704d30 73%);
+      }
+      .world-card-thumb[data-world-type='amplified']::after {
+        left: 26px; height: 32px; transform: skew(-30deg);
+      }
       .world-card-info { flex: 1; min-width: 0; }
       .world-card-name { font-size: 14px; color: #fff; }
       .world-card-meta {
@@ -852,6 +930,7 @@
       .settings-columns { display: flex; flex-direction: row; gap: 12px; flex: 1 1 auto; min-height: 0; }
       .settings-tabs { display: flex; flex-direction: column; flex: 0 0 104px; gap: 4px; }
       .settings-tab {
+        position: relative;
         font: inherit; font-size: 13px; padding: 6px 8px; min-height: 34px;
         text-align: left; white-space: nowrap; cursor: pointer; flex: 0 0 auto;
       }
@@ -859,6 +938,10 @@
       .settings-tab.active {
         background: var(--mc-panel); color: var(--mc-text);
         text-shadow: 1px 1px 0 rgba(255, 255, 255, .45);
+      }
+      .settings-tab.active::before {
+        content: ''; position: absolute; left: -5px; top: 2px; bottom: 2px; width: 3px;
+        background: #6cc349; box-shadow: 1px 0 0 #284c1c;
       }
       .settings-body {
         flex: 1 1 auto; min-height: 0;
@@ -992,7 +1075,9 @@
         body.touch-mode .pause-help { display: none; }
 
         /* ---- 主菜单：横屏宽度富余、高度紧张 ---- */
-        body.touch-mode .world-title { font-size: 20px; }
+        body.touch-mode .world-logo { font-size: 42px; }
+        body.touch-mode .world-edition { margin-top: 6px; font-size: 10px; }
+        body.touch-mode .world-splash { top: 38px; font-size: 12px; }
         body.touch-mode .world-menu { gap: 8px; margin-top: 10px; }
         body.touch-mode .world-primary { min-height: 44px; font-size: 14px; }
         body.touch-mode .world-secondary { min-height: 44px; }

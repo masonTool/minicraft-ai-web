@@ -9448,7 +9448,7 @@ async function boot(): Promise<void> {
         onResume: () => menuSettings?.hide(),
         onChange: (next) => saveSettings(next),
       });
-      menuSettings.setTitle('设置', 'Esc 或点面板外关闭；这些设置存在这台设备上，进世界后直接生效', '返回');
+      menuSettings.setTitle('设置', '设置保存在此设备，进入世界后立即生效', '返回');
       menuSettings.setMeta('');
     }
     menuSettings.show();

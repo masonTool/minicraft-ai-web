@@ -164,7 +164,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   }
 
   // ---- ③ 设置分组：页签与 section 一一对应（漏一组 = 有一页设置永远看不到）
-  equal('四个分组（图形/操作/声音/游戏）', SETTING_GROUPS.length, 4);
+  equal('四个分组（视频/控制/音频/游戏）', SETTING_GROUPS.length, 4);
   check('每个分组都有中文名', SETTING_GROUPS.every((group) => (SETTING_GROUP_LABELS[group] ?? '').length > 0));
   equal('分组名不重复', new Set(SETTING_GROUPS.map((group) => SETTING_GROUP_LABELS[group])).size, SETTING_GROUPS.length);
 
@@ -695,7 +695,12 @@ console.log('\n[暂停菜单分两层（批次 108）]');
   check('设置页有 ‹ 返回', source.includes("'‹ 返回'"));
   check('设置页上不再并排放着动作按钮', !source.includes("className = 'settings-buttons'"));
   // Esc / Android 返回键共用"退一层"这一个判据
-  check('退一层收在 goBack() 里（返回"还开着吗"）', source.includes('goBack(): boolean') && source.includes("this.setPage('menu');\n      return true;"));
+  check(
+    '退一层收在 goBack() 里（游戏内回菜单、主菜单设置直接关）',
+    source.includes('goBack(): boolean') &&
+      source.includes("this.setPage('menu');") &&
+      source.includes('this.actions.onResume();'),
+  );
   // 从主菜单打开时没有"暂停"可言，直接进设置页
   check('从主菜单打开直接进设置页', source.includes("page ?? (this.actions.onExitToMenu ? 'menu' : 'settings')"));
   // 主程序三条路径都要走 goBack（Esc / Android 返回键 / 关最上层界面）
@@ -723,6 +728,9 @@ console.log('\n[主菜单分层（批次 108）]');
   check('二级页有存档列表（验收脚本按 id 找）', source.includes("this.listEl.id = 'world-list';"));
   check('存档的"进入"按钮有专属类名（不再靠"第一个匹配"）', source.includes("enter.className = 'world-enter';"));
   check('新建表单的提交按钮有专属 id', source.includes("createButton.id = 'world-create-button';"));
+  check('首页品牌信号是 MINECRAFT + 基岩版标识', source.includes("logo.textContent = 'MINECRAFT';") && source.includes('world-edition'));
+  check('世界列表按视图展开并带缩略图', source.includes("this.panel.dataset.view = view;") && source.includes('world-card-thumb'));
+  check('新建世界返回世界列表（不是跳回首页）', source.includes("this.makeNav('创建新世界', () => this.setView('worlds'))"));
   // 三个浏览器验收脚本都要走完这三步，一处漏了就会在主页上卡住
   // （⚠️ 路径是 `../tools/`：测试被打包到 `.tmp/ui-test.mjs` 里跑，`import.meta.url`
   //   的基准是那个临时文件，不是本文件——与上面 `../index.html` 同一个道理）
@@ -824,6 +832,11 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
     source.includes('private backFromSettings(): void') && source.includes('if (this.actions.onExitToMenu) this.setPage(\'menu\');'),
   );
   check('暂停菜单页左槽留空（标题仍然居中）', source.includes('this.makeHeader(menuTitle, null)'));
+  check('删除世界只在世界列表，暂停菜单不放不可逆删除', !source.includes("deleteWorld.textContent = '删除本世界';"));
+  check(
+    '主菜单设置按返回直接关闭（不会露出「游戏已暂停」）',
+    source.includes('if (this.actions.onExitToMenu)') && source.includes('this.actions.onResume();'),
+  );
 
   // 固定高度之后"四组一次全展开"放不下了 → 三端统一"左选项卡 + 右内容、一次一组"
   check('三端统一：左选项卡 + 右内容', compact.includes('.settings-columns { display: flex; flex-direction: row; gap: 12px;'));
@@ -845,7 +858,7 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   // 横屏只剩"主菜单"与"把按钮排紧一点"：**不许再碰面板尺寸**
   check('横屏不再覆盖面板尺寸（只允许把里面的按钮排紧）', !landscape.includes('.settings-panel') && !landscape.includes('.settings-columns'));
   check('横屏：暂停按钮收紧到 42px（面板尺寸不变）', landscape.includes('body.touch-mode .pause-action { min-height: 42px; font-size: 14px; }'));
-  check('横屏：主菜单标题缩小、按钮高度统一到 44px', landscape.includes('body.touch-mode .world-title { font-size: 20px; }') && landscape.includes('body.touch-mode .world-primary { min-height: 44px;'));
+  check('横屏：主菜单 logo 缩小、按钮高度统一到 44px', landscape.includes('body.touch-mode .world-logo { font-size: 42px; }') && landscape.includes('body.touch-mode .world-primary { min-height: 44px;'));
 }
 
 console.log('\n[按钮尺寸对齐（批次 111）]');
@@ -879,7 +892,7 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   // 用户："首页的按钮要对齐，符合正常的按钮大小"。
   // 根因：首页按钮被单独收窄到 280px（横屏 240px），而二级页是满宽——两页对不齐。
   check('首页按钮不再被单独收窄', !compact.includes('.world-menu > * { width'));
-  check('标题页那一片收到 360px（接近原版那一列的宽度）', compact.includes('.world-panel { width: min(92vw, 360px);'));
+  check('标题页按钮列约 400px，世界列表按视图展开', compact.includes('width: min(92vw, 400px);') && compact.includes(".world-panel[data-view='worlds'] { width: min(94vw, 720px); }"));
   // 用户："暂停界面按钮可以窄一点"（面板 760 宽，一列按钮拉满太宽）
   check(
     '暂停菜单的按钮列收到 300px 并居中',
