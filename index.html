@@ -326,6 +326,9 @@
         position: relative;
         display: flex; flex-direction: column; align-items: center;
         text-align: center; color: #fff;
+        /* 收缩到内容宽（批次 167）：`.world-splash` 是相对这一块绝对定位的，
+           盒子要是拉满 760px 面板宽，那行斜字就会压在 MINECRAFT 的字母上。 */
+        width: fit-content; align-self: center;
       }
       .world-logo {
         font-size: clamp(42px, 8vw, 72px); line-height: .85;
@@ -344,7 +347,9 @@
         text-shadow: 1px 1px 0 #111;
       }
       .world-splash {
-        position: absolute; left: calc(50% + 92px); top: 64px;
+        /* 贴在主标右上角（批次 167）：基准是标题块（已收缩到内容宽），
+           所以无论字号/面板多宽，它都落在 MINECRAFT 的右侧而不是压在字母上 */
+        position: absolute; left: calc(100% - 40px); top: 64px;
         color: #fff85b; font-size: 16px; font-weight: 700;
         transform: rotate(-12deg);
         text-shadow: 2px 2px 0 #3b3700;
@@ -993,7 +998,7 @@
          多个按钮，它只是很短的空间，你可以适当地让它们并排"。
          `auto-fit` + 230px 下限：宽窗口（PC / 横屏手机）自动两列、窄屏退回一列，
          不用另写断点。滑杆行带 `.settings-row.wide` 跨满两列（压到半栏不好拖）。 */
-      .settings-section { display: none; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 10px; align-content: start; }
+      .settings-section { display: none; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 10px; align-content: start; flex: 0 0 auto; }
       .settings-section.active { display: grid; }
       .settings-group { display: none; }
       .settings-meta { flex: 0 0 auto; margin: 8px 0 0; }

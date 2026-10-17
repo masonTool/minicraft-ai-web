@@ -113,12 +113,17 @@ export class WorldScreen {
     splash.className = 'world-splash';
     splash.textContent = 'WebGL2!';
     splash.setAttribute('aria-hidden', 'true');
+    // ⚠️ splash 挂在**标题块里**（批次 167）：它是 `position: absolute`，
+    // 原来作为面板的直接子节点，定位基准就是那个盒子——面板从 400 宽到 760 宽之后，
+    // `left: calc(50% + 92px)` 直接落到 MINECRAFT 的字母上。挂进标题块（收缩到内容宽）
+    // 之后，它始终贴在主标右上角，与字号无关。
+    title.append(splash);
 
     const footer = document.createElement('div');
     footer.className = 'world-footer';
     footer.textContent = '非官方 Web 复刻 · 存档保存在此设备';
 
-    home.append(title, splash, subtitle, menu, footer);
+    home.append(title, subtitle, menu, footer);
 
     // ---------------------------------------------------------------- ② 世界列表
     //
