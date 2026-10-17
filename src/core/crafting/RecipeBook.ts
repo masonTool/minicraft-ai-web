@@ -45,46 +45,18 @@ export const RECIPE_BOOK_TABS_POCKET = ['all', 'building', 'equipment', 'items',
 export type RecipeBookTab = (typeof RECIPE_BOOK_TABS)[number];
 
 /**
- * 经典 UI 的判据宽度（px）：与 `index.html` 里 `body.split-ui` 那组规则的
- * `min-width: 1280px` **同一个数**——两边不一致会出现"画面已并排、页签还是按
- * 携带版排"这种一半对一半的情况。
+ * 标签栏的排列顺序（批次 157）。
+ *
+ * ⚠️ 这里**曾经有两套**：经典 UI 是"全部"在最右、携带版在最前，按视口宽度挑一套
+ * （≥1280 走经典）。批次 157 把两套合成了一套——用户要的是"PC 的布局展示也不太
+ * 合理，统一都用手机端的展示方式"，而两套并存的直接后果就是"同一台机器转个屏、
+ * 页签顺序就变了"，以及"手机上明明有摇杆，点开物品栏却是 PC 那一套"。
+ *
+ * 现在**只有携带版这一套**：界面不分经典/携带，标签栏也不再看宽度。
+ * `RECIPE_BOOK_TABS`（经典顺序）保留下来只是给测试当"另一组排列"的参照。
  */
-export const CLASSIC_UI_MIN_WIDTH = 1280;
-
-/**
- * 界面配置（批次 142，对齐基岩版「视频选项 → UI」）：
- * - `auto`：按宽度（≥1280 → 经典，否则携带版）
- * - `classic` / `pocket`：强制，不看宽度
- */
-export type UiProfile = 'auto' | 'classic' | 'pocket';
-export const UI_PROFILES = ['auto', 'classic', 'pocket'] as const;
-export const UI_PROFILE_LABELS: Record<UiProfile, string> = {
-  auto: '自动',
-  classic: '经典 UI',
-  pocket: '携带版 UI',
-};
-
-/** 当前生效的界面配置（由主程序 `applySettings` 写入） */
-let activeUiProfile: UiProfile = 'auto';
-
-export function setUiProfile(profile: UiProfile): void {
-  activeUiProfile = UI_PROFILES.includes(profile) ? profile : 'auto';
-}
-
-export function getUiProfile(): UiProfile {
-  return activeUiProfile;
-}
-
-/** 该视口走经典 UI（并排）还是携带版 UI（整屏） */
-export function isClassicUi(width: number, profile: UiProfile = activeUiProfile): boolean {
-  if (profile === 'classic') return true;
-  if (profile === 'pocket') return false;
-  return width >= CLASSIC_UI_MIN_WIDTH;
-}
-
-/** 该视口下标签栏的排列顺序（转屏会变，界面按它重排 `order`） */
-export function recipeBookTabsFor(width: number, profile: UiProfile = activeUiProfile): readonly RecipeBookTab[] {
-  return isClassicUi(width, profile) ? RECIPE_BOOK_TABS : RECIPE_BOOK_TABS_POCKET;
+export function recipeBookTabsFor(): readonly RecipeBookTab[] {
+  return RECIPE_BOOK_TABS_POCKET;
 }
 
 export const RECIPE_BOOK_TAB_LABELS: Record<RecipeBookTab, string> = {

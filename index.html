@@ -96,7 +96,9 @@
         /* 携带版背包自己的固定基准：所有单窗共用；双窗只横向再加一块同高区域。
            视口放不下时只做同倍率约束，不再按页签分别改宽高。 */
         --inv-pocket-w: min(calc(100vw - 88px), 568px);
-        --inv-pocket-h: min(calc(100dvh - 72px), 318px);
+        /* 318px 是手机横屏那一档（高 360~430）；桌面屏高得多，给到 42vh 不至于
+           把同一副壳压成一条。手机上 42vh 仍小于 318，取值不变。 */
+        --inv-pocket-h: min(calc(100dvh - 72px), max(318px, 42vh));
 
         /* ---- 面板 ---- */
         --panel-bg: var(--mc-panel);
@@ -441,44 +443,15 @@
       }
       #recipe-book.hidden { display: none; }
       /* ================================================================
-         经典 UI：配方书与背包**并排**（批次 134）
+         配方书**嵌在背包的左栏里**（批次 157）
          ================================================================
-         用户给的截图是基岩版**经典 UI**：左边配方书、右边玩家物品栏，两块并排，
-         谁也不盖谁。我们原来是"配方书整屏盖在背包上"——那是基岩版的**携带版 UI**
-         （手机上就是它，Wiki 里两种都写了）。
-         所以按基岩版自己的规则切换：**屏幕放得下就并排，放不下退回整屏**。
-         判据全在媒体查询里（1280px ≈ 600 的配方书 + 约 460 的背包 + 两侧留边），
-         窄屏下 `body.split-ui` 这个类等于没写。
-         ⚠️ 两块面板各是一层 `inset: 0` 的整屏遮罩，所以"并排"必须把它们**真的分成
-           左右两半**（各自覆盖一半），否则上面那层遮罩会把下面那半边的点击全吃掉。
+         以前配方书是"第二个窗口"：宽屏并排（各占半屏）、窄屏整屏盖上来。
+         两种都是**把背包挤走**——用户原话："点左边的按钮，界面总是在跳"。
+         现在它占的就是背包双栏壳里左栏那一格，栏目对齐、面板尺寸一动不动，
+         换的只是左栏里的内容（我的物品 ↔ 配方列表）。
+         ⚠️ 整屏那一层（`#recipe-book`）只在"背包没开、单独开配方书"时才显示；
+           嵌进左栏时它是 hidden 的，只有 `.recipe-panel` 被搬过去。
          ================================================================ */
-      /* 批次 142：并排不再绑死 min-width 媒体查询——由 JS 打 body.classic-ui
-         （设置可强制经典/携带版；auto 时仍按 ≥1280 打这个类） */
-      /* 并排：经典与携带版合成页共用（批次 144）。经典偏宽屏侧栏；携带版对半。 */
-      body.split-ui #recipe-book {
-        right: auto; width: 52%;
-        background: rgba(0, 0, 0, .55);
-      }
-      body.split-ui #inventory-screen { left: auto; width: 48%; }
-      body.split-ui .recipe-panel {
-        width: min(100%, 600px); max-width: 600px;
-        height: var(--panel-h); max-height: var(--panel-h);
-      }
-      /* 携带版（非 classic）：配方书与背包各占近半屏，贴合 Wiki 合成页 */
-      body.split-ui:not(.classic-ui) #recipe-book { width: 50%; }
-      body.split-ui:not(.classic-ui) #inventory-screen { width: 50%; }
-      body.split-ui:not(.classic-ui) .recipe-panel,
-      body.split-ui:not(.classic-ui) .inv-panel {
-        width: min(96%, var(--panel-w)); max-width: min(96%, var(--panel-w));
-        height: var(--inv-pocket-h); max-height: var(--inv-pocket-h);
-        overflow: hidden; box-sizing: border-box;
-      }
-      body.split-ui:not(.classic-ui) .recipe-panel {
-        display: flex; flex-direction: column;
-      }
-      body.split-ui:not(.classic-ui) .recipe-grid {
-        flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
-      }
       .recipe-panel {
         /* 批次 111：与设置/暂停面板**共用同一套固定尺寸**（用户上一轮要的"统一大小"）
            ——原来配方书是 min(96vw,780px) × 90vh，成就又是另一套，三块面板三个尺寸。 */
@@ -1352,76 +1325,66 @@
       body.inv-pocket-open #vitals {
         visibility: hidden; pointer-events: none;
       }
-      /* 合成并排：箱子页签挂在配方书根节点左下（Wiki 左板底） */
-      #recipe-book.has-pocket-inv-tab {
-        /* 仍须保持 fixed + inset:0。此前改成 relative 后根节点会塌成内容高度，
-           左板贴到屏幕顶，右板仍垂直居中，于是两边一高一低。 */
-        position: fixed;
-      }
-      #recipe-book.has-pocket-inv-tab > .inv-pocket-inv-tab {
-        position: absolute; left: 4px; bottom: 10px; z-index: 3;
-      }
-      /* 携带版并排：配方书分类改左缘竖排（与 Wiki 左板一致） */
-      body.split-ui:not(.classic-ui) .recipe-panel {
+      /* ---------------- 配方书嵌进背包左栏（批次 157） ----------------
+         落脚点是 `.inv-recipe-host`（左栏那一格），配方书把 `.recipe-panel`
+         搬进来后自己加 `.embedded`。这里只把它压成"填满这一格、内容在格内滚"。 */
+      .recipe-panel.embedded {
         position: relative;
-        margin-left: 40px;
-        width: calc(100% - 40px); max-width: calc(100% - 40px);
-        padding: 8px 10px;
-        /* 分类页签挂在灰框左边，不能被灰框自身裁掉；物品格单独负责滚动。 */
-        overflow: visible;
+        width: 100%; max-width: 100%;
+        height: 100%; max-height: 100%;
+        margin: 0; padding: 0 2px;
+        box-sizing: border-box;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+        /* 它现在是背包左栏里的**内容**，不是一个套在里面的窗口：
+           再画一圈边框 + 阴影就成了"面板里嵌面板"，反而看不清分栏。 */
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        border-radius: 0;
       }
-      body.split-ui:not(.classic-ui) .recipe-tabs {
-        position: absolute; left: -40px; top: 40px; bottom: 48px;
-        display: flex; flex-direction: column; flex-wrap: nowrap;
-        gap: 4px; margin: 0; overflow-y: auto; overflow-x: hidden;
-        width: 36px;
-      }
-      body.split-ui:not(.classic-ui) .recipe-tab {
-        width: 36px; height: 36px; flex: 0 0 auto;
-      }
-      /* 携带版左右板共用右板的关闭键；左板不重复标题、说明和关闭键。 */
-      body.split-ui:not(.classic-ui) .recipe-header {
+      /* 分类页签就是左轨那排图标，面板内不再重复一排 */
+      .recipe-panel.embedded .recipe-tabs { display: none; }
+      .recipe-panel.embedded .recipe-header {
         display: flex; min-height: 24px; padding: 0 0 5px; margin: 0 0 6px;
-        flex: 0 0 auto;
+        flex: 0 0 auto; align-items: center;
       }
-      body.split-ui:not(.classic-ui) .recipe-header .recipe-hint,
-      body.split-ui:not(.classic-ui) .recipe-header .recipe-close,
-      body.split-ui:not(.classic-ui) .recipe-detail { display: none; }
-      /* 搜索框只属于放大镜（全部）分类；建筑/装备/物品/自然直接从物品格开始。 */
-      body.split-ui:not(.classic-ui) .recipe-panel:not([data-tab='all']) .recipe-controls {
-        display: none;
-      }
-      body.split-ui:not(.classic-ui) .recipe-controls {
+      /* 关闭键留给"关掉配方书、左栏回到我的物品"；横屏矮屏上说明行不占地方 */
+      .recipe-panel.embedded .recipe-hint,
+      .recipe-panel.embedded .recipe-detail { display: none; }
+      /* 搜索框只属于放大镜（全部）分类；其余分类像原版一样直接从物品格开始。 */
+      .recipe-panel.embedded:not([data-tab='all']) .recipe-controls { display: none; }
+      .recipe-panel.embedded .recipe-controls {
         flex: 0 0 auto; margin-bottom: 6px;
       }
-      body.split-ui:not(.classic-ui) .recipe-search {
+      .recipe-panel.embedded .recipe-search {
         min-width: 0; height: 30px; box-sizing: border-box;
       }
-      body.split-ui:not(.classic-ui) .recipe-filter {
+      .recipe-panel.embedded .recipe-filter {
         width: 30px; height: 30px;
       }
-      /* 携带版配方页只展示合成配方。熔炼属于熔炉界面；把整张熔炼表塞在这里
-         会把产物网格压到只剩一条缝，与基岩版左侧物品网格完全不同。 */
-      body.split-ui:not(.classic-ui) .recipe-smelting { display: none; }
-      body.split-ui:not(.classic-ui) .inv-pager {
+      /* 只有这一格能滚：外框与左栏网格都不动。
+         列数必须与 `RECIPE_PANE_PAGE_SIZE` 对上（7 列 × 4 行），
+         半栏宽塞不下 12 列 / 8 列——硬塞会被 `overflow-x: hidden` 裁掉。 */
+      .recipe-panel.embedded .recipe-grid {
+        grid-template-columns: repeat(7, var(--recipe-cell));
+        flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+        overscroll-behavior: contain;
+        align-content: start;
+      }
+      /* 熔炼属于熔炉界面；嵌在左栏时整张熔炼表会把配方网格压成一条缝 */
+      .recipe-panel.embedded .recipe-smelting { display: none; }
+      .recipe-panel.embedded .inv-pager {
         flex: 0 0 auto; margin-top: 4px; gap: 4px;
       }
-      body.split-ui:not(.classic-ui) .recipe-panel .inv-page-button {
+      .recipe-panel.embedded .inv-page-button {
         min-width: 34px; min-height: 30px; padding: 2px 7px;
         font-size: 0; position: relative;
       }
-      body.split-ui:not(.classic-ui) .recipe-panel .inv-page-button::after {
-        font-size: 15px;
-      }
-      body.split-ui:not(.classic-ui) .recipe-panel .inv-page-button[data-role='prev']::after { content: '‹'; }
-      body.split-ui:not(.classic-ui) .recipe-panel .inv-page-button[data-role='next']::after { content: '›'; }
-      body.split-ui:not(.classic-ui) .recipe-panel .inv-page-label {
-        font-size: 11px;
-      }
-      /* 箱子页签已挪到左板底；右板不再保留一条 40px 的空左轨。 */
-      body.split-ui:not(.classic-ui) #inventory-screen .inv-shell.pocket-chrome > .inv-rail-left {
-        display: none;
-      }
+      .recipe-panel.embedded .inv-page-button::after { font-size: 15px; }
+      .recipe-panel.embedded .inv-page-button[data-role='prev']::after { content: '‹'; }
+      .recipe-panel.embedded .inv-page-button[data-role='next']::after { content: '›'; }
+      .recipe-panel.embedded .inv-page-label { font-size: 11px; }
 
       .inv-panel {
         background: var(--panel-bg);
@@ -1961,23 +1924,39 @@
         justify-content: flex-end;
         padding-bottom: 8px;
       }
-      /* 配方打开后左板由 RecipeBook 接管，右板只保留合成/装备，不再重复玩家物品。 */
-      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual {
-        width: min(96%, var(--inv-pocket-w));
-        max-width: min(96%, var(--inv-pocket-w));
-      }
-      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual .inv-body {
-        grid-template-columns: 1fr;
-      }
-      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual .inv-main > .inv-grid,
-      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual .inv-personal-title,
-      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual .inv-creative-section {
-        display: none !important;
-      }
-      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual :is(.inv-top, .inv-gear) {
+
+      /* ---------------- 左栏：我的物品 / 创造物品 / 配方书 ----------------
+         三份内容**占的是同一个格子**（col 1、row 1/span 2），切换只换内容：
+         面板宽高、两栏的分界、右栏的位置全都不动——这就是"不该跳"的落点。 */
+      .inv-panel.pocket-ui.pocket-dual .inv-recipe-host {
         grid-column: 1;
-        border-left: 0;
+        grid-row: 1 / span 2;
+        display: none;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
       }
+      /* 左栏换成配方列表时：合成区收到右栏上半，玩家自己的 3×9 让位到下半
+         （基岩版手机合成页就是这个排法，不用把仓库藏掉） */
+      .inv-panel.pocket-ui.pocket-dual[data-pocket-left='recipes'] .inv-top {
+        grid-row: 1;
+        height: auto;
+        min-height: 0;
+      }
+      .inv-panel.pocket-ui.pocket-dual[data-pocket-left='recipes'] .inv-main > .inv-grid {
+        grid-column: 2;
+        grid-row: 2;
+        border-left: 2px solid #8a8a8a;
+        padding-left: 6px;
+        box-sizing: border-box;
+        align-self: start;
+      }
+      /* 换栏目内容时的淡入：只改透明度，**不碰几何**（一碰就又变成"面板在动"） */
+      @keyframes inv-pane-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .inv-pane-enter { animation: inv-pane-in var(--dur-fast) ease-out; }
 
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
       .inv-grid.inv-armor { grid-template-columns: 42px; }
@@ -2399,37 +2378,6 @@
                  env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
         box-sizing: border-box;
       }
-      /* 并排时两块都不得超出半屏 */
-      body.touch-mode.split-ui:not(.classic-ui) .recipe-panel,
-      body.touch-mode.split-ui:not(.classic-ui) .inv-panel {
-        width: min(48vw, var(--inv-pocket-w));
-        max-width: min(48vw, var(--inv-pocket-w));
-        /* 双窗只是横向增加区域：高度继续沿用单窗唯一变量。 */
-        height: var(--inv-pocket-h);
-        max-height: var(--inv-pocket-h);
-      }
-      body.touch-mode.split-ui:not(.classic-ui) .recipe-panel {
-        /* 左侧 40px 留给分类轨，灰框本体止于半屏分界线。 */
-        width: min(calc(50vw - 40px), var(--inv-pocket-w));
-        max-width: min(calc(50vw - 40px), var(--inv-pocket-w));
-      }
-      /* 844px 横屏时半屏装不下 9×44：只在双窗约束槽位，同一页内仍保持九列和顺序。
-         单窗继续使用 44px，避免为了工作台把普通背包也缩小。 */
-      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui .inv-main {
-        width: 100%;
-      }
-      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui .inv-main > .inv-grid {
-        --split-slot: min(44px, calc((50vw - 80px) / 9));
-        grid-template-columns: repeat(9, var(--split-slot));
-      }
-      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui .inv-main > .inv-grid .inv-slot {
-        width: var(--split-slot); height: var(--split-slot);
-        min-width: 0; max-width: var(--split-slot); max-height: var(--split-slot);
-      }
-      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui .inv-main .inv-grid .inv-slot canvas {
-        width: min(36px, calc(var(--split-slot) - 6px));
-        height: min(36px, calc(var(--split-slot) - 6px));
-      }
       /* 说明文字在矮屏上占一整行还不参与操作——竖屏可留，横屏矮屏直接藏 */
       body.touch-mode .inv-header-hint { font-size: 11px; line-height: 1.35; max-width: 100%; }
       body.touch-mode .inv-panel.creative-ui .inv-creative {
@@ -2448,10 +2396,6 @@
            快捷栏上沿；继续垂直居中会让快捷栏压住个人仓库最后一行。 */
         body.touch-mode #inventory-screen .inv-shell {
           align-self: start;
-        }
-        body.touch-mode.split-ui:not(.classic-ui) #recipe-book {
-          align-items: start;
-          padding-top: 0;
         }
         body.touch-mode .inv-header-hint,
         body.touch-mode .recipe-hint { display: none; }
@@ -2804,11 +2748,9 @@
         overflow-x: hidden;
         overscroll-behavior: contain;
       }
-      /* 携带版配方分类轨有意伸在灰框之外；只让内部网格滚，不能被通用防横滑规则裁掉。 */
-      body.split-ui:not(.classic-ui) #recipe-book .recipe-panel {
-        overflow: visible;
-      }
-      /* 触摸端通用规则写在双栏规则之后，最终在这里收口，避免重新压回旧单栏宽度。 */
+      /* 双栏壳的宽度在这里收口：不管左栏是"我的物品 / 创造物品 / 配方书"，
+         面板都是同一个宽度——切栏目时没有东西会动。 */
+      .inv-panel.pocket-ui.pocket-dual,
       body.touch-mode .inv-panel.pocket-ui.pocket-dual {
         width: min(calc(100vw - 88px), 800px);
         max-width: min(calc(100vw - 88px), 800px);
@@ -2817,13 +2759,6 @@
         grid-template-columns: repeat(7, 40px);
         min-height: 0;
         max-height: 174px;
-      }
-      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui.pocket-dual {
-        width: min(48vw, var(--inv-pocket-w));
-        max-width: min(48vw, var(--inv-pocket-w));
-      }
-      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid {
-        display: none !important;
       }
       /* ⚠️ 刻意**不**包含 `.inv-tabs`：那一行分类标签是"单行横向滚动"的
          （窄屏上一个都换行不下），锁掉就不会滚了（见 `ui-test` 里那条断言）。 */

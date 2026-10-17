@@ -178,12 +178,7 @@ import {
   type GameRules,
 } from './core/world/Rules.ts';
 import { RecipeBook } from './ui/RecipeBook.ts';
-import {
-  craftFromInventory,
-  isClassicUi,
-  setUiProfile,
-  type RecipeBookTab,
-} from './core/crafting/RecipeBook.ts';
+import { craftFromInventory, type RecipeBookTab } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
 import { itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
@@ -1277,11 +1272,11 @@ class App {
       {
         onOpenChange: (open) => this.handleInventoryOpen(open),
         onOpenRecipes: (tab) => this.openRecipeBook(tab),
-        onCloseRecipes: () => {
-          if (!this.recipeBook.isOpen) return;
-          this.recipeBook.hide();
-          this.updateSplitUi();
-        },
+        onCloseRecipes: () => this.closeRecipeBook(),
+        // 左栏是不是正被配方书占着（决定显示"我的物品"还是"配方列表"）
+        isRecipesOpen: () => this.isRecipeBookOpen(),
+        // 把配方书搬进背包的左栏（或还回整屏那一层）
+        onRecipeHost: (host) => this.attachRecipeBook(host),
         // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口
         onOpenAdvancements: () => this.openAdvancements(),
         // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
@@ -1316,6 +1311,8 @@ class App {
       gridSize: () => (this.inventoryScreen.currentMode === 'crafting' ? 3 : 2),
       onCraft: (recipe) => this.craftFromBook(recipe),
       onFill: (recipe) => this.fillFromBook(recipe),
+      // 配方书自己那颗 ✕：背包要把左栏还回"我的物品"
+      onHidden: () => this.inventoryScreen.syncRecipePane(),
     });
     // 成就面板与达成提示（M7，批次 87）：同样挂 <body>（见上面那条 z-index 的注记），
     // 点外框关闭；提示卡是 HUD 性质的东西，挂 body 才不会被打包进 #app 的层叠上下文
@@ -1371,9 +1368,6 @@ class App {
       this.applyResolutionScale();
     }
     this.audio.volume = this.settings.volume;
-    // 界面配置（批次 142）：启动时就要生效，否则第一帧还按默认 auto
-    setUiProfile(this.settings.uiProfile);
-    this.updateUiProfileClass();
     this.lastStepX = this.physics.x;
     this.lastStepZ = this.physics.z;
     this.settingsScreen = new SettingsScreen(document.body, this.settings, {
@@ -1540,12 +1534,8 @@ class App {
     // 触摸按钮/摇杆大小（批次 97）：改一个 CSS 变量，摇杆与按钮一起缩放
     document.documentElement.style.setProperty('--touch-scale', String(settings.touchScale));
     this.debugEl.style.display = settings.showDebug ? '' : 'none';
-    // 界面配置（批次 142）：经典 / 携带版 / 自动
-    setUiProfile(settings.uiProfile);
-    this.updateUiProfileClass();
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.recipeBook.isOpen) this.recipeBook.render();
-    this.updateSplitUi();
     this.applyEnvironment();
     // 视距变化后立刻按新的范围请求/卸载区块
     this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
@@ -1583,31 +1573,9 @@ class App {
     else this.openSettings();
   }
 
-  /**
-   * 经典 UI / 携带版 UI（批次 134 → 142）。
-   *
-   * **经典 UI** = 左配方书 + 右物品栏并排；**携带版** = 配方书整屏。
-   * 批次 142 起：`body.classic-ui` 由设置里的界面配置决定（不再只靠 CSS 媒体查询），
-   * `split-ui` 仍表示"两块都开着"。
-   */
-  private updateUiProfileClass(): void {
-    document.body.classList.toggle('classic-ui', isClassicUi(window.innerWidth));
-  }
-
-  private updateSplitUi(): void {
-    this.updateUiProfileClass();
-    // 经典 / 携带：只要背包与配方书同时开着就并排（携带版合成页 = 左配方 + 右 2×2）
-    document.body.classList.toggle(
-      'split-ui',
-      this.recipeBook.isOpen && this.inventoryScreen.isOpen,
-    );
-  }
-
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
   private handleInventoryOpen(open: boolean): void {
     this.uiOpen = open;
-    // 背包的开合也决定"配方书要不要并排显示"（背包不开着就没有并排可言）
-    this.updateSplitUi();
     this.keys.clear();
     this.leftDown = false;
     this.rightDown = false;
@@ -2677,8 +2645,6 @@ class App {
       this.camera.updateProjectionMatrix();
       // 转屏也走动态分辨率的唯一同步入口：保留 DPR×档位，且不让 three 改写 CSS 尺寸。
       this.applyResolutionScale();
-      // auto 界面配置下转屏会跨过经典/携带断点
-      this.updateSplitUi();
       // 快捷栏在手机断点由 32px 变 36px，重新按实际 CSS 尺寸分配清晰背板。
       this.refreshHotbar();
       if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
@@ -6139,18 +6105,39 @@ class App {
    *  ① "摆进合成格"这件事玩家根本看不见；
    *  ② 关界面会把格子里的东西倒回背包——刚摆好的立刻被清掉。
    */
+  /**
+   * 背包比配方书先构造（配方书要问"现在是 2×2 还是 3×3"），
+   * 所以构造期那一次排布还没有配方书可问——这两个小包裹就是给它兜底的。
+   */
+  private isRecipeBookOpen(): boolean {
+    return this.recipeBook ? this.recipeBook.isOpen : false;
+  }
+
+  private attachRecipeBook(host: HTMLElement | null): void {
+    this.recipeBook?.attach(host);
+  }
+
   private openRecipeBook(tab?: RecipeBookTab): void {
     // 背包没开着就顺手打开（原版的配方书本来就在背包界面里）
     if (!this.inventoryScreen.isOpen) this.inventoryScreen.openWith('inventory');
     // 携带版左上分类图标会带上 tab（批次 140）
     this.recipeBook.show(tab);
+    // 配方书是左栏的内容：开完要让背包把左栏换成它（面板几何不变）
+    this.inventoryScreen.syncRecipePane();
     this.handleInventoryOpen(true);
+  }
+
+  /** 收起配方书：背包左栏还回"我的物品" */
+  private closeRecipeBook(): void {
+    if (!this.recipeBook.isOpen) return;
+    this.recipeBook.hide();
+    this.inventoryScreen.syncRecipePane();
   }
 
   /** R 键：开/关配方书。关掉时要把 uiOpen 交回给背包（背包可能还开着） */
   private toggleRecipeBook(): void {
     if (this.recipeBook.isOpen) {
-      this.recipeBook.hide();
+      this.closeRecipeBook();
       this.handleInventoryOpen(this.inventoryScreen.isOpen);
       return;
     }

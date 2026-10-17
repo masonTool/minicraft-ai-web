@@ -18,11 +18,6 @@
  */
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
-import {
-  UI_PROFILES,
-  UI_PROFILE_LABELS,
-  type UiProfile,
-} from '../core/crafting/RecipeBook.ts';
 import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './TouchControls.ts';
 
 /**
@@ -137,11 +132,6 @@ export interface GameSettings {
    * 而且 44px 只是下限——基岩版把这个选择权交给玩家，我们也给。
    */
   touchScale: number;
-  /**
-   * 界面配置（批次 142，对齐基岩版视频选项里的经典 UI / 携带版 UI）：
-   * `auto` 按宽度、`classic` / `pocket` 强制。
-   */
-  uiProfile: UiProfile;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -160,7 +150,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
   maxFps: 0,
   touchStick: 'fixed',
   touchScale: 1,
-  uiProfile: 'auto',
 };
 
 const STORAGE_KEY = 'bedrock-settings';
@@ -193,9 +182,6 @@ export function loadSettings(): GameSettings {
         ? (parsed.touchStick as StickMode)
         : DEFAULT_SETTINGS.touchStick,
       touchScale: clampNumber(parsed.touchScale, TOUCH_SCALE_MIN, TOUCH_SCALE_MAX, DEFAULT_SETTINGS.touchScale),
-      uiProfile: UI_PROFILES.includes(parsed.uiProfile as UiProfile)
-        ? (parsed.uiProfile as UiProfile)
-        : DEFAULT_SETTINGS.uiProfile,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -443,8 +429,6 @@ export class SettingsScreen {
       FPS_CAP_LABELS,
     );
     this.makeSelect(graphics, 'particles', '粒子效果', PARTICLE_LEVELS, PARTICLE_LEVEL_LABELS);
-    // 经典 UI / 携带版 UI（批次 142）：基岩版视频选项里就有这一项
-    this.makeSelect(graphics, 'uiProfile', '界面配置', UI_PROFILES, UI_PROFILE_LABELS);
 
     const controls = this.section('controls');
     this.makeSelect(controls, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
@@ -695,7 +679,7 @@ export class SettingsScreen {
    */
   private makeSelect<T extends string>(
     options: HTMLElement,
-    key: 'cameraMode' | 'particles' | 'touchStick' | 'maxFps' | 'uiProfile',
+    key: 'cameraMode' | 'particles' | 'touchStick' | 'maxFps',
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
@@ -715,7 +699,6 @@ export class SettingsScreen {
         else if (key === 'particles') this.settings.particles = next as ParticleLevel;
         // 帧率上限是**数字**（0/30/60），但选择行按字符串循环（见上面 `FPS_CAP_LABELS`）
         else if (key === 'maxFps') this.settings.maxFps = Number(next);
-        else if (key === 'uiProfile') this.settings.uiProfile = next as UiProfile;
         else this.settings.touchStick = next as StickMode;
         this.commit();
         return `‹ ${labels[next]} ›`;

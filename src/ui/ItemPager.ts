@@ -32,6 +32,16 @@ export const CARD_PAGE_SIZE_NARROW = 8;
 /** 窄屏判定阈值（px）：与 CSS 里那个 `@media (max-width: 900px)` 是同一个数 */
 export const NARROW_MAX_WIDTH = 900;
 
+/**
+ * 配方书**嵌在背包左栏**时的每页条数（批次 157）：7 列 × 4 行。
+ *
+ * 左栏只有面板的一半宽（约 340px），12 列 / 8 列都塞不下——塞不下就是横向被裁，
+ * 而"界面不许横滑"这条规矩不能破。列数与页大小必须一起给：
+ * 不一致的话最后一行会出现半行空位（见文件头那条第 1 条）。
+ */
+export const RECIPE_PANE_COLUMNS = 7;
+export const RECIPE_PANE_PAGE_SIZE = RECIPE_PANE_COLUMNS * 4;
+
 /** 这个宽度算不算窄屏 */
 export function isNarrowViewport(width: number): boolean {
   return width <= NARROW_MAX_WIDTH;

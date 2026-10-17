@@ -22,14 +22,20 @@ import type { Inventory } from '../core/container/Inventory.ts';
 import {
   RECIPE_BOOK_TAB_LABELS,
   buildRecipeEntries,
-  isClassicUi,
   matchesRecipe,
   recipeBookTabsFor,
   type RecipeBookTab,
   type RecipeEntry,
 } from '../core/crafting/RecipeBook.ts';
 import { recipeLayout } from '../core/crafting/RecipeLayout.ts';
-import { clampPage, pageCount, pageLabel, pageSizeFor, slicePage } from './ItemPager.ts';
+import {
+  RECIPE_PANE_PAGE_SIZE,
+  clampPage,
+  pageCount,
+  pageLabel,
+  pageSizeFor,
+  slicePage,
+} from './ItemPager.ts';
 import { SMELTING_RECIPES, SMELTING_TIME } from '../core/crafting/Smelting.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import type { Recipe } from '../core/crafting/Recipes.ts';
@@ -68,6 +74,13 @@ export interface RecipeBookActions {
    * 摆法看得见、还能自己改，最后点输出格取成品（见中文 Wiki「物品栏 → 配方书」）。
    */
   onFill: (recipe: Recipe) => boolean;
+  /**
+   * 配方书被**自己那颗 ✕**关掉时通知主程序（批次 157）。
+   *
+   * 嵌在背包左栏时，光靠这里 `hide()` 不够——背包还以为左栏被占着，
+   * 得让它重排一次把左栏还回"我的物品"。
+   */
+  onHidden?: () => void;
 }
 
 export class RecipeBook {
@@ -101,13 +114,13 @@ export class RecipeBook {
   private readonly detailEl: HTMLDivElement;
   private tab: RecipeBookTab = 'all';
   /**
-   * 上次画的时候走的是哪种 UI（批次 136）。
+   * 配方书是不是**嵌在背包左栏里**（批次 157）。
    *
-   * 页签的先后在两种 UI 里不一样（经典 UI"全部"在最右、携带版在最前），
-   * 而转屏会连发一串 `resize`——所以只在**真的跨过那个断点**时才重画，
-   * 否则横屏拿手机转一下就重建 60 个 canvas。
+   * 以前它是"另一个窗口"：手机上点一下就整屏铺开或把背包挤到半屏，
+   * 整个界面跟着跳一次。现在它默认挂在背包的左栏——栏目对齐，
+   * 切的就是栏目里的内容，面板几何一动不动。
    */
-  private classicUi = isClassicUi(this.viewportWidth);
+  private host: HTMLElement | null = null;
   /**
    * 「仅显示可合成」（批次 133）。
    *
@@ -200,7 +213,7 @@ export class RecipeBook {
     this.tabsEl = document.createElement('div');
     this.tabsEl.className = 'recipe-tabs';
 
-    for (const tab of recipeBookTabsFor(this.viewportWidth)) {
+    for (const tab of recipeBookTabsFor()) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'recipe-tab';
@@ -264,8 +277,6 @@ export class RecipeBook {
     panel.append(header, controls, this.tabsEl, this.gridEl, this.detailEl, this.pagerEl, this.smeltingEl);
     this.root.append(panel);
     host.appendChild(this.root);
-    // 转屏会换 UI 形态（并排的经典 UI ↔ 整屏的携带版 UI），页签顺序要跟着重排
-    window.addEventListener('resize', this.handleResize);
 
     // ⚠️ 批次 111 删掉了"点面板外关闭"（用户要求"不要点击空白关闭，就用关闭按钮"）：
     // 这里的出口是标题栏右上角的 ✕（`.recipe-close`）。
@@ -281,18 +292,47 @@ export class RecipeBook {
   }
 
   /**
+   * 把配方书**挂进背包左栏**（批次 157）。
+   *
+   * 传元素 = 嵌进去（整屏那一层保持隐藏，只有面板挪过去）；传 `null` = 还回
+   * 整屏那一层。目的是让"打开配方书"不再重排背包——点左侧分类图标时栏目不动，
+   * 只有左栏里的内容换了一份。
+   */
+  attach(host: HTMLElement | null): void {
+    if (this.host === host) return;
+    this.host = host;
+    if (host) {
+      host.appendChild(this.panelEl);
+      // 整屏那一层空了就收起来：它铺满屏幕，留着会吃掉背包上的点击
+      this.root.classList.add('hidden');
+    } else {
+      this.root.appendChild(this.panelEl);
+      this.root.classList.toggle('hidden', !this.open);
+    }
+    this.panelEl.classList.toggle('embedded', host !== null);
+  }
+
+  /** 是不是嵌在背包左栏里（嵌入时不画熔炼表，见 `render`） */
+  get isEmbedded(): boolean {
+    return this.host !== null;
+  }
+
+  /**
    * @param tab 打开时切到这一栏（携带版物品栏左上角的分类图标会传进来，批次 140）
    */
   show(tab?: RecipeBookTab): void {
     if (tab) this.tab = tab;
     this.open = true;
-    this.root.classList.remove('hidden');
+    // 嵌在背包左栏里时，整屏那一层不该露出来——露出来就是"又一个窗口盖上来"
+    if (!this.host) this.root.classList.remove('hidden');
     this.render();
   }
 
   hide(): void {
+    const wasOpen = this.open;
     this.open = false;
     this.root.classList.add('hidden');
+    if (wasOpen) this.actions.onHidden?.();
   }
 
   toggle(): void {
@@ -321,7 +361,8 @@ export class RecipeBook {
     // 分页（批次 29）：181 条配方一次全建进 DOM 要 400ms 以上，而搜索框每敲一个字
     // 都会重建。只画当前页就回到可忽略。页大小跟着 CSS 的列数走（宽屏 12 列 × 5 行、
     // 窄屏 8 列 × 4 行），否则最后一行会出现"半行空位"看着像 bug。
-    const pageSize = pageSizeFor(this.viewportWidth);
+    // 嵌在背包左栏时按左栏的列数分页（12/8 列在半栏宽里会被横向裁掉）
+    const pageSize = this.isEmbedded ? RECIPE_PANE_PAGE_SIZE : pageSizeFor(this.viewportWidth);
     this.page = clampPage(this.page, entries.length, pageSize);
     const visible = slicePage(entries, this.page, pageSize);
 
@@ -341,22 +382,15 @@ export class RecipeBook {
     }
 
     this.renderPager(entries.length, pageSize);
-    // 携带版合成页的左板只放合成配方网格；熔炼表属于熔炉界面。
+    // 嵌在背包左栏时只放合成配方网格；熔炼表属于熔炉界面。
     // 这里若仍创建整张熔炼表，不仅内容混杂，还会把可操作的配方网格压到几乎没有高度。
-    if (this.isPocketSplit) {
+    if (this.isEmbedded) {
       this.smeltingEl.replaceChildren();
       this.smeltingEl.classList.add('hidden');
     } else {
       this.smeltingEl.classList.remove('hidden');
       this.renderSmelting();
     }
-  }
-
-  private get isPocketSplit(): boolean {
-    if (typeof document === 'undefined') return false;
-    // `split-ui` 是配方书 render 结束后由主循环补上的；这里若依赖它，首次打开时
-    // 仍会先构造整张熔炼表。UI 形态在进入页面时已经由 classic-ui 确定，可直接使用。
-    return !document.body.classList.contains('classic-ui');
   }
 
   /**
@@ -369,8 +403,8 @@ export class RecipeBook {
   private renderTabs(base: readonly RecipeEntry[]): void {
     const counts = new Map<RecipeBookTab, number>([['all', base.length]]);
     for (const entry of base) counts.set(entry.tab, (counts.get(entry.tab) ?? 0) + 1);
-    // 页签的先后跟着 UI 形态走（经典 UI "全部"在最右、携带版在最前）
-    const order = recipeBookTabsFor(this.viewportWidth);
+    // 页签的先后只有一套（携带版："全部"在最前），不再随视口宽度变
+    const order = recipeBookTabsFor();
 
     for (const button of this.tabsEl.querySelectorAll<HTMLButtonElement>('.recipe-tab')) {
       const tab = button.dataset.tab as RecipeBookTab;
@@ -544,14 +578,6 @@ export class RecipeBook {
     this.smeltingEl.appendChild(row);
   }
 
-  /** 转屏/改窗口大小：只有真的跨过"经典 UI ↔ 携带版 UI"那个断点才重画 */
-  private readonly handleResize = (): void => {
-    const next = isClassicUi(this.viewportWidth);
-    if (next === this.classicUi) return;
-    this.classicUi = next;
-    if (this.open) this.render();
-  };
-
   /** 验收脚本用：设置搜索词并重画 */
   setQuery(query: string): void {
     this.query = query;
@@ -561,7 +587,6 @@ export class RecipeBook {
   }
 
   dispose(): void {
-    window.removeEventListener('resize', this.handleResize);
     this.root.remove();
   }
 }

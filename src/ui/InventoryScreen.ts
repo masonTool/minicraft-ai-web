@@ -41,7 +41,6 @@ import {
   RECIPE_BOOK_TAB_LABELS,
   RECIPE_BOOK_TABS_POCKET,
   fillCraftingGrid,
-  isClassicUi,
   type RecipeBookTab,
 } from '../core/crafting/RecipeBook.ts';
 import type { Recipe } from '../core/crafting/Recipes.ts';
@@ -174,6 +173,16 @@ export interface InventoryScreenHooks {
   onOpenRecipes?: (tab?: RecipeBookTab) => void;
   /** 关掉配方书（携带版离开合成页时） */
   onCloseRecipes?: () => void;
+  /** 配方书现在开着吗（决定左栏显示"我的物品"还是"配方列表"） */
+  isRecipesOpen?: () => boolean;
+  /**
+   * 把配方书**搬进背包的左栏**（批次 157）。
+   *
+   * 传元素 = 嵌进去；传 `null` = 还回整屏那一层。以前配方书是"另一个窗口"，
+   * 点一下就把背包挤成半屏（界面跳一次）；现在它占的是左栏，栏目对齐，
+   * 换的只是栏目里的内容。
+   */
+  onRecipeHost?: (host: HTMLElement | null) => void;
   /**
    * 打开成就 / 进度面板（M7，批次 87）。
    *
@@ -264,6 +273,14 @@ const TOUCH_REPEAT_MS = 170;
 /** 携带版物品栏的三个内容页（批次 140；Wiki「携带版 UI」） */
 export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
 
+/**
+ * 双栏壳里**左栏**现在显示哪一份内容（批次 157）。
+ *
+ * 三份内容占的是同一个网格格子（同样的位置、同样的尺寸），切换只换内容——
+ * 这是"点左边按钮时界面不该跳"的落点。
+ */
+export type PocketLeftPane = 'items' | 'creative' | 'recipes';
+
 /** 「全部」配方页签的放大镜（与 RecipeBook 同源；图集里没有这件物品） */
 const POCKET_RECIPE_ALL_ICON =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
@@ -327,6 +344,13 @@ export class InventoryScreen {
   private readonly personalInventoryTitleEl: HTMLDivElement;
   /** 快捷栏：携带版**无论哪一页都可见**（Wiki 原文） */
   private readonly hotbarGridEl: HTMLDivElement;
+  /**
+   * 配方书的落脚点（批次 157）：**与"我的物品 / 创造物品"共用左栏**。
+   *
+   * 它不自己画内容，只提供一个格子；配方面板由 `RecipeBook.attach()` 搬进来。
+   * 这样"打开配方书"是左栏换了一份内容，而不是又弹一个窗口把背包挤走。
+   */
+  private readonly recipeHostEl: HTMLDivElement;
   /** 经典 UI 标题栏上的「配方书」文字按钮；携带版改用左上图标条 */
   private recipesBtn: HTMLButtonElement | null = null;
   /** 携带版左上：配方书五个分类图标 */
@@ -342,10 +366,14 @@ export class InventoryScreen {
   /** 盔甲页标题（Wiki「盔甲」） */
   private readonly armorTitleEl: HTMLDivElement;
   /**
-   * 携带版当前内容页（批次 140）。
-   * 仅在「非经典视口 + 玩家物品栏模式」下生效；经典 UI 三块同时显示。
+   * 携带版**右栏**当前显示什么（批次 140 → 157）。
+   * 左栏见 `leftPane`：`items` / `creative` / `recipes` 三选一。
    */
   private pocketTab: PocketInventoryTab = 'crafting';
+  /** 上一次排布时左栏显示的是哪一份（用来判断要不要给淡入） */
+  private lastLeftPane: PocketLeftPane | '' = '';
+  /** 上一次排布时右栏是不是"合成"（盔甲 ↔ 合成切换才淡入） */
+  private lastRightCrafting = true;
   /**
    * 创造模式里正在看「生存背包」而不是创造物品网格（批次 142）。
    * 基岩版创造栏与生存栏是两套界面，用按钮互切。
@@ -846,18 +874,23 @@ export class InventoryScreen {
     this.railRight.appendChild(this.pocketSideEl);
     this.pocketTabsEl.setAttribute('aria-hidden', 'true');
 
+    // 配方书落脚点：与"我的物品 / 创造物品"同属左栏，位置由 CSS 网格固定
+    this.recipeHostEl = document.createElement('div');
+    this.recipeHostEl.className = 'inv-recipe-host';
+    this.recipeHostEl.dataset.role = 'pocket-recipe-host';
+
     this.creativeSection = document.createElement('div');
     this.creativeSection.className = 'inv-creative-section';
     this.buildCreativeSection();
     // 携带版统一双栏：左栏在“玩家物品 / 创造物品”之间切换，右栏始终是合成或装备。
     // 放进 playerBody 才能与 mainColumn / gear 共用同一套两栏网格。
-    this.playerBody.appendChild(this.creativeSection);
+    this.playerBody.append(this.creativeSection, this.recipeHostEl);
 
     // 顺序：左轨（配方+箱子）| 灰框 | 右轨（合成/盔甲）——页签在 panel 外
     this.shellEl.append(this.railLeft, this.panel, this.railRight, this.pocketTabsEl);
     this.root.append(this.shellEl, this.hotbarDock);
 
-    // 转屏会跨过经典/携带断点：只在真的变形态时重排（与配方书同一条 `isClassicUi`）
+    // 转屏会改视口尺寸（面板宽高里有 100vw/100dvh）：重排一次把尺寸对齐
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', () => this.applyPocketLayout());
     }
@@ -1083,28 +1116,37 @@ export class InventoryScreen {
     return button;
   }
 
-  /** 携带版切页（批次 140 → 144） */
+  /** 携带版切右栏（批次 140 → 157）：只换右栏内容，左栏与面板几何都不动 */
   private setPocketTab(tab: PocketInventoryTab): void {
+    if (this.pocketTab === tab) return;
     this.pocketTab = tab;
+    // 盔甲页得看见自己的东西：左栏还回"我的物品"
+    if (tab === 'armor') this.hooks.onCloseRecipes?.();
     this.applyInventoryChrome();
-  }
-
-  private openPocketRecipes(tab: RecipeBookTab): void {
-    this.pocketTab = 'crafting';
-    this.applyInventoryChrome();
-    this.hooks.onOpenRecipes?.(tab);
-    // 配方书打开并挂上 split-ui 之后，再把箱子页签挪到左板底。
-    requestAnimationFrame(() => {
-      if (this.open && this.pocketTab === 'crafting') this.parkInvTabOnRecipeBook();
-    });
   }
 
   /**
-   * 统一排布：创造整屏 / 携带版分页 / 经典两列（批次 140 + 146）。
+   * 左轨那排分类图标（批次 157）：**把配方书搬进左栏**，不是再开一个窗口。
    *
-   * 创造模式默认是**整屏创造物品栏 + 快捷栏**（基岩版形态），按「生存背包」
-   * 才露出合成/盔甲/主背包那一套。
-   * 携带版：页签在 shell 左右轨（灰框外）、快捷栏在屏幕底 dock（面板外）。
+   * 以前这里是"打开配方书 → 背包被挤到半屏"，点一下整个界面跳一次。
+   * 现在配方书占的就是左栏那格，栏目对齐、面板尺寸不变，
+   * 只是左栏里的内容从"我的物品"换成了"配方列表"。
+   */
+  private openPocketRecipes(tab: RecipeBookTab): void {
+    this.pocketTab = 'crafting';
+    this.applyInventoryChrome();
+    // 已经开着时 `show(tab)` 只是换一栏，不会再弹一次
+    this.hooks.onOpenRecipes?.(tab);
+  }
+
+  /**
+   * 统一排布（批次 157）：**只有携带版这一副壳**。
+   *
+   * ⚠️ 以前界面有两套（≥1280 走"经典 UI"，否则"携带版"），后果就是用户说的那句
+   * "手机上明明有摇杆、右侧也有物品栏入口，点开却是 PC 的布局"。现在：
+   *   - 玩家背包 / 工作台 → **双栏壳**（左栏 = 我的物品 / 创造物品 / 配方书，
+   *     右栏 = 合成 / 盔甲），左右两栏的格子位置**恒定**，切的是栏目里的内容；
+   *   - 箱子 / 熔炉那些容器界面 → 单栏通用面板（它们本来就没有"分页"这回事）。
    */
   private applyInventoryChrome(): void {
     // 触摸层可能比背包更晚挂 touch-mode：每次排布时把关闭键文案对齐
@@ -1114,173 +1156,141 @@ export class InventoryScreen {
     const creative = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
     if (!creative) this.creativeSurvival = false;
     const showCreativeItems = creative && !this.creativeSurvival;
-    const pocketWidth = !isClassicUi(this.viewportWidth);
+    // 玩家背包与世界里的工作台共用同一副双栏壳；其余（箱子/熔炉/铁砧…）走单栏
+    const workbench = this.mode === 'crafting';
+    const dual = this.mode === 'inventory' || workbench;
 
-    this.creativeSection.style.display = showCreativeItems ? '' : 'none';
-    this.panel.classList.toggle('creative-ui', showCreativeItems);
-    const workbenchPocket = this.mode === 'crafting' && pocketWidth;
-    const pocket = (this.mode === 'inventory' || workbenchPocket) && pocketWidth;
-    this.panel.classList.toggle('workbench-ui', workbenchPocket);
-    // 经典 / 非携带：保留文字切换；携带版创造用左轨分类 + 箱子互切
+    this.panel.classList.toggle('workbench-ui', workbench);
     if (this.creativeToggleBtn) {
-      this.creativeToggleBtn.classList.toggle('hidden', !creative || pocket);
+      this.creativeToggleBtn.classList.toggle('hidden', !creative || dual);
       this.creativeToggleBtn.textContent = this.creativeSurvival ? '创造物品' : '生存背包';
     }
 
-    // 携带版普通背包统一成用户截图的固定双栏：
-    // 左栏 = 玩家物品（生存）或无限物品（创造）；右栏 = 合成 / 装备。
-    // 左下箱子与左上分类只切左栏，右下两键只切右栏，两边互不把对方整页换走。
-    if (pocket && this.mode === 'inventory') {
-      if (this.pocketTab === 'inventory') this.pocketTab = 'crafting';
-      const leftShowsCreative = creative && !this.creativeSurvival;
-      const rightShowsCrafting = this.pocketTab === 'crafting';
-
-      this.panel.classList.add('pocket-ui', 'pocket-dual');
-      this.panel.classList.toggle('creative-ui', leftShowsCreative);
-      this.panel.classList.remove('workbench-ui');
-      this.shellEl.classList.add('pocket-chrome');
-      this.pocketTabsEl.classList.remove('hidden');
-      this.panel.dataset.pocketTab = this.pocketTab;
-
-      this.playerBody.style.display = '';
-      this.creativeSection.style.display = leftShowsCreative ? '' : 'none';
-      this.mainGridEl.style.display = leftShowsCreative ? 'none' : '';
-      this.hotbarGridEl.style.display = '';
-      this.topArea.style.display = rightShowsCrafting ? '' : 'none';
-      this.gearEl.style.display = rightShowsCrafting ? 'none' : '';
-      this.personalInventoryTitleEl.style.display = leftShowsCreative ? 'none' : '';
-      this.syncCraftArrow(false);
-
-      // 生存左轨是四个分类 + 搜索；创造左轨复用创造物品分类。
-      this.syncCreativeRails(true, leftShowsCreative);
-      if (!leftShowsCreative) {
-        this.pocketRecipeBar.classList.remove('hidden');
-        this.railLeft.classList.remove('hidden');
-      }
-      this.railRight.classList.remove('hidden');
-      this.restoreInvTabToRail();
-      this.placeHotbar(true);
-      this.syncPocketBodyClass(true);
-      this.renderCreativeGrid();
-
-      if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', creative);
-      this.invTabEl.classList.toggle('active', !leftShowsCreative);
-      for (const button of this.root.querySelectorAll<HTMLElement>('.inv-pocket-tab')) {
-        if (button.dataset.tab === 'inventory') continue;
-        button.classList.toggle('active', button.dataset.tab === this.pocketTab);
-      }
-      return;
-    }
-
-    if (showCreativeItems) {
-      // 携带版创造：分类挂左轨、合成/盔甲挂右轨、快捷栏屏幕底（Wiki Creative Pocket）
-      this.panel.classList.toggle('pocket-ui', pocket);
-      this.shellEl.classList.toggle('pocket-chrome', pocket);
+    // —— 容器类界面：单栏通用面板，页签 / 左右轨 / 配方书落脚点都不参与 ——
+    if (!dual) {
+      this.panel.classList.remove('pocket-ui', 'pocket-dual');
+      this.panel.classList.remove('creative-ui');
+      this.panel.dataset.pocketLeft = '';
+      this.shellEl.classList.remove('pocket-chrome');
       this.pocketTabsEl.classList.add('hidden');
       this.pocketRecipeBar.classList.add('hidden');
-      if (this.recipesBtn) this.recipesBtn.classList.add('hidden');
-      this.panel.dataset.pocketTab = '';
-      this.gearEl.style.display = 'none';
-      this.topArea.style.display = 'none';
-      this.mainGridEl.style.display = 'none';
-      this.hotbarGridEl.style.display = '';
-      this.syncCreativeRails(pocket, true);
-      // 携带版创造靠滚动，不靠翻页条（Wiki）
-      if (pocket) this.creativePager.classList.add('hidden');
-      // `renderCreativeGrid` 构造时还不知道最终 UI 形态；进入携带版后重画一次，
-      // 才能从桌面分页（32 件）切成原版式的整表滚动。
-      this.renderCreativeGrid();
-      this.placeHotbar(pocket);
-      this.syncPocketBodyClass(pocket);
-      this.restoreInvTabToRail();
-      this.syncCraftArrow(false);
-      return;
-    }
-
-    // —— 生存布局（含创造模式下的「生存背包」）——
-    this.panel.classList.toggle('pocket-ui', pocket);
-    this.shellEl.classList.toggle('pocket-chrome', pocket);
-    this.pocketTabsEl.classList.toggle('hidden', !pocket);
-    // 创造模式的生存背包：左轨仍挂创造分类（点分类回创造网格），与 Wiki 一致
-    this.syncCreativeRails(pocket, creative && pocket);
-    if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', pocket);
-
-    if (!pocket) {
       this.railLeft.classList.add('hidden');
       this.railRight.classList.add('hidden');
-      this.pocketRecipeBar.classList.add('hidden');
+      // 容器界面没有左栏可给配方书落脚；留着它就会整屏盖上来
+      this.hooks.onCloseRecipes?.();
+      this.detachRecipeBook();
       this.gearEl.style.display = '';
       this.topArea.style.display = '';
       this.mainGridEl.style.display = '';
       this.hotbarGridEl.style.display = '';
+      this.personalInventoryTitleEl.style.display = 'none';
+      this.creativeSection.style.display = 'none';
       this.panel.dataset.pocketTab = '';
       this.placeHotbar(false);
       this.syncPocketBodyClass(false);
       this.syncCraftArrow(false);
       this.restoreInvTabToRail();
+      if (this.recipesBtn) this.recipesBtn.classList.remove('hidden');
+      this.lastLeftPane = '';
       return;
     }
 
-    // 真工作台（右键世界里的工作台）：左边是配方书，右边是 3×3 合成区，
-    // 右下继续显示玩家自己的 3×9 仓库。此前它绕过携带版壳，退回 760px 通用面板，
-    // 而且配方书不会自动打开；在手机横屏上既过大，也不像基岩版工作台。
-    if (workbenchPocket) {
-      this.panel.dataset.pocketTab = 'crafting';
-      this.pocketTabsEl.classList.add('hidden');
-      this.pocketRecipeBar.classList.add('hidden');
-      this.railLeft.classList.add('hidden');
-      this.railRight.classList.add('hidden');
-      this.topArea.style.display = '';
-      this.gearEl.style.display = 'none';
-      this.mainGridEl.style.display = '';
-      this.hotbarGridEl.style.display = '';
-      this.syncCraftArrow(false);
-      this.placeHotbar(true);
-      this.syncPocketBodyClass(true);
-      this.restoreInvTabToRail();
-      return;
-    }
+    // —— 双栏壳 ——
+    if (this.pocketTab === 'inventory') this.pocketTab = 'crafting';
+    if (workbench) this.pocketTab = 'crafting';
 
-    const tab = this.pocketTab;
-    this.panel.dataset.pocketTab = tab;
-    // 合成页：只留 2×2（配方书在左侧并排）；盔甲页：左主背包 + 右装备（Wiki 图）
-    // 物品栏页：主背包铺满；快捷栏始终在屏幕底 dock
-    this.topArea.style.display = tab === 'crafting' ? '' : 'none';
-    this.gearEl.style.display = tab === 'armor' ? '' : 'none';
-    // 合成页下半区就是玩家自己的仓库；原来这里整块隐藏，留下大片空白，
-    // 也让人误以为左侧配方候选就是“我的物品”。
-    this.mainGridEl.style.display =
-      tab === 'inventory' || tab === 'armor' || tab === 'crafting' ? '' : 'none';
+    // 左栏三选一：**位置与尺寸完全一致**（同一个网格格子），换的只是内容
+    const recipesOpen = this.hooks.isRecipesOpen?.() ?? false;
+    const leftPane: PocketLeftPane = showCreativeItems ? 'creative' : recipesOpen ? 'recipes' : 'items';
+
+    this.panel.classList.add('pocket-ui', 'pocket-dual');
+    this.panel.classList.toggle('creative-ui', showCreativeItems);
+    this.panel.dataset.pocketLeft = leftPane;
+    this.panel.dataset.pocketTab = this.pocketTab;
+    this.shellEl.classList.add('pocket-chrome');
+    this.pocketTabsEl.classList.remove('hidden');
+    this.playerBody.style.display = '';
+
+    this.creativeSection.style.display = leftPane === 'creative' ? '' : 'none';
+    this.recipeHostEl.style.display = leftPane === 'recipes' ? 'block' : 'none';
+    this.mainGridEl.style.display = leftPane === 'creative' ? 'none' : '';
+    this.personalInventoryTitleEl.style.display = leftPane === 'items' ? '' : 'none';
     this.hotbarGridEl.style.display = '';
-    this.syncCraftArrow(tab === 'crafting');
-    // 合成并排：左半配方书自带分类页签；箱子页签挪到配方书左下（Wiki）
-    const splitCrafting = tab === 'crafting' && document.body.classList.contains('split-ui');
-    const creativePocket = creative && pocket;
-    if (!creativePocket) {
-      this.pocketRecipeBar.classList.toggle(
-        'hidden',
-        splitCrafting || !this.hooks.onOpenRecipes,
-      );
-    }
-    this.railRight.classList.remove('hidden');
-    if (splitCrafting && !creativePocket) this.parkInvTabOnRecipeBook();
-    else {
-      this.restoreInvTabToRail();
+
+    // 右栏：合成 / 盔甲二选一，同样占同一个格子
+    const rightShowsCrafting = this.pocketTab === 'crafting';
+    this.topArea.style.display = rightShowsCrafting ? '' : 'none';
+    this.gearEl.style.display = rightShowsCrafting ? 'none' : '';
+    this.syncCraftArrow(false);
+
+    // 配方书嵌进左栏 / 还回整屏那一层
+    this.hooks.onRecipeHost?.(leftPane === 'recipes' ? this.recipeHostEl : null);
+
+    // 生存左轨是配方分类 + 箱子；创造左轨复用创造物品分类
+    this.syncCreativeRails(leftPane === 'creative');
+    if (leftPane !== 'creative') {
+      this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes);
       this.railLeft.classList.remove('hidden');
     }
+    // 工作台只有"合成"这一件事，右轨那两颗（合成/盔甲）没有意义
+    this.railRight.classList.toggle('hidden', workbench);
+    this.restoreInvTabToRail();
     this.placeHotbar(true);
     this.syncPocketBodyClass(true);
+    this.renderCreativeGrid();
+    if (this.recipesBtn) this.recipesBtn.classList.add('hidden');
 
+    // 换栏内容时给一下淡入：**位置不动**，只是让人看见"这一栏换了一份"
+    if (this.open) {
+      if (leftPane !== this.lastLeftPane) this.flashPane(this.leftPaneEl(leftPane));
+      if (rightShowsCrafting !== this.lastRightCrafting) {
+        this.flashPane(rightShowsCrafting ? this.topArea : this.gearEl);
+      }
+    }
+    this.lastLeftPane = leftPane;
+    this.lastRightCrafting = rightShowsCrafting;
+
+    this.invTabEl.classList.toggle('active', leftPane === 'items');
     for (const button of this.root.querySelectorAll<HTMLElement>('.inv-pocket-tab')) {
-      button.classList.toggle('active', button.dataset.tab === tab);
+      if (button.dataset.tab === 'inventory') continue;
+      button.classList.toggle('active', button.dataset.tab === this.pocketTab);
     }
   }
 
+  /** 左栏三种内容各自对应的元素（淡入要用） */
+  private leftPaneEl(pane: PocketLeftPane): HTMLElement {
+    if (pane === 'creative') return this.creativeSection;
+    if (pane === 'recipes') return this.recipeHostEl;
+    return this.mainGridEl;
+  }
+
   /**
-   * @param onRail 创造分类挂左轨（创造整屏或创造模式下的生存背包）
+   * 换栏目内容时的短淡入（批次 157）。
+   *
+   * 只做 opacity 的一点变化：**不碰几何**（不 translate 布局盒），
+   * 否则又变成"面板在动"。`prefers-reduced-motion` 下 CSS 会把时长压成 0。
    */
-  private syncCreativeRails(pocket: boolean, onRail: boolean): void {
-    if (onRail && pocket) {
+  private flashPane(element: HTMLElement): void {
+    element.classList.remove('inv-pane-enter');
+    // 强制重排一次：不然连续点同一个键时 animation 不会重跑
+    void element.offsetWidth;
+    element.classList.add('inv-pane-enter');
+  }
+
+  /** 把配方书从背左栏还回整屏那一层（关背包 / 切到容器界面时） */
+  private detachRecipeBook(): void {
+    this.recipeHostEl.style.display = 'none';
+    this.hooks.onRecipeHost?.(null);
+  }
+
+  /**
+   * 左轨挂哪一组分类：创造时挂创造物品分类，生存时挂配方书分类。
+   *
+   * ⚠️ `replaceChildren` 只换**轨道里的按钮**，不动灰框里的格子——
+   * 换分类时左栏里那一格还是同一格（批次 157）。
+   */
+  private syncCreativeRails(onRail: boolean): void {
+    if (onRail) {
       if (this.creativeTabs.parentElement !== this.railLeft) {
         this.railLeft.replaceChildren();
         this.railLeft.append(this.creativeTabs, this.invTabEl);
@@ -1299,7 +1309,6 @@ export class InventoryScreen {
     if (this.creativeTabs.parentElement !== this.creativeControls) {
       this.creativeControls.insertBefore(this.creativeTabs, this.creativeSearch);
     }
-    if (!pocket) return;
     if (
       this.pocketRecipeBar.parentElement !== this.railLeft ||
       this.invTabEl.parentElement !== this.railLeft
@@ -1319,21 +1328,13 @@ export class InventoryScreen {
     if (arrow) arrow.textContent = vertical ? '↓' : '→';
   }
 
-  /** 并排合成时：箱子页签挂到配方书左下（Wiki 左板底） */
-  private parkInvTabOnRecipeBook(): void {
-    const book = document.getElementById('recipe-book');
-    if (!book || book.classList.contains('hidden')) {
-      this.restoreInvTabToRail();
-      this.railLeft.classList.add('hidden');
-      return;
-    }
-    book.classList.add('has-pocket-inv-tab');
-    if (this.invTabEl.parentElement !== book) book.appendChild(this.invTabEl);
-    this.railLeft.classList.add('hidden');
-  }
-
+  /**
+   * 箱子页签**始终留在左轨**（批次 157）。
+   *
+   * 以前配方书一打开就把它搬到配方书左下、顺手把左轨藏起来——那正是
+   * "点左边的按钮，界面跳一下"的来源：按钮自己会跑，还会把一整条轨带走。
+   */
   private restoreInvTabToRail(): void {
-    document.getElementById('recipe-book')?.classList.remove('has-pocket-inv-tab');
     if (this.invTabEl.parentElement !== this.railLeft) {
       this.railLeft.appendChild(this.invTabEl);
     }
@@ -2544,6 +2545,16 @@ export class InventoryScreen {
     return this.mode;
   }
 
+  /**
+   * 配方书开合之后重排左栏（批次 157）。
+   *
+   * 配方书是主程序开的（界面只提供落脚点），开完要回头告诉界面一声，
+   * 界面才能把左栏从"我的物品"换成"配方列表"。
+   */
+  syncRecipePane(): void {
+    if (this.open) this.applyInventoryChrome();
+  }
+
   /** 打开为指定模式；容器模式必须传入容器实例 */
   openWith(mode: InventoryPanelMode, container?: BlockContainer): void {
     // 换面板（背包 → 箱子 → 工作台……）时把没结算完的"选数量"收掉：
@@ -2565,16 +2576,16 @@ export class InventoryScreen {
     }
 
     this.titleEl.textContent = MODE_TITLES[mode];
-    // 携带版每次从快捷栏打开：落到「物品栏」页（Wiki 左下箱子），并收起配方书
-    if (mode === 'inventory' && !isClassicUi(this.viewportWidth)) {
+    // 每次从快捷栏打开玩家背包：落到「物品栏」页（Wiki 左下箱子），并收起配方书
+    if (mode === 'inventory') {
       this.pocketTab = 'inventory';
       this.hooks.onCloseRecipes?.();
     }
     this.applyInventoryChrome();
     this.openPanel();
-    // 基岩版工作台默认把配方书摊在左侧。必须等背包先 open，
+    // 基岩版工作台默认把配方书摊在左侧（现在是左栏）。必须等背包先 open，
     // 否则主程序的 openRecipeBook 会把模式改回普通 inventory。
-    if (mode === 'crafting' && !isClassicUi(this.viewportWidth)) {
+    if (mode === 'crafting') {
       this.hooks.onOpenRecipes?.('all');
     }
   }
@@ -2673,6 +2684,9 @@ export class InventoryScreen {
     this.open = false;
     this.root.classList.add('hidden');
     document.body.classList.remove('inv-pocket-open');
+    // 配方书是从背包左栏借来的位置，背包关了就得还回去
+    this.detachRecipeBook();
+    this.lastLeftPane = '';
     this.restoreInvTabToRail();
     this.hooks.onOpenChange?.(false);
   }

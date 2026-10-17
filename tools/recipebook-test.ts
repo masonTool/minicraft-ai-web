@@ -29,10 +29,8 @@ import { RECIPES, type Recipe } from '../src/core/crafting/Recipes.ts';
 import { recipeLayout, stationLabel, trimPattern } from '../src/core/crafting/RecipeLayout.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import {
-  CLASSIC_UI_MIN_WIDTH,
   RECIPE_BOOK_TABS,
   RECIPE_BOOK_TABS_POCKET,
-  isClassicUi,
   recipeBookTabsFor,
   RECIPE_BOOK_TAB_LABELS,
   buildRecipeEntries,
@@ -452,10 +450,10 @@ console.log('\n[配方书：标签栏（批次 133，对齐基岩版）]');
     'all,building,equipment,items,nature',
   );
   equal('两套顺序是同一组页签（只是先后不同）', [...RECIPE_BOOK_TABS].sort().join(','), [...RECIPE_BOOK_TABS_POCKET].sort().join(','));
-  equal('宽屏（1280 及以上）走经典 UI 的顺序', recipeBookTabsFor(1280).join(','), 'building,equipment,items,nature,all');
-  equal('手机（窄屏）走携带版 UI 的顺序', recipeBookTabsFor(844).join(','), 'all,building,equipment,items,nature');
-  equal('经典 UI 的断点与 CSS 里 `body.split-ui` 那个 1280 是同一个数', CLASSIC_UI_MIN_WIDTH, 1280);
-  check('断点两侧立刻分出两种形态', isClassicUi(1279) === false && isClassicUi(1280) === true);
+  // 批次 157：界面只剩携带版那一套，页签顺序**不再看视口宽度**——
+  // 宽屏窄屏同一个顺序，转屏也不会跳。
+  equal('界面统一走携带版的顺序', recipeBookTabsFor().join(','), 'all,building,equipment,items,nature');
+  equal('顺序就是 RECIPE_BOOK_TABS_POCKET', recipeBookTabsFor().join(','), RECIPE_BOOK_TABS_POCKET.join(','));
   for (const tab of RECIPE_BOOK_TABS) {
     check(`标签栏「${tab}」有中文名`, (RECIPE_BOOK_TAB_LABELS[tab] ?? '').length > 0);
   }

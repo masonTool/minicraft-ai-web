@@ -405,7 +405,11 @@ console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克�
   check('销毁格左键整叠 / 右键一个', invSrc.includes('destroyHeld(event.button === 2 ? 1 : null)'));
   check('销毁格 CSS 在', css.includes('.inv-creative-destroy-row') && css.includes('.inv-slot.creative-destroy'));
   check('创造格选取上光标（左满组/右一个）', invSrc.includes('创造选取') && invSrc.includes('this.held = { id: itemId, count: max }'));
-  check('创造物品作为统一双栏的左栏', invSrc.includes("classList.toggle('creative-ui', leftShowsCreative)") && invSrc.includes('leftShowsCreative'));
+  check(
+    '创造物品作为统一双栏的左栏',
+    invSrc.includes("classList.toggle('creative-ui', showCreativeItems)") &&
+      invSrc.includes("leftPane === 'creative'"),
+  );
   check('创造 ↔ 生存背包可切换', invSrc.includes("dataset.role = 'creative-toggle'"));
 }
 
@@ -416,17 +420,19 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const core = readFileSync(new URL('../src/core/crafting/RecipeBook.ts', import.meta.url), 'utf8');
+  const pagerSrc = readFileSync(new URL('../src/ui/ItemPager.ts', import.meta.url), 'utf8');
 
   check('左右栏仍复用 PocketInventoryTab 状态', invSrc.includes("export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory'"));
   check('页签 DOM role=pocket-tabs', invSrc.includes("dataset.role = 'pocket-tabs'"));
   check('左上配方图标 role=pocket-recipes', invSrc.includes("dataset.role = 'pocket-recipes'"));
   check('图标页签：右缘合成/盔甲 + 左下物品栏', invSrc.includes('makePocketIconTab') && invSrc.includes('inv-pocket-side'));
-  check('右下合成键只切右栏，不自动打开配方书', /private setPocketTab[\s\S]{0,180}applyInventoryChrome\(\);[\s\S]{0,30}\}/.test(invSrc));
+  check('右下合成键只切右栏，不自动打开配方书', /private setPocketTab[\s\S]{0,320}applyInventoryChrome\(\);[\s\S]{0,30}\}/.test(invSrc));
   check('只有左侧分类/配方键打开配方书', invSrc.includes('private openPocketRecipes(tab: RecipeBookTab)') && invSrc.includes('this.hooks.onOpenRecipes?.(tab)'));
-  check('盔甲页保留左侧主背包', invSrc.includes("this.mainGridEl.style.display = leftShowsCreative ? 'none' : ''"));
+  check('盔甲页保留左侧主背包', invSrc.includes("this.mainGridEl.style.display = leftPane === 'creative' ? 'none' : ''"));
   check('快捷栏在携带版始终显示', /this\.hotbarGridEl\.style\.display = '';/.test(invSrc));
-  check('经典 UI 断点复用 isClassicUi', invSrc.includes('!isClassicUi(this.viewportWidth)'));
-  check('与配方书同一断点常量', core.includes('CLASSIC_UI_MIN_WIDTH = 1280'));
+  // 批次 157：界面统一成携带版那一套，不再有"经典 UI"这个分支
+  check('不再按视口宽度选 UI 形态', !invSrc.includes('isClassicUi') && !core.includes('CLASSIC_UI_MIN_WIDTH'));
+  check('左栏三份内容写在 data-pocket-left 上', invSrc.includes("dataset.pocketLeft = leftPane") && css.includes("[data-pocket-left='recipes']"));
   check('配方书 show 可带 tab', /show\(tab\?: RecipeBookTab\)/.test(recipeSrc));
   check('主程序把 tab 传给配方书', mainSrc.includes('this.recipeBook.show(tab)'));
   check('生存与创造共用 pocket-dual 双栏', invSrc.includes("classList.add('pocket-ui', 'pocket-dual')") && css.includes('.inv-panel.pocket-ui.pocket-dual'));
@@ -440,7 +446,12 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('打开携带版时藏 HUD 快捷栏', css.includes('body.inv-pocket-open #hotbar'));
   check('创造携带版分类挂左轨', invSrc.includes('syncCreativeRails') && invSrc.includes('creative-tabs'));
   check('合成页竖排箭头', invSrc.includes('inv-craft-vertical') && invSrc.includes("'↓'"));
-  check('并排时箱子挂配方书', invSrc.includes('parkInvTabOnRecipeBook'));
+  // 批次 157：箱子页签不再搬到配方书里、左轨也不再被藏（那是"点左边就跳"的来源）
+  check(
+    '箱子页签常驻左轨（不再随配方书搬家）',
+    !invSrc.includes('parkInvTabOnRecipeBook') && invSrc.includes('private restoreInvTabToRail(): void {'),
+  );
+  check('换栏目内容有淡入且不碰几何', css.includes('@keyframes inv-pane-in') && css.includes('.inv-pane-enter'));
   check('盔甲页标题', invSrc.includes('inv-armor-title') && css.includes('.inv-armor-title'));
   check('快捷栏 dock 带框', css.includes('.inv-hotbar-dock:not(.hidden) .inv-hotbar'));
   // 批次 149：携带版比例与分类页不能再退回“灰框很大、槽位很小、内容混在一起”
@@ -453,27 +464,32 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('width: var(--inv-pocket-w);') &&
       css.includes('height: var(--inv-pocket-h);'),
   );
-  check('携带版不再按页签写 height:auto', !/inv-panel\.pocket-ui[^}]*height:\s*auto/.test(css));
-  check(
-    '配方书挂箱子页签后仍保持 fixed（双窗不会左高右低）',
-    css.includes('#recipe-book.has-pocket-inv-tab') && css.includes('position: fixed;'),
-  );
+  check('携带版面板高度不按页签改（只由 --inv-pocket-h 定）', !/inv-panel\.pocket-ui\s*\{[^}]*height:\s*auto/.test(css));
   check('合成/装备右栏与左侧玩家物品独立切换', invSrc.includes('const rightShowsCrafting') && invSrc.includes("this.gearEl.style.display = rightShowsCrafting ? 'none' : ''"));
   check(
-    '工作台携带版自动打开配方书并沿用双窗壳',
-    invSrc.includes("mode === 'crafting' && !isClassicUi(this.viewportWidth)") &&
+    '工作台自动打开配方书并沿用同一副双栏壳',
+    invSrc.includes("if (mode === 'crafting')") &&
       invSrc.includes("this.hooks.onOpenRecipes?.('all')") &&
-      invSrc.includes("classList.toggle('workbench-ui', workbenchPocket)"),
+      invSrc.includes("classList.toggle('workbench-ui', workbench)"),
   );
   check('携带版创造栏是半屏可容纳的 7 列 40px 槽位', css.includes('grid-template-columns: repeat(7, 40px)'));
   check(
     '携带版创造栏渲染整表滚动而非只留分页首屏',
     invSrc.includes('const visible = pocketScroll ? items : slicePage('),
   );
-  check('合成分屏不再保留右板空左轨', css.includes("#inventory-screen .inv-shell.pocket-chrome > .inv-rail-left"));
-  check('携带版分类轨允许伸出灰框且仍可点击', css.includes('overflow: visible;') && css.includes('.recipe-tabs {'));
-  check('非搜索分类隐藏搜索框', css.includes(".recipe-panel:not([data-tab='all']) .recipe-controls"));
-  check('携带版配方页不混入熔炼表', recipeSrc.includes('this.isPocketSplit') && recipeSrc.includes("this.smeltingEl.classList.add('hidden')"));
+  check(
+    '左栏三份内容占同一个格子（换内容不换位置）',
+    css.includes('.inv-recipe-host {') && css.includes("grid-row: 1 / span 2;") && css.includes("[data-pocket-left='recipes']"),
+  );
+  check('嵌入态只让配方网格滚', css.includes('.recipe-panel.embedded .recipe-grid {'));
+  check(
+    '嵌入态的列数与页大小是同一组数（半栏宽塞不下 12 列）',
+    css.includes('repeat(7, var(--recipe-cell))') &&
+      pagerSrc.includes('RECIPE_PANE_PAGE_SIZE = RECIPE_PANE_COLUMNS * 4') &&
+      pagerSrc.includes('RECIPE_PANE_COLUMNS = 7'),
+  );
+  check('非搜索分类隐藏搜索框', css.includes(".recipe-panel.embedded:not([data-tab='all']) .recipe-controls"));
+  check('携带版配方页不混入熔炼表', recipeSrc.includes('this.isEmbedded') && recipeSrc.includes("this.smeltingEl.classList.add('hidden')"));
   check('配方页把当前分类写入面板供布局使用', recipeSrc.includes('this.panelEl.dataset.tab = this.tab'));
 }
 
@@ -1077,12 +1093,13 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   );
 
   // ---- 配方书：标签栏 + 「仅显示可合成」（批次 133，Wiki「物品栏 → 配方书」）
-  check('配方书按标签栏分行', bookUi.includes('for (const tab of recipeBookTabsFor(this.viewportWidth))'));
+  check('配方书按标签栏分行', bookUi.includes('for (const tab of recipeBookTabsFor())'));
   check(
-    '页签的先后跟着 UI 形态走（经典 UI 全部在最右 / 携带版在最前）',
+    '页签的先后只有一套（携带版：全部在最前）',
     bookUi.includes('button.style.order = String(order.indexOf(tab))'),
   );
-  check('转屏只在跨过断点时重画（否则重建 60 个 canvas）', bookUi.includes('if (next === this.classicUi) return;'));
+  // 批次 157：不再有"跨过断点重画"——页签顺序与视口宽度无关
+  check('不再按视口宽度重排页签', !bookUi.includes('isClassicUi') && !bookUi.includes('handleResize'));
   check('页签上带条数（免得点进去才发现是空的）', bookUi.includes('RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）'));
   check('有「仅显示可合成」筛选', bookUi.includes("this.filterButton.dataset.role = 'craftable-filter'"));
   check('筛选默认关（默认藏掉大半会让人以为配方丢了）', bookUi.includes('private onlyCraftable = false'));
@@ -1106,23 +1123,21 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('说明行会说出缺哪样材料', bookUi.includes('材料不足${missing'));
   check('没点着任何一格时说明行也有默认文案', bookUi.includes('this.resetDetail()') && bookUi.includes('点一格：材料会摆进右边的合成格'));
 
-  // ---- 配方书与背包并排（批次 134 → 144：经典与携带版合成页共用 body.split-ui）
+  // ---- 配方书嵌进背包左栏（批次 157：不再有 "第二个窗口并排"）
   check(
-    '并排走 body.split-ui（经典与携带版共用）',
-    compact.includes('body.split-ui #recipe-book {') && compact.includes('right: auto; width: 52%;'),
+    '配方书不再并排分屏（没有 split-ui 那套半屏规则）',
+    !compact.includes('body.split-ui #recipe-book {') && !compact.includes('body.split-ui #inventory-screen {'),
   );
+  check('嵌入态由 .recipe-panel.embedded 描述', compact.includes('.recipe-panel.embedded {'));
+  check('背包提供左栏落脚点', inventorySrc.includes("dataset.role = 'pocket-recipe-host'"));
+  check('配方书可搬进/搬出落脚点', bookUi.includes('attach(host: HTMLElement | null)'));
+  check('嵌入时不画熔炼表', bookUi.includes('if (this.isEmbedded)'));
   check(
-    '两块遮罩各占一半（否则上面那层会把下面半边的点击吃掉）',
-    compact.includes('body.split-ui #inventory-screen { left: auto; width: 48%; }'),
+    '开/关配方书后背包重排左栏',
+    mainSrc.includes('this.inventoryScreen.syncRecipePane()') &&
+      inventorySrc.includes('syncRecipePane(): void {'),
   );
-  check('并排时配方书收窄成侧栏（600px）', compact.includes('body.split-ui .recipe-panel {'));
-  check(
-    'main 在两块都开着时打 split-ui（不再要求 classic）',
-    mainSrc.includes('this.recipeBook.isOpen && this.inventoryScreen.isOpen') &&
-      !mainSrc.includes('classic && this.recipeBook.isOpen && this.inventoryScreen.isOpen'),
-  );
-  check('背包开关时刷新并排状态', /handleInventoryOpen\(open: boolean\): void \{[\s\S]{0,200}this\.updateSplitUi\(\);/.test(mainSrc));
-  check('设置有界面配置 uiProfile', settingsSrc.includes('uiProfile') && settingsSrc.includes("'界面配置'"));
+  check('界面不再有"界面配置"这一项（统一携带版）', !settingsSrc.includes("'界面配置'"));
   check('底部滑入/滑出动画', compact.includes('@keyframes panel-out') && compact.includes('translateY(28%)'));
   check('触摸多余回源格', inventorySrc.includes('returnHeldToTouchOrigin') && inventorySrc.includes('touchOrigin'));
   check('点不可放置槽会取消选中并安全退回', inventorySrc.includes('private cancelHeldSelection()') && /!this\.accepts[\s\S]{0,180}cancelHeldSelection\(\)/.test(inventorySrc));
