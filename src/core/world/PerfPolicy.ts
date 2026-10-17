@@ -2,18 +2,32 @@
  * 移动端降级策略（TASKS N7，批次 130）
  *
  * 手机长时间游玩会发热降频，帧率掉下去之后如果什么都不做只会越来越卡。
- * 批次 96 的 N6 先做了**自适应视距**（那一段写在 `main.updateAdaptiveViewDistance` 里），
- * 这一批把策略收进这个模块，并补上另外三个旋钮：
+ * 批次 96 的 N6 先做了**自适应视距**，批次 130 把策略收进这个模块并补上另外几个旋钮。
  *
- *  1. **动态分辨率**：掉帧时先把渲染分辨率降下来（0.5~1.0 倍）。它排在最前面——
- *     因为"画面糊一点"比"视距短一截"更难被察觉，而省下的开销一样多（填充率）；
- *  2. **自适应视距**（N6）：分辨率已经降到地板（0.5）之后才继续降视距；
- *  3. **限帧**：`maxFps` 只决定"这一帧该不该跳过"（见 `frameIntervalMs`），
- *     省的是 GPU 与电池，不改变画面；
- *  4. **粒子总量**：按画质档给一个**硬上限**（`particleBudgetFor`）。
- *     ⚠️ 与设置里那个"粒子强度"（`ParticleLevel`，控制**每次生成多少颗**）是两回事：
- *     那一条管"每次撒多少"，这一条管"场上最多同时存在多少"——下雨 + 打怪 +
- *     挖矿一起发生时，只有前者挡不住爆量。
+ * ## 掉帧时先牺牲什么（批次 157 反转过一次）
+ *
+ * 批次 130 定的是"**先降分辨率、再降视距**"，理由是"画面糊一点比视距短一截更难被察觉"。
+ * 这条判断在**手机上不成立**，而且理由很具体：
+ *
+ *  - **分辨率是全局的**：降它等于把近处一起糊掉——玩家手上的方块、脚下的地面先糊，
+ *    而玩家真正盯着看的永远是近处；
+ *  - **视距只影响远处**，而远处本来就在雾里（雾距跟着视距走，见 `main.applyEnvironment`），
+ *    收短一截几乎看不出来。
+ *
+ * 所以掉帧时改成：
+ *
+ *  1. **先收视距**（手机上只在 4~8 之间活动，见 `viewDistanceCapFor`）；
+ *  2. 视距到地板之后才动分辨率，而且手机只到 **0.75**（`MOBILE_RESOLUTION_MIN`）——
+ *     0.5 那一档近处已经没法看了，留作桌面上的最后手段；
+ *  3. 有余量时**严格倒着还**：先把分辨率还满（近处清晰优先），最后才放视距。
+ *
+ * 另外两个旋钮：
+ *  - **限帧**：`maxFps` 只决定"这一帧该不该跳过"（见 `frameIntervalMs`），
+ *    省的是 GPU 与电池，不改变画面；
+ *  - **粒子总量**：按画质档给一个**硬上限**（`particleBudgetFor`）。
+ *    ⚠️ 与设置里那个"粒子强度"（`ParticleLevel`，控制**每次生成多少颗**）是两回事：
+ *    那一条管"每次撒多少"，这一条管"场上最多同时存在多少"——下雨 + 打怪 +
+ *    挖矿一起发生时，只有前者挡不住爆量。
  *
  * ## 为什么抽成纯模块
  *
@@ -39,14 +53,39 @@ export const RESOLUTION_MAX = 1;
  */
 export const DESKTOP_PIXEL_RATIO_CAP = 2;
 export const MOBILE_PIXEL_RATIO_CAP = 1.5;
-/** 手机开局分辨率档（相对背板上限）。有余量时自适应会把它升回 1。 */
-export const MOBILE_INITIAL_RESOLUTION = 0.8;
-/** 手机开局视距。玩家设置仍是上限，帧时间有余量再往回加。 */
+/**
+ * 手机开局分辨率档（相对背板上限）。
+ *
+ * 批次 157 之前是 0.8（"先预折一点，掉帧时再继续降"）。既然降级顺序改成视距优先，
+ * 开局就不该先打折了——**近处清晰优先**，压力交给视距（手机开局只有 6 区块）。
+ * 这个值现在是 1.0，保留常量是为了将来要调时只有一处。
+ */
+export const MOBILE_INITIAL_RESOLUTION = 1;
+/** 手机开局视距。上限另有一个更小的数（见 `MOBILE_VIEW_DISTANCE_MAX`）。 */
 export const MOBILE_VIEW_DISTANCE = 6;
+/**
+ * **手机的动态视距上限**。
+ *
+ * 手机屏幕小（横屏典型 844×390），FOV 72° 下 8 区块 = 128 格外的东西在屏幕上只有几个像素，
+ * 展示了也看不清，却要付出 289 个区块的 draw call。所以手机不跟桌面共用 12。
+ * ⚠️ 玩家设置的视距**仍然生效**，只是被这个上限夹住（`viewDistanceCapFor`）：
+ * 想更近就把滑块往左拖，拖到 16 也不会超过 8。
+ */
+export const MOBILE_VIEW_DISTANCE_MAX = 8;
+/** 视距滑杆的上限（与设置界面那颗滑块一致，见 `SettingsScreen`） */
+export const VIEW_DISTANCE_MAX = 16;
 /** 每次调档的步长 */
 export const RESOLUTION_STEP = 0.1;
 /** 视距的地板（再低就没法玩了，与 N6 一致） */
 export const VIEW_DISTANCE_MIN = 4;
+/**
+ * 手机上的分辨率地板。
+ *
+ * 桌面那档 0.5 在手机上等于把近处一起糊掉（DPR 3 的机器只剩下物理屏的 6% 像素），
+ * 而分辨率是这一批的**最后手段**（视距与装饰层都让完了才轮到它），
+ * 所以手机停在 0.75：还能看出是"糊了一点"，不至于"看不清手里拿的是什么"。
+ */
+export const MOBILE_RESOLUTION_MIN = 0.75;
 
 /** 帧时间超过它就算"卡"（毫秒，约 45fps）→ 降档 */
 export const FRAME_TIME_DROP = 22;
@@ -64,12 +103,32 @@ export const VIEW_DISTANCE_RAISE_COOLDOWN = 8;
 /** 一次调整做了什么（给主程序打日志、给测试断言） */
 export type PerfAction = 'resolution-down' | 'resolution-up' | 'view-down' | 'view-up' | null;
 
-/** 玩家侧的两个开关 + 视距上限（都在 `SettingsScreen.GameSettings` 里） */
+/** 玩家侧的两个开关 + 两个上限（都在 `SettingsScreen.GameSettings` 里或由设备决定） */
 export interface PerfTuning {
   adaptiveResolution: boolean;
   adaptiveViewDistance: boolean;
-  /** 玩家设定的视距（自适应只在这个值以下活动） */
+  /** 自适应视距的上限（手机上已经过 `viewDistanceCapFor` 夹过） */
   viewDistanceCap: number;
+  /**
+   * 分辨率降到底能降到多少。
+   *
+   * 手机传 `MOBILE_RESOLUTION_MIN`（0.75），桌面传 `RESOLUTION_MIN`（0.5）。
+   * 抽成字段而不是在函数里判设备，是因为"地板在哪一档"是**策略**而不是设备查询，
+   * 策略就该能被离线断言（`test:perfpolicy`）。
+   */
+  resolutionFloor: number;
+}
+
+/**
+ * 自适应的视距上限：手机另有一个更小的上限。
+ *
+ * 抽成纯函数的原因与这个模块里其它东西一样——"手机上到底封到几"要能被断言。
+ * 玩家把滑块拖到 16 也不会超过手机上限（往左拖仍然有效，那是玩家自己的选择）。
+ */
+export function viewDistanceCapFor(playerSetting: number, mobile: boolean): number {
+  const raw = Number.isFinite(playerSetting) ? Math.floor(playerSetting) : VIEW_DISTANCE_MAX;
+  const cap = Math.min(raw, mobile ? MOBILE_VIEW_DISTANCE_MAX : VIEW_DISTANCE_MAX);
+  return Math.max(VIEW_DISTANCE_MIN, cap);
 }
 
 export interface PerfState {
@@ -129,33 +188,40 @@ export function perfPolicyStep(
 
   const dropping = frameTimeAvg > FRAME_TIME_DROP;
   const hasRoom = frameTimeAvg < FRAME_TIME_RAISE;
+  // 分辨率地板由调用方给（手机 0.75 / 桌面 0.5），再夹一次防止传进非法值
+  const floor = Math.min(RESOLUTION_MAX, Math.max(RESOLUTION_MIN, tuning.resolutionFloor));
 
-  // ---- 降档：先降分辨率（最不易察觉），它到底了才降视距
+  // ---- 降档：**先收视距**（远处本来就在雾里，砍掉最不心疼），视距到地板才动分辨率
   if (dropping) {
-    if (tuning.adaptiveResolution && next.resolutionScale > RESOLUTION_MIN) {
-      next.resolutionScale = round1(Math.max(RESOLUTION_MIN, next.resolutionScale - RESOLUTION_STEP));
-      next.cooldown = RESOLUTION_DROP_COOLDOWN;
-      return { state: next, action: 'resolution-down' };
-    }
     if (tuning.adaptiveViewDistance && next.viewDistance > VIEW_DISTANCE_MIN) {
       next.viewDistance -= 1;
       next.cooldown = VIEW_DISTANCE_DROP_COOLDOWN;
       return { state: next, action: 'view-down' };
     }
+    if (tuning.adaptiveResolution && next.resolutionScale > floor) {
+      // ⚠️ 顺序是"先取整、再夹地板"，不能反过来：
+      // `round1(Math.max(floor, ...))` 会把 0.75 再喂给 `round1`，而 `Math.round(7.5)` = 8
+      // ——于是最后一档永远落不到 0.75，表现为"每 3 秒降一次、画面却不再变化"。
+      // 地板不必落在 0.1 的步长网格上，所以只能由夹紧这一步决定。
+      next.resolutionScale = Math.max(floor, round1(next.resolutionScale - RESOLUTION_STEP));
+      next.cooldown = RESOLUTION_DROP_COOLDOWN;
+      return { state: next, action: 'resolution-down' };
+    }
     return { state: next, action: null };
   }
 
-  // ---- 升档：**反过来**——先把视距还回去（那更显眼），最后才把分辨率升满
+  // ---- 升档：**严格倒着来**——先把分辨率还满（近处清晰优先），最后才放视距
   if (hasRoom) {
+    if (tuning.adaptiveResolution && next.resolutionScale < RESOLUTION_MAX) {
+      // 与降档同一条规矩：先取整、再夹上限（见降档那一处的说明）
+      next.resolutionScale = Math.min(RESOLUTION_MAX, round1(next.resolutionScale + RESOLUTION_STEP));
+      next.cooldown = RESOLUTION_RAISE_COOLDOWN;
+      return { state: next, action: 'resolution-up' };
+    }
     if (tuning.adaptiveViewDistance && next.viewDistance < tuning.viewDistanceCap) {
       next.viewDistance += 1;
       next.cooldown = VIEW_DISTANCE_RAISE_COOLDOWN;
       return { state: next, action: 'view-up' };
-    }
-    if (tuning.adaptiveResolution && next.resolutionScale < RESOLUTION_MAX) {
-      next.resolutionScale = round1(Math.min(RESOLUTION_MAX, next.resolutionScale + RESOLUTION_STEP));
-      next.cooldown = RESOLUTION_RAISE_COOLDOWN;
-      return { state: next, action: 'resolution-up' };
     }
   }
   return { state: next, action: null };

@@ -2,8 +2,11 @@
  * 性能（K6 + N7）验收：自适应视距、动态分辨率、限帧、粒子总量
  *
  * 真机上没法稳定复现"掉帧"，所以用 `mc.simulateFrameTime(ms)` 把帧时间固定成
- * 一个高值，观察降级策略的动作顺序（**先降分辨率、再降视距**）、恢复顺序
- * （**先还视距、最后还分辨率**），以及限帧与粒子总量两个旋钮。
+ * 一个高值，观察降级策略的动作顺序（**先收视距、再降分辨率**）、恢复顺序
+ * （**先还分辨率、最后放视距**），以及限帧与粒子总量两个旋钮。
+ *
+ * ⚠️ 顺序在批次 157 反转过一次：分辨率是全局的（会连近处一起糊），视距只影响远处、
+ * 而远处本来就在雾里，所以掉帧时先收视距。验收脚本里那三条顺序断言要跟着反。
  *
  * 用法：playwright-cli eval "eval(atob('$(base64 -i tools/perf-acceptance.js | tr -d '\n')'))"
  */
@@ -23,33 +26,40 @@
     `${start.viewDistance} scale=${start.resolutionScale}`,
   );
 
-  // ---- 掉帧的第一段：**分辨率先顶**（视距还没动）
+  // ---- 掉帧的第一段：**视距先收**（分辨率还没动）
+  // 视距冷却 4 秒一次，9 秒够降两格
   mc.simulateFrameTime(33);
-  await sleep(7000);
+  await sleep(9000);
   const afterDrop = mc.settingsState;
-  check(`resolution drops under load (1 -> ${afterDrop.resolutionScale})`, afterDrop.resolutionScale < 1, `frameTimeAvg=${afterDrop.frameTimeAvg}ms`);
-  check('view distance still untouched (resolution absorbs it first)', afterDrop.viewDistance === 12, `${afterDrop.viewDistance}`);
+  check(`view distance shrinks under load (12 -> ${afterDrop.viewDistance})`, afterDrop.viewDistance < 12, `${afterDrop.viewDistance}`);
+  check('resolution still untouched (near field must stay sharp)', afterDrop.resolutionScale === 1, `${afterDrop.resolutionScale}`);
   check('frame time average reflects the load', afterDrop.frameTimeAvg > 22, `${afterDrop.frameTimeAvg}ms`);
 
-  // ---- 继续掉帧：分辨率到底之后才降视距
-  await sleep(18000);
+  // ---- 继续掉帧：视距收到地板之后才轮到分辨率
+  // 视距 12 → 4 需要 8 档 × 4 秒 ≈ 32 秒，之后再等十来秒分辨率才会动
+  await sleep(30000);
   const afterLong = mc.settingsState;
-  check(`resolution bottoms out at 0.5 (${afterLong.resolutionScale})`, afterLong.resolutionScale === 0.5, `${afterLong.resolutionScale}`);
-  check(`view distance starts dropping only then (12 -> ${afterLong.viewDistance})`, afterLong.viewDistance < 12, `${afterLong.viewDistance}`);
+  check(`view distance keeps shrinking (${afterDrop.viewDistance} -> ${afterLong.viewDistance})`, afterLong.viewDistance < afterDrop.viewDistance, `${afterLong.viewDistance}`);
+  check(
+    `resolution only starts dropping then (1 -> ${afterLong.resolutionScale})`,
+    afterLong.resolutionScale < 1,
+    `${afterLong.resolutionScale}`,
+  );
 
-  // ---- 恢复：先还视距、最后还分辨率
+  // ---- 恢复：先还分辨率、最后才放视距
+  // 分辨率冷却 10 秒一次，25 秒够还两档；视距在这期间一动不动
   mc.simulateFrameTime(0);
-  await sleep(20000);
+  await sleep(25000);
   const afterRecover = mc.settingsState;
   check(
-    `view distance recovers (${afterLong.viewDistance} -> ${afterRecover.viewDistance})`,
-    afterRecover.viewDistance > afterLong.viewDistance,
-    `cap=${afterRecover.settings.viewDistance}`,
+    `resolution recovers first (${afterLong.resolutionScale} -> ${afterRecover.resolutionScale})`,
+    afterRecover.resolutionScale > afterLong.resolutionScale,
+    `${afterRecover.resolutionScale}`,
   );
   check(
-    'resolution recovers after the view distance is back',
-    afterRecover.resolutionScale >= afterLong.resolutionScale,
-    `${afterLong.resolutionScale} -> ${afterRecover.resolutionScale}`,
+    'view distance stays put until the resolution is full',
+    afterRecover.viewDistance === afterLong.viewDistance,
+    `${afterLong.viewDistance} -> ${afterRecover.viewDistance}`,
   );
   check('never exceeds the player-set cap', afterRecover.viewDistance <= afterRecover.settings.viewDistance, `${afterRecover.viewDistance} <= ${afterRecover.settings.viewDistance}`);
 

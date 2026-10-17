@@ -337,12 +337,15 @@ import {
   DESKTOP_PIXEL_RATIO_CAP,
   MOBILE_INITIAL_RESOLUTION,
   MOBILE_PIXEL_RATIO_CAP,
+  MOBILE_RESOLUTION_MIN,
   MOBILE_VIEW_DISTANCE,
+  RESOLUTION_MIN,
   effectivePixelRatio,
   frameIntervalMs,
   initialPerfState,
   particleBudgetFor,
   perfPolicyStep,
+  viewDistanceCapFor,
   type PerfState,
 } from './core/world/PerfPolicy.ts';
 // 失眠与幻翼（批次 126，"连续三天不睡"才来的那只）：判据是纯逻辑，
@@ -1356,8 +1359,10 @@ class App {
     // 时被调用，不在这里补一刀的话，存档里那个"粒子效果：减半"要等玩家开一次设置才生效
     this.particles.setBudget(particleBudgetFor(this.settings.particles));
     this.perf = { ...this.perf, viewDistance: this.settings.viewDistance };
-    // 手机不要从桌面那套满画质往下降：降档有 3 秒冷却，玩家会先卡一整段。
-    // 视距只是开局值，设置里的视距仍是上限，帧时间有余量会加回去。
+    // 手机开局按"保守的视距 + 满分辨率"起步：
+    //  · 视距先只给 6（有余量时自适应会加到手机上限 8，`viewDistanceCapFor` 封顶）；
+    //  · **分辨率不预折**（批次 157 起 `MOBILE_INITIAL_RESOLUTION` = 1.0）——
+    //    降级顺序已经是"视距优先"，先把近处画清楚，压力交给视距。
     if (isTouchDevice()) {
       const view = Math.min(this.viewDistance, MOBILE_VIEW_DISTANCE);
       this.viewDistance = view;
@@ -8049,10 +8054,15 @@ class App {
     // `simulateFrameTime` 会把帧时间固定成一个高值（验收脚本用它复现"掉帧"）
     const frameTime = this.simulatedFrameTime > 0 ? this.simulatedFrameTime : dt * 1000;
     const before = this.perf;
+    const mobile = isTouchDevice();
+    // 视距上限：手机另有一个更小的上限（屏幕小，不需要展示那么远），见 `viewDistanceCapFor`
+    const cap = viewDistanceCapFor(this.settings.viewDistance, mobile);
     const { state, action } = perfPolicyStep(before, dt, frameTime, {
       adaptiveResolution: this.settings.adaptiveResolution,
       adaptiveViewDistance: this.settings.adaptiveViewDistance,
-      viewDistanceCap: this.settings.viewDistance,
+      viewDistanceCap: cap,
+      // 分辨率是最后手段：手机只降到 0.75，桌面才允许到 0.5
+      resolutionFloor: mobile ? MOBILE_RESOLUTION_MIN : RESOLUTION_MIN,
     });
     this.perf = state;
     if (action === null) return;
@@ -8060,12 +8070,12 @@ class App {
     if (state.viewDistance !== before.viewDistance) {
       this.setViewDistance(state.viewDistance);
       console.info(
-        `[perf] 帧时间 ${state.frameTimeAvg.toFixed(1)}ms，视距 ${state.viewDistance}（上限 ${this.settings.viewDistance}）`,
+        `[perf] 帧时间 ${state.frameTimeAvg.toFixed(1)}ms，视距 ${state.viewDistance}（上限 ${cap}）`,
       );
     }
     if (state.resolutionScale !== before.resolutionScale) {
       this.applyResolutionScale();
-      console.info(`[perf] 渲染分辨率 ×${state.resolutionScale}（掉帧时先牺牲它）`);
+      console.info(`[perf] 渲染分辨率 ×${state.resolutionScale}（视距已经让到底了，才轮到它）`);
     }
   }
 

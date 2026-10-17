@@ -20,12 +20,16 @@ import {
   RESOLUTION_MAX,
   RESOLUTION_MIN,
   VIEW_DISTANCE_MIN,
+  MOBILE_INITIAL_RESOLUTION,
   MOBILE_PIXEL_RATIO_CAP,
+  MOBILE_RESOLUTION_MIN,
+  MOBILE_VIEW_DISTANCE_MAX,
   effectivePixelRatio,
   frameIntervalMs,
   initialPerfState,
   particleBudgetFor,
   perfPolicyStep,
+  viewDistanceCapFor,
   type PerfState,
   type PerfTuning,
 } from '../src/core/world/PerfPolicy.ts';
@@ -47,7 +51,20 @@ function equal(label: string, actual: unknown, expected: unknown): void {
   check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
-const BOTH: PerfTuning = { adaptiveResolution: true, adaptiveViewDistance: true, viewDistanceCap: 12 };
+/** 桌面：两档都开、上限 12、分辨率地板 0.5 */
+const BOTH: PerfTuning = {
+  adaptiveResolution: true,
+  adaptiveViewDistance: true,
+  viewDistanceCap: 12,
+  resolutionFloor: RESOLUTION_MIN,
+};
+/** 手机：上限被 `viewDistanceCapFor` 夹到 8，分辨率地板 0.75 */
+const MOBILE: PerfTuning = {
+  adaptiveResolution: true,
+  adaptiveViewDistance: true,
+  viewDistanceCap: viewDistanceCapFor(12, true),
+  resolutionFloor: MOBILE_RESOLUTION_MIN,
+};
 
 /** 跑 `seconds` 秒（每帧 16.7ms），帧时间固定在 `frameTimeMs` */
 function run(state: PerfState, seconds: number, frameTimeMs: number, tuning = BOTH): PerfState {
@@ -59,23 +76,23 @@ function run(state: PerfState, seconds: number, frameTimeMs: number, tuning = BO
 
 // ---------------------------------------------------------------- 1. 降级优先级
 
-console.log('\n[掉帧时先牺牲什么：先分辨率、再视距]');
+console.log('\n[掉帧时先牺牲什么：先视距、后分辨率]');
 {
   const start = initialPerfState(12);
   equal('初值：分辨率 1.0（= 原来那套行为，不引入回归）', start.resolutionScale, RESOLUTION_MAX);
   equal('初值：视距取玩家设定值', start.viewDistance, 12);
 
-  // 掉帧 3 秒：只该动分辨率（冷却 3 秒一次）
-  const after3 = run(start, 3.5, 33);
-  check('掉帧后分辨率降了', after3.resolutionScale < RESOLUTION_MAX, `${after3.resolutionScale}`);
-  equal('视距**还没动**（分辨率先扛）', after3.viewDistance, 12);
-  check('帧时间平均确实反映了掉帧', after3.frameTimeAvg > FRAME_TIME_DROP, `${after3.frameTimeAvg.toFixed(1)}ms`);
+  // 掉帧 4.5 秒：只该动视距（视距冷却 4 秒一次，这时刚降完第二格）
+  const after = run(start, 4.5, 33);
+  check('掉帧后视距降了', after.viewDistance < 12, `${after.viewDistance}`);
+  equal('分辨率**还没动**（视距先扛：近处不能糊）', after.resolutionScale, RESOLUTION_MAX);
+  check('帧时间平均确实反映了掉帧', after.frameTimeAvg > FRAME_TIME_DROP, `${after.frameTimeAvg.toFixed(1)}ms`);
 
-  // 一直掉帧：分辨率降到地板之后才开始降视距
-  const long = run(start, 40, 33);
-  equal('分辨率降到地板 0.5', long.resolutionScale, RESOLUTION_MIN);
-  check('视距这时才降下来', long.viewDistance < 12, `${long.viewDistance}`);
-  check('而且视距不会低于 4（再低没法玩）', long.viewDistance >= VIEW_DISTANCE_MIN, `${long.viewDistance}`);
+  // 一直掉帧：视距收到地板之后才轮到分辨率
+  const long = run(start, 90, 33);
+  equal('视距先收到地板 4', long.viewDistance, VIEW_DISTANCE_MIN);
+  check('分辨率这时才降下来', long.resolutionScale < RESOLUTION_MAX, `${long.resolutionScale}`);
+  equal('分辨率降到地板 0.5（桌面那一档）', long.resolutionScale, RESOLUTION_MIN);
 }
 
 console.log('\n[动态分辨率按设备背板缩放]');
@@ -86,32 +103,39 @@ console.log('\n[动态分辨率按设备背板缩放]');
   equal('最低档仍保留 1 倍 CSS 像素', effectivePixelRatio(3, 0.5), 1);
   equal('非法 DPR 回退为 1', effectivePixelRatio(Number.NaN, 1), 1);
   equal('手机背板上限 1.5，不再画到 2', effectivePixelRatio(3, 1, MOBILE_PIXEL_RATIO_CAP), 1.5);
-  check(
-    '手机开局 0.8 档约 1.2（大约只有 2 倍档三分之一的像素）',
-    Math.abs(effectivePixelRatio(3, 0.8, MOBILE_PIXEL_RATIO_CAP) - 1.2) < 1e-9,
-    String(effectivePixelRatio(3, 0.8, MOBILE_PIXEL_RATIO_CAP)),
+  equal(
+    '手机开局不再预折：1.0 档直接给到背板上限 1.5（近处清晰优先）',
+    effectivePixelRatio(3, MOBILE_INITIAL_RESOLUTION, MOBILE_PIXEL_RATIO_CAP),
+    1.5,
   );
+  equal('手机开局档就是满档', MOBILE_INITIAL_RESOLUTION, RESOLUTION_MAX);
   equal('上限不会超过桌面的 2', effectivePixelRatio(3, 1, 4), 2);
 }
 
 // ---------------------------------------------------------------- 2. 恢复顺序相反
 
-console.log('\n[帧率回来之后：先还视距、最后才还分辨率]');
+console.log('\n[帧率回来之后：先还分辨率、最后才放视距]');
 {
-  const stressed: PerfState = { frameTimeAvg: 40, resolutionScale: RESOLUTION_MIN, viewDistance: 6, cooldown: 0 };
+  // 起点：视距已经在地板、分辨率已经到底（最惨的那一档，两者都有得可还）
+  const stressed: PerfState = {
+    frameTimeAvg: 40,
+    resolutionScale: RESOLUTION_MIN,
+    viewDistance: VIEW_DISTANCE_MIN,
+    cooldown: 0,
+  };
 
-  // 恢复的第一段：视距先涨。
-  // ⚠️ 帧时间平均是**滞后信号**（平滑系数 0.05）：刚切回 8ms 的头十来帧它还在 22ms 以上，
-  // 所以那几帧仍算"掉帧"（甚至可能再多降一格视距）。这是迟滞控制的正常代价，
-  // 断言要跨过这段过渡期看趋势（第一版只跑 9 秒，正好落在过渡期里）
-  const early = run(stressed, 60, 8);
-  check('视距先回来（更显眼的东西先还）', early.viewDistance > 6, `${early.viewDistance}`);
-  equal('分辨率这时还没升（要等视距回到上限）', early.resolutionScale, RESOLUTION_MIN);
+  // 恢复的第一段（12 秒）：只够涨两次分辨率（冷却 10 秒一次）
+  // ⚠️ 帧时间平均是**滞后信号**（平滑系数 0.05）：刚切回 8ms 的头二十来帧它还在 22ms 以上，
+  // 所以那几帧仍算"掉帧"。起点特意选在"视距与分辨率都到底"，过渡期就无处可降，
+  // 断言因此只看得到"恢复"这一侧（更稳）
+  const early = run(stressed, 12, 8);
+  check('分辨率先回来（近处清晰优先）', early.resolutionScale > RESOLUTION_MIN, `${early.resolutionScale}`);
+  equal('视距这时还没动（要等分辨率还满）', early.viewDistance, VIEW_DISTANCE_MIN);
 
   // 长期恢复：两者都回到上限
   const full = run(stressed, 200, 8);
-  equal('视距回到玩家设定值（不会超过）', full.viewDistance, 12);
   equal('分辨率回到 1.0', full.resolutionScale, RESOLUTION_MAX);
+  equal('视距回到玩家设定值（不会超过）', full.viewDistance, 12);
 }
 
 // ---------------------------------------------------------------- 3. 开关与边界
@@ -128,7 +152,12 @@ console.log('\n[两个开关各管一头、互不牵连]');
   check('关掉自适应视距 → 分辨率照降', noView.resolutionScale < RESOLUTION_MAX, `${noView.resolutionScale}`);
   equal('视距一动不动', noView.viewDistance, 12);
 
-  const allOff = run(start, 12, 33, { adaptiveResolution: false, adaptiveViewDistance: false, viewDistanceCap: 12 });
+  const allOff = run(start, 12, 33, {
+    adaptiveResolution: false,
+    adaptiveViewDistance: false,
+    viewDistanceCap: 12,
+    resolutionFloor: RESOLUTION_MIN,
+  });
   equal('两个都关 → 什么都不动（帧时间照样统计）', `${allOff.resolutionScale},${allOff.viewDistance}`, '1,12');
   check('但帧时间平均仍在更新（HUD 与验收要读它）', allOff.frameTimeAvg > 30, `${allOff.frameTimeAvg.toFixed(1)}ms`);
 
@@ -151,17 +180,17 @@ console.log('\n[冷却：一次调整之后要等一会儿才允许下一次]');
     firstAction = step.action;
   }
   const dropping = { state, action: firstAction };
-  check('掉帧积累一会儿之后动了一次', dropping.action === 'resolution-down', `${dropping.action}`);
+  check('掉帧积累一会儿之后动了一次（先动视距）', dropping.action === 'view-down', `${dropping.action}`);
   check('并且进入冷却', dropping.state.cooldown > 0, `${dropping.state.cooldown}s`);
 
   // 冷却期内就算继续掉帧也不动
   const during = perfPolicyStep(dropping.state, 0.5, 33, BOTH);
   equal('冷却期内不再调档', during.action, null);
-  equal('状态不变（除了帧时间平均）', during.state.resolutionScale, dropping.state.resolutionScale);
+  equal('状态不变（除了帧时间平均）', during.state.viewDistance, dropping.state.viewDistance);
 
   // 冷却过去之后继续降
   const after = perfPolicyStep({ ...dropping.state, cooldown: 0 }, 1 / 60, 33, BOTH);
-  equal('冷却过后继续降一档', after.action, 'resolution-down');
+  equal('冷却过后继续降一档', after.action, 'view-down');
 }
 
 // ---------------------------------------------------------------- 5. 来回折腾会不会漂
@@ -177,7 +206,51 @@ console.log('\n[反复掉帧与恢复之后，能回到原样（不漂）]');
   equal('四轮之后视距仍然是玩家设定值', state.viewDistance, 12);
 }
 
-// ---------------------------------------------------------------- 6. 限帧与粒子总量
+// ---------------------------------------------------------------- 6. 手机的两个上限
+
+console.log('\n[手机：视距上限更小、分辨率地板更高]');
+{
+  equal('桌面不受影响（玩家设 12 就是 12）', viewDistanceCapFor(12, false), 12);
+  equal('手机夹到 8（屏幕小，不需要展示那么远）', viewDistanceCapFor(12, true), MOBILE_VIEW_DISTANCE_MAX);
+  equal('滑块拖到 16 也只到 8（手机上限挡住它）', viewDistanceCapFor(16, true), MOBILE_VIEW_DISTANCE_MAX);
+  equal('玩家自己往小调仍然生效', viewDistanceCapFor(5, true), 5);
+  equal('不会低于视距地板 4', viewDistanceCapFor(1, true), VIEW_DISTANCE_MIN);
+  equal('非法取值回退到手机上限', viewDistanceCapFor(Number.NaN, true), MOBILE_VIEW_DISTANCE_MAX);
+  check('手机上限确实小于桌面常用的 12', MOBILE_VIEW_DISTANCE_MAX < 12);
+
+  // 手机上持续掉帧：视距先收到 4，分辨率只在最后动，且只到 0.75
+  const start: PerfState = {
+    frameTimeAvg: 16.7,
+    resolutionScale: RESOLUTION_MAX,
+    viewDistance: viewDistanceCapFor(12, true),
+    cooldown: 0,
+  };
+  const stressed = run(start, 60, 33, MOBILE);
+  equal('手机视距先收到地板 4', stressed.viewDistance, VIEW_DISTANCE_MIN);
+  equal('手机分辨率只降到 0.75（不到 0.5）', stressed.resolutionScale, MOBILE_RESOLUTION_MIN);
+  check('手机那一档比桌面高（近处不能糊）', MOBILE_RESOLUTION_MIN > RESOLUTION_MIN);
+
+  // ⚠️ 这一条是踩出来的坑（开发时真的红过）：`Math.round(7.5)` = **8**，
+  // 所以"先夹地板再取整"会把 0.75 重新算成 0.8 —— 症状是"每 3 秒降一档、画面却不再变化"。
+  // 地板不必落在 0.1 的步长网格上，因此只能由**夹紧**那一步决定，取整必须在它之前。
+  const atFloor: PerfState = {
+    frameTimeAvg: 30,
+    resolutionScale: 0.8,
+    viewDistance: VIEW_DISTANCE_MIN,
+    cooldown: 0,
+  };
+  const stepped = perfPolicyStep(atFloor, 1 / 60, 33, MOBILE);
+  equal('最后一档真的落到地板 0.75（不会被 round1 弹回 0.8）', stepped.state.resolutionScale, MOBILE_RESOLUTION_MIN);
+  const afterFloor = perfPolicyStep({ ...stepped.state, cooldown: 0 }, 1 / 60, 33, MOBILE);
+  equal('两个旋钮都到底之后不再折腾（动作为空）', afterFloor.action, null);
+
+  // 手机恢复：分辨率先回到 1.0，视距最后才放，且只放到手机上限 8
+  const recovered = run(stressed, 200, 8, MOBILE);
+  equal('手机分辨率先回到 1.0', recovered.resolutionScale, RESOLUTION_MAX);
+  equal('视距回到手机上限 8（不会一路爬到 12）', recovered.viewDistance, MOBILE_VIEW_DISTANCE_MAX);
+}
+
+// ---------------------------------------------------------------- 7. 限帧与粒子总量
 
 console.log('\n[限帧与粒子总量（另外两个旋钮）]');
 {
