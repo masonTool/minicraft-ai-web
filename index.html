@@ -365,15 +365,22 @@
          ================================================================ */
       /* 批次 142：并排不再绑死 min-width 媒体查询——由 JS 打 body.classic-ui
          （设置可强制经典/携带版；auto 时仍按 ≥1280 打这个类） */
-      body.classic-ui.split-ui #recipe-book {
+      /* 并排：经典与携带版合成页共用（批次 144）。经典偏宽屏侧栏；携带版对半。 */
+      body.split-ui #recipe-book {
         right: auto; width: 52%;
-        /* 两块遮罩挨在一起，压暗的深浅要一致，否则中间会显出一道缝 */
         background: rgba(0, 0, 0, .55);
       }
-      body.classic-ui.split-ui #inventory-screen { left: auto; width: 48%; }
-      /* 并排时它是"侧栏"而不是对话框：收窄到 600，高度沿用同一套令牌 */
-      body.classic-ui.split-ui .recipe-panel {
+      body.split-ui #inventory-screen { left: auto; width: 48%; }
+      body.split-ui .recipe-panel {
         width: min(100%, 600px); max-width: 600px;
+        height: var(--panel-h); max-height: var(--panel-h);
+      }
+      /* 携带版（非 classic）：配方书与背包各占近半屏，贴合 Wiki 合成页 */
+      body.split-ui:not(.classic-ui) #recipe-book { width: 50%; }
+      body.split-ui:not(.classic-ui) #inventory-screen { width: 50%; }
+      body.split-ui:not(.classic-ui) .recipe-panel,
+      body.split-ui:not(.classic-ui) .inv-panel {
+        width: min(96%, var(--panel-w)); max-width: min(96%, var(--panel-w));
         height: var(--panel-h); max-height: var(--panel-h);
       }
       .recipe-panel {
@@ -1315,20 +1322,47 @@
       }
       .inv-pocket-recipe-tab canvas { width: 16px; height: 16px; image-rendering: pixelated; }
       .inv-pocket-recipe-tab:active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
+      /* 携带版页签（批次 144）：右缘竖排合成/盔甲，左下箱子 = 物品栏（对齐 Wiki 图） */
       .inv-pocket-tabs {
-        display: flex; gap: 6px; justify-content: center; margin-top: 8px;
+        position: absolute; inset: 0; pointer-events: none; z-index: 2;
       }
       .inv-pocket-tabs.hidden { display: none; }
+      .inv-pocket-side {
+        position: absolute; right: -2px; bottom: 56px;
+        display: flex; flex-direction: column; gap: 4px; pointer-events: auto;
+      }
+      .inv-pocket-inv-tab {
+        position: absolute; left: 6px; bottom: 6px; pointer-events: auto;
+      }
       .inv-pocket-tab {
-        font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; cursor: pointer;
+        width: 40px; height: 40px; padding: 0; cursor: pointer;
+        display: grid; place-items: center;
         background: #a8a8a8; color: #2b2b2b;
         border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
+      .inv-pocket-tab canvas { width: 22px; height: 22px; image-rendering: pixelated; }
       .inv-pocket-tab.active {
         background: #dcdec4; border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
       }
       .inv-recipes-btn.hidden { display: none; }
-      /* 携带版：单栏居中；快捷栏始终在底部内容区 */
+      .inv-panel.pocket-ui { position: relative; padding-right: 48px; padding-left: 48px; padding-bottom: 10px; }
+      .inv-panel.pocket-ui .inv-header-hint { display: none; }
+      /* 携带版：分类图标改竖条贴左缘（Wiki 合成/盔甲页左侧那一列） */
+      .inv-panel.pocket-ui .inv-pocket-recipes {
+        position: absolute; left: 6px; top: 48px;
+        display: flex; flex-direction: column; gap: 4px;
+        margin: 0;
+      }
+      .inv-panel.pocket-ui .inv-header {
+        justify-content: flex-end; padding-left: 0;
+      }
+      .inv-panel.pocket-ui .inv-header > b { display: none; }
+      .inv-panel.pocket-ui .inv-recipes-btn[data-role='advancements'] { display: none; }
+      /* 合成页右半只留 2×2，别占一整屏空背包 */
+      .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-body {
+        min-height: 200px; place-content: center;
+      }
+      /* 携带版：单栏；盔甲页改回左主背包 + 右装备（Wiki「盔甲」标签页） */
       .inv-panel.pocket-ui .inv-body {
         grid-template-columns: 1fr;
         justify-items: center;
@@ -1338,9 +1372,23 @@
         grid-column: 1; grid-row: auto; width: 100%;
       }
       .inv-panel.pocket-ui .inv-gear { display: flex; justify-content: center; }
-      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-main { align-items: center; }
+      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-body {
+        grid-template-columns: 1fr auto; align-items: start; gap: 10px;
+      }
+      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-main {
+        grid-column: 1; grid-row: 1; width: 100%;
+      }
+      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-gear {
+        grid-column: 2; grid-row: 1; flex-direction: row; align-items: flex-start;
+      }
       .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-player-preview {
         width: 64px; height: 134px;
+      }
+      .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-body {
+        justify-items: center;
+      }
+      .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-top {
+        width: 100%; display: flex; justify-content: center;
       }
 
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
@@ -1594,16 +1642,16 @@
         will-change: transform;
       }
 
-      /* 右下那一簇（批次 107 起只有"潜行 + 跳跃"两颗，批次 111 对齐原版排法）：
-         **一排右对齐——跳跃在右（最大、拇指最常够到），潜行在它左边**。
-         原版手机默认布局就是这样（原来我们排成了上下两行，和原版不一致）。
-         背包与聊天不在这里，它们在快捷栏两侧（见下面 `.touch-side-btn`）。 */
+      /* 右下那一簇（批次 144，对齐基岩手机 / Education）：
+         **生存只有一颗跳跃**；创造双击起飞后，上下再出现上升 / 下降。
+         竖排：上 → 跳 → 下。背包与聊天在快捷栏两侧（见 `.touch-side-btn`）。 */
       #touch-buttons {
         position: absolute; right: 20px; bottom: 96px;
-        display: flex; flex-direction: row; align-items: flex-end;
-        gap: calc(12px * var(--touch-scale, 1));
+        display: flex; flex-direction: column; align-items: center;
+        gap: calc(10px * var(--touch-scale, 1));
         pointer-events: none;
       }
+      #touch-buttons .fly-only.hidden { display: none; }
       .touch-button {
         width: calc(62px * var(--touch-scale, 1));
         height: calc(62px * var(--touch-scale, 1));
@@ -1626,18 +1674,18 @@
       }
       .touch-button.jump svg { width: 52%; height: 52%; }
 
-      /* 飞行时的升降提示（批次 96）：飞起来之后"跳跃/潜行"这两颗键的含义变成了
-         上升/下降，不提示就只能靠试（基岩版也在这两颗键上画箭头）。
-         用伪元素画：不往按钮里塞文字节点（读屏与验收脚本看到的仍然只有图标）。 */
-      #touch-ui.flying .touch-button.jump::after,
-      #touch-ui.flying .touch-button[data-icon="sneak"]::after {
+      /* 飞行时上升/下降是独立两颗键（不再用伪元素画在跳跃/潜行上） */
+      .touch-button { position: relative; }
+      .touch-button.fly-up::after,
+      .touch-button.fly-down::after {
         position: absolute; left: 50%; transform: translateX(-50%);
         font-size: 11px; line-height: 1; color: rgba(255, 255, 255, .92);
-        text-shadow: 0 0 3px rgba(0, 0, 0, .8);
+        text-shadow: 0 0 3px rgba(0, 0, 0, .8); pointer-events: none;
       }
-      #touch-ui.flying .touch-button.jump::after { content: '▲'; top: 4px; }
-      #touch-ui.flying .touch-button[data-icon="sneak"]::after { content: '▼'; bottom: 3px; }
-      .touch-button { position: relative; }
+      .touch-button.fly-up::after { content: '▲'; top: 4px; }
+      .touch-button.fly-down::after { content: '▼'; bottom: 3px; }
+      /* 双击摇杆潜行时给摇杆一圈提示 */
+      #touch-stick.sneaking { box-shadow: 0 0 0 3px rgba(140, 220, 140, .55); }
 
       /* 动态摇杆（批次 96）：平时隐形待命，按下才出现在手指下面。
          ⚠️ 只改透明度、不改 display：`beginDynamicStick` 要靠 getBoundingClientRect

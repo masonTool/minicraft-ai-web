@@ -122,13 +122,24 @@
   // 批次 107 起按基岩版重新分位：右下那一簇只有"潜行 + 跳跃"，
   // 背包与聊天挂到快捷栏两侧（`#touch-hotbar-inventory` / `#touch-hotbar-chat`）。
   const buttons = [...document.querySelectorAll('.touch-button')];
-  const cluster = [...document.querySelectorAll('#touch-buttons .touch-button')];
-  check('right cluster is sneak + jump only', cluster.length === 2, `${cluster.length} buttons`);
+  const clusterAll = [...document.querySelectorAll('#touch-buttons .touch-button')];
+  const clusterVisible = clusterAll.filter((button) => !button.classList.contains('hidden'));
+  check('right cluster has jump + fly-up/down nodes', clusterAll.length === 3, `${clusterAll.length} buttons`);
   check(
-    'right cluster icons are jump,sneak',
-    cluster.map((button) => button.dataset.icon).sort().join(',') === 'jump,sneak',
-    cluster.map((button) => button.dataset.icon).join(','),
+    'on ground only jump is visible',
+    clusterVisible.length === 1 && clusterVisible[0]?.classList.contains('jump'),
+    clusterVisible.map((button) => button.dataset.icon).join(','),
   );
+  mc.setFlying(true);
+  await sleep(50);
+  const flyingVisible = clusterAll.filter((button) => !button.classList.contains('hidden'));
+  check(
+    'flying shows up + jump + down',
+    flyingVisible.length === 3,
+    flyingVisible.map((button) => button.className).join(' | '),
+  );
+  mc.setFlying(false);
+  await sleep(50);
 
   const sideButtons = ['touch-hotbar-inventory', 'touch-hotbar-chat'].map((id) => document.getElementById(id));
   check(
@@ -152,15 +163,21 @@
   const labelled = buttons.filter((button) => (button.getAttribute('aria-label') ?? '').length > 0);
   check('every button has an aria-label', labelled.length === buttons.length, `${labelled.length}/${buttons.length}`);
 
-  const sizes = buttons.map((button) => rect(button)).filter(Boolean);
+  // 飞行前升降键是 .hidden（display:none → 矩形为 0），不能算进热区/重叠
+  const visibleButtons = buttons.filter((button) => {
+    if (button.classList.contains('hidden')) return false;
+    const r = rect(button);
+    return !!r && r.width > 1 && r.height > 1;
+  });
+  const sizes = visibleButtons.map((button) => rect(button));
   const smallest = Math.min(...sizes.map((r) => Math.min(r.width, r.height)));
-  check('every touch target >= 44px', smallest >= 44, `smallest ${smallest.toFixed(1)}px`);
+  check('every visible touch target >= 44px', smallest >= 44, `smallest ${smallest.toFixed(1)}px`);
 
   let overlaps = 0;
   for (let i = 0; i < sizes.length; i++) {
     for (let j = i + 1; j < sizes.length; j++) if (overlap(sizes[i], sizes[j])) overlaps++;
   }
-  check('buttons do not overlap', overlaps === 0, `${overlaps} overlapping pairs`);
+  check('visible buttons do not overlap', overlaps === 0, `${overlaps} overlapping pairs`);
 
   // ---------------------------------------------------------------- 2. 聊天入口
   const chatButton = buttons.find((button) => button.dataset.icon === 'chat');

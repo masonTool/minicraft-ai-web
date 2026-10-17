@@ -111,6 +111,7 @@ import {
   slicePage,
 } from './ItemPager.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
+import { Block } from '../core/registry/blocks.ts';
 import { CREATIVE_TAB_ICONS, RECIPE_TAB_ICONS } from './CreativeTabs.ts';
 import { drawPlayerPreview } from './PlayerPreview.ts';
 import { isTouchUi } from './TouchControls.ts';
@@ -168,6 +169,8 @@ export interface InventoryScreenHooks {
    * @param tab 携带版点某个分类图标时带上，配方书直接切到那一栏
    */
   onOpenRecipes?: (tab?: RecipeBookTab) => void;
+  /** 关掉配方书（携带版离开合成页时） */
+  onCloseRecipes?: () => void;
   /**
    * 打开成就 / 进度面板（M7，批次 87）。
    *
@@ -544,7 +547,8 @@ export class InventoryScreen {
         }
         button.addEventListener('pointerdown', (event) => {
           event.preventDefault();
-          this.hooks.onOpenRecipes?.(tab);
+          // Wiki：左上分类图标打开对应配方书页，与合成/盔甲/物品栏互斥
+          this.setPocketTab('crafting', tab);
         });
         this.pocketRecipeBar.appendChild(button);
       }
@@ -776,27 +780,22 @@ export class InventoryScreen {
     this.playerBody.appendChild(this.gearEl);
     this.panel.appendChild(this.playerBody);
 
-    // 携带版底栏：物品栏 / 合成 / 盔甲（批次 140）
+    // 携带版页签（批次 144，对齐 Wiki 图）：
+    //  右缘竖排 = 合成台图标 / 盔甲剪影；左下 = 箱子（物品栏）。
+    // 不再用底部文字「物品栏/合成/盔甲」——那不是基岩携带版形态。
     this.pocketTabsEl = document.createElement('div');
     this.pocketTabsEl.className = 'inv-pocket-tabs';
     this.pocketTabsEl.dataset.role = 'pocket-tabs';
-    const pocketLabels: { tab: PocketInventoryTab; label: string }[] = [
-      { tab: 'inventory', label: '物品栏' },
-      { tab: 'crafting', label: '合成' },
-      { tab: 'armor', label: '盔甲' },
-    ];
-    for (const { tab, label } of pocketLabels) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'inv-pocket-tab';
-      button.dataset.tab = tab;
-      button.textContent = label;
-      button.addEventListener('pointerdown', (event) => {
-        event.preventDefault();
-        this.setPocketTab(tab);
-      });
-      this.pocketTabsEl.appendChild(button);
-    }
+
+    const side = document.createElement('div');
+    side.className = 'inv-pocket-side';
+    side.append(
+      this.makePocketIconTab('crafting', '合成', Block.CRAFTING_TABLE),
+      this.makePocketIconTab('armor', '盔甲', null),
+    );
+    const invTab = this.makePocketIconTab('inventory', '物品栏', Block.CHEST);
+    invTab.classList.add('inv-pocket-inv-tab');
+    this.pocketTabsEl.append(side, invTab);
     this.panel.appendChild(this.pocketTabsEl);
 
     this.creativeSection = document.createElement('div');
@@ -963,11 +962,47 @@ export class InventoryScreen {
     this.narrowQuery?.addEventListener('change', () => this.renderCreativeGrid());
   }
 
-  /** 携带版底栏切页（批次 140） */
-  private setPocketTab(tab: PocketInventoryTab): void {
-    if (this.pocketTab === tab) return;
+  /** 携带版图标页签（批次 144）：右缘合成/盔甲，左下物品栏 */
+  private makePocketIconTab(
+    tab: PocketInventoryTab,
+    label: string,
+    itemId: number | null,
+  ): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'inv-pocket-tab';
+    button.dataset.tab = tab;
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    if (itemId === null) {
+      // 盔甲页：基岩用玩家剪影，图集里没有对应物品
+      button.innerHTML =
+        '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">' +
+        '<circle cx="12" cy="7" r="3.2" fill="currentColor"/>' +
+        '<path d="M6.5 20c0-3.6 2.4-5.5 5.5-5.5s5.5 1.9 5.5 5.5z" fill="currentColor"/>' +
+        '</svg>';
+    } else {
+      const icon = document.createElement('canvas');
+      icon.width = 22;
+      icon.height = 22;
+      drawItemIcon(icon, this.atlas, itemId, 20);
+      button.appendChild(icon);
+    }
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      this.setPocketTab(tab);
+    });
+    return button;
+  }
+
+  /** 携带版切页（批次 140 → 144） */
+  private setPocketTab(tab: PocketInventoryTab, recipeTab?: RecipeBookTab): void {
+    const changed = this.pocketTab !== tab;
     this.pocketTab = tab;
     this.applyInventoryChrome();
+    // 合成页：左半摊开配方书；离开合成页就收起来（Wiki：各页互斥）
+    if (tab === 'crafting') this.hooks.onOpenRecipes?.(recipeTab ?? 'all');
+    else if (changed) this.hooks.onCloseRecipes?.();
   }
 
   /**
@@ -1019,13 +1054,14 @@ export class InventoryScreen {
 
     const tab = this.pocketTab;
     this.panel.dataset.pocketTab = tab;
+    // 合成页：只留 2×2（配方书在左侧并排）；盔甲页：左主背包 + 右装备（Wiki 图）
+    // 物品栏页：主背包铺满
     this.topArea.style.display = tab === 'crafting' ? '' : 'none';
     this.gearEl.style.display = tab === 'armor' ? '' : 'none';
-    this.mainGridEl.style.display = tab === 'inventory' ? '' : 'none';
+    this.mainGridEl.style.display = tab === 'inventory' || tab === 'armor' ? '' : 'none';
     this.hotbarGridEl.style.display = '';
 
-    for (const child of Array.from(this.pocketTabsEl.children)) {
-      const button = child as HTMLElement;
+    for (const button of this.pocketTabsEl.querySelectorAll<HTMLElement>('.inv-pocket-tab')) {
       button.classList.toggle('active', button.dataset.tab === tab);
     }
   }

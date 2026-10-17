@@ -1256,6 +1256,11 @@ class App {
       {
         onOpenChange: (open) => this.handleInventoryOpen(open),
         onOpenRecipes: (tab) => this.openRecipeBook(tab),
+        onCloseRecipes: () => {
+          if (!this.recipeBook.isOpen) return;
+          this.recipeBook.hide();
+          this.updateSplitUi();
+        },
         // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口
         onOpenAdvancements: () => this.openAdvancements(),
         // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
@@ -1558,10 +1563,10 @@ class App {
 
   private updateSplitUi(): void {
     this.updateUiProfileClass();
-    const classic = isClassicUi(window.innerWidth);
+    // 经典 / 携带：只要背包与配方书同时开着就并排（携带版合成页 = 左配方 + 右 2×2）
     document.body.classList.toggle(
       'split-ui',
-      classic && this.recipeBook.isOpen && this.inventoryScreen.isOpen,
+      this.recipeBook.isOpen && this.inventoryScreen.isOpen,
     );
   }
 
@@ -6125,12 +6130,12 @@ class App {
    */
   private fillFromBook(recipe: Recipe): boolean {
     if (!this.inventoryScreen.fillFromRecipe(recipe)) return false;
-    if (isClassicUi(window.innerWidth)) {
-      // 材料被拿走了，"还能不能做"要重算（页签上的条数也跟着变）
+    // 背包还开着就让配方书留着（经典侧栏 / 携带版合成页都是并排，关掉会看不见摆法）
+    if (this.inventoryScreen.isOpen) {
       this.recipeBook.render();
     } else {
       this.recipeBook.hide();
-      this.handleInventoryOpen(this.inventoryScreen.isOpen);
+      this.handleInventoryOpen(false);
     }
     this.audio.play('click');
     return true;

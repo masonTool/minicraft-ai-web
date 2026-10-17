@@ -225,7 +225,7 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 尺寸都走 `--touch-scale`（批次 98）：默认 1× 下与写死像素完全一致
     // 右下那一簇（批次 107）：一列右对齐，跳跃在下
     // 右下那一簇（批次 111 对齐原版）：一排、右对齐——跳跃在右、潜行在它左边
-    ['右下按钮簇是一排右对齐（跳跃在右）', '#touch-buttons { position: absolute; right: 20px; bottom: 96px; display: flex; flex-direction: row; align-items: flex-end;'],
+    ['右下按钮簇竖排（生存只跳，飞时上中下）', '#touch-buttons { position: absolute; right: 20px; bottom: 96px; display: flex; flex-direction: column; align-items: center;'],
     // 快捷栏两侧的背包/聊天：挂进 #hotbar 内并绝对定位（不参与那 9 格的宽度计算）
     ['背包/聊天按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
     ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
@@ -412,15 +412,17 @@ console.log('\n[携带版分标签页（批次 140）]');
   const core = readFileSync(new URL('../src/core/crafting/RecipeBook.ts', import.meta.url), 'utf8');
 
   check('有 PocketInventoryTab 三页', invSrc.includes("export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory'"));
-  check('底栏 DOM role=pocket-tabs', invSrc.includes("dataset.role = 'pocket-tabs'"));
+  check('页签 DOM role=pocket-tabs', invSrc.includes("dataset.role = 'pocket-tabs'"));
   check('左上配方图标 role=pocket-recipes', invSrc.includes("dataset.role = 'pocket-recipes'"));
-  check('页签互斥：合成/盔甲/主背包按 tab 显隐', invSrc.includes("tab === 'crafting'") && invSrc.includes("tab === 'armor'") && invSrc.includes("tab === 'inventory'"));
+  check('图标页签：右缘合成/盔甲 + 左下物品栏', invSrc.includes('makePocketIconTab') && invSrc.includes('inv-pocket-side'));
+  check('合成页自动摊开配方书', invSrc.includes("tab === 'crafting'") && invSrc.includes('this.hooks.onOpenRecipes?.(recipeTab ?? \'all\')'));
+  check('盔甲页同时显示主背包与装备', invSrc.includes("tab === 'inventory' || tab === 'armor'"));
   check('快捷栏在携带版始终显示', /this\.hotbarGridEl\.style\.display = '';/.test(invSrc));
   check('经典 UI 断点复用 isClassicUi', invSrc.includes('!isClassicUi(this.viewportWidth)'));
   check('与配方书同一断点常量', core.includes('CLASSIC_UI_MIN_WIDTH = 1280'));
   check('配方书 show 可带 tab', /show\(tab\?: RecipeBookTab\)/.test(recipeSrc));
   check('主程序把 tab 传给配方书', mainSrc.includes('this.recipeBook.show(tab)'));
-  check('携带版 CSS 在', css.includes('.inv-panel.pocket-ui') && css.includes('.inv-pocket-tabs') && css.includes('.inv-pocket-recipes'));
+  check('携带版 CSS 在', css.includes('.inv-panel.pocket-ui') && css.includes('.inv-pocket-tabs') && css.includes('.inv-pocket-side'));
   check('经典下隐藏携带版控件', css.includes('.inv-pocket-tabs.hidden') && css.includes('.inv-pocket-recipes.hidden'));
 }
 
@@ -544,8 +546,8 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
   for (const [label, needle] of [
     ['动态摇杆平时隐形', '#touch-stick.dynamic { opacity: 0; }'],
     ['动态摇杆按下现身', '#touch-stick.dynamic.active { opacity: 1; }'],
-    ['飞行时跳跃键画上升箭头', "#touch-ui.flying .touch-button.jump::after { content: '▲';"],
-    ['飞行时潜行键画下降箭头', "#touch-ui.flying .touch-button[data-icon=\"sneak\"]::after { content: '▼';"],
+    ['上升键画 ▲', ".touch-button.fly-up::after { content: '▲';"],
+    ['下降键画 ▼', ".touch-button.fly-down::after { content: '▼';"],
     // 按钮大小（批次 97）：尺寸必须走 CSS 变量，否则设置里的滑块拖了没反应
     ['触摸按钮尺寸吃变量', '.touch-button { width: calc(62px * var(--touch-scale, 1));'],
     ['跳跃键尺寸吃变量', 'width: calc(76px * var(--touch-scale, 1));'],
@@ -634,13 +636,16 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
 {
   const source = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
   // 右下那一簇只剩"潜行 + 跳跃"；背包/聊天挂到快捷栏两侧（挂进 #hotbar 内部并绝对定位）
-  check('右下按钮簇只放潜行与跳跃', source.includes('buttons.append(this.sneakButton, jump);'));
+  check(
+    '右下：上升/跳跃/下降三颗（飞行前 CSS 藏升降）',
+    source.includes('buttons.append(this.flyUpButton, this.jumpButton, this.flyDownButton)'),
+  );
   check('背包/聊天挂进快捷栏（不参与那 9 格的宽度计算）', source.includes("document.getElementById('hotbar')"));
   check('触摸层里不再有"飞行"按钮（已搬进设置面板）', !source.includes("makeIconButton('fly'"));
   check('触摸层里不再有"切换视角"按钮（已搬进设置面板）', !source.includes("makeIconButton('view'"));
-  // 基岩手机手势：轻点放 / 按住连放 / 再久挖掘；飞行时潜行=按住下降
   check('有按住连放阈值（短于长按破坏）', source.includes('PLACE_HOLD_MS') && source.includes('onPlaceHoldStart'));
-  check('飞行时潜行改按住下降（不是切换）', source.includes('private bindSneakMode') && source.includes('this.sneakHeld'));
+  check('双击摇杆切换潜行（右手只留跳跃）', source.includes('lastStickDown') && source.includes('双击摇杆'));
+  check('飞行态用 applyFlyChrome 露出升降键', source.includes('private applyFlyChrome') && source.includes('fly-only'));
 
   // 搬走之后必须**在设置里有对应入口**，否则这两项在手机上等于消失
   const settingsSource = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
@@ -914,15 +919,14 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   // 一键做完改成 Shift+点：原版没有"合成"按钮这条路径，不该再占用版面
   check('一键做完改成 Shift+点（版面里没有这颗按钮）', bookUi.includes('event.shiftKey') && !compact.includes('.recipe-craft {'));
   check('main 把 onFill 接上了', mainSrc.includes('onFill: (recipe) => this.fillFromBook(recipe)'));
-  // 整屏（携带版 UI）时它盖着背包 → 收起来露出摆好的格子；
-  // 并排（经典 UI）时原版就是"配方书常驻在旁边"，不该关（批次 136）
+  // 批次 144：经典侧栏与携带版合成页都是并排，背包开着时配方书一律不关
   check(
-    '整屏时摆好配方才收起配方书',
-    /private fillFromBook[\s\S]{0,600}this\.recipeBook\.hide\(\)/.test(mainSrc),
+    '背包开着时摆配方不关配方书（只重算）',
+    /private fillFromBook[\s\S]{0,400}inventoryScreen\.isOpen[\s\S]{0,200}this\.recipeBook\.render\(\)/.test(mainSrc),
   );
   check(
-    '并排（经典 UI）时配方书**不关**，只重算"还能不能做"',
-    /private fillFromBook[\s\S]{0,400}isClassicUi\(window\.innerWidth\)[\s\S]{0,200}this\.recipeBook\.render\(\)/.test(mainSrc),
+    '背包已关才收起配方书',
+    /private fillFromBook[\s\S]{0,600}this\.recipeBook\.hide\(\)/.test(mainSrc),
   );
   // 打开配方书**不能**再关背包：关界面会把格子里的东西倒回背包，刚摆的立刻被清掉
   check(
@@ -1005,17 +1009,21 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('说明行会说出缺哪样材料', bookUi.includes('材料不足${missing'));
   check('没点着任何一格时说明行也有默认文案', bookUi.includes('this.resetDetail()') && bookUi.includes('点一格：材料会摆进右边的合成格'));
 
-  // ---- 经典 UI：配方书与背包并排（批次 134 → 142：改由 body.classic-ui 控制）
+  // ---- 配方书与背包并排（批次 134 → 144：经典与携带版合成页共用 body.split-ui）
   check(
-    '并排走 body.classic-ui（设置可强制，不再只靠媒体查询）',
-    compact.includes('body.classic-ui.split-ui #recipe-book { right: auto; width: 52%;'),
+    '并排走 body.split-ui（经典与携带版共用）',
+    compact.includes('body.split-ui #recipe-book {') && compact.includes('right: auto; width: 52%;'),
   );
   check(
     '两块遮罩各占一半（否则上面那层会把下面半边的点击吃掉）',
-    compact.includes('body.classic-ui.split-ui #inventory-screen { left: auto; width: 48%; }'),
+    compact.includes('body.split-ui #inventory-screen { left: auto; width: 48%; }'),
   );
-  check('并排时配方书收窄成侧栏（600px）', compact.includes('body.classic-ui.split-ui .recipe-panel {'));
-  check('main 按 classic + 两块都开着打 split-ui', mainSrc.includes('classic && this.recipeBook.isOpen && this.inventoryScreen.isOpen'));
+  check('并排时配方书收窄成侧栏（600px）', compact.includes('body.split-ui .recipe-panel {'));
+  check(
+    'main 在两块都开着时打 split-ui（不再要求 classic）',
+    mainSrc.includes('this.recipeBook.isOpen && this.inventoryScreen.isOpen') &&
+      !mainSrc.includes('classic && this.recipeBook.isOpen && this.inventoryScreen.isOpen'),
+  );
   check('背包开关时刷新并排状态', /handleInventoryOpen\(open: boolean\): void \{[\s\S]{0,200}this\.updateSplitUi\(\);/.test(mainSrc));
   check('设置有界面配置 uiProfile', settingsSrc.includes('uiProfile') && settingsSrc.includes("'界面配置'"));
   check('底部滑入/滑出动画', compact.includes('@keyframes panel-out') && compact.includes('translateY(28%)'));
