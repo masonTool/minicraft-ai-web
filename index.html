@@ -1167,10 +1167,79 @@
       /* ---------------- 背包界面 ---------------- */
       #inventory-screen {
         position: fixed; inset: 0; z-index: 10;
-        display: grid; place-items: center;
+        /* 上行：居中 shell；下行：屏幕底快捷栏 dock（携带版） */
+        display: grid;
+        grid-template-rows: 1fr auto;
+        justify-items: center;
+        align-items: center;
         background: rgba(0, 0, 0, .55);
+        box-sizing: border-box;
       }
       #inventory-screen.hidden { display: none; }
+      /* 携带版外壳：左轨 | 灰框 | 右轨（页签在 border 外，对齐 Wiki） */
+      .inv-shell {
+        grid-row: 1;
+        display: flex; flex-direction: row; align-items: stretch;
+        justify-content: center; gap: 0;
+        max-width: 100%; max-height: 100%;
+        min-width: 0; align-self: center;
+      }
+      .inv-shell:not(.pocket-chrome) .inv-rail-left,
+      .inv-shell:not(.pocket-chrome) .inv-rail-right { display: none; }
+      .inv-rail-left, .inv-rail-right {
+        display: flex; flex-direction: column; flex: 0 0 auto;
+        gap: 4px; z-index: 2;
+      }
+      .inv-rail-left.hidden, .inv-rail-right.hidden { display: none; }
+      .inv-shell.pocket-chrome .inv-rail-left {
+        justify-content: space-between; align-items: flex-end;
+        padding: 36px 0 8px; /* 顶对齐配方区，底对齐箱子页签 */
+        width: 40px;
+      }
+      .inv-shell.pocket-chrome .inv-rail-right {
+        justify-content: flex-end; align-items: flex-start;
+        padding: 0 0 56px; /* 合成/盔甲贴在灰框右下外侧 */
+        width: 40px;
+      }
+      .inv-shell.pocket-chrome .inv-pocket-side {
+        position: static; display: flex; flex-direction: column; gap: 4px;
+      }
+      .inv-shell.pocket-chrome .inv-pocket-inv-tab { position: static; }
+      .inv-shell.pocket-chrome .inv-pocket-recipes {
+        position: static; display: flex; flex-direction: column; gap: 4px;
+        overflow-x: hidden; overflow-y: auto; max-height: min(52vh, 280px);
+        overscroll-behavior: contain;
+      }
+      /* 携带版快捷栏：屏幕底、面板外（Wiki）；经典时 dock 隐藏、格回面板内 */
+      .inv-hotbar-dock {
+        grid-row: 2;
+        display: none;
+        justify-content: center; align-items: center;
+        width: 100%; padding: 6px 12px 12px;
+        box-sizing: border-box;
+        align-self: end;
+      }
+      .inv-hotbar-dock:not(.hidden) { display: flex; }
+      .inv-hotbar-dock.hidden { display: none !important; }
+      .inv-hotbar-dock .inv-hotbar {
+        margin: 0; width: min(100%, 432px);
+        grid-template-columns: repeat(9, minmax(0, 1fr));
+        gap: 2px;
+      }
+      .inv-hotbar-dock .inv-slot {
+        width: auto; height: auto; aspect-ratio: 1; min-width: 0;
+        max-width: 48px; max-height: 48px; justify-self: center;
+      }
+      .inv-hotbar-dock .inv-slot canvas {
+        width: 78%; height: 78%; max-width: 36px; max-height: 36px;
+      }
+      /* 打开携带版时藏 HUD 快捷栏 / 经验 / 生命，只留 dock 那一排（对齐 Wiki） */
+      body.inv-pocket-open #hotbar,
+      body.inv-pocket-open #xp-bar,
+      body.inv-pocket-open #xp-level,
+      body.inv-pocket-open #vitals {
+        visibility: hidden; pointer-events: none;
+      }
 
       .inv-panel {
         background: var(--panel-bg);
@@ -1314,9 +1383,9 @@
       /* 快捷栏与主背包之间空一道缝（原版这两排是紧挨着的，靠缝区分） */
       .inv-main .inv-hotbar { margin-top: 5px; }
 
-      /* ---------------- 携带版分标签页（批次 140） ----------------
-         Wiki：合成 / 盔甲 / 物品栏互斥；左上配方书图标；快捷栏始终可见。
-         经典 UI（≥1280）不走这套——panel 没有 .pocket-ui。 */
+      /* ---------------- 携带版分标签页（批次 140 → 146） ----------------
+         Wiki：合成 / 盔甲 / 物品栏互斥；左轨配方书图标；右轨合成/盔甲；
+         左下箱子；快捷栏在屏幕底（面板外）。经典 UI（≥1280）不走这套。 */
       .inv-pocket-recipes {
         display: flex; gap: 4px; align-items: center; flex: 0 0 auto;
       }
@@ -1329,19 +1398,15 @@
       }
       .inv-pocket-recipe-tab canvas { width: 16px; height: 16px; image-rendering: pixelated; }
       .inv-pocket-recipe-tab:active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
-      /* 携带版页签（批次 145）：全部画在面板**内侧**，禁止 right:-2px 这类伸出框外。
-         Wiki 图上页签贴边，但整块 UI 必须落在视口内、内容不得溢出灰框。 */
+      /* 批次 146：页签在 .inv-rail-*（灰框外）；.inv-pocket-tabs 仅 role/.hidden 哨兵 */
       .inv-pocket-tabs {
-        position: absolute; inset: 0; pointer-events: none; z-index: 2;
+        position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none;
       }
       .inv-pocket-tabs.hidden { display: none; }
       .inv-pocket-side {
-        position: absolute; right: 4px; bottom: 48px;
-        display: flex; flex-direction: column; gap: 4px; pointer-events: auto;
+        display: flex; flex-direction: column; gap: 4px;
       }
-      .inv-pocket-inv-tab {
-        position: absolute; left: 4px; bottom: 4px; pointer-events: auto;
-      }
+      .inv-pocket-inv-tab { flex: 0 0 auto; }
       .inv-pocket-tab {
         width: 36px; height: 36px; padding: 0; cursor: pointer;
         display: grid; place-items: center;
@@ -1358,19 +1423,16 @@
       .inv-panel.pocket-ui {
         position: relative;
         display: flex; flex-direction: column;
-        /* 左右留给竖排页签，底留给箱子页签——都在 padding 里，不伸出 border */
-        padding: 8px 44px 44px 44px;
+        /* 页签已在轨上：灰框只需内容 padding；底留给关闭行即可 */
+        padding: 8px 12px 10px;
         box-sizing: border-box;
         overflow: hidden;
         min-width: 0;
+        /* 给底栏 dock 留出垂直空间 */
+        max-height: min(72vh, calc(100vh - 72px));
+        flex: 0 1 auto;
       }
       .inv-panel.pocket-ui .inv-header-hint { display: none; }
-      .inv-panel.pocket-ui .inv-pocket-recipes {
-        position: absolute; left: 4px; top: 36px; bottom: 44px;
-        display: flex; flex-direction: column; gap: 4px;
-        margin: 0; overflow-x: hidden; overflow-y: auto;
-        overscroll-behavior: contain;
-      }
       .inv-panel.pocket-ui .inv-header {
         flex: 0 0 auto;
         justify-content: flex-end; padding: 0 0 6px; margin: 0;
@@ -1395,22 +1457,32 @@
       .inv-panel.pocket-ui .inv-main {
         grid-column: 1; grid-row: auto; width: 100%; min-width: 0;
       }
-      .inv-panel.pocket-ui .inv-grid {
+      /* 主背包/快捷栏才是 9 列；合成 2×2、盔甲竖列不要被这条盖掉 */
+      .inv-panel.pocket-ui .inv-main .inv-grid,
+      .inv-hotbar-dock .inv-hotbar {
         width: 100%; max-width: 100%;
         grid-template-columns: repeat(9, minmax(0, 1fr));
         gap: 2px;
       }
-      /* 横屏手机：槽位按内容区收，保证 3×9+快捷栏一整屏落在灰框内（不裁切、不外滚） */
       .inv-panel.pocket-ui .inv-main {
         max-width: min(100%, 432px); /* 9×48 */
         margin: 0 auto;
       }
-      .inv-panel.pocket-ui .inv-grid .inv-slot {
+      .inv-panel.pocket-ui .inv-main .inv-grid .inv-slot,
+      .inv-hotbar-dock .inv-slot {
         width: auto; height: auto; aspect-ratio: 1; min-width: 0;
         max-width: 48px; max-height: 48px; justify-self: center;
       }
-      .inv-panel.pocket-ui .inv-grid .inv-slot canvas {
+      .inv-panel.pocket-ui .inv-main .inv-grid .inv-slot canvas,
+      .inv-hotbar-dock .inv-slot canvas {
         width: 78%; height: 78%; max-width: 36px; max-height: 36px;
+      }
+      .inv-panel.pocket-ui .inv-craft-grid.size-2 {
+        grid-template-columns: repeat(2, minmax(36px, 42px));
+        gap: 4px; width: auto;
+      }
+      .inv-panel.pocket-ui .inv-craft-grid.size-2 .inv-slot {
+        width: 42px; height: 42px; max-width: 42px; max-height: 42px;
       }
       .inv-panel.pocket-ui .inv-grid.inv-armor {
         grid-template-columns: minmax(0, 40px);
@@ -1418,9 +1490,8 @@
       .inv-panel.pocket-ui .inv-grid.inv-armor .inv-slot {
         max-width: 40px; max-height: 40px;
       }
-      .inv-panel.pocket-ui .inv-main .inv-hotbar { margin-top: 6px; }
 
-      /* 物品栏页：只有 3×9 + 快捷栏（Wiki 左下箱子页） */
+      /* 物品栏页：只有 3×9（快捷栏在屏幕底 dock） */
       .inv-panel.pocket-ui[data-pocket-tab='inventory'] .inv-gear { display: none; }
       .inv-panel.pocket-ui[data-pocket-tab='inventory'] .inv-body {
         display: flex; flex-direction: column; justify-content: center;
@@ -1449,9 +1520,62 @@
       .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-top {
         width: auto; max-width: 100%; display: flex; justify-content: center;
       }
+      /* ⚠️ 不要对 .inv-main 设 display:none——topArea（2×2 合成）就在 .inv-main 里 */
       .inv-panel.pocket-ui .inv-creative-section {
         flex: 1 1 auto; min-height: 0; overflow: hidden;
         display: flex; flex-direction: column;
+      }
+      /* 携带版创造：左竖分类 | 右（搜索 + 网格 + 翻页 + 销毁），槽位不溢出灰框 */
+      .inv-panel.creative-ui.pocket-ui {
+        width: min(96vw, 720px);
+        max-width: min(96vw, 720px);
+        max-height: min(68vh, calc(100vh - 78px));
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-creative-section {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+        gap: 4px 8px;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-creative-section > .inv-label {
+        grid-column: 1 / -1; grid-row: 1; margin: 0;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-creative-controls {
+        display: contents;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-tabs {
+        grid-column: 1; grid-row: 2 / 6;
+        display: flex; flex-direction: column; flex-wrap: nowrap;
+        justify-content: flex-start; align-items: center;
+        overflow-x: hidden; overflow-y: auto; gap: 3px;
+        max-height: none; min-height: 0;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-tab .inv-tab-label { display: none; }
+      .inv-panel.creative-ui.pocket-ui .inv-tab {
+        width: 36px; height: 36px; min-width: 36px; padding: 0;
+        display: grid; place-items: center; flex: 0 0 auto;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-search {
+        grid-column: 2; grid-row: 2;
+        width: 100%; min-width: 0; flex: none;
+        box-sizing: border-box;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-creative {
+        grid-column: 2; grid-row: 3;
+        min-height: min(38vh, 200px);
+        max-height: min(42vh, 220px);
+        overflow-x: hidden; overflow-y: auto;
+        width: 100%;
+        align-content: start;
+        grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-pager {
+        grid-column: 2; grid-row: 4;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-creative-destroy-row {
+        grid-column: 2; grid-row: 5;
       }
 
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
@@ -1874,14 +1998,23 @@
       body.touch-mode .inv-panel.creative-ui .inv-creative {
         max-height: min(40vh, 300px);
       }
+      /* 携带版创造网格高度由 .pocket-ui 规则管，别被触摸矮屏上限压成一行 */
+      body.touch-mode .inv-panel.creative-ui.pocket-ui .inv-creative {
+        min-height: min(38vh, 200px);
+        max-height: min(42vh, 220px);
+      }
       body.touch-mode .inv-creative-section {
         min-height: 0;
       }
       @media (orientation: landscape) and (max-height: 500px) {
         body.touch-mode .inv-header-hint,
         body.touch-mode .recipe-hint { display: none; }
-        body.touch-mode .inv-panel.creative-ui .inv-creative {
+        body.touch-mode .inv-panel.creative-ui:not(.pocket-ui) .inv-creative {
           max-height: min(26vh, 140px);
+        }
+        body.touch-mode .inv-panel.creative-ui.pocket-ui .inv-creative {
+          min-height: min(34vh, 160px);
+          max-height: min(38vh, 180px);
         }
         body.touch-mode .inv-panel { padding: 8px 10px; }
         body.touch-mode .recipe-panel { padding: 8px 10px; }

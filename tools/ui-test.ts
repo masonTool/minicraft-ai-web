@@ -427,6 +427,11 @@ console.log('\n[携带版分标签页（批次 140）]');
   // 批次 145：页签不得用负偏移伸出灰框
   check('携带版页签不伸出面板（无 right:-N）', !/inv-pocket-side\s*\{[^}]*right:\s*-\d/.test(css.replace(/\s+/g, ' ')));
   check('携带版面板 overflow:hidden + 内容区内滚', css.includes('.inv-panel.pocket-ui {') && css.includes('overflow: hidden;'));
+  // 批次 146：页签在灰框外轨、快捷栏屏幕底
+  check('携带版 shell + 左右轨', invSrc.includes("className = 'inv-shell'") && invSrc.includes('pocket-rail-left') && invSrc.includes('pocket-rail-right'));
+  check('快捷栏 dock 外置', invSrc.includes('pocket-hotbar-dock') && invSrc.includes('placeHotbar'));
+  check('打开携带版时藏 HUD 快捷栏', css.includes('body.inv-pocket-open #hotbar'));
+  check('创造携带版分类竖排 CSS', css.includes('.inv-panel.creative-ui.pocket-ui .inv-tabs'));
 }
 
 console.log('\n[玩家预览占位（批次 141）]');
