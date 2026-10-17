@@ -1724,8 +1724,8 @@
       }
       /* 携带版创造：分类已在左轨；面板内只留搜索 + 网格 + 销毁 */
       .inv-panel.creative-ui.pocket-ui {
-        width: min(92vw, 680px);
-        max-width: min(92vw, 680px);
+        width: min(calc(100vw - 88px), 568px);
+        max-width: min(calc(100vw - 88px), 568px);
         max-height: min(68vh, calc(100vh - 78px));
       }
       .inv-panel.creative-ui.pocket-ui .inv-creative-section {
@@ -1758,7 +1758,12 @@
         overflow-x: hidden; overflow-y: auto;
         width: 100%;
         align-content: start;
-        grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+        justify-content: center;
+        grid-template-columns: repeat(10, 44px);
+        gap: 2px;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-creative .inv-slot {
+        width: 44px; height: 44px; max-width: 44px; max-height: 44px;
       }
       .inv-panel.creative-ui.pocket-ui .inv-pager { display: none !important; }
       .inv-panel.creative-ui.pocket-ui .inv-creative-destroy-row {
@@ -2167,6 +2172,16 @@
         max-width: min(calc(100vw - 88px), 438px);
         height: auto;
       }
+      body.touch-mode .inv-panel.creative-ui.pocket-ui {
+        width: min(calc(100vw - 88px), 568px);
+        max-width: min(calc(100vw - 88px), 568px);
+      }
+      /* 盔甲页同时放 9×44px 主背包与 104px 装备区，不能沿用普通背包的 438px：
+         内容宽约 412 + 8 + 104px，再加内边距/边框后需要 562px。 */
+      body.touch-mode .inv-panel.pocket-ui[data-pocket-tab='armor'] {
+        width: min(calc(100vw - 88px), 568px);
+        max-width: min(calc(100vw - 88px), 568px);
+      }
       body.touch-mode .inv-panel:not(.pocket-ui) {
         overflow-x: hidden;
         overflow-y: auto;
@@ -2287,8 +2302,7 @@
           max-width: 100%; padding-bottom: 2px;
         }
         .inv-tab {
-          /* 窄屏只按图标算宽度（批次 98）：十个分类的图标排一行正好放得下——
-             文字标签加起来要四百多像素，手机上必须横向滚才能换分类。
+          /* 窄屏只按图标算宽度（批次 98）：五个基岩版顶层分类无需占用长文字宽度。
              文字仍然留在 DOM 里（读屏与搜索能读到），只是不显示 */
           font-size: 13px; padding: 7px 10px; min-height: 38px;
           white-space: nowrap; flex: 0 0 auto;

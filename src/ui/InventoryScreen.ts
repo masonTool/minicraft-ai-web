@@ -92,13 +92,9 @@ import {
 } from '../core/container/BrewingStand.ts';
 import type { BlockContainer } from '../core/world/BlockEntityStore.ts';
 import {
-  CATEGORY_LABELS,
-  ITEM_CATEGORIES,
   CREATIVE_ITEMS,
-  categoryOf,
   itemName,
   maxStackOf,
-  type ItemCategory,
 } from '../core/registry/items.ts';
 import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
 import { SIX_FACING_NAMES } from '../core/registry/blockState.ts';
@@ -112,7 +108,14 @@ import {
 } from './ItemPager.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
 import { Block } from '../core/registry/blocks.ts';
-import { CREATIVE_TAB_ICONS, RECIPE_TAB_ICONS } from './CreativeTabs.ts';
+import {
+  CREATIVE_TAB_ICONS,
+  CREATIVE_TAB_LABELS,
+  CREATIVE_TABS,
+  RECIPE_TAB_ICONS,
+  creativeTabFor,
+  type CreativeTab,
+} from './CreativeTabs.ts';
 import { drawPlayerPreview } from './PlayerPreview.ts';
 import { isTouchDevice, isTouchUi } from './TouchControls.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
@@ -445,7 +448,7 @@ export class InventoryScreen {
   private creativeTabs!: HTMLDivElement;
   private creativeSearch!: HTMLInputElement;
   private creativeCountEl!: HTMLSpanElement;
-  private creativeCategory: ItemCategory = 'all';
+  private creativeCategory: CreativeTab = 'all';
   private creativeQuery = '';
   /** 当前页（0 起）：换分类/改搜索词/屏幕变化时都要夹一次 */
   private creativePage = 0;
@@ -921,20 +924,20 @@ export class InventoryScreen {
     this.creativeTabs = document.createElement('div');
     this.creativeTabs.className = 'inv-tabs';
     this.creativeTabs.dataset.role = 'creative-tabs';
-    for (const category of ITEM_CATEGORIES) {
+    for (const category of CREATIVE_TABS) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'inv-tab';
       button.dataset.category = category;
       // 图标 + 文字（批次 98，对齐基岩版）：图标是**注册表里的真实物品**
-      // （砖块/羊毛/镐/苹果…），窄屏可以只留图标——十个 38px 的方块刚好一行放得下，
-      // 不用再横向滚。文字用 span 包着是为了能在窄屏单独隐藏它
+      // （砖块/镐/工作台/草方块），窄屏可以只留图标；五个顶层分类与基岩版一致。
+      // 文字用 span 包着是为了能在窄屏单独隐藏它
       const icon = document.createElement('canvas');
       icon.className = 'inv-tab-icon';
       drawItemIcon(icon, this.atlas, CREATIVE_TAB_ICONS[category], 18);
       const label = document.createElement('span');
       label.className = 'inv-tab-label';
-      label.textContent = CATEGORY_LABELS[category];
+      label.textContent = CREATIVE_TAB_LABELS[category];
       button.append(icon, label);
       button.addEventListener('pointerdown', (event) => {
         event.preventDefault();
@@ -1105,6 +1108,9 @@ export class InventoryScreen {
       this.syncCreativeRails(pocket, true);
       // 携带版创造靠滚动，不靠翻页条（Wiki）
       if (pocket) this.creativePager.classList.add('hidden');
+      // `renderCreativeGrid` 构造时还不知道最终 UI 形态；进入携带版后重画一次，
+      // 才能从桌面分页（32 件）切成原版式的整表滚动。
+      this.renderCreativeGrid();
       this.placeHotbar(pocket);
       this.syncPocketBodyClass(pocket);
       this.restoreInvTabToRail();
@@ -1301,20 +1307,22 @@ export class InventoryScreen {
     }
   }
 
-  /** 按当前分类与搜索词重建创造网格（**只建当前这一页**） */
+  /** 按当前分类与搜索词重建创造网格；经典 UI 分页，携带版整表滚动。 */
   private renderCreativeGrid(): void {
     const query = this.creativeQuery;
     const items = CREATIVE_ITEMS.filter((itemId) => {
-      if (this.creativeCategory !== 'all' && categoryOf(itemId) !== this.creativeCategory) return false;
+      if (this.creativeCategory !== 'all' && creativeTabFor(itemId) !== this.creativeCategory) return false;
       // 中文名与英文 id 都能搜：写"石头"或写 stone 都能找到（原来只认英文 id）
       if (query.length > 0 && !matchesQuery(itemId, query)) return false;
       return true;
     });
 
+    const pocketScroll =
+      this.panel.classList.contains('pocket-ui') && this.panel.classList.contains('creative-ui');
     const pageSize = pageSizeFor(this.viewportWidth);
     // 夹一次页码：换分类、改搜索词、转屏之后原来的页码都可能越界
-    this.creativePage = clampPage(this.creativePage, items.length, pageSize);
-    const visible = slicePage(items, this.creativePage, pageSize);
+    this.creativePage = pocketScroll ? 0 : clampPage(this.creativePage, items.length, pageSize);
+    const visible = pocketScroll ? items : slicePage(items, this.creativePage, pageSize);
 
     this.creativeGrid.replaceChildren();
     for (const itemId of visible) {
@@ -1355,7 +1363,7 @@ export class InventoryScreen {
     this.creativePrev.disabled = this.creativePage <= 0;
     this.creativeNext.disabled = this.creativePage >= pages - 1;
     // 只有一页时整条隐藏：手机屏幕本来就窄，没必要常驻一条翻不动的按钮
-    this.creativePager.classList.toggle('hidden', pages <= 1);
+    this.creativePager.classList.toggle('hidden', pocketScroll || pages <= 1);
   }
 
   /** 当前视口宽度（窄屏判定用；不在浏览器里时按宽屏处理） */

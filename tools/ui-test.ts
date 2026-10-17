@@ -42,9 +42,9 @@ import {
   TOUCH_SCALE_MIN,
   loadSettings,
 } from '../src/ui/SettingsScreen.ts';
-import { CREATIVE_TAB_ICONS, missingTabIcons } from '../src/ui/CreativeTabs.ts';
+import { CREATIVE_TAB_ICONS, CREATIVE_TABS, creativeTabFor, missingTabIcons } from '../src/ui/CreativeTabs.ts';
 import { armAutoFullscreen, isFullscreen } from '../src/ui/Fullscreen.ts';
-import { ITEM_CATEGORIES, itemDef, itemIconTile } from '../src/core/registry/items.ts';
+import { CREATIVE_ITEMS, itemDef, itemIconTile } from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 
 let passed = 0;
@@ -443,6 +443,15 @@ console.log('\n[携带版分标签页（批次 140）]');
   // 批次 149：携带版比例与分类页不能再退回“灰框很大、槽位很小、内容混在一起”
   check('携带版主背包与快捷栏固定 9×44px', css.includes('grid-template-columns: repeat(9, 44px)'));
   check('快捷栏 dock 固定到整屏底部', css.includes('position: fixed; left: 0; right: 0; bottom: 0;') && css.includes('width: 100vw;'));
+  check(
+    '盔甲页为 9 列背包 + 装备区单独加宽',
+    css.includes(".inv-panel.pocket-ui[data-pocket-tab='armor']") && css.includes('568px'),
+  );
+  check('携带版创造栏是 10 列 44px 槽位', css.includes('grid-template-columns: repeat(10, 44px)'));
+  check(
+    '携带版创造栏渲染整表滚动而非只留分页首屏',
+    invSrc.includes('const visible = pocketScroll ? items : slicePage('),
+  );
   check('合成分屏不再保留右板空左轨', css.includes("#inventory-screen .inv-shell.pocket-chrome > .inv-rail-left"));
   check('携带版分类轨允许伸出灰框且仍可点击', css.includes('overflow: visible;') && css.includes('.recipe-tabs {'));
   check('非搜索分类隐藏搜索框', css.includes(".recipe-panel:not([data-tab='all']) .recipe-controls"));
@@ -583,13 +592,14 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
 
 console.log('\n[创造栏分类图标（批次 98，对齐基岩版的组织形式）]');
 {
-  equal('每个分类都配了图标（漏一个就是界面上一个空白标签）', missingTabIcons(ITEM_CATEGORIES).join(','), '');
+  equal('基岩版创造栏只有五个顶层分类', CREATIVE_TABS.join(','), 'all,building,equipment,items,nature');
+  equal('每个分类都配了图标（漏一个就是界面上一个空白标签）', missingTabIcons(CREATIVE_TABS).join(','), '');
   const categories = Object.keys(CREATIVE_TAB_ICONS) as (keyof typeof CREATIVE_TAB_ICONS)[];
-  equal('图标表没有多余项（多一个说明分类被删了但图标没跟着删）', String(categories.length), String(ITEM_CATEGORIES.length));
+  equal('图标表没有多余项（多一个说明分类被删了但图标没跟着删）', String(categories.length), String(CREATIVE_TABS.length));
 
   const tiles = new Set<string>(TILE_ORDER);
   const bad: string[] = [];
-  for (const category of ITEM_CATEGORIES) {
+  for (const category of CREATIVE_TABS) {
     const itemId = CREATIVE_TAB_ICONS[category];
     // 图标必须是**真实存在的物品**，而且它那张贴图得在图集里（否则标签上是一片空白）
     if (!itemDef(itemId)) {
@@ -599,8 +609,12 @@ console.log('\n[创造栏分类图标（批次 98，对齐基岩版的组织形�
     if (!tiles.has(itemIconTile(itemId))) bad.push(`${category}:贴图不在图集`);
   }
   check('图标的物品都存在、贴图都在图集里', bad.length === 0, bad.join(', '));
+  check(
+    '创造物品都能归入五个顶层分类',
+    CREATIVE_ITEMS.every((itemId) => CREATIVE_TABS.includes(creativeTabFor(itemId))),
+  );
 
-  // CSS：窄屏只留图标（十个分类一行放得下），宽屏图标 + 文字
+  // CSS：窄屏只留图标，宽屏图标 + 文字
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
