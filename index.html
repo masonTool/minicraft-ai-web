@@ -1290,6 +1290,46 @@
       /* 快捷栏与主背包之间空一道缝（原版这两排是紧挨着的，靠缝区分） */
       .inv-main .inv-hotbar { margin-top: 5px; }
 
+      /* ---------------- 携带版分标签页（批次 140） ----------------
+         Wiki：合成 / 盔甲 / 物品栏互斥；左上配方书图标；快捷栏始终可见。
+         经典 UI（≥1280）不走这套——panel 没有 .pocket-ui。 */
+      .inv-pocket-recipes {
+        display: flex; gap: 4px; align-items: center; flex: 0 0 auto;
+      }
+      .inv-pocket-recipes.hidden { display: none; }
+      .inv-pocket-recipe-tab {
+        width: 36px; height: 36px; padding: 0; cursor: pointer;
+        display: grid; place-items: center;
+        background: #a8a8a8; color: #2b2b2b;
+        border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      .inv-pocket-recipe-tab canvas { width: 16px; height: 16px; image-rendering: pixelated; }
+      .inv-pocket-recipe-tab:active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
+      .inv-pocket-tabs {
+        display: flex; gap: 6px; justify-content: center; margin-top: 8px;
+      }
+      .inv-pocket-tabs.hidden { display: none; }
+      .inv-pocket-tab {
+        font: inherit; font-size: 13px; padding: 8px 14px; min-height: 40px; cursor: pointer;
+        background: #a8a8a8; color: #2b2b2b;
+        border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      .inv-pocket-tab.active {
+        background: #dcdec4; border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+      }
+      .inv-recipes-btn.hidden { display: none; }
+      /* 携带版：单栏居中；快捷栏始终在底部内容区 */
+      .inv-panel.pocket-ui .inv-body {
+        grid-template-columns: 1fr;
+        justify-items: center;
+      }
+      .inv-panel.pocket-ui .inv-gear,
+      .inv-panel.pocket-ui .inv-main {
+        grid-column: 1; grid-row: auto; width: 100%;
+      }
+      .inv-panel.pocket-ui .inv-gear { display: flex; justify-content: center; }
+      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-main { align-items: center; }
+
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
       .inv-grid.inv-armor { grid-template-columns: 42px; }
       /* 空槽里写"头/胸/腿/靴/副"：触摸端没有悬停提示，只能靠槽位自己说明 */
@@ -1651,6 +1691,8 @@
       /* 面板里那几个"小字按钮"在手机上要放大到能点得到（44px 是平台下限）：
          背包标题栏的"配方书/成就"原来只有 12px 字 + 3px 内边距，手机上很难点 */
       body.touch-mode .inv-recipes-btn { min-height: 44px; padding: 8px 14px; font-size: 14px; }
+      body.touch-mode .inv-pocket-tab { min-height: 44px; padding: 10px 16px; font-size: 14px; }
+      body.touch-mode .inv-pocket-recipe-tab { width: 44px; height: 44px; }
       body.touch-mode .recipe-close,
       body.touch-mode .inv-close,
       body.touch-mode .adv-close { min-width: 48px; min-height: 44px; font-size: 17px; padding: 8px 12px; }

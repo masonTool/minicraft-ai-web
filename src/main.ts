@@ -178,7 +178,7 @@ import {
   type GameRules,
 } from './core/world/Rules.ts';
 import { RecipeBook } from './ui/RecipeBook.ts';
-import { craftFromInventory, isClassicUi } from './core/crafting/RecipeBook.ts';
+import { craftFromInventory, isClassicUi, type RecipeBookTab } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
 import { itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
@@ -1248,7 +1248,7 @@ class App {
       this.inventory,
       {
         onOpenChange: (open) => this.handleInventoryOpen(open),
-        onOpenRecipes: () => this.openRecipeBook(),
+        onOpenRecipes: (tab) => this.openRecipeBook(tab),
         // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口
         onOpenAdvancements: () => this.openAdvancements(),
         // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
@@ -6047,10 +6047,11 @@ class App {
    *  ① "摆进合成格"这件事玩家根本看不见；
    *  ② 关界面会把格子里的东西倒回背包——刚摆好的立刻被清掉。
    */
-  private openRecipeBook(): void {
+  private openRecipeBook(tab?: RecipeBookTab): void {
     // 背包没开着就顺手打开（原版的配方书本来就在背包界面里）
     if (!this.inventoryScreen.isOpen) this.inventoryScreen.openWith('inventory');
-    this.recipeBook.show();
+    // 携带版左上分类图标会带上 tab（批次 140）
+    this.recipeBook.show(tab);
     this.handleInventoryOpen(true);
   }
 

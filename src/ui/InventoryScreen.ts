@@ -37,7 +37,13 @@ import {
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 // 配方书点一条配方 = **把材料摆进合成格**（批次 132，对齐原版）。
 // 规则在 `core/crafting/RecipeBook.ts` 里（纯逻辑、可断言），界面只负责"摆哪一格"。
-import { fillCraftingGrid } from '../core/crafting/RecipeBook.ts';
+import {
+  RECIPE_BOOK_TAB_LABELS,
+  RECIPE_BOOK_TABS_POCKET,
+  fillCraftingGrid,
+  isClassicUi,
+  type RecipeBookTab,
+} from '../core/crafting/RecipeBook.ts';
 import type { Recipe } from '../core/crafting/Recipes.ts';
 // 快速移动（批次 127）：Shift+左键的规则是纯逻辑（`core/container/QuickMove.ts`），
 // 界面只负责把"哪一格 / 开着哪个容器 / 容器多少格"交给它
@@ -105,7 +111,7 @@ import {
   slicePage,
 } from './ItemPager.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
-import { CREATIVE_TAB_ICONS } from './CreativeTabs.ts';
+import { CREATIVE_TAB_ICONS, RECIPE_TAB_ICONS } from './CreativeTabs.ts';
 import { isTouchUi } from './TouchControls.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
 import {
@@ -156,8 +162,11 @@ export type InventoryPanelMode =
 
 export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
-  /** 打开配方书（背包标题栏上的按钮） */
-  onOpenRecipes?: () => void;
+  /**
+   * 打开配方书（背包标题栏 / 携带版左上分类图标）。
+   * @param tab 携带版点某个分类图标时带上，配方书直接切到那一栏
+   */
+  onOpenRecipes?: (tab?: RecipeBookTab) => void;
   /**
    * 打开成就 / 进度面板（M7，批次 87）。
    *
@@ -245,6 +254,15 @@ const DOUBLE_CLICK_MS = 400;
 export const TOUCH_LONG_PRESS_MS = 260;
 const TOUCH_REPEAT_MS = 170;
 
+/** 携带版物品栏的三个内容页（批次 140；Wiki「携带版 UI」） */
+export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
+
+/** 「全部」配方页签的放大镜（与 RecipeBook 同源；图集里没有这件物品） */
+const POCKET_RECIPE_ALL_ICON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
+  '<path fill="currentColor" d="M10 2.6a7.4 7.4 0 1 0 4.4 13.35l4.32 4.32 1.7-1.7-4.32-4.32A7.4 7.4 0 0 0 10 2.6zm0 2.4a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>' +
+  '</svg>';
+
 export class InventoryScreen {
   /** 触摸长按的定时器（长按判定 + 连发），桌面端始终为 null */
   private touchPressTimer: number | null = null;
@@ -286,6 +304,23 @@ export class InventoryScreen {
   private readonly playerBody: HTMLDivElement;
   private readonly mainColumn: HTMLDivElement;
   private readonly topArea: HTMLDivElement;
+  /** 左栏盔甲 + 副手（携带版「盔甲」页只露这一块） */
+  private readonly gearEl: HTMLDivElement;
+  /** 主背包 3×9（携带版「物品栏」页） */
+  private readonly mainGridEl: HTMLDivElement;
+  /** 快捷栏：携带版**无论哪一页都可见**（Wiki 原文） */
+  private readonly hotbarGridEl: HTMLDivElement;
+  /** 经典 UI 标题栏上的「配方书」文字按钮；携带版改用左上图标条 */
+  private recipesBtn: HTMLButtonElement | null = null;
+  /** 携带版左上：配方书五个分类图标 */
+  private readonly pocketRecipeBar: HTMLDivElement;
+  /** 携带版底栏：合成 / 盔甲 / 物品栏 */
+  private readonly pocketTabsEl: HTMLDivElement;
+  /**
+   * 携带版当前内容页（批次 140）。
+   * 仅在「非经典视口 + 玩家物品栏模式」下生效；经典 UI 三块同时显示。
+   */
+  private pocketTab: PocketInventoryTab = 'inventory';
   private readonly creativeSection: HTMLDivElement;
   private readonly heldElement: HTMLDivElement;
   private readonly heldCanvas: HTMLCanvasElement;
@@ -468,7 +503,35 @@ export class InventoryScreen {
     hint.innerHTML = touchDevice
       ? '轻点拿起 / 再轻点放下 · 长按划动选数量 · 点空槽放下一个'
       : '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭 · 左键整叠 / 右键单个';
-    header.append(this.titleEl, hint);
+    // 携带版左上：配方书分类图标（批次 140）。经典 UI 仍用右边那颗文字按钮。
+    this.pocketRecipeBar = document.createElement('div');
+    this.pocketRecipeBar.className = 'inv-pocket-recipes';
+    this.pocketRecipeBar.dataset.role = 'pocket-recipes';
+    if (this.hooks.onOpenRecipes) {
+      for (const tab of RECIPE_BOOK_TABS_POCKET) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'inv-pocket-recipe-tab';
+        button.dataset.tab = tab;
+        button.title = RECIPE_BOOK_TAB_LABELS[tab];
+        button.setAttribute('aria-label', `配方书 · ${RECIPE_BOOK_TAB_LABELS[tab]}`);
+        if (tab === 'all') {
+          button.innerHTML = POCKET_RECIPE_ALL_ICON;
+        } else {
+          const icon = document.createElement('canvas');
+          icon.width = 18;
+          icon.height = 18;
+          drawItemIcon(icon, this.atlas, RECIPE_TAB_ICONS[tab], 16);
+          button.appendChild(icon);
+        }
+        button.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          this.hooks.onOpenRecipes?.(tab);
+        });
+        this.pocketRecipeBar.appendChild(button);
+      }
+    }
+    header.append(this.pocketRecipeBar, this.titleEl, hint);
     if (this.hooks.onOpenRecipes) {
       const recipes = document.createElement('button');
       recipes.type = 'button';
@@ -477,6 +540,7 @@ export class InventoryScreen {
       // 只会让人以为"要按 R 才能打开"（批次 104）
       recipes.textContent = touchDevice ? '配方书' : '配方书 (R)';
       recipes.addEventListener('click', () => this.hooks.onOpenRecipes?.());
+      this.recipesBtn = recipes;
       header.appendChild(recipes);
     }
     // 成就（M7）：与配方书并排。手机上这条是**唯一**的入口（没有 Esc、也没有暂停键）
@@ -665,22 +729,52 @@ export class InventoryScreen {
 
     // ---- 玩家背包（右栏）：3×9 主背包 + 9 快捷栏，**不再带文字标签**
     // （原版靠一道缝区分这两排；标签是我们自己加的，用户要求照原版来）
-    this.mainColumn.appendChild(this.buildGrid(MAIN_START, MAIN_SIZE, 'inv-grid', 'inv'));
-    this.mainColumn.appendChild(this.buildGrid(HOTBAR_START, HOTBAR_SIZE, 'inv-grid inv-hotbar', 'inv'));
+    // 携带版分页（批次 140）要单独显隐主背包，快捷栏则**始终留下**
+    this.mainGridEl = this.buildGrid(MAIN_START, MAIN_SIZE, 'inv-grid', 'inv');
+    this.hotbarGridEl = this.buildGrid(HOTBAR_START, HOTBAR_SIZE, 'inv-grid inv-hotbar', 'inv');
+    this.mainColumn.append(this.mainGridEl, this.hotbarGridEl);
 
     // ---- 玩家装备（左栏，4 格盔甲 + 1 格副手）竖排；
     // 空槽显示部位提示字（头/胸/腿/靴/副），触摸端才知道该放哪
-    const gear = document.createElement('div');
-    gear.className = 'inv-gear';
-    gear.appendChild(this.buildArmorGrid());
-    this.playerBody.appendChild(gear);
+    this.gearEl = document.createElement('div');
+    this.gearEl.className = 'inv-gear';
+    this.gearEl.appendChild(this.buildArmorGrid());
+    this.playerBody.appendChild(this.gearEl);
     this.panel.appendChild(this.playerBody);
+
+    // 携带版底栏：物品栏 / 合成 / 盔甲（批次 140）
+    this.pocketTabsEl = document.createElement('div');
+    this.pocketTabsEl.className = 'inv-pocket-tabs';
+    this.pocketTabsEl.dataset.role = 'pocket-tabs';
+    const pocketLabels: { tab: PocketInventoryTab; label: string }[] = [
+      { tab: 'inventory', label: '物品栏' },
+      { tab: 'crafting', label: '合成' },
+      { tab: 'armor', label: '盔甲' },
+    ];
+    for (const { tab, label } of pocketLabels) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'inv-pocket-tab';
+      button.dataset.tab = tab;
+      button.textContent = label;
+      button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        this.setPocketTab(tab);
+      });
+      this.pocketTabsEl.appendChild(button);
+    }
+    this.panel.appendChild(this.pocketTabsEl);
 
     this.creativeSection = document.createElement('div');
     this.buildCreativeSection();
     this.panel.appendChild(this.creativeSection);
 
     this.root.appendChild(this.panel);
+
+    // 转屏会跨过经典/携带断点：只在真的变形态时重排（与配方书同一条 `isClassicUi`）
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', () => this.applyPocketLayout());
+    }
 
     this.heldElement = document.createElement('div');
     this.heldElement.id = 'inv-held';
@@ -694,6 +788,7 @@ export class InventoryScreen {
     this.bindEvents();
     this.inventory.onChange = () => this.refresh();
     this.rebuildTopArea();
+    this.applyPocketLayout();
     this.refresh();
   }
 
@@ -840,6 +935,49 @@ export class InventoryScreen {
   private updateCreativeVisibility(): void {
     const show = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
     this.creativeSection.style.display = show ? '' : 'none';
+  }
+
+  /** 携带版底栏切页（批次 140） */
+  private setPocketTab(tab: PocketInventoryTab): void {
+    if (this.pocketTab === tab) return;
+    this.pocketTab = tab;
+    this.applyPocketLayout();
+  }
+
+  /**
+   * 经典 UI vs 携带版分标签页（批次 140）。
+   *
+   * Wiki「携带版 UI」：合成 / 盔甲 / 物品栏互斥；左上打开配方书分类；
+   * **快捷栏无论哪一页都可见**。经典视口（≥1280）维持左盔甲 + 右合成 + 主背包一次全显。
+   * 容器模式不做三页签（外部物品栏是另一套图）。
+   */
+  private applyPocketLayout(): void {
+    const pocket = this.mode === 'inventory' && !isClassicUi(this.viewportWidth);
+    this.panel.classList.toggle('pocket-ui', pocket);
+    this.pocketTabsEl.classList.toggle('hidden', !pocket);
+    this.pocketRecipeBar.classList.toggle('hidden', !pocket || !this.hooks.onOpenRecipes);
+    if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', pocket);
+
+    if (!pocket) {
+      this.gearEl.style.display = '';
+      this.topArea.style.display = '';
+      this.mainGridEl.style.display = '';
+      this.hotbarGridEl.style.display = '';
+      this.panel.dataset.pocketTab = '';
+      return;
+    }
+
+    const tab = this.pocketTab;
+    this.panel.dataset.pocketTab = tab;
+    this.topArea.style.display = tab === 'crafting' ? '' : 'none';
+    this.gearEl.style.display = tab === 'armor' ? '' : 'none';
+    this.mainGridEl.style.display = tab === 'inventory' ? '' : 'none';
+    this.hotbarGridEl.style.display = '';
+
+    for (const child of Array.from(this.pocketTabsEl.children)) {
+      const button = child as HTMLElement;
+      button.classList.toggle('active', button.dataset.tab === tab);
+    }
   }
 
   /**
@@ -1948,6 +2086,7 @@ export class InventoryScreen {
 
     this.titleEl.textContent = MODE_TITLES[mode];
     this.updateCreativeVisibility();
+    this.applyPocketLayout();
     this.openPanel();
   }
 
@@ -2128,6 +2267,11 @@ export class InventoryScreen {
     this.updateCreativeVisibility();
   }
 
+  /** 供主程序 / 验收：当前携带版页签（经典 UI 下也会返回上次值，但不影响布局） */
+  get currentPocketTab(): PocketInventoryTab {
+    return this.pocketTab;
+  }
+
   /** 指针底下的槽位当前是什么物品 */
   private tooltipFor(element: HTMLElement): ItemTooltip | null {
     // 正在长按选数量时不弹提示框（批次 137）：那个手势的反馈是**指示条**，
@@ -2224,6 +2368,7 @@ export class InventoryScreen {
     }
     this.titleEl.textContent = MODE_TITLES.trade;
     this.updateCreativeVisibility();
+    this.applyPocketLayout();
     this.openPanel();
   }
 

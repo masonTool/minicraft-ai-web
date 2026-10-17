@@ -278,7 +278,11 @@ export class RecipeBook {
     return this.entryCount;
   }
 
-  show(): void {
+  /**
+   * @param tab 打开时切到这一栏（携带版物品栏左上角的分类图标会传进来，批次 140）
+   */
+  show(tab?: RecipeBookTab): void {
+    if (tab) this.tab = tab;
     this.open = true;
     this.root.classList.remove('hidden');
     this.render();

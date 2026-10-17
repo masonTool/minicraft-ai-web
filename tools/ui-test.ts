@@ -401,6 +401,27 @@ console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克�
   check('创造格中键克隆到光标', /event\.button === 1/.test(invSrc) && /this\.held = \{ id: itemId, count: maxStackOf\(itemId\) \}/.test(invSrc));
 }
 
+console.log('\n[携带版分标签页（批次 140）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const recipeSrc = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const core = readFileSync(new URL('../src/core/crafting/RecipeBook.ts', import.meta.url), 'utf8');
+
+  check('有 PocketInventoryTab 三页', invSrc.includes("export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory'"));
+  check('底栏 DOM role=pocket-tabs', invSrc.includes("dataset.role = 'pocket-tabs'"));
+  check('左上配方图标 role=pocket-recipes', invSrc.includes("dataset.role = 'pocket-recipes'"));
+  check('页签互斥：合成/盔甲/主背包按 tab 显隐', invSrc.includes("tab === 'crafting'") && invSrc.includes("tab === 'armor'") && invSrc.includes("tab === 'inventory'"));
+  check('快捷栏在携带版始终显示', /this\.hotbarGridEl\.style\.display = '';/.test(invSrc));
+  check('经典 UI 断点复用 isClassicUi', invSrc.includes('!isClassicUi(this.viewportWidth)'));
+  check('与配方书同一断点常量', core.includes('CLASSIC_UI_MIN_WIDTH = 1280'));
+  check('配方书 show 可带 tab', /show\(tab\?: RecipeBookTab\)/.test(recipeSrc));
+  check('主程序把 tab 传给配方书', mainSrc.includes('this.recipeBook.show(tab)'));
+  check('携带版 CSS 在', css.includes('.inv-panel.pocket-ui') && css.includes('.inv-pocket-tabs') && css.includes('.inv-pocket-recipes'));
+  check('经典下隐藏携带版控件', css.includes('.inv-pocket-tabs.hidden') && css.includes('.inv-pocket-recipes.hidden'));
+}
+
 console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全关完才轮到浏览器]');
 {
   /** 一个可断言的假浏览器：`history` 只有"压一条/退一格"两个动作 */
