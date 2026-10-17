@@ -638,6 +638,9 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('背包/聊天挂进快捷栏（不参与那 9 格的宽度计算）', source.includes("document.getElementById('hotbar')"));
   check('触摸层里不再有"飞行"按钮（已搬进设置面板）', !source.includes("makeIconButton('fly'"));
   check('触摸层里不再有"切换视角"按钮（已搬进设置面板）', !source.includes("makeIconButton('view'"));
+  // 基岩手机手势：轻点放 / 按住连放 / 再久挖掘；飞行时潜行=按住下降
+  check('有按住连放阈值（短于长按破坏）', source.includes('PLACE_HOLD_MS') && source.includes('onPlaceHoldStart'));
+  check('飞行时潜行改按住下降（不是切换）', source.includes('private bindSneakMode') && source.includes('this.sneakHeld'));
 
   // 搬走之后必须**在设置里有对应入口**，否则这两项在手机上等于消失
   const settingsSource = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
@@ -649,6 +652,14 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check(
     '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
     !settingsSource.includes("key: 'flying'") && settingsSource.includes('private makeCreativeRow'),
+  );
+
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  check(
+    '触摸端背包面板也吃 --panel-w/--panel-h（不再 fit-content 撑出视口）',
+    compact.includes('body.touch-mode .inv-panel {') &&
+      compact.includes('body.touch-mode .inv-panel { width: var(--panel-w); max-width: var(--panel-w); height: var(--panel-h); max-height: var(--panel-h);'),
   );
 }
 
@@ -834,10 +845,10 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   );
   check('装备格竖排成一一列（原版位置）', compact.includes('.inv-grid.inv-armor { grid-template-columns: 42px; }'));
   check('快捷栏与主背包之间留一道缝', compact.includes('.inv-main .inv-hotbar { margin-top: 5px; }'));
-  // 成就与配方书也共用同一套固定尺寸（原来三块面板三个尺寸）
+  // 成就 / 配方书 / 设置 / 触摸端背包：同一套固定尺寸（原来三块，触摸端背包也并进来）
   check(
-    '成就/配方书与设置面板共用同一套固定尺寸',
-    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 3,
+    '成就/配方书/设置/触摸背包共用同一套固定尺寸',
+    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 4,
   );
   // 文字标签是原来我们自己加的（原版没有），这次按用户要求去掉
   const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');

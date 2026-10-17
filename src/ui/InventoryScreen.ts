@@ -511,6 +511,7 @@ export class InventoryScreen {
     this.titleEl = document.createElement('b');
     this.titleEl.textContent = '物品栏';
     const hint = document.createElement('span');
+    hint.className = 'inv-header-hint';
     // 触摸端没有左右键之分，提示改成"轻点"的说法，免得玩家找不到右键
     const touchDevice = isTouchUi();
     // ⚠️ 原来这里写着"点空白处关闭"——**那是错的**：面板外的 pointerdown 实际是
@@ -799,6 +800,7 @@ export class InventoryScreen {
     this.panel.appendChild(this.pocketTabsEl);
 
     this.creativeSection = document.createElement('div');
+    this.creativeSection.className = 'inv-creative-section';
     this.buildCreativeSection();
     this.panel.appendChild(this.creativeSection);
 

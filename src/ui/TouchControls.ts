@@ -5,16 +5,14 @@
  * 摇杆产出 forward/strafe、按钮产出 jump/sneak/sprint，直接喂给现有的 PlayerPhysics，
  * 因此移动手感（速度、重力、自动上台阶）在手机与桌面完全一致，不需要两套物理。
  *
- * 手势约定对齐基岩版：
- *  - 左下角摇杆：拖动移动；推到几乎到底会自动疾跑（基岩版的"推满即冲刺"）
- *  - 屏幕任意处拖动：转动视角
- *  - 轻点：放置方块 / 与方块交互（开箱子、开门、开工作台）
- *  - 长按：持续破坏方块（松手停止）
- *  - 右下角按钮：跳跃 / 潜行（切换）；飞行时这两颗的含义变成上升/下降
- *  - 快捷栏两侧：右边背包、左边聊天（基岩版就是这两个位置）
- *
- * 轻点与长按的区分靠"按下时长 + 位移"两个条件：位移超过阈值就算转视角，
- * 时长超过阈值就升级成长按破坏。这样手指略微抖动不会误判。
+ * 手势约定对齐基岩版**手机**：
+ *  - 左下角摇杆：拖动移动；推满自动疾跑
+ *  - 屏幕拖动：转视角
+ *  - 轻点抬起：放置 / 交互一次
+ *  - 按住不放（未拖动）：先连续放置，超过破坏阈值后改为挖掘
+ *  - 右下：跳跃（按住）+ 潜行（地面切换；**飞行时按住下降**）
+ *  - 双击跳跃：起飞 / 落地
+ *  - 快捷栏两侧：右背包、左聊天
  */
 
 import type { PlayerInput } from '../core/physics/PlayerPhysics.ts';
@@ -23,6 +21,11 @@ import { TOUCH_ICON_LABELS, touchIconSvg, type TouchIconName } from './TouchIcon
 
 /** 超过这个时长（毫秒）就算长按，升级为破坏 */
 const LONG_PRESS_MS = 220;
+/**
+ * 按住达到此时长、且尚未进入破坏 → 开始**连续放置**（基岩手机建造手感）。
+ * 必须短于 `LONG_PRESS_MS`，否则永远轮不到放置。
+ */
+const PLACE_HOLD_MS = 140;
 /** 按下后位移超过这个像素数就算拖动视角，不再是点击 */
 const TAP_MOVE_SLOP = 12;
 /** 摇杆推到该比例以上自动疾跑 */
@@ -60,8 +63,11 @@ export interface TouchActions {
    * 想退出当前世界也只能靠"返回键退出页面"。基岩版手机就在这个位置放一颗暂停键。
    */
   onOpenPause: () => void;
-  /** 轻点：放置方块或与目标方块交互 */
+  /** 轻点抬起：放置 / 交互一次（未进入按住连放时） */
   onTap(): void;
+  /** 按住连放开始 / 结束（未拖动、尚未升级为破坏） */
+  onPlaceHoldStart(): void;
+  onPlaceHoldEnd(): void;
   /** 长按开始 / 结束：破坏方块 */
   onBreakStart(): void;
   onBreakEnd(): void;
@@ -145,16 +151,22 @@ export class TouchControls {
   private lookPointer: number | null = null;
   private lookStartX = 0;
   private lookStartY = 0;
-  private lookStartTime = 0;
   private lookDragged = false;
   private longPressTimer: number | null = null;
+  private placeHoldTimer: number | null = null;
   private breaking = false;
+  private placeHolding = false;
 
   private enabled = false;
   private sneaking = false;
+  /** 飞行时潜行键是"按住下降"，落地才是切换 */
+  private flying = false;
+  private sneakHeld = false;
   private stickMode: StickMode = 'fixed';
   /** 上一次"按下跳跃键"的时刻（双击起飞用） */
   private lastJumpDown = 0;
+  /** 解绑潜行键当前那一套监听（切换飞行语义时要换） */
+  private sneakDetach: (() => void) | null = null;
 
   constructor(
     host: HTMLElement,
@@ -201,14 +213,11 @@ export class TouchControls {
       this.lastJumpDown = now;
     });
 
-    this.sneakButton = this.makeIconButton('sneak', () => {
-      this.sneaking = !this.sneaking;
-      this.sneakButton.classList.toggle('on', this.sneaking);
-      this.actions.onToggleSneak();
-    });
+    // 潜行：地面 = 切换；飞行 = 按住下降（基岩手机）。构造时先按地面语义绑。
+    this.sneakButton = this.makeIconButton('sneak', () => undefined);
+    this.bindSneakMode(false);
 
-    // 潜行在上、跳跃在下（跳跃更大、也是拇指最常够到的位置）。
-    // 飞行时这两颗键的含义变成"上升/下降"，箭头由 CSS 伪元素画（见 index.html）。
+    // DOM 顺序：潜行在左、跳跃在右（CSS 横排右对齐；跳跃更大）
     buttons.append(this.sneakButton, jump);
 
     // ---- 顶部中央的暂停键（批次 104）
@@ -226,7 +235,7 @@ export class TouchControls {
     this.hint = document.createElement('div');
     this.hint.id = 'touch-hint';
     this.hint.textContent =
-      '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏 · 双击跳跃起飞 · 背包与聊天在快捷栏两侧';
+      '摇杆走 · 拖动看 · 轻点放 · 按住连放/挖掘 · 双击跳起飞 · 飞时按住潜行下降';
 
     this.object.append(this.lookSurface, this.stickBase, buttons, pauseBar, this.hint);
     host.appendChild(this.object);
@@ -290,7 +299,8 @@ export class TouchControls {
       forward: this.forward,
       strafe: this.strafe,
       jump: this.jumpHeld,
-      sneak: this.sneaking,
+      // 地面切换潜行 / 飞行按住下降——两路都喂给物理
+      sneak: this.sneaking || this.sneakHeld,
       // 基岩版：摇杆推满即疾跑
       sprint: magnitude >= SPRINT_THRESHOLD,
     };
@@ -306,8 +316,61 @@ export class TouchControls {
 
   setFlying(flying: boolean): void {
     // 飞行时给整层挂个标记：跳跃/潜行键上会浮出"上升/下降"的小箭头
-    //（基岩版也这么提示——飞起来之后那两颗键的含义变了，不提示就只能靠试）
     this.object.classList.toggle('flying', flying);
+    if (this.flying === flying) return;
+    this.flying = flying;
+    // 起飞时清掉"切换潜行"的亮态——飞着潜行语义是按住，不该还亮着切换灯
+    if (flying) {
+      this.sneaking = false;
+      this.sneakButton.classList.remove('on');
+    }
+    this.sneakHeld = false;
+    this.bindSneakMode(flying);
+  }
+
+  /**
+   * 地面：点一下切换潜行；飞行：按住下降（松手停）。
+   * 换绑前先卸掉上一套，避免两套监听叠在一起。
+   */
+  private bindSneakMode(flying: boolean): void {
+    this.sneakDetach?.();
+    this.sneakDetach = null;
+    if (flying) {
+      const onDown = (event: PointerEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.sneakHeld = true;
+        this.sneakButton.classList.add('on');
+        try {
+          this.sneakButton.setPointerCapture(event.pointerId);
+        } catch {
+          /* ignore */
+        }
+      };
+      const onUp = (event: PointerEvent) => {
+        event.preventDefault();
+        this.sneakHeld = false;
+        this.sneakButton.classList.remove('on');
+      };
+      this.sneakButton.addEventListener('pointerdown', onDown);
+      this.sneakButton.addEventListener('pointerup', onUp);
+      this.sneakButton.addEventListener('pointercancel', onUp);
+      this.sneakDetach = () => {
+        this.sneakButton.removeEventListener('pointerdown', onDown);
+        this.sneakButton.removeEventListener('pointerup', onUp);
+        this.sneakButton.removeEventListener('pointercancel', onUp);
+      };
+      return;
+    }
+    const onToggle = (event: PointerEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.sneaking = !this.sneaking;
+      this.sneakButton.classList.toggle('on', this.sneaking);
+      this.actions.onToggleSneak();
+    };
+    this.sneakButton.addEventListener('pointerdown', onToggle);
+    this.sneakDetach = () => this.sneakButton.removeEventListener('pointerdown', onToggle);
   }
 
   /**
@@ -502,13 +565,24 @@ export class TouchControls {
       this.lookPointer = event.pointerId;
       this.lookStartX = event.clientX;
       this.lookStartY = event.clientY;
-      this.lookStartTime = performance.now();
+      this.lastMoveX = event.clientX;
+      this.lastMoveY = event.clientY;
       this.lookDragged = false;
+      this.breaking = false;
+      this.placeHolding = false;
       capturePointer(this.lookSurface, event.pointerId);
 
-      // 按住不动到阈值 → 升级为长按破坏
+      // 按住一小段 → 连续放置（基岩手机建造）；再久一点 → 改成挖掘
+      this.placeHoldTimer = window.setTimeout(() => {
+        if (this.lookDragged || this.breaking) return;
+        this.placeHolding = true;
+        this.actions.onPlaceHoldStart();
+      }, PLACE_HOLD_MS);
+
       this.longPressTimer = window.setTimeout(() => {
         if (this.lookDragged) return;
+        // 挖掘优先：先停掉连放，再开破坏
+        this.endPlaceHold();
         this.breaking = true;
         this.actions.onBreakStart();
       }, LONG_PRESS_MS);
@@ -523,7 +597,8 @@ export class TouchControls {
 
       if (!this.lookDragged && Math.hypot(dx, dy) > TAP_MOVE_SLOP) {
         this.lookDragged = true;
-        this.clearLongPress();
+        this.clearGestureTimers();
+        this.endPlaceHold();
       }
 
       if (this.lookDragged && !this.breaking) {
@@ -538,13 +613,15 @@ export class TouchControls {
     const finish = (event: PointerEvent) => {
       if (event.pointerId !== this.lookPointer) return;
       event.preventDefault();
-      this.clearLongPress();
+      this.clearGestureTimers();
 
-      const elapsed = performance.now() - this.lookStartTime;
       if (this.breaking) {
         this.breaking = false;
         this.actions.onBreakEnd();
-      } else if (!this.lookDragged && elapsed < LONG_PRESS_MS) {
+      } else if (this.placeHolding) {
+        this.endPlaceHold();
+      } else if (!this.lookDragged) {
+        // 短于连放阈值抬起 = 轻点一次（放置 / 交互）
         this.actions.onTap();
       }
       this.lookPointer = null;
@@ -559,14 +636,30 @@ export class TouchControls {
   private lastMoveX = 0;
   private lastMoveY = 0;
 
-  private clearLongPress(): void {
-    if (this.longPressTimer === null) return;
-    clearTimeout(this.longPressTimer);
-    this.longPressTimer = null;
+  private clearGestureTimers(): void {
+    if (this.longPressTimer !== null) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+    if (this.placeHoldTimer !== null) {
+      clearTimeout(this.placeHoldTimer);
+      this.placeHoldTimer = null;
+    }
+  }
+
+  private endPlaceHold(): void {
+    if (this.placeHoldTimer !== null) {
+      clearTimeout(this.placeHoldTimer);
+      this.placeHoldTimer = null;
+    }
+    if (!this.placeHolding) return;
+    this.placeHolding = false;
+    this.actions.onPlaceHoldEnd();
   }
 
   private cancelLook(): void {
-    this.clearLongPress();
+    this.clearGestureTimers();
+    this.endPlaceHold();
     this.lookPointer = null;
     this.lookDragged = false;
     if (!this.breaking) return;

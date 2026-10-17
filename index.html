@@ -1721,6 +1721,45 @@
          会让格子比列还宽，互相压住）。 */
       body.touch-mode .recipe-grid { --recipe-cell: 40px; }
 
+      /* ---------------- 手机面板收进视口（背包曾用 fit-content + 92vh，内容一高就要
+         整层外滚，竖屏/矮横屏都难受）。与设置/配方书共用 --panel-w/--panel-h，
+         溢出只在面板**内部**滚。 */
+      body.touch-mode .inv-panel {
+        width: var(--panel-w); max-width: var(--panel-w);
+        height: var(--panel-h); max-height: var(--panel-h);
+        min-width: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        box-sizing: border-box;
+        touch-action: pan-y;
+      }
+      body.touch-mode #inventory-screen,
+      body.touch-mode #recipe-book,
+      body.touch-mode #advancements {
+        overflow: hidden;
+        padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+                 env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+        box-sizing: border-box;
+      }
+      /* 说明文字在矮屏上占一整行还不参与操作——竖屏可留，横屏矮屏直接藏 */
+      body.touch-mode .inv-header-hint { font-size: 11px; line-height: 1.35; max-width: 100%; }
+      body.touch-mode .inv-panel.creative-ui .inv-creative {
+        max-height: min(40vh, 300px);
+      }
+      body.touch-mode .inv-creative-section {
+        min-height: 0;
+      }
+      @media (orientation: landscape) and (max-height: 500px) {
+        body.touch-mode .inv-header-hint,
+        body.touch-mode .recipe-hint { display: none; }
+        body.touch-mode .inv-panel.creative-ui .inv-creative {
+          max-height: min(26vh, 140px);
+        }
+        body.touch-mode .inv-panel { padding: 8px 10px; }
+        body.touch-mode .recipe-panel { padding: 8px 10px; }
+      }
+
       /* 主菜单（世界列表 / 新建世界）同理：这几个按钮原是按鼠标尺寸做的（高约 30px），
          手机上点"进入/删除"经常点到隔壁。手机上统一抬到 44px。 */
       body.touch-mode .world-card-actions button,

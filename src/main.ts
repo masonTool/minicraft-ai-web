@@ -812,6 +812,8 @@ class App {
   private touch: TouchControls | null;
   /** 触摸端"轻点"产生的一次性放置/交互请求，由 updatePlacing 消费 */
   private touchPlaceRequest = false;
+  /** 触摸端"按住连放"：等价于按住鼠标右键，松手才停 */
+  private touchPlaceHeld = false;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   /**
@@ -1398,12 +1400,20 @@ class App {
     // （开始遮罩上的提示文字在手机上写 <kbd>W</kbd> 只会误导）
     document.body.classList.add('touch-mode');
     return new TouchControls(document.getElementById('hud') ?? document.body, {
-      // 轻点：放置方块，或与工作台/熔炉/箱子/门交互（与鼠标右键同一套逻辑）
+      // 轻点抬起：放置 / 交互一次（与鼠标右键点一下同一套逻辑）
       onTap: () => {
         this.touchPlaceRequest = true;
       },
-      // 长按：等价于按住左键破坏
+      // 按住连放：等价于按住右键（未拖动、尚未升级为挖掘）
+      onPlaceHoldStart: () => {
+        this.touchPlaceHeld = true;
+      },
+      onPlaceHoldEnd: () => {
+        this.touchPlaceHeld = false;
+      },
+      // 长按：等价于按住左键破坏（会先停掉连放）
       onBreakStart: () => {
+        this.touchPlaceHeld = false;
         this.leftDown = true;
       },
       onBreakEnd: () => {
@@ -7231,9 +7241,10 @@ class App {
   }
 
   private updatePlacing(): void {
-    // 触摸端是"一次性轻点"，鼠标是"按住不放"，这里统一成一个待执行标记
+    // 触摸：轻点一次 / 按住连放；鼠标：按住右键。统一成"本帧要不要放"
     const tapped = this.touchPlaceRequest;
-    if ((!this.rightDown && !tapped && !this.padUse) || this.placeCooldown > 0) return;
+    const touchHeld = this.touchPlaceHeld;
+    if ((!this.rightDown && !tapped && !touchHeld && !this.padUse) || this.placeCooldown > 0) return;
 
     // 投掷物优先于放置：手里拿着雪球/鸡蛋/喷溅药水时，这一下是"扔"而不是"放"
     if (this.throwHeld()) {
@@ -7263,13 +7274,19 @@ class App {
     if (!this.hit) return;
 
     // 右键功能方块：潜行时仍然走放置逻辑（与原版一致）
-    const sneak = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    // 触摸潜行也要算进来，否则手机上无法"潜行对着箱子放方块"
+    const sneak =
+      this.keys.has('ShiftLeft') ||
+      this.keys.has('ShiftRight') ||
+      (this.touch?.input.sneak ?? false) ||
+      (this.gamepadState?.sneak ?? false);
     if (!sneak && this.useFunctionalBlock(this.hit.x, this.hit.y, this.hit.z)) {
+      this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;
       return;
     }
 
-    // 触摸端只有一次轻点，放完就要清掉，否则会一直放
+    // 轻点只消费一次；按住连放保持到松手（不要在这里清 touchPlaceHeld）
     this.touchPlaceRequest = false;
 
     // 对生物使用物品（剪羊毛）：看在功能方块之后、放置之前——
