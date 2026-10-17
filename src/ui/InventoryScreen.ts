@@ -1274,10 +1274,10 @@ export class InventoryScreen {
       this.categoryPage,
       this.inventoryStamp(),
     ].join('|');
-    // ⚠️ 手上拿着东西时**不重建**：选中的那一格就在这一栏里，
-    //    重建会把它连同"来源格"一起丢掉（表现就是"刚选中又没了"）。
-    if (this.held) return;
-    if (key === this.categoryStamp) return;
+    // ⚠️ 不因为"手上有东西"就整栏冻住：宁可重建完再按 id 把选中那一格找回来。
+    //    冻住的话，一旦某次渲染结果是空的（比如刚合成完、背包一时为空），
+    //    这一栏就会**一直空着**——那正是"合成一次就全空了"的来源。
+    if (key === this.categoryStamp && this.categoryGrid.childElementCount > 0) return;
     this.categoryStamp = key;
 
     // 搜索框只在"全部"那一栏出现（与创造栏、配方书同一口径）
@@ -1289,8 +1289,11 @@ export class InventoryScreen {
     const pages = pageCount(items.length, pageSize);
     this.categoryPage = scrollMode ? 0 : clampPage(this.categoryPage, items.length, pageSize);
     const visible = scrollMode ? items : slicePage(items, this.categoryPage, pageSize);
+    // 有内容却"这一页是空的"：宁可保留旧内容，也不要换成一整栏空白
+    if (items.length > 0 && visible.length === 0) return;
 
-    this.categoryGrid.replaceChildren();
+    // 先在 fragment 里搭好再一次性换上去：中途抛错时旧内容还在（不会留一栏空白）
+    const fragment = document.createDocumentFragment();
     for (const itemId of visible) {
       const owned = this.inventory.countOf(itemId);
       const slot = this.createSlot();
@@ -1307,7 +1310,7 @@ export class InventoryScreen {
         event.preventDefault();
         this.pickCategoryItem(itemId);
       });
-      this.categoryGrid.appendChild(slot);
+      fragment.appendChild(slot);
     }
 
     if (items.length === 0) {
@@ -1316,7 +1319,22 @@ export class InventoryScreen {
       empty.textContent = this.showUnowned
         ? '这一栏里没有匹配的物品'
         : '这一栏里你还没有东西（打开配方按钮可以看全部）';
-      this.categoryGrid.appendChild(empty);
+      fragment.appendChild(empty);
+    }
+
+    for (const child of Array.from(this.categoryGrid.children)) this.tooltipStacks.delete(child as HTMLElement);
+    this.categoryGrid.replaceChildren(fragment);
+    // 重建之后把"手上那叠"的落点按 id 找回来并补上选中态（刷新尾部不会再给分类栏补）
+    if (this.held) {
+      const cell = this.categoryGrid.querySelector<HTMLElement>(`.category-slot[data-item-id="${this.held.id}"]`);
+      if (cell) {
+        this.heldOriginEl = cell;
+        this.renderInto(cell, this.held);
+        cell.classList.add('selected');
+        this.selectedEl = cell;
+      } else {
+        this.heldOriginEl = null;
+      }
     }
 
     this.categoryPageLabel.textContent = pageLabel(this.categoryPage, items.length, pageSize);
@@ -1855,7 +1873,9 @@ export class InventoryScreen {
       scrollMode ? 0 : this.creativePage,
       scrollMode ? 'scroll' : pageSizeFor(this.viewportWidth),
     ].join('|');
-    if (key === this.creativeStamp) return;
+    // ⚠️ 缓存之外再加一条"自愈"：万一这一栏被别处清空过（DOM 空了但指纹没变），
+    //    也必须重画——否则就是"一次意外之后永远空白"。
+    if (key === this.creativeStamp && this.creativeGrid.childElementCount > 0) return;
     this.creativeStamp = key;
 
     const query = this.creativeQuery;
@@ -1870,16 +1890,14 @@ export class InventoryScreen {
     // 夹一次页码：换分类、改搜索词、转屏之后原来的页码都可能越界
     this.creativePage = scrollMode ? 0 : clampPage(this.creativePage, items.length, pageSize);
     const visible = scrollMode ? items : slicePage(items, this.creativePage, pageSize);
+    // 有内容却"这一页是空的"：宁可保留旧内容，也不要换成一整栏空白
+    if (items.length > 0 && visible.length === 0) return;
 
-    // 换掉整批格子时把它们在 `tooltipStacks` 里的条目一起删掉：
-    // 不删的话每重建一次就多留 800 条指向旧元素的记录（只增不减）。
-    for (const child of Array.from(this.creativeGrid.children)) this.tooltipStacks.delete(child as HTMLElement);
-    this.creativeGrid.replaceChildren();
-    // 批次 159：整表是**重建**的（`replaceChildren`），所以"选中的那一格"会跟着被丢掉。
-    // 重建前先记下手上那件的 id，重建后按 id 把高亮搬回新格子——
-    // 否则在创造栏里点一下，选中的反馈一刷新就没了。
-    const restoreId =
-      this.held && this.heldOriginEl && !this.heldOriginEl.isConnected ? this.held.id : null;
+    // 批次 159：先在 fragment 里搭好再一次性换上去——
+    // 中途抛错时旧内容还在，不会留下一栏空白。
+    const fragment = document.createDocumentFragment();
+    // "选中的那一格"重建后会跟着被丢掉：记下手上的 id，重建后按 id 搬回去。
+    const restoreId = this.held ? this.held.id : null;
 
     for (const itemId of visible) {
       const slot = this.createSlot();
@@ -1915,20 +1933,33 @@ export class InventoryScreen {
         this.hooks.onMove?.();
         this.refresh();
       });
-      this.creativeGrid.appendChild(slot);
+      fragment.appendChild(slot);
     }
 
     if (items.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
       empty.textContent = '没有匹配的物品';
-      this.creativeGrid.appendChild(empty);
+      fragment.appendChild(empty);
     }
 
-    // 把"选中的那一格"搬回重建后的新格子（同上）
+    // 换掉整批格子时把它们在 `tooltipStacks` 里的条目一起删掉：
+    // 不删的话每重建一次就多留 800 条指向旧元素的记录（只增不减）。
+    for (const child of Array.from(this.creativeGrid.children)) this.tooltipStacks.delete(child as HTMLElement);
+    this.creativeGrid.replaceChildren(fragment);
+
+    // 把"手上那叠"的落点搬回重建后的新格子，并把选中态补上
+    // （`refresh()` 里那一步在上面的重建之前就做完了）
     if (restoreId !== null) {
       const cell = this.creativeGrid.querySelector<HTMLElement>(`.creative-slot[data-item-id="${restoreId}"]`);
-      if (cell) this.heldOriginEl = cell;
+      if (cell && this.held) {
+        this.heldOriginEl = cell;
+        this.renderInto(cell, this.held);
+        cell.classList.add('selected');
+        this.selectedEl = cell;
+      } else {
+        this.heldOriginEl = null;
+      }
     }
 
     const pages = pageCount(items.length, pageSize);

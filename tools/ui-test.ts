@@ -655,7 +655,13 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       css.includes('.inv-slot.locked {'),
   );
   // 分类栏最多 800 个 canvas，`refresh()` 每次都会走到排布 → 必须按指纹缓存
-  check('分类栏按指纹缓存，不是每次刷新都重建', invSrc.includes('private inventoryStamp(): string {') && invSrc.includes('if (key === this.categoryStamp) return;'));
+  // ⚠️ 缓存要带"自愈"：指纹没变但 DOM 空了（被别处清过）也必须重画，
+  //    否则一次意外之后就永远是空白
+  check(
+    '分类栏按指纹缓存，且 DOM 空了会自愈',
+    invSrc.includes('private inventoryStamp(): string {') &&
+      invSrc.includes('if (key === this.categoryStamp && this.categoryGrid.childElementCount > 0) return;'),
+  );
 
   // ⑤ 点分类里的物品 → 把它的配方摆进合成格
   // ⑤ 点分类里的物品：**先选中**（能丢弃 / 放置 / 换位），再看它由什么组成
@@ -722,7 +728,10 @@ console.log('\n[分类栏"怎么就空了"（批次 159 六）]');
     '创造栏按指纹缓存（800 个格子不再每次搬东西都重画）',
     invSrc.includes('private creativeStamp'),
   );
-  check('指纹里带着分类 / 搜索词 / 页码 / 页大小', invSrc.includes('if (key === this.creativeStamp) return;'));
+  check(
+    '指纹里带着分类 / 搜索词 / 页码 / 页大小，且空了会自愈',
+    invSrc.includes('if (key === this.creativeStamp && this.creativeGrid.childElementCount > 0) return;'),
+  );
   // ② 看不见的过滤器：换到不显示搜索框的分类时要把搜索词清掉
   check(
     '换分类时清掉藏起来的搜索词',
