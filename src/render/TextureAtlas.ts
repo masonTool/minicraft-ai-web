@@ -4914,6 +4914,26 @@ PAINTERS.composter_top = composterTop(false);
 PAINTERS.composter_ready = composterTop(true);
 
 /**
+ * 音符盒（批次 173）：深色木板底 + 一圈黑框 + 正中一个**浅木色音符**。
+ *
+ * 与原版那张的差别只有配色：原版是深色橡木 + 暗红音符，而我们的木板底本来就偏暗，
+ * 暗红音符在 16×16 里几乎看不见——所以音符取亮木色（那一眼就能认出"这是乐器"）。
+ * 音高不改变贴图（原版也是同一张），所以网格化那边不用管状态位。
+ */
+PAINTERS.note_block = (x: number, y: number, rng: () => number): [number, number, number, number] => {
+  // 四周 1px 黑框
+  if (x === 0 || y === 0 || x === 15 || y === 15) return [32, 21, 12, 255];
+  // 音符：圆头（4×3）+ 竖杆，画在正中偏下
+  const head = x >= 6 && x <= 9 && y >= 9 && y <= 11;
+  const stem = x >= 9 && x <= 10 && y >= 4 && y <= 9;
+  if (head || stem) return [236, 218, 180, 255];
+  // 木板：横向纹理 + 每 4 行一道暗缝
+  const seam = y % 4 === 0 ? 0.78 : 1;
+  const grain = (rng() < 0.18 ? 0.88 : 1) * seam;
+  return [clamp255(126 * grain), clamp255(86 * grain), clamp255(50 * grain), 255];
+};
+
+/**
  * 末影箱（批次 71）：黑洞石底子 + 正面那只**青绿色的眼睛**。
  *
  * 三张共用同一套底（深紫近黑、带一点点颗粒），差异只在**正面**：

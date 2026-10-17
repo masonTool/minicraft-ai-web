@@ -1938,6 +1938,28 @@ const COMPOSTER_SPECS: readonly BlockSpec[] = [
 ];
 
 /**
+ * 音符盒（批次 173，G9）。
+ *
+ * 它是一件**纯粹的玩具**：右击响一声，潜行右击把音高往上拨一档（0~24，最高音之后再点回到最低音）。
+ * 两处刻意的取舍：
+ *  1. 音高存在**方块状态低 5 位**里（`blockState.notePitchOf`），所以它不需要方块实体、
+ *     不进容器表，也不进存档的另一条通道——与堆肥桶的等级完全同构；
+ *  2. 贴图**不随音高变**（原版也是同一张贴图），因此网格化那边一行都不用改。
+ *
+ * 原版的"红石脉冲自动演奏"没做：那要接进 `core/tick/Redstone` 的边沿检测，
+ * 而右击这一下已经能玩（差异记在 TASKS G9）。
+ */
+export const NOTE_BLOCK_ID = 574;
+
+const NOTE_BLOCK_SPECS: readonly BlockSpec[] = [
+  {
+    id: NOTE_BLOCK_ID,
+    name: 'minecraft:note_block',
+    tiles: ['note_block', 'note_block', 'note_block'],
+  },
+];
+
+/**
  * 末影箱（批次 71，B44）：**27 格、跟着玩家走**的容器。
  *
  * 它与前面几件容器最大的不同是"内容不在这格方块上"：世界里的末影箱打开的都是
@@ -2900,6 +2922,7 @@ const SPECS: readonly BlockSpec[] = [
   ...DISPENSER_SPECS,
   ...BARREL_SPECS,
   ...COMPOSTER_SPECS,
+  ...NOTE_BLOCK_SPECS,
   ...ENDER_CHEST_SPECS,
   ...SHULKER_BOX_SPECS,
   ...SAPLING_SPECS,
@@ -3193,6 +3216,8 @@ export const Block = {
   BARREL: BARREL_ID,
   // ---- 堆肥桶（批次 70，见 `COMPOSTER_SPECS`）：等级存在状态位里，满了收骨粉
   COMPOSTER: COMPOSTER_ID,
+  // ---- 音符盒（批次 173，见 `NOTE_BLOCK_SPECS`）：音高存在状态位里，右击响一声
+  NOTE_BLOCK: NOTE_BLOCK_ID,
   // ---- 末影箱（批次 71，见 `ENDER_CHEST_SPECS`）：27 格，内容跟着玩家走
   ENDER_CHEST: ENDER_CHEST_ID,
   // ---- 潜影盒（批次 72，见 `SHULKER_BOX_SPECS`）：27 格，内容跟着**物品**走
@@ -3584,6 +3609,8 @@ HARDNESS.set(Block.DISPENSER, 3.5);
 HARDNESS.set(Block.BARREL, 2.5);
 // 堆肥桶（批次 70）：原版 0.6，斧头更快但**徒手就能挖**（与木桶同一条）
 HARDNESS.set(Block.COMPOSTER, 0.6);
+// 音符盒（批次 173）：原版 0.8，斧头更快、徒手也能挖（与木桶/堆肥桶同一条）
+HARDNESS.set(Block.NOTE_BLOCK, 0.8);
 // 末影箱（批次 71）：原版 22.5（黑曜石那一档，挖起来很慢）+ 要**钻石镐**才掉（见 tools）
 HARDNESS.set(Block.ENDER_CHEST, 22.5);
 // 潜影盒（批次 72）：原版 2（要镐，但木质镐就够——见 tools.ts）

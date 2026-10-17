@@ -965,6 +965,8 @@ export const TILE_ORDER = [
   'concrete_powder_green',
   'concrete_powder_red',
   'concrete_powder_black',
+  // 音符盒（批次 173）：深色木板 + 黑框 + 正中一个浅色音符（音高不改变贴图）
+  'note_block',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

@@ -1106,6 +1106,13 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     key: { S: slabId(OAK_SLAB_INDEX) },
   },
   {
+    // 音符盒（批次 173）：原版图案 = **8 块木板围一圈 + 正中 1 颗红石**
+    kind: 'shaped' as const,
+    result: { id: Block.NOTE_BLOCK, count: 1 },
+    pattern: ['PPP', 'PRP', 'PPP'],
+    key: { P: Block.OAK_PLANKS, R: Item.REDSTONE },
+  },
+  {
     // 木桶（批次 61）：原版图案 = 6 块木板 + 上下两个**木板台阶**（左右两列各 3 块）
     kind: 'shaped' as const,
     result: { id: Block.BARREL, count: 1 },

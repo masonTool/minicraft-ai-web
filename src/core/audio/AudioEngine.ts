@@ -259,6 +259,8 @@ export class AudioEngine {
   played = 0;
   /** 每种音效最近一次的起始时刻（秒，AudioContext 时钟），用于同一声的节流 */
   private readonly lastStartAt = new Map<SoundKind, number>();
+  /** 音符盒那一声的节流（它没有 `SoundKind`，单开一个时间戳，见 `playNote`） */
+  private lastNoteAt = -1;
   /** 仍在发声的那些声音的结束时刻（秒），用来数当前并发了几声 */
   private voiceEnds: number[] = [];
 
@@ -380,6 +382,71 @@ export class AudioEngine {
       thump.stop(now + spec.duration * 0.8);
     }
 
+    this.played++;
+  }
+
+  /**
+   * 按**频率**播放一声（批次 173，音符盒）。
+   *
+   * 为什么不并进 `play(kind)`：`SOUNDS` 那张表是"**每种声音一条固定参数**"
+   * （频率从 A 滑到 B），而音符盒要的是"25 个音高共用同一个音色、只有基频不同"。
+   * 给它 25 条 spec 显然是错的（而且新加音高还得改表）。
+   *
+   * 音色取三角形波（木琴的近亲）+ 一层二次谐波（`2f`，音量 0.35）——
+   * 单正弦太"电子"，两个谐波才像木头敲出来的。
+   * 节流与并发上限照旧：同一声 70ms 内连响两次、或同时响超过 12 声，
+   * 玩家都听不出来（与 `play()` 同一条判断）。
+   */
+  playNote(frequency: number, at?: { x: number; y: number; z: number }): void {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    if (now - this.lastNoteAt < SAME_SOUND_THROTTLE) return;
+    if (this.voiceEnds.length > 0) {
+      this.voiceEnds = this.voiceEnds.filter((end) => end > now);
+      if (this.voiceEnds.length >= MAX_CONCURRENT_VOICES) return;
+    }
+    this.lastNoteAt = now;
+
+    const hz = Math.max(20, Math.min(4000, frequency));
+    const duration = 0.55;
+    let gain = 0.42 * this.volume;
+    if (at) {
+      const distance = Math.hypot(at.x - this.listenerX, at.y - this.listenerY, at.z - this.listenerZ);
+      if (distance > HEARING_RANGE) return;
+      gain *= Math.max(0.08, 1 - distance / HEARING_RANGE) ** 1.6;
+    }
+    if (this.underwater) gain = underwaterGain(gain);
+    if (gain <= 0.001) return;
+
+    this.voiceEnds.push(now + duration);
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0, now);
+    out.gain.linearRampToValueAtTime(gain, now + 0.004);
+    out.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    if (this.underwater) {
+      const muffle = ctx.createBiquadFilter();
+      muffle.type = 'lowpass';
+      muffle.frequency.value = UNDERWATER_LOWPASS_HZ;
+      muffle.Q.value = 0.8;
+      out.connect(muffle).connect(ctx.destination);
+    } else {
+      out.connect(ctx.destination);
+    }
+
+    for (const [multiplier, level] of [
+      [1, 1],
+      [2, 0.35],
+    ] as const) {
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(hz * multiplier, now);
+      const voice = ctx.createGain();
+      voice.gain.value = level;
+      osc.connect(voice).connect(out);
+      osc.start(now);
+      osc.stop(now + duration + 0.02);
+    }
     this.played++;
   }
 

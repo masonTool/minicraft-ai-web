@@ -208,18 +208,23 @@ import { NetClient, defaultServerUrl } from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
 import type { NetPlayerState } from './net/NetClient.ts';
 import {
+  NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
   beaconRegen,
   delayOf,
   hasEndPortalEye,
   isFenceGateOpen,
   isTrapdoorOpen,
+  nextNotePitch,
+  noteFrequency,
+  notePitchOf,
   portalAxis,
   withBeaconPrimary,
   withBeaconRegen,
   withDelay,
   withEndPortalEye,
   withFenceGateOpen,
+  withNotePitch,
   withTrapdoorOpen,
 } from './core/registry/blockState.ts';
 // 信标（K5，批次 117）：等级/范围/效果是纯逻辑（`world/Beacon.ts`），
@@ -6390,6 +6395,26 @@ class App {
   }
 
   /**
+   * 音符盒（批次 173，G9）：**潜行右击换音高、普通右击演奏**。
+   *
+   * 单独一个方法（而不是塞进 `useFunctionalBlock`）是因为它要**知道有没有潜行**：
+   * 主循环里"潜行右键"一律走放置方块，功能方块那条路根本收不到潜行。原版也正是
+   * "潜行右击换音高"，所以这一段必须排在放置之前（调用点见 `rightClick`）。
+   */
+  private playNoteBlock(x: number, y: number, z: number, sneaking: boolean): void {
+    const state = this.world.getBlockState(x, y, z);
+    if (sneaking) {
+      const pitch = nextNotePitch(state);
+      this.world.setStateAndUpdate(x, y, z, withNotePitch(state, pitch));
+      this.chat.push(`音符盒：第 ${pitch + 1} 档 / 共 ${NOTE_BLOCK_MAX_PITCH + 1} 档`, 'system');
+      this.audio.play('click', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      return;
+    }
+    this.audio.playNote(noteFrequency(notePitchOf(state)), { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.hand.swing();
+  }
+
+  /**
    * 对"功能方块"执行右键行为：门 / 工作台 / 熔炉 / 箱子 / 红石元件。
    *
    * 抽成一个方法同时给玩家右键与自动化脚本用——两条路径共用同一套逻辑，
@@ -7541,6 +7566,16 @@ class App {
       this.keys.has('ShiftRight') ||
       (this.touch?.input.sneak ?? false) ||
       (this.gamepadState?.sneak ?? false);
+    // ---- 音符盒（批次 173，G9）：**普通右击演奏、潜行右击换音高**（原版行为）。
+    // ⚠️ 必须排在下面那道"潜行时不走功能方块"的判断**之前**：原版就是"潜行右击换音高"，
+    //    而我们的潜行右键被"放置方块"占着——不特判的话音高永远换不了（这一条是写代码时才发现的）。
+    if (this.world.getBlock(this.hit.x, this.hit.y, this.hit.z) === Block.NOTE_BLOCK) {
+      this.playNoteBlock(this.hit.x, this.hit.y, this.hit.z, sneak);
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
     if (!sneak && this.useFunctionalBlock(this.hit.x, this.hit.y, this.hit.z)) {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;

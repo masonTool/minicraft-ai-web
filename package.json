@@ -135,7 +135,8 @@
     "test:drowned": "esbuild tools/drowned-test.ts --bundle --platform=node --format=esm --outfile=.tmp/drowned-test.mjs --log-level=error && node .tmp/drowned-test.mjs",
     "test:husk": "esbuild tools/husk-test.ts --bundle --platform=node --format=esm --outfile=.tmp/husk-test.mjs --log-level=error && node .tmp/husk-test.mjs",
     "test:stray": "esbuild tools/stray-test.ts --bundle --platform=node --format=esm --outfile=.tmp/stray-test.mjs --log-level=error && node .tmp/stray-test.mjs",
-    "test:phantom": "esbuild tools/phantom-test.ts --bundle --platform=node --format=esm --outfile=.tmp/phantom-test.mjs --log-level=error && node .tmp/phantom-test.mjs"
+    "test:phantom": "esbuild tools/phantom-test.ts --bundle --platform=node --format=esm --outfile=.tmp/phantom-test.mjs --log-level=error && node .tmp/phantom-test.mjs",
+    "test:note": "esbuild tools/note-test.ts --bundle --platform=node --format=esm --outfile=.tmp/note-test.mjs --log-level=warning && node .tmp/note-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

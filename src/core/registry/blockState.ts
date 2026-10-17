@@ -1112,3 +1112,46 @@ export function describeState(shape: BlockShape, state: number): string {
 }
 
 const FACING_NAMES = ['北', '东', '南', '西'] as const;
+
+// ---------------------------------------------------------------- 音符盒（批次 173，G9）
+//
+// 音高是 **0~24 共 25 档**（原版：每档一个半音），存在**低 5 位**里。
+// 与堆肥桶的等级同一个套路：一个方块用不着为此开方块实体；
+// 而"音高"不是画出来的（贴图不随它变），所以网格化那边完全不用管它。
+
+/** 音符盒的最高音高（原版 24 档，加上 0 一共 25 个音） */
+export const NOTE_BLOCK_MAX_PITCH = 24;
+
+/** 音高占低 5 位（0~24，31 够用） */
+const NOTE_PITCH_MASK = 0b11111;
+
+export function notePitchOf(state: number): number {
+  return state & NOTE_PITCH_MASK;
+}
+
+/**
+ * 写入音高（夹到 0~24）。
+ *
+ * ⚠️ 与堆肥桶/蛋糕同一条：夹到**合法范围**而不是掩码上限——超过 24 的音高
+ * 不是一个合法状态，真出现说明有代码忘了在这里拦。
+ */
+export function withNotePitch(state: number, pitch: number): number {
+  const clamped = Math.max(0, Math.min(NOTE_BLOCK_MAX_PITCH, Math.floor(pitch)));
+  return (state & ~NOTE_PITCH_MASK) | clamped;
+}
+
+/** 右键换下一档音高（最高音之后再点回到最低音） */
+export function nextNotePitch(state: number): number {
+  return (notePitchOf(state) + 1) % (NOTE_BLOCK_MAX_PITCH + 1);
+}
+
+/**
+ * 音高 → 频率（Hz）。
+ *
+ * 原版 0 号音是 **F#3 ≈ 185Hz**，之后每一档升一个半音（`2^(1/12)`）——
+ * 于是 24 号大概落在 740Hz（F#5）。这个函数是纯的，音符盒与测试共用它。
+ */
+export function noteFrequency(pitch: number): number {
+  const clamped = Math.max(0, Math.min(NOTE_BLOCK_MAX_PITCH, pitch));
+  return 185 * Math.pow(2, clamped / 12);
+}
