@@ -3066,15 +3066,17 @@ export class InventoryScreen {
       return;
     }
 
+    // 批次 160：产物**直接进背包**，不再挂到光标上。
+    //
+    // 用户的场景是"把材料摆进工作台 → 点产物"：这时想要的不是"手上多一叠再找地方放"，
+    // 而是"做好就收起来"。`Inventory.addStack` 的填充顺序就是**快捷栏 → 主仓库**
+    // （`AUTO_FILL_SLOTS` 按槽位下标走，0-8 是快捷栏、9-35 是主仓库）；
+    // 两边都满了就丢在脚边——与"背包放不下"的处理一致（`onDrop` = 主程序那边造掉落物）。
     const taken: ItemStack = { id: product.id, count: product.count };
     if (!grid.takeResult()) return;
-
-    if (!this.held) this.held = taken;
-    else if (this.held.id === taken.id && this.held.count + taken.count <= maxStackOf(taken.id)) {
-      this.held.count += taken.count;
-    } else {
-      this.inventory.add(taken.id, taken.count);
-    }
+    const leftover = this.inventory.addStack(taken);
+    if (leftover > 0) this.hooks.onDrop?.(taken.id, leftover);
+    this.inventory.notify();
     this.refresh();
   }
 

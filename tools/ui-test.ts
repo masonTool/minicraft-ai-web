@@ -744,6 +744,27 @@ console.log('\n[分类栏"怎么就空了"（批次 159 六）]');
   check('重建时清掉旧格子的提示数据', invSrc.includes('this.tooltipStacks.delete(child as HTMLElement)'));
 }
 
+console.log('\n[合成产物直接进背包（批次 160）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const inv = readFileSync(new URL('../src/core/container/Inventory.ts', import.meta.url), 'utf8');
+
+  check(
+    '点产物不再挂到光标上，而是直接收进背包',
+    invSrc.includes('const leftover = this.inventory.addStack(taken);') &&
+      !invSrc.includes('if (!this.held) this.held = taken;'),
+  );
+  // 填充顺序必须是"快捷栏 → 主仓库"：`addStack` 按槽位下标走，且不碰盔甲槽
+  check(
+    '先快捷栏再主仓库（AUTO_FILL_SLOTS 截止在盔甲槽之前）',
+    inv.includes('export const AUTO_FILL_SLOTS = ARMOR_SLOT_BASE;'),
+  );
+  check(
+    '两边都满了就掉在脚边（与"背包放不下"同一套）',
+    invSrc.includes('if (leftover > 0) this.hooks.onDrop?.(taken.id, leftover);'),
+  );
+}
+
 console.log('\n[玩家预览占位（批次 141）]');
 {
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
@@ -1317,9 +1338,11 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   );
   // ---- 批次 136 复核通过的那几条（钉住，别以后被改掉）
   check('右键取半数、且是**向上取整**（Wiki：半数（向上取整））', inventorySrc.includes('Math.ceil(slot.count / 2)'));
+  // 批次 160 改口径：点产物**直接进背包**（先快捷栏、再主仓库、都满了掉脚边），
+  // 不再"先挂到光标上"——"做好了还要再找地方放"不是玩家想要的
   check(
-    '合成产物优先上光标、同类合并、否则进背包',
-    inventorySrc.includes('if (!this.held) this.held = taken;') && inventorySrc.includes('this.held.count += taken.count;'),
+    '合成产物直接进背包（不再挂光标）',
+    inventorySrc.includes('const leftover = this.inventory.addStack(taken);'),
   );
   check(
     'Shift+点产物 = 一次做完，终止条件是"背包塞不下 / 材料用完"',
