@@ -24,6 +24,13 @@ import {
   type Difficulty,
   type GameRules,
 } from '../world/Rules.ts';
+// 世界边界（K12，批次 175）：命令只做参数校验，夹取/描述都由纯函数给
+import {
+  BORDER_MIN_SIZE,
+  clampBorderSize,
+  describeBorder,
+  type WorldBorder,
+} from '../world/WorldBorder.ts';
 
 export { DIFFICULTIES, DIFFICULTY_LABELS, DEFAULT_GAME_RULES } from '../world/Rules.ts';
 export type { Difficulty, GameRules } from '../world/Rules.ts';
@@ -59,6 +66,12 @@ export interface CommandContext {
   setDifficulty(value: Difficulty): void;
   gameRules(): GameRules;
   setGameRule<K extends keyof GameRules>(key: K, value: GameRules[K]): void;
+
+  // ---- 世界边界（K12，批次 175）
+  /** 当前边界（中心 + 边长） */
+  worldBorder(): WorldBorder;
+  /** 改一部分（`set` 只改边长、`center` 只改中心）；返回改完之后的完整状态 */
+  setWorldBorder(patch: Partial<WorldBorder>): WorldBorder;
 
   // ---- 实体
   /** 在玩家附近召唤一只生物；名字不认识返回 false */
@@ -532,6 +545,42 @@ export const COMMANDS: readonly CommandSpec[] = [
         ctx.setXpLevel(Math.floor(value));
         out.info(`已将等级设置为 ${Math.floor(value)}`);
       }
+    },
+  },
+  {
+    name: 'worldborder',
+    usage: '/worldborder get | /worldborder set <边长> | /worldborder center <x> <z>',
+    description: '查看或修改世界边界（越界掉血、超出软区会被推回）',
+    run(args, ctx, out) {
+      const mode = (args[0] ?? 'get').toLowerCase();
+      const current = ctx.worldBorder();
+
+      if (mode === 'get') {
+        out.info(describeBorder(current));
+        return;
+      }
+      if (mode === 'set') {
+        const size = Number(args[1]);
+        if (!Number.isFinite(size) || size < BORDER_MIN_SIZE) {
+          out.error(`边长必须是 ≥ ${BORDER_MIN_SIZE} 的数字（当前 ${current.size}）`);
+          return;
+        }
+        const next = ctx.setWorldBorder({ size: clampBorderSize(size) });
+        out.info(`世界边界已设为边长 ${next.size} 格（中心 ${next.centerX}, ${next.centerZ}）`);
+        return;
+      }
+      if (mode === 'center') {
+        const centerX = num(args[1]);
+        const centerZ = num(args[2]);
+        if (!Number.isFinite(centerX) || !Number.isFinite(centerZ)) {
+          out.error('用法：/worldborder center <x> <z>');
+          return;
+        }
+        const next = ctx.setWorldBorder({ centerX: Math.floor(centerX), centerZ: Math.floor(centerZ) });
+        out.info(`世界中心已设为 (${next.centerX}, ${next.centerZ})，边长 ${next.size} 格`);
+        return;
+      }
+      out.error('用法：/worldborder get | set <边长> | center <x> <z>');
     },
   },
 ];

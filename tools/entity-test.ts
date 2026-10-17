@@ -410,8 +410,11 @@ console.log('\n[经验球：拆档 / 吸附 / 结算 / 合并（批次 170，I16
 
   // ---- 合并：靠近的两个球并成一个（金额相加），而不是各飞各的
   const manager = new EntityManager();
-  const a = manager.spawn(new XpOrb(3, 0.5, 1, 0.5));
-  const b = manager.spawn(new XpOrb(7, 0.6, 1, 0.6));
+  // ⚠️ 初速必须显式给 0：默认初速是"随机向四周弹一下"（±0.8 格/秒 + 向上一抛），
+  // 0.6 秒后两个球可能已经飘出 1 格——那正好是合并半径，于是这条断言**时绿时红**
+  // （批次 175 抓到的：它灰了一整轮才发现是"测试自己带随机性"）
+  const a = manager.spawn(new XpOrb(3, 0.5, 1, 0.5, { x: 0, y: 0, z: 0 }));
+  const b = manager.spawn(new XpOrb(7, 0.6, 1, 0.6, { x: 0, y: 0, z: 0 }));
   manager.update({ ...ctx, player: null } as EntityContext, 0.6);
   const orbs = manager.all.filter((entity) => entity instanceof XpOrb) as XpOrb[];
   equal('靠近的两个球并成一个', orbs.length, 1);

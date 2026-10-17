@@ -108,6 +108,14 @@ export interface PlayerSave {
    * `restoreWeather` 已经能容忍"字段缺失"，迁移只要挪一行。
    */
   weather?: { kind: string; seconds: number };
+  /**
+   * 世界边界（K12，批次 175）：中心 + 边长。
+   *
+   * 与天气同一个理由放在玩家存档里（见上面那段的说明：**一处放世界状态，
+   * 好过两处各放一半**）。老存档没有这个字段 → `normalizeBorder` 回退默认
+   * （3 千万格 = 没有边界），不迁移、不改存档版本号。
+   */
+  border?: { centerX: number; centerZ: number; size: number };
   health: number;
   food: number;
   saturation: number;

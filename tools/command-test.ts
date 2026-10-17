@@ -34,6 +34,7 @@ import {
   normalizeGameRules,
 } from '../src/core/world/Rules.ts';
 import { BLOCKS } from '../src/core/registry/blocks.ts';
+import { defaultBorder, normalizeBorder, type WorldBorder } from '../src/core/world/WorldBorder.ts';
 import { resolveBlockId, resolveItemId } from '../src/core/registry/itemNames.ts';
 import { Experience } from '../src/core/survival/Experience.ts';
 
@@ -80,6 +81,8 @@ class FakeWorld implements CommandContext {
   // 桩对象再写一个同名字段就会正面相撞（而运行时 `ctx.difficulty` 拿到值还是函数都"能跑"）
   difficultyValue: Difficulty = 'normal';
   rules: GameRules = { ...DEFAULT_GAME_RULES };
+  /** 世界边界（K12，批次 175）：`/worldborder` 改它 */
+  border: WorldBorder = defaultBorder();
   inventory = new Map<number, number>();
   blocks = new Map<string, number>();
   mobs: Array<{ type: string; x: number; y: number; z: number }> = [];
@@ -164,6 +167,13 @@ class FakeWorld implements CommandContext {
   }
   setGameRule<K extends keyof GameRules>(key: K, value: GameRules[K]): void {
     this.rules[key] = value;
+  }
+  worldBorder(): WorldBorder {
+    return { ...this.border };
+  }
+  setWorldBorder(patch: Partial<WorldBorder>): WorldBorder {
+    this.border = normalizeBorder({ ...this.border, ...patch });
+    return { ...this.border };
   }
   summon(name: string, x: number, y: number, z: number): boolean {
     if (!isValidMob(name)) return false;

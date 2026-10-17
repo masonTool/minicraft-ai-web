@@ -237,6 +237,17 @@ import {
 } from './core/world/Beacon.ts';
 import { BeaconScreen } from './ui/BeaconScreen.ts';
 import { BeaconBeamRenderer } from './render/BeaconBeamRenderer.ts';
+import { BorderRenderer } from './render/BorderRenderer.ts';
+// 世界边界（K12，批次 175）：判定/夹取/伤害都是纯函数，主程序只负责接进去
+import {
+  DEFAULT_BORDER_SIZE,
+  borderDamagePerSecond,
+  clampToBorder,
+  defaultBorder,
+  describeBorder,
+  normalizeBorder,
+  type WorldBorder,
+} from './core/world/WorldBorder.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
@@ -883,6 +894,12 @@ class App {
   private readonly beaconScreen = new BeaconScreen();
   /** 信标的光柱（K5）：运行时实体，不烘进区块网格 */
   private readonly beaconBeamRenderer = new BeaconBeamRenderer();
+  /** 世界边界的蓝墙（K12，批次 175）：四道跟着玩家平移的半透明面 */
+  private readonly borderRenderer = new BorderRenderer();
+  /** 世界边界状态（中心 + 边长）：进存档，`/worldborder` 改它 */
+  private border: WorldBorder = defaultBorder();
+  /** 越界伤害的结算计时（边界伤害是**每秒一次**，不是每帧） */
+  private borderDamageTimer = 0;
   /**
    * 场上已知的信标（K5，批次 117）：键是 `beaconKey(维度, x, y, z)`。
    *
@@ -1257,6 +1274,7 @@ class App {
       this.handleInventoryOpen(false);
     };
     this.scene.add(this.beaconBeamRenderer.group);
+    this.scene.add(this.borderRenderer.group);
 
     this.world.events = {
       onChunkLoaded: (chunk) => {
@@ -1817,6 +1835,8 @@ class App {
     this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
     // 天气（L6，批次 85）：老存档没有这个字段 → `restoreWeather` 回退默认晴天
     this.weather.restore(data.weather);
+    // 世界边界（K12，批次 175）：老存档没有这个字段 → 默认 3 千万格（等于"没有边界"）
+    this.border = normalizeBorder(data.border);
     this.stats.health = data.health;
     this.stats.food = data.food;
     this.stats.saturation = data.saturation;
@@ -1879,6 +1899,8 @@ class App {
       daysWithoutSleep: this.daysWithoutSleep,
       // 天气（L6，批次 85）：重开之后接着下，而不是每次重掷
       weather: this.weather.snapshot(),
+      // 世界边界（K12，批次 175）：中心与边长都跟着存档走
+      border: { ...this.border },
       health: this.stats.health,
       food: this.stats.food,
       saturation: this.stats.saturation,
@@ -4732,6 +4754,48 @@ class App {
     this.beaconBeamRenderer.sync(beams);
   }
 
+  /**
+   * 世界边界（K12，批次 175）：蓝墙摆位 + 越界伤害 + 硬推回。
+   *
+   * 三件事的次序是有讲究的：**先摆墙**（用这一帧的位置，视觉上不滞后）、
+   * **再判伤害**（按"推回之前"的位置算，否则玩家永远站在边界内侧、永远不会掉血）、
+   * **最后推回**（把位置夹到软区里侧，物理层下一帧就从这里继续）。
+   *
+   * ⚠️ 传送途中与"落地解析之前"一律跳过：那时坐标是临时值，按它判越界会把玩家
+   * 传送到一个还没加载的地方（与 `spawnResolved` 那套保护同一条理由）。
+   */
+  private updateWorldBorder(dt: number): void {
+    this.borderRenderer.sync(
+      this.border,
+      { x: this.physics.x, y: this.physics.y, z: this.physics.z },
+      this.viewDistanceNow,
+    );
+
+    if (!this.spawnResolved || this.pendingArrival || this.sleeping || this.stats.dead) {
+      this.borderDamageTimer = 0;
+      return;
+    }
+
+    const damage = borderDamagePerSecond(this.border, this.physics.x, this.physics.z);
+    if (damage > 0) {
+      this.borderDamageTimer += dt;
+      if (this.borderDamageTimer >= 1) {
+        this.borderDamageTimer -= 1;
+        this.damagePlayer(damage, this.physics.x, this.physics.z);
+      }
+    } else {
+      this.borderDamageTimer = 0;
+    }
+
+    const clamped = clampToBorder(this.border, this.physics.x, this.physics.z);
+    if (clamped.clamped) {
+      // 推回时顺手把水平速度清零：否则会被墙"吸"着抖动（一帧推回、一帧又冲出去）
+      this.physics.teleport(clamped.x, this.physics.y, clamped.z);
+      this.physics.vx = 0;
+      this.physics.vz = 0;
+    }
+  }
+
   /** 右键信标：打开界面（把金字塔等级与当前选择读给它） */
   private openBeaconScreen(x: number, y: number, z: number): void {
     const state = this.world.getBlockState(x, y, z);
@@ -6076,6 +6140,12 @@ class App {
         this.rules[key] = value;
         // 昼夜循环这类规则同时写回设置（设置是"这台设备的默认"，规则是"这个世界的当前值"）
         if (key === 'doDaylightCycle') this.settings.daylightCycle = value as boolean;
+      },
+      // 世界边界（K12，批次 175）：改完立刻生效（蓝墙下一帧就在新位置），并进存档
+      worldBorder: () => ({ ...this.border }),
+      setWorldBorder: (patch) => {
+        this.border = normalizeBorder({ ...this.border, ...patch });
+        return { ...this.border };
       },
       summon: (name, x, y, z) => {
         const type = mobTypeById(name);
@@ -8490,6 +8560,9 @@ class App {
       `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}   护甲: ${armorPoints}\n` +
       `经验: ${this.experience.level} 级 ${this.experience.progress}/${this.experience.toNext}（累计 ${this.experience.total}）\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
+      // 世界边界（K12，批次 175）：只在"不是默认的 3 千万格"时才占一行，
+      // 否则每个玩家的调试面板都会多一句永远不变的话
+      (this.border.size < DEFAULT_BORDER_SIZE ? `${describeBorder(this.border)}\n` : '') +
       `联机: ${this.netStatus}${this.net.selfId > 0 ? `（#${this.net.selfId} · 在线 ${this.net.playerCount} 人）` : ''}` +
       (this.chatLine && performance.now() < this.chatUntil ? `\n${this.chatLine}` : '');
   }
@@ -8592,6 +8665,8 @@ class App {
       this.updateSpawners(dt);
       // 信标（K5，批次 117）：光柱逐帧同步、效果每秒挂一次
       this.updateBeacons(dt);
+      // 世界边界（K12，批次 175）：蓝墙逐帧摆位、越界判推回与伤害
+      this.updateWorldBorder(dt);
       // 启动期的渐进视距（批次 100）：涨一格就重新按新的范围请求区块。
       // 帧率吃紧时先不涨（自适应视距那一套会把视距往下压，边卡边涨只会雪上加霜）
       if (!this.startupRamp.done) {
@@ -8736,6 +8811,7 @@ class App {
     this.signRenderer.dispose();
     this.itemFrameRenderer.dispose();
     this.beaconBeamRenderer.dispose();
+    this.borderRenderer.dispose();
     // 浮标（批次 81）：懒建的，可能一次都没抛过竿
     this.bobberMesh?.geometry.dispose();
     const bobberMaterial = this.bobberMesh?.material;
