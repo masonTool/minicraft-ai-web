@@ -475,8 +475,8 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('携带版面板高度不按页签改（只由 --inv-pocket-h 定）', !/inv-panel\.pocket-ui\s*\{[^}]*height:\s*auto/.test(css));
   check('合成/装备右栏与左侧玩家物品独立切换', invSrc.includes('const rightShowsCrafting') && invSrc.includes("this.gearEl.style.display = rightShowsCrafting ? 'none' : ''"));
   check(
-    '工作台自动摊开左侧物品分类并沿用同一副双栏壳',
-    invSrc.includes("if (mode === 'crafting') this.openPocketCategory('all');") &&
+    '工作台自动摊开左侧物品分类并沿用同一副双栏壳（创造模式除外）',
+    invSrc.includes("if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) this.openPocketCategory('all');") &&
       invSrc.includes("classList.toggle('workbench-ui', workbench)"),
   );
   check('携带版创造栏是半屏可容纳的 7 列 40px 槽位', css.includes('grid-template-columns: repeat(7, 40px)'));
@@ -799,12 +799,24 @@ console.log('\n[创造模式不给配方入口（批次 163）]');
 
   check(
     '创造模式下标题栏那颗配方按钮整颗藏掉（不只是"创造物品"那一栏）',
-    invSrc.includes("this.recipesBtn.classList.toggle('hidden', creative);") &&
+    invSrc.includes("this.recipesBtn.classList.toggle('hidden', creativePlayer);") &&
       !invSrc.includes("this.recipesBtn.classList.toggle('hidden', showCreativeItems);"),
   );
   check(
     '创造模式下左轨那排配方分类也不给',
-    invSrc.includes("this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes || creative);"),
+    invSrc.includes("this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes || creativePlayer);"),
+  );
+  // 批次 164：工作台在创造模式里**不摊配方分类**，就只是"3×3 + 仓库"拿来合成
+  check(
+    '创造模式的工作台不摊配方分类',
+    invSrc.includes("if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) this.openPocketCategory('all');") &&
+      invSrc.includes("if (creativePlayer) this.leftPaneKind = 'items';"),
+  );
+  // "有没有配方书"按**玩家模式**判，不按"当前哪一屏"判——工作台里人也还在创造模式
+  check(
+    '配方入口按 creativePlayer 判（不是按当前界面）',
+    invSrc.includes('const creativePlayer = this.hooks.isCreative?.() ?? false;') &&
+      invSrc.includes('const creative = this.mode === \'inventory\' && creativePlayer;'),
   );
 }
 

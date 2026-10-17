@@ -1569,8 +1569,16 @@ export class InventoryScreen {
     if (this.closeBtn) {
       this.closeBtn.textContent = isTouchUi() || isTouchDevice() ? '✕' : '关闭 (E)';
     }
-    const creative = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
+    // ⚠️ 两个口径要分开：
+    //   `creativePlayer` = **玩家在创造模式**（与当前开着哪个界面无关）——"有没有配方书"
+    //     这类"模式能力"要按它判，工作台界面里人也还在创造模式；
+    //   `creative` = 当前这一屏是不是"创造物品栏"（只有玩家背包那一屏有）。
+    // 批次 164：原来只按 `creative` 判，于是创造模式的工作台里配方分类又冒出来了。
+    const creativePlayer = this.hooks.isCreative?.() ?? false;
+    const creative = this.mode === 'inventory' && creativePlayer;
     if (!creative) this.creativeSurvival = false;
+    // 创造模式没有"按分类看配方"这件事（入口全藏了），左栏只可能是物品
+    if (creativePlayer) this.leftPaneKind = 'items';
     const showCreativeItems = creative && !this.creativeSurvival;
     // 玩家背包与世界里的工作台共用同一副双栏壳；其余（箱子/熔炉/铁砧…）走单栏
     const workbench = this.mode === 'crafting';
@@ -1607,7 +1615,7 @@ export class InventoryScreen {
       this.syncCraftArrow(false);
       this.restoreInvTabToRail();
       // 容器界面照旧给这颗按钮；创造模式下不要（同一口径，见下面那条注释）
-      if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', creative);
+      if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', creativePlayer);
       this.lastLeftPane = '';
       return;
     }
@@ -1655,7 +1663,7 @@ export class InventoryScreen {
     if (leftPane !== 'creative') {
       // 批次 163：创造模式下**连左轨那排配方分类也不给**——与标题栏那颗按钮同一口径。
       // 创造模式左栏是无限物品（或"生存背包"），配方书在这儿没有意义。
-      this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes || creative);
+      this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes || creativePlayer);
       this.railLeft.classList.remove('hidden');
       // 批次 159：点亮当前分类（点了哪一颗要看得出来）
       this.syncRecipeRail(leftPane === 'category' ? this.categoryTab : null);
@@ -1674,7 +1682,7 @@ export class InventoryScreen {
       // 批次 163：**创造模式整个不要这颗按钮**（不只是"创造物品"那一栏）。
       // 创造模式左栏是无限物品分类，配方开关在这儿没有意义；
       // 切到"生存背包"时也不该冒出来（人还在创造模式里）。
-      this.recipesBtn.classList.toggle('hidden', creative);
+      this.recipesBtn.classList.toggle('hidden', creativePlayer);
       this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned);
     }
 
@@ -3146,7 +3154,9 @@ export class InventoryScreen {
     this.openPanel();
     // 基岩版工作台默认把左侧那一片摊开。必须等背包先 open，
     // 否则主程序的 openRecipeBook 会把模式改回普通 inventory。
-    if (mode === 'crafting') this.openPocketCategory('all');
+    // 批次 164：**创造模式的工作台不用摊开配方分类**——它就是拿来合成的。
+    // 生存模式才按基岩版把左侧摊成"按分类找东西"。
+    if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) this.openPocketCategory('all');
   }
 
   toggle(): void {
