@@ -970,6 +970,19 @@ console.log('\n[进游戏首页默认全屏]');
 
   // 一个目标都没给时不该炸（`#overlay` 在某些外壳里可能不在）
   check('没有目标时安静返回', typeof armAutoFullscreen([]) === 'function');
+
+  const fullscreenSrc = readFileSync(new URL('../src/ui/Fullscreen.ts', import.meta.url), 'utf8');
+  const manifest = readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8');
+  const htmlHead = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('第一次点击同时请求全屏和横屏锁', fullscreenSrc.includes('enterMobilePresentation') && fullscreenSrc.includes("orientation.lock('landscape')"));
+  check('竖屏触摸设备有横屏提示，点它就是那一次手势', fullscreenSrc.includes('installRotateHint') && htmlHead.includes('rotate-hint'));
+  check('manifest 以横屏全屏打开', manifest.includes('"orientation": "landscape"') && manifest.includes('"display": "fullscreen"'));
+  check('微信/QQ 的 X5 内核一打开就横屏全屏', htmlHead.includes('x5-orientation') && htmlHead.includes('content="landscape"') && htmlHead.includes('x5-fullscreen'));
+  check(
+    '手机进游戏后不再把“视距没涨完”当成启动期光照',
+    mainSrc.includes('isTouchDevice() ? !this.loadingCleared : !this.loadingCleared || !this.startupRamp.done'),
+  );
 }
 
 console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物品栏」）]');

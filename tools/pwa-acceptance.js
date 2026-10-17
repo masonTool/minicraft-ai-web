@@ -18,7 +18,12 @@
     const response = await fetch(link.href);
     const manifest = await response.json();
     check('manifest served', response.ok, `${response.status}`);
-    check('manifest has name + standalone display', Boolean(manifest.name) && manifest.display === 'standalone', `${manifest.name} / ${manifest.display}`);
+    check(
+      'manifest has name + fullscreen display',
+      Boolean(manifest.name) && (manifest.display === 'fullscreen' || manifest.display === 'standalone'),
+      `${manifest.name} / ${manifest.display}`,
+    );
+    check('manifest locks landscape', manifest.orientation === 'landscape', manifest.orientation ?? 'missing');
     check('manifest declares icons', Array.isArray(manifest.icons) && manifest.icons.length > 0, `${manifest.icons?.length ?? 0} 个`);
     check('theme + background color set', Boolean(manifest.theme_color && manifest.background_color), `${manifest.theme_color}/${manifest.background_color}`);
   }

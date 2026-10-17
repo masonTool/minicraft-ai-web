@@ -9,10 +9,18 @@
  */
 
 import {
+  LIGHT_BUDGET_PER_FRAME,
+  MOBILE_LIGHT_BUDGET_PER_FRAME,
+  MOBILE_STARTUP_LIGHT_BUDGET_PER_FRAME,
+  STARTUP_LIGHT_BUDGET_PER_FRAME,
+  lightBudgetForFrame,
+} from '../src/game/tuning.ts';
+import {
   FRAME_TIME_DROP,
   RESOLUTION_MAX,
   RESOLUTION_MIN,
   VIEW_DISTANCE_MIN,
+  MOBILE_PIXEL_RATIO_CAP,
   effectivePixelRatio,
   frameIntervalMs,
   initialPerfState,
@@ -77,6 +85,13 @@ console.log('\n[动态分辨率按设备背板缩放]');
   equal('手机降到 0.9 档是 1.8（不会从 2 突然跳成 0.9）', effectivePixelRatio(3, 0.9), 1.8);
   equal('最低档仍保留 1 倍 CSS 像素', effectivePixelRatio(3, 0.5), 1);
   equal('非法 DPR 回退为 1', effectivePixelRatio(Number.NaN, 1), 1);
+  equal('手机背板上限 1.5，不再画到 2', effectivePixelRatio(3, 1, MOBILE_PIXEL_RATIO_CAP), 1.5);
+  check(
+    '手机开局 0.8 档约 1.2（大约只有 2 倍档三分之一的像素）',
+    Math.abs(effectivePixelRatio(3, 0.8, MOBILE_PIXEL_RATIO_CAP) - 1.2) < 1e-9,
+    String(effectivePixelRatio(3, 0.8, MOBILE_PIXEL_RATIO_CAP)),
+  );
+  equal('上限不会超过桌面的 2', effectivePixelRatio(3, 1, 4), 2);
 }
 
 // ---------------------------------------------------------------- 2. 恢复顺序相反
@@ -175,6 +190,19 @@ console.log('\n[限帧与粒子总量（另外两个旋钮）]');
   equal('粒子关掉 → 上限 0', particleBudgetFor('off'), 0);
   equal('粒子减半 → 120', particleBudgetFor('reduced'), 120);
   equal('粒子全开 → 400', particleBudgetFor('all'), 400);
+}
+
+console.log('\n[手机光照预算不能沿用桌面的启动档]');
+{
+  equal('桌面启动期仍是 12 万步', lightBudgetForFrame(true, false), STARTUP_LIGHT_BUDGET_PER_FRAME);
+  equal('桌面进游戏后回到 6000', lightBudgetForFrame(false, false), LIGHT_BUDGET_PER_FRAME);
+  equal('手机遮罩期间用较小的启动预算', lightBudgetForFrame(true, true), MOBILE_STARTUP_LIGHT_BUDGET_PER_FRAME);
+  equal('手机进游戏后用游玩预算', lightBudgetForFrame(false, true), MOBILE_LIGHT_BUDGET_PER_FRAME);
+  check(
+    '手机启动预算不超过桌面的四分之一（否则一帧仍会被打满）',
+    MOBILE_STARTUP_LIGHT_BUDGET_PER_FRAME * 4 <= STARTUP_LIGHT_BUDGET_PER_FRAME,
+  );
+  check('手机游玩预算低于桌面', MOBILE_LIGHT_BUDGET_PER_FRAME < LIGHT_BUDGET_PER_FRAME);
 }
 
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);

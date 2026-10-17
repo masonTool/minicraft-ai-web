@@ -12,6 +12,13 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- 微信 / QQ（X5）与 UC：打开页面就横屏全屏，不必等第一次点击 -->
+    <meta name="x5-orientation" content="landscape" />
+    <meta name="x5-fullscreen" content="true" />
+    <meta name="x5-page-mode" content="app" />
+    <meta name="screen-orientation" content="landscape" />
+    <meta name="full-screen" content="yes" />
+    <meta name="browsermode" content="application" />
     <meta name="theme-color" content="#0b0b0b" />
     <title>Bedrock 1.18 Web</title>
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
@@ -2718,6 +2725,24 @@
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
       }
       .unsupported-screen.visible { display: grid; }
+      /* 竖屏手机：点这一层就是进全屏 + 锁横屏的那一次手势。默认不显示。 */
+      .rotate-hint {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        margin: 0;
+        background: #0b0b0b;
+        color: #e0e0e0;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        text-align: center;
+        font: 16px/1.4 'Courier New', monospace;
+      }
+      .rotate-hint.visible { display: flex; }
+      .rotate-hint b { font-size: 22px; font-weight: 400; }
       .unsupported-panel {
         display: flex; flex-direction: column; gap: 12px;
         padding: 18px 20px; max-width: min(520px, 90vw);

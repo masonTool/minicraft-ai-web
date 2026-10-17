@@ -30,6 +30,19 @@
 /** 渲染分辨率倍率的范围：0.5（最糊、最省）~ 1.0（基准，等于 CSS 像素） */
 export const RESOLUTION_MIN = 0.5;
 export const RESOLUTION_MAX = 1;
+/**
+ * 背板像素比上限。
+ *
+ * 桌面视网膜画到 2 倍没问题。手机 DPR 经常是 3，若沿用 2 倍，
+ * 一块 844×390 的横屏要填大约 130 万像素——再叠上方块场景，帧时间会直接超过 30ms。
+ * 手机上限 1.5：满档大约只有 2 倍档的一半像素，开局再乘 0.8，先落在能玩的填充率上。
+ */
+export const DESKTOP_PIXEL_RATIO_CAP = 2;
+export const MOBILE_PIXEL_RATIO_CAP = 1.5;
+/** 手机开局分辨率档（相对背板上限）。有余量时自适应会把它升回 1。 */
+export const MOBILE_INITIAL_RESOLUTION = 0.8;
+/** 手机开局视距。玩家设置仍是上限，帧时间有余量再往回加。 */
+export const MOBILE_VIEW_DISTANCE = 6;
 /** 每次调档的步长 */
 export const RESOLUTION_STEP = 0.1;
 /** 视距的地板（再低就没法玩了，与 N6 一致） */
@@ -81,8 +94,16 @@ export function initialPerfState(viewDistance: number): PerfState {
  * 例如 DPR=3 的手机以 2 作为画质上限：0.9 档应当得到 1.8，而不是从 2 突然跳到 0.9。
  * 后一种旧写法会在第一次掉帧时把横纵清晰度各砍掉一半以上，表现为整屏闪一下并持续发虚。
  */
-export function effectivePixelRatio(devicePixelRatio: number, resolutionScale: number): number {
-  const base = Math.min(2, Math.max(1, Number.isFinite(devicePixelRatio) ? devicePixelRatio : 1));
+export function effectivePixelRatio(
+  devicePixelRatio: number,
+  resolutionScale: number,
+  pixelRatioCap = DESKTOP_PIXEL_RATIO_CAP,
+): number {
+  const cap = Math.min(
+    DESKTOP_PIXEL_RATIO_CAP,
+    Math.max(1, Number.isFinite(pixelRatioCap) ? pixelRatioCap : DESKTOP_PIXEL_RATIO_CAP),
+  );
+  const base = Math.min(cap, Math.max(1, Number.isFinite(devicePixelRatio) ? devicePixelRatio : 1));
   const scale = Math.min(RESOLUTION_MAX, Math.max(RESOLUTION_MIN, resolutionScale));
   return base * scale;
 }

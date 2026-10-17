@@ -76,6 +76,22 @@ export const TOUCH_SENSITIVITY = 0.0034;
 export const LIGHT_BUDGET_PER_FRAME = 6000;
 /** 启动期的光照预算（见上）。实测把它开到 12 万步能把"到第一块地形"从 16.2s 压到 ~1s */
 export const STARTUP_LIGHT_BUDGET_PER_FRAME = 120000;
+/**
+ * 手机上的光照预算。
+ *
+ * 12 万步在桌面大约 10ms，在手机上是一整帧甚至更久。更糟的是：视距还在涨时
+ * 如果一直用这笔预算，帧时间永远过不了 22ms，渐进视距就停在半路，
+ * "还在启动"这个判断也就永远为真——于是每一帧都做 12 万步，越玩越卡。
+ * 遮罩还在时可以多做一点（玩家还没看见世界）；遮罩一撤必须回到游玩预算。
+ */
+export const MOBILE_LIGHT_BUDGET_PER_FRAME = 4000;
+export const MOBILE_STARTUP_LIGHT_BUDGET_PER_FRAME = 24000;
+
+/** 这一帧光照引擎该走多少步。`startup` 只表示"加载遮罩还在"（手机）或"视距还没涨完"（桌面）。 */
+export function lightBudgetForFrame(startup: boolean, mobile: boolean): number {
+  if (!mobile) return startup ? STARTUP_LIGHT_BUDGET_PER_FRAME : LIGHT_BUDGET_PER_FRAME;
+  return startup ? MOBILE_STARTUP_LIGHT_BUDGET_PER_FRAME : MOBILE_LIGHT_BUDGET_PER_FRAME;
+}
 
 /** 连续破坏/放置的最小间隔（秒） */
 export const BREAK_COOLDOWN = 0.25;

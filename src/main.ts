@@ -95,7 +95,7 @@ import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
-import { armAutoFullscreen } from './ui/Fullscreen.ts';
+import { armAutoFullscreen, installRotateHint, preferInstalledLandscape } from './ui/Fullscreen.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
@@ -339,6 +339,10 @@ import { hardenAround } from './core/world/Concrete.ts';
 // 移动端降级策略（批次 130，TASKS N7）：动态分辨率 / 自适应视距 / 限帧 / 粒子总量。
 // 策略本身是**纯函数**（`test:perfpolicy` 逐条钉住），这里只负责把结果落到渲染器与粒子上
 import {
+  DESKTOP_PIXEL_RATIO_CAP,
+  MOBILE_INITIAL_RESOLUTION,
+  MOBILE_PIXEL_RATIO_CAP,
+  MOBILE_VIEW_DISTANCE,
   effectivePixelRatio,
   frameIntervalMs,
   initialPerfState,
@@ -483,8 +487,7 @@ import {
   WATER_FOG,
   WATER_FOG_FAR,
   WATER_FOG_NEAR,
-  LIGHT_BUDGET_PER_FRAME,
-  STARTUP_LIGHT_BUDGET_PER_FRAME,
+  lightBudgetForFrame,
   clampUnit,
   rodKey,
   spawnerKey,
@@ -1050,6 +1053,8 @@ class App {
    * 策略归 `perfPolicyStep`（纯函数），主程序只负责"把结果落下去"。
    */
   private perf: PerfState = initialPerfState(12);
+  /** 手机背板画到 1.5 而不是 2：填充率大约少一半，自适应仍可在这顶下面升降 */
+  private readonly pixelRatioCap = isTouchDevice() ? MOBILE_PIXEL_RATIO_CAP : DESKTOP_PIXEL_RATIO_CAP;
   /** 调试用：把帧时间固定成这个值（毫秒），0 表示用真实值。验收脚本靠它稳定复现"掉帧" */
   private simulatedFrameTime = 0;
   // ⚠️ 自适应视距的冷却（`adaptiveCooldown`）在**批次 130** 并进了 `this.perf.cooldown`：
@@ -1141,13 +1146,19 @@ class App {
     // （显存不足、上下文数量到顶——手机上真实发生过）。失败时**给一块能看懂的界面**，
     // 而不是让 `new WebGLRenderer` 那行红字把整页留成白屏
     try {
-      this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+      this.renderer = new THREE.WebGLRenderer({
+        antialias: false,
+        // 手机上 high-performance 会钉在大核/高功耗 GPU，几分钟后降频，帧时间反而更差
+        powerPreference: isTouchDevice() ? 'default' : 'high-performance',
+        alpha: false,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       lastRendererFailure = rendererFailure(message);
       throw new Error(UNSUPPORTED_GL_ERROR);
     }
-    this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), 1));
+    if (isTouchDevice()) this.perf = { ...this.perf, resolutionScale: MOBILE_INITIAL_RESOLUTION };
+    this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), this.perf.resolutionScale, this.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
 
@@ -1183,7 +1194,10 @@ class App {
 
     // 网格化放在独立 Worker 池里：地形生成的 Worker 忙于长任务，混在一起会互相拖慢。
     // 留 2 个核心给主线程（渲染 + 物理），最多用 2 个做网格化。
-    const meshWorkers = Math.max(1, Math.min(2, (navigator.hardwareConcurrency ?? 4) - 2));
+    // 手机核心又小又挤：再开两个网格化 Worker 会跟主线程抢同一颗大核，表现为一卡一卡
+    const meshWorkers = isTouchDevice()
+      ? 1
+      : Math.max(1, Math.min(2, (navigator.hardwareConcurrency ?? 4) - 2));
     this.meshPool = new MeshWorkerPool(meshWorkers);
     this.chunkRenderer = new ChunkRenderer(
       this.scene,
@@ -1345,6 +1359,17 @@ class App {
     // 时被调用，不在这里补一刀的话，存档里那个"粒子效果：减半"要等玩家开一次设置才生效
     this.particles.setBudget(particleBudgetFor(this.settings.particles));
     this.perf = { ...this.perf, viewDistance: this.settings.viewDistance };
+    // 手机不要从桌面那套满画质往下降：降档有 3 秒冷却，玩家会先卡一整段。
+    // 视距只是开局值，设置里的视距仍是上限，帧时间有余量会加回去。
+    if (isTouchDevice()) {
+      const view = Math.min(this.viewDistance, MOBILE_VIEW_DISTANCE);
+      this.viewDistance = view;
+      this.perf = { ...this.perf, viewDistance: view, resolutionScale: MOBILE_INITIAL_RESOLUTION };
+      this.camera.far = view * 16 + 32;
+      this.camera.updateProjectionMatrix();
+      this.applyEnvironment();
+      this.applyResolutionScale();
+    }
     this.audio.volume = this.settings.volume;
     // 界面配置（批次 142）：启动时就要生效，否则第一帧还按默认 auto
     setUiProfile(this.settings.uiProfile);
@@ -8066,7 +8091,7 @@ class App {
    */
   private applyResolutionScale(): void {
     const scale = this.perf.resolutionScale;
-    this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), scale));
+    this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), scale, this.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     // 粒子的点尺寸是按"设备像素"算的（`setViewport` 拿的就是缓冲区高度），
     // 所以分辨率一变要重新告诉它一次，否则粒子会跟着分辨率一起变大或变小
@@ -8358,19 +8383,12 @@ class App {
       const centerCz = toChunkCoord(this.physics.z);
       this.refreshWorld(centerCx, centerCz);
 
-      /**
-       * 光照预算：启动期开大（批次 103，N8）。
-       *
-       * ⚠️ 网格化被 `if (!lightBusy)` 挡着，而渐进视距一开局就把半径开到 12 ——
-       * 489 个区块的光照队列约 450 万步，6000 步/帧要 **12.5 秒**才排空，
-       * 期间网格化一个都不派、加载遮罩一直挂着（实测 16.2s 才能玩）。
-       * 启动期（遮罩还在 / 渐进视距还没涨完）玩家看不到世界，把 CPU 花在光照上是划算的。
-       * 见 `game/tuning.ts` 的 `STARTUP_LIGHT_BUDGET_PER_FRAME`。
-       */
-      const inStartup = !this.loadingCleared || !this.startupRamp.done;
-      const lightBusy = this.world.processLighting(
-        inStartup ? STARTUP_LIGHT_BUDGET_PER_FRAME : LIGHT_BUDGET_PER_FRAME,
-      );
+      // 光照预算：遮罩还在时开大（批次 103，桌面把"能玩"从 16s 压到 1s 内）。
+      // 桌面：遮罩还在、或视距还没涨完，都用启动预算（那时候多花 CPU 换"早能玩"）。
+      // 手机：只有遮罩还在才用较大的预算。视距没涨完如果也走 12 万步，
+      // 帧时间下不去，视距永远涨不完，"启动期"就再也不会结束。
+      const startupLighting = isTouchDevice() ? !this.loadingCleared : !this.loadingCleared || !this.startupRamp.done;
+      const lightBusy = this.world.processLighting(lightBudgetForFrame(startupLighting, isTouchDevice()));
 
       // 光照收敛后再重刷一次方块改动过的区块，避免烘焙进未收敛的光照
       if (!lightBusy && this.pendingSettle.length > 0) {
@@ -9498,10 +9516,12 @@ async function boot(): Promise<void> {
   // 启动耗时台账也挂出去：它是一个**读数的入口**（与 `__worldMenu` 同一类）
   (window as unknown as { __startup: typeof startupTrace }).__startup = startupTrace;
   menu.show();
-  // 进游戏首页就"默认全屏"（用户要求）。全屏请求必须在用户手势里，所以挂在
-  // 主菜单的**第一次点击**上——点第一下时全屏已经进去了（见 ui/Fullscreen.ts）。
-  // ⚠️ 批次 111 删掉了"点击进入游戏"那层遮罩，所以这里只剩主菜单一个触发点。
-  armAutoFullscreen([menu.root]);
+  // 进游戏首页就"默认全屏 + 横屏"（用户要求）。浏览器不允许页面一加载就全屏，
+  // 所以：已安装的 PWA 立刻锁横屏；浏览器里挂在第一次点击上，同时锁方向。
+  // 竖屏手机会先盖一层提示，点它就是那一次手势。
+  preferInstalledLandscape();
+  installRotateHint();
+  armAutoFullscreen([menu.root, document.body]);
   startupTrace.mark(STARTUP_PHASES.bootMenu);
 }
 
