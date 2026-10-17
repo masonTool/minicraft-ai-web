@@ -2247,8 +2247,18 @@ class App {
    *
    * ⚠️ 就绪门控必须配一个等待上限：玩家一直在挖方块时网格队列几乎永远非空，
    * 只认就绪的话雾会**永远**推不出去（表现为"视距变大了但一直灰蒙蒙"）。
+   *
+   * ⚠️ 构造顺序：构造函数里的 `applyEnvironment()` 比 `chunkRenderer` **还早**跑一次
+   * （它要到 1203 行才建）。那一趟只是"把环境算一遍"，谈不上"远处画好了没"，
+   * 所以必须先确认渲染层在——否则每一局的第一帧就崩在 `queueLength` 上
+   * （`Cannot read properties of undefined`）。这类回归离线断言看不到，只有真跑才现形。
    */
   private updateFogRadius(dt: number): void {
+    if (!this.chunkRenderer) {
+      if (this.fogRadius <= 0) this.fogRadius = this.viewDistanceNow;
+      return;
+    }
+
     // "就绪"的判据：目标那一圈既没有待生成的、也没有待网格化的。
     // 网格队列在挖方块时几乎永远非空，所以 `fogRadiusStep` 里配了等待上限。
     const ready = this.world.pendingCount === 0 && this.chunkRenderer.queueLength === 0;

@@ -8,6 +8,8 @@
  * 运行：npm run test:perfpolicy
  */
 
+import { readFileSync } from 'node:fs';
+
 import {
   LIGHT_BUDGET_PER_FRAME,
   MOBILE_LIGHT_BUDGET_PER_FRAME,
@@ -390,6 +392,27 @@ console.log('\n[装饰层档位：关的都是"不在近处"的东西]');
   const noView = run(initialPerfState(12), 20, 33, { ...BOTH, adaptiveViewDistance: false });
   equal('关掉自适应视距 → 装饰层也不动', noView.decorLevel, 0);
   check('但分辨率照降（最后手段还在）', noView.resolutionScale < RESOLUTION_MAX, `${noView.resolutionScale}`);
+}
+
+// ---------------------------------------------------------------- 10. 接线那一处（源码级）
+
+console.log('\n[接线：雾的推进不能假设渲染层已经建好]');
+{
+  // ⚠️ 这一条是**真机崩出来的**：`applyEnvironment()` 在构造函数里比 `chunkRenderer`
+  // 还早跑一次（它排在建 Worker 池之后），而 `updateFogRadius` 要读它的 `queueLength`
+  // ——于是每一局的第一帧都是 `Cannot read properties of undefined`。
+  // 纯函数（`fogRadiusStep`）测不到"被调用得太早"这件事，只能盯住接线那一处必须有守卫。
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const from = mainSrc.indexOf('private updateFogRadius');
+  check('找得到 updateFogRadius', from >= 0);
+  const after = mainSrc.slice(from);
+  const method = after.slice(0, after.indexOf('\n  }'));
+  check(
+    '访问 chunkRenderer 之前先确认它在（构造早期还没建）',
+    method.includes('!this.chunkRenderer'),
+    '缺少守卫会在开世界第一帧崩',
+  );
+  check('守卫在前、读 queueLength 在后', method.indexOf('!this.chunkRenderer') < method.indexOf('queueLength'));
 }
 
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);
