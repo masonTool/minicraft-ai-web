@@ -11,7 +11,10 @@
 
 import {
   AudioEngine,
+  SOUND_GROUP_LABELS,
+  SOUND_GROUPS,
   SOUND_KINDS,
+  soundGroupOf,
   UNDERWATER_GAIN,
   UNDERWATER_LOWPASS_HZ,
   breakSoundFor,
@@ -209,6 +212,47 @@ console.log('\n[水下闷响（批次 138）]');
     threw = true;
   }
   check('水下播放不抛错', !threw);
+}
+
+// ---------------------------------------------------------------- 6. 音量分组（批次 178）
+
+console.log('\n[音量分组：四组各自可调]');
+{
+  // 穷尽性：每个音效都必须有分组（TS 的 Record 已经保证了类型，这里再钉一次运行时）
+  const missing = SOUND_KINDS.filter((kind) => SOUND_GROUPS[kind] === undefined);
+  check('每个音效都归到了某一组', missing.length === 0, missing.join(','));
+  check(
+    '四组都有中文名（设置界面直接用）',
+    (['blocks', 'mobs', 'player', 'ui'] as const).every((group) => typeof SOUND_GROUP_LABELS[group] === 'string'),
+  );
+
+  // 分类要"讲得通"：挖方块归方块、生物叫归生物、按钮归界面
+  check('破坏音效归"方块"', soundGroupOf('break_stone') === 'blocks' && soundGroupOf('break_wood') === 'blocks');
+  check('门/活板门也归"方块"', soundGroupOf('door') === 'blocks' && soundGroupOf('trapdoor') === 'blocks');
+  check('生物叫归"生物"', soundGroupOf('mob_zombie') === 'mobs' && soundGroupOf('mob_cow') === 'mobs');
+  check('脚步与受伤归"玩家"', soundGroupOf('step') === 'player' && soundGroupOf('hurt') === 'player');
+  check('按钮/达成/交易归"界面"', soundGroupOf('click') === 'ui' && soundGroupOf('achievement') === 'ui' && soundGroupOf('trade') === 'ui');
+
+  // 每一组都真的分到了东西（否则设置里那条滑杆是空的）
+  for (const group of ['blocks', 'mobs', 'player', 'ui'] as const) {
+    const count = SOUND_KINDS.filter((kind) => SOUND_GROUPS[kind] === group).length;
+    check(`「${SOUND_GROUP_LABELS[group]}」这一组不为空`, count > 0, `${count} 条`);
+  }
+
+  // 增益：默认 1（不额外衰减），越界被夹住
+  const engine = new AudioEngine();
+  check(
+    '四组默认都是 1（默认状态下不该悄悄变轻）',
+    (['blocks', 'mobs', 'player', 'ui'] as const).every((group) => engine.groupVolumeOf(group) === 1),
+  );
+  engine.setGroupVolume('mobs', 0);
+  check('调到 0 就是这一组全静音', engine.groupVolumeOf('mobs') === 0);
+  engine.setGroupVolume('mobs', 3);
+  check('超过 1 被夹住', engine.groupVolumeOf('mobs') === 1);
+  engine.setGroupVolume('mobs', -2);
+  check('负数被夹到 0', engine.groupVolumeOf('mobs') === 0);
+  engine.setGroupVolume('mobs', 0.35);
+  check('正常值原样保留', Math.abs(engine.groupVolumeOf('mobs') - 0.35) < 1e-9);
 }
 
 console.log(`\n音效测试：${passed} 通过 / ${failed} 失败`);

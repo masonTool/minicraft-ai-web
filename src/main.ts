@@ -1594,6 +1594,11 @@ class App {
     this.camera.far = cameraFarFor(settings.viewDistance);
     this.camera.updateProjectionMatrix();
     this.audio.volume = settings.volume;
+    // 四组音量（批次 178，M20）：与主音量相乘，各自独立
+    this.audio.setGroupVolume('blocks', settings.volumeBlocks);
+    this.audio.setGroupVolume('mobs', settings.volumeMobs);
+    this.audio.setGroupVolume('player', settings.volumePlayer);
+    this.audio.setGroupVolume('ui', settings.volumeUi);
     // 自动保存间隔（批次 172，M20）：改完立刻按新节奏走（下一轮从这里读）
     this.autoSaveInterval = settings.autosaveSeconds;
     this.particles.setDensity(PARTICLE_DENSITY[settings.particles]);

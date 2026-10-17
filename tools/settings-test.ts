@@ -235,6 +235,35 @@ console.log('\n[天气效果 / 自动保存间隔（批次 172，M20）]');
   check('非法值一律显示第一档', cycleValue(['0', '30', '60'], 999) === '0');
 }
 
+// ---------------------------------------------------------------- 8. 批次 178：四组音量
+
+console.log('\n[四组音量（批次 178）]');
+{
+  check(
+    '四组默认都是 1（默认状态下不该比以前轻）',
+    DEFAULT_SETTINGS.volumeBlocks === 1 &&
+      DEFAULT_SETTINGS.volumeMobs === 1 &&
+      DEFAULT_SETTINGS.volumePlayer === 1 &&
+      DEFAULT_SETTINGS.volumeUi === 1,
+  );
+
+  const storage = new MemoryStorage();
+  useStorage(storage);
+  saveSettings({ ...DEFAULT_SETTINGS, volumeMobs: 0.25, volumeUi: 0 });
+  const roundTrip = loadSettings();
+  check(
+    '四项都能存下来并读回',
+    roundTrip.volumeMobs === 0.25 && roundTrip.volumeUi === 0 && roundTrip.volumeBlocks === 1,
+  );
+
+  // 脏数据：超范围要夹住（0~1），不是原样吃下去
+  storage.setItem(KEY, JSON.stringify({ volumeBlocks: 5, volumePlayer: -3, volumeMobs: 'loud' }));
+  const dirty = loadSettings();
+  check('超过 1 的夹到 1', dirty.volumeBlocks === 1);
+  check('负数夹到 0', dirty.volumePlayer === 0);
+  check('不是数字的回退默认 1', dirty.volumeMobs === 1);
+}
+
 useStorage(null);
 console.log(`\n设置测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

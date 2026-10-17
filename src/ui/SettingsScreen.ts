@@ -111,8 +111,18 @@ export interface GameSettings {
   viewDistance: number;
   /** 视野角度（度）：60~110 */
   fov: number;
-  /** 音量 0~1（K5 的音效会用） */
+  /** 主音量 0~1（K5 的音效会用） */
   volume: number;
+  /**
+   * 四组音量（批次 178，M20 的最后一项）：与主音量**相乘**。
+   *
+   * 分组的默认值给 1（= 不额外衰减）：默认状态下"看不出有这个功能"才是对的，
+   * 调过之后才有差别——否则所有声音一上来就比以前轻一截。
+   */
+  volumeBlocks: number;
+  volumeMobs: number;
+  volumePlayer: number;
+  volumeUi: number;
   /** 鼠标/触摸灵敏度倍率：0.5~2 */
   sensitivity: number;
   /** 视角模式：第一人称 / 第三人称背后 / 第三人称正面（`V` 键循环切换） */
@@ -181,6 +191,10 @@ export const DEFAULT_SETTINGS: GameSettings = {
   viewDistance: 12,
   fov: 72,
   volume: 0.7,
+  volumeBlocks: 1,
+  volumeMobs: 1,
+  volumePlayer: 1,
+  volumeUi: 1,
   sensitivity: 1,
   cameraMode: 'first',
   particles: 'all',
@@ -209,6 +223,11 @@ export function loadSettings(): GameSettings {
       viewDistance: clampNumber(parsed.viewDistance, 4, 16, DEFAULT_SETTINGS.viewDistance),
       fov: clampNumber(parsed.fov, 60, 110, DEFAULT_SETTINGS.fov),
       volume: clampNumber(parsed.volume, 0, 1, DEFAULT_SETTINGS.volume),
+      // 四组音量（批次 178）：脏数据一律回退到 1（= 不额外衰减）
+      volumeBlocks: clampNumber(parsed.volumeBlocks, 0, 1, DEFAULT_SETTINGS.volumeBlocks),
+      volumeMobs: clampNumber(parsed.volumeMobs, 0, 1, DEFAULT_SETTINGS.volumeMobs),
+      volumePlayer: clampNumber(parsed.volumePlayer, 0, 1, DEFAULT_SETTINGS.volumePlayer),
+      volumeUi: clampNumber(parsed.volumeUi, 0, 1, DEFAULT_SETTINGS.volumeUi),
       sensitivity: clampNumber(parsed.sensitivity, 0.5, 2, DEFAULT_SETTINGS.sensitivity),
       cameraMode: CAMERA_MODES.includes(parsed.cameraMode as CameraMode)
         ? (parsed.cameraMode as CameraMode)
@@ -493,6 +512,11 @@ export class SettingsScreen {
 
     const sound = this.section('sound');
     sound.append(this.makeSlider('volume', '音量', '%', 0, 100, 1, 100));
+    // 分组音量（批次 178，M20 最后一项）：主音量下面四条，各自 0~100%
+    sound.append(this.makeSlider('volumeBlocks', '方块音效', '%', 0, 100, 1, 100));
+    sound.append(this.makeSlider('volumeMobs', '生物音效', '%', 0, 100, 1, 100));
+    sound.append(this.makeSlider('volumePlayer', '玩家音效', '%', 0, 100, 1, 100));
+    sound.append(this.makeSlider('volumeUi', '界面与环境', '%', 0, 100, 1, 100));
 
     const game = this.section('game');
     this.makeToggle(game, 'daylightCycle', '昼夜循环');

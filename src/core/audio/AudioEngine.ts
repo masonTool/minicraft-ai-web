@@ -184,6 +184,69 @@ export function soundSpec(kind: SoundKind): SoundSpec | undefined {
 }
 
 /**
+ * 音量分组（批次 178，M20 的最后一项）。
+ *
+ * 原版把音量拆成"主音量 + 音乐 + 方块 + 生物 + 环境 + 语音"；本项目没有音乐与语音，
+ * 于是收敛成**四组**：方块（挖/放/门/工具）、生物（叫/受伤）、玩家（脚步/受伤/吃/弓）、
+ * 界面与环境（按钮/达成/交易/雷声/爆炸/传送门）。
+ *
+ * ⚠️ 这张表**必须是穷尽映射**（`Record<SoundKind, …>`）：加了新音效却忘了分组，
+ * 编译期就会报错——而不是等到玩家发现"这个声音调不小"。
+ */
+export type SoundGroup = 'blocks' | 'mobs' | 'player' | 'ui';
+
+export const SOUND_GROUPS: Readonly<Record<SoundKind, SoundGroup>> = {
+  break_stone: 'blocks',
+  break_wood: 'blocks',
+  break_grass: 'blocks',
+  break_sand: 'blocks',
+  break_glass: 'blocks',
+  break_wool: 'blocks',
+  place: 'blocks',
+  door: 'blocks',
+  door_close: 'blocks',
+  trapdoor: 'blocks',
+  fence_gate: 'blocks',
+  flint: 'blocks',
+  shear: 'blocks',
+  step: 'player',
+  hurt: 'player',
+  death: 'player',
+  fall: 'player',
+  splash: 'player',
+  eat: 'player',
+  bow_shoot: 'player',
+  arrow_hit: 'player',
+  mob_zombie: 'mobs',
+  mob_skeleton: 'mobs',
+  mob_creeper: 'mobs',
+  mob_cow: 'mobs',
+  mob_sheep: 'mobs',
+  mob_villager: 'mobs',
+  click: 'ui',
+  achievement: 'ui',
+  trade: 'ui',
+  item_move: 'ui',
+  explode: 'ui',
+  thunder: 'ui',
+  portal: 'ui',
+  fuse: 'ui',
+};
+
+/** 某个音效属于哪一组（界面与测试用） */
+export function soundGroupOf(kind: SoundKind): SoundGroup {
+  return SOUND_GROUPS[kind];
+}
+
+/** 四组的显示顺序与中文名（设置界面按它排） */
+export const SOUND_GROUP_LABELS: Readonly<Record<SoundGroup, string>> = {
+  blocks: '方块音效',
+  mobs: '生物音效',
+  player: '玩家音效',
+  ui: '界面与环境',
+};
+
+/**
  * 方块名 → 破坏音效。抽成纯函数是为了能离线测试：
  * 引擎本身需要 AudioContext（浏览器才有），但"什么材质响什么声"是纯逻辑。
  */
@@ -242,6 +305,14 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   /** 主音量（与设置里的音量联动） */
   volume = 0.7;
+  /**
+   * 四组各自的音量倍率（0~1，默认 1 = 不额外衰减）。
+   *
+   * 与 `volume` 是**相乘**关系：主音量管"整体"，分组管"我想让哪一类更轻"。
+   * 分组的默认值给 1 而不是 0.8：默认状态下"没有这个功能"才是对的，
+   * 玩家调过之后才有差别（免得一上来所有声音都比以前小一截）。
+   */
+  private readonly groupVolume: Record<SoundGroup, number> = { blocks: 1, mobs: 1, player: 1, ui: 1 };
   /** 是否启用（可在设置里关掉；AudioContext 创建失败时为 false） */
   enabled = true;
   /** 监听者位置（玩家），用于距离衰减 */
@@ -284,6 +355,20 @@ export class AudioEngine {
     return this.ctx?.state ?? 'none';
   }
 
+  /**
+   * 设置某一组的音量（0~1，超范围夹住）。
+   *
+   * 只影响**之后**播放的声音：已经响着的那一声不会跟着变（它与原版一样是"合成一次、播完即弃"）。
+   */
+  setGroupVolume(group: SoundGroup, value: number): void {
+    this.groupVolume[group] = Math.max(0, Math.min(1, value));
+  }
+
+  /** 某一组现在的音量（设置界面回显与测试用） */
+  groupVolumeOf(group: SoundGroup): number {
+    return this.groupVolume[group];
+  }
+
   setListener(x: number, y: number, z: number): void {
     this.listenerX = x;
     this.listenerY = y;
@@ -310,7 +395,7 @@ export class AudioEngine {
     this.lastStartAt.set(kind, nowClock);
     this.voiceEnds.push(nowClock + spec.duration);
 
-    let gain = spec.gain * this.volume;
+    let gain = spec.gain * this.volume * this.groupVolume[SOUND_GROUPS[kind]];
     if (at) {
       const distance = Math.hypot(at.x - this.listenerX, at.y - this.listenerY, at.z - this.listenerZ);
       if (distance > HEARING_RANGE) return;
@@ -410,7 +495,8 @@ export class AudioEngine {
 
     const hz = Math.max(20, Math.min(4000, frequency));
     const duration = 0.55;
-    let gain = 0.42 * this.volume;
+    // 音符盒归"方块"那一组（它就是一块木头）
+    let gain = 0.42 * this.volume * this.groupVolume.blocks;
     if (at) {
       const distance = Math.hypot(at.x - this.listenerX, at.y - this.listenerY, at.z - this.listenerZ);
       if (distance > HEARING_RANGE) return;
