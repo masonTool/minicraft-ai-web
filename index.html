@@ -131,6 +131,10 @@
         /* ---- 槽位 ---- */
         --slot-bg: var(--mc-face);
         --slot-bg-hover: var(--mc-face-hover);
+        /* 批次 159：选中（手上拿着的那叠就显示在这一格）＝ **比常态深一档**。
+           悬停是变亮（#a0a0a0），选中要跟它区分开，所以往下取（#7a7a7a），
+           再深就成"按下"那个色（#6c6c6c）了，会让人以为是坏的。 */
+        --slot-bg-selected: #7a7a7a;
         --slot-edge-light: #ffffff;
         --slot-edge-dark: #373737;
         --slot-radius: 0;
@@ -1345,11 +1349,10 @@
       }
       /* 分类页签就是左轨那排图标，面板内不再重复一排 */
       .recipe-panel.embedded .recipe-tabs { display: none; }
-      .recipe-panel.embedded .recipe-header {
-        display: flex; min-height: 24px; padding: 0 0 5px; margin: 0 0 6px;
-        flex: 0 0 auto; align-items: center;
-      }
-      /* 关闭键留给"关掉配方书、左栏回到我的物品"；横屏矮屏上说明行不占地方 */
+      /* 批次 159：嵌在左栏时**整条标题行都不要**——"配方书"三个字和那颗 ✕ 都去掉。
+         配方列表上方再写一次自己是多余的；关闭入口移到标题栏那颗开关上
+         （另一个出口是左下"我的物品"页签）。 */
+      .recipe-panel.embedded .recipe-header { display: none; }
       .recipe-panel.embedded .recipe-hint,
       .recipe-panel.embedded .recipe-detail { display: none; }
       /* 搜索框只属于放大镜（全部）分类；其余分类像原版一样直接从物品格开始。 */
@@ -1608,14 +1611,25 @@
         flex: 0 1 auto;
       }
       .inv-panel.pocket-ui .inv-header-hint { display: none; }
+      /* 批次 159：标题栏改成**三列网格**——左两列平分（配方开关落在左列的右端，
+         也就是"左栏的右上角、比较靠中间"），最右一列留给关闭键。
+         原来整条 flex-end 会把开关和关闭键挤在一起，分不清哪颗是开关。 */
       .inv-panel.pocket-ui .inv-header {
         flex: 0 0 auto;
-        justify-content: flex-end; padding: 0 0 6px; margin: 0;
+        display: grid; grid-template-columns: 1fr 1fr auto;
+        align-items: center; gap: 0 8px;
+        padding: 0 0 6px; margin: 0;
         border-bottom: 2px solid #a9a9a9;
       }
       .inv-panel.pocket-ui .inv-header > b { display: none; }
-      /* 携带版标题栏只留关闭（成就/配方书另有入口）；创造切换仍可留 */
-      .inv-panel.pocket-ui .inv-header .inv-recipes-btn:not(.inv-creative-toggle) { display: none; }
+      /* 携带版标题栏只留关闭 + 配方开关；成就等其它按钮仍藏 */
+      .inv-panel.pocket-ui .inv-header .inv-recipes-btn:not(.inv-creative-toggle):not(.inv-pocket-recipe-toggle) { display: none; }
+      .inv-panel.pocket-ui .inv-header .inv-pocket-recipe-toggle { grid-column: 1; justify-self: end; }
+      .inv-panel.pocket-ui .inv-header .inv-close { grid-column: 3; justify-self: end; }
+      /* 配方书开着时开关自己也要看得出来是"按下去了" */
+      .inv-panel.pocket-ui .inv-header .inv-pocket-recipe-toggle.active {
+        background: #dcdec4; border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+      }
       .inv-panel.pocket-ui .inv-close { min-width: 36px; min-height: 36px; padding: 4px 8px; }
 
       /* 内容区在框内滚动；格子永远 9 列自适应，禁止撑破灰框 */
@@ -1643,12 +1657,12 @@
         max-width: 100%;
         margin: 0 auto;
       }
+      /* 批次 159：左栏上方那行「物品栏」不要（基岩版左栏没有这行字），
+         界面里也不再显示它（`applyInventoryChrome` 恒为 none）。 */
       .inv-personal-title {
         display: none; width: 100%; color: #3a3a3a;
         font-size: 12px; line-height: 16px; text-align: left;
       }
-      .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-personal-title,
-      .inv-panel.pocket-ui.workbench-ui .inv-personal-title { display: block; }
       .inv-panel.pocket-ui .inv-main > .inv-grid .inv-slot,
       .inv-hotbar-dock .inv-slot {
         width: 44px; height: 44px; min-width: 44px;
@@ -1936,21 +1950,6 @@
         min-height: 0;
         overflow: hidden;
       }
-      /* 左栏换成配方列表时：合成区收到右栏上半，玩家自己的 3×9 让位到下半
-         （基岩版手机合成页就是这个排法，不用把仓库藏掉） */
-      .inv-panel.pocket-ui.pocket-dual[data-pocket-left='recipes'] .inv-top {
-        grid-row: 1;
-        height: auto;
-        min-height: 0;
-      }
-      .inv-panel.pocket-ui.pocket-dual[data-pocket-left='recipes'] .inv-main > .inv-grid {
-        grid-column: 2;
-        grid-row: 2;
-        border-left: 2px solid #8a8a8a;
-        padding-left: 6px;
-        box-sizing: border-box;
-        align-self: start;
-      }
       /* 换栏目内容时的淡入：只改透明度，**不碰几何**（一碰就又变成"面板在动"） */
       @keyframes inv-pane-in {
         from { opacity: 0; }
@@ -2081,6 +2080,10 @@
       /* 悬停亮一档、按下凹一点：此前槽位完全没有交互反馈（点了才知道点到了没） */
       .inv-slot:hover { background: var(--slot-bg-hover); }
       .inv-slot:active { transform: scale(.96); }
+      /* 批次 159：选中 = 底色变深（手上拿的那叠就**显示在这一格**里）。
+         ⚠️ 必须压住 `:hover`：鼠标停在选中那一格上时，悬停那条会把深色顶掉。 */
+      .inv-slot.selected,
+      .inv-slot.selected:hover { background: var(--slot-bg-selected); }
 
       /* ---------------- 耐久条（批次 28） ----------------
          受损的工具/盔甲在格子底部显示一条 3px 的条，颜色随剩余耐久 绿→黄→红。
@@ -2098,6 +2101,32 @@
       }
       .dur-bar.dur-mid b { background: var(--dur-mid); }
       .dur-bar.dur-low b { background: var(--dur-low); }
+
+      /* ---------------- 点物品时的小说明（批次 159） ----------------
+         手机上只有**长按 600ms** 才有提示框，轻点一下什么都没有——而轻点才是触摸端的
+         主手势。这块小浮层就是补这条：点一下就把"是什么 + 一句说明"摆到快捷栏上方，
+         几秒后自己消失。
+         ⚠️ 位置由 `placePickToast()` 按快捷栏的位置算（JS 写 left/top），
+            这里只负责"像一块小牌子"；`position: fixed` 所以不受面板网格影响。 */
+      #inv-pick-toast {
+        position: fixed; left: 0; top: 0; z-index: 12; pointer-events: none;
+        transform: translateX(-50%);
+        max-width: min(80vw, 320px);
+        padding: 5px 9px;
+        /* 与提示框同一套配色（近黑紫底 + 紫边 + 白字带阴影），免得又多一种观感 */
+        background: #100010f2;
+        border: 2px solid #2d0a63;
+        border-radius: 0;
+        color: #e6e6e6; font-size: 12px; line-height: 1.45;
+        text-shadow: 1px 1px 0 #000;
+        box-shadow: 0 0 0 2px var(--mc-outline);
+      }
+      #inv-pick-toast.hidden { display: none; }
+      #inv-pick-toast .tooltip-title { font-size: 13px; font-weight: 700; }
+      #inv-pick-toast .tooltip-desc { color: #d8d8d8; }
+      /* 只淡入透明度：位置是 JS 给的，动几何会让人觉得"界面又在跳" */
+      @keyframes pick-toast-in { from { opacity: 0; } to { opacity: 1; } }
+      #inv-pick-toast:not(.hidden) { animation: pick-toast-in var(--dur-fast) ease-out; }
 
       /* ---------------- 稀有度配色 ----------------
          色值在 `:root` 里（与 `itemVisuals.ts` 的档位一一对应），这里只做映射。 */

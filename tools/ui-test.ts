@@ -428,11 +428,18 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('图标页签：右缘合成/盔甲 + 左下物品栏', invSrc.includes('makePocketIconTab') && invSrc.includes('inv-pocket-side'));
   check('右下合成键只切右栏，不自动打开配方书', /private setPocketTab[\s\S]{0,320}applyInventoryChrome\(\);[\s\S]{0,30}\}/.test(invSrc));
   check('只有左侧分类/配方键打开配方书', invSrc.includes('private openPocketRecipes(tab: RecipeBookTab)') && invSrc.includes('this.hooks.onOpenRecipes?.(tab)'));
-  check('盔甲页保留左侧主背包', invSrc.includes("this.mainGridEl.style.display = leftPane === 'creative' ? 'none' : ''"));
+  // 批次 159：左栏换成配方列表时，右栏只留合成区——下方那片 3×9 仓库不显示
+  // （工作台例外：它本来就是 3×3 + 3×9 的排法）
+  check(
+    '配方页右栏不显示仓库（工作台除外）',
+    invSrc.includes("const hideMainGrid = leftPane === 'creative' || (leftPane === 'recipes' && !workbench);") &&
+      invSrc.includes("this.mainGridEl.style.display = hideMainGrid ? 'none' : '';"),
+  );
+  check('左栏上方那行「物品栏」不再显示', invSrc.includes("this.personalInventoryTitleEl.style.display = 'none';"));
   check('快捷栏在携带版始终显示', /this\.hotbarGridEl\.style\.display = '';/.test(invSrc));
   // 批次 157：界面统一成携带版那一套，不再有"经典 UI"这个分支
   check('不再按视口宽度选 UI 形态', !invSrc.includes('isClassicUi') && !core.includes('CLASSIC_UI_MIN_WIDTH'));
-  check('左栏三份内容写在 data-pocket-left 上', invSrc.includes("dataset.pocketLeft = leftPane") && css.includes("[data-pocket-left='recipes']"));
+  check('左栏三份内容写在 data-pocket-left 上', invSrc.includes("dataset.pocketLeft = leftPane") && css.includes('.inv-recipe-host {'));
   check('配方书 show 可带 tab', /show\(tab\?: RecipeBookTab\)/.test(recipeSrc));
   check('主程序把 tab 传给配方书', mainSrc.includes('this.recipeBook.show(tab)'));
   check('生存与创造共用 pocket-dual 双栏', invSrc.includes("classList.add('pocket-ui', 'pocket-dual')") && css.includes('.inv-panel.pocket-ui.pocket-dual'));
@@ -479,7 +486,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '左栏三份内容占同一个格子（换内容不换位置）',
-    css.includes('.inv-recipe-host {') && css.includes("grid-row: 1 / span 2;") && css.includes("[data-pocket-left='recipes']"),
+    css.includes('.inv-recipe-host {') && css.includes('grid-row: 1 / span 2;') && invSrc.includes("dataset.pocketLeft = leftPane"),
   );
   check('嵌入态只让配方网格滚', css.includes('.recipe-panel.embedded .recipe-grid {'));
   check(
@@ -491,6 +498,63 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('非搜索分类隐藏搜索框', css.includes(".recipe-panel.embedded:not([data-tab='all']) .recipe-controls"));
   check('携带版配方页不混入熔炼表', recipeSrc.includes('this.isEmbedded') && recipeSrc.includes("this.smeltingEl.classList.add('hidden')"));
   check('配方页把当前分类写入面板供布局使用', recipeSrc.includes('this.panelEl.dataset.tab = this.tab'));
+}
+
+console.log('\n[携带版细节收口（批次 159）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  // ① 配方页右栏只留合成区
+  check(
+    '配方页不显示合成区下方的仓库',
+    invSrc.includes("leftPane === 'recipes' && !workbench") && invSrc.includes("hideMainGrid ? 'none' : ''"),
+  );
+
+  // ② 两处标题都去掉
+  check('嵌入态整条配方书标题行都不显示', css.includes('.recipe-panel.embedded .recipe-header { display: none; }'));
+  check('左栏上方不再有「物品栏」那行字', invSrc.includes("this.personalInventoryTitleEl.style.display = 'none';"));
+
+  // ③ 配方开关：标题栏 + 开关语义
+  check(
+    '配方开关留在标题栏（与关闭键同一行，排在左栏右上角）',
+    css.includes('grid-template-columns: 1fr 1fr auto;') &&
+      css.includes('.inv-pocket-recipe-toggle { grid-column: 1; justify-self: end; }') &&
+      css.includes('.inv-close { grid-column: 3; justify-self: end; }'),
+  );
+  check(
+    '开关是**开/关**两态（再点一下就关）',
+    invSrc.includes('if (this.hooks.isRecipesOpen?.()) this.hooks.onCloseRecipes?.();') &&
+      invSrc.includes("classList.toggle('active', leftPane === 'recipes')"),
+  );
+  // 创造模式搜索框只在「搜索」那一栏出现（与生存模式同一个口径）
+  check(
+    '创造搜索框只在「搜索」分类显示',
+    invSrc.includes("private syncCreativeSearch(): void {") &&
+      invSrc.includes("this.creativeCategory === 'all' ? '' : 'none'"),
+  );
+
+  // ④ 点物品 → 快捷栏上方的小说明
+  check('有这块说明浮层', css.includes('#inv-pick-toast {') && invSrc.includes("this.pickToastEl.id = 'inv-pick-toast'"));
+  check('说明锚在快捷栏上方', invSrc.includes('const anchor = dockVisible ? this.hotbarDock : this.hotbarGridEl;'));
+  check('几秒后自己消失', invSrc.includes('PICK_TOAST_MS') && invSrc.includes('window.setTimeout(() => this.hidePickToast(), PICK_TOAST_MS)'));
+  check('关界面时收掉', invSrc.includes('this.hidePickToast();') && /finishClose\(\): void \{[\s\S]{0,400}hidePickToast/.test(invSrc));
+
+  // ⑤ 选中 = 原格内显示 + 底色变深；不再有跟着光标飘的图标
+  check('选中态是底色变深（且压住 hover）', css.includes('.inv-slot.selected,') && css.includes('--slot-bg-selected'));
+  check(
+    '手上那叠**画回来源格**而不是跟着光标飘',
+    invSrc.includes('this.heldOriginEl = takeOnly ? null : binding.element;') &&
+      invSrc.includes('this.renderInto(this.heldOriginEl, this.held);'),
+  );
+  // 只取不放的槽（熔炉产物）被取空是要产出下一件的，画回去会让人以为没取出来
+  check('只取不放的槽不就地显示（用兜底那块）', invSrc.includes('takeOnly ? null : binding.element'));
+  // 原来那块 `#inv-held` 是 position:fixed 却没有初始 left/top，触摸端轻点不产生
+  // pointermove → 停在容器左上角（用户原话："图标会飘在左边"）
+  check(
+    '兜底那块图标按下时就写坐标（不再停在左上角）',
+    /pointerdown'[\s\S]{0,400}heldElement\.style\.left = `\$\{pointer\.clientX\}px`/.test(invSrc),
+  );
 }
 
 console.log('\n[玩家预览占位（批次 141）]');

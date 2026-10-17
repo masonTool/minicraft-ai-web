@@ -96,6 +96,8 @@ import {
   maxStackOf,
 } from '../core/registry/items.ts';
 import { itemLabel, itemTooltip, type ItemTooltip } from '../core/registry/itemNames.ts';
+// 说明浮层的标题颜色与提示框同源（稀有度 → 类名，CSS 只认类名）
+import { rarityClassName } from '../core/registry/itemVisuals.ts';
 import { SIX_FACING_NAMES } from '../core/registry/blockState.ts';
 import {
   NARROW_MAX_WIDTH,
@@ -269,6 +271,11 @@ const DOUBLE_CLICK_MS = 400;
 
 export const TOUCH_LONG_PRESS_MS = 260;
 const TOUCH_REPEAT_MS = 170;
+/**
+ * 点物品时那块小说明停留多久（毫秒，批次 159）。
+ * 比"看一眼"长、比"碍事"短：3.5 秒够读完一行说明，又不至于一直压在快捷栏上。
+ */
+export const PICK_TOAST_MS = 3500;
 
 /** 携带版物品栏的三个内容页（批次 140；Wiki「携带版 UI」） */
 export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
@@ -390,6 +397,21 @@ export class InventoryScreen {
    * 而不是留在光标上。
    */
   private touchOrigin: { source: SlotSource; index: number; itemId: number } | null = null;
+  /**
+   * 手上那叠**是从哪个格子拿起来的**（批次 159）。
+   *
+   * 选中态原来是"画一个图标跟着光标飘"，但触摸端一次轻点根本不产生 `pointermove`，
+   * 那块图标就停在居中容器的左上角（用户原话："物品图标会飘在左边"）。
+   * 现在改成**把那叠画回来源格 + 底色变深**：既是"选中"，也顺带把
+   * "两格都有东西 → 先后点两下 = 交换"这件事说清楚（换过来的那件就显示在来源格）。
+   */
+  private heldOriginEl: HTMLElement | null = null;
+  /** 当前正被标记成"选中"的那一格（每次刷新先把旧的摘掉，避免高亮残留） */
+  private selectedEl: HTMLElement | null = null;
+  /** 点物品时浮在快捷栏上方的那块小说明（批次 159）：几秒后自己消失 */
+  private readonly pickToastEl: HTMLDivElement;
+  /** 说明浮层的自动收起计时器 */
+  private pickToastTimer = 0;
   private readonly creativeSection: HTMLDivElement;
   private readonly heldElement: HTMLDivElement;
   private readonly heldCanvas: HTMLCanvasElement;
@@ -635,7 +657,13 @@ export class InventoryScreen {
       // 键盘热键的括注只在 PC 上给：手机上没有 R 这个键，写成"配方书 (R)"
       // 只会让人以为"要按 R 才能打开"（批次 104）
       recipes.textContent = touchDevice ? '配方书' : '配方书 (R)';
-      recipes.addEventListener('click', () => this.openPocketRecipes('all'));
+      // 批次 159：它是**开关**——已经开着时再点一下就是关（左栏还回"我的物品"）。
+      // 配方书嵌进左栏后自己那颗 ✕ 已经去掉了（见 CSS `.recipe-panel.embedded`），
+      // 这一颗是关掉配方列表的唯一入口（另一个是左下"我的物品"页签）。
+      recipes.addEventListener('click', () => {
+        if (this.hooks.isRecipesOpen?.()) this.hooks.onCloseRecipes?.();
+        else this.openPocketRecipes('all');
+      });
       this.recipesBtn = recipes;
       header.appendChild(recipes);
     }
@@ -902,6 +930,12 @@ export class InventoryScreen {
     this.heldElement.append(this.heldCanvas, this.heldCount);
     this.root.appendChild(this.heldElement);
 
+    // 点物品时那块小说明（批次 159）：挂在 root 上，跟着界面一起显隐
+    this.pickToastEl = document.createElement('div');
+    this.pickToastEl.id = 'inv-pick-toast';
+    this.pickToastEl.className = 'hidden';
+    this.root.appendChild(this.pickToastEl);
+
     document.body.appendChild(this.root);
 
     this.bindEvents();
@@ -1061,6 +1095,16 @@ export class InventoryScreen {
     this.narrowQuery?.addEventListener('change', () => this.renderCreativeGrid());
   }
 
+  /**
+   * 创造搜索框只跟「搜索」那一栏走（批次 159）。
+   *
+   * 与生存模式同一个口径：那边是 `.recipe-panel:not([data-tab='all']) .recipe-controls`
+   * 把搜索行整条藏掉——点放大镜才有搜索框，点别的分类直接从物品格开始。
+   */
+  private syncCreativeSearch(): void {
+    this.creativeSearch.style.display = this.creativeCategory === 'all' ? '' : 'none';
+  }
+
   private makeSearchTabIcon(): SVGSVGElement {
     const ns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(ns, 'svg');
@@ -1213,8 +1257,12 @@ export class InventoryScreen {
 
     this.creativeSection.style.display = leftPane === 'creative' ? '' : 'none';
     this.recipeHostEl.style.display = leftPane === 'recipes' ? 'block' : 'none';
-    this.mainGridEl.style.display = leftPane === 'creative' ? 'none' : '';
-    this.personalInventoryTitleEl.style.display = leftPane === 'items' ? '' : 'none';
+    // 批次 159：配方列表占着左栏时，右栏只留合成区——合成区**下方那片 3×9 仓库不显示**。
+    // 工作台界面例外：它本来就是"3×3 + 下面 3×9"的排法，藏了就没处放材料。
+    const hideMainGrid = leftPane === 'creative' || (leftPane === 'recipes' && !workbench);
+    this.mainGridEl.style.display = hideMainGrid ? 'none' : '';
+    // 左栏上方那行「物品栏」也不要（基岩版左栏没有这行字）
+    this.personalInventoryTitleEl.style.display = 'none';
     this.hotbarGridEl.style.display = '';
 
     // 右栏：合成 / 盔甲二选一，同样占同一个格子
@@ -1238,7 +1286,12 @@ export class InventoryScreen {
     this.placeHotbar(true);
     this.syncPocketBodyClass(true);
     this.renderCreativeGrid();
-    if (this.recipesBtn) this.recipesBtn.classList.add('hidden');
+    // 配方书开关：生存双栏时**留在标题栏**（与关闭键同一行，排在左栏右上角那一带），
+    // 创造模式左栏是物品分类，用不上它。
+    if (this.recipesBtn) {
+      this.recipesBtn.classList.toggle('hidden', showCreativeItems);
+      this.recipesBtn.classList.toggle('active', leftPane === 'recipes');
+    }
 
     // 换栏内容时给一下淡入：**位置不动**，只是让人看见"这一栏换了一份"
     if (this.open) {
@@ -1412,6 +1465,8 @@ export class InventoryScreen {
 
   /** 按当前分类与搜索词重建创造网格；经典 UI 分页，携带版整表滚动。 */
   private renderCreativeGrid(): void {
+    // 搜索框只在「搜索」那一栏出现（与生存模式同一个口径，见 `syncCreativeSearch`）
+    this.syncCreativeSearch();
     const query = this.creativeQuery;
     const items = CREATIVE_ITEMS.filter((itemId) => {
       if (this.creativeCategory !== 'all' && creativeTabFor(itemId) !== this.creativeCategory) return false;
@@ -1428,9 +1483,16 @@ export class InventoryScreen {
     const visible = pocketScroll ? items : slicePage(items, this.creativePage, pageSize);
 
     this.creativeGrid.replaceChildren();
+    // 批次 159：整表是**重建**的（`replaceChildren`），所以"选中的那一格"会跟着被丢掉。
+    // 重建前先记下手上那件的 id，重建后按 id 把高亮搬回新格子——
+    // 否则在创造栏里点一下，选中的反馈一刷新就没了。
+    const restoreId =
+      this.held && this.heldOriginEl && !this.heldOriginEl.isConnected ? this.held.id : null;
+
     for (const itemId of visible) {
       const slot = this.createSlot();
       slot.classList.add('creative-slot');
+      slot.dataset.itemId = String(itemId);
       this.tooltipStacks.set(slot, { id: itemId, count: 1 });
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
       slot.addEventListener('pointerdown', (event) => {
@@ -1447,6 +1509,8 @@ export class InventoryScreen {
         } else {
           this.held = { id: itemId, count: max };
         }
+        // 批次 159：创造格同样"就地选中"——点中的那一格变深，手上那叠就显示在那儿
+        this.heldOriginEl = slot;
         this.hooks.onMove?.();
         this.refresh();
       });
@@ -1458,6 +1522,12 @@ export class InventoryScreen {
       empty.className = 'inv-empty';
       empty.textContent = '没有匹配的物品';
       this.creativeGrid.appendChild(empty);
+    }
+
+    // 把"选中的那一格"搬回重建后的新格子（同上）
+    if (restoreId !== null) {
+      const cell = this.creativeGrid.querySelector<HTMLElement>(`.creative-slot[data-item-id="${restoreId}"]`);
+      if (cell) this.heldOriginEl = cell;
     }
 
     const pages = pageCount(items.length, pageSize);
@@ -1886,6 +1956,23 @@ export class InventoryScreen {
       this.heldElement.style.left = `${event.clientX}px`;
       this.heldElement.style.top = `${event.clientY}px`;
     });
+
+    // 批次 159：**按下就记一次坐标**。
+    // `#inv-held` 是 `position: fixed` 却没有初始 left/top，坐标只在 pointermove 里给；
+    // 触摸端一次轻点不产生 pointermove，那块图标就停在居中容器的左上角——
+    // 用户看到的正是"点中一个物品，它的图标会飘在左边"。
+    // 同一处顺手接上"点物品弹说明"（捕获阶段：销毁格会 stopPropagation）。
+    this.root.addEventListener(
+      'pointerdown',
+      (event) => {
+        const pointer = event as PointerEvent;
+        this.heldElement.style.left = `${pointer.clientX}px`;
+        this.heldElement.style.top = `${pointer.clientY}px`;
+        const slot = (event.target as HTMLElement | null)?.closest<HTMLElement>('.inv-slot');
+        if (slot) this.showPickToast(slot);
+      },
+      true,
+    );
 
     // 松手：把这一趟拖过的槽位结算掉（批次 128）
     document.addEventListener('pointerup', () => {
@@ -2417,6 +2504,9 @@ export class InventoryScreen {
         this.held = { id: slot.id, count: half };
         slot.count -= half;
         this.inventory.notify();
+        // 这一格自己还留着一半，"就地显示"会把剩下的那一半盖掉——
+        // 没法就地表示就退回"跟着光标那一块"（它的坐标在 pointerdown 时就写好了）
+        this.heldOriginEl = null;
       } else if (!this.held || takeOnly) {
         if (this.held && takeOnly) {
           // 手上有东西时点只取不放的槽：合并同类
@@ -2432,6 +2522,11 @@ export class InventoryScreen {
           source.set(index, null);
           // 无论鼠标还是触摸都记来源：点到不可放置区域时要能“取消选中”并原位退回。
           this.touchOrigin = { source, index, itemId: slot.id };
+          // 批次 159：整叠被拿走 → 那叠就**显示在来源格里**并变深（= 选中）。
+          // 交换时也留意这一条：来源格空着，换过来的那件正好落在里面。
+          // ⚠️ 只取不放的槽（熔炉产物等）除外：它们被取空是要"产出下一件"的，
+          //   再把取走的那叠画回去会让人以为没取出来。
+          this.heldOriginEl = takeOnly ? null : binding.element;
         }
       }
     }
@@ -2686,6 +2781,7 @@ export class InventoryScreen {
     document.body.classList.remove('inv-pocket-open');
     // 配方书是从背包左栏借来的位置，背包关了就得还回去
     this.detachRecipeBook();
+    this.hidePickToast();
     this.lastLeftPane = '';
     this.restoreInvTabToRail();
     this.hooks.onOpenChange?.(false);
@@ -2794,7 +2890,24 @@ export class InventoryScreen {
     if (this.mode === 'stonecutter') this.refreshStonecutter();
     if (this.mode === 'trade') this.refreshTrade();
 
-    if (this.held) {
+    // 批次 159：手上那叠**画回来源格**并让底色变深（= 选中），
+    // 不再画一个跟着光标飘的图标（触摸端没有 pointermove，那块图标会停在左上角）。
+    // ⚠️ 交换时刻意**保留**同一个来源格：换过来的那件正好出现在你第一次点的那一格里，
+    //   于是"先点第一个再点第二个 = 两格换位"看起来就是真的换了位。
+    if (!this.held) this.heldOriginEl = null;
+    else if (this.heldOriginEl && !this.heldOriginEl.isConnected) this.heldOriginEl = null;
+    if (this.selectedEl && this.selectedEl !== this.heldOriginEl) {
+      this.selectedEl.classList.remove('selected');
+      this.selectedEl = null;
+    }
+    if (this.held && this.heldOriginEl) {
+      this.renderInto(this.heldOriginEl, this.held);
+      this.heldOriginEl.classList.add('selected');
+      this.selectedEl = this.heldOriginEl;
+      this.heldElement.classList.remove('on');
+      this.heldCount.textContent = '';
+    } else if (this.held) {
+      // 兜底：来源格自己还留着东西（右键取半数）时没法"就地表示"，仍用跟着光标那一块
       drawItemIcon(this.heldCanvas, this.atlas, this.held.id, 32);
       this.heldElement.classList.add('on');
       this.heldCount.textContent = this.held.count > 1 ? String(this.held.count) : '';
@@ -2836,6 +2949,60 @@ export class InventoryScreen {
     const stack = this.tooltipStacks.get(element);
     if (!stack) return null;
     return itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name);
+  }
+
+  /**
+   * 点物品时把说明浮在快捷栏上方几秒（批次 159）。
+   *
+   * 手机上只有**长按 600ms** 才有提示框，轻点一下什么都没有——而轻点才是触摸端的主手势。
+   * 悬停那条路在触摸端永远不成立（手指没有 hover），所以补这条"点击即弹"。
+   * 位置锚在快捷栏上方：那里是屏幕上唯一一块不会挡住格子、又必然在视线里的地方。
+   */
+  private showPickToast(slot: HTMLElement): void {
+    const stack = this.tooltipStacks.get(slot);
+    if (!stack) return;
+    const data = itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name);
+
+    this.pickToastEl.textContent = '';
+    const title = document.createElement('div');
+    title.className = `tooltip-title ${rarityClassName(data.rarity)}`;
+    title.textContent = data.count > 1 ? `${data.title} ×${data.count}` : data.title;
+    this.pickToastEl.appendChild(title);
+    // 说明为空就退回副标题（英文 id），总比一块只剩名字的浮层好
+    const line = data.description.length > 0 ? data.description : data.subtitle;
+    if (line.length > 0) {
+      const description = document.createElement('div');
+      description.className = 'tooltip-desc';
+      description.textContent = line;
+      this.pickToastEl.appendChild(description);
+    }
+    this.pickToastEl.classList.remove('hidden');
+    this.placePickToast();
+    window.clearTimeout(this.pickToastTimer);
+    this.pickToastTimer = window.setTimeout(() => this.hidePickToast(), PICK_TOAST_MS);
+  }
+
+  /** 说明浮层锚在快捷栏上沿（携带版 dock 在屏幕底；容器界面用面板内那一排） */
+  private placePickToast(): void {
+    if (this.pickToastEl.classList.contains('hidden')) return;
+    const dockVisible = !this.hotbarDock.classList.contains('hidden');
+    const anchor = dockVisible ? this.hotbarDock : this.hotbarGridEl;
+    const rect = anchor.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return; // 还没布局出来
+    const height = this.pickToastEl.offsetHeight;
+    const top = Math.max(6, rect.top - height - 10);
+    // 夹在视口里：贴边的说明会有一半被切掉
+    const half = Math.min(this.pickToastEl.offsetWidth / 2, 160);
+    const left = Math.min(Math.max(rect.left + rect.width / 2, half + 6), window.innerWidth - half - 6);
+    this.pickToastEl.style.top = `${Math.round(top)}px`;
+    this.pickToastEl.style.left = `${Math.round(left)}px`;
+  }
+
+  /** 收起说明浮层（超时 / 关界面） */
+  private hidePickToast(): void {
+    window.clearTimeout(this.pickToastTimer);
+    this.pickToastTimer = 0;
+    this.pickToastEl.classList.add('hidden');
   }
 
   /**
