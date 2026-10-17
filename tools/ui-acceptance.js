@@ -315,55 +315,54 @@
     info(`panel background: ${panelStyle.backgroundColor}`);
   }
 
-  // ------------------------------------------- 3.6 配方书：摆放位置与分页
+  // ------------------------------------------- 3.6 配方书：图标网格 + 分页
   {
     document.querySelector('.inv-recipes-btn')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await sleep(400);
     const book = document.getElementById('recipe-book');
     check('recipe book opens from the inventory', !!book && !book.classList.contains('hidden'));
 
-    const { Item } = await import('/src/core/registry/items.ts');
-    const cards = [...document.querySelectorAll('.recipe-card')];
+    const { Block } = await import('/src/core/registry/blocks.ts');
     const narrow = window.innerWidth <= 900;
-    check(`recipe book renders one page only (<= ${narrow ? 8 : 18})`, cards.length > 0 && cards.length <= (narrow ? 8 : 18), `${cards.length} cards`);
+    const cells = [...document.querySelectorAll('.recipe-cell')];
+    check(`recipe book renders one page only (<= ${narrow ? 32 : 60})`, cells.length > 0 && cells.length <= (narrow ? 32 : 60), `${cells.length} cells`);
+    check('the recipes live in an icon grid (not a card list)', !!document.querySelector('.recipe-grid'));
+    check('every cell carries the result id', cells.every((cell) => cell.dataset.resultId), 'missing data-result-id');
+    // 基岩版：能做的亮着、做不了的压暗，不做别的标记
+    check('uncraftable recipes are dimmed, not hidden', cells.some((cell) => cell.classList.contains('locked')) && cells.some((cell) => cell.classList.contains('on')));
+    check('the book has one line telling what a cell is', !!document.querySelector('.recipe-detail'));
 
-    // 火把是最好核对的一条：煤炭在上面、木棍在下面（2×2）
+    // 火把是最好核对的一条：煤炭在上、木棍在下（2×2）
     const search = document.querySelector('.recipe-search');
     search.value = 'torch';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     await sleep(150);
-    const torchCard = [...document.querySelectorAll('.recipe-card')].find((card) => card.querySelector('.recipe-layout[data-kind="shaped"]'));
-    check('shaped recipes render a placement grid', !!torchCard);
-    if (torchCard) {
-      const layout = torchCard.querySelector('.recipe-layout');
-      const slots = [...layout.querySelectorAll('.recipe-slot')];
-      check('a 2x2 recipe draws 4 cells (empty ones included)', slots.length === 4, `${slots.length} cells`);
-      const ids = slots.map((slot) => slot.dataset.itemId ?? '');
-      check('coal goes in the top cell', ids[0] === String(Item.COAL), ids[0] || 'empty');
-      check('the cell next to it is empty (placement includes holes)', slots[1]?.classList.contains('empty'));
-      check('the stick goes below the coal', ids[2] === String(Item.STICK), ids[2] || 'empty');
-      check('the card says where to craft it', /背包|工作台/.test(torchCard.textContent ?? ''), (torchCard.textContent ?? '').slice(0, 40));
-      check('the card carries a placement aria-label', (torchCard.getAttribute('aria-label') ?? '').includes('第 1 行'));
+    const torch = document.querySelector(`.recipe-cell[data-result-id="${Block.TORCH}"]`);
+    check('the torch recipe shows up in the grid', !!torch);
+    if (torch) {
+      const title = torch.getAttribute('title') ?? '';
+      check('a cell names the recipe and its result count', title.includes('火把') && title.includes('×4'), title.slice(0, 40));
+      check('a cell still tells how to place it', title.includes('第 1 行'), title.slice(0, 60));
     }
 
-    // 无序配方：不画网格，明说"摆哪一格都行"
+    // 无序配方：摆哪一格都行（这句话得留在说明里，网格本身不画摆法）
     search.value = 'planks';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     await sleep(150);
-    const loose = document.querySelector('.recipe-layout[data-kind="shapeless"]');
-    check('shapeless recipes say "placement does not matter"', !!loose && /无序/.test((loose.parentElement?.parentElement?.textContent ?? '')), 'no shapeless note');
+    const loose = [...document.querySelectorAll('.recipe-cell')].find((cell) => (cell.getAttribute('title') ?? '').includes('无序'));
+    check('shapeless recipes say "placement does not matter"', !!loose, 'no shapeless note');
 
-    // 分页：181 条配方不能一次全塞进 DOM（摆放格让每张卡片都重了不少）
+    // 分页：181 条配方不能一次全塞进 DOM
     search.value = '';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     await sleep(150);
     const pager = document.querySelector('#recipe-book .inv-pager');
     check('recipe book has a pager', !!pager && !pager.classList.contains('hidden'), pager?.textContent ?? 'missing');
-    const before = document.querySelector('.recipe-card')?.getAttribute('aria-label') ?? '';
+    const before = document.querySelector('.recipe-cell')?.dataset.resultId ?? '';
     pager?.querySelector('[data-role="next"]')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 9202, pointerType: 'touch' }));
     await sleep(200);
-    const after = document.querySelector('.recipe-card')?.getAttribute('aria-label') ?? '';
-    check('paging really changes the recipes', before.length > 0 && after.length > 0 && before !== after, `${before.slice(0, 24)} -> ${after.slice(0, 24)}`);
+    const after = document.querySelector('.recipe-cell')?.dataset.resultId ?? '';
+    check('paging really changes the recipes', before.length > 0 && after.length > 0 && before !== after, `${before} -> ${after}`);
 
     document.querySelector('.recipe-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await sleep(150);

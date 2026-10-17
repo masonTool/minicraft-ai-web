@@ -763,12 +763,13 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
 
-  // ---- 配方书：点一条配方 = **把材料摆进合成格**（原版主交互）
+  // ---- 配方书：点一格 = **把材料摆进合成格**（原版主交互）
   check('配方书的动作接口有 onFill（摆进合成格）', bookUi.includes('onFill: (recipe: Recipe) => boolean'));
-  check('卡片可点，且标了 dataset.role（验收脚本要能找到它）', bookUi.includes("card.dataset.role = 'fill'"));
-  check('可点的卡片才给 fillable（有按下/悬停反馈）', bookUi.includes("card.classList.add('fillable')") && compact.includes('.recipe-card.fillable:active'));
+  check('一格配方标了 dataset.role（验收脚本要能找到它）', bookUi.includes("cell.dataset.role = 'fill'"));
+  check('能点的格子才给 fillable（有按下/悬停反馈）', bookUi.includes("cell.classList.add('fillable')") && compact.includes('.recipe-cell.fillable:active'));
   check('3×3 的配方在背包里不可点（要站到工作台前）', bookUi.includes('entry.gridSize <= 2'));
-  check('点卡片时不会抢那颗"合成"按钮的事', bookUi.includes("closest('.recipe-craft')"));
+  // 一键做完改成 Shift+点：原版没有"合成"按钮这条路径，不该再占用版面
+  check('一键做完改成 Shift+点（版面里没有这颗按钮）', bookUi.includes('event.shiftKey') && !compact.includes('.recipe-craft {'));
   check('main 把 onFill 接上了', mainSrc.includes('onFill: (recipe) => this.fillFromBook(recipe)'));
   check('fillFromBook 摆好后收起配方书（露出摆好的合成格）', /private fillFromBook[\s\S]{0,400}this\.recipeBook\.hide\(\)/.test(mainSrc));
   // 打开配方书**不能**再关背包：关界面会把格子里的东西倒回背包，刚摆的立刻被清掉
@@ -802,6 +803,18 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('筛选默认关（默认藏掉大半会让人以为配方丢了）', bookUi.includes('private onlyCraftable = false'));
   check('空列表会说清为什么空（是筛掉了还是这一栏本来就没有）', bookUi.includes('关掉「仅显示可合成」可以看到全部'));
   check('标签栏与筛选按钮的样式在（含选中态）', compact.includes('.recipe-tabs {') && compact.includes('.recipe-tab.active, .recipe-filter.on'));
+
+  // ---- 版面：基岩版经典 UI 那一屏（批次 135，用户给的截图）
+  check('配方列表是**产物图标网格**（不是卡片列表）', compact.includes('.recipe-grid {') && !compact.includes('.recipe-card {'));
+  check('网格的每一格带产物图标与数量徽章', bookUi.includes("badge.className = 'recipe-cell-count'") && compact.includes('.recipe-cell-count {'));
+  check('材料不够的格子压暗（基岩版是灰掉，不另加标记）', bookUi.includes("classList.add(entry.craftable ? 'on' : 'locked')") && compact.includes('.recipe-cell.locked canvas {'));
+  check('3×3 的格子标出"要工作台"', compact.includes('.recipe-cell.needs-table::after'));
+  check('搜索框与那颗方形筛选按钮同一行（截图里就是这个位置）', compact.includes('.recipe-controls {') && bookUi.includes("controls.append(this.searchEl, this.filterButton)"));
+  check('页签是方形图标块（文字只留在 title/aria 里）', compact.includes('.recipe-tab { width: 32px;') && compact.includes('.recipe-tab-label { display: none; }'));
+  // 图标网格省掉了卡片上的文字，但名字与材料不能跟着一起没（手机上没有悬停）
+  check('底部有一行说明"这格是什么 + 材料够不够"', bookUi.includes("this.detailEl.textContent = summary"));
+  check('说明行会说出缺哪样材料', bookUi.includes('材料不足${missing'));
+  check('没点着任何一格时说明行也有默认文案', bookUi.includes('this.resetDetail()') && bookUi.includes('点一格：材料会摆进右边的合成格'));
 
   // ---- 经典 UI：配方书与背包并排（批次 134，用户给的截图就是经典 UI）
   check(

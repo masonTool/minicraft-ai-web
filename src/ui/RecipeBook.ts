@@ -1,12 +1,19 @@
 /**
- * 配方书（界面）
+ * 配方书（界面）——**按基岩版经典 UI 复刻**（批次 135）。
  *
- * 一个覆盖式面板：列出所有配方、每条显示"产物 + 摆法 + 材料够不够"。
+ * 版面（与用户给的截图一致，左半屏那块）：
+ *   ① 顶栏：标题「配方书」+ 条数 + 关闭
+ *   ② 搜索框 + 右侧一颗**方形筛选按钮**（=「仅显示可合成」开关）
+ *   ③ 一排**方形图标页签**：全部（放大镜）/ 建筑 / 装备 / 物品 / 自然
+ *   ④ **产物图标网格**：一格一件产物，右下角是数量；材料够的亮着、不够的压暗
+ *   ⑤ 底部一行"这一格是什么 + 材料够不够"（手机上没有悬停，必须有这一行）
+ *   ⑥ 翻页条 + 熔炼表
  *
- * ⚠️ 交互在批次 132 按原版改过（用户拿中文 Wiki「物品栏 → 配方书」当参考）：
- * **点一条配方 = 把材料摆进合成格**，摆法看得见、还能自己改，最后点输出格取成品。
+ * ⚠️ 主交互（批次 132，中文 Wiki「物品栏 → 配方书」）：
+ * **点一格 = 把材料摆进合成格**，摆法看得见、还能自己改，最后点输出格取成品。
  * 原来那版是"点一下直接扣料出成品"，看不见摆放过程——与 Wiki 描述不符。
- * 那颗"合成"按钮留着（原版没有它），给"这条能做 5 次"这种批量场景用。
+ * 更早那版是"一张配方一张卡片"（摆法网格 + 材料 chip + 合成按钮），
+ * 用户明确否决：截图里就是**纯图标网格**，不是卡片列表。
  *
  * 数据都在 `core/crafting/RecipeBook.ts` 里（纯函数，可离线测），这里只管画。
  */
@@ -20,8 +27,8 @@ import {
   type RecipeBookTab,
   type RecipeEntry,
 } from '../core/crafting/RecipeBook.ts';
-import { recipeLayout, stationLabel, type RecipeLayout } from '../core/crafting/RecipeLayout.ts';
-import { cardPageSizeFor, clampPage, pageCount, pageLabel, slicePage } from './ItemPager.ts';
+import { recipeLayout } from '../core/crafting/RecipeLayout.ts';
+import { clampPage, pageCount, pageLabel, pageSizeFor, slicePage } from './ItemPager.ts';
 import { SMELTING_RECIPES, SMELTING_TIME } from '../core/crafting/Smelting.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import type { Recipe } from '../core/crafting/Recipes.ts';
@@ -43,14 +50,19 @@ const SEARCH_TAB_ICON =
   '</svg>';
 
 export interface RecipeBookActions {
-  /** 合成一次；返回是否成功（材料不够时返回 false） */
+  /**
+   * 一键做完（按住 Shift 点格子才走这条）；返回是否成功（材料不够时返回 false）。
+   *
+   * 原版配方书**没有**这颗按钮——批量是在合成格里连点输出格做的。
+   * 留着它是因为"这条能做 12 次"时一次一次点太累，且它是纯加速路径，
+   * 不占版面（没有对应的可见控件）。
+   */
   onCraft: (recipe: Recipe) => boolean;
   /**
    * 把材料**摆进合成格**（批次 132，对齐原版）；返回是否摆成功。
    *
-   * ⚠️ 这是**主交互**：原版配方书点一条配方就是"把材料摆进合成格"，
+   * ⚠️ 这是**唯一的常规交互**：原版配方书点一条配方就是"把材料摆进合成格"，
    * 摆法看得见、还能自己改，最后点输出格取成品（见中文 Wiki「物品栏 → 配方书」）。
-   * `onCraft` 那条一键合成留着给"批量做"用。
    */
   onFill: (recipe: Recipe) => boolean;
 }
@@ -58,7 +70,7 @@ export interface RecipeBookActions {
 export class RecipeBook {
   readonly root: HTMLDivElement;
 
-  private readonly listEl: HTMLDivElement;
+  private readonly gridEl: HTMLDivElement;
   private readonly searchEl: HTMLInputElement;
   private readonly summaryEl: HTMLSpanElement;
   private readonly smeltingEl: HTMLDivElement;
@@ -75,8 +87,15 @@ export class RecipeBook {
   private readonly pageLabel: HTMLSpanElement;
   /** 标签栏（批次 133）：基岩版就是"建筑 / 装备 / 物品 / 自然 / 全部" */
   private readonly tabsEl: HTMLDivElement;
-  /** 「仅显示可合成」开关 */
+  /** 「仅显示可合成」开关：搜索框右边那颗**方形按钮**（基岩版就是这个位置） */
   private readonly filterButton: HTMLButtonElement;
+  /**
+   * 底部那一行"点着的这格是什么"（批次 135）。
+   *
+   * 图标网格省掉了卡片上那些文字，但**名字与材料**不能跟着一起没——
+   * 手机（横屏）上没有鼠标悬停，`title` 拿不到，只能靠这一行说出来。
+   */
+  private readonly detailEl: HTMLDivElement;
   private tab: RecipeBookTab = 'all';
   /**
    * 「仅显示可合成」（批次 133）。
@@ -132,7 +151,31 @@ export class RecipeBook {
     close.setAttribute('aria-label', '关闭配方书');
     close.addEventListener('click', () => this.hide());
 
-    header.append(title, this.summaryEl, this.searchEl, close);
+    header.append(title, this.summaryEl, close);
+
+    // ---- 搜索框 + 筛选按钮（批次 135，对齐截图）
+    //
+    // 基岩版经典 UI：配方书顶上是"搜索框 + 右边一颗方形按钮"，那颗按钮就是
+    // 「仅显示可合成」的开关（图标是工作台）。原来这颗按钮挂在页签那一行的右端，
+    // 与截图对不上，这里挪回来。
+    const controls = document.createElement('div');
+    controls.className = 'recipe-controls';
+    this.filterButton = document.createElement('button');
+    this.filterButton.type = 'button';
+    this.filterButton.className = 'recipe-filter';
+    this.filterButton.dataset.role = 'craftable-filter';
+    const filterIcon = document.createElement('canvas');
+    filterIcon.className = 'recipe-filter-icon';
+    filterIcon.width = 18;
+    filterIcon.height = 18;
+    drawItemIcon(filterIcon, this.atlas, RECIPE_TAB_ICONS.items, 16);
+    this.filterButton.appendChild(filterIcon);
+    this.filterButton.addEventListener('click', () => {
+      this.onlyCraftable = !this.onlyCraftable;
+      this.page = 0;
+      this.render();
+    });
+    controls.append(this.searchEl, this.filterButton);
 
     // ---- 标签栏（批次 133，对齐基岩版）
     //
@@ -178,21 +221,14 @@ export class RecipeBook {
       this.tabsEl.appendChild(button);
     }
 
-    // 「仅显示可合成」：Wiki 在配方书那一节提到的筛选项，摆在标签栏那一行的右端
-    this.filterButton = document.createElement('button');
-    this.filterButton.type = 'button';
-    this.filterButton.className = 'recipe-filter';
-    this.filterButton.dataset.role = 'craftable-filter';
-    this.filterButton.addEventListener('click', () => {
-      this.onlyCraftable = !this.onlyCraftable;
-      this.page = 0;
-      this.render();
-    });
-    this.tabsEl.appendChild(this.filterButton);
+    // ---- 配方列表：基岩版是**产物图标网格**（截图里那一屏方格子），
+    // 不是"一条配方一张卡片"
+    this.gridEl = document.createElement('div');
+    this.gridEl.className = 'recipe-grid';
 
-    // ---- 配方列表
-    this.listEl = document.createElement('div');
-    this.listEl.className = 'recipe-list';
+    // ---- 底部说明行（见 `detailEl` 的注记）
+    this.detailEl = document.createElement('div');
+    this.detailEl.className = 'recipe-detail';
 
     // ---- 熔炼
     this.smeltingEl = document.createElement('div');
@@ -210,7 +246,7 @@ export class RecipeBook {
     this.nextButton.dataset.role = 'next';
     this.pagerEl.append(this.prevButton, this.pageLabel, this.nextButton);
 
-    panel.append(header, this.tabsEl, this.listEl, this.pagerEl, this.smeltingEl);
+    panel.append(header, controls, this.tabsEl, this.gridEl, this.detailEl, this.pagerEl, this.smeltingEl);
     this.root.append(panel);
     host.appendChild(this.root);
 
@@ -258,13 +294,15 @@ export class RecipeBook {
     const craftable = entries.filter((entry) => entry.craftable).length;
     this.summaryEl.textContent = `共 ${entries.length} 条 · 现在能做 ${craftable} 条`;
 
-    // 分页（批次 29）：摆放位置让每张卡片重了不少——181 张一起画要 400ms 以上
-    // （1348 个摆放小格），而搜索框每敲一个字都会重建。只画当前页就回到可忽略。
-    const pageSize = cardPageSizeFor(this.viewportWidth);
+    // 分页（批次 29）：181 条配方一次全建进 DOM 要 400ms 以上，而搜索框每敲一个字
+    // 都会重建。只画当前页就回到可忽略。页大小跟着 CSS 的列数走（宽屏 12 列 × 5 行、
+    // 窄屏 8 列 × 4 行），否则最后一行会出现"半行空位"看着像 bug。
+    const pageSize = pageSizeFor(this.viewportWidth);
     this.page = clampPage(this.page, entries.length, pageSize);
     const visible = slicePage(entries, this.page, pageSize);
 
-    this.listEl.replaceChildren();
+    this.gridEl.replaceChildren();
+    this.resetDetail();
     if (entries.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'recipe-empty';
@@ -273,9 +311,9 @@ export class RecipeBook {
       empty.textContent = this.onlyCraftable
         ? '现在没有能做的配方（关掉「仅显示可合成」可以看到全部）'
         : '这一栏里没有匹配的配方';
-      this.listEl.appendChild(empty);
+      this.gridEl.appendChild(empty);
     } else {
-      for (const entry of visible) this.listEl.appendChild(this.makeCard(entry));
+      for (const entry of visible) this.gridEl.appendChild(this.makeCell(entry));
     }
 
     this.renderPager(entries.length, pageSize);
@@ -283,10 +321,11 @@ export class RecipeBook {
   }
 
   /**
-   * 刷新标签栏与"仅显示可合成"的状态（批次 133）。
+   * 刷新标签栏与"仅显示可合成"的状态（批次 133；批次 135 改成**方形图标按钮**）。
    *
-   * 每个页签上带**条数**（`建筑（57）`）：配方书有 180 多条、五个页签，
-   * 不写条数就得一页一页点进去才知道哪一栏是空的。
+   * 基岩版的页签是**只有图标的方块**（截图里那一排），名字与条数挂在
+   * `title` / `aria-label` 上：鼠标悬停看得到、读屏念得出，但画面上不占宽度
+   * （五个页签都写文字，手机上得横向滚才能换栏）。
    */
   private renderTabs(base: readonly RecipeEntry[]): void {
     const counts = new Map<RecipeBookTab, number>([['all', base.length]]);
@@ -297,14 +336,99 @@ export class RecipeBook {
       const on = tab === this.tab;
       button.classList.toggle('active', on);
       button.setAttribute('aria-pressed', String(on));
-      // ⚠️ 只改文字那一层：图标是 canvas / svg，整个 `textContent` 覆盖会把它们抹掉
+      // ⚠️ 条数只写进 title / aria 与那个不可见的 label：页面上仍是"纯图标方块"。
+      // 整块 `textContent` 覆盖会把 canvas / svg 抹掉，所以只改 label 那一层。
+      const text = `${RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）`;
       const label = button.querySelector('.recipe-tab-label');
-      if (label) label.textContent = `${RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）`;
+      if (label) label.textContent = text;
+      button.title = text;
+      button.setAttribute('aria-label', text);
     }
 
+    const filterText = this.onlyCraftable ? '仅显示可合成（已开启）' : '仅显示可合成';
     this.filterButton.classList.toggle('on', this.onlyCraftable);
     this.filterButton.setAttribute('aria-pressed', String(this.onlyCraftable));
-    this.filterButton.textContent = this.onlyCraftable ? '仅显示可合成 ✓' : '仅显示可合成';
+    this.filterButton.title = filterText;
+    this.filterButton.setAttribute('aria-label', filterText);
+  }
+
+  /**
+   * 网格里的一格 = 一条配方的**产物图标**（批次 135，对齐截图）。
+   *
+   * 与原来那张卡片的区别：卡片自己把摆法、材料、按钮全画出来（一屏放不下几条），
+   * 而基岩版是"一格一件产物、材料够的亮着不够的压暗"——点下去把材料摆进合成格，
+   * 摆法在合成格里看得见。
+   */
+  private makeCell(entry: RecipeEntry): HTMLDivElement {
+    const cell = document.createElement('div');
+    cell.className = 'recipe-cell';
+    // 验收脚本靠产物 id 找到"某条配方"（界面里没有别的稳定标识）
+    cell.dataset.resultId = String(entry.result.id);
+    cell.dataset.role = 'fill';
+
+    const layout = recipeLayout(entry.recipe);
+
+    const icon = document.createElement('canvas');
+    icon.width = 32;
+    icon.height = 32;
+    drawItemIcon(icon, this.atlas, entry.result.id, 28);
+    cell.appendChild(icon);
+
+    // 数量徽章（一次出 4 个火把这种）：基岩版也是画在格子右下角
+    if (entry.result.count > 1) {
+      const badge = document.createElement('span');
+      badge.className = 'recipe-cell-count';
+      badge.textContent = String(entry.result.count);
+      cell.appendChild(badge);
+    }
+
+    // 3×3 要工作台，2×2 在背包里就能摆——原版背包里的配方书同样只让摆 2×2
+    const usable = entry.craftable && entry.gridSize <= 2;
+    cell.classList.add(entry.craftable ? 'on' : 'locked');
+    if (entry.gridSize > 2) cell.classList.add('needs-table');
+    if (usable) cell.classList.add('fillable');
+    else cell.classList.add('disabled');
+
+    const summary = this.describe(entry, layout.text);
+    cell.title = summary;
+    cell.setAttribute('aria-label', summary);
+
+    // 悬停/点住时把这一格说清楚（手机上没有悬停，但 pointerenter 在触屏 tap 时也会先来一次）
+    cell.addEventListener('pointerenter', () => {
+      this.detailEl.textContent = summary;
+    });
+    cell.addEventListener('pointerdown', (event) => {
+      if (!usable) return;
+      event.preventDefault();
+      // Shift + 点 = 一次做完（不占版面的加速路径，见 `RecipeBookActions.onCraft`）
+      const done = event.shiftKey
+        ? this.actions.onCraft(entry.recipe)
+        : this.actions.onFill(entry.recipe);
+      if (done && event.shiftKey) this.render();
+    });
+    return cell;
+  }
+
+  /** 一格配方的说明（名字 + 数量 + 摆法 + 材料够不够） */
+  private describe(entry: RecipeEntry, layoutText: string): string {
+    const name = itemLabel(entry.result.id);
+    const head = entry.result.count > 1 ? `${name} ×${entry.result.count}` : name;
+    if (!entry.craftable) {
+      const missing = entry.ingredients
+        .filter((ingredient) => this.inventory.countOf(ingredient.id) < ingredient.count)
+        .map((ingredient) => itemLabel(ingredient.id))
+        .join('、');
+      return `${head} · ${layoutText} · 材料不足${missing ? `（缺 ${missing}）` : ''}`;
+    }
+    if (entry.gridSize > 2) return `${head} · ${layoutText} · 需要工作台 3×3`;
+    return entry.maxCraftable > 1
+      ? `${head} · ${layoutText} · 可做 ${entry.maxCraftable} 次`
+      : `${head} · ${layoutText}`;
+  }
+
+  /** 说明行的默认文案（没点着任何一格时） */
+  private resetDetail(): void {
+    this.detailEl.textContent = '点一格：材料会摆进右边的合成格';
   }
 
   /** 翻页条：与创造物品栏共用 `.inv-pager` 那套样式（一处样式，两处使用） */
@@ -320,7 +444,7 @@ export class RecipeBook {
   private flipPage(delta: number): void {
     this.page += delta;
     this.render();
-    this.listEl.scrollTop = 0;
+    this.gridEl.scrollTop = 0;
     this.panelEl.scrollTop = 0;
   }
 
@@ -340,161 +464,6 @@ export class RecipeBook {
       onClick();
     });
     return button;
-  }
-
-  private makeCard(entry: RecipeEntry): HTMLDivElement {
-    const card = document.createElement('div');
-    card.className = 'recipe-card';
-    // 记下产物 id：验收脚本靠它找到"某条配方"的卡片（界面里没有别的稳定标识）
-    card.dataset.resultId = String(entry.result.id);
-    if (entry.craftable) card.classList.add('craftable');
-
-    // ---- 摆放位置（批次 29）：形状配方画成真正的格子，无序配方说明"摆哪都行"
-    const layout = recipeLayout(entry.recipe);
-    const layoutEl = this.makeLayout(layout);
-
-    // ---- 产物
-    const result = document.createElement('div');
-    result.className = 'recipe-result';
-    const icon = document.createElement('canvas');
-    icon.width = 32;
-    icon.height = 32;
-    drawItemIcon(icon, this.atlas, entry.result.id, 28);
-    const name = document.createElement('span');
-    name.textContent = entry.result.count > 1
-      ? `${itemLabel(entry.result.id)} ×${entry.result.count}`
-      : itemLabel(entry.result.id);
-    result.append(icon, name);
-
-    // ---- 材料（数量与"有/需要"）：格子已经说明摆放位置，这里只回答"够不够"
-    const ingredients = document.createElement('div');
-    ingredients.className = 'recipe-ingredients';
-    for (const ingredient of entry.ingredients) {
-      const chip = document.createElement('span');
-      chip.className = 'recipe-chip';
-      chip.dataset.itemId = String(ingredient.id);
-      const have = this.inventory.countOf(ingredient.id);
-      if (have < ingredient.count) chip.classList.add('missing');
-      const chipIcon = document.createElement('canvas');
-      chipIcon.width = 20;
-      chipIcon.height = 20;
-      drawItemIcon(chipIcon, this.atlas, ingredient.id, 18);
-      const text = document.createElement('i');
-      // 不够的材料直接把"有/需要"写出来，玩家不用自己去数背包
-      text.textContent = `${itemLabel(ingredient.id)} ×${ingredient.count}${
-        have < ingredient.count ? `（有 ${have}）` : ''
-      }`;
-      chip.append(chipIcon, text);
-      ingredients.appendChild(chip);
-    }
-
-    // ---- 合成按钮
-    const craft = document.createElement('button');
-    craft.type = 'button';
-    craft.className = 'recipe-craft';
-    craft.textContent = entry.craftable
-      ? entry.maxCraftable > 1
-        ? `合成（可做 ${entry.maxCraftable} 次）`
-        : '合成'
-      : '材料不足';
-    craft.disabled = !entry.craftable;
-    craft.addEventListener('click', () => {
-      if (this.actions.onCraft(entry.recipe)) {
-        // 合成会改变背包，"能不能做"要重算
-        this.render();
-      }
-    });
-
-    const main = document.createElement('div');
-    main.className = 'recipe-main';
-    main.append(layoutEl, this.makeArrow(), result);
-
-    const meta = document.createElement('div');
-    meta.className = 'recipe-station';
-    // "在哪摆"也要说清楚：2×2 在背包里就能做，3×3 必须站到工作台前
-    meta.textContent = entry.recipe.kind === 'shapeless' ? '无序配方（摆哪一格都行）' : stationLabel(layout.station);
-    main.append(ingredients, meta);
-
-    card.append(main, craft);
-
-    // ---- 点卡片 = **把材料摆进合成格**（批次 132，对齐原版）
-    //
-    // 原版（中文 Wiki「物品栏 → 配方书」）：点一条配方就把材料摆进合成格，
-    // 摆法看得见、还能自己改，最后由输出格取成品。所以可点的判据是
-    // "材料够 + 这条配方放得进当前的格子"——3×3 的要站到工作台前，
-    // 在背包里点了也没地方摆（原版背包里的配方书同样只列 2×2 能做的）。
-    if (entry.craftable && entry.gridSize <= 2) {
-      card.classList.add('fillable');
-      card.dataset.role = 'fill';
-      card.addEventListener('pointerdown', (event) => {
-        // 点在那颗"合成"按钮上时别抢它的事（它是另一条路径：一键做完）
-        if ((event.target as HTMLElement).closest('.recipe-craft')) return;
-        event.preventDefault();
-        this.actions.onFill(entry.recipe);
-      });
-    }
-
-    // 摆放说明挂在 title/aria 上：读屏与鼠标悬停都能拿到"每个格子放什么"
-    card.setAttribute('aria-label', `${itemLabel(entry.result.id)}：${layout.text}`);
-    card.title = layout.text;
-    return card;
-  }
-
-  /**
-   * 画一条配方的摆放位置。
-   *
-   * - **形状配方**：`grid × grid` 的格子，格子里就是该放的物品（空格也画出来——
-   *   "哪一格要空着"和"哪一格要放东西"一样是配方的一部分）
-   * - **无序配方**：画成一排槽位，标题已经写了"摆哪一格都行"，不画成网格
-   *   （画成网格会让人以为必须按这个顺序摆）
-   */
-  private makeLayout(layout: RecipeLayout): HTMLDivElement {
-    const wrap = document.createElement('div');
-    wrap.className = `recipe-layout ${layout.kind}`;
-    wrap.dataset.kind = layout.kind;
-    wrap.dataset.grid = String(layout.grid);
-
-    if (layout.kind === 'shapeless') {
-      for (const id of layout.items) {
-        wrap.appendChild(this.makeLayoutSlot(id));
-      }
-      return wrap;
-    }
-
-    // 形状配方：空格也占位，这样"第 2 行第 2 格"的位置一眼可见
-    for (const id of layout.cells) {
-      wrap.appendChild(this.makeLayoutSlot(id));
-    }
-    // 3×3 才需要工作台；2×2 在背包里就能摆
-    wrap.classList.toggle('needs-table', layout.station === 'crafting_table');
-    return wrap;
-  }
-
-  /** 摆放格里的一格（`null` = 空格）；`data-item-id` 让验收脚本能核对位置 */
-  private makeLayoutSlot(id: number | null): HTMLDivElement {
-    const slot = document.createElement('div');
-    slot.className = 'recipe-slot';
-    if (id === null) {
-      slot.classList.add('empty');
-      return slot;
-    }
-    slot.dataset.itemId = String(id);
-    slot.title = itemLabel(id);
-    const canvas = document.createElement('canvas');
-    canvas.width = 26;
-    canvas.height = 26;
-    drawItemIcon(canvas, this.atlas, id, 24);
-    slot.appendChild(canvas);
-    if (this.inventory.countOf(id) === 0) slot.classList.add('missing');
-    return slot;
-  }
-
-  /** 摆放格与产物之间的箭头 */
-  private makeArrow(): HTMLSpanElement {
-    const arrow = document.createElement('span');
-    arrow.className = 'recipe-arrow';
-    arrow.textContent = '➜';
-    return arrow;
   }
 
   /** 熔炼表：输入 → 产物（熔炼要时间，这里只做展示，真正的烧炼在熔炉界面里） */

@@ -398,85 +398,97 @@
         background: #eee; color: #222; border: 1px solid #777; border-radius: 3px;
       }
       .recipe-close {
-        font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer;
+        /* 搜索框挪到下面那一行之后，标题栏只剩"标题 + 条数 + 关闭"，
+           靠这条把关闭键顶到右端（原来是把搜索框 flex:1 挤过去的） */
+        margin-left: auto; font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer;
         background: #a8a8a8; color: #222; border: 2px solid;
         border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
-      /* ---------------- 配方书的标签栏（批次 133，对齐基岩版） ----------------
-         Wiki「物品栏 → 配方书」：基岩版把配方按标签栏展示（建筑 / 装备 / 物品 / 自然 /
-         全部），而且"合成配方书的标签栏与创造分类相同"。这一行同时放
-         "仅显示可合成"那个筛选项（贴着右端）。样式与面板上其它按钮一致。 */
-      .recipe-tabs {
-        display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-        margin: 0 0 8px;
-      }
-      .recipe-tab, .recipe-filter {
-        font: inherit; font-size: 12px; padding: 4px 9px; cursor: pointer;
-        background: #a8a8a8; color: #2b2b2b; border: 2px solid;
+      /* ---------------- 搜索框 + 右侧那颗方形筛选按钮（批次 135，对齐截图） ----------------
+         基岩版经典 UI 的配方书顶上就是"搜索框 + 右边一颗方形按钮"，那颗按钮是
+         「仅显示可合成」的开关（图标是工作台）。原来这颗按钮挂在页签行的右端，
+         与截图对不上。 */
+      .recipe-controls { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
+      .recipe-filter {
+        flex: 0 0 auto; width: 32px; height: 32px; padding: 0; cursor: pointer;
+        display: grid; place-items: center; background: #a8a8a8; border: 2px solid;
         border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
-      /* 页签 = 图标 + 文字（批次 134，对齐截图里那一排）；
-         图标用真实物品（`drawItemIcon` 画的 canvas）或放大镜 SVG */
-      .recipe-tab { display: inline-flex; align-items: center; gap: 5px; }
-      .recipe-tab-icon { width: 16px; height: 16px; flex: 0 0 16px; image-rendering: pixelated; }
-      .recipe-tab-icon svg { display: block; }
-      .recipe-tab-label { white-space: nowrap; }
+      .recipe-filter-icon { width: 18px; height: 18px; image-rendering: pixelated; }
+
+      /* ---------------- 标签栏（批次 133，对齐基岩版；批次 135 改方形） ----------------
+         Wiki「物品栏 → 配方书」：基岩版把配方按标签栏展示（建筑 / 装备 / 物品 / 自然 /
+         全部），而且"合成配方书的标签栏与创造分类相同"。
+         ⚠️ 页签是**只有图标的方块**（截图里那一排）：名字与条数挂在 `title` /
+         `aria-label` 上——鼠标悬停看得到、读屏念得出，画面上不占宽度（五个页签都写
+         文字，手机上得横向滚才能换栏）。 */
+      .recipe-tabs { display: flex; align-items: center; gap: 4px; margin: 0 0 8px; }
+      .recipe-tab {
+        width: 32px; height: 32px; padding: 0; cursor: pointer;
+        display: grid; place-items: center; background: #a8a8a8; border: 2px solid;
+        border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      /* 图标用真实物品（`drawItemIcon` 画的 canvas）；"全部"那一栏是放大镜 SVG */
+      .recipe-tab-icon { width: 18px; height: 18px; image-rendering: pixelated; }
+      .recipe-tab-icon svg { display: block; width: 16px; height: 16px; }
+      /* 文字只留给读屏与悬停（见上面那段），页面上不显示 */
+      .recipe-tab-label { display: none; }
       /* 当前页签 / 已打开的筛选：反白 + 斜角翻过来（"按下去"的那一块） */
       .recipe-tab.active, .recipe-filter.on {
         background: #6f6f6f; color: #f2f2f2;
         border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
       }
-      .recipe-filter { margin-left: auto; }
-      .recipe-list { display: flex; flex-direction: column; gap: 6px; }
-      .recipe-empty { padding: 20px; text-align: center; color: #5a5a5a; }
-      .recipe-card {
-        display: flex; align-items: center; gap: 10px;
-        padding: 7px 9px; background: #b4b4b4;
-        border: 2px solid; border-color: #d8d8d8 #7a7a7a #7a7a7a #d8d8d8;
+
+      /* ---------------- 产物图标网格（批次 135：基岩版就是这一屏方格子） ----------------
+         一格一件产物，右下角是数量；材料够的亮着、不够的压暗；点一格 = 材料摆进
+         合成格。原来这里是"一条配方一张卡片"（摆法 + 材料 + 按钮），一屏放不下
+         几条，与基岩版也对不上。 */
+      .recipe-grid {
+        /* 格子边长只写一处：触摸端把它抬到 40px（下面那条），列宽会跟着变 */
+        --recipe-cell: 34px;
+        display: grid; grid-template-columns: repeat(12, var(--recipe-cell)); gap: 3px;
+        justify-content: center; align-content: start;
+        padding: 6px 4px; background: #c6c6c6; border: 2px solid;
+        border-color: #8a8a8a #ffffff #ffffff #8a8a8a;
         border-radius: var(--radius-sm);
       }
-      .recipe-card.craftable { background: #b9c9b0; }
-      /* 可点的卡片（批次 132）：点它 = **把材料摆进合成格**（原版主交互）。
-         给一点"能按下去"的反馈：光标 + 按下时斜角翻过来（与全站按钮同一套语言）。 */
-      .recipe-card.fillable { cursor: pointer; }
-      .recipe-card.fillable:hover { background: #c7d6bd; }
-      .recipe-card.fillable:active {
-        border-color: #7a7a7a #d8d8d8 #d8d8d8 #7a7a7a;
-        transform: translateY(1px);
+      .recipe-cell {
+        position: relative; width: var(--recipe-cell, 34px); height: var(--recipe-cell, 34px);
+        display: grid; place-items: center;
+        background: var(--slot-bg); border: 2px solid;
+        border-color: var(--slot-edge-dark) var(--slot-edge-light) var(--slot-edge-light) var(--slot-edge-dark);
+        border-radius: var(--slot-radius);
       }
-      .recipe-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-
-      /* ---------------- 摆放位置（批次 29） ----------------
-         形状配方画成 `grid × grid` 的格子（**空格也画**：哪一格要空着也是配方的一部分）；
-         无序配方画成一排槽位并写明"摆哪一格都行"。 */
-      .recipe-layout {
-        display: grid; gap: 2px;
-        grid-template-columns: repeat(var(--layout-cols, 3), 26px);
+      .recipe-cell canvas { width: 28px; height: 28px; image-rendering: pixelated; }
+      /* 材料不够：压暗（基岩版也是把做不了的灰掉，不另加"叉"之类） */
+      .recipe-cell.locked { background: #6f6f6f; }
+      .recipe-cell.locked canvas { opacity: .35; filter: grayscale(1); }
+      /* 3×3 要工作台：左上角标一下，免得点不动却不知道为什么 */
+      .recipe-cell.needs-table::after {
+        content: '3×3'; position: absolute; left: 1px; top: 0;
+        font-size: 9px; line-height: 1; color: #ffe9a8; text-shadow: 1px 1px 0 #000;
       }
-      .recipe-layout[data-grid='2'] { --layout-cols: 2; }
-      .recipe-layout[data-grid='3'] { --layout-cols: 3; }
-      /* 无序配方不占网格：排成一排，视觉上明确"这不是摆放顺序" */
-      .recipe-layout.shapeless {
-        display: flex; flex-wrap: wrap; gap: 3px;
-        padding: 3px; border-radius: var(--radius-sm);
-        background: repeating-linear-gradient(45deg, #00000010, #00000010 6px, transparent 6px, transparent 12px);
+      /* 能点的一格（批次 132 的主交互）：给"能按下去"的反馈 */
+      .recipe-cell.fillable { cursor: pointer; }
+      .recipe-cell.fillable:hover { background: var(--slot-bg-hover); box-shadow: inset 0 0 0 2px #ffffffa8; }
+      .recipe-cell.fillable:active { transform: translateY(1px); }
+      .recipe-cell-count {
+        position: absolute; right: 1px; bottom: -1px; font-size: 11px; color: #fff;
+        text-shadow: 1px 1px 0 #000;
       }
-      .recipe-slot {
-        width: 26px; height: 26px; display: grid; place-items: center;
-        background: var(--slot-bg);
-        border: 1px solid; border-color: var(--slot-edge-dark) #cfcfcf #cfcfcf var(--slot-edge-dark);
-        border-radius: 2px;
+      /* 底部说明行：手机上没有鼠标悬停，名字与材料只能靠这一行说出来 */
+      .recipe-detail {
+        min-height: 17px; margin: 6px 2px 0; font-size: 11px; color: #3f3f3f;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
-      .recipe-slot.empty { background: #9d9d9d; border-color: #8a8a8a; }
-      .recipe-slot.missing { box-shadow: inset 0 0 0 2px #d06a6a; }
-      .recipe-arrow { color: #4a4a4a; font-size: 16px; line-height: 1; }
-      /* "在哪摆"：2×2 背包就能做、3×3 要工作台——把这条信息单独摆一行，别混在材料里 */
-      .recipe-station {
-        flex: 1 1 100%; color: #3f3f3f; font-size: 11px;
+      .recipe-empty { grid-column: 1 / -1; padding: 16px 4px; text-align: center; color: #5a5a5a; }
+      /* 列数与 `ItemPager.pageSizeFor()` 的页大小一一对应（宽屏 12 列 × 5 行、
+         窄屏 8 列 × 4 行）：不一致的话最后一行会出现"半行空位"看着像 bug。
+         ⚠️ 判据只能写"宽度 ≤ 900"，与上面那个函数同一个数——写成
+         `(max-height: 560px)` 会把"矮而宽的窗口"也算成窄屏，两边就对不上了。 */
+      @media (max-width: 900px) {
+        .recipe-grid { grid-template-columns: repeat(8, var(--recipe-cell)); }
       }
-      .recipe-result { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #1c1c1c; }
-      .recipe-result canvas { image-rendering: pixelated; }
-      .recipe-ingredients { display: flex; flex-wrap: wrap; gap: 4px; }
       .recipe-chip {
         display: inline-flex; align-items: center; gap: 3px;
         padding: 2px 5px; background: #d2d2d2; border-radius: 3px; color: #333; font-size: 11px;
@@ -484,11 +496,6 @@
       .recipe-chip.missing { background: #e0b0b0; color: #6b1a1a; }
       .recipe-chip canvas { image-rendering: pixelated; }
       .recipe-chip i { font-style: normal; }
-      .recipe-craft {
-        flex-shrink: 0; font: inherit; font-size: 12px; padding: 6px 10px; cursor: pointer;
-        background: #6f9a63; color: #fff; border: 2px solid; border-color: #a8d69c #3c5c33 #3c5c33 #a8d69c;
-      }
-      .recipe-craft:disabled { background: #9a9a9a; border-color: #c0c0c0 #6a6a6a #6a6a6a #c0c0c0; cursor: not-allowed; }
       .recipe-smelting { margin-top: 10px; padding-top: 8px; border-top: 2px solid #9a9a9a; }
       .recipe-smelt-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
       .inv-recipes-btn {
@@ -1613,10 +1620,17 @@
       body.touch-mode .recipe-close,
       body.touch-mode .inv-close,
       body.touch-mode .adv-close { min-width: 48px; min-height: 44px; font-size: 17px; padding: 8px 12px; }
-      /* 配方书的标签栏（批次 133）：手机上热区放到 40px——页签是"翻配方"的主入口，
-         比每张卡片上那颗"合成"用得更频繁 */
+      /* 配方书的方块按钮（页签 / 筛选，批次 135）：手机上热区放到 40px——
+         页签是"翻配方"的主入口，32px 的方块手指点不准 */
       body.touch-mode .recipe-tab,
-      body.touch-mode .recipe-filter { min-height: 40px; padding: 8px 11px; font-size: 13px; }
+      body.touch-mode .recipe-filter { width: 40px; height: 40px; min-height: 40px; }
+      body.touch-mode .recipe-tab-icon,
+      body.touch-mode .recipe-filter-icon { width: 22px; height: 22px; }
+      body.touch-mode .recipe-tab-icon svg { width: 20px; height: 20px; }
+      /* 配方格子同 SLOT_TOUCH：手机上 34px 太小，抬到 40px（8 列 × 40 ≈ 340px，
+         横屏手机放得下）。只改那个变量，列宽跟着一起变（改 `.recipe-cell` 的宽高
+         会让格子比列还宽，互相压住）。 */
+      body.touch-mode .recipe-grid { --recipe-cell: 40px; }
 
       /* 主菜单（世界列表 / 新建世界）同理：这几个按钮原是按鼠标尺寸做的（高约 30px），
          手机上点"进入/删除"经常点到隔壁。手机上统一抬到 44px。 */
