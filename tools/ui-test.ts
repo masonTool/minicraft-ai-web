@@ -606,12 +606,13 @@ console.log('\n[携带版细节收口（二）（批次 159）]');
     recipeHooks.length === 5 && recipeHooks.every((line) => !line.includes('this.recipeBook.')),
   );
 
-  // ③ 选中效果：底色变深 + **一圈亮白粗框 + 金边**，且**按下那一刻**就有
+  // ③ 选中效果：**底变白 + 边框加粗（相框）**，且**按下那一刻**就有
   check(
-    '选中一眼能看出来（白框 + 金边 + 沉下去），按下就先给（触摸端抬手才结算）',
+    '选中 = 底变白 + 相框式粗边框，按下就先给（触摸端抬手才结算）',
     css.includes('.inv-slot.pressing,') &&
-      css.includes('inset 0 0 0 3px #ffffff') &&
-      css.includes('rgba(255, 216, 74, .95)') &&
+      css.includes('--slot-bg-selected: #ffffff') &&
+      // 用 box-shadow 叠粗，而不是改 border-width（后者会顶到隔壁、带着布局一起动）
+      css.includes('0 0 0 4px #2b2b2b') &&
       invSrc.includes('private markPressing(slot: HTMLElement | null): void {'),
   );
   check(
