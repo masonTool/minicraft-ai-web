@@ -1287,6 +1287,8 @@ export class InventoryScreen {
       const owned = this.inventory.countOf(itemId);
       const slot = this.createSlot();
       slot.classList.add('category-slot');
+      // 取消选中 / 换选之后要能按 id 找回这一格（重建会把元素换掉）
+      slot.dataset.itemId = String(itemId);
       if (owned <= 0) slot.classList.add('locked');
       // 提示框（悬停 / 长按）与"点击弹说明"都靠这份数据
       this.tooltipStacks.set(slot, { id: itemId, count: owned > 0 ? owned : 1 });
@@ -1295,7 +1297,7 @@ export class InventoryScreen {
       if (count && owned > 1) count.textContent = String(owned);
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        this.pickCategoryItem(itemId, slot);
+        this.pickCategoryItem(itemId);
       });
       this.categoryGrid.appendChild(slot);
     }
@@ -1327,24 +1329,36 @@ export class InventoryScreen {
    * ② 右栏在合成状态时，把这件东西的**配方**摆出来——可组装就以它为目标，
    *    材料够就直接摆进合成格；不够就把配方**画**进合成格，缺的那件红底。
    */
-  private pickCategoryItem(itemId: number, cell: HTMLElement): void {
-    // ① **选中**（批次 159）：红底那种"我没有的"选不了；手上有东西时先处理手上那叠。
+  private pickCategoryItem(itemId: number): void {
+    // ① **再点同一件 = 取消选中**（批次 159 补）；点另一件 = 先把手上那叠放回去再选新的。
+    //    ⚠️ 取消/放回会让分类栏重建，所以格子元素要按 id **重新找**，不能沿用旧引用。
+    if (this.held) {
+      const same =
+        this.heldOriginEl !== null &&
+        this.heldOriginEl.dataset.itemId === String(itemId) &&
+        this.categoryGrid.contains(this.heldOriginEl);
+      this.cancelHeldSelection();
+      if (same || this.held) return; // 同一格：取消就结束；放不下：也别继续
+    }
+    // ② **选中**：红底那种"我没有的"选不了。
     //    选中的就是这一格——之后点窗口外丢弃、点可放置处放置、点别的物品栏换位。
     const owned = this.inventory.countOf(itemId);
-    if (owned > 0 && !this.held) {
+    if (owned > 0) {
       const index = this.inventory.find(itemId);
       const stack = index >= 0 ? this.inventory.get(index) : null;
       if (stack) {
         this.held = stack;
         this.inventory.set(index, null);
+        // notify 会触发一次 refresh：那时 held 已经在了，分类栏被冻结、元素不会被换掉
         this.inventory.notify();
         // 记来源：点窗口外是丢弃，点不可放置区域是原位退回
         this.touchOrigin = { source: this.inventory, index, itemId };
         this.heldFromCreative = false;
-        this.heldOriginEl = cell;
+        this.heldOriginEl =
+          this.categoryGrid.querySelector<HTMLElement>(`.category-slot[data-item-id="${itemId}"]`) ?? null;
       }
     }
-    // ② 右栏在合成 → 把这件东西"由什么组成"摆出来
+    // ③ 右栏在合成 → 把这件东西"由什么组成"摆出来
     this.showRecipeFor(itemId);
     this.refresh();
   }
@@ -1844,6 +1858,11 @@ export class InventoryScreen {
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
+        // 批次 159：**再点同一格 = 取消选中**（创造取的是复制品，取消就是清掉它）
+        if (this.held && this.heldOriginEl === slot) {
+          this.cancelHeldSelection();
+          return;
+        }
         // 创造选取 = **先拿到光标**（批次 142，对齐基岩/Java 创造）：
         // 左键/中键满组、右键 1 个（同类可累加到堆叠上限）。不再直接 inventory.add。
         const max = maxStackOf(itemId);

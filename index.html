@@ -134,7 +134,7 @@
         /* 批次 159：选中（手上拿着的那叠就显示在这一格）＝ **比常态深一档**。
            悬停是变亮（#a0a0a0），选中要跟它区分开，所以往下取（#7a7a7a），
            再深就成"按下"那个色（#6c6c6c）了，会让人以为是坏的。 */
-        --slot-bg-selected: #7a7a7a;
+        --slot-bg-selected: #6a6a6a;
         --slot-edge-light: #ffffff;
         --slot-edge-dark: #373737;
         --slot-radius: 0;
@@ -2144,8 +2144,15 @@
       .inv-slot.pressing,
       .inv-slot.selected,
       .inv-slot.selected:hover {
+        position: relative;
+        z-index: 2;
         background: var(--slot-bg-selected);
-        box-shadow: inset 3px 3px 0 rgba(0, 0, 0, .38), inset 0 0 0 2px rgba(255, 255, 255, .9);
+        /* 沉下去（左上压暗）+ **一圈亮白粗框**：灰面板上白框最跳，
+           再叠一道黑边把白框从底色里"抠"出来，一眼就能看出是哪一格。 */
+        box-shadow:
+          inset 0 0 0 3px #ffffff,
+          inset 0 0 0 5px rgba(0, 0, 0, .6),
+          0 0 0 2px rgba(255, 216, 74, .95);
       }
 
       /* ---------------- 耐久条（批次 28） ----------------

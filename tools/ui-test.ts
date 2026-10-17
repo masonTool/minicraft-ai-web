@@ -606,11 +606,12 @@ console.log('\n[携带版细节收口（二）（批次 159）]');
     recipeHooks.length === 5 && recipeHooks.every((line) => !line.includes('this.recipeBook.')),
   );
 
-  // ③ 选中效果：沉下去（内阴影）+ 一圈白框，且**按下那一刻**就有
+  // ③ 选中效果：底色变深 + **一圈亮白粗框 + 金边**，且**按下那一刻**就有
   check(
-    '选中是"沉下去"+ 白框，按下就先沉一下（触摸端抬手才结算）',
+    '选中一眼能看出来（白框 + 金边 + 沉下去），按下就先给（触摸端抬手才结算）',
     css.includes('.inv-slot.pressing,') &&
-      css.includes('inset 3px 3px 0 rgba(0, 0, 0, .38)') &&
+      css.includes('inset 0 0 0 3px #ffffff') &&
+      css.includes('rgba(255, 216, 74, .95)') &&
       invSrc.includes('private markPressing(slot: HTMLElement | null): void {'),
   );
   check(
@@ -660,13 +661,23 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   // ⑤ 点分类里的物品：**先选中**（能丢弃 / 放置 / 换位），再看它由什么组成
   check(
     '点分类里的物品 = 选中它 + 看它由什么组成',
-    invSrc.includes('private pickCategoryItem(itemId: number, cell: HTMLElement): void {') &&
+    invSrc.includes('private pickCategoryItem(itemId: number): void {') &&
       invSrc.includes('const index = this.inventory.find(itemId);') &&
-      invSrc.includes('this.heldOriginEl = cell;') &&
+      invSrc.includes('.category-slot[data-item-id=') &&
       invSrc.includes('private showRecipeFor(itemId: number): void {'),
   );
   // 红底（我没有的）不能选中
-  check('没有的那些（红底）选不了', invSrc.includes('const owned = this.inventory.countOf(itemId);') && invSrc.includes('if (owned > 0 && !this.held) {'));
+  check(
+    '没有的那些（红底）选不了',
+    invSrc.includes('const owned = this.inventory.countOf(itemId);') && invSrc.includes('if (owned > 0) {'),
+  );
+  // **再点同一格 = 取消选中**（分类栏要有；普通槽位走"放回来源格"那条老路）
+  check(
+    '再点同一格取消选中',
+    invSrc.includes('this.cancelHeldSelection();\n      if (same || this.held) return;') ||
+      /cancelHeldSelection\(\);\s*\n\s*if \(same \|\| this\.held\) return;/.test(invSrc),
+  );
+  check('创造栏再点同一格也取消', invSrc.includes('if (this.held && this.heldOriginEl === slot) {'));
   check(
     '材料够就直接摆进合成格',
     invSrc.includes('if (canCraft(this.inventory, recipe).ok) {') && invSrc.includes('fillCraftingGrid(this.inventory, this.crafting, recipe);'),
