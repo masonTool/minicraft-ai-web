@@ -27,9 +27,39 @@ import { categoryOf, itemName } from '../registry/items.ts';
 // 做一次**归并**，而不是另立一套分类表——另立一套迟早与创造栏漂移
 //（同一桶混凝土在两边归进不同页，玩家就得记两套）。
 
-/** 配方书的五个标签栏（顺序照基岩版：全部在最前，它也是"携带版UI"的第一个） */
-export const RECIPE_BOOK_TABS = ['all', 'building', 'equipment', 'items', 'nature'] as const;
+/**
+ * **经典 UI** 的标签栏顺序（批次 136，照 Wiki 原文改）。
+ *
+ * 中文 Wiki「物品栏 → 配方书」逐条写了位置：
+ *   建筑 —— 使用经典UI时为**最左侧第一个**标签栏
+ *   装备 —— 经典UI时为**第二个**
+ *   物品 —— 经典UI时为**左侧第三个**
+ *   自然 —— （夹在物品与全部之间）
+ *   全部 —— 使用经典UI时显示在**最右侧**，使用携带版UI时为顶部第一个
+ *
+ * ⚠️ 批次 133 只写了携带版那一套（"全部"在最前），与用户给的**经典 UI 截图**对不上。
+ */
+export const RECIPE_BOOK_TABS = ['building', 'equipment', 'items', 'nature', 'all'] as const;
+/** **携带版 UI** 的顺序（Wiki："全部…使用携带版UI时为顶部第一个标签栏"） */
+export const RECIPE_BOOK_TABS_POCKET = ['all', 'building', 'equipment', 'items', 'nature'] as const;
 export type RecipeBookTab = (typeof RECIPE_BOOK_TABS)[number];
+
+/**
+ * 经典 UI 的判据宽度（px）：与 `index.html` 里 `body.split-ui` 那组规则的
+ * `min-width: 1280px` **同一个数**——两边不一致会出现"画面已并排、页签还是按
+ * 携带版排"这种一半对一半的情况。
+ */
+export const CLASSIC_UI_MIN_WIDTH = 1280;
+
+/** 该视口走经典 UI（并排）还是携带版 UI（整屏） */
+export function isClassicUi(width: number): boolean {
+  return width >= CLASSIC_UI_MIN_WIDTH;
+}
+
+/** 该视口下标签栏的排列顺序（转屏会变，界面按它重排 `order`） */
+export function recipeBookTabsFor(width: number): readonly RecipeBookTab[] {
+  return isClassicUi(width) ? RECIPE_BOOK_TABS : RECIPE_BOOK_TABS_POCKET;
+}
 
 export const RECIPE_BOOK_TAB_LABELS: Record<RecipeBookTab, string> = {
   all: '全部',

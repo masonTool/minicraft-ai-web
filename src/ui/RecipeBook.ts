@@ -20,10 +20,11 @@
 
 import type { Inventory } from '../core/container/Inventory.ts';
 import {
-  RECIPE_BOOK_TABS,
   RECIPE_BOOK_TAB_LABELS,
   buildRecipeEntries,
+  isClassicUi,
   matchesRecipe,
+  recipeBookTabsFor,
   type RecipeBookTab,
   type RecipeEntry,
 } from '../core/crafting/RecipeBook.ts';
@@ -97,6 +98,14 @@ export class RecipeBook {
    */
   private readonly detailEl: HTMLDivElement;
   private tab: RecipeBookTab = 'all';
+  /**
+   * 上次画的时候走的是哪种 UI（批次 136）。
+   *
+   * 页签的先后在两种 UI 里不一样（经典 UI"全部"在最右、携带版在最前），
+   * 而转屏会连发一串 `resize`——所以只在**真的跨过那个断点**时才重画，
+   * 否则横屏拿手机转一下就重建 60 个 canvas。
+   */
+  private classicUi = isClassicUi(this.viewportWidth);
   /**
    * 「仅显示可合成」（批次 133）。
    *
@@ -177,15 +186,19 @@ export class RecipeBook {
     });
     controls.append(this.searchEl, this.filterButton);
 
-    // ---- 标签栏（批次 133，对齐基岩版）
+    // ---- 标签栏（批次 133，对齐基岩版；批次 136 按 UI 形态排顺序）
     //
     // Wiki「物品栏 → 配方书」写得很明确：基岩版的配方书按标签栏展示，且
     // "合成配方书的标签栏与创造分类相同"——建筑 / 装备 / 物品 / 自然 / 全部。
     // 分类归并在 `core/crafting/RecipeBook.ts` 的 `recipeBookTab()` 里（纯函数、可断言）。
+    //
+    // ⚠️ **顺序两种**（Wiki 逐条写了位置）：经典 UI 是"全部"在**最右侧**、
+    // 携带版 UI 是"全部"在**第一个**。手机上转屏/开合窗口会换形态，所以页签
+    // 的先后不写死在 DOM 里——`renderTabs` 每次按当前宽度重排 CSS `order`。
     this.tabsEl = document.createElement('div');
     this.tabsEl.className = 'recipe-tabs';
 
-    for (const tab of RECIPE_BOOK_TABS) {
+    for (const tab of recipeBookTabsFor(this.viewportWidth)) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'recipe-tab';
@@ -249,6 +262,8 @@ export class RecipeBook {
     panel.append(header, controls, this.tabsEl, this.gridEl, this.detailEl, this.pagerEl, this.smeltingEl);
     this.root.append(panel);
     host.appendChild(this.root);
+    // 转屏会换 UI 形态（并排的经典 UI ↔ 整屏的携带版 UI），页签顺序要跟着重排
+    window.addEventListener('resize', this.handleResize);
 
     // ⚠️ 批次 111 删掉了"点面板外关闭"（用户要求"不要点击空白关闭，就用关闭按钮"）：
     // 这里的出口是标题栏右上角的 ✕（`.recipe-close`）。
@@ -330,10 +345,13 @@ export class RecipeBook {
   private renderTabs(base: readonly RecipeEntry[]): void {
     const counts = new Map<RecipeBookTab, number>([['all', base.length]]);
     for (const entry of base) counts.set(entry.tab, (counts.get(entry.tab) ?? 0) + 1);
+    // 页签的先后跟着 UI 形态走（经典 UI "全部"在最右、携带版在最前）
+    const order = recipeBookTabsFor(this.viewportWidth);
 
     for (const button of this.tabsEl.querySelectorAll<HTMLButtonElement>('.recipe-tab')) {
       const tab = button.dataset.tab as RecipeBookTab;
       const on = tab === this.tab;
+      button.style.order = String(order.indexOf(tab));
       button.classList.toggle('active', on);
       button.setAttribute('aria-pressed', String(on));
       // ⚠️ 条数只写进 title / aria 与那个不可见的 label：页面上仍是"纯图标方块"。
@@ -497,6 +515,14 @@ export class RecipeBook {
     this.smeltingEl.appendChild(row);
   }
 
+  /** 转屏/改窗口大小：只有真的跨过"经典 UI ↔ 携带版 UI"那个断点才重画 */
+  private readonly handleResize = (): void => {
+    const next = isClassicUi(this.viewportWidth);
+    if (next === this.classicUi) return;
+    this.classicUi = next;
+    if (this.open) this.render();
+  };
+
   /** 验收脚本用：设置搜索词并重画 */
   setQuery(query: string): void {
     this.query = query;
@@ -506,6 +532,7 @@ export class RecipeBook {
   }
 
   dispose(): void {
+    window.removeEventListener('resize', this.handleResize);
     this.root.remove();
   }
 }

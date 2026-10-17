@@ -29,7 +29,11 @@ import { RECIPES, type Recipe } from '../src/core/crafting/Recipes.ts';
 import { recipeLayout, stationLabel, trimPattern } from '../src/core/crafting/RecipeLayout.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import {
+  CLASSIC_UI_MIN_WIDTH,
   RECIPE_BOOK_TABS,
+  RECIPE_BOOK_TABS_POCKET,
+  isClassicUi,
+  recipeBookTabsFor,
   RECIPE_BOOK_TAB_LABELS,
   buildRecipeEntries,
   canCraft,
@@ -436,7 +440,22 @@ console.log('\n[配方书：把配方摆进合成格（批次 132）]');
 
 console.log('\n[配方书：标签栏（批次 133，对齐基岩版）]');
 {
-  equal('五个标签栏，顺序照基岩版（全部在最前）', RECIPE_BOOK_TABS.join(','), 'all,building,equipment,items,nature');
+  // 顺序**两种**（Wiki 逐条写了位置）：经典 UI "全部"在最右、携带版 "全部"最前
+  equal(
+    '经典 UI：建筑 → 装备 → 物品 → 自然 → 全部（全部在最右）',
+    RECIPE_BOOK_TABS.join(','),
+    'building,equipment,items,nature,all',
+  );
+  equal(
+    '携带版 UI：全部在最前',
+    RECIPE_BOOK_TABS_POCKET.join(','),
+    'all,building,equipment,items,nature',
+  );
+  equal('两套顺序是同一组页签（只是先后不同）', [...RECIPE_BOOK_TABS].sort().join(','), [...RECIPE_BOOK_TABS_POCKET].sort().join(','));
+  equal('宽屏（1280 及以上）走经典 UI 的顺序', recipeBookTabsFor(1280).join(','), 'building,equipment,items,nature,all');
+  equal('手机（窄屏）走携带版 UI 的顺序', recipeBookTabsFor(844).join(','), 'all,building,equipment,items,nature');
+  equal('经典 UI 的断点与 CSS 里 `body.split-ui` 那个 1280 是同一个数', CLASSIC_UI_MIN_WIDTH, 1280);
+  check('断点两侧立刻分出两种形态', isClassicUi(1279) === false && isClassicUi(1280) === true);
   for (const tab of RECIPE_BOOK_TABS) {
     check(`标签栏「${tab}」有中文名`, (RECIPE_BOOK_TAB_LABELS[tab] ?? '').length > 0);
   }

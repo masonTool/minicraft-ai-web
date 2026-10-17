@@ -797,7 +797,12 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   );
 
   // ---- 配方书：标签栏 + 「仅显示可合成」（批次 133，Wiki「物品栏 → 配方书」）
-  check('配方书按标签栏分行', bookUi.includes('for (const tab of RECIPE_BOOK_TABS)'));
+  check('配方书按标签栏分行', bookUi.includes('for (const tab of recipeBookTabsFor(this.viewportWidth))'));
+  check(
+    '页签的先后跟着 UI 形态走（经典 UI 全部在最右 / 携带版在最前）',
+    bookUi.includes('button.style.order = String(order.indexOf(tab))'),
+  );
+  check('转屏只在跨过断点时重画（否则重建 60 个 canvas）', bookUi.includes('if (next === this.classicUi) return;'));
   check('页签上带条数（免得点进去才发现是空的）', bookUi.includes('RECIPE_BOOK_TAB_LABELS[tab]}（${counts.get(tab) ?? 0}）'));
   check('有「仅显示可合成」筛选', bookUi.includes("this.filterButton.dataset.role = 'craftable-filter'"));
   check('筛选默认关（默认藏掉大半会让人以为配方丢了）', bookUi.includes('private onlyCraftable = false'));
