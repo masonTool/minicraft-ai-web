@@ -1606,7 +1606,8 @@ export class InventoryScreen {
       this.syncPocketBodyClass(false);
       this.syncCraftArrow(false);
       this.restoreInvTabToRail();
-      if (this.recipesBtn) this.recipesBtn.classList.remove('hidden');
+      // 容器界面照旧给这颗按钮；创造模式下不要（同一口径，见下面那条注释）
+      if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', creative);
       this.lastLeftPane = '';
       return;
     }
@@ -1652,7 +1653,9 @@ export class InventoryScreen {
     // 生存左轨是物品分类 + 箱子；创造左轨复用创造物品分类
     this.syncCreativeRails(leftPane === 'creative');
     if (leftPane !== 'creative') {
-      this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes);
+      // 批次 163：创造模式下**连左轨那排配方分类也不给**——与标题栏那颗按钮同一口径。
+      // 创造模式左栏是无限物品（或"生存背包"），配方书在这儿没有意义。
+      this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes || creative);
       this.railLeft.classList.remove('hidden');
       // 批次 159：点亮当前分类（点了哪一颗要看得出来）
       this.syncRecipeRail(leftPane === 'category' ? this.categoryTab : null);
@@ -1668,7 +1671,10 @@ export class InventoryScreen {
     // ⚠️ active = "该分类下的所有物品都列出来（没有的红底）"；
     //    关着 = 只列自己拥有的，这就是"物品分类"本身的能力。
     if (this.recipesBtn) {
-      this.recipesBtn.classList.toggle('hidden', showCreativeItems);
+      // 批次 163：**创造模式整个不要这颗按钮**（不只是"创造物品"那一栏）。
+      // 创造模式左栏是无限物品分类，配方开关在这儿没有意义；
+      // 切到"生存背包"时也不该冒出来（人还在创造模式里）。
+      this.recipesBtn.classList.toggle('hidden', creative);
       this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned);
     }
 

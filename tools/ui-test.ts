@@ -793,6 +793,21 @@ console.log('\n[浅底按钮用深色字（批次 162）]');
   );
 }
 
+console.log('\n[创造模式不给配方入口（批次 163）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+
+  check(
+    '创造模式下标题栏那颗配方按钮整颗藏掉（不只是"创造物品"那一栏）',
+    invSrc.includes("this.recipesBtn.classList.toggle('hidden', creative);") &&
+      !invSrc.includes("this.recipesBtn.classList.toggle('hidden', showCreativeItems);"),
+  );
+  check(
+    '创造模式下左轨那排配方分类也不给',
+    invSrc.includes("this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes || creative);"),
+  );
+}
+
 console.log('\n[玩家预览占位（批次 141）]');
 {
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
