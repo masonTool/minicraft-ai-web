@@ -310,9 +310,23 @@ console.log('\n[四、缺口与白名单必须一一对应]');
 
 const nameOf = (id: number): string => (itemDef(id)?.name ?? String(id)).replace('minecraft:', '');
 
+/**
+ * **创造专属物品**（批次 174，J17 的刷怪蛋）：它们**本来就不该有生存来源**，
+ * 所以既不进"缺口"、也不进白名单。
+ *
+ * ⚠️ 这不是给白名单开后门：白名单那条规矩（"不拿'反正创造模式能拿'当理由"）
+ * 针对的是**本该能拿到的**东西。刷怪蛋在原版里就没有任何生存获取途径，
+ * 所以判据换成"它必须**真的**没有任何来源"——下面第三段那两条断言盯着这件事。
+ */
+const SPAWN_EGG_IDS: number[] = [];
+for (const item of ITEMS) {
+  if (item?.spawnEgg !== undefined) SPAWN_EGG_IDS.push(item.id);
+}
+
 const unreachable: number[] = [];
 for (let id = BLOCK_ITEM_ID_LIMIT; id < ITEMS.length; id++) {
   if (ITEMS[id] === undefined || reach.has(id)) continue;
+  if (ITEMS[id]!.spawnEgg !== undefined) continue;
   unreachable.push(id);
 }
 
@@ -434,6 +448,28 @@ const dyeableWool = DYE_COLORS.filter((_color, index) =>
   ),
 ).length;
 equal('羊毛的 16 条染色配方里 14 条原料自足（黑/灰那两条不是）', dyeableWool, 14);
+
+// ③b 刷怪蛋（批次 174，J17）：创造专属，判据是"**真的**没有任何来源"——
+//     哪天有人给刷怪蛋接上配方/掉落，这两条会立刻变红（那意味着"创造专属"这个标签该撤了）
+check('刷怪蛋有 21 枚（`SPAWN_EGG_SPECS` 的长度）', SPAWN_EGG_IDS.length === 21, String(SPAWN_EGG_IDS.length));
+check(
+  '每一枚刷怪蛋都在创造物品栏里（不然玩家根本拿不到它）',
+  SPAWN_EGG_IDS.every((id) => CREATIVE_ITEMS.includes(id)),
+);
+check(
+  '每一枚刷怪蛋都没有配方 / 掉落 / 战利品来源（"创造专属"这句话必须是真的）',
+  SPAWN_EGG_IDS.every(
+    (id) =>
+      !RECIPES.some((recipe) => recipe.result.id === id) &&
+      !SMELTING_RECIPES.some((recipe) => recipe.output.id === id) &&
+      !lootItemIds().includes(id) &&
+      !fishingEntryIds().includes(id) &&
+      MOB_TYPES.every((type) => type.drops.every((drop) => drop.itemId !== id)) &&
+      PROFESSIONS.every((profession) =>
+        profession.levels.every((level) => level.every((spec) => spec.result.id !== id)),
+      ),
+  ),
+);
 
 // ④ 锁链甲（批次 169，B53）：**仍然没有配方**（给了会和铁甲撞车），
 //    但三件都由**盔甲匠**卖——交易就是它们唯一的来源，"拿得到"这一侧才闭环

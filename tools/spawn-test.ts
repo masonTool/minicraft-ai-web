@@ -13,6 +13,17 @@ import { SLIME_SPAWN_MAX_Y } from '../src/core/world/Slime.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
 import type { MobType } from '../src/core/entity/Mob.ts';
 import { Block } from '../src/core/registry/blocks.ts';
+import { CREATIVE_ITEMS, Item, itemDef } from '../src/core/registry/items.ts';
+import {
+  SPAWN_EGG_EXCLUDED,
+  SPAWN_EGG_SPECS,
+  spawnEggItemId,
+  spawnEggMobOf,
+  spawnEggTile,
+} from '../src/core/registry/spawnEggs.ts';
+import { RECIPES } from '../src/core/crafting/Recipes.ts';
+import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { itemLabel } from '../src/core/registry/itemNames.ts';
 
 let passed = 0;
 let failed = 0;
@@ -322,6 +333,61 @@ console.log('\n[维度与空腔（批次 94）]');
     netherKinds.length > 0 &&
       netherKinds.every((id) => id === 'ghast' || id === 'magma_cube_big' || id === 'zombie_piglin'),
     netherKinds.join(','),
+  );
+}
+
+console.log('\n[刷怪蛋（批次 174，J17）：每种生物一枚，创造专属]');
+{
+  /**
+   * 三条口径：
+   *  ① 蛋 ↔ 生物**一一对应**（少一枚 = "这只生物没有蛋"；多一枚 = "蛋生不出东西"）；
+   *  ② 每枚蛋都能反查出生成哪种生物（`spawnEggMobOf` 是主程序右击时唯一用的那个函数）；
+   *  ③ 每枚蛋的贴图都在图集名单里（漏一个就是图集里的紫黑方块）。
+   */
+  const eggMobs = new Set(SPAWN_EGG_SPECS.map((spec) => spec.mobId));
+  const breedable = MOB_TYPES.filter((type) => !SPAWN_EGG_EXCLUDED.includes(type.id));
+  check(
+    '每只（可刷蛋的）生物都有一枚蛋',
+    breedable.every((type) => eggMobs.has(type.id)),
+    breedable.filter((type) => !eggMobs.has(type.id)).map((type) => type.id).join(','),
+  );
+  check(
+    '每枚蛋都能对上一只真实存在的生物',
+    [...eggMobs].every((mobId) => MOB_TYPES.some((type) => type.id === mobId)),
+    [...eggMobs].filter((mobId) => !MOB_TYPES.some((type) => type.id === mobId)).join(','),
+  );
+  check(
+    '尺寸变体与远程玩家被排除（史莱姆/岩浆怪只有一枚中号蛋，与原版一致）',
+    SPAWN_EGG_EXCLUDED.every((id) => !eggMobs.has(id)) &&
+      SPAWN_EGG_EXCLUDED.includes('slime_big') &&
+      SPAWN_EGG_EXCLUDED.includes('remote_player'),
+  );
+
+  let roundTrip = true;
+  let tileOk = true;
+  let idOk = true;
+  const seen = new Set<number>();
+  for (const [index, spec] of SPAWN_EGG_SPECS.entries()) {
+    const id = spawnEggItemId(index);
+    if (seen.has(id)) idOk = false;
+    seen.add(id);
+    if (spawnEggMobOf(id) !== spec.mobId) roundTrip = false;
+    const def = itemDef(id);
+    if (!def || def.spawnEgg !== spec.mobId) roundTrip = false;
+    if (!(TILE_ORDER as readonly string[]).includes(spawnEggTile(spec.mobId))) tileOk = false;
+    if (itemLabel(id) !== `${spec.label}刷怪蛋`) roundTrip = false;
+  }
+  check('蛋的 id 两两不同', idOk);
+  check('每枚蛋都能反查出生物、名字也由规格表给', roundTrip);
+  check('每枚蛋的贴图都在图集名单里', tileOk);
+  check('不是蛋的 id 查不出生物（防止越界读到别的蛋）', spawnEggMobOf(Item.DIAMOND) === undefined);
+  check(
+    '刷怪蛋都在创造物品栏里（创造模式拿得到才叫"蛋"）',
+    SPAWN_EGG_SPECS.every((_spec, index) => CREATIVE_ITEMS.includes(spawnEggItemId(index))),
+  );
+  check(
+    '刷怪蛋没有配方（原版也没有：给了配方就不叫创造专属了）',
+    RECIPES.every((recipe) => !SPAWN_EGG_SPECS.some((_spec, index) => recipe.result.id === spawnEggItemId(index))),
   );
 }
 

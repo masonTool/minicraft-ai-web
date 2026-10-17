@@ -299,6 +299,8 @@ import { applyPickBlock, pickItemFor, planPickBlock } from './core/interaction/P
 // 快捷栏的起点与大小：`planPickBlock` 返回的是**背包下标**，切选中格要减掉起点
 import { HOTBAR_START } from './core/container/Inventory.ts';
 import { planPlacement } from './core/interaction/Placement.ts';
+// 刷怪蛋（批次 174）：手里那件是蛋就生成对应生物（`spawnEggMobOf` 查不到就返回 undefined）
+import { spawnEggMobOf } from './core/registry/spawnEggs.ts';
 import {
   isDoorOpen,
   isDoorUpper,
@@ -7573,6 +7575,24 @@ class App {
       this.playNoteBlock(this.hit.x, this.hit.y, this.hit.z, sneak);
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
+    // ---- 刷怪蛋（批次 174，J17）：对着方块右击生成一只生物。
+    // 排在功能方块之前：拿着蛋点箱子时，那一下应该是"生出生物"而不是"打开箱子"。
+    // 创造模式（= 会飞）不消耗，与原版一致。
+    const eggMob = spawnEggMobOf(this.heldItemId ?? -1);
+    if (eggMob) {
+      if (this.spawnMob(eggMob, this.hit.x, this.hit.y + 1, this.hit.z)) {
+        if (!this.flying) {
+          this.inventory.take(this.hotbarIndex, 1);
+          this.refreshHotbar();
+        }
+        this.audio.play('place', { x: this.hit.x + 0.5, y: this.hit.y + 1, z: this.hit.z + 0.5 });
+        this.hand.swing();
+      }
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
       return;
     }
 

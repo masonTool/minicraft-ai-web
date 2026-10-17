@@ -967,6 +967,30 @@ export const TILE_ORDER = [
   'concrete_powder_black',
   // 音符盒（批次 173）：深色木板 + 黑框 + 正中一个浅色音符（音高不改变贴图）
   'note_block',
+  // 刷怪蛋（批次 174，21 枚）：同一副蛋形，按生物的主色/点缀色参数化（见 `TextureAtlas`）。
+  // ⚠️ 这份名单必须与 `registry/spawnEggs.ts` 的规格表一一对应——`test:spawn` 有一条断言盯着
+  //   （漏一行的症状是"那枚蛋在图集里没有贴图"，表现为一个紫黑方块，而不会报任何错）
+  'spawn_egg_zombie',
+  'spawn_egg_skeleton',
+  'spawn_egg_creeper',
+  'spawn_egg_spider',
+  'spawn_egg_cave_spider',
+  'spawn_egg_enderman',
+  'spawn_egg_drowned',
+  'spawn_egg_husk',
+  'spawn_egg_stray',
+  'spawn_egg_phantom',
+  'spawn_egg_slime',
+  'spawn_egg_magma_cube',
+  'spawn_egg_blaze',
+  'spawn_egg_ghast',
+  'spawn_egg_wither_skeleton',
+  'spawn_egg_zombie_piglin',
+  'spawn_egg_cow',
+  'spawn_egg_pig',
+  'spawn_egg_sheep',
+  'spawn_egg_chicken',
+  'spawn_egg_villager',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

@@ -20,6 +20,10 @@ import { COPPER_STAGES } from '../core/registry/blocks.ts';
 import { POTIONS, TIPPED_ARROWS, potionById, potionColor } from '../core/registry/potions.ts';
 import { ARMOR_TYPES, ALL_ARMOR_MATERIALS } from '../core/registry/armor.ts';
 import { ALL_TOOL_MATERIALS, TOOL_KINDS } from '../core/registry/tools.ts';
+// 刷怪蛋（批次 174）：蛋形只有一副，颜色取自该生物自己的 bodyColor/accentColor ——
+// 不为 21 枚蛋各写一份配色（那样"改了僵尸的绿"两边就会分家）
+import { SPAWN_EGG_SPECS, spawnEggTile } from '../core/registry/spawnEggs.ts';
+import { mobTypeById } from '../core/entity/mobs.ts';
 
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from './atlasLayout.ts';
 
@@ -4920,6 +4924,38 @@ PAINTERS.composter_ready = composterTop(true);
  * 暗红音符在 16×16 里几乎看不见——所以音符取亮木色（那一眼就能认出"这是乐器"）。
  * 音高不改变贴图（原版也是同一张），所以网格化那边不用管状态位。
  */
+/**
+ * 刷怪蛋（批次 174）：一副蛋形 + 该生物自己的配色。
+ *
+ * 蛋形用椭圆（横向 9px、纵向 11px），底部两行压暗一点（有体积感）、
+ * 外加 3~4 个点缀色斑点——远处一眼能分出"这枚蛋是谁的"。
+ * ⚠️ 颜色**从 `MOB_TYPES` 取**（`bodyColor` / `accentColor`），不在这里另抄一份：
+ * 以后调僵尸的绿，蛋也跟着变；抄一份的话两边一定会分家。
+ */
+function spawnEggPainter(base: number, accent: number): (x: number, y: number, rng: () => number) => [number, number, number, number] {
+  const channel = (color: number, shift: number): number => (color >> shift) & 0xff;
+  const b = [channel(base, 16), channel(base, 8), channel(base, 0)];
+  const a = [channel(accent, 16), channel(accent, 8), channel(accent, 0)];
+  return (x, y, rng) => {
+    // 椭圆：中心 (7.5, 8)，半轴 4.6 / 5.6
+    const nx = (x - 7.5) / 4.6;
+    const ny = (y - 8) / 5.6;
+    const d = nx * nx + ny * ny;
+    if (d > 1) return [0, 0, 0, 0];
+    // 斑点：用坐标哈希挑几个格子（确定性，刷新图集不会变）
+    const spot = hashString(`egg${x},${y}`) % 9 === 0;
+    const color = spot ? a : b;
+    // 简易明暗：左上亮一点、右下暗一点
+    const shade = 1 + (0.12 * (7.5 - x)) / 7 - (0.1 * (y - 8)) / 7 + (rng() * 0.04 - 0.02);
+    return [clamp255(color[0]! * shade), clamp255(color[1]! * shade), clamp255(color[2]! * shade), 255];
+  };
+}
+
+for (const spec of SPAWN_EGG_SPECS) {
+  const type = mobTypeById(spec.mobId);
+  PAINTERS[spawnEggTile(spec.mobId)] = spawnEggPainter(type?.bodyColor ?? 0x9a9a9a, type?.accentColor ?? 0xf2f2f2);
+}
+
 PAINTERS.note_block = (x: number, y: number, rng: () => number): [number, number, number, number] => {
   // 四周 1px 黑框
   if (x === 0 || y === 0 || x === 15 || y === 15) return [32, 21, 12, 255];

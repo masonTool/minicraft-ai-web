@@ -29,6 +29,7 @@ import { SPLASH_RADIUS, isInstantEffect } from '../survival/SplashPotion.ts';
 import { CLOUD_DURATION, CLOUD_PULSE_INTERVAL, LINGERING_RADIUS } from '../survival/PotionCloud.ts';
 import { POTIONS, TIPPED_ARROWS, potionById, type PotionEntry, type TippedArrowEntry } from './potions.ts';
 import { tippedArrowEffects } from '../survival/TippedArrow.ts';
+import { SPAWN_EGG_SPECS, spawnEggTile } from './spawnEggs.ts';
 import { enchantmentById, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
 import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
@@ -1119,6 +1120,18 @@ function tippedArrowDescription(arrow: TippedArrowEntry): string {
 for (const arrow of TIPPED_ARROWS) {
   put(arrow.key, arrow.name);
   DESCRIPTIONS[arrow.key] = tippedArrowDescription(arrow);
+}
+
+// ---------------------------------------------------------------- 刷怪蛋（批次 174，J17）
+//
+// 21 枚蛋的名字与说明都由**同一张规格表**派生（`registry/spawnEggs.ts`）：
+// 手抄 21 行"僵尸刷怪蛋/骷髅刷怪蛋…"迟早会漏一个，而漏掉的那枚在界面上会显示成英文 id。
+for (const spec of SPAWN_EGG_SPECS) {
+  const key = spawnEggTile(spec.mobId);
+  put(key, `${spec.label}刷怪蛋`);
+  DESCRIPTIONS[key] =
+    `对着一格方块右击，生成一只**${spec.label}**。⚠️ **创造专属**：原版刷怪蛋也没有任何生存来源` +
+    `（本项目一样），所以它只出现在创造物品栏里；生存模式拿到也用不掉。`;
 }
 
 // ---------------------------------------------------------------- 对外接口

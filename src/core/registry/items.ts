@@ -45,6 +45,8 @@ import {
 import { DYE_COLORS } from './colors.ts';
 import { foodForName, type FoodInfo } from './food.ts';
 import { SHEARS_INFO, SHEARS_ITEM_ID, TOOL_SPECS, type ToolInfo } from './tools.ts';
+// 刷怪蛋（批次 174）：规格表与 id 区间单独一个模块（它不引任何东西，所以不成环）
+import { SPAWN_EGG_SPECS, spawnEggItemId, spawnEggTile } from './spawnEggs.ts';
 
 export const MAX_STACK = 64;
 
@@ -73,6 +75,14 @@ export interface ItemDef {
    * 这里只给"只差一个耐久上限"的东西留个位置。
    */
   readonly durability?: number;
+  /**
+   * 刷怪蛋（批次 174，J17）：放着的时候生成**哪种生物**（`MobType.id`）。
+   *
+   * 有这一项的物品就是"创造专属"的——可达性审计会**显式跳过**它们
+   * （见 `tools/reachability-test.ts`），而不是给白名单写一条"创造模式能拿"的理由：
+   * 白名单那条规矩是"给真正的缺口写理由"，而刷怪蛋**本来就不该有生存来源**。
+   */
+  readonly spawnEgg?: string;
 }
 
 /** 方块物品可用的 id 上限：非方块物品一律从 1000 起，两段空间彻底隔开 */
@@ -1132,6 +1142,25 @@ export const LEGACY_ITEM_IDS: ReadonlySet<number> = new Set<number>([Item.REDSTO
 /** 是不是"旧 id"（界面不展示、`/give` 的名字索引里也不收） */
 export function isLegacyItem(itemId: number): boolean {
   return LEGACY_ITEM_IDS.has(itemId);
+}
+
+/**
+ * 刷怪蛋（批次 174，TASKS J17）。
+ *
+ * ⚠️ **必须注册在 `CREATIVE_ITEMS` 之前**：那张表是在模块初始化时从 `ITEMS` 过滤出来的，
+ * 晚注册的条目不会出现在创造栏里（而且不会报错——只会"创造模式里找不到刷怪蛋"）。
+ *
+ * 每枚蛋只有一个 `tile`（`spawn_egg_<mob>`）与一个 `spawnEgg`（哪只生物），
+ * 贴图由 `TextureAtlas` 按该生物的 `bodyColor`/`accentColor` 参数化画出来。
+ */
+for (const [index, spec] of SPAWN_EGG_SPECS.entries()) {
+  register({
+    id: spawnEggItemId(index),
+    name: `minecraft:${spawnEggTile(spec.mobId)}`,
+    maxStack: MAX_STACK,
+    tile: spawnEggTile(spec.mobId),
+    spawnEgg: spec.mobId,
+  });
 }
 
 /**
