@@ -1258,6 +1258,8 @@ class App {
         // 背包里搬动东西的一声"咔"（H19 ⑪，批次 138）：界面只报"动过了"，
         // 播不播、多大声由音频引擎那边统一按音量设置决定
         onMove: () => this.audio.play('item_move'),
+        // 创造物品栏门控（批次 139）：能飞 = 创造，与 isCreative / 中键拾取同一条口径
+        isCreative: () => this.flying,
         // 丢出（批次 128）：Q / Ctrl+Q / 点界面外 —— 界面只报"丢哪件、丢几件"，
         // 真正造掉落物的是这里（它才知道玩家站在哪）
         onDrop: (itemId, count) => this.spawnDrop(itemId, count, this.physics.x, this.physics.y + 1.2, this.physics.z),
@@ -8622,6 +8624,8 @@ class App {
     this.flying = value;
     // 触摸端的"飞"按钮需要跟着亮/灭
     this.touch?.setFlying(value);
+    // 创造物品栏跟着显隐（批次 139）：背包开着时按 F 起飞，创造区要立刻出现
+    if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
   }
 
   /**

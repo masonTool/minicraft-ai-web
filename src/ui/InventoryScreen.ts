@@ -207,6 +207,13 @@ export interface InventoryScreenHooks {
    * 否则玩家会以为东西放进去了（这一条与"点了没反应要抖一下"是同一个理由）。
    */
   onMove?: () => void;
+  /**
+   * **现在是不是创造模式**（H19，批次 139）：创造物品栏只能在创造模式打开。
+   *
+   * 本项目的口径是「能飞 = 创造」（与中键拾取、伤害免疫同一条）。
+   * 没接这个钩子时当作生存——宁可多藏一块创造区，也不能让生存玩家拿到无限物资。
+   */
+  isCreative?: () => boolean;
 }
 
 interface SlotBinding {
@@ -376,6 +383,8 @@ export class InventoryScreen {
   private creativePrev!: HTMLButtonElement;
   private creativeNext!: HTMLButtonElement;
   private creativePageLabel!: HTMLSpanElement;
+  /** 创造销毁格（批次 139）：把手上那一叠清掉 */
+  private creativeDestroySlot!: HTMLDivElement;
   /** 页面尺寸变化（手机转屏）时重算每页条数：只在跨越窄屏阈值时才真的重渲染 */
   private readonly narrowQuery = typeof window === 'undefined' ? null : window.matchMedia(`(max-width: ${NARROW_MAX_WIDTH}px)`);
 
@@ -796,12 +805,53 @@ export class InventoryScreen {
     this.creativePageLabel.dataset.role = 'label';
     this.creativePager.append(this.creativePrev, this.creativePageLabel, this.creativeNext);
 
-    this.creativeSection.append(header, controls, this.creativeGrid, this.creativePager);
+    // 销毁格（批次 139，对齐创造 HCI）：把手上的东西清掉，而不是丢进世界。
+    // 左键整叠、右键一个——与点界面外丢物的按键分工一致，只是结果是「没了」。
+    const destroyRow = document.createElement('div');
+    destroyRow.className = 'inv-creative-destroy-row';
+    this.creativeDestroySlot = this.createSlot();
+    this.creativeDestroySlot.classList.add('creative-destroy');
+    this.creativeDestroySlot.dataset.role = 'creative-destroy';
+    this.creativeDestroySlot.title = '销毁（左键整叠 / 右键一个）';
+    const destroyHint = document.createElement('span');
+    destroyHint.className = 'inv-slot-hint';
+    destroyHint.textContent = '销';
+    this.creativeDestroySlot.appendChild(destroyHint);
+    this.creativeDestroySlot.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.destroyHeld(event.button === 2 ? 1 : null);
+    });
+    destroyRow.appendChild(this.creativeDestroySlot);
+
+    this.creativeSection.append(header, controls, this.creativeGrid, this.creativePager, destroyRow);
     this.updateTabHighlight();
     this.renderCreativeGrid();
+    this.updateCreativeVisibility();
 
     // 转屏（竖屏 ↔ 横屏）会改变每页条数：跨过阈值时按新页大小重排
     this.narrowQuery?.addEventListener('change', () => this.renderCreativeGrid());
+  }
+
+  /**
+   * 创造物品栏只在创造模式 + 玩家物品栏模式下显示（批次 139）。
+   * Wiki：「创造模式物品栏只能在创造模式打开」。
+   */
+  private updateCreativeVisibility(): void {
+    const show = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
+    this.creativeSection.style.display = show ? '' : 'none';
+  }
+
+  /**
+   * 销毁光标上的物品（创造销毁格）。
+   * @param count 要销几个；`null` = 整叠
+   */
+  private destroyHeld(count: number | null): void {
+    if (!this.held) return;
+    if (count === null || count >= this.held.count) this.held = null;
+    else this.held = { ...this.held, count: this.held.count - count };
+    this.hooks.onMove?.();
+    this.refresh();
   }
 
   /** 翻页条上的按钮：触摸端热区要够大（与 CSS 里的 44px 下限配套） */
@@ -855,6 +905,13 @@ export class InventoryScreen {
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
+        // 中键 = 复制满组到光标（批次 139，对齐创造「选取即复制」的桌面用法）
+        if (event.button === 1) {
+          this.held = { id: itemId, count: maxStackOf(itemId) };
+          this.hooks.onMove?.();
+          this.refresh();
+          return;
+        }
         this.inventory.add(itemId, event.button === 2 ? 1 : maxStackOf(itemId));
       });
       this.creativeGrid.appendChild(slot);
@@ -1890,7 +1947,7 @@ export class InventoryScreen {
     }
 
     this.titleEl.textContent = MODE_TITLES[mode];
-    this.creativeSection.style.display = mode === 'inventory' ? '' : 'none';
+    this.updateCreativeVisibility();
     this.openPanel();
   }
 
@@ -2066,6 +2123,9 @@ export class InventoryScreen {
       this.heldElement.classList.remove('on');
       this.heldCount.textContent = '';
     }
+
+    // 飞行开关可能在背包开着时切换（F / 触摸起飞）——创造区要跟着显隐
+    this.updateCreativeVisibility();
   }
 
   /** 指针底下的槽位当前是什么物品 */
@@ -2163,7 +2223,7 @@ export class InventoryScreen {
       this.rebuildTopArea();
     }
     this.titleEl.textContent = MODE_TITLES.trade;
-    this.creativeSection.style.display = 'none';
+    this.updateCreativeVisibility();
     this.openPanel();
   }
 

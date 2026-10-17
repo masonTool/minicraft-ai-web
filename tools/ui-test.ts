@@ -383,6 +383,24 @@ console.log('\n[背包搬运音效（H19 ⑪，批次 138）]');
   check('主程序把它接到 audio.play', mainSrc.includes("onMove: () => this.audio.play('item_move')"));
 }
 
+console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克隆]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  check('界面提供了 isCreative 钩子', invSrc.includes('isCreative?: () => boolean;'));
+  check('主程序接到 flying', mainSrc.includes('isCreative: () => this.flying'));
+  // Wiki：「创造模式物品栏只能在创造模式打开」——不能再写 mode === 'inventory' 就显示
+  check('创造区按 isCreative 门控', /mode === 'inventory' && \(this\.hooks\.isCreative\?\.\(\) \?\? false\)/.test(invSrc));
+  check('没接钩子时当作生存（不显示）', invSrc.includes('this.hooks.isCreative?.() ?? false'));
+  check('飞行切换时刷新界面（创造区跟着显隐）', /if \(this\.inventoryScreen\.isOpen\) this\.inventoryScreen\.refresh\(\)/.test(mainSrc));
+  check('有销毁格 DOM', invSrc.includes("dataset.role = 'creative-destroy'") && invSrc.includes('creative-destroy'));
+  check('销毁格左键整叠 / 右键一个', invSrc.includes('destroyHeld(event.button === 2 ? 1 : null)'));
+  check('销毁格 CSS 在', css.includes('.inv-creative-destroy-row') && css.includes('.inv-slot.creative-destroy'));
+  check('创造格中键克隆到光标', /event\.button === 1/.test(invSrc) && /this\.held = \{ id: itemId, count: maxStackOf\(itemId\) \}/.test(invSrc));
+}
+
 console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全关完才轮到浏览器]');
 {
   /** 一个可断言的假浏览器：`history` 只有"压一条/退一格"两个动作 */

@@ -1390,6 +1390,15 @@
         outline: none;
       }
       .inv-count-label { color: #6a6a6a; font-size: 11px; }
+      /* 创造销毁格（批次 139）：网格下方单独一格，提示字「销」 */
+      .inv-creative-destroy-row {
+        display: flex; justify-content: flex-end; margin: 6px 2px 2px;
+      }
+      .inv-slot.creative-destroy {
+        background: #8a5050;
+        border-color: #c08080 #4a2020 #4a2020 #c08080;
+      }
+      .inv-slot.creative-destroy .inv-slot-hint { color: #f0d0d0; opacity: 1; }
       /* 空状态提示在网格里要跨满整行，否则会被 34px 的列宽挤成一列字 */
       .inv-empty { grid-column: 1 / -1; color: #5a5a5a; font-size: 12px; padding: 10px 2px; }
       .inv-slot {
