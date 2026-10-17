@@ -318,7 +318,9 @@ import {
   drainCauldronToBottle,
   drainCauldronToBucket,
   fillCauldron,
+  fillCauldronWithLava,
   isBucketSource,
+  isLavaCauldronState,
 } from './core/world/Cauldron.ts';
 import {
   isDoorOpen,
@@ -6573,13 +6575,25 @@ class App {
       return true;
     }
 
-    // ② 空桶 → 从**满锅**里舀回一桶（不满舀不出来，见 `drainCauldronToBucket`）
+    // ①b 岩浆桶 → 倒成岩浆锅（批次 177）：与水锅同一个锅，靠状态位区分内容物
+    if (held === Item.LAVA_BUCKET) {
+      this.world.setStateAndUpdate(x, y, z, fillCauldronWithLava(state));
+      if (!this.flying) this.exchangeHeld(Item.LAVA_BUCKET, Item.BUCKET);
+      this.audio.play('flint', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xff9a1f, 6);
+      this.hand.swing();
+      return true;
+    }
+
+    // ② 空桶 → 从**满锅**里舀回一桶（不满舀不出来，见 `drainCauldronToBucket`）。
+    // 岩浆锅舀出来的是岩浆桶（原版也是这样），水锅舀出来的是水桶。
     if (held === Item.BUCKET) {
+      const lava = isLavaCauldronState(state);
       const drained = drainCauldronToBucket(state);
       if (drained === null) return false;
       this.world.setStateAndUpdate(x, y, z, drained);
-      this.exchangeHeld(Item.BUCKET, Item.WATER_BUCKET);
-      this.audio.play('splash', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.exchangeHeld(Item.BUCKET, lava ? Item.LAVA_BUCKET : Item.WATER_BUCKET);
+      this.audio.play(lava ? 'flint' : 'splash', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.hand.swing();
       return true;
     }
@@ -8399,10 +8413,16 @@ class App {
     const feetZ = Math.floor(p.z);
     const feet = this.world.getBlock(feetX, feetY, feetZ);
     const body = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 1.0), Math.floor(p.z));
+    // 岩浆锅（批次 177，G13 收尾）：站在里面等同泡岩浆——原版也烫脚
+    const feetLavaCauldron =
+      feet === Block.CAULDRON && isLavaCauldronState(this.world.getBlockState(feetX, feetY, feetZ));
+    const bodyLavaCauldron =
+      body === Block.CAULDRON &&
+      isLavaCauldronState(this.world.getBlockState(Math.floor(p.x), Math.floor(p.y + 1.0), Math.floor(p.z)));
 
     return {
       eyeInWater: eye === Block.WATER,
-      inLava: feet === Block.LAVA || body === Block.LAVA,
+      inLava: feet === Block.LAVA || body === Block.LAVA || feetLavaCauldron || bodyLavaCauldron,
       // 站在火里（I12）：脚或身体所在格是火焰 → 被点燃 + 每秒掉血。
       // 批次 48 起也包含**点着的营火**（熄灭的不算）——它同样会烫脚
       inFire:

@@ -12,6 +12,8 @@ import { Block, blockDef } from '../src/core/registry/blocks.ts';
 import {
   CAULDRON_MAX_LEVEL,
   cauldronLevelOf,
+  isLavaCauldron,
+  withCauldronLava,
   withCauldronLevel,
   withFluidLevel,
   withFallingFluid,
@@ -25,9 +27,12 @@ import {
   drainCauldronToBottle,
   drainCauldronToBucket,
   fillCauldron,
+  fillCauldronWithLava,
   isBucketSource,
   isCauldronFull,
+  isLavaCauldronState,
 } from '../src/core/world/Cauldron.ts';
+import { RANDOM_TICK_BEHAVIORS, hasRandomTick } from '../src/core/tick/RandomTicks.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { hasDescription, itemLabel } from '../src/core/registry/itemNames.ts';
@@ -93,6 +98,35 @@ console.log('\n[炼药锅：0~3 级水位]');
   check('描述文案看得出几级', describeCauldron(withCauldronLevel(0, 2)).includes('2'));
 }
 
+// ---------------------------------------------------------------- 2b. 岩浆锅与下雨接水（批次 177）
+
+console.log('\n[岩浆锅：同一个锅、另一种内容物]');
+{
+  equal('一桶岩浆灌满', cauldronLevelOf(fillCauldronWithLava(0)), CAULDRON_MAX_LEVEL);
+  check('灌完带"岩浆"标记', isLavaCauldronState(fillCauldronWithLava(0)));
+  check('水锅不是岩浆锅', !isLavaCauldronState(fillCauldron(withCauldronLevel(0, 3))));
+  check(
+    '往岩浆锅里倒水 → 洗成水锅（原版也是）',
+    !isLavaCauldronState(fillCauldron(fillCauldronWithLava(0))),
+  );
+  equal('水位与岩浆标记互不干扰（写水位不动标记）', isLavaCauldron(withCauldronLevel(withCauldronLava(0), 1)), true);
+  check('岩浆锅不接雨', !cauldronAcceptsRain(fillCauldronWithLava(0), 15));
+  check('岩浆锅也能舀回一桶（舀完是空锅）', drainCauldronToBucket(fillCauldronWithLava(0)) === 0);
+  check('描述里写的是"岩浆"', describeCauldron(fillCauldronWithLava(0)).includes('岩浆'));
+  check(
+    '岩浆锅的顶面换成岩浆那张（水/空锅各一张）',
+    blockDef(Block.CAULDRON).stateTiles?.(fillCauldronWithLava(0))?.[0] === 'cauldron_lava',
+  );
+}
+
+console.log('\n[下雨接水：走随机刻，判据用天光]');
+{
+  check('炼药锅登记了随机刻行为（否则永远不会自己接水）', hasRandomTick(Block.CAULDRON));
+  check('登记的就是接雨那一条', RANDOM_TICK_BEHAVIORS.has(Block.CAULDRON));
+  // 判据本身（雨/天光/满没满）已经在上一节钉过；这里补一条"锅里还能再加一级"的边界
+  equal('2 级锅再加一级正好满', cauldronLevelOf(withCauldronLevel(0, 3)), CAULDRON_MAX_LEVEL);
+}
+
 // ---------------------------------------------------------------- 3. 注册与贴图
 
 console.log('\n[方块 / 物品 / 贴图 / 配方]');
@@ -100,6 +134,7 @@ console.log('\n[方块 / 物品 / 贴图 / 配方]');
   const def = blockDef(Block.CAULDRON);
   check('炼药锅已注册', def !== undefined && def.name === 'minecraft:cauldron');
   equal('形状借堆肥桶那一副（四面板条 + 薄底）', def.shape, 'composter');
+  check('岩浆锅那张贴图也在图集里', (TILE_ORDER as readonly string[]).includes('cauldron_lava'));
   equal('中文名', itemLabel(Block.CAULDRON), '炼药锅');
   check('有说明（写明三级、瓶子、下雨接水与差异）', hasDescription(Block.CAULDRON));
 

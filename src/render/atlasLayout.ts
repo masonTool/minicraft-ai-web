@@ -996,6 +996,7 @@ export const TILE_ORDER = [
   'cauldron_bottom',
   'cauldron_top',
   'cauldron_water',
+  'cauldron_lava',
   'item_water_bucket',
   'item_lava_bucket',
 ] as const;

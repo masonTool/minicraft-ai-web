@@ -12,6 +12,7 @@ import type { TreeKind } from '../gen/Features.ts';
 import {
   cauldronLevelOf,
   hasEndPortalEye,
+  isLavaCauldron,
   isComposterReady,
   isFlash,
   isInverted,
@@ -1967,11 +1968,13 @@ const CAULDRON_SPECS: readonly BlockSpec[] = [
     id: CAULDRON_ID,
     name: 'minecraft:cauldron',
     tiles: ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
-    // 有水时顶面换成"水面"那张（空锅是"看得到桶底"的暗口）
+    // 有水时顶面换成"水面"那张（空锅是"看得到桶底"的暗口）；装了岩浆时是橙红的那张
     stateTiles: (state) =>
-      cauldronLevelOf(state) > 0
-        ? ['cauldron_water', 'cauldron_bottom', 'cauldron_side']
-        : ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
+      isLavaCauldron(state)
+        ? ['cauldron_lava', 'cauldron_bottom', 'cauldron_side']
+        : cauldronLevelOf(state) > 0
+          ? ['cauldron_water', 'cauldron_bottom', 'cauldron_side']
+          : ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
     shape: 'composter' as const,
   },
 ];

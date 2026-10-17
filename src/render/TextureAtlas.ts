@@ -1584,6 +1584,14 @@ PAINTERS.cauldron_top = (x, y, rng) => {
   const v = 0.34 - Math.min(0.2, depth * 0.2) + rng() * 0.04;
   return [clamp255(52 * v), clamp255(56 * v), clamp255(64 * v), 255];
 };
+/** 装了岩浆（批次 177）：同样的铁沿，里面是橙红的岩浆（比水面亮、带条纹） */
+PAINTERS.cauldron_lava = (x, y, rng) => {
+  const inset = x >= 2 && x <= 13 && y >= 2 && y <= 13;
+  if (!inset) return cauldronIron(y, rng, 1.1);
+  const streak = Math.sin((x * 1.7 + y * 0.6) * 1.3) * 18;
+  return [clamp255(232 + streak), clamp255(112 + streak * 0.5), clamp255(28 + streak * 0.2), 255];
+};
+
 /** 有水：同样的铁沿，里面是青蓝的水面（带一点点波纹） */
 PAINTERS.cauldron_water = (x, y, rng) => {
   const inset = x >= 2 && x <= 13 && y >= 2 && y <= 13;

@@ -49,8 +49,10 @@ import { growTreeAt } from '../world/TreeGrowth.ts';
 import {
   FACING_OFFSET,
   MAX_SNOW_LAYERS,
+  cauldronLevelOf,
   facingOf,
   snowLayers,
+  withCauldronLevel,
   withFacing,
   withSnowLayers,
   withVineSide,
@@ -58,6 +60,8 @@ import {
   vineSides,
   type Facing,
 } from '../registry/blockState.ts';
+// 炼药锅接雨（批次 177，G13 收尾）：判据与概率都在 `world/Cauldron.ts` 里（纯函数）
+import { CAULDRON_RAIN_CHANCE, cauldronAcceptsRain } from '../world/Cauldron.ts';
 import { fireBehavior } from '../world/Fire.ts';
 import { COPPER_IDS, copperWeatherBehavior } from '../world/Copper.ts';
 
@@ -731,7 +735,27 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   ...[...CORAL_LIVE_VARIANT.keys()].map((id) => [id, coralReviveBehavior] as const),
   // TNT（批次 56）：旁边有火或岩浆就点着（点燃本身走 `igniteTnt` 回调）
   [Block.TNT, tntBehavior],
+  // 炼药锅（批次 177，G13 收尾）：下雨时露天的锅会自己接水
+  [Block.CAULDRON, cauldronRainBehavior],
 ]);
+
+// ---------------------------------------------------------------- 炼药锅接雨（批次 177，G13 收尾）
+
+/**
+ * 炼药锅接雨：锅没满、**头顶见天**、正下雨 → 有概率涨一级。
+ *
+ * ⚠️ "露天"用 **天光 15** 判，与"火焰被雨浇灭""雪层只在露天积"同一条口径——
+ * 洞里、屋檐下、树冠下的锅接不到雨。岩浆锅接不到（`cauldronAcceptsRain` 会否掉）。
+ */
+function cauldronRainBehavior(world: TickWorld, x: number, y: number, z: number): boolean {
+  if (!world.raining) return false;
+  const sky = world.skyLightAt?.(x, y, z) ?? 0;
+  const state = world.getState?.(x, y, z) ?? 0;
+  if (!cauldronAcceptsRain(state, sky)) return false;
+  if (Math.random() >= CAULDRON_RAIN_CHANCE) return false;
+  const next = withCauldronLevel(state, cauldronLevelOf(state) + 1);
+  return world.setBlockWithState?.(x, y, z, Block.CAULDRON, next) ?? false;
+}
 
 /** 作物生长需要的最低光照（原版小麦就是 9） */
 export const CROP_MIN_LIGHT = 9;

@@ -1177,3 +1177,20 @@ export function withCauldronLevel(state: number, level: number): number {
   const clamped = Math.max(0, Math.min(CAULDRON_MAX_LEVEL, Math.floor(level)));
   return (state & ~CAULDRON_LEVEL_MASK) | clamped;
 }
+
+/**
+ * 锅里装的是**岩浆**而不是水（批次 177，G13 收尾）：用第 3 位标记。
+ *
+ * 为什么不另开一个方块 id：原版岩浆锅就是"同一个锅 + 另一种内容物"，
+ * 而我们的状态位本来就只用掉了低 2 位；多开一个 id 会让 `cauldronLevelOf` 这类读法
+ * 在两处各写一遍（"这个锅是水的还是岩浆的"要在每个调用点判断）。
+ */
+const CAULDRON_LAVA_MASK = 0b100;
+
+export function isLavaCauldron(state: number): boolean {
+  return (state & CAULDRON_LAVA_MASK) !== 0;
+}
+
+export function withCauldronLava(state: number, lava = true): number {
+  return lava ? state | CAULDRON_LAVA_MASK : state & ~CAULDRON_LAVA_MASK;
+}
