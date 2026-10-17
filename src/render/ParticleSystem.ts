@@ -78,6 +78,14 @@ const KINDS = {
   heart: { gravity: -1.1, drag: 1.2, life: [0.7, 1.3], size: [0.14, 0.24], alpha: 1 },
   /** 传送门（K8）：紫色光点，缓缓上飘、比爱心活得久一点（原版门前的紫粒子也是飘着的） */
   portal: { gravity: -0.8, drag: 1.3, life: [0.9, 1.6], size: [0.09, 0.17], alpha: 0.9 },
+  /** 爆炸（E22）：橙白色的闪光碎片，向外炸开、很快消失（烟另由 `spawnSmoke` 撒） */
+  explosion: { gravity: 6, drag: 1.6, life: [0.25, 0.6], size: [0.12, 0.26], alpha: 1 },
+  /** 气泡柱（E22）：水里的小气泡，一路往上窜 */
+  bubble: { gravity: -3.4, drag: 2, life: [0.5, 1.1], size: [0.05, 0.11], alpha: 0.8 },
+  /** 雨滴溅落（E22）：贴地的小水星，往上弹一下就没了 */
+  rain: { gravity: 26, drag: 0.5, life: [0.18, 0.4], size: [0.035, 0.07], alpha: 0.7 },
+  /** 红石尘（E22）：开关红石元件时掉下几粒红色粉末 */
+  dust: { gravity: 16, drag: 1.1, life: [0.35, 0.75], size: [0.05, 0.1], alpha: 0.95 },
 } as const satisfies Record<string, KindParams>;
 
 export type ParticleKind = keyof typeof KINDS;
@@ -260,6 +268,31 @@ export class ParticleSystem {
    */
   spawnHearts(x: number, y: number, z: number, scale = 1): void {
     this.burst('heart', x, y, z, 0xff4d80, Math.max(1, Math.round(6 * scale)), 0.34, 1.6);
+  }
+
+  /**
+   * 爆炸闪光（E22）：橙白色的碎片向外炸开。
+   *
+   * 灰烟由调用方另撒（`spawnSmoke` 早就在 `explodeAt` 里了）——两者混在一条爆发里，
+   * 烟就会被"炸飞的速度"带着跑，看起来像一团在飞的灰。
+   */
+  spawnExplosion(x: number, y: number, z: number, power = 3): void {
+    this.burst('explosion', x, y, z, 0xffd27a, Math.round(10 * power), 0.5 * power, 6 * power);
+  }
+
+  /** 气泡柱（E22）：泡在水里时身边一直往上冒的小气泡 */
+  spawnBubble(x: number, y: number, z: number, count = 3): void {
+    this.burst('bubble', x, y, z, 0xbfe6ff, count, 0.22, 0.6);
+  }
+
+  /** 雨滴溅落（E22）：雨点打在露天地面上溅起的小水星（雪地给白色） */
+  spawnRainSplash(x: number, y: number, z: number, count = 3, color = 0xa8c8e0): void {
+    this.burst('rain', x, y, z, color, count, 0.08, 1.6);
+  }
+
+  /** 红石尘（E22）：开关拉杆/按钮、调中继器时掉下的几粒红粉 */
+  spawnRedstoneDust(x: number, y: number, z: number, count = 5): void {
+    this.burst('dust', x, y, z, 0xd03a22, count, 0.14, 1.2);
   }
 
   /** 通用爆发：`spread` 是生成点的抖动半径，`speed` 是初速度上限 */

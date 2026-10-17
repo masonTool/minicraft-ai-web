@@ -269,6 +269,51 @@ console.log('\n[粒子系统：生成 / 重力 / 淘汰 / 上限]');
   const colorAttr = points.geometry.getAttribute('aColor') as THREE.BufferAttribute;
   check('颜色与透明度属性都在', colorAttr.count === PARTICLE_POOL && points.geometry.getAttribute('aAlpha') !== undefined);
 
+  // ---- 批次 171（E22）新增的四类：爆炸闪光 / 气泡柱 / 雨滴溅落 / 红石尘
+  particles.clear();
+  particles.spawnExplosion(0.5, 64.5, 0.5, 3);
+  equal('爆炸闪光按威力折算数量（3 → 30 颗）', particles.debugSnapshot().byKind.explosion, 30);
+  particles.update(0.1);
+  {
+    const spread = particles.debugSnapshot().positions;
+    let maxDistance = 0;
+    for (let i = 0; i < 30; i++) {
+      maxDistance = Math.max(maxDistance, Math.hypot(spread[i * 3]! - 0.5, spread[i * 3 + 2]! - 0.5));
+    }
+    check('爆炸碎片向四周炸开（不是原地冒烟）', maxDistance > 0.3, `最远 ${maxDistance.toFixed(2)} 格`);
+  }
+
+  particles.clear();
+  particles.spawnBubble(0.5, 60.5, 0.5, 4);
+  equal('气泡归到 bubble', particles.debugSnapshot().byKind.bubble, 4);
+  particles.update(0.4);
+  {
+    const bubbleY = particles.debugSnapshot().positions[1]!;
+    check('气泡往上窜（负重力）', bubbleY > 60.5, `y=${bubbleY.toFixed(2)}`);
+  }
+
+  particles.clear();
+  particles.spawnRainSplash(0.5, 65.05, 0.5);
+  equal('雨花归到 rain', particles.debugSnapshot().byKind.rain, 3);
+  particles.update(0.12);
+  check('雨花是"往上弹一下"（有重力，0.12 秒后已经回落）', particles.debugSnapshot().positions[1]! < 65.2);
+
+  particles.clear();
+  particles.spawnRedstoneDust(0.5, 64.5, 0.5);
+  equal('红石尘归到 dust', particles.debugSnapshot().byKind.dust, 5);
+  particles.update(0.2);
+  check('红石尘往下掉', particles.debugSnapshot().positions[1]! < 64.5);
+
+  // 密度为 0（设置里"关闭粒子"）时，新四类也一样不能生成
+  particles.clear();
+  particles.setDensity(0);
+  particles.spawnExplosion(0.5, 64.5, 0.5, 3);
+  particles.spawnBubble(0.5, 64.5, 0.5);
+  particles.spawnRainSplash(0.5, 64.5, 0.5);
+  particles.spawnRedstoneDust(0.5, 64.5, 0.5);
+  equal('粒子关闭时新四类都不生成', particles.active, 0);
+  particles.setDensity(1);
+
   particles.dispose();
 }
 

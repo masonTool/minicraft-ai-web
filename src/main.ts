@@ -2195,9 +2195,41 @@ class App {
           0.15,
         );
       }
+      // 气泡柱（E22）：眼睛泡在水里时，身边一直往上冒小气泡（原版潜到水里就是这个观感）
+      if (this.eyeMedium() === 'water') {
+        this.particles.spawnBubble(
+          p.x + (Math.random() - 0.5) * 0.9,
+          p.y + 0.3 + Math.random() * 0.9,
+          p.z + (Math.random() - 0.5) * 0.9,
+          1,
+        );
+      }
+      // 雨滴溅落（E22）：露天淋雨时脚边地面上一颗颗小水星（雪地是白的）
+      if (this.weather.raining && this.dimension === Dimension.OVERWORLD && this.eyeMedium() !== 'water') {
+        this.spawnRainSplashNear(p.x, p.y, p.z);
+      }
     }
 
     this.particles.update(dt);
+  }
+
+  /**
+   * 雨滴溅落（E22）：在玩家周围试两个点，只对"那一层是空气、下面一格是实心"的位置溅。
+   *
+   * ⚠️ 判据用**玩家脚下那一层**（`floor(y)`），不是每列各自去算地表：
+   * 算地表要逐列扫方块，一秒几十次会把"下雨时的帧率"吃光——而雨花本来就是
+   * "打在你正踩着的那片地上"最容易被看见。坡地上会少溅几颗，这个取舍是划算的。
+   */
+  private spawnRainSplashNear(x: number, y: number, z: number): void {
+    for (let i = 0; i < 2; i++) {
+      const bx = Math.floor(x + (Math.random() - 0.5) * 8);
+      const bz = Math.floor(z + (Math.random() - 0.5) * 8);
+      const by = Math.floor(y);
+      if (this.world.getBlock(bx, by, bz) !== Block.AIR) continue;
+      if (this.world.getBlock(bx, by - 1, bz) === Block.AIR) continue;
+      const snowy = this.isSnowyColumn(bx, bz);
+      this.particles.spawnRainSplash(bx + 0.5, by + 0.05, bz + 0.5, 2, snowy ? 0xffffff : 0xa8c8e0);
+    }
   }
 
   /** 走路时手臂轻微上下摆动（静止时归零，避免站着也在抖） */
@@ -5372,6 +5404,8 @@ class App {
   private explodeAt(x: number, y: number, z: number, power: number): void {
     this.audio.play('explode', { x, y, z });
     this.particles.spawnSmoke(x, y + 0.5, z, Math.round(40 * (power / 3)), 0.7);
+    // 橙白色的闪光碎片（E22）：只有灰烟的话，爆炸看起来像"冒了一团烟"，没有"炸"的那一下
+    this.particles.spawnExplosion(x, y + 0.5, z, power);
 
     // ---- 玩家伤害：半径 = power * 1.4，越远越轻
     const radius = power * 1.4;
@@ -6525,7 +6559,12 @@ class App {
     if (hitBlock === Block.WATER) return this.fillWaterBottle();
 
     // ---- 红石元件：拉杆开关、按钮按下
-    if (hitBlock === Block.LEVER) return this.redstone.toggleLever(this.redstoneWorld, x, y, z);
+    if (hitBlock === Block.LEVER) {
+      const toggled = this.redstone.toggleLever(this.redstoneWorld, x, y, z);
+      // 红石尘（E22）：开关红石元件时掉几粒红粉，是"它真的动了"最直接的反馈
+      if (toggled) this.particles.spawnRedstoneDust(x + 0.5, y + 0.5, z + 0.5);
+      return toggled;
+    }
     // 阳光传感器（批次 54）：右键在"白天通电"与"反向（天黑通电）"之间切换（原版行为）
     if (hitBlock === Block.DAYLIGHT_DETECTOR) {
       return this.redstone.toggleInverted(this.redstoneWorld, x, y, z);
@@ -6538,12 +6577,15 @@ class App {
       return true;
     }
     if (hitBlock === Block.STONE_BUTTON || hitBlock === Block.OAK_BUTTON) {
-      return this.redstone.pressButton(this.redstoneWorld, x, y, z);
+      const pressed = this.redstone.pressButton(this.redstoneWorld, x, y, z);
+      if (pressed) this.particles.spawnRedstoneDust(x + 0.5, y + 0.5, z + 0.5, 3);
+      return pressed;
     }
     if (hitBlock === Block.REPEATER) {
       // 右键循环切换延迟档位（原版行为：0.1 / 0.2 / 0.3 / 0.4 秒）
       const state = this.world.getBlockState(x, y, z);
       this.world.setStateAndUpdate(x, y, z, withDelay(state, (delayOf(state) + 1) & 3));
+      this.particles.spawnRedstoneDust(x + 0.5, y + 0.5, z + 0.5, 3);
       return true;
     }
 
