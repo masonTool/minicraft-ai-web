@@ -1233,12 +1233,46 @@
       .inv-hotbar-dock .inv-slot canvas {
         width: 78%; height: 78%; max-width: 36px; max-height: 36px;
       }
+      /* Wiki：底栏快捷栏自带一圈灰框，与面板分离 */
+      .inv-hotbar-dock:not(.hidden) .inv-hotbar {
+        padding: 4px 6px;
+        background: var(--panel-bg);
+        border: 3px solid; border-color: var(--pixel-bevel);
+        box-shadow: var(--panel-shadow);
+      }
       /* 打开携带版时藏 HUD 快捷栏 / 经验 / 生命，只留 dock 那一排（对齐 Wiki） */
       body.inv-pocket-open #hotbar,
       body.inv-pocket-open #xp-bar,
       body.inv-pocket-open #xp-level,
       body.inv-pocket-open #vitals {
         visibility: hidden; pointer-events: none;
+      }
+      /* 合成并排：箱子页签挂在配方书根节点左下（Wiki 左板底） */
+      #recipe-book.has-pocket-inv-tab {
+        position: relative;
+      }
+      #recipe-book.has-pocket-inv-tab > .inv-pocket-inv-tab {
+        position: absolute; left: 4px; bottom: 10px; z-index: 3;
+      }
+      /* 携带版并排：配方书分类改左缘竖排（与 Wiki 左板一致） */
+      body.split-ui:not(.classic-ui) .recipe-panel {
+        position: relative;
+        margin-left: 40px;
+        padding-left: 10px;
+      }
+      body.split-ui:not(.classic-ui) .recipe-tabs {
+        position: absolute; left: -40px; top: 40px; bottom: 48px;
+        display: flex; flex-direction: column; flex-wrap: nowrap;
+        gap: 4px; margin: 0; overflow-y: auto; overflow-x: hidden;
+        width: 36px;
+      }
+      body.split-ui:not(.classic-ui) .recipe-tab {
+        width: 36px; height: 36px; flex: 0 0 auto;
+      }
+      body.split-ui:not(.classic-ui) .recipe-header b,
+      body.split-ui:not(.classic-ui) .recipe-hint { display: none; }
+      body.split-ui:not(.classic-ui) .recipe-close {
+        min-width: 36px; min-height: 36px; padding: 4px 8px;
       }
 
       .inv-panel {
@@ -1418,7 +1452,31 @@
       .inv-pocket-tab.active {
         background: #dcdec4; border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
       }
+      /* 选中页签贴紧灰框（Wiki：active 页与面板连成一块） */
+      .inv-shell.pocket-chrome .inv-rail-left .inv-pocket-tab.active,
+      .inv-shell.pocket-chrome .inv-rail-left .inv-tab.active {
+        margin-right: -3px;
+      }
+      .inv-shell.pocket-chrome .inv-rail-right .inv-pocket-tab.active {
+        margin-left: -3px;
+      }
       .inv-recipes-btn.hidden { display: none; }
+      .inv-armor-title {
+        display: none;
+        width: 100%; text-align: center;
+        color: #3a3a3a; font-size: 14px; font-weight: 700;
+        letter-spacing: 1px; margin: 0 0 6px;
+      }
+      .inv-gear-row {
+        display: flex; flex-direction: row; align-items: flex-start; gap: 8px;
+      }
+      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-armor-title { display: block; }
+      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-gear {
+        flex-direction: column; align-items: center;
+      }
+      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-player-preview {
+        width: 72px; height: 148px;
+      }
 
       .inv-panel.pocket-ui {
         position: relative;
@@ -1506,8 +1564,8 @@
         grid-column: 1; grid-row: 1; width: 100%;
       }
       .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-gear {
-        grid-column: 2; grid-row: 1; display: flex; flex-direction: row;
-        align-items: flex-start; flex: 0 0 auto;
+        grid-column: 2; grid-row: 1; display: flex; flex-direction: column;
+        align-items: center; flex: 0 0 auto;
       }
       .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-player-preview {
         width: 56px; height: 118px; flex: 0 0 auto;
@@ -1520,50 +1578,49 @@
       .inv-panel.pocket-ui[data-pocket-tab='crafting'] .inv-top {
         width: auto; max-width: 100%; display: flex; justify-content: center;
       }
+      /* Wiki 携带版合成：2×2 在上 → 箭头朝下 → 产物在下 */
+      .inv-panel.pocket-ui .inv-craft.inv-craft-vertical {
+        flex-direction: column; gap: 8px; align-items: center;
+      }
+      .inv-panel.pocket-ui .inv-craft.inv-craft-vertical .inv-arrow {
+        font-size: 18px; line-height: 1; transform: none;
+      }
       /* ⚠️ 不要对 .inv-main 设 display:none——topArea（2×2 合成）就在 .inv-main 里 */
       .inv-panel.pocket-ui .inv-creative-section {
         flex: 1 1 auto; min-height: 0; overflow: hidden;
         display: flex; flex-direction: column;
       }
-      /* 携带版创造：左竖分类 | 右（搜索 + 网格 + 翻页 + 销毁），槽位不溢出灰框 */
+      /* 携带版创造：分类已在左轨；面板内只留搜索 + 网格 + 销毁 */
       .inv-panel.creative-ui.pocket-ui {
-        width: min(96vw, 720px);
-        max-width: min(96vw, 720px);
+        width: min(92vw, 680px);
+        max-width: min(92vw, 680px);
         max-height: min(68vh, calc(100vh - 78px));
       }
       .inv-panel.creative-ui.pocket-ui .inv-creative-section {
-        display: grid;
-        grid-template-columns: 40px minmax(0, 1fr);
-        grid-template-rows: auto auto minmax(0, 1fr) auto auto;
-        gap: 4px 8px;
-        min-height: 0;
-        overflow: hidden;
+        display: flex; flex-direction: column; gap: 6px;
+        min-height: 0; overflow: hidden; flex: 1 1 auto;
       }
-      .inv-panel.creative-ui.pocket-ui .inv-creative-section > .inv-label {
-        grid-column: 1 / -1; grid-row: 1; margin: 0;
-      }
+      .inv-panel.creative-ui.pocket-ui .inv-creative-section > .inv-label { display: none; }
       .inv-panel.creative-ui.pocket-ui .inv-creative-controls {
-        display: contents;
+        display: flex; flex-direction: row; flex-wrap: nowrap;
+        align-items: center; gap: 6px; margin: 0;
       }
-      .inv-panel.creative-ui.pocket-ui .inv-tabs {
-        grid-column: 1; grid-row: 2 / 6;
+      /* 分类已挪到左轨时，controls 里不应再占位 */
+      .inv-shell.pocket-chrome .inv-rail-left .inv-tabs {
         display: flex; flex-direction: column; flex-wrap: nowrap;
-        justify-content: flex-start; align-items: center;
-        overflow-x: hidden; overflow-y: auto; gap: 3px;
-        max-height: none; min-height: 0;
+        gap: 3px; overflow-y: auto; max-height: min(52vh, 280px);
+        flex: 1 1 auto; min-height: 0;
       }
-      .inv-panel.creative-ui.pocket-ui .inv-tab .inv-tab-label { display: none; }
-      .inv-panel.creative-ui.pocket-ui .inv-tab {
+      .inv-shell.pocket-chrome .inv-rail-left .inv-tab .inv-tab-label { display: none; }
+      .inv-shell.pocket-chrome .inv-rail-left .inv-tab {
         width: 36px; height: 36px; min-width: 36px; padding: 0;
         display: grid; place-items: center; flex: 0 0 auto;
       }
       .inv-panel.creative-ui.pocket-ui .inv-search {
-        grid-column: 2; grid-row: 2;
-        width: 100%; min-width: 0; flex: none;
+        width: 100%; min-width: 0; flex: 1 1 auto;
         box-sizing: border-box;
       }
       .inv-panel.creative-ui.pocket-ui .inv-creative {
-        grid-column: 2; grid-row: 3;
         min-height: min(38vh, 200px);
         max-height: min(42vh, 220px);
         overflow-x: hidden; overflow-y: auto;
@@ -1571,11 +1628,12 @@
         align-content: start;
         grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
       }
-      .inv-panel.creative-ui.pocket-ui .inv-pager {
-        grid-column: 2; grid-row: 4;
-      }
+      .inv-panel.creative-ui.pocket-ui .inv-pager { display: none !important; }
       .inv-panel.creative-ui.pocket-ui .inv-creative-destroy-row {
-        grid-column: 2; grid-row: 5;
+        justify-content: flex-end; flex: 0 0 auto;
+      }
+      .inv-panel.creative-ui.pocket-ui .inv-slot.creative-destroy {
+        max-width: 36px; max-height: 36px;
       }
 
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */

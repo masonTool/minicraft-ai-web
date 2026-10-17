@@ -431,7 +431,11 @@ console.log('\n[携带版分标签页（批次 140）]');
   check('携带版 shell + 左右轨', invSrc.includes("className = 'inv-shell'") && invSrc.includes('pocket-rail-left') && invSrc.includes('pocket-rail-right'));
   check('快捷栏 dock 外置', invSrc.includes('pocket-hotbar-dock') && invSrc.includes('placeHotbar'));
   check('打开携带版时藏 HUD 快捷栏', css.includes('body.inv-pocket-open #hotbar'));
-  check('创造携带版分类竖排 CSS', css.includes('.inv-panel.creative-ui.pocket-ui .inv-tabs'));
+  check('创造携带版分类挂左轨', invSrc.includes('syncCreativeRails') && invSrc.includes('creative-tabs'));
+  check('合成页竖排箭头', invSrc.includes('inv-craft-vertical') && invSrc.includes("'↓'"));
+  check('并排时箱子挂配方书', invSrc.includes('parkInvTabOnRecipeBook'));
+  check('盔甲页标题', invSrc.includes('inv-armor-title') && css.includes('.inv-armor-title'));
+  check('快捷栏 dock 带框', css.includes('.inv-hotbar-dock:not(.hidden) .inv-hotbar'));
 }
 
 console.log('\n[玩家预览占位（批次 141）]');

@@ -328,6 +328,14 @@ export class InventoryScreen {
   private readonly pocketRecipeBar: HTMLDivElement;
   /** 携带版底栏：合成 / 盔甲 / 物品栏 */
   private readonly pocketTabsEl: HTMLDivElement;
+  /** 左下箱子页签（创造时也挂在左轨底） */
+  private invTabEl!: HTMLButtonElement;
+  /** 右轨：合成 / 盔甲 */
+  private pocketSideEl!: HTMLDivElement;
+  /** 创造分类条的父节点（挪到左轨后要能归还） */
+  private creativeControls!: HTMLDivElement;
+  /** 盔甲页标题（Wiki「盔甲」） */
+  private readonly armorTitleEl: HTMLDivElement;
   /**
    * 携带版当前内容页（批次 140）。
    * 仅在「非经典视口 + 玩家物品栏模式」下生效；经典 UI 三块同时显示。
@@ -794,12 +802,19 @@ export class InventoryScreen {
     // 空槽显示部位提示字（头/胸/腿/靴/副），触摸端才知道该放哪
     this.gearEl = document.createElement('div');
     this.gearEl.className = 'inv-gear';
+    // Wiki 盔甲页右栏标题「盔甲」
+    this.armorTitleEl = document.createElement('div');
+    this.armorTitleEl.className = 'inv-armor-title';
+    this.armorTitleEl.textContent = '盔甲';
     // 玩家预览（批次 141）：盔甲列旁边那块小人，原版有、我们也要有位置
     this.playerPreviewEl = document.createElement('canvas');
     this.playerPreviewEl.className = 'inv-player-preview';
     this.playerPreviewEl.dataset.role = 'player-preview';
     this.playerPreviewEl.setAttribute('aria-label', '玩家预览');
-    this.gearEl.append(this.buildArmorGrid(), this.playerPreviewEl);
+    const gearRow = document.createElement('div');
+    gearRow.className = 'inv-gear-row';
+    gearRow.append(this.buildArmorGrid(), this.playerPreviewEl);
+    this.gearEl.append(this.armorTitleEl, gearRow);
     this.playerBody.appendChild(this.gearEl);
     this.panel.appendChild(this.playerBody);
 
@@ -808,17 +823,17 @@ export class InventoryScreen {
     this.pocketTabsEl.className = 'inv-pocket-tabs';
     this.pocketTabsEl.dataset.role = 'pocket-tabs';
 
-    const side = document.createElement('div');
-    side.className = 'inv-pocket-side';
-    side.append(
+    this.pocketSideEl = document.createElement('div');
+    this.pocketSideEl.className = 'inv-pocket-side';
+    this.pocketSideEl.append(
       this.makePocketIconTab('crafting', '合成', Block.CRAFTING_TABLE),
       this.makePocketIconTab('armor', '盔甲', null),
     );
-    const invTab = this.makePocketIconTab('inventory', '物品栏', Block.CHEST);
-    invTab.classList.add('inv-pocket-inv-tab');
+    this.invTabEl = this.makePocketIconTab('inventory', '物品栏', Block.CHEST);
+    this.invTabEl.classList.add('inv-pocket-inv-tab');
     // 页签挂在左右轨（Wiki：贴灰框外侧）；pocketTabsEl 只挂 role + .hidden（不参与布局）
-    this.railLeft.append(this.pocketRecipeBar, invTab);
-    this.railRight.appendChild(side);
+    this.railLeft.append(this.pocketRecipeBar, this.invTabEl);
+    this.railRight.appendChild(this.pocketSideEl);
     this.pocketTabsEl.setAttribute('aria-hidden', 'true');
 
     this.creativeSection = document.createElement('div');
@@ -900,11 +915,12 @@ export class InventoryScreen {
     this.creativeCountEl.className = 'inv-count-label';
     header.appendChild(this.creativeCountEl);
 
-    const controls = document.createElement('div');
-    controls.className = 'inv-creative-controls';
+    this.creativeControls = document.createElement('div');
+    this.creativeControls.className = 'inv-creative-controls';
 
     this.creativeTabs = document.createElement('div');
     this.creativeTabs.className = 'inv-tabs';
+    this.creativeTabs.dataset.role = 'creative-tabs';
     for (const category of ITEM_CATEGORIES) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -925,6 +941,11 @@ export class InventoryScreen {
         this.creativeCategory = category;
         // 换分类回到第 1 页：停在"第 7 页"而新分类只有 2 页会显示空网格
         this.creativePage = 0;
+        // Wiki：创造模式下点左侧分类 = 回到创造物品网格（离开生存背包）
+        if (this.creativeSurvival) {
+          this.creativeSurvival = false;
+          this.applyInventoryChrome();
+        }
         this.updateTabHighlight();
         this.renderCreativeGrid();
       });
@@ -942,7 +963,7 @@ export class InventoryScreen {
       this.renderCreativeGrid();
     });
 
-    controls.append(this.creativeTabs, this.creativeSearch);
+    this.creativeControls.append(this.creativeTabs, this.creativeSearch);
 
     this.creativeGrid = document.createElement('div');
     this.creativeGrid.className = 'inv-grid inv-creative';
@@ -978,7 +999,7 @@ export class InventoryScreen {
     });
     destroyRow.appendChild(this.creativeDestroySlot);
 
-    this.creativeSection.append(header, controls, this.creativeGrid, this.creativePager, destroyRow);
+    this.creativeSection.append(header, this.creativeControls, this.creativeGrid, this.creativePager, destroyRow);
     this.updateTabHighlight();
     this.renderCreativeGrid();
     this.updateCreativeVisibility();
@@ -1015,6 +1036,11 @@ export class InventoryScreen {
     }
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault();
+      // 创造整屏时点箱子/合成/盔甲 → 切回生存背包对应页（Wiki 左下箱 + 右缘两键）
+      const creative = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
+      if (creative && !this.creativeSurvival) {
+        this.creativeSurvival = true;
+      }
       this.setPocketTab(tab);
     });
     return button;
@@ -1026,8 +1052,16 @@ export class InventoryScreen {
     this.pocketTab = tab;
     this.applyInventoryChrome();
     // 合成页：左半摊开配方书；离开合成页就收起来（Wiki：各页互斥）
-    if (tab === 'crafting') this.hooks.onOpenRecipes?.(recipeTab ?? 'all');
-    else if (changed) this.hooks.onCloseRecipes?.();
+    if (tab === 'crafting') {
+      this.hooks.onOpenRecipes?.(recipeTab ?? 'all');
+      // 配方书打开并挂上 split-ui 之后，再把箱子页签挪到左板底
+      requestAnimationFrame(() => {
+        if (this.open && this.pocketTab === 'crafting') this.parkInvTabOnRecipeBook();
+      });
+    } else if (changed) {
+      this.hooks.onCloseRecipes?.();
+      this.restoreInvTabToRail();
+    }
   }
 
   /**
@@ -1049,42 +1083,47 @@ export class InventoryScreen {
 
     this.creativeSection.style.display = showCreativeItems ? '' : 'none';
     this.panel.classList.toggle('creative-ui', showCreativeItems);
+    const pocket = this.mode === 'inventory' && pocketWidth;
+    // 经典 / 非携带：保留文字切换；携带版创造用左轨分类 + 箱子互切
     if (this.creativeToggleBtn) {
-      this.creativeToggleBtn.classList.toggle('hidden', !creative);
+      this.creativeToggleBtn.classList.toggle('hidden', !creative || pocket);
       this.creativeToggleBtn.textContent = this.creativeSurvival ? '创造物品' : '生存背包';
     }
 
     if (showCreativeItems) {
-      // 携带版创造：底栏快捷栏外置；分类竖排靠 CSS（.creative-ui.pocket-ui）；生存页签藏起
-      const pocket = pocketWidth && this.mode === 'inventory';
+      // 携带版创造：分类挂左轨、合成/盔甲挂右轨、快捷栏屏幕底（Wiki Creative Pocket）
       this.panel.classList.toggle('pocket-ui', pocket);
       this.shellEl.classList.toggle('pocket-chrome', pocket);
       this.pocketTabsEl.classList.add('hidden');
       this.pocketRecipeBar.classList.add('hidden');
-      this.railLeft.classList.add('hidden');
-      this.railRight.classList.add('hidden');
       if (this.recipesBtn) this.recipesBtn.classList.add('hidden');
       this.panel.dataset.pocketTab = '';
       this.gearEl.style.display = 'none';
       this.topArea.style.display = 'none';
       this.mainGridEl.style.display = 'none';
       this.hotbarGridEl.style.display = '';
+      this.syncCreativeRails(pocket, true);
+      // 携带版创造靠滚动，不靠翻页条（Wiki）
+      if (pocket) this.creativePager.classList.add('hidden');
       this.placeHotbar(pocket);
       this.syncPocketBodyClass(pocket);
+      this.restoreInvTabToRail();
+      this.syncCraftArrow(false);
       return;
     }
 
     // —— 生存布局（含创造模式下的「生存背包」）——
-    const pocket = this.mode === 'inventory' && pocketWidth;
     this.panel.classList.toggle('pocket-ui', pocket);
     this.shellEl.classList.toggle('pocket-chrome', pocket);
     this.pocketTabsEl.classList.toggle('hidden', !pocket);
-    this.railLeft.classList.toggle('hidden', !pocket);
-    this.railRight.classList.toggle('hidden', !pocket);
-    this.pocketRecipeBar.classList.toggle('hidden', !pocket || !this.hooks.onOpenRecipes);
+    // 创造模式的生存背包：左轨仍挂创造分类（点分类回创造网格），与 Wiki 一致
+    this.syncCreativeRails(pocket, creative && pocket);
     if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', pocket);
 
     if (!pocket) {
+      this.railLeft.classList.add('hidden');
+      this.railRight.classList.add('hidden');
+      this.pocketRecipeBar.classList.add('hidden');
       this.gearEl.style.display = '';
       this.topArea.style.display = '';
       this.mainGridEl.style.display = '';
@@ -1092,6 +1131,8 @@ export class InventoryScreen {
       this.panel.dataset.pocketTab = '';
       this.placeHotbar(false);
       this.syncPocketBodyClass(false);
+      this.syncCraftArrow(false);
+      this.restoreInvTabToRail();
       return;
     }
 
@@ -1103,11 +1144,90 @@ export class InventoryScreen {
     this.gearEl.style.display = tab === 'armor' ? '' : 'none';
     this.mainGridEl.style.display = tab === 'inventory' || tab === 'armor' ? '' : 'none';
     this.hotbarGridEl.style.display = '';
+    this.syncCraftArrow(tab === 'crafting');
+    // 合成并排：左半配方书自带分类页签；箱子页签挪到配方书左下（Wiki）
+    const splitCrafting = tab === 'crafting' && document.body.classList.contains('split-ui');
+    const creativePocket = creative && pocket;
+    if (!creativePocket) {
+      this.pocketRecipeBar.classList.toggle(
+        'hidden',
+        splitCrafting || !this.hooks.onOpenRecipes,
+      );
+    }
+    this.railRight.classList.remove('hidden');
+    if (splitCrafting && !creativePocket) this.parkInvTabOnRecipeBook();
+    else {
+      this.restoreInvTabToRail();
+      this.railLeft.classList.remove('hidden');
+    }
     this.placeHotbar(true);
     this.syncPocketBodyClass(true);
 
-    for (const button of this.shellEl.querySelectorAll<HTMLElement>('.inv-pocket-tab')) {
+    for (const button of this.root.querySelectorAll<HTMLElement>('.inv-pocket-tab')) {
       button.classList.toggle('active', button.dataset.tab === tab);
+    }
+  }
+
+  /**
+   * @param onRail 创造分类挂左轨（创造整屏或创造模式下的生存背包）
+   */
+  private syncCreativeRails(pocket: boolean, onRail: boolean): void {
+    if (onRail && pocket) {
+      if (this.creativeTabs.parentElement !== this.railLeft) {
+        this.railLeft.replaceChildren();
+        this.railLeft.append(this.creativeTabs, this.invTabEl);
+      } else if (this.invTabEl.parentElement !== this.railLeft) {
+        this.railLeft.appendChild(this.invTabEl);
+      }
+      if (this.pocketSideEl.parentElement !== this.railRight) {
+        this.railRight.replaceChildren(this.pocketSideEl);
+      }
+      this.railLeft.classList.remove('hidden');
+      this.railRight.classList.remove('hidden');
+      this.pocketRecipeBar.classList.add('hidden');
+      return;
+    }
+    // 归还创造分类条
+    if (this.creativeTabs.parentElement !== this.creativeControls) {
+      this.creativeControls.insertBefore(this.creativeTabs, this.creativeSearch);
+    }
+    if (!pocket) return;
+    if (
+      this.pocketRecipeBar.parentElement !== this.railLeft ||
+      this.invTabEl.parentElement !== this.railLeft
+    ) {
+      this.railLeft.replaceChildren(this.pocketRecipeBar, this.invTabEl);
+    }
+    if (this.pocketSideEl.parentElement !== this.railRight) {
+      this.railRight.replaceChildren(this.pocketSideEl);
+    }
+  }
+
+  /** Wiki 合成页：2×2 在上、箭头朝下、产物在下 */
+  private syncCraftArrow(vertical: boolean): void {
+    const layout = this.topArea.querySelector('.inv-craft');
+    const arrow = this.topArea.querySelector('.inv-arrow');
+    layout?.classList.toggle('inv-craft-vertical', vertical);
+    if (arrow) arrow.textContent = vertical ? '↓' : '→';
+  }
+
+  /** 并排合成时：箱子页签挂到配方书左下（Wiki 左板底） */
+  private parkInvTabOnRecipeBook(): void {
+    const book = document.getElementById('recipe-book');
+    if (!book || book.classList.contains('hidden')) {
+      this.restoreInvTabToRail();
+      this.railLeft.classList.add('hidden');
+      return;
+    }
+    book.classList.add('has-pocket-inv-tab');
+    if (this.invTabEl.parentElement !== book) book.appendChild(this.invTabEl);
+    this.railLeft.classList.add('hidden');
+  }
+
+  private restoreInvTabToRail(): void {
+    document.getElementById('recipe-book')?.classList.remove('has-pocket-inv-tab');
+    if (this.invTabEl.parentElement !== this.railLeft) {
+      this.railLeft.appendChild(this.invTabEl);
     }
   }
 
@@ -2383,6 +2503,7 @@ export class InventoryScreen {
     this.open = false;
     this.root.classList.add('hidden');
     document.body.classList.remove('inv-pocket-open');
+    this.restoreInvTabToRail();
     this.hooks.onOpenChange?.(false);
   }
 
