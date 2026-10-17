@@ -480,9 +480,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes("classList.toggle('workbench-ui', workbench)"),
   );
   check('携带版创造栏是半屏可容纳的 7 列 40px 槽位', css.includes('grid-template-columns: repeat(7, 40px)'));
+  // 批次 159：判据从"是不是携带版布局"改成"是不是触摸端"——
+  // 界面统一成携带版之后，PC 也会被算成滚动，于是 PC 失去了底部分页键
   check(
-    '携带版创造栏渲染整表滚动而非只留分页首屏',
-    invSrc.includes('const visible = pocketScroll ? items : slicePage('),
+    '创造栏：触摸端整表滚动、PC 底部翻页',
+    invSrc.includes('const scrollMode = isTouchUi();') &&
+      invSrc.includes('const visible = scrollMode ? items : slicePage(') &&
+      invSrc.includes("this.creativePager.classList.toggle('hidden', scrollMode || pages <= 1);"),
   );
   check(
     '左栏三份内容占同一个格子（换内容不换位置）',
@@ -503,6 +507,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
 console.log('\n[携带版细节收口（批次 159）]');
 {
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const recipeSrc = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
   // ① 配方页右栏只留合成区
@@ -522,10 +527,17 @@ console.log('\n[携带版细节收口（批次 159）]');
       css.includes('.inv-pocket-recipe-toggle { grid-column: 1; justify-self: end; }') &&
       css.includes('.inv-close { grid-column: 3; justify-self: end; }'),
   );
+  // 批次 159：开关改成"是否显示自己没有的那些"，**不再切换分类、也不再退回我的物品**
   check(
-    '开关是**开/关**两态（再点一下就关）',
-    invSrc.includes('if (this.hooks.isRecipesOpen?.()) this.hooks.onCloseRecipes?.();') &&
-      invSrc.includes("classList.toggle('active', leftPane === 'recipes')"),
+    '配方开关只切换"显不显示未拥有的"，不切分类',
+    invSrc.includes('this.hooks.onSetRecipeOwnedOnly?.(!(this.hooks.isRecipeOwnedOnly?.() ?? false));') &&
+      invSrc.includes('this.openPocketRecipes(this.lastRecipeTab);') &&
+      invSrc.includes('private lastRecipeTab: RecipeBookTab'),
+  );
+  check(
+    '开着 = 全部列出（红底）、关着 = 只显示拥有的',
+    invSrc.includes("classList.toggle('active', leftPane === 'recipes' && !ownedOnly)") &&
+      recipeSrc.includes('setOnlyOwned(on: boolean)'),
   );
   // 创造模式搜索框只在「搜索」那一栏出现（与生存模式同一个口径）
   check(
@@ -554,6 +566,53 @@ console.log('\n[携带版细节收口（批次 159）]');
   check(
     '兜底那块图标按下时就写坐标（不再停在左上角）',
     /pointerdown'[\s\S]{0,400}heldElement\.style\.left = `\$\{pointer\.clientX\}px`/.test(invSrc),
+  );
+}
+
+console.log('\n[携带版细节收口（二）（批次 159）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const recipeSrc = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  // ① 左轨分类按钮点中后**一直保持按下**的样子
+  check('分类按钮有选中态（斜面翻进去 + 底色亮一档）', css.includes('.inv-pocket-recipe-tab.active {'));
+  check(
+    '高亮跟着配方书当前那一栏走',
+    invSrc.includes('private syncRecipeRail(active: RecipeBookTab | null): void {') &&
+      recipeSrc.includes('get currentTab(): RecipeBookTab') &&
+      mainSrc.includes('currentRecipeTab: () => this.recipeBook.currentTab'),
+  );
+
+  // ② 配方开关不切分类 + 主程序把"只显示拥有的"接上
+  check(
+    '主程序接上"只显示我拥有的"的读与写',
+    mainSrc.includes('isRecipeOwnedOnly: () => this.recipeBook.onlyOwned') &&
+      mainSrc.includes('onSetRecipeOwnedOnly: (on) => this.recipeBook.setOnlyOwned(on)'),
+  );
+
+  // ③ 选中效果更明显：底色变深之外再加一圈白框
+  check('选中格有一圈白框（光靠深一点点在手机上看不出）', css.includes('box-shadow: inset 0 0 0 2px #ffffffe6;'));
+  check(
+    '创造栏取出的复制品放到已有物品的格子 = 覆盖（旧的销毁）',
+    invSrc.includes('this.heldFromCreative && slot') && invSrc.includes('this.heldFromCreative = true;'),
+  );
+  // 从真实格子拿的仍然是**交换**，不能被复制品那条规则带偏
+  check('真实格子拿的仍走交换', invSrc.includes('this.heldFromCreative = false;'));
+
+  // ④ 触摸端整表滚动（右侧可见滚动条）、PC 底部翻页
+  check(
+    '配方书：触摸端滚动、PC 翻页',
+    recipeSrc.includes('private get useScroll(): boolean') &&
+      recipeSrc.includes('const pageSize = this.useScroll ? entries.length : this.panePageSize();'),
+  );
+  check('滚动条看得见（否则不知道下面还有）', css.includes('::-webkit-scrollbar-thumb') && css.includes('scrollbar-color:'));
+
+  // ⑤ 右下角盔甲 / 合成只换右栏，左栏一动不动
+  check(
+    '切盔甲不再顺手关掉配方书（那是右栏的键在改左栏）',
+    !invSrc.includes("if (tab === 'armor') this.hooks.onCloseRecipes?.();"),
   );
 }
 

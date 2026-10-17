@@ -317,6 +317,39 @@ export class RecipeBook {
     return this.host !== null;
   }
 
+  /** 当前停在哪一栏（左轨那排分类图标要靠它点亮当前分类） */
+  get currentTab(): RecipeBookTab {
+    return this.tab;
+  }
+
+  /** 「只显示我拥有的」开着吗（材料不足的配方会被筛掉，见 `render`） */
+  get onlyOwned(): boolean {
+    return this.onlyCraftable;
+  }
+
+  /**
+   * 从外面切「只显示我拥有的」（批次 159：背包标题栏那颗配方开关）。
+   *
+   * 开着 = 本分类下**不拥有的**（材料不足）配方整条不出现；
+   * 关着 = 全部列出，不拥有的用红底标出来（`.recipe-cell.locked`）。
+   */
+  setOnlyOwned(on: boolean): void {
+    if (this.onlyCraftable === on) return;
+    this.onlyCraftable = on;
+    this.page = 0;
+    this.render();
+  }
+
+  /** 每页几条：嵌在左栏时按左栏的列数，否则按视口（与 CSS 的列数一一对应） */
+  private panePageSize(): number {
+    return this.isEmbedded ? RECIPE_PANE_PAGE_SIZE : pageSizeFor(this.viewportWidth);
+  }
+
+  /** 触摸端整表滚动、PC 底部翻页（批次 159） */
+  private get useScroll(): boolean {
+    return isTouchUi();
+  }
+
   /**
    * @param tab 打开时切到这一栏（携带版物品栏左上角的分类图标会传进来，批次 140）
    */
@@ -362,7 +395,11 @@ export class RecipeBook {
     // 都会重建。只画当前页就回到可忽略。页大小跟着 CSS 的列数走（宽屏 12 列 × 5 行、
     // 窄屏 8 列 × 4 行），否则最后一行会出现"半行空位"看着像 bug。
     // 嵌在背包左栏时按左栏的列数分页（12/8 列在半栏宽里会被横向裁掉）
-    const pageSize = this.isEmbedded ? RECIPE_PANE_PAGE_SIZE : pageSizeFor(this.viewportWidth);
+    //
+    // 批次 159：**触摸端改成整表滚动**——手指滑一格是本能，"上一页/下一页"两颗小按钮
+    // 在手机上既难点也反直觉；PC 才用底部那对翻页键。做法是把页大小开成整表长度，
+    // `slicePage` 自然返回全部、`pageCount` 变 1 → 翻页条自己隐藏。
+    const pageSize = this.useScroll ? entries.length : this.panePageSize();
     this.page = clampPage(this.page, entries.length, pageSize);
     const visible = slicePage(entries, this.page, pageSize);
 

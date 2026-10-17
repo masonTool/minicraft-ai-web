@@ -1366,6 +1366,9 @@
       .recipe-panel.embedded .recipe-filter {
         width: 30px; height: 30px;
       }
+      /* 批次 159：「只显示我拥有的」已经搬到标题栏那颗开关上了，
+         面板里再留一颗同样的就是把同一个开关做成两个（且两个不会同步）。 */
+      .recipe-panel.embedded .recipe-filter { display: none; }
       /* 只有这一格能滚：外框与左栏网格都不动。
          列数必须与 `RECIPE_PANE_PAGE_SIZE` 对上（7 列 × 4 行），
          半栏宽塞不下 12 列 / 8 列——硬塞会被 `overflow-x: hidden` 裁掉。 */
@@ -1377,6 +1380,21 @@
       }
       /* 熔炼属于熔炉界面；嵌在左栏时整张熔炼表会把配方网格压成一条缝 */
       .recipe-panel.embedded .recipe-smelting { display: none; }
+      /* 批次 159：触摸端改成整表滚动，滚动条要**看得见**——
+         看不见就不知道下面还有东西（PC 那条路是底部翻页键，用不上滚动条）。 */
+      .recipe-panel.embedded .recipe-grid,
+      .inv-panel.creative-ui.pocket-ui .inv-creative {
+        scrollbar-width: thin;
+        scrollbar-color: #6f6f6f #b9b9b9;
+      }
+      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar,
+      .inv-panel.creative-ui.pocket-ui .inv-creative::-webkit-scrollbar { width: 8px; }
+      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar-track,
+      .inv-panel.creative-ui.pocket-ui .inv-creative::-webkit-scrollbar-track { background: #b9b9b9; }
+      .recipe-panel.embedded .recipe-grid::-webkit-scrollbar-thumb,
+      .inv-panel.creative-ui.pocket-ui .inv-creative::-webkit-scrollbar-thumb {
+        background: #6f6f6f; border: 1px solid #4a4a4a;
+      }
       .recipe-panel.embedded .inv-pager {
         flex: 0 0 auto; margin-top: 4px; gap: 4px;
       }
@@ -1546,6 +1564,12 @@
       }
       .inv-pocket-recipe-tab canvas { width: 16px; height: 16px; image-rendering: pixelated; }
       .inv-pocket-recipe-tab:active { border-color: #5a5a5a #ffffff #ffffff #5a5a5a; }
+      /* 批次 159：点中哪一分类就**一直保持按下**的样子（斜面翻进去 + 底色亮一档），
+         与创造分类页签 `.inv-tab.active` 同一套——点完看不出选中的那颗等于没反馈。 */
+      .inv-pocket-recipe-tab.active {
+        background: #dcdec4; border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+      }
+      .inv-pocket-recipe-tab.active canvas { opacity: 1; }
       /* 批次 146：页签在 .inv-rail-*（灰框外）；.inv-pocket-tabs 仅 role/.hidden 哨兵 */
       .inv-pocket-tabs {
         position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none;
@@ -1626,9 +1650,13 @@
       .inv-panel.pocket-ui .inv-header .inv-recipes-btn:not(.inv-creative-toggle):not(.inv-pocket-recipe-toggle) { display: none; }
       .inv-panel.pocket-ui .inv-header .inv-pocket-recipe-toggle { grid-column: 1; justify-self: end; }
       .inv-panel.pocket-ui .inv-header .inv-close { grid-column: 3; justify-self: end; }
-      /* 配方书开着时开关自己也要看得出来是"按下去了" */
+      /* 批次 159：开关开着 = "本分类全部列出、不拥有的红底"，按下去的样子要跟
+         左轨那排分类页签一致（同一套斜面 + 亮一档的底色），否则两种"选中"
+         看起来是两种东西。关着 = 只显示自己拥有的。 */
       .inv-panel.pocket-ui .inv-header .inv-pocket-recipe-toggle.active {
-        background: #dcdec4; border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+        background: #dcdec4;
+        border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+        transform: translateY(1px);
       }
       .inv-panel.pocket-ui .inv-close { min-width: 36px; min-height: 36px; padding: 4px 8px; }
 
@@ -2080,10 +2108,14 @@
       /* 悬停亮一档、按下凹一点：此前槽位完全没有交互反馈（点了才知道点到了没） */
       .inv-slot:hover { background: var(--slot-bg-hover); }
       .inv-slot:active { transform: scale(.96); }
-      /* 批次 159：选中 = 底色变深（手上拿的那叠就**显示在这一格**里）。
-         ⚠️ 必须压住 `:hover`：鼠标停在选中那一格上时，悬停那条会把深色顶掉。 */
+      /* 批次 159：选中 = 底色变深 + **一圈白框**（光靠深一点点在手机上太不明显）。
+         ⚠️ 必须压住 `:hover`：鼠标停在选中那一格上时，悬停那条会把深色顶掉。
+         ⚠️ 空槽永远不会有这个类：`held` 只在真的拿着一叠东西时才存在。 */
       .inv-slot.selected,
-      .inv-slot.selected:hover { background: var(--slot-bg-selected); }
+      .inv-slot.selected:hover {
+        background: var(--slot-bg-selected);
+        box-shadow: inset 0 0 0 2px #ffffffe6;
+      }
 
       /* ---------------- 耐久条（批次 28） ----------------
          受损的工具/盔甲在格子底部显示一条 3px 的条，颜色随剩余耐久 绿→黄→红。

@@ -1281,6 +1281,11 @@ class App {
         onCloseRecipes: () => this.closeRecipeBook(),
         // 左栏是不是正被配方书占着（决定显示"我的物品"还是"配方列表"）
         isRecipesOpen: () => this.isRecipeBookOpen(),
+        // 左轨那排分类图标要点亮当前分类
+        currentRecipeTab: () => this.recipeBook.currentTab,
+        // 「只显示我拥有的」：开着 = 筛掉不拥有的；关着 = 全部列出、不拥有的红底
+        isRecipeOwnedOnly: () => this.recipeBook.onlyOwned,
+        onSetRecipeOwnedOnly: (on) => this.recipeBook.setOnlyOwned(on),
         // 把配方书搬进背包的左栏（或还回整屏那一层）
         onRecipeHost: (host) => this.attachRecipeBook(host),
         // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口

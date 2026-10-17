@@ -177,6 +177,12 @@ export interface InventoryScreenHooks {
   onCloseRecipes?: () => void;
   /** 配方书现在开着吗（决定左栏显示"我的物品"还是"配方列表"） */
   isRecipesOpen?: () => boolean;
+  /** 配方书当前停在哪一栏（左轨那排分类图标要点亮它） */
+  currentRecipeTab?: () => RecipeBookTab;
+  /** 「只显示我拥有的」开着吗（关着 = 全部列出、不拥有的红底） */
+  isRecipeOwnedOnly?: () => boolean;
+  /** 切「只显示我拥有的」（背包标题栏那颗配方开关，批次 159） */
+  onSetRecipeOwnedOnly?: (on: boolean) => void;
   /**
    * 把配方书**搬进背包的左栏**（批次 157）。
    *
@@ -408,6 +414,21 @@ export class InventoryScreen {
   private heldOriginEl: HTMLElement | null = null;
   /** 当前正被标记成"选中"的那一格（每次刷新先把旧的摘掉，避免高亮残留） */
   private selectedEl: HTMLElement | null = null;
+  /**
+   * 最近一次选中的配方分类（批次 159）。
+   *
+   * 标题栏那颗配方开关再点开时**沿用这一栏**——原来它写死成"全部"（放大镜），
+   * 于是玩家在"建筑"里关掉再打开就被扔回"全部"，分类白选了。
+   */
+  private lastRecipeTab: RecipeBookTab = 'all';
+  /**
+   * 手上这叠是不是**从创造物品栏取出来的复制品**（批次 159）。
+   *
+   * 复制品没有来源格，所以它有专门的放置规则：放到已有物品的格子时
+   * **直接覆盖、原来那件销毁**（基岩版创造就是这么做的），而不是把旧的那件
+   * 换到手上——创造模式下"手上多出一叠"没有任何意义。
+   */
+  private heldFromCreative = false;
   /** 点物品时浮在快捷栏上方的那块小说明（批次 159）：几秒后自己消失 */
   private readonly pickToastEl: HTMLDivElement;
   /** 说明浮层的自动收起计时器 */
@@ -657,12 +678,20 @@ export class InventoryScreen {
       // 键盘热键的括注只在 PC 上给：手机上没有 R 这个键，写成"配方书 (R)"
       // 只会让人以为"要按 R 才能打开"（批次 104）
       recipes.textContent = touchDevice ? '配方书' : '配方书 (R)';
-      // 批次 159：它是**开关**——已经开着时再点一下就是关（左栏还回"我的物品"）。
-      // 配方书嵌进左栏后自己那颗 ✕ 已经去掉了（见 CSS `.recipe-panel.embedded`），
-      // 这一颗是关掉配方列表的唯一入口（另一个是左下"我的物品"页签）。
+      // 批次 159：它有两态，但**不再切换分类**——
+      //   左栏还在"我的物品"时：点它 = 打开上次那个分类（沿用 `lastRecipeTab`）；
+      //   左栏已经是某个分类时：点它 = 切"是否显示自己没有的那些"。
+      //     开着（active）→ 本分类全部列出，不拥有的用红底标出来；
+      //     关着       → 只显示自己拥有的（红的自然就不见了）。
+      // 原来的写法是"关 = 退回我的物品 + 切回全部"，分类白选了，所以改成这样。
       recipes.addEventListener('click', () => {
-        if (this.hooks.isRecipesOpen?.()) this.hooks.onCloseRecipes?.();
-        else this.openPocketRecipes('all');
+        if (this.hooks.isRecipesOpen?.()) {
+          this.hooks.onSetRecipeOwnedOnly?.(!(this.hooks.isRecipeOwnedOnly?.() ?? false));
+          // 重排一次把按钮自己的"按下去"状态对齐（配方书那头只重画了列表）
+          this.applyInventoryChrome();
+          return;
+        }
+        this.openPocketRecipes(this.lastRecipeTab);
       });
       this.recipesBtn = recipes;
       header.appendChild(recipes);
@@ -1160,12 +1189,16 @@ export class InventoryScreen {
     return button;
   }
 
-  /** 携带版切右栏（批次 140 → 157）：只换右栏内容，左栏与面板几何都不动 */
+  /**
+   * 携带版切右栏（批次 140 → 157 → 159）：**只换右栏**，左栏一动不动。
+   *
+   * 批次 159 把"切到盔甲页就关掉配方书"这条去掉了：那是右栏的按钮在改左栏，
+   * 左栏当前的分类（以及格子里的选中）会被打掉。左栏是什么就是什么——
+   * 想穿背包里的东西，左下那颗"我的物品"页签才是该动的那一颗。
+   */
   private setPocketTab(tab: PocketInventoryTab): void {
     if (this.pocketTab === tab) return;
     this.pocketTab = tab;
-    // 盔甲页得看见自己的东西：左栏还回"我的物品"
-    if (tab === 'armor') this.hooks.onCloseRecipes?.();
     this.applyInventoryChrome();
   }
 
@@ -1178,6 +1211,7 @@ export class InventoryScreen {
    */
   private openPocketRecipes(tab: RecipeBookTab): void {
     this.pocketTab = 'crafting';
+    this.lastRecipeTab = tab;
     this.applyInventoryChrome();
     // 已经开着时 `show(tab)` 只是换一栏，不会再弹一次
     this.hooks.onOpenRecipes?.(tab);
@@ -1279,6 +1313,8 @@ export class InventoryScreen {
     if (leftPane !== 'creative') {
       this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes);
       this.railLeft.classList.remove('hidden');
+      // 批次 159：点亮当前分类（点了哪一颗要看得出来）
+      this.syncRecipeRail(leftPane === 'recipes' ? (this.hooks.currentRecipeTab?.() ?? null) : null);
     }
     // 工作台只有"合成"这一件事，右轨那两颗（合成/盔甲）没有意义
     this.railRight.classList.toggle('hidden', workbench);
@@ -1288,9 +1324,11 @@ export class InventoryScreen {
     this.renderCreativeGrid();
     // 配方书开关：生存双栏时**留在标题栏**（与关闭键同一行，排在左栏右上角那一带），
     // 创造模式左栏是物品分类，用不上它。
+    // ⚠️ active = "本分类全部列出、不拥有的用红底标出"；关着 = 只显示自己拥有的。
+    const ownedOnly = this.hooks.isRecipeOwnedOnly?.() ?? false;
     if (this.recipesBtn) {
       this.recipesBtn.classList.toggle('hidden', showCreativeItems);
-      this.recipesBtn.classList.toggle('active', leftPane === 'recipes');
+      this.recipesBtn.classList.toggle('active', leftPane === 'recipes' && !ownedOnly);
     }
 
     // 换栏内容时给一下淡入：**位置不动**，只是让人看见"这一栏换了一份"
@@ -1328,6 +1366,18 @@ export class InventoryScreen {
     // 强制重排一次：不然连续点同一个键时 animation 不会重跑
     void element.offsetWidth;
     element.classList.add('inv-pane-enter');
+  }
+
+  /**
+   * 点亮左轨上当前那一颗分类（批次 159）。
+   *
+   * 传 `null`（左栏在"我的物品"）就把高亮全部摘掉——分类视图没开，就没有"当前分类"。
+   * ⚠️ 只动 class，不换位、不重建：换高亮不该让那一排按钮动一下。
+   */
+  private syncRecipeRail(active: RecipeBookTab | null): void {
+    for (const button of this.pocketRecipeBar.querySelectorAll<HTMLElement>('.inv-pocket-recipe-tab')) {
+      button.classList.toggle('active', button.dataset.tab === active);
+    }
   }
 
   /** 把配方书从背左栏还回整屏那一层（关背包 / 切到容器界面时） */
@@ -1475,12 +1525,14 @@ export class InventoryScreen {
       return true;
     });
 
-    const pocketScroll =
-      this.panel.classList.contains('pocket-ui') && this.panel.classList.contains('creative-ui');
+    // 批次 159：**触摸端整表滚动、PC 底部翻页**——手指滑一格是本能，
+    // 手机上那两颗"上一页/下一页"既难点也反直觉；PC 才用翻页条。
+    // （原来是按"是不是携带版布局"判的，统一成携带版之后 PC 也误伤成了滚动。）
+    const scrollMode = isTouchUi();
     const pageSize = pageSizeFor(this.viewportWidth);
     // 夹一次页码：换分类、改搜索词、转屏之后原来的页码都可能越界
-    this.creativePage = pocketScroll ? 0 : clampPage(this.creativePage, items.length, pageSize);
-    const visible = pocketScroll ? items : slicePage(items, this.creativePage, pageSize);
+    this.creativePage = scrollMode ? 0 : clampPage(this.creativePage, items.length, pageSize);
+    const visible = scrollMode ? items : slicePage(items, this.creativePage, pageSize);
 
     this.creativeGrid.replaceChildren();
     // 批次 159：整表是**重建**的（`replaceChildren`），所以"选中的那一格"会跟着被丢掉。
@@ -1511,6 +1563,8 @@ export class InventoryScreen {
         }
         // 批次 159：创造格同样"就地选中"——点中的那一格变深，手上那叠就显示在那儿
         this.heldOriginEl = slot;
+        // 这是**复制品**（没有来源格）：放到已有物品的格子上时直接覆盖、旧的销毁
+        this.heldFromCreative = true;
         this.hooks.onMove?.();
         this.refresh();
       });
@@ -1535,8 +1589,8 @@ export class InventoryScreen {
     this.creativePageLabel.textContent = pageLabel(this.creativePage, items.length, pageSize);
     this.creativePrev.disabled = this.creativePage <= 0;
     this.creativeNext.disabled = this.creativePage >= pages - 1;
-    // 只有一页时整条隐藏：手机屏幕本来就窄，没必要常驻一条翻不动的按钮
-    this.creativePager.classList.toggle('hidden', pocketScroll || pages <= 1);
+    // 触摸端整表滚动不需要翻页条；PC 只有一页时也隐藏（翻不动的按钮没有意义）
+    this.creativePager.classList.toggle('hidden', scrollMode || pages <= 1);
   }
 
   /** 当前视口宽度（窄屏判定用；不在浏览器里时按宽屏处理） */
@@ -2468,7 +2522,15 @@ export class InventoryScreen {
         this.cancelHeldSelection();
         return;
       }
-      if (button === 2) {
+      // 批次 159：**创造栏取出的复制品直接覆盖**（原来那件销毁）。
+      // 复制品没有来源格，"换到手上"在创造模式里毫无意义（手上多一叠没处用），
+      // 基岩版创造也是放到已有物品的格子上时直接盖掉。
+      if (this.heldFromCreative && slot) {
+        source.set(index, this.held);
+        this.held = null;
+        this.heldFromCreative = false;
+        this.inventory.notify();
+      } else if (button === 2) {
         if (!slot) {
           source.set(index, { id: this.held.id, count: 1 });
           this.held.count -= 1;
@@ -2527,6 +2589,8 @@ export class InventoryScreen {
           // ⚠️ 只取不放的槽（熔炉产物等）除外：它们被取空是要"产出下一件"的，
           //   再把取走的那叠画回去会让人以为没取出来。
           this.heldOriginEl = takeOnly ? null : binding.element;
+          // 从真实格子拿的：不是复制品，放到已有物品的格子上要按原版**交换**
+          this.heldFromCreative = false;
         }
       }
     }
@@ -2894,8 +2958,10 @@ export class InventoryScreen {
     // 不再画一个跟着光标飘的图标（触摸端没有 pointermove，那块图标会停在左上角）。
     // ⚠️ 交换时刻意**保留**同一个来源格：换过来的那件正好出现在你第一次点的那一格里，
     //   于是"先点第一个再点第二个 = 两格换位"看起来就是真的换了位。
-    if (!this.held) this.heldOriginEl = null;
-    else if (this.heldOriginEl && !this.heldOriginEl.isConnected) this.heldOriginEl = null;
+    if (!this.held) {
+      this.heldOriginEl = null;
+      this.heldFromCreative = false;
+    } else if (this.heldOriginEl && !this.heldOriginEl.isConnected) this.heldOriginEl = null;
     if (this.selectedEl && this.selectedEl !== this.heldOriginEl) {
       this.selectedEl.classList.remove('selected');
       this.selectedEl = null;
