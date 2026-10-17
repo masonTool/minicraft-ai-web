@@ -2650,9 +2650,12 @@ class App {
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      // 转屏也走动态分辨率的唯一同步入口：保留 DPR×档位，且不让 three 改写 CSS 尺寸。
+      this.applyResolutionScale();
       // auto 界面配置下转屏会跨过经典/携带断点
       this.updateSplitUi();
+      // 快捷栏在手机断点由 32px 变 36px，重新按实际 CSS 尺寸分配清晰背板。
+      this.refreshHotbar();
       if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     });
   }

@@ -34,6 +34,11 @@ export function currentIconBackingScale(): number {
   return iconBackingScale(devicePixelRatioValue());
 }
 
+/** 优先采用 CSS 实际显示尺寸；元素尚未挂进 DOM 时回退调用方给的设计尺寸。 */
+export function iconDisplaySize(measuredCssPixels: number, fallback: number): number {
+  return Number.isFinite(measuredCssPixels) && measuredCssPixels > 0 ? measuredCssPixels : fallback;
+}
+
 export function drawItemIcon(
   canvas: HTMLCanvasElement,
   atlas: TextureAtlas,
@@ -42,8 +47,10 @@ export function drawItemIcon(
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  // 背板按设备像素放大，显示尺寸仍由 CSS 说了算
-  const pixels = Math.max(1, Math.round(size * currentIconBackingScale()));
+  // 背板按**实际 CSS 显示尺寸**放大。快捷栏在桌面是 32px、手机是 36px，
+  // 创造栏又是 28px；固定拿调用处的 size 会在某些断点形成 64→36 这类非整数缩放。
+  const displaySize = iconDisplaySize(canvas.clientWidth, size);
+  const pixels = Math.max(1, Math.round(displaySize * currentIconBackingScale()));
   if (canvas.width !== pixels) canvas.width = pixels;
   if (canvas.height !== pixels) canvas.height = pixels;
   // 某些临时界面（交易、附魔花费、提示卡）没有各自的 canvas CSS 规则。

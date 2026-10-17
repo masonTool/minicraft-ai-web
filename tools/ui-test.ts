@@ -29,7 +29,7 @@ import {
   slicePage,
 } from '../src/ui/ItemPager.ts';
 import { TOUCH_ICON_LABELS, TOUCH_ICON_NAMES, touchIconSvg } from '../src/ui/TouchIcons.ts';
-import { iconBackingScale } from '../src/ui/ItemIcon.ts';
+import { iconBackingScale, iconDisplaySize } from '../src/ui/ItemIcon.ts';
 import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
 import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
 import { BackButton } from '../src/ui/BackButton.ts';
@@ -287,6 +287,8 @@ console.log('\n[手机端物品显示与提示（批次 95 体检）]');
   equal('DPR 2 → 2 倍', iconBackingScale(2), 2);
   equal('DPR 3 → 仍夹到 2 倍（图集一格只有 16px，再高只是更大更糊）', iconBackingScale(3), 2);
   equal('DPR 0.5 / NaN / 0 → 1 倍（异常输入不吃亏）', `${iconBackingScale(0.5)},${iconBackingScale(Number.NaN)},${iconBackingScale(0)}`, '1,1,1');
+  equal('手机快捷栏按 CSS 实际 36px 画背板（不再固定拿桌面 32px）', iconDisplaySize(36, 32), 36);
+  equal('元素尚未布局时回退设计尺寸', iconDisplaySize(0, 32), 32);
 
   // ---- ② 触摸端的"长按看详情"阈值必须**长于**长按右键，否则同一个手势会互相打架
   check(
