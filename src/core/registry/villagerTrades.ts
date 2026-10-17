@@ -23,6 +23,8 @@ import { DYE_COLORS } from './colors.ts';
 import { Item, dyeItemId } from './items.ts';
 // 武器匠卖的是**工具/武器**（原版也是），所以这里要按"种类 × 材质"算 id
 import { toolItemId } from './tools.ts';
+// 盔甲匠卖**锁链甲**（批次 169，B53）：它与铁甲没有配方差别，只能靠交易/穿甲怪物
+import { armorItemId } from './armor.ts';
 
 /** 职业 id（原版名字） */
 export type VillagerProfessionId =
@@ -162,9 +164,22 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
         { cost: [{ id: Item.EMERALD, count: 4 }], result: { id: Block.IRON_BLOCK, count: 1 }, maxUses: 8, xp: 2 },
       ],
       [{ cost: [{ id: Item.IRON_INGOT, count: 4 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 5 }],
-      [{ cost: [{ id: Item.EMERALD, count: 6 }], result: { id: Block.IRON_BLOCK, count: 2 }, maxUses: 8, xp: 10 }],
-      [{ cost: [{ id: Item.EMERALD, count: 9 }], result: { id: Block.IRON_BLOCK, count: 3 }, maxUses: 8, xp: 15 }],
-      [{ cost: [{ id: Item.EMERALD, count: 12 }], result: { id: Block.IRON_BLOCK, count: 4 }, maxUses: 8, xp: 30 }],
+      // ⚠️ 锁链甲（批次 169，TASKS B53）：原版它**没有配方**（材料与图案都与铁甲相同，
+      // 给了配方必然和铁甲撞车），只能靠"穿甲的怪物掉落"或"与盔甲匠交易"。
+      // 本项目没有个体装备层（怪物不穿甲），所以走交易这一条；三件分在 L3/L4/L5，
+      // 于是"把盔甲匠养起来"这件事第一次有了明确的回报。
+      [
+        { cost: [{ id: Item.EMERALD, count: 6 }], result: { id: Block.IRON_BLOCK, count: 2 }, maxUses: 8, xp: 10 },
+        { cost: [{ id: Item.EMERALD, count: 5 }], result: { id: armorItemId('helmet', 'chainmail'), count: 1 }, maxUses: 8, xp: 10 },
+      ],
+      [
+        { cost: [{ id: Item.EMERALD, count: 9 }], result: { id: Block.IRON_BLOCK, count: 3 }, maxUses: 8, xp: 15 },
+        { cost: [{ id: Item.EMERALD, count: 7 }], result: { id: armorItemId('leggings', 'chainmail'), count: 1 }, maxUses: 8, xp: 15 },
+      ],
+      [
+        { cost: [{ id: Item.EMERALD, count: 12 }], result: { id: Block.IRON_BLOCK, count: 4 }, maxUses: 8, xp: 30 },
+        { cost: [{ id: Item.EMERALD, count: 4 }], result: { id: armorItemId('boots', 'chainmail'), count: 1 }, maxUses: 8, xp: 30 },
+      ],
     ],
   },
   {

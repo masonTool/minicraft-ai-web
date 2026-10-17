@@ -5,8 +5,9 @@
  * （`registry/villagerTrades.ts`），村民是 `Mob` 的一个子类（多一份职业与交易状态），
  * 界面只负责"点一条"、主程序负责扣与给。断言分八块：
  *  1. **职业表自检**：7 个职业、工作站不撞车、每级都有货、单价都为正、颜色能分辨；
- *  2. **可达性**：每条交易的**收货与产物**都要能在生存里拿到（绿宝石尤其重要——
- *     没有它整套交易就是死数据）；这条规矩与酿造/进度那两批同源；
+ *  2. **可达性**：每条交易的**收货**都要能在生存里拿到（绿宝石尤其重要——没有它整套交易
+ *     就是死数据）；⚠️ 批次 169 起**产物不再要求另有来源**（商店本身就可以是唯一来源，
+ *     锁链甲就是这种情况）；
  *  3. **等级**：经验→等级的纯函数（阈值边界）、逐级解锁的交易条数；
  *  4. **成交判定**：材料不够/次数用完/第二样不够，以及"结算数据是副本"；
  *  5. **村民实体**：认领职业、升级解锁、幼体不认领、外观版本随职业变；
@@ -22,6 +23,7 @@ import { Block, blockDef, blockTiles } from '../src/core/registry/blocks.ts';
 import { Item, dropFor, itemDef, possibleBlockDropIds } from '../src/core/registry/items.ts';
 import { hasDescription, missingBlockNames } from '../src/core/registry/itemNames.ts';
 import { efficientToolType, harvestRequirement } from '../src/core/registry/tools.ts';
+import { armorItemId } from '../src/core/registry/armor.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { RECIPES } from '../src/core/crafting/Recipes.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
@@ -185,6 +187,10 @@ console.log('\n[可达性：交易两边的物品都拿得到]');
   // 结构里的战利品箱（荧石粉就是靠它——它没有方块来源）
   for (const id of lootItemIds()) obtainable.add(id);
 
+  // ⚠️ 批次 169：这里只判**收货**那一侧。产物不必另有来源——
+  // 商店**本身就可以是**某件东西的唯一来源（锁链甲就是这样：原版没有配方，
+  // 只能靠盔甲匠或穿甲的怪物，而本项目没有个体装备层，见 TASKS B53）。
+  // 之前那条"产物也要能拿到"的断言会把"用交易补上一个来源"这件事判成错误。
   const unreachable: string[] = [];
   for (const profession of PROFESSIONS) {
     for (const specs of profession.levels) {
@@ -192,11 +198,21 @@ console.log('\n[可达性：交易两边的物品都拿得到]');
         for (const cost of spec.cost) {
           if (!obtainable.has(cost.id)) unreachable.push(`${profession.name}:收 ${itemDef(cost.id)?.name ?? cost.id}`);
         }
-        if (!obtainable.has(spec.result.id)) unreachable.push(`${profession.name}:卖 ${itemDef(spec.result.id)?.name ?? spec.result.id}`);
       }
     }
   }
-  check('每条交易的收货与产物都能拿到', unreachable.length === 0, unreachable.join(','));
+  check('每条交易的收货都能拿到（卖的可以只有交易这一条来源）', unreachable.length === 0, unreachable.join(','));
+
+  // 锁链甲三件：**交易是它们唯一的来源**，这条断言盯着"别哪天顺手把哪一条交易删了"
+  const chainmailPieces = (['helmet', 'leggings', 'boots'] as const).map((type) => armorItemId(type, 'chainmail'));
+  check(
+    '锁链甲三件都由村民卖（B53：没有配方也没关系，交易就是来源）',
+    chainmailPieces.every((id) =>
+      PROFESSIONS.some((profession) =>
+        profession.levels.some((level) => level.some((spec) => spec.result.id === id)),
+      ),
+    ),
+  );
 
   // 整套交易的"血液"：绿宝石。它拿不到的话，这一批在生存里一点用都没有
   check('绿宝石矿掉绿宝石（整套交易的前提）', dropFor(Block.EMERALD_ORE)?.id === Item.EMERALD);

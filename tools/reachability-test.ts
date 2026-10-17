@@ -201,7 +201,8 @@ interface Exempt {
   readonly reason: string;
 }
 
-const many = (ids: readonly number[], reason: string): Exempt[] => ids.map((id) => ({ id, reason }));
+// ⚠️ 批次 169：`many()` 这个"一整族套一条理由"的 helper 随锁链甲那一族一起删掉了——
+// 白名单现在只剩四条各自独立的缺口，没有哪一族还共用一条理由（留着会变成"下次顺手再用"的口子）
 
 /**
  * 药水那一族的理由**从酿造图里算出来**，不再手抄 45 个 id（批次 92 改的）。
@@ -289,11 +290,9 @@ const EXEMPT: readonly Exempt[] = [
     reason: '原版灰色染料唯一的路是"黑 + 白"，黑色断了，于是灰色也跟着断（J26）',
   },
 
-  // ---- ③ 原版就没有配方，只能靠"怪物掉落"或"与盔甲匠交易"
-  ...many(
-    CHAINMAIL_PIECES,
-    '锁链甲原版没有配方（材料与图案都与铁甲完全相同，给了配方就会和铁甲撞车），只能靠穿甲的怪物掉落或与盔甲匠交易；本项目两样都没有（TASKS 的 B53）',
-  ),
+  // ---- ③ 锁链甲（批次 169，B53 收口）：三件现在由**盔甲匠**卖，所以从白名单删掉了。
+  //         这里留一段注释而不是空行：**白名单条目被还掉之后必须真的删掉**
+  //         （上面那条"每条都仍然拿不到"的断言会立刻变红，逼着人来删）。
 
   // ---- ④ 没有该生物（恶魂已在批次 94 做掉，这里只剩兔子）
   { id: Item.RABBIT_FOOT, reason: '兔子未实现：原版兔子脚由兔子掉落（J15/J16 的生物整组）' },
@@ -332,10 +331,11 @@ check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.le
 // 逼着人回来看白名单——**自清的清单需要一个会响的铃**
 // 缺口一路在缩：批次 91 量出来是 124 条 → 92（下界要塞 + 烈焰人）70 条 → 93（蜘蛛）**20 条**。
 // 每次变化都从这里开始查（它是这套审计的"总分"）
-// 缺口一路在缩：批次 91 是 124 条 → 92（要塞+烈焰人）70 → 93（蜘蛛）20 → 94（恶魂）**7 条**。
-// 剩下这 7 条都不是"某条链断在中间"，而是**内容本身还没做**（黑/灰染料要鱿鱼与凋灵、
-// 锁链甲要么靠怪物穿甲要么靠盔甲匠、兔子脚要兔子、旧 id 只留存档兼容）
-equal('缺口总数（批次 94 之后：7 条 —— 药水那一族整族通了）', unreachable.length, 7);
+// 缺口一路在缩：批次 91 是 124 条 → 92（要塞+烈焰人）70 → 93（蜘蛛）20 → 94（恶魂）**7 条**
+// → 批次 169（锁链甲改由盔甲匠卖）**4 条**。
+// 剩下这 4 条都不是"某条链断在中间"，而是**内容本身还没做**（黑/灰染料要鱿鱼与凋灵、
+// 兔子脚要兔子、旧 id 只留存档兼容）
+equal('缺口总数（批次 169 之后：4 条 —— 锁链甲那一族也通了）', unreachable.length, 4);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));
@@ -435,11 +435,23 @@ const dyeableWool = DYE_COLORS.filter((_color, index) =>
 ).length;
 equal('羊毛的 16 条染色配方里 14 条原料自足（黑/灰那两条不是）', dyeableWool, 14);
 
-// ④ 锁链甲：原版就没有配方，本项目连"替代来源"都没有
+// ④ 锁链甲（批次 169，B53）：**仍然没有配方**（给了会和铁甲撞车），
+//    但三件都由**盔甲匠**卖——交易就是它们唯一的来源，"拿得到"这一侧才闭环
 check(
-  '三件锁链甲既没有配方、也没有任何掉落（胸甲例外：堡垒遗迹的战利品箱里有）',
-  CHAINMAIL_PIECES.every((id) => !RECIPES.some((recipe) => recipe.result.id === id)) &&
-    CHAINMAIL_PIECES.every((id) => !lootItemIds().includes(id)) &&
+  '三件锁链甲仍然没有配方（原版差异不抹平）',
+  CHAINMAIL_PIECES.every((id) => !RECIPES.some((recipe) => recipe.result.id === id)),
+);
+check(
+  '三件锁链甲由盔甲匠卖（B53 的收口：交易是它们唯一的来源）',
+  CHAINMAIL_PIECES.every((id) =>
+    PROFESSIONS.some((profession) =>
+      profession.levels.some((level) => level.some((spec) => spec.result.id === id)),
+    ),
+  ),
+);
+check(
+  '三件锁链甲不靠怪物掉落与战利品箱（胸甲例外：堡垒遗迹的杂物表里有）',
+  CHAINMAIL_PIECES.every((id) => !lootItemIds().includes(id)) &&
     CHAINMAIL_PIECES.every((id) => MOB_TYPES.every((type) => type.drops.every((drop) => drop.itemId !== id))),
 );
 
