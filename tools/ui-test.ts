@@ -534,9 +534,12 @@ console.log('\n[携带版细节收口（批次 159）]');
       invSrc.includes('this.showUnowned = !this.showUnowned;') &&
       invSrc.includes('this.openPocketCategory(this.lastRecipeTab);'),
   );
+  // ⚠️ "只列我拥有的"必须**从背包格子本身**取：拿"全部物品里我有多少"来筛，
+  //    会把不在 CREATIVE_ITEMS 里的东西悄悄漏掉（"我明明有，分类里却没有"）
   check(
     '关着 = 只列我拥有的；开着 = 全部列出（没有的红底）',
-    invSrc.includes("if (!this.showUnowned && this.inventory.countOf(id) <= 0) return false;") &&
+    invSrc.includes('if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);') &&
+      invSrc.includes('owned.push(stack.id);') &&
       invSrc.includes("classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
       css.includes('.inv-slot.locked {'),
   );
@@ -645,24 +648,37 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes("showCreativeItems ? 'creative' : this.leftPaneKind === 'category' ? 'category' : 'items'"),
   );
   check(
-    '默认只列我拥有的；配方开关开着才列全部（没有的红底）',
+    '默认只列我拥有的（从背包格子取）；配方开关开着才列全部（没有的红底）',
     invSrc.includes('private showUnowned = false;') &&
-      invSrc.includes("if (!this.showUnowned && this.inventory.countOf(id) <= 0) return false;") &&
+      invSrc.includes('if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);') &&
       css.includes('.inv-slot.locked {'),
   );
   // 分类栏最多 800 个 canvas，`refresh()` 每次都会走到排布 → 必须按指纹缓存
   check('分类栏按指纹缓存，不是每次刷新都重建', invSrc.includes('private inventoryStamp(): string {') && invSrc.includes('if (key === this.categoryStamp) return;'));
 
   // ⑤ 点分类里的物品 → 把它的配方摆进合成格
+  // ⑤ 点分类里的物品：**先选中**（能丢弃 / 放置 / 换位），再看它由什么组成
   check(
-    '点分类里的物品 = 看它由什么组成（右栏在合成时）',
-    invSrc.includes('private pickCategoryItem(itemId: number): void {') &&
-      invSrc.includes("if (this.pocketTab !== 'crafting') return;") &&
-      invSrc.includes('recipesForResult(itemId)[0]'),
+    '点分类里的物品 = 选中它 + 看它由什么组成',
+    invSrc.includes('private pickCategoryItem(itemId: number, cell: HTMLElement): void {') &&
+      invSrc.includes('const index = this.inventory.find(itemId);') &&
+      invSrc.includes('this.heldOriginEl = cell;') &&
+      invSrc.includes('private showRecipeFor(itemId: number): void {'),
   );
+  // 红底（我没有的）不能选中
+  check('没有的那些（红底）选不了', invSrc.includes('const owned = this.inventory.countOf(itemId);') && invSrc.includes('if (owned > 0 && !this.held) {'));
   check(
     '材料够就直接摆进合成格',
     invSrc.includes('if (canCraft(this.inventory, recipe).ok) {') && invSrc.includes('fillCraftingGrid(this.inventory, this.crafting, recipe);'),
+  );
+  // 创造模式下点物品同样要把配方摆出来
+  check('创造栏点物品也展示配方', invSrc.includes('this.showRecipeFor(itemId);\n        this.hooks.onMove?.();'));
+  // 空槽不可选中：按下那一层"沉下去"只给有东西的格子
+  check('空槽不给选中反馈', invSrc.includes('if (this.tooltipStacks.has(slot)) this.markPressing(slot);'));
+  // 丢物：面板与快捷栏 dock 之外的空处都算"界面外"（只认 root 时点两栏之间的缝没反应）
+  check(
+    '点界面外（含 shell 留白）才丢出去',
+    invSrc.includes('if (event.target !== this.root && event.target !== this.shellEl) return;'),
   );
   // 材料不齐 → 把配方**画**进合成格，缺的那件红底（格子里是预览不是实物）
   check(

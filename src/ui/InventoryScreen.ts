@@ -1216,15 +1216,29 @@ export class InventoryScreen {
     this.categoryHostEl.append(this.categorySearch, this.categoryGrid, this.categoryPager);
   }
 
-  /** 分类栏里的物品：按分类 + 搜索词筛，默认只要"我拥有的" */
+  /**
+   * 分类栏里的物品：按分类 + 搜索词筛。
+   *
+   * ⚠️ "我拥有的"这一路是**从背包格子本身**取的，不是"在全部物品里挑我有多少"：
+   *    只要有一件东西不在 `CREATIVE_ITEMS` 里（特殊物品、旧 id），后一种写法就会
+   *    把它悄悄漏掉——玩家看到的就是"我明明有，分类里却没有"。
+   */
   private categoryItems(): number[] {
     const query = this.categoryQuery;
-    return CREATIVE_ITEMS.filter((id) => {
+    const byCategory = (id: number): boolean => {
       if (this.categoryTab !== 'all' && recipeBookTab(id) !== this.categoryTab) return false;
       if (query.length > 0 && !matchesQuery(id, query)) return false;
-      if (!this.showUnowned && this.inventory.countOf(id) <= 0) return false;
       return true;
-    });
+    };
+    if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);
+
+    const owned: number[] = [];
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
+      const stack = this.inventory.get(i);
+      if (!stack || owned.includes(stack.id)) continue;
+      owned.push(stack.id);
+    }
+    return owned.filter(byCategory);
   }
 
   /**
@@ -1252,6 +1266,9 @@ export class InventoryScreen {
       this.categoryPage,
       this.inventoryStamp(),
     ].join('|');
+    // ⚠️ 手上拿着东西时**不重建**：选中的那一格就在这一栏里，
+    //    重建会把它连同"来源格"一起丢掉（表现就是"刚选中又没了"）。
+    if (this.held) return;
     if (key === this.categoryStamp) return;
     this.categoryStamp = key;
 
@@ -1278,7 +1295,7 @@ export class InventoryScreen {
       if (count && owned > 1) count.textContent = String(owned);
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        this.pickCategoryItem(itemId);
+        this.pickCategoryItem(itemId, slot);
       });
       this.categoryGrid.appendChild(slot);
     }
@@ -1310,17 +1327,36 @@ export class InventoryScreen {
    * ② 右栏在合成状态时，把这件东西的**配方**摆出来——可组装就以它为目标，
    *    材料够就直接摆进合成格；不够就把配方**画**进合成格，缺的那件红底。
    */
-  private pickCategoryItem(itemId: number): void {
+  private pickCategoryItem(itemId: number, cell: HTMLElement): void {
+    // ① **选中**（批次 159）：红底那种"我没有的"选不了；手上有东西时先处理手上那叠。
+    //    选中的就是这一格——之后点窗口外丢弃、点可放置处放置、点别的物品栏换位。
+    const owned = this.inventory.countOf(itemId);
+    if (owned > 0 && !this.held) {
+      const index = this.inventory.find(itemId);
+      const stack = index >= 0 ? this.inventory.get(index) : null;
+      if (stack) {
+        this.held = stack;
+        this.inventory.set(index, null);
+        this.inventory.notify();
+        // 记来源：点窗口外是丢弃，点不可放置区域是原位退回
+        this.touchOrigin = { source: this.inventory, index, itemId };
+        this.heldFromCreative = false;
+        this.heldOriginEl = cell;
+      }
+    }
+    // ② 右栏在合成 → 把这件东西"由什么组成"摆出来
+    this.showRecipeFor(itemId);
+    this.refresh();
+  }
+
+  /** 把一件东西的配方摆进右栏的合成格（材料够就摆实物，不够就画出来、缺的红底） */
+  private showRecipeFor(itemId: number): void {
     if (this.pocketTab !== 'crafting') return;
     const recipe = recipesForResult(itemId)[0];
     this.clearCraftGhost();
-    if (!recipe || recipeGridSize(recipe) > this.crafting.size) {
-      this.refresh();
-      return;
-    }
+    if (!recipe || recipeGridSize(recipe) > this.crafting.size) return;
     if (canCraft(this.inventory, recipe).ok) {
       fillCraftingGrid(this.inventory, this.crafting, recipe);
-      this.refresh();
       return;
     }
     this.showRecipeGhost(recipe);
@@ -1824,6 +1860,8 @@ export class InventoryScreen {
         this.heldOriginEl = slot;
         // 这是**复制品**（没有来源格）：放到已有物品的格子上时直接覆盖、旧的销毁
         this.heldFromCreative = true;
+        // 创造模式下点一件东西也要看到"它由什么组成"（右栏在合成时）
+        this.showRecipeFor(itemId);
         this.hooks.onMove?.();
         this.refresh();
       });
@@ -2285,10 +2323,11 @@ export class InventoryScreen {
         // 合成格里那套是"配方预览"（材料不齐时画的）：一碰就收掉，换成真实内容
         if (this.craftGhost && slot?.closest('.inv-craft')) this.clearCraftGhost();
         if (slot) {
+          this.showPickToast(slot);
           // 批次 159：**按下就沉下去**。触摸端一次轻点要到 `pointerup` 才结算
           //（要跟长按区分），等结算完再给反馈就成了"点了要等一下才选中"。
-          this.markPressing(slot);
-          this.showPickToast(slot);
+          // ⚠️ 空槽不给：空槽本来就不可选中，给它"沉下去"会让人以为选中了。
+          if (this.tooltipStacks.has(slot)) this.markPressing(slot);
         }
       },
       true,
@@ -2327,7 +2366,10 @@ export class InventoryScreen {
     //（原文："左键点击物品栏界面中暗色的无内容处会将鼠标上的物品全部丢出。
     // 按右键则只会丢出一个。"）
     this.root.addEventListener('pointerdown', (event) => {
-      if (event.target !== this.root) return;
+      // 面板与快捷栏 dock 之外的**空处**都算"界面外"（含 shell 自己的留白）：
+      // 只认 `event.target === root` 时，点两栏之间的缝什么都不发生，
+      // 玩家就会以为"丢弃没做"。
+      if (event.target !== this.root && event.target !== this.shellEl) return;
       event.preventDefault();
       if (this.held) {
         const count = event.button === 2 ? 1 : this.held.count;
