@@ -221,6 +221,23 @@ export function breakSoundFor(blockName: string): SoundKind {
 /** 可听距离（格）：超出这个距离不再播放，省掉无意义的合成开销 */
 const HEARING_RANGE = 32;
 
+/**
+ * 同一种音效在这么短的时间内**不重复播**（秒，按 AudioContext 时钟）。
+ *
+ * 挖矿、连击、一群生物同时受击时，同一种声音会在几十毫秒内被请求十几次；
+ * 它们叠在一起既听不出区别，又要各自建一套节点。
+ * ⚠️ 0.07 秒远小于最密的正常节奏（脚步约 0.37 秒一声、破坏冷却 0.25 秒），
+ * 所以 Regular 玩法不会被吞声。
+ */
+const SAME_SOUND_THROTTLE = 0.07;
+/**
+ * 同时发声的上限。
+ *
+ * 超出的请求直接丢弃（不是排队）——密集场景里"少响几声"听不出来，
+ * 但省掉的是一整批节点的创建与随后的回收。
+ */
+const MAX_CONCURRENT_VOICES = 12;
+
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   /** 主音量（与设置里的音量联动） */
@@ -240,6 +257,10 @@ export class AudioEngine {
   private noiseBuffer: AudioBuffer | null = null;
   /** 统计播放次数（调试面板用） */
   played = 0;
+  /** 每种音效最近一次的起始时刻（秒，AudioContext 时钟），用于同一声的节流 */
+  private readonly lastStartAt = new Map<SoundKind, number>();
+  /** 仍在发声的那些声音的结束时刻（秒），用来数当前并发了几声 */
+  private voiceEnds: number[] = [];
 
   /**
    * 创建/恢复 AudioContext。必须由用户手势触发（浏览器自动播放策略），
@@ -272,6 +293,20 @@ export class AudioEngine {
     if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
     const spec = SOUNDS[kind];
     if (!spec) return;
+
+    // ---- 两道节流（批次 157）
+    // 每一声要新建 5~8 个 WebAudio 节点（gain / bandpass / bufferSource / oscillator …）。
+    // 挖矿 + 打怪 + 下雨 + 一群生物同时叫的时候，节点分配与 GC 在手机上不是免费的，
+    // 而"同一声在 70ms 内响了两次""同时响超过 12 声"这两件事玩家根本听不出来。
+    const nowClock = this.ctx.currentTime;
+    const last = this.lastStartAt.get(kind);
+    if (last !== undefined && nowClock - last < SAME_SOUND_THROTTLE) return;
+    if (this.voiceEnds.length > 0) {
+      this.voiceEnds = this.voiceEnds.filter((end) => end > nowClock);
+      if (this.voiceEnds.length >= MAX_CONCURRENT_VOICES) return;
+    }
+    this.lastStartAt.set(kind, nowClock);
+    this.voiceEnds.push(nowClock + spec.duration);
 
     let gain = spec.gain * this.volume;
     if (at) {
