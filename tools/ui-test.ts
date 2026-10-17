@@ -312,6 +312,63 @@ console.log('\n[手机端物品显示与提示（批次 95 体检）]');
   check('物品名浮标贴在快捷栏上方（用了底部安全区）', nameRule.includes('safe-area-inset-bottom'));
 }
 
+console.log('\n[触摸端长按选数量（批次 137，基岩版那个指示条）]');
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+
+  // ---- ① 元素真的建出来了（没建 = 长按之后什么都不会出现，且没有任何报错）
+  check('槽位里建了指示条', invSrc.includes("splitBar.className = 'inv-split-bar hidden'"));
+  check('槽位里建了数字标签', invSrc.includes("splitLabel.className = 'inv-split-count hidden'"));
+  check(
+    '槽位把两者都挂上了（只建不挂是最常见的一种"写了但没接线"）',
+    /slot\.append\(canvas, count, durability, splitBar, splitLabel\)/.test(invSrc),
+  );
+
+  // ---- ② CSS：条的绿边是**占比**（宽度百分比），并且默认不显示
+  const barRule = /\.inv-split-bar \{([^}]*)\}/.exec(compact)?.[1] ?? '';
+  check('指示条是一块绝对定位的细条', barRule.includes('position: absolute') && barRule.includes('height: 5px'), barRule.slice(0, 60));
+  check('指示条不吃手势（否则划动会被它截走）', barRule.includes('pointer-events: none'), barRule.slice(0, 60));
+  check('指示条默认隐藏（.hidden 有 none）', compact.includes('.inv-split-bar.hidden { display: none; }'));
+  check('数字标签默认隐藏', compact.includes('.inv-split-count.hidden { display: none; }'));
+  check('选中时长的那一格有亮边（手指常盖住格子本身）', compact.includes('.inv-slot.splitting { outline'));
+  // 绿色部分靠 inline width 驱动：写成固定宽度就变成"永远一半"
+  check('界面按比例写宽度（inline style + 百分比）', /split\.fill\.style\.width = `\$\{Math\.round\(splitFraction\(split\.count, split\.total\) \* 100\)\}%`/.test(invSrc));
+
+  // ---- ③ 长按的分流顺序：先问"能不能选数量"，再退回右键 + 连发
+  const longPressBlock = /this\.touchPressTimer = window\.setTimeout\(\(\) => \{([\s\S]*?)\}, TOUCH_LONG_PRESS_MS\)/.exec(invSrc)?.[1] ?? '';
+  const splitAt = longPressBlock.indexOf('this.beginSplit(');
+  const rightAt = longPressBlock.indexOf('this.activateSlot(key, 2)');
+  check(
+    '长按里"选数量"排在右键语义之前',
+    splitAt >= 0 && rightAt > splitAt,
+    `beginSplit@${splitAt} activateSlot@${rightAt}`,
+  );
+  // ⚠️ 走了选数量就必须**不再启动连发**，否则每 170ms 又拿走一件
+  check('选了数量就不再启动连发', /if \(this\.beginSplit\(slot, key, startX\)\) return;/.test(longPressBlock));
+  // 抬手结算必须排在被清掉之前（先 commit 再 clear）
+  check(
+    '抬手时先结算再清状态（顺序反了就白条）',
+    /if \(this\.split\) \{\s*this\.commitSplit\(\);\s*return;/.test(invSrc),
+  );
+
+  // ---- ④ 规则真的接到界面上了（模块存在但没人调 = 玩家眼里什么都没发生）
+  check('界面调用 canSplitStack 判"这一格能不能选"', invSrc.includes('canSplitStack(stack, this.held !== null)'));
+  check('界面调用 splitCountForDrag 换算划动量', invSrc.includes('splitCountForDrag(this.split.total, this.split.startCount, dx, this.split.width)'));
+  check('界面调用 splitStack 结算', invSrc.includes('splitStack(stack, count)'));
+  // 格宽不能写死：三档尺寸（34/42/46px）各不相同，写死就会有一档"划一寸就到底"
+  check('划动按格子的实际宽度归一', /width: slot\.getBoundingClientRect\(\)\.width \|\| 42/.test(invSrc));
+
+  // ---- ⑤ 选数量期间不弹提示框（提示框会正好盖住要看的那个数字）
+  const tooltipBlock = /private tooltipFor\(element: HTMLElement\): ItemTooltip \| null \{([\s\S]*?)\n  \}/.exec(invSrc)?.[1] ?? '';
+  check('选数量时不弹提示框', tooltipBlock.includes('if (this.split) return null;'), tooltipBlock.slice(0, 40));
+
+  // ---- ⑥ 触摸端的提示要说出这个手势（不说没人会去划）
+  const invHint = /hint\.innerHTML = touchDevice([\s\S]*?);\n/.exec(invSrc)?.[1] ?? '';
+  check('背包提示写了"长按划动选数量"', invHint.includes('长按划动选数量'), invHint.slice(0, 60));
+}
+
 console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全关完才轮到浏览器]');
 {
   /** 一个可断言的假浏览器：`history` 只有"压一条/退一格"两个动作 */

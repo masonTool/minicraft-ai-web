@@ -108,6 +108,13 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
 import { CREATIVE_TAB_ICONS } from './CreativeTabs.ts';
 import { isTouchUi } from './TouchControls.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
+import {
+  canSplitStack,
+  initialSplitCount,
+  splitCountForDrag,
+  splitFraction,
+  splitStack,
+} from '../core/container/TouchSplit.ts';
 
 export type InventoryPanelMode =
   | 'inventory'
@@ -208,11 +215,14 @@ const CONTAINER_REFRESH_INTERVAL = 0.1;
 /**
  * 触摸端的"长按"手势参数。
  *
- * 触摸屏没有右键，所以把原版的右键语义（取一半 / 放一个）映射到长按上：
- *   短按抬起 → 左键（拿起整叠 / 放下整叠）
- *   按住超过 260ms → 右键（取一半 / 放一个），并且**按住不放每 170ms 重复一次**，
- *     于是在合成格上按住不动就是"连续放材料"（批量放置），在箱子里按住就是"连续取一个"。
- * 桌面鼠标完全不走这条路径，行为与原来一致。
+ * 触摸屏没有右键，所以长按要同时承担两件事，按**按下的那一格是什么**分流：
+ *
+ * | 按下的格子 | 长按的含义 |
+ * | --- | --- |
+ * | **有 2 个以上、且手上空着** | **选数量**（批次 137，基岩版那个绿色指示条）：左右划改数量，松手拿走那么多 |
+ * | 其余（空格 / 手上拿着东西 / 只有 1 个 / 只取不放） | 右键语义（取一半 / 放一个）+ **每 170ms 重复**，即"连续放材料 / 连续取一个" |
+ *
+ * 短按抬起一律是左键（拿起整叠 / 放下整叠）。桌面鼠标完全不走这条路径。
  */
 /** 双击的判定窗口（毫秒，批次 128）：同一格在这个窗口内点第二下 = 双击收集 */
 const DOUBLE_CLICK_MS = 400;
@@ -224,6 +234,35 @@ export class InventoryScreen {
   /** 触摸长按的定时器（长按判定 + 连发），桌面端始终为 null */
   private touchPressTimer: number | null = null;
   private touchRepeatTimer: number | null = null;
+
+  /**
+   * 触摸端"长按选数量"的进行中状态（批次 137）：null = 没在选。
+   *
+   * 这一格**在被确认之前不动任何数据**——划动只改 `count`（纯界面），
+   * 松手才真的按 `count` 拆开。所以划到一半取消（抬手被系统回收、关界面）
+   * 什么都不会丢。
+   */
+  private split: {
+    key: string;
+    source: SlotSource;
+    index: number;
+    /** 这一格原本的总数（分母） */
+    total: number;
+    /** 按下那一刻选中的数量（划动映射的原点，见 `splitCountForDrag`） */
+    startCount: number;
+    /** 当前选中数量（分子） */
+    count: number;
+    /** 按下时手指的横坐标（划动的原点） */
+    startX: number;
+    /** 一格的宽度（像素）：划动映射要按它归一，见 `splitCountForDrag` */
+    width: number;
+    element: HTMLDivElement;
+    bar: HTMLElement;
+    fill: HTMLElement;
+    label: HTMLElement;
+  } | null = null;
+  /** 解绑"选数量"期间的 pointermove / pointerup（抬手或取消时调用一次） */
+  private splitDetach: (() => void) | null = null;
 
   private readonly root: HTMLDivElement;
   private readonly panel: HTMLDivElement;
@@ -407,8 +446,10 @@ export class InventoryScreen {
     const touchDevice = isTouchUi();
     // ⚠️ 原来这里写着"点空白处关闭"——**那是错的**：面板外的 pointerdown 实际是
     // "把手上的东西丢出去"（批次 128 对齐原版），根本不会关界面（批次 111 顺手修掉）
+    // 触摸端的提示要说出"长按能做两件事"里最反直觉的那一件（批次 137）：
+    // 长按一格 = 出指示条选数量，左右划改数目——不说的话没人会去划
     hint.innerHTML = touchDevice
-      ? '轻点拿起 / 再轻点放下 · 点空槽放下一个 · 长按看详情'
+      ? '轻点拿起 / 再轻点放下 · 长按划动选数量 · 点空槽放下一个'
       : '按 <kbd>E</kbd> 或 <kbd>Esc</kbd> 关闭 · 左键整叠 / 右键单个';
     header.append(this.titleEl, hint);
     if (this.hooks.onOpenRecipes) {
@@ -1168,7 +1209,15 @@ export class InventoryScreen {
     const durability = document.createElement('i');
     durability.className = 'dur-bar hidden';
     durability.appendChild(document.createElement('b'));
-    slot.append(canvas, count, durability);
+    // 长按选数量的指示条（批次 137）：绿色占比 = 选中数 / 这一格总数。
+    // 默认 hidden，只有这一格正在被"选数量"时才露出来（`showSplitBar`）。
+    const splitBar = document.createElement('i');
+    splitBar.className = 'inv-split-bar hidden';
+    const splitFill = document.createElement('b');
+    splitBar.appendChild(splitFill);
+    const splitLabel = document.createElement('span');
+    splitLabel.className = 'inv-split-count hidden';
+    slot.append(canvas, count, durability, splitBar, splitLabel);
 
     slot.addEventListener('pointerdown', (event) => {
       const key = slot.dataset.key;
@@ -1191,8 +1240,8 @@ export class InventoryScreen {
         return;
       }
 
-      // 触摸：短按 = 左键，长按 = 右键（并支持连发批量放置）
-      this.beginTouchPress(slot, key, event.pointerId);
+      // 触摸：短按 = 左键；长按 = 选数量（有物品且手空）或右键 + 连发，见 `beginTouchPress`
+      this.beginTouchPress(slot, key, event.pointerId, event.clientX);
     });
     return slot;
   }
@@ -1478,7 +1527,7 @@ export class InventoryScreen {
    * 用 `setPointerCapture` 把后续事件绑到同一个槽位元素上，
    * 这样手指稍微滑出槽位再抬起也能正确收尾（否则 pointerup 会丢，定时器一直跑）。
    */
-  private beginTouchPress(slot: HTMLDivElement, key: string, pointerId: number): void {
+  private beginTouchPress(slot: HTMLDivElement, key: string, pointerId: number, startX = 0): void {
     this.clearTouchPress();
     try {
       slot.setPointerCapture(pointerId);
@@ -1488,12 +1537,21 @@ export class InventoryScreen {
 
     this.touchPressTimer = window.setTimeout(() => {
       this.touchPressTimer = null;
-      // 长按：右键行为 + 连发（合成网格批量放置、箱子连续取一个都靠它）
+      // 长按的第一支：**选数量**（基岩版那个指示条）。它自己管划动与松手结算，
+      // 所以连发不再启动——两者的手势是同一次"按住"，不该叠在一起。
+      if (this.beginSplit(slot, key, startX)) return;
+      // 长按的第二支：右键行为 + 连发（合成网格批量放置、箱子连续取一个都靠它）
       this.activateSlot(key, 2);
       this.touchRepeatTimer = window.setInterval(() => this.activateSlot(key, 2), TOUCH_REPEAT_MS);
     }, TOUCH_LONG_PRESS_MS);
 
     const finish = (): void => {
+      // 正在选数量：抬手 = 按当前数量拆开（这才是这一支的"点击结算"）。
+      // ⚠️ 必须在 `clearTouchPress` 之前判——它会把选数量的状态一起收掉。
+      if (this.split) {
+        this.commitSplit();
+        return;
+      }
       const wasQuickTap = this.touchPressTimer !== null;
       this.clearTouchPress();
       if (wasQuickTap) this.activateSlot(key, 0);
@@ -1501,6 +1559,96 @@ export class InventoryScreen {
 
     slot.addEventListener('pointerup', finish, { once: true });
     slot.addEventListener('pointercancel', () => this.clearTouchPress(), { once: true });
+  }
+
+  /**
+   * 进入"长按选数量"（批次 137）。返回 false = 这一格不走这条路（走原来的右键 + 连发）。
+   *
+   * 判据全在 `canSplitStack` 里（有 ≥2 个且手上空着），这里只补"只取不放的槽位不参与"。
+   */
+  private beginSplit(slot: HTMLDivElement, key: string, startX: number): boolean {
+    const binding = this.bindings.get(key);
+    if (!binding || binding.takeOnly) return false;
+    const stack = binding.source.get(binding.index);
+    if (!canSplitStack(stack, this.held !== null)) return false;
+    const bar = slot.querySelector<HTMLElement>('.inv-split-bar');
+    const fill = bar?.firstElementChild as HTMLElement | null;
+    const label = slot.querySelector<HTMLElement>('.inv-split-count');
+    if (!bar || !fill || !label) return false;
+
+    const total = stack!.count;
+    this.split = {
+      key,
+      source: binding.source,
+      index: binding.index,
+      total,
+      startCount: initialSplitCount(total),
+      count: initialSplitCount(total),
+      startX,
+      // 一格的实际宽度：划动映射按它归一，所以三档尺寸（34/42/46px）不用各写一套
+      width: slot.getBoundingClientRect().width || 42,
+      element: slot,
+      bar,
+      fill,
+      label,
+    };
+
+    const onMove = (event: PointerEvent): void => {
+      if (!this.split) return;
+      const dx = event.clientX - this.split.startX;
+      this.split.count = splitCountForDrag(this.split.total, this.split.startCount, dx, this.split.width);
+      this.paintSplit();
+    };
+    slot.addEventListener('pointermove', onMove);
+    this.splitDetach = () => slot.removeEventListener('pointermove', onMove);
+
+    slot.classList.add('splitting');
+    bar.classList.remove('hidden');
+    label.classList.remove('hidden');
+    this.paintSplit();
+    return true;
+  }
+
+  /** 指示条的绿色占比与数字（只改界面，不动数据） */
+  private paintSplit(): void {
+    const split = this.split;
+    if (!split) return;
+    split.fill.style.width = `${Math.round(splitFraction(split.count, split.total) * 100)}%`;
+    split.label.textContent = String(split.count);
+  }
+
+  /** 收掉选数量的界面痕迹（数据不动） */
+  private endSplit(): void {
+    const split = this.split;
+    if (!split) return;
+    this.splitDetach?.();
+    this.splitDetach = null;
+    this.split = null;
+    split.element.classList.remove('splitting');
+    split.bar.classList.add('hidden');
+    split.label.classList.add('hidden');
+  }
+
+  /**
+   * 松手结算：按选中的数量把这一格拆开，**选中的那份放到光标上**。
+   *
+   * 之后就是既有的"光标拿着东西"那套：点空格放下、点同类合并，
+   * 目标格装不下的部分留在光标上（Wiki 说的是"留在来源格"，见 TASKS H19 的差异注记）。
+   */
+  private commitSplit(): void {
+    const split = this.split;
+    if (!split) return;
+    // 期间这一格可能已经变了（漏斗往里塞、另一个界面动过同一个容器）——以"现在"为准
+    const stack = split.source.get(split.index);
+    const count = split.count;
+    this.endSplit();
+    if (!stack || this.held) return;
+    const { taken, rest } = splitStack(stack, count);
+    if (!taken) return;
+    split.source.set(split.index, rest);
+    this.held = taken;
+    if (split.source === this.inventory) this.inventory.notify();
+    this.refresh();
   }
 
   /** 清掉长按相关的定时器（抬起 / 取消 / 开始新手势时调用） */
@@ -1513,6 +1661,7 @@ export class InventoryScreen {
       window.clearInterval(this.touchRepeatTimer);
       this.touchRepeatTimer = null;
     }
+    this.endSplit();
   }
 
   /**
@@ -1690,6 +1839,9 @@ export class InventoryScreen {
 
   /** 打开为指定模式；容器模式必须传入容器实例 */
   openWith(mode: InventoryPanelMode, container?: BlockContainer): void {
+    // 换面板（背包 → 箱子 → 工作台……）时把没结算完的"选数量"收掉：
+    // 上半部分的槽位会被重建，留着它等于让一个已经不在屏幕上的格子继续吃手势
+    this.endSplit();
     if (this.mode !== mode || this.activeContainer !== container) {
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = mode;
@@ -1884,6 +2036,9 @@ export class InventoryScreen {
 
   /** 指针底下的槽位当前是什么物品 */
   private tooltipFor(element: HTMLElement): ItemTooltip | null {
+    // 正在长按选数量时不弹提示框（批次 137）：那个手势的反馈是**指示条**，
+    // 再糊一块提示框上去会正好盖住玩家要看的那个数字
+    if (this.split) return null;
     const stack = this.tooltipStacks.get(element);
     if (!stack) return null;
     return itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name);

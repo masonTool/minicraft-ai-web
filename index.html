@@ -1456,6 +1456,31 @@
         text-shadow: 1px 1px 0 #000;
       }
 
+      /* ---------------- 长按选数量的指示条（批次 137） ----------------
+         基岩版触摸操作：长按一格出现一条指示条，**绿色部分 = 选中数量 / 这一格总数**，
+         左右划改数量。这两条（条的占比、数字）都是"界面侧"的反馈，
+         规则本身在 `core/container/TouchSplit.ts` 里。 */
+      .inv-split-bar {
+        position: absolute; left: 2px; right: 2px; bottom: 1px; height: 5px;
+        background: rgba(0, 0, 0, .7);
+        pointer-events: none;
+      }
+      .inv-split-bar.hidden { display: none; }
+      .inv-split-bar b {
+        display: block; height: 100%; width: 50%;
+        background: var(--dur-high);
+      }
+      .inv-split-count {
+        position: absolute; top: 0; left: 1px; padding: 0 3px;
+        font-size: 11px; line-height: 13px; color: #fff;
+        background: rgba(0, 0, 0, .6);
+        pointer-events: none;
+      }
+      .inv-split-count.hidden { display: none; }
+      /* 正在选数量的那一格描一圈亮边：手指常常盖住了格子本身，
+         没有这一圈就分不清"是我在选"还是"它自己亮了一下" */
+      .inv-slot.splitting { outline: 2px solid #ffef9e; outline-offset: -1px; }
+
       #inv-held {
         position: fixed; z-index: 11; pointer-events: none;
         transform: translate(-50%, -50%); display: none;
