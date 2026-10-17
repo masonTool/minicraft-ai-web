@@ -216,6 +216,7 @@ console.log('\n[放大化世界]');
   let amplifiedMax = -Infinity;
   let normalDeviation = 0;
   let amplifiedDeviation = 0;
+  let landSamples = 0;
   const SAMPLES = 40;
   for (let i = 0; i < SAMPLES; i++) {
     const x = i * 37 - 300;
@@ -224,15 +225,21 @@ console.log('\n[放大化世界]');
     const heightA = amplified.surfaceY(x, z);
     normalMax = Math.max(normalMax, heightN);
     amplifiedMax = Math.max(amplifiedMax, heightA);
-    normalDeviation += Math.abs(heightN - SEA_LEVEL);
-    amplifiedDeviation += Math.abs(heightA - SEA_LEVEL);
+    // ⚠️ 只在**陆地**上比"起伏被放大"。批次 179 起，水下的起伏按设计**不再随
+    // relief 放大**（放大化只该放大山，不该把海也放大成无底洞），而这条采样线
+    // 的 40 个点里有相当一部分落在海里 —— 混着量会把 2 倍的差异稀释成 1.01 倍。
+    if (heightN >= SEA_LEVEL) {
+      landSamples++;
+      normalDeviation += heightN - SEA_LEVEL;
+      amplifiedDeviation += heightA - SEA_LEVEL;
+    }
   }
 
   check('放大化世界确实更高（最高点超过默认）', amplifiedMax > normalMax, `默认 ${normalMax} / 放大 ${amplifiedMax}`);
   check(
-    '整体起伏也更大（偏离海平面的幅度更大）',
-    amplifiedDeviation > normalDeviation * 1.2,
-    `默认 ${normalDeviation} / 放大 ${amplifiedDeviation}`,
+    '陆地上起伏被放大（偏离海平面的幅度更大）',
+    landSamples >= 8 && amplifiedDeviation > normalDeviation * 1.2,
+    `陆地样本 ${landSamples} 个：默认 ${normalDeviation} / 放大 ${amplifiedDeviation}`,
   );
   check(
     '倍率就是配置里那个数',

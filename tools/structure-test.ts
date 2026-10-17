@@ -266,7 +266,12 @@ console.log('\n[村庄：门方块与方块状态]');
             if (blocks[Chunk.index(x, y, z)] !== Block.OAK_DOOR) continue;
             const upper = (states[Chunk.index(x, y, z)]! & 0b100000) !== 0;
             const below = y > 0 ? blocks[Chunk.index(x, y - 1, z)] : 0;
-            if (!upper && below !== Block.OAK_DOOR) paired = false;
+            // ⚠️ 批次 179 修：这里原来写的是 `!upper`（查**下半**扇下方有没有门）——
+            // 下半扇下面当然是地板，于是它只可能"通过"，实际查的是不存在的情形。
+            // 真正要查的是**上半扇**下方必须有它的下半扇（否则就是悬空的门）。
+            // 这条断言以前一直没执行到：`states` 为 null 时整段被跳过，而村庄中心
+            // 那个区块此前正好没有房子；地形一变、中心区块有了门，它就红了。
+            if (upper && below !== Block.OAK_DOOR) paired = false;
           }
         }
       }

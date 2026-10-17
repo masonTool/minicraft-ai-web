@@ -155,8 +155,11 @@ let samples = 0;
 let oceanSamples = 0;
 
 // 真正生成区块再按实际地表分类——这样统计结果与画面里看到的完全一致
-for (let cx = -3; cx <= 3; cx++) {
-  for (let cz = -3; cz <= 3; cz++) {
+// ⚠️ 采样窗从 7×7 扩到 **11×11 区块**（批次 179）：7×7 = 112×112 格只采到 784 个点，
+// 随机种子的方差大到"这一片正好靠海"就能让海洋占比从 35% 掉到 16%，
+// 于是这条断言量到的其实是"我这窗口落在哪"，而不是"世界长什么样"。
+for (let cx = -5; cx <= 5; cx++) {
+  for (let cz = -5; cz <= 5; cz++) {
     const blocks = generator.generate(cx, cz);
     for (let z = 0; z < 16; z += 4) {
       for (let x = 0; x < 16; x += 4) {

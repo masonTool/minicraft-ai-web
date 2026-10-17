@@ -549,7 +549,19 @@ function buildVillage(w: FeatureWriter, s: StructureInstance, world: FeatureWorl
     buildHouse(w, hx, hGround, hz, s.rng, palette);
   }
 
+  /**
+   * 房屋占地的保守半径（含 ±1 的石头地基圈与 1 格余量）。
+   * 房子最大 9×9（半宽 4）+ 地基外扩 1 + 余量 1 = 6。
+   */
+  const HOUSE_HALF = 6;
+
   // ---- 道路：从广场向 4 个方向铺出去，顺带清掉挡路的植物
+  //
+  // ⚠️ 批次 179 修：道路**必须绕开房屋**。原来这里是无条件
+  // `clear(rx, ry+1, rz, rx, ry+4, rz)` —— 一条路正好从房子南墙穿过去时，
+  // 会把墙和门一起清掉，于是那栋房子**有床没门**（`test:village` 数到 10 张床 9 扇门）。
+  // 这个坑一直在，只是以前村庄中心那个区块没有房子、断言整段被跳过；
+  // 地形一变（房屋落点高度变了）露出来。判据是"房子的门必须比邻床存在"。
   for (const [dx, dz] of [
     [1, 0],
     [-1, 0],
@@ -564,6 +576,10 @@ function buildVillage(w: FeatureWriter, s: StructureInstance, world: FeatureWorl
       for (let side = -1; side <= 1; side++) {
         const rx = px + (dz === 0 ? 0 : side);
         const rz = pz + (dx === 0 ? 0 : side);
+        const insideHouse = placed.some(
+          (house) => Math.abs(house.x - rx) <= HOUSE_HALF && Math.abs(house.z - rz) <= HOUSE_HALF,
+        );
+        if (insideHouse) continue;
         const ry = world.surfaceY(rx, rz);
         clear(w, rx, ry + 1, rz, rx, ry + 4, rz);
         w.fill(rx, ry, rz, Block.GRAVEL);

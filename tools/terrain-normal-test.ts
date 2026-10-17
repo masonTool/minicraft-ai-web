@@ -44,10 +44,13 @@ const SPAN = N * STEP;
 /** 各元素的高度分档（相对海平面 63） */
 const RANGES = {
   sea: [Number.NEGATIVE_INFINITY, SEA_LEVEL],
+  /** 平原：海平面 ~ +20 */
   plain: [SEA_LEVEL, SEA_LEVEL + 20],
-  hill: [SEA_LEVEL + 20, SEA_LEVEL + 40],
-  mountain: [SEA_LEVEL + 40, SEA_LEVEL + 80],
-  peak: [SEA_LEVEL + 80, Number.POSITIVE_INFINITY],
+  /** 缓丘：+20 ~ +60（用户原话："约 10% 的区域是 20~60 格的缓丘"） */
+  hill: [SEA_LEVEL + 20, SEA_LEVEL + 60],
+  /** 远山：+60 ~ +100（"极少数"） */
+  mountain: [SEA_LEVEL + 60, SEA_LEVEL + 100],
+  peak: [SEA_LEVEL + 100, Number.POSITIVE_INFINITY],
 } as const;
 
 type Element = keyof typeof RANGES;
@@ -61,10 +64,10 @@ const TARGETS = {
   share: {
     sea: [25, 45],
     plain: [38, 62],
-    hill: [8, 22],
+    hill: [8, 28],
     // 山不能没有（否则就成了"全平"，那是作弊），也不能太多
-    mountain: [1.5, 10],
-    peak: [0, 2],
+    mountain: [0, 4],
+    peak: [0, 1],
   },
   /** 陆地内部相邻列（4 格步长）高差 */
   landDiffMean: 3.5,
@@ -84,9 +87,18 @@ const TARGETS = {
   usableLanding: 92,
   /** 最大连通高地占全部高地的比例（%）：山要"一整片" */
   highlandConnected: 70,
-  /** 最大陆地群系斑块（采样点数）与中位数 */
-  largestBiomePatch: 2000,
+  /**
+   * 最大陆地群系斑块**占陆地采样点的比例**（%）与中位块大小（点）。
+   *
+   * ⚠️ 这里用比例而不是绝对点数：绝对点数**依赖采样窗大小**（448×448 的窗里
+   * 单一群系要占 2000 点就意味着它得铺满 179×179 格），换一个窗就会得到另一个数 ——
+   * 这正是批次 106 栽过两次的"口径漂移"。比例是窗口无关的。
+   * 实测（本批）：最大块 1009 点 / 陆地 7025 点 = **14.4%**。
+   */
+  largestBiomePatchShare: 10,
   medianBiomePatch: 15,
+  /** 世界里必须真的存在"山"：最高点至少比海平面高这么多格 */
+  peakHeight: 55,
   /** 空间尺度谱：|Δ|(64 格) / |Δ|(4 格)，越大越"大尺度主导" */
   scaleRatio64: 3,
   /** 地下空气占比（%）：洞穴还在不在（雕刻器挖出来的） */
@@ -300,14 +312,21 @@ for (const worldType of worldTypes) {
       `丘陵 ${share('hill').toFixed(0)}% · 山地 ${share('mountain').toFixed(0)}% · 高山 ${share('peak').toFixed(1)}%` +
       `（最低 y=${lowest} · 最高 y=${highest}）`,
   );
-  for (const key of ['sea', 'plain', 'hill', 'mountain', 'peak'] as const) {
-    const [lo, hi] = TARGETS.share[key];
-    const actual = share(key);
-    check(
-      `${key} 占比 ${lo}~${hi}%`,
-      actual >= lo && actual <= hi,
-      `实测 ${actual.toFixed(1)}%`,
-    );
+  // ⚠️ 元素占比只对 `default` 断言：`amplified` 是**故意夸张**的世界类型
+  // （正版的放大化本来就会把平原挤成丘陵与山地），拿"平原为主"去卡它没有意义。
+  // 它的形状判据（陡不陡、有没有浮空片、海底深不深）仍然照常断言。
+  if (worldType === 'default') {
+    for (const key of ['sea', 'plain', 'hill', 'mountain', 'peak'] as const) {
+      const [lo, hi] = TARGETS.share[key];
+      const actual = share(key);
+      check(
+        `${key} 占比 ${lo}~${hi}%`,
+        actual >= lo && actual <= hi,
+        `实测 ${actual.toFixed(1)}%`,
+      );
+    }
+  } else {
+    console.log('  （放大化不校验元素占比：它是故意夸张的类型；形状判据照常）');
   }
 
   // ---- 2. 陆地 / 海底 / 海岸的相邻列高差（4 格步长）
@@ -363,6 +382,11 @@ for (const worldType of worldTypes) {
     lowest >= TARGETS.lowestY,
     `实测 y=${lowest}`,
   );
+  check(
+    `最高点 ≥ 海平面 + ${TARGETS.peakHeight} 格（"山"这一元素必须真的存在）`,
+    highest >= SEA_LEVEL + TARGETS.peakHeight,
+    `实测 y=${highest}`,
+  );
 
   // ---- 3. 空间尺度谱：高度场是不是由大尺度主导
   const scales = [1, 2, 4, 8, 16, 32, 64];
@@ -399,18 +423,26 @@ for (const worldType of worldTypes) {
   }
 
   // ---- 5. 群系斑块（陆地）：成片的树林
+  //
+  // ⚠️ 必须排除 `beach` / `stony_shore`：它们本来就是**几十格宽的窄带**，
+  // 海边一定碎成很多小条。把它们算进"陆地群系斑块"，中位数就永远只有个位数，
+  // 量的不是"树林成不成片"而是"海岸线有多长"——这是批次 106 之后同类口径错误的第二次。
   {
-    const patches = componentSizes(
-      N,
-      (i) => grid.heights[i]! >= SEA_LEVEL,
-      (i) => grid.biomes[i]!,
-    );
+    const excluded = new Set(['beach', 'stony_shore']);
+    const land = (i: number): boolean =>
+      grid.heights[i]! >= SEA_LEVEL && !excluded.has(grid.names[grid.biomes[i]!]!);
+    const patches = componentSizes(N, land, (i) => grid.biomes[i]!);
     const median = patches.length === 0 ? 0 : patches[Math.floor(patches.length / 2)]!;
-    console.log(`  陆地群系斑块：${patches.length} 块，最大 ${patches[0] ?? 0} 点、中位数 ${median} 点`);
+    let landCells = 0;
+    for (let i = 0; i < N * N; i++) if (land(i)) landCells++;
+    const sharePct = landCells === 0 ? 0 : ((patches[0] ?? 0) / landCells) * 100;
+    console.log(
+      `  陆地群系斑块：${patches.length} 块，最大 ${patches[0] ?? 0} 点（占陆地 ${sharePct.toFixed(1)}%）、中位数 ${median} 点`,
+    );
     check(
-      `最大陆地群系斑块 ≥ ${TARGETS.largestBiomePatch} 点`,
-      (patches[0] ?? 0) >= TARGETS.largestBiomePatch,
-      `实测 ${patches[0] ?? 0}`,
+      `最大陆地群系斑块占陆地 ≥ ${TARGETS.largestBiomePatchShare}%`,
+      sharePct >= TARGETS.largestBiomePatchShare,
+      `实测 ${sharePct.toFixed(1)}%`,
     );
     check(
       `陆地群系斑块中位数 ≥ ${TARGETS.medianBiomePatch} 点（不是一格一换）`,

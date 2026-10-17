@@ -715,17 +715,20 @@ export function findLandBiome(point: ClimatePoint): BiomeDef {
 export function biomeForColumn(climate: ClimatePoint, groundY: number, seaLevel: number): BiomeDef {
   const gain = applyClimateGain(climate);
 
-  if (groundY < seaLevel - 4) {
+  if (groundY < seaLevel - 1) {
     if (groundY < seaLevel - 14) return biomeById(Biome.DEEP_OCEAN);
     if (gain.temperature < -0.45) return biomeById(Biome.FROZEN_OCEAN);
     if (gain.temperature > 0.5) return biomeById(Biome.WARM_OCEAN);
     return biomeById(Biome.OCEAN);
   }
 
-  // 沙滩只留 3 格宽的窄带。
-  // 之所以不能像原版那样更宽，是因为本实现的地形起伏偏小（见 D1b），
-  // 贴近海平面的面积很大，用宽判定会让沙滩占比高到离谱（实测 31.8%）。
-  if (groundY >= seaLevel - 1 && groundY <= seaLevel + 1) {
+  // 沙滩只留**水线上下各一格**（2 格）的窄带。
+  //
+  // 批次 179 把海岸改成缓坡之后，这条边界必须跟着收：以前 `-1..+1`（3 格）落在
+  // 陡岸上只覆盖很窄的一条；现在缓坡 + 平坦海滨意味着一个 3 格高的带子能铺开
+  // 十几格宽，实测沙滩占比 17.6%（原版随机一片区域大约 2~5%）。
+  // 收成 `-1..0` 之后沙滩回到水线那一圈，`+1` 及以上算陆地（与画面上"沙到水边为止"一致）。
+  if (groundY >= seaLevel - 1 && groundY <= seaLevel) {
     if (gain.erosion < -0.6) return biomeById(Biome.STONY_SHORE);
     return biomeById(Biome.BEACH);
   }

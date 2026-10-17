@@ -149,6 +149,13 @@ console.log('\n[真实生成：村庄的屋里有床与工作站]');
                 else {
                   bedFeet++;
                   // 床脚 → 另一半必须是同一张床、朝向一致、且是床头
+                  // ⚠️ 头顶空间必须在"床头是否跨区块"这个 continue **之前**统计：
+                  // 跨区块的床照样要有头顶空间，而原来的写法在 continue 之后才数，
+                  // 于是只要有一张床的床头落在隔壁区块，`bedsWithAirAbove` 就永远
+                  // 比 `bedFeet` 少 1 —— 断言看起来在查"床能不能站人"，实际在查
+                  // "有没有床跨区块"。批次 179 地形变缓后正好踩到（10 张里 1 张跨）。
+                  const above = y + 1 < 200 ? blocks[Chunk.index(x, y + 1, z)]! : Block.AIR;
+                  if (above === Block.AIR) bedsWithAirAbove++;
                   const [hx, , hz] = bedOtherHalf(cx * CHUNK_SIZE_X + x, y, cz * CHUNK_SIZE_Z + z, state);
                   const lx = hx - cx * CHUNK_SIZE_X;
                   const lz = hz - cz * CHUNK_SIZE_Z;
@@ -158,9 +165,6 @@ console.log('\n[真实生成：村庄的屋里有床与工作站]');
                   if (headId !== id || !isBedHead(headState) || facingOf(headState) !== facingOf(state)) {
                     badPairs++;
                   }
-                  // 床脚上面要是空气（人得站得起来）
-                  const above = y + 1 < 200 ? blocks[Chunk.index(x, y + 1, z)]! : Block.AIR;
-                  if (above === Block.AIR) bedsWithAirAbove++;
                 }
               }
               // 工作站必须是**职业表里认得出来的那几种**：摆一个"没人认领的方块"

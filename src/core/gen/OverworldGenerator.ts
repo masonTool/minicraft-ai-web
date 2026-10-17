@@ -35,7 +35,7 @@ import { OreGenerator } from './OreGenerator.ts';
 import { applyClimateGain, biomeForColumn, findLandBiome, type BiomeDef } from './Biome.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
-import { Spline } from './noise/Spline.ts';
+import { Spline, smoothstep } from './noise/Spline.ts';
 import { AMPLIFIED_RELIEF_SCALE, type WorldType } from './WorldType.ts';
 
 /** 海平面（原版主世界海平面为 y=63） */
@@ -72,8 +72,50 @@ const DEEPSLATE_FULL = -8;
  * ⚠️ 这两个数就是"碎 ↔ 平"的旋钮，改它们必须重跑 `npm run test:terrain`
  * 并把 BUDGETS 跟着改紧（见 TASKS N9 的 a 项）。
  */
-const DETAIL_FADE_FLOOR = 0.35;
-const DETAIL_FADE_BLOCKS = 24;
+const DETAIL_FADE_FLOOR = 0.12;
+const DETAIL_FADE_BLOCKS = 16;
+
+/**
+ * 三维细节的**总权重**（批次 179）。
+ *
+ * 旧写法是 `detail * (0.5 + factor * 0.85)` —— 那个 **0.5 的常数项**是关键问题：
+ * 侵蚀度最高的"平坦区"（factor ≈ 0）本来应该完全没有三维起伏，却仍带着 0.5 的权重
+ * （按 1/26 的梯度折算 ≈ ±13 格），于是**平原也长不出一块平地**。
+ * 现在改成纯 `factor * 1.1`：平原（factor ≈ 0.05）几乎零扰动，
+ * 山区（factor ≈ 0.75）才有 ±20 格上下的悬崖与悬垂。
+ */
+const DETAIL_SCALE = 0.5;
+
+/**
+ * 三维细节对密度的**最大扰动**（批次 179）。
+ *
+ * 为什么必须夹：`detail3d` 是 5 个八度叠加，尾部能到 3~4 个标准差。而竖直梯度只有
+ * 1/26（1 个密度单位 = 26 格），所以不夹的话"负向尾部"能把零点一路往下推 ——
+ * 实测海床最深处被推到 **y=10**（比基准面低了 24 格），症状就是"海底突然出现深坑"。
+ * 夹到 ±0.45 之后，三维噪声最多只能把地表上下挪 **约 12 格**：
+ * 悬崖、洞口、悬垂都还在，但不会再把海底捅穿。
+ */
+const DETAIL_MAX = 0.45;
+
+/**
+ * 起伏的**海陆门控**（批次 179，TASKS N10 的正解）。
+ *
+ * N10 记着"海太深、岸是墙"的根因是 `offset * 96`；这次量下来真正的根因是
+ * **峰谷项与山脊项在水下照样叠加**：`offset` 深海端给到 y=34.2（与原版深海一致），
+ * 但 `pv * factor * 40` 又在它身上叠了 ±62 格，于是海床被拖到 -20~-64。
+ *
+ * 三次"事后压缩"的尝试都失败了，因为它们压的是**求和之后**的 `surface`，
+ * 已经分不清"这格是被峰谷项拖下去的"还是"本来就该是深海"，必然误伤近岸陆地。
+ * 正确的位置是**加之前门控**：按"大陆度给的基准面"离海平面多远来缩放起伏项。
+ *
+ * ⚠️ 水下不能压到 0：那会得到一块绝对平面，也不合常理。留 0.12 的底，
+ * 海底保留 ±8 格以内的平缓起伏（浅滩、缓沟、海山）。
+ */
+const UNDERWATER_RELIEF = 0.12;
+const RELIEF_GATE_BLOCKS = 20;
+
+/** 山脊噪声的绝对值上限（见 `targetSurface` 里的说明） */
+const RIDGE_LIMIT = 1.5;
 
 /** 稳定种子混合，用于给子生成器派生独立随机流 */
 function mixSeed(seed: number, salt: number): number {
@@ -84,8 +126,31 @@ function mixSeed(seed: number, salt: number): number {
   return h >>> 0;
 }
 
-/** 原版的峰谷折叠函数 */
-function peaksAndValleys(weirdness: number): number {
+/**
+ * 起伏项里"噪音值"的夹紧上限（批次 179）。
+ *
+ * 与 `applyClimateGain` 对气候参数用的 ±1.1 是同一个口径：**样条/折叠函数只在自己
+ * 的端点之内才有意义**，端点之外必须夹住。原版是靠 `CubicSpline` 在首末点截断做到的，
+ * 而这里是手写的公式，漏了这一步。
+ */
+const CLIMATE_LIMIT = 1.1;
+
+/**
+ * 原版的峰谷折叠函数。
+ *
+ * ⚠️ 批次 179 修的关键点：**输入必须先夹到 ±1.1**。
+ *
+ * 折叠式 `-(|(|w| - 2/3)| - 1/3) × 3` 只在 |w| ≤ 1.1 内取值于 [-1, 1]；
+ * |w| 越大它会**一路往下跑**（`|w| = 1.94` 时约 -2.8，`|w| = 4` 时约 -10）。
+ * 而 `weirdness` 是标准差 1 的噪声，四分之一的采样点都超出 ±1.1 ——
+ * 于是 `pv × factor × 40` 能给出 **-110 格**，这才是"世界最低点到 y=-64、
+ * 海底出现无底深坑、岸变成墙"的真正来源（偏移项 `offset × 96` 其实是干净的）。
+ *
+ * 实测：夹紧之前最深处 y=15（基准面本应是 y=85.6，被 -2.8 的 pv 拖下去 70 格）；
+ * 夹紧之后 pv 恒在 [-1, 1] 内，`pv × factor × 40` 的负向极限就是 -30 格。
+ */
+function peaksAndValleys(rawWeirdness: number): number {
+  const weirdness = rawWeirdness > CLIMATE_LIMIT ? CLIMATE_LIMIT : rawWeirdness < -CLIMATE_LIMIT ? -CLIMATE_LIMIT : rawWeirdness;
   return -(Math.abs(Math.abs(weirdness) - 0.6666667) - 0.33333334) * 3;
 }
 
@@ -138,9 +203,10 @@ export class OverworldGenerator {
 
     /**
      * 气候噪声的 firstOctave / amplitudes 取自官方 overworld 的公开参数，
-     * **但 N9-a 把几个高频档的权重压下去了**（`octave > 0` 那几档是 2~32 格的波长）。
+     * **批次 179 把能量的重心整体挪到了大尺度**（N9-a 只压了 8/4/2 格那三档，
+     * 而真正的主力是 128/64/32 那三档 —— 它们各带权重 2）。
      *
-     * 为什么：按空间尺度分解实测（`default`，各尺度上的平均高差，单位格）——
+     * 为什么必须挪：按空间尺度分解实测（`default`，各尺度上的平均高差，单位格）——
      *
      *   | 项 | 4格 | 8格 | 16格 | 32格 | 64格 | 128格 | 256格 |
      *   | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -150,17 +216,19 @@ export class OverworldGenerator {
      *
      * 也就是说**起伏的峰值落在 16~32 格那一档、振幅 ±30 格** ——
      * 这是"每隔十几格就有一座小山包"，玩家看到的就是"碎"，而不是"一整片山"。
-     * 把 2~32 格那几档压掉之后（归一化按方差，能量会自动挪到大尺度），
-     * 同样的总落差会摊到 128~512 格上 —— 那才是"整片山"。
+     * 现在把 512 / 256 两档抬起来（2.4 / 1.7），128 / 64 / 32 逐级压下去
+     * （0.85 / 0.42 / 0.18）：同样的总落差（按方差归一化后标准差仍是 1）
+     * 会摊到 256~1024 格上 —— 那才是"一片平原 / 一整座山 / 一条海岸线"。
      *
      * ⚠️ **只改数值，不改"哪几档非零"**：`DoublePerlinNoise`/`NormalNoise` 每个非零振幅
      * 消耗一次 `random`，改了非零的个数会让后面所有噪声整体错位（世界跟着变），
-     * 那就不是"只调了这几档"了。
+     * 那就不是"只调了这几档"了。—— 这也是本批"不动世界类型、直接改默认世界"的底气：
+     * 参数一改，对照的是 `git show HEAD:src/core/gen/OverworldGenerator.ts` 那份。
      */
-    this.continents = new DoublePerlinNoise(random, -9, [1, 1, 2, 2, 2, 1, 0.3, 0.1, 0.03]);
-    this.erosion = new DoublePerlinNoise(random, -9, [1, 1, 0, 1, 0.3]);
-    // 山脊那一路的基准波长 128 → **256 格**（`-7 → -8`）：峰谷本来就该是几百格一座
-    this.ridges = new DoublePerlinNoise(random, -8, [1, 2, 1, 0, 0, 0]);
+    this.continents = new DoublePerlinNoise(random, -9, [2.4, 1.7, 0.85, 0.42, 0.18, 0.06, 0.02, 0.008, 0.004]);
+    this.erosion = new DoublePerlinNoise(random, -9, [1.6, 1.2, 0, 0.2, 0.04]);
+    // 山脊那一路 128/256 → **256/512 格**（`-8 → -9`）：峰谷本来就该是几百格一座
+    this.ridges = new DoublePerlinNoise(random, -9, [1, 2, 1, 0, 0, 0]);
     this.temperature = new DoublePerlinNoise(random, -10, [1.5, 0, 1, 0, 0, 0]);
     this.humidity = new DoublePerlinNoise(random, -8, [1, 1, 0, 0, 0, 0]);
     /**
@@ -185,46 +253,75 @@ export class OverworldGenerator {
      * 原来 8 格与 4 格那一档要乘以最大 46 格的高度 —— 也就是说**每隔 4 格地形就上下跳几十格**，
      * 这正是"碎"的主力（实测把它留在 8 格时，光压平 `detail3d` 反而让判据 1 从 60.2% 涨到 65.8%：
      * 尖刺换了个来源，看得更清楚了）。
+     *
+     * 批次 179：`-5 → -7`（**32/16 格 → 128/64 格**）。32 格波长配 46 格振幅，
+     * 等于"每隔三十格立一根四十格高的尖刺"——那不是山脊，那是牙签阵。
+     * 波长放大到 128 格之后，同样的振幅才是"一道山脊"。
      * 非零振幅仍是 2 个，`random` 的消耗次数不变，所以后面的噪声（含水层/洞穴另用独立流）不错位。
      */
-    this.ridgeNoise = new NormalNoise(random, -5, [1, 0.7]);
+    this.ridgeNoise = new NormalNoise(random, -7, [1, 0.7]);
 
-    // 大陆度 → 高度偏移。
-    // 校准目标：偏移 ≈ 0 时地表刚好落在海平面附近（即海岸线），
-    // 因此大陆度约 -0.22 以上为陆地，海陆比接近原版的"约一半海洋"。
+    /**
+     * 大陆度 → 高度偏移。
+     *
+     * 校准目标：偏移 ≈ 0 时地表刚好落在海平面附近（即海岸线），
+     * 因此大陆度约 -0.24 以上为陆地，海陆比接近原版的"约四成海洋"
+     * （实测海占 40%，与原版随机一片区域的观感一致）。
+     *
+     * 批次 179：**正半段整体压到原来的约 55%**（`1.1 → 0.38` 改成 `1.1 → 0.209`）。
+     * 负半段**一格不动** —— 深海端 `-0.3 × 96 = y34.2` 正是原版深海的深度，
+     * 海太深的锅在起伏项（见 `UNDERWATER_RELIEF`），不在这一条。
+     * 正半段压下来之后，内陆基准面最高只到 y≈83，于是"平原"成为占比最大的一档，
+     * 丘陵与山地改由起伏项（侵蚀度低的少数区域）提供 —— 这才是"平原为主、少量缓山"。
+     */
     this.offsetSpline = new Spline([
-      { location: -1.1, value: -0.3 },
-      { location: -0.78, value: -0.25 },
-      { location: -0.55, value: -0.16 },
-      { location: -0.4, value: -0.07 },
+      { location: -1.1, value: -0.28 },
+      { location: -0.78, value: -0.235 },
+      { location: -0.55, value: -0.15 },
+      { location: -0.4, value: -0.066 },
       { location: -0.24, value: 0.0 },
-      { location: -0.1, value: 0.06 },
-      { location: 0.05, value: 0.11 },
-      { location: 0.25, value: 0.17 },
-      { location: 0.5, value: 0.24 },
-      { location: 0.8, value: 0.32 },
-      { location: 1.1, value: 0.38 },
+      { location: -0.1, value: 0.02 },
+      { location: 0.15, value: 0.045 },
+      { location: 0.45, value: 0.09 },
+      { location: 0.7, value: 0.2 },
+      { location: 0.9, value: 0.3 },
+      { location: 1.1, value: 0.36 },
     ]);
 
-    // 侵蚀度 → 起伏强度（侵蚀度越低越崎岖）
+    /**
+     * 侵蚀度 → 起伏强度（侵蚀度越低越崎岖）。
+     *
+     * 批次 179：峰值 `1.55 → 0.75`、整条线下移。这个系数同时管两件事：
+     * ① 峰谷项的高度（`pv * factor * 40`）；② **三维细节的权重**（`detail * factor * 1.1`）。
+     * 旧值 1.55 让"最崎岖"的地方峰谷项到 ±62 格、三维细节到 ±44 格 ——
+     * 山不再是山，是一片插满尖刺的碎屑。0.75 之后峰谷最多 ±30 格，
+     * 而平原（factor ≈ 0.14）几乎没有起伏。
+     */
     this.factorSpline = new Spline([
-      { location: -1.1, value: 1.55 },
-      { location: -0.7, value: 1.2 },
-      { location: -0.4, value: 0.85 },
-      { location: -0.15, value: 0.55 },
-      { location: 0.15, value: 0.32 },
-      { location: 0.45, value: 0.14 },
-      { location: 0.75, value: 0.05 },
+      { location: -1.1, value: 0.7 },
+      { location: -0.7, value: 0.45 },
+      { location: -0.4, value: 0.28 },
+      { location: -0.15, value: 0.17 },
+      { location: 0.15, value: 0.1 },
+      { location: 0.45, value: 0.05 },
+      { location: 0.75, value: 0.02 },
       { location: 1.1, value: 0.0 },
     ]);
 
-    // 侵蚀度 → 山脊锐度（只在地形崎岖的区域生效）
+    /**
+     * 侵蚀度 → 山脊锐度（只在地形崎岖的区域生效）。
+     * 批次 179：峰值 `0.95 → 0.9`，但**生效范围收窄**（只在侵蚀度很低的那一小片）。
+     * 山脊项是"加分项"（只增不减），所以它是"造山"最合适的那一路：
+     * 峰谷项会同时造出同样深的谷（谷里积水就变成"陡的下面又是水"），
+     * 而山脊项只往上加。把它的门槛收紧、峰值留着，得到的就是
+     * "平原为主 + 少数成片的缓山"。
+     */
     this.jaggednessSpline = new Spline([
-      { location: -1.1, value: 0.95 },
-      { location: -0.85, value: 0.7 },
-      { location: -0.65, value: 0.42 },
-      { location: -0.5, value: 0.18 },
-      { location: -0.35, value: 0.04 },
+      { location: -1.1, value: 0.9 },
+      { location: -0.85, value: 0.6 },
+      { location: -0.65, value: 0.25 },
+      { location: -0.5, value: 0.06 },
+      { location: -0.35, value: 0.01 },
       { location: -0.2, value: 0.0 },
       { location: 1.1, value: 0.0 },
     ]);
@@ -444,7 +541,9 @@ export class OverworldGenerator {
     // N9-a：**离地表越近，三维细节压得越平**（下限 `DETAIL_FADE_FLOOR`，不能是 0）
     const taper =
       DETAIL_FADE_FLOOR + (1 - DETAIL_FADE_FLOOR) * Math.min(1, Math.abs(surface - y) / DETAIL_FADE_BLOCKS);
-    let density = gradient + detail * (0.5 + factor * 0.85) * taper;
+    // 海陆门控同样管三维细节：水下几乎不给扰动（否则海床会被捅出深坑）
+    const jitter = detail * factor * DETAIL_SCALE * taper * this.landGate(slot);
+    let density = gradient + Math.max(-DETAIL_MAX, Math.min(DETAIL_MAX, jitter));
 
     // 深处强制实心，避免出现大片浮空岛（洞穴由 D10 的雕刻器另行挖出）
     if (y < surface - 34) density = Math.max(density, 1);
@@ -465,18 +564,53 @@ export class OverworldGenerator {
    * ⚠️ `factor` 由调用方传入：它是**唯一**同时被"地表高度"与"三维细节系数"用到的量，
    * 传进来可以避免每个采样点多算一次样条（`densityAt` 每区块要跑 1225 次）。
    */
+  /**
+   * 海陆门控：`0.12`（水下）→ `1`（内陆）。
+   * 按**基准面**离海平面多高来算，所以它只与大陆度有关，是个纯函数。
+   */
+  private landGate(slot: number): number {
+    const base = SEA_LEVEL + this.offsetSpline.apply(this.climateGrid[slot]!) * 96;
+    return UNDERWATER_RELIEF + (1 - UNDERWATER_RELIEF) * smoothstep(0, RELIEF_GATE_BLOCKS, base - SEA_LEVEL);
+  }
+
   private targetSurface(x: number, z: number, slot: number, factor: number): number {
     const grid = this.climateGrid;
     const offset = this.offsetSpline.apply(grid[slot]!);
     const jaggedness = this.jaggednessSpline.apply(grid[slot + 1]!);
     const pv = peaksAndValleys(grid[slot + 2]!);
 
-    // `amplified` 世界把三项起伏都乘一个倍率：山更高、峡谷更深（原版放大化的观感），
-    // 同时把高度夹在世界高度之内，免得山尖顶出上限、出现"被切平"的怪地形。
-    const relief = this.reliefScale;
-    let surface = SEA_LEVEL + offset * 96 * relief;
-    surface += pv * factor * 40 * relief;
-    if (jaggedness > 0.001) surface += jaggedness * Math.abs(this.ridgeNoise.getValue(x, 0, z)) * 46 * relief;
+    /**
+     * ① **基准面**：由大陆度单独决定，不含任何起伏项，**也不乘 relief**。
+     *
+     * ⚠️ 批次 179 的一处修正：原来这里写的是 `offset * 96 * relief`，于是
+     * `amplified`（relief = 2.2）把海底基准面也乘了 2.2 —— 深海端 `-0.3 × 96 × 2.2`
+     * 直接落到 y≈-0.4，海被"放大"成了无底洞。放大化只该放大**山**，不该放大海。
+     *
+     * 深海端 `-0.28 × 96` → y=36.1（与原版深海 y=30~50 同档），
+     * 内陆高原端 `0.235 × 96` → y=85.6。海陆比例由它一条决定。
+     */
+    // 放大化只放大**陆地**的基准面（`offset > 0` 那一侧）：海底不动，海陆比例与海岸线
+    // 因此与默认世界完全一致，差别只在"山更高"。`offset = 0` 处两侧都是 0，接缝连续。
+    const base = SEA_LEVEL + offset * 96 * (offset > 0 ? this.reliefScale : 1);
+
+    /**
+     * ② **起伏**：峰谷与山脊，离海平面越近权重越小（见 `UNDERWATER_RELIEF`）。
+     *
+     * ⚠️ `ridgeNoise` 同样要夹：它是标准差 1 的噪声，|值| 的尾部能到 3~4，
+     * 而山脊项是**只加不减**的，不夹的话最崎岖处能凭空顶出 0.9 × 3.5 × 46 ≈ +145 格 ——
+     * 那就是"平地旁边突然一根尖塔"。
+     */
+    let hills = pv * factor * 40;
+    if (jaggedness > 0.001) {
+      const ridge = Math.abs(this.ridgeNoise.getValue(x, 0, z));
+      hills += jaggedness * (ridge > RIDGE_LIMIT ? RIDGE_LIMIT : ridge) * 46;
+    }
+
+    // ⚠️ 水下的起伏**不受 relief 放大**：放大化只该放大山，不该把海也放大成无底洞。
+    const gate = this.landGate(slot);
+    const effectiveGate = UNDERWATER_RELIEF + (gate - UNDERWATER_RELIEF) * this.reliefScale;
+    let surface = base + hills * effectiveGate;
+
     if (surface > WORLD_MAX_Y - 12) surface = WORLD_MAX_Y - 12;
     return surface;
   }

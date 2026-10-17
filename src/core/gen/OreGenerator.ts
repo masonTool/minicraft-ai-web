@@ -65,7 +65,7 @@ interface OreSpec {
  * 这里按离线统计（tools/ore-test.ts）校准到"煤炭最多、钻石最稀有"的原版丰度关系。
  */
 const ORES: readonly OreSpec[] = [
-  { ore: Block.COAL_ORE, deepslate: Block.DEEPSLATE_COAL_ORE, veins: 24, minY: 0, maxY: 150, peakY: 46, minSize: 5, maxSize: 17 },
+  { ore: Block.COAL_ORE, deepslate: Block.DEEPSLATE_COAL_ORE, veins: 28, minY: 0, maxY: 150, peakY: 46, minSize: 5, maxSize: 17 },
   { ore: Block.COPPER_ORE, deepslate: Block.DEEPSLATE_COPPER_ORE, veins: 8, minY: 0, maxY: 96, peakY: 40, minSize: 4, maxSize: 10 },
   { ore: Block.IRON_ORE, deepslate: Block.DEEPSLATE_IRON_ORE, veins: 12, minY: -24, maxY: 56, peakY: 16, minSize: 4, maxSize: 13 },
   { ore: Block.GOLD_ORE, deepslate: Block.DEEPSLATE_GOLD_ORE, veins: 3, minY: -64, maxY: 32, peakY: -16, minSize: 4, maxSize: 9 },
@@ -74,7 +74,7 @@ const ORES: readonly OreSpec[] = [
   // 钻石：明显偏向深部，众数约 -59（基岩层上方），且非常稀有
   { ore: Block.DIAMOND_ORE, deepslate: Block.DEEPSLATE_DIAMOND_ORE, veins: 1, minY: -64, maxY: 16, peakY: -59, minSize: 4, maxSize: 8 },
   // 绿宝石：只在山地单块生成
-  { ore: Block.EMERALD_ORE, deepslate: Block.DEEPSLATE_EMERALD_ORE, veins: 24, minY: -16, maxY: 320, peakY: 100, minSize: 1, maxSize: 1, mountainOnly: true },
+  { ore: Block.EMERALD_ORE, deepslate: Block.DEEPSLATE_EMERALD_ORE, veins: 24, minY: -16, maxY: 220, peakY: 62, minSize: 1, maxSize: 1, mountainOnly: true },
 
   // ---- 大矿脉（1.18 Ore Vein）：铜矿脉，花岗岩伴生 + 稀有粗铜块
   {
@@ -124,6 +124,19 @@ function sampleTriangle(u: number, peakT: number): number {
 
 /** 全部矿石方块，用来避免矿脉互相覆盖（测试脚本也用它识别矿石） */
 export const ORE_BLOCKS = new Set<number>(ORES.flatMap((spec) => [spec.ore, spec.deepslate]));
+
+/**
+ * 矿脉除矿石本身之外还会写下的方块：**脉体的母岩**（铜脉嵌在花岗岩里、铁脉嵌在凝灰岩里）
+ * 与**粗金属块**。
+ *
+ * ⚠️ 这里**必须从 `ORES` 派生**：以前是手写 `[GRANITE, TUFF, RAW_COPPER_BLOCK]`，
+ * 漏了 `RAW_IRON_BLOCK` —— 症状是 `test:genregistry` 的"采样到的方块都在登记表里"
+ * 在某两个群系的采样区块里偶发变红（哪一片区块正好落到一条铁矿脉上就红哪一片）。
+ * 批次 179 改地形之后正好撞上，才把这条手写数据揪出来。
+ */
+export const ORE_VEIN_HOST_BLOCKS = new Set<number>(
+  ORES.flatMap((spec) => [spec.host, spec.raw].filter((id): id is number => id !== undefined)),
+);
 
 /** 累积缓冲里表示"普通矿石"的哨兵值（具体用石头还是深板岩变体，写入时才决定） */
 const ORE_MARKER = -1;

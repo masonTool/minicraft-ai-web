@@ -88,9 +88,17 @@ const BUDGETS = {
   coastMeanDrop: { default: 42, amplified: 68 },
   /**
    * 判据 2：最大连通高地的采样点数。**越大越好（"一整片山"）。**
-   * 调前 → 调后：default 2787 → **3201**、amplified 4456 → **6331**（占高地 93%）
+   * N9-a：default 2787 → 3201、amplified 4456 → 6331。
+   *
+   * ⚠️ 批次 179（地形正常化）之后**这个绝对值必然变小**：世界改成"平原为主"，
+   * 高于 +20 的地块总量从 5843 点掉到 3238 点，最大一块自然也跟着从 3201 掉到 2804。
+   * 变的不是"碎不碎"，而是"高地有多少"——所以从这一批起，**这条判据改用占比**
+   * （`largestHighlandShare`），绝对点数只留作参考与回归锚点。
+   * 实测（批次 179）：default 占 **87%**（批前 54%）、amplified **83%**（批前 93%）。
    */
-  largestHighland: { default: 3100, amplified: 6200 },
+  largestHighland: { default: 2700, amplified: 2700 },
+  /** 判据 2b：最大连通高地**占全部高地**的比例（%）。与"高地有多少"解耦，越大越"成片" */
+  largestHighlandShare: { default: 70, amplified: 70 },
   /**
    * 判据 3：最大的**陆地**群系斑块的采样点数。**越大越好（"成片的树林"）。**
    *
@@ -351,6 +359,12 @@ for (const worldType of worldTypes) {
     `最大连通高地 ≥ ${BUDGETS.largestHighland[worldType]} 点（碎山会退化成很多小块）`,
     largest >= BUDGETS.largestHighland[worldType],
     `实测 ${largest}`,
+  );
+  const connectedShare = highlandCells === 0 ? 0 : (largest / highlandCells) * 100;
+  check(
+    `最大连通高地占高地 ≥ ${BUDGETS.largestHighlandShare[worldType]}%（与"高地有多少"解耦）`,
+    connectedShare >= BUDGETS.largestHighlandShare[worldType],
+    `实测 ${connectedShare.toFixed(0)}%`,
   );
 
   // ---- 判据 3：群系斑块尺寸（**按陆 / 海分开**，批次 106，B105-5）

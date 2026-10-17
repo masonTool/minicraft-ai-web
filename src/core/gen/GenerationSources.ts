@@ -26,7 +26,7 @@
 import { Block, bedId, stairsId, stoneVariantId, Wood } from '../registry/blocks.ts';
 import { BIOMES } from './Biome.ts';
 import { BIOME_FEATURES, SEA_LEVEL, woodFor } from './Features.ts';
-import { ORE_BLOCKS } from './OreGenerator.ts';
+import { ORE_BLOCKS, ORE_VEIN_HOST_BLOCKS } from './OreGenerator.ts';
 import { columnSurface } from './SurfaceRules.ts';
 
 export interface GenSource {
@@ -146,8 +146,10 @@ const CORAL_KIND_COUNT = 5;
  *
  * ⚠️ `ORE_BLOCKS` 只收了每个矿种自己的 `ore`/`deepslate` 两格，母岩不在里面——
  * 采样对账抓到过（花岗岩/凝灰岩/粗铜块只在含矿脉的区块里出现，批次 118）。
+ * **这批再修一次**：原来这里是手写的 `[GRANITE, TUFF, RAW_COPPER_BLOCK]`，
+ * 漏了粗铁块；改成从 `ORES` 表派生（`ORE_VEIN_HOST_BLOCKS`），以后加矿脉不会再漏。
  */
-const ORE_VEIN_BLOCKS: readonly number[] = [Block.GRANITE, Block.TUFF, Block.RAW_COPPER_BLOCK];
+const ORE_VEIN_BLOCKS: readonly number[] = [...ORE_VEIN_HOST_BLOCKS];
 
 // ---------------------------------------------------------------- 手写：地形、下界、末地
 
