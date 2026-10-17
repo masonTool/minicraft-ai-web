@@ -2659,6 +2659,18 @@ class App {
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
 
+    // 批次 159：**长按属于我们的手势**（取一半 / 看详情 / 选数量），
+    // 必须先屏蔽 HTML 自带的那一套长按效果——否则手机上长按物品图标会弹出
+    // "保存图片 / 下载图片"，长按文字会选中并弹出选择菜单。
+    // ⚠️ 原来这句话写在下面 `if (!this.touch)` 那一段里（那是给指针锁用的），
+    //    于是**触摸端一直没屏蔽**——这正是"长按总是弹出保存图片"的原因。
+    //    输入框要留着：聊天与搜索还得能粘贴、全选。
+    document.addEventListener('contextmenu', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.('input, textarea')) return;
+      event.preventDefault();
+    });
+
     // 触摸端不需要指针锁（拖动即转视角），所以只有桌面端接这套
     // ⚠️ 批次 111 把"点击进入游戏"那层遮罩删掉之后，PC 进世界的第一步就是**点一下画面**
     // ——`requestPointerLock()` 必须在用户手势的调用栈里，这一下点击就是那个手势。
@@ -2697,7 +2709,6 @@ class App {
         if (e.button === 0) this.leftDown = false;
         if (e.button === 2) this.rightDown = false;
       });
-      document.addEventListener('contextmenu', (e) => e.preventDefault());
     }
 
     window.addEventListener('resize', () => {
@@ -6220,6 +6231,12 @@ class App {
     if (this.recipeBook.isOpen) {
       this.closeRecipeBook();
       this.handleInventoryOpen(this.inventoryScreen.isOpen);
+      return;
+    }
+    // 批次 159：配方书不再嵌进背包左栏（左栏是**物品分类**）。
+    // 背包已经开着时，R 键切的是左栏的分类视图——不然按一下就顶出一整屏配方书。
+    if (this.inventoryScreen.isOpen) {
+      this.inventoryScreen.toggleCategoryPane();
       return;
     }
     this.openRecipeBook();

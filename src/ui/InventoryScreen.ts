@@ -30,6 +30,7 @@ import {
   Inventory,
   MAIN_SIZE,
   MAIN_START,
+  TOTAL_SLOTS,
   type ItemStack,
   type SlotSource,
   stackExtras,
@@ -40,10 +41,16 @@ import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import {
   RECIPE_BOOK_TAB_LABELS,
   RECIPE_BOOK_TABS_POCKET,
+  canCraft,
   fillCraftingGrid,
+  recipeBookTab,
+  recipeGridSize,
+  recipesForResult,
   type RecipeBookTab,
 } from '../core/crafting/RecipeBook.ts';
 import type { Recipe } from '../core/crafting/Recipes.ts';
+// 配方的**摆放位置**（批次 29）：左栏点一件物品要把它怎么摆画进合成格
+import { recipeLayout } from '../core/crafting/RecipeLayout.ts';
 // 快速移动（批次 127）：Shift+左键的规则是纯逻辑（`core/container/QuickMove.ts`），
 // 界面只负责把"哪一格 / 开着哪个容器 / 容器多少格"交给它
 import { PLAYER_FILL_ORDER, fitCount, quickMove } from '../core/container/QuickMove.ts';
@@ -287,12 +294,18 @@ export const PICK_TOAST_MS = 3500;
 export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
 
 /**
- * 双栏壳里**左栏**现在显示哪一份内容（批次 157）。
+ * 双栏壳里**左栏**现在显示哪一份内容（批次 157 → 159）。
  *
  * 三份内容占的是同一个网格格子（同样的位置、同样的尺寸），切换只换内容——
  * 这是"点左边按钮时界面不该跳"的落点。
+ *
+ * - `items`    ：我的物品（3×9 仓库）
+ * - `category` ：**物品分类**（批次 159 的重点）——左栏的主要职责是"按分类找东西"，
+ *   不是"看配方"。默认只列出**我拥有的**；配方开关打开时把该分类下的**所有物品**
+ *   都列出来，我没有的那些用红底标出（用来找"不知道怎么组装"的东西）。
+ * - `creative` ：创造物品栏
  */
-export type PocketLeftPane = 'items' | 'creative' | 'recipes';
+export type PocketLeftPane = 'items' | 'creative' | 'category';
 
 /** 「全部」配方页签的放大镜（与 RecipeBook 同源；图集里没有这件物品） */
 const POCKET_RECIPE_ALL_ICON =
@@ -358,12 +371,40 @@ export class InventoryScreen {
   /** 快捷栏：携带版**无论哪一页都可见**（Wiki 原文） */
   private readonly hotbarGridEl: HTMLDivElement;
   /**
-   * 配方书的落脚点（批次 157）：**与"我的物品 / 创造物品"共用左栏**。
+   * **物品分类**那一栏的落脚点（批次 157 → 159）：**与"我的物品 / 创造物品"共用左栏**。
    *
-   * 它不自己画内容，只提供一个格子；配方面板由 `RecipeBook.attach()` 搬进来。
-   * 这样"打开配方书"是左栏换了一份内容，而不是又弹一个窗口把背包挤走。
+   * 批次 159 之前这里放的是配方书，但用户要的是"左栏 = 物品分类"：
+   * 点分类 → 列出该分类下的**物品**（默认只列我拥有的），配方开关只负责
+   * "要不要把我没有的那些也列出来（红底）"。所以这里现在装的是分类物品网格。
    */
-  private readonly recipeHostEl: HTMLDivElement;
+  private readonly categoryHostEl: HTMLDivElement;
+  /** 分类物品网格 */
+  private categoryGrid!: HTMLDivElement;
+  /** 分类物品那一栏的搜索框（只在"全部"那一栏出现） */
+  private categorySearch!: HTMLInputElement;
+  private categoryPrev!: HTMLButtonElement;
+  private categoryNext!: HTMLButtonElement;
+  private categoryPageLabel!: HTMLSpanElement;
+  private categoryPager!: HTMLDivElement;
+  /** 左栏当前是"我的物品"还是"物品分类" */
+  private leftPaneKind: 'items' | 'category' = 'items';
+  /** 当前分类（全部 / 建筑 / 装备 / 物品 / 自然） */
+  private categoryTab: RecipeBookTab = 'all';
+  private categoryQuery = '';
+  private categoryPage = 0;
+  /** 分类栏上一次渲染的指纹（没变就不重建，见 `renderCategoryGrid`） */
+  private categoryStamp = '';
+  /**
+   * 「把所有物品都列出来」（批次 159）：开着 = 该分类下的**所有**物品都出现，
+   * 我没有的那些用红底标出——为的是"找一件不知道怎么组装的东西"。
+   * 关着 = 只列我拥有的，这就是"物品分类"本身的能力。
+   */
+  private showUnowned = false;
+  /**
+   * 材料不齐时把配方"画"进合成格（批次 159）：格子里是**预览**不是实物，
+   * 缺的那件用红底标出来。点任何合成格就收掉。
+   */
+  private craftGhost: Array<{ id: number; have: boolean } | null> | null = null;
   /** 经典 UI 标题栏上的「配方书」文字按钮；携带版改用左上图标条 */
   private recipesBtn: HTMLButtonElement | null = null;
   /** 携带版左上：配方书五个分类图标 */
@@ -414,6 +455,8 @@ export class InventoryScreen {
   private heldOriginEl: HTMLElement | null = null;
   /** 当前正被标记成"选中"的那一格（每次刷新先把旧的摘掉，避免高亮残留） */
   private selectedEl: HTMLElement | null = null;
+  /** 正被按下（还没抬手）的那一格：给它"沉下去"的样子，抬手就摘 */
+  private pressingEl: HTMLElement | null = null;
   /**
    * 最近一次选中的配方分类（批次 159）。
    *
@@ -653,7 +696,7 @@ export class InventoryScreen {
         button.addEventListener('pointerdown', (event) => {
           event.preventDefault();
           // 左上分类才打开配方书；右下工作台键只负责切换右栏。
-          this.openPocketRecipes(tab);
+          this.openPocketCategory(tab);
         });
         this.pocketRecipeBar.appendChild(button);
       }
@@ -685,13 +728,15 @@ export class InventoryScreen {
       //     关着       → 只显示自己拥有的（红的自然就不见了）。
       // 原来的写法是"关 = 退回我的物品 + 切回全部"，分类白选了，所以改成这样。
       recipes.addEventListener('click', () => {
-        if (this.hooks.isRecipesOpen?.()) {
-          this.hooks.onSetRecipeOwnedOnly?.(!(this.hooks.isRecipeOwnedOnly?.() ?? false));
-          // 重排一次把按钮自己的"按下去"状态对齐（配方书那头只重画了列表）
-          this.applyInventoryChrome();
-          return;
+        // 左栏已经在某一分类里 → 切"要不要把我没有的那些也列出来（红底）"
+        if (this.leftPaneKind === 'category') {
+          this.showUnowned = !this.showUnowned;
+          this.categoryPage = 0;
+        } else {
+          // 左栏还在"我的物品" → 进入分类视图，沿用上次那一栏（不切分类）
+          this.openPocketCategory(this.lastRecipeTab);
         }
-        this.openPocketRecipes(this.lastRecipeTab);
+        this.applyInventoryChrome();
       });
       this.recipesBtn = recipes;
       header.appendChild(recipes);
@@ -931,17 +976,18 @@ export class InventoryScreen {
     this.railRight.appendChild(this.pocketSideEl);
     this.pocketTabsEl.setAttribute('aria-hidden', 'true');
 
-    // 配方书落脚点：与"我的物品 / 创造物品"同属左栏，位置由 CSS 网格固定
-    this.recipeHostEl = document.createElement('div');
-    this.recipeHostEl.className = 'inv-recipe-host';
-    this.recipeHostEl.dataset.role = 'pocket-recipe-host';
+    // 物品分类落脚点：与"我的物品 / 创造物品"同属左栏，位置由 CSS 网格固定
+    this.categoryHostEl = document.createElement('div');
+    this.categoryHostEl.className = 'inv-category-section';
+    this.categoryHostEl.dataset.role = 'pocket-category-host';
+    this.buildCategorySection();
 
     this.creativeSection = document.createElement('div');
     this.creativeSection.className = 'inv-creative-section';
     this.buildCreativeSection();
     // 携带版统一双栏：左栏在“玩家物品 / 创造物品”之间切换，右栏始终是合成或装备。
     // 放进 playerBody 才能与 mainColumn / gear 共用同一套两栏网格。
-    this.playerBody.append(this.creativeSection, this.recipeHostEl);
+    this.playerBody.append(this.creativeSection, this.categoryHostEl);
 
     // 顺序：左轨（配方+箱子）| 灰框 | 右轨（合成/盔甲）——页签在 panel 外
     this.shellEl.append(this.railLeft, this.panel, this.railRight, this.pocketTabsEl);
@@ -1134,6 +1180,195 @@ export class InventoryScreen {
     this.creativeSearch.style.display = this.creativeCategory === 'all' ? '' : 'none';
   }
 
+  /**
+   * 左栏的**物品分类**（批次 159）。
+   *
+   * 这一栏的职责是"按分类找东西"，不是"看配方"：
+   *  - 默认只列**我拥有的**（`showUnowned = false`）——泥土在我仓库里，
+   *    点"自然"就应该看到它；
+   *  - 配方开关打开时把该分类下的**所有物品**都列出来，我没有的用红底标出，
+   *    这样才知道"还有什么可以做、大概要什么"。
+   */
+  private buildCategorySection(): void {
+    this.categorySearch = document.createElement('input');
+    this.categorySearch.type = 'text';
+    this.categorySearch.className = 'inv-search';
+    this.categorySearch.placeholder = '搜索物品…';
+    this.categorySearch.addEventListener('input', () => {
+      this.categoryQuery = this.categorySearch.value.trim().toLowerCase();
+      this.renderCategoryGrid();
+    });
+
+    this.categoryGrid = document.createElement('div');
+    this.categoryGrid.className = 'inv-grid inv-category';
+
+    this.categoryPager = document.createElement('div');
+    this.categoryPager.className = 'inv-pager';
+    this.categoryPrev = this.makePagerButton('‹ 上一页', () => this.flipCategoryPage(-1));
+    this.categoryNext = this.makePagerButton('下一页 ›', () => this.flipCategoryPage(1));
+    this.categoryPageLabel = document.createElement('span');
+    this.categoryPageLabel.className = 'inv-page-label';
+    this.categoryPrev.dataset.role = 'prev';
+    this.categoryNext.dataset.role = 'next';
+    this.categoryPageLabel.dataset.role = 'label';
+    this.categoryPager.append(this.categoryPrev, this.categoryPageLabel, this.categoryNext);
+
+    this.categoryHostEl.append(this.categorySearch, this.categoryGrid, this.categoryPager);
+  }
+
+  /** 分类栏里的物品：按分类 + 搜索词筛，默认只要"我拥有的" */
+  private categoryItems(): number[] {
+    const query = this.categoryQuery;
+    return CREATIVE_ITEMS.filter((id) => {
+      if (this.categoryTab !== 'all' && recipeBookTab(id) !== this.categoryTab) return false;
+      if (query.length > 0 && !matchesQuery(id, query)) return false;
+      if (!this.showUnowned && this.inventory.countOf(id) <= 0) return false;
+      return true;
+    });
+  }
+
+  /**
+   * 背包格子的一份廉价指纹：分类栏要不要重建就看它变了没。
+   *
+   * ⚠️ 这一栏最多要画 800 个 `<canvas>`（"全部物品"打开时），而 `refresh()`
+   * 每次都会走到排布——不缓存就是"每搬一件东西重画八百个图标"。
+   */
+  private inventoryStamp(): string {
+    let stamp = '';
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
+      const stack = this.inventory.get(i);
+      stamp += stack ? `${stack.id}x${stack.count},` : '-,';
+    }
+    return stamp;
+  }
+
+  private renderCategoryGrid(): void {
+    // ⚠️ 只有"分类 / 搜索词 / 开关 / 页码 / 背包内容"真的变了才重建：
+    //    `refresh()` 每次都会走到这里，而无脑重建等于每次搬东西都重画上百个图标。
+    const key = [
+      this.categoryTab,
+      this.categoryQuery,
+      this.showUnowned ? 'all' : 'owned',
+      this.categoryPage,
+      this.inventoryStamp(),
+    ].join('|');
+    if (key === this.categoryStamp) return;
+    this.categoryStamp = key;
+
+    // 搜索框只在"全部"那一栏出现（与创造栏、配方书同一口径）
+    this.categorySearch.style.display = this.categoryTab === 'all' ? '' : 'none';
+    const items = this.categoryItems();
+    // 触摸端整表滚动、PC 底部翻页（与创造栏同一条判据）
+    const scrollMode = isTouchUi();
+    const pageSize = pageSizeFor(this.viewportWidth);
+    const pages = pageCount(items.length, pageSize);
+    this.categoryPage = scrollMode ? 0 : clampPage(this.categoryPage, items.length, pageSize);
+    const visible = scrollMode ? items : slicePage(items, this.categoryPage, pageSize);
+
+    this.categoryGrid.replaceChildren();
+    for (const itemId of visible) {
+      const owned = this.inventory.countOf(itemId);
+      const slot = this.createSlot();
+      slot.classList.add('category-slot');
+      if (owned <= 0) slot.classList.add('locked');
+      // 提示框（悬停 / 长按）与"点击弹说明"都靠这份数据
+      this.tooltipStacks.set(slot, { id: itemId, count: owned > 0 ? owned : 1 });
+      drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
+      const count = slot.querySelector('.inv-count') as HTMLSpanElement | null;
+      if (count && owned > 1) count.textContent = String(owned);
+      slot.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        this.pickCategoryItem(itemId);
+      });
+      this.categoryGrid.appendChild(slot);
+    }
+
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'inv-empty';
+      empty.textContent = this.showUnowned
+        ? '这一栏里没有匹配的物品'
+        : '这一栏里你还没有东西（打开配方按钮可以看全部）';
+      this.categoryGrid.appendChild(empty);
+    }
+
+    this.categoryPageLabel.textContent = pageLabel(this.categoryPage, items.length, pageSize);
+    this.categoryPrev.disabled = this.categoryPage <= 0;
+    this.categoryNext.disabled = this.categoryPage >= pages - 1;
+    this.categoryPager.classList.toggle('hidden', scrollMode || pages <= 1);
+  }
+
+  private flipCategoryPage(delta: number): void {
+    this.categoryPage += delta;
+    this.renderCategoryGrid();
+  }
+
+  /**
+   * 点分类里的一件物品（批次 159）。
+   *
+   * ① 说明一律弹在快捷栏上方（那条由委托的 `showPickToast` 负责，固定位置）；
+   * ② 右栏在合成状态时，把这件东西的**配方**摆出来——可组装就以它为目标，
+   *    材料够就直接摆进合成格；不够就把配方**画**进合成格，缺的那件红底。
+   */
+  private pickCategoryItem(itemId: number): void {
+    if (this.pocketTab !== 'crafting') return;
+    const recipe = recipesForResult(itemId)[0];
+    this.clearCraftGhost();
+    if (!recipe || recipeGridSize(recipe) > this.crafting.size) {
+      this.refresh();
+      return;
+    }
+    if (canCraft(this.inventory, recipe).ok) {
+      fillCraftingGrid(this.inventory, this.crafting, recipe);
+      this.refresh();
+      return;
+    }
+    this.showRecipeGhost(recipe);
+  }
+
+  /** 材料不齐：把配方"画"进合成格（缺的红底），让人一眼看出差什么 */
+  private showRecipeGhost(recipe: Recipe): void {
+    const size = this.crafting.size;
+    const layout = recipeLayout(recipe);
+    const wanted: Array<number | null> =
+      layout.kind === 'shaped'
+        ? [...layout.cells]
+        : [...layout.items];
+    const used = new Map<number, number>();
+    const ghost: Array<{ id: number; have: boolean } | null> = new Array(size * size).fill(null);
+    for (let i = 0; i < wanted.length && i < ghost.length; i++) {
+      const id = wanted[i]!;
+      if (id === null || id === undefined) continue;
+      const taken = (used.get(id) ?? 0) + 1;
+      used.set(id, taken);
+      ghost[i] = { id, have: taken <= this.inventory.countOf(id) };
+    }
+    this.craftGhost = ghost;
+    this.refresh();
+  }
+
+  private clearCraftGhost(): void {
+    if (!this.craftGhost) return;
+    this.craftGhost = null;
+    for (const [key, binding] of this.bindings) {
+      if (key.startsWith('craft:')) binding.element.classList.remove('ghost-missing');
+    }
+  }
+
+  /** 把"配方预览"画到合成格上（格子里是预览，不是实物） */
+  private renderCraftGhost(): void {
+    const ghost = this.craftGhost;
+    if (!ghost) return;
+    for (let i = 0; i < ghost.length; i++) {
+      const binding = this.bindings.get(`craft:${i}`);
+      if (!binding) continue;
+      const cell = ghost[i] ?? null;
+      const element = binding.element;
+      this.renderInto(element, cell ? { id: cell.id, count: 1 } : null);
+      element.classList.toggle('ghost-missing', cell !== null && !cell.have);
+    }
+  }
+
   private makeSearchTabIcon(): SVGSVGElement {
     const ns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(ns, 'svg');
@@ -1174,10 +1409,12 @@ export class InventoryScreen {
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       if (tab === 'inventory') {
-        // 左下箱子只切左栏：生存时从配方表回到玩家物品，创造时在无限物品与玩家物品间切换。
+        // 左下箱子只切左栏：生存时从"物品分类"回到玩家物品，创造时在无限物品与玩家物品间切换。
         if (this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false)) {
           this.creativeSurvival = true;
         }
+        // 批次 159：左栏回到"我的物品"（分类视图是玩家自己点开的，这里就是退出它）
+        this.leftPaneKind = 'items';
         this.hooks.onCloseRecipes?.();
         this.restoreInvTabToRail();
         this.applyInventoryChrome();
@@ -1209,12 +1446,31 @@ export class InventoryScreen {
    * 现在配方书占的就是左栏那格，栏目对齐、面板尺寸不变，
    * 只是左栏里的内容从"我的物品"换成了"配方列表"。
    */
-  private openPocketRecipes(tab: RecipeBookTab): void {
-    this.pocketTab = 'crafting';
-    this.lastRecipeTab = tab;
+  /**
+   * 从外面（R 键）在"我的物品 ↔ 物品分类"之间切（批次 159）。
+   *
+   * 配方书已经不再嵌进左栏了，所以 R 键开着背包时切的是**分类栏**——
+   * 否则按一下 R 会顶出一整屏配方书盖在背包上，那又是"另一个窗口"。
+   */
+  toggleCategoryPane(): void {
+    if (this.leftPaneKind === 'category') this.leftPaneKind = 'items';
+    else this.openPocketCategory(this.lastRecipeTab);
     this.applyInventoryChrome();
-    // 已经开着时 `show(tab)` 只是换一栏，不会再弹一次
-    this.hooks.onOpenRecipes?.(tab);
+  }
+
+  /**
+   * 左轨那排分类图标（批次 157 → 159）：**左栏换成该分类下的物品**。
+   *
+   * 批次 159 之前这里会打开配方书；现在左栏的职责是"物品分类"——
+   * 点"自然"就该看到仓库里那组泥土，配方只是"要不要把没有的也列出来"。
+   */
+  private openPocketCategory(tab: RecipeBookTab): void {
+    this.pocketTab = 'crafting';
+    this.categoryTab = tab;
+    this.categoryPage = 0;
+    this.lastRecipeTab = tab;
+    this.leftPaneKind = 'category';
+    this.applyInventoryChrome();
   }
 
   /**
@@ -1277,9 +1533,11 @@ export class InventoryScreen {
     if (this.pocketTab === 'inventory') this.pocketTab = 'crafting';
     if (workbench) this.pocketTab = 'crafting';
 
-    // 左栏三选一：**位置与尺寸完全一致**（同一个网格格子），换的只是内容
-    const recipesOpen = this.hooks.isRecipesOpen?.() ?? false;
-    const leftPane: PocketLeftPane = showCreativeItems ? 'creative' : recipesOpen ? 'recipes' : 'items';
+    // 左栏三选一：**位置与尺寸完全一致**（同一个网格格子），换的只是内容。
+    // ⚠️ 批次 159：左栏的主要职责是**物品分类**（`category`），配方书不再嵌进来
+    // ——"配方"只是分类栏上"要不要把我没有的也列出来"那一颗开关。
+    const leftPane: PocketLeftPane =
+      showCreativeItems ? 'creative' : this.leftPaneKind === 'category' ? 'category' : 'items';
 
     this.panel.classList.add('pocket-ui', 'pocket-dual');
     this.panel.classList.toggle('creative-ui', showCreativeItems);
@@ -1290,10 +1548,11 @@ export class InventoryScreen {
     this.playerBody.style.display = '';
 
     this.creativeSection.style.display = leftPane === 'creative' ? '' : 'none';
-    this.recipeHostEl.style.display = leftPane === 'recipes' ? 'block' : 'none';
-    // 批次 159：配方列表占着左栏时，右栏只留合成区——合成区**下方那片 3×9 仓库不显示**。
-    // 工作台界面例外：它本来就是"3×3 + 下面 3×9"的排法，藏了就没处放材料。
-    const hideMainGrid = leftPane === 'creative' || (leftPane === 'recipes' && !workbench);
+    this.categoryHostEl.style.display = leftPane === 'category' ? 'flex' : 'none';
+    if (leftPane === 'category') this.renderCategoryGrid();
+    // 批次 159：左栏是物品分类时，右栏只留合成区——合成区**下方那片 3×9 仓库不显示**
+    //（分类栏已经把"我有什么"列出来了）。工作台界面例外：它本来就是 3×3 + 3×9 的排法。
+    const hideMainGrid = leftPane === 'creative' || (leftPane === 'category' && !workbench);
     this.mainGridEl.style.display = hideMainGrid ? 'none' : '';
     // 左栏上方那行「物品栏」也不要（基岩版左栏没有这行字）
     this.personalInventoryTitleEl.style.display = 'none';
@@ -1305,16 +1564,16 @@ export class InventoryScreen {
     this.gearEl.style.display = rightShowsCrafting ? 'none' : '';
     this.syncCraftArrow(false);
 
-    // 配方书嵌进左栏 / 还回整屏那一层
-    this.hooks.onRecipeHost?.(leftPane === 'recipes' ? this.recipeHostEl : null);
+    // 批次 159：配方书不再嵌进左栏（左栏是物品分类），它只作为整屏那一层存在
+    this.detachRecipeBook();
 
-    // 生存左轨是配方分类 + 箱子；创造左轨复用创造物品分类
+    // 生存左轨是物品分类 + 箱子；创造左轨复用创造物品分类
     this.syncCreativeRails(leftPane === 'creative');
     if (leftPane !== 'creative') {
       this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes);
       this.railLeft.classList.remove('hidden');
       // 批次 159：点亮当前分类（点了哪一颗要看得出来）
-      this.syncRecipeRail(leftPane === 'recipes' ? (this.hooks.currentRecipeTab?.() ?? null) : null);
+      this.syncRecipeRail(leftPane === 'category' ? this.categoryTab : null);
     }
     // 工作台只有"合成"这一件事，右轨那两颗（合成/盔甲）没有意义
     this.railRight.classList.toggle('hidden', workbench);
@@ -1324,11 +1583,11 @@ export class InventoryScreen {
     this.renderCreativeGrid();
     // 配方书开关：生存双栏时**留在标题栏**（与关闭键同一行，排在左栏右上角那一带），
     // 创造模式左栏是物品分类，用不上它。
-    // ⚠️ active = "本分类全部列出、不拥有的用红底标出"；关着 = 只显示自己拥有的。
-    const ownedOnly = this.hooks.isRecipeOwnedOnly?.() ?? false;
+    // ⚠️ active = "该分类下的所有物品都列出来（没有的红底）"；
+    //    关着 = 只列自己拥有的，这就是"物品分类"本身的能力。
     if (this.recipesBtn) {
       this.recipesBtn.classList.toggle('hidden', showCreativeItems);
-      this.recipesBtn.classList.toggle('active', leftPane === 'recipes' && !ownedOnly);
+      this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned);
     }
 
     // 换栏内容时给一下淡入：**位置不动**，只是让人看见"这一栏换了一份"
@@ -1351,7 +1610,7 @@ export class InventoryScreen {
   /** 左栏三种内容各自对应的元素（淡入要用） */
   private leftPaneEl(pane: PocketLeftPane): HTMLElement {
     if (pane === 'creative') return this.creativeSection;
-    if (pane === 'recipes') return this.recipeHostEl;
+    if (pane === 'category') return this.categoryHostEl;
     return this.mainGridEl;
   }
 
@@ -1382,7 +1641,7 @@ export class InventoryScreen {
 
   /** 把配方书从背左栏还回整屏那一层（关背包 / 切到容器界面时） */
   private detachRecipeBook(): void {
-    this.recipeHostEl.style.display = 'none';
+    this.categoryHostEl.style.display = 'none';
     this.hooks.onRecipeHost?.(null);
   }
 
@@ -2023,10 +2282,21 @@ export class InventoryScreen {
         this.heldElement.style.left = `${pointer.clientX}px`;
         this.heldElement.style.top = `${pointer.clientY}px`;
         const slot = (event.target as HTMLElement | null)?.closest<HTMLElement>('.inv-slot');
-        if (slot) this.showPickToast(slot);
+        // 合成格里那套是"配方预览"（材料不齐时画的）：一碰就收掉，换成真实内容
+        if (this.craftGhost && slot?.closest('.inv-craft')) this.clearCraftGhost();
+        if (slot) {
+          // 批次 159：**按下就沉下去**。触摸端一次轻点要到 `pointerup` 才结算
+          //（要跟长按区分），等结算完再给反馈就成了"点了要等一下才选中"。
+          this.markPressing(slot);
+          this.showPickToast(slot);
+        }
       },
       true,
     );
+    // 抬手 / 取消就摘掉"按下去"那一层：真正的选中（`.selected`）由刷新接着接上
+    for (const type of ['pointerup', 'pointercancel'] as const) {
+      document.addEventListener(type, () => this.markPressing(null));
+    }
 
     // 松手：把这一趟拖过的槽位结算掉（批次 128）
     document.addEventListener('pointerup', () => {
@@ -2735,18 +3005,17 @@ export class InventoryScreen {
     }
 
     this.titleEl.textContent = MODE_TITLES[mode];
-    // 每次从快捷栏打开玩家背包：落到「物品栏」页（Wiki 左下箱子），并收起配方书
+    // 每次从快捷栏打开玩家背包：落到「物品栏」页（Wiki 左下箱子），左栏是"我的物品"
     if (mode === 'inventory') {
       this.pocketTab = 'inventory';
+      this.leftPaneKind = 'items';
       this.hooks.onCloseRecipes?.();
     }
     this.applyInventoryChrome();
     this.openPanel();
-    // 基岩版工作台默认把配方书摊在左侧（现在是左栏）。必须等背包先 open，
+    // 基岩版工作台默认把左侧那一片摊开。必须等背包先 open，
     // 否则主程序的 openRecipeBook 会把模式改回普通 inventory。
-    if (mode === 'crafting') {
-      this.hooks.onOpenRecipes?.('all');
-    }
+    if (mode === 'crafting') this.openPocketCategory('all');
   }
 
   toggle(): void {
@@ -2846,6 +3115,8 @@ export class InventoryScreen {
     // 配方书是从背包左栏借来的位置，背包关了就得还回去
     this.detachRecipeBook();
     this.hidePickToast();
+    this.clearCraftGhost();
+    this.markPressing(null);
     this.lastLeftPane = '';
     this.restoreInvTabToRail();
     this.hooks.onOpenChange?.(false);
@@ -2962,6 +3233,8 @@ export class InventoryScreen {
       this.heldOriginEl = null;
       this.heldFromCreative = false;
     } else if (this.heldOriginEl && !this.heldOriginEl.isConnected) this.heldOriginEl = null;
+    // 材料不齐时把配方"画"进合成格（预览，不是实物）
+    if (this.craftGhost) this.renderCraftGhost();
     if (this.selectedEl && this.selectedEl !== this.heldOriginEl) {
       this.selectedEl.classList.remove('selected');
       this.selectedEl = null;
@@ -3062,6 +3335,18 @@ export class InventoryScreen {
     const left = Math.min(Math.max(rect.left + rect.width / 2, half + 6), window.innerWidth - half - 6);
     this.pickToastEl.style.top = `${Math.round(top)}px`;
     this.pickToastEl.style.left = `${Math.round(left)}px`;
+  }
+
+  /**
+   * 给某一格加"按下去"的样子（批次 159），传 `null` 收掉。
+   *
+   * 触摸端一次轻点要到抬手才结算（要跟长按区分），所以**光靠 `.selected` 会慢半拍**；
+   * 按下这一刻先沉一下，抬手时真正的选中（或什么都没发生）再接上。
+   */
+  private markPressing(slot: HTMLElement | null): void {
+    if (this.pressingEl && this.pressingEl !== slot) this.pressingEl.classList.remove('pressing');
+    this.pressingEl = slot;
+    slot?.classList.add('pressing');
   }
 
   /** 收起说明浮层（超时 / 关界面） */

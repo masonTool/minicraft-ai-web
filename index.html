@@ -1967,17 +1967,44 @@
         padding-bottom: 8px;
       }
 
-      /* ---------------- 左栏：我的物品 / 创造物品 / 配方书 ----------------
+      /* ---------------- 左栏：我的物品 / 创造物品 / 物品分类 ----------------
          三份内容**占的是同一个格子**（col 1、row 1/span 2），切换只换内容：
          面板宽高、两栏的分界、右栏的位置全都不动——这就是"不该跳"的落点。 */
-      .inv-panel.pocket-ui.pocket-dual .inv-recipe-host {
+      .inv-panel.pocket-ui.pocket-dual .inv-category-section {
         grid-column: 1;
         grid-row: 1 / span 2;
         display: none;
+        flex-direction: column;
+        gap: 4px;
         min-width: 0;
         min-height: 0;
         overflow: hidden;
       }
+      /* 分类里的物品：半栏宽塞不下 9 列，7 列 × 40px 与创造栏一致 */
+      .inv-grid.inv-category {
+        grid-template-columns: repeat(7, 40px);
+        gap: 2px;
+        justify-content: center;
+        align-content: start;
+        min-height: 0;
+        max-height: min(38vh, 200px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      .inv-grid.inv-category .inv-slot { width: 40px; height: 40px; max-width: 40px; max-height: 40px; }
+      .inv-grid.inv-category .inv-slot canvas { width: 28px; height: 28px; }
+      /* 我没有的那些：红底（配方开关打开时才可能出现在这一栏里） */
+      .inv-slot.locked {
+        background: #9b3b35;
+        border-color: #cf7770 #54201c #54201c #cf7770;
+      }
+      .inv-slot.locked canvas { opacity: .62; filter: grayscale(.35); }
+      /* 配方预览里"差的那件"同样是红底（格子里是预览，不是实物） */
+      .inv-slot.ghost-missing {
+        background: #9b3b35;
+        border-color: #cf7770 #54201c #54201c #cf7770;
+      }
+      .inv-slot.ghost-missing canvas { opacity: .62; filter: grayscale(.35); }
       /* 换栏目内容时的淡入：只改透明度，**不碰几何**（一碰就又变成"面板在动"） */
       @keyframes inv-pane-in {
         from { opacity: 0; }
@@ -2108,13 +2135,17 @@
       /* 悬停亮一档、按下凹一点：此前槽位完全没有交互反馈（点了才知道点到了没） */
       .inv-slot:hover { background: var(--slot-bg-hover); }
       .inv-slot:active { transform: scale(.96); }
-      /* 批次 159：选中 = 底色变深 + **一圈白框**（光靠深一点点在手机上太不明显）。
+      /* 批次 159：选中 = **沉下去**（槽位本来就是"洞"，选中就是再按深一点：
+         左上压一道内阴影 + 底色深一档）+ 一圈白框（手机上才看得清）。
          ⚠️ 必须压住 `:hover`：鼠标停在选中那一格上时，悬停那条会把深色顶掉。
-         ⚠️ 空槽永远不会有这个类：`held` 只在真的拿着一叠东西时才存在。 */
+         ⚠️ 空槽永远不会有这个类：`held` 只在真的拿着一叠东西时才存在。
+         `.pressing` 是**按下那一刻**就给的同一副样子：触摸端一次轻点要到
+         `pointerup` 才结算（要跟长按区分），等结算再变就是"点了要等一下才选中"。 */
+      .inv-slot.pressing,
       .inv-slot.selected,
       .inv-slot.selected:hover {
         background: var(--slot-bg-selected);
-        box-shadow: inset 0 0 0 2px #ffffffe6;
+        box-shadow: inset 3px 3px 0 rgba(0, 0, 0, .38), inset 0 0 0 2px rgba(255, 255, 255, .9);
       }
 
       /* ---------------- 耐久条（批次 28） ----------------
@@ -2228,6 +2259,32 @@
       #inv-held span {
         position: absolute; right: -2px; bottom: -2px; font-size: 12px; color: #fff;
         text-shadow: 1px 1px 0 #000;
+      }
+
+      /* ---------------- 禁掉 HTML 自带的长按效果（批次 159） ----------------
+         长按在游戏里**是我们的手势**（取一半 / 看详情 / 选数量），
+         但手机上长按一个 `<canvas>` 会弹"保存图片 / 下载图片"，
+         长按文字会选中并弹选择菜单——那一套必须关掉。
+         ⚠️ 只关游戏这一侧：聊天框、搜索框、告示牌里的输入框要能正常选中/粘贴
+            （见下面 `#chat input` 那条例外）。 */
+      canvas,
+      img {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      body,
+      #app, #hud, #touch-ui, #inventory-screen, #recipe-book, #advancements,
+      #settings-screen, #world-screen, #chat, #sign-editor, #item-tooltip, #inv-pick-toast {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      /* 输入框例外：不给它"不能选"这条，否则手机上没法长按粘贴 */
+      input, textarea {
+        -webkit-touch-callout: default;
+        -webkit-user-select: text;
+        user-select: text;
       }
 
       /* ---------------- 触摸操作层（手机 / 平板）----------------
