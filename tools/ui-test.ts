@@ -582,14 +582,24 @@ console.log('\n[携带版细节收口（二）（批次 159）]');
     '高亮跟着配方书当前那一栏走',
     invSrc.includes('private syncRecipeRail(active: RecipeBookTab | null): void {') &&
       recipeSrc.includes('get currentTab(): RecipeBookTab') &&
-      mainSrc.includes('currentRecipeTab: () => this.recipeBook.currentTab'),
+      mainSrc.includes('currentRecipeTab: () => this.currentRecipeTab()'),
   );
 
   // ② 配方开关不切分类 + 主程序把"只显示拥有的"接上
   check(
     '主程序接上"只显示我拥有的"的读与写',
-    mainSrc.includes('isRecipeOwnedOnly: () => this.recipeBook.onlyOwned') &&
-      mainSrc.includes('onSetRecipeOwnedOnly: (on) => this.recipeBook.setOnlyOwned(on)'),
+    mainSrc.includes('isRecipeOwnedOnly: () => this.isRecipeOwnedOnly()') &&
+      mainSrc.includes('onSetRecipeOwnedOnly: (on) => this.setRecipeOwnedOnly(on)'),
+  );
+  // ⚠️ 真出过一次：`applyInventoryChrome()` 在 InventoryScreen **构造函数**里就会跑
+  //（建创造栏时），那时 `App.recipeBook` 还是 undefined，钩子里直接读它就崩在
+  // "Cannot read properties of undefined (reading 'onlyOwned')"。
+  const recipeHooks = mainSrc
+    .split('\n')
+    .filter((line) => /^\s+(isRecipesOpen|currentRecipeTab|isRecipeOwnedOnly|onSetRecipeOwnedOnly|onRecipeHost):/.test(line));
+  check(
+    '背包那些配方书钩子都走兜底包裹（构造期 recipeBook 还没建）',
+    recipeHooks.length === 5 && recipeHooks.every((line) => !line.includes('this.recipeBook.')),
   );
 
   // ③ 选中效果更明显：底色变深之外再加一圈白框

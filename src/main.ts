@@ -1282,10 +1282,10 @@ class App {
         // 左栏是不是正被配方书占着（决定显示"我的物品"还是"配方列表"）
         isRecipesOpen: () => this.isRecipeBookOpen(),
         // 左轨那排分类图标要点亮当前分类
-        currentRecipeTab: () => this.recipeBook.currentTab,
+        currentRecipeTab: () => this.currentRecipeTab(),
         // 「只显示我拥有的」：开着 = 筛掉不拥有的；关着 = 全部列出、不拥有的红底
-        isRecipeOwnedOnly: () => this.recipeBook.onlyOwned,
-        onSetRecipeOwnedOnly: (on) => this.recipeBook.setOnlyOwned(on),
+        isRecipeOwnedOnly: () => this.isRecipeOwnedOnly(),
+        onSetRecipeOwnedOnly: (on) => this.setRecipeOwnedOnly(on),
         // 把配方书搬进背包的左栏（或还回整屏那一层）
         onRecipeHost: (host) => this.attachRecipeBook(host),
         // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口
@@ -6173,6 +6173,27 @@ class App {
     return this.recipeBook ? this.recipeBook.isOpen : false;
   }
 
+  /**
+   * 同上：构造期还没有配方书可问，这几个小包裹统一兜底。
+   *
+   * ⚠️ 批次 159 在这里踩过一次——`applyInventoryChrome()` 在 `InventoryScreen` 的
+   *    构造函数里就会跑一次（建造创造栏时），那时 `this.recipeBook` 还是 `undefined`，
+   *    直接读 `this.recipeBook.onlyOwned` 就是
+   *    "Cannot read properties of undefined (reading 'onlyOwned')"。
+   *    **新增钩子时必须走这里**，别在钩子里直接摸 `this.recipeBook`。
+   */
+  private currentRecipeTab(): RecipeBookTab {
+    return this.recipeBook ? this.recipeBook.currentTab : 'all';
+  }
+
+  private isRecipeOwnedOnly(): boolean {
+    return this.recipeBook ? this.recipeBook.onlyOwned : false;
+  }
+
+  private setRecipeOwnedOnly(on: boolean): void {
+    this.recipeBook?.setOnlyOwned(on);
+  }
+
   private attachRecipeBook(host: HTMLElement | null): void {
     this.recipeBook?.attach(host);
   }
@@ -6189,7 +6210,7 @@ class App {
 
   /** 收起配方书：背包左栏还回"我的物品" */
   private closeRecipeBook(): void {
-    if (!this.recipeBook.isOpen) return;
+    if (!this.isRecipeBookOpen()) return;
     this.recipeBook.hide();
     this.inventoryScreen.syncRecipePane();
   }
