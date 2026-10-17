@@ -394,6 +394,8 @@ export class InventoryScreen {
   private categoryPage = 0;
   /** 分类栏上一次渲染的指纹（没变就不重建，见 `renderCategoryGrid`） */
   private categoryStamp = '';
+  /** 创造栏上一次渲染的指纹（内容只跟分类 / 搜索词 / 页码有关，见 `renderCreativeGrid`） */
+  private creativeStamp = '';
   /**
    * 「把所有物品都列出来」（批次 159）：开着 = 该分类下的**所有**物品都出现，
    * 我没有的那些用红底标出——为的是"找一件不知道怎么组装的东西"。
@@ -1102,6 +1104,12 @@ export class InventoryScreen {
         this.creativeCategory = category;
         // 换分类回到第 1 页：停在"第 7 页"而新分类只有 2 页会显示空网格
         this.creativePage = 0;
+        // ⚠️ 换到不显示搜索框的分类时**把搜索词清掉**，否则那是个看不见的过滤器：
+        //    列表会一直空着，而玩家已经没有输入框可以取消它（"分类栏怎么全空了"）
+        if (category !== 'all') {
+          this.creativeQuery = '';
+          this.creativeSearch.value = '';
+        }
         // Wiki：创造模式下点左侧分类 = 回到创造物品网格（离开生存背包）
         if (this.creativeSurvival) {
           this.creativeSurvival = false;
@@ -1520,6 +1528,12 @@ export class InventoryScreen {
     this.categoryPage = 0;
     this.lastRecipeTab = tab;
     this.leftPaneKind = 'category';
+    // ⚠️ 换到不显示搜索框的分类时清掉搜索词：否则那是个**看不见的过滤器**，
+    //    列表会一直空着，而玩家已经没有输入框可以取消它（"分类栏怎么全空了"）。
+    if (tab !== 'all') {
+      this.categoryQuery = '';
+      this.categorySearch.value = '';
+    }
     this.applyInventoryChrome();
   }
 
@@ -1822,10 +1836,28 @@ export class InventoryScreen {
     }
   }
 
-  /** 按当前分类与搜索词重建创造网格；经典 UI 分页，携带版整表滚动。 */
+  /** 按当前分类与搜索词重建创造网格；触摸端整表滚动，PC 底部翻页。 */
   private renderCreativeGrid(): void {
     // 搜索框只在「搜索」那一栏出现（与生存模式同一个口径，见 `syncCreativeSearch`）
     this.syncCreativeSearch();
+
+    // 批次 159：**触摸端整表滚动、PC 底部翻页**——手指滑一格是本能，
+    // 手机上那两颗"上一页/下一页"既难点也反直觉；PC 才用翻页条。
+    // （原来是按"是不是携带版布局"判的，统一成携带版之后 PC 也误伤成了滚动。）
+    const scrollMode = isTouchUi();
+    // ⚠️ 这一栏有 **800 多个格子**，而 `refresh()` 每次都会走到这里（搬一次东西一次）。
+    //    原来是无脑重建：每次都要先 `replaceChildren()` 再画 800 个 canvas，
+    //    手机上那几十毫秒里**整栏是空的**——连点几下就是"分类栏怎么全空了"。
+    //    内容只跟"分类 / 搜索词 / 页码"有关（创造格不显示数量），所以按它们缓存。
+    const key = [
+      this.creativeCategory,
+      this.creativeQuery,
+      scrollMode ? 0 : this.creativePage,
+      scrollMode ? 'scroll' : pageSizeFor(this.viewportWidth),
+    ].join('|');
+    if (key === this.creativeStamp) return;
+    this.creativeStamp = key;
+
     const query = this.creativeQuery;
     const items = CREATIVE_ITEMS.filter((itemId) => {
       if (this.creativeCategory !== 'all' && creativeTabFor(itemId) !== this.creativeCategory) return false;
@@ -1834,15 +1866,14 @@ export class InventoryScreen {
       return true;
     });
 
-    // 批次 159：**触摸端整表滚动、PC 底部翻页**——手指滑一格是本能，
-    // 手机上那两颗"上一页/下一页"既难点也反直觉；PC 才用翻页条。
-    // （原来是按"是不是携带版布局"判的，统一成携带版之后 PC 也误伤成了滚动。）
-    const scrollMode = isTouchUi();
     const pageSize = pageSizeFor(this.viewportWidth);
     // 夹一次页码：换分类、改搜索词、转屏之后原来的页码都可能越界
     this.creativePage = scrollMode ? 0 : clampPage(this.creativePage, items.length, pageSize);
     const visible = scrollMode ? items : slicePage(items, this.creativePage, pageSize);
 
+    // 换掉整批格子时把它们在 `tooltipStacks` 里的条目一起删掉：
+    // 不删的话每重建一次就多留 800 条指向旧元素的记录（只增不减）。
+    for (const child of Array.from(this.creativeGrid.children)) this.tooltipStacks.delete(child as HTMLElement);
     this.creativeGrid.replaceChildren();
     // 批次 159：整表是**重建**的（`replaceChildren`），所以"选中的那一格"会跟着被丢掉。
     // 重建前先记下手上那件的 id，重建后按 id 把高亮搬回新格子——

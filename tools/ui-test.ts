@@ -711,6 +711,29 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   check('输入框例外（还能长按粘贴）', css.includes('-webkit-user-select: text;'));
 }
 
+console.log('\n[分类栏"怎么就空了"（批次 159 六）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  // ① 创造栏 800 多个格子**不能**每次 refresh 都重建：重建期间整栏是空的，
+  //    连点几下就是"分类栏怎么全空了"
+  check(
+    '创造栏按指纹缓存（800 个格子不再每次搬东西都重画）',
+    invSrc.includes('private creativeStamp'),
+  );
+  check('指纹里带着分类 / 搜索词 / 页码 / 页大小', invSrc.includes('if (key === this.creativeStamp) return;'));
+  // ② 看不见的过滤器：换到不显示搜索框的分类时要把搜索词清掉
+  check(
+    '换分类时清掉藏起来的搜索词',
+    invSrc.includes("if (category !== 'all') {") && invSrc.includes("this.creativeQuery = '';") && invSrc.includes("this.categoryQuery = '';"),
+  );
+  // ③ 竖排容器里搜索框不能吃剩余高度（会把网格挤出可视区）
+  check('分类栏搜索框 flex: 0 0 auto', css.includes('.inv-category-section .inv-search {') && css.includes('flex: 0 0 auto;'));
+  // ④ 重建整批格子时顺手把它们在 tooltipStacks 里的条目删掉（否则只增不减）
+  check('重建时清掉旧格子的提示数据', invSrc.includes('this.tooltipStacks.delete(child as HTMLElement)'));
+}
+
 console.log('\n[玩家预览占位（批次 141）]');
 {
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');

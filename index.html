@@ -1980,6 +1980,14 @@
         min-height: 0;
         overflow: hidden;
       }
+      /* ⚠️ 搜索框在**竖排**容器里不能沿用 `flex: 1`（那是"吃掉剩余高度"），
+         否则它会把下面的物品网格挤出可视区——表现就是"这一栏里什么都看不见" */
+      .inv-category-section .inv-search {
+        flex: 0 0 auto;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
       /* 分类里的物品：半栏宽塞不下 9 列，7 列 × 40px 与创造栏一致 */
       .inv-grid.inv-category {
         grid-template-columns: repeat(7, 40px);
@@ -1987,7 +1995,9 @@
         justify-content: center;
         align-content: start;
         min-height: 0;
-        max-height: min(38vh, 200px);
+        /* 只占 4 行：搜索框 + 网格 + 翻页条要和面板高度（约 318px）对得上，
+           再高就会把翻页条挤出可视区（外框是 `overflow: hidden`） */
+        max-height: min(32vh, 160px);
         overflow-y: auto;
         overscroll-behavior: contain;
       }
