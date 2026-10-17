@@ -424,6 +424,9 @@ console.log('\n[携带版分标签页（批次 140）]');
   check('主程序把 tab 传给配方书', mainSrc.includes('this.recipeBook.show(tab)'));
   check('携带版 CSS 在', css.includes('.inv-panel.pocket-ui') && css.includes('.inv-pocket-tabs') && css.includes('.inv-pocket-side'));
   check('经典下隐藏携带版控件', css.includes('.inv-pocket-tabs.hidden') && css.includes('.inv-pocket-recipes.hidden'));
+  // 批次 145：页签不得用负偏移伸出灰框
+  check('携带版页签不伸出面板（无 right:-N）', !/inv-pocket-side\s*\{[^}]*right:\s*-\d/.test(css.replace(/\s+/g, ' ')));
+  check('携带版面板 overflow:hidden + 内容区内滚', css.includes('.inv-panel.pocket-ui {') && css.includes('overflow: hidden;'));
 }
 
 console.log('\n[玩家预览占位（批次 141）]');
@@ -662,9 +665,10 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const compact = html.replace(/\s+/g, ' ');
   check(
-    '触摸端背包面板也吃 --panel-w/--panel-h（不再 fit-content 撑出视口）',
+    '触摸端背包面板收进视口（吃 --panel-*，再用 vw/dvh 夹紧）',
     compact.includes('body.touch-mode .inv-panel {') &&
-      compact.includes('body.touch-mode .inv-panel { width: var(--panel-w); max-width: var(--panel-w); height: var(--panel-h); max-height: var(--panel-h);'),
+      compact.includes('min(96vw, var(--panel-w))') &&
+      compact.includes('min(86dvh, var(--panel-h))'),
   );
 }
 
@@ -850,10 +854,10 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   );
   check('装备格竖排成一一列（原版位置）', compact.includes('.inv-grid.inv-armor { grid-template-columns: 42px; }'));
   check('快捷栏与主背包之间留一道缝', compact.includes('.inv-main .inv-hotbar { margin-top: 5px; }'));
-  // 成就 / 配方书 / 设置 / 触摸端背包：同一套固定尺寸（原来三块，触摸端背包也并进来）
+  // 成就 / 配方书 / 设置：仍直接吃 --panel-*；触摸背包用 min(vw/dvh, --panel-*) 夹紧
   check(
-    '成就/配方书/设置/触摸背包共用同一套固定尺寸',
-    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 4,
+    '成就/配方书/设置共用同一套固定尺寸',
+    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 3,
   );
   // 文字标签是原来我们自己加的（原版没有），这次按用户要求去掉
   const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');

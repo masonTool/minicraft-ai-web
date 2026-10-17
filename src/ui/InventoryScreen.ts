@@ -114,7 +114,7 @@ import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
 import { Block } from '../core/registry/blocks.ts';
 import { CREATIVE_TAB_ICONS, RECIPE_TAB_ICONS } from './CreativeTabs.ts';
 import { drawPlayerPreview } from './PlayerPreview.ts';
-import { isTouchUi } from './TouchControls.ts';
+import { isTouchDevice, isTouchUi } from './TouchControls.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
 import {
   canSplitStack,
@@ -334,6 +334,8 @@ export class InventoryScreen {
   private creativeSurvival = false;
   /** 创造 ↔ 生存背包 的切换按钮 */
   private creativeToggleBtn: HTMLButtonElement | null = null;
+  /** 关闭键：触摸层挂上之后文案要从「关闭 (E)」改成 ✕ */
+  private closeBtn: HTMLButtonElement | null = null;
   /** 关面板动画进行中，避免连点重复结算 */
   private closing = false;
   /**
@@ -516,7 +518,8 @@ export class InventoryScreen {
     const hint = document.createElement('span');
     hint.className = 'inv-header-hint';
     // 触摸端没有左右键之分，提示改成"轻点"的说法，免得玩家找不到右键
-    const touchDevice = isTouchUi();
+    // 构造时 body 可能还没挂 touch-mode（触摸层更晚才建），用 isTouchDevice 兜底
+    const touchDevice = isTouchUi() || isTouchDevice();
     // ⚠️ 原来这里写着"点空白处关闭"——**那是错的**：面板外的 pointerdown 实际是
     // "把手上的东西丢出去"（批次 128 对齐原版），根本不会关界面（批次 111 顺手修掉）
     // 触摸端的提示要说出"长按能做两件事"里最反直觉的那一件（批次 137）：
@@ -595,6 +598,7 @@ export class InventoryScreen {
     closeButton.textContent = touchDevice ? '✕' : '关闭 (E)';
     closeButton.setAttribute('aria-label', '关闭背包');
     closeButton.addEventListener('click', () => this.close());
+    this.closeBtn = closeButton;
     header.appendChild(closeButton);
     this.panel.appendChild(header);
 
@@ -1012,6 +1016,10 @@ export class InventoryScreen {
    * 才露出合成/盔甲/主背包那一套。
    */
   private applyInventoryChrome(): void {
+    // 触摸层可能比背包更晚挂 touch-mode：每次排布时把关闭键文案对齐
+    if (this.closeBtn) {
+      this.closeBtn.textContent = isTouchUi() || isTouchDevice() ? '✕' : '关闭 (E)';
+    }
     const creative = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
     if (!creative) this.creativeSurvival = false;
     const showCreativeItems = creative && !this.creativeSurvival;
@@ -2217,6 +2225,11 @@ export class InventoryScreen {
     }
 
     this.titleEl.textContent = MODE_TITLES[mode];
+    // 携带版每次从快捷栏打开：落到「物品栏」页（Wiki 左下箱子），并收起配方书
+    if (mode === 'inventory' && !isClassicUi(this.viewportWidth)) {
+      this.pocketTab = 'inventory';
+      this.hooks.onCloseRecipes?.();
+    }
     this.applyInventoryChrome();
     this.openPanel();
   }
