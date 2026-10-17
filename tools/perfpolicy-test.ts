@@ -16,6 +16,7 @@ import {
   lightBudgetForFrame,
 } from '../src/game/tuning.ts';
 import {
+  DECOR_LEVEL_MAX,
   FRAME_TIME_DROP,
   RESOLUTION_MAX,
   RESOLUTION_MIN,
@@ -24,6 +25,9 @@ import {
   MOBILE_PIXEL_RATIO_CAP,
   MOBILE_RESOLUTION_MIN,
   MOBILE_VIEW_DISTANCE_MAX,
+  decorCloudsVisible,
+  decorParticleBudget,
+  decorRainFraction,
   FOG_GROW_CHUNKS_PER_SEC,
   FOG_GROW_WAIT_LIMIT,
   FOG_SHRINK_CHUNKS_PER_SEC,
@@ -78,6 +82,29 @@ function run(state: PerfState, seconds: number, frameTimeMs: number, tuning = BO
   return current;
 }
 
+/**
+ * 与 `run` 同样跑一遍，但把**每一步的动作**按顺序收集起来。
+ *
+ * "先降哪个"这类优先级，只断言最终状态是看不出来的（三条路最后都会走到底），
+ * 必须看动作序列。
+ */
+function collectActions(
+  state: PerfState,
+  seconds: number,
+  frameTimeMs: number,
+  tuning = BOTH,
+): string[] {
+  const dt = 1 / 60;
+  const actions: string[] = [];
+  let current = state;
+  for (let t = 0; t < seconds; t += dt) {
+    const step = perfPolicyStep(current, dt, frameTimeMs, tuning);
+    current = step.state;
+    if (step.action) actions.push(step.action);
+  }
+  return actions;
+}
+
 // ---------------------------------------------------------------- 1. 降级优先级
 
 console.log('\n[掉帧时先牺牲什么：先视距、后分辨率]');
@@ -92,11 +119,18 @@ console.log('\n[掉帧时先牺牲什么：先视距、后分辨率]');
   equal('分辨率**还没动**（视距先扛：近处不能糊）', after.resolutionScale, RESOLUTION_MAX);
   check('帧时间平均确实反映了掉帧', after.frameTimeAvg > FRAME_TIME_DROP, `${after.frameTimeAvg.toFixed(1)}ms`);
 
-  // 一直掉帧：视距收到地板之后才轮到分辨率
+  // 一直掉帧：视距收到地板 → 关装饰层 → 最后才轮到分辨率
   const long = run(start, 90, 33);
   equal('视距先收到地板 4', long.viewDistance, VIEW_DISTANCE_MIN);
+  equal('装饰层也关到底（云/粒子/雨量）', long.decorLevel, DECOR_LEVEL_MAX);
   check('分辨率这时才降下来', long.resolutionScale < RESOLUTION_MAX, `${long.resolutionScale}`);
   equal('分辨率降到地板 0.5（桌面那一档）', long.resolutionScale, RESOLUTION_MIN);
+
+  // 顺序本身：先动视距、再动装饰层、最后才动分辨率
+  const seq = collectActions(initialPerfState(12), 90, 33);
+  check('第一个动作是收视距', seq[0] === 'view-down', `${seq[0]}`);
+  check('视距让完之后才轮到装饰层', seq.indexOf('decor-down') > seq.lastIndexOf('view-down'), seq.join(','));
+  check('装饰层让完之后才轮到分辨率', seq.indexOf('resolution-down') > seq.lastIndexOf('decor-down'), seq.join(','));
 }
 
 console.log('\n[动态分辨率按设备背板缩放]');
@@ -125,6 +159,7 @@ console.log('\n[帧率回来之后：先还分辨率、最后才放视距]');
     frameTimeAvg: 40,
     resolutionScale: RESOLUTION_MIN,
     viewDistance: VIEW_DISTANCE_MIN,
+    decorLevel: DECOR_LEVEL_MAX,
     cooldown: 0,
   };
 
@@ -135,11 +170,19 @@ console.log('\n[帧率回来之后：先还分辨率、最后才放视距]');
   const early = run(stressed, 12, 8);
   check('分辨率先回来（近处清晰优先）', early.resolutionScale > RESOLUTION_MIN, `${early.resolutionScale}`);
   equal('视距这时还没动（要等分辨率还满）', early.viewDistance, VIEW_DISTANCE_MIN);
+  equal('装饰层也还没开回来（排在分辨率之后）', early.decorLevel, DECOR_LEVEL_MAX);
 
-  // 长期恢复：两者都回到上限
-  const full = run(stressed, 200, 8);
+  // 长期恢复：三者都回到上限
+  const full = run(stressed, 240, 8);
   equal('分辨率回到 1.0', full.resolutionScale, RESOLUTION_MAX);
+  equal('装饰层回到 0（云与粒子都回来）', full.decorLevel, 0);
   equal('视距回到玩家设定值（不会超过）', full.viewDistance, 12);
+
+  // 顺序本身：分辨率 → 装饰层 → 视距
+  const seq = collectActions(stressed, 240, 8);
+  check('第一个动作是还分辨率', seq[0] === 'resolution-up', `${seq[0]}`);
+  check('分辨率还满之后才开装饰层', seq.indexOf('decor-up') > seq.lastIndexOf('resolution-up'), seq.join(','));
+  check('装饰层开完之后才放视距', seq.indexOf('view-up') > seq.lastIndexOf('decor-up'), seq.join(','));
 }
 
 // ---------------------------------------------------------------- 3. 开关与边界
@@ -227,6 +270,7 @@ console.log('\n[手机：视距上限更小、分辨率地板更高]');
     frameTimeAvg: 16.7,
     resolutionScale: RESOLUTION_MAX,
     viewDistance: viewDistanceCapFor(12, true),
+    decorLevel: 0,
     cooldown: 0,
   };
   const stressed = run(start, 60, 33, MOBILE);
@@ -241,6 +285,7 @@ console.log('\n[手机：视距上限更小、分辨率地板更高]');
     frameTimeAvg: 30,
     resolutionScale: 0.8,
     viewDistance: VIEW_DISTANCE_MIN,
+    decorLevel: DECOR_LEVEL_MAX,
     cooldown: 0,
   };
   const stepped = perfPolicyStep(atFloor, 1 / 60, 33, MOBILE);
@@ -318,6 +363,33 @@ console.log('\n[雾滞后于视距：收缩快、扩张慢、而且要等远处�
   equal('已经到目标就不动', fogRadiusStep(8, 8, 1, true, 0).radius, 8);
   equal('扩张不会冲过目标', fogRadiusStep(7.9, 8, 1, true, 0).radius, 8);
   equal('收缩不会冲过目标', fogRadiusStep(4.1, 4, 1, true, 0).radius, 4);
+}
+
+// ---------------------------------------------------------------- 9. 装饰层档位
+
+console.log('\n[装饰层档位：关的都是"不在近处"的东西]');
+{
+  // 云：一层 900×900 的双面半透明面，而且 frustumCulled = false（每帧必画）
+  check('档位 0 画云', decorCloudsVisible(0));
+  check('档位 1 起就不画云', !decorCloudsVisible(1) && !decorCloudsVisible(2));
+
+  // 粒子：与玩家设置取小（设置永远是最严的那个）
+  equal('档位 0 尊重设置（全开 = 400）', decorParticleBudget('all', 0), 400);
+  equal('档位 1 压到减半档 120', decorParticleBudget('all', 1), 120);
+  equal('档位 2 直接归零', decorParticleBudget('all', 2), 0);
+  equal('设置里关掉的，档位回到 0 也不打开', decorParticleBudget('off', 0), 0);
+  equal('设置是减半、档位 1 → 仍是 120（取小）', decorParticleBudget('reduced', 1), 120);
+
+  // 雨 / 雪：密度直接等于 overdraw
+  equal('档位 0 全量', decorRainFraction(0), 1);
+  equal('档位 1 减半', decorRainFraction(1), 0.5);
+  equal('档位 2 只剩四分之一', decorRainFraction(2), 0.25);
+  check('雨量随档位单调递减', decorRainFraction(0) > decorRainFraction(1) && decorRainFraction(1) > decorRainFraction(2));
+
+  // 门控：关掉"自适应视距"之后，装饰层也不该被自动关掉（共用同一个开关）
+  const noView = run(initialPerfState(12), 20, 33, { ...BOTH, adaptiveViewDistance: false });
+  equal('关掉自适应视距 → 装饰层也不动', noView.decorLevel, 0);
+  check('但分辨率照降（最后手段还在）', noView.resolutionScale < RESOLUTION_MAX, `${noView.resolutionScale}`);
 }
 
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);

@@ -340,11 +340,13 @@ import {
   MOBILE_RESOLUTION_MIN,
   MOBILE_VIEW_DISTANCE,
   RESOLUTION_MIN,
+  decorCloudsVisible,
+  decorParticleBudget,
+  decorRainFraction,
   effectivePixelRatio,
   fogRadiusStep,
   frameIntervalMs,
   initialPerfState,
-  particleBudgetFor,
   perfPolicyStep,
   viewDistanceCapFor,
   type PerfState,
@@ -1356,9 +1358,10 @@ class App {
 
     // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
     this.viewDistance = this.settings.viewDistance;
-    // 粒子总量（批次 130，N7）：**启动时也要应用一次**——`applySettings` 只在"玩家改设置"
-    // 时被调用，不在这里补一刀的话，存档里那个"粒子效果：减半"要等玩家开一次设置才生效
-    this.particles.setBudget(particleBudgetFor(this.settings.particles));
+    // 装饰层（批次 157）：**启动时也要应用一次**——`applySettings` 只在"玩家改设置"
+    // 时被调用，不在这里补一刀的话，存档里那个"粒子效果：减半"要等玩家开一次设置才生效。
+    // 云、粒子上限、雨量三样一起落（档位 0 时等于"完全按设置来"）
+    this.applyDecorLevel();
     this.perf = { ...this.perf, viewDistance: this.settings.viewDistance };
     // 手机开局按"保守的视距 + 满分辨率"起步：
     //  · 视距先只给 6（有余量时自适应会加到手机上限 8，`viewDistanceCapFor` 封顶）；
@@ -1532,9 +1535,9 @@ class App {
     this.camera.updateProjectionMatrix();
     this.audio.volume = settings.volume;
     this.particles.setDensity(PARTICLE_DENSITY[settings.particles]);
-    // 粒子总量（批次 130，N7）：与"密度"一起设，两条各管一头（见 ParticleSystem.setBudget）
-    this.particles.setBudget(particleBudgetFor(settings.particles));
-    this.sky.setCloudsVisible(settings.clouds);
+    // 云 / 粒子上限 / 雨量一起按"设置 × 当前装饰层档位"落下去（见 `applyDecorLevel`）：
+    // 设置里关掉的，档位回到 0 也不会自作主张打开
+    this.applyDecorLevel();
     // 触摸摇杆模式（批次 96）：没有触摸层时静默忽略（桌面端这个设置项不该报错）
     this.touch?.setStickMode(settings.touchStick);
     // 触摸按钮/摇杆大小（批次 97）：改一个 CSS 变量，摇杆与按钮一起缩放
@@ -8110,9 +8113,13 @@ class App {
         `[perf] 帧时间 ${state.frameTimeAvg.toFixed(1)}ms，视距 ${state.viewDistance}（上限 ${cap}）`,
       );
     }
+    if (state.decorLevel !== before.decorLevel) {
+      this.applyDecorLevel();
+      console.info(`[perf] 装饰层 → ${state.decorLevel}（关掉天上与远处的，近处不变）`);
+    }
     if (state.resolutionScale !== before.resolutionScale) {
       this.applyResolutionScale();
-      console.info(`[perf] 渲染分辨率 ×${state.resolutionScale}（视距已经让到底了，才轮到它）`);
+      console.info(`[perf] 渲染分辨率 ×${state.resolutionScale}（视距与装饰层都让完了，才轮到它）`);
     }
   }
 
@@ -8130,6 +8137,22 @@ class App {
     // 粒子的点尺寸是按"设备像素"算的（`setViewport` 拿的就是缓冲区高度），
     // 所以分辨率一变要重新告诉它一次，否则粒子会跟着分辨率一起变大或变小
     this.particles.setViewport(this.camera.fov, this.renderer.domElement.height);
+  }
+
+  /**
+   * 把装饰层档位落到三个渲染对象上（批次 157 的第三档降级）。
+   *
+   * 这三项的共同点是：**都不在近处**——云在天上、粒子是一瞬、雨是满屏的透明点。
+   * 关掉它们省的是填充率与 draw call，而玩家手里的方块、脚下的地面一点都不变，
+   * 所以它排在"降分辨率"**之前**（分辨率是全局的，会把近处一起糊掉）。
+   *
+   * ⚠️ 云与粒子仍然尊重玩家自己的设置：设置里关掉的，档位回到 0 也不会打开。
+   */
+  private applyDecorLevel(): void {
+    const decor = this.perf.decorLevel;
+    this.sky.setCloudsVisible(decorCloudsVisible(decor) && this.settings.clouds);
+    this.particles.setBudget(decorParticleBudget(this.settings.particles, decor));
+    this.weather.setIntensity(decorRainFraction(decor));
   }
 
   /**

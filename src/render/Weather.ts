@@ -47,6 +47,8 @@ export class Weather {
   private snowy = false;
   private flashValue = 0;
   private flashTimer = 8;
+  /** 当前实际参与绘制的雨/雪点数（见 `setIntensity`） */
+  private drawCount = PARTICLE_COUNT;
 
   constructor() {
     this.positions = new Float32Array(PARTICLE_COUNT * 3);
@@ -101,6 +103,26 @@ export class Weather {
     return this.flashValue;
   }
 
+  /**
+   * 雨 / 雪的**密度**（0~1）：只画前 `PARTICLE_COUNT × fraction` 个点。
+   *
+   * 存在的理由（批次 157）：雨点是 `transparent + depthWrite:false` 的 `Points`，
+   * 密度直接等于 overdraw，在手机上"一下雨就卡"很大一部分来自它。
+   * 减半之后"雨变小了"几乎看不出来——这是一笔很划算的降级。
+   *
+   * ⚠️ 用 `setDrawRange` 而不是重建缓冲：数组与容量都不用动，来回切档零成本。
+   */
+  setIntensity(fraction: number): void {
+    const safe = Number.isFinite(fraction) ? Math.min(1, Math.max(0.05, fraction)) : 1;
+    this.drawCount = Math.max(1, Math.round(PARTICLE_COUNT * safe));
+    this.geometry.setDrawRange(0, this.drawCount);
+  }
+
+  /** 当前实际在画多少个点（调试与验收用） */
+  get activeCount(): number {
+    return this.drawCount;
+  }
+
   /** 调试 / 命令用：直接切换天气（剩余时长按这一种天气的区间取） */
   setKind(kind: WeatherKind): void {
     this.state = { kind, seconds: weatherSecondsFor(Math.random, kind) };
@@ -145,7 +167,8 @@ export class Weather {
     this.object.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z);
     const speed = (this.snowy ? SNOW_SPEED : RAIN_SPEED) * dt;
     const positions = this.positions;
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
+    // 只推进"真的在画"的那一段（密度降到 1/4 时就别再白算剩下 2400 个点）
+    for (let i = 0; i < this.drawCount; i++) {
       let y = positions[i * 3 + 1]! - speed;
       if (y < -HEIGHT / 2) {
         y += HEIGHT;

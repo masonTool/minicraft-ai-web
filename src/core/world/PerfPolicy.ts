@@ -99,9 +99,32 @@ export const RESOLUTION_DROP_COOLDOWN = 3;
 export const RESOLUTION_RAISE_COOLDOWN = 10;
 export const VIEW_DISTANCE_DROP_COOLDOWN = 4;
 export const VIEW_DISTANCE_RAISE_COOLDOWN = 8;
+export const DECOR_DROP_COOLDOWN = 4;
+export const DECOR_RAISE_COOLDOWN = 8;
 
 /** 一次调整做了什么（给主程序打日志、给测试断言） */
-export type PerfAction = 'resolution-down' | 'resolution-up' | 'view-down' | 'view-up' | null;
+export type PerfAction =
+  | 'resolution-down'
+  | 'resolution-up'
+  | 'view-down'
+  | 'view-up'
+  | 'decor-down'
+  | 'decor-up'
+  | null;
+
+/**
+ * **装饰层档位**：0 = 全开、1 = 关掉"远处与天上的"、2 = 再关掉"瞬时的"。
+ *
+ * 它插在"视距"与"分辨率"之间，是因为这三者的代价/观感排序很明确：
+ *  - 视距：只影响远处（且远处本来就在雾里），最先让；
+ *  - 装饰层：云在天上、粒子是一瞬、远处的牌子本来就看不见字 —— **近处一点都不变**；
+ *  - 分辨率：全局生效，会把近处一起糊掉，最后才动。
+ *
+ * ⚠️ 这一档**没有**对应的设置开关：它关的东西玩家几乎察觉不到，
+ * 不值得占一个设置项（粒子仍然尊重设置里那个 `particles`）。
+ */
+export type DecorLevel = 0 | 1 | 2;
+export const DECOR_LEVEL_MAX: DecorLevel = 2;
 
 /** 玩家侧的两个开关 + 两个上限（都在 `SettingsScreen.GameSettings` 里或由设备决定） */
 export interface PerfTuning {
@@ -138,13 +161,51 @@ export interface PerfState {
   resolutionScale: number;
   /** 当前视距（区块） */
   viewDistance: number;
+  /** 当前装饰层档位（0 全开 ~ 2 最省，见 `DecorLevel`） */
+  decorLevel: DecorLevel;
   /** 距离下一次可以调档还有多久（秒） */
   cooldown: number;
 }
 
-/** 初值：分辨率 1.0（= 原来那套行为，不引入回归）、视距取玩家设定值 */
+/** 初值：分辨率 1.0（= 原来那套行为，不引入回归）、装饰层全开、视距取玩家设定值 */
 export function initialPerfState(viewDistance: number): PerfState {
-  return { frameTimeAvg: 16.7, resolutionScale: RESOLUTION_MAX, viewDistance, cooldown: 0 };
+  return {
+    frameTimeAvg: 16.7,
+    resolutionScale: RESOLUTION_MAX,
+    viewDistance,
+    decorLevel: 0,
+    cooldown: 0,
+  };
+}
+
+/** 装饰层档位 → 云还画不画。云是一层 900×900 的双面半透明面，且从不参与视锥剔除 */
+export function decorCloudsVisible(decor: DecorLevel): boolean {
+  return decor === 0;
+}
+
+/**
+ * 装饰层档位 → 粒子硬上限（再与玩家设置取小，设置仍然是"最严的那个"）。
+ *
+ * 档位 2 直接给 0：粒子是全屏散的小方块、带透明混合，爆量时（下雨 + 打怪 + 挖矿）
+ * 正是最卡的那一刻，而"没有粒子"玩家几乎不会察觉。
+ */
+export function decorParticleBudget(setting: 'off' | 'reduced' | 'all', decor: DecorLevel): number {
+  const base = particleBudgetFor(setting);
+  if (decor >= 2) return 0;
+  if (decor === 1) return Math.min(base, particleBudgetFor('reduced'));
+  return base;
+}
+
+/**
+ * 装饰层档位 → 雨/雪的密度比例（1 = 全部 3200 个点精灵）。
+ *
+ * 雨点是 `transparent + depthWrite:false` 的 `Points`，密度直接等于 overdraw；
+ * 减半之后"雨变小了"几乎看不出来，但省掉一半的透明填充。
+ */
+export function decorRainFraction(decor: DecorLevel): number {
+  if (decor >= 2) return 0.25;
+  if (decor === 1) return 0.5;
+  return 1;
 }
 
 /**
@@ -198,6 +259,14 @@ export function perfPolicyStep(
       next.cooldown = VIEW_DISTANCE_DROP_COOLDOWN;
       return { state: next, action: 'view-down' };
     }
+    // 第二顺位：**关装饰层**（云 / 粒子 / 雨量）——它们都不在近处，砍掉几乎无感。
+    // ⚠️ 门控复用 `adaptiveViewDistance`：装饰层与视距同属"让出远处"那一族，
+    // 玩家关掉"自适应视距"的意思就是"别自动替我省远景"，不该再冒出一个新的开关。
+    if (tuning.adaptiveViewDistance && next.decorLevel < DECOR_LEVEL_MAX) {
+      next.decorLevel = (next.decorLevel + 1) as DecorLevel;
+      next.cooldown = DECOR_DROP_COOLDOWN;
+      return { state: next, action: 'decor-down' };
+    }
     if (tuning.adaptiveResolution && next.resolutionScale > floor) {
       // ⚠️ 顺序是"先取整、再夹地板"，不能反过来：
       // `round1(Math.max(floor, ...))` 会把 0.75 再喂给 `round1`，而 `Math.round(7.5)` = 8
@@ -217,6 +286,13 @@ export function perfPolicyStep(
       next.resolutionScale = Math.min(RESOLUTION_MAX, round1(next.resolutionScale + RESOLUTION_STEP));
       next.cooldown = RESOLUTION_RAISE_COOLDOWN;
       return { state: next, action: 'resolution-up' };
+    }
+    // 倒着来的第二顺位：把装饰层还回来（云与粒子回来了，近处观感才算完整）。
+    // 门控与降档那侧同一个（见上面的说明）
+    if (tuning.adaptiveViewDistance && next.decorLevel > 0) {
+      next.decorLevel = (next.decorLevel - 1) as DecorLevel;
+      next.cooldown = DECOR_RAISE_COOLDOWN;
+      return { state: next, action: 'decor-up' };
     }
     if (tuning.adaptiveViewDistance && next.viewDistance < tuning.viewDistanceCap) {
       next.viewDistance += 1;
