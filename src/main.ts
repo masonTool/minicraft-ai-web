@@ -95,7 +95,14 @@ import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone
 import { GamepadInput } from './ui/GamepadInput.ts';
 import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
-import { armAutoFullscreen, installRotateHint, preferInstalledLandscape } from './ui/Fullscreen.ts';
+import { hideLoading, showLoading, WORLD_LOADING_TEXT } from './ui/LoadingOverlay.ts';
+import {
+  armAutoFullscreen,
+  enterFullscreenOnBoot,
+  installRotateHint,
+  preferInstalledLandscape,
+} from './ui/Fullscreen.ts';
+import { hideInstallHint, installInstallHint } from './ui/InstallHint.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
@@ -2283,6 +2290,9 @@ class App {
   /**
    * 第一块地形完成网格化、且玩家已经放到安全地面后才撤掉加载遮罩。
    * 注意：必须在主循环里检查——区块"加载完成"时还没有网格，只监听加载事件会永远等不到。
+   *
+   * 批次 160：遮罩不再写在 HTML 里（那样首屏就会显示"正在生成世界…"），
+   * 它由 `showLoading()` 在**进世界那一刻**挂出来，这里只负责撤掉。
    */
   private refreshLoadingState(): void {
     if (this.loadingCleared) return;
@@ -2290,7 +2300,7 @@ class App {
     if (this.chunkRenderer.chunkMeshCount === 0) return;
     this.loadingCleared = true;
     startupTrace.mark(STARTUP_PHASES.worldPlayable);
-    document.getElementById('loading')?.remove();
+    hideLoading();
   }
 
   // ---------------------------------------------------------------- 快捷栏
@@ -9570,7 +9580,7 @@ async function boot(): Promise<void> {
   const support = probeBrowserGl();
   if (!support.ok) {
     console.warn(`[gl] 设备不支持：${support.kind} —— ${support.reason}`);
-    document.getElementById('loading')?.remove();
+    hideLoading();
     unsupported.show(support);
     return;
   }
@@ -9590,6 +9600,11 @@ async function boot(): Promise<void> {
     // 主菜单设置即使当前隐藏，也仍占着 `#settings-screen`；不移除会与 App 内实例重复 id。
     menuSettings?.destroy();
     menuSettings = null;
+    // ⚠️ 遮罩**只在这一刻**挂出来（批次 160）：从这一行起才真的在"生成世界"。
+    // 放得这么早是有意的——`SaveGame.open()` 要等 IndexedDB，手机上可能是几百毫秒的空白。
+    showLoading(WORLD_LOADING_TEXT);
+    // 安装引导只在主菜单上有意义；进世界之后它会压在触摸按钮上
+    hideInstallHint();
     // 先开存档库再建世界：存档里有玩家位置与维度，世界要先知道该从哪生成
     // （打开失败会返回 null，游戏照常可玩，只是不保存）
     const save = await SaveGame.open(world.id);
@@ -9608,7 +9623,7 @@ async function boot(): Promise<void> {
       // 预检过了、但真正创建渲染器时还是失败（显存不足/上下文到顶）：
       // 走同一块界面，别把白屏留给玩家（A10，批次 85）
       if (error instanceof Error && error.message === UNSUPPORTED_GL_ERROR) {
-        document.getElementById('loading')?.remove();
+        hideLoading();
         unsupported.show(
           lastRendererFailure ?? rendererFailure('无法创建 WebGL2 绘图上下文'),
         );
@@ -9663,11 +9678,16 @@ async function boot(): Promise<void> {
   (window as unknown as { __startup: typeof startupTrace }).__startup = startupTrace;
   menu.show();
   // 进游戏首页就"默认全屏 + 横屏"（用户要求）。浏览器不允许页面一加载就全屏，
-  // 所以：已安装的 PWA 立刻锁横屏；浏览器里挂在第一次点击上，同时锁方向。
-  // 竖屏手机会先盖一层提示，点它就是那一次手势。
+  // 所以这里分三层（批次 160，用户："能不能在加载的时候自动进入"）：
+  //  ① 已装成 PWA 立刻锁横屏；② 立刻**试着**进全屏（PWA / X5 内核里真能成）；
+  //  ③ 被拒时把"第一次交互"挂到 document 上（点任意地方、按键都算），
+  //     竖屏手机会先盖一层提示，点它就是那一次手势。
   preferInstalledLandscape();
   installRotateHint();
-  armAutoFullscreen([menu.root, document.body]);
+  enterFullscreenOnBoot();
+  armAutoFullscreen([document]);
+  // 没装成 PWA 时引导一次"添加到主屏幕"——那是标签页里唯一零点击全屏的路径
+  installInstallHint();
   startupTrace.mark(STARTUP_PHASES.bootMenu);
 }
 

@@ -44,6 +44,7 @@ import {
 } from '../src/ui/SettingsScreen.ts';
 import { CREATIVE_TAB_ICONS, CREATIVE_TABS, creativeTabFor, missingTabIcons } from '../src/ui/CreativeTabs.ts';
 import { armAutoFullscreen, isFullscreen } from '../src/ui/Fullscreen.ts';
+import { hideLoading, isLoadingVisible, showLoading } from '../src/ui/LoadingOverlay.ts';
 import { CREATIVE_ITEMS, itemDef, itemIconTile } from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 
@@ -1217,7 +1218,7 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   //    根因就是批次 107~109 给两页各写了一套宽度（菜单页 400px、设置页 820px）。
   check(
     '面板尺寸只有一个出处（--panel-w / --panel-h）',
-    compact.includes('--panel-w: min(94vw, 760px);') && compact.includes('--panel-h: min(88vh, 620px);'),
+    compact.includes('--panel-w: min(94vw, 760px);') && compact.includes('--panel-h: min(88dvh, 620px);'),
   );
   // "只留一点点外部游戏区域"：上限不能小到让 PC 上留下大半屏
   check('面板上限够大（PC 上不会只剩半屏游戏区域）', compact.includes('--panel-w: min(94vw, 760px);'));
@@ -1257,7 +1258,18 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   check('三端统一：左选项卡 + 右内容', compact.includes('.settings-columns { display: flex; flex-direction: row; gap: 12px;'));
   check(
     '一次只显示当前分组（固定高度下永远不用滚）',
-    compact.includes('.settings-section { display: none; flex-direction: column; gap: 6px; }'),
+    compact.includes('.settings-section { display: none; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));'),
+  );
+  // 批次 160：用户"视频里面这个选项里面有多个按钮，只是很短的空间，可以适当让它们并排"
+  check(
+    '分组内容两列并排（窄屏自动退回一列）',
+    compact.includes('.settings-section.active { display: grid; }') &&
+      compact.includes('grid-template-columns: repeat(auto-fit, minmax(230px, 1fr))'),
+  );
+  check(
+    '滑杆这类"越长越好用"的行跨满两列',
+    compact.includes('.settings-row.wide { grid-column: 1 / -1; }') &&
+      source.includes("row.className = 'settings-row wide';"),
   );
   check(
     '页签永远显示（不再分"高屏隐藏/矮屏显示"）',
@@ -1291,10 +1303,11 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   );
   check('装备格竖排成一一列（原版位置）', compact.includes('.inv-grid.inv-armor { grid-template-columns: 42px; }'));
   check('快捷栏与主背包之间留一道缝', compact.includes('.inv-main .inv-hotbar { margin-top: 5px; }'));
-  // 成就 / 配方书 / 设置：仍直接吃 --panel-*；触摸背包用 min(vw/dvh, --panel-*) 夹紧
+  // 成就 / 配方书 / 设置 / 主菜单：直接吃 --panel-*；触摸背包用 min(vw/dvh, --panel-*) 夹紧
+  // （批次 160：主菜单也并进来了——用户"首页两个按钮点下去应该是同一个固定大小的框"）
   check(
-    '成就/配方书/设置共用同一套固定尺寸',
-    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 3,
+    '成就/配方书/设置/主菜单共用同一套固定尺寸',
+    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 4,
   );
   // 文字标签是原来我们自己加的（原版没有），这次按用户要求去掉
   const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
@@ -1305,9 +1318,30 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
       !invSource.includes("buildLabel('盔甲与副手')"),
   );
   // 用户："首页的按钮要对齐，符合正常的按钮大小"。
-  // 根因：首页按钮被单独收窄到 280px（横屏 240px），而二级页是满宽——两页对不齐。
+  // ⚠️ 批次 160 改了口径：盒子统一到 `--panel-w` 之后，按钮**不能**再拉满
+  //    （760px 一条长条既不像原版那一列，也和二级页对不上），所以宽度收到 320 居中、
+  //    首页/世界列表/新建世界共用同一条规则。
   check('首页按钮不再被单独收窄', !compact.includes('.world-menu > * { width'));
-  check('标题页按钮列约 400px，世界列表按视图展开', compact.includes('width: min(92vw, 400px);') && compact.includes(".world-panel[data-view='worlds'] { width: min(94vw, 720px); }"));
+  check(
+    '主菜单主按钮同宽居中（320px，首页与二级页共用一条规则）',
+    compact.includes('.world-primary, .world-secondary { width: min(100%, 320px); max-width: 320px;'),
+  );
+  check(
+    '主菜单三视图共用同一个盒子（不再按视图各写一套宽度）',
+    compact.includes('.world-panel { position: relative; z-index: 1; width: var(--panel-w); max-width: var(--panel-w); height: var(--panel-h); max-height: var(--panel-h);') &&
+      !compact.includes(".world-panel[data-view='worlds'] { width:") &&
+      !compact.includes(".world-panel[data-view='create'] { width:"),
+  );
+  check(
+    '首页不加框、二级页与设置用同一副深色框',
+    compact.includes(".world-panel[data-view='worlds'], .world-panel[data-view='create'] { padding: 14px 16px; background: rgba(22, 22, 22, .82);") &&
+      !compact.includes(".world-view[data-view='home'] { padding: 14px"),
+  );
+  check(
+    '新建世界表单两列并排（长编辑框不再一条占一行）',
+    compact.includes('grid-template-columns: repeat(auto-fit, minmax(260px, 1fr))') &&
+      compact.includes('.world-new > .world-primary { grid-column: 1 / -1; }'),
+  );
   // 用户："暂停界面按钮可以窄一点"（面板 760 宽，一列按钮拉满太宽）
   check(
     '暂停菜单的按钮列收到 300px 并居中',
@@ -1352,6 +1386,74 @@ console.log('\n[进游戏首页默认全屏]');
     '手机进游戏后不再把“视距没涨完”当成启动期光照',
     mainSrc.includes('isTouchDevice() ? !this.loadingCleared : !this.loadingCleared || !this.startupRamp.done'),
   );
+
+  // ---- 批次 160：用户"能不能在加载的时候自动进入（全屏横屏）"
+  //
+  // 浏览器规范要求手势，所以这里能钉死的是三件事：① boot 里**真的试着**要了一次；
+  // ② 被拒时那网挂在 `document` 的捕获阶段、并且覆盖点击/触摸/键盘；
+  // ③ 没装成 PWA 时有一条"添加到主屏幕"的引导（那是唯一零点击的路径）。
+  check('boot 里会主动尝试全屏（PWA / X5 内核下真的成立）', mainSrc.includes('enterFullscreenOnBoot();'));
+  check(
+    '自动尝试那一步也在切回前台时补一次',
+    fullscreenSrc.includes("doc.addEventListener('visibilitychange'") && fullscreenSrc.includes('doc.visibilityState'),
+  );
+  check(
+    '一次性手势网挂在 document 的捕获阶段（点任何地方都算第一次交互）',
+    mainSrc.includes('armAutoFullscreen([document]);') &&
+      fullscreenSrc.includes("['pointerdown', 'touchstart', 'keydown']") &&
+      fullscreenSrc.includes('addEventListener(type, trigger, true)'),
+  );
+  const installSrc = readFileSync(new URL('../src/ui/InstallHint.ts', import.meta.url), 'utf8');
+  check(
+    '没装成 PWA 时引导一次"添加到主屏幕"（标签页里唯一零点击全屏的路径）',
+    installSrc.includes("beforeinstallprompt") &&
+      installSrc.includes('event.preventDefault()') &&
+      installSrc.includes('isStandalone()') &&
+      mainSrc.includes('installInstallHint();'),
+  );
+  check(
+    '引导关掉之后记住（不会每次开都弹）',
+    installSrc.includes("localStorage.setItem(DISMISS_KEY, '1')") && installSrc.includes('readDismissed()'),
+  );
+  check('引导的样式与层级在 index.html 里（压在主菜单之上、设置之下）', htmlHead.includes('.install-hint {') && htmlHead.includes('z-index: 46'));
+  check('viewport 用交互键盘不缩排版的写法', htmlHead.includes('interactive-widget=resizes-content'));
+}
+
+console.log('\n[加载遮罩只属于"进世界"（批次 160）]');
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const overlaySrc = readFileSync(new URL('../src/ui/LoadingOverlay.ts', import.meta.url), 'utf8');
+
+  // 用户："首次加载这个页面的时候，它会显示一个'地图生成中'的东西，能不能一开始不需要？
+  // 因为地图生成是在创建游戏的时候才生成的。"
+  check(
+    'index.html 里不再写死加载遮罩（否则首屏就会显示"正在生成世界…"）',
+    !/<div id="loading"/.test(html),
+  );
+  // 样式还在（`test:theme` 也盯着 loading-sweep），只是"什么时候挂"改成了按需
+  check('遮罩的样式还留着（按需创建仍然要它）', html.includes('#loading {') && html.includes('@keyframes loading-sweep'));
+  check(
+    'main.ts 里只有一处 showLoading（boot 自己的流程一次都不挂）',
+    (mainSrc.match(/^\s*showLoading\(/gm) ?? []).length === 1,
+  );
+  check(
+    '进世界那一刻才挂遮罩',
+    /const startWorld = async[\s\S]*?showLoading\(WORLD_LOADING_TEXT\)/.test(mainSrc),
+  );
+  check(
+    '遮罩撤掉时整块移除（验收脚本按 getElementById 判）',
+    overlaySrc.includes('getElementById(LOADING_ID)?.remove()'),
+  );
+  // Node 里没有 document：这两个函数必须安静退化，而不是抛
+  let safe = true;
+  try {
+    showLoading('x');
+    hideLoading();
+  } catch {
+    safe = false;
+  }
+  check('没有 document 时 show/hide 不抛', safe && !isLoadingVisible());
 }
 
 console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物品栏」）]');

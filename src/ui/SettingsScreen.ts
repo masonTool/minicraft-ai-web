@@ -609,7 +609,9 @@ export class SettingsScreen {
     scale = 1,
   ): HTMLLabelElement {
     const row = document.createElement('label');
-    row.className = 'settings-row';
+    // `.wide` = 跨满两列（批次 160）：分组现在是两列栅格，滑杆压到半栏就只剩百来像素，
+    // 拖起来很别扭；而开关/选择那类"很短"的项正好两两并排。
+    row.className = 'settings-row wide';
 
     const name = document.createElement('span');
     name.textContent = label;
@@ -709,7 +711,8 @@ export class SettingsScreen {
   /** 资源包导入行（.mcpack / .zip） */
   private makeResourcePackRow(): HTMLElement {
     const row = document.createElement('label');
-    row.className = 'settings-row';
+    // 文件选择框本身就宽，与滑杆一样跨满两列
+    row.className = 'settings-row wide';
     const name = document.createElement('span');
     name.textContent = '资源包';
 

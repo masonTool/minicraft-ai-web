@@ -6,7 +6,7 @@
          viewport-fit=cover：让页面铺满刘海屏，配合 env(safe-area-inset-*) 排布触摸控件 -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <!-- 手机上以全屏应用的方式运行（加到主屏后隐藏浏览器地址栏） -->
     <meta name="mobile-web-app-capable" content="yes" />
@@ -90,9 +90,14 @@
            760 × 620 在三个典型视口下的边距：
              PC 1440×900   → 340 / 140px（约 24% / 16%）
              手机横屏 844×390 → 42 / 23px（5% / 6%）
-             手机竖屏 430×932 → 13 / 156px（受 vw/vh 限制，面板仍收得进屏幕） */
+             手机竖屏 430×932 → 13 / 156px（受 vw/dvh 限制，面板仍收得进屏幕）
+           ⚠️ 高度用 `dvh` 而不是 `vh`（批次 160）：手机浏览器地址栏收起/展开时，
+              `vh` 永远是"最大的那个视口"，面板底边会被地址栏咬掉一截
+              （主菜单也吃这一对尺寸了，所以这件事从"设置面板"升级成"整个菜单"）。
+           ⚠️ 主菜单（首页/世界列表/新建世界）也从批次 160 起吃这一对——
+              用户："首页两个按钮点下去应该是弹出一个固定大小的框，不是一大一小。" */
         --panel-w: min(94vw, 760px);
-        --panel-h: min(88vh, 620px);
+        --panel-h: min(88dvh, 620px);
         /* 携带版背包自己的固定基准：所有单窗共用；双窗只横向再加一块同高区域。
            视口放不下时只做同倍率约束，不再按页签分别改宽高。 */
         --inv-pocket-w: min(calc(100vw - 88px), 568px);
@@ -290,27 +295,33 @@
         mix-blend-mode: multiply;
       }
       #world-screen.hidden { display: none; }
-      /* 标题页那一片：**没有边框、没有底色**，只有内边距。
-         ⚠️ 宽度是个"按钮尺寸"问题（批次 111，用户："首页的按钮要对齐，符合正常的
-         按钮大小"）：原来首页按钮被单独收窄到 280px（横屏 240px），而二级页面的按钮
-         是满宽（面板 520px）——同一套菜单里两页按钮宽度不同，看着就是"没对齐"。
-         现在面板收窄到 360px（接近原版标题页那一列的宽度），**首页与二级页的所有
-         按钮都满宽**，左边缘也和存档卡片对齐。 */
+      /* 主菜单的那**一个盒子**（批次 160）。
+         ⚠️ 用户反馈："首页两个按钮点击之后应该是弹出来一个固定大小的框，
+         而不是当前的一个大一个小。"——根因就是这里给每个视图各写了一套宽度
+         （首页 400 / 世界列表 720 / 新建世界 620），而"设置"又是另一对
+         `--panel-w/--panel-h`（760×620）。三个尺寸、三副观感。
+         现在尺寸**只有一处**：直接吃 `--panel-w/--panel-h`（与设置/配方书/成就同一对），
+         于是"点游戏"与"点设置"看到的是同一个盒子，切视图时盒子一动不动。
+         ⚠️ 首页刻意**不加框**（用户明确要保留基岩版标题页那种"标题 + 一列按钮"
+         的观感）；二级页（世界列表 / 新建世界）与设置用同一副深色框——
+         切换时变的只是"框有没有"，尺寸不变。 */
       .world-panel {
         position: relative; z-index: 1;
-        width: min(92vw, 400px); padding: 0; font-size: 13px;
-        transition: width var(--dur-med) var(--ease);
+        width: var(--panel-w); max-width: var(--panel-w);
+        height: var(--panel-h); max-height: var(--panel-h);
+        padding: 0; font-size: 13px;
+        display: flex; flex-direction: column;
+        overflow: hidden;
       }
-      .world-panel[data-view='worlds'] { width: min(94vw, 720px); }
+      .world-panel[data-view='worlds'],
       .world-panel[data-view='create'] {
-        width: min(94vw, 620px);
-        max-height: calc(100dvh - 24px);
         padding: 14px 16px;
-        overflow-y: auto;
         background: rgba(22, 22, 22, .82);
         border: 3px solid; border-color: var(--pixel-bevel-dark);
         box-shadow: var(--panel-shadow);
       }
+      /* 新建世界表单比列表长一点：框的高度不变，超出就在框内滚 */
+      .world-panel[data-view='create'] { overflow-y: auto; }
       .world-title {
         position: relative;
         display: flex; flex-direction: column; align-items: center;
@@ -348,26 +359,52 @@
          原来把存档列表 + 四行新建表单 + 设置按钮全摞在一屏里，面板很高、
          手机上得滚；分层之后每一屏都只有三两行，且"返回"永远在同一处。 */
       .world-view { display: none; }
-      .world-view.active { display: flex; flex-direction: column; }
+      /* 视图要**撑满那个固定盒子**（批次 160）：盒子高度是固定值，
+         所以每一节自己负责"里面怎么排"，而不是让盒子随内容长高。 */
+      .world-view.active { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+      /* 首页没有框，内容在盒子正中（否则固定高度下会顶在上面、下面空一大片） */
+      .world-view[data-view='home'].active { justify-content: center; }
       /* 二级页面顶部：‹ 返回 + 标题 */
-      .world-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+      .world-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex: 0 0 auto; }
       .world-nav-title { font-size: 17px; letter-spacing: 1px; color: #fff; }
       .world-back {
         font: inherit; font-size: 12px; cursor: pointer; flex: 0 0 auto;
         padding: 6px 10px; background: var(--btn-bg); color: var(--btn-text);
         transition: transform var(--dur-fast) var(--ease);
       }
-      /* 主页那几列入口：竖着一列、**满宽**（批次 111：不再单独收窄，
-         否则和二级页面的按钮对不齐——面板本身已经只有 360px 了） */
-      .world-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+      /* 主页那几列入口：竖着一列（按钮宽度由 `.world-primary/.world-secondary`
+         统一给 320px 居中，见下面那一条） */
+      .world-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; flex: 0 0 auto; }
       .world-hint { color: #e0e0e0; font-size: 12px; margin: 10px 0 0; text-align: center; }
       .world-footer {
         margin-top: 20px; text-align: center; font-size: 10px;
         color: rgba(255,255,255,.65);
       }
+      /* ---------------- 「添加到主屏幕」引导（批次 160） ----------------
+         用户要的是"加载时就自动全屏横屏"，而浏览器只允许**用户手势**里请求全屏；
+         标签页里唯一零点击的路径是"装成 App"（manifest 已经是 fullscreen + landscape）。
+         所以没装的时候在主菜单底下提示一次，点「添加」走浏览器自己的安装框。
+         层级 46：压在主菜单（40）之上、设置（50）之下——它不该盖住设置面板。
+         ⚠️ 只在 `beforeinstallprompt` 到达时才会挂上来（`ui/InstallHint.ts`），
+            iOS Safari 与桌面根本不会出现这一条。 */
+      .install-hint {
+        position: fixed; left: 50%; transform: translateX(-50%);
+        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+        z-index: 46; display: flex; align-items: center; gap: 8px;
+        max-width: min(94vw, 520px); padding: 8px 10px;
+        font-size: 12px; color: var(--mc-text-light);
+        background: rgba(22, 22, 22, .92);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+      }
+      .install-hint span { flex: 1 1 auto; min-width: 0; }
+      .install-hint button { flex: 0 0 auto; font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer; }
       .world-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
       /* 列表在窄屏/世界多的时候自己滚，别把面板撑破 */
       .world-list { max-height: min(46vh, 300px); overflow-x: hidden; overflow-y: auto; }
+      /* 固定盒子之后列表改成"吃掉剩下的高度"（原来是 46vh 封顶，PC 上会在框底留一片空） */
+      .world-panel[data-view='worlds'] .world-list { flex: 1 1 auto; min-height: 0; max-height: none; }
       /* 二级页面里"存档"那一行小标题（上面是「＋ 新建世界」主入口） */
       .world-group-label {
         display: flex; justify-content: space-between; align-items: center;
@@ -422,8 +459,13 @@
       /* 危险操作 = **红字**（原版没有红色按钮），底还是那颗灰按钮 */
       .world-card-actions button.danger,
       .pause-action.danger { color: var(--mc-text-danger); }
-      .world-new { display: flex; flex-direction: column; gap: 8px; }
-      .world-row { display: grid; grid-template-columns: 68px 1fr 52px; align-items: center; gap: 8px; }
+      /* 新建世界表单：**两列并排**（批次 160）。
+         用户："创建新世界的时候，每一个栏目的编辑框都太长了，可以适当地去并排。"
+         `auto-fit` + 260px 下限：宽盒子（PC / 横屏手机）两列、窄屏（竖屏手机）一列。
+         名称｜种子 一排、类型｜难度 一排，"创建并进入"跨满两列。 */
+      .world-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 10px; align-content: start; }
+      .world-new > .world-primary { grid-column: 1 / -1; }
+      .world-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 48px; align-items: center; gap: 6px; min-width: 0; }
       /* 输入框 = 原版文本框：黑底白字 + 灰边框（聚焦时边框转白） */
       .world-input {
         width: 100%; padding: 7px 9px; font: inherit; font-size: 12px;
@@ -434,10 +476,18 @@
       }
       .world-input:focus { border-color: var(--mc-edge-light); }
       .world-mini { font-size: 12px; }
+      /* 主菜单的主按钮：**同宽、居中**（批次 160）。
+         盒子统一到 760 宽之后，按钮不能再拉满（那会成一条长条，也不像原版标题页那一列）；
+         而首页 / 世界列表 / 新建世界用的是同一列按钮，所以宽度只能有一处——
+         `align-self`（flex 列）与 `justify-self`（表单栅格）各管一个方向，两个都写。 */
+      .world-primary, .world-secondary {
+        width: min(100%, 320px); max-width: 320px;
+        align-self: center; justify-self: center;
+      }
       .world-primary { padding: 9px; font-size: 14px; letter-spacing: 1px; }
       /* ⚠️ 不再写 `margin-top`：主页那几颗入口的间距交给 `.world-menu` 的 `gap`，
          写了 margin 会在"列表页底部那颗新建键"上多出一截空隙 */
-      .world-secondary { width: 100%; padding: 9px; font: inherit; font-size: 13px; }
+      .world-secondary { padding: 9px; font: inherit; font-size: 13px; }
 
       /* ---------------- 配方书 ---------------- */
       #recipe-book {
@@ -938,12 +988,19 @@
         overflow-x: hidden; overflow-y: auto;
         display: flex; flex-direction: column; gap: 6px;
       }
-      /* 一次只显示当前分组（组名写在左边的选项卡上，段内标题是重复信息） */
-      .settings-section { display: none; flex-direction: column; gap: 6px; }
-      .settings-section.active { display: flex; }
+      /* 一次只显示当前分组（组名写在左边的选项卡上，段内标题是重复信息）。
+         ⚠️ 批次 160：分组内容改成**两列并排**——用户原话"在视频里面这个选项里面有
+         多个按钮，它只是很短的空间，你可以适当地让它们并排"。
+         `auto-fit` + 230px 下限：宽窗口（PC / 横屏手机）自动两列、窄屏退回一列，
+         不用另写断点。滑杆行带 `.settings-row.wide` 跨满两列（压到半栏不好拖）。 */
+      .settings-section { display: none; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 10px; align-content: start; }
+      .settings-section.active { display: grid; }
       .settings-group { display: none; }
       .settings-meta { flex: 0 0 auto; margin: 8px 0 0; }
-      .settings-row { display: grid; grid-template-columns: minmax(96px, auto) 1fr 52px; align-items: center; gap: 8px; }
+      /* 行内三列压紧（批次 160）：标签不再吃 96px、值列 52 → 44，行高由内容+`min-height` 定 */
+      .settings-row { display: grid; grid-template-columns: minmax(78px, auto) minmax(0, 1fr) 44px; align-items: center; gap: 6px; min-width: 0; min-height: 32px; }
+      /* 滑杆 / 文件选择这类"越长越好用"的行占满两列 */
+      .settings-row.wide { grid-column: 1 / -1; }
 
       /* ---------------- 暂停菜单那一页（批次 108） ----------------
          同一份 DOM 的两页：`.pause-page.active` 才是当前这一页。
@@ -1036,13 +1093,14 @@
          ⚠️ 判据用 `body.touch-mode` 而不是 `@media (max-width: 900px)`：
          平板（1024×768 触摸屏）也该拿这套，而它不命中那个宽度断点。 */
       body.touch-mode .settings-row {
-        grid-template-columns: minmax(86px, auto) 1fr 54px; min-height: 36px;
+        grid-template-columns: minmax(78px, auto) minmax(0, 1fr) 46px; min-height: 34px;
       }
       body.touch-mode .settings-row input[type="range"] { height: 34px; }
       body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
         width: 16px; height: 26px; margin-top: -8px;
       }
-      body.touch-mode .settings-cycle { min-width: 100px; padding: 6px 8px; font-size: 13px; }
+      /* 批次 160：两列并排之后每格只有 ~300px，循环按钮再占 100px 就挤了（热区仍够 34px） */
+      body.touch-mode .settings-cycle { min-width: 88px; padding: 6px 8px; font-size: 13px; }
       body.touch-mode .settings-tab { min-height: 40px; padding: 8px 10px; }
       body.touch-mode .settings-tabs { flex: 0 0 88px; }
       body.touch-mode .settings-back { height: 38px; font-size: 14px; }
@@ -1071,6 +1129,12 @@
         body.touch-mode .world-menu { gap: 8px; margin-top: 10px; }
         body.touch-mode .world-primary { min-height: 44px; font-size: 14px; }
         body.touch-mode .world-secondary { min-height: 44px; }
+
+        /* ---- 设置：横屏只有 ~343px 高，一屏放完全靠"更紧的行 + 更密的列" ----
+           （批次 160。面板尺寸仍然不变，只是里面的行压到 30px、循环按钮再收一档） */
+        body.touch-mode .settings-row { min-height: 30px; }
+        body.touch-mode .settings-cycle { min-width: 80px; padding: 3px 6px; font-size: 12px; }
+        body.touch-mode .settings-hint { margin: 2px 0 6px; font-size: 11px; }
       }
 
       /* ---------------- 状态效果 HUD ---------------- */
@@ -2838,7 +2902,7 @@
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
-          .inv-page-button, .inv-close, .unsupported-button) {
+          .inv-page-button, .inv-close, .unsupported-button, .install-hint button) {
         background: var(--btn-bg);
         color: var(--btn-text);
         border: 2px solid var(--mc-outline);
@@ -2849,14 +2913,14 @@
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
-          .inv-page-button, .inv-close, .unsupported-button):not(:disabled):hover {
+          .inv-page-button, .inv-close, .unsupported-button, .install-hint button):not(:disabled):hover {
         background: var(--mc-face-hover);
         color: var(--mc-text-hover);
       }
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .adv-close, .recipe-close, .recipe-page-button,
-          .inv-page-button, .inv-close, .unsupported-button):not(:disabled):active {
+          .inv-page-button, .inv-close, .unsupported-button, .install-hint button):not(:disabled):active {
         /* 斜面反转 = 凹进去（原版靠这个表达"按下了"，不靠位移） */
         box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
         color: var(--mc-text-hover);
@@ -2955,7 +3019,13 @@
          手机上没有 Esc 之类的键，跳跃键是唯一可靠的入口 -->
     <div id="sleep" class="hidden"><div><b>Zzz…</b>天快亮了<br />跳跃键可以提前起床</div></div>
 
-    <div id="loading">正在生成世界…</div>
+    <!-- ⚠️ 这里原来是一个写死的加载节点（`#loading`，文案"正在生成世界…"，批次 160 删掉）。
+         它从 `boot()` 第一行就在屏幕上，而那段文案说的是**当时还没发生的事**
+         （那时只是在做 GL 预检、画图集、读存档库）——用户的原话：
+         "首次加载这个页面的时候，它会显示一个地图生成中的东西……地图生成是在创建游戏
+         的时候才生成的"。现在它由 `ui/LoadingOverlay.ts` **按需创建**：
+         只有点进一个世界、真的要生成地形时才挂出来，撤掉时整块 remove。
+         CSS（`#loading` 与 `loading-sweep`）留在上面那一段，`test:theme` 有断言盯着。 -->
 
     <!-- 设备不支持时的整屏提示（A10）：判定在 core/render/webglSupport.ts，
          这里只给样式；内容由 ui/UnsupportedScreen.ts 填（见那边的注记：

@@ -2,9 +2,14 @@
  * 全屏（用户要求：进游戏首页就默认进全屏）
  *
  * ⚠️ 浏览器**不允许**"页面加载完就自动进全屏"：`requestFullscreen()` 只能在
- * **用户手势**（点击/按键）的调用栈里发出，否则一律被拒。所以这里不去跟浏览器较劲，
- * 而是把全屏请求挂到主菜单的"第一次点击"上——玩家点第一下（无论是"开始游戏"还是
- * 点开始遮罩）时全屏就已经进去了，体感就是"进游戏就全屏"。
+ * **用户手势**（点击/按键）的调用栈里发出，否则一律被拒。
+ * 批次 160 起分三层做（用户反馈"手机上需要点一下才进入全屏横屏"）：
+ *  1. `enterFullscreenOnBoot()`：加载时**先试一次**——PWA（manifest 是
+ *     `display: fullscreen` + `orientation: landscape`）与微信/QQ 的 X5 内核里它真能成；
+ *  2. `armAutoFullscreen()`：被拒时挂在 **`document` 的捕获阶段**上，
+ *     任何第一次交互（点击 / 触摸 / 按键）都再要一次；
+ *  3. `ui/InstallHint.ts`：没装成 PWA 时引导一次"添加到主屏幕"——
+ *     这是普通浏览器里**唯一真正零点击**的全屏路径（装完打开就是全屏横屏）。
  *
  * 三个刻意的选择：
  *  1. **一次性**：触发后立刻摘掉监听。否则每次点菜单按钮都再请求一次全屏
@@ -119,14 +124,26 @@ export function enterMobilePresentation(): void {
   void pending?.then(() => lockLandscape()).catch(() => undefined);
 }
 
-/** 装到主屏之后打开：没有浏览器按钮可点，能锁就立刻锁（这个上下文里通常允许）。 */
-export function preferInstalledLandscape(): void {
-  if (typeof window === 'undefined') return;
+/**
+ * 现在是不是"已经装成 App"（standalone / fullscreen 显示模式，或 iOS 的 `navigator.standalone`）。
+ *
+ * 两种用途：① 装好之后能直接锁方向（不需要先全屏）；② 反过来——**只有没装的时候**
+ * 才该去引导"添加到主屏幕"（见 `ui/InstallHint.ts`）。
+ */
+export function isStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
   const standalone =
     window.matchMedia?.('(display-mode: standalone)').matches === true ||
     window.matchMedia?.('(display-mode: fullscreen)').matches === true ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  if (standalone || isFullscreen()) lockLandscape();
+    (typeof navigator !== 'undefined' &&
+      (navigator as Navigator & { standalone?: boolean }).standalone === true);
+  return standalone;
+}
+
+/** 装到主屏之后打开：没有浏览器按钮可点，能锁就立刻锁（这个上下文里通常允许）。 */
+export function preferInstalledLandscape(): void {
+  if (typeof window === 'undefined') return;
+  if (isStandalone() || isFullscreen()) lockLandscape();
 }
 
 /** 退出全屏；没在全屏里时什么都不做 */
@@ -151,27 +168,65 @@ export function toggleFullscreen(): void {
 }
 
 /**
- * 把"第一次点一下就进全屏"挂到给定元素上（主菜单 + 开始遮罩）。
+ * 页面一加载就**试着**进全屏 + 锁横屏（批次 160，用户："能不能在加载的时候自动进入"）。
  *
- * 只挂一次、只触发一次：第一个 `pointerdown` 一到就把所有监听摘掉，
+ * ⚠️ 老实说：`requestFullscreen()` 的规范要求"用户激活"，所以普通浏览器标签页里
+ * 这一次调用**一定被拒**（`enterFullscreen()` 内部已经静默 catch 掉了）。
+ * 但它不是白调的——下面三种上下文里它真的会成功，而它们正是手机玩家的主要入口：
+ *   · 已装成 PWA（manifest 是 `display: fullscreen` + `orientation: landscape`）；
+ *   · 微信 / QQ 的 X5 内核（`x5-fullscreen` / `x5-orientation` 两个 meta 已经写在
+ *     `index.html` 里，那边**不需要**手势）；
+ *   · 部分把页面当成"应用窗口"打开的内核。
+ * 被拒时不算失败：第一笔落地的 `pointerdown/touchstart/keydown` 会再要一次
+ * （见 `armAutoFullscreen`），所以玩家体感是"随便碰一下就全屏"。
+ */
+export function enterFullscreenOnBoot(): void {
+  const doc = fullscreenDocument();
+  if (!doc) return;
+  enterMobilePresentation();
+  // 切回前台时补一次：有些内核在"页面重新可见"这一刻放行（浏览器切后台再回来很常见）
+  doc.addEventListener('visibilitychange', () => {
+    if (doc.visibilityState !== 'visible' || isFullscreen()) return;
+    enterMobilePresentation();
+  });
+}
+
+/** 一次手势要监听的事件（触摸 / 鼠标 / 键盘都算"第一次交互"） */
+const BOOT_GESTURES = ['pointerdown', 'touchstart', 'keydown'] as const;
+
+/**
+ * 把"第一次交互就进全屏"挂到给定目标上（默认 `document`）。
+ *
+ * 只挂一次、只触发一次：第一个手势一到就把所有监听摘掉，
  * 之后玩家在全屏里的所有点击都与这里无关。
  *
- * 返回一个"撤销"函数，方便测试与将来换触发点（现在没人调，但比写死成不可撤销好）。
+ * ⚠️ 批次 160 起**挂在 `document` 的捕获阶段**，而不是"主菜单那块 DOM"上：
+ * 用户反馈"手机上需要点一下才进全屏"，而原来只有点在菜单上才算数——
+ * 现在点任何地方（包括竖屏提示层、系统返回、键盘）都算第一次交互。
+ *
+ * 返回一个"撤销"函数，方便测试与将来换触发点。
  */
-export function armAutoFullscreen(targets: ReadonlyArray<HTMLElement | null | undefined>): () => void {
-  const elements = targets.filter((target): target is HTMLElement => Boolean(target));
+export function armAutoFullscreen(
+  targets?: ReadonlyArray<EventTarget | null | undefined>,
+): () => void {
+  const fallback: EventTarget[] = typeof document === 'undefined' ? [] : [document];
+  const elements = (targets ?? fallback).filter((target): target is EventTarget => Boolean(target));
   if (elements.length === 0) return () => undefined;
 
-  const detach = (): void => {
-    for (const element of elements) element.removeEventListener('pointerdown', trigger);
-  };
-  const trigger = (): void => {
+  function detach(): void {
+    for (const element of elements) {
+      for (const type of BOOT_GESTURES) element.removeEventListener(type, trigger, true);
+    }
+  }
+  function trigger(): void {
     detach();
     enterMobilePresentation();
     syncRotateHint();
-  };
+  }
 
-  for (const element of elements) element.addEventListener('pointerdown', trigger);
+  for (const element of elements) {
+    for (const type of BOOT_GESTURES) element.addEventListener(type, trigger, true);
+  }
   return detach;
 }
 
