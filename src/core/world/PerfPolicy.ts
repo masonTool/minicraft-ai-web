@@ -76,6 +76,18 @@ export function initialPerfState(viewDistance: number): PerfState {
 }
 
 /**
+ * 动态分辨率是“设备原生背板”的倍率，不是直接传给 three 的绝对 pixelRatio。
+ *
+ * 例如 DPR=3 的手机以 2 作为画质上限：0.9 档应当得到 1.8，而不是从 2 突然跳到 0.9。
+ * 后一种旧写法会在第一次掉帧时把横纵清晰度各砍掉一半以上，表现为整屏闪一下并持续发虚。
+ */
+export function effectivePixelRatio(devicePixelRatio: number, resolutionScale: number): number {
+  const base = Math.min(2, Math.max(1, Number.isFinite(devicePixelRatio) ? devicePixelRatio : 1));
+  const scale = Math.min(RESOLUTION_MAX, Math.max(RESOLUTION_MIN, resolutionScale));
+  return base * scale;
+}
+
+/**
  * 推进一步（每帧调用）。
  *
  * @param state 当前状态（函数**不改它**，返回新的）

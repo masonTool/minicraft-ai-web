@@ -156,6 +156,9 @@ export class ChunkRenderer {
   private enqueue(cx: number, cz: number): void {
     const key = chunkKey(cx, cz);
     if (this.queued.has(key)) return;
+    // 已有 Worker 请求在途时，改动一入队就立刻让旧结果失效；否则旧结果可能赶在
+    // 新请求派发前回来，把“破坏前”的方块短暂画回去一帧。
+    if (this.pending.has(key)) this.pending.set(key, ++this.requestSeq);
     this.queued.add(key);
     this.queue.push({ cx, cz, distanceSq: 0 });
   }
@@ -183,10 +186,11 @@ export class ChunkRenderer {
 
   private build(cx: number, cz: number): void {
     const key = chunkKey(cx, cz);
-    this.dispose(key);
-
     const chunk = this.world.getChunk(cx, cz);
-    if (!chunk) return;
+    if (!chunk) {
+      this.dispose(key);
+      return;
+    }
 
     if (this.meshPool) {
       const request = this.collectChunkData(cx, cz);
@@ -264,7 +268,6 @@ export class ChunkRenderer {
         const mesh = new THREE.Mesh(geometry, this.solidMaterial);
         mesh.position.set(offsetX, baseY, offsetZ);
         mesh.frustumCulled = true;
-        this.scene.add(mesh);
         meshes.push(mesh);
         triangles += geometry.index!.count / 3;
       }
@@ -273,13 +276,12 @@ export class ChunkRenderer {
         const mesh = new THREE.Mesh(geometry, this.translucentMaterial);
         mesh.position.set(offsetX, baseY, offsetZ);
         mesh.frustumCulled = true;
-        this.scene.add(mesh);
         meshes.push(mesh);
         triangles += geometry.index!.count / 3;
       }
     }
 
-    if (meshes.length > 0) this.rendered.set(key, { meshes, triangles });
+    this.replaceMeshes(key, meshes, triangles);
   }
 
   /** Worker 不可用时的回退：在主线程同步网格化 */
@@ -299,7 +301,6 @@ export class ChunkRenderer {
         const mesh = new THREE.Mesh(solid, this.solidMaterial);
         mesh.position.set(offsetX, baseY, offsetZ);
         mesh.frustumCulled = true;
-        this.scene.add(mesh);
         meshes.push(mesh);
         triangles += solid.index!.count / 3;
       }
@@ -307,12 +308,24 @@ export class ChunkRenderer {
         const mesh = new THREE.Mesh(translucent, this.translucentMaterial);
         mesh.position.set(offsetX, baseY, offsetZ);
         mesh.frustumCulled = true;
-        this.scene.add(mesh);
         meshes.push(mesh);
         triangles += translucent.index!.count / 3;
       }
     }
 
+    this.replaceMeshes(key, meshes, triangles);
+  }
+
+  /**
+   * 新网格完整就绪后才原子替换旧网格。
+   *
+   * 旧实现是在 Worker 开工前就 `dispose`，手机上一次网格化要跨好几帧，于是破坏一格方块会让
+   * 整个 16×16 区块暂时消失，邻区块载入时还会连带四块一起闪。现在旧几何一直留到新几何
+   * 全部建好；回调期间先挂新网格再拆旧网格，渲染帧永远只会看到“旧”或“新”中的完整一版。
+   */
+  private replaceMeshes(key: string, meshes: THREE.Mesh[], triangles: number): void {
+    for (const mesh of meshes) this.scene.add(mesh);
+    this.dispose(key);
     if (meshes.length > 0) this.rendered.set(key, { meshes, triangles });
   }
 

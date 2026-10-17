@@ -13,6 +13,7 @@ import {
   RESOLUTION_MAX,
   RESOLUTION_MIN,
   VIEW_DISTANCE_MIN,
+  effectivePixelRatio,
   frameIntervalMs,
   initialPerfState,
   particleBudgetFor,
@@ -67,6 +68,15 @@ console.log('\n[掉帧时先牺牲什么：先分辨率、再视距]');
   equal('分辨率降到地板 0.5', long.resolutionScale, RESOLUTION_MIN);
   check('视距这时才降下来', long.viewDistance < 12, `${long.viewDistance}`);
   check('而且视距不会低于 4（再低没法玩）', long.viewDistance >= VIEW_DISTANCE_MIN, `${long.viewDistance}`);
+}
+
+console.log('\n[动态分辨率按设备背板缩放]');
+{
+  equal('桌面 DPR 1 × 满分辨率 = 1', effectivePixelRatio(1, 1), 1);
+  equal('手机 DPR 3 夹到 2 × 满分辨率 = 2', effectivePixelRatio(3, 1), 2);
+  equal('手机降到 0.9 档是 1.8（不会从 2 突然跳成 0.9）', effectivePixelRatio(3, 0.9), 1.8);
+  equal('最低档仍保留 1 倍 CSS 像素', effectivePixelRatio(3, 0.5), 1);
+  equal('非法 DPR 回退为 1', effectivePixelRatio(Number.NaN, 1), 1);
 }
 
 // ---------------------------------------------------------------- 2. 恢复顺序相反

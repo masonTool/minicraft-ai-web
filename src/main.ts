@@ -339,6 +339,7 @@ import { hardenAround } from './core/world/Concrete.ts';
 // 移动端降级策略（批次 130，TASKS N7）：动态分辨率 / 自适应视距 / 限帧 / 粒子总量。
 // 策略本身是**纯函数**（`test:perfpolicy` 逐条钉住），这里只负责把结果落到渲染器与粒子上
 import {
+  effectivePixelRatio,
   frameIntervalMs,
   initialPerfState,
   particleBudgetFor,
@@ -1146,7 +1147,7 @@ class App {
       lastRendererFailure = rendererFailure(message);
       throw new Error(UNSUPPORTED_GL_ERROR);
     }
-    this.renderer.setPixelRatio(Math.min(devicePixelRatioValue(), 2));
+    this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), 1));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
 
@@ -2058,7 +2059,9 @@ class App {
     this.sky.setSunGlow(Math.max(0, 1 - Math.abs(sunHeight) * 3.2) * (1 - overcast) * 0.9);
     this.sky.setCloudAppearance(daylight, overcast);
 
-    const fogFar = (this.viewDistance * 16 - 6) * (1 - overcast * 0.45);
+    // 启动期雾墙跟着当前渐进视距向外推，避免加载半径还在 3 区块时就把
+    // 最终 12 区块的空缺全部暴露出来，远处地形会在雾里逐渐显现而不是逐块弹出。
+    const fogFar = (this.viewDistanceNow * 16 - 6) * (1 - overcast * 0.45);
     const fogNear = fogFar * 0.72;
     this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
     this.translucentMaterial.setFog(this.skyColor, fogNear, fogFar);
@@ -8060,7 +8063,7 @@ class App {
    */
   private applyResolutionScale(): void {
     const scale = this.perf.resolutionScale;
-    this.renderer.setPixelRatio(scale);
+    this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), scale));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     // 粒子的点尺寸是按"设备像素"算的（`setViewport` 拿的就是缓冲区高度），
     // 所以分辨率一变要重新告诉它一次，否则粒子会跟着分辨率一起变大或变小

@@ -46,6 +46,9 @@ export function drawItemIcon(
   const pixels = Math.max(1, Math.round(size * currentIconBackingScale()));
   if (canvas.width !== pixels) canvas.width = pixels;
   if (canvas.height !== pixels) canvas.height = pixels;
+  // 某些临时界面（交易、附魔花费、提示卡）没有各自的 canvas CSS 规则。
+  // 把像素缩放规则落在唯一绘制入口，保证物品图标无论出现在哪都不会被双线性滤糊。
+  canvas.style.imageRendering = 'pixelated';
 
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, pixels, pixels);

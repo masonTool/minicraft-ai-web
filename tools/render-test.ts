@@ -32,6 +32,11 @@ import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { srgbColor } from '../src/render/srgb.ts';
+import { ChunkRenderer } from '../src/render/ChunkRenderer.ts';
+import type { MeshWorkerPool } from '../src/render/MeshWorkerPool.ts';
+import { Chunk } from '../src/core/world/Chunk.ts';
+import type { World } from '../src/core/world/World.ts';
+import type { MeshResponse } from '../src/worker/chunk.worker.ts';
 
 let passed = 0;
 let failed = 0;
@@ -48,6 +53,69 @@ function check(label: string, condition: boolean, detail = ''): void {
 
 function equal(label: string, actual: unknown, expected: unknown): void {
   check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
+
+// ---------------------------------------------------------------- 区块异步重建不能闪空
+
+console.log('\n[区块网格原子替换]');
+{
+  const chunk = new Chunk(0, 0);
+  chunk.set(0, 64, 0, Block.STONE);
+  const world = {
+    getChunk: (cx: number, cz: number) => (cx === 0 && cz === 0 ? chunk : undefined),
+  } as unknown as World;
+  const callbacks: Array<(response: MeshResponse) => void> = [];
+  const pool = {
+    size: 1,
+    request: (
+      _cx: number,
+      _cz: number,
+      _chunks: unknown,
+      _transfer: unknown,
+      onDone: (response: MeshResponse) => void,
+    ) => callbacks.push(onDone),
+  } as unknown as MeshWorkerPool;
+  const scene = new THREE.Scene();
+  const material = new THREE.MeshBasicMaterial();
+  const renderer = new ChunkRenderer(
+    scene,
+    {} as TextureAtlas,
+    world,
+    material,
+    material,
+    pool,
+  );
+  const response = (sections: MeshResponse['sections']): MeshResponse => ({
+    type: 'meshed',
+    id: 1,
+    cx: 0,
+    cz: 0,
+    sections,
+  });
+  const triangle = {
+    position: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    uv: new Float32Array(6),
+    tile: new Float32Array(6),
+    light: new Float32Array(6),
+    shade: new Float32Array(3),
+    index: new Uint32Array([0, 1, 2]),
+  };
+
+  renderer.onChunkLoaded(0, 0);
+  renderer.processQueue(1, 0, 0);
+  callbacks.shift()!(response([{ section: 8, solid: triangle, translucent: null }]));
+  equal('首版网格已显示', renderer.chunkMeshCount, 1);
+
+  renderer.enqueueAround(1, 1);
+  renderer.processQueue(1, 0, 0);
+  equal('Worker 重建期间旧网格仍留在场景里（不会整块闪空）', renderer.chunkMeshCount, 1);
+  equal('场景里仍有旧网格', scene.children.length, 1);
+
+  callbacks.shift()!(response([]));
+  equal('空的新结果就绪后才移除旧网格', renderer.chunkMeshCount, 0);
+  equal('旧几何已从场景释放', scene.children.length, 0);
+  renderer.disposeAll();
+  material.dispose();
 }
 
 /** 按贴图名给出固定 UV 的桩图集：石头在 (0,0)-(0.25,0.25)，草方块各面各占一格 */
