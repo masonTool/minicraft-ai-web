@@ -422,6 +422,22 @@ console.log('\n[携带版分标签页（批次 140）]');
   check('经典下隐藏携带版控件', css.includes('.inv-pocket-tabs.hidden') && css.includes('.inv-pocket-recipes.hidden'));
 }
 
+console.log('\n[玩家预览占位（批次 141）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const previewSrc = readFileSync(new URL('../src/ui/PlayerPreview.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const playerSrc = readFileSync(new URL('../src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
+
+  check('有 PlayerPreview 模块', previewSrc.includes('export function drawPlayerPreview'));
+  check('色板与 PlayerRenderer 同源（肤色）', previewSrc.includes('#dc9a6b') && playerSrc.includes('0xdc9a6b'));
+  check('界面挂了 preview canvas', invSrc.includes("dataset.role = 'player-preview'"));
+  check('refresh 会重画预览', invSrc.includes('refreshPlayerPreview()'));
+  check('预览读四个盔甲槽', invSrc.includes('ARMOR_START + 3'));
+  check('预览 CSS 在', css.includes('.inv-player-preview'));
+  check('注释写明是占位不是真皮肤', previewSrc.includes('不是可换皮肤') || previewSrc.includes('不假装有真皮肤'));
+}
+
 console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全关完才轮到浏览器]');
 {
   /** 一个可断言的假浏览器：`history` 只有"压一条/退一格"两个动作 */
@@ -809,7 +825,9 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   check(
     '背包改"左装备 / 右背包"两列',
     compact.includes('.inv-body { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }') &&
-      compact.includes('.inv-gear { grid-column: 1; grid-row: 1; }') &&
+      // 批次 141：gear 里加了预览 canvas，规则拆成多行（flex 横排盔甲+小人）
+      compact.includes('.inv-gear {') &&
+      compact.includes('grid-column: 1; grid-row: 1;') &&
       compact.includes('.inv-main { grid-column: 2; grid-row: 1;'),
   );
   check('装备格竖排成一一列（原版位置）', compact.includes('.inv-grid.inv-armor { grid-template-columns: 42px; }'));

@@ -112,6 +112,7 @@ import {
 } from './ItemPager.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
 import { CREATIVE_TAB_ICONS, RECIPE_TAB_ICONS } from './CreativeTabs.ts';
+import { drawPlayerPreview } from './PlayerPreview.ts';
 import { isTouchUi } from './TouchControls.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
 import {
@@ -306,6 +307,8 @@ export class InventoryScreen {
   private readonly topArea: HTMLDivElement;
   /** 左栏盔甲 + 副手（携带版「盔甲」页只露这一块） */
   private readonly gearEl: HTMLDivElement;
+  /** 玩家预览剪影（批次 141；占位，非真皮肤） */
+  private readonly playerPreviewEl: HTMLCanvasElement;
   /** 主背包 3×9（携带版「物品栏」页） */
   private readonly mainGridEl: HTMLDivElement;
   /** 快捷栏：携带版**无论哪一页都可见**（Wiki 原文） */
@@ -738,7 +741,12 @@ export class InventoryScreen {
     // 空槽显示部位提示字（头/胸/腿/靴/副），触摸端才知道该放哪
     this.gearEl = document.createElement('div');
     this.gearEl.className = 'inv-gear';
-    this.gearEl.appendChild(this.buildArmorGrid());
+    // 玩家预览（批次 141）：盔甲列旁边那块小人，原版有、我们也要有位置
+    this.playerPreviewEl = document.createElement('canvas');
+    this.playerPreviewEl.className = 'inv-player-preview';
+    this.playerPreviewEl.dataset.role = 'player-preview';
+    this.playerPreviewEl.setAttribute('aria-label', '玩家预览');
+    this.gearEl.append(this.buildArmorGrid(), this.playerPreviewEl);
     this.playerBody.appendChild(this.gearEl);
     this.panel.appendChild(this.playerBody);
 
@@ -2265,11 +2273,27 @@ export class InventoryScreen {
 
     // 飞行开关可能在背包开着时切换（F / 触摸起飞）——创造区要跟着显隐
     this.updateCreativeVisibility();
+    this.refreshPlayerPreview();
   }
 
   /** 供主程序 / 验收：当前携带版页签（经典 UI 下也会返回上次值，但不影响布局） */
   get currentPocketTab(): PocketInventoryTab {
     return this.pocketTab;
+  }
+
+  /** 按当前盔甲槽重画预览剪影（批次 141） */
+  private refreshPlayerPreview(): void {
+    drawPlayerPreview(
+      this.playerPreviewEl,
+      {
+        helmet: this.inventory.get(ARMOR_START)?.id ?? null,
+        chest: this.inventory.get(ARMOR_START + 1)?.id ?? null,
+        legs: this.inventory.get(ARMOR_START + 2)?.id ?? null,
+        boots: this.inventory.get(ARMOR_START + 3)?.id ?? null,
+      },
+      this.atlas,
+      48,
+    );
   }
 
   /** 指针底下的槽位当前是什么物品 */

@@ -1285,7 +1285,17 @@
          ⚠️ 两列用 fixed 的 grid-column/row 定位而不是 DOM 顺序：`topArea`
          （随模式切换的合成/箱子/熔炉）在构造函数里先于装备列被建出来。 */
       .inv-body { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
-      .inv-gear { grid-column: 1; grid-row: 1; }
+      .inv-gear {
+        grid-column: 1; grid-row: 1;
+        display: flex; flex-direction: row; align-items: flex-start; gap: 8px;
+      }
+      /* 玩家预览剪影（批次 141）：盔甲列右侧；色块占位，不是可换皮肤 */
+      .inv-player-preview {
+        width: 48px; height: 100px; image-rendering: pixelated;
+        background: rgba(0, 0, 0, 0.12);
+        border: 2px solid; border-color: #5a5a5a #c8c8c8 #c8c8c8 #5a5a5a;
+        flex: 0 0 auto;
+      }
       .inv-main { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 4px; }
       /* 快捷栏与主背包之间空一道缝（原版这两排是紧挨着的，靠缝区分） */
       .inv-main .inv-hotbar { margin-top: 5px; }
@@ -1329,6 +1339,9 @@
       }
       .inv-panel.pocket-ui .inv-gear { display: flex; justify-content: center; }
       .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-main { align-items: center; }
+      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-player-preview {
+        width: 64px; height: 134px;
+      }
 
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
       .inv-grid.inv-armor { grid-template-columns: 42px; }
