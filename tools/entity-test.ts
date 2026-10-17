@@ -6,8 +6,9 @@
  */
 
 import { Block } from '../src/core/registry/blocks.ts';
-import { Item } from '../src/core/registry/items.ts';
-import { ItemEntity, ITEM_LIFETIME } from '../src/core/entity/ItemEntity.ts';
+import { Item, isFireproofItem } from '../src/core/registry/items.ts';
+import { TOOL_KINDS, toolItemId } from '../src/core/registry/tools.ts';
+import { ItemEntity, ITEM_FIRE_SECONDS, ITEM_LIFETIME } from '../src/core/entity/ItemEntity.ts';
 import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
@@ -285,6 +286,67 @@ console.log('\n[掉落物：带的是整份栈（批次 63）]');
     JSON.stringify((picked as { extras?: unknown } | null)?.extras) === JSON.stringify(fancy.extras),
   );
   check('收下之后就消失了', fancy.dead);
+}
+
+console.log('\n[掉落物：岩浆与火焰会把它销毁（批次 168，J18）]');
+{
+  /**
+   * 用户/规格要的那件事：**掉进岩浆的普通掉落物会没**，而下界合金那一族（`fireproof`）
+   * 泡在岩浆里也不会消失——这才是 K8 里"下界合金不会被火烧掉"能成立的前提。
+   *
+   * 这几条断言的搭法：掉落物静止时脚在 y∈[0, 0.25)，`burnAway()` 读的是
+   * `floor(y + 0.12)` 那一格，也就是 **y = 0 这一层**；所以只让 `getBlock`
+   * 对 y === 0 回答"岩浆 / 火 / 空气"，其余给空气。
+   */
+  let cell: number = Block.AIR;
+  const burningCtx = (): EntityContext => ({
+    ...makeContext(),
+    getBlock: (_x: number, y: number) => (y === 0 ? cell : Block.AIR),
+  });
+
+  // ① 普通掉落物碰到岩浆：当场销毁（不用等）
+  cell = Block.LAVA;
+  const inLava = new ItemEntity(Block.STONE, 1, 0.5, 0.3, 0.5, { x: 0, y: 0, z: 0 });
+  inLava.tick(burningCtx(), 0.05);
+  check('普通掉落物掉进岩浆 → 一 tick 就没了', inLava.dead);
+
+  // ② 火里不是立刻没：烧 1.5 秒才销毁（给玩家伸手捡回来的余地）
+  cell = Block.FIRE;
+  const inFire = new ItemEntity(Block.STONE, 1, 0.5, 0.3, 0.5, { x: 0, y: 0, z: 0 });
+  advance(inFire, burningCtx(), 1.0);
+  check('泡在火里 1 秒还在（原版也留了一点余地）', !inFire.dead);
+  advance(inFire, burningCtx(), 0.7);
+  check(`泡满 ${ITEM_FIRE_SECONDS} 秒才烧掉`, inFire.dead);
+
+  // ③ 离开火焰要清零：1 秒 + 跳出去 + 再 1 秒，仍然活着（不是"累计 1.5 秒"）
+  cell = Block.FIRE;
+  const hopping = new ItemEntity(Block.STONE, 1, 0.5, 0.3, 0.5, { x: 0, y: 0, z: 0 });
+  advance(hopping, burningCtx(), 1.0);
+  cell = Block.AIR;
+  advance(hopping, burningCtx(), 0.2);
+  cell = Block.FIRE;
+  advance(hopping, burningCtx(), 1.0);
+  check('跳出火焰后计时清零（不是累计 1.5 秒）', !hopping.dead);
+  advance(hopping, burningCtx(), 0.6);
+  check('再连着烧满就又没了', hopping.dead);
+
+  // ④ 下界合金：岩浆与火都不怕
+  cell = Block.LAVA;
+  const alloyLava = new ItemEntity(Item.NETHERITE_INGOT, 1, 0.5, 0.3, 0.5, { x: 0, y: 0, z: 0 });
+  advance(alloyLava, burningCtx(), 2);
+  check('下界合金锭在岩浆里不会消失', !alloyLava.dead);
+  cell = Block.FIRE;
+  const alloyFire = new ItemEntity(Item.NETHERITE_INGOT, 1, 0.5, 0.3, 0.5, { x: 0, y: 0, z: 0 });
+  advance(alloyFire, burningCtx(), 3);
+  check('下界合金锭在火里也不会消失', !alloyFire.dead);
+
+  // ⑤ 判据本身：按名字派生（以后再加下界合金的东西自动在里面）
+  check('下界合金锭 / 残骸 / 远古残骸都算 fireproof', isFireproofItem(Item.NETHERITE_INGOT) && isFireproofItem(Item.NETHERITE_SCRAP) && isFireproofItem(Block.ANCIENT_DEBRIS));
+  check(
+    '下界合金的每一种工具都算 fireproof（派生，不是手抄一张表）',
+    TOOL_KINDS.every((kind) => isFireproofItem(toolItemId(kind, 'netherite'))),
+  );
+  check('钻石镐 / 钻石 / 石头都不算（别把所有东西都豁免了）', !isFireproofItem(toolItemId('pickaxe', 'diamond')) && !isFireproofItem(Item.DIAMOND) && !isFireproofItem(Block.STONE));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

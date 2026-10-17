@@ -658,6 +658,21 @@ export function isArmor(itemId: number): boolean {
   return itemDef(itemId)?.armor !== undefined;
 }
 
+/**
+ * 这一件物品**不会被岩浆与火焰销毁**（原版的 `fireproof`，批次 168 / TASKS J18）。
+ *
+ * 原版只有**下界合金那一族**有这个性质：`ancient_debris`、`netherite_scrap`、
+ * `netherite_ingot`、`netherite_block`，以及下界合金做的工具/盔甲（它们的物品名
+ * 都是 `minecraft:netherite_*`）。所以这里是**按名字派生**而不是手写一张 id 表：
+ * 以后再加下界合金的东西（比如锻造模板、下界合金锄）自动就在里面，
+ * 不用记得回来改第二处——这个仓库吃过太多次"派生出来的东西清单还是手抄的"。
+ */
+export function isFireproofItem(itemId: number): boolean {
+  const def = itemDef(itemId);
+  if (!def) return false;
+  return def.name.startsWith('minecraft:netherite_') || def.name === 'minecraft:ancient_debris';
+}
+
 /** 该物品的食物数值；不能吃返回 undefined */
 export function foodInfoById(itemId: number): FoodInfo | undefined {
   return itemDef(itemId)?.food;
