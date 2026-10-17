@@ -51,6 +51,29 @@ export const TOUCH_SCALE_MIN = 0.8;
 export const TOUCH_SCALE_MAX = 1.4;
 
 /**
+ * 循环按钮上的"当前值"（批次 172 修的一个真 bug）。
+ *
+ * ⚠️ 设置里有的项存的是**数字**（帧率上限 0/30/60、自动保存 30/60/120），
+ * 而循环按钮按**字符串**列表转（`FPS_CAPS.map(String)`）。原来的写法是
+ * `values.includes(this.settings[key] as T)`——数字 `30` 永远不等于字符串 `'30'`，
+ * 于是它**永远显示第一档**，而且每点一次都只回到第二档：`maxFps` 从 0 点一次 → 30，
+ * 再点还是 30（因为 `current()` 又回到 `'0'`）。这个 bug 从批次 130 潜伏到 172，
+ * 期间没有任何断言覆盖"点了之后**再点一次**"。
+ *
+ * 修法：一律先转成字符串再比。两个小函数单独导出，就是为了能被离线断言钉住。
+ */
+export function cycleValue(values: readonly string[], raw: unknown): string {
+  const text = String(raw);
+  return values.includes(text) ? text : values[0]!;
+}
+
+/** 循环按钮点一下之后的下一个值（同样先转字符串） */
+export function nextCycleValue(values: readonly string[], raw: unknown): string {
+  const current = cycleValue(values, raw);
+  return values[(values.indexOf(current) + 1) % values.length]!;
+}
+
+/**
  * 设置项的分组（批次 104，批次 107 调整过呈现方式）。
  *
  * 分组本身仍是排版的关键：每组一个小标题，相邻两组之间有一条分隔线，
@@ -69,6 +92,10 @@ export const SETTING_GROUP_LABELS: Record<SettingGroup, string> = {
   game: '游戏',
 };
 
+/** 自动保存间隔的可选值（秒，批次 172 / TASKS M20）：不提供"关闭"，避免丢档 */
+export const AUTOSAVE_OPTIONS: readonly number[] = [30, 60, 120];
+export const AUTOSAVE_LABELS: Record<string, string> = { '30': '30 秒', '60': '60 秒', '120': '120 秒' };
+
 /** 布尔型设置项（开关那种），单独取个名字给 makeToggle 用 */
 type BoolSettingKey =
   | 'clouds'
@@ -76,7 +103,8 @@ type BoolSettingKey =
   | 'daylightCycle'
   | 'showDebug'
   | 'adaptiveViewDistance'
-  | 'adaptiveResolution';
+  | 'adaptiveResolution'
+  | 'weatherEffects';
 
 export interface GameSettings {
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
@@ -93,6 +121,21 @@ export interface GameSettings {
   particles: ParticleLevel;
   /** 是否显示云（关掉能省一点填充率，也能看清远处地形） */
   clouds: boolean;
+  /**
+   * 天气效果（批次 172，TASKS M20）：关掉之后**不画雨雪点、也不溅雨花**，
+   * 但天气本身照旧（火焰还是会被雨浇灭、炼药锅照样接水）。
+   *
+   * 手机上雨点是 `transparent` 的 `Points`，是最典型的填充率开销；
+   * "雨太大看不清远处"时玩家需要的是一个能关掉它的开关。
+   */
+  weatherEffects: boolean;
+  /**
+   * 自动保存间隔（秒，批次 172，TASKS M20）：30 / 60 / 120。
+   *
+   * 不提供"关闭"——本项目没有手动存档按钮，关掉自动保存等于"崩了就白玩"。
+   * 大世界保存那一下会有一次卡顿，间隔拉开是给"在手机上建大工程"的人留的旋钮。
+   */
+  autosaveSeconds: number;
   /** 反转视角的上下方向（触摸拖动与鼠标都受影响） */
   invertY: boolean;
   /** 昼夜循环：关掉之后时间停在当前时刻（截图对比、搭建筑时很好用） */
@@ -142,6 +185,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   cameraMode: 'first',
   particles: 'all',
   clouds: true,
+  weatherEffects: true,
+  autosaveSeconds: 30,
   invertY: false,
   daylightCycle: true,
   showDebug: true,
@@ -172,6 +217,11 @@ export function loadSettings(): GameSettings {
         ? (parsed.particles as ParticleLevel)
         : DEFAULT_SETTINGS.particles,
       clouds: parsed.clouds !== false,
+      weatherEffects: parsed.weatherEffects !== false,
+      // 间隔只认那几个档位：脏数据（或老存档里没有这一项）一律回到 30 秒
+      autosaveSeconds: AUTOSAVE_OPTIONS.includes(parsed.autosaveSeconds as number)
+        ? (parsed.autosaveSeconds as number)
+        : DEFAULT_SETTINGS.autosaveSeconds,
       invertY: parsed.invertY === true,
       daylightCycle: parsed.daylightCycle !== false,
       showDebug: parsed.showDebug !== false,
@@ -417,6 +467,8 @@ export class SettingsScreen {
       this.makeSlider('fov', '视野', '°', 60, 110, 1),
     );
     this.makeToggle(graphics, 'clouds', '云');
+    // 天气效果（批次 172，M20）：只关**画出来的**雨雪与雨花，天气本身照旧
+    this.makeToggle(graphics, 'weatherEffects', '天气效果');
     // 降级四件套（批次 130，N7）：手机上"掉帧时先牺牲什么"交给玩家自己定。
     // 默认值刻意选成"手机优先"：两档自适应都开、帧率不限（能跑多少跑多少）
     this.makeToggle(graphics, 'adaptiveResolution', '自适应分辨率');
@@ -445,6 +497,8 @@ export class SettingsScreen {
     const game = this.section('game');
     this.makeToggle(game, 'daylightCycle', '昼夜循环');
     this.makeToggle(game, 'showDebug', '调试信息');
+    // 自动保存间隔（批次 172，M20）：大世界保存那一下会有卡顿，间隔是可调的
+    this.makeSelect(game, 'autosaveSeconds', '自动保存', AUTOSAVE_OPTIONS.map(String), AUTOSAVE_LABELS);
     // 创造模式（飞行）：手机端右下那一簇精简之后，这是唯一的**显式**开关
     //（双击跳跃仍然能用，那是手势）
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
@@ -681,26 +735,25 @@ export class SettingsScreen {
    */
   private makeSelect<T extends string>(
     options: HTMLElement,
-    key: 'cameraMode' | 'particles' | 'touchStick' | 'maxFps',
+    key: 'cameraMode' | 'particles' | 'touchStick' | 'maxFps' | 'autosaveSeconds',
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
   ): HTMLButtonElement {
-    const current = (): T => {
-      const value = this.settings[key] as T;
-      return values.includes(value) ? value : values[0]!;
-    };
+    const current = (): T => cycleValue(values, this.settings[key]) as T;
     return this.makeCycleRow(
       options,
       label,
       () => `‹ ${labels[current()]} ›`,
       () => {
-        const next = values[(values.indexOf(current()) + 1) % values.length]!;
+        const next = nextCycleValue(values, this.settings[key]) as T;
         // 逐个分支赋值：`GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查
         if (key === 'cameraMode') this.settings.cameraMode = next as CameraMode;
         else if (key === 'particles') this.settings.particles = next as ParticleLevel;
         // 帧率上限是**数字**（0/30/60），但选择行按字符串循环（见上面 `FPS_CAP_LABELS`）
         else if (key === 'maxFps') this.settings.maxFps = Number(next);
+        // 自动保存间隔同理（`AUTOSAVE_OPTIONS` 是秒数）
+        else if (key === 'autosaveSeconds') this.settings.autosaveSeconds = Number(next);
         else this.settings.touchStick = next as StickMode;
         this.commit();
         return `‹ ${labels[next]} ›`;

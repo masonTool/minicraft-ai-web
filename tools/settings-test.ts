@@ -13,11 +13,15 @@
  */
 
 import {
+  AUTOSAVE_LABELS,
+  AUTOSAVE_OPTIONS,
   DEFAULT_SETTINGS,
   PARTICLE_DENSITY,
   PARTICLE_LEVELS,
   PARTICLE_LEVEL_LABELS,
+  cycleValue,
   loadSettings,
+  nextCycleValue,
   saveSettings,
   type GameSettings,
 } from '../src/ui/SettingsScreen.ts';
@@ -195,6 +199,40 @@ console.log('\n[下拉框的选项]');
       (key) => (DEFAULT_SETTINGS as unknown as Record<string, unknown>)[key] !== undefined,
     ),
   );
+}
+
+// ---------------------------------------------------------------- 7. 批次 172：天气效果与自动保存
+
+console.log('\n[天气效果 / 自动保存间隔（批次 172，M20）]');
+{
+  check('天气效果默认开（不然玩家会以为雨坏了）', DEFAULT_SETTINGS.weatherEffects === true);
+  check('自动保存默认 30 秒', DEFAULT_SETTINGS.autosaveSeconds === 30);
+  check(
+    '自动保存只给三档，且每档都有中文标签',
+    AUTOSAVE_OPTIONS.length === 3 && AUTOSAVE_OPTIONS.every((value) => typeof AUTOSAVE_LABELS[String(value)] === 'string'),
+  );
+
+  const storage = new MemoryStorage();
+  useStorage(storage);
+  saveSettings({ ...DEFAULT_SETTINGS, weatherEffects: false, autosaveSeconds: 120 });
+  const roundTrip = loadSettings();
+  check('两项都能存下来并读回', roundTrip.weatherEffects === false && roundTrip.autosaveSeconds === 120);
+
+  // 脏数据：不在那三档里的间隔一律回到 30（45 秒这种"看着合理"的值也不行，
+  // 否则"改了一个不存在的档位"会让界面显示 A、实际按 B 跑）
+  storage.setItem(KEY, JSON.stringify({ autosaveSeconds: 45, weatherEffects: 'no' }));
+  const dirty = loadSettings();
+  check('脏的间隔回退到 30 秒', dirty.autosaveSeconds === 30);
+  check('weatherEffects 只有显式 false 才算关（缺省友好）', dirty.weatherEffects === true);
+
+  // ⚠️ 循环按钮的"数字 vs 字符串"bug（批次 130 潜伏到 172）：
+  //   设置里存的是数字，而选项表是字符串；老写法 `values.includes(30)` 永远为假，
+  //   于是按钮永远显示第一档、点一次之后再也换不动。
+  check('帧率上限：数字 30 能对上字符串档位', cycleValue(['0', '30', '60'], 30) === '30');
+  check('帧率上限：30 点一下 → 60（不再是"卡在 30"）', nextCycleValue(['0', '30', '60'], 30) === '60');
+  check('帧率上限：60 点一下 → 回到不限', nextCycleValue(['0', '30', '60'], 60) === '0');
+  check('自动保存：120 点一下 → 回到 30', nextCycleValue(AUTOSAVE_OPTIONS.map(String), 120) === '30');
+  check('非法值一律显示第一档', cycleValue(['0', '30', '60'], 999) === '0');
 }
 
 useStorage(null);

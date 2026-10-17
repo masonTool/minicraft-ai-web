@@ -991,8 +991,11 @@ class App {
   /** 一个游戏日为 20 分钟（与原版一致） */
   private readonly dayLengthSeconds = 1200;
 
-  /** 自动保存间隔（秒）：与原版的自动保存节奏接近 */
-  private readonly autoSaveInterval = 30;
+  /**
+   * 自动保存间隔（秒）。批次 172 起可调（TASKS M20，30 / 60 / 120），
+   * 默认 30——与原版的自动保存节奏接近；`applySettings()` 会按设置覆盖它。
+   */
+  private autoSaveInterval = 30;
   private autoSaveTimer = 0;
   /** 上次保存的结果（调试面板与验收脚本用） */
   private lastSaveAt = 0;
@@ -1556,6 +1559,8 @@ class App {
     this.camera.far = cameraFarFor(settings.viewDistance);
     this.camera.updateProjectionMatrix();
     this.audio.volume = settings.volume;
+    // 自动保存间隔（批次 172，M20）：改完立刻按新节奏走（下一轮从这里读）
+    this.autoSaveInterval = settings.autosaveSeconds;
     this.particles.setDensity(PARTICLE_DENSITY[settings.particles]);
     // 云 / 粒子上限 / 雨量一起按"设置 × 当前装饰层档位"落下去（见 `applyDecorLevel`）：
     // 设置里关掉的，档位回到 0 也不会自作主张打开
@@ -1578,7 +1583,7 @@ class App {
     const save = this.saveStatus;
     this.settingsScreen.setMeta(
       save.enabled
-        ? `存档：${save.hasSave ? '已保存' : '新世界'} · 改动 ${save.edits} 格 / ${save.editedChunks} 区块 · 自动保存每 30 秒`
+        ? `存档：${save.hasSave ? '已保存' : '新世界'} · 改动 ${save.edits} 格 / ${save.editedChunks} 区块 · 自动保存每 ${this.autoSaveInterval} 秒`
         : '存档：不可用（浏览器未提供 IndexedDB）',
     );
     this.settingsScreen.show();
@@ -2204,8 +2209,14 @@ class App {
           1,
         );
       }
-      // 雨滴溅落（E22）：露天淋雨时脚边地面上一颗颗小水星（雪地是白的）
-      if (this.weather.raining && this.dimension === Dimension.OVERWORLD && this.eyeMedium() !== 'water') {
+      // 雨滴溅落（E22）：露天淋雨时脚边地面上一颗颗小水星（雪地是白的）。
+      // 与"天气效果"开关同一个判据（批次 172）：关掉雨点却还在溅雨花，那开关就是坏的
+      if (
+        this.settings.weatherEffects &&
+        this.weather.raining &&
+        this.dimension === Dimension.OVERWORLD &&
+        this.eyeMedium() !== 'water'
+      ) {
         this.spawnRainSplashNear(p.x, p.y, p.z);
       }
     }
@@ -8314,7 +8325,9 @@ class App {
     const decor = this.perf.decorLevel;
     this.sky.setCloudsVisible(decorCloudsVisible(decor) && this.settings.clouds);
     this.particles.setBudget(decorParticleBudget(this.settings.particles, decor));
-    this.weather.setIntensity(decorRainFraction(decor));
+    // 天气效果（批次 172，M20）：关掉就一个雨点都不画，但**天气本身照旧**
+    // （火焰照样被雨浇灭、炼药锅照样接水）——它关的只是"画出来的那一层"
+    this.weather.setIntensity(this.settings.weatherEffects ? decorRainFraction(decor) : 0);
   }
 
   /**
