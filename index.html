@@ -2236,6 +2236,17 @@
       :is(.inv-page-button, .inv-tab, .inv-recipes-btn, .recipe-close, .enchant-option):disabled {
         color: #7d7d7d; background: #9c9c9c; cursor: default;
       }
+      /* 批次 162：背包面板里这几颗按钮是**浅底**（常态 #a8a8a8、选中 #dcdec4），
+         而统一按钮那套给的 `--btn-text` 是浅色（#e0e0e0）——选中时底一变浅，
+         字就彻底看不见了（用户："配方按钮的图标颜色应该是黑色"）。
+         ⚠️ 必须写在这条统一规则**之后**：两边特异性相同，靠先后定胜负。 */
+      .inv-recipes-btn,
+      .inv-page-button,
+      .inv-tab,
+      .inv-pocket-recipe-tab,
+      .recipe-close {
+        color: #2b2b2b;
+      }
       .inv-grid.inv-creative .inv-slot { width: 34px; height: 34px; }
       .inv-slot canvas { width: 36px; height: 36px; image-rendering: pixelated; }
       .inv-grid.inv-creative .inv-slot canvas { width: 28px; height: 28px; }

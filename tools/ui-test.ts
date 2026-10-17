@@ -780,6 +780,19 @@ console.log('\n[丢出口袋要在拾取范围之外（批次 161）]');
   check('朝向复用 lookDirection 的水平分量（不另抄一份三角函数）', mainSrc.includes('const [dirX, , dirZ] = PlayerPhysics.lookDirection(this.yaw, this.pitch);'));
 }
 
+console.log('\n[浅底按钮用深色字（批次 162）]');
+{
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  // 统一按钮那套给的是浅色文字（--btn-text = #e0e0e0），而背包这几颗是浅底；
+  // 选中时底变成 #dcdec4，浅色字就彻底看不见了
+  check('统一按钮的默认文字是浅色（所以要单独盖掉）', css.includes('--btn-text: var(--mc-text-light);'));
+  check(
+    '背包里的浅底按钮统一用深色字',
+    /\.inv-recipes-btn,\s*\n\s*\.inv-page-button,\s*\n\s*\.inv-tab,\s*\n\s*\.inv-pocket-recipe-tab,\s*\n\s*\.recipe-close \{\s*\n\s*color: #2b2b2b;/.test(css),
+  );
+}
+
 console.log('\n[玩家预览占位（批次 141）]');
 {
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
