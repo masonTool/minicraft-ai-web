@@ -270,6 +270,10 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
   // 删掉它之后每个面板必须还有**看得见**的出口
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   check('背包补上了关闭键（它原来根本没有）', invSrc.includes("closeButton.className = 'inv-close'") && html.includes('.inv-close {'));
+  check(
+    '关闭背包会同步关闭携带版配方页（不留下孤立左板）',
+    /close\(\): void \{[\s\S]{0,260}this\.hooks\.onCloseRecipes\?\.\(\)/.test(invSrc),
+  );
   // ⚠️ 只查**提示文案那一句**（注释里会解释"原来写的是错的"，会撞到自己）
   const invHint = /hint\.innerHTML = touchDevice([\s\S]*?);\n/.exec(invSrc)?.[1] ?? '';
   check('背包提示不再说"点空白处关闭"（那句话本来就是错的）', invHint.length > 0 && !invHint.includes('点空白'));

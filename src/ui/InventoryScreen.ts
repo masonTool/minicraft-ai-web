@@ -2470,6 +2470,9 @@ export class InventoryScreen {
   close(): void {
     this.clearTouchPress();
     if (!this.open || this.closing) return;
+    // 携带版合成页的配方书是背包的左半页，不是独立窗口。
+    // 直接点右上角关闭时必须一起收起，否则背包滑走后会留下一个孤立的配方面板。
+    this.hooks.onCloseRecipes?.();
     this.returnHeldToInventory();
     this.returnCraftingToInventory();
     if (this.activeContainer) this.activeContainer.onChange = null;
