@@ -563,9 +563,12 @@
         border-radius: var(--slot-radius);
       }
       .recipe-cell canvas { width: 28px; height: 28px; image-rendering: pixelated; }
-      /* 材料不够：压暗（基岩版也是把做不了的灰掉，不另加"叉"之类） */
-      .recipe-cell.locked { background: #6f6f6f; }
-      .recipe-cell.locked canvas { opacity: .35; filter: grayscale(1); }
+      /* 生存配方表：背包缺材料的配方用红底，不再只是“灰一点”而看不出原因。 */
+      .recipe-cell.locked {
+        background: #9b3b35;
+        border-color: #cf7770 #54201c #54201c #cf7770;
+      }
+      .recipe-cell.locked canvas { opacity: .62; filter: grayscale(.35); }
       /* 3×3 要工作台：左上角标一下，免得点不动却不知道为什么 */
       .recipe-cell.needs-table::after {
         content: '3×3'; position: absolute; left: 1px; top: 0;
@@ -1832,6 +1835,150 @@
         max-width: 36px; max-height: 36px;
       }
 
+      /* ---------------- 携带版统一双栏（批次 156） ----------------
+         生存与创造都用同一副壳：左边角色物品/配方/创造物品，右边合成或装备。
+         不再点一次页签就把整扇窗口换成另一种宽高。 */
+      .inv-panel.pocket-ui.pocket-dual {
+        width: min(calc(100vw - 88px), 800px);
+        max-width: min(calc(100vw - 88px), 800px);
+        height: var(--inv-pocket-h);
+        max-height: var(--inv-pocket-h);
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-header {
+        position: relative;
+        min-height: 34px;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-header .inv-pocket-recipe-toggle:not(.hidden) {
+        display: block;
+        position: absolute;
+        left: calc(50% - 42px);
+        top: 0;
+        min-width: 36px;
+        min-height: 32px;
+        padding: 3px 7px;
+        font-size: 0;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-header .inv-pocket-recipe-toggle::after {
+        content: '▦';
+        font-size: 20px;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 6px 14px;
+        width: 100%;
+        overflow: hidden;
+        align-items: start;
+      }
+      /* mainColumn 只是代码层的分组；视觉上让它的三个孩子直接进入双栏网格。 */
+      .inv-panel.pocket-ui.pocket-dual .inv-main { display: contents; }
+      .inv-panel.pocket-ui.pocket-dual .inv-personal-title {
+        display: block;
+        grid-column: 1;
+        grid-row: 1;
+        text-align: center;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid {
+        grid-column: 1;
+        grid-row: 2;
+        align-self: start;
+        justify-self: center;
+        grid-template-columns: repeat(9, 36px);
+        gap: 2px;
+        max-height: 148px;
+        overflow: hidden;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid .inv-slot {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        max-width: 36px;
+        max-height: 36px;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid .inv-slot canvas {
+        width: 32px;
+        height: 32px;
+        max-width: 32px;
+        max-height: 32px;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-top {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-left: 2px solid #8a8a8a;
+        box-sizing: border-box;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-gear {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-left: 2px solid #8a8a8a;
+        box-sizing: border-box;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-gear-row {
+        align-items: center;
+        justify-content: center;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-player-preview {
+        width: 170px;
+        height: 190px;
+        background: #080808;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-creative-section {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-creative-controls {
+        min-height: 32px;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-creative {
+        grid-template-columns: repeat(7, 40px);
+        gap: 2px;
+        max-height: 174px;
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .inv-panel.pocket-ui.pocket-dual .inv-creative .inv-slot {
+        width: 40px;
+        height: 40px;
+        max-width: 40px;
+        max-height: 40px;
+      }
+      /* 截图里的两颗右侧键在右下角：第一颗工作台，第二颗人物装备。 */
+      .inv-shell.pocket-chrome:has(.pocket-dual) .inv-rail-right {
+        justify-content: flex-end;
+        padding-bottom: 8px;
+      }
+      /* 配方打开后左板由 RecipeBook 接管，右板只保留合成/装备，不再重复玩家物品。 */
+      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual {
+        width: min(96%, var(--inv-pocket-w));
+        max-width: min(96%, var(--inv-pocket-w));
+      }
+      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual .inv-body {
+        grid-template-columns: 1fr;
+      }
+      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual .inv-main > .inv-grid,
+      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual .inv-personal-title,
+      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual .inv-creative-section {
+        display: none !important;
+      }
+      body.split-ui:not(.classic-ui) .inv-panel.pocket-dual :is(.inv-top, .inv-gear) {
+        grid-column: 1;
+        border-left: 0;
+      }
+
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
       .inv-grid.inv-armor { grid-template-columns: 42px; }
       /* 空槽里写"头/胸/腿/靴/副"：触摸端没有悬停提示，只能靠槽位自己说明 */
@@ -2660,6 +2807,23 @@
       /* 携带版配方分类轨有意伸在灰框之外；只让内部网格滚，不能被通用防横滑规则裁掉。 */
       body.split-ui:not(.classic-ui) #recipe-book .recipe-panel {
         overflow: visible;
+      }
+      /* 触摸端通用规则写在双栏规则之后，最终在这里收口，避免重新压回旧单栏宽度。 */
+      body.touch-mode .inv-panel.pocket-ui.pocket-dual {
+        width: min(calc(100vw - 88px), 800px);
+        max-width: min(calc(100vw - 88px), 800px);
+      }
+      body.touch-mode .inv-panel.creative-ui.pocket-ui.pocket-dual .inv-creative {
+        grid-template-columns: repeat(7, 40px);
+        min-height: 0;
+        max-height: 174px;
+      }
+      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui.pocket-dual {
+        width: min(48vw, var(--inv-pocket-w));
+        max-width: min(48vw, var(--inv-pocket-w));
+      }
+      body.touch-mode.split-ui:not(.classic-ui) .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid {
+        display: none !important;
       }
       /* ⚠️ 刻意**不**包含 `.inv-tabs`：那一行分类标签是"单行横向滚动"的
          （窄屏上一个都换行不下），锁掉就不会滚了（见 `ui-test` 里那条断言）。 */

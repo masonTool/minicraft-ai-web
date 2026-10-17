@@ -405,11 +405,11 @@ console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克�
   check('销毁格左键整叠 / 右键一个', invSrc.includes('destroyHeld(event.button === 2 ? 1 : null)'));
   check('销毁格 CSS 在', css.includes('.inv-creative-destroy-row') && css.includes('.inv-slot.creative-destroy'));
   check('创造格选取上光标（左满组/右一个）', invSrc.includes('创造选取') && invSrc.includes('this.held = { id: itemId, count: max }'));
-  check('创造整屏排布（creative-ui）', invSrc.includes("classList.toggle('creative-ui'") && invSrc.includes('showCreativeItems'));
+  check('创造物品作为统一双栏的左栏', invSrc.includes("classList.toggle('creative-ui', leftShowsCreative)") && invSrc.includes('leftShowsCreative'));
   check('创造 ↔ 生存背包可切换', invSrc.includes("dataset.role = 'creative-toggle'"));
 }
 
-console.log('\n[携带版分标签页（批次 140）]');
+console.log('\n[携带版统一双栏（批次 140 / 156）]');
 {
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
   const recipeSrc = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
@@ -417,18 +417,19 @@ console.log('\n[携带版分标签页（批次 140）]');
   const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const core = readFileSync(new URL('../src/core/crafting/RecipeBook.ts', import.meta.url), 'utf8');
 
-  check('有 PocketInventoryTab 三页', invSrc.includes("export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory'"));
+  check('左右栏仍复用 PocketInventoryTab 状态', invSrc.includes("export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory'"));
   check('页签 DOM role=pocket-tabs', invSrc.includes("dataset.role = 'pocket-tabs'"));
   check('左上配方图标 role=pocket-recipes', invSrc.includes("dataset.role = 'pocket-recipes'"));
   check('图标页签：右缘合成/盔甲 + 左下物品栏', invSrc.includes('makePocketIconTab') && invSrc.includes('inv-pocket-side'));
-  check('合成页自动摊开配方书', invSrc.includes("tab === 'crafting'") && invSrc.includes('this.hooks.onOpenRecipes?.(recipeTab ?? \'all\')'));
-  check('盔甲页同时显示主背包与装备', invSrc.includes("tab === 'inventory' || tab === 'armor'"));
+  check('右下合成键只切右栏，不自动打开配方书', /private setPocketTab[\s\S]{0,180}applyInventoryChrome\(\);[\s\S]{0,30}\}/.test(invSrc));
+  check('只有左侧分类/配方键打开配方书', invSrc.includes('private openPocketRecipes(tab: RecipeBookTab)') && invSrc.includes('this.hooks.onOpenRecipes?.(tab)'));
+  check('盔甲页保留左侧主背包', invSrc.includes("this.mainGridEl.style.display = leftShowsCreative ? 'none' : ''"));
   check('快捷栏在携带版始终显示', /this\.hotbarGridEl\.style\.display = '';/.test(invSrc));
   check('经典 UI 断点复用 isClassicUi', invSrc.includes('!isClassicUi(this.viewportWidth)'));
   check('与配方书同一断点常量', core.includes('CLASSIC_UI_MIN_WIDTH = 1280'));
   check('配方书 show 可带 tab', /show\(tab\?: RecipeBookTab\)/.test(recipeSrc));
   check('主程序把 tab 传给配方书', mainSrc.includes('this.recipeBook.show(tab)'));
-  check('携带版 CSS 在', css.includes('.inv-panel.pocket-ui') && css.includes('.inv-pocket-tabs') && css.includes('.inv-pocket-side'));
+  check('生存与创造共用 pocket-dual 双栏', invSrc.includes("classList.add('pocket-ui', 'pocket-dual')") && css.includes('.inv-panel.pocket-ui.pocket-dual'));
   check('经典下隐藏携带版控件', css.includes('.inv-pocket-tabs.hidden') && css.includes('.inv-pocket-recipes.hidden'));
   // 批次 145：页签不得用负偏移伸出灰框
   check('携带版页签不伸出面板（无 right:-N）', !/inv-pocket-side\s*\{[^}]*right:\s*-\d/.test(css.replace(/\s+/g, ' ')));
@@ -443,7 +444,7 @@ console.log('\n[携带版分标签页（批次 140）]');
   check('盔甲页标题', invSrc.includes('inv-armor-title') && css.includes('.inv-armor-title'));
   check('快捷栏 dock 带框', css.includes('.inv-hotbar-dock:not(.hidden) .inv-hotbar'));
   // 批次 149：携带版比例与分类页不能再退回“灰框很大、槽位很小、内容混在一起”
-  check('携带版主背包与快捷栏固定 9×44px', css.includes('grid-template-columns: repeat(9, 44px)'));
+  check('双栏主背包保持 9 列并缩到手机半屏', css.includes('grid-template-columns: repeat(9, 36px)'));
   check('快捷栏 dock 固定到整屏底部', css.includes('position: fixed; left: 0; right: 0; bottom: 0;') && css.includes('width: 100vw;'));
   check(
     '单窗各页共用同一组固定背包尺寸',
@@ -457,17 +458,14 @@ console.log('\n[携带版分标签页（批次 140）]');
     '配方书挂箱子页签后仍保持 fixed（双窗不会左高右低）',
     css.includes('#recipe-book.has-pocket-inv-tab') && css.includes('position: fixed;'),
   );
-  check(
-    '合成页下方显示玩家自己的主背包',
-    invSrc.includes("tab === 'inventory' || tab === 'armor' || tab === 'crafting'"),
-  );
+  check('合成/装备右栏与左侧玩家物品独立切换', invSrc.includes('const rightShowsCrafting') && invSrc.includes("this.gearEl.style.display = rightShowsCrafting ? 'none' : ''"));
   check(
     '工作台携带版自动打开配方书并沿用双窗壳',
     invSrc.includes("mode === 'crafting' && !isClassicUi(this.viewportWidth)") &&
       invSrc.includes("this.hooks.onOpenRecipes?.('all')") &&
       invSrc.includes("classList.toggle('workbench-ui', workbenchPocket)"),
   );
-  check('携带版创造栏是 10 列 44px 槽位', css.includes('grid-template-columns: repeat(10, 44px)'));
+  check('携带版创造栏是半屏可容纳的 7 列 40px 槽位', css.includes('grid-template-columns: repeat(7, 40px)'));
   check(
     '携带版创造栏渲染整表滚动而非只留分页首屏',
     invSrc.includes('const visible = pocketScroll ? items : slicePage('),
@@ -1094,7 +1092,12 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   // ---- 版面：基岩版经典 UI 那一屏（批次 135，用户给的截图）
   check('配方列表是**产物图标网格**（不是卡片列表）', compact.includes('.recipe-grid {') && !compact.includes('.recipe-card {'));
   check('网格的每一格带产物图标与数量徽章', bookUi.includes("badge.className = 'recipe-cell-count'") && compact.includes('.recipe-cell-count {'));
-  check('材料不够的格子压暗（基岩版是灰掉，不另加标记）', bookUi.includes("classList.add(entry.craftable ? 'on' : 'locked')") && compact.includes('.recipe-cell.locked canvas {'));
+  check(
+    '生存材料不足的配方用红底表示仅展示配方',
+    bookUi.includes("classList.add(entry.craftable ? 'on' : 'locked')") &&
+      compact.includes('.recipe-cell.locked {') &&
+      compact.includes('background: #9b3b35;'),
+  );
   check('3×3 的格子标出"要工作台"', compact.includes('.recipe-cell.needs-table::after'));
   check('搜索框与那颗方形筛选按钮同一行（截图里就是这个位置）', compact.includes('.recipe-controls {') && bookUi.includes("controls.append(this.searchEl, this.filterButton)"));
   check('页签是方形图标块（文字只留在 title/aria 里）', compact.includes('.recipe-tab { width: 32px;') && compact.includes('.recipe-tab-label { display: none; }'));
@@ -1122,6 +1125,8 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('设置有界面配置 uiProfile', settingsSrc.includes('uiProfile') && settingsSrc.includes("'界面配置'"));
   check('底部滑入/滑出动画', compact.includes('@keyframes panel-out') && compact.includes('translateY(28%)'));
   check('触摸多余回源格', inventorySrc.includes('returnHeldToTouchOrigin') && inventorySrc.includes('touchOrigin'));
+  check('点不可放置槽会取消选中并安全退回', inventorySrc.includes('private cancelHeldSelection()') && /!this\.accepts[\s\S]{0,180}cancelHeldSelection\(\)/.test(inventorySrc));
+  check('点面板内非槽位区域只取消、不丢弃', inventorySrc.includes("target.closest('.inv-slot, button, input, .recipe-cell')") && inventorySrc.includes('this.cancelHeldSelection();'));
 
   // ---- 标签栏图标（Wiki："配方书的标签栏与创造分类相同"）
   check('四个实体标签栏复用了创造栏的真实物品图标', creativeSrc.includes('export const RECIPE_TAB_ICONS'));

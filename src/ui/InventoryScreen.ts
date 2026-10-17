@@ -345,7 +345,7 @@ export class InventoryScreen {
    * 携带版当前内容页（批次 140）。
    * 仅在「非经典视口 + 玩家物品栏模式」下生效；经典 UI 三块同时显示。
    */
-  private pocketTab: PocketInventoryTab = 'inventory';
+  private pocketTab: PocketInventoryTab = 'crafting';
   /**
    * 创造模式里正在看「生存背包」而不是创造物品网格（批次 142）。
    * 基岩版创造栏与生存栏是两套界面，用按钮互切。
@@ -581,8 +581,8 @@ export class InventoryScreen {
         }
         button.addEventListener('pointerdown', (event) => {
           event.preventDefault();
-          // Wiki：左上分类图标打开对应配方书页，与合成/盔甲/物品栏互斥
-          this.setPocketTab('crafting', tab);
+          // 左上分类才打开配方书；右下工作台键只负责切换右栏。
+          this.openPocketRecipes(tab);
         });
         this.pocketRecipeBar.appendChild(button);
       }
@@ -602,11 +602,12 @@ export class InventoryScreen {
     if (this.hooks.onOpenRecipes) {
       const recipes = document.createElement('button');
       recipes.type = 'button';
-      recipes.className = 'inv-recipes-btn';
+      recipes.className = 'inv-recipes-btn inv-pocket-recipe-toggle';
+      recipes.dataset.role = 'recipe-toggle';
       // 键盘热键的括注只在 PC 上给：手机上没有 R 这个键，写成"配方书 (R)"
       // 只会让人以为"要按 R 才能打开"（批次 104）
       recipes.textContent = touchDevice ? '配方书' : '配方书 (R)';
-      recipes.addEventListener('click', () => this.hooks.onOpenRecipes?.());
+      recipes.addEventListener('click', () => this.openPocketRecipes('all'));
       this.recipesBtn = recipes;
       header.appendChild(recipes);
     }
@@ -848,7 +849,9 @@ export class InventoryScreen {
     this.creativeSection = document.createElement('div');
     this.creativeSection.className = 'inv-creative-section';
     this.buildCreativeSection();
-    this.panel.appendChild(this.creativeSection);
+    // 携带版统一双栏：左栏在“玩家物品 / 创造物品”之间切换，右栏始终是合成或装备。
+    // 放进 playerBody 才能与 mainColumn / gear 共用同一套两栏网格。
+    this.playerBody.appendChild(this.creativeSection);
 
     // 顺序：左轨（配方+箱子）| 灰框 | 右轨（合成/盔甲）——页签在 panel 外
     this.shellEl.append(this.railLeft, this.panel, this.railRight, this.pocketTabsEl);
@@ -938,12 +941,19 @@ export class InventoryScreen {
       // 图标 + 文字（批次 98，对齐基岩版）：图标是**注册表里的真实物品**
       // （砖块/镐/工作台/草方块），窄屏可以只留图标；五个顶层分类与基岩版一致。
       // 文字用 span 包着是为了能在窄屏单独隐藏它
-      const icon = document.createElement('canvas');
-      icon.className = 'inv-tab-icon';
-      drawItemIcon(icon, this.atlas, CREATIVE_TAB_ICONS[category], 18);
+      const icon =
+        category === 'all'
+          ? this.makeSearchTabIcon()
+          : document.createElement('canvas');
+      icon.classList.add('inv-tab-icon');
+      if (icon instanceof HTMLCanvasElement) {
+        drawItemIcon(icon, this.atlas, CREATIVE_TAB_ICONS[category], 18);
+      }
       const label = document.createElement('span');
       label.className = 'inv-tab-label';
-      label.textContent = CREATIVE_TAB_LABELS[category];
+      label.textContent = category === 'all' ? '搜索' : CREATIVE_TAB_LABELS[category];
+      button.title = label.textContent;
+      button.setAttribute('aria-label', label.textContent);
       button.append(icon, label);
       button.addEventListener('pointerdown', (event) => {
         event.preventDefault();
@@ -957,6 +967,7 @@ export class InventoryScreen {
         }
         this.updateTabHighlight();
         this.renderCreativeGrid();
+        if (category === 'all') this.creativeSearch.focus();
       });
       this.creativeTabs.appendChild(button);
     }
@@ -1017,6 +1028,17 @@ export class InventoryScreen {
     this.narrowQuery?.addEventListener('change', () => this.renderCreativeGrid());
   }
 
+  private makeSearchTabIcon(): SVGSVGElement {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML =
+      '<circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/>' +
+      '<path d="M14.5 14.5L21 21" fill="none" stroke="currentColor" stroke-width="2.5"/>';
+    return svg;
+  }
+
   /** 携带版图标页签（批次 144）：右缘合成/盔甲，左下物品栏 */
   private makePocketIconTab(
     tab: PocketInventoryTab,
@@ -1045,32 +1067,36 @@ export class InventoryScreen {
     }
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault();
-      // 创造整屏时点箱子/合成/盔甲 → 切回生存背包对应页（Wiki 左下箱 + 右缘两键）
-      const creative = this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false);
-      if (creative && !this.creativeSurvival) {
-        this.creativeSurvival = true;
+      if (tab === 'inventory') {
+        // 左下箱子只切左栏：生存时从配方表回到玩家物品，创造时在无限物品与玩家物品间切换。
+        if (this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false)) {
+          this.creativeSurvival = true;
+        }
+        this.hooks.onCloseRecipes?.();
+        this.restoreInvTabToRail();
+        this.applyInventoryChrome();
+        return;
       }
+      // 合成/装备只切右栏，不应顺手把左侧创造物品换成玩家背包。
       this.setPocketTab(tab);
     });
     return button;
   }
 
   /** 携带版切页（批次 140 → 144） */
-  private setPocketTab(tab: PocketInventoryTab, recipeTab?: RecipeBookTab): void {
-    const changed = this.pocketTab !== tab;
+  private setPocketTab(tab: PocketInventoryTab): void {
     this.pocketTab = tab;
     this.applyInventoryChrome();
-    // 合成页：左半摊开配方书；离开合成页就收起来（Wiki：各页互斥）
-    if (tab === 'crafting') {
-      this.hooks.onOpenRecipes?.(recipeTab ?? 'all');
-      // 配方书打开并挂上 split-ui 之后，再把箱子页签挪到左板底
-      requestAnimationFrame(() => {
-        if (this.open && this.pocketTab === 'crafting') this.parkInvTabOnRecipeBook();
-      });
-    } else if (changed) {
-      this.hooks.onCloseRecipes?.();
-      this.restoreInvTabToRail();
-    }
+  }
+
+  private openPocketRecipes(tab: RecipeBookTab): void {
+    this.pocketTab = 'crafting';
+    this.applyInventoryChrome();
+    this.hooks.onOpenRecipes?.(tab);
+    // 配方书打开并挂上 split-ui 之后，再把箱子页签挪到左板底。
+    requestAnimationFrame(() => {
+      if (this.open && this.pocketTab === 'crafting') this.parkInvTabOnRecipeBook();
+    });
   }
 
   /**
@@ -1099,6 +1125,51 @@ export class InventoryScreen {
     if (this.creativeToggleBtn) {
       this.creativeToggleBtn.classList.toggle('hidden', !creative || pocket);
       this.creativeToggleBtn.textContent = this.creativeSurvival ? '创造物品' : '生存背包';
+    }
+
+    // 携带版普通背包统一成用户截图的固定双栏：
+    // 左栏 = 玩家物品（生存）或无限物品（创造）；右栏 = 合成 / 装备。
+    // 左下箱子与左上分类只切左栏，右下两键只切右栏，两边互不把对方整页换走。
+    if (pocket && this.mode === 'inventory') {
+      if (this.pocketTab === 'inventory') this.pocketTab = 'crafting';
+      const leftShowsCreative = creative && !this.creativeSurvival;
+      const rightShowsCrafting = this.pocketTab === 'crafting';
+
+      this.panel.classList.add('pocket-ui', 'pocket-dual');
+      this.panel.classList.toggle('creative-ui', leftShowsCreative);
+      this.panel.classList.remove('workbench-ui');
+      this.shellEl.classList.add('pocket-chrome');
+      this.pocketTabsEl.classList.remove('hidden');
+      this.panel.dataset.pocketTab = this.pocketTab;
+
+      this.playerBody.style.display = '';
+      this.creativeSection.style.display = leftShowsCreative ? '' : 'none';
+      this.mainGridEl.style.display = leftShowsCreative ? 'none' : '';
+      this.hotbarGridEl.style.display = '';
+      this.topArea.style.display = rightShowsCrafting ? '' : 'none';
+      this.gearEl.style.display = rightShowsCrafting ? 'none' : '';
+      this.personalInventoryTitleEl.style.display = leftShowsCreative ? 'none' : '';
+      this.syncCraftArrow(false);
+
+      // 生存左轨是四个分类 + 搜索；创造左轨复用创造物品分类。
+      this.syncCreativeRails(true, leftShowsCreative);
+      if (!leftShowsCreative) {
+        this.pocketRecipeBar.classList.remove('hidden');
+        this.railLeft.classList.remove('hidden');
+      }
+      this.railRight.classList.remove('hidden');
+      this.restoreInvTabToRail();
+      this.placeHotbar(true);
+      this.syncPocketBodyClass(true);
+      this.renderCreativeGrid();
+
+      if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', creative);
+      this.invTabEl.classList.toggle('active', !leftShowsCreative);
+      for (const button of this.root.querySelectorAll<HTMLElement>('.inv-pocket-tab')) {
+        if (button.dataset.tab === 'inventory') continue;
+        button.classList.toggle('active', button.dataset.tab === this.pocketTab);
+      }
+      return;
     }
 
     if (showCreativeItems) {
@@ -1827,6 +1898,17 @@ export class InventoryScreen {
       this.refresh();
     });
 
+    // 点面板里的非槽位区域 = 取消当前选取，不移动任何物品。
+    // “窗口外”仍由下面 root 的监听处理为丢弃；两块区域的语义必须分开。
+    this.panel.addEventListener('pointerdown', (event) => {
+      const target = event.target as HTMLElement;
+      if (!this.held) return;
+      if (target.closest('.inv-slot, button, input, .recipe-cell')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.cancelHeldSelection();
+    });
+
     // 点界面外：**把手上的东西丢进世界**（批次 128，对齐原版；
     // 原来是"放回背包"，那与原版不符——原版是直接丢出去）。
     // ⚠️ 批次 132 按 Wiki「物品管理」补上按键之分：**左键全部丢出、右键只丢一个**
@@ -2283,10 +2365,19 @@ export class InventoryScreen {
     const slot = source.get(index);
     const hadHeld = this.held !== null;
 
+    // 产物槽等只取不放：手里拿着东西再点它属于“不可放置点”。
+    // 不交换、不把物品塞进产物槽；只取消当前选取并把东西送回来源。
+    if (this.held && takeOnly) {
+      this.rejectSlot(binding.element);
+      this.cancelHeldSelection();
+      return;
+    }
+
     if (this.held && !takeOnly) {
       // 盔甲槽只吃对应部位：不匹配就整次操作作废（既不放下也不交换）
       if (!this.accepts(binding, this.held.id)) {
         this.rejectSlot(binding.element);
+        this.cancelHeldSelection();
         return;
       }
       if (button === 2) {
@@ -2338,8 +2429,8 @@ export class InventoryScreen {
         } else {
           this.held = slot;
           source.set(index, null);
-          // 触摸短按拿起：记下来源，装不下时多余要送回去（批次 142）
-          if (isTouchUi()) this.touchOrigin = { source, index, itemId: slot.id };
+          // 无论鼠标还是触摸都记来源：点到不可放置区域时要能“取消选中”并原位退回。
+          this.touchOrigin = { source, index, itemId: slot.id };
         }
       }
     }
@@ -2356,6 +2447,38 @@ export class InventoryScreen {
 
     if (this.held && this.held.count <= 0) this.held = null;
     this.crafting.recompute();
+    this.refresh();
+  }
+
+  /** 取消选中：优先原位退回；原位已被占时再放回玩家背包。创造复制出来的物品直接清掉。 */
+  private cancelHeldSelection(): void {
+    if (!this.held) return;
+    const origin = this.touchOrigin;
+    if (origin && this.held.id === origin.itemId) {
+      const there = origin.source.get(origin.index);
+      if (!there) {
+        origin.source.set(origin.index, this.held);
+        if (origin.source === this.inventory) this.inventory.notify();
+        this.held = null;
+      } else if (there.id === this.held.id) {
+        const room = maxStackOf(there.id) - there.count;
+        const moved = Math.min(room, this.held.count);
+        there.count += moved;
+        this.held.count -= moved;
+        if (origin.source === this.inventory) this.inventory.notify();
+        if (this.held.count <= 0) this.held = null;
+      }
+    }
+    if (this.held) {
+      // 创造栏选出来的是复制品，没有来源；取消时不能把复制品偷偷塞进玩家背包。
+      const creativeCopy =
+        this.mode === 'inventory' &&
+        (this.hooks.isCreative?.() ?? false) &&
+        origin === null;
+      if (creativeCopy) this.held = null;
+      else this.storeHeld();
+    }
+    this.touchOrigin = null;
     this.refresh();
   }
 
