@@ -32,6 +32,7 @@
     "test:combat": "esbuild tools/combat-test.ts --bundle --platform=node --format=esm --outfile=.tmp/combat-test.mjs --log-level=error && node .tmp/combat-test.mjs",
     "test:decor": "esbuild tools/decor-test.ts --bundle --platform=node --format=esm --outfile=.tmp/decor-test.mjs --log-level=error && node .tmp/decor-test.mjs",
     "test:terrain": "esbuild tools/terrain-feel-test.ts --bundle --platform=node --format=esm --outfile=.tmp/terrain-feel-test.mjs --log-level=error && node .tmp/terrain-feel-test.mjs",
+    "test:terrain:normal": "esbuild tools/terrain-normal-test.ts --bundle --platform=node --format=esm --outfile=.tmp/terrain-normal-test.mjs --log-level=error && node .tmp/terrain-normal-test.mjs",
     "test:wood": "esbuild tools/woodfamily-test.ts --bundle --platform=node --format=esm --outfile=.tmp/woodfamily-test.mjs --log-level=error && node .tmp/woodfamily-test.mjs",
     "test:structure": "esbuild tools/structure-test.ts --bundle --platform=node --format=esm --outfile=.tmp/structure-test.mjs --log-level=error && node .tmp/structure-test.mjs",
     "test:nether": "esbuild tools/nether-test.ts --bundle --platform=node --format=esm --outfile=.tmp/nether-test.mjs --log-level=error && node .tmp/nether-test.mjs",
