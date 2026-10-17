@@ -369,6 +369,20 @@ console.log('\n[触摸端长按选数量（批次 137，基岩版那个指示条
   check('背包提示写了"长按划动选数量"', invHint.includes('长按划动选数量'), invHint.slice(0, 60));
 }
 
+console.log('\n[背包搬运音效（H19 ⑪，批次 138）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+
+  check('界面提供了 onMove 钩子', invSrc.includes('onMove?: () => void;'));
+  // ⚠️ 判据是"动过"而不是"点过"：散在十几个分支里逐个补一句迟早漏，
+  // 所以用一个前后指纹包住整个激活入口
+  check('用前后指纹判断"动过没有"', /const before = this\.moveSignature\(\);/.test(invSrc) && /if \(this\.moveSignature\(\) !== before\) this\.hooks\.onMove\?\.\(\)/.test(invSrc));
+  check('指纹含光标那一叠（否则"拿走半叠"漏判）', /this\.held \? `@\$\{this\.held\.id\}:\$\{this\.held\.count\}`/.test(invSrc));
+  check('选数量的结算也响（它不是普通点击那条路）', /this\.refresh\(\);\s*\n\s*this\.hooks\.onMove\?\.\(\);/.test(invSrc));
+  check('主程序把它接到 audio.play', mainSrc.includes("onMove: () => this.audio.play('item_move')"));
+}
+
 console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全关完才轮到浏览器]');
 {
   /** 一个可断言的假浏览器：`history` 只有"压一条/退一格"两个动作 */

@@ -53,9 +53,22 @@ export type SoundKind =
    * 成交（J11）：一声干脆的双音"叮"。
    * 不复用 `click`：成交是"钱货两清"，手感要更实在一点（而且它总与进度/升级挨着响）。
    */
-  | 'trade';
+  | 'trade'
+  /**
+   * 背包里搬东西（H19 ⑪，批次 138）：一声很轻的"咔"。
+   *
+   * 为什么不能复用 `click`：`click` 是**按钮**的声音（面板开关、页签），又亮又脆；
+   * 而搬东西在一次操作里可能连响好几下（连发放置），用前者会很吵。
+   */
+  | 'item_move'
+  /** 关门（批次 138）：木质门合上的"咔嗒"——原来开门关门共用 `door`（那是"吱呀"） */
+  | 'door_close'
+  /** 活板门（批次 138）：短促的一声木质闷响（原版这三种门各有各的声） */
+  | 'trapdoor'
+  /** 栅栏门（批次 138）：比门更轻的木头声 */
+  | 'fence_gate';
 
-interface SoundSpec {
+export interface SoundSpec {
   /** 声音总时长（秒） */
   duration: number;
   /** 音量（0~1，再乘以播放增益与主音量） */
@@ -124,7 +137,51 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   mob_villager: { duration: 0.5, gain: 0.34, noise: 0.12, freqFrom: 300, freqTo: 210, type: 'sawtooth', filter: 1100, filterQ: 2.2, attack: 0.05, release: 0.44, thump: 95 },
   // 成交（J11）：两声干脆的"叮"（原版是硬币落袋；这里用两个高音短音代替）
   trade: { duration: 0.26, gain: 0.34, noise: 0.08, freqFrom: 1200, freqTo: 1800, type: 'triangle', filter: 5200, filterQ: 1.6, attack: 0.002, release: 0.24 },
+  // 背包搬运（批次 138）：极短、极轻的一下——它会在"连发放置"时连着响，
+  // 音量只要比 `click` 低一档就够（响了说明"这件东西动了"，而不是"我按了键"）
+  item_move: { duration: 0.05, gain: 0.16, noise: 0.35, freqFrom: 560, freqTo: 360, type: 'square', filter: 2400, filterQ: 1.3, attack: 0.001, release: 0.045 },
+  // 关门（批次 138）：木质门"咔嗒"——起手极短、低频闷响收尾，与开门的"吱呀"（`door`）分开
+  door_close: { duration: 0.18, gain: 0.42, noise: 0.5, freqFrom: 240, freqTo: 90, type: 'square', filter: 900, filterQ: 3, attack: 0.001, release: 0.17, thump: 95 },
+  // 活板门：一块木板拍下来的"咚"（比门短、比栅栏门闷）
+  trapdoor: { duration: 0.2, gain: 0.4, noise: 0.72, freqFrom: 200, freqTo: 120, type: 'square', filter: 1100, filterQ: 2.6, attack: 0.002, release: 0.19, thump: 110 },
+  // 栅栏门：更轻的木头（噪声多、音调高一点，听起来"薄"）
+  fence_gate: { duration: 0.24, gain: 0.32, noise: 0.68, freqFrom: 320, freqTo: 190, type: 'sawtooth', filter: 1400, filterQ: 2.2, attack: 0.004, release: 0.22 },
 };
+
+/**
+ * 开关类方块 → 音效（批次 138）。
+ *
+ * 抽成纯函数的原因与 `breakSoundFor` 一样：**三种门的"声音分工"是纯逻辑**，
+ * 而"哪一格是门"要在主程序里判。原来三种门共用 `door`，症状是
+ * "关活板门听着像在推开一扇吱呀作响的大门"。
+ */
+export function doorSoundFor(shape: string, opened: boolean): SoundKind {
+  if (shape === 'trapdoor') return 'trapdoor';
+  if (shape === 'fence_gate') return 'fence_gate';
+  return opened ? 'door' : 'door_close';
+}
+
+/**
+ * 水下闷响（批次 138）：听者在水下时，所有音效过一道低通并压低音量。
+ *
+ * 原版在水下听到的一切都是"闷"的——它是一个**全局**效果，所以放在引擎里
+ * （而不是给每种音效各写一套水下参数：那样加一种声就要记得加两套）。
+ */
+export const UNDERWATER_LOWPASS_HZ = 700;
+export const UNDERWATER_GAIN = 0.55;
+
+/** 水下的音量折算（纯函数，好断言；水下不该比空气里响） */
+export function underwaterGain(gain: number): number {
+  return gain * UNDERWATER_GAIN;
+}
+
+/** 全部音效种类（测试用：新增一种忘了填参数，这里会当场露） */
+export const SOUND_KINDS = Object.keys(SOUNDS) as SoundKind[];
+
+/** 取某个音效的参数（测试用） */
+export function soundSpec(kind: SoundKind): SoundSpec | undefined {
+  return SOUNDS[kind];
+}
 
 /**
  * 方块名 → 破坏音效。抽成纯函数是为了能离线测试：
@@ -174,6 +231,11 @@ export class AudioEngine {
   private listenerX = 0;
   private listenerY = 0;
   private listenerZ = 0;
+  /**
+   * 听者是不是在水下（批次 138）：主程序每帧按"眼睛那一格是不是水"设置。
+   * 水下所有音效都会**过一道低通 + 压低音量**（见 `UNDERWATER_LOWPASS_HZ`）。
+   */
+  underwater = false;
   /** 噪声缓冲复用：每次合成都新建 AudioBuffer 会产生大量垃圾 */
   private noiseBuffer: AudioBuffer | null = null;
   /** 统计播放次数（调试面板用） */
@@ -218,6 +280,8 @@ export class AudioEngine {
       // 距离衰减：近处几乎不衰减，远处快速变小（与原版的听觉范围接近）
       gain *= Math.max(0.08, 1 - distance / HEARING_RANGE) ** 1.6;
     }
+    // 水下：全局压低音量（低通在下面的出口处接）
+    if (this.underwater) gain = underwaterGain(gain);
     if (gain <= 0.001) return;
 
     const ctx = this.ctx;
@@ -226,7 +290,17 @@ export class AudioEngine {
     out.gain.setValueAtTime(0, now);
     out.gain.linearRampToValueAtTime(gain, now + spec.attack);
     out.gain.exponentialRampToValueAtTime(0.0001, now + spec.duration);
-    out.connect(ctx.destination);
+    if (this.underwater) {
+      // 每一声各挂一个低通（而不是改主图）：引擎没有主总线，
+      // 加一条总线会牵动所有连接点；一声一个滤波器的开销可以忽略
+      const muffle = ctx.createBiquadFilter();
+      muffle.type = 'lowpass';
+      muffle.frequency.value = UNDERWATER_LOWPASS_HZ;
+      muffle.Q.value = 0.8;
+      out.connect(muffle).connect(ctx.destination);
+    } else {
+      out.connect(ctx.destination);
+    }
 
     // ---- 噪声通道：白噪声 → 带通 → 包络（石头/沙子/爆炸的主体）
     if (spec.noise > 0.01) {

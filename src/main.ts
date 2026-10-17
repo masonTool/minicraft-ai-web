@@ -192,7 +192,7 @@ import {
   nextCameraMode,
   type CameraMode,
 } from './core/viewMode.ts';
-import { AudioEngine, type SoundKind } from './core/audio/AudioEngine.ts';
+import { AudioEngine, doorSoundFor, type SoundKind } from './core/audio/AudioEngine.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
@@ -1255,6 +1255,9 @@ class App {
         onTrade: (villager, index) => void this.performTrade(villager, index),
         // 熔炉产物被取空时结算烧炼经验（I5）
         onFurnaceXp: (amount) => this.awardXp(amount),
+        // 背包里搬动东西的一声"咔"（H19 ⑪，批次 138）：界面只报"动过了"，
+        // 播不播、多大声由音频引擎那边统一按音量设置决定
+        onMove: () => this.audio.play('item_move'),
         // 丢出（批次 128）：Q / Ctrl+Q / 点界面外 —— 界面只报"丢哪件、丢几件"，
         // 真正造掉落物的是这里（它才知道玩家站在哪）
         onDrop: (itemId, count) => this.spawnDrop(itemId, count, this.physics.x, this.physics.y + 1.2, this.physics.z),
@@ -2043,6 +2046,8 @@ class App {
         ? 'portal'
         : this.eyeMedium();
     this.screenEffects.set(effect);
+    // 音效跟着一起"闷"（批次 138）：水下听什么都该是低通之后的
+    this.audio.underwater = effect === 'water';
 
     if (effect === 'water') {
       this.solidMaterial.setFog(WATER_FOG, WATER_FOG_NEAR, WATER_FOG_FAR);
@@ -3761,23 +3766,24 @@ class App {
     const next = withDoorOpen(baseState, !isDoorOpen(baseState));
     this.world.setBlockAndUpdate(x, baseY, z, doorId, next);
     this.world.setBlockAndUpdate(x, baseY + 1, z, doorId, withDoorUpper(next, true));
-    this.audio.play('door', { x: x + 0.5, y: baseY + 0.5, z: z + 0.5 });
+    // 开门/关门是两种声音（批次 138）：`door` 是那声"吱呀"，`door_close` 是"咔嗒"
+    this.audio.play(doorSoundFor('door', isDoorOpen(next)), { x: x + 0.5, y: baseY + 0.5, z: z + 0.5 });
   }
 
   /**
    * 活板门 / 栅栏门的开合（批次 30；批次 38 起按形状判定，不再写死橡木）。
    *
    * 两者都是**单格**方块，只需要翻自己的开关位（与门共用同一个位，见 `blockState.ts`）。
-   * 与门一样播 `door` 音效——原版这三种的开合音是同一套木质声。
+   * ⚠️ 音效在批次 138 之后**按形状分**（原来三种门共用 `door`，于是
+   * "关活板门听着像在推开一扇吱呀作响的大门"）。
    */
   private toggleOpenable(x: number, y: number, z: number, id: number): void {
     const state = this.world.getBlockState(x, y, z);
-    const next =
-      blockDef(id).shape === 'trapdoor'
-        ? withTrapdoorOpen(state, !isTrapdoorOpen(state))
-        : withFenceGateOpen(state, !isFenceGateOpen(state));
+    const shape = blockDef(id).shape;
+    const opened = shape === 'trapdoor' ? !isTrapdoorOpen(state) : !isFenceGateOpen(state);
+    const next = shape === 'trapdoor' ? withTrapdoorOpen(state, opened) : withFenceGateOpen(state, opened);
     this.world.setBlockAndUpdate(x, y, z, id, next);
-    this.audio.play('door', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.audio.play(doorSoundFor(shape, opened), { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
   }
 
   /**

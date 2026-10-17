@@ -199,6 +199,14 @@ export interface InventoryScreenHooks {
    * 真正生成掉落物的是主程序（它握着 `spawnDrop`）。
    */
   onDrop?: (itemId: number, count: number) => void;
+  /**
+   * **背包里真的搬动了东西**（H19 ⑪，批次 138）：主程序据此播一声很轻的"咔"。
+   *
+   * 界面不持有音频，也不知道音量设置——它只报"刚才那一下动过东西"。
+   * ⚠️ 判据是"动过"而不是"点过"：点到空格、点到不接受的盔甲槽都**不该响**，
+   * 否则玩家会以为东西放进去了（这一条与"点了没反应要抖一下"是同一个理由）。
+   */
+  onMove?: () => void;
 }
 
 interface SlotBinding {
@@ -1417,6 +1425,29 @@ export class InventoryScreen {
    * 触摸端没有 Shift 键，所以长按那套（右键语义）完全不受影响。
    */
   private activateSlot(key: string, button: number, shift = false): void {
+    // 搬运声（批次 138）：**动过才响**。判据放在这一层而不是散在十几个分支里——
+    // 那些分支有一堆提前 return，逐个补一句"响一下"迟早漏掉一处（漏掉的表现是"点了没声"）
+    const before = this.moveSignature();
+    this.activateSlotInner(key, button, shift);
+    if (this.moveSignature() !== before) this.hooks.onMove?.();
+  }
+
+  /**
+   * 界面上"东西都在哪"的指纹：光标那一叠 + 每一个已注册槽位。
+   *
+   * 只在一次点击里取两次（前后各一次），所以不必省——几十个槽位拼一个字符串而已。
+   * ⚠️ 槽位按 `bindings` 的插入顺序遍历，两次调用之间只要没重建面板就是稳定的。
+   */
+  private moveSignature(): string {
+    const parts: string[] = [this.held ? `@${this.held.id}:${this.held.count}` : '@'];
+    for (const [key, binding] of this.bindings) {
+      const stack = binding.source.get(binding.index);
+      parts.push(stack ? `${key}=${stack.id}:${stack.count}` : `${key}=`);
+    }
+    return parts.join('|');
+  }
+
+  private activateSlotInner(key: string, button: number, shift = false): void {
     // **双击收集**（批次 128）：同一格在 400ms 内点第二下 → 把容器里的同类凑满一整堆。
     // ⚠️ 放在最前面：双击的那一下不该再按"普通左键"走一遍（那会先把光标上的东西放下）
     const now = performance.now();
@@ -1649,6 +1680,7 @@ export class InventoryScreen {
     this.held = taken;
     if (split.source === this.inventory) this.inventory.notify();
     this.refresh();
+    this.hooks.onMove?.();
   }
 
   /** 清掉长按相关的定时器（抬起 / 取消 / 开始新手势时调用） */
@@ -1887,6 +1919,8 @@ export class InventoryScreen {
   fillFromRecipe(recipe: Recipe): boolean {
     if (!fillCraftingGrid(this.inventory, this.crafting, recipe)) return false;
     this.refresh();
+    // 配方书"摆进合成格"也是一次搬运（批次 138）：材料确实从背包挪到了格子
+    this.hooks.onMove?.();
     return true;
   }
 
