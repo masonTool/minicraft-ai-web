@@ -1358,14 +1358,14 @@ class App {
 
     // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
     this.viewDistance = this.settings.viewDistance;
-    // 装饰层（批次 157）：**启动时也要应用一次**——`applySettings` 只在"玩家改设置"
+    // 装饰层（批次 158）：**启动时也要应用一次**——`applySettings` 只在"玩家改设置"
     // 时被调用，不在这里补一刀的话，存档里那个"粒子效果：减半"要等玩家开一次设置才生效。
     // 云、粒子上限、雨量三样一起落（档位 0 时等于"完全按设置来"）
     this.applyDecorLevel();
     this.perf = { ...this.perf, viewDistance: this.settings.viewDistance };
     // 手机开局按"保守的视距 + 满分辨率"起步：
     //  · 视距先只给 6（有余量时自适应会加到手机上限 8，`viewDistanceCapFor` 封顶）；
-    //  · **分辨率不预折**（批次 157 起 `MOBILE_INITIAL_RESOLUTION` = 1.0）——
+    //  · **分辨率不预折**（批次 158 起 `MOBILE_INITIAL_RESOLUTION` = 1.0）——
     //    降级顺序已经是"视距优先"，先把近处画清楚，压力交给视距。
     if (isTouchDevice()) {
       const view = Math.min(this.viewDistance, MOBILE_VIEW_DISTANCE);
@@ -2237,7 +2237,7 @@ class App {
   private fogWait = 0;
 
   /**
-   * 雾半径平滑跟随视距（批次 157 的第二件事：别让地形一块一块地弹出来）。
+   * 雾半径平滑跟随视距（批次 158 的第二件事：别让地形一块一块地弹出来）。
    *
    * 两个方向**刻意不对称**：
    *  - **收缩要快**：掉帧时立刻把远处收进雾里，玩家看到的是"雾涌上来"；
@@ -8140,7 +8140,7 @@ class App {
   }
 
   /**
-   * 把装饰层档位落到三个渲染对象上（批次 157 的第三档降级）。
+   * 把装饰层档位落到三个渲染对象上（批次 158 的第三档降级）。
    *
    * 这三项的共同点是：**都不在近处**——云在天上、粒子是一瞬、雨是满屏的透明点。
    * 关掉它们省的是填充率与 draw call，而玩家手里的方块、脚下的地面一点都不变，

@@ -106,7 +106,7 @@ export class Weather {
   /**
    * 雨 / 雪的**密度**（0~1）：只画前 `PARTICLE_COUNT × fraction` 个点。
    *
-   * 存在的理由（批次 157）：雨点是 `transparent + depthWrite:false` 的 `Points`，
+   * 存在的理由（批次 158）：雨点是 `transparent + depthWrite:false` 的 `Points`，
    * 密度直接等于 overdraw，在手机上"一下雨就卡"很大一部分来自它。
    * 减半之后"雨变小了"几乎看不出来——这是一笔很划算的降级。
    *

@@ -294,7 +294,7 @@ export class AudioEngine {
     const spec = SOUNDS[kind];
     if (!spec) return;
 
-    // ---- 两道节流（批次 157）
+    // ---- 两道节流（批次 158）
     // 每一声要新建 5~8 个 WebAudio 节点（gain / bandpass / bufferSource / oscillator …）。
     // 挖矿 + 打怪 + 下雨 + 一群生物同时叫的时候，节点分配与 GC 在手机上不是免费的，
     // 而"同一声在 70ms 内响了两次""同时响超过 12 声"这两件事玩家根本听不出来。
