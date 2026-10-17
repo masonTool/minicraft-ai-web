@@ -9395,9 +9395,15 @@ async function boot(): Promise<void> {
   const registry = new WorldRegistry();
   await adoptLegacyWorld(registry);
 
+  /** 主菜单里的设置面板是临时实例；进入世界前销毁，局内 App 会建立自己的设置面板。 */
+  let menuSettings: SettingsScreen | null = null;
+
   const startWorld = async (world: WorldSummary): Promise<void> => {
     startupTrace.mark(STARTUP_PHASES.worldBegin);
     menu.hide();
+    // 主菜单设置即使当前隐藏，也仍占着 `#settings-screen`；不移除会与 App 内实例重复 id。
+    menuSettings?.destroy();
+    menuSettings = null;
     // 先开存档库再建世界：存档里有玩家位置与维度，世界要先知道该从哪生成
     // （打开失败会返回 null，游戏照常可玩，只是不保存）
     const save = await SaveGame.open(world.id);
@@ -9440,7 +9446,6 @@ async function boot(): Promise<void> {
    * 懒创建：直接复用同一个 `SettingsScreen`，只是不给它"回主菜单/删世界"两个按钮
    * （那两个动作只在游戏里有意义），改动只写 localStorage，进世界时会被读走。
    */
-  let menuSettings: SettingsScreen | null = null;
   const openMenuSettings = (): void => {
     if (!menuSettings) {
       const settings = loadSettings();

@@ -798,8 +798,8 @@ export class SettingsScreen {
   setTitle(title: string, subtitle: string, resumeLabel = '继续游戏'): void {
     this.settingsTitleEl.textContent = title;
     this.subtitleText = subtitle;
-    this.renderSubtitle();
     this.resumeButton.textContent = resumeLabel;
+    this.renderSubtitle();
   }
 
   /**
@@ -812,7 +812,9 @@ export class SettingsScreen {
    */
   private renderSubtitle(): void {
     const touch = isTouchUi();
-    this.menuHintEl.textContent = touch ? '点 ✕ 或系统返回键继续游戏' : this.subtitleText;
+    this.menuHintEl.textContent = touch
+      ? `点「${this.resumeButton.textContent ?? '继续游戏'}」或系统返回键返回`
+      : this.subtitleText;
     this.settingsHintEl.textContent = touch ? '改动立即生效 · 点 ‹ 返回 回菜单' : '改动立即生效 · 按 Esc 返回菜单';
   }
 
@@ -836,6 +838,12 @@ export class SettingsScreen {
   hide(): void {
     this.open = false;
     this.root.classList.add('hidden');
+  }
+
+  /** 主菜单设置是懒建的临时实例；进世界前销毁，避免与局内面板重复 `#settings-screen`。 */
+  destroy(): void {
+    this.open = false;
+    this.root.remove();
   }
 
   toggle(): void {

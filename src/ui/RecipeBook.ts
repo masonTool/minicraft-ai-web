@@ -308,6 +308,9 @@ export class RecipeBook {
     );
     const entries = this.tab === 'all' ? base : base.filter((entry) => entry.tab === this.tab);
     this.entryCount = entries.length;
+    // 携带版用左侧外置分类轨；CSS 需要知道当前是不是“搜索/全部”页：
+    // 只有该页显示搜索框，其余分类像原版一样直接从物品格开始。
+    this.panelEl.dataset.tab = this.tab;
 
     this.renderTabs(base);
     const craftable = entries.filter((entry) => entry.craftable).length;
@@ -336,7 +339,22 @@ export class RecipeBook {
     }
 
     this.renderPager(entries.length, pageSize);
-    this.renderSmelting();
+    // 携带版合成页的左板只放合成配方网格；熔炼表属于熔炉界面。
+    // 这里若仍创建整张熔炼表，不仅内容混杂，还会把可操作的配方网格压到几乎没有高度。
+    if (this.isPocketSplit) {
+      this.smeltingEl.replaceChildren();
+      this.smeltingEl.classList.add('hidden');
+    } else {
+      this.smeltingEl.classList.remove('hidden');
+      this.renderSmelting();
+    }
+  }
+
+  private get isPocketSplit(): boolean {
+    if (typeof document === 'undefined') return false;
+    // `split-ui` 是配方书 render 结束后由主循环补上的；这里若依赖它，首次打开时
+    // 仍会先构造整张熔炼表。UI 形态在进入页面时已经由 classic-ui 确定，可直接使用。
+    return !document.body.classList.contains('classic-ui');
   }
 
   /**

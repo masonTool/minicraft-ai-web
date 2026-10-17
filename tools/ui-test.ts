@@ -436,6 +436,14 @@ console.log('\n[携带版分标签页（批次 140）]');
   check('并排时箱子挂配方书', invSrc.includes('parkInvTabOnRecipeBook'));
   check('盔甲页标题', invSrc.includes('inv-armor-title') && css.includes('.inv-armor-title'));
   check('快捷栏 dock 带框', css.includes('.inv-hotbar-dock:not(.hidden) .inv-hotbar'));
+  // 批次 149：携带版比例与分类页不能再退回“灰框很大、槽位很小、内容混在一起”
+  check('携带版主背包与快捷栏固定 9×44px', css.includes('grid-template-columns: repeat(9, 44px)'));
+  check('快捷栏 dock 固定到整屏底部', css.includes('position: fixed; left: 0; right: 0; bottom: 0;') && css.includes('width: 100vw;'));
+  check('合成分屏不再保留右板空左轨', css.includes("#inventory-screen .inv-shell.pocket-chrome > .inv-rail-left"));
+  check('携带版分类轨允许伸出灰框且仍可点击', css.includes('overflow: visible;') && css.includes('.recipe-tabs {'));
+  check('非搜索分类隐藏搜索框', css.includes(".recipe-panel:not([data-tab='all']) .recipe-controls"));
+  check('携带版配方页不混入熔炼表', recipeSrc.includes('this.isPocketSplit') && recipeSrc.includes("this.smeltingEl.classList.add('hidden')"));
+  check('配方页把当前分类写入面板供布局使用', recipeSrc.includes('this.panelEl.dataset.tab = this.tab'));
 }
 
 console.log('\n[玩家预览占位（批次 141）]');
