@@ -757,6 +757,7 @@ console.log('\n[进游戏首页默认全屏]');
 console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物品栏」）]');
 {
   const inventorySrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const quickMoveSrc = readFileSync(new URL('../src/core/container/QuickMove.ts', import.meta.url), 'utf8');
   const bookUi = readFileSync(new URL('../src/ui/RecipeBook.ts', import.meta.url), 'utf8');
   const creativeSrc = readFileSync(new URL('../src/ui/CreativeTabs.ts', import.meta.url), 'utf8');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
@@ -771,7 +772,16 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   // 一键做完改成 Shift+点：原版没有"合成"按钮这条路径，不该再占用版面
   check('一键做完改成 Shift+点（版面里没有这颗按钮）', bookUi.includes('event.shiftKey') && !compact.includes('.recipe-craft {'));
   check('main 把 onFill 接上了', mainSrc.includes('onFill: (recipe) => this.fillFromBook(recipe)'));
-  check('fillFromBook 摆好后收起配方书（露出摆好的合成格）', /private fillFromBook[\s\S]{0,400}this\.recipeBook\.hide\(\)/.test(mainSrc));
+  // 整屏（携带版 UI）时它盖着背包 → 收起来露出摆好的格子；
+  // 并排（经典 UI）时原版就是"配方书常驻在旁边"，不该关（批次 136）
+  check(
+    '整屏时摆好配方才收起配方书',
+    /private fillFromBook[\s\S]{0,600}this\.recipeBook\.hide\(\)/.test(mainSrc),
+  );
+  check(
+    '并排（经典 UI）时配方书**不关**，只重算"还能不能做"',
+    /private fillFromBook[\s\S]{0,400}isClassicUi\(window\.innerWidth\)[\s\S]{0,200}this\.recipeBook\.render\(\)/.test(mainSrc),
+  );
   // 打开配方书**不能**再关背包：关界面会把格子里的东西倒回背包，刚摆的立刻被清掉
   check(
     '打开配方书不再先关背包（否则摆好的立刻被倒回去）',
@@ -784,6 +794,38 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('放不下的留在格子里（不凭空消失）', /returnCraftingToInventory[\s\S]{0,500}addStack\(stack\) > 0\) continue/.test(inventorySrc));
   // 左键点暗处全部丢出、右键只丢一个
   check('右键点空白只丢 1 个（左键才全丢）', inventorySrc.includes('event.button === 2 ? 1 : this.held.count'));
+  // ---- 批次 136 逐条对 Wiki 原文时抓出来的两处**行为**偏差（不是"函数存在"就算数）
+  {
+    // 位置断言：这一支必须**落在右键那一块里**，且后面紧跟"放下 + 拿起"（= 交换）
+    const rightBlock = inventorySrc.indexOf('if (button === 2) {');
+    const swapBranch = inventorySrc.indexOf('slot.id !== this.held.id');
+    check(
+      '右键点在"放着别的东西"的格子上同样是**交换**（Wiki：点击**左右键**时…两者交换）',
+      rightBlock >= 0 && swapBranch > rightBlock &&
+        inventorySrc.slice(swapBranch, swapBranch + 700).includes('this.held = slot;'),
+      `right@${rightBlock} swap@${swapBranch}`,
+    );
+  }
+  check(
+    '拖拽经过的格子只记一次（Wiki：每个格子只会被影响一次，原路返回无法取消）',
+    inventorySrc.includes('this.dragSlots.some((slot) => slot.source === source && slot.index === index)) return;'),
+  );
+  // ---- 批次 136 复核通过的那几条（钉住，别以后被改掉）
+  check('右键取半数、且是**向上取整**（Wiki：半数（向上取整））', inventorySrc.includes('Math.ceil(slot.count / 2)'));
+  check(
+    '合成产物优先上光标、同类合并、否则进背包',
+    inventorySrc.includes('if (!this.held) this.held = taken;') && inventorySrc.includes('this.held.count += taken.count;'),
+  );
+  check(
+    'Shift+点产物 = 一次做完，终止条件是"背包塞不下 / 材料用完"',
+    /handleResultClick\(shift = false\)[\s\S]{0,700}fitCount\(next, this\.inventory, PLAYER_FILL_ORDER\) < next\.count\) break;/.test(inventorySrc),
+  );
+  check(
+    '容器 → 玩家背包优先**快捷栏最靠左**（基岩版那条，与 Java 版相反）',
+    quickMoveSrc.includes('PLAYER_FILL_ORDER = [...HOTBAR_ORDER, ...MAIN_ORDER]') ||
+      quickMoveSrc.includes('export const PLAYER_FILL_ORDER: readonly number[] = [...HOTBAR_ORDER, ...MAIN_ORDER];'),
+  );
+  check('Q 丢 1 件 / Ctrl+Q 丢整叠，且作用在悬停的那一格', inventorySrc.includes("dropFromCursor(event.ctrlKey || event.metaKey)"));
   // 这几条原版规则本来就在（钉住，防止以后被改掉）
   check('右键点格子拿一半', inventorySrc.includes('button === 2') || inventorySrc.includes('halfOf'));
   check('Shift+左键 = 快速移动', inventorySrc.includes('this.quickMoveSlot(key)'));

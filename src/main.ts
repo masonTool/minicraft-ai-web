@@ -178,7 +178,7 @@ import {
   type GameRules,
 } from './core/world/Rules.ts';
 import { RecipeBook } from './ui/RecipeBook.ts';
-import { craftFromInventory } from './core/crafting/RecipeBook.ts';
+import { craftFromInventory, isClassicUi } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
 import { itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
@@ -6072,16 +6072,23 @@ class App {
   /**
    * 配方书里**点一条配方**：把材料摆进合成格（批次 132，对齐原版）。
    *
-   * 摆好之后收起配方书——背包就在下面，摆好的格子与输出格一眼可见，
-   * 点输出格取成品（`handleResultClick` 那套原版规则已经在跑）。
+   * ⚠️ 批次 136：**并排（经典 UI）时配方书不关**。原版的配方书就一直摊在物品栏
+   * 旁边，点一条配方只是"把材料摆进合成格"，玩家接着还能点下一条；
+   * 只有整屏（携带版 UI）时它盖着背包，才必须收起来露出刚摆好的格子。
+   * 原来两种形态都关，与截图那种"配方书常驻在左边"的观感对不上。
    *
    * 与上面 `craftFromBook` 的分工：**这个才是原版的主交互**，
    * 那个"一键合成"留着给"能做 5 次"这类批量场景。
    */
   private fillFromBook(recipe: Recipe): boolean {
     if (!this.inventoryScreen.fillFromRecipe(recipe)) return false;
-    this.recipeBook.hide();
-    this.handleInventoryOpen(this.inventoryScreen.isOpen);
+    if (isClassicUi(window.innerWidth)) {
+      // 材料被拿走了，"还能不能做"要重算（页签上的条数也跟着变）
+      this.recipeBook.render();
+    } else {
+      this.recipeBook.hide();
+      this.handleInventoryOpen(this.inventoryScreen.isOpen);
+    }
     this.audio.play('click');
     return true;
   }

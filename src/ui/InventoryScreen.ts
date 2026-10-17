@@ -1214,7 +1214,13 @@ export class InventoryScreen {
     // 拖拽时经过的槽位也在这里收集（松手时统一结算分配）
     slot.addEventListener('mouseenter', () => {
       this.hovered = { key, source, index };
-      if (this.dragButton !== null) this.dragSlots.push({ source, index });
+      // ⚠️ 批次 136：**同一格只记一次**。Wiki「物品管理」："在此期间，每个格子只会
+      // 被影响一次，原路返回无法取消操作对格子的波及。"——鼠标来回划过一个格子会
+      // 触发多次 `mouseenter`，不去重的话同一格会被算成两个格子，均分的结果偏多
+      //（10 个划过 A→B→A 会被分成 3 份而不是 2 份）。
+      if (this.dragButton === null) return;
+      if (this.dragSlots.some((slot) => slot.source === source && slot.index === index)) return;
+      this.dragSlots.push({ source, index });
     });
     slot.addEventListener('mouseleave', () => {
       if (this.hovered?.key === key) this.hovered = null;
@@ -1564,6 +1570,13 @@ export class InventoryScreen {
           slot.count += 1;
           this.held.count -= 1;
           this.inventory.notify();
+        } else if (slot.id !== this.held.id) {
+          // ⚠️ 批次 136 补这一支：Wiki「物品管理」原文是"点击**左右键**时，若目标格
+          // 放有与鼠标上所带物品不同的物品，两者交换"——右键点异类格同样是交换。
+          // 原来右键只有"空格放 1 个 / 同类 +1"两条分支，点在异类格上**什么都不发生**，
+          // 而同一格用左键点就换了（同一次操作两种结果，最容易被当成"点击没生效"）。
+          source.set(index, this.held);
+          this.held = slot;
         }
       } else if (!slot) {
         source.set(index, this.held);
