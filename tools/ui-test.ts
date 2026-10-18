@@ -1385,7 +1385,14 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   check(
     '触摸瞄准时命中面更亮 + 整块微光（准星那一路不变）',
-    mainSource.includes('TOUCH_HIGHLIGHT_STRENGTH,') && mainSource.includes('this.blockOverlay.showGlow('),
+    mainSource.includes('const strength = touchAim ? TOUCH_HIGHLIGHT_STRENGTH : 1;') &&
+      mainSource.includes('this.blockOverlay.showGlow('),
+  );
+  check(
+    '非满格目标（植物 / 雪层）的高亮改成贴地，不再挂整格方片',
+    mainSource.includes("if (shape === 'cube') {") &&
+      mainSource.includes('this.blockOverlay.showGroundHighlight(') &&
+      mainSource.includes('this.world.isSelectable(this.hit.x, this.hit.y - 1, this.hit.z)'),
   );
   // 切模式/开关界面/失焦时要清手势，否则另一根手指的旧基准会把摇杆和视角带歪
   check('切飞行前清手势', mainSource.includes("this.touch?.resetInput('flying')"));

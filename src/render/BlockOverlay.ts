@@ -7,6 +7,9 @@
  *    （原版没有这个，属于本项目的可读性增强，所以做得非常淡）
  *  - **整块微光**（批次 239）：触摸端改为"手指落点取目标"后，光靠一条命中面玩家不容易
  *    在手指底下认出是哪一格，于是再给整个方块贴一层极淡的**加法**白光（背面被深度挡掉）
+ *  - **贴地高亮**（批次 241 复查）：非满格目标（植物 / 雪层 / 台阶 / 火把…）不再把
+ *    整格大小的方片挂在命中面上（那会悬在半空），改为贴在地面或它自己的顶面
+ *    （`showGroundHighlight`，高度由 `shapeTop` 决定）
  *  - 后两者的强度由调用方给：触摸瞄准更明显，准星那套维持原来的很淡
  *
  * 关键实现点：
@@ -17,7 +20,7 @@
  */
 
 import * as THREE from 'three';
-import { collisionBoxes, meshBoxes, type LocalBox } from '../core/registry/blockShapes.ts';
+import { collisionBoxes, meshBoxes, shapeTop, type LocalBox } from '../core/registry/blockShapes.ts';
 import type { BlockShape } from '../core/registry/blockState.ts';
 import type { TextureAtlas } from './TextureAtlas.ts';
 
@@ -32,6 +35,12 @@ const HIGHLIGHT_OFFSET = 0.004;
 
 /** 命中面高亮的基准不透明度（准星那套"很淡"的口径） */
 const HIGHLIGHT_BASE_OPACITY = 0.08;
+
+/** 地面高亮：贴在方块表面外侧一点点（避免与地面/自身顶面 z-fighting） */
+const GROUND_OFFSET = 0.003;
+
+/** 地面高亮四边收缩 1.5%：看得出是"贴在表面上的一层"，而不是和面子重合 */
+const GROUND_INSET = 0.015;
 
 /** 整块微光的不透明度（触摸瞄准用；加法混合，10% 已经是"看得出亮、不糊贴图"） */
 const GLOW_OPACITY = 0.1;
@@ -255,6 +264,54 @@ export class BlockOverlay {
     this.highlightMesh.position.set(x, y, z);
     this.highlightMesh.visible = true;
     this.syncVisible();
+  }
+
+  /**
+   * 地面高亮（批次 241 复查）：给**非满格**的方块画一块贴地的白色方片。
+   *
+   * 用户："手指指定的目标，如果目标没有完全占满、而是有半透的（某些植物、半透的雪），
+   * 那就把高亮只显示到地上。" 以前无论什么形状都把整格大小的高亮贴在命中面上，
+   * 瞄准植物/雪层时会挂出一块**悬空的方片**。
+   *
+   * 贴多高由 `shapeTop` 决定：
+   *  - 铺满整格（雪层 / 台阶 / 地毯 / 睡莲）→ 贴它自己的顶面；
+   *  - 细杆 / 薄片 / 十字植物（没有整格足迹）→ 贴脚下地面（格子底面）。
+   *
+   * @param hasGround 脚下有没有方块（调用方用 `world.isSelectable(y-1)` 判）。
+   *                  `false` 且形状自己不铺满（墙上的藤蔓 / 挂牌）时返回 false，
+   *                  由调用方退回"命中面高亮"。
+   * @returns 是否真的画出来了
+   */
+  showGroundHighlight(
+    x: number,
+    y: number,
+    z: number,
+    shape: BlockShape,
+    state: number,
+    strength = 1,
+    hasGround = true,
+  ): boolean {
+    const { top, covers } = shapeTop(shape, state);
+    if (!covers && !hasGround) return false;
+
+    const localY = (covers ? top : 0) + GROUND_OFFSET;
+    const a = GROUND_INSET;
+    const b = 1 - GROUND_INSET;
+    const positions = [a, localY, a, b, localY, a, b, localY, b, a, localY, b];
+    const uvs = [0, 0, 1, 0, 1, 1, 0, 1];
+
+    this.highlightGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    this.highlightGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    this.highlightGeometry.setIndex([0, 1, 2, 0, 2, 3]);
+    this.highlightGeometry.computeBoundingSphere();
+
+    const material = this.highlightMesh.material as THREE.MeshBasicMaterial;
+    material.opacity = Math.min(1, HIGHLIGHT_BASE_OPACITY * strength);
+
+    this.highlightMesh.position.set(x, y, z);
+    this.highlightMesh.visible = true;
+    this.syncVisible();
+    return true;
   }
 
   hideHighlight(): void {

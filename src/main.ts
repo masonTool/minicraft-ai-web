@@ -3738,18 +3738,35 @@ class App {
       }
       // 命中面高亮 + 整块微光：让玩家看清这一下打在哪一面
       // （触摸取目标时没有准星做参考，亮一档，并给整个方块一层淡光）
-      if (touchAim) {
-        this.blockOverlay.showGlow(this.hit.x, this.hit.y, this.hit.z, shape, state);
-        this.blockOverlay.showHighlight(
+      const strength = touchAim ? TOUCH_HIGHLIGHT_STRENGTH : 1;
+      if (shape === 'cube') {
+        if (touchAim) this.blockOverlay.showGlow(this.hit.x, this.hit.y, this.hit.z, shape, state);
+        else this.blockOverlay.hideGlow();
+        this.blockOverlay.showHighlight(this.hit.x, this.hit.y, this.hit.z, [this.hit.nx, this.hit.ny, this.hit.nz], strength);
+      } else {
+        // 批次 241 复查：非满格（植物 / 雪层 / 台阶 / 火把…）不能把整格的方片挂在命中面上，
+        // 改成贴地（铺满整格的形状贴它自己的顶面）。
+        // 悬空且形状自己不铺满的（墙上的藤蔓 / 挂牌）由 `showGroundHighlight` 返回 false，
+        // 退回原来的"命中面高亮"。
+        this.blockOverlay.hideGlow();
+        const drewGround = this.blockOverlay.showGroundHighlight(
           this.hit.x,
           this.hit.y,
           this.hit.z,
-          [this.hit.nx, this.hit.ny, this.hit.nz],
-          TOUCH_HIGHLIGHT_STRENGTH,
+          shape,
+          state,
+          strength,
+          this.world.isSelectable(this.hit.x, this.hit.y - 1, this.hit.z),
         );
-      } else {
-        this.blockOverlay.hideGlow();
-        this.blockOverlay.showHighlight(this.hit.x, this.hit.y, this.hit.z, [this.hit.nx, this.hit.ny, this.hit.nz]);
+        if (!drewGround) {
+          this.blockOverlay.showHighlight(
+            this.hit.x,
+            this.hit.y,
+            this.hit.z,
+            [this.hit.nx, this.hit.ny, this.hit.nz],
+            strength,
+          );
+        }
       }
     } else {
       this.outline.hide();

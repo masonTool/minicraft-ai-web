@@ -393,6 +393,32 @@ console.log('\n[破坏裂纹与命中面高亮（G2/G3）]');
   check('微光可以单独收起', !overlay.glowVisible);
   overlay.showGlow(1, 2, 3, 'cube', 0);
   overlay.showDamage(1, 2, 3, 'cube', 0, 3);
+
+  // 批次 241 复查：非满格目标的高亮贴地（而不是整格高度上的悬空方片）
+  const highlightY = (): number => {
+    const mesh = overlay.object.children[1] as THREE.Mesh;
+    return mesh.geometry.getAttribute('position').getY(0);
+  };
+  check(
+    '十字植物：高亮贴在地面（局部 y≈0.003）',
+    overlay.showGroundHighlight(1, 2, 3, 'cross', 0, 2, true) && highlightY() < 0.01,
+    `y=${highlightY().toFixed(3)}`,
+  );
+  check(
+    '雪层：高亮贴在自己的顶面（1 层 = 0.125）',
+    overlay.showGroundHighlight(1, 2, 3, 'snow', 0, 2, true) && Math.abs(highlightY() - 0.128) < 0.005,
+    `y=${highlightY().toFixed(3)}`,
+  );
+  check(
+    '台阶：高亮贴在 0.5 的台面上',
+    overlay.showGroundHighlight(1, 2, 3, 'slab', 0, 2, true) && Math.abs(highlightY() - 0.503) < 0.005,
+    `y=${highlightY().toFixed(3)}`,
+  );
+  check(
+    '悬空且不铺满（墙上藤蔓）：返回 false，交给调用方退回命中面',
+    !overlay.showGroundHighlight(1, 2, 3, 'cross', 0, 2, false),
+  );
+
   overlay.hide();
   check('hide 一次性收起三者', !overlay.highlightVisible && !overlay.glowVisible && overlay.damageStage === -1);
   overlay.dispose();

@@ -1379,3 +1379,26 @@ export function dispenserBoxes(state: number): readonly LocalBox[] {
 export function canScaffoldConnectTo(neighborId: number): boolean {
   return neighborId !== 0 && blockDef(neighborId).shape === 'scaffolding';
 }
+
+/**
+ * 非满格形状的"顶面高度"与"是否铺满整格"（批次 241 复查）。
+ *
+ * 用来决定"瞄准时的白色高亮该贴在哪"：
+ *  - 雪层 / 台阶 / 地毯 / 睡莲这类**铺满整格**的形状 → 贴在自己的顶面（`top`）；
+ *  - 十字植物（`cross` 没有盒子）、火把、栅栏这类**细杆 / 薄片** → 贴在脚下地面，
+ *    不能让高亮跟着"整格"的高度悬在半空（用户："把高亮只显示到地上"）。
+ *
+ * 纯函数，离线可测；碰撞盒为空的形状退回渲染盒（植物两者都空 → `top = 0`）。
+ */
+export function shapeTop(shape: BlockShape, state: number): { top: number; covers: boolean } {
+  const collision = collisionBoxes(shape, state);
+  const boxes = collision.length > 0 ? collision : meshBoxes(shape, state);
+  let top = 0;
+  let covers = false;
+  for (const box of boxes) {
+    if (box[4] > top) top = box[4];
+    // "铺满整格"的判据留 5% 余量：雪层/台阶/地毯都是 0..1 的整格足迹
+    if (box[0] <= 0.05 && box[2] <= 0.05 && box[3] >= 0.95 && box[5] >= 0.95) covers = true;
+  }
+  return { top, covers };
+}
