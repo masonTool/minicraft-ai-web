@@ -10,6 +10,7 @@
  *   chest     ：3×9 容器格
  *   enchanting：物品 + 青金石 + 三个候选槽（H9）
  *   anvil     ：左 / 右 / 产物三格 + 改名与代价（H8）
+ *   grindstone：左 / 右 / 产物三格，洗附魔与拼耐久，**返还**经验（H15）
  *   smithing  ：装备 / 下界合金锭 / 产物三格（K8 尾巴，不要经验）
  *   brewing   ：3 个药水槽 + 材料 + 燃料 + 20 秒进度（H10）
  *
@@ -71,6 +72,12 @@ import {
 import { CHEST_SIZE } from '../core/container/Chest.ts';
 import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, Anvil } from '../core/container/Anvil.ts';
 import {
+  GRINDSTONE_LEFT,
+  GRINDSTONE_RESULT,
+  GRINDSTONE_RIGHT,
+  Grindstone,
+} from '../core/container/Grindstone.ts';
+import {
   SMITHING_EQUIPMENT,
   SMITHING_MATERIAL,
   SMITHING_RESULT,
@@ -92,6 +99,7 @@ import {
   EnchantTable,
 } from '../core/container/EnchantTable.ts';
 import { anvilHint, repairCostLabel } from '../core/crafting/Anvil.ts';
+import { grindstoneHint } from '../core/crafting/Grindstone.ts';
 import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, Furnace } from '../core/container/Furnace.ts';
 import { UI_HINT_UNIMPLEMENTED, optionLabel, type EnchantOption } from '../core/crafting/Enchanting.ts';
 import {
@@ -155,6 +163,8 @@ export type InventoryPanelMode =
   | 'shulker_box'
   | 'enchanting'
   | 'anvil'
+  /** 砂轮（H15，批次 188）：与铁砧同构的两格输入，但**不收经验、返还经验** */
+  | 'grindstone'
   | 'smithing'
   /** 烟熏炉与高炉（批次 46）：与 `furnace` 同一套布局，只是容器与标题不同 */
   | 'smoker'
@@ -243,6 +253,13 @@ export interface InventoryScreenHooks {
     playerLevel: number;
     consumeLevels: (levels: number) => boolean;
   };
+  /**
+   * 砂轮洗掉附魔后**返还**的经验点数（H15，批次 188）。
+   *
+   * 与熔炉那条同一个口径：界面只报数字，攒成经验球、加给谁、在哪个位置冒出来
+   * 全由主程序决定（它握着 `spawnXpOrbs` 与砂轮坐标）。
+   */
+  onGrindstoneXp?: (amount: number) => void;
   /**
    * **把手上/某一格的东西丢进世界**（批次 128，Q / Ctrl+Q / 点界面外）。
    *
@@ -558,6 +575,12 @@ export class InventoryScreen {
   private readonly anvilNameInput: HTMLInputElement;
   private readonly anvilCostEl: HTMLDivElement;
   private readonly anvilStatusEl: HTMLDivElement;
+  private readonly grindstoneLayout: HTMLDivElement;
+  private readonly grindstoneLeftSlot: HTMLDivElement;
+  private readonly grindstoneRightSlot: HTMLDivElement;
+  private readonly grindstoneResultSlot: HTMLDivElement;
+  private readonly grindstoneHintEl: HTMLDivElement;
+  private readonly grindstoneStatusEl: HTMLDivElement;
   private readonly cookFillEl: HTMLElement;
 
   /** 锻造台（K8 尾巴）：装备格 + 材料格 + 产物格 + 提示行 */
@@ -905,6 +928,20 @@ export class InventoryScreen {
     this.anvilCostEl.className = 'anvil-cost';
     this.anvilStatusEl = document.createElement('div');
     this.anvilStatusEl.className = 'enchant-status';
+
+    // 砂轮（H15，批次 188）：与铁砧同一套 "左 + 右 → 产物" 布局，少一个改名输入框
+    this.grindstoneLayout = document.createElement('div');
+    this.grindstoneLayout.className = 'anvil-layout';
+    this.grindstoneLeftSlot = this.createSlot();
+    this.grindstoneLeftSlot.dataset.key = 'grindstone:left';
+    this.grindstoneRightSlot = this.createSlot();
+    this.grindstoneRightSlot.dataset.key = 'grindstone:right';
+    this.grindstoneResultSlot = this.createSlot();
+    this.grindstoneResultSlot.dataset.key = 'grindstone:result';
+    this.grindstoneHintEl = document.createElement('div');
+    this.grindstoneHintEl.className = 'anvil-cost';
+    this.grindstoneStatusEl = document.createElement('div');
+    this.grindstoneStatusEl.className = 'enchant-status';
 
     // 锻造台（K8 尾巴）：装备格 + 材料格 + 产物格（比铁砧少一个改名输入框）
     this.smithingLayout = document.createElement('div');
@@ -2184,6 +2221,7 @@ export class InventoryScreen {
     this.clearBindings('shulker_box:');
     this.clearBindings('enchant:');
     this.clearBindings('anvil:');
+    this.clearBindings('grindstone:');
     this.clearBindings('smithing:');
     this.clearBindings('stonecutter:');
     this.clearBindings('campfire:');
@@ -2294,6 +2332,43 @@ export class InventoryScreen {
       side.append(this.buildLabel('重命名'), this.anvilNameInput, this.anvilCostEl, this.anvilStatusEl);
       this.anvilLayout.replaceChildren(row, side);
       this.topArea.appendChild(this.anvilLayout);
+      return;
+    }
+
+    if (this.mode === 'grindstone') {
+      const grindstone = this.activeContainer instanceof Grindstone ? this.activeContainer : null;
+      const left = this.registerExisting(this.grindstoneLeftSlot, 'grindstone:left', grindstone!, GRINDSTONE_LEFT);
+      const right = this.registerExisting(
+        this.grindstoneRightSlot,
+        'grindstone:right',
+        grindstone!,
+        GRINDSTONE_RIGHT,
+      );
+      // 产物槽只能取不能放（与铁砧一样，产物是两格算出来的）
+      const result = this.registerExisting(
+        this.grindstoneResultSlot,
+        'grindstone:result',
+        grindstone!,
+        GRINDSTONE_RESULT,
+        true,
+      );
+      this.grindstoneStatusEl.textContent = '';
+
+      const row = document.createElement('div');
+      row.className = 'anvil-row';
+      row.append(
+        this.buildLabel('要洗的物品'),
+        left,
+        this.buildLabel('同种装备（可选）'),
+        right,
+        this.buildLabel('产物'),
+        result,
+      );
+      const side = document.createElement('div');
+      side.className = 'anvil-side';
+      side.append(this.grindstoneHintEl, this.grindstoneStatusEl);
+      this.grindstoneLayout.replaceChildren(row, side);
+      this.topArea.appendChild(this.grindstoneLayout);
       return;
     }
 
@@ -3096,6 +3171,7 @@ export class InventoryScreen {
   private accepts(binding: SlotBinding, itemId: number): boolean {
     // 铁砧与锻造台的产物槽都由输入格算出来，不能手动放
     if (binding.source instanceof Anvil && binding.index === ANVIL_RESULT) return false;
+    if (binding.source instanceof Grindstone && binding.index === GRINDSTONE_RESULT) return false;
     if (binding.source instanceof SmithingTable && binding.index === SMITHING_RESULT) return false;
     // 附魔台的青金石槽只吃青金石（放别的进去会把"点不动"的原因藏起来）
     if (binding.source instanceof EnchantTable) {
@@ -3120,6 +3196,11 @@ export class InventoryScreen {
     // 铁砧产物：不是普通搬运——要先查等级、扣等级、扣材料再重算（H8）
     if (binding.source instanceof Anvil && binding.index === ANVIL_RESULT) {
       this.handleAnvilTake();
+      return;
+    }
+    // 砂轮产物：扣两格输入 + 返还经验（不查等级，H15）
+    if (binding.source instanceof Grindstone && binding.index === GRINDSTONE_RESULT) {
+      this.handleGrindstoneTake();
       return;
     }
     // 锻造台产物：同样要先扣材料再重算（不要经验，见 K8 尾巴）
@@ -3619,6 +3700,7 @@ export class InventoryScreen {
 
     if (this.mode === 'enchanting') this.refreshEnchantOptions();
     if (this.mode === 'anvil') this.refreshAnvil();
+    if (this.mode === 'grindstone') this.refreshGrindstone();
     if (this.mode === 'smithing') this.refreshSmithing();
     if (this.mode === 'stonecutter') this.refreshStonecutter();
     if (this.mode === 'trade') this.refreshTrade();
@@ -3848,6 +3930,49 @@ export class InventoryScreen {
     this.anvilStatusEl.textContent = `花费 ${result.cost} 级`;
     this.anvilStatusEl.classList.remove('bad');
     this.refresh();
+  }
+
+  /**
+   * 取走砂轮的产物（H15，批次 188）。
+   *
+   * 与铁砧的差别有两条：**不查等级、不扣等级**（砂轮不要经验），
+   * 以及**返还经验**（被洗掉的附魔折算成经验点，交给主程序变成经验球）。
+   * 手上拿着别的东西时直接拒绝：砂轮的产物几乎都是装备，叠不上去。
+   */
+  private handleGrindstoneTake(): void {
+    const grindstone = this.activeContainer;
+    if (!(grindstone instanceof Grindstone)) return;
+    const preview = grindstone.get(GRINDSTONE_RESULT);
+    if (!preview) return;
+    if (this.held) {
+      this.rejectSlot(this.grindstoneResultSlot);
+      return;
+    }
+
+    const result = grindstone.take();
+    if (!result.ok) {
+      this.grindstoneStatusEl.textContent = result.reason;
+      this.grindstoneStatusEl.classList.add('bad');
+      this.refresh();
+      return;
+    }
+    this.held = result.output;
+    if (result.xp > 0) this.hooks.onGrindstoneXp?.(result.xp);
+    this.grindstoneStatusEl.textContent = result.xp > 0 ? `洗掉附魔，返还 ${result.xp} 点经验` : '已取出';
+    this.grindstoneStatusEl.classList.remove('bad');
+    this.refresh();
+  }
+
+  /**
+   * 刷新砂轮的提示行（产物能不能拼、能返多少经验）。
+   */
+  private refreshGrindstone(): void {
+    const grindstone = this.activeContainer;
+    if (!(grindstone instanceof Grindstone)) return;
+    const outcome = grindstone.outcome;
+    this.grindstoneResultSlot.classList.toggle('ready', outcome !== null);
+    this.grindstoneHintEl.textContent = grindstoneHint(grindstone.left, grindstone.right);
+    this.grindstoneHintEl.classList.toggle('bad', outcome === null);
   }
 
   /**
@@ -4245,6 +4370,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   shulker_box: '潜影盒',
   enchanting: '附魔台',
   anvil: '铁砧',
+  grindstone: '砂轮',
   smithing: '锻造台',
   stonecutter: '切石机',
   brewing: '酿造台',

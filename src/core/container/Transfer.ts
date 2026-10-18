@@ -22,7 +22,7 @@
  *     这里刻意收紧：不然"漏斗摆在炉子下面自动收成品"会先把刚放进去的矿石抽回来。
  */
 
-import { ANVIL_LEFT, ANVIL_RIGHT, ANVIL_SIZE, Anvil } from './Anvil.ts';
+import { ANVIL_LEFT, ANVIL_RESULT, ANVIL_RIGHT, ANVIL_SIZE, Anvil } from './Anvil.ts';
 import {
   BREW_BOTTLE_SLOTS,
   BREW_FUEL_SLOT,
@@ -36,7 +36,14 @@ import { DROPPER_SIZE, Dropper } from './Dropper.ts';
 import { EnchantTable } from './EnchantTable.ts';
 import { FURNACE_FUEL, FURNACE_INPUT, FURNACE_OUTPUT, FURNACE_SIZE, Furnace } from './Furnace.ts';
 import { HOPPER_SIZE, Hopper } from './Hopper.ts';
-import { SMITHING_EQUIPMENT, SMITHING_MATERIAL, SMITHING_SIZE, SmithingTable } from './SmithingTable.ts';
+import { SMITHING_EQUIPMENT, SMITHING_MATERIAL, SMITHING_RESULT, SMITHING_SIZE, SmithingTable } from './SmithingTable.ts';
+import {
+  GRINDSTONE_LEFT,
+  GRINDSTONE_RESULT,
+  GRINDSTONE_RIGHT,
+  GRINDSTONE_SIZE,
+  Grindstone,
+} from './Grindstone.ts';
 import { STONECUTTER_INPUT, STONECUTTER_SIZE, Stonecutter } from './Stonecutter.ts';
 import { sameExtras, type ItemStack } from './Inventory.ts';
 import { fuelSeconds, smeltingRecipeFor } from '../crafting/Smelting.ts';
@@ -73,8 +80,26 @@ export function acceptingSlots(container: BlockContainer): readonly number[] {
   if (container instanceof SmithingTable) return [SMITHING_EQUIPMENT, SMITHING_MATERIAL];
   if (container instanceof Stonecutter) return [STONECUTTER_INPUT];
   if (container instanceof Anvil) return [ANVIL_LEFT, ANVIL_RIGHT];
+  // 砂轮（批次 188）：两格输入可塞，**产物槽不能塞**（与铁砧同一个理由）
+  if (container instanceof Grindstone) return [GRINDSTONE_LEFT, GRINDSTONE_RIGHT];
   // 剩下的就是附魔台：原版对漏斗是关着的（见文件头的差异说明）
   return EMPTY_SLOTS;
+}
+
+/**
+ * 这一格是不是"**算出来的**产物槽"（铁砧 / 锻造台 / 砂轮）。
+ *
+ * 这类格子里的东西是**输入两格算出来的**，不是玩家放进去的：
+ *  - 搬运方（漏斗 / 投掷器）不许往里塞（见上面 `acceptingSlots`）；
+ *  - 拆掉方块时也**不许倒出来**——否则"放两把附魔剑、把铁砧拆了"就能白拿一把
+ *    洗过附魔的剑（批次 188 才发现铁砧与锻造台一直有这个刷物品的口子：
+ *    `dropContainerContents` 是按下标全倒的）。
+ */
+export function isComputedResultSlot(container: BlockContainer, slot: number): boolean {
+  if (container instanceof Anvil) return slot === ANVIL_RESULT;
+  if (container instanceof SmithingTable) return slot === SMITHING_RESULT;
+  if (container instanceof Grindstone) return slot === GRINDSTONE_RESULT;
+  return false;
 }
 
 /** 某容器一共几格（倒空、断言、调试用；**含**产物槽，所以不能用 `acceptingSlots` 的长度） */
@@ -88,6 +113,7 @@ export function containerSlotCount(container: BlockContainer): number {
   if (container instanceof SmithingTable) return SMITHING_SIZE;
   if (container instanceof Stonecutter) return STONECUTTER_SIZE;
   if (container instanceof Anvil) return ANVIL_SIZE;
+  if (container instanceof Grindstone) return GRINDSTONE_SIZE;
   if (container instanceof EnchantTable) return ENCHANT_SLOT_COUNT;
   return 0;
 }

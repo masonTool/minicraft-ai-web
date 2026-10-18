@@ -365,7 +365,7 @@ import { collisionBoxes } from './core/registry/blockShapes.ts';
 import { Campfire } from './core/container/Campfire.ts';
 import type { DropperEnv } from './core/container/Dropper.ts';
 import { Hopper, type HopperEnv } from './core/container/Hopper.ts';
-import { containerSlotCount } from './core/container/Transfer.ts';
+import { containerSlotCount, isComputedResultSlot } from './core/container/Transfer.ts';
 import type { BlockContainer } from './core/world/BlockEntityStore.ts';
 import { PrecipitationTicker } from './core/tick/Precipitation.ts';
 import {
@@ -1183,6 +1183,9 @@ class App {
   /** 当前打开的附魔台坐标（数周围书架用） */
   private enchantTablePos: { x: number; y: number; z: number } | null = null;
 
+  /** 当前打开的砂轮坐标（返还的经验球要冒在砂轮上方，而不是玩家脚下） */
+  private grindstonePos: { x: number; y: number; z: number } | null = null;
+
   /** 拉弓蓄力 0~1（J9）与"这一次拉弓是否还在进行"的标记 */
   private bowCharge = 0;
   private bowDrawing = false;
@@ -1433,6 +1436,12 @@ class App {
           playerLevel: this.experience.level,
           consumeLevels: (levels) => this.experience.consumeLevels(levels),
         }),
+        // 砂轮（H15，批次 188）：洗掉附魔返还的经验球冒在**砂轮**上方——
+        // 与熔炉那条同一个道理（界面只报数字，位置由握着坐标的这里决定）
+        onGrindstoneXp: (amount) => {
+          const pos = this.grindstonePos;
+          this.spawnXpOrbs(amount, pos ? pos.x + 0.5 : this.physics.x, pos ? pos.y + 0.9 : this.physics.y + 0.5, pos ? pos.z + 0.5 : this.physics.z);
+        },
         // 附魔台（H9）：等级、书架加成、扣等级的出口都由主程序提供
         enchantContext: () => ({
           playerLevel: this.experience.level,
@@ -7146,6 +7155,12 @@ class App {
       this.inventoryScreen.openWith('stonecutter', this.world.containers.getOrCreateStonecutter(this.dimension, x, y, z));
       return true;
     }
+    // 砂轮（H15，批次 188）：洗附魔 / 拼耐久。记下坐标是为了让返还的经验球冒在砂轮上方
+    if (hitBlock === Block.GRINDSTONE) {
+      this.grindstonePos = { x, y, z };
+      this.inventoryScreen.openWith('grindstone', this.world.containers.getOrCreateGrindstone(this.dimension, x, y, z));
+      return true;
+    }
     if (hitBlock === Block.ENCHANTING_TABLE) {
       // 记下位置：书架加成要围着**这一台**数，而 `enchantContext` 是每次刷新时问的
       this.enchantTablePos = { x, y, z };
@@ -7472,6 +7487,9 @@ class App {
     //  漏斗这种"一加就是新容器"的方块迟早会漏）
     const size = containerSlotCount(container);
     for (let i = 0; i < size; i++) {
+      // ⚠️ **算出来的产物槽不倒**（铁砧 / 锻造台 / 砂轮）：那是输入两格推出来的东西，
+      // 倒出来就等于"放两把附魔剑、把铁砧拆了，白拿一把洗过附魔的剑"。批次 188 补上
+      if (isComputedResultSlot(container, i)) continue;
       const stack = container.get(i);
       if (!stack) continue;
       this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.5, z + 0.5, stackExtras(stack));
@@ -7576,6 +7594,7 @@ class App {
     if (block === Block.ANVIL) return store.getOrCreateAnvil(dimension, x, y, z);
     if (block === Block.SMITHING_TABLE) return store.getOrCreateSmithingTable(dimension, x, y, z);
     if (block === Block.STONECUTTER) return store.getOrCreateStonecutter(dimension, x, y, z);
+    if (block === Block.GRINDSTONE) return store.getOrCreateGrindstone(dimension, x, y, z);
     if (block === Block.ENCHANTING_TABLE) return store.getOrCreateEnchantTable(dimension, x, y, z);
     if (block === Block.CAMPFIRE) return store.getOrCreateCampfire(dimension, x, y, z);
     // 三种炉子：站台由**方块**决定（与右键打开界面时同一套，避免同一个炉子两种结论）

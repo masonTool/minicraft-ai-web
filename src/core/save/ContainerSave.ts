@@ -23,6 +23,7 @@ import { EnchantTable } from '../container/EnchantTable.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
 import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
+import { GRINDSTONE_SIZE, Grindstone } from '../container/Grindstone.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
 import { BARREL_SIZE, Barrel } from '../container/Barrel.ts';
 import { DISPENSER_SIZE, Dispenser } from '../container/Dispenser.ts';
@@ -54,6 +55,8 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   // ⚠️ 用 `CHEST_SIZE` 而不是 `SHULKER_BOX_SIZE`：后者在互相 import 的模块里
   // 于本模块初始化时可能还是 undefined（见 ShulkerBox.ts 里的说明）
   shulker_box: CHEST_SIZE,
+  // 砂轮（批次 188）：两格输入 + 产物。产物是算出来的，存下来无妨（读档后 refresh 会重算）
+  grindstone: GRINDSTONE_SIZE,
 };
 
 export interface SerializedContainer {
@@ -109,6 +112,7 @@ export function kindOf(container: BlockContainer): ContainerKind {
   if (container instanceof Anvil) return 'anvil';
   if (container instanceof SmithingTable) return 'smithing';
   if (container instanceof Stonecutter) return 'stonecutter';
+  if (container instanceof Grindstone) return 'grindstone';
   if (container instanceof Campfire) return 'campfire';
   if (container instanceof Hopper) return 'hopper';
   // ⚠️ 顺序要紧：发射器是投掷器的**子类**，先判子类，否则发射器会被存成投掷器
@@ -135,6 +139,7 @@ function containerFor(
   if (kind === 'anvil') return store.getOrCreateAnvil(dimension, x, y, z);
   if (kind === 'smithing') return store.getOrCreateSmithingTable(dimension, x, y, z);
   if (kind === 'stonecutter') return store.getOrCreateStonecutter(dimension, x, y, z);
+  if (kind === 'grindstone') return store.getOrCreateGrindstone(dimension, x, y, z);
   if (kind === 'campfire') return store.getOrCreateCampfire(dimension, x, y, z);
   if (kind === 'hopper') return store.getOrCreateHopper(dimension, x, y, z);
   if (kind === 'dropper') return store.getOrCreateDropper(dimension, x, y, z);

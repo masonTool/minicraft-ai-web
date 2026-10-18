@@ -21,6 +21,7 @@ import { ShulkerBox } from '../container/ShulkerBox.ts';
 import { Dropper } from '../container/Dropper.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
+import { Grindstone } from '../container/Grindstone.ts';
 import { Hopper } from '../container/Hopper.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
@@ -41,7 +42,8 @@ export type BlockContainer =
   | Hopper
   | Dropper
   | Dispenser
-  | Barrel;
+  | Barrel
+  | Grindstone;
 export type ContainerKind =
   | 'furnace'
   | 'chest'
@@ -55,7 +57,8 @@ export type ContainerKind =
   | 'dropper'
   | 'dispenser'
   | 'barrel'
-  | 'shulker_box';
+  | 'shulker_box'
+  | 'grindstone';
 
 /**
  * **带方块实体的方块**（= 装得下东西的方块）的 id 名单。
@@ -88,6 +91,8 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   Block.ANVIL,
   Block.SMITHING_TABLE,
   Block.STONECUTTER,
+  // 砂轮（批次 188）：两格输入按坐标存（与铁砧同一个理由），所以活塞一样推不动
+  Block.GRINDSTONE,
   Block.ENCHANTING_TABLE,
   Block.CAMPFIRE,
   // 三种炉子：站台不同，但都是按坐标存着的容器
@@ -223,6 +228,23 @@ export class BlockEntityStore {
     const cutter = new Stonecutter();
     this.put({ dimension, x, y, z, container: cutter });
     return cutter;
+  }
+
+  getGrindstone(dimension: DimensionId, x: number, y: number, z: number): Grindstone | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Grindstone ? container : undefined;
+  }
+
+  /**
+   * 砂轮的两格输入也按坐标存（H15，批次 188）：
+   * 把附魔剑放上去走开再回来，东西还在轮子上——与铁砧/锻造台同一个理由。
+   */
+  getOrCreateGrindstone(dimension: DimensionId, x: number, y: number, z: number): Grindstone {
+    const existing = this.getGrindstone(dimension, x, y, z);
+    if (existing) return existing;
+    const grindstone = new Grindstone();
+    this.put({ dimension, x, y, z, container: grindstone });
+    return grindstone;
   }
 
   /**
