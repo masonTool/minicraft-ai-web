@@ -22,6 +22,7 @@ import { Dropper } from '../container/Dropper.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 import { Grindstone } from '../container/Grindstone.ts';
+import { Lectern } from '../container/Lectern.ts';
 import { Hopper } from '../container/Hopper.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
@@ -43,7 +44,8 @@ export type BlockContainer =
   | Dropper
   | Dispenser
   | Barrel
-  | Grindstone;
+  | Grindstone
+  | Lectern;
 export type ContainerKind =
   | 'furnace'
   | 'chest'
@@ -58,7 +60,8 @@ export type ContainerKind =
   | 'dispenser'
   | 'barrel'
   | 'shulker_box'
-  | 'grindstone';
+  | 'grindstone'
+  | 'lectern';
 
 /**
  * **带方块实体的方块**（= 装得下东西的方块）的 id 名单。
@@ -93,6 +96,8 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   Block.STONECUTTER,
   // 砂轮（批次 188）：两格输入按坐标存（与铁砧同一个理由），所以活塞一样推不动
   Block.GRINDSTONE,
+  // 讲台（批次 191）：摊在上面的那本书按坐标存（推走就等于把书弄丢）
+  Block.LECTERN,
   Block.ENCHANTING_TABLE,
   Block.CAMPFIRE,
   // 三种炉子：站台不同，但都是按坐标存着的容器
@@ -245,6 +250,23 @@ export class BlockEntityStore {
     const grindstone = new Grindstone();
     this.put({ dimension, x, y, z, container: grindstone });
     return grindstone;
+  }
+
+  getLectern(dimension: DimensionId, x: number, y: number, z: number): Lectern | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Lectern ? container : undefined;
+  }
+
+  /**
+   * 讲台上摊着的那本书也按坐标存（批次 191，J25）：
+   * 放一本书走开再回来，书还在台上、还翻在同一页——与铁砧/砂轮同一个理由。
+   */
+  getOrCreateLectern(dimension: DimensionId, x: number, y: number, z: number): Lectern {
+    const existing = this.getLectern(dimension, x, y, z);
+    if (existing) return existing;
+    const lectern = new Lectern();
+    this.put({ dimension, x, y, z, container: lectern });
+    return lectern;
   }
 
   /**

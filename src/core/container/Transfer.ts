@@ -44,6 +44,7 @@ import {
   GRINDSTONE_SIZE,
   Grindstone,
 } from './Grindstone.ts';
+import { LECTERN_SIZE, Lectern } from './Lectern.ts';
 import { STONECUTTER_INPUT, STONECUTTER_SIZE, Stonecutter } from './Stonecutter.ts';
 import { sameExtras, type ItemStack } from './Inventory.ts';
 import { fuelSeconds, smeltingRecipeFor } from '../crafting/Smelting.ts';
@@ -82,6 +83,9 @@ export function acceptingSlots(container: BlockContainer): readonly number[] {
   if (container instanceof Anvil) return [ANVIL_LEFT, ANVIL_RIGHT];
   // 砂轮（批次 188）：两格输入可塞，**产物槽不能塞**（与铁砧同一个理由）
   if (container instanceof Grindstone) return [GRINDSTONE_LEFT, GRINDSTONE_RIGHT];
+  // 讲台（批次 191）：**不接受自动输入**——原版讲台只收"一本摊开的书"，
+  // 而且它的界面是"阅读"而不是物品栏，让漏斗往里塞只会塞进一个看不见的口袋。
+  if (container instanceof Lectern) return EMPTY_SLOTS;
   // 剩下的就是附魔台：原版对漏斗是关着的（见文件头的差异说明）
   return EMPTY_SLOTS;
 }
@@ -114,6 +118,7 @@ export function containerSlotCount(container: BlockContainer): number {
   if (container instanceof Stonecutter) return STONECUTTER_SIZE;
   if (container instanceof Anvil) return ANVIL_SIZE;
   if (container instanceof Grindstone) return GRINDSTONE_SIZE;
+  if (container instanceof Lectern) return LECTERN_SIZE;
   if (container instanceof EnchantTable) return ENCHANT_SLOT_COUNT;
   return 0;
 }

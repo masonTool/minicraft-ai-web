@@ -4718,6 +4718,58 @@ class App {
   }
 
   /**
+   * 讲台（批次 191，J25）：放书 / 打开阅读。
+   *
+   * 三条分支（与原版一致的部分写在前面，差异写在 TASKS J25）：
+   *  1. 手里拿着书与笔/成书、台面空着 → **放上去**（创造不消耗）；
+   *  2. 台面上有书 → **打开阅读界面**，从上次翻到的那一页开始；
+   *  3. 其它情况（空手 + 空讲台 / 拿着方块）→ 不消费，继续走放置逻辑。
+   *
+   * ⚠️ 台面上**已经有书时不再替换**：原版也不让直接换，玩家得先（潜行右击）拿走。
+   */
+  private useLectern(x: number, y: number, z: number): boolean {
+    const lectern = this.world.containers.getOrCreateLectern(this.dimension, x, y, z);
+    const held = this.inventory.get(this.hotbarIndex);
+    if (held && lectern.accepts(held)) {
+      // `place` 放的是**一份拷贝**（不改手里那一叠），所以创造模式什么都不用补
+      if (lectern.place(held) < 0) return false;
+      // 生存：手里那本减 1（书本来就不可堆叠，通常是 0 本了）
+      if (!this.isCreative) this.inventory.take(this.hotbarIndex, 1);
+      this.refreshHotbar();
+      this.audio.play('item_move', { x: x + 0.5, y: y + 1, z: z + 0.5 });
+      this.hand.swing();
+      return true;
+    }
+    const book = lectern.book;
+    if (!book) return false;
+    // 阅读：页码回调写回讲台（`onPageChange` 是全局的，所以每次都显式重设）
+    this.bookScreen.onPageChange = (page) => lectern.setPage(page);
+    this.bookScreen.show(book, { startPage: lectern.page });
+    this.handleInventoryOpen(true);
+    return true;
+  }
+
+  /**
+   * 潜行右击讲台：把书收回来（批次 191，与原版一致）。
+   *
+   * @returns 有没有收（false → 这一下照常走放置逻辑）
+   */
+  private takeLecternBook(x: number, y: number, z: number): boolean {
+    const lectern = this.world.containers.getOrCreateLectern(this.dimension, x, y, z);
+    const book = lectern.take();
+    if (!book) return false;
+    const leftover = this.inventory.addStack(book);
+    if (leftover > 0) {
+      // 背包满了就丢在讲台前（原版也是掉出来）——掉的是**带内容的原栈**，不是白书
+      this.spawnDrop(book.id, leftover, x + 0.5, y + 1.05, z + 0.5, stackExtras(book));
+    }
+    this.refreshHotbar();
+    this.audio.play('item_move', { x: x + 0.5, y: y + 1, z: z + 0.5 });
+    this.hand.swing();
+    return true;
+  }
+
+  /**
    * 举着书右击（批次 190，H16，书与笔 / 成书）。
    *
    * @returns 有没有打开（false → 这一下继续走"放置方块"那条路）
@@ -4726,6 +4778,8 @@ class App {
     const stack = this.inventory.get(this.hotbarIndex);
     if (!stack) return false;
     if (!isWritableBook(stack) && !isWrittenBook(stack)) return false;
+    // 打开的是"手里那本"：页码不落盘，也别让上一次讲台的页码回调串过来
+    this.bookScreen.onPageChange = null;
     this.bookScreen.show(stack);
     // 与告示牌/背包同一个入口：释放指针锁、收起触摸层，打字不会被当成操作
     this.handleInventoryOpen(true);
@@ -7062,6 +7116,8 @@ class App {
     // 物品展示框（B14，批次 86）：右键 = 挂上去 / 转 45° / 换一件。
     // 画（`painting`）没有交互：右键点它继续走放置逻辑（原版画也没有交互）
     if (hitShape === 'item_frame') return this.useItemFrame(x, y, z);
+    // 讲台（批次 191，J25）：放书 / 读数（潜行收书那条在 `updatePlacing` 里，见 `takeLecternBook`）
+    if (hitBlock === Block.LECTERN) return this.useLectern(x, y, z);
     // 信标（K5，批次 117）：右键打开效果面板（**没有物品格**，见 `ui/BeaconScreen.ts`）
     if (hitBlock === Block.BEACON) {
       this.openBeaconScreen(x, y, z);
@@ -7641,6 +7697,8 @@ class App {
     if (block === Block.SMITHING_TABLE) return store.getOrCreateSmithingTable(dimension, x, y, z);
     if (block === Block.STONECUTTER) return store.getOrCreateStonecutter(dimension, x, y, z);
     if (block === Block.GRINDSTONE) return store.getOrCreateGrindstone(dimension, x, y, z);
+    // 讲台（批次 191）：摊着的那本书按坐标存，拆掉时才会掉出来
+    if (block === Block.LECTERN) return store.getOrCreateLectern(dimension, x, y, z);
     if (block === Block.ENCHANTING_TABLE) return store.getOrCreateEnchantTable(dimension, x, y, z);
     if (block === Block.CAMPFIRE) return store.getOrCreateCampfire(dimension, x, y, z);
     // 三种炉子：站台由**方块**决定（与右键打开界面时同一套，避免同一个炉子两种结论）
@@ -8214,6 +8272,17 @@ class App {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN;
       return;
+    }
+
+    // ---- 讲台（批次 191，J25）：**潜行右击把书收回来**（原版行为）。
+    // 与音符盒同一个理由排在这里：潜行右键在我们的输入里被"放置方块"占着，
+    // 不特判的话那条"拿走"永远收不到（`useFunctionalBlock` 在 `!sneak` 之后才会被调用）。
+    if (sneak && this.world.getBlock(this.hit.x, this.hit.y, this.hit.z) === Block.LECTERN) {
+      if (this.takeLecternBook(this.hit.x, this.hit.y, this.hit.z)) {
+        this.touchPlaceRequest = false;
+        this.placeCooldown = PLACE_COOLDOWN;
+        return;
+      }
     }
 
     // ---- 刷怪蛋（批次 174，J17）：对着方块右击生成一只生物。

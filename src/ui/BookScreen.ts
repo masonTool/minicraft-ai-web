@@ -37,6 +37,11 @@ export class BookScreen {
   onCommit: ((stack: ItemStack) => void) | null = null;
   /** 关闭（保存或取消）时回调：主程序用它把输入权交回去 */
   onClose: (() => void) | null = null;
+  /**
+   * 翻页时回调（批次 191，讲台用）：讲台要把"玩家停在第几页"记进方块状态里。
+   * 打开普通书时主程序会把它置回 null，免得两处串着改。
+   */
+  onPageChange: ((page: number) => void) | null = null;
 
   private readonly titleEl: HTMLDivElement;
   private readonly pageEl: HTMLTextAreaElement;
@@ -134,12 +139,17 @@ export class BookScreen {
     return this.open;
   }
 
-  /** 打开一本书（书与笔 → 可写，成书 → 只读） */
-  show(stack: ItemStack): void {
+  /**
+   * 打开一本书（书与笔 → 可写，成书 → 只读）。
+   *
+   * @param options.startPage 从第几页开始（讲台用：上次翻到哪就从哪继续）
+   */
+  show(stack: ItemStack, options: { startPage?: number } = {}): void {
     this.stack = stack;
     this.writing = isWritableBook(stack);
     this.pages = bookPages(stack);
-    this.pageIndex = 0;
+    const start = Math.floor(options.startPage ?? 0);
+    this.pageIndex = Math.max(0, Math.min(this.pages.length - 1, Number.isFinite(start) ? start : 0));
     this.titleEl.textContent = this.writing ? '书与笔' : bookTitleOf(stack);
 
     this.pageEl.classList.toggle('hidden', !this.writing);
@@ -223,6 +233,7 @@ export class BookScreen {
     if (this.writing) this.pages[this.pageIndex] = this.pageEl.value;
     this.pageIndex = target;
     this.syncPage();
+    this.onPageChange?.(this.pageIndex);
     if (this.writing) this.pageEl.focus();
   }
 

@@ -24,6 +24,7 @@ import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
 import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
 import { GRINDSTONE_SIZE, Grindstone } from '../container/Grindstone.ts';
+import { LECTERN_SIZE, Lectern } from '../container/Lectern.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
 import { BARREL_SIZE, Barrel } from '../container/Barrel.ts';
 import { DISPENSER_SIZE, Dispenser } from '../container/Dispenser.ts';
@@ -57,6 +58,8 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   shulker_box: CHEST_SIZE,
   // 砂轮（批次 188）：两格输入 + 产物。产物是算出来的，存下来无妨（读档后 refresh 会重算）
   grindstone: GRINDSTONE_SIZE,
+  // 讲台（批次 191）：只有一格——摊着的那本书；页码在同一条 `lectern` 状态里
+  lectern: LECTERN_SIZE,
 };
 
 export interface SerializedContainer {
@@ -99,6 +102,10 @@ export interface SerializedContainer {
   chest?: {
     looted: boolean;
   };
+  /** 讲台的页码（批次 191）：书在 `stacks[0]`，"翻到第几页"跟它一起存 */
+  lectern?: {
+    page: number;
+  };
 }
 
 /** 容器实例 → 种类 */
@@ -113,6 +120,7 @@ export function kindOf(container: BlockContainer): ContainerKind {
   if (container instanceof SmithingTable) return 'smithing';
   if (container instanceof Stonecutter) return 'stonecutter';
   if (container instanceof Grindstone) return 'grindstone';
+  if (container instanceof Lectern) return 'lectern';
   if (container instanceof Campfire) return 'campfire';
   if (container instanceof Hopper) return 'hopper';
   // ⚠️ 顺序要紧：发射器是投掷器的**子类**，先判子类，否则发射器会被存成投掷器
@@ -140,6 +148,7 @@ function containerFor(
   if (kind === 'smithing') return store.getOrCreateSmithingTable(dimension, x, y, z);
   if (kind === 'stonecutter') return store.getOrCreateStonecutter(dimension, x, y, z);
   if (kind === 'grindstone') return store.getOrCreateGrindstone(dimension, x, y, z);
+  if (kind === 'lectern') return store.getOrCreateLectern(dimension, x, y, z);
   if (kind === 'campfire') return store.getOrCreateCampfire(dimension, x, y, z);
   if (kind === 'hopper') return store.getOrCreateHopper(dimension, x, y, z);
   if (kind === 'dropper') return store.getOrCreateDropper(dimension, x, y, z);
@@ -250,6 +259,9 @@ export function serializeContainer(
   if (container instanceof Chest) {
     data.chest = { looted: container.looted };
   }
+  if (container instanceof Lectern) {
+    data.lectern = { page: container.page };
+  }
   return data;
 }
 
@@ -312,6 +324,10 @@ export function restoreContainers(store: BlockEntityStore, data: readonly Serial
     if (container instanceof Chest) {
       // 旧存档没有这个字段：缺省 false 是安全的（那只箱子本来就还没被战利品表填过）
       container.looted = entry.chest?.looted === true;
+    }
+    if (container instanceof Lectern) {
+      // 页码要**夹到页数范围内**：书换了、或者存档被手改过，都不该让界面显示"第 37 / 2 页"
+      container.setPage(numberOr(entry.lectern?.page, 0));
     }
 
     restored++;
