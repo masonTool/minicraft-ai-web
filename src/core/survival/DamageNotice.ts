@@ -45,7 +45,8 @@ export function damageReason(cause: DamageCause, source?: string): string {
   // 有具体来源时按类型换个说法，别出现"被世界边界攻击"这种别扭句子
   switch (cause) {
     case 'generic':
-      return `${from}造成的伤害`;
+      // "来自僵尸"比"僵尸造成的伤害"短，配上后半句"（3 点）"也不会重复"伤害"两个字
+      return `来自${from}`;
     case 'projectile':
       return `被${from}射中`;
     case 'explosion':
