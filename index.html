@@ -1107,17 +1107,22 @@
         /* 底部安全区：刘海屏/全面屏的"home 横条"会盖住贴边的 UI */
         bottom: calc(14px + env(safe-area-inset-bottom, 0px));
         display: flex; gap: var(--hotbar-gap); padding: var(--hotbar-pad);
-        background: var(--hud-bg);
-        border: 1px solid var(--hud-border);
-        border-radius: var(--radius-md);
-        box-shadow: var(--hud-shadow), var(--hud-inner);
+        /* 批次 228：**只改外观**，交互保持旧的"点一格换手持槽"。
+           外观与背包底部那排对齐：灰框 + 像素斜面 + 无圆角。 */
+        background: var(--panel-bg);
+        border: 3px solid;
+        border-color: var(--pixel-bevel);
+        border-radius: 0;
+        box-shadow: var(--panel-shadow);
       }
       #hotbar .slot {
         position: relative; width: var(--hotbar-slot); height: var(--hotbar-slot);
         display: grid; place-items: center;
-        background: rgba(255, 255, 255, .10);
-        border: 2px solid rgba(0, 0, 0, .38);
-        border-radius: var(--slot-radius);
+        /* 批次 228：槽位也换成背包那套灰底 + 像素斜面（只改外观） */
+        background: var(--slot-bg);
+        border: 2px solid;
+        border-color: var(--pixel-bevel);
+        border-radius: 0;
         transition: background var(--dur-fast) var(--ease), transform var(--dur-med) var(--ease),
                     box-shadow var(--dur-med) var(--ease);
       }
@@ -1810,23 +1815,6 @@
         background: var(--panel-bg);
         border: 3px solid; border-color: var(--pixel-bevel);
         box-shadow: var(--panel-shadow);
-      }
-      /* 批次 227：HUD 与背包共用同一排快捷栏。旧 #hotbar 的**格子**让位，
-         但容器要留着——快捷栏右侧那颗"背包"按钮是绝对定位在它里面的，
-         整块 display:none 会把打开背包的唯一入口一起藏掉。
-         只把格子设成 visibility:hidden（保留宽度），按钮位置不变。 */
-      body.hotbar-docked #hotbar {
-        background: transparent;
-        border-color: transparent;
-        box-shadow: none;
-      }
-      body.hotbar-docked #hotbar .slot { visibility: hidden; }
-      /* 当前手持槽（批次 227）：与旧 HUD 快捷栏同一种"抬起来 + 白光" */
-      .inv-hotbar-dock .inv-slot.active {
-        border-color: #fff;
-        background: rgba(255, 255, 255, .26);
-        transform: translateY(-2px) scale(1.06);
-        box-shadow: 0 0 12px rgba(255, 255, 255, .45), 0 2px 6px rgba(0, 0, 0, .5);
       }
       /* 打开携带版时藏 HUD 快捷栏 / 经验 / 生命，只留 dock 那一排（对齐 Wiki） */
       body.inv-pocket-open #hotbar,

@@ -1532,10 +1532,6 @@ class App {
       this.inventory,
       {
         onOpenChange: (open) => this.handleInventoryOpen(open),
-        // 批次 227：关闭背包时快捷栏就是 HUD 那排——点别的格 = 换手持槽，
-        // 点当前格 = 拿起（与背包里同一套逻辑）
-        activeHotbar: () => this.hotbarIndex,
-        onSelectHotbar: (index) => this.selectSlot(index),
         onOpenRecipes: (tab) => this.openRecipeBook(tab),
         onCloseRecipes: () => this.closeRecipeBook(),
         // 左栏是不是正被配方书占着（决定显示"我的物品"还是"配方列表"）
@@ -1982,8 +1978,6 @@ class App {
   /** 打开暂停菜单 */
   openSettings(): void {
     if (this.settingsScreen.isOpen) return;
-    // 批次 227：暂停界面打开前，先把快捷栏上"拿着"的东西放回背包，别让光标飘在菜单上
-    this.inventoryScreen.cancelHeld();
     const save = this.saveStatus;
     this.settingsScreen.setMeta(
       save.enabled
@@ -7039,7 +7033,6 @@ class App {
 
   /** 输入框打开/关闭：借背包那套"界面打开就停用移动与交互"的逻辑 */
   private handleChatOpen(open: boolean): void {
-    if (open) this.inventoryScreen.cancelHeld();
     this.handleInventoryOpen(open);
     // 批次 209：聊天时**不收起触摸操作层**。
     // 收起会把刚按下的聊天键从手指底下抽走（部分安卓内核会因此把焦点/手势判成取消），
@@ -10357,7 +10350,7 @@ class App {
       // 后台回来那一下 `now - lastTime` 可能是几分钟：那是"暂停"，不是"一帧卡了 3 分钟"，
       // 所以测量值另有一个 2 秒上限。
       const rawDt = Math.max(0, (now - this.lastTime) / 1000);
-      // 批次 227：暂停菜单 / 后台回来的"点击继续"层开着时，**整局模拟停住**。
+      // 暂停菜单 / 后台回来的"点击继续"层开着时，**整局模拟停住**（批次 228）：
       // 循环里物理、生存 tick、实体、粒子、昼夜、天气、方块 tick 全部吃 `dt`；
       // 渲染与性能采样仍用真实帧时间（`frameSeconds`），画面不会冻结在黑屏。
       const paused = this.settingsScreen.isOpen || this.resumeGateEl !== null;
@@ -11032,8 +11025,6 @@ class App {
     const changed = this.hotbarIndex !== index;
     this.hotbarIndex = index;
     this.refreshHotbar();
-    // 批次 227：快捷栏就是 HUD 那排，选中框要立刻跟过去
-    this.inventoryScreen?.syncHotbarActive();
     // 换槽时浮一下物品名（批次 95，对齐基岩版）：手机上"手上是什么"只能靠图标，
     // 而图标在 44px 的格子里看不太清（尤其是同名不同材质的工具）
     if (changed) this.showSelectedItemName();

@@ -686,15 +686,13 @@
 
 ---
 
-## 批次 227：HUD 快捷栏与背包共用一排 + 暂停冻结（2026-10-19）
+## 批次 228：回退共用快捷栏，只保留外观优化（2026-10-19）
 
-- [x] B227-1 `hotbarDock` / `heldElement` / `pickToastEl` 移到 body：关背包时快捷栏与光标仍可见
-- [x] B227-2 `body.hotbar-docked` 只隐藏旧 `#hotbar` 的格子（保留容器宽度，背包入口按钮不丢）
-- [x] B227-3 交互复用背包逻辑：`activeHotbar` / `onSelectHotbar` 钩子（点别的格换槽、点当前格拿起）
-- [x] B227-4 拿起/放置/交换/长按选数量/点外面丢弃全部沿用 `activateSlot`；dock 单独绑 tooltip 与按下反馈
-- [x] B227-5 `syncHotbarActive()`：当前手持槽高亮；`selectSlot` 立刻同步
-- [x] B227-6 暂停冻结：`paused = 设置面板 || resumeGate` 时主循环 `dt = 0`；暂停/聊天前 `cancelHeld()`
-- [x] B227-7 门禁：`test:ui` 655
+- [x] B228-1 回退批次 227 的共用 dock：hotbar / 光标 / 提示回到 #inventory-screen 内部
+- [x] B228-2 移除 activeHotbar 钩子、dock 的换槽与外部丢弃监听、syncHotbarActive
+- [x] B228-3 保留暂停冻结：设置面板 / resumeGate 打开时主循环 dt = 0
+- [x] B228-4 外观向背包那排靠：灰框 + 3px 像素斜面 + 方角 + panel-shadow，槽位改 --slot-bg
+- [x] B228-5 门禁：test:ui 655
 
-> **批次 227 已完成。** 快捷栏只剩一个 DOM；旧 HUD 容器必须留着（里面有背包按钮），
-> 只把格子设为 visibility:hidden。
+> **批次 228 已完成。** 教训：把两个上下文合并成同一 DOM 虽然"复用"，但会牵出
+> 换槽、焦点、命中层级一串特例；用户要的往往只是**看起来一致**，不是同一份节点。

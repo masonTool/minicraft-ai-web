@@ -718,7 +718,7 @@ console.log('\n[携带版细节收口（批次 159）]');
     '顶部视角键接了相机循环',
     readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('onCycleCamera: () => {'),
   );
-  check('关界面时收掉', invSrc.includes('this.hidePickToast();') && /finishClose\(\): void \{[\s\S]{0,900}hidePickToast/.test(invSrc));
+  check('关界面时收掉', invSrc.includes('this.hidePickToast();') && /finishClose\(\): void \{[\s\S]{0,400}hidePickToast/.test(invSrc));
 
   // ⑤ 选中 = 原格内显示 + 底色变深；不再有跟着光标飘的图标
   check('选中态是底色变深（且压住 hover）', css.includes('.inv-slot.selected,') && css.includes('--slot-bg-selected'));
@@ -887,8 +887,7 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   check(
     '点面板空白 / 窗口外 / 快捷栏两侧空白都丢出手上的整叠',
     invSrc.includes('private dropHeldStack(') &&
-      invSrc.includes('if (this.panel.contains(target)) return;') &&
-      invSrc.includes('const inDock = target ? this.hotbarDock.contains(target) : false;') &&
+      !invSrc.includes('this.hotbarDock.contains(target)') &&
       invSrc.includes("if (target.closest('.inv-slot, button, input, .recipe-cell')) return;"),
   );
   check(
