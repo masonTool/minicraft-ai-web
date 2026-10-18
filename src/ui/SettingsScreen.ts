@@ -373,6 +373,13 @@ export class SettingsScreen {
   private gameModeToggle: HTMLButtonElement | null = null;
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
   private diagnosticsStatusEl: HTMLDivElement | null = null;
+  /**
+   * 控件"按当前 settings 重画"的回调表（批次 185，"恢复默认"要用）。
+   *
+   * 每个滑块 / 循环按钮在造出来的时候把自己的 `sync` 塞进来：恢复默认只需要
+   * `Object.assign` 再把这张表跑一遍，不用重建整页 DOM（那会丢掉当前分组与滚动位置）。
+   */
+  private readonly refreshers: Array<() => void> = [];
 
   constructor(
     host: HTMLElement,
@@ -526,13 +533,10 @@ export class SettingsScreen {
     // 默认值刻意选成"手机优先"：两档自适应都开、帧率不限（能跑多少跑多少）
     this.makeToggle(graphics, 'adaptiveResolution', '自适应分辨率');
     this.makeToggle(graphics, 'adaptiveViewDistance', '自适应视距');
-    this.makeSelect(
-      graphics,
-      'maxFps',
-      '帧率上限',
-      FPS_CAPS.map(String),
-      FPS_CAP_LABELS,
-    );
+    // 批次 185（用户："帧率那些有必要吗？默认去适配当前性能状态就行"）：
+    // **帧率上限这一行删掉**。降级交给上面两条自适应——它们会在掉帧时先降分辨率/视距，
+    // 跑到 60 就是 60；手动钉一个"30 帧"只会让好设备白等。
+    // （`maxFps` 字段保留：老存档里的值还会被读取，只是不再给入口。）
     this.makeSelect(graphics, 'particles', '粒子效果', PARTICLE_LEVELS, PARTICLE_LEVEL_LABELS);
 
     const controls = this.section('controls');
@@ -570,6 +574,18 @@ export class SettingsScreen {
     if (this.actions.onDiagnosticsMark || this.actions.onDiagnosticsExport || this.actions.onDiagnosticsCopy) {
       game.appendChild(this.makeDiagnosticsRow());
     }
+    // 恢复默认（批次 185，用户要求）：一行一颗键，放在"游戏"组最下面——
+    // 它影响的是**所有**分组，所以不塞进任何一组，而是整页的最后一个动作。
+    const resetRow = document.createElement('div');
+    resetRow.className = 'settings-row wide settings-reset-row';
+    const resetButton = document.createElement('button');
+    resetButton.type = 'button';
+    resetButton.id = 'settings-reset';
+    resetButton.className = 'settings-reset';
+    resetButton.textContent = '恢复默认设置';
+    resetButton.addEventListener('click', () => this.resetDefaults());
+    resetRow.appendChild(resetButton);
+    game.appendChild(resetRow);
 
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
     // 这一层留着是为了让"选项卡列"与"内容区"能各自独立收缩/滚动。
@@ -754,6 +770,12 @@ export class SettingsScreen {
       this.commit();
     });
 
+    // 恢复默认时按 settings 重画（见 `refreshers`）
+    this.refreshers.push(() => {
+      input.value = String((this.settings[key] as number) * scale);
+      value.textContent = `${input.value}${unit}`;
+    });
+
     row.append(name, input, value);
     this.sliders.set(key, input);
     return row;
@@ -785,10 +807,29 @@ export class SettingsScreen {
     button.addEventListener('click', () => {
       button.textContent = cycle();
     });
+    // 恢复默认时按 settings 重画（见 `refreshers`）
+    this.refreshers.push(() => {
+      button.textContent = read();
+    });
 
     row.append(name, button);
     host.appendChild(row);
     return button;
+  }
+
+  /**
+   * 一键恢复默认（批次 185，用户要求）。
+   *
+   * `Object.assign` 而不是 `this.settings = {...DEFAULT}`：主程序握着同一个对象引用
+   * （`loadSettings()` 的结果直接传进构造函数），换引用会让"改设置立即生效"断掉。
+   */
+  resetDefaults(): void {
+    Object.assign(this.settings, DEFAULT_SETTINGS);
+    for (const refresh of this.refreshers) refresh();
+    this.commit();
+    // 给一句确认：面板上没有独立的 toast，借用设置页那行提示，2 秒后恢复原文
+    this.settingsHintEl.textContent = '已恢复默认设置';
+    window.setTimeout(() => this.renderSubtitle(), 2000);
   }
 
   /** 布尔项的按钮文字：原版就是写"开 / 关"两个字 */

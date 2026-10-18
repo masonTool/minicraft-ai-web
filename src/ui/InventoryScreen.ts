@@ -49,6 +49,8 @@ import {
   type RecipeBookTab,
 } from '../core/crafting/RecipeBook.ts';
 import type { Recipe } from '../core/crafting/Recipes.ts';
+// 熔炼表（批次 185）：判断"这件东西只能烧出来" → 合成箭头上面点亮熔炉图标
+import { SMELTING_RECIPES } from '../core/crafting/Smelting.ts';
 // 配方的**摆放位置**（批次 29）：左栏点一件物品要把它怎么摆画进合成格
 import { recipeLayout } from '../core/crafting/RecipeLayout.ts';
 // 快速移动（批次 127）：Shift+左键的规则是纯逻辑（`core/container/QuickMove.ts`），
@@ -383,6 +385,8 @@ export class InventoryScreen {
   private categoryGrid!: HTMLDivElement;
   /** 分类物品那一栏的搜索框（只在"全部"那一栏出现） */
   private categorySearch!: HTMLInputElement;
+  /** 左栏分类底部那行统计（批次 185：当前分类我有几种 / 共几种） */
+  private categoryInfo!: HTMLDivElement;
   private categoryPrev!: HTMLButtonElement;
   private categoryNext!: HTMLButtonElement;
   private categoryPageLabel!: HTMLSpanElement;
@@ -416,6 +420,12 @@ export class InventoryScreen {
    * 缺的那件用红底标出来。点任何合成格就收掉。
    */
   private craftGhost: Array<{ id: number; have: boolean } | null> | null = null;
+  /**
+   * 当前预览的配方"要什么工作台"（批次 185）：合成箭头上面那颗小图标。
+   * `workbench` = 3×3 摆不下、`furnace` = 只能烧出来、`null` = 当前就能做。
+   */
+  private craftStation: 'workbench' | 'furnace' | null = null;
+  private craftStationEl: HTMLDivElement | null = null;
   /** 经典 UI 标题栏上的「配方书」文字按钮；携带版改用左上图标条 */
   private recipesBtn: HTMLButtonElement | null = null;
   /** 携带版左上：配方书五个分类图标 */
@@ -445,6 +455,8 @@ export class InventoryScreen {
   private closeBtn: HTMLButtonElement | null = null;
   /** 关面板动画进行中，避免连点重复结算 */
   private closing = false;
+  /** 关闭动画的 400ms 兜底定时器（批次 185：重新打开时要能取消它） */
+  private closeTimer: number | null = null;
   /**
    * 全局监听（window / document）的解绑开关（批次 181）。
    *
@@ -589,7 +601,6 @@ export class InventoryScreen {
   private creativeNext!: HTMLButtonElement;
   private creativePageLabel!: HTMLSpanElement;
   /** 创造销毁格（批次 139）：把手上那一叠清掉 */
-  private creativeDestroySlot!: HTMLDivElement;
   /** 页面尺寸变化（手机转屏）时重算每页条数：只在跨越窄屏阈值时才真的重渲染 */
   private readonly narrowQuery = typeof window === 'undefined' ? null : window.matchMedia(`(max-width: ${NARROW_MAX_WIDTH}px)`);
 
@@ -1129,6 +1140,9 @@ export class InventoryScreen {
         this.pane = 'creative';
         this.applyInventoryChrome();
         this.updateTabHighlight();
+        // 批次 185：换分类要**回到这一类的最上面**——原来沿用上一类的滚动位置，
+        // 玩家切过去看到的是"从中间开始"的列表，得自己滑回顶部。
+        this.creativeGrid.scrollTop = 0;
         this.renderCreativeGrid();
         // 批次 181：任何点击都在快捷栏上方说一句"刚才点了什么"
         this.showMessage(`创造分类：${CREATIVE_TAB_LABELS[category]}`);
@@ -1165,26 +1179,10 @@ export class InventoryScreen {
     this.creativePageLabel.dataset.role = 'label';
     this.creativePager.append(this.creativePrev, this.creativePageLabel, this.creativeNext);
 
-    // 销毁格（批次 139，对齐创造 HCI）：把手上的东西清掉，而不是丢进世界。
-    // 左键整叠、右键一个——与点界面外丢物的按键分工一致，只是结果是「没了」。
-    const destroyRow = document.createElement('div');
-    destroyRow.className = 'inv-creative-destroy-row';
-    this.creativeDestroySlot = this.createSlot();
-    this.creativeDestroySlot.classList.add('creative-destroy');
-    this.creativeDestroySlot.dataset.role = 'creative-destroy';
-    this.creativeDestroySlot.title = '销毁（左键整叠 / 右键一个）';
-    const destroyHint = document.createElement('span');
-    destroyHint.className = 'inv-slot-hint';
-    destroyHint.textContent = '销';
-    this.creativeDestroySlot.appendChild(destroyHint);
-    this.creativeDestroySlot.addEventListener('pointerdown', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      this.destroyHeld(event.button === 2 ? 1 : null);
-    });
-    destroyRow.appendChild(this.creativeDestroySlot);
-
-    this.creativeSection.append(header, this.creativeControls, this.creativeGrid, this.creativePager, destroyRow);
+    // 批次 185（用户要求）：创造栏下面那颗「销毁」格**去掉**。
+    // 它占掉了一整行高度，而且和"拖到界面外丢弃"是同一件事的两种入口；
+    // 现在统一走"点界面外丢弃"（`dropFromCursor` / root 空白区）。
+    this.creativeSection.append(header, this.creativeControls, this.creativeGrid, this.creativePager);
     this.updateTabHighlight();
     this.renderCreativeGrid();
     this.updateCreativeVisibility();
@@ -1236,7 +1234,14 @@ export class InventoryScreen {
     this.categoryPageLabel.dataset.role = 'label';
     this.categoryPager.append(this.categoryPrev, this.categoryPageLabel, this.categoryNext);
 
-    this.categoryHostEl.append(this.categorySearch, this.categoryGrid, this.categoryPager);
+    // 底部一行小字（批次 185，用户："分类下面还有空间，加一条信息栏"）：
+    // 这一栏是"按分类找东西"，玩家最常问的两件事就是**这一类我有几种**、
+    // **总共有几种**（差额就是配方开关打开后那些红底的）。
+    this.categoryInfo = document.createElement('div');
+    this.categoryInfo.className = 'inv-category-info';
+    this.categoryInfo.dataset.role = 'category-info';
+
+    this.categoryHostEl.append(this.categorySearch, this.categoryGrid, this.categoryPager, this.categoryInfo);
   }
 
   /**
@@ -1301,6 +1306,14 @@ export class InventoryScreen {
 
     // 搜索框只在"全部"那一栏出现（与创造栏、配方书同一口径）
     this.categorySearch.style.display = this.categoryTab === 'all' ? '' : 'none';
+    // 批次 185：底部统计。**不受搜索词影响**（它是"这一类有多少"的口径，
+    // 不是"当前筛出来多少"），否则搜一个词就变成 0/0，反而看不出分类规模。
+    {
+      const inTab = (id: number): boolean => this.categoryTab === 'all' || recipeBookTab(id) === this.categoryTab;
+      const ownedInTab = this.ownedItemIds().filter(inTab).length;
+      const allInTab = CREATIVE_ITEMS.filter(inTab).length;
+      this.categoryInfo.textContent = `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 我有 ${ownedInTab} / 共 ${allInTab}`;
+    }
     const items = this.categoryItems();
     // 触摸端整表滚动、PC 底部翻页（与创造栏同一条判据）
     const scrollMode = isTouchUi();
@@ -1425,14 +1438,46 @@ export class InventoryScreen {
     // "这件东西由什么组装"没有任何意义；点物品就只是"拿起它"。
     // 顺手把可能残留的配方预览收掉（从生存切过来时它可能还画在合成格里）。
     this.clearCraftGhost();
+    this.craftStation = null;
     if (this.hooks.isCreative?.() ?? false) return;
     const recipe = recipesForResult(itemId)[0];
-    if (!recipe || recipeGridSize(recipe) > this.crafting.size) return;
+    // 批次 185：没有合成配方、但能在熔炉里烧出来 → 点亮"熔炉"小图标
+    if (!recipe) {
+      if (SMELTING_RECIPES.some((entry) => entry.output.id === itemId)) this.craftStation = 'furnace';
+      return;
+    }
+    // 批次 185：3×3 的配方在 2×2 背包里摆不下——不再"什么都不显示"，
+    // 而是点出工作台图标（材料预览只对摆得下的配方有意义）。
+    if (recipeGridSize(recipe) > this.crafting.size) {
+      this.craftStation = 'workbench';
+      return;
+    }
     if (canCraft(this.inventory, recipe).ok) {
       fillCraftingGrid(this.inventory, this.crafting, recipe);
       return;
     }
     this.showRecipeGhost(recipe);
+  }
+
+  /**
+   * 箭头上面那颗小图标（批次 185）：这件东西"要工作台"还是"要熔炉"。
+   *
+   * 用户的原话是"在箭头那个上方，会显示小小的一个工作台图标"——放在箭头里而不是
+   * 另外占一行，是为了不把 2×2 合成区撑高（横屏高度本来就紧张）。
+   */
+  private syncCraftStation(): void {
+    const el = this.craftStationEl;
+    if (!el) return;
+    const station = this.mode === 'inventory' || this.mode === 'crafting' ? this.craftStation : null;
+    el.classList.toggle('hidden', !station);
+    if (!station) return;
+    const icon = el.firstElementChild;
+    if (icon instanceof HTMLCanvasElement) {
+      drawItemIcon(icon, this.atlas, station === 'workbench' ? Block.CRAFTING_TABLE : Block.FURNACE, 16);
+    } else {
+      el.textContent = station === 'workbench' ? '台' : '炉';
+    }
+    el.title = station === 'workbench' ? '需要工作台（3×3）' : '需要在熔炉里烧炼';
   }
 
   /** 材料不齐：把配方"画"进合成格（缺的红底），让人一眼看出差什么 */
@@ -1461,6 +1506,8 @@ export class InventoryScreen {
   }
 
   private clearCraftGhost(): void {
+    // 预览收了，"要工作台/要熔炉"的标记也一起收（批次 185）
+    this.craftStation = null;
     if (!this.craftGhost) return;
     this.craftGhost = null;
     for (const [key, binding] of this.bindings) {
@@ -1595,6 +1642,9 @@ export class InventoryScreen {
       this.categorySearch.value = '';
     }
     this.applyInventoryChrome();
+    // 批次 185：切分类回到顶部（与创造栏同一条口径）。
+    // 必须放在 applyInventoryChrome 之后——里面会 renderCategoryGrid() 重建格子。
+    this.categoryGrid.scrollTop = 0;
     this.showMessage(`分类：${RECIPE_BOOK_TAB_LABELS[tab]}`);
   }
 
@@ -1615,10 +1665,14 @@ export class InventoryScreen {
     // ⚠️ 两个口径要分开：
     //   `creativePlayer` = **玩家在创造模式**（与当前开着哪个界面无关）——"有没有配方书"
     //     这类"模式能力"要按它判，工作台界面里人也还在创造模式；
-    //   `creative` = 当前这一屏是不是"创造物品栏"（只有玩家背包那一屏有）。
+    //   `creative` = 这一屏能不能显示"创造物品栏"。
     // 批次 164：原来只按 `creative` 判，于是创造模式的工作台里配方分类又冒出来了。
+    // 批次 185：`creative` 不能再要求 `mode === 'inventory'`——创造模式打开 3×3 工作台时，
+    //   左轨那排分类点了之后 `leftPane` 永远退回 'items'（只看见仓库），
+    //   玩家体感就是"分类没反应、搜索也没反应"。工作台同样是双栏壳，
+    //   左栏放创造物品栏完全放得下。
     const creativePlayer = this.hooks.isCreative?.() ?? false;
-    const creative = this.mode === 'inventory' && creativePlayer;
+    const creative = creativePlayer;
     // 模式变了（暂停菜单 / /gamemode）→ 左栏回到该模式的默认页。
     // 这是批次 181 的关键一步：原来创造模式里 `pane` 被强行改回 'items'，
     // 于是"切到个人仓库再点分类"永远回不去。
@@ -1842,7 +1896,9 @@ export class InventoryScreen {
     const layout = this.topArea.querySelector('.inv-craft');
     const arrow = this.topArea.querySelector('.inv-arrow');
     layout?.classList.toggle('inv-craft-vertical', vertical);
-    if (arrow) arrow.textContent = vertical ? '↓' : '→';
+    // ⚠️ 只改那一层字形，不能用 `arrow.textContent`——那会顺手删掉"要工作台"的小图标
+    const glyph = arrow?.querySelector('.inv-arrow-glyph');
+    if (glyph) glyph.textContent = vertical ? '↓' : '→';
   }
 
   /**
@@ -1885,18 +1941,6 @@ export class InventoryScreen {
 
   private updateCreativeVisibility(): void {
     this.applyInventoryChrome();
-  }
-
-  /**
-   * 销毁光标上的物品（创造销毁格）。
-   * @param count 要销几个；`null` = 整叠
-   */
-  private destroyHeld(count: number | null): void {
-    if (!this.held) return;
-    if (count === null || count >= this.held.count) this.held = null;
-    else this.held = { ...this.held, count: this.held.count - count };
-    this.hooks.onMove?.();
-    this.refresh();
   }
 
   /** 翻页条上的按钮：触摸端热区要够大（与 CSS 里的 44px 下限配套） */
@@ -2344,7 +2388,23 @@ export class InventoryScreen {
 
     const arrow = document.createElement('div');
     arrow.className = 'inv-arrow';
-    arrow.textContent = '→';
+    // ⚠️ 箭头字符单独包一层：`syncCraftArrow` 每次排布都会改它的方向（→ / ↓），
+    // 直接写 `arrow.textContent` 会把下面的小图标一起抹掉（批次 185 踩过）。
+    const glyph = document.createElement('span');
+    glyph.className = 'inv-arrow-glyph';
+    glyph.textContent = '→';
+    arrow.appendChild(glyph);
+    // 箭头上面那颗"要工作台 / 要熔炉"的小图标（批次 185）。始终建、默认隐藏：
+    // 只在"点了一件摆不下或烧出来的东西"时露出来，切换预览时由 `syncCraftStation` 收放。
+    const station = document.createElement('div');
+    station.className = 'inv-craft-station hidden';
+    station.dataset.role = 'craft-station';
+    const stationIcon = document.createElement('canvas');
+    stationIcon.width = 16;
+    stationIcon.height = 16;
+    station.appendChild(stationIcon);
+    arrow.appendChild(station);
+    this.craftStationEl = station;
 
     const layout = document.createElement('div');
     layout.className = 'inv-craft';
@@ -3260,6 +3320,18 @@ export class InventoryScreen {
   }
 
   openPanel(): void {
+    // 批次 185：关闭动画（400ms）还没走完又要打开——例如快速点两下背包、
+    // 或者程序在关掉背包的同时打开箱子。原来 `open` 还是 true，这里直接 return，
+    // 随后 `finishClose` 把面板藏起来，结果是"界面打开了但屏幕上看不见"。
+    if (this.closing) {
+      this.closing = false;
+      if (this.closeTimer !== null) {
+        window.clearTimeout(this.closeTimer);
+        this.closeTimer = null;
+      }
+      this.panel.classList.remove('panel-out');
+      this.open = false;
+    }
     if (this.open) return;
     diag.event('inventory', 'open', {
       mode: this.mode,
@@ -3341,11 +3413,17 @@ export class InventoryScreen {
       if (done) return;
       done = true;
       this.panel.removeEventListener('animationend', finish);
+      if (this.closeTimer !== null) {
+        window.clearTimeout(this.closeTimer);
+        this.closeTimer = null;
+      }
+      // 关闭被取消（`openPanel` 里重新打开）→ 不能再把面板藏起来
+      if (!this.closing) return;
       this.panel.classList.remove('panel-out');
       this.finishClose();
     };
     this.panel.addEventListener('animationend', finish);
-    window.setTimeout(finish, 400);
+    this.closeTimer = window.setTimeout(finish, 400);
   }
 
   private finishClose(): void {
@@ -3389,6 +3467,8 @@ export class InventoryScreen {
       this.renderInto(this.resultElement, result ? { id: result.id, count: result.count } : null);
       this.resultElement.classList.toggle('ready', result !== null);
       this.resultElement.classList.add('take-only');
+      // 批次 185：箭头上面那颗"要工作台/要熔炉"的小图标
+      this.syncCraftStation();
     }
 
     if (isFurnaceMode(this.mode) && this.activeContainer instanceof Furnace) {
