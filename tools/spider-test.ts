@@ -288,7 +288,66 @@ console.log('\n[洞穴蜘蛛：更小、有毒、不自然刷]');
   equal('普通蜘蛛不施毒（对照）', plainRec.poison.length, 0);
 }
 
-// ---------------------------------------------------------------- 6. 工厂与模型
+// ---------------------------------------------------------------- 6. 近战判据
+
+console.log('\n[近战判据：隔着地板/墙的蜘蛛打不到人（批次 225）]');
+{
+  // 用户 2026-10-18 的现场："站在一个区域里一直掉血，提示受到蜘蛛伤害，
+  // 但是完全看不到蜘蛛"。导出日志里 13 次 `source: "蜘蛛"` 的共同点是
+  // **水平距离一直很小**（0~1.9 格）——旧判据只看 `dx² + dz² < 4`，
+  // 竖直方向与"中间有没有方块"一概不管，于是地板下面/墙背后的蜘蛛每下都打中。
+  // 原版补的正是这两条：触及距离是 3D 的，出手前还要 `canSee`。
+
+  // ① 地板下的地窖（竖直隔 2 格 + 一层石头）
+  const CELLAR = (x: number, y: number, z: number): number => {
+    if (y >= 61 && y <= 62 && x === 0 && z === 0) return Block.AIR;
+    return y <= 63 ? Block.STONE : Block.AIR;
+  };
+  const cellarRec = makeCtx(physicsOf(CELLAR), CELLAR, { player: { x: 0.5, y: 64, z: 0.5 }, light: 4 });
+  const cellarSpider = new Mob(SPIDER_TYPE, 0.5, 61, 0.5);
+  for (let i = 0; i < 120; i++) cellarSpider.tick(cellarRec.ctx, 0.05);
+  check('地板下的洞里：一下都打不到（旧代码每下都中）', cellarRec.damage === 0, String(cellarRec.damage));
+
+  // ② 正下方竖井（中间只有玻璃，不挡视线）：这一条单独验"竖直间隙"
+  const SHAFT = (x: number, y: number, z: number): number => {
+    void x;
+    void z;
+    if (y <= 60) return Block.STONE;
+    if (y === 63) return Block.GLASS; // 玩家脚下的地板：挡光为 0，视线穿得过去
+    return Block.AIR;
+  };
+  const shaftRec = makeCtx(physicsOf(SHAFT), SHAFT, { player: { x: 0.5, y: 64, z: 0.5 }, light: 4 });
+  const shaftSpider = new Mob(SPIDER_TYPE, 0.5, 61, 0.5);
+  for (let i = 0; i < 120; i++) shaftSpider.tick(shaftRec.ctx, 0.05);
+  check('正下方隔 2 格、中间没有遮挡：也打不到（竖直判据）', shaftRec.damage === 0, String(shaftRec.damage));
+
+  // ③ 墙背后的僵尸：水平 1.9 格（够得着）、同高（竖直也过），只有中间那格石头挡着
+  const WALLX = (x: number, y: number, z: number): number => {
+    void z;
+    if (y <= 63) return Block.STONE;
+    if (x === 1 && y <= 65) return Block.STONE;
+    return Block.AIR;
+  };
+  const wallRec = makeCtx(physicsOf(WALLX), WALLX, { player: { x: 0.5, y: 64, z: 0.5 }, light: 4 });
+  const wallZombie = new Mob(mobTypeById('zombie')!, 2.4, 64, 0.5);
+  for (let i = 0; i < 120; i++) wallZombie.tick(wallRec.ctx, 0.05);
+  check('隔着 1 格厚的墙：打不到（视线判据）', wallRec.damage === 0, String(wallRec.damage));
+  check('墙也确实挡住了它（没有穿墙）', wallZombie.x > 2, wallZombie.x.toFixed(2));
+
+  // ④ 对照：同样的水平距离、空地上照旧打得到 —— 证明上面不是"本来就够不着"
+  const openRec = makeCtx(physicsOf(FLAT), FLAT, { player: { x: 0.5, y: 64, z: 0.5 }, light: 4 });
+  const openZombie = new Mob(mobTypeById('zombie')!, 2.4, 65, 0.5);
+  for (let i = 0; i < 120; i++) openZombie.tick(openRec.ctx, 0.05);
+  check('（对照）空地上同样的距离会打人', openRec.damage > 0, String(openRec.damage));
+
+  // ⑤ 一格台阶下（竖直间隙 0.1）：照旧打得到 —— 竖直判据不能把"相邻台阶"也否掉
+  const stepRec = makeCtx(physicsOf(FLAT), FLAT, { player: { x: 0.5, y: 65, z: 0.5 }, light: 4 });
+  const stepSpider = new Mob(SPIDER_TYPE, 0.5, 65, 0.5);
+  for (let i = 0; i < 120; i++) stepSpider.tick(stepRec.ctx, 0.05);
+  check('玩家站在高一格的台阶上：仍然打得到', stepRec.damage > 0, String(stepRec.damage));
+}
+
+// ---------------------------------------------------------------- 7. 工厂与模型
 
 console.log('\n[工厂与模型]');
 {

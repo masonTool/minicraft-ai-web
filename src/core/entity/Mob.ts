@@ -91,6 +91,21 @@ const CLIMB_SPEED = 3;
 const ANGER_SECONDS = 10;
 
 /**
+ * 玩家碰撞盒高度（格，批次 225）。与 `PlayerPhysics.height` 同源；
+ * 实体层只要判断"竖直方向有没有重叠"，不必为此依赖玩家物理模块。
+ */
+const PLAYER_BODY_HEIGHT = 1.8;
+/**
+ * 近战允许的**竖直间隙**（格，批次 225）。
+ *
+ * 1 表示"站在相邻台阶（一格高差）上还够得着，隔着一整层地板/天花板够不着"。
+ * 只查水平距离的下场见 `canMeleeReach`。
+ */
+const MELEE_VERTICAL_GAP = 1;
+/** 近战视线的采样步长（格）：2~2.5 格的触及距离下最多 7 次 `getBlock` */
+const MELEE_SIGHT_STEP = 0.4;
+
+/**
  * 跳跃式移动（批次 120，史莱姆）的三个数：
  *  - `HOP_SPEED` 是**起跳那一瞬间**给的向上速度（原版约 0.42 格/tick ≈ 8 格/秒的初速，
  *    这里取小一点：本项目的地形更密，跳太高会一直撞天花板）；
@@ -789,10 +804,7 @@ export class Mob extends Entity {
       dt,
     );
 
-    if (distance < 2.5 && this.attackCooldown <= 0) {
-      this.attackCooldown = 1;
-      this.deliverMelee(ctx);
-    }
+    if (this.attackCooldown <= 0 && this.deliverMelee(ctx, 2.5)) this.attackCooldown = 1;
   }
 
   /**
@@ -801,13 +813,78 @@ export class Mob extends Entity {
    * 收成一处的理由：接触伤害在**两处**发生（飞行生物的 `flyAi` 与地面生物的
    * `updateAi`），各自写一遍"算伤害 + 顺带中毒"的话，迟早只改一处
    * （洞穴蜘蛛的中毒就是这条路径上的第二件事）。
+   *
+   * **够不够得着也在这里判**（批次 225）：判据只有一处，调用方就不会漏
+   * （以前两个调用点各写一遍"水平距离 < 2/2.5"，于是都少了竖直与视线两条）。
+   *
+   * @returns 真的打中了（没够着返回 false，调用方不要因此进冷却）
    */
-  private deliverMelee(ctx: EntityContext): void {
+  private deliverMelee(ctx: EntityContext, reach: number): boolean {
+    const player = ctx.player;
+    if (!player || !this.canMeleeReach(ctx, player, reach)) return false;
     // 力量/虚弱影响出手伤害（数值与玩家同源）；虚弱不能把伤害打成负数
     const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
     // 带上生物名：左上角要写"被僵尸攻击"而不是笼统的"受到攻击"（批次 207）
     ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name);
     if (this.type.venom) ctx.afflictPlayer?.(this.type.venom.effect, this.type.venom.seconds);
+    return true;
+  }
+
+  /**
+   * 近战够不够得着玩家（批次 225）：**水平距离 + 竖直间隙 + 视线**三条同时成立。
+   *
+   * ⚠️ 只查水平距离（`dx² + dz² < 4`）是这一批修掉的 bug：站在地板下的洞里、
+   * 墙背后的蜘蛛，水平距离照样 < 2 格，于是**隔着方块每一下都打中玩家**——
+   * 玩家看到的是"提示被蜘蛛打了，却完全看不到蜘蛛"（用户 2026-10-18 的导出日志里
+   * 13 次 `source: "蜘蛛"` 全是这么来的）。
+   * 原版的两条判据正是补上的这两条：触及距离是 **3D** 的（`distanceToSqr`），
+   * 出手前还要 `canSee`（眼睛到眼睛的连线不穿方块）。
+   *
+   * @param reach 水平触及距离（格）：地面生物 2、飞行生物 2.5
+   */
+  private canMeleeReach(
+    ctx: EntityContext,
+    player: { x: number; y: number; z: number },
+    reach: number,
+  ): boolean {
+    const dx = player.x - this.x;
+    const dz = player.z - this.z;
+    if (dx * dx + dz * dz > reach * reach) return false;
+    // 竖直：两具身体之间最多隔 MELEE_VERTICAL_GAP 格空气。
+    // 少了这一条，"玩家正下方竖井里 5 格的蜘蛛"也够得着
+    const gap = Math.max(0, this.y - (player.y + PLAYER_BODY_HEIGHT), player.y - (this.y + this.height));
+    if (gap > MELEE_VERTICAL_GAP) return false;
+    return this.hasLineOfSight(ctx, player);
+  }
+
+  /**
+   * 生物胸口到玩家胸口之间有没有**挡光的方块**（批次 225）。
+   *
+   * 判据用 `opaque` 而不是 `solid`：玻璃、水、树叶挡光与否是另一套语义，
+   * 而"看得见"应当允许隔着玻璃/水（原版的 `canSee` 也是忽略这些薄物的）。
+   * 两端点不采样：生物/玩家自己陷在方块里时，那不该算作"视线被挡"。
+   */
+  private hasLineOfSight(
+    ctx: EntityContext,
+    player: { x: number; y: number; z: number },
+  ): boolean {
+    const x0 = this.x;
+    const y0 = this.y + this.height * 0.5;
+    const z0 = this.z;
+    const dx = player.x - x0;
+    const dy = player.y + PLAYER_BODY_HEIGHT * 0.5 - y0;
+    const dz = player.z - z0;
+    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy, dz) / MELEE_SIGHT_STEP));
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const block = ctx.getBlock(
+        Math.floor(x0 + dx * t),
+        Math.floor(y0 + dy * t),
+        Math.floor(z0 + dz * t),
+      );
+      if (blockDef(block).opaque) return false;
+    }
+    return true;
   }
 
   /** 朝目标点平滑加速（飞行用；与末影龙那个 `steer` 同一个套路，收在基类里） */
@@ -968,10 +1045,9 @@ export class Mob extends Entity {
           // 玩家跑远了 → 引信熄灭（原版会回缩）
           this.fuse = Math.max(0, this.fuse - dt * 2);
         }
-      } else if (distanceSq < 4 && this.attackCooldown <= 0) {
+      } else if (this.attackCooldown <= 0 && this.deliverMelee(ctx, 2)) {
         // 贴脸就打（原版僵尸的触及距离约 2 格）
         this.attackCooldown = 1;
-        this.deliverMelee(ctx);
       }
     } else {
       this.wanderTimer -= dt;
