@@ -351,6 +351,13 @@ export interface EntityContext {
    * 老的离线桩不必跟着改。
    */
   getState?: (x: number, y: number, z: number) => number;
+  /**
+   * 投掷物/箭**撞在方块上**（批次 248：标靶用）。
+   *
+   * 实体层只报"撞到了哪一格"，"这一格是不是标靶、要不要发信号"归主程序。
+   * 不传就当没人在意（老桩不必改）。
+   */
+  hitBlock?: (x: number, y: number, z: number) => void;
 }
 
 let nextEntityId = 1;

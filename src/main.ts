@@ -380,6 +380,7 @@ import {
   isSlabDouble,
   withDoorOpen,
   withDoorUpper,
+  withPowered,
 } from './core/registry/blockState.ts';
 // 床的两半（B13，批次 79）：`bedOtherHalf` / `bedFootPos` 都是纯函数，
 // 主程序只负责照它们找另一半、拆对与定重生点
@@ -728,6 +729,8 @@ class App {
     hasEntityAt: (x, y, z) => this.hasEntityAt(x, y, z),
     // 测重压力板（批次 247）：要的是"几个"，不是"有没有"
     entityCountAt: (x, y, z) => this.entityCountAt(x, y, z),
+    // 标靶（批次 248）：中箭后 1 秒内算"被点亮"
+    isTargetPowered: (x, y, z) => this.targetPulses.has(`${x},${y},${z}`),
     // 阳光传感器（批次 54）：红石引擎里唯二要看**外部世界的量**的元件之一
     getSkyLight: (x, y, z) => this.world.getSkyLight(x, y, z),
     // 避雷针（批次 83）：另一个——"被雷劈中的那 0.4 秒"由上面的脉冲表拿着，
@@ -999,6 +1002,12 @@ class App {
    *  - 跳跃/潜行 = 下船。
    */
   private ridingVehicle: Rideable | null = null;
+  /** 标靶脉冲（批次 248）：位置 → 剩余秒数 */
+  private readonly targetPulses = new Map<string, number>();
+  /** 被踩亮的红石矿石（批次 248）：位置 → 剩余秒数 */
+  private readonly litOres = new Map<string, number>();
+  /** 10Hz 一次"脚下是不是红石矿石"的检查 */
+  private orePollTimer = 0;
   /** 上下船的冷却（秒）：防止"上船那一下同时被当成下船" */
   private mountCooldown = 0;
   /** 这一帧的输入快照（船要读它；`collectInput` 每帧只该调一次） */
@@ -4325,6 +4334,78 @@ class App {
     return isPowered(this.world.getBlockState(x, y, z));
   }
 
+  /**
+   * 投掷物/箭命中方块（批次 248）：目前只有标靶关心。
+   *
+   * 命中后亮 1 秒：写 `powered` 位（贴图变亮）+ 喊红石重算（它此刻是电源）。
+   * 重复命中只续时间，不重复喊重算。
+   */
+  private onProjectileHitBlock(x: number, y: number, z: number): void {
+    if (this.world.getBlock(x, y, z) !== Block.TARGET) return;
+    const key = `${x},${y},${z}`;
+    const fresh = !this.targetPulses.has(key);
+    this.targetPulses.set(key, 1);
+    if (!fresh) return;
+    this.world.setStateAndUpdate(x, y, z, withPowered(this.world.getBlockState(x, y, z), true));
+    this.redstone.onBlockChanged(this.redstoneWorld, x, y, z);
+    this.audio.play('arrow_hit', { x, y, z });
+  }
+
+  /**
+   * 标靶脉冲与"踩亮的红石矿石"（批次 248）。
+   *
+   * 两条都是"主程序拿着计时器、方块只留一个 `powered` 位"：
+   *  - 标靶：实体层报命中格（`hitBlock`），这里亮 1 秒；
+   *  - 红石矿石：每 0.1 秒看玩家脚下/身体那两格，踩上就亮 3 秒（原版是"被打扰时发光"）。
+   * 到期只清状态位，不重新计时——所以站着不动会一直亮（每 0.1 秒续上）。
+   */
+  private updatePulsingBlocks(dt: number): void {
+    for (const [key, remaining] of [...this.targetPulses]) {
+      const next = remaining - dt;
+      if (next > 0) {
+        this.targetPulses.set(key, next);
+        continue;
+      }
+      this.targetPulses.delete(key);
+      const [x, y, z] = key.split(',').map(Number) as [number, number, number];
+      this.clearPoweredState(x, y, z);
+    }
+    for (const [key, remaining] of [...this.litOres]) {
+      const next = remaining - dt;
+      if (next > 0) {
+        this.litOres.set(key, next);
+        continue;
+      }
+      this.litOres.delete(key);
+      const [x, y, z] = key.split(',').map(Number) as [number, number, number];
+      this.clearPoweredState(x, y, z);
+    }
+
+    this.orePollTimer -= dt;
+    if (this.orePollTimer > 0) return;
+    this.orePollTimer = 0.1;
+    const p = this.physics;
+    const x = Math.floor(p.x);
+    const z = Math.floor(p.z);
+    for (const y of [Math.floor(p.y + 0.1), Math.floor(p.y + 1.0)]) {
+      const id = this.world.getBlock(x, y, z);
+      if (id !== Block.REDSTONE_ORE && id !== Block.DEEPSLATE_REDSTONE_ORE) continue;
+      const key = `${x},${y},${z}`;
+      const fresh = !this.litOres.has(key);
+      this.litOres.set(key, 3);
+      if (!fresh) continue;
+      this.world.setStateAndUpdate(x, y, z, withPowered(this.world.getBlockState(x, y, z), true));
+    }
+  }
+
+  /** 清掉某格的 `powered` 位并让红石重算（标靶 / 红石矿石共用） */
+  private clearPoweredState(x: number, y: number, z: number): void {
+    const state = this.world.getBlockState(x, y, z);
+    if (!isPowered(state)) return;
+    this.world.setStateAndUpdate(x, y, z, withPowered(state, false));
+    this.redstone.onBlockChanged(this.redstoneWorld, x, y, z);
+  }
+
   /** 把玩家贴到载具上（每帧实体更新之后调用，保证相机不比载具慢一帧） */
   private syncRiderToVehicle(): void {
     const vehicle = this.ridingVehicle;
@@ -7315,6 +7396,8 @@ class App {
         : undefined,
       // 方块状态位（批次 246）：动力铁轨要读 `powered` 决定推不推车
       getState: (x, y, z) => this.world.getBlockState(x, y, z),
+      // 投掷物撞到方块（批次 248，标靶）：实体层只报格子，是不是标靶由这里判
+      hitBlock: (x, y, z) => this.onProjectileHitBlock(x, y, z),
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);
@@ -7374,6 +7457,8 @@ class App {
     // 而这里是"时间流逝"。两条不同的取舍，写在各自旁边）
     const tntDt = Math.min(dt, 0.5);
     this.primedTnt.update(tntDt, this.tntWorld, (x, y, z, power) => this.explodeAt(x, y, z, power));
+    // 标靶脉冲 / 踩亮的红石矿石（批次 248）：先推进计时器，再让红石看到最新状态
+    this.updatePulsingBlocks(dt);
     this.redstone.tick(this.redstoneWorld, Math.min(dt, 0.1));
   }
 

@@ -1817,6 +1817,58 @@ PAINTERS.heavy_weighted_pressure_plate = weightedPlatePainter([200, 200, 208], f
 PAINTERS.heavy_weighted_pressure_plate_on = weightedPlatePainter([176, 176, 186], true);
 
 /**
+ * 标靶（批次 248）：同心圆靶心。
+ *
+ * @param top 顶/底面（正圆）还是侧面（压暗一档）——同一张靶心图在两个视角下
+ *            亮度不同，和原版"顶面最亮、侧面稍暗"一致。
+ * @param on 被打中时整体提亮，玩家一眼能看出"打中了"
+ */
+function targetPainter(top: boolean, on: boolean): Painter {
+  const rings: readonly (readonly [number, number, number])[] = [
+    [214, 200, 176],
+    [196, 74, 58],
+    [232, 224, 206],
+    [172, 46, 36],
+  ];
+  return (x, y) => {
+    const distance = Math.hypot(x - 7.5, y - 7.5);
+    const band = distance > 7.2 ? 0 : distance > 4.6 ? 1 : distance > 2.2 ? 2 : 3;
+    const color = rings[band]!;
+    const k = (on ? 1.2 : 1) * (top ? 1 : 0.86);
+    return [clamp255(color[0] * k), clamp255(color[1] * k), clamp255(color[2] * k), 255];
+  };
+}
+
+PAINTERS.target_top = targetPainter(true, false);
+PAINTERS.target_top_on = targetPainter(true, true);
+PAINTERS.target_side = targetPainter(false, false);
+PAINTERS.target_side_on = targetPainter(false, true);
+
+/**
+ * 被踩亮的红石矿石（批次 248）：复用普通矿石的贴图，只把**偏红的像素**提亮。
+ *
+ * 直接照抄一份 oreTexture 会多出两套 salt/斑点分布，亮/灭切换时纹理会"跳一下"；
+ * 包一层既保持完全一致的纹理，又只让红点发光。
+ */
+function litOrePainter(base: Painter): Painter {
+  return (x, y, rng) => {
+    const [r, g, b, a] = base(x, y, rng);
+    if (a === 0) return [r, g, b, a];
+    const red = r > g + 10;
+    const k = red ? 1.35 : 1.06;
+    return [
+      clamp255(r * k + (red ? 24 : 0)),
+      clamp255(g * k),
+      clamp255(b * k),
+      a,
+    ];
+  };
+}
+
+PAINTERS.redstone_ore_lit = litOrePainter(PAINTERS.redstone_ore as Painter);
+PAINTERS.deepslate_redstone_ore_lit = litOrePainter(PAINTERS.deepslate_redstone_ore as Painter);
+
+/**
  * 矿车图标（批次 245）：一只开口的铁皮斗 + 两个轮子。
  */
 PAINTERS.item_minecart = (x, y) => {

@@ -836,6 +836,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     pattern: ['II'],
     key: { I: Item.IRON_INGOT },
   },
+  // 标靶（批次 248）：4 红石围着 1 块木板（原版是 4 红石 + 干草块；本项目还没有干草块）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.TARGET, count: 1 },
+    pattern: [' R ', 'RPR', ' R '],
+    key: { R: Item.REDSTONE, P: Block.OAK_PLANKS },
+  },
   // 蘑菇煲：红蘑菇 + 棕蘑菇 + 碗（原版无序）
   { kind: 'shapeless' as const, result: { id: Item.MUSHROOM_STEW, count: 1 }, ingredients: [Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Item.BOWL] },
   // 甜菜汤：6 个甜菜根 + 碗（原版无序）

@@ -178,6 +178,11 @@ export class Arrow extends Entity implements MovingBody {
       const blockedY = beforeVy !== 0 && this.vy === 0;
       const blockedZ = beforeVz !== 0 && this.vz === 0;
       if (blockedX || blockedY || blockedZ) {
+        // 标靶（批次 248）：把"撞到哪一格"报给主程序（沿被挡住的那一轴往前推半格）
+        const bx = Math.floor(this.x + (blockedX ? Math.sign(beforeVx) * 0.5 : 0));
+        const by = Math.floor(this.y + (blockedY ? Math.sign(beforeVy) * 0.5 : 0));
+        const bz = Math.floor(this.z + (blockedZ ? Math.sign(beforeVz) * 0.5 : 0));
+        ctx.hitBlock?.(bx, by, bz);
         this.stick();
         return;
       }

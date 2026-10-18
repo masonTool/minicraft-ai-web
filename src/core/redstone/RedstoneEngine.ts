@@ -84,6 +84,13 @@ export interface RedstoneWorld {
    * 不传就当"没被劈"（离线测试不必为了它搭一套天气）。
    */
   isRodPowered?(x: number, y: number, z: number): boolean;
+  /**
+   * 这个标靶**此刻**是否被刚打中（批次 248）。
+   *
+   * 与避雷针同一个套路："命中"是一次外部事件，实体层/主程序拿着脉冲表，
+   * 引擎每轮问一句"还亮着吗"，到期由主程序主动喊一次 `onBlockChanged`。
+   */
+  isTargetPowered?(x: number, y: number, z: number): boolean;
 }
 
 /**
@@ -129,6 +136,11 @@ export function isRedstoneComponent(id: number): boolean {
     // 测重压力板（批次 247）：电源，输出强度随实体数量变化
     case Block.LIGHT_WEIGHTED_PRESSURE_PLATE:
     case Block.HEAVY_WEIGHTED_PRESSURE_PLATE:
+    // 标靶（批次 248）：中箭时发一秒信号；红石矿石只是"节点"（踩亮靠主程序写状态位），
+    // 进这张表是为了让洪泛把"线—框"连起来，同时它的 `stateLight` 也要跟着重光照
+    case Block.TARGET:
+    case Block.REDSTONE_ORE:
+    case Block.DEEPSLATE_REDSTONE_ORE:
     // 漏斗（批次 58）：通电就**锁定**（不推也不吸）——这是原版的"漏斗闸门"玩法
     case Block.HOPPER:
     // 投掷器（批次 59）：通电的**上升沿**吐一件出去（它是"负载"，
@@ -678,6 +690,16 @@ export class RedstoneEngine {
           // `powered` 位跟着输出走（渲染要看"现在踩没踩"）
           if (isPowered(state) !== (strength > 0)) {
             world.setState(nx, ny, nz, withPowered(state, strength > 0));
+          }
+          break;
+        }
+        // 标靶（批次 248）：中箭后 1 秒内输出 15
+        case Block.TARGET: {
+          const powered = world.isTargetPowered?.(nx, ny, nz) === true;
+          if (isPowered(state) !== powered) world.setState(nx, ny, nz, withPowered(state, powered));
+          if (powered) {
+            strengths.set(key, 15);
+            sources.push({ x: nx, y: ny, z: nz });
           }
           break;
         }

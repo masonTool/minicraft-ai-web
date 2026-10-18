@@ -1037,6 +1037,13 @@ export const TILE_ORDER = [
   'light_weighted_pressure_plate_on',
   'heavy_weighted_pressure_plate',
   'heavy_weighted_pressure_plate_on',
+  // 标靶与"被踩亮的红石矿石"（批次 248）
+  'target_top',
+  'target_top_on',
+  'target_side',
+  'target_side_on',
+  'redstone_ore_lit',
+  'deepslate_redstone_ore_lit',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

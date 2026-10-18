@@ -267,7 +267,17 @@ const BASE_SPECS: readonly BlockSpec[] = [
   { id: 28, name: 'minecraft:iron_ore', tiles: ['iron_ore', 'iron_ore', 'iron_ore'] },
   { id: 29, name: 'minecraft:copper_ore', tiles: ['copper_ore', 'copper_ore', 'copper_ore'] },
   { id: 30, name: 'minecraft:gold_ore', tiles: ['gold_ore', 'gold_ore', 'gold_ore'] },
-  { id: 31, name: 'minecraft:redstone_ore', tiles: ['redstone_ore', 'redstone_ore', 'redstone_ore'] },
+  {
+    id: 31,
+    name: 'minecraft:redstone_ore',
+    tiles: ['redstone_ore', 'redstone_ore', 'redstone_ore'],
+    // 踩上去会亮（批次 248）：原版是"被打扰时发光 9 级"，状态位与红石灯同一条 `powered`
+    stateTiles: (state) =>
+      isPowered(state)
+        ? ['redstone_ore_lit', 'redstone_ore_lit', 'redstone_ore_lit']
+        : ['redstone_ore', 'redstone_ore', 'redstone_ore'],
+    stateLight: (state) => (isPowered(state) ? 9 : 0),
+  },
   { id: 32, name: 'minecraft:lapis_ore', tiles: ['lapis_ore', 'lapis_ore', 'lapis_ore'] },
   { id: 33, name: 'minecraft:diamond_ore', tiles: ['diamond_ore', 'diamond_ore', 'diamond_ore'] },
   { id: 34, name: 'minecraft:emerald_ore', tiles: ['emerald_ore', 'emerald_ore', 'emerald_ore'] },
@@ -283,6 +293,11 @@ const BASE_SPECS: readonly BlockSpec[] = [
     id: 39,
     name: 'minecraft:deepslate_redstone_ore',
     tiles: ['deepslate_redstone_ore', 'deepslate_redstone_ore', 'deepslate_redstone_ore'],
+    stateTiles: (state) =>
+      isPowered(state)
+        ? ['deepslate_redstone_ore_lit', 'deepslate_redstone_ore_lit', 'deepslate_redstone_ore_lit']
+        : ['deepslate_redstone_ore', 'deepslate_redstone_ore', 'deepslate_redstone_ore'],
+    stateLight: (state) => (isPowered(state) ? 9 : 0),
   },
   { id: 40, name: 'minecraft:deepslate_lapis_ore', tiles: ['deepslate_lapis_ore', 'deepslate_lapis_ore', 'deepslate_lapis_ore'] },
   {
@@ -2350,6 +2365,8 @@ export const ACTIVATOR_RAIL_ID = 581;
 export const LIGHT_WEIGHTED_PRESSURE_PLATE_ID = 582;
 /** 重质测重压力板（批次 247）：每多 10 个实体 +1 强度 */
 export const HEAVY_WEIGHTED_PRESSURE_PLATE_ID = 583;
+/** 标靶（批次 248）：被投掷物打中时发一秒红石信号 */
+export const TARGET_ID = 584;
 export const RAIL_SPECS: readonly BlockSpec[] = [
   {
     id: RAIL_ID,
@@ -2406,6 +2423,24 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
  * 测重压力板（批次 247）：与普通压力板同样几何，区别只在**输出强度随实体数量变化**
  * （轻质 1 个/点、重质 10 个/点），所以它们走红石引擎里"可变强度电源"那条路。
  */
+/**
+ * 标靶（批次 248）：整格方块，中箭时发一秒信号。
+ *
+ * ⚠️ 原版按命中位置给 15/7/3 三档强度；这里只做"中/不中"两档（15/0）——
+ * 要按位置分档，得让投掷物报出精确命中点，而现在的钩子只报"哪一格"。
+ */
+export const TARGET_SPECS: readonly BlockSpec[] = [
+  {
+    id: TARGET_ID,
+    name: 'minecraft:target',
+    tiles: ['target_top', 'target_top', 'target_side'],
+    stateTiles: (state) =>
+      isPowered(state)
+        ? ['target_top_on', 'target_top_on', 'target_side_on']
+        : ['target_top', 'target_top', 'target_side'],
+  },
+];
+
 export const WEIGHTED_PLATE_SPECS: readonly BlockSpec[] = [
   {
     id: LIGHT_WEIGHTED_PRESSURE_PLATE_ID,
@@ -2490,8 +2525,9 @@ const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
   MORE_STONE_SPECS,
   // 铁轨（批次 245）：也进"已定义"表，`tilesOfDefined` 查得到它
   RAIL_SPECS,
-  // 测重压力板（批次 247）
+  // 测重压力板（批次 247）与标靶（批次 248）
   WEIGHTED_PLATE_SPECS,
+  TARGET_SPECS,
 ];
 
 /**
@@ -3119,6 +3155,7 @@ const SPECS: readonly BlockSpec[] = [
   // 铁轨（批次 245/247）：flat 薄板，注册进主表
   ...RAIL_SPECS,
   ...WEIGHTED_PLATE_SPECS,
+  ...TARGET_SPECS,
   ...STONE_VARIANT_SPECS,
   ...STONECUTTER_SPECS,
   ...RED_SAND_SPECS,
@@ -3309,6 +3346,8 @@ export const Block = {
   ACTIVATOR_RAIL: ACTIVATOR_RAIL_ID,
   LIGHT_WEIGHTED_PRESSURE_PLATE: LIGHT_WEIGHTED_PRESSURE_PLATE_ID,
   HEAVY_WEIGHTED_PRESSURE_PLATE: HEAVY_WEIGHTED_PRESSURE_PLATE_ID,
+  // 标靶（批次 248）
+  TARGET: TARGET_ID,
   REDSTONE_TORCH: 257,
   REDSTONE_BLOCK: 258,
   LEVER: 259,
@@ -3750,6 +3789,8 @@ HARDNESS.set(Block.ACTIVATOR_RAIL, 0.7);
 // 测重压力板：原版 0.5（徒手可挖）
 HARDNESS.set(Block.LIGHT_WEIGHTED_PRESSURE_PLATE, 0.5);
 HARDNESS.set(Block.HEAVY_WEIGHTED_PRESSURE_PLATE, 0.5);
+// 标靶（批次 248）：原版 1.5（木头 + 红石）
+HARDNESS.set(Block.TARGET, 1.5);
 
 // 台阶 / 楼梯的硬度跟随母方块（原版行为）
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {

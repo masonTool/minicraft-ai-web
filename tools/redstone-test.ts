@@ -100,6 +100,20 @@ class StubWorld implements RedstoneWorld {
     return this.entityCounts.get(StubWorld.key(x, y, z)) ?? 0;
   }
 
+  /** 标靶（批次 248）：被"打中"的格子 */
+  private readonly poweredTargets = new Set<string>();
+
+  isTargetPowered(x: number, y: number, z: number): boolean {
+    return this.poweredTargets.has(StubWorld.key(x, y, z));
+  }
+
+  /** 模拟"刚被打中/脉冲结束" */
+  setTargetPowered(x: number, y: number, z: number, on: boolean): void {
+    const key = StubWorld.key(x, y, z);
+    if (on) this.poweredTargets.add(key);
+    else this.poweredTargets.delete(key);
+  }
+
   /** 往一格上放 `count` 个实体（默认 1，测重压力板要多个） */
   placeEntity(x: number, y: number, z: number, count = 1): void {
     const key = StubWorld.key(x, y, z);
@@ -642,6 +656,29 @@ console.log('\n[测重压力板：强度随实体数量（批次 247）]');
   equal('纯函数：重质 20 个 = 2', weightedPlateSignal(Block.HEAVY_WEIGHTED_PRESSURE_PLATE, 20), 2);
   equal('纯函数：重质 9 个 = 0', weightedPlateSignal(Block.HEAVY_WEIGHTED_PRESSURE_PLATE, 9), 0);
   equal('纯函数：负数按 0 算', weightedPlateSignal(Block.LIGHT_WEIGHTED_PRESSURE_PLATE, -5), 0);
+}
+
+console.log('\n[标靶：被打中时输出一秒信号（批次 248）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.TARGET, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('没被打中时不输出', !isPowered(world.getState(0, Y, 0)) && !isPowered(world.getState(1, Y, 0)));
+
+  // "被打中"是外部事件：主程序写脉冲表后会主动喊一次 `onBlockChanged`（这里照做）
+  world.setTargetPowered(0, Y, 0, true);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('被打中 → 标靶点亮', isPowered(world.getState(0, Y, 0)));
+  check('相邻红石灯被点亮', isPowered(world.getState(1, Y, 0)));
+
+  world.setTargetPowered(0, Y, 0, false);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('脉冲结束 → 熄灭', !isPowered(world.getState(0, Y, 0)) && !isPowered(world.getState(1, Y, 0)));
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);

@@ -2922,6 +2922,21 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       recipesSrc.includes('result: { id: Block.LIGHT_WEIGHTED_PRESSURE_PLATE, count: 1 }') &&
       recipesSrc.includes('result: { id: Block.HEAVY_WEIGHTED_PRESSURE_PLATE, count: 1 }'),
   );
+  check(
+    '标靶（id 584）：中箭一秒脉冲，实体层只报命中格',
+    blocksSrc.includes('export const TARGET_ID = 584') &&
+      recipesSrc.includes('result: { id: Block.TARGET, count: 1 }') &&
+      engineSrc.includes('isTargetPowered?.(nx, ny, nz)') &&
+      appSrc.includes('private onProjectileHitBlock(x: number, y: number, z: number)') &&
+      appSrc.includes('hitBlock: (x, y, z) => this.onProjectileHitBlock(x, y, z),'),
+  );
+  check(
+    '红石矿石：踩上去亮（贴图 + 9 级光 + 主程序 10Hz 检查）',
+    blocksSrc.includes("'redstone_ore_lit'") &&
+      blocksSrc.includes('stateLight: (state) => (isPowered(state) ? 9 : 0)') &&
+      appSrc.includes('private updatePulsingBlocks(dt: number): void') &&
+      appSrc.includes('this.updatePulsingBlocks(dt);'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

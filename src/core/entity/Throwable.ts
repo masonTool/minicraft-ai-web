@@ -264,6 +264,11 @@ export class Throwable extends Entity implements MovingBody {
       const blockedY = beforeVy !== 0 && this.vy === 0;
       const blockedZ = beforeVz !== 0 && this.vz === 0;
       if (blockedX || blockedY || blockedZ) {
+        // 标靶（批次 248）：与箭同一条钩子，沿被挡住的轴往前推半格算命中格
+        const bx = Math.floor(this.x + (blockedX ? Math.sign(beforeVx) * 0.5 : 0));
+        const by = Math.floor(this.y + (blockedY ? Math.sign(beforeVy) * 0.5 : 0));
+        const bz = Math.floor(this.z + (blockedZ ? Math.sign(beforeVz) * 0.5 : 0));
+        ctx.hitBlock?.(bx, by, bz);
         this.impact(ctx);
         return;
       }
