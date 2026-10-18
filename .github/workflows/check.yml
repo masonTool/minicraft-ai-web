@@ -1,0 +1,49 @@
+# 提交前的门禁（CI）
+#
+# 为什么要有这一条：`npm run check`（typecheck + vitest + 129 套离线测试 + 三张台账）
+# 一直是**本地自觉**跑的——推上去之后只有"能不能构建"会被验证（`deploy-pages.yml`）。
+# 换句话说，某一次赶时间跳过 check 也不会被发现，直到线上行为不对。
+# 这个工作流把同一道门禁搬到 CI：推送与 PR 都跑一遍，红了就有记录。
+#
+# 三个容易踩的细节：
+#   1. **checkout 必须 fetch-depth: 0**：`audit:tasks` 要用
+#      `git rev-list --count HEAD` 核对 HANDOFF 里的"提交总数"，
+#      浅克隆（默认 depth 1）会算出 1，直接把台账判红；
+#   2. 用 `npm ci` 而不是 `npm install`：严格按 lock 装，CI 与本地可复现；
+#   3. Node 版本与 `deploy-pages.yml` 对齐（vite 8 / vitest 5 要求 20.19+，取 24）。
+#
+# ⚠️ 与"发布"分开两个工作流：发布只关心"能不能出包"，门禁关心"改动是否自洽"。
+#    合成一个的话，门禁红了会直接把线上卡在旧版本，而这两件事的处置方式并不一样。
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支连续推送时，只保留最新一次（旧的那次结论已经过期）
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 见文件头第 1 条：台账要数提交数，浅克隆会误判
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # 本地那道门禁：typecheck → vitest → 129 套离线测试 → 三张台账
+      - run: npm run check
+
+      # 再验一次"能不能出包"（关 sourcemap 的快版本，产物内容与正式构建一致）
+      - run: npm run build:fast

@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 598（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 599（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **181**、进行中 **75**、待办 31 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,9 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 199（CI 门禁）：新增 `.github/workflows/check.yml`——推送与 PR 上跑**和本地同一条**
+  `npm run check` + `npm run build:fast`，门禁不再只靠本地自觉。两处坑写在文件头：
+  `fetch-depth: 0`（台账要 `git rev-list --count`）、与发布工作流分开（门禁红了不该卡发布）。
 - 批次 198（流程自检）：① **AGENTS.md 的"套数"纳入自检**——它写着 109（实际 129）却一直没人发现，
   因为 `audit:tasks` 只查 README 与 HANDOFF；现在三处一起核对。② **两份长文档再瘦身**：
   `HANDOFF.md` §1 只留最近 6 批（435 → 256 行，167~191 搬去归档）、
@@ -99,6 +102,12 @@ npm run dev            # http://localhost:5173
 | 长期总表 / 覆盖率 / 与原版的差异 | [`TASKS.md`](./TASKS.md)（三张派生表都由脚本生成，不要手抄） |
 
 **派生数字一律不要手抄**：`npm run audit:tasks` 会核对本文件的进度口径与提交总数，
+
+
+> **CI 门禁（批次 199）**：`.github/workflows/check.yml` 在推送与 PR 上跑**和本地同一条**
+> `npm run check` + `npm run build:fast`。它在别处跑会有两个坑，都写在那个文件头里：
+> ① `checkout` 必须 `fetch-depth: 0`（台账要数提交数，浅克隆会算出 1）；
+> ② 与"发布"分成两个工作流（门禁红了不该把线上卡在旧版本）。
 `npm run audit:coverage` / `npm run audit:diffs` 会重写 TASKS 里的两张表——手抄过的都漂过。
 ## 2. 两条硬性约定（用户要求，必须遵守）
 
