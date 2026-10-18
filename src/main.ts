@@ -114,6 +114,7 @@ import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
 import { ChatInput } from './ui/ChatInput.ts';
+import { installKeyboardGuards } from './ui/Keyboard.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
 import {
   TickScheduler,
@@ -10379,6 +10380,8 @@ async function boot(): Promise<void> {
   diag.event('app', 'boot', { href: location.href });
   // 主菜单阶段还没有 App；先挂一个全局入口，出事时控制台/自动化脚本能直接取日志
   (window as unknown as { __diag: typeof diag }).__diag = diag;
+  // 批次 184：键盘不挤压布局 + 点输入框以外的地方先 blur（菜单与游戏内共用）
+  installKeyboardGuards();
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
   const vitalsEl = document.getElementById('vitals');

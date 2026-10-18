@@ -3,10 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <!-- maximum-scale + user-scalable=no：禁止双指缩放，否则游戏画面会被误缩放
-         viewport-fit=cover：让页面铺满刘海屏，配合 env(safe-area-inset-*) 排布触摸控件 -->
+         viewport-fit=cover：让页面铺满刘海屏，配合 env(safe-area-inset-*) 排布触摸控件
+         interactive-widget=resizes-visual（批次 184）：键盘弹出时**只缩视觉视口**，
+         不去缩布局视口——原来写的是 resizes-content，点一下聊天框整块 3D 画面被压矮，
+         用户的原话是"点击后不要挤压界面内容"。键盘占掉的高度由 `ui/Keyboard.ts`
+         写成 `--kb-inset`，聊天框/告示牌自己抬起来，界面别的部分一动不动。 -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual"
     />
     <!-- 手机上以全屏应用的方式运行（加到主屏后隐藏浏览器地址栏） -->
     <meta name="mobile-web-app-capable" content="yes" />
@@ -746,11 +750,15 @@
         position: fixed; inset: 0; z-index: 12;
         display: grid; place-items: center;
         background: rgba(0, 0, 0, .55);
+        /* 批次 184：键盘只缩视觉视口，编辑器要自己让开键盘占的高度 */
+        padding-bottom: var(--kb-inset, 0px);
       }
       .sign-editor.hidden { display: none; }
       .sign-editor-panel {
         display: flex; flex-direction: column; gap: 10px;
         padding: 14px 16px;
+        max-height: calc(100dvh - var(--kb-inset, 0px) - 16px);
+        overflow-y: auto;
         min-width: min(360px, 92vw); max-width: 92vw;
         background: var(--panel-bg); color: var(--panel-text);
         border: 3px solid; border-color: var(--pixel-bevel);
@@ -1228,6 +1236,14 @@
         font-size: 13px; line-height: 1.45; pointer-events: none;
       }
       #chat.open { pointer-events: auto; }
+      /* 批次 184：键盘弹出时布局视口不再变矮（viewport 是 resizes-visual），
+         聊天输入行按键盘高度自己抬上去；`--kb-inset` 由 `ui/Keyboard.ts` 维护。 */
+      #chat.open {
+        bottom: calc(82px + env(safe-area-inset-bottom, 0px) + var(--kb-inset, 0px));
+      }
+      #chat.open .chat-log {
+        max-height: min(34vh, max(56px, calc(100dvh - var(--kb-inset, 0px) - 210px)));
+      }
       .chat-log { display: flex; flex-direction: column; gap: 1px; max-height: 34vh; overflow: hidden; }
       .chat-line {
         padding: 3px 8px; border-radius: var(--radius-sm); color: #fff;
