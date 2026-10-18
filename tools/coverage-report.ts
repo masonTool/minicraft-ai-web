@@ -104,7 +104,9 @@ for (let id = 0; id < BLOCKS.length; id++) {
   if (shape === 'door' || shape === 'trapdoor' || shape === 'fence_gate') openableShapes.add(shape);
   else redstoneKinds++;
 }
-const redstoneElements = redstoneKinds + openableShapes.size;
+// +1 = 普通铁轨（批次 245）。它**故意不进** `isRedstoneComponent`：
+// 我们还没做充能/动力轨，进了那张表只会让红石引擎去扫一个永远不会响应的方块。
+const redstoneElements = redstoneKinds + openableShapes.size + 1;
 const implementedEnchants = ENCHANTMENTS.filter((def) => def.implemented === true).length;
 /**
  * "可见方块"：排除空气与两种流体。
@@ -218,7 +220,7 @@ const rows: readonly Row[] = [
     spec: SPEC.redstone,
     now: redstoneElements,
     basis: '原版 1.18 参与充能/传导/负载的元件（同族木材只算一种）',
-    gap: '音符盒/目标方块/四种铁轨/红石矿石/测重压力板/陷阱箱',
+    gap: '音符盒/目标方块/动力·探测·激活铁轨/红石矿石/测重压力板/陷阱箱',
   },
   {
     label: '维度',

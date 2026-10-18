@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 688（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 690（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **182**、进行中 **75**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,21 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 245（用户："请梳理一下流程继续开发"；G12 第二件）：**普通铁轨 + 普通矿车**。
+  ① **铁轨**：复用 `flat` 形状（1/16 薄板，与红石粉/压力板同一套几何）——**不新增 shape、
+  不改碰撞与网格化**；id **578**（现有最大 577 之后），6 铁锭 + 1 木棍 → 16 段，
+  新画「两根钢轨 + 枕木」贴图。⚠️ 只做直轨；故意**不进** `isRedstoneComponent`
+  （还没做充能，进了那张表只会让红石引擎去扫一个永远不会响应的方块）。
+  ② **矿车**（`core/entity/Minecart.ts`）：轨道上阻力 0.4/s、加速度 8，离开轨道 8/s、2；
+  空车不吃输入；重力/落地照常。只能放在铁轨上（`this.hit` 是铁轨才生成）。
+  ③ **载具层统一**：`ridingBoat/mountBoat/dismountBoat/boatAtScreen…` 全部改名成
+  `ridingVehicle/mountVehicle/dismountVehicle/vehicleAtScreen…`，类型收成
+  `type Rideable = Boat | Minecart`；上下车、贴位置、`vehicleInput`、触屏点选、
+  下车间距全部共用一份（没有为矿车复制第二套）。
+  ④ **渲染**：`EntityRenderer` 新增矿车分支（铁皮斗 5 块 + 4 个轮子，`iron_block`/`stone` 贴图）。
+  门禁：`test:entity` 80 → **83**、`test:ui` 701 → **704**、`test:crafting` 42 → **43**
+  （配方 557 → **559**），离线 130 套全绿；覆盖率：方块 575 → **576**、物品 895 → **902**、
+  红石元件 26 → **27**（77%）。
 - 批次 244（用户："请继续开发"；按"先船后马"）：G12 载具层第一件——**橡木船**。
   ① **物品**：`Item.OAK_BOAT`（id **1478**；1448/1449 被药水箭占着）、5 块木板 U 形配方
   （配方表 556 → **557**）、图集图标 `item_oak_boat`（按规矩追加在 TILE_ORDER 末尾）、
