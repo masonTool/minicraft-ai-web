@@ -87,7 +87,8 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'projectile_protection', name: '弹射物保护', maxLevel: 4, targets: ARMOR, weight: 5, implemented: true },
   { id: 'respiration', name: '水下呼吸', maxLevel: 3, targets: ['helmet'], weight: 2, implemented: true },
   { id: 'aqua_affinity', name: '水下速掘', maxLevel: 1, targets: ['helmet'], weight: 2, implemented: true },
-  { id: 'thorns', name: '荆棘', maxLevel: 3, targets: ['chestplate'], weight: 1 },
+  // 荆棘（批次 264）：被近战打中时反伤攻击者，数值见 `PlayerStats.thornsDamage`
+  { id: 'thorns', name: '荆棘', maxLevel: 3, targets: ['chestplate'], weight: 1, implemented: true },
   // 深海探索者 / 灵魂疾行（批次 262）：水下与灵魂沙上的移速倍率，见 `PlayerStats`
   { id: 'depth_strider', name: '深海探索者', maxLevel: 3, targets: ['boots'], weight: 2, implemented: true },
   // 冰霜行者（批次 263）：踩过的水面结霜冰，5 秒后化回水，见 `main.updateFrostWalker`

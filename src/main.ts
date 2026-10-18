@@ -31,6 +31,7 @@ import {
   featherFallDamage,
   frostWalkerRadius,
   soulSpeedMultiplier,
+  thornsDamage,
   type DamageCause,
   type SurvivalEnvironment,
 } from './core/survival/PlayerStats.ts';
@@ -551,7 +552,7 @@ import {
 } from './core/entity/Bow.ts';
 import { ItemEntity } from './core/entity/ItemEntity.ts';
 import { XpOrb, splitXpOrbs } from './core/entity/XpOrb.ts';
-import type { EntityContext } from './core/entity/Entity.ts';
+import type { DamageAttacker, EntityContext } from './core/entity/Entity.ts';
 import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
@@ -4407,6 +4408,18 @@ class App {
     return isPowered(this.world.getBlockState(x, y, z));
   }
 
+  /** 四件盔甲里最高的一级荆棘（批次 264）：原版也只有最高那一件生效 */
+  private thornsLevel(): number {
+    let level = 0;
+    for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
+      level = Math.max(
+        level,
+        enchantLevel(this.inventory.get(ARMOR_SLOT_BASE + i)?.enchants, 'thorns'),
+      );
+    }
+    return level;
+  }
+
   /**
    * 靴子附魔带来的移速倍率（批次 262）。
    *
@@ -7599,6 +7612,8 @@ class App {
     sourceZ: number,
     cause: DamageCause = 'generic',
     source?: string,
+    /** 攻击者（批次 264，荆棘反伤）：只有生物近战会带 */
+    attacker?: DamageAttacker,
   ): void {
     if (this.isCreative) return;
     // 难度倍率：和平难度下生物不造成伤害（原版和平难度敌对生物根本不生成）
@@ -7620,6 +7635,24 @@ class App {
     this.applyIncomingDamage(damage, cause, source);
     const result = { applied: before - this.stats.health };
     if (result.applied <= 0) return;
+
+    // 荆棘（批次 264）：被**近战**打中时反伤攻击者。
+    // 只对真正造成伤害的那一下生效——盾牌挡下、抗性提升吃满都不该反弹。
+    // 数值按等级（I/II/III = 1/2/3），与原版"随机 1~4"的差异写在 TASKS K3。
+    if (attacker) {
+      const thorns = this.thornsLevel();
+      const context = this.lastEntityContext;
+      if (thorns > 0 && context) {
+        attacker.hurt(
+          thornsDamage(thorns),
+          attacker.x - this.physics.x,
+          attacker.z - this.physics.z,
+          context,
+          0,
+          0,
+        );
+      }
+    }
 
     // 声音 / 红闪 / 触觉**不在这里**播：统一由 `reactToDamage`（`emitPlayerNotices`）
     // 按"实际掉的血"出。这样抗性把伤害削到 0 时不会白叫一声，而溺水/着火/饥饿
@@ -7758,8 +7791,8 @@ class App {
       // ⚠️ 第 5 个参数是"谁打的"（僵尸 / 箭矢 / 末影水晶…）。漏掉它不会报错，
       // 但左上角与死亡卡片就只剩"受到伤害（没有记录到来源）"——实体层明明传了名字，
       // 桥接层不接等于白传（批次 218 用户"被不明原因打死"就是这个）。
-      hurtPlayer: (amount, sourceX, sourceZ, cause, source) =>
-        this.damagePlayer(amount, sourceX, sourceZ, cause, source),
+      hurtPlayer: (amount, sourceX, sourceZ, cause, source, attacker) =>
+        this.damagePlayer(amount, sourceX, sourceZ, cause, source, attacker),
       // 蜘蛛在亮处中立（批次 93）：亮度取"方块光与折算后的天光"的较大者，
       // 与刷怪判据同一套折算（天光要按昼夜折算，否则夜里也算 15 → 蜘蛛永不打人）
       lightAt: (x, y, z) =>

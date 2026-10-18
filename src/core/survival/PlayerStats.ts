@@ -148,6 +148,17 @@ export function depthStriderMultiplier(level: number): number {
  * 原版 I 级 2 格、II 级 3 格（以玩家为中心的正方形半径），0 级不结冰。
  * 抽成纯函数是为了让"II 级比 I 级宽一格"这条能离线断言。
  */
+/**
+ * 荆棘的反伤数值（批次 264）。
+ *
+ * ⚠️ 与原版的差异：原版是**任意等级都随机 1~4 点**，这里改成"等级 = 伤害"
+ * （I/II/III = 1/2/3）——固定值才能离线断言，也不会让 I 级荆棘突然打出 4 点。
+ */
+export function thornsDamage(level: number): number {
+  const clamped = Math.max(0, Math.min(3, Math.floor(level)));
+  return clamped;
+}
+
 export function frostWalkerRadius(level: number): number {
   const clamped = Math.max(0, Math.min(2, Math.floor(level)));
   return clamped <= 0 ? 0 : clamped + 1;

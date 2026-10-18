@@ -57,6 +57,25 @@ export interface DroppedStack {
   repairCost?: number;
 }
 
+/**
+ * 能"被反伤"的攻击者（批次 264）。
+ *
+ * 只描述实体层能保证的四件事：在哪、怎么挨打。`Mob` 天然满足（`hurt` 的签名一致），
+ * 而 `Entity.ts` 不必 import `Mob.ts`。
+ */
+export interface DamageAttacker {
+  x: number;
+  z: number;
+  hurt(
+    damage: number,
+    dx: number,
+    dz: number,
+    ctx: EntityContext,
+    looting?: number,
+    knockback?: number,
+  ): boolean;
+}
+
 export interface EntityContext {
   /** 碰撞与流体查询 */
   world: PhysicsWorld;
@@ -201,6 +220,13 @@ export interface EntityContext {
     cause?: EntityDamageCause,
     /** 具体来源名（生物名 / 弹射物名），只用于左上角"为什么掉血"的播报 */
     source?: string,
+    /**
+     * 攻击者本体（批次 264，荆棘反伤用）。
+     *
+     * 用**结构化类型**而不是 `Mob`：`Entity.ts` 不能引 `Mob.ts`（后者要 `extends Entity`，
+     * 会成环）。这里只要求"有坐标 + 能挨打"，主程序拿到的是真的 `Mob`。
+     */
+    attacker?: DamageAttacker,
   ) => void;
   /**
    * 查询与给定体积相交的生物（箭矢命中判定用）。
