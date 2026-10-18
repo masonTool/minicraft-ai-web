@@ -9,12 +9,14 @@
 
 | 文件 | 读它是为了 | 怎么读 |
 | --- | --- | --- |
-| [`HANDOFF.md`](./HANDOFF.md) | 当前状态、硬性约定、常用命令、悬案 | **整份读完**（约 200 行） |
-| [`.codebuddy/auto-continue.md`](./.codebuddy/auto-continue.md) | **"进行中"的唯一口径**（队列）+ 下一批候选 | **整份读完**（约 220 行；历史已归档） |
+| [`HANDOFF.md`](./HANDOFF.md) | 当前状态、硬性约定、常用命令、悬案 | **整份读完**（约 250 行；只留最近 6 批，更早的在归档里） |
+| [`.codebuddy/auto-continue.md`](./.codebuddy/auto-continue.md) | **"进行中"的唯一口径**（队列）+ 下一批候选 | **整份读完**（约 150 行；历史已归档） |
 
 > 这两份原本分别是 1409 行与 4108 行，**批次 101 做过上下文瘦身**：
 > 已经做完的流水搬到了 `docs/HANDOFF-ARCHIVE.md` 与
 > `.codebuddy/auto-continue-archive.md`，内容一字未改，只是不再"每轮都读一遍"。
+> **批次 198 又收了一次**：HANDOFF §1 只留最近 6 批（167~191 搬去归档），
+> 并把"离线测试套数"的核对从 README/HANDOFF 两处扩到 **README / HANDOFF / 本文件** 三处。
 
 ## 2. 按需展开（**只在需要时读**）
 
@@ -34,7 +36,7 @@ npm run check:fast     # typecheck + 单测 + 只跑被本次改动命中的离�
 npm run build:fast     # 只验"能不能出包"（关 sourcemap，产物内容与正式构建一致）
 
 # —— 提交前（全量，约 10s）——
-npm run check          # typecheck + 109 套离线测试 + 三张台账，任一失败即非零退出
+npm run check          # typecheck + 129 套离线测试 + 三张台账，任一失败即非零退出
 ```
 
 单套调试仍可直接跑老命令（`npm run test:reach`、`npm run test:perf` …）；

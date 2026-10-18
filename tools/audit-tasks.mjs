@@ -258,6 +258,17 @@ if (!claimCommits) {
    * 自检就得查两处**——否则"锚点文档不会漂"这句话本身就在漂。
    */
   const claimHandoff = /\*\*(\d+) 套\*\*自建离线测试/.exec(handoff);
+  /**
+   * **AGENTS.md 也要查**（批次 198 补）：它是"会话入口"，写着 `npm run check` 那行
+   * "typecheck + N 套离线测试 + 三张台账"。这个数从 109 一路漂到 129 都没人发现——
+   * 因为自检当时只查 README 与 HANDOFF。**同一个事实写在第三处，就得查第三处**。
+   */
+  let claimAgents = null;
+  try {
+    claimAgents = /typecheck \+ (\d+) 套离线测试/.exec(readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8'));
+  } catch {
+    claimAgents = null;
+  }
   if (declared === 0) {
     console.log('· 跳过离线测试套数核对（读不到 package.json）');
   } else if (!claimTests) {
@@ -272,8 +283,14 @@ if (!claimCommits) {
   } else if (Number(claimHandoff[1]) !== declared) {
     failed = true;
     console.log(`\n✗ HANDOFF 的离线测试套数过期：写着 ${claimHandoff[1]} 套，package.json 里实际 ${declared} 套`);
+  } else if (!claimAgents) {
+    failed = true;
+    console.log('\n✗ AGENTS.md 里找不到"typecheck + N 套离线测试"这一句');
+  } else if (Number(claimAgents[1]) !== declared) {
+    failed = true;
+    console.log(`\n✗ AGENTS.md 的离线测试套数过期：写着 ${claimAgents[1]} 套，package.json 里实际 ${declared} 套`);
   } else {
-    console.log(`✓ README 与 HANDOFF 的离线测试套数都与 package.json 一致（${declared} 套）`);
+    console.log(`✓ README / HANDOFF / AGENTS 的离线测试套数都与 package.json 一致（${declared} 套）`);
   }
 }
 
