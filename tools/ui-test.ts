@@ -3091,5 +3091,38 @@ console.log('\n[载具持久化：区块卸载不丢（批次 257）]');
   );
 }
 
+console.log('\n[位移 / 横扫附魔（批次 262）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const statsSrc = readFileSync(new URL('../src/core/survival/PlayerStats.ts', import.meta.url), 'utf8');
+  const toolsSrc = readFileSync(new URL('../src/core/registry/tools.ts', import.meta.url), 'utf8');
+  check(
+    '三条附魔都标了 implemented（深度探索者 / 灵魂疾行 / 横扫之刃）',
+    ["depth_strider", 'soul_speed', 'sweeping'].every((id) => {
+      const at = enchantSrc.indexOf(`id: '${id}'`);
+      return at >= 0 && enchantSrc.slice(at, at + 160).includes('implemented: true');
+    }),
+  );
+  check(
+    '深海探索者 / 灵魂疾行 接在每帧移速上（靴子附魔 × 状态效果）',
+    appSrc.includes('this.effects.moveSpeedMultiplier() * this.movementEnchantMultiplier()') &&
+      appSrc.includes("enchantLevel(boots, 'depth_strider')") &&
+      appSrc.includes("enchantLevel(boots, 'soul_speed')") &&
+      appSrc.includes('below === Block.SOUL_SAND || below === Block.SOUL_SOIL'),
+  );
+  check(
+    '横扫只对剑、非冲刺、命中后生效',
+    appSrc.includes("enchantLevel(this.heldEnchants, 'sweeping')") &&
+      appSrc.includes("this.heldTool?.type === 'sword' && !this.frameInput.sprint") &&
+      toolsSrc.includes('export function sweepDamage('),
+  );
+  check(
+    '两条移速倍率是纯函数（离线可断言）',
+    statsSrc.includes('export function depthStriderMultiplier(') &&
+      statsSrc.includes('export function soulSpeedMultiplier('),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

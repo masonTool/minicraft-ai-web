@@ -10,9 +10,22 @@
 import { Mob } from '../src/core/entity/Mob.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { rayBoxDistance, raycastEntities } from '../src/core/interaction/EntityRaycast.ts';
+import { sweepDamage } from '../src/core/registry/tools.ts';
 
 let passed = 0;
 let failed = 0;
+
+/** 数值断言（与其他套件同名同义） */
+function equal(name: string, actual: number, expected: number): void {
+  const ok = Math.abs(actual - expected) < 1e-6;
+  if (ok) {
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${name}  →  ${actual}（期望 ${expected}）`);
+  }
+}
 
 function check(name: string, condition: boolean, detail = ''): void {
   if (condition) {
@@ -93,6 +106,15 @@ console.log('\n[实际瞄准场景]');
   // 高度对齐：视线抬到生物躯干高度则能命中
   const level = raycastEntities([mob], player.x, 64 + zombie.height * 0.5, player.z, dirX, 0, dirZ, 3.2);
   check('视线与躯干同高时命中', level !== null, `${level?.distance}`);
+}
+
+console.log('\n[横扫之刃的溅射伤害（批次 262）]');
+{
+  equal('0 级不溅射', sweepDamage(7, 0), 0);
+  equal('I 级：1 + 7×1/2 = 4.5', sweepDamage(7, 1), 4.5);
+  equal('III 级：1 + 7×3/4 = 6.25', sweepDamage(7, 3), 6.25);
+  equal('超过 III 级按 III 级算', sweepDamage(7, 9), 6.25);
+  equal('武器伤害 0 时只剩基础 1 点', sweepDamage(0, 3), 1);
 }
 
 console.log(`\n战斗测试：${passed} 通过 / ${failed} 失败\n`);

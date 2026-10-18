@@ -14,7 +14,9 @@ import {
   MAX_HEALTH,
   VOID_DAMAGE_Y,
   PlayerStats,
+  depthStriderMultiplier,
   fallDamageFor,
+  soulSpeedMultiplier,
   type SurvivalEnvironment,
 } from '../src/core/survival/PlayerStats.ts';
 import { touchesCactus } from '../src/core/world/Cactus.ts';
@@ -326,6 +328,21 @@ console.log('\n[仙人掌接触（批次 222）]');
   // 方形完整方块（老形状）走 'full' 快路径也要能判
   const fullWorld: CollisionWorld = { collisionAt: () => 'full' as const };
   check('完整方块也走同一条判据', touchesCactus(fullWorld, boxAt(0.0, 64, 0.5, 0.6, 1.8), () => true));
+}
+
+console.log('\n[靴子附魔的移速倍率（批次 262）]');
+{
+  check('深海探索者 0 级 = 1 倍', depthStriderMultiplier(0) === 1);
+  check(
+    '深海探索者 I 级 ≈ 1.33',
+    Math.abs(depthStriderMultiplier(1) - 1.333) < 0.001,
+    `${depthStriderMultiplier(1)}`,
+  );
+  check('深海探索者 III 级封顶 2 倍', depthStriderMultiplier(3) === 2);
+  check('深海探索者超过上限按 3 级算', depthStriderMultiplier(5) === 2);
+  check('灵魂疾行 0 级 = 1 倍', soulSpeedMultiplier(0) === 1);
+  check('灵魂疾行 I 级 = 1.3', Math.abs(soulSpeedMultiplier(1) - 1.3) < 1e-6);
+  check('灵魂疾行 III 级 = 1.9', Math.abs(soulSpeedMultiplier(3) - 1.9) < 1e-6);
 }
 
 console.log(`\n生存测试：${passed} 通过 / ${failed} 失败\n`);
