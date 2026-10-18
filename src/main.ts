@@ -429,6 +429,8 @@ import {
   signKey,
 } from './core/world/SignText.ts';
 import { SignEditor } from './ui/SignEditor.ts';
+import { BookScreen } from './ui/BookScreen.ts';
+import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
 import { UnsupportedScreen } from './ui/UnsupportedScreen.ts';
 import { probeBrowserGl, rendererFailure, type GlSupportFail } from './core/render/webglSupport.ts';
@@ -940,6 +942,9 @@ class App {
    */
   private readonly signText = new SignTextStore();
   private readonly signEditor = new SignEditor();
+
+  /** 书与笔 / 成书的读写界面（批次 190，H16）：与告示牌编辑器同一套浮层分工 */
+  private readonly bookScreen = new BookScreen();
   /** 信标界面（K5，批次 117）：右键信标打开 */
   private readonly beaconScreen = new BeaconScreen();
   /** 信标的光柱（K5）：运行时实体，不烘进区块网格 */
@@ -1348,6 +1353,9 @@ class App {
       // 与背包/配方书一样：关掉界面要把输入权交回去（重新锁指针、收起触摸层）
       this.handleInventoryOpen(false);
     };
+    // 书（批次 190）：界面只报"新的那一叠"，写回哪一格由这里决定
+    this.bookScreen.onCommit = (stack) => this.applyBookStack(stack);
+    this.bookScreen.onClose = () => this.handleInventoryOpen(false);
 
     // 信标（K5，批次 117）：界面里点一下就把那条效果写进**方块状态**（见
     // `applyBeaconChoice`），关掉时把输入权交回去；光柱的组挂在场景里、逐帧 sync
@@ -1666,6 +1674,7 @@ class App {
   private isAnyUiOpen(): boolean {
     return (
       this.signEditor.isOpen ||
+      this.bookScreen.isOpen ||
       this.beaconScreen.isOpen ||
       this.chat.isOpen ||
       this.recipeBook.isOpen ||
@@ -1683,6 +1692,7 @@ class App {
    */
   private closeTopUi(): boolean {
     if (this.signEditor.isOpen) this.signEditor.close();
+    else if (this.bookScreen.isOpen) this.bookScreen.close();
     else if (this.beaconScreen.isOpen) this.beaconScreen.close();
     else if (this.chat.isOpen) this.chat.close();
     else if (this.recipeBook.isOpen) this.recipeBook.hide();
@@ -2666,7 +2676,7 @@ class App {
         const index = Number(element.dataset.index);
         if (!Number.isFinite(index)) return null;
         const stack = this.inventory.get(index);
-        return stack ? itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name) : null;
+        return stack ? itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name ?? stack.title) : null;
         },
         // 触摸端：长按 600ms 看详情（批次 95）。快捷栏上一次长按没有别的含义，
         // 所以这里是最安全的"看物品详情"入口——手机上原来根本看不到耐久与附魔
@@ -2932,6 +2942,16 @@ class App {
       // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
       // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
       if (this.signEditor.isOpen && e.code !== 'Escape') return;
+      // 书写中（批次 190）：按键归文本框；Esc 也在这里收掉——
+      // 面板自己的 root 上也有一个 Esc 监听，但**焦点不在面板里**时（玩家点了别处）
+      // 那个监听收不到，这里兜住，免得"书还开着、暂停菜单先弹出来"
+      if (this.bookScreen.isOpen) {
+        if (e.code === 'Escape') {
+          e.preventDefault();
+          this.bookScreen.close();
+        }
+        return;
+      }
       // Esc：**先关成就面板**（它可能叠在暂停菜单上面），再轮到暂停菜单
       if (e.code === 'Escape' && this.advancementScreen.isOpen) {
         e.preventDefault();
@@ -4695,6 +4715,32 @@ class App {
     // 这条差异写进了 TASKS B12（与"容器内容不同步"是同一个口径）。
     this.signText.set(this.dimension, target.x, target.y, target.z, lines);
     this.syncSigns();
+  }
+
+  /**
+   * 举着书右击（批次 190，H16，书与笔 / 成书）。
+   *
+   * @returns 有没有打开（false → 这一下继续走"放置方块"那条路）
+   */
+  private openBookScreen(): boolean {
+    const stack = this.inventory.get(this.hotbarIndex);
+    if (!stack) return false;
+    if (!isWritableBook(stack) && !isWrittenBook(stack)) return false;
+    this.bookScreen.show(stack);
+    // 与告示牌/背包同一个入口：释放指针锁、收起触摸层，打字不会被当成操作
+    this.handleInventoryOpen(true);
+    return true;
+  }
+
+  /**
+   * 书写界面交回来的**新那一叠**：写回快捷栏里那一格。
+   *
+   * ⚠️ 只写回"打开时那一格"（`hotbarIndex`）：界面开着的时候快捷栏是锁住的，
+   * 所以它没变过——但不要图省事去写回"第一个书与笔"，那样玩家摆弄两本书就会串。
+   */
+  private applyBookStack(stack: ItemStack): void {
+    this.inventory.set(this.hotbarIndex, stack);
+    this.refreshHotbar();
   }
 
   /**
@@ -8142,6 +8188,14 @@ class App {
       return;
     }
 
+    // 书与笔 / 成书（批次 190，H16）：举着书右击就打开读写界面。
+    // 放在"必须先命中方块"之前——原版对着空气点一下就能写书
+    if (this.openBookScreen()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
     // 没有命中方块就没什么可放/可交互的（投掷在上面已经处理过了）
     if (!this.hit) return;
 
@@ -9424,6 +9478,7 @@ class App {
     this.settingsScreen.destroy();
     this.chat.dispose();
     this.signEditor.dispose();
+    this.bookScreen.dispose();
     this.beaconScreen.dispose();
     this.deathEl.classList.add('hidden');
     this.audio.dispose();

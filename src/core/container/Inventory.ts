@@ -13,6 +13,8 @@
 
 import { ARMOR_SLOT_BASE, armorSlotAccepts } from '../registry/armor.ts';
 import { itemDef, maxStackOf } from '../registry/items.ts';
+// 书页的规整规则（批次 190）：与编辑界面**同一套**，否则会出现"能打 300 字、读档剩 256 字"
+import { BOOK_TITLE_CHARS, isBlankBook, sanitizePages } from '../items/Book.ts';
 
 export interface ItemStack {
   id: number;
@@ -45,6 +47,18 @@ export interface ItemStack {
    *  2. 与其它附加数据一样走"可选字段"：普通方块/材料不带它，存档里不会多出一片 `contents: []`。
    */
   contents?: (ItemStack | null)[];
+  /**
+   * **书页**（批次 190，书与笔 / 成书）：每一页一段文字。
+   *
+   * 与 `contents` 一样是"整块数据"，但它是**纯文本**，所以校验简单得多：
+   * 只收字符串、去掉控制字符、每页截到 256 字、最多 50 页（原版是 100 页 / 每页 1023 字，
+   * 我们的界面一页装不下那么多，截短之后玩家看到的与实际存的一致）。
+   *
+   * 空书（还没写过）不带这个字段——存档里不会多出一片 `pages: []`。
+   */
+  pages?: string[];
+  /** 成书的标题（只有成书有；书与笔的"书名"在写过程里由界面自己留着） */
+  title?: string;
 }
 
 /**
@@ -87,6 +101,15 @@ export function restoreStack(raw: unknown, depth = 1): ItemStack | null {
   if (depth > 0 && Array.isArray(candidate.contents)) {
     const inner = candidate.contents.map((item) => restoreStack(item, depth - 1));
     if (inner.some((item) => item !== null)) stack.contents = inner;
+  }
+  // 书页与书名（批次 190，书与笔/成书）：只收字符串，逐页规整（与编辑期同一套规则，
+  // 免得"界面里能打 300 字、读档回来只剩 256 字"）
+  if (Array.isArray(candidate.pages)) {
+    const pages = sanitizePages(candidate.pages.filter((page): page is string => typeof page === 'string'));
+    if (!isBlankBook(pages)) stack.pages = pages;
+  }
+  if (typeof candidate.title === 'string' && candidate.title.trim().length > 0) {
+    stack.title = candidate.title.trim().slice(0, BOOK_TITLE_CHARS);
   }
   return stack;
 }
@@ -147,6 +170,9 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
   if (stack.repairCost !== undefined) extras.repairCost = stack.repairCost;
   // 内容物要**深拷**（潜影盒）：直接交引用的话，改背包里的那份会顺手改到"已经取出的快照"
   if (stack.contents !== undefined) extras.contents = copyContents(stack.contents);
+  // 书页同理要拷一份数组（批次 190）：不拷的话"翻页改字"会改到掉落物/箱子里那份
+  if (stack.pages !== undefined) extras.pages = [...stack.pages];
+  if (stack.title !== undefined) extras.title = stack.title;
   return extras;
 }
 
@@ -166,6 +192,12 @@ export function sameExtras(a: Partial<ItemStack>, b: Partial<ItemStack>): boolea
   if ((a.damage ?? 0) !== (b.damage ?? 0)) return false;
   if ((a.repairCost ?? 0) !== (b.repairCost ?? 0)) return false;
   if ((a.name ?? '') !== (b.name ?? '')) return false;
+  // 书名与页（批次 190）：两本内容不同的书**不能并堆**（原版也不并）
+  if ((a.title ?? '') !== (b.title ?? '')) return false;
+  const pagesA = a.pages ?? [];
+  const pagesB = b.pages ?? [];
+  if (pagesA.length !== pagesB.length) return false;
+  for (let i = 0; i < pagesA.length; i++) if (pagesA[i] !== pagesB[i]) return false;
   const from = a.enchants ?? {};
   const to = b.enchants ?? {};
   const keys = new Set([...Object.keys(from), ...Object.keys(to)]);

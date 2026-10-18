@@ -798,6 +798,71 @@
         box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
       }
 
+      /* 书与笔 / 成书（批次 190，H16）：一页文本 + 翻页 + 完成/署名。
+         与告示牌编辑器同一套写法与层叠层（12，盖住背包、在提示框之下）。
+         手机横屏是主场景：面板高度封顶、文本区自己滚，按钮固定在底部 */
+      .book-screen {
+        position: fixed; inset: 0; z-index: 12;
+        display: grid; place-items: center;
+        background: rgba(0, 0, 0, .55);
+        padding-bottom: var(--kb-inset, 0px);
+      }
+      .book-screen.hidden { display: none; }
+      .book-panel {
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 12px 14px;
+        width: min(420px, 92vw);
+        max-height: calc(100dvh - var(--kb-inset, 0px) - 16px);
+        background: var(--panel-bg); color: var(--panel-text);
+        border: 3px solid; border-color: var(--pixel-bevel);
+        border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
+      }
+      .book-title { font-size: 14px; font-weight: 600; text-align: center; }
+      .book-page-input {
+        box-sizing: border-box; width: 100%; height: 46dvh; min-height: 96px;
+        padding: 8px 10px; font: inherit; font-size: 14px; line-height: 1.45;
+        color: var(--field-text); background: #f6f1dc;
+        border: 2px solid var(--panel-edge-dark); border-radius: var(--slot-radius);
+        resize: none;
+      }
+      .book-page-input:focus { outline: none; border-color: #3a7d33; }
+      .book-page-read {
+        box-sizing: border-box; width: 100%; height: 46dvh; min-height: 96px;
+        padding: 10px 12px; font-size: 14px; line-height: 1.5;
+        color: #2a2318; background: #f6f1dc;
+        border: 2px solid var(--panel-edge-dark); border-radius: var(--slot-radius);
+        white-space: pre-wrap; word-break: break-word; overflow-y: auto;
+      }
+      .book-page-read.hidden, .book-page-input.hidden { display: none; }
+      .book-pager {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        font-size: 13px; color: var(--panel-text-muted);
+      }
+      .book-pager .book-button { flex: 0 0 44px; min-height: 34px; padding: 4px 0; }
+      .book-page-label { flex: 1; text-align: center; }
+      .book-sign-row { display: flex; gap: 8px; }
+      .book-sign-row.hidden { display: none; }
+      .book-title-input {
+        flex: 1; box-sizing: border-box; min-height: 34px; padding: 6px 9px;
+        font: inherit; font-size: 14px; color: var(--field-text); background: var(--field-bg);
+        border: 2px solid var(--panel-edge-dark); border-radius: var(--slot-radius);
+      }
+      .book-buttons { display: flex; gap: 8px; }
+      .book-button {
+        flex: 1; padding: 9px 10px; font: inherit; font-size: 14px; cursor: pointer;
+        color: var(--btn-text); background: var(--btn-bg);
+        border: 2px solid var(--mc-outline); border-radius: 0;
+        box-shadow: inset 2px 2px 0 var(--mc-edge-light), inset -2px -2px 0 var(--mc-edge-dark);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+        min-height: 38px;
+      }
+      .book-button:disabled { opacity: .45; }
+      .book-button:active:not(:disabled) {
+        background: var(--mc-face-hover);
+        box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
+      }
+      .book-button.hidden { display: none; }
+
       /* 信标界面（K5，批次 117）：主效果一行 + 次级效果一行，**点一下就生效**。
          与告示牌编辑器同一套写法（DOM 在 TS 里建、样式在这儿、Esc 收起） */
       .beacon-screen {

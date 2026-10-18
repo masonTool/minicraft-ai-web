@@ -3572,6 +3572,52 @@ PAINTERS.item_ink_sac = (x, y, rng) => {
   return [clamp255(base * 0.8), clamp255(base * 0.86), clamp255(base + 16), 255];
 };
 
+/**
+ * 书与笔（批次 190）：一本**摊开的小棕书** + 右上角一支白羽毛。
+ *
+ * 画法与告示牌图标同一路数——"看出这是什么"优先，不追原版的像素：
+ * 棕色封皮 + 右侧白色书页边 + 几道横线（字），羽毛只用三格白。
+ */
+PAINTERS.item_book_and_quill = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  const left = 2;
+  const right = 13;
+  const top = 6;
+  const bottom = 14;
+  // 羽毛：右上角一支斜着的白色羽（笔杆 + 两侧羽片）
+  const feather = Math.abs(y - (2 + (13 - x) * 0.5)) < 1;
+  if (x >= 9 && x <= 13 && feather) return [clamp255(244 + jitter), clamp255(246 + jitter), clamp255(240 + jitter), 255];
+  if (x >= 11 && x <= 13 && y >= 1 && y <= 4) return [clamp255(226 + jitter), clamp255(228 + jitter), clamp255(220 + jitter), 255];
+  if (x < left || x > right || y < top || y > bottom) return [0, 0, 0, 0];
+  // 右侧那条是书页（白），其余是封皮（棕）
+  if (x >= right - 1) return [clamp255(238 + jitter), clamp255(232 + jitter), clamp255(210 + jitter), 255];
+  if (x === left || y === top || y === bottom) return [clamp255(92 + jitter), clamp255(62 + jitter), clamp255(38 + jitter), 255];
+  // 三道"字"：比封皮浅一档的横线
+  if ((y - top) % 3 === 0) return [clamp255(130 + jitter), clamp255(96 + jitter), clamp255(62 + jitter), 255];
+  return [clamp255(166 + jitter), clamp255(122 + jitter), clamp255(74 + jitter), 255];
+};
+
+/**
+ * 成书（批次 190）：**合上的一本书**——深红封皮 + 白色书口 + 一条金色书脊带。
+ *
+ * 与书与笔的区别要一眼看出：那本是"摊开的 + 有笔"，这本是"合上的、有书名带"。
+ */
+PAINTERS.item_written_book = (x, y, rng) => {
+  const jitter = rng() * 8 - 4;
+  const left = 3;
+  const right = 12;
+  const top = 3;
+  const bottom = 13;
+  if (x < left || x > right || y < top || y > bottom) return [0, 0, 0, 0];
+  // 书口（右侧一列白页）
+  if (x === right) return [clamp255(236 + jitter), clamp255(232 + jitter), clamp255(214 + jitter), 255];
+  // 封皮边框
+  if (x === left || y === top || y === bottom) return [clamp255(84 + jitter), clamp255(30 + jitter), clamp255(30 + jitter), 255];
+  // 金色的书名带：靠近书脊的两格
+  if (x === left + 2 || x === left + 3) return [clamp255(206 + jitter), clamp255(170 + jitter), clamp255(68 + jitter), 255];
+  return [clamp255(140 + jitter), clamp255(44 + jitter), clamp255(44 + jitter), 255];
+};
+
 /** 凋灵骷髅头的顶面（批次 115）：几道更深的骨缝，说明"这是个头"而不是一块石头 */
 PAINTERS.wither_skull_top = (x, y, rng) => {
   const jitter = rng() * 14 - 7;

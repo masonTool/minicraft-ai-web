@@ -166,6 +166,9 @@ function cloneExtras(stack: ItemStack): ItemStack {
   if (stack.enchants !== undefined) copy.enchants = { ...stack.enchants };
   if (stack.name !== undefined) copy.name = stack.name;
   if (stack.repairCost !== undefined) copy.repairCost = stack.repairCost;
+  // 书（批次 190）：漏斗搬一本写过的书，页与书名不能丢（丢了就变成一本白书）
+  if (stack.pages !== undefined) copy.pages = [...stack.pages];
+  if (stack.title !== undefined) copy.title = stack.title;
   return copy;
 }
 

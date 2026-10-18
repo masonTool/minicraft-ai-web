@@ -3794,7 +3794,7 @@ export class InventoryScreen {
     if (this.split) return null;
     const stack = this.tooltipStacks.get(element);
     if (!stack) return null;
-    return itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name);
+    return itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name ?? stack.title);
   }
 
   /**
@@ -3807,7 +3807,7 @@ export class InventoryScreen {
   private showPickToast(slot: HTMLElement): void {
     const stack = this.tooltipStacks.get(slot);
     if (!stack) return;
-    const data = itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name);
+    const data = itemTooltip(stack.id, stack.count, stack.damage, stack.enchants, stack.name ?? stack.title);
 
     this.pickToastEl.textContent = '';
     const title = document.createElement('div');

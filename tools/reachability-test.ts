@@ -290,6 +290,14 @@ const EXEMPT: readonly Exempt[] = [
   //         这里留一段注释而不是空行：**白名单条目被还掉之后必须真的删掉**
   //         （上面那条"每条都仍然拿不到"的断言会立刻变红，逼着人来删）。
 
+  // ---- ③b 成书（批次 190）：它不是"做出来"的，而是**书与笔署名**出来的——
+  //         那条路在界面里（`ui/BookScreen`），审计的模型看不到，所以列在这里。
+  //         ⚠️ 它与"拿不到"不同：只要有一本写好的书与笔，署名就能得到它
+  {
+    id: Item.WRITTEN_BOOK,
+    reason: '成书由书与笔署名得到（界面里的一步，不是配方/掉落），审计模型看不到这一步',
+  },
+
   // ---- ④ 没有该生物（恶魂已在批次 94 做掉，这里只剩兔子）
   { id: Item.RABBIT_FOOT, reason: '兔子未实现：原版兔子脚由兔子掉落（J15/J16 的生物整组）' },
 
@@ -345,7 +353,7 @@ check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.le
 // → 批次 169（锁链甲改由盔甲匠卖）**4 条**。
 // 剩下这 4 条都不是"某条链断在中间"，而是**内容本身还没做**（黑/灰染料要鱿鱼与凋灵、
 // 兔子脚要兔子、旧 id 只留存档兼容）
-equal('缺口总数（批次 189 之后：2 条 —— 黑/灰染料那一族也通了）', unreachable.length, 2);
+equal('缺口总数（批次 190 之后：3 条 —— 多了一条"界面里才拿得到"的成书）', unreachable.length, 3);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));

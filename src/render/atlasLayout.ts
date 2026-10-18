@@ -917,8 +917,10 @@ export const TILE_ORDER = [
   // 三叉戟（批次 123，溺尸手里那件）；幻翼膜（批次 126，幻翼掉的那一片）
   'item_trident',
   'item_phantom_membrane',
-  // 墨囊（批次 189）：鱿鱼掉的那一颗
+  // 墨囊（批次 189）：鱿鱼掉的那一颗；书与笔 / 成书（批次 190）
   'item_ink_sac',
+  'item_book_and_quill',
+  'item_written_book',
   // 矿物块与信标（批次 117，K5）：信标的金字塔底座要用这三种块
   'gold_block',
   'diamond_block',

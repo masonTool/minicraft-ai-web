@@ -189,6 +189,14 @@ export const Item = {
    * 它还有第二个用途：**书与笔**（H16）的原版配方要用墨囊（批次 190 接上）。
    */
   INK_SAC: 1499,
+  /**
+   * 书与笔（批次 190，H16）：书 + 墨囊 + 羽毛。**可写**，内容存在 `ItemStack.pages`。
+   *
+   * 不可堆叠：每一本的内容都不一样（与成书同一个理由）。
+   */
+  BOOK_AND_QUILL: 1496,
+  /** 成书（批次 190）：署名之后的样子，`id` 换成它、`title` 记下书名，从此只读 */
+  WRITTEN_BOOK: 1497,
   SUGAR: 1174,
   RABBIT_FOOT: 1190,
   MAGMA_CREAM: 1191,
@@ -432,6 +440,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
   { id: Item.INK_SAC, name: 'minecraft:ink_sac', tile: 'item_ink_sac' },
+  // 书与笔 / 成书（批次 190，H16）：内容在 `pages`，所以**不可堆叠**
+  { id: Item.BOOK_AND_QUILL, name: 'minecraft:writable_book', tile: 'item_book_and_quill', maxStack: 1 },
+  { id: Item.WRITTEN_BOOK, name: 'minecraft:written_book', tile: 'item_written_book', maxStack: 1 },
   { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
   { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
   { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },
