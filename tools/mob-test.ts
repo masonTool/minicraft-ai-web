@@ -754,13 +754,31 @@ console.log('\n[骑乘：马（批次 253）]');
   horse.tryTame(1);
   check('苹果驯服成功', horse.tamed);
 
-  // ⚠️ 已知缺口（批次 253）：`Horse.updateAi` 的骑乘分支在离线测试里**没有跑通**
-  // （设了 `passenger` 与 `vehicleInput` 之后位置仍然不动），原因还没定位。
-  // 这里只钉住"状态与接线"，位移断言等排查完再补——不把没验证的东西写成通过。
+  // 批次 253 修复：驱动方向必须用**独立的 `rideYaw`**——
+  // `Mob.tick` 会按移动方向回写 `yaw`，用 yaw 算速度会让马原地来回蹭。
+  const world = new TestWorld();
+  world.floor(-24, 24, -8, 8, 64);
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player: { x: 8.5, y: 65, z: 0.5 },
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+    vehicleInput: { forward: 1, strafe: 0, sprint: false },
+  };
+
   horse.passenger = 'player';
-  check('骑手状态写进去了（主程序按这个字段贴位置）', horse.passenger === 'player');
+  horse.rideYaw = -Math.PI / 2; // 朝 +X
+  const start = horse.x;
+  for (let i = 0; i < 60; i++) horse.tick(ctx, 0.05); // 3 秒
+  check('骑上去按前进会往前走（不再原地蹭）', horse.x > start + 3, `x ${start.toFixed(1)} → ${horse.x.toFixed(1)}`);
+
   horse.passenger = null;
-  check('下马后状态清空', horse.passenger === null);
+  const stopX = horse.x;
+  for (let i = 0; i < 20; i++) horse.tick(ctx, 0.05);
+  check('下马后不再按骑手的方向冲', Math.abs(horse.x - stopX) < 8, `x=${horse.x.toFixed(1)}`);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);
