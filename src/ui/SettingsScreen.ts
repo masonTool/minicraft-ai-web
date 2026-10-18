@@ -19,7 +19,7 @@
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
-import { MOBILE_VIEW_DISTANCE, MOBILE_VIEW_DISTANCE_MAX } from '../core/world/PerfPolicy.ts';
+import { MOBILE_VIEW_DISTANCE_MAX } from '../core/world/PerfPolicy.ts';
 import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './TouchControls.ts';
 import {
   DEFAULT_APPEARANCE,
@@ -243,20 +243,19 @@ export const DEFAULT_SETTINGS: GameSettings = {
 const STORAGE_KEY = 'bedrock-settings';
 
 /**
- * "恢复默认设置"该回落到多大的视距（批次 202）。
+ * 这台设备的**视距上限**（批次 202 引入，批次 203 改语义）。
  *
  * ⚠️ 这里必须按设备分开，不能直接用 `DEFAULT_SETTINGS.viewDistance`：
- *  - 那个 12 是**桌面**默认值；手机开局只给 `MOBILE_VIEW_DISTANCE`（6），
- *    自适应上限才是 `MOBILE_VIEW_DISTANCE_MAX`（8）；
- *  - 以前"恢复默认"把 12 原样写回去，手机上等于一次性请求 489 个区块
- *    （`World.update` 在半径 12 下的候选圈；半径 6 只有 137 个）——
- *    玩家的体感就是"点了恢复默认反而更卡"。
+ *  - 那个 12 是**桌面**默认值；手机上限是 `MOBILE_VIEW_DISTANCE_MAX`（8）；
+ *  - 批次 202 之前"恢复默认"把 12 原样写回去，手机上等于一次性请求 489 个区块
+ *    （`World.update` 在半径 12 下的候选圈；半径 8 是 225 个）——体感就是"恢复默认反而更卡"。
  *
- * 真机日志（`minicraft-diag-2026-10-18`）里 `viewport 792×360 / dpr 3` 就是这种机子：
- * 60 帧开局，动一动就掉到 20、再掉到 9。
+ * 批次 203 起玩家**已经没有视距滑块**，所以这个函数返回的是"自适应策略允许涨到哪"：
+ * 桌面上就是 12（`DEFAULT_SETTINGS`），手机上是 8。开局仍然只有
+ * `MOBILE_VIEW_DISTANCE`（6）——那由渐进视距 `StartupRamp` 慢慢涨到上限。
  */
 export function defaultViewDistanceFor(touch: boolean): number {
-  return touch ? MOBILE_VIEW_DISTANCE : DEFAULT_SETTINGS.viewDistance;
+  return touch ? MOBILE_VIEW_DISTANCE_MAX : DEFAULT_SETTINGS.viewDistance;
 }
 
 /** 从 localStorage 读取设置（缺字段或损坏时回退默认值） */
@@ -447,14 +446,6 @@ export class SettingsScreen {
     private readonly settings: GameSettings,
     private readonly actions: SettingsActions,
   ) {
-    // 手机上先把"存下来的视距"夹进这台设备真能做到的范围（批次 202）。
-    //
-    // 滑块原来一律是 4~16：玩家在手机上把它拖到 12、甚至点"恢复默认"回到 12，
-    // 而实际生效的上限是 `MOBILE_VIEW_DISTANCE_MAX`（8）——**界面上的数和游戏里的数不一致**，
-    // 这正是"我在设置里怎么调都没用"的来源。夹一次之后，滑块、存档、实际生效三者一致。
-    if (isTouchUi()) {
-      this.settings.viewDistance = Math.min(this.settings.viewDistance, MOBILE_VIEW_DISTANCE_MAX);
-    }
     this.root = document.createElement('div');
     this.root.id = 'settings-screen';
     this.root.classList.add('hidden');
@@ -591,32 +582,21 @@ export class SettingsScreen {
     }
 
     const graphics = this.section('graphics');
-    graphics.append(
-      // 上限按设备给（批次 202）：手机上 4~8（`MOBILE_VIEW_DISTANCE_MAX`）。
-      // 拖到 16 却只生效 8，是"设置里调了没用"的另一个来源（见构造函数里那次夹紧）。
-      this.makeSlider(
-        'viewDistance',
-        '视距',
-        ' 区块',
-        4,
-        isTouchUi() ? MOBILE_VIEW_DISTANCE_MAX : 16,
-        1,
-      ),
-      this.makeSlider('fov', '视野', '°', 60, 110, 1),
-    );
-    // 批次 185（用户："性能相关那些设置有必要吗？默认去适配当前性能就行"）：
-    // **「云」与「粒子效果」两行删掉**。它们都是"画不画"的开关，自适应已经在掉帧时
-    // 降分辨率与视距；再让玩家自己猜"关云能不能救帧"只是把调参负担丢给玩家。
-    // （`clouds` / `particles` 字段保留：老存档照旧读取，默认值最完整。）
-    // 天气效果（批次 172，M20）：只关**画出来的**雨雪与雨花，天气本身照旧
-    this.makeToggle(graphics, 'weatherEffects', '天气效果');
-    // 降级四件套（批次 130，N7）：手机上"掉帧时先牺牲什么"交给玩家自己定。
-    // 默认值刻意选成"手机优先"：两档自适应都开、帧率不限（能跑多少跑多少）
-    this.makeToggle(graphics, 'adaptiveResolution', '自适应分辨率');
-    this.makeToggle(graphics, 'adaptiveViewDistance', '自适应视距');
-    // 批次 185（用户："帧率那些有必要吗？默认去适配当前性能状态就行"）：
-    // **帧率上限这一行删掉**。降级交给上面两条自适应——它们会在掉帧时先降分辨率/视距，
-    // 跑到 60 就是 60；手动钉一个"30 帧"只会让好设备白等。
+    // 批次 203（用户："性能相关的设置可以不用让用户去设置……我们给到用户最好的决策就够了"）：
+    // **图形组只剩「视野」**。删掉的是四行：
+    //  - 视距滑块、自适应分辨率、自适应视距 —— 这三样全是**性能调参**，
+    //    已经由 `PerfPolicy` 全权接管（掉帧时先收视距、再关装饰层、最后降分辨率）。
+    //    让玩家自己猜"关掉哪个能救帧"只是把调参负担丢回给玩家，而且他们的选择
+    //    与自适应策略会互相打架（比如手动钉死视距 16，策略还得一轮轮往下压）。
+    //  - 天气效果 —— 雨雪的量已经由装饰层档位自动控制（`decorRainFraction`），
+    //    再给一个"关掉雨"的开关同样是让玩家替我们做性能决策。
+    //  - 更早（批次 185）删掉的：云、粒子效果、帧率上限。
+    // ⚠️ `viewDistance` / `weatherEffects` / `adaptiveResolution` / `adaptiveViewDistance`
+    // 这些**字段保留**：老存档照旧能读（不会因为字段消失而整份回退），
+    // 值由主程序按设备定死（见 `main` 构造里那三行）。
+    //
+    // 「视野」留着：它不是性能项——FOV 关系到晕动症与个人习惯，原版也只有这一个视野滑块。
+    graphics.append(this.makeSlider('fov', '视野', '°', 60, 110, 1));
     // （`maxFps` 字段保留：老存档里的值还会被读取，只是不再给入口。）
 
     // ---- 外观（批次 187）：肤色 / 上衣 / 裤子 / 披风

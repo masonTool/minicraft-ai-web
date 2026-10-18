@@ -272,29 +272,30 @@ console.log('\n[四组音量（批次 178）]');
   check('不是数字的回退默认 1', dirty.volumeMobs === 1);
 }
 
-// ---------------------------------------------------------------- 9. 批次 202：恢复默认
+// ---------------------------------------------------------------- 9. 批次 202 / 203：视距口径
 
-console.log('\n[恢复默认设置（批次 202）]');
+console.log('\n[视距口径：设备上限与恢复默认（批次 202 / 203）]');
 {
   // 真机反馈："在设置里恢复默认都没用，还是卡"。三个原因各自断言一条：
-  //  ① 恢复默认把**桌面**的 12 原样写回去 → 手机上等于请求 625 个区块；
+  //  ① 恢复默认把**桌面**的 12 原样写回去 → 手机上等于请求 489 个区块；
   //  ② 自适应已经降下去的分辨率/装饰层不在 settings 里，恢复默认碰不到它们；
   //  ③ `main.applySettings` 直接赋值 `settings.viewDistance`，绕过了手机上限。
   check(
-    '桌面恢复默认还是 12 区块',
+    '桌面视距上限还是 12 区块',
     defaultViewDistanceFor(false) === DEFAULT_SETTINGS.viewDistance,
   );
+  // 批次 203：玩家已经没有视距滑块，这个值就是"自适应允许涨到哪"
   check(
-    '手机恢复默认是 6 区块（不是 12）',
-    defaultViewDistanceFor(true) === MOBILE_VIEW_DISTANCE && MOBILE_VIEW_DISTANCE === 6,
+    '手机视距上限是 8（不是 12）',
+    defaultViewDistanceFor(true) === MOBILE_VIEW_DISTANCE_MAX && MOBILE_VIEW_DISTANCE_MAX === 8,
   );
   check(
-    '手机默认值本身就在设备上限之内',
-    defaultViewDistanceFor(true) <= MOBILE_VIEW_DISTANCE_MAX && defaultViewDistanceFor(true) >= 4,
+    '开局仍然只有 6（先给脚下这一片，别让渐进视距一上来就请求满）',
+    MOBILE_VIEW_DISTANCE === 6 && MOBILE_VIEW_DISTANCE < defaultViewDistanceFor(true),
   );
 
   // `main.applySettings` 现在走的这条夹紧：滑块上写 12 → 实际只按 8 请求区块
-  check('手机把 12 夹到 8（不再一口气请求 625 个区块）',
+  check('手机把 12 夹到 8（不再一口气请求 489 个区块）',
     viewDistanceCapFor(12, true) === MOBILE_VIEW_DISTANCE_MAX);
   check('桌面夹紧不改变玩家的 12', viewDistanceCapFor(12, false) === 12);
 

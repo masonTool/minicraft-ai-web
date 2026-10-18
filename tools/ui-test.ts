@@ -2074,6 +2074,36 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '诊断导出带上真实渲染规模与显卡型号',
     appSrc.includes('perf: this.perfSnapshot()') && appSrc.includes('gpu: this.gpuName()'),
   );
+  // 批次 203（用户："性能相关的设置可以不用让用户去设置"）：图形组只剩「视野」，
+  // 视距 / 自适应分辨率 / 自适应视距 / 天气效果 四行全部删掉（字段保留给老存档）
+  check(
+    '图形组只剩「视野」（性能档位全交给自适应）',
+    !settingsSrc.includes("'adaptiveResolution',") &&
+      !settingsSrc.includes("'adaptiveViewDistance',") &&
+      !settingsSrc.includes("'weatherEffects',") &&
+      !/makeSlider\(\s*'viewDistance'/.test(settingsSrc) &&
+      settingsSrc.includes("this.makeSlider('fov', '视野', '°', 60, 110, 1)"),
+  );
+  // ⚠️ 字段必须还在：删字段会让 `loadSettings` 把老存档里其它值一起丢掉
+  check(
+    '四个性能字段仍保留在 GameSettings 里（只是没有入口）',
+    settingsSrc.includes('viewDistance: number') &&
+      settingsSrc.includes('adaptiveResolution: boolean') &&
+      settingsSrc.includes('adaptiveViewDistance: boolean') &&
+      settingsSrc.includes('weatherEffects: boolean'),
+  );
+  // 没有滑块之后，进世界时由主程序按设备定死——老存档里关过自适应的也要重新打开
+  check(
+    '进世界时强制接管三样性能档位',
+    appSrc.includes('this.settings.adaptiveResolution = true;') &&
+      appSrc.includes('this.settings.adaptiveViewDistance = true;') &&
+      appSrc.includes('this.settings.viewDistance = defaultViewDistanceFor(isTouchDevice());'),
+  );
+  // 渐进视距涨完之后，自适应还回来的视距必须真的生效（否则手机上永远停在开局那 6）
+  check(
+    '渐进视距涨完后只认 viewDistance（自适应涨回 8 才真的生效）',
+    appSrc.includes('if (this.startupRamp.done) return this.viewDistance;'),
+  );
   check(
     '帧率上限那个手动档位已删除（交给自适应）',
     !settingsSrc.includes("'帧率上限'"),

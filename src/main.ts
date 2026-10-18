@@ -95,6 +95,7 @@ import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone
 import { GamepadInput } from './ui/GamepadInput.ts';
 import {
   SettingsScreen,
+  defaultViewDistanceFor,
   loadSettings,
   saveSettings,
   type GameSettings,
@@ -1542,6 +1543,16 @@ class App {
     // 走这道接口而不是直接在伤害入口算，是为了让**环境伤害也自动吃到减伤**
     this.stats.armor = createArmorWearer(this.inventory);
 
+    // 性能档位**不再由玩家决定**（批次 203）：设置里那三个入口都删了，这里按设备定死。
+    //
+    //  - 两档自适应一律打开：它们就是"我们替玩家做决定"的那套策略（掉帧时先收视距、
+    //    再关装饰层、最后降分辨率）；老存档里关过它们的，进世界时重新接管。
+    //  - 视距回到这台设备的上限（手机 8 / 桌面 12），**并忽略存下来的旧值**：
+    //    没有滑块之后，旧值只会是"以前在别的设备上拖过的数字"（手机上是 489 个区块的坑）。
+    this.settings.adaptiveResolution = true;
+    this.settings.adaptiveViewDistance = true;
+    this.settings.viewDistance = defaultViewDistanceFor(isTouchDevice());
+
     // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
     this.viewDistance = this.settings.viewDistance;
     // 装饰层（批次 158）：**启动时也要应用一次**——`applySettings` 只在"玩家改设置"
@@ -2654,8 +2665,17 @@ class App {
     this.refreshWorld(toChunkCoord(region.x), toChunkCoord(region.z), true);
   }
 
-  /** 这一帧的生效视距（区块）：启动期是逐格涨的，涨到位之后就是玩家的设置值 */
+  /**
+   * 这一帧的生效视距（区块）：启动期是逐格涨的，涨到位之后就是**当前设定的视距**。
+   *
+   * ⚠️ 渐进视距涨完之后必须**只认 `viewDistance`**（批次 203 修的）：
+   * `StartupRamp` 一到目标就冻结（`done` 之后主循环不再调 `advance`），
+   * 而它的 `radius` 停在"启动那一刻的设定值"（手机上是 6）。自适应随后把
+   * `viewDistance` 往手机上限 8 还回来时，`min(8, 6)` 永远是 6 —— 玩家看到的是
+   * "自适应说视距涨了，实际画面一点没变"。涨完之后就不再受 ramp 的旧半径约束。
+   */
   private get viewDistanceNow(): number {
+    if (this.startupRamp.done) return this.viewDistance;
     return Math.min(this.viewDistance, this.startupRamp.radius);
   }
 
