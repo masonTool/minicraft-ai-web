@@ -1043,6 +1043,99 @@ export const DOLPHIN_TYPE: MobType = {
   eyeHeight: 0.4,
 };
 
+/** 熊猫（批次 260）：丛林里吃竹子；无掉落（原版只掉竹子，本项目给的是方块，不重复给） */
+export const PANDA_TYPE: MobType = {
+  id: 'panda',
+  name: '熊猫',
+  health: 20,
+  width: 1.0,
+  height: 1.1,
+  speed: 1.6,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: Block.BAMBOO,
+  spawnBiomes: ['jungle'],
+  bodyColor: 0xf0efe9,
+  accentColor: 0x2a2a2e,
+  eyeHeight: 0.9,
+};
+
+/** 北极熊（批次 260）：雪原系，掉 0~2 条鳕鱼（原版就是鱼） */
+export const POLAR_BEAR_TYPE: MobType = {
+  id: 'polar_bear',
+  name: '北极熊',
+  health: 30,
+  width: 1.2,
+  height: 1.2,
+  speed: 2.2,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [{ itemId: Item.COD, min: 0, max: 2 }],
+  xp: 3,
+  feed: [Item.COD, Item.SALMON],
+  spawnBiomes: ['snowy_plains', 'snowy_taiga', 'snowy_slopes'],
+  bodyColor: 0xf2f0e6,
+  accentColor: 0xc9c4b4,
+  eyeHeight: 1.0,
+};
+
+/**
+ * 海龟（批次 260）。
+ *
+ * ⚠️ 生成差异：原版在**沙滩**产卵，而本项目的陆地刷怪判据只认草地/雪层（沙子不在其中），
+ * 所以这里改成"水里刷"（`spawnInWater`）——不然它只能靠刷怪蛋见到。
+ */
+export const TURTLE_TYPE: MobType = {
+  id: 'turtle',
+  name: '海龟',
+  health: 30,
+  width: 0.9,
+  height: 0.4,
+  speed: 0.9,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  aquatic: true,
+  spawnInWater: true,
+  ignoreLight: true,
+  spawnBiomes: ['ocean', 'deep_ocean', 'warm_ocean'],
+  bodyColor: 0x4f7f52,
+  accentColor: 0x9fc27a,
+  eyeHeight: 0.3,
+};
+
+/**
+ * 美西螈（批次 260）。
+ *
+ * ⚠️ 生成差异：原版在繁茂洞穴的水里，本项目没有独立洞穴群系，改为暖海/海洋。
+ */
+export const AXOLOTL_TYPE: MobType = {
+  id: 'axolotl',
+  name: '美西螈',
+  health: 14,
+  width: 0.5,
+  height: 0.4,
+  speed: 1.4,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  aquatic: true,
+  spawnInWater: true,
+  ignoreLight: true,
+  spawnBiomes: ['warm_ocean', 'ocean'],
+  bodyColor: 0xe9a6b6,
+  accentColor: 0xc76f87,
+  eyeHeight: 0.3,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -1086,6 +1179,11 @@ export const MOB_TYPES: readonly MobType[] = [
   COD_TYPE,
   SALMON_TYPE,
   DOLPHIN_TYPE,
+  // 被动生物第三批（批次 260）：熊猫 / 北极熊 / 海龟 / 美西螈
+  PANDA_TYPE,
+  POLAR_BEAR_TYPE,
+  TURTLE_TYPE,
+  AXOLOTL_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

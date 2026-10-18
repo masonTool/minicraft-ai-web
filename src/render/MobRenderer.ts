@@ -90,7 +90,9 @@ type ModelKind =
   /** 骑乘系（批次 253）：马/驴/骡/羊驼——长腿、长身、长脖子 */
   | 'horse'
   /** 水生（批次 259）：鳕鱼 / 鲑鱼 / 海豚——一个纺锤形身体 + 尾鳍 + 背鳍 */
-  | 'fish';
+  | 'fish'
+  /** 海龟（批次 260）：扁平的壳 + 探出来的头 + 四只鳍足 */
+  | 'turtle';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
@@ -126,6 +128,10 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'cod' || typeId === 'salmon' || typeId === 'dolphin') return 'fish';
   // 兔子（批次 259）：小体型 + 尖耳，直接复用 `pet` 那副骨架（比四足更像兔子）
   if (typeId === 'rabbit') return 'pet';
+  // 熊猫/北极熊（批次 260）：四足；美西螈沿用鱼形（它是水生、有尾）
+  if (typeId === 'panda' || typeId === 'polar_bear') return 'quadruped';
+  if (typeId === 'axolotl') return 'fish';
+  if (typeId === 'turtle') return 'turtle';
   // 山羊（批次 259）：四足，角暂时用 accent 色的头顶部件代替（`quadruped` 自带鼻吻）
   if (typeId === 'goat') return 'quadruped';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
@@ -156,6 +162,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return horseBoxes(type);
     case 'fish':
       return fishBoxes(type);
+    case 'turtle':
+      return turtleBoxes(type);
     case 'bird':
       return birdBoxes(type);
     case 'spider':
@@ -442,6 +450,35 @@ function horseBoxes(type: MobType): BoxSpec[] {
  * 一个前后拉长的身体 + 竖着的尾鳍 + 背鳍 + 两只眼；没有腿（`legCountOf` 返回 0），
  * 游动时只靠整体倾斜表达，不做尾摆动画（原版那套摆尾需要骨骼，这里没有）。
  */
+/**
+ * 海龟（批次 260）：扁平的壳 + 探出来的头 + 四只鳍足。
+ *
+ * 壳用 `body`、鳍足与头用 `accent`，眼睛照旧；前四个部件是鳍足
+ * （`legCountOf` 返回 4，走路摆动只认最前面四个）。
+ */
+function turtleBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const shellWidth = w * 0.8;
+  const shellHeight = h * 0.7;
+  const shellDepth = w * 1.05;
+  const finZ = shellDepth * 0.3;
+  return [
+    // 四只鳍足（下标 0~3）
+    { width: w * 0.22, height: h * 0.35, depth: w * 0.3, x: -shellWidth * 0.55, y: h * 0.18, z: finZ, color: 'accent' },
+    { width: w * 0.22, height: h * 0.35, depth: w * 0.3, x: shellWidth * 0.55, y: h * 0.18, z: finZ, color: 'accent' },
+    { width: w * 0.22, height: h * 0.35, depth: w * 0.3, x: -shellWidth * 0.55, y: h * 0.18, z: -finZ, color: 'accent' },
+    { width: w * 0.22, height: h * 0.35, depth: w * 0.3, x: shellWidth * 0.55, y: h * 0.18, z: -finZ, color: 'accent' },
+    // 壳
+    { width: shellWidth, height: shellHeight, depth: shellDepth, x: 0, y: h * 0.55, z: 0, color: 'body' },
+    // 头
+    { width: w * 0.3, height: h * 0.4, depth: w * 0.35, x: 0, y: h * 0.5, z: shellDepth * 0.62, color: 'accent' },
+    // 双眼
+    { width: w * 0.07, height: h * 0.1, depth: w * 0.06, x: -w * 0.12, y: h * 0.58, z: shellDepth * 0.62 + w * 0.16, color: 'eye' },
+    { width: w * 0.07, height: h * 0.1, depth: w * 0.06, x: w * 0.12, y: h * 0.58, z: shellDepth * 0.62 + w * 0.16, color: 'eye' },
+  ];
+}
+
 function fishBoxes(type: MobType): BoxSpec[] {
   const w = type.width;
   const h = type.height;
@@ -644,6 +681,8 @@ function legCountOf(kind: ModelKind): number {
   if (kind === 'pet' || kind === 'horse') return 4;
   // 水生（批次 259）：没有腿，靠尾巴摆
   if (kind === 'fish') return 0;
+  // 海龟（批次 260）：四条鳍足（部件表最前面四个）
+  if (kind === 'turtle') return 4;
   if (kind === 'quadruped') return 4;
   if (kind === 'spider') return 8;
   // 水晶/烈焰人/恶魂不摆动：水晶自转、烈焰人的火棒长在它自己身上、

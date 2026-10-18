@@ -476,6 +476,8 @@ const VOICE_BY_ID: Readonly<Record<string, MobVoiceId>> = {
   cod: 'squid',
   salmon: 'squid',
   dolphin: 'squid',
+  // 北极熊（批次 260）：低吼与狼相近，复用 wolf（个体差异交给音高）
+  polar_bear: 'wolf',
   phantom: 'phantom',
   wither: 'wither',
   ender_dragon: 'dragon',

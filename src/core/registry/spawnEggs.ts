@@ -91,6 +91,11 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'cod', label: '鳕鱼', id: 1502 },
   { mobId: 'salmon', label: '鲑鱼', id: 1503 },
   { mobId: 'dolphin', label: '海豚', id: 1504 },
+  // 被动生物第三批（批次 260）：熊猫 / 北极熊 / 海龟 / 美西螈
+  { mobId: 'panda', label: '熊猫', id: 1505 },
+  { mobId: 'polar_bear', label: '北极熊', id: 1506 },
+  { mobId: 'turtle', label: '海龟', id: 1507 },
+  { mobId: 'axolotl', label: '美西螈', id: 1508 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */
