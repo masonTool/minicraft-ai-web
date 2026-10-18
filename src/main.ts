@@ -9515,10 +9515,12 @@ class App {
     const distance = Math.hypot(p.x - this.lastPlayerX, p.z - this.lastPlayerZ);
     this.lastPlayerX = p.x;
     this.lastPlayerZ = p.z;
-    if (distance > 0 && !this.flying) {
+    // 创造模式不累加疲劳值：饥饿在 `PlayerStats.tick` 里本来就被强制拉满，
+    // 这里再算一遍纯属白做，还会把 exhaustion 留到切回生存的那一刻
+    if (distance > 0 && !this.flying && !this.isCreative) {
       this.stats.addExhaustion(distance * (input.sprint ? 0.1 : 0.01));
     }
-    if (input.jump && wasOnGround && !this.flying) {
+    if (input.jump && wasOnGround && !this.flying && !this.isCreative) {
       this.stats.addExhaustion(input.sprint ? 0.2 : 0.05);
     }
 
@@ -9539,8 +9541,9 @@ class App {
 
     // 玩家信息播报（批次 206）：受伤 / 回血 / 饥饿 / 氧气 / 着火，统一进左上角聊天栏
     this.emitPlayerNotices();
-    this.vitalsHud.update(this.stats);
-    this.xpHud.update(this.experience);
+    // 创造模式整条生存状态栏与经验条都不显示（批次 230，对齐原版）
+    this.vitalsHud.update(this.stats, this.isCreative);
+    this.xpHud.update(this.experience, this.isCreative);
     this.updateToolHud();
     // 地图探索（批次 196）：跨区块才扫一遍背包
     this.updateMapExploration();
@@ -9599,6 +9602,14 @@ class App {
     const food = this.stats.food;
     const air = this.stats.air;
     const fmt = (value: number): string => App.statText(value);
+    /**
+     * 创造模式只播报**伤害**。
+     *
+     * 饥饿 / 氧气 / 着火在 `PlayerStats.tick` 的创造分支里每 tick 被强制复位，
+     * 播它们只会产生噪音（切进创造时饥饿从 5 被拉满，会假报一句"饥饿值 +20（进食）"）。
+     * 伤害必须留着：虚空与 `/kill` 在创造模式仍能致死，死因要说清。
+     */
+    const survivalMode = !this.isCreative;
 
     // ---- 生命：掉血一定要说清"多少 + 为什么"
     const healthDelta = health - this.noticeHealth;
@@ -9647,50 +9658,51 @@ class App {
         food,
       });
     }
-    if (healthDelta >= 2) {
+    if (survivalMode && healthDelta >= 2) {
       this.chat.push(`生命 +${fmt(healthDelta)}（自然恢复或治疗效果）· 当前 ${fmt(health)}/20`, 'gain');
     }
 
     // ---- 饥饿：掉 1 点也播（原版没有这个提示，但手机上血条很小，等看见时已经晚了）
-    if (food < this.noticeFood) {
+    if (survivalMode && food < this.noticeFood) {
       const lost = this.noticeFood - food;
       const hint = food <= 6 ? ' · 快吃点东西，否则会饿到掉血' : '';
       this.chat.push(
         `饥饿值 -${fmt(lost)}（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）· 剩余 ${fmt(food)}/20${hint}`,
         food <= 6 ? 'warning' : 'system',
       );
-    } else if (food > this.noticeFood) {
+    } else if (survivalMode && food > this.noticeFood) {
       this.chat.push(`饥饿值 +${fmt(food - this.noticeFood)}（进食 / 饱和效果）· 当前 ${fmt(food)}/20`, 'gain');
     }
 
     // ---- 低血量 / 饥饿耗尽：只在"刚跨过阈值"时报一次，恢复后复位
-    if (!this.lowHealthWarned && health > 0 && health <= 6) {
+    // 创造模式整段跳过，但**不复位 warned**：切回生存时该提示的还要提示
+    if (survivalMode && !this.lowHealthWarned && health > 0 && health <= 6) {
       this.lowHealthWarned = true;
       this.chat.push(
         `生命值偏低（${fmt(health)}/20）：先躲开敌人或危险方块，吃东西可以回血`,
         'warning',
       );
-    } else if (this.lowHealthWarned && health > 10) {
+    } else if (survivalMode && this.lowHealthWarned && health > 10) {
       this.lowHealthWarned = false;
     }
-    if (!this.starveWarned && food <= 0) {
+    if (survivalMode && !this.starveWarned && food <= 0) {
       this.starveWarned = true;
       this.chat.push('饥饿值耗尽（体力透支）：会持续掉血，也无法自然回血；快吃东西', 'warning');
-    } else if (this.starveWarned && food > 6) {
+    } else if (survivalMode && this.starveWarned && food > 6) {
       this.starveWarned = false;
     }
 
     // ---- 氧气：不足与耗尽各提示一次（之后由"受到伤害"那条接管）
-    if (air <= 100 && this.noticeAir > 100) {
+    if (survivalMode && air <= 100 && this.noticeAir > 100) {
       this.chat.push(`氧气不足（正在水下憋气，剩余 ${Math.max(0, Math.round(air))}）：浮上水面换气`, 'warning');
-    } else if (air <= 0 && this.noticeAir > 0) {
+    } else if (survivalMode && air <= 0 && this.noticeAir > 0) {
       this.chat.push('氧气耗尽（已经憋不住）：正在溺水掉血，立刻上浮', 'damage');
-    } else if (air > 120 && this.noticeAir <= 100) {
+    } else if (survivalMode && air > 120 && this.noticeAir <= 100) {
       this.chat.push('回到水面（已能呼吸）：氧气正在恢复', 'gain');
     }
 
     // ---- 着火：点燃那一刻说一次（持续伤害由生命那条播）
-    if (this.stats.burning && !this.noticeBurning) {
+    if (survivalMode && this.stats.burning && !this.noticeBurning) {
       this.chat.push('你着火了（站在火/岩浆里或被点燃）：每秒掉血，跳进水里可熄灭', 'warning');
     }
 

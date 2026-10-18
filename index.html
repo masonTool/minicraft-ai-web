@@ -1218,6 +1218,10 @@
       /* 护甲条只在身上有甲时出现（与原版一致：脱了就整条收起，不占屏） */
       #vital-armor { visibility: hidden; }
       #vital-armor.on { visibility: visible; }
+      /* 创造模式：原版不显示生命 / 饥饿 / 护甲 / 氧气整条状态栏。
+         用 display:none（不是 visibility:hidden）——横屏手机高度本来就紧张，
+         藏了还要占着一块布局高度就白改了。掉虚空/自杀的提示仍走左上角聊天栏 */
+      #vitals.creative-mode { display: none; }
 
       /* ---------------- 暂停 / 设置 ---------------- */
       #settings-screen {

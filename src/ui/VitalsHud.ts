@@ -159,15 +159,22 @@ export class VitalsHud {
   /** 拆局：把这一套行从静态容器里摘掉 */
   dispose(): void {
     this.container.replaceChildren();
-    this.container.classList.remove('low-health');
+    this.container.classList.remove('low-health', 'creative-mode');
     this.lastKey = '';
   }
 
-  update(stats: PlayerStats): void {
+  /**
+   * @param creative 创造模式：原版不显示生命 / 饥饿 / 护甲 / 氧气（它们对玩家没有信息量，
+   *   手机上还占着快捷栏上方的空间），整条收起交给 CSS
+   */
+  update(stats: PlayerStats, creative = false): void {
     const armorPoints = stats.armorPoints;
-    const key = `${stats.health}|${stats.food}|${stats.air}|${stats.dead}|${armorPoints}`;
+    // ⚠️ creative 必须进 key：切模式时各项数值不变，漏了它就会 early return，类名永远不更新
+    const key = `${stats.health}|${stats.food}|${stats.air}|${stats.dead}|${armorPoints}|${creative}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
+
+    this.container.classList.toggle('creative-mode', creative);
 
     for (let i = 0; i < this.hearts.length; i++) {
       applyState(this.hearts[i]!, stateOf(stats.health - i * 2));
@@ -185,8 +192,9 @@ export class VitalsHud {
     }
 
     // 低血量脉冲（批次 28）：血量掉到 4 点（两颗心）以下时整条状态栏自己"跳"起来，
-    // 提醒玩家该退了——原来只有数字变小，战斗中很容易没注意到
-    this.container.classList.toggle('low-health', !stats.dead && stats.health > 0 && stats.health <= 4);
+    // 提醒玩家该退了——原来只有数字变小，战斗中很容易没注意到。
+    // 创造模式不给脉冲：切进去时常常带着残血，而血条已经藏起来了（批次 230）
+    this.container.classList.toggle('low-health', !creative && !stats.dead && stats.health > 0 && stats.health <= 4);
 
     // 氧气条只在没吸满时出现（与原版一致）
     const showAir = stats.air < MAX_AIR;

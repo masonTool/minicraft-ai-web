@@ -233,12 +233,22 @@ console.log('\n[伤害记录（批次 207）]');
 
 console.log('\n[创造模式与重生]');
 {
+  // 创造模式免疫岩浆 / 摔落 / 仙人掌，饥饿与氧气保持满值（虚空单独测，见下）
   const stats = new PlayerStats();
   stats.food = 3;
   stats.health = 5;
-  runTicks(stats, 100, env({ creative: true, inLava: true, fallDistance: 20, y: VOID_DAMAGE_Y - 5 }));
+  runTicks(stats, 100, env({ creative: true, inLava: true, fallDistance: 20, onCactus: true }));
   check('创造模式不受伤、不消耗饥饿、氧气满', stats.health === 5 && stats.food === MAX_FOOD && stats.air === MAX_AIR,
     `生命 ${stats.health} 饥饿 ${stats.food}`);
+
+  // 虚空是创造模式**唯一**还会受伤的自然伤害（批次 230，原版同口径）：
+  // 掉出世界必须有反馈，否则玩家会在虚空里无限下坠、只能靠飞回来
+  const voidStats = new PlayerStats();
+  runTicks(voidStats, 1, env({ creative: true, y: VOID_DAMAGE_Y - 5 }));
+  check('创造模式掉虚空仍受伤（每 tick 4 点）', voidStats.health === MAX_HEALTH - 4, `剩余 ${voidStats.health}`);
+  runTicks(voidStats, 10, env({ creative: true, y: VOID_DAMAGE_Y - 5 }));
+  check('创造模式掉虚空会死（不会卡在虚空里）', voidStats.dead, `剩余 ${voidStats.health}`);
+  check('虚空伤害的原因记为 void', voidStats.lastDamage?.cause === 'void');
 
   const dead = new PlayerStats();
   dead.damage(100, 'generic');

@@ -39,12 +39,16 @@ export class XpHud {
     this.lastKey = '';
   }
 
-  update(xp: Experience): void {
-    const key = `${xp.level}|${xp.progress}`;
+  /**
+   * @param creative 创造模式：原版不显示经验条（创造模式没有消耗经验的地方，等级只是噪音）
+   */
+  update(xp: Experience, creative = false): void {
+    // creative 必须进 key：切模式时等级/进度不变，漏了它就不会重算显隐
+    const key = `${xp.level}|${xp.progress}|${creative}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
 
-    this.root.classList.toggle('hidden', xp.level === 0 && xp.progress === 0);
+    this.root.classList.toggle('hidden', creative || (xp.level === 0 && xp.progress === 0));
     // 进度条宽度按"当前级内的比例"；满级时 ratio 可能因浮点略微超过 1，夹一下
     this.fill.style.width = `${Math.round(Math.min(1, xp.ratio) * 100)}%`;
     this.levelEl.textContent = String(xp.level);

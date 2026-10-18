@@ -2034,6 +2034,8 @@ console.log('\n[状态栏贴快捷栏两端 + 仙人掌接触（批次 222）]')
   const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const physicsSrc = readFileSync(new URL('../src/core/physics/PlayerPhysics.ts', import.meta.url), 'utf8');
   const worldSrc = readFileSync(new URL('../src/core/world/World.ts', import.meta.url), 'utf8');
+  const statsSrc = readFileSync(new URL('../src/core/survival/PlayerStats.ts', import.meta.url), 'utf8');
+  const xpHudSrc = readFileSync(new URL('../src/ui/XpHud.ts', import.meta.url), 'utf8');
 
   check(
     '快捷栏与状态栏共用一组几何变量（两端才能真的对齐）',
@@ -2051,6 +2053,37 @@ console.log('\n[状态栏贴快捷栏两端 + 仙人掌接触（批次 222）]')
     '状态栏在经验条上方（不挡等级数字）',
     /#vitals \{[\s\S]{0,400}?bottom: calc\(86px \+ env\(safe-area-inset-bottom/.test(html) &&
       /#xp-bar \{[\s\S]{0,200}?bottom: calc\(68px \+ env\(safe-area-inset-bottom/.test(html),
+  );
+
+  // 创造模式隐藏生存状态栏（批次 230）：原版创造模式没有生命/饥饿/护甲/氧气/经验条
+  check(
+    '创造模式整条状态栏收起（display:none，不占横屏高度）',
+    /#vitals\.creative-mode \{\s*display: none;/.test(html),
+  );
+  check(
+    '创造标记进缓存 key（切模式数值不变也要更新显隐）',
+    vitalsSrc.includes('|${creative}') && vitalsSrc.includes("toggle('creative-mode', creative)"),
+  );
+  check('创造模式不给低血量脉冲（切进去常带残血）', vitalsSrc.includes('!creative && !stats.dead'));
+  check('拆局时摘掉创造标记', vitalsSrc.includes("classList.remove('low-health', 'creative-mode')"));
+  check(
+    '经验条也按模式隐藏',
+    xpHudSrc.includes('|${creative}') && xpHudSrc.includes('creative || (xp.level === 0'),
+  );
+  check(
+    '主循环把 isCreative 传给两条 HUD',
+    appSrc.includes('this.vitalsHud.update(this.stats, this.isCreative)') &&
+      appSrc.includes('this.xpHud.update(this.experience, this.isCreative)'),
+  );
+  check(
+    '创造模式不播报饥饿/氧气/着火（假提示与噪音）',
+    appSrc.includes('const survivalMode = !this.isCreative;') &&
+      appSrc.includes('if (survivalMode && food < this.noticeFood)'),
+  );
+  check('创造模式不累加疲劳值', appSrc.includes('!this.flying && !this.isCreative'));
+  check(
+    '创造模式掉虚空仍结算伤害（不会无限下坠）',
+    /env\.creative\) \{[\s\S]{0,500}?env\.y <= VOID_DAMAGE_Y/.test(statsSrc),
   );
 
   // 仙人掌（批次 222）：伤害判定以前恒为 false，用户"撞上去"其实既不掉血也不会抖

@@ -13,6 +13,8 @@
  *  - **摔落**：下落超过 3 格后落地，伤害 = 下落格数 - 3
  *  - **岩浆**：每 10 tick 4 点（受无敌帧限制）；仙人掌 1 点；窒息 1 点；虚空每 tick 4 点
  *  - **无敌帧**：受伤后 10 tick 内不再受伤（除非新伤害更大）
+ *  - **创造模式**：除**虚空**外免疫全部伤害（原版同口径：掉出世界仍会致死），
+ *    饥饿 / 氧气 / 着火每 tick 复位成满值
  *
  * 该模块不依赖 DOM，可直接在离线脚本里测。
  */
@@ -90,7 +92,7 @@ export interface SurvivalEnvironment {
   /** 本 tick 的落地高度（未落地为 0） */
   fallDistance: number;
   y: number;
-  /** 创造模式：不受伤、不消耗饥饿、不会饿死 */
+  /** 创造模式：不受伤、不消耗饥饿、不会饿死、不溺水（**虚空除外**，原版同口径） */
   creative: boolean;
   /** 饥饿值高时是否自然回血（游戏规则 naturalRegeneration，缺省开） */
   naturalRegeneration?: boolean;
@@ -296,6 +298,13 @@ export class PlayerStats {
       this.air = MAX_AIR;
       this.fireSeconds = 0;
       this.fireTickTimer = 0;
+      // 虚空是创造模式**唯一**还会受伤的自然伤害（原版同口径）：
+      // 掉出世界必须有反馈，否则玩家会在虚空里无限下坠，只能靠飞回来
+      if (env.y <= VOID_DAMAGE_Y) {
+        this.hurtResistantTime = 0;
+        this.lastDamageAmount = 0;
+        this.damage(4, 'void');
+      }
       return;
     }
 
