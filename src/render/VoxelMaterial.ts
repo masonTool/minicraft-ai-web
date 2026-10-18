@@ -86,6 +86,14 @@ uniform float uAlphaTest;
 /** 单张贴图占图集的 UV 尺寸，以及半像素内缩比例 */
 uniform vec2 uTileSpan;
 uniform float uTileInset;
+/** 图集的像素尺寸（只用来算 mip 层级） */
+uniform vec2 uAtlasSize;
+/**
+ * 光照色温（批次 237）：亮度仍然烘焙在顶点的 vLight 里，这里只决定"白光是什么颜色"。
+ * 以前只有标量亮度，于是火把照的房间是灰的、夜里只是"变暗"而不是"变冷"。
+ */
+uniform vec3 uSkyLightColor;
+uniform vec3 uBlockLightColor;
 
 uniform float uTime;
 
@@ -98,6 +106,12 @@ varying float vFluid;
 varying float vPortal;
 
 void main() {
+  // 导数必须在**任何分支之前**取：GLSL 规定 dFdx/dFdy 在非一致控制流里是未定义的。
+  // 这里要的是 vUv（fract 之前的平铺坐标）的屏幕空间变化率，换算成图集 UV 空间。
+  vec2 tileScale = uTileSpan * (1.0 - 2.0 * uTileInset);
+  vec2 gradX = dFdx(vUv) * tileScale;
+  vec2 gradY = dFdy(vUv) * tileScale;
+
   // uv 是「平铺坐标」：单面时落在 [0,1]，贪心合并出的大四边形则是 [0,w]×[0,h]。
   // 取小数部分即可把任意大小的面都映射回同一张贴图，再叠加半像素内缩避免渗色。
   //
@@ -110,14 +124,41 @@ void main() {
   else if (vPortal > 0.5) scroll = vec2(uTime * 0.026, uTime * 0.017);
   vec2 local = fract(vUv + scroll + vec2(vFluid * 0.5, 0.0));
   vec2 tileUv = vTile + (uTileInset + local * (1.0 - 2.0 * uTileInset)) * uTileSpan;
-  vec4 texel = texture2D(uAtlas, tileUv);
+
+  // ---- mip 层级要自己算（批次 237）
+  //
+  // 不能直接 texture2D(uAtlas, tileUv) 让硬件隐式求导：上面那个 fract 在每个方块
+  // 边界都会把 uv 从 1 拽回 0，硬件会把"一像素跨了整张 tile"当真，于是每条方块缝都
+  // 被采到最糊的 mip —— 整屏出现一圈圈发灰的缝。
+  //
+  // 做法：用 **fract 之前** 的 vUv（连续）求导（在 main 开头就算好了），显式喂给 textureGrad。
+  // 顺带好处：各向异性过滤只认显式梯度，以后要开 aniso 不用再动这里。
+  //
+  // 层级封顶到"每格 1 纹素"（16 纹素 = level 4）：再远就会跨到图集里邻居贴图上，
+  // 而那一档的方块已经不足一个像素、早就被雾吃掉。等比缩放不破坏各向异性的长宽比。
+  float rho = max(
+    max(abs(gradX.x * uAtlasSize.x), abs(gradX.y * uAtlasSize.y)),
+    max(abs(gradY.x * uAtlasSize.x), abs(gradY.y * uAtlasSize.y))
+  );
+  float tileTexels = uTileSpan.x * uAtlasSize.x;
+  float lodCap = min(1.0, tileTexels / max(rho, 0.0001));
+  vec4 texel = textureGrad(uAtlas, tileUv, gradX * lodCap, gradY * lodCap);
   if (texel.a < uAlphaTest) discard;
 
-  float level = max(vLight.x * uSkyBrightness, vLight.y);
-  float curve = level / (4.0 - 3.0 * level);
-  float brightness = max(curve * vShade, uMinBrightness);
+  // 两条光各走一次原版曲线（level / (4 - 3·level)），亮度取较大者：
+  // 洞里只有块光、白天只有天光；交界处按曲线强度加权算颜色，不会硬切换。
+  float skyLevel = vLight.x * uSkyBrightness;
+  float blkLevel = vLight.y;
+  float skyCurve = skyLevel / (4.0 - 3.0 * skyLevel);
+  float blkCurve = blkLevel / (4.0 - 3.0 * blkLevel);
+  // 那 0.0001 的权重挂在**天光**上：两条光都是 0 时（全黑处）颜色不至于变成 0/0；
+  // 亮度另由 uMinBrightness 兜底。
+  vec3 lightColor =
+    (uSkyLightColor * (skyCurve + 0.0001) + uBlockLightColor * blkCurve) /
+    max(skyCurve + blkCurve + 0.0001, 0.0001);
+  float brightness = max(max(skyCurve, blkCurve) * vShade, uMinBrightness);
 
-  vec3 color = texel.rgb * brightness;
+  vec3 color = texel.rgb * brightness * lightColor;
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDepth);
   color = mix(color, uFogColor, fogFactor);
 
@@ -148,6 +189,12 @@ export class VoxelMaterial {
     const fluidTiles: THREE.Vector2[] = [];
     for (let i = 0; i < FLUID_TILE_SLOTS; i++) fluidTiles.push(new THREE.Vector2(-1, -1));
 
+    // 图集像素尺寸：只用来把"一像素跨几个纹素"换算成 mip 层级。
+    // `new THREE.Texture()`（离线测试里就这么传）没有 image，退回 1×1 —— 那只影响
+    // LOD 的封顶值，而测试不编译/不执行 GLSL，所以无所谓。
+    const image = atlas.image as { width?: number; height?: number } | null | undefined;
+    const atlasSize = new THREE.Vector2(image?.width ?? 1, image?.height ?? 1);
+
     this.uniforms = {
       uAtlas: { value: atlas },
       uTime: { value: 0 },
@@ -162,6 +209,10 @@ export class VoxelMaterial {
       uAlphaTest: { value: translucent ? 0 : 0.5 },
       uTileSpan: { value: new THREE.Vector2(span[0], span[1]) },
       uTileInset: { value: options.tileInset ?? 0 },
+      uAtlasSize: { value: atlasSize },
+      // 默认纯白：与"只有亮度"的旧行为完全一致，由主程序按昼夜去推色温
+      uSkyLightColor: { value: new THREE.Color(1, 1, 1) },
+      uBlockLightColor: { value: new THREE.Color(1, 1, 1) },
     };
 
     this.defaultMinBrightness = translucent ? 0.32 : 0.06;
@@ -235,6 +286,17 @@ export class VoxelMaterial {
     this.uniforms.uTime!.value = seconds;
   }
 
+  /**
+   * 天光 / 块光的颜色（批次 237）。
+   *
+   * 只改 uniform，**不重建任何网格**——这正是当初把光照烘焙进顶点时要的收益：
+   * 昼夜、黄昏、火把的"色温"每帧都能推，而几何一个字节都不用动。
+   */
+  setLightColors(sky: THREE.Color, block: THREE.Color): void {
+    (this.uniforms.uSkyLightColor!.value as THREE.Color).copy(sky);
+    (this.uniforms.uBlockLightColor!.value as THREE.Color).copy(block);
+  }
+
   /** 0 = 深夜，1 = 正午。用于昼夜循环 */
   set skyBrightness(value: number) {
     this.uniforms.uSkyBrightness!.value = value;
@@ -245,7 +307,9 @@ export class VoxelMaterial {
   }
 
   setFog(color: THREE.ColorRepresentation, near: number, far: number): void {
-    this.uniforms.uFogColor!.value = new THREE.Color(color);
+    // ⚠️ 不要每帧 `new THREE.Color(...)`：这个方法每帧都会被两套材质各调一次，
+    // 而 `Color.set` 写进的是同一个 uniform 对象（批次 237 顺手省掉的两次分配）。
+    (this.uniforms.uFogColor!.value as THREE.Color).set(color);
     this.uniforms.uFogNear!.value = near;
     this.uniforms.uFogFar!.value = far;
   }

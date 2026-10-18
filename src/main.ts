@@ -593,10 +593,14 @@ import { STARTUP_PHASES, startupTrace } from './game/startupTrace.ts';
 import { diag } from './game/diagnosticsRuntime.ts';
 // 天空调色板与缓动（只被下面的"环境"一段用）
 import {
+  BLOCK_LIGHT,
   DAY_SKY,
   FLASH_SKY,
+  NIGHT_LIGHT,
   NIGHT_SKY,
   OVERCAST_SKY,
+  SUNSET_HORIZON,
+  SUNSET_LIGHT,
   WHITE_SKY,
   smoothstep,
 } from './render/SkyPalette.ts';
@@ -809,6 +813,11 @@ class App {
   private netherStructureWorld: FortressWorld | null = null;
   private readonly domeTop = new THREE.Color();
   private readonly domeHorizon = new THREE.Color();
+  /**
+   * 天光色（批次 237）：正午纯白 → 夜里偏冷 → 日出日落偏暖。
+   * 只有颜色、没有亮度——亮度那条线仍然走 `skyBrightness`（烘焙在顶点里的光照需要它）。
+   */
+  private readonly skyLightColor = new THREE.Color(1, 1, 1);
   /** 玩家所在地表是否为寒冷群系（决定下雪还是下雨），每秒复查一次 */
   private snowyHere = false;
   private snowCheckTimer = 0;
@@ -2550,6 +2559,10 @@ class App {
       this.syncRenderBrightness(NETHER_SKY_BRIGHTNESS);
       this.solidMaterial.setFog(NETHER_FOG, NETHER_FOG_NEAR, NETHER_FOG_FAR);
       this.translucentMaterial.setFog(NETHER_FOG, NETHER_FOG_NEAR, NETHER_FOG_FAR);
+      // 下界没有天光（skylight 恒 0）：只有块光，直接给暖橙
+      this.skyLightColor.setRGB(1, 1, 1);
+      this.solidMaterial.setLightColors(this.skyLightColor, BLOCK_LIGHT);
+      this.translucentMaterial.setLightColors(this.skyLightColor, BLOCK_LIGHT);
       this.solidMaterial.setMinBrightness(NETHER_MIN_BRIGHTNESS);
       this.translucentMaterial.setMinBrightness(NETHER_MIN_BRIGHTNESS);
       this.weather.object.visible = false;
@@ -2567,6 +2580,10 @@ class App {
       this.syncRenderBrightness(END_SKY_BRIGHTNESS);
       this.solidMaterial.setFog(END_FOG, END_FOG_NEAR, END_FOG_FAR);
       this.translucentMaterial.setFog(END_FOG, END_FOG_NEAR, END_FOG_FAR);
+      // 末地没有昼夜：给一点冷白，保住原版那种发青的观感
+      this.skyLightColor.setRGB(0.88, 0.94, 1);
+      this.solidMaterial.setLightColors(this.skyLightColor, WHITE_SKY);
+      this.translucentMaterial.setLightColors(this.skyLightColor, WHITE_SKY);
       this.solidMaterial.setMinBrightness(END_MIN_BRIGHTNESS);
       this.translucentMaterial.setMinBrightness(END_MIN_BRIGHTNESS);
       this.weather.object.visible = false;
@@ -2610,11 +2627,22 @@ class App {
     this.syncRenderBrightness(effectiveSky);
 
     // 穹顶：顶部略深、地平线略亮；日出日落时给太阳附近加霞光
+    const sunGlow = Math.max(0, 1 - Math.abs(sunHeight) * 3.2) * (1 - overcast) * 0.9;
     this.domeTop.copy(this.skyColor).multiplyScalar(0.86);
-    this.domeHorizon.copy(this.skyColor).lerp(WHITE_SKY, 0.32);
+    // 地平线辉光必须跟着昼夜收放。写死 0.32 时**午夜的地平线是灰的**
+    // （NIGHT_SKY 混 32% 白 ≈ rgb(82,82,84)，半夜天边挂一条灰带）；日出日落再叠一层暖色。
+    this.domeHorizon.copy(this.skyColor).lerp(WHITE_SKY, 0.06 + 0.26 * daylight);
+    this.domeHorizon.lerp(SUNSET_HORIZON, sunGlow * 0.5);
     this.sky.setDomeColors(this.domeTop, this.domeHorizon);
-    this.sky.setSunGlow(Math.max(0, 1 - Math.abs(sunHeight) * 3.2) * (1 - overcast) * 0.9);
+    this.sky.setSunGlow(sunGlow);
     this.sky.setCloudAppearance(daylight, overcast);
+
+    // 光照色温（批次 237）：亮度仍走 `skyBrightness`，这里只给"白光"上色。
+    // 正午纯白、夜里偏冷月光、日出日落偏暖；块光恒定为暖橙（火把 / 岩浆 / 荧石）。
+    this.skyLightColor.setRGB(1, 1, 1).lerp(NIGHT_LIGHT, (1 - daylight) * 0.85);
+    if (sunGlow > 0) this.skyLightColor.lerp(SUNSET_LIGHT, sunGlow * 0.35);
+    this.solidMaterial.setLightColors(this.skyLightColor, BLOCK_LIGHT);
+    this.translucentMaterial.setLightColors(this.skyLightColor, BLOCK_LIGHT);
 
     // 雾不再直接等于视距，而是**滞后于**它（见 `updateFogRadius`）：
     // 雾推过去之前，那一圈的区块早就画好了，于是新地形是"从雾里浮出来"，
@@ -2622,8 +2650,11 @@ class App {
     this.updateFogRadius(dt);
     const fogFar = this.fogRadius * 16 * (1 - overcast * 0.45);
     const fogNear = fogFar * 0.72;
-    this.solidMaterial.setFog(this.skyColor, fogNear, fogFar);
-    this.translucentMaterial.setFog(this.skyColor, fogNear, fogFar);
+    // ⚠️ 雾色必须是**地平线色**，不是天顶色：地形消失的地方正对着地平线，
+    // 用更蓝更暗的天顶色会在天地交界处留一条肉眼可见的色带——"远景化进天空"
+    // 的空气透视就是被这一条毁掉的（批次 237）。
+    this.solidMaterial.setFog(this.domeHorizon, fogNear, fogFar);
+    this.translucentMaterial.setFog(this.domeHorizon, fogNear, fogFar);
   }
 
   /**

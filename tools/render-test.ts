@@ -425,6 +425,43 @@ console.log('\n[半透明层单/双面（批次 215）]');
   solid.material.dispose();
 }
 
+// ---------------------------------------------------------------- 2.11 色温与 mip（批次 237）
+
+console.log('\n[光照色温 / mip 层级（批次 237）]');
+{
+  // 带 image 的纹理：`uAtlasSize` 是从 texture.image 读的（算 mip 层级要用）
+  const texture = new THREE.Texture();
+  (texture as unknown as { image: { width: number; height: number } }).image = { width: 256, height: 1008 };
+  const material = new VoxelMaterial(texture);
+
+  const size = material.material.uniforms.uAtlasSize!.value as THREE.Vector2;
+  check('图集像素尺寸进了 uniform', size.x === 256 && size.y === 1008, `${size.x}×${size.y}`);
+
+  const sky = new THREE.Color(0.8, 0.9, 1);
+  const block = new THREE.Color(1, 0.85, 0.65);
+  material.setLightColors(sky, block);
+  const skyUniform = material.material.uniforms.uSkyLightColor!.value as THREE.Color;
+  const blockUniform = material.material.uniforms.uBlockLightColor!.value as THREE.Color;
+  check('天光色写进 uniform', skyUniform.equals(sky));
+  check('块光色写进 uniform', blockUniform.equals(block));
+  check('写的是 copy：uniform 不持有调用方的 Color 对象', skyUniform !== sky && skyUniform.equals(sky));
+
+  // 雾色每帧都设：必须是 set 到同一个 Color 上，不能每帧 new（批次 237 顺手省掉的分配）
+  const fogBefore = material.material.uniforms.uFogColor!.value as THREE.Color;
+  material.setFog(0x123456, 10, 20);
+  check('雾色写回同一个 Color 对象', material.material.uniforms.uFogColor!.value === fogBefore);
+  equal('雾近端跟着写', material.material.uniforms.uFogNear!.value, 10);
+  equal('雾远端跟着写', material.material.uniforms.uFogFar!.value, 20);
+
+  // 着色器结构守卫：这两条是本批次的核心，改回去就会重新出现"远处发碎 / 火把是灰的"
+  const frag = material.material.fragmentShader;
+  check('用 textureGrad 显式给 mip 梯度（fract 会毁掉隐式求导）', frag.includes('textureGrad('));
+  check('片元里同时用到天光色与块光色', frag.includes('uSkyLightColor *') && frag.includes('uBlockLightColor *'));
+  check('没有退回"只乘标量亮度"的旧写法', !frag.includes('texel.rgb * brightness;'));
+
+  material.material.dispose();
+}
+
 // ---------------------------------------------------------------- 3. 视野效果
 
 console.log('\n[视野效果：预设 / 过渡 / 帧率无关]');

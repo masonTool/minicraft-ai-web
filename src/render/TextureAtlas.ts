@@ -67,11 +67,25 @@ function noisy(base: number, spread: number, tint: [number, number, number] = [1
 }
 
 /**
+ * 低频簇的"色相偏移"强度（批次 237）。
+ *
+ * 原版 16×16 的草地里同时有偏黄的、偏蓝的像素（同一块地里有好几种绿），
+ * 而纯 `base × tint` 只能沿一条直线做明暗 —— 近看就是"单色塑料上刷了噪点"。
+ * 这里让**亮簇偏暖、暗簇偏冷**，幅度按 tint 自身的彩度缩放：
+ * 石头 / 铁块（灰）彩度为 0，一点都不会被染花；草 / 土 / 沙 / 叶则多出一层自然色差。
+ */
+const CLUSTER_HUE = 0.14;
+
+/**
  * 双尺度噪声：4×4 的粗粒起伏 + 逐像素的细粒噪点。
  * 单用 2×2 聚簇会在草地上形成明显的棋盘格，双尺度叠加才接近原版观感。
+ *
+ * 批次 237 起，粗粒那一层**同时驱动色相**：亮簇偏黄、暗簇偏蓝（见 `CLUSTER_HUE`）。
  */
 function layered(base: number, coarse: number, fine: number, tint: [number, number, number] = [1, 1, 1]): Painter {
   const coarseCache = new Map<number, number>();
+  // 彩度只由 tint 决定，逐像素再算一次是白费
+  const chroma = Math.max(tint[0], tint[1], tint[2]) - Math.min(tint[0], tint[1], tint[2]);
   return (x, y, rng) => {
     const key = (y >> 2) * 4 + (x >> 2);
     let c = coarseCache.get(key);
@@ -79,8 +93,16 @@ function layered(base: number, coarse: number, fine: number, tint: [number, numb
       c = rng();
       coarseCache.set(key, c);
     }
-    const v = base + (c * 2 - 1) * coarse + (rng() * 2 - 1) * fine;
-    return [clamp255(v * tint[0]), clamp255(v * tint[1]), clamp255(v * tint[2]), 255];
+    const cluster = c * 2 - 1;
+    const v = base + cluster * coarse + (rng() * 2 - 1) * fine;
+    // 暖 / 冷：红与蓝反向偏，绿只跟一点点（不然会从"黄绿↔青绿"滑到"橙↔紫"）
+    const warm = cluster * CLUSTER_HUE * chroma;
+    return [
+      clamp255(v * tint[0] * (1 + warm)),
+      clamp255(v * tint[1] * (1 + warm * 0.15)),
+      clamp255(v * tint[2] * (1 - warm * 0.9)),
+      255,
+    ];
   };
 }
 
@@ -357,12 +379,25 @@ function planksPainter(base: readonly [number, number, number]): Painter {
   };
 }
 
-/** 树叶：颗粒 + 少量镂空（alphaTest 会把这些洞裁掉） */
+/**
+ * 树叶：颗粒 + 少量镂空（alphaTest 会把这些洞裁掉）
+ *
+ * 批次 237：在逐像素颗粒之下再压一层 **4×4 一簇** 的色相起伏（亮簇偏黄绿、暗簇偏青绿）。
+ * 原版树冠远看"一片叶子里有好几种绿"就是这一层；纯逐像素抖动退到几格以外就糊成一个绿团。
+ */
 function leavesPainter(base: readonly [number, number, number], alpha = 255): Painter {
   return (x, y, rng) => {
-    const v = 1 + (rng() * 0.34 - 0.17);
+    // 与 `layered` 同一个簇尺度（4×4）；5 档足够把"黄绿/正绿/青绿"分开
+    const cluster = (hashString(`leafc${x >> 2},${y >> 2}`) % 5) / 4;
+    const v = 1 + (cluster - 0.5) * 0.24 + (rng() * 0.34 - 0.17);
+    const warm = (cluster - 0.5) * 0.34;
     const hole = hashString(`leaf${x},${y}`) % 11 === 0;
-    return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), hole ? 150 : alpha];
+    return [
+      clamp255(base[0] * v * (1 + warm * 0.55)),
+      clamp255(base[1] * v * (1 + warm * 0.15)),
+      clamp255(base[2] * v * (1 - warm * 0.45)),
+      hole ? 150 : alpha,
+    ];
   };
 }
 
@@ -5564,8 +5599,15 @@ export class TextureAtlas {
     // 整片地面变成带边框网格的亮黄色。关掉 flipY 才能让 v=0 真正对应画布顶部。
     texture.flipY = false;
     texture.magFilter = THREE.NearestFilter;
-    texture.minFilter = THREE.NearestFilter;
-    texture.generateMipmaps = false;
+    // 缩小方向走 mipmap（批次 237）：这是"远处干净、走动时不闪"的来源。
+    // 放大方向仍然是 Nearest —— 近处方块的像素风不能糊。
+    //
+    // 图集高度永远是 16 的倍数（`TILE_SIZE * rows`），所以 0~4 级的每张 tile
+    // 都还是整数像素（16→8→4→2→1），盒式降采样**不会跨 tile 混色**；
+    // 更高层级在着色器里被 LOD 封顶挡住（见 `VoxelMaterial` 的 `textureGrad`）。
+    // 内存代价：整条 mip 链只多 1/3（256×1008 ≈ 1.0MB → 1.34MB）。
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.generateMipmaps = true;
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
     // ⚠️ 必须是 NoColorSpace（按原始数据采样），不能标成 SRGBColorSpace。
