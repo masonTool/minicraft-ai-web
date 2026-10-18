@@ -31,6 +31,16 @@ export interface GameRules {
   naturalRegeneration: boolean;
   /** 每区块每 tick 的随机刻数量（原版默认 3，0 = 关闭随机刻） */
   randomTickSpeed: number;
+  /** 生物死亡是否掉东西（批次 255） */
+  doMobLoot: boolean;
+  /** 玩家挖方块是否掉东西（批次 255；创造模式本来就不掉） */
+  doTileDrops: boolean;
+  /** 天气是否自然变化（批次 255；关掉后一直保持当前天气） */
+  doWeatherCycle: boolean;
+  /** 失眠是否招来幻翼（批次 255） */
+  doInsomnia: boolean;
+  /** 死亡后是否跳过死亡界面立即重生（批次 255） */
+  doImmediateRespawn: boolean;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -40,6 +50,11 @@ export const DEFAULT_GAME_RULES: GameRules = {
   doDaylightCycle: true,
   naturalRegeneration: true,
   randomTickSpeed: 3,
+  doMobLoot: true,
+  doTileDrops: true,
+  doWeatherCycle: true,
+  doInsomnia: true,
+  doImmediateRespawn: false,
 };
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */

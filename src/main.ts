@@ -5497,7 +5497,8 @@ class App {
 
     // 创造模式不产生掉落（与原版一致）
     // G4：还需要"手上工具够格"——石镐挖不动钻石矿（挖得动但一无所获）
-    if (!this.isCreative && canHarvest(brokenId, tool)) {
+    // `doTileDrops`（批次 255）：关掉之后挖什么都是"凭空消失"，方便做跑酷/建筑展示
+    if (!this.isCreative && this.rules.doTileDrops && canHarvest(brokenId, tool)) {
       const enchants = this.heldEnchants;
       // 七件事的先后顺序（精准采集 / 剪刀 / 替换 / 常规 / 额外 / 双层台阶 / 时运）
       // 整体收在 `items.blockDrops` 里，那里写了注释，也才能离线断言
@@ -7076,6 +7077,8 @@ class App {
    */
   private updateInsomnia(dt: number): void {
     if (this.dimension !== Dimension.OVERWORLD) return;
+    // 失眠规则（批次 255）：关掉之后连着几夜不睡也不会招来幻翼
+    if (!this.rules.doInsomnia) return;
     if (!phantomNightIsComing(this.daysWithoutSleep, isNight(this.timeOfDay), this.phantomSpawnedTonight)) {
       return;
     }
@@ -7465,7 +7468,9 @@ class App {
       explode: (x, y, z, power) => this.explodeAt(x, y, z, power),
       // 烟花（批次 192）：不炸地形，只冒粒子 + 伤生物
       burstFirework: (x, y, z, colors, power, damage) => this.burstFirework(x, y, z, colors, power, damage),
-      spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),
+      // `doMobLoot`（批次 255）：生物掉落统一走这个回调，堵在这里就等于"全部不掉"
+      spawnDrop: (itemId, count, x, y, z) =>
+        this.rules.doMobLoot ? this.spawnDrop(itemId, count, x, y, z) : undefined,
       // 骷髅射箭与玩家走完全同一条路径，两边不会各自漂移
       // 骷髅射箭走与玩家完全同一条路径，两边不会各自漂移
       spawnArrow: (x, y, z, velocity, options) => {
@@ -10585,7 +10590,8 @@ class App {
       }
       this.deathEl.classList.remove('hidden');
       this.respawnCountdown += dt;
-      if (this.respawnCountdown >= RESPAWN_DELAY) this.respawnPlayer();
+      // 立即重生（批次 255）：跳过那 1 秒等待，直接回出生点
+      if (this.rules.doImmediateRespawn || this.respawnCountdown >= RESPAWN_DELAY) this.respawnPlayer();
     } else {
       if (this.respawnCountdown !== 0) this.respawnCountdown = 0;
       this.deathEl.classList.add('hidden');
@@ -11685,7 +11691,8 @@ class App {
         // 天气是**自己会变**的（晴天 8~16 分钟后可能转雨，见 `WeatherState.ts`），
         // 所以每帧记一下变化前的种类，播报由同一个入口出（批次 221）
         const weatherBefore = this.weather.current;
-        this.weather.update(dt, this.camera.position, this.snowyHere);
+        // 天气周期（批次 255）：关掉之后就一直保持当前天气（下雨也不停、不会自己放晴）
+        if (this.rules.doWeatherCycle) this.weather.update(dt, this.camera.position, this.snowyHere);
         this.announceWeather(weatherBefore);
         this.sky.update(this.timeOfDay, this.camera.position, dt);
       }

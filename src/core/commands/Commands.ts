@@ -304,7 +304,10 @@ export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'gamerule',
     usage: '/gamerule <规则> [值]',
-    description: '查看或修改游戏规则（keepInventory / doMobSpawning / mobGriefing / doDaylightCycle / naturalRegeneration / randomTickSpeed）',
+    description:
+      '查看或修改游戏规则（keepInventory / doMobSpawning / mobGriefing / doDaylightCycle / ' +
+      'naturalRegeneration / randomTickSpeed / doMobLoot / doTileDrops / doWeatherCycle / ' +
+      'doInsomnia / doImmediateRespawn）',
     run(args, ctx, out) {
       const rules = ctx.gameRules();
       const key = args[0] as keyof GameRules | undefined;
