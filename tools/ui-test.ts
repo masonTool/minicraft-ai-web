@@ -3243,5 +3243,32 @@ console.log('\n[三叉戟：穿刺 / 激流（批次 267）]');
   );
 }
 
+console.log('\n[投掷三叉戟 + 忠诚（批次 268）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const loyaltyAt = enchantSrc.indexOf("id: 'loyalty'");
+  check(
+    '忠诚标了 implemented',
+    loyaltyAt >= 0 && enchantSrc.slice(loyaltyAt, loyaltyAt + 160).includes('implemented: true'),
+  );
+  check(
+    '投掷复用 Arrow：换 itemId、伤害 8、可拾取',
+    appSrc.includes('{ fromPlayer: true, damage: 8, pickable: true, itemId: Item.TRIDENT }') &&
+      appSrc.includes('private throwTrident(): boolean'),
+  );
+  check(
+    '激流优先于投掷（水里/雨中带激流时右键是冲刺）',
+    appSrc.includes("enchantLevel(this.heldEnchants, 'riptide') > 0") &&
+      appSrc.includes('(this.physics.inWater || this.weather.raining)'),
+  );
+  check(
+    '忠诚：插住 0.3 秒后飞回，距离 < 1 格进背包',
+    appSrc.includes('private updateThrownTridents(dt: number): void') &&
+      appSrc.includes('entry.backTimer < 0.3') &&
+      appSrc.includes('this.inventory.add(Item.TRIDENT, 1);'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
