@@ -25,7 +25,7 @@ import {
   type CameraMode,
 } from '../src/core/viewMode.ts';
 import { DEFAULT_SETTINGS, loadSettings } from '../src/ui/SettingsScreen.ts';
-import { PlayerRenderer } from '../src/render/PlayerRenderer.ts';
+import { PlayerRenderer, shadeHex } from '../src/render/PlayerRenderer.ts';
 
 let passed = 0;
 let failed = 0;
@@ -217,6 +217,31 @@ console.log('\n[玩家模型]');
   // 火把旁（方块光 14）在没有天光的洞里也要亮起来
   model.update({ ...pose, flying: false }, () => ({ sky: 0, block: 14 }));
   check('洞里站在火把旁会被点亮（方块光生效）', skin.color.r > 0.5, `r=${skin.color.r.toFixed(3)}`);
+
+  // 批次 241（用户："组成人物的方块可以更加精细"）：从"几根方棍"拆成更多零件
+  let meshCount = 0;
+  const shades = new Set<number>();
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    meshCount++;
+    shades.add(model.shadeOf(mesh));
+  });
+  check('模型由 ≥ 30 块零件组成（原来 15 块）', meshCount >= 30, `实际 ${meshCount}`);
+  check(
+    '头部细节 ≥ 12 块（头 / 头发四片 / 耳 / 眉 / 眼 / 鼻 / 嘴）',
+    head!.children.length >= 12,
+    `实际 ${head!.children.length}`,
+  );
+  check(
+    '同一部位有明暗分档（正色 + 压暗 + 提亮都在）',
+    shades.has(1) && shades.has(0.85) && shades.has(1.06),
+    [...shades].join(','),
+  );
+  check('头本体是正色（外观换颜色的样本块）', model.shadeOf(head!.children[0] as THREE.Mesh) === 1);
+  check('shadeHex 压暗一半', shadeHex(0x808080, 0.5) === 0x404040);
+  check('shadeHex 提亮 1.06（四舍五入）', shadeHex(0x808080, 1.06) === 0x888888);
+  check('shadeHex 提亮封顶 255（不会溢出成别的颜色）', shadeHex(0xffffff, 1.5) === 0xffffff);
 
   model.dispose();
   check('dispose 后从场景移除', !scene.children.includes(root));

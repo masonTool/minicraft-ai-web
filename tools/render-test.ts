@@ -258,6 +258,20 @@ console.log('\n[粒子系统：生成 / 重力 / 淘汰 / 上限]');
     JSON.stringify(mixed.byKind),
   );
 
+  // 批次 241：挖掘碎屑必须从**命中面**往外溅——旧版从格心撒，整簇闷在不透明方块里看不见
+  particles.clear();
+  particles.spawnDigging(10.5, 65, 3.5, 0x888888, 0, 1, 0, 3);
+  {
+    const snapshot = particles.debugSnapshot();
+    let minY = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < snapshot.count; i++) minY = Math.min(minY, snapshot.positions[i * 3 + 1]!);
+    check(
+      '挖掘碎屑全部生成在方块顶面之外（不再闷在方块里）',
+      snapshot.byKind.digging === 3 && minY > 65,
+      `最低 y=${minY.toFixed(3)}`,
+    );
+  }
+
   particles.update(0.016);
   const points = particles.object.children[0] as THREE.Points;
   check(
@@ -535,16 +549,28 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
   check('空手时也画手臂（手臂恒在）', group.children.length >= 1);
 
   // 方块走立方体（24 个顶点）、非方块走平面（4 个顶点）
-  const blockMesh = (group.children[1] as THREE.Group).children[0] as THREE.Mesh;
+  // ⚠️ 挂点下标是 2：批次 241 在手臂后面插了一块布袖（`arm → cuff → itemAnchor → 袖套`）
+  const blockMesh = (group.children[2] as THREE.Group).children[0] as THREE.Mesh;
   check('手持方块用立方体几何体', blockMesh.geometry.getAttribute('position').count === 24, String(blockMesh.geometry.getAttribute('position').count));
   check('方块六个面都写了 UV', blockMesh.geometry.getAttribute('uv').count === 24);
 
   hand.setItem(Item.STICK);
-  const stickMesh = (group.children[1] as THREE.Group).children[0] as THREE.Mesh;
+  const stickMesh = (group.children[2] as THREE.Group).children[0] as THREE.Mesh;
   check('手持物品换成平面贴图', stickMesh.geometry.getAttribute('position').count === 4, String(stickMesh.geometry.getAttribute('position').count));
 
   hand.setItem(undefined);
-  check('切回空手会移除手上的东西', (group.children[1] as THREE.Group).children.length === 0);
+  check('切回空手会移除手上的东西', (group.children[2] as THREE.Group).children.length === 0);
+
+  // 批次 241：手臂根部多一段布袖；第一人称的肤色/上衣色要跟着外观走
+  const cuff = group.children[1] as THREE.Mesh;
+  check('手臂根部有布袖（也画了逐面明暗）', cuff.isMesh && cuff.geometry.getAttribute('position').count === 24);
+  hand.setAppearance({ skin: 0xff0000, shirt: 0x0000ff, pants: 0x000000 });
+  const armMaterialNow = (group.children[0] as THREE.Mesh).material as THREE.ShaderMaterial;
+  const cuffMaterialNow = cuff.material as THREE.ShaderMaterial;
+  const skinColor = armMaterialNow.uniforms.uFlatColor!.value as THREE.Color;
+  const shirtColor = cuffMaterialNow.uniforms.uFlatColor!.value as THREE.Color;
+  check('第一人称手臂跟随肤色设置', skinColor.r === 1 && skinColor.g === 0 && skinColor.b === 0);
+  check('布袖跟随上衣色设置', shirtColor.b === 1 && shirtColor.r === 0 && shirtColor.g === 0);
 
   hand.setBrightness(0.42);
   const armMaterial = (group.children[0] as THREE.Mesh).material as THREE.ShaderMaterial;
@@ -637,7 +663,8 @@ console.log('\n[盔甲：第一人称袖套]');
 {
   const hand = new HandRenderer(stubAtlas);
   const group = hand.scene.children[0] as THREE.Group;
-  const sleeve = group.children[2] as THREE.Mesh;
+  // 下标 3：批次 241 之后是「手臂 → 布袖 → 手持物挂点 → 盔甲袖套」
+  const sleeve = group.children[3] as THREE.Mesh;
   const sleeveMaterial = sleeve.material as THREE.ShaderMaterial;
 
   check('初始不显示袖套（没穿胸甲）', !sleeve.visible);

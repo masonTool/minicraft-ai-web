@@ -6,6 +6,11 @@
  * 躯干、双臂、双腿，比例按原版玩家模型（腿 0.75 + 身 0.75 + 头 0.5 ≈ 2.0 格，
  * 眼高 1.62 与物理的 `eyeY` 对得上）。
  *
+ * 批次 241（用户："组成人物的方块可以更加精细"）：每个部位再拆细——腿是
+ * 大腿/小腿/膝缝/鞋/鞋沿，躯干是胸/收腰/腰带/领口，手臂是肩头/上臂/前臂/手，
+ * 头加了鬓角/刘海/耳朵/眉/鼻；同一部位的零件再用 `meshShade` 压/提一档明暗，
+ * 靠"多一块、差一点色"做出体积（没有皮肤贴图，这是这套模型唯一能做细的办法）。
+ *
  * 与 `MobRenderer` 的两点不同：
  *  - **层级式挂点**：腿绕髋部转、手臂绕肩转、头绕脖子转，所以用 `Group` 当枢轴、
  *    网格挂在枢轴下方；生物是实例化渲染（没有层级），摆腿只能绕方块中心转。
@@ -36,6 +41,10 @@ const SHIRT = 0x00a8a8;
 const PANTS = 0x3b4bb5;
 const SHOES = 0x4a4a52;
 const EYE = 0x1b2a44;
+/** 头发的亮部（刘海）：同色系提一档，远看能分出"发际线" */
+const HAIR_HI = 0x3f2b1d;
+/** 鞋底那一圈（比鞋面深）：让脚不是一块方砖 */
+const SHOE_SOLE = 0x33333a;
 /** 披风（批次 185 外观）：暗红，与皮肤的暖色区分开 */
 const CAPE = 0x9b1b2f;
 /** 副手盾牌的木色（没有盾牌物品，先用一块板表示"副手拿着东西"） */
@@ -87,6 +96,13 @@ export class PlayerRenderer {
     shirt: [],
     pants: [],
   };
+  /**
+   * 每块网格的明暗系数（批次 241）。
+   *
+   * 同一部位拆成多块之后，如果全是同一个颜色，看起来仍是一整块；用 0.85 / 1.0 / 1.06
+   * 这种轻微色差把"这是两个零件"做出来，比再建一套材质表便宜得多。
+   */
+  private readonly meshShade = new Map<THREE.Mesh, number>();
 
   /**
    * 盔甲：每个部位一份材质（同部位的几块甲片共用），材质颜色按装备的材质换。
@@ -106,33 +122,60 @@ export class PlayerRenderer {
     this.scene.add(this.object);
 
     // ---- 双腿：枢轴在髋（y = 0.78），网格挂在枢轴下方
+    // 批次 241（用户："组成人物的方块可以更加精细"）：一条腿从"一整根 0.25×0.72 的柱子"
+    // 拆成 大腿 → 小腿（略收 0.23）→ 膝缝 → 鞋 → 鞋沿。总高仍是 0.78，脚底仍落在 y=0，
+    // 所以物理与第三人称镜头不用改。
     this.legL = this.makePivot(0.125, 0.78, 0);
     this.legR = this.makePivot(-0.125, 0.78, 0);
-    this.addRoleBox(this.legL, 0.25, 0.72, 0.25, 0, -0.36, 0, PANTS, 'pants');
-    this.addRoleBox(this.legR, 0.25, 0.72, 0.25, 0, -0.36, 0, PANTS, 'pants');
-    this.addBox(this.legL, 0.26, 0.12, 0.28, 0, -0.72, -0.01, SHOES);
-    this.addBox(this.legR, 0.26, 0.12, 0.28, 0, -0.72, -0.01, SHOES);
+    for (const leg of [this.legL, this.legR]) {
+      this.addRoleBox(leg, 0.25, 0.4, 0.25, 0, -0.2, 0, PANTS, 'pants');
+      this.addRoleBox(leg, 0.23, 0.3, 0.23, 0, -0.55, 0, PANTS, 'pants', 0.9);
+      // 膝缝：比小腿宽一点点，正好卡在两段中间，远看是一条横向折线
+      this.addRoleBox(leg, 0.252, 0.035, 0.252, 0, -0.405, 0, PANTS, 'pants', 0.76);
+      this.addBox(leg, 0.26, 0.12, 0.3, 0, -0.72, -0.02, SHOES);
+      // 鞋沿：比鞋面宽/深 0.003，压在鞋帮上（不与底面共面，避免 z-fighting）
+      this.addBox(leg, 0.265, 0.025, 0.305, 0, -0.735, -0.02, SHOE_SOLE);
+    }
 
-    // ---- 躯干（0.78 ~ 1.46）
-    this.addRoleBox(this.object, 0.5, 0.68, 0.26, 0, 1.12, 0, SHIRT, 'shirt');
+    // ---- 躯干（0.78 ~ 1.46）：胸 + 收腰 + 腰带 + 领口
+    // 原来是一整块 0.5×0.68 的方柱；腰部收 0.04 之后，正面能看出"肩比腰宽"。
+    this.addRoleBox(this.object, 0.5, 0.36, 0.26, 0, 1.28, 0, SHIRT, 'shirt');
+    this.addRoleBox(this.object, 0.46, 0.34, 0.24, 0, 0.95, 0, SHIRT, 'shirt', 0.93);
+    this.addRoleBox(this.object, 0.47, 0.05, 0.25, 0, 0.8, 0, PANTS, 'pants', 0.72);
+    this.addRoleBox(this.object, 0.52, 0.05, 0.28, 0, 1.435, 0, SHIRT, 'shirt', 1.12);
 
-    // ---- 双臂：枢轴在肩（y = 1.44），袖子 + 手
+    // ---- 双臂：枢轴在肩（y = 1.44）
+    // 肩头 → 上臂（袖）→ 前臂（皮肤，略细）→ 手（略宽、提亮一档）。
+    // ⚠️ 循环里**第一个**皮肤块必须用正色（`skin[0]`）：外观验收脚本拿它当"肤色样本"。
     this.armL = this.makePivot(0.375, 1.44, 0);
     this.armR = this.makePivot(-0.375, 1.44, 0);
     for (const arm of [this.armL, this.armR]) {
-      this.addRoleBox(arm, 0.24, 0.46, 0.24, 0, -0.23, 0, SHIRT, 'shirt');
-      this.addRoleBox(arm, 0.22, 0.24, 0.22, 0, -0.58, 0, SKIN, 'skin');
+      this.addRoleBox(arm, 0.255, 0.1, 0.255, 0, -0.04, 0, SHIRT, 'shirt', 0.86);
+      this.addRoleBox(arm, 0.24, 0.3, 0.24, 0, -0.2, 0, SHIRT, 'shirt');
+      this.addRoleBox(arm, 0.22, 0.26, 0.22, 0, -0.47, 0, SKIN, 'skin');
+      this.addRoleBox(arm, 0.23, 0.14, 0.23, 0, -0.63, 0, SKIN, 'skin', 1.06);
     }
 
     // ---- 头：枢轴在脖子（y = 1.46）
+    // ⚠️ 第一块必须是**正色皮肤**（头本体）：离线测试把它当亮度/换色样本。
     this.head = this.makePivot(0, 1.46, 0);
     this.addRoleBox(this.head, 0.5, 0.5, 0.5, 0, 0.25, 0, SKIN, 'skin');
-    // 头发：顶盖 + 后脑（正面留出脸）
+    // 头发：顶盖 + 后脑 + 两侧鬓角 + 刘海（正面留出脸）
     this.addBox(this.head, 0.52, 0.13, 0.52, 0, 0.44, 0, HAIR);
     this.addBox(this.head, 0.52, 0.37, 0.11, 0, 0.28, 0.2, HAIR);
-    // 五官贴在 -Z 面（正脸朝 -Z）
+    // 鬓角：外沿 0.272（头盔内径是 0.28，不能被顶穿）
+    this.addBox(this.head, 0.044, 0.2, 0.44, 0.25, 0.38, 0.02, HAIR);
+    this.addBox(this.head, 0.044, 0.2, 0.44, -0.25, 0.38, 0.02, HAIR);
+    this.addBox(this.head, 0.52, 0.07, 0.08, 0, 0.465, -0.235, HAIR_HI);
+    // 耳朵：外沿 0.278（与鬓角错开 0.006，避免两个平面重合打架），戴上头盔正好被罩住
+    this.addRoleBox(this.head, 0.033, 0.11, 0.08, 0.2615, 0.24, 0.0, SKIN, 'skin', 0.9);
+    this.addRoleBox(this.head, 0.033, 0.11, 0.08, -0.2615, 0.24, 0.0, SKIN, 'skin', 0.9);
+    // 五官贴在 -Z 面（正脸朝 -Z）：眉 + 眼 + 鼻 + 嘴
+    this.addBox(this.head, 0.11, 0.02, 0.02, 0.13, 0.355, -0.255, HAIR);
+    this.addBox(this.head, 0.11, 0.02, 0.02, -0.13, 0.355, -0.255, HAIR);
     this.addBox(this.head, 0.1, 0.09, 0.02, 0.13, 0.3, -0.255, EYE);
     this.addBox(this.head, 0.1, 0.09, 0.02, -0.13, 0.3, -0.255, EYE);
+    this.addRoleBox(this.head, 0.08, 0.05, 0.06, 0, 0.255, -0.27, SKIN, 'skin', 0.85);
     this.addBox(this.head, 0.13, 0.03, 0.02, 0, 0.15, -0.255, EYE);
 
     this.buildArmor();
@@ -150,9 +193,21 @@ export class PlayerRenderer {
    * 只换材质引用，不动几何；材质按颜色共享，重复调用同一套配色不会新建对象。
    */
   setAppearance(palette: AppearancePalette): void {
-    for (const mesh of this.roleMeshes.skin) mesh.material = this.materialFor(palette.skin);
-    for (const mesh of this.roleMeshes.shirt) mesh.material = this.materialFor(palette.shirt);
-    for (const mesh of this.roleMeshes.pants) mesh.material = this.materialFor(palette.pants);
+    // 每块都乘上自己的明暗系数（批次 241）：同一部位拆细之后仍然"换一套衣服全跟着变"
+    for (const mesh of this.roleMeshes.skin) {
+      mesh.material = this.materialFor(shadeHex(palette.skin, this.meshShade.get(mesh) ?? 1));
+    }
+    for (const mesh of this.roleMeshes.shirt) {
+      mesh.material = this.materialFor(shadeHex(palette.shirt, this.meshShade.get(mesh) ?? 1));
+    }
+    for (const mesh of this.roleMeshes.pants) {
+      mesh.material = this.materialFor(shadeHex(palette.pants, this.meshShade.get(mesh) ?? 1));
+    }
+  }
+
+  /** 验收脚本用：这块网格在所属部位里的明暗系数（1 = 正色） */
+  shadeOf(mesh: THREE.Mesh): number {
+    return this.meshShade.get(mesh) ?? 1;
   }
 
   /** 外观：披风开/关（批次 185）。预览与第三人称共用同一个开关 */
@@ -275,9 +330,12 @@ export class PlayerRenderer {
     z: number,
     color: number,
     role: 'skin' | 'shirt' | 'pants',
+    /** 明暗系数（1 = 正色；出厂色只在没走 `setAppearance` 时起作用） */
+    shade = 1,
   ): THREE.Mesh {
     const mesh = this.addBox(parent, width, height, depth, x, y, z, color);
     this.roleMeshes[role].push(mesh);
+    this.meshShade.set(mesh, shade);
     return mesh;
   }
 
@@ -401,4 +459,19 @@ export class PlayerRenderer {
     for (const material of this.armorMaterials) material.dispose();
     this.geometry.dispose();
   }
+}
+
+/**
+ * 把一个颜色按比例压暗/提亮（分量夹在 0~255）。
+ *
+ * 只用于"同一个部位的不同零件"：不引入调色板档位，也不额外建材质表——
+ * 材质按颜色缓存，明暗档自然就落在 `materialFor` 里。
+ * 纯函数，离线测试可以直接钉住边界（压到 0 / 提到 255 不溢出）。
+ */
+export function shadeHex(color: number, factor: number): number {
+  const clamp = (value: number): number => Math.max(0, Math.min(255, Math.round(value)));
+  const r = clamp(((color >> 16) & 0xff) * factor);
+  const g = clamp(((color >> 8) & 0xff) * factor);
+  const b = clamp((color & 0xff) * factor);
+  return (r << 16) | (g << 8) | b;
 }

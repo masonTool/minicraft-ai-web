@@ -232,9 +232,41 @@ export class ParticleSystem {
     this.burst('block', x, y, z, color, count, 0.22, 3.2);
   }
 
-  /** 挖掘途中的零星碎屑 */
-  spawnDigging(x: number, y: number, z: number, color: number): void {
-    this.burst('digging', x, y, z, color, 2, 0.12, 1.4);
+  /**
+   * 挖掘途中的零星碎屑（批次 241：从**命中面**往外溅）。
+   *
+   * ⚠️ 这里踩过一个"效果写了但看不见"的坑：以前调用方传的是**方块中心**、
+   * 抖动半径只有 0.12，碎屑整个生成在不透明方块内部，被方块自己的深度挡掉——
+   * 挖半天一颗都看不到（用户："长按打破方块时需要有碎屑效果"）。
+   *
+   * @param x,y,z 命中点（方块**表面**，取 `RayHit.hitX/Y/Z`）
+   * @param nx,ny,nz 命中面法线（指向方块外侧）；碎屑沿它往外蹦
+   * @param count 数量（默认 2，与旧版一致；实际游戏里给 3）
+   */
+  spawnDigging(
+    x: number,
+    y: number,
+    z: number,
+    color: number,
+    nx = 0,
+    ny = 1,
+    nz = 0,
+    count = 2,
+  ): void {
+    // 沿法线先离开表面 0.12 格，再在 0.1 半径内抖：保证每一颗都落在方块外面
+    const offset = 0.12;
+    this.burst(
+      'digging',
+      x + nx * offset,
+      y + ny * offset,
+      z + nz * offset,
+      color,
+      count,
+      0.1,
+      1.8,
+      // 初速度也朝外偏：贴着墙面挖时碎屑会"扑"出来，而不是顺着墙往下掉
+      [nx * 1.1, ny * 1.1 + 0.6, nz * 1.1],
+    );
   }
 
   /** 入水水花 */
@@ -309,7 +341,12 @@ export class ParticleSystem {
     this.burst('dust', x, y, z, 0xd03a22, count, 0.14, 1.2);
   }
 
-  /** 通用爆发：`spread` 是生成点的抖动半径，`speed` 是初速度上限 */
+  /**
+   * 通用爆发：`spread` 是生成点的抖动半径，`speed` 是初速度上限。
+   *
+   * @param bias 可选的**定向初速度**（批次 241）：挖掘碎屑沿命中面法线往外蹦时用；
+   *             其它 12 类粒子的默认 `[0,0,0]` 与旧行为完全一致。
+   */
   private burst(
     kind: ParticleKind,
     x: number,
@@ -319,6 +356,7 @@ export class ParticleSystem {
     count: number,
     spread: number,
     speed: number,
+    bias: readonly [number, number, number] = [0, 0, 0],
   ): void {
     // 密度只在这里生效：所有粒子都从 burst 走，调一处就够
     count = this.scaledCount(count);
@@ -336,14 +374,14 @@ export class ParticleSystem {
       const dx = (Math.random() * 2 - 1) * spread;
       const dy = (Math.random() * 2 - 1) * spread;
       const dz = (Math.random() * 2 - 1) * spread;
-      // 初速度：半球形散开，向上偏一点（落下来才自然）
+      // 初速度：半球形散开，向上偏一点（落下来才自然）；`bias` 再叠一个方向
       this.add(
         x + dx,
         y + dy,
         z + dz,
-        (Math.random() * 2 - 1) * speed,
-        Math.random() * speed * 0.9 + speed * 0.25,
-        (Math.random() * 2 - 1) * speed,
+        (Math.random() * 2 - 1) * speed + bias[0],
+        Math.random() * speed * 0.9 + speed * 0.25 + bias[1],
+        (Math.random() * 2 - 1) * speed + bias[2],
         randomBetween(params.life),
         randomBetween(params.size),
         cr,

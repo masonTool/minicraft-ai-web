@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import type { TextureAtlas } from './TextureAtlas.ts';
+import { SHIRT_COLORS, type AppearancePalette } from '../game/appearance.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from './atlasMesh.ts';
 import { srgbColor } from './srgb.ts';
@@ -28,6 +29,12 @@ const SKIN_COLOR = 0xdc9a6b;
  */
 const SLEEVE_LENGTH = ARM_LENGTH * 0.45;
 const SLEEVE_RADIUS = ARM_WIDTH * 1.3;
+/**
+ * 布袖（批次 241）：第一人称手臂靠近肩膀的一段用上衣色，手臂不再是"一整根肉色"。
+ * 比手臂粗 0.004，靠"套在外面"分层；穿胸甲时会被更长的盔甲袖套盖住。
+ */
+const CUFF_LENGTH = 0.22;
+const CUFF_RADIUS = ARM_WIDTH + 0.008;
 /** 挥动一次的时间（秒） */
 const SWING_DURATION = 0.26;
 /** 走路时的摆动频率（次/秒）与幅度 */
@@ -87,6 +94,8 @@ export class HandRenderer {
   private readonly group = new THREE.Group();
   /** 手臂（空手时也要画） */
   private readonly arm: THREE.Mesh;
+  /** 布袖（上衣色的一段，批次 241）：空手时也能看出"穿着衣服" */
+  private readonly cuff: THREE.Mesh;
   /** 胸甲袖套（穿着胸甲时才显示） */
   private readonly armorSleeve: THREE.Mesh;
   /** 手持物品的挂点（在手臂末端） */
@@ -94,6 +103,7 @@ export class HandRenderer {
 
   private readonly itemMaterial: THREE.ShaderMaterial;
   private readonly armMaterial: THREE.ShaderMaterial;
+  private readonly cuffMaterial: THREE.ShaderMaterial;
   private readonly sleeveMaterial: THREE.ShaderMaterial;
 
   private readonly blockGeometries = new Map<number, THREE.BufferGeometry>();
@@ -149,11 +159,30 @@ export class HandRenderer {
       fragmentShader: FRAGMENT_SHADER,
     });
 
+    // 布袖与手臂共用同一套着色器，颜色跟着外观的"上衣色"走
+    this.cuffMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uAtlas: { value: atlas.texture },
+        uFlatColor: { value: srgbColor(SHIRT_COLORS[0]) },
+        uUseAtlas: { value: 0 },
+        uBrightness: { value: 1 },
+        uAlphaTest: { value: 0 },
+      },
+      vertexShader: VERTEX_SHADER,
+      fragmentShader: FRAGMENT_SHADER,
+    });
+
     const armGeometry = new THREE.BoxGeometry(ARM_WIDTH, ARM_WIDTH, ARM_LENGTH);
     applyFaceShade(armGeometry, FACE_SHADE);
     this.arm = new THREE.Mesh(armGeometry, this.armMaterial);
     // 几何体中心在原点，往 -Z 推半截，让手臂从"手的根部"向外伸
     this.arm.position.set(0, 0, -ARM_LENGTH / 2);
+
+    const cuffGeometry = new THREE.BoxGeometry(CUFF_RADIUS, CUFF_RADIUS, CUFF_LENGTH);
+    applyFaceShade(cuffGeometry, FACE_SHADE);
+    this.cuff = new THREE.Mesh(cuffGeometry, this.cuffMaterial);
+    // 套在靠近肩膀的那一段（手臂从 z=0 往 -Z 伸）
+    this.cuff.position.set(0, 0, -CUFF_LENGTH / 2 + 0.01);
 
     const sleeveGeometry = new THREE.BoxGeometry(SLEEVE_RADIUS, SLEEVE_RADIUS, SLEEVE_LENGTH);
     applyFaceShade(sleeveGeometry, FACE_SHADE);
@@ -164,9 +193,9 @@ export class HandRenderer {
 
     this.itemAnchor.position.set(0, 0, -ARM_LENGTH - ITEM_SIZE * 0.36);
 
-    // 顺序固定为「手臂 → 手持物挂点 → 袖套」：挂点必须排在袖套前面，
+    // 顺序固定为「手臂 → 布袖 → 手持物挂点 → 袖套」：挂点必须排在袖套前面，
     // 否则袖套会挡住手上的东西（袖套比手臂粗一圈）
-    this.group.add(this.arm, this.itemAnchor, this.armorSleeve);
+    this.group.add(this.arm, this.cuff, this.itemAnchor, this.armorSleeve);
     this.group.position.set(...SHOULDER_POSITION);
     this.group.rotation.set(...SHOULDER_ROTATION);
     this.scene.add(this.group);
@@ -226,6 +255,17 @@ export class HandRenderer {
   }
 
   /**
+   * 外观（批次 241）：肤色 / 上衣色。
+   *
+   * 之前第一人称手臂用的是写死的 `SKIN_COLOR`——改完肤色再切回第一人称，手臂还是默认色，
+   * 观感像"换了一个人"。布袖同理，必须跟着上衣色走。
+   */
+  setAppearance(palette: AppearancePalette): void {
+    this.armMaterial.uniforms.uFlatColor!.value = srgbColor(palette.skin);
+    this.cuffMaterial.uniforms.uFlatColor!.value = srgbColor(palette.shirt);
+  }
+
+  /**
    * 胸甲袖套的颜色（`null` = 没穿胸甲，整块不画）。
    * 与第三人称的甲片同源：都由调用方从装备图标取色，渲染层不认识"材质"。
    */
@@ -245,6 +285,7 @@ export class HandRenderer {
   setBrightness(value: number): void {
     this.itemMaterial.uniforms.uBrightness!.value = value;
     this.armMaterial.uniforms.uBrightness!.value = value;
+    this.cuffMaterial.uniforms.uBrightness!.value = value;
     this.sleeveMaterial.uniforms.uBrightness!.value = value;
   }
 
@@ -317,9 +358,11 @@ export class HandRenderer {
     this.blockGeometries.clear();
     this.spriteGeometries.clear();
     this.arm.geometry.dispose();
+    this.cuff.geometry.dispose();
     this.armorSleeve.geometry.dispose();
     this.itemMaterial.dispose();
     this.armMaterial.dispose();
+    this.cuffMaterial.dispose();
     this.sleeveMaterial.dispose();
     this.scene.clear();
   }

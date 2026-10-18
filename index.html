@@ -319,9 +319,9 @@
         text-shadow: 1px 1px 0 #000;
       }
       #target-info.hidden { display: none; }
-      /* 触摸瞄准：标签挂在白圈正上方（半径 69 × 触摸缩放 + 5px 间隙），而不是屏幕中央 */
+      /* 触摸瞄准：标签挂在白圈正上方（半径 46 × 触摸缩放 + 5px 间隙），而不是屏幕中央 */
       #target-info.pinned {
-        transform: translate(-50%, calc(-100% - 74px * var(--touch-scale, 1)));
+        transform: translate(-50%, calc(-100% - 51px * var(--touch-scale, 1)));
       }
 
       /* ---------------- 主菜单（批次 109：对齐原版"标题页"的样子） ----------------
@@ -3024,14 +3024,14 @@
          尺寸跟着 `--touch-scale`（与摇杆/按钮同一个设置项），位置用 JS 的
          `transform` 写，**不能**用 `left/top`——每帧改 left/top 会触发布局。
          `position: fixed` 是必须的：#touch-ui 有安全区 padding，absolute 会整体偏移。
-         ⚠️ 直径是原来的三倍（批次 239 复查，用户："圈再增大为当前的三倍"）：
-            46 → 138，居中用的负 margin 也跟着 23 → 69。 */
+         ⚠️ 尺寸沿革：46 →(×3) 138 →(×2/3) **92**（批次 241，用户："把手指触摸的改成当前的 2/3"）。
+            居中用的负 margin 始终取直径的一半（现在是 46）。 */
       #touch-ring {
         position: fixed; left: 0; top: 0;
-        width: calc(138px * var(--touch-scale, 1));
-        height: calc(138px * var(--touch-scale, 1));
-        margin-left: calc(-69px * var(--touch-scale, 1));
-        margin-top: calc(-69px * var(--touch-scale, 1));
+        width: calc(92px * var(--touch-scale, 1));
+        height: calc(92px * var(--touch-scale, 1));
+        margin-left: calc(-46px * var(--touch-scale, 1));
+        margin-top: calc(-46px * var(--touch-scale, 1));
         border-radius: 50%;
         border: 2px solid rgba(255, 255, 255, .92);
         /* 外层暗影保证在雪地/亮天空上也看得见，内层微光是"圈"的厚度感 */

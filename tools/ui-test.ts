@@ -1362,9 +1362,9 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       mainSource.includes('} else if (this.touch !== null) {'),
   );
   check(
-    '白圈直径是原来的三倍（46 → 138，居中负 margin 23 → 69）',
-    indexSource.includes('width: calc(138px * var(--touch-scale, 1));') &&
-      indexSource.includes('margin-left: calc(-69px * var(--touch-scale, 1));'),
+    '白圈直径 92（46 →×3 138 →×2/3 92），负 margin 始终取半径 46',
+    indexSource.includes('width: calc(92px * var(--touch-scale, 1));') &&
+      indexSource.includes('margin-left: calc(-46px * var(--touch-scale, 1));'),
   );
   check(
     '轻点抬手白圈原地闪一下（长按/拖动抬手立即收起）',
@@ -2566,8 +2566,10 @@ console.log('\n[角色创建：外观（批次 187）]');
       playerSrc.includes("this.roleMeshes.pants"),
   );
   check(
-    '改设置立刻作用到第三人称与 3D 预览',
-    appSrc.includes('this.playerRenderer.setAppearance(paletteOf(settings));') &&
+    '改设置立刻作用到第三人称、第一人称手臂与 3D 预览',
+    appSrc.includes('const palette = paletteOf(settings);') &&
+      appSrc.includes('this.playerRenderer.setAppearance(palette);') &&
+      appSrc.includes('this.hand.setAppearance(palette);') &&
       invSrc.includes('this.hooks.appearance?.() ?? paletteOf(null)') &&
       previewSrc.includes('this.model.setAppearance(this.palette)'),
   );

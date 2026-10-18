@@ -1503,6 +1503,11 @@ class App {
     this.mobRenderer = new MobRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
     // 玩家模型与生物用同一套亮度口径，第三人称下才可见
     this.playerRenderer = new PlayerRenderer(this.scene, () => this.solidMaterial.skyBrightnessValue);
+    // 外观（批次 241）：存档里的肤色/上衣色要在**进世界那一刻**就落到第三人称与第一人称上。
+    // 以前只有 `applySettings()` 会调 `setAppearance()`，等于"自定义外观要打开一次设置才生效"。
+    const initialPalette = paletteOf(this.settings);
+    this.playerRenderer.setAppearance(initialPalette);
+    this.hand.setAppearance(initialPalette);
     this.bossBarEl = document.getElementById('boss-bar');
     this.bossFillEl = document.getElementById('boss-fill');
     this.bossTitleEl = document.querySelector('#boss-bar b');
@@ -1988,7 +1993,10 @@ class App {
     this.viewDistance = view;
     this.playerRenderer.setCape(settings.cape);
     // 外观（批次 187）：肤色 / 上衣 / 裤子，改完立刻在第三人称上生效
-    this.playerRenderer.setAppearance(paletteOf(settings));
+    // 批次 241：第一人称的手臂与布袖也跟着换，否则切视角像"换了个人"
+    const palette = paletteOf(settings);
+    this.playerRenderer.setAppearance(palette);
+    this.hand.setAppearance(palette);
     // 玩家手动改视距时把自适应冷却重置：否则刚拖完滑块又要等几秒才允许升降
     // ⚠️ 分辨率的当前值**不重置**：它是"这台设备现在扛不扛得住"的记忆，
     // 改一次视距就把它弹回 1.0 的话，弱机每次调设置都要重新掉一轮帧
@@ -4746,10 +4754,20 @@ class App {
     }
 
     // 挖掘途中持续掉碎屑 + 挥手臂（原版每挖一下挥一次）
+    // 批次 241：从**命中面**撒（不是格心）——以前碎屑生成在方块内部，被深度挡得一颗都看不见
     this.particleTimer -= dt;
     if (this.particleTimer <= 0) {
       this.particleTimer = 0.12;
-      this.particles.spawnDigging(this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5, this.blockParticleColor(id));
+      this.particles.spawnDigging(
+        this.hit.hitX,
+        this.hit.hitY,
+        this.hit.hitZ,
+        this.blockParticleColor(id),
+        this.hit.nx,
+        this.hit.ny,
+        this.hit.nz,
+        3,
+      );
       this.hand.swing();
     }
 
@@ -4987,7 +5005,8 @@ class App {
     this.stats.eat(CAKE_SLICE_FOOD.hunger, saturationFrom(CAKE_SLICE_FOOD));
     this.audio.play('eat');
     this.hand.swing();
-    this.particles.spawnDigging(x + 0.5, y + 0.4, z + 0.5, this.blockParticleColor(Block.CAKE));
+    // 批次 241：从**蛋糕顶面**撒（原来 y+0.4 在蛋糕内部，同样看不见）
+    this.particles.spawnDigging(x + 0.5, y + 0.5, z + 0.5, this.blockParticleColor(Block.CAKE), 0, 1, 0, 3);
     this.vibrate(8);
 
     if (bites >= CAKE_SLICES) {
