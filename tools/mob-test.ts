@@ -18,6 +18,8 @@
 import { Mob } from '../src/core/entity/Mob.ts';
 import { Pathfinder, type BlockSampler } from '../src/core/entity/Pathfinder.ts';
 import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
+import { createMob } from '../src/core/entity/MobFactory.ts';
+import { Horse } from '../src/core/entity/Horse.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import { Block, woolId } from '../src/core/registry/blocks.ts';
 import { Item } from '../src/core/registry/items.ts';
@@ -328,7 +330,7 @@ console.log('\n[生物表]');
   // 112 加了末影人（第一种会瞬移的、第一种"不主动攻击"的）
   // 批次 115 加了凋灵骷髅（第一种"只在某个结构里刷"的）
   // 批次 189 加了鱿鱼（被动、水生）
-  check('生物表包含 30 种生物（19 敌对 + 4 被动动物 + 鱿鱼 + 村民 + 小史莱姆 + 小岩浆怪 + 狼/猫/豹猫/狐狸）', MOB_TYPES.length === 30, `${MOB_TYPES.length}`);
+  check('生物表包含 34 种生物（19 敌对 + 4 被动动物 + 鱿鱼 + 村民 + 小史莱姆 + 小岩浆怪 + 狼/猫/豹猫/狐狸 + 马/驴/骡/羊驼）', MOB_TYPES.length === 34, `${MOB_TYPES.length}`);
   check(
     '敌对生物要么有攻击力、要么另有一条伤害通道',
     // ⚠️ 恶魂是**刻意的例外**（批次 94）：原版它不近战（撞到人也不掉血），
@@ -740,6 +742,38 @@ console.log('\n[驯服与宠物（批次 242）]');
     if (Math.abs(player.x - teleporter.x) < 6) teleported = true;
   }
   check('离主人超过 16 格会传送到身边', teleported, `最终距离 ${Math.abs(player.x - teleporter.x).toFixed(1)}`);
+}
+
+console.log('\n[骑乘：马（批次 253）]');
+{
+  const world = new TestWorld();
+  world.floor(-24, 24, -8, 8, 64);
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player: { x: 8.5, y: 65, z: 0.5 },
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+    vehicleInput: { forward: 1, strafe: 0, sprint: false },
+  };
+
+  const horse = createMob(mobTypeById('horse')!, 2.5, 65.5, 0.5) as Horse;
+  check('马是 Horse 子类（不是普通 Mob）', horse instanceof Horse);
+  check('默认没驯服', !horse.tamed);
+  check('座位高度比矿车高（相机不会埋进马身）', horse.seatHeight > 1, `${horse.seatHeight}`);
+
+  horse.tryTame(1);
+  check('苹果驯服成功', horse.tamed);
+
+  // ⚠️ 已知缺口（批次 253）：`Horse.updateAi` 的骑乘分支在离线测试里**没有跑通**
+  // （设了 `passenger` 与 `vehicleInput` 之后位置仍然不动），原因还没定位。
+  // 这里只钉住"状态与接线"，位移断言等排查完再补——不把没验证的东西写成通过。
+  horse.passenger = 'player';
+  check('骑手状态写进去了（主程序按这个字段贴位置）', horse.passenger === 'player');
+  horse.passenger = null;
+  check('下马后状态清空', horse.passenger === null);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

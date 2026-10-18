@@ -92,11 +92,12 @@ import { Boat } from './core/entity/Boat.ts';
 import { Minecart } from './core/entity/Minecart.ts';
 import { HopperMinecart } from './core/entity/HopperMinecart.ts';
 import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from './core/entity/FurnaceMinecart.ts';
+import { Horse } from './core/entity/Horse.ts';
 /**
  * 可骑乘的载具（批次 245）：船与矿车共用"上下车 + 每帧贴位置 + `vehicleInput`"那一套，
  * 所以主程序里所有骑乘状态都按这个联合类型存。
  */
-type Rideable = Boat | Minecart;
+type Rideable = Boat | Minecart | Horse;
 import { Villager } from './core/entity/Villager.ts';
 import { isVillagerFood, levelName, tradeBlocker, tradeSettlement } from './core/registry/villagerTrades.ts';
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
@@ -4254,7 +4255,13 @@ class App {
       reach,
     );
     if (!hit || hit.entity.dead) return null;
-    if (!(hit.entity instanceof Boat) && !(hit.entity instanceof Minecart)) return null;
+    if (
+      !(hit.entity instanceof Boat) &&
+      !(hit.entity instanceof Minecart) &&
+      !(hit.entity instanceof Horse)
+    ) {
+      return null;
+    }
     if (Math.hypot(hit.entity.x - this.physics.x, hit.entity.z - this.physics.z) > 4.5) return null;
     return hit.entity;
   }
@@ -4273,16 +4280,25 @@ class App {
       4.5,
     );
     if (!hit || hit.entity.dead) return null;
-    if (!(hit.entity instanceof Boat) && !(hit.entity instanceof Minecart)) return null;
+    if (
+      !(hit.entity instanceof Boat) &&
+      !(hit.entity instanceof Minecart) &&
+      !(hit.entity instanceof Horse)
+    ) {
+      return null;
+    }
     return hit.entity;
   }
 
   /** 上载具（船 / 矿车）：两者共用"停跑玩家物理 + 每帧贴位置"那一套 */
   private mountVehicle(vehicle: Rideable): boolean {
     if (this.ridingVehicle || vehicle.dead || this.mountCooldown > 0) return false;
+    // 马（批次 253）：没驯服骑不上去（原版会把你甩下来，这里直接不给上）
+    if (vehicle instanceof Horse && !vehicle.tamed) return false;
     this.ridingVehicle = vehicle;
     vehicle.passenger = 'player';
-    this.physics.teleport(vehicle.x, vehicle.y + 0.25, vehicle.z);
+    const seat = vehicle instanceof Horse ? vehicle.seatHeight : 0.25;
+    this.physics.teleport(vehicle.x, vehicle.y + seat, vehicle.z);
     this.physics.vx = 0;
     this.physics.vy = 0;
     this.physics.vz = 0;
@@ -4500,7 +4516,7 @@ class App {
     vehicle.yaw = this.yaw;
     const p = this.physics;
     p.x = vehicle.x;
-    p.y = vehicle.y + 0.25;
+    p.y = vehicle.y + (vehicle instanceof Horse ? vehicle.seatHeight : 0.25);
     p.z = vehicle.z;
     p.vx = vehicle.vx;
     p.vy = 0;
@@ -4697,6 +4713,8 @@ class App {
     // "手上没东西就返回 false"那一条之前
     if (mob instanceof Villager) return this.useOnVillager(mob, held);
     // 已驯服的宠物（批次 242）：空手点一下 = 坐下 / 起来（原版就是这个手势）
+    // 马（批次 253）：驯服后空手点它 = **上马**（不是坐下）
+    if (mob instanceof Horse && mob.tamed && held === undefined) return this.mountVehicle(mob);
     if (mob.tamed && held === undefined) {
       const sitting = mob.toggleSitting();
       this.playMobVoice(mob);

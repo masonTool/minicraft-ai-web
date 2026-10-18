@@ -16,6 +16,7 @@
 
 import { Blaze } from './Blaze.ts';
 import { Ghast } from './Ghast.ts';
+import { Horse } from './Horse.ts';
 import { Mob, type MobType } from './Mob.ts';
 import { Phantom, PHANTOM_TYPE } from './Phantom.ts';
 import { Villager } from './Villager.ts';
@@ -38,5 +39,10 @@ export function createMob(type: MobType, x: number, y: number, z: number): Mob {
   // 幻翼（批次 126）：它的招牌是"盘旋之后一头扎下来"，所以也是一个子类
   // （与烈焰人/恶魂同一条理由：`new Mob(PHANTOM_TYPE, …)` 会造出一只只会平移的鸟）
   if (type.id === PHANTOM_TYPE.id) return new Phantom(x, y, z);
+  // 骑乘系（批次 253）：马/驴/骡/羊驼都是 `Horse`（多一个 `passenger` 与骑乘 AI）。
+  // 与村民同一个理由：`new Mob(HORSE_TYPE, …)` 会造出一匹"能喂能驯、但骑不上去"的马。
+  if (type.id === 'horse' || type.id === 'donkey' || type.id === 'mule' || type.id === 'llama') {
+    return new Horse(type, x, y, z);
+  }
   return new Mob(type, x, y, z);
 }

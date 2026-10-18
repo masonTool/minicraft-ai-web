@@ -839,6 +839,98 @@ export const FOX_TYPE: MobType = {
   eyeHeight: 0.55,
 };
 
+/**
+ * 马（批次 253）：第一只**可骑乘**的生物（见 `core/entity/Horse.ts`）。
+ *
+ * 驯服用苹果（原版是反复骑乘），骑乘不要求鞍（鞍还没做）。
+ */
+export const HORSE_TYPE: MobType = {
+  id: 'horse',
+  name: '马',
+  health: 20,
+  width: 1.0,
+  height: 1.5,
+  speed: 2.6,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: Item.WHEAT,
+  tameWith: Item.APPLE,
+  tameChance: 1 / 3,
+  spawnBiomes: ['plains', 'sunflower_plains', 'meadow', 'savanna'],
+  bodyColor: 0x8a5a34,
+  accentColor: 0x53331a,
+  eyeHeight: 1.2,
+};
+
+/** 驴（批次 253）：比马小一圈、慢一点，同样能骑 */
+export const DONKEY_TYPE: MobType = {
+  id: 'donkey',
+  name: '驴',
+  health: 18,
+  width: 0.9,
+  height: 1.35,
+  speed: 2.2,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: Item.WHEAT,
+  tameWith: Item.APPLE,
+  tameChance: 1 / 3,
+  spawnBiomes: ['plains', 'sunflower_plains', 'meadow', 'savanna'],
+  bodyColor: 0x8f8a80,
+  accentColor: 0x5d5850,
+  eyeHeight: 1.1,
+};
+
+/** 骡（批次 253）：原版不能自然生成，这里给平原/草甸让它能被看到 */
+export const MULE_TYPE: MobType = {
+  id: 'mule',
+  name: '骡',
+  health: 20,
+  width: 0.9,
+  height: 1.4,
+  speed: 2.3,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: Item.WHEAT,
+  tameWith: Item.APPLE,
+  tameChance: 1 / 3,
+  spawnBiomes: ['plains', 'meadow'],
+  bodyColor: 0x6e5a44,
+  accentColor: 0x453426,
+  eyeHeight: 1.15,
+};
+
+/** 羊驼（批次 253）：队伍里那一只；目前与马同一套骑乘 */
+export const LLAMA_TYPE: MobType = {
+  id: 'llama',
+  name: '羊驼',
+  health: 20,
+  width: 0.9,
+  height: 1.4,
+  speed: 2.4,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: Item.WHEAT,
+  tameWith: Item.APPLE,
+  tameChance: 1 / 3,
+  spawnBiomes: ['savanna', 'meadow'],
+  bodyColor: 0xd8c9a8,
+  accentColor: 0x9c8a68,
+  eyeHeight: 1.15,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -871,6 +963,11 @@ export const MOB_TYPES: readonly MobType[] = [
   CAT_TYPE,
   OCELOT_TYPE,
   FOX_TYPE,
+  // 骑乘系（批次 253）：与宠物同一套驯服通道，差别是能骑
+  HORSE_TYPE,
+  DONKEY_TYPE,
+  MULE_TYPE,
+  LLAMA_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

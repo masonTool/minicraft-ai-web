@@ -1020,6 +1020,11 @@ export const TILE_ORDER = [
   'spawn_egg_cat',
   'spawn_egg_ocelot',
   'spawn_egg_fox',
+  // 骑乘系（批次 253）：马/驴/骡/羊驼的蛋
+  'spawn_egg_horse',
+  'spawn_egg_donkey',
+  'spawn_egg_mule',
+  'spawn_egg_llama',
   // 橡木船（批次 244，G12）：物品图标一张
   'item_oak_boat',
   // 铁轨与矿车（批次 245，G12）：铁轨是方块贴图，矿车是物品图标

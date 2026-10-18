@@ -86,7 +86,9 @@ type ModelKind =
   /** 鱿鱼（批次 189）：一个圆头 + 八条垂下来的触手 */
   | 'squid'
   /** 驯养系（批次 242）：狼 / 猫 / 豹猫 / 狐狸——短腿、尖耳、翘尾巴、脖子上有项圈 */
-  | 'pet';
+  | 'pet'
+  /** 骑乘系（批次 253）：马/驴/骡/羊驼——长腿、长身、长脖子 */
+  | 'horse';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
@@ -118,6 +120,7 @@ function modelKindOf(typeId: string): ModelKind {
   // 驯养系（批次 242）：牛猪羊那套四足太"壮"（大鼻子、没有尾巴），
   // 狼/猫/豹猫/狐狸需要一个更小的骨架 + 尖耳 + 翘尾
   if (typeId === 'wolf' || typeId === 'cat' || typeId === 'ocelot' || typeId === 'fox') return 'pet';
+  if (typeId === 'horse' || typeId === 'donkey' || typeId === 'mule' || typeId === 'llama') return 'horse';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   return 'humanoid';
 }
@@ -142,6 +145,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return quadrupedBoxes(type);
     case 'pet':
       return petBoxes(type);
+    case 'horse':
+      return horseBoxes(type);
     case 'bird':
       return birdBoxes(type);
     case 'spider':
@@ -377,6 +382,51 @@ function petBoxes(type: MobType): BoxSpec[] {
   ];
 }
 
+/**
+ * 骑乘系（批次 253）：马 / 驴 / 骡 / 羊驼共用的一副骨架。
+ *
+ * 与 `petBoxes` 的区别：腿占身高一半（马腿长）、身子更长、脖子竖起来再接一个长头，
+ * 尾巴垂在身后。前四个盒子仍是腿（`legCountOf` 固定 4）。
+ */
+function horseBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const legHeight = h * 0.52;
+  const bodyHeight = h * 0.3;
+  const bodyY = legHeight + bodyHeight / 2;
+  const bodyLength = w * 1.5;
+  const legX = w * 0.3;
+  const legZ = bodyLength * 0.32;
+  const neckHeight = h * 0.34;
+  const neckY = bodyY + bodyHeight * 0.5 + neckHeight * 0.4;
+  const headSize = w * 0.42;
+  const headY = neckY + neckHeight * 0.55;
+
+  return [
+    // 四条长腿（下标 0~3）
+    { width: w * 0.16, height: legHeight, depth: w * 0.16, x: -legX, y: legHeight / 2, z: legZ, color: 'accent' },
+    { width: w * 0.16, height: legHeight, depth: w * 0.16, x: legX, y: legHeight / 2, z: legZ, color: 'accent' },
+    { width: w * 0.16, height: legHeight, depth: w * 0.16, x: -legX, y: legHeight / 2, z: -legZ, color: 'accent' },
+    { width: w * 0.16, height: legHeight, depth: w * 0.16, x: legX, y: legHeight / 2, z: -legZ, color: 'accent' },
+    // 躯干
+    { width: w * 0.66, height: bodyHeight, depth: bodyLength, x: 0, y: bodyY, z: 0, color: 'body' },
+    // 脖子（竖起来）
+    { width: w * 0.3, height: neckHeight, depth: w * 0.34, x: 0, y: neckY, z: bodyLength * 0.36, color: 'body' },
+    // 头 + 口鼻
+    { width: headSize, height: headSize * 0.8, depth: headSize * 1.2, x: 0, y: headY, z: bodyLength * 0.5, color: 'body' },
+    { width: headSize * 0.7, height: headSize * 0.45, depth: headSize * 0.6, x: 0, y: headY - headSize * 0.1, z: bodyLength * 0.5 + headSize * 0.7, color: 'accent' },
+    // 双耳
+    { width: w * 0.08, height: h * 0.09, depth: w * 0.06, x: -headSize * 0.25, y: headY + headSize * 0.5, z: bodyLength * 0.46, color: 'accent' },
+    { width: w * 0.08, height: h * 0.09, depth: w * 0.06, x: headSize * 0.25, y: headY + headSize * 0.5, z: bodyLength * 0.46, color: 'accent' },
+    // 双眼
+    { width: w * 0.07, height: h * 0.04, depth: w * 0.03, x: -headSize * 0.22, y: headY + headSize * 0.08, z: bodyLength * 0.5 + headSize * 0.56, color: 'eye' },
+    { width: w * 0.07, height: h * 0.04, depth: w * 0.03, x: headSize * 0.22, y: headY + headSize * 0.08, z: bodyLength * 0.5 + headSize * 0.56, color: 'eye' },
+    // 尾巴 + 鬃毛
+    { width: w * 0.1, height: h * 0.22, depth: w * 0.1, x: 0, y: bodyY + bodyHeight * 0.3, z: -bodyLength * 0.55, color: 'accent' },
+    { width: w * 0.08, height: neckHeight * 0.8, depth: w * 0.12, x: 0, y: neckY, z: bodyLength * 0.29, color: 'accent' },
+  ];
+}
+
 function birdBoxes(type: MobType): BoxSpec[] {
   const w = type.width;
   const legHeight = type.height * 0.34;
@@ -526,8 +576,8 @@ function spiderBoxes(type: MobType): BoxSpec[] {
  * 而且它是**可断言的事实**，离线测试直接读它（见 `describeMobModel`）。
  */
 function legCountOf(kind: ModelKind): number {
-  // 驯养系（批次 242）：四条短腿（部件表最前面四个）
-  if (kind === 'pet') return 4;
+  // 驯养系（批次 242）与骑乘系（批次 253）：四条腿（部件表最前面四个）
+  if (kind === 'pet' || kind === 'horse') return 4;
   if (kind === 'quadruped') return 4;
   if (kind === 'spider') return 8;
   // 水晶/烈焰人/恶魂不摆动：水晶自转、烈焰人的火棒长在它自己身上、

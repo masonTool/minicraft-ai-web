@@ -563,8 +563,8 @@ export class Mob extends Entity {
 
   private burnTick = 0;
   /** 远程生物的移动方向（保持距离用）与"正在拉开"标记 */
-  private moveDirX = 0;
-  private moveDirZ = 0;
+  protected moveDirX = 0;
+  protected moveDirZ = 0;
   private retreating = false;
   /** 距离下一次放箭还有多久 */
   private rangedTimer = 0;
@@ -622,7 +622,7 @@ export class Mob extends Entity {
   private chaseDirX = 0;
   private chaseDirZ = 0;
   /** 游荡时是否停下（一部分时间站着不动，比一直乱走自然） */
-  private idle = false;
+  protected idle = false;
 
   private readonly pathfinder: Pathfinder;
   private sampleBlock: ((x: number, y: number, z: number) => number) | null = null;
@@ -1043,7 +1043,9 @@ export class Mob extends Entity {
     this.yaw = Math.atan2(this.vx, this.vz);
   }
 
-  private updateAi(ctx: EntityContext, dt: number): void {
+  // `protected`（批次 253）：马这类"可骑乘生物"要覆写 AI——骑着时由玩家控制方向，
+  // 没骑时仍然走这套游荡/追逐/繁殖
+  protected updateAi(ctx: EntityContext, dt: number): void {
     const player = ctx.player;
     const dx = player ? player.x - this.x : 0;
     const dz = player ? player.z - this.z : 0;
@@ -1355,7 +1357,7 @@ export class Mob extends Entity {
     ctx.playSound?.('bow_shoot', this.x, this.y, this.z);
   }
 
-  private move(chasing: boolean, dt: number): void {
+  protected move(chasing: boolean, dt: number): void {
     // 状态效果直接乘在速度上：缓慢 -15%/级、速度 +20%/级（数值来自 `StatusEffects`，与玩家同源）
     const speed = (chasing ? this.type.speed * 1.12 : this.type.speed * 0.5) * this.effects.moveSpeedMultiplier();
     let targetVx = 0;

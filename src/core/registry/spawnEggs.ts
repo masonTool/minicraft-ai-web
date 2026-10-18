@@ -79,6 +79,11 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'cat', label: '猫', id: 1475 },
   { mobId: 'ocelot', label: '豹猫', id: 1476 },
   { mobId: 'fox', label: '狐狸', id: 1477 },
+  // 骑乘系（批次 253）：马/驴/骡/羊驼（刷怪蛋 id 1476/1475 之后顺延到 1482~1485）
+  { mobId: 'horse', label: '马', id: 1482 },
+  { mobId: 'donkey', label: '驴', id: 1483 },
+  { mobId: 'mule', label: '骡', id: 1484 },
+  { mobId: 'llama', label: '羊驼', id: 1485 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */
