@@ -507,11 +507,11 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('右下合成键只切右栏，不自动打开配方书', /private setPocketTab[\s\S]{0,320}applyInventoryChrome\(\);[\s\S]{0,120}\}/.test(invSrc));
   // 批次 159：左栏的职责是**物品分类**——点分类切的是左栏内容，不再去开配方书
   check('只有左侧分类键切左栏（配方书不再嵌进来）', invSrc.includes('private openPocketCategory(tab: RecipeBookTab)') && !invSrc.includes('this.hooks.onOpenRecipes?.(tab)'));
-  // 批次 159：左栏换成配方列表时，右栏只留合成区——下方那片 3×9 仓库不显示
-  // （工作台例外：它本来就是 3×3 + 3×9 的排法）
+  // 批次 206：分类栏与 3×9 仓库在双栏网格里**占同一格**，工作台也不例外——
+  // 同时显示就是"多一个浮层"（用户反馈的 3×3 工作台 bug）。
   check(
-    '配方页右栏不显示仓库（工作台除外）',
-    invSrc.includes("const hideMainGrid = leftPane === 'creative' || (leftPane === 'category' && !workbench);") &&
+    '分类栏显示时 3×9 仓库一起藏掉（工作台也不叠层）',
+    invSrc.includes("const hideMainGrid = leftPane === 'creative' || leftPane === 'category';") &&
       invSrc.includes("this.mainGridEl.style.display = hideMainGrid ? 'none' : '';"),
   );
   check('左栏上方那行「物品栏」不再显示', invSrc.includes("this.personalInventoryTitleEl.style.display = 'none';"));
@@ -654,12 +654,13 @@ console.log('\n[携带版细节收口（批次 159）]');
       invSrc.includes('this.showUnowned = !this.showUnowned;') &&
       invSrc.includes('this.openPocketCategory(this.lastRecipeTab);'),
   );
-  // ⚠️ "只列我拥有的"必须**从背包格子本身**取：拿"全部物品里我有多少"来筛，
-  //    会把不在 CREATIVE_ITEMS 里的东西悄悄漏掉（"我明明有，分类里却没有"）
+  // 批次 206：列表 = "材料够的产物" + （开关开着时）"看过的缺料配方（红底）"
   check(
-    '关着 = 只列我拥有的；开着 = 全部列出（没有的红底）',
-    invSrc.includes('if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);') &&
-      invSrc.includes('owned.push(stack.id);') &&
+    '分类栏列的是能合成的产物；缺料的那批按材料齐不齐标红',
+    invSrc.includes('private craftableIds(): number[]') &&
+      invSrc.includes('if (canCraft(this.inventory, recipe).ok) ids.push(recipe.result.id);') &&
+      invSrc.includes('for (const id of this.viewedRecipeIds) {') &&
+      invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
       invSrc.includes("classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
       css.includes('.inv-slot.locked {'),
   );
@@ -790,9 +791,10 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('const showCreativeItems = creative && this.pane === \'creative\';'),
   );
   check(
-    '默认只列我拥有的（从背包格子取）；配方开关开着才列全部（没有的红底）',
-    invSrc.includes('private showUnowned = false;') &&
-      invSrc.includes('if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);') &&
+    '默认列出能合成的全部产物；看过的缺料配方用红底保留',
+    invSrc.includes('private showUnowned = true;') &&
+      invSrc.includes('private craftableIds(): number[]') &&
+      invSrc.includes('this.viewedRecipeIds.add(itemId);') &&
       css.includes('.inv-slot.locked {'),
   );
   // 分类栏最多 800 个 canvas，`refresh()` 每次都会走到排布 → 必须按指纹缓存
@@ -804,27 +806,22 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('if (key === this.categoryStamp && this.categoryGrid.childElementCount > 0) return;'),
   );
 
-  // ⑤ 点分类里的物品 → 把它的配方摆进合成格
-  // ⑤ 点分类里的物品：**先选中**（能丢弃 / 放置 / 换位），再看它由什么组成
+  // ⑤ 点分类里的物品（批次 206 改语义）：
+  // 生存模式**不选中**（不把仓库成品拿到手上），只把配方画到右栏；
+  // 创造模式才保留"拿一件复制品"的老行为。
   check(
-    '点分类里的物品 = 选中它 + 看它由什么组成',
+    '生存点分类物品只预览配方、不产生选中态',
     invSrc.includes('private pickCategoryItem(itemId: number): void {') &&
-      invSrc.includes('const index = this.inventory.find(itemId);') &&
-      invSrc.includes('.category-slot[data-item-id=') &&
-      invSrc.includes('private showRecipeFor(itemId: number): void {'),
+      invSrc.includes('this.viewedRecipeIds.add(itemId);') &&
+      /pickCategoryItem[\s\S]{0,600}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) \{/.test(invSrc),
   );
-  // 红底（我没有的）不能选中
   check(
-    '没有的那些（红底）选不了',
-    invSrc.includes('const owned = this.inventory.countOf(itemId);') && invSrc.includes('if (owned > 0) {'),
+    '材料不齐时结果槽也画出产物（只读预览）',
+    invSrc.includes('this.previewResult = { id: recipe.result.id, count: recipe.result.count };') &&
+      invSrc.includes("classList.toggle('preview-result'") &&
+      css.includes('.inv-slot.preview-result'),
   );
-  // **再点同一格 = 取消选中**（分类栏要有；普通槽位走"放回来源格"那条老路）
-  check(
-    '再点同一格取消选中',
-    invSrc.includes('this.cancelHeldSelection();\n      if (same || this.held) return;') ||
-      /cancelHeldSelection\(\);\s*\n\s*if \(same \|\| this\.held\) return;/.test(invSrc),
-  );
-  check('创造栏再点同一格也取消', invSrc.includes('if (this.held && this.heldOriginEl === slot) {'));
+  check('创造模式仍可把物品拿到手上（复制品语义）', invSrc.includes('this.heldFromCreative = false;'));
   check(
     '材料够就直接摆进合成格',
     invSrc.includes('if (canCraft(this.inventory, recipe).ok) {') && invSrc.includes('fillCraftingGrid(this.inventory, this.crafting, recipe);'),
@@ -842,10 +839,13 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
     '空槽不给选中反馈',
     /if \(this\.tooltipStacks\.has\(slot\)\) \{[\s\S]{0,220}else this\.markPressing\(slot\);/.test(invSrc),
   );
-  // 丢物：面板与快捷栏 dock 之外的空处都算"界面外"（只认 root 时点两栏之间的缝没反应）
+  // 丢物（批次 206）：面板空白与窗外暗色区域都丢；
+  // 判据是"不在任何交互元素里"，而不是死认 target === root/shell。
   check(
-    '点界面外（含 shell 留白）才丢出去',
-    invSrc.includes('if (event.target !== this.root && event.target !== this.shellEl) return;'),
+    '点面板空白 / 窗口外都丢出手上的整叠',
+    invSrc.includes('private dropHeldStack(') &&
+      invSrc.includes('if (this.panel.contains(target) || this.hotbarDock.contains(target)) return;') &&
+      invSrc.includes("if (target.closest('.inv-slot, button, input, .recipe-cell')) return;"),
   );
   // 材料不齐 → 把配方**画**进合成格，缺的那件红底（格子里是预览不是实物）
   check(
@@ -991,8 +991,7 @@ console.log('\n[分类栏永远空：detachRecipeBook 顺手把它藏了（批�
   // 只有确实存在筛选条件（搜索词、或"显示全部"）时才需要解释为什么空着。
   check(
     '配方开关关着时空栏留白（有筛选条件时才解释）',
-    invSrc.includes('private ownedItemIds(): number[]') &&
-      invSrc.includes('if (this.categoryQuery.length > 0 || this.showUnowned) {') &&
+    invSrc.includes('if (this.categoryQuery.length > 0 || this.showUnowned) {') &&
       !invSrc.includes('背包里共 ${this.ownedItemIds().length}'),
   );
 }
@@ -1995,11 +1994,11 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     invSrc.includes('this.creativeGrid.scrollTop = 0;') && invSrc.includes('this.categoryGrid.scrollTop = 0;'),
   );
 
-  // ④ 分类底部统计
+  // ④ 分类底部统计（批次 206：可合成 N / 缺料 M）
   check(
-    '分类底部统计（我有 N / 共 M）',
+    '分类底部统计（可合成 N / 缺料 M）',
     invSrc.includes("this.categoryInfo.dataset.role = 'category-info'") &&
-      invSrc.includes('我有 ${ownedInTab} / 共 ${allInTab}') &&
+      invSrc.includes('可合成 ${craftableInTab}') &&
       css.includes('.inv-category-info'),
   );
 
@@ -2023,8 +2022,8 @@ console.log('\n[用户第二轮反馈（批次 185）]');
 
   // ⑥ 丢弃 / 关闭动画期间重开
   check(
-    '点界面外空处丢弃（root 与 shell 都算）',
-    invSrc.includes('event.target !== this.root && event.target !== this.shellEl') && invSrc.includes('hooks.onDrop?.(this.held.id'),
+    '点界面外空处丢弃（面板空白与窗外都算）',
+    invSrc.includes('private dropHeldStack(') && invSrc.includes('this.hooks.onDrop(stack.id, drop);'),
   );
   check(
     '关闭动画没走完就重开：取消关闭，不会"打开了却看不见"',

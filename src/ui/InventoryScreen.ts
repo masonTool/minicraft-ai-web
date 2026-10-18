@@ -51,7 +51,7 @@ import {
   recipesForResult,
   type RecipeBookTab,
 } from '../core/crafting/RecipeBook.ts';
-import type { Recipe } from '../core/crafting/Recipes.ts';
+import { RECIPES, type Recipe } from '../core/crafting/Recipes.ts';
 // 熔炼表（批次 185）：判断"这件东西只能烧出来" → 合成箭头上面点亮熔炉图标
 import { SMELTING_RECIPES } from '../core/crafting/Smelting.ts';
 // 配方的**摆放位置**（批次 29）：左栏点一件物品要把它怎么摆画进合成格
@@ -334,9 +334,10 @@ export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
  * 这是"点左边按钮时界面不该跳"的落点。
  *
  * - `items`    ：我的物品（3×9 仓库）
- * - `category` ：**物品分类**（批次 159 的重点）——左栏的主要职责是"按分类找东西"，
- *   不是"看配方"。默认只列出**我拥有的**；配方开关打开时把该分类下的**所有物品**
- *   都列出来，我没有的那些用红底标出（用来找"不知道怎么组装"的东西）。
+ * - `category` ：**可合成的物品**（批次 159 引入、批次 206 按用户澄清改口径）——
+ *   它列的不是"仓库里有什么"，而是"**仓库里的材料能做出什么**"：
+ *   材料够的配方正常显示，之前点开看过、现在缺料的用红底保留；
+ *   没有任何配方的原料（原木、矿石…）不出现。点一项 = 在右栏看它的配方。
  * - `creative` ：创造物品栏
  */
 export type PocketLeftPane = 'items' | 'creative' | 'category';
@@ -441,16 +442,33 @@ export class InventoryScreen {
   /** 创造栏上一次渲染的指纹（内容只跟分类 / 搜索词 / 页码有关，见 `renderCreativeGrid`） */
   private creativeStamp = '';
   /**
-   * 「把所有物品都列出来」（批次 159）：开着 = 该分类下的**所有**物品都出现，
-   * 我没有的那些用红底标出——为的是"找一件不知道怎么组装的东西"。
-   * 关着 = 只列我拥有的，这就是"物品分类"本身的能力。
+   * 「也显示缺料配方」（批次 159 → 206 改语义）。
+   *
+   * 批次 206 起左栏列的是**能合成的东西**（不是仓库里有什么）：
+   *  - 默认（开）：当前材料够的配方 + **之前点过、现在缺料**的配方（红底）；
+   *  - 关着：只列**现在就能做**的。
+   * 用户原话："搜索栏内展示当前所有可以合成的物品，以及之前查看过的没有集齐材料的物品（红底）。"
    */
-  private showUnowned = false;
+  private showUnowned = true;
+  /**
+   * 之前点开看过的配方产物（批次 206）：材料后来不够了也要留在列表里（红底），
+   * 这样玩家能接着看"还差什么"，而不是东西一缺就从列表里消失。
+   */
+  private readonly viewedRecipeIds = new Set<number>();
+  /** 可合成产物集合的缓存（键是背包指纹，见 `craftableIds`） */
+  private craftableCache: { stamp: string; ids: number[] } | null = null;
   /**
    * 材料不齐时把配方"画"进合成格（批次 159）：格子里是**预览**不是实物，
    * 缺的那件用红底标出来。点任何合成格就收掉。
    */
   private craftGhost: Array<{ id: number; have: boolean } | null> | null = null;
+  /**
+   * 缺料预览时**结果槽**里画什么（批次 206）。
+   *
+   * 用户："把材料以及生成物都要在工作台的槽内，现在工作台的槽只有材料。"
+   * 材料够的时候走真实填充（结果由 `CraftingGrid` 算），材料不够时只有这份预览。
+   */
+  private previewResult: { id: number; count: number } | null = null;
   /**
    * 当前预览的配方"要什么工作台"（批次 185）：合成箭头上面那颗小图标。
    * `workbench` = 3×3 摆不下、`furnace` = 只能烧出来、`null` = 当前就能做。
@@ -792,19 +810,16 @@ export class InventoryScreen {
       // 键盘热键的括注只在 PC 上给：手机上没有 R 这个键，写成"配方书 (R)"
       // 只会让人以为"要按 R 才能打开"（批次 104）
       recipes.textContent = touchDevice ? '配方书' : '配方书 (R)';
-      // 批次 159：它有两态，但**不再切换分类**——
-      //   左栏还在"我的物品"时：点它 = 打开上次那个分类（沿用 `lastRecipeTab`）；
-      //   左栏已经是某个分类时：点它 = 切"是否显示自己没有的那些"。
-      //     开着（active）→ 本分类全部列出，不拥有的用红底标出来；
-      //     关着       → 只显示自己拥有的（红的自然就不见了）。
-      // 原来的写法是"关 = 退回我的物品 + 切回全部"，分类白选了，所以改成这样。
+      // 批次 206：它管的是"要不要把**看过的缺料配方**也列出来（红底）"。
+      //   左栏还在"我的物品"时：点它 = 进入上次那个分类（沿用 `lastRecipeTab`）；
+      //   左栏已经是某个分类时：点它 = 切"缺料配方显不显示"。
+      // ⚠️ 列表本身就是"能合成的东西"（不是"我拥有的东西"），所以不再有
+      //   "只显示我拥有的"那层语义了。
       recipes.addEventListener('click', () => {
-        // 左栏已经在某一分类里 → 切"要不要把我没有的那些也列出来（红底）"
         if (this.pane === 'category') {
           this.showUnowned = !this.showUnowned;
           this.categoryPage = 0;
         } else {
-          // 左栏还在"我的物品" → 进入分类视图，沿用上次那一栏（不切分类）
           this.openPocketCategory(this.lastRecipeTab);
         }
         this.applyInventoryChrome();
@@ -1301,7 +1316,8 @@ export class InventoryScreen {
     this.categorySearch = document.createElement('input');
     this.categorySearch.type = 'text';
     this.categorySearch.className = 'inv-search';
-    this.categorySearch.placeholder = '搜索物品…';
+    // 批次 206：这一栏列的是"能合成什么"，搜索的也是产物名（不是仓库里的东西）
+    this.categorySearch.placeholder = '搜索可合成的物品…';
     this.categorySearch.addEventListener('input', () => {
       this.categoryQuery = this.categorySearch.value.trim().toLowerCase();
       this.renderCategoryGrid();
@@ -1332,32 +1348,47 @@ export class InventoryScreen {
   }
 
   /**
-   * 分类栏里的物品：按分类 + 搜索词筛。
+   * **当前背包材料能合成出来的产物 id**（批次 206）。
    *
-   * ⚠️ "我拥有的"这一路是**从背包格子本身**取的，不是"在全部物品里挑我有多少"：
-   *    只要有一件东西不在 `CREATIVE_ITEMS` 里（特殊物品、旧 id），后一种写法就会
-   *    把它悄悄漏掉——玩家看到的就是"我明明有，分类里却没有"。
+   * 用户澄清："分类项以及搜索，不是为了分类查看仓库的物品，而是展示仓库内的物品
+   * 可以合成的物品。"——所以这一栏的数据源从"我有什么"换成了"我能做出什么"。
+   *
+   * 配方表 550+ 条，每条要遍历一遍材料；`refresh()` 每搬一件东西就会调到这里，
+   * 所以按**背包指纹**缓存（同一个指纹下材料分布没变，结果一定一样）。
+   */
+  private craftableIds(): number[] {
+    const stamp = this.inventoryStamp();
+    if (this.craftableCache?.stamp === stamp) return this.craftableCache.ids;
+    const ids: number[] = [];
+    for (const recipe of RECIPES) {
+      if (ids.includes(recipe.result.id)) continue;
+      if (canCraft(this.inventory, recipe).ok) ids.push(recipe.result.id);
+    }
+    this.craftableCache = { stamp, ids };
+    return ids;
+  }
+
+  /**
+   * 分类栏里的物品：**能合成的产物**，按分类 + 搜索词筛。
+   *
+   * - 材料够的配方一定出现（不管仓库里有没有成品）；
+   * - 之前点开看过、现在缺料的配方也留着（红底），否则"差一点材料"的东西
+   *   会在用掉某件材料的一瞬间从列表里消失，玩家再也找不到它；
+   * - 没有任何配方的物品（原木、矿石…）不列——它们不是"能合成的东西"。
    */
   private categoryItems(): number[] {
     const query = this.categoryQuery;
-    const byCategory = (id: number): boolean => {
-      if (this.categoryTab !== 'all' && recipeBookTab(id) !== this.categoryTab) return false;
-      if (query.length > 0 && !matchesQuery(id, query)) return false;
-      return true;
-    };
-    if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);
-    return this.ownedItemIds().filter(byCategory);
-  }
-
-  /** 背包里出现过的物品 id（去重；按槽位 0-40 的顺序，快捷栏在前） */
-  private ownedItemIds(): number[] {
-    const owned: number[] = [];
-    for (let i = 0; i < TOTAL_SLOTS; i++) {
-      const stack = this.inventory.get(i);
-      if (!stack || owned.includes(stack.id)) continue;
-      owned.push(stack.id);
+    const craftable = new Set(this.craftableIds());
+    const ids = new Set<number>(craftable);
+    if (this.showUnowned) {
+      for (const id of this.viewedRecipeIds) {
+        if (!craftable.has(id) && recipesForResult(id).length > 0) ids.add(id);
+      }
     }
-    return owned;
+    return [...ids].filter((id) => {
+      if (this.categoryTab !== 'all' && recipeBookTab(id) !== this.categoryTab) return false;
+      return query.length === 0 || matchesQuery(id, query);
+    });
   }
 
   /**
@@ -1384,6 +1415,8 @@ export class InventoryScreen {
       this.showUnowned ? 'all' : 'owned',
       this.categoryPage,
       this.inventoryStamp(),
+      // 看过的配方集合也会影响列表（缺料那一批红底项）
+      [...this.viewedRecipeIds].sort((a, b) => a - b).join(','),
     ].join('|');
     // ⚠️ 不因为"手上有东西"就整栏冻住：宁可重建完再按 id 把选中那一格找回来。
     //    冻住的话，一旦某次渲染结果是空的（比如刚合成完、背包一时为空），
@@ -1393,13 +1426,20 @@ export class InventoryScreen {
 
     // 搜索框只在"全部"那一栏出现（与创造栏、配方书同一口径）
     this.categorySearch.style.display = this.categoryTab === 'all' ? '' : 'none';
-    // 批次 185：底部统计。**不受搜索词影响**（它是"这一类有多少"的口径，
-    // 不是"当前筛出来多少"），否则搜一个词就变成 0/0，反而看不出分类规模。
+    // 底部统计（批次 206 改口径）：这一栏是"能合成什么"，所以报**可合成**多少项、
+    // 以及"看过的缺料"多少项。**不受搜索词影响**（那是筛选结果，不是分类规模）。
     {
       const inTab = (id: number): boolean => this.categoryTab === 'all' || recipeBookTab(id) === this.categoryTab;
-      const ownedInTab = this.ownedItemIds().filter(inTab).length;
-      const allInTab = CREATIVE_ITEMS.filter(inTab).length;
-      this.categoryInfo.textContent = `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 我有 ${ownedInTab} / 共 ${allInTab}`;
+      const craftable = this.craftableIds();
+      const craftableInTab = craftable.filter(inTab).length;
+      const missingInTab = this.showUnowned
+        ? [...this.viewedRecipeIds].filter(
+            (id) => !craftable.includes(id) && inTab(id) && recipesForResult(id).length > 0,
+          ).length
+        : 0;
+      this.categoryInfo.textContent =
+        `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 可合成 ${craftableInTab}` +
+        (missingInTab > 0 ? ` · 缺料 ${missingInTab}（红底）` : '');
     }
     const items = this.categoryItems();
     // 触摸端整表滚动、PC 底部翻页（与创造栏同一条判据）
@@ -1413,13 +1453,16 @@ export class InventoryScreen {
 
     // 先在 fragment 里搭好再一次性换上去：中途抛错时旧内容还在（不会留一栏空白）
     const fragment = document.createDocumentFragment();
+    // 红底的判据是**材料齐不齐**，不是"仓库里有没有成品"：
+    // 能做但还没做出来的东西是正常项（点击看配方），只有缺料的才红。
+    const craftable = new Set(this.craftableIds());
     for (const itemId of visible) {
       const owned = this.inventory.countOf(itemId);
       const slot = this.createSlot();
       slot.classList.add('category-slot');
       // 取消选中 / 换选之后要能按 id 找回这一格（重建会把元素换掉）
       slot.dataset.itemId = String(itemId);
-      if (owned <= 0) slot.classList.add('locked');
+      if (!craftable.has(itemId)) slot.classList.add('locked');
       // 提示框（悬停 / 长按）与"点击弹说明"都靠这份数据
       this.tooltipStacks.set(slot, { id: itemId, count: owned > 0 ? owned : 1 });
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
@@ -1472,11 +1515,14 @@ export class InventoryScreen {
   }
 
   /**
-   * 点分类里的一件物品（批次 159）。
+   * 点左栏里的一件**可合成产物**（批次 159 → 206 改语义）。
    *
-   * ① 说明一律弹在快捷栏上方（那条由委托的 `showPickToast` 负责，固定位置）；
-   * ② 右栏在合成状态时，把这件东西的**配方**摆出来——可组装就以它为目标，
-   *    材料够就直接摆进合成格；不够就把配方**画**进合成格，缺的那件红底。
+   * 用户："生存模式下，不管是红底还是非红底，都不能有选中效果，但可以有点击效果；
+   * 点击后右侧工作台页要显示其合成配方，材料与生成物都要在槽内。"
+   *
+   * 所以生存模式这里**不再把仓库里的成品拿到手上**（那是"选中"，会跟着手指走），
+   * 只做两件事：记下"看过它"（缺料后仍留在列表里）+ 把配方画到右栏。
+   * 创造模式保留原来的"拿一件复制品"（那一栏本来就是无限物品）。
    */
   private pickCategoryItem(itemId: number): void {
     diag.event('inventory', 'category.pick', {
@@ -1485,65 +1531,72 @@ export class InventoryScreen {
       held: this.held?.id ?? null,
       heldCount: this.held?.count ?? 0,
     });
-    // ① **再点同一件 = 取消选中**（批次 159 补）；点另一件 = 先把手上那叠放回去再选新的。
-    //    ⚠️ 取消/放回会让分类栏重建，所以格子元素要按 id **重新找**，不能沿用旧引用。
-    if (this.held) {
-      const same =
-        this.heldOriginEl !== null &&
-        this.heldOriginEl.dataset.itemId === String(itemId) &&
-        this.categoryGrid.contains(this.heldOriginEl);
-      this.cancelHeldSelection();
-      if (same || this.held) return; // 同一格：取消就结束；放不下：也别继续
-    }
-    // ② **选中**：红底那种"我没有的"选不了。
-    //    选中的就是这一格——之后点窗口外丢弃、点可放置处放置、点别的物品栏换位。
-    const owned = this.inventory.countOf(itemId);
-    if (owned > 0) {
-      const index = this.inventory.find(itemId);
-      const stack = index >= 0 ? this.inventory.get(index) : null;
-      if (stack) {
-        this.held = stack;
-        this.inventory.set(index, null);
-        // notify 会触发一次 refresh：那时 held 已经在了，分类栏被冻结、元素不会被换掉
-        this.inventory.notify();
-        // 记来源：点窗口外是丢弃，点不可放置区域是原位退回
-        this.touchOrigin = { source: this.inventory, index, itemId };
-        this.heldFromCreative = false;
-        this.heldOriginEl =
-          this.categoryGrid.querySelector<HTMLElement>(`.category-slot[data-item-id="${itemId}"]`) ?? null;
+    this.viewedRecipeIds.add(itemId);
+
+    if (this.hooks.isCreative?.() ?? false) {
+      // 创造：再点同一件 = 取消选中；否则把仓库里那叠拿到手上（复制品语义另说）
+      if (this.held) {
+        const same =
+          this.heldOriginEl !== null &&
+          this.heldOriginEl.dataset.itemId === String(itemId) &&
+          this.categoryGrid.contains(this.heldOriginEl);
+        this.cancelHeldSelection();
+        if (same || this.held) return;
+      }
+      const owned = this.inventory.countOf(itemId);
+      if (owned > 0) {
+        const index = this.inventory.find(itemId);
+        const stack = index >= 0 ? this.inventory.get(index) : null;
+        if (stack) {
+          this.held = stack;
+          this.inventory.set(index, null);
+          this.inventory.notify();
+          this.touchOrigin = { source: this.inventory, index, itemId };
+          this.heldFromCreative = false;
+          this.heldOriginEl =
+            this.categoryGrid.querySelector<HTMLElement>(`.category-slot[data-item-id="${itemId}"]`) ?? null;
+        }
       }
     }
-    // ③ 右栏在合成 → 把这件东西"由什么组成"摆出来
+
     this.showRecipeFor(itemId);
     this.refresh();
   }
 
-  /** 把一件东西的配方摆进右栏的合成格（材料够就摆实物，不够就画出来、缺的红底） */
+  /**
+   * 把一件东西的配方摆进右栏（批次 206：材料与**生成物**都要看得见）。
+   *
+   *  - 材料够：真实摆进合成格（结果由 `CraftingGrid` 算，点结果就能取）；
+   *  - 材料不够：材料画成预览（缺的红底），**结果槽也画出产物**（只读预览）；
+   *  - 3×3 配方在 2×2 背包里摆不下：点亮"需要工作台"小图标，不硬塞；
+   *  - 只能烧出来的：点亮"熔炉"小图标。
+   */
   private showRecipeFor(itemId: number): void {
-    if (this.pocketTab !== 'crafting') return;
-    // 批次 166：**创造模式不显示配方**——创造模式拥有所有方块，
-    // "这件东西由什么组装"没有任何意义；点物品就只是"拿起它"。
-    // 顺手把可能残留的配方预览收掉（从生存切过来时它可能还画在合成格里）。
+    // 点在左栏时右栏可能停在"盔甲"页：切回合成，否则"配方"画在看不见的地方
+    if (this.pocketTab !== 'crafting') {
+      this.pocketTab = 'crafting';
+      this.applyInventoryChrome();
+    }
     this.clearCraftGhost();
-    this.craftStation = null;
+    // 批次 166：创造模式不显示配方（拥有所有方块，看配方没有意义）
     if (this.hooks.isCreative?.() ?? false) return;
     const recipe = recipesForResult(itemId)[0];
-    // 批次 185：没有合成配方、但能在熔炉里烧出来 → 点亮"熔炉"小图标
     if (!recipe) {
       if (SMELTING_RECIPES.some((entry) => entry.output.id === itemId)) this.craftStation = 'furnace';
       return;
     }
-    // 批次 185：3×3 的配方在 2×2 背包里摆不下——不再"什么都不显示"，
-    // 而是点出工作台图标（材料预览只对摆得下的配方有意义）。
     if (recipeGridSize(recipe) > this.crafting.size) {
       this.craftStation = 'workbench';
       return;
     }
     if (canCraft(this.inventory, recipe).ok) {
       fillCraftingGrid(this.inventory, this.crafting, recipe);
+      this.previewResult = null;
       return;
     }
     this.showRecipeGhost(recipe);
+    // 材料不齐时结果槽也画出来（用户："工作台的槽只有材料，这是不对的"）
+    this.previewResult = { id: recipe.result.id, count: recipe.result.count };
   }
 
   /**
@@ -1589,12 +1642,13 @@ export class InventoryScreen {
       ghost[i] = { id, have: taken <= this.inventory.countOf(id) };
     }
     this.craftGhost = ghost;
-    this.refresh();
+    // 刷新由调用方统一做（它还要把结果槽的预览一起摆好）
   }
 
   private clearCraftGhost(): void {
-    // 预览收了，"要工作台/要熔炉"的标记也一起收（批次 185）
+    // 预览收了，"要工作台/要熔炉"的标记与结果槽预览也一起收（批次 185 / 206）
     this.craftStation = null;
+    this.previewResult = null;
     if (!this.craftGhost) return;
     this.craftGhost = null;
     for (const [key, binding] of this.bindings) {
@@ -1853,9 +1907,12 @@ export class InventoryScreen {
     this.creativeSection.style.display = leftPane === 'creative' ? '' : 'none';
     this.categoryHostEl.style.display = leftPane === 'category' ? 'flex' : 'none';
     if (leftPane === 'category') this.renderCategoryGrid();
-    // 批次 159：左栏是物品分类时，右栏只留合成区——合成区**下方那片 3×9 仓库不显示**
-    //（分类栏已经把"我有什么"列出来了）。工作台界面例外：它本来就是 3×3 + 3×9 的排法。
-    const hideMainGrid = leftPane === 'creative' || (leftPane === 'category' && !workbench);
+    // 批次 159/206：左栏是物品分类时，那片 3×9 仓库必须一起藏掉。
+    // ⚠️ 以前工作台是"例外"（`leftPane === 'category' && !workbench`），但两者在
+    // `pocket-dual` 网格里**占的是同一格**（col 1 / row 2）——工作台 + 分类栏时
+    // 3×9 会直接盖在分类列表上，就是用户说的"多一个浮层"。
+    // 想搬仓库里的东西时切到左下那颗"物品栏"页签即可（那才是 3×9 的入口）。
+    const hideMainGrid = leftPane === 'creative' || leftPane === 'category';
     this.mainGridEl.style.display = hideMainGrid ? 'none' : '';
     // 左栏上方那行「物品栏」也不要（基岩版左栏没有这行字）
     this.personalInventoryTitleEl.style.display = 'none';
@@ -1899,6 +1956,10 @@ export class InventoryScreen {
       // 切到"生存背包"时也不该冒出来（人还在创造模式里）。
       this.recipesBtn.classList.toggle('hidden', creativePlayer);
       this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned);
+      // 批次 206：这颗开关现在管的是"要不要把看过的**缺料配方**也列出来（红底）"
+      this.recipesBtn.title = this.showUnowned
+        ? '正在显示看过的缺料配方（红底）· 点一下只看现在能做的'
+        : '只看现在能做的 · 点一下把看过的缺料配方也列出来（红底）';
     }
 
     // 换栏内容时给一下淡入：**位置不动**，只是让人看见"这一栏换了一份"
@@ -2724,34 +2785,31 @@ export class InventoryScreen {
       { signal: this.listeners.signal },
     );
 
-    // 点面板里的非槽位区域 = 取消当前选取，不移动任何物品。
-    // “窗口外”仍由下面 root 的监听处理为丢弃；两块区域的语义必须分开。
+    // 点面板里的空白处 = **丢弃**（批次 206，用户反复提的那条）。
+    //
+    // 以前这里写的是"取消选中、原位退回"——理由是"面板内不属于窗口外"。
+    // 但在手机上，面板背景几乎铺满整屏，玩家真正能点到的"窗口外"只有边缘一条缝；
+    // 手指点在两栏之间/格子之外的空处时，看到的正是"外面"，期待的就是丢出去。
+    // 这个项目里没有"点空白取消"的其它入口损失（Esc / ✕ 都能关、再点原格也能放回）。
     this.panel.addEventListener('pointerdown', (event) => {
       const target = event.target as HTMLElement;
       if (!this.held) return;
       if (target.closest('.inv-slot, button, input, .recipe-cell')) return;
       event.preventDefault();
       event.stopPropagation();
-      this.cancelHeldSelection();
+      // 鼠标右键只丢一个（Wiki 原文），触摸/左键丢整叠
+      this.dropHeldStack(event.button === 2 ? 1 : this.held.count);
     });
 
-    // 点界面外：**把手上的东西丢进世界**（批次 128，对齐原版；
-    // 原来是"放回背包"，那与原版不符——原版是直接丢出去）。
-    // ⚠️ 批次 132 按 Wiki「物品管理」补上按键之分：**左键全部丢出、右键只丢一个**
-    //（原文："左键点击物品栏界面中暗色的无内容处会将鼠标上的物品全部丢出。
-    // 按右键则只会丢出一个。"）
+    // 点界面外（含 shell 留白、快捷栏 dock 以外的暗色区域）：同样丢进世界。
+    // 判据从"target 必须是 root/shell"放宽成"**不在任何交互元素里**"——
+    // 原来点两栏之间的缝、或某个装饰层什么都不发生，玩家就会以为"丢弃没做"。
     this.root.addEventListener('pointerdown', (event) => {
-      // 面板与快捷栏 dock 之外的**空处**都算"界面外"（含 shell 自己的留白）：
-      // 只认 `event.target === root` 时，点两栏之间的缝什么都不发生，
-      // 玩家就会以为"丢弃没做"。
-      if (event.target !== this.root && event.target !== this.shellEl) return;
+      const target = event.target as HTMLElement;
+      if (this.panel.contains(target) || this.hotbarDock.contains(target)) return;
+      if (target.closest('.inv-slot, button, input, .recipe-cell')) return;
       event.preventDefault();
-      if (this.held) {
-        const count = event.button === 2 ? 1 : this.held.count;
-        this.hooks.onDrop?.(this.held.id, count);
-        this.held = count >= this.held.count ? null : { ...this.held, count: this.held.count - count };
-      }
-      this.refresh();
+      this.dropHeldStack(event.button === 2 ? 1 : (this.held?.count ?? 0));
     });
 
     document.addEventListener(
@@ -2776,6 +2834,39 @@ export class InventoryScreen {
       },
       { signal: this.listeners.signal },
     );
+  }
+
+  /**
+   * 把光标上那一叠**整个丢进世界**（批次 206：点面板空白 / 窗口外）。
+   *
+   * 只报"丢哪件、丢几件"给主程序（它才知道玩家站哪、掉落物怎么生成）。
+   * 主程序没接 `onDrop` 时退回"原位放回"——宁可放回去，也不能把东西凭空吃掉。
+   */
+  private dropHeldStack(count = this.held?.count ?? 0): void {
+    if (!this.held) return;
+    if (!this.hooks.onDrop) {
+      this.cancelHeldSelection();
+      return;
+    }
+    const stack = this.held;
+    const drop = Math.min(Math.max(1, count), stack.count);
+    diag.event('inventory', 'item.drop', {
+      itemId: stack.id,
+      count: drop,
+      from: 'outside',
+      creative: this.hooks.isCreative?.() ?? false,
+    });
+    this.hooks.onDrop(stack.id, drop);
+    this.showMessage(`已丢弃 ${itemLabel(stack.id)} ×${drop}`);
+    if (drop >= stack.count) {
+      this.held = null;
+      this.heldFromCreative = false;
+      this.heldOriginEl = null;
+    } else {
+      this.held = { ...stack, count: stack.count - drop };
+    }
+    this.touchOrigin = null;
+    this.refresh();
   }
 
   /**
@@ -2892,6 +2983,12 @@ export class InventoryScreen {
   }
 
   private activateSlotInner(key: string, button: number, shift = false): void {
+    // 点合成格 = 要自己摆材料了：先把只读的配方预览收掉（批次 206），
+    // 否则预览会盖在真实材料上，玩家分不清哪一格是实物。
+    if (this.craftGhost && key !== 'craft:result' && key.startsWith('craft:')) {
+      this.clearCraftGhost();
+      this.refresh();
+    }
     // **双击收集**（批次 128）：同一格在 400ms 内点第二下 → 把容器里的同类凑满一整堆。
     // ⚠️ 放在最前面：双击的那一下不该再按"普通左键"走一遍（那会先把光标上的东西放下）
     const now = performance.now();
@@ -3458,8 +3555,10 @@ export class InventoryScreen {
       this.pocketTab = 'inventory';
       // 创造模式默认回到"无限物品"，生存回到"个人仓库"
       this.pane = (this.hooks.isCreative?.() ?? false) ? 'creative' : 'items';
-      this.hooks.onCloseRecipes?.();
     }
+    // 打开背包 / 工作台前先收掉可能还挂着的配方书面板（批次 206）。
+    // 以前只在 `inventory` 分支收，从配方书直接去开工作台时会留下"多一层浮层"。
+    if (mode === 'inventory' || mode === 'crafting') this.hooks.onCloseRecipes?.();
     this.applyInventoryChrome();
     this.openPanel();
     // 基岩版工作台默认把左侧那一片摊开。必须等背包先 open，
@@ -3618,9 +3717,13 @@ export class InventoryScreen {
     }
 
     if (this.mode === 'inventory' || this.mode === 'crafting') {
-      const result = this.crafting.result;
+      // 真实结果优先；只有"缺料预览"时才把预览产物画进结果槽（批次 206）
+      const real = this.crafting.result;
+      const result = real ?? (this.craftGhost ? this.previewResult : null);
       this.renderInto(this.resultElement, result ? { id: result.id, count: result.count } : null);
-      this.resultElement.classList.toggle('ready', result !== null);
+      this.resultElement.classList.toggle('ready', real !== null);
+      // 预览产物是只读的：与真实产物不同的底色，避免玩家以为点了能拿
+      this.resultElement.classList.toggle('preview-result', real === null && result !== null);
       this.resultElement.classList.add('take-only');
       // 批次 185：箭头上面那颗"要工作台/要熔炉"的小图标
       this.syncCraftStation();
