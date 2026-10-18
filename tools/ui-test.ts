@@ -1981,6 +1981,11 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       settingsSrc.includes("classList.add('pause-open')") &&
       css.includes('body.pause-open .rotate-hint'),
   );
+  check(
+    '全屏与 popstate 同时到达时只处理一次（不会一次返回退两个层级）',
+    appSrc.includes('private pauseAfterFullscreenTimer') &&
+      appSrc.includes('window.clearTimeout(this.pauseAfterFullscreenTimer);'),
+  );
 
   // ② 工作台 3×3：创造模式左栏仍能切分类
   check(

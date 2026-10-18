@@ -277,7 +277,8 @@
 - [x] B206-2 自动跳跃：`GameSettings.autoJump`（默认开）+ 设置「控制」组开关；
   `PlayerPhysics.update(..., autoJump)` 前方一格高的坎自动起跳（两格墙不蹦）
 - [x] B206-3 返回 = 暂停：监听 `fullscreenchange`（安卓返回常只退出全屏）；
-  暂停/继续层挂 `body.pause-open` 让竖屏提示让位；继续游戏顺手要回全屏+横屏
+  暂停/继续层挂 `body.pause-open` 让竖屏提示让位；继续游戏顺手要回全屏+横屏；
+  与 `popstate` 同时到达时用 160ms 计时器去重（一次返回只处理一次）
 - [x] B206-4 HUD：聊天/玩家信息左上、性能右上；聊天保留 300 条、打开铺 120 行可滑；
   新增 `emitPlayerNotices()`（受伤/回血/饥饿/低血/缺氧/着火）
 - [x] B206-5 背包分类改口径：列"材料能合成什么"（`craftableIds`，按背包 + 合成格指纹缓存）；

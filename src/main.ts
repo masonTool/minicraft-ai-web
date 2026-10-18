@@ -1001,6 +1001,15 @@ class App {
    * 而不是"暂停"。这里盯住"从全屏掉出来"这一刻，没有面板就落回暂停菜单。
    */
   private lastFullscreen = false;
+  /**
+   * "掉出全屏之后稍等一下再弹暂停"的计时器（批次 206）。
+   *
+   * 安卓返回键在**有些内核里会同时**派发 `fullscreenchange` 与 `popstate`：
+   * 两个都当成一次返回的话，第二下会把刚弹出的暂停菜单当成"再按一次"→ 直接退出世界。
+   * 所以全屏那一路只挂一个 160ms 的计时器；只要 `popstate` 先到就取消它，
+   * 由返回键那条路**只处理一次**。
+   */
+  private pauseAfterFullscreenTimer: number | null = null;
   private readonly hotbarSlots: HTMLDivElement[] = [];
   /** 聊天与命令输入（左下角消息栏 + 命令输入行） */
   private readonly chat = new ChatInput();
@@ -1681,6 +1690,11 @@ class App {
       'popstate',
       () => {
         if (this.disposed) return;
+        // 掉出全屏那一路还在等 → 这次返回已经落到这里了，让它不要再弹一次
+        if (this.pauseAfterFullscreenTimer !== null) {
+          window.clearTimeout(this.pauseAfterFullscreenTimer);
+          this.pauseAfterFullscreenTimer = null;
+        }
         // 批次 181：**游戏内没有面板时，返回 = 打开暂停菜单**。
         // 以前这里交给浏览器（PWA 里等于直接退出游戏）——玩家只是想关个界面，
         // 结果把整局退了，这是手机上最容易被劝退的一处。
@@ -1709,9 +1723,16 @@ class App {
         syncRotateHint();
         return;
       }
-      diag.event('input', 'back.exitFullscreen', {});
-      this.openSettings();
-      syncRotateHint();
+      // 稍等一下再弹：如果同一手势还会派发 `popstate`，那边会取消这个计时器，
+      // 避免"一次返回被处理两次、第二下直接退出世界"。
+      if (this.pauseAfterFullscreenTimer !== null) window.clearTimeout(this.pauseAfterFullscreenTimer);
+      this.pauseAfterFullscreenTimer = window.setTimeout(() => {
+        this.pauseAfterFullscreenTimer = null;
+        if (this.disposed || this.isAnyUiOpen()) return;
+        diag.event('input', 'back.exitFullscreen', {});
+        this.openSettings();
+        syncRotateHint();
+      }, 160);
     };
     document.addEventListener('fullscreenchange', onFullscreenChange, { signal: this.listeners.signal });
     document.addEventListener('webkitfullscreenchange', onFullscreenChange, { signal: this.listeners.signal });
@@ -10179,6 +10200,10 @@ class App {
     // 从后台回来那一层遮罩挂在 body 上（不在 App 的容器里），要自己摘掉
     this.resumeGateEl?.remove();
     this.resumeGateEl = null;
+    if (this.pauseAfterFullscreenTimer !== null) {
+      window.clearTimeout(this.pauseAfterFullscreenTimer);
+      this.pauseAfterFullscreenTimer = null;
+    }
     document.body.classList.remove('pause-open');
     this.wasHidden = false;
     diag.event('app', 'dispose', { world: this.worldConfig.id });
