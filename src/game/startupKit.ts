@@ -5,15 +5,22 @@
  * 末尾追加几件验收物资**——所以它是全仓库改动最频繁的数据表之一，
  * 单独放一份，改它不必在 8000 行的入口文件里找。
  *
- * ⚠️ 表的顺序有意义：`main.ts` 先填 `DEV_BASE_KIT`，再**从末尾倒着**填
- * `STARTING_HOTBAR`——所以越靠后越优先、被挤掉的永远是中间那几批。见下面 DEV_BASE_KIT 的说明。
+ * ⚠️ **批次 181 起它们不再自动发放**：生存模式开局就是空手（用户要求），
+ * 创造模式直接从创造背包拿，不需要塞进 36 格。只有显式打开调试开关
+ *（`?devkit=1` 或 `localStorage['mc.devkit'] = '1'`）才会走 `grantDevKit()`。
+ * 这样既保留了"加一批功能顺手塞两件验收物资"的习惯，又不会再把新玩家吓到。
+ *
+ * ⚠️ 表的顺序仍然有意义：`DEV_BASE_KIT` 先填（基础 12 件），再填 `STARTING_HOTBAR`；
+ * `DEV_KIT_ITEMS` 会去重，所以同一件东西不会占两格。
  */
 
 import { Block, JUNGLE_LOG_ID, stainedGlassId } from '../core/registry/blocks.ts';
 import { ARMOR_TYPES, armorItemId } from '../core/registry/armor.ts';
 // 染料一律按**颜色名**查（批次 91 起）：写死下标会在配色表改动时静默做错颜色
-import { Item, dyeIdByName } from '../core/registry/items.ts';
+import { Item, dyeIdByName, maxStackOf } from '../core/registry/items.ts';
+import { itemLabel } from '../core/registry/itemNames.ts';
 import { toolItemId } from '../core/registry/tools.ts';
+import type { Inventory } from '../core/container/Inventory.ts';
 
 /**
  * 开发期初始物资：补齐各色基础方块，便于立刻验证玩法。
@@ -144,3 +151,53 @@ export const STARTING_HOTBAR: readonly number[] = [
   // 开发期蜘蛛那一族（批次 93）：蜘蛛眼是"剧毒"唯一的原料，也是发酵蜘蛛眼的起点
   Item.SPIDER_EYE,
 ];
+
+/**
+ * 去重后的完整清单。
+ *
+ * 为什么必须去重：`DEV_BASE_KIT` 与 `STARTING_HOTBAR` 有十余件重叠
+ * （草/土/石/圆石/木板/原木/玻璃/荧石/铁镐/铁斧/铁剑）。方块能靠堆叠合并，
+ * 但**工具与盔甲 `maxStack = 1`**——重复一次就多占一格，36 格很快就不够。
+ *
+ * ⚠️ 顺序按"第一次出现"保留：基础 12 件在前，各批验收物资按表里的顺序跟在后面。
+ */
+export const DEV_KIT_ITEMS: readonly number[] = [...new Set([...DEV_BASE_KIT, ...STARTING_HOTBAR])];
+
+/**
+ * 要不要发开发物资。
+ *
+ * 两个入口都认：
+ *  - URL `?devkit=1`：临时排查时最方便；
+ *  - `localStorage['mc.devkit'] === '1'`：装成 PWA / 没有地址栏时仍然生效。
+ */
+export function devKitRequested(search: string, stored: string | null): boolean {
+  const query = search.startsWith('?') ? search.slice(1) : search;
+  if (new URLSearchParams(query).get('devkit') === '1') return true;
+  return stored === '1';
+}
+
+export interface DevKitGrant {
+  /** 放进去的件数（每件占一格或并进已有的同类堆） */
+  granted: number;
+  /** 放不下的物品名（36 格满了） */
+  skipped: string[];
+}
+
+/**
+ * 把开发物资放进背包。
+ *
+ * ⚠️ **每件的数量必须按 `maxStackOf` 夹**（批次 181 修的真 bug）：
+ * 原来统一写 `add(itemId, 64)`，而镐/甲 `maxStack = 1`，`Inventory.addStack`
+ * 会"每个空格放 1 件、直到放完 64 件"——于是第一把铁镐就把剩余 27 格全填成铁镐，
+ * 后面的物资一件都进不来，玩家看到的是"仓库塞满铁镐 + 开发物资超出背包"。
+ */
+export function grantDevKit(inventory: Inventory): DevKitGrant {
+  let granted = 0;
+  const skipped: string[] = [];
+  for (const itemId of DEV_KIT_ITEMS) {
+    const count = Math.max(1, Math.min(64, maxStackOf(itemId)));
+    if (inventory.add(itemId, count) > 0) skipped.push(itemLabel(itemId));
+    else granted++;
+  }
+  return { granted, skipped };
+}

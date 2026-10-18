@@ -18,6 +18,8 @@ import {
 } from '../src/core/registry/items.ts';
 import { translateName } from '../src/core/registry/itemNames.ts';
 import { HOTBAR_SIZE, Inventory, OFFHAND_SLOT, TOTAL_SLOTS } from '../src/core/container/Inventory.ts';
+import { DEV_KIT_ITEMS, devKitRequested, grantDevKit } from '../src/game/startupKit.ts';
+import { toolItemId } from '../src/core/registry/tools.ts';
 
 let passed = 0;
 let failed = 0;
@@ -218,6 +220,48 @@ console.log('\n[背包：整栈存入（批次 63）]');
   drag.moveTo(1, 0);
   equal('改名的那份没被并掉（换位）', drag.get(0)?.name, '地基');
   equal('普通那份还在原处', drag.get(1)?.name, undefined);
+}
+
+console.log('\n[开发期物资：开关 / 去重 / 非堆叠发放（批次 181）]');
+{
+  equal('清单去重后没有重复 id', new Set(DEV_KIT_ITEMS).size, DEV_KIT_ITEMS.length);
+  check('清单里确实有铁镐（这条断言才有意义）', DEV_KIT_ITEMS.includes(toolItemId('pickaxe', 'iron')));
+
+  check('?devkit=1 打开开关', devKitRequested('?devkit=1', null));
+  check('不带问号也认', devKitRequested('devkit=1', null));
+  check('localStorage 标记也认', devKitRequested('', '1'));
+  check('默认关闭（URL 与存储都没开）', !devKitRequested('', null));
+  check('其它参数不会误触发', !devKitRequested('?foo=1', null));
+
+  // 旧 bug 的"底噪"：`add(非堆叠, 64)` 本来就会逐格填满 36 格。
+  // 把这条钉住，是为了防止以后有人把"发放数量"改回 64 又以为是 Inventory 坏了。
+  const raw = new Inventory();
+  raw.add(toolItemId('pickaxe', 'iron'), 64);
+  const rawPicks = Array.from({ length: TOTAL_SLOTS }, (_, i) => raw.get(i)).filter(
+    (stack) => stack?.id === toolItemId('pickaxe', 'iron'),
+  );
+  equal('add(铁镐, 64) 会占满 36 格（这是 Inventory 的正常语义）', rawPicks.length, 36);
+
+  const kit = new Inventory();
+  const result = grantDevKit(kit);
+  const pick = toolItemId('pickaxe', 'iron');
+  const pickSlots = Array.from({ length: TOTAL_SLOTS }, (_, i) => kit.get(i)).filter(
+    (stack) => stack?.id === pick,
+  );
+  equal('开局发放只占 1 格铁镐', pickSlots.length, 1);
+  equal('铁镐数量就是 1 把', pickSlots[0]?.count, 1);
+
+  // 所有非堆叠物品都不该出现"同一件占两格"
+  const nonStackable = DEV_KIT_ITEMS.filter((id) => maxStackOf(id) === 1);
+  const duplicated = nonStackable.filter((id) => {
+    const slots = Array.from({ length: TOTAL_SLOTS }, (_, i) => kit.get(i)).filter((stack) => stack?.id === id);
+    return slots.length > 1;
+  });
+  equal('非堆叠物品没有一件占两格', duplicated.length, 0);
+
+  check('清单比 36 格多（所以确实会有放不下的）', DEV_KIT_ITEMS.length > TOTAL_SLOTS);
+  check('放不下时如实报告（控制台用）', result.skipped.length > 0);
+  equal('放进去的件数 = 36 - 跳过的件数', result.granted + result.skipped.length, DEV_KIT_ITEMS.length);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

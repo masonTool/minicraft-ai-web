@@ -530,8 +530,8 @@ import {
   spawnerKey,
   type WorldConfig,
 } from './game/tuning.ts';
-// 开发期初始物资：每加一批功能都要往 STARTING_HOTBAR 末尾追加验收物资，单独放一份
-import { DEV_BASE_KIT, STARTING_HOTBAR } from './game/startupKit.ts';
+// 开发期初始物资（批次 181 起默认不发，只有 `?devkit=1` 才发）
+import { devKitRequested, grantDevKit } from './game/startupKit.ts';
 // 启动耗时台账（N8 的判据，批次 103）：量"首次访问等多久"与"进世界等多久"两个数
 import { STARTUP_PHASES, startupTrace } from './game/startupTrace.ts';
 // 诊断日志（批次 181）：平时常开、500KB 封顶；设置里有入口，`window.__mc.diag` 给自动化取
@@ -1458,25 +1458,24 @@ class App {
       diagnosticsStats: () => diag.stats(),
     });
 
-    // 开发期初始物资（见 STARTING_HOTBAR 注释）。
+    // 开发期初始物资（批次 181）：**默认不再发放**。
     //
-    // ⚠️ **倒序填**（批次 88 修正）：背包只有 36 格，而这张单子早就超过 36 件了
-    // （每一件都是各自的物品 id，没法互相合并）。正序填的话，**最后写进去的那些**
-    // ——也就是最近几批新加的验收物资——会被 `add` 静默丢掉（返回值一直没人看），
-    // 症状是"这一批的东西按说明试不出来"。
-    // 倒序之后"最新那一批一定拿得到"，旧的靠创造模式或命令补。
-    const skipped: string[] = [];
-    // 先"地基"（见 `DEV_BASE_KIT`），再倒序填各批验收物资
-    for (const itemId of [...DEV_BASE_KIT, ...[...STARTING_HOTBAR].reverse()]) {
-      if (this.inventory.add(itemId, 64) > 0) skipped.push(itemLabel(itemId));
+    // 用户的原话是"生存模式开局应当空手"，而创造模式本来就能从分类里随时拿，
+    // 往仓库里塞 70 多件既没用、又正好把 36 格挤爆（铁镐那一堆就是这么来的）。
+    // 现在只有显式打开调试开关才发；开关见 `startupKit.devKitRequested`。
+    let storedDevKit: string | null = null;
+    try {
+      storedDevKit = localStorage.getItem('mc.devkit');
+    } catch {
+      // 无痕模式：读不到就当没开
     }
-    if (skipped.length > 0) {
-      // 不静默：控制台留全量，聊天里只列前几件（不然开局刷满一屏）
-      console.info(`[dev] 开发期物资有 ${skipped.length} 件放不进背包（36 格）：${skipped.join('、')}`);
-      this.chat.push(
-        `开发期物资超出背包，这 ${skipped.length} 件没放进来：${skipped.slice(0, 6).join('、')}${skipped.length > 6 ? ' 等' : ''}`,
-        'system',
+    if (devKitRequested(location.search, storedDevKit)) {
+      const kit = grantDevKit(this.inventory);
+      console.info(
+        `[dev] 开发期物资：${kit.granted} 件已放入` +
+          (kit.skipped.length > 0 ? `，${kit.skipped.length} 件放不下（36 格）：${kit.skipped.join('、')}` : ''),
       );
+      diag.event('app', 'devkit', { granted: kit.granted, skipped: kit.skipped.length });
     }
 
     // 触摸操作层：只在手势设备上创建，桌面端完全不引入这套 DOM
