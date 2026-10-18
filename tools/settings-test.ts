@@ -15,6 +15,8 @@
 import {
   AUTOSAVE_LABELS,
   AUTOSAVE_OPTIONS,
+  BRIGHTNESS_MAX,
+  BRIGHTNESS_MIN,
   DEFAULT_SETTINGS,
   PARTICLE_DENSITY,
   PARTICLE_LEVELS,
@@ -319,6 +321,27 @@ console.log('\n[视距口径：设备上限与恢复默认（批次 202 / 203）
   check('复位后渲染分辨率回到 1.0', fresh.resolutionScale === 1);
   check('复位后装饰层回到 0（云与粒子回来）', fresh.decorLevel === 0);
   check('复位后帧时间假定值不再"卡"（否则会立刻再降一轮）', fresh.frameTimeAvg < FRAME_TIME_DROP);
+}
+
+// ---------------------------------------------------------------- 10. 批次 220：场景亮度
+
+console.log('\n[场景亮度（批次 220）]');
+{
+  check('默认亮度是 1（= 不滤镜，与加这个设置之前完全一样）', DEFAULT_SETTINGS.brightness === 1);
+  check('范围是 50%~200%', BRIGHTNESS_MIN === 0.5 && BRIGHTNESS_MAX === 2);
+
+  const storage = new MemoryStorage();
+  useStorage(storage);
+  saveSettings({ ...DEFAULT_SETTINGS, brightness: 1.35 });
+  check('调过之后能存下来并读回', Math.abs(loadSettings().brightness - 1.35) < 1e-9);
+
+  // 脏数据：超范围要夹住，不是原样吃下去（否则一个坏值能把画面洗成全白/全黑）
+  storage.setItem(KEY, JSON.stringify({ brightness: 9 }));
+  check('超过 200% 夹到 2', loadSettings().brightness === 2);
+  storage.setItem(KEY, JSON.stringify({ brightness: 0.1 }));
+  check('低于 50% 夹到 0.5', loadSettings().brightness === 0.5);
+  storage.setItem(KEY, JSON.stringify({ brightness: '亮一点' }));
+  check('不是数字的回退默认 1', loadSettings().brightness === 1);
 }
 
 useStorage(null);

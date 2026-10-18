@@ -63,6 +63,17 @@ export const TOUCH_SCALE_MIN = 0.8;
 export const TOUCH_SCALE_MAX = 1.4;
 
 /**
+ * 场景亮度的范围（批次 220）：0.5 ~ 2，1 = 原始亮度。
+ *
+ * 用户要的是"能调节游戏内场景的亮度"——它不是游戏里的光照等级（那个由天光/火把决定），
+ * 而是**屏幕这一层**的增益：户外强光下、或者手机贴了防窥膜时，把画面整体提亮。
+ * 落地方式见 `main.applySceneBrightness`（渲染画布的 CSS brightness 滤镜），
+ * 所以它不改变任何方块/生物的实际亮度，也不进存档。
+ */
+export const BRIGHTNESS_MIN = 0.5;
+export const BRIGHTNESS_MAX = 2;
+
+/**
  * 循环按钮上的"当前值"（批次 172 修的一个真 bug）。
  *
  * ⚠️ 设置里有的项存的是**数字**（帧率上限 0/30/60、自动保存 30/60/120），
@@ -152,6 +163,13 @@ export interface GameSettings {
   skinTone: number;
   shirtColor: number;
   pantsColor: number;
+  /**
+   * 场景亮度（批次 220）：1 = 原始亮度，0.5~2（设置里显示成 50%~200%）。
+   *
+   * 只影响**渲染画布**（天空、地形、生物、粒子全在一起），不影响 HUD 与各个面板，
+   * 所以夜里把它调亮不会把按钮也一起洗白。
+   */
+  brightness: number;
   /** 视角模式：第一人称 / 第三人称背后 / 第三人称正面（`V` 键循环切换） */
   cameraMode: CameraMode;
   /** 粒子效果强度：`off` 完全关闭、`reduced` 减半、`all` 全开（低配设备/手机省电用） */
@@ -248,6 +266,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   skinTone: DEFAULT_APPEARANCE.skinTone,
   shirtColor: DEFAULT_APPEARANCE.shirtColor,
   pantsColor: DEFAULT_APPEARANCE.pantsColor,
+  brightness: 1,
   cameraMode: 'first',
   particles: 'all',
   clouds: true,
@@ -304,6 +323,8 @@ export function loadSettings(): GameSettings {
       skinTone: appearanceIndex(parsed.skinTone, SKIN_TONES.length, DEFAULT_SETTINGS.skinTone),
       shirtColor: appearanceIndex(parsed.shirtColor, SHIRT_COLORS.length, DEFAULT_SETTINGS.shirtColor),
       pantsColor: appearanceIndex(parsed.pantsColor, PANTS_COLORS.length, DEFAULT_SETTINGS.pantsColor),
+      // 场景亮度（批次 220）：超范围夹住，坏值回到 1（= 不滤镜）
+      brightness: clampNumber(parsed.brightness, BRIGHTNESS_MIN, BRIGHTNESS_MAX, DEFAULT_SETTINGS.brightness),
       cameraMode: CAMERA_MODES.includes(parsed.cameraMode as CameraMode)
         ? (parsed.cameraMode as CameraMode)
         : DEFAULT_SETTINGS.cameraMode,
@@ -388,16 +409,16 @@ export interface SettingsActions {
   /** 当前是不是在飞（决定那一行的开关亮不亮） */
   isFlying?: () => boolean;
   /**
-   * 诊断日志（批次 181）：三个入口都给了才显示这一块。
+   * 诊断日志（批次 181）：给了这个回调才显示这一块。
    *
    * 为什么放在设置而不是暂停菜单：暂停菜单只放"几个主要按钮"（批次 108 的定论），
    * 而日志是排查用的低频入口；设置里已经有资源包这种同类项。
+   *
+   * ⚠️ 批次 220（用户）：只保留**导出**。原来还有「记录问题」（往日志里插一条 mark）
+   * 与「复制」（把可读时间线放进剪贴板）两颗：它们对玩家来说是三个差不多的按钮，
+   * 但导出时 JSON 里本来就带着整条时间线，打点/复制并不产出额外信息。
    */
-  onDiagnosticsMark?: () => void;
-  /** 返回是否真的触发了下载（无 DOM / 被拒时为 false） */
   onDiagnosticsExport?: () => boolean;
-  /** 返回是否复制成功 */
-  onDiagnosticsCopy?: () => Promise<boolean>;
   /** 当前条数 / 占用，用来在入口上显示"离 500KB 还有多远" */
   diagnosticsStats?: () => { events: number; kb: number; marked: boolean };
   /**
@@ -628,6 +649,11 @@ export class SettingsScreen {
     // 用户："想创建角色、把他搞得漂亮一点"。这里先给**档位**而不是自由取色
     //（模型是方块拼的，自由取色很容易调成一坨），改完第三人称与背包 3D 预览同时生效。
     const appearance = this.section('appearance');
+    // 场景亮度（批次 220，用户要求）：户外看不清屏幕时就靠它把画面提亮。
+    // 50%~200%，100% 等于不动——**不改光照本身**，只改屏幕这一层（见 `applySceneBrightness`）。
+    appearance.append(
+      this.makeSlider('brightness', '场景亮度', '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
+    );
     this.makeSelect(
       appearance,
       'skinTone',
@@ -698,10 +724,8 @@ export class SettingsScreen {
     // 飞行：只在创造模式里显示（由 `refreshGameModeRows()` 控制显隐）
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
     game.appendChild(this.makeResourcePackRow());
-    // 诊断日志（批次 181）：平时常开、500KB 封顶；这里只放"打点 / 导出 / 复制"
-    if (this.actions.onDiagnosticsMark || this.actions.onDiagnosticsExport || this.actions.onDiagnosticsCopy) {
-      game.appendChild(this.makeDiagnosticsRow());
-    }
+    // 诊断日志（批次 181）：平时常开、500KB 封顶；批次 220 起这里只留「导出」
+    if (this.actions.onDiagnosticsExport) game.appendChild(this.makeDiagnosticsRow());
     // 恢复默认（批次 185，用户要求）：一行一颗键，放在"游戏"组最下面——
     // 它影响的是**所有**分组，所以不塞进任何一组，而是整页的最后一个动作。
     const resetRow = document.createElement('div');
@@ -1032,10 +1056,16 @@ export class SettingsScreen {
   }
 
   /**
-   * 诊断日志（批次 181）。
+   * 诊断日志（批次 181；批次 220 只留「导出」）。
    *
-   * 三个动作刻意都放在**同一行**里：出事时玩家只记得"进设置点那个日志"，
+   * 读数与按钮挤在同一行：出事时玩家只记得"进设置点那个日志"，
    * 再分子菜单就又多一层找不到的入口。
+   *
+   * 为什么删掉另外两颗（用户："只保留那个导出按钮就可以了"）：
+   *  - 「记录问题」只是往时间线里插一条要自己命名的 mark，而导出本来就从最早一条开始；
+   *  - 「复制」产出的是可读时间线，但导出的 JSON 里每个会话都带同一份事件，
+   *    AI 侧本来就要转成时间线再读。
+   *   两颗按钮不提供额外能力，却让"出了问题该点哪个"变成一个选择。
    */
   private makeDiagnosticsRow(): HTMLElement {
     const block = document.createElement('div');
@@ -1065,24 +1095,10 @@ export class SettingsScreen {
       actions.appendChild(button);
     };
 
-    if (this.actions.onDiagnosticsMark) {
-      make('记录问题', '打一个标记，导出时能直接找到现场起点', () => {
-        this.actions.onDiagnosticsMark?.();
-        this.refreshDiagnostics();
-      });
-    }
     if (this.actions.onDiagnosticsExport) {
       make('导出', '下载 JSON（含最近两次会话，最多 500KB）', () => {
         const ok = this.actions.onDiagnosticsExport?.() ?? false;
         this.refreshDiagnostics(ok ? '已导出' : '导出失败');
-      });
-    }
-    if (this.actions.onDiagnosticsCopy) {
-      make('复制', '把可读时间线复制到剪贴板', () => {
-        void this.actions
-          .onDiagnosticsCopy?.()
-          .then((ok) => this.refreshDiagnostics(ok ? '已复制' : '复制失败'))
-          .catch(() => this.refreshDiagnostics('复制失败'));
       });
     }
 

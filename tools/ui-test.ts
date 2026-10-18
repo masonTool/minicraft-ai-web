@@ -1550,9 +1550,13 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
     compact.includes('.settings-row.wide { grid-column: 1 / -1; }') &&
       source.includes("row.className = 'settings-row wide';"),
   );
-  // 诊断日志（批次 181）：入口在设置里，读数与三个动作挤一行且不许撑破
+  // 诊断日志（批次 181）：入口在设置里，读数与按钮挤一行且不许撑破
   check('诊断日志入口在设置里', source.includes('诊断日志') && source.includes('makeDiagnosticsRow'));
-  check('诊断日志三个动作齐全', source.includes('记录问题') && source.includes('导出') && source.includes('复制'));
+  // 批次 220（用户）：只保留「导出」——打点与复制对玩家不产出额外信息
+  check(
+    '诊断日志只留导出（不再有记录问题 / 复制）',
+    source.includes("make('导出'") && !source.includes("make('记录问题'") && !source.includes("make('复制'"),
+  );
   check(
     '诊断读数放不下时省略（不撑破设置行）',
     compact.includes('.diag-block {') &&
@@ -2420,6 +2424,27 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     chatSrc.includes('this.openedAt = performance.now();') &&
       chatSrc.includes('performance.now() - this.openedAt < 350') &&
       chatSrc.includes("closest?.('#touch-pause')"),
+  );
+  // 批次 220（用户）：字号小一倍、消息 1 秒消失、显示期间点一下进聊天（不弹键盘）
+  check(
+    '聊天字号走一个变量（用户要求"小一倍"）',
+    html.includes('--chat-font-size: 8px;') && html.includes('font-size: var(--chat-font-size);'),
+  );
+  check(
+    '消息 1 秒后彻底消失（0.7s 清晰 + 0.3s 淡出）',
+    chatSrc.includes('const LINE_LIFETIME = 700;') &&
+      chatSrc.includes('const FADE_AFTER = 300;') &&
+      html.includes('transition: opacity .3s linear;'),
+  );
+  check(
+    '显示期间点一下直接进聊天（只有 .chat-log 接手势）',
+    html.includes('#chat.peek .chat-log { pointer-events: auto;') &&
+      chatSrc.includes("this.root.classList.toggle('peek', !this.open && lines.length > 0);") &&
+      chatSrc.includes("this.openWith('', { focus: false });"),
+  );
+  check(
+    '点消息进来不聚焦输入框（手机不弹键盘）',
+    chatSrc.includes('if (options.focus !== false) {') && chatSrc.includes('this.inputEl.focus();'),
   );
   const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check(

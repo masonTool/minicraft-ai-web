@@ -97,6 +97,8 @@ import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
 import {
+  BRIGHTNESS_MAX,
+  BRIGHTNESS_MIN,
   SettingsScreen,
   defaultViewDistanceFor,
   loadSettings,
@@ -1389,6 +1391,9 @@ class App {
     this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), this.perf.resolutionScale, this.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
+    // 场景亮度（批次 220）：设置里的值只在"玩家改设置"时才走 `applySettings`，
+    // 启动时必须先落一次，否则存档里调过的亮度要等玩家进一次设置才生效
+    this.applySceneBrightness(this.settings.brightness);
 
     this.skyColor = new THREE.Color(0x8fc7ff);
     this.scene.background = this.skyColor;
@@ -1665,10 +1670,8 @@ class App {
       // 模式（批次 181）：唯一的入口在暂停菜单；双击跳只切飞行
       onToggleGameMode: () => this.setGameMode(nextGameMode(this.gameMode)),
       gameMode: () => this.gameMode,
-      // 诊断日志（批次 181）：打点 / 导出 / 复制，读数由 runtime 自己算
-      onDiagnosticsMark: () => diag.mark('用户记录问题'),
+      // 诊断日志（批次 181；批次 220 只留导出）：读数由 runtime 自己算
       onDiagnosticsExport: () => diag.download(),
-      onDiagnosticsCopy: () => diag.copy(),
       diagnosticsStats: () => diag.stats(),
       // 全屏 / 横屏：被系统踢出全屏、或第一次手势错过时的兜底入口
       onToggleFullscreen: () => {
@@ -1873,8 +1876,28 @@ class App {
     return this.isAnyUiOpen();
   }
 
+  /**
+   * 场景亮度（批次 220，用户："加一个游戏内的设置，可以调节游戏内场景的亮度"）。
+   *
+   * 为什么要用 CSS 滤镜，而不是把亮度乘进材质：
+   *  - 本项目的光照已经烘进**顶点色 + 贴图 + 天空盒 + 雾 + 粒子 + 手持物品 + 屏幕色罩**，
+   *    逐个材质乘一遍要动 6 个以上着色器，还一定会在"以后新加的渲染器"上漏掉；
+   *  - `brightness()` 作用在渲染画布这一层，上述全部一起变，且**不影响 HUD 与面板**
+   *    （夜里调亮不会把按钮、聊天一起洗白）。
+   *
+   * 100% 时把 filter 清空：那一条不写，浏览器就不会为画布多开一次合成，
+   * 于是默认设置下的性能与加这个功能之前完全一致。
+   */
+  private applySceneBrightness(value: number): void {
+    const brightness = Math.min(BRIGHTNESS_MAX, Math.max(BRIGHTNESS_MIN, value));
+    this.renderer.domElement.style.filter =
+      Math.abs(brightness - 1) < 0.001 ? '' : `brightness(${brightness})`;
+  }
+
   private applySettings(settings: GameSettings, meta?: SettingsChangeMeta): void {
     this.cameraMode = settings.cameraMode;
+    // 场景亮度先落（纯显示层，与其他设置没有依赖）
+    this.applySceneBrightness(settings.brightness);
     // 视距必须在这里再夹一次上限（批次 202）。
     //
     // `settings.viewDistance` 是**玩家在滑块上看到的数**（桌面默认 12），手机的"最多 8"
@@ -10258,6 +10281,8 @@ class App {
         maxFps: this.settings.maxFps,
         touchScale: this.settings.touchScale,
         touchStick: this.settings.touchStick,
+        // 批次 220：亮度会改变截图观感，导出里带上它才能判断"是不是玩家自己调的"
+        brightness: this.settings.brightness,
         // 批次 202：这两项决定"出问题时自动降级有没有在干活"，漏了就只能猜
         adaptiveViewDistance: this.settings.adaptiveViewDistance,
         adaptiveResolution: this.settings.adaptiveResolution,

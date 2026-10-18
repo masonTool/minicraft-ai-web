@@ -6,7 +6,7 @@
  *  - **命令输入**：`T` 或 `/` 打开，Enter 提交，Esc 取消，↑↓ 翻历史，Tab 补全
  *
  * 为什么不直接做一个 `<input>` 常驻：原版是"按键才出现输入行"，常驻会挡住视野；
- * 而且消息栏要能自己淡出（8 秒后旧消息变淡、再久一点消失）。
+ * 而且消息栏要能自己淡出（批次 220：整条消息 1 秒后彻底消失，见 `LINE_LIFETIME`）。
  */
 
 import { commandNames, mobNames } from '../core/commands/Commands.ts';
@@ -15,6 +15,17 @@ import { isTouchUi } from './TouchControls.ts';
 
 export type ChatLineKind = 'player' | 'system' | 'error' | 'damage' | 'gain' | 'warning';
 
+/** 打开输入框的选项（批次 220） */
+export interface ChatOpenOptions {
+  /**
+   * 是否把焦点放进输入框（默认 `true`）。
+   *
+   * 手机点消息进来时传 `false`：聚焦会立刻弹起虚拟键盘，而玩家可能只是想翻记录。
+   * 想打字时再点一下输入框即可（那一下是玩家自己的意图）。
+   */
+  focus?: boolean;
+}
+
 interface ChatLine {
   text: string;
   kind: ChatLineKind;
@@ -22,9 +33,16 @@ interface ChatLine {
   expires: number;
 }
 
-/** 消息在屏幕上停留的时间（毫秒） */
-const LINE_LIFETIME = 10000;
-const FADE_AFTER = 4000;
+/**
+ * 消息在屏幕上停留的时间（毫秒）。批次 220，用户："显示的时间一秒就消失"。
+ *
+ * 拆成两段是为了"消失"有个淡出、而不是硬切：
+ *  - `LINE_LIFETIME` 内完全清晰（0.7 秒，够看清一行短提示）；
+ *  - 之后按 `FADE_AFTER` 淡出，`700 + 300 = 1 秒`后连同 DOM 一起移出。
+ * 想调长短只改这两个常量（历史消息不会丢：打开输入框仍能翻最近 120 行）。
+ */
+const LINE_LIFETIME = 700;
+const FADE_AFTER = 300;
 /** 收起时最多显示的行数 */
 const MAX_LINES = 10;
 /**
@@ -125,6 +143,20 @@ export class ChatInput {
     host.appendChild(this.root);
 
     this.inputEl.addEventListener('keydown', (event) => this.onInputKeyDown(event));
+    // 显示期间点一下 ⇒ 直接进入聊天（批次 220）。
+    // 只在 `#chat.peek` 期间有效（CSS 给 `.chat-log` 开了 pointer-events），
+    // 所以没有消息时这一层根本不接手势，不会抢走转视角。
+    // `focus: false`：手机不弹键盘；`stopPropagation`：这一下不该再落到视角/放置上。
+    this.logEl.addEventListener(
+      'pointerdown',
+      (event) => {
+        if (this.open) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.openWith('', { focus: false });
+      },
+      { signal: this.listeners.signal },
+    );
     // 滚动历史时如果停在底部附近，新消息就继续跟随；翻到上面看旧消息时不要跳回底部
     this.logEl.addEventListener(
       'scroll',
@@ -177,19 +209,23 @@ export class ChatInput {
     console.info(`[chat] ${text}`);
   }
 
-  openWith(prefill = ''): void {
+  openWith(prefill = '', options: ChatOpenOptions = {}): void {
     if (this.open) return;
     this.open = true;
     this.openedAt = performance.now();
     this.root.classList.add('open');
+    this.root.classList.remove('peek');
     this.entryEl.classList.remove('hidden');
     this.inputEl.classList.remove('hidden');
     this.hintEl.classList.remove('hidden');
     this.sendButton.classList.remove('hidden');
     this.inputEl.value = prefill;
-    this.inputEl.focus();
-    // 光标放到末尾（`/` 预填时就在斜杠后面）
-    this.inputEl.setSelectionRange(prefill.length, prefill.length);
+    // 批次 220：点消息进来时不聚焦（手机不弹键盘）；键盘/按 T 进来仍然聚焦
+    if (options.focus !== false) {
+      this.inputEl.focus();
+      // 光标放到末尾（`/` 预填时就在斜杠后面）
+      this.inputEl.setSelectionRange(prefill.length, prefill.length);
+    }
     this.historyIndex = -1;
     this.lastPrefix = '';
     // 打开这一刻铺出历史并停在最上面（最新的一条）；往下滑才是更早的消息
@@ -269,6 +305,9 @@ export class ChatInput {
   private renderLog(now = performance.now()): void {
     const { start, lines } = this.visibleRange(now);
     this.renderedStart = start;
+    // 收起且有消息 → 开放点击（批次 220）。全部过期后这一行会把 `.peek` 摘掉，
+    // 于是左上角那块区域重新变成 `pointer-events: none`，不会吃转视角的手势。
+    this.root.classList.toggle('peek', !this.open && lines.length > 0);
     const fragment = document.createDocumentFragment();
     // 批次 209：**新消息在上、旧消息在下**（与常见聊天软件一致）。
     // `visibleRange` 仍按时间正序切片，这里倒过来插 DOM。
