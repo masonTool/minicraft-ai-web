@@ -431,6 +431,7 @@ import {
 import { SignEditor } from './ui/SignEditor.ts';
 import { BookScreen } from './ui/BookScreen.ts';
 import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
+import { SHIELD_KNOCKBACK, canBlockDamage, isFrontalAttack, isShield, shieldWear } from './core/items/Shield.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -5967,13 +5968,24 @@ class App {
    * 创造模式（飞行）免疫；无敌帧由 PlayerStats 判断。
    */
   private damagePlayer(amount: number, sourceX: number, sourceZ: number, cause: DamageCause = 'generic'): void {
-    // 触觉反馈：受击用"双短震"区分于放方块的轻震
-    if (amount > 0) this.vibrate([18, 40, 18]);
-    if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
     if (this.isCreative) return;
     // 难度倍率：和平难度下生物不造成伤害（原版和平难度敌对生物根本不生成）
     const damage = amount * difficultyProfile(this.difficulty).mobDamage;
     if (damage <= 0) return;
+
+    // 盾牌（批次 194）：正面挡近战与箭矢——**挡下不等于受伤**，所以音效与震动都在下面才播
+    if (
+      this.isShieldUp &&
+      canBlockDamage(cause) &&
+      isFrontalAttack(-Math.sin(this.yaw), -Math.cos(this.yaw), sourceX - this.physics.x, sourceZ - this.physics.z)
+    ) {
+      this.blockWithShield(damage, sourceX, sourceZ);
+      return;
+    }
+
+    // 触觉反馈：受击用"双短震"区分于放方块的轻震
+    if (amount > 0) this.vibrate([18, 40, 18]);
+    if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
     // 状态效果（抗性提升）在统一入口里叠加
     const before = this.stats.health;
     this.applyIncomingDamage(damage, cause);
@@ -5991,6 +6003,50 @@ class App {
     this.physics.vz += (dz / length) * 6;
     this.physics.vy = Math.max(this.physics.vy, 4.2);
     this.physics.onGround = false;
+  }
+
+  /**
+   * 现在是不是**举着盾**（主手或副手，且正按住"使用"）。
+   *
+   * 与 `usingItem` 同一条判据：桌面是按住右键、手柄是"使用"键、
+   * 触摸端是**按住空处**（准星没对着方块时长按）。创造模式不需要挡（本来就不受伤）。
+   */
+  private get isShieldUp(): boolean {
+    if (this.isCreative || !this.usingItem) return false;
+    return isShield(this.inventory.get(this.hotbarIndex)) || isShield(this.inventory.get(OFFHAND_SLOT));
+  }
+
+  /**
+   * 盾牌挡下一击（批次 194）：扣耐久、播闷响、轻推一下，**不进伤害流程**。
+   *
+   * 主手优先、其次副手（原版也是这个顺序）；耐久归零就碎掉（与工具同一条"碎掉"处理）。
+   */
+  private blockWithShield(amount: number, sourceX: number, sourceZ: number): void {
+    const wear = shieldWear(amount);
+    for (const slot of [this.hotbarIndex, OFFHAND_SLOT]) {
+      const stack = this.inventory.get(slot);
+      if (!stack || !isShield(stack)) continue;
+      const max = durabilityOf(stack.id) || 1;
+      const damage = (stack.damage ?? 0) + wear;
+      if (damage >= max) {
+        this.inventory.set(slot, null);
+        this.audio.play('break_wood', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
+        this.chat.push('盾牌碎了', 'system');
+      } else {
+        this.inventory.set(slot, { ...stack, damage });
+      }
+      this.refreshHotbar();
+      break;
+    }
+    this.audio.play('shield_block', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
+    this.vibrate([10, 30, 10]);
+
+    // 轻微后仰：沿"来源 → 玩家"方向推一小把（原版也是往后退半步）
+    const dx = this.physics.x - sourceX;
+    const dz = this.physics.z - sourceZ;
+    const length = Math.hypot(dx, dz) || 1;
+    this.physics.vx += (dx / length) * SHIELD_KNOCKBACK;
+    this.physics.vz += (dz / length) * SHIELD_KNOCKBACK;
   }
 
   /**

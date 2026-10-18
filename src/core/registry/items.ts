@@ -194,6 +194,8 @@ export const Item = {
    *
    * 不可堆叠：每一本的内容都不一样（与成书同一个理由）。
    */
+  /** 盾牌（批次 194）：举起来挡近战与箭矢，耐久 336 */
+  SHIELD: 1493,
   /** 烟火之星（批次 192）：火药 + 染料，是烟花的颜色来源（自己不会飞） */
   FIREWORK_STAR: 1494,
   /** 烟花火箭（批次 192）：纸 + 火药（1~3 份决定档位）+ 可选的星 */
@@ -444,6 +446,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
   { id: Item.INK_SAC, name: 'minecraft:ink_sac', tile: 'item_ink_sac' },
+  // 盾牌（批次 194）：耐久 336，铁砧用木板修（`SPECIAL_ITEMS` 里那条）
+  { id: Item.SHIELD, name: 'minecraft:shield', tile: 'item_shield', maxStack: 1, durability: 336 },
   // 烟花（批次 192，H16）：数据在 `firework`（档位 + 颜色），所以也不可堆叠
   { id: Item.FIREWORK_STAR, name: 'minecraft:firework_star', tile: 'item_firework_star', maxStack: 1 },
   { id: Item.FIREWORK_ROCKET, name: 'minecraft:firework_rocket', tile: 'item_firework_rocket', maxStack: 1 },
@@ -684,6 +688,8 @@ export const SPECIAL_ITEMS: Record<number, { kind: string; repair: string }> = {
   // 钓竿（批次 81）：`kind` 让附魔台能出"诱饵/海之眷顾/耐久/经验修补"，
   // `repair` 让铁砧能用木板修它（原版也是木板）
   [Item.FISHING_ROD]: { kind: 'fishing_rod', repair: 'wooden' },
+  // 盾牌（批次 194）：原版铁砧用木板修；`kind` 让它能进附魔台（耐久/经验修补那一族）
+  [Item.SHIELD]: { kind: 'shield', repair: 'wooden' },
 };
 
 /**

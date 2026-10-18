@@ -66,7 +66,14 @@ export type SoundKind =
   /** 活板门（批次 138）：短促的一声木质闷响（原版这三种门各有各的声） */
   | 'trapdoor'
   /** 栅栏门（批次 138）：比门更轻的木头声 */
-  | 'fence_gate';
+  | 'fence_gate'
+  /**
+   * 盾牌挡下攻击（批次 194）：木面被打中的"咚"（低频为主 + 一点金属尾巴）。
+   *
+   * 不复用 `hurt`：那是"我受伤了"的反馈，而挡下恰恰是"我没受伤"——
+   * 两者用同一声，玩家会以为盾牌没生效。
+   */
+  | 'shield_block';
 
 export interface SoundSpec {
   /** 声音总时长（秒） */
@@ -142,6 +149,8 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   item_move: { duration: 0.05, gain: 0.16, noise: 0.35, freqFrom: 560, freqTo: 360, type: 'square', filter: 2400, filterQ: 1.3, attack: 0.001, release: 0.045 },
   // 关门（批次 138）：木质门"咔嗒"——起手极短、低频闷响收尾，与开门的"吱呀"（`door`）分开
   door_close: { duration: 0.18, gain: 0.42, noise: 0.5, freqFrom: 240, freqTo: 90, type: 'square', filter: 900, filterQ: 3, attack: 0.001, release: 0.17, thump: 95 },
+  // 盾牌挡下（批次 194）：木板被砸中的闷响 + 一点铁边的高频尾音
+  shield_block: { duration: 0.22, gain: 0.42, noise: 0.55, freqFrom: 300, freqTo: 120, type: 'square', filter: 1800, filterQ: 2.2, attack: 0.001, release: 0.2, thump: 120 },
   // 活板门：一块木板拍下来的"咚"（比门短、比栅栏门闷）
   trapdoor: { duration: 0.2, gain: 0.4, noise: 0.72, freqFrom: 200, freqTo: 120, type: 'square', filter: 1100, filterQ: 2.6, attack: 0.002, release: 0.19, thump: 110 },
   // 栅栏门：更轻的木头（噪声多、音调高一点，听起来"薄"）
@@ -211,6 +220,7 @@ export const SOUND_GROUPS: Readonly<Record<SoundKind, SoundGroup>> = {
   shear: 'blocks',
   step: 'player',
   hurt: 'player',
+  shield_block: 'player',
   death: 'player',
   fall: 'player',
   splash: 'player',

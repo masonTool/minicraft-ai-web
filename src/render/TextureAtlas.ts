@@ -3573,6 +3573,36 @@ PAINTERS.item_ink_sac = (x, y, rng) => {
 };
 
 /**
+ * 盾牌（批次 194）：**木面铁边**的圆角盾——上方平、下方收尖，中间一块铁质盾心。
+ *
+ * 形状靠"逐行收边"画出来（不是矩形），因为物品栏里最能认出盾牌的就是那个下尖的轮廓。
+ */
+PAINTERS.item_shield = (x, y, rng) => {
+  const jitter = rng() * 6 - 3;
+  // 越往下越窄：y 11 起每行左右各收 1 格，最后一行收 3 格（收出一个尖）
+  const inset = y >= 13 ? 3 : y >= 11 ? 1 : 0;
+  const left = 3 + inset;
+  const right = 12 - inset;
+  if (x < left || x > right || y < 2 || y > 13) return [0, 0, 0, 0];
+  // 外圈：铁边（亮一档的冷灰）
+  if (x === left || x === right || y === 2 || y === 13) {
+    return [clamp255(178 + jitter), clamp255(182 + jitter), clamp255(186 + jitter), 255];
+  }
+  // 盾心：4×4 的铁块 + 中心高光
+  if (x >= 6 && x <= 9 && y >= 6 && y <= 9) {
+    if (x === 7 || x === 8) {
+      if (y === 7 || y === 8) return [clamp255(226 + jitter), clamp255(228 + jitter), clamp255(232 + jitter), 255];
+    }
+    return [clamp255(150 + jitter), clamp255(154 + jitter), clamp255(160 + jitter), 255];
+  }
+  // 木面：竖向木纹（每三列一档深浅）
+  const plank = (x - left) % 3 === 0;
+  return plank
+    ? [clamp255(112 + jitter), clamp255(78 + jitter), clamp255(46 + jitter), 255]
+    : [clamp255(138 + jitter), clamp255(98 + jitter), clamp255(58 + jitter), 255];
+};
+
+/**
  * 烟火之星（批次 192）：一颗**四角星**——中心白、四角金，周围散几点火星。
  *
  * 为什么不按颜色画：颜色是**每一颗星自己的数据**（`firework.colors`），

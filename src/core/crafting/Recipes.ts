@@ -687,6 +687,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   { kind: 'shapeless' as const, result: { id: Item.PAPER, count: 3 }, ingredients: [Block.SUGAR_CANE, Block.SUGAR_CANE, Block.SUGAR_CANE] },
   // 3 纸 + 1 皮革 → 1 书（原版无序）
   { kind: 'shapeless' as const, result: { id: Item.BOOK, count: 1 }, ingredients: [Item.PAPER, Item.PAPER, Item.PAPER, Item.LEATHER] },
+  // 盾牌（批次 194，B18）：6 木板 + 1 铁锭（原版图案）
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.SHIELD, count: 1 },
+    pattern: ['PIP', 'PPP', ' P '],
+    key: { P, I: Item.IRON_INGOT },
+  },
   // 书 + 墨囊 + 羽毛 → 书与笔（批次 190，H16；原版无序）
   // ⚠️ 墨囊在批次 189 才随鱿鱼出现——在那之前这条配方做成只会是一个"永远做不出来"的配方
   {
