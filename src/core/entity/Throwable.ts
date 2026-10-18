@@ -323,7 +323,7 @@ export class Throwable extends Entity implements MovingBody {
     // 它是唯一一个"两边都可能"的投掷物，所以按 `fromPlayer` 分流而不是按种类
     if (this.kind === 'trident' && !this.fromPlayer) {
       if (ctx.playerBox && entityIntersectsBox(this, ctx.playerBox)) {
-        ctx.hurtPlayer(TRIDENT_THROW_DAMAGE, this.x, this.z, 'projectile', '三叉戟');
+        ctx.hurtPlayer(TRIDENT_THROW_DAMAGE, this.x, this.z, 'projectile', '三叉戟', this.y);
         this.impact(ctx);
         return true;
       }

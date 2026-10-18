@@ -2559,14 +2559,15 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes('takeDamageLog()') &&
       appSrc.includes('damageReason(') &&
       appSrc.includes('受到 ${fmt(total)} 点伤害：') &&
-      mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name)"),
+      // 批次 226：第 6 个参数是攻击者的高度（诊断用，回答"看不见的攻击者在上层还是下层"）
+    mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name, this.y)"),
   );
   // 桥接层（`EntityContext.hurtPlayer` → `damagePlayer`）必须把第 5 个参数原样转过去：
   // 少了它，实体层传的生物名白传，所有生物伤害都显示"没有记录到来源"（批次 218）
   check(
     '实体伤害的来源名在桥接层没有被丢掉',
-    appSrc.includes('hurtPlayer: (amount, sourceX, sourceZ, cause, source) =>') &&
-      appSrc.includes('this.damagePlayer(amount, sourceX, sourceZ, cause, source)'),
+    appSrc.includes('hurtPlayer: (amount, sourceX, sourceZ, cause, source, sourceY) =>') &&
+      appSrc.includes('this.damagePlayer(amount, sourceX, sourceZ, cause, source, sourceY)'),
   );
   check(
     '凋零按自己的类别上报（不再借用 generic → 不再显示"没有记录到来源"）',
@@ -2580,6 +2581,12 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes("diag.event('survival', 'death'") &&
       appSrc.includes("diag.event('survival', 'respawn'") &&
       appSrc.includes("diag.event('survival', 'effect'"),
+  );
+  // 批次 226：伤害诊断要带"攻击者比玩家脚底高多少格"——否则"看不到它却一直挨打"
+  // （用户："提示被蜘蛛打了，但我完全看不到蜘蛛，它离我多远？"）只能靠地形推断
+  check(
+    '掉血诊断带上攻击者的相对高度（dy）',
+    appSrc.includes('dy:') && appSrc.includes('item.sourceY - this.physics.y'),
   );
   check(
     '死亡卡片也写清死因',

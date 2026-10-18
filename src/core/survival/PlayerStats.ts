@@ -125,6 +125,15 @@ export interface DamageEvent {
   /** 净值（护甲减伤后） */
   applied: number;
   source?: string;
+  /**
+   * 攻击者所在高度（批次 226，可选）。
+   *
+   * 由来：用户"提示被蜘蛛打了，但我完全看不到蜘蛛，它离我多远？"——
+   * 诊断里只有 `source: "蜘蛛"` 和一份血量，**没有 attacker 的坐标**，
+   * 只能靠地形推断。实体层现在把自己的 `y` 一起报上来，主程序据此记
+   * `dy = sourceY - 玩家脚底`，一眼就能看出"是地板下的洞，还是头顶的坑沿"。
+   */
+  sourceY?: number;
 }
 
 /**
@@ -245,7 +254,7 @@ export class PlayerStats {
    *
    * @returns 实际结算的伤害（被无敌帧挡下时为 0）
    */
-  damage(amount: number, cause: DamageCause, source?: string): DamageResult {
+  damage(amount: number, cause: DamageCause, source?: string, sourceY?: number): DamageResult {
     const result: DamageResult = { applied: 0, cause, source, fatal: false };
     if (this.dead || amount <= 0) return result;
 
@@ -262,7 +271,7 @@ export class PlayerStats {
     result.applied = afterArmor;
     result.fatal = this.health <= 0;
     this.lastDamage = result;
-    this.damageLog.push({ cause, applied: afterArmor, source });
+    this.damageLog.push({ cause, applied: afterArmor, source, sourceY });
     // 受伤本身也消耗疲劳值（原版 0.1）
     this.addExhaustion(0.1);
     return result;

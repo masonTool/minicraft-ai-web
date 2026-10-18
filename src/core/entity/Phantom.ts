@@ -143,7 +143,7 @@ export class Phantom extends Mob {
           // 不给 `cause`：那就是普通的"被生物打了一下"（默认 `generic`），
           // 与近战那条同一个口径——护甲照常减伤、无敌帧照常生效。
           // 也不放音效：玩家挨打的声音由生存模块统一播（这里再播一次会叠成两下）
-          ctx.hurtPlayer(this.type.attackDamage, this.x, this.z, 'generic', this.type.name);
+          ctx.hurtPlayer(this.type.attackDamage, this.x, this.z, 'generic', this.type.name, this.y);
         }
         break;
       }

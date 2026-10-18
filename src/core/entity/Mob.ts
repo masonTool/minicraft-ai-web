@@ -825,7 +825,8 @@ export class Mob extends Entity {
     // 力量/虚弱影响出手伤害（数值与玩家同源）；虚弱不能把伤害打成负数
     const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
     // 带上生物名：左上角要写"被僵尸攻击"而不是笼统的"受到攻击"（批次 207）
-    ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name);
+    // 第六个参数是**自己所在的高度**（批次 226）：只进诊断，用来回答"看不见的攻击者在上层还是下层"
+    ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name, this.y);
     if (this.type.venom) ctx.afflictPlayer?.(this.type.venom.effect, this.type.venom.seconds);
     return true;
   }

@@ -169,7 +169,7 @@ export class Dragon extends Mob {
       const distance = Math.hypot(player.x - this.x, player.z - this.z);
       const vertical = Math.abs(player.y - this.y);
       if (distance < 5.5 && vertical < 4) {
-        ctx.hurtPlayer(this.type.attackDamage, this.x, this.z, 'generic', this.type.name);
+        ctx.hurtPlayer(this.type.attackDamage, this.x, this.z, 'generic', this.type.name, this.y);
         this.attackTimer = 1.5;
       }
     }
