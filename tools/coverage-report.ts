@@ -139,7 +139,7 @@ const rows: readonly Row[] = [
     spec: SPEC.mobs,
     now: MOB_TYPES.length,
     basis: 'TASKS §0「约 70 种」',
-    gap: '下界系、海洋系、村庄系、驯养系整块',
+    gap: '下界系、海洋系、村庄系（驯养系：批次 242 已补狼/猫/豹猫/狐狸）',
   },
   {
     label: '生物群系',
