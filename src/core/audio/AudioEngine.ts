@@ -416,7 +416,10 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   // 受伤：一条"嗓子"（锯齿波 + 共振峰 = 元音）+ 一点呼气噪声。
   // ⚠️ 这是这一批最重要的改动：旧版是一条 380→160Hz 的锯齿滑音，
   // 没有共振峰就不可能像人声。
-  hurt: spec(0.34, [
+  // 批次 234：在"嗓子"之外补了两层**手机外放能听见**的东西——
+  // 一个低频"闷"（胸腔）与一层 2.6k 的"咬字/呼气"（电话喇叭在 300~1kHz 之外衰减很快，
+  // 只留共振峰会听起来又轻又糊）。音量也从 0.34 提到 0.42。
+  hurt: spec(0.42, [
     tone({
       at: 0,
       dur: 0.3,
@@ -427,12 +430,14 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
       pitch: curve([0.25, 1.08], [1, 0.7]),
       formants: [
         { hz: 620, q: 7, gain: 1 },
-        { hz: 1150, q: 9, gain: 0.55 },
+        { hz: 1250, q: 9, gain: 0.55 },
         { hz: 2400, q: 11, gain: 0.18 },
       ],
       vibrato: { hz: 6, cents: 28 },
     }),
-    noise({ at: 0.01, dur: 0.11, gain: 0.35, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1300, q: 0.8 }),
+    tone({ at: 0, dur: 0.18, gain: 0.35, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'sine', hz: 110, pitch: curve([1, 0.62]) }),
+    noise({ at: 0.01, dur: 0.11, gain: 0.4, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1300, q: 0.8 }),
+    noise({ at: 0, dur: 0.06, gain: 0.3, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 2800, q: 0.7 }),
   ], {
     jitter: 25,
     variants: [
@@ -447,12 +452,14 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
           pitch: curve([0.25, 1.08], [1, 0.7]),
           formants: [
             { hz: 620, q: 7, gain: 1 },
-            { hz: 1150, q: 9, gain: 0.55 },
+            { hz: 1250, q: 9, gain: 0.55 },
             { hz: 2400, q: 11, gain: 0.18 },
           ],
           vibrato: { hz: 6, cents: 28 },
         }),
-        noise({ at: 0.01, dur: 0.11, gain: 0.35, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1300, q: 0.8 }),
+        tone({ at: 0, dur: 0.18, gain: 0.35, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'sine', hz: 110, pitch: curve([1, 0.62]) }),
+        noise({ at: 0.01, dur: 0.11, gain: 0.4, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1300, q: 0.8 }),
+        noise({ at: 0, dur: 0.06, gain: 0.3, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 2800, q: 0.7 }),
       ],
       // 长一点的"啊"（被打得比较重时随机到）
       [
@@ -466,16 +473,18 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
           pitch: curve([0.3, 1.05], [1, 0.62]),
           formants: [
             { hz: 730, q: 8, gain: 1 },
-            { hz: 1090, q: 10, gain: 0.5 },
+            { hz: 1190, q: 10, gain: 0.5 },
             { hz: 2440, q: 12, gain: 0.15 },
           ],
           vibrato: { hz: 5, cents: 34 },
         }),
-        noise({ at: 0.02, dur: 0.16, gain: 0.3, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 1100, q: 0.7 }),
+        tone({ at: 0, dur: 0.22, gain: 0.3, env: curve([0, 0], [0.08, 1], [1, 0]), wave: 'sine', hz: 118, pitch: curve([1, 0.58]) }),
+        noise({ at: 0.02, dur: 0.16, gain: 0.34, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 1100, q: 0.7 }),
+        noise({ at: 0, dur: 0.08, gain: 0.26, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 2600, q: 0.7 }),
       ],
     ],
   }),
-  death: spec(0.4, [
+  death: spec(0.46, [
     tone({
       at: 0,
       dur: 0.85,
@@ -491,7 +500,9 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
       ],
       vibrato: { hz: 4.5, cents: 30 },
     }),
+    tone({ at: 0, dur: 0.5, gain: 0.3, env: curve([0, 0], [0.08, 1], [1, 0]), wave: 'sine', hz: 100, pitch: curve([1, 0.5]) }),
     noise({ at: 0.04, dur: 0.7, gain: 0.22, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'lowpass', hz: 1200, q: 0.6 }),
+    noise({ at: 0, dur: 0.12, gain: 0.24, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 2400, q: 0.7 }),
   ], { jitter: 15 }),
   // 打中生物的"闷响"（玩家近战那一下的打击感；不代替生物的受伤叫）
   hit_flesh: spec(0.3, [

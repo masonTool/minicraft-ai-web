@@ -14,6 +14,7 @@
 
 import { readFileSync } from 'node:fs';
 import { UnsupportedScreen } from '../src/ui/UnsupportedScreen.ts';
+import { DamageFlash, damageFlashStrength, decayDamageFlash } from '../src/ui/DamageFlash.ts';
 import {
   CARD_PAGE_SIZE_NARROW,
   CARD_PAGE_SIZE_WIDE,
@@ -2696,6 +2697,47 @@ console.log('\n[伤害原因文案（批次 207）]');
     '来源为空时不会留下空括号',
     !damageReason('fall', '').includes('（）') && !damageReason('lava', '   ').includes('（）'),
   );
+}
+
+console.log('\n[受伤红闪（批次 234）]');
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  check(
+    '#damage-flash 元素存在且垫在 HUD 之下',
+    html.includes('id="damage-flash"') && html.indexOf('id="damage-flash"') < html.indexOf('id="hud"'),
+  );
+  check('红闪不接指针事件（不会挡住触摸）', /#damage-flash \{[^}]*pointer-events: none/.test(compact));
+  check(
+    '红闪是"中心透明、边缘红"而不是整屏红',
+    compact.includes('radial-gradient(circle at 50% 50%, rgba(255, 40, 40, 0) 36%, rgba(196, 8, 8, .62) 100%)'),
+  );
+
+  check('没掉血就不闪', damageFlashStrength(0) === 0 && damageFlashStrength(-3) === 0);
+  check('掉 1 点也看得见', damageFlashStrength(1) >= 0.35);
+  check('8 点以上封顶（被炸一下不会整屏糊住）', damageFlashStrength(8) === 1 && damageFlashStrength(99) === 1);
+  check(
+    '伤害越高越红（单调）',
+    damageFlashStrength(2) > damageFlashStrength(1) && damageFlashStrength(6) > damageFlashStrength(2),
+  );
+  check('不闪时衰减保持 0', decayDamageFlash(0, 1) === 0);
+  check(
+    '衰减与帧率无关（一次大步 ≈ 两次小步）',
+    Math.abs(decayDamageFlash(decayDamageFlash(1, 0.05), 0.05) - decayDamageFlash(1, 0.1)) < 0.02,
+  );
+  check('衰减不会过冲成负数', decayDamageFlash(0.2, 10) === 0);
+
+  const style = { opacity: '' };
+  const flash = new DamageFlash({ style } as unknown as HTMLElement);
+  flash.hit(4);
+  check('掉血后强度立刻上来', flash.intensity > 0.7, String(flash.intensity));
+  flash.update(0.016);
+  check('按帧写 opacity', style.opacity !== '' && Number(style.opacity) > 0, style.opacity);
+  for (let i = 0; i < 40; i++) flash.update(0.05);
+  check('0.3 秒左右衰减到 0', flash.intensity === 0 && style.opacity === '0', style.opacity);
+  flash.hit(2);
+  flash.reset();
+  check('重置立刻收掉', flash.intensity === 0 && style.opacity === '0', style.opacity);
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

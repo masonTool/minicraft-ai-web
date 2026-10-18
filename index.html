@@ -253,6 +253,18 @@
       #app { position: fixed; inset: 0; }
       #app canvas { display: block; width: 100%; height: 100%; }
 
+      /* 受伤红闪（批次 234）：中心透明、边缘发红（原版掉血那一下就是这个形状）。
+         只由 `ui/DamageFlash` 写 opacity；强度为 0 时元素不产生可见绘制。
+         放在 HUD 之前，层叠上自然压在画布之上、HUD 之下。 */
+      #damage-flash {
+        position: fixed; inset: 0; pointer-events: none;
+        opacity: 0;
+        background:
+          radial-gradient(circle at 50% 50%, rgba(255, 40, 40, 0) 36%, rgba(196, 8, 8, .62) 100%),
+          linear-gradient(rgba(150, 0, 0, .12), rgba(150, 0, 0, .12));
+        will-change: opacity;
+      }
+
       #hud {
         position: fixed; inset: 0; pointer-events: none;
         color: #fff; text-shadow: 1px 1px 0 rgba(0, 0, 0, .7);
@@ -3630,6 +3642,9 @@
       <div class="boot-bar" aria-hidden="true"></div>
       <div class="boot-sub">正在准备材质与存档</div>
     </div>
+
+    <!-- 受伤红闪（批次 234）：垫在 HUD 下面，只由 `ui/DamageFlash` 写 opacity -->
+    <div id="damage-flash" aria-hidden="true"></div>
 
     <div id="hud">
       <!-- 右上：性能信息 + 状态效果（批次 206：性能从左上搬来，聊天/玩家信息占左上） -->

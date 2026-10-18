@@ -235,6 +235,7 @@ import {
 import { AudioEngine, digSoundFor, doorSoundFor, stepSoundFor, type SoundKind } from './core/audio/AudioEngine.ts';
 import { mobVoiceFor, mobVoicePitchFor, mobVoiceSpec } from './core/audio/MobVoices.ts';
 import { MusicDirector } from './core/audio/Music.ts';
+import { DamageFlash } from './ui/DamageFlash.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
@@ -1221,6 +1222,13 @@ class App {
   private readonly audio = new AudioEngine();
   /** 背景音乐导演（批次 233）：程序化生成短句，不依赖音乐素材 */
   private readonly music = new MusicDirector();
+  /**
+   * 受伤红闪（批次 234）：所有掉血（含溺水/着火/饥饿）都从这里闪一下。
+   * DOM 层在 `#hud` 之下，只写 opacity。
+   */
+  private readonly damageFlash = new DamageFlash(document.getElementById('damage-flash'));
+  /** 死亡声是否已经播过（`emitPlayerNotices` 每帧都跑，不能每帧播） */
+  private deathSounded = false;
   /** 挖掘摩擦声的节拍（秒）：挖硬方块时每 0.2 秒响一次 */
   private digSoundTimer = 0;
   /** 脚步音的距离累积器（走满一格半响一声） */
@@ -6376,14 +6384,15 @@ class App {
       return;
     }
 
-    // 触觉反馈：受击用"双短震"区分于放方块的轻震
-    if (amount > 0) this.vibrate([18, 40, 18]);
-    if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
     // 状态效果（抗性提升）在统一入口里叠加
     const before = this.stats.health;
     this.applyIncomingDamage(damage, cause, source);
     const result = { applied: before - this.stats.health };
     if (result.applied <= 0) return;
+
+    // 声音 / 红闪 / 触觉**不在这里**播：统一由 `reactToDamage`（`emitPlayerNotices`）
+    // 按"实际掉的血"出。这样抗性把伤害削到 0 时不会白叫一声，而溺水/着火/饥饿
+    // 这些不走 `damagePlayer` 的伤害也能有同样的反馈。
 
     // 挨打就会被从床上拽起来（原版：睡觉时受伤会惊醒）
     this.interruptSleep();
@@ -9614,6 +9623,10 @@ class App {
         .map((item) => `${damageReason(item.cause, item.source)}（${fmt(item.amount)} 点）`)
         .join('；');
       this.chat.push(`受到 ${fmt(total)} 点伤害：${reasons} · 生命 ${fmt(health)}/20`, 'damage');
+      // 受伤反馈（批次 234）：红闪 + 声音 + 触觉。
+      // ⚠️ 放在这里而不是 `damagePlayer`：只有这里拿得到"**实际**掉了多少血"，
+      // 而且溺水 / 着火 / 饥饿这些不走 `damagePlayer` 的伤害也要有同样的反馈。
+      this.reactToDamage(total);
       // 诊断日志（批次 218）：以前整份导出里**没有任何生命值信息**，只能靠猜。
       // 这里逐条记"被谁、什么类型、掉了多少、剩多少"，导出后一眼能对上。
       for (const item of list) {
@@ -9640,6 +9653,8 @@ class App {
         health,
         food,
       });
+      // 没有流水也要有反馈（否则玩家会看到血条掉了却什么都没发生）
+      this.reactToDamage(-healthDelta);
     }
     if (survivalMode && healthDelta >= 2) {
       this.chat.push(`生命 +${fmt(healthDelta)}（自然恢复或治疗效果）· 当前 ${fmt(health)}/20`, 'gain');
@@ -9695,6 +9710,30 @@ class App {
     this.noticeBurning = this.stats.burning;
   }
 
+  /**
+   * 掉血的三合一反馈（批次 234）：红闪 + 受伤声 + 双短震。
+   *
+   * @param amount 这次**实际**掉了多少血（已扣掉护甲/抗性/无敌帧）
+   *
+   * 为什么三者放在一起：它们的发射条件是同一件事（真的掉了血），
+   * 分成三处写迟早出现"闪了但没声""有声但血没掉"这种半对的状态。
+   * 红闪强度在 8 点封顶，否则被炸一下会整屏糊住。
+   */
+  private reactToDamage(amount: number): void {
+    if (!(amount > 0)) return;
+    this.damageFlash.hit(amount);
+    this.vibrate([18, 40, 18]);
+    // 死亡那一下只播一次：`emitPlayerNotices` 每帧都会跑
+    if (this.stats.dead) {
+      if (!this.deathSounded) {
+        this.deathSounded = true;
+        this.audio.play('death');
+      }
+      return;
+    }
+    this.audio.play('hurt');
+  }
+
   /** 读档 / 重生后重置播报基线，避免把"从存档读出来的低血量"当成刚刚受伤 */
   private resetPlayerNotices(): void {
     // 读档/重生时把上一局的伤害记录清掉，别拿旧原因播报新掉血
@@ -9705,6 +9744,9 @@ class App {
     this.noticeBurning = this.stats.burning;
     this.lowHealthWarned = this.stats.health <= 6;
     this.starveWarned = this.stats.food <= 0;
+    // 批次 234：把上一局的红闪与"死亡声已播"状态清掉
+    this.damageFlash.reset();
+    this.deathSounded = false;
   }
 
   /** 采集一帧的环境快照（水 / 岩浆 / 窒息 / 虚空） */
@@ -10575,6 +10617,8 @@ class App {
       }
       this.updateAudio(dt);
       this.updateMusic(dt);
+      // 红闪按**真实**帧时间衰减（不是 dt）：它是纯视觉反馈，暂停时也不该停在半红
+      this.damageFlash.update(frameSeconds);
       this.net.tick(
         this.physics.x,
         this.physics.y,
@@ -10707,6 +10751,8 @@ class App {
     this.mapScreen.dispose();
     this.beaconScreen.dispose();
     this.deathEl.classList.add('hidden');
+    // 批次 234：红闪是 DOM 层，退出世界时收掉（否则再进世界会是上一局的残留强度）
+    this.damageFlash.reset();
     this.audio.dispose();
 
     this.recipeBook.dispose();
