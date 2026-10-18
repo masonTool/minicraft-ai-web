@@ -1036,6 +1036,8 @@ export const TILE_ORDER = [
   'spawn_egg_polar_bear',
   'spawn_egg_turtle',
   'spawn_egg_axolotl',
+  // 蝙蝠（批次 261）
+  'spawn_egg_bat',
   // 橡木船（批次 244，G12）：物品图标一张
   'item_oak_boat',
   // 铁轨与矿车（批次 245，G12）：铁轨是方块贴图，矿车是物品图标

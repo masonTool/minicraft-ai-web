@@ -92,7 +92,9 @@ type ModelKind =
   /** 水生（批次 259）：鳕鱼 / 鲑鱼 / 海豚——一个纺锤形身体 + 尾鳍 + 背鳍 */
   | 'fish'
   /** 海龟（批次 260）：扁平的壳 + 探出来的头 + 四只鳍足 */
-  | 'turtle';
+  | 'turtle'
+  /** 蝙蝠（批次 261）：一小团身体 + 两片张开的翅膀 + 尖耳 */
+  | 'bat';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
@@ -132,6 +134,7 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'panda' || typeId === 'polar_bear') return 'quadruped';
   if (typeId === 'axolotl') return 'fish';
   if (typeId === 'turtle') return 'turtle';
+  if (typeId === 'bat') return 'bat';
   // 山羊（批次 259）：四足，角暂时用 accent 色的头顶部件代替（`quadruped` 自带鼻吻）
   if (typeId === 'goat') return 'quadruped';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
@@ -164,6 +167,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return fishBoxes(type);
     case 'turtle':
       return turtleBoxes(type);
+    case 'bat':
+      return batBoxes(type);
     case 'bird':
       return birdBoxes(type);
     case 'spider':
@@ -456,6 +461,30 @@ function horseBoxes(type: MobType): BoxSpec[] {
  * 壳用 `body`、鳍足与头用 `accent`，眼睛照旧；前四个部件是鳍足
  * （`legCountOf` 返回 4，走路摆动只认最前面四个）。
  */
+/**
+ * 蝙蝠（批次 261）：一小团身体 + 两片横向张开的翅膀 + 尖耳 + 双眼。
+ *
+ * 没有腿（`legCountOf` 返回 0）；翅膀不做扇动动画——`MobRenderer` 现在只对
+ * "部件表前 N 个"做走路摆动，而蝙蝠的翅膀是第 2、3 个部件（numLegs=0 就不摆）。
+ */
+function batBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  return [
+    // 身体
+    { width: w * 0.5, height: h * 0.9, depth: w * 0.5, x: 0, y: h * 0.5, z: 0, color: 'body' },
+    // 两片翅膀
+    { width: w * 0.55, height: h * 0.12, depth: w * 0.55, x: -w * 0.5, y: h * 0.55, z: 0, color: 'accent' },
+    { width: w * 0.55, height: h * 0.12, depth: w * 0.55, x: w * 0.5, y: h * 0.55, z: 0, color: 'accent' },
+    // 双耳
+    { width: w * 0.1, height: h * 0.3, depth: w * 0.08, x: -w * 0.12, y: h * 0.95, z: 0, color: 'accent' },
+    { width: w * 0.1, height: h * 0.3, depth: w * 0.08, x: w * 0.12, y: h * 0.95, z: 0, color: 'accent' },
+    // 双眼
+    { width: w * 0.08, height: h * 0.12, depth: w * 0.06, x: -w * 0.14, y: h * 0.6, z: w * 0.26, color: 'eye' },
+    { width: w * 0.08, height: h * 0.12, depth: w * 0.06, x: w * 0.14, y: h * 0.6, z: w * 0.26, color: 'eye' },
+  ];
+}
+
 function turtleBoxes(type: MobType): BoxSpec[] {
   const w = type.width;
   const h = type.height;
@@ -683,6 +712,8 @@ function legCountOf(kind: ModelKind): number {
   if (kind === 'fish') return 0;
   // 海龟（批次 260）：四条鳍足（部件表最前面四个）
   if (kind === 'turtle') return 4;
+  // 蝙蝠（批次 261）：飞行动物，没有腿可摆
+  if (kind === 'bat') return 0;
   if (kind === 'quadruped') return 4;
   if (kind === 'spider') return 8;
   // 水晶/烈焰人/恶魂不摆动：水晶自转、烈焰人的火棒长在它自己身上、

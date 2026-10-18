@@ -1136,6 +1136,32 @@ export const AXOLOTL_TYPE: MobType = {
   eyeHeight: 0.3,
 };
 
+/**
+ * 蝙蝠（批次 261）：唯一会飞的被动生物（见 `core/entity/Bat.ts`）。
+ *
+ * ⚠️ `naturalSpawn: false`：原版刷在洞穴，本项目没有"洞穴地面"这条刷怪通道
+ * （高度图给的是世界表面），所以只能靠刷怪蛋/命令出现——理由写在 `Bat.ts` 顶部。
+ */
+export const BAT_TYPE: MobType = {
+  id: 'bat',
+  name: '蝙蝠',
+  health: 6,
+  width: 0.5,
+  height: 0.4,
+  speed: 2.4,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 0,
+  flying: true,
+  naturalSpawn: false,
+  spawnBiomes: ['plains', 'forest', 'taiga', 'jungle'],
+  bodyColor: 0x4a4038,
+  accentColor: 0x2a231d,
+  eyeHeight: 0.3,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -1184,6 +1210,8 @@ export const MOB_TYPES: readonly MobType[] = [
   POLAR_BEAR_TYPE,
   TURTLE_TYPE,
   AXOLOTL_TYPE,
+  // 会飞的那一只（批次 261）
+  BAT_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

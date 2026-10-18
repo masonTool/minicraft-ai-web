@@ -17,6 +17,7 @@
 import { Blaze } from './Blaze.ts';
 import { Ghast } from './Ghast.ts';
 import { Horse } from './Horse.ts';
+import { Bat } from './Bat.ts';
 import { Mob, type MobType } from './Mob.ts';
 import { Phantom, PHANTOM_TYPE } from './Phantom.ts';
 import { Villager } from './Villager.ts';
@@ -44,5 +45,7 @@ export function createMob(type: MobType, x: number, y: number, z: number): Mob {
   if (type.id === 'horse' || type.id === 'donkey' || type.id === 'mule' || type.id === 'llama') {
     return new Horse(type, x, y, z);
   }
+  // 蝙蝠（批次 261）：会飞的那一只，走自己的空中游荡 AI
+  if (type.id === 'bat') return new Bat(type, x, y, z);
   return new Mob(type, x, y, z);
 }

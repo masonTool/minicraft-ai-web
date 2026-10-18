@@ -96,6 +96,7 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'polar_bear', label: '北极熊', id: 1506 },
   { mobId: 'turtle', label: '海龟', id: 1507 },
   { mobId: 'axolotl', label: '美西螈', id: 1508 },
+  { mobId: 'bat', label: '蝙蝠', id: 1509 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */
