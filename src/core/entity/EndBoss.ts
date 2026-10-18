@@ -169,7 +169,7 @@ export class Dragon extends Mob {
       const distance = Math.hypot(player.x - this.x, player.z - this.z);
       const vertical = Math.abs(player.y - this.y);
       if (distance < 5.5 && vertical < 4) {
-        ctx.hurtPlayer(this.type.attackDamage, this.x, this.z);
+        ctx.hurtPlayer(this.type.attackDamage, this.x, this.z, 'generic', this.type.name);
         this.attackTimer = 1.5;
       }
     }
@@ -272,7 +272,7 @@ export class EndCrystal extends Mob {
       const distance = Math.hypot(player.x - this.x, player.y - this.y, player.z - this.z);
       if (distance < CRYSTAL_BLAST_RADIUS) {
         const falloff = 1 - distance / CRYSTAL_BLAST_RADIUS;
-        ctx.hurtPlayer(CRYSTAL_BLAST_DAMAGE * falloff, this.x, this.z);
+        ctx.hurtPlayer(CRYSTAL_BLAST_DAMAGE * falloff, this.x, this.z, 'explosion', '末影水晶');
       }
     }
     return true;

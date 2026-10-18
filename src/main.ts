@@ -30,6 +30,8 @@ import {
   type DamageCause,
   type SurvivalEnvironment,
 } from './core/survival/PlayerStats.ts';
+// 伤害原因文案（批次 207）：表在纯模块里，主循环只负责拼"现象 + 原因"
+import { damageReason } from './core/survival/DamageNotice.ts';
 import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
@@ -632,23 +634,6 @@ type PortalArrivalKind = 'nether' | 'end' | 'spawn';
  */
 const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
 
-/** 伤害来源的中文名（批次 206：左上角信息栏要写清"为什么掉血"） */
-const DAMAGE_CAUSE_LABELS: Record<DamageCause, string> = {
-  poison: '中毒',
-  fall: '摔落',
-  drown: '溺水',
-  lava: '岩浆',
-  fire: '着火',
-  cactus: '仙人掌',
-  suffocate: '窒息',
-  starve: '饥饿',
-  void: '虚空',
-  explosion: '爆炸',
-  projectile: '箭矢',
-  lightning: '雷击',
-  generic: '攻击',
-};
-
 class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -808,6 +793,8 @@ class App {
   private snowyHere = false;
   private snowCheckTimer = 0;
   private readonly deathEl: HTMLElement;
+  /** 死亡卡片上那半句"为什么死的"（批次 207：只写"你死了"等于没解释） */
+  private readonly deathCauseEl: HTMLElement | null;
   /** 帧时间累积成 20Hz 游戏 tick */
   private tickAccumulator = 0;
   /** 本次下落起始高度（用于摔落伤害） */
@@ -1347,6 +1334,7 @@ class App {
       this.dispenseFrom(x, y, z);
     };
     this.deathEl = deathEl;
+    this.deathCauseEl = deathEl.querySelector<HTMLElement>('.death-cause');
     this.vitalsHud = new VitalsHud(vitalsEl);
     // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
     // 塞进 #vitals 那个 flex 列会被挤到别的地方
@@ -5569,7 +5557,8 @@ class App {
       this.borderDamageTimer += dt;
       if (this.borderDamageTimer >= 1) {
         this.borderDamageTimer -= 1;
-        this.damagePlayer(damage, this.physics.x, this.physics.z);
+        // 来源写"世界边界"：不然会显示成笼统的"受到伤害（没有记录到来源）"
+        this.damagePlayer(damage, this.physics.x, this.physics.z, 'generic', '世界边界');
       }
     } else {
       this.borderDamageTimer = 0;
@@ -6263,7 +6252,13 @@ class App {
     this.toolHud.update(null);
   }
 
-  private damagePlayer(amount: number, sourceX: number, sourceZ: number, cause: DamageCause = 'generic'): void {
+  private damagePlayer(
+    amount: number,
+    sourceX: number,
+    sourceZ: number,
+    cause: DamageCause = 'generic',
+    source?: string,
+  ): void {
     if (this.isCreative) return;
     // 难度倍率：和平难度下生物不造成伤害（原版和平难度敌对生物根本不生成）
     const damage = amount * difficultyProfile(this.difficulty).mobDamage;
@@ -6284,7 +6279,7 @@ class App {
     if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
     // 状态效果（抗性提升）在统一入口里叠加
     const before = this.stats.health;
-    this.applyIncomingDamage(damage, cause);
+    this.applyIncomingDamage(damage, cause, source);
     const result = { applied: before - this.stats.health };
     if (result.applied <= 0) return;
 
@@ -6972,7 +6967,7 @@ class App {
       setCreative: (on) => this.setGameMode(on ? 'creative' : 'survival'),
       isCreative: () => this.isCreative,
       killPlayer: () => {
-        this.stats.damage(MAX_HEALTH * 10, 'generic');
+        this.stats.damage(MAX_HEALTH * 10, 'generic', '/kill 命令');
       },
       seed: () => this.world.seed,
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
@@ -7068,7 +7063,7 @@ class App {
       if (instant.id === 'instant_health') {
         this.stats.heal(4 * (instant.amplifier + 1));
       } else if (instant.id === 'instant_damage') {
-        this.applyIncomingDamage(6 * (instant.amplifier + 1), 'generic');
+        this.applyIncomingDamage(6 * (instant.amplifier + 1), 'generic', '瞬间伤害药水');
       }
     }
   }
@@ -7077,10 +7072,11 @@ class App {
    * 统一的外部伤害入口：先把状态效果的减伤算进去（抗性提升），
    * 然后交给 `PlayerStats` 走无敌帧。生物攻击、中毒、瞬间伤害都从这里进。
    */
-  private applyIncomingDamage(amount: number, cause: DamageCause): void {
+  private applyIncomingDamage(amount: number, cause: DamageCause, source?: string): void {
     const scaled = amount * this.effects.incomingDamageMultiplier();
     if (scaled <= 0) return;
-    this.stats.damage(scaled, cause);
+    // `source` 只用于左上角的"为什么掉血"（"僵尸"/"世界边界"…），不参与数值结算
+    this.stats.damage(scaled, cause, source);
   }
 
   /**
@@ -7213,7 +7209,7 @@ class App {
     if (result.damage > 0) {
       if (result.damageCause === 'poison') {
         // 中毒不会致死（原版会停在半颗心）
-        this.stats.poisonDamage(result.damage);
+        this.stats.poisonDamage(result.damage, '中毒效果');
       } else {
         this.applyIncomingDamage(result.damage, 'generic');
       }
@@ -8572,7 +8568,9 @@ class App {
 
     if (cloud.kind === 'dragon_breath') {
       // 同一秒里被好几片云罩住也只掉一次：玩家的无敌帧会挡掉重复的伤害
-      if (playerDistance <= cloud.radius) this.applyIncomingDamage(DRAGON_BREATH_DAMAGE, 'generic');
+      if (playerDistance <= cloud.radius) {
+        this.applyIncomingDamage(DRAGON_BREATH_DAMAGE, 'generic', '末影龙吐息');
+      }
     } else {
       for (const effect of cloudEffectsAt(cloud, playerDistance)) {
         this.effects.apply(effect.id, effect.seconds, effect.amplifier);
@@ -9305,6 +9303,11 @@ class App {
       // 死亡只结算一次：把背包里的东西掉在原地（keepInventory 打开时保留）
       if (!this.deathHandled) {
         this.deathHandled = true;
+        // 死亡卡片也写清死因（"被僵尸打死"和"掉进岩浆"的应对完全不同）
+        if (this.deathCauseEl) {
+          const last = this.stats.lastDamage;
+          this.deathCauseEl.textContent = last ? `（${damageReason(last.cause, last.source)}）` : '';
+        }
         this.dropInventoryOnDeath();
         this.dropExperienceOnDeath();
       }
@@ -9336,52 +9339,80 @@ class App {
     const air = this.stats.air;
     const fmt = (value: number): string => App.statText(value);
 
-    // ---- 生命：掉血一定要说（并带上伤害类型），回血只在 >= 2 点时播（自然回血每 4 秒 1 点，太吵）
+    // ---- 生命：掉血一定要说清"多少 + 为什么"
     const healthDelta = health - this.noticeHealth;
-    if (healthDelta < -0.05) {
-      const cause = this.stats.lastDamage?.cause;
-      const label = cause ? DAMAGE_CAUSE_LABELS[cause] : '';
+    // 先取走这帧的伤害记录：**即使这次没掉血也要清**，否则会串到下一帧、
+    // 让下一次掉血的原因张冠李戴。
+    const damageEvents = this.stats.takeDamageLog().filter((event) => event.applied > 0);
+    if (damageEvents.length > 0) {
+      // 同一帧可能挨好几下（僵尸 + 岩浆）：按"原因"分组，各自的净值分开写
+      const groups = new Map<string, { cause: DamageCause; source?: string; amount: number }>();
+      for (const event of damageEvents) {
+        const key = `${event.cause}|${event.source ?? ''}`;
+        const group = groups.get(key);
+        if (group) group.amount += event.applied;
+        else groups.set(key, { cause: event.cause, source: event.source, amount: event.applied });
+      }
+      const list = [...groups.values()];
+      const total = list.reduce((sum, item) => sum + item.amount, 0);
+      const reasons = list
+        .map((item) => `${damageReason(item.cause, item.source)}（${fmt(item.amount)} 点）`)
+        .join('；');
+      this.chat.push(`受到 ${fmt(total)} 点伤害：${reasons} · 生命 ${fmt(health)}/20`, 'damage');
+    } else if (healthDelta < -0.05) {
+      // 没有记录（理论上不该发生，比如读档直接改了 health）：退回最后一条，至少给出类型
+      const last = this.stats.lastDamage;
       this.chat.push(
-        `受到 ${fmt(-healthDelta)} 点伤害${label ? `（${label}）` : ''} · 生命 ${fmt(health)}/20`,
+        `受到 ${fmt(-healthDelta)} 点伤害：${damageReason(last?.cause ?? 'generic', last?.source)} · 生命 ${fmt(health)}/20`,
         'damage',
       );
-    } else if (healthDelta >= 2) {
-      this.chat.push(`生命 +${fmt(healthDelta)} · 剩余 ${fmt(health)}/20`, 'gain');
+    }
+    if (healthDelta >= 2) {
+      this.chat.push(`生命 +${fmt(healthDelta)}（自然恢复或治疗效果）· 当前 ${fmt(health)}/20`, 'gain');
     }
 
     // ---- 饥饿：掉 1 点也播（原版没有这个提示，但手机上血条很小，等看见时已经晚了）
     if (food < this.noticeFood) {
       const lost = this.noticeFood - food;
-      this.chat.push(`饥饿值 -${fmt(lost)} · 剩余 ${fmt(food)}/20`, food <= 6 ? 'warning' : 'system');
+      const hint = food <= 6 ? ' · 快吃点东西，否则会饿到掉血' : '';
+      this.chat.push(
+        `饥饿值 -${fmt(lost)}（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）· 剩余 ${fmt(food)}/20${hint}`,
+        food <= 6 ? 'warning' : 'system',
+      );
     } else if (food > this.noticeFood) {
-      this.chat.push(`饥饿值 +${fmt(food - this.noticeFood)} · 恢复至 ${fmt(food)}/20`, 'gain');
+      this.chat.push(`饥饿值 +${fmt(food - this.noticeFood)}（进食 / 饱和效果）· 当前 ${fmt(food)}/20`, 'gain');
     }
 
     // ---- 低血量 / 饥饿耗尽：只在"刚跨过阈值"时报一次，恢复后复位
     if (!this.lowHealthWarned && health > 0 && health <= 6) {
       this.lowHealthWarned = true;
-      this.chat.push(`生命值偏低（${fmt(health)}/20），找地方躲一下或吃点东西`, 'warning');
+      this.chat.push(
+        `生命值偏低（${fmt(health)}/20）：先躲开敌人或危险方块，吃东西可以回血`,
+        'warning',
+      );
     } else if (this.lowHealthWarned && health > 10) {
       this.lowHealthWarned = false;
     }
     if (!this.starveWarned && food <= 0) {
       this.starveWarned = true;
-      this.chat.push('饥饿值耗尽：无法自然回血，并且会持续掉血', 'warning');
+      this.chat.push('饥饿值耗尽（体力透支）：会持续掉血，也无法自然回血；快吃东西', 'warning');
     } else if (this.starveWarned && food > 6) {
       this.starveWarned = false;
     }
 
     // ---- 氧气：不足与耗尽各提示一次（之后由"受到伤害"那条接管）
     if (air <= 100 && this.noticeAir > 100) {
-      this.chat.push('氧气不足，快浮上水面！', 'warning');
+      this.chat.push(`氧气不足（正在水下憋气，剩余 ${Math.max(0, Math.round(air))}）：浮上水面换气`, 'warning');
     } else if (air <= 0 && this.noticeAir > 0) {
-      this.chat.push('氧气耗尽，正在溺水', 'damage');
+      this.chat.push('氧气耗尽（已经憋不住）：正在溺水掉血，立刻上浮', 'damage');
     } else if (air > 120 && this.noticeAir <= 100) {
-      this.chat.push('回到水面，氧气恢复', 'gain');
+      this.chat.push('回到水面（已能呼吸）：氧气正在恢复', 'gain');
     }
 
     // ---- 着火：点燃那一刻说一次（持续伤害由生命那条播）
-    if (this.stats.burning && !this.noticeBurning) this.chat.push('你着火了！', 'warning');
+    if (this.stats.burning && !this.noticeBurning) {
+      this.chat.push('你着火了（站在火/岩浆里或被点燃）：每秒掉血，跳进水里可熄灭', 'warning');
+    }
 
     this.noticeHealth = health;
     this.noticeFood = food;
@@ -9391,6 +9422,8 @@ class App {
 
   /** 读档 / 重生后重置播报基线，避免把"从存档读出来的低血量"当成刚刚受伤 */
   private resetPlayerNotices(): void {
+    // 读档/重生时把上一局的伤害记录清掉，别拿旧原因播报新掉血
+    this.stats.takeDamageLog();
     this.noticeHealth = this.stats.health;
     this.noticeFood = this.stats.food;
     this.noticeAir = this.stats.air;

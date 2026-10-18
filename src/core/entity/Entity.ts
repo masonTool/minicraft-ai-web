@@ -177,7 +177,14 @@ export interface EntityContext {
    * 实体层不该认识生存模块的类型，但取值必须与那边对得上（箭矢要传 'projectile'，
    * 否则"弹射物保护"这条附魔永远不生效）。
    */
-  hurtPlayer: (amount: number, sourceX: number, sourceZ: number, cause?: EntityDamageCause) => void;
+  hurtPlayer: (
+    amount: number,
+    sourceX: number,
+    sourceZ: number,
+    cause?: EntityDamageCause,
+    /** 具体来源名（生物名 / 弹射物名），只用于左上角"为什么掉血"的播报 */
+    source?: string,
+  ) => void;
   /**
    * 查询与给定体积相交的生物（箭矢命中判定用）。
    * 实体层不持有生物列表，所以由主程序从实体管理器里查——

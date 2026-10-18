@@ -101,8 +101,23 @@ export interface DamageResult {
   /** 实际扣掉的生命值（护甲减伤后的净值） */
   applied: number;
   cause: DamageCause;
+  /** 更具体的来源（生物名 / 弹射物名 / "世界边界"…）；环境伤害通常为空 */
+  source?: string;
   /** 是否致死 */
   fatal: boolean;
+}
+
+/**
+ * 一次已经结算的伤害（批次 207：左上角要写清"为什么掉血"）。
+ *
+ * `DamageResult` 只保留**最后一次**，而一帧里可能同时挨两下（僵尸 + 岩浆）；
+ * 主循环用这份队列把"这一帧到底发生了什么"逐条播出来，不会再张冠李戴。
+ */
+export interface DamageEvent {
+  cause: DamageCause;
+  /** 净值（护甲减伤后） */
+  applied: number;
+  source?: string;
 }
 
 /**
@@ -161,6 +176,21 @@ export class PlayerStats {
   lastDamage: DamageResult | null = null;
   /** 累计受到的伤害，用于测试与统计 */
   totalDamage = 0;
+  /**
+   * 自上次被主循环取走以来的所有伤害（批次 207）。
+   *
+   * 为什么不用 `lastDamage`：一帧内可能既被僵尸打又被岩浆烫，只留最后一次
+   * 就会把"3 点僵尸伤害 + 2 点岩浆伤害"全算到岩浆头上。这里逐条记。
+   */
+  private damageLog: DamageEvent[] = [];
+
+  /** 取走这一帧的伤害记录（取完即清空；主循环负责播报） */
+  takeDamageLog(): DamageEvent[] {
+    if (this.damageLog.length === 0) return [];
+    const events = this.damageLog;
+    this.damageLog = [];
+    return events;
+  }
 
   get dead(): boolean {
     return this.health <= 0;
@@ -208,8 +238,8 @@ export class PlayerStats {
    *
    * @returns 实际结算的伤害（被无敌帧挡下时为 0）
    */
-  damage(amount: number, cause: DamageCause): DamageResult {
-    const result: DamageResult = { applied: 0, cause, fatal: false };
+  damage(amount: number, cause: DamageCause, source?: string): DamageResult {
+    const result: DamageResult = { applied: 0, cause, source, fatal: false };
     if (this.dead || amount <= 0) return result;
 
     if (this.hurtResistantTime > 0 && amount <= this.lastDamageAmount) return result;
@@ -225,6 +255,7 @@ export class PlayerStats {
     result.applied = afterArmor;
     result.fatal = this.health <= 0;
     this.lastDamage = result;
+    this.damageLog.push({ cause, applied: afterArmor, source });
     // 受伤本身也消耗疲劳值（原版 0.1）
     this.addExhaustion(0.1);
     return result;
@@ -406,8 +437,8 @@ export class PlayerStats {
    * 中毒伤害：**不会致死**（原版会把人打到剩半颗心就停）。
    * 凋零等其它持续伤害走普通 `damage`。
    */
-  poisonDamage(amount: number): DamageResult {
-    const result: DamageResult = { applied: 0, cause: 'poison', fatal: false };
+  poisonDamage(amount: number, source?: string): DamageResult {
+    const result: DamageResult = { applied: 0, cause: 'poison', source, fatal: false };
     if (this.dead || amount <= 0) return result;
     if (this.health <= 1) return result;
     const applied = Math.min(amount, this.health - 1);
@@ -415,6 +446,7 @@ export class PlayerStats {
     this.totalDamage += applied;
     result.applied = applied;
     this.lastDamage = result;
+    this.damageLog.push({ cause: 'poison', applied, source });
     return result;
   }
 
@@ -431,6 +463,7 @@ export class PlayerStats {
     this.hurtResistantTime = 0;
     this.lastDamageAmount = 0;
     this.lastDamage = null;
+    this.damageLog = [];
     this.fireSeconds = 0;
     this.fireTickTimer = 0;
   }

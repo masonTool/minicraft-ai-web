@@ -205,7 +205,8 @@ export class Arrow extends Entity implements MovingBody {
 
     // 玩家：只有"不是玩家自己射的"才会打玩家（骷髅的箭）
     if (!this.options.fromPlayer && ctx.playerBox && entityIntersectsBox(this, ctx.playerBox)) {
-      ctx.hurtPlayer(this.options.damage, this.x, this.z, 'projectile');
+      // 箭矢分不清是谁射的（骷髅 / 玩家都用同一套），来源就写"箭矢"
+      ctx.hurtPlayer(this.options.damage, this.x, this.z, 'projectile', '箭矢');
       // 流浪者的箭（批次 125）：伤害之后再挂一条效果（原版是"缓慢 I / 30 秒"）。
       // ⚠️ 效果挂在**玩家**这一支上：怪物射的箭只打玩家，所以这里就是它的全部去处
       if (this.options.effect) {

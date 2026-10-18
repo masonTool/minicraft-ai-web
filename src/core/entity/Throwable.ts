@@ -299,11 +299,18 @@ export class Throwable extends Entity implements MovingBody {
             this.x,
             this.z,
             'projectile',
+            '凋灵骷髅头',
           );
           ctx.afflictPlayer?.('wither', blue ? BLUE_WITHER_SKULL_WITHER_SECONDS : WITHER_SKULL_WITHER_SECONDS);
         } else {
           const large = this.kind === 'large_fireball';
-          ctx.hurtPlayer(large ? LARGE_FIREBALL_DAMAGE : SMALL_FIREBALL_DAMAGE, this.x, this.z, 'fire');
+          ctx.hurtPlayer(
+            large ? LARGE_FIREBALL_DAMAGE : SMALL_FIREBALL_DAMAGE,
+            this.x,
+            this.z,
+            'fire',
+            large ? '大火球' : '火球',
+          );
           ctx.ignitePlayer?.(large ? LARGE_FIREBALL_FIRE_SECONDS : SMALL_FIREBALL_FIRE_SECONDS);
         }
         this.impact(ctx);
@@ -316,7 +323,7 @@ export class Throwable extends Entity implements MovingBody {
     // 它是唯一一个"两边都可能"的投掷物，所以按 `fromPlayer` 分流而不是按种类
     if (this.kind === 'trident' && !this.fromPlayer) {
       if (ctx.playerBox && entityIntersectsBox(this, ctx.playerBox)) {
-        ctx.hurtPlayer(TRIDENT_THROW_DAMAGE, this.x, this.z, 'projectile');
+        ctx.hurtPlayer(TRIDENT_THROW_DAMAGE, this.x, this.z, 'projectile', '三叉戟');
         this.impact(ctx);
         return true;
       }

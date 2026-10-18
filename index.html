@@ -736,6 +736,11 @@
         from { opacity: 0; transform: scale(1.15); }
         to { opacity: 1; transform: none; }
       }
+      /* 死因那一行（批次 207）：标题下面单独一行，别和"正在重生"挤在一起 */
+      #death .death-cause {
+        display: block; font-size: 14px; line-height: 1.6;
+        color: #ffb8b8; letter-spacing: 1px;
+      }
       /* 睡觉遮罩（B13）：整屏渐暗 + 一排"Zzz"，与死亡遮罩同一个层叠层（z-index 6）。
          不接 pointer-events 的拦截：起床靠跳跃键，不需要点它（点了也不会穿透到世界）。
          ⚠️ 这两个动画不需要自己写 prefers-reduced-motion 分支：文件末尾那条全局规则
@@ -3444,7 +3449,7 @@
          原来遮罩上那份**按键/手势说明**没有丢：它移到了暂停菜单底部
          （见 `ui/SettingsScreen.ts` 的 `.pause-help`），按 Esc 就能查。 -->
 
-    <div id="death" class="hidden"><div><b>你死了！</b>正在重生…</div></div>
+    <div id="death" class="hidden"><div><b>你死了！</b><span class="death-cause"></span>正在重生…</div></div>
 
     <!-- 睡觉遮罩（B13）：躺在床上的那十几秒。文字里写清"怎么提前起来"，
          手机上没有 Esc 之类的键，跳跃键是唯一可靠的入口 -->

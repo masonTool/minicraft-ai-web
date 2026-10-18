@@ -208,6 +208,27 @@ console.log('\n[岩浆与虚空]');
   check('数满之后照常扣 1 点', stepped.health === MAX_HEALTH - 1, `生命 ${stepped.health}`);
 }
 
+console.log('\n[伤害记录（批次 207）]');
+{
+  const stats = new PlayerStats();
+  stats.damage(3, 'generic', '僵尸');
+  // 中毒绕过无敌帧，正好用来验证"同帧多次伤害都会被记下来"
+  stats.poisonDamage(1, '中毒效果');
+  const log = stats.takeDamageLog();
+  check(
+    '每次伤害都记下类型与具体来源',
+    log.length === 2 &&
+      log[0].cause === 'generic' &&
+      log[0].source === '僵尸' &&
+      log[0].applied === 3 &&
+      log[1].cause === 'poison' &&
+      log[1].source === '中毒效果',
+    JSON.stringify(log),
+  );
+  check('取走之后队列清空', stats.takeDamageLog().length === 0);
+  check('没有伤害时不产生记录', stats.takeDamageLog().length === 0);
+}
+
 console.log('\n[创造模式与重生]');
 {
   const stats = new PlayerStats();
@@ -226,6 +247,7 @@ console.log('\n[创造模式与重生]');
   dead.respawn();
   check('重生恢复满状态', dead.health === MAX_HEALTH && dead.food === MAX_FOOD && dead.air === MAX_AIR && !dead.dead);
   check('重生清空疲劳值与累计伤害记录', dead.exhaustion === 0 && dead.lastDamage === null);
+  check('重生也清空待播报的伤害记录', dead.takeDamageLog().length === 0);
 }
 
 console.log(`\n生存测试：${passed} 通过 / ${failed} 失败\n`);

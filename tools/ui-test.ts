@@ -34,6 +34,7 @@ import { ISO_ICON_SIZE, isoBounds, isoBoxesForShape, isoProject } from '../src/u
 import { BLOCKS } from '../src/core/registry/blocks.ts';
 import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
 import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
+import { damageReason } from '../src/core/survival/DamageNotice.ts';
 import { BackButton } from '../src/ui/BackButton.ts';
 import { STICK_MODES, STICK_MODE_LABELS, isTouchUi } from '../src/ui/TouchControls.ts';
 import {
@@ -2268,14 +2269,61 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     /#chat\.open \.chat-log \{[\s\S]{0,300}?overflow-y: auto/.test(html) &&
       html.includes('touch-action: pan-y'),
   );
+  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check(
-    '受伤 / 回血 / 饥饿 / 氧气 / 着火都有播报',
+    '掉血播报同时给出「现象 + 原因」（含具体生物名）',
     appSrc.includes('emitPlayerNotices()') &&
-      appSrc.includes('受到 ${fmt(-healthDelta)} 点伤害') &&
-      appSrc.includes('饥饿值 -${fmt(lost)}') &&
-      appSrc.includes('氧气不足，快浮上水面！') &&
-      appSrc.includes('你着火了！') &&
-      appSrc.includes('DAMAGE_CAUSE_LABELS'),
+      appSrc.includes('takeDamageLog()') &&
+      appSrc.includes('damageReason(') &&
+      appSrc.includes('受到 ${fmt(total)} 点伤害：') &&
+      mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name)"),
+  );
+  check(
+    '死亡卡片也写清死因',
+    html.includes('class="death-cause"') &&
+      appSrc.includes('this.deathCauseEl.textContent') &&
+      appSrc.includes('damageReason(last.cause, last.source)'),
+  );
+  check(
+    '饥饿 / 氧气 / 着火 / 低血量也写了原因与建议',
+    appSrc.includes('（体力消耗：走动 / 跳跃 / 战斗 / 挖掘）') &&
+      appSrc.includes('氧气不足（正在水下憋气') &&
+      appSrc.includes('你着火了（站在火/岩浆里或被点燃）') &&
+      appSrc.includes('生命值偏低') &&
+      appSrc.includes('饥饿值耗尽（体力透支）'),
+  );
+}
+
+console.log('\n[伤害原因文案（批次 207）]');
+{
+  // 每一档都必须有"具体原因"，不能退回"受伤/环境伤害"这种说了等于没说的词
+  const causes = [
+    'poison',
+    'fall',
+    'drown',
+    'lava',
+    'fire',
+    'cactus',
+    'suffocate',
+    'starve',
+    'void',
+    'explosion',
+    'projectile',
+    'lightning',
+    'generic',
+  ] as const;
+  const reasons = causes.map((cause) => damageReason(cause));
+  check('每一档伤害原因都不为空且够具体', reasons.every((text) => text.length >= 4), JSON.stringify(reasons));
+  check('原因文案互不重复', new Set(reasons).size === reasons.length);
+  check(
+    '有具体来源时会写进句子（僵尸 / 箭矢 / 世界边界）',
+    damageReason('generic', '僵尸').includes('僵尸') &&
+      damageReason('projectile', '箭矢').includes('箭矢') &&
+      damageReason('generic', '世界边界').includes('世界边界'),
+  );
+  check(
+    '来源为空时不会留下空括号',
+    !damageReason('fall', '').includes('（）') && !damageReason('lava', '   ').includes('（）'),
   );
 }
 

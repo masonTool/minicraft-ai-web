@@ -803,7 +803,8 @@ export class Mob extends Entity {
   private deliverMelee(ctx: EntityContext): void {
     // 力量/虚弱影响出手伤害（数值与玩家同源）；虚弱不能把伤害打成负数
     const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
-    ctx.hurtPlayer(damage, this.x, this.z);
+    // 带上生物名：左上角要写"被僵尸攻击"而不是笼统的"受到攻击"（批次 207）
+    ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name);
     if (this.type.venom) ctx.afflictPlayer?.(this.type.venom.effect, this.type.venom.seconds);
   }
 
