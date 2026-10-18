@@ -18,6 +18,7 @@ import {
   fallDamageFor,
   frostWalkerRadius,
   soulSpeedMultiplier,
+  thornsDamage,
   type SurvivalEnvironment,
 } from '../src/core/survival/PlayerStats.ts';
 import { touchesCactus } from '../src/core/world/Cactus.ts';
@@ -341,6 +342,9 @@ console.log('\n[靴子附魔的移速倍率（批次 262）]');
   );
   check('深海探索者 III 级封顶 2 倍', depthStriderMultiplier(3) === 2);
   check('深海探索者超过上限按 3 级算', depthStriderMultiplier(5) === 2);
+  check('荆棘 0 级不反伤', thornsDamage(0) === 0);
+  check('荆棘 I/II/III = 1/2/3', thornsDamage(1) === 1 && thornsDamage(2) === 2 && thornsDamage(3) === 3);
+  check('荆棘超过 III 级按 III 级算', thornsDamage(9) === 3);
   check('冰霜行者 0 级不结冰', frostWalkerRadius(0) === 0);
   check('冰霜行者 I 级半径 2', frostWalkerRadius(1) === 2);
   check('冰霜行者 II 级半径 3', frostWalkerRadius(2) === 3);

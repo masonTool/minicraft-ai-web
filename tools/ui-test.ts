@@ -2678,14 +2678,14 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes('takeDamageLog()') &&
       appSrc.includes('damageReason(') &&
       appSrc.includes('受到 ${fmt(total)} 点伤害：') &&
-      mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name)"),
+      mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name, this)"),
   );
   // 桥接层（`EntityContext.hurtPlayer` → `damagePlayer`）必须把第 5 个参数原样转过去：
   // 少了它，实体层传的生物名白传，所有生物伤害都显示"没有记录到来源"（批次 218）
   check(
     '实体伤害的来源名在桥接层没有被丢掉',
-    appSrc.includes('hurtPlayer: (amount, sourceX, sourceZ, cause, source) =>') &&
-      appSrc.includes('this.damagePlayer(amount, sourceX, sourceZ, cause, source)'),
+    appSrc.includes('hurtPlayer: (amount, sourceX, sourceZ, cause, source, attacker) =>') &&
+      appSrc.includes('this.damagePlayer(amount, sourceX, sourceZ, cause, source, attacker)'),
   );
   check(
     '凋零按自己的类别上报（不再借用 generic → 不再显示"没有记录到来源"）',
@@ -3146,6 +3146,32 @@ console.log('\n[冰霜行者（批次 263）]');
       appSrc.includes('this.updateFrostWalker(dt);') &&
       appSrc.includes('this.world.setBlockAndUpdate(x, waterY, z, Block.FROSTED_ICE, 0);') &&
       appSrc.includes('this.world.setBlockAndUpdate(x, y, z, Block.WATER, 0);'),
+  );
+}
+
+console.log('\n[荆棘（批次 264）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const entitySrc = readFileSync(new URL('../src/core/entity/Entity.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const thornsAt = enchantSrc.indexOf("id: 'thorns'");
+  check(
+    '荆棘标了 implemented',
+    thornsAt >= 0 && enchantSrc.slice(thornsAt, thornsAt + 160).includes('implemented: true'),
+  );
+  check(
+    '伤害链路把攻击者传下来（实体层用结构化类型，避免 Entity↔Mob 成环）',
+    entitySrc.includes('attacker?: DamageAttacker') &&
+      entitySrc.includes('export interface DamageAttacker') &&
+      mobSrc.includes('this.type.name, this);') &&
+      appSrc.includes('attacker?: DamageAttacker'),
+  );
+  check(
+    '只在真正受伤时反伤，且取四件盔甲里最高的一级',
+    appSrc.includes('const thorns = this.thornsLevel();') &&
+      appSrc.includes('attacker.hurt(') &&
+      appSrc.includes('private thornsLevel(): number'),
   );
 }
 
