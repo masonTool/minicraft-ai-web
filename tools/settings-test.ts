@@ -291,13 +291,14 @@ console.log('\n[视距口径：设备上限与恢复默认（批次 202 / 203）
     defaultViewDistanceFor(false) === DEFAULT_SETTINGS.viewDistance,
   );
   // 批次 203：玩家已经没有视距滑块，这个值就是"自适应允许涨到哪"
+  // 批次 216：8 → 6（用户愿意让视野，换帧率与画质）
   check(
-    '手机视距上限是 8（不是 12）',
-    defaultViewDistanceFor(true) === MOBILE_VIEW_DISTANCE_MAX && MOBILE_VIEW_DISTANCE_MAX === 8,
+    '手机视距上限是 6（不是 12）',
+    defaultViewDistanceFor(true) === MOBILE_VIEW_DISTANCE_MAX && MOBILE_VIEW_DISTANCE_MAX === 6,
   );
   check(
-    '开局仍然只有 6（先给脚下这一片，别让渐进视距一上来就请求满）',
-    MOBILE_VIEW_DISTANCE === 6 && MOBILE_VIEW_DISTANCE < defaultViewDistanceFor(true),
+    '开局仍然只有 5（先给脚下这一片，别让渐进视距一上来就请求满）',
+    MOBILE_VIEW_DISTANCE === 5 && MOBILE_VIEW_DISTANCE < defaultViewDistanceFor(true),
   );
 
   // `main.applySettings` 现在走的这条夹紧：滑块上写 12 → 实际只按 8 请求区块

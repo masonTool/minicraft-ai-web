@@ -294,7 +294,9 @@ console.log('\n[手机端物品显示与提示（批次 95 体检）]');
   equal('DPR 1 → 1 倍（桌面不变）', iconBackingScale(1), 1);
   equal('DPR 1.5 → 2 倍', iconBackingScale(1.5), 2);
   equal('DPR 2 → 2 倍', iconBackingScale(2), 2);
-  equal('DPR 3 → 仍夹到 2 倍（图集一格只有 16px，再高只是更大更糊）', iconBackingScale(3), 2);
+  // 批次 216：夹到 3（3 倍屏手机上图标只有 32~36 CSS px，2 倍背板会被插值糊掉一圈）
+  equal('DPR 3 → 3 倍（图标边缘不再糊）', iconBackingScale(3), 3);
+  equal('DPR 4 → 仍夹到 3 倍', iconBackingScale(4), 3);
   equal('DPR 0.5 / NaN / 0 → 1 倍（异常输入不吃亏）', `${iconBackingScale(0.5)},${iconBackingScale(Number.NaN)},${iconBackingScale(0)}`, '1,1,1');
   equal('手机快捷栏按 CSS 实际 36px 画背板（不再固定拿桌面 32px）', iconDisplaySize(36, 32), 36);
   equal('元素尚未布局时回退设计尺寸', iconDisplaySize(0, 32), 32);

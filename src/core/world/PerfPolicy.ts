@@ -45,33 +45,42 @@
 export const RESOLUTION_MIN = 0.5;
 export const RESOLUTION_MAX = 1;
 /**
- * 背板像素比上限。
+ * 背板像素比上限（批次 216：手机 1.5 → 2）。
  *
- * 桌面视网膜画到 2 倍没问题。手机 DPR 经常是 3，若沿用 2 倍，
- * 一块 844×390 的横屏要填大约 130 万像素——再叠上方块场景，帧时间会直接超过 30ms。
- * 手机上限 1.5：满档大约只有 2 倍档的一半像素，开局再乘 0.8，先落在能玩的填充率上。
+ * 用户的原话是"画质不要降低；性能吃紧时第一保帧率、第二保画质，视野可以让"。
+ * 真机日志（792×360 / DPR 3）里 `res` 恒为 1、`pixelRatio` 恒为 1.5 —— 也就是
+ * **一直在 1/2 线性分辨率上渲染**，而 UI 是 DPR 3 的 DOM，于是"物品边缘发虚"。
+ * 手机上限抬到 2 之后：满档填充率约 0.89M 像素（1.5 档是 0.64M，多 1.78 倍），
+ * 而省下来的开销由**视距**付——这正是用户愿意让的那一项。
+ *
+ * ⚠️ 真的扛不住时，分辨率仍然是最后一道：策略顺序没变
+ * （视距 → 装饰层 → 分辨率），手机地板 0.75 档 = 1.5 倍，正好是这一批之前的画质。
  */
 export const DESKTOP_PIXEL_RATIO_CAP = 2;
-export const MOBILE_PIXEL_RATIO_CAP = 1.5;
+export const MOBILE_PIXEL_RATIO_CAP = 2;
 /**
  * 手机开局分辨率档（相对背板上限）。
  *
  * 批次 158 之前是 0.8（"先预折一点，掉帧时再继续降"）。既然降级顺序改成视距优先，
- * 开局就不该先打折了——**近处清晰优先**，压力交给视距（手机开局只有 6 区块）。
+ * 开局就不该先打折了——**近处清晰优先**，压力交给视距。
  * 这个值现在是 1.0，保留常量是为了将来要调时只有一处。
  */
 export const MOBILE_INITIAL_RESOLUTION = 1;
 /** 手机开局视距。上限另有一个更小的数（见 `MOBILE_VIEW_DISTANCE_MAX`）。 */
-export const MOBILE_VIEW_DISTANCE = 6;
+export const MOBILE_VIEW_DISTANCE = 5;
 /**
- * **手机的动态视距上限**。
+ * **手机的动态视距上限**（批次 216：8 → 6）。
  *
  * 手机屏幕小（横屏典型 844×390），FOV 72° 下 8 区块 = 128 格外的东西在屏幕上只有几个像素，
  * 展示了也看不清，却要付出 289 个区块的 draw call。所以手机不跟桌面共用 12。
- * ⚠️ 玩家设置的视距**仍然生效**，只是被这个上限夹住（`viewDistanceCapFor`）：
- * 想更近就把滑块往左拖，拖到 16 也不会超过 8。
+ *
+ * 批次 216 再收到 6：真机日志里 `drawn` 225（视距 8）时 CPU 侧 `render` 段要 9~21ms，
+ * 而 177（视距 7）只要 8~11ms —— **每收一格省的是实打实的提交开销**。
+ * 用户的取舍很明确："可以牺牲视野，先保帧率、再保画质"，所以 8 → 6 省下的预算
+ * 全部给了背板倍率（见 `MOBILE_PIXEL_RATIO_CAP`）。
+ * ⚠️ 玩家设置的视距**仍然生效**，只是被这个上限夹住（`viewDistanceCapFor`）。
  */
-export const MOBILE_VIEW_DISTANCE_MAX = 8;
+export const MOBILE_VIEW_DISTANCE_MAX = 6;
 /** 视距滑杆的上限（与设置界面那颗滑块一致，见 `SettingsScreen`） */
 export const VIEW_DISTANCE_MAX = 16;
 /**
@@ -114,6 +123,24 @@ export const VIEW_DISTANCE_DROP_COOLDOWN = 4;
 export const VIEW_DISTANCE_RAISE_COOLDOWN = 8;
 export const DECOR_DROP_COOLDOWN = 4;
 export const DECOR_RAISE_COOLDOWN = 8;
+
+/**
+ * **同一档视距反复掉帧时，把它封多久**（秒，批次 216）。
+ *
+ * 真机日志（2026-10-18，792×360 / DPR 3）里最响的一条线索：13 分钟里
+ * `view-down` / `view-up` 各出现 **40 多次**，全是 7 ↩ 8 之间的来回：
+ * 视距 8 时 `frameAvg` 22~29ms（→ 判"卡"，降 7），视距 7 时 16.6ms（→ 判"有余量"，升 8）。
+ * 而 16.6ms 是 60Hz 的**刷新下限**——只要满帧就必然 `< FRAME_TIME_RAISE`，
+ * 所以"升档条件"在任何一台能跑满 60 的机器上永远成立，光靠冷却时间挡不住。
+ *
+ * 真正的毛病是：**从 8 降到 7 之后拿到 60fps，是降档起了作用，不是"8 也行"的证据**。
+ *
+ * 规则：**同一档第二次**降档时把它封 90 秒（第一次可能是 GC / 区块上传的长帧，
+ * 而且开局加载期 frameAvg 本来就高，不该把视距锁死在低位）；封禁到期允许再试一次
+ * ——世界会变：走出雨林 / 雨停了 / 生物散了。
+ * 每次换视距都要按新范围重算一圈区块，这条规则把这份抖动从"每 8 秒一次"压到"每 90 秒一次"。
+ */
+export const VIEW_RAISE_BLOCK_SECONDS = 90;
 
 /** 一次调整做了什么（给主程序打日志、给测试断言） */
 export type PerfAction =
@@ -195,6 +222,18 @@ export interface PerfState {
   decorLevel: DecorLevel;
   /** 距离下一次可以调档还有多久（秒） */
   cooldown: number;
+  /**
+   * 上一次是**从哪一档**降下来的（批次 216），例如 8 = 刚从 8 降到 7。
+   * 与 `blockedSeconds` 一起判断"这一档是不是反复掉帧"。
+   */
+  lastDropFrom: number | null;
+  /**
+   * 视距封禁还剩多少秒（批次 216）。
+   *
+   * 只在**同一档第二次掉帧**时启动：第一次掉帧可能只是一次 GC / 区块上传的长帧，
+   * 不该让开局那一轮（加载期 frameAvg 本来就高）把视距锁死在低位。
+   */
+  blockedSeconds: number;
 }
 
 /** 初值：分辨率 1.0（= 原来那套行为，不引入回归）、装饰层全开、视距取玩家设定值 */
@@ -205,6 +244,8 @@ export function initialPerfState(viewDistance: number): PerfState {
     viewDistance,
     decorLevel: 0,
     cooldown: 0,
+    lastDropFrom: null,
+    blockedSeconds: 0,
   };
 }
 
@@ -274,7 +315,9 @@ export function perfPolicyStep(
 ): { state: PerfState; action: PerfAction } {
   const frameTimeAvg = state.frameTimeAvg + (frameTimeMs - state.frameTimeAvg) * FRAME_TIME_SMOOTHING;
   const cooldown = Math.max(0, state.cooldown - dt);
-  const next: PerfState = { ...state, frameTimeAvg, cooldown };
+  // 封禁计时**不受调档冷却影响**：冷却只有几秒，封禁要几十秒，必须各走各的
+  const blockedSeconds = Math.max(0, state.blockedSeconds - dt);
+  const next: PerfState = { ...state, frameTimeAvg, cooldown, blockedSeconds };
   if (cooldown > 0) return { state: next, action: null };
 
   const dropping = frameTimeAvg > FRAME_TIME_DROP;
@@ -285,6 +328,11 @@ export function perfPolicyStep(
   // ---- 降档：**先收视距**（远处本来就在雾里，砍掉最不心疼），视距到地板才动分辨率
   if (dropping) {
     if (tuning.adaptiveViewDistance && next.viewDistance > VIEW_DISTANCE_MIN) {
+      // 把"刚离开的这一档"记下来（批次 216，见 `VIEW_RAISE_BLOCK_SECONDS`）：
+      // 降到这一档之后拿到满帧，是**降档起了作用**，不是"刚才那一档也行"的证据。
+      // 只有**同一档第二次**掉帧才真的封——第一次可能只是一次长帧。
+      if (state.lastDropFrom === next.viewDistance) next.blockedSeconds = VIEW_RAISE_BLOCK_SECONDS;
+      next.lastDropFrom = next.viewDistance;
       next.viewDistance -= 1;
       next.cooldown = VIEW_DISTANCE_DROP_COOLDOWN;
       return { state: next, action: 'view-down' };
@@ -325,6 +373,11 @@ export function perfPolicyStep(
       return { state: next, action: 'decor-up' };
     }
     if (tuning.adaptiveViewDistance && next.viewDistance < tuning.viewDistanceCap) {
+      // 刚因为这档反复掉过帧：封禁期内不试（批次 216）。
+      // 不设冷却，封禁到期后下一帧自然就会重新考虑
+      if (next.viewDistance + 1 === next.lastDropFrom && next.blockedSeconds > 0) {
+        return { state: next, action: null };
+      }
       next.viewDistance += 1;
       next.cooldown = VIEW_DISTANCE_RAISE_COOLDOWN;
       return { state: next, action: 'view-up' };

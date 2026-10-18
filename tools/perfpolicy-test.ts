@@ -24,6 +24,7 @@ import {
   RESOLUTION_MAX,
   RESOLUTION_MIN,
   VIEW_DISTANCE_MIN,
+  VIEW_RAISE_BLOCK_SECONDS,
   MOBILE_INITIAL_RESOLUTION,
   MOBILE_PIXEL_RATIO_CAP,
   MOBILE_RESOLUTION_MIN,
@@ -142,6 +143,43 @@ console.log('\n[掉帧时先牺牲什么：先视距、后分辨率]');
   check('装饰层让完之后才轮到分辨率', seq.indexOf('resolution-down') > seq.lastIndexOf('decor-down'), seq.join(','));
 }
 
+console.log('\n[视距 7↔8 反复横跳：降过的档位要封一会儿（批次 216）]');
+{
+  // 真机日志（2026-10-18）：8 档 frameAvg 22~29ms（判"卡"→降 7），
+  // 7 档 16.6ms（判"有余量"→升 8），13 分钟里来回 40 多次。
+  // 关键不是"升档太早"，而是**7 档的 60fps 正是降档换来的**，不能当作"8 也行"的证据。
+  let state = initialPerfState(8);
+  const actions: string[] = [];
+  const feed = (seconds: number, ms: number): void => {
+    const dt = 1 / 60;
+    for (let t = 0; t < seconds; t += dt) {
+      const step = perfPolicyStep(state, dt, ms, BOTH);
+      state = step.state;
+      if (step.action) actions.push(step.action);
+    }
+  };
+  feed(1, 26);
+  equal('8 档第一次掉帧 → 降到 7', state.viewDistance, 7);
+  equal('第一次不封（可能只是一次长帧）', state.blockedSeconds, 0);
+  equal('但记住了"是从 8 降下来的"', state.lastDropFrom, 8);
+  feed(8.5, 16.6);
+  equal('满帧 8 秒后允许重试一次 → 回到 8', state.viewDistance, 8);
+
+  // 升档后的冷却 8 秒要等过去，才会再判一次掉帧
+  feed(5, 26);
+  equal('同一档第二次掉帧 → 又降到 7', state.viewDistance, 7);
+  check('这次开始封（约 90 秒）', state.blockedSeconds > 85, `${state.blockedSeconds.toFixed(0)}s`);
+  // 只统计"封禁开始之后"的动作（前面那次合法的 view-up 不算）
+  const afterBlock = actions.length;
+  feed(40, 16.6);
+  equal('满帧 40 秒也不许升回 8', state.viewDistance, 7);
+  check('封禁期内一个 view-up 都没有', !actions.slice(afterBlock).includes('view-up'), actions.slice(afterBlock).join(','));
+  feed(VIEW_RAISE_BLOCK_SECONDS, 16.6);
+  check('封禁到期后才允许再试一次', actions.slice(afterBlock).includes('view-up'), actions.slice(afterBlock).join(','));
+  // 这套 tuning 用的是桌面上限 12，所以解封后会一路往上涨；关键是"能涨回 8 以上"
+  check('试过之后确实升回了被封锁的那一档以上', state.viewDistance > 7, `${state.viewDistance}`);
+}
+
 console.log('\n[动态分辨率按设备背板缩放]');
 {
   equal('桌面 DPR 1 × 满分辨率 = 1', effectivePixelRatio(1, 1), 1);
@@ -149,11 +187,13 @@ console.log('\n[动态分辨率按设备背板缩放]');
   equal('手机降到 0.9 档是 1.8（不会从 2 突然跳成 0.9）', effectivePixelRatio(3, 0.9), 1.8);
   equal('最低档仍保留 1 倍 CSS 像素', effectivePixelRatio(3, 0.5), 1);
   equal('非法 DPR 回退为 1', effectivePixelRatio(Number.NaN, 1), 1);
-  equal('手机背板上限 1.5，不再画到 2', effectivePixelRatio(3, 1, MOBILE_PIXEL_RATIO_CAP), 1.5);
+  // 批次 216：用户要求"画质不要降低，先保帧率、再保画质，视野可以让"
+  // → 手机背板从 1.5 抬到 2（多 1.78 倍像素），省下的预算由视距（8 → 6）付
+  equal('手机背板上限抬到 2（0.64M → 0.89M 像素）', effectivePixelRatio(3, 1, MOBILE_PIXEL_RATIO_CAP), 2);
   equal(
-    '手机开局不再预折：1.0 档直接给到背板上限 1.5（近处清晰优先）',
+    '手机开局不再预折：1.0 档直接给到背板上限 2（近处清晰优先）',
     effectivePixelRatio(3, MOBILE_INITIAL_RESOLUTION, MOBILE_PIXEL_RATIO_CAP),
-    1.5,
+    2,
   );
   equal('手机开局档就是满档', MOBILE_INITIAL_RESOLUTION, RESOLUTION_MAX);
   equal('上限不会超过桌面的 2', effectivePixelRatio(3, 1, 4), 2);
@@ -170,6 +210,8 @@ console.log('\n[帧率回来之后：先还分辨率、最后才放视距]');
     viewDistance: VIEW_DISTANCE_MIN,
     decorLevel: DECOR_LEVEL_MAX,
     cooldown: 0,
+    lastDropFrom: null,
+    blockedSeconds: 0,
   };
 
   // 恢复的第一段（12 秒）：只够涨两次分辨率（冷却 10 秒一次）
@@ -281,6 +323,8 @@ console.log('\n[手机：视距上限更小、分辨率地板更高]');
     viewDistance: viewDistanceCapFor(12, true),
     decorLevel: 0,
     cooldown: 0,
+    lastDropFrom: null,
+    blockedSeconds: 0,
   };
   const stressed = run(start, 60, 33, MOBILE);
   equal('手机视距先收到地板 4', stressed.viewDistance, VIEW_DISTANCE_MIN);
@@ -296,6 +340,8 @@ console.log('\n[手机：视距上限更小、分辨率地板更高]');
     viewDistance: VIEW_DISTANCE_MIN,
     decorLevel: DECOR_LEVEL_MAX,
     cooldown: 0,
+    lastDropFrom: null,
+    blockedSeconds: 0,
   };
   const stepped = perfPolicyStep(atFloor, 1 / 60, 33, MOBILE);
   equal('最后一档真的落到地板 0.75（不会被 round1 弹回 0.8）', stepped.state.resolutionScale, MOBILE_RESOLUTION_MIN);

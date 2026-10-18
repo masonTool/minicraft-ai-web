@@ -1234,6 +1234,14 @@ class App {
    * 策略归 `perfPolicyStep`（纯函数），主程序只负责"把结果落下去"。
    */
   private perf: PerfState = initialPerfState(12);
+  /**
+   * 世界这一趟的 draw call / 三角形（批次 216）。
+   *
+   * 为什么不能采样时直接读 `renderer.info`：一帧里 `render()` 被调用三次
+   * （世界 → 手持物品 → 屏幕色罩），每次开头都会把 `info` 重置，
+   * 于是 5 秒一次的采样读到的永远是最后那趟叠画（1 call / 12 tris）。
+   */
+  private readonly lastWorldDraw = { calls: 0, tris: 0 };
   /** 手机背板画到 1.5 而不是 2：填充率大约少一半，自适应仍可在这顶下面升降 */
   private readonly pixelRatioCap = isTouchDevice() ? MOBILE_PIXEL_RATIO_CAP : DESKTOP_PIXEL_RATIO_CAP;
   /** 调试用：把帧时间固定成这个值（毫秒），0 表示用真实值。验收脚本靠它稳定复现"掉帧" */
@@ -9854,8 +9862,10 @@ class App {
       xp,
       particles: this.particles.active,
       rain: this.weather.activeCount,
-      calls: info.render.calls,
-      tris: info.render.triangles,
+      // 世界这一趟的真实数字（批次 216）：`renderer.info` 每帧被重置三次，
+      // 采样时直接读只会拿到"最后一次叠画"的 1 call / 12 tris
+      calls: this.lastWorldDraw.calls,
+      tris: this.lastWorldDraw.tris,
       geo: info.memory.geometries,
       tex: info.memory.textures,
       prog: info.programs?.length ?? 0,
@@ -10395,6 +10405,12 @@ class App {
       // ——真机"一靠近水域就卡一点"主要就是这笔填充率。
       this.translucentMaterial.setDoubleSided(this.isCameraUnderwater());
       this.renderer.render(this.scene, this.camera);
+      // 世界这一趟的 draw call / 三角形**立刻**存下来（批次 216）：
+      // 后面还有两次 render（手持物品、色罩），而 `info` 在每次 `render()` 开头都会重置，
+      // 等到 5 秒采样时读到的只是最后一次（1 个 call / 12 个三角形）——之前日志里的
+      // `calls: 1, tris: 12` 就是这么来的，等于这一项一直没在工作。
+      this.lastWorldDraw.calls = this.renderer.info.render.calls;
+      this.lastWorldDraw.tris = this.renderer.info.render.triangles;
       // 世界之后叠画"贴在屏幕上的两件事"：手持物品与视野色罩。
       // ⚠️ 必须先关掉 autoClear，否则第二次 render 会把刚画好的世界清掉。
       this.renderer.autoClear = false;

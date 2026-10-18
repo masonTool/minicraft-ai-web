@@ -23,15 +23,19 @@ import { devicePixelRatioValue } from './Device.ts';
 export const DEFAULT_ICON_SIZE = 36;
 
 /**
- * 图标的**背板倍率**：`ceil(dpr)` 夹到 1~2。
+ * 图标的**背板倍率**：`ceil(dpr)` 夹到 1~**3**（批次 216：原来夹到 2）。
  *
- * 为什么最多 2 倍：与渲染器 `setPixelRatio(Math.min(devicePixelRatio, 2))` 同一个口径——
- * 3 倍屏上那多出来的一倍几乎看不出来，而图集本身一格只有 16 px，
- * 放到 3 倍就是把 16 个像素摊成 84 个（依然"块状"，只是更大更糊）。
+ * 原来夹到 2 的理由是"3 倍屏上多一倍看不出来"——这条在**大图标**上成立，
+ * 但在 3 倍屏手机上不成立：快捷栏/背包里的图标只有 32~36 CSS px，
+ * 2 倍背板（72 px 位图）摊到 108 个物理像素上，边缘会被插值糊掉一圈，
+ * 用户的原话正是"物品的边缘不清楚，有点粗糙"。
+ * 图标是 16×16 的图集格子放大画出来的，背板提到 3 倍只多几 KB 位图与一次
+ * `drawImage`，代价可以忽略；而这一项**不占 GPU 每帧预算**（画一次就缓存住），
+ * 正好符合"先保帧率、再保画质"的取舍。
  */
 export function iconBackingScale(dpr: number): number {
   if (!Number.isFinite(dpr) || dpr <= 1) return 1;
-  return Math.min(2, Math.max(1, Math.round(dpr)));
+  return Math.min(3, Math.max(1, Math.round(dpr)));
 }
 
 /** 当前设备的背板倍率（浏览器之外一律 1） */
