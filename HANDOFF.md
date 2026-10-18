@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 722（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 726（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **182**、进行中 **76**、待办 29 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,17 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 258（用户：队列最后一条；J2 第二刀）：**载具与生物/掉落物写进存档**。
+  ① `VehicleParking.snapshotAll()` / `restoreAll()`：导出带维度，恢复按 x/z 反推区块
+  （负坐标用 `Math.floor`），种类白名单 + 坐标必须有限；`PlayerSave.vehicles?`。
+  ② 新增 `EntityParking`：生物存种类/坐标/朝向/血量/驯服/坐下/被牵/剪毛/羊毛色，
+  掉落物存 id/数量/坐标；`PlayerSave.entities?`（两个字段都可选，老存档不用迁移）。
+  ③ 存盘导出"**寄存中的 + 已加载的**"两份；读档先 `restoreAll` 再加载区块，
+  顺着 `onChunkLoaded` 造回（与区块卸载寄存是同一条路）。
+  ④ 实测（JSON 往返脚本）：4 条记录 = **424 字节**，恢复后载具 2 条 / 实体 2 条，
+  坐标、朝向、血量 7、tamed/leashed/sheared、羊毛色 3 全部原样。
+  门禁：`test:entity` 99 → **109**、`test:ui` 728 → **734**，离线 130 套全绿。
+  ⚠️ 未做：幼体、状态效果、耐久/附魔（掉落物只存 id + 数量）、跨维度转移。
 - 批次 257（用户："继续下一批"；J2 第一刀）：**载具的区块持久化**。
   ① `core/entity/VehicleParking.ts`：按「维度 + 区块」存 `{ kind, x, y, z, yaw }`，
   `take()` 取完即删（避免重复生成），支持同一区块停多辆。
