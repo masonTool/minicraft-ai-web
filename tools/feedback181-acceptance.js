@@ -94,6 +94,25 @@
   check('三组坐标全 0 时不接管手势', rejected);
   check('坐标异常后触摸层自动恢复显示', restored);
 
+  // 按下时正常、拖动过程中变成 0,0：必须中途换到 screen 继续转，而不是停住
+  const yawRebase = mc.lookAngles.yaw;
+  fireLook('pointerdown', 903, [400, 200], [400, 200]);
+  fireLook('pointermove', 903, [0, 0], [470, 200]);
+  fireLook('pointermove', 903, [0, 0], [530, 200]);
+  await sleep(350);
+  const rebased = Math.abs(mc.lookAngles.yaw - yawRebase) > 1;
+  fireLook('pointerup', 903, [0, 0], [530, 200]);
+  check('拖动中途 client 变 0 时切到 screen 继续转视角', rebased, `${(mc.lookAngles.yaw - yawRebase).toFixed(1)}°`);
+
+  // 连续两次坐标异常：自动开关一次背包（用户手动恢复路径的自动化）
+  fireLook('pointerdown', 904, [0, 0], [0, 0]);
+  await sleep(250);
+  fireLook('pointerdown', 905, [0, 0], [0, 0]);
+  await sleep(350);
+  const diagText = window.__diag?.exportJson?.() ?? '';
+  check('连续坐标异常会自动开关背包恢复', diagText.includes('autoRecover.uiCycle'));
+  await sleep(900);
+
   mc.cycleCameraMode();
   await sleep(150);
   const toast = document.getElementById('hud-toast');

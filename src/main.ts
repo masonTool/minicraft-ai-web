@@ -900,7 +900,7 @@ class App {
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   /**
-   * 从后台回来时那层"游戏已暂停 · 点击继续"的遮罩（批次 184）。
+   * 从后台回来时那层"游戏已暂停 · 点击继续"的遮罩（批次 201）。
    *
    * 用户要求："从后台返回时，先不显示游戏页面，显示暂停页面；点击页面自动横屏全屏恢复游戏。"
    * 手机上切出去再回来，浏览器可能已经退出了全屏、或者方向被系统转回去了；
@@ -1014,6 +1014,9 @@ class App {
   /** 目标信息的刷新节拍（5Hz，别每帧写 DOM） */
   private targetInfoTimer = 0;
   private targetInfoText = '';
+  /** 触摸坐标异常的时刻（批次 201）：4 秒内连续两次才升级成"自动开关背包" */
+  private anomalyTimes: number[] = [];
+  private lastAutoRecovery = 0;
   /**
    * 进度系统"上岗"了没有（世界与存档都读完）。
    *
@@ -1662,6 +1665,8 @@ class App {
       onCycleCamera: () => {
         this.cycleCameraMode();
       },
+      // 触摸坐标异常（批次 201）：记录频率，必要时自动走一次"开关背包"
+      onPointerAnomaly: (phase) => this.handlePointerAnomaly(phase),
       // 飞行仍然可以被"双击跳跃"触发；"视角"与"创造飞行"的显式开关都搬进了
       // 设置面板（批次 107：右下那一簇只留跳/潜，见 ui/TouchControls.ts）
       onToggleFly: () => this.setFlying(!this.flying),
@@ -1804,7 +1809,7 @@ class App {
   }
 
   /**
-   * 从后台回来（批次 184，用户要求）：
+   * 从后台回来（批次 201，用户要求）：
    * **先不显示游戏页面，显示暂停页面；点一下才横屏全屏回到游戏。**
    *
    * 两件事分开做是有意的：
@@ -1890,6 +1895,34 @@ class App {
         /* 浏览器可能拒绝自动重新锁定，玩家点击画面即可 */
       });
     }
+  }
+
+  /**
+   * 触摸坐标异常（批次 201）。
+   *
+   * 用户实测的唯一可靠恢复是"点一下物品栏再关掉"。第一次异常只做轻量重排；
+   * 如果 4 秒内又来一次（说明轻量重排没救回来），就**真的开关一次背包**——
+   * 把用户手里那套动作自动做一遍，而不是让他自己点。
+   */
+  private handlePointerAnomaly(phase: string): void {
+    const now = performance.now();
+    this.anomalyTimes = this.anomalyTimes.filter((time) => now - time < 4000);
+    this.anomalyTimes.push(now);
+    if (this.anomalyTimes.length < 2) return;
+    if (now - this.lastAutoRecovery < 5000) return;
+    if (this.disposed || this.uiOpen || this.inventoryScreen.isOpen) return;
+    this.lastAutoRecovery = now;
+    diag.event('input', 'autoRecover.uiCycle', { phase, count: this.anomalyTimes.length });
+    console.info('[touch] 连续坐标异常：自动开关一次背包以恢复视角');
+    // 与用户手动操作同一条路径：失焦 → 开 → 120ms 后关 → 再失焦
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    this.inventoryScreen.openWith('inventory');
+    window.setTimeout(() => {
+      if (this.disposed) return;
+      this.inventoryScreen.close();
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }, 120);
+    this.hudToast.show('触摸坐标异常，已自动重置视角');
   }
 
   // ---------------------------------------------------------------- 联机（K2）
@@ -9499,7 +9532,7 @@ class App {
         } else {
           // 批次 183：从后台回来偶尔会拿到 clientX/Y=0 的触摸；先重排一次
           this.touch?.recover('visible');
-          // 批次 184：先落到暂停页，点一下才横屏全屏回到游戏
+          // 批次 201：先落到暂停页，点一下才横屏全屏回到游戏
           if (this.wasHidden) this.handleReturnFromBackground();
         }
       },
@@ -10841,7 +10874,7 @@ async function boot(): Promise<void> {
   diag.event('app', 'boot', { href: location.href });
   // 主菜单阶段还没有 App；先挂一个全局入口，出事时控制台/自动化脚本能直接取日志
   (window as unknown as { __diag: typeof diag }).__diag = diag;
-  // 批次 184：键盘不挤压布局 + 点输入框以外的地方先 blur（菜单与游戏内共用）
+  // 批次 201：键盘不挤压布局 + 点输入框以外的地方先 blur（菜单与游戏内共用）
   installKeyboardGuards();
   // 批次 185：竖屏浮层要**尽早**挂上——它现在是不透明的一整层，
   // 晚挂的话玩家会先看见竖屏菜单、再被盖住（"闪一下"）。
@@ -11025,7 +11058,7 @@ async function boot(): Promise<void> {
   preferInstalledLandscape();
   enterFullscreenOnBoot();
   armAutoFullscreen([document]);
-  // 批次 184：竖屏下**任何时候点任何区域**都再试一次（不是一次性）——
+  // 批次 201：竖屏下**任何时候点任何区域**都再试一次（不是一次性）——
   // 手机上第一次请求常见被拒（要等全屏完成后才允许锁方向），
   // 一次性的网摘掉之后玩家就会觉得"点半天才横过来"。
   armPresentOnTap(document);

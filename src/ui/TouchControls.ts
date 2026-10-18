@@ -81,6 +81,11 @@ export interface TouchActions {
   /** 切换第一/第三人称（批次 181，顶部第二颗键） */
   onCycleCamera(): void;
   /**
+   * 触摸坐标异常（批次 201）：`clientX/Y` 变成 0,0 时通知主程序。
+   * 连续多次异常时主程序会走"开关一次背包"的完整恢复路径。
+   */
+  onPointerAnomaly?: (phase: string) => void;
+  /**
    * 轻点抬起：交互 / 攻击 / 放置一次。
    *
    * 带上**松手时的手指坐标**（批次 185）：主程序要用它在屏幕上"点哪打哪"——
@@ -162,6 +167,8 @@ export class TouchControls {
   private lookPointSource: PointerSource = 'client';
   /** 正在做"隐藏一帧再显示"的坐标恢复 */
   private nudging = false;
+  /** 一次手势里连续收到几个 (0,0) 的 move（批次 201） */
+  private zeroMoveCount = 0;
   private lookStartX = 0;
   private lookStartY = 0;
   private lookDragged = false;
@@ -599,6 +606,7 @@ export class TouchControls {
       this.lastMoveY = point.y;
       this.lookDragged = false;
       this.breaking = false;
+      this.zeroMoveCount = 0;
       capturePointer(this.lookSurface, event.pointerId);
       diag.event('gesture', 'look.down', {
         pointer: event.pointerId,
@@ -621,9 +629,33 @@ export class TouchControls {
       if (event.pointerId !== this.lookPointer) return;
       event.preventDefault();
 
-      const point = pointFromEventWithSource(event, this.lookPointSource);
-      // 锁定 client 之后又收到 (0,0)：这是异常值，直接丢弃，别把视角甩到原点
-      if (this.lookPointSource === 'client' && point.x === 0 && point.y === 0) return;
+      let point = pointFromEventWithSource(event, this.lookPointSource);
+      // 锁定 client 之后又收到 (0,0)：批次 201 的正确做法是**中途换源**，
+      // 而不是丢弃——否则手指一直在动、视角却永远不动（用户反馈的"卡住"）。
+      if (this.lookPointSource === 'client' && point.x === 0 && point.y === 0) {
+        const alt = pointFromEvent(event);
+        if (alt.source !== 'none') {
+          // 保留已经累计的拖动量，重设基准，避免换源瞬间跳一下
+          const dxSoFar = this.lastMoveX - this.lookStartX;
+          const dySoFar = this.lastMoveY - this.lookStartY;
+          this.lookPointSource = alt.source;
+          this.lookStartX = alt.x - dxSoFar;
+          this.lookStartY = alt.y - dySoFar;
+          this.lastMoveX = alt.x;
+          this.lastMoveY = alt.y;
+          point = alt;
+          diag.event('gesture', 'pointer.rebase', { pointer: event.pointerId, source: alt.source });
+        } else {
+          // screen/page 也全是 0：连续几次就结束这次手势，交给主程序做完整恢复
+          this.zeroMoveCount++;
+          if (this.zeroMoveCount >= 3) {
+            this.zeroMoveCount = 0;
+            this.actions.onPointerAnomaly?.('look.zero');
+            this.cancelLook();
+          }
+          return;
+        }
+      }
       const dx = point.x - this.lookStartX;
       const dy = point.y - this.lookStartY;
 
@@ -654,6 +686,7 @@ export class TouchControls {
         state: this.debugState,
       });
       this.clearGestureTimers();
+      this.zeroMoveCount = 0;
 
       if (this.breaking) {
         this.breaking = false;
@@ -738,18 +771,36 @@ export class TouchControls {
       scroll: [window.scrollX, window.scrollY],
       visual: vv ? [Math.round(vv.offsetLeft), Math.round(vv.offsetTop), Number(vv.scale.toFixed(2))] : null,
     });
+    this.actions.onPointerAnomaly?.(phase);
   }
 
-  /** 触摸层隐藏一帧再显示：代价最小的一次"强制重排" */
+  /**
+   * 强制一次"和开关背包等价"的重排（批次 201）。
+   *
+   * 只切 `#touch-ui` 的 display 还不够：用户实测能恢复的是**完整界面开关**，
+   * 而它额外做了三件事——`body.inv-pocket-open`（HUD visibility）、
+   * 失焦（输入框/按钮）、以及整页 reflow。这里全部照做，隐藏两帧再恢复，
+   * 尽量让浏览器重新计算 visual viewport 与触摸坐标映射。
+   */
   private nudgeLayout(reason: string): void {
     if (this.nudging) return;
     this.nudging = true;
+    const body = document.body;
+    const hadPocketOpen = body.classList.contains('inv-pocket-open');
+    if (!hadPocketOpen) body.classList.add('inv-pocket-open');
+    // 隐藏输入框/按钮的焦点：Android 上软键盘/焦点残留会拖住 visual viewport
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     this.object.style.display = 'none';
+    // 读一次布局，强制浏览器在"隐藏"状态下重算
     void this.object.offsetHeight;
+    void body.offsetHeight;
     window.requestAnimationFrame(() => {
-      this.object.style.display = '';
-      this.nudging = false;
-      diag.event('gesture', 'pointer.recover', { reason });
+      window.requestAnimationFrame(() => {
+        if (!hadPocketOpen) body.classList.remove('inv-pocket-open');
+        this.object.style.display = '';
+        this.nudging = false;
+        diag.event('gesture', 'pointer.recover', { reason });
+      });
     });
   }
 

@@ -1876,6 +1876,16 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
       appSrc.includes("this.touch?.recover('fullscreen')"),
   );
   check('摇杆不再拿原点算方向', touchSrc.includes('if (event.clientX === 0 && event.clientY === 0) return;'));
+  check(
+    '拖动中途 client 变 0 会切到 screen/page 继续（不是丢弃）',
+    touchSrc.includes("'pointer.rebase'") && touchSrc.includes('this.lookPointSource = alt.source'),
+  );
+  check(
+    '连续坐标异常会自动走一次"开关背包"',
+    appSrc.includes('private handlePointerAnomaly(') &&
+      appSrc.includes("'autoRecover.uiCycle'") &&
+      appSrc.includes("this.inventoryScreen.openWith('inventory')"),
+  );
 }
 
 console.log('\n[用户反馈一轮收口（批次 184）]');
