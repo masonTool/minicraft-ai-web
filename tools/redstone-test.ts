@@ -31,7 +31,13 @@ import {
   withDoorUpper,
   withFacing,
 } from '../src/core/registry/blockState.ts';
-import { RedstoneEngine, canPush, wirePowerOf, type RedstoneWorld } from '../src/core/redstone/RedstoneEngine.ts';
+import {
+  RedstoneEngine,
+  canPush,
+  weightedPlateSignal,
+  wirePowerOf,
+  type RedstoneWorld,
+} from '../src/core/redstone/RedstoneEngine.ts';
 import { CONTAINER_BLOCKS } from '../src/core/world/BlockEntityStore.ts';
 
 let passed = 0;
@@ -56,6 +62,8 @@ class StubWorld implements RedstoneWorld {
   private readonly blocks = new Map<string, number>();
   private readonly states = new Map<string, number>();
   private readonly entities = new Set<string>();
+  /** 实体个数（批次 247，测重压力板用）：同一格可以站多个 */
+  private readonly entityCounts = new Map<string, number>();
 
   private static key(x: number, y: number, z: number): string {
     return `${x},${y},${z}`;
@@ -85,15 +93,24 @@ class StubWorld implements RedstoneWorld {
   }
 
   hasEntityAt(x: number, y: number, z: number): boolean {
-    return this.entities.has(StubWorld.key(x, y, z));
+    return (this.entityCounts.get(StubWorld.key(x, y, z)) ?? 0) > 0;
   }
 
-  placeEntity(x: number, y: number, z: number): void {
-    this.entities.add(StubWorld.key(x, y, z));
+  entityCountAt(x: number, y: number, z: number): number {
+    return this.entityCounts.get(StubWorld.key(x, y, z)) ?? 0;
+  }
+
+  /** 往一格上放 `count` 个实体（默认 1，测重压力板要多个） */
+  placeEntity(x: number, y: number, z: number, count = 1): void {
+    const key = StubWorld.key(x, y, z);
+    this.entities.add(key);
+    this.entityCounts.set(key, count);
   }
 
   removeEntity(x: number, y: number, z: number): void {
-    this.entities.delete(StubWorld.key(x, y, z));
+    const key = StubWorld.key(x, y, z);
+    this.entities.delete(key);
+    this.entityCounts.delete(key);
   }
 }
 
@@ -572,6 +589,59 @@ console.log('\n[动力铁轨：通电点亮、断电熄灭（批次 246）]');
   engine.onBlockChanged(world, 0, Y, 0);
   step(engine, world, 0.1);
   check('移走电源 → 动力轨熄灭', !isPowered(world.getState(1, Y, 0)));
+}
+
+console.log('\n[激活铁轨：通电才生效（批次 247）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.REDSTONE_BLOCK, 0);
+  world.setBlock(1, Y, 0, Block.ACTIVATOR_RAIL, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('贴着红石块 → 激活轨通电', isPowered(world.getState(1, Y, 0)));
+
+  world.setBlock(0, Y, 0, Block.AIR, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('移走电源 → 激活轨熄灭', !isPowered(world.getState(1, Y, 0)));
+}
+
+console.log('\n[测重压力板：强度随实体数量（批次 247）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.LIGHT_WEIGHTED_PRESSURE_PLATE, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_WIRE, 0);
+  world.setBlock(2, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.3);
+  check('空板不输出', !isPowered(world.getState(0, Y, 0)) && wirePowerOf(engine, 1, Y, 0) === 0);
+
+  world.placeEntity(0, Y, 0, 3);
+  step(engine, world, 0.3);
+  equal('3 个实体 → 轻质板强度 3（粉上剩 2）', wirePowerOf(engine, 1, Y, 0), 2);
+  check('灯随之点亮', isPowered(world.getState(2, Y, 0)));
+
+  world.removeEntity(0, Y, 0);
+  step(engine, world, 0.3);
+  check('实体离开 → 断电', !isPowered(world.getState(0, Y, 0)) && wirePowerOf(engine, 1, Y, 0) === 0);
+
+  // 重质板：每 10 个实体才 +1
+  const heavy = new StubWorld();
+  const heavyEngine = new RedstoneEngine();
+  heavy.setBlock(0, Y, 0, Block.HEAVY_WEIGHTED_PRESSURE_PLATE, 0);
+  heavy.setBlock(1, Y, 0, Block.REDSTONE_WIRE, 0);
+  heavyEngine.onBlockChanged(heavy, 0, Y, 0);
+  step(heavyEngine, heavy, 0.3);
+  heavy.placeEntity(0, Y, 0, 20);
+  step(heavyEngine, heavy, 0.3);
+  equal('20 个实体 → 重质板强度 2（粉上剩 1）', wirePowerOf(heavyEngine, 1, Y, 0), 1);
+
+  equal('纯函数：轻质 20 个封顶 15', weightedPlateSignal(Block.LIGHT_WEIGHTED_PRESSURE_PLATE, 20), 15);
+  equal('纯函数：重质 20 个 = 2', weightedPlateSignal(Block.HEAVY_WEIGHTED_PRESSURE_PLATE, 20), 2);
+  equal('纯函数：重质 9 个 = 0', weightedPlateSignal(Block.HEAVY_WEIGHTED_PRESSURE_PLATE, 9), 0);
+  equal('纯函数：负数按 0 算', weightedPlateSignal(Block.LIGHT_WEIGHTED_PRESSURE_PLATE, -5), 0);
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);

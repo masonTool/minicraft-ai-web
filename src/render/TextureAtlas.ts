@@ -1787,6 +1787,34 @@ PAINTERS.powered_rail_on = railPainter([188, 152, 58], [245, 206, 96], true);
 // 探测铁轨：石枕木 + 灰钢轨；通电版压一层红（原版是中间那块板变红）
 PAINTERS.detector_rail = railPainter([116, 116, 122], [166, 166, 174]);
 PAINTERS.detector_rail_on = railPainter([150, 96, 92], [226, 130, 118], true);
+// 激活铁轨（批次 247）：红石红的两根轨；通电提亮
+PAINTERS.activator_rail = railPainter([126, 78, 70], [196, 104, 96]);
+PAINTERS.activator_rail_on = railPainter([168, 96, 84], [246, 138, 122], true);
+
+/**
+ * 测重压力板（批次 247）：12×12 的方形板 + 一圈压暗的边。
+ * 按下（on）时整体压暗、中心一点红——16×16 下"踩下去"只能这样表达。
+ */
+function weightedPlatePainter(
+  base: readonly [number, number, number],
+  on: boolean,
+): Painter {
+  return (x, y) => {
+    const dx = Math.abs(x - 7.5);
+    const dy = Math.abs(y - 7.5);
+    if (dx > 6 || dy > 6) return [0, 0, 0, 0];
+    // 按下时中心亮一点红，一眼看出"有东西踩上去了"
+    if (on && dx < 1.5 && dy < 1.5) return [226, 88, 74, 255];
+    const edge = dx > 5 || dy > 5;
+    const k = edge ? 0.76 : on ? 0.9 : 1;
+    return [clamp255(base[0] * k), clamp255(base[1] * k), clamp255(base[2] * k), 255];
+  };
+}
+
+PAINTERS.light_weighted_pressure_plate = weightedPlatePainter([236, 198, 90], false);
+PAINTERS.light_weighted_pressure_plate_on = weightedPlatePainter([208, 168, 68], true);
+PAINTERS.heavy_weighted_pressure_plate = weightedPlatePainter([200, 200, 208], false);
+PAINTERS.heavy_weighted_pressure_plate_on = weightedPlatePainter([176, 176, 186], true);
 
 /**
  * 矿车图标（批次 245）：一只开口的铁皮斗 + 两个轮子。

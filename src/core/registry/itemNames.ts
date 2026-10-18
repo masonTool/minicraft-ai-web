@@ -721,6 +721,8 @@ const REDSTONE_CN: Record<string, string> = {
   powered_rail: '动力铁轨',
   detector_rail: '探测铁轨',
   activator_rail: '激活铁轨',
+  light_weighted_pressure_plate: '轻质测重压力板',
+  heavy_weighted_pressure_plate: '重质测重压力板',
 };
 for (const [id, name] of Object.entries(REDSTONE_CN)) put(id, name);
 

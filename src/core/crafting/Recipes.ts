@@ -816,6 +816,26 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     pattern: ['I I', 'ISI', 'IRI'],
     key: { I: Item.IRON_INGOT, S: Block.STONE_PRESSURE_PLATE, R: Item.REDSTONE },
   },
+  // 激活铁轨（批次 247）：6 铁锭 + 木棍 + 红石火把 → 6 段（原版图案）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.ACTIVATOR_RAIL, count: 6 },
+    pattern: ['I I', 'ISI', 'ITI'],
+    key: { I: Item.IRON_INGOT, S: Item.STICK, T: Block.REDSTONE_TORCH },
+  },
+  // 测重压力板（批次 247）：2 个材料并排（轻质金、重质铁），一次 1 块
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.LIGHT_WEIGHTED_PRESSURE_PLATE, count: 1 },
+    pattern: ['GG'],
+    key: { G: Item.GOLD_INGOT },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.HEAVY_WEIGHTED_PRESSURE_PLATE, count: 1 },
+    pattern: ['II'],
+    key: { I: Item.IRON_INGOT },
+  },
   // 蘑菇煲：红蘑菇 + 棕蘑菇 + 碗（原版无序）
   { kind: 'shapeless' as const, result: { id: Item.MUSHROOM_STEW, count: 1 }, ingredients: [Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Item.BOWL] },
   // 甜菜汤：6 个甜菜根 + 碗（原版无序）

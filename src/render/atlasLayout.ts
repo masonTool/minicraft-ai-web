@@ -1030,6 +1030,13 @@ export const TILE_ORDER = [
   'powered_rail_on',
   'detector_rail',
   'detector_rail_on',
+  // 激活轨与测重压力板（批次 247）
+  'activator_rail',
+  'activator_rail_on',
+  'light_weighted_pressure_plate',
+  'light_weighted_pressure_plate_on',
+  'heavy_weighted_pressure_plate',
+  'heavy_weighted_pressure_plate_on',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

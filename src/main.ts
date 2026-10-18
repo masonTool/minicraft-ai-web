@@ -376,6 +376,7 @@ import {
 import {
   isDoorOpen,
   isDoorUpper,
+  isPowered,
   isSlabDouble,
   withDoorOpen,
   withDoorUpper,
@@ -725,6 +726,8 @@ class App {
     setState: (x, y, z, state) => this.world.setStateAndUpdate(x, y, z, state),
     isLoaded: (x, z) => this.world.isLoaded(x, z),
     hasEntityAt: (x, y, z) => this.hasEntityAt(x, y, z),
+    // 测重压力板（批次 247）：要的是"几个"，不是"有没有"
+    entityCountAt: (x, y, z) => this.entityCountAt(x, y, z),
     // 阳光传感器（批次 54）：红石引擎里唯二要看**外部世界的量**的元件之一
     getSkyLight: (x, y, z) => this.world.getSkyLight(x, y, z),
     // 避雷针（批次 83）：另一个——"被雷劈中的那 0.4 秒"由上面的脉冲表拿着，
@@ -4308,6 +4311,20 @@ class App {
     this.audio.play('place', { x: vehicle.x, y: vehicle.y, z: vehicle.z });
   }
 
+  /**
+   * 矿车脚下的那格是不是**通电的激活铁轨**（批次 247）。
+   *
+   * 原版激活铁轨的用途就是"把乘客弹下来"（还有一种是把 TNT 矿车点着）。
+   * 判定放在主程序：只有它知道"谁坐在车上"。
+   */
+  private activatorRailUnder(cart: Minecart): boolean {
+    const x = Math.floor(cart.x);
+    const y = Math.floor(cart.y + 0.05);
+    const z = Math.floor(cart.z);
+    if (this.world.getBlock(x, y, z) !== Block.ACTIVATOR_RAIL) return false;
+    return isPowered(this.world.getBlockState(x, y, z));
+  }
+
   /** 把玩家贴到载具上（每帧实体更新之后调用，保证相机不比载具慢一帧） */
   private syncRiderToVehicle(): void {
     const vehicle = this.ridingVehicle;
@@ -4367,7 +4384,14 @@ class App {
     // 铁轨是 `flat` 薄板：矿车落在它上方 0.05（贴住轨面，不悬空）。
     // 三种轨道都能放车（批次 246 起）
     const rail = this.world.getBlock(hit.x, hit.y, hit.z);
-    if (rail !== Block.RAIL && rail !== Block.POWERED_RAIL && rail !== Block.DETECTOR_RAIL) return false;
+    if (
+      rail !== Block.RAIL &&
+      rail !== Block.POWERED_RAIL &&
+      rail !== Block.DETECTOR_RAIL &&
+      rail !== Block.ACTIVATOR_RAIL
+    ) {
+      return false;
+    }
     const cart = new Minecart(hit.x + 0.5, hit.y + 0.05, hit.z + 0.5);
     cart.yaw = this.yaw;
     this.entities.spawn(cart);
@@ -8624,6 +8648,43 @@ class App {
   }
 
   /**
+   * 这一格上有几个实体（批次 247，测重压力板用）。
+   *
+   * 与 `hasEntityAt` 同一个判据，只是把"命中即返回"换成计数：玩家算 1 个、
+   * 每个实体各算 1 个（原版矿车/生物都算重量）。
+   */
+  private entityCountAt(x: number, y: number, z: number): number {
+    const minX = x;
+    const maxX = x + 1;
+    const minY = y;
+    const maxY = y + 1;
+    const minZ = z;
+    const maxZ = z + 1;
+    let count = 0;
+
+    const px = this.physics.x;
+    const py = this.physics.y;
+    const pz = this.physics.z;
+    if (px + 0.3 > minX && px - 0.3 < maxX && py < maxY && py + 1.8 > minY && pz + 0.3 > minZ && pz - 0.3 < maxZ) {
+      count++;
+    }
+    for (const entity of this.entities.all) {
+      const half = entity.width / 2;
+      if (
+        entity.x + half > minX &&
+        entity.x - half < maxX &&
+        entity.y < maxY &&
+        entity.y + entity.height > minY &&
+        entity.z + half > minZ &&
+        entity.z - half < maxZ
+      ) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * 这只生物的脚下或身体所在格是不是火（I12）。
    * 只有两格要查（原版也是判实体 AABB 覆盖到的方块），不必扫整个包围盒。
    */
@@ -11233,6 +11294,14 @@ class App {
       this.mountCooldown = Math.max(0, this.mountCooldown - dt);
       // 在船上按跳跃/潜行 = 下船（手机上跳跃键是唯一顺手的按键；桌面潜行也认）
       if (this.ridingVehicle && this.mountCooldown <= 0 && (rawInput.jump || rawInput.sneak)) {
+        this.dismountVehicle();
+      }
+      // 激活铁轨（批次 247）：通电的激活轨把矿车乘客弹下来
+      if (
+        this.ridingVehicle instanceof Minecart &&
+        this.mountCooldown <= 0 &&
+        this.activatorRailUnder(this.ridingVehicle)
+      ) {
         this.dismountVehicle();
       }
       const wasOnGround = this.physics.onGround;

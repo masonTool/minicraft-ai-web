@@ -63,6 +63,13 @@ export interface RedstoneWorld {
   /** 该格是否有玩家/生物（压力板用） */
   hasEntityAt(x: number, y: number, z: number): boolean;
   /**
+   * 该格上有几个实体（批次 247，测重压力板用）。
+   *
+   * 不传就退回 `hasEntityAt ? 1 : 0`——老桩不必为了它改，
+   * 但测重板在那种世界里的输出会恒为"1 个实体"的强度。
+   */
+  entityCountAt?(x: number, y: number, z: number): number;
+  /**
    * 该格的天光等级（0~15）。**只有阳光传感器用**（批次 54）：
    * 它是唯一一个"输出强度取决于天气/时间"的电源。
    * 不传就当 0（室内/夜里）——离线测试不必为了它搭一套光照。
@@ -117,6 +124,11 @@ export function isRedstoneComponent(id: number): boolean {
     // 两者都要进这张表，洪泛才把"轨—线—灯"连成一片
     case Block.DETECTOR_RAIL:
     case Block.POWERED_RAIL:
+    // 激活铁轨（批次 247）：负载，通电就把乘客弹下车
+    case Block.ACTIVATOR_RAIL:
+    // 测重压力板（批次 247）：电源，输出强度随实体数量变化
+    case Block.LIGHT_WEIGHTED_PRESSURE_PLATE:
+    case Block.HEAVY_WEIGHTED_PRESSURE_PLATE:
     // 漏斗（批次 58）：通电就**锁定**（不推也不吸）——这是原版的"漏斗闸门"玩法
     case Block.HOPPER:
     // 投掷器（批次 59）：通电的**上升沿**吐一件出去（它是"负载"，
@@ -160,6 +172,19 @@ export function daylightOutput(skyLight: number, inverted: boolean): number {
   return inverted ? 15 - level : level;
 }
 
+/**
+ * 测重压力板的输出强度（批次 247）。
+ *
+ * 原版规则：**轻质**每多 1 个实体 +1，**重质**每多 10 个 +1，两者都封顶 15。
+ * 抽成纯函数是为了被离线测试钉住——"20 个实体踩轻质板 = 15、踩重质板 = 2"
+ * 这种数值差异，只能靠断言保。
+ */
+export function weightedPlateSignal(id: number, count: number): number {
+  const entities = Math.max(0, Math.floor(count));
+  const raw = id === Block.HEAVY_WEIGHTED_PRESSURE_PLATE ? Math.floor(entities / 10) : entities;
+  return Math.min(15, raw);
+}
+
 /** 一个节点的坐标 */
 interface Node {
   x: number;
@@ -186,6 +211,8 @@ export class RedstoneEngine {
   private readonly plateState = new Map<string, boolean>();
   /** 探测铁轨（批次 246）：和压力板一样要每 0.1 秒看一次"轨上有没有实体" */
   private readonly detectorRailState = new Map<string, boolean>();
+  /** 测重压力板（批次 247）：上一次的输出强度（强度变了才重算，不然每 0.1 秒全量重算） */
+  private readonly weightedPlatePower = new Map<string, number>();
   /**
    * 阳光传感器：位置 → 上次算出的输出强度（批次 54）。
    *
@@ -366,6 +393,8 @@ export class RedstoneEngine {
       if (this.pollPressurePlates(world)) changed = true;
       // 探测铁轨（批次 246）：与压力板同一条判据（`hasEntityAt`），只是方块换成铁轨
       if (this.pollDetectorRails(world)) changed = true;
+      // 测重压力板（批次 247）：数实体个数，强度变了才重算
+      if (this.pollWeightedPlates(world)) changed = true;
       // 绊线（批次 55）：与压力板同一节奏看"线上有没有实体"
       if (this.pollTripwires(world)) changed = true;
     }
@@ -563,6 +592,34 @@ export class RedstoneEngine {
     }
   }
 
+  /**
+   * 测重压力板轮询（批次 247）：按**实体数量**算输出强度，强度变了才重算。
+   *
+   * 与探测轨的区别：那条是"有/没有"，这条是"有几个"——所以必须记住上一次的强度，
+   * 否则每 0.1 秒都会把整片电路重算一遍（20 个实体踩在板上时尤其浪费）。
+   */
+  private pollWeightedPlates(world: RedstoneWorld): boolean {
+    let changed = false;
+    for (const [key, previous] of [...this.weightedPlatePower]) {
+      const [x, y, z] = parseKey(key);
+      const id = world.getBlock(x, y, z);
+      const isPlate =
+        id === Block.LIGHT_WEIGHTED_PRESSURE_PLATE || id === Block.HEAVY_WEIGHTED_PRESSURE_PLATE;
+      if (!isPlate || !world.isLoaded(x, z)) {
+        this.weightedPlatePower.delete(key);
+        continue;
+      }
+      const count = world.entityCountAt?.(x, y, z) ?? (world.hasEntityAt(x, y, z) ? 1 : 0);
+      const strength = weightedPlateSignal(id, count);
+      if (strength === previous) continue;
+      this.weightedPlatePower.set(key, strength);
+      world.setState(x, y, z, withPowered(world.getState(x, y, z), strength > 0));
+      this.markDirty(x, y, z);
+      changed = true;
+    }
+    return changed;
+  }
+
   // ---------------------------------------------------------------- 核心求解
 
   /**
@@ -607,6 +664,23 @@ export class RedstoneEngine {
             sources.push({ x: nx, y: ny, z: nz });
           }
           break;
+        // 测重压力板（批次 247）：输出强度 = 实体数量（重质每 10 个 +1），与阳光传感器
+        // 同一条"可变强度电源"的路——强度直接进 `strengths`，旁边的粉按它衰减
+        case Block.LIGHT_WEIGHTED_PRESSURE_PLATE:
+        case Block.HEAVY_WEIGHTED_PRESSURE_PLATE: {
+          const count = world.entityCountAt?.(nx, ny, nz) ?? (world.hasEntityAt(nx, ny, nz) ? 1 : 0);
+          const strength = weightedPlateSignal(id, count);
+          this.weightedPlatePower.set(key, strength);
+          if (strength > 0) {
+            strengths.set(key, strength);
+            sources.push({ x: nx, y: ny, z: nz });
+          }
+          // `powered` 位跟着输出走（渲染要看"现在踩没踩"）
+          if (isPowered(state) !== (strength > 0)) {
+            world.setState(nx, ny, nz, withPowered(state, strength > 0));
+          }
+          break;
+        }
         case Block.TRIPWIRE_HOOK: {
           // 绊线钩（批次 55）：两根**朝向相对**的钩子 + 中间若干格绊线 = 一条回路；
           // 线上有实体时两个钩子都输出 15。判定全在 `scanTripwire` 里（纯读世界）
@@ -762,6 +836,16 @@ export class RedstoneEngine {
         // 动力铁轨（批次 246）：通电就把状态位写上（矿车读它加速）。
         // 与红石灯同一个"负载"套路，只是"亮"换成"能推车"
         case Block.POWERED_RAIL: {
+          const shouldPower = input > 0;
+          if (isPowered(state) !== shouldPower) {
+            world.setState(nx, ny, nz, withPowered(state, shouldPower));
+            this.markDirty(nx, ny, nz);
+            changed = true;
+          }
+          break;
+        }
+        // 激活铁轨（批次 247）：同样是负载，通电后由主程序把乘客弹下车
+        case Block.ACTIVATOR_RAIL: {
           const shouldPower = input > 0;
           if (isPowered(state) !== shouldPower) {
             world.setState(nx, ny, nz, withPowered(state, shouldPower));

@@ -2866,10 +2866,11 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       recipesSrc.includes('result: { id: Block.RAIL, count: 16 }'),
   );
   check(
-    '矿车物品（5 铁锭）能放到三种铁轨上',
+    '矿车物品（5 铁锭）能放到四种铁轨上',
     itemsSrc.includes('MINECART: 1479') &&
       recipesSrc.includes('result: { id: Item.MINECART, count: 1 }') &&
-      appSrc.includes('rail !== Block.RAIL && rail !== Block.POWERED_RAIL && rail !== Block.DETECTOR_RAIL'),
+      appSrc.includes('rail !== Block.DETECTOR_RAIL &&') &&
+      appSrc.includes('rail !== Block.ACTIVATOR_RAIL'),
   );
   check(
     '矿车在轨道上阻力极小、离开轨道寸步难行',
@@ -2900,6 +2901,26 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       blocksSrc.includes("['detector_rail_on', 'detector_rail_on', 'detector_rail_on']") &&
       recipesSrc.includes('result: { id: Block.POWERED_RAIL, count: 6 }') &&
       recipesSrc.includes('result: { id: Block.DETECTOR_RAIL, count: 6 }'),
+  );
+
+  // 批次 247：激活轨（负载 + 弹人）与测重压力板（可变强度电源）
+  check(
+    '激活轨（id 581）：通电状态位 + 主程序把乘客弹下车',
+    blocksSrc.includes('export const ACTIVATOR_RAIL_ID = 581') &&
+      recipesSrc.includes('result: { id: Block.ACTIVATOR_RAIL, count: 6 }') &&
+      engineSrc.includes('case Block.ACTIVATOR_RAIL: {') &&
+      appSrc.includes('private activatorRailUnder(cart: Minecart)') &&
+      appSrc.includes('this.activatorRailUnder(this.ridingVehicle)'),
+  );
+  check(
+    '测重压力板（id 582/583）：强度按实体个数算，且有实体计数接口',
+    blocksSrc.includes('LIGHT_WEIGHTED_PRESSURE_PLATE_ID = 582') &&
+      blocksSrc.includes('HEAVY_WEIGHTED_PRESSURE_PLATE_ID = 583') &&
+      engineSrc.includes('export function weightedPlateSignal(') &&
+      engineSrc.includes('if (this.pollWeightedPlates(world)) changed = true;') &&
+      appSrc.includes('private entityCountAt(x: number, y: number, z: number): number') &&
+      recipesSrc.includes('result: { id: Block.LIGHT_WEIGHTED_PRESSURE_PLATE, count: 1 }') &&
+      recipesSrc.includes('result: { id: Block.HEAVY_WEIGHTED_PRESSURE_PLATE, count: 1 }'),
   );
 }
 

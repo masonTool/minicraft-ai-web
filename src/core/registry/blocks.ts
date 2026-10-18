@@ -2344,6 +2344,12 @@ export const RAIL_ID = 578;
 export const POWERED_RAIL_ID = 579;
 /** 探测铁轨（批次 246）：轨上有实体时点亮，并向相邻红石输出 15 */
 export const DETECTOR_RAIL_ID = 580;
+/** 激活铁轨（批次 247）：通电时把矿车里的乘客弹下来 */
+export const ACTIVATOR_RAIL_ID = 581;
+/** 轻质测重压力板（批次 247）：每多 1 个实体 +1 强度 */
+export const LIGHT_WEIGHTED_PRESSURE_PLATE_ID = 582;
+/** 重质测重压力板（批次 247）：每多 10 个实体 +1 强度 */
+export const HEAVY_WEIGHTED_PRESSURE_PLATE_ID = 583;
 export const RAIL_SPECS: readonly BlockSpec[] = [
   {
     id: RAIL_ID,
@@ -2376,6 +2382,76 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
       isPowered(state)
         ? ['detector_rail_on', 'detector_rail_on', 'detector_rail_on']
         : ['detector_rail', 'detector_rail', 'detector_rail'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: ACTIVATOR_RAIL_ID,
+    name: 'minecraft:activator_rail',
+    tiles: ['activator_rail', 'activator_rail', 'activator_rail'],
+    stateTiles: (state) =>
+      isPowered(state)
+        ? ['activator_rail_on', 'activator_rail_on', 'activator_rail_on']
+        : ['activator_rail', 'activator_rail', 'activator_rail'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
+/**
+ * 测重压力板（批次 247）：与普通压力板同样几何，区别只在**输出强度随实体数量变化**
+ * （轻质 1 个/点、重质 10 个/点），所以它们走红石引擎里"可变强度电源"那条路。
+ */
+export const WEIGHTED_PLATE_SPECS: readonly BlockSpec[] = [
+  {
+    id: LIGHT_WEIGHTED_PRESSURE_PLATE_ID,
+    name: 'minecraft:light_weighted_pressure_plate',
+    tiles: [
+      'light_weighted_pressure_plate',
+      'light_weighted_pressure_plate',
+      'light_weighted_pressure_plate',
+    ],
+    stateTiles: (state) =>
+      isPowered(state)
+        ? [
+            'light_weighted_pressure_plate_on',
+            'light_weighted_pressure_plate_on',
+            'light_weighted_pressure_plate_on',
+          ]
+        : [
+            'light_weighted_pressure_plate',
+            'light_weighted_pressure_plate',
+            'light_weighted_pressure_plate',
+          ],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: HEAVY_WEIGHTED_PRESSURE_PLATE_ID,
+    name: 'minecraft:heavy_weighted_pressure_plate',
+    tiles: [
+      'heavy_weighted_pressure_plate',
+      'heavy_weighted_pressure_plate',
+      'heavy_weighted_pressure_plate',
+    ],
+    stateTiles: (state) =>
+      isPowered(state)
+        ? [
+            'heavy_weighted_pressure_plate_on',
+            'heavy_weighted_pressure_plate_on',
+            'heavy_weighted_pressure_plate_on',
+          ]
+        : [
+            'heavy_weighted_pressure_plate',
+            'heavy_weighted_pressure_plate',
+            'heavy_weighted_pressure_plate',
+          ],
     shape: 'flat',
     solid: false,
     opaque: false,
@@ -2414,6 +2490,8 @@ const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
   MORE_STONE_SPECS,
   // 铁轨（批次 245）：也进"已定义"表，`tilesOfDefined` 查得到它
   RAIL_SPECS,
+  // 测重压力板（批次 247）
+  WEIGHTED_PLATE_SPECS,
 ];
 
 /**
@@ -3038,8 +3116,9 @@ const SPECS: readonly BlockSpec[] = [
   ...VINE_SPECS,
   ...COPPER_SPECS,
   ...MORE_STONE_SPECS,
-  // 铁轨（批次 245）：flat 薄板，注册进主表
+  // 铁轨（批次 245/247）：flat 薄板，注册进主表
   ...RAIL_SPECS,
+  ...WEIGHTED_PLATE_SPECS,
   ...STONE_VARIANT_SPECS,
   ...STONECUTTER_SPECS,
   ...RED_SAND_SPECS,
@@ -3226,6 +3305,10 @@ export const Block = {
   // 动力/探测铁轨（批次 246）：继续往后追加
   POWERED_RAIL: POWERED_RAIL_ID,
   DETECTOR_RAIL: DETECTOR_RAIL_ID,
+  // 激活轨与测重压力板（批次 247）
+  ACTIVATOR_RAIL: ACTIVATOR_RAIL_ID,
+  LIGHT_WEIGHTED_PRESSURE_PLATE: LIGHT_WEIGHTED_PRESSURE_PLATE_ID,
+  HEAVY_WEIGHTED_PRESSURE_PLATE: HEAVY_WEIGHTED_PRESSURE_PLATE_ID,
   REDSTONE_TORCH: 257,
   REDSTONE_BLOCK: 258,
   LEVER: 259,
@@ -3663,6 +3746,10 @@ HARDNESS.set(Block.SNOW, 0.1);
 HARDNESS.set(Block.RAIL, 0.7);
 HARDNESS.set(Block.POWERED_RAIL, 0.7);
 HARDNESS.set(Block.DETECTOR_RAIL, 0.7);
+HARDNESS.set(Block.ACTIVATOR_RAIL, 0.7);
+// 测重压力板：原版 0.5（徒手可挖）
+HARDNESS.set(Block.LIGHT_WEIGHTED_PRESSURE_PLATE, 0.5);
+HARDNESS.set(Block.HEAVY_WEIGHTED_PRESSURE_PLATE, 0.5);
 
 // 台阶 / 楼梯的硬度跟随母方块（原版行为）
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {
