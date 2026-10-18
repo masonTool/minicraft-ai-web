@@ -11,6 +11,7 @@ import { Mob } from '../src/core/entity/Mob.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { rayBoxDistance, raycastEntities } from '../src/core/interaction/EntityRaycast.ts';
 import { sweepDamage } from '../src/core/registry/tools.ts';
+import { crossbowChargeTime, crossbowVolley } from '../src/core/entity/Bow.ts';
 
 let passed = 0;
 let failed = 0;
@@ -115,6 +116,17 @@ console.log('\n[横扫之刃的溅射伤害（批次 262）]');
   equal('III 级：1 + 7×3/4 = 6.25', sweepDamage(7, 3), 6.25);
   equal('超过 III 级按 III 级算', sweepDamage(7, 9), 6.25);
   equal('武器伤害 0 时只剩基础 1 点', sweepDamage(0, 3), 1);
+}
+
+console.log('\n[弩：装填时间与齐射（批次 265）]');
+{
+  equal('无附魔 1.25 秒', crossbowChargeTime(0), 1.25);
+  equal('快速装填 I = 1.0 秒', crossbowChargeTime(1), 1);
+  equal('快速装填 III = 0.5 秒', crossbowChargeTime(3), 0.5);
+  equal('超过 III 级按 III 级算', crossbowChargeTime(9), 0.5);
+  equal('没箭时射不出', crossbowVolley(true, 0), 0);
+  equal('多重射击 = 3 支', crossbowVolley(true, 5), 3);
+  equal('普通 = 1 支', crossbowVolley(false, 5), 1);
 }
 
 console.log(`\n战斗测试：${passed} 通过 / ${failed} 失败\n`);

@@ -3175,5 +3175,36 @@ console.log('\n[荆棘（批次 264）]');
   );
 }
 
+console.log('\n[弩（批次 265）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const itemsSrc = readFileSync(new URL('../src/core/registry/items.ts', import.meta.url), 'utf8');
+  const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  check(
+    '弩物品（id 1510，耐久 465）与配方',
+    itemsSrc.includes('CROSSBOW: 1510') &&
+      itemsSrc.includes("name: 'minecraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465") &&
+      recipesSrc.includes('result: { id: Item.CROSSBOW, count: 1 }'),
+  );
+  check(
+    '装填满了才发射，快速装填缩短时间',
+    appSrc.includes('private updateCrossbow(dt: number): void') &&
+      appSrc.includes('crossbowChargeTime(enchantLevel(this.heldEnchants, \'quick_charge\'))') &&
+      appSrc.includes('if (charge >= full - 0.01) this.fireCrossbow();'),
+  );
+  check(
+    '多重射击一次三支（只消耗 1 支箭）',
+    appSrc.includes('crossbowVolley(enchantLevel(this.heldEnchants, \'multishot\') > 0, arrows)') &&
+      appSrc.includes('this.inventory.consume(ammo.itemId, 1)') &&
+      appSrc.includes('const spread = shots > 1 ? [-0.18, 0, 0.18] : [0];'),
+  );
+  check(
+    '三条弩附魔里两条标了 implemented（穿透待做）',
+    enchantSrc.includes("id: 'multishot'") &&
+      enchantSrc.includes("id: 'quick_charge'"),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
