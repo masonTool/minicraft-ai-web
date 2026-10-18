@@ -305,6 +305,8 @@ console.log('\n[踩上去：实体轮询触发]');
   world.entities.clear();
   equal('实体走开后（还没轮到轮询）灯还是亮着——这正是"为什么需要轮询"', lampOn(world), true);
   engine.tick(world, 0.11);
+  // 红石灯断电后 0.2 秒才灭（批次 250）
+  engine.tick(world, 0.3);
   equal('轮询到了 → 灯灭', lampOn(world), false);
   equal('线上的 powered 位也跟着灭', isPowered(world.getState(2, 64, 0)), false);
 
@@ -335,6 +337,8 @@ console.log('\n[剪断：这一格不再触发，但回路还连着]');
 
   equal('剪刀剪断（走在线的格上）', engine.disarmTripwire(world, 2, 64, 0), true);
   equal('剪断位写上了', isDisarmed(world.getState(2, 64, 0)), true);
+  // 立刻重算了，但灯有 0.2 秒余晖（批次 250）
+  engine.tick(world, 0.3);
   equal('剪断后立刻重算 → 灯灭（这一格不再触发）', lampOn(world), false);
   equal('但回路**没有断**（还是 attached）', isTripwireAttached(world.getState(0, 64, 0)), true);
   equal('重复剪同一格返回 false（已经剪过了）', engine.disarmTripwire(world, 2, 64, 0), false);

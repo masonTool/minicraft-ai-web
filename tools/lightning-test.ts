@@ -358,7 +358,9 @@ console.log('\n[红石接线：通电那 0.4 秒带得动电路]');
   const expired = world.pulses.tick(0.5);
   equal('到期了', expired.length, 1);
   for (const pos of expired) engine.onBlockChanged(world, pos.x, pos.y, pos.z);
+  // 红石灯断电后 0.2 秒才灭（批次 250）
   engine.tick(world, 0.05);
+  engine.tick(world, 0.3);
   check('到期之后灯熄灭', !isPowered(world.getState(3, Y, 0)));
   equal('粉的强度清零', wirePowerOf(engine, 1, Y, 0), 0);
   check('避雷针的 powered 位也回到 false', !isPowered(world.getState(0, Y, 0)));

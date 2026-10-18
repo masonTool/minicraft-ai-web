@@ -164,8 +164,9 @@ console.log('\n[拉杆 → 红石粉 → 红石灯]');
   check('拉杆自身状态为开', isPowered(world.getState(0, Y, 0)));
 
   engine.toggleLever(world, 0, Y, 0);
-  step(engine, world, 0.1);
-  check('拉杆关掉后灯熄灭', !isPowered(world.getState(3, Y, 0)));
+  // 红石灯断电后还要亮 0.2 秒（批次 250），所以这里等够再断言
+  step(engine, world, 0.3);
+  check('拉杆关掉后灯熄灭（延迟 0.2 秒）', !isPowered(world.getState(3, Y, 0)));
   check('粉的强度清零', wirePowerOf(engine, 1, Y, 0) === 0);
 }
 
@@ -236,8 +237,8 @@ console.log('\n[红石块 / 红石火把 直接点亮相邻的灯]');
   // 挖掉红石块，灯应当熄灭
   world.setBlock(0, Y, 0, Block.AIR, 0);
   engine.onBlockChanged(world, 0, Y, 0);
-  step(engine, world, 0.1);
-  check('红石块被挖掉后灯熄灭', !isPowered(world.getState(1, Y, 0)));
+  step(engine, world, 0.3);
+  check('红石块被挖掉后灯熄灭（延迟 0.2 秒）', !isPowered(world.getState(1, Y, 0)));
 }
 
 // ---------------------------------------------------------------- 3. 按钮
@@ -315,8 +316,8 @@ console.log('\n[中继器：延迟输出]');
   check('中继器把信号复位成满强度（下一格粉 15）', afterRepeater === 15, `${afterRepeater}`);
 
   engine.toggleLever(world, 0, Y, 0);
-  step(engine, world, 0.1);
-  check('断开输入后立刻停止输出', !isPowered(world.getState(4, Y, 0)));
+  step(engine, world, 0.3);
+  check('断开输入后灯熄灭（延迟 0.2 秒，批次 250）', !isPowered(world.getState(4, Y, 0)));
 }
 
 // ---------------------------------------------------------------- 6. 活塞
@@ -678,7 +679,7 @@ console.log('\n[标靶：被打中时输出一秒信号（批次 248）]');
 
   world.setTargetPowered(0, Y, 0, false);
   engine.onBlockChanged(world, 0, Y, 0);
-  step(engine, world, 0.1);
+  step(engine, world, 0.3);
   check('脉冲结束 → 熄灭', !isPowered(world.getState(0, Y, 0)) && !isPowered(world.getState(1, Y, 0)));
 }
 
@@ -701,8 +702,29 @@ console.log('\n[陷阱箱：开着就发信号（批次 249）]');
 
   world.setState(0, Y, 0, withPowered(world.getState(0, Y, 0), false));
   engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.3);
+  check('关箱 → 灯熄灭（延迟 0.2 秒）', !isPowered(world.getState(0, Y, 0)) && !isPowered(world.getState(1, Y, 0)));
+}
+
+console.log('\n[红石灯：断电后延迟 0.2 秒才灭（批次 250）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
   step(engine, world, 0.1);
-  check('关箱 → 灯熄灭', !isPowered(world.getState(0, Y, 0)) && !isPowered(world.getState(1, Y, 0)));
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('通电立刻亮', isPowered(world.getState(1, Y, 0)));
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('刚断电时灯还亮着（余晖）', isPowered(world.getState(1, Y, 0)));
+
+  step(engine, world, 0.15);
+  check('超过 0.2 秒后才熄灭', !isPowered(world.getState(1, Y, 0)));
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);

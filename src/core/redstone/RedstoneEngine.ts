@@ -174,6 +174,13 @@ const MAX_ITERATIONS = 8;
 const BUTTON_DURATION = { stone: 1, oak: 1.5 } as const;
 /** 侦测器脉冲宽度（秒，原版 2 红石刻） */
 const OBSERVER_PULSE = 0.2;
+/**
+ * 红石灯**断电后还亮多久**（秒，批次 250）。
+ *
+ * 原版是 4 个游戏刻 = 0.2 秒（"2 红石刻"）。这条延迟让灯不像普通方块那样
+ * "断电即灭"，也是红石灯能做出"余晖/脉冲拉长"玩法的手感来源。
+ */
+const LAMP_OFF_DELAY = 0.2;
 
 /**
  * 阳光传感器的输出强度（批次 54）：白天 = 天光等级，反向模式 = 15 − 天光。
@@ -227,6 +234,8 @@ export class RedstoneEngine {
   private readonly detectorRailState = new Map<string, boolean>();
   /** 测重压力板（批次 247）：上一次的输出强度（强度变了才重算，不然每 0.1 秒全量重算） */
   private readonly weightedPlatePower = new Map<string, number>();
+  /** 红石灯延迟熄灭（批次 250）：位置 → 剩余秒数 */
+  private readonly lampOffTimers = new Map<string, number>();
   /**
    * 阳光传感器：位置 → 上次算出的输出强度（批次 54）。
    *
@@ -380,6 +389,23 @@ export class RedstoneEngine {
       const [x, y, z] = parseKey(key);
       const state = world.getState(x, y, z);
       if (isPowered(state)) {
+        world.setState(x, y, z, withPowered(state, false));
+        this.markDirty(x, y, z);
+        changed = true;
+      }
+    }
+
+    // 红石灯延迟熄灭（批次 250）：断电后不立刻灭，先亮 0.2 秒
+    for (const [key, remaining] of [...this.lampOffTimers]) {
+      const next = remaining - dt;
+      if (next > 0) {
+        this.lampOffTimers.set(key, next);
+        continue;
+      }
+      this.lampOffTimers.delete(key);
+      const [x, y, z] = parseKey(key);
+      const state = world.getState(x, y, z);
+      if (world.getBlock(x, y, z) === Block.REDSTONE_LAMP && isPowered(state)) {
         world.setState(x, y, z, withPowered(state, false));
         this.markDirty(x, y, z);
         changed = true;
@@ -856,11 +882,18 @@ export class RedstoneEngine {
 
       switch (id) {
         case Block.REDSTONE_LAMP: {
-          const shouldLight = input > 0;
-          if (isPowered(state) !== shouldLight) {
-            world.setState(nx, ny, nz, withPowered(state, shouldLight));
-            this.markDirty(nx, ny, nz);
-            changed = true;
+          // 红石灯（批次 250 补延迟）：**通电立刻亮，断电要等 0.2 秒**才灭。
+          // 实现是"断电时排一个定时器"，定时器到期再真正熄——不能在这里立刻 setState(false)，
+          // 否则延迟等于没写（下一帧灯已经灭了，定时器只会再写一次同样的值）。
+          if (input > 0) {
+            this.lampOffTimers.delete(key);
+            if (!isPowered(state)) {
+              world.setState(nx, ny, nz, withPowered(state, true));
+              this.markDirty(nx, ny, nz);
+              changed = true;
+            }
+          } else if (isPowered(state) && !this.lampOffTimers.has(key)) {
+            this.lampOffTimers.set(key, LAMP_OFF_DELAY);
           }
           break;
         }

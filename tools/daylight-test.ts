@@ -229,6 +229,8 @@ console.log('\n[每秒复查：天光变了要能自动跟上]');
   engine.tick(world, 0.5);
   equal('不到一秒时还没复查（不给每帧都重算）', lampOn(world), true);
   engine.tick(world, 0.6);
+  // 红石灯断电后还有 0.2 秒余晖（批次 250）
+  engine.tick(world, 0.3);
   equal('满一秒后复查 → 灯灭', lampOn(world), false);
   equal('粉的强度也清了', engine.wirePower.get('1,64,0'), undefined);
 
@@ -263,6 +265,8 @@ console.log('\n[右键切换反向模式]');
 
   equal('右键返回 true（消费了这次点击）', engine.toggleInverted(world, 0, 64, 0), true);
   equal('反向位翻上去了', isInverted(world.getState(0, 64, 0)), true);
+  // 立刻重算了，但灯有 0.2 秒余晖（批次 250）
+  engine.tick(world, 0.3);
   equal('**立刻**重算（不用等下一秒）→ 白天反而灭了', lampOn(world), false);
 
   equal('再右键一次切回来', engine.toggleInverted(world, 0, 64, 0), true);
