@@ -100,6 +100,8 @@ const openableShapes = new Set<string>();
 let redstoneKinds = 0;
 for (let id = 0; id < BLOCKS.length; id++) {
   if (!isRedstoneComponent(id)) continue;
+  // 活塞头是**技术方块**（活塞伸出时才出现，没有物品），按上面那条计数规则不计
+  if (id === Block.PISTON_HEAD) continue;
   const shape = blockDef(id).shape;
   if (shape === 'door' || shape === 'trapdoor' || shape === 'fence_gate') openableShapes.add(shape);
   else redstoneKinds++;
@@ -220,7 +222,7 @@ const rows: readonly Row[] = [
     spec: SPEC.redstone,
     now: redstoneElements,
     basis: '原版 1.18 参与充能/传导/负载的元件（同族木材只算一种）',
-    gap: '目标方块/红石矿石/陷阱箱',
+    gap: '陷阱箱',
   },
   {
     label: '维度',
