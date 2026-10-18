@@ -343,6 +343,14 @@ export interface MobType {
    */
   throwsTrident?: boolean;
   /**
+   * **生成时手里带三叉戟的概率**（批次 235；只有 `throwsTrident` 的生物用它）。
+   *
+   * 原版：约 15% 的溺尸带着三叉戟，带的那种**扔出去就没了**。
+   * 不复刻这一条的话，远程 AI 的 2.5 秒冷却就变成一个**无限生成器**——
+   * 每扔一次落地都 `spawnDrop` 一把新的，海面很快就漂满三叉戟。
+   */
+  tridentChance?: number;
+  /**
    * **它射出的箭命中玩家时挂什么效果**（批次 125，流浪者的"缓慢 30 秒"）。
    *
    * ⚠️ 与 `venom` 分开：那一条是**近战命中**时挂的（蜘蛛/凋灵骷髅/尸壳），
@@ -480,6 +488,14 @@ export class Mob extends Entity {
    */
   baby = false;
 
+  /**
+   * 手里还有没有三叉戟（批次 235；只有 `throwsTrident` 的生物用）。
+   *
+   * 这是**个体**状态而不是种类状态：原版约 15% 的溺尸带着三叉戟，扔出去就没了。
+   * 没带的那种走近战，扔完的那种也改走近战（`canUseRanged` 判断的就是它）。
+   */
+  hasTrident = false;
+
   /** 求爱剩余秒数（>0 表示正在找配偶）与两次繁殖之间的冷却 */
   private loveTimer = 0;
   private breedCooldown = 0;
@@ -576,6 +592,8 @@ export class Mob extends Entity {
     super(x, y, z, type.width, type.height);
     this.type = type;
     this.health = type.health;
+    // 带不带三叉戟是**个体**属性（原版约 15%）：在这里掷一次，而不是按种类写死
+    this.hasTrident = type.throwsTrident === true && Math.random() < (type.tridentChance ?? 0);
     // 声音档案按种类查一次（`remote_player` 是 null：玩家角色不该发出动物声音）
     this.voiceId = mobVoiceFor(type.id, type.family);
     // 寻路器只需要"读方块"这一点能力，直接转发给每帧传入的上下文
@@ -1088,8 +1106,9 @@ export class Mob extends Entity {
       ctx.spawnHearts?.(this.x, this.y + this.type.height, this.z, 0.4);
     }
 
-    // 远程生物走自己那套（保持距离 + 放箭），不参与近战的寻路追击
-    if (chasing && player && this.type.ranged) {
+    // 远程生物走自己那套（保持距离 + 放箭），不参与近战的寻路追击。
+    // 批次 235：**没弹药就不算远程**——没带三叉戟的溺尸走下面的近战寻路。
+    if (chasing && player && this.canUseRanged()) {
       this.updateRangedAi(ctx, distanceSq, player, dt);
       this.move(true, dt);
       return;
@@ -1160,6 +1179,20 @@ export class Mob extends Entity {
   }
 
   /**
+   * 这一刻还算不算"远程生物"（批次 235）。
+   *
+   * 拿三叉戟的生物只有一支：扔出去之后就不再走"保持距离 + 投掷"那一套，
+   * 改走近战（原版没带三叉戟的溺尸也是贴上来打）。箭不限量，所以其余远程生物恒为 true。
+   *
+   * ⚠️ `move()` 里也要读它：那边原来按 `type.ranged` 分流，不改的话，
+   * 没三叉戟的溺尸会站在原地看着玩家（AI 在追、移动却走的是"远程站桩"分支）。
+   */
+  private canUseRanged(): boolean {
+    if (this.type.ranged === undefined) return false;
+    return this.type.throwsTrident !== true || this.hasTrident;
+  }
+
+  /**
    * 远程生物的 AI（J9）。
    *
    * 三件事：**保持距离**（太近后退、太远靠近、射程内站住）、**定期放箭**、**朝向玩家**。
@@ -1215,6 +1248,11 @@ export class Mob extends Entity {
     // （两句都留着），于是骷髅每次冷却都会射两箭（3 秒 4 发）——`test:mob` 那条
     // "3 秒最多两箭"当场就红了
     if (this.type.throwsTrident === true) {
+      // 没带三叉戟就不该走到这里（`canUseRanged` 已经把它切到近战了）——留一道防线
+      if (!this.hasTrident) return;
+      // 原版：溺尸只有那一支，扔出去就没了。不扣掉它，每 2.5 秒就会凭空造一把
+      // （落地又会 `spawnDrop` 一把），海面很快漂满三叉戟（批次 235 修的就是这个）
+      this.hasTrident = false;
       ctx.spawnTrident?.(this.x, eyeY, this.z, {
         x: (aimX * cos - aimZ * sin) * ranged.speed,
         y: aimY * ranged.speed,
@@ -1258,8 +1296,9 @@ export class Mob extends Entity {
       return;
     }
 
-    if (this.type.ranged || this.moveDirX !== 0 || this.moveDirZ !== 0) {
-      // 远程生物（保持距离）与求爱中的生物（走向配偶）：方向由 AI 直接给，不走寻路
+    if (this.canUseRanged() || this.moveDirX !== 0 || this.moveDirZ !== 0) {
+      // 远程生物（保持距离）与求爱中的生物（走向配偶）：方向由 AI 直接给，不走寻路。
+      // ⚠️ 这里必须用 `canUseRanged()` 而不是 `type.ranged`：没三叉戟的溺尸要能寻路贴上去
       targetVx = this.moveDirX * speed;
       targetVz = this.moveDirZ * speed;
       this.moveDirX = 0;

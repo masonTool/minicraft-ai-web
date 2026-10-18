@@ -117,6 +117,13 @@ console.log('\n[溺尸：僵尸的水生变体]');
   check('**会远程攻击**（配了 `ranged`）', DROWNED_TYPE.ranged !== undefined);
   equal('射程 12 格（比骷髅短：它在水里，看不清远处）', DROWNED_TYPE.ranged?.range, 12);
   check('**扔的是三叉戟**（`throwsTrident`）', DROWNED_TYPE.throwsTrident === true);
+  // 批次 235：只有约 15% 的溺尸带着三叉戟，而且扔出去就没了。
+  // 不写这一条的话，2.5 秒冷却的远程 AI 就是个无限三叉戟生成器（海面会漂满三叉戟）
+  check(
+    '只有约 15% 的溺尸带三叉戟（`tridentChance`）',
+    DROWNED_TYPE.tridentChance === 0.15,
+    String(DROWNED_TYPE.tridentChance),
+  );
   check('（对照）骷髅**不**扔三叉戟', mobTypeById('skeleton')!.throwsTrident !== true);
 
   // 掉落：腐肉 + 三叉戟（原版 15% × 8.5%）
@@ -263,12 +270,24 @@ console.log('\n[溺尸的远程攻击：扔的是三叉戟，不是箭]');
 {
   const { ctx, rec } = makeCtx({ player: { x: 8.5, y: 0, z: 0.5 } });
   const drowned = new Mob(DROWNED_TYPE, 0.5, 0, 0.5);
+  // 构造时是按 15% 掷点的，测试要可控 ⇒ 显式给它一支
+  drowned.hasTrident = true;
   run(drowned, ctx, 6);
   check('会扔三叉戟', rec.tridents > 0, `扔了 ${rec.tridents} 次`);
   equal('**一支箭都不射**（分流只有一个出口）', rec.arrows, 0);
 
-  // 冷却：6 秒里最多 3~4 支（2.5 秒一支 + 随机）
-  check('有冷却、不会连发', rec.tridents <= 4, `扔了 ${rec.tridents} 次`);
+  // 批次 235：一只溺尸只有一支，扔出去就没了（原版如此）
+  equal('6 秒内只扔 1 支（不会每 2.5 秒凭空造一支）', rec.tridents, 1);
+  equal('扔完 hasTrident 变成 false', drowned.hasTrident, false);
+
+  // 没带三叉戟的那种（原版约 85%）：一支都不扔，但**贴上来照样打人**
+  const { ctx: bareCtx, rec: bareRec } = makeCtx({ player: { x: 1.5, y: 0, z: 0.5 } });
+  const bare = new Mob(DROWNED_TYPE, 0.5, 0, 0.5);
+  bare.hasTrident = false;
+  run(bare, bareCtx, 6);
+  equal('没带三叉戟就不扔', bareRec.tridents, 0);
+  equal('也不射箭（对照）', bareRec.arrows, 0);
+  check('但近战照样打人（不是站在原地看着玩家）', bareRec.playerHits.length > 0, `${bareRec.playerHits.length} 下`);
 
   // ⚠️ 这条守的是批次 123 踩到的那次"两个出口"：把新分支加在旧的 `spawnArrow` 下面，
   // 结果骷髅每次冷却射两箭（`test:mob` 的"3 秒最多两箭"当场抓走）。
