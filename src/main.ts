@@ -9001,12 +9001,23 @@ class App {
     const collides = collisionBoxes(blockDef(blockId).shape, plan.state).length > 0;
     if (!plan.mergeInto && !plan.mergeIntoTarget && collides && this.physics.blockIntersects(x, y, z)) return;
 
+    // 放置要扣的是**手上那一件物品**，不是 `blockId`。
+    //
+    // ⚠️ 两者不一定相等：小麦种子 1160 → `WHEAT_STAGE0` 276、胡萝卜 1163 →
+    // `CARROTS_STAGE0` 280、下界疣 1172 → `NETHER_WART_STAGE0`……
+    // 以前一律 `consume(blockId, 1)`，对这些东西 `countOf` 为 0 → 静默返回 false，
+    // 而方块已经放下，表现就是"种子永远用不完"（白种）。
+    //
+    // 手上那一份完整栈在**放置之前**取：潜影盒的内容就在它身上，consume 之后就拿不到了。
+    const held = this.inventory.get(this.hotbarIndex);
+    const heldId = held?.id ?? blockId;
+
     // 台阶叠成双层 / 雪层叠高：改的是**命中方块自身**，不是命中面外侧那一格
     if (plan.mergeInto) {
       const { x: hx, y: hy, z: hz } = this.hit;
       if (this.world.setBlockAndUpdate(hx, hy, hz, blockId, plan.mergeInto.state)) {
         this.placeCooldown = PLACE_COOLDOWN;
-        this.inventory.consume(blockId, 1);
+        this.inventory.consume(heldId, 1);
         // 进度（M7）：合并类放置也算"放下了这个方块"（雪层叠高、台阶叠双层）
         this.reportProgress({ kind: 'place', block: blockId });
       }
@@ -9017,7 +9028,7 @@ class App {
     if (plan.mergeIntoTarget) {
       if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.mergeIntoTarget.state)) {
         this.placeCooldown = PLACE_COOLDOWN;
-        this.inventory.consume(blockId, 1);
+        this.inventory.consume(heldId, 1);
         this.net.sendBlock(x, y, z, blockId, plan.mergeIntoTarget.state, this.dimension);
         // 进度（M7）：藤蔓"再挂一面"同样是放下
         this.reportProgress({ kind: 'place', block: blockId });
@@ -9025,16 +9036,13 @@ class App {
       return;
     }
 
-    // 手上那一份完整栈（放置**之前**取：潜影盒的内容就在它身上，consume 之后就拿不到了）
-    const held = this.inventory.get(this.hotbarIndex);
-
     if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.state)) {
       if (plan.extra) {
         const { dx, dy, dz, id, state } = plan.extra;
         this.world.setBlockAndUpdate(x + dx, y + dy, z + dz, id, state);
       }
       this.placeCooldown = PLACE_COOLDOWN;
-      this.inventory.consume(blockId, 1);
+      this.inventory.consume(heldId, 1);
 
       // 避雷针（批次 83）：放下就进索引（不必等区块重载——它在**当前**加载的区块里）
       if (blockId === Block.LIGHTNING_ROD) this.noteRodPlaced(x, y, z);

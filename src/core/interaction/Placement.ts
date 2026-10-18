@@ -17,7 +17,7 @@
  *  - 告示牌（B12，批次 80）：命中顶面 → 落地牌（字朝你）；命中侧面 → 挂墙牌（字朝外）
  */
 
-import { Block, JUNGLE_LOG_ID, blockDef } from '../registry/blocks.ts';
+import { Block, JUNGLE_LOG_ID, blockDef, cropOf, stemKindOf } from '../registry/blocks.ts';
 import { pickPaintingVariant } from '../registry/paintings.ts';
 import {
   FACING_OFFSET,
@@ -475,13 +475,24 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
     }
 
     case 'cross': {
-      // 植物（花 / 草 / 甘蔗 / 竹子 / 甜浆果丛…）要站在**实心方块**上。
+      const below = input.blockAt(0, -1, 0);
+
+      // 作物（小麦/胡萝卜/马铃薯/甜菜，以及南瓜/西瓜的茎）只能种在**耕地**上。
+      //
+      // ⚠️ 以前它们和花、草共用下面那条"下方是实心方块"，于是种子能种在石头/木板/
+      // 沙子上：放得下、但永远不长（生长判定要求下方是 `FARMLAND`），
+      // 玩家只会以为是自己没浇水。判定用 id 族（`cropOf`/`stemKindOf`）而不是逐个列举，
+      // 以后加新作物不会漏。
+      const isCrop = cropOf(input.blockId) !== null || stemKindOf(input.blockId) !== null;
+      if (isCrop) return below === Block.FARMLAND ? { state: 0 } : null;
+
+      // 其余植物（花 / 草 / 甘蔗 / 竹子 / 甜浆果丛…）要站在**实心方块**上。
       //
       // ⚠️ 这条以前是漏的：`cross` 走 `default` 分支无条件返回状态 0，
       // 于是花可以悬空放在半空里（看着像浮在空中）。原版的判定更细
       // （花只认草/泥土/灰化土那几种），这里先收成"下方是实心方块"——
       // 比原版宽松一点，但把"悬空放植物"这条明显不对的行为挡住了。
-      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      if (!blockDef(below).solid) return null;
       return { state: 0 };
     }
 

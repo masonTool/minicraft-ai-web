@@ -737,6 +737,24 @@ console.log('\n[可可豆与植物支撑（批次 49）]');
   check('花也一样：悬空放不了（修掉了"花浮在半空"）', place(Block.DANDELION, [0, 1, 0], Block.GRASS_BLOCK, Block.AIR) === null);
   check('花有支撑就能放', place(Block.DANDELION, [0, 1, 0], Block.GRASS_BLOCK) !== null);
   equal('甜浆果丛没有碰撞（能走过去）', collisionBoxes('cross', 0).length, 0);
+
+  // ---- 作物只能种在耕地上（与花/草分开）
+  check('小麦种子种在耕地上', place(Block.WHEAT_STAGE0, [0, 1, 0], Block.FARMLAND, Block.FARMLAND) !== null);
+  check('小麦种子种不到草方块上', place(Block.WHEAT_STAGE0, [0, 1, 0], Block.GRASS_BLOCK, Block.GRASS_BLOCK) === null);
+  check('小麦种子种不到石头上', place(Block.WHEAT_STAGE0, [0, 1, 0], Block.STONE, Block.STONE) === null);
+  check('胡萝卜也只能种在耕地上', place(Block.CARROTS_STAGE0, [0, 1, 0], Block.DIRT, Block.DIRT) === null);
+  check('南瓜茎也只能种在耕地上', place(Block.PUMPKIN_STEM_STAGE0, [0, 1, 0], Block.DIRT, Block.DIRT) === null);
+  check('南瓜茎在耕地上能种', place(Block.PUMPKIN_STEM_STAGE0, [0, 1, 0], Block.FARMLAND, Block.FARMLAND) !== null);
+  // 成因钉住：种子**物品 id** 与它放下去的**方块 id** 不是同一个数——
+  // 放置时若拿 `blockId` 去背包里扣，就会扣不到（种子白种）。
+  // 标注成 number 是为了绕开 TS 对两个字面量直接比较的"永远不相等"报错。
+  const seedItemId: number = Item.WHEAT_SEEDS;
+  const cropBlockId: number = Block.WHEAT_STAGE0;
+  check(
+    '种子物品 id ≠ 作物方块 id（放置必须扣手上那一件）',
+    seedItemId !== cropBlockId,
+    `物品 ${seedItemId} / 方块 ${cropBlockId}`,
+  );
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
