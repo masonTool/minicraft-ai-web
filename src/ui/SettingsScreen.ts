@@ -310,6 +310,14 @@ export interface SettingsActions {
   onDiagnosticsCopy?: () => Promise<boolean>;
   /** 当前条数 / 占用，用来在入口上显示"离 500KB 还有多远" */
   diagnosticsStats?: () => { events: number; kb: number; marked: boolean };
+  /**
+   * 全屏 / 横屏（批次 181）。
+   *
+   * 浏览器的全屏必须由用户手势触发，所以"自动全屏"只能做到"第一次交互时补上"。
+   * 这一行是**手动兜底**：被系统踢出全屏、或第一次手势错过了，还能在这里补。
+   */
+  onToggleFullscreen?: () => void;
+  isFullscreen?: () => boolean;
 }
 
 /**
@@ -517,6 +525,10 @@ export class SettingsScreen {
     this.makeSelect(graphics, 'particles', '粒子效果', PARTICLE_LEVELS, PARTICLE_LEVEL_LABELS);
 
     const controls = this.section('controls');
+    // 全屏 / 横屏（批次 181）：手动兜底。放在最上面——"屏幕不对"时玩家第一个找的就是它
+    if (this.actions.onToggleFullscreen && this.actions.isFullscreen) {
+      controls.appendChild(this.makeFullscreenRow());
+    }
     this.makeSelect(controls, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异，所以给两档自己挑
     this.makeSelect(controls, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
@@ -879,6 +891,36 @@ export class SettingsScreen {
     }
     const marked = stats.marked ? ' · 已打点' : '';
     element.textContent = note ?? `${stats.events} 条 · ${stats.kb}KB / 500KB${marked}`;
+  }
+
+  /**
+   * 全屏 / 横屏行（批次 181）。
+   *
+   * 与其它循环按钮的区别：`requestFullscreen()` 是异步的，点完立刻读状态还是旧值，
+   * 所以这里点完延后一点再回填文案；不然玩家会看到"点了没反应"。
+   */
+  private makeFullscreenRow(): HTMLElement {
+    const row = document.createElement('label');
+    row.className = 'settings-row';
+
+    const name = document.createElement('span');
+    name.textContent = '全屏 / 横屏';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-cycle';
+    const read = (): string => (this.actions.isFullscreen?.() ? '‹ 已全屏 ›' : '‹ 进入全屏 ›');
+    button.textContent = read();
+    button.addEventListener('click', () => {
+      this.actions.onToggleFullscreen?.();
+      // 全屏 Promise 完成后再回填；400ms 足够浏览器走完过渡，也不会让玩家等太久
+      window.setTimeout(() => {
+        button.textContent = read();
+      }, 400);
+    });
+
+    row.append(name, button);
+    return row;
   }
 
   /** 资源包导入行（.mcpack / .zip） */

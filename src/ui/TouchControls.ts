@@ -669,6 +669,20 @@ export class TouchControls {
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
   }
+
+  /**
+   * 离开世界时整层拆掉（批次 181）。
+   *
+   * 顺序有讲究：先清计时器与手势状态（否则那两秒里还会给已经销毁的 App 回调），
+   * 再摘 HUD 外的两颗侧键（它们挂在 `#hotbar` 上，不在 `this.object` 里）。
+   */
+  dispose(): void {
+    this.clearGestureTimers();
+    this.cancelLook();
+    this.resetStick();
+    for (const button of this.sideButtons) button.remove();
+    this.object.remove();
+  }
 }
 
 /** 快捷栏在触摸端也需要能点：把点击事件绑到槽位元素上 */

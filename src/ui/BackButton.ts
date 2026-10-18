@@ -74,6 +74,19 @@ export class BackButton {
     this.lastSynced = false;
   }
 
+  /**
+   * 离开世界时把我们压的那条历史收回去（批次 181）。
+   *
+   * 不做这一步的话，回到主菜单后玩家按返回会先退到一条"假记录"，
+   * 看着像"返回键没反应"——而那条记录本来是给局内面板用的。
+   */
+  reset(): void {
+    if (!this.guarded) return;
+    this.guarded = false;
+    this.lastSynced = false;
+    this.host.back();
+  }
+
   /** 现在有没有压着一条守卫状态（调试与断言用） */
   get isGuarded(): boolean {
     return this.guarded;

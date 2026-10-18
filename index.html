@@ -3064,24 +3064,35 @@
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
       }
       .unsupported-screen.visible { display: grid; }
-      /* 竖屏手机：点这一层就是进全屏 + 锁横屏的那一次手势。默认不显示。 */
+      /* 竖屏手机：点这一条就是进全屏 + 锁横屏的那一次手势。默认不显示。
+         ⚠️ 批次 181 从**整屏黑幕**改成**底部横条**：黑幕会把主菜单一起盖住，
+         用户体感是"退出了另一个游戏"。现在菜单始终可见可点，只提示"横屏更好"。 */
       .rotate-hint {
         display: none;
         position: fixed;
-        inset: 0;
+        left: 50%;
+        /* 抬高一点：竖屏进游戏时别压在快捷栏上 */
+        bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+        transform: translateX(-50%);
         z-index: 80;
         margin: 0;
-        background: #0b0b0b;
+        max-width: min(92vw, 520px);
+        padding: 9px 14px;
+        background: rgba(16, 16, 16, .94);
         color: #e0e0e0;
+        border: 3px solid;
+        border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        gap: 8px;
+        gap: 2px;
         text-align: center;
-        font: 16px/1.4 'Courier New', monospace;
+        font: 13px/1.4 'Courier New', monospace;
+        cursor: pointer;
       }
       .rotate-hint.visible { display: flex; }
-      .rotate-hint b { font-size: 22px; font-weight: 400; }
+      .rotate-hint b { font-size: 15px; font-weight: 400; }
+      .rotate-hint span { font-size: 12px; color: #a8a8a8; }
       .unsupported-panel {
         display: flex; flex-direction: column; gap: 12px;
         padding: 18px 20px; max-width: min(520px, 90vw);

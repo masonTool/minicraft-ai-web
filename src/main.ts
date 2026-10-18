@@ -100,7 +100,10 @@ import {
   armAutoFullscreen,
   enterFullscreenOnBoot,
   installRotateHint,
+  isFullscreen,
   preferInstalledLandscape,
+  syncRotateHint,
+  toggleFullscreen,
 } from './ui/Fullscreen.ts';
 import { hideInstallHint, installInstallHint } from './ui/InstallHint.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
@@ -1156,9 +1159,21 @@ class App {
   /** 读档完成前不能让“新世界出生点”抢先覆盖存档坐标。 */
   private waitingForSaveRestore = false;
   private loadingCleared = false;
+  /**
+   * 已经销毁（批次 181）。
+   *
+   * 三处要认它：主循环不再排下一帧、异步读档回来不要往旧世界写、
+   * 退出流程本身不要重入。
+   */
+  private disposed = false;
+  /** 全局监听（window / document）的解绑开关 */
+  private readonly listeners = new AbortController();
+  /** 应用内退出到主菜单之后的回调（由 `boot()` 挂上：把菜单拉回来） */
+  onExitToMenu: (() => void) | null = null;
 
   constructor(
-    container: HTMLElement,
+    /** 渲染画布的挂载点；`dispose()` 要把画布从这里摘掉 */
+    private readonly container: HTMLElement,
     private readonly debugEl: HTMLElement,
     private readonly atlas: TextureAtlas,
     vitalsEl: HTMLElement,
@@ -1456,6 +1471,12 @@ class App {
       onDiagnosticsExport: () => diag.download(),
       onDiagnosticsCopy: () => diag.copy(),
       diagnosticsStats: () => diag.stats(),
+      // 全屏 / 横屏：被系统踢出全屏、或第一次手势错过时的兜底入口
+      onToggleFullscreen: () => {
+        toggleFullscreen();
+        syncRotateHint();
+      },
+      isFullscreen: () => isFullscreen(),
     });
 
     // 开发期初始物资（批次 181）：**默认不再发放**。
@@ -1486,7 +1507,22 @@ class App {
     // 返回键守卫（批次 96）：手机上"返回"先关界面，界面全关完才轮到浏览器（= 退出页面）。
     // 挂在 `popstate` 上而不是 `beforeunload`：前者能拿到"用户想后退"这件事，
     // 又不至于把"刷新/关标签页"也拦下来
-    window.addEventListener('popstate', () => this.backButton.onBrowserBack());
+    window.addEventListener(
+      'popstate',
+      () => {
+        if (this.disposed) return;
+        // 批次 181：**游戏内没有面板时，返回 = 打开暂停菜单**。
+        // 以前这里交给浏览器（PWA 里等于直接退出游戏）——玩家只是想关个界面，
+        // 结果把整局退了，这是手机上最容易被劝退的一处。
+        if (!this.backButton.isGuarded && !this.isAnyUiOpen()) {
+          diag.event('input', 'back.root', {});
+          this.openSettings();
+          return;
+        }
+        this.backButton.onBrowserBack();
+      },
+      { signal: this.listeners.signal },
+    );
 
     this.bindEvents();
     // 没有存档时直接按出生点请求区块；
@@ -2035,23 +2071,35 @@ class App {
     };
   }
 
-  /** 删除存档并重载页面（"新世界"入口） */
   /**
-   * 保存并回到主菜单。
+   * 回到主菜单（批次 181：**应用内返回**，不再 `location.reload()`）。
    *
-   * 直接 `location.reload()` 最省心：启动流程本来就会先出主菜单，
-   * 重载之后所有渲染资源、Worker、世界状态都干净重建，不必手写一套"卸载世界"的流程。
+   * 以前这里直接刷新页面，代价是：全屏被浏览器收走 → 重新 boot → 竖屏时被
+   * "请横屏"黑幕盖住 → 玩家还得再点一次。体感上就像"退出了另一个游戏"。
+   *
+   * 现在拆成三步：落盘 → `dispose()` 把这一局彻底拆掉 → 由 boot 挂的回调
+   * 把主菜单拉回来。**全程不退出全屏**。
+   *
+   * @param save 是否先落盘。删除世界那条路已经删库了，不能再往里写。
    */
+  private async returnToMenu(save: boolean): Promise<void> {
+    if (this.disposed) return;
+    const saved = save ? await this.saveNow('exit') : false;
+    diag.event('app', 'exitToMenu', { saved, save });
+    this.dispose();
+    this.onExitToMenu?.();
+  }
+
+  /** 保存并回到主菜单 */
   async exitToMenu(): Promise<void> {
-    diag.event('app', 'exitToMenu', { saved: await this.saveNow('exit') });
-    window.location.reload();
+    await this.returnToMenu(true);
   }
 
   /** 删除当前世界：连存档库一起删掉，再回主菜单 */
   async deleteCurrentWorld(): Promise<void> {
     await SaveGame.deleteWorld(this.worldConfig.id);
     this.onWorldDeleted?.(this.worldConfig.id);
-    window.location.reload();
+    await this.returnToMenu(false);
   }
 
   /** 世界被删掉时由 boot 注入的回调（App 本身不认识世界清单） */
@@ -2796,8 +2844,10 @@ class App {
           this.refreshHotbar();
         }
       }
+    }, { signal: this.listeners.signal });
+    document.addEventListener('keyup', (e) => this.keys.delete(e.code), {
+      signal: this.listeners.signal,
     });
-    document.addEventListener('keyup', (e) => this.keys.delete(e.code));
 
     // 批次 159：**长按属于我们的手势**（取一半 / 看详情 / 选数量），
     // 必须先屏蔽 HTML 自带的那一套长按效果——否则手机上长按物品图标会弹出
@@ -2805,61 +2855,85 @@ class App {
     // ⚠️ 原来这句话写在下面 `if (!this.touch)` 那一段里（那是给指针锁用的），
     //    于是**触摸端一直没屏蔽**——这正是"长按总是弹出保存图片"的原因。
     //    输入框要留着：聊天与搜索还得能粘贴、全选。
-    document.addEventListener('contextmenu', (event) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest?.('input, textarea')) return;
-      event.preventDefault();
-    });
+    document.addEventListener(
+      'contextmenu',
+      (event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest?.('input, textarea')) return;
+        event.preventDefault();
+      },
+      { signal: this.listeners.signal },
+    );
 
     // 触摸端不需要指针锁（拖动即转视角），所以只有桌面端接这套
     // ⚠️ 批次 111 把"点击进入游戏"那层遮罩删掉之后，PC 进世界的第一步就是**点一下画面**
     // ——`requestPointerLock()` 必须在用户手势的调用栈里，这一下点击就是那个手势。
     if (!this.touch) {
-      document.addEventListener('pointerlockchange', () => {
-        this.locked = document.pointerLockElement === this.renderer.domElement;
-        if (!this.locked) {
-          this.keys.clear();
-          this.leftDown = false;
-          this.rightDown = false;
-        }
-      });
+      document.addEventListener(
+        'pointerlockchange',
+        () => {
+          this.locked = document.pointerLockElement === this.renderer.domElement;
+          if (!this.locked) {
+            this.keys.clear();
+            this.leftDown = false;
+            this.rightDown = false;
+          }
+        },
+        { signal: this.listeners.signal },
+      );
 
       const requestLock = () => void this.renderer.domElement.requestPointerLock();
-      this.renderer.domElement.addEventListener('click', requestLock);
+      this.renderer.domElement.addEventListener('click', requestLock, { signal: this.listeners.signal });
 
-      document.addEventListener('mousemove', (e) => {
-        if (!this.locked) return;
-        // 灵敏度是设置项（0.5~2 倍）：鼠标、触摸、手柄三条路径都要乘上，不然调了没感觉
-        const gain = this.settings.sensitivity;
-        this.applyLook(e.movementX * MOUSE_SENSITIVITY * gain, e.movementY * MOUSE_SENSITIVITY * gain);
-      });
+      document.addEventListener(
+        'mousemove',
+        (e) => {
+          if (!this.locked) return;
+          // 灵敏度是设置项（0.5~2 倍）：鼠标、触摸、手柄三条路径都要乘上，不然调了没感觉
+          const gain = this.settings.sensitivity;
+          this.applyLook(e.movementX * MOUSE_SENSITIVITY * gain, e.movementY * MOUSE_SENSITIVITY * gain);
+        },
+        { signal: this.listeners.signal },
+      );
 
-      document.addEventListener('mousedown', (e) => {
-        if (!this.locked) return;
-        // **中键拾取方块**（批次 129）：按一下就结算，不需要按住（原版也如此）
-        if (e.button === 1) {
-          e.preventDefault();
-          this.pickBlock();
-          return;
-        }
-        if (e.button === 0) this.leftDown = true;
-        if (e.button === 2) this.rightDown = true;
-      });
-      document.addEventListener('mouseup', (e) => {
-        if (e.button === 0) this.leftDown = false;
-        if (e.button === 2) this.rightDown = false;
-      });
+      document.addEventListener(
+        'mousedown',
+        (e) => {
+          if (!this.locked) return;
+          // **中键拾取方块**（批次 129）：按一下就结算，不需要按住（原版也如此）
+          if (e.button === 1) {
+            e.preventDefault();
+            this.pickBlock();
+            return;
+          }
+          if (e.button === 0) this.leftDown = true;
+          if (e.button === 2) this.rightDown = true;
+        },
+        { signal: this.listeners.signal },
+      );
+      document.addEventListener(
+        'mouseup',
+        (e) => {
+          if (e.button === 0) this.leftDown = false;
+          if (e.button === 2) this.rightDown = false;
+        },
+        { signal: this.listeners.signal },
+      );
     }
 
-    window.addEventListener('resize', () => {
-      this.camera.aspect = window.innerWidth / window.innerHeight;
-      this.camera.updateProjectionMatrix();
-      // 转屏也走动态分辨率的唯一同步入口：保留 DPR×档位，且不让 three 改写 CSS 尺寸。
-      this.applyResolutionScale();
-      // 快捷栏在手机断点由 32px 变 36px，重新按实际 CSS 尺寸分配清晰背板。
-      this.refreshHotbar();
-      if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
-    });
+    window.addEventListener(
+      'resize',
+      () => {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        // 转屏也走动态分辨率的唯一同步入口：保留 DPR×档位，且不让 three 改写 CSS 尺寸。
+        this.applyResolutionScale();
+        // 快捷栏在手机断点由 32px 变 36px，重新按实际 CSS 尺寸分配清晰背板。
+        this.refreshHotbar();
+        if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
+      },
+      { signal: this.listeners.signal },
+    );
   }
 
   /**
@@ -8763,6 +8837,8 @@ class App {
     if (this.save?.hasSave) {
       void this.loadSaveState()
         .then((restored) => {
+          // 读档还没回来玩家就退出了：不要再往已经销毁的世界里写
+          if (this.disposed) return;
           this.waitingForSaveRestore = false;
           if (restored) console.info('[save] 已恢复上次的进度');
           else {
@@ -8772,6 +8848,7 @@ class App {
           }
         })
         .catch((error: unknown) => {
+          if (this.disposed) return;
           console.error('[save] 读档失败，按新世界进入', error);
           this.waitingForSaveRestore = false;
           this.prepareNewWorldSpawn();
@@ -8783,9 +8860,13 @@ class App {
     }
 
     // 切后台/关页面前补一次保存：移动端切走随时可能被系统回收
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') void this.saveNow('hidden');
-    });
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+        if (document.visibilityState === 'hidden') void this.saveNow('hidden');
+      },
+      { signal: this.listeners.signal },
+    );
 
     // 浏览器要求音频必须由用户手势解锁：第一次点击/按键时创建 AudioContext
     const unlockAudio = (): void => {
@@ -8793,8 +8874,8 @@ class App {
       window.removeEventListener('pointerdown', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);
     };
-    window.addEventListener('pointerdown', unlockAudio);
-    window.addEventListener('keydown', unlockAudio);
+    window.addEventListener('pointerdown', unlockAudio, { signal: this.listeners.signal });
+    window.addEventListener('keydown', unlockAudio, { signal: this.listeners.signal });
 
     // 诊断日志（批次 181）：导出时把这些"现场参数"一起带上，
     // 否则一份日志只能看出"点了什么"，看不出"在哪个世界、什么设置下点的"
@@ -8831,6 +8912,8 @@ class App {
     });
 
     const loop = () => {
+      // 退出世界后不再排下一帧（否则旧 App 会继续画一个已经拆掉的世界）
+      if (this.disposed) return;
       // 帧号进日志：复现时能对上"第几帧开始卡"
       diag.log.frame++;
       const now = performance.now();
@@ -9018,7 +9101,33 @@ class App {
     requestAnimationFrame(loop);
   }
 
+  /**
+   * 销毁整局（批次 181：应用内退出到主菜单）。
+   *
+   * 三件事缺一不可：
+   *  1. **停止一切还会回调的行为**：主循环、全局监听、返回键守卫、手势计时器；
+   *  2. **拆掉局内 DOM**：背包/设置/聊天/告示牌/信标/触摸层，否则再进世界会出现重复 id；
+   *  3. **释放 GPU/Worker**：渲染器、网格池、世界、音频上下文。
+   *
+   * 幂等：重复调用直接返回（`exitToMenu` 与页面卸载钩子都可能走到这里）。
+   */
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    diag.event('app', 'dispose', { world: this.worldConfig.id });
+    this.listeners.abort();
+    this.backButton.reset();
+    // 触摸层：先清手势计时器，再摘 DOM
+    this.touch?.dispose();
+    this.touch = null;
+    this.inventoryScreen.dispose();
+    this.settingsScreen.destroy();
+    this.chat.dispose();
+    this.signEditor.dispose();
+    this.beaconScreen.dispose();
+    this.deathEl.classList.add('hidden');
+    this.audio.dispose();
+
     this.recipeBook.dispose();
     this.advancementScreen.dispose();
     this.tooltip.dispose();
@@ -9044,6 +9153,12 @@ class App {
     const bobberMaterial = this.bobberMesh?.material;
     if (Array.isArray(bobberMaterial)) for (const item of bobberMaterial) item.dispose();
     else bobberMaterial?.dispose();
+    // 画布必须摘掉：WebGL 上下文有上限，反复进出世界不能靠 GC
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+    // #app 里只该有这一张画布；清一次兜底，避免下次进世界时残留旧节点
+    this.container.replaceChildren();
+    if (document.pointerLockElement) document.exitPointerLock();
   }
 
   // ---------------------------------------------------------------- 开发调试接口
@@ -10055,6 +10170,20 @@ async function boot(): Promise<void> {
   /** 主菜单里的设置面板是临时实例；进入世界前销毁，局内 App 会建立自己的设置面板。 */
   let menuSettings: SettingsScreen | null = null;
 
+  /**
+   * 主菜单的返回键守卫（批次 181）。
+   *
+   * 没有这条时，玩家在世界列表/新建世界里按返回会**直接退出页面**（PWA 里等于退出游戏）。
+   * 压一条状态之后，返回先落到我们手里：二级页 → 首页，首页再返回才交给浏览器。
+   */
+  const pushMenuGuard = (): void => {
+    try {
+      window.history.pushState({ mcMenu: true }, '');
+    } catch {
+      // 某些内嵌浏览器禁用 history：退回"只能点‹返回"
+    }
+  };
+
   const startWorld = async (world: WorldSummary): Promise<void> => {
     startupTrace.mark(STARTUP_PHASES.worldBegin);
     diag.event('app', 'world.enter', {
@@ -10105,6 +10234,18 @@ async function boot(): Promise<void> {
     app.onWorldDeleted = (id) => registry.remove(id);
     // 难度改了就回写世界清单（下次从主菜单进来还是这个难度）
     app.onDifficultyChanged = (value) => registry.update(world.id, { difficulty: value });
+    // 应用内退出（批次 181）：App 拆完自己之后把菜单拉回来。
+    // ⚠️ 这里**不碰全屏**——全屏是页面级的，退出世界不该把它一起退掉。
+    app.onExitToMenu = () => {
+      hideLoading();
+      menu.setView('home');
+      menu.render();
+      menu.show();
+      // 局内那条守卫已经被 `dispose()` 收走；主菜单自己要重新压一条，
+      // 否则玩家在菜单里按返回会直接退出页面
+      pushMenuGuard();
+      diag.event('app', 'menu.show', { from: 'world' });
+    };
     app.start();
     // 开发调试入口：控制台或自动化脚本可通过 window.__mc 精确定位与取样
     (window as unknown as { __mc: App }).__mc = app;
@@ -10121,10 +10262,17 @@ async function boot(): Promise<void> {
       menuSettings = new SettingsScreen(document.body, settings, {
         onResume: () => menuSettings?.hide(),
         onChange: (next) => saveSettings(next),
+        onToggleFullscreen: () => {
+          toggleFullscreen();
+          syncRotateHint();
+        },
+        isFullscreen: () => isFullscreen(),
       });
       menuSettings.setTitle('设置', '设置保存在此设备，进入世界后立即生效', '返回');
       menuSettings.setMeta('');
     }
+    // 打开菜单里的设置也压一条：返回键先关设置，而不是退出页面
+    pushMenuGuard();
     menuSettings.show();
   };
 
@@ -10145,6 +10293,22 @@ async function boot(): Promise<void> {
   // 启动耗时台账也挂出去：它是一个**读数的入口**（与 `__worldMenu` 同一类）
   (window as unknown as { __startup: typeof startupTrace }).__startup = startupTrace;
   menu.show();
+  pushMenuGuard();
+  // 主菜单的返回层级（批次 181）：设置 → 关掉；二级页 → 首页；首页 → 交给浏览器退出
+  window.addEventListener('popstate', () => {
+    if (!menu.isOpen) return; // 游戏内由 App 自己的守卫处理
+    if (menuSettings?.isOpen) {
+      menuSettings.hide();
+      pushMenuGuard();
+      return;
+    }
+    if (menu.view !== 'home') {
+      menu.setView('home');
+      pushMenuGuard();
+      return;
+    }
+    // 首页：不再补守卫，让下一次返回真的退出页面
+  });
   // 进游戏首页就"默认全屏 + 横屏"（用户要求）。浏览器不允许页面一加载就全屏，
   // 所以这里分三层（批次 167，用户："能不能在加载的时候自动进入"）：
   //  ① 已装成 PWA 立刻锁横屏；② 立刻**试着**进全屏（PWA / X5 内核里真能成）；
@@ -10154,6 +10318,12 @@ async function boot(): Promise<void> {
   installRotateHint();
   enterFullscreenOnBoot();
   armAutoFullscreen([document]);
+  // 全屏进出都记一笔：手机上的"全屏忽然没了"常常是系统手势/切后台造成的
+  document.addEventListener('fullscreenchange', () => {
+    const full = isFullscreen();
+    syncRotateHint();
+    diag.event('app', 'fullscreen.change', { full });
+  });
   // 没装成 PWA 时引导一次"添加到主屏幕"——那是标签页里唯一零点击全屏的路径
   installInstallHint();
   startupTrace.mark(STARTUP_PHASES.bootMenu);

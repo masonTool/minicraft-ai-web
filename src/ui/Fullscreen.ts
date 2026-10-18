@@ -11,6 +11,9 @@
  *  3. `ui/InstallHint.ts`：没装成 PWA 时引导一次"添加到主屏幕"——
  *     这是普通浏览器里**唯一真正零点击**的全屏路径（装完打开就是全屏横屏）。
  *
+ * ⚠️ 批次 181：竖屏提示层从**整屏黑幕**改成底部横条（见 `installRotateHint`）。
+ * 黑幕会把主菜单一起盖住，用户体感是"退出到了另一个页面"；横条让菜单始终可用。
+ *
  * 三个刻意的选择：
  *  1. **一次性**：触发后立刻摘掉监听。否则每次点菜单按钮都再请求一次全屏
  *     （已经在全屏里时会被浏览器拒掉并抛 unhandled rejection）；
@@ -247,9 +250,9 @@ export function installRotateHint(): void {
   hint.id = ROTATE_HINT_ID;
   hint.className = 'rotate-hint';
   const title = doc.createElement('b');
-  title.textContent = '请横持手机';
+  title.textContent = '横屏体验更好';
   const detail = doc.createElement('span');
-  detail.textContent = '点一下进入全屏';
+  detail.textContent = '点一下进入全屏 · 横屏后自动隐藏';
   hint.append(title, detail);
   hint.addEventListener('pointerdown', (event) => {
     event.preventDefault();

@@ -176,4 +176,9 @@ export class BeaconScreen {
     this.root.classList.add('hidden');
     this.onClose?.();
   }
+
+  /** 离开世界时移除 DOM（批次 181；监听都挂在 root 内） */
+  dispose(): void {
+    this.root.remove();
+  }
 }

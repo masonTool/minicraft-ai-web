@@ -443,6 +443,13 @@ export class InventoryScreen {
   /** 关面板动画进行中，避免连点重复结算 */
   private closing = false;
   /**
+   * 全局监听（window / document）的解绑开关（批次 181）。
+   *
+   * 应用内退出世界会把整块面板销毁；不解绑的话，旧面板还在听 resize / pointerup /
+   * keydown，回到主菜单后按 Q 仍会去丢一个已经不存在的光标物品。
+   */
+  private readonly listeners = new AbortController();
+  /**
    * 触摸端最近一次"从哪一格拿起"（批次 142）：装不下时多余按 Wiki 回到来源格，
    * 而不是留在光标上。
    */
@@ -998,7 +1005,7 @@ export class InventoryScreen {
 
     // 转屏会改视口尺寸（面板宽高里有 100vw/100dvh）：重排一次把尺寸对齐
     if (typeof window !== 'undefined') {
-      window.addEventListener('resize', () => this.applyPocketLayout());
+      window.addEventListener('resize', () => this.applyPocketLayout(), { signal: this.listeners.signal });
     }
 
     this.heldElement = document.createElement('div');
@@ -2429,11 +2436,15 @@ export class InventoryScreen {
   // ---------------------------------------------------------------- 交互
 
   private bindEvents(): void {
-    document.addEventListener('pointermove', (event) => {
-      if (!this.open) return;
-      this.heldElement.style.left = `${event.clientX}px`;
-      this.heldElement.style.top = `${event.clientY}px`;
-    });
+    document.addEventListener(
+      'pointermove',
+      (event) => {
+        if (!this.open) return;
+        this.heldElement.style.left = `${event.clientX}px`;
+        this.heldElement.style.top = `${event.clientY}px`;
+      },
+      { signal: this.listeners.signal },
+    );
 
     // 批次 159：**按下就记一次坐标**。
     // `#inv-held` 是 `position: fixed` 却没有初始 left/top，坐标只在 pointermove 里给；
@@ -2461,20 +2472,24 @@ export class InventoryScreen {
     );
     // 抬手 / 取消就摘掉"按下去"那一层：真正的选中（`.selected`）由刷新接着接上
     for (const type of ['pointerup', 'pointercancel'] as const) {
-      document.addEventListener(type, () => this.markPressing(null));
+      document.addEventListener(type, () => this.markPressing(null), { signal: this.listeners.signal });
     }
 
     // 松手：把这一趟拖过的槽位结算掉（批次 128）
-    document.addEventListener('pointerup', () => {
-      const button = this.dragButton;
-      const slots = this.dragSlots;
-      this.dragButton = null;
-      this.dragSlots = [];
-      // 只经过起点那一格 = 普通点击，已经由 `pointerdown` 处理过了
-      if (button === null || slots.length <= 1) return;
-      this.held = button === 0 ? distributeEvenly(this.held, slots) : placeOneEach(this.held, slots);
-      this.refresh();
-    });
+    document.addEventListener(
+      'pointerup',
+      () => {
+        const button = this.dragButton;
+        const slots = this.dragSlots;
+        this.dragButton = null;
+        this.dragSlots = [];
+        // 只经过起点那一格 = 普通点击，已经由 `pointerdown` 处理过了
+        if (button === null || slots.length <= 1) return;
+        this.held = button === 0 ? distributeEvenly(this.held, slots) : placeOneEach(this.held, slots);
+        this.refresh();
+      },
+      { signal: this.listeners.signal },
+    );
 
     // 点面板里的非槽位区域 = 取消当前选取，不移动任何物品。
     // “窗口外”仍由下面 root 的监听处理为丢弃；两块区域的语义必须分开。
@@ -2506,24 +2521,28 @@ export class InventoryScreen {
       this.refresh();
     });
 
-    document.addEventListener('keydown', (event) => {
-      if (!this.open) return;
-      if (event.code === 'Escape') {
-        this.close();
-        return;
-      }
-      // 数字键 1-9 / F：与快捷栏 / 副手交换（批次 128，作用在悬停的那一格）
-      const swapKey = swapKeyOf(event);
-      if (swapKey !== null) {
-        if (this.hovered && swapWithSlot(this.inventory, this.hovered, swapKey)) this.refresh();
-        return;
-      }
-      // Q / Ctrl+Q：丢 1 件 / 丢整叠（批次 128）
-      if (event.code === 'KeyQ') {
-        event.preventDefault();
-        this.dropFromCursor(event.ctrlKey || event.metaKey);
-      }
-    });
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        if (!this.open) return;
+        if (event.code === 'Escape') {
+          this.close();
+          return;
+        }
+        // 数字键 1-9 / F：与快捷栏 / 副手交换（批次 128，作用在悬停的那一格）
+        const swapKey = swapKeyOf(event);
+        if (swapKey !== null) {
+          if (this.hovered && swapWithSlot(this.inventory, this.hovered, swapKey)) this.refresh();
+          return;
+        }
+        // Q / Ctrl+Q：丢 1 件 / 丢整叠（批次 128）
+        if (event.code === 'KeyQ') {
+          event.preventDefault();
+          this.dropFromCursor(event.ctrlKey || event.metaKey);
+        }
+      },
+      { signal: this.listeners.signal },
+    );
   }
 
   /**
@@ -3933,9 +3952,15 @@ export class InventoryScreen {
   }
 
   dispose(): void {
+    this.listeners.abort();
+    window.clearTimeout(this.pickToastTimer);
+    this.pickToastTimer = 0;
     this.inventory.onChange = null;
     for (const grid of Object.values(this.grids)) grid.onChange = null;
     this.root.remove();
+    // 面板开着时退出世界：body 上那个"背包打开"的类也要一起摘掉，
+    // 否则主菜单会继承一套背包布局约束
+    document.body.classList.remove('inv-pocket-open');
   }
 }
 

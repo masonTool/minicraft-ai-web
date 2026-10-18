@@ -979,6 +979,15 @@ console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全�
   const before = manual.log.length;
   manual.back.onBrowserBack();
   equal('关完之后的返回交给浏览器（我们不再插手）', manual.log.length, before);
+
+  // ⑤ 离开世界（批次 181）：守卫要收回去，否则主菜单的返回先退到一条假记录
+  const leaving = makeHarness(1);
+  leaving.back.sync(true);
+  leaving.back.reset();
+  equal('离开世界时把压在历史里的守卫退掉', leaving.log.join(','), 'push,back');
+  equal('reset 之后不再守卫', String(leaving.back.isGuarded), 'false');
+  leaving.back.reset();
+  equal('重复 reset 不会再退一条历史（幂等）', leaving.log.join(','), 'push,back');
 }
 
 console.log('\n[动态摇杆与飞行提示（批次 96）]');

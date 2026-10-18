@@ -51,6 +51,13 @@ export class ChatInput {
   private completionIndex = 0;
   /** 上一次补全时的前缀（用来决定是换候选还是重新开始） */
   private lastPrefix = '';
+  /**
+   * 全局监听的解绑开关（批次 181）。
+   *
+   * 应用内退出世界会销毁整局 App；不解绑的话，旧聊天框还在听 document 的
+   * pointerdown，回到主菜单后点一下就会去关一个已经不在界面上的输入框。
+   */
+  private readonly listeners = new AbortController();
 
   constructor(host: HTMLElement = document.body) {
     this.root = document.createElement('div');
@@ -85,9 +92,19 @@ export class ChatInput {
 
     this.inputEl.addEventListener('keydown', (event) => this.onInputKeyDown(event));
     // 点输入框以外的地方就关掉输入（和原版一致）
-    document.addEventListener('pointerdown', (event) => {
-      if (this.open && !this.root.contains(event.target as Node)) this.close();
-    });
+    document.addEventListener(
+      'pointerdown',
+      (event) => {
+        if (this.open && !this.root.contains(event.target as Node)) this.close();
+      },
+      { signal: this.listeners.signal },
+    );
+  }
+
+  /** 离开世界时移除 DOM 与全局监听（批次 181） */
+  dispose(): void {
+    this.listeners.abort();
+    this.root.remove();
   }
 
   get isOpen(): boolean {

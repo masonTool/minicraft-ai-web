@@ -350,6 +350,21 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * 关掉 AudioContext（批次 181）。
+   *
+   * 应用内"保存并退出到主菜单"会销毁整局 App；不关 context 的话，
+   * 每进出一次世界就多一个还在跑的音频线程（手机上几轮就能听见电流声）。
+   */
+  dispose(): void {
+    const ctx = this.ctx;
+    this.ctx = null;
+    this.noiseBuffer = null;
+    this.lastStartAt.clear();
+    this.voiceEnds = [];
+    if (ctx) void ctx.close().catch(() => undefined);
+  }
+
   /** AudioContext 状态（验收脚本用：suspended 说明还没被用户手势解锁） */
   get contextState(): string {
     return this.ctx?.state ?? 'none';

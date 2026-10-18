@@ -158,4 +158,9 @@ export class SignEditor {
     for (const row of this.rowEls) row.blur();
     this.onClose?.();
   }
+
+  /** 离开世界时移除 DOM（批次 181；监听都挂在 root 内，移除即解绑） */
+  dispose(): void {
+    this.root.remove();
+  }
 }
