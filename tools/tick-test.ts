@@ -314,12 +314,19 @@ console.log('\n[流体：流动规则]');
   check('下方能进时优先往下', fall.getBlock(0, 63, 0) === Block.WATER && fall.getBlock(1, 64, 0) === Block.AIR);
   check('下落的水带 falling 标记', isFallingFluid(fall.getState(0, 63, 0)));
 
-  // 扩散上限
+  // 扩散上限：它自己是**被 6 级水供着的合法 7 级水**（否则会先被判成断源，
+  // 那样这条断言虽然还是绿的，测的却不是"最大距离"）
   const far = new FakeWorld();
   far.set(0, 64, 0, Block.WATER, WATER_SPREAD);
+  far.set(0, 64, -1, Block.WATER, WATER_SPREAD - 1);
   far.set(1, 64, 0, Block.AIR);
   far.set(0, 63, 0, Block.STONE);
-  check('到达最大扩散距离后不再往外流', !fluidTick(far, 0, 64, 0) || far.getBlock(1, 64, 0) === Block.AIR);
+  check(
+    '到达最大扩散距离后不再往外流（也不会被误判成断源）',
+    !fluidTick(far, 0, 64, 0) &&
+      far.getBlock(0, 64, 0) === Block.WATER &&
+      far.getBlock(1, 64, 0) === Block.AIR,
+  );
 
   // 流动的水会干涸
   const dry = new FakeWorld();
@@ -342,6 +349,42 @@ console.log('\n[流体：流动规则]');
   single.set(0, 63, 0, Block.STONE);
   fluidTick(single, 0, 64, 0);
   check('只有一个相邻水源不会变成水源', fluidLevel(single.getState(0, 64, 0)) === 1);
+
+  // ---- 已有水面的重算（批次 235）
+  //
+  // 液面是"离源头几步"的缓存。新放一个水源之后，旁边的旧流水必须跟着变薄，
+  // 否则它会一直停在 5 级、只够再流两格，旁边的空位永远填不上。
+  const relevel = new FakeWorld();
+  relevel.set(0, 64, 0, Block.WATER, 5);
+  relevel.set(1, 64, 0, Block.WATER, 0);
+  relevel.set(0, 63, 0, Block.STONE);
+  check(
+    '旁边出现水源后，旧流水会重算成 1 级',
+    fluidTick(relevel, 0, 64, 0) && fluidLevel(relevel.getState(0, 64, 0)) === 1,
+    `实际 ${fluidLevel(relevel.getState(0, 64, 0))}`,
+  );
+
+  // 反方向也要防：同级/更厚的邻居不是供源，不能凭空涨级
+  const flatChain = new FakeWorld();
+  flatChain.set(0, 64, 0, Block.WATER, 3);
+  flatChain.set(1, 64, 0, Block.WATER, 3);
+  flatChain.set(0, 63, 0, Block.STONE);
+  check(
+    '同级邻居不算供源（否则断了源的流水会自己涨级、永远干不了）',
+    fluidTick(flatChain, 0, 64, 0) && flatChain.getBlock(0, 64, 0) === Block.AIR,
+  );
+
+  // 失去源头的瀑布：下面还是空气也不能继续灌
+  // （旧实现先走"向下流"那一步就 return 了，永远到不了干涸判定）
+  const orphanFall = new FakeWorld();
+  orphanFall.set(0, 64, 0, Block.WATER, 3);
+  orphanFall.set(0, 63, 0, Block.AIR);
+  check(
+    '失去来源的流水不会继续往下灌',
+    fluidTick(orphanFall, 0, 64, 0) &&
+      orphanFall.getBlock(0, 64, 0) === Block.AIR &&
+      orphanFall.getBlock(0, 63, 0) === Block.AIR,
+  );
 }
 
 console.log('\n[流体：岩浆与水火相遇]');
@@ -358,9 +401,16 @@ console.log('\n[流体：岩浆与水火相遇]');
 
   const lavaFar = new FakeWorld();
   lavaFar.set(0, 64, 0, Block.LAVA, LAVA_SPREAD);
+  // 与水的 `far` 同一条：给它一个 2 级岩浆邻居，保证它是"合法的最外层"
+  lavaFar.set(0, 64, -1, Block.LAVA, LAVA_SPREAD - 1);
   lavaFar.set(1, 64, 0, Block.AIR);
   lavaFar.set(0, 63, 0, Block.STONE);
-  check('岩浆流到第 3 格就停', !fluidTick(lavaFar, 0, 64, 0) || lavaFar.getBlock(1, 64, 0) === Block.AIR);
+  check(
+    '岩浆流到第 3 格就停',
+    !fluidTick(lavaFar, 0, 64, 0) &&
+      lavaFar.getBlock(0, 64, 0) === Block.LAVA &&
+      lavaFar.getBlock(1, 64, 0) === Block.AIR,
+  );
 
   // 水碰岩浆 → 岩浆变石头类
   const meet = new FakeWorld();

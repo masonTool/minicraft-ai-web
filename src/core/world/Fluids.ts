@@ -97,17 +97,55 @@ const HORIZONTAL: ReadonlyArray<readonly [number, number]> = [
 ];
 
 /**
- * 这一格流动的液体还有没有"来源"。
- * 有来源 = 上方是同一液体（瀑布灌下来）或某个水平邻居比我这格更厚。
+ * 这一格流体**现在应该是什么状态**（液面等级 + 下落位）。
+ * @returns 状态字节；`null` = 已经失去来源，应当干涸
+ *
+ * 为什么要"重算"而不是只往空处写：液面其实是"离源头几步"的缓存。
+ * 新放一个水源、或者打通一条更短的路之后，**已经在场的水**也得重新算——
+ * 否则它会停在旧等级（比如 5 级），只能再走两格，旁边的空位永远填不上。
+ *
+ * ⚠️ 只允许**变薄**（`best < 当前等级`）：同级/更厚的邻居不是供源。
+ * 否则一条断了源的细流会拿旁边的同级格子当供源，一级一级涨上去、永远干不了。
  */
-function hasSupply(world: FluidWorld, x: number, y: number, z: number, id: number, level: number): boolean {
-  const above = world.getBlock(x, y + 1, z);
-  if (above === id) return true;
-  for (const [dx, dz] of HORIZONTAL) {
-    if (world.getBlock(x + dx, y, z + dz) !== id) continue;
-    if (fluidLevel(world.getState(x + dx, y, z + dz)) < level) return true;
+function desiredFluidState(
+  world: FluidWorld,
+  x: number,
+  y: number,
+  z: number,
+  id: number,
+  state: number,
+  source: boolean,
+): number | null {
+  const level = fluidLevel(state);
+
+  // 水源永远是水源（放下去就不会自己没）
+  if (source) return state;
+
+  // 上方是同一液体：这一节是瀑布（下落不衰减）
+  if (world.getBlock(x, y + 1, z) === id) return withFallingFluid(0, true);
+
+  // 无限水源：两个相邻水源让流动水变成水源
+  if (
+    id === WATER &&
+    world.getBlock(x, y - 1, z) !== WATER &&
+    countAdjacentSources(world, x, y, z, id) >= 2
+  ) {
+    return 0;
   }
-  return false;
+
+  // 水平邻居里**最厚**的那一格决定我：比它多一级
+  let best = Number.POSITIVE_INFINITY;
+  for (const [dx, dz] of HORIZONTAL) {
+    const nx = x + dx;
+    const nz = z + dz;
+    if (world.getBlock(nx, y, nz) !== id) continue;
+    const neighbour = fluidLevel(world.getState(nx, y, nz));
+    if (neighbour < best) best = neighbour;
+  }
+  if (!(best < level)) return null; // 没有更厚的供源 = 已经断源
+  const next = best + 1;
+  if (next > spreadDistance(id)) return null;
+  return withFluidLevel(0, next);
 }
 
 /**
@@ -159,8 +197,7 @@ export function fluidTick(world: FluidWorld, x: number, y: number, z: number): b
   if (!isFluid(id)) return false;
 
   const state = world.getState(x, y, z);
-  const level = fluidLevel(state);
-  const source = level === 0 && !isFallingFluid(state);
+  const source = fluidLevel(state) === 0 && !isFallingFluid(state);
   let changed = false;
 
   // ---- 0) 水与岩浆相遇：生成石头类方块（放在最前面，避免两边互相流）
@@ -171,15 +208,22 @@ export function fluidTick(world: FluidWorld, x: number, y: number, z: number): b
     return true;
   }
 
-  // ---- 1) 无限水源：流动的水有两格以上相邻水源 → 自己变水源
-  if (!source && id === WATER) {
-    const belowSame = world.getBlock(x, y - 1, z) === WATER;
-    if (!belowSame && countAdjacentSources(world, x, y, z, id) >= 2) {
-      world.setFluid(x, y, z, id, 0);
-      // 变成水源之后要唤醒邻居重新评估液面
-      wakeFluidNeighbours(world, x, y, z);
-      return true;
-    }
+  // ---- 1) 先重算自己（新水源 / 新通路 / 上游断了）
+  //
+  // ⚠️ 这一步必须**在"向下流"之前**：原来的顺序里，失去源头的瀑布会先走下面那条
+  // `return`，永远到不了干涸判定 —— 表现是源头拔掉了、水还在一直往下灌。
+  const want = desiredFluidState(world, x, y, z, id, state, source);
+  if (want === null) {
+    world.setFluid(x, y, z, Block.AIR, 0);
+    wakeFluidNeighbours(world, x, y, z);
+    return true;
+  }
+  if (want !== state) {
+    world.setFluid(x, y, z, id, want);
+    // 液面变了：自己下一 tick 按新等级继续流，邻居也可能因此重排
+    world.schedule(x, y, z, flowDelay(id));
+    wakeFluidNeighbours(world, x, y, z);
+    return true;
   }
 
   // ---- 2) 优先向下：下方能进就往下灌（下落液体不衰减）
@@ -191,7 +235,7 @@ export function fluidTick(world: FluidWorld, x: number, y: number, z: number): b
 
   // ---- 3) 水平扩散
   const maxSpread = spreadDistance(id);
-  const nextLevel = level + 1;
+  const nextLevel = fluidLevel(state) + 1;
   if (nextLevel <= maxSpread) {
     for (const [dx, dz] of HORIZONTAL) {
       const nx = x + dx;
@@ -199,15 +243,19 @@ export function fluidTick(world: FluidWorld, x: number, y: number, z: number): b
       if (!canFlowInto(world, nx, y, nz)) continue;
       world.setFluid(nx, y, nz, id, nextLevel);
       world.schedule(nx, y, nz, flowDelay(id));
+      // 新写的一格可能给旁边那条旧水流提供了一条更短的路：只叫醒**明显比自己厚**的
+      // 邻居。不能用 `wakeFluidNeighbours`——那会把整片海洋每 5 tick 都排进计划刻，
+      // 变成"水永远在重算"。
+      for (const [ndx, ndz] of HORIZONTAL) {
+        const bx = nx + ndx;
+        const bz = nz + ndz;
+        if (world.getBlock(bx, y, bz) !== id) continue;
+        if (fluidLevel(world.getState(bx, y, bz)) > nextLevel) {
+          world.schedule(bx, y, bz, flowDelay(id));
+        }
+      }
       changed = true;
     }
-  }
-
-  // ---- 4) 干涸：流动的液体失去来源就消失
-  if (!source && !hasSupply(world, x, y, z, id, level)) {
-    world.setFluid(x, y, z, Block.AIR, 0);
-    wakeFluidNeighbours(world, x, y, z);
-    return true;
   }
 
   return changed;

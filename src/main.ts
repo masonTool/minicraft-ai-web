@@ -7531,6 +7531,12 @@ class App {
     // 状态 0 = **水源**：倒出去的永远是源头，不是"接着流"
     if (!this.world.setBlockAndUpdate(target.x, target.y, target.z, liquid, 0)) return false;
 
+    // 流体（批次 235）：倒出去的这一格**必须自己排进计划刻**，否则它是一格死水。
+    // `setBlockAndUpdate` 只通知渲染/光照/红石，流动完全靠 `TickScheduler`。
+    // 这也解释了用户看到的"倒水不流"：手挖会流（那条路一直有唤醒），倒水不会。
+    this.wakeFluidsAround(target.x, target.y, target.z);
+    this.net.sendBlock(target.x, target.y, target.z, liquid, 0, this.dimension);
+
     // 创造模式不回收桶（原版也是"桶还在手里"），生存里变回空桶
     if (!this.isCreative) this.exchangeHeld(held, Item.BUCKET);
     this.audio.play(liquid === Block.WATER ? 'splash' : 'flint', {
@@ -9032,6 +9038,10 @@ class App {
         const { dx, dy, dz, id, state } = plan.extra;
         this.world.setBlockAndUpdate(x + dx, y + dy, z + dz, id, state);
       }
+      // 流体（批次 235）：落点在水中/水边时，四周的水要重新评估流向。
+      // 往水里放一块石头 = 抽走一格水，不唤醒的话这个洞永远没人来填。
+      this.wakeFluidsAround(x, y, z);
+      if (plan.extra) this.wakeFluidsAround(x + plan.extra.dx, y + plan.extra.dy, z + plan.extra.dz);
       this.placeCooldown = PLACE_COOLDOWN;
       this.inventory.consume(heldId, 1);
 
@@ -11771,8 +11781,12 @@ class App {
   /** 直接放置方块（自动化测试用）；可带状态 */
   place(x: number, y: number, z: number, blockId: number, state = 0): boolean {
     const ok = this.world.setBlockAndUpdate(x, y, z, blockId, state);
-    // 与玩家放置走同一条收尾：漏斗在这里也必须把容器建出来（否则脚本摆的漏斗是死的）
-    if (ok) this.ensureBlockEntityAt(x, y, z, blockId);
+    // 与玩家放置走同一条收尾：漏斗在这里也必须把容器建出来（否则脚本摆的漏斗是死的）；
+    // 流体同理（批次 235）：脚本摆的水/挖的洞也要能开始流
+    if (ok) {
+      this.ensureBlockEntityAt(x, y, z, blockId);
+      this.wakeFluidsAround(x, y, z);
+    }
     return ok;
   }
 
