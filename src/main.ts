@@ -432,6 +432,8 @@ import { SignEditor } from './ui/SignEditor.ts';
 import { BookScreen } from './ui/BookScreen.ts';
 import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
 import { SHIELD_KNOCKBACK, canBlockDamage, isFrontalAttack, isShield, shieldWear } from './core/items/Shield.ts';
+import { clockAngleDeg, compassAngleDeg, horizontalDistance } from './core/items/Navigation.ts';
+import { ToolHud } from './ui/ToolHud.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -679,6 +681,8 @@ class App {
   private readonly endBackground = new THREE.Color(END_SKY);
   private readonly vitalsHud: VitalsHud;
   private readonly xpHud: XpHud;
+  /** 指南针 / 时钟的读数（批次 195）：主手拿着它们时才有内容 */
+  private readonly toolHud: ToolHud;
   /** 天空：渐变穹顶 / 太阳月亮 / 星空 / 云 */
   private readonly sky: Sky;
   /** 天气：晴 / 雨 / 雷暴 */
@@ -1264,6 +1268,8 @@ class App {
     // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
     // 塞进 #vitals 那个 flex 列会被挤到别的地方
     this.xpHud = new XpHud(document.getElementById('hud') ?? container);
+    // 指南针/时钟读数（批次 195）：与生命/经验挂在同一个 `#hud` 里
+    this.toolHud = new ToolHud(document.getElementById('hud') ?? container);
     // 准星下方的目标名称（批次 181）：手机上"这是什么东西"原来只能靠猜
     this.targetInfoEl = document.createElement('div');
     this.targetInfoEl.id = 'target-info';
@@ -5967,6 +5973,32 @@ class App {
    * 生物对玩家造成伤害：结算生命值并施加击退。
    * 创造模式（飞行）免疫；无敌帧由 PlayerStats 判断。
    */
+  /**
+   * 指南针 / 时钟读数（批次 195，B19）。
+   *
+   * 只认**主手**：副手拿着不算（原版也是"拿在手里才有读数"，
+   * 而把副手算进来会让屏幕在战斗中莫名多一块 UI）。
+   */
+  private updateToolHud(): void {
+    const held = this.heldItemId ?? null;
+    if (held === Item.COMPASS) {
+      const [sx, , sz] = this.spawnPoint;
+      const dx = sx - this.physics.x;
+      const dz = sz - this.physics.z;
+      this.toolHud.update(
+        'compass',
+        compassAngleDeg(this.yaw, dx, dz),
+        horizontalDistance(this.physics.x, this.physics.z, sx, sz),
+      );
+      return;
+    }
+    if (held === Item.CLOCK) {
+      this.toolHud.update('clock', clockAngleDeg(this.timeOfDay), this.timeOfDay);
+      return;
+    }
+    this.toolHud.update(null);
+  }
+
   private damagePlayer(amount: number, sourceX: number, sourceZ: number, cause: DamageCause = 'generic'): void {
     if (this.isCreative) return;
     // 难度倍率：和平难度下生物不造成伤害（原版和平难度敌对生物根本不生成）
@@ -8984,6 +9016,7 @@ class App {
 
     this.vitalsHud.update(this.stats);
     this.xpHud.update(this.experience);
+    this.updateToolHud();
     this.chat.update();
     this.updateEffectsHud();
     // 水面动画的时间（与昼夜时间分开：调 /time 不该让水面跳一下）
@@ -9658,6 +9691,7 @@ class App {
     // 静态 HUD 容器（#vitals / #hud）要清干净：不清的话重进世界会叠出第二套血条与经验条
     this.vitalsHud.dispose();
     this.xpHud.dispose();
+    this.toolHud.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();
     this.touch = null;

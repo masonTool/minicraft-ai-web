@@ -3573,6 +3573,62 @@ PAINTERS.item_ink_sac = (x, y, rng) => {
 };
 
 /**
+ * 指南针（批次 195）：**圆表盘 + 红白指针**。
+ *
+ * 表盘用一圈深浅交替的金色表现"金属边"，指针是南北两极各一半（红指北、白指南），
+ * 与时钟的区别一眼能看出来：时钟里画的是日月，指南针里只有一根针。
+ */
+PAINTERS.item_compass = (x, y, rng) => {
+  const jitter = rng() * 6 - 3;
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const r = Math.hypot(dx, dy);
+  if (r > 6.4) return [0, 0, 0, 0];
+  // 外圈：金属边（右下暗、左上亮，做出一点立体）
+  if (r > 4.9) {
+    const light = dx + dy < 0 ? 40 : 0;
+    return [clamp255(176 + light + jitter), clamp255(150 + light + jitter), clamp255(72 + light + jitter), 255];
+  }
+  // 盘面：米白
+  if (r > 3.9) return [clamp255(226 + jitter), clamp255(222 + jitter), clamp255(206 + jitter), 255];
+  // 指针：沿 y = x 的斜线（西北-东南），上半红、下半白；中间留一格深色轴心
+  const axis = Math.abs(dx - dy);
+  if (axis <= 0.8 && r <= 3.9) {
+    if (r < 0.9) return [clamp255(70 + jitter), clamp255(60 + jitter), clamp255(50 + jitter), 255];
+    return dy < 0
+      ? [clamp255(206 + jitter), clamp255(48 + jitter), clamp255(40 + jitter), 255]
+      : [clamp255(238 + jitter), clamp255(236 + jitter), clamp255(228 + jitter), 255];
+  }
+  return [clamp255(232 + jitter), clamp255(228 + jitter), clamp255(212 + jitter), 255];
+};
+
+/**
+ * 时钟（批次 195）：**圆表盘 + 日月**——上半太阳（金）、下半月亮（银灰）。
+ *
+ * 静态图标只表达"这是个表盘"，真正的位置由 HUD 上那个小表盘按 `timeOfDay` 转。
+ */
+PAINTERS.item_clock = (x, y, rng) => {
+  const jitter = rng() * 6 - 3;
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const r = Math.hypot(dx, dy);
+  if (r > 6.4) return [0, 0, 0, 0];
+  if (r > 5.1) {
+    const light = dx + dy < 0 ? 36 : 0;
+    return [clamp255(150 + light + jitter), clamp255(120 + light + jitter), clamp255(58 + light + jitter), 255];
+  }
+  // 上半：太阳（金色圆盘）；下半：夜空（深蓝）+ 月亮
+  if (dy < 0) {
+    const sunR = Math.hypot(dx, dy + 2.2);
+    if (sunR < 1.6) return [clamp255(252 + jitter), clamp255(214 + jitter), clamp255(92 + jitter), 255];
+    return [clamp255(214 + jitter), clamp255(226 + jitter), clamp255(240 + jitter), 255];
+  }
+  const moonR = Math.hypot(dx, dy - 2.2);
+  if (moonR < 1.5) return [clamp255(238 + jitter), clamp255(240 + jitter), clamp255(228 + jitter), 255];
+  return [clamp255(44 + jitter), clamp255(56 + jitter), clamp255(92 + jitter), 255];
+};
+
+/**
  * 盾牌（批次 194）：**木面铁边**的圆角盾——上方平、下方收尖，中间一块铁质盾心。
  *
  * 形状靠"逐行收边"画出来（不是矩形），因为物品栏里最能认出盾牌的就是那个下尖的轮廓。

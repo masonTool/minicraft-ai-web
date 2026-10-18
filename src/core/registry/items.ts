@@ -194,6 +194,10 @@ export const Item = {
    *
    * 不可堆叠：每一本的内容都不一样（与成书同一个理由）。
    */
+  /** 时钟（批次 195）：拿在手里时 HUD 上显示一个"正午在顶上"的表盘 */
+  CLOCK: 1490,
+  /** 指南针（批次 195）：拿在手里时 HUD 上显示指向世界出生点的指针 */
+  COMPASS: 1491,
   /** 盾牌（批次 194）：举起来挡近战与箭矢，耐久 336 */
   SHIELD: 1493,
   /** 烟火之星（批次 192）：火药 + 染料，是烟花的颜色来源（自己不会飞） */
@@ -446,6 +450,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
   { id: Item.INK_SAC, name: 'minecraft:ink_sac', tile: 'item_ink_sac' },
+  // 指南针 / 时钟（批次 195）：都不可堆叠（它们不是材料），图标是参数化画的表盘
+  { id: Item.CLOCK, name: 'minecraft:clock', tile: 'item_clock', maxStack: 1 },
+  { id: Item.COMPASS, name: 'minecraft:compass', tile: 'item_compass', maxStack: 1 },
   // 盾牌（批次 194）：耐久 336，铁砧用木板修（`SPECIAL_ITEMS` 里那条）
   { id: Item.SHIELD, name: 'minecraft:shield', tile: 'item_shield', maxStack: 1, durability: 336 },
   // 烟花（批次 192，H16）：数据在 `firework`（档位 + 颜色），所以也不可堆叠

@@ -798,6 +798,71 @@
         box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
       }
 
+      /* 指南针 / 时钟读数（批次 195，B19）：主手拿着它们时右下角出现一个小表盘。
+         不接指针事件（`pointer-events: none`）——它是读数，不是按钮 */
+      .tool-hud {
+        position: fixed; right: 16px; bottom: 78px; z-index: 6;
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+        pointer-events: none; user-select: none;
+        filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .5));
+      }
+      .tool-hud.hidden { display: none; }
+      .tool-hud-dial {
+        position: relative; box-sizing: border-box;
+        width: 52px; height: 52px; border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #f2eee2, #cfc7b2 70%, #a89f8c);
+        border: 3px solid #6b5a36;
+      }
+      .tool-hud-tick {
+        position: absolute; font-size: 9px; line-height: 1;
+        color: #57492c; font-weight: 700;
+      }
+      .tick-n { top: 2px; left: 50%; transform: translateX(-50%); }
+      .tick-s { bottom: 2px; left: 50%; transform: translateX(-50%); }
+      .tick-e { right: 3px; top: 50%; transform: translateY(-50%); }
+      .tick-w { left: 3px; top: 50%; transform: translateY(-50%); }
+      .tool-hud-needle {
+        position: absolute; inset: 0;
+        /* 指针转起来要跟手，但不能每帧跳：给一点点过渡 */
+        transition: transform 80ms linear;
+      }
+      /* 指针从圆心往"上"画；容器整体旋转 = 绕圆心转 */
+      .tool-hud-needle::before {
+        content: '';
+        position: absolute; left: 50%; bottom: 50%;
+        width: 4px; height: 22px; margin-left: -2px;
+        background: linear-gradient(#e03b3b 0 50%, #f6f4ec 50% 100%);
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+        transform-origin: 50% 100%;
+      }
+      /* 时钟：藏掉方位字母，换成"上金下银"两个圆点；指针改成细白针 */
+      .tool-hud[data-kind='clock'] .tool-hud-tick { display: none; }
+      .tool-hud[data-kind='clock'] .tool-hud-dial {
+        background: radial-gradient(circle at 35% 30%, #dfe8f5, #9fb0c8 70%, #6f7f96);
+        border-color: #3c4a5e;
+      }
+      .tool-hud[data-kind='clock'] .tool-hud-needle::before {
+        width: 3px; height: 19px; margin-left: -1.5px;
+        background: #fffdf2; clip-path: none; border-radius: 2px;
+      }
+      .tool-hud[data-kind='clock'] .tool-hud-dial::before,
+      .tool-hud[data-kind='clock'] .tool-hud-dial::after {
+        content: ''; position: absolute; left: 50%;
+        width: 6px; height: 6px; margin-left: -3px; border-radius: 50%;
+      }
+      .tool-hud[data-kind='clock'] .tool-hud-dial::before { top: 3px; background: #f2c14b; }
+      .tool-hud[data-kind='clock'] .tool-hud-dial::after { bottom: 3px; background: #e8eef8; }
+      .tool-hud-label {
+        font-size: 10px; color: #f2efe4; white-space: nowrap;
+        text-shadow: 1px 1px 0 rgba(0, 0, 0, .75);
+      }
+      /* 手机横屏（高度很小）：整体缩一号、往上收一点，别压住快捷栏 */
+      @media (max-height: 430px) {
+        .tool-hud { right: 10px; bottom: 62px; }
+        .tool-hud-dial { width: 44px; height: 44px; }
+        .tool-hud-needle::before { height: 18px; }
+      }
+
       /* 书与笔 / 成书（批次 190，H16）：一页文本 + 翻页 + 完成/署名。
          与告示牌编辑器同一套写法与层叠层（12，盖住背包、在提示框之下）。
          手机横屏是主场景：面板高度封顶、文本区自己滚，按钮固定在底部 */

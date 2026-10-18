@@ -687,6 +687,19 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   { kind: 'shapeless' as const, result: { id: Item.PAPER, count: 3 }, ingredients: [Block.SUGAR_CANE, Block.SUGAR_CANE, Block.SUGAR_CANE] },
   // 3 纸 + 1 皮革 → 1 书（原版无序）
   { kind: 'shapeless' as const, result: { id: Item.BOOK, count: 1 }, ingredients: [Item.PAPER, Item.PAPER, Item.PAPER, Item.LEATHER] },
+  // 指南针 / 时钟（批次 195，B19）：4 个金属 + 1 红石（原版图案）
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.COMPASS, count: 1 },
+    pattern: [' I ', 'IRI', ' I '],
+    key: { I: Item.IRON_INGOT, R: Item.REDSTONE },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.CLOCK, count: 1 },
+    pattern: [' G ', 'GRG', ' G '],
+    key: { G: Item.GOLD_INGOT, R: Item.REDSTONE },
+  },
   // 盾牌（批次 194，B18）：6 木板 + 1 铁锭（原版图案）
   {
     kind: 'shaped' as const,
