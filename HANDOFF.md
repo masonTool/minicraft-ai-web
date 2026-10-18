@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 719（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 722（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **182**、进行中 **75**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,15 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 257（用户："继续下一批"；J2 第一刀）：**载具的区块持久化**。
+  ① `core/entity/VehicleParking.ts`：按「维度 + 区块」存 `{ kind, x, y, z, yaw }`，
+  `take()` 取完即删（避免重复生成），支持同一区块停多辆。
+  ② `main.parkVehicles` 挂在 `onChunkUnloaded`、**在 `removeInChunk` 之前**（那是直接
+  splice，晚一步就永远拿不到）；`restoreVehicles` 挂在 `onChunkLoaded`，原样造回含朝向。
+  ③ 四种载具按具体类判种类（boat / minecart / hopper / furnace）。
+  ⚠️ 仍是**内存态**：退出游戏（存档重开）会丢；生物与掉落物不做。
+  门禁：`test:entity` 93 → **99**（多辆 / 取完即删 / 维度隔离）、`test:ui` 725 → **728**，
+  离线 130 套全绿。
 - 批次 256（用户："继续"；载具/宠物收尾）：**拴绳**。
   ① 物品 `LEAD`（id **1487**，4 线 + 1 黏液球 → **2 条**），图标 + 中文名/说明。
   ② `Mob.leashed` + `updateAi` 里的**拴绳分支**：被牵的动物朝主人走，走到 `LEASH_STOP`
