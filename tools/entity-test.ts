@@ -17,6 +17,7 @@ import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../src/core/ent
 import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import { Boat } from '../src/core/entity/Boat.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
+import { HopperMinecart } from '../src/core/entity/HopperMinecart.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 import { boxAt } from '../src/core/physics/AABB.ts';
@@ -570,6 +571,16 @@ console.log('\n[矿车：轨道上滑得远 / 离轨寸步难行（批次 245）
     Math.hypot(boosted.vx, boosted.vz) > Math.hypot(idle.vx, idle.vz) + 2,
     `通电 ${Math.hypot(boosted.vx, boosted.vz).toFixed(1)} vs 断电 ${Math.hypot(idle.vx, idle.vz).toFixed(1)}`,
   );
+}
+
+console.log('\n[漏斗矿车：5 格肚子（批次 251）]');
+{
+  const cart = new HopperMinecart(0.5, 0.05, 0.5);
+  equal('5 格', cart.slots.length, 5);
+  equal('塞 70 个石头：全收下（先填满一格 64，再占一格 6）', cart.accept(Block.STONE, 70), 0);
+  equal('总数 70', cart.itemCount, 70);
+  equal('再塞 5 组泥土：只收下剩余 3 格（192），退回 128', cart.accept(Block.DIRT, 320), 128);
+  equal('总数变成 262', cart.itemCount, 262);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

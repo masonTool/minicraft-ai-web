@@ -2938,6 +2938,13 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       appSrc.includes('this.updatePulsingBlocks(dt);'),
   );
   check(
+    '漏斗矿车（批次 251）：5 格肚子 + 主程序搬运',
+    itemsSrc.includes('HOPPER_MINECART: 1480') &&
+      recipesSrc.includes('result: { id: Item.HOPPER_MINECART, count: 1 }') &&
+      appSrc.includes('private updateHopperMinecarts(dt: number): void') &&
+      appSrc.includes('this.updateHopperMinecarts(dt);'),
+  );
+  check(
     '陷阱箱（id 585）：开箱发信号、关箱撤信号',
     blocksSrc.includes('TRAPPED_CHEST: 585') &&
       recipesSrc.includes('result: { id: Block.TRAPPED_CHEST, count: 1 }') &&

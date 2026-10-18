@@ -808,6 +808,12 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   },
   // 矿车（批次 245）：5 块铁锭摆成 U 形
   { kind: 'shaped' as const, result: { id: Item.MINECART, count: 1 }, pattern: ['I I', 'III'], key: { I: Item.IRON_INGOT } },
+  // 漏斗矿车（批次 251）：矿车 + 漏斗（原版无序）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.HOPPER_MINECART, count: 1 },
+    ingredients: [Item.MINECART, Block.HOPPER],
+  },
   // 动力铁轨（批次 246）：6 金锭 + 1 木棍 + 1 红石 → 6 段（原版图案）
   {
     kind: 'shaped' as const,

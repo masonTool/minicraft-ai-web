@@ -90,6 +90,7 @@ import { createMob } from './core/entity/MobFactory.ts';
 // 船（批次 244，G12）：载具实体与"上下船"全在主程序这一层
 import { Boat } from './core/entity/Boat.ts';
 import { Minecart } from './core/entity/Minecart.ts';
+import { HopperMinecart } from './core/entity/HopperMinecart.ts';
 /**
  * 可骑乘的载具（批次 245）：船与矿车共用"上下车 + 每帧贴位置 + `vehicleInput`"那一套，
  * 所以主程序里所有骑乘状态都按这个联合类型存。
@@ -1015,6 +1016,8 @@ class App {
   private readonly litOres = new Map<string, number>();
   /** 10Hz 一次"脚下是不是红石矿石"的检查 */
   private orePollTimer = 0;
+  /** 漏斗矿车搬运节拍（批次 251）：0.4 秒一次，与漏斗方块同一个节奏 */
+  private hopperCartTimer = 0;
   /** 上下船的冷却（秒）：防止"上船那一下同时被当成下船" */
   private mountCooldown = 0;
   /** 这一帧的输入快照（船要读它；`collectInput` 每帧只该调一次） */
@@ -4432,6 +4435,47 @@ class App {
     }
   }
 
+  /**
+   * 漏斗矿车搬运（批次 251）：每 0.4 秒吸一次、倒一次。
+   *
+   *  - **吸**：1.3 格内的掉落物塞进 5 格肚子（塞不下的留在原地）；
+   *  - **倒**：脚下那一格是箱子时，把肚子里的东西全倒进去。
+   *
+   * ⚠️ 与漏斗方块的分工：那套在 `core/world/...` 里按红石节奏搬运，矿车这条
+   * 只在主程序里做——实体层不认识容器，也不该认识。
+   */
+  private updateHopperMinecarts(dt: number): void {
+    this.hopperCartTimer -= dt;
+    if (this.hopperCartTimer > 0) return;
+    this.hopperCartTimer = 0.4;
+
+    for (const cart of this.entities.all) {
+      if (!(cart instanceof HopperMinecart) || cart.dead) continue;
+
+      for (const item of this.entities.all) {
+        if (!(item instanceof ItemEntity) || item.dead) continue;
+        const distance = Math.hypot(item.x - cart.x, item.y - cart.y, item.z - cart.z);
+        if (distance > 1.3) continue;
+        const leftover = cart.accept(item.itemId, item.count);
+        if (leftover === 0) item.dead = true;
+        else item.count = leftover;
+      }
+
+      const bx = Math.floor(cart.x);
+      const by = Math.floor(cart.y) - 1;
+      const bz = Math.floor(cart.z);
+      if (this.world.getBlock(bx, by, bz) !== Block.CHEST) continue;
+      const chest = this.world.containers.getOrCreateChest(this.dimension, bx, by, bz);
+      for (let i = 0; i < cart.slots.length; i++) {
+        const slot = cart.slots[i];
+        if (!slot) continue;
+        const leftover = chest.add(slot.id, slot.count);
+        if (leftover === 0) cart.slots[i] = null;
+        else slot.count = leftover;
+      }
+    }
+  }
+
   /** 清掉某格的 `powered` 位并让红石重算（标靶 / 红石矿石共用） */
   private clearPoweredState(x: number, y: number, z: number): void {
     const state = this.world.getBlockState(x, y, z);
@@ -4493,7 +4537,7 @@ class App {
    * 用 `this.hit`（触摸端已经是按手指落点算出来的方块目标），
    * 所以调用点必须排在 `if (!this.hit) return;` 之后。
    */
-  private placeMinecart(): boolean {
+  private placeMinecart(hopper = false): boolean {
     const hit = this.hit;
     if (!hit) return false;
     // 铁轨是 `flat` 薄板：矿车落在它上方 0.05（贴住轨面，不悬空）。
@@ -4507,7 +4551,10 @@ class App {
     ) {
       return false;
     }
-    const cart = new Minecart(hit.x + 0.5, hit.y + 0.05, hit.z + 0.5);
+    // 漏斗矿车（批次 251）：同一套放置逻辑，只是生成另一种实体
+    const cart = hopper
+      ? new HopperMinecart(hit.x + 0.5, hit.y + 0.05, hit.z + 0.5)
+      : new Minecart(hit.x + 0.5, hit.y + 0.05, hit.z + 0.5);
     cart.yaw = this.yaw;
     this.entities.spawn(cart);
     if (!this.isCreative) {
@@ -7493,6 +7540,8 @@ class App {
     this.primedTnt.update(tntDt, this.tntWorld, (x, y, z, power) => this.explodeAt(x, y, z, power));
     // 标靶脉冲 / 踩亮的红石矿石（批次 248）：先推进计时器，再让红石看到最新状态
     this.updatePulsingBlocks(dt);
+    // 漏斗矿车的吸/倒（批次 251）
+    this.updateHopperMinecarts(dt);
     this.redstone.tick(this.redstoneWorld, Math.min(dt, 0.1));
   }
 
@@ -9691,7 +9740,10 @@ class App {
     if (!this.hit) return;
 
     // 放矿车（批次 245）：只能对着铁轨放，所以排在"必须命中方块"之后
-    if (this.heldItemId === Item.MINECART && this.placeMinecart()) {
+    if (
+      (this.heldItemId === Item.MINECART || this.heldItemId === Item.HOPPER_MINECART) &&
+      this.placeMinecart(this.heldItemId === Item.HOPPER_MINECART)
+    ) {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;
       return;

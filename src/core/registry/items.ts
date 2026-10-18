@@ -185,6 +185,8 @@ export const Item = {
   OAK_BOAT: 1478,
   /** 矿车（批次 245）：可放置物品，放到铁轨上变成 `Minecart` 实体 */
   MINECART: 1479,
+  /** 漏斗矿车（批次 251）：多 5 格肚子，捡掉落物并倒进脚下容器 */
+  HOPPER_MINECART: 1480,
   /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
@@ -467,6 +469,7 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.OAK_BOAT, name: 'minecraft:oak_boat', tile: 'item_oak_boat', maxStack: 1 },
   // 矿车（批次 245）：同样一次一辆，放到铁轨上变成实体
   { id: Item.MINECART, name: 'minecraft:minecart', tile: 'item_minecart', maxStack: 1 },
+  { id: Item.HOPPER_MINECART, name: 'minecraft:hopper_minecart', tile: 'item_hopper_minecart', maxStack: 1 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
