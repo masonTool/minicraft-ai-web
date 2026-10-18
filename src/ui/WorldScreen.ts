@@ -251,13 +251,16 @@ export class WorldScreen {
       if (event.key === 'Enter') this.createAndEnter();
     });
 
+    // 批次 184：**说明放最后**（原来夹在"类型"和"难度"中间，把两列栅格切断了：
+    // 第二行只剩类型一格、难度与模式被挤到下面，整张表单多出两行高度）。
+    // 现在三行字段两两并排 → 一行说明 → 跨满两列的创建键，横屏手机一屏就能看全。
     form.append(
       this.makeRow('世界名称', this.nameInput, null),
       this.makeRow('世界种子', this.seedInput, reroll),
       this.makeRow('世界类型', this.typeSelect, null),
-      this.typeHintEl,
       this.makeRow('难度', this.difficultySelect, null),
       this.makeRow('游戏模式', this.gameModeSelect, null),
+      this.typeHintEl,
       createButton,
     );
     this.updateTypeHint();

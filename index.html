@@ -493,11 +493,19 @@
       .pause-action.danger { color: var(--mc-text-danger); }
       /* 新建世界表单：**两列并排**（批次 167）。
          用户："创建新世界的时候，每一个栏目的编辑框都太长了，可以适当地去并排。"
-         `auto-fit` + 260px 下限：宽盒子（PC / 横屏手机）两列、窄屏（竖屏手机）一列。
-         名称｜种子 一排、类型｜难度 一排，"创建并进入"跨满两列。 */
-      .world-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 10px; align-content: start; }
+         `auto-fit` + 240px 下限：宽盒子（PC / 横屏手机）两列、极窄屏才一列。
+         名称｜种子 一排、类型｜难度 一排、模式单独一排，**说明最后、按钮跨满两列**。
+         ⚠️ 批次 184：用户手机上的旧规则会在窄屏把"标签"和"输入框"拆成上下两行
+         （让 `.world-input` 跨满整行的写法），整个表单因此高出一屏。
+         现在**任何宽度都保持"标签 + 输入框同一行"**，靠缩字号/内边距来适配窄屏。 */
+      .world-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 7px 12px; align-content: start; }
       .world-new > .world-primary { grid-column: 1 / -1; }
-      .world-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 48px; align-items: center; gap: 6px; min-width: 0; }
+      .world-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px; align-items: center; gap: 6px; min-width: 0; }
+      /* 标签右对齐、单行：一列里四项标签的左端不在同一条线上，右端对齐才看得成"一栏" */
+      .world-row > span {
+        color: #d6d6d6; font-size: 12px; text-align: right;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
       /* 输入框 = 原版文本框：黑底白字 + 灰边框（聚焦时边框转白）
          `color-scheme: dark`（批次 181）：原生 <select> 的下拉列表由系统绘制，
          不声明它就会在白底上弹出一整块白框，与主题完全脱节。 */
@@ -2823,9 +2831,17 @@
         .inv-page-label { font-size: 12px; min-width: 96px; }
         .chat-send { min-height: 42px; padding: 10px 18px; font-size: 14px; }
 
-        /* 世界列表的"名称 + 输入框 + 随机"三列在窄屏挤成一团，改成两行 */
-        .world-row { grid-template-columns: 1fr auto; }
-        .world-row .world-input { grid-column: 1 / -1; }
+        /* 新建世界表单（批次 184）：**不再把标签和输入框拆成两行**——
+           那样每个字段占两行，横屏手机上整张表单要滚才能看全。
+           窄屏只把标签列收窄、字号压一档，保持"标签 + 输入框"同一行。 */
+        .world-row { grid-template-columns: 56px minmax(0, 1fr) 40px; gap: 5px; }
+        .world-row > span { font-size: 11px; }
+        /* 横屏手机（~390 高）把新建表单再压一档：三行字段 + 说明 + 创建键一次放下 */
+        .world-panel[data-view='create'] { padding: 10px 12px; }
+        .world-panel[data-view='create'] .world-nav { margin-bottom: 8px; }
+        .world-panel[data-view='create'] .world-primary { min-height: 44px; padding: 7px; }
+        body.touch-mode .world-panel[data-view='create'] .world-input { padding: 7px 8px; font-size: 13px; }
+        .world-panel[data-view='create'] .world-hint { margin-top: 6px; font-size: 11px; }
       }
 
       /* 竖屏手机：摇杆与按钮簇都往上收一点，给屏幕中间留出视野 */
