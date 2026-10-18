@@ -14,6 +14,7 @@ import {
   MAX_HEALTH,
   VOID_DAMAGE_Y,
   PlayerStats,
+  fallDamageFor,
   type SurvivalEnvironment,
 } from '../src/core/survival/PlayerStats.ts';
 import { touchesCactus } from '../src/core/world/Cactus.ts';
@@ -65,6 +66,26 @@ console.log('\n[摔落伤害]');
   const stats3 = new PlayerStats();
   runTicks(stats3, 1, env({ fallDistance: 30 }));
   check('致命摔落直接死亡', stats3.dead, `剩余 ${stats3.health}`);
+}
+
+console.log('\n[摔落保护附魔（批次 243）]');
+{
+  const maxed = new PlayerStats();
+  runTicks(maxed, 1, env({ fallDistance: 10, featherFalling: 4 }));
+  check('摔落保护 IV：10 格只受 3 点（原 7 点）', maxed.health === MAX_HEALTH - 3, `剩余 ${maxed.health}`);
+
+  const mild = new PlayerStats();
+  runTicks(mild, 1, env({ fallDistance: 10, featherFalling: 1 }));
+  check('摔落保护 I：10 格受 6 点（每级 -12%）', mild.health === MAX_HEALTH - 6, `剩余 ${mild.health}`);
+
+  const short = new PlayerStats();
+  runTicks(short, 1, env({ fallDistance: 4, featherFalling: 4 }));
+  check('4 格 + 摔落保护 IV 完全免伤', short.health === MAX_HEALTH, `剩余 ${short.health}`);
+
+  check('纯函数：4 格落差 + IV = 0', fallDamageFor(4, 4) === 0);
+  check('纯函数：10 格落差 + IV = 3', fallDamageFor(10, 4) === 3);
+  check('纯函数：3 格以内恒为 0', fallDamageFor(3, 0) === 0);
+  check('纯函数：等级传负数按 0 算', fallDamageFor(10, -2) === 7);
 }
 
 console.log('\n[无敌帧]');
@@ -158,6 +179,24 @@ console.log('\n[溺水]');
 
   runTicks(stats, 10, env());
   check('出水后氧气每 tick 回复 4 点', stats.air === 40, `氧气 ${stats.air}`);
+}
+
+console.log('\n[水下呼吸附魔（批次 243）]');
+{
+  const stats = new PlayerStats();
+  runTicks(stats, 300, env({ eyeInWater: true, respiration: 3 }));
+  check(
+    '水下呼吸 III：300 tick 只耗掉 120 点氧气（2.5 倍憋气时间）',
+    Math.abs(stats.air - (MAX_AIR - 120)) <= 1,
+    `氧气 ${stats.air}`,
+  );
+  check('氧气还没耗尽，所以不掉血', stats.health === MAX_HEALTH, `生命 ${stats.health}`);
+
+  // 出水再入水：小数累积要清零，否则两次潜水会"攒出一次额外消耗"
+  runTicks(stats, 1, env());
+  const refilled = stats.air;
+  runTicks(stats, 2, env({ eyeInWater: true, respiration: 3 }));
+  check('出水后重新憋气从整数点开始扣', stats.air <= refilled, `氧气 ${refilled} → ${stats.air}`);
 }
 
 console.log('\n[岩浆与虚空]');

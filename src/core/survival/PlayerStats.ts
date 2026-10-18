@@ -104,6 +104,31 @@ export interface SurvivalEnvironment {
   waterBreathing?: boolean;
   /** 抗火（状态效果，缺省 false）：岩浆不造成伤害 */
   fireImmune?: boolean;
+  /**
+   * 摔落保护附魔等级（批次 243，0~4）：每级少受 12% 摔落伤害（封顶 48%）。
+   * 由主程序从**靴子**上读，生存模块不认识背包。
+   */
+  featherFalling?: number;
+  /** 水下呼吸附魔等级（批次 243，0~3）：每级把氧气消耗速度降到 1/(1+0.5·等级) */
+  respiration?: number;
+}
+
+/**
+ * 摔落伤害（批次 243，把"摔落保护"接上）。
+ *
+ * 原版公式：`⌊(落差 - 3) × (1 - 12% × 等级)⌋`，等级封顶 4（48%）。
+ * 抽成纯函数是因为有两个入口——普通落地（这里）与末影珍珠那 5 点
+ * （`main.teleportByEnderPearl`）——两处各写一遍公式迟早会漂。
+ */
+export function fallDamageFor(distance: number, featherFalling = 0): number {
+  if (!(distance > 3)) return 0;
+  return featherFallDamage(distance - 3, featherFalling);
+}
+
+/** 一次摔落伤害经过摔落保护之后的数值（已取整） */
+export function featherFallDamage(amount: number, featherFalling = 0): number {
+  const reduction = Math.min(0.48, 0.12 * Math.max(0, Math.floor(featherFalling)));
+  return Math.max(0, Math.floor(amount * (1 - reduction)));
 }
 
 export interface DamageResult {
@@ -168,6 +193,8 @@ export class PlayerStats {
   private hurtResistantTime = 0;
   private foodTickTimer = 0;
   private drownTickTimer = 0;
+  /** 氧气的小数消耗累积（批次 243：水下呼吸附魔让每 tick 扣不满 1 点） */
+  private airDrain = 0;
   private lavaTickTimer = 0;
   private fireTickTimer = 0;
   /** 岩浆块的烫伤计时（批次 121）：攒够 20 tick（= 1 秒）掉 1 点 */
@@ -350,11 +377,19 @@ export class PlayerStats {
     // 水下呼吸效果：氧气不掉（甚至回满）
     if (env.waterBreathing) {
       this.drownTickTimer = 0;
+      this.airDrain = 0;
       this.air = MAX_AIR;
       return;
     }
 
     if (env.eyeInWater) {
+      // 水下呼吸**附魔**（批次 243）：每级把氧气消耗降到 1/(1+0.5·等级)。
+      // 原版是"每级多 15 秒憋气 + 有概率免掉溺水伤害"，这里折算成"扣得更慢"——
+      // HUD 上的那 300 点氧气也就实打实地撑得更久，不必给界面加第二根条。
+      const level = Math.max(0, Math.floor(env.respiration ?? 0));
+      this.airDrain += 1 / (1 + 0.5 * level);
+      if (this.airDrain < 1) return;
+      this.airDrain -= 1;
       if (this.air > 0) {
         this.air--;
         this.drownTickTimer = 0;
@@ -368,15 +403,16 @@ export class PlayerStats {
       return;
     }
 
+    this.airDrain = 0;
     this.drownTickTimer = 0;
     if (this.air < MAX_AIR) this.air = Math.min(MAX_AIR, this.air + 4);
   }
 
   /** 环境伤害：摔落 / 岩浆 / 仙人掌 / 窒息 / 虚空 */
   private tickDamageSources(env: SurvivalEnvironment): void {
-    if (env.fallDistance > 3) {
-      this.damage(Math.floor(env.fallDistance - 3), 'fall');
-    }
+    // 摔落保护（批次 243）：每级 -12%，见 `fallDamageFor`
+    const fall = fallDamageFor(env.fallDistance, env.featherFalling ?? 0);
+    if (fall > 0) this.damage(fall, 'fall');
 
     if (env.y <= VOID_DAMAGE_Y) {
       // 虚空伤害无视无敌帧（原版就是这样，掉出去必死）
@@ -475,6 +511,7 @@ export class PlayerStats {
     this.exhaustion = 0;
     this.foodTickTimer = 0;
     this.drownTickTimer = 0;
+    this.airDrain = 0;
     this.lavaTickTimer = 0;
     this.hurtResistantTime = 0;
     this.lastDamageAmount = 0;

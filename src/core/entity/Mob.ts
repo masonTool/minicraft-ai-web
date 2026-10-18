@@ -1804,9 +1804,17 @@ export class Mob extends Entity {
   /**
    * 受到伤害：无敌帧内无效；否则扣血 + 击退 + 红闪，生命归零则标记死亡并把掉落物交给上层。
    * @param looting 击杀者的「抢夺」等级，只影响掉落数量（伤害加成在 `tools.ts#meleeDamage` 里算好）
-   * @returns 是否真的受到了伤害
+   * @param knockbackLevel 击杀者武器上的「击退」等级（批次 243）：每级把水平初速抬高 35%
+   * @returns 是否真的受到了伤害（调用方据此决定要不要点燃等后续效果）
    */
-  hurt(amount: number, knockbackX: number, knockbackZ: number, ctx?: EntityContext, looting = 0): boolean {
+  hurt(
+    amount: number,
+    knockbackX: number,
+    knockbackZ: number,
+    ctx?: EntityContext,
+    looting = 0,
+    knockbackLevel = 0,
+  ): boolean {
     if (this.dead || this.hurtTime > 0 || amount <= 0) return false;
 
     this.hurtTime = HURT_COOLDOWN;
@@ -1837,8 +1845,11 @@ export class Mob extends Entity {
 
     const length = Math.hypot(knockbackX, knockbackZ);
     if (length > 1e-4) {
-      this.vx += (knockbackX / length) * 5;
-      this.vz += (knockbackZ / length) * 5;
+      // 击退附魔（批次 243）：基础 5 格/秒的初速，每级 +35%（原版是"多推 3 格"，
+      // 这里的 35% 折算到现有的击退手感上；II 级约等于原来的一倍半）
+      const push = 5 * (1 + 0.35 * Math.max(0, Math.floor(knockbackLevel)));
+      this.vx += (knockbackX / length) * push;
+      this.vz += (knockbackZ / length) * push;
     }
     this.vy = Math.max(this.vy, 3.6);
     this.onGround = false;

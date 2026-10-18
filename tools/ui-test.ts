@@ -2791,5 +2791,34 @@ console.log('\n[受伤红闪（批次 234）]');
   check('重置立刻收掉', flash.intensity === 0 && style.opacity === '0', style.opacity);
 }
 
+console.log('\n[附魔效果接线（批次 243）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '击退 / 火焰附加接在近战入口（只在真正造成伤害时点火）',
+    appSrc.includes("enchantLevel(this.heldEnchants, 'knockback')") &&
+      appSrc.includes("enchantLevel(this.heldEnchants, 'fire_aspect')") &&
+      appSrc.includes('if (applied && fireAspect > 0 && !mob.dead) mob.ignite(4 * fireAspect);'),
+  );
+  check(
+    '摔落保护 / 水下呼吸从靴子与头盔上读，交给生存环境',
+    appSrc.includes("featherFalling: enchantLevel(this.inventory.get(ARMOR_SLOT_BASE + 3)?.enchants, 'feather_falling')") &&
+      appSrc.includes("respiration: enchantLevel(this.inventory.get(ARMOR_SLOT_BASE)?.enchants, 'respiration')"),
+  );
+  check(
+    '水下速掘：水里挖方块慢 5 倍，有附魔就不吃这个惩罚',
+    appSrc.includes("enchantLevel(this.inventory.get(ARMOR_SLOT_BASE)?.enchants, 'aqua_affinity')") &&
+      appSrc.includes('const waterPenalty = this.physics.inWater && !aquaAffinity ? 5 : 1;'),
+  );
+  check(
+    '消失诅咒：死亡掉落跳过带这条附魔的物品',
+    appSrc.includes("if (enchantLevel(stack.enchants, 'vanishing_curse') > 0) continue;"),
+  );
+  check(
+    '末影珍珠的 5 点摔落伤害也吃摔落保护',
+    appSrc.includes('featherFallDamage(ENDER_PEARL_FALL_DAMAGE'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

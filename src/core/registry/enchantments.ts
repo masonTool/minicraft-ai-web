@@ -9,7 +9,8 @@
  * 为什么效果要分两步做：附魔效果各自要改的地方差得很远（挖掘速度在 `tools.ts`、
  * 掉落数量在破坏路径、减伤在 `armor.ts`、攻击伤害在近战入口），
  * 一次全接容易把每条都做得似是而非。第一批做了最有手感的六条，第二批补上了
- * "按伤害类型分流"与"按生物家族分流"的那几条。
+ * "按伤害类型分流"与"按生物家族分流"的那几条；批次 243 又接了六条
+ * （摔落保护 / 水下呼吸 / 水下速掘 / 击退 / 火焰附加 / 消失诅咒）。
  *
  * ⚠️ **节肢杀手**目前"公式接好了但打不到东西"（蜘蛛还没做）——留着是对的，
  * 一旦有来源就立刻生效，但现在的玩家附了看不出区别，这一点写在 TASKS 的 K3 里。
@@ -81,11 +82,11 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   // ---- 盔甲类
   { id: 'protection', name: '保护', maxLevel: 4, targets: ARMOR, weight: 10, implemented: true },
   { id: 'fire_protection', name: '火焰保护', maxLevel: 4, targets: ARMOR, weight: 5, implemented: true },
-  { id: 'feather_falling', name: '摔落保护', maxLevel: 4, targets: ['boots'], weight: 5 },
+  { id: 'feather_falling', name: '摔落保护', maxLevel: 4, targets: ['boots'], weight: 5, implemented: true },
   { id: 'blast_protection', name: '爆炸保护', maxLevel: 4, targets: ARMOR, weight: 2, implemented: true },
   { id: 'projectile_protection', name: '弹射物保护', maxLevel: 4, targets: ARMOR, weight: 5, implemented: true },
-  { id: 'respiration', name: '水下呼吸', maxLevel: 3, targets: ['helmet'], weight: 2 },
-  { id: 'aqua_affinity', name: '水下速掘', maxLevel: 1, targets: ['helmet'], weight: 2 },
+  { id: 'respiration', name: '水下呼吸', maxLevel: 3, targets: ['helmet'], weight: 2, implemented: true },
+  { id: 'aqua_affinity', name: '水下速掘', maxLevel: 1, targets: ['helmet'], weight: 2, implemented: true },
   { id: 'thorns', name: '荆棘', maxLevel: 3, targets: ['chestplate'], weight: 1 },
   { id: 'depth_strider', name: '深海探索者', maxLevel: 3, targets: ['boots'], weight: 2 },
   { id: 'frost_walker', name: '冰霜行者', maxLevel: 2, targets: ['boots'], weight: 2, treasure: true },
@@ -96,8 +97,8 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'sharpness', name: '锋利', maxLevel: 5, targets: ['sword', 'axe'], weight: 10, implemented: true },
   { id: 'smite', name: '亡灵杀手', maxLevel: 5, targets: ['sword', 'axe'], weight: 5, implemented: true },
   { id: 'bane_of_arthropods', name: '节肢杀手', maxLevel: 5, targets: ['sword', 'axe'], weight: 5, implemented: true },
-  { id: 'knockback', name: '击退', maxLevel: 2, targets: ['sword'], weight: 5 },
-  { id: 'fire_aspect', name: '火焰附加', maxLevel: 2, targets: ['sword'], weight: 2 },
+  { id: 'knockback', name: '击退', maxLevel: 2, targets: ['sword'], weight: 5, implemented: true },
+  { id: 'fire_aspect', name: '火焰附加', maxLevel: 2, targets: ['sword'], weight: 2, implemented: true },
   { id: 'looting', name: '抢夺', maxLevel: 3, targets: ['sword'], weight: 2, implemented: true },
   { id: 'sweeping', name: '横扫之刃', maxLevel: 3, targets: ['sword'], weight: 2 },
 
@@ -107,7 +108,7 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'unbreaking', name: '耐久', maxLevel: 3, targets: ALL_GEAR, weight: 5, implemented: true },
   { id: 'fortune', name: '时运', maxLevel: 3, targets: ['pickaxe', 'axe', 'shovel', 'hoe'], weight: 2, implemented: true },
   { id: 'mending', name: '经验修补', maxLevel: 1, targets: ALL_GEAR, weight: 2, treasure: true, implemented: true },
-  { id: 'vanishing_curse', name: '消失诅咒', maxLevel: 1, targets: ALL_GEAR, weight: 1, treasure: true },
+  { id: 'vanishing_curse', name: '消失诅咒', maxLevel: 1, targets: ALL_GEAR, weight: 1, treasure: true, implemented: true },
 
   // ---- 弓（J9 落地后四条全部接线）
   // ⚠️ 这四条曾经漏标 `implemented`：效果在 `core/entity/Bow.ts` 里早就按它们算了

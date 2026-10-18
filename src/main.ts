@@ -27,6 +27,7 @@ import {
   MAX_FOOD,
   MAX_HEALTH,
   PlayerStats,
+  featherFallDamage,
   type DamageCause,
   type SurvivalEnvironment,
 } from './core/survival/PlayerStats.ts';
@@ -4796,8 +4797,20 @@ class App {
     const weapon = meleeDamage(this.heldTool?.attack ?? 1, this.heldEnchants, mob.type.family);
     const base = Math.max(0, weapon + this.effects.attackBonus());
     const damage = this.isCreative ? 100 : critical ? base * 1.5 : base;
-    // 抢夺只影响掉落数量（在 mob.hurt 内部结算）
-    mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context, lootingBonus(this.heldEnchants));
+    // 抢夺只影响掉落数量（在 mob.hurt 内部结算）；击退等级也在内部乘进初速（批次 243）
+    const knockbackLevel = enchantLevel(this.heldEnchants, 'knockback');
+    const fireAspect = enchantLevel(this.heldEnchants, 'fire_aspect');
+    const applied = mob.hurt(
+      damage,
+      mob.x - this.physics.x,
+      mob.z - this.physics.z,
+      context,
+      lootingBonus(this.heldEnchants),
+      knockbackLevel,
+    );
+    // 火焰附加（批次 243）：原版每级 4 秒。只在**真正造成伤害**时点着
+    // （无敌帧挡下的那一下不该补火，否则连点可以无限续燃）
+    if (applied && fireAspect > 0 && !mob.dead) mob.ignite(4 * fireAspect);
     // 打击感（批次 232）：打中"有肉的东西"的一下闷响。
     // 生物自己的惨叫由 `Mob.hurt` 播（按种类），两者叠起来才是"砍到了"的手感
     this.audio.play('hit_flesh', { x: mob.x, y: mob.y + mob.type.height * 0.5, z: mob.z });
@@ -4843,7 +4856,13 @@ class App {
     // 免得后面工具刚好用坏时用 null 去判断掉落
     const tool = this.heldTool;
     // 状态效果：急迫加快、挖掘疲劳减慢（倍率在 StatusEffects 里算好）
-    const required = this.isCreative ? 0 : breakSeconds(id, tool, this.heldEnchants) / this.effects.miningSpeedMultiplier();
+    // 水下速掘（批次 243）：原版在水里挖方块慢 5 倍，头盔上有这条附魔就不吃这个惩罚。
+    // ⚠️ 附魔在**头盔**上，不能读 `heldEnchants`（工具上的附魔）。
+    const aquaAffinity = enchantLevel(this.inventory.get(ARMOR_SLOT_BASE)?.enchants, 'aqua_affinity') > 0;
+    const waterPenalty = this.physics.inWater && !aquaAffinity ? 5 : 1;
+    const required = this.isCreative
+      ? 0
+      : (breakSeconds(id, tool, this.heldEnchants) * waterPenalty) / this.effects.miningSpeedMultiplier();
     if (!Number.isFinite(required)) return;
 
     this.breakProgress += required <= 0 ? 1 : dt / required;
@@ -8970,7 +8989,10 @@ class App {
     this.vibrate(12);
     // 创造模式免疫伤害——与 `damagePlayer` 的口径一致
     if (this.isCreative) return;
-    this.applyIncomingDamage(ENDER_PEARL_FALL_DAMAGE, 'fall');
+    // 摔落保护（批次 243）：原版这 5 点走的就是 FALL，所以靴子上的附魔照样减它
+    const boots = this.inventory.get(ARMOR_SLOT_BASE + 3);
+    const reduced = featherFallDamage(ENDER_PEARL_FALL_DAMAGE, enchantLevel(boots?.enchants, 'feather_falling'));
+    if (reduced > 0) this.applyIncomingDamage(reduced, 'fall');
   }
 
   /**
@@ -10170,6 +10192,10 @@ class App {
       // 水下呼吸效果：氧气不掉；抗火效果：岩浆不掉血
       waterBreathing: this.effects.waterBreathing,
       fireImmune: this.effects.fireResistant,
+      // 附魔（批次 243）：摔落保护在靴子上、水下呼吸在头盔上。
+      // 生存模块不认识背包，所以由这里把等级放进环境快照。
+      featherFalling: enchantLevel(this.inventory.get(ARMOR_SLOT_BASE + 3)?.enchants, 'feather_falling'),
+      respiration: enchantLevel(this.inventory.get(ARMOR_SLOT_BASE)?.enchants, 'respiration'),
     };
   }
 
@@ -10186,6 +10212,9 @@ class App {
     for (let i = 0; i < TOTAL_SLOTS; i++) {
       const stack = this.inventory.get(i);
       if (!stack) continue;
+      // 消失诅咒（批次 243）：死一次直接没了，不落地（原版如此）。
+      // 与"绑定诅咒"的区别：那条是**脱不下来**，这条是**死了不留**。
+      if (enchantLevel(stack.enchants, 'vanishing_curse') > 0) continue;
       this.spawnDrop(stack.id, stack.count, x, y, z);
     }
     this.inventory.clear();

@@ -285,6 +285,25 @@ console.log('\n[战斗与掉落]');
   const knockback = zombie.vx;
   check('受伤会被击退', knockback > 1, `vx=${knockback.toFixed(2)}`);
 
+  // 击退附魔（批次 243）：同一个方向、同样的伤害，等级越高推得越远
+  const plain = new Mob(mobTypeById('zombie')!, 0.5, 65.5, 0.5);
+  plain.hurt(2, 1, 0, ctx);
+  const knocked = new Mob(mobTypeById('zombie')!, 0.5, 65.5, 0.5);
+  knocked.hurt(2, 1, 0, ctx, 0, 2);
+  check(
+    '击退 II 推得比无附魔远（每级 +35%）',
+    knocked.vx > plain.vx * 1.5,
+    `${plain.vx.toFixed(2)} → ${knocked.vx.toFixed(2)}`,
+  );
+
+  // 火焰附加（批次 243）：主程序调 `ignite(4 * 等级)`，这里钉住实体侧的两件事
+  const burned = new Mob(mobTypeById('zombie')!, 0.5, 65.5, 0.5);
+  burned.ignite(8);
+  check('点燃之后进入燃烧', burned.burning);
+  for (let i = 0; i < 20; i++) burned.tick(ctx, 0.5); // 10 秒
+  check('烧够 8 秒后自动熄灭', !burned.burning);
+  check('火里每满 1 秒掉 1 点（8 秒 ≈ 8 点）', burned.health <= 12 && burned.health >= 10, `剩余 ${burned.health}`);
+
   // 上面刚受过伤，无敌帧还在；换一只满血的来做致死测试
   const victim0 = new Mob(mobTypeById('zombie')!, 0.5, 65.5, 0.5);
   victim0.hurt(999, 0, 0, ctx);
