@@ -3200,9 +3200,19 @@ console.log('\n[弩（批次 265）]');
       appSrc.includes('const spread = shots > 1 ? [-0.18, 0, 0.18] : [0];'),
   );
   check(
-    '三条弩附魔里两条标了 implemented（穿透待做）',
+    '三条弩附魔都接了（多重射击 / 快速装填 / 穿透）',
     enchantSrc.includes("id: 'multishot'") &&
-      enchantSrc.includes("id: 'quick_charge'"),
+      enchantSrc.includes("id: 'quick_charge'") &&
+      enchantSrc.includes("id: 'piercing'"),
+  );
+  // 批次 266：穿透
+  const arrowSrc = readFileSync(new URL('../src/core/entity/Arrow.ts', import.meta.url), 'utf8');
+  check(
+    '穿透：箭带剩余次数，命中后不消失、同一只不重复打',
+    arrowSrc.includes('pierce?: number') &&
+      arrowSrc.includes('if (this.pierceLeft > 0) {') &&
+      arrowSrc.includes('this.hitMobIds.has(mob.id)') &&
+      appSrc.includes("pierce: enchantLevel(this.heldEnchants, 'piercing'),"),
   );
 }
 

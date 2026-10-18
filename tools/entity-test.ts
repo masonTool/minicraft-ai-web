@@ -19,6 +19,7 @@ import { Boat } from '../src/core/entity/Boat.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
 import { VehicleParking } from '../src/core/entity/VehicleParking.ts';
 import { EntityParking } from '../src/core/entity/EntityParking.ts';
+import { Arrow } from '../src/core/entity/Arrow.ts';
 import { HopperMinecart } from '../src/core/entity/HopperMinecart.ts';
 import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from '../src/core/entity/FurnaceMinecart.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
@@ -718,6 +719,50 @@ console.log('\n[生物 / 掉落物的区块寄存（批次 258）]');
     { dimension: 'overworld', kind: 'mob', typeId: '', x: 1, y: 2, z: 3 },
   ] as never);
   check('脏记录全部跳过', dirty.size === 0, `${dirty.size}`);
+}
+
+console.log('\n[穿透箭：命中后继续飞（批次 266）]');
+{
+  const first = createMob(mobTypeById('cow')!, 1.5, 64, 0.5);
+  const second = createMob(mobTypeById('cow')!, 2.5, 64, 0.5);
+  let served = first;
+  // `hitMob` 直接返回"当前要打的那只"：这里测的是箭的穿透状态机，不是射线
+  const ctx = {
+    world: { collisionAt: () => null, isLiquid: () => false },
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: () => Block.AIR,
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+    hitMob: () => served,
+  } as never;
+
+  const arrow = new Arrow(0.5, 64.5, 0.5, { x: 30, y: 0, z: 0 }, {
+    fromPlayer: true,
+    damage: 2,
+    pierce: 1,
+  });
+  const firstHp = first.health;
+  arrow.tick(ctx, 0.05);
+  check('第一只被打中', first.health < firstHp, `${firstHp} → ${first.health}`);
+  check('穿透次数没用完时箭不消失', !arrow.dead);
+
+  const afterFirst = first.health;
+  arrow.tick(ctx, 0.05);
+  check('同一只不会被回头再打一次', first.health === afterFirst, `${afterFirst} → ${first.health}`);
+
+  served = second;
+  const secondHp = second.health;
+  arrow.tick(ctx, 0.05);
+  check('第二只也被打中', second.health < secondHp, `${secondHp} → ${second.health}`);
+  check('穿透次数用完 → 箭消失', arrow.dead);
+
+  // 没有穿透的普通箭：第一只命中就停
+  const plain = new Arrow(0.5, 64.5, 0.5, { x: 30, y: 0, z: 0 }, { fromPlayer: true, damage: 2 });
+  served = first;
+  plain.tick(ctx, 0.05);
+  check('普通箭命中即消失（不穿透）', plain.dead);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
