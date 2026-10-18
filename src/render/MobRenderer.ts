@@ -63,6 +63,8 @@ export function mobAccentColor(mob: Mob): number {
 export function mobAppearanceKey(mob: Mob): string {
   if (mob.type.wool) return mob.sheared ? 'sheared' : 'woolly';
   if (mob instanceof Villager) return mob.appearanceKey;
+  // 驯养系（批次 242）：项圈的颜色跟着"驯没驯服"变 → 驯服那一刻要重建一次模型
+  if (mob.type.tameWith !== undefined) return mob.tamed ? 'tamed' : 'wild';
   return '';
 }
 
@@ -82,7 +84,9 @@ type ModelKind =
   /** 幻翼（批次 126）：扁身子 + 两片长翼 + 尾巴 */
   | 'phantom'
   /** 鱿鱼（批次 189）：一个圆头 + 八条垂下来的触手 */
-  | 'squid';
+  | 'squid'
+  /** 驯养系（批次 242）：狼 / 猫 / 豹猫 / 狐狸——短腿、尖耳、翘尾巴、脖子上有项圈 */
+  | 'pet';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
@@ -111,6 +115,9 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'spider' || typeId === 'cave_spider') return 'spider';
   if (typeId === 'ghast') return 'ghast';
   if (typeId === 'chicken') return 'bird';
+  // 驯养系（批次 242）：牛猪羊那套四足太"壮"（大鼻子、没有尾巴），
+  // 狼/猫/豹猫/狐狸需要一个更小的骨架 + 尖耳 + 翘尾
+  if (typeId === 'wolf' || typeId === 'cat' || typeId === 'ocelot' || typeId === 'fox') return 'pet';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   return 'humanoid';
 }
@@ -133,6 +140,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return villagerBoxes(type);
     case 'quadruped':
       return quadrupedBoxes(type);
+    case 'pet':
+      return petBoxes(type);
     case 'bird':
       return birdBoxes(type);
     case 'spider':
@@ -239,7 +248,12 @@ interface BoxSpec {
   x: number;
   y: number;
   z: number;
-  color: 'body' | 'accent' | 'eye';
+  /**
+   * 颜色角色（批次 242 加了 `collar`）：
+   *  - `collar` 是宠物脖子上的项圈——**没驯服时会被涂成身体色**（等于看不见），
+   *    驯服之后才变成红色。这样模型表不必按"驯没驯服"分两份。
+   */
+  color: 'body' | 'accent' | 'eye' | 'collar';
 }
 
 function humanoidBoxes(type: MobType): BoxSpec[] {
@@ -313,6 +327,53 @@ function quadrupedBoxes(type: MobType): BoxSpec[] {
     { width: headSize, height: headSize, depth: headSize, x: 0, y: bodyY + bodyHeight * 0.28, z: bodyLength * 0.58, color: 'body' },
     { width: headSize * 0.3, height: headSize * 0.22, depth: headSize * 0.16, x: -headSize * 0.24, y: bodyY + bodyHeight * 0.3, z: bodyLength * 0.58 + headSize * 0.5, color: 'eye' },
     { width: headSize * 0.3, height: headSize * 0.22, depth: headSize * 0.16, x: headSize * 0.24, y: bodyY + bodyHeight * 0.3, z: bodyLength * 0.58 + headSize * 0.5, color: 'eye' },
+  ];
+}
+
+/**
+ * 驯养系（批次 242）：狼 / 猫 / 豹猫 / 狐狸共用的一副小骨架。
+ *
+ * 与 `quadrupedBoxes`（牛猪羊）的区别：腿更短、身子更细长、**有尖耳与翘尾巴**，
+ * 头上没有那个"大鼻子"。前四个盒子仍是腿（`legCountOf` 固定 4，
+ * 走路摆动只认部件表最前面那几个）。
+ *
+ * 最后一个是**项圈**：颜色角色 `collar`，没驯服时由 `createVisual` 涂成身体色
+ * （等于看不见），驯服后才显红——一张表同时管两种状态。
+ */
+function petBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const legHeight = h * 0.32;
+  const bodyHeight = h * 0.36;
+  const bodyY = legHeight + bodyHeight / 2;
+  const bodyLength = h * 0.78;
+  const headSize = w * 0.56;
+  const headY = bodyY + bodyHeight * 0.28;
+  const headZ = bodyLength * 0.52;
+  const legX = w * 0.28;
+  const legZ = bodyLength * 0.3;
+
+  return [
+    // 四条腿（下标 0~3）
+    { width: w * 0.16, height: legHeight, depth: w * 0.16, x: -legX, y: legHeight / 2, z: legZ, color: 'accent' },
+    { width: w * 0.16, height: legHeight, depth: w * 0.16, x: legX, y: legHeight / 2, z: legZ, color: 'accent' },
+    { width: w * 0.16, height: legHeight, depth: w * 0.16, x: -legX, y: legHeight / 2, z: -legZ, color: 'accent' },
+    { width: w * 0.16, height: legHeight, depth: w * 0.16, x: legX, y: legHeight / 2, z: -legZ, color: 'accent' },
+    // 躯干
+    { width: w * 0.58, height: bodyHeight, depth: bodyLength, x: 0, y: bodyY, z: 0, color: 'body' },
+    // 头 + 吻部（不像牛那样一个大鼻子，只有嘴前一截）
+    { width: headSize, height: headSize, depth: headSize * 0.92, x: 0, y: headY, z: headZ, color: 'body' },
+    { width: headSize * 0.4, height: headSize * 0.3, depth: headSize * 0.34, x: 0, y: headY - headSize * 0.08, z: headZ + headSize * 0.5, color: 'accent' },
+    // 尖耳
+    { width: headSize * 0.2, height: headSize * 0.34, depth: headSize * 0.16, x: -headSize * 0.3, y: headY + headSize * 0.52, z: headZ - headSize * 0.05, color: 'accent' },
+    { width: headSize * 0.2, height: headSize * 0.34, depth: headSize * 0.16, x: headSize * 0.3, y: headY + headSize * 0.52, z: headZ - headSize * 0.05, color: 'accent' },
+    // 眼睛
+    { width: headSize * 0.16, height: headSize * 0.14, depth: headSize * 0.1, x: -headSize * 0.22, y: headY + headSize * 0.04, z: headZ + headSize * 0.46, color: 'eye' },
+    { width: headSize * 0.16, height: headSize * 0.14, depth: headSize * 0.1, x: headSize * 0.22, y: headY + headSize * 0.04, z: headZ + headSize * 0.46, color: 'eye' },
+    // 尾巴（翘在身后）
+    { width: w * 0.13, height: w * 0.13, depth: bodyLength * 0.5, x: 0, y: bodyY + bodyHeight * 0.3, z: -bodyLength * 0.68, color: 'accent' },
+    // 项圈（驯服后显红；见 `petBoxes` 的注释）
+    { width: w * 0.64, height: w * 0.1, depth: w * 0.12, x: 0, y: bodyY + bodyHeight * 0.55, z: bodyLength * 0.42, color: 'collar' },
   ];
 }
 
@@ -465,6 +526,8 @@ function spiderBoxes(type: MobType): BoxSpec[] {
  * 而且它是**可断言的事实**，离线测试直接读它（见 `describeMobModel`）。
  */
 function legCountOf(kind: ModelKind): number {
+  // 驯养系（批次 242）：四条短腿（部件表最前面四个）
+  if (kind === 'pet') return 4;
   if (kind === 'quadruped') return 4;
   if (kind === 'spider') return 8;
   // 水晶/烈焰人/恶魂不摆动：水晶自转、烈焰人的火棒长在它自己身上、
@@ -801,6 +864,9 @@ export class MobRenderer {
     // 都是**跟着状态变**的，直接读种类表就会永远是默认那一份
     const bodyColor = mobBodyColor(mob);
     const accentColor = mobAccentColor(mob);
+    // 项圈（批次 242）：没驯服时涂成身体色（等于看不见），驯服后是红色。
+    // 与羊的"剪没剪"同一个套路：颜色跟着**个体状态**走，模型表不用分两份。
+    const collarColor = mob.tamed ? 0xb02a2a : bodyColor;
     for (let i = 0; i < specs.length; i++) {
       const spec = specs[i]!;
       // `eye`：默认那份近黑色，除非这种生物自带 `eyeColor`
@@ -810,7 +876,9 @@ export class MobRenderer {
           ? bodyColor
           : spec.color === 'accent'
             ? accentColor
-            : (type.eyeColor ?? 0x14161c);
+            : spec.color === 'collar'
+              ? collarColor
+              : (type.eyeColor ?? 0x14161c);
     }
 
     return {

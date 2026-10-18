@@ -26,8 +26,11 @@ import {
   BABY_SCALE,
   LOVE_SECONDS,
   WOOL_REGROW_SECONDS,
+  mobAcceptsTame,
+  mobEats,
 } from '../src/core/entity/Mob.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { describeMobModel, mobAppearanceKey } from '../src/render/MobRenderer.ts';
 
 let passed = 0;
 let failed = 0;
@@ -306,7 +309,7 @@ console.log('\n[生物表]');
   // 112 加了末影人（第一种会瞬移的、第一种"不主动攻击"的）
   // 批次 115 加了凋灵骷髅（第一种"只在某个结构里刷"的）
   // 批次 189 加了鱿鱼（被动、水生）
-  check('生物表包含 26 种生物（19 敌对 + 4 被动动物 + 鱿鱼 + 村民 + 小史莱姆 + 小岩浆怪）', MOB_TYPES.length === 26, `${MOB_TYPES.length}`);
+  check('生物表包含 30 种生物（19 敌对 + 4 被动动物 + 鱿鱼 + 村民 + 小史莱姆 + 小岩浆怪 + 狼/猫/豹猫/狐狸）', MOB_TYPES.length === 30, `${MOB_TYPES.length}`);
   check(
     '敌对生物要么有攻击力、要么另有一条伤害通道',
     // ⚠️ 恶魂是**刻意的例外**（批次 94）：原版它不近战（撞到人也不掉血），
@@ -319,9 +322,13 @@ console.log('\n[生物表]');
   // 村民（J11，批次 88）是**刻意的例外**：原版杀掉村民什么都不掉也不给经验
   //（掉了就等于鼓励玩家屠村），所以它进不了"被动生物都有掉落"这条里
   check(
-    '被动动物都有掉落，村民没有（原版如此）',
-    MOB_TYPES.filter((t) => !t.hostile && t.id !== 'villager').every((t) => t.drops.length > 0) &&
-      MOB_TYPES.find((t) => t.id === 'villager')!.drops.length === 0,
+    '被动动物都有掉落；村民与宠物（狼/猫/豹猫/狐狸）没有（原版如此）',
+    MOB_TYPES.filter(
+      (t) => !t.hostile && t.id !== 'villager' && t.id !== 'fox' && t.tameWith === undefined,
+    ).every((t) => t.drops.length > 0) &&
+      MOB_TYPES.filter(
+        (t) => t.id === 'villager' || t.id === 'fox' || t.tameWith !== undefined,
+      ).every((t) => t.drops.length === 0),
   );
   check('所有生物都有正的生命与尺寸', MOB_TYPES.every((t) => t.health > 0 && t.width > 0 && t.height > 0));
 }
@@ -611,6 +618,109 @@ console.log('\n[手持食物的吸引跟随]');
   baby.makeBaby();
   for (let i = 0; i < 60; i++) baby.tick(ctx, 0.05);
   check('幼体也会跟着食物走', Math.abs(player.x - baby.x) < 6, `距离 ${Math.abs(player.x - baby.x).toFixed(1)}`);
+}
+
+console.log('\n[驯服与宠物（批次 242）]');
+{
+  const world = new TestWorld();
+  world.floor(-24, 24, -8, 8, 64);
+  const player = { x: 8.5, y: 65, z: 0.5 };
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player,
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+  };
+
+  // ---- 数据：谁认什么
+  const wolfType = mobTypeById('wolf')!;
+  const catType = mobTypeById('cat')!;
+  const ocelotType = mobTypeById('ocelot')!;
+  const foxType = mobTypeById('fox')!;
+  check(
+    '狼：骨头驯服、生肉喂食（两套口粮分开）',
+    mobAcceptsTame(wolfType, Item.BONE) && !mobEats(wolfType, Item.BONE) && mobEats(wolfType, Item.BEEF),
+  );
+  check(
+    '猫/豹猫：生鱼既是驯服物也是食物',
+    [catType, ocelotType].every((t) => mobAcceptsTame(t, Item.COD) && mobEats(t, Item.SALMON)),
+  );
+  check('狐狸不可驯服（原版也不能），只吃甜浆果', foxType.tameWith === undefined && mobEats(foxType, Item.SWEET_BERRIES));
+  check(
+    '三种宠物的基础成功率都是 1/3',
+    [wolfType, catType, ocelotType].every((t) => Math.abs((t.tameChance ?? 0) - 1 / 3) < 1e-6),
+  );
+
+  // ---- 模型：独立的 pet 骨架 + 项圈随驯服状态换色
+  const model = describeMobModel(wolfType);
+  equal('狼用独立的 `pet` 骨架（不是牛猪羊那套四足）', model.kind, 'pet');
+  equal('四条腿参与走路摆动', model.legs, 4);
+  check(
+    '部件够多（4 腿 + 躯干 + 头 + 吻 + 双耳 + 双眼 + 尾巴 + 项圈 = 13）',
+    model.parts >= 13,
+    `${model.parts} 个`,
+  );
+  const keyWild = mobAppearanceKey(new Mob(wolfType, 0, 64, 0));
+  const tamedMob = new Mob(wolfType, 0, 64, 0);
+  tamedMob.tryTame(1);
+  check(
+    '项圈颜色随驯服状态变（渲染层据此重建模型）',
+    keyWild === 'wild' && mobAppearanceKey(tamedMob) === 'tamed',
+    `${keyWild} → ${mobAppearanceKey(tamedMob)}`,
+  );
+
+  // ---- 掷骰：0 必失败、1 必成功
+  const wild = new Mob(wolfType, 2.5, 65.5, 0.5);
+  equal('概率 0 → 驯服失败', wild.tryTame(0), 'failed');
+  check('失败不会把它变成宠物', !wild.tamed);
+  equal('概率 1 → 驯服成功', wild.tryTame(1), 'tamed');
+  check('驯服之后 tamed 为真', wild.tamed);
+  equal('已驯服的再喂不重复消耗', wild.tryTame(1), null);
+
+  // ---- 坐下 / 起来
+  check('驯服的宠物可以坐下', wild.toggleSitting() === true && wild.sitting);
+  check('再点一下站起来', wild.toggleSitting() === false && !wild.sitting);
+  const untamed = new Mob(wolfType, 2.5, 65.5, 0.5);
+  check('没驯服的不能坐下', untamed.toggleSitting() === false && !untamed.sitting);
+
+  // ---- 跟随
+  const follow = new Mob(wolfType, 2.5, 65.5, 0.5);
+  follow.tryTame(1);
+  const before = Math.abs(player.x - follow.x);
+  for (let i = 0; i < 80; i++) follow.tick(ctx, 0.05); // 4 秒
+  const after = Math.abs(player.x - follow.x);
+  check('驯服的狼会跟着主人走', after < before - 2, `${before.toFixed(1)} → ${after.toFixed(1)}`);
+  check('但不会顶着主人推（停在 2.2 格外）', after > 1.2, `距离 ${after.toFixed(2)}`);
+
+  // ---- 坐下时不跟随
+  const sitter = new Mob(wolfType, 2.5, 65.5, 0.5);
+  sitter.tryTame(1);
+  sitter.toggleSitting();
+  const sitBefore = Math.abs(player.x - sitter.x);
+  for (let i = 0; i < 80; i++) sitter.tick(ctx, 0.05);
+  check(
+    '坐下的宠物留在原地',
+    Math.abs(player.x - sitter.x) > sitBefore - 0.6,
+    `${sitBefore.toFixed(1)} → ${Math.abs(player.x - sitter.x).toFixed(1)}`,
+  );
+  check(
+    '坐下时速度归零（不会滑走）',
+    Math.abs(sitter.vx) < 0.2 && Math.abs(sitter.vz) < 0.2,
+    `v=${sitter.vx.toFixed(2)},${sitter.vz.toFixed(2)}`,
+  );
+
+  // ---- 太远会传送到主人身边
+  const teleporter = new Mob(wolfType, -20.5, 65.5, 0.5);
+  teleporter.tryTame(1);
+  let teleported = false;
+  for (let i = 0; i < 40 && !teleported; i++) {
+    teleporter.tick(ctx, 0.05);
+    if (Math.abs(player.x - teleporter.x) < 6) teleported = true;
+  }
+  check('离主人超过 16 格会传送到身边', teleported, `最终距离 ${Math.abs(player.x - teleporter.x).toFixed(1)}`);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

@@ -81,7 +81,7 @@ import { enchantLevel } from './core/registry/enchantments.ts';
 import { Sky, cameraFarFor } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer } from './render/MobRenderer.ts';
-import { MATE_SEARCH_RANGE, Mob, provokedBy } from './core/entity/Mob.ts';
+import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy } from './core/entity/Mob.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
 // 村民（J11，批次 88）：造生物的工厂 + 实体本体 + 那一层的纯数据（职业 / 交易表）
@@ -980,6 +980,13 @@ class App {
    * `touch.aimPoint` 是空的，只能靠这里把落点带进下一帧。
    */
   private touchTapPoint: { x: number; y: number } | null = null;
+  /**
+   * 触摸端点中的**可交互生物**（批次 242：驯服 / 喂食 / 剪毛 / 挤奶 / 坐下）。
+   *
+   * 与 `tapAttackMob` 二选一：手上拿着"能对它用的东西"时先判使用，
+   * 否则才是攻击。没有这一条，手机端拿着骨头点狼只会把它打一顿（驯不了宠物）。
+   */
+  private tapUseMob: Mob | null = null;
   /** `#target-info` 是否挂在手指上方（true = 已加 `.pinned`） */
   private targetPinned = false;
   /** 上一次写进 `#target-info` 的锚点（取整后比较，避免每帧重写样式） */
@@ -1868,6 +1875,13 @@ class App {
         this.touchTapPoint = { x: clientX, y: clientY };
         // 批次 185：先按**手指落点**找生物（点哪打哪），准星那条路作兜底
         const tapped = this.mobAtScreen(clientX, clientY);
+        // 批次 242：手上拿着"能对它用的东西"时这一下是**使用**（驯服/喂食/剪毛/坐下），
+        // 不是攻击——判断收在 `canUseItemOnMob` 里，触屏与鼠标共用。
+        if (tapped && this.canUseItemOnMob(tapped)) {
+          this.tapUseMob = tapped;
+          this.touchPlaceRequest = true;
+          return;
+        }
         this.tapAttackMob = tapped;
         if (tapped) this.tapAttackRequest = true;
         else this.touchPlaceRequest = true;
@@ -2160,6 +2174,7 @@ class App {
     this.touchPlaceRequest = false;
     this.tapAttackRequest = false;
     this.tapAttackMob = null;
+    this.tapUseMob = null;
     this.touchTapPoint = null;
     // 触摸端：界面打开时收起操作层；关闭时显式清一次手势状态，
     // 否则关面板那一瞬间按在屏幕上的手指会带着旧基准继续转视角
@@ -3691,6 +3706,7 @@ class App {
     if (this.uiOpen || this.sleeping) {
       this.hit = null;
       this.touchTapPoint = null;
+      this.tapUseMob = null;
       this.outline.hide();
       this.blockOverlay.hide();
       this.updateTargetAnchor(null);
@@ -3798,6 +3814,7 @@ class App {
     //    屏幕中央却冒出一个方块"，而这一批改的正是"不再用准星定位"。
     if (this.touchTapPoint) this.touchPlaceRequest = false;
     this.touchTapPoint = null;
+    this.tapUseMob = null;
   }
 
   /**
@@ -4203,13 +4220,25 @@ class App {
    * @returns 是否发生了交互（发生了就把这一次右键吃掉，不再放置方块）
    */
   private useOnEntity(): boolean {
-    const mob = this.mobUnderCrosshair();
+    // 触摸端：这一下点在**手指底下那一只**上（准星可能根本没对着它，批次 242）
+    const mob = this.tapUseMob ?? this.mobUnderCrosshair();
     if (!mob || mob.dead) return false;
     const held = this.heldItemId;
     // 村民（J11）：空手也**有交互**（打开交易界面）——所以它必须排在
     // "手上没东西就返回 false"那一条之前
     if (mob instanceof Villager) return this.useOnVillager(mob, held);
+    // 已驯服的宠物（批次 242）：空手点一下 = 坐下 / 起来（原版就是这个手势）
+    if (mob.tamed && held === undefined) {
+      const sitting = mob.toggleSitting();
+      this.playMobVoice(mob);
+      this.hudToast.show(sitting ? `${mob.type.name}坐下了` : `${mob.type.name}站起来了`);
+      return true;
+    }
     if (held === undefined) return false;
+    // 驯服（批次 242）：拿着骨头/生鱼点**野生**的狼/猫/豹猫。
+    // ⚠️ 必须是 `!mob.tamed`：猫与豹猫的驯服物同时也是食物，
+    // 已经驯服的猫再喂鱼应该走下面的 `feedMob`（繁殖），而不是再"驯"一次。
+    if (!mob.tamed && mobAcceptsTame(mob.type, held)) return this.tameMob(mob, held);
     if (held === Item.SHEARS && this.shearMob(mob) > 0) {
       // 剪刀也要掉耐久（原版每剪一次 -1）
       this.damageHeldTool();
@@ -4217,6 +4246,68 @@ class App {
     }
     if (held === Item.BUCKET && this.milkMob(mob)) return true;
     return this.feedMob(mob, held);
+  }
+
+  /**
+   * 手上这件东西能不能对这只生物"使用"（批次 242）。
+   *
+   * 触屏上"点生物"原本一律是攻击（批次 181），于是**拿着骨头点狼也是打它**
+   * ——手机端根本驯不了宠物。这里把"使用"的判据收成一处：
+   *  - 空手点**已驯服**的宠物 → 坐下 / 起来（原版）；
+   *  - 拿驯服物（骨头 / 生鱼）→ 驯服；
+   *  - 拿剪刀 / 桶 → 剪羊毛 / 挤奶；
+   *  - 拿它爱吃的东西 → 喂食 / 繁殖；
+   *  - 村民永远算交互（空手也能交易）。
+   * 其余一律当攻击（拿着剑点狼仍然是打）。
+   */
+  private canUseItemOnMob(mob: Mob): boolean {
+    const held = this.heldItemId;
+    if (mob instanceof Villager) return true;
+    if (mob.tamed && held === undefined) return true;
+    if (held === undefined) return false;
+    if (mobAcceptsTame(mob.type, held)) return true;
+    if (held === Item.SHEARS || held === Item.BUCKET) return true;
+    return mobEats(mob.type, held);
+  }
+
+  /**
+   * 驯服一次（批次 242）。
+   *
+   * 原版**失败也消耗**那一件（骨头/生鱼被吃掉），所以这里无论成败都扣 1；
+   * 成功冒爱心并提示，失败冒一小团烟——两者都有叫声，玩家能分清"它吃了"与"它认了"。
+   */
+  private tameMob(mob: Mob, itemId: number): boolean {
+    const result = mob.tryTame(mob.type.tameChance ?? 1 / 3);
+    if (result === null) return false;
+    if (!this.inventory.consume(itemId, 1)) return false;
+    this.hand.swing();
+    this.refreshHotbar();
+    if (result === 'tamed') {
+      this.particles.spawnHearts(mob.x, mob.y + mob.type.height, mob.z, 1);
+      this.playMobVoice(mob);
+      this.hudToast.show(`${mob.type.name}已被驯服`);
+      this.vibrate(10);
+    } else {
+      // 驯服失败：一小团烟 + 一声略低的叫（原版的反馈就是"它没认你"）
+      this.particles.spawnSmoke(mob.x, mob.y + mob.type.height * 0.6, mob.z, 4, 0.18);
+      this.playMobVoice(mob, 0.9);
+    }
+    return true;
+  }
+
+  /**
+   * 播一次某只生物的环境叫（有档案就用自己的，没有就静默——与 `feedMob` 同源）。
+   * @param pitchScale 在"幼体音高"之上再乘一档（驯服成功 1、失败 0.9）
+   */
+  private playMobVoice(mob: Mob, pitchScale = 1): void {
+    const voice = mobVoiceFor(mob.type.id, mob.type.family);
+    if (!voice) return;
+    this.audio.playVoice(
+      `${voice}:ambient`,
+      mobVoiceSpec(voice, 'ambient'),
+      { x: mob.x, y: mob.y, z: mob.z },
+      mobVoicePitchFor(mob.type.id, mob.baby) * pitchScale,
+    );
   }
 
   /**
@@ -9073,6 +9164,14 @@ class App {
     // 书与笔 / 成书（批次 190，H16）：举着书右击就打开读写界面。
     // 放在"必须先命中方块"之前——原版对着空气点一下就能写书
     if (this.openBookScreen()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
+    // 触摸端点中的生物（批次 242）：驯服 / 喂食 / 坐下不依赖"手指底下有没有方块"
+    // （点一只悬空的/悬崖边的生物时 `hit` 可能是 null，但交互照样该发生）
+    if (this.tapUseMob && this.useOnEntity()) {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;
       return;

@@ -57,6 +57,19 @@ export const MATE_RANGE = 2.5;
 /** 求爱时能"看见"配偶的距离（格） */
 export const MATE_SEARCH_RANGE = 8;
 
+/** 已驯服的宠物跟到这么近就停下（格）——与"被食物吸引"同一条手感，不顶着玩家推 */
+export const PET_FOLLOW_STOP = 2.2;
+/**
+ * 已驯服的宠物离主人超过这个距离就**传送**过去（格）。
+ *
+ * 原版狼/猫也是这个套路：玩家跑远了它会直接出现在身边（不然永远追不上，
+ * 而"宠物"这一层玩法的核心就是"它一直在"）。坐着的不传送。
+ */
+export const PET_TELEPORT_RANGE = 16;
+/** 宠物一次踢到主人身边就传送成功（与末影人的瞬移共用 `teleportNear`） */
+export const PET_TELEPORT_MIN = 1.5;
+export const PET_TELEPORT_MAX = 3;
+
 /**
  * 鸡下蛋的间隔（秒）：原版是 5~10 分钟一个蛋（`6000~12000` tick）。
  * 鸡蛋在生存里的**唯一来源**就是这里，所以这个节奏不能"为了好测"改短——
@@ -201,6 +214,16 @@ export interface MobType {
    * J11 批次 88 起）——判定统一走 `mobEats()`，所以"哪些算爱吃"只有一处。
    */
   feed?: number | readonly number[];
+  /**
+   * **能用什么驯服**（批次 242：狼用骨头、猫与豹猫用生鱼）；不填 = 不可驯服。
+   *
+   * 与 `feed` 分开写而不是复用：骨头不是狼的食物（它吃生肉），
+   * 生鱼同时是猫的食物与驯服物——合成一条会让"喂它繁殖"与"驯服它"分不开。
+   * 判定统一走 `mobAcceptsTame()`（与 `mobEats()` 同一个套路）。
+   */
+  tameWith?: number | readonly number[];
+  /** 一次驯服尝试的成功率（不填 = 1/3，原版狼/猫都是三分之一） */
+  tameChance?: number;
   /**
    * 会不会**自然刷出来**（默认会）。村民是第一个"不刷"的：
    * 原版它们只随村庄生成，而本项目还没有村庄（见 TASKS J22），
@@ -475,6 +498,12 @@ export function mobEats(type: MobType, itemId: number): boolean {
   return typeof type.feed === 'number' ? type.feed === itemId : type.feed.includes(itemId);
 }
 
+/** 这件东西能不能用来驯服这一种（批次 242；`tameWith` 允许写一样或几样） */
+export function mobAcceptsTame(type: MobType, itemId: number): boolean {
+  if (type.tameWith === undefined) return false;
+  return typeof type.tameWith === 'number' ? type.tameWith === itemId : type.tameWith.includes(itemId);
+}
+
 export class Mob extends Entity {
   readonly type: MobType;
 
@@ -487,6 +516,16 @@ export class Mob extends Entity {
    * 幼体（J8）：体型按 `BABY_SCALE` 缩小、**不产出任何掉落与经验**、`BABY_GROW_SECONDS` 后长大。
    */
   baby = false;
+
+  /**
+   * 已驯服（批次 242，狼 / 猫 / 豹猫）。
+   *
+   * 驯服之后：跟随主人、离得太远会被传送过去、右键可以让它坐下/起来。
+   * 与"繁殖"无关——生下来的幼体仍然是野生的（原版如此）。
+   */
+  tamed = false;
+  /** 坐下（已驯服的宠物）：不跟随、不游荡，但照样能被喂食 */
+  sitting = false;
 
   /**
    * 手里还有没有三叉戟（批次 235；只有 `throwsTrident` 的生物用）。
@@ -1062,7 +1101,8 @@ export class Mob extends Entity {
     // 被手里的食物吸引：玩家拿着它爱吃的东西走近，它会跟着走（原版行为）。
     // 放在"求爱"之前：正在被引的时候不会乱跑，但求爱仍然优先（毕竟那是在办事）
     // 幼体也认食物（原版小牛一样会跟，而且喂了能快点长大）
-    if (!chasing && player && this.type.feed !== undefined) {
+    // ⚠️ 坐下的宠物不跟着食物跑（批次 242）：不然"让它坐在这里看家"会被一块肉拐走
+    if (!chasing && !this.sitting && player && this.type.feed !== undefined) {
       const bait = ctx.heldItemId?.();
       const distance = Math.sqrt(distanceSq);
       if (bait !== undefined && mobEats(this.type, bait) && distance < TEMPT_RANGE) {
@@ -1080,6 +1120,8 @@ export class Mob extends Entity {
 
     // 求爱优先：在找配偶的这段时间里它只想找对象，别的行为都让位
     if (this.loveTimer > 0 && !this.baby && ctx.findMate && ctx.spawnBaby) {
+      // 求爱优先于"跟着主人走"：喂了食物的宠物应该去找对象，而不是继续贴着玩家
+
       const mate = ctx.findMate(this);
       if (mate) {
         const dxm = mate.x - this.x;
@@ -1104,6 +1146,36 @@ export class Mob extends Entity {
       }
       // 没找到对象：原地冒一会儿爱心再回去游荡（原版也会边冒边等）
       ctx.spawnHearts?.(this.x, this.y + this.type.height, this.z, 0.4);
+    }
+
+    // ---- 已驯服的宠物（批次 242）：坐下时原地不动；否则跟着主人走，太远就传送过去
+    if (this.tamed && player) {
+      this.yaw = Math.atan2(dx, dz);
+      if (this.sitting) {
+        this.vx = 0;
+        this.vz = 0;
+        this.idle = true;
+        return;
+      }
+      const distance = Math.sqrt(distanceSq);
+      if (distance > PET_TELEPORT_RANGE) {
+        // 主人跑远了：直接出现在身边（原版狼/猫的招牌行为）。
+        // 坐着的宠物不上这条——它们本来就该留在原地看家。
+        if (this.teleportNear(ctx, player, PET_TELEPORT_MIN, PET_TELEPORT_MAX)) return;
+      } else if (distance > PET_FOLLOW_STOP) {
+        const length = Math.max(1e-4, distance);
+        this.moveDirX = dx / length;
+        this.moveDirZ = dz / length;
+        this.move(true, dt);
+        return;
+      } else {
+        // 已经在主人身边：收住脚步后**直接返回**。
+        // 不返回会落到下面的"游荡"分支——宠物会绕着主人乱走、顶着人推。
+        this.vx *= Math.max(0, 1 - 8 * dt);
+        this.vz *= Math.max(0, 1 - 8 * dt);
+        this.idle = true;
+        return;
+      }
     }
 
     // 远程生物走自己那套（保持距离 + 放箭），不参与近战的寻路追击。
@@ -1454,6 +1526,38 @@ export class Mob extends Entity {
   }
 
   /**
+   * 尝试驯服（批次 242，狼 / 猫 / 豹猫）。
+   *
+   * @param chance 这一次成功的概率（来自种类表的 `tameChance`，默认 1/3）
+   * @returns `'tamed'` 成功、`'failed'` 失败（调用方照样要消耗那一件）、
+   *          `null` 不适用（已经驯服 / 幼体 / 已死）
+   */
+  tryTame(chance: number): 'tamed' | 'failed' | null {
+    if (this.tamed || this.baby || this.dead) return null;
+    const odds = Math.max(0, Math.min(1, chance));
+    if (Math.random() < odds) {
+      this.tamed = true;
+      this.sitting = false;
+      return 'tamed';
+    }
+    return 'failed';
+  }
+
+  /**
+   * 坐下 / 起来（已驯服的宠物；原版右键点一下切换）。
+   * @returns 切换之后是不是坐着；不可驯服或没驯服时返回 false（调用方据此判"没发生"）
+   */
+  toggleSitting(): boolean {
+    if (!this.tamed) return false;
+    this.sitting = !this.sitting;
+    if (this.sitting) {
+      this.vx = 0;
+      this.vz = 0;
+    }
+    return this.sitting;
+  }
+
+  /**
    * 喂食（J8）。
    *
    * @returns `'grow'` = 喂的是幼体、加速成长；`'love'` = 喂的是成年体、进入求爱；
@@ -1654,10 +1758,15 @@ export class Mob extends Entity {
    *
    * 与 `teleportRandomly` 的唯一区别是**落点围着目标转**，要求也一样（能站人、不在水里）。
    */
-  teleportNear(ctx: EntityContext, target: { x: number; y: number; z: number }): boolean {
+  teleportNear(
+    ctx: EntityContext,
+    target: { x: number; y: number; z: number },
+    minDistance = STARE_TELEPORT_MIN,
+    maxDistance = STARE_TELEPORT_MAX,
+  ): boolean {
     for (let attempt = 0; attempt < TELEPORT_ATTEMPTS; attempt++) {
       const angle = Math.random() * Math.PI * 2;
-      const distance = STARE_TELEPORT_MIN + Math.random() * (STARE_TELEPORT_MAX - STARE_TELEPORT_MIN);
+      const distance = minDistance + Math.random() * (maxDistance - minDistance);
       const x = Math.floor(target.x + Math.cos(angle) * distance);
       const z = Math.floor(target.z + Math.sin(angle) * distance);
       const y = Math.floor(target.y + (Math.random() * 8 - 4));

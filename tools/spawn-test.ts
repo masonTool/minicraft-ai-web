@@ -69,6 +69,10 @@ function makeContext(
     counts?: { block: number; surface: number };
     /** "这一列在不在某种结构里"（批次 115）：不传就当不在任何区域里 */
     inZone?: (kind: string, x: number, z: number) => boolean;
+    /** 这一点的群系（批次 242）：不传 = 没接群系钩子（带 `spawnBiomes` 的生物一只都不刷） */
+    biomeAt?: (x: number, z: number) => string | null;
+    /** 地表那一格是什么（批次 242：雪层也算地表） */
+    ground?: number;
   },
 ): SpawnContext {
   return {
@@ -76,7 +80,7 @@ function makeContext(
       if (options.counts) options.counts.block++;
       if (options.airBox) return ((y % 8) + 8) % 8 === 0 ? Block.STONE : Block.AIR;
       const phase = ((y % 4) + 4) % 4;
-      if (phase === 0) return y === 64 ? Block.GRASS_BLOCK : Block.STONE;
+      if (phase === 0) return y === 64 ? (options.ground ?? Block.GRASS_BLOCK) : Block.STONE;
       if (phase === 1 || phase === 2) return Block.AIR;
       return Block.STONE;
     },
@@ -93,6 +97,7 @@ function makeContext(
     player: options.player ?? { x: 0.5, y: 65, z: 0.5 },
     dimension: options.dimension,
     ...(options.inZone ? { inZone: options.inZone } : {}),
+    ...(options.biomeAt ? { biomeAt: options.biomeAt } : {}),
     spawn: (type, x, y, z) => options.spawned.push({ type, x, y, z }),
     hostileCount: options.hostile ?? 0,
     passiveCount: options.passive ?? 0,
@@ -247,6 +252,47 @@ console.log('\n[距离限制]');
   const passiveDistances = passive.map((s) => Math.hypot(s.x - 0.5, s.z - 0.5));
   check('被动生物刷在 8~32 格之间', passiveDistances.every((d) => d >= 8 - 1.5 && d <= 32 + 1.5),
     `${Math.min(...passiveDistances).toFixed(1)} ~ ${Math.max(...passiveDistances).toFixed(1)}`);
+}
+
+console.log('\n[被动生物的群系限定与雪地地表（批次 242）]');
+{
+  const spawned: Spawned[] = [];
+  const ctx = makeContext({
+    sky: 15,
+    block: 0,
+    spawned,
+    // 只留被动那条路：敌对计数顶满，update 里就不会去试敌对刷怪
+    hostile: 24,
+    biomeAt: () => 'taiga',
+    ground: Block.SNOW,
+  });
+  const spawner = new MobSpawner();
+  for (let i = 0; i < 200; i++) spawner.update(2.0, ctx);
+  const kinds = [...new Set(spawned.map((s) => s.type.id))];
+  check(
+    '雪层也算地表：针叶林里能刷出狼或狐狸',
+    kinds.includes('wolf') || kinds.includes('fox'),
+    kinds.join(','),
+  );
+  check('群系限定生效：针叶林不刷猫 / 豹猫', !kinds.includes('cat') && !kinds.includes('ocelot'), kinds.join(','));
+  check(
+    '雪地上普通动物照刷（没有被雪层挡住）',
+    kinds.some((id) => id === 'cow' || id === 'pig' || id === 'sheep' || id === 'chicken'),
+    kinds.join(','),
+  );
+
+  // 没接群系钩子（离线/未来的别的调用方）：带 `spawnBiomes` 的一只都不刷，
+  // 而不是"不知道群系就随便撒"
+  const noBiome: Spawned[] = [];
+  const plain = new MobSpawner();
+  const ctx2 = makeContext({ sky: 15, block: 0, spawned: noBiome, hostile: 24 });
+  for (let i = 0; i < 100; i++) plain.update(2.0, ctx2);
+  const kinds2 = [...new Set(noBiome.map((s) => s.type.id))];
+  check(
+    '没接群系钩子时不刷限定群系的生物',
+    kinds2.every((id) => id !== 'wolf' && id !== 'cat' && id !== 'ocelot' && id !== 'fox'),
+    kinds2.join(','),
+  );
 }
 
 console.log('\n[生成上限]');

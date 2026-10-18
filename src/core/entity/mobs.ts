@@ -724,6 +724,121 @@ export const SQUID_TYPE: MobType = {
   eyeHeight: 0.55,
 };
 
+/**
+ * 狼（批次 242，J16 被动生物第一批）。
+ *
+ * 与牛猪羊的区别是**能驯服**：喂骨头（`tameWith`）有三分之一概率变成宠物，
+ * 之后跟着玩家走、离远了会被传送过来、右键可以让它坐下/起来（见 `Mob.tryTame`）。
+ *
+ * 数值按原版：8 点生命、0.6×0.85。**掉落为空**（原版杀狼什么也不掉），
+ * 所以它进不了"被动动物都有掉落"那条断言——那条要显式排除宠物类。
+ * ⚠️ 差异：不主动攻击、也不帮玩家打怪（原版驯服后会帮忙咬骷髅）。
+ */
+export const WOLF_TYPE: MobType = {
+  id: 'wolf',
+  name: '狼',
+  health: 8,
+  width: 0.6,
+  height: 0.85,
+  speed: 1.8,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  // 生肉：既能把野狼引过来，也能让已驯服的狼进入求爱
+  feed: [Item.BEEF, Item.PORKCHOP, Item.CHICKEN, Item.MUTTON, Item.ROTTEN_FLESH],
+  tameWith: Item.BONE,
+  tameChance: 1 / 3,
+  // 原版：针叶林/雪林/森林/雪林山地（`grove`）
+  spawnBiomes: ['taiga', 'snowy_taiga', 'forest', 'grove'],
+  bodyColor: 0xd9d9d9,
+  accentColor: 0xaeaeae,
+  eyeHeight: 0.7,
+};
+
+/**
+ * 猫（批次 242）。驯服物是**生鱼**（鳕鱼/鲑鱼），与豹猫共用一条链。
+ *
+ * ⚠️ 生成差异：原版猫只随村庄/女巫小屋出现，本项目还没有"结构里刷生物"这条通道，
+ * 所以让它像普通动物一样在村镇群系（平原/向日葵平原/草甸）自然刷——
+ * 不这么写它就只能在创造模式里见到（与村民 `naturalSpawn: false` 那一课反着来）。
+ */
+export const CAT_TYPE: MobType = {
+  id: 'cat',
+  name: '猫',
+  health: 10,
+  width: 0.6,
+  height: 0.7,
+  speed: 1.6,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: [Item.COD, Item.SALMON],
+  tameWith: [Item.COD, Item.SALMON],
+  tameChance: 1 / 3,
+  spawnBiomes: ['plains', 'sunflower_plains', 'meadow'],
+  bodyColor: 0xd9a05b,
+  accentColor: 0x8a5a26,
+  eyeHeight: 0.55,
+};
+
+/**
+ * 豹猫（批次 242）。丛林里那一只，驯服物与猫相同（生鱼）。
+ *
+ * ⚠️ 与原版的差异：原版驯服后会**变成猫**，本项目没有"换种类"的通道
+ * （模型/碰撞盒/掉落都按 `type` 定死了），所以驯服后仍显示为豹猫。
+ * 写在这里，免得被当成 bug。
+ */
+export const OCELOT_TYPE: MobType = {
+  id: 'ocelot',
+  name: '豹猫',
+  health: 10,
+  width: 0.6,
+  height: 0.7,
+  speed: 1.6,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: [Item.COD, Item.SALMON],
+  tameWith: [Item.COD, Item.SALMON],
+  tameChance: 1 / 3,
+  spawnBiomes: ['jungle'],
+  bodyColor: 0xe0b04a,
+  accentColor: 0x8a6a2a,
+  eyeHeight: 0.55,
+};
+
+/**
+ * 狐狸（批次 242）。
+ *
+ * **不可驯服**（原版也不能）：它只是会跟着甜浆果丛/玩家手里的甜浆果走，
+ * 所以只有 `feed`、没有 `tameWith`——`useOnEntity` 会落到"喂食/繁殖"那条路。
+ * 掉落为空（原版狐狸不掉东西）。
+ */
+export const FOX_TYPE: MobType = {
+  id: 'fox',
+  name: '狐狸',
+  health: 10,
+  width: 0.6,
+  height: 0.7,
+  speed: 1.8,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: Item.SWEET_BERRIES,
+  spawnBiomes: ['taiga', 'snowy_taiga', 'grove'],
+  bodyColor: 0xd9772f,
+  accentColor: 0xf2ece2,
+  eyeHeight: 0.55,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -751,6 +866,11 @@ export const MOB_TYPES: readonly MobType[] = [
   PHANTOM_TYPE,
   // 鱿鱼（批次 189）：海里那只，墨囊/黑色染料唯一的来源
   SQUID_TYPE,
+  // 驯养系（批次 242）：狼 / 猫 / 豹猫 / 狐狸——前三种能驯服，狐狸只能喂甜浆果
+  WOLF_TYPE,
+  CAT_TYPE,
+  OCELOT_TYPE,
+  FOX_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

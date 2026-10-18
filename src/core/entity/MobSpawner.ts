@@ -238,8 +238,11 @@ export class MobSpawner {
       // 原来的逐格扫描也是从玩家高度往下找，所以够不到就等于扫不到
       const surfaceY = ctx.getSurfaceBlockY(x, z);
       if (surfaceY === null || surfaceY > top) continue;
-      // 只在地表**草地**上生成（不能只找"第一个落脚点"——那可能是地下岩壁上的平台）
-      if (ctx.getBlock(x, surfaceY, z) !== Block.GRASS_BLOCK) continue;
+      // 只在地表**草地**上生成（不能只找"第一个落脚点"——那可能是地下岩壁上的平台）。
+      // 批次 242：**雪层**也算地表——不然针叶林/雪林里的狼与狐狸一只都刷不出来
+      // （雪层盖住了草方块，而 `surfaceY` 拿到的是最上面那块"会挡住移动"的方块）。
+      const ground = ctx.getBlock(x, surfaceY, z);
+      if (ground !== Block.GRASS_BLOCK && ground !== Block.SNOW) continue;
       if (!this.canSpawnAt(ctx, x, surfaceY + 1, z)) continue;
       // 光照条件：白天户外（天光 ≥ 9）
       if (ctx.getSkyLight(x, surfaceY + 1, z) < 9) continue;
@@ -247,6 +250,13 @@ export class MobSpawner {
       // ⚠️ 从 `land` 里挑，不是 `candidates`：鱿鱼刷在草地上会当场开始窒息
       const type = this.pick(land);
       if (!type) continue;
+      // 批次 242：被动生物也可以限定群系（狼要针叶林、豹猫要丛林）。
+      // 以前只有"水里那条路"查 `spawnBiomes`，岸上这条不查 —— 不补的话
+      // 新加的生物会按 `PASSIVE_MOBS` 均匀撒到所有草地上。
+      if (type.spawnBiomes !== undefined) {
+        const biome = ctx.biomeAt?.(x, z) ?? null;
+        if (biome === null || !type.spawnBiomes.includes(biome)) continue;
+      }
       ctx.spawn(type, x + 0.5, surfaceY + 1, z + 0.5);
       this.spawnedPassive++;
       return 1;

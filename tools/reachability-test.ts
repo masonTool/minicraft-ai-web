@@ -472,7 +472,11 @@ equal('羊毛的 16 条染色配方**全部**原料自足（批次 189 起黑/�
 
 // ③b 刷怪蛋（批次 174，J17）：创造专属，判据是"**真的**没有任何来源"——
 //     哪天有人给刷怪蛋接上配方/掉落，这两条会立刻变红（那意味着"创造专属"这个标签该撤了）
-check('刷怪蛋有 22 枚（`SPAWN_EGG_SPECS` 的长度，批次 189 加了鱿鱼）', SPAWN_EGG_IDS.length === 22, String(SPAWN_EGG_IDS.length));
+check(
+  '刷怪蛋有 26 枚（`SPAWN_EGG_SPECS` 的长度：批次 189 加鱿鱼、241 加狼/猫/豹猫/狐狸）',
+  SPAWN_EGG_IDS.length === 26,
+  String(SPAWN_EGG_IDS.length),
+);
 check(
   '每一枚刷怪蛋都在创造物品栏里（不然玩家根本拿不到它）',
   SPAWN_EGG_IDS.every((id) => CREATIVE_ITEMS.includes(id)),

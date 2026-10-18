@@ -47,6 +47,10 @@ export type MobVoiceId =
   | 'chicken'
   | 'villager'
   | 'squid'
+  // 驯养系（批次 242）：狼的低吼、猫的喵、狐狸的短促狐鸣（豹猫复用 cat）
+  | 'wolf'
+  | 'cat'
+  | 'fox'
   | 'phantom'
   | 'wither'
   | 'dragon'
@@ -385,6 +389,23 @@ export const MOB_VOICES: Readonly<Record<MobVoiceId, MobVoice>> = {
     hurt: call({ hz: 340, hzEnd: 250, dur: 0.28, gain: 0.26, formants: [540, 1050], breath: 0.15 }),
     death: call({ hz: 300, hzEnd: 158, dur: 0.9, gain: 0.28, formants: [500, 980], breath: 0.2 }),
   },
+  // 驯养系（批次 242）：三种都比牛羊"尖"，但各有辨识点——
+  // 狼是**低而长**的喉音，猫是**先升后落**的喵，狐狸是**两声短促**的狐鸣。
+  wolf: {
+    ambient: growl({ hz: 168, hzEnd: 124, dur: 0.8, gain: 0.28, formants: [520, 1080], breath: 0.3, vibrato: { hz: 4, cents: 22 } }),
+    hurt: call({ hz: 268, hzEnd: 176, dur: 0.24, gain: 0.26, formants: [620, 1250], breath: 0.28 }),
+    death: growl({ hz: 190, hzEnd: 74, dur: 0.95, gain: 0.3, formants: [480, 980], breath: 0.34 }),
+  },
+  cat: {
+    ambient: call({ hz: 520, hzEnd: 640, dur: 0.55, gain: 0.22, formants: [820, 1900], breath: 0.12, vibrato: { hz: 5, cents: 26 } }),
+    hurt: call({ hz: 760, hzEnd: 520, dur: 0.22, gain: 0.22, formants: [880, 2000], breath: 0.16 }),
+    death: call({ hz: 660, hzEnd: 280, dur: 0.85, gain: 0.26, formants: [820, 1800], breath: 0.2 }),
+  },
+  fox: {
+    ambient: call({ hz: 620, hzEnd: 460, dur: 0.32, gain: 0.22, formants: [900, 2050], breath: 0.24, syllables: 2 }),
+    hurt: call({ hz: 780, hzEnd: 540, dur: 0.2, gain: 0.22, formants: [940, 2100], breath: 0.2 }),
+    death: call({ hz: 700, hzEnd: 320, dur: 0.75, gain: 0.24, formants: [880, 1900], breath: 0.26 }),
+  },
   squid: {
     ambient: squelch({ hz: 220, hzEnd: 118, dur: 0.4, gain: 0.22 }),
     hurt: squelch({ hz: 262, hzEnd: 148, dur: 0.2, gain: 0.22 }),
@@ -446,6 +467,11 @@ const VOICE_BY_ID: Readonly<Record<string, MobVoiceId>> = {
   chicken: 'chicken',
   villager: 'villager',
   squid: 'squid',
+  wolf: 'wolf',
+  cat: 'cat',
+  // 豹猫与猫同科：叫声复用同一套档案（个体差异交给音高）
+  ocelot: 'cat',
+  fox: 'fox',
   phantom: 'phantom',
   wither: 'wither',
   ender_dragon: 'dragon',
