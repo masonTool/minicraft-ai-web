@@ -246,3 +246,22 @@
 > **批次 204 已完成。** 离线套数不变（130 套，`test:render` 原就存在）。
 > 一条经验：**"策略生效"与"画面变化"是两条线**——视距是一个数，但决定画多少的是
 > ①已加载区块 ②远裁面 ③可见性。三者任一没跟着走，性能策略就是"账面上生效"。
+
+---
+
+## 批次 205：把"卡在哪一段"变成可测的（2026-10-18）
+
+> 批次 204 之后仍不知道"越玩越卡"的根因。这一批不猜，只做仪表。
+
+- [x] B205-1 `dt` 拆两条：物理用夹紧 100ms 的 `dt`，测量用真实 `frameSeconds`（上限 2s）
+- [x] B205-2 `updatePerfPolicy(frameSeconds)`：冷却与帧时间都按真实时间走
+- [x] B205-3 `FramePhaseMeter`（`PerfPolicy.ts`，纯逻辑）：add / endFrame / take
+  （除零、负数、NaN、只记了一段的分母都有断言）
+- [x] B205-4 主循环 8 段打点：sim / env / io / chunks / ent / part / render / hud
+- [x] B205-5 `perf/sample` 增加 `frameAvgMs`（窗口真实平均）、`cpu`（各段之和）、`phases`
+  —— ⚠️ 采样点必须在 `endFrame()` 之后，否则首帧的分母/分子错位、耗时会系统性偏低
+- [x] B205-6 `test:perfpolicy` 121 条（+11）
+
+> **批次 205 已完成。** 判据一句话：`cpu` ≪ `frameAvgMs` → GPU/合成瓶颈；
+> 两者接近 → CPU 瓶颈，再看 `phases` 哪一段涨。
+> 下次真机再卡，导出的日志里直接看 `perf/sample` 的这两列，不用再猜。

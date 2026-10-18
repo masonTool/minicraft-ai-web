@@ -2066,11 +2066,26 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     appSrc.includes('if (viewChanged) this.refreshWorld('),
   );
   // 批次 202：诊断日志补上性能采样——真机日志以前只有"点了什么"，没有"多少帧、画了多少"
+  // 批次 205：采样再带"真实帧间距 + cpu 分段耗时"，用来分 CPU 瓶颈与 GPU 瓶颈
   check(
     '主循环每 5 秒记一条性能采样',
     appSrc.includes('this.perfSampleTimer -= dt') &&
       appSrc.includes('this.logPerfSample();') &&
-      appSrc.includes("diag.event('perf', 'sample', this.perfSnapshot())"),
+      appSrc.includes("diag.event('perf', 'sample', {"),
+  );
+  check(
+    '采样带真实帧间距与 CPU 分段（判 CPU/GPU 瓶颈的唯一依据）',
+    appSrc.includes('frameAvgMs,') &&
+      appSrc.includes('cpu: phases.total') &&
+      appSrc.includes('phases: phases.avg'),
+  );
+  // 批次 205：物理用的 dt 必须夹住，测量用的必须是真实间隔（以前两者共用夹紧值，
+  // 掉到 9fps 时诊断里只看到 100ms）
+  check(
+    '物理 dt 与测量帧间距分开',
+    appSrc.includes('const dt = Math.min(rawDt, 0.1);') &&
+      appSrc.includes('const frameSeconds = Math.min(rawDt, 2);') &&
+      appSrc.includes('this.updatePerfPolicy(frameSeconds);'),
   );
   check(
     '诊断导出带上真实渲染规模与显卡型号',

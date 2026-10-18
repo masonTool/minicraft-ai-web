@@ -395,6 +395,7 @@ import {
   MOBILE_INITIAL_RESOLUTION,
   MOBILE_PIXEL_RATIO_CAP,
   MOBILE_RESOLUTION_MIN,
+  FramePhaseMeter,
   MOBILE_VIEW_DISTANCE,
   RESOLUTION_MIN,
   decorCloudsVisible,
@@ -932,6 +933,11 @@ class App {
    * 一条约 200 字节，10 分钟也就 24KB —— 相对于 500KB 的预算可以忽略。
    */
   private perfSampleTimer = 5;
+  /** 帧内分段计时（批次 205）：每秒级采样报表用，见 `lap` */
+  private readonly phases = new FramePhaseMeter();
+  /** 采样窗口内累计的帧数与真实帧时间（毫秒）——比指数平滑值更能代表"这一段的真实帧率" */
+  private sampleFrames = 0;
+  private sampleMs = 0;
   /**
    * Android 返回键 / 侧滑返回 = 关界面（批次 96，对齐基岩版）。
    *
@@ -9366,23 +9372,38 @@ class App {
   // ---------------------------------------------------------------- 主循环
 
   /**
+   * 记一段耗时并返回新的起点（批次 205，诊断用）。
+   *
+   * 用法是 `mark = this.lap('render', mark)`：不分配对象、只有一次 `performance.now()`，
+   * 一帧 6~7 次的总开销在微秒级。**不要**在这里做 stringify 或 map 遍历。
+   */
+  private lap(phase: string, since: number): number {
+    const now = performance.now();
+    this.phases.add(phase, now - since);
+    return now;
+  }
+
+  /**
    * 移动端降级策略（K6 的视距 + N7 的分辨率 / 限帧 / 粒子总量，批次 130）。
    *
-   * 每帧推进一步：帧时间滑动平均超过 22ms（约 45fps）就**先降分辨率**
-   * （0.5~1 倍，一次 0.1），分辨率到底了才继续降视距；有余量时**反过来**升
-   * （先把视距还回去，最后才把分辨率升满）。所有阈值、冷却、优先级都在
-   * `core/world/PerfPolicy.ts` 里，这里只把结果落下去。
+   * 每帧推进一步：帧时间超过 22ms（约 45fps）就按 `PerfPolicy` 定的顺序让资源——
+   * **先收视距、再关装饰层、最后降分辨率**；有余量时严格倒着还。阈值、冷却、
+   * 优先级都在 `core/world/PerfPolicy.ts` 里，这里只把结果落下去。
    *
-   * ⚠️ 玩家设定的视距是**上限**：自适应只在这个值以下活动，不会超过玩家的选择。
+   * ⚠️ 玩家设定的视距仍然是**上限**：自适应只在这个值以下活动（批次 203 起没有滑块，
+   * 那个上限由设备决定）。
+   *
+   * @param frameSeconds **真实**帧间距（秒，批次 205）：冷却与帧时间都用它算。
+   *   以前两者和物理共用"夹紧到 100ms 的 dt"，掉到 9fps 时测量值只有 100ms（真实 111ms）
    */
-  private updatePerfPolicy(dt: number): void {
+  private updatePerfPolicy(frameSeconds: number): void {
     // `simulateFrameTime` 会把帧时间固定成一个高值（验收脚本用它复现"掉帧"）
-    const frameTime = this.simulatedFrameTime > 0 ? this.simulatedFrameTime : dt * 1000;
+    const frameTime = this.simulatedFrameTime > 0 ? this.simulatedFrameTime : frameSeconds * 1000;
     const before = this.perf;
     const mobile = isTouchDevice();
     // 视距上限：手机另有一个更小的上限（屏幕小，不需要展示那么远），见 `viewDistanceCapFor`
     const cap = viewDistanceCapFor(this.settings.viewDistance, mobile);
-    const { state, action } = perfPolicyStep(before, dt, frameTime, {
+    const { state, action } = perfPolicyStep(before, frameSeconds, frameTime, {
       adaptiveResolution: this.settings.adaptiveResolution,
       adaptiveViewDistance: this.settings.adaptiveViewDistance,
       viewDistanceCap: cap,
@@ -9453,9 +9474,28 @@ class App {
     };
   }
 
-  /** 记一条性能采样（见 `perfSampleTimer`） */
+  /**
+   * 记一条性能采样（见 `perfSampleTimer`）。
+   *
+   * 除了"现在画了多少东西"，还带两份**时间**（批次 205）：
+   *  - `frameAvgMs`：这个窗口里真实的平均帧间距（不是指数平滑值，长帧下它不会滞后）；
+   *  - `cpu` / `phases`：JS 侧各段每帧平均耗时。
+   *
+   * 判据只有一句：**`cpu` 远小于 `frameAvgMs` → 卡在 GPU/合成；`cpu` 基本等于
+   * `frameAvgMs` → 卡在 CPU**，再看 `phases` 里是哪一段涨了。
+   */
   private logPerfSample(): void {
-    diag.event('perf', 'sample', this.perfSnapshot());
+    const phases = this.phases.take();
+    const frames = this.sampleFrames;
+    const frameAvgMs = frames > 0 ? Math.round((this.sampleMs / frames) * 10) / 10 : 0;
+    this.sampleFrames = 0;
+    this.sampleMs = 0;
+    diag.event('perf', 'sample', {
+      ...this.perfSnapshot(),
+      frameAvgMs,
+      cpu: phases.total,
+      phases: phases.avg,
+    });
   }
 
   /**
@@ -9745,8 +9785,19 @@ class App {
         requestAnimationFrame(loop);
         return;
       }
-      const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+      // 两条时间要分开（批次 205）：
+      //  - `dt` 给物理与动画——**必须夹住**（一步 0.6 秒会穿模、跳过整段碰撞）；
+      //  - `frameSeconds` 给测量——**必须真实**。真机掉到 9fps 时帧间距是 111ms，
+      //    原来两者共用 `Math.min(..., 0.1)`，于是诊断里的帧时间永远被低估成 100ms，
+      //    "卡成什么样"在报告里看不出来。
+      // 后台回来那一下 `now - lastTime` 可能是几分钟：那是"暂停"，不是"一帧卡了 3 分钟"，
+      // 所以测量值另有一个 2 秒上限。
+      const rawDt = Math.max(0, (now - this.lastTime) / 1000);
+      const dt = Math.min(rawDt, 0.1);
+      const frameSeconds = Math.min(rawDt, 2);
       this.lastTime = now;
+      // 帧内分段计时的起点（诊断用，见 `lap`）
+      let mark = performance.now();
 
       this.tryResolveSpawn();
 
@@ -9837,6 +9888,7 @@ class App {
       this.updateCamera(dt);
 
       this.updateInteraction(dt);
+      mark = this.lap('sim', mark);
 
       // 昼夜循环可以在设置里关掉（时间停在当前时刻，截图对比/搭建筑时有用）
       if (this.settings.daylightCycle) {
@@ -9858,17 +9910,15 @@ class App {
       }
       // 只有主循环传 dt：雾的平滑要按真实时间推进（其它调用点只是"重算一次"）
       this.applyEnvironment(dt);
+      mark = this.lap('env', mark);
 
       this.updateGamepad(dt);
       this.tickAutoSave(dt);
-      this.updatePerfPolicy(dt);
-      // 性能采样（批次 202）：掉帧时导出诊断日志就能看到"卡在哪一段"，
-      // 而不是像现在这样只能从事件间隔里倒推帧率
-      this.perfSampleTimer -= dt;
-      if (this.perfSampleTimer <= 0) {
-        this.perfSampleTimer = 5;
-        this.logPerfSample();
-      }
+      // 采样用的真实帧间距：`perf.frameTimeAvg` 是给策略用的指数平滑值，
+      // 在 9fps 这种长帧下会滞后好几秒，诊断要看的是"这个窗口里平均多少毫秒"
+      this.sampleFrames++;
+      this.sampleMs += frameSeconds * 1000;
+      this.updatePerfPolicy(frameSeconds);
       this.updateAudio(dt);
       this.net.tick(
         this.physics.x,
@@ -9878,6 +9928,7 @@ class App {
         this.pitch,
         this.dimension,
       );
+      mark = this.lap('io', mark);
 
       const centerCx = toChunkCoord(this.physics.x);
       const centerCz = toChunkCoord(this.physics.z);
@@ -9899,11 +9950,14 @@ class App {
       }
 
       if (!lightBusy) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
+      mark = this.lap('chunks', mark);
 
       this.tickContainers(dt);
       this.updateEntities(dt);
+      mark = this.lap('ent', mark);
       this.updateParticles(dt);
       this.inventoryScreen.tickUi(dt);
+      mark = this.lap('part', mark);
 
       // 手持物品：跟快捷栏选中项同步，并按走路/挥动做动画。
       // 第三人称看的是玩家模型（手里没有画方块），所以第一人称的手臂要藏起来。
@@ -9926,7 +9980,20 @@ class App {
       this.hand.render(this.renderer);
       this.screenEffects.render(this.renderer);
       this.renderer.autoClear = true;
+      // ⚠️ `render` 这一段只是**提交 draw call 的 CPU 时间**：真正的 GPU 时间在 JS 里量不到。
+      // 所以判据是"cpu 总和 vs 真实帧间距"——差得远就是 GPU/合成在拖（见 `logPerfSample`）。
+      mark = this.lap('render', mark);
       this.updateDebug(dt);
+      mark = this.lap('hud', mark);
+      this.phases.endFrame();
+      // 性能采样（批次 202 / 205）：掉帧时导出诊断日志就能看到"卡在哪一段"。
+      // ⚠️ 必须放在 `endFrame()` **之后**：放在帧中间取走，当帧前几段（sim/env）
+      // 已经进了上一个窗口，分母却会把它算进下一个窗口，平均耗时会系统性偏低。
+      this.perfSampleTimer -= dt;
+      if (this.perfSampleTimer <= 0) {
+        this.perfSampleTimer = 5;
+        this.logPerfSample();
+      }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);

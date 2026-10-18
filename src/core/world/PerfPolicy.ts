@@ -382,3 +382,67 @@ export function particleBudgetFor(level: 'off' | 'reduced' | 'all'): number {
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
+
+// ---------------------------------------------------------------- 帧内分段计时
+
+/** 一次采样窗口的分段报告（毫秒，都是**每帧平均**） */
+export interface PhaseReport {
+  /** 这个窗口里统计了多少帧（0 = 没跑过） */
+  frames: number;
+  /** 每段每帧平均毫秒（顺序按名字，数值保留 1 位小数） */
+  avg: Record<string, number>;
+  /** 所有段之和（每帧平均）：与真实帧间距一比就知道是 CPU 还是 GPU 在拖 */
+  total: number;
+}
+
+/**
+ * 帧内分段时间桶（批次 205，纯诊断）。
+ *
+ * 由来：真机日志能看出"60 帧 → 20 帧 → 9 帧"，但看不出**时间花在哪一段**。
+ * 掉帧可能是 CPU（物理/实体/网格化/光照/tick）也可能是 GPU（填充率/驱动），
+ * 而这两种的修法完全相反。有了分段计时，判据就一句话：
+ * **`total` 明显小于真实帧间距 → 卡在 GPU（或浏览器合成）；`total` 基本等于帧间距 → 卡在 CPU。**
+ *
+ * 为什么做成一个只有累加/取走的小类：
+ *  - 每帧要调 6~8 次，必须是"加一个数"这种开销（不能分配对象、不能 stringify）；
+ *  - "每 5 秒取一次并清零"这件事的边界（除零、负数、小数位）能离线断言，
+ *    写在主循环里只能靠眼睛看。
+ */
+export class FramePhaseMeter {
+  private readonly totals = new Map<string, number>();
+  private frames = 0;
+
+  /**
+   * 记一段耗时。
+   *
+   * ⚠️ 负数与 NaN 一律丢掉：这里喂的是 `performance.now()` 的差值，
+   * 理论上不会为负，但计时器精度回退/运行环境差异出现过，而**一条脏数据就能把
+   * 一张报表毁掉**（其它段全变成 0.x 都很正常，只有它跳到 -1e9）。
+   */
+  add(phase: string, ms: number): void {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    this.totals.set(phase, (this.totals.get(phase) ?? 0) + ms);
+  }
+
+  /** 这一帧走完了（分母 +1）。分段漏记也照样计一帧，否则平均值会被系统性放大 */
+  endFrame(): void {
+    this.frames++;
+  }
+
+  /** 取走并清零。窗口内一帧都没跑过时返回 `frames: 0` 与空报表（不是 NaN） */
+  take(): PhaseReport {
+    const avg: Record<string, number> = {};
+    let total = 0;
+    if (this.frames > 0) {
+      for (const [phase, ms] of this.totals) {
+        const value = ms / this.frames;
+        avg[phase] = round1(value);
+        total += value;
+      }
+    }
+    this.totals.clear();
+    const frames = this.frames;
+    this.frames = 0;
+    return { frames, avg, total: round1(total) };
+  }
+}

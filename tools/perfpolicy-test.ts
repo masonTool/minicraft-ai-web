@@ -28,6 +28,7 @@ import {
   MOBILE_PIXEL_RATIO_CAP,
   MOBILE_RESOLUTION_MIN,
   MOBILE_VIEW_DISTANCE_MAX,
+  FramePhaseMeter,
   decorCloudsVisible,
   decorParticleBudget,
   decorRainFraction,
@@ -436,6 +437,51 @@ console.log('\n[远裁面罩得住天空层（"屏幕正中那个圆洞"的来�
   equal('视距 16 同样不回归', cameraFarFor(16), 16 * 16 + 32);
   equal('小视距时由"罩住天空"那一式兜底', cameraFarFor(4), SKY_MAX_RADIUS + 32);
   check('日月（150）也在范围内', cameraFarFor(6) > 150, `${cameraFarFor(6)}`);
+}
+
+// ---------------------------------------------------------------- 帧内分段计时（批次 205）
+
+console.log('\n[帧内分段计时]');
+{
+  // 这张报表要回答的是："卡在 CPU 还是 GPU"——判据是 `total` 与真实帧间距的关系，
+  // 所以每一处除法都不能出 NaN / 负数。
+  const empty = new FramePhaseMeter().take();
+  equal('没跑过帧时 frames = 0（不是 NaN）', empty.frames, 0);
+  equal('没跑过帧时 total = 0', empty.total, 0);
+  equal('没跑过帧时报表是空对象', Object.keys(empty.avg).length, 0);
+
+  const meter = new FramePhaseMeter();
+  for (let i = 0; i < 4; i++) {
+    meter.add('sim', 2);
+    meter.add('render', 6.5);
+    meter.endFrame();
+  }
+  const report = meter.take();
+  equal('统计了 4 帧', report.frames, 4);
+  equal('每帧平均：sim 2ms', report.avg.sim, 2);
+  equal('每帧平均：render 6.5ms', report.avg.render, 6.5);
+  equal('总计是各段之和（8.5ms）', report.total, 8.5);
+
+  const after = meter.take();
+  equal('取走之后清零（不会把上一个窗口算进来）', after.frames, 0);
+
+  // 脏数据：负数 / NaN / Infinity 一律丢掉，且**不能影响分母**
+  const dirty = new FramePhaseMeter();
+  dirty.add('sim', -100);
+  dirty.add('sim', Number.NaN);
+  dirty.add('render', Number.POSITIVE_INFINITY);
+  dirty.add('render', 4);
+  dirty.endFrame();
+  const cleaned = dirty.take();
+  equal('脏数据被丢掉，只留合法的 4ms', cleaned.avg.render, 4);
+  check('负的那一段干脆不出现（不是 0）', !('sim' in cleaned.avg));
+
+  // 漏记分段的帧仍然计一帧：否则平均值会被系统性放大
+  const partial = new FramePhaseMeter();
+  partial.add('sim', 10);
+  partial.endFrame();
+  partial.endFrame();
+  equal('只记了一段的帧 + 一帧空跑 → 平均 5ms', partial.take().avg.sim, 5);
 }
 
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);
