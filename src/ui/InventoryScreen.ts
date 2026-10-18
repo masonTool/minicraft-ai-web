@@ -1333,15 +1333,16 @@ export class InventoryScreen {
     }
 
     if (items.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'inv-empty';
-      // 空列表要说清"为什么空"：是这一栏本来就没有，还是筛掉了。
-      // 顺带把"背包里一共有几件不同的东西"报出来——这一栏被弄成过"永远空"，
-      // 有这行数字就能一眼分清"背包空"还是"过滤坏了"。
-      empty.textContent = this.showUnowned
-        ? '这一栏里没有匹配的物品'
-        : `这一栏里你还没有东西（背包里共 ${this.ownedItemIds().length} 件不同的东西 · 打开配方按钮可以看全部）`;
-      fragment.appendChild(empty);
+      // 批次 184（用户要求）：**配方开关关着时，空栏就留空白**。
+      // 原来这里会写一段"你还没有东西 + 背包里共 N 件"的说明——那行字在手机上
+      // 又长又容易让人以为"背包坏了"，用户明确说"显示空白区域就行了"。
+      // 只有在"确实有筛选条件"（搜索词 / 显示全部）时，才需要解释为什么空着。
+      if (this.categoryQuery.length > 0 || this.showUnowned) {
+        const empty = document.createElement('div');
+        empty.className = 'inv-empty';
+        empty.textContent = '这一栏里没有匹配的物品';
+        fragment.appendChild(empty);
+      }
     }
 
     for (const child of Array.from(this.categoryGrid.children)) this.tooltipStacks.delete(child as HTMLElement);
