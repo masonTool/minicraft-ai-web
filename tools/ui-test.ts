@@ -2938,6 +2938,13 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       appSrc.includes('this.updatePulsingBlocks(dt);'),
   );
   check(
+    '动力矿车（批次 252）：拿煤点它 = 加油，烧完自己推',
+    itemsSrc.includes('FURNACE_MINECART: 1481') &&
+      recipesSrc.includes('result: { id: Item.FURNACE_MINECART, count: 1 }') &&
+      appSrc.includes('boatTarget instanceof FurnaceMinecart') &&
+      appSrc.includes('FURNACE_CART_FUEL_PER_COAL'),
+  );
+  check(
     '漏斗矿车（批次 251）：5 格肚子 + 主程序搬运',
     itemsSrc.includes('HOPPER_MINECART: 1480') &&
       recipesSrc.includes('result: { id: Item.HOPPER_MINECART, count: 1 }') &&

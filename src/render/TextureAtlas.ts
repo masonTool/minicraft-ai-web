@@ -1874,6 +1874,25 @@ PAINTERS.deepslate_redstone_ore_lit = litOrePainter(PAINTERS.deepslate_redstone_
  * 与普通箱子的区别只在**锁扣**：箱身木色略微偏红，锁扣变成红铜色——
  * 16×16 下这是唯一能把两者一眼分开的地方（原版也是靠那一块红锁扣）。
  */
+/** 动力矿车（批次 252）：车斗正面一个炉口 + 底部火光 */
+PAINTERS.item_furnace_minecart = (x, y) => {
+  if (y >= 3 && y <= 10) {
+    const half = 6.2 - (y - 3) * 0.35;
+    if (Math.abs(x - 7.5) <= half) {
+      // 炉口（中间那块暗色开口），下沿一圈火光
+      if (y >= 5 && y <= 9 && Math.abs(x - 7.5) <= 3) {
+        if (y >= 8) return [206, 112, 42, 255];
+        return [52, 50, 52, 255];
+      }
+      return [152, 152, 158, 255];
+    }
+  }
+  if (Math.hypot(x - 4.5, y - 12.5) <= 1.6 || Math.hypot(x - 10.5, y - 12.5) <= 1.6) {
+    return [64, 64, 70, 255];
+  }
+  return [0, 0, 0, 0];
+};
+
 /** 漏斗矿车（批次 251）：矿车斗 + 上半截深色漏斗口 */
 PAINTERS.item_hopper_minecart = (x, y) => {
   if (y >= 3 && y <= 10) {

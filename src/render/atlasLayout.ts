@@ -1047,8 +1047,9 @@ export const TILE_ORDER = [
   // 陷阱箱（批次 249）：箱子贴图的红色版本
   'trapped_chest_top',
   'trapped_chest_side',
-  // 漏斗矿车（批次 251）
+  // 漏斗矿车与动力矿车（批次 251/252）
   'item_hopper_minecart',
+  'item_furnace_minecart',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

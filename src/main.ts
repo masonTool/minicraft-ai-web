@@ -91,6 +91,7 @@ import { createMob } from './core/entity/MobFactory.ts';
 import { Boat } from './core/entity/Boat.ts';
 import { Minecart } from './core/entity/Minecart.ts';
 import { HopperMinecart } from './core/entity/HopperMinecart.ts';
+import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from './core/entity/FurnaceMinecart.ts';
 /**
  * 可骑乘的载具（批次 245）：船与矿车共用"上下车 + 每帧贴位置 + `vehicleInput`"那一套，
  * 所以主程序里所有骑乘状态都按这个联合类型存。
@@ -4537,7 +4538,7 @@ class App {
    * 用 `this.hit`（触摸端已经是按手指落点算出来的方块目标），
    * 所以调用点必须排在 `if (!this.hit) return;` 之后。
    */
-  private placeMinecart(hopper = false): boolean {
+  private placeMinecart(kind: 'normal' | 'hopper' | 'furnace' = 'normal'): boolean {
     const hit = this.hit;
     if (!hit) return false;
     // 铁轨是 `flat` 薄板：矿车落在它上方 0.05（贴住轨面，不悬空）。
@@ -4551,10 +4552,16 @@ class App {
     ) {
       return false;
     }
-    // 漏斗矿车（批次 251）：同一套放置逻辑，只是生成另一种实体
-    const cart = hopper
-      ? new HopperMinecart(hit.x + 0.5, hit.y + 0.05, hit.z + 0.5)
-      : new Minecart(hit.x + 0.5, hit.y + 0.05, hit.z + 0.5);
+    // 三种矿车同一套放置逻辑，只是生成不同的实体（批次 251/252）
+    const x = hit.x + 0.5;
+    const y = hit.y + 0.05;
+    const z = hit.z + 0.5;
+    const cart =
+      kind === 'hopper'
+        ? new HopperMinecart(x, y, z)
+        : kind === 'furnace'
+          ? new FurnaceMinecart(x, y, z)
+          : new Minecart(x, y, z);
     cart.yaw = this.yaw;
     this.entities.spawn(cart);
     if (!this.isCreative) {
@@ -9723,6 +9730,19 @@ class App {
 
     // 上船（批次 244）：船常浮在水上，准星/手指底下往往没有可选方块，所以排在这道判断之前
     const boatTarget = this.tapVehicle ?? this.vehicleUnderCrosshair();
+    // 动力矿车（批次 252）：手里拿煤点它 = **加燃料**（原版就是这个手势），不是上车
+    if (boatTarget instanceof FurnaceMinecart && this.heldItemId === Item.COAL) {
+      if (this.inventory.consume(Item.COAL, 1)) {
+        boatTarget.addFuel(FURNACE_CART_FUEL_PER_COAL);
+        this.hand.swing();
+        this.refreshHotbar();
+        this.hudToast.show('动力矿车加了一块煤');
+        this.tapVehicle = null;
+        this.touchPlaceRequest = false;
+        this.placeCooldown = PLACE_COOLDOWN * 2;
+        return;
+      }
+    }
     if (boatTarget && this.mountVehicle(boatTarget)) {
       this.tapVehicle = null;
       this.touchPlaceRequest = false;
@@ -9740,9 +9760,17 @@ class App {
     if (!this.hit) return;
 
     // 放矿车（批次 245）：只能对着铁轨放，所以排在"必须命中方块"之后
+    const cartKind =
+      this.heldItemId === Item.HOPPER_MINECART
+        ? 'hopper'
+        : this.heldItemId === Item.FURNACE_MINECART
+          ? 'furnace'
+          : 'normal';
     if (
-      (this.heldItemId === Item.MINECART || this.heldItemId === Item.HOPPER_MINECART) &&
-      this.placeMinecart(this.heldItemId === Item.HOPPER_MINECART)
+      (this.heldItemId === Item.MINECART ||
+        this.heldItemId === Item.HOPPER_MINECART ||
+        this.heldItemId === Item.FURNACE_MINECART) &&
+      this.placeMinecart(cartKind)
     ) {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;

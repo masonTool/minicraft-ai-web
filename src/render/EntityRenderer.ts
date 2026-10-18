@@ -26,6 +26,7 @@ import { Firework } from '../core/entity/Firework.ts';
 import { Boat } from '../core/entity/Boat.ts';
 import { Minecart } from '../core/entity/Minecart.ts';
 import { HopperMinecart } from '../core/entity/HopperMinecart.ts';
+import { FurnaceMinecart } from '../core/entity/FurnaceMinecart.ts';
 import type { Entity } from '../core/entity/Entity.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 
@@ -87,9 +88,11 @@ export class EntityRenderer {
   private boatParts: readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] | null = null;
   /** 矿车（批次 245）：与船同一套 Group 记账 */
   private readonly minecartGroups = new Map<number, THREE.Group>();
-  private minecartParts: readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] | null = null;
-  /** 漏斗矿车（批次 251）的部件：与矿车同一套形状、车身贴图不同 */
-  private hopperCartParts: readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] | null = null;
+  /**
+   * 矿车部件（批次 251/252）：按**车身贴图名**缓存——普通/漏斗/动力三种车
+   * 形状完全一样，只有车身那张贴图不同。
+   */
+  private readonly minecartParts = new Map<string, readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[]>();
   private orbMaterial: THREE.SpriteMaterial | null = null;
   /** 箭的几何体按**物品 id** 缓存：药水箭各有自己的贴图（箭头上染了药水颜色） */
   private readonly arrowGeometries = new Map<number, THREE.BufferGeometry>();
@@ -247,11 +250,18 @@ export class EntityRenderer {
     let group = this.minecartGroups.get(cart.id);
     if (!group) {
       group = new THREE.Group();
-      // 漏斗矿车（批次 251）：车身换成漏斗的深灰贴图，一眼分得出
-      const hopper = cart instanceof HopperMinecart;
-      const parts = hopper
-        ? (this.hopperCartParts ??= this.buildMinecartParts(true))
-        : (this.minecartParts ??= this.buildMinecartParts(false));
+      // 三种车同一套形状、车身贴图不同（批次 251/252）
+      const tile =
+        cart instanceof HopperMinecart
+          ? 'hopper_side'
+          : cart instanceof FurnaceMinecart
+            ? 'furnace_side'
+            : 'iron_block';
+      let parts = this.minecartParts.get(tile);
+      if (!parts) {
+        parts = this.buildMinecartParts(tile);
+        this.minecartParts.set(tile, parts);
+      }
       for (const part of parts) {
         const mesh = new THREE.Mesh(part.geometry, this.baseMaterial);
         mesh.position.set(part.x, part.y, part.z);
@@ -272,9 +282,8 @@ export class EntityRenderer {
     group.rotation.y = cart.yaw;
   }
 
-  /** 矿车的部件：斗底 + 四壁（铁 / 漏斗）+ 四个轮子（石头） */
-  private buildMinecartParts(hopper = false): readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] {
-    const bodyTile = hopper ? 'hopper_side' : 'iron_block';
+  /** 矿车的部件：斗底 + 四壁（车身贴图）+ 四个轮子（石头） */
+  private buildMinecartParts(bodyTile: string): readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] {
     const make = (
       width: number,
       height: number,
@@ -286,7 +295,7 @@ export class EntityRenderer {
     ) => {
       const geometry = new THREE.BoxGeometry(width, height, depth);
       // 六个面都必须写 UV（只给一个的话另外五面会用整张图集）
-      applyFaceUvs(geometry, this.atlas, Array<string>(6).fill(tile === 'iron_block' && hopper ? bodyTile : tile));
+      applyFaceUvs(geometry, this.atlas, Array<string>(6).fill(tile === 'iron_block' ? bodyTile : tile));
       return { geometry, x, y, z };
     };
     return [
@@ -663,14 +672,10 @@ export class EntityRenderer {
     }
     for (const group of this.minecartGroups.values()) this.object.remove(group);
     this.minecartGroups.clear();
-    if (this.minecartParts) {
-      for (const part of this.minecartParts) part.geometry.dispose();
-      this.minecartParts = null;
+    for (const parts of this.minecartParts.values()) {
+      for (const part of parts) part.geometry.dispose();
     }
-    if (this.hopperCartParts) {
-      for (const part of this.hopperCartParts) part.geometry.dispose();
-      this.hopperCartParts = null;
-    }
+    this.minecartParts.clear();
     for (const material of this.materialByLevel) material?.dispose();
     this.materialByLevel.length = 0;
     this.baseMaterial.dispose();

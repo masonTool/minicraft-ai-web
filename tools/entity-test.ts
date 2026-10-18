@@ -18,6 +18,7 @@ import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import { Boat } from '../src/core/entity/Boat.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
 import { HopperMinecart } from '../src/core/entity/HopperMinecart.ts';
+import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from '../src/core/entity/FurnaceMinecart.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 import { boxAt } from '../src/core/physics/AABB.ts';
@@ -581,6 +582,41 @@ console.log('\n[漏斗矿车：5 格肚子（批次 251）]');
   equal('总数 70', cart.itemCount, 70);
   equal('再塞 5 组泥土：只收下剩余 3 格（192），退回 128', cart.accept(Block.DIRT, 320), 128);
   equal('总数变成 262', cart.itemCount, 262);
+}
+
+console.log('\n[动力矿车：烧煤自己推（批次 252）]');
+{
+  const railWorld: PhysicsWorld = {
+    collisionAt: (_x, y) => (y < 0 ? 'full' : null),
+    isLiquid: () => false,
+  };
+  const ctx: EntityContext = {
+    world: railWorld,
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (_x, y) => (y === 0 ? Block.RAIL : Block.AIR),
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+  };
+  // 车头朝 +X（yaw = -π/2 时 forward = (1, 0)）
+  const cart = new FurnaceMinecart(0.5, 0.05, 0.5);
+  cart.yaw = -Math.PI / 2;
+  const start = cart.x;
+  for (let i = 0; i < 60; i++) cart.tick(ctx, 0.05);
+  check('没燃料时纹丝不动（没人坐也不烧）', Math.abs(cart.x - start) < 0.2, `x=${cart.x.toFixed(2)}`);
+
+  cart.addFuel(FURNACE_CART_FUEL_PER_COAL);
+  for (let i = 0; i < 60; i++) cart.tick(ctx, 0.05);
+  check('加一块煤之后自己往前开', cart.x > start + 3, `x=${cart.x.toFixed(2)}`);
+  check(
+    '燃料在按秒消耗',
+    cart.fuelSeconds < FURNACE_CART_FUEL_PER_COAL && cart.fuelSeconds > 0,
+    `剩余 ${cart.fuelSeconds.toFixed(1)} 秒`,
+  );
+
+  cart.addFuel(10_000);
+  check('燃料有上限（不会一加就无限烧）', cart.fuelSeconds <= 300, `${cart.fuelSeconds}`);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

@@ -814,6 +814,12 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.HOPPER_MINECART, count: 1 },
     ingredients: [Item.MINECART, Block.HOPPER],
   },
+  // 动力矿车（批次 252）：矿车 + 熔炉（原版无序）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.FURNACE_MINECART, count: 1 },
+    ingredients: [Item.MINECART, Block.FURNACE],
+  },
   // 动力铁轨（批次 246）：6 金锭 + 1 木棍 + 1 红石 → 6 段（原版图案）
   {
     kind: 'shaped' as const,
