@@ -779,6 +779,18 @@ console.log('\n[骑乘：马（批次 253）]');
   const stopX = horse.x;
   for (let i = 0; i < 20; i++) horse.tick(ctx, 0.05);
   check('下马后不再按骑手的方向冲', Math.abs(horse.x - stopX) < 8, `x=${horse.x.toFixed(1)}`);
+
+  // 批次 254：马跳与鞍
+  check('默认没鞍（要先装鞍才能骑）', horse.saddled === false);
+  horse.saddled = true;
+  horse.passenger = 'player';
+  const jumpCtx: EntityContext = {
+    ...ctx,
+    vehicleInput: { forward: 0, strafe: 0, sprint: false, jump: true },
+  };
+  for (let i = 0; i < 60; i++) horse.tick(ctx, 0.05); // 先落地
+  horse.tick(jumpCtx, 0.05);
+  check('骑着按跳跃键会起跳（vy > 0）', horse.vy > 0, `vy=${horse.vy.toFixed(2)}`);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

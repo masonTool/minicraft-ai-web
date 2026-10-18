@@ -2938,6 +2938,13 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       appSrc.includes('this.updatePulsingBlocks(dt);'),
   );
   check(
+    '鞍（批次 254）：装上才能骑，骑马时跳跃键是马跳不是下马',
+    itemsSrc.includes('SADDLE: 1486') &&
+      recipesSrc.includes('result: { id: Item.SADDLE, count: 1 }') &&
+      appSrc.includes('mob.saddled = true') &&
+      appSrc.includes('const jumpDismount = rawInput.jump && !(this.ridingVehicle instanceof Horse);'),
+  );
+  check(
     '动力矿车（批次 252）：拿煤点它 = 加油，烧完自己推',
     itemsSrc.includes('FURNACE_MINECART: 1481') &&
       recipesSrc.includes('result: { id: Item.FURNACE_MINECART, count: 1 }') &&
