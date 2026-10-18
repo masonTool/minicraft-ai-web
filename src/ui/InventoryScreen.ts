@@ -199,6 +199,13 @@ export interface InventoryScreenHooks {
   onOpenRecipes?: (tab?: RecipeBookTab) => void;
   /** 关掉配方书（携带版离开合成页时） */
   onCloseRecipes?: () => void;
+  /**
+   * 面板关闭（或换到另一个面板）时（批次 249）。
+   *
+   * 陷阱箱要靠它把"开箱中"的红石信号撤掉——容器本身不关心红石，
+   * 界面层也不该认识方块，"关了"这件事只有这一处知道。
+   */
+  onPanelClosed?: () => void;
   /** 配方书现在开着吗（决定左栏显示"我的物品"还是"配方列表"） */
   isRecipesOpen?: () => boolean;
   /** 配方书当前停在哪一栏（左轨那排分类图标要点亮它） */
@@ -3722,6 +3729,8 @@ export class InventoryScreen {
     // 上半部分的槽位会被重建，留着它等于让一个已经不在屏幕上的格子继续吃手势
     this.endSplit();
     if (this.mode !== mode || this.activeContainer !== container) {
+      // 换面板 = 上一个容器"关掉了"（陷阱箱据此撤信号，批次 249）
+      if (this.open) this.hooks.onPanelClosed?.();
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = mode;
       this.activeContainer = container ?? null;
@@ -3843,6 +3852,7 @@ export class InventoryScreen {
   close(): void {
     this.clearTouchPress();
     if (!this.open || this.closing) return;
+    this.hooks.onPanelClosed?.();
     // 携带版合成页的配方书是背包的左半页，不是独立窗口。
     // 直接点右上角关闭时必须一起收起，否则背包滑走后会留下一个孤立的配方面板。
     this.hooks.onCloseRecipes?.();

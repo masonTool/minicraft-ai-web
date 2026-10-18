@@ -141,6 +141,8 @@ export function isRedstoneComponent(id: number): boolean {
     case Block.TARGET:
     case Block.REDSTONE_ORE:
     case Block.DEEPSLATE_REDSTONE_ORE:
+    // 陷阱箱（批次 249）：打开时当电源（`powered` 位由主程序在开箱/关箱时写）
+    case Block.TRAPPED_CHEST:
     // 漏斗（批次 58）：通电就**锁定**（不推也不吸）——这是原版的"漏斗闸门"玩法
     case Block.HOPPER:
     // 投掷器（批次 59）：通电的**上升沿**吐一件出去（它是"负载"，
@@ -667,6 +669,13 @@ export class RedstoneEngine {
         case Block.REDSTONE_BLOCK:
           strengths.set(key, 15);
           sources.push({ x: nx, y: ny, z: nz });
+          break;
+        // 陷阱箱（批次 249）：`powered` 位 = "现在有人开着它"
+        case Block.TRAPPED_CHEST:
+          if (isPowered(state)) {
+            strengths.set(key, 15);
+            sources.push({ x: nx, y: ny, z: nz });
+          }
           break;
         // 探测铁轨（批次 246）：有实体就当场输出 15（状态位由 `pollDetectorRails` 维护）
         case Block.DETECTOR_RAIL:

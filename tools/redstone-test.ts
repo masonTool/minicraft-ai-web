@@ -30,6 +30,7 @@ import {
   withDelay,
   withDoorUpper,
   withFacing,
+  withPowered,
 } from '../src/core/registry/blockState.ts';
 import {
   RedstoneEngine,
@@ -679,6 +680,29 @@ console.log('\n[标靶：被打中时输出一秒信号（批次 248）]');
   engine.onBlockChanged(world, 0, Y, 0);
   step(engine, world, 0.1);
   check('脉冲结束 → 熄灭', !isPowered(world.getState(0, Y, 0)) && !isPowered(world.getState(1, Y, 0)));
+}
+
+console.log('\n[陷阱箱：开着就发信号（批次 249）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.TRAPPED_CHEST, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('关着的陷阱箱不输出', !isPowered(world.getState(0, Y, 0)) && !isPowered(world.getState(1, Y, 0)));
+
+  // 主程序开箱时会写 `powered` 位并喊一次重算（这里照做）
+  world.setState(0, Y, 0, withPowered(world.getState(0, Y, 0), true));
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('开箱 → 陷阱箱自身点亮', isPowered(world.getState(0, Y, 0)));
+  check('相邻红石灯被点亮', isPowered(world.getState(1, Y, 0)));
+
+  world.setState(0, Y, 0, withPowered(world.getState(0, Y, 0), false));
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('关箱 → 灯熄灭', !isPowered(world.getState(0, Y, 0)) && !isPowered(world.getState(1, Y, 0)));
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);

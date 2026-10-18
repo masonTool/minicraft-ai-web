@@ -142,6 +142,12 @@ const BASE_RECIPES: readonly Recipe[] = [
   { kind: 'shaped', result: { id: Item.STICK, count: 4 }, pattern: ['P', 'P'], key: { P } },
   { kind: 'shaped', result: { id: Block.CRAFTING_TABLE, count: 1 }, pattern: ['PP', 'PP'], key: { P } },
   { kind: 'shaped', result: { id: Block.CHEST, count: 1 }, pattern: ['PPP', 'P P', 'PPP'], key: { P } },
+  // 陷阱箱（批次 249）：箱子 + 绊线钩（原版无序配方）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Block.TRAPPED_CHEST, count: 1 },
+    ingredients: [Block.CHEST, Block.TRIPWIRE_HOOK],
+  },
 
   // ---- 石头 → 石砖 → 錾制石砖
   { kind: 'shaped', result: { id: Block.STONE_BRICKS, count: 4 }, pattern: ['SS', 'SS'], key: { S: Block.STONE } },

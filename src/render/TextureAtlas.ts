@@ -1869,6 +1869,32 @@ PAINTERS.redstone_ore_lit = litOrePainter(PAINTERS.redstone_ore as Painter);
 PAINTERS.deepslate_redstone_ore_lit = litOrePainter(PAINTERS.deepslate_redstone_ore as Painter);
 
 /**
+ * 陷阱箱（批次 249）：箱子的红色版本。
+ *
+ * 与普通箱子的区别只在**锁扣**：箱身木色略微偏红，锁扣变成红铜色——
+ * 16×16 下这是唯一能把两者一眼分开的地方（原版也是靠那一块红锁扣）。
+ */
+PAINTERS.trapped_chest_top = (x, y, rng) => {
+  const base = layered(140, 7, 7, [1.1, 0.78, 0.44])(x, y, rng);
+  if (x === 0 || y === 0 || x === 15 || y === 15) {
+    return [clamp255(98), clamp255(48), clamp255(30), 255];
+  }
+  return [clamp255(base[0] * 1.05), clamp255(base[1] * 0.88), clamp255(base[2] * 0.84), 255];
+};
+PAINTERS.trapped_chest_side = (x, y, rng) => {
+  const base = layered(140, 7, 7, [1.1, 0.78, 0.44])(x, y, rng);
+  if (x === 0 || y === 0 || x === 15 || y === 15) {
+    return [clamp255(98), clamp255(48), clamp255(30), 255];
+  }
+  // 红铜锁扣（普通箱子这里是银色）
+  if (x >= 6 && x <= 9 && y >= 4 && y <= 8) {
+    const v = 190 + rng() * 30;
+    return [clamp255(v), clamp255(58), clamp255(46), 255];
+  }
+  return [clamp255(base[0] * 1.05), clamp255(base[1] * 0.88), clamp255(base[2] * 0.84), 255];
+};
+
+/**
  * 矿车图标（批次 245）：一只开口的铁皮斗 + 两个轮子。
  */
 PAINTERS.item_minecart = (x, y) => {

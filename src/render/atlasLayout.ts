@@ -1044,6 +1044,9 @@ export const TILE_ORDER = [
   'target_side_on',
   'redstone_ore_lit',
   'deepslate_redstone_ore_lit',
+  // 陷阱箱（批次 249）：箱子贴图的红色版本
+  'trapped_chest_top',
+  'trapped_chest_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

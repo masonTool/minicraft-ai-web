@@ -1002,6 +1002,13 @@ class App {
    *  - 跳跃/潜行 = 下船。
    */
   private ridingVehicle: Rideable | null = null;
+  /**
+   * 正被打开的陷阱箱位置（批次 249）。
+   *
+   * 陷阱箱的红石信号 = "有人开着它"，而"开着"只有界面层知道；
+   * 所以开箱时记下坐标、关面板时按坐标把 `powered` 位撤掉。
+   */
+  private trappedChestPos: { x: number; y: number; z: number } | null = null;
   /** 标靶脉冲（批次 248）：位置 → 剩余秒数 */
   private readonly targetPulses = new Map<string, number>();
   /** 被踩亮的红石矿石（批次 248）：位置 → 剩余秒数 */
@@ -1646,6 +1653,8 @@ class App {
         onOpenChange: (open) => this.handleInventoryOpen(open),
         onOpenRecipes: (tab) => this.openRecipeBook(tab),
         onCloseRecipes: () => this.closeRecipeBook(),
+        // 陷阱箱（批次 249）：界面一关就把"开箱中"的红石信号撤掉
+        onPanelClosed: () => this.closeTrappedChest(),
         // 左栏是不是正被配方书占着（决定显示"我的物品"还是"配方列表"）
         isRecipesOpen: () => this.isRecipeBookOpen(),
         // 左轨那排分类图标要点亮当前分类
@@ -4332,6 +4341,31 @@ class App {
     const z = Math.floor(cart.z);
     if (this.world.getBlock(x, y, z) !== Block.ACTIVATOR_RAIL) return false;
     return isPowered(this.world.getBlockState(x, y, z));
+  }
+
+  /** 打开陷阱箱：记下坐标并把 `powered` 位点亮（批次 249） */
+  private openTrappedChest(x: number, y: number, z: number): void {
+    // 上一个还没关（例如直接点另一个箱子）就先撤掉，避免"两个都亮着"
+    this.closeTrappedChest();
+    this.trappedChestPos = { x, y, z };
+    this.setTrappedChestPowered(x, y, z, true);
+  }
+
+  /** 关掉陷阱箱：把信号撤掉（界面关闭钩子调用；没有开着的就什么都不做） */
+  private closeTrappedChest(): void {
+    const pos = this.trappedChestPos;
+    if (!pos) return;
+    this.trappedChestPos = null;
+    this.setTrappedChestPowered(pos.x, pos.y, pos.z, false);
+  }
+
+  /** 写陷阱箱的 `powered` 位并让红石重算（方块已经不在原处时静默跳过） */
+  private setTrappedChestPowered(x: number, y: number, z: number, on: boolean): void {
+    if (this.world.getBlock(x, y, z) !== Block.TRAPPED_CHEST) return;
+    const state = this.world.getBlockState(x, y, z);
+    if (isPowered(state) === on) return;
+    this.world.setStateAndUpdate(x, y, z, withPowered(state, on));
+    this.redstone.onBlockChanged(this.redstoneWorld, x, y, z);
   }
 
   /**
@@ -8470,6 +8504,16 @@ class App {
         this.chat.push('箱子上面压着方块，打不开（挪开它，或者换成**木桶**——木桶不怕压）', 'system');
         return true;
       }
+      this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
+      return true;
+    }
+    // 陷阱箱（批次 249）：与箱子同一个容器/界面，差别是**开着的时候发红石信号**
+    if (hitBlock === Block.TRAPPED_CHEST) {
+      if (this.isCoveredAbove(x, y, z)) {
+        this.chat.push('陷阱箱上面压着方块，打不开（挪开它）', 'system');
+        return true;
+      }
+      this.openTrappedChest(x, y, z);
       this.inventoryScreen.openWith('chest', this.world.containers.getOrCreateChest(this.dimension, x, y, z));
       return true;
     }

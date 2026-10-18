@@ -325,6 +325,13 @@ const BASE_SPECS: readonly BlockSpec[] = [
     stateLight: (state) => (isLitState(state) ? 13 : 0),
   },
   { id: 45, name: 'minecraft:chest', tiles: ['chest_top', 'chest_top', 'chest_side'] },
+  /**
+   * 陷阱箱（批次 249）：外观与箱子同款（红锁扣区分），**打开时向相邻红石输出 15**。
+   *
+   * 它没有额外的状态位：开箱/关箱由主程序写 `powered` 位（与拉杆同一个口径），
+   * 红石引擎把它当电源读。容器本身与箱子共用 `getOrCreateChest`（按坐标存）。
+   */
+  { id: 585, name: 'minecraft:trapped_chest', tiles: ['trapped_chest_top', 'trapped_chest_top', 'trapped_chest_side'] },
 
   // ---- 石材家族
   { id: 62, name: 'minecraft:stone_bricks', tiles: ['stone_bricks', 'stone_bricks', 'stone_bricks'] },
@@ -3244,6 +3251,8 @@ export const Block = {
   CRAFTING_TABLE: 43,
   FURNACE: 44,
   CHEST: 45,
+  // 陷阱箱（批次 249）：id 585（现有最大 584 之后）
+  TRAPPED_CHEST: 585,
   STONE_BRICKS: 62,
   CHISELED_STONE_BRICKS: 63,
   SMOOTH_STONE: 64,
@@ -3762,6 +3771,7 @@ const HARDNESS = new Map<number, number>([
   // 营火 2（原版）：斧最快，徒手也能采
   [Block.CAMPFIRE, 2],
   [Block.CHEST, 2.5],
+  [Block.TRAPPED_CHEST, 2.5],
 
   [Block.STONE_BRICKS, 1.5],
   [Block.CHISELED_STONE_BRICKS, 1.5],

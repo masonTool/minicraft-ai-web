@@ -77,6 +77,8 @@ export type ContainerKind =
  */
 export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   Block.CHEST,
+  // 陷阱箱（批次 249）：与箱子同一个容器实现（按坐标存），活塞一样推不动
+  Block.TRAPPED_CHEST,
   Block.HOPPER,
   Block.DROPPER,
   Block.DISPENSER,

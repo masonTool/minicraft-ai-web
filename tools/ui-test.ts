@@ -2937,6 +2937,14 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       appSrc.includes('private updatePulsingBlocks(dt: number): void') &&
       appSrc.includes('this.updatePulsingBlocks(dt);'),
   );
+  check(
+    '陷阱箱（id 585）：开箱发信号、关箱撤信号',
+    blocksSrc.includes('TRAPPED_CHEST: 585') &&
+      recipesSrc.includes('result: { id: Block.TRAPPED_CHEST, count: 1 }') &&
+      engineSrc.includes('case Block.TRAPPED_CHEST:') &&
+      appSrc.includes('private openTrappedChest(x: number, y: number, z: number)') &&
+      appSrc.includes('onPanelClosed: () => this.closeTrappedChest(),'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
