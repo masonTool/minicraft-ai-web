@@ -135,7 +135,8 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   // 多重射击 / 快速装填（批次 265）：弩装填与齐射，数值见 `Bow.ts`
   { id: 'multishot', name: '多重射击', maxLevel: 1, targets: ['crossbow'], weight: 2, implemented: true },
   { id: 'quick_charge', name: '快速装填', maxLevel: 3, targets: ['crossbow'], weight: 5, implemented: true },
-  { id: 'piercing', name: '穿透', maxLevel: 4, targets: ['crossbow'], weight: 10 },
+  // 穿透（批次 266）：箭矢命中生物后继续飞，剩余次数 = 等级
+  { id: 'piercing', name: '穿透', maxLevel: 4, targets: ['crossbow'], weight: 10, implemented: true },
 ];
 
 /** 原版 1.18 的附魔总数（用于断言"表有没有漏"） */

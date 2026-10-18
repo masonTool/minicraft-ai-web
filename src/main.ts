@@ -4197,6 +4197,8 @@ class App {
           fireSeconds: effects.flame > 0 ? FLAME_SECONDS : 0,
           pickable: effects.infinity === 0,
           itemId: ammo.itemId,
+          // 穿透（批次 266）：箭矢命中后能继续穿过的生物数
+          pierce: enchantLevel(this.heldEnchants, 'piercing'),
           ...(ammo.potionId === undefined ? {} : { potionId: ammo.potionId }),
         },
       );

@@ -65,6 +65,13 @@ export interface ArrowOptions {
    * 方向相反、时长也是原版的整时长（流浪者 30 秒），所以是两根数据线而不是一条。
    */
   effect?: { effect: EffectId; seconds: number };
+  /**
+   * 剩余穿透次数（批次 266，弩的「穿透」附魔）。
+   *
+   * 命中生物后如果还有次数，就**不消失**、继续按原速飞；同一只生物只会被打一次
+   * （靠 `hitMobIds` 去重）。0 = 普通箭，命中即停。
+   */
+  pierce?: number;
 }
 
 /** 补全默认值之后的选项（内部用，避免到处写 `?? 1`） */
@@ -90,6 +97,8 @@ export class Arrow extends Entity implements MovingBody {
   private readonly options: ResolvedArrowOptions;
   /** 命中过的生物 id，避免同一支箭在子步里重复打同一个目标 */
   private hitMobIds = new Set<number>();
+  /** 还能穿过几只生物（批次 266，穿透附魔；0 = 命中即停） */
+  private pierceLeft: number;
 
   constructor(
     x: number,
@@ -112,6 +121,7 @@ export class Arrow extends Entity implements MovingBody {
       ...(options.potionId === undefined ? {} : { potionId: options.potionId }),
       ...(options.effect === undefined ? {} : { effect: options.effect }),
     };
+    this.pierceLeft = Math.max(0, Math.floor(options.pierce ?? 0));
     this.updateDirection();
   }
 
@@ -236,6 +246,11 @@ export class Arrow extends Entity implements MovingBody {
       for (const effect of tippedArrowEffectsOf(this.options.potionId)) {
         mob.effects.apply(effect.id, effect.seconds, effect.amplifier);
       }
+    }
+    // 穿透（批次 266）：还有剩余次数就穿过这只继续飞
+    if (this.pierceLeft > 0) {
+      this.pierceLeft--;
+      return true;
     }
     this.dead = true;
     return true;
