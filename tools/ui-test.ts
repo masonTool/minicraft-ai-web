@@ -3029,5 +3029,26 @@ console.log('\n[拴绳（批次 256）]');
   );
 }
 
+console.log('\n[载具持久化：区块卸载不丢（批次 257）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const parkingSrc = readFileSync(new URL('../src/core/entity/VehicleParking.ts', import.meta.url), 'utf8');
+  check(
+    '卸载前登记、加载后原样造回（两个钩子都接上）',
+    appSrc.includes('private parkVehicles(cx: number, cz: number)') &&
+      appSrc.includes('private restoreVehicles(cx: number, cz: number)') &&
+      appSrc.includes('this.parkVehicles(cx, cz);') &&
+      appSrc.includes('this.restoreVehicles(chunk.cx, chunk.cz);'),
+  );
+  check(
+    '四种载具都能识别（船 + 三种矿车）',
+    parkingSrc.includes("export type VehicleKind = 'boat' | 'minecart' | 'hopper' | 'furnace'"),
+  );
+  check(
+    '按「维度 + 区块」分开存（同一坐标在不同维度不串）',
+    parkingSrc.includes('`${dimension}:${cx},${cz}`'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

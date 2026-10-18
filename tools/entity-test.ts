@@ -17,6 +17,7 @@ import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../src/core/ent
 import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import { Boat } from '../src/core/entity/Boat.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
+import { VehicleParking } from '../src/core/entity/VehicleParking.ts';
 import { HopperMinecart } from '../src/core/entity/HopperMinecart.ts';
 import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from '../src/core/entity/FurnaceMinecart.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
@@ -617,6 +618,29 @@ console.log('\n[动力矿车：烧煤自己推（批次 252）]');
 
   cart.addFuel(10_000);
   check('燃料有上限（不会一加就无限烧）', cart.fuelSeconds <= 300, `${cart.fuelSeconds}`);
+}
+
+console.log('\n[载具停放：区块卸载/重载不丢（批次 257）]');
+{
+  const parking = new VehicleParking();
+  parking.park('overworld', 0, 0, { kind: 'boat', x: 1, y: 2, z: 3, yaw: 0.5 });
+  parking.park('overworld', 0, 0, { kind: 'hopper', x: 4, y: 5, z: 6, yaw: 1 });
+  check('同一区块能停多辆', parking.size === 2, `${parking.size}`);
+
+  const taken = parking.take('overworld', 0, 0);
+  check('一次取回两辆', taken.length === 2, `${taken.length}`);
+  check(
+    '坐标与朝向原样带回',
+    taken[0]?.kind === 'boat' && taken[0]?.x === 1 && taken[0]?.y === 2 && taken[0]?.z === 3 && taken[0]?.yaw === 0.5,
+    JSON.stringify(taken[0]),
+  );
+  check('取完即删（不会重复生成）', parking.take('overworld', 0, 0).length === 0 && parking.size === 0);
+
+  // 维度隔离：同一组区块坐标在不同维度不能串
+  parking.park('overworld', 2, -1, { kind: 'minecart', x: 0, y: 64, z: 0, yaw: 0 });
+  parking.park('the_nether', 2, -1, { kind: 'furnace', x: 0, y: 32, z: 0, yaw: 0 });
+  check('下界只取到下界那一辆', parking.take('the_nether', 2, -1).length === 1);
+  check('主世界那一辆还在', parking.take('overworld', 2, -1).length === 1);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
