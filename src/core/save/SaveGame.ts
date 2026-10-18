@@ -26,6 +26,8 @@ import type { SerializedContainer } from './ContainerSave.ts';
 import type { SerializedSign } from '../world/SignText.ts';
 import type { SerializedFrame } from '../world/ItemFrame.ts';
 import type { SerializedAdvancements } from '../progress/AdvancementTracker.ts';
+import type { SavedVehicle } from '../entity/VehicleParking.ts';
+import type { SavedEntityRecord } from '../entity/EntityParking.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 import { SAVE_VERSION, migratePlayer } from './SaveMigrations.ts';
 
@@ -128,6 +130,21 @@ export interface PlayerSave {
    * （3 千万格 = 没有边界），不迁移、不改存档版本号。
    */
   border?: { centerX: number; centerZ: number; size: number };
+  /**
+   * 停放中的载具（批次 258，J2 第二刀）：船与三种矿车的「种类 + 坐标 + 朝向 + 维度」。
+   *
+   * 只存一份**纯数据**，不存实体引用：读档时按维度/区块把记录放回 `VehicleParking`，
+   * 等那一块区块加载时再原样造回（与"区块卸载时登记"是同一条恢复路径）。
+   * 老存档没有这个字段 → 当成"没有载具"，不迁移、不改存档版本号。
+   */
+  vehicles?: SavedVehicle[];
+  /**
+   * 生物与掉落物（批次 258）：同样按「维度 + 坐标」存纯数据，区块加载时造回。
+   *
+   * ⚠️ 只存一眼能看见的状态（种类/坐标/血量/驯服/坐下/被牵/剪毛/羊毛色）；
+   * 幼体、状态效果、耐久附魔等附加数据不存。老存档没有这个字段 → 当成空。
+   */
+  entities?: SavedEntityRecord[];
   health: number;
   food: number;
   saturation: number;

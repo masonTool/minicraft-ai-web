@@ -17,6 +17,9 @@
  */
 export type VehicleKind = 'boat' | 'minecart' | 'hopper' | 'furnace';
 
+/** 读档时校验种类：存档可以被手改，别让 `kind: 'ufo'` 造出一个 undefined 实体 */
+const KINDS: ReadonlySet<string> = new Set<VehicleKind>(['boat', 'minecart', 'hopper', 'furnace']);
+
 export interface ParkedVehicle {
   kind: VehicleKind;
   x: number;
@@ -25,9 +28,26 @@ export interface ParkedVehicle {
   yaw: number;
 }
 
+/** 存档里的一条（批次 258：多了维度，区块坐标由 x/z 反推） */
+export interface SavedVehicle extends ParkedVehicle {
+  dimension: string;
+}
+
+interface ParkedEntry {
+  dimension: string;
+  cx: number;
+  cz: number;
+  vehicles: ParkedVehicle[];
+}
+
+/** 区块边长（16）：`x >> 4` 与 `Math.floor(x / 16)` 对负数不一致，统一用后者 */
+function chunkOf(value: number): number {
+  return Math.floor(value / 16);
+}
+
 export class VehicleParking {
   /** key = `${dimension}:${chunkX},${chunkZ}` */
-  private readonly parked = new Map<string, ParkedVehicle[]>();
+  private readonly parked = new Map<string, ParkedEntry>();
 
   private static key(dimension: string, cx: number, cz: number): string {
     return `${dimension}:${cx},${cz}`;
@@ -36,23 +56,54 @@ export class VehicleParking {
   /** 记一条（同一区块可以停多辆，按顺序恢复） */
   park(dimension: string, cx: number, cz: number, vehicle: ParkedVehicle): void {
     const key = VehicleParking.key(dimension, cx, cz);
-    const list = this.parked.get(key);
-    if (list) list.push(vehicle);
-    else this.parked.set(key, [vehicle]);
+    const entry = this.parked.get(key);
+    if (entry) entry.vehicles.push(vehicle);
+    else this.parked.set(key, { dimension, cx, cz, vehicles: [vehicle] });
   }
 
   /** 取走这个区块的全部记录（取完即删，避免重复生成） */
   take(dimension: string, cx: number, cz: number): ParkedVehicle[] {
     const key = VehicleParking.key(dimension, cx, cz);
-    const list = this.parked.get(key) ?? [];
+    const entry = this.parked.get(key);
     this.parked.delete(key);
-    return list;
+    return entry?.vehicles ?? [];
+  }
+
+  /**
+   * 导出全部停放记录（批次 258：写存档用）。
+   *
+   * 区块坐标不进存档——恢复时按 x/z 重新算，少一个可能对不上的字段。
+   */
+  snapshotAll(): SavedVehicle[] {
+    const records: SavedVehicle[] = [];
+    for (const entry of this.parked.values()) {
+      for (const vehicle of entry.vehicles) {
+        records.push({ dimension: entry.dimension, ...vehicle });
+      }
+    }
+    return records;
+  }
+
+  /** 从存档恢复（批次 258）：脏数据跳过，不让一条坏记录把读档带崩 */
+  restoreAll(records: readonly SavedVehicle[] | undefined): void {
+    if (!records) return;
+    for (const record of records) {
+      if (!record || !KINDS.has(record.kind)) continue;
+      if (!Number.isFinite(record.x) || !Number.isFinite(record.y) || !Number.isFinite(record.z)) continue;
+      this.park(record.dimension, chunkOf(record.x), chunkOf(record.z), {
+        kind: record.kind,
+        x: record.x,
+        y: record.y,
+        z: record.z,
+        yaw: Number.isFinite(record.yaw) ? record.yaw : 0,
+      });
+    }
   }
 
   /** 现在一共停着几辆（验收/调试用） */
   get size(): number {
     let total = 0;
-    for (const list of this.parked.values()) total += list.length;
+    for (const entry of this.parked.values()) total += entry.vehicles.length;
     return total;
   }
 

@@ -93,7 +93,16 @@ import { Minecart } from './core/entity/Minecart.ts';
 import { HopperMinecart } from './core/entity/HopperMinecart.ts';
 import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from './core/entity/FurnaceMinecart.ts';
 import { Horse } from './core/entity/Horse.ts';
-import { VehicleParking, type VehicleKind } from './core/entity/VehicleParking.ts';
+import {
+  VehicleParking,
+  type SavedVehicle,
+  type VehicleKind,
+} from './core/entity/VehicleParking.ts';
+import {
+  EntityParking,
+  type SavedEntity,
+  type SavedEntityRecord,
+} from './core/entity/EntityParking.ts';
 /**
  * 可骑乘的载具（批次 245）：船与矿车共用"上下车 + 每帧贴位置 + `vehicleInput`"那一套，
  * 所以主程序里所有骑乘状态都按这个联合类型存。
@@ -1038,6 +1047,8 @@ class App {
   private leashedMob: Mob | null = null;
   /** 区块卸载时寄存的载具（批次 257，J2 第一刀）：区块重新加载时原样造回来 */
   private readonly parkedVehicles = new VehicleParking();
+  /** 区块卸载时寄存的生物与掉落物（批次 258，J2 第二刀） */
+  private readonly parkedEntities = new EntityParking();
   /** 绳子（一条两点的线段）：懒创建，没牵东西时隐藏 */
   private leashLine: THREE.Line | null = null;
   /** `#target-info` 是否挂在手指上方（true = 已加 `.pinned`） */
@@ -1636,6 +1647,8 @@ class App {
         this.populateVillage(chunk.cx, chunk.cz);
         // 载具（批次 257）：这一列上次卸载时停着的船/矿车，现在原样造回来
         this.restoreVehicles(chunk.cx, chunk.cz);
+        // 生物与掉落物（批次 258）：同一条恢复路径
+        this.restoreChunkEntities(chunk.cx, chunk.cz);
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
         this.refreshLoadingState();
       },
@@ -1648,8 +1661,9 @@ class App {
         this.forgetBeaconsInChunk(cx, cz);
         this.chunkRenderer.onChunkUnloaded(cx, cz);
         // 载具（批次 257）：先把它记进"停车登记表"（removeInChunk 是直接 splice，
-        // 不记就永久丢了）；生物与掉落物照旧清掉
+        // 不记就永久丢了）；生物与掉落物（批次 258）同样先寄存再删
         this.parkVehicles(cx, cz);
+        this.parkChunkEntities(cx, cz);
         // 区块卸载时一并清掉落在该区块里的掉落物，避免未加载区域实体无限堆积
         this.entities.removeInChunk(cx, cz);
         this.refreshLoadingState();
@@ -2502,6 +2516,12 @@ class App {
     this.spawnResolved = true;
     this.lastCenterCx = Number.NaN;
     this.lastCenterCz = Number.NaN;
+    // 载具（批次 258）：先把存档里的停放记录放回登记表，再加载区块——
+    // 区块的 `onChunkLoaded` 会顺着同一条恢复路径把它们造回来
+    this.parkedVehicles.clear();
+    this.parkedVehicles.restoreAll(data.vehicles);
+    this.parkedEntities.clear();
+    this.parkedEntities.restoreAll(data.entities);
     this.refreshWorld(toChunkCoord(data.x), toChunkCoord(data.z), true);
     // 存档里的坐标可能是半空/水里/被埋住：等区块加载好再复核一次脚底
     this.requestGroundSettle('load');
@@ -2526,6 +2546,10 @@ class App {
       weather: this.weather.snapshot(),
       // 世界边界（K12，批次 175）：中心与边长都跟着存档走
       border: { ...this.border },
+      // 载具（批次 258）：停放中的 + 已加载的，读档后按区块加载时造回
+      vehicles: this.snapshotVehicles(),
+      // 生物与掉落物（批次 258）：同一条"寄存 + 区块加载时造回"的路径
+      entities: this.snapshotSavedEntities(),
       health: this.stats.health,
       food: this.stats.food,
       saturation: this.stats.saturation,
@@ -4580,14 +4604,8 @@ class App {
       if (entity.chunkX !== cx || entity.chunkZ !== cz) continue;
       // `yaw` 只有载具与生物有，所以先用 `instanceof` 收窄类型再取字段
       if (!(entity instanceof Boat) && !(entity instanceof Minecart)) continue;
-      const kind: VehicleKind =
-        entity instanceof Boat
-          ? 'boat'
-          : entity instanceof FurnaceMinecart
-            ? 'furnace'
-            : entity instanceof HopperMinecart
-              ? 'hopper'
-              : 'minecart';
+      const kind = this.vehicleKindOf(entity);
+      if (!kind) continue;
       this.parkedVehicles.park(this.dimension, cx, cz, {
         kind,
         x: entity.x,
@@ -4596,6 +4614,122 @@ class App {
         yaw: entity.yaw,
       });
     }
+  }
+
+  /** 载具种类（批次 257/258）：船与三种矿车，其它实体返回 null */
+  private vehicleKindOf(entity: object): VehicleKind | null {
+    if (entity instanceof Boat) return 'boat';
+    if (entity instanceof FurnaceMinecart) return 'furnace';
+    if (entity instanceof HopperMinecart) return 'hopper';
+    if (entity instanceof Minecart) return 'minecart';
+    return null;
+  }
+
+  /**
+   * 存档用的载具清单（批次 258）：**停放中的 + 当前已加载的**。
+   *
+   * 只存停放中的会漏掉"关游戏时正停在身边的那条船"；只存已加载的又会漏掉
+   * "停在别的区块里的那些"。两份合起来才是完整的。
+   */
+  private snapshotVehicles(): SavedVehicle[] {
+    const records = this.parkedVehicles.snapshotAll();
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Boat) && !(entity instanceof Minecart)) continue;
+      const kind = this.vehicleKindOf(entity);
+      if (!kind) continue;
+      records.push({
+        dimension: this.dimension,
+        kind,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        yaw: entity.yaw,
+      });
+    }
+    return records;
+  }
+
+  /**
+   * 把一只实体转成可存档的纯数据（批次 258）。
+   *
+   * 载具走 `VehicleParking`，这里只管生物与掉落物；联机队友是"渲染层的假人"，不存。
+   */
+  private savedEntityOf(entity: object): SavedEntity | null {
+    if (entity instanceof ItemEntity) {
+      return {
+        kind: 'item',
+        itemId: entity.itemId,
+        count: entity.count,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+      };
+    }
+    if (entity instanceof Mob) {
+      if (entity.type.id === REMOTE_PLAYER_TYPE.id) return null;
+      return {
+        kind: 'mob',
+        typeId: entity.type.id,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        yaw: entity.yaw,
+        health: entity.health,
+        tamed: entity.tamed,
+        sitting: entity.sitting,
+        leashed: entity.leashed,
+        sheared: entity.sheared,
+        woolColor: entity.woolColor,
+      };
+    }
+    return null;
+  }
+
+  /** 区块卸载前寄存该区块的生物与掉落物（批次 258） */
+  private parkChunkEntities(cx: number, cz: number): void {
+    for (const entity of this.entities.all) {
+      if (entity.chunkX !== cx || entity.chunkZ !== cz) continue;
+      const record = this.savedEntityOf(entity);
+      if (record) this.parkedEntities.park(this.dimension, cx, cz, record);
+    }
+  }
+
+  /** 把一条存档记录造回实体（批次 258） */
+  private spawnSavedEntity(record: SavedEntity): void {
+    if (record.kind === 'item') {
+      this.entities.spawn(new ItemEntity(record.itemId, record.count, record.x, record.y, record.z));
+      return;
+    }
+    const type = mobTypeById(record.typeId);
+    if (!type) return; // 存档里出现了本版本没有的生物：静默跳过，别让读档失败
+    const mob = createMob(type, record.x, record.y, record.z);
+    mob.yaw = record.yaw;
+    mob.health = Math.max(1, Math.min(type.health, record.health));
+    mob.tamed = record.tamed;
+    mob.sitting = record.sitting;
+    mob.leashed = record.leashed;
+    mob.sheared = record.sheared;
+    mob.woolColor = record.woolColor;
+    this.entities.spawn(mob);
+    // 被牵的只记最后一只（与 `toggleLeash` 的"一次一只"一致）
+    if (mob.leashed) this.leashedMob = mob;
+  }
+
+  /** 区块重新加载时把生物与掉落物造回来（批次 258） */
+  private restoreChunkEntities(cx: number, cz: number): void {
+    for (const record of this.parkedEntities.take(this.dimension, cx, cz)) {
+      this.spawnSavedEntity(record);
+    }
+  }
+
+  /** 存档用的生物/掉落物清单（批次 258）：寄存中的 + 当前已加载的 */
+  private snapshotSavedEntities(): SavedEntityRecord[] {
+    const records = this.parkedEntities.snapshotAll();
+    for (const entity of this.entities.all) {
+      const record = this.savedEntityOf(entity);
+      if (record) records.push({ dimension: this.dimension, ...record });
+    }
+    return records;
   }
 
   /** 区块重新加载时把停着的载具造回来（批次 257） */
