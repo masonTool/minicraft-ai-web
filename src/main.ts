@@ -23,6 +23,7 @@ import { TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
 import {
+  MAX_AIR,
   MAX_FOOD,
   MAX_HEALTH,
   PlayerStats,
@@ -631,6 +632,23 @@ type PortalArrivalKind = 'nether' | 'end' | 'spawn';
  */
 const GAZE_CONE_COS = Math.cos((5 * Math.PI) / 180);
 
+/** 伤害来源的中文名（批次 206：左上角信息栏要写清"为什么掉血"） */
+const DAMAGE_CAUSE_LABELS: Record<DamageCause, string> = {
+  poison: '中毒',
+  fall: '摔落',
+  drown: '溺水',
+  lava: '岩浆',
+  fire: '着火',
+  cactus: '仙人掌',
+  suffocate: '窒息',
+  starve: '饥饿',
+  void: '虚空',
+  explosion: '爆炸',
+  projectile: '箭矢',
+  lightning: '雷击',
+  generic: '攻击',
+};
+
 class App {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -640,6 +658,20 @@ class App {
   private readonly meshPool: MeshWorkerPool;
   /** 生命 / 饥饿 / 氧气 */
   readonly stats = new PlayerStats();
+  /**
+   * 玩家信息播报用的上一帧快照（批次 206）。
+   *
+   * 用户要求"被攻击、扣血、掉饥饿值也要有信息提示"，而 `PlayerStats` 是纯逻辑模块
+   * （没有 DOM 概念，也不该知道聊天框）。所以在主循环里对比前后两个数，
+   * 只在**变化**时往左上角的聊天栏推一条——比在每个伤害入口各写一遍可靠。
+   */
+  private noticeHealth = MAX_HEALTH;
+  private noticeFood = MAX_FOOD;
+  private noticeAir = MAX_AIR;
+  private noticeBurning = false;
+  /** 低血量 / 饥饿耗尽的警告只报一次（回血/吃饱后复位） */
+  private lowHealthWarned = false;
+  private starveWarned = false;
   /** 经验值与等级（I5） */
   readonly experience = new Experience();
   /** 当前维度（与 world.dimension 同步，供渲染与环境使用） */
@@ -2210,6 +2242,8 @@ class App {
     this.stats.saturation = data.saturation;
     this.stats.air = data.air;
     this.stats.exhaustion = data.exhaustion;
+    // 读档恢复的低血量不该被当成"刚刚受到伤害"播出来
+    this.resetPlayerNotices();
     this.dragonDefeated = data.dragonDefeated;
     // 难度与游戏规则按世界存：旧存档没有这两个字段时回退默认值
     // 难度优先用存档里的（玩家可能在游戏里改过），没有就用世界清单里新建时选的
@@ -9231,6 +9265,8 @@ class App {
       this.pendingFallDistance = 0;
     }
 
+    // 玩家信息播报（批次 206）：受伤 / 回血 / 饥饿 / 氧气 / 着火，统一进左上角聊天栏
+    this.emitPlayerNotices();
     this.vitalsHud.update(this.stats);
     this.xpHud.update(this.experience);
     this.updateToolHud();
@@ -9259,6 +9295,87 @@ class App {
       this.deathEl.classList.add('hidden');
       this.deathHandled = false;
     }
+  }
+
+  /** 数字写进消息时去掉无意义的小数位（生命可能是 16.5 这种护甲减伤后的值） */
+  private static statText(value: number): string {
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  }
+
+  /**
+   * 玩家信息播报（批次 206）：对比上一帧的生命 / 饥饿 / 氧气，只播**变化**。
+   *
+   * 为什么不挂在每个伤害入口：伤害有十几个来源（摔落、岩浆、仙人掌、窒息、中毒、
+   * 生物、爆炸、饥饿、虚空…），漏一处就是"这次掉血没有提示"。
+   * 而它们最终都会落到 `PlayerStats` 上，这里对账一次就全覆盖了。
+   */
+  private emitPlayerNotices(): void {
+    const health = this.stats.health;
+    const food = this.stats.food;
+    const air = this.stats.air;
+    const fmt = (value: number): string => App.statText(value);
+
+    // ---- 生命：掉血一定要说（并带上伤害类型），回血只在 >= 2 点时播（自然回血每 4 秒 1 点，太吵）
+    const healthDelta = health - this.noticeHealth;
+    if (healthDelta < -0.05) {
+      const cause = this.stats.lastDamage?.cause;
+      const label = cause ? DAMAGE_CAUSE_LABELS[cause] : '';
+      this.chat.push(
+        `受到 ${fmt(-healthDelta)} 点伤害${label ? `（${label}）` : ''} · 生命 ${fmt(health)}/20`,
+        'damage',
+      );
+    } else if (healthDelta >= 2) {
+      this.chat.push(`生命 +${fmt(healthDelta)} · 剩余 ${fmt(health)}/20`, 'gain');
+    }
+
+    // ---- 饥饿：掉 1 点也播（原版没有这个提示，但手机上血条很小，等看见时已经晚了）
+    if (food < this.noticeFood) {
+      const lost = this.noticeFood - food;
+      this.chat.push(`饥饿值 -${fmt(lost)} · 剩余 ${fmt(food)}/20`, food <= 6 ? 'warning' : 'system');
+    } else if (food > this.noticeFood) {
+      this.chat.push(`饥饿值 +${fmt(food - this.noticeFood)} · 恢复至 ${fmt(food)}/20`, 'gain');
+    }
+
+    // ---- 低血量 / 饥饿耗尽：只在"刚跨过阈值"时报一次，恢复后复位
+    if (!this.lowHealthWarned && health > 0 && health <= 6) {
+      this.lowHealthWarned = true;
+      this.chat.push(`生命值偏低（${fmt(health)}/20），找地方躲一下或吃点东西`, 'warning');
+    } else if (this.lowHealthWarned && health > 10) {
+      this.lowHealthWarned = false;
+    }
+    if (!this.starveWarned && food <= 0) {
+      this.starveWarned = true;
+      this.chat.push('饥饿值耗尽：无法自然回血，并且会持续掉血', 'warning');
+    } else if (this.starveWarned && food > 6) {
+      this.starveWarned = false;
+    }
+
+    // ---- 氧气：不足与耗尽各提示一次（之后由"受到伤害"那条接管）
+    if (air <= 100 && this.noticeAir > 100) {
+      this.chat.push('氧气不足，快浮上水面！', 'warning');
+    } else if (air <= 0 && this.noticeAir > 0) {
+      this.chat.push('氧气耗尽，正在溺水', 'damage');
+    } else if (air > 120 && this.noticeAir <= 100) {
+      this.chat.push('回到水面，氧气恢复', 'gain');
+    }
+
+    // ---- 着火：点燃那一刻说一次（持续伤害由生命那条播）
+    if (this.stats.burning && !this.noticeBurning) this.chat.push('你着火了！', 'warning');
+
+    this.noticeHealth = health;
+    this.noticeFood = food;
+    this.noticeAir = air;
+    this.noticeBurning = this.stats.burning;
+  }
+
+  /** 读档 / 重生后重置播报基线，避免把"从存档读出来的低血量"当成刚刚受伤 */
+  private resetPlayerNotices(): void {
+    this.noticeHealth = this.stats.health;
+    this.noticeFood = this.stats.food;
+    this.noticeAir = this.stats.air;
+    this.noticeBurning = this.stats.burning;
+    this.lowHealthWarned = this.stats.health <= 6;
+    this.starveWarned = this.stats.food <= 0;
   }
 
   /** 采集一帧的环境快照（水 / 岩浆 / 窒息 / 虚空） */
@@ -9389,6 +9506,8 @@ class App {
     this.physics.vy = 0;
     this.physics.vz = 0;
     this.stats.respawn();
+    // 重生回满血不是"治疗"，别播成"生命 +20"
+    this.resetPlayerNotices();
     // 死亡会清空状态效果（原版行为）
     this.effects.clear();
     this.fallStartY = null;

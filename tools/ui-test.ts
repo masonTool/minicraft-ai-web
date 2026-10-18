@@ -2234,5 +2234,46 @@ console.log('\n[角色创建：外观（批次 187）]');
   );
 }
 
+console.log('\n[左上聊天 + 右上性能（批次 206）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const chatSrc = readFileSync(new URL('../src/ui/ChatInput.ts', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  check(
+    '聊天栏在左上角（不再贴快捷栏上方）',
+    /#chat \{[\s\S]{0,400}?top: calc\(8px \+ env\(safe-area-inset-top/.test(html) &&
+      !/#chat \{[\s\S]{0,300}?bottom: calc\(82px/.test(html),
+  );
+  check(
+    '性能面板搬到右上角，和状态效果同一列',
+    html.includes('<div id="hud-right">') &&
+      /#hud-right \{[\s\S]{0,300}?right: 8px/.test(html) &&
+      /#debug \{[\s\S]{0,200}?font-size: 12px/.test(html),
+  );
+  check(
+    '打开聊天输入框后能翻历史（消息不因过期被删掉）',
+    chatSrc.includes('MAX_OPEN_LINES') &&
+      chatSrc.includes('MAX_STORED_LINES') &&
+      chatSrc.includes('get historyLines()') &&
+      chatSrc.includes("this.logEl.addEventListener(") &&
+      chatSrc.includes("'scroll',"),
+  );
+  check(
+    '历史区可以滑动（触屏纵向滚动）',
+    /#chat\.open \.chat-log \{[\s\S]{0,300}?overflow-y: auto/.test(html) &&
+      html.includes('touch-action: pan-y'),
+  );
+  check(
+    '受伤 / 回血 / 饥饿 / 氧气 / 着火都有播报',
+    appSrc.includes('emitPlayerNotices()') &&
+      appSrc.includes('受到 ${fmt(-healthDelta)} 点伤害') &&
+      appSrc.includes('饥饿值 -${fmt(lost)}') &&
+      appSrc.includes('氧气不足，快浮上水面！') &&
+      appSrc.includes('你着火了！') &&
+      appSrc.includes('DAMAGE_CAUSE_LABELS'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

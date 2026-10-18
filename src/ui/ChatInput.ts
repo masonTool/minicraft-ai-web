@@ -13,7 +13,7 @@ import { commandNames, mobNames } from '../core/commands/Commands.ts';
 import { resolveItemId } from '../core/registry/itemNames.ts';
 import { isTouchUi } from './TouchControls.ts';
 
-export type ChatLineKind = 'player' | 'system' | 'error';
+export type ChatLineKind = 'player' | 'system' | 'error' | 'damage' | 'gain' | 'warning';
 
 interface ChatLine {
   text: string;
@@ -25,8 +25,19 @@ interface ChatLine {
 /** 消息在屏幕上停留的时间（毫秒） */
 const LINE_LIFETIME = 10000;
 const FADE_AFTER = 4000;
-/** 最多保留的行数 */
+/** 收起时最多显示的行数 */
 const MAX_LINES = 10;
+/**
+ * 打开输入框后能翻的历史行数（批次 206）。
+ *
+ * 用户："点击聊天输入框时，历史信息要能看到，可以通过滑动去查看。"
+ * 以前消息 14 秒就从数组里删掉了，打开输入框也只剩正在淡出的那几行；
+ * 现在消息留在内存里（最多 `MAX_STORED_LINES` 条），收起时只显示最近 10 行、
+ * 打开时把最近 120 行铺出来并允许滚动。
+ */
+const MAX_OPEN_LINES = 120;
+/** 内存里最多留多少条（再多就从最旧的丢） */
+const MAX_STORED_LINES = 300;
 /** 命令历史条数 */
 const MAX_HISTORY = 32;
 
@@ -43,9 +54,15 @@ export class ChatInput {
   private readonly hintEl: HTMLDivElement;
   /** 触屏的"发送"按钮：手机虚拟键盘的确定键不一定派发 Enter 的 keydown */
   private readonly sendButton: HTMLButtonElement;
-  private readonly lines: ChatLine[] = [];
+  /** 所有消息（含已经淡出的）：打开输入框时要能翻历史 */
+  private readonly messages: ChatLine[] = [];
+  /** 命令历史（↑↓ 翻的是这个，不是聊天记录） */
   private readonly history: string[] = [];
   private historyIndex = -1;
+  /** 上一次渲染从哪一条开始（没变就不重建 DOM） */
+  private renderedStart = -1;
+  /** 打开时是否贴着底部（玩家往上翻时不要被新消息拽回去） */
+  private stickToBottom = true;
   private open = false;
   /** 补全候选（按 Tab 在候选之间轮换） */
   private completionIndex = 0;
@@ -91,6 +108,15 @@ export class ChatInput {
     host.appendChild(this.root);
 
     this.inputEl.addEventListener('keydown', (event) => this.onInputKeyDown(event));
+    // 滚动历史时如果停在底部附近，新消息就继续跟随；翻到上面看旧消息时不要跳回底部
+    this.logEl.addEventListener(
+      'scroll',
+      () => {
+        const remaining = this.logEl.scrollHeight - this.logEl.scrollTop - this.logEl.clientHeight;
+        this.stickToBottom = remaining < 24;
+      },
+      { signal: this.listeners.signal },
+    );
     // 点输入框以外的地方就关掉输入（和原版一致）
     document.addEventListener(
       'pointerdown',
@@ -111,15 +137,20 @@ export class ChatInput {
     return this.open;
   }
 
-  /** 消息栏里的文字（验收脚本用） */
+  /** 消息栏里的文字（验收脚本用：只给当前屏幕上那几条） */
   get messageLines(): string[] {
-    return this.lines.map((line) => line.text);
+    return this.visibleRange(performance.now()).lines.map((line) => line.text);
+  }
+
+  /** 全部历史消息（验收脚本用：打开输入框后能翻到的那些） */
+  get historyLines(): string[] {
+    return this.messages.map((line) => line.text);
   }
 
   /** 追加一行消息 */
   push(text: string, kind: ChatLineKind = 'system'): void {
-    this.lines.push({ text, kind, expires: performance.now() + LINE_LIFETIME });
-    while (this.lines.length > MAX_LINES) this.lines.shift();
+    this.messages.push({ text, kind, expires: performance.now() + LINE_LIFETIME });
+    while (this.messages.length > MAX_STORED_LINES) this.messages.shift();
     this.renderLog();
     console.info(`[chat] ${text}`);
   }
@@ -137,6 +168,10 @@ export class ChatInput {
     this.inputEl.setSelectionRange(prefill.length, prefill.length);
     this.historyIndex = -1;
     this.lastPrefix = '';
+    // 打开这一刻铺出历史并落到最底部（最新的消息在下面）；之后玩家可以往上滑
+    this.stickToBottom = true;
+    this.renderedStart = -1;
+    this.renderLog();
     this.updateHint();
     this.onOpenChange?.(true);
   }
@@ -149,6 +184,9 @@ export class ChatInput {
     this.hintEl.classList.add('hidden');
     this.sendButton.classList.add('hidden');
     this.inputEl.blur();
+    // 收起后回到"只显示最近 10 行 + 淡出"的观感
+    this.renderedStart = -1;
+    this.renderLog();
     this.onOpenChange?.(false);
   }
 
@@ -162,38 +200,64 @@ export class ChatInput {
     this.onSubmit?.(text);
   }
 
-  /** 每帧调用：把过期的消息淡出并移除 */
+  /** 每帧调用：收起时把过期消息淡出（打开时保留全部，让玩家慢慢翻） */
   update(now = performance.now()): void {
-    let changed = false;
-    while (this.lines.length > 0 && now > this.lines[0]!.expires + FADE_AFTER) {
-      this.lines.shift();
-      changed = true;
+    const { start, lines } = this.visibleRange(now);
+    if (start !== this.renderedStart) {
+      this.renderLog(now);
+      return;
     }
-    if (changed) this.renderLog();
-    else {
-      // 只更新透明度（不重建 DOM）
-      const children = this.logEl.children;
-      for (let i = 0; i < this.lines.length; i++) {
-        const line = this.lines[i]!;
-        const element = children[i] as HTMLElement | undefined;
-        if (!element) continue;
-        const fading = now > line.expires;
-        element.classList.toggle('fading', fading);
-      }
+    // 只更新透明度（不重建 DOM）
+    const children = this.logEl.children;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      const element = children[i] as HTMLElement | undefined;
+      if (!element) continue;
+      const fading = !this.open && now > line.expires;
+      element.classList.toggle('fading', fading);
     }
   }
 
-  private renderLog(): void {
-    this.logEl.replaceChildren();
-    for (const line of this.lines) {
+  /**
+   * 当前应该显示哪一段消息。
+   *
+   * - **收起**：只留还没完全淡出的，最多 10 行（多出来的旧消息仍然在数组里）；
+   * - **打开**：最近 120 行全铺出来，可以滑动查看。
+   */
+  private visibleRange(now: number): { start: number; lines: ChatLine[] } {
+    const end = this.messages.length;
+    if (this.open) {
+      const start = Math.max(0, end - MAX_OPEN_LINES);
+      return { start, lines: this.messages.slice(start) };
+    }
+    let first = end;
+    for (let i = 0; i < end; i++) {
+      if (now <= this.messages[i]!.expires + FADE_AFTER) {
+        first = i;
+        break;
+      }
+    }
+    const start = Math.max(first, end - MAX_LINES);
+    return { start, lines: this.messages.slice(start) };
+  }
+
+  private renderLog(now = performance.now()): void {
+    const { start, lines } = this.visibleRange(now);
+    this.renderedStart = start;
+    const fragment = document.createDocumentFragment();
+    for (const line of lines) {
       const element = document.createElement('div');
       element.className = `chat-line chat-${line.kind}`;
       // 多行反馈（/help 那种）在消息栏里要按换行拆开显示
       element.textContent = line.text;
       if (line.text.includes('\n')) element.classList.add('chat-multiline');
-      this.logEl.appendChild(element);
+      // 打开输入框时不要淡出：玩家是来翻历史的，看不清就等于没有
+      if (!this.open && now > line.expires) element.classList.add('fading');
+      fragment.appendChild(element);
     }
-    this.logEl.scrollTop = this.logEl.scrollHeight;
+    this.logEl.replaceChildren(fragment);
+    // 只有"贴着底部"才自动跟到最新；玩家往上滑看旧消息时不要把他拽回来
+    if (this.stickToBottom) this.logEl.scrollTop = this.logEl.scrollHeight;
   }
 
   private onInputKeyDown(event: KeyboardEvent): void {

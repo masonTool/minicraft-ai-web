@@ -250,10 +250,17 @@
         position: fixed; inset: 0; pointer-events: none;
         color: #fff; text-shadow: 1px 1px 0 rgba(0, 0, 0, .7);
       }
+      /* 右上角一列：性能（#debug）在上、状态效果在下（批次 206）。
+         用户要求"性能信息放到右上角"，而左上角留给聊天与玩家信息。 */
+      #hud-right {
+        position: absolute; top: 8px; right: 8px;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+        max-width: 44vw;
+      }
       #debug {
-        position: absolute; top: 8px; left: 8px;
         font-size: 12px; line-height: 1.55; white-space: pre;
         background: rgba(0, 0, 0, .35); padding: 6px 9px; border-radius: 3px;
+        text-align: left;
       }
       #crosshair {
         position: absolute; left: 50%; top: 50%;
@@ -1400,7 +1407,6 @@
 
       /* ---------------- 状态效果 HUD ---------------- */
       #effects-hud {
-        position: fixed; right: 10px; top: 12px; z-index: 12;
         display: flex; flex-direction: column; gap: 3px; align-items: flex-end;
         pointer-events: none; font-size: 12px;
       }
@@ -1423,25 +1429,36 @@
       .effect-chip.instant { border-color: #6b9cd466; }
       .effect-chip.instant::before { background: #6b9cd4; box-shadow: 0 0 6px #6b9cd4; }
 
-      /* ---------------- 聊天与命令 ---------------- */
+      /* ---------------- 聊天与玩家信息（左上角，批次 206） ----------------
+         用户："聊天界面应该显示在左上角，聊天输入框也是左上角；
+         玩家被攻击、扣血、掉饥饿值这些信息也在左上角显示。"
+         以前它在左下（快捷栏上方），手机上会和摇杆、血条抢地方。 */
       #chat {
         /* z-index 低于背包(10)：打开面板时聊天不该压在面板上（原版也这样）。
            但仍然高于 HUD 与遮罩，游戏里照常可见。 */
-        position: fixed; left: 10px; z-index: 8;
-        bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+        position: fixed; left: 10px; top: calc(8px + env(safe-area-inset-top, 0px));
+        z-index: 8;
         width: min(52vw, 620px); display: flex; flex-direction: column; gap: 2px;
         font-size: 13px; line-height: 1.45; pointer-events: none;
+        /* 面板本身不滚动：滚的是里面的 .chat-log，输入框始终留在原地 */
+        max-height: calc(100dvh - var(--kb-inset, 0px) - 120px);
       }
       #chat.open { pointer-events: auto; }
-      /* 批次 184：键盘弹出时布局视口不再变矮（viewport 是 resizes-visual），
-         聊天输入行按键盘高度自己抬上去；`--kb-inset` 由 `ui/Keyboard.ts` 维护。 */
-      #chat.open {
-        bottom: calc(82px + env(safe-area-inset-bottom, 0px) + var(--kb-inset, 0px));
+      .chat-log {
+        display: flex; flex-direction: column; gap: 1px;
+        max-height: 34vh; overflow: hidden;
+        /* 触屏滑动查看历史（批次 206）：纵向手势交给这一层滚动 */
+        touch-action: pan-y; overscroll-behavior: contain;
       }
+      /* 打开输入框：铺出更多历史并允许滑动；输入行紧跟在消息下面 */
       #chat.open .chat-log {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
         max-height: min(34vh, max(56px, calc(100dvh - var(--kb-inset, 0px) - 210px)));
       }
-      .chat-log { display: flex; flex-direction: column; gap: 1px; max-height: 34vh; overflow: hidden; }
+      /* 键盘弹出时布局视口不再变矮（viewport 是 resizes-visual，批次 184）：
+         聊天已经在顶部、输入框不会被键盘挡住，这里只需要把历史高度再收一点，
+         由上面那条 `max-height` 里的 `--kb-inset` 负责（由 `ui/Keyboard.ts` 维护）。 */
       .chat-line {
         padding: 3px 8px; border-radius: var(--radius-sm); color: #fff;
         background: rgba(0, 0, 0, .42);
@@ -1460,6 +1477,10 @@
       .chat-line.chat-system { color: #d8e6b0; border-left-color: #a9c46b; }
       .chat-line.chat-error { color: #ff9a8a; border-left-color: #e0604c; }
       .chat-line.chat-player { color: #fff; border-left-color: #7db6f0; }
+      /* 玩家信息（批次 206）：受伤 / 回复 / 警告三种一眼能分开 */
+      .chat-line.chat-damage { color: #ff9c9c; border-left-color: #d64545; }
+      .chat-line.chat-gain { color: #a9e5a0; border-left-color: #57a94a; }
+      .chat-line.chat-warning { color: #ffd98a; border-left-color: #d8a028; }
       .chat-line.fading { opacity: .45; }
       .chat-hint {
         padding: 2px 6px; color: #c8c8c8; font-size: 12px;
@@ -3398,12 +3419,15 @@
     <div id="app"></div>
 
     <div id="hud">
-      <div id="debug"></div>
+      <!-- 右上：性能信息 + 状态效果（批次 206：性能从左上搬来，聊天/玩家信息占左上） -->
+      <div id="hud-right">
+        <div id="debug"></div>
+        <div id="effects-hud"></div>
+      </div>
       <div id="crosshair"></div>
       <div id="break-progress"><i></i></div>
       <div id="boss-bar"><b>末影龙</b><i><s id="boss-fill"></s></i></div>
       <div id="vitals"></div>
-      <div id="effects-hud"></div>
       <div id="hotbar"></div>
     </div>
 
