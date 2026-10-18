@@ -563,7 +563,13 @@ function trunk2x2(w: TreeWriter, x: number, z: number, base: number, height: num
   return base + height - 1;
 }
 
-/** 团状树冠：以 (x, top, z) 为中心，radius 逐层收缩，角上随机剔除 */
+/**
+ * 团状树冠：以 (x, top, z) 为中心，radius 逐层收缩，角上随机剔除。
+ *
+ * ⚠️ 顶盖必须是**一小片**，不能是孤零零一格：原来最后那行是
+ * `w.put(x, top + 1, z, leaf)`，于是橡木的轮廓变成"下面 5×5 一团、顶上戳一根杆"，
+ * 远看就像"树干在上面、树叶在下面"（批次 180 与云杉一起修的）。
+ */
 function blobCanopy(w: TreeWriter, x: number, z: number, top: number, leaf: number, rng: PositionalRng, radius = 2, layers = 2): void {
   for (let dy = 0; dy >= -layers; dy--) {
     const r = dy === 0 ? Math.max(1, radius - 1) : radius;
@@ -575,7 +581,16 @@ function blobCanopy(w: TreeWriter, x: number, z: number, top: number, leaf: numb
       }
     }
   }
-  w.put(x, top + 1, z, leaf);
+  // 顶盖：比最上面那层再收一圈（radius 2 → 3×3、radius 1 → 1 格）
+  const rt = Math.max(0, radius - 1);
+  for (let dx = -rt; dx <= rt; dx++) {
+    for (let dz = -rt; dz <= rt; dz++) {
+      // ⚠️ `rt === 0`（白桦那种小冠）时中心那一格**必须留下**：
+      // 角判定在 rt=0 时恒为真，会把唯一的一格也有 50% 概率剔掉 → "白桦没有树冠"。
+      if (rt > 0 && Math.abs(dx) === rt && Math.abs(dz) === rt && rng.chance(0.5)) continue;
+      w.put(x + dx, top + 1, z + dz, leaf);
+    }
+  }
 }
 
 /** 扁平的"伞状"树冠（金合欢 / 深色橡木 / 沼泽橡木用） */
@@ -644,8 +659,11 @@ const PLANTERS: Record<TreeKind, Planter> = {
     const base = w.groundAbove(world, x, z);
     const height = 7 + rng.int(4);
     const top = trunk(w, x, z, base, height, wood.log);
-    coneCanopy(w, x, z, top - 2, wood.leaves, height - 1, rng);
-    w.put(x, top + 1, z, wood.leaves);
+    // ⚠️ 批次 180 修：锥形树冠必须**从树顶往下**铺（`coneCanopy` 内部就是 `top - dy`
+    // 且越往下越宽）。原来这里传的是 `top - 2`、还铺 `height - 1` 层 —— 整株锥体被
+    // 压到树干下半段、下沿直接埋进土里，于是玩家看到的是"树叶在下面、树干在上面"，
+    // 树顶只剩 `w.put(x, top + 1, z, ...)` 那一格孤叶。
+    coneCanopy(w, x, z, top + 1, wood.leaves, height - 1, rng);
   },
 
   /** 巨型云杉：2×2 树干 + 高大的圆锥树冠（针叶林的地标） */
@@ -653,10 +671,12 @@ const PLANTERS: Record<TreeKind, Planter> = {
     const base = w.groundAbove(world, x, z);
     const height = 13 + rng.int(7);
     const top = trunk2x2(w, x, z, base, height, wood.log);
-    coneCanopy(w, x + 1, z + 1, top - 3, wood.leaves, height - 4, rng);
-    // 顶部十字
-    w.put(x + 1, top + 1, z + 1, wood.leaves);
-    w.put(x, top, z, wood.leaves);
+    // 同 `spruce`：从树顶往下铺（2×2 树干居中在 x+1 / z+1）
+    coneCanopy(w, x + 1, z + 1, top + 1, wood.leaves, height - 1, rng);
+    // 顶部十字：把 2×2 树干的另外三个角也盖住
+    w.put(x, top + 1, z, wood.leaves);
+    w.put(x + 1, top + 1, z, wood.leaves);
+    w.put(x, top + 1, z + 1, wood.leaves);
   },
 
   /** 丛林树：树高且树冠靠上，树干上挂藤蔓（原版丛林的地标） */
