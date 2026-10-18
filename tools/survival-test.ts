@@ -228,14 +228,6 @@ console.log('\n[伤害记录（批次 207）]');
     JSON.stringify(log),
   );
   check('取走之后队列清空', stats.takeDamageLog().length === 0);
-  // 批次 226：来源高度要跟着记录走（"看不见的攻击者在我上面还是下面"靠它回答）
-  const withY = new PlayerStats();
-  withY.damage(2, 'generic', '蜘蛛', 48.5);
-  const yLog = withY.takeDamageLog();
-  check('记下来源高度（供诊断算 dy）', yLog.length === 1 && yLog[0]!.sourceY === 48.5, JSON.stringify(yLog));
-  const noY = new PlayerStats();
-  noY.damage(2, 'generic', '仙人掌');
-  check('不传就保持 undefined（不写 0，免得"0 = 站在脚底"被误读）', noY.takeDamageLog()[0]!.sourceY === undefined);
   check('没有伤害时不产生记录', stats.takeDamageLog().length === 0);
 }
 

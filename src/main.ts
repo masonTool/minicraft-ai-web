@@ -6381,8 +6381,6 @@ class App {
     sourceZ: number,
     cause: DamageCause = 'generic',
     source?: string,
-    /** 来源高度（批次 226）：只进诊断，用来回答"看不见的攻击者在哪一层" */
-    sourceY?: number,
   ): void {
     if (this.isCreative) return;
     // 难度倍率：和平难度下生物不造成伤害（原版和平难度敌对生物根本不生成）
@@ -6404,7 +6402,7 @@ class App {
     if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
     // 状态效果（抗性提升）在统一入口里叠加
     const before = this.stats.health;
-    this.applyIncomingDamage(damage, cause, source, sourceY);
+    this.applyIncomingDamage(damage, cause, source);
     const result = { applied: before - this.stats.health };
     if (result.applied <= 0) return;
 
@@ -6541,8 +6539,8 @@ class App {
       // ⚠️ 第 5 个参数是"谁打的"（僵尸 / 箭矢 / 末影水晶…）。漏掉它不会报错，
       // 但左上角与死亡卡片就只剩"受到伤害（没有记录到来源）"——实体层明明传了名字，
       // 桥接层不接等于白传（批次 218 用户"被不明原因打死"就是这个）。
-      hurtPlayer: (amount, sourceX, sourceZ, cause, source, sourceY) =>
-        this.damagePlayer(amount, sourceX, sourceZ, cause, source, sourceY),
+      hurtPlayer: (amount, sourceX, sourceZ, cause, source) =>
+        this.damagePlayer(amount, sourceX, sourceZ, cause, source),
       // 蜘蛛在亮处中立（批次 93）：亮度取"方块光与折算后的天光"的较大者，
       // 与刷怪判据同一套折算（天光要按昼夜折算，否则夜里也算 15 → 蜘蛛永不打人）
       lightAt: (x, y, z) =>
@@ -7210,12 +7208,11 @@ class App {
    * 统一的外部伤害入口：先把状态效果的减伤算进去（抗性提升），
    * 然后交给 `PlayerStats` 走无敌帧。生物攻击、中毒、瞬间伤害都从这里进。
    */
-  private applyIncomingDamage(amount: number, cause: DamageCause, source?: string, sourceY?: number): void {
+  private applyIncomingDamage(amount: number, cause: DamageCause, source?: string): void {
     const scaled = amount * this.effects.incomingDamageMultiplier();
     if (scaled <= 0) return;
-    // `source` 只用于左上角的"为什么掉血"（"僵尸"/"世界边界"…），不参与数值结算；
-    // `sourceY` 同理，只写进诊断（批次 226）
-    this.stats.damage(scaled, cause, source, sourceY);
+    // `source` 只用于左上角的"为什么掉血"（"僵尸"/"世界边界"…），不参与数值结算
+    this.stats.damage(scaled, cause, source);
   }
 
   /**
@@ -9602,18 +9599,12 @@ class App {
     const damageEvents = this.stats.takeDamageLog().filter((event) => event.applied > 0);
     if (damageEvents.length > 0) {
       // 同一帧可能挨好几下（僵尸 + 岩浆）：按"原因"分组，各自的净值分开写
-      const groups = new Map<string, { cause: DamageCause; source?: string; amount: number; sourceY?: number }>();
+      const groups = new Map<string, { cause: DamageCause; source?: string; amount: number }>();
       for (const event of damageEvents) {
         const key = `${event.cause}|${event.source ?? ''}`;
         const group = groups.get(key);
         if (group) group.amount += event.applied;
-        else
-          groups.set(key, {
-            cause: event.cause,
-            source: event.source,
-            amount: event.applied,
-            sourceY: event.sourceY,
-          });
+        else groups.set(key, { cause: event.cause, source: event.source, amount: event.applied });
       }
       const list = [...groups.values()];
       const total = list.reduce((sum, item) => sum + item.amount, 0);
@@ -9623,23 +9614,11 @@ class App {
       this.chat.push(`受到 ${fmt(total)} 点伤害：${reasons} · 生命 ${fmt(health)}/20`, 'damage');
       // 诊断日志（批次 218）：以前整份导出里**没有任何生命值信息**，只能靠猜。
       // 这里逐条记"被谁、什么类型、掉了多少、剩多少"，导出后一眼能对上。
-      // 批次 226 起再加一项 `dy`（攻击者比玩家脚底高多少格）：
-      // 用户问"它离我多远"时，导出里从此能直接读出"在地板下的洞 / 头顶的坑沿"。
       for (const item of list) {
         diag.event('survival', 'damage', {
           amount: item.amount,
           cause: item.cause,
           source: item.source,
-          sourceY: item.sourceY,
-          dy:
-            item.sourceY === undefined
-              ? undefined
-              : Math.round((item.sourceY - this.physics.y) * 10) / 10,
-          pos: [
-            Math.round(this.physics.x * 10) / 10,
-            Math.round(this.physics.y * 10) / 10,
-            Math.round(this.physics.z * 10) / 10,
-          ],
           health,
           food,
         });
