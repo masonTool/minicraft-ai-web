@@ -10,7 +10,7 @@
  * 与"直接走过去就能上台阶"的原版行为一致。
  */
 
-import { boxAt, collides, intersects, makeAABB, translate, type CollisionWorld } from './AABB.ts';
+import { boxAt, collides, intersects, makeAABB, resolveVertical, translate, type CollisionWorld } from './AABB.ts';
 
 export const WALK_SPEED = 4.317;
 export const SPRINT_SPEED = 5.612;
@@ -332,6 +332,7 @@ export class PlayerPhysics {
 
   private moveY(world: PhysicsWorld, amount: number): void {
     if (amount === 0) return;
+    const fromY = this.y;
     this.y += amount;
 
     if (!collides(world, this.box())) {
@@ -339,14 +340,20 @@ export class PlayerPhysics {
       return;
     }
 
-    if (amount > 0) {
-      // 撞到天花板
-      this.y = Math.floor(this.y + this.height) - this.height - 1e-4;
-    } else {
+    // ⚠️ 不能再用 `floor(y) + 1`：那只对**整格方块**成立。雪层（1/8）、台阶（1/2）、
+    // 地毯、耕地这些非整格顶面会被顶到整格高度，下一帧重力又拉回来 ——
+    // 玩家看到的就是"站在雪地上一直跳"（批次 206 修的）。这里二分找真实碰撞面。
+    this.y = resolveVertical(
+      world,
+      (y) => boxAt(this.x, y, this.z, this.width, this.height),
+      fromY,
+      this.y,
+    );
+
+    if (amount < 0) {
       // 落地：**先记下落速度再清零**（批次 120）——粘液块要按"撞上去有多快"决定弹多高，
       // 而清零之后这一帧就再也读不到它了（`lastLandingSpeed` 只有主程序读）
       this.lastLandingSpeed = -this.vy;
-      this.y = Math.floor(this.y) + 1 + 1e-4;
       this.onGround = true;
     }
     this.vy = 0;

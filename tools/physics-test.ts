@@ -14,6 +14,7 @@
 
 import { PlayerPhysics, SPRINT_JUMP_BOOST, SPRINT_SPEED, WALK_SPEED, type PlayerInput } from '../src/core/physics/PlayerPhysics.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { moveBody } from '../src/core/physics/EntityMotion.ts';
 
 let passed = 0;
 let failed = 0;
@@ -159,6 +160,54 @@ console.log('\n[冲刺跳]');
   const still = standOnGround();
   still.update(world, input({ sprint: true, jump: true }), YAW_PLUS_X, DT, false);
   check('不按方向冲刺跳没有水平推力', Math.abs(still.vx) < 1e-6, `vx=${still.vx}`);
+}
+
+console.log('\n[非整格地面：雪层 / 台阶不再抖跳]');
+{
+  /** y=64 那一层是 `height` 高的非整格方块，底下是实心地面 */
+  function partialWorld(height: number): PhysicsWorld {
+    return {
+      collisionAt(x: number, y: number, z: number) {
+        void x;
+        void z;
+        if (y < 64) return 'full' as const;
+        if (y === 64) return [[0, 0, 0, 1, height, 1]] as const;
+        return null;
+      },
+      isLiquid: () => false,
+    };
+  }
+
+  for (const [name, height] of [
+    ['雪层（1/8 格）', 0.125],
+    ['台阶（1/2 格）', 0.5],
+  ] as const) {
+    const world = partialWorld(height);
+    const physics = new PlayerPhysics();
+    physics.x = 0.5;
+    physics.y = 65;
+    physics.z = 0.5;
+
+    // 落下来，再原地站 2 秒：以前会"顶上去 → 掉回来"地反复跳
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < 180; i++) {
+      physics.update(world, input(), YAW_PLUS_X, DT, false);
+      if (i > 60) {
+        min = Math.min(min, physics.y);
+        max = Math.max(max, physics.y);
+      }
+    }
+    check(`${name}：停在真实顶面（${(64 + height).toFixed(3)}）`, Math.abs(physics.y - (64 + height)) < 0.005, `y=${physics.y.toFixed(4)}`);
+    check(`${name}：站着 2 秒不再上下跳`, max - min < 0.005, `波动 ${(max - min).toFixed(4)}`);
+    check(`${name}：落稳后 onGround 为 true`, physics.onGround === true);
+  }
+
+  // 实体（掉落物 / 生物）走的是另一套解算，同样要贴在真实顶面
+  const body = { x: 0.5, y: 65, z: 0.5, vx: 0, vy: 0, vz: 0, width: 0.25, height: 0.25, onGround: false };
+  const world = partialWorld(0.125);
+  for (let i = 0; i < 120; i++) moveBody(world, body, 0, -0.3, 0);
+  check('实体也能停在雪层顶面', Math.abs(body.y - 64.125) < 0.005, `y=${body.y.toFixed(4)}`);
 }
 
 console.log('\n[常量]');

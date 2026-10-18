@@ -8,7 +8,7 @@
  * 两处存在一定重复，等生物系统（I4）落地、需要更多共用行为时再统一重构。
  */
 
-import { boxAt, collides, type AABB, type CollisionWorld } from './AABB.ts';
+import { boxAt, collides, resolveVertical, type AABB, type CollisionWorld } from './AABB.ts';
 
 /** 单次步进最大位移，避免高速穿透 */
 const MAX_STEP = 0.4;
@@ -49,6 +49,8 @@ export function moveBody(world: CollisionWorld, body: MovingBody, dx: number, dy
 function moveAxis(world: CollisionWorld, body: MovingBody, axis: 0 | 1 | 2, amount: number): void {
   if (amount === 0) return;
 
+  const from = axis === 0 ? body.x : axis === 1 ? body.y : body.z;
+
   if (axis === 0) body.x += amount;
   else if (axis === 1) body.y += amount;
   else body.z += amount;
@@ -64,12 +66,10 @@ function moveAxis(world: CollisionWorld, body: MovingBody, axis: 0 | 1 | 2, amou
     body.x = amount > 0 ? Math.floor(body.x + half) - half - 1e-4 : Math.floor(body.x - half) + 1 + half + 1e-4;
     body.vx = 0;
   } else if (axis === 1) {
-    if (amount > 0) {
-      body.y = Math.floor(body.y + body.height) - body.height - 1e-4;
-    } else {
-      body.y = Math.floor(body.y) + 1 + 1e-4;
-      body.onGround = true;
-    }
+    // 与玩家物理同一条修正（批次 206）：落在雪层/台阶上要吸附到**真实顶面**，
+    // 不能用"整格高度"，否则掉落物与生物站在雪上会一帧一顶地抖。
+    body.y = resolveVertical(world, (y) => boxAt(body.x, y, body.z, body.width, body.height), from, body.y);
+    if (amount < 0) body.onGround = true;
     body.vy = 0;
   } else {
     body.z = amount > 0 ? Math.floor(body.z + half) - half - 1e-4 : Math.floor(body.z - half) + 1 + half + 1e-4;

@@ -132,3 +132,31 @@ export function collides(world: CollisionWorld, box: AABB): boolean {
 
   return hit;
 }
+
+/**
+ * 沿 Y 轴求出"贴住碰撞面"的精确位置（批次 206）。
+ *
+ * 为什么需要它：以前竖直方向的碰撞解算用的是 `floor(y) + 1` —— 那是
+ * **整格方块**的顶面。雪层（1/8 格）、台阶（1/2 格）、地毯、耕地的顶面都不是整格，
+ * 于是玩家落到雪上会被"顶"到整格高度，下一帧重力又把人拉回来，
+ * 如此往复就是玩家看到的"站在雪地上一直跳"。
+ *
+ * 输入必须满足：`fromY` 不碰撞、`toY` 碰撞（调用方刚移动过去，位移已经拆到 0.4 以内）。
+ * 返回 `[fromY, toY]` 之间**最靠近碰撞面且不碰撞**的位置（二分 16 次 ≈ 6e-6 格）。
+ * 上升撞天花板时同样适用：返回的就是"头顶刚好贴住"的位置。
+ */
+export function resolveVertical(
+  world: CollisionWorld,
+  boxAtY: (y: number) => AABB,
+  fromY: number,
+  toY: number,
+): number {
+  let free = fromY;
+  let hit = toY;
+  for (let i = 0; i < 16; i++) {
+    const mid = (free + hit) / 2;
+    if (collides(world, boxAtY(mid))) hit = mid;
+    else free = mid;
+  }
+  return free;
+}
