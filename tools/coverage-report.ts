@@ -176,7 +176,7 @@ const rows: readonly Row[] = [
     spec: SPEC.enchantments,
     now: implementedEnchants,
     basis: '同上：分母按 38 条算，"能附"不等于"有效果"',
-    gap: '位移类（深海探索者/冰霜行者）、命中类（荆棘/横扫/火焰附加）',
+    gap: '位移类（深海探索者/冰霜行者/灵魂疾行）、荆棘、横扫，以及三叉戟/弩那一族（批次 243 已补摔落/水下/击退/火焰附加/消失诅咒）',
   },
   {
     label: '状态效果',
