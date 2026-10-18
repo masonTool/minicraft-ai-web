@@ -2038,6 +2038,20 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       fullscreenSrc.includes('getComputedStyle(hint).display') &&
       /\.rotate-hint \{[\s\S]{0,900}pointer-events: auto;/.test(css),
   );
+  check(
+    '横屏提示盖在暂停菜单上层（不再被 pause-open 藏掉）',
+    !/body\.pause-open \.rotate-hint\s*\{/.test(css) &&
+      /\.rotate-hint \{[\s\S]{0,500}z-index: 90;/.test(css) &&
+      /#settings-screen \{[\s\S]{0,300}z-index: 50;/.test(css),
+  );
+  check(
+    '读档 / 重生后复核脚底，不在空中 / 水里 / 岩石里',
+    appSrc.includes('private settlePlayerOnGround(): void {') &&
+      appSrc.includes("this.requestGroundSettle('load');") &&
+      appSrc.includes("this.requestGroundSettle('respawn');") &&
+      appSrc.includes('this.groundSettleReason !== null') &&
+      readFileSync(new URL('../src/core/world/SpawnPoint.ts', import.meta.url), 'utf8').includes('Block.NETHERRACK'),
+  );
 
   // ② 工作台 3×3：创造模式左栏仍能切分类
   check(

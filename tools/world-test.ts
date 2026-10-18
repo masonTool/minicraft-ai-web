@@ -24,7 +24,13 @@ import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { OverworldGenerator, SEA_LEVEL } from '../src/core/gen/OverworldGenerator.ts';
 import { Chunk, CHUNK_SIZE_X, CHUNK_SIZE_Z, WORLD_MAX_Y } from '../src/core/world/Chunk.ts';
-import { findSafeSpawn, naturalGroundY, planSpawnRegion, type SpawnSearchWorld } from '../src/core/world/SpawnPoint.ts';
+import {
+  findSafeSpawn,
+  naturalGroundNear,
+  naturalGroundY,
+  planSpawnRegion,
+  type SpawnSearchWorld,
+} from '../src/core/world/SpawnPoint.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, dbNameFor } from '../src/core/save/WorldRegistry.ts';
 import { relativeTime } from '../src/ui/WorldScreen.ts';
@@ -314,6 +320,18 @@ console.log('\n[安全出生点]');
   check('能在已加载区域找到出生点', spawn !== null);
   check('拒绝中心陡沟并优先植被丰富的平地', spawn !== null && spawn.roughness === 0 && spawn.biome === 'plains');
   check('出生高度恰在地表上方', spawn !== null && spawn.groundY === 70 && Math.abs(spawn.y - 71.01) < 1e-6);
+
+  // 批次 213：读档落地校正只扫玩家高度附近（不从世界顶翻整列）
+  check('读档校正：取玩家高度附近的自然地面', naturalGroundNear(mock, 8, 8, 80) === 70);
+  const ocean: SpawnSearchWorld = {
+    isLoaded: () => true,
+    getBlock: (_x, y, _z) => (y <= 66 ? Block.STONE : y <= 70 ? Block.WATER : Block.AIR),
+    isSolid(x, y, z) {
+      const id = this.getBlock(x, y, z);
+      return id !== Block.AIR && id !== Block.WATER && id !== Block.LAVA;
+    },
+  };
+  check('读档校正不会把玩家放到水底（水面之上无法站立）', naturalGroundNear(ocean, 0, 0, 80) === null);
 
   const region = planSpawnRegion(
     (x) => (Math.abs(x) < 12 ? 40 : 72),

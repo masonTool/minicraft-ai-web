@@ -48,6 +48,13 @@ const NATURAL_FLOORS = new Set<number>([
   Block.GRAVEL,
   Block.SNOW_BLOCK,
   Block.TERRACOTTA,
+  // 批次 213：读档/重生的落地校正也会用到这张表，下界与末地各自的地面
+  // 不认的话，那两处的校正会找不到任何落脚点。
+  Block.NETHERRACK,
+  Block.SOUL_SAND,
+  Block.BLACKSTONE,
+  Block.END_STONE,
+  Block.OBSIDIAN,
 ]);
 
 function openForPlayer(world: SpawnSearchWorld, x: number, y: number, z: number): boolean {
@@ -61,6 +68,32 @@ function openForPlayer(world: SpawnSearchWorld, x: number, y: number, z: number)
 export function naturalGroundY(world: SpawnSearchWorld, x: number, z: number): number | null {
   if (!world.isLoaded(x, z)) return null;
   for (let y = WORLD_MAX_Y - 2; y >= WORLD_MIN_Y; y--) {
+    const id = world.getBlock(x, y, z);
+    if (!NATURAL_FLOORS.has(id) || !world.isSolid(x, y, z)) continue;
+    if (!openForPlayer(world, x, y + 1, z)) continue;
+    return y;
+  }
+  return null;
+}
+
+/**
+ * 在给定高度附近找该列最高的自然地面（批次 213：读档落地校正用）。
+ *
+ * 与 `naturalGroundY` 的区别：**不从世界顶开始扫**。读档校正时玩家通常在
+ * 地表附近，从顶往下扫一整列（~384 次读方块）× 上百列会很贵；
+ * 这里只看 `[y-48, y+8]`，一次校正的开销压到可以忽略。
+ */
+export function naturalGroundNear(
+  world: SpawnSearchWorld,
+  x: number,
+  z: number,
+  fromY: number,
+  depth = 48,
+): number | null {
+  if (!world.isLoaded(x, z)) return null;
+  const top = Math.min(WORLD_MAX_Y - 2, Math.floor(fromY) + 8);
+  const bottom = Math.max(WORLD_MIN_Y, Math.floor(fromY) - depth);
+  for (let y = top; y >= bottom; y--) {
     const id = world.getBlock(x, y, z);
     if (!NATURAL_FLOORS.has(id) || !world.isSolid(x, y, z)) continue;
     if (!openForPlayer(world, x, y + 1, z)) continue;

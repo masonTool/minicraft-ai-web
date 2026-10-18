@@ -313,7 +313,11 @@ import {
   tillableTo,
 } from './core/registry/tools.ts';
 import { OverworldGenerator } from './core/gen/OverworldGenerator.ts';
-import { findSafeSpawn, planSpawnRegion } from './core/world/SpawnPoint.ts';
+import {
+  findSafeSpawn,
+  naturalGroundNear,
+  planSpawnRegion,
+} from './core/world/SpawnPoint.ts';
 // 凋灵骷髅"只要塞里面刷"（批次 115）：要塞的位置要算，而算它需要下界的洞顶/地板/群系
 import { NetherGenerator } from './core/gen/NetherGenerator.ts';
 import { fortressAt, type FortressWorld } from './core/gen/NetherFortress.ts';
@@ -1285,6 +1289,16 @@ class App {
   private lastCenterCx = Number.NaN;
   private lastCenterCz = Number.NaN;
   private spawnResolved = false;
+  /**
+   * 进世界后待做的一次"落地校正"（批次 213）。
+   *
+   * 读档恢复的位置可能是**存档那一刻**的状态（半空、水里、甚至被方块埋住），
+   * 重生点也可能因为世界被改过而不再安全。这个标记让主循环等区块加载好之后，
+   * 复核一次脚底：不安全就挪到最近的自然地面；期间冻住物理，避免先掉进虚空。
+   */
+  private groundSettleReason: string | null = null;
+  /** 落地校正已经等了多少帧（超时后放弃，别把玩家永远冻住） */
+  private groundSettleFrames = 0;
   private spawnSearchX = 0;
   private spawnSearchZ = 0;
   /** 读档完成前不能让“新世界出生点”抢先覆盖存档坐标。 */
@@ -2306,6 +2320,8 @@ class App {
     this.lastCenterCx = Number.NaN;
     this.lastCenterCz = Number.NaN;
     this.refreshWorld(toChunkCoord(data.x), toChunkCoord(data.z), true);
+    // 存档里的坐标可能是半空/水里/被埋住：等区块加载好再复核一次脚底
+    this.requestGroundSettle('load');
     return true;
   }
 
@@ -9235,6 +9251,92 @@ class App {
     this.refreshWorld(toChunkCoord(spawn.x), toChunkCoord(spawn.z), true);
   }
 
+  /** 请求一次落地校正（读档 / 重生之后调用） */
+  private requestGroundSettle(reason: string): void {
+    this.groundSettleReason = reason;
+    this.groundSettleFrames = 0;
+  }
+
+  /**
+   * 落地校正（批次 213）：脚底不安全就挪到最近的自然地面。
+   *
+   * "不安全"包括：脚/头卡在实心方块里、脚下没有支撑（悬空）、脚在水或岩浆里。
+   * 先按 `findSafeSpawn` 找一块平整的陆地；找不到就按环形向外找**最高自然地面**
+   * （`naturalGroundNear` 已经排除树冠与水面）。区块还没加载好时这一帧先跳过。
+   */
+  private settlePlayerOnGround(): void {
+    if (this.groundSettleReason === null) return;
+    if (++this.groundSettleFrames > 600) {
+      // 10 秒还没找到（例如整片汪洋）：放弃冻结，别让玩家永远动不了
+      diag.event('app', 'ground.settle.timeout', { reason: this.groundSettleReason });
+      this.groundSettleReason = null;
+      return;
+    }
+
+    const x = Math.floor(this.physics.x);
+    const z = Math.floor(this.physics.z);
+    if (!this.world.isLoaded(x, z)) return;
+
+    const solid = (id: number): boolean => blockDef(id).solid && !blockDef(id).liquid;
+    const feetY = Math.floor(this.physics.y + 0.001);
+    const feet = this.world.getBlock(x, feetY, z);
+    const head = this.world.getBlock(x, feetY + 1, z);
+    const under = this.world.getBlock(x, feetY - 1, z);
+    const unsafe =
+      solid(feet) ||
+      solid(head) ||
+      !solid(under) ||
+      feet === Block.WATER ||
+      feet === Block.LAVA;
+    if (!unsafe) {
+      this.groundSettleReason = null;
+      return;
+    }
+
+    const safe =
+      findSafeSpawn(this.world, (bx, bz) => this.biomeNameAt(bx, bz), x, z, 24) ??
+      this.nearestNaturalGround(x, z, 20);
+    if (!safe) return;
+
+    this.physics.teleport(safe.x, safe.y, safe.z);
+    this.physics.vx = 0;
+    this.physics.vy = 0;
+    this.physics.vz = 0;
+    this.fallStartY = null;
+    this.pendingFallDistance = 0;
+    this.lastPlayerX = safe.x;
+    this.lastPlayerZ = safe.z;
+    diag.event('app', 'ground.settle', {
+      reason: this.groundSettleReason,
+      from: [x, feetY, z],
+      to: [safe.x, safe.y, safe.z],
+    });
+    this.groundSettleReason = null;
+    this.refreshWorld(toChunkCoord(safe.x), toChunkCoord(safe.z), true);
+  }
+
+  /** 环形向外找最近的一格自然地面（找不到返回 null） */
+  private nearestNaturalGround(
+    x: number,
+    z: number,
+    radius: number,
+  ): { x: number; y: number; z: number } | null {
+    for (let r = 0; r <= radius; r++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const gx = x + dx;
+          const gz = z + dz;
+          // 只扫玩家高度附近，别从世界顶往下翻一整列（见 `naturalGroundNear`）
+          const y = naturalGroundNear(this.world, gx, gz, this.physics.y);
+          if (y === null) continue;
+          return { x: gx + 0.5, y: y + 1.01, z: gz + 0.5 };
+        }
+      }
+    }
+    return null;
+  }
+
   // ---------------------------------------------------------------- 生存
 
   /**
@@ -9594,6 +9696,8 @@ class App {
     this.portalTicks = 0;
     this.portalCooldownTicks = 0;
     this.pendingArrival = null;
+    // 重生点可能因为世界被改过（床被拆、地形被挖）而不再安全
+    this.requestGroundSettle('respawn');
   }
 
   // ---------------------------------------------------------------- 主循环
@@ -10057,6 +10161,7 @@ class App {
       let mark = performance.now();
 
       this.tryResolveSpawn();
+      this.settlePlayerOnGround();
 
       // 触摸视角：在物理与射线之前应用，保证同一帧里"看到的"和"走到的"是一致的
       if (this.touch) {
@@ -10074,9 +10179,10 @@ class App {
 
       const rawInput = this.uiOpen ? IDLE_INPUT : this.collectInput();
       const wasOnGround = this.physics.onGround;
-      if (!this.spawnResolved || this.pendingArrival) {
+      if (!this.spawnResolved || this.pendingArrival || this.groundSettleReason !== null) {
         // 传送途中：目的地的区块还没流出来，`getBlock` 一律返回空气。
         // 新世界安全落点解析前也一样：玩家还在临时高度，绝不能先累计摔落或环境伤害。
+        // 读档落地校正期间同样冻住：否则会先从存档的悬空位置掉下去，再被挪到地面。
         this.physics.vx = 0;
         this.physics.vy = 0;
         this.physics.vz = 0;
@@ -10100,7 +10206,7 @@ class App {
           this.settings.autoJump,
         );
       }
-      if (this.spawnResolved && !this.pendingArrival) {
+      if (this.spawnResolved && !this.pendingArrival && this.groundSettleReason === null) {
         this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
       }
       // 床（B13）：睡觉的计时与结算。用**真实输入**是为了让"跳跃键提前起床"能被读到

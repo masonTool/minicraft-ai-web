@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 622（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 623（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **181**、进行中 **76**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -66,6 +66,18 @@ npm run dev            # http://localhost:5173
   第 2 档才退回真开关背包（`autoRecover.uiCycle` + 提示卡；无感那一档记 `autoRecover.deep`）。
   ③ 从后台回来 / 全屏切换也升到重档——这两处正是后面坐标异常的上游。
   `test:ui` 605 → 607（`npm run check` 全绿）。
+- 批次 213（返回层级 + 进世界落地）：
+  ① **返回的顺序**：先让游戏暂停，再把"请横屏游玩"**盖在暂停菜单上层**
+  （90 > 50）。删掉 `body.pause-open .rotate-hint { display:none }`——
+  那一句会让暂停页顶在最上面，玩家看到的是"返回没让我横屏"。点一下提示 →
+  全屏 + 横屏 → 提示随横屏消失，正好看到「游戏已暂停」。
+  ② **进世界一定落在地面**：读档恢复的坐标 / 重生点可能悬空、在水里、被方块埋住。
+  新增 `requestGroundSettle` + `settlePlayerOnGround`：等区块加载好后复核脚底
+  （脚/头卡实心、脚下无支撑、脚在水/岩浆都算不安全），先 `findSafeSpawn`，
+  再环形找最近的自然地面；期间冻结物理与生存结算（最多 10 秒）。
+  `naturalGroundNear` 只扫玩家高度 ±48，不从世界顶翻整列；`NATURAL_FLOORS`
+  补上地狱岩/灵魂沙/黑石/末地石/黑曜石，下界与末地也能校正。
+  `test:ui` 618、`test:world` 60（`npm run check` 全绿）。
 - 批次 212（返回键 + 悬空雪）：
   ① **掉出全屏 = 补开暂停**（恢复 206 的思路、保留 209 的"不强制全屏"）：
   `fullscreenchange` 检测到从全屏掉出且没有面板 → 160ms 后 `openSettings()`；
