@@ -660,6 +660,7 @@ console.log('\n[携带版细节收口（批次 159）]');
     '分类栏列的是能合成的产物；缺料的那批按材料齐不齐标红',
     invSrc.includes('private craftableIds(): number[]') &&
       invSrc.includes('if (canCraft(counts, recipe).ok) ids.push(recipe.result.id);') &&
+      invSrc.includes('if (recipeGridSize(recipe) > this.crafting.size) continue;') &&
       invSrc.includes('for (const id of this.viewedRecipeIds) {') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
       invSrc.includes("classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
@@ -792,9 +793,9 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('const showCreativeItems = creative && this.pane === \'creative\';'),
   );
   check(
-    '默认列出能合成的全部产物；看过的缺料配方用红底保留',
-    invSrc.includes('private showUnowned = true;') &&
-      invSrc.includes('private craftableIds(): number[]') &&
+    '配方书开关：开=分类全部物品，关=能合成的 + 看过的缺料',
+    invSrc.includes('private showUnowned = false;') &&
+      invSrc.includes('if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);') &&
       invSrc.includes('this.viewedRecipeIds.add(itemId);') &&
       css.includes('.inv-slot.locked {'),
   );
@@ -838,15 +839,20 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   // 空槽不给选中反馈（批次 184：红底那种"我没有的"同样不给，只闪一下）
   check(
     '空槽不给选中反馈',
-    /if \(this\.tooltipStacks\.has\(slot\)\) \{[\s\S]{0,220}else this\.markPressing\(slot\);/.test(invSrc),
+    /if \(this\.tooltipStacks\.has\(slot\)\) \{[\s\S]{0,400}this\.markPressing\(slot\);/.test(invSrc),
   );
   // 丢物（批次 206）：面板空白与窗外暗色区域都丢；
   // 判据是"不在任何交互元素里"，而不是死认 target === root/shell。
   check(
-    '点面板空白 / 窗口外都丢出手上的整叠',
+    '点面板空白 / 窗口外 / 快捷栏两侧空白都丢出手上的整叠',
     invSrc.includes('private dropHeldStack(') &&
-      invSrc.includes('if (this.panel.contains(target) || this.hotbarDock.contains(target)) return;') &&
+      !invSrc.includes('this.hotbarDock.contains(target)') &&
       invSrc.includes("if (target.closest('.inv-slot, button, input, .recipe-cell')) return;"),
+  );
+  check(
+    '分类栏点击只给缩放反馈，不再套白色相框',
+    /slot\.classList\.contains\('category-slot'\) \|\| slot\.classList\.contains\('locked'\)/.test(invSrc) &&
+      css.includes('.inv-slot.tapped { animation: inv-locked-tap'),
   );
   // 材料不齐 → 把配方**画**进合成格，缺的那件红底（格子里是预览不是实物）
   check(
@@ -1956,10 +1962,15 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   );
   // ⑤ 红底"我没有的"：不选中，只给点击反馈 + 名称 + 配方
   check(
-    '红底物品不选中，只给点击反馈',
-    invSrc.includes('if (slot.classList.contains(\'locked\')) this.flashLocked(slot);') &&
+    '红底 / 分类格都不选中，只给缩放反馈',
+    invSrc.includes("slot.classList.contains('category-slot') || slot.classList.contains('locked')") &&
       invSrc.includes('private flashLocked(slot: HTMLElement): void {') &&
-      css.includes('.inv-slot.locked.tapped'),
+      css.includes('.inv-slot.tapped { animation: inv-locked-tap'),
+  );
+  check(
+    '手机上 :hover 不再把红底盖成灰白',
+    /@media \(hover: hover\) and \(pointer: fine\) \{\s*\.inv-slot:hover/.test(css) &&
+      css.includes('.inv-slot.locked:hover'),
   );
   // ⑥ 键盘：不缩布局 + 点别处先失焦
   check(
@@ -1991,19 +2002,16 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '浮层尽早挂上（不等菜单/加载）',
     /installKeyboardGuards\(\);[\s\S]{0,300}installRotateHint\(\);/.test(appSrc),
   );
-  // 批次 206：安卓返回键在全屏里常常只退出全屏 → 暂停菜单不该被竖屏提示盖住
+  // 批次 209（用户要求回退）：返回键**只走 popstate**，不再把"掉出全屏"当成一次返回。
+  // 批次 206 那套监听在真机上表现不符合预期（同一手势被处理两次/暂停页时机不对）。
   check(
-    '退出全屏等于一次返回：落回暂停菜单而不是"请横屏游玩"',
-    appSrc.includes("addEventListener('fullscreenchange'") &&
-      appSrc.includes("classList.add('pause-open')") &&
-      settingsSrc.includes("classList.add('pause-open')") &&
-      css.includes('body.pause-open .rotate-hint'),
+    '返回键只走 popstate（掉出全屏不再当成一次返回）',
+    appSrc.includes("addEventListener('popstate'") &&
+      !appSrc.includes('pauseAfterFullscreenTimer') &&
+      !/fullscreenchange'[\s\S]{0,300}openSettings\(\)/.test(appSrc) &&
+      !settingsSrc.includes("classList.add('pause-open')"),
   );
-  check(
-    '全屏与 popstate 同时到达时只处理一次（不会一次返回退两个层级）',
-    appSrc.includes('private pauseAfterFullscreenTimer') &&
-      appSrc.includes('window.clearTimeout(this.pauseAfterFullscreenTimer);'),
-  );
+  check('继续游戏不再强制请求全屏（回到批次 205 的行为）', !/closeSettings\(\): void \{[\s\S]{0,400}enterMobilePresentation\(\)/.test(appSrc));
 
   // ② 工作台 3×3：创造模式左栏仍能切分类
   check(
@@ -2285,6 +2293,28 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     '历史区可以滑动（触屏纵向滚动）',
     /#chat\.open \.chat-log \{[\s\S]{0,300}?overflow-y: auto/.test(html) &&
       html.includes('touch-action: pan-y'),
+  );
+  check(
+    '输入行在最上面（左上角），历史在下面',
+    chatSrc.includes('this.root.append(this.entryEl, this.hintEl, this.logEl)') &&
+      html.includes('.chat-entry {') &&
+      html.includes('.chat-entry.hidden { display: none; }'),
+  );
+  check(
+    '新消息在上、旧消息在下',
+    /for \(let i = lines\.length - 1; i >= 0; i--\)/.test(chatSrc) &&
+      chatSrc.includes('this.stickToTop') &&
+      chatSrc.includes('this.logEl.scrollTop = this.stickToTop ? 0 : previousTop'),
+  );
+  check(
+    '聊天面板不被键盘高度压扁（--kb-inset 不再减在 #chat 上）',
+    !/#chat \{[\s\S]{0,500}?max-height: calc\(100dvh - var\(--kb-inset/.test(html),
+  );
+  check(
+    '打开聊天的那一笔手势不会立刻把它关掉',
+    chatSrc.includes('this.openedAt = performance.now();') &&
+      chatSrc.includes('performance.now() - this.openedAt < 350') &&
+      chatSrc.includes("closest?.('#touch-pause')"),
   );
   const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check(

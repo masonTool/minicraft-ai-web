@@ -1466,7 +1466,10 @@ function decorateLocal(w: FeatureWriter, world: FeatureWorld, seed: number, stat
         if (hashAt(wx, wz, seed ^ 0x5c0a) >= config.snowCover) continue;
         const y = w.surfaceAbove(wx, wz, world.surfaceY(wx, wz) + 1);
         if (!isPlantableAt(w.get(wx, y, wz))) continue;
-        const layers = 1 + Math.floor(hashAt(wx, wz, seed ^ 0x5c0b) * 3);
+        // 批次 209：**统一 1 层**（= level 0，1/8 格）。
+        // 原来按列哈希给 1~3 层，雪原看起来坑坑洼洼、走路还一深一浅；
+        // 原版自然雪层也是整片同高（只有玩家手动堆才会变厚）。
+        const layers = 1;
         if (w.putState(wx, y, wz, Block.SNOW, withSnowLayers(0, layers))) {
           if (stats) stats.snow = (stats.snow ?? 0) + 1;
         }

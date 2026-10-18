@@ -198,10 +198,23 @@ export function craftFromInventory(inventory: Inventory, recipe: Recipe): Recipe
  */
 export function fillCraftingGrid(inventory: Inventory, grid: CraftingGrid, recipe: Recipe): boolean {
   if (recipeGridSize(recipe) > grid.size) return false;
-  if (!canCraft(inventory, recipe).ok) return false;
 
   const cells = grid.size * grid.size;
   const backup = Array.from({ length: cells }, (_, index) => grid.get(index));
+  // 判材料够不够要**连格子里已经摆着的**一起算（批次 209）。
+  // 原版点配方时，桌上已经放着的材料也是可用的；以前这里先只查背包，
+  // 材料一半在桌上就会直接拒绝——界面上却因为"合并计算"把这一项标成白底，
+  // 表现就是"白底却做不了"。下面会先把格子倒回背包再消耗，所以合并判断是准确的。
+  {
+    const fromGrid = new Map<number, number>();
+    for (const stack of backup) {
+      if (stack) fromGrid.set(stack.id, (fromGrid.get(stack.id) ?? 0) + stack.count);
+    }
+    const combined = {
+      countOf: (id: number): number => inventory.countOf(id) + (fromGrid.get(id) ?? 0),
+    };
+    if (!canCraft(combined, recipe).ok) return false;
+  }
   const restore = (): void => {
     for (let index = 0; index < cells; index++) grid.set(index, backup[index] ?? null);
   };

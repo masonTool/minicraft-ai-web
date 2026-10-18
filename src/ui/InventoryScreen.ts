@@ -442,14 +442,15 @@ export class InventoryScreen {
   /** 创造栏上一次渲染的指纹（内容只跟分类 / 搜索词 / 页码有关，见 `renderCreativeGrid`） */
   private creativeStamp = '';
   /**
-   * 「也显示缺料配方」（批次 159 → 206 改语义）。
+   * 「配方书开关」（批次 159 引入，批次 209 按用户澄清定稿）：
    *
-   * 批次 206 起左栏列的是**能合成的东西**（不是仓库里有什么）：
-   *  - 默认（开）：当前材料够的配方 + **之前点过、现在缺料**的配方（红底）；
-   *  - 关着：只列**现在就能做**的。
-   * 用户原话："搜索栏内展示当前所有可以合成的物品，以及之前查看过的没有集齐材料的物品（红底）。"
+   *  - **开**：列出该分类下的**全部物品**（相当于翻配方书，找你不知道怎么做的东西）；
+   *  - **关**（默认）：只列**现在能合成**的 + **之前点开看过、现在缺料**的（红底）。
+   *
+   * 颜色与开关无关：白底一律表示"当前材料够、且当前格子放得下"，
+   * 其余（缺料、需要 3×3、根本没有配方）都是红底。
    */
-  private showUnowned = true;
+  private showUnowned = false;
   /**
    * 之前点开看过的配方产物（批次 206）：材料后来不够了也要留在列表里（红底），
    * 这样玩家能接着看"还差什么"，而不是东西一缺就从列表里消失。
@@ -810,11 +811,10 @@ export class InventoryScreen {
       // 键盘热键的括注只在 PC 上给：手机上没有 R 这个键，写成"配方书 (R)"
       // 只会让人以为"要按 R 才能打开"（批次 104）
       recipes.textContent = touchDevice ? '配方书' : '配方书 (R)';
-      // 批次 206：它管的是"要不要把**看过的缺料配方**也列出来（红底）"。
+      // 批次 209：它就是"配方书"开关。
       //   左栏还在"我的物品"时：点它 = 进入上次那个分类（沿用 `lastRecipeTab`）；
-      //   左栏已经是某个分类时：点它 = 切"缺料配方显不显示"。
-      // ⚠️ 列表本身就是"能合成的东西"（不是"我拥有的东西"），所以不再有
-      //   "只显示我拥有的"那层语义了。
+      //   左栏已经是某个分类时：点它 = 在「只看能合成的」与「列出该分类全部物品」之间切。
+      // 颜色始终按"现在能不能合成"区分（白 = 能做，红 = 缺料/要 3×3/没配方）。
       recipes.addEventListener('click', () => {
         if (this.pane === 'category') {
           this.showUnowned = !this.showUnowned;
@@ -1357,7 +1357,7 @@ export class InventoryScreen {
    * 所以按**背包指纹**缓存（同一个指纹下材料分布没变，结果一定一样）。
    */
   private craftableIds(): number[] {
-    const stamp = `${this.inventoryStamp()}|${this.craftingStamp()}`;
+    const stamp = `${this.inventoryStamp()}|${this.crafting.size}|${this.craftingStamp()}`;
     if (this.craftableCache?.stamp === stamp) return this.craftableCache.ids;
     // ⚠️ 材料要连**合成格里已摆好的**一起算：点一条配方时材料会从仓库挪进格子，
     // 只看仓库的话，刚点完那一下这条配方就变成"缺料"（列表立刻红掉，像出错了）。
@@ -1365,6 +1365,9 @@ export class InventoryScreen {
     const ids: number[] = [];
     for (const recipe of RECIPES) {
       if (ids.includes(recipe.result.id)) continue;
+      // ⚠️ "能合成"要连**当前工作台放不放得下**一起算：
+      // 3×3 配方在背包的 2×2 里做不出来，不能标白（用户看到"白底却做不了"就是这条）。
+      if (recipeGridSize(recipe) > this.crafting.size) continue;
       if (canCraft(counts, recipe).ok) ids.push(recipe.result.id);
     }
     this.craftableCache = { stamp, ids };
@@ -1385,7 +1388,7 @@ export class InventoryScreen {
   /** 合成格内容的指纹（材料进出格子时也要重算"能合成什么"） */
   private craftingStamp(): string {
     const size = this.crafting.size;
-    let stamp = '';
+    let stamp = `${size}:`;
     for (let i = 0; i < size * size; i++) {
       const stack = this.crafting.get(i);
       stamp += stack ? `${stack.id}x${stack.count},` : '-,';
@@ -1403,17 +1406,20 @@ export class InventoryScreen {
    */
   private categoryItems(): number[] {
     const query = this.categoryQuery;
-    const craftable = new Set(this.craftableIds());
-    const ids = new Set<number>(craftable);
-    if (this.showUnowned) {
-      for (const id of this.viewedRecipeIds) {
-        if (!craftable.has(id) && recipesForResult(id).length > 0) ids.add(id);
-      }
-    }
-    return [...ids].filter((id) => {
+    const byCategory = (id: number): boolean => {
       if (this.categoryTab !== 'all' && recipeBookTab(id) !== this.categoryTab) return false;
       return query.length === 0 || matchesQuery(id, query);
-    });
+    };
+    // 配方书按钮打开 = **列举该分类的全部物品**（用户明确要求保留这条）。
+    // 颜色仍按"现在能不能合成"来分：白底 = 当前材料够且格子放得下，其余红底。
+    if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);
+    // 关闭 = 只列"现在能做的" + 之前点开看过、现在缺料的（红底）
+    const craftable = new Set(this.craftableIds());
+    const ids = new Set<number>(craftable);
+    for (const id of this.viewedRecipeIds) {
+      if (!craftable.has(id) && recipesForResult(id).length > 0) ids.add(id);
+    }
+    return [...ids].filter(byCategory);
   }
 
   /**
@@ -1452,20 +1458,24 @@ export class InventoryScreen {
 
     // 搜索框只在"全部"那一栏出现（与创造栏、配方书同一口径）
     this.categorySearch.style.display = this.categoryTab === 'all' ? '' : 'none';
-    // 底部统计（批次 206 改口径）：这一栏是"能合成什么"，所以报**可合成**多少项、
-    // 以及"看过的缺料"多少项。**不受搜索词影响**（那是筛选结果，不是分类规模）。
+    // 底部统计：开关打开时报"这一栏共多少 / 其中现在能做多少"，
+    // 关闭时报"现在能做多少 / 看过的缺料多少"。**不受搜索词影响**。
     {
       const inTab = (id: number): boolean => this.categoryTab === 'all' || recipeBookTab(id) === this.categoryTab;
       const craftable = this.craftableIds();
       const craftableInTab = craftable.filter(inTab).length;
-      const missingInTab = this.showUnowned
-        ? [...this.viewedRecipeIds].filter(
-            (id) => !craftable.includes(id) && inTab(id) && recipesForResult(id).length > 0,
-          ).length
-        : 0;
-      this.categoryInfo.textContent =
-        `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 可合成 ${craftableInTab}` +
-        (missingInTab > 0 ? ` · 缺料 ${missingInTab}（红底）` : '');
+      if (this.showUnowned) {
+        const allInTab = CREATIVE_ITEMS.filter(inTab).length;
+        this.categoryInfo.textContent =
+          `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 全部 ${allInTab} 项（白底 ${craftableInTab} 项现在能做）`;
+      } else {
+        const missingInTab = [...this.viewedRecipeIds].filter(
+          (id) => !craftable.includes(id) && inTab(id) && recipesForResult(id).length > 0,
+        ).length;
+        this.categoryInfo.textContent =
+          `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 可合成 ${craftableInTab}` +
+          (missingInTab > 0 ? ` · 缺料 ${missingInTab}（红底）` : '');
+      }
     }
     const items = this.categoryItems();
     // 触摸端整表滚动、PC 底部翻页（与创造栏同一条判据）
@@ -1606,7 +1616,7 @@ export class InventoryScreen {
     this.clearCraftGhost();
     // 批次 166：创造模式不显示配方（拥有所有方块，看配方没有意义）
     if (this.hooks.isCreative?.() ?? false) return;
-    const recipe = recipesForResult(itemId)[0];
+    const recipe = this.bestRecipeFor(itemId);
     if (!recipe) {
       if (SMELTING_RECIPES.some((entry) => entry.output.id === itemId)) this.craftStation = 'furnace';
       return;
@@ -1623,6 +1633,22 @@ export class InventoryScreen {
     this.showRecipeGhost(recipe);
     // 材料不齐时结果槽也画出来（用户："工作台的槽只有材料，这是不对的"）
     this.previewResult = { id: recipe.result.id, count: recipe.result.count };
+  }
+
+  /**
+   * 选一条**当前站点真能做/最接近能做**的配方（批次 209）。
+   *
+   * 同一件东西可能有多条配方（不同木材、不同形状）。原来直接取 `[0]`：
+   * 列表把它标成白底（另一条 2×2 配方材料够），点开却显示一条 3×3 的
+   * ——"白底却做不了"的观感就是这么来的。
+   *
+   * 优先级：放得下且材料够 → 放得下 → 随便一条（用来点亮"要工作台/要熔炉"）。
+   */
+  private bestRecipeFor(itemId: number): Recipe | undefined {
+    const all = recipesForResult(itemId);
+    const fits = all.filter((recipe) => recipeGridSize(recipe) <= this.crafting.size);
+    const counts = { countOf: (id: number) => this.craftCount(id) };
+    return fits.find((recipe) => canCraft(counts, recipe).ok) ?? fits[0] ?? all[0];
   }
 
   /**
@@ -1982,10 +2008,10 @@ export class InventoryScreen {
       // 切到"生存背包"时也不该冒出来（人还在创造模式里）。
       this.recipesBtn.classList.toggle('hidden', creativePlayer);
       this.recipesBtn.classList.toggle('active', leftPane === 'category' && this.showUnowned);
-      // 批次 206：这颗开关现在管的是"要不要把看过的**缺料配方**也列出来（红底）"
+      // 批次 209：开 = 配方书模式（列出该分类全部物品）；关 = 只看现在能做的
       this.recipesBtn.title = this.showUnowned
-        ? '正在显示看过的缺料配方（红底）· 点一下只看现在能做的'
-        : '只看现在能做的 · 点一下把看过的缺料配方也列出来（红底）';
+        ? '配方书：正在列出该分类的全部物品 · 点一下只看现在能合成的'
+        : '只看现在能合成的（含看过的缺料）· 点一下列出该分类全部物品';
     }
 
     // 换栏内容时给一下淡入：**位置不动**，只是让人看见"这一栏换了一份"
@@ -2783,8 +2809,13 @@ export class InventoryScreen {
           // 批次 184：红底那种"我没有的"也**不选中**，所以不给"相框"，
           // 只给一下缩放（用户："点击应该只触发点击效果"）。
           if (this.tooltipStacks.has(slot)) {
-            if (slot.classList.contains('locked')) this.flashLocked(slot);
-            else this.markPressing(slot);
+            // 批次 209：**分类栏一律只给"点一下"的缩放**，绝不给 `.pressing`
+            // （那套是"相框选中"的白色底，用户反复反馈"红底点一下变白"）。
+            if (slot.classList.contains('category-slot') || slot.classList.contains('locked')) {
+              this.flashLocked(slot);
+            } else {
+              this.markPressing(slot);
+            }
           }
         }
       },
@@ -2832,7 +2863,9 @@ export class InventoryScreen {
     // 原来点两栏之间的缝、或某个装饰层什么都不发生，玩家就会以为"丢弃没做"。
     this.root.addEventListener('pointerdown', (event) => {
       const target = event.target as HTMLElement;
-      if (this.panel.contains(target) || this.hotbarDock.contains(target)) return;
+      // 批次 209：快捷栏 dock 的**空白处**也算界面外（用户习惯点快捷栏左右两侧丢东西）。
+      // 只排除真正的格子/按钮/输入框——dock 本身不能整块豁免。
+      if (this.panel.contains(target)) return;
       if (target.closest('.inv-slot, button, input, .recipe-cell')) return;
       event.preventDefault();
       this.dropHeldStack(event.button === 2 ? 1 : (this.held?.count ?? 0));

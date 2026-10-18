@@ -289,7 +289,7 @@ export function loadSettings(): GameSettings {
       volumeMobs: clampNumber(parsed.volumeMobs, 0, 1, DEFAULT_SETTINGS.volumeMobs),
       volumePlayer: clampNumber(parsed.volumePlayer, 0, 1, DEFAULT_SETTINGS.volumePlayer),
       volumeUi: clampNumber(parsed.volumeUi, 0, 1, DEFAULT_SETTINGS.volumeUi),
-      sensitivity: clampNumber(parsed.sensitivity, 0.5, 2, DEFAULT_SETTINGS.sensitivity),
+      sensitivity: clampNumber(parsed.sensitivity, 0.5, 4, DEFAULT_SETTINGS.sensitivity),
       // 外观（批次 187）：坏值/越界一律回退默认档，渲染层不用再判空
       skinTone: appearanceIndex(parsed.skinTone, SKIN_TONES.length, DEFAULT_SETTINGS.skinTone),
       shirtColor: appearanceIndex(parsed.shirtColor, SHIRT_COLORS.length, DEFAULT_SETTINGS.shirtColor),
@@ -652,7 +652,7 @@ export class SettingsScreen {
     this.makeSelect(controls, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
     // 触摸按钮大小（批次 97）：手机上线 44px 只是下限，多大才顺手因人而异
     controls.append(this.makeSlider('touchScale', '触摸按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100));
-    controls.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05));
+    controls.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 4, 0.05));
     this.makeToggle(controls, 'invertY', '反转上下视角');
     // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开；
     // 但它会让"贴着一格高的墙走"变成自己往上跳，有人不喜欢，所以给开关。
@@ -1243,9 +1243,6 @@ export class SettingsScreen {
     this.renderSubtitle();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
-    // 局内暂停时让竖屏提示让位（批次 206）：返回键先退出全屏 → 手机转回竖屏，
-    // 那一层（z-index 90）会盖住暂停菜单（50），玩家看到的就是"请横屏游玩"。
-    if (this.actions.onExitToMenu) document.body.classList.add('pause-open');
     // 日志条数每次打开都会变，进来时对一次账
     this.refreshDiagnostics();
     // 模式可能被 /gamemode 或主菜单改过：两个开关按真实状态回填

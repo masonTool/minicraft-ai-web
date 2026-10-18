@@ -50,6 +50,8 @@ export class ChatInput {
   onOpenChange: ((open: boolean) => void) | null = null;
 
   private readonly logEl: HTMLDivElement;
+  /** 输入行（输入框 + 发送键）单独一组：打开时放在**最上面**（左上角） */
+  private readonly entryEl: HTMLDivElement;
   private readonly inputEl: HTMLInputElement;
   private readonly hintEl: HTMLDivElement;
   /** 触屏的"发送"按钮：手机虚拟键盘的确定键不一定派发 Enter 的 keydown */
@@ -61,9 +63,20 @@ export class ChatInput {
   private historyIndex = -1;
   /** 上一次渲染从哪一条开始（没变就不重建 DOM） */
   private renderedStart = -1;
-  /** 打开时是否贴着底部（玩家往上翻时不要被新消息拽回去） */
-  private stickToBottom = true;
+  /**
+   * 打开时是否贴着**顶部**（批次 209：新消息在上、旧消息在下）。
+   * 玩家往下翻看旧消息时不要被新消息拽回去。
+   */
+  private stickToTop = true;
   private open = false;
+  /**
+   * 打开的时刻（批次 209）。
+   *
+   * 手机上"点聊天按钮 → 窗口闪一下又关掉"：打开动作本身发生在 `pointerdown` 里，
+   * 同一笔手势还会继续走到 document 的"点外面就关"监听（部分内核的 target 不是按钮）。
+   * 这里给一个很短的免疫窗口，把"打开它的那一下"排除掉。
+   */
+  private openedAt = 0;
   /** 补全候选（按 Tab 在候选之间轮换） */
   private completionIndex = 0;
   /** 上一次补全时的前缀（用来决定是换候选还是重新开始） */
@@ -104,7 +117,11 @@ export class ChatInput {
       this.submit();
     });
 
-    this.root.append(this.logEl, this.hintEl, this.inputEl, this.sendButton);
+    this.entryEl = document.createElement('div');
+    this.entryEl.className = 'chat-entry hidden';
+    this.entryEl.append(this.inputEl, this.sendButton);
+    // 输入行在最上面（左上角），下面是提示与历史；打开时新消息排在最前
+    this.root.append(this.entryEl, this.hintEl, this.logEl);
     host.appendChild(this.root);
 
     this.inputEl.addEventListener('keydown', (event) => this.onInputKeyDown(event));
@@ -112,8 +129,8 @@ export class ChatInput {
     this.logEl.addEventListener(
       'scroll',
       () => {
-        const remaining = this.logEl.scrollHeight - this.logEl.scrollTop - this.logEl.clientHeight;
-        this.stickToBottom = remaining < 24;
+        // 新消息在顶部：停在最上面（scrollTop≈0）时继续跟随
+        this.stickToTop = this.logEl.scrollTop < 24;
       },
       { signal: this.listeners.signal },
     );
@@ -121,7 +138,12 @@ export class ChatInput {
     document.addEventListener(
       'pointerdown',
       (event) => {
-        if (this.open && !this.root.contains(event.target as Node)) this.close();
+        if (!this.open) return;
+        if (this.root.contains(event.target as Node)) return;
+        // 打开它的那一下 / 顶部那颗聊天键本身都不算"点外面"
+        if (performance.now() - this.openedAt < 350) return;
+        if ((event.target as Element | null)?.closest?.('#touch-pause')) return;
+        this.close();
       },
       { signal: this.listeners.signal },
     );
@@ -158,7 +180,9 @@ export class ChatInput {
   openWith(prefill = ''): void {
     if (this.open) return;
     this.open = true;
+    this.openedAt = performance.now();
     this.root.classList.add('open');
+    this.entryEl.classList.remove('hidden');
     this.inputEl.classList.remove('hidden');
     this.hintEl.classList.remove('hidden');
     this.sendButton.classList.remove('hidden');
@@ -168,8 +192,8 @@ export class ChatInput {
     this.inputEl.setSelectionRange(prefill.length, prefill.length);
     this.historyIndex = -1;
     this.lastPrefix = '';
-    // 打开这一刻铺出历史并落到最底部（最新的消息在下面）；之后玩家可以往上滑
-    this.stickToBottom = true;
+    // 打开这一刻铺出历史并停在最上面（最新的一条）；往下滑才是更早的消息
+    this.stickToTop = true;
     this.renderedStart = -1;
     this.renderLog();
     this.updateHint();
@@ -180,6 +204,7 @@ export class ChatInput {
     if (!this.open) return;
     this.open = false;
     this.root.classList.remove('open');
+    this.entryEl.classList.add('hidden');
     this.inputEl.classList.add('hidden');
     this.hintEl.classList.add('hidden');
     this.sendButton.classList.add('hidden');
@@ -245,7 +270,10 @@ export class ChatInput {
     const { start, lines } = this.visibleRange(now);
     this.renderedStart = start;
     const fragment = document.createDocumentFragment();
-    for (const line of lines) {
+    // 批次 209：**新消息在上、旧消息在下**（与常见聊天软件一致）。
+    // `visibleRange` 仍按时间正序切片，这里倒过来插 DOM。
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]!;
       const element = document.createElement('div');
       element.className = `chat-line chat-${line.kind}`;
       // 多行反馈（/help 那种）在消息栏里要按换行拆开显示
@@ -255,9 +283,10 @@ export class ChatInput {
       if (!this.open && now > line.expires) element.classList.add('fading');
       fragment.appendChild(element);
     }
+    const previousTop = this.logEl.scrollTop;
     this.logEl.replaceChildren(fragment);
-    // 只有"贴着底部"才自动跟到最新；玩家往上滑看旧消息时不要把他拽回来
-    if (this.stickToBottom) this.logEl.scrollTop = this.logEl.scrollHeight;
+    // 只有停在顶部才自动跟到最新；玩家往下翻旧消息时保留原来的滚动位置
+    this.logEl.scrollTop = this.stickToTop ? 0 : previousTop;
   }
 
   private onInputKeyDown(event: KeyboardEvent): void {

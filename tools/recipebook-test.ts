@@ -409,6 +409,16 @@ console.log('\n[配方书：把配方摆进合成格（批次 132）]');
   equal('背包没多也没少', full.countOf(stick), before);
   equal('没多出产物', full.countOf(Block.CRAFTING_TABLE), 0);
 
+  // 材料一半在桌上：合并判断（批次 209）
+  // 以前只查背包，桌上已经放着的材料不算数 → 界面标了白底却点不动
+  const splitInventory = new Inventory();
+  splitInventory.add(planks, 2);
+  const splitGrid = new CraftingGrid(2);
+  splitGrid.set(0, { id: planks, count: 2 });
+  check('材料一半在合成格里也能摆（批次 209）', fillCraftingGrid(splitInventory, splitGrid, table));
+  equal('四格都摆上了木板', [0, 1, 2, 3].filter((i) => splitGrid.get(i)?.id === planks).length, 4);
+  equal('背包里的木板被用光', splitInventory.countOf(planks), 0);
+
   // 无序配方：按材料顺序依次填
   const shapeless = RECIPES.find((r) => r.kind === 'shapeless' && recipeGridSize(r) === 2);
   if (shapeless) {

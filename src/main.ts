@@ -987,16 +987,7 @@ class App {
    * 手机转回竖屏 → 竖屏提示整层盖住画面。玩家体感是"按返回被扔到请横屏游玩"，
    * 而不是"暂停"。这里盯住"从全屏掉出来"这一刻，没有面板就落回暂停菜单。
    */
-  private lastFullscreen = false;
-  /**
-   * "掉出全屏之后稍等一下再弹暂停"的计时器（批次 206）。
-   *
-   * 安卓返回键在**有些内核里会同时**派发 `fullscreenchange` 与 `popstate`：
-   * 两个都当成一次返回的话，第二下会把刚弹出的暂停菜单当成"再按一次"→ 直接退出世界。
-   * 所以全屏那一路只挂一个 160ms 的计时器；只要 `popstate` 先到就取消它，
-   * 由返回键那条路**只处理一次**。
-   */
-  private pauseAfterFullscreenTimer: number | null = null;
+
   private readonly hotbarSlots: HTMLDivElement[] = [];
   /** 聊天与命令输入（左下角消息栏 + 命令输入行） */
   private readonly chat = new ChatInput();
@@ -1683,11 +1674,6 @@ class App {
       'popstate',
       () => {
         if (this.disposed) return;
-        // 掉出全屏那一路还在等 → 这次返回已经落到这里了，让它不要再弹一次
-        if (this.pauseAfterFullscreenTimer !== null) {
-          window.clearTimeout(this.pauseAfterFullscreenTimer);
-          this.pauseAfterFullscreenTimer = null;
-        }
         // 批次 181：**游戏内没有面板时，返回 = 打开暂停菜单**。
         // 以前这里交给浏览器（PWA 里等于直接退出游戏）——玩家只是想关个界面，
         // 结果把整局退了，这是手机上最容易被劝退的一处。
@@ -1702,34 +1688,6 @@ class App {
       },
       { signal: this.listeners.signal },
     );
-    // 批次 206：全屏里按返回，浏览器往往只退出全屏（没有 popstate）。
-    // 把"掉出全屏"也当成一次返回：没有面板就弹出暂停菜单，而不是让竖屏提示盖住画面。
-    this.lastFullscreen = isFullscreen();
-    const onFullscreenChange = (): void => {
-      if (this.disposed) return;
-      const now = isFullscreen();
-      const lost = this.lastFullscreen && !now;
-      this.lastFullscreen = now;
-      if (!lost) return;
-      if (this.isAnyUiOpen()) {
-        // 已经在某个面板里（例如设置里手动退出全屏）：只对一次竖屏提示，不要叠一层暂停
-        syncRotateHint();
-        return;
-      }
-      // 稍等一下再弹：如果同一手势还会派发 `popstate`，那边会取消这个计时器，
-      // 避免"一次返回被处理两次、第二下直接退出世界"。
-      if (this.pauseAfterFullscreenTimer !== null) window.clearTimeout(this.pauseAfterFullscreenTimer);
-      this.pauseAfterFullscreenTimer = window.setTimeout(() => {
-        this.pauseAfterFullscreenTimer = null;
-        if (this.disposed || this.isAnyUiOpen()) return;
-        diag.event('input', 'back.exitFullscreen', {});
-        this.openSettings();
-        syncRotateHint();
-      }, 160);
-    };
-    document.addEventListener('fullscreenchange', onFullscreenChange, { signal: this.listeners.signal });
-    document.addEventListener('webkitfullscreenchange', onFullscreenChange, { signal: this.listeners.signal });
-
     this.bindEvents();
     // 没有存档时直接按出生点请求区块；
     // 有存档时先不请求 —— 读档要先装载"方块增量"，否则先加载进来的区块
@@ -1930,9 +1888,6 @@ class App {
   closeSettings(): void {
     this.settingsScreen.hide();
     this.handleInventoryOpen(false);
-    // 手机上"继续游戏"就是那一次用户手势：顺手把全屏 + 横屏要回来（批次 206）。
-    // 不这样做的话，从"返回键退出全屏"落回暂停之后，点继续只会得到一个竖屏小窗。
-    if (isTouchDevice()) enterMobilePresentation();
     // 指针锁必须由用户手势触发，非手势下调用会被拒绝——吞掉异常，别让它打断关闭流程
     try {
       void this.renderer.domElement.requestPointerLock?.();
@@ -6926,6 +6881,11 @@ class App {
   /** 输入框打开/关闭：借背包那套"界面打开就停用移动与交互"的逻辑 */
   private handleChatOpen(open: boolean): void {
     this.handleInventoryOpen(open);
+    // 批次 209：聊天时**不收起触摸操作层**。
+    // 收起会把刚按下的聊天键从手指底下抽走（部分安卓内核会因此把焦点/手势判成取消），
+    // 玩家看到的就是"窗口闪一下又没了"。`uiOpen` 已经挡住了摇杆与放置请求，
+    // 留着这些按钮只影响观感，不影响输入。
+    if (this.touch) this.touch.visible = true;
     // 打字时释放指针锁，否则鼠标动不了、点不到输入框
     if (open && document.pointerLockElement) document.exitPointerLock();
   }
@@ -10257,10 +10217,6 @@ class App {
     // 从后台回来那一层遮罩挂在 body 上（不在 App 的容器里），要自己摘掉
     this.resumeGateEl?.remove();
     this.resumeGateEl = null;
-    if (this.pauseAfterFullscreenTimer !== null) {
-      window.clearTimeout(this.pauseAfterFullscreenTimer);
-      this.pauseAfterFullscreenTimer = null;
-    }
     document.body.classList.remove('pause-open');
     this.wasHidden = false;
     diag.event('app', 'dispose', { world: this.worldConfig.id });

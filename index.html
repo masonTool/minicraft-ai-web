@@ -1445,21 +1445,31 @@
         z-index: 8;
         width: min(52vw, 620px); display: flex; flex-direction: column; gap: 2px;
         font-size: 13px; line-height: 1.45; pointer-events: none;
-        /* 面板本身不滚动：滚的是里面的 .chat-log，输入框始终留在原地 */
-        max-height: calc(100dvh - var(--kb-inset, 0px) - 120px);
+        /* 面板本身不滚动：滚的是里面的 .chat-log，输入框始终留在原地。
+           ⚠️ 别把 `--kb-inset` 减在这里：横屏手机本身只有 ~390px 高，键盘一弹
+           再减 250px 就把整块压成 0 高（输入框被 flex 挤没），看起来就是"闪一下不见了"。
+           键盘在屏幕底部，顶部这块不需要为它让高度；让日志自己算。 */
+        max-height: calc(100dvh - 120px);
       }
       #chat.open { pointer-events: auto; }
+      /* 输入行固定在最上面（左上角），不许被 flex 压缩 */
+      .chat-entry { display: flex; gap: 4px; align-items: stretch; flex: 0 0 auto; }
+      .chat-entry.hidden { display: none; }
+      .chat-entry .chat-input { flex: 1 1 auto; min-width: 0; }
+      .chat-entry .chat-send { flex: 0 0 auto; }
+      .chat-hint { flex: 0 0 auto; }
       .chat-log {
         display: flex; flex-direction: column; gap: 1px;
         max-height: 34vh; overflow: hidden;
         /* 触屏滑动查看历史（批次 206）：纵向手势交给这一层滚动 */
         touch-action: pan-y; overscroll-behavior: contain;
+        flex: 1 1 auto; min-height: 0;
       }
-      /* 打开输入框：铺出更多历史并允许滑动；输入行紧跟在消息下面 */
+      /* 打开输入框：铺出更多历史并允许滑动；输入行在上、历史在下 */
       #chat.open .chat-log {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        max-height: min(34vh, max(56px, calc(100dvh - var(--kb-inset, 0px) - 210px)));
+        max-height: max(56px, calc(100dvh - var(--kb-inset, 0px) - 180px));
       }
       /* 键盘弹出时布局视口不再变矮（viewport 是 resizes-visual，批次 184）：
          聊天已经在顶部、输入框不会被键盘挡住，这里只需要把历史高度再收一点，
@@ -2465,7 +2475,15 @@
         0% { transform: scale(.9); filter: brightness(1.12); }
         100% { transform: none; filter: none; }
       }
-      .inv-slot.locked.tapped { animation: inv-locked-tap .22s ease-out; }
+      /* 分类栏的"点击效果"：只缩一下（`.tapped`），不套 `.pressing/.selected` 的白框 */
+      .inv-slot.tapped { animation: inv-locked-tap .22s ease-out; }
+      .inv-slot.category-slot.pressing,
+      .inv-slot.category-slot.selected {
+        background: var(--slot-bg-hover);
+        border-color: var(--mc-face-dark, #373737) #cfcfcf #cfcfcf var(--mc-face-dark, #373737);
+        box-shadow: none;
+        transform: scale(.94);
+      }
       /* 配方预览里"差的那件"同样是红底（格子里是预览，不是实物） */
       .inv-slot.ghost-missing {
         background: #9b3b35;
@@ -2592,9 +2610,16 @@
         border-radius: var(--slot-radius);
         transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
       }
-      /* 悬停亮一档、按下凹一点：此前槽位完全没有交互反馈（点了才知道点到了没） */
-      .inv-slot:hover { background: var(--slot-bg-hover); }
+      /* 悬停亮一档、按下凹一点：此前槽位完全没有交互反馈（点了才知道点到了没）。
+         ⚠️ 批次 209：`:hover` 只在**真鼠标**上生效。手机上点过之后 `:hover` 会一直黏在
+         那一格上，把红底整个盖成灰白——用户说的"点一下红底变白底"就是这个，不是选中态。 */
+      @media (hover: hover) and (pointer: fine) {
+        .inv-slot:hover { background: var(--slot-bg-hover); }
+      }
       .inv-slot:active { transform: scale(.96); }
+      /* 红底格无论 hover/按下都保持红底（只做缩放反馈） */
+      .inv-slot.locked:hover,
+      .inv-slot.locked.pressing { background: #9b3b35; box-shadow: none; }
       /* 批次 159：选中 = **沉下去**（槽位本来就是"洞"，选中就是再按深一点：
          左上压一道内阴影 + 底色深一档）+ 一圈白框（手机上才看得清）。
          ⚠️ 必须压住 `:hover`：鼠标停在选中那一格上时，悬停那条会把深色顶掉。

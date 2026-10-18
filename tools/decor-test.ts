@@ -825,9 +825,10 @@ console.log('\n[雪层（批次 37）：雪原地表铺雪]');
   // 256 列 × 密度 0.85 × 4 个种子 ≈ 870 格（草与树会占掉一些，所以只查下限）
   check(`4 个种子的雪原长出 ${snowBlocks} 层雪（期望 500+）`, snowBlocks > 500, `实际 ${snowBlocks}`);
   check('雪都落在地面正上方那一格', misplaced.length === 0, misplaced.slice(0, 3).join(' '));
+  // 批次 209：整片雪原统一 1 层（原版自然雪层也是同高，避免"坑坑洼洼 + 一深一浅"）
   check(
-    `层数在 1~3 之间（实测出现过 ${[...layersSeen].sort((a, b) => a - b).join('/')}）`,
-    layersSeen.size > 1 && [...layersSeen].every((layers) => layers >= 1 && layers <= 3),
+    `雪层统一为 1 层（实测 ${[...layersSeen].join('/')}）`,
+    layersSeen.size === 1 && layersSeen.has(1),
   );
 
   // 群系约束：只有雪原那一族配了它
