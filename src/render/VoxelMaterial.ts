@@ -146,16 +146,17 @@ void main() {
   if (texel.a < uAlphaTest) discard;
 
   // 两条光各走一次原版曲线（level / (4 - 3·level)），亮度取较大者：
-  // 洞里只有块光、白天只有天光；交界处按曲线强度加权算颜色，不会硬切换。
+  // 洞里只有块光、白天只有天光。
   float skyLevel = vLight.x * uSkyBrightness;
   float blkLevel = vLight.y;
   float skyCurve = skyLevel / (4.0 - 3.0 * skyLevel);
   float blkCurve = blkLevel / (4.0 - 3.0 * blkLevel);
-  // 那 0.0001 的权重挂在**天光**上：两条光都是 0 时（全黑处）颜色不至于变成 0/0；
-  // 亮度另由 uMinBrightness 兜底。
-  vec3 lightColor =
-    (uSkyLightColor * (skyCurve + 0.0001) + uBlockLightColor * blkCurve) /
-    max(skyCurve + blkCurve + 0.0001, 0.0001);
+  // 色温按 **t²** 混：t 是块光在两条光里的占比。
+  // 用比例（而不是线性加权）是因为"正午 + 旁边一支火把"这种情形下块光只该贡献一点点暖，
+  // 线性加权会让大白天也蒙上一层橙；平方之后 0.4 的占比只剩 0.16，而洞里 t=1 仍是纯暖。
+  // 两条光都为 0（全黑处）时 t=0 → 取天光色，不会出现 0/0。
+  float t = blkCurve / max(skyCurve + blkCurve, 0.0001);
+  vec3 lightColor = mix(uSkyLightColor, uBlockLightColor, t * t);
   float brightness = max(max(skyCurve, blkCurve) * vShade, uMinBrightness);
 
   vec3 color = texel.rgb * brightness * lightColor;

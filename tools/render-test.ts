@@ -456,7 +456,10 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
   // 着色器结构守卫：这两条是本批次的核心，改回去就会重新出现"远处发碎 / 火把是灰的"
   const frag = material.material.fragmentShader;
   check('用 textureGrad 显式给 mip 梯度（fract 会毁掉隐式求导）', frag.includes('textureGrad('));
-  check('片元里同时用到天光色与块光色', frag.includes('uSkyLightColor *') && frag.includes('uBlockLightColor *'));
+  check(
+    '片元里按 t² 混色（白天不会被火把染橙）',
+    frag.includes('mix(uSkyLightColor, uBlockLightColor, t * t)'),
+  );
   check('没有退回"只乘标量亮度"的旧写法', !frag.includes('texel.rgb * brightness;'));
 
   material.material.dispose();
