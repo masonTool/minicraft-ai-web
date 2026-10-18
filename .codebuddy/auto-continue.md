@@ -3227,3 +3227,15 @@
 > 新增 `feedback181-check` 13 条 OK（回菜单不刷新、再次进入、7 列、F6、目标名、返回键）。
 > 同时修了验收脚本的四处假红：读档未完成就传送、创造模式瞬间破坏、触摸端整表滚动按分页断言、
 > 配方书已嵌进左栏却去点旧按钮。
+
+---
+
+## 批次 182：首页显示构建版本（用户要求）
+
+- [x] B182-1 `vite.config.ts` 注入 `__BUILD_COMMIT__` / `__BUILD_TIME__`（`execFileSync`，无 git 回退 unknown）
+- [x] B182-2 `src/game/buildInfo.ts`：本地时区 `YYYY-MM-DD HH:mm`、空值/非法值不显示 `Invalid Date`
+- [x] B182-3 首页页脚一行 `构建 … · <hash> <提交标题>`，可选中复制；横屏 844×390 不溢出（footer 336 < panel 367）
+- [x] B182-4 `test:buildinfo`（12 条）+ `ui-check` 三视口首页断言 + 生产产物里 grep 到注入值
+
+> **批次 182 已完成。** 产物验证：`dist/assets/index-*.js` 里能 grep 到 `cabd039 <提交标题>` 与 ISO 构建时间；
+> 生产预览页 `#world-build` 实际显示 `构建 2026-10-18 10:47 · cabd039 …`。

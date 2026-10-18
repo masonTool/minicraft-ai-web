@@ -24,6 +24,7 @@ import {
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../core/world/Rules.ts';
 import { GAME_MODES, GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
+import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
 
 export interface WorldScreenActions {
   /** 进入世界（已有存档或刚创建的都走这里） */
@@ -132,7 +133,15 @@ export class WorldScreen {
 
     const footer = document.createElement('div');
     footer.className = 'world-footer';
-    footer.textContent = '非官方 Web 复刻 · 存档保存在此设备';
+    const footerNote = document.createElement('div');
+    footerNote.textContent = '非官方 Web 复刻 · 存档保存在此设备';
+    // 批次 182：当前版本的构建时间 + 提交标题——手机上确认"是不是最新那一版"用
+    const build = document.createElement('div');
+    build.className = 'world-build';
+    build.id = 'world-build';
+    build.textContent = formatBuildInfo(readBuildInfo());
+    build.title = '当前页面的构建版本';
+    footer.append(footerNote, build);
 
     home.append(title, subtitle, menu, footer);
 

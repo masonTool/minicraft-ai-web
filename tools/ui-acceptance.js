@@ -76,6 +76,14 @@
       info(`盖住主页的是 ${label(top)}（position ${cs.position} / z-index ${cs.zIndex} / bg ${cs.backgroundImage.slice(0, 40)}）`);
     }
 
+    // 批次 182：首页必须能看出"当前是哪一版"（构建时间 + 提交标题）
+    const build = document.getElementById('world-build');
+    check(
+      '首页显示构建时间与提交标题',
+      !!build && /构建 \d{4}-\d{2}-\d{2} \d{2}:\d{2} · /.test(build.textContent ?? ''),
+      build?.textContent ?? '缺少 #world-build',
+    );
+
     // ③ 通用形状：空的不透明整屏层**永远不合理**（不管它叫什么名字、谁挂的）
     const emptyCoverers = [];
     for (const el of document.body.querySelectorAll('*')) {

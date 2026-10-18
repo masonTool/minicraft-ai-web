@@ -1250,6 +1250,12 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   const worldSource = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   check('新建世界表单有"游戏模式"', worldSource.includes("'游戏模式'") && worldSource.includes('gameModeSelect'));
   check(
+    '首页显示构建时间与提交标题（批次 182）',
+    worldSource.includes("build.id = 'world-build'") &&
+      worldSource.includes('formatBuildInfo(readBuildInfo())') &&
+      readFileSync(new URL('../index.html', import.meta.url), 'utf8').includes('.world-build {'),
+  );
+  check(
     '世界类型下面有"到底有什么"的说明（超平坦会警告）',
     worldSource.includes('WORLD_TYPE_HINTS') &&
       worldSource.includes('private updateTypeHint') &&
