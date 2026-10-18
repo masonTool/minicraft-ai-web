@@ -333,7 +333,12 @@ console.log('\n[性能：被动刷怪不再逐格扫描（C6 高度图）]');
   // hostileCount 先顶满，这样一次 update 里只剩被动那条路，计数才干净
   const spawned: Spawned[] = [];
   const counts = { block: 0, surface: 0 };
-  new MobSpawner().update(2.0, makeContext({ sky: 15, block: 0, spawned, counts, hostile: 24 }));
+  // 给一个平原群系：现在大多数被动生物都带 `spawnBiomes`，没有群系钩子的话
+  // 它们会被"群系未知 ⇒ 不刷"挡掉，这条断言就会变成随机失败
+  new MobSpawner().update(
+    2.0,
+    makeContext({ sky: 15, block: 0, spawned, counts, hostile: 24, biomeAt: () => 'plains' }),
+  );
 
   check('地表高度走的是高度图', counts.surface > 0, `surface=${counts.surface} 次`);
   check('16 次尝试里的世界查询很少（原来要往下扫几十~几百格）', counts.block <= 64, `实际 ${counts.block} 次 getBlock`);

@@ -330,7 +330,7 @@ console.log('\n[生物表]');
   // 112 加了末影人（第一种会瞬移的、第一种"不主动攻击"的）
   // 批次 115 加了凋灵骷髅（第一种"只在某个结构里刷"的）
   // 批次 189 加了鱿鱼（被动、水生）
-  check('生物表包含 43 种生物（… + 兔/山羊/鳕鱼/鲑鱼/海豚 + 熊猫/北极熊/海龟/美西螈）', MOB_TYPES.length === 43, `${MOB_TYPES.length}`);
+  check('生物表包含 44 种生物（… + 熊猫/北极熊/海龟/美西螈 + 蝙蝠）', MOB_TYPES.length === 44, `${MOB_TYPES.length}`);
   check(
     '敌对生物要么有攻击力、要么另有一条伤害通道',
     // ⚠️ 恶魂是**刻意的例外**（批次 94）：原版它不近战（撞到人也不掉血），
@@ -344,7 +344,7 @@ console.log('\n[生物表]');
   //（掉了就等于鼓励玩家屠村），所以它进不了"被动生物都有掉落"这条里
   // 兔/山羊也在这条白名单里：原版它们掉兔皮/角，而本项目还没有那两件物品，
   // 所以**故意不给假掉落**（写进 TASKS 的差异）
-  const noDropIds = new Set(['villager', 'fox', 'rabbit', 'goat', 'panda', 'turtle', 'axolotl']);
+  const noDropIds = new Set(['villager', 'fox', 'rabbit', 'goat', 'panda', 'turtle', 'axolotl', 'bat']);
   check(
     '被动动物都有掉落；村民/狐狸/兔/山羊与宠物没有（原版如此或物品未做）',
     MOB_TYPES.filter(
@@ -817,6 +817,30 @@ console.log('\n[拴绳：牵着的动物跟着走（批次 256）]');
   const after = Math.abs(8.5 - cow.x);
   check('被牵着的动物会朝主人走近', after < before - 2, `${before.toFixed(1)} → ${after.toFixed(1)}`);
   check('走到绳子长度（3.5 格）附近就停', after > 2 && after < 5.5, `距离 ${after.toFixed(2)}`);
+}
+
+console.log('\n[蝙蝠：会飞的被动生物（批次 261）]');
+{
+  const world = new TestWorld();
+  world.floor(-24, 24, -8, 8, 64);
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player: null,
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+  };
+  const bat = createMob(mobTypeById('bat')!, 2.5, 68.5, 0.5);
+  const startX = bat.x;
+  const startY = bat.y;
+  const startZ = bat.z;
+  for (let i = 0; i < 80; i++) bat.tick(ctx, 0.05); // 4 秒
+  const horizontal = Math.hypot(bat.x - startX, bat.z - startZ);
+  check('蝙蝠在空中游荡（水平方向动了）', horizontal > 0.3, `水平位移 ${horizontal.toFixed(2)}`);
+  check('不会越飞越远（只在出生点附近绕）', horizontal < 8, `水平位移 ${horizontal.toFixed(2)}`);
+  check('高度基本维持（没有掉到地面）', bat.y > startY - 3 && bat.y < startY + 3, `y ${startY.toFixed(1)} → ${bat.y.toFixed(1)}`);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);
