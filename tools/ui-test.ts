@@ -3303,5 +3303,30 @@ console.log('\n[引雷（批次 269）]');
   );
 }
 
+console.log('\n[绑定诅咒（批次 270）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const curseAt = enchantSrc.indexOf("id: 'binding_curse'");
+  check(
+    '绑定诅咒标了 implemented，并提供纯函数判定',
+    curseAt >= 0 &&
+      enchantSrc.slice(curseAt, curseAt + 200).includes('implemented: true') &&
+      enchantSrc.includes('export function isBoundByCurse('),
+  );
+  check(
+    '装备槽拒绝取下绑定物品（点取 / 换装 / Shift 快速移动三条路）',
+    invSrc.includes('private boundArmorAt(source: unknown, index: number): boolean') &&
+      invSrc.includes("this.showMessage('绑定诅咒：这件装备取不下来');") &&
+      invSrc.includes('if (this.boundArmorAt(source, index)) {'),
+  );
+  check(
+    '创造模式例外（只拦玩家背包的四个盔甲槽）',
+    invSrc.includes('if (this.hooks.isCreative?.() === true) return false;') &&
+      invSrc.includes('if (index < ARMOR_START || index >= ARMOR_START + 4) return false;') &&
+      invSrc.includes('if (source !== this.inventory) return false;'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

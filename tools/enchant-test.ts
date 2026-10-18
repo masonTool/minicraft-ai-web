@@ -21,6 +21,7 @@ import {
   canEnchant,
   enchantmentById,
   enchantmentName,
+  isBoundByCurse,
   romanLevel,
 } from '../src/core/registry/enchantments.ts';
 import {
@@ -289,8 +290,8 @@ console.log('\n[未接效果的附魔要标出来]');
   const { UI_HINT_UNIMPLEMENTED, UNIMPLEMENTED_MARK } = await import('../src/core/crafting/Enchanting.ts');
   const implemented = ENCHANTMENTS.filter((def) => def.implemented === true);
   check(
-    '已接效果的附魔有 37 条（… + 267 穿刺/激流、268 忠诚、269 引雷）',
-    implemented.length === 37 &&
+    '已接效果的附魔有 38 条（全部接完，… + 269 引雷、270 绑定诅咒）',
+    implemented.length === 38 &&
       [
         'efficiency',
         'fortune',
@@ -333,16 +334,24 @@ console.log('\n[未接效果的附魔要标出来]');
         'riptide',
         'loyalty',
         'channeling',
+        'binding_curse',
       ].every((id) => implemented.some((def) => def.id === id)),
     implemented.map((def) => def.id).join(','),
   );
   equal('已接效果的附魔不带标记', optionLabel([{ id: 'efficiency', level: 3 }]), '效率 III');
   equal('亡灵杀手已接效果，所以不带标记', optionLabel([{ id: 'smite', level: 2 }]), '亡灵杀手 II');
   equal('力量已接效果（弓），所以不带标记', optionLabel([{ id: 'power', level: 2 }]), '力量 II');
-  // 换一条仍未接效果的做样例（荆棘在批次 264 已接，不能再用它当"未实现"的例子）
-  // 换一条仍未接效果的做样例（引雷在批次 269 已接，只剩绑定诅咒）
-  equal('未接效果的附魔带 * 标记', optionLabel([{ id: 'binding_curse', level: 1 }]), `绑定诅咒 I${UNIMPLEMENTED_MARK}`);
-  check('界面图例会说明这个标记', UI_HINT_UNIMPLEMENTED.includes(UNIMPLEMENTED_MARK));
+  // 批次 270 之后 38 条全部接完：不再有任何一条带"未实现"标记
+  check(
+    '全部附魔都不再带 * 标记',
+    ENCHANTMENTS.every((def) => !optionLabel([{ id: def.id, level: 1 }]).includes(UNIMPLEMENTED_MARK)),
+  );
+  check('界面图例仍然保留这个标记的说明（以后加新附魔还用得上）', UI_HINT_UNIMPLEMENTED.includes(UNIMPLEMENTED_MARK));
+
+  // 绑定诅咒（批次 270）：纯函数判定
+  check('绑定诅咒：有这条就为 true', isBoundByCurse({ binding_curse: 1 }));
+  check('没有绑定诅咒为 false', !isBoundByCurse({ sharpness: 3 }));
+  check('空附魔表为 false', !isBoundByCurse(undefined));
 }
 
 // ---------------------------------------------------------------- 5. 效果接线（K3）
