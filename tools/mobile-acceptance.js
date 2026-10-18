@@ -54,6 +54,11 @@
     mc = window.__mc;
   }
 
+  // 读档是异步的：它回来时会把玩家传送回存档位置。
+  // 不等它结束就 teleport，几秒后会被"恢复位置"覆盖——摇杆位移会量成 0
+  // （曾经就是这么假红的：传送到 150 格，读档又把人放回洞里）。
+  for (let i = 0; i < 150 && mc.waitingForSaveRestore; i++) await sleep(200);
+
   // ---------------------------------------------------------------- 1. 触摸层
   mc.enableTouchControls();
   const ui = document.getElementById('touch-ui');
@@ -69,9 +74,14 @@
 
   // ---------------------------------------------------------------- 2. 可点区域
   const buttons = [...document.querySelectorAll('.touch-button')];
-  const rects = buttons.map((b) => b.getBoundingClientRect());
+  // 隐藏的"上升/下降"键 rect 为 0：只量真正露出来的按钮
+  const shown = buttons.filter((b) => {
+    const r = b.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+  const rects = shown.map((b) => b.getBoundingClientRect());
   // 按钮现在是图标（没有文字节点），所以报告里用 aria-label 而不是 textContent
-  const names = buttons.map((b) => b.getAttribute('aria-label') ?? b.dataset.icon ?? '?');
+  const names = shown.map((b) => b.getAttribute('aria-label') ?? b.dataset.icon ?? '?');
   const minSide = Math.min(...rects.map((r) => Math.min(r.width, r.height)));
   check(
     `touch target ${minSide.toFixed(0)}px >= 44px (platform minimum)`,
@@ -100,6 +110,8 @@
   // 先把玩家挪到高空再开飞行：存档恢复可能把玩家放在水下或洞里，
   // 那种环境下"推满摇杆"走不动（水里慢、洞里撞墙），测出来的位移没有意义。
   // 高空是"一定没有阻挡"的环境，测的才是摇杆本身。
+  // 批次 181：飞行只在创造模式内可用
+  mc.setGameMode('creative');
   mc.setFlying(true);
   const spawn = mc.info.position;
   mc.teleportForce(spawn[0], 150, spawn[2]);
@@ -145,7 +157,20 @@
 
   // 长按破坏需要"射线命中一个方块"：先把玩家传送到一块真正的地面上，
   // 再朝脚下看——否则在空中/水面上射线经常落空（这条断言之前就因此偶发失败）
+  // 批次 181：创造模式是**瞬间破坏**，长按只会看到"方块已经没了"。
+  // 想量"按住 → 进度条出现"，必须回到生存模式。
+  mc.setGameMode('survival');
   mc.setFlying(false);
+  // 批次 181：生存开局是空手，而脚下的方块可能是石头（徒手挖不动 → 永远不会出进度）。
+  // 给一把铁镐并拿在手上，才是"长按能破坏"的稳定前置。
+  {
+    const { toolItemId } = await import('/src/core/registry/tools.ts');
+    const pick = toolItemId('pickaxe', 'iron');
+    mc.inventory.add(pick, 1);
+    const index = mc.inventory.find(pick);
+    if (index >= 9) mc.inventory.move(index, 0);
+    if (index >= 0) mc.selectSlot(index >= 9 ? 0 : index);
+  }
   const self0 = mc.info.position;
   const gx = Math.round(self0[0]);
   const gz = Math.round(self0[2]);
@@ -167,12 +192,20 @@
   check('raycast hits a block (breaking precondition)', hitForBreaking !== null, hitForBreaking ? `(${hitForBreaking.join(',')})` : 'no hit after 5s');
 
   fire(look, 'pointerdown', window.innerWidth * 0.5, window.innerHeight * 0.5, 404);
-  await sleep(600);
-  const breakingAfterHold = mc.isBreaking;
+  // 轮询"有没有出现过破坏进度"，而不是固定 600ms 再看：
+  // 软方块（草/泥土）在铁镐下 400ms 内就挖完了，固定采样会正好落在"已经挖掉"之后。
+  let sawBreaking = false;
+  for (let i = 0; i < 12; i++) {
+    await sleep(60);
+    if (mc.isBreaking) {
+      sawBreaking = true;
+      break;
+    }
+  }
   fire(look, 'pointerup', window.innerWidth * 0.5, window.innerHeight * 0.5, 404);
   await sleep(120);
   const stillBreaking = mc.isBreaking;
-  check('long press starts breaking', breakingAfterHold === true, `during=${breakingAfterHold} after=${stillBreaking}`);
+  check('long press starts breaking', sawBreaking === true, `during=${sawBreaking} after=${stillBreaking}`);
   check('release stops breaking', stillBreaking === false, `after=${stillBreaking}`);
 
   // ---------------------------------------------------------------- 5.5 触控延迟

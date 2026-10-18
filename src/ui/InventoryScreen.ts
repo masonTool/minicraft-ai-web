@@ -1130,6 +1130,8 @@ export class InventoryScreen {
         this.applyInventoryChrome();
         this.updateTabHighlight();
         this.renderCreativeGrid();
+        // 批次 181：任何点击都在快捷栏上方说一句"刚才点了什么"
+        this.showMessage(`创造分类：${CREATIVE_TAB_LABELS[category]}`);
         if (category === 'all') this.creativeSearch.focus();
       });
       this.creativeTabs.appendChild(button);
@@ -1545,6 +1547,7 @@ export class InventoryScreen {
     diag.event('inventory', 'tab.change', { from: this.pocketTab, to: tab, mode: this.mode });
     this.pocketTab = tab;
     this.applyInventoryChrome();
+    this.showMessage(tab === 'armor' ? '右栏：盔甲' : '右栏：合成');
   }
 
   /**
@@ -1591,6 +1594,7 @@ export class InventoryScreen {
       this.categorySearch.value = '';
     }
     this.applyInventoryChrome();
+    this.showMessage(`分类：${RECIPE_BOOK_TAB_LABELS[tab]}`);
   }
 
   /**

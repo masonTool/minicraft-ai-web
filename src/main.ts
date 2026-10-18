@@ -1548,9 +1548,11 @@ class App {
         // 批次 181：**游戏内没有面板时，返回 = 打开暂停菜单**。
         // 以前这里交给浏览器（PWA 里等于直接退出游戏）——玩家只是想关个界面，
         // 结果把整局退了，这是手机上最容易被劝退的一处。
-        if (!this.backButton.isGuarded && !this.isAnyUiOpen()) {
+        if (!this.isAnyUiOpen()) {
           diag.event('input', 'back.root', {});
           this.openSettings();
+          // 弹掉的那条历史要补回来，否则第二次返回又会被交给浏览器
+          this.backButton.rearm();
           return;
         }
         this.backButton.onBrowserBack();
@@ -8928,6 +8930,9 @@ class App {
   }
 
   start(): void {
+    // 批次 181：局内常驻一条返回守卫——**没有面板时按返回也要先落到我们手里**
+    //（以前无面板时没有任何守卫，浏览器会直接退出页面，PWA 里等于退游戏）
+    this.backButton.armRoot();
     // 读档是异步的：先让世界跑起来（玩家看到创建中的世界），读完再恢复位置与背包
     if (this.save?.hasSave) {
       void this.loadSaveState()
@@ -10382,6 +10387,8 @@ async function boot(): Promise<void> {
     // ⚠️ 这里**不碰全屏**——全屏是页面级的，退出世界不该把它一起退掉。
     app.onExitToMenu = () => {
       hideLoading();
+      // 局内实例已经拆掉：调试入口也要跟着清掉，否则自动化会对着一个死对象操作
+      (window as unknown as { __mc?: App }).__mc = undefined;
       menu.setView('home');
       menu.render();
       menu.show();

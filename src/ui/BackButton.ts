@@ -33,8 +33,36 @@ export class BackButton {
   private guarded = false;
   /** 上一帧对账时的"有没有界面开着"（只在**变化**时动手） */
   private lastSynced = false;
+  /**
+   * 常驻根守卫（批次 181）：进世界时压一条，**界面开关不再增删历史**。
+   *
+   * 为什么不是"每个界面各压一条"：这样"无面板时按返回"就没有任何守卫可弹，
+   * 浏览器会直接退出页面（PWA 里等于退游戏）。常驻一条之后，
+   * 每次返回都先落到我们手里：有面板就关一层，没有就打开暂停菜单。
+   */
+  private rootArmed = false;
 
   constructor(private readonly host: BackButtonHost) {}
+
+  /** 进入游戏时调用：压一条常驻守卫（重复调用无副作用） */
+  armRoot(): void {
+    if (this.rootArmed) return;
+    this.rootArmed = true;
+    this.guarded = true;
+    this.lastSynced = true;
+    this.host.pushState();
+  }
+
+  /**
+   * 根层返回被消费之后补回守卫。
+   *
+   * `popstate` 每触发一次就少一条历史；不补的话"第二次按返回"又会被交给浏览器。
+   */
+  rearm(): void {
+    if (!this.rootArmed) return;
+    this.guarded = true;
+    this.host.pushState();
+  }
 
   /**
    * 每帧对一次账（主循环调用）。
@@ -45,6 +73,11 @@ export class BackButton {
    * 而轮询只有一个调用点（与 `VillagePopulation`/`SignText` 那两处"定期对账"同一个理由）。
    */
   sync(uiOpen: boolean): void {
+    // 常驻根守卫模式下，界面的开/关**不动历史**（见 `armRoot`）
+    if (this.rootArmed) {
+      this.lastSynced = uiOpen;
+      return;
+    }
     if (uiOpen === this.lastSynced) return;
     this.lastSynced = uiOpen;
     if (uiOpen) {
@@ -62,6 +95,13 @@ export class BackButton {
 
   /** 浏览器的返回键 / 侧滑返回 */
   onBrowserBack(): void {
+    if (this.rootArmed) {
+      // 根守卫模式：关掉最上面一层，然后**总是**补回守卫
+      const stillOpen = this.host.closeTopUi();
+      this.lastSynced = stillOpen;
+      this.host.pushState();
+      return;
+    }
     if (!this.guarded) return; // 没界面开着 → 不拦，交给浏览器（= 退出页面）
     const stillOpen = this.host.closeTopUi();
     if (stillOpen) {
@@ -81,8 +121,9 @@ export class BackButton {
    * 看着像"返回键没反应"——而那条记录本来是给局内面板用的。
    */
   reset(): void {
-    if (!this.guarded) return;
+    if (!this.guarded && !this.rootArmed) return;
     this.guarded = false;
+    this.rootArmed = false;
     this.lastSynced = false;
     this.host.back();
   }

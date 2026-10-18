@@ -175,7 +175,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
     ['顶部暂停键容器', '#touch-pause {'],
-    ['顶部三键尺寸吃 --touch-scale', '#touch-pause .touch-button { width: calc(40px * var(--touch-scale, 1));'],
+    ['顶部三键尺寸吃 --touch-scale（44px 是平台热区下限）', '#touch-pause .touch-button { width: calc(44px * var(--touch-scale, 1));'],
     // 暂停菜单那一页（批次 108）：一页只放"几个主要按钮"，竖排
     ['暂停菜单的主按钮竖排', '.pause-actions { display: flex; flex-direction: column; gap: 8px;'],
     ['手机上暂停按钮热区 46px', 'body.touch-mode .pause-action { min-height: 46px; font-size: 15px; }'],
@@ -498,7 +498,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('页签 DOM role=pocket-tabs', invSrc.includes("dataset.role = 'pocket-tabs'"));
   check('左上配方图标 role=pocket-recipes', invSrc.includes("dataset.role = 'pocket-recipes'"));
   check('图标页签：右缘合成/盔甲 + 左下物品栏', invSrc.includes('makePocketIconTab') && invSrc.includes('inv-pocket-side'));
-  check('右下合成键只切右栏，不自动打开配方书', /private setPocketTab[\s\S]{0,320}applyInventoryChrome\(\);[\s\S]{0,30}\}/.test(invSrc));
+  check('右下合成键只切右栏，不自动打开配方书', /private setPocketTab[\s\S]{0,320}applyInventoryChrome\(\);[\s\S]{0,120}\}/.test(invSrc));
   // 批次 159：左栏的职责是**物品分类**——点分类切的是左栏内容，不再去开配方书
   check('只有左侧分类键切左栏（配方书不再嵌进来）', invSrc.includes('private openPocketCategory(tab: RecipeBookTab)') && !invSrc.includes('this.hooks.onOpenRecipes?.(tab)'));
   // 批次 159：左栏换成配方列表时，右栏只留合成区——下方那片 3×9 仓库不显示
@@ -660,6 +660,12 @@ console.log('\n[携带版细节收口（批次 159）]');
   // 批次 181：2 秒 + 淡出；丢弃也给一条文字确认
   check('提示 2 秒后淡出', invSrc.includes('export const PICK_TOAST_MS = 2000;') && css.includes('#inv-pick-toast.leaving'));
   check('丢弃有文字确认', invSrc.includes('已丢弃'));
+  check(
+    '分类/页签点击也有说明（不只是物品格）',
+    invSrc.includes('showMessage(`分类：') &&
+      invSrc.includes('showMessage(`创造分类：') &&
+      invSrc.includes("'右栏：合成'"),
+  );
   // 点配方预览只显示名字，不再把预览清掉
   check('点合成区不再清空配方预览', !invSrc.includes('this.craftGhost && slot?.closest'));
 
@@ -1042,6 +1048,18 @@ console.log('\n[返回键守卫（批次 96）：返回先关界面、界面全�
   equal('reset 之后不再守卫', String(leaving.back.isGuarded), 'false');
   leaving.back.reset();
   equal('重复 reset 不会再退一条历史（幂等）', leaving.log.join(','), 'push,back');
+
+  // ⑥ 常驻根守卫（批次 181）：局内**没有面板**时按返回也要先落到我们手里
+  const root = makeHarness(0);
+  root.back.armRoot();
+  equal('进世界时压一条常驻守卫', root.log.join(','), 'push');
+  root.back.sync(true);
+  root.back.sync(false);
+  equal('界面的开/关不再增删历史（守卫常驻）', root.log.join(','), 'push');
+  root.back.onBrowserBack();
+  equal('无面板时返回也由我们处理，并补回守卫', root.log.join(','), 'push,close,push');
+  root.back.reset();
+  equal('拆局时把常驻守卫退掉', root.log.join(','), 'push,close,push,back');
 }
 
 console.log('\n[动态摇杆与飞行提示（批次 96）]');

@@ -130,6 +130,8 @@
     clusterVisible.length === 1 && clusterVisible[0]?.classList.contains('jump'),
     clusterVisible.map((button) => button.dataset.icon).join(','),
   );
+  // 批次 181：飞行只在创造模式内可用；先切模式再起飞
+  mc.setGameMode('creative');
   mc.setFlying(true);
   await sleep(50);
   const flyingVisible = clusterAll.filter((button) => !button.classList.contains('hidden'));
@@ -139,11 +141,12 @@
     flyingVisible.map((button) => button.className).join(' | '),
   );
   mc.setFlying(false);
+  mc.setGameMode('survival');
   await sleep(50);
 
-  const sideButtons = ['touch-hotbar-inventory', 'touch-hotbar-chat'].map((id) => document.getElementById(id));
+  const sideButtons = ['touch-hotbar-inventory'].map((id) => document.getElementById(id));
   check(
-    'inventory & chat sit next to the hotbar',
+    'inventory sits next to the hotbar (chat moved to the top bar)',
     sideButtons.every(Boolean),
     sideButtons.map((el) => (el ? el.id : 'MISSING')).join(' | '),
   );
@@ -154,10 +157,32 @@
   });
   check('side buttons are tappable (>= 44px) and on screen', badSide.length === 0, badSide.map((el) => el?.id ?? 'MISSING').join(', '));
 
+  // 批次 181：顶部三颗方形小键（暂停 / 视角 / 聊天）
+  const topButtons = [...document.querySelectorAll('#touch-pause .touch-button')];
+  check(
+    'top bar has pause + view + chat',
+    topButtons.length === 3 &&
+      topButtons.some((button) => button.classList.contains('pause')) &&
+      topButtons.some((button) => button.classList.contains('view')) &&
+      topButtons.some((button) => button.classList.contains('chat')),
+    topButtons.map((button) => button.className).join(' | '),
+  );
+  const badTop = topButtons.filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width < 36 || r.height < 36 || r.left < -1 || r.right > innerWidth + 1 || r.top < -1;
+  });
+  check('top buttons are tappable and on screen', badTop.length === 0, badTop.map((el) => el.className).join(', '));
+  check(
+    'top buttons are square (no rounded corners)',
+    topButtons.every((el) => getComputedStyle(el).borderRadius === '0px'),
+    topButtons.map((el) => getComputedStyle(el).borderRadius).join(','),
+  );
+
   const noText = buttons.filter((button) => button.textContent.trim().length === 0);
   check('buttons render icons, not text', noText.length === buttons.length, `${noText.length}/${buttons.length} have no text node`);
 
-  const withIcon = buttons.filter((button) => button.querySelector('svg path'));
+  // 暂停图标是两个 <rect>，不能只找 path
+  const withIcon = buttons.filter((button) => button.querySelector('svg > *'));
   check('every button has an inline svg icon', withIcon.length === buttons.length, `${withIcon.length}/${buttons.length}`);
 
   const labelled = buttons.filter((button) => (button.getAttribute('aria-label') ?? '').length > 0);
@@ -203,6 +228,8 @@
   }
 
   // ---------------------------------------------------------------- 3. 创造物品栏分页
+  // 批次 181：创造栏只在创造模式出现（以前是"能飞 = 创造"，测试靠 setFlying 间接做到）
+  mc.setGameMode('creative');
   mc.toggleInventory();
   await sleep(300);
 
@@ -218,35 +245,48 @@
     const pageSize = narrow ? 32 : 60;
     const slots = () => [...grid.querySelectorAll('.inv-slot')];
     const count = slots().length;
-    check(`only one page of items is in the DOM (<= ${pageSize})`, count > 0 && count <= pageSize, `${count} slots in DOM`);
-
-    check('pager is visible on the "all" category', !pager.classList.contains('hidden'), label.textContent ?? '');
-    info(`page label: ${label.textContent}`);
-
-    const firstBefore = slots()[0]?.querySelector('canvas')?.toDataURL();
-    next.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 7003, pointerType: 'touch' }));
-    await sleep(120);
-    const firstAfter = slots()[0]?.querySelector('canvas')?.toDataURL();
-    check('next page really changes the items', !!firstBefore && !!firstAfter && firstBefore !== firstAfter, `slots ${count} -> ${slots().length}`);
-    // 用数字解析而不是正则匹配整句：文案里那空格/分隔符一旦调整，正则就会假红
-    const pageMatch = /(\d+)\s*\/\s*(\d+)/.exec(label.textContent ?? '');
-    check('page label advanced to page 2', pageMatch?.[1] === '2' && Number(pageMatch[2]) > 1, label.textContent ?? '');
-    check('prev button enabled after paging', !prev.disabled);
-
-    // 回到第 1 页：第一格应该与翻页前一致
-    prev.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 7004, pointerType: 'touch' }));
-    await sleep(120);
-    const backFirst = slots()[0]?.querySelector('canvas')?.toDataURL();
-    check('prev page restores the first page', backFirst === firstBefore, 'first slot icon identical');
-    check('prev disabled on the first page', prev.disabled);
-
-    // 页码与页大小必须自洽：`第 1/N 页 · 共 M 件` 里的 N 应该等于 ceil(M / 页大小)
-    const summary = /第\s*\d+\s*\/\s*(\d+)\s*页\s*·\s*共\s*(\d+)\s*件/.exec(label.textContent ?? '');
-    if (summary) {
-      const expectedPages = Math.max(1, Math.ceil(Number(summary[2]) / pageSize));
-      check(`page count matches the page size (${pageSize})`, Number(summary[1]) === expectedPages, `${summary[1]} pages for ${summary[2]} items`);
+    // 批次 181：触摸端是**整表滚动**（基岩版手感），PC 才是分页。
+    // 之前这里一律按分页断言，在真触摸环境下必然假红。
+    const touchScroll = document.body.classList.contains('touch-mode');
+    if (touchScroll) {
+      check('touch: all items are in one scrollable grid', count > pageSize, `${count} slots in DOM`);
+      check('touch: pager is hidden (scroll instead)', pager.classList.contains('hidden'), label.textContent ?? '');
+      check(
+        'touch: the grid really scrolls',
+        grid.scrollHeight > grid.clientHeight,
+        `scroll ${grid.scrollHeight} vs client ${grid.clientHeight}`,
+      );
     } else {
-      check('page label has the expected shape', false, label.textContent ?? '');
+      check(`only one page of items is in the DOM (<= ${pageSize})`, count > 0 && count <= pageSize, `${count} slots in DOM`);
+
+      check('pager is visible on the "all" category', !pager.classList.contains('hidden'), label.textContent ?? '');
+      info(`page label: ${label.textContent}`);
+
+      const firstBefore = slots()[0]?.querySelector('canvas')?.toDataURL();
+      next.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 7003, pointerType: 'touch' }));
+      await sleep(120);
+      const firstAfter = slots()[0]?.querySelector('canvas')?.toDataURL();
+      check('next page really changes the items', !!firstBefore && !!firstAfter && firstBefore !== firstAfter, `slots ${count} -> ${slots().length}`);
+      // 用数字解析而不是正则匹配整句：文案里那空格/分隔符一旦调整，正则就会假红
+      const pageMatch = /(\d+)\s*\/\s*(\d+)/.exec(label.textContent ?? '');
+      check('page label advanced to page 2', pageMatch?.[1] === '2' && Number(pageMatch[2]) > 1, label.textContent ?? '');
+      check('prev button enabled after paging', !prev.disabled);
+
+      // 回到第 1 页：第一格应该与翻页前一致
+      prev.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 7004, pointerType: 'touch' }));
+      await sleep(120);
+      const backFirst = slots()[0]?.querySelector('canvas')?.toDataURL();
+      check('prev page restores the first page', backFirst === firstBefore, 'first slot icon identical');
+      check('prev disabled on the first page', prev.disabled);
+
+      // 页码与页大小必须自洽：`第 1/N 页 · 共 M 件` 里的 N 应该等于 ceil(M / 页大小)
+      const summary = /第\s*\d+\s*\/\s*(\d+)\s*页\s*·\s*共\s*(\d+)\s*件/.exec(label.textContent ?? '');
+      if (summary) {
+        const expectedPages = Math.max(1, Math.ceil(Number(summary[2]) / pageSize));
+        check(`page count matches the page size (${pageSize})`, Number(summary[1]) === expectedPages, `${summary[1]} pages for ${summary[2]} items`);
+      } else {
+        check('page label has the expected shape', false, label.textContent ?? '');
+      }
     }
 
     // 搜索时只有一页 → 翻页条自动隐藏。
@@ -334,19 +374,50 @@
 
   // ------------------------------------------- 3.6 配方书：图标网格 + 分页
   {
-    document.querySelector('.inv-recipes-btn')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    // 批次 181：配方书在创造模式里**刻意不提供**；而且背包开着时 R 只切左栏分类。
+    // 所以先回生存、关背包，再走不依赖键盘的测试入口。
+    mc.setGameMode('survival');
+    // ⚠️ 看 `isOpen` 而不是 DOM 的 hidden：关闭有 400ms 滑出动画，动画期间两者不一致
+    if (mc.inventoryScreen?.isOpen) {
+      mc.toggleInventory();
+      await sleep(500);
+    }
+    window.__mc?.toggleRecipeBookForTest?.();
     await sleep(400);
     const book = document.getElementById('recipe-book');
-    check('recipe book opens from the inventory', !!book && !book.classList.contains('hidden'));
+    check('recipe book opens (R / test entry)', !!book && !book.classList.contains('hidden'));
 
     const { Block } = await import('/src/core/registry/blocks.ts');
     const narrow = window.innerWidth <= 900;
+    const touchScroll = document.body.classList.contains('touch-mode');
     const cells = [...document.querySelectorAll('.recipe-cell')];
-    check(`recipe book renders one page only (<= ${narrow ? 32 : 60})`, cells.length > 0 && cells.length <= (narrow ? 32 : 60), `${cells.length} cells`);
+    if (touchScroll) {
+      check('touch: book renders all recipes in a scroll grid', cells.length > 60, `${cells.length} cells`);
+      check(
+        'touch: book pager is hidden (scroll instead)',
+        document.querySelector('#recipe-book .inv-pager')?.classList.contains('hidden') ?? true,
+      );
+    } else {
+      check(`recipe book renders one page only (<= ${narrow ? 32 : 60})`, cells.length > 0 && cells.length <= (narrow ? 32 : 60), `${cells.length} cells`);
+    }
     check('the recipes live in an icon grid (not a card list)', !!document.querySelector('.recipe-grid'));
     check('every cell carries the result id', cells.every((cell) => cell.dataset.resultId), 'missing data-result-id');
-    // 基岩版：能做的亮着、做不了的压暗，不做别的标记
-    check('uncraftable recipes are dimmed, not hidden', cells.some((cell) => cell.classList.contains('locked')) && cells.some((cell) => cell.classList.contains('on')));
+    // 基岩版：能做的亮着、做不了的压暗，不做别的标记。
+    // 批次 181：生存开局是**空背包**，所以先确认"全暗"，再发一组原木确认"亮的会出现"。
+    check('empty inventory => every recipe is dimmed', cells.length > 0 && cells.every((cell) => cell.classList.contains('locked')));
+    // 只给原木的话"能做"的只有木板这一条（木棍要木板）；再给木板才有多个亮项。
+    // ⚠️ 配方书现在嵌在背包左栏：再点一次"开关"只会关掉它 / 切分类，
+    //    刷新"能不能做"应该直接让它重算一次。
+    mc.inventory.add(Block.OAK_LOG, 8);
+    mc.inventory.add(Block.OAK_PLANKS, 8);
+    mc.recipeBook.render();
+    await sleep(300);
+    const afterGive = [...document.querySelectorAll('.recipe-cell')];
+    check(
+      'with materials some recipes are bright and some stay dimmed',
+      afterGive.some((cell) => cell.classList.contains('on')) && afterGive.some((cell) => cell.classList.contains('locked')),
+      `${afterGive.filter((cell) => cell.classList.contains('on')).length} on / ${afterGive.length}`,
+    );
     check('the book has one line telling what a cell is', !!document.querySelector('.recipe-detail'));
 
     // 火把是最好核对的一条：煤炭在上、木棍在下（2×2）
@@ -369,17 +440,19 @@
     const loose = [...document.querySelectorAll('.recipe-cell')].find((cell) => (cell.getAttribute('title') ?? '').includes('无序'));
     check('shapeless recipes say "placement does not matter"', !!loose, 'no shapeless note');
 
-    // 分页：181 条配方不能一次全塞进 DOM
+    // 分页：PC 是一页一页翻；触摸端是整表滚动（pager 隐藏）
     search.value = '';
     search.dispatchEvent(new Event('input', { bubbles: true }));
     await sleep(150);
-    const pager = document.querySelector('#recipe-book .inv-pager');
-    check('recipe book has a pager', !!pager && !pager.classList.contains('hidden'), pager?.textContent ?? 'missing');
-    const before = document.querySelector('.recipe-cell')?.dataset.resultId ?? '';
-    pager?.querySelector('[data-role="next"]')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 9202, pointerType: 'touch' }));
-    await sleep(200);
-    const after = document.querySelector('.recipe-cell')?.dataset.resultId ?? '';
-    check('paging really changes the recipes', before.length > 0 && after.length > 0 && before !== after, `${before} -> ${after}`);
+    if (!touchScroll) {
+      const pager = document.querySelector('#recipe-book .inv-pager');
+      check('recipe book has a pager', !!pager && !pager.classList.contains('hidden'), pager?.textContent ?? 'missing');
+      const before = document.querySelector('.recipe-cell')?.dataset.resultId ?? '';
+      pager?.querySelector('[data-role="next"]')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 9202, pointerType: 'touch' }));
+      await sleep(200);
+      const after = document.querySelector('.recipe-cell')?.dataset.resultId ?? '';
+      check('paging really changes the recipes', before.length > 0 && after.length > 0 && before !== after, `${before} -> ${after}`);
+    }
 
     document.querySelector('.recipe-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await sleep(150);
