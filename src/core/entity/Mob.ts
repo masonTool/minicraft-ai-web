@@ -59,6 +59,14 @@ export const MATE_SEARCH_RANGE = 8;
 
 /** 已驯服的宠物跟到这么近就停下（格）——与"被食物吸引"同一条手感，不顶着玩家推 */
 export const PET_FOLLOW_STOP = 2.2;
+
+/**
+ * 被拴绳牵着时，动物跟到这么近就停下（格，批次 256）。
+ *
+ * 比宠物跟随（2.2）远一些：绳子本来就有 4 格余量，贴太近会像"被吸在身上"。
+ * 超过这个距离就朝主人走——**不传送**（牵着的东西突然瞬移会很怪）。
+ */
+export const LEASH_STOP = 3.5;
 /**
  * 已驯服的宠物离主人超过这个距离就**传送**过去（格）。
  *
@@ -526,6 +534,13 @@ export class Mob extends Entity {
   tamed = false;
   /** 坐下（已驯服的宠物）：不跟随、不游荡，但照样能被喂食 */
   sitting = false;
+  /**
+   * 被拴绳牵着（批次 256）。
+   *
+   * 与 `tamed` 分开：拴绳只要求"已驯服"，牵着的动物会**跟着走但不传送**；
+   * 真正系在谁身上由主程序记（一次只牵一只），这里只负责"有人牵我"时别乱逛。
+   */
+  leashed = false;
 
   /**
    * 手里还有没有三叉戟（批次 235；只有 `throwsTrident` 的生物用）。
@@ -1148,6 +1163,24 @@ export class Mob extends Entity {
       }
       // 没找到对象：原地冒一会儿爱心再回去游荡（原版也会边冒边等）
       ctx.spawnHearts?.(this.x, this.y + this.type.height, this.z, 0.4);
+    }
+
+    // ---- 拴绳（批次 256）：被牵着的动物朝主人走，走到绳子够长就停（**不传送**）
+    if (this.leashed && player) {
+      this.yaw = Math.atan2(dx, dz);
+      const leashDistance = Math.sqrt(distanceSq);
+      if (leashDistance > LEASH_STOP) {
+        const length = Math.max(1e-4, leashDistance);
+        this.moveDirX = dx / length;
+        this.moveDirZ = dz / length;
+        this.move(true, dt);
+        return;
+      }
+      // 绳子还松着：停下等主人，别自己游荡（否则会被拽得一抖一抖）
+      this.vx *= Math.max(0, 1 - 8 * dt);
+      this.vz *= Math.max(0, 1 - 8 * dt);
+      this.idle = true;
+      return;
     }
 
     // ---- 已驯服的宠物（批次 242）：坐下时原地不动；否则跟着主人走，太远就传送过去

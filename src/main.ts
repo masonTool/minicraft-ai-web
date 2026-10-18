@@ -1033,6 +1033,10 @@ class App {
   private tapUseMob: Mob | null = null;
   /** 触摸端点中的载具（批次 244/245）：手指落点优先于准星 */
   private tapVehicle: Rideable | null = null;
+  /** 正被牵着的那一只（批次 256）：一次只牵一只，简化原版的"多根绳子" */
+  private leashedMob: Mob | null = null;
+  /** 绳子（一条两点的线段）：懒创建，没牵东西时隐藏 */
+  private leashLine: THREE.Line | null = null;
   /** `#target-info` 是否挂在手指上方（true = 已加 `.pinned`） */
   private targetPinned = false;
   /** 上一次写进 `#target-info` 的锚点（取整后比较，避免每帧重写样式） */
@@ -4716,6 +4720,8 @@ class App {
     // "手上没东西就返回 false"那一条之前
     if (mob instanceof Villager) return this.useOnVillager(mob, held);
     // 已驯服的宠物（批次 242）：空手点一下 = 坐下 / 起来（原版就是这个手势）
+    // 拴绳（批次 256）：拿绳子点动物 = 拴上 / 解开（绳子不消耗，原版也如此）
+    if (held === Item.LEAD) return this.toggleLeash(mob);
     // 装鞍（批次 254）：拿鞍点已驯服的马，鞍被消耗
     if (mob instanceof Horse && mob.tamed && held === Item.SADDLE) {
       if (mob.saddled) {
@@ -4777,6 +4783,8 @@ class App {
     if (mobAcceptsTame(mob.type, held)) return true;
     // 鞍（批次 254）：对着已驯服的马是"装鞍"，不是打它
     if (held === Item.SADDLE && mob instanceof Horse && mob.tamed) return true;
+    // 拴绳（批次 256）：拿绳子点任何生物都是"拴/解"，不是打
+    if (held === Item.LEAD) return true;
     if (held === Item.SHEARS || held === Item.BUCKET) return true;
     return mobEats(mob.type, held);
   }
@@ -4804,6 +4812,68 @@ class App {
       this.playMobVoice(mob, 0.9);
     }
     return true;
+  }
+
+  /**
+   * 拴上 / 解开（批次 256）。
+   *
+   * 只牵**已驯服**的动物：原版任何生物都能牵，但本项目还没有"野马被牵就跟你走"
+   * 那套抗拒逻辑，先收窄到宠物/坐骑，免得出现"牵着一只僵尸"的怪画面。
+   */
+  private toggleLeash(mob: Mob): boolean {
+    if (mob.leashed) {
+      mob.leashed = false;
+      this.leashedMob = null;
+      if (this.leashLine) this.leashLine.visible = false;
+      this.hudToast.show(`解开了${mob.type.name}`);
+      return true;
+    }
+    if (!mob.tamed) {
+      this.hudToast.show('只能牵已驯服的动物');
+      return true;
+    }
+    // 一次只牵一只：换目标时先把旧的那只放开
+    if (this.leashedMob && this.leashedMob !== mob) this.leashedMob.leashed = false;
+    this.leashedMob = mob;
+    mob.leashed = true;
+    this.hand.swing();
+    this.hudToast.show(`牵住了${mob.type.name}`);
+    return true;
+  }
+
+  /** 渲染用的那根绳子（两点线段，懒创建） */
+  private createLeashLine(): void {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    const material = new THREE.LineBasicMaterial({ color: 0x6b4a2a });
+    this.leashLine = new THREE.Line(geometry, material);
+    this.leashLine.frustumCulled = false;
+    this.scene.add(this.leashLine);
+  }
+
+  /**
+   * 每帧更新绳子（批次 256）。
+   *
+   * 起点取玩家眼睛下方一点（像"握在手里"），终点取被牵动物身上 70% 高度。
+   * 动物死亡/被区块卸载/被别的系统移出实体表时自动解开——
+   * 否则绳子会永远连着一只不存在的东西。
+   */
+  private updateLeash(): void {
+    const mob = this.leashedMob;
+    if (!mob || mob.dead || !this.entities.all.includes(mob)) {
+      if (mob) mob.leashed = false;
+      this.leashedMob = null;
+      if (this.leashLine) this.leashLine.visible = false;
+      return;
+    }
+    if (!this.leashLine) this.createLeashLine();
+    const line = this.leashLine!;
+    line.visible = true;
+    const positions = line.geometry.getAttribute('position') as THREE.BufferAttribute;
+    positions.setXYZ(0, this.physics.x, this.physics.eyeY - 0.35, this.physics.z);
+    positions.setXYZ(1, mob.x, mob.y + mob.type.height * 0.7, mob.z);
+    positions.needsUpdate = true;
+    line.geometry.computeBoundingSphere();
   }
 
   /**
@@ -7544,6 +7614,8 @@ class App {
     this.entities.update(context, dt);
     // 船先动、人再贴上去：顺序不能反，否则相机会比船慢一帧（看着像"人在水里拖着船"）
     this.syncRiderToVehicle();
+    // 拴绳（批次 256）：动物动完之后再画绳子，否则线段会落后一帧
+    this.updateLeash();
     // 药水云在主循环里推进（不是实体）：`lastEntityContext` 刚更新过，
     // 所以云结算里伤到生物时用得上"掉落物要交给谁"这些回调
     this.updateClouds(dt);

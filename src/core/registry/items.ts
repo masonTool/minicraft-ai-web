@@ -191,6 +191,8 @@ export const Item = {
   FURNACE_MINECART: 1481,
   /** 鞍（批次 254）：给马/驴/骡/羊驼装上才能骑 */
   SADDLE: 1486,
+  /** 拴绳（批次 256）：牵着一只已驯服的动物走 */
+  LEAD: 1487,
   /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
@@ -476,6 +478,7 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.HOPPER_MINECART, name: 'minecraft:hopper_minecart', tile: 'item_hopper_minecart', maxStack: 1 },
   { id: Item.FURNACE_MINECART, name: 'minecraft:furnace_minecart', tile: 'item_furnace_minecart', maxStack: 1 },
   { id: Item.SADDLE, name: 'minecraft:saddle', tile: 'item_saddle', maxStack: 1 },
+  { id: Item.LEAD, name: 'minecraft:lead', tile: 'item_lead' },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料

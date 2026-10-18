@@ -826,6 +826,12 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.SADDLE, count: 1 },
     ingredients: [Item.LEATHER, Item.LEATHER, Item.LEATHER, Item.STRING, Item.STRING],
   },
+  // 拴绳（批次 256）：4 线 + 1 黏液球（原版图案，一次 2 条）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.LEAD, count: 2 },
+    ingredients: [Item.STRING, Item.STRING, Item.STRING, Item.STRING, Item.SLIME_BALL],
+  },
   // 动力铁轨（批次 246）：6 金锭 + 1 木棍 + 1 红石 → 6 段（原版图案）
   {
     kind: 'shaped' as const,

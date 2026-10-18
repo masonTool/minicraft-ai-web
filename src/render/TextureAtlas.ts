@@ -1874,6 +1874,16 @@ PAINTERS.deepslate_redstone_ore_lit = litOrePainter(PAINTERS.deepslate_redstone_
  * 与普通箱子的区别只在**锁扣**：箱身木色略微偏红，锁扣变成红铜色——
  * 16×16 下这是唯一能把两者一眼分开的地方（原版也是靠那一块红锁扣）。
  */
+/** 拴绳（批次 256）：一圈棕色绳套，按角度交替深浅做出"编绳"的质感 */
+PAINTERS.item_lead = (x, y) => {
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const radius = Math.hypot(dx, dy);
+  if (radius > 6.4 || radius < 3.4) return [0, 0, 0, 0];
+  const braid = Math.sin(Math.atan2(dy, dx) * 7) > 0 ? 1 : 0.82;
+  return [clamp255(150 * braid), clamp255(106 * braid), clamp255(58 * braid), 255];
+};
+
 /** 鞍（批次 254）：棕色座面 + 两侧银色马镫 */
 PAINTERS.item_saddle = (x, y) => {
   if (y >= 5 && y <= 10) {
