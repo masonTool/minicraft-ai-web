@@ -59,6 +59,8 @@ import { recipeLayout } from '../core/crafting/RecipeLayout.ts';
 // 快速移动（批次 127）：Shift+左键的规则是纯逻辑（`core/container/QuickMove.ts`），
 // 界面只负责把"哪一格 / 开着哪个容器 / 容器多少格"交给它
 import { PLAYER_FILL_ORDER, fitCount, quickMove } from '../core/container/QuickMove.ts';
+// 绑定诅咒（批次 270）：装备槽里的绑定物品不能主动脱下
+import { isBoundByCurse } from '../core/registry/enchantments.ts';
 // 光标上那几件事（批次 128）：双击收集 / 拖拽分配 / 数字键换槽 / 丢出——
 // 规则同样在纯模块里，界面只交坐标（见 `core/container/CursorActions.ts`）
 import {
@@ -3203,6 +3205,12 @@ export class InventoryScreen {
     if (!binding) return;
     const { source, index, takeOnly } = binding;
 
+    // 绑定诅咒（批次 270）：Shift+左键的"快速移动"同样不能把绑定装备挪走
+    if (this.boundArmorAt(source, index)) {
+      this.showMessage('绑定诅咒：这件装备取不下来');
+      return;
+    }
+
     // 只取不放的槽（熔炉/酿造台/切石机的产物）：原版 Shift 就是"整叠收走"。
     // 走既有那条路（它会结算烧炼经验），再把光标上的东西塞回背包
     if (takeOnly) {
@@ -3455,6 +3463,19 @@ export class InventoryScreen {
     window.setTimeout(() => element.classList.remove('inv-reject'), 220);
   }
 
+  /**
+   * 这一格是不是"脱不下来的装备"（批次 270，绑定诅咒）。
+   *
+   * 只拦**玩家背包的四个盔甲槽**：容器里的东西、创造模式、以及死亡掉落都不受这条限制
+   * （死亡时背包整体清空，走的是另一条路，不会经过这里）。
+   */
+  private boundArmorAt(source: unknown, index: number): boolean {
+    if (source !== this.inventory) return false;
+    if (index < ARMOR_START || index >= ARMOR_START + 4) return false;
+    if (this.hooks.isCreative?.() === true) return false;
+    return isBoundByCurse(this.inventory.get(index)?.enchants);
+  }
+
   private handleSlotClick(key: string, button: number): void {
     const binding = this.bindings.get(key);
     if (!binding) return;
@@ -3488,6 +3509,13 @@ export class InventoryScreen {
     if (this.held && !takeOnly) {
       // 盔甲槽只吃对应部位：不匹配就整次操作作废（既不放下也不交换）
       if (!this.accepts(binding, this.held.id)) {
+        this.rejectSlot(binding.element);
+        this.cancelHeldSelection();
+        return;
+      }
+      // 绑定诅咒（批次 270）：已装备的绑定物品换不下来
+      if (this.boundArmorAt(binding.source, index)) {
+        this.showMessage('绑定诅咒：这件装备取不下来');
         this.rejectSlot(binding.element);
         this.cancelHeldSelection();
         return;
@@ -3530,6 +3558,12 @@ export class InventoryScreen {
         if (!this.completeSwapIntoOrigin(slot)) this.held = slot;
       }
     } else if (slot) {
+      // 绑定诅咒（批次 270）：空手点已装备的绑定物品也拿不下来
+      if (this.boundArmorAt(binding.source, index)) {
+        this.showMessage('绑定诅咒：这件装备取不下来');
+        this.rejectSlot(binding.element);
+        return;
+      }
       // 只取不放的槽位：右键拿一半同样允许
       if (button === 2 && slot.count > 1) {
         const half = Math.ceil(slot.count / 2);

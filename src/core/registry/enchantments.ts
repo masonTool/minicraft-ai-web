@@ -94,7 +94,8 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   // 冰霜行者（批次 263）：踩过的水面结霜冰，5 秒后化回水，见 `main.updateFrostWalker`
   { id: 'frost_walker', name: '冰霜行者', maxLevel: 2, targets: ['boots'], weight: 2, treasure: true, implemented: true },
   { id: 'soul_speed', name: '灵魂疾行', maxLevel: 3, targets: ['boots'], weight: 1, treasure: true, implemented: true },
-  { id: 'binding_curse', name: '绑定诅咒', maxLevel: 1, targets: ARMOR, weight: 1, treasure: true },
+  // 绑定诅咒（批次 270）：装备后无法主动脱下，判定见 `isBoundByCurse`
+  { id: 'binding_curse', name: '绑定诅咒', maxLevel: 1, targets: ARMOR, weight: 1, treasure: true, implemented: true },
 
   // ---- 武器类
   { id: 'sharpness', name: '锋利', maxLevel: 5, targets: ['sword', 'axe'], weight: 10, implemented: true },
@@ -155,6 +156,15 @@ export function enchantmentById(id: string): EnchantmentDef | undefined {
 /** 附魔的中文名；表里没有就回退成 id（`/enchant` 与提示框都用它） */
 export function enchantmentName(id: string): string {
   return BY_ID.get(id)?.name ?? id;
+}
+
+/**
+ * 有没有绑定诅咒（批次 270）。
+ *
+ * 抽成纯函数：装备槽的"能不能脱下"要在界面层判，而界面层不该关心附魔表怎么存。
+ */
+export function isBoundByCurse(enchants?: Readonly<Record<string, number>>): boolean {
+  return enchantLevel(enchants, 'binding_curse') > 0;
 }
 
 /**
