@@ -484,14 +484,25 @@
       .world-new { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 10px; align-content: start; }
       .world-new > .world-primary { grid-column: 1 / -1; }
       .world-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 48px; align-items: center; gap: 6px; min-width: 0; }
-      /* 输入框 = 原版文本框：黑底白字 + 灰边框（聚焦时边框转白） */
+      /* 输入框 = 原版文本框：黑底白字 + 灰边框（聚焦时边框转白）
+         `color-scheme: dark`（批次 181）：原生 <select> 的下拉列表由系统绘制，
+         不声明它就会在白底上弹出一整块白框，与主题完全脱节。 */
       .world-input {
         width: 100%; padding: 7px 9px; font: inherit; font-size: 12px;
         background: var(--field-bg); color: var(--field-text);
         border: 2px solid var(--mc-outline);
         box-shadow: inset 2px 2px 0 rgba(0, 0, 0, .7), inset -2px -2px 0 rgba(255, 255, 255, .14);
         outline: none;
+        color-scheme: dark;
       }
+      .world-input option { background: #1c1c1c; color: #e0e0e0; }
+      /* 世界类型说明（批次 181）：跨满表单两列，警告态转暖红 */
+      .world-type-hint {
+        grid-column: 1 / -1;
+        font-size: 11px; line-height: 1.45; color: #a8a8a8;
+        min-height: 16px;
+      }
+      .world-type-hint.bad { color: #ff9b8a; }
       .world-input:focus { border-color: var(--mc-edge-light); }
       .world-mini { font-size: 12px; }
       /* 主菜单的主按钮：**同宽、居中**（批次 167）。

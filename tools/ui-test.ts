@@ -1227,6 +1227,17 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('生存模式拒绝起飞（能力看模式）', mainSource.includes('if (value && !this.isCreative)'));
   const worldSource = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   check('新建世界表单有"游戏模式"', worldSource.includes("'游戏模式'") && worldSource.includes('gameModeSelect'));
+  check(
+    '世界类型下面有"到底有什么"的说明（超平坦会警告）',
+    worldSource.includes('WORLD_TYPE_HINTS') &&
+      worldSource.includes('private updateTypeHint') &&
+      worldSource.includes('生存模式建议改选默认世界'),
+  );
+  {
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    check('原生下拉声明深色（不再白底弹窗）', html.includes('color-scheme: dark;'));
+    check('世界类型说明样式在', html.includes('.world-type-hint {') && html.includes('.world-type-hint.bad'));
+  }
   check('双击摇杆切换潜行（右手只留跳跃）', source.includes('lastStickDown') && source.includes('双击摇杆'));
   check('飞行态用 applyFlyChrome 露出升降键', source.includes('private applyFlyChrome') && source.includes('fly-only'));
 

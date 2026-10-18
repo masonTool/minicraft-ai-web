@@ -19,6 +19,19 @@ export const WORLD_TYPE_LABELS: Record<WorldType, string> = {
   amplified: '放大化（更高的山）',
 };
 
+/**
+ * 每种类型"到底有什么"（批次 181）。
+ *
+ * 用户问过"三种世界是不是都能找到所有材料"——答案是**只有默认/放大化是完整世界**：
+ * 超平坦在 `TerrainGenerator` 里直接返回三层方块，地物与结构阶段根本不会跑。
+ * 这段文案就是让玩家在创建之前就知道，而不是进游戏才发现没有树和矿。
+ */
+export const WORLD_TYPE_HINTS: Record<WorldType, string> = {
+  default: '完整世界：群系、树木、矿石、村庄、要塞… 生存模式推荐',
+  amplified: '与默认相同的全部内容，只是陆地起伏更大、山更高',
+  flat: '只有三层平地：没有树木、村庄与矿石（适合建筑/创造）',
+};
+
 /** 超平坦世界的分层（从 y = -64 起，与原版"经典"预设一致） */
 export const FLAT_LAYERS = {
   /** 最底下这一层是基岩（防掉出世界） */

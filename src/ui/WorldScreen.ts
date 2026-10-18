@@ -14,7 +14,13 @@
  * 进世界的动作交回给调用方（`main.ts` 的 boot）。这样这个模块在 Node 里也能测。
  */
 
-import { WORLD_TYPES, WORLD_TYPE_LABELS, randomSeed, type WorldType } from '../core/gen/WorldType.ts';
+import {
+  WORLD_TYPES,
+  WORLD_TYPE_HINTS,
+  WORLD_TYPE_LABELS,
+  randomSeed,
+  type WorldType,
+} from '../core/gen/WorldType.ts';
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../core/world/Rules.ts';
 import { GAME_MODES, GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
@@ -47,6 +53,8 @@ export class WorldScreen {
   private readonly difficultySelect: HTMLSelectElement;
   /** 新建世界时的游戏模式（批次 181）：生存/创造；进世界后可在暂停菜单里改 */
   private readonly gameModeSelect: HTMLSelectElement;
+  /** 世界类型下面那行说明（批次 181：超平坦没有树/村庄/矿石要说在前面） */
+  private readonly typeHintEl: HTMLDivElement;
   /** 三个视图各自的那一节（同一份 DOM 用 `.active` 切换，见文件头注释） */
   private readonly views = new Map<WorldView, HTMLElement>();
   private currentView: WorldView = 'home';
@@ -213,6 +221,12 @@ export class WorldScreen {
     }
     this.gameModeSelect.value = 'survival';
 
+    // 世界类型说明（批次 181）：超平坦"没有树/村庄/矿石"必须写在选之前
+    this.typeHintEl = document.createElement('div');
+    this.typeHintEl.className = 'world-type-hint';
+    this.typeSelect.addEventListener('change', () => this.updateTypeHint());
+    this.gameModeSelect.addEventListener('change', () => this.updateTypeHint());
+
     const createButton = document.createElement('button');
     createButton.type = 'button';
     createButton.className = 'world-primary';
@@ -232,10 +246,12 @@ export class WorldScreen {
       this.makeRow('世界名称', this.nameInput, null),
       this.makeRow('世界种子', this.seedInput, reroll),
       this.makeRow('世界类型', this.typeSelect, null),
+      this.typeHintEl,
       this.makeRow('难度', this.difficultySelect, null),
       this.makeRow('游戏模式', this.gameModeSelect, null),
       createButton,
     );
+    this.updateTypeHint();
 
     const hint = document.createElement('div');
     hint.className = 'world-hint';
@@ -306,6 +322,8 @@ export class WorldScreen {
     this.panel.dataset.view = view;
     for (const [key, element] of this.views) element.classList.toggle('active', key === view);
     if (view === 'worlds') this.render();
+    // 每次进新建页都按当前选择刷新说明（从世界列表删完回来时选择可能没变，但无害）
+    if (view === 'create') this.updateTypeHint();
   }
 
   show(): void {
@@ -438,6 +456,17 @@ export class WorldScreen {
     this.typeSelect.value = worldType;
     this.difficultySelect.value = difficulty;
     this.gameModeSelect.value = gameMode;
+    this.updateTypeHint();
+  }
+
+  /** 世界类型说明 + "超平坦 + 生存"的警告（批次 181） */
+  private updateTypeHint(): void {
+    const type = this.typeSelect.value as WorldType;
+    const survival = this.gameModeSelect.value === 'survival';
+    const base = WORLD_TYPE_HINTS[type] ?? '';
+    const warn = type === 'flat' && survival;
+    this.typeHintEl.textContent = warn ? `${base} —— 生存模式建议改选默认世界，或改用创造模式` : base;
+    this.typeHintEl.classList.toggle('bad', warn);
   }
 
   /** 验收脚本用：等价于点"创建并进入" */
