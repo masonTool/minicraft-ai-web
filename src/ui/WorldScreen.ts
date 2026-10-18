@@ -16,6 +16,7 @@
 
 import { WORLD_TYPES, WORLD_TYPE_LABELS, randomSeed, type WorldType } from '../core/gen/WorldType.ts';
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../core/world/Rules.ts';
+import { GAME_MODES, GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
 
 export interface WorldScreenActions {
@@ -44,6 +45,8 @@ export class WorldScreen {
   private readonly typeSelect: HTMLSelectElement;
   /** 新建世界时的难度（I7）：进世界后还能用 /difficulty 改 */
   private readonly difficultySelect: HTMLSelectElement;
+  /** 新建世界时的游戏模式（批次 181）：生存/创造；进世界后可在暂停菜单里改 */
+  private readonly gameModeSelect: HTMLSelectElement;
   /** 三个视图各自的那一节（同一份 DOM 用 `.active` 切换，见文件头注释） */
   private readonly views = new Map<WorldView, HTMLElement>();
   private currentView: WorldView = 'home';
@@ -199,6 +202,17 @@ export class WorldScreen {
     }
     this.difficultySelect.value = 'normal';
 
+    // 游戏模式（批次 181）：**在创建时就要选**，不要靠游戏里双击跳跃去猜
+    this.gameModeSelect = document.createElement('select');
+    this.gameModeSelect.className = 'world-input';
+    for (const value of GAME_MODES) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = GAME_MODE_LABELS[value];
+      this.gameModeSelect.appendChild(option);
+    }
+    this.gameModeSelect.value = 'survival';
+
     const createButton = document.createElement('button');
     createButton.type = 'button';
     createButton.className = 'world-primary';
@@ -219,6 +233,7 @@ export class WorldScreen {
       this.makeRow('世界种子', this.seedInput, reroll),
       this.makeRow('世界类型', this.typeSelect, null),
       this.makeRow('难度', this.difficultySelect, null),
+      this.makeRow('游戏模式', this.gameModeSelect, null),
       createButton,
     );
 
@@ -342,7 +357,7 @@ export class WorldScreen {
 
     const meta = document.createElement('div');
     meta.className = 'world-card-meta';
-    meta.textContent = `${WORLD_TYPE_LABELS[world.worldType]} · ${DIFFICULTY_LABELS[world.difficulty]} · 种子 ${world.seed}`;
+    meta.textContent = `${WORLD_TYPE_LABELS[world.worldType]} · ${DIFFICULTY_LABELS[world.difficulty]} · ${GAME_MODE_LABELS[world.gameMode]} · 种子 ${world.seed}`;
 
     const stats = document.createElement('div');
     stats.className = 'world-card-meta';
@@ -396,6 +411,7 @@ export class WorldScreen {
       seed,
       worldType: this.typeSelect.value as WorldType,
       difficulty: this.difficultySelect.value as Difficulty,
+      gameMode: this.gameModeSelect.value as GameMode,
     });
     // 清空表单：下次再新建时不会带上一次的名字与种子
     this.nameInput.value = '';
@@ -409,12 +425,19 @@ export class WorldScreen {
   }
 
   /** 验收脚本用：填表但不提交（顺带切到新建页，否则填的是看不见的表单） */
-  fillNewWorldForm(name: string, seed: string, worldType: WorldType, difficulty: Difficulty = 'normal'): void {
+  fillNewWorldForm(
+    name: string,
+    seed: string,
+    worldType: WorldType,
+    difficulty: Difficulty = 'normal',
+    gameMode: GameMode = 'survival',
+  ): void {
     this.setView('create');
     this.nameInput.value = name;
     this.seedInput.value = seed;
     this.typeSelect.value = worldType;
     this.difficultySelect.value = difficulty;
+    this.gameModeSelect.value = gameMode;
   }
 
   /** 验收脚本用：等价于点"创建并进入" */

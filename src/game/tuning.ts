@@ -15,6 +15,7 @@
 import type { PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import type { WorldType } from '../core/gen/WorldType.ts';
 import type { Difficulty } from '../core/world/Rules.ts';
+import type { GameMode } from '../core/world/GameMode.ts';
 
 // ---------------------------------------------------------------- 世界与帧
 
@@ -158,6 +159,8 @@ export interface WorldConfig {
   worldType: WorldType;
   /** 新建这个世界时选的难度（进世界后还能用 /difficulty 改） */
   difficulty: Difficulty;
+  /** 游戏模式（批次 181）：生存/创造；缺省按生存处理 */
+  gameMode?: GameMode;
 }
 
 /** 界面打开时喂给物理的空输入，让玩家原地停住而不是保持上一帧的速度 */

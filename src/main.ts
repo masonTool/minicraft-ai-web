@@ -187,6 +187,13 @@ import {
   type Difficulty,
   type GameRules,
 } from './core/world/Rules.ts';
+import {
+  GAME_MODE_LABELS,
+  isCreativeMode,
+  nextGameMode,
+  normalizeGameMode,
+  type GameMode,
+} from './core/world/GameMode.ts';
 import { RecipeBook } from './ui/RecipeBook.ts';
 import { craftFromInventory, type RecipeBookTab } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
@@ -1019,6 +1026,8 @@ class App {
   private difficulty: Difficulty = 'normal';
   /** 难度被命令改动时的回调（主菜单用它回写世界清单） */
   onDifficultyChanged: ((value: Difficulty) => void) | null = null;
+  /** 游戏模式改了（批次 181）：主菜单用它回写世界清单 */
+  onGameModeChanged: ((mode: GameMode) => void) | null = null;
   /** 状态效果（I4）：随身携带，死亡后清空 */
   private readonly effects = new StatusEffects();
   /** 游戏规则（I11）：保存在世界里 */
@@ -1123,7 +1132,10 @@ class App {
   private pitch = -0.22;
   private readonly keys = new Set<string>();
   private locked = false;
+  /** 在飞（**只在创造模式里**有意义；批次 181 起它与"模式"分开） */
   private flying = false;
+  /** 游戏模式（生存/创造）：免伤、瞬间破坏、无限物品这些能力看它，不看 `flying` */
+  private gameMode: GameMode = 'survival';
   private hotbarIndex = 0;
 
   private hit: RayHit | null = null;
@@ -1195,6 +1207,7 @@ class App {
     },
   ) {
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType);
+    this.gameMode = normalizeGameMode(this.worldConfig.gameMode);
     this.waitingForSaveRestore = Boolean(save?.hasSave);
     // TNT（批次 56）：红石引擎只负责"判定这里通电了"，点火交给拿着引信表的那一方
     this.redstone.onTntIgnite = (x, y, z) => {
@@ -1373,8 +1386,8 @@ class App {
         // 背包里搬动东西的一声"咔"（H19 ⑪，批次 138）：界面只报"动过了"，
         // 播不播、多大声由音频引擎那边统一按音量设置决定
         onMove: () => this.audio.play('item_move'),
-        // 创造物品栏门控（批次 139）：能飞 = 创造，与 isCreative / 中键拾取同一条口径
-        isCreative: () => this.flying,
+        // 创造物品栏门控（批次 181 起看**模式**，不再看"在不在飞"）
+        isCreative: () => this.isCreative,
         // 丢出（批次 128）：Q / Ctrl+Q / 点界面外 —— 界面只报"丢哪件、丢几件"，
         // 真正造掉落物的是这里（它才知道玩家站在哪）
         onDrop: (itemId, count) => this.dropInFrontOfPlayer(itemId, count),
@@ -1471,6 +1484,9 @@ class App {
       // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,
+      // 模式（批次 181）：唯一的入口在暂停菜单；双击跳只切飞行
+      onToggleGameMode: () => this.setGameMode(nextGameMode(this.gameMode)),
+      gameMode: () => this.gameMode,
       // 诊断日志（批次 181）：打点 / 导出 / 复制，读数由 runtime 自己算
       onDiagnosticsMark: () => diag.mark('用户记录问题'),
       onDiagnosticsExport: () => diag.download(),
@@ -1887,7 +1903,11 @@ class App {
     this.physics.teleport(data.x, data.y, data.z);
     this.yaw = data.yaw;
     this.pitch = data.pitch;
-    this.setFlying(data.flying);
+    // 批次 181 迁移：老存档没有 `gameMode`，`flying === true` 视为创造模式
+    if (data.gameMode) this.setGameMode(data.gameMode);
+    else if (data.flying) this.setGameMode('creative');
+    // 生存模式不允许飞：`setFlying` 自己也会挡，这里把条件写清楚
+    this.setFlying(data.flying === true && this.isCreative);
     this.timeOfDay = data.timeOfDay;
     // 月相（批次 84）：老存档没有 dayCount → 第 0 天（满月），与 `moonPhaseFor(0)` 一条口径
     this.dayCount = Number.isFinite(data.dayCount) && (data.dayCount ?? 0) >= 0 ? Math.floor(data.dayCount!) : 0;
@@ -1958,6 +1978,7 @@ class App {
       pitch: this.pitch,
       dimension: this.dimension,
       flying: this.flying,
+      gameMode: this.gameMode,
       timeOfDay: this.timeOfDay,
       dayCount: this.dayCount,
       daysWithoutSleep: this.daysWithoutSleep,
@@ -2724,7 +2745,7 @@ class App {
    * 创造模式（飞行中）不掉耐久，与原版一致。
    */
   private damageHeldTool(amount = 1): void {
-    if (this.flying || amount <= 0) return;
+    if (this.isCreative || amount <= 0) return;
     const index = this.hotbarIndex;
     const stack = this.inventory.get(index);
     if (!stack) return;
@@ -3907,7 +3928,7 @@ class App {
     // 亡灵杀手/节肢杀手只对对应家族的生物生效，所以要把家族传进去
     const weapon = meleeDamage(this.heldTool?.attack ?? 1, this.heldEnchants, mob.type.family);
     const base = Math.max(0, weapon + this.effects.attackBonus());
-    const damage = this.flying ? 100 : critical ? base * 1.5 : base;
+    const damage = this.isCreative ? 100 : critical ? base * 1.5 : base;
     // 抢夺只影响掉落数量（在 mob.hurt 内部结算）
     mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context, lootingBonus(this.heldEnchants));
     this.hand.swing();
@@ -3948,7 +3969,7 @@ class App {
     // 免得后面工具刚好用坏时用 null 去判断掉落
     const tool = this.heldTool;
     // 状态效果：急迫加快、挖掘疲劳减慢（倍率在 StatusEffects 里算好）
-    const required = this.flying ? 0 : breakSeconds(id, tool, this.heldEnchants) / this.effects.miningSpeedMultiplier();
+    const required = this.isCreative ? 0 : breakSeconds(id, tool, this.heldEnchants) / this.effects.miningSpeedMultiplier();
     if (!Number.isFinite(required)) return;
 
     this.breakProgress += required <= 0 ? 1 : dt / required;
@@ -4017,7 +4038,7 @@ class App {
     // ⚠️ 创造模式**不掉**（与原版一致，也与下面"创造模式不产生掉落"那一条同源）：
     // 直接把条目清掉即可，否则创造模式拆几个框就能刷出一堆东西
     if (brokenId === Block.ITEM_FRAME) {
-      if (this.flying) this.itemFrames.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
+      if (this.isCreative) this.itemFrames.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
       else this.dropFrameContents(this.hit.x, this.hit.y, this.hit.z);
     }
 
@@ -4046,7 +4067,7 @@ class App {
 
     // 创造模式不产生掉落（与原版一致）
     // G4：还需要"手上工具够格"——石镐挖不动钻石矿（挖得动但一无所获）
-    if (!this.flying && canHarvest(brokenId, tool)) {
+    if (!this.isCreative && canHarvest(brokenId, tool)) {
       const enchants = this.heldEnchants;
       // 七件事的先后顺序（精准采集 / 剪刀 / 替换 / 常规 / 额外 / 双层台阶 / 时运）
       // 整体收在 `items.blockDrops` 里，那里写了注释，也才能离线断言
@@ -4078,7 +4099,7 @@ class App {
     // 挖矿经验（I5）：只有部分矿石给（煤 0~2、钻石/绿宝石 3~7…），
     // 与掉落无关——铁矿挖出来有粗铁但**不给**经验，与原版一致；创造模式不给。
     // 批次 170 起掉成球（I16）：位置就是刚挖掉那一格的格心
-    if (!this.flying) {
+    if (!this.isCreative) {
       const xp = rollBlockXp(brokenId, Math.random());
       this.spawnXpOrbs(xp, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
     }
@@ -4164,7 +4185,7 @@ class App {
     if (this.world.getBlock(x, y, z) !== Block.AIR) return false;
     if (!this.world.setBlockAndUpdate(x, y, z, Block.TRIPWIRE)) return false;
     // 创造模式不扣线（与"创造不掉落"同一条规矩）
-    if (!this.flying) {
+    if (!this.isCreative) {
       this.inventory.consume(Item.STRING, 1);
       this.refreshHotbar();
     }
@@ -4395,7 +4416,7 @@ class App {
       this.net.sendBlock(bx, by, bz, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(bx + 0.5, by + 0.5, bz + 0.5, this.blockParticleColor(id));
       // 整张床只掉一次（在床脚那一格的位置掉）
-      if (this.flying || [bx, by, bz].join() !== [x, y, z].join()) continue;
+      if (this.isCreative || [bx, by, bz].join() !== [x, y, z].join()) continue;
       const drop = dropFor(id);
       if (drop) this.spawnDrop(drop.id, drop.count, bx + 0.5, by + 0.5, bz + 0.5);
     }
@@ -5357,7 +5378,7 @@ class App {
       this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       // 创造模式不产生掉落（与原版一致）
-      if (this.flying) continue;
+      if (this.isCreative) continue;
       const drop = dropFor(id);
       if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, oy + 0.5, z + 0.5);
     }
@@ -5377,7 +5398,7 @@ class App {
       this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
       this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
-      if (this.flying || dy !== 0) continue;
+      if (this.isCreative || dy !== 0) continue;
       // 掉落**这一种**门（原来写死 `dropFor(Block.OAK_DOOR)`，加别的木材就会掉错东西）
       const drop = dropFor(id);
       if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5);
@@ -5573,7 +5594,7 @@ class App {
     // 触觉反馈：受击用"双短震"区分于放方块的轻震
     if (amount > 0) this.vibrate([18, 40, 18]);
     if (amount > 0) this.audio.play(this.stats.health <= 0 ? 'death' : 'hurt');
-    if (this.flying) return;
+    if (this.isCreative) return;
     // 难度倍率：和平难度下生物不造成伤害（原版和平难度敌对生物根本不生成）
     const damage = amount * difficultyProfile(this.difficulty).mobDamage;
     if (damage <= 0) return;
@@ -6218,8 +6239,8 @@ class App {
       },
       setFlying: (on) => this.setFlying(on),
       isFlying: () => this.flying,
-      setCreative: (on) => this.setFlying(on),
-      isCreative: () => this.flying,
+      setCreative: (on) => this.setGameMode(on ? 'creative' : 'survival'),
+      isCreative: () => this.isCreative,
       killPlayer: () => {
         this.stats.damage(MAX_HEALTH * 10, 'generic');
       },
@@ -6534,7 +6555,7 @@ class App {
   /** R 键：开/关配方书。关掉时要把 uiOpen 交回给背包（背包可能还开着） */
   private toggleRecipeBook(): void {
     // 批次 166：创造模式不提供配方（拥有所有方块，看配方没有意义），R 键也不该开它
-    if (this.flying) return;
+    if (this.isCreative) return;
     if (this.recipeBook.isOpen) {
       this.closeRecipeBook();
       this.handleInventoryOpen(this.inventoryScreen.isOpen);
@@ -6654,7 +6675,7 @@ class App {
     if (!this.world.setBlockAndUpdate(target.x, target.y, target.z, liquid, 0)) return false;
 
     // 创造模式不回收桶（原版也是"桶还在手里"），生存里变回空桶
-    if (!this.flying) this.exchangeHeld(held, Item.BUCKET);
+    if (!this.isCreative) this.exchangeHeld(held, Item.BUCKET);
     this.audio.play(liquid === Block.WATER ? 'splash' : 'flint', {
       x: target.x + 0.5,
       y: target.y + 0.5,
@@ -6678,7 +6699,7 @@ class App {
     // ① 水桶 → 灌满（原版：一桶就是一整锅，不按"量"折算）
     if (held === Item.WATER_BUCKET) {
       this.world.setStateAndUpdate(x, y, z, fillCauldron(state));
-      if (!this.flying) this.exchangeHeld(Item.WATER_BUCKET, Item.BUCKET);
+      if (!this.isCreative) this.exchangeHeld(Item.WATER_BUCKET, Item.BUCKET);
       this.audio.play('splash', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.particles.spawnSplash(x + 0.5, y + 0.9, z + 0.5, 0x9fd4ff, 6);
       this.hand.swing();
@@ -6688,7 +6709,7 @@ class App {
     // ①b 岩浆桶 → 倒成岩浆锅（批次 177）：与水锅同一个锅，靠状态位区分内容物
     if (held === Item.LAVA_BUCKET) {
       this.world.setStateAndUpdate(x, y, z, fillCauldronWithLava(state));
-      if (!this.flying) this.exchangeHeld(Item.LAVA_BUCKET, Item.BUCKET);
+      if (!this.isCreative) this.exchangeHeld(Item.LAVA_BUCKET, Item.BUCKET);
       this.audio.play('flint', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xff9a1f, 6);
       this.hand.swing();
@@ -7712,8 +7733,8 @@ class App {
     this.audio.play('portal');
     this.particles.spawnPortal(x, y + 0.6, z, 16, 0.5);
     this.vibrate(12);
-    // 创造模式（飞行）免疫伤害——与 `damagePlayer` 的口径一致
-    if (this.flying) return;
+    // 创造模式免疫伤害——与 `damagePlayer` 的口径一致
+    if (this.isCreative) return;
     this.applyIncomingDamage(ENDER_PEARL_FALL_DAMAGE, 'fall');
   }
 
@@ -7913,7 +7934,7 @@ class App {
     const eggMob = spawnEggMobOf(this.heldItemId ?? -1);
     if (eggMob) {
       if (this.spawnMob(eggMob, this.hit.x, this.hit.y + 1, this.hit.z)) {
-        if (!this.flying) {
+        if (!this.isCreative) {
           this.inventory.take(this.hotbarIndex, 1);
           this.refreshHotbar();
         }
@@ -8206,9 +8227,8 @@ class App {
       return;
     }
 
-    // 本项目的"飞行"开关就是创造模式（见 `survivalEnvironment`），
-    // 原版对创造/旁观玩家的 `getPortalWaitTime` 返回 1
-    const wait = this.flying ? PORTAL_CREATIVE_IGNITE_TICKS : PORTAL_IGNITE_TICKS;
+    // 创造模式（批次 181 起与"在飞"分开）走瞬发，原版对创造/旁观返回 1
+    const wait = this.isCreative ? PORTAL_CREATIVE_IGNITE_TICKS : PORTAL_IGNITE_TICKS;
     this.portalTicks++;
     if (this.portalTicks >= wait) this.travelThroughPortal();
   }
@@ -8547,8 +8567,8 @@ class App {
       suffocating: body !== Block.AIR && blockDef(body).opaque,
       fallDistance: this.pendingFallDistance,
       y: p.y,
-      // 创造模式就是飞行状态（P1 的模式切换定义如此）
-      creative: this.flying,
+      // 批次 181：能力看模式，不再看"在不在飞"
+      creative: this.isCreative,
       // 难度与游戏规则影响饥饿/回复（和平难度饿不死、回血更快）
       naturalRegeneration: this.rules.naturalRegeneration,
       starveRate: difficultyProfile(this.difficulty).starveRate,
@@ -8824,7 +8844,7 @@ class App {
     if (this.touch) {
       this.debugEl.textContent =
         `${this.fps} fps   ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\n` +
-        `${this.flying ? '创造(飞行)' : '生存'}   ${clock}   ${moon}\n` +
+        `${GAME_MODE_LABELS[this.gameMode]}${this.flying ? '(飞行)' : ''}   ${clock}   ${moon}\n` +
         `持有 ${this.heldName}${armorPoints > 0 ? `   护甲 ${armorPoints}` : ''}`;
       return;
     }
@@ -8833,7 +8853,7 @@ class App {
       `Bedrock 1.18 Web  ·  P1 物理 + 方块交互\n` +
       `${this.fps} fps   ${this.chunkRenderer.triangles.toLocaleString()} 三角形\n` +
       `XYZ: ${p.x.toFixed(2)} / ${p.y.toFixed(2)} / ${p.z.toFixed(2)}   区块: ${cx}, ${cz}\n` +
-      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${DIFFICULTY_LABELS[this.difficulty]}   模式: ${this.flying ? '创造(飞行)' : '生存'}   维度: ${DIMENSION_LABELS[this.dimension]}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
+      `朝向: ${facing}   时间: ${clock}   月相: ${moon}   难度: ${DIFFICULTY_LABELS[this.difficulty]}   模式: ${GAME_MODE_LABELS[this.gameMode]}${this.flying ? '(飞行)' : ''}   维度: ${DIMENSION_LABELS[this.dimension]}   视角: ${CAMERA_MODE_LABELS[this.cameraMode]}\n` +
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
@@ -8907,7 +8927,7 @@ class App {
         type: this.worldConfig.worldType,
         difficulty: this.difficulty,
         dimension: this.dimension,
-        mode: this.flying ? 'creative' : 'survival',
+        mode: this.gameMode,
       },
       settings: {
         viewDistance: this.settings.viewDistance,
@@ -9448,16 +9468,51 @@ class App {
     this.applyEnvironment();
   }
 
-  /** 切换创造飞行（键盘 F、触摸按钮与调试入口共用） */
+  /**
+   * 当前是不是创造模式（**能力口径**）。
+   *
+   * 免伤、瞬间破坏、不掉耐久、物品不消耗、创造物品栏都看它；
+   * "在不在飞"是另一件事（创造模式也可以走路）。
+   */
+  get isCreative(): boolean {
+    return isCreativeMode(this.gameMode);
+  }
+
+  /**
+   * 切游戏模式（批次 181）。
+   *
+   * 入口只有三处：新建世界、暂停菜单、`/gamemode`。双击跳跃**不再**走这里。
+   * 切回生存时强制落地，否则会出现"生存模式在飞"——既不受重力也不掉血。
+   */
+  setGameMode(mode: GameMode): void {
+    const next = normalizeGameMode(mode);
+    if (next === this.gameMode) return;
+    diag.event('mode', 'gameMode.change', { from: this.gameMode, to: next, flying: this.flying });
+    this.gameMode = next;
+    if (next === 'survival' && this.flying) this.setFlying(false);
+    // 回写世界清单（暂停菜单里改的，下次从主菜单进来还是这个模式）
+    this.onGameModeChanged?.(next);
+    // 背包开着时创造区要立刻显隐；设置面板开着时"飞行"那一行要显隐
+    if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
+    if (this.settingsScreen.isOpen) this.settingsScreen.refreshGameModeRows();
+  }
+
+  /** 切换创造飞行（键盘 F、双击跳跃、设置里的"飞行"共用；生存模式会被拒绝） */
   setFlying(value: boolean): void {
     // 先记日志再改状态：D2 那种"切完就卡"的问题要靠 before/after 对比定位
     diag.event('mode', 'setFlying', {
       value,
+      allowed: !value || this.isCreative,
       before: this.flying,
+      gameMode: this.gameMode,
       uiOpen: this.uiOpen,
       touch: this.touch?.debugState,
     });
-    // 切模式先清手势（批次 181）：启动新世界/双击跳都走这里
+    if (value && !this.isCreative) {
+      // 生存不能飞：把调用方（双击跳/F/命令）静默挡掉，状态保持一致
+      return;
+    }
+    // 切飞行先清手势（批次 181）：另一根手指的旧基准不能带到切换之后
     this.touch?.resetInput('flying');
     this.flying = value;
     // 触摸端的"飞"按钮需要跟着亮/灭
@@ -9481,7 +9536,7 @@ class App {
     const itemId = pickItemFor(this.world.getBlock(hit.x, hit.y, hit.z));
     if (itemId === null) return;
 
-    const plan = planPickBlock(this.inventory, itemId, this.hotbarIndex, this.flying);
+    const plan = planPickBlock(this.inventory, itemId, this.hotbarIndex, this.isCreative);
     if (!plan) return;
     applyPickBlock(this.inventory, plan);
     // `'select'` 与另外两档都要"把手移到那一格"——原版拾取之后手上就是它
@@ -10239,6 +10294,7 @@ async function boot(): Promise<void> {
         seed: world.seed,
         worldType: world.worldType,
         difficulty: world.difficulty,
+        gameMode: world.gameMode,
       });
     } catch (error) {
       // 预检过了、但真正创建渲染器时还是失败（显存不足/上下文到顶）：
@@ -10258,6 +10314,8 @@ async function boot(): Promise<void> {
     app.onWorldDeleted = (id) => registry.remove(id);
     // 难度改了就回写世界清单（下次从主菜单进来还是这个难度）
     app.onDifficultyChanged = (value) => registry.update(world.id, { difficulty: value });
+    // 游戏模式同理（批次 181）：暂停菜单里改了，主菜单卡片与下次进入都跟着变
+    app.onGameModeChanged = (mode) => registry.update(world.id, { gameMode: mode });
     // 应用内退出（批次 181）：App 拆完自己之后把菜单拉回来。
     // ⚠️ 这里**不碰全屏**——全屏是页面级的，退出世界不该把它一起退掉。
     app.onExitToMenu = () => {

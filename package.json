@@ -140,7 +140,8 @@
     "test:note": "esbuild tools/note-test.ts --bundle --platform=node --format=esm --outfile=.tmp/note-test.mjs --log-level=warning && node .tmp/note-test.mjs",
     "test:border": "esbuild tools/border-test.ts --bundle --platform=node --format=esm --outfile=.tmp/border-test.mjs --log-level=warning && node .tmp/border-test.mjs",
     "test:bucket": "esbuild tools/bucket-test.ts --bundle --platform=node --format=esm --outfile=.tmp/bucket-test.mjs --log-level=warning && node .tmp/bucket-test.mjs",
-    "test:diag": "esbuild tools/diagnostics-test.ts --bundle --platform=node --format=esm --outfile=.tmp/diagnostics-test.mjs --log-level=error && node .tmp/diagnostics-test.mjs"
+    "test:diag": "esbuild tools/diagnostics-test.ts --bundle --platform=node --format=esm --outfile=.tmp/diagnostics-test.mjs --log-level=error && node .tmp/diagnostics-test.mjs",
+    "test:mode": "esbuild tools/mode-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mode-test.mjs --log-level=error && node .tmp/mode-test.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

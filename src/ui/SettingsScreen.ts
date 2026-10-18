@@ -18,6 +18,7 @@
  */
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
+import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './TouchControls.ts';
 
 /**
@@ -318,6 +319,14 @@ export interface SettingsActions {
    */
   onToggleFullscreen?: () => void;
   isFullscreen?: () => boolean;
+  /**
+   * 游戏模式（批次 181）：生存 ↔ 创造。
+   *
+   * 这是**唯一的模式入口**（新建世界时也能选）；双击跳跃只负责在创造模式里起降，
+   * 不再顺带切模式。
+   */
+  onToggleGameMode?: () => void;
+  gameMode?: () => GameMode;
 }
 
 /**
@@ -358,8 +367,10 @@ export class SettingsScreen {
   private readonly panel: HTMLDivElement;
   /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
   private subtitleText = '按 Esc 继续游戏';
-  /** "创造模式（飞行）"那个开关（非持久设置，见 `makeCreativeRow`） */
+  /** "飞行"那个开关（非持久设置，见 `makeCreativeRow`；只在创造模式里显示） */
   private flyingToggle: HTMLButtonElement | null = null;
+  /** "游戏模式"那个开关（生存 ↔ 创造） */
+  private gameModeToggle: HTMLButtonElement | null = null;
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
   private diagnosticsStatusEl: HTMLDivElement | null = null;
 
@@ -550,8 +561,9 @@ export class SettingsScreen {
     this.makeToggle(game, 'showDebug', '调试信息');
     // 自动保存间隔（批次 172，M20）：大世界保存那一下会有卡顿，间隔是可调的
     this.makeSelect(game, 'autosaveSeconds', '自动保存', AUTOSAVE_OPTIONS.map(String), AUTOSAVE_LABELS);
-    // 创造模式（飞行）：手机端右下那一簇精简之后，这是唯一的**显式**开关
-    //（双击跳跃仍然能用，那是手势）
+    // 游戏模式（批次 181）：生存 ↔ 创造。这是唯一的模式入口。
+    if (this.actions.onToggleGameMode && this.actions.gameMode) this.makeGameModeRow();
+    // 飞行：只在创造模式里显示（由 `refreshGameModeRows()` 控制显隐）
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
     game.appendChild(this.makeResourcePackRow());
     // 诊断日志（批次 181）：平时常开、500KB 封顶；这里只放"打点 / 导出 / 复制"
@@ -958,7 +970,7 @@ export class SettingsScreen {
   private makeCreativeRow(): void {
     this.flyingToggle = this.makeCycleRow(
       this.section('game'),
-      '创造模式（飞行）',
+      '飞行',
       () => SettingsScreen.onOff(this.actions.isFlying?.() ?? false),
       () => {
         this.actions.onToggleFly?.();
@@ -966,6 +978,37 @@ export class SettingsScreen {
         return SettingsScreen.onOff(this.actions.isFlying?.() ?? false);
       },
     );
+  }
+
+  /**
+   * "游戏模式"开关（批次 181）。
+   *
+   * 与"飞行"分成两行：模式决定能力（免伤/瞬间破坏/无限物品），飞行只是创造里的一种移动方式。
+   * 生存模式下"飞行"那一行会整行隐藏，否则玩家会以为生存也能飞。
+   */
+  private makeGameModeRow(): void {
+    this.gameModeToggle = this.makeCycleRow(
+      this.section('game'),
+      '游戏模式',
+      () => `‹ ${GAME_MODE_LABELS[this.actions.gameMode?.() ?? 'survival']} ›`,
+      () => {
+        this.actions.onToggleGameMode?.();
+        const mode = this.actions.gameMode?.() ?? 'survival';
+        this.refreshGameModeRows();
+        return `‹ ${GAME_MODE_LABELS[mode]} ›`;
+      },
+    );
+  }
+
+  /** 打开面板 / 切模式之后，把两个开关的文案与显隐对齐真实状态 */
+  refreshGameModeRows(): void {
+    const mode = this.actions.gameMode?.() ?? 'survival';
+    if (this.gameModeToggle) this.gameModeToggle.textContent = `‹ ${GAME_MODE_LABELS[mode]} ›`;
+    if (this.flyingToggle) {
+      this.flyingToggle.textContent = SettingsScreen.onOff(this.actions.isFlying?.() ?? false);
+      const row = this.flyingToggle.closest<HTMLElement>('.settings-row');
+      if (row) row.style.display = mode === 'creative' ? '' : 'none';
+    }
   }
 
   /** 造一个开关设置项（原版形态：一颗"‹ 开 ›/‹ 关 ›"的灰按钮，点一下切换） */
@@ -1036,6 +1079,8 @@ export class SettingsScreen {
     this.root.classList.remove('hidden');
     // 日志条数每次打开都会变，进来时对一次账
     this.refreshDiagnostics();
+    // 模式可能被 /gamemode 或主菜单改过：两个开关按真实状态回填
+    this.refreshGameModeRows();
   }
 
   hide(): void {

@@ -17,6 +17,7 @@
 
 import { isWorldType, randomSeed, type WorldType } from '../gen/WorldType.ts';
 import { normalizeDifficulty, type Difficulty } from '../world/Rules.ts';
+import { normalizeGameMode, type GameMode } from '../world/GameMode.ts';
 
 export interface WorldSummary {
   id: string;
@@ -33,6 +34,11 @@ export interface WorldSummary {
   edits: number;
   /** 难度（I7）：新建时可选，之后在游戏里改也会回写到这里 */
   difficulty: Difficulty;
+  /**
+   * 游戏模式（批次 181）：新建时可选，暂停菜单里改了也会回写。
+   * 老清单没有这个字段 → 生存。
+   */
+  gameMode: GameMode;
 }
 
 const STORAGE_KEY = 'bedrock-worlds';
@@ -54,6 +60,7 @@ export interface CreateWorldOptions {
   seed?: number;
   worldType?: WorldType;
   difficulty?: Difficulty;
+  gameMode?: GameMode;
   /** 指定 id（认领旧存档时用） */
   id?: string;
 }
@@ -89,6 +96,7 @@ export class WorldRegistry {
       seed: options.seed ?? randomSeed(),
       worldType: options.worldType ?? 'default',
       difficulty: options.difficulty ?? 'normal',
+      gameMode: normalizeGameMode(options.gameMode),
       createdAt: now,
       lastPlayed: now,
       playTime: 0,
@@ -106,7 +114,13 @@ export class WorldRegistry {
   adopt(
     id: string,
     seed: number,
-    options: { name?: string; worldType?: WorldType; edits?: number; difficulty?: Difficulty } = {},
+    options: {
+      name?: string;
+      worldType?: WorldType;
+      edits?: number;
+      difficulty?: Difficulty;
+      gameMode?: GameMode;
+    } = {},
   ): WorldSummary {
     const existing = this.get(id);
     if (existing) return existing;
@@ -116,6 +130,7 @@ export class WorldRegistry {
       seed,
       worldType: options.worldType ?? 'default',
       difficulty: options.difficulty,
+      gameMode: options.gameMode,
       // 认领时不重置游玩时长：存档里已经有 meta 了，后面 update 会同步回来
     });
   }
@@ -175,6 +190,7 @@ function normalizeWorld(value: unknown): WorldSummary | null {
     name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : '未命名世界',
     seed: typeof raw.seed === 'number' && Number.isFinite(raw.seed) ? Math.floor(raw.seed) : randomSeed(),
     difficulty: normalizeDifficulty((raw as { difficulty?: unknown }).difficulty),
+    gameMode: normalizeGameMode((raw as { gameMode?: unknown }).gameMode),
     worldType: isWorldType(raw.worldType) ? raw.worldType : 'default',
     createdAt,
     lastPlayed: typeof raw.lastPlayed === 'number' ? raw.lastPlayed : createdAt,

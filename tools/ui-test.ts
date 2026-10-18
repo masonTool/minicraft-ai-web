@@ -461,7 +461,8 @@ console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克�
   const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
   check('界面提供了 isCreative 钩子', invSrc.includes('isCreative?: () => boolean;'));
-  check('主程序接到 flying', mainSrc.includes('isCreative: () => this.flying'));
+  // 批次 181：创造能力看**模式**，不再看"在不在飞"
+  check('主程序接到 isCreative（模式口径）', mainSrc.includes('isCreative: () => this.isCreative'));
   // Wiki：「创造模式物品栏只能在创造模式打开」——不能再写 mode === 'inventory' 就显示
   check('创造区按 isCreative 门控', /mode === 'inventory' && \(this\.hooks\.isCreative\?\.\(\) \?\? false\)/.test(invSrc));
   check('没接钩子时当作生存（不显示）', invSrc.includes('this.hooks.isCreative?.() ?? false'));
@@ -1162,14 +1163,23 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   // 切模式/开关界面/失焦时要清手势，否则另一根手指的旧基准会把摇杆和视角带歪
   check('切飞行前清手势', mainSource.includes("this.touch?.resetInput('flying')"));
   check('界面开关与失焦也清手势', mainSource.includes("'ui.open' : 'ui.close'") && mainSource.includes("resetInput('blur')"));
+
+  // 模式与飞行分开（批次 181）：老存档按 flying 迁移，新世界在表单里选
+  check('老存档迁移：flying=true 视为创造', mainSource.includes("else if (data.flying) this.setGameMode('creative')"));
+  check('生存模式拒绝起飞（能力看模式）', mainSource.includes('if (value && !this.isCreative)'));
+  const worldSource = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  check('新建世界表单有"游戏模式"', worldSource.includes("'游戏模式'") && worldSource.includes('gameModeSelect'));
   check('双击摇杆切换潜行（右手只留跳跃）', source.includes('lastStickDown') && source.includes('双击摇杆'));
   check('飞行态用 applyFlyChrome 露出升降键', source.includes('private applyFlyChrome') && source.includes('fly-only'));
 
   // 搬走之后必须**在设置里有对应入口**，否则这两项在手机上等于消失
   const settingsSource = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   check(
-    '设置面板补了"创造模式（飞行）"开关',
-    settingsSource.includes("'创造模式（飞行）'") && settingsSource.includes('private makeCreativeRow'),
+    '设置面板有"游戏模式"与"飞行"两个开关（批次 181 拆开）',
+    settingsSource.includes("'游戏模式'") &&
+      settingsSource.includes("'飞行'") &&
+      settingsSource.includes('private makeCreativeRow') &&
+      settingsSource.includes('private makeGameModeRow'),
   );
   check('设置面板里的"视角"下拉还在', settingsSource.includes("this.makeSelect(controls, 'cameraMode', '视角'"));
   check(

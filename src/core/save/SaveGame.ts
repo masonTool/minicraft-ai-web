@@ -32,6 +32,7 @@ import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 const DB_VERSION = 5;
 const STORE_META = 'meta';
 import type { ItemStack } from '../container/Inventory.ts';
+import type { GameMode } from '../world/GameMode.ts';
 
 const STORE_PLAYER = 'player';
 const STORE_CHUNKS = 'chunks';
@@ -86,6 +87,13 @@ export interface PlayerSave {
   pitch: number;
   dimension: string;
   flying: boolean;
+  /**
+   * 游戏模式（批次 181）。
+   *
+   * 老存档没有这个字段 → 迁移规则：`flying === true` 视为创造，否则生存
+   *（见 `App.loadSaveState`）。之后模式与飞行各存各的：创造模式也可以是走路的。
+   */
+  gameMode?: GameMode;
   timeOfDay: number;
   /**
    * 世界已经过了几天（批次 84，月相用）：从开服算起的**整天数**，第 0 天是满月。
