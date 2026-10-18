@@ -166,7 +166,9 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   }
 
   // ---- ③ 设置分组：页签与 section 一一对应（漏一组 = 有一页设置永远看不到）
-  equal('四个分组（视频/控制/音频/游戏）', SETTING_GROUPS.length, 4);
+  // 批次 187：新增「外观」页（肤色/上衣/裤子/披风）
+  equal('五个分组（视频/外观/控制/音频/游戏）', SETTING_GROUPS.length, 5);
+  check('分组里有「外观」', SETTING_GROUPS.includes('appearance') && SETTING_GROUP_LABELS.appearance === '外观');
   check('每个分组都有中文名', SETTING_GROUPS.every((group) => (SETTING_GROUP_LABELS[group] ?? '').length > 0));
   equal('分组名不重复', new Set(SETTING_GROUPS.map((group) => SETTING_GROUP_LABELS[group])).size, SETTING_GROUPS.length);
 
@@ -2097,6 +2099,43 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
     '副手有东西时左臂挂一块板（没有盾牌物品，先做有/没有）',
     playerSrc.includes('setOffhand(visible: boolean)') &&
       appSrc.includes('this.playerRenderer.setOffhand(this.inventory.get(OFFHAND_SLOT) !== null);'),
+  );
+}
+
+console.log('\n[角色创建：外观（批次 187）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const playerSrc = readFileSync(new URL('../src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
+  const previewSrc = readFileSync(new URL('../src/ui/PlayerPreview3D.ts', import.meta.url), 'utf8');
+
+  check(
+    '设置存"档位下标"而不是颜色（旧存档不会失效）',
+    settingsSrc.includes('skinTone: number;') &&
+      settingsSrc.includes('shirtColor: number;') &&
+      settingsSrc.includes('pantsColor: number;') &&
+      settingsSrc.includes('appearanceIndex(parsed.skinTone'),
+  );
+  check(
+    '外观页：肤色 / 上衣 / 裤子 / 披风四行',
+    /this\.makeSelect\(\s*appearance,\s*'skinTone'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*appearance,\s*'shirtColor'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*appearance,\s*'pantsColor'/.test(settingsSrc) &&
+      settingsSrc.includes("this.makeToggle(appearance, 'cape', '披风')"),
+  );
+  check(
+    '模型按部位换材质（肤色/上衣/裤子），不改几何',
+    playerSrc.includes("roleMeshes: Record<'skin' | 'shirt' | 'pants', THREE.Mesh[]>") &&
+      playerSrc.includes('setAppearance(palette: AppearancePalette): void') &&
+      playerSrc.includes("this.roleMeshes.skin") &&
+      playerSrc.includes("this.roleMeshes.pants"),
+  );
+  check(
+    '改设置立刻作用到第三人称与 3D 预览',
+    appSrc.includes('this.playerRenderer.setAppearance(paletteOf(settings));') &&
+      invSrc.includes('this.hooks.appearance?.() ?? paletteOf(null)') &&
+      previewSrc.includes('this.model.setAppearance(this.palette)'),
   );
 }
 

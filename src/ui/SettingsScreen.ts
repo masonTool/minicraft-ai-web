@@ -20,6 +20,16 @@
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './TouchControls.ts';
+import {
+  DEFAULT_APPEARANCE,
+  PANTS_COLORS,
+  PANTS_COLOR_LABELS,
+  SHIRT_COLORS,
+  SHIRT_COLOR_LABELS,
+  SKIN_TONES,
+  SKIN_TONE_LABELS,
+  appearanceIndex,
+} from '../game/appearance.ts';
 
 /**
  * 粒子效果强度。
@@ -82,12 +92,13 @@ export function nextCycleValue(values: readonly string[], raw: unknown): string 
  * 批次 107 改成"四组一次全展开 + 行高压紧"（更符合"展示得更多"的反馈）；
  * 只有矮屏（横屏手机）放不下时才退回页签分页——判据见 index.html。
  */
-export const SETTING_GROUPS = ['graphics', 'controls', 'sound', 'game'] as const;
+export const SETTING_GROUPS = ['graphics', 'appearance', 'controls', 'sound', 'game'] as const;
 
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
 export const SETTING_GROUP_LABELS: Record<SettingGroup, string> = {
   graphics: '视频',
+  appearance: '外观',
   controls: '控制',
   sound: '音频',
   game: '游戏',
@@ -127,6 +138,10 @@ export interface GameSettings {
   volumeUi: number;
   /** 鼠标/触摸灵敏度倍率：0.5~2 */
   sensitivity: number;
+  /** 角色外观（批次 187）：都是**档位下标**，见 `game/appearance.ts` */
+  skinTone: number;
+  shirtColor: number;
+  pantsColor: number;
   /** 视角模式：第一人称 / 第三人称背后 / 第三人称正面（`V` 键循环切换） */
   cameraMode: CameraMode;
   /** 粒子效果强度：`off` 完全关闭、`reduced` 减半、`all` 全开（低配设备/手机省电用） */
@@ -205,6 +220,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   volumePlayer: 1,
   volumeUi: 1,
   sensitivity: 1,
+  skinTone: DEFAULT_APPEARANCE.skinTone,
+  shirtColor: DEFAULT_APPEARANCE.shirtColor,
+  pantsColor: DEFAULT_APPEARANCE.pantsColor,
   cameraMode: 'first',
   particles: 'all',
   clouds: true,
@@ -239,6 +257,10 @@ export function loadSettings(): GameSettings {
       volumePlayer: clampNumber(parsed.volumePlayer, 0, 1, DEFAULT_SETTINGS.volumePlayer),
       volumeUi: clampNumber(parsed.volumeUi, 0, 1, DEFAULT_SETTINGS.volumeUi),
       sensitivity: clampNumber(parsed.sensitivity, 0.5, 2, DEFAULT_SETTINGS.sensitivity),
+      // 外观（批次 187）：坏值/越界一律回退默认档，渲染层不用再判空
+      skinTone: appearanceIndex(parsed.skinTone, SKIN_TONES.length, DEFAULT_SETTINGS.skinTone),
+      shirtColor: appearanceIndex(parsed.shirtColor, SHIRT_COLORS.length, DEFAULT_SETTINGS.shirtColor),
+      pantsColor: appearanceIndex(parsed.pantsColor, PANTS_COLORS.length, DEFAULT_SETTINGS.pantsColor),
       cameraMode: CAMERA_MODES.includes(parsed.cameraMode as CameraMode)
         ? (parsed.cameraMode as CameraMode)
         : DEFAULT_SETTINGS.cameraMode,
@@ -542,8 +564,6 @@ export class SettingsScreen {
     // （`clouds` / `particles` 字段保留：老存档照旧读取，默认值最完整。）
     // 天气效果（批次 172，M20）：只关**画出来的**雨雪与雨花，天气本身照旧
     this.makeToggle(graphics, 'weatherEffects', '天气效果');
-    // 外观（批次 185）：披风
-    this.makeToggle(graphics, 'cape', '披风');
     // 降级四件套（批次 130，N7）：手机上"掉帧时先牺牲什么"交给玩家自己定。
     // 默认值刻意选成"手机优先"：两档自适应都开、帧率不限（能跑多少跑多少）
     this.makeToggle(graphics, 'adaptiveResolution', '自适应分辨率');
@@ -552,6 +572,34 @@ export class SettingsScreen {
     // **帧率上限这一行删掉**。降级交给上面两条自适应——它们会在掉帧时先降分辨率/视距，
     // 跑到 60 就是 60；手动钉一个"30 帧"只会让好设备白等。
     // （`maxFps` 字段保留：老存档里的值还会被读取，只是不再给入口。）
+
+    // ---- 外观（批次 187）：肤色 / 上衣 / 裤子 / 披风
+    //
+    // 用户："想创建角色、把他搞得漂亮一点"。这里先给**档位**而不是自由取色
+    //（模型是方块拼的，自由取色很容易调成一坨），改完第三人称与背包 3D 预览同时生效。
+    const appearance = this.section('appearance');
+    this.makeSelect(
+      appearance,
+      'skinTone',
+      '肤色',
+      SKIN_TONES.map((_, i) => String(i)),
+      Object.fromEntries(SKIN_TONE_LABELS.map((label, i) => [String(i), label])),
+    );
+    this.makeSelect(
+      appearance,
+      'shirtColor',
+      '上衣',
+      SHIRT_COLORS.map((_, i) => String(i)),
+      Object.fromEntries(SHIRT_COLOR_LABELS.map((label, i) => [String(i), label])),
+    );
+    this.makeSelect(
+      appearance,
+      'pantsColor',
+      '裤子',
+      PANTS_COLORS.map((_, i) => String(i)),
+      Object.fromEntries(PANTS_COLOR_LABELS.map((label, i) => [String(i), label])),
+    );
+    this.makeToggle(appearance, 'cape', '披风');
 
     const controls = this.section('controls');
     // 全屏 / 横屏（批次 181）：手动兜底。放在最上面——"屏幕不对"时玩家第一个找的就是它
@@ -857,7 +905,15 @@ export class SettingsScreen {
    */
   private makeSelect<T extends string>(
     options: HTMLElement,
-    key: 'cameraMode' | 'particles' | 'touchStick' | 'maxFps' | 'autosaveSeconds',
+    key:
+      | 'cameraMode'
+      | 'particles'
+      | 'touchStick'
+      | 'maxFps'
+      | 'autosaveSeconds'
+      | 'skinTone'
+      | 'shirtColor'
+      | 'pantsColor',
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
@@ -876,6 +932,10 @@ export class SettingsScreen {
         else if (key === 'maxFps') this.settings.maxFps = Number(next);
         // 自动保存间隔同理（`AUTOSAVE_OPTIONS` 是秒数）
         else if (key === 'autosaveSeconds') this.settings.autosaveSeconds = Number(next);
+        // 外观档位（批次 187）：循环行按字符串走，存回数字下标
+        else if (key === 'skinTone') this.settings.skinTone = Number(next);
+        else if (key === 'shirtColor') this.settings.shirtColor = Number(next);
+        else if (key === 'pantsColor') this.settings.pantsColor = Number(next);
         else this.settings.touchStick = next as StickMode;
         this.commit();
         return `‹ ${labels[next]} ›`;

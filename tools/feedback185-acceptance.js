@@ -314,6 +314,26 @@
     check('"披风"外观同时作用在预览上', capeOn);
     mc.settings.cape = false;
     inv.refreshPlayerPreview();
+
+    // 外观（批次 187）：改肤色/上衣 → 世界模型与预览同时变
+    const prevSkin = mc.settings.skinTone;
+    const prevShirt = mc.settings.shirtColor;
+    mc.settings.skinTone = (prevSkin + 1) % 6;
+    mc.settings.shirtColor = (prevShirt + 1) % 6;
+    mc.applySettings(mc.settings); // 走真实的"改设置"链路
+    inv.refresh();
+    await sleep(200);
+    const base = mc.playerRenderer.roleMeshes.skin[0].material.userData.base;
+    const expectedSkin =
+      (Math.round(base.r * 255) << 16) | (Math.round(base.g * 255) << 8) | Math.round(base.b * 255);
+    check(
+      '外观（肤色/上衣）同时作用到第三人称与 3D 预览',
+      !!inv.preview3d && inv.preview3d.palette.skin === expectedSkin && mc.settings.skinTone === (prevSkin + 1) % 6,
+      `skin=${mc.settings.skinTone} palette=${inv.preview3d?.palette?.skin?.toString(16)} model=${expectedSkin.toString(16)}`,
+    );
+    mc.settings.skinTone = prevSkin;
+    mc.settings.shirtColor = prevShirt;
+    mc.applySettings(mc.settings);
     inv.close();
     await sleep(400);
   }

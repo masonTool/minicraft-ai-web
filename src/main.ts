@@ -108,6 +108,7 @@ import {
   toggleFullscreen,
 } from './ui/Fullscreen.ts';
 import { hideInstallHint, installInstallHint } from './ui/InstallHint.ts';
+import { paletteOf } from './game/appearance.ts';
 import { HudToast } from './ui/HudToast.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
@@ -1413,6 +1414,7 @@ class App {
         // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口
         onOpenAdvancements: () => this.openAdvancements(),
         isCapeVisible: () => this.settings.cape,
+        appearance: () => paletteOf(this.settings),
         // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
         onTrade: (villager, index) => void this.performTrade(villager, index),
         // 熔炉产物被取空时结算烧炼经验（I5）
@@ -1694,6 +1696,8 @@ class App {
     this.cameraMode = settings.cameraMode;
     this.viewDistance = settings.viewDistance;
     this.playerRenderer.setCape(settings.cape);
+    // 外观（批次 187）：肤色 / 上衣 / 裤子，改完立刻在第三人称上生效
+    this.playerRenderer.setAppearance(paletteOf(settings));
     // 玩家手动改视距时把自适应冷却重置：否则刚拖完滑块又要等几秒才允许升降
     // ⚠️ 分辨率的当前值**不重置**：它是"这台设备现在扛不扛得住"的记忆，
     // 改一次视距就把它弹回 1.0 的话，弱机每次调设置都要重新掉一轮帧

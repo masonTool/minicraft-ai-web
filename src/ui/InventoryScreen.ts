@@ -131,6 +131,7 @@ import {
 } from './CreativeTabs.ts';
 import { drawPlayerPreview } from './PlayerPreview.ts';
 import { PlayerPreview3D } from './PlayerPreview3D.ts';
+import { paletteOf, type AppearancePalette } from '../game/appearance.ts';
 import { isTouchDevice, isTouchUi } from './TouchControls.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
 import {
@@ -213,6 +214,8 @@ export interface InventoryScreenHooks {
   onOpenAdvancements?: () => void;
   /** 预览用：披风外观是否开启（批次 185） */
   isCapeVisible?: () => boolean;
+  /** 预览用：肤色 / 上衣 / 裤子（批次 187） */
+  appearance?: () => AppearancePalette;
   /**
    * 成交一条交易（J11，批次 88）。
    *
@@ -3675,6 +3678,7 @@ export class InventoryScreen {
         this.preview3dFailed = true;
       }
     }
+    const palette = this.hooks.appearance?.() ?? paletteOf(null);
     if (this.preview3d) {
       const colors = armorIds.map((id) =>
         id === null ? null : this.atlas.averageColor(itemIconTile(id)),
@@ -3683,6 +3687,7 @@ export class InventoryScreen {
         colors,
         this.hooks.isCapeVisible?.() ?? false,
         this.inventory.get(OFFHAND_SLOT) !== null,
+        palette,
       );
       return;
     }
@@ -3696,6 +3701,7 @@ export class InventoryScreen {
       },
       this.atlas,
       48,
+      palette,
     );
   }
 

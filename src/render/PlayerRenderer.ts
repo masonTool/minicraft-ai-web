@@ -27,6 +27,7 @@
 
 import * as THREE from 'three';
 import { ARMOR_SLOT_COUNT } from '../core/registry/armor.ts';
+import type { AppearancePalette } from '../game/appearance.ts';
 
 /** 肤色（与第一人称手臂同一个色，切换人称时不会"换个人"） */
 const SKIN = 0xdc9a6b;
@@ -76,6 +77,16 @@ export class PlayerRenderer {
   private readonly capeMesh: THREE.Mesh;
   /** 副手那块板：挂在左臂外侧，默认不显示 */
   private readonly offhandMesh: THREE.Mesh;
+  /**
+   * 按"角色部位"分组的网格（批次 187 外观）。
+   * 换肤色/衣色就是把这几组网格的材质换掉——材质按颜色共享（`materialFor`），
+   * 所以同一件颜色不会重复创建。
+   */
+  private readonly roleMeshes: Record<'skin' | 'shirt' | 'pants', THREE.Mesh[]> = {
+    skin: [],
+    shirt: [],
+    pants: [],
+  };
 
   /**
    * 盔甲：每个部位一份材质（同部位的几块甲片共用），材质颜色按装备的材质换。
@@ -97,25 +108,25 @@ export class PlayerRenderer {
     // ---- 双腿：枢轴在髋（y = 0.78），网格挂在枢轴下方
     this.legL = this.makePivot(0.125, 0.78, 0);
     this.legR = this.makePivot(-0.125, 0.78, 0);
-    this.addBox(this.legL, 0.25, 0.72, 0.25, 0, -0.36, 0, PANTS);
-    this.addBox(this.legR, 0.25, 0.72, 0.25, 0, -0.36, 0, PANTS);
+    this.addRoleBox(this.legL, 0.25, 0.72, 0.25, 0, -0.36, 0, PANTS, 'pants');
+    this.addRoleBox(this.legR, 0.25, 0.72, 0.25, 0, -0.36, 0, PANTS, 'pants');
     this.addBox(this.legL, 0.26, 0.12, 0.28, 0, -0.72, -0.01, SHOES);
     this.addBox(this.legR, 0.26, 0.12, 0.28, 0, -0.72, -0.01, SHOES);
 
     // ---- 躯干（0.78 ~ 1.46）
-    this.addBox(this.object, 0.5, 0.68, 0.26, 0, 1.12, 0, SHIRT);
+    this.addRoleBox(this.object, 0.5, 0.68, 0.26, 0, 1.12, 0, SHIRT, 'shirt');
 
     // ---- 双臂：枢轴在肩（y = 1.44），袖子 + 手
     this.armL = this.makePivot(0.375, 1.44, 0);
     this.armR = this.makePivot(-0.375, 1.44, 0);
     for (const arm of [this.armL, this.armR]) {
-      this.addBox(arm, 0.24, 0.46, 0.24, 0, -0.23, 0, SHIRT);
-      this.addBox(arm, 0.22, 0.24, 0.22, 0, -0.58, 0, SKIN);
+      this.addRoleBox(arm, 0.24, 0.46, 0.24, 0, -0.23, 0, SHIRT, 'shirt');
+      this.addRoleBox(arm, 0.22, 0.24, 0.22, 0, -0.58, 0, SKIN, 'skin');
     }
 
     // ---- 头：枢轴在脖子（y = 1.46）
     this.head = this.makePivot(0, 1.46, 0);
-    this.addBox(this.head, 0.5, 0.5, 0.5, 0, 0.25, 0, SKIN);
+    this.addRoleBox(this.head, 0.5, 0.5, 0.5, 0, 0.25, 0, SKIN, 'skin');
     // 头发：顶盖 + 后脑（正面留出脸）
     this.addBox(this.head, 0.52, 0.13, 0.52, 0, 0.44, 0, HAIR);
     this.addBox(this.head, 0.52, 0.37, 0.11, 0, 0.28, 0.2, HAIR);
@@ -131,6 +142,17 @@ export class PlayerRenderer {
     this.capeMesh.visible = false;
     this.offhandMesh = this.addBox(this.armL, 0.42, 0.46, 0.06, 0.02, -0.28, -0.14, SHIELD);
     this.offhandMesh.visible = false;
+  }
+
+  /**
+   * 换外观（批次 187）：肤色 / 上衣 / 裤子。
+   *
+   * 只换材质引用，不动几何；材质按颜色共享，重复调用同一套配色不会新建对象。
+   */
+  setAppearance(palette: AppearancePalette): void {
+    for (const mesh of this.roleMeshes.skin) mesh.material = this.materialFor(palette.skin);
+    for (const mesh of this.roleMeshes.shirt) mesh.material = this.materialFor(palette.shirt);
+    for (const mesh of this.roleMeshes.pants) mesh.material = this.materialFor(palette.pants);
   }
 
   /** 外观：披风开/关（批次 185）。预览与第三人称共用同一个开关 */
@@ -243,6 +265,22 @@ export class PlayerRenderer {
   }
 
   /** 往挂点上挂一个方块（尺寸用缩放实现，几何体全场共用一份） */
+  private addRoleBox(
+    parent: THREE.Object3D,
+    width: number,
+    height: number,
+    depth: number,
+    x: number,
+    y: number,
+    z: number,
+    color: number,
+    role: 'skin' | 'shirt' | 'pants',
+  ): THREE.Mesh {
+    const mesh = this.addBox(parent, width, height, depth, x, y, z, color);
+    this.roleMeshes[role].push(mesh);
+    return mesh;
+  }
+
   private addBox(
     parent: THREE.Object3D,
     width: number,

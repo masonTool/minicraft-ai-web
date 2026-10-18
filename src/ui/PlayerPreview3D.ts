@@ -20,6 +20,7 @@
 
 import * as THREE from 'three';
 import { PlayerRenderer } from '../render/PlayerRenderer.ts';
+import type { AppearancePalette } from '../game/appearance.ts';
 
 export class PlayerPreview3D {
   private readonly renderer: THREE.WebGLRenderer;
@@ -31,6 +32,7 @@ export class PlayerPreview3D {
   private cape = false;
   private offhand = false;
   private armor: readonly (number | null)[] = [null, null, null, null];
+  private palette: AppearancePalette | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
@@ -56,10 +58,16 @@ export class PlayerPreview3D {
   }
 
   /** 装备 / 外观变化时调用；`armor` 是四个部位的平均色（null = 空槽） */
-  update(armor: readonly (number | null)[], cape: boolean, offhand: boolean): void {
+  update(
+    armor: readonly (number | null)[],
+    cape: boolean,
+    offhand: boolean,
+    palette: AppearancePalette | null = null,
+  ): void {
     this.armor = armor;
     this.cape = cape;
     this.offhand = offhand;
+    if (palette) this.palette = palette;
     this.render();
   }
 
@@ -76,6 +84,8 @@ export class PlayerPreview3D {
     this.camera.position.z = 4.4 * Math.max(1, 0.62 / this.camera.aspect);
     this.camera.updateProjectionMatrix();
 
+    // 外观（批次 187）：肤色 / 上衣 / 裤子；没传过就用模型出厂配色
+    if (this.palette) this.model.setAppearance(this.palette);
     this.model.setArmor(this.armor);
     this.model.setCape(this.cape);
     this.model.setOffhand(this.offhand);

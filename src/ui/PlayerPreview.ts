@@ -43,7 +43,12 @@ export function drawPlayerPreview(
   armor: PlayerPreviewArmor = { helmet: null, chest: null, legs: null, boots: null },
   atlas: TextureAtlas | null = null,
   widthCss = 48,
+  /** 外观（批次 187）：不给就用出厂配色，与 3D 预览/第三人称一致 */
+  palette: { skin: number; shirt: number; pants: number } | null = null,
 ): void {
+  const skinColor = palette ? hexColor(palette.skin) : SKIN;
+  const shirtColor = palette ? hexColor(palette.shirt) : SHIRT;
+  const pantsColor = palette ? hexColor(palette.pants) : PANTS;
   const scale = 2;
   const w = Math.max(1, Math.round(widthCss * scale));
   const h = Math.round(w * 2.1);
@@ -62,7 +67,7 @@ export function drawPlayerPreview(
   };
 
   // 腿（左 / 右）
-  const legColor = armorTint(atlas, armor.legs) ?? PANTS;
+  const legColor = armorTint(atlas, armor.legs) ?? pantsColor;
   fill(legColor, 4, 20, 3, 8);
   fill(legColor, 9, 20, 3, 8);
   // 鞋
@@ -71,17 +76,17 @@ export function drawPlayerPreview(
   fill(bootColor, 9, 27, 3, 2);
 
   // 身
-  const bodyColor = armorTint(atlas, armor.chest) ?? SHIRT;
+  const bodyColor = armorTint(atlas, armor.chest) ?? shirtColor;
   fill(bodyColor, 4, 10, 8, 10);
   // 臂
   fill(bodyColor, 1, 10, 3, 9);
   fill(bodyColor, 12, 10, 3, 9);
   // 手（露出肤色）
-  fill(SKIN, 1, 19, 3, 2);
-  fill(SKIN, 12, 19, 3, 2);
+  fill(skinColor, 1, 19, 3, 2);
+  fill(skinColor, 12, 19, 3, 2);
 
   // 头
-  fill(SKIN, 5, 2, 6, 6);
+  fill(skinColor, 5, 2, 6, 6);
   fill(HAIR, 5, 1, 6, 2);
   fill(EYE, 6, 4, 1, 1);
   fill(EYE, 9, 4, 1, 1);
