@@ -237,4 +237,72 @@ describe('光照引擎', () => {
     settle(engine);
     expect(world.getBlockLight(8, 65, 8)).toBeGreaterThan(0);
   });
+
+  it('增量任务超过队列上限时丢弃并计数，区块播种不受限（批次 238）', () => {
+    // 由来：真机日志里队列涨到 308 万格，`LightEngine.spread()` 的 `Array.push`
+    // 抛 `RangeError: Invalid array length`，把渲染主循环一起打死（画面定格）。
+    // 上限的意义是"宁可光照暂时不准，也不能拖死主循环"，所以这里把上限调到 8 格来验证。
+    const { chunk, world } = makeChunk();
+    const engine = new LightEngine(world, { maxPendingCells: 8 });
+    engine.initChunk(chunk);
+
+    // 播种是"加载一个新区块"的确定性工作量：超过上限也照常入队
+    // （否则启动期一旦积压，后面的区块就永远点不亮）
+    expect(engine.pendingCells).toBeGreaterThan(8);
+    expect(engine.pushStats.dropped).toBe(0);
+
+    // 增量任务（改方块）超限：一格都不进去，但计数要能看出来
+    const before = engine.pendingCells;
+    chunk.set(4, 70, 4, Block.STONE, 0);
+    engine.onBlockChanged(4, 70, 4);
+    expect(engine.pendingCells).toBe(before);
+    expect(engine.pushStats.dropped).toBeGreaterThan(0);
+  });
+
+  it('队列排空后增量任务恢复正常（上限是刹车，不是永久关闭）', () => {
+    const { chunk, world } = makeChunk();
+    const engine = new LightEngine(world, { maxPendingCells: 8 });
+    engine.initChunk(chunk);
+    settle(engine);
+    expect(engine.pendingCells).toBe(0);
+
+    chunk.set(4, 70, 4, Block.STONE, 0);
+    engine.onBlockChanged(4, 70, 4);
+    expect(engine.pendingCells).toBeGreaterThan(0);
+    settle(engine);
+    expect(engine.pendingCells).toBe(0);
+  });
+
+  it('移除 BFS 超过步数上限时放弃精确移除并计数，队列仍能排空（批次 238）', () => {
+    const { chunk, world } = makeChunk();
+    const engine = new LightEngine(world, { maxUnlightSteps: 2 });
+    engine.initChunk(chunk);
+    settle(engine);
+
+    chunk.set(4, 70, 4, Block.STONE, 0);
+    engine.onBlockChanged(4, 70, 4);
+    expect(engine.pushStats.overflow).toBeGreaterThan(0);
+
+    // 超限只影响"这一刻的精度"，不能让队列卡住
+    settle(engine);
+    expect(engine.pendingCells).toBe(0);
+    // 新方块**上方**的露天格子不受影响
+    expect(world.getSkyLight(4, 71, 4)).toBe(15);
+  });
+
+  it('`spread()` 自己再扩散的入队量单独计数（批次 238）', () => {
+    // 批次 238 之前这一路完全没统计：日志里只看得到"种子"（readded），
+    // 而真正让队列只涨不消的是种子扩散出去又压进来的那一层。
+    const { chunk, world } = makeChunk();
+    const engine = new LightEngine(world);
+    engine.initChunk(chunk);
+    settle(engine);
+    expect(engine.pushStats.spread).toBe(0);
+
+    // 埋一个方块 → 下方那一列被挖空 → 边界格重新扩散 → 产生 spread 入队
+    chunk.set(4, 70, 4, Block.STONE, 0);
+    engine.onBlockChanged(4, 70, 4);
+    settle(engine);
+    expect(engine.pushStats.spread).toBeGreaterThan(0);
+  });
 });

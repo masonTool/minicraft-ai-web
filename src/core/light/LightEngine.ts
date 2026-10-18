@@ -43,6 +43,21 @@ const HORIZONTAL: readonly (readonly [number, number])[] = [
 ];
 
 /**
+ * 格坐标打包成一个整数（批次 238，`unlight` 的"重新扩散"去重键）。
+ *
+ * 为什么必须去重：一块被移除的格子会把**它四周每一个比它亮的邻居**都登记成 reAdd，
+ * 而同一个亮格子往往同时挨着 4~6 个被移除的格子 —— 不去重时同一格会被压进去好几次。
+ * 真机日志里 `readded` 每 5 秒 40~50 万格，其中相当一部分是这种重复。
+ *
+ * 位宽：竖直 9 位（-64..319 → 0..383）、水平各 20 位（同一处改动波及的范围远小于 100 万格），
+ * 合计 49 位，稳稳落在 `Number.MAX_SAFE_INTEGER` 之内；水平方向 100 万格以外的碰撞
+ * 在同一次 BFS 里不可能出现（步数上限 6 万）。
+ */
+function cellKey(x: number, y: number, z: number): number {
+  return ((y + 64) * 0x100000 + (x & 0xfffff)) * 0x100000 + (z & 0xfffff);
+}
+
+/**
  * 队列消费后回收空间的阈值：**剩下的元素少于这么多时**才丢掉已消费的前缀。
  *
  * ⚠️ 批次 217：原来的判据是 `head > 24576`（元素数 = 8192 格），它只看"消费了多少"，
@@ -52,26 +67,94 @@ const HORIZONTAL: readonly (readonly [number, number])[] = [
  */
 const COMPACT_TAIL = 3 * 4096;
 
+/**
+ * **增量任务**的队列上限（格，批次 238）。
+ *
+ * 为什么要有上限：真机日志（792×360 / Adreno 829）里队列从 2 万格一路涨到 **308 万格**，
+ * `readded` 每 5 秒还在灌 50 万格，最后 `spread()` 的 `Array.push` 抛
+ * `RangeError: Invalid array length` —— 而主循环是"帧末才排下一帧"的写法，
+ * 一抛就把整个渲染循环打死（画面定格、DOM 还能点），只能强退重进。
+ *
+ * 队列无界就是那颗地雷的土壤，所以给它一个硬上限：
+ * **宁可光照暂时不准，也不能拖死主循环。**
+ *
+ * ⚠️ 区块播种（`self` / `border`）**不受这个上限约束**：那是"加载一个新区块"的确定性工作量，
+ * 有界、且一定会被消费完（批次 103 的启动预算就是靠它把"能玩"从 16s 压到 1s）。
+ * 受约束的是 `change` / `readded` / `spread` 三条"改方块引发的增量任务"——失控的只会是它们。
+ */
+export const MAX_PENDING_CELLS = 300_000;
+
+/**
+ * 一次增量移除 BFS 的步数上限（格，批次 238）。
+ *
+ * `onBlockChanged` 每次都要从改动点做一次"清掉下游光"的 BFS。开阔地形/水体里
+ * 这片连通区域可以很大（真机里一次改动平均要动上百格），极端情况下能走几十万格，
+ * 光这一项就把一帧吃穿。超了就放弃"精确移除"，剩下的交给 reAdd 的边界回填
+ * （光会从边界一层层渗回去，结果是"偏暗几帧"而不是"卡死"）。
+ */
+export const MAX_UNLIGHT_STEPS = 60_000;
+
+/** 入队来源：`self` / `border` 是区块播种，其余是"改方块引发的增量任务" */
+export type LightPushKind = 'self' | 'border' | 'change' | 'readded' | 'spread';
+
+/** 队列"谁在灌"的累计计数（批次 217/238，诊断用） */
+export interface LightPushStats {
+  /** 新区块播种 */
+  self: number;
+  /** 邻区边界列 */
+  border: number;
+  /** 改方块引发的自发光/回填 */
+  change: number;
+  /** 移除 BFS 之后重新扩散的边界格 */
+  readded: number;
+  /**
+   * `spread()` 自己再扩散压进去的（批次 238 新增）。
+   *
+   * 以前这一路**完全没统计**：日志里看到的 `readded` 只是"种子"，
+   * 种子扩散出去又会压进新格，那条链才是队列真正的增量。
+   */
+  spread: number;
+  /** 因为超过队列上限被丢弃的增量任务数 */
+  dropped: number;
+  /** 因为超过 BFS 步数上限被放弃的移除 BFS 次数 */
+  overflow: number;
+}
+
+/** 离线测试要把上限调小来验证"超限就丢"，所以留一个覆盖口（默认值就是上面两个常量） */
+export interface LightEngineOptions {
+  maxPendingCells?: number;
+  maxUnlightSteps?: number;
+}
+
 export class LightEngine {
   private skyQueue: number[] = [];
   private blockQueue: number[] = [];
   private skyHead = 0;
   private blockHead = 0;
+  private readonly maxPendingCells: number;
+  private readonly maxUnlightSteps: number;
 
-  /**
-   * 队列"谁在灌"的累计计数（批次 217，诊断用）。
-   *
-   * 真机日志里队列涨到 **820 万格**，但只看总数判断不了来源：
-   * 是"区块加载播种"、"改方块引发的移除/重扩散"，还是"边界列无条件入队"。
-   * 主程序每 5 秒取一次差值，积压时记一条 `perf/light`。
-   */
-  private readonly pushes = { self: 0, border: 0, change: 0, readded: 0 };
+  private readonly pushes: LightPushStats = {
+    self: 0,
+    border: 0,
+    change: 0,
+    readded: 0,
+    spread: 0,
+    dropped: 0,
+    overflow: 0,
+  };
 
-  get pushStats(): Readonly<{ self: number; border: number; change: number; readded: number }> {
+  get pushStats(): Readonly<LightPushStats> {
     return this.pushes;
   }
 
-  constructor(private readonly world: LightAccessor) {}
+  constructor(
+    private readonly world: LightAccessor,
+    options: LightEngineOptions = {},
+  ) {
+    this.maxPendingCells = options.maxPendingCells ?? MAX_PENDING_CELLS;
+    this.maxUnlightSteps = options.maxUnlightSteps ?? MAX_UNLIGHT_STEPS;
+  }
 
   get hasWork(): boolean {
     return this.skyHead < this.skyQueue.length || this.blockHead < this.blockQueue.length;
@@ -86,6 +169,27 @@ export class LightEngine {
 
   get pendingCells(): number {
     return (this.skyQueue.length - this.skyHead) / 3 + (this.blockQueue.length - this.blockHead) / 3;
+  }
+
+  /**
+   * **所有入队的唯一出口**（批次 238）。
+   *
+   * 之前散着 6 处 `queue.push`，上限只能贴在每一处上，漏一处就等于没有；
+   * 现在统一走这里，顺带把"谁在灌"的计数也收在一处。
+   *
+   * 三条增量路径（`change` / `readded` / `spread`）在超过上限时直接丢弃并计 `dropped`；
+   * 区块播种（`self` / `border`）不受限，理由见 `MAX_PENDING_CELLS`。
+   */
+  private enqueue(isSky: boolean, x: number, y: number, z: number, kind: LightPushKind): boolean {
+    const seeding = kind === 'self' || kind === 'border';
+    if (!seeding && this.pendingCells >= this.maxPendingCells) {
+      this.pushes.dropped++;
+      return false;
+    }
+    if (isSky) this.skyQueue.push(x, y, z);
+    else this.blockQueue.push(x, y, z);
+    this.pushes[kind]++;
+    return true;
   }
 
   /** 对光照有意义的 Y 区间：从最低非空 section 的底，到最高非空 section 之上那一节的顶 */
@@ -187,8 +291,7 @@ export class LightEngine {
         for (let x = 0; x < 16; x++) {
           const sky = chunk.getSkyLight(x, y, z);
           if (sky > 1 && LightEngine.needsSpread(chunk, x, y, z, sky)) {
-            this.skyQueue.push(originX + x, y, originZ + z);
-            this.pushes.self++;
+            this.enqueue(true, originX + x, y, originZ + z, 'self');
           }
           const id = chunk.get(x, y, z);
           if (id !== 0) {
@@ -196,8 +299,7 @@ export class LightEngine {
             const emit = emitLightWithState(id, chunk.getState(x, y, z));
             if (emit > 0) {
               chunk.setBlockLight(x, y, z, emit);
-              this.blockQueue.push(originX + x, y, originZ + z);
-              this.pushes.self++;
+              this.enqueue(false, originX + x, y, originZ + z, 'self');
             }
           }
         }
@@ -231,16 +333,14 @@ export class LightEngine {
           const across = this.world.getSkyLight(originX + x + dirX, y, originZ + z + dirZ);
           // `sky - 1` 是它能给出的最高值：连这个都不比对面亮，扩散必然什么都不写
           if (sky - 1 > across) {
-            this.skyQueue.push(originX + x, y, originZ + z);
-            this.pushes.border++;
+            this.enqueue(true, originX + x, y, originZ + z, 'border');
           }
         }
         const block = neighbor.getBlockLight(x, y, z);
         if (block > 1) {
           const across = this.world.getBlockLight(originX + x + dirX, y, originZ + z + dirZ);
           if (block - 1 > across) {
-            this.blockQueue.push(originX + x, y, originZ + z);
-            this.pushes.border++;
+            this.enqueue(false, originX + x, y, originZ + z, 'border');
           }
         }
       }
@@ -273,6 +373,10 @@ export class LightEngine {
   }
 
   private spread(level: number, x: number, y: number, z: number, isSky: boolean): void {
+    // 队列满了就**一格都不写**（批次 238）：写了却排不进队列，光会停在半路，
+    // 结果是一片"看起来像漏光的花斑"；保持原值等它慢慢排空反而更干净。
+    if (this.pendingCells >= this.maxPendingCells) return;
+
     for (const [dx, dy, dz] of DIRS) {
       const nx = x + dx;
       const ny = y + dy;
@@ -288,14 +392,13 @@ export class LightEngine {
       if (isSky && dy === -1 && level === 15 && opacity === 0) target = 15;
       if (target <= 0) continue;
 
+      // 先入队再写：入队被上限拒绝时**不写**，避免"写了一半、扩散不出去"的花斑
       if (isSky) {
-        if (target > this.world.getSkyLight(nx, ny, nz)) {
+        if (target > this.world.getSkyLight(nx, ny, nz) && this.enqueue(true, nx, ny, nz, 'spread')) {
           this.world.setSkyLight(nx, ny, nz, target);
-          this.skyQueue.push(nx, ny, nz);
         }
-      } else if (target > this.world.getBlockLight(nx, ny, nz)) {
+      } else if (target > this.world.getBlockLight(nx, ny, nz) && this.enqueue(false, nx, ny, nz, 'spread')) {
         this.world.setBlockLight(nx, ny, nz, target);
-        this.blockQueue.push(nx, ny, nz);
       }
     }
   }
@@ -321,8 +424,7 @@ export class LightEngine {
     // 若跟着 opacity<15 一起跳过，运行时放下荧石就不会亮（区块生成走的是另一条路径，所以不易察觉）。
     if (def.light > 0) {
       this.world.setBlockLight(worldX, worldY, worldZ, def.light);
-      this.blockQueue.push(worldX, worldY, worldZ);
-      this.pushes.change++;
+      this.enqueue(false, worldX, worldY, worldZ, 'change');
     } else if (opacity < 15) {
       let block = 0;
       for (const [dx, dy, dz] of DIRS) {
@@ -336,8 +438,7 @@ export class LightEngine {
       }
       if (block > 0) {
         this.world.setBlockLight(worldX, worldY, worldZ, block);
-        this.blockQueue.push(worldX, worldY, worldZ);
-        this.pushes.change++;
+        this.enqueue(false, worldX, worldY, worldZ, 'change');
       }
     }
 
@@ -362,8 +463,7 @@ export class LightEngine {
 
       if (sky > 0) {
         this.world.setSkyLight(worldX, worldY, worldZ, sky);
-        this.skyQueue.push(worldX, worldY, worldZ);
-        this.pushes.change++;
+        this.enqueue(true, worldX, worldY, worldZ, 'change');
       }
     }
 
@@ -374,14 +474,8 @@ export class LightEngine {
       const nz = worldZ + dz;
       if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
       if (!this.world.isLoaded(nx, nz)) continue;
-      if (this.world.getSkyLight(nx, ny, nz) > 1) {
-        this.skyQueue.push(nx, ny, nz);
-        this.pushes.change++;
-      }
-      if (this.world.getBlockLight(nx, ny, nz) > 0) {
-        this.blockQueue.push(nx, ny, nz);
-        this.pushes.change++;
-      }
+      if (this.world.getSkyLight(nx, ny, nz) > 1) this.enqueue(true, nx, ny, nz, 'change');
+      if (this.world.getBlockLight(nx, ny, nz) > 0) this.enqueue(false, nx, ny, nz, 'change');
     }
   }
 
@@ -403,8 +497,18 @@ export class LightEngine {
 
     const removal: number[] = [worldX, worldY, worldZ, startLevel];
     const reAdd: number[] = [];
+    // 同一格会被四周多个"被移除"的邻居各登记一次，不去重的话 readded 能翻 4~6 倍（批次 238）
+    const seen = new Set<number>();
+    let steps = 0;
 
     while (removal.length > 0) {
+      // 步数上限（批次 238）：见 `MAX_UNLIGHT_STEPS`。放弃的只是"精确移除"，
+      // 已经收进 reAdd 的边界格会把光重新渗回去，所以结果是"偏暗一阵"而不是"卡死"。
+      if (++steps > this.maxUnlightSteps) {
+        this.pushes.overflow++;
+        break;
+      }
+
       const level = removal.pop()!;
       const z = removal.pop()!;
       const y = removal.pop()!;
@@ -426,18 +530,16 @@ export class LightEngine {
           set(nx, ny, nz, 0);
           removal.push(nx, ny, nz, neighborLevel);
         } else {
+          const key = cellKey(nx, ny, nz);
+          if (seen.has(key)) continue;
+          seen.add(key);
           reAdd.push(nx, ny, nz);
         }
       }
     }
 
     for (let i = 0; i < reAdd.length; i += 3) {
-      const x = reAdd[i]!;
-      const y = reAdd[i + 1]!;
-      const z = reAdd[i + 2]!;
-      if (isSky) this.skyQueue.push(x, y, z);
-      else this.blockQueue.push(x, y, z);
-      this.pushes.readded++;
+      this.enqueue(isSky, reAdd[i]!, reAdd[i + 1]!, reAdd[i + 2]!, 'readded');
     }
   }
 

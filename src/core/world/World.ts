@@ -15,7 +15,7 @@ import { BlockEntityStore } from './BlockEntityStore.ts';
 import { heightToY, type HeightmapKind } from './Heightmap.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import type { WorldType } from '../gen/WorldType.ts';
-import { LightEngine } from '../light/LightEngine.ts';
+import { LightEngine, type LightPushStats } from '../light/LightEngine.ts';
 import { blockDef, isClimbableBlock } from '../registry/blocks.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
@@ -70,6 +70,34 @@ export class World {
   /** 已完成的生成任务数 / 已派发任务数，供加载进度显示 */
   completed = 0;
   dispatched = 0;
+
+  /**
+   * `setBlockAndUpdate` + `setStateAndUpdate` 的累计调用次数（批次 238，诊断用）。
+   *
+   * 2026-10-18 的真机日志里光照队列涨到 308 万格、`readded` 每 5 秒 50 万格，
+   * 按 `change` 的增量反推是"每秒约 1300 次方块写入"——但日志里没有任何字段能证实这一点，
+   * 更没法判断是谁写的（流体？随机刻？红石？降雪？）。
+   * 这个总数配上主程序已有的 `randomTickChanges` / `fluidChanges` 增量，
+   * 下次导出就能把范围直接缩到某个子系统。
+   */
+  private writes = 0;
+
+  /**
+   * 其中"写入的值和原来完全一样"的次数（批次 238，诊断用）。
+   *
+   * 这种写法世界不变，却照样触发一次光照移除 BFS + 重网格化 + 增量存档。
+   * 若 `noop ≈ writes`，说明某个子系统在拿"写方块"当心跳（流体/红石/降雪的闭环都可能），
+   * 那就不必再去猜光照引擎，直接去那条路上找。
+   */
+  private noopWrites = 0;
+
+  get blockWriteCount(): number {
+    return this.writes;
+  }
+
+  get noopWriteCount(): number {
+    return this.noopWrites;
+  }
 
   /** 单条目的区块查询缓存：网格化/光照会大量按世界坐标连续取样，命中率极高 */
   private cacheCx = Number.NaN;
@@ -321,7 +349,14 @@ export class World {
    * @returns 是否成功
    */
   setBlockAndUpdate(worldX: number, worldY: number, worldZ: number, id: number, state = 0): boolean {
+    const before = this.getBlock(worldX, worldY, worldZ);
+    const beforeState = this.getBlockState(worldX, worldY, worldZ);
     if (!this.setBlock(worldX, worldY, worldZ, id, state)) return false;
+    this.writes++;
+    // 写入"同一个值"（批次 238）：世界没变，但仍会触发一次完整的光照移除 BFS + 重网格化。
+    // 这是把光照队列喂爆最省力的方式，所以单独计数——`noop` 高就说明有子系统在"原地打转"，
+    // 比只看 `writes` 容易定位得多（这一批只记账，不改行为）。
+    if (before === id && beforeState === state) this.noopWrites++;
     if (worldY < -64 || worldY >= 320) return true;
     // 记进增量存档：只有"玩家动过"的格子需要落盘
     this.edits.record(this.dimension, toChunkCoord(worldX), toChunkCoord(worldZ), Chunk.index(worldX & 15, worldY, worldZ & 15), id, state);
@@ -337,7 +372,11 @@ export class World {
   setStateAndUpdate(worldX: number, worldY: number, worldZ: number, state: number): boolean {
     const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
     if (!chunk) return false;
+    const beforeState = chunk.getState(worldX & 15, worldY, worldZ & 15);
     chunk.setState(worldX & 15, worldY, worldZ & 15, state);
+    this.writes++;
+    // 同 `setBlockAndUpdate`：状态没变也算一次"原地打转"，单独计数便于定位来源（批次 238）
+    if (beforeState === state) this.noopWrites++;
     if (worldY < -64 || worldY >= 320) return true;
     this.edits.record(
       this.dimension,
@@ -389,12 +428,12 @@ export class World {
   }
 
   /**
-   * 光照队列"谁在灌"的累计计数（批次 217，诊断用）。
+   * 光照队列"谁在灌"的累计计数（批次 217/231，诊断用）。
    *
-   * 真机日志里队列涨到 820 万格、12fps，但只看 `lightQueue` 判断不了来源——
+   * 真机日志里队列涨到 820 万格（后来 308 万格）、12fps，但只看 `lightQueue` 判断不了来源——
    * 是区块加载播种、边界列，还是改方块引发的移除/重扩散。主程序按 5 秒取差值记日志。
    */
-  get lightPushStats(): Readonly<{ self: number; border: number; change: number; readded: number }> {
+  get lightPushStats(): Readonly<LightPushStats> {
     return this.light.pushStats;
   }
 

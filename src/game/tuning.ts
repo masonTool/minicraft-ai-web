@@ -94,6 +94,29 @@ export function lightBudgetForFrame(startup: boolean, mobile: boolean): number {
   return startup ? MOBILE_STARTUP_LIGHT_BUDGET_PER_FRAME : MOBILE_LIGHT_BUDGET_PER_FRAME;
 }
 
+/**
+ * 光照积压到多少格之后，**网格化不再等它**（批次 238）。
+ *
+ * 主循环里网格化的门闩是 `if (!lightBusy)`，本意是"别把没收敛的光照烘焙进网格"。
+ * 但 2026-10-18 的真机日志里光照队列涨到 308 万格之后这个条件**永远为假**：
+ * `meshQueue` 卡在 142、`drawn` 从 128 掉到 69，玩家看到的是"世界停在旧画面上"——
+ * 一个光照 bug 直接把整局游戏的画面连坐了。
+ *
+ * 积压超过这个数就退让：照常用**当前**光照烘焙，等队列排空后 `pendingSettle` 会再刷一遍。
+ * 50k 大约相当于"正常游玩时队列的 2~3 倍"，够区分"真的排不空"与"加载期的正常积压"。
+ */
+export const LIGHT_BACKLOG_MESH_PATIENCE = 50_000;
+
+/**
+ * `pendingSettle`（等光照收敛后要重刷的坐标）最多攒多少**格**（批次 238）。
+ *
+ * 它只在 `!lightBusy` 时被消费；光照一旦长期不收敛就会只进不出
+ * （每次改方块 push 3 个数），等于第二份无界队列。超出就丢最旧的：
+ * 每个改动区块在 `onBlockChanged` 里本来就走过一次 `enqueueAround`，
+ * 这里只是"光照收敛后再刷一次"的补充，丢了不会让画面不更新。
+ */
+export const PENDING_SETTLE_LIMIT = 3 * 4096;
+
 /** 连续破坏/放置的最小间隔（秒） */
 export const BREAK_COOLDOWN = 0.25;
 export const PLACE_COOLDOWN = 0.22;

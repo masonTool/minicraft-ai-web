@@ -560,6 +560,7 @@ import {
   LAVA_FOG,
   LAVA_FOG_FAR,
   LAVA_FOG_NEAR,
+  LIGHT_BACKLOG_MESH_PATIENCE,
   MESH_BUDGET_PER_FRAME,
   MOUSE_SENSITIVITY,
   NETHER_FOG,
@@ -568,6 +569,7 @@ import {
   NETHER_MIN_BRIGHTNESS,
   NETHER_SKY_BRIGHTNESS,
   PARTICLE_MIN_BRIGHTNESS,
+  PENDING_SETTLE_LIMIT,
   PLACE_COOLDOWN,
   PORTAL_ARRIVAL_TIMEOUT_FRAMES,
   RANDOM_TICK_RADIUS,
@@ -1273,7 +1275,15 @@ class App {
    */
   private readonly lastWorldDraw = { calls: 0, tris: 0 };
   /** 上一次光照队列来源计数（批次 217，诊断用） */
-  private lastLightStats = { self: 0, border: 0, change: 0, readded: 0 };
+  private lastLightStats = { self: 0, border: 0, change: 0, readded: 0, spread: 0, dropped: 0, overflow: 0 };
+  /**
+   * 上一次采样时"谁在改方块"的累计值（批次 238）。
+   *
+   * `writes` 是总次数，`noop` 是其中"写了同一个值"的次数，
+   * `rt` / `fluid` 是已经能分开统计的两路来源；
+   * 若 `writes` 明显大于 `rt + fluid`，剩下的就只可能在红石 / 降雪 / 玩家 / 联机那几条路上。
+   */
+  private lastWriteStats = { writes: 0, noop: 0, rt: 0, fluid: 0 };
   /** 手机背板画到 1.5 而不是 2：填充率大约少一半，自适应仍可在这顶下面升降 */
   private readonly pixelRatioCap = isTouchDevice() ? MOBILE_PIXEL_RATIO_CAP : DESKTOP_PIXEL_RATIO_CAP;
   /** 调试用：把帧时间固定成这个值（毫秒），0 表示用真实值。验收脚本靠它稳定复现"掉帧" */
@@ -1322,6 +1332,14 @@ class App {
 
   /** 方块改动后等待光照收敛、需要再次重刷网格的坐标 */
   private readonly pendingSettle: number[] = [];
+
+  /**
+   * 主循环的**连续**失败次数（批次 238）。
+   *
+   * 只用来刹车"每帧都抛"的刷屏：成功一帧就清零，所以它表示的是"这一串连续坏帧有多长"。
+   * 帧内异常本身由 `loop()` 兜住（只丢这一帧，下一帧照排），这个计数只服务诊断与提示。
+   */
+  private frameErrors = 0;
 
   private frames = 0;
   private fpsTimer = 0;
@@ -10084,6 +10102,30 @@ class App {
   }
 
   /**
+   * 帧内异常的处理入口（批次 238，调用点在 `start()` 的 `loop` 里）。
+   *
+   * 设计约束：
+   *  - **不重抛**：异常已经由 `loop()` 兜住，这里只负责"留下现场 + 别刷屏"；
+   *  - 前 3 条全记（崩溃前那几帧最关键），之后每 120 次记一条——
+   *    诊断日志只有 4000 条环形缓冲，每帧一条会把真正的线索（崩溃前的操作）挤掉；
+   *  - 连续第 3 次才提示玩家：偶发一帧出错不值得打断体验，连续出错说明画面不会更新了。
+   */
+  private onFrameError(err: unknown): void {
+    this.frameErrors++;
+    if (this.frameErrors <= 3 || this.frameErrors % 120 === 0) {
+      diag.event('error', 'frame.crashed', {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        frame: diag.log.frame,
+        count: this.frameErrors,
+      });
+    }
+    if (this.frameErrors === 3) {
+      this.hudToast.show('渲染出错，已跳过该帧');
+    }
+  }
+
+  /**
    * 记一条性能采样（见 `perfSampleTimer`）。
    *
    * 除了"现在画了多少东西"，还带两份**时间**（批次 205）：
@@ -10106,11 +10148,20 @@ class App {
       phases: phases.avg,
     });
 
-    // 光照队列积压时记一条"谁在灌"（批次 217）。
-    // 真机日志里它涨到 820 万格、`chunks` 段 74ms/帧、12fps，
-    // 但只看 `lightQueue` 判断不了来源：区块加载播种 / 边界列 / 改方块引发的重扩散，
-    // 这三条路要动的地方完全不同，所以把 5 秒内的增量分别记下来。
+    // 光照队列积压时记一条"谁在灌"（批次 217 / 231）。
+    // 2026-10-18 那份真机日志里队列涨到 308 万格、`readded` 每 5 秒 50 万格，
+    // 但"到底谁在改方块"只能反推（按 `change` 折算约 1300 次/秒）。
+    // 所以这里把**来源 + 真实写入次数**一起记下来：
+    //  - `spread`：`spread()` 自己再扩散压进去的（以前完全没统计，正是"越治越多"那一段）；
+    //  - `dropped` / `overflow`：上限已经在丢任务 / 移除 BFS 已经超步数（光照会暂时不准）；
+    //  - `writes`：`setBlockAndUpdate + setStateAndUpdate` 的真实调用数；
+    //  - `noop`：其中"写了同一个值"的次数——它高就说明有子系统在拿写方块当心跳；
+    //  - `rt` / `fluid`：随机刻与流体各改了多少（这两个计数器本来就有，只是一直没进日志）。
     const pending = this.world.lightWorkCount;
+    const writes = this.world.blockWriteCount;
+    const noop = this.world.noopWriteCount;
+    const rt = this.randomTickChanges;
+    const fluid = this.fluidChanges;
     if (pending > 20_000) {
       const now = this.world.lightPushStats;
       diag.event('perf', 'light', {
@@ -10119,9 +10170,17 @@ class App {
         border: now.border - this.lastLightStats.border,
         change: now.change - this.lastLightStats.change,
         readded: now.readded - this.lastLightStats.readded,
+        spread: now.spread - this.lastLightStats.spread,
+        dropped: now.dropped - this.lastLightStats.dropped,
+        overflow: now.overflow - this.lastLightStats.overflow,
+        writes: writes - this.lastWriteStats.writes,
+        noop: noop - this.lastWriteStats.noop,
+        rt: rt - this.lastWriteStats.rt,
+        fluid: fluid - this.lastWriteStats.fluid,
       });
     }
     this.lastLightStats = { ...this.world.lightPushStats };
+    this.lastWriteStats = { writes, noop, rt, fluid };
   }
 
   /**
@@ -10471,18 +10530,20 @@ class App {
       save: this.save?.hasSave === true,
     });
 
-    const loop = () => {
+    // ⚠️ 这是**一帧的循环体**，不是 rAF 回调本身（回调见下面的 `loop`，批次 238）。
+    // 它自己只负责"干完这一帧"，排下一帧统一走 `schedule()`。
+    const frame = (): void => {
       // 退出世界后不再排下一帧（否则旧 App 会继续画一个已经拆掉的世界）
       if (this.disposed) return;
       // 帧号进日志：复现时能对上"第几帧开始卡"
       diag.log.frame++;
       const now = performance.now();
       // 限帧（批次 130，N7）：上限只决定"这一帧来得太早就不画"。
-      // ⚠️ 跳过时必须**继续排下一帧**（`requestAnimationFrame` 后再 return）——
+      // ⚠️ 跳过时必须**继续排下一帧**（`schedule()` 后再 return）——
       // 直接 return 会让循环停住，画面就此冻住（最容易写错的一处）
       const interval = frameIntervalMs(this.settings.maxFps);
       if (interval > 0 && now - this.lastTime < interval) {
-        requestAnimationFrame(loop);
+        schedule();
         return;
       }
       // 两条时间要分开（批次 205）：
@@ -10687,9 +10748,20 @@ class App {
           this.chunkRenderer.enqueueAround(this.pendingSettle[i]!, this.pendingSettle[i + 2]!);
         }
         this.pendingSettle.length = 0;
+      } else if (this.pendingSettle.length > PENDING_SETTLE_LIMIT) {
+        // 光照长期不收敛时这个数组只进不出（批次 238），会变成第二份无界队列：
+        // 丢掉最旧的一段（区块在 `onBlockChanged` 里已经走过一次 `enqueueAround`），
+        // 保留"最近改过"的那些，等光照真收敛了再补刷。
+        // ⚠️ 一次砍掉一半而不是每帧挪掉超出的那 3 个数：`splice` 要搬整段数组，
+        // 12k 个数字每帧搬一次也不便宜；砍半后平均每 6k 格才搬一次。
+        this.pendingSettle.splice(0, this.pendingSettle.length - PENDING_SETTLE_LIMIT / 2);
       }
 
-      if (!lightBusy) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
+      // ⚠️ 网格化的门闩不能只看 `lightBusy`（批次 238）：真机日志里光照队列涨到 308 万格之后
+      // 它永远为真，于是**一块区块都不再网格化**（meshQueue 卡住、画面停在旧帧）。
+      // 积压太深时退让：用当前光照照常烘焙，等队列排空后 `pendingSettle` 会再刷一遍。
+      const lightBacklog = this.world.lightWorkCount > LIGHT_BACKLOG_MESH_PATIENCE;
+      if (!lightBusy || lightBacklog) this.chunkRenderer.processQueue(MESH_BUDGET_PER_FRAME, centerCx, centerCz);
       mark = this.lap('chunks', mark);
 
       this.tickContainers(dt);
@@ -10745,9 +10817,37 @@ class App {
         this.perfSampleTimer = 5;
         this.logPerfSample();
       }
-      requestAnimationFrame(loop);
+      schedule();
     };
-    requestAnimationFrame(loop);
+
+    /** 排下一帧：`frame()` 正常走完、提前 return、抛异常，三条路都必须走到这里 */
+    const schedule = (): void => {
+      if (!this.disposed) requestAnimationFrame(loop);
+    };
+
+    /**
+     * rAF 回调：**兜住帧内的一切异常**（批次 238）。
+     *
+     * 2026-10-18 的真机日志：第 20319 帧在 `LightEngine.spread()` 里抛
+     * `RangeError: Invalid array length`，而当时"排下一帧"写在帧体最后一行 ——
+     * 于是渲染循环再也没被排上：画面定格在那一帧，DOM 却还能点
+     * （日志里之后 58 秒的触摸、背包开关全部正常记录），用户只能强退。
+     *
+     * 一个坏帧不该等于一局游戏作废。这里的最小承诺是：
+     * **异常只丢这一帧，下一帧照排**；连续失败 3 次给一句提示（说明有系统性错误，
+     * 画面会一直不更新），前 3 次 + 之后每 120 次各记一条诊断，避免把 4000 条环形缓冲刷满。
+     */
+    const loop = (): void => {
+      if (this.disposed) return;
+      try {
+        frame();
+        this.frameErrors = 0;
+      } catch (err) {
+        this.onFrameError(err);
+        schedule();
+      }
+    };
+    schedule();
   }
 
   /**
