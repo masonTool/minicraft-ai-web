@@ -395,6 +395,36 @@ console.log('\n[水面动画（E12）]');
   material.material.dispose();
 }
 
+// ---------------------------------------------------------------- 2.10 半透明层单/双面
+
+console.log('\n[半透明层单/双面（批次 215）]');
+{
+  // 水/玻璃是 `transparent + depthWrite:false`：没有 early-z，覆盖多少像素就混合多少次。
+  // 双面等于把同一片水面再画一遍，而双面只有"从水里往上抬头"时才必需。
+  const material = new VoxelMaterial(new THREE.Texture(), { translucent: true });
+  equal('默认可双面（水下抬头能看见水面）', material.material.side, THREE.DoubleSide);
+
+  material.setDoubleSided(false);
+  equal('岸上切到单面', material.material.side, THREE.FrontSide);
+  material.setDoubleSided(true);
+  equal('下水切回双面', material.material.side, THREE.DoubleSide);
+
+  // ⚠️ `side` 是 gl.cullFace 的渲染状态、不是着色器宏：设了 needsUpdate 会让每次
+  // 上岸/下水都重编译一次着色器（手机上几十毫秒的卡顿）。这条断言就是守这个。
+  const version = material.material.version;
+  material.setDoubleSided(false);
+  material.setDoubleSided(true);
+  equal('来回切不触发着色器重编译', material.material.version, version);
+
+  // 实心层（泥土/石头）：本来就该单面，调一下也不能变成双面
+  const solid = new VoxelMaterial(new THREE.Texture());
+  solid.setDoubleSided(false);
+  equal('实心层单面不变', solid.material.side, THREE.FrontSide);
+
+  material.material.dispose();
+  solid.material.dispose();
+}
+
 // ---------------------------------------------------------------- 3. 视野效果
 
 console.log('\n[视野效果：预设 / 过渡 / 帧率无关]');

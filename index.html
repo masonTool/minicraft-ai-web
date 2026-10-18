@@ -1208,6 +1208,12 @@
         font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
       }
       .settings-hint { color: #a8a8a8; font-size: 12px; margin: 4px 0 8px; text-align: center; }
+      /* 说明行（批次 215）：跟在某一项下面解释"为什么"，不占控件位置。
+         跨满整行（`1 / -1`）：它讲的是上面那一项，压到半栏会被读成"属于右边那一项" */
+      .settings-note {
+        grid-column: 1 / -1; color: #8f8f8f; font-size: 11px; line-height: 1.35;
+        margin: -2px 0 2px;
+      }
       /* 页签 + 内容：**永远"左选项卡 + 右内容"**（原版就是左侧一列） */
       .settings-columns { display: flex; flex-direction: row; gap: 12px; flex: 1 1 auto; min-height: 0; }
       .settings-tabs { display: flex; flex-direction: column; flex: 0 0 104px; gap: 4px; }

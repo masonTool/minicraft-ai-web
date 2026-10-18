@@ -74,6 +74,19 @@ export const MOBILE_VIEW_DISTANCE = 6;
 export const MOBILE_VIEW_DISTANCE_MAX = 8;
 /** 视距滑杆的上限（与设置界面那颗滑块一致，见 `SettingsScreen`） */
 export const VIEW_DISTANCE_MAX = 16;
+/**
+ * 手机上的视野（FOV）上限（批次 215）。
+ *
+ * FOV 不是视距，但它同样决定"同屏要画多少"：72° → 110° 时水平可视范围约翻一倍
+ * （`tan(55°)/tan(36°) ≈ 1.97`），视锥里能进的区块网格与三角形也跟着翻。
+ * 手机屏幕小、离眼近，超过 90° 的"更广"几乎看不出来，却要实打实多画一圈——
+ * 而这一项**自适应管不到**（策略只动视距/装饰层/分辨率），所以只能封上限，
+ * 并在设置里写一行说明（见 `SettingsScreen`，批次 215）。
+ */
+export const MOBILE_FOV_MAX = 90;
+/** 视野的通用上限（桌面）与下限，与设置界面那颗滑块一致 */
+export const FOV_MAX = 110;
+export const FOV_MIN = 60;
 /** 每次调档的步长 */
 export const RESOLUTION_STEP = 0.1;
 /** 视距的地板（再低就没法玩了，与 N6 一致） */
@@ -152,6 +165,23 @@ export function viewDistanceCapFor(playerSetting: number, mobile: boolean): numb
   const raw = Number.isFinite(playerSetting) ? Math.floor(playerSetting) : VIEW_DISTANCE_MAX;
   const cap = Math.min(raw, mobile ? MOBILE_VIEW_DISTANCE_MAX : VIEW_DISTANCE_MAX);
   return Math.max(VIEW_DISTANCE_MIN, cap);
+}
+
+/** 这台设备的视野上限（见 `MOBILE_FOV_MAX`）：手机 90、桌面 110 */
+export function fovCapFor(mobile: boolean): number {
+  return mobile ? MOBILE_FOV_MAX : FOV_MAX;
+}
+
+/**
+ * 把任意来源的视野夹进这台设备的合法区间（批次 215）。
+ *
+ * 三个来源都会进来：老存档里存着的 110、设置界面那颗滑块、`DEFAULT_SETTINGS`。
+ * ⚠️ 下限也一起夹：0 或负数会让相机的投影矩阵退化成一条线（画面全黑），
+ * 而这种脏值最容易从一段"手改过的 localStorage"里冒出来。
+ */
+export function clampFovFor(fov: number, mobile: boolean): number {
+  const value = Number.isFinite(fov) ? fov : FOV_MAX;
+  return Math.min(fovCapFor(mobile), Math.max(FOV_MIN, value));
 }
 
 export interface PerfState {

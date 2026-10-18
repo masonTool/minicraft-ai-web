@@ -19,7 +19,7 @@
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
-import { MOBILE_VIEW_DISTANCE_MAX } from '../core/world/PerfPolicy.ts';
+import { FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
 import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './TouchControls.ts';
 import {
   DEFAULT_APPEARANCE,
@@ -647,7 +647,14 @@ export class SettingsScreen {
     this.makeSelect(controls, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
     // 视野（批次 203 从「视频」组搬来）：晕动症的人会往小调，习惯广角的人会往大调，
     // 只有玩家自己知道——所以它留着（原版也只有这一个视野滑块）。
-    controls.append(this.makeSlider('fov', '视野', '°', 60, 110, 1));
+    // ⚠️ 但它**有代价**（批次 215）：72°→110° 时水平可视范围约翻倍（≈1.97×），
+    // 视锥里的区块网格与三角形跟着翻，而自适应管不到 FOV → 手机上封 90° 并说明一次。
+    controls.append(
+      this.makeSlider('fov', '视野', '°', FOV_MIN, fovCapFor(isTouchUi()), 1),
+    );
+    if (isTouchUi()) {
+      this.makeNote(controls, `视野越大，同屏要画的方块越多；手机上最多 ${fovCapFor(true)}°`);
+    }
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异，所以给两档自己挑
     this.makeSelect(controls, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
     // 触摸按钮大小（批次 97）：手机上线 44px 只是下限，多大才顺手因人而异
@@ -839,6 +846,21 @@ export class SettingsScreen {
     group.className = 'settings-group';
     group.textContent = label;
     return group;
+  }
+
+  /**
+   * 一行浅色说明（批次 215）。
+   *
+   * 与开关/滑块不同，它不可点、不占控件位置，只回答"为什么这么定"——
+   * 用户的原话是"给一点提示，可能会影响性能，会好一点"。所以只在**真的有代价**
+   * 的那一项下面出现，不做成通用帮助文本（那会变成噪音）。
+   */
+  private makeNote(host: HTMLElement, text: string): HTMLDivElement {
+    const note = document.createElement('div');
+    note.className = 'settings-note';
+    note.textContent = text;
+    host.appendChild(note);
+    return note;
   }
 
   /** 造一个滑块设置项 */

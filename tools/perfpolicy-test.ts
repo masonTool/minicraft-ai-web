@@ -28,8 +28,13 @@ import {
   MOBILE_PIXEL_RATIO_CAP,
   MOBILE_RESOLUTION_MIN,
   MOBILE_VIEW_DISTANCE_MAX,
+  MOBILE_FOV_MAX,
+  FOV_MAX,
+  FOV_MIN,
   FramePhaseMeter,
+  clampFovFor,
   decorCloudsVisible,
+  fovCapFor,
   decorParticleBudget,
   decorRainFraction,
   FOG_GROW_CHUNKS_PER_SEC,
@@ -482,6 +487,27 @@ console.log('\n[帧内分段计时]');
   partial.endFrame();
   partial.endFrame();
   equal('只记了一段的帧 + 一帧空跑 → 平均 5ms', partial.take().avg.sim, 5);
+}
+
+// ---------------------------------------------------------------- 视野上限（批次 215）
+
+console.log('\n[视野封顶]');
+{
+  // FOV 也是"同屏要画多少"的乘数（72°→110° ≈ 1.97 倍可视范围），而自适应管不到它，
+  // 所以只能封上限。手机上 90、桌面 110。
+  equal('手机视野上限 90°', fovCapFor(true), MOBILE_FOV_MAX);
+  equal('桌面视野上限 110°', fovCapFor(false), FOV_MAX);
+  check('手机上限比桌面低（否则封它没有意义）', MOBILE_FOV_MAX < FOV_MAX);
+
+  equal('老存档里的 110 在手机上被夹到 90', clampFovFor(110, true), MOBILE_FOV_MAX);
+  equal('桌面上 110 原样保留', clampFovFor(110, false), 110);
+  equal('小视野在手机上不被抬高', clampFovFor(70, true), 70);
+
+  // 脏值：0 / 负数 / NaN 都会让投影矩阵退化（画面全黑或倒过来）
+  equal('0 回退到下限', clampFovFor(0, false), FOV_MIN);
+  equal('负数回退到下限', clampFovFor(-30, true), FOV_MIN);
+  equal('NaN 回退到上限', clampFovFor(Number.NaN, true), MOBILE_FOV_MAX);
+  equal('超大的值被夹到上限', clampFovFor(999, false), FOV_MAX);
 }
 
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);

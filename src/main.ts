@@ -405,6 +405,7 @@ import {
   FramePhaseMeter,
   MOBILE_VIEW_DISTANCE,
   RESOLUTION_MIN,
+  clampFovFor,
   decorCloudsVisible,
   decorParticleBudget,
   decorRainFraction,
@@ -1608,6 +1609,14 @@ class App {
     this.settings.adaptiveResolution = true;
     this.settings.adaptiveViewDistance = true;
     this.settings.viewDistance = defaultViewDistanceFor(isTouchDevice());
+    // 视野同样按设备封顶（批次 215）：手机 90°。自适应管不到 FOV，
+    // 而 72°→110° 是约 2 倍的可视范围，老存档里存着的 110 必须在这里夹掉
+    this.settings.fov = clampFovFor(this.settings.fov, isTouchDevice());
+    // ⚠️ 相机是上面按**硬编码 72°** 建的，这里必须落一次真正的值：
+    // 以前只有 `applySettings` 会写 `camera.fov`，于是"视野调到 90"重启之后就没了
+    // （要等玩家进设置动一下才生效）——这也是批次 215 顺手修的
+    this.camera.fov = this.settings.fov;
+    this.camera.updateProjectionMatrix();
 
     // 设置 / 暂停菜单（K3）：应用后立即生效，不必重开局
     this.viewDistance = this.settings.viewDistance;
@@ -1881,7 +1890,9 @@ class App {
     this.perf = meta?.reset
       ? initialPerfState(view)
       : { ...this.perf, viewDistance: view, cooldown: 3 };
-    this.camera.fov = settings.fov;
+    // 视野也要按设备封顶（批次 215）：滑块已经封了，但老存档 / 主菜单那份设置
+    // 仍可能带着桌面的 110 进来——手机上放行它等于白白多画近一倍的范围
+    this.camera.fov = clampFovFor(settings.fov, mobile);
     // ⚠️ 这一处也要走 `cameraFarFor`：它是最容易被漏掉的一处（改设置时重算远裁面）
     this.camera.far = cameraFarFor(view);
     this.camera.updateProjectionMatrix();
@@ -9930,6 +9941,17 @@ class App {
   }
 
   /**
+   * 摄像机是不是浸在液体里（批次 215）。
+   *
+   * 判据用**摄像机**而不是玩家的脚：第三人称时镜头可能在身后很远处，
+   * 也可能玩家贴着水面、镜头却已经沉下去。一个 `getBlock` 而已，每帧一次不心疼。
+   */
+  private isCameraUnderwater(): boolean {
+    const p = this.camera.position;
+    return this.world.isLiquid(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
+  }
+
+  /**
    * 脚步与听觉位置（K5）。
    *
    * 脚步按**水平位移**累积而不是按时间：走动时约每 1.6 格一声（与原版节奏接近），
@@ -10368,6 +10390,10 @@ class App {
       // 天空穹顶撑着（约 13 区块），裁不掉它们——不切一下，"自适应降视距"在画面上
       // 几乎不生效（真机反馈"卡的时候视距看起来还是很大"）。
       this.chunkRenderer.applyViewDistance(centerCx, centerCz, this.viewDistanceNow);
+      // 半透明层（水/玻璃）只在水下才双面（批次 215）：水面顶面的正面朝上，
+      // 摄像机在水下看到的是背面，单面会看穿水面；而岸上双面等于把整片水混合两遍
+      // ——真机"一靠近水域就卡一点"主要就是这笔填充率。
+      this.translucentMaterial.setDoubleSided(this.isCameraUnderwater());
       this.renderer.render(this.scene, this.camera);
       // 世界之后叠画"贴在屏幕上的两件事"：手持物品与视野色罩。
       // ⚠️ 必须先关掉 autoClear，否则第二次 render 会把刚画好的世界清掉。

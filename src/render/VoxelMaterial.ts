@@ -188,6 +188,26 @@ export class VoxelMaterial {
   }
 
   /**
+   * 半透明层要不要**双面**画（批次 215）。
+   *
+   * 半透明层（水 / 玻璃）是 `transparent + depthWrite: false`，本来就没有 early-z，
+   * **覆盖多少像素就混合多少次**；双面等于把同一片水面**再画一遍**（背面与正面投影
+   * 几乎重合），手机上"一靠近水就卡一点"很大一部分来自这里。
+   *
+   * 双面只有**从水里往上看**时才是必需的：水面顶面的正面朝上，摄像机在水下看到的是它的
+   * 背面，单面会被剔除 → 抬头直接看穿水面见到天空。所以主循环按"摄像机是否在液体里"
+   * 来回切：岸上单面（省一半水面填充率），下水双面（观感与原来一致）。
+   *
+   * ⚠️ 不设 `needsUpdate`：`side` 是 `gl.cullFace` 的渲染状态、不是着色器宏，
+   * 设了反而每次切换都重编译一次着色器。
+   */
+  setDoubleSided(doubleSided: boolean): void {
+    const side = doubleSided ? THREE.DoubleSide : THREE.FrontSide;
+    if (this.material.side === side) return;
+    this.material.side = side;
+  }
+
+  /**
    * 登记"哪些贴图要做水面动画"。
    * 传贴图在图集里的完整起点（`atlas.tileOrigin(name)`）；多余的槽位填 (-1,-1)。
    */

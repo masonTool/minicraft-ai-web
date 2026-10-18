@@ -2172,6 +2172,38 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       appSrc.includes('const frameSeconds = Math.min(rawDt, 2);') &&
       appSrc.includes('this.updatePerfPolicy(frameSeconds);'),
   );
+
+  // 批次 215：水的"流动"不花钱，花钱的是半透明层（水/玻璃）的覆盖 + 双面。
+  // 双面只在水下抬头时才必需，所以按"摄像机是否在液体里"来回切。
+  const renderMapSrc = readFileSync(new URL('../src/render/VoxelMaterial.ts', import.meta.url), 'utf8');
+  check(
+    '半透明层按"摄像机在水下"切单/双面（岸上省一半水面填充率）',
+    appSrc.includes('this.translucentMaterial.setDoubleSided(this.isCameraUnderwater());') &&
+      appSrc.includes('private isCameraUnderwater(): boolean') &&
+      renderMapSrc.includes('setDoubleSided(doubleSided: boolean): void'),
+  );
+  check(
+    '切面不触发着色器重编译（side 是 GL 状态，不是宏）',
+    !/setDoubleSided[\s\S]{0,200}needsUpdate/.test(renderMapSrc),
+  );
+
+  // 批次 215：视野也是"同屏画多少"的乘数，但自适应管不到它 → 手机上封 90° 并说明
+  check(
+    '手机视野封 90°，且滑块上限与运行时夹紧共用同一处策略',
+    settingsSrc.includes('fovCapFor(isTouchUi())') &&
+      settingsSrc.includes('this.makeNote(controls') &&
+      appSrc.includes('clampFovFor(this.settings.fov, isTouchDevice())') &&
+      appSrc.includes('clampFovFor(settings.fov, mobile)'),
+  );
+  check(
+    '说明行有样式（跨满整行，不压到半栏）',
+    /\.settings-note \{[^}]*grid-column: 1 \/ -1;/.test(css),
+  );
+  // 顺手修的：相机是按硬编码 72° 建的，以前"视野 90"重启后要进设置动一下才生效
+  check(
+    '启动时把存档里的视野落到相机（以前重启后会退回 72°）',
+    appSrc.includes('this.camera.fov = this.settings.fov;'),
+  );
   check(
     '诊断导出带上真实渲染规模与显卡型号',
     appSrc.includes('perf: this.perfSnapshot()') && appSrc.includes('gpu: this.gpuName()'),
@@ -2190,7 +2222,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '「视频」组没了，「视野」并进「控制」',
     !settingsSrc.includes("this.section('graphics')") &&
       !settingsSrc.includes('graphics:') &&
-      settingsSrc.includes("this.makeSlider('fov', '视野', '°', 60, 110, 1)"),
+      /makeSlider\(\s*'fov',\s*'视野'/.test(settingsSrc),
   );
   // ⚠️ 字段必须还在：删字段会让 `loadSettings` 把老存档里其它值一起丢掉
   check(
