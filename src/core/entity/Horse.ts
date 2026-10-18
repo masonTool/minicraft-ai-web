@@ -26,6 +26,15 @@ const HORSE_STOP_DRAG = 6;
 export class Horse extends Mob {
   /** 谁骑着它（本项目只有玩家能上） */
   passenger: 'player' | null = null;
+  /**
+   * 骑乘朝向（批次 253 修复）。
+   *
+   * ⚠️ **不能用 `this.yaw`**：`Mob.tick` 会按本帧的移动方向回写 `yaw`
+   * （`atan2(vx, vz)`），于是"用 yaw 算速度 → yaw 被反写 → 下一帧朝反方向"，
+   * 马会在原地来回蹭（实测位置在 2.5 ↔ 2.617 之间往复、vx 正负交替）。
+   * 骑手给的朝向单独存一份，主程序每帧写它。
+   */
+  rideYaw = 0;
   /** 玩家坐在马背上时脚底相对马脚的高度（渲染与相机用） */
   readonly seatHeight = 1.45;
 
@@ -36,15 +45,17 @@ export class Horse extends Mob {
       const strafe = input?.strafe ?? 0;
 
       // 转向：左右键（A/D 或摇杆横轴）改朝向；马不像船能横移
-      this.yaw -= strafe * HORSE_TURN_RATE * dt;
+      this.rideYaw -= strafe * HORSE_TURN_RATE * dt;
+      // 渲染朝向跟着骑乘朝向走（`yaw` 仍可能被 `Mob.tick` 回写，所以每帧重写一次）
+      this.yaw = this.rideYaw;
 
       if (Math.abs(forward) > 0.05) {
         // 直接给水平速度：位置的积分在 `Mob.tick` 里统一做（`moveBody`），
         // 这里不需要再走 `move()`——那条分支是给 AI 寻路用的，骑马是"人给方向"。
         // 后退只有一半速度（原版马也这样）。
         const speed = this.type.speed * (forward > 0 ? 0.9 : 0.45);
-        this.vx = -Math.sin(this.yaw) * speed;
-        this.vz = -Math.cos(this.yaw) * speed;
+        this.vx = -Math.sin(this.rideYaw) * speed;
+        this.vz = -Math.cos(this.rideYaw) * speed;
         return;
       }
 

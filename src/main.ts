@@ -4512,7 +4512,10 @@ class App {
       this.ridingVehicle = null;
       return;
     }
-    // 朝向跟玩家视角走（原版也是"你往哪看，就往哪开"）
+    // 朝向跟玩家视角走（原版也是"你往哪看，就往哪开"）。
+    // ⚠️ 马要用单独的 `rideYaw`：`Mob.tick` 会按移动方向回写 `yaw`，
+    // 直接写 `yaw` 会让驱动方向每帧翻转（马在原地来回蹭，批次 253 的坑）
+    if (vehicle instanceof Horse) vehicle.rideYaw = this.yaw;
     vehicle.yaw = this.yaw;
     const p = this.physics;
     p.x = vehicle.x;
