@@ -362,3 +362,23 @@
 > ① **移动端不要用 `:hover` 表示状态**（点过一次就一直黏着，能把红底盖成白底）；
 > ② **"能不能合成"要连站点算**（2×2 背包里，3×3 配方本来就是做不出来的），
 > 否则列表会出现"白底却点不动"的自相矛盾。
+---
+
+## 批次 210：让诊断日志真的带上"卡在哪"（2026-10-18）
+
+> 用户给了一份 22 分钟的真机诊断（792×360 / dpr 3），体感是"掉帧时视距没缩，
+> 反而像分辨率降低了"。查数据先撞上一个我们自己的 bug：**新加的字段根本没进日志**。
+
+- [x] B210-1 根因：`sanitizeData` 把 `data` 裁到 **16 个键**，而 `perf/sample` 有 29 个
+  → 批次 202 的 `calls/tris/heapMb`、批次 205 的 `cpu/phases` 排在末尾，被静默丢掉
+- [x] B210-2 上限 16 → 32；`test:diag` 新增 3 条（29 键采样原样通过 / cpu·phases 还在 /
+  calls·heap 还在）
+- [x] B210-3 `perf/sample` 补实体构成 `mobs/items/xp`（真机 `entities` 到过 550）
+- [x] B210-4 每次真调档记 `perf/policy`（action / frameAvg / view / decor / res），
+  以前只有 `console.info`，导出里看不到
+- [x] B210-5 门禁：`test:diag` 60 条、`npm run check` 全绿
+
+> **批次 210 已完成。** 这份日志能做的结论已经写进 HANDOFF §1（分辨率一次没降、
+> 视距只在 7↔8 弹、降档阈值 22ms 落在用户体感之上）。
+> 下一份日志要回答的：`cpu` vs `frameAvgMs`（CPU 还是 GPU）、`phases` 哪一段涨、
+> `mobs/items/xp` 谁占多数、`perf/policy` 到底有没有被触发过。
