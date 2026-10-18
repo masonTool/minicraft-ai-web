@@ -125,10 +125,9 @@ console.log('\n[物品分页：页码夹取与切片]');
 
 console.log('\n[触摸按钮图标]');
 {
-  // 批次 107：右下那一簇精简成"潜行 + 跳跃"，背包/聊天搬到快捷栏两侧
-  //（`view`/`fly` 两个图标随之作废：视角与"创造飞行"都搬进了设置面板）
-  equal('五个图标（右下两颗 + 快捷栏两侧两颗 + 顶部暂停）', TOUCH_ICON_NAMES.length, 5);
-  for (const name of ['chat', 'sneak', 'inventory', 'jump', 'pause'] as const) {
+  // 批次 181：顶部三颗（暂停/视角/聊天）+ 右下两颗（跳/潜）+ 快捷栏右侧背包
+  equal('六个图标（顶部三颗 + 右下两颗 + 快捷栏背包）', TOUCH_ICON_NAMES.length, 6);
+  for (const name of ['chat', 'view', 'sneak', 'inventory', 'jump', 'pause'] as const) {
     check(`图标集里有 ${name}`, TOUCH_ICON_NAMES.includes(name));
   }
 
@@ -176,7 +175,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
     ['顶部暂停键容器', '#touch-pause {'],
-    ['暂停键尺寸吃 --touch-scale（与"触摸按钮大小"同一个设置项）', '#touch-pause .touch-button { width: calc(52px * var(--touch-scale, 1));'],
+    ['顶部三键尺寸吃 --touch-scale', '#touch-pause .touch-button { width: calc(40px * var(--touch-scale, 1));'],
     // 暂停菜单那一页（批次 108）：一页只放"几个主要按钮"，竖排
     ['暂停菜单的主按钮竖排', '.pause-actions { display: flex; flex-direction: column; gap: 8px;'],
     ['手机上暂停按钮热区 46px', 'body.touch-mode .pause-action { min-height: 46px; font-size: 15px; }'],
@@ -229,10 +228,12 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 右下那一簇（批次 107）：一列右对齐，跳跃在下
     // 右下那一簇（批次 111 对齐原版）：一排、右对齐——跳跃在右、潜行在它左边
     ['右下按钮簇竖排（生存只跳，飞时上中下）', '#touch-buttons { position: absolute; right: 20px; bottom: 96px; display: flex; flex-direction: column; align-items: center;'],
-    // 快捷栏两侧的背包/聊天：挂进 #hotbar 内并绝对定位（不参与那 9 格的宽度计算）
-    ['背包/聊天按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
+    // 快捷栏右侧只留背包（聊天搬到顶部，批次 181）
+    ['背包按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
     ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
-    ['聊天摆快捷栏左侧', '#touch-hotbar-chat { left: auto; right: calc(100% + 8px); }'],
+    ['顶部三键是方形小键', '#touch-pause { position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 6px;'],
+    ['准星下方有目标名称', '#target-info {'],
+    ['游戏内一行提示在快捷栏上方', '#hud-toast {'],
     // 切石机（H11，批次 44）：候选列表与候选按钮的样式被误删时这里会红
     ['切石机候选列表', '.stonecutter-list'],
     ['切石机候选按钮', '.stonecutter-option'],
@@ -661,6 +662,15 @@ console.log('\n[携带版细节收口（批次 159）]');
   check('丢弃有文字确认', invSrc.includes('已丢弃'));
   // 点配方预览只显示名字，不再把预览清掉
   check('点合成区不再清空配方预览', !invSrc.includes('this.craftGhost && slot?.closest'));
+
+  // 游戏内一行提示（批次 181）：与背包那块分开，2 秒 + 200ms 淡出
+  const hudToastSrc = readFileSync(new URL('../src/ui/HudToast.ts', import.meta.url), 'utf8');
+  check('游戏内提示停留 2 秒', hudToastSrc.includes('export const HUD_TOAST_MS = 2000;'));
+  check('游戏内提示 200ms 淡出', hudToastSrc.includes('const FADE_MS = 200;'));
+  check(
+    '顶部视角键接了相机循环',
+    readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('onCycleCamera: () => {'),
+  );
   check('关界面时收掉', invSrc.includes('this.hidePickToast();') && /finishClose\(\): void \{[\s\S]{0,400}hidePickToast/.test(invSrc));
 
   // ⑤ 选中 = 原格内显示 + 底色变深；不再有跟着光标飘的图标
@@ -1185,9 +1195,14 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
     '右下：上升/跳跃/下降三颗（飞行前 CSS 藏升降）',
     source.includes('buttons.append(this.flyUpButton, this.jumpButton, this.flyDownButton)'),
   );
-  check('背包/聊天挂进快捷栏（不参与那 9 格的宽度计算）', source.includes("document.getElementById('hotbar')"));
+  check('背包挂进快捷栏（不参与那 9 格的宽度计算）', source.includes("document.getElementById('hotbar')"));
+  check(
+    '顶部三键：暂停 / 视角 / 聊天（批次 181）',
+    source.includes('pauseBar.append(this.pauseButton, viewButton, chatButton)'),
+  );
+  check('聊天不再挂在快捷栏左侧', !source.includes("'touch-hotbar-chat'"));
   check('触摸层里不再有"飞行"按钮（已搬进设置面板）', !source.includes("makeIconButton('fly'"));
-  check('触摸层里不再有"切换视角"按钮（已搬进设置面板）', !source.includes("makeIconButton('view'"));
+  check('视角按钮回到顶部（批次 181，与设置里的视角项共用循环）', source.includes("makeIconButton('view'"));
   // 批次 181：删掉 140ms 的"按住连续放置"（它会抢在长按破坏之前），只留一个长按阈值
   check('只有一个长按阈值（280ms）', source.includes('const LONG_PRESS_MS = 280'));
   check('连续放置已删除（不再有 PLACE_HOLD_MS / onPlaceHoldStart）', !source.includes('PLACE_HOLD_MS') && !source.includes('onPlaceHoldStart'));

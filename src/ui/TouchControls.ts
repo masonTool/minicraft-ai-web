@@ -12,7 +12,7 @@
  *  - 按住不放（未拖动，≥280ms）：破坏方块 / 持续攻击
  *  - **生存：右侧只有一颗跳跃键**
  *  - **创造：双击跳跃起飞 → 右侧出现上升 / 下降键**；再双击跳跃落地，升降键消失
- *  - 快捷栏两侧：右背包、左聊天
+ *  - 顶部三键：暂停 / 视角 / 聊天；快捷栏右侧：背包
  */
 
 import type { PlayerInput } from '../core/physics/PlayerPhysics.ts';
@@ -73,6 +73,8 @@ export interface TouchActions {
    * 打开暂停 / 设置菜单（批次 104，屏幕上方正中那颗键）。
    */
   onOpenPause: () => void;
+  /** 切换第一/第三人称（批次 181，顶部第二颗键） */
+  onCycleCamera(): void;
   /** 轻点抬起：交互 / 攻击 / 放置一次 */
   onTap(): void;
   /** 长按开始 / 结束：破坏方块 / 持续攻击 */
@@ -233,12 +235,17 @@ export class TouchControls {
     // DOM：上 → 跳 → 下；未飞行时 CSS 把 `.fly-only` 藏掉，只剩跳跃
     buttons.append(this.flyUpButton, this.jumpButton, this.flyDownButton);
 
-    // ---- 顶部中央的暂停键（批次 104）
+    // ---- 顶部中央三颗键（批次 181）：暂停 / 视角 / 聊天。
+    // 原来只有暂停，视角要靠键盘 V、聊天挂在快捷栏左侧；手机上都不合适。
     this.pauseButton = this.makeIconButton('pause', () => this.actions.onOpenPause());
     this.pauseButton.classList.add('pause');
+    const viewButton = this.makeIconButton('view', () => this.actions.onCycleCamera());
+    viewButton.classList.add('view');
+    const chatButton = this.makeIconButton('chat', () => this.actions.onOpenChat());
+    chatButton.classList.add('chat');
     const pauseBar = document.createElement('div');
     pauseBar.id = 'touch-pause';
-    pauseBar.appendChild(this.pauseButton);
+    pauseBar.append(this.pauseButton, viewButton, chatButton);
 
     // ---- 操作提示
     this.hint = document.createElement('div');
@@ -258,8 +265,8 @@ export class TouchControls {
    */
   private mountHotbarSideButtons(): void {
     const host = document.getElementById('hotbar') ?? this.object;
+    // 批次 181：聊天搬到顶部，快捷栏右侧只留背包（基岩版的位置）
     for (const [icon, id, action] of [
-      ['chat', 'touch-hotbar-chat', () => this.actions.onOpenChat()],
       ['inventory', 'touch-hotbar-inventory', () => this.actions.onToggleInventory()],
     ] as const) {
       const button = this.makeIconButton(icon, action);

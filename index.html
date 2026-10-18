@@ -261,6 +261,19 @@
       }
       #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
       #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
+      /* 准星下方的目标名称（批次 181）：口袋里/手机上"这是什么"只能靠它 */
+      #target-info {
+        position: fixed; left: 50%; top: calc(50% + 24px);
+        transform: translateX(-50%);
+        z-index: 7; pointer-events: none;
+        padding: 2px 7px;
+        background: rgba(0, 0, 0, .55);
+        color: #f0f0f0;
+        font-size: 12px; line-height: 1.5;
+        white-space: nowrap;
+        text-shadow: 1px 1px 0 #000;
+      }
+      #target-info.hidden { display: none; }
 
       /* ---------------- 主菜单（批次 109：对齐原版"标题页"的样子） ----------------
          原版基岩版的标题页**没有面板框**：标题 + 一列按钮直接浮在暗色石纹背景上。
@@ -2305,6 +2318,32 @@
       }
       #inv-pick-toast.hidden { display: none; }
       #inv-pick-toast.leaving { opacity: 0; }
+
+      /* ---------------- 游戏内一行提示（批次 181） ----------------
+         视角/模式切换这类"一句话反馈"：快捷栏上方、2 秒后淡出。
+         与 `#inv-pick-toast` 同一套配色与位置，但属于 HUD，不随背包显隐。 */
+      #hud-toast {
+        position: fixed;
+        left: 50%;
+        bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+        transform: translateX(-50%);
+        z-index: 9;
+        pointer-events: none;
+        padding: 5px 10px;
+        background: #100010f2;
+        border: 2px solid #2d0a63;
+        border-radius: 0;
+        color: #e6e6e6;
+        font-size: 12px;
+        line-height: 1.45;
+        white-space: nowrap;
+        text-shadow: 1px 1px 0 #000;
+        box-shadow: 0 0 0 2px var(--mc-outline);
+        opacity: 0;
+        transition: opacity .2s ease;
+      }
+      #hud-toast.visible { opacity: 1; }
+      #hud-toast.hidden { display: none; }
       #inv-pick-toast .tooltip-title { font-size: 13px; font-weight: 700; }
       #inv-pick-toast .tooltip-desc { color: #d8d8d8; }
       /* 只淡入透明度：位置是 JS 给的，动几何会让人觉得"界面又在跳" */
@@ -2525,11 +2564,16 @@
       #touch-pause {
         position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px));
         transform: translateX(-50%);
+        display: flex; align-items: center; gap: 6px;
         pointer-events: none;
       }
+      /* 批次 181：暂停 / 视角 / 聊天三颗**方形小键**（原来是 52px 圆角暂停键）。
+         方形是为了与基岩版顶部那一排一致，也更省横屏宽度。 */
       #touch-pause .touch-button {
-        width: calc(52px * var(--touch-scale, 1));
-        height: calc(52px * var(--touch-scale, 1));
+        width: calc(40px * var(--touch-scale, 1));
+        height: calc(40px * var(--touch-scale, 1));
+        border-radius: 0;
+        pointer-events: auto;
         background: rgba(0, 0, 0, .34);
         border-color: rgba(255, 255, 255, .42);
       }
@@ -2548,12 +2592,11 @@
         background: rgba(0, 0, 0, .34);
         border-color: rgba(255, 255, 255, .42);
       }
+      /* 批次 181：聊天已搬到顶部，快捷栏右侧只留背包 */
       #touch-hotbar-inventory { right: 0; }
-      #touch-hotbar-chat { left: 0; }
       @media (min-width: 760px) {
         #hotbar .touch-side-btn { bottom: 0; }
         #touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }
-        #touch-hotbar-chat { left: auto; right: calc(100% + 8px); }
       }
 
       /* 顶部那一行现在被暂停键占着：血条与调试信息往下让一格，免得叠在一起 */

@@ -106,6 +106,7 @@ import {
   toggleFullscreen,
 } from './ui/Fullscreen.ts';
 import { hideInstallHint, installInstallHint } from './ui/InstallHint.ts';
+import { HudToast } from './ui/HudToast.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './ui/Tooltip.ts';
 import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
@@ -197,7 +198,7 @@ import {
 import { RecipeBook } from './ui/RecipeBook.ts';
 import { craftFromInventory, type RecipeBookTab } from './core/crafting/RecipeBook.ts';
 import type { Recipe } from './core/crafting/Recipes.ts';
-import { itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
+import { blockLabel, itemLabel, itemTooltip, resolveItemId } from './core/registry/itemNames.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, type WorldSummary } from './core/save/WorldRegistry.ts';
 import { PARTICLE_DENSITY } from './ui/SettingsScreen.ts';
 import {
@@ -963,6 +964,13 @@ class App {
   private readonly advancements = new AdvancementTracker();
   private readonly advancementScreen: AdvancementScreen;
   private readonly advancementToast: AdvancementToast;
+  /** 游戏内一行提示（批次 181）：视角/模式切换、全屏状态… */
+  private readonly hudToast = new HudToast(document.getElementById('hud') ?? document.body);
+  /** 准星下方那行"这是什么"（批次 181） */
+  private readonly targetInfoEl: HTMLDivElement;
+  /** 目标信息的刷新节拍（5Hz，别每帧写 DOM） */
+  private targetInfoTimer = 0;
+  private targetInfoText = '';
   /**
    * 进度系统"上岗"了没有（世界与存档都读完）。
    *
@@ -1223,6 +1231,11 @@ class App {
     // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
     // 塞进 #vitals 那个 flex 列会被挤到别的地方
     this.xpHud = new XpHud(document.getElementById('hud') ?? container);
+    // 准星下方的目标名称（批次 181）：手机上"这是什么东西"原来只能靠猜
+    this.targetInfoEl = document.createElement('div');
+    this.targetInfoEl.id = 'target-info';
+    this.targetInfoEl.className = 'hidden';
+    (document.getElementById('hud') ?? container).appendChild(this.targetInfoEl);
     // 渲染器创建兜底（A10，批次 85）：即使前面探测到了 WebGL2，真正创建时也可能失败
     // （显存不足、上下文数量到顶——手机上真实发生过）。失败时**给一块能看懂的界面**，
     // 而不是让 `new WebGLRenderer` 那行红字把整页留成白屏
@@ -1579,6 +1592,10 @@ class App {
       onToggleInventory: () => this.inventoryScreen.toggle(),
       // 暂停 / 设置（批次 104）：手机上原来没有入口，只能按 Esc（手机没有）或退出页面
       onOpenPause: () => this.toggleSettings(),
+      // 顶部视角键（批次 181）：与键盘 V 同一条循环
+      onCycleCamera: () => {
+        this.cycleCameraMode();
+      },
       // 飞行仍然可以被"双击跳跃"触发；"视角"与"创造飞行"的显式开关都搬进了
       // 设置面板（批次 107：右下那一簇只留跳/潜，见 ui/TouchControls.ts）
       onToggleFly: () => this.setFlying(!this.flying),
@@ -3089,7 +3106,10 @@ class App {
 
   /** 循环切换视角（`V` 键）：第一人称 → 背后 → 正面 → 第一人称 */
   cycleCameraMode(): CameraMode {
-    return this.setCameraMode(nextCameraMode(this.cameraMode));
+    const mode = this.setCameraMode(nextCameraMode(this.cameraMode));
+    // 顶部按钮点完给一句反馈：图标变化在手机上不够明显
+    this.hudToast.show(`视角：${CAMERA_MODE_LABELS[mode]}`);
+    return mode;
   }
 
   // ---------------------------------------------------------------- 方块交互
@@ -3196,6 +3216,9 @@ class App {
       this.blockOverlay.hide();
     }
 
+    // 准星目标名称（批次 181）：5Hz 刷新，避免每帧写 DOM
+    this.updateTargetInfo(dt);
+
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
 
@@ -3208,6 +3231,42 @@ class App {
     // 拉弓也放在放置之后：准星对着功能方块时右键那一下归方块
     this.updateBow(dt);
     this.hand.setDrawPull(this.bowCharge);
+  }
+
+  /**
+   * 准星下方那行"这是什么"（批次 181）。
+   *
+   * 手机上没有鼠标悬停，玩家指着方块时无从判断它是什么；这里把
+   * 方块的**中文名**、或生物的**名字 + 血量**放在准星正下方。
+   * 5Hz 刷新：准星扫过一片方块时不会每帧重建文本节点。
+   */
+  private updateTargetInfo(dt: number): void {
+    this.targetInfoTimer -= dt;
+    if (this.targetInfoTimer > 0) return;
+    this.targetInfoTimer = 0.2;
+
+    if (this.uiOpen || this.sleeping || this.stats.dead) {
+      this.setTargetInfo('');
+      return;
+    }
+    const mob = this.mobUnderCrosshair();
+    if (mob && !mob.dead) {
+      const health = Math.max(0, Math.ceil(mob.health));
+      this.setTargetInfo(`${mob.type.name}  ${health}/${mob.type.health}`);
+      return;
+    }
+    if (this.hit) {
+      this.setTargetInfo(blockLabel(this.world.getBlock(this.hit.x, this.hit.y, this.hit.z)));
+      return;
+    }
+    this.setTargetInfo('');
+  }
+
+  private setTargetInfo(text: string): void {
+    if (text === this.targetInfoText) return;
+    this.targetInfoText = text;
+    this.targetInfoEl.textContent = text;
+    this.targetInfoEl.classList.toggle('hidden', text.length === 0);
   }
 
   /**
@@ -9157,6 +9216,8 @@ class App {
     diag.event('app', 'dispose', { world: this.worldConfig.id });
     this.listeners.abort();
     this.backButton.reset();
+    this.hudToast.dispose();
+    this.targetInfoEl.remove();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();
     this.touch = null;
@@ -9492,6 +9553,7 @@ class App {
     if (next === 'survival' && this.flying) this.setFlying(false);
     // 回写世界清单（暂停菜单里改的，下次从主菜单进来还是这个模式）
     this.onGameModeChanged?.(next);
+    this.hudToast.show(`游戏模式：${GAME_MODE_LABELS[next]}`);
     // 背包开着时创造区要立刻显隐；设置面板开着时"飞行"那一行要显隐
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.settingsScreen.isOpen) this.settingsScreen.refreshGameModeRows();

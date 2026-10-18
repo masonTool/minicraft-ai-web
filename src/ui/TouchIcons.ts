@@ -15,7 +15,7 @@
  * ⚠️ 只画**填充色块**（不依赖描边宽度）：描边在小尺寸下容易糊成一团。
  */
 
-export const TOUCH_ICON_NAMES = ['jump', 'sneak', 'inventory', 'chat', 'pause'] as const;
+export const TOUCH_ICON_NAMES = ['jump', 'sneak', 'inventory', 'chat', 'pause', 'view'] as const;
 export type TouchIconName = (typeof TOUCH_ICON_NAMES)[number];
 
 /** 24×24 视口的图标路径（`fill="currentColor"`，颜色交给 CSS） */
@@ -31,6 +31,8 @@ const PATHS: Readonly<Record<TouchIconName, string>> = {
   chat: '<path d="M4 5.4A2.4 2.4 0 0 1 6.4 3h11.2A2.4 2.4 0 0 1 20 5.4v7.2a2.4 2.4 0 0 1-2.4 2.4H9.6L4 20z"/>',
   // 暂停/设置：两条竖杠（基岩版手机屏幕上方正中的那颗键）
   pause: '<rect x="6" y="4.4" width="4.2" height="15.2" rx="1.4"/><rect x="13.8" y="4.4" width="4.2" height="15.2" rx="1.4"/>',
+  // 视角：人物剪影（第一/第三人称切换）
+  view: '<circle cx="12" cy="7.2" r="3.2"/><path d="M4.8 20c0-4.1 3.2-6.6 7.2-6.6s7.2 2.5 7.2 6.6z"/>',
 };
 
 /** 图标对应的中文说明（`aria-label` 与长按提示用） */
@@ -40,6 +42,7 @@ export const TOUCH_ICON_LABELS: Readonly<Record<TouchIconName, string>> = {
   inventory: '背包',
   chat: '聊天与命令',
   pause: '暂停与设置',
+  view: '切换视角',
 };
 
 /**

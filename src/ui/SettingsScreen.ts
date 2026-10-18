@@ -464,7 +464,7 @@ export class SettingsScreen {
     gestures.className = 'touch-only';
     gestures.innerHTML =
       '左摇杆移动 · 拖动转视角 · 轻点放置 · 长按破坏<br />' +
-      '右下角是跳跃与潜行 · 背包在快捷栏右边、聊天在左边<br />' +
+      '右下角是跳跃与潜行 · 背包在快捷栏右边、聊天在顶部<br />' +
       '双击跳跃起飞（创造模式）· 视角与飞行在「设置」里';
     help.append(keys, gestures);
 
