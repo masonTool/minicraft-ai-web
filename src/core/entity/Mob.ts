@@ -680,8 +680,8 @@ export class Mob extends Entity {
    *
    * 顺序与原版一致：**瞬间效果先结算**（瞬间治疗/伤害不进持续列表），
    * 之后每 0.05 秒推一次持续效果（中毒/凋零掉血、生命恢复回血、时长递减）。
-   * ⚠️ **中毒不会致死**（原版停在 1 点血），凋零会——两者在 `StatusEffects` 里靠
-   * `damageCause` 区分，这里不能只看 `damage > 0` 一刀切。
+   * ⚠️ **中毒不会致死**（原版停在 1 点血），凋零会——两者在 `StatusEffects` 里是
+   * `damageHits` 里的两条记录（各带 `cause`），这里必须逐条分流、不能一刀切。
    */
   private tickEffects(ctx: EntityContext, dt: number): void {
     for (const instant of this.effects.takeInstant()) {
@@ -699,9 +699,11 @@ export class Mob extends Entity {
     while (this.effectAccumulator >= EFFECT_STEP) {
       this.effectAccumulator -= EFFECT_STEP;
       const result = this.effects.tick();
-      if (result.damage > 0) {
-        if (result.damageCause === 'poison') this.health = Math.max(1, this.health - result.damage);
-        else this.hurt(result.damage, 0, 0, ctx);
+      for (const hit of result.damageHits) {
+        // 中毒停在 1 点血（原版），凋零能致死
+        if (hit.cause === 'poison') this.health = Math.max(1, this.health - hit.amount);
+        else this.hurt(hit.amount, 0, 0, ctx);
+        if (this.dead) return;
       }
       if (result.heal > 0) this.heal(result.heal);
       if (this.dead) return;

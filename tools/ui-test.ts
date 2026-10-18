@@ -2414,6 +2414,11 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes('this.damagePlayer(amount, sourceX, sourceZ, cause, source)'),
   );
   check(
+    '凋零按自己的类别上报（不再借用 generic → 不再显示"没有记录到来源"）',
+    appSrc.includes("this.applyIncomingDamage(hit.amount, 'wither')") &&
+      appSrc.includes('for (const hit of result.damageHits)'),
+  );
+  check(
     '死亡卡片也写清死因',
     html.includes('class="death-cause"') &&
       appSrc.includes('this.deathCauseEl.textContent') &&
@@ -2434,6 +2439,7 @@ console.log('\n[伤害原因文案（批次 207）]');
   // 每一档都必须有"具体原因"，不能退回"受伤/环境伤害"这种说了等于没说的词
   const causes = [
     'poison',
+    'wither',
     'fall',
     'drown',
     'lava',

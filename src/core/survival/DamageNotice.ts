@@ -19,6 +19,8 @@ import type { DamageCause } from './PlayerStats.ts';
  */
 const CAUSE_REASON: Record<DamageCause, string> = {
   poison: '中毒（持续扣血）',
+  // 与中毒的区别必须说清：中毒停在半颗心，凋零会把人打死（批次 218）
+  wither: '凋零（持续扣血，会致死）',
   fall: '摔落（从高处落地）',
   drown: '溺水（氧气耗尽）',
   lava: '碰到岩浆（要立刻离开，水浇不灭）',
@@ -55,6 +57,9 @@ export function damageReason(cause: DamageCause, source?: string): string {
       return `${from}造成的火焰伤害`;
     case 'poison':
       return `${from}导致的中毒`;
+    // 凋零也可能带来源（"凋灵骷髅导致的凋零"），句式与中毒保持一致
+    case 'wither':
+      return `${from}导致的凋零`;
     default:
       return `${CAUSE_REASON[cause]}（来源：${from}）`;
   }

@@ -41,6 +41,13 @@ export const FIRE_DAMAGE_INTERVAL_TICKS = 20;
 
 export type DamageCause =
   | 'poison'
+  /**
+   * 凋零（批次 218）：与中毒同为"状态效果持续扣血"，但**能致死**、**无视护甲**。
+   *
+   * 以前它借用 `'generic'` 上报，左上角只能显示"受到伤害（没有记录到来源）"——
+   * 用户"站在草地上突然一直掉血到死、提示查不出原因"就是这么来的。
+   */
+  | 'wither'
   | 'fall'
   | 'drown'
   | 'lava'

@@ -174,7 +174,7 @@ equal('0 点伤害不掉耐久', armorWearPerHit(0), 0);
 // ---------------------------------------------------------------- 4. 无视护甲的伤害
 
 console.log('\n[无视护甲的伤害类型]');
-const bypassing: DamageCause[] = ['fall', 'drown', 'starve', 'void', 'suffocate', 'poison'];
+const bypassing: DamageCause[] = ['fall', 'drown', 'starve', 'void', 'suffocate', 'poison', 'wither'];
 {
   const inventory = new Inventory();
   equipSet(inventory, 'diamond');

@@ -7288,12 +7288,16 @@ class App {
   /** 每 tick 结算状态效果（中毒伤害 / 生命恢复 / 饥饿 / 到期） */
   private tickEffects(): void {
     const result = this.effects.tick();
-    if (result.damage > 0) {
-      if (result.damageCause === 'poison') {
+    // 按效果逐条结算：同一 tick 里中毒与凋零可能各来一条，**不能合并**
+    // （合并后只剩一个 cause，凋零会被当成中毒卡在 1 点血，或者中毒被当成凋零致死）
+    for (const hit of result.damageHits) {
+      if (hit.cause === 'poison') {
         // 中毒不会致死（原版会停在半颗心）
-        this.stats.poisonDamage(result.damage, '中毒效果');
+        this.stats.poisonDamage(hit.amount, '中毒效果');
       } else {
-        this.applyIncomingDamage(result.damage, 'generic');
+        // 凋零：能致死、无视护甲。以前它借用 `'generic'` 且不带来源，
+        // 左上角只能写"受到伤害（没有记录到来源）"（批次 218）
+        this.applyIncomingDamage(hit.amount, 'wither');
       }
     }
     if (result.heal > 0) this.stats.heal(result.heal);

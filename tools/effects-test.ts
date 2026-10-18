@@ -117,7 +117,9 @@ console.log('\n[周期结算：中毒 / 凋零 / 恢复 / 饥饿]');
   const poison = new StatusEffects();
   poison.apply('poison', 10, 0);
   let damage = 0;
-  for (let i = 0; i < 200; i++) damage += poison.tick().damage;
+  for (let i = 0; i < 200; i++) {
+    for (const hit of poison.tick().damageHits) damage += hit.amount;
+  }
   check('中毒按周期掉血（10 秒约 8 点）', damage >= 7 && damage <= 9, String(damage));
 
   const wither = new StatusEffects();
@@ -125,12 +127,28 @@ console.log('\n[周期结算：中毒 / 凋零 / 恢复 / 饥饿]');
   let witherDamage = 0;
   let cause: string = '';
   for (let i = 0; i < 200; i++) {
-    const result = wither.tick();
-    witherDamage += result.damage;
-    if (result.damage > 0) cause = result.damageCause;
+    for (const hit of wither.tick().damageHits) {
+      witherDamage += hit.amount;
+      cause = hit.cause;
+    }
   }
   check('凋零按周期掉血', witherDamage >= 4, String(witherDamage));
   check('凋零的伤害类别是 wither（会致死）', cause === 'wither');
+
+  // 两种同时挂着：**必须各记一条**，不能合并成"一个总数 + 一个 cause"——
+  // 合并后凋零会被当成中毒（永远停在半颗心），或者中毒被当成凋零（能打死人）
+  const both = new StatusEffects();
+  both.apply('poison', 10, 0);
+  both.apply('wither', 10, 0);
+  let sawPoison = false;
+  let sawWither = false;
+  for (let i = 0; i < 200; i++) {
+    for (const hit of both.tick().damageHits) {
+      if (hit.cause === 'poison') sawPoison = true;
+      else sawWither = true;
+    }
+  }
+  check('中毒 + 凋零同时挂：两条各自记账，cause 不会互相顶掉', sawPoison && sawWither);
 
   const regen = new StatusEffects();
   regen.apply('regeneration', 10, 0);
@@ -157,7 +175,13 @@ console.log('\n[周期结算：中毒 / 凋零 / 恢复 / 饥饿]');
   check('饱和效果补饥饿值', food >= 3, String(food));
 
   const empty = new StatusEffects();
-  check('没有效果时 tick 是空结果（不产生任何副作用）', empty.tick().damage === 0 && empty.tick().heal === 0);
+  const emptyTick = empty.tick();
+  // 也顺带挡住"`EMPTY_TICK` 的数组被上一轮 push 污染"这类共享引用问题：
+  // 上面几段已经跑过中毒/凋零，这里必须是干净的空结果
+  check(
+    '没有效果时 tick 是空结果（不产生任何副作用，也不带上一轮的伤害）',
+    emptyTick.damageHits.length === 0 && emptyTick.heal === 0,
+  );
 }
 
 // ---------------------------------------------------------------- 5. 数值倍率

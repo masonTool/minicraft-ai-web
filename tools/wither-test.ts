@@ -189,23 +189,23 @@ console.log('\n[凋零与中毒的差别]');
   let total = 0;
   let killer = false;
   for (let i = 0; i < 300; i++) {
-    const result = effects.tick();
-    if (result.damage > 0) {
-      total += result.damage;
-      if (result.damageCause === 'wither') killer = true;
+    for (const hit of effects.tick().damageHits) {
+      total += hit.amount;
+      if (hit.cause === 'wither') killer = true;
     }
   }
   check('凋零会持续掉血', total > 0, `${total} 点`);
-  check('而且它的 `damageCause` 是 `wither`（**能致死**，不像中毒会停在 1 点血）', killer);
+  check('而且它的伤害类别是 `wither`（**能致死**，不像中毒会停在 1 点血）', killer);
 
   const poison = new StatusEffects();
   poison.apply('poison', 10, 0);
   let poisonCause = false;
   for (let i = 0; i < 300; i++) {
-    const result = poison.tick();
-    if (result.damage > 0 && result.damageCause === 'poison') poisonCause = true;
+    for (const hit of poison.tick().damageHits) {
+      if (hit.cause === 'poison') poisonCause = true;
+    }
   }
-  check('对照：中毒的 `damageCause` 是 `poison`（生物那一层据此"停在 1 点血"）', poisonCause);
+  check('对照：中毒的伤害类别是 `poison`（生物那一层据此"停在 1 点血"）', poisonCause);
 }
 
 // ---------------------------------------------------------------- 4. 只在要塞里刷

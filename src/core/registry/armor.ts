@@ -195,6 +195,8 @@ export const ARMOR_BYPASS_CAUSES: ReadonlySet<string> = new Set([
   'void',
   'suffocate',
   'poison',
+  // 凋零（批次 218）：原版也在 `#bypasses_armor` 里——穿一身钻甲照样被凋零打死
+  'wither',
   // 雷击（批次 83）：原版雷击**无视护甲**（`#bypasses_armor` 里有它），
   // 所以穿一身钻石甲站在避雷针旁边也会被劈掉 5 颗心
   'lightning',

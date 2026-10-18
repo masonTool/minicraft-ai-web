@@ -137,12 +137,24 @@ export interface ActiveEffect {
   ambient: boolean;
 }
 
+/** 一条持续伤害（一次 tick 里中毒与凋零可能各来一条） */
+export interface EffectDamageHit {
+  /** 这次要扣多少血 */
+  amount: number;
+  /** 类别：中毒不致死、凋零能致死（两者在结算层走不同的路） */
+  cause: 'poison' | 'wither';
+}
+
 /** 每 tick 的结算结果（由调用方落到玩家身上） */
 export interface EffectTickResult {
-  /** 中毒/凋零造成的伤害 */
-  damage: number;
-  /** 伤害的类别（中毒不致死） */
-  damageCause: 'poison' | 'wither';
+  /**
+   * 中毒/凋零造成的伤害，**按效果分开记**。
+   *
+   * ⚠️ 以前是"一个 `damage` + 一个 `damageCause`"：两种效果同时挂着时，后处理的
+   * 那个会覆盖 `damageCause`，于是凋零被当成中毒（卡在剩 1 点血、永远打不死），
+   * 或者中毒被当成凋零（能致死）。分裂成数组后两边各自按 `cause` 分流。
+   */
+  damageHits: EffectDamageHit[];
   /** 生命恢复回的血 */
   heal: number;
   /** 饥饿效果消耗的疲劳值 */
@@ -155,8 +167,7 @@ export interface EffectTickResult {
 }
 
 const EMPTY_TICK: EffectTickResult = {
-  damage: 0,
-  damageCause: 'poison',
+  damageHits: [],
   heal: 0,
   exhaustion: 0,
   food: 0,
@@ -250,7 +261,9 @@ export class StatusEffects {
   tick(): EffectTickResult {
     if (this.active.size === 0) return EMPTY_TICK;
 
-    const result: EffectTickResult = { ...EMPTY_TICK, expired: [] };
+    // ⚠️ `damageHits`/`expired` 必须各给一个新数组：展开 `EMPTY_TICK` 会把那两个
+    // 共享数组的**引用**带过来，`push` 一下就永久污染 `EMPTY_TICK`。
+    const result: EffectTickResult = { ...EMPTY_TICK, damageHits: [], expired: [] };
 
     for (const effect of [...this.active.values()]) {
       effect.ticks--;
@@ -273,12 +286,14 @@ export class StatusEffects {
     switch (effect.id) {
       case 'poison':
         // 每 25 tick 掉 1 点，等级越高掉得越勤
-        if (effect.ticks % Math.max(5, 25 - (level - 1) * 5) === 0) result.damage += 1;
-        result.damageCause = 'poison';
+        if (effect.ticks % Math.max(5, 25 - (level - 1) * 5) === 0) {
+          result.damageHits.push({ amount: 1, cause: 'poison' });
+        }
         break;
       case 'wither':
-        if (effect.ticks % Math.max(10, 40 - (level - 1) * 10) === 0) result.damage += 1;
-        result.damageCause = 'wither';
+        if (effect.ticks % Math.max(10, 40 - (level - 1) * 10) === 0) {
+          result.damageHits.push({ amount: 1, cause: 'wither' });
+        }
         break;
       case 'regeneration':
         // 每 50 tick 回 1 点，每级提速
