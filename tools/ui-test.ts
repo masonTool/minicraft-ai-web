@@ -2999,5 +2999,35 @@ console.log('\n[游戏规则 6 → 11（批次 255）]');
   check('/gamerule 的帮助里列出了新规则', commandsSrc.includes('doImmediateRespawn'));
 }
 
+console.log('\n[拴绳（批次 256）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const itemsSrc = readFileSync(new URL('../src/core/registry/items.ts', import.meta.url), 'utf8');
+  const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
+  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  check(
+    '拴绳物品（id 1487，4 线 + 1 黏液球 → 2 条）',
+    itemsSrc.includes('LEAD: 1487') && recipesSrc.includes('result: { id: Item.LEAD, count: 2 }'),
+  );
+  check(
+    '拴 / 解不消耗绳子，且只牵已驯服的动物',
+    appSrc.includes('private toggleLeash(mob: Mob)') &&
+      appSrc.includes("if (!mob.tamed) {") &&
+      appSrc.includes("this.hudToast.show('只能牵已驯服的动物');"),
+  );
+  check(
+    '绳子是一条两点线段，每帧跟着动物更新',
+    appSrc.includes('private createLeashLine()') &&
+      appSrc.includes('private updateLeash()') &&
+      appSrc.includes('this.updateLeash();'),
+  );
+  check(
+    '被牵的动物跟随但不传送（与宠物跟随分开）',
+    mobSrc.includes('leashed = false') &&
+      mobSrc.includes('this.leashed && player') &&
+      mobSrc.includes('export const LEASH_STOP = 3.5'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

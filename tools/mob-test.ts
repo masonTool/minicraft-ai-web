@@ -793,5 +793,28 @@ console.log('\n[骑乘：马（批次 253）]');
   check('骑着按跳跃键会起跳（vy > 0）', horse.vy > 0, `vy=${horse.vy.toFixed(2)}`);
 }
 
+console.log('\n[拴绳：牵着的动物跟着走（批次 256）]');
+{
+  const world = new TestWorld();
+  world.floor(-24, 24, -8, 8, 64);
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player: { x: 8.5, y: 65, z: 0.5 },
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+  };
+  const cow = new Mob(mobTypeById('cow')!, 2.5, 65.5, 0.5);
+  cow.tamed = true;
+  cow.leashed = true;
+  const before = Math.abs(8.5 - cow.x);
+  for (let i = 0; i < 80; i++) cow.tick(ctx, 0.05); // 4 秒
+  const after = Math.abs(8.5 - cow.x);
+  check('被牵着的动物会朝主人走近', after < before - 2, `${before.toFixed(1)} → ${after.toFixed(1)}`);
+  check('走到绳子长度（3.5 格）附近就停', after > 2 && after < 5.5, `距离 ${after.toFixed(2)}`);
+}
+
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);
 if (failed > 0) process.exit(1);
