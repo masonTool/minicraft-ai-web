@@ -37,6 +37,14 @@ export interface BlockDef {
   readonly solid: boolean;
   /** 完全遮挡：剔除相邻面 + 阻挡光照 */
   readonly opaque: boolean;
+  /**
+   * 头卡在这一格里会不会**窒息**（批次 218）。
+   *
+   * 与 `opaque` 分开写：树叶为了渲染优化是**不透明**的（要剔除相邻面），
+   * 但原版**钻进树叶里不掉血**——之前直接拿 `opaque` 当判据，导致站在树冠里
+   * 会被"窒息"判定持续扣血。默认值跟 `opaque` 一致（绝大多数方块两者相同）。
+   */
+  readonly suffocates: boolean;
   /** 自发光等级 0-15 */
   readonly light: number;
   /** 光照衰减（0-15）：光穿过该方块时减少的等级，≥15 视为完全阻挡 */
@@ -109,6 +117,8 @@ interface BlockSpec {
   tiles?: readonly [string, string, string];
   solid?: boolean;
   opaque?: boolean;
+  /** 头卡住会窒息（不填 = 跟 `opaque` 一致；树叶显式写 false） */
+  suffocates?: boolean;
   light?: number;
   lightOpacity?: number;
   liquid?: boolean;
@@ -194,7 +204,8 @@ const BASE_SPECS: readonly BlockSpec[] = [
   { id: 3, name: 'minecraft:grass_block', tiles: ['grass_top', 'dirt', 'grass_side'] },
   { id: 4, name: 'minecraft:sand', tiles: ['sand', 'sand', 'sand'] },
   { id: 5, name: 'minecraft:oak_log', tiles: ['oak_log_top', 'oak_log_top', 'oak_log_side'] },
-  { id: 6, name: 'minecraft:oak_leaves', tiles: ['oak_leaves', 'oak_leaves', 'oak_leaves'], lightOpacity: 1 },
+  // 树叶：不透明（渲染要剔除相邻面）但**不致窒息**，原版钻进树叶里不掉血
+  { id: 6, name: 'minecraft:oak_leaves', tiles: ['oak_leaves', 'oak_leaves', 'oak_leaves'], lightOpacity: 1, suffocates: false },
   { id: 7, name: 'minecraft:oak_planks', tiles: ['oak_planks', 'oak_planks', 'oak_planks'] },
   { id: 8, name: 'minecraft:cobblestone', tiles: ['cobblestone', 'cobblestone', 'cobblestone'] },
   { id: 9, name: 'minecraft:bedrock', tiles: ['bedrock', 'bedrock', 'bedrock'] },
@@ -367,6 +378,8 @@ const WOOD_SPECS: readonly BlockSpec[] = EXTRA_WOODS.flatMap((wood, index) => {
       name: `minecraft:${wood.name}_leaves`,
       tiles: [`${wood.name}_leaves`, `${wood.name}_leaves`, `${wood.name}_leaves`],
       lightOpacity: 1,
+      // 与橡树树叶同一条：不透明但**不致窒息**
+      suffocates: false,
     },
     {
       id: ids.slab,
@@ -3439,6 +3452,8 @@ function buildBlockTable(): readonly BlockDef[] {
       tiles: spec.tiles ?? ['stone', 'stone', 'stone'],
       solid: spec.solid ?? true,
       opaque: spec.opaque ?? true,
+      // 默认与 `opaque` 一致；只有树叶这类"挡光但不该闷死人"的方块会单独关掉
+      suffocates: spec.suffocates ?? (spec.opaque ?? true),
       light: spec.light ?? 0,
       // 默认：不透光方块完全阻挡光照，透明方块不衰减
       lightOpacity: spec.lightOpacity ?? ((spec.opaque ?? true) ? 15 : 0),

@@ -9664,7 +9664,9 @@ class App {
       // 岩浆块（批次 121）：脚底下那一格是岩浆块 → 每秒 1 点火焰伤害。
       // 与生物那边**共用同一个算式**（`standsOnMagmaBlock`），见那里的注记
       onMagma: this.standsOnMagmaBlock(p.x, p.y, p.z),
-      suffocating: body !== Block.AIR && blockDef(body).opaque,
+      // 窒息用 `suffocates` 而不是 `opaque`：树叶为了剔除相邻面是"不透明"的，
+      // 但原版钻进树叶里不掉血（批次 218，之前站在树冠里会被持续扣血）
+      suffocating: body !== Block.AIR && blockDef(body).suffocates,
       fallDistance: this.pendingFallDistance,
       y: p.y,
       // 批次 181：能力看模式，不再看"在不在飞"

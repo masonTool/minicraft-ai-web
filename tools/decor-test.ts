@@ -159,6 +159,16 @@ check('植物无碰撞且不遮挡', [Block.SHORT_GRASS, Block.POPPY, Block.SUGA
 check('仙人掌不遮挡邻居（否则贴着的方块会缺面）', !blockDef(Block.CACTUS).opaque);
 check('植物徒手可采集（硬度 0 → 瞬间破坏）', breakSeconds(Block.SHORT_GRASS) === 0);
 check('南瓜属于徒手可采集', isHandHarvestable(Block.PUMPKIN));
+
+// 批次 218：树叶是"不透明"的（渲染要剔除相邻面），但**不该让人窒息**——
+// 之前窒息判据直接读 `opaque`，钻进树冠里会被持续扣血，原版不掉血
+const leaves = BLOCKS.filter((def) => def.name.endsWith('_leaves'));
+check('树叶登记齐全（6 种木材各一套）', leaves.length >= 6, String(leaves.length));
+check(
+  '树叶挡光但不致窒息',
+  leaves.length > 0 && leaves.every((def) => def.opaque && !def.suffocates),
+);
+check('石头仍然会让人窒息（判据没有被一刀切掉）', blockDef(Block.STONE).suffocates);
 // 海晶石 1.5 硬度：木镐 1.5 × 1.5 ÷ 2 = 1.125 秒；徒手是 7.5 秒
 check(
   '海晶石需要镐（不在徒手表）',
