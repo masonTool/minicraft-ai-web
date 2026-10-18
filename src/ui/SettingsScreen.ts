@@ -19,6 +19,7 @@
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
+import { MOBILE_VIEW_DISTANCE, MOBILE_VIEW_DISTANCE_MAX } from '../core/world/PerfPolicy.ts';
 import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './TouchControls.ts';
 import {
   DEFAULT_APPEARANCE,
@@ -241,6 +242,23 @@ export const DEFAULT_SETTINGS: GameSettings = {
 
 const STORAGE_KEY = 'bedrock-settings';
 
+/**
+ * "恢复默认设置"该回落到多大的视距（批次 202）。
+ *
+ * ⚠️ 这里必须按设备分开，不能直接用 `DEFAULT_SETTINGS.viewDistance`：
+ *  - 那个 12 是**桌面**默认值；手机开局只给 `MOBILE_VIEW_DISTANCE`（6），
+ *    自适应上限才是 `MOBILE_VIEW_DISTANCE_MAX`（8）；
+ *  - 以前"恢复默认"把 12 原样写回去，手机上等于一次性请求 489 个区块
+ *    （`World.update` 在半径 12 下的候选圈；半径 6 只有 137 个）——
+ *    玩家的体感就是"点了恢复默认反而更卡"。
+ *
+ * 真机日志（`minicraft-diag-2026-10-18`）里 `viewport 792×360 / dpr 3` 就是这种机子：
+ * 60 帧开局，动一动就掉到 20、再掉到 9。
+ */
+export function defaultViewDistanceFor(touch: boolean): number {
+  return touch ? MOBILE_VIEW_DISTANCE : DEFAULT_SETTINGS.viewDistance;
+}
+
 /** 从 localStorage 读取设置（缺字段或损坏时回退默认值） */
 export function loadSettings(): GameSettings {
   try {
@@ -303,6 +321,17 @@ export function saveSettings(settings: GameSettings): void {
   }
 }
 
+/**
+ * `onChange` 的附加说明（批次 202）。
+ *
+ * `reset` 只在一处为真：玩家点了"恢复默认设置"。主程序那边有一份**不写在设置里**
+ * 的运行时状态（自适应已经降下去的分辨率倍率 / 装饰层档位、被压低过的视距），
+ * 只有它知道"这一下是重置"，才能把那一份也一起复位。
+ */
+export interface SettingsChangeMeta {
+  reset?: boolean;
+}
+
 export interface SettingsActions {
   /** 继续游戏（关闭面板） */
   onResume: () => void;
@@ -311,7 +340,7 @@ export interface SettingsActions {
   /** 删除当前世界（含存档）并回到主菜单；同上 */
   onDeleteWorld?: () => void;
   /** 设置变化：立即生效（视距/视野/调试信息都要马上看到效果） */
-  onChange: (settings: GameSettings) => void;
+  onChange: (settings: GameSettings, meta?: SettingsChangeMeta) => void;
   /** 导入资源包（.mcpack / .zip） */
   onResourcePack?: (file: File) => void;
   /**
@@ -418,6 +447,14 @@ export class SettingsScreen {
     private readonly settings: GameSettings,
     private readonly actions: SettingsActions,
   ) {
+    // 手机上先把"存下来的视距"夹进这台设备真能做到的范围（批次 202）。
+    //
+    // 滑块原来一律是 4~16：玩家在手机上把它拖到 12、甚至点"恢复默认"回到 12，
+    // 而实际生效的上限是 `MOBILE_VIEW_DISTANCE_MAX`（8）——**界面上的数和游戏里的数不一致**，
+    // 这正是"我在设置里怎么调都没用"的来源。夹一次之后，滑块、存档、实际生效三者一致。
+    if (isTouchUi()) {
+      this.settings.viewDistance = Math.min(this.settings.viewDistance, MOBILE_VIEW_DISTANCE_MAX);
+    }
     this.root = document.createElement('div');
     this.root.id = 'settings-screen';
     this.root.classList.add('hidden');
@@ -555,7 +592,16 @@ export class SettingsScreen {
 
     const graphics = this.section('graphics');
     graphics.append(
-      this.makeSlider('viewDistance', '视距', ' 区块', 4, 16, 1),
+      // 上限按设备给（批次 202）：手机上 4~8（`MOBILE_VIEW_DISTANCE_MAX`）。
+      // 拖到 16 却只生效 8，是"设置里调了没用"的另一个来源（见构造函数里那次夹紧）。
+      this.makeSlider(
+        'viewDistance',
+        '视距',
+        ' 区块',
+        4,
+        isTouchUi() ? MOBILE_VIEW_DISTANCE_MAX : 16,
+        1,
+      ),
       this.makeSlider('fov', '视野', '°', 60, 110, 1),
     );
     // 批次 185（用户："性能相关那些设置有必要吗？默认去适配当前性能就行"）：
@@ -880,15 +926,22 @@ export class SettingsScreen {
   }
 
   /**
-   * 一键恢复默认（批次 185，用户要求）。
+   * 一键恢复默认（批次 185，用户要求；批次 202 修了三处"恢复了但没生效"）。
    *
    * `Object.assign` 而不是 `this.settings = {...DEFAULT}`：主程序握着同一个对象引用
    * （`loadSettings()` 的结果直接传进构造函数），换引用会让"改设置立即生效"断掉。
+   *
+   * 批次 202 的三处修正（真机反馈："恢复默认都没用"）：
+   *  1. **视距按设备给默认值**（见 `defaultViewDistanceFor`）：手机上回落到 12 只会更卡；
+   *  2. **带 `reset` 标记通知主程序**：分辨率倍率 / 装饰层档位不在这份 settings 里，
+   *     不带标记的话它们会永远停在"上一台机器扛不住"的那一档；
+   *  3. **同时清掉运行时那份"降级记忆"**（由 `main.applySettings` 完成）。
    */
   resetDefaults(): void {
-    Object.assign(this.settings, DEFAULT_SETTINGS);
+    // 先按设备决定视距，再整体覆盖：`Object.assign` 后者覆盖前者，顺序不能反
+    Object.assign(this.settings, DEFAULT_SETTINGS, { viewDistance: defaultViewDistanceFor(isTouchUi()) });
     for (const refresh of this.refreshers) refresh();
-    this.commit();
+    this.commit(true);
     // 给一句确认：面板上没有独立的 toast，借用设置页那行提示，2 秒后恢复原文
     this.settingsHintEl.textContent = '已恢复默认设置';
     window.setTimeout(() => this.renderSubtitle(), 2000);
@@ -1140,9 +1193,9 @@ export class SettingsScreen {
     );
   }
 
-  private commit(): void {
+  private commit(reset = false): void {
     saveSettings(this.settings);
-    this.actions.onChange(this.settings);
+    this.actions.onChange(this.settings, reset ? { reset: true } : undefined);
   }
 
   /** 存档信息（打开时刷新） */

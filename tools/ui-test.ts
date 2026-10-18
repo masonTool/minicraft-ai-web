@@ -2046,9 +2046,33 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   check(
     '设置里能一键恢复默认，且控件跟着重画',
     settingsSrc.includes('resetDefaults(): void') &&
-      settingsSrc.includes('Object.assign(this.settings, DEFAULT_SETTINGS);') &&
+      settingsSrc.includes(
+        'Object.assign(this.settings, DEFAULT_SETTINGS, { viewDistance: defaultViewDistanceFor(isTouchUi()) })',
+      ) &&
       settingsSrc.includes('for (const refresh of this.refreshers) refresh();') &&
       settingsSrc.includes("resetButton.id = 'settings-reset'"),
+  );
+  // 批次 202：恢复默认必须带 `reset` 标记出去——分辨率倍率与装饰层档位不在 `GameSettings` 里，
+  // 主程序不收到这个标记的话，玩家会看到"点了恢复默认，画面还是糊的 / 云还是没有"
+  check(
+    '恢复默认会通知主程序复位运行时的降级档位',
+    settingsSrc.includes('this.commit(true)') && appSrc.includes('meta?.reset'),
+  );
+  // 批次 202：改设置不再无条件重算区块范围（拖个音量滑块不该惊动流式层）
+  check(
+    '只有视距真的变了才重算区块范围',
+    appSrc.includes('if (viewChanged) this.refreshWorld('),
+  );
+  // 批次 202：诊断日志补上性能采样——真机日志以前只有"点了什么"，没有"多少帧、画了多少"
+  check(
+    '主循环每 5 秒记一条性能采样',
+    appSrc.includes('this.perfSampleTimer -= dt') &&
+      appSrc.includes('this.logPerfSample();') &&
+      appSrc.includes("diag.event('perf', 'sample', this.perfSnapshot())"),
+  );
+  check(
+    '诊断导出带上真实渲染规模与显卡型号',
+    appSrc.includes('perf: this.perfSnapshot()') && appSrc.includes('gpu: this.gpuName()'),
   );
   check(
     '帧率上限那个手动档位已删除（交给自适应）',

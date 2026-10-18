@@ -20,12 +20,20 @@ import {
   PARTICLE_LEVELS,
   PARTICLE_LEVEL_LABELS,
   cycleValue,
+  defaultViewDistanceFor,
   loadSettings,
   nextCycleValue,
   saveSettings,
   type GameSettings,
 } from '../src/ui/SettingsScreen.ts';
 import { CAMERA_MODES, CAMERA_MODE_LABELS } from '../src/core/viewMode.ts';
+import {
+  FRAME_TIME_DROP,
+  MOBILE_VIEW_DISTANCE,
+  MOBILE_VIEW_DISTANCE_MAX,
+  initialPerfState,
+  viewDistanceCapFor,
+} from '../src/core/world/PerfPolicy.ts';
 import { ParticleSystem } from '../src/render/ParticleSystem.ts';
 
 let passed = 0;
@@ -262,6 +270,39 @@ console.log('\n[四组音量（批次 178）]');
   check('超过 1 的夹到 1', dirty.volumeBlocks === 1);
   check('负数夹到 0', dirty.volumePlayer === 0);
   check('不是数字的回退默认 1', dirty.volumeMobs === 1);
+}
+
+// ---------------------------------------------------------------- 9. 批次 202：恢复默认
+
+console.log('\n[恢复默认设置（批次 202）]');
+{
+  // 真机反馈："在设置里恢复默认都没用，还是卡"。三个原因各自断言一条：
+  //  ① 恢复默认把**桌面**的 12 原样写回去 → 手机上等于请求 625 个区块；
+  //  ② 自适应已经降下去的分辨率/装饰层不在 settings 里，恢复默认碰不到它们；
+  //  ③ `main.applySettings` 直接赋值 `settings.viewDistance`，绕过了手机上限。
+  check(
+    '桌面恢复默认还是 12 区块',
+    defaultViewDistanceFor(false) === DEFAULT_SETTINGS.viewDistance,
+  );
+  check(
+    '手机恢复默认是 6 区块（不是 12）',
+    defaultViewDistanceFor(true) === MOBILE_VIEW_DISTANCE && MOBILE_VIEW_DISTANCE === 6,
+  );
+  check(
+    '手机默认值本身就在设备上限之内',
+    defaultViewDistanceFor(true) <= MOBILE_VIEW_DISTANCE_MAX && defaultViewDistanceFor(true) >= 4,
+  );
+
+  // `main.applySettings` 现在走的这条夹紧：滑块上写 12 → 实际只按 8 请求区块
+  check('手机把 12 夹到 8（不再一口气请求 625 个区块）',
+    viewDistanceCapFor(12, true) === MOBILE_VIEW_DISTANCE_MAX);
+  check('桌面夹紧不改变玩家的 12', viewDistanceCapFor(12, false) === 12);
+
+  // ②：恢复默认要把运行时那一份也复位——`initialPerfState` 就是"满分辨率 + 装饰层全开"
+  const fresh = initialPerfState(defaultViewDistanceFor(true));
+  check('复位后渲染分辨率回到 1.0', fresh.resolutionScale === 1);
+  check('复位后装饰层回到 0（云与粒子回来）', fresh.decorLevel === 0);
+  check('复位后帧时间假定值不再"卡"（否则会立刻再降一轮）', fresh.frameTimeAvg < FRAME_TIME_DROP);
 }
 
 useStorage(null);

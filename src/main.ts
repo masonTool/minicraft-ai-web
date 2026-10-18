@@ -93,7 +93,13 @@ import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/
 import { endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
-import { SettingsScreen, loadSettings, saveSettings, type GameSettings } from './ui/SettingsScreen.ts';
+import {
+  SettingsScreen,
+  loadSettings,
+  saveSettings,
+  type GameSettings,
+  type SettingsChangeMeta,
+} from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
 import { hideLoading, showLoading, WORLD_LOADING_TEXT } from './ui/LoadingOverlay.ts';
 import {
@@ -917,6 +923,15 @@ class App {
    */
   private readonly startupRamp = new StartupRamp();
   /**
+   * 性能采样节拍（批次 202）。
+   *
+   * 真机日志里只有"点了什么"，没有"那一刻多少帧、画了多少东西"，
+   * 于是"为什么卡"只能靠猜。这里每 5 秒往诊断日志里写一条 `perf/sample`：
+   * 帧时间、渲染分辨率、视距、区块/网格/光照队列、draw call、三角形、实体、粒子、堆占用。
+   * 一条约 200 字节，10 分钟也就 24KB —— 相对于 500KB 的预算可以忽略。
+   */
+  private perfSampleTimer = 5;
+  /**
    * Android 返回键 / 侧滑返回 = 关界面（批次 96，对齐基岩版）。
    *
    * 手机上**没有 Esc**：原来关界面只有"点空白处"，而系统的返回手势会直接退出页面
@@ -1738,19 +1753,36 @@ class App {
     return this.isAnyUiOpen();
   }
 
-  private applySettings(settings: GameSettings): void {
+  private applySettings(settings: GameSettings, meta?: SettingsChangeMeta): void {
     this.cameraMode = settings.cameraMode;
-    this.viewDistance = settings.viewDistance;
+    // 视距必须在这里再夹一次上限（批次 202）。
+    //
+    // `settings.viewDistance` 是**玩家在滑块上看到的数**（桌面默认 12），手机的"最多 8"
+    // 以前只写在策略侧（`perfPolicyStep` 的 `viewDistanceCap`），而这一行是**直接赋值**，
+    // 于是"改任意一项设置 / 点恢复默认"都会把视距原样提到 12 —— `World.update` 按半径 12
+    // 一口气请求 489 个区块（外加 keepRadius 14 的常驻，最多 841 个都留着）。
+    // 真机日志（2026-10-18，792×360 / dpr 3）里"开局 60 帧 → 三分钟后 9 帧"正是这一串：
+    // 请求风暴把生成/光照队列塞满，之后每一帧都在还这笔债。
+    const mobile = isTouchDevice();
+    const view = viewDistanceCapFor(settings.viewDistance, mobile);
+    const viewChanged = view !== this.viewDistance;
+    this.viewDistance = view;
     this.playerRenderer.setCape(settings.cape);
     // 外观（批次 187）：肤色 / 上衣 / 裤子，改完立刻在第三人称上生效
     this.playerRenderer.setAppearance(paletteOf(settings));
     // 玩家手动改视距时把自适应冷却重置：否则刚拖完滑块又要等几秒才允许升降
     // ⚠️ 分辨率的当前值**不重置**：它是"这台设备现在扛不扛得住"的记忆，
     // 改一次视距就把它弹回 1.0 的话，弱机每次调设置都要重新掉一轮帧
-    this.perf = { ...this.perf, viewDistance: settings.viewDistance, cooldown: 3 };
+    //
+    // 唯一例外是"恢复默认设置"（批次 202）：那一份运行时记忆**必须**一起清掉，
+    // 否则玩家点了恢复默认，看到的还是"糊的 / 没有云 / 视距被压在 4"——那正是
+    // 真机反馈里"恢复默认都没用"的另一半原因。
+    this.perf = meta?.reset
+      ? initialPerfState(view)
+      : { ...this.perf, viewDistance: view, cooldown: 3 };
     this.camera.fov = settings.fov;
     // ⚠️ 这一处也要走 `cameraFarFor`：它是最容易被漏掉的一处（改设置时重算远裁面）
-    this.camera.far = cameraFarFor(settings.viewDistance);
+    this.camera.far = cameraFarFor(view);
     this.camera.updateProjectionMatrix();
     this.audio.volume = settings.volume;
     // 四组音量（批次 178，M20）：与主音量相乘，各自独立
@@ -1772,8 +1804,20 @@ class App {
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.recipeBook.isOpen) this.recipeBook.render();
     this.applyEnvironment();
-    // 视距变化后立刻按新的范围请求/卸载区块
-    this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
+    // 恢复默认：把分辨率倍率也落回 1.0（装饰层跟着 `applyDecorLevel` 已经还原）。
+    // 这两样都不在 `GameSettings` 里，是自适应策略自己记的账 —— 见上面 `perf` 那一处。
+    if (meta?.reset) {
+      this.applyResolutionScale();
+      diag.event('app', 'settings.reset', {
+        viewDistance: view,
+        viewDistanceSetting: settings.viewDistance,
+        mobile,
+      });
+    }
+    // 视距没变就别再"按新范围重算一遍"（批次 202）：这条路径原来是无条件的，
+    // 于是拖动**任何一个**滑块（音量、灵敏度…）都会走一遍 `World.update` 的
+    // 489 次候选排序 + 请求检查（视距 12 时）。改音量不该惊动区块流式层。
+    if (viewChanged) this.refreshWorld(toChunkCoord(this.physics.x), toChunkCoord(this.physics.z), true);
   }
 
   /** 打开暂停菜单 */
@@ -9345,6 +9389,71 @@ class App {
   }
 
   /**
+   * 这一刻的渲染规模快照（批次 202）。
+   *
+   * 两处共用同一份口径：①诊断导出时的 `meta.perf`；②主循环里每 5 秒的 `perf/sample`。
+   *
+   * ⚠️ 只读现成的计数器，**不遍历任何大数组**——它每 5 秒跑一次，绝不能自己变成卡顿源。
+   * 读 `renderer.info` 拿到的是上一帧的数字（three 每帧重置它）。
+   *
+   * 为什么要记这些：真机上"卡"与"设置里写着 12"往往不是一回事——手机上限 8、
+   * 自适应可能已经把视距压到 4、分辨率降到 0.75。只看 `settings` 永远看不出来。
+   */
+  private perfSnapshot(): Record<string, unknown> {
+    const info = this.renderer.info;
+    const canvas = this.renderer.domElement;
+    const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
+    return {
+      fps: this.fps,
+      // 帧时间是**平滑值**（系数 0.05，见 PerfPolicy）：它决定升降档，单帧尖峰看不出来
+      frameMs: Math.round(this.perf.frameTimeAvg * 10) / 10,
+      res: this.perf.resolutionScale,
+      view: this.viewDistance,
+      decor: this.perf.decorLevel,
+      pixelRatio: Math.round(this.renderer.getPixelRatio() * 100) / 100,
+      buffer: `${canvas.width}×${canvas.height}`,
+      chunks: this.world.chunks.size,
+      meshes: this.chunkRenderer.chunkMeshCount,
+      meshQueue: this.chunkRenderer.queueLength,
+      genQueue: this.world.pendingCount,
+      lightQueue: this.world.lightWorkCount,
+      entities: this.entities.all.length,
+      particles: this.particles.active,
+      rain: this.weather.activeCount,
+      calls: info.render.calls,
+      tris: info.render.triangles,
+      geo: info.memory.geometries,
+      tex: info.memory.textures,
+      prog: info.programs?.length ?? 0,
+      // 手机 Chrome 有 `performance.memory`（非标准）；没有就不记这一项
+      heapMb: memory ? Math.round(memory.usedJSHeapSize / 1048576) : undefined,
+      uiOpen: this.uiOpen,
+    };
+  }
+
+  /** 记一条性能采样（见 `perfSampleTimer`） */
+  private logPerfSample(): void {
+    diag.event('perf', 'sample', this.perfSnapshot());
+  }
+
+  /**
+   * 显卡型号。
+   *
+   * 导出诊断时带上它：同一份代码在 Adreno 与 Mali 上表现能差一倍，
+   * "只有这台机子卡"这种话没有型号就没法验证。
+   */
+  private gpuName(): string {
+    try {
+      const gl = this.renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      return typeof name === 'string' ? name : 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  /**
    * 把分辨率倍率落到渲染器上（批次 130，N7 的"动态分辨率"）。
    *
    * ⚠️ `setSize` 的第三个参数是 `updateStyle`，**必须传 `false`**：传 true 的话 canvas 的
@@ -9574,7 +9683,17 @@ class App {
         maxFps: this.settings.maxFps,
         touchScale: this.settings.touchScale,
         touchStick: this.settings.touchStick,
+        // 批次 202：这两项决定"出问题时自动降级有没有在干活"，漏了就只能猜
+        adaptiveViewDistance: this.settings.adaptiveViewDistance,
+        adaptiveResolution: this.settings.adaptiveResolution,
+        particles: this.settings.particles,
+        clouds: this.settings.clouds,
       },
+      // 批次 202：导出这一刻的**真实**渲染规模。
+      // 真机上"卡"与"设置里写着 12"往往不是一回事：手机上限 8、自适应可能已经压到 4、
+      // 分辨率可能已经被降到 0.75——只看 settings 永远看不出来。
+      perf: this.perfSnapshot(),
+      gpu: this.gpuName(),
       runtime: {
         uiOpen: this.uiOpen,
         flying: this.flying,
@@ -9721,6 +9840,13 @@ class App {
       this.updateGamepad(dt);
       this.tickAutoSave(dt);
       this.updatePerfPolicy(dt);
+      // 性能采样（批次 202）：掉帧时导出诊断日志就能看到"卡在哪一段"，
+      // 而不是像现在这样只能从事件间隔里倒推帧率
+      this.perfSampleTimer -= dt;
+      if (this.perfSampleTimer <= 0) {
+        this.perfSampleTimer = 5;
+        this.logPerfSample();
+      }
       this.updateAudio(dt);
       this.net.tick(
         this.physics.x,
