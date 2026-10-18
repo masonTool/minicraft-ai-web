@@ -107,7 +107,13 @@ import {
   type SettingsChangeMeta,
 } from './ui/SettingsScreen.ts';
 import { WorldScreen } from './ui/WorldScreen.ts';
-import { hideLoading, showLoading, WORLD_LOADING_TEXT } from './ui/LoadingOverlay.ts';
+import {
+  failBootLoading,
+  hideBootLoading,
+  hideLoading,
+  showLoading,
+  WORLD_LOADING_TEXT,
+} from './ui/LoadingOverlay.ts';
 import {
   armAutoFullscreen,
   armPresentOnTap,
@@ -11735,6 +11741,9 @@ async function boot(): Promise<void> {
   if (!support.ok) {
     console.warn(`[gl] 设备不支持：${support.kind} —— ${support.reason}`);
     hideLoading();
+    // 首屏那层"加载中"也一并撤掉：不支持提示（90）虽然压在它（60）上面，
+    // 但留着一个永远转圈的层没有意义
+    hideBootLoading();
     unsupported.show(support);
     return;
   }
@@ -11913,6 +11922,14 @@ async function boot(): Promise<void> {
   // 没装成 PWA 时引导一次"添加到主屏幕"——那是标签页里唯一零点击全屏的路径
   installInstallHint();
   startupTrace.mark(STARTUP_PHASES.bootMenu);
+  // 主菜单已经铺好，撤掉首屏启动遮罩（那之前一直由它盖着准星那个"加号"）。
+  // 必须在 `menu.show()` 之后：菜单是不透明的整屏，先撤会闪一下黑底 + 准星。
+  hideBootLoading();
 }
 
-void boot();
+void boot().catch((error: unknown) => {
+  // 启动期抛错：别让"加载中…"永远转下去（也别说谎说还在加载）。
+  // 这里只负责给玩家一句人话，错误本身照旧 rethrow，交给 `unhandledrejection` 记账。
+  failBootLoading();
+  throw error;
+});

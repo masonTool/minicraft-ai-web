@@ -58,3 +58,44 @@ export function isLoadingVisible(): boolean {
   if (!document_) return false;
   return document_.getElementById(LOADING_ID) !== null;
 }
+
+// ---------------------------------------------------------------- 首屏启动遮罩
+//
+// 用户反馈："初始加载游戏页面的时候，加载的中间是个加号，改成转圈圈吧。"
+// 那个"加号"是 `#hud` 里的准星（`#crosshair`）：它写在 HTML 里，CSS 一解析就落在
+// 屏幕正中，而模块脚本还在下载/执行——首屏那几百毫秒看起来像"只有加号的空页面"。
+//
+// ⚠️ 这一层与上面的 `#loading` **不是同一个东西**，职责也不同：
+//   · `#boot-loading` = 应用启动（脚本 / 图集 / 存档清单），文案"加载中…"；
+//     它**静态写在 `index.html` 里**——脚本还没跑起来的时候正是要被盖住的那段，
+//     由 JS 创建就晚了。这里只负责"撤掉 / 换成失败文案"。
+//   · `#loading`      = 真的在生成一个世界（按需创建）。
+// 验收脚本与离线断言的判据也是分开的（`#loading` vs `#boot-loading`）。
+
+/** 首屏启动遮罩的 id（与 `index.html` 里那个静态节点一一对应） */
+export const BOOT_LOADING_ID = 'boot-loading';
+
+/**
+ * 撤掉**首屏启动遮罩**（没有就什么都不做；重复调用是安全的）。
+ *
+ * 只在"主菜单已经铺好"或"设备不支持"时调用——提前撤会把准星那个"加号"露出来。
+ */
+export function hideBootLoading(): void {
+  doc()?.getElementById(BOOT_LOADING_ID)?.remove();
+}
+
+/** 启动失败：停住转圈、换成一句能看懂的话（保留遮罩，别把"黑屏 + 准星"还给玩家） */
+export function failBootLoading(text = '加载失败，请刷新页面重试'): void {
+  const element = doc()?.getElementById(BOOT_LOADING_ID);
+  if (!element) return;
+  element.classList.add('failed');
+  const label = element.querySelector('.boot-text');
+  if (label) label.textContent = text;
+}
+
+/** 首屏启动遮罩还在不在（验收脚本与断言用） */
+export function isBootLoadingVisible(): boolean {
+  const document_ = doc();
+  if (!document_) return false;
+  return document_.getElementById(BOOT_LOADING_ID) !== null;
+}

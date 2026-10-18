@@ -1053,6 +1053,55 @@
         to { background-position: 160% 0; }
       }
 
+      /* ---------------- 首屏启动遮罩（用户："加载的中间是个加号，改成转圈圈"） ----------------
+         那个"加号"不是加载图标，是 `#hud` 里的准星（`#crosshair` 的两条白线）：它跟着 HTML
+         一起解析、CSS 一生效就落在屏幕正中，而模块脚本还在下载/执行——于是首屏那几百
+         毫秒看起来像"一张只有加号的空页面"。
+
+         这一层**必须静态写在 HTML 里**（由 JS 创建的话，正是要被盖住的那段时间没东西盖），
+         转圈纯 CSS、不依赖脚本。走到主菜单或判定设备不支持时由 JS 整块 remove。
+
+         ⚠️ 与 `#loading` 是两个东西：
+           · `#boot-loading` = 应用启动（脚本 / 图集 / 存档清单），文案"加载中…"
+           · `#loading`      = 真的在生成一个世界，文案"正在生成世界…"（批次 167 起按需创建）
+         z-index 60：压住主菜单(40) / 设置(50) / 回前台层(55)，但**低于**竖屏提示与
+         不支持提示(90)——手机上竖屏打开时应该先看见"请横屏"。 */
+      #boot-loading {
+        position: fixed; inset: 0; z-index: 60;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 12px;
+        background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
+        color: #c8c8c8; font-size: 14px; text-align: center;
+        cursor: progress;
+      }
+      /* 转圈：一圈暗环 + 一段高亮弧（整圈同色的话转起来看不出在动） */
+      .boot-spinner {
+        width: 34px; height: 34px; box-sizing: border-box;
+        border: 3px solid rgba(255, 255, 255, .16);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: boot-spin .9s linear infinite;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      .boot-text { letter-spacing: 1px; }
+      /* 不确定进度条（与 `#loading` 那条同一套动画）：启动没有可靠的总进度，
+         用"一直在走"的一条比一个假的百分比诚实 */
+      .boot-bar {
+        width: min(180px, 46vw); height: 3px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        background-size: 60% 100%; background-repeat: no-repeat;
+        animation: loading-sweep 1.4s var(--ease) infinite;
+      }
+      .boot-sub { font-size: 11px; color: #7d848f; }
+      /* 启动失败：停住转圈、换成一句能看懂的话（别让它假装还在加载） */
+      #boot-loading.failed .boot-spinner {
+        animation: none;
+        border-color: rgba(255, 255, 255, .16);
+        border-top-color: var(--danger);
+      }
+      #boot-loading.failed .boot-bar { display: none; }
+      #boot-loading.failed .boot-text { color: var(--danger); }
+
       #hotbar {
         position: absolute; left: 50%; transform: translateX(-50%);
         /* 底部安全区：刘海屏/全面屏的"home 横条"会盖住贴边的 UI */
@@ -3524,6 +3573,16 @@
   <body>
     <div id="app"></div>
 
+    <!-- 首屏启动遮罩：**静态**写在 HTML 里（模块脚本还没跑的时候就要盖住准星那个"加号"）。
+         `boot()` 走到主菜单（或判定设备不支持）时，由 `ui/LoadingOverlay.ts` 的
+         `hideBootLoading()` 整块 remove。 -->
+    <div id="boot-loading" role="status" aria-live="polite">
+      <div class="boot-spinner" aria-hidden="true"></div>
+      <div class="boot-text">加载中…</div>
+      <div class="boot-bar" aria-hidden="true"></div>
+      <div class="boot-sub">正在准备材质与存档</div>
+    </div>
+
     <div id="hud">
       <!-- 右上：性能信息 + 状态效果（批次 206：性能从左上搬来，聊天/玩家信息占左上） -->
       <div id="hud-right">
@@ -3557,7 +3616,9 @@
          "首次加载这个页面的时候，它会显示一个地图生成中的东西……地图生成是在创建游戏
          的时候才生成的"。现在它由 `ui/LoadingOverlay.ts` **按需创建**：
          只有点进一个世界、真的要生成地形时才挂出来，撤掉时整块 remove。
-         CSS（`#loading` 与 `loading-sweep`）留在上面那一段，`test:theme` 有断言盯着。 -->
+         CSS（`#loading` 与 `loading-sweep`）留在上面那一段，`test:theme` 有断言盯着。
+         ℹ️ 首屏告别"只有一个准星"的那层遮罩是另一个东西（`#boot-loading`，静态、
+            文案"加载中…"），见上面 `#boot-loading` 那段注记与 body 开头的节点。 -->
 
     <!-- 设备不支持时的整屏提示（A10）：判定在 core/render/webglSupport.ts，
          这里只给样式；内容由 ui/UnsupportedScreen.ts 填（见那边的注记：

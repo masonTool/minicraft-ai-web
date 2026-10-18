@@ -47,7 +47,14 @@ import {
 } from '../src/ui/SettingsScreen.ts';
 import { CREATIVE_TAB_ICONS, CREATIVE_TABS, creativeTabFor, missingTabIcons } from '../src/ui/CreativeTabs.ts';
 import { armAutoFullscreen, isFullscreen } from '../src/ui/Fullscreen.ts';
-import { hideLoading, isLoadingVisible, showLoading } from '../src/ui/LoadingOverlay.ts';
+import {
+  failBootLoading,
+  hideBootLoading,
+  hideLoading,
+  isBootLoadingVisible,
+  isLoadingVisible,
+  showLoading,
+} from '../src/ui/LoadingOverlay.ts';
 import { CREATIVE_ITEMS, itemDef, itemIconTile } from '../src/core/registry/items.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 
@@ -1755,10 +1762,44 @@ console.log('\n[加载遮罩只属于"进世界"（批次 167）]');
   try {
     showLoading('x');
     hideLoading();
+    hideBootLoading();
+    failBootLoading();
   } catch {
     safe = false;
   }
-  check('没有 document 时 show/hide 不抛', safe && !isLoadingVisible());
+  check('没有 document 时 show/hide 不抛', safe && !isLoadingVisible() && !isBootLoadingVisible());
+
+  // ---- 首屏启动遮罩（用户："初始加载游戏页面的时候，加载的中间是个加号，改成转圈圈吧"）
+  //
+  // 那个"加号"是 `#hud` 里的准星：它写在 HTML 里，CSS 一解析就落在屏幕正中，而模块
+  // 脚本还没跑。修法是**静态**写一层 `#boot-loading`（纯 CSS 转圈 + 文案 + 不确定进度条），
+  // 走到主菜单才由 JS 整块撤掉。三条判据分别盯"节点在不在 / 转圈是不是纯 CSS / 谁来撤"。
+  check(
+    'index.html 里有静态首屏遮罩（盖住准星那个"加号"）',
+    /<div id="boot-loading"/.test(html) && html.includes('加载中…'),
+  );
+  check(
+    '首屏遮罩是 CSS 转圈（不依赖脚本就能画出来）',
+    html.includes('.boot-spinner') && html.includes('@keyframes boot-spin'),
+  );
+  check(
+    '首屏遮罩带一条不确定进度条（复用 loading-sweep）',
+    /\.boot-bar \{[^}]*loading-sweep/.test(html),
+  );
+  // 层级必须低于竖屏提示/不支持提示(90)：手机上竖屏打开时应该先看见"请横屏"。
+  check(
+    '首屏遮罩层级低于竖屏提示（z-index 60）',
+    /#boot-loading \{[^}]*z-index: 60/.test(html),
+  );
+  check(
+    '主菜单铺好之后才撤首屏遮罩（boot 末尾 + 设备不支持分支）',
+    (mainSrc.match(/hideBootLoading\(\)/g) ?? []).length >= 2 &&
+      /startupTrace\.mark\(STARTUP_PHASES\.bootMenu\);[\s\S]{0,200}hideBootLoading\(\)/.test(mainSrc),
+  );
+  check(
+    '启动失败时把遮罩换成错误文案（不让它一直转）',
+    mainSrc.includes('failBootLoading()') && overlaySrc.includes('加载失败'),
+  );
 }
 
 console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物品栏」）]');
