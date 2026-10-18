@@ -2418,6 +2418,14 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     appSrc.includes("this.applyIncomingDamage(hit.amount, 'wither')") &&
       appSrc.includes('for (const hit of result.damageHits)'),
   );
+  // 没有这四类事件，导出的诊断日志就只有手势与性能，死因永远只能靠猜（批次 218）
+  check(
+    '掉血 / 死亡 / 重生 / 状态效果都进诊断日志（survival）',
+    appSrc.includes("diag.event('survival', 'damage'") &&
+      appSrc.includes("diag.event('survival', 'death'") &&
+      appSrc.includes("diag.event('survival', 'respawn'") &&
+      appSrc.includes("diag.event('survival', 'effect'"),
+  );
   check(
     '死亡卡片也写清死因',
     html.includes('class="death-cause"') &&

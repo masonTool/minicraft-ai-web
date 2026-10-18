@@ -72,6 +72,22 @@ console.log('\n[一、环形缓冲]');
   equal('mark 的分类是 mark', mark.cat, 'mark');
 }
 
+{
+  // 批次 218：生存类（掉血 / 死亡 / 重生 / 效果）是事后复盘死因的唯一线索，
+  // 至少要保证它是合法分类，并且能原样落盘再读回来
+  const log = new DiagnosticsLog(8);
+  log.log('survival', 'damage', { amount: 3, cause: 'wither', health: 7 });
+  const back = decodeSessions(
+    JSON.stringify(encodeSessions([{ id: 's1', startedAt: 0, events: log.events() }])),
+  );
+  equal('生存事件能落盘再读回', back[0]?.events[0]?.cat, 'survival');
+  equal(
+    '并且原因字段还在',
+    (back[0]?.events[0]?.data as Record<string, unknown> | undefined)?.['cause'],
+    'wither',
+  );
+}
+
 console.log('\n[二、data 裁剪]');
 
 {

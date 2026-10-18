@@ -6503,6 +6503,8 @@ class App {
       // 与"蜘蛛眼/牛奶能解"这些既有规则自动生效
       afflictPlayer: (effect, seconds) => {
         this.effects.apply(effect, seconds, 0);
+        // 挂效果也记一笔（批次 218）：凋零能致死，事后要能看出"是哪一下挂上的"
+        diag.event('survival', 'effect', { effect, seconds });
       },
       // 末影人被注视激怒（批次 112）：实体层拿不到相机，所以由这里回答"玩家在看哪"
       playerGazeAt: (x, y, z) => this.playerGazeAt(x, y, z),
@@ -7134,6 +7136,7 @@ class App {
     const id = resolveEffect(name);
     if (!id) return false;
     this.effects.apply(id, seconds, amplifier, true);
+    diag.event('survival', 'effect', { effect: id, seconds, amplifier, via: 'command' });
     this.resolveInstantEffects();
     this.chat.push(`获得效果：${effectLabel(id)}${amplifier > 0 ? ` ${romanLevel(amplifier)}` : ''}`, 'system');
     return true;
@@ -9476,10 +9479,18 @@ class App {
       if (!this.deathHandled) {
         this.deathHandled = true;
         // 死亡卡片也写清死因（"被僵尸打死"和"掉进岩浆"的应对完全不同）
+        const last = this.stats.lastDamage;
         if (this.deathCauseEl) {
-          const last = this.stats.lastDamage;
           this.deathCauseEl.textContent = last ? `（${damageReason(last.cause, last.source)}）` : '';
         }
+        // 死亡也进诊断日志（批次 218）：死因、当时的位置与饥饿值，事后能复盘
+        diag.event('survival', 'death', {
+          cause: last?.cause,
+          source: last?.source,
+          health: this.stats.health,
+          food: this.stats.food,
+          pos: [Math.round(this.physics.x * 10) / 10, Math.round(this.physics.y * 10) / 10, Math.round(this.physics.z * 10) / 10],
+        });
         this.dropInventoryOnDeath();
         this.dropExperienceOnDeath();
       }
@@ -9531,6 +9542,17 @@ class App {
         .map((item) => `${damageReason(item.cause, item.source)}（${fmt(item.amount)} 点）`)
         .join('；');
       this.chat.push(`受到 ${fmt(total)} 点伤害：${reasons} · 生命 ${fmt(health)}/20`, 'damage');
+      // 诊断日志（批次 218）：以前整份导出里**没有任何生命值信息**，只能靠猜。
+      // 这里逐条记"被谁、什么类型、掉了多少、剩多少"，导出后一眼能对上。
+      for (const item of list) {
+        diag.event('survival', 'damage', {
+          amount: item.amount,
+          cause: item.cause,
+          source: item.source,
+          health,
+          food,
+        });
+      }
     } else if (healthDelta < -0.05) {
       // 没有记录（理论上不该发生，比如读档直接改了 health）：退回最后一条，至少给出类型
       const last = this.stats.lastDamage;
@@ -9538,6 +9560,14 @@ class App {
         `受到 ${fmt(-healthDelta)} 点伤害：${damageReason(last?.cause ?? 'generic', last?.source)} · 生命 ${fmt(health)}/20`,
         'damage',
       );
+      // 这条本身就是"伤害流水对不上"的信号，必须记下来（带 `unlogged` 标记便于筛）
+      diag.event('survival', 'damage.unlogged', {
+        amount: -healthDelta,
+        cause: last?.cause,
+        source: last?.source,
+        health,
+        food,
+      });
     }
     if (healthDelta >= 2) {
       this.chat.push(`生命 +${fmt(healthDelta)}（自然恢复或治疗效果）· 当前 ${fmt(health)}/20`, 'gain');
@@ -9734,6 +9764,10 @@ class App {
     this.stats.respawn();
     // 重生回满血不是"治疗"，别播成"生命 +20"
     this.resetPlayerNotices();
+    diag.event('survival', 'respawn', {
+      pos: [Math.round(sx * 10) / 10, Math.round(sy * 10) / 10, Math.round(sz * 10) / 10],
+      dimension: point.dimension,
+    });
     // 死亡会清空状态效果（原版行为）
     this.effects.clear();
     this.fallStartY = null;
