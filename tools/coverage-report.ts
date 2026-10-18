@@ -220,7 +220,7 @@ const rows: readonly Row[] = [
     spec: SPEC.redstone,
     now: redstoneElements,
     basis: '原版 1.18 参与充能/传导/负载的元件（同族木材只算一种）',
-    gap: '音符盒/目标方块/激活铁轨/红石矿石/测重压力板/陷阱箱',
+    gap: '目标方块/红石矿石/陷阱箱',
   },
   {
     label: '维度',
