@@ -330,7 +330,7 @@ console.log('\n[生物表]');
   // 112 加了末影人（第一种会瞬移的、第一种"不主动攻击"的）
   // 批次 115 加了凋灵骷髅（第一种"只在某个结构里刷"的）
   // 批次 189 加了鱿鱼（被动、水生）
-  check('生物表包含 34 种生物（19 敌对 + 4 被动动物 + 鱿鱼 + 村民 + 小史莱姆 + 小岩浆怪 + 狼/猫/豹猫/狐狸 + 马/驴/骡/羊驼）', MOB_TYPES.length === 34, `${MOB_TYPES.length}`);
+  check('生物表包含 39 种生物（19 敌对 + 4 被动动物 + 鱿鱼 + 村民 + 小史莱姆 + 小岩浆怪 + 狼/猫/豹猫/狐狸 + 马/驴/骡/羊驼 + 兔/山羊/鳕鱼/鲑鱼/海豚）', MOB_TYPES.length === 39, `${MOB_TYPES.length}`);
   check(
     '敌对生物要么有攻击力、要么另有一条伤害通道',
     // ⚠️ 恶魂是**刻意的例外**（批次 94）：原版它不近战（撞到人也不掉血），
@@ -342,14 +342,17 @@ console.log('\n[生物表]');
   );
   // 村民（J11，批次 88）是**刻意的例外**：原版杀掉村民什么都不掉也不给经验
   //（掉了就等于鼓励玩家屠村），所以它进不了"被动生物都有掉落"这条里
+  // 兔/山羊也在这条白名单里：原版它们掉兔皮/角，而本项目还没有那两件物品，
+  // 所以**故意不给假掉落**（写进 TASKS 的差异）
+  const noDropIds = new Set(['villager', 'fox', 'rabbit', 'goat']);
   check(
-    '被动动物都有掉落；村民与宠物（狼/猫/豹猫/狐狸）没有（原版如此）',
+    '被动动物都有掉落；村民/狐狸/兔/山羊与宠物没有（原版如此或物品未做）',
     MOB_TYPES.filter(
-      (t) => !t.hostile && t.id !== 'villager' && t.id !== 'fox' && t.tameWith === undefined,
+      (t) => !t.hostile && !noDropIds.has(t.id) && t.tameWith === undefined,
     ).every((t) => t.drops.length > 0) &&
-      MOB_TYPES.filter(
-        (t) => t.id === 'villager' || t.id === 'fox' || t.tameWith !== undefined,
-      ).every((t) => t.drops.length === 0),
+      MOB_TYPES.filter((t) => noDropIds.has(t.id) || t.tameWith !== undefined).every(
+        (t) => t.drops.length === 0,
+      ),
   );
   check('所有生物都有正的生命与尺寸', MOB_TYPES.every((t) => t.health > 0 && t.width > 0 && t.height > 0));
 }
