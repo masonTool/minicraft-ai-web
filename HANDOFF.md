@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 637（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 638（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **181**、进行中 **76**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,24 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 220（聊天 HUD 三条 + 场景亮度 + 诊断入口精简，用户一次提了四条）：
+  ① **聊天字号 13px → 8px**（`index.html` 的 `--chat-font-size` 一个变量；打开翻历史时回到 11px）
+  ——字面"小一倍"是 6.5px，手机上读不清，取 8px 折中，改一个变量就能整体缩放；
+  ② **消息 1 秒后彻底消失**：`LINE_LIFETIME` 10s → **0.7s** + `FADE_AFTER` 4s → **0.3s**，
+  CSS 淡出 `.8s → .3s`（原来 0.8s 根本淡不完就被移除了）；历史不丢，打开仍能翻最近 120 行；
+  ③ **显示期间点一下直接进聊天**：`renderLog` 在"未打开且有可见行"时给根节点挂 `.peek`
+  （CSS：`#chat.peek .chat-log { pointer-events: auto }`，缝隙/空白处照常转视角）；
+  `openWith(prefill, { focus: false })` **不聚焦输入框**，手机不弹键盘，想打字再点输入框。
+  消息全部过期 → 自动摘 `.peek`，左上角不会留一块看不见的点击陷阱；
+  ④ 新增设置项**场景亮度**（外观组，50%~200%，默认 100%）：`main.applySceneBrightness()`
+  把 `filter: brightness()` 写在渲染画布上——光照已经烘进顶点色/贴图/天空盒/粒子/手持/色罩，
+  逐材质乘一遍要动 6+ 个着色器且必漏；100% 时不写 filter（零合成开销），HUD 与面板不受影响；
+  ⑤ 诊断日志按用户要求**只留「导出」**：去掉"记录问题"（插 mark）与"复制"（时间线进剪贴板）
+  ——导出 JSON 本来就带整条时间线，三颗按钮只是让"点哪个"变成一道选择题；
+  `diagnosticsRuntime` 的 `mark()/copy()` 保留（离线测试与控制台 `__mc.diag` 还在用）。
+  门禁：`test:settings` 63 → **69**（+6 亮度默认/范围/往返/脏值）、
+  `test:ui` 634 → **638**（+4 字号/寿命/点击进入/不聚焦；诊断断言改成"只有导出"）；
+  `npm run check` 与 `npm run build:fast` 全绿。
 - 批次 219（用户："手拿肉，点了比较久才开始吃"）：把"按下 → 咽下"从 **1.88 秒压到 1.0 秒**。
   ① **触摸端不再等 280ms**：`usingItem` 原来要求 `leftDown`（长按判定才置位），现在读
   `TouchControls.holding`（`lookPointer !== null && !lookDragged`）——按住且没划动就算"使用"；
