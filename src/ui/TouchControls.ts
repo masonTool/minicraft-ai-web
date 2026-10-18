@@ -8,8 +8,8 @@
  * 手势约定对齐基岩版**手机**（Education / Wiki「控制」）：
  *  - 左下角摇杆：拖动移动；推满自动疾跑；**双击摇杆 = 切换潜行**
  *  - 屏幕拖动：转视角
- *  - 轻点抬起：放置 / 交互一次
- *  - 按住不放（未拖动）：先连续放置，超过破坏阈值后改为挖掘
+ *  - 轻点抬起：交互 / 攻击 / 放置一次（优先级由主程序决定）
+ *  - 按住不放（未拖动，≥280ms）：破坏方块 / 持续攻击
  *  - **生存：右侧只有一颗跳跃键**
  *  - **创造：双击跳跃起飞 → 右侧出现上升 / 下降键**；再双击跳跃落地，升降键消失
  *  - 快捷栏两侧：右背包、左聊天
@@ -29,20 +29,22 @@ export interface TouchDebugState {
   forward: number;
   strafe: number;
   breaking: boolean;
-  placeHolding: boolean;
   jumpHeld: boolean;
   sneakHeld: boolean;
   flying: boolean;
   lookDragged: boolean;
 }
 
-/** 超过这个时长（毫秒）就算长按，升级为破坏 */
-const LONG_PRESS_MS = 220;
 /**
- * 按住达到此时长、且尚未进入破坏 → 开始**连续放置**（基岩手机建造手感）。
- * 必须短于 `LONG_PRESS_MS`，否则永远轮不到放置。
+ * 超过这个时长（毫秒）就算长按，升级为破坏 / 持续攻击（批次 181）。
+ *
+ * ⚠️ 批次 181 删掉了原来的 140ms"按住连续放置"：手机上一次普通点按通常有
+ * 100~200ms，手指还没抬起来连放就触发了——玩家看到的是"一碰就放方块"，
+ * 而长按破坏反而被放置抢先。现在只有一个阈值：
+ *  - 抬手早于 280ms → **轻点**：交互 / 攻击 / 放置一次；
+ *  - 按住超过 280ms → **破坏 / 持续攻击**。
  */
-const PLACE_HOLD_MS = 140;
+const LONG_PRESS_MS = 280;
 /** 按下后位移超过这个像素数就算拖动视角，不再是点击 */
 const TAP_MOVE_SLOP = 12;
 /** 摇杆推到该比例以上自动疾跑 */
@@ -71,12 +73,9 @@ export interface TouchActions {
    * 打开暂停 / 设置菜单（批次 104，屏幕上方正中那颗键）。
    */
   onOpenPause: () => void;
-  /** 轻点抬起：放置 / 交互一次（未进入按住连放时） */
+  /** 轻点抬起：交互 / 攻击 / 放置一次 */
   onTap(): void;
-  /** 按住连放开始 / 结束（未拖动、尚未升级为破坏） */
-  onPlaceHoldStart(): void;
-  onPlaceHoldEnd(): void;
-  /** 长按开始 / 结束：破坏方块 */
+  /** 长按开始 / 结束：破坏方块 / 持续攻击 */
   onBreakStart(): void;
   onBreakEnd(): void;
   onToggleInventory(): void;
@@ -151,9 +150,7 @@ export class TouchControls {
   private lookStartY = 0;
   private lookDragged = false;
   private longPressTimer: number | null = null;
-  private placeHoldTimer: number | null = null;
   private breaking = false;
-  private placeHolding = false;
 
   private enabled = false;
   private sneaking = false;
@@ -323,7 +320,6 @@ export class TouchControls {
       forward: Math.round(this.forward * 100) / 100,
       strafe: Math.round(this.strafe * 100) / 100,
       breaking: this.breaking,
-      placeHolding: this.placeHolding,
       jumpHeld: this.jumpHeld,
       sneakHeld: this.sneakHeld,
       flying: this.flying,
@@ -554,7 +550,6 @@ export class TouchControls {
       this.lastMoveY = event.clientY;
       this.lookDragged = false;
       this.breaking = false;
-      this.placeHolding = false;
       capturePointer(this.lookSurface, event.pointerId);
       diag.event('gesture', 'look.down', {
         pointer: event.pointerId,
@@ -563,16 +558,9 @@ export class TouchControls {
         state: this.debugState,
       });
 
-      this.placeHoldTimer = window.setTimeout(() => {
-        if (this.lookDragged || this.breaking) return;
-        this.placeHolding = true;
-        diag.event('gesture', 'placehold.start', { pointer: this.lookPointer, state: this.debugState });
-        this.actions.onPlaceHoldStart();
-      }, PLACE_HOLD_MS);
-
+      // 只有一个阈值（批次 181）：按住超过它才是破坏/持续攻击，松手早于它就是轻点
       this.longPressTimer = window.setTimeout(() => {
         if (this.lookDragged) return;
-        this.endPlaceHold();
         this.breaking = true;
         diag.event('gesture', 'break.start', { pointer: this.lookPointer, state: this.debugState });
         this.actions.onBreakStart();
@@ -594,7 +582,6 @@ export class TouchControls {
           dy: Math.round(dy),
         });
         this.clearGestureTimers();
-        this.endPlaceHold();
       }
 
       if (this.lookDragged && !this.breaking) {
@@ -618,9 +605,8 @@ export class TouchControls {
       if (this.breaking) {
         this.breaking = false;
         this.actions.onBreakEnd();
-      } else if (this.placeHolding) {
-        this.endPlaceHold();
       } else if (!this.lookDragged) {
+        // 松手早于长按阈值 → 轻点：主程序按"生物/方块/可放置点"决定攻击、交互还是放置
         this.actions.onTap();
       }
       this.lookPointer = null;
@@ -639,30 +625,38 @@ export class TouchControls {
       clearTimeout(this.longPressTimer);
       this.longPressTimer = null;
     }
-    if (this.placeHoldTimer !== null) {
-      clearTimeout(this.placeHoldTimer);
-      this.placeHoldTimer = null;
-    }
-  }
-
-  private endPlaceHold(): void {
-    if (this.placeHoldTimer !== null) {
-      clearTimeout(this.placeHoldTimer);
-      this.placeHoldTimer = null;
-    }
-    if (!this.placeHolding) return;
-    this.placeHolding = false;
-    this.actions.onPlaceHoldEnd();
   }
 
   private cancelLook(): void {
     this.clearGestureTimers();
-    this.endPlaceHold();
     this.lookPointer = null;
     this.lookDragged = false;
     if (!this.breaking) return;
     this.breaking = false;
     this.actions.onBreakEnd();
+  }
+
+  /**
+   * 把输入状态整体清零（批次 181）。
+   *
+   * 为什么必须有它：切飞行/切界面/切维度时，另一根手指很可能正按在视角面或摇杆上。
+   * 只改标志位的话，`lookPointer` / `stickPointer` / `stickCenter` 还是切换前的基准，
+   * 之后每一帧都按旧基准算增量——表现就是"摇杆反了、视角卡住"。
+   * 旧版本靠"开关一次背包"（`visible=false` 会 reset）碰巧能恢复，正是这个原因。
+   *
+   * @param reason 记进日志：`flying` / `ui.open` / `ui.close` / `dimension` / `respawn` / `blur`
+   */
+  resetInput(reason: string): void {
+    const before = this.debugState;
+    this.clearGestureTimers();
+    this.cancelLook();
+    this.resetStick();
+    this.jumpHeld = false;
+    this.sneakHeld = false;
+    // 双击计时也清掉：切换之后紧接着的一次按下不该被当成"第二次点击"
+    this.lastJumpDown = 0;
+    this.lastStickDown = 0;
+    diag.event('input', 'resetInput', { reason, before, after: this.debugState });
   }
 
   /** 主循环在每帧开始处调用；界面打开时禁用 */

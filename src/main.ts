@@ -859,8 +859,13 @@ class App {
   private touch: TouchControls | null;
   /** 触摸端"轻点"产生的一次性放置/交互请求，由 updatePlacing 消费 */
   private touchPlaceRequest = false;
-  /** 触摸端"按住连放"：等价于按住鼠标右键，松手才停 */
-  private touchPlaceHeld = false;
+  /**
+   * 触摸端轻点落在生物上（批次 181）：这一下是攻击，不是放置。
+   *
+   * 为什么不在 `onTap` 里直接结算：攻击要走 `updateAttacking` 里那条统一路径
+   *（冷却、暴击、附魔、耐久、进度上报都在那儿），拆成两份迟早分叉。
+   */
+  private tapAttackRequest = false;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   /**
@@ -1542,20 +1547,14 @@ class App {
     // （开始遮罩上的提示文字在手机上写 <kbd>W</kbd> 只会误导）
     document.body.classList.add('touch-mode');
     return new TouchControls(document.getElementById('hud') ?? document.body, {
-      // 轻点抬起：放置 / 交互一次（与鼠标右键点一下同一套逻辑）
+      // 轻点抬起（批次 181）：**先看准星下有没有生物**——
+      // 有就是攻击（生物不是可放置面），没有才走"交互 / 放置一次"那条老路
       onTap: () => {
-        this.touchPlaceRequest = true;
+        if (this.mobUnderCrosshair()) this.tapAttackRequest = true;
+        else this.touchPlaceRequest = true;
       },
-      // 按住连放：等价于按住右键（未拖动、尚未升级为挖掘）
-      onPlaceHoldStart: () => {
-        this.touchPlaceHeld = true;
-      },
-      onPlaceHoldEnd: () => {
-        this.touchPlaceHeld = false;
-      },
-      // 长按：等价于按住左键破坏（会先停掉连放）
+      // 长按：等价于按住左键破坏 / 持续攻击
       onBreakStart: () => {
-        this.touchPlaceHeld = false;
         this.leftDown = true;
       },
       onBreakEnd: () => {
@@ -1698,8 +1697,15 @@ class App {
     this.keys.clear();
     this.leftDown = false;
     this.rightDown = false;
-    // 触摸端：界面打开时收起操作层，避免界面开着人还在走
-    if (this.touch) this.touch.visible = !open;
+    // 界面开着/刚关掉时，上一帧排队的轻点请求一律作废（别让"点关闭键"变成放方块）
+    this.touchPlaceRequest = false;
+    this.tapAttackRequest = false;
+    // 触摸端：界面打开时收起操作层；关闭时显式清一次手势状态，
+    // 否则关面板那一瞬间按在屏幕上的手指会带着旧基准继续转视角
+    if (this.touch) {
+      this.touch.resetInput(open ? 'ui.open' : 'ui.close');
+      this.touch.visible = !open;
+    }
 
     if (open) {
       if (document.pointerLockElement) document.exitPointerLock();
@@ -2934,6 +2940,11 @@ class App {
       },
       { signal: this.listeners.signal },
     );
+    // 窗口失焦（切 App / 下拉通知栏）时手指的抬起可能永远收不到：
+    // 清零输入，回来不会出现"摇杆一直朝某个方向"或"视角还在转"
+    window.addEventListener('blur', () => this.touch?.resetInput('blur'), {
+      signal: this.listeners.signal,
+    });
   }
 
   /**
@@ -3873,7 +3884,10 @@ class App {
   private updateAttacking(dt: number): void {
     this.suppressBreaking = false;
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
-    if (!this.leftDown || this.uiOpen || this.attackCooldown > 0) return;
+    // 触摸"轻点生物"是一次性请求（批次 181）；按住（leftDown）仍然持续攻击
+    const tapped = this.tapAttackRequest;
+    this.tapAttackRequest = false;
+    if ((!this.leftDown && !tapped) || this.uiOpen || this.attackCooldown > 0) return;
 
     const context = this.lastEntityContext;
     if (!context) return;
@@ -7844,10 +7858,10 @@ class App {
   }
 
   private updatePlacing(): void {
-    // 触摸：轻点一次 / 按住连放；鼠标：按住右键。统一成"本帧要不要放"
+    // 触摸：轻点一次；鼠标：按住右键。统一成"本帧要不要放"
+    //（批次 181 删掉了"按住连放"：它在 140ms 就触发，抢在长按破坏之前）
     const tapped = this.touchPlaceRequest;
-    const touchHeld = this.touchPlaceHeld;
-    if ((!this.rightDown && !tapped && !touchHeld && !this.padUse) || this.placeCooldown > 0) return;
+    if ((!this.rightDown && !tapped && !this.padUse) || this.placeCooldown > 0) return;
 
     // 投掷物优先于放置：手里拿着雪球/鸡蛋/喷溅药水时，这一下是"扔"而不是"放"
     if (this.throwHeld()) {
@@ -7925,7 +7939,7 @@ class App {
       return;
     }
 
-    // 轻点只消费一次；按住连放保持到松手（不要在这里清 touchPlaceHeld）
+    // 轻点只消费一次
     this.touchPlaceRequest = false;
 
     // 对生物使用物品（剪羊毛）：看在功能方块之后、放置之前——
@@ -8617,6 +8631,8 @@ class App {
   }
 
   private respawnPlayer(): void {
+    // 死亡界面上的点击/长按不该带进重生后的第一帧
+    this.touch?.resetInput('respawn');
     const point = this.resolveRespawnPoint();
     const [sx, sy, sz] = [point.x, point.y, point.z];
     // 床重生点可能在世界出生点之外的维度（在下界死掉、床在主世界）：
@@ -8863,7 +8879,11 @@ class App {
     document.addEventListener(
       'visibilitychange',
       () => {
-        if (document.visibilityState === 'hidden') void this.saveNow('hidden');
+        if (document.visibilityState === 'hidden') {
+          // 切后台时手指的按下/抬起可能收不到：把输入清零，回来不会"自己一直走"
+          this.touch?.resetInput('hidden');
+          void this.saveNow('hidden');
+        }
       },
       { signal: this.listeners.signal },
     );
@@ -9366,6 +9386,8 @@ class App {
     // 一次性请求整个视距会同样卡住（批次 100 的渐进视距在这儿也要生效）
     this.startupRamp.reset();
     if (dimension === this.dimension) return;
+    // 传送那一刻的按键不该带到另一片地形里（尤其是"按住前进"）
+    this.touch?.resetInput('dimension');
     this.dimension = dimension;
     this.world.setDimension(dimension);
     // 掉落物实体属于旧维度，直接清掉
@@ -9435,6 +9457,8 @@ class App {
       uiOpen: this.uiOpen,
       touch: this.touch?.debugState,
     });
+    // 切模式先清手势（批次 181）：启动新世界/双击跳都走这里
+    this.touch?.resetInput('flying');
     this.flying = value;
     // 触摸端的"飞"按钮需要跟着亮/灭
     this.touch?.setFlying(value);

@@ -1144,7 +1144,24 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('背包/聊天挂进快捷栏（不参与那 9 格的宽度计算）', source.includes("document.getElementById('hotbar')"));
   check('触摸层里不再有"飞行"按钮（已搬进设置面板）', !source.includes("makeIconButton('fly'"));
   check('触摸层里不再有"切换视角"按钮（已搬进设置面板）', !source.includes("makeIconButton('view'"));
-  check('有按住连放阈值（短于长按破坏）', source.includes('PLACE_HOLD_MS') && source.includes('onPlaceHoldStart'));
+  // 批次 181：删掉 140ms 的"按住连续放置"（它会抢在长按破坏之前），只留一个长按阈值
+  check('只有一个长按阈值（280ms）', source.includes('const LONG_PRESS_MS = 280'));
+  check('连续放置已删除（不再有 PLACE_HOLD_MS / onPlaceHoldStart）', !source.includes('PLACE_HOLD_MS') && !source.includes('onPlaceHoldStart'));
+  check('轻点与长按分工写在注释里', source.includes('轻点') && source.includes('破坏 / 持续攻击'));
+
+  // 轻点落在生物上要"攻击优先"，不能顺手把方块放到它身上
+  const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '轻点先判生物：有生物 → 一次性攻击请求，否则才放置/交互',
+    mainSource.includes('if (this.mobUnderCrosshair()) this.tapAttackRequest = true'),
+  );
+  check(
+    '一次性攻击请求由 updateAttacking 统一消费（冷却/暴击/附魔不分叉）',
+    mainSource.includes('const tapped = this.tapAttackRequest'),
+  );
+  // 切模式/开关界面/失焦时要清手势，否则另一根手指的旧基准会把摇杆和视角带歪
+  check('切飞行前清手势', mainSource.includes("this.touch?.resetInput('flying')"));
+  check('界面开关与失焦也清手势', mainSource.includes("'ui.open' : 'ui.close'") && mainSource.includes("resetInput('blur')"));
   check('双击摇杆切换潜行（右手只留跳跃）', source.includes('lastStickDown') && source.includes('双击摇杆'));
   check('飞行态用 applyFlyChrome 露出升降键', source.includes('private applyFlyChrome') && source.includes('fly-only'));
 
