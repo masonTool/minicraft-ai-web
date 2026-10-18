@@ -72,6 +72,11 @@ export interface ArrowOptions {
    * （靠 `hitMobIds` 去重）。0 = 普通箭，命中即停。
    */
   pierce?: number;
+  /**
+   * 引雷（批次 269）：命中生物/方块时在命中点召唤闪电。
+   * 是否真的落雷由主程序判（只有雷雨天才会打）——这里只是"报点"。
+   */
+  channeling?: boolean;
 }
 
 /** 补全默认值之后的选项（内部用，避免到处写 `?? 1`） */
@@ -84,6 +89,8 @@ interface ResolvedArrowOptions {
   itemId: number;
   potionId?: number;
   effect?: { effect: EffectId; seconds: number };
+  /** 引雷（批次 269）：命中时把点报给主程序 */
+  channeling: boolean;
 }
 
 export class Arrow extends Entity implements MovingBody {
@@ -120,6 +127,7 @@ export class Arrow extends Entity implements MovingBody {
       itemId: options.itemId ?? Item.ARROW,
       ...(options.potionId === undefined ? {} : { potionId: options.potionId }),
       ...(options.effect === undefined ? {} : { effect: options.effect }),
+      channeling: options.channeling === true,
     };
     this.pierceLeft = Math.max(0, Math.floor(options.pierce ?? 0));
     this.updateDirection();
@@ -193,6 +201,8 @@ export class Arrow extends Entity implements MovingBody {
         const by = Math.floor(this.y + (blockedY ? Math.sign(beforeVy) * 0.5 : 0));
         const bz = Math.floor(this.z + (blockedZ ? Math.sign(beforeVz) * 0.5 : 0));
         ctx.hitBlock?.(bx, by, bz);
+        // 引雷（批次 269）：插在方块上也算命中点
+        if (this.options.channeling === true) ctx.strikeLightningAt?.(bx, by, bz);
         this.stick();
         return;
       }
@@ -247,6 +257,8 @@ export class Arrow extends Entity implements MovingBody {
         mob.effects.apply(effect.id, effect.seconds, effect.amplifier);
       }
     }
+    // 引雷（批次 269）：打在生物身上同样报点
+    if (this.options.channeling === true) ctx.strikeLightningAt?.(mob.x, mob.y, mob.z);
     // 穿透（批次 266）：还有剩余次数就穿过这只继续飞
     if (this.pierceLeft > 0) {
       this.pierceLeft--;

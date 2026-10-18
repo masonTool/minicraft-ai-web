@@ -384,6 +384,13 @@ export interface EntityContext {
    * 不传就当没人在意（老桩不必改）。
    */
   hitBlock?: (x: number, y: number, z: number) => void;
+  /**
+   * 命中点召唤闪电（批次 269：三叉戟的「引雷」）。
+   *
+   * 实体层只报"打在哪"，**雷雨天判定与落雷演出归主程序**——
+   * 与 `hitBlock`（标靶）同一个分工。
+   */
+  strikeLightningAt?: (x: number, y: number, z: number) => void;
 }
 
 let nextEntityId = 1;

@@ -4169,10 +4169,11 @@ class App {
     ) {
       return false;
     }
-    // ⚠️ 只有**带忠诚**的三叉戟走这条 Arrow 路径；没忠诚的继续走原有的
+    // ⚠️ 只有**带忠诚或引雷**的三叉戟走这条 Arrow 路径；其余继续走原有的
     // `Throwable`（落地掉回物品，走近能捡）——那条路径已经跑了很久，不替换它
     const loyalty = enchantLevel(this.heldEnchants, 'loyalty');
-    if (loyalty <= 0) return false;
+    const channeling = enchantLevel(this.heldEnchants, 'channeling');
+    if (loyalty <= 0 && channeling <= 0) return false;
     this.tridentThrowCooldown = 0.6;
     // 投出去就离手（创造模式不扣）
     if (!this.isCreative) {
@@ -4189,7 +4190,14 @@ class App {
       this.physics.eyeY - 0.1,
       this.physics.z + dirZ * 0.4,
       { x: dirX * speed, y: dirY * speed + 2, z: dirZ * speed },
-      { fromPlayer: true, damage: 8, pickable: true, itemId: Item.TRIDENT },
+      {
+        fromPlayer: true,
+        damage: 8,
+        pickable: true,
+        itemId: Item.TRIDENT,
+        // 引雷（批次 269）：命中点报给主程序，雷雨天由它落雷
+        channeling: channeling > 0,
+      },
     );
     this.thrownTridents.push({ arrow, loyalty, backTimer: 0, returning: false });
     this.audio.play('bow_shoot');
@@ -7318,13 +7326,14 @@ class App {
    * 落点由 `pickStrike` 决定（128 格内有避雷针就打它），y 由这里补：
    * 避雷针那格就是它自己，否则按那一列找地表（**打地表**是原版的观感）。
    */
-  private strikeLightning(): void {
+  private strikeLightning(fixed?: { x: number; y: number; z: number; rod: boolean }): void {
     const player = { x: this.physics.x, y: this.physics.y, z: this.physics.z };
     const rods = [...this.lightningRods].map((key) => {
       const [x, y, z] = key.split(',').map(Number);
       return { x: x!, y: y!, z: z! };
     });
-    const target = pickStrike(Math.random, player, rods);
+    // 引雷（批次 269）会传一个固定落点；随机落雷仍走 `pickStrike`
+    const target = fixed ?? pickStrike(Math.random, player, rods);
     if (!target) return;
 
     let y = target.y;
@@ -8152,6 +8161,11 @@ class App {
       getState: (x, y, z) => this.world.getBlockState(x, y, z),
       // 投掷物撞到方块（批次 248，标靶）：实体层只报格子，是不是标靶由这里判
       hitBlock: (x, y, z) => this.onProjectileHitBlock(x, y, z),
+      // 引雷（批次 269）：只在雷雨天真的落雷（原版规则）
+      strikeLightningAt: (x, y, z) => {
+        if (this.weather.current !== 'thunder') return;
+        this.strikeLightning({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), rod: false });
+      },
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);
