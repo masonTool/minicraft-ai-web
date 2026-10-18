@@ -14,21 +14,30 @@
  * 不在这里——伤害流水只有 `PlayerStats` 说了算。
  */
 
-/** 衰减速度（每秒）：0.35 → 0 约 0.1 秒，满强度 1 → 0 约 0.3 秒（与原版同量级） */
-export const DAMAGE_FLASH_DECAY = 3.4;
+/**
+ * 衰减速度（每秒）。
+ *
+ * 批次 236 从 3.4 降到 2.6：3.4 的时候 1 点伤害只闪 0.14 秒，
+ * 手机上一眨眼就没了（用户："效果太不明显"）。现在最短也有 0.25 秒左右。
+ */
+export const DAMAGE_FLASH_DECAY = 2.6;
 
-/** 基础强度：哪怕只掉半点血也要看得见 */
-const BASE_STRENGTH = 0.32;
+/**
+ * 基础强度：哪怕只掉半点血也要看得见。
+ *
+ * 批次 236 从 0.32 提到 0.6——0.32 在明亮的户外几乎看不出来。
+ */
+const BASE_STRENGTH = 0.6;
 
 /**
  * 伤害点数 → 红闪强度（0~1）。
  *
- * 4 点（两格心）约到 0.8，8 点封顶。不做线性 1:1：8 点与 20 点看起来应该一样"红"，
+ * 5 点（两格半心）就接近满强度，8 点封顶。不做线性 1:1：8 点与 20 点看起来应该一样"红"，
  * 否则被苦力怕炸一下会整屏发黑红、什么都看不见。
  */
 export function damageFlashStrength(amount: number): number {
   if (!(amount > 0)) return 0;
-  return Math.min(1, BASE_STRENGTH + amount / 8);
+  return Math.min(1, BASE_STRENGTH + amount / 6);
 }
 
 /** 一帧之后的强度（下限 0） */

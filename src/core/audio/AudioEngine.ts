@@ -413,97 +413,195 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   ], { jitter: 35 }),
 
   // ---------------------------------------------------------------- 玩家受伤/死亡
-  // 受伤：一条"嗓子"（锯齿波 + 共振峰 = 元音）+ 一点呼气噪声。
-  // ⚠️ 这是这一批最重要的改动：旧版是一条 380→160Hz 的锯齿滑音，
-  // 没有共振峰就不可能像人声。
-  // 批次 234：在"嗓子"之外补了两层**手机外放能听见**的东西——
-  // 一个低频"闷"（胸腔）与一层 2.6k 的"咬字/呼气"（电话喇叭在 300~1kHz 之外衰减很快，
-  // 只留共振峰会听起来又轻又糊）。音量也从 0.34 提到 0.42。
-  hurt: spec(0.42, [
+  //
+  // 批次 236：这一版是**两段元音**，不是一条长滑音。
+  // 只说"锯齿波 + 共振峰"仍然会像合成器，原因有三条，这次逐条改掉：
+  //  1. **共振峰的 Q 太高**（7~12）会变成几个"哨音"，人声的 F1/F2 大约 Q 4~6；
+  //  2. **元音从头到尾不变** → "机器人在念 uh"；真实的一声"呃啊"是
+  //     喉咙先闭（F1 500 / F2 900）、再张开（F1 730 / F2 1150）；
+  //  3. **没有起音**：真人挨打先是短促的"h"（呼气），再出声带；
+  //     所以这里补了一层 0.05 秒的带通噪声。
+  //
+  // 另外保留批次 234 的两层"手机外放听得见"的东西：2.4k 的咬字层与低频胸腔。
+  // 音量 0.42 → 0.46，抖动 45 音分（每次挨打音高都不同）。
+  hurt: spec(0.46, [
+    // ---- 起音："呃"（喉咙闭着）
     tone({
       at: 0,
-      dur: 0.3,
-      gain: 0.9,
-      env: curve([0, 0], [0.04, 1], [0.35, 0.75], [1, 0]),
+      dur: 0.13,
+      gain: 0.8,
+      env: curve([0, 0], [0.06, 1], [0.6, 0.8], [1, 0]),
       wave: 'sawtooth',
-      hz: 190,
-      pitch: curve([0.25, 1.08], [1, 0.7]),
+      hz: 172,
+      pitch: curve([0.3, 1.06], [1, 0.84]),
       formants: [
-        { hz: 620, q: 7, gain: 1 },
-        { hz: 1250, q: 9, gain: 0.55 },
-        { hz: 2400, q: 11, gain: 0.18 },
+        { hz: 500, q: 4.5, gain: 1 },
+        { hz: 900, q: 5.5, gain: 0.55 },
+        { hz: 2400, q: 7, gain: 0.1 },
       ],
-      vibrato: { hz: 6, cents: 28 },
+      vibrato: { hz: 7, cents: 15 },
     }),
-    tone({ at: 0, dur: 0.18, gain: 0.35, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'sine', hz: 110, pitch: curve([1, 0.62]) }),
-    noise({ at: 0.01, dur: 0.11, gain: 0.4, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1300, q: 0.8 }),
-    noise({ at: 0, dur: 0.06, gain: 0.3, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 2800, q: 0.7 }),
+    // ---- 尾音："啊"（张口，气从胸口出来）
+    tone({
+      at: 0.055,
+      dur: 0.28,
+      gain: 0.9,
+      env: curve([0, 0], [0.14, 1], [0.55, 0.72], [1, 0]),
+      wave: 'sawtooth',
+      hz: 160,
+      pitch: curve([0.2, 1.08], [1, 0.6]),
+      formants: [
+        { hz: 730, q: 5, gain: 1 },
+        { hz: 1150, q: 6, gain: 0.55 },
+        { hz: 2500, q: 8, gain: 0.12 },
+      ],
+      vibrato: { hz: 5, cents: 18 },
+      tremolo: { hz: 14, depth: 0.16 },
+    }),
+    // ---- 起音的"h"（不是元音，是一口气）
+    noise({ at: 0, dur: 0.05, gain: 0.5, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 900, q: 0.7 }),
+    // ---- 咬字/牙齿（手机喇叭在 1k 以上衰减很快，没有这层会听不清）
+    noise({ at: 0.01, dur: 0.09, gain: 0.3, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 2400, q: 0.7 }),
+    // ---- 胸腔（一声"闷"的重量）
+    tone({ at: 0, dur: 0.16, gain: 0.28, env: curve([0, 0], [0.06, 1], [1, 0]), wave: 'sine', hz: 98, pitch: curve([1, 0.6]) }),
   ], {
-    jitter: 25,
+    jitter: 45,
     variants: [
+      // 短促的"呃"（轻伤）
       [
         tone({
           at: 0,
+          dur: 0.12,
+          gain: 0.8,
+          env: curve([0, 0], [0.06, 1], [0.6, 0.8], [1, 0]),
+          wave: 'sawtooth',
+          hz: 182,
+          pitch: curve([0.3, 1.05], [1, 0.8]),
+          formants: [
+            { hz: 470, q: 4.5, gain: 1 },
+            { hz: 860, q: 5.5, gain: 0.5 },
+            { hz: 2350, q: 7, gain: 0.1 },
+          ],
+          vibrato: { hz: 8, cents: 14 },
+        }),
+        noise({ at: 0, dur: 0.045, gain: 0.5, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 820, q: 0.7 }),
+        noise({ at: 0.01, dur: 0.07, gain: 0.26, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 2500, q: 0.7 }),
+        tone({ at: 0, dur: 0.12, gain: 0.26, env: curve([0, 0], [0.06, 1], [1, 0]), wave: 'sine', hz: 105, pitch: curve([1, 0.65]) }),
+      ],
+      // 长的"啊"（重伤）
+      [
+        tone({
+          at: 0,
+          dur: 0.16,
+          gain: 0.8,
+          env: curve([0, 0], [0.06, 1], [0.6, 0.8], [1, 0]),
+          wave: 'sawtooth',
+          hz: 178,
+          pitch: curve([0.3, 1.05], [1, 0.82]),
+          formants: [
+            { hz: 520, q: 4.5, gain: 1 },
+            { hz: 950, q: 5.5, gain: 0.55 },
+            { hz: 2400, q: 7, gain: 0.1 },
+          ],
+          vibrato: { hz: 6.5, cents: 16 },
+        }),
+        tone({
+          at: 0.06,
+          dur: 0.38,
+          gain: 0.9,
+          env: curve([0, 0], [0.16, 1], [0.5, 0.75], [1, 0]),
+          wave: 'sawtooth',
+          hz: 168,
+          pitch: curve([0.2, 1.06], [1, 0.52]),
+          formants: [
+            { hz: 780, q: 5, gain: 1 },
+            { hz: 1200, q: 6, gain: 0.5 },
+            { hz: 2550, q: 8, gain: 0.1 },
+          ],
+          vibrato: { hz: 4.5, cents: 24 },
+          tremolo: { hz: 12, depth: 0.18 },
+        }),
+        noise({ at: 0, dur: 0.06, gain: 0.55, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 950, q: 0.7 }),
+        noise({ at: 0.02, dur: 0.14, gain: 0.3, env: curve([0, 0], [0.25, 1], [1, 0]), filter: 'highpass', hz: 2300, q: 0.7 }),
+        tone({ at: 0, dur: 0.24, gain: 0.3, env: curve([0, 0], [0.08, 1], [1, 0]), wave: 'sine', hz: 92, pitch: curve([1, 0.5]) }),
+      ],
+      // 低沉的一声"呃"（血厚/低音色，避免每次都一样）
+      [
+        tone({
+          at: 0,
+          dur: 0.15,
+          gain: 0.8,
+          env: curve([0, 0], [0.07, 1], [0.6, 0.8], [1, 0]),
+          wave: 'sawtooth',
+          hz: 138,
+          pitch: curve([0.3, 1.06], [1, 0.78]),
+          formants: [
+            { hz: 460, q: 4, gain: 1 },
+            { hz: 820, q: 5, gain: 0.5 },
+            { hz: 2200, q: 7, gain: 0.1 },
+          ],
+          vibrato: { hz: 7.5, cents: 14 },
+        }),
+        tone({
+          at: 0.05,
           dur: 0.3,
           gain: 0.9,
-          env: curve([0, 0], [0.04, 1], [0.35, 0.75], [1, 0]),
+          env: curve([0, 0], [0.16, 1], [0.55, 0.7], [1, 0]),
           wave: 'sawtooth',
-          hz: 190,
-          pitch: curve([0.25, 1.08], [1, 0.7]),
+          hz: 128,
+          pitch: curve([0.25, 1.06], [1, 0.55]),
           formants: [
-            { hz: 620, q: 7, gain: 1 },
-            { hz: 1250, q: 9, gain: 0.55 },
-            { hz: 2400, q: 11, gain: 0.18 },
+            { hz: 660, q: 4.5, gain: 1 },
+            { hz: 1050, q: 5.5, gain: 0.5 },
+            { hz: 2350, q: 8, gain: 0.1 },
           ],
-          vibrato: { hz: 6, cents: 28 },
+          vibrato: { hz: 5, cents: 20 },
+          tremolo: { hz: 15, depth: 0.14 },
         }),
-        tone({ at: 0, dur: 0.18, gain: 0.35, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'sine', hz: 110, pitch: curve([1, 0.62]) }),
-        noise({ at: 0.01, dur: 0.11, gain: 0.4, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1300, q: 0.8 }),
-        noise({ at: 0, dur: 0.06, gain: 0.3, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 2800, q: 0.7 }),
-      ],
-      // 长一点的"啊"（被打得比较重时随机到）
-      [
-        tone({
-          at: 0,
-          dur: 0.4,
-          gain: 0.9,
-          env: curve([0, 0], [0.05, 1], [0.4, 0.8], [1, 0]),
-          wave: 'sawtooth',
-          hz: 205,
-          pitch: curve([0.3, 1.05], [1, 0.62]),
-          formants: [
-            { hz: 730, q: 8, gain: 1 },
-            { hz: 1190, q: 10, gain: 0.5 },
-            { hz: 2440, q: 12, gain: 0.15 },
-          ],
-          vibrato: { hz: 5, cents: 34 },
-        }),
-        tone({ at: 0, dur: 0.22, gain: 0.3, env: curve([0, 0], [0.08, 1], [1, 0]), wave: 'sine', hz: 118, pitch: curve([1, 0.58]) }),
-        noise({ at: 0.02, dur: 0.16, gain: 0.34, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 1100, q: 0.7 }),
-        noise({ at: 0, dur: 0.08, gain: 0.26, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 2600, q: 0.7 }),
+        noise({ at: 0, dur: 0.05, gain: 0.45, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 780, q: 0.7 }),
+        noise({ at: 0.01, dur: 0.1, gain: 0.28, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 2200, q: 0.7 }),
+        tone({ at: 0, dur: 0.2, gain: 0.32, env: curve([0, 0], [0.07, 1], [1, 0]), wave: 'sine', hz: 84, pitch: curve([1, 0.55]) }),
       ],
     ],
   }),
-  death: spec(0.46, [
+  // 死亡：同样的"两段元音"，但拖得更长、尾音更低、呼气更多
+  death: spec(0.5, [
     tone({
       at: 0,
-      dur: 0.85,
-      gain: 0.9,
-      env: curve([0, 0], [0.05, 1], [0.45, 0.8], [0.8, 0.5], [1, 0]),
+      dur: 0.2,
+      gain: 0.8,
+      env: curve([0, 0], [0.06, 1], [0.6, 0.8], [1, 0]),
       wave: 'sawtooth',
-      hz: 175,
-      pitch: curve([0.25, 1.05], [1, 0.45]),
+      hz: 168,
+      pitch: curve([0.3, 1.04], [1, 0.82]),
       formants: [
-        { hz: 650, q: 7, gain: 1 },
-        { hz: 1080, q: 9, gain: 0.5 },
-        { hz: 2300, q: 11, gain: 0.15 },
+        { hz: 520, q: 4.5, gain: 1 },
+        { hz: 940, q: 5.5, gain: 0.55 },
+        { hz: 2350, q: 7, gain: 0.1 },
       ],
-      vibrato: { hz: 4.5, cents: 30 },
+      vibrato: { hz: 6, cents: 16 },
     }),
-    tone({ at: 0, dur: 0.5, gain: 0.3, env: curve([0, 0], [0.08, 1], [1, 0]), wave: 'sine', hz: 100, pitch: curve([1, 0.5]) }),
-    noise({ at: 0.04, dur: 0.7, gain: 0.22, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'lowpass', hz: 1200, q: 0.6 }),
-    noise({ at: 0, dur: 0.12, gain: 0.24, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 2400, q: 0.7 }),
-  ], { jitter: 15 }),
+    tone({
+      at: 0.12,
+      dur: 0.75,
+      gain: 0.9,
+      env: curve([0, 0], [0.14, 1], [0.4, 0.8], [0.75, 0.5], [1, 0]),
+      wave: 'sawtooth',
+      hz: 158,
+      pitch: curve([0.2, 1.05], [1, 0.38]),
+      formants: [
+        { hz: 720, q: 4.5, gain: 1 },
+        { hz: 1120, q: 5.5, gain: 0.5 },
+        { hz: 2300, q: 8, gain: 0.1 },
+      ],
+      vibrato: { hz: 3.6, cents: 26 },
+      tremolo: { hz: 9, depth: 0.14 },
+    }),
+    noise({ at: 0, dur: 0.07, gain: 0.5, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 900, q: 0.7 }),
+    noise({ at: 0.05, dur: 0.7, gain: 0.28, env: curve([0, 0], [0.25, 1], [1, 0]), filter: 'lowpass', hz: 1100, q: 0.6 }),
+    noise({ at: 0, dur: 0.12, gain: 0.26, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 2300, q: 0.7 }),
+    tone({ at: 0, dur: 0.6, gain: 0.3, env: curve([0, 0], [0.1, 1], [1, 0]), wave: 'sine', hz: 88, pitch: curve([1, 0.42]) }),
+  ], { jitter: 25 }),
   // 打中生物的"闷响"（玩家近战那一下的打击感；不代替生物的受伤叫）
   hit_flesh: spec(0.3, [
     noise({ at: 0, dur: 0.07, gain: 1, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'lowpass', hz: 650, q: 0.8 }),
@@ -1429,8 +1527,9 @@ export class AudioEngine {
           level.gain.value = Math.max(0, formant.gain);
           osc.connect(band).connect(level).connect(amp);
         }
+        // 0.09 而不是 0.14（批次 236）：两段元音叠在一起时，干声叠两遍会让嗓音发"嗡"
         const dry = ctx.createGain();
-        dry.gain.value = 0.14;
+        dry.gain.value = 0.09;
         osc.connect(dry).connect(amp);
       } else {
         osc.connect(amp);

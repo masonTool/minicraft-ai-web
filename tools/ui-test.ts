@@ -2709,12 +2709,12 @@ console.log('\n[受伤红闪（批次 234）]');
   );
   check('红闪不接指针事件（不会挡住触摸）', /#damage-flash \{[^}]*pointer-events: none/.test(compact));
   check(
-    '红闪是"中心透明、边缘红"而不是整屏红',
-    compact.includes('radial-gradient(circle at 50% 50%, rgba(255, 40, 40, 0) 36%, rgba(196, 8, 8, .62) 100%)'),
+    '红闪是"中心淡红 + 边缘重红"（批次 236 之前只有边缘，户外看不见）',
+    compact.includes('rgba(214, 12, 12, .38)') && compact.includes('rgba(201, 5, 5, .92)'),
   );
 
   check('没掉血就不闪', damageFlashStrength(0) === 0 && damageFlashStrength(-3) === 0);
-  check('掉 1 点也看得见', damageFlashStrength(1) >= 0.35);
+  check('掉 1 点也明显（批次 236 把最小值提到 0.6）', damageFlashStrength(1) >= 0.6);
   check('8 点以上封顶（被炸一下不会整屏糊住）', damageFlashStrength(8) === 1 && damageFlashStrength(99) === 1);
   check(
     '伤害越高越红（单调）',
