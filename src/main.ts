@@ -344,6 +344,7 @@ import {
   harvestRequirement,
   lootingBonus,
   meleeDamage,
+  riptideSpeed,
   sweepDamage,
   toolInfoById,
   type ToolInfo,
@@ -1439,6 +1440,8 @@ class App {
   /** 弩的装填进度（秒，批次 265）：与弓分开记，换武器不会串 */
   private crossbowCharge = 0;
   private crossbowDrawing = false;
+  /** 激流的冷却（秒，批次 267）：防连按飞天 */
+  private riptideCooldown = 0;
   private bowDrawing = false;
 
   /** 进食进度（0~1）与"距离下一次咀嚼"的计时 */
@@ -3914,6 +3917,7 @@ class App {
     // 拉弓也放在放置之后：准星对着功能方块时右键那一下归方块
     this.updateBow(dt);
     this.updateCrossbow(dt);
+    this.updateRiptide(dt);
     this.hand.setDrawPull(this.bowCharge);
     // 轻点是一次性的：
     //  · 落点只活这一帧——破坏/放置/进食/拉弓都已经在上面读过 `this.hit` 了；
@@ -4133,6 +4137,35 @@ class App {
     // 只有"手还拿着弓、而且没开界面"才算正常松手
     if (!holding || this.uiOpen || this.stats.dead) return;
     if (canFire(charge)) this.fireBow(charge);
+  }
+
+  /**
+   * 激流（批次 267）：拿着三叉戟、在水里或雨中按住使用键 → 向前冲刺。
+   *
+   * 与弓/弩不同，它**不蓄力**，是一次瞬时位移；1 秒冷却防止连按飞天。
+   * 抬头时会带一点上升，但至少给 3 格/秒——不然在水里会像"原地抽动"。
+   */
+  private updateRiptide(dt: number): void {
+    this.riptideCooldown = Math.max(0, this.riptideCooldown - dt);
+    if (this.riptideCooldown > 0) return;
+    if (this.heldItemId !== Item.TRIDENT) return;
+    const level = enchantLevel(this.heldEnchants, 'riptide');
+    if (level <= 0) return;
+    // 原版只在水里/雨中生效
+    if (!this.physics.inWater && !this.weather.raining) return;
+    if (!this.usingItem || this.uiOpen || this.stats.dead) return;
+
+    const speed = riptideSpeed(level);
+    const cosPitch = Math.cos(this.pitch);
+    this.physics.vx = -Math.sin(this.yaw) * cosPitch * speed;
+    this.physics.vz = -Math.cos(this.yaw) * cosPitch * speed;
+    this.physics.vy = Math.max(3, Math.sin(this.pitch) * speed);
+    this.physics.onGround = false;
+    this.riptideCooldown = 1;
+    this.fallStartY = null;
+    this.pendingFallDistance = 0;
+    this.hand.swing();
+    this.audio.play('bow_shoot');
   }
 
   /**
@@ -5740,7 +5773,12 @@ class App {
     // 徒手 1 点；手持武器按 tools.ts 的伤害表（剑 4~7、斧 7~9…），
     // 锋利每级 +0.5 且只要有一级就额外 +0.5（原版就是这个式子），力量/虚弱在这里加减；暴击 ×1.5
     // 亡灵杀手/节肢杀手只对对应家族的生物生效，所以要把家族传进去
-    const weapon = meleeDamage(this.heldTool?.attack ?? 1, this.heldEnchants, mob.type.family);
+    const weapon = meleeDamage(
+      this.heldTool?.attack ?? 1,
+      this.heldEnchants,
+      mob.type.family,
+      mob.type.aquatic === true,
+    );
     const base = Math.max(0, weapon + this.effects.attackBonus());
     const damage = this.isCreative ? 100 : critical ? base * 1.5 : base;
     // 抢夺只影响掉落数量（在 mob.hurt 内部结算）；击退等级也在内部乘进初速（批次 243）

@@ -631,12 +631,27 @@ export function meleeDamage(
   weaponAttack: number,
   enchants?: Readonly<Record<string, number>>,
   family?: 'undead' | 'arthropod',
+  /** 被打的是不是水生生物（批次 267：穿刺只对它们生效） */
+  aquatic = false,
 ): number {
   const sharpness = enchantLevel(enchants, 'sharpness');
   let damage = weaponAttack + (sharpness > 0 ? 0.5 * sharpness + 0.5 : 0);
   if (family === 'undead') damage += 2.5 * enchantLevel(enchants, 'smite');
   if (family === 'arthropod') damage += 2.5 * enchantLevel(enchants, 'bane_of_arthropods');
+  // 穿刺（批次 267）：原版每级 +2.5，只对水生生物
+  if (aquatic) damage += 2.5 * enchantLevel(enchants, 'impaling');
   return damage;
+}
+
+/**
+ * 「激流」的冲刺速度（格/秒，批次 267）。
+ *
+ * 原版 III 级大约 10 m/s 量级；这里取 `8 + 1.5 × 等级`（I/II/III = 9.5/11/12.5），
+ * 0 级返回 0（调用方据此判断"这条附魔没生效"）。
+ */
+export function riptideSpeed(level: number): number {
+  const clamped = Math.max(0, Math.min(3, Math.floor(level)));
+  return clamped === 0 ? 0 : 8 + clamped * 1.5;
 }
 
 /**

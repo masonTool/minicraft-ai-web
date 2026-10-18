@@ -129,8 +129,10 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'luck_of_the_sea', name: '海之眷顾', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
   { id: 'lure', name: '诱饵', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
   { id: 'loyalty', name: '忠诚', maxLevel: 3, targets: ['trident'], weight: 5 },
-  { id: 'impaling', name: '穿刺', maxLevel: 5, targets: ['trident'], weight: 2 },
-  { id: 'riptide', name: '激流', maxLevel: 3, targets: ['trident'], weight: 2 },
+  // 穿刺（批次 267）：三叉戟对水生生物每级 +2.5
+  { id: 'impaling', name: '穿刺', maxLevel: 5, targets: ['trident'], weight: 2, implemented: true },
+  // 激流（批次 267）：在水里/雨中按住使用键向前冲，速度见 `tools.riptideSpeed`
+  { id: 'riptide', name: '激流', maxLevel: 3, targets: ['trident'], weight: 2, implemented: true },
   { id: 'channeling', name: '引雷', maxLevel: 1, targets: ['trident'], weight: 1 },
   // 多重射击 / 快速装填（批次 265）：弩装填与齐射，数值见 `Bow.ts`
   { id: 'multishot', name: '多重射击', maxLevel: 1, targets: ['crossbow'], weight: 2, implemented: true },
