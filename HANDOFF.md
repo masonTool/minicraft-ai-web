@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 630（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 635（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **181**、进行中 **76**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,20 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 218（"一直掉血到死，提示没有记录到来源"）：用户导出诊断日志并补充"站在草地上、
+  头上有树、没打任何东西"。日志里 `damage / health / hurt / death` **全文件零命中**——
+  不是日志损坏，而是根本没有生命值这一路，只能读代码。查出四个问题，各自一条提交：
+  ① `EntityContext.hurtPlayer → damagePlayer` 的桥接箭头只接了 4 个参数，**第 5 个 `source`
+  被静默丢掉**（实体层明明传了生物名）→ 所有生物/箭矢/末影水晶/火球伤害都退化成
+  `generic` 的兜底文案"受到伤害（没有记录到来源）"，甚至被误报成"着火"；
+  ② `tickEffects` 把非中毒的效果伤害一律按 `'generic'` 上报，而 `DamageCause` 里**没有"凋零"**
+  —— 凋零能致死，是另一条会打出这句文案的路（顺手把 `damage + damageCause` 拆成
+  `damageHits: [{ amount, cause }]`：两者同挂时原来会合并，凋零被当中毒卡在 1 点血）；
+  ③ 诊断日志新增 `survival` 类（掉血 / `damage.unlogged` / 死亡（带坐标）/ 重生 / 挂效果），
+  下次导出能直接读出"第几秒、被谁、掉了多少"；④ 窒息判据原来读 `opaque`，而树叶为了
+  剔除相邻面是 `opaque: true` → **钻进树冠里会持续扣血**（原版不掉血），改读新的 `suffocates`
+  （默认跟 `opaque` 一致，6 种木材的树叶显式 `false`）。门禁：`test:ui` 629、`test:effects` 68、
+  `test:diag` 62、`test:decor` 237、`test:wither`/`test:armor`/`test:survival`/`test:mob` 全绿。
 - 批次 217（光照队列涨到 820 万格 → 12fps）：用户给的真机日志（792×360 / dpr 3）最后一段
   只有 12fps、`frameAvgMs` 123ms、`heapMb` 1020，而 `view` 已经到地板 4、`res` 0.75、`decor` 2
   —— 策略已经把能降的全降了，说明不是"画得多"。真凶在 `LightEngine.compact()`：
