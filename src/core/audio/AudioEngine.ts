@@ -1,160 +1,615 @@
 /**
- * 音效引擎（K5）：用 Web Audio 现场合成，不依赖任何音频文件
+ * 音效引擎（K5；批次 232 重写）：用 Web Audio 现场合成，不依赖任何音频文件
  *
  * 为什么不放音频资源：本项目的贴图都是程序化生成的（`atlasLayout.ts`），
- * 音效沿用同一思路——一组噪声 + 振荡器 + 包络就足以表现"石头碎裂""玻璃叮当"
- * "僵尸低吼"这些辨识度很高的声音，而且省掉了打包与许可问题。
+ * 音效沿用同一思路——而且省掉了打包与许可问题。
+ *
+ * 为什么批次 232 要把引擎重写一遍：旧版一条声音只有"一段噪声 + 一条滑音 + 可选的闷响"，
+ * 参数表里 `release` 甚至**根本没被引擎用到**。于是所有声音都是同一种"嗖——"的包络，
+ * 走路、受伤、牛叫听起来像同一个电子蜂鸣器换了音高。玩家能听出来的差别只有"频率"。
+ *
+ * 新版的最小单位是**层**（`SoundLayer`）：
+ *  - `tone`：振荡器 + 任意折线的音高走向 + 2~3 个共振峰（元音）+ 颤音；
+ *  - `noise`：噪声 + 可扫频的滤波器 + 幅度抖动（骨节"咔咔"、羊叫的"咩～"）；
+ *  - 每一层都有自己的起止时间、音量与**折线包络**，所以"起音 → 保持 → 收尾"能分开写。
+ *
+ * 一条声音 = 若干层叠起来（牛叫 = 声带层 + 呼气层；石头碎裂 = 瞬态 + 主体 + 余韵）。
+ * 这是"更像真的"与"省节点"之间的折中：一条声音 2~4 层，正常同屏 6 声以内。
+ *
+ * 另外三件以前完全没有、但对"正常感"影响极大的事：
+ *  1. **随机化**：同一条声音有 2~3 个变体 + 音高抖动，连踩几步不会一模一样；
+ *  2. **声像与距离低通**：知道声音在左还是右，远处的声音更闷（不是一样亮）；
+ *  3. **主总线**：压缩器（多声叠加不炸）+ 两条反馈延迟做的"房间感"（不用卷积，手机友好）。
  *
  * 浏览器自动播放策略：AudioContext 必须在**用户手势之后**才能出声，
  * 因此 `resume()` 会挂在第一次点击/按键上（见 main 的绑定）。
  */
 
+/** 折线点：时间比例 0~1 → 值（包络是 0~1，音高是基频倍率） */
+export type LayerPoint = readonly [number, number];
+
+/** 元音共振峰：中心频率 / 尖锐度 / 相对音量 */
+export interface Formant {
+  hz: number;
+  q: number;
+  gain: number;
+}
+
+interface LayerBase {
+  /** 相对整段声音起点的延迟（秒） */
+  at: number;
+  /** 这一层持续多久（秒） */
+  dur: number;
+  /** 这一层的相对音量（0~1，最终还会乘 `SoundSpec.gain` 与总音量） */
+  gain: number;
+  /** 幅度折线：[[0,0],[0.06,1],[0.6,0.8],[1,0]] 这种写法就是"起音 → 保持 → 收尾" */
+  env: readonly LayerPoint[];
+  /** 幅度抖动：骨节"咔咔"、羊叫的颤（对噪声层与音调层都生效） */
+  tremolo?: { hz: number; depth: number };
+}
+
+/** 有音高的层：振荡器（动物的声带、木头/玻璃的余韵都靠它） */
+export interface ToneLayer extends LayerBase {
+  t: 'tone';
+  wave: OscillatorType;
+  hz: number;
+  /** 音高走向（倍率）：牛哞"先升后降"、末影人"往下滑"都在这里 */
+  pitch?: readonly LayerPoint[];
+  /** 共振峰（元音）。有它才像"嗓子"，没有它就是"电子音" */
+  formants?: readonly Formant[];
+  /** 颤音：生物叫声的灵魂（羊 11Hz、村民 4Hz、末影人 12Hz） */
+  vibrato?: { hz: number; cents: number };
+}
+
+/** 噪声层：脚步的摩擦、碎裂的瞬态、苦力怕的"嘶" */
+export interface NoiseLayer extends LayerBase {
+  t: 'noise';
+  filter: 'lowpass' | 'bandpass' | 'highpass';
+  hz: number;
+  /** 滤波器扫频（倍率），例如"嘶——"从 900Hz 扫到 1400Hz */
+  sweep?: readonly LayerPoint[];
+  q: number;
+}
+
+export type SoundLayer = ToneLayer | NoiseLayer;
+
+export interface SoundSpec {
+  layers: readonly SoundLayer[];
+  /** 整条声音的基准音量（0~1） */
+  gain: number;
+  /** 每次播放的音高抖动（音分，1 半音 = 100 音分）：0 = 每次完全一样 */
+  pitchJitter?: number;
+  /** 2~3 个变体；有它时随机挑一个，`layers` 只当兜底 */
+  variants?: readonly (readonly SoundLayer[])[];
+}
+
+// ---------------------------------------------------------------- 造表小工具
+//
+// 让下面那张表能一眼看出"这一声由哪几层组成"，而不是被对象字面量淹掉。
+
+function curve(...points: [number, number][]): LayerPoint[] {
+  return points;
+}
+
+function tone(o: Omit<ToneLayer, 't'>): ToneLayer {
+  return { t: 'tone', ...o };
+}
+
+function noise(o: Omit<NoiseLayer, 't'>): NoiseLayer {
+  return { t: 'noise', ...o };
+}
+
+function spec(gain: number, layers: SoundLayer[], opts: { jitter?: number; variants?: SoundLayer[][] } = {}): SoundSpec {
+  return { gain, layers, pitchJitter: opts.jitter, variants: opts.variants };
+}
+
+/** 取某个音效要播的那一组层（有变体就随机挑） */
+export function pickLayers(spec: SoundSpec, random: () => number = Math.random): readonly SoundLayer[] {
+  if (!spec.variants || spec.variants.length === 0) return spec.layers;
+  const index = Math.min(spec.variants.length - 1, Math.floor(random() * spec.variants.length));
+  return spec.variants[index] ?? spec.layers;
+}
+
+/** 一组层的总时长（秒） */
+export function layersDuration(layers: readonly SoundLayer[]): number {
+  let end = 0;
+  for (const layer of layers) end = Math.max(end, layer.at + layer.dur);
+  return end;
+}
+
+/** 一条声音的总时长（按最长的变体算，用于并发计数与测试） */
+export function specDuration(s: SoundSpec): number {
+  let end = layersDuration(s.layers);
+  for (const variant of s.variants ?? []) end = Math.max(end, layersDuration(variant));
+  return end;
+}
+
 export type SoundKind =
+  // ---- 破坏方块（按材质）
   | 'break_stone'
   | 'break_wood'
   | 'break_grass'
   | 'break_sand'
   | 'break_glass'
   | 'break_wool'
+  // ---- 放置方块（按材质；`place` 给"不是放方块"的交互兜底）
   | 'place'
+  | 'place_stone'
+  | 'place_wood'
+  | 'place_grass'
+  | 'place_sand'
+  | 'place_glass'
+  | 'place_wool'
+  // ---- 脚步声（批次 232：以前直接借破坏音）
   | 'step'
+  | 'step_grass'
+  | 'step_stone'
+  | 'step_wood'
+  | 'step_sand'
+  | 'step_gravel'
+  | 'step_snow'
+  | 'step_wool'
+  // ---- 落地 / 受伤 / 死亡（批次 232：以前 `fall` 定义了却从没播过）
+  | 'land_soft'
+  | 'land_hard'
   | 'hurt'
   | 'death'
+  | 'hit_flesh'
   | 'fall'
+  // ---- 开关与交互
   | 'door'
+  | 'door_close'
+  | 'trapdoor'
+  | 'fence_gate'
   | 'explode'
   | 'splash'
   | 'click'
   | 'eat'
+  | 'drink'
+  | 'pickup'
+  | 'xp'
   | 'bow_shoot'
   | 'arrow_hit'
   | 'shear'
-  /** 打火石点火：铁片刮擦的"擦"声（I12） */
   | 'flint'
-  /** 雷声（批次 83）：低频长噪声，远远地滚过来 */
   | 'thunder'
-  /** 传送门：低频的"嗡"（进出传送门时响一声，K8） */
   | 'portal'
-  | 'mob_zombie'
-  | 'mob_skeleton'
-  | 'mob_creeper'
-  | 'mob_cow'
-  | 'mob_sheep'
   | 'fuse'
-  /**
-   * 达成进度（M7，批次 87）：原版是一声"叮——叮"的双音铃声。
-   * 单开一种而不是复用 `click`：达成是**值得记住的一刻**，
-   * 与"点了什么"共用一声会让玩家分不清（这条与本项目的"音效要能分辨"同一个理由）。
-   */
   | 'achievement'
-  /** 村民的"嗯…"（J11，批次 88）：低沉的喉音，认领职业与闲着时都会来一声 */
-  | 'mob_villager'
-  /**
-   * 成交（J11）：一声干脆的双音"叮"。
-   * 不复用 `click`：成交是"钱货两清"，手感要更实在一点（而且它总与进度/升级挨着响）。
-   */
   | 'trade'
-  /**
-   * 背包里搬东西（H19 ⑪，批次 138）：一声很轻的"咔"。
-   *
-   * 为什么不能复用 `click`：`click` 是**按钮**的声音（面板开关、页签），又亮又脆；
-   * 而搬东西在一次操作里可能连响好几下（连发放置），用前者会很吵。
-   */
   | 'item_move'
-  /** 关门（批次 138）：木质门合上的"咔嗒"——原来开门关门共用 `door`（那是"吱呀"） */
-  | 'door_close'
-  /** 活板门（批次 138）：短促的一声木质闷响（原版这三种门各有各的声） */
-  | 'trapdoor'
-  /** 栅栏门（批次 138）：比门更轻的木头声 */
-  | 'fence_gate'
-  /**
-   * 盾牌挡下攻击（批次 194）：木面被打中的"咚"（低频为主 + 一点金属尾巴）。
-   *
-   * 不复用 `hurt`：那是"我受伤了"的反馈，而挡下恰恰是"我没受伤"——
-   * 两者用同一声，玩家会以为盾牌没生效。
-   */
   | 'shield_block';
-
-export interface SoundSpec {
-  /** 声音总时长（秒） */
-  duration: number;
-  /** 音量（0~1，再乘以播放增益与主音量） */
-  gain: number;
-  /** 噪声成分占比（0 = 纯振荡器，1 = 纯噪声） */
-  noise: number;
-  /** 振荡器起始/结束频率（赫兹）；两者不同即为滑音 */
-  freqFrom: number;
-  freqTo: number;
-  /** 波形（噪声通道不使用） */
-  type: OscillatorType;
-  /** 滤波器中心频率与 Q（把噪声塑形成"石头/沙子/玻璃"的质感） */
-  filter: number;
-  filterQ: number;
-  /** 包络（秒）：起音与释放 */
-  attack: number;
-  release: number;
-  /** 是否叠加一个低频"闷响"（爆炸、受伤、落地用） */
-  thump?: number;
-}
 
 /**
  * 音效表。数值是听感调出来的，不是采样复刻——
- * 目标是"闭着眼能分辨出是石头还是木头"，而不是逐位还原原版音源。
+ * 目标是"闭着眼能分辨出是石头还是木头、是牛还是羊"，而不是逐位还原原版音源。
+ *
+ * ⚠️ 新旧口径的差别：
+ *  - 旧版一个 `duration` 管整条声音，包络永远是"起音后一路指数衰减"；
+ *  - 新版每一层各有 `at/dur/env`，所以"两下骨节响"就是两个延迟 0.06 秒的噪声层，
+ *    而不是两次 `play()`（两次播放会被 70ms 的同种节流吞掉一次）。
+ *
+ * ⚠️ 生物叫声**不在**这张表里：它们按"种类 → 声音档案"组织，
+ * 见 `core/audio/MobVoices.ts`（一种生物要有环境叫/受伤/死亡三条，塞在这里会淹没方块音）。
  */
 const SOUNDS: Record<SoundKind, SoundSpec> = {
-  break_stone: { duration: 0.22, gain: 0.55, noise: 0.9, freqFrom: 180, freqTo: 90, type: 'triangle', filter: 1400, filterQ: 0.8, attack: 0.002, release: 0.2, thump: 60 },
-  break_wood: { duration: 0.2, gain: 0.5, noise: 0.7, freqFrom: 220, freqTo: 110, type: 'square', filter: 900, filterQ: 1.1, attack: 0.002, release: 0.18 },
-  break_grass: { duration: 0.16, gain: 0.35, noise: 1, freqFrom: 400, freqTo: 300, type: 'triangle', filter: 2600, filterQ: 0.6, attack: 0.002, release: 0.14 },
-  break_sand: { duration: 0.2, gain: 0.4, noise: 1, freqFrom: 300, freqTo: 260, type: 'triangle', filter: 3600, filterQ: 0.4, attack: 0.004, release: 0.18 },
-  break_glass: { duration: 0.28, gain: 0.45, noise: 0.45, freqFrom: 2100, freqTo: 1400, type: 'sine', filter: 5200, filterQ: 2.5, attack: 0.001, release: 0.26 },
-  break_wool: { duration: 0.18, gain: 0.32, noise: 1, freqFrom: 260, freqTo: 200, type: 'triangle', filter: 1200, filterQ: 0.5, attack: 0.004, release: 0.16 },
-  place: { duration: 0.12, gain: 0.4, noise: 0.35, freqFrom: 320, freqTo: 180, type: 'square', filter: 1600, filterQ: 1, attack: 0.001, release: 0.1 },
-  step: { duration: 0.1, gain: 0.18, noise: 1, freqFrom: 240, freqTo: 180, type: 'triangle', filter: 1500, filterQ: 0.6, attack: 0.003, release: 0.08 },
-  hurt: { duration: 0.32, gain: 0.5, noise: 0.25, freqFrom: 380, freqTo: 160, type: 'sawtooth', filter: 1400, filterQ: 0.9, attack: 0.004, release: 0.3, thump: 90 },
-  death: { duration: 0.9, gain: 0.55, noise: 0.2, freqFrom: 340, freqTo: 90, type: 'sawtooth', filter: 1000, filterQ: 0.8, attack: 0.01, release: 0.85, thump: 70 },
-  fall: { duration: 0.24, gain: 0.45, noise: 0.5, freqFrom: 140, freqTo: 70, type: 'triangle', filter: 700, filterQ: 0.9, attack: 0.002, release: 0.22, thump: 55 },
-  door: { duration: 0.4, gain: 0.4, noise: 0.55, freqFrom: 160, freqTo: 240, type: 'sawtooth', filter: 800, filterQ: 3.5, attack: 0.01, release: 0.36 },
-  explode: { duration: 1.1, gain: 0.7, noise: 1, freqFrom: 120, freqTo: 40, type: 'triangle', filter: 500, filterQ: 0.5, attack: 0.002, release: 1.05, thump: 45 },
-  thunder: { duration: 1.8, gain: 0.85, noise: 1, freqFrom: 120, freqTo: 48, type: 'sine', filter: 320, filterQ: 0.5, attack: 0.02, release: 1.7 },
-  splash: { duration: 0.5, gain: 0.4, noise: 1, freqFrom: 900, freqTo: 300, type: 'triangle', filter: 2200, filterQ: 0.5, attack: 0.004, release: 0.46 },
-  click: { duration: 0.07, gain: 0.3, noise: 0.15, freqFrom: 900, freqTo: 700, type: 'square', filter: 3000, filterQ: 1, attack: 0.001, release: 0.06 },
-  // 咀嚼声：短促的低频噪声，进食过程中每嚼一口响一次
-  eat: { duration: 0.14, gain: 0.26, noise: 0.85, freqFrom: 320, freqTo: 200, type: 'triangle', filter: 900, filterQ: 1.6, attack: 0.008, release: 0.13 },
-  // 弓弦：一声由高到低的"崩"（频率下滑得快、余音短）
-  bow_shoot: { duration: 0.24, gain: 0.42, noise: 0.3, freqFrom: 880, freqTo: 180, type: 'triangle', filter: 2400, filterQ: 2.4, attack: 0.001, release: 0.22 },
-  // 箭命中方块/生物：短促的"笃"
-  arrow_hit: { duration: 0.1, gain: 0.32, noise: 0.55, freqFrom: 420, freqTo: 220, type: 'square', filter: 1800, filterQ: 1.4, attack: 0.001, release: 0.09 },
-  // 剪羊毛：高频的"咔嚓"（噪声为主，几乎没有音调）
-  shear: { duration: 0.12, gain: 0.34, noise: 1, freqFrom: 1800, freqTo: 900, type: 'square', filter: 5200, filterQ: 0.7, attack: 0.001, release: 0.11 },
-  // 打火石：高频噪声起手（铁片刮擦）→ 迅速滑到低频（火苗窜起来），所以频率跨度拉得很大
-  flint: { duration: 0.34, gain: 0.4, noise: 1, freqFrom: 2600, freqTo: 420, type: 'triangle', filter: 4600, filterQ: 1.6, attack: 0.002, release: 0.32 },
-  // 传送门：偏低频、几乎没有噪声（"嗡"的一声），起手慢一点听起来才像被"吸"进去
-  portal: { duration: 0.9, gain: 0.45, noise: 0.18, freqFrom: 220, freqTo: 90, type: 'sawtooth', filter: 900, filterQ: 1.8, attack: 0.06, release: 0.84, thump: 70 },
-  mob_zombie: { duration: 0.7, gain: 0.42, noise: 0.45, freqFrom: 150, freqTo: 110, type: 'sawtooth', filter: 700, filterQ: 1.4, attack: 0.05, release: 0.6, thump: 80 },
-  mob_skeleton: { duration: 0.35, gain: 0.38, noise: 0.4, freqFrom: 900, freqTo: 600, type: 'square', filter: 2800, filterQ: 2.2, attack: 0.002, release: 0.32 },
-  mob_creeper: { duration: 0.55, gain: 0.45, noise: 1, freqFrom: 700, freqTo: 380, type: 'triangle', filter: 2400, filterQ: 1.2, attack: 0.01, release: 0.5 },
-  mob_cow: { duration: 0.75, gain: 0.38, noise: 0.2, freqFrom: 210, freqTo: 150, type: 'sawtooth', filter: 900, filterQ: 1.1, attack: 0.08, release: 0.65 },
-  mob_sheep: { duration: 0.6, gain: 0.36, noise: 0.25, freqFrom: 380, freqTo: 300, type: 'sawtooth', filter: 1400, filterQ: 1.3, attack: 0.05, release: 0.55 },
-  // 苦力怕引信：持续的嘶嘶声，音调缓慢上扬（原版点火音的辨识度全靠它）
-  fuse: { duration: 1.4, gain: 0.34, noise: 1, freqFrom: 1500, freqTo: 2600, type: 'triangle', filter: 3200, filterQ: 1.1, attack: 0.08, release: 1.3 },
-  // 达成进度（M7）：清亮的双音铃（正弦 + 很高的中心频率，没有噪声成分——
-  // 一耳朵就与"破坏方块"那一族区分开）。滑音就是从低音"滑"到高音的那一下。
-  achievement: { duration: 0.9, gain: 0.42, noise: 0, freqFrom: 880, freqTo: 1568, type: 'sine', filter: 4200, filterQ: 0.7, attack: 0.01, release: 0.85 },
-  // 村民的"嗯…"（J11，批次 88）：低沉的喉音，带一点抖动（原版是那句著名的 huh）
-  mob_villager: { duration: 0.5, gain: 0.34, noise: 0.12, freqFrom: 300, freqTo: 210, type: 'sawtooth', filter: 1100, filterQ: 2.2, attack: 0.05, release: 0.44, thump: 95 },
-  // 成交（J11）：两声干脆的"叮"（原版是硬币落袋；这里用两个高音短音代替）
-  trade: { duration: 0.26, gain: 0.34, noise: 0.08, freqFrom: 1200, freqTo: 1800, type: 'triangle', filter: 5200, filterQ: 1.6, attack: 0.002, release: 0.24 },
-  // 背包搬运（批次 138）：极短、极轻的一下——它会在"连发放置"时连着响，
-  // 音量只要比 `click` 低一档就够（响了说明"这件东西动了"，而不是"我按了键"）
-  item_move: { duration: 0.05, gain: 0.16, noise: 0.35, freqFrom: 560, freqTo: 360, type: 'square', filter: 2400, filterQ: 1.3, attack: 0.001, release: 0.045 },
-  // 关门（批次 138）：木质门"咔嗒"——起手极短、低频闷响收尾，与开门的"吱呀"（`door`）分开
-  door_close: { duration: 0.18, gain: 0.42, noise: 0.5, freqFrom: 240, freqTo: 90, type: 'square', filter: 900, filterQ: 3, attack: 0.001, release: 0.17, thump: 95 },
-  // 盾牌挡下（批次 194）：木板被砸中的闷响 + 一点铁边的高频尾音
-  shield_block: { duration: 0.22, gain: 0.42, noise: 0.55, freqFrom: 300, freqTo: 120, type: 'square', filter: 1800, filterQ: 2.2, attack: 0.001, release: 0.2, thump: 120 },
-  // 活板门：一块木板拍下来的"咚"（比门短、比栅栏门闷）
-  trapdoor: { duration: 0.2, gain: 0.4, noise: 0.72, freqFrom: 200, freqTo: 120, type: 'square', filter: 1100, filterQ: 2.6, attack: 0.002, release: 0.19, thump: 110 },
-  // 栅栏门：更轻的木头（噪声多、音调高一点，听起来"薄"）
-  fence_gate: { duration: 0.24, gain: 0.32, noise: 0.68, freqFrom: 320, freqTo: 190, type: 'sawtooth', filter: 1400, filterQ: 2.2, attack: 0.004, release: 0.22 },
+  // ---------------------------------------------------------------- 破坏方块
+  // 石头：硬瞬态（高频短噪声）+ 主体（带通噪声）+ 一点低频"闷"
+  break_stone: spec(0.5, [
+    noise({ at: 0, dur: 0.05, gain: 0.8, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 2600, q: 0.7 }),
+    noise({ at: 0, dur: 0.18, gain: 1, env: curve([0, 0], [0.06, 1], [1, 0]), filter: 'bandpass', hz: 1500, q: 0.9 }),
+    tone({
+      at: 0,
+      dur: 0.14,
+      gain: 0.35,
+      env: curve([0, 0], [0.05, 1], [1, 0]),
+      wave: 'triangle',
+      hz: 175,
+      pitch: curve([1, 0.6]),
+    }),
+  ]),
+  // 木头：低频共鸣更明显（"咚"），噪声偏窄
+  break_wood: spec(0.46, [
+    noise({ at: 0, dur: 0.06, gain: 0.7, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 1800, q: 0.8 }),
+    noise({ at: 0, dur: 0.16, gain: 0.9, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'bandpass', hz: 900, q: 1.4 }),
+    tone({ at: 0, dur: 0.16, gain: 0.5, env: curve([0, 0], [0.04, 1], [1, 0]), wave: 'triangle', hz: 230, pitch: curve([1, 0.62]) }),
+  ]),
+  // 草/树叶：只有摩擦，没有体量（所以很轻、很快）
+  break_grass: spec(0.3, [
+    noise({ at: 0, dur: 0.13, gain: 1, env: curve([0, 0], [0.08, 1], [1, 0]), filter: 'lowpass', hz: 2400, q: 0.6 }),
+    noise({ at: 0.01, dur: 0.08, gain: 0.5, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 4200, q: 0.7 }),
+  ]),
+  break_sand: spec(0.34, [
+    noise({ at: 0, dur: 0.16, gain: 1, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'lowpass', hz: 3200, q: 0.5 }),
+    noise({ at: 0.02, dur: 0.1, gain: 0.45, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 1700, q: 0.8 }),
+  ]),
+  // 玻璃：三个高频短音（碎片）+ 一层很高的噪声（不是"一声脆响"就完了）
+  break_glass: spec(0.4, [
+    tone({ at: 0, dur: 0.22, gain: 0.55, env: curve([0, 0], [0.02, 1], [1, 0]), wave: 'sine', hz: 2250, pitch: curve([1, 0.92]) }),
+    tone({ at: 0.03, dur: 0.18, gain: 0.4, env: curve([0, 0], [0.02, 1], [1, 0]), wave: 'sine', hz: 2950, pitch: curve([1, 0.9]) }),
+    tone({ at: 0.07, dur: 0.14, gain: 0.3, env: curve([0, 0], [0.02, 1], [1, 0]), wave: 'sine', hz: 3400 }),
+    noise({ at: 0, dur: 0.12, gain: 0.5, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'highpass', hz: 5000, q: 0.7 }),
+  ]),
+  break_wool: spec(0.26, [
+    noise({ at: 0, dur: 0.15, gain: 1, env: curve([0, 0], [0.12, 1], [1, 0]), filter: 'lowpass', hz: 1100, q: 0.5 }),
+    noise({ at: 0.01, dur: 0.1, gain: 0.4, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 700, q: 0.9 }),
+  ]),
+
+  // ---------------------------------------------------------------- 放置方块
+  // 放方块 = 短、闷、没有碎片（它不该和"挖掉它"一样响）
+  place: spec(0.28, [
+    tone({ at: 0, dur: 0.07, gain: 0.6, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'square', hz: 300, pitch: curve([1, 0.6]) }),
+    noise({ at: 0, dur: 0.05, gain: 0.6, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 1500, q: 1 }),
+  ]),
+  place_stone: spec(0.3, [
+    noise({ at: 0, dur: 0.07, gain: 0.9, env: curve([0, 0], [0.12, 1], [1, 0]), filter: 'bandpass', hz: 1800, q: 1.1 }),
+    tone({ at: 0, dur: 0.06, gain: 0.5, env: curve([0, 0], [0.08, 1], [1, 0]), wave: 'triangle', hz: 190, pitch: curve([1, 0.7]) }),
+  ]),
+  place_wood: spec(0.29, [
+    noise({ at: 0, dur: 0.07, gain: 0.7, env: curve([0, 0], [0.12, 1], [1, 0]), filter: 'bandpass', hz: 1000, q: 1.4 }),
+    tone({ at: 0, dur: 0.1, gain: 0.55, env: curve([0, 0], [0.06, 1], [1, 0]), wave: 'triangle', hz: 250, pitch: curve([1, 0.75]) }),
+  ]),
+  place_grass: spec(0.22, [
+    noise({ at: 0, dur: 0.08, gain: 1, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'lowpass', hz: 2200, q: 0.6 }),
+  ]),
+  place_sand: spec(0.24, [
+    noise({ at: 0, dur: 0.1, gain: 1, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'lowpass', hz: 3000, q: 0.5 }),
+  ]),
+  place_glass: spec(0.26, [
+    tone({ at: 0, dur: 0.1, gain: 0.6, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'sine', hz: 2100 }),
+    noise({ at: 0, dur: 0.04, gain: 0.4, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 4200, q: 0.8 }),
+  ]),
+  place_wool: spec(0.2, [
+    noise({ at: 0, dur: 0.09, gain: 1, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'lowpass', hz: 1000, q: 0.5 }),
+  ]),
+
+  // ---------------------------------------------------------------- 脚步
+  // 脚步的判据：**短、软、比破坏音低一档**。玩家每 1.6 格就听一次，
+  // 任何"亮"的成分都会在连续走动时变成噪音。
+  step: spec(0.16, [
+    noise({ at: 0, dur: 0.07, gain: 1, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'lowpass', hz: 1400, q: 0.6 }),
+  ], {
+    jitter: 60,
+    variants: [
+      [
+        noise({ at: 0, dur: 0.07, gain: 1, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'lowpass', hz: 1400, q: 0.6 }),
+      ],
+      [
+        noise({ at: 0, dur: 0.06, gain: 0.9, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 1700, q: 1 }),
+        tone({ at: 0, dur: 0.05, gain: 0.25, env: curve([0, 0], [0.1, 1], [1, 0]), wave: 'sine', hz: 130 }),
+      ],
+    ],
+  }),
+  step_grass: spec(0.15, [
+    noise({ at: 0, dur: 0.08, gain: 1, env: curve([0, 0], [0.12, 1], [1, 0]), filter: 'lowpass', hz: 2200, q: 0.6 }),
+    tone({ at: 0, dur: 0.05, gain: 0.2, env: curve([0, 0], [0.1, 1], [1, 0]), wave: 'sine', hz: 120 }),
+  ], {
+    jitter: 70,
+    variants: [
+      [
+        noise({ at: 0, dur: 0.08, gain: 1, env: curve([0, 0], [0.12, 1], [1, 0]), filter: 'lowpass', hz: 2200, q: 0.6 }),
+        tone({ at: 0, dur: 0.05, gain: 0.2, env: curve([0, 0], [0.1, 1], [1, 0]), wave: 'sine', hz: 120 }),
+      ],
+      [
+        noise({ at: 0, dur: 0.09, gain: 0.9, env: curve([0, 0], [0.18, 1], [1, 0]), filter: 'bandpass', hz: 2600, q: 0.7 }),
+      ],
+      [
+        noise({ at: 0, dur: 0.075, gain: 1, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'lowpass', hz: 1800, q: 0.5 }),
+        noise({ at: 0.02, dur: 0.05, gain: 0.4, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 3800, q: 0.8 }),
+      ],
+    ],
+  }),
+  step_stone: spec(0.16, [
+    noise({ at: 0, dur: 0.055, gain: 1, env: curve([0, 0], [0.08, 1], [1, 0]), filter: 'bandpass', hz: 2400, q: 1.1 }),
+    tone({ at: 0, dur: 0.05, gain: 0.25, env: curve([0, 0], [0.1, 1], [1, 0]), wave: 'sine', hz: 190 }),
+  ], {
+    jitter: 55,
+    variants: [
+      [
+        noise({ at: 0, dur: 0.055, gain: 1, env: curve([0, 0], [0.08, 1], [1, 0]), filter: 'bandpass', hz: 2400, q: 1.1 }),
+        tone({ at: 0, dur: 0.05, gain: 0.25, env: curve([0, 0], [0.1, 1], [1, 0]), wave: 'sine', hz: 190 }),
+      ],
+      [
+        noise({ at: 0, dur: 0.06, gain: 1, env: curve([0, 0], [0.12, 1], [1, 0]), filter: 'bandpass', hz: 1900, q: 1.4 }),
+        noise({ at: 0, dur: 0.03, gain: 0.5, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'highpass', hz: 4200, q: 0.7 }),
+      ],
+    ],
+  }),
+  step_wood: spec(0.17, [
+    noise({ at: 0, dur: 0.06, gain: 0.8, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1000, q: 1.4 }),
+    tone({ at: 0, dur: 0.09, gain: 0.45, env: curve([0, 0], [0.06, 1], [1, 0]), wave: 'triangle', hz: 240, pitch: curve([1, 0.8]) }),
+  ], {
+    jitter: 55,
+    variants: [
+      [
+        noise({ at: 0, dur: 0.06, gain: 0.8, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1000, q: 1.4 }),
+        tone({ at: 0, dur: 0.09, gain: 0.45, env: curve([0, 0], [0.06, 1], [1, 0]), wave: 'triangle', hz: 240, pitch: curve([1, 0.8]) }),
+      ],
+      [
+        tone({ at: 0, dur: 0.1, gain: 0.5, env: curve([0, 0], [0.08, 1], [1, 0]), wave: 'triangle', hz: 200, pitch: curve([1, 0.85]) }),
+        noise({ at: 0, dur: 0.045, gain: 0.5, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 1400, q: 1.2 }),
+      ],
+    ],
+  }),
+  step_sand: spec(0.15, [
+    noise({ at: 0, dur: 0.09, gain: 1, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 3000, q: 0.5 }),
+  ], {
+    jitter: 80,
+    variants: [
+      [
+        noise({ at: 0, dur: 0.09, gain: 1, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 3000, q: 0.5 }),
+      ],
+      [
+        noise({ at: 0, dur: 0.1, gain: 1, env: curve([0, 0], [0.25, 1], [1, 0]), filter: 'bandpass', hz: 3600, q: 0.6 }),
+      ],
+    ],
+  }),
+  // 砂砾：三个错开的短爆（"咯吱咯吱"的颗粒感）
+  step_gravel: spec(0.16, [
+    noise({ at: 0, dur: 0.035, gain: 0.9, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 2500, q: 1.2 }),
+    noise({ at: 0.028, dur: 0.03, gain: 0.7, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 3100, q: 1.4 }),
+    noise({ at: 0.055, dur: 0.04, gain: 0.8, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 2200, q: 1 }),
+  ], { jitter: 90 }),
+  step_snow: spec(0.13, [
+    noise({ at: 0, dur: 0.1, gain: 1, env: curve([0, 0], [0.25, 1], [1, 0]), filter: 'lowpass', hz: 3500, q: 0.5 }),
+    noise({ at: 0, dur: 0.06, gain: 0.4, env: curve([0, 0], [0.3, 1], [1, 0]), filter: 'bandpass', hz: 1200, q: 0.7 }),
+  ], { jitter: 70 }),
+  step_wool: spec(0.12, [
+    noise({ at: 0, dur: 0.07, gain: 1, env: curve([0, 0], [0.25, 1], [1, 0]), filter: 'lowpass', hz: 1100, q: 0.5 }),
+  ], { jitter: 60 }),
+
+  // ---------------------------------------------------------------- 落地
+  // 软着陆：一声很短的闷响（脚掌拍地），没有碎石
+  land_soft: spec(0.3, [
+    tone({ at: 0, dur: 0.12, gain: 0.7, env: curve([0, 0], [0.06, 1], [1, 0]), wave: 'sine', hz: 95, pitch: curve([1, 0.6]) }),
+    noise({ at: 0, dur: 0.08, gain: 0.6, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'lowpass', hz: 900, q: 0.7 }),
+  ], { jitter: 40 }),
+  // 硬着陆：更低的闷响 + 碎石 + 稍微长一点的尾（"砰——"）
+  land_hard: spec(0.42, [
+    tone({ at: 0, dur: 0.26, gain: 0.85, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'sine', hz: 72, pitch: curve([1, 0.5]) }),
+    noise({ at: 0, dur: 0.14, gain: 0.9, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'lowpass', hz: 700, q: 0.6 }),
+    noise({ at: 0.02, dur: 0.16, gain: 0.35, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 2100, q: 0.8 }),
+  ], {
+    jitter: 30,
+    variants: [
+      [
+        tone({ at: 0, dur: 0.26, gain: 0.85, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'sine', hz: 72, pitch: curve([1, 0.5]) }),
+        noise({ at: 0, dur: 0.14, gain: 0.9, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'lowpass', hz: 700, q: 0.6 }),
+        noise({ at: 0.02, dur: 0.16, gain: 0.35, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 2100, q: 0.8 }),
+      ],
+      [
+        tone({ at: 0, dur: 0.3, gain: 0.8, env: curve([0, 0], [0.04, 1], [1, 0]), wave: 'sine', hz: 64, pitch: curve([1, 0.55]) }),
+        noise({ at: 0, dur: 0.18, gain: 0.9, env: curve([0, 0], [0.08, 1], [1, 0]), filter: 'lowpass', hz: 600, q: 0.5 }),
+      ],
+    ],
+  }),
+  // 旧名字（K5 就有），保留给"从高处掉下来"这一档，与 `land_hard` 略有区别
+  fall: spec(0.38, [
+    tone({ at: 0, dur: 0.22, gain: 0.8, env: curve([0, 0], [0.04, 1], [1, 0]), wave: 'triangle', hz: 120, pitch: curve([1, 0.55]) }),
+    noise({ at: 0, dur: 0.12, gain: 0.7, env: curve([0, 0], [0.07, 1], [1, 0]), filter: 'lowpass', hz: 800, q: 0.8 }),
+  ], { jitter: 35 }),
+
+  // ---------------------------------------------------------------- 玩家受伤/死亡
+  // 受伤：一条"嗓子"（锯齿波 + 共振峰 = 元音）+ 一点呼气噪声。
+  // ⚠️ 这是这一批最重要的改动：旧版是一条 380→160Hz 的锯齿滑音，
+  // 没有共振峰就不可能像人声。
+  hurt: spec(0.34, [
+    tone({
+      at: 0,
+      dur: 0.3,
+      gain: 0.9,
+      env: curve([0, 0], [0.04, 1], [0.35, 0.75], [1, 0]),
+      wave: 'sawtooth',
+      hz: 190,
+      pitch: curve([0.25, 1.08], [1, 0.7]),
+      formants: [
+        { hz: 620, q: 7, gain: 1 },
+        { hz: 1150, q: 9, gain: 0.55 },
+        { hz: 2400, q: 11, gain: 0.18 },
+      ],
+      vibrato: { hz: 6, cents: 28 },
+    }),
+    noise({ at: 0.01, dur: 0.11, gain: 0.35, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1300, q: 0.8 }),
+  ], {
+    jitter: 25,
+    variants: [
+      [
+        tone({
+          at: 0,
+          dur: 0.3,
+          gain: 0.9,
+          env: curve([0, 0], [0.04, 1], [0.35, 0.75], [1, 0]),
+          wave: 'sawtooth',
+          hz: 190,
+          pitch: curve([0.25, 1.08], [1, 0.7]),
+          formants: [
+            { hz: 620, q: 7, gain: 1 },
+            { hz: 1150, q: 9, gain: 0.55 },
+            { hz: 2400, q: 11, gain: 0.18 },
+          ],
+          vibrato: { hz: 6, cents: 28 },
+        }),
+        noise({ at: 0.01, dur: 0.11, gain: 0.35, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1300, q: 0.8 }),
+      ],
+      // 长一点的"啊"（被打得比较重时随机到）
+      [
+        tone({
+          at: 0,
+          dur: 0.4,
+          gain: 0.9,
+          env: curve([0, 0], [0.05, 1], [0.4, 0.8], [1, 0]),
+          wave: 'sawtooth',
+          hz: 205,
+          pitch: curve([0.3, 1.05], [1, 0.62]),
+          formants: [
+            { hz: 730, q: 8, gain: 1 },
+            { hz: 1090, q: 10, gain: 0.5 },
+            { hz: 2440, q: 12, gain: 0.15 },
+          ],
+          vibrato: { hz: 5, cents: 34 },
+        }),
+        noise({ at: 0.02, dur: 0.16, gain: 0.3, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 1100, q: 0.7 }),
+      ],
+    ],
+  }),
+  death: spec(0.4, [
+    tone({
+      at: 0,
+      dur: 0.85,
+      gain: 0.9,
+      env: curve([0, 0], [0.05, 1], [0.45, 0.8], [0.8, 0.5], [1, 0]),
+      wave: 'sawtooth',
+      hz: 175,
+      pitch: curve([0.25, 1.05], [1, 0.45]),
+      formants: [
+        { hz: 650, q: 7, gain: 1 },
+        { hz: 1080, q: 9, gain: 0.5 },
+        { hz: 2300, q: 11, gain: 0.15 },
+      ],
+      vibrato: { hz: 4.5, cents: 30 },
+    }),
+    noise({ at: 0.04, dur: 0.7, gain: 0.22, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'lowpass', hz: 1200, q: 0.6 }),
+  ], { jitter: 15 }),
+  // 打中生物的"闷响"（玩家近战那一下的打击感；不代替生物的受伤叫）
+  hit_flesh: spec(0.3, [
+    noise({ at: 0, dur: 0.07, gain: 1, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'lowpass', hz: 650, q: 0.8 }),
+    tone({ at: 0, dur: 0.09, gain: 0.5, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'sine', hz: 105, pitch: curve([1, 0.65]) }),
+  ], { jitter: 30 }),
+
+  // ---------------------------------------------------------------- 开关与交互
+  door: spec(0.3, [
+    tone({
+      at: 0,
+      dur: 0.38,
+      gain: 0.55,
+      env: curve([0, 0], [0.15, 1], [0.7, 0.8], [1, 0]),
+      wave: 'sawtooth',
+      hz: 170,
+      pitch: curve([0.5, 1.25], [1, 0.9]),
+      vibrato: { hz: 8, cents: 45 },
+    }),
+    noise({ at: 0, dur: 0.36, gain: 0.4, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 800, q: 3.2 }),
+  ]),
+  door_close: spec(0.36, [
+    tone({ at: 0, dur: 0.16, gain: 0.7, env: curve([0, 0], [0.02, 1], [1, 0]), wave: 'square', hz: 230, pitch: curve([1, 0.45]) }),
+    noise({ at: 0, dur: 0.12, gain: 0.6, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'lowpass', hz: 900, q: 2.4 }),
+    tone({ at: 0, dur: 0.2, gain: 0.35, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'sine', hz: 95, pitch: curve([1, 0.6]) }),
+  ]),
+  trapdoor: spec(0.34, [
+    tone({ at: 0, dur: 0.18, gain: 0.65, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'square', hz: 200, pitch: curve([1, 0.55]) }),
+    noise({ at: 0, dur: 0.14, gain: 0.7, env: curve([0, 0], [0.08, 1], [1, 0]), filter: 'bandpass', hz: 1100, q: 2.2 }),
+    tone({ at: 0, dur: 0.16, gain: 0.3, env: curve([0, 0], [0.04, 1], [1, 0]), wave: 'sine', hz: 115 }),
+  ]),
+  fence_gate: spec(0.28, [
+    tone({ at: 0, dur: 0.2, gain: 0.5, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'sawtooth', hz: 330, pitch: curve([1, 0.6]) }),
+    noise({ at: 0, dur: 0.16, gain: 0.55, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 1500, q: 2 }),
+  ]),
+  shield_block: spec(0.38, [
+    tone({ at: 0, dur: 0.2, gain: 0.7, env: curve([0, 0], [0.02, 1], [1, 0]), wave: 'square', hz: 300, pitch: curve([1, 0.4]) }),
+    noise({ at: 0, dur: 0.1, gain: 0.7, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'bandpass', hz: 1800, q: 1.6 }),
+    tone({ at: 0, dur: 0.16, gain: 0.5, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'sine', hz: 120, pitch: curve([1, 0.55]) }),
+  ]),
+
+  // ---------------------------------------------------------------- 环境
+  // 爆炸：低频主体 + 早期的高频"撕裂" + 一条长尾
+  explode: spec(0.62, [
+    noise({ at: 0, dur: 0.9, gain: 1, env: curve([0, 0], [0.008, 1], [0.25, 0.6], [1, 0]), filter: 'lowpass', hz: 520, q: 0.5, sweep: curve([0.4, 1.5]) }),
+    noise({ at: 0, dur: 0.18, gain: 0.8, env: curve([0, 0], [0.01, 1], [1, 0]), filter: 'bandpass', hz: 1600, q: 0.7 }),
+    tone({ at: 0, dur: 0.7, gain: 0.9, env: curve([0, 0], [0.01, 1], [1, 0]), wave: 'sine', hz: 62, pitch: curve([1, 0.35]) }),
+  ], { jitter: 20 }),
+  thunder: spec(0.68, [
+    noise({ at: 0, dur: 1.7, gain: 1, env: curve([0, 0], [0.02, 1], [0.4, 0.8], [1, 0]), filter: 'lowpass', hz: 330, q: 0.5, sweep: curve([1, 0.55]) }),
+    tone({ at: 0, dur: 1.5, gain: 0.5, env: curve([0, 0], [0.05, 1], [0.5, 0.7], [1, 0]), wave: 'sine', hz: 46, pitch: curve([1, 0.7]) }),
+    noise({ at: 0.1, dur: 1.2, gain: 0.3, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'lowpass', hz: 180, q: 0.6, tremolo: { hz: 0.9, depth: 0.5 } }),
+  ], { jitter: 0 }),
+  splash: spec(0.3, [
+    noise({ at: 0, dur: 0.32, gain: 1, env: curve([0, 0], [0.03, 1], [1, 0]), filter: 'bandpass', hz: 2200, q: 0.5, sweep: curve([1, 1.7]) }),
+    noise({ at: 0.04, dur: 0.3, gain: 0.45, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 3500, q: 0.6 }),
+    tone({ at: 0.06, dur: 0.14, gain: 0.3, env: curve([0, 0], [0.2, 1], [1, 0]), wave: 'sine', hz: 900, pitch: curve([1, 1.6]) }),
+  ], { jitter: 60 }),
+  portal: spec(0.36, [
+    tone({
+      at: 0,
+      dur: 0.85,
+      gain: 0.8,
+      env: curve([0, 0], [0.15, 1], [0.7, 0.85], [1, 0]),
+      wave: 'sawtooth',
+      hz: 220,
+      pitch: curve([0.5, 1.15], [1, 0.55]),
+      vibrato: { hz: 3.2, cents: 40 },
+    }),
+    noise({ at: 0, dur: 0.8, gain: 0.2, env: curve([0, 0], [0.3, 1], [1, 0]), filter: 'lowpass', hz: 900, q: 1.5 }),
+  ]),
+  fuse: spec(0.26, [
+    noise({ at: 0, dur: 1.3, gain: 1, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 1500, q: 0.7, sweep: curve([1, 2]), tremolo: { hz: 7, depth: 0.35 } }),
+    tone({ at: 0, dur: 1.2, gain: 0.12, env: curve([0, 0], [0.2, 1], [1, 0]), wave: 'triangle', hz: 220, pitch: curve([1, 1.4]) }),
+  ]),
+
+  // ---------------------------------------------------------------- 界面与工具
+  click: spec(0.24, [
+    tone({ at: 0, dur: 0.05, gain: 0.8, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'square', hz: 950, pitch: curve([1, 0.82]) }),
+    noise({ at: 0, dur: 0.025, gain: 0.3, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'highpass', hz: 4000, q: 0.8 }),
+  ], { jitter: 30 }),
+  item_move: spec(0.15, [
+    tone({ at: 0, dur: 0.04, gain: 0.7, env: curve([0, 0], [0.1, 1], [1, 0]), wave: 'square', hz: 560, pitch: curve([1, 0.65]) }),
+    noise({ at: 0, dur: 0.02, gain: 0.35, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'bandpass', hz: 2400, q: 1.2 }),
+  ], { jitter: 60 }),
+  pickup: spec(0.22, [
+    tone({ at: 0, dur: 0.09, gain: 0.8, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'sine', hz: 620, pitch: curve([0.5, 1.5], [1, 1.2]) }),
+  ], { jitter: 40 }),
+  xp: spec(0.2, [
+    tone({ at: 0, dur: 0.18, gain: 0.7, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'sine', hz: 1320, pitch: curve([0.5, 1.25], [1, 1]) }),
+    tone({ at: 0.03, dur: 0.16, gain: 0.35, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'sine', hz: 1980 }),
+  ], { jitter: 35 }),
+  achievement: spec(0.34, [
+    tone({ at: 0, dur: 0.5, gain: 0.7, env: curve([0, 0], [0.03, 1], [0.6, 0.6], [1, 0]), wave: 'sine', hz: 880 }),
+    tone({ at: 0.16, dur: 0.7, gain: 0.6, env: curve([0, 0], [0.03, 1], [0.6, 0.5], [1, 0]), wave: 'sine', hz: 1568, pitch: curve([1, 1.002]) }),
+  ]),
+  trade: spec(0.28, [
+    tone({ at: 0, dur: 0.1, gain: 0.7, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'triangle', hz: 1250 }),
+    tone({ at: 0.08, dur: 0.14, gain: 0.6, env: curve([0, 0], [0.03, 1], [1, 0]), wave: 'triangle', hz: 1870 }),
+  ]),
+  eat: spec(0.22, [
+    noise({ at: 0, dur: 0.09, gain: 1, env: curve([0, 0], [0.08, 1], [1, 0]), filter: 'bandpass', hz: 1700, q: 1.4 }),
+    noise({ at: 0.02, dur: 0.07, gain: 0.6, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'lowpass', hz: 700, q: 1 }),
+  ], {
+    jitter: 90,
+    variants: [
+      [
+        noise({ at: 0, dur: 0.09, gain: 1, env: curve([0, 0], [0.08, 1], [1, 0]), filter: 'bandpass', hz: 1700, q: 1.4 }),
+        noise({ at: 0.02, dur: 0.07, gain: 0.6, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'lowpass', hz: 700, q: 1 }),
+      ],
+      [
+        noise({ at: 0, dur: 0.08, gain: 1, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 2100, q: 1.8 }),
+      ],
+      [
+        noise({ at: 0, dur: 0.06, gain: 0.9, env: curve([0, 0], [0.12, 1], [1, 0]), filter: 'bandpass', hz: 1400, q: 1.2 }),
+        noise({ at: 0.04, dur: 0.06, gain: 0.7, env: curve([0, 0], [0.12, 1], [1, 0]), filter: 'bandpass', hz: 1900, q: 1.5 }),
+      ],
+    ],
+  }),
+  // 喝（药水/牛奶）：连续"咕咚"（幅度抖动），没有咀嚼的脆感
+  drink: spec(0.24, [
+    noise({ at: 0, dur: 0.3, gain: 0.7, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 900, q: 1.2, tremolo: { hz: 14, depth: 0.7 } }),
+    tone({ at: 0, dur: 0.3, gain: 0.3, env: curve([0, 0], [0.1, 1], [1, 0]), wave: 'sine', hz: 300, pitch: curve([1, 0.7]), vibrato: { hz: 9, cents: 60 } }),
+  ], { jitter: 30 }),
+  bow_shoot: spec(0.34, [
+    noise({ at: 0, dur: 0.05, gain: 0.7, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'bandpass', hz: 2600, q: 1.2 }),
+    tone({ at: 0, dur: 0.2, gain: 0.85, env: curve([0, 0], [0.02, 1], [1, 0]), wave: 'triangle', hz: 420, pitch: curve([0.15, 1.15], [1, 0.32]) }),
+  ], { jitter: 25 }),
+  arrow_hit: spec(0.26, [
+    noise({ at: 0, dur: 0.07, gain: 1, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'bandpass', hz: 1900, q: 1.6 }),
+    tone({ at: 0, dur: 0.08, gain: 0.5, env: curve([0, 0], [0.05, 1], [1, 0]), wave: 'square', hz: 460, pitch: curve([1, 0.5]) }),
+  ], { jitter: 40 }),
+  shear: spec(0.28, [
+    noise({ at: 0, dur: 0.05, gain: 1, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'highpass', hz: 5200, q: 0.7 }),
+    noise({ at: 0.05, dur: 0.05, gain: 0.8, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'highpass', hz: 4200, q: 0.7 }),
+  ], { jitter: 40 }),
+  flint: spec(0.32, [
+    noise({ at: 0, dur: 0.1, gain: 0.9, env: curve([0, 0], [0.05, 1], [1, 0]), filter: 'highpass', hz: 3000, q: 0.8, sweep: curve([1, 0.35]) }),
+    noise({ at: 0.08, dur: 0.22, gain: 0.5, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 1200, q: 0.7, sweep: curve([1, 1.6]) }),
+    tone({ at: 0.08, dur: 0.2, gain: 0.25, env: curve([0, 0], [0.15, 1], [1, 0]), wave: 'triangle', hz: 320, pitch: curve([1, 0.7]) }),
+  ], { jitter: 35 }),
 };
 
 /**
@@ -173,8 +628,8 @@ export function doorSoundFor(shape: string, opened: boolean): SoundKind {
 /**
  * 水下闷响（批次 138）：听者在水下时，所有音效过一道低通并压低音量。
  *
- * 原版在水下听到的一切都是"闷"的——它是一个**全局**效果，所以放在引擎里
- * （而不是给每种音效各写一套水下参数：那样加一种声就要记得加两套）。
+ * 批次 232 起它和"距离低通"合并成同一个滤波器（取两者更低的那个截止频率）——
+ * 两件事都是"把高频削掉"，分两个滤波器只是多一倍节点。
  */
 export const UNDERWATER_LOWPASS_HZ = 700;
 export const UNDERWATER_GAIN = 0.55;
@@ -199,6 +654,9 @@ export function soundSpec(kind: SoundKind): SoundSpec | undefined {
  * 于是收敛成**四组**：方块（挖/放/门/工具）、生物（叫/受伤）、玩家（脚步/受伤/吃/弓）、
  * 界面与环境（按钮/达成/交易/雷声/爆炸/传送门）。
  *
+ * ⚠️ 生物那一组不在这张表里——它的声音是按"种类档案"播的（`MobVoices.ts`），
+ * 走 `AudioEngine.playVoice()` 时固定归 `mobs`。表里留空的组仍然是有效设置项。
+ *
  * ⚠️ 这张表**必须是穷尽映射**（`Record<SoundKind, …>`）：加了新音效却忘了分组，
  * 编译期就会报错——而不是等到玩家发现"这个声音调不小"。
  */
@@ -212,6 +670,12 @@ export const SOUND_GROUPS: Readonly<Record<SoundKind, SoundGroup>> = {
   break_glass: 'blocks',
   break_wool: 'blocks',
   place: 'blocks',
+  place_stone: 'blocks',
+  place_wood: 'blocks',
+  place_grass: 'blocks',
+  place_sand: 'blocks',
+  place_glass: 'blocks',
+  place_wool: 'blocks',
   door: 'blocks',
   door_close: 'blocks',
   trapdoor: 'blocks',
@@ -219,20 +683,27 @@ export const SOUND_GROUPS: Readonly<Record<SoundKind, SoundGroup>> = {
   flint: 'blocks',
   shear: 'blocks',
   step: 'player',
+  step_grass: 'player',
+  step_stone: 'player',
+  step_wood: 'player',
+  step_sand: 'player',
+  step_gravel: 'player',
+  step_snow: 'player',
+  step_wool: 'player',
+  land_soft: 'player',
+  land_hard: 'player',
   hurt: 'player',
-  shield_block: 'player',
   death: 'player',
+  hit_flesh: 'player',
   fall: 'player',
   splash: 'player',
   eat: 'player',
+  drink: 'player',
+  pickup: 'player',
+  xp: 'player',
   bow_shoot: 'player',
   arrow_hit: 'player',
-  mob_zombie: 'mobs',
-  mob_skeleton: 'mobs',
-  mob_creeper: 'mobs',
-  mob_cow: 'mobs',
-  mob_sheep: 'mobs',
-  mob_villager: 'mobs',
+  shield_block: 'player',
   click: 'ui',
   achievement: 'ui',
   trade: 'ui',
@@ -291,6 +762,75 @@ export function breakSoundFor(blockName: string): SoundKind {
   return 'break_stone';
 }
 
+/**
+ * 方块名 → 脚步声（批次 232）。
+ *
+ * 以前脚步直接复用 `break_*`（草方块用"挖草"的声音），结果走路像一直在挖方块。
+ * 脚步要的是"短、软、比破坏音低一档"，所以是**独立一套**，不是破坏音的降调版。
+ *
+ * ⚠️ 顺序要紧：`gravel` 归砂砾（不是沙子），`snow` 先于 `block`，
+ * `carpet`/`wool` 归软材质——与 `breakSoundFor` 的分类口径保持一致，但多了一档"砂砾"。
+ */
+export function stepSoundFor(blockName: string): SoundKind {
+  const name = blockName.replace('minecraft:', '');
+  if (name.includes('snow')) return 'step_snow';
+  if (name.includes('wool') || name.includes('carpet') || name.includes('wart')) return 'step_wool';
+  if (name.includes('gravel')) return 'step_gravel';
+  if (name.includes('sand') || name.includes('soul_soil')) return 'step_sand';
+  if (name.includes('glass') || name.includes('ice')) return 'step_stone';
+  // 泥土/耕地是"松软带颗粒"的，不是石头的硬响
+  if (name.includes('dirt') || name.includes('farmland')) return 'step_gravel';
+  if (
+    name.includes('grass') ||
+    name.includes('leaves') ||
+    name.includes('moss') ||
+    name.includes('nylium') ||
+    name.includes('fern') ||
+    name.includes('azalea') ||
+    name.includes('podzol') ||
+    name.includes('mycelium')
+  ) {
+    return 'step_grass';
+  }
+  if (
+    name.includes('planks') ||
+    name.includes('log') ||
+    name.includes('wood') ||
+    name.includes('stem') ||
+    name.includes('bamboo') ||
+    name.includes('chest') ||
+    name.includes('table') ||
+    name.endsWith('_sign')
+  ) {
+    return 'step_wood';
+  }
+  return 'step_stone';
+}
+
+/** 方块名 → 放置音效（批次 232：以前所有方块共用一个 `place`） */
+export function placeSoundFor(blockName: string): SoundKind {
+  const name = blockName.replace('minecraft:', '');
+  if (name.includes('glass') || name.includes('ice')) return 'place_glass';
+  if (name.includes('wool') || name.includes('carpet') || name.includes('wart')) return 'place_wool';
+  if (name.includes('sand') || name.includes('gravel') || name.includes('soul_soil')) return 'place_sand';
+  if (name.includes('grass') || name.includes('leaves') || name.includes('nylium') || name.includes('fern')) {
+    return 'place_grass';
+  }
+  if (
+    name.includes('planks') ||
+    name.includes('log') ||
+    name.includes('wood') ||
+    name.includes('stem') ||
+    name.includes('bamboo') ||
+    name.includes('chest') ||
+    name.includes('table') ||
+    name.endsWith('_sign')
+  ) {
+    return 'place_wood';
+  }
+  return 'place_stone';
+}
+
 /** 可听距离（格）：超出这个距离不再播放，省掉无意义的合成开销 */
 const HEARING_RANGE = 32;
 
@@ -303,16 +843,34 @@ const HEARING_RANGE = 32;
  * 所以 Regular 玩法不会被吞声。
  */
 const SAME_SOUND_THROTTLE = 0.07;
+
 /**
  * 同时发声的上限。
  *
  * 超出的请求直接丢弃（不是排队）——密集场景里"少响几声"听不出来，
  * 但省掉的是一整批节点的创建与随后的回收。
+ * 批次 232：12 → 16（生物环境叫也进这条路了），并给"最该听见的"留了余地。
  */
-const MAX_CONCURRENT_VOICES = 12;
+const MAX_CONCURRENT_VOICES = 16;
+
+/**
+ * 关键的几种声音可以**突破上限**（再宽限这么多声）。
+ *
+ * 以前 12 声满了之后，第一个被丢的可能正是"玩家受伤"——
+ * 一群怪围上来时反而听不见自己挨打。取舍很简单：这几种很少同时响。
+ */
+const CRITICAL_KINDS: ReadonlySet<string> = new Set(['hurt', 'death', 'explode', 'shield_block']);
+const CRITICAL_BYPASS = 4;
+
+/** 混响发送量（0 = 干声）。10% 足够让脚步/弓弦不"贴着脸"，又不至于糊 */
+const REVERB_MIX = 0.1;
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
+  /** 主总线（所有声音都汇到这里 → 压缩器 → 扬声器） */
+  private master: GainNode | null = null;
+  /** 混响发送（两条反馈延迟；不用卷积，手机上更稳） */
+  private reverbSend: GainNode | null = null;
   /** 主音量（与设置里的音量联动） */
   volume = 0.7;
   /**
@@ -329,6 +887,8 @@ export class AudioEngine {
   private listenerX = 0;
   private listenerY = 0;
   private listenerZ = 0;
+  /** 监听者朝向（弧度，0 = 朝 -Z）：声像靠它算"在左还是在右" */
+  private listenerYaw = 0;
   /**
    * 听者是不是在水下（批次 138）：主程序每帧按"眼睛那一格是不是水"设置。
    * 水下所有音效都会**过一道低通 + 压低音量**（见 `UNDERWATER_LOWPASS_HZ`）。
@@ -339,7 +899,7 @@ export class AudioEngine {
   /** 统计播放次数（调试面板用） */
   played = 0;
   /** 每种音效最近一次的起始时刻（秒，AudioContext 时钟），用于同一声的节流 */
-  private readonly lastStartAt = new Map<SoundKind, number>();
+  private readonly lastStartAt = new Map<string, number>();
   /** 音符盒那一声的节流（它没有 `SoundKind`，单开一个时间戳，见 `playNote`） */
   private lastNoteAt = -1;
   /** 仍在发声的那些声音的结束时刻（秒），用来数当前并发了几声 */
@@ -353,6 +913,7 @@ export class AudioEngine {
     if (!this.enabled) return;
     try {
       this.ctx ??= new AudioContext();
+      this.ensureGraph(this.ctx);
       if (this.ctx.state === 'suspended') void this.ctx.resume();
     } catch {
       // 某些环境（无音频设备、隐私模式）会直接抛错：关掉音效，不影响游戏
@@ -369,6 +930,8 @@ export class AudioEngine {
   dispose(): void {
     const ctx = this.ctx;
     this.ctx = null;
+    this.master = null;
+    this.reverbSend = null;
     this.noiseBuffer = null;
     this.lastStartAt.clear();
     this.voiceEnds = [];
@@ -378,6 +941,55 @@ export class AudioEngine {
   /** AudioContext 状态（验收脚本用：suspended 说明还没被用户手势解锁） */
   get contextState(): string {
     return this.ctx?.state ?? 'none';
+  }
+
+  /**
+   * 建主总线：gain → 压缩器 → 扬声器，外加一条反馈延迟做的混响发送。
+   *
+   * 为什么不需要卷积混响：我们要的是"有一点空间"而不是"大教堂"。
+   * 两条 80/140ms 的反馈延迟就已经能把"贴着脸的干声"推远一点，
+   * 而且没有 FFT 卷积的固定开销（手机上更稳）。
+   */
+  private ensureGraph(ctx: AudioContext): void {
+    if (this.master) return;
+
+    const master = ctx.createGain();
+    master.gain.value = 1;
+    const comp = ctx.createDynamicsCompressor();
+    // 阈值不压得太狠：单声几乎不过去，只有"多声叠在一起"才被收住
+    comp.threshold.value = -12;
+    comp.knee.value = 18;
+    comp.ratio.value = 3.5;
+    comp.attack.value = 0.004;
+    comp.release.value = 0.22;
+    master.connect(comp).connect(ctx.destination);
+
+    const send = ctx.createGain();
+    send.gain.value = REVERB_MIX;
+    const wetSum = ctx.createGain();
+    wetSum.gain.value = 0.55;
+    for (const [time, feedback, cutoff] of [
+      [0.083, 0.34, 3200],
+      [0.137, 0.28, 2600],
+    ] as const) {
+      const delay = ctx.createDelay(0.5);
+      delay.delayTime.value = time;
+      const damp = ctx.createBiquadFilter();
+      damp.type = 'lowpass';
+      damp.frequency.value = cutoff;
+      const fb = ctx.createGain();
+      fb.gain.value = feedback;
+      send.connect(delay);
+      delay.connect(damp);
+      damp.connect(fb);
+      fb.connect(delay);
+      damp.connect(wetSum);
+    }
+    // 混响也要过压缩器：不然它的尾巴会把总电平顶上去
+    wetSum.connect(comp);
+
+    this.master = master;
+    this.reverbSend = send;
   }
 
   /**
@@ -394,36 +1006,81 @@ export class AudioEngine {
     return this.groupVolume[group];
   }
 
-  setListener(x: number, y: number, z: number): void {
+  /**
+   * 设置听者的位置与朝向。
+   *
+   * 朝向是可选的：老代码/测试只传坐标时，声像按"yaw = 0"算（正前方是 -Z），
+   * 至少不会因为少传一个参数就静音。
+   */
+  setListener(x: number, y: number, z: number, yaw = this.listenerYaw): void {
     this.listenerX = x;
     this.listenerY = y;
     this.listenerZ = z;
+    this.listenerYaw = yaw;
   }
 
-  /** 播放一个音效；给坐标时会按距离衰减 */
-  play(kind: SoundKind, at?: { x: number; y: number; z: number }): void {
-    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+  /** 播放一个音效；给坐标时会按距离衰减并做声像。`gainScale` 用于"疾跑更响"这类微调 */
+  play(kind: SoundKind, at?: { x: number; y: number; z: number }, gainScale = 1): void {
     const spec = SOUNDS[kind];
     if (!spec) return;
+    this.playSpec(kind, spec, at, gainScale, SOUND_GROUPS[kind], 1, SAME_SOUND_THROTTLE);
+  }
 
-    // ---- 两道节流（批次 158）
-    // 每一声要新建 5~8 个 WebAudio 节点（gain / bandpass / bufferSource / oscillator …）。
-    // 挖矿 + 打怪 + 下雨 + 一群生物同时叫的时候，节点分配与 GC 在手机上不是免费的，
-    // 而"同一声在 70ms 内响了两次""同时响超过 12 声"这两件事玩家根本听不出来。
-    const nowClock = this.ctx.currentTime;
-    const last = this.lastStartAt.get(kind);
-    if (last !== undefined && nowClock - last < SAME_SOUND_THROTTLE) return;
-    if (this.voiceEnds.length > 0) {
-      this.voiceEnds = this.voiceEnds.filter((end) => end > nowClock);
-      if (this.voiceEnds.length >= MAX_CONCURRENT_VOICES) return;
-    }
-    this.lastStartAt.set(kind, nowClock);
-    this.voiceEnds.push(nowClock + spec.duration);
+  /**
+   * 播放一条生物声音（环境叫 / 受伤 / 死亡）。
+   *
+   * 与 `play()` 分开的原因：生物声音不是"一种音效一条 spec"，而是
+   * **每种生物三条**（见 `MobVoices.ts`）。把它们全塞进 `SOUNDS` 会让表长出 80 多条，
+   * 而且"加一种生物就要改三个地方"。这里统一归 `mobs` 音量组。
+   *
+   * @param pitch 音高倍率：幼体更高、洞穴蜘蛛更高（由 `mobVoicePitchFor` 算）
+   */
+  playVoice(kind: string, spec: SoundSpec, at: { x: number; y: number; z: number }, pitch = 1): void {
+    // 环境叫的节流比"受伤"宽：它只是"在场感"，一群牛不该变成合唱
+    const throttle = kind.endsWith(':ambient') ? 0.32 : SAME_SOUND_THROTTLE;
+    this.playSpec(kind, spec, at, 1, 'mobs', pitch, throttle);
+  }
 
-    let gain = spec.gain * this.volume * this.groupVolume[SOUND_GROUPS[kind]];
+  private playSpec(
+    key: string,
+    spec: SoundSpec,
+    at: { x: number; y: number; z: number } | undefined,
+    gainScale: number,
+    group: SoundGroup,
+    rateScale: number,
+    throttle: number,
+  ): void {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    const master = this.master;
+    const wet = this.reverbSend;
+    if (!master) return;
+
+    const now = ctx.currentTime;
+
+    // ---- 节流：同一条声音在极短时间内不重复播
+    const last = this.lastStartAt.get(key);
+    if (last !== undefined && now - last < throttle) return;
+
+    // ---- 距离：先判"听不见"，**再**占并发名额（旧版顺序反了，远处被丢弃的请求会白占一个）
+    let distance = 0;
     if (at) {
-      const distance = Math.hypot(at.x - this.listenerX, at.y - this.listenerY, at.z - this.listenerZ);
+      distance = Math.hypot(at.x - this.listenerX, at.y - this.listenerY, at.z - this.listenerZ);
       if (distance > HEARING_RANGE) return;
+    }
+
+    // ---- 并发上限：关键的几种允许突破（见 `CRITICAL_KINDS`）
+    if (this.voiceEnds.length > 0) {
+      this.voiceEnds = this.voiceEnds.filter((end) => end > now);
+      const cap = MAX_CONCURRENT_VOICES + (CRITICAL_KINDS.has(key) ? CRITICAL_BYPASS : 0);
+      if (this.voiceEnds.length >= cap) return;
+    }
+
+    const layers = pickLayers(spec);
+    const duration = layersDuration(layers);
+
+    let gain = spec.gain * this.volume * this.groupVolume[group] * gainScale;
+    if (at) {
       // 距离衰减：近处几乎不衰减，远处快速变小（与原版的听觉范围接近）
       gain *= Math.max(0.08, 1 - distance / HEARING_RANGE) ** 1.6;
     }
@@ -431,68 +1088,159 @@ export class AudioEngine {
     if (this.underwater) gain = underwaterGain(gain);
     if (gain <= 0.001) return;
 
-    const ctx = this.ctx;
-    const now = ctx.currentTime;
+    this.lastStartAt.set(key, now);
+    this.voiceEnds.push(now + duration);
+
+    // ---- 音高抖动：变体之外的第二层随机（同一条声音每次也不完全一样）
+    const jitter = spec.pitchJitter ?? 0;
+    const rate = rateScale * (jitter > 0 ? 2 ** (((Math.random() * 2 - 1) * jitter) / 1200) : 1);
+
     const out = ctx.createGain();
-    out.gain.setValueAtTime(0, now);
-    out.gain.linearRampToValueAtTime(gain, now + spec.attack);
-    out.gain.exponentialRampToValueAtTime(0.0001, now + spec.duration);
-    if (this.underwater) {
-      // 每一声各挂一个低通（而不是改主图）：引擎没有主总线，
-      // 加一条总线会牵动所有连接点；一声一个滤波器的开销可以忽略
-      const muffle = ctx.createBiquadFilter();
-      muffle.type = 'lowpass';
-      muffle.frequency.value = UNDERWATER_LOWPASS_HZ;
-      muffle.Q.value = 0.8;
-      out.connect(muffle).connect(ctx.destination);
+    out.gain.value = gain;
+
+    // ---- 距离低通（与水下的闷响合并成一个滤波器）
+    let tail: AudioNode = out;
+    const cutoff = this.cutoffFor(distance);
+    if (cutoff < 16000) {
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = 'lowpass';
+      lowpass.frequency.value = cutoff;
+      lowpass.Q.value = 0.7;
+      out.connect(lowpass);
+      tail = lowpass;
+    }
+
+    // ---- 声像：把"源相对听者的左右投影"映射到 -1..1
+    if (typeof ctx.createStereoPanner === 'function') {
+      const panner = ctx.createStereoPanner();
+      panner.pan.value = at ? this.panFor(at, distance) : 0;
+      tail.connect(panner);
+      panner.connect(master);
+      if (wet) panner.connect(wet);
     } else {
-      out.connect(ctx.destination);
+      // 极老的浏览器没有 StereoPanner：退化成"没有左右"，不影响出声
+      tail.connect(master);
+      if (wet) tail.connect(wet);
     }
 
-    // ---- 噪声通道：白噪声 → 带通 → 包络（石头/沙子/爆炸的主体）
-    if (spec.noise > 0.01) {
-      const source = ctx.createBufferSource();
-      source.buffer = this.getNoiseBuffer(ctx);
-      source.loop = true;
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(spec.filter, now);
-      filter.Q.value = spec.filterQ;
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = spec.noise;
-      source.connect(filter).connect(gainNode).connect(out);
-      source.start(now);
-      source.stop(now + spec.duration + 0.02);
-    }
-
-    // ---- 振荡器通道：给声音一个明确的音高（玻璃/脚步/生物叫）
-    if (spec.noise < 0.99) {
-      const osc = ctx.createOscillator();
-      osc.type = spec.type;
-      osc.frequency.setValueAtTime(spec.freqFrom, now);
-      osc.frequency.exponentialRampToValueAtTime(Math.max(20, spec.freqTo), now + spec.duration);
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = 1 - spec.noise;
-      osc.connect(gainNode).connect(out);
-      osc.start(now);
-      osc.stop(now + spec.duration + 0.02);
-    }
-
-    // ---- 低频闷响：爆炸/受伤/落地那一下"拳头感"
-    if (spec.thump) {
-      const thump = ctx.createOscillator();
-      thump.type = 'sine';
-      thump.frequency.setValueAtTime(spec.thump * 2, now);
-      thump.frequency.exponentialRampToValueAtTime(spec.thump * 0.6, now + spec.duration * 0.6);
-      const gainNode = ctx.createGain();
-      gainNode.gain.setValueAtTime(0.9, now);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + spec.duration * 0.7);
-      thump.connect(gainNode).connect(out);
-      thump.start(now);
-      thump.stop(now + spec.duration * 0.8);
-    }
-
+    for (const layer of layers) this.scheduleLayer(ctx, layer, now, rate, out);
     this.played++;
+  }
+
+  /** 距离越远，高频越少（32 格外全部听不见，截止频率从 18k 收到 2.4k） */
+  private cutoffFor(distance: number): number {
+    const t = Math.min(1, Math.max(0, distance / HEARING_RANGE));
+    const hz = 18000 * Math.pow(2400 / 18000, t);
+    return this.underwater ? Math.min(hz, UNDERWATER_LOWPASS_HZ) : hz;
+  }
+
+  /**
+   * 声像：源在听者右侧为正、左侧为负。
+   *
+   * `yaw = 0` 时玩家朝 -Z，右向量是 (cos yaw, 0, -sin yaw) = (1, 0, 0)。
+   * 除以水平距离（而不是三维距离）是为了"正上方/正下方的声音"不因为竖直距离被压成中间。
+   */
+  private panFor(at: { x: number; y: number; z: number }, distance: number): number {
+    if (distance < 0.001) return 0;
+    const dx = at.x - this.listenerX;
+    const dz = at.z - this.listenerZ;
+    const horizontal = Math.hypot(dx, dz);
+    if (horizontal < 0.001) return 0;
+    const rightX = Math.cos(this.listenerYaw);
+    const rightZ = -Math.sin(this.listenerYaw);
+    const side = (dx * rightX + dz * rightZ) / horizontal;
+    return Math.max(-1, Math.min(1, side)) * 0.7;
+  }
+
+  /** 把一层排进时间线（所有时间都相对"这一声的起点"） */
+  private scheduleLayer(ctx: AudioContext, layer: SoundLayer, now: number, rate: number, out: AudioNode): void {
+    const start = now + Math.max(0, layer.at);
+    const end = start + Math.max(0.01, layer.dur);
+
+    // ---- 这一层的幅度包络（折线；起点先归零，避免爆音）
+    const amp = ctx.createGain();
+    amp.gain.setValueAtTime(0, start);
+    for (const [ratio, level] of layer.env) {
+      const t = start + Math.min(1, Math.max(0, ratio)) * layer.dur;
+      const value = Math.max(0, level) * layer.gain;
+      if (t <= start) amp.gain.setValueAtTime(value, start);
+      else amp.gain.linearRampToValueAtTime(value, t);
+    }
+    amp.connect(out);
+
+    // 幅度抖动：正弦 LFO 叠在包络上（对音调层与噪声层一视同仁）
+    if (layer.tremolo && layer.tremolo.depth > 0) {
+      const lfo = ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = Math.max(0.1, layer.tremolo.hz);
+      const depth = ctx.createGain();
+      depth.gain.value = layer.gain * Math.min(1, layer.tremolo.depth) * 0.5;
+      lfo.connect(depth).connect(amp.gain);
+      lfo.start(start);
+      lfo.stop(end + 0.02);
+    }
+
+    if (layer.t === 'tone') {
+      const hz = Math.max(20, layer.hz * rate);
+      const osc = ctx.createOscillator();
+      osc.type = layer.wave;
+      osc.frequency.setValueAtTime(hz, start);
+      for (const [ratio, mult] of layer.pitch ?? []) {
+        osc.frequency.linearRampToValueAtTime(Math.max(20, hz * mult), start + Math.min(1, ratio) * layer.dur);
+      }
+
+      // 颤音：一个正弦 LFO 直接加到频率上（单位是 Hz，按音分折算）
+      if (layer.vibrato && layer.vibrato.cents > 0) {
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = Math.max(0.1, layer.vibrato.hz);
+        const depth = ctx.createGain();
+        depth.gain.value = hz * (2 ** (layer.vibrato.cents / 1200) - 1);
+        lfo.connect(depth).connect(osc.frequency);
+        lfo.start(start);
+        lfo.stop(end + 0.02);
+      }
+
+      if (layer.formants && layer.formants.length > 0) {
+        // 并联共振峰 = 元音。再留一点点干声当"身体"，否则只剩几个峰、像口哨
+        for (const formant of layer.formants) {
+          const band = ctx.createBiquadFilter();
+          band.type = 'bandpass';
+          band.frequency.value = Math.min(12000, Math.max(60, formant.hz * rate));
+          band.Q.value = Math.max(0.3, formant.q);
+          const level = ctx.createGain();
+          level.gain.value = Math.max(0, formant.gain);
+          osc.connect(band).connect(level).connect(amp);
+        }
+        const dry = ctx.createGain();
+        dry.gain.value = 0.14;
+        osc.connect(dry).connect(amp);
+      } else {
+        osc.connect(amp);
+      }
+
+      osc.start(start);
+      osc.stop(end + 0.02);
+      return;
+    }
+
+    // ---- 噪声层
+    const source = ctx.createBufferSource();
+    source.buffer = this.getNoiseBuffer(ctx);
+    source.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = layer.filter;
+    filter.Q.value = Math.max(0.05, layer.q);
+    const hz = Math.max(20, layer.hz * rate);
+    filter.frequency.setValueAtTime(hz, start);
+    for (const [ratio, mult] of layer.sweep ?? []) {
+      filter.frequency.linearRampToValueAtTime(Math.max(20, hz * mult), start + Math.min(1, ratio) * layer.dur);
+    }
+    source.connect(filter).connect(amp);
+
+    // 从噪声缓冲的随机位置起播：同一段噪声听起来也不一样
+    source.start(start, Math.random() * 0.8);
+    source.stop(end + 0.02);
   }
 
   /**
@@ -504,12 +1252,14 @@ export class AudioEngine {
    *
    * 音色取三角形波（木琴的近亲）+ 一层二次谐波（`2f`，音量 0.35）——
    * 单正弦太"电子"，两个谐波才像木头敲出来的。
-   * 节流与并发上限照旧：同一声 70ms 内连响两次、或同时响超过 12 声，
+   * 节流与并发上限照旧：同一声 70ms 内连响两次、或同时响超过上限，
    * 玩家都听不出来（与 `play()` 同一条判断）。
    */
   playNote(frequency: number, at?: { x: number; y: number; z: number }): void {
     if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
     const ctx = this.ctx;
+    const master = this.master;
+    if (!master) return;
     const now = ctx.currentTime;
     if (now - this.lastNoteAt < SAME_SOUND_THROTTLE) return;
     if (this.voiceEnds.length > 0) {
@@ -522,8 +1272,9 @@ export class AudioEngine {
     const duration = 0.55;
     // 音符盒归"方块"那一组（它就是一块木头）
     let gain = 0.42 * this.volume * this.groupVolume.blocks;
+    let distance = 0;
     if (at) {
-      const distance = Math.hypot(at.x - this.listenerX, at.y - this.listenerY, at.z - this.listenerZ);
+      distance = Math.hypot(at.x - this.listenerX, at.y - this.listenerY, at.z - this.listenerZ);
       if (distance > HEARING_RANGE) return;
       gain *= Math.max(0.08, 1 - distance / HEARING_RANGE) ** 1.6;
     }
@@ -535,14 +1286,26 @@ export class AudioEngine {
     out.gain.setValueAtTime(0, now);
     out.gain.linearRampToValueAtTime(gain, now + 0.004);
     out.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    if (this.underwater) {
-      const muffle = ctx.createBiquadFilter();
-      muffle.type = 'lowpass';
-      muffle.frequency.value = UNDERWATER_LOWPASS_HZ;
-      muffle.Q.value = 0.8;
-      out.connect(muffle).connect(ctx.destination);
+
+    let tail: AudioNode = out;
+    const cutoff = this.cutoffFor(distance);
+    if (cutoff < 16000) {
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = 'lowpass';
+      lowpass.frequency.value = cutoff;
+      lowpass.Q.value = 0.7;
+      out.connect(lowpass);
+      tail = lowpass;
+    }
+    if (typeof ctx.createStereoPanner === 'function') {
+      const panner = ctx.createStereoPanner();
+      panner.pan.value = at ? this.panFor(at, distance) : 0;
+      tail.connect(panner);
+      panner.connect(master);
+      if (this.reverbSend) panner.connect(this.reverbSend);
     } else {
-      out.connect(ctx.destination);
+      tail.connect(master);
+      if (this.reverbSend) tail.connect(this.reverbSend);
     }
 
     for (const [multiplier, level] of [
@@ -564,6 +1327,16 @@ export class AudioEngine {
   /** 按方块材质挑破坏音效（方块名 → 音效） */
   playBreakForBlock(blockName: string, at?: { x: number; y: number; z: number }): void {
     this.play(breakSoundFor(blockName), at);
+  }
+
+  /** 按方块材质挑脚步声 */
+  playStepForBlock(blockName: string, gainScale = 1): void {
+    this.play(stepSoundFor(blockName), undefined, gainScale);
+  }
+
+  /** 按方块材质挑放置音效 */
+  playPlaceForBlock(blockName: string, at?: { x: number; y: number; z: number }): void {
+    this.play(placeSoundFor(blockName), at);
   }
 
   private getNoiseBuffer(ctx: AudioContext): AudioBuffer {

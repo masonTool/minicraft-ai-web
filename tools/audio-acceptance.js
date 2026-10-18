@@ -23,7 +23,7 @@
   mc.playSound('break_stone');
   mc.playSound('break_wood');
   mc.playSound('explode');
-  mc.playSound('mob_zombie');
+  mc.playSound('step_stone');
   await sleep(150);
   const afterFour = mc.audioState.played;
   check('four sounds counted as played', afterFour - before === 4, `${before} -> ${afterFour}`);
@@ -56,7 +56,8 @@
 
   // 受伤音效走的是 damagePlayer 路径；这里验证"音效种类覆盖了游戏事件"即可
   const beforeEvents = mc.audioState.played;
-  for (const kind of ['hurt', 'death', 'fall', 'door', 'explode', 'splash', 'click', 'mob_zombie', 'mob_skeleton', 'mob_creeper']) {
+  // 批次 232：mob_* 挪去了 `playMobVoice`（按生物档案播），这里换成同类事件的普通音效
+  for (const kind of ['hurt', 'death', 'fall', 'door', 'explode', 'splash', 'click', 'land_hard', 'hit_flesh', 'eat']) {
     mc.playSound(kind, self[0], self[1], self[2]);
   }
   await sleep(200);

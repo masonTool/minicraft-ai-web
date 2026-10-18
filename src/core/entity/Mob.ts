@@ -16,6 +16,13 @@ import { moveBody } from '../physics/EntityMotion.ts';
 import { Block, blockDef, woolId } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 import { StatusEffects, type EffectId } from '../survival/StatusEffects.ts';
+import {
+  ambientIntervalFor,
+  mobVoiceFor,
+  mobVoicePitchFor,
+  type MobVoiceEvent,
+  type MobVoiceId,
+} from '../audio/MobVoices.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 
 /** 与玩家一致的常量（原版数值） */
@@ -59,6 +66,14 @@ export const EGG_LAY_INTERVAL_MIN = 300;
 export const EGG_LAY_INTERVAL_MAX = 600;
 /** 状态效果的结算频率（秒）：与玩家的状态效果同频（20Hz） */
 const EFFECT_STEP = 0.05;
+
+/**
+ * 环境叫能被听到的距离（格，批次 232）。
+ *
+ * 引擎那边还有 32 格的硬上限；这里提前一档是为了**不做无用功**：
+ * 一只在 30 格外哼唧的牛，就算合成出来也听不见，还会占并发名额。
+ */
+const AMBIENT_HEARING = 24;
 
 const GRAVITY = 32;
 const JUMP_SPEED = 8.95;
@@ -527,6 +542,22 @@ export class Mob extends Entity {
   /** 下蛋倒计时（秒，仅 `type.laysEggs` 用）；初值随机是为了让一群鸡不要齐刷刷下蛋 */
   private eggTimer = EGG_LAY_INTERVAL_MIN + Math.random() * (EGG_LAY_INTERVAL_MAX - EGG_LAY_INTERVAL_MIN);
 
+  /**
+   * 下一次"环境叫"还要等多久（秒，批次 232）。
+   *
+   * 初值随机而不是固定：一群同类同时刷出来时，"齐声叫"听起来像 bug。
+   */
+  private ambientTimer = 5 + Math.random() * 12;
+  /**
+   * 死亡声是否已经播过。
+   *
+   * 死亡声统一在 `tick` 末尾播（那里能覆盖"被烧死/淹死/岩浆块烫死"这些**不走 `hurt()`**
+   * 的死法）；`hurt()` 只负责受伤那一声，致死的那一下不重复播。
+   */
+  private deathVoiced = false;
+  /** 这一只用哪套声音档案（种类不会变，构造时查一次就够） */
+  private readonly voiceId: MobVoiceId | null;
+
   private path: PathPoint[] = [];
   private pathIndex = 0;
   private repathTimer = 0;
@@ -545,6 +576,8 @@ export class Mob extends Entity {
     super(x, y, z, type.width, type.height);
     this.type = type;
     this.health = type.health;
+    // 声音档案按种类查一次（`remote_player` 是 null：玩家角色不该发出动物声音）
+    this.voiceId = mobVoiceFor(type.id, type.family);
     // 寻路器只需要"读方块"这一点能力，直接转发给每帧传入的上下文
     this.pathfinder = new Pathfinder({ getBlock: (bx, by, bz) => this.sampleBlock?.(bx, by, bz) ?? 0 });
   }
@@ -627,6 +660,59 @@ export class Mob extends Entity {
       this.splitDone = true;
       this.splitIntoChildren(ctx);
     }
+
+    // 声音（批次 232）：环境叫 + 死亡声。放在最后是因为它不该影响任何行为
+    this.tickVoice(ctx, dt);
+  }
+
+  /**
+   * 声音的每帧结算（批次 232）：环境叫的计时器 + 死亡那一声。
+   *
+   * 为什么死亡声放在 `tick` 而不是 `hurt()`：`tickBurning` / `tickWaterFear` /
+   * `tickAquatic` 这三条死法**都不走 `hurt()`**（否则会被无敌帧卡成半速），
+   * 写在 `hurt()` 里就只剩"被砍死"有声音——而"被烧死的猪"同样是玩家会看见的一刻。
+   */
+  private tickVoice(ctx: EntityContext, dt: number): void {
+    if (this.dead) {
+      if (!this.deathVoiced) {
+        this.deathVoiced = true;
+        this.playVoice(ctx, 'death');
+      }
+      return;
+    }
+    const voice = this.voiceId;
+    if (!voice) return;
+
+    this.ambientTimer -= dt;
+    if (this.ambientTimer > 0) return;
+    const [min, max] = ambientIntervalFor(voice);
+    this.ambientTimer = min + Math.random() * (max - min);
+
+    // 远处不出声：省一次合成，也免得"看不见的牛一直在叫"
+    const player = ctx.player;
+    if (!player) return;
+    if (Math.hypot(player.x - this.x, player.y - this.y, player.z - this.z) > AMBIENT_HEARING) return;
+    this.playVoice(ctx, 'ambient');
+  }
+
+  /**
+   * 播一条自己的声音（环境叫 / 受伤 / 死亡）。
+   *
+   * 音高倍率同时承担两件事：幼体更高（原版如此）、洞穴蜘蛛/小史莱姆更高。
+   * 位置取身体中段而不是脚下——脚下贴着地面，听起来像"从地里传出来"。
+   */
+  private playVoice(ctx: EntityContext | undefined, event: MobVoiceEvent): void {
+    if (!ctx?.playMobVoice) return;
+    const voice = this.voiceId;
+    if (!voice) return;
+    ctx.playMobVoice(
+      voice,
+      event,
+      this.x,
+      this.y + this.type.height * 0.6,
+      this.z,
+      mobVoicePitchFor(this.type.id, this.baby),
+    );
   }
 
   /** 分裂是否已结算（与 `lootDropped` 分开：两条路的触发时机不同，见 `tick` 末尾） */
@@ -1588,6 +1674,11 @@ export class Mob extends Entity {
     }
     this.hitFlash = 0.3;
     this.health -= amount;
+
+    // 挨打叫一声（批次 232）。
+    // ⚠️ 致死的那一下**不在这里**播：死亡声统一由 `tickVoice` 结算，
+    // 否则"被打死"会同时响受伤和死亡两条（而火烧/淹死又一条都不响）。
+    if (this.health > 0) this.playVoice(ctx, 'hurt');
 
     // 挨打就闪（批次 112，末影人）：原版按伤害来源分（被箭射必躲、近战有概率躲），
     // 我们的 `hurt()` 不认识来源，统一按 `TELEPORT_ON_HURT_CHANCE`。

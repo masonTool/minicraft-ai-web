@@ -35,9 +35,6 @@ import { VILLAGER_TYPE } from './mobs.ts';
 /** 无业村民隔多久再找一次工作站（秒，带随机抖动，免得一村人同时扫） */
 const CLAIM_RETRY_MIN = 2;
 const CLAIM_RETRY_MAX = 4;
-/** 村民的"嗯…"隔多久来一次（秒，原版更密，这里压低一点免得吵） */
-const AMBIENT_MIN = 8;
-const AMBIENT_MAX = 16;
 
 export interface WorkstationPos {
   x: number;
@@ -56,7 +53,6 @@ export class Villager extends Mob {
   workstation: WorkstationPos | null = null;
 
   private claimTimer = CLAIM_RETRY_MIN + Math.random() * (CLAIM_RETRY_MAX - CLAIM_RETRY_MIN);
-  private ambientTimer = AMBIENT_MIN + Math.random() * (AMBIENT_MAX - AMBIENT_MIN);
 
   constructor(x: number, y: number, z: number) {
     super(VILLAGER_TYPE, x, y, z);
@@ -132,12 +128,8 @@ export class Villager extends Mob {
     super.tick(ctx, dt);
     if (this.dead) return;
 
-    // "嗯…"：只给在场感，不带任何机制（原版村民也一直在哼哼）
-    this.ambientTimer -= dt;
-    if (this.ambientTimer <= 0) {
-      this.ambientTimer = AMBIENT_MIN + Math.random() * (AMBIENT_MAX - AMBIENT_MIN);
-      ctx.playSound?.('mob_villager', this.x, this.y, this.z);
-    }
+    // "嗯…" 的环境叫（批次 232 起）由 `Mob.tickVoice` 统一负责：
+    // 村民只是"声音档案是 villager"，不再自己维护一套计时器
 
     if (this.baby || this.professionId !== null) return;
     this.claimTimer -= dt;
@@ -151,7 +143,7 @@ export class Villager extends Mob {
     // 认领成功：冒一串绿色粒子（原版是绿星），再"嗯"一声
     this.assignProfession(profession.id, { x: found.x, y: found.y, z: found.z });
     ctx.spawnHearts?.(this.x, this.y + this.type.height, this.z, 0.6);
-    ctx.playSound?.('mob_villager', this.x, this.y, this.z);
+    ctx.playMobVoice?.('villager', 'ambient', this.x, this.y + this.type.height * 0.6, this.z);
   }
 
   /** 调试与断言用：这一只现在能做什么（不返回 offer 对象本体，免得被顺手改掉） */

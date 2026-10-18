@@ -11,6 +11,9 @@ import type { PhysicsWorld } from '../physics/PlayerPhysics.ts';
 // 只引类型：`afflictPlayer` 的效果名跟着状态效果表走（见那一行的注记）。
 // type-only import 不会把生存模块拖进实体层的运行时依赖里
 import type { EffectId } from '../survival/StatusEffects.ts';
+// 音效只引类型：实体层不认识"怎么合成声音"，它只负责说"该播哪一种"
+import type { SoundKind } from '../audio/AudioEngine.ts';
+import type { MobVoiceEvent, MobVoiceId } from '../audio/MobVoices.ts';
 
 /**
  * 实体层能报出来的伤害类型（是 `PlayerStats.DamageCause` 的子集，那边才是权威定义）。
@@ -130,12 +133,26 @@ export interface EntityContext {
   /**
    * 播放音效（生物与投掷物用：点火、爆炸、命中……）；不传就没有声音。
    * 取值必须是音频模块里真实存在的 kind（多写一个不存在的名字会在运行时静默无声）。
+   *
+   * 批次 232 起直接用 `SoundKind`（以前是一张手写的白名单，加一种声音就要改三处：
+   * 音频表、这里、还有调用点——漏一处就是静默）。
    */
-  playSound?: (
-    kind: 'fuse' | 'explode' | 'bow_shoot' | 'arrow_hit' | 'break_glass' | 'splash' | 'mob_villager',
+  playSound?: (kind: SoundKind, x: number, y: number, z: number) => void;
+  /**
+   * 播放**生物自己的声音**（批次 232：环境叫 / 受伤 / 死亡）。
+   *
+   * 为什么不走 `playSound`：那一条是"某一种音效"，而生物声音是"某一种生物 × 三种事件"。
+   * 拆成独立的钩子之后，加一种生物不用再往 `SoundKind` 里塞三个名字。
+   *
+   * @param pitch 音高倍率（幼体更高、洞穴蜘蛛更尖），由 `Mob` 算好传进来
+   */
+  playMobVoice?: (
+    voice: MobVoiceId,
+    event: MobVoiceEvent,
     x: number,
     y: number,
     z: number,
+    pitch?: number,
   ) => void;
   /**
    * 爆炸（苦力怕用）。

@@ -1,10 +1,12 @@
 /**
- * 音效（K5）离线测试
+ * 音效离线测试（K5；批次 232 重写）
  *
  * 引擎本身要 AudioContext（只有浏览器有），因此这里测的是**纯逻辑部分**：
- *  1. 方块材质 → 破坏音效的映射（石头/木头/草/沙/玻璃/羊毛要能被区分开）
- *  2. 音效表本身的合法性（时长/增益/频率/滤波器都在可合成的范围内）
- *  3. 音量与静音行为（volume = 0 时不该出声）
+ *  1. 材质 → 音效的映射（破坏 / 脚步 / 放置三套，各按材质分类）
+ *  2. 音效表本身的合法性（层/包络/频率/共振峰都在可合成的范围内）
+ *  3. 随机化（变体 + 音高抖动）与“表里不许有两份完全一样的配方”
+ *  4. 生物声音档案（每一种生物都要能解析出三条，永远不静默）
+ *  5. 引擎在无 AudioContext 环境下的安全性
  *
  * 运行：npm run test:audio
  */
@@ -14,15 +16,30 @@ import {
   SOUND_GROUP_LABELS,
   SOUND_GROUPS,
   SOUND_KINDS,
-  soundGroupOf,
   UNDERWATER_GAIN,
   UNDERWATER_LOWPASS_HZ,
   breakSoundFor,
   doorSoundFor,
+  layersDuration,
+  pickLayers,
+  placeSoundFor,
+  soundGroupOf,
   soundSpec,
+  specDuration,
+  stepSoundFor,
   underwaterGain,
+  type SoundSpec,
 } from '../src/core/audio/AudioEngine.ts';
+import {
+  MOB_VOICES,
+  MOB_VOICE_IDS,
+  ambientIntervalFor,
+  mobVoiceFor,
+  mobVoicePitchFor,
+  mobVoiceSpec,
+} from '../src/core/audio/MobVoices.ts';
 import { BLOCKS } from '../src/core/registry/blocks.ts';
+import { DROPPING_MOB_TYPES, REMOTE_PLAYER_TYPE } from '../src/core/entity/mobs.ts';
 
 let passed = 0;
 let failed = 0;
@@ -35,6 +52,66 @@ function check(label: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+/**
+ * 一条声音的结构合法性。返回问题清单（空 = 合法）。
+ *
+ * ⚠️ 这里故意查得比“能播”更细：包络**首尾都必须是 0**。
+ * 首点不是 0 → 起音会“啪”一下（爆音）；末点不是 0 → 声音被硬切断，同样会咔。
+ */
+function specProblems(spec: SoundSpec | undefined): string[] {
+  const problems: string[] = [];
+  if (!spec) return ['无参数'];
+  if (!(spec.gain > 0 && spec.gain <= 1)) problems.push(`gain=${spec.gain}`);
+  const layerSets = [spec.layers, ...(spec.variants ?? [])];
+  if (layerSets.length === 0 || spec.layers.length === 0) problems.push('没有任何层');
+  for (const layers of layerSets) {
+    if (layers.length === 0) problems.push('空变体');
+    for (const layer of layers) {
+      if (!(layer.dur > 0 && layer.dur < 3)) problems.push(`dur=${layer.dur}`);
+      if (!(layer.at >= 0 && layer.at < 3)) problems.push(`at=${layer.at}`);
+      if (!(layer.gain > 0 && layer.gain <= 1)) problems.push(`layer.gain=${layer.gain}`);
+      if (layer.env.length < 2) problems.push('包络点数不足');
+      let previous = -1;
+      for (const [ratio, level] of layer.env) {
+        if (!(ratio >= 0 && ratio <= 1)) problems.push(`env ratio=${ratio}`);
+        if (ratio < previous) problems.push('包络时间倒流');
+        if (!(level >= 0 && level <= 1)) problems.push(`env level=${level}`);
+        previous = ratio;
+      }
+      if (layer.env[0]?.[1] !== 0) problems.push('包络首点不是 0（会爆音）');
+      if (layer.env[layer.env.length - 1]?.[1] !== 0) problems.push('包络末点不是 0（会咔一声）');
+      if (layer.tremolo) {
+        if (!(layer.tremolo.hz > 0 && layer.tremolo.hz < 60)) problems.push(`tremolo.hz=${layer.tremolo.hz}`);
+        if (!(layer.tremolo.depth > 0 && layer.tremolo.depth <= 1)) problems.push(`tremolo.depth=${layer.tremolo.depth}`);
+      }
+      if (layer.t === 'tone') {
+        if (!(layer.hz >= 20 && layer.hz <= 12000)) problems.push(`hz=${layer.hz}`);
+        for (const [ratio, mult] of layer.pitch ?? []) {
+          if (!(ratio >= 0 && ratio <= 1)) problems.push(`pitch ratio=${ratio}`);
+          if (!(mult > 0.1 && mult < 8)) problems.push(`pitch mult=${mult}`);
+        }
+        if (layer.vibrato) {
+          if (!(layer.vibrato.hz > 0 && layer.vibrato.hz < 40)) problems.push(`vibrato.hz=${layer.vibrato.hz}`);
+          if (!(layer.vibrato.cents > 0 && layer.vibrato.cents <= 200)) problems.push(`vibrato.cents=${layer.vibrato.cents}`);
+        }
+        for (const formant of layer.formants ?? []) {
+          if (!(formant.hz >= 60 && formant.hz <= 12000)) problems.push(`formant.hz=${formant.hz}`);
+          if (!(formant.q > 0 && formant.q <= 40)) problems.push(`formant.q=${formant.q}`);
+          if (!(formant.gain > 0 && formant.gain <= 1)) problems.push(`formant.gain=${formant.gain}`);
+        }
+      } else {
+        if (!(layer.hz >= 20 && layer.hz <= 12000)) problems.push(`noise.hz=${layer.hz}`);
+        if (!(layer.q > 0 && layer.q <= 40)) problems.push(`noise.q=${layer.q}`);
+        for (const [ratio, mult] of layer.sweep ?? []) {
+          if (!(ratio >= 0 && ratio <= 1)) problems.push(`sweep ratio=${ratio}`);
+          if (!(mult > 0.1 && mult < 8)) problems.push(`sweep mult=${mult}`);
+        }
+      }
+    }
+  }
+  return problems;
 }
 
 // ---------------------------------------------------------------- 1. 材质映射
@@ -70,30 +147,86 @@ console.log('\n[方块材质 → 破坏音效]');
       console.log(`      ${name} → ${actual}（期望 ${expected}）`);
     }
   }
-  check(`${cases.length} 种方块的音效分类正确`, bad === 0, `不匹配 ${bad} 种`);
+  check(`${cases.length} 种方块的破坏音分类正确`, bad === 0, `不匹配 ${bad} 种`);
 
-  // 六类破坏音效都要能被"认出来"（避免全部落到默认的石头）
   const kinds = new Set(cases.map(([name]) => breakSoundFor(name)));
   check('至少覆盖 5 类材质音效', kinds.size >= 5, [...kinds].join(','));
   check('未知方块回落到石头音（不会静默）', breakSoundFor('minecraft:unknown_block') === 'break_stone');
   check('带/不带 minecraft: 前缀结果一致', breakSoundFor('stone') === breakSoundFor('minecraft:stone'));
 }
 
-// ---------------------------------------------------------------- 2. 覆盖真实的方块表
+console.log('\n[方块材质 → 脚步 / 放置音效（批次 232）]');
+{
+  // 脚步：每一种材质都要有自己的声音（以前全借破坏音，走路像在挖方块）
+  const steps: Array<[string, string]> = [
+    ['minecraft:grass_block', 'step_grass'],
+    ['minecraft:short_grass', 'step_grass'],
+    ['minecraft:oak_leaves', 'step_grass'],
+    ['minecraft:stone', 'step_stone'],
+    ['minecraft:deepslate', 'step_stone'],
+    ['minecraft:oak_planks', 'step_wood'],
+    ['minecraft:oak_log', 'step_wood'],
+    ['minecraft:sand', 'step_sand'],
+    ['minecraft:gravel', 'step_gravel'],
+    ['minecraft:snow_block', 'step_snow'],
+    ['minecraft:powder_snow', 'step_snow'],
+    ['minecraft:white_wool', 'step_wool'],
+    ['minecraft:oak_carpet', 'step_wool'],
+  ];
+  let badSteps = 0;
+  for (const [name, expected] of steps) {
+    if (stepSoundFor(name) !== expected) {
+      badSteps++;
+      console.log(`      ${name} → ${stepSoundFor(name)}（期望 ${expected}）`);
+    }
+  }
+  check(`${steps.length} 种方块的脚步音分类正确`, badSteps === 0, `不匹配 ${badSteps} 种`);
+  check('脚步音不会落回破坏音（两套是分开的）', !stepSoundFor('minecraft:stone').startsWith('break_'));
+  check('未知方块回落到石头脚步（不会静默）', stepSoundFor('minecraft:unknown_block') === 'step_stone');
+  check('砂砾优先于沙子（颗粒感不能被吞掉）', stepSoundFor('minecraft:gravel') === 'step_gravel');
+
+  const places: Array<[string, string]> = [
+    ['minecraft:stone', 'place_stone'],
+    ['minecraft:oak_planks', 'place_wood'],
+    ['minecraft:grass_block', 'place_grass'],
+    ['minecraft:sand', 'place_sand'],
+    ['minecraft:glass', 'place_glass'],
+    ['minecraft:white_wool', 'place_wool'],
+  ];
+  let badPlaces = 0;
+  for (const [name, expected] of places) {
+    if (placeSoundFor(name) !== expected) {
+      badPlaces++;
+      console.log(`      ${name} → ${placeSoundFor(name)}（期望 ${expected}）`);
+    }
+  }
+  check(`${places.length} 种方块的放置音分类正确`, badPlaces === 0, `不匹配 ${badPlaces} 种`);
+  check('未知方块回落到石头放置音', placeSoundFor('minecraft:unknown_block') === 'place_stone');
+}
+
+// ---------------------------------------------------------------- 2. 覆盖真实方块表
 
 console.log('\n[真实方块表覆盖检查]');
 {
-  // 从注册表里取样一批方块，确认映射不会抛错、也不会返回空
-  const kinds = new Map<string, number>();
+  const missing: string[] = [];
+  const stepKinds = new Map<string, number>();
+  const placeKinds = new Map<string, number>();
   for (const def of BLOCKS) {
     if (!def || !def.name) continue;
     const kind = breakSoundFor(def.name);
-    kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+    if (!soundSpec(kind)) missing.push(`break:${def.name}→${kind}`);
+    const step = stepSoundFor(def.name);
+    if (!soundSpec(step)) missing.push(`step:${def.name}→${step}`);
+    const place = placeSoundFor(def.name);
+    if (!soundSpec(place)) missing.push(`place:${def.name}→${place}`);
+    stepKinds.set(step, (stepKinds.get(step) ?? 0) + 1);
+    placeKinds.set(place, (placeKinds.get(place) ?? 0) + 1);
   }
-  const total = [...kinds.values()].reduce((a, b) => a + b, 0);
-  console.log(`  ${total} 种方块的音效分布：${[...kinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
-  check('全部方块都能映射到音效', total === BLOCKS.length, `${total} / ${BLOCKS.length}`);
-  check('没有方块被分到不存在的音效种类', [...kinds.keys()].every((kind) => kind.startsWith('break_')), [...kinds.keys()].join(','));
+  console.log(`  脚步音分布：${[...stepKinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
+  console.log(`  放置音分布：${[...placeKinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
+  check('全部方块的破坏/脚步/放置音都真实存在', missing.length === 0, missing.slice(0, 3).join(' / '));
+  check('脚步音至少覆盖 6 种材质', stepKinds.size >= 6, `${stepKinds.size} 种`);
+  check('放置音至少覆盖 6 种材质', placeKinds.size >= 6, `${placeKinds.size} 种`);
 }
 
 // ---------------------------------------------------------------- 3. 引擎行为
@@ -101,13 +234,15 @@ console.log('\n[真实方块表覆盖检查]');
 console.log('\n[引擎行为]');
 {
   const engine = new AudioEngine();
-  engine.setListener(0, 64, 0);
+  engine.setListener(0, 64, 0, Math.PI / 3);
   // 没有 AudioContext（node 里没有）：play 应当是安全的空操作，而不是抛错
   let threw = false;
   try {
     engine.play('break_stone');
     engine.play('explode', { x: 100, y: 64, z: 100 });
-    engine.playBreakForBlock('minecraft:glass', { x: 1, y: 64, z: 1 });
+    engine.playStepForBlock('minecraft:grass_block');
+    engine.playPlaceForBlock('minecraft:glass', { x: 1, y: 64, z: 1 });
+    engine.playVoice('zombie:ambient', mobVoiceSpec('undead', 'ambient'), { x: 1, y: 64, z: 1 });
   } catch {
     threw = true;
   }
@@ -121,67 +256,28 @@ console.log('\n[引擎行为]');
 
 // ---------------------------------------------------------------- 4. 音效表参数
 
-console.log('\n[音效表参数范围]');
-{
-  // 通过"能否安全播放"间接验证参数：这里直接检查引擎在禁用状态下不受影响
-  const engine = new AudioEngine();
-  engine.enabled = false;
-  engine.volume = 1;
-  engine.play('mob_zombie', { x: 0, y: 0, z: 0 });
-  check('禁用后播放计数不增长', engine.played === 0);
-
-  // 距离衰减：远处不播（这条在真实浏览器里通过 played 计数验证，见 tools/audio-acceptance.js）
-  check('引擎提供音量与启用开关', typeof engine.volume === 'number' && typeof engine.enabled === 'boolean');
-}
-
-// ---------------------------------------------------------------- 5. 门的开合音（批次 138）
-
-console.log('\n[开关类方块 → 音效（批次 138）]');
-{
-  check('开门是"吱呀"，关门是"咔嗒"', doorSoundFor('door', true) === 'door' && doorSoundFor('door', false) === 'door_close');
-  check('活板门有自己的声音（开关同一套）', doorSoundFor('trapdoor', true) === 'trapdoor' && doorSoundFor('trapdoor', false) === 'trapdoor');
-  check('栅栏门也有自己的声音', doorSoundFor('fence_gate', false) === 'fence_gate');
-  check('未知形状回落到门（不会静默）', doorSoundFor('nothing', false) === 'door_close');
-  // 三种门必须是三种不同的声音：共用一种的症状是"关活板门像在推大门"
-  const three = new Set([doorSoundFor('door', true), doorSoundFor('trapdoor', true), doorSoundFor('fence_gate', true)]);
-  check('三种门的音效互不相同', three.size === 3, [...three].join(','));
-  // 新加的音效都要在表里（`soundSpec` 为空 = 播放时静默丢弃，而且不会有任何报错）
-  for (const kind of ['item_move', 'door_close', 'trapdoor', 'fence_gate'] as const) {
-    check(`音效表里有 ${kind}`, soundSpec(kind) !== undefined);
-  }
-}
-
-// ---------------------------------------------------------------- 6. 音效表完整性
-
 console.log('\n[音效表：每种都要有能合成出来的参数]');
 {
-  check('种类清单非空', SOUND_KINDS.length >= 30, `${SOUND_KINDS.length} 种`);
+  check('种类清单非空', SOUND_KINDS.length >= 45, `${SOUND_KINDS.length} 种`);
   const bad: string[] = [];
   for (const kind of SOUND_KINDS) {
-    const spec = soundSpec(kind);
-    if (!spec) {
-      bad.push(`${kind}: 无参数`);
-      continue;
-    }
-    const ok =
-      spec.duration > 0 &&
-      spec.duration < 3 &&
-      spec.gain > 0 &&
-      spec.gain <= 1 &&
-      spec.noise >= 0 &&
-      spec.noise <= 1 &&
-      spec.freqFrom >= 20 &&
-      spec.freqTo >= 20 &&
-      spec.filter > 0 &&
-      spec.filterQ >= 0 &&
-      spec.attack >= 0 &&
-      spec.attack < spec.duration &&
-      spec.release > 0 &&
-      (spec.thump === undefined || spec.thump > 20);
-    if (!ok) bad.push(`${kind}: ${JSON.stringify(spec)}`);
+    const problems = specProblems(soundSpec(kind));
+    if (problems.length > 0) bad.push(`${kind}: ${problems.slice(0, 3).join(',')}`);
   }
   check(`${SOUND_KINDS.length} 种音效参数都合法`, bad.length === 0, bad.slice(0, 3).join(' / '));
-  // 同一份常数表里不该出现"两个音效完全一样"（那等于白写一种）
+
+  // 变体：有就至少两个，而且内容不同（两个一样的变体等于白写）
+  const badVariants: string[] = [];
+  for (const kind of SOUND_KINDS) {
+    const spec = soundSpec(kind);
+    if (!spec?.variants) continue;
+    if (spec.variants.length < 2) badVariants.push(`${kind}: 只有 ${spec.variants.length} 个`);
+    const seen = new Set(spec.variants.map((layers) => JSON.stringify(layers)));
+    if (seen.size !== spec.variants.length) badVariants.push(`${kind}: 有重复变体`);
+  }
+  check('变体音效都至少两个且互不相同', badVariants.length === 0, badVariants.join(' / '));
+
+  // 同一份常数表里不该出现“两个音效完全一样”
   const seen = new Map<string, string>();
   const dup: string[] = [];
   for (const kind of SOUND_KINDS) {
@@ -191,19 +287,34 @@ console.log('\n[音效表：每种都要有能合成出来的参数]');
     else seen.set(key, kind);
   }
   check('没有两种音效的参数完全相同', dup.length === 0, dup.join(','));
+
+  check('时长能算出来（用于并发计数）', SOUND_KINDS.every((kind) => specDuration(soundSpec(kind)!) > 0));
+  check('单条音效不超过 3 秒（不能霸占并发名额）', SOUND_KINDS.every((kind) => specDuration(soundSpec(kind)!) < 3));
 }
 
-// ---------------------------------------------------------------- 7. 水下闷响（批次 138）
+console.log('\n[随机化：变体挑选]');
+{
+  const spec = soundSpec('step_grass')!;
+  const first = pickLayers(spec, () => 0);
+  const last = pickLayers(spec, () => 0.999);
+  check('随机取 0 拿到第一个变体', first === spec.variants?.[0]);
+  check('随机取 0.999 拿到最后一个变体', last === spec.variants?.[spec.variants.length - 1]);
+  check('两个变体确实不同', JSON.stringify(first) !== JSON.stringify(last));
+  check('没有变体时回落到 layers', pickLayers({ gain: 0.2, layers: spec.layers }) === spec.layers);
+  check('时长按最长变体算', specDuration(spec) >= layersDuration(first));
+  check('脚步/破坏/吃都有抖动（连踩不会一模一样）', (soundSpec('step')!.pitchJitter ?? 0) > 0 && (soundSpec('eat')!.pitchJitter ?? 0) > 0);
+}
+
+// ---------------------------------------------------------------- 5. 水下闷响
 
 console.log('\n[水下闷响（批次 138）]');
 {
-  check('水下低通在"闷"的频段（300~1200Hz）', UNDERWATER_LOWPASS_HZ >= 300 && UNDERWATER_LOWPASS_HZ <= 1200, String(UNDERWATER_LOWPASS_HZ));
+  check('水下低通在“闷”的频段（300~1200Hz）', UNDERWATER_LOWPASS_HZ >= 300 && UNDERWATER_LOWPASS_HZ <= 1200, String(UNDERWATER_LOWPASS_HZ));
   check('水下音量要明显更小', UNDERWATER_GAIN > 0 && UNDERWATER_GAIN < 0.8, String(UNDERWATER_GAIN));
   check('折算后仍大于 0（不是静音）', underwaterGain(0.5) > 0.1);
   check('折算比原值小', underwaterGain(0.5) < 0.5);
   const engine = new AudioEngine();
   check('默认不在水下', engine.underwater === false);
-  // 水下也要能安全播放（没有 AudioContext 时依然是空操作）
   engine.underwater = true;
   let threw = false;
   try {
@@ -214,11 +325,10 @@ console.log('\n[水下闷响（批次 138）]');
   check('水下播放不抛错', !threw);
 }
 
-// ---------------------------------------------------------------- 6. 音量分组（批次 178）
+// ---------------------------------------------------------------- 6. 音量分组
 
 console.log('\n[音量分组：四组各自可调]');
 {
-  // 穷尽性：每个音效都必须有分组（TS 的 Record 已经保证了类型，这里再钉一次运行时）
   const missing = SOUND_KINDS.filter((kind) => SOUND_GROUPS[kind] === undefined);
   check('每个音效都归到了某一组', missing.length === 0, missing.join(','));
   check(
@@ -226,20 +336,20 @@ console.log('\n[音量分组：四组各自可调]');
     (['blocks', 'mobs', 'player', 'ui'] as const).every((group) => typeof SOUND_GROUP_LABELS[group] === 'string'),
   );
 
-  // 分类要"讲得通"：挖方块归方块、生物叫归生物、按钮归界面
-  check('破坏音效归"方块"', soundGroupOf('break_stone') === 'blocks' && soundGroupOf('break_wood') === 'blocks');
-  check('门/活板门也归"方块"', soundGroupOf('door') === 'blocks' && soundGroupOf('trapdoor') === 'blocks');
-  check('生物叫归"生物"', soundGroupOf('mob_zombie') === 'mobs' && soundGroupOf('mob_cow') === 'mobs');
-  check('脚步与受伤归"玩家"', soundGroupOf('step') === 'player' && soundGroupOf('hurt') === 'player');
-  check('按钮/达成/交易归"界面"', soundGroupOf('click') === 'ui' && soundGroupOf('achievement') === 'ui' && soundGroupOf('trade') === 'ui');
+  check('破坏音效归“方块”', soundGroupOf('break_stone') === 'blocks' && soundGroupOf('break_wood') === 'blocks');
+  check('门/活板门也归“方块”', soundGroupOf('door') === 'blocks' && soundGroupOf('trapdoor') === 'blocks');
+  check('脚步与受伤归“玩家”', soundGroupOf('step') === 'player' && soundGroupOf('hurt') === 'player');
+  check('落地与打击感也归“玩家”', soundGroupOf('land_hard') === 'player' && soundGroupOf('hit_flesh') === 'player');
+  check('按钮/达成/交易归“界面”', soundGroupOf('click') === 'ui' && soundGroupOf('achievement') === 'ui' && soundGroupOf('trade') === 'ui');
 
-  // 每一组都真的分到了东西（否则设置里那条滑杆是空的）
-  for (const group of ['blocks', 'mobs', 'player', 'ui'] as const) {
+  // 生物那一组不再有固定的 SOUND_KIND（它们按“种类档案”播），但仍必须是可调的一组
+  check('生物音效不占用普通音效表（按档案播）', SOUND_KINDS.every((kind) => soundGroupOf(kind) !== 'mobs'));
+
+  for (const group of ['blocks', 'player', 'ui'] as const) {
     const count = SOUND_KINDS.filter((kind) => SOUND_GROUPS[kind] === group).length;
     check(`「${SOUND_GROUP_LABELS[group]}」这一组不为空`, count > 0, `${count} 条`);
   }
 
-  // 增益：默认 1（不额外衰减），越界被夹住
   const engine = new AudioEngine();
   check(
     '四组默认都是 1（默认状态下不该悄悄变轻）',
@@ -253,6 +363,125 @@ console.log('\n[音量分组：四组各自可调]');
   check('负数被夹到 0', engine.groupVolumeOf('mobs') === 0);
   engine.setGroupVolume('mobs', 0.35);
   check('正常值原样保留', Math.abs(engine.groupVolumeOf('mobs') - 0.35) < 1e-9);
+}
+
+// ---------------------------------------------------------------- 7. 开关类方块
+
+console.log('\n[开关类方块 → 音效（批次 138）]');
+{
+  check('开门是“吱呀”，关门是“咔嗒”', doorSoundFor('door', true) === 'door' && doorSoundFor('door', false) === 'door_close');
+  check('活板门有自己的声音（开关同一套）', doorSoundFor('trapdoor', true) === 'trapdoor' && doorSoundFor('trapdoor', false) === 'trapdoor');
+  check('栅栏门也有自己的声音', doorSoundFor('fence_gate', false) === 'fence_gate');
+  check('未知形状回落到门（不会静默）', doorSoundFor('nothing', false) === 'door_close');
+  const three = new Set([doorSoundFor('door', true), doorSoundFor('trapdoor', true), doorSoundFor('fence_gate', true)]);
+  check('三种门的音效互不相同', three.size === 3, [...three].join(','));
+}
+
+// ---------------------------------------------------------------- 8. 生物声音档案
+
+console.log('\n[生物声音档案：每一种生物都要有环境叫/受伤/死亡]');
+{
+  check('档案数量够多（21 种以上）', MOB_VOICE_IDS.length >= 21, `${MOB_VOICE_IDS.length} 套`);
+
+  const bad: string[] = [];
+  for (const voice of MOB_VOICE_IDS) {
+    for (const event of ['ambient', 'hurt', 'death'] as const) {
+      const problems = specProblems(MOB_VOICES[voice][event]);
+      if (problems.length > 0) bad.push(`${voice}.${event}: ${problems.slice(0, 2).join(',')}`);
+    }
+  }
+  check('每一套档案的三条声音都合法', bad.length === 0, bad.slice(0, 3).join(' / '));
+
+  // 真实生物表：除远程玩家外，每一只都必须解析出一个非空档案
+  const unresolved: string[] = [];
+  for (const type of [...DROPPING_MOB_TYPES, REMOTE_PLAYER_TYPE]) {
+    const voice = mobVoiceFor(type.id, type.family);
+    if (type.id === 'remote_player') {
+      if (voice !== null) unresolved.push(`${type.id} 不该有动物叫声`);
+      continue;
+    }
+    if (voice === null) unresolved.push(type.id);
+  }
+  check(
+    `${DROPPING_MOB_TYPES.length} 种生物都能解析出声音档案（远程玩家除外）`,
+    unresolved.length === 0,
+    unresolved.join(','),
+  );
+
+  // 每一条都真的取得到 spec（`mobVoiceSpec` 永远不返回 undefined）
+  const missingSpec = DROPPING_MOB_TYPES.filter((type) => {
+    const voice = mobVoiceFor(type.id, type.family);
+    if (!voice) return true;
+    return (['ambient', 'hurt', 'death'] as const).some((event) => !mobVoiceSpec(voice, event));
+  });
+  check('每一只的三条声音都取得到', missingSpec.length === 0, missingSpec.map((type) => type.id).join(','));
+
+  // 家族兜底：不在表里的新生物，也要落到某一套（亡灵/节肢/其它）
+  check('未知亡灵落到亡灵档案', mobVoiceFor('future_zombie', 'undead') === 'undead');
+  check('未知节肢落到蜘蛛档案', mobVoiceFor('future_bug', 'arthropod') === 'spider');
+  check('未知普通生物落到 passive（永远不静默）', mobVoiceFor('future_bunny') === 'passive');
+
+  // 音高：幼体更高、洞穴蜘蛛比蜘蛛尖、小史莱姆比大史莱姆高
+  check('幼体比成年高', mobVoicePitchFor('cow', true) > mobVoicePitchFor('cow', false));
+  check('洞穴蜘蛛比蜘蛛高', mobVoicePitchFor('cave_spider') > mobVoicePitchFor('spider'));
+  check('小史莱姆比大史莱姆高', mobVoicePitchFor('slime_small') > mobVoicePitchFor('slime_big'));
+  check('音高倍率在合理区间（0.5~2）', DROPPING_MOB_TYPES.every((type) => {
+    const adult = mobVoicePitchFor(type.id, false);
+    const baby = mobVoicePitchFor(type.id, true);
+    return adult >= 0.5 && adult <= 2 && baby >= 0.5 && baby <= 2;
+  }));
+
+  // 环境叫的间隔：min < max，且不能密到变成噪音
+  const badIntervals = MOB_VOICE_IDS.filter((voice) => {
+    const [min, max] = ambientIntervalFor(voice);
+    return !(min > 0 && min < max && min >= 6);
+  });
+  check('环境叫间隔合法且不过密', badIntervals.length === 0, badIntervals.join(','));
+
+  // 档案之间不能“听起来完全一样”（否则等于只有几种生物）
+  const signatures = new Set(MOB_VOICE_IDS.map((voice) => JSON.stringify(MOB_VOICES[voice])));
+  check('不同档案的配方互不相同', signatures.size === MOB_VOICE_IDS.length, `${signatures.size}/${MOB_VOICE_IDS.length}`);
+}
+
+// ---------------------------------------------------------------- 9. 兼容性：旧音效还在
+
+console.log('\n[旧音效兼容（验收脚本与控制台还在用这些名字）]');
+{
+  const legacy = [
+    'break_stone',
+    'break_wood',
+    'break_grass',
+    'break_sand',
+    'break_glass',
+    'break_wool',
+    'place',
+    'step',
+    'hurt',
+    'death',
+    'fall',
+    'door',
+    'explode',
+    'splash',
+    'click',
+    'eat',
+    'bow_shoot',
+    'arrow_hit',
+    'shear',
+    'flint',
+    'thunder',
+    'portal',
+    'fuse',
+    'achievement',
+    'trade',
+    'item_move',
+    'door_close',
+    'trapdoor',
+    'fence_gate',
+    'shield_block',
+  ] as const;
+  const missing = legacy.filter((kind) => !soundSpec(kind));
+  check(`${legacy.length} 个旧音效名字都还在`, missing.length === 0, missing.join(','));
+  check('新增的脚步/落地有独立种类', !!soundSpec('step_grass') && !!soundSpec('land_soft') && !!soundSpec('land_hard'));
 }
 
 console.log(`\n音效测试：${passed} 通过 / ${failed} 失败`);

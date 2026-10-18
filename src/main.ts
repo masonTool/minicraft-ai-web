@@ -232,7 +232,8 @@ import {
   nextCameraMode,
   type CameraMode,
 } from './core/viewMode.ts';
-import { AudioEngine, doorSoundFor, type SoundKind } from './core/audio/AudioEngine.ts';
+import { AudioEngine, doorSoundFor, stepSoundFor, type SoundKind } from './core/audio/AudioEngine.ts';
+import { mobVoiceFor, mobVoicePitchFor, mobVoiceSpec } from './core/audio/MobVoices.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
@@ -1221,6 +1222,9 @@ class App {
   private stepDistance = 0;
   private lastStepX = 0;
   private lastStepZ = 0;
+  /** 落地音（批次 232）：上一帧是否在地上 + 本次腾空时的最高点 */
+  private wasOnGroundAudio = true;
+  private audioFallY: number | null = null;
   /** 本机设置（视距/视野/音量/灵敏度/调试信息），存在 localStorage */
   private readonly settings: GameSettings = loadSettings();
   private readonly settingsScreen: SettingsScreen;
@@ -4181,7 +4185,8 @@ class App {
     const leftover = this.inventory.add(Item.MILK_BUCKET, 1);
     if (leftover > 0) this.spawnDrop(Item.MILK_BUCKET, leftover, mob.x, mob.y + 0.5, mob.z);
 
-    this.audio.play('mob_cow', { x: mob.x, y: mob.y, z: mob.z });
+    // 挤奶时牛"哞"一声（批次 232：走生物声音档案，和它平时的叫声是同一套）
+    this.audio.playVoice('cow:ambient', mobVoiceSpec('cow', 'ambient'), { x: mob.x, y: mob.y, z: mob.z });
     this.particles.spawnHearts(mob.x, mob.y + mob.type.height, mob.z, 0.4);
     this.refreshHotbar();
     return true;
@@ -4197,10 +4202,20 @@ class App {
     if (!this.inventory.consume(itemId, 1)) return false;
 
     this.particles.spawnHearts(mob.x, mob.y + mob.type.height, mob.z, result === 'grow' ? 0.6 : 1);
-    // 牛羊猪鸡都吃这几样，用各自家族的叫声最贴切；没有的用通用的"吃掉"音。
-    // 村民（J11）用它自己的"嗯…"——喂他面包却听见羊叫会很出戏
-    const sound = mob instanceof Villager ? 'mob_villager' : result === 'grow' ? 'mob_sheep' : 'eat';
-    this.audio.play(sound, { x: mob.x, y: mob.y, z: mob.z });
+    // 喂食的反应（批次 232）：用**这一只自己的**叫声档案（牛羊猪鸡各叫各的），
+    // 而不是"长大的那一律用羊叫"——喂猪听见羊叫是上一版最出戏的一处。
+    // 没有声音档案的（比如以后的怪）退回通用的咀嚼声。
+    const voice = mobVoiceFor(mob.type.id, mob.type.family);
+    if (voice) {
+      this.audio.playVoice(
+        `${voice}:ambient`,
+        mobVoiceSpec(voice, 'ambient'),
+        { x: mob.x, y: mob.y, z: mob.z },
+        mobVoicePitchFor(mob.type.id, mob.baby),
+      );
+    } else {
+      this.audio.play('eat', { x: mob.x, y: mob.y, z: mob.z });
+    }
     this.refreshHotbar();
     return true;
   }
@@ -4439,6 +4454,9 @@ class App {
     const damage = this.isCreative ? 100 : critical ? base * 1.5 : base;
     // 抢夺只影响掉落数量（在 mob.hurt 内部结算）
     mob.hurt(damage, mob.x - this.physics.x, mob.z - this.physics.z, context, lootingBonus(this.heldEnchants));
+    // 打击感（批次 232）：打中"有肉的东西"的一下闷响。
+    // 生物自己的惨叫由 `Mob.hurt` 播（按种类），两者叠起来才是"砍到了"的手感
+    this.audio.play('hit_flesh', { x: mob.x, y: mob.y + mob.type.height * 0.5, z: mob.z });
     this.hand.swing();
     // 攻击也要消耗耐久（原版剑/斧砍怪掉耐久）
     this.damageHeldTool();
@@ -6539,6 +6557,9 @@ class App {
         return null;
       },
       playSound: (kind, x, y, z) => this.audio.play(kind, { x, y, z }),
+      // 生物声音（批次 232）：实体层只报"哪种档案 × 哪种事件"，取 spec 与音高折算都在这里
+      playMobVoice: (voice, event, x, y, z, pitch = 1) =>
+        this.audio.playVoice(`${voice}:${event}`, mobVoiceSpec(voice, event), { x, y, z }, pitch),
       explode: (x, y, z, power) => this.explodeAt(x, y, z, power),
       // 烟花（批次 192）：不炸地形，只冒粒子 + 伤生物
       burstFirework: (x, y, z, colors, power, damage) => this.burstFirework(x, y, z, colors, power, damage),
@@ -9014,7 +9035,8 @@ class App {
 
       // 触觉反馈：放下一块方块的轻震
       this.vibrate(6);
-      this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      // 放置音按材质分（批次 232）：放羊毛和放石头不该是同一声
+      this.audio.playPlaceForBlock(blockDef(blockId).name, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.hand.swing();
       // 联机：把这次改动广播给队友
       this.net.sendBlock(x, y, z, blockId, this.world.getBlockState(x, y, z), this.dimension);
@@ -10057,43 +10079,73 @@ class App {
   }
 
   /**
-   * 脚步与听觉位置（K5）。
+   * 脚步、落地与听觉位置（K5；批次 232 重做）。
+   *
+   * 三件事都和旧版不一样了：
+   *  1. **脚步有自己的一套音色**（`stepSoundFor`）——以前直接借"破坏方块"的声音，
+   *     走路听起来像一直在挖方块；现在按材质分 8 类，且比破坏音轻一档；
+   *  2. **节奏与音量跟着速度走**：疾跑更密更响、潜行更疏更轻（以前只看走了多远，
+   *     跑和走的声音完全一样）；
+   *  3. **落地有声**：按本次腾空的落差选软/硬着陆。旧版的 `fall` 音效定义了却从没播过，
+   *     从二十格摔下来只有一声"受伤"，没有"落地"。
    *
    * 脚步按**水平位移**累积而不是按时间：走动时约每 1.6 格一声（与原版节奏接近），
-   * 站着不动不会响，蹲行（速度慢）自然也就稀疏了。
+   * 站着不动不会响。
    */
   private updateAudio(dt: number): void {
-    this.audio.setListener(this.physics.x, this.physics.eyeY, this.physics.z);
+    const p = this.physics;
+    // 朝向一起传进去：远处的生物叫声才知道该从左边还是右边来
+    this.audio.setListener(p.x, p.eyeY, p.z, this.yaw);
 
-    const dx = this.physics.x - this.lastStepX;
-    const dz = this.physics.z - this.lastStepZ;
-    this.lastStepX = this.physics.x;
-    this.lastStepZ = this.physics.z;
+    // 一帧挪了几格 → 瞬移（/tp、重生、末影珍珠）不该触发"落地"或"脚步"：
+    // 那不是走出来的位移，落差也算不出来
+    const frameMove = Math.hypot(p.x - this.lastStepX, p.z - this.lastStepZ);
+    if (frameMove > 4) {
+      this.audioFallY = null;
+      this.stepDistance = 0;
+    }
 
-    if (!this.physics.onGround) {
+    // ---- 落地音：只在"刚落地"那一帧响一次
+    if (!p.onGround) {
+      if (!this.flying && !p.inWater) {
+        // 记录本次腾空的**最高点**（不是"离地那一刻"，跳起来再落地才有正确落差）
+        this.audioFallY = this.audioFallY === null ? p.y : Math.max(this.audioFallY, p.y);
+      } else {
+        this.audioFallY = null;
+      }
+    } else {
+      const drop = this.audioFallY === null ? 0 : this.audioFallY - p.y;
+      this.audioFallY = null;
+      if (!this.wasOnGroundAudio && !this.flying && !p.inWater && drop > 0.7) {
+        // 落差越大越响；3 格以内是软着陆，超过就是硬着陆
+        const scale = Math.min(1.4, 0.8 + drop / 12);
+        this.audio.play(drop > 3 ? 'land_hard' : 'land_soft', undefined, scale);
+      }
+    }
+    this.wasOnGroundAudio = p.onGround;
+
+    // ---- 脚步：按水平位移累积（`frameMove` 在函数开头就算好了）
+    this.lastStepX = p.x;
+    this.lastStepZ = p.z;
+
+    if (!p.onGround || this.flying) {
       this.stepDistance = 0;
       return;
     }
-    this.stepDistance += Math.hypot(dx, dz);
-    const stride = this.physics.inWater ? 2.2 : 1.6;
+    const speed = frameMove / Math.max(dt, 1e-4);
+    const stride = p.inWater ? 2.2 : speed > 5 ? 1.35 : speed < 2.6 ? 2.3 : 1.6;
+    this.stepDistance += frameMove;
     if (this.stepDistance < stride) return;
     this.stepDistance = 0;
+
     // 踩水是水声；陆地上按脚下方块材质挑脚步音
-    if (this.physics.inWater) {
-      this.audio.play('splash');
-    } else {
-      const belowId = this.world.getBlock(
-        Math.floor(this.physics.x),
-        Math.floor(this.physics.y - 0.2),
-        Math.floor(this.physics.z),
-      );
-      const name = blockDef(belowId).name.replace('minecraft:', '');
-      if (name.includes('sand') || name.includes('gravel')) this.audio.play('break_sand');
-      else if (name.includes('grass') || name.includes('leaves')) this.audio.play('break_grass');
-      else if (name.includes('planks') || name.includes('log')) this.audio.play('break_wood');
-      else this.audio.play('step');
+    if (p.inWater) {
+      this.audio.play('splash', undefined, 0.7);
+      return;
     }
-    void dt;
+    const belowId = this.world.getBlock(Math.floor(p.x), Math.floor(p.y - 0.2), Math.floor(p.z));
+    const gain = speed > 5 ? 1.15 : speed < 2.6 ? 0.65 : 1;
+    this.audio.play(stepSoundFor(blockDef(belowId).name), undefined, gain);
   }
 
   /** 改视距：相机远裁剪面、雾、区块流式范围一起更新 */
