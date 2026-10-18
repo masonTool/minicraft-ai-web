@@ -832,6 +832,19 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.LEAD, count: 2 },
     ingredients: [Item.STRING, Item.STRING, Item.STRING, Item.STRING, Item.SLIME_BALL],
   },
+  // 弩（批次 265）：3 木棍 + 2 铁锭 + 1 线（原版是木棍/铁/线/绊线钩的九宫格，这里简化）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.CROSSBOW, count: 1 },
+    ingredients: [
+      Item.STICK,
+      Item.STICK,
+      Item.STICK,
+      Item.IRON_INGOT,
+      Item.IRON_INGOT,
+      Item.STRING,
+    ],
+  },
   // 动力铁轨（批次 246）：6 金锭 + 1 木棍 + 1 红石 → 6 段（原版图案）
   {
     kind: 'shaped' as const,

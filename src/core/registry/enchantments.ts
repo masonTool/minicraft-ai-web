@@ -132,8 +132,9 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'impaling', name: '穿刺', maxLevel: 5, targets: ['trident'], weight: 2 },
   { id: 'riptide', name: '激流', maxLevel: 3, targets: ['trident'], weight: 2 },
   { id: 'channeling', name: '引雷', maxLevel: 1, targets: ['trident'], weight: 1 },
-  { id: 'multishot', name: '多重射击', maxLevel: 1, targets: ['crossbow'], weight: 2 },
-  { id: 'quick_charge', name: '快速装填', maxLevel: 3, targets: ['crossbow'], weight: 5 },
+  // 多重射击 / 快速装填（批次 265）：弩装填与齐射，数值见 `Bow.ts`
+  { id: 'multishot', name: '多重射击', maxLevel: 1, targets: ['crossbow'], weight: 2, implemented: true },
+  { id: 'quick_charge', name: '快速装填', maxLevel: 3, targets: ['crossbow'], weight: 5, implemented: true },
   { id: 'piercing', name: '穿透', maxLevel: 4, targets: ['crossbow'], weight: 10 },
 ];
 

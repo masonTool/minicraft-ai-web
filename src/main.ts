@@ -548,6 +548,8 @@ import {
   canFire,
   canShoot,
   chargeAfter,
+  crossbowChargeTime,
+  crossbowVolley,
   knockbackStrength,
 } from './core/entity/Bow.ts';
 import { ItemEntity } from './core/entity/ItemEntity.ts';
@@ -1434,6 +1436,9 @@ class App {
 
   /** 拉弓蓄力 0~1（J9）与"这一次拉弓是否还在进行"的标记 */
   private bowCharge = 0;
+  /** 弩的装填进度（秒，批次 265）：与弓分开记，换武器不会串 */
+  private crossbowCharge = 0;
+  private crossbowDrawing = false;
   private bowDrawing = false;
 
   /** 进食进度（0~1）与"距离下一次咀嚼"的计时 */
@@ -3908,6 +3913,7 @@ class App {
     this.updateEating(dt);
     // 拉弓也放在放置之后：准星对着功能方块时右键那一下归方块
     this.updateBow(dt);
+    this.updateCrossbow(dt);
     this.hand.setDrawPull(this.bowCharge);
     // 轻点是一次性的：
     //  · 落点只活这一帧——破坏/放置/进食/拉弓都已经在上面读过 `this.hit` 了；
@@ -4127,6 +4133,79 @@ class App {
     // 只有"手还拿着弓、而且没开界面"才算正常松手
     if (!holding || this.uiOpen || this.stats.dead) return;
     if (canFire(charge)) this.fireBow(charge);
+  }
+
+  /**
+   * 弩的装填与发射（批次 265）。
+   *
+   * 与弓同一套"按住累加、松手结算"，区别是**装填时间固定**（快速装填才减），
+   * 而且只有**装满了**才射得出去——没装满松手等于取消，不消耗箭。
+   */
+  private updateCrossbow(dt: number): void {
+    const holding = this.heldItemId === Item.CROSSBOW;
+    const active = holding && this.usingItem && !this.uiOpen && !this.stats.dead;
+    const full = crossbowChargeTime(enchantLevel(this.heldEnchants, 'quick_charge'));
+
+    if (active) {
+      this.crossbowCharge = Math.min(full, this.crossbowCharge + dt);
+      this.crossbowDrawing = true;
+      return;
+    }
+
+    if (!this.crossbowDrawing) {
+      this.crossbowCharge = 0;
+      return;
+    }
+    this.crossbowDrawing = false;
+    const charge = this.crossbowCharge;
+    this.crossbowCharge = 0;
+    if (!holding || this.uiOpen || this.stats.dead) return;
+    // 差 0.01 秒以内算装满（浮点累加总差一点点，不能死等相等）
+    if (charge >= full - 0.01) this.fireCrossbow();
+  }
+
+  /** 弩齐射（批次 265）：多重射击时三支扇形，只消耗 1 支箭 */
+  private fireCrossbow(): void {
+    const effects = bowEffects(this.heldEnchants);
+    const ammo = pickArrowAmmo(this.inventory.serialize());
+    const arrows = ammo?.total ?? 0;
+    const shots = crossbowVolley(enchantLevel(this.heldEnchants, 'multishot') > 0, arrows);
+    if (!ammo || shots === 0) {
+      if (arrows < 1) this.chat.push('没有箭了', 'error');
+      return;
+    }
+    this.inventory.consume(ammo.itemId, 1);
+
+    // 多重射击的扇形：中间一支 + 左右各偏约 10°
+    const spread = shots > 1 ? [-0.18, 0, 0.18] : [0];
+    const cosPitch = Math.cos(this.pitch);
+    const speed = arrowSpeedAt(1);
+    for (const offset of spread) {
+      const yaw = this.yaw + offset;
+      const dirX = -Math.sin(yaw) * cosPitch;
+      const dirY = Math.sin(this.pitch);
+      const dirZ = -Math.cos(yaw) * cosPitch;
+      this.spawnArrow(
+        this.physics.x + dirX * 0.4,
+        this.physics.eyeY - 0.12,
+        this.physics.z + dirZ * 0.4,
+        { x: dirX * speed, y: dirY * speed, z: dirZ * speed },
+        {
+          fromPlayer: true,
+          damage: arrowDamageAt(1, effects.power),
+          knockback: knockbackStrength(effects.punch),
+          fireSeconds: effects.flame > 0 ? FLAME_SECONDS : 0,
+          pickable: effects.infinity === 0,
+          itemId: ammo.itemId,
+          ...(ammo.potionId === undefined ? {} : { potionId: ammo.potionId }),
+        },
+      );
+    }
+
+    this.audio.play('bow_shoot');
+    this.hand.swing();
+    this.damageHeldTool();
+    this.refreshHotbar();
   }
 
   /** 放出一支箭：扣箭、算伤害与附魔、给弓扣耐久 */

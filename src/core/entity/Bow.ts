@@ -48,6 +48,27 @@ export function arrowSpeedAt(charge: number): number {
   return clamp01(charge) * ARROW_MAX_SPEED;
 }
 
+/**
+ * 弩的装填时间（秒，批次 265）。
+ *
+ * 原版基础 1.25 秒，快速装填每级 -0.25 秒（III 级 0.5 秒）；这里再兜一个 0.25 秒下限，
+ * 免得以后改数值时出现"0 秒装填"。
+ */
+export function crossbowChargeTime(quickChargeLevel: number): number {
+  const level = Math.max(0, Math.min(3, Math.floor(quickChargeLevel)));
+  return Math.max(0.25, 1.25 - level * 0.25);
+}
+
+/**
+ * 一次装填射出几支（批次 265）。
+ *
+ * 多重射击一次三支（只消耗 1 支箭，与原版一致）；没箭时返回 0，调用方据此提示"没有箭了"。
+ */
+export function crossbowVolley(multishot: boolean, arrows: number): number {
+  if (arrows <= 0) return 0;
+  return multishot ? 3 : 1;
+}
+
 /** 蓄力 + 力量 → 伤害 */
 export function arrowDamageAt(charge: number, powerLevel = 0): number {
   const base = clamp01(charge) * ARROW_MAX_DAMAGE;
