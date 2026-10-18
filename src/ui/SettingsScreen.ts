@@ -93,12 +93,19 @@ export function nextCycleValue(values: readonly string[], raw: unknown): string 
  * 批次 107 改成"四组一次全展开 + 行高压紧"（更符合"展示得更多"的反馈）；
  * 只有矮屏（横屏手机）放不下时才退回页签分页——判据见 index.html。
  */
-export const SETTING_GROUPS = ['graphics', 'appearance', 'controls', 'sound', 'game'] as const;
+export const SETTING_GROUPS = ['appearance', 'controls', 'sound', 'game'] as const;
 
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
+/**
+ * 分组中文名。
+ *
+ * ⚠️ 批次 203 起**没有「视频」组了**：视距 / 自适应分辨率 / 自适应视距 / 天气效果
+ * 四行删掉之后，那一组只剩一个「视野」，于是并进「控制」。
+ * 判断标准：**一组的行数掉到 1~2 行时就该问"它还算一个分类吗"**——
+ * 一个只为一行设置的页签，在手机上等于多一次点击。
+ */
 export const SETTING_GROUP_LABELS: Record<SettingGroup, string> = {
-  graphics: '视频',
   appearance: '外观',
   controls: '控制',
   sound: '音频',
@@ -581,23 +588,18 @@ export class SettingsScreen {
       body.appendChild(section);
     }
 
-    const graphics = this.section('graphics');
-    // 批次 203（用户："性能相关的设置可以不用让用户去设置……我们给到用户最好的决策就够了"）：
-    // **图形组只剩「视野」**。删掉的是四行：
-    //  - 视距滑块、自适应分辨率、自适应视距 —— 这三样全是**性能调参**，
-    //    已经由 `PerfPolicy` 全权接管（掉帧时先收视距、再关装饰层、最后降分辨率）。
-    //    让玩家自己猜"关掉哪个能救帧"只是把调参负担丢回给玩家，而且他们的选择
-    //    与自适应策略会互相打架（比如手动钉死视距 16，策略还得一轮轮往下压）。
-    //  - 天气效果 —— 雨雪的量已经由装饰层档位自动控制（`decorRainFraction`），
-    //    再给一个"关掉雨"的开关同样是让玩家替我们做性能决策。
+    // ⚠️ 批次 203（用户："性能相关的设置可以不用让用户去设置……我们给到用户最好的决策就够了"）：
+    // 原来「视频」组里的四行全删了，组也一起没了：
+    //  - 视距滑块、自适应分辨率、自适应视距 —— 纯性能调参，已由 `PerfPolicy` 全权接管
+    //    （掉帧时先收视距、再关装饰层、最后降分辨率）。玩家的手动值还会与策略打架
+    //    （手动钉死 16，策略仍要一轮轮往下压，界面数字与生效值从此对不上）。
+    //  - 天气效果 —— 雨雪量已由装饰层档位自动控制（`decorRainFraction`）。
     //  - 更早（批次 185）删掉的：云、粒子效果、帧率上限。
+    // 「视野」并进「控制」：它不是性能项（FOV 关系到晕动症与个人习惯），
+    // 但不足以撑起一个独立页签——一组的行数掉到 1~2 行时就该合并。
     // ⚠️ `viewDistance` / `weatherEffects` / `adaptiveResolution` / `adaptiveViewDistance`
     // 这些**字段保留**：老存档照旧能读（不会因为字段消失而整份回退），
-    // 值由主程序按设备定死（见 `main` 构造里那三行）。
-    //
-    // 「视野」留着：它不是性能项——FOV 关系到晕动症与个人习惯，原版也只有这一个视野滑块。
-    graphics.append(this.makeSlider('fov', '视野', '°', 60, 110, 1));
-    // （`maxFps` 字段保留：老存档里的值还会被读取，只是不再给入口。）
+    // 值由主程序按设备定死（见 `main` 构造里那几行）。`maxFps` 同理。
 
     // ---- 外观（批次 187）：肤色 / 上衣 / 裤子 / 披风
     //
@@ -633,6 +635,9 @@ export class SettingsScreen {
       controls.appendChild(this.makeFullscreenRow());
     }
     this.makeSelect(controls, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
+    // 视野（批次 203 从「视频」组搬来）：晕动症的人会往小调，习惯广角的人会往大调，
+    // 只有玩家自己知道——所以它留着（原版也只有这一个视野滑块）。
+    controls.append(this.makeSlider('fov', '视野', '°', 60, 110, 1));
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异，所以给两档自己挑
     this.makeSelect(controls, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
     // 触摸按钮大小（批次 97）：手机上线 44px 只是下限，多大才顺手因人而异

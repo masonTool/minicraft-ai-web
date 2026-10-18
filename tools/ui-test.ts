@@ -167,8 +167,10 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
 
   // ---- ③ 设置分组：页签与 section 一一对应（漏一组 = 有一页设置永远看不到）
   // 批次 187：新增「外观」页（肤色/上衣/裤子/披风）
-  equal('五个分组（视频/外观/控制/音频/游戏）', SETTING_GROUPS.length, 5);
+  // 批次 203：删掉「视频」页（性能四行没了，只剩视野 → 并进「控制」）
+  equal('四个分组（外观/控制/音频/游戏）', SETTING_GROUPS.length, 4);
   check('分组里有「外观」', SETTING_GROUPS.includes('appearance') && SETTING_GROUP_LABELS.appearance === '外观');
+  check('不再有「视频」页（视野已并进控制）', !SETTING_GROUPS.includes('graphics' as never));
   check('每个分组都有中文名', SETTING_GROUPS.every((group) => (SETTING_GROUP_LABELS[group] ?? '').length > 0));
   equal('分组名不重复', new Set(SETTING_GROUPS.map((group) => SETTING_GROUP_LABELS[group])).size, SETTING_GROUPS.length);
 
@@ -2074,14 +2076,20 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '诊断导出带上真实渲染规模与显卡型号',
     appSrc.includes('perf: this.perfSnapshot()') && appSrc.includes('gpu: this.gpuName()'),
   );
-  // 批次 203（用户："性能相关的设置可以不用让用户去设置"）：图形组只剩「视野」，
-  // 视距 / 自适应分辨率 / 自适应视距 / 天气效果 四行全部删掉（字段保留给老存档）
+  // 批次 203（用户："性能相关的设置可以不用让用户去设置"）：视距 / 自适应分辨率 /
+  // 自适应视距 / 天气效果 四行全部删掉（字段保留给老存档），「视频」组随之消失，
+  // 「视野」并进「控制」
   check(
-    '图形组只剩「视野」（性能档位全交给自适应）',
+    '性能四行全删（视距/自适应分辨率/自适应视距/天气效果）',
     !settingsSrc.includes("'adaptiveResolution',") &&
       !settingsSrc.includes("'adaptiveViewDistance',") &&
       !settingsSrc.includes("'weatherEffects',") &&
-      !/makeSlider\(\s*'viewDistance'/.test(settingsSrc) &&
+      !/makeSlider\(\s*'viewDistance'/.test(settingsSrc),
+  );
+  check(
+    '「视频」组没了，「视野」并进「控制」',
+    !settingsSrc.includes("this.section('graphics')") &&
+      !settingsSrc.includes('graphics:') &&
       settingsSrc.includes("this.makeSlider('fov', '视野', '°', 60, 110, 1)"),
   );
   // ⚠️ 字段必须还在：删字段会让 `loadSettings` 把老存档里其它值一起丢掉

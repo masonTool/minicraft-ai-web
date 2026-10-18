@@ -24,6 +24,8 @@ import type { MeshChunkPayload, MeshResponse } from '../worker/chunk.worker.ts';
 interface ChunkMeshes {
   meshes: THREE.Mesh[];
   triangles: number;
+  cx: number;
+  cz: number;
 }
 
 interface QueueItem {
@@ -41,6 +43,8 @@ export class ChunkRenderer {
   private requestSeq = 0;
   private inFlight = 0;
   private readonly maxInFlight: number;
+  /** 上一帧真正画出来的区块数（见 `applyViewDistance`） */
+  private drawnChunks = 0;
 
   /**
    * 调试用：抽样某区块网格顶点里的光照值，以及这段网格覆盖的 Y 区间。
@@ -281,7 +285,7 @@ export class ChunkRenderer {
       }
     }
 
-    this.replaceMeshes(key, meshes, triangles);
+    this.replaceMeshes(key, response.cx, response.cz, meshes, triangles);
   }
 
   /** Worker 不可用时的回退：在主线程同步网格化 */
@@ -313,7 +317,7 @@ export class ChunkRenderer {
       }
     }
 
-    this.replaceMeshes(key, meshes, triangles);
+    this.replaceMeshes(key, cx, cz, meshes, triangles);
   }
 
   /**
@@ -323,10 +327,45 @@ export class ChunkRenderer {
    * 整个 16×16 区块暂时消失，邻区块载入时还会连带四块一起闪。现在旧几何一直留到新几何
    * 全部建好；回调期间先挂新网格再拆旧网格，渲染帧永远只会看到“旧”或“新”中的完整一版。
    */
-  private replaceMeshes(key: string, meshes: THREE.Mesh[], triangles: number): void {
+  private replaceMeshes(key: string, cx: number, cz: number, meshes: THREE.Mesh[], triangles: number): void {
     for (const mesh of meshes) this.scene.add(mesh);
     this.dispose(key);
-    if (meshes.length > 0) this.rendered.set(key, { meshes, triangles });
+    if (meshes.length > 0) this.rendered.set(key, { meshes, triangles, cx, cz });
+  }
+
+  /**
+   * 只画视距之内的区块（批次 203）。
+   *
+   * 为什么需要这一步：`rendered` 里留着的区块**比视距多**——`World.update` 卸载时留了
+   * `keepRadius = 半径 + 2` 的一圈缓冲（避免边界反复加载卸载）。而远裁面**裁不掉它们**：
+   * `cameraFarFor` 取"视距×16+32"与天空穹顶（180+32=212，约 13 区块）的**较大者**，
+   * 手机视距 4~8 时它永远是 212。于是"自适应把视距降到 4"只让**加载圈**变小，
+   * 画面里的 draw call 与三角形几乎不掉——真机反馈"卡的时候视距看起来还是很大"正是这个。
+   *
+   * 做法：每帧按区块中心到玩家的**水平**距离切 `.visible`（区块是 16×16 柱，垂直方向
+   * 拉满，用水平距离就够）。改的是可见性标志，不动几何体、不触发重新上传；
+   * 441 个区块也就是几百次平方距离比较，比省下来的 draw call 便宜得多。
+   *
+   * ⚠️ 半径取 `视距 + 0.5` 格：区块中心相对玩家最远 8 格（半格 + 半区块），
+   * 多一点余量避免边缘区块在两帧之间闪进闪出。多出来的这半圈本来也在雾里。
+   */
+  applyViewDistance(centerCx: number, centerCz: number, viewChunks: number): void {
+    const limit = Math.max(1, viewChunks) + 0.5;
+    const limitSq = limit * limit;
+    let drawn = 0;
+    for (const entry of this.rendered.values()) {
+      const dx = entry.cx - centerCx;
+      const dz = entry.cz - centerCz;
+      const visible = dx * dx + dz * dz <= limitSq;
+      if (visible) drawn++;
+      for (const mesh of entry.meshes) mesh.visible = visible;
+    }
+    this.drawnChunks = drawn;
+  }
+
+  /** 上一帧真正参与渲染的区块数（诊断用：与 `chunkMeshCount` 的差就是被视距切掉的） */
+  get drawnCount(): number {
+    return this.drawnChunks;
   }
 
   private dispose(key: string): void {

@@ -9434,6 +9434,8 @@ class App {
       buffer: `${canvas.width}×${canvas.height}`,
       chunks: this.world.chunks.size,
       meshes: this.chunkRenderer.chunkMeshCount,
+      // 真正画出来的区块数：与 `meshes` 的差就是被视距切掉的那圈缓冲
+      drawn: this.chunkRenderer.drawnCount,
       meshQueue: this.chunkRenderer.queueLength,
       genQueue: this.world.pendingCount,
       lightQueue: this.world.lightWorkCount,
@@ -9608,7 +9610,7 @@ class App {
       `在地面: ${p.onGround ? '是' : '否'}   在水中: ${p.inWater ? '是' : '否'}   脚下方块光: ${feetLight}\n` +
       `指向: ${target}${this.breakProgress > 0 ? `   破坏 ${Math.round(this.breakProgress * 100)}%` : ''}\n` +
       `持有: ${this.heldName}\n` +
-      `视距: ${this.viewDistance}${this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance ? `（自适应，上限 ${this.settings.viewDistance}）` : ''} 区块   雾: ${this.fogRadius.toFixed(1)}   已渲染: ${this.chunkRenderer.chunkMeshCount}   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
+      `视距: ${this.viewDistance}${this.settings.adaptiveViewDistance && this.viewDistance < this.settings.viewDistance ? `（自适应，上限 ${this.settings.viewDistance}）` : ''} 区块   雾: ${this.fogRadius.toFixed(1)}   已渲染: ${this.chunkRenderer.drawnCount}/${this.chunkRenderer.chunkMeshCount}（画/留）   待网格化: ${this.chunkRenderer.queueLength}   在途: ${this.chunkRenderer.inFlightCount}   待生成: ${this.world.pendingCount}\n` +
       `生命: ${this.stats.health.toFixed(1)}/20   饥饿: ${this.stats.food}/20   饱和: ${this.stats.saturation.toFixed(1)}   氧气: ${this.stats.air}/300   疲劳: ${this.stats.exhaustion.toFixed(2)}   护甲: ${armorPoints}\n` +
       `经验: ${this.experience.level} 级 ${this.experience.progress}/${this.experience.toNext}（累计 ${this.experience.total}）\n` +
       `光照队列: ${this.world.lightWorkCount}   待重刷: ${this.pendingSettle.length / 3}\n` +
@@ -9912,6 +9914,10 @@ class App {
 
       this.refreshLoadingState();
       this.updateBreakProgressUi();
+      // 只画视距之内的区块（批次 203）：加载圈留了 `radius + 2` 的缓冲，而远裁面被
+      // 天空穹顶撑着（约 13 区块），裁不掉它们——不切一下，"自适应降视距"在画面上
+      // 几乎不生效（真机反馈"卡的时候视距看起来还是很大"）。
+      this.chunkRenderer.applyViewDistance(centerCx, centerCz, this.viewDistanceNow);
       this.renderer.render(this.scene, this.camera);
       // 世界之后叠画"贴在屏幕上的两件事"：手持物品与视野色罩。
       // ⚠️ 必须先关掉 autoClear，否则第二次 render 会把刚画好的世界清掉。

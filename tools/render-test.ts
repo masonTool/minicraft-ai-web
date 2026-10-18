@@ -599,5 +599,85 @@ console.log('\n[剪羊毛的外观（J8）]');
   equal('牛这种不掉羊毛的生物不受影响', mobBodyColor(cow), cow.type.bodyColor);
 }
 
+// ---------------------------------------------------------------- 视距裁剪（批次 203）
+
+console.log('\n[只画视距之内的区块]');
+{
+  // 真机反馈："自适应把视距降下来了，可画面里的范围还是很大"。
+  // 原因是 `rendered` 里留着 `radius + 2` 的缓冲圈，而远裁面被天空穹顶撑着（约 13 区块），
+  // 裁不掉它们。`applyViewDistance` 每帧按区块中心到玩家的水平距离切可见性。
+  const chunks = new Map<string, Chunk>([
+    ['0,0', new Chunk(0, 0)],
+    ['3,1', new Chunk(3, 1)],
+    ['8,0', new Chunk(8, 0)],
+    ['0,-7', new Chunk(0, -7)],
+  ]);
+  for (const chunk of chunks.values()) chunk.set(0, 64, 0, Block.STONE);
+  const world = {
+    getChunk: (cx: number, cz: number) => chunks.get(`${cx},${cz}`),
+  } as unknown as World;
+
+  const callbacks: Array<(response: MeshResponse) => void> = [];
+  const pool = {
+    size: 1,
+    request: (
+      _cx: number,
+      _cz: number,
+      _chunks: unknown,
+      _transfer: unknown,
+      onDone: (response: MeshResponse) => void,
+    ) => callbacks.push(onDone),
+  } as unknown as MeshWorkerPool;
+  const scene = new THREE.Scene();
+  const material = new THREE.MeshBasicMaterial();
+  const renderer = new ChunkRenderer(scene, {} as TextureAtlas, world, material, material, pool);
+  const triangle = {
+    position: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    uv: new Float32Array(6),
+    tile: new Float32Array(6),
+    light: new Float32Array(6),
+    shade: new Float32Array(3),
+    index: new Uint32Array([0, 1, 2]),
+  };
+
+  for (const [cx, cz] of [[0, 0], [3, 1], [8, 0], [0, -7]]) {
+    renderer.onChunkLoaded(cx!, cz!);
+    renderer.processQueue(1, 0, 0);
+    callbacks.shift()!({
+      type: 'meshed',
+      id: 1,
+      cx: cx!,
+      cz: cz!,
+      sections: [{ section: 8, solid: triangle, translucent: null }],
+    });
+  }
+  equal('四个区块的网格都在场景里', renderer.chunkMeshCount, 4);
+
+  // 视距 4：中心区块与 (3,1) 在 4.5 格内，(8,0) 与 (0,-9) 应被切掉
+  renderer.applyViewDistance(0, 0, 4);
+  equal('视距 4 只画 2 个区块', renderer.drawnCount, 2);
+  equal('切掉两个 = 场景里 2 个可见', scene.children.filter((child) => child.visible).length, 2);
+  check(
+    '被切掉的正是远处那两个（几何体没有被删，切的是可见性）',
+    scene.children.filter((child) => !child.visible).length === 2 && renderer.chunkMeshCount === 4,
+  );
+
+  // 视距涨回 8：四个都回来（缓冲圈不必重新网格化）
+  renderer.applyViewDistance(0, 0, 8);
+  equal('视距 8 又把它们放回来', renderer.drawnCount, 4);
+  equal('场景里 4 个都可见', scene.children.filter((child) => child.visible).length, 4);
+
+  // 跟着玩家走：站在 (3,1) 上看视距 2，(0,0) 与 (3,1) 在范围内，(8,0) 依然在外
+  renderer.applyViewDistance(3, 1, 3);
+  equal('跟着玩家所在区块重算', renderer.drawnCount, 2);
+  check(
+    '远处那个仍然被切掉',
+    scene.children.filter((child) => !child.visible).length === 2,
+  );
+
+  renderer.disposeAll();
+  material.dispose();
+}
+
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
