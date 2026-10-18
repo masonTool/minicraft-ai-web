@@ -63,6 +63,14 @@ export interface PhysicsWorld extends CollisionWorld {
    * 不提供时一律按"不能攀爬"处理——与 `TickWorld` 的 `skyLightAt` / `raining` 同一个套路。
    */
   isClimbable?(x: number, y: number, z: number): boolean;
+  /**
+   * 这一格是不是"贴上去会掉血"的方块（目前只有仙人掌，批次 222）。
+   *
+   * 自动跳跃用它避让：默认开着的自动跳跃会把 1 格高的障碍当台阶跳上去，
+   * 而仙人掌是**踩不得**的——跳上去/掉下来这一套动作会让视角一格一格地上下弹，
+   * 玩家看到的就是"顶着仙人掌一直抖"。同样做成可选成员，老 stub 世界不用改。
+   */
+  isHazardous?(x: number, y: number, z: number): boolean;
 }
 
 function approach(current: number, target: number, maxDelta: number): number {
@@ -81,6 +89,13 @@ export class PlayerPhysics {
 
   onGround = false;
   inWater = false;
+  /**
+   * 这一帧是不是刚触发了**自动跳跃**（批次 222，给诊断日志用）。
+   *
+   * 每帧开头复位：主程序读它就能在"视角莫名其妙上下弹"时确认是不是自动跳跃
+   * 在反复起跳（真机日志里 `input/autoJump` 连成一串就是这个原因）。
+   */
+  autoJumped = false;
   /** 是否正贴着可攀爬方块（梯子 / 藤蔓 / 锁链，B11） */
   onClimbable = false;
   /** 摔落起始高度；落地时用于计算摔落伤害（生存系统接入后使用） */
@@ -122,6 +137,8 @@ export class PlayerPhysics {
     jumpMultiplier = 1,
     autoJump = false,
   ): void {
+    this.autoJumped = false;
+
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
 
@@ -190,6 +207,7 @@ export class PlayerPhysics {
         if (this.canAutoJump(world, dirX, dirZ)) {
           this.vy = JUMP_VELOCITY * jumpMultiplier;
           this.onGround = false;
+          this.autoJumped = true;
         }
       }
       if (input.jump && this.onGround) {
@@ -247,13 +265,15 @@ export class PlayerPhysics {
    * 只看**一列**（前方 0.6 格的方块坐标）就够了：
    *  - 顶面高出脚底 0.6 以内的（雪层 / 台阶）不算障碍，交给上台阶那条路；
    *  - 高出 1 格左右、且头顶（站上去之后 1.8 格）没有方块 → 值得跳；
-   *  - 两格墙 / 一格高的洞 → 跳了也上不去，不跳（否则贴墙站着会一直原地蹦）。
+   *  - 两格墙 / 一格高的洞 → 跳了也上不去，不跳（否则贴墙站着会一直原地蹦）；
+   *  - **贴着会掉血的方块（仙人掌）→ 不跳**（批次 222）：跳上去/掉下来会来回弹。
    */
   private canAutoJump(world: PhysicsWorld, dirX: number, dirZ: number): boolean {
     const bx = Math.floor(this.x + dirX * 0.6);
     const bz = Math.floor(this.z + dirZ * 0.6);
     const base = Math.floor(this.y + 0.02);
     let top: number | null = null;
+    let hazard = false;
 
     for (let vy = base; vy <= base + 1; vy++) {
       const collision = world.collisionAt(bx, vy, bz);
@@ -266,9 +286,10 @@ export class PlayerPhysics {
       }
       if (blockTop > this.y + this.stepHeight + 0.02 && blockTop <= this.y + 1.15) {
         top = Math.max(top ?? -Infinity, blockTop);
+        if (world.isHazardous?.(bx, vy, bz) === true) hazard = true;
       }
     }
-    if (top === null) return false;
+    if (top === null || hazard) return false;
 
     // 站上去之后身体占的那几格必须是空的
     const headFrom = Math.floor(top + 0.02);

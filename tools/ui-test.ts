@@ -327,7 +327,9 @@ console.log('\n[手机端物品显示与提示（批次 95 体检）]');
     // 点快捷栏的手势会落到铺满全屏的视角面上（= 在身后挖方块），切槽永远点不动
     ['快捷栏可点（命中打开）', '#hotbar { pointer-events: auto; z-index: 1; }'],
     ['触摸端槽位按下有反馈', 'body.touch-mode #hotbar .slot:active'],
-    ['触摸端槽位放大到 44px（平台最小手势尺寸）', '#hotbar .slot { width: 44px; height: 44px; }'],
+    // 批次 222：槽位尺寸改成走 `#hud` 上的变量（血条/饥饿要跟快捷栏两端对齐）
+    ['触摸端槽位放大到 44px（平台最小手势尺寸）', '#hud { --hotbar-slot: 44px; --hotbar-gap: 1px; --hotbar-pad: 2px; }'],
+    ['槽位尺寸来自同一个变量', 'width: var(--hotbar-slot); height: var(--hotbar-slot);'],
     ['选中物品名浮标', '#selected-item-name'],
     ['物品名浮标有显示态', '#selected-item-name.show'],
   ] as const) {
@@ -1968,6 +1970,47 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
       appSrc.includes("'autoRecover.ghost'") &&
       appSrc.includes("'autoRecover.uiCycle'"),
   );
+}
+
+console.log('\n[状态栏贴快捷栏两端 + 仙人掌接触（批次 222）]');
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const compact = html.replace(/\s+/g, ' ');
+  const vitalsSrc = readFileSync(new URL('../src/ui/VitalsHud.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const physicsSrc = readFileSync(new URL('../src/core/physics/PlayerPhysics.ts', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../src/core/world/World.ts', import.meta.url), 'utf8');
+
+  check(
+    '快捷栏与状态栏共用一组几何变量（两端才能真的对齐）',
+    compact.includes('--hotbar-w: calc(9 * var(--hotbar-slot) + 8 * var(--hotbar-gap) + 2 * var(--hotbar-pad) + 2px);') &&
+      compact.includes('width: var(--hotbar-w);') &&
+      compact.includes('gap: var(--hotbar-gap); padding: var(--hotbar-pad);'),
+  );
+  check(
+    '生命/饥饿分两列贴住两端，中间让给进度条',
+    compact.includes('justify-content: space-between;') &&
+      vitalsSrc.includes("leftSide.append(this.armorRow, healthRow);") &&
+      vitalsSrc.includes("rightSide.append(this.airRow, foodRow);"),
+  );
+  check(
+    '状态栏在经验条上方（不挡等级数字）',
+    /#vitals \{[\s\S]{0,400}?bottom: calc\(86px \+ env\(safe-area-inset-bottom/.test(html) &&
+      /#xp-bar \{[\s\S]{0,200}?bottom: calc\(68px \+ env\(safe-area-inset-bottom/.test(html),
+  );
+
+  // 仙人掌（批次 222）：伤害判定以前恒为 false，用户"撞上去"其实既不掉血也不会抖
+  check(
+    '仙人掌接触已接线（不再恒为 false）',
+    appSrc.includes('onCactus: touchesCactus(') && !appSrc.includes('onCactus: false'),
+  );
+  check(
+    '自动跳跃不把危险方块当台阶（否则顶着仙人掌会反复起跳）',
+    physicsSrc.includes('world.isHazardous?.(bx, vy, bz)') &&
+      physicsSrc.includes('if (top === null || hazard) return false;'),
+  );
+  check('世界侧提供 isHazardous', worldSrc.includes("blockDef(id).shape === 'cactus'"));
+  check('自动跳跃进诊断日志（用于确认"画面抖"是不是它）', appSrc.includes("diag.event('input', 'autoJump', {"));
 }
 
 console.log('\n[用户反馈一轮收口（批次 184）]');

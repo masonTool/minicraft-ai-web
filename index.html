@@ -249,6 +249,13 @@
       #hud {
         position: fixed; inset: 0; pointer-events: none;
         color: #fff; text-shadow: 1px 1px 0 rgba(0, 0, 0, .7);
+        /* 快捷栏的几何（批次 222）：生命/饥饿要**贴在它两端**，所以两边必须共用
+           同一组数字。改槽位大小时只改这三个变量，别在 `#hotbar` 与 `#vitals` 各写一份 */
+        --hotbar-slot: 42px;
+        --hotbar-gap: 3px;
+        --hotbar-pad: 4px;
+        /* 9 格 + 8 条间隙 + 两侧内边距 + 两侧 1px 边框 */
+        --hotbar-w: calc(9 * var(--hotbar-slot) + 8 * var(--hotbar-gap) + 2 * var(--hotbar-pad) + 2px);
       }
       /* 右上角一列：性能（#debug）在上、状态效果在下（批次 206）。
          用户要求"性能信息放到右上角"，而左上角留给聊天与玩家信息。 */
@@ -1050,14 +1057,14 @@
         position: absolute; left: 50%; transform: translateX(-50%);
         /* 底部安全区：刘海屏/全面屏的"home 横条"会盖住贴边的 UI */
         bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-        display: flex; gap: 3px; padding: 4px;
+        display: flex; gap: var(--hotbar-gap); padding: var(--hotbar-pad);
         background: var(--hud-bg);
         border: 1px solid var(--hud-border);
         border-radius: var(--radius-md);
         box-shadow: var(--hud-shadow), var(--hud-inner);
       }
       #hotbar .slot {
-        position: relative; width: 42px; height: 42px;
+        position: relative; width: var(--hotbar-slot); height: var(--hotbar-slot);
         display: grid; place-items: center;
         background: rgba(255, 255, 255, .10);
         border: 2px solid rgba(0, 0, 0, .38);
@@ -1134,13 +1141,22 @@
         pointer-events: none;
       }
 
-      /* ---------------- 生命 / 饥饿 / 氧气 ---------------- */
+      /* ---------------- 生命 / 饥饿 / 氧气 / 护甲 ----------------
+         批次 222（用户："生命值和饥饿值放在快捷栏的两端，不要挡住进度按钮"）：
+         两列**贴住快捷栏的左右两端**（与它同宽），中间完全让给经验条与等级数字。
+         竖向顺序照原版：护甲在心上、气泡在鸡腿上，两列**底边对齐**（心和鸡腿同一行）。 */
       #vitals {
         position: absolute; left: 50%; transform: translateX(-50%);
+        /* 在经验条（68~74px）之上，留 12px 空隙 */
         bottom: calc(86px + env(safe-area-inset-bottom, 0px));
-        display: flex; flex-direction: column; align-items: center; gap: 2px;
+        width: var(--hotbar-w);
+        display: flex; align-items: flex-end; justify-content: space-between;
+        pointer-events: none;
       }
       #vitals .vital-defs { position: absolute; width: 0; height: 0; }
+      #vitals .vital-side { display: flex; flex-direction: column; gap: 2px; }
+      /* 右列（气泡 + 鸡腿）靠右：10 个图标刚好贴住快捷栏右端 */
+      #vitals .vital-side.right { align-items: flex-end; }
       .vital-row { display: flex; gap: 1px; }
       .vital-row svg.vital-icon { width: 18px; height: 18px; display: block; }
       #vital-air { visibility: hidden; }
@@ -3128,11 +3144,11 @@
          目标：竖屏/横屏手机都能操作，且界面不溢出、热区够大。 */
       @media (max-width: 900px), (max-height: 560px) {
         #debug { font-size: 10px; line-height: 1.45; padding: 4px 6px; max-width: 46vw; }
-        #hotbar { bottom: 12px; padding: 2px; gap: 1px; }
         /* 槽位从 36 提到 44（批次 95）：触摸端要"点得准"，44px 是平台最小手势尺寸，
-           而 36px 的格子在实际操作里经常点到隔壁。9 × 44 + 间隙 ≈ 408px，430px 宽的
-           竖屏手机放得下 */
-        #hotbar .slot { width: 44px; height: 44px; }
+           而 36px 的格子在实际操作里经常点到隔壁。9 × 44 + 间隙 ≈ 410px，430px 宽的
+           竖屏手机放得下。批次 222 起尺寸统一走 `#hud` 上的变量（血条要跟着对齐） */
+        #hud { --hotbar-slot: 44px; --hotbar-gap: 1px; --hotbar-pad: 2px; }
+        #hotbar { bottom: 12px; }
         #hotbar .slot canvas { width: 36px; height: 36px; }
         #hotbar .slot .index { font-size: 9px; }
         #hotbar .slot .count { font-size: 11px; }
@@ -3207,6 +3223,14 @@
         .world-panel[data-view='create'] .world-primary { min-height: 44px; padding: 7px; }
         body.touch-mode .world-panel[data-view='create'] .world-input { padding: 7px 8px; font-size: 13px; }
         .world-panel[data-view='create'] .world-hint { margin-top: 6px; font-size: 11px; }
+      }
+
+      /* 窄屏（< 760px，背包键只能挂在快捷栏**右端上方**）：血条/饥饿整行再抬一个
+         按钮的高度，否则饥饿那 10 个图标会和背包键叠在一起。
+         ≥ 760px 时背包键摆在快捷栏右侧（见 `#touch-hotbar-inventory`），不需要这条。
+         ⚠️ 竖屏本身被"请横屏"整屏浮层挡着，这里实际只影响 667~759px 的横屏机。 */
+      @media (max-width: 759px) {
+        #vitals { bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
       }
 
       /* 竖屏手机：摇杆与按钮簇都往上收一点，给屏幕中间留出视野 */

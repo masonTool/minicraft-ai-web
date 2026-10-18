@@ -255,6 +255,27 @@ console.log('\n[自动跳跃（设置项）]');
   }
   check('雪层由台阶逻辑走上去（没有整格起跳）', snowMax < 64.2, `最高 y=${snowMax.toFixed(3)}`);
   check('雪层上最终停在 64.125', Math.abs(snowPhysics.y - 64.125) < 0.01, `y=${snowPhysics.y.toFixed(4)}`);
+
+  // 仙人掌（批次 222）：1 格高，但贴上去会掉血 → 自动跳跃不该把它当台阶。
+  // 用户反馈"顶着仙人掌走路画面一直抖"：跳上去、被挡/滑下、再跳，就是这个循环。
+  const cactusWorld: PhysicsWorld = { ...stepWorld(1), isHazardous: (x) => x >= 1 };
+  const cactus = walk(cactusWorld, true, 30);
+  check('仙人掌前不会自动跳（不把危险方块当台阶）', cactus.y < 64.01, `y=${cactus.y.toFixed(3)}`);
+  check('仙人掌前被老老实实挡住', cactus.x < 1, `x=${cactus.x.toFixed(2)}`);
+
+  // 反向断言：普通台阶仍然要跳（别把"有 hazard 判据"写成"所有台阶都不跳"）
+  const normalStep = walk(stepWorld(1), true, 30);
+  check('同一份假世界去掉 hazard 之后照旧自动跳', normalStep.y > 64.5, `y=${normalStep.y.toFixed(3)}`);
+
+  // autoJumped 标志（诊断用）：只在起跳那一帧为真
+  const flagPhysics = standOnGround();
+  const flagWorld = stepWorld(1);
+  let jumpFrames = 0;
+  for (let i = 0; i < 30; i++) {
+    flagPhysics.update(flagWorld, input({ forward: 1 }), YAW_PLUS_X, DT, false, 1, 1, true);
+    if (flagPhysics.autoJumped) jumpFrames++;
+  }
+  check('autoJumped 只在起跳那一帧为真', jumpFrames === 1, `${jumpFrames} 帧`);
 }
 
 console.log('\n[常量]');

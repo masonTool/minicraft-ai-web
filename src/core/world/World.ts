@@ -276,6 +276,18 @@ export class World {
   }
 
   /**
+   * 这一格贴上去会掉血（批次 222）：目前只有仙人掌。
+   *
+   * 物理层每帧问一次（只在"想自动跳"时问），所以按 `shape` 判一次表就够；
+   * 不做成 `BlockDef.hazard` 字段是因为它只服务这一条规则，加了反而多一处要维护的数据。
+   */
+  isHazardous(worldX: number, worldY: number, worldZ: number): boolean {
+    if (worldY < -64 || worldY >= 320) return false;
+    const id = this.getBlock(worldX, worldY, worldZ);
+    return id !== 0 && blockDef(id).shape === 'cactus';
+  }
+
+  /**
    * 物理碰撞查询：完整方块返回 'full' 快路径，非完整方块返回局部盒子列表，
    * 无碰撞返回 null。
    */

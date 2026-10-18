@@ -397,6 +397,8 @@ import {
 import { DAYLIGHT_BURN_SECONDS, FULL_SKY_LIGHT, sunBurns } from './core/world/Daylight.ts';
 // 天气播报（批次 221）：文案与"下雪还是下雨"的判据都在纯函数里（`test:weather` 逐条钉住）
 import { weatherNotice } from './core/world/WeatherState.ts';
+// 仙人掌接触判定（批次 222）：玩家被整格钳制挡在仙人掌 14/16 盒之外，判据要带一点容差
+import { touchesCactus } from './core/world/Cactus.ts';
 // 混凝土（批次 131）：粉末遇水凝固——规则是纯函数（`test:concrete` 逐条钉住）
 import { hardenAround } from './core/world/Concrete.ts';
 // 移动端降级策略（批次 130，TASKS N7）：动态分辨率 / 自适应视距 / 限帧 / 粒子总量。
@@ -9721,8 +9723,14 @@ class App {
         feet === Block.FIRE ||
         body === Block.FIRE ||
         burnsOnContact(feet, this.world.getBlockState(feetX, feetY, feetZ)),
-      // 仙人掌还没进方块表，先保持关闭（加了之后这里改成四邻检测）
-      onCactus: false,
+      // 贴着仙人掌（批次 222）：以前这里恒为 false（注释还停在"仙人掌还没进方块表"），
+      // 于是撞上去既不掉血也没有任何反馈。判据在 `world/Cactus.ts`：玩家被整格钳制
+      // 挡在 14/16 的碰撞盒之外，必须带 0.1 的横向容差才算"贴住"。
+      onCactus: touchesCactus(
+        this.world,
+        p.box(),
+        (x, y, z) => this.world.getBlock(x, y, z) === Block.CACTUS,
+      ),
       // 岩浆块（批次 121）：脚底下那一格是岩浆块 → 每秒 1 点火焰伤害。
       // 与生物那边**共用同一个算式**（`standsOnMagmaBlock`），见那里的注记
       onMagma: this.standsOnMagmaBlock(p.x, p.y, p.z),
@@ -10387,6 +10395,17 @@ class App {
           // 自动跳跃（批次 206）：飞行时不跳（`update` 里那条分支本来也不走）
           this.settings.autoJump,
         );
+        // 自动跳跃进诊断日志（批次 222）：用户反馈"顶着仙人掌走路时画面一直抖"，
+        // 静态看代码只能猜（受伤没有镜头抖动、仙人掌当时也没接线掉血）。
+        // 这条事件连成一串就说明是自动跳跃在反复起跳；只跳一次说明另有原因。
+        if (this.physics.autoJumped) {
+          diag.event('input', 'autoJump', {
+            x: Math.round(this.physics.x * 10) / 10,
+            y: Math.round(this.physics.y * 10) / 10,
+            z: Math.round(this.physics.z * 10) / 10,
+            vy: Math.round(this.physics.vy * 10) / 10,
+          });
+        }
       }
       if (this.spawnResolved && !this.pendingArrival && this.groundSettleReason === null) {
         this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);

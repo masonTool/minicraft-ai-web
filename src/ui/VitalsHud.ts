@@ -144,7 +144,16 @@ export class VitalsHud {
       this.bubbles.push({ foreground: fg });
     }
 
-    container.append(this.airRow, this.armorRow, healthRow, foodRow);
+    // 批次 222（用户："生命值和饥饿值放在快捷栏的两端，不要挡住进度按钮"）：
+    // 左列＝护甲 + 生命，右列＝气泡 + 饥饿；两列底边对齐，中间整块留给经验条。
+    // 顺序就是 DOM 顺序：护甲在心上、气泡在鸡腿上（与原版一致）。
+    const leftSide = document.createElement('div');
+    leftSide.className = 'vital-side left';
+    const rightSide = document.createElement('div');
+    rightSide.className = 'vital-side right';
+    leftSide.append(this.armorRow, healthRow);
+    rightSide.append(this.airRow, foodRow);
+    container.append(leftSide, rightSide);
   }
 
   /** 拆局：把这一套行从静态容器里摘掉 */

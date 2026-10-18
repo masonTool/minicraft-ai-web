@@ -16,6 +16,8 @@ import {
   PlayerStats,
   type SurvivalEnvironment,
 } from '../src/core/survival/PlayerStats.ts';
+import { touchesCactus } from '../src/core/world/Cactus.ts';
+import { boxAt, type CollisionWorld } from '../src/core/physics/AABB.ts';
 
 let passed = 0;
 let failed = 0;
@@ -248,6 +250,33 @@ console.log('\n[创造模式与重生]');
   check('重生恢复满状态', dead.health === MAX_HEALTH && dead.food === MAX_FOOD && dead.air === MAX_AIR && !dead.dead);
   check('重生清空疲劳值与累计伤害记录', dead.exhaustion === 0 && dead.lastDamage === null);
   check('重生也清空待播报的伤害记录', dead.takeDamageLog().length === 0);
+}
+
+console.log('\n[仙人掌接触（批次 222）]');
+{
+  // 14/16 宽的仙人掌在 (1, 64, 0)
+  const cactus: CollisionWorld = {
+    collisionAt(x, y, z) {
+      if (x === 1 && y === 64 && z === 0) return [[0.0625, 0, 0.0625, 0.9375, 1, 0.9375]] as const;
+      return null;
+    },
+  };
+  const isCactus = (x: number, y: number, z: number): boolean => x === 1 && y === 64 && z === 0;
+
+  // 玩家被整格钳制停在 x=0.6999（右边缘 0.9999），与仙人掌盒还差 1/16
+  const beside = boxAt(0.6999, 64, 0.5, 0.6, 1.8);
+  check('贴着仙人掌算接触（带 0.1 横向容差）', touchesCactus(cactus, beside, isCactus));
+
+  const far = boxAt(0.2, 64, 0.5, 0.6, 1.8);
+  check('隔着一格不算', !touchesCactus(cactus, far, isCactus));
+
+  // 站在仙人掌顶上：横向是重叠的，但脚底与盒顶只剩"贴边"——不能算贴着掉血
+  const onTop = boxAt(1.5, 65, 0.5, 0.6, 1.8);
+  check('站在顶上不掉血（容差只放大 X/Z）', !touchesCactus(cactus, onTop, isCactus));
+
+  // 方形完整方块（老形状）走 'full' 快路径也要能判
+  const fullWorld: CollisionWorld = { collisionAt: () => 'full' as const };
+  check('完整方块也走同一条判据', touchesCactus(fullWorld, boxAt(0.0, 64, 0.5, 0.6, 1.8), () => true));
 }
 
 console.log(`\n生存测试：${passed} 通过 / ${failed} 失败\n`);
