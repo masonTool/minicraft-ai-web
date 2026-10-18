@@ -27,6 +27,13 @@ import type { SerializedSign } from '../world/SignText.ts';
 import type { SerializedFrame } from '../world/ItemFrame.ts';
 import type { SerializedAdvancements } from '../progress/AdvancementTracker.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
+import { SAVE_VERSION, migratePlayer } from './SaveMigrations.ts';
+
+/**
+ * 存档结构版本（口径在 `SaveMigrations.ts`：每加一条迁移规则 +1）。
+ * 这里是**转发**，好让老调用方继续 `import { SAVE_VERSION } from './SaveGame.ts'`。
+ */
+export { SAVE_VERSION };
 
 /** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
 const DB_VERSION = 5;
@@ -65,9 +72,6 @@ const STORE_FRAMES = 'frames';
  */
 const STORE_ADVANCEMENTS = 'advancements';
 
-/** 存档结构版本：改了字段含义就要 +1，并在加载时做迁移或丢弃 */
-export const SAVE_VERSION = 1;
-
 export interface SaveMeta {
   seed: number;
   version: number;
@@ -91,7 +95,7 @@ export interface PlayerSave {
    * 游戏模式（批次 181）。
    *
    * 老存档没有这个字段 → 迁移规则：`flying === true` 视为创造，否则生存
-   *（见 `App.loadSaveState`）。之后模式与飞行各存各的：创造模式也可以是走路的。
+   *（见 `SaveMigrations` 的 v1→v2）。之后模式与飞行各存各的：创造模式也可以是走路的。
    */
   gameMode?: GameMode;
   timeOfDay: number;
@@ -236,10 +240,17 @@ export class SaveGame {
       const db = await promisify(request);
       const save = new SaveGame(db, worldId);
       save.meta = await save.readMeta();
-      // 结构版本不一致：旧存档的字段含义可能已经变了，直接当作没有存档
-      if (save.meta && save.meta.version !== SAVE_VERSION) {
-        console.warn(`[save] 存档版本 ${save.meta.version} 与当前 ${SAVE_VERSION} 不一致，按新世界处理`);
+      // 结构版本（C8 / 批次 193）：
+      //  - **比程序新** → 按新世界处理。玩家在别的设备上玩过新版本时，硬读一半字段
+      //    再写回去会把存档写坏，这比"这个存档暂时读不了"糟得多；
+      //  - **比程序旧** → 保留 meta，读玩家数据时按 `SaveMigrations` 的链逐级升上来。
+      if (save.meta && save.meta.version > SAVE_VERSION) {
+        console.warn(
+          `[save] 存档版本 ${save.meta.version} 比当前程序（${SAVE_VERSION}）新，按新世界处理`,
+        );
         save.meta = null;
+      } else if (save.meta && save.meta.version < SAVE_VERSION) {
+        console.info(`[save] 存档版本 ${save.meta.version} → ${SAVE_VERSION}，读档时按迁移规则升级`);
       }
       return save;
     } catch (error) {
@@ -287,7 +298,22 @@ export class SaveGame {
     const value = await this.transaction(STORE_PLAYER, 'readonly', (store) =>
       promisify(store.get('player') as IDBRequest<PlayerSave | undefined>),
     );
-    return value ?? null;
+    if (value === undefined || value === null) return null;
+
+    // 旧存档：按版本链升级（批次 193，C8）。`meta.version` 就是这份玩家数据的版本——
+    // 两份永远是同一次保存写下来的，所以拿它当起点。
+    const fromVersion = this.meta?.version ?? SAVE_VERSION;
+    const migrated = migratePlayer(value, fromVersion);
+    if (!migrated) {
+      console.warn(`[save] 存档 v${fromVersion} 无法迁移到 v${SAVE_VERSION}，本次按"没有玩家数据"处理`);
+      return null;
+    }
+    if (migrated.applied.length > 0) {
+      console.info(`[save] 存档已升级：${migrated.applied.join('；')}`);
+      // 让下一次自动保存写出新版本号（否则每次读档都要再迁移一遍）
+      if (this.meta) this.meta.version = SAVE_VERSION;
+    }
+    return migrated.player as unknown as PlayerSave;
   }
 
   /** 读某个区块的增量改动 */

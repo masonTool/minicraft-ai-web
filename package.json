@@ -72,6 +72,7 @@
     "test:book": "esbuild tools/book-test.ts --bundle --platform=node --format=esm --outfile=.tmp/book-test.mjs --log-level=error && node .tmp/book-test.mjs",
     "test:lectern": "esbuild tools/lectern-test.ts --bundle --platform=node --format=esm --outfile=.tmp/lectern-test.mjs --log-level=error && node .tmp/lectern-test.mjs",
     "test:firework": "esbuild tools/firework-test.ts --bundle --platform=node --format=esm --outfile=.tmp/firework-test.mjs --log-level=error && node .tmp/firework-test.mjs",
+    "test:migration": "esbuild tools/migration-test.ts --bundle --platform=node --format=esm --outfile=.tmp/migration-test.mjs --log-level=error && node .tmp/migration-test.mjs",
     "test:brewing": "esbuild tools/brewing-test.ts --bundle --platform=node --format=esm --outfile=.tmp/brewing-test.mjs --log-level=error && node .tmp/brewing-test.mjs",
     "test:throwable": "esbuild tools/throwable-test.ts --bundle --platform=node --format=esm --outfile=.tmp/throwable-test.mjs --log-level=error && node .tmp/throwable-test.mjs",
     "test:potioncloud": "esbuild tools/potion-cloud-test.ts --bundle --platform=node --format=esm --outfile=.tmp/potion-cloud-test.mjs --log-level=error && node .tmp/potion-cloud-test.mjs",
