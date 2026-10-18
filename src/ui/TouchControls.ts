@@ -10,6 +10,8 @@
  *  - 屏幕拖动：转视角
  *  - 轻点抬起：交互 / 攻击 / 放置一次（优先级由主程序决定）
  *  - 按住不放（未拖动，≥280ms）：破坏方块 / 持续攻击
+ *  - **按下即出白圈（批次 239）**：白圈跟手，主程序用它做"手指落点射线"，
+ *    不再用屏幕中央的准星决定目标（见 `aimPoint`）
  *  - **生存：右侧只有一颗跳跃键**
  *  - **创造：双击跳跃起飞 → 右侧出现上升 / 下降键**；再双击跳跃落地，升降键消失
  *  - 顶部三键：暂停 / 视角 / 聊天；快捷栏右侧：背包
@@ -67,6 +69,13 @@ export const TOUCH_USE_STILL_MS = 100;
 const USE_MOVE_SLOP = 6;
 /** 摇杆推到该比例以上自动疾跑 */
 const SPRINT_THRESHOLD = 0.92;
+/**
+ * 轻点抬手后白圈在原地停留多久（毫秒）。
+ *
+ * 长按/拖动时白圈是"跟手的锚点"，抬手就该消失；只有轻点（点一下就收）需要
+ * 留一小段让玩家确认"点到的是这里"。120ms 比一帧长、又不至于挡住下一次操作。
+ */
+const TAP_FLASH_MS = 120;
 /**
  * 双击跳跃起飞 / 双击摇杆潜行。
  * 只看两次**按下**的时间差。
@@ -144,6 +153,8 @@ export class TouchControls {
   readonly object: HTMLDivElement;
 
   private readonly lookSurface: HTMLDivElement;
+  /** 手指落点白圈（批次 239）：按下即出现、跟手；`pointer-events: none` */
+  private readonly aimRing: HTMLDivElement;
   private readonly stickBase: HTMLDivElement;
   private readonly stickKnob: HTMLDivElement;
   private readonly hint: HTMLDivElement;
@@ -184,6 +195,15 @@ export class TouchControls {
   private lookDownAt = 0;
   /** 这一次按下以来离落点的最大位移（像素）：防"慢慢滑"被当成按住不动（批次 224） */
   private lookDrift = 0;
+  /**
+   * 当前手指落点（client 坐标）——**按住中才非空**。
+   *
+   * 主程序每帧读它做"屏幕射线拾取"（批次 239）：目标不再由准星决定，
+   * 而是玩家手指底下那一点。抬手即清空（轻点那一下由主程序另记落点）。
+   */
+  private aim: { x: number; y: number } | null = null;
+  /** 轻点抬手后白圈的停留计时（`TAP_FLASH_MS`） */
+  private tapFlashTimer: number | null = null;
   private longPressTimer: number | null = null;
   private breaking = false;
 
@@ -203,6 +223,11 @@ export class TouchControls {
   ) {
     this.object = document.createElement('div');
     this.object.id = 'touch-ui';
+
+    // ---- 手指落点白圈（批次 239）：位置由 JS 的 transform 写（见 index.html 的注释）
+    // 先建它再绑手势：`trackAim` 会在 pointerdown 里立刻用到
+    this.aimRing = document.createElement('div');
+    this.aimRing.id = 'touch-ring';
 
     // ---- 视角面：铺满全屏，承接拖动与轻点/长按
     this.lookSurface = document.createElement('div');
@@ -284,9 +309,9 @@ export class TouchControls {
     this.hint = document.createElement('div');
     this.hint.id = 'touch-hint';
     this.hint.textContent =
-      '摇杆走 · 双击摇杆潜行 · 拖动看 · 轻点放 · 按住连放/挖 · 双击跳起飞（飞时出升降键）';
+      '摇杆走 · 双击摇杆潜行 · 拖动看 · 轻点放 · 按住挖/用 · 双击跳起飞（飞时出升降键）';
 
-    this.object.append(this.lookSurface, this.stickBase, buttons, pauseBar, this.hint);
+    this.object.append(this.lookSurface, this.aimRing, this.stickBase, buttons, pauseBar, this.hint);
     host.appendChild(this.object);
 
     this.mountHotbarSideButtons();
@@ -396,6 +421,16 @@ export class TouchControls {
     if (this.lookPointer === null || this.lookDragged) return false;
     if (this.lookDrift > USE_MOVE_SLOP) return false;
     return performance.now() - this.lookDownAt >= TOUCH_USE_STILL_MS;
+  }
+
+  /**
+   * 手指当前的落点（client 坐标）；**只有按住中才非空**。
+   *
+   * 主程序拿它做"屏幕射线拾取"（批次 239）：挖方块、放方块、开箱子……
+   * 全部以手指底下那一点为准，屏幕中央的准星只留作方向参考（按住时还会淡出）。
+   */
+  get aimPoint(): { x: number; y: number } | null {
+    return this.aim;
   }
 
   /** 取走本帧累积的视角增量（像素），取完即清零 */
@@ -653,6 +688,8 @@ export class TouchControls {
       this.breaking = false;
       this.zeroMoveCount = 0;
       capturePointer(this.lookSurface, event.pointerId);
+      // 批次 239：按下即出白圈，并把落点交给主程序做"手指射线"（目标不再看准星）
+      this.trackAim(point.x, point.y);
       diag.event('gesture', 'look.down', {
         pointer: event.pointerId,
         x: Math.round(point.x),
@@ -724,6 +761,8 @@ export class TouchControls {
       }
       this.lastMoveX = point.x;
       this.lastMoveY = point.y;
+      // 拖动转视角时白圈继续跟手（用户口径：目标随手实时切换）
+      this.trackAim(point.x, point.y);
     });
 
     const finish = (event: PointerEvent) => {
@@ -737,12 +776,23 @@ export class TouchControls {
       this.clearGestureTimers();
       this.zeroMoveCount = 0;
 
+      // 抬手落点：事件里偶发 (0,0) 时退回本次手势最后一次已知坐标（批次 239）——
+      // 轻点要靠这个坐标"点哪打哪"，点到 (0,0) 会落到屏幕左上角
+      const raw = pointFromEventWithSource(event, this.lookPointSource);
+      const tapX = raw.x !== 0 || raw.y !== 0 ? raw.x : this.lastMoveX;
+      const tapY = raw.x !== 0 || raw.y !== 0 ? raw.y : this.lastMoveY;
+
       if (this.breaking) {
         this.breaking = false;
+        // 按住（破坏/使用）抬手：白圈立即收起
+        this.releaseAim(false);
         this.actions.onBreakEnd();
       } else if (!this.lookDragged) {
-        // 松手早于长按阈值 → 轻点：主程序按"生物/方块/可放置点"决定攻击、交互还是放置
-        this.actions.onTap(event.clientX, event.clientY);
+        // 松手早于长按阈值 → 轻点：白圈原地闪一下，主程序按落点决定攻击/交互/放置
+        this.releaseAim(true);
+        this.actions.onTap(tapX, tapY);
+      } else {
+        this.releaseAim(false);
       }
       this.lookPointer = null;
     };
@@ -762,10 +812,55 @@ export class TouchControls {
     }
   }
 
+  /**
+   * 更新手指落点并让白圈跟着走（批次 239）。
+   *
+   * 落点同时是主程序的取目标依据（`aimPoint`），所以按下与每一次 move 都要走这里。
+   * 用 `transform` 而不是 `left/top`：后者每帧触发布局，手机上是白给的帧开销。
+   */
+  private trackAim(x: number, y: number): void {
+    this.clearTapFlash();
+    this.aim = { x, y };
+    this.aimRing.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    this.aimRing.classList.add('visible');
+    document.body.classList.add('touch-aiming');
+  }
+
+  /**
+   * 收起落点与白圈。
+   *
+   * @param linger 轻点抬手时先停 `TAP_FLASH_MS` 再淡出（"点到的是这里"的反馈）；
+   *               按住结束 / 拖动结束 / 界面打开都传 false，立即消失。
+   *               ⚠️ 停留期间 `aimPoint` 已经是 null——那 120ms 只是画面，
+   *                  不能让主程序继续拿旧落点去挖方块。
+   */
+  private releaseAim(linger: boolean): void {
+    this.aim = null;
+    this.clearTapFlash();
+    if (linger) {
+      this.tapFlashTimer = window.setTimeout(() => {
+        this.tapFlashTimer = null;
+        this.aimRing.classList.remove('visible');
+        document.body.classList.remove('touch-aiming');
+      }, TAP_FLASH_MS);
+      return;
+    }
+    this.aimRing.classList.remove('visible');
+    document.body.classList.remove('touch-aiming');
+  }
+
+  private clearTapFlash(): void {
+    if (this.tapFlashTimer === null) return;
+    clearTimeout(this.tapFlashTimer);
+    this.tapFlashTimer = null;
+  }
+
   private cancelLook(): void {
     this.clearGestureTimers();
     this.lookPointer = null;
     this.lookDragged = false;
+    // 界面打开 / 手势作废：落点与白圈一起收起（批次 239）
+    this.releaseAim(false);
     if (!this.breaking) return;
     this.breaking = false;
     this.actions.onBreakEnd();

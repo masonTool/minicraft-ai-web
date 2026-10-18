@@ -625,6 +625,14 @@ const UNSUPPORTED_GL_ERROR = 'unsupported-gl';
 let lastRendererFailure: GlSupportFail | null = null;
 
 /**
+ * 触摸瞄准时命中面高亮的强度倍数（批次 239）。
+ *
+ * 准星那一路是 1（0.08，淡到"只是提示"）；手指落点取目标时没有准星做参考，
+ * 提到 2 倍（0.16）才看得清打的是哪一面，同时仍不盖住方块贴图。
+ */
+const TOUCH_HIGHLIGHT_STRENGTH = 2;
+
+/**
  * ---------------------------------------------------------------- App 类的段落目录
  *
  * 这个类很长（约 7000 行），**不要整份读**。它内部按职责分了段，每段的开头都有一行
@@ -955,6 +963,18 @@ class App {
    * 由 `updateAttacking` 统一结算（与准星那条路共用冷却/伤害/耐久）。
    */
   private tapAttackMob: Mob | null = null;
+  /**
+   * 触摸端"轻点抬手"的落点（批次 239），只活到下一次 `updateInteraction` 结束。
+   *
+   * 原来轻点的坐标只用于"点生物"；现在方块目标也由它决定——抬手时手指已经离开，
+   * `touch.aimPoint` 是空的，只能靠这里把落点带进下一帧。
+   */
+  private touchTapPoint: { x: number; y: number } | null = null;
+  /** `#target-info` 是否挂在手指上方（true = 已加 `.pinned`） */
+  private targetPinned = false;
+  /** 上一次写进 `#target-info` 的锚点（取整后比较，避免每帧重写样式） */
+  private targetAnchorX = Number.NaN;
+  private targetAnchorY = Number.NaN;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   /**
@@ -1829,6 +1849,8 @@ class App {
       // 轻点抬起（批次 181）：**先看准星下有没有生物**——
       // 有就是攻击（生物不是可放置面），没有才走"交互 / 放置一次"那条老路
       onTap: (clientX: number, clientY: number) => {
+        // 批次 239：记下这一下的落点——**方块目标**也改由它决定（不只是生物）
+        this.touchTapPoint = { x: clientX, y: clientY };
         // 批次 185：先按**手指落点**找生物（点哪打哪），准星那条路作兜底
         const tapped = this.mobAtScreen(clientX, clientY);
         this.tapAttackMob = tapped;
@@ -2120,6 +2142,7 @@ class App {
     this.touchPlaceRequest = false;
     this.tapAttackRequest = false;
     this.tapAttackMob = null;
+    this.touchTapPoint = null;
     // 触摸端：界面打开时收起操作层；关闭时显式清一次手势状态，
     // 否则关面板那一瞬间按在屏幕上的手指会带着旧基准继续转视角
     if (this.touch) {
@@ -3640,30 +3663,40 @@ class App {
     // （睡觉时必须挡住破坏/放置：不然躺着还能拆自家床）
     if (this.uiOpen || this.sleeping) {
       this.hit = null;
+      this.touchTapPoint = null;
       this.outline.hide();
       this.blockOverlay.hide();
+      this.updateTargetAnchor(null);
       return;
     }
 
-    const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
-    this.hit = raycastVoxels(
-      (x, y, z) => this.isCrosshairTarget(x, y, z),
-      this.physics.x,
-      this.physics.eyeY,
-      this.physics.z,
-      dx,
-      dy,
-      dz,
-      REACH,
-    );
+    // 触摸端（批次 239）：**按下的手指 / 刚抬手的落点**决定目标，准星只做兜底。
+    // 桌面键鼠永远走准星那一条，行为与以前完全一致。
+    const screenAim = this.touch?.aimPoint ?? this.touchTapPoint;
+    if (screenAim) {
+      this.hit = this.hitAtScreen(screenAim.x, screenAim.y);
+    } else {
+      const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
+      this.hit = raycastVoxels(
+        (x, y, z) => this.isCrosshairTarget(x, y, z),
+        this.physics.x,
+        this.physics.eyeY,
+        this.physics.z,
+        dx,
+        dy,
+        dz,
+        REACH,
+      );
+    }
+    const touchAim = screenAim !== null;
 
     if (this.hit) {
       const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
       const state = this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z);
-      this.outline.show(id, state, blockDef(id).shape, this.hit.x, this.hit.y, this.hit.z);
+      const shape = blockDef(id).shape;
+      this.outline.show(id, state, shape, this.hit.x, this.hit.y, this.hit.z);
 
       // 破坏裂纹：进度 0~1 映射到 0~(DAMAGE_STAGES-1) 段（原版 10 段）
-      const shape = blockDef(id).shape;
       if (this.forcedDamageStage >= 0) {
         // 验收脚本强制指定的阶段（截图对比用，与真实挖掘解耦）
         this.blockOverlay.showDamage(this.hit.x, this.hit.y, this.hit.z, shape, state, this.forcedDamageStage);
@@ -3673,15 +3706,31 @@ class App {
       } else {
         this.blockOverlay.hideDamage();
       }
-      // 命中面高亮：让玩家看清这一下打在哪一面
-      this.blockOverlay.showHighlight(this.hit.x, this.hit.y, this.hit.z, [this.hit.nx, this.hit.ny, this.hit.nz]);
+      // 命中面高亮 + 整块微光：让玩家看清这一下打在哪一面
+      // （触摸取目标时没有准星做参考，亮一档，并给整个方块一层淡光）
+      if (touchAim) {
+        this.blockOverlay.showGlow(this.hit.x, this.hit.y, this.hit.z, shape, state);
+        this.blockOverlay.showHighlight(
+          this.hit.x,
+          this.hit.y,
+          this.hit.z,
+          [this.hit.nx, this.hit.ny, this.hit.nz],
+          TOUCH_HIGHLIGHT_STRENGTH,
+        );
+      } else {
+        this.blockOverlay.hideGlow();
+        this.blockOverlay.showHighlight(this.hit.x, this.hit.y, this.hit.z, [this.hit.nx, this.hit.ny, this.hit.nz]);
+      }
     } else {
       this.outline.hide();
       this.blockOverlay.hide();
     }
 
+    // 目标名的锚点：触摸瞄准时挂到手指上方（文字仍是 5Hz，锚点每帧跟手）
+    this.updateTargetAnchor(screenAim);
+
     // 准星目标名称（批次 181）：5Hz 刷新，避免每帧写 DOM
-    this.updateTargetInfo(dt);
+    this.updateTargetInfo(dt, touchAim);
 
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
@@ -3695,6 +3744,13 @@ class App {
     // 拉弓也放在放置之后：准星对着功能方块时右键那一下归方块
     this.updateBow(dt);
     this.hand.setDrawPull(this.bowCharge);
+    // 轻点是一次性的：
+    //  · 落点只活这一帧——破坏/放置/进食/拉弓都已经在上面读过 `this.hit` 了；
+    //  · 这一帧没被消费的放置请求（点到空气 / 太远 / 冷却中）也必须作废。
+    //    留着它就等于让它落到**下一帧的准星**上——手机上看就是"点了空气，
+    //    屏幕中央却冒出一个方块"，而这一批改的正是"不再用准星定位"。
+    if (this.touchTapPoint) this.touchPlaceRequest = false;
+    this.touchTapPoint = null;
   }
 
   /**
@@ -3703,8 +3759,11 @@ class App {
    * 手机上没有鼠标悬停，玩家指着方块时无从判断它是什么；这里把
    * 方块的**中文名**、或生物的**名字 + 血量**放在准星正下方。
    * 5Hz 刷新：准星扫过一片方块时不会每帧重建文本节点。
+   *
+   * @param touchAim 触摸端正用手指取目标（批次 239）：这时标签挂在手指上方，
+   *                 生物信息不参与——生物那一路仍以准星判定（Tap 攻击另有 `mobAtScreen`）
    */
-  private updateTargetInfo(dt: number): void {
+  private updateTargetInfo(dt: number, touchAim = false): void {
     this.targetInfoTimer -= dt;
     if (this.targetInfoTimer > 0) return;
     this.targetInfoTimer = 0.2;
@@ -3713,7 +3772,7 @@ class App {
       this.setTargetInfo('');
       return;
     }
-    const mob = this.mobUnderCrosshair();
+    const mob = touchAim ? null : this.mobUnderCrosshair();
     if (mob && !mob.dead) {
       const health = Math.max(0, Math.ceil(mob.health));
       this.setTargetInfo(`${mob.type.name}  ${health}/${mob.type.health}`);
@@ -3731,6 +3790,39 @@ class App {
     this.targetInfoText = text;
     this.targetInfoEl.textContent = text;
     this.targetInfoEl.classList.toggle('hidden', text.length === 0);
+  }
+
+  /**
+   * 目标名的锚点（批次 239）。
+   *
+   * 准星藏起来之后，把"这是什么"留在屏幕正中会让人以为还在看准星；
+   * 触摸瞄准时挂到手指（白圈）正上方，松手再回到准星下方。
+   * 只在取整后的坐标变化时写样式——手指不动就不重排。
+   */
+  private updateTargetAnchor(aim: { x: number; y: number } | null): void {
+    if (!aim) {
+      if (!this.targetPinned) return;
+      this.targetPinned = false;
+      this.targetAnchorX = Number.NaN;
+      this.targetAnchorY = Number.NaN;
+      this.targetInfoEl.classList.remove('pinned');
+      this.targetInfoEl.style.left = '';
+      this.targetInfoEl.style.top = '';
+      return;
+    }
+    const x = Math.round(aim.x);
+    // 白圈半径 23（乘触摸缩放）+ 一点余量，标签底边落在圈上方；
+    // 手指贴到屏幕上沿时把标签压回可视区内，别让它跑出屏幕
+    const y = Math.round(Math.max(18, aim.y - 28));
+    if (!this.targetPinned) {
+      this.targetPinned = true;
+      this.targetInfoEl.classList.add('pinned');
+    }
+    if (x === this.targetAnchorX && y === this.targetAnchorY) return;
+    this.targetAnchorX = x;
+    this.targetAnchorY = y;
+    this.targetInfoEl.style.left = `${x}px`;
+    this.targetInfoEl.style.top = `${y}px`;
   }
 
   /**
@@ -4004,6 +4096,51 @@ class App {
     const dz = hit.entity.z - this.physics.z;
     if (Math.hypot(dx, dz) > ATTACK_RANGE + 1) return null;
     return hit.entity;
+  }
+
+  /**
+   * 屏幕坐标 → 射线 → 方块目标（批次 239，触摸端"点哪打哪"）。
+   *
+   * 用户口径："不再用光标来定位操作目标，用屏幕内按下的位置。"
+   * 与 `mobAtScreen` 同一套反投影；差别是这里打的是**方块**（体素射线），
+   * 并且必须把射程换算回"从眼睛算起"，否则第三人称（相机在身后 4 格）会白送距离。
+   *
+   * ⚠️ `updateInteraction` 在 `updateCamera` 之后、`render` 之前调用，此时相机的
+   *    `matrixWorld` 还停在上一次绘制——必须手动 `updateMatrixWorld()`，
+   *    否则反投影用的是"上一帧的镜头"，手指移动时目标会慢半拍。
+   */
+  private hitAtScreen(clientX: number, clientY: number): RayHit | null {
+    const canvas = this.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const ndc = new THREE.Vector3(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -(((clientY - rect.top) / rect.height) * 2 - 1),
+      0.5,
+    );
+    this.camera.updateMatrixWorld();
+    const origin = this.camera.position.clone();
+    const dir = ndc.unproject(this.camera).sub(origin).normalize();
+    const eye = new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z);
+    const hit = raycastVoxels(
+      (x, y, z) => this.isCrosshairTarget(x, y, z),
+      origin.x,
+      origin.y,
+      origin.z,
+      dir.x,
+      dir.y,
+      dir.z,
+      REACH + origin.distanceTo(eye),
+    );
+    if (!hit) return null;
+    // 射程按"眼睛到命中点"卡：屏幕上点得着、人却够不着的方块不算数
+    const eyeDistance = Math.hypot(hit.hitX - eye.x, hit.hitY - eye.y, hit.hitZ - eye.z);
+    if (eyeDistance > REACH + 0.05) return null;
+    // `RayHit.distance` 的语义是"射线起点到命中面"。这里改成到眼睛的距离，
+    // 免得 `mobUnderCrosshair` 用 `this.hit.distance < hit.distance` 比远近时
+    // 在第三人称下把方块判得更近（相机在身后，多出的那 4 格会把比较算歪）。
+    hit.distance = eyeDistance;
+    return hit;
   }
 
   /**

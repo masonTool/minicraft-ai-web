@@ -5,6 +5,9 @@
  *  - **破坏裂纹**：把方块六个面各贴一遍裂纹贴图，按破坏进度换 0~9 阶段的贴图
  *  - **命中面高亮**：只在准星打到的那一个面上贴一层很淡的白色，让玩家看清"这一下会打在哪一面"
  *    （原版没有这个，属于本项目的可读性增强，所以做得非常淡）
+ *  - **整块微光**（批次 239）：触摸端改为"手指落点取目标"后，光靠一条命中面玩家不容易
+ *    在手指底下认出是哪一格，于是再给整个方块贴一层极淡的**加法**白光（背面被深度挡掉）
+ *  - 后两者的强度由调用方给：触摸瞄准更明显，准星那套维持原来的很淡
  *
  * 关键实现点：
  *  1. 贴图 UV 用 uniform 传（`uTileOrigin` + `uTileSpan`），顶点里只存 0~1 的局部 UV，
@@ -26,6 +29,12 @@ const INFLATE = 0.002;
 
 /** 命中面高亮再往外一点（它贴在裂纹下面，两者同时出现时不能打架） */
 const HIGHLIGHT_OFFSET = 0.004;
+
+/** 命中面高亮的基准不透明度（准星那套"很淡"的口径） */
+const HIGHLIGHT_BASE_OPACITY = 0.08;
+
+/** 整块微光的不透明度（触摸瞄准用；加法混合，10% 已经是"看得出亮、不糊贴图"） */
+const GLOW_OPACITY = 0.1;
 
 type Vec3 = readonly [number, number, number];
 
@@ -96,8 +105,9 @@ export class BlockOverlay {
   private readonly damageUniforms: Record<string, THREE.IUniform>;
   private readonly highlightMesh: THREE.Mesh;
   private readonly highlightGeometry: THREE.BufferGeometry;
+  /** 整块微光（批次 239）：触摸瞄准时给整个方块贴一层淡淡的加法白光 */
+  private readonly glowMesh: THREE.Mesh;
   private readonly cache = new Map<string, THREE.BufferGeometry>();
-  private currentKey = '';
   /** 当前贴出来的裂纹阶段（验收脚本用） */
   private lastStage = -1;
 
@@ -150,7 +160,8 @@ export class BlockOverlay {
       color: 0xffffff,
       transparent: true,
       // 很淡：它只是"告诉玩家打的是哪一面"，不能盖住方块本身的贴图与裂纹
-      opacity: 0.08,
+      // （触摸瞄准时由 `showHighlight` 的 strength 调高到 ~0.16）
+      opacity: HIGHLIGHT_BASE_OPACITY,
       depthWrite: false,
       side: THREE.DoubleSide,
       polygonOffset: true,
@@ -161,7 +172,24 @@ export class BlockOverlay {
     this.highlightMesh.frustumCulled = false;
     this.highlightMesh.visible = false;
 
-    this.object.add(this.damageMesh, this.highlightMesh);
+    // ---- 整块微光（批次 239）：加法混合，背面被方块自身深度挡掉，只亮"看得见的那几面"
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: GLOW_OPACITY,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    this.glowMesh = new THREE.Mesh(new THREE.BufferGeometry(), glowMaterial);
+    this.glowMesh.frustumCulled = false;
+    this.glowMesh.visible = false;
+
+    this.object.add(this.damageMesh, this.highlightMesh, this.glowMesh);
   }
 
   /**
@@ -171,32 +199,27 @@ export class BlockOverlay {
   showDamage(x: number, y: number, z: number, shape: BlockShape, state: number, stage: number): void {
     const clamped = Math.max(0, Math.min(DAMAGE_STAGES - 1, Math.floor(stage)));
     this.lastStage = clamped;
-    const key = `${shape}:${state & 0xff}`;
-    if (key !== this.currentKey) {
-      this.currentKey = key;
-      let geometry = this.cache.get(key);
-      if (!geometry) {
-        const boxes = collisionBoxes(shape, state);
-        geometry = buildBoxGeometry(boxes.length > 0 ? boxes : meshBoxes(shape, state));
-        this.cache.set(key, geometry);
-      }
-      this.damageMesh.geometry = geometry;
-    }
+    this.damageMesh.geometry = this.geometryFor(shape, state);
 
     const origin = this.atlas.tileOrigin(`destroy_stage_${clamped}`);
     (this.damageUniforms.uTileOrigin!.value as THREE.Vector2).set(origin[0], origin[1]);
     this.damageMesh.position.set(x, y, z);
     this.damageMesh.visible = true;
-    this.object.visible = true;
+    this.syncVisible();
   }
 
   hideDamage(): void {
     this.damageMesh.visible = false;
-    if (!this.highlightMesh.visible) this.object.visible = false;
+    this.syncVisible();
   }
 
-  /** 高亮准星命中的那一个面 */
-  showHighlight(x: number, y: number, z: number, normal: Vec3): void {
+  /**
+   * 高亮命中的那一个面。
+   *
+   * @param strength 不透明度倍数：准星那一路用 1（很淡）；触摸端"手指取目标"用 2，
+   *                 因为手指底下没有准星做参考，得让玩家一眼看清打的是哪一面。
+   */
+  showHighlight(x: number, y: number, z: number, normal: Vec3, strength = 1): void {
     const face = FACES.find(
       (candidate) =>
         candidate.dir[0] === Math.sign(normal[0]) &&
@@ -226,19 +249,59 @@ export class BlockOverlay {
     this.highlightGeometry.setIndex([0, 1, 2, 0, 2, 3]);
     this.highlightGeometry.computeBoundingSphere();
 
+    const material = this.highlightMesh.material as THREE.MeshBasicMaterial;
+    material.opacity = Math.min(1, HIGHLIGHT_BASE_OPACITY * strength);
+
     this.highlightMesh.position.set(x, y, z);
     this.highlightMesh.visible = true;
-    this.object.visible = true;
+    this.syncVisible();
   }
 
   hideHighlight(): void {
     this.highlightMesh.visible = false;
-    if (!this.damageMesh.visible) this.object.visible = false;
+    this.syncVisible();
+  }
+
+  /**
+   * 整块微光（批次 239）：触摸端用手指取目标时显示。
+   *
+   * 几何体与破坏裂纹共用同一份缓存（同一个 `(shape, state)` 只建一次），
+   * 所以这里只换引用、不新建。
+   */
+  showGlow(x: number, y: number, z: number, shape: BlockShape, state: number): void {
+    this.glowMesh.geometry = this.geometryFor(shape, state);
+    this.glowMesh.position.set(x, y, z);
+    this.glowMesh.visible = true;
+    this.syncVisible();
+  }
+
+  hideGlow(): void {
+    this.glowMesh.visible = false;
+    this.syncVisible();
   }
 
   hide(): void {
     this.hideDamage();
     this.hideHighlight();
+    this.hideGlow();
+  }
+
+  /** 三个子网格任一可见，整组才可见（省一次无意义的绘制调用） */
+  private syncVisible(): void {
+    this.object.visible =
+      this.damageMesh.visible || this.highlightMesh.visible || this.glowMesh.visible;
+  }
+
+  /** 按 `(shape, state)` 取（或建）一份"每个面一个四边形"的几何体 */
+  private geometryFor(shape: BlockShape, state: number): THREE.BufferGeometry {
+    const key = `${shape}:${state & 0xff}`;
+    let geometry = this.cache.get(key);
+    if (!geometry) {
+      const boxes = collisionBoxes(shape, state);
+      geometry = buildBoxGeometry(boxes.length > 0 ? boxes : meshBoxes(shape, state));
+      this.cache.set(key, geometry);
+    }
+    return geometry;
   }
 
   /** 验收脚本用：当前贴的是哪一张裂纹贴图（-1 = 没显示） */
@@ -250,6 +313,15 @@ export class BlockOverlay {
     return this.highlightMesh.visible;
   }
 
+  /** 验收脚本用：当前命中面高亮的不透明度（触摸瞄准应该比准星那套更亮） */
+  get highlightOpacity(): number {
+    return (this.highlightMesh.material as THREE.MeshBasicMaterial).opacity;
+  }
+
+  get glowVisible(): boolean {
+    return this.glowMesh.visible;
+  }
+
   dispose(): void {
     for (const geometry of this.cache.values()) geometry.dispose();
     this.cache.clear();
@@ -257,6 +329,8 @@ export class BlockOverlay {
     (this.damageMesh.material as THREE.Material).dispose();
     this.highlightGeometry.dispose();
     (this.highlightMesh.material as THREE.Material).dispose();
+    // 微光与裂纹共用缓存几何体（上面已经 dispose 过），这里只释放材质
+    (this.glowMesh.material as THREE.Material).dispose();
   }
 }
 

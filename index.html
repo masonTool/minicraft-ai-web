@@ -295,6 +295,9 @@
         position: absolute; left: 50%; top: 50%;
         width: 20px; height: 20px; transform: translate(-50%, -50%);
         opacity: .85; mix-blend-mode: difference;
+        /* 触摸端按住时淡出（`body.touch-aiming`）：目标改由手指落点决定，
+           屏幕中央再挂一个十字只会跟白圈抢"我在瞄哪"。 */
+        transition: opacity .12s linear;
       }
       #crosshair::before, #crosshair::after {
         content: ''; position: absolute; background: #fff;
@@ -306,6 +309,8 @@
         position: fixed; left: 50%; top: calc(50% + 24px);
         transform: translateX(-50%);
         z-index: 7; pointer-events: none;
+        /* 触摸按住时改由 JS 写 left/top 跟到白圈上方（加 `.pinned` 换锚点） */
+        transition: opacity .12s linear;
         padding: 2px 7px;
         background: rgba(0, 0, 0, .55);
         color: #f0f0f0;
@@ -314,6 +319,8 @@
         text-shadow: 1px 1px 0 #000;
       }
       #target-info.hidden { display: none; }
+      /* 触摸瞄准：标签挂在白圈正上方，而不是屏幕中央 */
+      #target-info.pinned { transform: translate(-50%, -100%); }
 
       /* ---------------- 主菜单（批次 109：对齐原版"标题页"的样子） ----------------
          原版基岩版的标题页**没有面板框**：标题 + 一列按钮直接浮在暗色石纹背景上。
@@ -2999,7 +3006,7 @@
          `visibility: hidden`（保留布局，不重排、也不拆层）；视角面本身留着，
          但 `pointer-events: none`，免得面板外的点击漏到游戏里。
          转视角另有 `TouchControls#setEnabled(!uiOpen)` 挡着，双保险。 */
-      #touch-ui.ui-off > :is(#touch-stick, #touch-buttons, #touch-pause, #touch-hint) {
+      #touch-ui.ui-off > :is(#touch-ring, #touch-stick, #touch-buttons, #touch-pause, #touch-hint) {
         visibility: hidden;
       }
       #touch-ui.ui-off #touch-look { pointer-events: none; }
@@ -3009,6 +3016,30 @@
         position: absolute; inset: 0;
         pointer-events: auto; touch-action: none;
       }
+
+      /* ---------------- 手指落点白圈 ----------------
+         触摸端"点哪打哪"的视觉锚点：按下即出现在手指下，拖动时跟手。
+         尺寸跟着 `--touch-scale`（与摇杆/按钮同一个设置项），位置用 JS 的
+         `transform` 写，**不能**用 `left/top`——每帧改 left/top 会触发布局。
+         `position: fixed` 是必须的：#touch-ui 有安全区 padding，absolute 会整体偏移。 */
+      #touch-ring {
+        position: fixed; left: 0; top: 0;
+        width: calc(46px * var(--touch-scale, 1));
+        height: calc(46px * var(--touch-scale, 1));
+        margin-left: calc(-23px * var(--touch-scale, 1));
+        margin-top: calc(-23px * var(--touch-scale, 1));
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, .92);
+        /* 外层暗影保证在雪地/亮天空上也看得见，内层微光是"圈"的厚度感 */
+        box-shadow: 0 0 8px rgba(0, 0, 0, .35), inset 0 0 6px rgba(255, 255, 255, .28);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .10s linear;
+        will-change: transform, opacity;
+      }
+      #touch-ring.visible { opacity: 1; }
+      /* 手指按住 = 目标由手指决定：准星完全收起（用户口径："彻底不以光标定位"） */
+      body.touch-aiming #crosshair { opacity: 0; }
 
       #touch-stick {
         position: absolute; left: 22px; bottom: 96px;

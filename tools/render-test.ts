@@ -366,10 +366,21 @@ console.log('\n[破坏裂纹与命中面高亮（G2/G3）]');
 
   overlay.showHighlight(1, 2, 3, [0, 1, 0]);
   check('命中面高亮可以单独显示', overlay.highlightVisible && overlay.damageStage === -1);
+  check('准星那一路维持很淡（0.08）', Math.abs(overlay.highlightOpacity - 0.08) < 1e-6);
   overlay.showHighlight(1, 2, 3, [5, 0, 0]);
   check('法线只取符号（不必是单位向量）', overlay.highlightVisible);
+  // 批次 239：触摸端用手指取目标，没有准星做参考 → 命中面亮一档
+  overlay.showHighlight(1, 2, 3, [0, 1, 0], 2);
+  check('触摸瞄准亮一档（0.16）', Math.abs(overlay.highlightOpacity - 0.16) < 1e-6);
+
+  overlay.showGlow(1, 2, 3, 'cube', 0);
+  check('整块微光可以单独显示', overlay.glowVisible && overlay.damageStage === -1);
+  overlay.hideGlow();
+  check('微光可以单独收起', !overlay.glowVisible);
+  overlay.showGlow(1, 2, 3, 'cube', 0);
+  overlay.showDamage(1, 2, 3, 'cube', 0, 3);
   overlay.hide();
-  check('hide 一次性收起两者', !overlay.highlightVisible && overlay.damageStage === -1);
+  check('hide 一次性收起三者', !overlay.highlightVisible && !overlay.glowVisible && overlay.damageStage === -1);
   overlay.dispose();
 }
 

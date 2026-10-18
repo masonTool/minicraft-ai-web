@@ -1345,6 +1345,42 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
     '一次性攻击请求由 updateAttacking 统一消费（冷却/暴击/附魔不分叉）',
     mainSource.includes('const tapped = this.tapAttackRequest'),
   );
+
+  // 批次 239：触摸端"点哪打哪"——白圈跟手，方块目标改由手指落点决定
+  const indexSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  check(
+    '按下即出白圈，白圈用 fixed + transform 跟手（安全区 padding 不会带偏）',
+    indexSource.includes('#touch-ring {') &&
+      indexSource.includes('position: fixed; left: 0; top: 0;') &&
+      source.includes("this.aimRing.id = 'touch-ring'") &&
+      source.includes('translate3d(${x}px, ${y}px, 0)'),
+  );
+  check(
+    '按住时准星完全收起（目标不再看光标）',
+    indexSource.includes('body.touch-aiming #crosshair { opacity: 0; }') &&
+      source.includes("document.body.classList.add('touch-aiming')"),
+  );
+  check(
+    '轻点抬手白圈原地闪一下（长按/拖动抬手立即收起）',
+    source.includes('const TAP_FLASH_MS = 120;') &&
+      source.includes('this.releaseAim(true);') &&
+      source.includes('this.releaseAim(false);'),
+  );
+  check(
+    '主程序用按住中的落点做方块射线（准星只是兜底）',
+    source.includes('get aimPoint()') &&
+      mainSource.includes('const screenAim = this.touch?.aimPoint ?? this.touchTapPoint;') &&
+      mainSource.includes('this.hit = this.hitAtScreen(screenAim.x, screenAim.y);'),
+  );
+  check(
+    '射程按"眼睛到命中点"卡，第三人称不白送距离',
+    mainSource.includes('REACH + origin.distanceTo(eye)') &&
+      mainSource.includes('if (eyeDistance > REACH + 0.05) return null;'),
+  );
+  check(
+    '触摸瞄准时命中面更亮 + 整块微光（准星那一路不变）',
+    mainSource.includes('TOUCH_HIGHLIGHT_STRENGTH,') && mainSource.includes('this.blockOverlay.showGlow('),
+  );
   // 切模式/开关界面/失焦时要清手势，否则另一根手指的旧基准会把摇杆和视角带歪
   check('切飞行前清手势', mainSource.includes("this.touch?.resetInput('flying')"));
   check('界面开关与失焦也清手势', mainSource.includes("'ui.open' : 'ui.close'") && mainSource.includes("resetInput('blur')"));
@@ -2010,8 +2046,8 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
       !touchSrc.includes("this.object.classList.toggle('hidden', !value)"),
   );
   check(
-    'ui-off 只藏摇杆/按钮/暂停条/提示，视角面改成不吃事件（不改布局）',
-    /#touch-ui\.ui-off > :is\(#touch-stick, #touch-buttons, #touch-pause, #touch-hint\) \{[\s\S]{0,80}visibility: hidden;/.test(
+    'ui-off 只藏摇杆/按钮/暂停条/提示/白圈，视角面改成不吃事件（不改布局）',
+    /#touch-ui\.ui-off > :is\(#touch-ring, #touch-stick, #touch-buttons, #touch-pause, #touch-hint\) \{[\s\S]{0,80}visibility: hidden;/.test(
       pageCss,
     ) && /#touch-ui\.ui-off #touch-look \{ pointer-events: none; \}/.test(pageCss),
   );
