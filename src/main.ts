@@ -1242,6 +1242,8 @@ class App {
    * 于是 5 秒一次的采样读到的永远是最后那趟叠画（1 call / 12 tris）。
    */
   private readonly lastWorldDraw = { calls: 0, tris: 0 };
+  /** 上一次光照队列来源计数（批次 217，诊断用） */
+  private lastLightStats = { self: 0, border: 0, change: 0, readded: 0 };
   /** 手机背板画到 1.5 而不是 2：填充率大约少一半，自适应仍可在这顶下面升降 */
   private readonly pixelRatioCap = isTouchDevice() ? MOBILE_PIXEL_RATIO_CAP : DESKTOP_PIXEL_RATIO_CAP;
   /** 调试用：把帧时间固定成这个值（毫秒），0 表示用真实值。验收脚本靠它稳定复现"掉帧" */
@@ -9897,6 +9899,23 @@ class App {
       cpu: phases.total,
       phases: phases.avg,
     });
+
+    // 光照队列积压时记一条"谁在灌"（批次 217）。
+    // 真机日志里它涨到 820 万格、`chunks` 段 74ms/帧、12fps，
+    // 但只看 `lightQueue` 判断不了来源：区块加载播种 / 边界列 / 改方块引发的重扩散，
+    // 这三条路要动的地方完全不同，所以把 5 秒内的增量分别记下来。
+    const pending = this.world.lightWorkCount;
+    if (pending > 20_000) {
+      const now = this.world.lightPushStats;
+      diag.event('perf', 'light', {
+        pending,
+        self: now.self - this.lastLightStats.self,
+        border: now.border - this.lastLightStats.border,
+        change: now.change - this.lastLightStats.change,
+        readded: now.readded - this.lastLightStats.readded,
+      });
+    }
+    this.lastLightStats = { ...this.world.lightPushStats };
   }
 
   /**

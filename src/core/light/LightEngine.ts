@@ -42,14 +42,34 @@ const HORIZONTAL: readonly (readonly [number, number])[] = [
   [0, -1],
 ];
 
-/** 队列消费后回收空间的阈值（元素个数） */
-const COMPACT_THRESHOLD = 24576;
+/**
+ * 队列消费后回收空间的阈值：**剩下的元素少于这么多时**才丢掉已消费的前缀。
+ *
+ * ⚠️ 批次 217：原来的判据是 `head > 24576`（元素数 = 8192 格），它只看"消费了多少"，
+ * 不看"还剩多少"。队列一旦涨到几百万格，就变成**每 2~3 帧把几十 MB 的数组 slice 一次**：
+ * 真机日志（792×360，光照队列 820 万格）里 `chunks` 段 74ms/帧、堆 1GB、12fps 全是它。
+ * 现在按"剩余量"判断：拷贝量 ≤ 12k 个数字，而且一整轮队列只发生一次（均摊 O(1)/格）。
+ */
+const COMPACT_TAIL = 3 * 4096;
 
 export class LightEngine {
   private skyQueue: number[] = [];
   private blockQueue: number[] = [];
   private skyHead = 0;
   private blockHead = 0;
+
+  /**
+   * 队列"谁在灌"的累计计数（批次 217，诊断用）。
+   *
+   * 真机日志里队列涨到 **820 万格**，但只看总数判断不了来源：
+   * 是"区块加载播种"、"改方块引发的移除/重扩散"，还是"边界列无条件入队"。
+   * 主程序每 5 秒取一次差值，积压时记一条 `perf/light`。
+   */
+  private readonly pushes = { self: 0, border: 0, change: 0, readded: 0 };
+
+  get pushStats(): Readonly<{ self: number; border: number; change: number; readded: number }> {
+    return this.pushes;
+  }
 
   constructor(private readonly world: LightAccessor) {}
 
@@ -168,6 +188,7 @@ export class LightEngine {
           const sky = chunk.getSkyLight(x, y, z);
           if (sky > 1 && LightEngine.needsSpread(chunk, x, y, z, sky)) {
             this.skyQueue.push(originX + x, y, originZ + z);
+            this.pushes.self++;
           }
           const id = chunk.get(x, y, z);
           if (id !== 0) {
@@ -176,6 +197,7 @@ export class LightEngine {
             if (emit > 0) {
               chunk.setBlockLight(x, y, z, emit);
               this.blockQueue.push(originX + x, y, originZ + z);
+              this.pushes.self++;
             }
           }
         }
@@ -200,11 +222,26 @@ export class LightEngine {
       for (let t = 0; t < 16; t++) {
         const x = dirX !== 0 ? fixedX : t;
         const z = dirZ !== 0 ? fixedZ : t;
-        if (neighbor.getSkyLight(x, y, z) > 1) {
-          this.skyQueue.push(originX + x, y, originZ + z);
+        // 只有"邻区这一格比新区块贴边那格更亮"时，光才可能真的流过去（批次 217）。
+        // 以前是**无条件**把整列都塞进队列：高地形下一列能有 300+ 行 × 16 列，
+        // 一个区块加载就往队列里灌四五千条无用任务，而手机每帧预算只有 4000 步 ——
+        // 队列只涨不消，真机日志里涨到 820 万格、`chunks` 段 74ms/帧、12fps。
+        const sky = neighbor.getSkyLight(x, y, z);
+        if (sky > 1) {
+          const across = this.world.getSkyLight(originX + x + dirX, y, originZ + z + dirZ);
+          // `sky - 1` 是它能给出的最高值：连这个都不比对面亮，扩散必然什么都不写
+          if (sky - 1 > across) {
+            this.skyQueue.push(originX + x, y, originZ + z);
+            this.pushes.border++;
+          }
         }
-        if (neighbor.getBlockLight(x, y, z) > 0) {
-          this.blockQueue.push(originX + x, y, originZ + z);
+        const block = neighbor.getBlockLight(x, y, z);
+        if (block > 1) {
+          const across = this.world.getBlockLight(originX + x + dirX, y, originZ + z + dirZ);
+          if (block - 1 > across) {
+            this.blockQueue.push(originX + x, y, originZ + z);
+            this.pushes.border++;
+          }
         }
       }
     }
@@ -285,6 +322,7 @@ export class LightEngine {
     if (def.light > 0) {
       this.world.setBlockLight(worldX, worldY, worldZ, def.light);
       this.blockQueue.push(worldX, worldY, worldZ);
+      this.pushes.change++;
     } else if (opacity < 15) {
       let block = 0;
       for (const [dx, dy, dz] of DIRS) {
@@ -299,6 +337,7 @@ export class LightEngine {
       if (block > 0) {
         this.world.setBlockLight(worldX, worldY, worldZ, block);
         this.blockQueue.push(worldX, worldY, worldZ);
+        this.pushes.change++;
       }
     }
 
@@ -324,6 +363,7 @@ export class LightEngine {
       if (sky > 0) {
         this.world.setSkyLight(worldX, worldY, worldZ, sky);
         this.skyQueue.push(worldX, worldY, worldZ);
+        this.pushes.change++;
       }
     }
 
@@ -334,8 +374,14 @@ export class LightEngine {
       const nz = worldZ + dz;
       if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
       if (!this.world.isLoaded(nx, nz)) continue;
-      if (this.world.getSkyLight(nx, ny, nz) > 1) this.skyQueue.push(nx, ny, nz);
-      if (this.world.getBlockLight(nx, ny, nz) > 0) this.blockQueue.push(nx, ny, nz);
+      if (this.world.getSkyLight(nx, ny, nz) > 1) {
+        this.skyQueue.push(nx, ny, nz);
+        this.pushes.change++;
+      }
+      if (this.world.getBlockLight(nx, ny, nz) > 0) {
+        this.blockQueue.push(nx, ny, nz);
+        this.pushes.change++;
+      }
     }
   }
 
@@ -391,17 +437,20 @@ export class LightEngine {
       const z = reAdd[i + 2]!;
       if (isSky) this.skyQueue.push(x, y, z);
       else this.blockQueue.push(x, y, z);
+      this.pushes.readded++;
     }
   }
 
   /** 回收已消费的队列头部，避免数组无限增长 */
   private compact(): void {
-    if (this.skyHead > COMPACT_THRESHOLD) {
-      this.skyQueue = this.skyQueue.slice(this.skyHead);
+    // 只在"队列快见底"时回收前缀（见 `COMPACT_TAIL`）：这样拷贝量恒定、
+    // 且一整轮队列只搬一次。队列很长的中途**不搬**——那时搬一次就是几十 MB。
+    if (this.skyQueue.length - this.skyHead <= COMPACT_TAIL && this.skyHead > 0) {
+      this.skyQueue = this.skyHead >= this.skyQueue.length ? [] : this.skyQueue.slice(this.skyHead);
       this.skyHead = 0;
     }
-    if (this.blockHead > COMPACT_THRESHOLD) {
-      this.blockQueue = this.blockQueue.slice(this.blockHead);
+    if (this.blockQueue.length - this.blockHead <= COMPACT_TAIL && this.blockHead > 0) {
+      this.blockQueue = this.blockHead >= this.blockQueue.length ? [] : this.blockQueue.slice(this.blockHead);
       this.blockHead = 0;
     }
   }

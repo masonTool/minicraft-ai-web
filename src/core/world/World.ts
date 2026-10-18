@@ -376,6 +376,16 @@ export class World {
     return this.light.pendingCells;
   }
 
+  /**
+   * 光照队列"谁在灌"的累计计数（批次 217，诊断用）。
+   *
+   * 真机日志里队列涨到 820 万格、12fps，但只看 `lightQueue` 判断不了来源——
+   * 是区块加载播种、边界列，还是改方块引发的移除/重扩散。主程序按 5 秒取差值记日志。
+   */
+  get lightPushStats(): Readonly<{ self: number; border: number; change: number; readded: number }> {
+    return this.light.pushStats;
+  }
+
   get pendingCount(): number {
     return this.loading.size;
   }

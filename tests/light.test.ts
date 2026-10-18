@@ -109,6 +109,65 @@ describe('光照引擎', () => {
     expect(world.getSkyLight(4, 69, 4)).toBe(15);
   });
 
+  it('新区块加载只播种"真能流过去"的边界格（批次 217）', () => {
+    // 两块**一模一样**的地形并排：边界两侧的天光处处相同，光根本无处可流。
+    // 旧实现会把邻区整列（高地形下 300+ 行 × 16 列）无条件塞进队列，
+    // 一个区块加载就灌进四五千条无用任务；手机每帧预算只有 4000 步，
+    // 于是队列只涨不消（真机日志里涨到 820 万格、12fps）。
+    const groundY = 200;
+    const { chunk: a, world } = makeChunk(0, 0, groundY);
+    const b = new Chunk(1, 0);
+    for (let y = WORLD_MIN_Y; y <= groundY; y++) {
+      for (let z = 0; z < 16; z++) {
+        for (let x = 0; x < 16; x++) b.set(x, y, z, Block.STONE, 0);
+      }
+    }
+    world.addChunk(b);
+
+    const engine = new LightEngine(world);
+    engine.initChunk(a);
+    settle(engine);
+    expect(engine.pendingCells).toBe(0);
+
+    engine.initChunk(b);
+    // 只剩 b 自己的"地表那一层"（16×16 = 256 格）；旧实现会多出约 5000 格边界任务
+    expect(engine.pendingCells).toBeLessThan(1000);
+    settle(engine);
+    expect(engine.pendingCells).toBe(0);
+    // 光照结果仍然是对的：两块都在露天
+    expect(world.getSkyLight(16, groundY + 1, 8)).toBe(15);
+  });
+
+  it('邻区的光仍然能横向流进新加载的区块（批次 217 的边界过滤不能过头）', () => {
+    // A：露天；B：头顶盖了一层石头板 —— B 板下的格子只能靠 A 那一侧的横向渗光。
+    // 边界过滤的判据是"邻格 - 1 是否比对面亮"，这条用例保证它不会把**真需要流过去**的格子也滤掉。
+    const groundY = 64;
+    const { chunk: a, world } = makeChunk(0, 0, groundY);
+    const b = new Chunk(1, 0);
+    for (let y = WORLD_MIN_Y; y <= groundY; y++) {
+      for (let z = 0; z < 16; z++) {
+        for (let x = 0; x < 16; x++) b.set(x, y, z, Block.STONE, 0);
+      }
+    }
+    for (let z = 0; z < 16; z++) {
+      for (let x = 0; x < 16; x++) b.set(x, 80, z, Block.STONE, 0);
+    }
+    world.addChunk(b);
+
+    const engine = new LightEngine(world);
+    engine.initChunk(a);
+    settle(engine);
+    engine.initChunk(b);
+    settle(engine);
+
+    // B 板下的第一列（世界坐标 x=16）应当是 14：从 A 的 15 横向渗进来
+    expect(world.getSkyLight(16, 70, 8)).toBe(14);
+    // 往里一格是 13（逐格衰减）
+    expect(world.getSkyLight(17, 70, 8)).toBe(13);
+    // 板子上方仍然露天
+    expect(world.getSkyLight(16, 81, 8)).toBe(15);
+  });
+
   it('露天的格子在天光满级时不会自己变暗', () => {
     const { chunk, world } = makeChunk();
     const engine = new LightEngine(world);
