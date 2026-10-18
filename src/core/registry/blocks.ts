@@ -2840,6 +2840,15 @@ export const EMERALD_BLOCK_ID = 555;
 export const BEACON_ID = 556;
 /** 粘液块（批次 120，J16 的史莱姆那一族） */
 export const SLIME_BLOCK_ID = 557;
+/**
+ * 灵魂火把（批次 200，B20）：蓝色火焰的火把，亮度 10（普通火把是 14）。
+ *
+ * ⚠️ id 接在**炼药锅（575）**之后——`558~573` 是 16 色混凝土粉末、
+ * 574/575 是音符盒与炼药锅。方块表要求 id 从 0 起连续，随便挑一个"看起来空着"的号会当场报错。
+ */
+export const SOUL_TORCH_ID = 576;
+/** 灵魂灯笼（批次 200，B20）：落地的小灯，亮度 10；新形状 `lantern` */
+export const SOUL_LANTERN_ID = 577;
 
 /**
  * 粘液块（批次 120）：绿色半透明的一整块，**落在上面会被弹起来**（弹跳那一段在
@@ -2848,6 +2857,36 @@ export const SLIME_BLOCK_ID = 557;
  * ⚠️ 与原版的差异：**活塞推它不会带走相邻方块**（原版那套"粘性方块"要活塞推动时
  * 连带检查六个面，本项目还没做——记在 TASKS J16）。所以它的说明里只写了"能弹跳"。
  */
+/**
+ * 灵魂火把 / 灵魂灯笼（批次 200，B20 的三件之一）。
+ *
+ * 它们的存在理由不是"再来两个光源"：**灵魂沙谷**与**灵魂沙**早就在（下界生成），
+ * 但做出来的东西只有"烧"这一条用途。这两件把灵魂沙接进了"照明"这条链，
+ * 而且亮度 **10**（普通火把 14）——比火把暗一档，在灵魂沙谷里反而更耐看。
+ */
+const SOUL_LIGHT_SPECS: readonly BlockSpec[] = [
+  {
+    id: SOUL_TORCH_ID,
+    name: 'minecraft:soul_torch',
+    tiles: ['soul_torch', 'soul_torch', 'soul_torch'],
+    shape: 'torch',
+    solid: false,
+    opaque: false,
+    light: 10,
+    lightOpacity: 0,
+  },
+  {
+    id: SOUL_LANTERN_ID,
+    name: 'minecraft:soul_lantern',
+    tiles: ['soul_lantern', 'soul_lantern', 'soul_lantern'],
+    shape: 'lantern',
+    solid: false,
+    opaque: false,
+    light: 10,
+    lightOpacity: 0,
+  },
+];
+
 const SLIME_BLOCK_SPECS: readonly BlockSpec[] = [
   {
     id: SLIME_BLOCK_ID,
@@ -2968,6 +3007,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SKULL_SPECS,
   ...MINERAL_AND_BEACON_SPECS,
   ...SLIME_BLOCK_SPECS,
+  ...SOUL_LIGHT_SPECS,
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -3294,6 +3334,8 @@ export const Block = {
   BEACON: BEACON_ID,
   // 粘液块（批次 120）：史莱姆掉的那条链的终点
   SLIME_BLOCK: SLIME_BLOCK_ID,
+  SOUL_TORCH: SOUL_TORCH_ID,
+  SOUL_LANTERN: SOUL_LANTERN_ID,
   CRACKED_POLISHED_BLACKSTONE_BRICKS: CRACKED_POLISHED_BLACKSTONE_BRICKS_ID,
   OAK_SAPLING: WOOD_SAPLING_ID_START,
   BIRCH_SAPLING: WOOD_SAPLING_ID_START + 1,
@@ -3598,6 +3640,9 @@ HARDNESS.set(Block.EMERALD_BLOCK, 5);
 HARDNESS.set(Block.BEACON, 3);
 // 粘液块（批次 120）：原版硬度 **0**（徒手一拍就碎，只是碎得"黏"）
 HARDNESS.set(Block.SLIME_BLOCK, 0);
+// 灵魂火把 / 灵魂灯笼：与普通火把同级（一碰就掉）
+HARDNESS.set(Block.SOUL_TORCH, 0);
+HARDNESS.set(Block.SOUL_LANTERN, 3.5);
 // 混凝土粉末（批次 131）：原版硬度 0.5（比混凝土的 1.8 软得多，徒手也能挖）
 for (let i = 0; i < 16; i++) HARDNESS.set(concretePowderId(i), 0.5);
 // 下界疣：原版徒手一拍就掉（硬度 0），四个阶段都要登记

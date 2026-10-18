@@ -151,6 +151,10 @@ export function isoBoxesForShape(shape: BlockShape): readonly IsoBox[] | null {
     case 'daylight_detector':
       return [box(0, 1, 0, 0.0625, 0, 1)];
 
+    /** 灯笼（批次 200）：小灯身 + 提环 */
+    case 'lantern':
+      return [box(0.3125, 0.6875, 0, 0.5625, 0.3125, 0.6875), box(0.4375, 0.5625, 0.5625, 0.6875, 0.4375, 0.5625)];
+
     // ---- 以下保持平面图标：原版在物品栏里也是精灵图 ----
     // 门/活板门/栅栏门：一整片门板，画成立方体会变成实心木箱
     case 'door':

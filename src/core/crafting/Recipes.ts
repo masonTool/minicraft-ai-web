@@ -350,6 +350,24 @@ const UTILITY_RECIPES: readonly Recipe[] = [
     pattern: ['C', 'S'],
     key: { C: Item.CHARCOAL, S: Item.STICK },
   },
+  // 灵魂火把（批次 200，原版无序配方）：煤/木炭 + 木棍 + 灵魂沙/灵魂土 → 4 个。
+  // 四种组合各写一条：配方匹配是**精确物品匹配**，不支持"任意一种"标签
+  ...[Item.COAL, Item.CHARCOAL].flatMap((fuel): Recipe[] =>
+    [Block.SOUL_SAND, Block.SOUL_SOIL].map(
+      (soil): Recipe => ({
+        kind: 'shapeless' as const,
+        result: { id: Block.SOUL_TORCH, count: 4 },
+        ingredients: [fuel, Item.STICK, soil],
+      }),
+    ),
+  ),
+  // 灵魂灯笼（批次 200）：8 个铁粒围着 1 个灵魂火把（原版图案）
+  {
+    kind: 'shaped',
+    result: { id: Block.SOUL_LANTERN, count: 1 },
+    pattern: ['NNN', 'NTN', 'NNN'],
+    key: { N: Item.IRON_NUGGET, T: Block.SOUL_TORCH },
+  },
 ];
 
 /**

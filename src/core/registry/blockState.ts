@@ -58,6 +58,13 @@ export type BlockShape =
   /** 仙人掌：四面向内缩 1 像素，且不遮挡邻居（否则贴着的方块会被剔除掉一面） */
   | 'cactus'
   /**
+   * 灯笼（批次 200，灵魂灯笼）：**落地的小灯**——6/16 见方、9/16 高，顶上一个小提环。
+   *
+   * 原版灯笼还能挂在天花板上；这里只做落地那一态（见 `Placement` 的 `case 'lantern'`），
+   * 因为"挂顶"要一套新的贴附状态位，而灵魂灯笼最常见的用法就是摆在下界的地上。
+   */
+  | 'lantern'
+  /**
    * 贴地的薄板（红石粉 / 中继器 / 比较器 / 按钮 / 压力板）。
    * 渲染成 1/16 高的一层，**无碰撞**：原版这些方块也确实不挡路（压力板能踩上去）。
    */
@@ -1058,6 +1065,8 @@ export function describeState(shape: BlockShape, state: number): string {
       return `${FACING_NAMES[facingOf(state)]}${isTop(state) ? '·上半' : ''}`;
     case 'torch':
       return isWallMounted(state) ? `挂墙·${FACING_NAMES[facingOf(state)]}` : '落地';
+    case 'lantern':
+      return '落地';
     case 'ladder':
       return `贴·${FACING_NAMES[facingOf(state)]}`;
     case 'door':

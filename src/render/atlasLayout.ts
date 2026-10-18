@@ -921,6 +921,8 @@ export const TILE_ORDER = [
   'item_ink_sac',
   'item_map',
   'item_filled_map',
+  'soul_torch',
+  'soul_lantern',
   'item_clock',
   'item_compass',
   'item_shield',

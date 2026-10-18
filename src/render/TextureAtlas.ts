@@ -1108,6 +1108,43 @@ PAINTERS.torch = (x, y, rng) => {
 };
 
 /**
+ * 灵魂火把（批次 200）：与普通火把同一个画法，**火焰换成青蓝**（灵魂火那一族）。
+ *
+ * 形状仍是 `torch`（3/16 粗的细柱），所以贴图也只画中间那几像素。
+ */
+PAINTERS.soul_torch = (x, y, rng) => {
+  const centered = Math.abs(x - 7.5);
+  // 火焰（顶部 3 像素）：青蓝，越靠上越白
+  if (y <= 3) {
+    if (centered > 2.2 - y * 0.4) return [0, 0, 0, 0];
+    const v = 190 + rng() * 60;
+    return [clamp255(v * 0.42), clamp255(v * 0.86), clamp255(v), 255];
+  }
+  // 木柄（与普通火把一模一样：区别只在火）
+  if (centered > 1.6 || y > 14) return [0, 0, 0, 0];
+  const v = 148 - centered * 20 + (rng() * 12 - 6);
+  return [clamp255(v * 1.05), clamp255(v * 0.78), clamp255(v * 0.44), 255];
+};
+
+/**
+ * 灵魂灯笼（批次 200）：**深色铁框 + 青蓝灯芯**——上下一圈更亮的沿口，中间是发光的芯。
+ *
+ * 方块只有 6/16 见方（`lantern` 形状），贴图画满整张也没关系：六个面都会按盒子裁。
+ */
+PAINTERS.soul_lantern = (x, y, rng) => {
+  const jitter = rng() * 6 - 3;
+  // 四边的铁框
+  const edge = x <= 1 || x >= 14 || y <= 1 || y >= 14;
+  if (edge) return [clamp255(78 + jitter), clamp255(72 + jitter), clamp255(64 + jitter), 255];
+  // 上下沿口：比铁框亮一点，让"这是一盏灯"有体积感
+  if (y <= 3 || y >= 12) return [clamp255(122 + jitter), clamp255(112 + jitter), clamp255(96 + jitter), 255];
+  // 灯芯：中间的青蓝，越靠中心越亮
+  const distance = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
+  const v = 255 - distance * 16 + jitter;
+  return [clamp255(v * 0.40), clamp255(v * 0.84), clamp255(v), 255];
+};
+
+/**
  * 锁链（B11）：中间一串铁环，四周透明（alphaTest 会裁掉，看着就是一根细链）。
  *
  * 贴图必须**只画中间那几像素**：方块形状是 3/16 粗的细柱（`chain`），

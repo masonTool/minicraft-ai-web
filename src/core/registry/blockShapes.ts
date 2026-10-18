@@ -44,6 +44,11 @@ const HALF_BOTTOM: LocalBox = [0, 0, 0, 1, 0.5, 1];
 /** 仙人掌：原版四周各内缩 1 像素（15/16 宽），碰撞与渲染一致 */
 const CACTUS_BOX: LocalBox = [0.0625, 0, 0.0625, 0.9375, 1, 0.9375];
 
+/** 灯笼的灯身（批次 200）：6/16 见方、9/16 高，坐在方块底面上 */
+const LANTERN_BODY: LocalBox = [0.3125, 0, 0.3125, 0.6875, 0.5625, 0.6875];
+/** 灯笼顶上的提环：再往上 2/16 的一小块（只画不撞） */
+const LANTERN_KNOB: LocalBox = [0.4375, 0.5625, 0.4375, 0.5625, 0.6875, 0.5625];
+
 /** 贴地薄板的厚度（1/16 格，与原版红石粉/压力板一致）。睡莲也用这个厚度 */
 export const FLAT_HEIGHT = 0.0625;
 
@@ -151,6 +156,9 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
       // 这里曾经无论开关都返回那块薄板，导致"门开了但走不过去"——
       // 是 K7 的单元测试（tests/collision.test.ts）把它抓出来的。
       return isDoorOpen(state) ? [] : [doorBox(state)];
+    case 'lantern':
+      // 只有灯身挡路（提环太细，原版也不挡）；与渲染同源，免得"看着小、撞着大"
+      return [LANTERN_BODY];
     case 'trapdoor':
       // 活板门**开关都有碰撞**（开着的活板门就是一片竖着的挡板，原版也撞得到）。
       // 与渲染共用同一份几何：免得"画一片板、撞在另一处"
@@ -425,6 +433,9 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       return [trapdoorBox(state)];
     case 'fence_gate':
       return fenceGateBoxes(state);
+    case 'lantern':
+      // 灯笼（批次 200）：6/16 见方的灯身 + 顶上一个小提环（落地态，见 Placement）
+      return [LANTERN_BODY, LANTERN_KNOB];
     case 'torch':
       return torchBoxes(state);
     case 'ladder':

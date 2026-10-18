@@ -204,6 +204,13 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       return { state: withWallMounted(withFacing(0, facing), true) };
     }
 
+    case 'lantern':
+      // 灯笼（批次 200）：只能放在实心方块**上面**（原版还能挂天花板，这里不做，
+      // 见 `blockState.ts` 的 `lantern` 注记）
+      if (ny <= 0) return null;
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: 0 };
+
     case 'cake':
       // 蛋糕（批次 52）：半格高的方块，只能放在实心方块**上面**（原版放不了天花板）
       if (ny <= 0) return null;

@@ -78,6 +78,8 @@ export function supportKindOf(id: number): SupportKind {
   // ⚠️ 放置侧比这里更严（只认灵魂沙），但**支撑判据只问"下面还实心吗"**：
   // 灵魂沙被换成别的实心方块时，原版的wart是照样长着的（它也只在灵魂沙上生成）。
   if (def.shape === 'nether_wart') return 'solid';
+  // 灯笼（批次 200）：落地摆放，下方没了就该掉（与花盆/头同一档）
+  if (def.shape === 'lantern') return 'solid';
   // 贴附面（B14，批次 86）：展示框与画贴在墙上，墙没了就该掉下来。
   // ⚠️ 这一档只接了这两件：火把/梯子/藤蔓仍是 `'none'`（它们是同一类，
   // 但"藤蔓能同时挂好几面、梯子还能站人"这些差别要各自想过，见 TASKS B49）
