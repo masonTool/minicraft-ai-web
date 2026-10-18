@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 653（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 654（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **181**、进行中 **76**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,18 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 227（用户："游戏页快捷栏改成跟背包里一模一样；暂停时游戏要停住"）：
+  ① **只剩一排快捷栏**：`InventoryScreen` 的 `hotbarGridEl`（`.inv-hotbar-dock`）常驻 body，
+  关背包时它就是 HUD 快捷栏；旧 `#hotbar` 的格子只设 `visibility:hidden` 保留容器宽度——
+  整块隐藏会把绝对定位在里面的"背包"入口一起藏掉。经验条/血条位置不动。
+  ② 交互直接复用背包那套：点别的手持格 = 换槽（`activeHotbar` / `onSelectHotbar` 钩子），
+  点当前格 = 拿起（空格/交换/合并、长按选数量、点外面丢弃全部沿用 `activateSlot`）；
+  拿起的光标 `#inv-held`、物品名提示 `#inv-pick-toast` 也移到 body，关背包时仍可见。
+  ③ 选中框：`refresh()` 按 `activeHotbar` 给 dock 那格加 `.active`（与旧 HUD 同一种高亮）。
+  ④ **暂停真的停**：主循环 `dt = paused ? 0 : …`，`paused = 设置面板开着 || resumeGate 在`；
+  物理/生存 tick/实体/粒子/昼夜/天气/方块 tick 全停，渲染与性能采样仍用真实帧时间。
+  暂停/聊天打开前 `cancelHeld()`，不把光标留在菜单上。
+  `test:ui` 655（`npm run check` 全绿）。
 - 批次 225（用户："我在一个区域里一直掉血，提示是受到蜘蛛伤害，但是完全看不到蜘蛛"）：
   导出的诊断里 13 次 `source: "蜘蛛"` 的**水平距离全是 0~1.9 格**，而竖直方向从没查过——
   `updateAi` 的近战判据只有 `dx² + dz² < 4`（`flyAi` 同理，只有水平 2.5）。

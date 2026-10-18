@@ -193,6 +193,15 @@ export type InventoryPanelMode =
 export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
   /**
+   * 当前手持槽（批次 227）。
+   *
+   * 关闭背包时，快捷栏就是 HUD 那排：点**别的有物品的格** = 换手持槽；
+   * 点**当前手持格** = 像背包里一样把物品拿到光标上。没有这两个钩子，
+   * 复用同一排 DOM 之后就没法换手持物品了。
+   */
+  activeHotbar?: () => number;
+  onSelectHotbar?: (index: number) => void;
+  /**
    * 打开配方书（背包标题栏 / 携带版左上分类图标）。
    * @param tab 携带版点某个分类图标时带上，配方书直接切到那一栏
    */
@@ -389,6 +398,7 @@ export class InventoryScreen {
   private readonly railRight: HTMLDivElement;
   /** 携带版：快捷栏停在屏幕底（面板外），经典 UI 仍在面板内 */
   private readonly hotbarDock: HTMLDivElement;
+  /** 批次 227：HUD 快捷栏与背包快捷栏是**同一个** dock（关闭背包时也常驻） */
   private readonly panel: HTMLDivElement;
   private readonly titleEl: HTMLElement;
   /** 玩家那一块的两列：左=装备竖排，右=合成/容器 + 主背包 + 快捷栏 */
@@ -759,8 +769,13 @@ export class InventoryScreen {
     this.railRight.className = 'inv-rail-right';
     this.railRight.dataset.role = 'pocket-rail-right';
     this.hotbarDock = document.createElement('div');
+    // 批次 227：它就是**游戏里的快捷栏**，不再只是背包的一部分。
+    // 挂在 body 上（不是 root 的子节点），否则关背包时 root 一隐藏它也跟着没了。
     this.hotbarDock.className = 'inv-hotbar-dock hidden';
     this.hotbarDock.dataset.role = 'pocket-hotbar-dock';
+    this.tooltip.delegate(this.hotbarDock, (target) => this.tooltipFor(target), {
+      touchLongPressMs: TOUCH_TOOLTIP_MS,
+    });
 
     this.panel = document.createElement('div');
     this.panel.className = 'inv-panel';
@@ -1138,7 +1153,8 @@ export class InventoryScreen {
 
     // 顺序：左轨（配方+箱子）| 灰框 | 右轨（合成/盔甲）——页签在 panel 外
     this.shellEl.append(this.railLeft, this.panel, this.railRight, this.pocketTabsEl);
-    this.root.append(this.shellEl, this.hotbarDock);
+    this.root.append(this.shellEl);
+    document.body.appendChild(this.hotbarDock);
 
     // 转屏会改视口尺寸（面板宽高里有 100vw/100dvh）：重排一次把尺寸对齐
     if (typeof window !== 'undefined') {
@@ -1150,7 +1166,8 @@ export class InventoryScreen {
     this.heldCanvas = document.createElement('canvas');
     this.heldCount = document.createElement('span');
     this.heldElement.append(this.heldCanvas, this.heldCount);
-    this.root.appendChild(this.heldElement);
+    // 批次 227：拿起的光标要在关闭背包时也看得见（root 那时是隐藏的）
+    document.body.appendChild(this.heldElement);
 
     // 点物品时那块小说明（批次 159）：挂在 root 上，跟着界面一起显隐
     this.pickToastEl = document.createElement('div');
@@ -1162,7 +1179,8 @@ export class InventoryScreen {
       event.stopPropagation();
       this.hidePickToast(true);
     });
-    this.root.appendChild(this.pickToastEl);
+    // 批次 227：物品名提示也常驻 body，关背包时照样能弹
+    document.body.appendChild(this.pickToastEl);
 
     document.body.appendChild(this.root);
 
@@ -1171,6 +1189,8 @@ export class InventoryScreen {
     this.rebuildTopArea();
     this.applyInventoryChrome();
     this.refresh();
+    // 构造完就让快捷栏出现在屏幕底部（不需要先打开一次背包）
+    this.showDockedHotbar();
   }
 
   // ---------------------------------------------------------------- DOM 构建
@@ -1947,6 +1967,14 @@ export class InventoryScreen {
     if (this.closeBtn) {
       this.closeBtn.textContent = isTouchUi() || isTouchDevice() ? '✕' : '关闭 (E)';
     }
+    // 批次 227：背包没开时，这里只维护"屏幕底部那排快捷栏"。
+    // 不能按上一次打开的面板模式继续排布——例如上次开的是箱子（单栏），
+    // `placeHotbar(false)` 会把 dock 藏起来，转个屏 HUD 快捷栏就没了。
+    if (!this.open) {
+      this.showDockedHotbar();
+      this.syncHotbarActive();
+      return;
+    }
     // ⚠️ 两个口径要分开：
     //   `creativePlayer` = **玩家在创造模式**（与当前开着哪个界面无关）——"有没有配方书"
     //     这类"模式能力"要按它判，工作台界面里人也还在创造模式；
@@ -2225,6 +2253,20 @@ export class InventoryScreen {
       }
       this.hotbarDock.classList.add('hidden');
     }
+  }
+
+  /**
+   * 批次 227：把快捷栏常驻在屏幕底部。
+   *
+   * 关闭背包时它就是**游戏里的快捷栏**（与背包内那排是同一个 DOM），
+   * 旧 HUD `#hotbar` 由 `body.hotbar-docked` 隐藏——两套并存会点出两种行为。
+   */
+  private showDockedHotbar(): void {
+    if (this.hotbarGridEl.parentElement !== this.hotbarDock) {
+      this.hotbarDock.appendChild(this.hotbarGridEl);
+    }
+    this.hotbarDock.classList.remove('hidden');
+    document.body.classList.add('hotbar-docked');
   }
 
   /** 打开携带版时藏 HUD `#hotbar`，避免与 dock 叠两层 */
@@ -2856,7 +2898,8 @@ export class InventoryScreen {
     document.addEventListener(
       'pointermove',
       (event) => {
-        if (!this.open) return;
+        // 批次 227：关闭背包时，快捷栏（dock）也可能拿着东西，光标照样要跟手
+        if (!this.open && !this.held) return;
         this.heldElement.style.left = `${event.clientX}px`;
         this.heldElement.style.top = `${event.clientY}px`;
         // 分类栏"按住滑动查看配方"（批次 209）
@@ -2908,6 +2951,44 @@ export class InventoryScreen {
       },
       true,
     );
+    // 批次 227：dock 已经不在 root 里了，按下反馈与"点物品弹说明"要单独绑一份。
+    // 行为与背包内完全一致（按下就沉、松手结算由槽位自己的监听负责）。
+    this.hotbarDock.addEventListener(
+      'pointerdown',
+      (event) => {
+        this.heldElement.style.left = `${event.clientX}px`;
+        this.heldElement.style.top = `${event.clientY}px`;
+        const slot = (event.target as HTMLElement | null)?.closest<HTMLElement>('.inv-slot');
+        if (!slot) return;
+        this.showPickToast(slot);
+        if (this.tooltipStacks.has(slot)) {
+          if (slot.classList.contains('locked')) this.flashLocked(slot);
+          else this.markPressing(slot);
+        }
+      },
+      true,
+    );
+
+    // 批次 227：关闭背包时，"点快捷栏以外的地方"= 丢弃（与背包里点面板外同一口径）。
+    // 快捷栏自己的留白/左右两侧也算外面；真正的格子交给槽位监听。
+    document.addEventListener(
+      'pointerdown',
+      (event) => {
+        if (this.open || !this.held) return;
+        const target = event.target as HTMLElement | null;
+        const inDock = target ? this.hotbarDock.contains(target) : false;
+        if (inDock && target?.closest('.inv-slot')) return;
+        // 别的界面（暂停、聊天等）上的点击不抢：那些界面会把 held 放回背包
+        if (!inDock && target?.closest('#settings-screen, #chat, #resume-gate, #inventory-screen, .inv-panel')) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        this.dropHeldStack(this.held.count);
+      },
+      true,
+    );
+
     // 抬手 / 取消就摘掉"按下去"那一层：真正的选中（`.selected`）由刷新接着接上
     for (const type of ['pointerup', 'pointercancel'] as const) {
       document.addEventListener(
@@ -3137,6 +3218,22 @@ export class InventoryScreen {
   }
 
   private activateSlotInner(key: string, button: number, shift = false): void {
+    // 批次 227：关闭背包时，快捷栏同时承担"换手持槽"。
+    // 手是空的、点的是**另一格有物品的**热栏格 → 只换槽，不把东西拿起来；
+    // 点当前手持格才进入背包那套"拿起 / 交换 / 丢弃"。
+    if (!this.open && !this.held && key.startsWith('inv:')) {
+      const index = Number(key.slice(4));
+      if (
+        Number.isInteger(index) &&
+        index >= 0 &&
+        index < HOTBAR_SIZE &&
+        this.inventory.get(index) !== null &&
+        index !== this.hooks.activeHotbar?.()
+      ) {
+        this.hooks.onSelectHotbar?.(index);
+        return;
+      }
+    }
     // 只有"手里拿着东西去点合成格"（= 真的要摆材料）才收掉只读预览。
     // 空手点材料区**保持预览**（批次 211）：玩家就是来看"这条配方要什么"的，
     // 点一下就把预览清掉等于看不到组成材料。
@@ -3739,6 +3836,14 @@ export class InventoryScreen {
     else this.openWith('inventory');
   }
 
+  /**
+   * 取消当前"拿着东西"的状态（批次 227）：暂停 / 聊天 / 成就这类界面打开前调用，
+   * 免得那块光标跟着飘到菜单上面。
+   */
+  cancelHeld(): void {
+    if (this.held) this.returnHeldToInventory();
+  }
+
   openPanel(): void {
     // 批次 185：关闭动画（400ms）还没走完又要打开——例如快速点两下背包、
     // 或者程序在关掉背包的同时打开箱子。原来 `open` 还是 true，这里直接 return，
@@ -3813,6 +3918,15 @@ export class InventoryScreen {
    * 所以放不下的那几格**留在格子里**——宁可玩家下次打开还看见它，
    * 也不能让它凭空消失。工作台/箱子那些界面由各自的容器负责，这里只动玩家自己的格子。
    */
+  /** 把"当前手持槽"的选中样式同步到快捷栏（批次 227） */
+  syncHotbarActive(): void {
+    const active = this.hooks.activeHotbar?.();
+    if (active === undefined) return;
+    for (let i = 0; i < HOTBAR_SIZE; i++) {
+      this.bindings.get(`inv:${i}`)?.element.classList.toggle('active', i === active);
+    }
+  }
+
   private returnCraftingToInventory(): void {
     const grid = this.grids[2];
     for (let index = 0; index < grid.size * grid.size; index++) {
@@ -3873,6 +3987,8 @@ export class InventoryScreen {
     this.open = false;
     this.root.classList.add('hidden');
     document.body.classList.remove('inv-pocket-open');
+    // 关背包之后快捷栏继续留在屏幕底部（它就是游戏快捷栏）
+    this.showDockedHotbar();
     // 配方书是从背包左栏借来的位置，背包关了就得还回去
     this.detachRecipeBook();
     this.hidePickToast();
@@ -3898,6 +4014,9 @@ export class InventoryScreen {
   }
 
   refresh(): void {
+    // 批次 227：快捷栏同时也是 HUD 那排，要把"当前手持槽"标出来，
+    // 否则拿在手上的是哪一格只能靠第一人称手里那件东西猜。
+    this.syncHotbarActive();
     for (const binding of this.bindings.values()) {
       this.renderInto(binding.element, binding.source.get(binding.index));
       if (binding.takeOnly) binding.element.classList.add('take-only');
@@ -4645,6 +4764,12 @@ export class InventoryScreen {
     this.preview3d = null;
     this.previewDrag = null;
     this.root.remove();
+    // 批次 227：快捷栏 / 光标 / 物品名提示已经挂在 body 上，要一起摘掉，
+    // 否则回到主菜单还会留着上一局的那排物品。
+    this.hotbarDock.remove();
+    this.heldElement.remove();
+    this.pickToastEl.remove();
+    document.body.classList.remove('hotbar-docked');
     // 拆局时也把"隐身"摘掉（批次 214）：万一有别的路径复用这个根节点，别把背包永久变透明
     this.setGhost(false);
     // 面板开着时退出世界：body 上那个"背包打开"的类也要一起摘掉，

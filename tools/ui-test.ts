@@ -718,7 +718,7 @@ console.log('\n[携带版细节收口（批次 159）]');
     '顶部视角键接了相机循环',
     readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes('onCycleCamera: () => {'),
   );
-  check('关界面时收掉', invSrc.includes('this.hidePickToast();') && /finishClose\(\): void \{[\s\S]{0,400}hidePickToast/.test(invSrc));
+  check('关界面时收掉', invSrc.includes('this.hidePickToast();') && /finishClose\(\): void \{[\s\S]{0,900}hidePickToast/.test(invSrc));
 
   // ⑤ 选中 = 原格内显示 + 底色变深；不再有跟着光标飘的图标
   check('选中态是底色变深（且压住 hover）', css.includes('.inv-slot.selected,') && css.includes('--slot-bg-selected'));
@@ -887,7 +887,8 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   check(
     '点面板空白 / 窗口外 / 快捷栏两侧空白都丢出手上的整叠',
     invSrc.includes('private dropHeldStack(') &&
-      !invSrc.includes('this.hotbarDock.contains(target)') &&
+      invSrc.includes('if (this.panel.contains(target)) return;') &&
+      invSrc.includes('const inDock = target ? this.hotbarDock.contains(target) : false;') &&
       invSrc.includes("if (target.closest('.inv-slot, button, input, .recipe-cell')) return;"),
   );
   check(
@@ -2287,8 +2288,9 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   // 批次 205：物理用的 dt 必须夹住，测量用的必须是真实间隔（以前两者共用夹紧值，
   // 掉到 9fps 时诊断里只看到 100ms）
   check(
-    '物理 dt 与测量帧间距分开',
-    appSrc.includes('const dt = Math.min(rawDt, 0.1);') &&
+    '物理 dt 与测量帧间距分开（暂停时模拟 dt 归零）',
+    appSrc.includes('const paused = this.settingsScreen.isOpen || this.resumeGateEl !== null;') &&
+      appSrc.includes('const dt = paused ? 0 : Math.min(rawDt, 0.1);') &&
       appSrc.includes('const frameSeconds = Math.min(rawDt, 2);') &&
       appSrc.includes('this.updatePerfPolicy(frameSeconds);'),
   );

@@ -1811,6 +1811,23 @@
         border: 3px solid; border-color: var(--pixel-bevel);
         box-shadow: var(--panel-shadow);
       }
+      /* 批次 227：HUD 与背包共用同一排快捷栏。旧 #hotbar 的**格子**让位，
+         但容器要留着——快捷栏右侧那颗"背包"按钮是绝对定位在它里面的，
+         整块 display:none 会把打开背包的唯一入口一起藏掉。
+         只把格子设成 visibility:hidden（保留宽度），按钮位置不变。 */
+      body.hotbar-docked #hotbar {
+        background: transparent;
+        border-color: transparent;
+        box-shadow: none;
+      }
+      body.hotbar-docked #hotbar .slot { visibility: hidden; }
+      /* 当前手持槽（批次 227）：与旧 HUD 快捷栏同一种"抬起来 + 白光" */
+      .inv-hotbar-dock .inv-slot.active {
+        border-color: #fff;
+        background: rgba(255, 255, 255, .26);
+        transform: translateY(-2px) scale(1.06);
+        box-shadow: 0 0 12px rgba(255, 255, 255, .45), 0 2px 6px rgba(0, 0, 0, .5);
+      }
       /* 打开携带版时藏 HUD 快捷栏 / 经验 / 生命，只留 dock 那一排（对齐 Wiki） */
       body.inv-pocket-open #hotbar,
       body.inv-pocket-open #xp-bar,

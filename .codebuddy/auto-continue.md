@@ -683,3 +683,18 @@
 > 1. 苦力怕引信仍是纯水平距离（`distanceSq < 9`）：要不要也加视线，等真机上"隔墙爆炸"再定
 > 2. 玩家侧的效果来源补全（药水 / 食物 / 信标 / 龙息云那四条 `survival/effect`）
 > 3. 队列里剩下的 TASKS 待办（村民与交易、功能方块、喷溅/滞留药水）
+
+---
+
+## 批次 227：HUD 快捷栏与背包共用一排 + 暂停冻结（2026-10-19）
+
+- [x] B227-1 `hotbarDock` / `heldElement` / `pickToastEl` 移到 body：关背包时快捷栏与光标仍可见
+- [x] B227-2 `body.hotbar-docked` 只隐藏旧 `#hotbar` 的格子（保留容器宽度，背包入口按钮不丢）
+- [x] B227-3 交互复用背包逻辑：`activeHotbar` / `onSelectHotbar` 钩子（点别的格换槽、点当前格拿起）
+- [x] B227-4 拿起/放置/交换/长按选数量/点外面丢弃全部沿用 `activateSlot`；dock 单独绑 tooltip 与按下反馈
+- [x] B227-5 `syncHotbarActive()`：当前手持槽高亮；`selectSlot` 立刻同步
+- [x] B227-6 暂停冻结：`paused = 设置面板 || resumeGate` 时主循环 `dt = 0`；暂停/聊天前 `cancelHeld()`
+- [x] B227-7 门禁：`test:ui` 655
+
+> **批次 227 已完成。** 快捷栏只剩一个 DOM；旧 HUD 容器必须留着（里面有背包按钮），
+> 只把格子设为 visibility:hidden。
