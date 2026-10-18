@@ -27,7 +27,9 @@ import {
   MAX_FOOD,
   MAX_HEALTH,
   PlayerStats,
+  depthStriderMultiplier,
   featherFallDamage,
+  soulSpeedMultiplier,
   type DamageCause,
   type SurvivalEnvironment,
 } from './core/survival/PlayerStats.ts';
@@ -340,6 +342,7 @@ import {
   harvestRequirement,
   lootingBonus,
   meleeDamage,
+  sweepDamage,
   toolInfoById,
   type ToolInfo,
   canTill,
@@ -4399,6 +4402,32 @@ class App {
     return isPowered(this.world.getBlockState(x, y, z));
   }
 
+  /**
+   * 靴子附魔带来的移速倍率（批次 262）。
+   *
+   *  - **深海探索者**：只在水里生效，`1 + 等级/3`（封顶 2 倍）；
+   *  - **灵魂疾行**：只在站在灵魂沙/灵魂土上生效，`1 + 0.3 × 等级`。
+   *
+   * 两条都乘在状态效果之后（速度药水 + 附魔可以叠加，与原版一致）。
+   */
+  private movementEnchantMultiplier(): number {
+    const boots = this.inventory.get(ARMOR_SLOT_BASE + 3)?.enchants;
+    let multiplier = 1;
+    if (this.physics.inWater) {
+      multiplier *= depthStriderMultiplier(enchantLevel(boots, 'depth_strider'));
+    } else if (this.physics.onGround) {
+      const below = this.world.getBlock(
+        Math.floor(this.physics.x),
+        Math.floor(this.physics.y - 0.2),
+        Math.floor(this.physics.z),
+      );
+      if (below === Block.SOUL_SAND || below === Block.SOUL_SOIL) {
+        multiplier *= soulSpeedMultiplier(enchantLevel(boots, 'soul_speed'));
+      }
+    }
+    return multiplier;
+  }
+
   /** 打开陷阱箱：记下坐标并把 `powered` 位点亮（批次 249） */
   private openTrappedChest(x: number, y: number, z: number): void {
     // 上一个还没关（例如直接点另一个箱子）就先撤掉，避免"两个都亮着"
@@ -5578,6 +5607,24 @@ class App {
     // 火焰附加（批次 243）：原版每级 4 秒。只在**真正造成伤害**时点着
     // （无敌帧挡下的那一下不该补火，否则连点可以无限续燃）
     if (applied && fireAspect > 0 && !mob.dead) mob.ignite(4 * fireAspect);
+    // 横扫之刃（批次 262）：剑、非冲刺、命中后对身前 2.6 格内的其他生物溅射。
+    // 原版冲刺时是"击退"而不是横扫，所以冲刺状态直接跳过
+    const sweepLevel = enchantLevel(this.heldEnchants, 'sweeping');
+    if (applied && sweepLevel > 0 && this.heldTool?.type === 'sword' && !this.frameInput.sprint) {
+      const splash = sweepDamage(weapon, sweepLevel);
+      const fx = -Math.sin(this.yaw);
+      const fz = -Math.cos(this.yaw);
+      for (const other of this.entities.all) {
+        if (other === mob || !(other instanceof Mob) || other.dead) continue;
+        const dx = other.x - this.physics.x;
+        const dz = other.z - this.physics.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance < 0.01 || distance > 2.6) continue;
+        // 只溅射身前约 60°：点积 > 0.5
+        if ((dx * fx + dz * fz) / distance < 0.5) continue;
+        other.hurt(splash, dx, dz, context, 0, 0);
+      }
+    }
     // 打击感（批次 232）：打中"有肉的东西"的一下闷响。
     // 生物自己的惨叫由 `Mob.hurt` 播（按种类），两者叠起来才是"砍到了"的手感
     this.audio.play('hit_flesh', { x: mob.x, y: mob.y + mob.type.height * 0.5, z: mob.z });
@@ -11856,7 +11903,8 @@ class App {
           this.yaw,
           dt,
           this.flying,
-          this.effects.moveSpeedMultiplier(),
+          // 状态效果 × 靴子附魔（批次 262：深海探索者 / 灵魂疾行）
+          this.effects.moveSpeedMultiplier() * this.movementEnchantMultiplier(),
           this.effects.jumpMultiplier(),
           // 自动跳跃（批次 206）：飞行时不跳（`update` 里那条分支本来也不走）
           this.settings.autoJump,

@@ -88,9 +88,10 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'respiration', name: '水下呼吸', maxLevel: 3, targets: ['helmet'], weight: 2, implemented: true },
   { id: 'aqua_affinity', name: '水下速掘', maxLevel: 1, targets: ['helmet'], weight: 2, implemented: true },
   { id: 'thorns', name: '荆棘', maxLevel: 3, targets: ['chestplate'], weight: 1 },
-  { id: 'depth_strider', name: '深海探索者', maxLevel: 3, targets: ['boots'], weight: 2 },
+  // 深海探索者 / 灵魂疾行（批次 262）：水下与灵魂沙上的移速倍率，见 `PlayerStats`
+  { id: 'depth_strider', name: '深海探索者', maxLevel: 3, targets: ['boots'], weight: 2, implemented: true },
   { id: 'frost_walker', name: '冰霜行者', maxLevel: 2, targets: ['boots'], weight: 2, treasure: true },
-  { id: 'soul_speed', name: '灵魂疾行', maxLevel: 3, targets: ['boots'], weight: 1, treasure: true },
+  { id: 'soul_speed', name: '灵魂疾行', maxLevel: 3, targets: ['boots'], weight: 1, treasure: true, implemented: true },
   { id: 'binding_curse', name: '绑定诅咒', maxLevel: 1, targets: ARMOR, weight: 1, treasure: true },
 
   // ---- 武器类
@@ -100,7 +101,8 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'knockback', name: '击退', maxLevel: 2, targets: ['sword'], weight: 5, implemented: true },
   { id: 'fire_aspect', name: '火焰附加', maxLevel: 2, targets: ['sword'], weight: 2, implemented: true },
   { id: 'looting', name: '抢夺', maxLevel: 3, targets: ['sword'], weight: 2, implemented: true },
-  { id: 'sweeping', name: '横扫之刃', maxLevel: 3, targets: ['sword'], weight: 2 },
+  // 横扫之刃（批次 262）：命中时对周围生物溅射，公式见 `tools.ts#sweepDamage`
+  { id: 'sweeping', name: '横扫之刃', maxLevel: 3, targets: ['sword'], weight: 2, implemented: true },
 
   // ---- 工具类
   { id: 'efficiency', name: '效率', maxLevel: 5, targets: ['pickaxe', 'axe', 'shovel', 'hoe', 'shears'], weight: 10, implemented: true },

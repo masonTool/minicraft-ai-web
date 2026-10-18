@@ -640,6 +640,19 @@ export function meleeDamage(
 }
 
 /**
+ * 横扫之刃的溅射伤害（批次 262）。
+ *
+ * 原版式子：`1 + 武器伤害 × 等级/(等级+1)`——I 级约一半、III 级约 3/4，
+ * 所以高等级不是"伤害翻倍"，而是把"额外那一点"推近上限。
+ * 抽成纯函数与 `meleeDamage` 同一个理由：伤害数值必须能在离线测试里断言。
+ */
+export function sweepDamage(weaponAttack: number, level: number): number {
+  const clamped = Math.max(0, Math.min(3, Math.floor(level)));
+  if (clamped <= 0) return 0;
+  return 1 + weaponAttack * (clamped / (clamped + 1));
+}
+
+/**
  * 「抢夺」带来的额外掉落上限。
  * 原版是把每种掉落的**数量上限**加上等级（`uniform(min, max + looting)`），
  * 所以这里返回的正是那个加数，由 `Mob.dropLoot` 加在 `max` 上。

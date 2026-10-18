@@ -126,6 +126,27 @@ export function fallDamageFor(distance: number, featherFalling = 0): number {
 }
 
 /** 一次摔落伤害经过摔落保护之后的数值（已取整） */
+/**
+ * 深海探索者的水下移速倍率（批次 262）。
+ *
+ * 原版每级把"水的阻力"削掉三分之一，等价于游泳速度 ×(1 + 等级/3)，
+ * 封顶 2 倍（III 级正好封顶）。
+ */
+export function depthStriderMultiplier(level: number): number {
+  const clamped = Math.max(0, Math.min(3, Math.floor(level)));
+  return clamped <= 0 ? 1 : Math.min(2, 1 + clamped / 3);
+}
+
+/**
+ * 灵魂疾行的移速倍率（批次 262）。
+ *
+ * 原版在灵魂沙/灵魂土上是 1.3 / 1.6 / 1.9 倍，这里直接用 `1 + 0.3 × 等级`。
+ */
+export function soulSpeedMultiplier(level: number): number {
+  const clamped = Math.max(0, Math.min(3, Math.floor(level)));
+  return clamped <= 0 ? 1 : 1 + clamped * 0.3;
+}
+
 export function featherFallDamage(amount: number, featherFalling = 0): number {
   const reduction = Math.min(0.48, 0.12 * Math.max(0, Math.floor(featherFalling)));
   return Math.max(0, Math.floor(amount * (1 - reduction)));
