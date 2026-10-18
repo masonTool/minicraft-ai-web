@@ -14,6 +14,7 @@ import { TOOL_KINDS, toolItemId } from '../src/core/registry/tools.ts';
 import { ItemEntity, ITEM_FIRE_SECONDS, ITEM_LIFETIME } from '../src/core/entity/ItemEntity.ts';
 import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../src/core/entity/XpOrb.ts';
 import { EntityManager } from '../src/core/entity/EntityManager.ts';
+import { Boat } from '../src/core/entity/Boat.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 import { boxAt } from '../src/core/physics/AABB.ts';
@@ -447,6 +448,57 @@ console.log('\n[经验球：拆档 / 吸附 / 结算 / 合并（批次 170，I16
     mainSrc.includes('spawnXpOrbs: (amount, x, y, z) => this.spawnXpOrbs(amount, x, y, z)') &&
       mainSrc.includes('awardXp: (amount) => this.awardXp(amount)'),
   );
+}
+
+console.log('\n[船：浮在水面 / 驾驶 / 空船漂（批次 244）]');
+{
+  // 水面在 y=3（水格 0..3），海底是实心
+  const waterWorld: PhysicsWorld = {
+    collisionAt: (_x, y) => (y < 0 ? 'full' : null),
+    isLiquid: (_x, y) => y >= 0 && y <= 3,
+  };
+  const baseCtx: EntityContext = {
+    world: waterWorld,
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: () => 0,
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+  };
+  const drive = { forward: 1, strafe: 0, sprint: false };
+  const ctx: EntityContext = { ...baseCtx, vehicleInput: drive };
+
+  // ---- 浮力：从水下 1 格开始，几秒后应该浮到水面附近
+  const boat = new Boat(0.5, 2.2, 0.5);
+  for (let i = 0; i < 120; i++) boat.tick(baseCtx, 0.05);
+  check('空船会自己浮到水面附近（不沉底）', boat.y > 3.2, `y=${boat.y.toFixed(2)}`);
+  check('浮起来之后不再乱抖（竖直速度收敛）', Math.abs(boat.vy) < 1.2, `vy=${boat.vy.toFixed(2)}`);
+
+  // ---- 驾驶：船头是 -Z（与玩家视角同一口径）
+  boat.passenger = 'player';
+  boat.yaw = 0;
+  boat.y = 3.6;
+  const z0 = boat.z;
+  for (let i = 0; i < 40; i++) boat.tick(ctx, 0.05); // 2 秒
+  check('有人驾驶时朝船头（-Z）开出去', boat.z < z0 - 1, `z ${z0.toFixed(2)} → ${boat.z.toFixed(2)}`);
+  check('速度被限制在 `BOAT_MAX_SPEED` 以内', Math.hypot(boat.vx, boat.vz) <= 7.01, `${Math.hypot(boat.vx, boat.vz).toFixed(2)}`);
+
+  // ---- 空船：同样的输入不该被开走
+  const empty = new Boat(0.5, 3.6, 0.5);
+  const ez = empty.z;
+  for (let i = 0; i < 40; i++) empty.tick(ctx, 0.05);
+  check('空船不吃驾驶输入（没人开就不动）', Math.abs(empty.z - ez) < 0.2, `z ${ez.toFixed(2)} → ${empty.z.toFixed(2)}`);
+
+  // ---- 岸上：重力把它拉回地面
+  const landWorld: PhysicsWorld = {
+    collisionAt: (_x, y) => (y < 0 ? 'full' : null),
+    isLiquid: () => false,
+  };
+  const landCtx: EntityContext = { ...baseCtx, world: landWorld };
+  const beached = new Boat(0.5, 4, 0.5);
+  for (let i = 0; i < 80; i++) beached.tick(landCtx, 0.05);
+  check('岸上的船会落到地面', beached.y < 0.2, `y=${beached.y.toFixed(2)}`);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

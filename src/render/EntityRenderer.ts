@@ -23,6 +23,7 @@ import { XpOrb } from '../core/entity/XpOrb.ts';
 import { itemDef } from '../core/registry/items.ts';
 import { Throwable } from '../core/entity/Throwable.ts';
 import { Firework } from '../core/entity/Firework.ts';
+import { Boat } from '../core/entity/Boat.ts';
 import type { Entity } from '../core/entity/Entity.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 
@@ -78,6 +79,10 @@ export class EntityRenderer {
   private readonly throwableMeshes = new Map<number, THREE.Mesh>();
   /** 经验球（批次 170，I16）：用 `Sprite`（永远朝向镜头），与掉落物那套平面分开存 */
   private readonly orbSprites = new Map<number, THREE.Sprite>();
+  /** 船（批次 244）：一个 `Group`（船底 + 两舷 + 首尾 + 坐板），按实体 id 记账 */
+  private readonly boatGroups = new Map<number, THREE.Group>();
+  /** 船的部件几何体（所有船共用一份，只建一次） */
+  private boatParts: readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] | null = null;
   private orbMaterial: THREE.SpriteMaterial | null = null;
   /** 箭的几何体按**物品 id** 缓存：药水箭各有自己的贴图（箭头上染了药水颜色） */
   private readonly arrowGeometries = new Map<number, THREE.BufferGeometry>();
@@ -148,6 +153,11 @@ export class EntityRenderer {
         this.syncFirework(entity, alive, camera);
         continue;
       }
+      // 船（批次 244）：一个多部件的 Group，按 yaw 转向、按光照换材质
+      if (entity instanceof Boat) {
+        this.syncBoat(entity, alive, lightAt);
+        continue;
+      }
       if (!(entity instanceof ItemEntity)) continue;
       alive.add(entity.id);
 
@@ -199,6 +209,84 @@ export class EntityRenderer {
       this.object.remove(sprite);
       this.orbSprites.delete(id);
     }
+    for (const [id, group] of [...this.boatGroups]) {
+      if (alive.has(id)) continue;
+      this.object.remove(group);
+      this.boatGroups.delete(id);
+    }
+  }
+
+  /**
+   * 同步一条船（批次 244）。
+   *
+   * 六个盒子拼成"船底 + 两舷 + 首尾 + 坐板"，贴图直接用**橡木木板**那一张
+   * （原版船身也确实是木板纹理），所以不需要新画一张 3D 贴图。
+   * 朝向由 `boat.yaw` 给；亮度与其它实体同一套"按光照档位换材质"。
+   */
+  private syncBoat(
+    boat: Boat,
+    alive: Set<number>,
+    lightAt?: (x: number, y: number, z: number) => EntityLight | null,
+  ): void {
+    alive.add(boat.id);
+
+    let group = this.boatGroups.get(boat.id);
+    if (!group) {
+      group = new THREE.Group();
+      for (const part of this.boatParts ?? (this.boatParts = this.buildBoatParts())) {
+        const mesh = new THREE.Mesh(part.geometry, this.baseMaterial);
+        mesh.position.set(part.x, part.y, part.z);
+        group.add(mesh);
+      }
+      this.boatGroups.set(boat.id, group);
+      this.object.add(group);
+    }
+
+    let material = this.baseMaterial;
+    if (lightAt) {
+      const light = lightAt(Math.floor(boat.x), Math.floor(boat.y + 0.2), Math.floor(boat.z));
+      if (light) {
+        const level = Math.max(light.sky * this.skyLightFactor, light.block);
+        material = this.materialForLevel(Math.round(level));
+      }
+    }
+    for (const child of group.children) (child as THREE.Mesh).material = material;
+
+    group.position.set(boat.x, boat.y, boat.z);
+    group.rotation.y = boat.yaw;
+  }
+
+  /** 船的部件（局部坐标，原点在船底中心） */
+  private buildBoatParts(): readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] {
+    const tile = 'oak_planks';
+    // ⚠️ 必须给满 6 个面：`applyFaceUvs` 是按 `faceTiles.length` 逐面写的，
+    // 只给一个的话另外五面会保留 0..1 的整张图集 UV（渲染出来是花的）。
+    const tiles = Array<string>(6).fill(tile);
+    const make = (
+      width: number,
+      height: number,
+      depth: number,
+      x: number,
+      y: number,
+      z: number,
+    ) => {
+      const geometry = new THREE.BoxGeometry(width, height, depth);
+      applyFaceUvs(geometry, this.atlas, tiles);
+      return { geometry, x, y, z };
+    };
+
+    return [
+      // 船底
+      make(1.3, 0.16, 0.92, 0, 0.1, 0),
+      // 两舷
+      make(0.12, 0.44, 0.92, -0.59, 0.34, 0),
+      make(0.12, 0.44, 0.92, 0.59, 0.34, 0),
+      // 首尾（比两舷矮一点，像原版那种两头翘起的槽）
+      make(1.3, 0.38, 0.12, 0, 0.31, 0.4),
+      make(1.3, 0.38, 0.12, 0, 0.31, -0.4),
+      // 坐板
+      make(0.6, 0.08, 0.7, 0, 0.3, 0),
+    ];
   }
 
   /**
@@ -478,6 +566,12 @@ export class EntityRenderer {
     this.arrowGeometries.clear();
     this.spriteGeometries.clear();
     this.tileSpriteGeometries.clear();
+    for (const group of this.boatGroups.values()) this.object.remove(group);
+    this.boatGroups.clear();
+    if (this.boatParts) {
+      for (const part of this.boatParts) part.geometry.dispose();
+      this.boatParts = null;
+    }
     for (const material of this.materialByLevel) material?.dispose();
     this.materialByLevel.length = 0;
     this.baseMaterial.dispose();

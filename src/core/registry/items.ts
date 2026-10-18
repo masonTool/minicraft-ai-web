@@ -173,6 +173,17 @@ export const Item = {
    */
   TRIDENT: 1447,
   /**
+   * 橡木船（批次 244，G12 载具层第一件）。
+   *
+   * ⚠️ id 不能顺手写 1448/1449：那两格被**药水箭**占了
+   * （`potionId + TIPPED_ARROW_ID_OFFSET(200)`，1248/1249 → 1448/1449）。
+   * 1478 落在"刷怪蛋 1451~1477"之后、`MAX_ITEM_ID` 之前的一段空号里。
+   *
+   * ⚠️ 它是**可放置物品**（放到水上/岸上变成 `Boat` 实体），不是方块：
+   * 所以 `ItemDef.block` 为空，放置那条路走 `main.placeBoat()`。
+   */
+  OAK_BOAT: 1478,
+  /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
    * 它的用途与原版一致：**缓降药水**（`Brewing` 的 `VARIANT_INGREDIENTS`）
@@ -450,6 +461,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.SLIME_BALL, name: 'minecraft:slime_ball', tile: 'item_slime_ball' },
   // 三叉戟（批次 123）：**不可堆叠**（原版如此——它是一件武器，不是材料）
   { id: Item.TRIDENT, name: 'minecraft:trident', tile: 'item_trident', maxStack: 1 },
+  // 船（批次 244）：原版一次只能拿一艘（堆叠 1），放置后变成实体
+  { id: Item.OAK_BOAT, name: 'minecraft:oak_boat', tile: 'item_oak_boat', maxStack: 1 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料

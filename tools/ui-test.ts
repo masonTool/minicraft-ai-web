@@ -2820,5 +2820,41 @@ console.log('\n[附魔效果接线（批次 243）]');
   );
 }
 
+console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const itemsSrc = readFileSync(new URL('../src/core/registry/items.ts', import.meta.url), 'utf8');
+  const recipesSrc = readFileSync(new URL('../src/core/crafting/Recipes.ts', import.meta.url), 'utf8');
+  check(
+    '船物品存在（id 1478，堆叠 1）',
+    itemsSrc.includes('OAK_BOAT: 1478') && itemsSrc.includes("name: 'minecraft:oak_boat', tile: 'item_oak_boat', maxStack: 1"),
+  );
+  check(
+    '5 块木板摆成 U 形 → 一艘船',
+    recipesSrc.includes("result: { id: Item.OAK_BOAT, count: 1 }, pattern: ['P P', 'PPP']"),
+  );
+  check(
+    '放船时射线把**水**也算成目标（普通准星射线会跳过液体）',
+    appSrc.includes('(x, y, z) => this.world.getBlock(x, y, z) !== Block.AIR') &&
+      appSrc.includes('private placeBoat()') &&
+      appSrc.includes('blockDef(this.world.getBlock(hit.x, hit.y, hit.z)).liquid'),
+  );
+  check(
+    '上船 / 下船 / 每帧把玩家贴到船上',
+    appSrc.includes('private mountBoat(boat: Boat)') &&
+      appSrc.includes('private dismountBoat()') &&
+      appSrc.includes('this.syncRiderToBoat();'),
+  );
+  check(
+    '船只在有人驾驶时吃输入（空船自己漂）',
+    appSrc.includes('vehicleInput: this.ridingBoat') && appSrc.includes('boat.yaw = this.yaw;'),
+  );
+  check(
+    '触摸端先认船（点船 = 上船，不是打它/放方块）',
+    appSrc.includes('const tappedBoat = this.boatAtScreen(clientX, clientY);') &&
+      appSrc.includes('const boatTarget = this.tapBoat ?? this.boatUnderCrosshair();'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

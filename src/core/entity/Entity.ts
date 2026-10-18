@@ -335,6 +335,15 @@ export interface EntityContext {
    * "受伤就会着火"（岩浆是两者都有，而火球是分开结算的）。
    */
   ignitePlayer?: (seconds: number) => void;
+  /**
+   * 载具（船 / 矿车）收到的玩家输入（批次 244）。
+   *
+   * 与 `PlayerInput` 同名同义：`forward` / `strafe` 是 -1..1 的轴。
+   * 为什么不把输入塞进载具实体：实体层不持有"玩家按了什么"，
+   * 每帧由主程序按"有没有人在驾驶"决定传不传。
+   * 不传 = 空船，自己漂、不吃加速。
+   */
+  vehicleInput?: { forward: number; strafe: number; sprint: boolean };
 }
 
 let nextEntityId = 1;

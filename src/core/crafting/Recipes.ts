@@ -791,6 +791,8 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   { kind: 'shapeless' as const, result: { id: Item.GOLD_NUGGET, count: 9 }, ingredients: [Item.GOLD_INGOT] },
   // 碗：3 木板摆成 V 形 → 4 个（原版图案）。蘑菇煲 / 甜菜汤都要它
   { kind: 'shaped' as const, result: { id: Item.BOWL, count: 4 }, pattern: ['P P', ' P '], key: { P: Block.OAK_PLANKS } },
+  // 船（批次 244，G12）：5 块木板摆成 U 形（原版图案），一次一艘
+  { kind: 'shaped' as const, result: { id: Item.OAK_BOAT, count: 1 }, pattern: ['P P', 'PPP'], key: { P: Block.OAK_PLANKS } },
   // 蘑菇煲：红蘑菇 + 棕蘑菇 + 碗（原版无序）
   { kind: 'shapeless' as const, result: { id: Item.MUSHROOM_STEW, count: 1 }, ingredients: [Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Item.BOWL] },
   // 甜菜汤：6 个甜菜根 + 碗（原版无序）

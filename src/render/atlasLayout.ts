@@ -1020,6 +1020,8 @@ export const TILE_ORDER = [
   'spawn_egg_cat',
   'spawn_egg_ocelot',
   'spawn_egg_fox',
+  // 橡木船（批次 244，G12）：物品图标一张
+  'item_oak_boat',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

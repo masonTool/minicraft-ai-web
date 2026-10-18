@@ -87,6 +87,8 @@ import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts
 import { mobTypeById } from './core/entity/mobs.ts';
 // 村民（J11，批次 88）：造生物的工厂 + 实体本体 + 那一层的纯数据（职业 / 交易表）
 import { createMob } from './core/entity/MobFactory.ts';
+// 船（批次 244，G12）：载具实体与"上下船"全在主程序这一层
+import { Boat } from './core/entity/Boat.ts';
 import { Villager } from './core/entity/Villager.ts';
 import { isVillagerFood, levelName, tradeBlocker, tradeSettlement } from './core/registry/villagerTrades.ts';
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
@@ -982,12 +984,25 @@ class App {
    */
   private touchTapPoint: { x: number; y: number } | null = null;
   /**
+   * 玩家正坐着的那条船（批次 244）。非空时：
+   *  - 玩家物理**不跑**（位置由 `syncRiderToBoat` 每帧贴到船上）；
+   *  - 主程序把视角与输入交给船（`vehicleInput` + 每帧写 `yaw`）；
+   *  - 跳跃/潜行 = 下船。
+   */
+  private ridingBoat: Boat | null = null;
+  /** 上下船的冷却（秒）：防止"上船那一下同时被当成下船" */
+  private mountCooldown = 0;
+  /** 这一帧的输入快照（船要读它；`collectInput` 每帧只该调一次） */
+  private frameInput: PlayerInput = { forward: 0, strafe: 0, jump: false, sneak: false, sprint: false };
+  /**
    * 触摸端点中的**可交互生物**（批次 242：驯服 / 喂食 / 剪毛 / 挤奶 / 坐下）。
    *
    * 与 `tapAttackMob` 二选一：手上拿着"能对它用的东西"时先判使用，
    * 否则才是攻击。没有这一条，手机端拿着骨头点狼只会把它打一顿（驯不了宠物）。
    */
   private tapUseMob: Mob | null = null;
+  /** 触摸端点中的船（批次 244）：手指落点优先于准星 */
+  private tapBoat: Boat | null = null;
   /** `#target-info` 是否挂在手指上方（true = 已加 `.pinned`） */
   private targetPinned = false;
   /** 上一次写进 `#target-info` 的锚点（取整后比较，避免每帧重写样式） */
@@ -1874,6 +1889,13 @@ class App {
       onTap: (clientX: number, clientY: number) => {
         // 批次 239：记下这一下的落点——**方块目标**也改由它决定（不只是生物）
         this.touchTapPoint = { x: clientX, y: clientY };
+        // 批次 244：点到船 → 上船（船不是生物，单独一条；优先于生物与方块）
+        const tappedBoat = this.boatAtScreen(clientX, clientY);
+        if (tappedBoat) {
+          this.tapBoat = tappedBoat;
+          this.touchPlaceRequest = true;
+          return;
+        }
         // 批次 185：先按**手指落点**找生物（点哪打哪），准星那条路作兜底
         const tapped = this.mobAtScreen(clientX, clientY);
         // 批次 242：手上拿着"能对它用的东西"时这一下是**使用**（驯服/喂食/剪毛/坐下），
@@ -2176,6 +2198,7 @@ class App {
     this.tapAttackRequest = false;
     this.tapAttackMob = null;
     this.tapUseMob = null;
+    this.tapBoat = null;
     this.touchTapPoint = null;
     // 触摸端：界面打开时收起操作层；关闭时显式清一次手势状态，
     // 否则关面板那一瞬间按在屏幕上的手指会带着旧基准继续转视角
@@ -3708,6 +3731,7 @@ class App {
       this.hit = null;
       this.touchTapPoint = null;
       this.tapUseMob = null;
+      this.tapBoat = null;
       this.outline.hide();
       this.blockOverlay.hide();
       this.updateTargetAnchor(null);
@@ -3816,6 +3840,7 @@ class App {
     if (this.touchTapPoint) this.touchPlaceRequest = false;
     this.touchTapPoint = null;
     this.tapUseMob = null;
+    this.tapBoat = null;
   }
 
   /**
@@ -4165,6 +4190,222 @@ class App {
     const dz = hit.entity.z - this.physics.z;
     if (Math.hypot(dx, dz) > ATTACK_RANGE + 1) return null;
     return hit.entity;
+  }
+
+  // ---------------------------------------------------------------- 船（批次 244，G12）
+
+  /**
+   * 屏幕坐标 → 射线 → 船（触摸端）。
+   *
+   * 与 `mobAtScreen` 同一套反投影；射程按"玩家到船"卡 4.5 格
+   * （船比生物大，站在岸上够得到水面上的船）。
+   */
+  private boatAtScreen(clientX: number, clientY: number): Boat | null {
+    const canvas = this.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const ndc = new THREE.Vector3(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -(((clientY - rect.top) / rect.height) * 2 - 1),
+      0.5,
+    );
+    const origin = this.camera.position.clone();
+    const dir = ndc.unproject(this.camera).sub(origin).normalize();
+    const reach = 5 + origin.distanceTo(new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z));
+    const hit = raycastEntities(
+      this.entities.all,
+      origin.x,
+      origin.y,
+      origin.z,
+      dir.x,
+      dir.y,
+      dir.z,
+      reach,
+    );
+    if (!hit || !(hit.entity instanceof Boat) || hit.entity.dead) return null;
+    if (Math.hypot(hit.entity.x - this.physics.x, hit.entity.z - this.physics.z) > 4.5) return null;
+    return hit.entity;
+  }
+
+  /** 准星对着的船（桌面右键）：与 `boatAtScreen` 同一套判据，射线从眼睛发出 */
+  private boatUnderCrosshair(): Boat | null {
+    const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
+    const hit = raycastEntities(
+      this.entities.all,
+      this.physics.x,
+      this.physics.eyeY,
+      this.physics.z,
+      dx,
+      dy,
+      dz,
+      4.5,
+    );
+    if (!hit || !(hit.entity instanceof Boat) || hit.entity.dead) return null;
+    return hit.entity;
+  }
+
+  /** 上船 */
+  private mountBoat(boat: Boat): boolean {
+    if (this.ridingBoat || boat.dead || this.mountCooldown > 0) return false;
+    this.ridingBoat = boat;
+    boat.passenger = 'player';
+    this.physics.teleport(boat.x, boat.y + 0.25, boat.z);
+    this.physics.vx = 0;
+    this.physics.vy = 0;
+    this.physics.vz = 0;
+    this.mountCooldown = 0.4;
+    this.fallStartY = null;
+    this.pendingFallDistance = 0;
+    this.audio.play('place', { x: boat.x, y: boat.y, z: boat.z });
+    this.hudToast.show('上船：跳跃 / 潜行 下船');
+    return true;
+  }
+
+  /**
+   * 下船：把玩家挪到船边。
+   *
+   * 四个方向里挑第一个"脚与头都是空气"的落点；都不行就站到船顶上
+   * （不会把玩家塞进方块里——那是比"下不了船"严重得多的问题）。
+   */
+  private dismountBoat(): void {
+    const boat = this.ridingBoat;
+    if (!boat) return;
+    boat.passenger = null;
+    this.ridingBoat = null;
+    this.mountCooldown = 0.45;
+    this.physics.vx = 0;
+    this.physics.vy = 0;
+    this.physics.vz = 0;
+
+    const spots: readonly (readonly [number, number, number])[] = [
+      [boat.x + 1.1, boat.y + 0.05, boat.z],
+      [boat.x - 1.1, boat.y + 0.05, boat.z],
+      [boat.x, boat.y + 0.05, boat.z + 1.1],
+      [boat.x, boat.y + 0.05, boat.z - 1.1],
+      [boat.x, boat.y + 0.9, boat.z],
+    ];
+    let target = spots[spots.length - 1]!;
+    for (const spot of spots) {
+      const feet = this.world.getBlock(Math.floor(spot[0]), Math.floor(spot[1]), Math.floor(spot[2]));
+      const head = this.world.getBlock(Math.floor(spot[0]), Math.floor(spot[1]) + 1, Math.floor(spot[2]));
+      if (feet === Block.AIR && head === Block.AIR) {
+        target = spot;
+        break;
+      }
+    }
+    this.physics.teleport(target[0], target[1], target[2]);
+    this.fallStartY = null;
+    this.pendingFallDistance = 0;
+    this.audio.play('place', { x: boat.x, y: boat.y, z: boat.z });
+  }
+
+  /** 把玩家贴到船上（每帧实体更新之后调用，保证相机不比船慢一帧） */
+  private syncRiderToBoat(): void {
+    const boat = this.ridingBoat;
+    if (!boat) return;
+    // 船可能因为区块卸载/切维度被直接移出实体表（`removeInChunk` 只 splice、不标 dead）。
+    // 不查这一下的话，骑手会被永久"贴"在一条已经不存在的船上（悬在半空、下不来）。
+    if (boat.dead || !this.entities.all.includes(boat)) {
+      boat.passenger = null;
+      this.ridingBoat = null;
+      return;
+    }
+    // 船的朝向跟玩家视角走（原版也是"你往哪看，船就往哪开"）
+    boat.yaw = this.yaw;
+    const p = this.physics;
+    p.x = boat.x;
+    p.y = boat.y + 0.25;
+    p.z = boat.z;
+    p.vx = boat.vx;
+    p.vy = 0;
+    p.vz = boat.vz;
+    p.onGround = true;
+    // 在船上既不算摔落，也不该被当成"在游泳"
+    this.fallStartY = null;
+    this.pendingFallDistance = 0;
+  }
+
+  /**
+   * 放船（批次 244）：射线**把水也算成目标**。
+   *
+   * 普通准星射线会跳过液体（`isCrosshairTarget` 只认可选中方块），
+   * 照它写的话"对着水面放船"永远放不下去——这条是船最容易踩的坑。
+   */
+  private placeBoat(): boolean {
+    const target = this.boatPlacementTarget();
+    if (!target) return false;
+    const boat = new Boat(target.x, target.y, target.z);
+    boat.yaw = this.yaw;
+    this.entities.spawn(boat);
+    if (!this.isCreative) {
+      this.inventory.take(this.hotbarIndex, 1);
+      this.refreshHotbar();
+    }
+    this.audio.play('place', { x: target.x, y: target.y, z: target.z });
+    this.hand.swing();
+    return true;
+  }
+
+  /** 船放哪：打进水里 → 放进那一格；打进岸上 → 放在命中方块顶上 */
+  private boatPlacementTarget(): { x: number; y: number; z: number } | null {
+    // 触摸端按**手指落点**发（与"点哪打哪"一致）；桌面按视线。
+    // 两种入口的射线起点不同（相机 vs 眼睛），所以这里把 origin 也一起参数化。
+    const aim = this.touch?.aimPoint ?? this.touchTapPoint;
+    let ox = this.physics.x;
+    let oy = this.physics.eyeY;
+    let oz = this.physics.z;
+    let dx: number;
+    let dy: number;
+    let dz: number;
+    let maxDistance = REACH;
+    if (aim) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return null;
+      const ndc = new THREE.Vector3(
+        ((aim.x - rect.left) / rect.width) * 2 - 1,
+        -(((aim.y - rect.top) / rect.height) * 2 - 1),
+        0.5,
+      );
+      this.camera.updateMatrixWorld();
+      const origin = this.camera.position.clone();
+      const dir = ndc.unproject(this.camera).sub(origin).normalize();
+      ox = origin.x;
+      oy = origin.y;
+      oz = origin.z;
+      dx = dir.x;
+      dy = dir.y;
+      dz = dir.z;
+      maxDistance =
+        REACH + origin.distanceTo(new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z));
+    } else {
+      [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
+    }
+
+    const hit = raycastVoxels(
+      (x, y, z) => this.world.getBlock(x, y, z) !== Block.AIR,
+      ox,
+      oy,
+      oz,
+      dx,
+      dy,
+      dz,
+      maxDistance,
+    );
+    if (!hit) return null;
+    // 射程按"眼睛到命中点"再卡一道：屏幕上够得着、人够不着的地方不放
+    const eyeDistance = Math.hypot(
+      hit.hitX - this.physics.x,
+      hit.hitY - this.physics.eyeY,
+      hit.hitZ - this.physics.z,
+    );
+    if (eyeDistance > REACH + 0.6) return null;
+
+    const liquid = blockDef(this.world.getBlock(hit.x, hit.y, hit.z)).liquid;
+    return {
+      x: hit.x + 0.5,
+      y: liquid ? hit.y + 0.1 : hit.y + 1,
+      z: hit.z + 0.5,
+    };
   }
 
   /**
@@ -7010,9 +7251,15 @@ class App {
       // 隐身（K4 尾巴）：敌对生物看不见你就不追（原版隐形后 8 格内还是会被发现，
       // 这里简化成"完全不追"，见 TASKS K4 的差异记录）
       playerInvisible: this.effects.invisible,
+      // 船（批次 244）：只有"有人在驾驶"时才把输入交出去——空船不该自己开
+      vehicleInput: this.ridingBoat
+        ? { forward: this.frameInput.forward, strafe: this.frameInput.strafe, sprint: this.frameInput.sprint }
+        : undefined,
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);
+    // 船先动、人再贴上去：顺序不能反，否则相机会比船慢一帧（看着像"人在水里拖着船"）
+    this.syncRiderToBoat();
     // 药水云在主循环里推进（不是实体）：`lastEntityContext` 刚更新过，
     // 所以云结算里伤到生物时用得上"掉落物要交给谁"这些回调
     this.updateClouds(dt);
@@ -9199,6 +9446,21 @@ class App {
       return;
     }
 
+    // 上船（批次 244）：船常浮在水上，准星/手指底下往往没有可选方块，所以排在这道判断之前
+    const boatTarget = this.tapBoat ?? this.boatUnderCrosshair();
+    if (boatTarget && this.mountBoat(boatTarget)) {
+      this.tapBoat = null;
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+    // 放船（批次 244）：手里拿着船，对着水面/岸上按一下
+    if (this.heldItemId === Item.OAK_BOAT && this.placeBoat()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
     // 没有命中方块就没什么可放/可交互的（投掷在上面已经处理过了）
     if (!this.hit) return;
 
@@ -10923,11 +11185,24 @@ class App {
       }
 
       const rawInput = this.uiOpen ? IDLE_INPUT : this.collectInput();
+      // 船要读这一帧的输入（批次 244）：`collectInput` 每帧只调一次，存在这里共用
+      this.frameInput = rawInput;
+      this.mountCooldown = Math.max(0, this.mountCooldown - dt);
+      // 在船上按跳跃/潜行 = 下船（手机上跳跃键是唯一顺手的按键；桌面潜行也认）
+      if (this.ridingBoat && this.mountCooldown <= 0 && (rawInput.jump || rawInput.sneak)) {
+        this.dismountBoat();
+      }
       const wasOnGround = this.physics.onGround;
       if (!this.spawnResolved || this.pendingArrival || this.groundSettleReason !== null) {
         // 传送途中：目的地的区块还没流出来，`getBlock` 一律返回空气。
         // 新世界安全落点解析前也一样：玩家还在临时高度，绝不能先累计摔落或环境伤害。
         // 读档落地校正期间同样冻住：否则会先从存档的悬空位置掉下去，再被挪到地面。
+        this.physics.vx = 0;
+        this.physics.vy = 0;
+        this.physics.vz = 0;
+      } else if (this.ridingBoat) {
+        // 骑船（批次 244）：玩家物理这一帧不跑——位置由 `syncRiderToBoat` 贴到船上。
+        // 速度归零（船的速度由实体自己算），否则下船瞬间会带着船速弹出去。
         this.physics.vx = 0;
         this.physics.vy = 0;
         this.physics.vz = 0;
@@ -10965,6 +11240,8 @@ class App {
       if (this.spawnResolved && !this.pendingArrival && this.groundSettleReason === null) {
         this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
       }
+      // 死了就别赖在船上（否则重生后第一帧又会被贴回船上）
+      if (this.stats.dead && this.ridingBoat) this.dismountBoat();
       // 床（B13）：睡觉的计时与结算。用**真实输入**是为了让"跳跃键提前起床"能被读到
       this.updateSleep(dt, rawInput);
       // 钓鱼（批次 81）：浮标飞行 / 等待咬钩 / 咬钩窗口，全在状态机里

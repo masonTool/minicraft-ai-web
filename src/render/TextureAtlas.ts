@@ -1729,6 +1729,21 @@ function arrowPainter(tip: readonly [number, number, number] | null = null): Pai
 }
 
 PAINTERS.item_arrow = arrowPainter();
+/**
+ * 橡木船图标（批次 244）：俯视的 U 形船体——外圈是木板色、内舱压暗一档。
+ * 与原版那枚"从斜上方看的小船"不同，但 16×16 下"两头翘的槽"已经够认。
+ */
+PAINTERS.item_oak_boat = (x, y) => {
+  const dy = y - 7.5;
+  if (y < 4 || y > 12) return [0, 0, 0, 0];
+  const half = 5.8 - Math.abs(dy) * 0.22;
+  const dx = Math.abs(x - 7.5);
+  if (dx > half) return [0, 0, 0, 0];
+  // 内舱：中间那条更暗的"槽"，两端各留一格船帮
+  if (dx < half - 1.3 && y > 5 && y < 11) return [92, 60, 32, 255];
+  const shade = 0.82 + (1 - dx / half) * 0.22;
+  return [clamp255(176 * shade), clamp255(124 * shade), clamp255(70 * shade), 255];
+};
 
 /**
  * 打火石（I12）：左下角一块燧石、右上角一根铁条，中间几点火星。
