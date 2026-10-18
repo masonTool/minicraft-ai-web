@@ -661,7 +661,7 @@ console.log('\n[携带版细节收口（批次 159）]');
     invSrc.includes('private craftableIds(): number[]') &&
       invSrc.includes('if (canCraft(counts, recipe).ok) ids.push(recipe.result.id);') &&
       invSrc.includes('if (recipeGridSize(recipe) > this.crafting.size) continue;') &&
-      invSrc.includes('for (const id of this.viewedRecipeIds) {') &&
+      invSrc.includes('for (const id of this.usedRecipeIds) {') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
       invSrc.includes("classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
       css.includes('.inv-slot.locked {'),
@@ -793,10 +793,11 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('const showCreativeItems = creative && this.pane === \'creative\';'),
   );
   check(
-    '配方书开关：开=分类全部物品，关=能合成的 + 看过的缺料',
+    '配方书开关：开=分类全部物品，关=能合成的 + 用过的缺料',
     invSrc.includes('private showUnowned = false;') &&
       invSrc.includes('if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);') &&
-      invSrc.includes('this.viewedRecipeIds.add(itemId);') &&
+      invSrc.includes('private readonly usedRecipeIds') &&
+      invSrc.includes('this.usedRecipeIds.add(product.id);') &&
       css.includes('.inv-slot.locked {'),
   );
   // 分类栏最多 800 个 canvas，`refresh()` 每次都会走到排布 → 必须按指纹缓存
@@ -812,10 +813,11 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   // 生存模式**不选中**（不把仓库成品拿到手上），只把配方画到右栏；
   // 创造模式才保留"拿一件复制品"的老行为。
   check(
-    '生存点分类物品只预览配方、不产生选中态',
-    invSrc.includes('private pickCategoryItem(itemId: number): void {') &&
-      invSrc.includes('this.viewedRecipeIds.add(itemId);') &&
-      /pickCategoryItem[\s\S]{0,600}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) \{/.test(invSrc),
+    '生存点分类物品只预览配方、不产生选中态；按住滑动切换预览',
+    invSrc.includes("private pickCategoryItem(itemId: number, mode: 'preview' | 'fill' = 'fill')") &&
+      invSrc.includes('private beginCategoryScrub(') &&
+      invSrc.includes('this.pickCategoryItem(itemId, \'preview\');') &&
+      invSrc.includes('if (!cancel && !scrub.moved) this.pickCategoryItem(scrub.itemId, \'fill\');'),
   );
   check(
     '材料不齐时结果槽也画出产物（只读预览）',
@@ -825,15 +827,33 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   );
   check('创造模式仍可把物品拿到手上（复制品语义）', invSrc.includes('this.heldFromCreative = false;'));
   check(
-    '材料够就直接摆进合成格',
-    invSrc.includes('if (canCraft(this.inventory, recipe).ok) {') && invSrc.includes('fillCraftingGrid(this.inventory, this.crafting, recipe);'),
+    '抬手确认才把材料摆进合成格（滑动只预览）',
+    invSrc.includes("if (mode === 'fill' && fillCraftingGrid(this.inventory, this.crafting, recipe))"),
+  );
+  {
+    const ghostStart = invSrc.indexOf('private showRecipeGhost(');
+    const ghostEnd = invSrc.indexOf('private clearCraftGhost(');
+    const ghostBody = ghostStart >= 0 && ghostEnd > ghostStart ? invSrc.slice(ghostStart, ghostEnd) : '';
+    check(
+      '点材料区不再清空预览（空手时保持组成材料可见）',
+      invSrc.includes("if (this.craftGhost && key !== 'craft:result' && key.startsWith('craft:'))") &&
+        /craftGhost[\s\S]{0,200}if \(this\.held\) \{/.test(invSrc) &&
+        ghostBody.length > 0 &&
+        !ghostBody.includes('drainTo'),
+    );
+  }
+  check(
+    '提示条可以点一下立刻消失',
+    invSrc.includes('this.pickToastEl.addEventListener(\'pointerdown\'') &&
+      invSrc.includes('this.hidePickToast(true)') &&
+      readFileSync(new URL('../src/ui/HudToast.ts', import.meta.url), 'utf8').includes('hide(): void {'),
   );
   // 创造模式下点物品同样要把配方摆出来
   // 批次 166 改口径：**创造模式根本不显示配方**（拥有所有方块，看配方没意义），
   // 点物品就只是"拿起它"——创造栏那个调用点保留，但 `showRecipeFor` 会提前返回
   check(
     '创造模式点物品不展示配方（showRecipeFor 先挡掉创造模式）',
-    /private showRecipeFor\(itemId: number\): void \{[\s\S]{0,400}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) return;/.test(invSrc),
+    /private showRecipeFor\(itemId: number, mode: 'preview' \| 'fill' = 'fill'\): void \{[\s\S]{0,600}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) return;/.test(invSrc),
   );
   // 空槽不可选中：按下那一层"沉下去"只给有东西的格子
   // 空槽不给选中反馈（批次 184：红底那种"我没有的"同样不给，只闪一下）

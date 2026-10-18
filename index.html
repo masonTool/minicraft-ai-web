@@ -2460,6 +2460,8 @@
         max-height: none;
         overflow-y: auto;
         overscroll-behavior: contain;
+        /* 批次 211：纵向仍是滚动列表；**横向拖动交给 JS** 做"按住滑动看配方" */
+        touch-action: pan-y;
       }
       .inv-grid.inv-category .inv-slot { width: 40px; height: 40px; max-width: 40px; max-height: 40px; }
       .inv-grid.inv-category .inv-slot canvas { width: 28px; height: 28px; }
@@ -2667,7 +2669,8 @@
          ⚠️ 位置由 `placePickToast()` 按快捷栏的位置算（JS 写 left/top），
             这里只负责"像一块小牌子"；`position: fixed` 所以不受面板网格影响。 */
       #inv-pick-toast {
-        position: fixed; left: 0; top: 0; z-index: 12; pointer-events: none;
+        /* 批次 211：可点（点一下立刻收起）；隐藏时 display:none 不会拦手势 */
+        position: fixed; left: 0; top: 0; z-index: 12; pointer-events: auto;
         transform: translateX(-50%);
         max-width: min(80vw, 320px);
         padding: 5px 9px;
@@ -2693,7 +2696,8 @@
         bottom: calc(96px + env(safe-area-inset-bottom, 0px));
         transform: translateX(-50%);
         z-index: 9;
-        pointer-events: none;
+        /* 批次 211：点一下立刻收起 */
+        pointer-events: auto;
         padding: 5px 10px;
         background: #100010f2;
         border: 2px solid #2d0a63;

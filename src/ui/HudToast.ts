@@ -25,7 +25,20 @@ export class HudToast {
     this.root.className = 'hidden';
     this.root.setAttribute('role', 'status');
     this.root.setAttribute('aria-live', 'polite');
+    // 批次 211：点一下就直接收起，不必等满两秒（用户要求）
+    this.root.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.hide();
+    });
     host.appendChild(this.root);
+  }
+
+  /** 立刻收起（点提示条本身就调这个） */
+  hide(): void {
+    this.clearTimers();
+    this.root.classList.remove('visible');
+    this.root.classList.add('hidden');
   }
 
   /** 显示一条提示；连续调用时后一条直接覆盖前一条（不排队，避免积压） */

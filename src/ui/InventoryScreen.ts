@@ -336,7 +336,7 @@ export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
  * - `items`    ：我的物品（3×9 仓库）
  * - `category` ：**可合成的物品**（批次 159 引入、批次 206 按用户澄清改口径）——
  *   它列的不是"仓库里有什么"，而是"**仓库里的材料能做出什么**"：
- *   材料够的配方正常显示，之前点开看过、现在缺料的用红底保留；
+ *   材料够的配方正常显示，之前真正做过、现在缺料的用红底保留；
  *   没有任何配方的原料（原木、矿石…）不出现。点一项 = 在右栏看它的配方。
  * - `creative` ：创造物品栏
  */
@@ -439,23 +439,42 @@ export class InventoryScreen {
   private categoryPage = 0;
   /** 分类栏上一次渲染的指纹（没变就不重建，见 `renderCategoryGrid`） */
   private categoryStamp = '';
+  /**
+   * 分类栏的"按住滑动预览"（批次 211）。
+   *
+   * 用户要求："手按下去不抬起的时候，滑到哪一个物品上就查看哪一个的配方。"
+   * 按下只做**预览**（不动背包、不动合成格），抬手且没滑动才真正填充材料；
+   * 这样滑动过程中列表不会因为库存变化而重建，手指底下的格子保持稳定。
+   */
+  private categoryScrub: {
+    pointerId: number;
+    itemId: number;
+    moved: boolean;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
+  } | null = null;
   /** 创造栏上一次渲染的指纹（内容只跟分类 / 搜索词 / 页码有关，见 `renderCreativeGrid`） */
   private creativeStamp = '';
   /**
    * 「配方书开关」（批次 159 引入，批次 209 按用户澄清定稿）：
    *
    *  - **开**：列出该分类下的**全部物品**（相当于翻配方书，找你不知道怎么做的东西）；
-   *  - **关**（默认）：只列**现在能合成**的 + **之前点开看过、现在缺料**的（红底）。
+   *  - **关**（默认）：只列**现在能合成**的 + **之前真正做过、现在缺料**的（红底）。
    *
    * 颜色与开关无关：白底一律表示"当前材料够、且当前格子放得下"，
    * 其余（缺料、需要 3×3、根本没有配方）都是红底。
    */
   private showUnowned = false;
   /**
-   * 之前点开看过的配方产物（批次 206）：材料后来不够了也要留在列表里（红底），
-   * 这样玩家能接着看"还差什么"，而不是东西一缺就从列表里消失。
+   * **用过**的配方产物（批次 211；取代"看过的"）。
+   *
+   * 用户澄清：配方开关关着时"不再显示那些我看过的配方"，只留
+   * ① 当前能合成的；② **真正做过**的（后来缺料了也红底留着，方便再凑材料）。
+   * 所以只在**取出产物**时记录，点一下看看不再往列表里加东西。
    */
-  private readonly viewedRecipeIds = new Set<number>();
+  private readonly usedRecipeIds = new Set<number>();
   /** 可合成产物集合的缓存（键是背包指纹，见 `craftableIds`） */
   private craftableCache: { stamp: string; ids: number[] } | null = null;
   /**
@@ -1137,6 +1156,12 @@ export class InventoryScreen {
     this.pickToastEl = document.createElement('div');
     this.pickToastEl.id = 'inv-pick-toast';
     this.pickToastEl.className = 'hidden';
+    // 批次 211：点一下立刻收起（不必等 2 秒），并拦住这次点击（不要顺手丢东西）
+    this.pickToastEl.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.hidePickToast(true);
+    });
     this.root.appendChild(this.pickToastEl);
 
     document.body.appendChild(this.root);
@@ -1400,7 +1425,7 @@ export class InventoryScreen {
    * 分类栏里的物品：**能合成的产物**，按分类 + 搜索词筛。
    *
    * - 材料够的配方一定出现（不管仓库里有没有成品）；
-   * - 之前点开看过、现在缺料的配方也留着（红底），否则"差一点材料"的东西
+   * - 之前真正做过、现在缺料的配方也留着（红底），否则"差一点材料"的东西
    *   会在用掉某件材料的一瞬间从列表里消失，玩家再也找不到它；
    * - 没有任何配方的物品（原木、矿石…）不列——它们不是"能合成的东西"。
    */
@@ -1413,10 +1438,10 @@ export class InventoryScreen {
     // 配方书按钮打开 = **列举该分类的全部物品**（用户明确要求保留这条）。
     // 颜色仍按"现在能不能合成"来分：白底 = 当前材料够且格子放得下，其余红底。
     if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);
-    // 关闭 = 只列"现在能做的" + 之前点开看过、现在缺料的（红底）
+    // 关闭 = 只列"现在能做的" + 之前真正做过、现在缺料的（红底）
     const craftable = new Set(this.craftableIds());
     const ids = new Set<number>(craftable);
-    for (const id of this.viewedRecipeIds) {
+    for (const id of this.usedRecipeIds) {
       if (!craftable.has(id) && recipesForResult(id).length > 0) ids.add(id);
     }
     return [...ids].filter(byCategory);
@@ -1447,8 +1472,8 @@ export class InventoryScreen {
       this.categoryPage,
       this.inventoryStamp(),
       this.craftingStamp(),
-      // 看过的配方集合也会影响列表（缺料那一批红底项）
-      [...this.viewedRecipeIds].sort((a, b) => a - b).join(','),
+      // 用过的配方集合也会影响列表（缺料那一批红底项）
+      [...this.usedRecipeIds].sort((a, b) => a - b).join(','),
     ].join('|');
     // ⚠️ 不因为"手上有东西"就整栏冻住：宁可重建完再按 id 把选中那一格找回来。
     //    冻住的话，一旦某次渲染结果是空的（比如刚合成完、背包一时为空），
@@ -1459,7 +1484,7 @@ export class InventoryScreen {
     // 搜索框只在"全部"那一栏出现（与创造栏、配方书同一口径）
     this.categorySearch.style.display = this.categoryTab === 'all' ? '' : 'none';
     // 底部统计：开关打开时报"这一栏共多少 / 其中现在能做多少"，
-    // 关闭时报"现在能做多少 / 看过的缺料多少"。**不受搜索词影响**。
+    // 关闭时报"现在能做多少 / 用过的缺料多少"。**不受搜索词影响**。
     {
       const inTab = (id: number): boolean => this.categoryTab === 'all' || recipeBookTab(id) === this.categoryTab;
       const craftable = this.craftableIds();
@@ -1469,7 +1494,7 @@ export class InventoryScreen {
         this.categoryInfo.textContent =
           `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 全部 ${allInTab} 项（白底 ${craftableInTab} 项现在能做）`;
       } else {
-        const missingInTab = [...this.viewedRecipeIds].filter(
+        const missingInTab = [...this.usedRecipeIds].filter(
           (id) => !craftable.includes(id) && inTab(id) && recipesForResult(id).length > 0,
         ).length;
         this.categoryInfo.textContent =
@@ -1506,7 +1531,7 @@ export class InventoryScreen {
       if (count && owned > 1) count.textContent = String(owned);
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        this.pickCategoryItem(itemId);
+        this.beginCategoryScrub(event, itemId, slot);
       });
       fragment.appendChild(slot);
     }
@@ -1557,19 +1582,19 @@ export class InventoryScreen {
    * 点击后右侧工作台页要显示其合成配方，材料与生成物都要在槽内。"
    *
    * 所以生存模式这里**不再把仓库里的成品拿到手上**（那是"选中"，会跟着手指走），
-   * 只做两件事：记下"看过它"（缺料后仍留在列表里）+ 把配方画到右栏。
+   * 只做两件事：记下"真正做过它"（缺料后仍留在列表里）+ 把配方画到右栏。
    * 创造模式保留原来的"拿一件复制品"（那一栏本来就是无限物品）。
    */
-  private pickCategoryItem(itemId: number): void {
+  private pickCategoryItem(itemId: number, mode: 'preview' | 'fill' = 'fill'): void {
     diag.event('inventory', 'category.pick', {
       itemId,
+      mode,
       owned: this.inventory.countOf(itemId),
       held: this.held?.id ?? null,
       heldCount: this.held?.count ?? 0,
     });
-    this.viewedRecipeIds.add(itemId);
 
-    if (this.hooks.isCreative?.() ?? false) {
+    if (mode === 'fill' && (this.hooks.isCreative?.() ?? false)) {
       // 创造：再点同一件 = 取消选中；否则把仓库里那叠拿到手上（复制品语义另说）
       if (this.held) {
         const same =
@@ -1595,8 +1620,59 @@ export class InventoryScreen {
       }
     }
 
-    this.showRecipeFor(itemId);
+    this.showRecipeFor(itemId, mode);
     this.refresh();
+  }
+
+  /** 按下分类格：进入"按住滑动预览"，只做预览，不动物品（批次 211） */
+  private beginCategoryScrub(event: PointerEvent, itemId: number, slot: HTMLElement): void {
+    this.categoryScrub = {
+      pointerId: event.pointerId,
+      itemId,
+      moved: false,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+    };
+    this.showPickToast(slot);
+    this.pickCategoryItem(itemId, 'preview');
+  }
+
+  /** 按住移动：手指底下换成哪一格就预览哪一格 */
+  private updateCategoryScrub(event: PointerEvent): void {
+    const scrub = this.categoryScrub;
+    if (!scrub || event.pointerId !== scrub.pointerId) return;
+    scrub.lastX = event.clientX;
+    scrub.lastY = event.clientY;
+    if (!scrub.moved && Math.hypot(event.clientX - scrub.startX, event.clientY - scrub.startY) > 8) {
+      scrub.moved = true;
+    }
+    this.previewCategoryAt(scrub.lastX, scrub.lastY);
+  }
+
+  /** 手指/列表滚动之后，取当前落点下面的分类格（滚动时也要跟着换） */
+  private previewCategoryAt(x: number, y: number): void {
+    const scrub = this.categoryScrub;
+    if (!scrub) return;
+    const element = document.elementFromPoint(x, y);
+    const slot = element instanceof Element ? element.closest<HTMLElement>('.category-slot') : null;
+    if (!slot) return;
+    const itemId = Number(slot.dataset.itemId);
+    if (!Number.isFinite(itemId) || itemId === scrub.itemId) return;
+    scrub.itemId = itemId;
+    this.showPickToast(slot);
+    // 手指滑到哪一格，哪一格就闪一下（和单独点击的反馈一致）
+    this.flashLocked(slot);
+    this.pickCategoryItem(itemId, 'preview');
+  }
+
+  /** 抬手：没滑动过 = 一次正常点击（这时才真正把材料摆进格子） */
+  private endCategoryScrub(cancel = false): void {
+    const scrub = this.categoryScrub;
+    if (!scrub) return;
+    this.categoryScrub = null;
+    if (!cancel && !scrub.moved) this.pickCategoryItem(scrub.itemId, 'fill');
   }
 
   /**
@@ -1607,7 +1683,7 @@ export class InventoryScreen {
    *  - 3×3 配方在 2×2 背包里摆不下：点亮"需要工作台"小图标，不硬塞；
    *  - 只能烧出来的：点亮"熔炉"小图标。
    */
-  private showRecipeFor(itemId: number): void {
+  private showRecipeFor(itemId: number, mode: 'preview' | 'fill' = 'fill'): void {
     // 点在左栏时右栏可能停在"盔甲"页：切回合成，否则"配方"画在看不见的地方
     if (this.pocketTab !== 'crafting') {
       this.pocketTab = 'crafting';
@@ -1625,8 +1701,9 @@ export class InventoryScreen {
       this.craftStation = 'workbench';
       return;
     }
-    if (canCraft(this.inventory, recipe).ok) {
-      fillCraftingGrid(this.inventory, this.crafting, recipe);
+    // 只有"抬手确认"那一下才真正把材料摆进格子；按住滑动只做预览，
+    // 否则每滑过一件就动物品/重建列表，手指底下的格子会被换掉。
+    if (mode === 'fill' && fillCraftingGrid(this.inventory, this.crafting, recipe)) {
       this.previewResult = null;
       return;
     }
@@ -1674,10 +1751,10 @@ export class InventoryScreen {
 
   /** 材料不齐：把配方"画"进合成格（缺的红底），让人一眼看出差什么 */
   private showRecipeGhost(recipe: Recipe): void {
-    // 批次 181：预览前先把合成格里的**真实材料**收回背包。
-    // 否则预览会盖在实物上：玩家点那一格本意是"看看它叫什么"，
-    // 实际却把底下的材料拿起来了——那正是"点合成区把配方清空/乱动"的来源。
-    for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
+    // ⚠️ 批次 211：**不再把格子里已有的材料倒回背包**。
+    // 用户要求"点材料区不要清空，保持当前状态"——预览只是一层画在格子上的
+    // 只读信息，底下的实物（如果有）原样留着；要摆材料时再手动点格子。
+    // 这也避免了"点一下红底、材料回到背包后那件东西突然变成能合成"的副作用。
     const size = this.crafting.size;
     const layout = recipeLayout(recipe);
     const wanted: Array<number | null> =
@@ -2011,7 +2088,7 @@ export class InventoryScreen {
       // 批次 209：开 = 配方书模式（列出该分类全部物品）；关 = 只看现在能做的
       this.recipesBtn.title = this.showUnowned
         ? '配方书：正在列出该分类的全部物品 · 点一下只看现在能合成的'
-        : '只看现在能合成的（含看过的缺料）· 点一下列出该分类全部物品';
+        : '只看现在能合成的（含用过的缺料）· 点一下列出该分类全部物品';
     }
 
     // 换栏内容时给一下淡入：**位置不动**，只是让人看见"这一栏换了一份"
@@ -2782,6 +2859,16 @@ export class InventoryScreen {
         if (!this.open) return;
         this.heldElement.style.left = `${event.clientX}px`;
         this.heldElement.style.top = `${event.clientY}px`;
+        // 分类栏"按住滑动查看配方"（批次 209）
+        this.updateCategoryScrub(event);
+      },
+      { signal: this.listeners.signal },
+    );
+    // 分类列表滚动时手指位置不变、格子却在换：照样跟到最新的格子上
+    this.categoryGrid.addEventListener(
+      'scroll',
+      () => {
+        if (this.categoryScrub) this.previewCategoryAt(this.categoryScrub.lastX, this.categoryScrub.lastY);
       },
       { signal: this.listeners.signal },
     );
@@ -2823,7 +2910,15 @@ export class InventoryScreen {
     );
     // 抬手 / 取消就摘掉"按下去"那一层：真正的选中（`.selected`）由刷新接着接上
     for (const type of ['pointerup', 'pointercancel'] as const) {
-      document.addEventListener(type, () => this.markPressing(null), { signal: this.listeners.signal });
+      document.addEventListener(
+        type,
+        () => {
+          this.markPressing(null);
+          // 抬手指才决定"是点击（填充）还是只滑动过（保持预览）"
+          this.endCategoryScrub(type === 'pointercancel');
+        },
+        { signal: this.listeners.signal },
+      );
     }
 
     // 松手：把这一趟拖过的槽位结算掉（批次 128）
@@ -3042,11 +3137,18 @@ export class InventoryScreen {
   }
 
   private activateSlotInner(key: string, button: number, shift = false): void {
-    // 点合成格 = 要自己摆材料了：先把只读的配方预览收掉（批次 206），
-    // 否则预览会盖在真实材料上，玩家分不清哪一格是实物。
+    // 只有"手里拿着东西去点合成格"（= 真的要摆材料）才收掉只读预览。
+    // 空手点材料区**保持预览**（批次 211）：玩家就是来看"这条配方要什么"的，
+    // 点一下就把预览清掉等于看不到组成材料。
     if (this.craftGhost && key !== 'craft:result' && key.startsWith('craft:')) {
-      this.clearCraftGhost();
-      this.refresh();
+      if (this.held) {
+        this.clearCraftGhost();
+        this.refresh();
+      } else {
+        // 预览盖住的可能是真实材料：空手这一下**什么都不做**，
+        // 否则会把看不见的东西抓到手上（"我只是想看看配方"）。
+        return;
+      }
     }
     // **双击收集**（批次 128）：同一格在 400ms 内点第二下 → 把容器里的同类凑满一整堆。
     // ⚠️ 放在最前面：双击的那一下不该再按"普通左键"走一遍（那会先把光标上的东西放下）
@@ -3530,7 +3632,11 @@ export class InventoryScreen {
         // 保底：正经配方都到不了 64 次，只为防"产物又能当原料"那种配方死循环
         if (crafted >= 64) break;
       }
-      if (crafted > 0) this.inventory.notify();
+      if (crafted > 0) {
+        // "用过的配方"：真正做出来才算（关闭配方开关时它会留在列表里）
+        this.usedRecipeIds.add(product.id);
+        this.inventory.notify();
+      }
       this.refresh();
       return;
     }
@@ -3544,6 +3650,7 @@ export class InventoryScreen {
     // 附加数据一起交出去：不然"合出来一枚蓝色烟花"到背包里会变成金色
     const taken: ItemStack = { id: product.id, count: product.count, ...stackExtras(product) };
     if (!grid.takeResult()) return;
+    this.usedRecipeIds.add(product.id);
     const leftover = this.inventory.addStack(taken);
     if (leftover > 0) this.hooks.onDrop?.(taken.id, leftover);
     this.inventory.notify();
@@ -3754,6 +3861,7 @@ export class InventoryScreen {
     this.hidePickToast();
     this.clearCraftGhost();
     this.markPressing(null);
+    this.categoryScrub = null;
     this.lastLeftPane = '';
     this.restoreInvTabToRail();
     this.hooks.onOpenChange?.(false);
@@ -4052,10 +4160,17 @@ export class InventoryScreen {
   }
 
   /** 收起说明浮层（超时 / 关界面）：先淡出 200ms 再挂 hidden */
-  private hidePickToast(): void {
+  private hidePickToast(immediate = false): void {
     window.clearTimeout(this.pickToastTimer);
     this.pickToastTimer = 0;
     if (this.pickToastEl.classList.contains('hidden')) return;
+    if (immediate) {
+      // 玩家自己点了提示：**立刻**收掉，别再走 200ms 淡出
+      window.clearTimeout(this.pickToastFadeTimer);
+      this.pickToastEl.classList.add('hidden');
+      this.pickToastEl.classList.remove('leaving');
+      return;
+    }
     this.pickToastEl.classList.add('leaving');
     window.clearTimeout(this.pickToastFadeTimer);
     this.pickToastFadeTimer = window.setTimeout(() => {
