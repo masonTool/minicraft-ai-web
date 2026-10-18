@@ -355,6 +355,20 @@ export class TouchControls {
     };
   }
 
+  /**
+   * 手指正按在视角面上、且还没划动 = "可能正在使用"。
+   *
+   * 给主程序算 `usingItem` 用：有了它，进食 / 举盾 / 拉弓都不用再等"长按 280ms"。
+   *
+   * ⚠️ 直接读 `lookPointer`，**不要**改成"按下时回调置位的布尔量"：
+   * 那个布尔量在"按下时指针被界面 / 摇杆 / 切飞行抢走"这类情况下会永远停在 true
+   * （松手事件被吞了），表现就是下一帧凭空开始吃。`lookPointer` 在
+   * `finish` / `cancelLook` / `resetInput` 三处都会被清空，读它不会留脏状态。
+   */
+  get holding(): boolean {
+    return this.lookPointer !== null && !this.lookDragged;
+  }
+
   /** 取走本帧累积的视角增量（像素），取完即清零 */
   consumeLook(): { x: number; y: number } {
     const delta = { x: this.lookX, y: this.lookY };

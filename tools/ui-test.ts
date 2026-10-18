@@ -245,10 +245,20 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 营火（批次 47）：4 格 + 每格自己的进度条
     ['营火格子排布', '.campfire-grid'],
     ['营火进度条', '.campfire-cook'],
+    // 进食进度条（批次 219）：与破坏进度条同一套视觉
+    ['进食进度条', '#eat-progress i {'],
   ] as const) {
     // 用压过空白的版本比对：断言里可以跨行引用一整段规则，不用把换行也抄进来
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
+
+  // 进食进度条（批次 219）：DOM 与位置都要在——挖掘条在 74px、进食条在 86px，
+  // 两条判据互斥（挖掘要对着方块、进食要不对着），所以不会同时出现
+  check(
+    '进食进度条挂在 HUD 里，位置在破坏进度条之上',
+    compact.includes('<div id="eat-progress"><i></i></div>') &&
+      /#eat-progress \{[^}]*bottom: 86px/.test(compact),
+  );
 
   // "点击进入游戏"那层遮罩（批次 111 整个删掉）：DOM、样式、文案一处都不该留。
   // ⚠️ 先剥掉注释——说明"这层已经删掉"的注释里正好会提到这些字眼。
@@ -1281,9 +1291,23 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('只有一个长按阈值（280ms）', source.includes('const LONG_PRESS_MS = 280'));
   check('连续放置已删除（不再有 PLACE_HOLD_MS / onPlaceHoldStart）', !source.includes('PLACE_HOLD_MS') && !source.includes('onPlaceHoldStart'));
   check('轻点与长按分工写在注释里', source.includes('轻点') && source.includes('破坏 / 持续攻击'));
+  // 批次 219：进食/举盾/拉弓"按下即生效"，不再等那 280ms 长按判定。
+  // 读手势状态而不是回调置位的布尔量——后者在"按下被界面抢走指针"时会卡在 true
+  check(
+    '触摸层暴露 holding（按下且未拖动）',
+    source.includes('get holding(): boolean') && source.includes('return this.lookPointer !== null && !this.lookDragged;'),
+  );
 
   // 轻点落在生物上要"攻击优先"，不能顺手把方块放到它身上
   const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    'usingItem 在触摸端走"按下即使用"（不等 280ms 长按阈值）',
+    mainSource.includes('return this.leftDown || this.touch.holding;'),
+  );
+  check(
+    '进食时长按设置取档（原版 1.6 / 快速 1.0）',
+    mainSource.includes('eatSecondsFor(this.settings.fastEat)'),
+  );
   check(
     '轻点先判生物：点到生物 → 一次性攻击请求，否则才放置/交互',
     mainSource.includes('const tapped = this.mobAtScreen(clientX, clientY);') &&

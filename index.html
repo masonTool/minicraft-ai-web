@@ -1570,6 +1570,21 @@
         background: linear-gradient(#ffffff, #c8c8c8);
         box-shadow: 0 0 8px rgba(255, 255, 255, .5);
       }
+      /* 进食进度条（批次 219）：与破坏进度条同一套视觉，位置往上一格。
+         两者不会同时出现（挖掘要求准星对着方块，进食要求没对着），所以不打架。 */
+      #eat-progress {
+        position: absolute; left: 50%; bottom: 86px; transform: translateX(-50%);
+        width: 120px; height: 6px;
+        background: rgba(0, 0, 0, .62);
+        overflow: hidden; display: none;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .12);
+      }
+      #eat-progress.on { display: block; }
+      #eat-progress i {
+        display: block; height: 100%; width: 0;
+        background: linear-gradient(#ffe9a8, #e0b552);
+        box-shadow: 0 0 8px rgba(255, 210, 120, .5);
+      }
 
       /* boss 血条（末影龙）：只在 boss 存活时显示 */
       #boss-bar {
@@ -3416,7 +3431,7 @@
       /* 其余写着具体圆角的方框（提示条 / 标签 / 底衬 / 聊天记录） */
       :is(#debug, #overlay kbd, .inv-header kbd, .inv-label::before, .inv-panel kbd,
           #item-tooltip, .adv-badge, .adv-toast, #chat .chat-line, .chat-send,
-          #xp-bar, #xp-fill, #xp-level, #boss-bar, #break-progress,
+          #xp-bar, #xp-fill, #xp-level, #boss-bar, #break-progress, #eat-progress,
           #selected-item-name, #touch-hint, .unsupported-panel,
           #chat, .chat-log, .sign-editor-hint) {
         border-radius: 0;
@@ -3481,6 +3496,7 @@
       </div>
       <div id="crosshair"></div>
       <div id="break-progress"><i></i></div>
+      <div id="eat-progress"><i></i></div>
       <div id="boss-bar"><b>末影龙</b><i><s id="boss-fill"></s></i></div>
       <div id="vitals"></div>
       <div id="hotbar"></div>

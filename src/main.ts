@@ -525,7 +525,7 @@ import {
   Item,
   extraCropDrop,
 } from './core/registry/items.ts';
-import { CAKE_SLICE_FOOD, canEat } from './core/registry/food.ts';
+import { CAKE_SLICE_FOOD, canEat, eatSecondsFor } from './core/registry/food.ts';
 // 调参常量 / 世界配置 / 纯工具：**批次 101 从本文件搬出去的**（详见各文件头）
 import {
   ATTACK_COOLDOWN,
@@ -3045,10 +3045,17 @@ class App {
    * 鼠标右键与手柄的"使用"键直接算按住；触摸端没有独立的"使用"按钮，
    * 于是借用手势里唯一还没被用掉的空档：**长按空处**（准星没对着任何方块）。
    * 长按方块仍然是破坏，长按空处以前什么都不做。
+   *
+   * ⚠️ 触摸端**不能等那 280ms**（批次 219）：`LONG_PRESS_MS` 是"长按 = 破坏"
+   * 的判定阈值，只该约束对着方块的那一支。原版手机有独立使用键、按下即开始，
+   * 而这里如果等长按判完再算进食，每吃一口都要白等 0.28 秒（1.6 → 1.88 秒）。
+   * 所以手上"能用的东西"按下且未拖动就立刻算按住——用 `touch.holding` 读，
+   * 它是 `lookPointer !== null && !lookDragged`，松手/取消/切界面时自然失效。
    */
   private get usingItem(): boolean {
     if (this.rightDown || this.padUse) return true;
-    return this.touch !== null && this.leftDown && this.hit === null;
+    if (this.touch === null || this.hit !== null) return false;
+    return this.leftDown || this.touch.holding;
   }
 
   /**
@@ -3699,17 +3706,25 @@ class App {
     const potion = this.heldPotion;
     // 药水随时都能喝（不像食物要"没吃饱"），其余条件与进食完全一致
     const edible = potion !== null || (held !== null && canEat(held.food, this.stats.food, MAX_FOOD));
-    if (!edible || !this.usingItem || this.uiOpen || this.stats.dead) {
+    // 准星对着生物时不算"使用"（批次 219）：那一下是攻击 / 喂食（原版同理，
+    // 使用键落在生物身上走的是交互）。不加这条，"按住打怪"会把手里那份肉一起吃掉——
+    // 进食变快之后这事更容易撞上。
+    const aimingMob = edible && this.mobUnderCrosshair() !== null;
+    if (!edible || aimingMob || !this.usingItem || this.uiOpen || this.stats.dead) {
       this.eatProgress = 0;
       this.chewTimer = 0;
       return;
     }
 
-    this.eatProgress += dt / EAT_SECONDS;
-    // 每 0.4 秒"嚼一口"：手臂晃一下 + 一声咀嚼，让玩家看得出正在吃（原版也有咀嚼音）
+    // 原版 1.6 秒；设置里开着"快速进食"就是 1.0 秒（两个数都在 food.ts）
+    const seconds = eatSecondsFor(this.settings.fastEat);
+    this.eatProgress += dt / seconds;
+    // 咀嚼节奏按总时长等比缩：一份食物始终是 4 口（手臂晃一下 + 一声咀嚼）。
+    // 原版也是"每 8 tick 一口、共 32 tick"，比例不变、只是整体变快。
+    const chewInterval = CHEW_INTERVAL * (seconds / EAT_SECONDS);
     this.chewTimer -= dt;
     if (this.chewTimer <= 0) {
-      this.chewTimer = CHEW_INTERVAL;
+      this.chewTimer = chewInterval;
       this.hand.swing();
       this.audio.play('eat');
     }
@@ -8402,6 +8417,25 @@ class App {
   }
 
   /**
+   * 进食进度条（批次 219）：与破坏进度条同一套视觉，位置在它上面一条。
+   *
+   * 为什么需要它：进食从"按下"到"咽下"要 1 秒（原版档 1.6 秒），中间除了每口
+   * 晃一下手臂、响一声咀嚼之外**画面上什么都没有**——玩起来就像"按了没反应"。
+   * 有了这条，手指一按下就能看到进度在走。
+   *
+   * 与破坏进度条同帧调用，但两者不会同时出现：挖掘要求准星对着方块，
+   * 进食要求准星**没**对着方块，判据互斥。
+   */
+  private updateEatingProgressUi(): void {
+    const container = document.getElementById('eat-progress');
+    const bar = container?.firstElementChild as HTMLElement | null;
+    if (!container || !bar) return;
+    const active = this.eatProgress > 0 && this.eatProgress < 1;
+    container.classList.toggle('on', active);
+    if (active) bar.style.width = `${Math.round(this.eatProgress * 100)}%`;
+  }
+
+  /**
    * 扔出手上的东西（K4 尾巴）：雪球 / 鸡蛋 / 喷溅药水。
    *
    * 为什么是"点按即投"而不是像吃喝那样长按：扔东西时瞄准的就是正前方
@@ -10459,6 +10493,7 @@ class App {
 
       this.refreshLoadingState();
       this.updateBreakProgressUi();
+      this.updateEatingProgressUi();
       // 只画视距之内的区块（批次 203）：加载圈留了 `radius + 2` 的缓冲，而远裁面被
       // 天空穹顶撑着（约 13 区块），裁不掉它们——不切一下，"自适应降视距"在画面上
       // 几乎不生效（真机反馈"卡的时候视距看起来还是很大"）。

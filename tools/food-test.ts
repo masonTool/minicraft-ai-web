@@ -24,7 +24,15 @@ import {
   itemDef,
   rareDropFor,
 } from '../src/core/registry/items.ts';
-import { EAT_SECONDS, FOOD_TABLE, canEat, foodForName, saturationFrom } from '../src/core/registry/food.ts';
+import {
+  EAT_SECONDS,
+  EAT_SECONDS_FAST,
+  FOOD_TABLE,
+  canEat,
+  eatSecondsFor,
+  foodForName,
+  saturationFrom,
+} from '../src/core/registry/food.ts';
 import { itemLabel } from '../src/core/registry/itemNames.ts';
 import { MAX_FOOD, MAX_HEALTH, MAX_SATURATION, PlayerStats } from '../src/core/survival/PlayerStats.ts';
 import { StatusEffects } from '../src/core/survival/StatusEffects.ts';
@@ -126,6 +134,15 @@ equal('牛奶的饱和度修饰值也是 0', FOOD_TABLE.milk_bucket!.saturationM
 check('牛奶是"饥饿满也能喝"的（原版行为）', FOOD_TABLE.milk_bucket!.alwaysEdible === true);
 check('牛奶会清除所有状态效果', FOOD_TABLE.milk_bucket!.clearsEffects === true);
 equal('进食耗时与原版一致（1.6 秒）', EAT_SECONDS, 1.6);
+// 快速档（批次 219）：默认开，1.0 秒。两个数都钉住——改任何一个都会在这里露馅
+equal('快速进食档是 1.0 秒', EAT_SECONDS_FAST, 1.0);
+equal('关掉快速进食 → 原版 1.6 秒', eatSecondsFor(false), EAT_SECONDS);
+equal('打开快速进食 → 1.0 秒', eatSecondsFor(true), EAT_SECONDS_FAST);
+check(
+  '快速档确实更快，但没快到"秒吃"（0.8~1.6 秒之间）',
+  EAT_SECONDS_FAST < EAT_SECONDS && EAT_SECONDS_FAST >= 0.8,
+  `实际 ${EAT_SECONDS_FAST}`,
+);
 check('熟肉比同种生肉更顶饱', FOOD_TABLE.cooked_beef!.hunger > FOOD_TABLE.beef!.hunger);
 equal('腐肉的饱和度修饰值最低（原版 0.1）', FOOD_TABLE.rotten_flesh!.saturationModifier, 0.1);
 

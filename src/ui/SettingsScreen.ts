@@ -126,7 +126,8 @@ type BoolSettingKey =
   | 'adaptiveResolution'
   | 'weatherEffects'
   | 'cape'
-  | 'autoJump';
+  | 'autoJump'
+  | 'fastEat';
 
 export interface GameSettings {
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
@@ -186,6 +187,14 @@ export interface GameSettings {
    * 默认开——手机上一边推摇杆一边点跳跃很别扭，原版也是默认开。
    */
   autoJump: boolean;
+  /**
+   * 快速进食（1.0 秒，批次 219）。
+   *
+   * 默认**开**：触摸端没有独立的使用键，进食只能借用"长按空处"，
+   * 原版 1.6 秒叠上 280ms 的长按判定是 1.88 秒，手机上实在太磨。
+   * 关掉即回到原版的 1.6 秒节奏（数值见 `core/registry/food.ts` 的两个常量）。
+   */
+  fastEat: boolean;
   /** 反转视角的上下方向（触摸拖动与鼠标都受影响） */
   invertY: boolean;
   /** 昼夜循环：关掉之后时间停在当前时刻（截图对比、搭建筑时很好用） */
@@ -246,6 +255,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   weatherEffects: true,
   autosaveSeconds: 30,
   autoJump: true,
+  fastEat: true,
   invertY: false,
   daylightCycle: true,
   showDebug: true,
@@ -308,6 +318,8 @@ export function loadSettings(): GameSettings {
         ? (parsed.autosaveSeconds as number)
         : DEFAULT_SETTINGS.autosaveSeconds,
       autoJump: parsed.autoJump !== false,
+      // 快速进食默认开（与 autoJump 同一口径：只有显式 false 才关）
+      fastEat: parsed.fastEat !== false,
       invertY: parsed.invertY === true,
       daylightCycle: parsed.daylightCycle !== false,
       showDebug: parsed.showDebug !== false,
@@ -664,6 +676,9 @@ export class SettingsScreen {
     // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开；
     // 但它会让"贴着一格高的墙走"变成自己往上跳，有人不喜欢，所以给开关。
     this.makeToggle(controls, 'autoJump', '自动跳跃');
+    // 快速进食（批次 219）：1.0 秒 vs 原版的 1.6 秒。触摸端没有使用键，
+    // "长按空处"还要多等 280ms，所以默认开；想完全对齐原版节奏就关掉。
+    this.makeToggle(controls, 'fastEat', '快速进食（1 秒）');
 
     const sound = this.section('sound');
     sound.append(this.makeSlider('volume', '音量', '%', 0, 100, 1, 100));

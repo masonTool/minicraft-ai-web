@@ -86,6 +86,24 @@ export const CAKE_SLICE_FOOD: FoodInfo = { hunger: 2, saturationModifier: 0.1 };
 export const EAT_SECONDS = 1.6;
 
 /**
+ * "快速进食"档：1.0 秒（设置项 `fastEat`，默认**开**，批次 219）。
+ *
+ * 为什么给一档更快的：触摸端没有独立的使用键，进食只能借用"长按空处"，
+ * 于是原版 1.6 秒之外还要多等 280ms 的长按判定 —— 1.88 秒实在太磨人。
+ * 那 280ms 已经在本批从 `usingItem` 里去掉（它不是原版设计，是缺使用键的补丁成本），
+ * 这一档再把它压到 1 秒；关掉开关就完全回到原版节奏。
+ *
+ * ⚠️ 与原版的差异：这是**唯一**一处进食时长偏离 1.6 秒的地方，且只在该开关打开时生效。
+ * `tools/food-test.ts` 同时钉住两个数（1.6 / 1.0），改任何一个都会被抓住。
+ */
+export const EAT_SECONDS_FAST = 1.0;
+
+/** 按设置选进食总时长（`fastEat` 见 `SettingsScreen.ts`） */
+export function eatSecondsFor(fast: boolean): number {
+  return fast ? EAT_SECONDS_FAST : EAT_SECONDS;
+}
+
+/**
  * 食物数值表，键是注册名去掉 `minecraft:` 前缀。
  * 数值取自原版 1.18 的 `Items.java`（食品那一段）。
  */

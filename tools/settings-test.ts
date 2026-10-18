@@ -82,6 +82,8 @@ console.log('\n[默认设置]');
   check('默认粒子是全部、云是开、昼夜循环是开', DEFAULT_SETTINGS.particles === 'all' && DEFAULT_SETTINGS.clouds && DEFAULT_SETTINGS.daylightCycle);
   check('默认不反转上下视角', DEFAULT_SETTINGS.invertY === false);
   check('自动跳跃默认开（与基岩版一致，老存档缺字段也按开）', DEFAULT_SETTINGS.autoJump === true && fallback.autoJump === true);
+  // 批次 219：触摸端没有独立使用键，进食要借用"长按空处"，1.6 秒 + 280ms 太磨
+  check('快速进食默认开（老存档缺字段也按开）', DEFAULT_SETTINGS.fastEat === true && fallback.fastEat === true);
   check('默认视距/视野在合理范围', DEFAULT_SETTINGS.viewDistance >= 4 && DEFAULT_SETTINGS.viewDistance <= 16 && DEFAULT_SETTINGS.fov >= 60 && DEFAULT_SETTINGS.fov <= 110);
 }
 
@@ -130,6 +132,12 @@ console.log('\n[设置的容错]');
   const off = loadSettings();
   check('显式关掉的三项都能读回来', off.clouds === false && off.invertY === true && off.daylightCycle === false && off.particles === 'off');
   check('自动跳跃可以显式关掉', off.autoJump === false);
+
+  // 快速进食（批次 219）：默认开，但必须能显式关回原版的 1.6 秒
+  storage.setItem(KEY, JSON.stringify({ fastEat: false }));
+  check('快速进食可以显式关掉（回到原版 1.6 秒）', loadSettings().fastEat === false);
+  storage.setItem(KEY, JSON.stringify({ fastEat: 'no' }));
+  check('脏值不当成关闭（只认严格的 false）', loadSettings().fastEat === true);
 }
 
 // ---------------------------------------------------------------- 3. 往返
