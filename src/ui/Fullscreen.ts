@@ -233,6 +233,35 @@ export function armAutoFullscreen(
   return detach;
 }
 
+/**
+ * 竖屏时"点任何地方都进横屏全屏"（批次 184，用户要求）。
+ *
+ * 与 `armAutoFullscreen` 的区别是**它不是一次性的**：
+ *  - `armAutoFullscreen` 只管"第一次交互"那一下，成功失败都摘掉监听；
+ *    而手机上第一次请求常见地被拒（不在全屏、方向锁要等全屏完成），
+ *    之后再点就没人管了，玩家体感是"点了很多下才横过来"。
+ *  - 这一条一直挂着，只在"已经横屏且已经全屏"时什么都不做；
+ *    其余时候每一笔落地的点击都再要一次（`enterMobilePresentation` 内部静默失败）。
+ *
+ * 只挂给**粗指针**（触摸）设备：桌面把窗口拉成竖条时不该每点一下都请求全屏。
+ * 返回撤销函数，方便测试与将来换触发点。
+ */
+export function armPresentOnTap(target: EventTarget | null = null): () => void {
+  const element = target ?? (typeof document === 'undefined' ? null : document);
+  if (!element || !isCoarsePointer()) return () => undefined;
+  const types = ['pointerdown', 'touchstart'] as const;
+  const trigger = (): void => {
+    if (isFullscreen() && isLandscapeOrientation()) return;
+    enterMobilePresentation();
+    // 全屏/转向都是异步的：提示条晚一点再对一次账
+    if (typeof window !== 'undefined') window.setTimeout(syncRotateHint, 200);
+  };
+  for (const type of types) element.addEventListener(type, trigger, true);
+  return () => {
+    for (const type of types) element.removeEventListener(type, trigger, true);
+  };
+}
+
 const ROTATE_HINT_ID = 'rotate-hint';
 
 /**

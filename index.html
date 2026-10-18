@@ -3149,6 +3149,32 @@
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
       }
       .unsupported-screen.visible { display: grid; }
+      /* 从后台回来的"点击继续"层（批次 184）。
+         用户要求："从后台返回时，先不显示游戏页面，显示暂停页面；点击页面自动横屏全屏恢复游戏。"
+         **不透明**是刻意的：回来时浏览器常常已经退出了全屏、方向也被系统转回去，
+         先让玩家看见运行中的竖屏小窗等于把"我已经不在游戏里"演一遍。
+         层数高于暂停菜单（50），由它自己吃掉第一下点击（`App.dismissResumeGate`）。 */
+      #resume-gate {
+        position: fixed; inset: 0; z-index: 55;
+        display: grid; place-items: center;
+        padding: 16px;
+        background: radial-gradient(circle at 50% 42%, #1b1f24, #060708 76%);
+        color: var(--mc-text-light);
+        text-align: center;
+        font-size: 13px; line-height: 1.6;
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+        cursor: pointer;
+      }
+      #resume-gate .resume-gate-panel {
+        display: flex; flex-direction: column; gap: 6px;
+        padding: 18px 30px;
+        background: rgba(20, 20, 20, .9);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+      }
+      #resume-gate b { font-size: 22px; letter-spacing: 2px; }
+      #resume-gate span { font-size: 12px; color: #a8a8a8; }
+
       /* 竖屏手机：点这一条就是进全屏 + 锁横屏的那一次手势。默认不显示。
          ⚠️ 批次 181 从**整屏黑幕**改成**底部横条**：黑幕会把主菜单一起盖住，
          用户体感是"退出了另一个游戏"。现在菜单始终可见可点，只提示"横屏更好"。 */

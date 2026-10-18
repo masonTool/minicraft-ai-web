@@ -98,7 +98,9 @@ import { WorldScreen } from './ui/WorldScreen.ts';
 import { hideLoading, showLoading, WORLD_LOADING_TEXT } from './ui/LoadingOverlay.ts';
 import {
   armAutoFullscreen,
+  armPresentOnTap,
   enterFullscreenOnBoot,
+  enterMobilePresentation,
   installRotateHint,
   isFullscreen,
   preferInstalledLandscape,
@@ -876,6 +878,16 @@ class App {
   private tapAttackRequest = false;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
+  /**
+   * 从后台回来时那层"游戏已暂停 · 点击继续"的遮罩（批次 184）。
+   *
+   * 用户要求："从后台返回时，先不显示游戏页面，显示暂停页面；点击页面自动横屏全屏恢复游戏。"
+   * 手机上切出去再回来，浏览器可能已经退出了全屏、或者方向被系统转回去了；
+   * 直接把运行中的画面摆到玩家面前，既容易被吓一跳，也常常是"一回来看见小窗/竖屏"。
+   */
+  private resumeGateEl: HTMLDivElement | null = null;
+  /** 刚刚切到过后台：下一次回到前台要先落到暂停页（见 `handleReturnFromBackground`） */
+  private wasHidden = false;
   /**
    * 启动期的渐进视距（批次 100）：开局先只请求 3 格半径，之后每 0.5 秒往外涨一格。
    *
@@ -1723,6 +1735,63 @@ class App {
   toggleSettings(): void {
     if (this.settingsScreen.isOpen) this.closeSettings();
     else this.openSettings();
+  }
+
+  /**
+   * 从后台回来（批次 184，用户要求）：
+   * **先不显示游戏页面，显示暂停页面；点一下才横屏全屏回到游戏。**
+   *
+   * 两件事分开做是有意的：
+   *  1. 暂停菜单照常打开（Esc / 返回键那条路也在用它），玩家能看见"游戏已暂停"；
+   *  2. 上面再压一层不透明的 `#resume-gate`——它同时挡住画面与暂停菜单上的按钮：
+   *     从后台回来时浏览器往往已经**退出了全屏、方向也被系统转回去了**，
+   *     直接让玩家点"继续游戏"只会得到一个竖屏小窗里的游戏。
+   *     那一层自己吃掉第一下点击：请求全屏 + 锁横屏，再关掉它自己与暂停菜单。
+   */
+  private handleReturnFromBackground(): void {
+    if (this.disposed) return;
+    this.wasHidden = false;
+    diag.event('app', 'resume.background', { fullscreen: isFullscreen() });
+    // 回来先落到暂停页：其它面板（背包/聊天/告示牌）一律先收起
+    if (this.chat.isOpen) this.chat.close();
+    if (this.signEditor.isOpen) this.signEditor.close();
+    if (this.beaconScreen.isOpen) this.beaconScreen.close();
+    if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
+    if (this.advancementScreen.isOpen) this.advancementScreen.hide();
+    if (!this.settingsScreen.isOpen) this.openSettings();
+    this.showResumeGate();
+  }
+
+  /** 挂出"点击继续"那一层（已经挂着就不重复建） */
+  private showResumeGate(): void {
+    if (this.resumeGateEl) return;
+    const gate = document.createElement('div');
+    gate.id = 'resume-gate';
+    gate.dataset.role = 'resume-gate';
+    const panel = document.createElement('div');
+    panel.className = 'resume-gate-panel';
+    const title = document.createElement('b');
+    title.textContent = '游戏已暂停';
+    const hint = document.createElement('span');
+    hint.textContent = '点击任意处继续 · 自动横屏全屏';
+    panel.append(title, hint);
+    gate.appendChild(panel);
+    // pointerdown 而不是 click：全屏必须在用户手势的调用栈里发出
+    gate.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      enterMobilePresentation();
+      this.dismissResumeGate();
+    });
+    document.body.appendChild(gate);
+    this.resumeGateEl = gate;
+  }
+
+  /** 收掉"点击继续"那一层，并把暂停菜单一起关掉（回到游戏） */
+  private dismissResumeGate(): void {
+    this.resumeGateEl?.remove();
+    this.resumeGateEl = null;
+    if (this.settingsScreen.isOpen) this.closeSettings();
+    syncRotateHint();
   }
 
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
@@ -8965,11 +9034,14 @@ class App {
       () => {
         if (document.visibilityState === 'hidden') {
           // 切后台时手指的按下/抬起可能收不到：把输入清零，回来不会"自己一直走"
+          this.wasHidden = true;
           this.touch?.resetInput('hidden');
           void this.saveNow('hidden');
         } else {
           // 批次 183：从后台回来偶尔会拿到 clientX/Y=0 的触摸；先重排一次
           this.touch?.recover('visible');
+          // 批次 184：先落到暂停页，点一下才横屏全屏回到游戏
+          if (this.wasHidden) this.handleReturnFromBackground();
         }
       },
       { signal: this.listeners.signal },
@@ -9229,6 +9301,10 @@ class App {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    // 从后台回来那一层遮罩挂在 body 上（不在 App 的容器里），要自己摘掉
+    this.resumeGateEl?.remove();
+    this.resumeGateEl = null;
+    this.wasHidden = false;
     diag.event('app', 'dispose', { world: this.worldConfig.id });
     this.listeners.abort();
     this.backButton.reset();
@@ -10483,6 +10559,10 @@ async function boot(): Promise<void> {
   installRotateHint();
   enterFullscreenOnBoot();
   armAutoFullscreen([document]);
+  // 批次 184：竖屏下**任何时候点任何区域**都再试一次（不是一次性）——
+  // 手机上第一次请求常见被拒（要等全屏完成后才允许锁方向），
+  // 一次性的网摘掉之后玩家就会觉得"点半天才横过来"。
+  armPresentOnTap(document);
   // 全屏进出都记一笔：手机上的"全屏忽然没了"常常是系统手势/切后台造成的
   document.addEventListener('fullscreenchange', () => {
     const full = isFullscreen();
