@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 676（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 678（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **182**、进行中 **75**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -77,6 +77,13 @@ npm run dev            # http://localhost:5173
   共用几何缓存）；准星那一路仍是 0.08、无微光。⑤ 按住时准星完全收起
   （`body.touch-aiming`），`#target-info` 挂到白圈上方跟手。门禁：`test:render` 125、
   `test:ui` 688，离线 130 套全绿。
+  **同日复查**（用户："去掉原来的默认的十字光标，手指不触摸没有任何目标，圈再增大为当前的三倍"）：
+  ① 准星在触摸端**整个隐藏**（`body.touch-mode #crosshair { display: none }`，桌面键鼠保留）；
+  ② `updateInteraction` 里"触摸端 + 没有手指落点"直接 `hit = null`——不画描边/命中面/微光，
+  也不显示目标名；进食的"准星对着生物"门槛只对桌面生效（否则手指按空白处吃饭会被
+  屏幕中央恰好站着的生物挡掉）；③ 白圈直径 46 → **138**（居中负 margin 23 → 69，
+  只放大直径、描边仍 2px），`#target-info.pinned` 改由 CSS 按圈半径
+  （`74px × --touch-scale`）向上偏移。门禁：`test:ui` **689** 条、`test:render` 125 条。
 - 批次 238（用户丢来一份真机诊断日志，问"游戏画面为什么卡死了"）：**画面不是变慢，是渲染主循环停了**。
   日志里第 20319 帧在 `LightEngine.spread()` 抛 `RangeError: Invalid array length`，
   而"排下一帧"写在帧体最后一行 → 循环再也没排上：画面定格、DOM 却还能点

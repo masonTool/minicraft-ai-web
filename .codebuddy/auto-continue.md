@@ -933,9 +933,16 @@
   轻点落点 `touchTapPoint` 只活一帧，未消费即作废（否则会落到下一帧准星上）
 - [x] B239-5 `BlockOverlay`：命中面 0.08 → 0.16（`showHighlight` 加 strength 参数）+
   `showGlow` 整块 10% 加法微光（与裂纹共用几何缓存；准星那一路不显示微光）
-- [x] B239-6 按住时 `body.touch-aiming` 收起准星；`#target-info` 加 `.pinned` 挂到白圈上方跟手
+- [x] B239-6 `#target-info` 加 `.pinned` 挂到白圈上方跟手
 - [x] B239-7 门禁：`test:render` 125 条（微光/强度）、`test:ui` 688 条（白圈/射线/准星守卫），
   离线 130 套全绿
+- [x] B239-8 复查（用户："去掉原来的默认的十字光标，手指不触摸没有任何目标"）：
+  触摸端**整个隐藏准星**（`body.touch-mode #crosshair { display: none }`，桌面保留）；
+  没有手指落点时 `hit = null`（不画描边/命中面/微光、不显示目标名）；
+  进食的"准星对着生物"门槛只对桌面生效
+- [x] B239-9 复查（用户："圈再增大为当前的三倍"）：白圈直径 46 → **138**
+  （负 margin 23 → 69，描边仍 2px）；`#target-info.pinned` 的向上偏移改由 CSS 按
+  圈半径算（`74px × --touch-scale`）；门禁 `test:ui` 688 → **689**
 
 > **批次 239 已完成。** 两条经验：
 > ① **"点击落点"必须只活一帧**。`onTap` 发生在帧与帧之间，`updatePlacing` 却按帧读
