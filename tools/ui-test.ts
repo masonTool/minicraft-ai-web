@@ -785,6 +785,13 @@ console.log('\n[携带版细节收口（二）（批次 159）]');
   );
   // 从真实格子拿的仍然是**交换**，不能被复制品那条规则带偏
   check('真实格子拿的仍走交换', invSrc.includes('this.heldFromCreative = false;'));
+  // 批次 229：交换成功 = 对方那叠回到来源格，选中态清空（不再"连续换"）
+  check(
+    '交换成功后取消选中（对方那叠回到来源格）',
+    invSrc.includes('private completeSwapIntoOrigin(swapped: ItemStack): boolean {') &&
+      invSrc.includes('this.held = null;') &&
+      invSrc.split('if (!this.completeSwapIntoOrigin(slot)) this.held = slot;').length - 1 >= 2,
+  );
 
   // ④ 触摸端整表滚动（右侧可见滚动条）、PC 底部翻页
   check(

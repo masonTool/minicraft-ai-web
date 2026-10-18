@@ -3507,7 +3507,7 @@ export class InventoryScreen {
           // 原来右键只有"空格放 1 个 / 同类 +1"两条分支，点在异类格上**什么都不发生**，
           // 而同一格用左键点就换了（同一次操作两种结果，最容易被当成"点击没生效"）。
           source.set(index, this.held);
-          this.held = slot;
+          if (!this.completeSwapIntoOrigin(slot)) this.held = slot;
         }
       } else if (!slot) {
         source.set(index, this.held);
@@ -3520,7 +3520,7 @@ export class InventoryScreen {
         this.inventory.notify();
       } else {
         source.set(index, this.held);
-        this.held = slot;
+        if (!this.completeSwapIntoOrigin(slot)) this.held = slot;
       }
     } else if (slot) {
       // 只取不放的槽位：右键拿一半同样允许
@@ -3571,6 +3571,27 @@ export class InventoryScreen {
     if (this.held && this.held.count <= 0) this.held = null;
     this.crafting.recompute();
     this.refresh();
+  }
+
+  /**
+   * 交换成功后**取消选中**（批次 229，用户要求）。
+   *
+   * 原版鼠标语义是"换到手上的变成对方那叠"，于是可以连续换；但在手机上手一直
+   * 举着一叠东西很碍事。这里把对方那叠放回**来源格**（A 离开后它正好空着），
+   * 一次交换 = 两格真正对调，选中态清空。
+   *
+   * @param swapped 目标格里被换下来的那叠
+   * @returns 是否已放回来源格（false 时调用方按旧逻辑把 swapped 拿到手上）
+   */
+  private completeSwapIntoOrigin(swapped: ItemStack): boolean {
+    const origin = this.touchOrigin;
+    if (!origin || origin.source.get(origin.index) !== null) return false;
+    origin.source.set(origin.index, swapped);
+    if (origin.source === this.inventory) this.inventory.notify();
+    this.held = null;
+    this.heldOriginEl = null;
+    this.touchOrigin = null;
+    return true;
   }
 
   /** 取消选中：优先原位退回；原位已被占时再放回玩家背包。创造复制出来的物品直接清掉。 */

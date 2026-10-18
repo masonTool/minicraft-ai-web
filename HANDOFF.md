@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 655（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 656（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **181**、进行中 **76**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,12 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 229（用户："选中物品交换位置时，交换成功后应该取消选中态"）：
+  背包里拿着 A 点另一格 B（A≠B）时，原版语义是"换到手上的变成 B"，可以连续换；
+  手机上手一直举着一叠东西很碍事。新增 `completeSwapIntoOrigin()`：B 直接放回
+  **A 离开后空出来的来源格**，一次点击完成两格对调，`held` 清空、选中框消失。
+  左右键两条交换分支都走它；来源格被占用等异常情况仍退回旧行为（把 B 拿到手上）。
+  `test:ui` 656（`npm run check` 全绿）。
 - 批次 228（用户："回退共用快捷栏的策略，改回之前的逻辑，只优化显示效果"）：
   ① **整批回退批次 227 的共用方案**：`hotbarDock` / `#inv-held` / `#inv-pick-toast` 回到
   `#inventory-screen` 内部，HUD 继续用独立的 `#hotbar`；`activeHotbar` / `onSelectHotbar`
