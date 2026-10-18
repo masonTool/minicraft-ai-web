@@ -1357,15 +1357,40 @@ export class InventoryScreen {
    * 所以按**背包指纹**缓存（同一个指纹下材料分布没变，结果一定一样）。
    */
   private craftableIds(): number[] {
-    const stamp = this.inventoryStamp();
+    const stamp = `${this.inventoryStamp()}|${this.craftingStamp()}`;
     if (this.craftableCache?.stamp === stamp) return this.craftableCache.ids;
+    // ⚠️ 材料要连**合成格里已摆好的**一起算：点一条配方时材料会从仓库挪进格子，
+    // 只看仓库的话，刚点完那一下这条配方就变成"缺料"（列表立刻红掉，像出错了）。
+    const counts = { countOf: (id: number) => this.craftCount(id) };
     const ids: number[] = [];
     for (const recipe of RECIPES) {
       if (ids.includes(recipe.result.id)) continue;
-      if (canCraft(this.inventory, recipe).ok) ids.push(recipe.result.id);
+      if (canCraft(counts, recipe).ok) ids.push(recipe.result.id);
     }
     this.craftableCache = { stamp, ids };
     return ids;
+  }
+
+  /** 仓库 + 当前合成格里的某件材料总数（可合成列表的判据） */
+  private craftCount(itemId: number): number {
+    let count = this.inventory.countOf(itemId);
+    const size = this.crafting.size;
+    for (let i = 0; i < size * size; i++) {
+      const stack = this.crafting.get(i);
+      if (stack && stack.id === itemId) count += stack.count;
+    }
+    return count;
+  }
+
+  /** 合成格内容的指纹（材料进出格子时也要重算"能合成什么"） */
+  private craftingStamp(): string {
+    const size = this.crafting.size;
+    let stamp = '';
+    for (let i = 0; i < size * size; i++) {
+      const stack = this.crafting.get(i);
+      stamp += stack ? `${stack.id}x${stack.count},` : '-,';
+    }
+    return stamp;
   }
 
   /**
@@ -1415,6 +1440,7 @@ export class InventoryScreen {
       this.showUnowned ? 'all' : 'owned',
       this.categoryPage,
       this.inventoryStamp(),
+      this.craftingStamp(),
       // 看过的配方集合也会影响列表（缺料那一批红底项）
       [...this.viewedRecipeIds].sort((a, b) => a - b).join(','),
     ].join('|');

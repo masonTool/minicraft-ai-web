@@ -658,7 +658,7 @@ console.log('\n[携带版细节收口（批次 159）]');
   check(
     '分类栏列的是能合成的产物；缺料的那批按材料齐不齐标红',
     invSrc.includes('private craftableIds(): number[]') &&
-      invSrc.includes('if (canCraft(this.inventory, recipe).ok) ids.push(recipe.result.id);') &&
+      invSrc.includes('if (canCraft(counts, recipe).ok) ids.push(recipe.result.id);') &&
       invSrc.includes('for (const id of this.viewedRecipeIds) {') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
       invSrc.includes("classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
