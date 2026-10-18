@@ -469,13 +469,15 @@ console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克�
   check(
     '创造区按 isCreative（模式）门控',
     invSrc.includes('const creativePlayer = this.hooks.isCreative?.() ?? false;') &&
-      invSrc.includes('const creative = this.mode === \'inventory\' && creativePlayer;'),
+      invSrc.includes('const creative = creativePlayer;'),
   );
   check('没接钩子时当作生存（不显示）', invSrc.includes('this.hooks.isCreative?.() ?? false'));
   check('飞行切换时刷新界面（创造区跟着显隐）', /if \(this\.inventoryScreen\.isOpen\) this\.inventoryScreen\.refresh\(\)/.test(mainSrc));
-  check('有销毁格 DOM', invSrc.includes("dataset.role = 'creative-destroy'") && invSrc.includes('creative-destroy'));
-  check('销毁格左键整叠 / 右键一个', invSrc.includes('destroyHeld(event.button === 2 ? 1 : null)'));
-  check('销毁格 CSS 在', css.includes('.inv-creative-destroy-row') && css.includes('.inv-slot.creative-destroy'));
+  // 批次 185（用户要求）：创造栏下面那颗「销毁」格已删掉，统一走"点界面外丢弃"
+  check(
+    '不再有销毁格（DOM 与样式都删了）',
+    !invSrc.includes('creative-destroy') && !css.includes('.inv-creative-destroy-row'),
+  );
   check('创造格选取上光标（左满组/右一个）', invSrc.includes('创造选取') && invSrc.includes('this.held = { id: itemId, count: max }'));
   check(
     '创造物品作为统一双栏的左栏',
@@ -961,7 +963,7 @@ console.log('\n[创造模式不给配方入口（批次 163）]');
   check(
     '配方入口按 creativePlayer 判（不是按当前界面）',
     invSrc.includes('const creativePlayer = this.hooks.isCreative?.() ?? false;') &&
-      invSrc.includes('const creative = this.mode === \'inventory\' && creativePlayer;'),
+      invSrc.includes('const creative = creativePlayer;'),
   );
 }
 
@@ -1247,8 +1249,14 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   // 轻点落在生物上要"攻击优先"，不能顺手把方块放到它身上
   const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   check(
-    '轻点先判生物：有生物 → 一次性攻击请求，否则才放置/交互',
-    mainSource.includes('if (this.mobUnderCrosshair()) this.tapAttackRequest = true'),
+    '轻点先判生物：点到生物 → 一次性攻击请求，否则才放置/交互',
+    mainSource.includes('const tapped = this.mobAtScreen(clientX, clientY);') &&
+      mainSource.includes('if (tapped) this.tapAttackRequest = true;'),
+  );
+  check(
+    '屏幕坐标反投影成射线选生物（不用准星对准）',
+    mainSource.includes('private mobAtScreen(clientX: number, clientY: number): Mob | null') &&
+      mainSource.includes('ndc.unproject(this.camera)'),
   );
   check(
     '一次性攻击请求由 updateAttacking 统一消费（冷却/暴击/附魔不分叉）',
@@ -1925,6 +1933,110 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
       keyboardSrc.includes('active.blur();') &&
       keyboardSrc.includes("addEventListener('resize', syncKeyboardInset") &&
       css.includes('var(--kb-inset, 0px)'),
+  );
+}
+
+console.log('\n[用户第二轮反馈（批次 185）]');
+{
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const fullscreenSrc = readFileSync(new URL('../src/ui/Fullscreen.ts', import.meta.url), 'utf8');
+  const touchSrc = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+
+  // ① 竖屏：整屏浮层
+  check(
+    '竖屏浮层是整屏不透明层（不再只是底部横条）',
+    /\.rotate-hint \{[\s\S]{0,500}position: fixed;[\s\S]{0,200}inset: 0;/.test(css) &&
+      /\.rotate-hint \{[\s\S]{0,600}z-index: 90;/.test(css) &&
+      fullscreenSrc.includes('请横屏游玩'),
+  );
+  check(
+    '浮层尽早挂上（不等菜单/加载）',
+    /installKeyboardGuards\(\);[\s\S]{0,300}installRotateHint\(\);/.test(appSrc),
+  );
+
+  // ② 工作台 3×3：创造模式左栏仍能切分类
+  check(
+    '创造模式的工作台也能显示创造物品栏（左侧分类有反应）',
+    invSrc.includes('const creative = creativePlayer;'),
+  );
+
+  // ③ 切分类回到顶部
+  check(
+    '切分类把网格滚回顶部',
+    invSrc.includes('this.creativeGrid.scrollTop = 0;') && invSrc.includes('this.categoryGrid.scrollTop = 0;'),
+  );
+
+  // ④ 分类底部统计
+  check(
+    '分类底部统计（我有 N / 共 M）',
+    invSrc.includes("this.categoryInfo.dataset.role = 'category-info'") &&
+      invSrc.includes('我有 ${ownedInTab} / 共 ${allInTab}') &&
+      css.includes('.inv-category-info'),
+  );
+
+  // ⑤ 红底物品 + 工作台/熔炉标记
+  check(
+    '红底物品只闪一下，不套选中态',
+    invSrc.includes("slot.classList.contains('locked')") && invSrc.includes('flashLocked'),
+  );
+  check(
+    '3×3 配方点亮"要工作台"、只能烧的物资点亮"要熔炉"',
+    invSrc.includes("this.craftStation = 'workbench';") &&
+      invSrc.includes("this.craftStation = 'furnace';") &&
+      invSrc.includes("station.className = 'inv-craft-station hidden'") &&
+      css.includes('.inv-craft-station'),
+  );
+  check(
+    '箭头方向只改字形，不抹掉小图标',
+    invSrc.includes("glyph.className = 'inv-arrow-glyph'") &&
+      /const glyph = arrow\?\.querySelector\('\.inv-arrow-glyph'\);/.test(invSrc),
+  );
+
+  // ⑥ 丢弃 / 关闭动画期间重开
+  check(
+    '点界面外空处丢弃（root 与 shell 都算）',
+    invSrc.includes('event.target !== this.root && event.target !== this.shellEl') && invSrc.includes('hooks.onDrop?.(this.held.id'),
+  );
+  check(
+    '关闭动画没走完就重开：取消关闭，不会"打开了却看不见"',
+    invSrc.includes('private closeTimer: number | null = null;') &&
+      /if \(this\.closing\) \{[\s\S]{0,300}this\.open = false;/.test(invSrc),
+  );
+
+  // ⑦ 箱子等容器：正方形格
+  check(
+    '容器格子在手机上封顶 44px 且为正方形',
+    css.includes('repeat(9, minmax(0, 44px))') && css.includes('.inv-grid .inv-slot { width: auto; height: auto; aspect-ratio: 1; }'),
+  );
+
+  // ⑧ 触摸攻击
+  check(
+    '轻点按屏幕坐标选生物（点哪打哪）',
+    appSrc.includes('private mobAtScreen(clientX: number, clientY: number): Mob | null') &&
+      appSrc.includes('const tapped = this.mobAtScreen(clientX, clientY);') &&
+      touchSrc.includes('onTap(clientX: number, clientY: number): void;'),
+  );
+
+  // ⑨ 水流动：玩家手挖也要唤醒邻居
+  check(
+    '玩家破坏方块后唤醒周围流体',
+    /this\.world\.setBlockAndUpdate\(this\.hit\.x, this\.hit\.y, this\.hit\.z, Block\.AIR\);[\s\S]{0,400}this\.wakeFluidsAround\(this\.hit\.x, this\.hit\.y, this\.hit\.z\);/.test(appSrc),
+  );
+
+  // ⑩ 设置：恢复默认 + 性能项精简
+  check(
+    '设置里能一键恢复默认，且控件跟着重画',
+    settingsSrc.includes('resetDefaults(): void') &&
+      settingsSrc.includes('Object.assign(this.settings, DEFAULT_SETTINGS);') &&
+      settingsSrc.includes('for (const refresh of this.refreshers) refresh();') &&
+      settingsSrc.includes("resetButton.id = 'settings-reset'"),
+  );
+  check(
+    '帧率上限那个手动档位已删除（交给自适应）',
+    !settingsSrc.includes("'帧率上限'"),
   );
 }
 
