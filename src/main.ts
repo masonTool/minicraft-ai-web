@@ -3076,8 +3076,8 @@ class App {
    * ⚠️ 触摸端**不能等那 280ms**（批次 219）：`LONG_PRESS_MS` 是"长按 = 破坏"
    * 的判定阈值，只该约束对着方块的那一支。原版手机有独立使用键、按下即开始，
    * 而这里如果等长按判完再算进食，每吃一口都要白等 0.28 秒（1.6 → 1.88 秒）。
-   * 所以手上"能用的东西"按下且未拖动就立刻算按住——用 `touch.holding` 读，
-   * 它是 `lookPointer !== null && !lookDragged`，松手/取消/切界面时自然失效。
+   * 所以触摸端改读 `touch.holding`（按住不动 100ms、漂移 ≤ 6px 即算使用），
+   * 比长按阈值快 2.8 倍，又不会被"滑动视角"误触发（细节见 TouchControls 那个 getter）。
    */
   private get usingItem(): boolean {
     if (this.rightDown || this.padUse) return true;

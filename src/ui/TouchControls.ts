@@ -52,6 +52,19 @@ export interface TouchDebugState {
 const LONG_PRESS_MS = 280;
 /** 按下后位移超过这个像素数就算拖动视角，不再是点击 */
 const TAP_MOVE_SLOP = 12;
+/**
+ * "按住使用"（吃 / 喝 / 举盾 / 拉弓）的判据：手指**几乎不动地**停留够这么久（毫秒）。
+ *
+ * 为什么不能是 0（批次 219 首版就是 0，用户当场发现"拿肉滑动视角会触发吃东西"）：
+ * 视角面只有一个，转视角是"按下 + 移动"，而移动要累计到 TAP_MOVE_SLOP（12px）才算拖动；
+ * 在那之前（通常 1~3 帧）游戏并不知道你要转视角，于是先咬一口：晃手 + 咀嚼声 + 进度条闪一下。
+ * 100ms 低于"即时响应"的感知阈值，而真拖动在 20~40ms 内就会越过 USE_MOVE_SLOP，故不会误触。
+ *
+ * ⚠️ 单靠一个手势无法同时表达两种意图；要真正 0 延迟只能加独立的使用键。
+ */
+export const TOUCH_USE_STILL_MS = 100;
+/** 按住使用时允许的手指漂移（像素）：超过它就算"想转视角"，不再算按住不动 */
+const USE_MOVE_SLOP = 6;
 /** 摇杆推到该比例以上自动疾跑 */
 const SPRINT_THRESHOLD = 0.92;
 /**
@@ -172,6 +185,10 @@ export class TouchControls {
   private lookStartX = 0;
   private lookStartY = 0;
   private lookDragged = false;
+  /** 这一次按下的时刻（毫秒）：`holding` 靠它算"静止够不够久"（批次 224） */
+  private lookDownAt = 0;
+  /** 这一次按下以来离落点的最大位移（像素）：防"慢慢滑"被当成按住不动（批次 224） */
+  private lookDrift = 0;
   private longPressTimer: number | null = null;
   private breaking = false;
 
@@ -356,17 +373,24 @@ export class TouchControls {
   }
 
   /**
-   * 手指正按在视角面上、且还没划动 = "可能正在使用"。
+   * 手指正**按住不动** = "可能正在使用"（吃 / 喝 / 举盾 / 拉弓）。
    *
-   * 给主程序算 `usingItem` 用：有了它，进食 / 举盾 / 拉弓都不用再等"长按 280ms"。
+   * 给主程序算 `usingItem` 用：有了它，进食不用再等"长按 280ms"那一步。
    *
-   * ⚠️ 直接读 `lookPointer`，**不要**改成"按下时回调置位的布尔量"：
+   * 判据是两条（批次 224，缺一不可）：
+   *  ① 漂移 ≤ `USE_MOVE_SLOP`（6px）：手指在滑就说明想转视角，不是想用；
+   *  ② 静止够 `TOUCH_USE_STILL_MS`（100ms）：挡掉"拖视角的前 1~3 帧"——
+   *     那时还没越过 12px 的拖动阈值，不加这一条会先咬一口再转视角。
+   *
+   * ⚠️ 直接读 `lookPointer` / 位移，**不要**改成"按下时回调置位的布尔量"：
    * 那个布尔量在"按下时指针被界面 / 摇杆 / 切飞行抢走"这类情况下会永远停在 true
    * （松手事件被吞了），表现就是下一帧凭空开始吃。`lookPointer` 在
    * `finish` / `cancelLook` / `resetInput` 三处都会被清空，读它不会留脏状态。
    */
   get holding(): boolean {
-    return this.lookPointer !== null && !this.lookDragged;
+    if (this.lookPointer === null || this.lookDragged) return false;
+    if (this.lookDrift > USE_MOVE_SLOP) return false;
+    return performance.now() - this.lookDownAt >= TOUCH_USE_STILL_MS;
   }
 
   /** 取走本帧累积的视角增量（像素），取完即清零 */
@@ -619,6 +643,8 @@ export class TouchControls {
       this.lastMoveX = point.x;
       this.lastMoveY = point.y;
       this.lookDragged = false;
+      this.lookDownAt = performance.now();
+      this.lookDrift = 0;
       this.breaking = false;
       this.zeroMoveCount = 0;
       capturePointer(this.lookSurface, event.pointerId);
@@ -672,8 +698,11 @@ export class TouchControls {
       }
       const dx = point.x - this.lookStartX;
       const dy = point.y - this.lookStartY;
+      const drift = Math.hypot(dx, dy);
+      // 记住"这一次按下最多漂了多远"：`holding` 用它判断"是不是想转视角"（批次 224）
+      if (drift > this.lookDrift) this.lookDrift = drift;
 
-      if (!this.lookDragged && Math.hypot(dx, dy) > TAP_MOVE_SLOP) {
+      if (!this.lookDragged && drift > TAP_MOVE_SLOP) {
         this.lookDragged = true;
         diag.event('gesture', 'look.drag.start', {
           pointer: event.pointerId,

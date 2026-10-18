@@ -1293,11 +1293,17 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('只有一个长按阈值（280ms）', source.includes('const LONG_PRESS_MS = 280'));
   check('连续放置已删除（不再有 PLACE_HOLD_MS / onPlaceHoldStart）', !source.includes('PLACE_HOLD_MS') && !source.includes('onPlaceHoldStart'));
   check('轻点与长按分工写在注释里', source.includes('轻点') && source.includes('破坏 / 持续攻击'));
-  // 批次 219：进食/举盾/拉弓"按下即生效"，不再等那 280ms 长按判定。
+  // 批次 219/224：进食/举盾/拉弓"按住不动即生效"，不走那 280ms 长按判定。
   // 读手势状态而不是回调置位的布尔量——后者在"按下被界面抢走指针"时会卡在 true
   check(
-    '触摸层暴露 holding（按下且未拖动）',
-    source.includes('get holding(): boolean') && source.includes('return this.lookPointer !== null && !this.lookDragged;'),
+    '触摸层暴露 holding（按住不动 100ms、漂移 ≤ 6px）',
+    source.includes('get holding(): boolean') &&
+      source.includes('if (this.lookDrift > USE_MOVE_SLOP) return false;') &&
+      source.includes('return performance.now() - this.lookDownAt >= TOUCH_USE_STILL_MS;'),
+  );
+  check(
+    '静止门槛是 100ms、漂移门槛 6px（0ms 会让"滑视角"先咬一口，批次 224 的教训）',
+    source.includes('export const TOUCH_USE_STILL_MS = 100;') && source.includes('const USE_MOVE_SLOP = 6;'),
   );
 
   // 轻点落在生物上要"攻击优先"，不能顺手把方块放到它身上
