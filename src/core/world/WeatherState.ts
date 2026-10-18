@@ -74,6 +74,43 @@ export function tickWeather(state: WeatherState, dt: number, random: () => numbe
   return nextWeather(random, state.kind);
 }
 
+/** 天气播报的语气：普通提示 / 警告（雷暴） */
+export type WeatherNoticeKind = 'system' | 'warning';
+
+export interface WeatherNotice {
+  text: string;
+  kind: WeatherNoticeKind;
+}
+
+/**
+ * 天气变化时该在消息栏里说什么（批次 221，用户："把天气变化的信息也提示一下"）。
+ *
+ * 为什么放在这个纯模块里：文案与"下雪还是下雨"的判据都是**规则**，
+ * 和时长区间一样值得离线断言（改一个词不该靠进游戏里等一场雨来验收）。
+ *
+ * @param snowy 玩家所在地表是否寒冷群系（同一场降水在雪原叫"雪"、在平原叫"雨"）
+ * @param seconds 新天气预计持续多少秒（播报里换算成分钟，让玩家知道要不要先躲一下）
+ * @returns 没有变化（或变化不值得说）时返回 `null`
+ */
+export function weatherNotice(
+  previous: WeatherKind,
+  next: WeatherKind,
+  snowy: boolean,
+  seconds: number,
+): WeatherNotice | null {
+  if (previous === next) return null;
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (next === 'clear') {
+    // 雷暴转晴用"过去了"，雨/雪转晴用"停了"——雷暴的重点从来不是水
+    if (previous === 'thunder') return { text: '雷暴过去了，天放晴了', kind: 'system' };
+    return { text: snowy ? '雪停了' : '雨停了', kind: 'system' };
+  }
+  if (next === 'thunder') {
+    return { text: `雷暴来了，小心闪电（约 ${minutes} 分钟）`, kind: 'warning' };
+  }
+  return { text: `${snowy ? '开始下雪了' : '开始下雨了'}（约 ${minutes} 分钟）`, kind: 'system' };
+}
+
 /**
  * 从存档里读回来（**脏数据逐条跳过**，与容器/告示牌那两处同一条口径）：
  * 字段缺失、种类不认识、秒数不是正数 —— 一律回退默认值，**不抛错也不静默变成负数**。

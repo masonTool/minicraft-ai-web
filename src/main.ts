@@ -395,6 +395,8 @@ import {
 // 亡灵被太阳晒（批次 124）：判据是纯函数（露天 + 白天 + 没下雨），
 // 而"哪些生物会烧"是每种生物自己的一位数据（`MobType.burnsInDaylight`）
 import { DAYLIGHT_BURN_SECONDS, FULL_SKY_LIGHT, sunBurns } from './core/world/Daylight.ts';
+// 天气播报（批次 221）：文案与"下雪还是下雨"的判据都在纯函数里（`test:weather` 逐条钉住）
+import { weatherNotice } from './core/world/WeatherState.ts';
 // 混凝土（批次 131）：粉末遇水凝固——规则是纯函数（`test:concrete` 逐条钉住）
 import { hardenAround } from './core/world/Concrete.ts';
 // 移动端降级策略（批次 130，TASKS N7）：动态分辨率 / 自适应视距 / 限帧 / 粒子总量。
@@ -4928,8 +4930,10 @@ class App {
     this.advanceDay();
     // 但**睡过了就不算失眠**（批次 126）：先推进一天、再归零，所以"睡一觉"净效果是 0
     this.daysWithoutSleep = 0;
-    // 原版睡一觉会放晴（雷暴与雨一起停）
+    // 原版睡一觉会放晴（雷暴与雨一起停）；如果睡前在下，顺手播一句"雨停了"（批次 221）
+    const weatherBeforeSleep = this.weather.current;
     this.weather.setKind('clear');
+    this.announceWeather(weatherBeforeSleep);
     this.bedSpawn = { x: bed.x, y: bed.y, z: bed.z, dimension: this.dimension };
     this.applyEnvironment();
     // 睡醒回血在原版是"睡觉直接回满"以外的效果（1.18 只有饥饿够时自然回复），
@@ -7116,7 +7120,8 @@ class App {
         this.timeOfDay = ((t % 1) + 1) % 1;
       },
       timeOfDay: () => this.timeOfDay,
-      setWeather: (kind) => this.weather.setKind(kind),
+      // `/weather` 走与调试接口同一条路径（批次 221）：这样命令切换也会播报时长
+      setWeather: (kind) => this.setWeather(kind),
       difficulty: () => this.difficulty,
       setDifficulty: (value) => {
         this.difficulty = value;
@@ -10455,7 +10460,11 @@ class App {
         this.snowyHere = this.isSnowyColumn(Math.floor(this.physics.x), Math.floor(this.physics.z));
       }
       if (this.dimension === Dimension.OVERWORLD) {
+        // 天气是**自己会变**的（晴天 8~16 分钟后可能转雨，见 `WeatherState.ts`），
+        // 所以每帧记一下变化前的种类，播报由同一个入口出（批次 221）
+        const weatherBefore = this.weather.current;
         this.weather.update(dt, this.camera.position, this.snowyHere);
+        this.announceWeather(weatherBefore);
         this.sky.update(this.timeOfDay, this.camera.position, dt);
       }
       // 只有主循环传 dt：雾的平滑要按真实时间推进（其它调用点只是"重算一次"）
@@ -11134,9 +11143,38 @@ class App {
     return { total: hostile + passive, hostile, passive, byType };
   }
 
+  /**
+   * 天气变化播报（批次 221，用户："把天气变化的信息也提示一下"）。
+   *
+   * 三种变化各自一句话：转雨/转雪（带预计分钟数）、转雷暴（警告色）、放晴。
+   * 文案与"下雪还是下雨"的判据在 `core/world/WeatherState.ts` 的 `weatherNotice()` 里
+   * （纯函数，`test:weather` 逐条钉住），这里只负责取现场数据 + 写进消息栏与诊断日志。
+   *
+   * ⚠️ 下界 / 末地**没有天气**（雨雪粒子只在主世界跑），换维度时那边会把天气重置成晴：
+   * 那种"重置"不是玩家感知到的天气变化，不能播报成"雨停了"。
+   */
+  private announceWeather(previous: WeatherKind): void {
+    const next = this.weather.current;
+    if (next === previous) return;
+    if (this.dimension !== Dimension.OVERWORLD) return;
+    const seconds = this.weather.remaining;
+    const notice = weatherNotice(previous, next, this.snowyHere, seconds);
+    if (!notice) return;
+    this.chat.push(notice.text, notice.kind);
+    // 诊断日志：真机上报"卡的时候正好在下雨"这类关联，只看录屏是拼不出来的
+    diag.event('world', 'weather', {
+      from: previous,
+      to: next,
+      seconds: Math.round(seconds),
+      snowy: this.snowyHere,
+    });
+  }
+
   /** 调试 / 命令用：切换天气 */
   setWeather(kind: WeatherKind): void {
+    const previous = this.weather.current;
     this.weather.setKind(kind);
+    this.announceWeather(previous);
     this.applyEnvironment();
   }
 

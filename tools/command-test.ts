@@ -322,7 +322,12 @@ console.log('\n[时间与天气]');
   const bad = run('/time set teatime');
   check('非法时间报错', bad.out.lastError.includes('时间格式'));
   const weather = run('/weather thunder');
-  check('/weather 生效', weather.world.weather === 'thunder' && weather.out.lastInfo.includes('thunder'));
+  // 批次 221：回执改成中文（以前直接印 `thunder`）
+  check('/weather 生效', weather.world.weather === 'thunder' && weather.out.lastInfo.includes('雷暴'));
+  const rainy = run('/weather rain', weather.world);
+  check('/weather rain 回执是"下雨"', rainy.out.lastInfo.includes('下雨'), rainy.out.lastInfo);
+  const sunny = run('/weather clear', weather.world);
+  check('/weather clear 回执是"晴天"', sunny.out.lastInfo.includes('晴天'), sunny.out.lastInfo);
   const badWeather = run('/weather sunny');
   check('非法天气报错', badWeather.out.lastError.includes('用法'));
 }

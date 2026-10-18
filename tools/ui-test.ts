@@ -2446,6 +2446,22 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     '点消息进来不聚焦输入框（手机不弹键盘）',
     chatSrc.includes('if (options.focus !== false) {') && chatSrc.includes('this.inputEl.focus();'),
   );
+  // 批次 221（用户："把天气变化的信息也提示一下"）：自然转换 / 睡觉放晴 / /weather 三条路径
+  // 都必须汇到同一个播报入口，否则总有一条变化不会出现在消息栏里
+  check(
+    '天气变化进消息栏（三条路径共用 announceWeather）',
+    appSrc.includes('weatherNotice(') &&
+      appSrc.includes('private announceWeather(previous: WeatherKind): void') &&
+      appSrc.includes('this.announceWeather(weatherBefore);') &&
+      appSrc.includes('const weatherBeforeSleep = this.weather.current;') &&
+      appSrc.includes('this.announceWeather(weatherBeforeSleep);') &&
+      appSrc.includes('setWeather: (kind) => this.setWeather(kind),'),
+  );
+  check(
+    '天气播报只落在主世界（换维度重置不算"雨停了"）',
+    appSrc.includes('if (this.dimension !== Dimension.OVERWORLD) return;') &&
+      appSrc.includes("diag.event('world', 'weather', {"),
+  );
   const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
   check(
     '掉血播报同时给出「现象 + 原因」（含具体生物名）',

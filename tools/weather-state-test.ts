@@ -26,6 +26,7 @@ import {
   nextWeatherKind,
   restoreWeather,
   tickWeather,
+  weatherNotice,
   weatherSecondsFor,
 } from '../src/core/world/WeatherState.ts';
 
@@ -172,6 +173,38 @@ console.log('\n[脏数据：一律回退默认，且不回退成 0 秒]');
   const keptKind = restoreWeather({ kind: 'thunder', seconds: Number.NaN });
   equal('只有秒数坏掉时保住种类', keptKind.kind, 'thunder');
   check('并且给这一种天气的合理时长', keptKind.seconds >= STORM_SECONDS_MIN && keptKind.seconds <= STORM_SECONDS_MAX);
+}
+
+console.log('\n[天气播报（批次 221）]');
+{
+  // 没有变化就什么都不说：这段每帧都在跑，比较必须廉价且不产噪音
+  equal('天气没变 → 不播报', weatherNotice('clear', 'clear', false, 600), null);
+  equal('雨天继续下雨 → 不播报', weatherNotice('rain', 'rain', false, 100), null);
+
+  const rain = weatherNotice('clear', 'rain', false, 180);
+  equal('转雨：普通提示', rain?.kind, 'system');
+  check('转雨：文案带预计分钟数', rain?.text === '开始下雨了（约 3 分钟）', rain?.text);
+
+  const snow = weatherNotice('clear', 'rain', true, 240);
+  check('寒冷群系里同一场降水叫"雪"', snow?.text === '开始下雪了（约 4 分钟）', snow?.text);
+
+  const thunder = weatherNotice('clear', 'thunder', false, 270);
+  equal('转雷暴：警告色', thunder?.kind, 'warning');
+  check('转雷暴：提示小心闪电', thunder?.text === '雷暴来了，小心闪电（约 5 分钟）', thunder?.text);
+
+  const stopRain = weatherNotice('rain', 'clear', false, 600);
+  check('雨停', stopRain?.text === '雨停了', stopRain?.text);
+  const stopSnow = weatherNotice('rain', 'clear', true, 600);
+  check('雪停', stopSnow?.text === '雪停了', stopSnow?.text);
+  const stopThunder = weatherNotice('thunder', 'clear', false, 600);
+  check('雷暴转晴用"过去了"', stopThunder?.text === '雷暴过去了，天放晴了', stopThunder?.text);
+
+  // `/weather rain` → `/weather thunder` 这种手动切换也要能播
+  const upgraded = weatherNotice('rain', 'thunder', false, 120);
+  equal('雨天被切换成雷暴 → 警告', upgraded?.kind, 'warning');
+
+  // 分钟数下限 1：`/weather` 之后剩余时间可能很短（雨天最短 2 分钟，但别写成 0 分钟）
+  check('不足 1 分钟也不显示"0 分钟"', weatherNotice('clear', 'rain', false, 10)?.text.includes('约 1 分钟') === true);
 }
 
 console.log(`\n天气状态测试：${passed} 通过 / ${failed} 失败`);

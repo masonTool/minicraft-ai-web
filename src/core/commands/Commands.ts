@@ -172,6 +172,13 @@ export function isSelfTarget(text: string | undefined, playerName: string): bool
 const numericRule = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, Math.round(value)));
 
+/** 天气的中文名（批次 221）：`/weather` 的回执以前直接印 `rain` 这种英文原值 */
+const WEATHER_LABELS: Record<'clear' | 'rain' | 'thunder', string> = {
+  clear: '晴天',
+  rain: '下雨',
+  thunder: '雷暴',
+};
+
 export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'help',
@@ -276,7 +283,8 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       ctx.setWeather(kind);
-      out.info(`天气已切换为 ${kind}`);
+      // 回执用中文；预计时长由主程序的天气播报补一句（`App.announceWeather`）
+      out.info(`天气已切换为 ${WEATHER_LABELS[kind]}`);
     },
   },
   {
