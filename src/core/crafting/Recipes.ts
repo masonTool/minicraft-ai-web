@@ -793,6 +793,15 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
   { kind: 'shaped' as const, result: { id: Item.BOWL, count: 4 }, pattern: ['P P', ' P '], key: { P: Block.OAK_PLANKS } },
   // 船（批次 244，G12）：5 块木板摆成 U 形（原版图案），一次一艘
   { kind: 'shaped' as const, result: { id: Item.OAK_BOAT, count: 1 }, pattern: ['P P', 'PPP'], key: { P: Block.OAK_PLANKS } },
+  // 铁轨（批次 245，G12）：6 铁锭 + 1 木棍 → 16 段（原版图案与产量）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.RAIL, count: 16 },
+    pattern: ['I I', 'ISI', 'I I'],
+    key: { I: Item.IRON_INGOT, S: Item.STICK },
+  },
+  // 矿车（批次 245）：5 块铁锭摆成 U 形
+  { kind: 'shaped' as const, result: { id: Item.MINECART, count: 1 }, pattern: ['I I', 'III'], key: { I: Item.IRON_INGOT } },
   // 蘑菇煲：红蘑菇 + 棕蘑菇 + 碗（原版无序）
   { kind: 'shapeless' as const, result: { id: Item.MUSHROOM_STEW, count: 1 }, ingredients: [Block.RED_MUSHROOM, Block.BROWN_MUSHROOM, Item.BOWL] },
   // 甜菜汤：6 个甜菜根 + 碗（原版无序）

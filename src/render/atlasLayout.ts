@@ -1022,6 +1022,9 @@ export const TILE_ORDER = [
   'spawn_egg_fox',
   // 橡木船（批次 244，G12）：物品图标一张
   'item_oak_boat',
+  // 铁轨与矿车（批次 245，G12）：铁轨是方块贴图，矿车是物品图标
+  'rail',
+  'item_minecart',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

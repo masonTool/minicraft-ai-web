@@ -2840,19 +2840,42 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       appSrc.includes('blockDef(this.world.getBlock(hit.x, hit.y, hit.z)).liquid'),
   );
   check(
-    '上船 / 下船 / 每帧把玩家贴到船上',
-    appSrc.includes('private mountBoat(boat: Boat)') &&
-      appSrc.includes('private dismountBoat()') &&
-      appSrc.includes('this.syncRiderToBoat();'),
+    '上载具 / 下载具 / 每帧把玩家贴上去（船与矿车共用）',
+    appSrc.includes('private mountVehicle(vehicle: Rideable)') &&
+      appSrc.includes('private dismountVehicle()') &&
+      appSrc.includes('this.syncRiderToVehicle();'),
   );
   check(
-    '船只在有人驾驶时吃输入（空船自己漂）',
-    appSrc.includes('vehicleInput: this.ridingBoat') && appSrc.includes('boat.yaw = this.yaw;'),
+    '载具只在有人驾驶时吃输入（空车自己漂）',
+    appSrc.includes('vehicleInput: this.ridingVehicle') && appSrc.includes('vehicle.yaw = this.yaw;'),
   );
   check(
-    '触摸端先认船（点船 = 上船，不是打它/放方块）',
-    appSrc.includes('const tappedBoat = this.boatAtScreen(clientX, clientY);') &&
-      appSrc.includes('const boatTarget = this.tapBoat ?? this.boatUnderCrosshair();'),
+    '触摸端先认载具（点船/点车 = 上去，不是打它/放方块）',
+    appSrc.includes('const tappedBoat = this.vehicleAtScreen(clientX, clientY);') &&
+      appSrc.includes('const boatTarget = this.tapVehicle ?? this.vehicleUnderCrosshair();'),
+  );
+
+  // 批次 245：铁轨与矿车
+  const blocksSrc = readFileSync(new URL('../src/core/registry/blocks.ts', import.meta.url), 'utf8');
+  const cartSrc = readFileSync(new URL('../src/core/entity/Minecart.ts', import.meta.url), 'utf8');
+  check(
+    '铁轨复用 flat 薄板形状（不新增 shape），且 6 铁锭 + 1 木棍做 16 段',
+    blocksSrc.includes('export const RAIL_ID = 578') &&
+      blocksSrc.includes('export const RAIL_SPECS') &&
+      blocksSrc.includes("shape: 'flat'") &&
+      recipesSrc.includes('result: { id: Block.RAIL, count: 16 }'),
+  );
+  check(
+    '矿车物品（5 铁锭）只能放到铁轨上',
+    itemsSrc.includes('MINECART: 1479') &&
+      recipesSrc.includes('result: { id: Item.MINECART, count: 1 }') &&
+      appSrc.includes('if (this.world.getBlock(hit.x, hit.y, hit.z) !== Block.RAIL) return false;'),
+  );
+  check(
+    '矿车在轨道上阻力极小、离开轨道寸步难行',
+    cartSrc.includes('RAIL_DRAG') &&
+      cartSrc.includes('GROUND_DRAG') &&
+      cartSrc.includes('ctx.getBlock(Math.floor(this.x), Math.floor(this.y + 0.05), Math.floor(this.z)) === Block.RAIL'),
   );
 }
 

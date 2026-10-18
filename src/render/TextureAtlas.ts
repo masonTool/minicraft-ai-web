@@ -1733,6 +1733,47 @@ PAINTERS.item_arrow = arrowPainter();
  * 橡木船图标（批次 244）：俯视的 U 形船体——外圈是木板色、内舱压暗一档。
  * 与原版那枚"从斜上方看的小船"不同，但 16×16 下"两头翘的槽"已经够认。
  */
+/**
+ * 铁轨（批次 245）：两根纵向钢轨 + 横向枕木。
+ *
+ * 画法对齐原版那 16×16：轨道沿**纵向**（z）走，枕木每 4 像素一条，
+ * 钢轨压在枕木上面（所以先判钢轨，再判枕木）。透明像素留空——
+ * 铁轨是 `flat` 非实心方块，空的地方就该透出脚下的地面。
+ */
+PAINTERS.rail = (x, y) => {
+  const steel = (x >= 2 && x <= 4) || (x >= 11 && x <= 13);
+  if (steel && y > 0) {
+    // 轨道中间压一道亮线，看起来像有"轨面"
+    const shine = x === 3 || x === 12 ? 210 : 168;
+    return [shine, shine, shine + 6, 255];
+  }
+  if (y % 4 === 2 && x > 0) {
+    // 枕木：比木头暗一档，别抢钢轨的视觉
+    const grain = x % 3 === 0 ? 88 : 104;
+    return [grain, grain - 24, grain - 48, 255];
+  }
+  return [0, 0, 0, 0];
+};
+
+/**
+ * 矿车图标（批次 245）：一只开口的铁皮斗 + 两个轮子。
+ */
+PAINTERS.item_minecart = (x, y) => {
+  // 斗身（y 3~10），上宽下窄
+  if (y >= 3 && y <= 10) {
+    const half = 6.2 - (y - 3) * 0.35;
+    if (Math.abs(x - 7.5) <= half) {
+      if (y === 3) return [92, 92, 100, 255]; // 斗口压暗，读得出"是开口的"
+      const shade = 0.85 + (y - 3) * 0.03;
+      return [clamp255(188 * shade), clamp255(190 * shade), clamp255(198 * shade), 255];
+    }
+  }
+  // 轮子
+  const wheel = (cx: number): boolean => Math.hypot(x - cx, y - 12.5) <= 1.6;
+  if (wheel(4.5) || wheel(10.5)) return [64, 64, 70, 255];
+  return [0, 0, 0, 0];
+};
+
 PAINTERS.item_oak_boat = (x, y) => {
   const dy = y - 7.5;
   if (y < 4 || y > 12) return [0, 0, 0, 0];

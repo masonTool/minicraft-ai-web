@@ -2330,6 +2330,28 @@ export const STONE_VARIANT_ID_START = 351;
  */
 export const BLACKSTONE_VARIANT_ID_START = 533;
 
+/**
+ * 铁轨（批次 245，G12 载具层的第二件）。
+ *
+ * 复用 `flat` 形状（1/16 厚的贴地薄板，与红石粉/压力板同一套几何）——
+ * **不需要新 shape、也不改碰撞盒与网格化**，这是铁轨能在一批里落地的关键。
+ *
+ * ⚠️ 只做**直轨**：原版的直/弯/坡三种朝向与充能状态都没做（见 TASKS G12）。
+ * 玩家与矿车都能直接走过去（`solid: false`），与原版一样不会挡路。
+ */
+export const RAIL_ID = 578;
+export const RAIL_SPECS: readonly BlockSpec[] = [
+  {
+    id: RAIL_ID,
+    name: 'minecraft:rail',
+    tiles: ['rail', 'rail', 'rail'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+];
+
 /** 截至这里已经建好的全部规格段（按定义顺序）——下面 `tilesOfDefined` 用它查母方块贴图 */
 const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
   BASE_SPECS,
@@ -2359,6 +2381,8 @@ const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
   VINE_SPECS,
   COPPER_SPECS,
   MORE_STONE_SPECS,
+  // 铁轨（批次 245）：也进"已定义"表，`tilesOfDefined` 查得到它
+  RAIL_SPECS,
 ];
 
 /**
@@ -2983,6 +3007,8 @@ const SPECS: readonly BlockSpec[] = [
   ...VINE_SPECS,
   ...COPPER_SPECS,
   ...MORE_STONE_SPECS,
+  // 铁轨（批次 245）：flat 薄板，注册进主表
+  ...RAIL_SPECS,
   ...STONE_VARIANT_SPECS,
   ...STONECUTTER_SPECS,
   ...RED_SAND_SPECS,
@@ -3164,6 +3190,8 @@ export const Block = {
 
   // ---- 红石
   REDSTONE_WIRE: 256,
+  // 铁轨（批次 245）：id 578，在现有最大 id（577）之后追加
+  RAIL: RAIL_ID,
   REDSTONE_TORCH: 257,
   REDSTONE_BLOCK: 258,
   LEVER: 259,
@@ -3597,6 +3625,8 @@ for (let i = 0; i < DYE_COLORS.length; i++) HARDNESS.set(woolId(i), 0.8);
 // 地毯：比羊毛薄得多，原版硬度 0.1（一拍就掉）；雪层同样是 0.1
 for (let i = 0; i < DYE_COLORS.length; i++) HARDNESS.set(carpetId(i), 0.1);
 HARDNESS.set(Block.SNOW, 0.1);
+// 铁轨（批次 245）：原版 0.7（镐/徒手都挖得动，但比压力板结实）
+HARDNESS.set(Block.RAIL, 0.7);
 
 // 台阶 / 楼梯的硬度跟随母方块（原版行为）
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {

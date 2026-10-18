@@ -89,6 +89,12 @@ import { mobTypeById } from './core/entity/mobs.ts';
 import { createMob } from './core/entity/MobFactory.ts';
 // 船（批次 244，G12）：载具实体与"上下船"全在主程序这一层
 import { Boat } from './core/entity/Boat.ts';
+import { Minecart } from './core/entity/Minecart.ts';
+/**
+ * 可骑乘的载具（批次 245）：船与矿车共用"上下车 + 每帧贴位置 + `vehicleInput`"那一套，
+ * 所以主程序里所有骑乘状态都按这个联合类型存。
+ */
+type Rideable = Boat | Minecart;
 import { Villager } from './core/entity/Villager.ts';
 import { isVillagerFood, levelName, tradeBlocker, tradeSettlement } from './core/registry/villagerTrades.ts';
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
@@ -985,11 +991,11 @@ class App {
   private touchTapPoint: { x: number; y: number } | null = null;
   /**
    * 玩家正坐着的那条船（批次 244）。非空时：
-   *  - 玩家物理**不跑**（位置由 `syncRiderToBoat` 每帧贴到船上）；
+   *  - 玩家物理**不跑**（位置由 `syncRiderToVehicle` 每帧贴到船上）；
    *  - 主程序把视角与输入交给船（`vehicleInput` + 每帧写 `yaw`）；
    *  - 跳跃/潜行 = 下船。
    */
-  private ridingBoat: Boat | null = null;
+  private ridingVehicle: Rideable | null = null;
   /** 上下船的冷却（秒）：防止"上船那一下同时被当成下船" */
   private mountCooldown = 0;
   /** 这一帧的输入快照（船要读它；`collectInput` 每帧只该调一次） */
@@ -1001,8 +1007,8 @@ class App {
    * 否则才是攻击。没有这一条，手机端拿着骨头点狼只会把它打一顿（驯不了宠物）。
    */
   private tapUseMob: Mob | null = null;
-  /** 触摸端点中的船（批次 244）：手指落点优先于准星 */
-  private tapBoat: Boat | null = null;
+  /** 触摸端点中的载具（批次 244/245）：手指落点优先于准星 */
+  private tapVehicle: Rideable | null = null;
   /** `#target-info` 是否挂在手指上方（true = 已加 `.pinned`） */
   private targetPinned = false;
   /** 上一次写进 `#target-info` 的锚点（取整后比较，避免每帧重写样式） */
@@ -1890,9 +1896,9 @@ class App {
         // 批次 239：记下这一下的落点——**方块目标**也改由它决定（不只是生物）
         this.touchTapPoint = { x: clientX, y: clientY };
         // 批次 244：点到船 → 上船（船不是生物，单独一条；优先于生物与方块）
-        const tappedBoat = this.boatAtScreen(clientX, clientY);
+        const tappedBoat = this.vehicleAtScreen(clientX, clientY);
         if (tappedBoat) {
-          this.tapBoat = tappedBoat;
+          this.tapVehicle = tappedBoat;
           this.touchPlaceRequest = true;
           return;
         }
@@ -2198,7 +2204,7 @@ class App {
     this.tapAttackRequest = false;
     this.tapAttackMob = null;
     this.tapUseMob = null;
-    this.tapBoat = null;
+    this.tapVehicle = null;
     this.touchTapPoint = null;
     // 触摸端：界面打开时收起操作层；关闭时显式清一次手势状态，
     // 否则关面板那一瞬间按在屏幕上的手指会带着旧基准继续转视角
@@ -3731,7 +3737,7 @@ class App {
       this.hit = null;
       this.touchTapPoint = null;
       this.tapUseMob = null;
-      this.tapBoat = null;
+      this.tapVehicle = null;
       this.outline.hide();
       this.blockOverlay.hide();
       this.updateTargetAnchor(null);
@@ -3840,7 +3846,7 @@ class App {
     if (this.touchTapPoint) this.touchPlaceRequest = false;
     this.touchTapPoint = null;
     this.tapUseMob = null;
-    this.tapBoat = null;
+    this.tapVehicle = null;
   }
 
   /**
@@ -4195,12 +4201,12 @@ class App {
   // ---------------------------------------------------------------- 船（批次 244，G12）
 
   /**
-   * 屏幕坐标 → 射线 → 船（触摸端）。
+   * 屏幕坐标 → 射线 → 载具（触摸端：船 / 矿车）。
    *
-   * 与 `mobAtScreen` 同一套反投影；射程按"玩家到船"卡 4.5 格
-   * （船比生物大，站在岸上够得到水面上的船）。
+   * 与 `mobAtScreen` 同一套反投影；射程按"玩家到载具"卡 4.5 格
+   * （船比生物大，站在岸上够得到水面上的船；矿车同理）。
    */
-  private boatAtScreen(clientX: number, clientY: number): Boat | null {
+  private vehicleAtScreen(clientX: number, clientY: number): Rideable | null {
     const canvas = this.renderer.domElement;
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
@@ -4222,13 +4228,14 @@ class App {
       dir.z,
       reach,
     );
-    if (!hit || !(hit.entity instanceof Boat) || hit.entity.dead) return null;
+    if (!hit || hit.entity.dead) return null;
+    if (!(hit.entity instanceof Boat) && !(hit.entity instanceof Minecart)) return null;
     if (Math.hypot(hit.entity.x - this.physics.x, hit.entity.z - this.physics.z) > 4.5) return null;
     return hit.entity;
   }
 
-  /** 准星对着的船（桌面右键）：与 `boatAtScreen` 同一套判据，射线从眼睛发出 */
-  private boatUnderCrosshair(): Boat | null {
+  /** 准星对着的载具（桌面右键）：与 `vehicleAtScreen` 同一套判据，射线从眼睛发出 */
+  private vehicleUnderCrosshair(): Rideable | null {
     const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
     const hit = raycastEntities(
       this.entities.all,
@@ -4240,49 +4247,51 @@ class App {
       dz,
       4.5,
     );
-    if (!hit || !(hit.entity instanceof Boat) || hit.entity.dead) return null;
+    if (!hit || hit.entity.dead) return null;
+    if (!(hit.entity instanceof Boat) && !(hit.entity instanceof Minecart)) return null;
     return hit.entity;
   }
 
-  /** 上船 */
-  private mountBoat(boat: Boat): boolean {
-    if (this.ridingBoat || boat.dead || this.mountCooldown > 0) return false;
-    this.ridingBoat = boat;
-    boat.passenger = 'player';
-    this.physics.teleport(boat.x, boat.y + 0.25, boat.z);
+  /** 上载具（船 / 矿车）：两者共用"停跑玩家物理 + 每帧贴位置"那一套 */
+  private mountVehicle(vehicle: Rideable): boolean {
+    if (this.ridingVehicle || vehicle.dead || this.mountCooldown > 0) return false;
+    this.ridingVehicle = vehicle;
+    vehicle.passenger = 'player';
+    this.physics.teleport(vehicle.x, vehicle.y + 0.25, vehicle.z);
     this.physics.vx = 0;
     this.physics.vy = 0;
     this.physics.vz = 0;
     this.mountCooldown = 0.4;
     this.fallStartY = null;
     this.pendingFallDistance = 0;
-    this.audio.play('place', { x: boat.x, y: boat.y, z: boat.z });
-    this.hudToast.show('上船：跳跃 / 潜行 下船');
+    this.audio.play('place', { x: vehicle.x, y: vehicle.y, z: vehicle.z });
+    const boat = vehicle instanceof Boat;
+    this.hudToast.show(boat ? '上船：跳跃 / 潜行 下船' : '上车：跳跃 / 潜行 下车');
     return true;
   }
 
   /**
-   * 下船：把玩家挪到船边。
+   * 下载具：把玩家挪到载具边。
    *
-   * 四个方向里挑第一个"脚与头都是空气"的落点；都不行就站到船顶上
-   * （不会把玩家塞进方块里——那是比"下不了船"严重得多的问题）。
+   * 四个方向里挑第一个"脚与头都是空气"的落点；都不行就站到载具顶上
+   * （不会把玩家塞进方块里——那是比"下不来"严重得多的问题）。
    */
-  private dismountBoat(): void {
-    const boat = this.ridingBoat;
-    if (!boat) return;
-    boat.passenger = null;
-    this.ridingBoat = null;
+  private dismountVehicle(): void {
+    const vehicle = this.ridingVehicle;
+    if (!vehicle) return;
+    vehicle.passenger = null;
+    this.ridingVehicle = null;
     this.mountCooldown = 0.45;
     this.physics.vx = 0;
     this.physics.vy = 0;
     this.physics.vz = 0;
 
     const spots: readonly (readonly [number, number, number])[] = [
-      [boat.x + 1.1, boat.y + 0.05, boat.z],
-      [boat.x - 1.1, boat.y + 0.05, boat.z],
-      [boat.x, boat.y + 0.05, boat.z + 1.1],
-      [boat.x, boat.y + 0.05, boat.z - 1.1],
-      [boat.x, boat.y + 0.9, boat.z],
+      [vehicle.x + 1.1, vehicle.y + 0.05, vehicle.z],
+      [vehicle.x - 1.1, vehicle.y + 0.05, vehicle.z],
+      [vehicle.x, vehicle.y + 0.05, vehicle.z + 1.1],
+      [vehicle.x, vehicle.y + 0.05, vehicle.z - 1.1],
+      [vehicle.x, vehicle.y + 0.9, vehicle.z],
     ];
     let target = spots[spots.length - 1]!;
     for (const spot of spots) {
@@ -4296,31 +4305,31 @@ class App {
     this.physics.teleport(target[0], target[1], target[2]);
     this.fallStartY = null;
     this.pendingFallDistance = 0;
-    this.audio.play('place', { x: boat.x, y: boat.y, z: boat.z });
+    this.audio.play('place', { x: vehicle.x, y: vehicle.y, z: vehicle.z });
   }
 
-  /** 把玩家贴到船上（每帧实体更新之后调用，保证相机不比船慢一帧） */
-  private syncRiderToBoat(): void {
-    const boat = this.ridingBoat;
-    if (!boat) return;
-    // 船可能因为区块卸载/切维度被直接移出实体表（`removeInChunk` 只 splice、不标 dead）。
-    // 不查这一下的话，骑手会被永久"贴"在一条已经不存在的船上（悬在半空、下不来）。
-    if (boat.dead || !this.entities.all.includes(boat)) {
-      boat.passenger = null;
-      this.ridingBoat = null;
+  /** 把玩家贴到载具上（每帧实体更新之后调用，保证相机不比载具慢一帧） */
+  private syncRiderToVehicle(): void {
+    const vehicle = this.ridingVehicle;
+    if (!vehicle) return;
+    // 载具可能因为区块卸载/切维度被直接移出实体表（`removeInChunk` 只 splice、不标 dead）。
+    // 不查这一下的话，骑手会被永久"贴"在一个已经不存在的载具上（悬在半空、下不来）。
+    if (vehicle.dead || !this.entities.all.includes(vehicle)) {
+      vehicle.passenger = null;
+      this.ridingVehicle = null;
       return;
     }
-    // 船的朝向跟玩家视角走（原版也是"你往哪看，船就往哪开"）
-    boat.yaw = this.yaw;
+    // 朝向跟玩家视角走（原版也是"你往哪看，就往哪开"）
+    vehicle.yaw = this.yaw;
     const p = this.physics;
-    p.x = boat.x;
-    p.y = boat.y + 0.25;
-    p.z = boat.z;
-    p.vx = boat.vx;
+    p.x = vehicle.x;
+    p.y = vehicle.y + 0.25;
+    p.z = vehicle.z;
+    p.vx = vehicle.vx;
     p.vy = 0;
-    p.vz = boat.vz;
+    p.vz = vehicle.vz;
     p.onGround = true;
-    // 在船上既不算摔落，也不该被当成"在游泳"
+    // 在载具上既不算摔落，也不该被当成"在游泳"
     this.fallStartY = null;
     this.pendingFallDistance = 0;
   }
@@ -4342,6 +4351,29 @@ class App {
       this.refreshHotbar();
     }
     this.audio.play('place', { x: target.x, y: target.y, z: target.z });
+    this.hand.swing();
+    return true;
+  }
+
+  /**
+   * 放矿车（批次 245）：只能放在**铁轨**上（原版也是"对着轨道放"）。
+   *
+   * 用 `this.hit`（触摸端已经是按手指落点算出来的方块目标），
+   * 所以调用点必须排在 `if (!this.hit) return;` 之后。
+   */
+  private placeMinecart(): boolean {
+    const hit = this.hit;
+    if (!hit) return false;
+    // 铁轨是 `flat` 薄板：矿车落在它上方 0.05（贴住轨面，不悬空）
+    if (this.world.getBlock(hit.x, hit.y, hit.z) !== Block.RAIL) return false;
+    const cart = new Minecart(hit.x + 0.5, hit.y + 0.05, hit.z + 0.5);
+    cart.yaw = this.yaw;
+    this.entities.spawn(cart);
+    if (!this.isCreative) {
+      this.inventory.take(this.hotbarIndex, 1);
+      this.refreshHotbar();
+    }
+    this.audio.play('place', { x: cart.x, y: cart.y, z: cart.z });
     this.hand.swing();
     return true;
   }
@@ -7252,14 +7284,14 @@ class App {
       // 这里简化成"完全不追"，见 TASKS K4 的差异记录）
       playerInvisible: this.effects.invisible,
       // 船（批次 244）：只有"有人在驾驶"时才把输入交出去——空船不该自己开
-      vehicleInput: this.ridingBoat
+      vehicleInput: this.ridingVehicle
         ? { forward: this.frameInput.forward, strafe: this.frameInput.strafe, sprint: this.frameInput.sprint }
         : undefined,
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);
     // 船先动、人再贴上去：顺序不能反，否则相机会比船慢一帧（看着像"人在水里拖着船"）
-    this.syncRiderToBoat();
+    this.syncRiderToVehicle();
     // 药水云在主循环里推进（不是实体）：`lastEntityContext` 刚更新过，
     // 所以云结算里伤到生物时用得上"掉落物要交给谁"这些回调
     this.updateClouds(dt);
@@ -9447,9 +9479,9 @@ class App {
     }
 
     // 上船（批次 244）：船常浮在水上，准星/手指底下往往没有可选方块，所以排在这道判断之前
-    const boatTarget = this.tapBoat ?? this.boatUnderCrosshair();
-    if (boatTarget && this.mountBoat(boatTarget)) {
-      this.tapBoat = null;
+    const boatTarget = this.tapVehicle ?? this.vehicleUnderCrosshair();
+    if (boatTarget && this.mountVehicle(boatTarget)) {
+      this.tapVehicle = null;
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;
       return;
@@ -9463,6 +9495,13 @@ class App {
 
     // 没有命中方块就没什么可放/可交互的（投掷在上面已经处理过了）
     if (!this.hit) return;
+
+    // 放矿车（批次 245）：只能对着铁轨放，所以排在"必须命中方块"之后
+    if (this.heldItemId === Item.MINECART && this.placeMinecart()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
 
     // 右键功能方块：潜行时仍然走放置逻辑（与原版一致）
     // 触摸潜行也要算进来，否则手机上无法"潜行对着箱子放方块"
@@ -11189,8 +11228,8 @@ class App {
       this.frameInput = rawInput;
       this.mountCooldown = Math.max(0, this.mountCooldown - dt);
       // 在船上按跳跃/潜行 = 下船（手机上跳跃键是唯一顺手的按键；桌面潜行也认）
-      if (this.ridingBoat && this.mountCooldown <= 0 && (rawInput.jump || rawInput.sneak)) {
-        this.dismountBoat();
+      if (this.ridingVehicle && this.mountCooldown <= 0 && (rawInput.jump || rawInput.sneak)) {
+        this.dismountVehicle();
       }
       const wasOnGround = this.physics.onGround;
       if (!this.spawnResolved || this.pendingArrival || this.groundSettleReason !== null) {
@@ -11200,8 +11239,8 @@ class App {
         this.physics.vx = 0;
         this.physics.vy = 0;
         this.physics.vz = 0;
-      } else if (this.ridingBoat) {
-        // 骑船（批次 244）：玩家物理这一帧不跑——位置由 `syncRiderToBoat` 贴到船上。
+      } else if (this.ridingVehicle) {
+        // 骑船（批次 244）：玩家物理这一帧不跑——位置由 `syncRiderToVehicle` 贴到船上。
         // 速度归零（船的速度由实体自己算），否则下船瞬间会带着船速弹出去。
         this.physics.vx = 0;
         this.physics.vy = 0;
@@ -11241,7 +11280,7 @@ class App {
         this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
       }
       // 死了就别赖在船上（否则重生后第一帧又会被贴回船上）
-      if (this.stats.dead && this.ridingBoat) this.dismountBoat();
+      if (this.stats.dead && this.ridingVehicle) this.dismountVehicle();
       // 床（B13）：睡觉的计时与结算。用**真实输入**是为了让"跳跃键提前起床"能被读到
       this.updateSleep(dt, rawInput);
       // 钓鱼（批次 81）：浮标飞行 / 等待咬钩 / 咬钩窗口，全在状态机里

@@ -183,6 +183,8 @@ export const Item = {
    * 所以 `ItemDef.block` 为空，放置那条路走 `main.placeBoat()`。
    */
   OAK_BOAT: 1478,
+  /** 矿车（批次 245）：可放置物品，放到铁轨上变成 `Minecart` 实体 */
+  MINECART: 1479,
   /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
@@ -463,6 +465,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.TRIDENT, name: 'minecraft:trident', tile: 'item_trident', maxStack: 1 },
   // 船（批次 244）：原版一次只能拿一艘（堆叠 1），放置后变成实体
   { id: Item.OAK_BOAT, name: 'minecraft:oak_boat', tile: 'item_oak_boat', maxStack: 1 },
+  // 矿车（批次 245）：同样一次一辆，放到铁轨上变成实体
+  { id: Item.MINECART, name: 'minecraft:minecart', tile: 'item_minecart', maxStack: 1 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料

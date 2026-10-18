@@ -15,6 +15,7 @@ import { ItemEntity, ITEM_FIRE_SECONDS, ITEM_LIFETIME } from '../src/core/entity
 import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../src/core/entity/XpOrb.ts';
 import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import { Boat } from '../src/core/entity/Boat.ts';
+import { Minecart } from '../src/core/entity/Minecart.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 import { boxAt } from '../src/core/physics/AABB.ts';
@@ -499,6 +500,50 @@ console.log('\n[船：浮在水面 / 驾驶 / 空船漂（批次 244）]');
   const beached = new Boat(0.5, 4, 0.5);
   for (let i = 0; i < 80; i++) beached.tick(landCtx, 0.05);
   check('岸上的船会落到地面', beached.y < 0.2, `y=${beached.y.toFixed(2)}`);
+}
+
+console.log('\n[矿车：轨道上滑得远 / 离轨寸步难行（批次 245）]');
+{
+  const flatWorld: PhysicsWorld = {
+    collisionAt: (_x, y) => (y < 0 ? 'full' : null),
+    isLiquid: () => false,
+  };
+  const makeCtx = (rail: boolean): EntityContext => ({
+    world: flatWorld,
+    playerBox: null,
+    pickup: () => 0,
+    // 铁轨铺在 y=0 这一层；`rail=false` 就是"草地上"
+    getBlock: (_x, y) => (rail && y === 0 ? Block.RAIL : Block.AIR),
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+    vehicleInput: { forward: 1, strafe: 0, sprint: false },
+  });
+  const drive = (cart: Minecart, ctx: EntityContext, seconds: number): void => {
+    for (let t = 0; t < seconds; t += 0.05) cart.tick(ctx, 0.05);
+  };
+
+  // 车头朝 +X：yaw = -π/2 时 forward = (-sin(-π/2), -cos(-π/2)) = (1, 0)
+  const onRail = new Minecart(0.5, 0.05, 0.5);
+  onRail.passenger = 'player';
+  onRail.yaw = -Math.PI / 2;
+  drive(onRail, makeCtx(true), 2);
+  check('铁轨上 2 秒能滑出很远（加速度大、阻力小）', onRail.x > 6, `x=${onRail.x.toFixed(2)}`);
+
+  const offRail = new Minecart(0.5, 0.05, 0.5);
+  offRail.passenger = 'player';
+  offRail.yaw = -Math.PI / 2;
+  drive(offRail, makeCtx(false), 2);
+  check(
+    '草地上同样的输入几乎推不动（原版也寸步难行）',
+    offRail.x < 3 && offRail.x < onRail.x,
+    `草地上 x=${offRail.x.toFixed(2)}，铁轨上 x=${onRail.x.toFixed(2)}`,
+  );
+
+  const empty = new Minecart(0.5, 0.05, 0.5);
+  empty.yaw = -Math.PI / 2;
+  drive(empty, makeCtx(true), 2);
+  check('空车不吃驾驶输入（没人开就不动）', Math.abs(empty.x - 0.5) < 0.2, `x=${empty.x.toFixed(2)}`);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

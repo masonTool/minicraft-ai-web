@@ -24,6 +24,7 @@ import { itemDef } from '../core/registry/items.ts';
 import { Throwable } from '../core/entity/Throwable.ts';
 import { Firework } from '../core/entity/Firework.ts';
 import { Boat } from '../core/entity/Boat.ts';
+import { Minecart } from '../core/entity/Minecart.ts';
 import type { Entity } from '../core/entity/Entity.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 
@@ -83,6 +84,9 @@ export class EntityRenderer {
   private readonly boatGroups = new Map<number, THREE.Group>();
   /** 船的部件几何体（所有船共用一份，只建一次） */
   private boatParts: readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] | null = null;
+  /** 矿车（批次 245）：与船同一套 Group 记账 */
+  private readonly minecartGroups = new Map<number, THREE.Group>();
+  private minecartParts: readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] | null = null;
   private orbMaterial: THREE.SpriteMaterial | null = null;
   /** 箭的几何体按**物品 id** 缓存：药水箭各有自己的贴图（箭头上染了药水颜色） */
   private readonly arrowGeometries = new Map<number, THREE.BufferGeometry>();
@@ -158,6 +162,11 @@ export class EntityRenderer {
         this.syncBoat(entity, alive, lightAt);
         continue;
       }
+      // 矿车（批次 245）：同一套 Group，铁皮斗 + 四个轮子
+      if (entity instanceof Minecart) {
+        this.syncMinecart(entity, alive, lightAt);
+        continue;
+      }
       if (!(entity instanceof ItemEntity)) continue;
       alive.add(entity.id);
 
@@ -214,6 +223,77 @@ export class EntityRenderer {
       this.object.remove(group);
       this.boatGroups.delete(id);
     }
+    for (const [id, group] of [...this.minecartGroups]) {
+      if (alive.has(id)) continue;
+      this.object.remove(group);
+      this.minecartGroups.delete(id);
+    }
+  }
+
+  /**
+   * 同步一辆矿车（批次 245）：铁皮斗 + 四个轮子，按 `yaw` 转向、按光照换材质。
+   * 与船同一套写法（`syncBoat`）——两者都是"几个盒子拼出来的载具"。
+   */
+  private syncMinecart(
+    cart: Minecart,
+    alive: Set<number>,
+    lightAt?: (x: number, y: number, z: number) => EntityLight | null,
+  ): void {
+    alive.add(cart.id);
+
+    let group = this.minecartGroups.get(cart.id);
+    if (!group) {
+      group = new THREE.Group();
+      for (const part of this.minecartParts ?? (this.minecartParts = this.buildMinecartParts())) {
+        const mesh = new THREE.Mesh(part.geometry, this.baseMaterial);
+        mesh.position.set(part.x, part.y, part.z);
+        group.add(mesh);
+      }
+      this.minecartGroups.set(cart.id, group);
+      this.object.add(group);
+    }
+
+    let material = this.baseMaterial;
+    if (lightAt) {
+      const light = lightAt(Math.floor(cart.x), Math.floor(cart.y + 0.2), Math.floor(cart.z));
+      if (light) material = this.materialForLevel(Math.round(Math.max(light.sky * this.skyLightFactor, light.block)));
+    }
+    for (const child of group.children) (child as THREE.Mesh).material = material;
+
+    group.position.set(cart.x, cart.y, cart.z);
+    group.rotation.y = cart.yaw;
+  }
+
+  /** 矿车的部件：斗底 + 四壁（铁）+ 四个轮子（石头） */
+  private buildMinecartParts(): readonly { geometry: THREE.BufferGeometry; x: number; y: number; z: number }[] {
+    const make = (
+      width: number,
+      height: number,
+      depth: number,
+      x: number,
+      y: number,
+      z: number,
+      tile: string,
+    ) => {
+      const geometry = new THREE.BoxGeometry(width, height, depth);
+      // 六个面都必须写 UV（只给一个的话另外五面会用整张图集）
+      applyFaceUvs(geometry, this.atlas, Array<string>(6).fill(tile));
+      return { geometry, x, y, z };
+    };
+    return [
+      // 斗底
+      make(0.86, 0.12, 0.86, 0, 0.14, 0, 'iron_block'),
+      // 四壁（比船矮，原版矿车是敞口的）
+      make(0.1, 0.34, 0.86, -0.38, 0.37, 0, 'iron_block'),
+      make(0.1, 0.34, 0.86, 0.38, 0.37, 0, 'iron_block'),
+      make(0.86, 0.34, 0.1, 0, 0.37, 0.38, 'iron_block'),
+      make(0.86, 0.34, 0.1, 0, 0.37, -0.38, 'iron_block'),
+      // 四个轮子（贴 stone，铁皮斗下面一圈深色，一眼能看出"有轮子"）
+      make(0.16, 0.16, 0.12, -0.28, 0.08, 0.3, 'stone'),
+      make(0.16, 0.16, 0.12, 0.28, 0.08, 0.3, 'stone'),
+      make(0.16, 0.16, 0.12, -0.28, 0.08, -0.3, 'stone'),
+      make(0.16, 0.16, 0.12, 0.28, 0.08, -0.3, 'stone'),
+    ];
   }
 
   /**
@@ -571,6 +651,12 @@ export class EntityRenderer {
     if (this.boatParts) {
       for (const part of this.boatParts) part.geometry.dispose();
       this.boatParts = null;
+    }
+    for (const group of this.minecartGroups.values()) this.object.remove(group);
+    this.minecartGroups.clear();
+    if (this.minecartParts) {
+      for (const part of this.minecartParts) part.geometry.dispose();
+      this.minecartParts = null;
     }
     for (const material of this.materialByLevel) material?.dispose();
     this.materialByLevel.length = 0;
