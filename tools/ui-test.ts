@@ -553,7 +553,14 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     '分类栏在 align-items:start 的父网格里显式拉伸（否则内容多时会一路长到面板外、永远不滚）',
     /\.inv-panel\.pocket-ui\.pocket-dual \.inv-category-section \{[\s\S]{0,600}align-self: stretch;/.test(css),
   );
-  check('左轨分类改两列（横屏不被截断）', css.includes('grid-template-columns: repeat(2, 36px)'));
+  // 批次 184：用户要求"左侧按钮要一个竖列展示，不要换列"（批次 181 的两列已撤掉）
+  check(
+    '左轨分类单列竖排，按钮按可用高度均分（不换列、不截断）',
+    !css.includes('grid-template-columns: repeat(2, 36px)') &&
+      /\.inv-shell\.pocket-chrome \.inv-pocket-recipes \{[\s\S]{0,500}flex-direction: column/.test(css) &&
+      /\.inv-shell\.pocket-chrome \.inv-rail-left \.inv-tabs \{[\s\S]{0,400}flex-direction: column/.test(css) &&
+      /\.inv-shell\.pocket-chrome \.inv-rail-left \.inv-pocket-recipe-tab \{[\s\S]{0,300}flex: 1 1 0;/.test(css),
+  );
 
   // 左栏状态机（批次 181）：只有一个 pane，删掉两套互相打架的布尔
   check('左栏只有一个 pane 状态', invSrc.includes("private pane: 'creative' | 'category' | 'items'"));
@@ -824,7 +831,11 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
     /private showRecipeFor\(itemId: number\): void \{[\s\S]{0,400}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) return;/.test(invSrc),
   );
   // 空槽不可选中：按下那一层"沉下去"只给有东西的格子
-  check('空槽不给选中反馈', invSrc.includes('if (this.tooltipStacks.has(slot)) this.markPressing(slot);'));
+  // 空槽不给选中反馈（批次 184：红底那种"我没有的"同样不给，只闪一下）
+  check(
+    '空槽不给选中反馈',
+    /if \(this\.tooltipStacks\.has\(slot\)\) \{[\s\S]{0,220}else this\.markPressing\(slot\);/.test(invSrc),
+  );
   // 丢物：面板与快捷栏 dock 之外的空处都算"界面外"（只认 root 时点两栏之间的缝没反应）
   check(
     '点界面外（含 shell 留白）才丢出去',
@@ -970,10 +981,13 @@ console.log('\n[分类栏永远空：detachRecipeBook 顺手把它藏了（批�
     '分类栏的显隐只由 leftPane 决定',
     invSrc.includes("this.categoryHostEl.style.display = leftPane === 'category' ? 'flex' : 'none';"),
   );
-  // 空列表要能分清"背包空"还是"过滤坏了"：把背包里不同物品的件数报出来
+  // 批次 184（用户要求）：配方开关关着时空栏**留白**，不再写"这一栏里你还没有东西…"。
+  // 只有确实存在筛选条件（搜索词、或"显示全部"）时才需要解释为什么空着。
   check(
-    '空栏的提示里有"背包里共 N 件"',
-    invSrc.includes('private ownedItemIds(): number[]') && invSrc.includes('背包里共 ${this.ownedItemIds().length} 件不同的东西'),
+    '配方开关关着时空栏留白（有筛选条件时才解释）',
+    invSrc.includes('private ownedItemIds(): number[]') &&
+      invSrc.includes('if (this.categoryQuery.length > 0 || this.showUnowned) {') &&
+      !invSrc.includes('背包里共 ${this.ownedItemIds().length}'),
   );
 }
 
@@ -1545,7 +1559,7 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   );
   check(
     '新建世界表单两列并排（长编辑框不再一条占一行）',
-    compact.includes('grid-template-columns: repeat(auto-fit, minmax(260px, 1fr))') &&
+    compact.includes('grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))') &&
       compact.includes('.world-new > .world-primary { grid-column: 1 / -1; }'),
   );
   // 用户："暂停界面按钮可以窄一点"（面板 760 宽，一列按钮拉满太宽）
@@ -1622,7 +1636,12 @@ console.log('\n[进游戏首页默认全屏]');
     installSrc.includes("localStorage.setItem(DISMISS_KEY, '1')") && installSrc.includes('readDismissed()'),
   );
   check('引导的样式与层级在 index.html 里（压在主菜单之上、设置之下）', htmlHead.includes('.install-hint {') && htmlHead.includes('z-index: 46'));
-  check('viewport 用交互键盘不缩排版的写法', htmlHead.includes('interactive-widget=resizes-content'));
+  // 批次 184：键盘只能缩**视觉**视口（resizes-visual）。resizes-content 会把布局
+  // 视口一起缩矮，点一下聊天框整块 3D 画面就被压一下。
+  check(
+    'viewport 用交互键盘不缩排版的写法（resizes-visual）',
+    htmlHead.includes('interactive-widget=resizes-visual') && !htmlHead.includes('interactive-widget=resizes-content'),
+  );
 }
 
 console.log('\n[加载遮罩只属于"进世界"（批次 167）]');
@@ -1843,6 +1862,70 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
       appSrc.includes("this.touch?.recover('fullscreen')"),
   );
   check('摇杆不再拿原点算方向', touchSrc.includes('if (event.clientX === 0 && event.clientY === 0) return;'));
+}
+
+console.log('\n[用户反馈一轮收口（批次 184）]');
+{
+  const fullscreenSrc = readFileSync(new URL('../src/ui/Fullscreen.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const worldSrc = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
+  const keyboardSrc = readFileSync(new URL('../src/ui/Keyboard.ts', import.meta.url), 'utf8');
+
+  // ① 竖屏点任何区域都进横屏全屏：不是一次性监听，只在"已经横屏且全屏"时跳过
+  check(
+    '竖屏点任意处都会再试一次全屏 + 横屏（不是一次性）',
+    fullscreenSrc.includes('export function armPresentOnTap') &&
+      fullscreenSrc.includes('if (isFullscreen() && isLandscapeOrientation()) return;') &&
+      appSrc.includes('armPresentOnTap(document);'),
+  );
+  // ② 从后台回来：先落暂停页 + 不透明"点击继续"层，点它才请求全屏并回到游戏
+  check(
+    '从后台回来先落到暂停页（先收起其它界面）',
+    appSrc.includes('private handleReturnFromBackground(): void {') &&
+      appSrc.includes('if (this.wasHidden) this.handleReturnFromBackground();') &&
+      appSrc.includes('if (!this.settingsScreen.isOpen) this.openSettings();'),
+  );
+  check(
+    '"点击继续"层自己吃掉第一下点击：请求全屏再关掉自己与暂停菜单',
+    /gate\.addEventListener\('pointerdown'[\s\S]{0,200}enterMobilePresentation\(\);[\s\S]{0,80}this\.dismissResumeGate\(\);/.test(appSrc) &&
+      css.includes('#resume-gate {') &&
+      css.includes('z-index: 55;'),
+  );
+  // ③ 新建世界：标签与输入框同一行，说明放最后（两列栅格不再被切断）
+  check(
+    '新建世界表单：标签与输入框同一行（窄屏也不再拆两行）',
+    !css.includes('.world-row .world-input { grid-column: 1 / -1; }') &&
+      css.includes('.world-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px;') &&
+      css.includes('.world-row > span {'),
+  );
+  check(
+    '新建世界表单：说明排在字段最后、创建键跨满两列',
+    /this\.makeRow\('游戏模式', this\.gameModeSelect, null\),\s*this\.typeHintEl,\s*createButton,/.test(worldSrc) &&
+      css.includes('.world-new > .world-primary { grid-column: 1 / -1; }'),
+  );
+  // ④ 配方开关关着 + 空栏 = 空白（不再写"这一栏里你还没有东西…"）
+  check(
+    '配方开关关着时空栏留白（只在有筛选条件时解释）',
+    invSrc.includes('if (this.categoryQuery.length > 0 || this.showUnowned) {') &&
+      !invSrc.includes('这一栏里你还没有东西'),
+  );
+  // ⑤ 红底"我没有的"：不选中，只给点击反馈 + 名称 + 配方
+  check(
+    '红底物品不选中，只给点击反馈',
+    invSrc.includes('if (slot.classList.contains(\'locked\')) this.flashLocked(slot);') &&
+      invSrc.includes('private flashLocked(slot: HTMLElement): void {') &&
+      css.includes('.inv-slot.locked.tapped'),
+  );
+  // ⑥ 键盘：不缩布局 + 点别处先失焦
+  check(
+    '键盘只缩视觉视口，点输入框以外先 blur',
+    appSrc.includes('installKeyboardGuards();') &&
+      keyboardSrc.includes('active.blur();') &&
+      keyboardSrc.includes("addEventListener('resize', syncKeyboardInset") &&
+      css.includes('var(--kb-inset, 0px)'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
