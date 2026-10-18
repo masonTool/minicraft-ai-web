@@ -38,7 +38,7 @@ const CX = 0;
 const CZ = 0;
 
 interface Stats {
-  blocks: Uint32Array;
+  blocks: ReturnType<typeof generateChunkBlocks>;
   solid: number;
   unique: Set<number>;
   minY: number;
@@ -85,7 +85,7 @@ console.log('\n[二、超平坦：只有三层]');
   check('没有矿石（煤/铁/钻石都找不到）', !flat.has(Block.COAL_ORE) && !flat.has(Block.IRON_ORE) && !flat.has(Block.DIAMOND_ORE));
   // 实心格数 = 16×16 × 4 层（基岩 1 + 泥土 2 + 草 1）
   equal('实心格数正好四层', flat.solid, 16 * 16 * 4);
-  equal('最低层是基岩所在高度', flat.minY, FLAT_LAYERS.bedrockY + 0, `${flat.minY}`);
+  equal('最低层是基岩所在高度', flat.minY, FLAT_LAYERS.bedrockY);
 }
 
 console.log('\n[三、默认 / 放大化：完整世界]');

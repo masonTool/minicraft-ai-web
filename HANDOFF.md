@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 554（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 565（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **178**、进行中 **73**、待办 36 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -51,6 +51,17 @@ npm run dev            # http://localhost:5173
   冷启动一页背包 <1ms。顺带给 `TextureAtlas` 补 `revision` + `markTextureChanged()`
   （资源包换贴图后图标缓存、平均色缓存一起作废，否则背包里还是旧材质）与 `tileOpacity()`
   （带透明洞的贴图不垫底色，否则玻璃/树叶会变成实心方块）。`test:ui` 489 → 490 条
+- 批次 181（用户手机反馈）：**启动/输入/背包/HUD 收口**。
+  ① 诊断日志（`game/diagnostics*.ts`，环形 4000 条、500KB 落盘预算、设置里有记录/导出/复制，
+  `__diag` 与 `__mc.diag` 给自动化）——"切模式后摇杆反向"这类问题以后靠它复现；
+  ② 退出世界改**应用内回菜单**（`App.dispose()` 全量拆局 + AbortController 解绑），不再 reload、不丢全屏；
+  竖屏提示从整屏黑幕改成底部横条；返回键分层（游戏内无面板 → 暂停菜单）；
+  ③ 触摸手势只留一个 280ms 阈值：点=交互/攻击/放置，按=破坏；`resetInput()` 在切模式/开关界面/失焦时清手势；
+  ④ `gameMode` 与 `flying` 拆开，新建世界/暂停菜单可选模式，双击跳只切飞行；
+  ⑤ 背包左栏统一 7 列 40px、状态收成一个 `pane`、配方预览只读、关界面孤品归位、丢弃有提示；
+  ⑥ 顶部三键（暂停/视角/聊天）、准星下方目标名称、2 秒提示浮窗；
+  ⑦ 世界类型写明"超平坦没有树/村庄/矿石"，下拉深色主题。
+  新增 `test:diag`（57）、`test:mode`（18）、`test:worldtype`（19），离线套数 114 → **117**。
 - 批次 179（TASKS N10 收尾）：**地形正常化** —— 山、岸、海底一起变正常。
   三条根因：① `peaksAndValleys()` 的输入**没夹紧**，weirdness 超出 ±1.1 时折叠值能到
   **-2.8**，`pv × factor × 40` 于是给出 **-110 格**（这才是"海床深到世界底"的真凶，
@@ -235,11 +246,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 114 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 117 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 114 套离线测试
+npm test                   # typecheck:tools + vitest + 117 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -251,7 +262,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **114 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **117 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。

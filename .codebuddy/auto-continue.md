@@ -3150,59 +3150,75 @@
 
 ### M0 · 诊断日志（G1）
 
-- [ ] B181-1 `src/game/diagnostics.ts`：环形缓冲 + 会话分桶 + 500KB 预算裁剪 + 可读时间线
-- [ ] B181-2 `src/game/diagnosticsRuntime.ts`：错误捕获、可见性/页面隐藏落盘、导出/复制、单例
-- [ ] B181-3 设置「游戏」组加"诊断日志"入口（记录/导出/复制/占用显示）
-- [ ] B181-4 埋点：boot / 进世界 / 退出 / 保存 / 全屏 / 手势状态 / 背包关键操作
-- [ ] B181-5 `tools/diagnostics-test.ts` + `test:diag`
+- [x] B181-1 `src/game/diagnostics.ts`：环形缓冲 + 会话分桶 + 500KB 预算裁剪 + 可读时间线
+- [x] B181-2 `src/game/diagnosticsRuntime.ts`：错误捕获、可见性/页面隐藏落盘、导出/复制、单例
+- [x] B181-3 设置「游戏」组加"诊断日志"入口（记录/导出/复制/占用显示）
+- [x] B181-4 埋点：boot / 进世界 / 退出 / 保存 / 全屏 / 手势状态 / 背包关键操作
+- [x] B181-5 `tools/diagnostics-test.ts` + `test:diag`
 
 ### M2 · 开局物资（C1/C2）
 
-- [ ] B181-6 删除正常流程的开发物资发放，改为显式调试开关（`?devkit=1`）
-- [ ] B181-7 发放数量按 `maxStackOf` 夹取并去重；`test:inventory` 钉住"每件只占一格"
+- [x] B181-6 删除正常流程的开发物资发放，改为显式调试开关（`?devkit=1`）
+- [x] B181-7 发放数量按 `maxStackOf` 夹取并去重；`test:inventory` 钉住"每件只占一格"
 
 ### M1 · 启动 / 退出 / 返回（A1/A2/A3）
 
-- [ ] B181-8 `App.dispose()` 补全 + `AbortController` 解绑 + 循环 disposed 检查
-- [ ] B181-9 `exitToMenu()` 改应用内返回（不 reload、不丢全屏）
-- [ ] B181-10 竖屏提示改底部横条；设置加"全屏 / 横屏"状态行
-- [ ] B181-11 `BackButton` 根层：游戏内无面板 → 暂停菜单；菜单二级页 → 首页
-- [ ] B181-12 `test:ui` 补返回层级与提示层不遮挡菜单
+- [x] B181-8 `App.dispose()` 补全 + `AbortController` 解绑 + 循环 disposed 检查
+- [x] B181-9 `exitToMenu()` 改应用内返回（不 reload、不丢全屏）
+- [x] B181-10 竖屏提示改底部横条；设置加"全屏 / 横屏"状态行
+- [x] B181-11 `BackButton` 根层：游戏内无面板 → 暂停菜单；菜单二级页 → 首页
+- [x] B181-12 `test:ui` 补返回层级与提示层不遮挡菜单
 
 ### M3 · 触摸输入（D2/D3）
 
-- [ ] B181-13 `TouchControls.resetInput(reason)` + 所有状态变化调用点
-- [ ] B181-14 手势抽 `core/input/TouchGesture.ts`：点=交互/攻击/放置，按=破坏，拖=视角
-- [ ] B181-15 `tools/touchgesture-test.ts` 覆盖点/按/拖/多指/取消
-- [ ] B181-16 删除 140ms 连续放置（保留一个旧手感开关）
+- [x] B181-13 `TouchControls.resetInput(reason)` + 所有状态变化调用点
+- [x] B181-14 手势抽 `core/input/TouchGesture.ts`：点=交互/攻击/放置，按=破坏，拖=视角
+- [x] B181-15 `tools/touchgesture-test.ts` 覆盖点/按/拖/多指/取消
+- [x] B181-16 删除 140ms 连续放置（保留一个旧手感开关）
 
 ### M4 · 游戏模式（D1/B3）
 
-- [ ] B181-17 `gameMode` 进世界清单与存档（旧档迁移：flying=creative）
-- [ ] B181-18 新建世界可选模式；暂停菜单可切（带确认）
-- [ ] B181-19 `isCreative()` 改读 gameMode；双击跳只切飞行
-- [ ] B181-20 `test:mode`：迁移、权限、切回生存必须落地
+- [x] B181-17 `gameMode` 进世界清单与存档（旧档迁移：flying=creative）
+- [x] B181-18 新建世界可选模式；暂停菜单可切（带确认）
+- [x] B181-19 `isCreative()` 改读 gameMode；双击跳只切飞行
+- [x] B181-20 `test:mode`：迁移、权限、切回生存必须落地
 
 ### M5 · 背包（F1~F8）
 
-- [ ] B181-21 左栏状态机 `creative | category | items`，删两套布尔
-- [ ] B181-22 `held` 与 `preview` 分离；不拥有的物品只预览、点合成格只弹名称
-- [ ] B181-23 左栏统一 7 列同规格；分类区 `flex:1` 滚动；左轨高度自适应
-- [ ] B181-24 光标不变量 + 关面板/失焦强制结算 + 孤儿自检
-- [ ] B181-25 丢弃与新语义统一并弹提示
+- [x] B181-21 左栏状态机 `creative | category | items`，删两套布尔
+- [x] B181-22 `held` 与 `preview` 分离；不拥有的物品只预览、点合成格只弹名称
+- [x] B181-23 左栏统一 7 列同规格；分类区 `flex:1` 滚动；左轨高度自适应
+- [x] B181-24 光标不变量 + 关面板/失焦强制结算 + 孤儿自检
+- [x] B181-25 丢弃与新语义统一并弹提示
 
 ### M6 · HUD（E1~E5）
 
-- [ ] B181-26 顶部三键（暂停/视角/聊天），方形小键
-- [ ] B181-27 `#target-info` 方块名 / 生物名+血量
-- [ ] B181-28 `ui/HudToast.ts` 2 秒 + 淡出，接入背包与游戏内点击
+- [x] B181-26 顶部三键（暂停/视角/聊天），方形小键
+- [x] B181-27 `#target-info` 方块名 / 生物名+血量
+- [x] B181-28 `ui/HudToast.ts` 2 秒 + 淡出，接入背包与游戏内点击
 
 ### M7 · 世界类型（B1/B2）
 
-- [ ] B181-29 三种类型说明 + 超平坦生存警告
-- [ ] B181-30 下拉主题（`color-scheme`，必要时自定义）
-- [ ] B181-31 `test:worldtype` 钉住三种类型的地物/结构有无
+- [x] B181-29 三种类型说明 + 超平坦生存警告
+- [x] B181-30 下拉主题（`color-scheme`，必要时自定义）
+- [x] B181-31 `test:worldtype` 钉住三种类型的地物/结构有无
 
 ### M8 · 收尾
 
-- [ ] B181-32 生存可达性清单进文档；`npm run check` / `npm run build`；更新 HANDOFF
+- [x] B181-32 生存可达性清单进文档；`npm run check` / `npm run build`；更新 HANDOFF
+
+> **批次 181 已完成。** 用户这一轮反馈的主干都落地了，四条结论值得记下来：
+> ① **"铁镐塞满仓库"不是背包坏了**：`add(非堆叠, 64)` 本来就会逐格各放 1 件；
+>    错的是开局发放写了 64。现在默认不发，调试开关按 `maxStackOf` 夹。
+> ② **"切模式后摇杆反向"高度怀疑是手势没清**：`setFlying` 只改标志位，
+>    另一根手指的 `lookPointer` / `stickCenter` 还停在切换前；开关一次背包
+>    会 `resetStick + cancelLook`，所以能"碰巧修好"。现在切模式/开关界面/失焦
+>    都走 `resetInput(reason)`，日志里能直接看到 before/after。
+> ③ **背包左栏原来有两套状态**（`leftPaneKind` + `creativeSurvival`），
+>    创造模式里 `applyInventoryChrome` 又把前者强行改回 `items`——这就是
+>    "切个人仓库后分类按钮失灵"的根因。收成一个 `pane` 之后没有这个分叉。
+> ④ **退出世界不该 `location.reload()`**：刷新会丢全屏，再被竖屏黑幕盖住，
+>    体感就是"换了个游戏"。现在 `dispose()` 拆局 + 菜单回调，全程不退出全屏。
+>
+> 仍未做（留给后续）：E5 只接了"视角/模式/丢弃"，左轨分类按钮的名称提示还没逐颗接；
+> D2 的"卡卡"如果还有，按 `__mc.diag.exportText()` 抓一份时间线再定位。
