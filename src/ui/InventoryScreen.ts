@@ -289,7 +289,7 @@ const TOUCH_REPEAT_MS = 170;
  * 点物品时那块小说明停留多久（毫秒，批次 159）。
  * 比"看一眼"长、比"碍事"短：3.5 秒够读完一行说明，又不至于一直压在快捷栏上。
  */
-export const PICK_TOAST_MS = 3500;
+export const PICK_TOAST_MS = 2000;
 
 /** 携带版物品栏的三个内容页（批次 140；Wiki「携带版 UI」） */
 export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
@@ -387,8 +387,16 @@ export class InventoryScreen {
   private categoryNext!: HTMLButtonElement;
   private categoryPageLabel!: HTMLSpanElement;
   private categoryPager!: HTMLDivElement;
-  /** 左栏当前是"我的物品"还是"物品分类" */
-  private leftPaneKind: 'items' | 'category' = 'items';
+  /**
+   * 左栏当前显示哪一份（批次 181 收成**一个**状态）。
+   *
+   * 原来有 `leftPaneKind` + `creativeSurvival` 两套布尔，创造模式下
+   * "切到生存背包再点分类"会被 `applyInventoryChrome` 里的
+   * `if (creativePlayer) leftPaneKind = 'items'` 强行改回去——分类按钮看起来"失灵"。
+   */
+  private pane: 'creative' | 'category' | 'items' = 'items';
+  /** 上一次排布时的模式：模式变了要把左栏重置回该模式的默认页 */
+  private lastCreative = false;
   /** 当前分类（全部 / 建筑 / 装备 / 物品 / 自然） */
   private categoryTab: RecipeBookTab = 'all';
   private categoryQuery = '';
@@ -431,12 +439,7 @@ export class InventoryScreen {
   private lastLeftPane: PocketLeftPane | '' = '';
   /** 上一次排布时右栏是不是"合成"（盔甲 ↔ 合成切换才淡入） */
   private lastRightCrafting = true;
-  /**
-   * 创造模式里正在看「生存背包」而不是创造物品网格（批次 142）。
-   * 基岩版创造栏与生存栏是两套界面，用按钮互切。
-   */
-  private creativeSurvival = false;
-  /** 创造 ↔ 生存背包 的切换按钮 */
+  /** 创造 ↔ 生存背包 的切换按钮（容器界面里才出现；双栏左栏由 `pane` 管） */
   private creativeToggleBtn: HTMLButtonElement | null = null;
   /** 关闭键：触摸层挂上之后文案要从「关闭 (E)」改成 ✕ */
   private closeBtn: HTMLButtonElement | null = null;
@@ -486,6 +489,8 @@ export class InventoryScreen {
   private readonly pickToastEl: HTMLDivElement;
   /** 说明浮层的自动收起计时器 */
   private pickToastTimer = 0;
+  /** 淡出动画结束后再挂 hidden 的计时器 */
+  private pickToastFadeTimer = 0;
   private readonly creativeSection: HTMLDivElement;
   private readonly heldElement: HTMLDivElement;
   private readonly heldCanvas: HTMLCanvasElement;
@@ -718,7 +723,7 @@ export class InventoryScreen {
     creativeToggle.className = 'inv-recipes-btn inv-creative-toggle hidden';
     creativeToggle.dataset.role = 'creative-toggle';
     creativeToggle.addEventListener('click', () => {
-      this.creativeSurvival = !this.creativeSurvival;
+      this.pane = this.pane === 'creative' ? 'items' : 'creative';
       this.applyInventoryChrome();
     });
     this.creativeToggleBtn = creativeToggle;
@@ -739,7 +744,7 @@ export class InventoryScreen {
       // 原来的写法是"关 = 退回我的物品 + 切回全部"，分类白选了，所以改成这样。
       recipes.addEventListener('click', () => {
         // 左栏已经在某一分类里 → 切"要不要把我没有的那些也列出来（红底）"
-        if (this.leftPaneKind === 'category') {
+        if (this.pane === 'category') {
           this.showUnowned = !this.showUnowned;
           this.categoryPage = 0;
         } else {
@@ -1119,10 +1124,10 @@ export class InventoryScreen {
           this.creativeSearch.value = '';
         }
         // Wiki：创造模式下点左侧分类 = 回到创造物品网格（离开生存背包）
-        if (this.creativeSurvival) {
-          this.creativeSurvival = false;
-          this.applyInventoryChrome();
-        }
+        // 批次 181：分类条现在**常驻左轨**，所以这里只要把 pane 切回去，
+        // 不再有"按钮被搬走、点了没反应"的情况
+        this.pane = 'creative';
+        this.applyInventoryChrome();
         this.updateTabHighlight();
         this.renderCreativeGrid();
         if (category === 'all') this.creativeSearch.focus();
@@ -1429,6 +1434,10 @@ export class InventoryScreen {
 
   /** 材料不齐：把配方"画"进合成格（缺的红底），让人一眼看出差什么 */
   private showRecipeGhost(recipe: Recipe): void {
+    // 批次 181：预览前先把合成格里的**真实材料**收回背包。
+    // 否则预览会盖在实物上：玩家点那一格本意是"看看它叫什么"，
+    // 实际却把底下的材料拿起来了——那正是"点合成区把配方清空/乱动"的来源。
+    for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
     const size = this.crafting.size;
     const layout = recipeLayout(recipe);
     const wanted: Array<number | null> =
@@ -1510,12 +1519,9 @@ export class InventoryScreen {
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       if (tab === 'inventory') {
-        // 左下箱子只切左栏：生存时从"物品分类"回到玩家物品，创造时在无限物品与玩家物品间切换。
-        if (this.mode === 'inventory' && (this.hooks.isCreative?.() ?? false)) {
-          this.creativeSurvival = true;
-        }
-        // 批次 159：左栏回到"我的物品"（分类视图是玩家自己点开的，这里就是退出它）
-        this.leftPaneKind = 'items';
+        // 左下箱子只切左栏：生存时从"物品分类"回到玩家物品；
+        // 创造时在"无限物品"与"个人仓库"之间切换（批次 181：只动 pane）
+        this.pane = 'items';
         this.hooks.onCloseRecipes?.();
         this.restoreInvTabToRail();
         this.applyInventoryChrome();
@@ -1555,7 +1561,7 @@ export class InventoryScreen {
    * 否则按一下 R 会顶出一整屏配方书盖在背包上，那又是"另一个窗口"。
    */
   toggleCategoryPane(): void {
-    if (this.leftPaneKind === 'category') this.leftPaneKind = 'items';
+    if (this.pane === 'category') this.pane = 'items';
     else this.openPocketCategory(this.lastRecipeTab);
     this.applyInventoryChrome();
   }
@@ -1571,13 +1577,13 @@ export class InventoryScreen {
       tab,
       mode: this.mode,
       creative: this.hooks.isCreative?.() ?? false,
-      pane: this.leftPaneKind,
+      pane: this.pane,
     });
     this.pocketTab = 'crafting';
     this.categoryTab = tab;
     this.categoryPage = 0;
     this.lastRecipeTab = tab;
-    this.leftPaneKind = 'category';
+    this.pane = 'category';
     // ⚠️ 换到不显示搜索框的分类时清掉搜索词：否则那是个**看不见的过滤器**，
     //    列表会一直空着，而玩家已经没有输入框可以取消它（"分类栏怎么全空了"）。
     if (tab !== 'all') {
@@ -1608,10 +1614,16 @@ export class InventoryScreen {
     // 批次 164：原来只按 `creative` 判，于是创造模式的工作台里配方分类又冒出来了。
     const creativePlayer = this.hooks.isCreative?.() ?? false;
     const creative = this.mode === 'inventory' && creativePlayer;
-    if (!creative) this.creativeSurvival = false;
-    // 创造模式没有"按分类看配方"这件事（入口全藏了），左栏只可能是物品
-    if (creativePlayer) this.leftPaneKind = 'items';
-    const showCreativeItems = creative && !this.creativeSurvival;
+    // 模式变了（暂停菜单 / /gamemode）→ 左栏回到该模式的默认页。
+    // 这是批次 181 的关键一步：原来创造模式里 `pane` 被强行改回 'items'，
+    // 于是"切到个人仓库再点分类"永远回不去。
+    if (creativePlayer !== this.lastCreative) {
+      this.pane = creativePlayer ? 'creative' : 'items';
+      this.lastCreative = creativePlayer;
+    }
+    if (creativePlayer && this.pane === 'category') this.pane = 'creative';
+    if (!creativePlayer && this.pane === 'creative') this.pane = 'items';
+    const showCreativeItems = creative && this.pane === 'creative';
     // 玩家背包与世界里的工作台共用同一副双栏壳；其余（箱子/熔炉/铁砧…）走单栏
     const workbench = this.mode === 'crafting';
     const dual = this.mode === 'inventory' || workbench;
@@ -1619,7 +1631,7 @@ export class InventoryScreen {
     this.panel.classList.toggle('workbench-ui', workbench);
     if (this.creativeToggleBtn) {
       this.creativeToggleBtn.classList.toggle('hidden', !creative || dual);
-      this.creativeToggleBtn.textContent = this.creativeSurvival ? '创造物品' : '生存背包';
+      this.creativeToggleBtn.textContent = this.pane === 'creative' ? '生存背包' : '创造物品';
     }
 
     // —— 容器类界面：单栏通用面板，页签 / 左右轨 / 配方书落脚点都不参与 ——
@@ -1660,7 +1672,7 @@ export class InventoryScreen {
     // ⚠️ 批次 159：左栏的主要职责是**物品分类**（`category`），配方书不再嵌进来
     // ——"配方"只是分类栏上"要不要把我没有的也列出来"那一颗开关。
     const leftPane: PocketLeftPane =
-      showCreativeItems ? 'creative' : this.leftPaneKind === 'category' ? 'category' : 'items';
+      showCreativeItems ? 'creative' : !creativePlayer && this.pane === 'category' ? 'category' : 'items';
 
     this.panel.classList.add('pocket-ui', 'pocket-dual');
     this.panel.classList.toggle('creative-ui', showCreativeItems);
@@ -1690,15 +1702,18 @@ export class InventoryScreen {
     // 批次 159：配方书不再嵌进左栏（左栏是物品分类），它只作为整屏那一层存在
     this.detachRecipeBook();
 
-    // 生存左轨是物品分类 + 箱子；创造左轨复用创造物品分类
-    this.syncCreativeRails(leftPane === 'creative');
-    if (leftPane !== 'creative') {
-      // 批次 163：创造模式下**连左轨那排配方分类也不给**——与标题栏那颗按钮同一口径。
-      // 创造模式左栏是无限物品（或"生存背包"），配方书在这儿没有意义。
-      this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes || creativePlayer);
+    // 生存左轨是物品分类 + 箱子；创造左轨**始终**是创造物品分类（批次 181）
+    // ⚠️ 判据是 `creativePlayer` 而不是 `leftPane === 'creative'`：
+    //    切到"个人仓库"时那一排分类按钮也必须留在轨道上，否则点了当然没反应。
+    this.syncCreativeRails(creativePlayer);
+    if (!creativePlayer) {
+      this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes);
       this.railLeft.classList.remove('hidden');
       // 批次 159：点亮当前分类（点了哪一颗要看得出来）
       this.syncRecipeRail(leftPane === 'category' ? this.categoryTab : null);
+    } else {
+      this.syncRecipeRail(null);
+      this.updateTabHighlight();
     }
     // 工作台只有"合成"这一件事，右轨那两颗（合成/盔甲）没有意义
     this.railRight.classList.toggle('hidden', workbench);
@@ -2458,8 +2473,9 @@ export class InventoryScreen {
         this.heldElement.style.left = `${pointer.clientX}px`;
         this.heldElement.style.top = `${pointer.clientY}px`;
         const slot = (event.target as HTMLElement | null)?.closest<HTMLElement>('.inv-slot');
-        // 合成格里那套是"配方预览"（材料不齐时画的）：一碰就收掉，换成真实内容
-        if (this.craftGhost && slot?.closest('.inv-craft')) this.clearCraftGhost();
+        // ⚠️ 批次 181：合成格里的配方预览**不因为点一下就消失**。
+        // 用户的原话："点合成区应该是显示那一格的名称，而不是把配方清空"。
+        // 预览只是展示，不是真实材料；点它唯一的结果就是下面那条名称提示。
         if (slot) {
           this.showPickToast(slot);
           // 批次 159：**按下就沉下去**。触摸端一次轻点要到 `pointerup` 才结算
@@ -2563,6 +2579,8 @@ export class InventoryScreen {
       held: this.held?.id ?? null,
     });
     this.hooks.onDrop(stack.id, count);
+    // 丢完给一句确认：触摸端没有"东西掉在地上"的直接反馈
+    this.showMessage(`已丢弃 ${itemLabel(stack.id)} ×${count}`);
     if (binding) {
       binding.source.set(binding.index, stack.count > count ? { ...stack, count: stack.count - count } : null);
     } else if (this.held) {
@@ -3151,10 +3169,19 @@ export class InventoryScreen {
     this.refresh();
   }
 
+  /**
+   * 关界面 / 点面板外：把手上的东西与合成格里的残留还给背包。
+   *
+   * ⚠️ 批次 181：背包满了不能再把东西留在光标上（那就是"物品飘在屏幕外、
+   * 跟手但没有归属"的来源）。放不下就按原版掉在玩家脚边。
+   */
   private returnHeldToInventory(): void {
     if (this.held) {
-      const leftover = this.inventory.add(this.held.id, this.held.count);
-      this.held = leftover > 0 ? { id: this.held.id, count: leftover } : null;
+      const stack = this.held;
+      const leftover = this.inventory.add(stack.id, stack.count);
+      if (leftover > 0) this.hooks.onDrop?.(stack.id, leftover);
+      this.held = null;
+      this.touchOrigin = null;
     }
     for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
     this.refresh();
@@ -3204,7 +3231,8 @@ export class InventoryScreen {
     // 每次从快捷栏打开玩家背包：落到「物品栏」页（Wiki 左下箱子），左栏是"我的物品"
     if (mode === 'inventory') {
       this.pocketTab = 'inventory';
-      this.leftPaneKind = 'items';
+      // 创造模式默认回到"无限物品"，生存回到"个人仓库"
+      this.pane = (this.hooks.isCreative?.() ?? false) ? 'creative' : 'items';
       this.hooks.onCloseRecipes?.();
     }
     this.applyInventoryChrome();
@@ -3226,7 +3254,7 @@ export class InventoryScreen {
     diag.event('inventory', 'open', {
       mode: this.mode,
       creative: this.hooks.isCreative?.() ?? false,
-      leftPane: this.leftPaneKind,
+      leftPane: this.pane,
     });
     this.closing = false;
     this.open = true;
@@ -3523,9 +3551,24 @@ export class InventoryScreen {
       description.textContent = line;
       this.pickToastEl.appendChild(description);
     }
-    this.pickToastEl.classList.remove('hidden');
+    this.pickToastEl.classList.remove('hidden', 'leaving');
     this.placePickToast();
     window.clearTimeout(this.pickToastTimer);
+    window.clearTimeout(this.pickToastFadeTimer);
+    this.pickToastTimer = window.setTimeout(() => this.hidePickToast(), PICK_TOAST_MS);
+  }
+
+  /** 一条纯文字提示（丢弃、模式切换等）：复用同一块浮层与位置 */
+  private showMessage(text: string): void {
+    this.pickToastEl.textContent = '';
+    const line = document.createElement('div');
+    line.className = 'tooltip-title';
+    line.textContent = text;
+    this.pickToastEl.appendChild(line);
+    this.pickToastEl.classList.remove('hidden', 'leaving');
+    this.placePickToast();
+    window.clearTimeout(this.pickToastTimer);
+    window.clearTimeout(this.pickToastFadeTimer);
     this.pickToastTimer = window.setTimeout(() => this.hidePickToast(), PICK_TOAST_MS);
   }
 
@@ -3557,11 +3600,17 @@ export class InventoryScreen {
     slot?.classList.add('pressing');
   }
 
-  /** 收起说明浮层（超时 / 关界面） */
+  /** 收起说明浮层（超时 / 关界面）：先淡出 200ms 再挂 hidden */
   private hidePickToast(): void {
     window.clearTimeout(this.pickToastTimer);
     this.pickToastTimer = 0;
-    this.pickToastEl.classList.add('hidden');
+    if (this.pickToastEl.classList.contains('hidden')) return;
+    this.pickToastEl.classList.add('leaving');
+    window.clearTimeout(this.pickToastFadeTimer);
+    this.pickToastFadeTimer = window.setTimeout(() => {
+      this.pickToastEl.classList.add('hidden');
+      this.pickToastEl.classList.remove('leaving');
+    }, 200);
   }
 
   /**
@@ -3952,9 +4001,14 @@ export class InventoryScreen {
   }
 
   dispose(): void {
+    // 退出世界时面板可能正拿着东西：先结算（放回背包 / 掉脚边），再拆 DOM。
+    // 不结算的话，那一叠会随着界面一起消失——这是最不该发生的"凭空丢东西"。
+    if (this.held || this.open) this.returnHeldToInventory();
     this.listeners.abort();
     window.clearTimeout(this.pickToastTimer);
     this.pickToastTimer = 0;
+    window.clearTimeout(this.pickToastFadeTimer);
+    this.pickToastFadeTimer = 0;
     this.inventory.onChange = null;
     for (const grid of Object.values(this.grids)) grid.onChange = null;
     this.root.remove();

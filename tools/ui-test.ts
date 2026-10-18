@@ -464,7 +464,12 @@ console.log('\n[创造栏 HCI（批次 139）：门控 / 销毁格 / 中键克�
   // 批次 181：创造能力看**模式**，不再看"在不在飞"
   check('主程序接到 isCreative（模式口径）', mainSrc.includes('isCreative: () => this.isCreative'));
   // Wiki：「创造模式物品栏只能在创造模式打开」——不能再写 mode === 'inventory' 就显示
-  check('创造区按 isCreative 门控', /mode === 'inventory' && \(this\.hooks\.isCreative\?\.\(\) \?\? false\)/.test(invSrc));
+  // 批次 181：能力口径统一成 `creativePlayer`（模式），不再内联判 isCreative
+  check(
+    '创造区按 isCreative（模式）门控',
+    invSrc.includes('const creativePlayer = this.hooks.isCreative?.() ?? false;') &&
+      invSrc.includes('const creative = this.mode === \'inventory\' && creativePlayer;'),
+  );
   check('没接钩子时当作生存（不显示）', invSrc.includes('this.hooks.isCreative?.() ?? false'));
   check('飞行切换时刷新界面（创造区跟着显隐）', /if \(this\.inventoryScreen\.isOpen\) this\.inventoryScreen\.refresh\(\)/.test(mainSrc));
   check('有销毁格 DOM', invSrc.includes("dataset.role = 'creative-destroy'") && invSrc.includes('creative-destroy'));
@@ -529,7 +534,38 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('盔甲页标题', invSrc.includes('inv-armor-title') && css.includes('.inv-armor-title'));
   check('快捷栏 dock 带框', css.includes('.inv-hotbar-dock:not(.hidden) .inv-hotbar'));
   // 批次 149：携带版比例与分类页不能再退回“灰框很大、槽位很小、内容混在一起”
-  check('双栏主背包保持 9 列并缩到手机半屏', css.includes('grid-template-columns: repeat(9, 36px)'));
+  // 批次 181：双栏左栏统一 7 列 40px（主背包 27 格重排成 4 行）；
+  // 9 列在左栏会溢出、第一格被裁掉，而且与分类/创造栏不一致。
+  check(
+    '双栏左栏统一 7 列 40px（主背包/分类/创造同一几何）',
+    css.includes('.inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid') &&
+      css.includes('grid-template-columns: repeat(7, 40px)') &&
+      !css.includes('grid-template-columns: repeat(9, 36px)'),
+  );
+  check(
+    '分类栏不再写死 4 行（改为铺满 + 滚动）',
+    css.includes('.inv-grid.inv-category {') &&
+      css.includes('flex: 1 1 auto;') &&
+      !css.includes('max-height: min(32vh, 160px)'),
+  );
+  check('左轨分类改两列（横屏不被截断）', css.includes('grid-template-columns: repeat(2, 36px)'));
+
+  // 左栏状态机（批次 181）：只有一个 pane，删掉两套互相打架的布尔
+  check('左栏只有一个 pane 状态', invSrc.includes("private pane: 'creative' | 'category' | 'items'"));
+  check(
+    '旧的 leftPaneKind / creativeSurvival 字段已删除',
+    !invSrc.includes('private leftPaneKind') && !invSrc.includes('private creativeSurvival'),
+  );
+  check(
+    '创造模式左轨始终挂创造分类（切到个人仓库也不搬走）',
+    invSrc.includes('this.syncCreativeRails(creativePlayer)'),
+  );
+  check(
+    '点创造分类会切回无限物品页',
+    /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
+  );
+  check('点箱子页签回到我的物品', /this\.pane = 'items';\s*\n\s*this\.hooks\.onCloseRecipes/.test(invSrc));
+  check('关界面放不下的手持物品会掉在脚边（不留在光标上）', invSrc.includes('if (leftover > 0) this.hooks.onDrop?.(stack.id, leftover)'));
   check('快捷栏 dock 固定到整屏底部', css.includes('position: fixed; left: 0; right: 0; bottom: 0;') && css.includes('width: 100vw;'));
   check(
     '单窗各页共用同一组固定背包尺寸',
@@ -596,7 +632,7 @@ console.log('\n[携带版细节收口（批次 159）]');
   // **不再切换分类、也不再退回我的物品**
   check(
     '配方开关只切"显不显示我没有的"，不切分类',
-    invSrc.includes('if (this.leftPaneKind === \'category\') {') &&
+    invSrc.includes("if (this.pane === 'category') {") &&
       invSrc.includes('this.showUnowned = !this.showUnowned;') &&
       invSrc.includes('this.openPocketCategory(this.lastRecipeTab);'),
   );
@@ -620,6 +656,11 @@ console.log('\n[携带版细节收口（批次 159）]');
   check('有这块说明浮层', css.includes('#inv-pick-toast {') && invSrc.includes("this.pickToastEl.id = 'inv-pick-toast'"));
   check('说明锚在快捷栏上方', invSrc.includes('const anchor = dockVisible ? this.hotbarDock : this.hotbarGridEl;'));
   check('几秒后自己消失', invSrc.includes('PICK_TOAST_MS') && invSrc.includes('window.setTimeout(() => this.hidePickToast(), PICK_TOAST_MS)'));
+  // 批次 181：2 秒 + 淡出；丢弃也给一条文字确认
+  check('提示 2 秒后淡出', invSrc.includes('export const PICK_TOAST_MS = 2000;') && css.includes('#inv-pick-toast.leaving'));
+  check('丢弃有文字确认', invSrc.includes('已丢弃'));
+  // 点配方预览只显示名字，不再把预览清掉
+  check('点合成区不再清空配方预览', !invSrc.includes('this.craftGhost && slot?.closest'));
   check('关界面时收掉', invSrc.includes('this.hidePickToast();') && /finishClose\(\): void \{[\s\S]{0,400}hidePickToast/.test(invSrc));
 
   // ⑤ 选中 = 原格内显示 + 底色变深；不再有跟着光标飘的图标
@@ -711,9 +752,9 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
 
   // ③ 左栏的职责是**物品分类**：默认只列我拥有的（仓库里的泥土就在它那个分类里）
   check(
-    '左栏是"物品分类"而不是"配方"',
-    invSrc.includes("private leftPaneKind: 'items' | 'category' = 'items';") &&
-      invSrc.includes("showCreativeItems ? 'creative' : this.leftPaneKind === 'category' ? 'category' : 'items'"),
+    '左栏是"物品分类"而不是"配方"（状态收成一个 pane）',
+    invSrc.includes("private pane: 'creative' | 'category' | 'items' = 'items';") &&
+      invSrc.includes('const showCreativeItems = creative && this.pane === \'creative\';'),
   );
   check(
     '默认只列我拥有的（从背包格子取）；配方开关开着才列全部（没有的红底）',
@@ -875,13 +916,15 @@ console.log('\n[创造模式不给配方入口（批次 163）]');
   );
   check(
     '创造模式下左轨那排配方分类也不给',
-    invSrc.includes("this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes || creativePlayer);"),
+    invSrc.includes('if (!creativePlayer) {') &&
+      invSrc.includes("this.pocketRecipeBar.classList.toggle('hidden', !this.hooks.onOpenRecipes);"),
   );
   // 批次 164：工作台在创造模式里**不摊配方分类**，就只是"3×3 + 仓库"拿来合成
+  // 批次 181：创造模式左轨**始终**挂创造分类（切到个人仓库也不搬走）
   check(
     '创造模式的工作台不摊配方分类',
     invSrc.includes("if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) this.openPocketCategory('all');") &&
-      invSrc.includes("if (creativePlayer) this.leftPaneKind = 'items';"),
+      invSrc.includes('this.syncCreativeRails(creativePlayer)'),
   );
   // "有没有配方书"按**玩家模式**判，不按"当前哪一屏"判——工作台里人也还在创造模式
   check(

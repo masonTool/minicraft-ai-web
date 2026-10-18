@@ -1353,9 +1353,12 @@
       }
       .inv-rail-left.hidden, .inv-rail-right.hidden { display: none; }
       .inv-shell.pocket-chrome .inv-rail-left {
-        justify-content: space-between; align-items: flex-end;
-        padding: 36px 0 8px; /* 顶对齐配方区，底对齐箱子页签 */
-        width: 40px;
+        /* 批次 181：左轨改成**两列图标**。单列 10 个创造分类 / 5 个物品分类在
+           横屏 390 高时必然被截断（用户："左侧按钮有的会被截断"）；
+           两列之后最多 5 行，整条轨道不用滚也能看全。 */
+        justify-content: space-between; align-items: flex-start;
+        padding: 6px 0 8px;
+        width: 76px; min-height: 0; max-height: 100%;
       }
       .inv-shell.pocket-chrome .inv-rail-right {
         justify-content: flex-end; align-items: flex-start;
@@ -1367,9 +1370,10 @@
       }
       .inv-shell.pocket-chrome .inv-pocket-inv-tab { position: static; }
       .inv-shell.pocket-chrome .inv-pocket-recipes {
-        position: static; display: flex; flex-direction: column; gap: 4px;
-        overflow-x: hidden; overflow-y: auto; max-height: min(52vh, 280px);
-        overscroll-behavior: contain;
+        position: static;
+        display: grid; grid-template-columns: repeat(2, 36px); gap: 4px;
+        align-content: start;
+        overflow: visible; max-height: none;
       }
       /* 携带版快捷栏：屏幕底、面板外（Wiki）；经典时 dock 隐藏、格回面板内 */
       .inv-hotbar-dock {
@@ -1891,9 +1895,11 @@
       }
       /* 分类已挪到左轨时，controls 里不应再占位 */
       .inv-shell.pocket-chrome .inv-rail-left .inv-tabs {
-        display: flex; flex-direction: column; flex-wrap: nowrap;
-        gap: 3px; overflow-y: auto; max-height: min(52vh, 280px);
-        flex: 1 1 auto; min-height: 0;
+        /* 与配方分类同一套：两列 36px，10 个创造分类刚好 5 行 */
+        display: grid; grid-template-columns: repeat(2, 36px); gap: 3px;
+        align-content: start;
+        overflow: visible; max-height: none;
+        flex: 0 0 auto; min-height: 0;
       }
       .inv-shell.pocket-chrome .inv-rail-left .inv-tab .inv-tab-label { display: none; }
       .inv-shell.pocket-chrome .inv-rail-left .inv-tab {
@@ -1969,22 +1975,27 @@
         grid-row: 1;
         text-align: center;
       }
+      /* 批次 181：双栏左栏**统一 7 列**。
+         原来主背包是 9×36px（9×36 + 8×2 = 340px），左栏实际只有 ~330px，
+         第一格被 `justify-self: center` 推到容器外面——用户看到的"第一格被挤掉一部分"。
+         现在与物品分类/创造栏一样 7 列 × 40px（7×40 + 6×2 = 292px），
+         27 格排成 4 行；切左侧按钮时**槽位几何完全不变**，只换槽内物品。 */
       .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid {
         grid-column: 1;
         grid-row: 2;
         align-self: start;
         justify-self: center;
-        grid-template-columns: repeat(9, 36px);
+        grid-template-columns: repeat(7, 40px);
         gap: 2px;
-        max-height: 148px;
-        overflow: hidden;
+        max-height: none;
+        overflow: visible;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid .inv-slot {
-        width: 36px;
-        height: 36px;
-        min-width: 36px;
-        max-width: 36px;
-        max-height: 36px;
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        max-width: 40px;
+        max-height: 40px;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid .inv-slot canvas {
         width: 32px;
@@ -2080,9 +2091,10 @@
         justify-content: center;
         align-content: start;
         min-height: 0;
-        /* 只占 4 行：搜索框 + 网格 + 翻页条要和面板高度（约 318px）对得上，
-           再高就会把翻页条挤出可视区（外框是 `overflow: hidden`） */
-        max-height: min(32vh, 160px);
+        /* 批次 181：不再写死 4 行（横屏 32vh 只有 ~125px，正好 3 行）。
+           改成吃掉左栏剩余高度并滚动——用户要求"格子铺满区域，铺满后上下滑"。 */
+        flex: 1 1 auto;
+        max-height: none;
         overflow-y: auto;
         overscroll-behavior: contain;
       }
@@ -2288,8 +2300,11 @@
         color: #e6e6e6; font-size: 12px; line-height: 1.45;
         text-shadow: 1px 1px 0 #000;
         box-shadow: 0 0 0 2px var(--mc-outline);
+        /* 批次 181：2 秒后淡出（原来只有淡入、到点直接消失） */
+        transition: opacity .2s ease;
       }
       #inv-pick-toast.hidden { display: none; }
+      #inv-pick-toast.leaving { opacity: 0; }
       #inv-pick-toast .tooltip-title { font-size: 13px; font-weight: 700; }
       #inv-pick-toast .tooltip-desc { color: #d8d8d8; }
       /* 只淡入透明度：位置是 JS 给的，动几何会让人觉得"界面又在跳" */
