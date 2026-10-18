@@ -278,11 +278,13 @@ export function installRotateHint(): void {
   const hint = doc.createElement('div');
   hint.id = ROTATE_HINT_ID;
   hint.className = 'rotate-hint';
+  const phone = doc.createElement('div');
+  phone.className = 'rotate-phone';
   const title = doc.createElement('b');
-  title.textContent = '横屏体验更好';
+  title.textContent = '请横屏游玩';
   const detail = doc.createElement('span');
-  detail.textContent = '点一下进入全屏 · 横屏后自动隐藏';
-  hint.append(title, detail);
+  detail.textContent = '点一下进入全屏并横屏 · 把手机横过来也会自动开始';
+  hint.append(phone, title, detail);
   hint.addEventListener('pointerdown', (event) => {
     event.preventDefault();
     enterMobilePresentation();

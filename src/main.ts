@@ -877,6 +877,14 @@ class App {
    *（冷却、暴击、附魔、耐久、进度上报都在那儿），拆成两份迟早分叉。
    */
   private tapAttackRequest = false;
+  /**
+   * 轻点那一下**在屏幕上点到**的生物（批次 185）。
+   *
+   * 用户："即使准星没有在动物身上，我用手机触摸到它，只要在攻击范围内也应该打到。"
+   * 触摸端拿不到"鼠标位置"，但 `onTap` 会带手指坐标，于是这里记下"点中的那只"，
+   * 由 `updateAttacking` 统一结算（与准星那条路共用冷却/伤害/耐久）。
+   */
+  private tapAttackMob: Mob | null = null;
   /** 背包界面是否打开；打开时暂停移动、视角与方块交互 */
   private uiOpen = false;
   /**
@@ -1593,8 +1601,11 @@ class App {
     return new TouchControls(document.getElementById('hud') ?? document.body, {
       // 轻点抬起（批次 181）：**先看准星下有没有生物**——
       // 有就是攻击（生物不是可放置面），没有才走"交互 / 放置一次"那条老路
-      onTap: () => {
-        if (this.mobUnderCrosshair()) this.tapAttackRequest = true;
+      onTap: (clientX: number, clientY: number) => {
+        // 批次 185：先按**手指落点**找生物（点哪打哪），准星那条路作兜底
+        const tapped = this.mobAtScreen(clientX, clientY);
+        this.tapAttackMob = tapped;
+        if (tapped) this.tapAttackRequest = true;
         else this.touchPlaceRequest = true;
       },
       // 长按：等价于按住左键破坏 / 持续攻击
@@ -1805,6 +1816,7 @@ class App {
     // 界面开着/刚关掉时，上一帧排队的轻点请求一律作废（别让"点关闭键"变成放方块）
     this.touchPlaceRequest = false;
     this.tapAttackRequest = false;
+    this.tapAttackMob = null;
     // 触摸端：界面打开时收起操作层；关闭时显式清一次手势状态，
     // 否则关面板那一瞬间按在屏幕上的手指会带着旧基准继续转视角
     if (this.touch) {
@@ -3564,6 +3576,49 @@ class App {
   }
 
   /**
+   * 屏幕坐标 → 射线 → 生物（批次 185）。
+   *
+   * 用户："看到一只动物想打它，得先把准星对上去；手机点到它就应该能打到。"
+   * 实现就是把"手指落点"反投影成一条射线，再从**眼睛**沿这个方向找生物：
+   *  - 用 `unproject` 而不是自己算三角函数，第三人称（相机在身后）也自动正确；
+   *  - 距离仍用 `ATTACK_RANGE`，所以"点得着但够不着"不会隔空打；
+   *  - 找不到就返回 null，调用方退回"放置方块/交互"那条路。
+   */
+  private mobAtScreen(clientX: number, clientY: number): Mob | null {
+    const canvas = this.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const ndc = new THREE.Vector3(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -(((clientY - rect.top) / rect.height) * 2 - 1),
+      0.5,
+    );
+    // 射线**从相机**发出：屏幕上的那一点本来就是相机看到的。
+    // ⚠️ 不能从眼睛发：第三人称时相机在玩家身后 4 格，方向与屏幕像素对不上，
+    // 连"准星正对"都会打不中（批次 185 实测踩过）。
+    const origin = this.camera.position.clone();
+    const dir = ndc.unproject(this.camera).sub(origin).normalize();
+    // 相机在身后时把射程补上这段距离，最后再用"玩家到生物"的距离卡攻击范围
+    const reach = ATTACK_RANGE + origin.distanceTo(new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z));
+    const hit = raycastEntities(
+      this.entities.all,
+      origin.x,
+      origin.y,
+      origin.z,
+      dir.x,
+      dir.y,
+      dir.z,
+      reach,
+    );
+    if (!hit || !(hit.entity instanceof Mob) || hit.entity.dead) return null;
+    // 隔着屏幕点得着、但人离得远 → 不算（第三人称的相机在身后，不能白送射程）
+    const dx = hit.entity.x - this.physics.x;
+    const dz = hit.entity.z - this.physics.z;
+    if (Math.hypot(dx, dz) > ATTACK_RANGE + 1) return null;
+    return hit.entity;
+  }
+
+  /**
    * 对生物右键使用手上的物品（J8）。
    *
    * 目前只有"用剪刀剪羊毛"，但这正是后面喂食繁殖、挤奶要挂的同一个入口，
@@ -4038,13 +4093,16 @@ class App {
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     // 触摸"轻点生物"是一次性请求（批次 181）；按住（leftDown）仍然持续攻击
     const tapped = this.tapAttackRequest;
+    // 批次 185：轻点那一下点中的生物优先（点哪打哪），没有才回退到准星
+    const tappedMob = tapped ? this.tapAttackMob : null;
     this.tapAttackRequest = false;
+    this.tapAttackMob = null;
     if ((!this.leftDown && !tapped) || this.uiOpen || this.attackCooldown > 0) return;
 
     const context = this.lastEntityContext;
     if (!context) return;
 
-    const mob = this.mobUnderCrosshair();
+    const mob = tappedMob && !tappedMob.dead ? tappedMob : this.mobUnderCrosshair();
     if (!mob) return;
 
     this.attackCooldown = ATTACK_COOLDOWN;
@@ -4179,6 +4237,10 @@ class App {
     if (brokenId === Block.SHULKER_BOX) this.world.containers.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
+    // 批次 185（用户："水旁边的方块挖掉之后水不会流"）：
+    // 挖掉的一格可能是"水底/水侧"的塞子——必须唤醒它周围的液体重新评估流向。
+    // 原来只有爆炸、拔海带/甘蔗那几条路会唤醒，**玩家手挖这条主路漏了**。
+    this.wakeFluidsAround(this.hit.x, this.hit.y, this.hit.z);
     // 支撑没了，该掉的就掉（批次 78，B49）：从这一格的**上面**一路往上收——
     // 拆掉甘蔗下面那格沙子，整根甘蔗要一节节掉完（只收一格的话上面几节会悬空）
     this.sweepUnsupportedAbove(this.hit.x, this.hit.y + 1, this.hit.z);
@@ -10382,6 +10444,9 @@ async function boot(): Promise<void> {
   (window as unknown as { __diag: typeof diag }).__diag = diag;
   // 批次 184：键盘不挤压布局 + 点输入框以外的地方先 blur（菜单与游戏内共用）
   installKeyboardGuards();
+  // 批次 185：竖屏浮层要**尽早**挂上——它现在是不透明的一整层，
+  // 晚挂的话玩家会先看见竖屏菜单、再被盖住（"闪一下"）。
+  installRotateHint();
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
   const vitalsEl = document.getElementById('vitals');
@@ -10559,7 +10624,6 @@ async function boot(): Promise<void> {
   //  ③ 被拒时把"第一次交互"挂到 document 上（点任意地方、按键都算），
   //     竖屏手机会先盖一层提示，点它就是那一次手势。
   preferInstalledLandscape();
-  installRotateHint();
   enterFullscreenOnBoot();
   armAutoFullscreen([document]);
   // 批次 184：竖屏下**任何时候点任何区域**都再试一次（不是一次性）——

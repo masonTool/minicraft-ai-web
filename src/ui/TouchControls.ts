@@ -80,8 +80,13 @@ export interface TouchActions {
   onOpenPause: () => void;
   /** 切换第一/第三人称（批次 181，顶部第二颗键） */
   onCycleCamera(): void;
-  /** 轻点抬起：交互 / 攻击 / 放置一次 */
-  onTap(): void;
+  /**
+   * 轻点抬起：交互 / 攻击 / 放置一次。
+   *
+   * 带上**松手时的手指坐标**（批次 185）：主程序要用它在屏幕上"点哪打哪"——
+   * 原来只按准星判定，玩家必须先把视角对到生物身上才能打到。
+   */
+  onTap(clientX: number, clientY: number): void;
   /** 长按开始 / 结束：破坏方块 / 持续攻击 */
   onBreakStart(): void;
   onBreakEnd(): void;
@@ -655,7 +660,7 @@ export class TouchControls {
         this.actions.onBreakEnd();
       } else if (!this.lookDragged) {
         // 松手早于长按阈值 → 轻点：主程序按"生物/方块/可放置点"决定攻击、交互还是放置
-        this.actions.onTap();
+        this.actions.onTap(event.clientX, event.clientY);
       }
       this.lookPointer = null;
     };
