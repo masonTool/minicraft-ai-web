@@ -18,4 +18,6 @@ playwright-cli resize "$WIDTH" "$HEIGHT" >/dev/null
 playwright-cli goto "$URL" >/dev/null
 # 等世界加载出一片区块，否则帧率与内存都在爬坡期
 sleep 12
+# 批次 185：竖屏整屏浮层（预期 UX）会吃掉点击，布局验收先移除它
+playwright-cli eval "() => document.getElementById('rotate-hint')?.remove()" >/dev/null
 playwright-cli eval "eval(atob('$(base64 -i tools/mobile-acceptance.js | tr -d '\n')'))"

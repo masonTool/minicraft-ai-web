@@ -25,6 +25,9 @@ run_case() {
   # 等世界与 UI 就绪（触摸层是世界加载完后才创建的）。
   # 脚本自己会点"创建并进入"（全新会话里主菜单是空的），慢机器留足时间。
   sleep 6
+  # 批次 185：竖屏现在压着一层整屏浮层（点它 = 全屏 + 锁横屏，这是预期 UX）。
+  # 布局验收要绕开它，否则第一下点击就被浮层吃掉。
+  playwright-cli eval "() => document.getElementById('rotate-hint')?.remove()" >/dev/null
   # ⚠️ `atob` 解出来的是**二进制字符串**，直接 eval 会让脚本里的中文变成乱码
   #    （表现为"搜索汉字搜不到东西"这类莫名其妙的失败）；用 TextDecoder 按 UTF-8 还原
   playwright-cli eval "eval(new TextDecoder().decode(Uint8Array.from(atob('$(base64 -i "$SCRIPT" | tr -d '\n')'), (c) => c.charCodeAt(0))))" |
