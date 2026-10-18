@@ -16,6 +16,7 @@ import { itemDef, maxStackOf } from '../registry/items.ts';
 // 书页的规整规则（批次 190）：与编辑界面**同一套**，否则会出现"能打 300 字、读档剩 256 字"
 import { BOOK_TITLE_CHARS, isBlankBook, sanitizePages } from '../items/Book.ts';
 import { sanitizeFirework, type FireworkData } from '../items/Firework.ts';
+import { sanitizeMap, type MapData } from '../items/Map.ts';
 
 export interface ItemStack {
   id: number;
@@ -65,6 +66,12 @@ export interface ItemStack {
    * 星作为原料时 `flight` 是 0（它自己不会飞）。
    */
   firework?: FireworkData;
+  /**
+   * 地图数据（批次 196）：中心 + **已探索位图**（32×32 区块，base64 128 字节）。
+   *
+   * 只有"已填好的地图"带这个字段；空地图（`MAP`）什么都不带——它还没绑定到任何区域。
+   */
+  map?: MapData;
 }
 
 /**
@@ -120,6 +127,9 @@ export function restoreStack(raw: unknown, depth = 1): ItemStack | null {
   // 烟花（批次 192）：档位与颜色都要规整；认不出来就当没有这个字段
   const firework = sanitizeFirework(candidate.firework);
   if (firework) stack.firework = firework;
+  // 地图（批次 196）：中心与位图都过一遍校验（位图长度不对就换成全空）
+  const map = sanitizeMap(candidate.map);
+  if (map) stack.map = map;
   return stack;
 }
 
@@ -184,6 +194,8 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
   if (stack.title !== undefined) extras.title = stack.title;
   // 烟花：颜色数组同样要拷（改了手里的那枚不该改到箱子里那枚）
   if (stack.firework !== undefined) extras.firework = { flight: stack.firework.flight, colors: [...stack.firework.colors] };
+  // 地图：`map` 里的 `bits` 是字符串（不可变），整体拷一份对象即可
+  if (stack.map !== undefined) extras.map = { ...stack.map };
   return extras;
 }
 
@@ -217,6 +229,10 @@ export function sameExtras(a: Partial<ItemStack>, b: Partial<ItemStack>): boolea
   const colorsB = fireB?.colors ?? [];
   if (colorsA.length !== colorsB.length) return false;
   for (let i = 0; i < colorsA.length; i++) if (colorsA[i] !== colorsB[i]) return false;
+  // 地图（批次 196）：中心或位图不同就是两张不同的地图（原版也不并堆）
+  if ((a.map?.originX ?? 0) !== (b.map?.originX ?? 0)) return false;
+  if ((a.map?.originZ ?? 0) !== (b.map?.originZ ?? 0)) return false;
+  if ((a.map?.bits ?? '') !== (b.map?.bits ?? '')) return false;
   const from = a.enchants ?? {};
   const to = b.enchants ?? {};
   const keys = new Set([...Object.keys(from), ...Object.keys(to)]);

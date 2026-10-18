@@ -176,6 +176,8 @@ function cloneExtras(stack: ItemStack): ItemStack {
   if (stack.title !== undefined) copy.title = stack.title;
   // 烟花（批次 192）：漏斗搬一枚火箭，档位与颜色不能丢（丢了就变成"金色 1 档"）
   if (stack.firework !== undefined) copy.firework = { flight: stack.firework.flight, colors: [...stack.firework.colors] };
+  // 地图（批次 196）：漏斗搬一张地图，中心与已探索位图不能丢
+  if (stack.map !== undefined) copy.map = { ...stack.map };
   return copy;
 }
 

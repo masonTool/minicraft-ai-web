@@ -298,6 +298,13 @@ const EXEMPT: readonly Exempt[] = [
     reason: '成书由书与笔署名得到（界面里的一步，不是配方/掉落），审计模型看不到这一步',
   },
 
+  // ---- ③c 已填好的地图（批次 196）：不是做出来的，是**空地图右键绑定**出来的——
+  //         那一步在界面里（`main.openMapScreen`），审计模型看不到。
+  {
+    id: Item.FILLED_MAP,
+    reason: '已填好的地图由空地图右键绑定得到（界面里的一步，不是配方/掉落）',
+  },
+
   // ---- ④ 没有该生物（恶魂已在批次 94 做掉，这里只剩兔子）
   { id: Item.RABBIT_FOOT, reason: '兔子未实现：原版兔子脚由兔子掉落（J15/J16 的生物整组）' },
 
@@ -353,7 +360,7 @@ check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.le
 // → 批次 169（锁链甲改由盔甲匠卖）**4 条**。
 // 剩下这 4 条都不是"某条链断在中间"，而是**内容本身还没做**（黑/灰染料要鱿鱼与凋灵、
 // 兔子脚要兔子、旧 id 只留存档兼容）
-equal('缺口总数（批次 190 之后：3 条 —— 多了一条"界面里才拿得到"的成书）', unreachable.length, 3);
+equal('缺口总数（批次 196 之后：4 条 —— 三条"界面里才拿得到"的：成书 / 已填好的地图…）', unreachable.length, 4);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));

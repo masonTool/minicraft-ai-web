@@ -194,6 +194,10 @@ export const Item = {
    *
    * 不可堆叠：每一本的内容都不一样（与成书同一个理由）。
    */
+  /** 空地图（批次 196）：8 张纸 + 1 个指南针；右键才绑定到脚下这片区域 */
+  MAP: 1488,
+  /** 已填好的地图（批次 196）：带中心与已探索位图，右键打开阅读界面 */
+  FILLED_MAP: 1489,
   /** 时钟（批次 195）：拿在手里时 HUD 上显示一个"正午在顶上"的表盘 */
   CLOCK: 1490,
   /** 指南针（批次 195）：拿在手里时 HUD 上显示指向世界出生点的指针 */
@@ -450,6 +454,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
   { id: Item.INK_SAC, name: 'minecraft:ink_sac', tile: 'item_ink_sac' },
+  // 地图（批次 196）：空地图与已填好的地图都不堆叠（后者带位图数据）
+  { id: Item.MAP, name: 'minecraft:map', tile: 'item_map', maxStack: 1 },
+  { id: Item.FILLED_MAP, name: 'minecraft:filled_map', tile: 'item_filled_map', maxStack: 1 },
   // 指南针 / 时钟（批次 195）：都不可堆叠（它们不是材料），图标是参数化画的表盘
   { id: Item.CLOCK, name: 'minecraft:clock', tile: 'item_clock', maxStack: 1 },
   { id: Item.COMPASS, name: 'minecraft:compass', tile: 'item_compass', maxStack: 1 },

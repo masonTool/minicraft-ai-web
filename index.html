@@ -798,6 +798,51 @@
         box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
       }
 
+      /* 地图阅读界面（批次 196，H16）：一块 canvas + 关闭键。
+         与告示牌/书同一套层叠层（12），手机横屏下画布按视口高度收 */
+      .map-screen {
+        position: fixed; inset: 0; z-index: 12;
+        display: grid; place-items: center;
+        background: rgba(0, 0, 0, .55);
+        padding-bottom: var(--kb-inset, 0px);
+      }
+      .map-screen.hidden { display: none; }
+      .map-panel {
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        padding: 12px 14px;
+        max-height: calc(100dvh - var(--kb-inset, 0px) - 16px);
+        background: var(--panel-bg); color: var(--panel-text);
+        border: 3px solid; border-color: var(--pixel-bevel);
+        border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
+      }
+      .map-title { font-size: 14px; font-weight: 600; text-align: center; }
+      .map-canvas {
+        display: block;
+        width: min(64vh, 78vw); height: auto;
+        border-radius: var(--slot-radius);
+        image-rendering: auto;
+      }
+      .map-footer {
+        font-size: 11px; line-height: 1.4; text-align: center;
+        color: var(--panel-text-muted);
+      }
+      .map-button {
+        width: 100%; padding: 9px 10px; font: inherit; font-size: 14px; cursor: pointer;
+        color: var(--btn-text); background: var(--btn-bg);
+        border: 2px solid var(--mc-outline); border-radius: 0;
+        box-shadow: inset 2px 2px 0 var(--mc-edge-light), inset -2px -2px 0 var(--mc-edge-dark);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+        min-height: 38px;
+      }
+      .map-button:active {
+        background: var(--mc-face-hover);
+        box-shadow: inset 2px 2px 0 var(--mc-edge-dark), inset -2px -2px 0 var(--mc-edge-light);
+      }
+      @media (max-height: 430px) {
+        .map-canvas { width: min(58vh, 52vw); }
+        .map-panel { gap: 5px; padding: 8px 10px; }
+      }
+
       /* 指南针 / 时钟读数（批次 195，B19）：主手拿着它们时右下角出现一个小表盘。
          不接指针事件（`pointer-events: none`）——它是读数，不是按钮 */
       .tool-hud {

@@ -433,6 +433,8 @@ import { BookScreen } from './ui/BookScreen.ts';
 import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
 import { SHIELD_KNOCKBACK, canBlockDamage, isFrontalAttack, isShield, shieldWear } from './core/items/Shield.ts';
 import { clockAngleDeg, compassAngleDeg, horizontalDistance } from './core/items/Navigation.ts';
+import { emptyMapData, markExplored } from './core/items/Map.ts';
+import { MapScreen } from './ui/MapScreen.ts';
 import { ToolHud } from './ui/ToolHud.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
@@ -952,6 +954,13 @@ class App {
 
   /** 书与笔 / 成书的读写界面（批次 190，H16）：与告示牌编辑器同一套浮层分工 */
   private readonly bookScreen = new BookScreen();
+
+  /** 地图阅读界面（批次 196）：只画、不改数据 */
+  private readonly mapScreen = new MapScreen();
+
+  /** 上一次记录地图探索时玩家在哪个区块（变了才扫一遍背包） */
+  private mapChunkX = Number.NaN;
+  private mapChunkZ = Number.NaN;
   /** 信标界面（K5，批次 117）：右键信标打开 */
   private readonly beaconScreen = new BeaconScreen();
   /** 信标的光柱（K5）：运行时实体，不烘进区块网格 */
@@ -1365,6 +1374,8 @@ class App {
     // 书（批次 190）：界面只报"新的那一叠"，写回哪一格由这里决定
     this.bookScreen.onCommit = (stack) => this.applyBookStack(stack);
     this.bookScreen.onClose = () => this.handleInventoryOpen(false);
+    // 地图（批次 196）：关掉时把输入权交回去（数据早在走路时就写进物品了）
+    this.mapScreen.onClose = () => this.handleInventoryOpen(false);
 
     // 信标（K5，批次 117）：界面里点一下就把那条效果写进**方块状态**（见
     // `applyBeaconChoice`），关掉时把输入权交回去；光柱的组挂在场景里、逐帧 sync
@@ -1684,6 +1695,7 @@ class App {
     return (
       this.signEditor.isOpen ||
       this.bookScreen.isOpen ||
+      this.mapScreen.isOpen ||
       this.beaconScreen.isOpen ||
       this.chat.isOpen ||
       this.recipeBook.isOpen ||
@@ -1702,6 +1714,7 @@ class App {
   private closeTopUi(): boolean {
     if (this.signEditor.isOpen) this.signEditor.close();
     else if (this.bookScreen.isOpen) this.bookScreen.close();
+    else if (this.mapScreen.isOpen) this.mapScreen.close();
     else if (this.beaconScreen.isOpen) this.beaconScreen.close();
     else if (this.chat.isOpen) this.chat.close();
     else if (this.recipeBook.isOpen) this.recipeBook.hide();
@@ -2951,6 +2964,14 @@ class App {
       // 告示牌编辑中（B12）：按键归输入框（Esc 由编辑器自己处理）——
       // 输入框失焦时（玩家点了别处）按 E 不该把背包也打开
       if (this.signEditor.isOpen && e.code !== 'Escape') return;
+      // 看地图（批次 196）：按键一律不处理，Esc 收掉这一层（同样兜住"焦点跑出去"）
+      if (this.mapScreen.isOpen) {
+        if (e.code === 'Escape') {
+          e.preventDefault();
+          this.mapScreen.close();
+        }
+        return;
+      }
       // 书写中（批次 190）：按键归文本框；Esc 也在这里收掉——
       // 面板自己的 root 上也有一个 Esc 监听，但**焦点不在面板里**时（玩家点了别处）
       // 那个监听收不到，这里兜住，免得"书还开着、暂停菜单先弹出来"
@@ -4826,6 +4847,56 @@ class App {
     this.audio.play('item_move', { x: x + 0.5, y: y + 1, z: z + 0.5 });
     this.hand.swing();
     return true;
+  }
+
+  /**
+   * 地图（批次 196，H16）：空地图**绑定到脚下**，已填好的地图**打开阅读界面**。
+   *
+   * @returns 有没有消费这次右击（false → 继续走别的分支）
+   */
+  private openMapScreen(): boolean {
+    const stack = this.inventory.get(this.hotbarIndex);
+    if (!stack) return false;
+    if (stack.id === Item.MAP) {
+      // 绑定：中心钉在当前位置，同时把脚下这一格标成已探索
+      const base = emptyMapData(this.physics.x, this.physics.z);
+      const data = markExplored(base, this.physics.x, this.physics.z) ?? base;
+      // 空地图不可堆叠（maxStack 1），所以直接替换那一格就是"消耗一张、得到一张"
+      this.inventory.set(this.hotbarIndex, { id: Item.FILLED_MAP, count: 1, map: data });
+      this.mapChunkX = Math.floor(this.physics.x) >> 4;
+      this.mapChunkZ = Math.floor(this.physics.z) >> 4;
+      this.refreshHotbar();
+      this.audio.play('item_move', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
+      this.mapScreen.show(data, { x: this.physics.x, z: this.physics.z, yaw: this.yaw }, '已填好的地图');
+      this.handleInventoryOpen(true);
+      return true;
+    }
+    if (stack.id !== Item.FILLED_MAP || !stack.map) return false;
+    this.mapScreen.show(stack.map, { x: this.physics.x, z: this.physics.z, yaw: this.yaw });
+    this.handleInventoryOpen(true);
+    return true;
+  }
+
+  /**
+   * 把"玩家走到了哪"记进背包里所有已填好的地图（批次 196）。
+   *
+   * 只在**跨区块**时才扫一遍背包（41 格）：走一格扫一次的代价没必要，
+   * 而区块粒度正是地图的格子粒度——所以"进了新区块"就是"可能要多标一格"的充要条件。
+   */
+  private updateMapExploration(): void {
+    const cx = Math.floor(this.physics.x) >> 4;
+    const cz = Math.floor(this.physics.z) >> 4;
+    if (cx === this.mapChunkX && cz === this.mapChunkZ) return;
+    this.mapChunkX = cx;
+    this.mapChunkZ = cz;
+    for (let slot = 0; slot < TOTAL_SLOTS; slot++) {
+      const stack = this.inventory.get(slot);
+      if (!stack || stack.id !== Item.FILLED_MAP || !stack.map) continue;
+      const next = markExplored(stack.map, this.physics.x, this.physics.z);
+      // 复制一份再写回：`inventory.set` 会归一化，直接改原对象也能work，
+      // 但复制能保证"界面正拿着一份快照"时不会跟着变
+      if (next) this.inventory.set(slot, { ...stack, map: next });
+    }
   }
 
   /**
@@ -8396,6 +8467,14 @@ class App {
       return;
     }
 
+    // 地图（批次 196，H16）：空地图右击 = 绑到脚下，已填好的右击 = 打开阅读界面。
+    // 与书同一个理由排在"必须先命中方块"之前（对着天空也能看地图）
+    if (this.openMapScreen()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
     // 书与笔 / 成书（批次 190，H16）：举着书右击就打开读写界面。
     // 放在"必须先命中方块"之前——原版对着空气点一下就能写书
     if (this.openBookScreen()) {
@@ -9017,6 +9096,8 @@ class App {
     this.vitalsHud.update(this.stats);
     this.xpHud.update(this.experience);
     this.updateToolHud();
+    // 地图探索（批次 196）：跨区块才扫一遍背包
+    this.updateMapExploration();
     this.chat.update();
     this.updateEffectsHud();
     // 水面动画的时间（与昼夜时间分开：调 /time 不该让水面跳一下）
@@ -9700,6 +9781,7 @@ class App {
     this.chat.dispose();
     this.signEditor.dispose();
     this.bookScreen.dispose();
+    this.mapScreen.dispose();
     this.beaconScreen.dispose();
     this.deathEl.classList.add('hidden');
     this.audio.dispose();

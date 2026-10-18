@@ -3573,6 +3573,50 @@ PAINTERS.item_ink_sac = (x, y, rng) => {
 };
 
 /**
+ * 空地图（批次 196）：**卷起来的纸卷**——上下两道深色卷边、中间米色纸面。
+ *
+ * 与"已填好的地图"的区别要一眼看出：这个没有内容（空白），那个画着绿色地块。
+ */
+PAINTERS.item_map = (x, y, rng) => {
+  const jitter = rng() * 5 - 2.5;
+  const left = 3;
+  const right = 12;
+  if (x < left || x > right) return [0, 0, 0, 0];
+  // 上下卷边（比纸面深一档）
+  if (y <= 3 || y >= 12) {
+    if (y < 2 || y > 13) return [0, 0, 0, 0];
+    return [clamp255(150 + jitter), clamp255(122 + jitter), clamp255(72 + jitter), 255];
+  }
+  // 纸面：左浅右深一点（圆柱感）
+  const shade = x >= right - 2 ? 18 : 0;
+  return [clamp255(224 - shade + jitter), clamp255(210 - shade + jitter), clamp255(176 - shade + jitter), 255];
+};
+
+/**
+ * 已填好的地图（批次 196）：**摊开的羊皮纸 + 几块绿色陆地 + 一个红叉**。
+ *
+ * 红叉是"这里探索过"的象征（真正的玩家标记在阅读界面里画）。
+ */
+PAINTERS.item_filled_map = (x, y, rng) => {
+  const jitter = rng() * 5 - 2.5;
+  if (x < 2 || x > 13 || y < 2 || y > 13) return [0, 0, 0, 0];
+  // 纸边
+  if (x === 2 || x === 13 || y === 2 || y === 13) {
+    return [clamp255(150 + jitter), clamp255(126 + jitter), clamp255(84 + jitter), 255];
+  }
+  // 绿色陆地：两块不规则地块
+  const landA = x >= 4 && x <= 8 && y >= 4 && y <= 8 && !(x === 8 && y === 8);
+  const landB = x >= 9 && x <= 11 && y >= 8 && y <= 11;
+  if (landA || landB) return [clamp255(96 + jitter), clamp255(148 + jitter), clamp255(74 + jitter), 255];
+  // 红叉（右上角一点）
+  if ((x === 11 && y === 4) || (x === 10 && y === 5) || (x === 11 && y === 5) || (x === 10 && y === 6) || (x === 12 && y === 3)) {
+    return [clamp255(196 + jitter), clamp255(56 + jitter), clamp255(48 + jitter), 255];
+  }
+  // 纸面
+  return [clamp255(226 + jitter), clamp255(212 + jitter), clamp255(178 + jitter), 255];
+};
+
+/**
  * 指南针（批次 195）：**圆表盘 + 红白指针**。
  *
  * 表盘用一圈深浅交替的金色表现"金属边"，指针是南北两极各一半（红指北、白指南），

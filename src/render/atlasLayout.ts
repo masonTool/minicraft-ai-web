@@ -919,6 +919,8 @@ export const TILE_ORDER = [
   'item_phantom_membrane',
   // 墨囊（批次 189）：鱿鱼掉的那一颗；书与笔 / 成书（批次 190）
   'item_ink_sac',
+  'item_map',
+  'item_filled_map',
   'item_clock',
   'item_compass',
   'item_shield',
