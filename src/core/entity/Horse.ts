@@ -22,6 +22,10 @@ import type { EntityContext } from './Entity.ts';
 const HORSE_TURN_RATE = 2.2;
 /** 松开前进后的减速（每秒比例） */
 const HORSE_STOP_DRAG = 6;
+/** 马的起跳初速度（格/秒）：约 1.5 格高（v²/2g） */
+export const HORSE_JUMP_SPEED = 8.2;
+/** 连续起跳的最小间隔（秒） */
+const HORSE_JUMP_COOLDOWN = 0.8;
 
 export class Horse extends Mob {
   /** 谁骑着它（本项目只有玩家能上） */
@@ -35,10 +39,16 @@ export class Horse extends Mob {
    * 骑手给的朝向单独存一份，主程序每帧写它。
    */
   rideYaw = 0;
+  /** 有没有装鞍（批次 254）：驯服之后还要装鞍才能骑 */
+  saddled = false;
+  /** 起跳冷却（秒） */
+  private rideJumpCooldown = 0;
   /** 玩家坐在马背上时脚底相对马脚的高度（渲染与相机用） */
   readonly seatHeight = 1.45;
 
   protected override updateAi(ctx: EntityContext, dt: number): void {
+    if (this.rideJumpCooldown > 0) this.rideJumpCooldown -= dt;
+
     if (this.passenger !== null) {
       const input = ctx.vehicleInput;
       const forward = input?.forward ?? 0;
@@ -48,6 +58,14 @@ export class Horse extends Mob {
       this.rideYaw -= strafe * HORSE_TURN_RATE * dt;
       // 渲染朝向跟着骑乘朝向走（`yaw` 仍可能被 `Mob.tick` 回写，所以每帧重写一次）
       this.yaw = this.rideYaw;
+
+      // 跳跃（批次 254）：骑着时按跳跃键起跳（下马改按潜行）。
+      // 冷却防"按住不放连跳"——原版是蓄力，这里退化成"点一下跳一次"。
+      if (input?.jump === true && this.onGround && this.rideJumpCooldown <= 0) {
+        this.vy = HORSE_JUMP_SPEED;
+        this.rideJumpCooldown = HORSE_JUMP_COOLDOWN;
+        this.onGround = false;
+      }
 
       if (Math.abs(forward) > 0.05) {
         // 直接给水平速度：位置的积分在 `Mob.tick` 里统一做（`moveBody`），

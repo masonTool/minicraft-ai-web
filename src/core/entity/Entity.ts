@@ -343,7 +343,7 @@ export interface EntityContext {
    * 每帧由主程序按"有没有人在驾驶"决定传不传。
    * 不传 = 空船，自己漂、不吃加速。
    */
-  vehicleInput?: { forward: number; strafe: number; sprint: boolean };
+  vehicleInput?: { forward: number; strafe: number; sprint: boolean; jump?: boolean };
   /**
    * 读取方块的**状态位**（批次 246：动力铁轨要读 `powered`）。
    *

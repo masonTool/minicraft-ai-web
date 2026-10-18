@@ -1055,6 +1055,8 @@ export const TILE_ORDER = [
   // 漏斗矿车与动力矿车（批次 251/252）
   'item_hopper_minecart',
   'item_furnace_minecart',
+  // 鞍（批次 254）
+  'item_saddle',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

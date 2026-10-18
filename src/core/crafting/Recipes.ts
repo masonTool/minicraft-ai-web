@@ -820,6 +820,12 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.FURNACE_MINECART, count: 1 },
     ingredients: [Item.MINECART, Block.FURNACE],
   },
+  // 鞍（批次 254）：3 皮革 + 2 线（原版没有配方、只能找；这里必须能合成才拿得到）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.SADDLE, count: 1 },
+    ingredients: [Item.LEATHER, Item.LEATHER, Item.LEATHER, Item.STRING, Item.STRING],
+  },
   // 动力铁轨（批次 246）：6 金锭 + 1 木棍 + 1 红石 → 6 段（原版图案）
   {
     kind: 'shaped' as const,

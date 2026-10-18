@@ -189,6 +189,8 @@ export const Item = {
   HOPPER_MINECART: 1480,
   /** 动力矿车（批次 252）：烧煤沿车头方向自己推 */
   FURNACE_MINECART: 1481,
+  /** 鞍（批次 254）：给马/驴/骡/羊驼装上才能骑 */
+  SADDLE: 1486,
   /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
@@ -473,6 +475,7 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.MINECART, name: 'minecraft:minecart', tile: 'item_minecart', maxStack: 1 },
   { id: Item.HOPPER_MINECART, name: 'minecraft:hopper_minecart', tile: 'item_hopper_minecart', maxStack: 1 },
   { id: Item.FURNACE_MINECART, name: 'minecraft:furnace_minecart', tile: 'item_furnace_minecart', maxStack: 1 },
+  { id: Item.SADDLE, name: 'minecraft:saddle', tile: 'item_saddle', maxStack: 1 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料

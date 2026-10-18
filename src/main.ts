@@ -4293,8 +4293,8 @@ class App {
   /** 上载具（船 / 矿车）：两者共用"停跑玩家物理 + 每帧贴位置"那一套 */
   private mountVehicle(vehicle: Rideable): boolean {
     if (this.ridingVehicle || vehicle.dead || this.mountCooldown > 0) return false;
-    // 马（批次 253）：没驯服骑不上去（原版会把你甩下来，这里直接不给上）
-    if (vehicle instanceof Horse && !vehicle.tamed) return false;
+    // 马（批次 253/254）：没驯服、或驯服了还没装鞍，都骑不上去
+    if (vehicle instanceof Horse && (!vehicle.tamed || !vehicle.saddled)) return false;
     this.ridingVehicle = vehicle;
     vehicle.passenger = 'player';
     const seat = vehicle instanceof Horse ? vehicle.seatHeight : 0.25;
@@ -4716,8 +4716,27 @@ class App {
     // "手上没东西就返回 false"那一条之前
     if (mob instanceof Villager) return this.useOnVillager(mob, held);
     // 已驯服的宠物（批次 242）：空手点一下 = 坐下 / 起来（原版就是这个手势）
-    // 马（批次 253）：驯服后空手点它 = **上马**（不是坐下）
-    if (mob instanceof Horse && mob.tamed && held === undefined) return this.mountVehicle(mob);
+    // 装鞍（批次 254）：拿鞍点已驯服的马，鞍被消耗
+    if (mob instanceof Horse && mob.tamed && held === Item.SADDLE) {
+      if (mob.saddled) {
+        this.hudToast.show('这匹马已经有鞍了');
+        return true;
+      }
+      if (!this.inventory.consume(Item.SADDLE, 1)) return false;
+      mob.saddled = true;
+      this.hand.swing();
+      this.refreshHotbar();
+      this.hudToast.show(`给${mob.type.name}装上了鞍`);
+      return true;
+    }
+    // 马（批次 253）：驯服后空手点它 = **上马**（不是坐下）；没鞍先提示
+    if (mob instanceof Horse && mob.tamed && held === undefined) {
+      if (!mob.saddled) {
+        this.hudToast.show('先给它装上鞍');
+        return true;
+      }
+      return this.mountVehicle(mob);
+    }
     if (mob.tamed && held === undefined) {
       const sitting = mob.toggleSitting();
       this.playMobVoice(mob);
@@ -4756,6 +4775,8 @@ class App {
     if (mob.tamed && held === undefined) return true;
     if (held === undefined) return false;
     if (mobAcceptsTame(mob.type, held)) return true;
+    // 鞍（批次 254）：对着已驯服的马是"装鞍"，不是打它
+    if (held === Item.SADDLE && mob instanceof Horse && mob.tamed) return true;
     if (held === Item.SHEARS || held === Item.BUCKET) return true;
     return mobEats(mob.type, held);
   }
@@ -7501,7 +7522,13 @@ class App {
       playerInvisible: this.effects.invisible,
       // 船（批次 244）：只有"有人在驾驶"时才把输入交出去——空船不该自己开
       vehicleInput: this.ridingVehicle
-        ? { forward: this.frameInput.forward, strafe: this.frameInput.strafe, sprint: this.frameInput.sprint }
+        ? {
+            forward: this.frameInput.forward,
+            strafe: this.frameInput.strafe,
+            sprint: this.frameInput.sprint,
+            // 马跳（批次 254）：跳跃键在骑乘时先归坐骑
+            jump: this.frameInput.jump,
+          }
         : undefined,
       // 方块状态位（批次 246）：动力铁轨要读 `powered` 决定推不推车
       getState: (x, y, z) => this.world.getBlockState(x, y, z),
@@ -11522,8 +11549,10 @@ class App {
       // 船要读这一帧的输入（批次 244）：`collectInput` 每帧只调一次，存在这里共用
       this.frameInput = rawInput;
       this.mountCooldown = Math.max(0, this.mountCooldown - dt);
-      // 在船上按跳跃/潜行 = 下船（手机上跳跃键是唯一顺手的按键；桌面潜行也认）
-      if (this.ridingVehicle && this.mountCooldown <= 0 && (rawInput.jump || rawInput.sneak)) {
+      // 在船上按跳跃/潜行 = 下船（手机上跳跃键是唯一顺手的按键；桌面潜行也认）。
+      // ⚠️ 骑马例外（批次 254）：跳跃键是**马跳**，下马只能潜行——否则一按跳就掉下来。
+      const jumpDismount = rawInput.jump && !(this.ridingVehicle instanceof Horse);
+      if (this.ridingVehicle && this.mountCooldown <= 0 && (jumpDismount || rawInput.sneak)) {
         this.dismountVehicle();
       }
       // 激活铁轨（批次 247）：通电的激活轨把矿车乘客弹下来
