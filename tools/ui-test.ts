@@ -3254,7 +3254,9 @@ console.log('\n[投掷三叉戟 + 忠诚（批次 268）]');
   );
   check(
     '投掷复用 Arrow：换 itemId、伤害 8、可拾取',
-    appSrc.includes('{ fromPlayer: true, damage: 8, pickable: true, itemId: Item.TRIDENT }') &&
+    appSrc.includes('damage: 8,') &&
+      appSrc.includes('pickable: true,') &&
+      appSrc.includes('itemId: Item.TRIDENT,') &&
       appSrc.includes('private throwTrident(): boolean'),
   );
   check(
@@ -3267,6 +3269,37 @@ console.log('\n[投掷三叉戟 + 忠诚（批次 268）]');
     appSrc.includes('private updateThrownTridents(dt: number): void') &&
       appSrc.includes('entry.backTimer < 0.3') &&
       appSrc.includes('this.inventory.add(Item.TRIDENT, 1);'),
+  );
+}
+
+console.log('\n[引雷（批次 269）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const arrowSrc = readFileSync(new URL('../src/core/entity/Arrow.ts', import.meta.url), 'utf8');
+  const entitySrc = readFileSync(new URL('../src/core/entity/Entity.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const channelingAt = enchantSrc.indexOf("id: 'channeling'");
+  check(
+    '引雷标了 implemented',
+    channelingAt >= 0 && enchantSrc.slice(channelingAt, channelingAt + 160).includes('implemented: true'),
+  );
+  check(
+    '实体层只报落雷点（strikeLightningAt），不判天气',
+    entitySrc.includes('strikeLightningAt?: (x: number, y: number, z: number) => void') &&
+      arrowSrc.includes('this.options.channeling === true') &&
+      arrowSrc.includes('ctx.strikeLightningAt?.(mob.x, mob.y, mob.z)') &&
+      arrowSrc.includes('ctx.strikeLightningAt?.(bx, by, bz)'),
+  );
+  check(
+    '只有雷雨天真的落雷，落点由引雷指定',
+    appSrc.includes("if (this.weather.current !== 'thunder') return;") &&
+      appSrc.includes('this.strikeLightning({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), rod: false });'),
+  );
+  check(
+    '带引雷的三叉戟也走 Arrow 路径',
+    appSrc.includes("const channeling = enchantLevel(this.heldEnchants, 'channeling');") &&
+      appSrc.includes('if (loyalty <= 0 && channeling <= 0) return false;') &&
+      appSrc.includes('channeling: channeling > 0,'),
   );
 }
 

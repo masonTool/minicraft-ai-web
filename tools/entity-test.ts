@@ -763,6 +763,45 @@ console.log('\n[穿透箭：命中后继续飞（批次 266）]');
   served = first;
   plain.tick(ctx, 0.05);
   check('普通箭命中即消失（不穿透）', plain.dead);
+
+  // 引雷（批次 269）：命中点报给主程序
+  let strikes = 0;
+  const strikeAt: { x?: number; y?: number; z?: number } = {};
+  const channelCtx = Object.assign({}, ctx as object, {
+    strikeLightningAt: (x: number, y: number, z: number) => {
+      strikes++;
+      strikeAt.x = x;
+      strikeAt.y = y;
+      strikeAt.z = z;
+    },
+  }) as never;
+  const channelled = new Arrow(0.5, 64.5, 0.5, { x: 30, y: 0, z: 0 }, {
+    fromPlayer: true,
+    damage: 2,
+    channeling: true,
+  });
+  served = second;
+  channelled.tick(channelCtx, 0.05);
+  check('引雷箭命中生物 → 报一次落雷点', strikes === 1, `${strikes}`);
+  check(
+    '落雷点就是那只生物的位置',
+    typeof strikeAt.x === 'number' &&
+      Math.abs(strikeAt.x - second.x) < 2 &&
+      typeof strikeAt.z === 'number' &&
+      Math.abs(strikeAt.z - second.z) < 2,
+    JSON.stringify(strikeAt),
+  );
+
+  let plainStrikes = 0;
+  const noChannelCtx = Object.assign({}, ctx as object, {
+    strikeLightningAt: () => {
+      plainStrikes++;
+    },
+  }) as never;
+  const ordinary = new Arrow(0.5, 64.5, 0.5, { x: 30, y: 0, z: 0 }, { fromPlayer: true, damage: 2 });
+  served = first;
+  ordinary.tick(noChannelCtx, 0.05);
+  check('没有引雷的箭不报落雷点', plainStrikes === 0, `${plainStrikes}`);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
