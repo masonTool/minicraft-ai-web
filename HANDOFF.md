@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 568（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 569（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **178**、进行中 **73**、待办 36 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -51,6 +51,17 @@ npm run dev            # http://localhost:5173
   冷启动一页背包 <1ms。顺带给 `TextureAtlas` 补 `revision` + `markTextureChanged()`
   （资源包换贴图后图标缓存、平均色缓存一起作废，否则背包里还是旧材质）与 `tileOpacity()`
   （带透明洞的贴图不垫底色，否则玻璃/树叶会变成实心方块）。`test:ui` 489 → 490 条
+- 批次 183（真机日志定位的两处）：**双血条 + 视角卡死**。
+  ① 双血条/双经验条是"应用内回菜单"的副作用：`VitalsHud` / `XpHud` 挂在静态容器
+  （`#vitals` / `#hud`）上，重进世界时 new 了新实例却没有清旧节点。现在构造函数先清、
+  拆局也 `dispose()`；专项验收在"退出→再进入"之后数 `#vital-health` / `#xp-bar` 必须各 1。
+  ② 视角卡死的根因是 **PointerEvent 的 `clientX/Y` 偶发双双为 0**（用户日志里连续 20 多次
+  `look.down x=0 y=0`，拖动增量恒 0；摇杆也会拿原点算方向）。新增
+  `core/input/PointerPoint.ts`：client 不可用时退 screen/page，一次手势锁定同一来源；
+  三组全 0 则判手势无效并**强制触摸层隐藏一帧再显示**（等价于用户摸索出的"开关一次背包"）；
+  回到前台 / 全屏切换也会 `recover()`。日志新增 `pointer.anomaly`（含 pointerType /
+  screen / page / visualViewport）与 `stick.reset` 原因，下次再犯能直接定位。
+  `test:pointer` 9 条；专项验收 21 条（含 client=0 时 screen 兜底仍能转视角）。
 - 批次 182（首页版本信息）：**首页页脚显示"构建时间 + 提交标题"**（`src/game/buildInfo.ts`）。
   两个值由 `vite.config.ts` 用 `execFileSync('git', ['log','-1','--format=%h%x20%s'])` 在构建/启动时注入
   （`define` → `__BUILD_COMMIT__` / `__BUILD_TIME__`，声明在 `src/globals.d.ts`）；
@@ -252,11 +263,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 118 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 119 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 118 套离线测试
+npm test                   # typecheck:tools + vitest + 119 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -268,7 +279,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **118 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **119 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。

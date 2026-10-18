@@ -76,6 +76,9 @@ export class VitalsHud {
   private lastKey = '';
 
   constructor(private readonly container: HTMLElement) {
+    // 批次 183：退出世界再进入时会 new 一个实例，而 `#vitals` 是**静态容器**。
+    // 不先清掉上一个实例挂的行，血条/饥饿/护甲会叠成两三套（真机日志里的"双血条"）。
+    container.replaceChildren();
     // 半颗心的裁剪定义只放一份，所有图标共用
     const defs = createSvg();
     defs.setAttribute('class', 'vital-defs');
@@ -142,6 +145,13 @@ export class VitalsHud {
     }
 
     container.append(this.airRow, this.armorRow, healthRow, foodRow);
+  }
+
+  /** 拆局：把这一套行从静态容器里摘掉 */
+  dispose(): void {
+    this.container.replaceChildren();
+    this.container.classList.remove('low-health');
+    this.lastKey = '';
   }
 
   update(stats: PlayerStats): void {

@@ -1815,5 +1815,35 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   check('合成区有"合成"标题（截图里就有，其它分组原版没有标题）', inventorySrc.includes("this.buildLabel('合成')"));
 }
 
+console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
+{
+  const vitalsSrc = readFileSync(new URL('../src/ui/VitalsHud.ts', import.meta.url), 'utf8');
+  const xpSrc = readFileSync(new URL('../src/ui/XpHud.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const touchSrc = readFileSync(new URL('../src/ui/TouchControls.ts', import.meta.url), 'utf8');
+  check('血条构造时先清空静态容器（重进世界不再叠第二套）', vitalsSrc.includes('container.replaceChildren();'));
+  check('经验条构造时先删旧的那条', xpSrc.includes("container.querySelector('#xp-bar')?.remove()"));
+  check(
+    '拆局时清掉血条与经验条',
+    appSrc.includes('this.vitalsHud.dispose();') && appSrc.includes('this.xpHud.dispose();'),
+  );
+  check(
+    '触摸坐标有 screen/page 兜底，且一次手势锁定来源',
+    touchSrc.includes('pointFromEvent(event)') &&
+      touchSrc.includes('pointFromEventWithSource(event, this.lookPointSource)'),
+  );
+  check(
+    'clientX/Y 全为 0 时记现场并强制重排（等价于开关一次背包）',
+    touchSrc.includes("reportPointerAnomaly('look.down'") &&
+      touchSrc.includes("this.nudgeLayout('look.down')"),
+  );
+  check(
+    '回到前台/全屏切换会重置触摸并重排',
+    appSrc.includes("this.touch?.recover('visible')") &&
+      appSrc.includes("this.touch?.recover('fullscreen')"),
+  );
+  check('摇杆不再拿原点算方向', touchSrc.includes('if (event.clientX === 0 && event.clientY === 0) return;'));
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

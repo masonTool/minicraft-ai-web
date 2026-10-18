@@ -116,6 +116,10 @@
   const spawn = mc.info.position;
   mc.teleportForce(spawn[0], 150, spawn[2]);
   await sleep(1200);
+  // 第一次指针事件会触发"开机全屏"的一次性手势；fullscreenchange 落定时
+  // `recover('fullscreen')` 会重置输入。先把它耗掉，免得它正好打断摇杆测试。
+  document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch' }));
+  await sleep(900);
   mc.look(0, 0);
   const before = mc.info.position.slice();
   const stick = document.getElementById('touch-stick');
@@ -125,7 +129,11 @@
   const t = window.__mc.info;
   const moved = Math.hypot(t.position[0] - before[0], t.position[2] - before[2]);
   fire(stick, 'pointerup', stickCx, stickCy - stickRect.height, 101);
-  check(`stick drives movement: ${moved.toFixed(2)} blocks`, moved > 2, `from (${before.map((n) => n.toFixed(1)).join(',')})`);
+  check(
+    `stick drives movement: ${moved.toFixed(2)} blocks`,
+    moved > 2,
+    `from (${before.map((n) => n.toFixed(1)).join(',')}) | stick ${Math.round(stickRect.width)}x${Math.round(stickRect.height)} @ ${Math.round(stickCx)},${Math.round(stickCy)}`,
+  );
 
   // 停下之后不该继续滑行（说明抬手后 forward 归零了）
   await sleep(250);

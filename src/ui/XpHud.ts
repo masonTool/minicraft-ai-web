@@ -17,6 +17,9 @@ export class XpHud {
   private lastKey = '';
 
   constructor(container: HTMLElement) {
+    // 批次 183：`#hud` 是静态容器，重进世界时会再挂一条经验条。
+    // 只删自己那一块（不能 `replaceChildren`，`#hud` 里还有准星、提示、触摸层）。
+    container.querySelector('#xp-bar')?.remove();
     this.root = document.createElement('div');
     this.root.id = 'xp-bar';
 
@@ -28,6 +31,12 @@ export class XpHud {
 
     this.root.append(this.fill, this.levelEl);
     container.appendChild(this.root);
+  }
+
+  /** 拆局：把经验条从公共 HUD 上摘掉 */
+  dispose(): void {
+    this.root.remove();
+    this.lastKey = '';
   }
 
   update(xp: Experience): void {

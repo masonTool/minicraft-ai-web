@@ -19,6 +19,11 @@ import type { PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { HOTBAR_SIZE } from '../core/container/Inventory.ts';
 import { diag } from '../game/diagnosticsRuntime.ts';
 import { TOUCH_ICON_LABELS, touchIconSvg, type TouchIconName } from './TouchIcons.ts';
+import {
+  pointFromEvent,
+  pointFromEventWithSource,
+  type PointerSource,
+} from '../core/input/PointerPoint.ts';
 
 /** 诊断日志里用的输入快照（D2 那种"切完就卡"全靠它对比） */
 export interface TouchDebugState {
@@ -148,6 +153,10 @@ export class TouchControls {
   private strafe = 0;
 
   private lookPointer: number | null = null;
+  /** 这一次视角拖动锁定用哪一组坐标（批次 183，见 `core/input/PointerPoint.ts`） */
+  private lookPointSource: PointerSource = 'client';
+  /** 正在做"隐藏一帧再显示"的坐标恢复 */
+  private nudging = false;
   private lookStartX = 0;
   private lookStartY = 0;
   private lookDragged = false;
@@ -288,7 +297,7 @@ export class TouchControls {
     this.object.classList.toggle('hidden', !value);
     for (const button of this.sideButtons) button.style.display = value ? '' : 'none';
     if (value) return;
-    this.resetStick();
+    this.resetStick('ui.hide');
     this.cancelLook();
     this.jump = false;
     this.sneakHeld = false;
@@ -373,7 +382,7 @@ export class TouchControls {
   setStickMode(mode: StickMode): void {
     this.stickMode = mode;
     this.stickBase.classList.toggle('dynamic', mode === 'dynamic');
-    if (mode === 'fixed') this.resetStick();
+    if (mode === 'fixed') this.resetStick('stickMode');
   }
 
   /** 同步潜行状态（键盘切换时按钮也要跟着变——潜行已不在右簇，只保内部状态） */
@@ -432,6 +441,11 @@ export class TouchControls {
   }
 
   private beginDynamicStick(event: PointerEvent): void {
+    if (event.clientX === 0 && event.clientY === 0) {
+      this.reportPointerAnomaly('stick.dynamic', event);
+      this.nudgeLayout('stick.dynamic');
+      return;
+    }
     const rect = this.stickBase.getBoundingClientRect();
     const radius = rect.width > 0 ? rect.width / 2 : this.stickRadius;
     this.stickRadius = radius;
@@ -456,7 +470,7 @@ export class TouchControls {
       this.lookSurface.removeEventListener('pointermove', move);
       this.lookSurface.removeEventListener('pointerup', release);
       this.lookSurface.removeEventListener('pointercancel', release);
-      this.resetStick();
+      this.resetStick('dynamic.release');
       this.stickBase.style.left = '';
       this.stickBase.style.top = '';
       this.stickBase.style.bottom = '';
@@ -469,6 +483,14 @@ export class TouchControls {
   private bindStick(): void {
     this.stickBase.addEventListener('pointerdown', (event) => {
       event.preventDefault();
+      // 批次 183：摇杆的圆心是 client 坐标，混用 screen 会算错方向；
+      // 坐标不可用时直接判这次手势无效，并强制一次布局重排等下一次。
+      const point = pointFromEvent(event);
+      if (point.source !== 'client') {
+        this.reportPointerAnomaly('stick.down', event);
+        this.nudgeLayout('stick.down');
+        return;
+      }
       // 双击摇杆 = 切换潜行（Education：D-pad 中心双击；我们用摇杆，右手只留跳跃）
       const now = performance.now();
       if (now - this.lastStickDown <= DOUBLE_TAP_MS && !this.flying) {
@@ -508,16 +530,19 @@ export class TouchControls {
       event.preventDefault();
       diag.event('gesture', 'stick.up', {
         pointer: event.pointerId,
+        kind: event.type,
         forward: Math.round(this.forward * 100) / 100,
         strafe: Math.round(this.strafe * 100) / 100,
       });
-      this.resetStick();
+      this.resetStick(event.type);
     };
     this.stickBase.addEventListener('pointerup', release);
     this.stickBase.addEventListener('pointercancel', release);
   }
 
   private applyStick(event: PointerEvent): void {
+    // 防御：坐标异常时不要用"手指在原点"去算方向（会产生一个巨大的反向输入）
+    if (event.clientX === 0 && event.clientY === 0) return;
     const dx = event.clientX - this.stickCenterX;
     const dy = event.clientY - this.stickCenterY;
     const distance = Math.hypot(dx, dy);
@@ -532,7 +557,8 @@ export class TouchControls {
     if (distance > TAP_MOVE_SLOP) this.dismissHint();
   }
 
-  private resetStick(): void {
+  private resetStick(reason = 'unknown'): void {
+    if (this.stickPointer !== null) diag.event('gesture', 'stick.reset', { reason, pointer: this.stickPointer });
     this.stickPointer = null;
     this.forward = 0;
     this.strafe = 0;
@@ -550,18 +576,30 @@ export class TouchControls {
       }
       if (this.lookPointer !== null) return;
 
+      // 批次 183：真机上偶发 clientX/Y 双双为 0（关面板 / 后台回来 / 全屏切换之后）。
+      // 仅凭 0,0 无法算拖动增量，拖多久视角都不动——先按 screen/page 兜底，
+      // 三个来源都不可用时强制一次布局重排（等价于"开关一次背包"的恢复路径）。
+      const point = pointFromEvent(event);
+      this.lookPointSource = point.source;
+      if (point.source === 'none') {
+        this.reportPointerAnomaly('look.down', event);
+        this.nudgeLayout('look.down');
+        return;
+      }
+
       this.lookPointer = event.pointerId;
-      this.lookStartX = event.clientX;
-      this.lookStartY = event.clientY;
-      this.lastMoveX = event.clientX;
-      this.lastMoveY = event.clientY;
+      this.lookStartX = point.x;
+      this.lookStartY = point.y;
+      this.lastMoveX = point.x;
+      this.lastMoveY = point.y;
       this.lookDragged = false;
       this.breaking = false;
       capturePointer(this.lookSurface, event.pointerId);
       diag.event('gesture', 'look.down', {
         pointer: event.pointerId,
-        x: Math.round(event.clientX),
-        y: Math.round(event.clientY),
+        x: Math.round(point.x),
+        y: Math.round(point.y),
+        source: point.source,
         state: this.debugState,
       });
 
@@ -578,8 +616,11 @@ export class TouchControls {
       if (event.pointerId !== this.lookPointer) return;
       event.preventDefault();
 
-      const dx = event.clientX - this.lookStartX;
-      const dy = event.clientY - this.lookStartY;
+      const point = pointFromEventWithSource(event, this.lookPointSource);
+      // 锁定 client 之后又收到 (0,0)：这是异常值，直接丢弃，别把视角甩到原点
+      if (this.lookPointSource === 'client' && point.x === 0 && point.y === 0) return;
+      const dx = point.x - this.lookStartX;
+      const dy = point.y - this.lookStartY;
 
       if (!this.lookDragged && Math.hypot(dx, dy) > TAP_MOVE_SLOP) {
         this.lookDragged = true;
@@ -592,11 +633,11 @@ export class TouchControls {
       }
 
       if (this.lookDragged && !this.breaking) {
-        this.lookX += event.clientX - this.lastMoveX;
-        this.lookY += event.clientY - this.lastMoveY;
+        this.lookX += point.x - this.lastMoveX;
+        this.lookY += point.y - this.lastMoveY;
       }
-      this.lastMoveX = event.clientX;
-      this.lastMoveY = event.clientY;
+      this.lastMoveX = point.x;
+      this.lastMoveY = point.y;
     });
 
     const finish = (event: PointerEvent) => {
@@ -657,13 +698,54 @@ export class TouchControls {
     const before = this.debugState;
     this.clearGestureTimers();
     this.cancelLook();
-    this.resetStick();
+    this.resetStick('resetInput');
+    this.lookPointSource = 'client';
     this.jumpHeld = false;
     this.sneakHeld = false;
     // 双击计时也清掉：切换之后紧接着的一次按下不该被当成"第二次点击"
     this.lastJumpDown = 0;
     this.lastStickDown = 0;
     diag.event('input', 'resetInput', { reason, before, after: this.debugState });
+  }
+
+  /**
+   * 从"坐标异常"里恢复（批次 183）。
+   *
+   * 与用户摸索出来的"开关一次背包"完全同一条路径：重置输入 + 让触摸层隐藏一帧
+   * 再显示，强制浏览器重新算布局与触摸映射。差异只是不弹面板。
+   */
+  recover(reason: string): void {
+    this.resetInput(reason);
+    this.nudgeLayout(reason);
+  }
+
+  /** 把"坐标全是 0"的现场记下来：pointerType / screen / page / visualViewport 都要 */
+  private reportPointerAnomaly(phase: string, event: PointerEvent): void {
+    const vv = typeof window === 'undefined' ? null : window.visualViewport;
+    diag.event('gesture', 'pointer.anomaly', {
+      phase,
+      pointer: event.pointerId,
+      pointerType: event.pointerType,
+      client: [Math.round(event.clientX), Math.round(event.clientY)],
+      screen: [Math.round(event.screenX), Math.round(event.screenY)],
+      page: [Math.round(event.pageX), Math.round(event.pageY)],
+      viewport: [window.innerWidth, window.innerHeight],
+      scroll: [window.scrollX, window.scrollY],
+      visual: vv ? [Math.round(vv.offsetLeft), Math.round(vv.offsetTop), Number(vv.scale.toFixed(2))] : null,
+    });
+  }
+
+  /** 触摸层隐藏一帧再显示：代价最小的一次"强制重排" */
+  private nudgeLayout(reason: string): void {
+    if (this.nudging) return;
+    this.nudging = true;
+    this.object.style.display = 'none';
+    void this.object.offsetHeight;
+    window.requestAnimationFrame(() => {
+      this.object.style.display = '';
+      this.nudging = false;
+      diag.event('gesture', 'pointer.recover', { reason });
+    });
   }
 
   /** 主循环在每帧开始处调用；界面打开时禁用 */
@@ -680,7 +762,7 @@ export class TouchControls {
   dispose(): void {
     this.clearGestureTimers();
     this.cancelLook();
-    this.resetStick();
+    this.resetStick('dispose');
     for (const button of this.sideButtons) button.remove();
     this.object.remove();
   }

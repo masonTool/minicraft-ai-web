@@ -60,6 +60,40 @@
   const target = document.getElementById('target-info');
   check('准星下方显示目标方块名', visible(target) && (target.textContent ?? '').length > 0, target?.textContent ?? '');
 
+  // 批次 183：真机日志里 clientX/Y 会偶发变成 0,0。只要 screen 还有值，就必须能转视角。
+  const lookEl = document.getElementById('touch-look');
+  const fireLook = (type, id, client, screen) =>
+    lookEl.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        isPrimary: true,
+        clientX: client[0],
+        clientY: client[1],
+        screenX: screen[0],
+        screenY: screen[1],
+        pointerId: id,
+        pointerType: 'touch',
+      }),
+    );
+  const yawBefore = mc.lookAngles.yaw;
+  fireLook('pointerdown', 901, [0, 0], [400, 200]);
+  fireLook('pointermove', 901, [0, 0], [470, 200]);
+  await sleep(350);
+  const turned = Math.abs(mc.lookAngles.yaw - yawBefore) > 1;
+  fireLook('pointerup', 901, [0, 0], [470, 200]);
+  check('client 坐标全 0 时用 screen 兜底仍能转视角', turned, `${(mc.lookAngles.yaw - yawBefore).toFixed(1)}°`);
+
+  // 三组坐标全 0：这次手势必须作废，并自动重排触摸层（不要求玩家去开关背包）
+  fireLook('pointerdown', 902, [0, 0], [0, 0]);
+  await sleep(80);
+  const rejected = mc.touch.lookPointer === null;
+  await sleep(120);
+  const restored = getComputedStyle(document.getElementById('touch-ui')).display !== 'none';
+  check('三组坐标全 0 时不接管手势', rejected);
+  check('坐标异常后触摸层自动恢复显示', restored);
+
   mc.cycleCameraMode();
   await sleep(150);
   const toast = document.getElementById('hud-toast');
@@ -170,6 +204,17 @@
   check('回菜单后还能再次进入同一个世界', back, back ? 'chunks > 0' : 'timeout');
   if (back) {
     check('再次进入后背包仍是空的（没有重复发开局物资）', window.__mc.inventory.slots.every((slot) => !slot));
+    // 批次 183：HUD 挂在静态容器上，重进世界必须只有一套
+    check(
+      '重进世界后只有一套血条',
+      document.querySelectorAll('#vital-health').length === 1,
+      `${document.querySelectorAll('#vital-health').length} 套`,
+    );
+    check(
+      '重进世界后只有一条经验条',
+      document.querySelectorAll('#xp-bar').length === 1,
+      `${document.querySelectorAll('#xp-bar').length} 条`,
+    );
   }
 
   const failed = lines.filter((line) => line.startsWith('[FAIL]')).length;

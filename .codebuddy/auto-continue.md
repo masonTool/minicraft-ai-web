@@ -3239,3 +3239,18 @@
 
 > **批次 182 已完成。** 产物验证：`dist/assets/index-*.js` 里能 grep 到 `cabd039 <提交标题>` 与 ISO 构建时间；
 > 生产预览页 `#world-build` 实际显示 `构建 2026-10-18 10:47 · cabd039 …`。
+
+---
+
+## 批次 183：真机日志定位（双血条 + 视角卡死）
+
+- [x] B183-1 `VitalsHud` / `XpHud` 构造先清静态容器，`App.dispose` 调 `dispose()`（重进世界不再叠 HUD）
+- [x] B183-2 `core/input/PointerPoint.ts`：client→screen→page 兜底、一次手势锁定来源、全 0 判无效
+- [x] B183-3 0,0 坐标记 `pointer.anomaly`（pointerType/screen/page/visualViewport）并强制触摸层重排
+- [x] B183-4 摇杆拒绝原点输入；`stick.reset` 记原因；前台/全屏恢复走 `recover()`
+- [x] B183-5 `test:pointer` 9 条；专项验收 21 条（screen 兜底转视角 + 重进世界各 1 套 HUD）
+
+> **批次 183 已完成。** 证据来自用户 2026-10-18 03:06 的诊断日志：
+> 681–690s 连续 `look.down x=0 y=0` → 拖动无增量（视角卡死）；且 610s 有一次
+> `exitToMenu` + 617s 重进世界 → `#vitals` 里出现多套血条。
+> 移动端验收 14 条、界面验收 152 条、专项 21 条均通过；`npm test` 119 套。

@@ -8967,7 +8967,18 @@ class App {
           // 切后台时手指的按下/抬起可能收不到：把输入清零，回来不会"自己一直走"
           this.touch?.resetInput('hidden');
           void this.saveNow('hidden');
+        } else {
+          // 批次 183：从后台回来偶尔会拿到 clientX/Y=0 的触摸；先重排一次
+          this.touch?.recover('visible');
         }
+      },
+      { signal: this.listeners.signal },
+    );
+    // 退出/重进全屏之后同样可能坐标异常（真机日志里正是这一段之后开始拖不动）
+    document.addEventListener(
+      'fullscreenchange',
+      () => {
+        this.touch?.recover('fullscreen');
       },
       { signal: this.listeners.signal },
     );
@@ -9223,6 +9234,9 @@ class App {
     this.backButton.reset();
     this.hudToast.dispose();
     this.targetInfoEl.remove();
+    // 静态 HUD 容器（#vitals / #hud）要清干净：不清的话重进世界会叠出第二套血条与经验条
+    this.vitalsHud.dispose();
+    this.xpHud.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();
     this.touch = null;
