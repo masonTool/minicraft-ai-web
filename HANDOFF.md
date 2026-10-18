@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 706（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 710（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **182**、进行中 **75**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,19 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 253（用户："请继续"；被动生物第三批）：**马 / 驴 / 骡 / 羊驼**（生物 30 → **34**）。
+  ① `Horse extends Mob`：`passenger` / `seatHeight` / **`rideYaw`**，覆写 `updateAi`
+  （骑着时按 `vehicleInput` 给水平速度，没骑走原 AI）；`Mob` 的
+  `updateAi` / `move` / `idle` / `moveDir*` 改成 `protected`。
+  ② 四种数据（体型/速度/群系/苹果驯服/小麦喂食/无掉落）+ 刷怪蛋 4 枚（1482~1485）。
+  ③ `MobFactory` 造 `Horse`；`Rideable = Boat | Minecart | Horse`，座位高度 1.45，
+  驯服后空手点 = 上马（不是坐下）。
+  ④ 渲染新增 `horse` 骨架（长腿 / 长身 / 竖脖 / 鬃毛 / 垂尾）。
+  ⑤ **踩坑与修复**：最初用 `this.yaw` 算驱动速度，但 `Mob.tick` 会按本帧移动方向
+  回写 `yaw`（`atan2`）→ 两者互相覆盖，马在原地震荡（实测 2.5 ↔ 2.617、vx 正负交替）。
+  改为独立 `rideYaw`（主程序每帧写）后正常：3 秒走 2.5 → 4.37（2.34 格/秒）。
+  门禁：`test:mob` **125**、`test:spawn`/`test:reach` 同步（蛋 26 → 30），离线 130 套全绿。
+  待补：跳跃蓄力、鞍与拴绳。
 - 批次 252（用户："请继续开发"；G12 最后一件）：**动力矿车**。
   ① `FurnaceMinecart extends Minecart`：`fuelSeconds` + `addFuel()`（封顶 300 秒），
   烧着时沿车头方向持续加速（6 格/秒²），阻力/限速/碰撞全走父类。
