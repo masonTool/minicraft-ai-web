@@ -9602,6 +9602,17 @@ class App {
     this.perf = state;
     if (action === null) return;
 
+    // 批次 210：每一次真调档都进日志。以前只有 `console.info`，而导出的诊断里
+    // 看不到这条——"那两分钟到底降没降、降的是哪一个"只能靠猜。
+    // 量很小：稳态下 `action` 一直是 null，一条都不会记。
+    diag.event('perf', 'policy', {
+      action,
+      frameAvg: Math.round(state.frameTimeAvg * 10) / 10,
+      view: state.viewDistance,
+      decor: state.decorLevel,
+      res: state.resolutionScale,
+    });
+
     if (state.viewDistance !== before.viewDistance) {
       this.setViewDistance(state.viewDistance);
       console.info(
@@ -9624,6 +9635,9 @@ class App {
    * 两处共用同一份口径：①诊断导出时的 `meta.perf`；②主循环里每 5 秒的 `perf/sample`。
    *
    * ⚠️ 只读现成的计数器，**不遍历任何大数组**——它每 5 秒跑一次，绝不能自己变成卡顿源。
+   * 唯一的例外是实体构成那三项（批次 210）：一次线性扫描、上限几百个，5 秒一次可以忽略；
+   * 不扫的话，"`entities: 550`"到底是 550 只生物还是满地掉落物永远分不出来，
+   * 而这两个的代价差一个数量级。
    * 读 `renderer.info` 拿到的是上一帧的数字（three 每帧重置它）。
    *
    * 为什么要记这些：真机上"卡"与"设置里写着 12"往往不是一回事——手机上限 8、
@@ -9633,6 +9647,15 @@ class App {
     const info = this.renderer.info;
     const canvas = this.renderer.domElement;
     const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
+    // 实体构成（批次 210）：真机日志里 entities 冲到过 550，只凭总数判断不了该砍哪一块
+    let mobs = 0;
+    let items = 0;
+    let xp = 0;
+    for (const entity of this.entities.all) {
+      if (entity instanceof Mob) mobs++;
+      else if (entity instanceof ItemEntity) items++;
+      else if (entity instanceof XpOrb) xp++;
+    }
     return {
       fps: this.fps,
       // 帧时间是**平滑值**（系数 0.05，见 PerfPolicy）：它决定升降档，单帧尖峰看不出来
@@ -9650,6 +9673,10 @@ class App {
       genQueue: this.world.pendingCount,
       lightQueue: this.world.lightWorkCount,
       entities: this.entities.all.length,
+      // 上面那次扫描的结果（批次 210）：`mobs` 走 AI/寻路，`items`/`xp` 只是飘着
+      mobs,
+      items,
+      xp,
       particles: this.particles.active,
       rain: this.weather.activeCount,
       calls: info.render.calls,

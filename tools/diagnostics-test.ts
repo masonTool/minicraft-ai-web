@@ -94,7 +94,49 @@ console.log('\n[二、data 裁剪]');
 {
   const wide = Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`k${i}`, i]));
   const clean = sanitizeData(wide) as Record<string, unknown>;
-  equal('对象最多保留 16 个键', Object.keys(clean).length, 16);
+  equal('对象最多保留 32 个键', Object.keys(clean).length, 32);
+}
+
+{
+  // 批次 210：`perf/sample` 有 29 个键，而宽度上限原来只有 16 —— 排在末尾的
+  // `calls/tris/heapMb`（批次 202）与 `cpu/phases`（批次 205）被**静默裁掉**，
+  // 于是"卡在 CPU 还是 GPU"这件事查了两批都没数据。这条断言盯住"尾巴还在"：
+  // 以后再加键、或者有人把上限调小，这里会当场红。
+  const sample: Record<string, unknown> = {
+    fps: 43,
+    frameMs: 21.3,
+    res: 1,
+    view: 7,
+    decor: 0,
+    pixelRatio: 1.5,
+    buffer: '1188×540',
+    chunks: 284,
+    meshes: 284,
+    drawn: 177,
+    meshQueue: 0,
+    genQueue: 0,
+    lightQueue: 0,
+    entities: 226,
+    particles: 0,
+    rain: 3200,
+    mobs: 210,
+    items: 12,
+    xp: 4,
+    calls: 300,
+    tris: 900_000,
+    geo: 4813,
+    tex: 6,
+    prog: 18,
+    heapMb: 527,
+    uiOpen: false,
+    frameAvgMs: 19.9,
+    cpu: 12.4,
+    phases: { sim: 3 },
+  };
+  const clean = sanitizeData(sample) as Record<string, unknown>;
+  equal('29 个键的采样原样通过', Object.keys(clean).length, Object.keys(sample).length);
+  check('末尾的 cpu / phases 还在（批次 205 的判据）', 'cpu' in clean && 'phases' in clean);
+  check('draw call / 堆占用还在（批次 202 的判据）', 'calls' in clean && 'heapMb' in clean);
 }
 
 console.log('\n[三、落盘预算]');

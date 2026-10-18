@@ -47,8 +47,18 @@ export interface LogSession {
 
 /** 单条字符串的上限：堆栈可以很长，但不能让它一条吃掉整个预算 */
 const MAX_STRING = 240;
-/** 对象/数组最多保留多少项 */
-const MAX_ITEMS = 16;
+/**
+ * 对象/数组最多保留多少项。
+ *
+ * ⚠️ 批次 210：原来是 **16**，而 `perf/sample` 已经有 **29 个键**（`perfSnapshot` 23 个
+ * + 实体构成 3 个 + 帧间距/cpu/phases 3 个），`sanitizeData` 是**按插入顺序保留前面
+ * 若干项**，于是后面那些键被**静默丢掉**——丢的还正好是后来才加在末尾的：
+ * 批次 202 的 `calls/tris/heapMb`、批次 205 的 `cpu/phases` 从来没进过日志，
+ * "卡在 CPU 还是 GPU"查了两批都没答案，就是因为这个上限。
+ * 放宽的代价只有几十字节/条（预算按字符算，见 `trimSessions`），
+ * 而"悄悄少一个键"没人会发现。**给 `data` 加键加到接近这个数时，这里要一起调。**
+ */
+const MAX_ITEMS = 32;
 /** 数据最多展开几层 */
 const MAX_DEPTH = 2;
 
