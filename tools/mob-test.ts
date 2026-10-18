@@ -746,19 +746,6 @@ console.log('\n[驯服与宠物（批次 242）]');
 
 console.log('\n[骑乘：马（批次 253）]');
 {
-  const world = new TestWorld();
-  world.floor(-24, 24, -8, 8, 64);
-  const ctx: EntityContext = {
-    world: world.asPhysicsWorld(),
-    playerBox: null,
-    pickup: () => 0,
-    getBlock: (x, y, z) => world.getBlock(x, y, z),
-    player: { x: 8.5, y: 65, z: 0.5 },
-    hurtPlayer: () => undefined,
-    spawnDrop: () => undefined,
-    vehicleInput: { forward: 1, strafe: 0, sprint: false },
-  };
-
   const horse = createMob(mobTypeById('horse')!, 2.5, 65.5, 0.5) as Horse;
   check('马是 Horse 子类（不是普通 Mob）', horse instanceof Horse);
   check('默认没驯服', !horse.tamed);
