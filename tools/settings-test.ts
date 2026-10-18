@@ -81,6 +81,7 @@ console.log('\n[默认设置]');
   check('默认视角是第一人称', DEFAULT_SETTINGS.cameraMode === 'first');
   check('默认粒子是全部、云是开、昼夜循环是开', DEFAULT_SETTINGS.particles === 'all' && DEFAULT_SETTINGS.clouds && DEFAULT_SETTINGS.daylightCycle);
   check('默认不反转上下视角', DEFAULT_SETTINGS.invertY === false);
+  check('自动跳跃默认开（与基岩版一致，老存档缺字段也按开）', DEFAULT_SETTINGS.autoJump === true && fallback.autoJump === true);
   check('默认视距/视野在合理范围', DEFAULT_SETTINGS.viewDistance >= 4 && DEFAULT_SETTINGS.viewDistance <= 16 && DEFAULT_SETTINGS.fov >= 60 && DEFAULT_SETTINGS.fov <= 110);
 }
 
@@ -121,9 +122,10 @@ console.log('\n[设置的容错]');
   check('daylightCycle 缺省为开', messy.daylightCycle === true);
   check('showDebug 不是 false 就当开', messy.showDebug === true);
 
-  storage.setItem(KEY, JSON.stringify({ clouds: false, invertY: true, daylightCycle: false, particles: 'off' }));
+  storage.setItem(KEY, JSON.stringify({ clouds: false, invertY: true, daylightCycle: false, particles: 'off', autoJump: false }));
   const off = loadSettings();
   check('显式关掉的三项都能读回来', off.clouds === false && off.invertY === true && off.daylightCycle === false && off.particles === 'off');
+  check('自动跳跃可以显式关掉', off.autoJump === false);
 }
 
 // ---------------------------------------------------------------- 3. 往返

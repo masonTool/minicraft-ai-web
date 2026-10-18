@@ -125,7 +125,8 @@ type BoolSettingKey =
   | 'adaptiveViewDistance'
   | 'adaptiveResolution'
   | 'weatherEffects'
-  | 'cape';
+  | 'cape'
+  | 'autoJump';
 
 export interface GameSettings {
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
@@ -178,6 +179,13 @@ export interface GameSettings {
    * 大世界保存那一下会有一次卡顿，间隔拉开是给"在手机上建大工程"的人留的旋钮。
    */
   autosaveSeconds: number;
+  /**
+   * 自动跳跃（批次 206，与基岩版同名设置）：走路顶到一格高的台阶时自动起跳。
+   *
+   * 0.6 格以内的雪层/台阶本来就由"上台阶"处理，这个开关只管整格高的那一档。
+   * 默认开——手机上一边推摇杆一边点跳跃很别扭，原版也是默认开。
+   */
+  autoJump: boolean;
   /** 反转视角的上下方向（触摸拖动与鼠标都受影响） */
   invertY: boolean;
   /** 昼夜循环：关掉之后时间停在当前时刻（截图对比、搭建筑时很好用） */
@@ -237,6 +245,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   cape: false,
   weatherEffects: true,
   autosaveSeconds: 30,
+  autoJump: true,
   invertY: false,
   daylightCycle: true,
   showDebug: true,
@@ -298,6 +307,7 @@ export function loadSettings(): GameSettings {
       autosaveSeconds: AUTOSAVE_OPTIONS.includes(parsed.autosaveSeconds as number)
         ? (parsed.autosaveSeconds as number)
         : DEFAULT_SETTINGS.autosaveSeconds,
+      autoJump: parsed.autoJump !== false,
       invertY: parsed.invertY === true,
       daylightCycle: parsed.daylightCycle !== false,
       showDebug: parsed.showDebug !== false,
@@ -644,6 +654,9 @@ export class SettingsScreen {
     controls.append(this.makeSlider('touchScale', '触摸按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100));
     controls.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 2, 0.05));
     this.makeToggle(controls, 'invertY', '反转上下视角');
+    // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开；
+    // 但它会让"贴着一格高的墙走"变成自己往上跳，有人不喜欢，所以给开关。
+    this.makeToggle(controls, 'autoJump', '自动跳跃');
 
     const sound = this.section('sound');
     sound.append(this.makeSlider('volume', '音量', '%', 0, 100, 1, 100));

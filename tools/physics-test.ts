@@ -210,6 +210,53 @@ console.log('\n[非整格地面：雪层 / 台阶不再抖跳]');
   check('实体也能停在雪层顶面', Math.abs(body.y - 64.125) < 0.005, `y=${body.y.toFixed(4)}`);
 }
 
+console.log('\n[自动跳跃（设置项）]');
+{
+  /** 地面 y<64；x>=1 处额外多出一段 `height` 高的坎 */
+  function stepWorld(height: number): PhysicsWorld {
+    return {
+      collisionAt(x: number, y: number, z: number) {
+        void z;
+        if (y < 64) return 'full' as const;
+        if (x >= 1 && y === 64 && height > 0) return [[0, 0, 0, 1, height, 1]] as const;
+        return null;
+      },
+      isLiquid: () => false,
+    };
+  }
+
+  function walk(world: PhysicsWorld, autoJump: boolean, frames = 90): PlayerPhysics {
+    const physics = standOnGround();
+    for (let i = 0; i < frames; i++) {
+      physics.update(world, input({ forward: 1 }), YAW_PLUS_X, DT, false, 1, 1, autoJump);
+    }
+    return physics;
+  }
+
+  const withJump = walk(stepWorld(1), true);
+  check('一格高的坎：自动跳上去了', withJump.y > 64.9, `y=${withJump.y.toFixed(3)}`);
+  check('一格高的坎：确实越过去了', withJump.x > 1.2, `x=${withJump.x.toFixed(2)}`);
+
+  const withoutJump = walk(stepWorld(1), false);
+  check('关掉之后：被一格坎挡住', withoutJump.y < 64.01 && withoutJump.x < 1, `y=${withoutJump.y.toFixed(3)} x=${withoutJump.x.toFixed(2)}`);
+
+  // 两格墙：跳了也上不去 → 不该原地一直蹦
+  const wall = walk(stepWorld(2), true);
+  check('两格墙前不会原地蹦', wall.y < 64.01, `y=${wall.y.toFixed(3)}`);
+  check('两格墙前仍然被挡住', wall.x < 1, `x=${wall.x.toFixed(2)}`);
+
+  // 雪层只有 1/8 格：由上台阶处理，自动跳跃不该被触发（不该出现"跳到 1 格高"）
+  const snowPhysics = standOnGround();
+  let snowMax = -Infinity;
+  const snowWorld = stepWorld(0.125);
+  for (let i = 0; i < 90; i++) {
+    snowPhysics.update(snowWorld, input({ forward: 1 }), YAW_PLUS_X, DT, false, 1, 1, true);
+    snowMax = Math.max(snowMax, snowPhysics.y);
+  }
+  check('雪层由台阶逻辑走上去（没有整格起跳）', snowMax < 64.2, `最高 y=${snowMax.toFixed(3)}`);
+  check('雪层上最终停在 64.125', Math.abs(snowPhysics.y - 64.125) < 0.01, `y=${snowPhysics.y.toFixed(4)}`);
+}
+
 console.log('\n[常量]');
 {
   check('冲刺跳的补速是正的', SPRINT_JUMP_BOOST > 0);

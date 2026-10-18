@@ -120,6 +120,7 @@ export class PlayerPhysics {
     flying: boolean,
     speedMultiplier = 1,
     jumpMultiplier = 1,
+    autoJump = false,
   ): void {
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
@@ -182,6 +183,15 @@ export class PlayerPhysics {
       if (this.vy < -4) this.vy = -4;
       this.fallStartY = null;
     } else {
+      // 自动跳跃（设置项，批次 206）：走路顶到一格高的台阶时自己起跳。
+      // 与"上台阶"（0.6 格）互补：0.6 以内的雪层/台阶仍由 `tryStepUp` 悄悄走上去，
+      // 这里只负责整格高的那一档；两格高的墙不会触发（跳上去也站不住）。
+      if (autoJump && this.onGround && input.jump === false && dirLength > 1e-6) {
+        if (this.canAutoJump(world, dirX, dirZ)) {
+          this.vy = JUMP_VELOCITY * jumpMultiplier;
+          this.onGround = false;
+        }
+      }
       if (input.jump && this.onGround) {
         this.vy = JUMP_VELOCITY * jumpMultiplier;
         // 冲刺跳（F3 尾巴）：起跳那一帧沿**输入方向**再补一点水平速度。
@@ -227,6 +237,44 @@ export class PlayerPhysics {
         const box = makeAABB(cx - probe, this.y - SNEAK_PROBE, cz - probe, cx + probe, this.y - 0.001, cz + probe);
         if (!collides(world, box)) return false;
       }
+    }
+    return true;
+  }
+
+  /**
+   * 自动跳跃的判据（设置项，批次 206）：正前方半格处是不是"刚好一格、且上面站得下"。
+   *
+   * 只看**一列**（前方 0.6 格的方块坐标）就够了：
+   *  - 顶面高出脚底 0.6 以内的（雪层 / 台阶）不算障碍，交给上台阶那条路；
+   *  - 高出 1 格左右、且头顶（站上去之后 1.8 格）没有方块 → 值得跳；
+   *  - 两格墙 / 一格高的洞 → 跳了也上不去，不跳（否则贴墙站着会一直原地蹦）。
+   */
+  private canAutoJump(world: PhysicsWorld, dirX: number, dirZ: number): boolean {
+    const bx = Math.floor(this.x + dirX * 0.6);
+    const bz = Math.floor(this.z + dirZ * 0.6);
+    const base = Math.floor(this.y + 0.02);
+    let top: number | null = null;
+
+    for (let vy = base; vy <= base + 1; vy++) {
+      const collision = world.collisionAt(bx, vy, bz);
+      if (collision === null) continue;
+      let blockTop = vy + 1;
+      if (collision !== 'full') {
+        blockTop = -Infinity;
+        for (const local of collision) blockTop = Math.max(blockTop, vy + local[4]);
+        if (!Number.isFinite(blockTop)) continue;
+      }
+      if (blockTop > this.y + this.stepHeight + 0.02 && blockTop <= this.y + 1.15) {
+        top = Math.max(top ?? -Infinity, blockTop);
+      }
+    }
+    if (top === null) return false;
+
+    // 站上去之后身体占的那几格必须是空的
+    const headFrom = Math.floor(top + 0.02);
+    const headTo = Math.floor(top + this.height - 0.02);
+    for (let vy = headFrom; vy <= headTo; vy++) {
+      if (world.collisionAt(bx, vy, bz) !== null) return false;
     }
     return true;
   }

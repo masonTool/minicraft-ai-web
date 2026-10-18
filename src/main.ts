@@ -9831,7 +9831,17 @@ class App {
         this.physics.vy = 0;
         this.physics.vz = 0;
       } else {
-        this.physics.update(this.world, rawInput, this.yaw, dt, this.flying, this.effects.moveSpeedMultiplier(), this.effects.jumpMultiplier());
+        this.physics.update(
+          this.world,
+          rawInput,
+          this.yaw,
+          dt,
+          this.flying,
+          this.effects.moveSpeedMultiplier(),
+          this.effects.jumpMultiplier(),
+          // 自动跳跃（批次 206）：飞行时不跳（`update` 里那条分支本来也不走）
+          this.settings.autoJump,
+        );
       }
       if (this.spawnResolved && !this.pendingArrival) {
         this.updateSurvival(dt, this.sleeping ? IDLE_INPUT : rawInput, wasOnGround);
