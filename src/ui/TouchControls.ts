@@ -94,11 +94,6 @@ export interface TouchActions {
   /** 切换第一/第三人称（批次 181，顶部第二颗键） */
   onCycleCamera(): void;
   /**
-   * 触摸坐标异常（批次 201）：`clientX/Y` 变成 0,0 时通知主程序。
-   * 连续多次异常时主程序会走"开关一次背包"的完整恢复路径。
-   */
-  onPointerAnomaly?: (phase: string) => void;
-  /**
    * 轻点抬起：交互 / 攻击 / 放置一次。
    *
    * 带上**松手时的手指坐标**（批次 185）：主程序要用它在屏幕上"点哪打哪"——
@@ -318,13 +313,23 @@ export class TouchControls {
   // ---------------------------------------------------------------- 对外接口
 
   get visible(): boolean {
-    return !this.object.classList.contains('hidden');
+    return !this.object.classList.contains('ui-off');
   }
 
-  /** 打开界面时隐藏操作层并清空输入，避免"界面开着人还在走" */
+  /**
+   * 打开界面时收起操作层并清空输入，避免"界面开着人还在走"。
+   *
+   * ⚠️ 批次 231：**不再 `display:none`**（`.hidden`），只挂 `ui-off` 收掉
+   * "看得见的壳"（摇杆/按钮/暂停条/提示）。原因见 `index.html` 的 `#touch-ui.ui-off`：
+   * 整层拆掉再建回来会让浏览器重算触摸坐标映射，而"关掉暂停页后的第一次滑动"
+   * 正好撞在那一次重算上（`clientX/Y` 被报成 0,0）。不参与点击由 CSS 的
+   * `#touch-look { pointer-events: none }` 负责，转视角本身已被 `setEnabled(!uiOpen)` 挡住。
+   */
   set visible(value: boolean) {
-    this.object.classList.toggle('hidden', !value);
-    for (const button of this.sideButtons) button.style.display = value ? '' : 'none';
+    this.object.classList.toggle('ui-off', !value);
+    // 侧键挂在 `#hotbar` 上（不在 `this.object` 里）：同样用类而不是 `style.display`，
+    // 免得多一次重排（它们的位置在快捷栏两端，重排会牵动整条快捷栏）
+    for (const button of this.sideButtons) button.classList.toggle('ui-off', !value);
     if (value) return;
     this.resetStick('ui.hide');
     this.cancelLook();
@@ -686,11 +691,12 @@ export class TouchControls {
           point = alt;
           diag.event('gesture', 'pointer.rebase', { pointer: event.pointerId, source: alt.source });
         } else {
-          // screen/page 也全是 0：连续几次就结束这次手势，交给主程序做完整恢复
+          // screen/page 也全是 0：连续几次就结束这次手势（批次 231：不再升级到
+          // "开关一次背包"——那条路自己就会让触摸层停摆 0.5 秒，见 `nudgeLayout`）
           this.zeroMoveCount++;
           if (this.zeroMoveCount >= 3) {
             this.zeroMoveCount = 0;
-            this.actions.onPointerAnomaly?.('look.zero');
+            this.nudgeLayout('look.zero');
             this.cancelLook();
           }
           return;
@@ -814,16 +820,17 @@ export class TouchControls {
       scroll: [window.scrollX, window.scrollY],
       visual: vv ? [Math.round(vv.offsetLeft), Math.round(vv.offsetTop), Number(vv.scale.toFixed(2))] : null,
     });
-    this.actions.onPointerAnomaly?.(phase);
   }
 
   /**
-   * 强制一次"和开关背包等价"的重排（批次 201）。
+   * 强制一次整页重排（批次 201；批次 231 起是**唯一**的坐标恢复手段）。
    *
-   * 只切 `#touch-ui` 的 display 还不够：用户实测能恢复的是**完整界面开关**，
-   * 而它额外做了三件事——`body.inv-pocket-open`（HUD visibility）、
-   * 失焦（输入框/按钮）、以及整页 reflow。这里全部照做，隐藏两帧再恢复，
-   * 尽量让浏览器重新计算 visual viewport 与触摸坐标映射。
+   * 关了暂停面板之后仍可能收到一组 0,0（浏览器没重算坐标映射）。这里隐藏两帧
+   * 再恢复、顺手失焦并让 HUD 让位——副作用与"开关一次背包"前半程一致，
+   * 但**不打开任何面板**，玩家手上正在滑的那一指不会被打断半秒。
+   *
+   * ⚠️ 别把它升级成"开一次背包"：批次 231 之前就这么干过（`runInventoryRecovery`），
+   * 那 0.4~0.6 秒里触摸层是收起的，手感上正是一次"卡一下"。
    */
   private nudgeLayout(reason: string): void {
     if (this.nudging) return;

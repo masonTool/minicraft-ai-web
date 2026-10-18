@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 658（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 660（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **181**、进行中 **76**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,29 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 231（用户："只要进入暂停页面，再回来滑动切换视角就会卡一下；如果这个问题改了，
+  之前那套开关背包的兜底就可以不要了；暂停页也太宽了"）：三件事叠在一起。
+  ① **根因是"同一帧拆层 + 建层"**：`closeSettings()` 在同一个 tick 里
+  `settingsScreen.hide()`（`display:none`）再 `touch.visible = true`（`#touch-ui`
+  也从 `display:none` 变回来）。浏览器要在这时候重算触摸坐标映射，下一次
+  `pointerdown` 的 `clientX/Y` 就是 0,0 —— 真机日志里"关掉任一面板后 0.8~3 秒内第一次
+  触摸坐标全 0"正是它。**背包一直没事**，因为它是"滑出动画结束（250~400ms）才 hidden"。
+  修法两条：触摸层**不再拆**（`#touch-ui.ui-off` 只把摇杆/按钮/暂停条/提示改
+  `visibility:hidden`、视角面 `pointer-events:none`）；暂停面板改成 **130ms 淡出后**
+  才加 `.hidden`（`SETTINGS_FADE_MS`），且 `closeSettings` 里先恢复触摸层、再 `hide()`。
+  ② **暂停期间不再跑采样与自适应降档**（`if (!paused)`）：暂停页是一层全屏面板，帧时间
+  不代表游戏内表现；拿它去降档 → `setViewDistance` 整圈重铺区块、`applyResolutionScale`
+  重建画布，玩家"回来第一次滑动"正好撞在补区块上 = 真·卡一下。
+  ③ **删掉"连续坐标异常 → 开关一次背包"整套**（`handlePointerAnomaly` /
+  `runInventoryRecovery` / `InventoryScreen#setGhost` / `.inv-ghost`）：那条兜底自己就会
+  让触摸层收起来 0.4~0.6 秒，手感上就是一次"卡一下"。留着 `TouchControls#nudgeLayout`
+  （隐藏两帧 + 失焦 + HUD 让位，不弹面板）。顺带删掉 `closeSettings` 里触摸端多余的
+  `requestPointerLock`（桌面端 `handleInventoryOpen(false)` 已经锁过，手机上只会得到一个
+  被拒绝的 Promise）。
+  ④ **暂停页收窄**：`--pause-w: min(90vw, 460px)` + `.settings-panel[data-page='menu']`
+  （`data-page` 早就写在面板上了，一直没被 CSS 用过）；高度仍与设置页一致，切页不上下跳。
+  门禁：`test:ui` 665 → **668**（ghost 那 5 条改成"层不拆 / 淡出后隐藏 / 暂停不降档"），
+  `sh tools/feedback181-check.sh` 里 ghost 三连改成"不再开背包 + 触摸层仍可用"。
 - 批次 230（用户："当前创造模式也有生命值和饥饿值。这个合理吗？"）：不合理——原版创造模式
   **整条生存状态栏都不显示**。① `VitalsHud` / `XpHud` 增加 `creative` 参数，并把它放进
   缓存 key（切模式时数值不变，漏了就不会重算显隐）；`#vitals.creative-mode { display:none }`

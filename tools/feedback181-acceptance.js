@@ -85,14 +85,16 @@
   fireLook('pointerup', 901, [0, 0], [470, 200]);
   check('client 坐标全 0 时用 screen 兜底仍能转视角', turned, `${(mc.lookAngles.yaw - yawBefore).toFixed(1)}°`);
 
-  // 三组坐标全 0：这次手势必须作废，并自动重排触摸层（不要求玩家去开关背包）
+  // 三组坐标全 0：这次手势必须作废，并静默重排两帧（批次 231：不再开面板）
   fireLook('pointerdown', 902, [0, 0], [0, 0]);
   await sleep(80);
   const rejected = mc.touch.lookPointer === null;
   await sleep(120);
-  const restored = getComputedStyle(document.getElementById('touch-ui')).display !== 'none';
+  const touchUi = document.getElementById('touch-ui');
+  const restored = getComputedStyle(touchUi).display !== 'none' && !touchUi.classList.contains('ui-off');
   check('三组坐标全 0 时不接管手势', rejected);
-  check('坐标异常后触摸层自动恢复显示', restored);
+  check('坐标异常后触摸层仍可用（只重排、不弹面板）', restored);
+  check('坐标异常的兜底不会再打开背包', getComputedStyle(document.getElementById('inventory-screen')).display === 'none');
 
   // 按下时正常、拖动过程中变成 0,0：必须中途换到 screen 继续转，而不是停住
   const yawRebase = mc.lookAngles.yaw;
@@ -104,20 +106,16 @@
   fireLook('pointerup', 903, [0, 0], [530, 200]);
   check('拖动中途 client 变 0 时切到 screen 继续转视角', rebased, `${(mc.lookAngles.yaw - yawRebase).toFixed(1)}°`);
 
-  // 连续两次坐标异常：走"开关一次背包"，但面板挂 ghost（批次 214）
+  // 连续两次坐标异常（批次 231）：**不再"开关一次背包"**——那条路自己会让触摸层
+  // 停摆 0.4~0.6 秒，玩家感觉到的"卡一下"就是它。现在只记日志 + 静默重排。
   fireLook('pointerdown', 904, [0, 0], [0, 0]);
   await sleep(250);
   fireLook('pointerdown', 905, [0, 0], [0, 0]);
-  await sleep(120);
+  await sleep(200);
   const invRoot = document.getElementById('inventory-screen');
   const diagText = window.__diag?.exportJson?.() ?? '';
-  check('连续坐标异常走"隐身开关背包"', diagText.includes('autoRecover.ghost'));
-  check(
-    '恢复时背包面板确实打开了、但挂着 ghost（看不见）',
-    getComputedStyle(invRoot).display !== 'none' && invRoot.classList.contains('inv-ghost'),
-  );
-  await sleep(1000);
-  check('恢复结束后背包关掉、ghost 摘掉', getComputedStyle(invRoot).display === 'none' && !invRoot.classList.contains('inv-ghost'));
+  check('连续坐标异常不再走"开关背包"', !diagText.includes('autoRecover.') && !diagText.includes('recovery'));
+  check('连续坐标异常期间背包一直关着', getComputedStyle(invRoot).display === 'none');
   check('恢复结束后 uiOpen 归位（否则摇杆与视角都被停用）', mc.uiOpen === false);
 
   // 批次 214 的真机复现路径：进设置 → 切游戏模式 → 返回 → 视角必须还能转
@@ -126,7 +124,12 @@
   mc.setGameMode(mc.gameMode === 'creative' ? 'survival' : 'creative');
   await sleep(100);
   mc.closeSettings();
-  await sleep(700);
+  await sleep(20);
+  const settingsRoot = document.getElementById('settings-screen');
+  check('关面板时触摸层先回来（不再同帧拆层）', !document.getElementById('touch-ui').classList.contains('ui-off'));
+  check('暂停面板是"淡出后才 display:none"', getComputedStyle(settingsRoot).display !== 'none');
+  await sleep(680);
+  check('淡出结束后面板确实收起', getComputedStyle(settingsRoot).display === 'none');
   check('切模式并关掉设置后 uiOpen 归位', mc.uiOpen === false);
   const yawAfterMode = mc.lookAngles.yaw;
   fireLook('pointerdown', 906, [500, 200], [500, 200]);

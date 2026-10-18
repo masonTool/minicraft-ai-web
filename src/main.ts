@@ -1083,14 +1083,6 @@ class App {
   /** 目标信息的刷新节拍（5Hz，别每帧写 DOM） */
   private targetInfoTimer = 0;
   private targetInfoText = '';
-  /** 触摸坐标异常的时刻（批次 201）：4 秒内连续两次才升级成自动恢复 */
-  private anomalyTimes: number[] = [];
-  private lastAutoRecovery = 0;
-  /**
-   * 连续自动恢复的"档位"（批次 214）：1 = 隐身开关背包，2 = 可见开关背包。
-   * 安静 10 秒（见 `handlePointerAnomaly`）说明上一次已经救回来了，回到第 0 档。
-   */
-  private recoveryAttempts = 0;
   /**
    * 进度系统"上岗"了没有（世界与存档都读完）。
    *
@@ -1813,8 +1805,6 @@ class App {
       onCycleCamera: () => {
         this.cycleCameraMode();
       },
-      // 触摸坐标异常（批次 201）：记录频率，必要时自动走一次"开关背包"
-      onPointerAnomaly: (phase) => this.handlePointerAnomaly(phase),
       // 飞行仍然可以被"双击跳跃"触发；"视角"与"创造飞行"的显式开关都搬进了
       // 设置面板（批次 107：右下那一簇只留跳/潜，见 ui/TouchControls.ts）
       onToggleFly: () => this.setFlying(!this.flying),
@@ -1984,22 +1974,26 @@ class App {
         ? `存档：${save.hasSave ? '已保存' : '新世界'} · 改动 ${save.edits} 格 / ${save.editedChunks} 区块 · 自动保存每 ${this.autoSaveInterval} 秒`
         : '存档：不可用（浏览器未提供 IndexedDB）',
     );
-    this.settingsScreen.show();
+    // 与 `closeSettings` 同样的顺序讲究（批次 231）：**先收触摸层的壳，再让面板出现**，
+    // 两个方向的"层交换"都别挤在同一帧里。
     this.handleInventoryOpen(true);
-    // 打开界面时释放指针锁，否则鼠标被锁住点不到按钮
+    // 打开界面时释放指针锁，否则鼠标被锁住点不到按钮（`handleInventoryOpen` 里也做了一次，
+    // 那一次是给别的面板用的；这里显式留着是因为全屏退出等路径可能已经把锁丢了）
     if (document.pointerLockElement) document.exitPointerLock();
+    this.settingsScreen.show();
   }
 
   /** 关闭暂停菜单 */
   closeSettings(): void {
-    this.settingsScreen.hide();
+    // 顺序有讲究（批次 231）：**先让触摸层回来，再摘面板**。
+    // 面板自己是"淡出 130ms 后才 display:none"（见 `SettingsScreen.hide`），
+    // 于是这两件事不再挤在同一帧里——同帧"拆一层 + 建一层"会让浏览器
+    // 重算触摸坐标映射，下一次 `pointerdown` 的 clientX/Y 就成了 0,0。
     this.handleInventoryOpen(false);
-    // 指针锁必须由用户手势触发，非手势下调用会被拒绝——吞掉异常，别让它打断关闭流程
-    try {
-      void this.renderer.domElement.requestPointerLock?.();
-    } catch {
-      // 忽略：玩家点一下画面就会重新锁定
-    }
+    this.settingsScreen.hide();
+    // ⚠️ 这里**不要**再 `requestPointerLock()`：桌面端 `handleInventoryOpen(false)`
+    // 已经锁过了；触摸端本来就不需要指针锁（见 `bindEvents` 里那条 `if (!this.touch)`），
+    // 手机上这行只会得到一个被拒绝的 Promise。
     syncRotateHint();
   }
 
@@ -2100,71 +2094,13 @@ class App {
     }
   }
 
-  /**
-   * 触摸坐标异常（批次 201 / 211）。
-   *
-   * **症状与触发**（真机日志 2026-10-18，8/8 组）：**关掉任何一个全屏面板之后**
-   * （`ui.close` 起 0.8~3 秒内的第一次触摸），`clientX/Y`、`screenX/Y`、`pageX/Y`
-   * 三个来源**同时**变成 0；摇杆与视角都拿不到位置，表现就是"卡住"。
-   * 切游戏模式只是让人频繁进出设置，所以看起来像"切模式必现"。
-   *
-   * **唯一被真机证明有效的恢复是"真的开关一次背包"**：同一份日志里自动开关之后，
-   * 下一次触摸（t+0.85s）就是 684,180，视角立刻能转。
-   * 批次 208 换成"透明全屏层"失败了——那块 div 没有子节点、背景透明，
-   * 压根没被绘制，浏览器的触摸坐标映射也就不会重算。**"层存在"≠"层被画出来"**。
-   *
-   * 所以现在按**档位**升级（安静 10 秒 = 上一次救回来了，回到第 0 档）：
-   *  - 第 1 档：同一条背包路径，但面板挂 `ghost`（0.4% 透明，肉眼看不见）；
-   *  - 第 2 档：去掉 ghost 真画一遍（兜底，玩家看得见，配一张提示卡）。
-   */
-  private handlePointerAnomaly(phase: string): void {
-    const now = performance.now();
-    this.anomalyTimes = this.anomalyTimes.filter((time) => now - time < 4000);
-    this.anomalyTimes.push(now);
-    if (this.anomalyTimes.length < 2) return;
-    if (now - this.lastAutoRecovery < 5000) return;
-    if (this.disposed || this.uiOpen || this.inventoryScreen.isOpen) return;
-
-    if (now - this.lastAutoRecovery > 10_000) this.recoveryAttempts = 0;
-    this.lastAutoRecovery = now;
-    this.recoveryAttempts++;
-
-    if (this.recoveryAttempts === 1) {
-      diag.event('input', 'autoRecover.ghost', { phase, count: this.anomalyTimes.length });
-      console.info('[touch] 连续坐标异常：隐身开关一次背包');
-      this.runInventoryRecovery(true);
-      return;
-    }
-
-    this.recoveryAttempts = 0;
-    diag.event('input', 'autoRecover.uiCycle', { phase, count: this.anomalyTimes.length });
-    console.info('[touch] 隐身恢复没压住：真开关一次背包');
-    this.runInventoryRecovery(false);
-    this.hudToast.show('触摸坐标异常，已自动重置视角');
-  }
-
-  /**
-   * 真的开关一次背包（批次 201 的老办法，批次 214 起可以"隐身"）。
-   *
-   * 为什么不换成更轻的路径：真机只认它的副作用——`body.inv-pocket-open`（藏 HUD）、
-   * 一块**真正被绘制**的全屏面板（含子节点与滑入滑出动画）、以及触摸层收起约 520ms。
-   * 这三样少一样，Android 就会继续把坐标报成 0。
-   *
-   * @param ghost true = 面板压到 0.4%（看不见），副作用与可见时完全一致
-   */
-  private runInventoryRecovery(ghost: boolean): void {
-    if (this.disposed || this.uiOpen || this.inventoryScreen.isOpen) return;
-    // 软键盘 / 全屏按钮的焦点残留会拖住 visual viewport（与手动开关背包同一套）
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    this.inventoryScreen.setGhost(ghost);
-    this.inventoryScreen.openWith('inventory');
-    window.setTimeout(() => {
-      if (this.disposed) return;
-      // ghost 类由 `finishClose()` 摘掉，这里只负责关
-      this.inventoryScreen.close();
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    }, 120);
-  }
+  // 批次 231：**"连续坐标异常 → 自动开关一次背包"那套已整块删除**。
+  //
+  // 那段恢复本身才是玩家感觉到的"卡一下"：它收起触摸层、藏 HUD、再开一块全屏面板，
+  // 前后 0.4~0.6 秒里手指怎么滑都不动。根因（关面板时同帧拆掉/重建触摸层 +
+  // 暂停期间还在跑降档策略）改在 `TouchControls#visible` / `index.html` 的
+  // `#touch-ui.ui-off` / 主循环的 `if (!paused)` 里；万一还剩零星 0,0，
+  // `TouchControls#nudgeLayout` 会静默重排两帧，不弹任何面板。
 
   // ---------------------------------------------------------------- 联机（K2）
 
@@ -10283,8 +10219,8 @@ class App {
       { signal: this.listeners.signal },
     );
     // 退出/重进全屏之后同样可能坐标异常（真机日志里正是这一段之后开始拖不动）。
-    // 批次 214：全屏切换常常紧跟着"打开暂停菜单"，所以这里只做轻量重排；
-    // 真的丢了坐标，会由 `handlePointerAnomaly` 走隐身背包恢复。
+    // 这里只做轻量重排（`recover` = 清零手势 + 隐藏两帧再显示）；
+    // 批次 231 起不再升级成"开关一次背包"——那套恢复自己就会卡半秒。
     document.addEventListener(
       'fullscreenchange',
       () => {
@@ -10522,11 +10458,17 @@ class App {
 
       this.updateGamepad(dt);
       this.tickAutoSave(dt);
+      // 采样与自适应降档**暂停期间一律不跑**（批次 231）。
+      // 暂停页是一层全屏面板，帧时间不代表游戏内表现：拿它去降档 → `setViewDistance`
+      // 会整圈重铺区块、`applyResolutionScale` 会重建画布，玩家"回来第一次滑动"
+      // 正好撞在补区块/重建上，感觉就是"卡一下"。顺带也避免暂停帧污染 5 秒采样窗口。
       // 采样用的真实帧间距：`perf.frameTimeAvg` 是给策略用的指数平滑值，
       // 在 9fps 这种长帧下会滞后好几秒，诊断要看的是"这个窗口里平均多少毫秒"
-      this.sampleFrames++;
-      this.sampleMs += frameSeconds * 1000;
-      this.updatePerfPolicy(frameSeconds);
+      if (!paused) {
+        this.sampleFrames++;
+        this.sampleMs += frameSeconds * 1000;
+        this.updatePerfPolicy(frameSeconds);
+      }
       this.updateAudio(dt);
       this.net.tick(
         this.physics.x,

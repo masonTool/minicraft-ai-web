@@ -724,3 +724,32 @@
 
 > **批次 230 已完成。** 判据：HUD 显隐也要看**模式**，不能只看数值——
 > 创造模式把数值固定在满格，"满格"本身就是在说谎。
+
+---
+
+## 批次 231：从暂停回来第一次滑动卡一下 + 暂停页收窄（2026-10-19）
+
+> 用户："只要进入暂停页面，再回来滑动切换视角就会卡一下……如果这个问题改了，我们之前
+> 用背包打开关闭以及类似的方案就可以不需要了。游戏暂停页面也太宽了。"
+
+- [x] B231-1 定位：`closeSettings()` 在**同一个 tick** 里 `hide()`（面板 `display:none`）
+  又把 `#touch-ui` 从 `display:none` 变回来 → 浏览器重算触摸坐标映射，下一次
+  `pointerdown` 的 clientX/Y 报成 0,0。背包没事是因为它"滑出动画结束（250~400ms）才 hidden"
+- [x] B231-2 `TouchControls#visible` 改挂 `ui-off`：只把摇杆/按钮/暂停条/提示
+  `visibility:hidden`、`#touch-look` 改 `pointer-events:none`，**不拆这一层**
+- [x] B231-3 `SettingsScreen#hide()` 改"淡出 130ms 后再 `.hidden`"（`SETTINGS_FADE_MS`），
+  `closeSettings()` 顺序改成先恢复触摸层、再 `hide()`；淡出期间 `pointer-events:none`
+- [x] B231-4 主循环 `if (!paused)` 跳过采样与 `updatePerfPolicy`：暂停页的帧时间不代表
+  游戏内表现，拿它降档会让回来那几帧在补一圈区块 / 重建画布
+- [x] B231-5 删掉 `handlePointerAnomaly` / `runInventoryRecovery` / `InventoryScreen#setGhost`
+  / `.inv-ghost`；兜底只留 `nudgeLayout`（隐藏两帧 + 失焦，不弹面板）
+- [x] B231-6 删掉 `closeSettings` 里触摸端多余的 `requestPointerLock`（会得到一个被拒绝的 Promise）
+- [x] B231-7 暂停页宽度：`--pause-w: min(90vw, 460px)` + `.settings-panel[data-page='menu']`
+  （高度仍与设置页一致）；按钮列在窄面板里放宽到 340px
+- [x] B231-8 门禁：`test:ui` 665 → **668**；`tools/feedback181-acceptance.js` 的 ghost 三连
+  改成"不再开背包 + 触摸层仍可用 + 关面板时先回来"
+
+> **批次 231 已完成。** 一条经验：**"同一帧拆一层、建一层"本身就是 bug 的载体**——
+> 触摸坐标这类"浏览器自己算的映射"只在图层被重建时重算，而重建恰好发生在
+> 玩家抬起手指、下一次按下之前的空档里。修法不是"出问题再开关一次背包"，
+> 而是**让层的交换跨帧**（或者干脆别拆）。顺带：暂停期间别拿暂停页的帧时间去调画质。

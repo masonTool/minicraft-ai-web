@@ -1528,8 +1528,13 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
     '两页共用这对尺寸，且高度是固定值（不再是 auto）',
     compact.includes('.settings-panel { width: var(--panel-w); max-width: var(--panel-w); height: var(--panel-h); max-height: var(--panel-h);'),
   );
-  // 反向断言：不许再出现"按页/按方向另写一套尺寸"
-  check('没有按页另写宽高', !/settings-panel\[data-page='menu'\] \{ width/.test(compact));
+  // 批次 231：菜单页允许**只收窄宽度**（用户："游戏暂停页面也太宽了"），
+  // 但不许改高度——两页高度一致，切页才不会上下跳；也不许按方向另写尺寸。
+  check(
+    '菜单页只收窄宽度、不改高度',
+    /\.settings-panel\[data-page='menu'\] \{[^}]*width: var\(--pause-w\);[^}]*\}/.test(compact) &&
+      !/\.settings-panel\[data-page='menu'\] \{[^}]*height:/.test(compact),
+  );
   check('没有按方向另写宽高（横屏不再覆盖设置面板）', !landscape.includes('.settings-panel'));
   check('面板不铺满（四周留出游戏区域）', !compact.includes('.settings-panel { width: 100%'));
 
@@ -1980,7 +1985,7 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
       touchSrc.includes('pointFromEventWithSource(event, this.lookPointSource)'),
   );
   check(
-    'clientX/Y 全为 0 时记现场并强制重排（等价于开关一次背包）',
+    'clientX/Y 全为 0 时记现场并静默重排两帧',
     touchSrc.includes("reportPointerAnomaly('look.down'") &&
       touchSrc.includes("this.nudgeLayout('look.down')"),
   );
@@ -1994,35 +1999,56 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
     '拖动中途 client 变 0 会切到 screen/page 继续（不是丢弃）',
     touchSrc.includes("'pointer.rebase'") && touchSrc.includes('this.lookPointSource = alt.source'),
   );
-  // 批次 214：真机日志证明"透明 div"救不回坐标全 0（它没被绘制），
-  // 唯一有效的是**真的开关一次背包**。所以恢复回到背包路径，只是可以隐身。
-  const recoverCss = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  // 批次 231：真机"从暂停回来第一次滑动卡住"的根因是**同一帧拆层/建层**。
+  const pageCss = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
   check(
-    '自动恢复走"开关背包"，且支持隐身（ghost 类）',
-    appSrc.includes('private runInventoryRecovery(') &&
-      appSrc.includes("this.inventoryScreen.setGhost(ghost)") &&
-      appSrc.includes("this.inventoryScreen.openWith('inventory')"),
+    '界面打开时只收"壳"，不再把触摸层 display:none（层拆建会让坐标映射重算）',
+    touchSrc.includes("classList.toggle('ui-off', !value)") &&
+      !touchSrc.includes("this.object.classList.toggle('hidden', !value)"),
   );
   check(
-    'ghost 只是压到极低不透明度（0 会被跳过绘制），并且不吃事件',
-    /#inventory-screen\.inv-ghost \{[\s\S]{0,200}opacity: \.004;/.test(recoverCss) &&
-      /#inventory-screen\.inv-ghost \{[\s\S]{0,200}pointer-events: none;/.test(recoverCss),
+    'ui-off 只藏摇杆/按钮/暂停条/提示，视角面改成不吃事件（不改布局）',
+    /#touch-ui\.ui-off > :is\(#touch-stick, #touch-buttons, #touch-pause, #touch-hint\) \{[\s\S]{0,80}visibility: hidden;/.test(
+      pageCss,
+    ) && /#touch-ui\.ui-off #touch-look \{ pointer-events: none; \}/.test(pageCss),
   );
   check(
-    'ghost 在关面板/拆局时被强制摘掉（下次主动打开必须正常可见）',
-    invSrc.includes('this.setGhost(false);'),
+    '关暂停面板要错开 130ms 再 display:none（触摸层先回来并被画出来）',
+    settingsSrc.includes('export const SETTINGS_FADE_MS = 130;') &&
+      settingsSrc.includes('this.root.classList.add(\'closing\');') &&
+      settingsSrc.includes('this.root.classList.add(\'hidden\');') &&
+      /#settings-screen\.closing \{[\s\S]{0,120}opacity: 0; pointer-events: none;/.test(pageCss),
   );
   check(
-    '透明 div 那套已经删干净（别再有人以为它有用）',
-    !touchSrc.includes('recoverDeep') && !recoverCss.includes('#touch-recover'),
+    '先恢复触摸层、再摘面板（顺序反了又会挤回同一帧）',
+    /handleInventoryOpen\(false\);[\s\S]{0,120}this\.settingsScreen\.hide\(\);/.test(appSrc),
   );
   check(
-    '连续坐标异常先走隐身背包，压不住才可见兜底',
-    appSrc.includes('private handlePointerAnomaly(') &&
-      appSrc.includes('this.recoveryAttempts') &&
-      appSrc.includes("'autoRecover.ghost'") &&
-      appSrc.includes("'autoRecover.uiCycle'"),
+    '触摸端不再请求指针锁（桌面端由 handleInventoryOpen 负责）',
+    !appSrc.includes('this.renderer.domElement.requestPointerLock?.()'),
+  );
+  check(
+    '暂停期间不做帧采样与自适应降档（否则回来要补一圈区块）',
+    /if \(!paused\) \{[\s\S]{0,160}this\.updatePerfPolicy\(frameSeconds\);/.test(appSrc),
+  );
+  // 批次 231："连续异常 → 开关一次背包"整套删除（它自己就是那 0.5 秒卡顿）
+  check(
+    '自动开关背包的恢复路径已整块删除',
+    !appSrc.includes('runInventoryRecovery') &&
+      !appSrc.includes('handlePointerAnomaly') &&
+      !appSrc.includes('autoRecover.') &&
+      !invSrc.includes('setGhost') &&
+      !pageCss.includes('inv-ghost') &&
+      !touchSrc.includes('recoverDeep') &&
+      !pageCss.includes('#touch-recover'),
+  );
+  check(
+    '兜底只剩"静默重排"：不打开任何面板、不弹提示卡',
+    /private nudgeLayout\(reason: string\): void \{[\s\S]{0,1400}pointer\.recover/.test(touchSrc) &&
+      !touchSrc.includes('openWith') &&
+      !touchSrc.includes('hudToast'),
   );
 }
 

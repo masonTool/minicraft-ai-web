@@ -452,9 +452,21 @@ export interface SettingsActions {
 export const PAUSE_PAGES = ['menu', 'settings'] as const;
 export type PausePage = (typeof PAUSE_PAGES)[number];
 
+/**
+ * 关面板的淡出时长（毫秒，批次 231）。
+ *
+ * 它的**主要作用不是好看**，而是把"摘面板"与"叫回触摸操作层"错开：
+ * 只要面板在触摸层恢复之后还画了几帧，浏览器就不必在同一帧里拆/建两层，
+ * 那一次会重算触摸坐标映射（下一次 `pointerdown` 的 clientX/Y 变成 0,0）。
+ * 取 130ms：约 8 帧@60Hz，肉眼是"淡出"，不至于让玩家觉得慢。
+ */
+export const SETTINGS_FADE_MS = 130;
+
 export class SettingsScreen {
   readonly root: HTMLDivElement;
   private open = false;
+  /** `hide()` 排下的"淡出结束后隐藏"计时器 */
+  private hideTimer: number | null = null;
   private readonly sliders = new Map<keyof GameSettings, HTMLInputElement>();
   private readonly metaEl: HTMLDivElement;
   /** 设置页的标题（`setTitle` 改的是它：主菜单里打开时是"设置"） */
@@ -1293,6 +1305,13 @@ export class SettingsScreen {
    */
   show(page?: PausePage): void {
     this.open = true;
+    // 上一次关面板的"淡出后隐藏"可能还在等（130ms 内又打开了）：取消掉，
+    // 否则它会把刚打开的面板重新 `.hidden` 掉。
+    if (this.hideTimer !== null) {
+      window.clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+    }
+    this.root.classList.remove('closing');
     this.renderSubtitle();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
@@ -1306,15 +1325,39 @@ export class SettingsScreen {
     this.refreshGameModeRows();
   }
 
+  /**
+   * 关面板（批次 231：**淡出 130ms 后才 `display:none`**）。
+   *
+   * 为什么不能同步隐藏：`closeSettings()` 会在同一个 tick 里把触摸操作层叫回来。
+   * "同一帧拆掉一整层 + 建回一整层"会让浏览器重算触摸坐标映射，于是下一次
+   * `pointerdown` 的 `clientX/Y` 被报成 0,0——玩家看到的就是"从暂停回来第一次
+   * 滑动卡住"。背包一直是"滑出动画结束才 hidden"，所以开关背包反而没事。
+   *
+   * 时序对齐背包：面板先继续画几帧，触摸层先回来并被画出来，再摘面板。
+   */
   hide(): void {
     this.open = false;
-    this.root.classList.add('hidden');
     document.body.classList.remove('pause-open');
+    // 已经在等 / 没显示：不重复排计时器
+    if (this.hideTimer !== null) return;
+    if (!this.root.isConnected || this.root.classList.contains('hidden')) return;
+    this.root.classList.add('closing');
+    this.hideTimer = window.setTimeout(() => {
+      this.hideTimer = null;
+      // 这 130ms 里又打开了 → 不能再藏起来
+      if (this.open) return;
+      this.root.classList.add('hidden');
+      this.root.classList.remove('closing');
+    }, SETTINGS_FADE_MS);
   }
 
   /** 主菜单设置是懒建的临时实例；进世界前销毁，避免与局内面板重复 `#settings-screen`。 */
   destroy(): void {
     this.open = false;
+    if (this.hideTimer !== null) {
+      window.clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+    }
     this.root.remove();
     document.body.classList.remove('pause-open');
   }

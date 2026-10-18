@@ -102,6 +102,13 @@
               用户："首页两个按钮点下去应该是弹出一个固定大小的框，不是一大一小。" */
         --panel-w: min(94vw, 760px);
         --panel-h: min(88dvh, 620px);
+        /* 暂停菜单页的宽度（批次 231，用户："游戏暂停页面也太宽了"）。
+           菜单页只有**一列按钮**（`.pause-actions` 本身收到 300px），用设置页那
+           760px 等于左右各留 200px 空地；横屏手机上 760 更是几乎铺满整屏
+           （844 宽只剩 42px 游戏画面）。
+           设置页仍吃 `--panel-w`：它要"左选项卡 + 右两列内容"，收窄会挤成一条。
+           两页只差宽度、高度一致，切页时不会上下跳。 */
+        --pause-w: min(90vw, 460px);
         /* 携带版背包自己的固定基准：所有单窗共用；双窗只横向再加一块同高区域。
            视口放不下时只做同倍率约束，不再按页签分别改宽高。 */
         --inv-pocket-w: min(calc(100vw - 88px), 568px);
@@ -1231,6 +1238,15 @@
         background: rgba(0, 0, 0, .55);
       }
       #settings-screen.hidden { display: none; }
+      /* 关闭时的淡出（批次 231）：`SettingsScreen.hide()` 先挂这个类，
+         130ms 后才加 `.hidden`。**时序是功能的一部分**——面板必须比
+         "触摸操作层恢复"晚几帧消失，否则同一帧拆/建两层会让浏览器重算
+         触摸坐标映射（下一次 pointerdown 的 clientX/Y 变成 0,0）。
+         这一层同时 `pointer-events: none`：淡出期间那一下点击直接落到游戏里。 */
+      #settings-screen.closing {
+        opacity: 0; pointer-events: none;
+        transition: opacity .12s linear;
+      }
       /* ================================================================
          暂停 / 设置面板：**固定尺寸 + 统一标题栏**（批次 110）
          ================================================================
@@ -1263,6 +1279,18 @@
         box-shadow: var(--panel-shadow);
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
         display: flex; flex-direction: column; overflow: hidden;
+        /* 切页时宽度会变（菜单页窄 / 设置页宽）：补一条过渡，别让面板"啪"地跳一下 */
+        transition: width .16s var(--ease);
+      }
+      /* 暂停菜单页：收到 `--pause-w`（批次 231）。`SettingsScreen#setPage` 一直
+         会写面板的 `data-page`，这里才第一次真正用它。 */
+      .settings-panel[data-page='menu'] {
+        width: var(--pause-w); max-width: var(--pause-w);
+      }
+      /* 面板窄到 460 之后，300px 的按钮列会在里面留出两条 66px 的空边：
+         放到 340（左右各 46px），一列按钮仍然"不顶满面板"，与原版同一种观感 */
+      .settings-panel[data-page='menu'] .pause-actions {
+        max-width: min(100%, 340px);
       }
       /* 标题栏：**三列栅格**（左槽 | 标题 | 右槽），标题永远在正中间。
          两页共用同一个骨架：暂停菜单页左槽是空的，设置页左槽是"‹ 返回"。
@@ -1727,15 +1755,6 @@
         box-sizing: border-box;
       }
       #inventory-screen.hidden { display: none; }
-      /* 自动恢复专用（批次 214）：整块面板压到 0.4% —— 肉眼看不出来，
-         但**不是 0**：opacity≠1 会让它单独成为合成层、背景与子节点照样被绘制。
-         这正是"真的开关一次背包"能修好 Android 触摸坐标全 0 的原因，
-         而批次 208 那块透明 div（无子节点、透明背景）根本没被画，所以无效。
-         ⚠️ 类由 `InventoryScreen#setGhost` 控制，`finishClose` / `dispose` 会强制摘掉。 */
-      #inventory-screen.inv-ghost {
-        opacity: .004;
-        pointer-events: none;
-      }
       /* 携带版外壳：左轨 | 灰框 | 右轨（页签在 border 外，对齐 Wiki） */
       .inv-shell {
         grid-row: 1;
@@ -2952,6 +2971,23 @@
                  env(safe-area-inset-bottom) env(safe-area-inset-left);
       }
       #touch-ui.hidden { display: none; }
+      /* ================================================================
+         界面打开时"收起"操作层（批次 231）——**不拆这一层**。
+         ================================================================
+         以前是给 `#touch-ui` 加 `.hidden`（display:none），关面板时再变回来。
+         真机表现：从暂停页回来后的**第一次滑动**转不动，导出的日志里
+         `look.down` 的 clientX/Y 全是 0。原因不在 JS，而在"同一帧把一层拆掉、
+         又把另一层建回来"——浏览器要重算触摸坐标映射，第一下正好落在重算之前。
+         （背包一直没事，因为它是"滑出动画结束才 hidden"，摘面板要 250~400ms。）
+
+         现在只收**看得见的那层壳**：摇杆 / 按钮 / 顶部暂停条 / 提示改
+         `visibility: hidden`（保留布局，不重排、也不拆层）；视角面本身留着，
+         但 `pointer-events: none`，免得面板外的点击漏到游戏里。
+         转视角另有 `TouchControls#setEnabled(!uiOpen)` 挡着，双保险。 */
+      #touch-ui.ui-off > :is(#touch-stick, #touch-buttons, #touch-pause, #touch-hint) {
+        visibility: hidden;
+      }
+      #touch-ui.ui-off #touch-look { pointer-events: none; }
 
       /* 视角面铺满全屏：承接拖动转视角，以及轻点/长按 */
       #touch-look {
@@ -3077,6 +3113,9 @@
         background: rgba(0, 0, 0, .34);
         border-color: rgba(255, 255, 255, .42);
       }
+      /* 界面打开时一起收起（批次 231）：`visibility` 不改布局，
+         不要写成 `display:none`——那会让整条快捷栏重排一次 */
+      #hotbar .touch-side-btn.ui-off { visibility: hidden; }
       /* 批次 181：聊天已搬到顶部，快捷栏右侧只留背包 */
       #touch-hotbar-inventory { right: 0; }
       @media (min-width: 760px) {
