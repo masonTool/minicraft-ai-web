@@ -93,6 +93,7 @@ import { Minecart } from './core/entity/Minecart.ts';
 import { HopperMinecart } from './core/entity/HopperMinecart.ts';
 import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from './core/entity/FurnaceMinecart.ts';
 import { Horse } from './core/entity/Horse.ts';
+import { VehicleParking, type VehicleKind } from './core/entity/VehicleParking.ts';
 /**
  * 可骑乘的载具（批次 245）：船与矿车共用"上下车 + 每帧贴位置 + `vehicleInput`"那一套，
  * 所以主程序里所有骑乘状态都按这个联合类型存。
@@ -1035,6 +1036,8 @@ class App {
   private tapVehicle: Rideable | null = null;
   /** 正被牵着的那一只（批次 256）：一次只牵一只，简化原版的"多根绳子" */
   private leashedMob: Mob | null = null;
+  /** 区块卸载时寄存的载具（批次 257，J2 第一刀）：区块重新加载时原样造回来 */
+  private readonly parkedVehicles = new VehicleParking();
   /** 绳子（一条两点的线段）：懒创建，没牵东西时隐藏 */
   private leashLine: THREE.Line | null = null;
   /** `#target-info` 是否挂在手指上方（true = 已加 `.pinned`） */
@@ -1631,6 +1634,8 @@ class App {
         // 与上面两件事同一个位置、同一条理由：**方块已经在了，但还需要有人管一下**
         // （结构生成在 Worker 里，而 Worker 造不了实体）
         this.populateVillage(chunk.cx, chunk.cz);
+        // 载具（批次 257）：这一列上次卸载时停着的船/矿车，现在原样造回来
+        this.restoreVehicles(chunk.cx, chunk.cz);
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
         this.refreshLoadingState();
       },
@@ -1642,6 +1647,9 @@ class App {
         // 信标（K5，批次 117）：区块走了就别再画它的光柱（下次加载会重新扫出来）
         this.forgetBeaconsInChunk(cx, cz);
         this.chunkRenderer.onChunkUnloaded(cx, cz);
+        // 载具（批次 257）：先把它记进"停车登记表"（removeInChunk 是直接 splice，
+        // 不记就永久丢了）；生物与掉落物照旧清掉
+        this.parkVehicles(cx, cz);
         // 区块卸载时一并清掉落在该区块里的掉落物，避免未加载区域实体无限堆积
         this.entities.removeInChunk(cx, cz);
         this.refreshLoadingState();
@@ -4561,6 +4569,51 @@ class App {
    * 用 `this.hit`（触摸端已经是按手指落点算出来的方块目标），
    * 所以调用点必须排在 `if (!this.hit) return;` 之后。
    */
+  /**
+   * 区块卸载前把载具登记下来（批次 257，J2 第一刀）。
+   *
+   * 只看**载具**：生物与掉落物不做（那需要连血量/驯服/背包一起序列化）。
+   * 船的三种矿车子类都在 `Minecart` 名下，所以要按具体类判种类。
+   */
+  private parkVehicles(cx: number, cz: number): void {
+    for (const entity of this.entities.all) {
+      if (entity.chunkX !== cx || entity.chunkZ !== cz) continue;
+      // `yaw` 只有载具与生物有，所以先用 `instanceof` 收窄类型再取字段
+      if (!(entity instanceof Boat) && !(entity instanceof Minecart)) continue;
+      const kind: VehicleKind =
+        entity instanceof Boat
+          ? 'boat'
+          : entity instanceof FurnaceMinecart
+            ? 'furnace'
+            : entity instanceof HopperMinecart
+              ? 'hopper'
+              : 'minecart';
+      this.parkedVehicles.park(this.dimension, cx, cz, {
+        kind,
+        x: entity.x,
+        y: entity.y,
+        z: entity.z,
+        yaw: entity.yaw,
+      });
+    }
+  }
+
+  /** 区块重新加载时把停着的载具造回来（批次 257） */
+  private restoreVehicles(cx: number, cz: number): void {
+    for (const parked of this.parkedVehicles.take(this.dimension, cx, cz)) {
+      const vehicle =
+        parked.kind === 'boat'
+          ? new Boat(parked.x, parked.y, parked.z)
+          : parked.kind === 'hopper'
+            ? new HopperMinecart(parked.x, parked.y, parked.z)
+            : parked.kind === 'furnace'
+              ? new FurnaceMinecart(parked.x, parked.y, parked.z)
+              : new Minecart(parked.x, parked.y, parked.z);
+      vehicle.yaw = parked.yaw;
+      this.entities.spawn(vehicle);
+    }
+  }
+
   private placeMinecart(kind: 'normal' | 'hopper' | 'furnace' = 'normal'): boolean {
     const hit = this.hit;
     if (!hit) return false;
