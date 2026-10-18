@@ -165,8 +165,10 @@ export async function applyResourcePack(file: File, atlas: TextureAtlas, packNam
     }
   }
 
-  // 让 three 重新上传纹理：下一帧就是新贴图，不需要重建材质或重载页面
-  if (result.replaced.length > 0) atlas.texture.needsUpdate = true;
+  // 让 three 重新上传纹理：下一帧就是新贴图，不需要重建材质或重载页面。
+  // 走 `markTextureChanged()` 而不是直接写 `texture.needsUpdate`：它同时会把
+  // 平均色缓存与 UI 的等轴方块图标缓存一起作废（否则背包里的图标还是旧材质）。
+  if (result.replaced.length > 0) atlas.markTextureChanged();
 
   console.info(
     `[pack] ${packName}：替换 ${result.replaced.length} 张贴图` +

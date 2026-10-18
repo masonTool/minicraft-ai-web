@@ -5234,6 +5234,10 @@ export class TextureAtlas {
   readonly rows: number;
   /** 贴图平均色缓存（`averageColor` 用，懒算） */
   private readonly averageColors = new Map<string, number>();
+  /** 贴图不透明像素占比缓存（`tileOpacity` 用，懒算） */
+  private readonly opacities = new Map<string, number>();
+  /** 画布像素被**外部**改写（资源包替换）的次数，见 `markTextureChanged` */
+  private revisionValue = 0;
 
   constructor() {
     const columns = ATLAS_COLUMNS;
@@ -5298,6 +5302,30 @@ export class TextureAtlas {
     texture.colorSpace = THREE.NoColorSpace;
     texture.needsUpdate = true;
     this.texture = texture;
+  }
+
+  /**
+   * 画布像素的**版本号**：任何外部改写（资源包替换贴图）都必须 +1。
+   *
+   * UI 侧会按图集像素拼图标（等轴方块图标），拼好的结果要缓存；
+   * 缓存失效的判据只能是这个计数器——`texture.needsUpdate` 是给 three 用的，
+   * UI 读不到它，也不能拿"画布尺寸没变"当没变（资源包换的就是像素）。
+   */
+  get revision(): number {
+    return this.revisionValue;
+  }
+
+  /**
+   * 图集像素被外部改写后调用：让 three 重新上传纹理，并让所有"按像素派生"的缓存失效。
+   *
+   * `averageColors` 也是按像素算的（资源包换完贴图，破坏粒子的颜色必须跟着变），
+   * 两者失效的时机一模一样，所以合并在这一处，避免以后加缓存时漏掉某一份。
+   */
+  markTextureChanged(): void {
+    this.revisionValue++;
+    this.averageColors.clear();
+    this.opacities.clear();
+    this.texture.needsUpdate = true;
   }
 
   /** 贴图在图集中的列号（供 UI 从图集裁切图标） */
@@ -5386,6 +5414,35 @@ export class TextureAtlas {
 
     this.averageColors.set(tile, color);
     return color;
+  }
+
+  /**
+   * 贴图里"不透明像素"的占比（0..1，已缓存）。
+   *
+   * 拼等轴方块图标时用它判断**这一面是不是实心的**：实心面要先垫一层平均色，
+   * 盖住两个面交界处的抗锯齿细缝；而玻璃 / 树叶 / 刷怪笼这种带透明洞的贴图
+   * 一旦垫上平均色就会变成一整块实心方块——那比细缝难看得多。
+   */
+  tileOpacity(tile: string): number {
+    const cached = this.opacities.get(tile);
+    if (cached !== undefined) return cached;
+
+    const index = TILE_INDEX.get(tile) ?? 0;
+    const originX = (index % this.columns) * TILE_SIZE;
+    const originY = Math.floor(index / this.columns) * TILE_SIZE;
+
+    let ratio = 1;
+    const ctx = this.canvas.getContext('2d');
+    if (ctx) {
+      const data = ctx.getImageData(originX, originY, TILE_SIZE, TILE_SIZE).data;
+      let solid = 0;
+      // 判据与 `averageColor` 保持一致（alpha < 8 视为全透明）
+      for (let i = 3; i < data.length; i += 4) if (data[i]! >= 8) solid++;
+      ratio = solid / (TILE_SIZE * TILE_SIZE);
+    }
+
+    this.opacities.set(tile, ratio);
+    return ratio;
   }
 
   /** 贴图在图集画布上的像素左上角（UI 用 drawImage 裁切图标） */

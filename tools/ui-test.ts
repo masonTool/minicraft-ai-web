@@ -30,6 +30,8 @@ import {
 } from '../src/ui/ItemPager.ts';
 import { TOUCH_ICON_LABELS, TOUCH_ICON_NAMES, touchIconSvg } from '../src/ui/TouchIcons.ts';
 import { iconBackingScale, iconDisplaySize } from '../src/ui/ItemIcon.ts';
+import { ISO_ICON_SIZE, isoBounds, isoBoxesForShape, isoProject } from '../src/ui/BlockIcon.ts';
+import { BLOCKS } from '../src/core/registry/blocks.ts';
 import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
 import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
 import { BackButton } from '../src/ui/BackButton.ts';
@@ -317,6 +319,68 @@ console.log('\n[手机端物品显示与提示（批次 95 体检）]');
   const nameRule = /#selected-item-name \{([^}]*)\}/.exec(compact)?.[1] ?? '';
   check('物品名浮标不吃手势（pointer-events: none）', nameRule.includes('pointer-events: none'), nameRule.slice(0, 60));
   check('物品名浮标贴在快捷栏上方（用了底部安全区）', nameRule.includes('safe-area-inset-bottom'));
+}
+
+console.log('\n[方块物品的等轴（iso）图标]');
+{
+  // ① 注册表里每一种形状都必须有明确口径：要么给出盒子，要么明确"走平面图标"。
+  //    漏一个 case 的症状是那个形状的方块在背包里画不出来（而不是报错）。
+  const shapes = [...new Set(BLOCKS.map((def) => def.shape))].sort();
+  const missing = shapes.filter((shape) => isoBoxesForShape(shape) === undefined);
+  equal('每种方块形状都有明确口径（undefined = 漏了一个 case）', missing.join(','), '');
+  check('形状表不是空的（否则上面的断言会空转）', shapes.length >= 20, String(shapes.length));
+
+  // ② 盒子必须落在单位立方体内：越界的那部分会被画布裁掉，
+  //    缩到 32px 之后表现是"图标缺一角"，几乎不可能靠肉眼归因。
+  const outside: string[] = [];
+  for (const shape of shapes) {
+    for (const b of isoBoxesForShape(shape) ?? []) {
+      for (const v of [b.x0, b.x1, b.y0, b.y1, b.z0, b.z1]) {
+        if (!(v >= 0 && v <= 1)) outside.push(`${shape}:${v}`);
+      }
+    }
+  }
+  equal('所有盒子都在单位立方体内', outside.join(','), '');
+
+  // ③ 投影几何：整方块必须投影成 32×32，居中后四周正好留 1px。
+  //    "竖直方向也按 16" 这一条最容易写错（写成 8 会得到扁的图标）。
+  // 顶面四个角在屏幕上的相对位置（这就是"菱形"的全部定义）：
+  // 后角在最上、前角在最下、左右两角各低半格——写反一个就是歪的图标
+  equal(
+    '顶面四角：后/右/前/左',
+    [isoProject(0, 1, 0), isoProject(1, 1, 0), isoProject(1, 1, 1), isoProject(0, 1, 1)]
+      .map((p) => `${p.x},${p.y}`)
+      .join(' | '),
+    '0,-16 | 16,-8 | 0,0 | -16,-8',
+  );
+
+  const cubeBoxes = isoBoxesForShape('cube')!;
+  const bounds = isoBounds(cubeBoxes);
+  equal('整方块投影成 32×32', `${bounds.maxX - bounds.minX}×${bounds.maxY - bounds.minY}`, '32×32');
+  equal('画布 34 = 32 + 两侧各 1px', String(ISO_ICON_SIZE - (bounds.maxX - bounds.minX)), '2');
+  const offset = ISO_ICON_SIZE / 2 - (bounds.minX + bounds.maxX) / 2;
+  check(
+    '居中之后不出画布（含 1px 边距）',
+    bounds.minX + offset >= 1 && bounds.maxX + offset <= ISO_ICON_SIZE - 1,
+    `${bounds.minX + offset} .. ${bounds.maxX + offset}`,
+  );
+
+  // ④ 平面名单：门/火把/植物这些**必须**保持精灵图。
+  //    把它们塞进盒子会得到"实心木箱"和"糊掉的柱子"，比平面图标更糟。
+  for (const shape of ['door', 'trapdoor', 'fence_gate', 'torch', 'ladder', 'pane', 'cross', 'nether_wart'] as const) {
+    equal(`${shape} 保持平面图标`, String(isoBoxesForShape(shape)), 'null');
+  }
+  // 反向：这几个是"看得出来是个块"的，必须走等轴
+  for (const shape of ['cube', 'slab', 'stairs', 'hopper', 'bed'] as const) {
+    check(`${shape} 走等轴图标`, (isoBoxesForShape(shape)?.length ?? 0) > 0);
+  }
+
+  // ⑤ 资源包换贴图之后图标缓存必须失效（否则背包里还是旧材质）
+  const packSrc = readFileSync(new URL('../src/core/resourcepack/ResourcePack.ts', import.meta.url), 'utf8');
+  check('替换贴图走 markTextureChanged（一次性作废所有按像素派生的缓存）', packSrc.includes('atlas.markTextureChanged()'));
+  check('不再直接写 texture.needsUpdate', !packSrc.includes('atlas.texture.needsUpdate = true'));
+  const isoSrc = readFileSync(new URL('../src/ui/BlockIcon.ts', import.meta.url), 'utf8');
+  check('图标缓存以 atlas.revision 为失效判据', isoSrc.includes('atlas.revision'));
 }
 
 console.log('\n[触摸端长按选数量（批次 137，基岩版那个指示条）]');

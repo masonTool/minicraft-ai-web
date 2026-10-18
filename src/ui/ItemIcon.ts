@@ -4,6 +4,10 @@
  * 图标不单独出图，直接从纹理图集里裁一块放大到目标尺寸。
  * 关闭图像平滑，保证放大后仍是清晰的像素风。
  *
+ * **方块物品另走一条路**（`ui/BlockIcon.ts`）：它有 顶/底/侧 三张贴图，
+ * 会被拼成一个等轴立方体再画进来——原版物品栏里的方块就是立体的。
+ * 拿不到（平面形状 / 无 DOM）才回退到下面的单格裁切。
+ *
  * ⚠️ **手机上要按 `devicePixelRatio` 放大背板**（批次 95，见 `iconBackingScale`）：
  * `canvas.width/height` 的单位是**设备像素**，只写 `size` 的话浏览器得把这张位图
  * 再放大 2~3 倍才显示成 `size` CSS px——物品图标在手机上因此发虚。
@@ -12,7 +16,8 @@
  */
 
 import { TILE_SIZE, type TextureAtlas } from '../render/TextureAtlas.ts';
-import { itemIconTile } from '../core/registry/items.ts';
+import { blockForItem, itemIconTile } from '../core/registry/items.ts';
+import { blockIconCanvas } from './BlockIcon.ts';
 import { devicePixelRatioValue } from './Device.ts';
 
 export const DEFAULT_ICON_SIZE = 36;
@@ -60,7 +65,17 @@ export function drawItemIcon(
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, pixels, pixels);
 
-  // 图集是网格排布，裁切起点必须走 tileSource（不能用"列号 × 宽度"直接算）
+  // 方块物品：画等轴立方体（顶面 + 左右两个侧面，逐面明暗）。
+  // 缓存住在 BlockIcon 里，这里只是一次 drawImage，和原来一样便宜。
+  const block = blockForItem(itemId);
+  const iso = block === undefined ? null : blockIconCanvas(atlas, block);
+  if (iso) {
+    ctx.drawImage(iso, 0, 0, iso.width, iso.height, 0, 0, pixels, pixels);
+    return;
+  }
+
+  // 非方块物品 / 平面形状：图集是网格排布，裁切起点必须走 tileSource
+  // （不能用"列号 × 宽度"直接算）
   const source = atlas.tileSource(itemIconTile(itemId));
   ctx.drawImage(atlas.canvas, source.x, source.y, TILE_SIZE, TILE_SIZE, 0, 0, pixels, pixels);
 }
