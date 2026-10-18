@@ -22,6 +22,16 @@ export const FLY_SPRINT_SPEED = 21.8;
 const GRAVITY = 32;
 const JUMP_VELOCITY = 8.95;
 const TERMINAL_VELOCITY = 78;
+/**
+ * 冲刺跳的额外水平初速（格/秒，F3 尾巴）。
+ *
+ * 原版是"在起跳那一 tick 把水平速度顶到 0.2 格/tick 以上"（≈ 4 格/秒），
+ * 这里取 2.2：叠加在疾跑速度（5.6）上会瞬间到 7.8，随后按空气阻力收敛回 5.6——
+ * 观感就是"跳出去那一下明显更远"，但不至于像被弹射。
+ */
+export const SPRINT_JUMP_BOOST = 2.2;
+/** 潜行防掉落的探测深度（格）：比一帧的重力位移小，又能探到半砖 */
+const SNEAK_PROBE = 0.08;
 
 // ---- 攀爬（B11：梯子 / 藤蔓 / 锁链）
 /** 按住跳跃时的上升速度（格/秒，≈ 原版爬梯） */
@@ -174,13 +184,51 @@ export class PlayerPhysics {
     } else {
       if (input.jump && this.onGround) {
         this.vy = JUMP_VELOCITY * jumpMultiplier;
+        // 冲刺跳（F3 尾巴）：起跳那一帧沿**输入方向**再补一点水平速度。
+        // 用输入方向而不是当前速度方向：贴着墙起跳时速度可能已经被撞没了，
+        // 但玩家想要的仍然是"朝我按的方向跳出去"。
+        if (input.sprint && dirLength > 1e-6) {
+          this.vx += dirX * SPRINT_JUMP_BOOST;
+          this.vz += dirZ * SPRINT_JUMP_BOOST;
+        }
         this.onGround = false;
       }
       this.vy -= GRAVITY * dt;
       if (this.vy < -TERMINAL_VELOCITY) this.vy = -TERMINAL_VELOCITY;
     }
 
+    // 潜行防掉落（F3 尾巴）：贴着边缘时不许把自己走出去。
+    // 分轴判断，所以"沿着边缘横着走"仍然可以（原版手感：能贴着坑边挪）。
+    // ⚠️ 只在"当前有支撑"时生效：否则从半空潜行下落时会被莫名其妙钉住。
+    if (!flying && !this.inWater && input.sneak && this.onGround && this.hasSupportAt(world, this.x, this.z)) {
+      const stepX = this.vx * dt;
+      const stepZ = this.vz * dt;
+      if (stepX !== 0 && !this.hasSupportAt(world, this.x + stepX, this.z)) this.vx = 0;
+      if (stepZ !== 0 && !this.hasSupportAt(world, this.x, this.z + stepZ)) this.vz = 0;
+    }
+
     this.move(world, this.vx * dt, this.vy * dt, this.vz * dt);
+  }
+
+  /**
+   * 站在 (x, z) 时脚下有没有支撑（潜行防掉落的判据）。
+   *
+   * **四个角都要有**，而不是"整体框和地面有重叠就算"：后者会让玩家一直走到
+   * 身体几乎全部悬空（框只剩一角压着方块）才停——那不是"防掉落"，是"延迟掉落"。
+   * 四角探针让玩家停在"脚尖还在台上"的位置（中心约在方块边缘内 0.25 格）。
+   */
+  private hasSupportAt(world: PhysicsWorld, x: number, z: number): boolean {
+    const half = this.width / 2 - 0.05;
+    const probe = 0.05;
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const cx = x + sx * half;
+        const cz = z + sz * half;
+        const box = makeAABB(cx - probe, this.y - SNEAK_PROBE, cz - probe, cx + probe, this.y - 0.001, cz + probe);
+        if (!collides(world, box)) return false;
+      }
+    }
+    return true;
   }
 
   private move(world: PhysicsWorld, dx: number, dy: number, dz: number): void {

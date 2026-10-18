@@ -76,6 +76,7 @@
     "test:shield": "esbuild tools/shield-test.ts --bundle --platform=node --format=esm --outfile=.tmp/shield-test.mjs --log-level=error && node .tmp/shield-test.mjs",
     "test:navigation": "esbuild tools/navigation-test.ts --bundle --platform=node --format=esm --outfile=.tmp/navigation-test.mjs --log-level=error && node .tmp/navigation-test.mjs",
     "test:map": "esbuild tools/map-test.ts --bundle --platform=node --format=esm --outfile=.tmp/map-test.mjs --log-level=error && node .tmp/map-test.mjs",
+    "test:physics": "esbuild tools/physics-test.ts --bundle --platform=node --format=esm --outfile=.tmp/physics-test.mjs --log-level=error && node .tmp/physics-test.mjs",
     "test:brewing": "esbuild tools/brewing-test.ts --bundle --platform=node --format=esm --outfile=.tmp/brewing-test.mjs --log-level=error && node .tmp/brewing-test.mjs",
     "test:throwable": "esbuild tools/throwable-test.ts --bundle --platform=node --format=esm --outfile=.tmp/throwable-test.mjs --log-level=error && node .tmp/throwable-test.mjs",
     "test:potioncloud": "esbuild tools/potion-cloud-test.ts --bundle --platform=node --format=esm --outfile=.tmp/potion-cloud-test.mjs --log-level=error && node .tmp/potion-cloud-test.mjs",
