@@ -105,6 +105,41 @@
   await sleep(400);
   check('分类网格也是 7 列', colCount(document.querySelector('.inv-grid.inv-category')) === 7, paneNow());
 
+  // 分类区必须**铺满左栏并在内部滚动**（用户反馈"只有 3 行"）
+  document
+    .querySelector('.inv-recipes-btn[data-role="recipe-toggle"]')
+    ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await sleep(400);
+  {
+    const gridEl = document.querySelector('.inv-grid.inv-category');
+    const panelEl = document.querySelector('.inv-panel');
+    const g = gridEl?.getBoundingClientRect();
+    const p = panelEl?.getBoundingClientRect();
+    check(
+      '分类区被约束在面板内',
+      !!g && !!p && g.bottom <= p.bottom + 1 && g.height > 160,
+      g && p ? `grid ${Math.round(g.height)}px / bottom ${Math.round(g.bottom)} <= ${Math.round(p.bottom)}` : 'missing',
+    );
+    check(
+      '分类区内部可滚动',
+      !!gridEl && gridEl.scrollHeight > gridEl.clientHeight + 2,
+      gridEl ? `scroll ${gridEl.scrollHeight} vs client ${gridEl.clientHeight}` : 'missing',
+    );
+  }
+  {
+    const panelEl = document.querySelector('.inv-panel');
+    const p = panelEl?.getBoundingClientRect();
+    const railButtons = [...document.querySelectorAll('.inv-rail-left button')].filter((b) => {
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    const clipped = railButtons.filter((b) => {
+      const r = b.getBoundingClientRect();
+      return !!p && (r.bottom > p.bottom + 1 || r.top < p.top - 1);
+    });
+    check('左侧分类按钮没有被裁掉', railButtons.length >= 5 && clipped.length === 0, `${railButtons.length} 个 / 裁掉 ${clipped.length}`);
+  }
+
   mc.toggleInventory();
   await sleep(600);
 

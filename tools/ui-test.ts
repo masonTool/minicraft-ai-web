@@ -549,6 +549,10 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('flex: 1 1 auto;') &&
       !css.includes('max-height: min(32vh, 160px)'),
   );
+  check(
+    '分类栏在 align-items:start 的父网格里显式拉伸（否则内容多时会一路长到面板外、永远不滚）',
+    /\.inv-panel\.pocket-ui\.pocket-dual \.inv-category-section \{[\s\S]{0,600}align-self: stretch;/.test(css),
+  );
   check('左轨分类改两列（横屏不被截断）', css.includes('grid-template-columns: repeat(2, 36px)'));
 
   // 左栏状态机（批次 181）：只有一个 pane，删掉两套互相打架的布尔

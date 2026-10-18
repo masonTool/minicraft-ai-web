@@ -2099,6 +2099,12 @@
         min-width: 0;
         min-height: 0;
         overflow: hidden;
+        /* ⚠️ 父网格是 `align-items: start`：不显式拉伸的话，这一栏只有"内容高度"，
+           分类物品多时会一路长到面板外（被 overflow 裁掉）且永远不会滚。
+           用户反馈的"分类只有 3 行"就是这一条 + 旧的 max-height 一起造成的。 */
+        align-self: stretch;
+        height: 100%;
+        max-height: 100%;
       }
       /* ⚠️ 搜索框在**竖排**容器里不能沿用 `flex: 1`（那是"吃掉剩余高度"），
          否则它会把下面的物品网格挤出可视区——表现就是"这一栏里什么都看不见" */

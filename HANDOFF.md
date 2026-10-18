@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 566（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 567（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **178**、进行中 **73**、待办 36 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -62,7 +62,7 @@ npm run dev            # http://localhost:5173
   ⑥ 顶部三键（暂停/视角/聊天）、准星下方目标名称、2 秒提示浮窗；
   ⑦ 世界类型写明"超平坦没有树/村庄/矿石"，下拉深色主题。
   新增 `test:diag`（57）、`test:mode`（18）、`test:worldtype`（19），离线套数 114 → **117**。
-  真浏览器：`ui-check` 149 条 OK（三视口）、`mobile-check` 14 条 OK（844×390）、新增 `feedback181-check` 13 条 OK。
+  真浏览器：`ui-check` 149 条 OK（三视口）、`mobile-check` 14 条 OK（844×390）、新增 `feedback181-check` 16 条 OK。
 - 批次 179（TASKS N10 收尾）：**地形正常化** —— 山、岸、海底一起变正常。
   三条根因：① `peaksAndValleys()` 的输入**没夹紧**，weirdness 超出 ±1.1 时折叠值能到
   **-2.8**，`pv × factor × 40` 于是给出 **-110 格**（这才是"海床深到世界底"的真凶，

@@ -206,13 +206,14 @@ graph LR
 | 正式构建 | `npm run build` | 通过（仅有既有的 chunk 体积提示） |
 | 界面三视口 | `sh tools/ui-check.sh` | **149 条 OK / 0 FAIL**（430×932、844×390、1440×900） |
 | 横屏手机端 | `sh tools/mobile-check.sh 844 390` | **14 条 OK / 0 FAIL**（摇杆 13.2 格、59~60fps） |
-| 本轮专项 | `sh tools/feedback181-check.sh` | **13 条 OK / 0 FAIL** |
+| 本轮专项 | `sh tools/feedback181-check.sh` | **16 条 OK / 0 FAIL** |
 
 专项验收覆盖的是离线测试够不到的部分（`tools/feedback181-acceptance.js`）：
 
 - 新世界默认生存、准星下方显示方块名、视角切换弹 2 秒提示；
 - 个人仓库与分类栏都是 **7 列**，第一格不再被裁到面板外；
 - 创造 → 个人仓库 → 再点左侧分类，能回到创造物品栏（F6 回归）；
+- 分类区被约束在面板内（254px 高、内部滚动 880px），左轨 6 颗分类按钮没有被裁切；
 - 游戏内无面板按返回 → 暂停菜单；
 - `exitToMenu` 不刷新页面、`__mc` 被清掉、回菜单后还能再次进入同一世界且背包为空。
 
