@@ -2340,11 +2340,42 @@ export const BLACKSTONE_VARIANT_ID_START = 533;
  * 玩家与矿车都能直接走过去（`solid: false`），与原版一样不会挡路。
  */
 export const RAIL_ID = 578;
+/** 动力铁轨（批次 246）：通电时换成"亮起的金轨"贴图，并由红石引擎把状态位写上 */
+export const POWERED_RAIL_ID = 579;
+/** 探测铁轨（批次 246）：轨上有实体时点亮，并向相邻红石输出 15 */
+export const DETECTOR_RAIL_ID = 580;
 export const RAIL_SPECS: readonly BlockSpec[] = [
   {
     id: RAIL_ID,
     name: 'minecraft:rail',
     tiles: ['rail', 'rail', 'rail'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: POWERED_RAIL_ID,
+    name: 'minecraft:powered_rail',
+    tiles: ['powered_rail', 'powered_rail', 'powered_rail'],
+    // 通电状态换贴图：红石引擎在 `recompute` 里写 `powered` 位，渲染层照它取图
+    stateTiles: (state) =>
+      isPowered(state)
+        ? ['powered_rail_on', 'powered_rail_on', 'powered_rail_on']
+        : ['powered_rail', 'powered_rail', 'powered_rail'],
+    shape: 'flat',
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: DETECTOR_RAIL_ID,
+    name: 'minecraft:detector_rail',
+    tiles: ['detector_rail', 'detector_rail', 'detector_rail'],
+    stateTiles: (state) =>
+      isPowered(state)
+        ? ['detector_rail_on', 'detector_rail_on', 'detector_rail_on']
+        : ['detector_rail', 'detector_rail', 'detector_rail'],
     shape: 'flat',
     solid: false,
     opaque: false,
@@ -3192,6 +3223,9 @@ export const Block = {
   REDSTONE_WIRE: 256,
   // 铁轨（批次 245）：id 578，在现有最大 id（577）之后追加
   RAIL: RAIL_ID,
+  // 动力/探测铁轨（批次 246）：继续往后追加
+  POWERED_RAIL: POWERED_RAIL_ID,
+  DETECTOR_RAIL: DETECTOR_RAIL_ID,
   REDSTONE_TORCH: 257,
   REDSTONE_BLOCK: 258,
   LEVER: 259,
@@ -3625,8 +3659,10 @@ for (let i = 0; i < DYE_COLORS.length; i++) HARDNESS.set(woolId(i), 0.8);
 // 地毯：比羊毛薄得多，原版硬度 0.1（一拍就掉）；雪层同样是 0.1
 for (let i = 0; i < DYE_COLORS.length; i++) HARDNESS.set(carpetId(i), 0.1);
 HARDNESS.set(Block.SNOW, 0.1);
-// 铁轨（批次 245）：原版 0.7（镐/徒手都挖得动，但比压力板结实）
+// 铁轨（批次 245/246）：原版 0.7（镐/徒手都挖得动，但比压力板结实）
 HARDNESS.set(Block.RAIL, 0.7);
+HARDNESS.set(Block.POWERED_RAIL, 0.7);
+HARDNESS.set(Block.DETECTOR_RAIL, 0.7);
 
 // 台阶 / 楼梯的硬度跟随母方块（原版行为）
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {

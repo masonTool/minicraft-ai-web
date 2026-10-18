@@ -113,6 +113,10 @@ export function isRedstoneComponent(id: number): boolean {
     case Block.TRIPWIRE_HOOK:
     // TNT（批次 56）：通电就点燃（它是"负载"，但点燃的后果在引信表那边）
     case Block.TNT:
+    // 铁轨（批次 246）：探测轨是"有实体就发信号"的电源，动力轨是"通电就加速"的负载。
+    // 两者都要进这张表，洪泛才把"轨—线—灯"连成一片
+    case Block.DETECTOR_RAIL:
+    case Block.POWERED_RAIL:
     // 漏斗（批次 58）：通电就**锁定**（不推也不吸）——这是原版的"漏斗闸门"玩法
     case Block.HOPPER:
     // 投掷器（批次 59）：通电的**上升沿**吐一件出去（它是"负载"，
@@ -180,6 +184,8 @@ export class RedstoneEngine {
   private readonly repeaterOutput = new Map<string, boolean>();
   /** 压力板的状态缓存（避免每帧都改状态触发重网格化） */
   private readonly plateState = new Map<string, boolean>();
+  /** 探测铁轨（批次 246）：和压力板一样要每 0.1 秒看一次"轨上有没有实体" */
+  private readonly detectorRailState = new Map<string, boolean>();
   /**
    * 阳光传感器：位置 → 上次算出的输出强度（批次 54）。
    *
@@ -358,6 +364,8 @@ export class RedstoneEngine {
     if (this.plateTimer <= 0) {
       this.plateTimer = 0.1;
       if (this.pollPressurePlates(world)) changed = true;
+      // 探测铁轨（批次 246）：与压力板同一条判据（`hasEntityAt`），只是方块换成铁轨
+      if (this.pollDetectorRails(world)) changed = true;
       // 绊线（批次 55）：与压力板同一节奏看"线上有没有实体"
       if (this.pollTripwires(world)) changed = true;
     }
@@ -522,6 +530,39 @@ export class RedstoneEngine {
     if (!this.plateState.has(key)) this.plateState.set(key, isPowered(world.getState(x, y, z)));
   }
 
+  /**
+   * 探测铁轨轮询（批次 246）：轨上有实体（矿车/生物/玩家）就通电。
+   *
+   * ⚠️ 与压力板同一条 `hasEntityAt`，所以**任何实体**都会触发——原版只有矿车能触发。
+   * 这一条差异写进 TASKS G12：要精确到"矿车"得让实体层上报"我是什么"，
+   * 而现在红石世界接口只回答"这一格有没有东西"。
+   */
+  private pollDetectorRails(world: RedstoneWorld): boolean {
+    let changed = false;
+    for (const [key, on] of [...this.detectorRailState]) {
+      const [x, y, z] = parseKey(key);
+      if (world.getBlock(x, y, z) !== Block.DETECTOR_RAIL || !world.isLoaded(x, z)) {
+        this.detectorRailState.delete(key);
+        continue;
+      }
+      const pressed = world.hasEntityAt(x, y, z);
+      if (pressed === on) continue;
+      this.detectorRailState.set(key, pressed);
+      world.setState(x, y, z, withPowered(world.getState(x, y, z), pressed));
+      this.markDirty(x, y, z);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** 注册一块探测铁轨（recompute 发现时登记，之后按 10Hz 轮询实体） */
+  private trackDetectorRail(world: RedstoneWorld, x: number, y: number, z: number): void {
+    const key = keyOf(x, y, z);
+    if (!this.detectorRailState.has(key)) {
+      this.detectorRailState.set(key, isPowered(world.getState(x, y, z)));
+    }
+  }
+
   // ---------------------------------------------------------------- 核心求解
 
   /**
@@ -557,6 +598,14 @@ export class RedstoneEngine {
         case Block.REDSTONE_BLOCK:
           strengths.set(key, 15);
           sources.push({ x: nx, y: ny, z: nz });
+          break;
+        // 探测铁轨（批次 246）：有实体就当场输出 15（状态位由 `pollDetectorRails` 维护）
+        case Block.DETECTOR_RAIL:
+          this.trackDetectorRail(world, nx, ny, nz);
+          if (isPowered(state)) {
+            strengths.set(key, 15);
+            sources.push({ x: nx, y: ny, z: nz });
+          }
           break;
         case Block.TRIPWIRE_HOOK: {
           // 绊线钩（批次 55）：两根**朝向相对**的钩子 + 中间若干格绊线 = 一条回路；
@@ -705,6 +754,17 @@ export class RedstoneEngine {
           const shouldLight = input > 0;
           if (isPowered(state) !== shouldLight) {
             world.setState(nx, ny, nz, withPowered(state, shouldLight));
+            this.markDirty(nx, ny, nz);
+            changed = true;
+          }
+          break;
+        }
+        // 动力铁轨（批次 246）：通电就把状态位写上（矿车读它加速）。
+        // 与红石灯同一个"负载"套路，只是"亮"换成"能推车"
+        case Block.POWERED_RAIL: {
+          const shouldPower = input > 0;
+          if (isPowered(state) !== shouldPower) {
+            world.setState(nx, ny, nz, withPowered(state, shouldPower));
             this.markDirty(nx, ny, nz);
             changed = true;
           }

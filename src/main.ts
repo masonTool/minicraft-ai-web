@@ -4364,8 +4364,10 @@ class App {
   private placeMinecart(): boolean {
     const hit = this.hit;
     if (!hit) return false;
-    // 铁轨是 `flat` 薄板：矿车落在它上方 0.05（贴住轨面，不悬空）
-    if (this.world.getBlock(hit.x, hit.y, hit.z) !== Block.RAIL) return false;
+    // 铁轨是 `flat` 薄板：矿车落在它上方 0.05（贴住轨面，不悬空）。
+    // 三种轨道都能放车（批次 246 起）
+    const rail = this.world.getBlock(hit.x, hit.y, hit.z);
+    if (rail !== Block.RAIL && rail !== Block.POWERED_RAIL && rail !== Block.DETECTOR_RAIL) return false;
     const cart = new Minecart(hit.x + 0.5, hit.y + 0.05, hit.z + 0.5);
     cart.yaw = this.yaw;
     this.entities.spawn(cart);
@@ -7287,6 +7289,8 @@ class App {
       vehicleInput: this.ridingVehicle
         ? { forward: this.frameInput.forward, strafe: this.frameInput.strafe, sprint: this.frameInput.sprint }
         : undefined,
+      // 方块状态位（批次 246）：动力铁轨要读 `powered` 决定推不推车
+      getState: (x, y, z) => this.world.getBlockState(x, y, z),
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);

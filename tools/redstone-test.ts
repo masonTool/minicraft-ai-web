@@ -536,5 +536,43 @@ console.log('\n[红石元件的配方（批次 119 按原版补）]');
   equal('诡异菌柄 → 4 诡异木板', matchRecipe([Block.WARPED_STEM], 2)?.id, Block.WARPED_PLANKS);
 }
 
+console.log('\n[探测铁轨：轨上有实体就发信号（批次 246）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.DETECTOR_RAIL, 0);
+  world.setBlock(1, Y, 0, Block.REDSTONE_LAMP, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.3);
+  check('空轨不发信号', !isPowered(world.getState(0, Y, 0)));
+  check('空轨旁边的灯不亮', !isPowered(world.getState(1, Y, 0)));
+
+  world.placeEntity(0, Y, 0);
+  step(engine, world, 0.3);
+  check('轨上有实体 → 探测轨通电', isPowered(world.getState(0, Y, 0)));
+  check('相邻红石灯被点亮', isPowered(world.getState(1, Y, 0)));
+
+  world.removeEntity(0, Y, 0);
+  step(engine, world, 0.3);
+  check('实体离开 → 探测轨断电', !isPowered(world.getState(0, Y, 0)));
+  check('灯随之熄灭', !isPowered(world.getState(1, Y, 0)));
+}
+
+console.log('\n[动力铁轨：通电点亮、断电熄灭（批次 246）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.REDSTONE_BLOCK, 0);
+  world.setBlock(1, Y, 0, Block.POWERED_RAIL, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('贴着红石块 → 动力轨通电', isPowered(world.getState(1, Y, 0)));
+
+  world.setBlock(0, Y, 0, Block.AIR, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('移走电源 → 动力轨熄灭', !isPowered(world.getState(1, Y, 0)));
+}
+
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

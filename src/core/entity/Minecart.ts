@@ -17,6 +17,7 @@
 
 import { Entity, type EntityContext } from './Entity.ts';
 import { Block } from '../registry/blocks.ts';
+import { isPowered } from '../registry/blockState.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
 
 /** 矿车碰撞盒（格）：比一格窄一点，过门/过洞不容易卡 */
@@ -33,6 +34,10 @@ const GROUND_ACCEL = 2;
 export const MINECART_MAX_SPEED = 8;
 /** 空车滑行的上限：比有人开时慢，避免"空车自己跑丢" */
 const EMPTY_MAX_SPEED = 5;
+/** 动力铁轨通电时的上限：比手动快一截（原版动力轨能一直加速） */
+export const MINECART_BOOST_SPEED = 12;
+/** 动力铁轨的推力（格/秒²） */
+const BOOST_ACCEL = 10;
 
 export class Minecart extends Entity {
   /** 朝向（与船同一个口径：`yaw` 的 -Z 是车头） */
@@ -47,8 +52,15 @@ export class Minecart extends Entity {
   tick(ctx: EntityContext, dt: number): void {
     this.age += dt;
 
-    // 脚下一格是不是铁轨（车底在 y，格子取 y+0.05 避开台阶边缘的浮点误差）
-    const onRail = this.isOnRail(ctx);
+    // 脚下那一格（车底在 y，格子取 y+0.05 避开台阶边缘的浮点误差）
+    const railX = Math.floor(this.x);
+    const railY = Math.floor(this.y + 0.05);
+    const railZ = Math.floor(this.z);
+    const railId = ctx.getBlock(railX, railY, railZ);
+    const onRail =
+      railId === Block.RAIL || railId === Block.POWERED_RAIL || railId === Block.DETECTOR_RAIL;
+    // 动力铁轨（批次 246）：通电才推车。状态位由红石引擎写（见 `RedstoneEngine.recompute`）
+    const powered = railId === Block.POWERED_RAIL && isPowered(ctx.getState?.(railX, railY, railZ) ?? 0);
 
     // 重力（车不浮）
     this.vy -= 22 * dt;
@@ -75,7 +87,20 @@ export class Minecart extends Entity {
       }
     }
 
-    const max = this.passenger !== null ? MINECART_MAX_SPEED : EMPTY_MAX_SPEED;
+    // 动力铁轨：沿当前运动方向持续加速（还没速度就沿车头）
+    if (powered) {
+      const speed = Math.hypot(this.vx, this.vz);
+      const fx = speed > 0.3 ? this.vx / speed : -Math.sin(this.yaw);
+      const fz = speed > 0.3 ? this.vz / speed : -Math.cos(this.yaw);
+      this.vx += fx * BOOST_ACCEL * dt;
+      this.vz += fz * BOOST_ACCEL * dt;
+    }
+
+    const max = powered
+      ? MINECART_BOOST_SPEED
+      : this.passenger !== null
+        ? MINECART_MAX_SPEED
+        : EMPTY_MAX_SPEED;
     const speed = Math.hypot(this.vx, this.vz);
     if (speed > max) {
       this.vx = (this.vx / speed) * max;
@@ -86,8 +111,4 @@ export class Minecart extends Entity {
     if (this.onGround && this.vy < 0) this.vy = 0;
   }
 
-  /** 脚下是不是铁轨（`Block.RAIL`；没有铁轨时返回 false，走"草地"那一档） */
-  private isOnRail(ctx: EntityContext): boolean {
-    return ctx.getBlock(Math.floor(this.x), Math.floor(this.y + 0.05), Math.floor(this.z)) === Block.RAIL;
-  }
 }

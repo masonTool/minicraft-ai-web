@@ -344,6 +344,13 @@ export interface EntityContext {
    * 不传 = 空船，自己漂、不吃加速。
    */
   vehicleInput?: { forward: number; strafe: number; sprint: boolean };
+  /**
+   * 读取方块的**状态位**（批次 246：动力铁轨要读 `powered`）。
+   *
+   * 与 `getBlock` 一样是可选的：不传就当"没有状态"（0），
+   * 老的离线桩不必跟着改。
+   */
+  getState?: (x: number, y: number, z: number) => number;
 }
 
 let nextEntityId = 1;

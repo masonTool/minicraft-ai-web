@@ -2866,16 +2866,40 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
       recipesSrc.includes('result: { id: Block.RAIL, count: 16 }'),
   );
   check(
-    '矿车物品（5 铁锭）只能放到铁轨上',
+    '矿车物品（5 铁锭）能放到三种铁轨上',
     itemsSrc.includes('MINECART: 1479') &&
       recipesSrc.includes('result: { id: Item.MINECART, count: 1 }') &&
-      appSrc.includes('if (this.world.getBlock(hit.x, hit.y, hit.z) !== Block.RAIL) return false;'),
+      appSrc.includes('rail !== Block.RAIL && rail !== Block.POWERED_RAIL && rail !== Block.DETECTOR_RAIL'),
   );
   check(
     '矿车在轨道上阻力极小、离开轨道寸步难行',
     cartSrc.includes('RAIL_DRAG') &&
       cartSrc.includes('GROUND_DRAG') &&
-      cartSrc.includes('ctx.getBlock(Math.floor(this.x), Math.floor(this.y + 0.05), Math.floor(this.z)) === Block.RAIL'),
+      cartSrc.includes('railId === Block.RAIL || railId === Block.POWERED_RAIL || railId === Block.DETECTOR_RAIL'),
+  );
+
+  // 批次 246：动力铁轨（负载）与探测铁轨（电源）
+  const engineSrc = readFileSync(new URL('../src/core/redstone/RedstoneEngine.ts', import.meta.url), 'utf8');
+  check(
+    '探测铁轨：轨上有实体就发 15，并登记进 10Hz 轮询',
+    blocksSrc.includes('export const DETECTOR_RAIL_ID = 580') &&
+      engineSrc.includes('private pollDetectorRails(') &&
+      engineSrc.includes('this.trackDetectorRail(world, nx, ny, nz);') &&
+      engineSrc.includes('if (this.pollDetectorRails(world)) changed = true;'),
+  );
+  check(
+    '动力铁轨：通电就写状态位（矿车读它加速）',
+    blocksSrc.includes('export const POWERED_RAIL_ID = 579') &&
+      engineSrc.includes('case Block.POWERED_RAIL: {') &&
+      cartSrc.includes('MINECART_BOOST_SPEED') &&
+      appSrc.includes('getState: (x, y, z) => this.world.getBlockState(x, y, z),'),
+  );
+  check(
+    '两种铁轨都有通电/断电两张贴图，且各有一条原版配方',
+    blocksSrc.includes("['powered_rail_on', 'powered_rail_on', 'powered_rail_on']") &&
+      blocksSrc.includes("['detector_rail_on', 'detector_rail_on', 'detector_rail_on']") &&
+      recipesSrc.includes('result: { id: Block.POWERED_RAIL, count: 6 }') &&
+      recipesSrc.includes('result: { id: Block.DETECTOR_RAIL, count: 6 }'),
   );
 }
 

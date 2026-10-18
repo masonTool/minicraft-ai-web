@@ -1740,20 +1740,53 @@ PAINTERS.item_arrow = arrowPainter();
  * 钢轨压在枕木上面（所以先判钢轨，再判枕木）。透明像素留空——
  * 铁轨是 `flat` 非实心方块，空的地方就该透出脚下的地面。
  */
-PAINTERS.rail = (x, y) => {
-  const steel = (x >= 2 && x <= 4) || (x >= 11 && x <= 13);
-  if (steel && y > 0) {
-    // 轨道中间压一道亮线，看起来像有"轨面"
-    const shine = x === 3 || x === 12 ? 210 : 168;
-    return [shine, shine, shine + 6, 255];
-  }
-  if (y % 4 === 2 && x > 0) {
-    // 枕木：比木头暗一档，别抢钢轨的视觉
-    const grain = x % 3 === 0 ? 88 : 104;
-    return [grain, grain - 24, grain - 48, 255];
-  }
-  return [0, 0, 0, 0];
-};
+/**
+ * 铁轨贴图的画法（批次 245/246）：两根纵向钢轨 + 横向枕木。
+ *
+ * 参数化的原因：普通 / 动力 / 探测三种轨道只差**颜色与亮度**（金轨、石枕木、
+ * 通电发红），形状完全一样——抄三份迟早会改一处漏两处。
+ *
+ * @param sleeper 枕木颜色
+ * @param steel 钢轨颜色
+ * @param glow 通电版本：整体提亮一档（一眼看出"这条是热的"）
+ */
+function railPainter(
+  sleeper: readonly [number, number, number],
+  steel: readonly [number, number, number],
+  glow = false,
+): Painter {
+  return (x, y) => {
+    const onRail = (x >= 2 && x <= 4) || (x >= 11 && x <= 13);
+    if (onRail && y > 0) {
+      // 中间那一列压一道高光，看起来像有"轨面"
+      const shine = (x === 3 || x === 12 ? 1.22 : 1) * (glow ? 1.28 : 1);
+      return [
+        clamp255(steel[0] * shine),
+        clamp255(steel[1] * shine),
+        clamp255(steel[2] * shine),
+        255,
+      ];
+    }
+    if (y % 4 === 2 && x > 0) {
+      const grain = x % 3 === 0 ? 0.84 : 1;
+      return [
+        clamp255(sleeper[0] * grain),
+        clamp255(sleeper[1] * grain),
+        clamp255(sleeper[2] * grain),
+        255,
+      ];
+    }
+    return [0, 0, 0, 0];
+  };
+}
+
+PAINTERS.rail = railPainter([104, 80, 56], [176, 176, 184]);
+// 动力铁轨：金枕木 + 金轨；通电版整体提亮（原版是"金轨亮起来"）
+PAINTERS.powered_rail = railPainter([150, 122, 48], [206, 172, 74]);
+PAINTERS.powered_rail_on = railPainter([188, 152, 58], [245, 206, 96], true);
+// 探测铁轨：石枕木 + 灰钢轨；通电版压一层红（原版是中间那块板变红）
+PAINTERS.detector_rail = railPainter([116, 116, 122], [166, 166, 174]);
+PAINTERS.detector_rail_on = railPainter([150, 96, 92], [226, 130, 118], true);
 
 /**
  * 矿车图标（批次 245）：一只开口的铁皮斗 + 两个轮子。

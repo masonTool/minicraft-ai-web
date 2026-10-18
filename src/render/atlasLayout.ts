@@ -1025,6 +1025,11 @@ export const TILE_ORDER = [
   // 铁轨与矿车（批次 245，G12）：铁轨是方块贴图，矿车是物品图标
   'rail',
   'item_minecart',
+  // 动力/探测铁轨（批次 246）：各有"通电 / 未通电"两张
+  'powered_rail',
+  'powered_rail_on',
+  'detector_rail',
+  'detector_rail_on',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

@@ -6,6 +6,7 @@
  */
 
 import { Block } from '../src/core/registry/blocks.ts';
+import { withPowered } from '../src/core/registry/blockState.ts';
 import { Item, isFireproofItem } from '../src/core/registry/items.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
@@ -544,6 +545,31 @@ console.log('\n[矿车：轨道上滑得远 / 离轨寸步难行（批次 245）
   empty.yaw = -Math.PI / 2;
   drive(empty, makeCtx(true), 2);
   check('空车不吃驾驶输入（没人开就不动）', Math.abs(empty.x - 0.5) < 0.2, `x=${empty.x.toFixed(2)}`);
+
+  // 批次 246：动力铁轨通电才有额外推力（状态位由红石引擎写，这里直接给通电状态）
+  const poweredCtx: EntityContext = {
+    ...makeCtx(true),
+    getBlock: (_x, y) => (y === 0 ? Block.POWERED_RAIL : Block.AIR),
+    getState: () => withPowered(0, true),
+  };
+  const idleCtx: EntityContext = {
+    ...makeCtx(true),
+    getBlock: (_x, y) => (y === 0 ? Block.POWERED_RAIL : Block.AIR),
+    getState: () => 0,
+  };
+  const boosted = new Minecart(0.5, 0.05, 0.5);
+  boosted.passenger = 'player';
+  boosted.yaw = -Math.PI / 2;
+  drive(boosted, poweredCtx, 3);
+  const idle = new Minecart(0.5, 0.05, 0.5);
+  idle.passenger = 'player';
+  idle.yaw = -Math.PI / 2;
+  drive(idle, idleCtx, 3);
+  check(
+    '通电的动力铁轨把车推得更快（断电就只是普通轨）',
+    Math.hypot(boosted.vx, boosted.vz) > Math.hypot(idle.vx, idle.vz) + 2,
+    `通电 ${Math.hypot(boosted.vx, boosted.vz).toFixed(1)} vs 断电 ${Math.hypot(idle.vx, idle.vz).toFixed(1)}`,
+  );
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
