@@ -289,8 +289,8 @@ console.log('\n[未接效果的附魔要标出来]');
   const { UI_HINT_UNIMPLEMENTED, UNIMPLEMENTED_MARK } = await import('../src/core/crafting/Enchanting.ts');
   const implemented = ENCHANTMENTS.filter((def) => def.implemented === true);
   check(
-    '已接效果的附魔有 28 条（… + 批次 262 的深海探索者/灵魂疾行/横扫之刃）',
-    implemented.length === 28 &&
+    '已接效果的附魔有 29 条（… + 批次 262 深海探索者/灵魂疾行/横扫、263 冰霜行者）',
+    implemented.length === 29 &&
       [
         'efficiency',
         'fortune',
@@ -324,6 +324,7 @@ console.log('\n[未接效果的附魔要标出来]');
         'depth_strider',
         'soul_speed',
         'sweeping',
+        'frost_walker',
       ].every((id) => implemented.some((def) => def.id === id)),
     implemented.map((def) => def.id).join(','),
   );

@@ -16,6 +16,7 @@ import {
   PlayerStats,
   depthStriderMultiplier,
   fallDamageFor,
+  frostWalkerRadius,
   soulSpeedMultiplier,
   type SurvivalEnvironment,
 } from '../src/core/survival/PlayerStats.ts';
@@ -340,6 +341,10 @@ console.log('\n[靴子附魔的移速倍率（批次 262）]');
   );
   check('深海探索者 III 级封顶 2 倍', depthStriderMultiplier(3) === 2);
   check('深海探索者超过上限按 3 级算', depthStriderMultiplier(5) === 2);
+  check('冰霜行者 0 级不结冰', frostWalkerRadius(0) === 0);
+  check('冰霜行者 I 级半径 2', frostWalkerRadius(1) === 2);
+  check('冰霜行者 II 级半径 3', frostWalkerRadius(2) === 3);
+  check('冰霜行者超过 II 级按 II 级算', frostWalkerRadius(9) === 3);
   check('灵魂疾行 0 级 = 1 倍', soulSpeedMultiplier(0) === 1);
   check('灵魂疾行 I 级 = 1.3', Math.abs(soulSpeedMultiplier(1) - 1.3) < 1e-6);
   check('灵魂疾行 III 级 = 1.9', Math.abs(soulSpeedMultiplier(3) - 1.9) < 1e-6);

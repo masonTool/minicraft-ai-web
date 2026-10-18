@@ -3124,5 +3124,30 @@ console.log('\n[位移 / 横扫附魔（批次 262）]');
   );
 }
 
+console.log('\n[冰霜行者（批次 263）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const blocksSrc = readFileSync(new URL('../src/core/registry/blocks.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const frostAt = enchantSrc.indexOf("id: 'frost_walker'");
+  check(
+    '霜冰方块注册（id 586，无物品形态）',
+    blocksSrc.includes('export const FROSTED_ICE_ID = 586') &&
+      blocksSrc.includes("name: 'minecraft:frosted_ice'") &&
+      blocksSrc.includes('FROSTED_ICE: FROSTED_ICE_ID'),
+  );
+  check(
+    '冰霜行者标了 implemented',
+    frostAt >= 0 && enchantSrc.slice(frostAt, frostAt + 200).includes('implemented: true'),
+  );
+  check(
+    '主程序：站上水面结霜冰、5 秒后化回水',
+    appSrc.includes('private updateFrostWalker(dt: number): void') &&
+      appSrc.includes('this.updateFrostWalker(dt);') &&
+      appSrc.includes('this.world.setBlockAndUpdate(x, waterY, z, Block.FROSTED_ICE, 0);') &&
+      appSrc.includes('this.world.setBlockAndUpdate(x, y, z, Block.WATER, 0);'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
