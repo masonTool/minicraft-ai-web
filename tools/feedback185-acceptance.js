@@ -291,6 +291,82 @@
     check('挖掉水旁边的方块：水会流过去', before === 1 && after === 10, `${before} → ${after}`);
   }
 
+  // ------------------------------------------------------------ 3D 角色预览（可旋转 / 披风 / 副手）
+  {
+    const inv = mc.inventoryScreen;
+    inv.openWith('inventory');
+    await sleep(500);
+    const canvas = document.querySelector('.inv-player-preview');
+    const has3d = !!inv.preview3d;
+    const before = has3d ? inv.preview3d.rotation : 0;
+    if (canvas && has3d) {
+      const r = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 71, pointerType: 'touch', clientX: r.left + 20, clientY: r.top + 60 }));
+      canvas.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 71, pointerType: 'touch', clientX: r.left + 100, clientY: r.top + 60 }));
+      canvas.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 71, pointerType: 'touch', clientX: r.left + 100, clientY: r.top + 60 }));
+    }
+    const after = inv.preview3d ? inv.preview3d.rotation : 0;
+    check('角色预览是 3D 的，拖动可以转一圈', has3d && Math.abs(after - before) > 0.5, `3d=${has3d} ${before.toFixed(2)}→${after.toFixed(2)}`);
+
+    mc.settings.cape = true;
+    inv.refreshPlayerPreview();
+    const capeOn = !!inv.preview3d && inv.preview3d.cape === true;
+    check('"披风"外观同时作用在预览上', capeOn);
+    mc.settings.cape = false;
+    inv.refreshPlayerPreview();
+    inv.close();
+    await sleep(400);
+  }
+
+  // ------------------------------------------------------------ 潜行姿态
+  {
+    // 第一人称时模型是隐藏的（`update` 会提前 return），先切第三人称再量姿态
+    mc.setCameraMode('third');
+    await sleep(500);
+    const body = mc.playerRenderer.object;
+    // `input` 是 getter（返回一份快照），要真的改状态必须走 `setSneaking`
+    const prev = mc.touch?.isSneaking ?? false;
+    mc.touch?.setSneaking(true);
+    await sleep(350);
+    const lean = body.rotation.x;
+    const drop = mc.physics.y - body.position.y;
+    mc.touch?.setSneaking(prev);
+    await sleep(250);
+    const restored = body.rotation.x;
+    mc.setCameraMode('first');
+    await sleep(250);
+    check(
+      '潜行有姿态（前倾 + 下沉，松开恢复）',
+      lean > 0.15 && drop > 0.08 && Math.abs(restored) < 0.02,
+      `lean=${lean.toFixed(2)} drop=${drop.toFixed(2)} restore=${restored.toFixed(2)}`,
+    );
+  }
+
+  // ------------------------------------------------------------ 成就入口（右轨）
+  {
+    mc.inventoryScreen.openWith('inventory');
+    await sleep(450);
+    const railBtn = document.querySelector('.inv-rail-right .inv-rail-action');
+    const headerBtn = document.querySelector("[data-role='advancements']");
+    const railVisible = !!railBtn && railBtn.getBoundingClientRect().width > 0;
+    const headerHidden =
+      !headerBtn || headerBtn.classList.contains('hidden') || headerBtn.getBoundingClientRect().width === 0;
+    const railRect = railBtn ? railBtn.getBoundingClientRect() : null;
+    const craftRect = document.querySelector(".inv-rail-right .inv-pocket-tab[data-tab='crafting']")?.getBoundingClientRect();
+    check(
+      '成就入口在右轨、位于合成上方',
+      railVisible && headerHidden && !!railRect && !!craftRect && railRect.top < craftRect.top,
+      `rail=${railVisible} headerHidden=${headerHidden}`,
+    );
+    railBtn?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'touch', button: 0 }));
+    await sleep(450);
+    const adv = document.getElementById('advancements');
+    check('点它打开成就面板', !!adv && !adv.classList.contains('hidden'));
+    mc.advancementScreen.hide();
+    mc.inventoryScreen.close();
+    await sleep(450);
+  }
+
   // ------------------------------------------------------------ 后台回来：暂停门
   mc.toggleInventory && (mc.inventoryScreen.isOpen && mc.inventoryScreen.close());
   await sleep(200);
@@ -306,6 +382,15 @@
     gate?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'touch', button: 0 }));
     await sleep(400);
     check('点暂停门：遮罩与暂停菜单一起收起、回到游戏', !document.getElementById('resume-gate') && mc.settingsScreen.isOpen === false);
+  }
+
+  // ------------------------------------------------------------ 返回键层级（最后做：会退出世界）
+  {
+    mc.openSettings();
+    await sleep(500);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    const backToMenu = await waitFor(() => !window.__mc && !!document.getElementById('world-screen'), 8000);
+    check('暂停菜单再按返回 = 保存并回到主菜单', backToMenu, `mc=${!!window.__mc}`);
   }
 
   return lines.join('\n');

@@ -35,6 +35,10 @@ const SHIRT = 0x00a8a8;
 const PANTS = 0x3b4bb5;
 const SHOES = 0x4a4a52;
 const EYE = 0x1b2a44;
+/** 披风（批次 185 外观）：暗红，与皮肤的暖色区分开 */
+const CAPE = 0x9b1b2f;
+/** 副手盾牌的木色（没有盾牌物品，先用一块板表示"副手拿着东西"） */
+const SHIELD = 0x7a5a33;
 
 export interface PlayerPose {
   x: number;
@@ -50,6 +54,8 @@ export interface PlayerPose {
   swing: number;
   /** 飞行中：双腿并拢不再走路摆动 */
   flying: boolean;
+  /** 潜行（批次 185）：蹲下 + 前倾，腿的摆幅减半（原版"蹲着走"的观感） */
+  sneaking?: boolean;
 }
 
 /** 亮度采样：返回该点的天光/方块光（区块未加载时返回 null） */
@@ -66,6 +72,10 @@ export class PlayerRenderer {
   private readonly armL: THREE.Group;
   private readonly armR: THREE.Group;
   private readonly head: THREE.Group;
+  /** 披风（批次 185）：挂在背后跟着躯干走，默认不显示 */
+  private readonly capeMesh: THREE.Mesh;
+  /** 副手那块板：挂在左臂外侧，默认不显示 */
+  private readonly offhandMesh: THREE.Mesh;
 
   /**
    * 盔甲：每个部位一份材质（同部位的几块甲片共用），材质颜色按装备的材质换。
@@ -80,6 +90,8 @@ export class PlayerRenderer {
     private readonly skyBrightnessOf: () => number,
   ) {
     this.object.visible = false;
+    // 先偏航再俯仰：潜行前倾要绕着**身体朝向**的 X 轴转，默认的 XYZ 会绕世界轴转
+    this.object.rotation.order = 'YXZ';
     this.scene.add(this.object);
 
     // ---- 双腿：枢轴在髋（y = 0.78），网格挂在枢轴下方
@@ -113,6 +125,26 @@ export class PlayerRenderer {
     this.addBox(this.head, 0.13, 0.03, 0.02, 0, 0.15, -0.255, EYE);
 
     this.buildArmor();
+
+    // ---- 披风（外观开关）与副手（盾牌位）
+    this.capeMesh = this.addBox(this.object, 0.46, 0.7, 0.04, 0, 1.1, 0.16, CAPE);
+    this.capeMesh.visible = false;
+    this.offhandMesh = this.addBox(this.armL, 0.42, 0.46, 0.06, 0.02, -0.28, -0.14, SHIELD);
+    this.offhandMesh.visible = false;
+  }
+
+  /** 外观：披风开/关（批次 185）。预览与第三人称共用同一个开关 */
+  setCape(visible: boolean): void {
+    this.capeMesh.visible = visible;
+  }
+
+  /** 副手拿着东西时在左臂外侧显示一块板（目前没有盾牌物品，先做"有/没有"） */
+  setOffhand(visible: boolean): void {
+    this.offhandMesh.visible = visible;
+  }
+
+  get capeVisible(): boolean {
+    return this.capeMesh.visible;
   }
 
   /**
@@ -273,17 +305,23 @@ export class PlayerRenderer {
   update(pose: PlayerPose, sampleLight: LightSampler): void {
     if (!this.object.visible) return;
 
-    this.object.position.set(pose.x, pose.y, pose.z);
+    const sneak = !!pose.sneaking && !pose.flying;
+    // 潜行：整体下沉 0.12 格并前倾 0.22 rad。模型是一整块（没有脊柱关节），
+    // 前倾绕脚底转，看起来就是"缩着身子走"。
+    this.object.position.set(pose.x, pose.y - (sneak ? 0.12 : 0), pose.z);
     this.object.rotation.y = pose.yaw;
+    this.object.rotation.x = sneak ? 0.22 : 0;
 
-    // 走路：两条腿反相，手臂与腿反相（原版就是这个节奏）
-    const walk = pose.flying ? 0 : Math.sin(pose.walkPhase) * pose.walkAmount * 0.85;
+    // 走路：两条腿反相，手臂与腿反相（原版就是这个节奏）；蹲着走幅度减半
+    const walk = pose.flying ? 0 : Math.sin(pose.walkPhase) * pose.walkAmount * (sneak ? 0.42 : 0.85);
     this.legL.rotation.x = walk;
     this.legR.rotation.x = -walk;
     // 挥手：0→1→0 的一次前甩，叠加在走路摆臂上
     const swing = Math.sin(Math.min(1, pose.swing) * Math.PI) * 1.5;
-    this.armL.rotation.x = -walk * 0.8;
-    this.armR.rotation.x = walk * 0.8 - swing;
+    // 潜行时两条手臂略向前收（原版蹲着时手臂是夹着的）
+    const tuck = sneak ? 0.22 : 0;
+    this.armL.rotation.x = -walk * 0.8 - tuck;
+    this.armR.rotation.x = walk * 0.8 - swing - tuck;
     // 飞行时手臂张开一点，看起来像在飘
     if (pose.flying) {
       this.armL.rotation.z = -0.25;

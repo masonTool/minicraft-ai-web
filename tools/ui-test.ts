@@ -1004,7 +1004,11 @@ console.log('\n[玩家预览占位（批次 141）]');
   check('色板与 PlayerRenderer 同源（肤色）', previewSrc.includes('#dc9a6b') && playerSrc.includes('0xdc9a6b'));
   check('界面挂了 preview canvas', invSrc.includes("dataset.role = 'player-preview'"));
   check('refresh 会重画预览', invSrc.includes('refreshPlayerPreview()'));
-  check('预览读四个盔甲槽', invSrc.includes('ARMOR_START + 3'));
+  // 批次 185：改成循环取四个槽（`[0,1,2,3].map(...)`），断言落在"确实读了 4 个"
+  check(
+    '预览读四个盔甲槽',
+    invSrc.includes('const armorIds = [0, 1, 2, 3].map((offset) => this.inventory.get(ARMOR_START + offset)?.id ?? null);'),
+  );
   check('预览 CSS 在', css.includes('.inv-player-preview'));
   check('注释写明是占位不是真皮肤', previewSrc.includes('不是可换皮肤') || previewSrc.includes('不假装有真皮肤'));
 }
@@ -2037,6 +2041,62 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   check(
     '帧率上限那个手动档位已删除（交给自适应）',
     !settingsSrc.includes("'帧率上限'"),
+  );
+}
+
+console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精简（批次 185 续）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
+  const playerSrc = readFileSync(new URL('../src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  check(
+    '返回键：暂停菜单页再按返回 = 保存退出到主菜单（设置子页仍先退回菜单页）',
+    /if \(this\.settingsScreen\.page === 'menu'\) void this\.exitToMenu\(\);/.test(appSrc) &&
+      /else this\.settingsScreen\.goBack\(\);/.test(appSrc),
+  );
+  check(
+    '成就入口搬到右轨（合成/盔甲上面）',
+    invSrc.includes("this.makeRailAction('成就'") &&
+      /this\.pocketSideEl\.append\(\s*this\.railAchievementsEl,/.test(invSrc) &&
+      css.includes('.inv-rail-action'),
+  );
+  check(
+    '潜行有姿态（下沉 + 前倾 + 摆幅减半）',
+    playerSrc.includes('sneaking?: boolean') &&
+      playerSrc.includes("this.object.rotation.order = 'YXZ'") &&
+      playerSrc.includes('pose.y - (sneak ? 0.12 : 0)') &&
+      appSrc.includes('(this.touch?.input.sneak ?? false)'),
+  );
+  check(
+    '设置删掉「云」「粒子效果」两行（保留字段给老存档）',
+    !settingsSrc.includes("'clouds', '云'") && !settingsSrc.includes("'particles', '粒子效果'"),
+  );
+
+  // 3D 角色预览（批次 185 外观）
+  const previewSrc = readFileSync(new URL('../src/ui/PlayerPreview3D.ts', import.meta.url), 'utf8');
+  check(
+    '背包角色预览是 3D、可拖动旋转（WebGL 不可用时退回 2D 剪影）',
+    previewSrc.includes('class PlayerPreview3D') &&
+      previewSrc.includes('rotateBy(deltaX: number)') &&
+      invSrc.includes('new PlayerPreview3D(this.playerPreviewEl)') &&
+      invSrc.includes('this.preview3dFailed = true') &&
+      invSrc.includes('drawPlayerPreview('),
+  );
+  check(
+    '披风外观：设置项 + 预览 + 世界模型三处共用',
+    settingsSrc.includes("'cape', '披风'") &&
+      settingsSrc.includes('cape: false,') &&
+      invSrc.includes('this.hooks.isCapeVisible') &&
+      playerSrc.includes('setCape(visible: boolean)') &&
+      appSrc.includes('this.playerRenderer.setCape(this.settings.cape);'),
+  );
+  check(
+    '副手有东西时左臂挂一块板（没有盾牌物品，先做有/没有）',
+    playerSrc.includes('setOffhand(visible: boolean)') &&
+      appSrc.includes('this.playerRenderer.setOffhand(this.inventory.get(OFFHAND_SLOT) !== null);'),
   );
 }
 

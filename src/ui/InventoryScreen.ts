@@ -22,9 +22,11 @@
 
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { drawItemIcon } from './ItemIcon.ts';
+import { itemIconTile } from '../core/registry/items.ts';
 import {
   ARMOR_SIZE,
   ARMOR_START,
+  OFFHAND_SLOT,
   HOTBAR_SIZE,
   HOTBAR_START,
   Inventory,
@@ -128,6 +130,7 @@ import {
   type CreativeTab,
 } from './CreativeTabs.ts';
 import { drawPlayerPreview } from './PlayerPreview.ts';
+import { PlayerPreview3D } from './PlayerPreview3D.ts';
 import { isTouchDevice, isTouchUi } from './TouchControls.ts';
 import { updateDurabilityBar } from './SlotVisuals.ts';
 import {
@@ -208,6 +211,8 @@ export interface InventoryScreenHooks {
    * 别处进去（背包是唯一常开的入口），配方书当初也是这么挂上去的。
    */
   onOpenAdvancements?: () => void;
+  /** 预览用：披风外观是否开启（批次 185） */
+  isCapeVisible?: () => boolean;
   /**
    * 成交一条交易（J11，批次 88）。
    *
@@ -294,6 +299,12 @@ const TOUCH_REPEAT_MS = 170;
 export const PICK_TOAST_MS = 2000;
 
 /** 携带版物品栏的三个内容页（批次 140；Wiki「携带版 UI」） */
+/** 右轨"成就"图标（图集里没有对应物品，用内联 SVG：奖杯） */
+const ACHIEVEMENT_ICON =
+  '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">' +
+  '<path d="M7 4h10v3a5 5 0 0 1-4 4.9V15h3v2H8v-2h3v-3.1A5 5 0 0 1 7 7V4zm-3 1h2v2H5a2 2 0 0 0 2 2v2a4 4 0 0 1-3-3.9V5zm16 0h-2v2h1a2 2 0 0 1-2 2v2a4 4 0 0 0 3-3.9V5z"/>' +
+  '</svg>';
+
 export type PocketInventoryTab = 'crafting' | 'armor' | 'inventory';
 
 /**
@@ -436,6 +447,14 @@ export class InventoryScreen {
   private invTabEl!: HTMLButtonElement;
   /** 右轨：合成 / 盔甲 */
   private pocketSideEl!: HTMLDivElement;
+  /** 3D 角色预览（批次 185）；WebGL 不可用时为 null，退回 2D 剪影 */
+  private preview3d: PlayerPreview3D | null = null;
+  private preview3dFailed = false;
+  /** 拖拽预览用的指针（点击拖动 = 转一圈） */
+  private previewDrag: { pointerId: number; x: number } | null = null;
+  /** 标题栏那颗「成就」（容器界面用）与右轨那颗（双栏壳用），二选一显示 */
+  private achievementsBtn: HTMLButtonElement | null = null;
+  private railAchievementsEl: HTMLButtonElement | null = null;
   /** 创造分类条的父节点（挪到左轨后要能归还） */
   private creativeControls!: HTMLDivElement;
   /** 盔甲页标题（Wiki「盔甲」） */
@@ -775,6 +794,7 @@ export class InventoryScreen {
       achievements.dataset.role = 'advancements';
       achievements.textContent = touchDevice ? '成就' : '成就 (J)';
       achievements.addEventListener('click', () => this.hooks.onOpenAdvancements?.());
+      this.achievementsBtn = achievements;
       header.appendChild(achievements);
     }
     // 关闭键（批次 111，用户："不要点击空白关闭，就用关闭按钮"）。
@@ -976,6 +996,29 @@ export class InventoryScreen {
     this.playerPreviewEl = document.createElement('canvas');
     this.playerPreviewEl.className = 'inv-player-preview';
     this.playerPreviewEl.dataset.role = 'player-preview';
+    // 拖一下 = 转一圈（批次 185）。`touch-action: none` 在 CSS 里，避免拖动被当成滚动
+    this.playerPreviewEl.addEventListener('pointerdown', (event) => {
+      if (!this.preview3d) return;
+      event.preventDefault();
+      this.previewDrag = { pointerId: event.pointerId, x: event.clientX };
+      try {
+        this.playerPreviewEl.setPointerCapture(event.pointerId);
+      } catch {
+        // 某些浏览器在合成事件上会拒绝，拖不动就算了
+      }
+    });
+    this.playerPreviewEl.addEventListener('pointermove', (event) => {
+      const drag = this.previewDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const dx = event.clientX - drag.x;
+      drag.x = event.clientX;
+      this.preview3d?.rotateBy(dx);
+    });
+    const endPreviewDrag = (event: PointerEvent): void => {
+      if (this.previewDrag?.pointerId === event.pointerId) this.previewDrag = null;
+    };
+    this.playerPreviewEl.addEventListener('pointerup', endPreviewDrag);
+    this.playerPreviewEl.addEventListener('pointercancel', endPreviewDrag);
     this.playerPreviewEl.setAttribute('aria-label', '玩家预览');
     const gearRow = document.createElement('div');
     gearRow.className = 'inv-gear-row';
@@ -991,7 +1034,11 @@ export class InventoryScreen {
 
     this.pocketSideEl = document.createElement('div');
     this.pocketSideEl.className = 'inv-pocket-side';
+    // 批次 185（用户）：成就挪到右轨、**在合成/盔甲上面**——与那两颗同属"右栏的入口"，
+    // 比挤在 18px 高的标题栏里合理。容器界面没有右轨，那边仍用标题栏那颗（见 applyInventoryChrome）。
+    this.railAchievementsEl = this.makeRailAction('成就', ACHIEVEMENT_ICON, () => this.hooks.onOpenAdvancements?.());
     this.pocketSideEl.append(
+      this.railAchievementsEl,
       this.makePocketIconTab('crafting', '合成', Block.CRAFTING_TABLE),
       this.makePocketIconTab('armor', '盔甲', null),
     );
@@ -1541,6 +1588,21 @@ export class InventoryScreen {
   }
 
   /** 携带版图标页签（批次 144）：右缘合成/盔甲，左下物品栏 */
+  /** 右轨上的"动作键"（不是页签）：成就这类一按就开面板的入口 */
+  private makeRailAction(label: string, svg: string, onClick: () => void): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'inv-pocket-tab inv-rail-action';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.innerHTML = svg;
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      onClick();
+    });
+    return button;
+  }
+
   private makePocketIconTab(
     tab: PocketInventoryTab,
     label: string,
@@ -1719,6 +1781,9 @@ export class InventoryScreen {
       this.restoreInvTabToRail();
       // 容器界面照旧给这颗按钮；创造模式下不要（同一口径，见下面那条注释）
       if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', creativePlayer);
+      // 容器界面没有右轨 → 成就用标题栏那颗；右轨那颗跟着藏
+      this.achievementsBtn?.classList.remove('hidden');
+      this.railAchievementsEl?.classList.add('hidden');
       this.lastLeftPane = '';
       return;
     }
@@ -1734,6 +1799,10 @@ export class InventoryScreen {
       showCreativeItems ? 'creative' : !creativePlayer && this.pane === 'category' ? 'category' : 'items';
 
     this.panel.classList.add('pocket-ui', 'pocket-dual');
+    // 双栏壳：成就放右轨（合成/盔甲上面），标题栏那颗收起——标题栏只有 18px，
+    // 再塞三颗键就挤成一排了。
+    this.achievementsBtn?.classList.add('hidden');
+    this.railAchievementsEl?.classList.remove('hidden');
     this.panel.classList.toggle('creative-ui', showCreativeItems);
     this.panel.dataset.pocketLeft = leftPane;
     this.panel.dataset.pocketTab = this.pocketTab;
@@ -3591,15 +3660,39 @@ export class InventoryScreen {
     return this.pocketTab;
   }
 
-  /** 按当前盔甲槽重画预览剪影（批次 141） */
+  /**
+   * 重画预览（批次 141 的 2D 剪影 → 批次 185 的 3D 小人）。
+   *
+   * 先试 WebGL：一块 canvas 拿到 2d 上下文之后就再也拿不到 webgl，
+   * 所以**不能**先画 2D 再升级——失败才退回剪影。
+   */
   private refreshPlayerPreview(): void {
+    const armorIds = [0, 1, 2, 3].map((offset) => this.inventory.get(ARMOR_START + offset)?.id ?? null);
+    if (!this.preview3d && !this.preview3dFailed) {
+      try {
+        this.preview3d = new PlayerPreview3D(this.playerPreviewEl);
+      } catch {
+        this.preview3dFailed = true;
+      }
+    }
+    if (this.preview3d) {
+      const colors = armorIds.map((id) =>
+        id === null ? null : this.atlas.averageColor(itemIconTile(id)),
+      );
+      this.preview3d.update(
+        colors,
+        this.hooks.isCapeVisible?.() ?? false,
+        this.inventory.get(OFFHAND_SLOT) !== null,
+      );
+      return;
+    }
     drawPlayerPreview(
       this.playerPreviewEl,
       {
-        helmet: this.inventory.get(ARMOR_START)?.id ?? null,
-        chest: this.inventory.get(ARMOR_START + 1)?.id ?? null,
-        legs: this.inventory.get(ARMOR_START + 2)?.id ?? null,
-        boots: this.inventory.get(ARMOR_START + 3)?.id ?? null,
+        helmet: armorIds[0],
+        chest: armorIds[1],
+        legs: armorIds[2],
+        boots: armorIds[3],
       },
       this.atlas,
       48,
@@ -4117,6 +4210,10 @@ export class InventoryScreen {
     this.pickToastFadeTimer = 0;
     this.inventory.onChange = null;
     for (const grid of Object.values(this.grids)) grid.onChange = null;
+    // 3D 预览有自己的 WebGL 上下文：拆局时要主动释放（上下文数量有上限）
+    this.preview3d?.dispose();
+    this.preview3d = null;
+    this.previewDrag = null;
     this.root.remove();
     // 面板开着时退出世界：body 上那个"背包打开"的类也要一起摘掉，
     // 否则主菜单会继承一套背包布局约束

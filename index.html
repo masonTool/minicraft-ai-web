@@ -1443,6 +1443,10 @@
       .inv-shell.pocket-chrome .inv-pocket-side {
         position: static; display: flex; flex-direction: column; gap: 4px;
       }
+      /* 右轨的"动作键"（成就，批次 185）：与页签同尺寸，但不吃选中态 */
+      .inv-shell.pocket-chrome .inv-rail-right .inv-rail-action {
+        width: 36px; height: 36px; min-height: 36px;
+      }
       .inv-shell.pocket-chrome .inv-pocket-inv-tab { position: static; }
       .inv-shell.pocket-chrome .inv-pocket-recipes {
         position: static;
@@ -1729,6 +1733,9 @@
         background: rgba(0, 0, 0, 0.12);
         border: 2px solid; border-color: #5a5a5a #c8c8c8 #c8c8c8 #5a5a5a;
         flex: 0 0 auto;
+        /* 3D 预览（批次 185）：拖它转一圈；别让触摸拖动变成滚动页面/背包 */
+        touch-action: none;
+        cursor: grab;
       }
       .inv-main { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 4px; }
       /* 快捷栏与主背包之间空一道缝（原版这两排是紧挨着的，靠缝区分） */

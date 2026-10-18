@@ -322,7 +322,7 @@ import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 // 中键拾取方块（批次 129）：三条规则是纯函数（`test:pickblock` 逐条钉住）
 import { applyPickBlock, pickItemFor, planPickBlock } from './core/interaction/PickBlock.ts';
 // 快捷栏的起点与大小：`planPickBlock` 返回的是**背包下标**，切选中格要减掉起点
-import { HOTBAR_START } from './core/container/Inventory.ts';
+import { HOTBAR_START, OFFHAND_SLOT } from './core/container/Inventory.ts';
 import { planPlacement } from './core/interaction/Placement.ts';
 // 刷怪蛋（批次 174）：手里那件是蛋就生成对应生物（`spawnEggMobOf` 查不到就返回 undefined）
 import { spawnEggMobOf } from './core/registry/spawnEggs.ts';
@@ -1412,6 +1412,7 @@ class App {
         onRecipeHost: (host) => this.attachRecipeBook(host),
         // 成就（M7）：背包标题栏上的按钮——手机上没有 Esc，这条是唯一的入口
         onOpenAdvancements: () => this.openAdvancements(),
+        isCapeVisible: () => this.settings.cape,
         // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
         onTrade: (villager, index) => void this.performTrade(villager, index),
         // 熔炉产物被取空时结算烧炼经验（I5）
@@ -1678,13 +1679,21 @@ class App {
     else if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
     // 暂停菜单分两层（批次 108）：先"设置页 → 菜单页"，回到菜单页时它**还开着**，
     // 所以这里不能直接 closeSettings()——`goBack` 会自己决定（必要时才真关）
-    else if (this.settingsScreen.isOpen) this.settingsScreen.goBack();
+    else if (this.settingsScreen.isOpen) {
+      // 批次 185（用户）：返回键层级 = 暂停菜单 → 保存回主菜单 → 再返回才退出页面。
+      //  - 在设置子页：先退回菜单页（与 `goBack` 一致）；
+      //  - 已经在菜单页：这一下就是"保存并退出"，回到主菜单（不再只是关掉继续玩）。
+      // 回到主菜单后 `BackButton.reset()` 已经把那条例外历史收掉，下一次返回交给浏览器。
+      if (this.settingsScreen.page === 'menu') void this.exitToMenu();
+      else this.settingsScreen.goBack();
+    }
     return this.isAnyUiOpen();
   }
 
   private applySettings(settings: GameSettings): void {
     this.cameraMode = settings.cameraMode;
     this.viewDistance = settings.viewDistance;
+    this.playerRenderer.setCape(settings.cape);
     // 玩家手动改视距时把自适应冷却重置：否则刚拖完滑块又要等几秒才允许升降
     // ⚠️ 分辨率的当前值**不重置**：它是"这台设备现在扛不扛得住"的记忆，
     // 改一次视距就把它弹回 1.0 的话，弱机每次调设置都要重新掉一轮帧
@@ -3141,6 +3150,9 @@ class App {
     // 盔甲：第三人称画甲片、第一人称只画胸甲袖套，但取色是同一份
     this.applyArmorAppearance();
     if (thirdPerson) {
+      // 外观（批次 185）：披风是设置项，副手有东西就在左臂外侧挂一块板
+      this.playerRenderer.setCape(this.settings.cape);
+      this.playerRenderer.setOffhand(this.inventory.get(OFFHAND_SLOT) !== null);
       this.playerRenderer.update(
         {
           x: this.physics.x,
@@ -3152,6 +3164,12 @@ class App {
           walkAmount: this.walkAmount,
           swing: this.hand.swingProgress,
           flying: this.flying,
+          // 潜行姿态（批次 185）：键盘 Shift、触摸"潜行"键、手柄任一条都算
+          sneaking:
+            this.keys.has('ShiftLeft') ||
+            this.keys.has('ShiftRight') ||
+            (this.touch?.input.sneak ?? false) ||
+            (this.gamepadState?.sneak ?? false),
         },
         (x, y, z) => {
           if (!this.world.isLoaded(x, z)) return null;

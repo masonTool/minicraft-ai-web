@@ -105,7 +105,8 @@ type BoolSettingKey =
   | 'showDebug'
   | 'adaptiveViewDistance'
   | 'adaptiveResolution'
-  | 'weatherEffects';
+  | 'weatherEffects'
+  | 'cape';
 
 export interface GameSettings {
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
@@ -132,6 +133,13 @@ export interface GameSettings {
   particles: ParticleLevel;
   /** 是否显示云（关掉能省一点填充率，也能看清远处地形） */
   clouds: boolean;
+  /**
+   * 披风（批次 185 外观）：第三人称与背包 3D 预览同时生效。
+   *
+   * 没有"披风物品"——原版的披风是皮肤的一部分，这里先给一个外观开关；
+   * 以后做角色创建时，这块就是"皮肤/披风"那一栏的落点。
+   */
+  cape: boolean;
   /**
    * 天气效果（批次 172，TASKS M20）：关掉之后**不画雨雪点、也不溅雨花**，
    * 但天气本身照旧（火焰还是会被雨浇灭、炼药锅照样接水）。
@@ -200,6 +208,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   cameraMode: 'first',
   particles: 'all',
   clouds: true,
+  cape: false,
   weatherEffects: true,
   autosaveSeconds: 30,
   invertY: false,
@@ -237,6 +246,7 @@ export function loadSettings(): GameSettings {
         ? (parsed.particles as ParticleLevel)
         : DEFAULT_SETTINGS.particles,
       clouds: parsed.clouds !== false,
+      cape: parsed.cape === true,
       weatherEffects: parsed.weatherEffects !== false,
       // 间隔只认那几个档位：脏数据（或老存档里没有这一项）一律回到 30 秒
       autosaveSeconds: AUTOSAVE_OPTIONS.includes(parsed.autosaveSeconds as number)
@@ -526,9 +536,14 @@ export class SettingsScreen {
       this.makeSlider('viewDistance', '视距', ' 区块', 4, 16, 1),
       this.makeSlider('fov', '视野', '°', 60, 110, 1),
     );
-    this.makeToggle(graphics, 'clouds', '云');
+    // 批次 185（用户："性能相关那些设置有必要吗？默认去适配当前性能就行"）：
+    // **「云」与「粒子效果」两行删掉**。它们都是"画不画"的开关，自适应已经在掉帧时
+    // 降分辨率与视距；再让玩家自己猜"关云能不能救帧"只是把调参负担丢给玩家。
+    // （`clouds` / `particles` 字段保留：老存档照旧读取，默认值最完整。）
     // 天气效果（批次 172，M20）：只关**画出来的**雨雪与雨花，天气本身照旧
     this.makeToggle(graphics, 'weatherEffects', '天气效果');
+    // 外观（批次 185）：披风
+    this.makeToggle(graphics, 'cape', '披风');
     // 降级四件套（批次 130，N7）：手机上"掉帧时先牺牲什么"交给玩家自己定。
     // 默认值刻意选成"手机优先"：两档自适应都开、帧率不限（能跑多少跑多少）
     this.makeToggle(graphics, 'adaptiveResolution', '自适应分辨率');
@@ -537,7 +552,6 @@ export class SettingsScreen {
     // **帧率上限这一行删掉**。降级交给上面两条自适应——它们会在掉帧时先降分辨率/视距，
     // 跑到 60 就是 60；手动钉一个"30 帧"只会让好设备白等。
     // （`maxFps` 字段保留：老存档里的值还会被读取，只是不再给入口。）
-    this.makeSelect(graphics, 'particles', '粒子效果', PARTICLE_LEVELS, PARTICLE_LEVEL_LABELS);
 
     const controls = this.section('controls');
     // 全屏 / 横屏（批次 181）：手动兜底。放在最上面——"屏幕不对"时玩家第一个找的就是它
