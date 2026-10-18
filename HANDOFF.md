@@ -34,14 +34,24 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 584（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 586（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 287 项 —— 已完成 **178**、进行中 **73**、待办 36 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 287 项 —— 已完成 **179**、进行中 **74**、待办 34 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 188（H15 砂轮）：**砂轮终于有界面了**。右键打开后三格（要洗的物品 / 同种装备 / 产物）：
+  ① 单件带附魔 → **洗掉全部附魔**（含诅咒），按"权重 × 等级"折算成经验**返还**，
+  累积惩罚归零、自定义名保留；② 两件同种装备 → 剩余耐久相加 + **5%**（铁砧是 12%），附魔一起洗掉；
+  ③ 附魔书 → 洗完变成普通书。产物仍然是"两格算出来"的，取走才扣输入，经验球冒在**砂轮上方**。
+  逻辑在 `core/crafting/Grindstone.ts`（纯函数）、容器在 `core/container/Grindstone.ts`、
+  界面是 `InventoryScreen` 的 `grindstone` 模式（复用铁砧那套 `anvil-row` 布局）；
+  容器按坐标存、随存档走、进 `CONTAINER_BLOCKS` 与 `containerOfBlockAt`（拆掉时东西会还给你）。
+  顺手修掉一个**刷物品的口子**（铁砧 / 锻造台一直有）：拆方块倒空时把"算出来的产物槽"也倒了，
+  放两把附魔剑再拆铁砧就能白拿一把洗过附魔的剑——现在 `Transfer.isComputedResultSlot()` 跳过这三台。
+  `test:grindstone` 63 条；离线套数 119 → **120**；H15 收口（锻造台早做完、制箭台原版无界面）。
 - 批次 187（角色创建最小版）：设置新增「外观」页（肤色/上衣/裤子各 6 档 + 披风），
   `game/appearance.ts` 存**档位下标**（坏值回退默认），第三人称模型、背包 3D 预览、2D 兜底
   三处共用同一套配色；默认档 = 原配色，老存档不换人。`feedback185-check` 32 条全 OK。
@@ -291,11 +301,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 119 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 120 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 119 套离线测试
+npm test                   # typecheck:tools + vitest + 120 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -307,7 +317,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **119 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **120 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
