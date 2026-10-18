@@ -1974,6 +1974,14 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '浮层尽早挂上（不等菜单/加载）',
     /installKeyboardGuards\(\);[\s\S]{0,300}installRotateHint\(\);/.test(appSrc),
   );
+  // 批次 206：安卓返回键在全屏里常常只退出全屏 → 暂停菜单不该被竖屏提示盖住
+  check(
+    '退出全屏等于一次返回：落回暂停菜单而不是"请横屏游玩"',
+    appSrc.includes("addEventListener('fullscreenchange'") &&
+      appSrc.includes("classList.add('pause-open')") &&
+      settingsSrc.includes("classList.add('pause-open')") &&
+      css.includes('body.pause-open .rotate-hint'),
+  );
 
   // ② 工作台 3×3：创造模式左栏仍能切分类
   check(

@@ -3497,6 +3497,11 @@
         -webkit-tap-highlight-color: transparent;
       }
       .rotate-hint.visible { display: flex; }
+      /* 暂停菜单 / "点击继续"层开着时不要盖它（批次 206）。
+         安卓返回键在全屏里会**先退出全屏**，方向锁随之失效、手机转回竖屏——
+         以前这一层就会盖住暂停菜单，玩家看到的是"请横屏游玩"而不是"游戏已暂停"。
+         暂停是玩家主动要的界面，方向不对不该把它藏起来。 */
+      body.pause-open .rotate-hint { display: none; }
       .rotate-hint b { font-size: 20px; font-weight: 400; letter-spacing: 2px; }
       .rotate-hint span { font-size: 12px; color: #a8a8a8; }
       /* 竖屏里的手机轮廓：只做视觉引导，不参与点击 */

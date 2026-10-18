@@ -961,6 +961,14 @@ class App {
     },
     closeTopUi: () => this.closeTopUi(),
   });
+  /**
+   * 上一帧是不是全屏（批次 206）。
+   *
+   * 安卓在全屏里的返回键**常常先退出全屏、而不是派发 `popstate`**：方向锁随着全屏一起失效，
+   * 手机转回竖屏 → 竖屏提示整层盖住画面。玩家体感是"按返回被扔到请横屏游玩"，
+   * 而不是"暂停"。这里盯住"从全屏掉出来"这一刻，没有面板就落回暂停菜单。
+   */
+  private lastFullscreen = false;
   private readonly hotbarSlots: HTMLDivElement[] = [];
   /** 聊天与命令输入（左下角消息栏 + 命令输入行） */
   private readonly chat = new ChatInput();
@@ -1655,6 +1663,26 @@ class App {
       },
       { signal: this.listeners.signal },
     );
+    // 批次 206：全屏里按返回，浏览器往往只退出全屏（没有 popstate）。
+    // 把"掉出全屏"也当成一次返回：没有面板就弹出暂停菜单，而不是让竖屏提示盖住画面。
+    this.lastFullscreen = isFullscreen();
+    const onFullscreenChange = (): void => {
+      if (this.disposed) return;
+      const now = isFullscreen();
+      const lost = this.lastFullscreen && !now;
+      this.lastFullscreen = now;
+      if (!lost) return;
+      if (this.isAnyUiOpen()) {
+        // 已经在某个面板里（例如设置里手动退出全屏）：只对一次竖屏提示，不要叠一层暂停
+        syncRotateHint();
+        return;
+      }
+      diag.event('input', 'back.exitFullscreen', {});
+      this.openSettings();
+      syncRotateHint();
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange, { signal: this.listeners.signal });
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange, { signal: this.listeners.signal });
 
     this.bindEvents();
     // 没有存档时直接按出生点请求区块；
@@ -1856,12 +1884,16 @@ class App {
   closeSettings(): void {
     this.settingsScreen.hide();
     this.handleInventoryOpen(false);
+    // 手机上"继续游戏"就是那一次用户手势：顺手把全屏 + 横屏要回来（批次 206）。
+    // 不这样做的话，从"返回键退出全屏"落回暂停之后，点继续只会得到一个竖屏小窗。
+    if (isTouchDevice()) enterMobilePresentation();
     // 指针锁必须由用户手势触发，非手势下调用会被拒绝——吞掉异常，别让它打断关闭流程
     try {
       void this.renderer.domElement.requestPointerLock?.();
     } catch {
       // 忽略：玩家点一下画面就会重新锁定
     }
+    syncRotateHint();
   }
 
   toggleSettings(): void {
@@ -1915,6 +1947,8 @@ class App {
       this.dismissResumeGate();
     });
     document.body.appendChild(gate);
+    // 这一层常出现在"系统把手机转回竖屏"之后：别让"请横屏游玩"盖在"游戏已暂停"上
+    document.body.classList.add('pause-open');
     this.resumeGateEl = gate;
   }
 
@@ -1923,6 +1957,7 @@ class App {
     this.resumeGateEl?.remove();
     this.resumeGateEl = null;
     if (this.settingsScreen.isOpen) this.closeSettings();
+    document.body.classList.remove('pause-open');
     syncRotateHint();
   }
 
@@ -10025,6 +10060,7 @@ class App {
     // 从后台回来那一层遮罩挂在 body 上（不在 App 的容器里），要自己摘掉
     this.resumeGateEl?.remove();
     this.resumeGateEl = null;
+    document.body.classList.remove('pause-open');
     this.wasHidden = false;
     diag.event('app', 'dispose', { world: this.worldConfig.id });
     this.listeners.abort();

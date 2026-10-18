@@ -1243,6 +1243,9 @@ export class SettingsScreen {
     this.renderSubtitle();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
+    // 局内暂停时让竖屏提示让位（批次 206）：返回键先退出全屏 → 手机转回竖屏，
+    // 那一层（z-index 90）会盖住暂停菜单（50），玩家看到的就是"请横屏游玩"。
+    if (this.actions.onExitToMenu) document.body.classList.add('pause-open');
     // 日志条数每次打开都会变，进来时对一次账
     this.refreshDiagnostics();
     // 模式可能被 /gamemode 或主菜单改过：两个开关按真实状态回填
@@ -1252,12 +1255,14 @@ export class SettingsScreen {
   hide(): void {
     this.open = false;
     this.root.classList.add('hidden');
+    document.body.classList.remove('pause-open');
   }
 
   /** 主菜单设置是懒建的临时实例；进世界前销毁，避免与局内面板重复 `#settings-screen`。 */
   destroy(): void {
     this.open = false;
     this.root.remove();
+    document.body.classList.remove('pause-open');
   }
 
   toggle(): void {
