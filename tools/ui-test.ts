@@ -1335,6 +1335,15 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
     compact.includes('.settings-row.wide { grid-column: 1 / -1; }') &&
       source.includes("row.className = 'settings-row wide';"),
   );
+  // 诊断日志（批次 181）：入口在设置里，读数与三个动作挤一行且不许撑破
+  check('诊断日志入口在设置里', source.includes('诊断日志') && source.includes('makeDiagnosticsRow'));
+  check('诊断日志三个动作齐全', source.includes('记录问题') && source.includes('导出') && source.includes('复制'));
+  check(
+    '诊断读数放不下时省略（不撑破设置行）',
+    compact.includes('.diag-block {') &&
+      compact.includes('.diag-status {') &&
+      compact.includes('text-overflow: ellipsis;'),
+  );
   check(
     '页签永远显示（不再分"高屏隐藏/矮屏显示"）',
     compact.includes('.settings-tabs { display: flex; flex-direction: column; flex: 0 0 104px; gap: 4px; }'),

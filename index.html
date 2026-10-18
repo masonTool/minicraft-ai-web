@@ -1032,6 +1032,23 @@
         font: inherit; font-size: 14px; padding: 9px; min-height: 42px; cursor: pointer;
       }
       .settings-row i { font-style: normal; color: var(--mc-text-light); text-align: right; }
+      /* ---------------- 诊断日志（批次 181） ----------------
+         标题 + 读数 + 三个动作挤在一行：横屏手机高度紧张，能不加行就不加行；
+         窄屏放不下时允许换行（flex-wrap），而不是把按钮压扁。 */
+      .diag-block {
+        grid-column: 1 / -1;
+        display: flex; align-items: center; flex-wrap: wrap;
+        gap: 4px 6px; min-width: 0; padding: 3px 0;
+        border-top: 1px solid #a9a9a9;
+      }
+      .diag-title { flex: 0 0 auto; font-size: 12px; color: var(--mc-text-light); }
+      .diag-status {
+        flex: 1 1 96px; min-width: 0; font-size: 11px; color: #a8a8a8;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .diag-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+      .diag-actions .diag-button { min-width: 0; padding: 3px 7px; font-size: 11px; }
+      body.touch-mode .diag-actions .diag-button { min-height: 32px; padding: 5px 9px; font-size: 12px; }
       /* ---------------- 循环切换控件（批次 109） ----------------
          ⚠️ 基岩版的设置界面里**没有复选框、也没有下拉框**：布尔项与"几选一"项
          都是同一颗灰按钮（`开 / 关`、`‹ 中 ›`），点一下换下一个值。

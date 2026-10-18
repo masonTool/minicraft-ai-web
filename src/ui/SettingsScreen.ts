@@ -297,6 +297,19 @@ export interface SettingsActions {
   onToggleFly?: () => void;
   /** 当前是不是在飞（决定那一行的开关亮不亮） */
   isFlying?: () => boolean;
+  /**
+   * 诊断日志（批次 181）：三个入口都给了才显示这一块。
+   *
+   * 为什么放在设置而不是暂停菜单：暂停菜单只放"几个主要按钮"（批次 108 的定论），
+   * 而日志是排查用的低频入口；设置里已经有资源包这种同类项。
+   */
+  onDiagnosticsMark?: () => void;
+  /** 返回是否真的触发了下载（无 DOM / 被拒时为 false） */
+  onDiagnosticsExport?: () => boolean;
+  /** 返回是否复制成功 */
+  onDiagnosticsCopy?: () => Promise<boolean>;
+  /** 当前条数 / 占用，用来在入口上显示"离 500KB 还有多远" */
+  diagnosticsStats?: () => { events: number; kb: number; marked: boolean };
 }
 
 /**
@@ -339,6 +352,8 @@ export class SettingsScreen {
   private subtitleText = '按 Esc 继续游戏';
   /** "创造模式（飞行）"那个开关（非持久设置，见 `makeCreativeRow`） */
   private flyingToggle: HTMLButtonElement | null = null;
+  /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
+  private diagnosticsStatusEl: HTMLDivElement | null = null;
 
   constructor(
     host: HTMLElement,
@@ -527,6 +542,10 @@ export class SettingsScreen {
     //（双击跳跃仍然能用，那是手势）
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
     game.appendChild(this.makeResourcePackRow());
+    // 诊断日志（批次 181）：平时常开、500KB 封顶；这里只放"打点 / 导出 / 复制"
+    if (this.actions.onDiagnosticsMark || this.actions.onDiagnosticsExport || this.actions.onDiagnosticsCopy) {
+      game.appendChild(this.makeDiagnosticsRow());
+    }
 
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
     // 这一层留着是为了让"选项卡列"与"内容区"能各自独立收缩/滚动。
@@ -785,6 +804,83 @@ export class SettingsScreen {
     );
   }
 
+  /**
+   * 诊断日志（批次 181）。
+   *
+   * 三个动作刻意都放在**同一行**里：出事时玩家只记得"进设置点那个日志"，
+   * 再分子菜单就又多一层找不到的入口。
+   */
+  private makeDiagnosticsRow(): HTMLElement {
+    const block = document.createElement('div');
+    block.className = 'diag-block';
+
+    const title = document.createElement('span');
+    title.className = 'diag-title';
+    title.textContent = '诊断日志';
+
+    const status = document.createElement('div');
+    status.className = 'diag-status';
+    this.diagnosticsStatusEl = status;
+
+    const actions = document.createElement('div');
+    actions.className = 'diag-actions';
+
+    const make = (label: string, hint: string, run: () => void): void => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'settings-cycle diag-button';
+      button.textContent = label;
+      button.title = hint;
+      button.addEventListener('click', () => {
+        button.blur(); // 手机上点完别一直保持"按下"态
+        run();
+      });
+      actions.appendChild(button);
+    };
+
+    if (this.actions.onDiagnosticsMark) {
+      make('记录问题', '打一个标记，导出时能直接找到现场起点', () => {
+        this.actions.onDiagnosticsMark?.();
+        this.refreshDiagnostics();
+      });
+    }
+    if (this.actions.onDiagnosticsExport) {
+      make('导出', '下载 JSON（含最近两次会话，最多 500KB）', () => {
+        const ok = this.actions.onDiagnosticsExport?.() ?? false;
+        this.refreshDiagnostics(ok ? '已导出' : '导出失败');
+      });
+    }
+    if (this.actions.onDiagnosticsCopy) {
+      make('复制', '把可读时间线复制到剪贴板', () => {
+        void this.actions
+          .onDiagnosticsCopy?.()
+          .then((ok) => this.refreshDiagnostics(ok ? '已复制' : '复制失败'))
+          .catch(() => this.refreshDiagnostics('复制失败'));
+      });
+    }
+
+    block.append(title, status, actions);
+    this.refreshDiagnostics();
+    return block;
+  }
+
+  /**
+   * 刷新诊断入口上的读数。
+   *
+   * @param note 传了就临时显示这句话（"已导出"），否则显示条数/占用。
+   */
+  refreshDiagnostics(note?: string): void {
+    const element = this.diagnosticsStatusEl;
+    if (!element) return;
+    const stats = this.actions.diagnosticsStats?.();
+    if (!stats) {
+      element.textContent = note ?? '';
+      return;
+    }
+    const marked = stats.marked ? ' · 已打点' : '';
+    element.textContent = note ?? `${stats.events} 条 · ${stats.kb}KB / 500KB${marked}`;
+  }
+
   /** 资源包导入行（.mcpack / .zip） */
   private makeResourcePackRow(): HTMLElement {
     const row = document.createElement('label');
@@ -896,6 +992,8 @@ export class SettingsScreen {
     this.renderSubtitle();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
+    // 日志条数每次打开都会变，进来时对一次账
+    this.refreshDiagnostics();
   }
 
   hide(): void {

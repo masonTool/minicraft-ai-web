@@ -534,6 +534,8 @@ import {
 import { DEV_BASE_KIT, STARTING_HOTBAR } from './game/startupKit.ts';
 // 启动耗时台账（N8 的判据，批次 103）：量"首次访问等多久"与"进世界等多久"两个数
 import { STARTUP_PHASES, startupTrace } from './game/startupTrace.ts';
+// 诊断日志（批次 181）：平时常开、500KB 封顶；设置里有入口，`window.__mc.diag` 给自动化取
+import { diag } from './game/diagnosticsRuntime.ts';
 // 天空调色板与缓动（只被下面的"环境"一段用）
 import {
   DAY_SKY,
@@ -1449,6 +1451,11 @@ class App {
       // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,
+      // 诊断日志（批次 181）：打点 / 导出 / 复制，读数由 runtime 自己算
+      onDiagnosticsMark: () => diag.mark('用户记录问题'),
+      onDiagnosticsExport: () => diag.download(),
+      onDiagnosticsCopy: () => diag.copy(),
+      diagnosticsStats: () => diag.stats(),
     });
 
     // 开发期初始物资（见 STARTING_HOTBAR 注释）。
@@ -1651,6 +1658,7 @@ class App {
 
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
   private handleInventoryOpen(open: boolean): void {
+    diag.event('ui', 'ui.open.changed', { open, touch: this.touch?.debugState });
     this.uiOpen = open;
     this.keys.clear();
     this.leftDown = false;
@@ -1971,6 +1979,12 @@ class App {
       this.lastSaveAt = Date.now();
       this.lastSaveMs = performance.now() - started;
       this.saveCount++;
+      diag.event('app', 'save', {
+        reason,
+        ms: Math.round(this.lastSaveMs),
+        chunks: records.length,
+        ok: true,
+      });
       // 通知主菜单刷新"上次游玩 / 游玩时长 / 改动数"（没接就什么都不做）
       this.onSaved?.({
         playTime: this.save.meta?.playTime ?? 0,
@@ -1979,6 +1993,10 @@ class App {
       return true;
     } catch (error) {
       console.warn(`[save] ${reason} 保存失败`, error);
+      diag.event('error', 'save.failed', {
+        reason,
+        message: error instanceof Error ? error.message : String(error),
+      });
       return false;
     }
   }
@@ -2026,7 +2044,7 @@ class App {
    * 重载之后所有渲染资源、Worker、世界状态都干净重建，不必手写一套"卸载世界"的流程。
    */
   async exitToMenu(): Promise<void> {
-    await this.saveNow('exit');
+    diag.event('app', 'exitToMenu', { saved: await this.saveNow('exit') });
     window.location.reload();
   }
 
@@ -8779,7 +8797,43 @@ class App {
     window.addEventListener('pointerdown', unlockAudio);
     window.addEventListener('keydown', unlockAudio);
 
+    // 诊断日志（批次 181）：导出时把这些"现场参数"一起带上，
+    // 否则一份日志只能看出"点了什么"，看不出"在哪个世界、什么设置下点的"
+    diag.setMetaProvider(() => ({
+      world: {
+        id: this.worldConfig.id,
+        name: this.worldConfig.name,
+        seed: this.worldConfig.seed,
+        type: this.worldConfig.worldType,
+        difficulty: this.difficulty,
+        dimension: this.dimension,
+        mode: this.flying ? 'creative' : 'survival',
+      },
+      settings: {
+        viewDistance: this.settings.viewDistance,
+        fov: this.settings.fov,
+        maxFps: this.settings.maxFps,
+        touchScale: this.settings.touchScale,
+        touchStick: this.settings.touchStick,
+      },
+      runtime: {
+        uiOpen: this.uiOpen,
+        flying: this.flying,
+        sleeping: this.sleeping,
+        entities: this.entities.all.length,
+      },
+    }));
+    diag.event('app', 'world.start', {
+      id: this.worldConfig.id,
+      type: this.worldConfig.worldType,
+      seed: this.worldConfig.seed,
+      difficulty: this.worldConfig.difficulty,
+      save: this.save?.hasSave === true,
+    });
+
     const loop = () => {
+      // 帧号进日志：复现时能对上"第几帧开始卡"
+      diag.log.frame++;
       const now = performance.now();
       // 限帧（批次 130，N7）：上限只决定"这一帧来得太早就不画"。
       // ⚠️ 跳过时必须**继续排下一帧**（`requestAnimationFrame` 后再 return）——
@@ -8995,6 +9049,16 @@ class App {
 
   // ---------------------------------------------------------------- 开发调试接口
   // 供开发/自动化验收使用：精确定位相机、设置时间，便于复现与截图对比。
+
+  /**
+   * 诊断日志入口（批次 181）。
+   *
+   * 浏览器控制台里可以 `__mc.diag.exportText()` 直接拿到可读时间线，
+   * 或 `__mc.diag.download()` 下载 JSON——不必让玩家手抄。
+   */
+  get diag(): typeof diag {
+    return diag;
+  }
 
   teleport(x: number, y: number, z: number): void {
     this.physics.teleport(x, y, z);
@@ -9250,6 +9314,13 @@ class App {
 
   /** 切换创造飞行（键盘 F、触摸按钮与调试入口共用） */
   setFlying(value: boolean): void {
+    // 先记日志再改状态：D2 那种"切完就卡"的问题要靠 before/after 对比定位
+    diag.event('mode', 'setFlying', {
+      value,
+      before: this.flying,
+      uiOpen: this.uiOpen,
+      touch: this.touch?.debugState,
+    });
     this.flying = value;
     // 触摸端的"飞"按钮需要跟着亮/灭
     this.touch?.setFlying(value);
@@ -9953,6 +10024,11 @@ async function adoptLegacyWorld(registry: WorldRegistry): Promise<void> {
 
 async function boot(): Promise<void> {
   startupTrace.mark(STARTUP_PHASES.bootBegin);
+  // 诊断日志先开：启动期的错误（图集/Worker/WebGL）也要能被带出来
+  diag.start();
+  diag.event('app', 'boot', { href: location.href });
+  // 主菜单阶段还没有 App；先挂一个全局入口，出事时控制台/自动化脚本能直接取日志
+  (window as unknown as { __diag: typeof diag }).__diag = diag;
   const container = document.getElementById('app');
   const debugEl = document.getElementById('debug');
   const vitalsEl = document.getElementById('vitals');
@@ -9982,6 +10058,13 @@ async function boot(): Promise<void> {
 
   const startWorld = async (world: WorldSummary): Promise<void> => {
     startupTrace.mark(STARTUP_PHASES.worldBegin);
+    diag.event('app', 'world.enter', {
+      id: world.id,
+      name: world.name,
+      type: world.worldType,
+      difficulty: world.difficulty,
+      seed: world.seed,
+    });
     menu.hide();
     // 主菜单设置即使当前隐藏，也仍占着 `#settings-screen`；不移除会与 App 内实例重复 id。
     menuSettings?.destroy();

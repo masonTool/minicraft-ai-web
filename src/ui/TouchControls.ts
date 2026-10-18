@@ -17,7 +17,24 @@
 
 import type { PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { HOTBAR_SIZE } from '../core/container/Inventory.ts';
+import { diag } from '../game/diagnosticsRuntime.ts';
 import { TOUCH_ICON_LABELS, touchIconSvg, type TouchIconName } from './TouchIcons.ts';
+
+/** 诊断日志里用的输入快照（D2 那种"切完就卡"全靠它对比） */
+export interface TouchDebugState {
+  enabled: boolean;
+  visible: boolean;
+  lookPointer: number | null;
+  stickPointer: number | null;
+  forward: number;
+  strafe: number;
+  breaking: boolean;
+  placeHolding: boolean;
+  jumpHeld: boolean;
+  sneakHeld: boolean;
+  flying: boolean;
+  lookDragged: boolean;
+}
 
 /** 超过这个时长（毫秒）就算长按，升级为破坏 */
 const LONG_PRESS_MS = 220;
@@ -291,6 +308,29 @@ export class TouchControls {
     };
   }
 
+  /**
+   * 当前输入快照（诊断日志用）。
+   *
+   * ⚠️ 只读、无副作用：日志里每一条手势事件都带上它，
+   * 事后就能看出"指针还挂着的时候状态切换了"这类时序问题。
+   */
+  get debugState(): TouchDebugState {
+    return {
+      enabled: this.enabled,
+      visible: this.visible,
+      lookPointer: this.lookPointer,
+      stickPointer: this.stickPointer,
+      forward: Math.round(this.forward * 100) / 100,
+      strafe: Math.round(this.strafe * 100) / 100,
+      breaking: this.breaking,
+      placeHolding: this.placeHolding,
+      jumpHeld: this.jumpHeld,
+      sneakHeld: this.sneakHeld,
+      flying: this.flying,
+      lookDragged: this.lookDragged,
+    };
+  }
+
   /** 取走本帧累积的视角增量（像素），取完即清零 */
   consumeLook(): { x: number; y: number } {
     const delta = { x: this.lookX, y: this.lookY };
@@ -445,6 +485,13 @@ export class TouchControls {
       capturePointer(this.stickBase, event.pointerId);
       this.stickBase.classList.add('active');
       this.applyStick(event);
+      diag.event('gesture', 'stick.down', {
+        pointer: event.pointerId,
+        x: Math.round(event.clientX),
+        y: Math.round(event.clientY),
+        mode: this.stickMode,
+        state: this.debugState,
+      });
     });
 
     this.stickBase.addEventListener('pointermove', (event) => {
@@ -456,6 +503,11 @@ export class TouchControls {
     const release = (event: PointerEvent) => {
       if (event.pointerId !== this.stickPointer) return;
       event.preventDefault();
+      diag.event('gesture', 'stick.up', {
+        pointer: event.pointerId,
+        forward: Math.round(this.forward * 100) / 100,
+        strafe: Math.round(this.strafe * 100) / 100,
+      });
       this.resetStick();
     };
     this.stickBase.addEventListener('pointerup', release);
@@ -504,10 +556,17 @@ export class TouchControls {
       this.breaking = false;
       this.placeHolding = false;
       capturePointer(this.lookSurface, event.pointerId);
+      diag.event('gesture', 'look.down', {
+        pointer: event.pointerId,
+        x: Math.round(event.clientX),
+        y: Math.round(event.clientY),
+        state: this.debugState,
+      });
 
       this.placeHoldTimer = window.setTimeout(() => {
         if (this.lookDragged || this.breaking) return;
         this.placeHolding = true;
+        diag.event('gesture', 'placehold.start', { pointer: this.lookPointer, state: this.debugState });
         this.actions.onPlaceHoldStart();
       }, PLACE_HOLD_MS);
 
@@ -515,6 +574,7 @@ export class TouchControls {
         if (this.lookDragged) return;
         this.endPlaceHold();
         this.breaking = true;
+        diag.event('gesture', 'break.start', { pointer: this.lookPointer, state: this.debugState });
         this.actions.onBreakStart();
       }, LONG_PRESS_MS);
     });
@@ -528,6 +588,11 @@ export class TouchControls {
 
       if (!this.lookDragged && Math.hypot(dx, dy) > TAP_MOVE_SLOP) {
         this.lookDragged = true;
+        diag.event('gesture', 'look.drag.start', {
+          pointer: event.pointerId,
+          dx: Math.round(dx),
+          dy: Math.round(dy),
+        });
         this.clearGestureTimers();
         this.endPlaceHold();
       }
@@ -543,6 +608,11 @@ export class TouchControls {
     const finish = (event: PointerEvent) => {
       if (event.pointerId !== this.lookPointer) return;
       event.preventDefault();
+      diag.event('gesture', 'look.up', {
+        pointer: event.pointerId,
+        kind: event.type,
+        state: this.debugState,
+      });
       this.clearGestureTimers();
 
       if (this.breaking) {

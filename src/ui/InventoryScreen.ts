@@ -115,6 +115,7 @@ import {
   slicePage,
 } from './ItemPager.ts';
 import { TOUCH_TOOLTIP_MS, Tooltip } from './Tooltip.ts';
+import { diag } from '../game/diagnosticsRuntime.ts';
 import { Block } from '../core/registry/blocks.ts';
 import {
   CREATIVE_TAB_ICONS,
@@ -1363,6 +1364,12 @@ export class InventoryScreen {
    *    材料够就直接摆进合成格；不够就把配方**画**进合成格，缺的那件红底。
    */
   private pickCategoryItem(itemId: number): void {
+    diag.event('inventory', 'category.pick', {
+      itemId,
+      owned: this.inventory.countOf(itemId),
+      held: this.held?.id ?? null,
+      heldCount: this.held?.count ?? 0,
+    });
     // ① **再点同一件 = 取消选中**（批次 159 补）；点另一件 = 先把手上那叠放回去再选新的。
     //    ⚠️ 取消/放回会让分类栏重建，所以格子元素要按 id **重新找**，不能沿用旧引用。
     if (this.held) {
@@ -1522,6 +1529,7 @@ export class InventoryScreen {
    */
   private setPocketTab(tab: PocketInventoryTab): void {
     if (this.pocketTab === tab) return;
+    diag.event('inventory', 'tab.change', { from: this.pocketTab, to: tab, mode: this.mode });
     this.pocketTab = tab;
     this.applyInventoryChrome();
   }
@@ -1552,6 +1560,12 @@ export class InventoryScreen {
    * 点"自然"就该看到仓库里那组泥土，配方只是"要不要把没有的也列出来"。
    */
   private openPocketCategory(tab: RecipeBookTab): void {
+    diag.event('inventory', 'category.open', {
+      tab,
+      mode: this.mode,
+      creative: this.hooks.isCreative?.() ?? false,
+      pane: this.leftPaneKind,
+    });
     this.pocketTab = 'crafting';
     this.categoryTab = tab;
     this.categoryPage = 0;
@@ -2523,6 +2537,12 @@ export class InventoryScreen {
     const stack = binding ? binding.source.get(binding.index) : this.held;
     const count = dropCount(stack, wholeStack);
     if (!stack || count <= 0 || !this.hooks.onDrop) return;
+    diag.event('inventory', 'item.drop', {
+      itemId: stack.id,
+      count,
+      from: binding ? (this.hovered?.key ?? 'slot') : 'cursor',
+      held: this.held?.id ?? null,
+    });
     this.hooks.onDrop(stack.id, count);
     if (binding) {
       binding.source.set(binding.index, stack.count > count ? { ...stack, count: stack.count - count } : null);
@@ -3184,6 +3204,11 @@ export class InventoryScreen {
 
   openPanel(): void {
     if (this.open) return;
+    diag.event('inventory', 'open', {
+      mode: this.mode,
+      creative: this.hooks.isCreative?.() ?? false,
+      leftPane: this.leftPaneKind,
+    });
     this.closing = false;
     this.open = true;
     this.root.classList.remove('hidden');
@@ -3267,6 +3292,11 @@ export class InventoryScreen {
   }
 
   private finishClose(): void {
+    diag.event('inventory', 'close', {
+      mode: this.mode,
+      held: this.held?.id ?? null,
+      heldCount: this.held?.count ?? 0,
+    });
     this.closing = false;
     this.open = false;
     this.root.classList.add('hidden');
