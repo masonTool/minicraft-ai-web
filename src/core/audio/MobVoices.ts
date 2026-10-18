@@ -472,6 +472,10 @@ const VOICE_BY_ID: Readonly<Record<string, MobVoiceId>> = {
   // 豹猫与猫同科：叫声复用同一套档案（个体差异交给音高）
   ocelot: 'cat',
   fox: 'fox',
+  // 水生（批次 259）：本项目没有单独的鱼叫/海豚哨声，复用鱿鱼的水声（个体差异交给音高）
+  cod: 'squid',
+  salmon: 'squid',
+  dolphin: 'squid',
   phantom: 'phantom',
   wither: 'wither',
   ender_dragon: 'dragon',

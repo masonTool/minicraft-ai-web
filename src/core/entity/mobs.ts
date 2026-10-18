@@ -931,6 +931,118 @@ export const LLAMA_TYPE: MobType = {
   eyeHeight: 1.15,
 };
 
+/**
+ * 兔子（批次 259）：被动生物第二批。
+ *
+ * 体型小、跑得快；吃胡萝卜。**无掉落**（原版的兔皮/兔肉本项目还没有那两件物品，
+ * 不给"假掉落"）。
+ */
+export const RABBIT_TYPE: MobType = {
+  id: 'rabbit',
+  name: '兔子',
+  health: 3,
+  width: 0.4,
+  height: 0.4,
+  speed: 2.2,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 1,
+  feed: [Item.CARROT, Item.GOLDEN_CARROT],
+  spawnBiomes: ['plains', 'sunflower_plains', 'desert', 'taiga', 'snowy_plains', 'meadow', 'forest'],
+  bodyColor: 0xcbb49a,
+  accentColor: 0xf2efe8,
+  eyeHeight: 0.3,
+};
+
+/** 山羊（批次 259）：山地那只，吃小麦；无掉落（原版只掉角，本项目没有） */
+export const GOAT_TYPE: MobType = {
+  id: 'goat',
+  name: '山羊',
+  health: 10,
+  width: 0.9,
+  height: 1.1,
+  speed: 2.0,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 2,
+  feed: Item.WHEAT,
+  spawnBiomes: ['windswept_hills', 'stony_peaks', 'snowy_slopes', 'meadow'],
+  bodyColor: 0xcdc5b4,
+  accentColor: 0x8a8272,
+  eyeHeight: 0.9,
+};
+
+/** 鳕鱼（批次 259）：水里的小鱼，钓上来就是它自己 */
+export const COD_TYPE: MobType = {
+  id: 'cod',
+  name: '鳕鱼',
+  health: 3,
+  width: 0.5,
+  height: 0.3,
+  speed: 1.4,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [{ itemId: Item.COD, min: 1, max: 1 }],
+  xp: 1,
+  aquatic: true,
+  spawnInWater: true,
+  ignoreLight: true,
+  spawnBiomes: ['ocean', 'deep_ocean', 'warm_ocean', 'frozen_ocean'],
+  bodyColor: 0xb9a06a,
+  accentColor: 0xe8dec4,
+  eyeHeight: 0.2,
+};
+
+/** 鲑鱼（批次 259）：与鳕鱼同一条水生路径，只是颜色与体型不同 */
+export const SALMON_TYPE: MobType = {
+  id: 'salmon',
+  name: '鲑鱼',
+  health: 3,
+  width: 0.6,
+  height: 0.4,
+  speed: 1.5,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [{ itemId: Item.SALMON, min: 1, max: 1 }],
+  xp: 1,
+  aquatic: true,
+  spawnInWater: true,
+  ignoreLight: true,
+  spawnBiomes: ['ocean', 'deep_ocean', 'warm_ocean', 'frozen_ocean'],
+  bodyColor: 0xa8473f,
+  accentColor: 0xd9c6b8,
+  eyeHeight: 0.25,
+};
+
+/** 海豚（批次 259）：海洋里的大只水生生物，掉 0~1 条鳕鱼（原版如此） */
+export const DOLPHIN_TYPE: MobType = {
+  id: 'dolphin',
+  name: '海豚',
+  health: 10,
+  width: 0.9,
+  height: 0.6,
+  speed: 2.6,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [{ itemId: Item.COD, min: 0, max: 1 }],
+  xp: 2,
+  aquatic: true,
+  spawnInWater: true,
+  ignoreLight: true,
+  // 原版海豚只在非冻洋出现（冻洋里会冻死），这里跟着收窄
+  spawnBiomes: ['ocean', 'deep_ocean', 'warm_ocean'],
+  bodyColor: 0x7f97a8,
+  accentColor: 0xd8e2ea,
+  eyeHeight: 0.4,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -968,6 +1080,12 @@ export const MOB_TYPES: readonly MobType[] = [
   DONKEY_TYPE,
   MULE_TYPE,
   LLAMA_TYPE,
+  // 被动生物第二批（批次 259）：兔子 / 山羊 / 鳕鱼 / 鲑鱼 / 海豚
+  RABBIT_TYPE,
+  GOAT_TYPE,
+  COD_TYPE,
+  SALMON_TYPE,
+  DOLPHIN_TYPE,
   {
     id: 'zombie',
     name: '僵尸',

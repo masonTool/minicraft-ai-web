@@ -84,6 +84,13 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'donkey', label: '驴', id: 1483 },
   { mobId: 'mule', label: '骡', id: 1484 },
   { mobId: 'llama', label: '羊驼', id: 1485 },
+  // 被动生物第二批（批次 259）：兔子 / 山羊 / 鳕鱼 / 鲑鱼 / 海豚。
+  // ⚠️ 1500 之后：`MAX_ITEM_ID` 为此从 1500 扩到 1510
+  { mobId: 'rabbit', label: '兔子', id: 1500 },
+  { mobId: 'goat', label: '山羊', id: 1501 },
+  { mobId: 'cod', label: '鳕鱼', id: 1502 },
+  { mobId: 'salmon', label: '鲑鱼', id: 1503 },
+  { mobId: 'dolphin', label: '海豚', id: 1504 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */

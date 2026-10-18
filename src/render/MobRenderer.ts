@@ -88,7 +88,9 @@ type ModelKind =
   /** 驯养系（批次 242）：狼 / 猫 / 豹猫 / 狐狸——短腿、尖耳、翘尾巴、脖子上有项圈 */
   | 'pet'
   /** 骑乘系（批次 253）：马/驴/骡/羊驼——长腿、长身、长脖子 */
-  | 'horse';
+  | 'horse'
+  /** 水生（批次 259）：鳕鱼 / 鲑鱼 / 海豚——一个纺锤形身体 + 尾鳍 + 背鳍 */
+  | 'fish';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
@@ -121,6 +123,11 @@ function modelKindOf(typeId: string): ModelKind {
   // 狼/猫/豹猫/狐狸需要一个更小的骨架 + 尖耳 + 翘尾
   if (typeId === 'wolf' || typeId === 'cat' || typeId === 'ocelot' || typeId === 'fox') return 'pet';
   if (typeId === 'horse' || typeId === 'donkey' || typeId === 'mule' || typeId === 'llama') return 'horse';
+  if (typeId === 'cod' || typeId === 'salmon' || typeId === 'dolphin') return 'fish';
+  // 兔子（批次 259）：小体型 + 尖耳，直接复用 `pet` 那副骨架（比四足更像兔子）
+  if (typeId === 'rabbit') return 'pet';
+  // 山羊（批次 259）：四足，角暂时用 accent 色的头顶部件代替（`quadruped` 自带鼻吻）
+  if (typeId === 'goat') return 'quadruped';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   return 'humanoid';
 }
@@ -147,6 +154,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return petBoxes(type);
     case 'horse':
       return horseBoxes(type);
+    case 'fish':
+      return fishBoxes(type);
     case 'bird':
       return birdBoxes(type);
     case 'spider':
@@ -427,6 +436,61 @@ function horseBoxes(type: MobType): BoxSpec[] {
   ];
 }
 
+/**
+ * 水生（批次 259）：鳕鱼 / 鲑鱼 / 海豚共用。
+ *
+ * 一个前后拉长的身体 + 竖着的尾鳍 + 背鳍 + 两只眼；没有腿（`legCountOf` 返回 0），
+ * 游动时只靠整体倾斜表达，不做尾摆动画（原版那套摆尾需要骨骼，这里没有）。
+ */
+function fishBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const bodyLength = w * 1.5;
+  return [
+    // 身体
+    { width: w * 0.55, height: h * 0.75, depth: bodyLength, x: 0, y: h * 0.5, z: 0, color: 'body' },
+    // 尾鳍（竖着的一片）
+    {
+      width: w * 0.08,
+      height: h * 0.9,
+      depth: bodyLength * 0.35,
+      x: 0,
+      y: h * 0.5,
+      z: -bodyLength * 0.62,
+      color: 'accent',
+    },
+    // 背鳍
+    {
+      width: w * 0.07,
+      height: h * 0.4,
+      depth: bodyLength * 0.45,
+      x: 0,
+      y: h * 0.95,
+      z: 0,
+      color: 'accent',
+    },
+    // 双眼
+    {
+      width: w * 0.08,
+      height: h * 0.12,
+      depth: w * 0.08,
+      x: -w * 0.24,
+      y: h * 0.62,
+      z: bodyLength * 0.38,
+      color: 'eye',
+    },
+    {
+      width: w * 0.08,
+      height: h * 0.12,
+      depth: w * 0.08,
+      x: w * 0.24,
+      y: h * 0.62,
+      z: bodyLength * 0.38,
+      color: 'eye',
+    },
+  ];
+}
+
 function birdBoxes(type: MobType): BoxSpec[] {
   const w = type.width;
   const legHeight = type.height * 0.34;
@@ -578,6 +642,8 @@ function spiderBoxes(type: MobType): BoxSpec[] {
 function legCountOf(kind: ModelKind): number {
   // 驯养系（批次 242）与骑乘系（批次 253）：四条腿（部件表最前面四个）
   if (kind === 'pet' || kind === 'horse') return 4;
+  // 水生（批次 259）：没有腿，靠尾巴摆
+  if (kind === 'fish') return 0;
   if (kind === 'quadruped') return 4;
   if (kind === 'spider') return 8;
   // 水晶/烈焰人/恶魂不摆动：水晶自转、烈焰人的火棒长在它自己身上、
