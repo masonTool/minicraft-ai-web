@@ -90,7 +90,8 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   { id: 'thorns', name: '荆棘', maxLevel: 3, targets: ['chestplate'], weight: 1 },
   // 深海探索者 / 灵魂疾行（批次 262）：水下与灵魂沙上的移速倍率，见 `PlayerStats`
   { id: 'depth_strider', name: '深海探索者', maxLevel: 3, targets: ['boots'], weight: 2, implemented: true },
-  { id: 'frost_walker', name: '冰霜行者', maxLevel: 2, targets: ['boots'], weight: 2, treasure: true },
+  // 冰霜行者（批次 263）：踩过的水面结霜冰，5 秒后化回水，见 `main.updateFrostWalker`
+  { id: 'frost_walker', name: '冰霜行者', maxLevel: 2, targets: ['boots'], weight: 2, treasure: true, implemented: true },
   { id: 'soul_speed', name: '灵魂疾行', maxLevel: 3, targets: ['boots'], weight: 1, treasure: true, implemented: true },
   { id: 'binding_curse', name: '绑定诅咒', maxLevel: 1, targets: ARMOR, weight: 1, treasure: true },
 

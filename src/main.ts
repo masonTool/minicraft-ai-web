@@ -29,6 +29,7 @@ import {
   PlayerStats,
   depthStriderMultiplier,
   featherFallDamage,
+  frostWalkerRadius,
   soulSpeedMultiplier,
   type DamageCause,
   type SurvivalEnvironment,
@@ -1031,6 +1032,10 @@ class App {
   private readonly litOres = new Map<string, number>();
   /** 10Hz 一次"脚下是不是红石矿石"的检查 */
   private orePollTimer = 0;
+  /** 霜冰（批次 263）：位置 → 剩余秒数（到期化回水） */
+  private readonly frostedIceTimers = new Map<string, number>();
+  /** 冰霜行者的检查节拍（秒）：比每帧便宜，又跟得上走路 */
+  private frostWalkTimer = 0;
   /** 漏斗矿车搬运节拍（批次 251）：0.4 秒一次，与漏斗方块同一个节奏 */
   private hopperCartTimer = 0;
   /** 上下船的冷却（秒）：防止"上船那一下同时被当成下船" */
@@ -4558,6 +4563,57 @@ class App {
     }
   }
 
+  /**
+   * 冰霜行者（批次 263）：踩在水面上把脚下的水冻成霜冰，5 秒后化回水。
+   *
+   * 判定只看两格：**脚下是空气、再下面一格是水**——也就是"站在水面"。
+   * 只冻同一层的水，且要求上方也是空气，所以不会在水下楼里冻出一条竖井。
+   * 结出来的霜冰不发光、不进红石体系，因此用 `setBlockAndUpdate` 就够
+   * （换贴图 + 重网格 + 光照，与放一个普通方块同一条路）。
+   */
+  private updateFrostWalker(dt: number): void {
+    for (const [key, remaining] of [...this.frostedIceTimers]) {
+      const next = remaining - dt;
+      if (next > 0) {
+        this.frostedIceTimers.set(key, next);
+        continue;
+      }
+      this.frostedIceTimers.delete(key);
+      const [x, y, z] = key.split(',').map(Number) as [number, number, number];
+      // 这 5 秒里可能被玩家挖掉/换成别的东西：只剩下霜冰才化回水
+      if (this.world.getBlock(x, y, z) === Block.FROSTED_ICE) {
+        this.world.setBlockAndUpdate(x, y, z, Block.WATER, 0);
+      }
+    }
+
+    this.frostWalkTimer -= dt;
+    if (this.frostWalkTimer > 0) return;
+    this.frostWalkTimer = 0.12;
+
+    const level = enchantLevel(this.inventory.get(ARMOR_SLOT_BASE + 3)?.enchants, 'frost_walker');
+    const radius = frostWalkerRadius(level);
+    if (radius <= 0) return;
+
+    const p = this.physics;
+    const fx = Math.floor(p.x);
+    const fz = Math.floor(p.z);
+    const feetY = Math.floor(p.y + 0.05);
+    if (this.world.getBlock(fx, feetY, fz) !== Block.AIR) return;
+    const waterY = feetY - 1;
+    if (this.world.getBlock(fx, waterY, fz) !== Block.WATER) return;
+
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        const x = fx + dx;
+        const z = fz + dz;
+        if (this.world.getBlock(x, waterY, z) !== Block.WATER) continue;
+        if (this.world.getBlock(x, waterY + 1, z) !== Block.AIR) continue;
+        this.world.setBlockAndUpdate(x, waterY, z, Block.FROSTED_ICE, 0);
+        this.frostedIceTimers.set(`${x},${waterY},${z}`, 5);
+      }
+    }
+  }
+
   /** 清掉某格的 `powered` 位并让红石重算（标靶 / 红石矿石共用） */
   private clearPoweredState(x: number, y: number, z: number): void {
     const state = this.world.getBlockState(x, y, z);
@@ -7906,6 +7962,8 @@ class App {
     this.primedTnt.update(tntDt, this.tntWorld, (x, y, z, power) => this.explodeAt(x, y, z, power));
     // 标靶脉冲 / 踩亮的红石矿石（批次 248）：先推进计时器，再让红石看到最新状态
     this.updatePulsingBlocks(dt);
+    // 冰霜行者（批次 263）：水面结霜冰、5 秒后化回水
+    this.updateFrostWalker(dt);
     // 漏斗矿车的吸/倒（批次 251）
     this.updateHopperMinecarts(dt);
     this.redstone.tick(this.redstoneWorld, Math.min(dt, 0.1));

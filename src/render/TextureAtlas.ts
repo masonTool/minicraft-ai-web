@@ -1875,6 +1875,19 @@ PAINTERS.deepslate_redstone_ore_lit = litOrePainter(PAINTERS.deepslate_redstone_
  * 16×16 下这是唯一能把两者一眼分开的地方（原版也是靠那一块红锁扣）。
  */
 /** 拴绳（批次 256）：一圈棕色绳套，按角度交替深浅做出"编绳"的质感 */
+/**
+ * 霜冰（批次 263）：比普通冰更白、表面有裂纹。
+ *
+ * 与冰的区别只靠**颜色 + 几道亮纹**表达（原版也是"磨砂感的冰"）；
+ * 裂纹用一条固定的斜线 + 零散亮点，不引入随机数——同一块霜冰每次画出来一样。
+ */
+PAINTERS.frosted_ice = (x, y) => {
+  const crack = (x === 7 && y > 2 && y < 13) || (y === 5 && x > 2 && x < 12);
+  if (crack) return [236, 248, 252, 255];
+  const shade = 0.94 + ((x * 3 + y * 5) % 4) * 0.02;
+  return [clamp255(186 * shade), clamp255(224 * shade), clamp255(240 * shade), 255];
+};
+
 PAINTERS.item_lead = (x, y) => {
   const dx = x - 7.5;
   const dy = y - 7.5;

@@ -2448,6 +2448,24 @@ export const TARGET_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 霜冰（批次 263）：**冰霜行者**踩过的水面变成它，5 秒后再化回水。
+ *
+ * 不新增形状：整格方块，与冰同款几何，只是贴图偏白、带裂纹。
+ * 它没有物品形态（原版也挖不到），所以只进 `BLOCKS`、不进创造/物品表。
+ */
+export const FROSTED_ICE_ID = 586;
+export const FROSTED_ICE_SPECS: readonly BlockSpec[] = [
+  {
+    id: FROSTED_ICE_ID,
+    name: 'minecraft:frosted_ice',
+    tiles: ['frosted_ice', 'frosted_ice', 'frosted_ice'],
+    // 原版挖不到霜冰（挖掉直接碎），所以它**没有物品形态**——
+    // 不标这一条，方块物品自动生成会往背包里塞一个"霜冰"，各路审计立刻报缺名字/缺配方
+    itemless: true,
+  },
+];
+
 export const WEIGHTED_PLATE_SPECS: readonly BlockSpec[] = [
   {
     id: LIGHT_WEIGHTED_PRESSURE_PLATE_ID,
@@ -2535,6 +2553,8 @@ const DEFINED_SPECS: readonly (readonly BlockSpec[])[] = [
   // 测重压力板（批次 247）与标靶（批次 248）
   WEIGHTED_PLATE_SPECS,
   TARGET_SPECS,
+  // 霜冰（批次 263）
+  FROSTED_ICE_SPECS,
 ];
 
 /**
@@ -3163,6 +3183,7 @@ const SPECS: readonly BlockSpec[] = [
   ...RAIL_SPECS,
   ...WEIGHTED_PLATE_SPECS,
   ...TARGET_SPECS,
+  ...FROSTED_ICE_SPECS,
   ...STONE_VARIANT_SPECS,
   ...STONECUTTER_SPECS,
   ...RED_SAND_SPECS,
@@ -3355,8 +3376,9 @@ export const Block = {
   ACTIVATOR_RAIL: ACTIVATOR_RAIL_ID,
   LIGHT_WEIGHTED_PRESSURE_PLATE: LIGHT_WEIGHTED_PRESSURE_PLATE_ID,
   HEAVY_WEIGHTED_PRESSURE_PLATE: HEAVY_WEIGHTED_PRESSURE_PLATE_ID,
-  // 标靶（批次 248）
+  // 标靶（批次 248）与霜冰（批次 263，冰霜行者踩出来的）
   TARGET: TARGET_ID,
+  FROSTED_ICE: FROSTED_ICE_ID,
   REDSTONE_TORCH: 257,
   REDSTONE_BLOCK: 258,
   LEVER: 259,
@@ -3801,6 +3823,8 @@ HARDNESS.set(Block.LIGHT_WEIGHTED_PRESSURE_PLATE, 0.5);
 HARDNESS.set(Block.HEAVY_WEIGHTED_PRESSURE_PLATE, 0.5);
 // 标靶（批次 248）：原版 1.5（木头 + 红石）
 HARDNESS.set(Block.TARGET, 1.5);
+// 霜冰（批次 263）：原版 0.5，且挖掉不掉东西（没有物品形态）
+HARDNESS.set(Block.FROSTED_ICE, 0.5);
 
 // 台阶 / 楼梯的硬度跟随母方块（原版行为）
 for (let index = 0; index < SHAPED_PARENTS.length; index++) {

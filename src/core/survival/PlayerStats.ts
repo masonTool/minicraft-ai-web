@@ -142,6 +142,17 @@ export function depthStriderMultiplier(level: number): number {
  *
  * 原版在灵魂沙/灵魂土上是 1.3 / 1.6 / 1.9 倍，这里直接用 `1 + 0.3 × 等级`。
  */
+/**
+ * 冰霜行者的结冰半径（批次 263）。
+ *
+ * 原版 I 级 2 格、II 级 3 格（以玩家为中心的正方形半径），0 级不结冰。
+ * 抽成纯函数是为了让"II 级比 I 级宽一格"这条能离线断言。
+ */
+export function frostWalkerRadius(level: number): number {
+  const clamped = Math.max(0, Math.min(2, Math.floor(level)));
+  return clamped <= 0 ? 0 : clamped + 1;
+}
+
 export function soulSpeedMultiplier(level: number): number {
   const clamped = Math.max(0, Math.min(3, Math.floor(level)));
   return clamped <= 0 ? 1 : 1 + clamped * 0.3;

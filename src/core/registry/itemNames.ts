@@ -309,6 +309,7 @@ const EXPLICIT: Record<string, string> = {
   // 雪层（批次 37）：与"雪块"是两样东西——它是 1~8 层的薄雪，用锹铲或徒手撸
   snow: '雪',
   ice: '冰',
+  frosted_ice: '霜冰',
   packed_ice: '浮冰',
   obsidian: '黑曜石',
   raw_copper_block: '粗铜块',
