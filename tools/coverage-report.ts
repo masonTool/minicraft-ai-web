@@ -222,7 +222,7 @@ const rows: readonly Row[] = [
     spec: SPEC.redstone,
     now: redstoneElements,
     basis: '原版 1.18 参与充能/传导/负载的元件（同族木材只算一种）',
-    gap: '陷阱箱',
+    gap: '—（剩下只有"红石灯延迟熄灭"这一条行为，不是元件）',
   },
   {
     label: '维度',
