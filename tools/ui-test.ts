@@ -2474,10 +2474,10 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     html.includes('--chat-font-size: 8px;') && html.includes('font-size: var(--chat-font-size);'),
   );
   check(
-    '消息 1 秒后彻底消失（0.7s 清晰 + 0.3s 淡出）',
-    chatSrc.includes('const LINE_LIFETIME = 700;') &&
-      chatSrc.includes('const FADE_AFTER = 300;') &&
-      html.includes('transition: opacity .3s linear;'),
+    '消息 3 秒后彻底消失（2.2s 清晰 + 0.8s 淡出）',
+    chatSrc.includes('const LINE_LIFETIME = 2200;') &&
+      chatSrc.includes('const FADE_AFTER = 800;') &&
+      html.includes('transition: opacity .8s linear;'),
   );
   check(
     '显示期间点一下直接进聊天（只有 .chat-log 接手势）',

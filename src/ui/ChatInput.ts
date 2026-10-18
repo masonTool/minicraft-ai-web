@@ -6,7 +6,7 @@
  *  - **命令输入**：`T` 或 `/` 打开，Enter 提交，Esc 取消，↑↓ 翻历史，Tab 补全
  *
  * 为什么不直接做一个 `<input>` 常驻：原版是"按键才出现输入行"，常驻会挡住视野；
- * 而且消息栏要能自己淡出（批次 220：整条消息 1 秒后彻底消失，见 `LINE_LIFETIME`）。
+ * 而且消息栏要能自己淡出（批次 223：整条消息 3 秒后彻底消失，见 `LINE_LIFETIME`）。
  */
 
 import { commandNames, mobNames } from '../core/commands/Commands.ts';
@@ -34,15 +34,16 @@ interface ChatLine {
 }
 
 /**
- * 消息在屏幕上停留的时间（毫秒）。批次 220，用户："显示的时间一秒就消失"。
+ * 消息在屏幕上停留的时间（毫秒）。
  *
+ * 批次 220 曾按"一秒就消失"压到 1 秒，批次 223 用户回头看觉得太赶，改成 **3 秒**。
  * 拆成两段是为了"消失"有个淡出、而不是硬切：
- *  - `LINE_LIFETIME` 内完全清晰（0.7 秒，够看清一行短提示）；
- *  - 之后按 `FADE_AFTER` 淡出，`700 + 300 = 1 秒`后连同 DOM 一起移出。
+ *  - `LINE_LIFETIME` 内完全清晰（2.2 秒，够扫一眼受伤原因 / 天气变化）；
+ *  - 之后按 `FADE_AFTER` 淡出，`2200 + 800 = 3 秒`后连同 DOM 一起移出。
  * 想调长短只改这两个常量（历史消息不会丢：打开输入框仍能翻最近 120 行）。
  */
-const LINE_LIFETIME = 700;
-const FADE_AFTER = 300;
+const LINE_LIFETIME = 2200;
+const FADE_AFTER = 800;
 /** 收起时最多显示的行数 */
 const MAX_LINES = 10;
 /**
