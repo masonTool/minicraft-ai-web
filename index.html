@@ -1411,12 +1411,15 @@
       }
       .inv-rail-left.hidden, .inv-rail-right.hidden { display: none; }
       .inv-shell.pocket-chrome .inv-rail-left {
-        /* 批次 181：左轨改成**两列图标**。单列 10 个创造分类 / 5 个物品分类在
-           横屏 390 高时必然被截断（用户："左侧按钮有的会被截断"）；
-           两列之后最多 5 行，整条轨道不用滚也能看全。 */
-        justify-content: space-between; align-items: flex-start;
-        padding: 6px 0 8px;
-        width: 76px; min-height: 0; max-height: 100%;
+        /* 批次 184：用户要求"左侧按钮要一个竖列展示，不要换列"——
+           批次 181 为解决截断改成的两列**改回单列**。
+           截断问题改由"按钮按可用高度均分"解决（见下面 `.inv-pocket-recipes / .inv-tabs`），
+           所以创造模式 10 个分类 + 物品栏共 11 颗也能整列放下，不需要滚动。 */
+        justify-content: flex-start; align-items: center;
+        gap: 2px;
+        padding: 4px 0;
+        width: 40px; min-height: 0; max-height: 100%;
+        overflow: hidden;
       }
       .inv-shell.pocket-chrome .inv-rail-right {
         justify-content: flex-end; align-items: flex-start;
@@ -1429,9 +1432,12 @@
       .inv-shell.pocket-chrome .inv-pocket-inv-tab { position: static; }
       .inv-shell.pocket-chrome .inv-pocket-recipes {
         position: static;
-        display: grid; grid-template-columns: repeat(2, 36px); gap: 4px;
-        align-content: start;
-        overflow: visible; max-height: none;
+        /* 单列竖排（批次 184）。`flex: 1 1 auto` + 内部按钮 `flex: 1 1 0`：
+           这一组吃掉左轨剩余高度，按钮再多也只会变矮，不会换列/被截断。 */
+        display: flex; flex-direction: column; gap: 2px;
+        flex: 1 1 auto; min-height: 0;
+        align-items: center;
+        overflow: hidden; max-height: none;
       }
       /* 携带版快捷栏：屏幕底、面板外（Wiki）；经典时 dock 隐藏、格回面板内 */
       .inv-hotbar-dock {
@@ -1805,7 +1811,9 @@
         border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
         transform: translateY(1px);
       }
-      .inv-panel.pocket-ui .inv-close { min-width: 36px; min-height: 36px; padding: 4px 8px; }
+      /* 批次 184：用户要求"关闭按钮和配方按钮小一点，那一层不要那么高，缩到之前的 1/2"。
+         这里只压标题那一行（它没有标题字，只有两颗键），内容区因此多出约 16px 高度。 */
+      .inv-panel.pocket-ui .inv-close { min-width: 24px; min-height: 20px; padding: 0 6px; font-size: 12px; line-height: 1.1; }
 
       /* 内容区在框内滚动；格子永远 9 列自适应，禁止撑破灰框 */
       .inv-panel.pocket-ui .inv-body {
@@ -1953,16 +1961,38 @@
       }
       /* 分类已挪到左轨时，controls 里不应再占位 */
       .inv-shell.pocket-chrome .inv-rail-left .inv-tabs {
-        /* 与配方分类同一套：两列 36px，10 个创造分类刚好 5 行 */
-        display: grid; grid-template-columns: repeat(2, 36px); gap: 3px;
-        align-content: start;
-        overflow: visible; max-height: none;
-        flex: 0 0 auto; min-height: 0;
+        /* 单列竖排（批次 184）：10 个创造分类按左轨剩余高度均分，不换列 */
+        display: flex; flex-direction: column; gap: 2px;
+        flex: 1 1 auto; min-height: 0;
+        align-items: center;
+        overflow: hidden; max-height: none;
       }
       .inv-shell.pocket-chrome .inv-rail-left .inv-tab .inv-tab-label { display: none; }
       .inv-shell.pocket-chrome .inv-rail-left .inv-tab {
-        width: 36px; height: 36px; min-width: 36px; padding: 0;
-        display: grid; place-items: center; flex: 0 0 auto;
+        width: 36px; min-width: 36px; padding: 0;
+        height: auto; min-height: 20px; max-height: 36px;
+        display: grid; place-items: center; flex: 1 1 0;
+        box-sizing: border-box;
+      }
+      /* 同一条"均分"规则也管生存那 5 个分类与左下那颗物品栏键 */
+      .inv-shell.pocket-chrome .inv-rail-left .inv-pocket-recipe-tab {
+        width: 36px; min-width: 36px;
+        height: auto; min-height: 20px; max-height: 36px;
+        flex: 1 1 0; box-sizing: border-box;
+      }
+      /* 物品栏键是这一列的"出口"，固定高度，不参与均分 */
+      .inv-shell.pocket-chrome .inv-rail-left .inv-pocket-inv-tab {
+        flex: 0 0 auto; width: 36px; height: 34px; min-height: 34px; max-height: 34px;
+      }
+      /* 按钮被压矮时图标跟着收，不能被裁掉一半 */
+      .inv-shell.pocket-chrome .inv-rail-left .inv-tab canvas,
+      .inv-shell.pocket-chrome .inv-rail-left .inv-pocket-recipe-tab canvas,
+      .inv-shell.pocket-chrome .inv-rail-left .inv-pocket-tab canvas {
+        width: 18px; height: 18px; max-width: 100%; max-height: 100%;
+      }
+      .inv-shell.pocket-chrome .inv-rail-left .inv-tab svg,
+      .inv-shell.pocket-chrome .inv-rail-left .inv-pocket-tab svg {
+        max-width: 100%; max-height: 100%;
       }
       .inv-panel.creative-ui.pocket-ui .inv-search {
         width: 100%; min-width: 0; flex: 1 1 auto;
@@ -2000,21 +2030,25 @@
       }
       .inv-panel.pocket-ui.pocket-dual .inv-header {
         position: relative;
-        min-height: 34px;
+        /* 批次 184：34px → 18px（约 1/2）。这一行只有"配方开关 + 关闭键"，没有标题字，
+           留着那么高只是把下面的格子挤小。 */
+        min-height: 18px;
+        padding: 0 0 2px;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-header .inv-pocket-recipe-toggle:not(.hidden) {
         display: block;
         position: absolute;
-        left: calc(50% - 42px);
+        left: calc(50% - 28px);
         top: 0;
-        min-width: 36px;
-        min-height: 32px;
-        padding: 3px 7px;
+        min-width: 24px;
+        min-height: 18px;
+        padding: 0 5px;
         font-size: 0;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-header .inv-pocket-recipe-toggle::after {
         content: '▦';
-        font-size: 20px;
+        font-size: 14px;
+        line-height: 1;
       }
       .inv-panel.pocket-ui.pocket-dual .inv-body {
         display: grid;
