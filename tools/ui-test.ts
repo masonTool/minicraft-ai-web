@@ -2968,5 +2968,36 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   );
 }
 
+console.log('\n[游戏规则 6 → 11（批次 255）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const rulesSrc = readFileSync(new URL('../src/core/world/Rules.ts', import.meta.url), 'utf8');
+  const commandsSrc = readFileSync(new URL('../src/core/commands/Commands.ts', import.meta.url), 'utf8');
+  check(
+    '五条新规则都进了默认表（旧存档会被 normalizeGameRules 补齐）',
+    ['doMobLoot', 'doTileDrops', 'doWeatherCycle', 'doInsomnia', 'doImmediateRespawn'].every((key) =>
+      rulesSrc.includes(`${key}: `),
+    ),
+  );
+  check(
+    'doMobLoot 堵在实体掉落回调上（一处就管住全部生物）',
+    appSrc.includes('this.rules.doMobLoot ? this.spawnDrop(itemId, count, x, y, z) : undefined'),
+  );
+  check(
+    'doTileDrops 堵在挖方块掉落',
+    appSrc.includes('this.rules.doTileDrops && canHarvest(brokenId, tool)'),
+  );
+  check(
+    'doWeatherCycle 堵在天气推进',
+    appSrc.includes('if (this.rules.doWeatherCycle) this.weather.update('),
+  );
+  check(
+    'doInsomnia / doImmediateRespawn 各有一个入口',
+    appSrc.includes('if (!this.rules.doInsomnia) return;') &&
+      appSrc.includes('this.rules.doImmediateRespawn || this.respawnCountdown >= RESPAWN_DELAY'),
+  );
+  check('/gamerule 的帮助里列出了新规则', commandsSrc.includes('doImmediateRespawn'));
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
