@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 702（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 704（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **182**、进行中 **75**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,16 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 252（用户："请继续开发"；G12 最后一件）：**动力矿车**。
+  ① `FurnaceMinecart extends Minecart`：`fuelSeconds` + `addFuel()`（封顶 300 秒），
+  烧着时沿车头方向持续加速（6 格/秒²），阻力/限速/碰撞全走父类。
+  ② **加油手势**：手里拿煤点它 = 加 60 秒燃料（原版就是这个手势），否则才是上车；
+  交互收在 `updatePlacing` 的载具分支里。
+  ③ 物品 id **1481** + 图标（炉口 + 火光）+ 配方（矿车 + 熔炉）+ 渲染
+  （三种矿车按车身贴图缓存部件：`iron_block` / `hopper_side` / `furnace_side`）。
+  ⚠️ 不推连着的其他矿车；燃料只认煤（不认木炭/煤炭块），也不显示烟粒子。
+  门禁：`test:entity` 88 → **93**、`test:ui` 713 → **714**、`test:crafting` 43
+  （配方 590 → **591**），离线 130 套全绿。
 - 批次 251（用户："请继续"；G12 收尾）：**漏斗矿车**。
   ① `HopperMinecart extends Minecart`：5 格肚子、`accept(id, count)` 返回没塞下的数量；
   运动与骑乘完全继承（`instanceof Minecart` → 上下车/激活轨全部照旧）。
