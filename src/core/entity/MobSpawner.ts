@@ -88,6 +88,17 @@ const HOSTILE_MAX_Y = 70;
 
 const PASSIVE_MIN_DISTANCE = 8;
 const PASSIVE_MAX_DISTANCE = 32;
+/**
+ * 一轮被动刷怪里，原本要花在"水里"的比例（批次 189）。
+ *
+ * 0.35：玩家在水边/海上时能较快看到鱿鱼，同时不至于把牛羊的名额全挤掉
+ * （两种生物共用 `PASSIVE_LIMIT`）。岸上那条路每次尝试花费更高，
+ * 所以"掷中水"的尝试失败了还会接着试，不会白占一轮。
+ */
+const WATER_SPAWN_SHARE = 0.35;
+/** 水里找落点：每次尝试上下摸几格、最多试几次 */
+const WATER_SPAWN_SPAN = 8;
+const WATER_SPAWN_ATTEMPTS = 4;
 /** 敌对生物离玩家超过这个距离就消失 */
 const DESPAWN_DISTANCE = 96;
 
@@ -211,9 +222,17 @@ export class MobSpawner {
     const player = ctx.player!;
     const candidates = PASSIVE_MOBS.filter((type) => mobSpawnsIn(type, ctx.dimension));
     if (candidates.length === 0) return 0;
+    // 水生被动生物（批次 189，鱿鱼）走另一条路：它们不在草地上、也不看天光，
+    // 要的是"水里"。两条路在一轮里互相抢尝试次数，所以先按比例掷一次
+    const water = candidates.filter((type) => type.spawnInWater === true);
+    const land = candidates.filter((type) => type.spawnInWater !== true);
     const top = Math.min(WORLD_MAX_Y - 2, Math.floor(player.y) + 12);
 
     for (let attempt = 0; attempt < 16; attempt++) {
+      if (water.length > 0 && (land.length === 0 || this.random() < WATER_SPAWN_SHARE)) {
+        if (this.trySpawnWaterPassive(ctx, water)) return 1;
+        continue;
+      }
       const { x, z } = this.randomAround(player, PASSIVE_MIN_DISTANCE, PASSIVE_MAX_DISTANCE);
       // 地表（= 最高的"会挡住移动"的方块）够不到玩家附近就不试：
       // 原来的逐格扫描也是从玩家高度往下找，所以够不到就等于扫不到
@@ -225,13 +244,49 @@ export class MobSpawner {
       // 光照条件：白天户外（天光 ≥ 9）
       if (ctx.getSkyLight(x, surfaceY + 1, z) < 9) continue;
 
-      const type = this.pick(candidates);
+      // ⚠️ 从 `land` 里挑，不是 `candidates`：鱿鱼刷在草地上会当场开始窒息
+      const type = this.pick(land);
       if (!type) continue;
       ctx.spawn(type, x + 0.5, surfaceY + 1, z + 0.5);
       this.spawnedPassive++;
       return 1;
     }
     return 0;
+  }
+
+  /**
+   * 水生被动生物的落点（批次 189，鱿鱼）。
+   *
+   * 与岸上那条**不是**同一套判据：不看高度图、不看草方块、不看天光——
+   * 深海里草方块与天光都不存在（天光在水下逐格衰减），照岸上那套写会一只都刷不出来。
+   *
+   * 做法：在玩家周围撒一个点，然后在玩家高度上下 6 格的范围里找"脚与头都是水"的一格。
+   * 为什么限制在玩家附近：鱿鱼的意义是"潜水时看到的活物"，刷在 30 格深的海底
+   * 玩家永远遇不到；而且这一带的水体通常与玩家所在的同一片（不会刷在半空的水柱里）。
+   */
+  private trySpawnWaterPassive(ctx: SpawnContext, water: readonly MobType[]): boolean {
+    const player = ctx.player!;
+    const baseY = Math.floor(player.y);
+    for (let attempt = 0; attempt < WATER_SPAWN_ATTEMPTS; attempt++) {
+      const { x, z } = this.randomAround(player, PASSIVE_MIN_DISTANCE, PASSIVE_MAX_DISTANCE);
+      const type = this.pick(water);
+      if (!type) continue;
+      if (type.spawnBiomes !== undefined) {
+        const biome = ctx.biomeAt?.(x, z) ?? null;
+        if (biome === null || !type.spawnBiomes.includes(biome)) continue;
+      }
+      // 从一个随机的起点开始绕一圈找水：总是从最低那格试起的话，
+      // 玩家站在海面时每次都会先撞上"水面之上"的那几格
+      const offset = Math.floor(this.random() * WATER_SPAWN_SPAN);
+      for (let i = 0; i < WATER_SPAWN_SPAN; i++) {
+        const y = baseY - 6 + ((offset + i) % WATER_SPAWN_SPAN);
+        if (!this.canSpawnInWater(ctx, x, y, z)) continue;
+        ctx.spawn(type, x + 0.5, y, z + 0.5);
+        this.spawnedPassive++;
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

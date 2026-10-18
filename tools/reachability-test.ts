@@ -283,15 +283,8 @@ const EXEMPT: readonly Exempt[] = [
   ...BLOCKED_POTIONS,
   ...BLOCKED_TIPPED,
 
-  // ---- ② 染料里只剩黑色一条断链，灰色依赖它
-  {
-    id: BLACK_DYE,
-    reason: '原版黑色染料只从墨囊（鱿鱼）与凋零玫瑰（凋灵）来，两样都没有；不给替代品（J26）',
-  },
-  {
-    id: GRAY_DYE,
-    reason: '原版灰色染料唯一的路是"黑 + 白"，黑色断了，于是灰色也跟着断（J26）',
-  },
+  // ---- ② 染料（批次 189 收口）：鱿鱼做出来之后墨囊就有了，黑色与灰色两族
+  //         从白名单删掉（"补上了就真的删掉"——上面那条断言会盯着）
 
   // ---- ③ 锁链甲（批次 169，B53 收口）：三件现在由**盔甲匠**卖，所以从白名单删掉了。
   //         这里留一段注释而不是空行：**白名单条目被还掉之后必须真的删掉**
@@ -352,7 +345,7 @@ check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.le
 // → 批次 169（锁链甲改由盔甲匠卖）**4 条**。
 // 剩下这 4 条都不是"某条链断在中间"，而是**内容本身还没做**（黑/灰染料要鱿鱼与凋灵、
 // 兔子脚要兔子、旧 id 只留存档兼容）
-equal('缺口总数（批次 169 之后：4 条 —— 锁链甲那一族也通了）', unreachable.length, 4);
+equal('缺口总数（批次 189 之后：2 条 —— 黑/灰染料那一族也通了）', unreachable.length, 2);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));
@@ -429,11 +422,21 @@ check(
 
 // ③ 染料：16 色里 14 色本批接通，黑色那一条原版就没有别的路
 const dyeReachable = DYE_COLORS.filter((_color, index) => reach.has(dyeItemId(index))).length;
-equal('16 色染料里 14 种能拿到（本批补的花/骨粉/青金石/仙人掌/混合）', dyeReachable, 14);
-check('黑色染料拿不到（墨囊与凋零玫瑰都没有）', !reach.has(BLACK_DYE));
+equal('16 色染料**全部**能拿到（批次 189 补上墨囊之后黑/灰也通了）', dyeReachable, 16);
 check(
-  '灰色染料一个配方都没有：原版唯一的路是"黑 + 白"，而黑色断了——我们没给它安排别的路',
-  !reach.has(GRAY_DYE) && !RECIPES.some((recipe) => recipe.result.id === GRAY_DYE),
+  '黑色染料来自墨囊（鱿鱼的掉落，原版唯一的两条路之一）',
+  RECIPES.some(
+    (recipe) => recipe.result.id === BLACK_DYE && recipeIngredients(recipe).some((ingredient) => ingredient.id === Item.INK_SAC),
+  ),
+);
+check(
+  '灰色染料是"黑 + 白"（原版唯一的路）',
+  RECIPES.some(
+    (recipe) =>
+      recipe.result.id === GRAY_DYE &&
+      recipeIngredients(recipe).some((ingredient) => ingredient.id === BLACK_DYE) &&
+      recipeIngredients(recipe).some((ingredient) => ingredient.id === WHITE_DYE),
+  ),
 );
 check(
   '白色染料来自骨粉、绿色染料只有"熔炼仙人掌"这一条（原版口径）',
@@ -450,11 +453,11 @@ const dyeableWool = DYE_COLORS.filter((_color, index) =>
       recipe.result.id === woolId(index) && recipeIngredients(recipe).every((ingredient) => reach.has(ingredient.id)),
   ),
 ).length;
-equal('羊毛的 16 条染色配方里 14 条原料自足（黑/灰那两条不是）', dyeableWool, 14);
+equal('羊毛的 16 条染色配方**全部**原料自足（批次 189 起黑/灰也自足）', dyeableWool, 16);
 
 // ③b 刷怪蛋（批次 174，J17）：创造专属，判据是"**真的**没有任何来源"——
 //     哪天有人给刷怪蛋接上配方/掉落，这两条会立刻变红（那意味着"创造专属"这个标签该撤了）
-check('刷怪蛋有 21 枚（`SPAWN_EGG_SPECS` 的长度）', SPAWN_EGG_IDS.length === 21, String(SPAWN_EGG_IDS.length));
+check('刷怪蛋有 22 枚（`SPAWN_EGG_SPECS` 的长度，批次 189 加了鱿鱼）', SPAWN_EGG_IDS.length === 22, String(SPAWN_EGG_IDS.length));
 check(
   '每一枚刷怪蛋都在创造物品栏里（不然玩家根本拿不到它）',
   SPAWN_EGG_IDS.every((id) => CREATIVE_ITEMS.includes(id)),
@@ -580,8 +583,9 @@ const BLOCK_MECHANISM_SOURCES: readonly { label: string; ids: readonly number[] 
   { label: '红石线（红石粉放下就是它）', ids: [Block.REDSTONE_WIRE] },
   {
     label: '混凝土（粉末遇水凝固，批次 131）',
-    // ⚠️ 只列**能做出粉末的那 14 种**：灰与黑缺染料（它们在白名单那一族里）
-    ids: DYE_COLORS.map((_color, i) => concreteId(i)).filter((_id, i) => i !== 7 && i !== 15),
+    // ⚠️ 16 色**全部**：粉末都能做出来了（批次 189 补上墨囊之后黑/灰也有染料），
+    // 白的这一族留着的唯一原因是"粉末遇水凝固"这条机制审计不建模
+    ids: DYE_COLORS.map((_color, i) => concreteId(i)),
   },
   {
     label: '铜的氧化档（`world/Copper.ts` 会自己往下氧化）',
@@ -615,23 +619,6 @@ const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: st
   // ⚠️ "混凝土 16 色"那一族在**批次 131** 删掉了：粉末方块 + 遇水凝固都做出来了，
   // 那一族的 14 种（除灰/黑）现在真的拿得到。**灰与黑两种留在白名单里**，
   // 但它们卡的是**染料**（鱿鱼与凋灵玫瑰），所以并入下面那一族（理由同源）
-  {
-    label: '灰/黑两色的玻璃、陶瓦与混凝土',
-    ids: idsNamed(
-      'gray_stained_glass',
-      'black_stained_glass',
-      'gray_stained_glass_pane',
-      'black_stained_glass_pane',
-      'gray_terracotta',
-      'black_terracotta',
-      // 混凝土（批次 131）：粉末能合成了，但灰/黑两色**缺染料**（下面那两种粉末同理）
-      'gray_concrete',
-      'black_concrete',
-      'gray_concrete_powder',
-      'black_concrete_powder',
-    ),
-    reason: '灰与黑染料拿不到（缺墨囊与凋灵玫瑰，见物品侧白名单），所以这两色的整族断在染料上',
-  },
   {
     label: '生成侧没写的几样',
     // ⚠️ 裂纹深板岩砖**不在**这一族了：批次 119 按原版补上了"深板岩砖 → 熔炼 → 裂纹"那条
@@ -755,7 +742,7 @@ const blockGaps: number[] = [];
   // 剩下的每一条都是"缺一整块内容"（鱿鱼与墨囊、丛林竹子、珊瑚死亡机制、深色森林、生成侧没写的几件），
   // 而不是"某条链断在中间"——正是这一栏该有的样子
   equal(
-    '方块侧缺口总数（批次 131 之后：33 条）',
+    '方块侧缺口总数（批次 189 之后：25 条）',
     blockGaps.length,
     BLOCK_EXEMPT.reduce((sum, family) => sum + family.ids.length, 0),
   );

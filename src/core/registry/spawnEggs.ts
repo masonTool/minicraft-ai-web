@@ -26,6 +26,14 @@ export interface SpawnEggSpec {
   readonly mobId: string;
   /** 中文名的主体（"僵尸" → "僵尸刷怪蛋"） */
   readonly label: string;
+  /**
+   * 显式物品 id（不填就按表内序号从 `SPAWN_EGG_ID_START` 往下排）。
+   *
+   * ⚠️ 只在"顺序区间的末尾撞上别的物品"时才用（批次 189 的鱿鱼就是这种情况：
+   * 前 21 枚占满 1451~1471，1472 与 1473 已被水桶/岩浆桶占了）。
+   * 同一种"撞位"要往后放一整段，改之前先看清楚后面还有哪些 id。
+   */
+  readonly id?: number;
 }
 
 /**
@@ -62,6 +70,9 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'sheep', label: '羊' },
   { mobId: 'chicken', label: '鸡' },
   { mobId: 'villager', label: '村民' },
+  // 鱿鱼（批次 189）：生物表里多了一种，蛋也必须跟上（`test:spawn` 一一对应那条断言）。
+  // ⚠️ 显式 id：顺序区间 1451~1471 之后紧挨着水桶（1472）与岩浆桶（1473）
+  { mobId: 'squid', label: '鱿鱼', id: 1498 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */
@@ -69,13 +80,19 @@ export function spawnEggTile(mobId: string): string {
   return `spawn_egg_${mobId}`;
 }
 
-/** 第 index 枚刷怪蛋的物品 id */
+/** 第 index 枚刷怪蛋的物品 id（`spec.id` 写了就用它，见那边的注记） */
 export function spawnEggItemId(index: number): number {
-  return SPAWN_EGG_ID_START + index;
+  const spec = SPAWN_EGG_SPECS[index];
+  if (!spec) return -1;
+  return spec.id ?? SPAWN_EGG_ID_START + index;
 }
+
+/** 物品 id → 生物 id（不是蛋就查不到）。按 id 建表，因为 id 不再严格等于"起点 + 序号" */
+const EGG_BY_ITEM_ID = new Map<number, string>(
+  SPAWN_EGG_SPECS.map((spec, index) => [spawnEggItemId(index), spec.mobId]),
+);
 
 /** 这枚蛋生成哪种生物（不是蛋就返回 undefined） */
 export function spawnEggMobOf(itemId: number): string | undefined {
-  const index = itemId - SPAWN_EGG_ID_START;
-  return index >= 0 && index < SPAWN_EGG_SPECS.length ? SPAWN_EGG_SPECS[index]!.mobId : undefined;
+  return EGG_BY_ITEM_ID.get(itemId);
 }

@@ -80,7 +80,9 @@ type ModelKind =
   /** 史莱姆（批次 120）：一个果冻方块 + 里面那颗核 */
   | 'slime'
   /** 幻翼（批次 126）：扁身子 + 两片长翼 + 尾巴 */
-  | 'phantom';
+  | 'phantom'
+  /** 鱿鱼（批次 189）：一个圆头 + 八条垂下来的触手 */
+  | 'squid';
 
 function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ender_dragon') return 'dragon';
@@ -88,6 +90,8 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'wither') return 'wither';
   // 幻翼（批次 126）：扁平的飞行生物，与鸟（鸡）那种"小圆身子"差得远
   if (typeId === 'phantom') return 'phantom';
+  // 鱿鱼（批次 189）：圆头 + 触手，与任何现有骨架都不同
+  if (typeId === 'squid') return 'squid';
   // 史莱姆（批次 120）：三档尺寸都是"果冻方块 + 内核"，所以三者的 id 共用一个骨架。
   // 岩浆怪（批次 121）也走这一个：原版它们的几何**一模一样**，区别只在贴图与颜色
   // （深红外壳 + 亮橙内核），所以没必要再开一个骨架
@@ -141,6 +145,8 @@ function modelBoxes(kind: ModelKind, type: MobType): BoxSpec[] {
       return witherBoxes(type);
     case 'phantom':
       return phantomBoxes(type);
+    case 'squid':
+      return squidBoxes(type);
     default:
       return humanoidBoxes(type);
   }
@@ -468,6 +474,8 @@ function legCountOf(kind: ModelKind): number {
   if (kind === 'crystal' || kind === 'blaze' || kind === 'ghast' || kind === 'wither' || kind === 'slime') return 0;
   // 幻翼（批次 126）：它一直在飞，没有腿可摆
   if (kind === 'phantom') return 0;
+  // 鱿鱼（批次 189）：那八条触手是垂着的，摆起来会像在走路（与恶魂同一条）
+  if (kind === 'squid') return 0;
   return 2;
 }
 
@@ -534,6 +542,47 @@ function phantomBoxes(type: MobType): BoxSpec[] {
     // 尾巴：往后收成一小节
     { width: w * 0.12, height: h * 0.3, depth: w * 0.36, x: 0, y: bodyY - h * 0.08, z: -w * 0.42, color: 'accent' },
   ];
+  return boxes;
+}
+
+/**
+ * 鱿鱼（批次 189）：**一个圆头 + 八条垂下来的触手**。
+ *
+ * 原版它的辨识点只有两个：软圆的头（头顶尖一点）与那一把触手；
+ * 眼睛是两颗发亮的白点（`eye`），在水下那种暗蓝里就靠它们认出"这是活的"。
+ *
+ * ⚠️ 所有部件都落在 `0..height` 之内（与恶魂/凋灵同一条：挂出去会看起来悬空）。
+ */
+function squidBoxes(type: MobType): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const headHeight = h * 0.52;
+  const headY = h - headHeight / 2;
+  const boxes: BoxSpec[] = [
+    // 头：横宽、竖略扁，做成"软体"的观感
+    { width: w * 0.8, height: headHeight, depth: w * 0.8, x: 0, y: headY, z: 0, color: 'body' },
+    // 头顶那个尖（原版的鳍）
+    { width: w * 0.3, height: h * 0.16, depth: w * 0.3, x: 0, y: h - h * 0.08, z: 0, color: 'accent' },
+    // 两只眼睛：贴在头的两侧靠下
+    { width: w * 0.13, height: h * 0.12, depth: w * 0.06, x: -w * 0.26, y: headY - h * 0.04, z: w * 0.38, color: 'eye' },
+    { width: w * 0.13, height: h * 0.12, depth: w * 0.06, x: w * 0.26, y: headY - h * 0.04, z: w * 0.38, color: 'eye' },
+  ];
+  // 八条触手：绕头底一圈（4×2 排布），往下垂到脚底
+  const legTop = h - headHeight;
+  const tentacleHeight = legTop * 0.94;
+  for (let i = 0; i < 8; i++) {
+    const col = (i % 4) - 1.5;
+    const row = Math.floor(i / 4) - 0.5;
+    boxes.push({
+      width: w * 0.14,
+      height: tentacleHeight,
+      depth: w * 0.2,
+      x: col * w * 0.2,
+      y: tentacleHeight / 2,
+      z: row * w * 0.28,
+      color: 'accent',
+    });
+  }
   return boxes;
 }
 

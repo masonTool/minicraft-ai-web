@@ -62,6 +62,16 @@ const EFFECT_STEP = 0.05;
 
 const GRAVITY = 32;
 const JUMP_SPEED = 8.95;
+/**
+ * 水生生物泡在水里时的上浮速度（格/秒，批次 189）。
+ *
+ * 只是"朝这个速度收敛"，不是硬给：所以鱿鱼看起来是在水里慢慢上下漂，
+ * 而不是像电梯一样匀速上升。0.35 大约是原版鱿鱼上下摆动的一半。
+ */
+const AQUATIC_DRIFT_SPEED = 0.35;
+/** 水生生物上岸后多久开始窒息（秒）与窒息间隔（秒） */
+const AQUATIC_SUFFOCATE_DELAY = 10;
+const AQUATIC_SUFFOCATE_INTERVAL = 1;
 /** 受击后的无敌时间（秒） */
 const HURT_COOLDOWN = 0.5;
 /**
@@ -319,6 +329,14 @@ export interface MobType {
    */
   spawnInWater?: boolean;
   /**
+   * **水生**（批次 189，鱿鱼）：泡在水里时**不受重力**，靠一点浮力上下漂；上岸会掉血。
+   *
+   * 与 `flying` 的区别：飞行是"完全不管重力、悬在空中"，而它是"**水里**才漂"——
+   * 上了岸照样往下掉（原版鱿鱼在岸上是一坨会抽动的软体，几秒后窒息）。
+   * 只写 `spawnInWater` 不够：那只管"在哪刷"，刷出来的鱿鱼会直接沉到海底趴着。
+   */
+  aquatic?: boolean;
+  /**
    * **只在某几个群系里自然刷**（批次 124 尸壳只要沙漠；批次 125 流浪者要三种雪原）。
    *
    * 填**群系名**（`gen/Biome.ts` 里那些 `desert` / `snowy_plains`），
@@ -545,6 +563,7 @@ export class Mob extends Entity {
     if (this.breedCooldown > 0) this.breedCooldown -= dt;
     this.tickBurning(dt);
     this.tickWaterFear(ctx, dt);
+    this.tickAquatic(ctx, dt);
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
     // 效果要在 AI 之前结算：缓慢/速度影响的正是这一帧的移动速度
@@ -558,6 +577,12 @@ export class Mob extends Entity {
       // 这里只做一点阻尼，免得"上一帧的上升速度"永远留着（那样它会一直往上飘）。
       // ⚠️ 位置仍然走 `moveBody`：飞**不等于穿墙**（撞到方块照样被拦下）
       this.vy *= Math.max(0, 1 - 2.5 * dt);
+    } else if (this.type.aquatic === true && this.inWater(ctx)) {
+      // 水生生物（批次 189，鱿鱼）：**水里没有重力**，朝"每秒 0.35 格的上浮"收敛再阻尼。
+      // 不这么做的话，刷在水里的鱿鱼会直接沉到海底、贴着沙面走（看着像坏了）。
+      // 上岸它就掉回普通重力那一条（原版鱿鱼在岸上也是一坨软体）
+      this.vy += (AQUATIC_DRIFT_SPEED - this.vy) * Math.min(1, 4 * dt);
+      this.vy = Math.max(-1.2, Math.min(1.2, this.vy));
     } else {
       this.vy -= GRAVITY * dt;
       if (this.vy < -60) this.vy = -60;
@@ -1322,6 +1347,46 @@ export class Mob extends Entity {
    * ⚠️ 与环境伤害（着火）同一条口径：**不走 `hurt()`**——那会被 0.5 秒的无敌帧
    * 卡成"每 0.5 秒 1 点"，还会带上击退。这里直接扣血，并自己决定要不要瞬移。
    */
+  /**
+   * 它现在是不是泡在水里（批次 189，水生生物用）。
+   *
+   * 取**身体中部**那一格而不是脚：鱿鱼的身子有一半在水面之上时仍然算"在水里"，
+   * 否则贴到水面就会一半时间算干、一半时间算湿，上浮速度一顿一顿的。
+   */
+  inWater(ctx: EntityContext): boolean {
+    return ctx.getBlock(Math.floor(this.x), Math.floor(this.y + this.height * 0.5), Math.floor(this.z)) === Block.WATER;
+  }
+
+  /**
+   * 水生生物上岸窒息（批次 189，鱿鱼）。
+   *
+   * 原版鱿鱼离开水会先抽搐、十几秒后才开始掉血；这里只保留后半段：
+   * **离水满 10 秒**之后每秒掉 1 点。与"岩浆块/淋雨"同一口径——直接扣血，
+   * 不走 `hurt()`（那会被 0.5 秒无敌帧卡成半速，还会带上莫名其妙的击退）。
+   *
+   * 掉落仍由 `tick` 末尾统一结算（只要 `diedFromDamage` 标上就行）。
+   */
+  private tickAquatic(ctx: EntityContext, dt: number): void {
+    if (this.type.aquatic !== true || this.dead) return;
+    if (this.inWater(ctx)) {
+      this.aquaticDryTimer = 0;
+      return;
+    }
+    this.aquaticDryTimer += dt;
+    if (this.aquaticDryTimer < AQUATIC_SUFFOCATE_DELAY) return;
+    this.aquaticDryTimer = AQUATIC_SUFFOCATE_DELAY - AQUATIC_SUFFOCATE_INTERVAL;
+    this.health -= 1;
+    this.hitFlash = 0.2;
+    if (this.health <= 0) {
+      this.health = 0;
+      this.dead = true;
+      this.diedFromDamage = true;
+    }
+  }
+
+  /** 水生生物离水的计时（秒；回到水里就清零） */
+  private aquaticDryTimer = 0;
+
   private tickWaterFear(ctx: EntityContext, dt: number): void {
     if (this.type.waterSensitive !== true || this.dead) return;
     const x = Math.floor(this.x);

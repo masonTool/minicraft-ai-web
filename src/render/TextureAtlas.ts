@@ -3552,6 +3552,26 @@ PAINTERS.item_phantom_membrane = (x, y, rng) => {
   return [clamp255(base * 0.72), clamp255(base + 18), clamp255(base + 22), 255];
 };
 
+/**
+ * 墨囊（批次 189）：一颗**深蓝黑的鼓包**，左上角一点冷光。
+ *
+ * 画法与幻翼膜相反——它是实心的（墨囊里有墨），所以不留透明边，
+ * 只把外圈压暗做出圆润感：一眼能认出"这是 squid 掉的那颗"。
+ */
+PAINTERS.item_ink_sac = (x, y, rng) => {
+  const dx = x - 7.5;
+  const dy = y - 8.2;
+  const d = Math.hypot(dx, dy * 0.94);
+  if (d > 6.3) return [0, 0, 0, 0];
+  const jitter = rng() * 10 - 5;
+  // 顶部那一小截"扎口"：比身子再暗一档
+  if (y <= 2 && Math.abs(dx) < 1.6) return [clamp255(18 + jitter), clamp255(20 + jitter), clamp255(32 + jitter), 255];
+  // 左上高光（光源与其它物品图标一致）
+  if (Math.hypot(x - 5.4, y - 5.8) < 1.7) return [clamp255(104 + jitter), clamp255(112 + jitter), clamp255(136 + jitter), 255];
+  const base = (d > 4.8 ? 18 : 30) + jitter;
+  return [clamp255(base * 0.8), clamp255(base * 0.86), clamp255(base + 16), 255];
+};
+
 /** 凋灵骷髅头的顶面（批次 115）：几道更深的骨缝，说明"这是个头"而不是一块石头 */
 PAINTERS.wither_skull_top = (x, y, rng) => {
   const jitter = rng() * 14 - 7;

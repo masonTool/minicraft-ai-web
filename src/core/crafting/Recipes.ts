@@ -63,7 +63,17 @@ const DYE_SOURCE_RECIPES: readonly Recipe[] = [
   { kind: 'shapeless' as const, result: { id: dyeIdByName('light_gray'), count: 1 }, ingredients: [Block.OXEYE_DAISY] },
   { kind: 'shapeless' as const, result: { id: dyeIdByName('blue'), count: 1 }, ingredients: [Block.CORNFLOWER] },
   { kind: 'shapeless' as const, result: { id: dyeIdByName('blue'), count: 1 }, ingredients: [Item.LAPIS_LAZULI] },
+  /**
+   * 墨囊 → 黑色染料（批次 189）：原版唯一的黑色来源（另一条是凋灵玫瑰，还没做）。
+   *
+   * 这一条之前是 O14 白名单里最长的一条断链：黑色一断，黑色/灰色羊毛、地毯、床、
+   * 染色玻璃、陶瓦、混凝土**整族**都拿不到（14 色能染、黑灰两色不能）。
+   * 鱿鱼做出来之后它自己就通了——白名单那一段按规矩删掉（见 TASKS J26）。
+   */
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('black'), count: 1 }, ingredients: [Item.INK_SAC] },
   // 混合（原版产 2 个）
+  // 灰 = 黑 + 白（批次 189）：黑色通了之后这条才可能成立，所以它跟着一起补
+  { kind: 'shapeless' as const, result: { id: dyeIdByName('gray'), count: 2 }, ingredients: [dyeIdByName('black'), dyeIdByName('white')] },
   { kind: 'shapeless' as const, result: { id: dyeIdByName('orange'), count: 2 }, ingredients: [dyeIdByName('red'), dyeIdByName('yellow')] },
   { kind: 'shapeless' as const, result: { id: dyeIdByName('purple'), count: 2 }, ingredients: [dyeIdByName('blue'), dyeIdByName('red')] },
   { kind: 'shapeless' as const, result: { id: dyeIdByName('pink'), count: 2 }, ingredients: [dyeIdByName('red'), dyeIdByName('white')] },

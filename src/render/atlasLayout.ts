@@ -917,6 +917,8 @@ export const TILE_ORDER = [
   // 三叉戟（批次 123，溺尸手里那件）；幻翼膜（批次 126，幻翼掉的那一片）
   'item_trident',
   'item_phantom_membrane',
+  // 墨囊（批次 189）：鱿鱼掉的那一颗
+  'item_ink_sac',
   // 矿物块与信标（批次 117，K5）：信标的金字塔底座要用这三种块
   'gold_block',
   'diamond_block',
@@ -991,6 +993,8 @@ export const TILE_ORDER = [
   'spawn_egg_sheep',
   'spawn_egg_chicken',
   'spawn_egg_villager',
+  // 鱿鱼（批次 189）
+  'spawn_egg_squid',
   // 炼药锅与水桶（批次 176，G13）：锅身 / 桶底 / 空锅口 / 水面；两张物品图标
   'cauldron_side',
   'cauldron_bottom',

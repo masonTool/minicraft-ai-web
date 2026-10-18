@@ -179,6 +179,16 @@ export const Item = {
    * 与**修复鞘翅**（鞘翅还没做，见 B18）——所以它现在至少有一条真的路（药水）。
    */
   PHANTOM_MEMBRANE: 1450,
+  /**
+   * 墨囊（批次 189）：**鱿鱼**掉的那一颗，也是黑色染料的原版唯一来源。
+   *
+   * 它到这一批才出现，是因为在此之前本项目**没有鱿鱼**——而黑色染料一断，
+   * 黑色/灰色羊毛、地毯、床、染色玻璃、陶瓦、混凝土整族都跟着断（O14 的白名单里
+   * 一直挂着这一族）。补上它之后那两色的整族一次接通（见 TASKS J26）。
+   *
+   * 它还有第二个用途：**书与笔**（H16）的原版配方要用墨囊（批次 190 接上）。
+   */
+  INK_SAC: 1499,
   SUGAR: 1174,
   RABBIT_FOOT: 1190,
   MAGMA_CREAM: 1191,
@@ -420,6 +430,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.TRIDENT, name: 'minecraft:trident', tile: 'item_trident', maxStack: 1 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
+  // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
+  { id: Item.INK_SAC, name: 'minecraft:ink_sac', tile: 'item_ink_sac' },
   { id: Item.SUGAR, name: 'minecraft:sugar', tile: 'item_sugar' },
   { id: Item.RABBIT_FOOT, name: 'minecraft:rabbit_foot', tile: 'item_rabbit_foot' },
   { id: Item.MAGMA_CREAM, name: 'minecraft:magma_cream', tile: 'item_magma_cream' },

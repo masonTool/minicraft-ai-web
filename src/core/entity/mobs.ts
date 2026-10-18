@@ -683,6 +683,44 @@ export const STRAY_TYPE: MobType = {
   eyeHeight: 1.74,
 };
 
+/**
+ * 鱿鱼（批次 189，J14 的生物表 + J26 的染料链）。
+ *
+ * 它补的是**黑色染料**那条最长的断链：原版黑色的两个来源是墨囊与凋灵玫瑰，
+ * 两样都没有，于是黑色一断、灰色（黑 + 白）跟着断，黑/灰两色的羊毛、地毯、床、
+ * 染色玻璃、陶瓦、混凝土**整族**都拿不到。鱿鱼一出现，那条链自己就通了。
+ *
+ * 数值按原版：10 血、**1~3 个墨囊**、2 点经验（原版 1~3）、被打不还手。
+ * 三处与"岸上动物"不同的地方：
+ *  - `spawnInWater`：刷在水里（判据见 `MobSpawner.canSpawnInWater`，与溺尸同一条）；
+ *  - `aquatic`：水里**不受重力**（否则会沉到海底贴地走），上岸 10 秒后开始窒息；
+ *  - `ignoreLight`：水下天光是逐格衰减的，按"天光 ≥ 9"筛会一只都刷不出来。
+ *
+ * ⚠️ 与原版的差异：原版还会喷墨逃开、会随水位上下游动；这里只有"慢慢上下漂"。
+ */
+export const SQUID_TYPE: MobType = {
+  id: 'squid',
+  name: '鱿鱼',
+  health: 10,
+  width: 0.8,
+  height: 0.8,
+  speed: 1.1,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [{ itemId: Item.INK_SAC, min: 1, max: 3 }],
+  xp: 2,
+  aquatic: true,
+  spawnInWater: true,
+  // 原版只在海洋/河流里刷；本项目没有独立的"河流"群系（水靠流体填），所以是四种海洋
+  spawnBiomes: ['ocean', 'deep_ocean', 'warm_ocean', 'frozen_ocean'],
+  ignoreLight: true,
+  dimension: 'overworld',
+  bodyColor: 0x2f4f6f,
+  accentColor: 0x1a3050,
+  eyeHeight: 0.55,
+};
+
 export const MOB_TYPES: readonly MobType[] = [
   BLAZE_TYPE,
   GHAST_TYPE,
@@ -708,6 +746,8 @@ export const MOB_TYPES: readonly MobType[] = [
   STRAY_TYPE,
   // 幻翼（批次 126）：天上那只"失眠怪"——**不进自然生成表**，只由失眠触发
   PHANTOM_TYPE,
+  // 鱿鱼（批次 189）：海里那只，墨囊/黑色染料唯一的来源
+  SQUID_TYPE,
   {
     id: 'zombie',
     name: '僵尸',
