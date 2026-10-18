@@ -3789,6 +3789,23 @@ export class InventoryScreen {
   }
 
   /**
+   * 自动恢复用：把面板淡到几乎看不见，但**副作用一条不少**（批次 214）。
+   *
+   * 为什么不是"换成一块透明 div"（批次 208 试过，失败）：真机日志证明，
+   * "全屏面板出现又消失"能修好 Android 把触摸坐标报成 0,0 的毛病；
+   * 而那块透明 div（透明背景 + `opacity:.01` + 无子节点）根本没被绘制，
+   * 浏览器的坐标映射也就不会重算。所以要留的是**真的画出来的这一层**：
+   * 保留 `body.inv-pocket-open`、面板的布局/子节点/滑入滑出动画与 DOM 重建，
+   * 只把最终像素压到 0.4%（肉眼看不出来，但 `opacity ≠ 1` 仍会单独合成、仍然绘制）。
+   *
+   * ⚠️ 只在**自动恢复**里用；正常打开背包必须先把 ghost 摘掉，
+   * 所以 `finishClose()` / `dispose()` 都会强制清掉这个类。
+   */
+  setGhost(on: boolean): void {
+    this.root.classList.toggle('inv-ghost', on);
+  }
+
+  /**
    * 关界面时把**合成格里的残留**还给背包（批次 132，对齐原版）。
    *
    * 原版规则：关掉物品栏时，合成格里的东西自动回到背包，背包满了就掉到地上。
@@ -3859,6 +3876,9 @@ export class InventoryScreen {
     // 配方书是从背包左栏借来的位置，背包关了就得还回去
     this.detachRecipeBook();
     this.hidePickToast();
+    // 自动恢复用过的"隐身"必须在这里摘掉（批次 214）：
+    // 下一次玩家**主动**打开背包时必须是正常可见的
+    this.setGhost(false);
     this.clearCraftGhost();
     this.markPressing(null);
     this.categoryScrub = null;
@@ -4625,6 +4645,8 @@ export class InventoryScreen {
     this.preview3d = null;
     this.previewDrag = null;
     this.root.remove();
+    // 拆局时也把"隐身"摘掉（批次 214）：万一有别的路径复用这个根节点，别把背包永久变透明
+    this.setGhost(false);
     // 面板开着时退出世界：body 上那个"背包打开"的类也要一起摘掉，
     // 否则主菜单会继承一套背包布局约束
     document.body.classList.remove('inv-pocket-open');

@@ -167,8 +167,6 @@ export class TouchControls {
   private lookPointSource: PointerSource = 'client';
   /** 正在做"隐藏一帧再显示"的坐标恢复 */
   private nudging = false;
-  /** 正在做"重"档恢复（透明全屏层，批次 208） */
-  private recovering = false;
   /** 一次手势里连续收到几个 (0,0) 的 move（批次 201） */
   private zeroMoveCount = 0;
   private lookStartX = 0;
@@ -759,61 +757,6 @@ export class TouchControls {
     this.nudgeLayout(reason);
   }
 
-  /**
-   * 坐标恢复的"重"档（批次 208）：不弹背包，换成一块**看不见的全屏层**。
-   *
-   * 做的是 `openWith('inventory')` + `close()` 那套动作里**真正起作用的部分**：
-   *   ① 新建并插入 `#touch-recover`（等价于"面板刚显示出来"）；
-   *   ② 触摸层收起（等价于 `visible = false`）；
-   *   ③ 读一次布局，强制在"层在、触摸层不在"的条件下重算；
-   *   ④ **摘掉**这一层（等价于"面板关掉"，再算一次）。层不能只切 display：
-   *      新节点插入与移除各带一次 reflow，正好对上开/关面板那两下。
-   *
-   * 两个时间常数是**分开**的：
-   *  - 触摸层的收起只占两帧（≈32ms）：这一步会让人看得见（摇杆/跳跃键闪一下），
-   *    所以压到最短——和 `nudgeLayout` 一样短，用户感知不到；
-   *  - 透明层留 `holdMs`（默认 200ms ≈ 6 帧）：visual viewport 的重算是异步的，
-   *    两帧回来得太早（`nudgeLayout` 就是因此压不住），而层本身看不见，留久点没代价。
-   *
-   * 代价只有这一小段时间不收手势——`resetInput` 本来就把当前拖动作废了。
-   *
-   * @param reason 记进诊断日志
-   * @param holdMs 透明层停留多久（毫秒）
-   */
-  recoverDeep(reason: string, holdMs = 200): void {
-    // 先清输入：即便已经在恢复中，也不该把这一次的手势状态留着
-    this.resetInput(reason);
-    if (this.recovering) return;
-    this.recovering = true;
-    // 软键盘 / 全屏按钮的焦点残留会拖住 visual viewport（与开关背包时一致）
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-
-    const layer = document.createElement('div');
-    layer.id = 'touch-recover';
-    layer.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(layer);
-    this.object.style.display = 'none';
-    void layer.offsetHeight;
-    void this.object.offsetHeight;
-    void document.body.offsetHeight;
-
-    // 两帧后先把触摸层放回来（这一步越短越无感）
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        this.object.style.display = '';
-        void this.object.offsetHeight;
-      });
-    });
-
-    // 透明层再撑一会儿：给浏览器留出重算坐标映射的时间
-    window.setTimeout(() => {
-      layer.remove();
-      void document.body.offsetHeight;
-      this.recovering = false;
-      diag.event('gesture', 'pointer.recover.deep', { reason, holdMs });
-    }, holdMs);
-  }
-
   /** 把"坐标全是 0"的现场记下来：pointerType / screen / page / visualViewport 都要 */
   private reportPointerAnomaly(phase: string, event: PointerEvent): void {
     const vv = typeof window === 'undefined' ? null : window.visualViewport;
@@ -878,9 +821,6 @@ export class TouchControls {
     this.resetStick('dispose');
     for (const button of this.sideButtons) button.remove();
     this.object.remove();
-    // 恢复用的透明层是临时插的：倒计时没走完就退出世界时别把它留在页面上
-    document.getElementById('touch-recover')?.remove();
-    this.recovering = false;
   }
 }
 

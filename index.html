@@ -1620,6 +1620,15 @@
         box-sizing: border-box;
       }
       #inventory-screen.hidden { display: none; }
+      /* 自动恢复专用（批次 214）：整块面板压到 0.4% —— 肉眼看不出来，
+         但**不是 0**：opacity≠1 会让它单独成为合成层、背景与子节点照样被绘制。
+         这正是"真的开关一次背包"能修好 Android 触摸坐标全 0 的原因，
+         而批次 208 那块透明 div（无子节点、透明背景）根本没被画，所以无效。
+         ⚠️ 类由 `InventoryScreen#setGhost` 控制，`finishClose` / `dispose` 会强制摘掉。 */
+      #inventory-screen.inv-ghost {
+        opacity: .004;
+        pointer-events: none;
+      }
       /* 携带版外壳：左轨 | 灰框 | 右轨（页签在 border 外，对齐 Wiki） */
       .inv-shell {
         grid-row: 1;
@@ -2836,22 +2845,6 @@
                  env(safe-area-inset-bottom) env(safe-area-inset-left);
       }
       #touch-ui.hidden { display: none; }
-
-      /* 视角恢复用的"隐形遮罩"（批次 208）。
-         用户实测：真开一次背包再关掉能救回"坐标恒为 0"导致的视角卡住。
-         拆开看，起作用的是**一个刚显示出来的全屏固定定位层**（逼浏览器重算
-         visual viewport 与触摸坐标映射），背包面板只是它当时的载体。
-         这里换成一个看不见的层：透明、不吃事件、单独合成一层。
-         ⚠️ 由 `TouchControls#recoverDeep` 临时插进 DOM、200ms 后自己摘掉，
-           所以平时页面上并不存在这个节点。 */
-      #touch-recover {
-        position: fixed; inset: 0; z-index: 9;
-        background: transparent;
-        /* 1% 透明黑只为让浏览器真的去合成它，肉眼看不出来 */
-        opacity: .01;
-        pointer-events: none; touch-action: none;
-        will-change: transform; transform: translateZ(0);
-      }
 
       /* 视角面铺满全屏：承接拖动转视角，以及轻点/长按 */
       #touch-look {

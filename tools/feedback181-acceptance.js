@@ -104,19 +104,40 @@
   fireLook('pointerup', 903, [0, 0], [530, 200]);
   check('拖动中途 client 变 0 时切到 screen 继续转视角', rebased, `${(mc.lookAngles.yaw - yawRebase).toFixed(1)}°`);
 
-  // 连续两次坐标异常：走"透明全屏层"重恢复（批次 208——不弹背包，玩家看不出）
+  // 连续两次坐标异常：走"开关一次背包"，但面板挂 ghost（批次 214）
   fireLook('pointerdown', 904, [0, 0], [0, 0]);
   await sleep(250);
   fireLook('pointerdown', 905, [0, 0], [0, 0]);
-  await sleep(350);
+  await sleep(120);
+  const invRoot = document.getElementById('inventory-screen');
   const diagText = window.__diag?.exportJson?.() ?? '';
-  check('连续坐标异常走透明层重恢复', diagText.includes('autoRecover.deep'));
+  check('连续坐标异常走"隐身开关背包"', diagText.includes('autoRecover.ghost'));
   check(
-    '重恢复不弹背包面板',
-    getComputedStyle(document.getElementById('inventory-screen')).display === 'none',
+    '恢复时背包面板确实打开了、但挂着 ghost（看不见）',
+    getComputedStyle(invRoot).display !== 'none' && invRoot.classList.contains('inv-ghost'),
   );
-  await sleep(900);
-  check('恢复用的透明层会自己摘掉', document.getElementById('touch-recover') === null);
+  await sleep(1000);
+  check('恢复结束后背包关掉、ghost 摘掉', getComputedStyle(invRoot).display === 'none' && !invRoot.classList.contains('inv-ghost'));
+  check('恢复结束后 uiOpen 归位（否则摇杆与视角都被停用）', mc.uiOpen === false);
+
+  // 批次 214 的真机复现路径：进设置 → 切游戏模式 → 返回 → 视角必须还能转
+  mc.openSettings();
+  await sleep(200);
+  mc.setGameMode(mc.gameMode === 'creative' ? 'survival' : 'creative');
+  await sleep(100);
+  mc.closeSettings();
+  await sleep(700);
+  check('切模式并关掉设置后 uiOpen 归位', mc.uiOpen === false);
+  const yawAfterMode = mc.lookAngles.yaw;
+  fireLook('pointerdown', 906, [500, 200], [500, 200]);
+  fireLook('pointermove', 906, [560, 200], [560, 200]);
+  await sleep(300);
+  fireLook('pointerup', 906, [560, 200], [560, 200]);
+  check(
+    '切模式关设置后仍能转视角',
+    Math.abs(mc.lookAngles.yaw - yawAfterMode) > 1,
+    `${(mc.lookAngles.yaw - yawAfterMode).toFixed(1)}°`,
+  );
 
   mc.cycleCameraMode();
   await sleep(150);

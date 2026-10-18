@@ -1074,7 +1074,7 @@ class App {
   private anomalyTimes: number[] = [];
   private lastAutoRecovery = 0;
   /**
-   * 连续自动恢复的"档位"（批次 208）：1 = 透明层，2 = 真开关背包。
+   * 连续自动恢复的"档位"（批次 214）：1 = 隐身开关背包，2 = 可见开关背包。
    * 安静 10 秒（见 `handlePointerAnomaly`）说明上一次已经救回来了，回到第 0 档。
    */
   private recoveryAttempts = 0;
@@ -2047,14 +2047,21 @@ class App {
   }
 
   /**
-   * 触摸坐标异常（批次 201 / 208）。
+   * 触摸坐标异常（批次 201 / 211）。
    *
-   * 用户实测的唯一可靠恢复是"点一下物品栏再关掉"。但面板滑进滑出太显眼，
-   * 所以第 1 档改走 `recoverDeep`：**一块看不见的全屏层**代替面板，
-   * 副作用（新全屏层出现又消失 + 触摸层收起 + 失焦 + 重排）一条不少，画面不变。
+   * **症状与触发**（真机日志 2026-10-18，8/8 组）：**关掉任何一个全屏面板之后**
+   * （`ui.close` 起 0.8~3 秒内的第一次触摸），`clientX/Y`、`screenX/Y`、`pageX/Y`
+   * 三个来源**同时**变成 0；摇杆与视角都拿不到位置，表现就是"卡住"。
+   * 切游戏模式只是让人频繁进出设置，所以看起来像"切模式必现"。
    *
-   * 档位按"10 秒内又出问题"升级：安静 10 秒 = 上一次真的救回来了，重新从第 0 档算。
-   * 第 2 档才退回真开关背包——那一步玩家看得见，只留给"透明层也压不住"的情况。
+   * **唯一被真机证明有效的恢复是"真的开关一次背包"**：同一份日志里自动开关之后，
+   * 下一次触摸（t+0.85s）就是 684,180，视角立刻能转。
+   * 批次 208 换成"透明全屏层"失败了——那块 div 没有子节点、背景透明，
+   * 压根没被绘制，浏览器的触摸坐标映射也就不会重算。**"层存在"≠"层被画出来"**。
+   *
+   * 所以现在按**档位**升级（安静 10 秒 = 上一次救回来了，回到第 0 档）：
+   *  - 第 1 档：同一条背包路径，但面板挂 `ghost`（0.4% 透明，肉眼看不见）；
+   *  - 第 2 档：去掉 ghost 真画一遍（兜底，玩家看得见，配一张提示卡）。
    */
   private handlePointerAnomaly(phase: string): void {
     const now = performance.now();
@@ -2069,25 +2076,40 @@ class App {
     this.recoveryAttempts++;
 
     if (this.recoveryAttempts === 1) {
-      diag.event('input', 'autoRecover.deep', { phase, count: this.anomalyTimes.length });
-      console.info('[touch] 连续坐标异常：透明层重恢复');
-      // 不弹面板、不藏 HUD、也不弹"已自动重置视角"的提示——这条恢复要的就是无感
-      this.touch?.recoverDeep('anomaly');
+      diag.event('input', 'autoRecover.ghost', { phase, count: this.anomalyTimes.length });
+      console.info('[touch] 连续坐标异常：隐身开关一次背包');
+      this.runInventoryRecovery(true);
       return;
     }
 
     this.recoveryAttempts = 0;
     diag.event('input', 'autoRecover.uiCycle', { phase, count: this.anomalyTimes.length });
-    console.info('[touch] 透明层没压住：退回开关一次背包');
-    // 与用户手动操作同一条路径：失焦 → 开 → 120ms 后关 → 再失焦
+    console.info('[touch] 隐身恢复没压住：真开关一次背包');
+    this.runInventoryRecovery(false);
+    this.hudToast.show('触摸坐标异常，已自动重置视角');
+  }
+
+  /**
+   * 真的开关一次背包（批次 201 的老办法，批次 214 起可以"隐身"）。
+   *
+   * 为什么不换成更轻的路径：真机只认它的副作用——`body.inv-pocket-open`（藏 HUD）、
+   * 一块**真正被绘制**的全屏面板（含子节点与滑入滑出动画）、以及触摸层收起约 520ms。
+   * 这三样少一样，Android 就会继续把坐标报成 0。
+   *
+   * @param ghost true = 面板压到 0.4%（看不见），副作用与可见时完全一致
+   */
+  private runInventoryRecovery(ghost: boolean): void {
+    if (this.disposed || this.uiOpen || this.inventoryScreen.isOpen) return;
+    // 软键盘 / 全屏按钮的焦点残留会拖住 visual viewport（与手动开关背包同一套）
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    this.inventoryScreen.setGhost(ghost);
     this.inventoryScreen.openWith('inventory');
     window.setTimeout(() => {
       if (this.disposed) return;
+      // ghost 类由 `finishClose()` 摘掉，这里只负责关
       this.inventoryScreen.close();
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     }, 120);
-    this.hudToast.show('触摸坐标异常，已自动重置视角');
   }
 
   // ---------------------------------------------------------------- 联机（K2）
@@ -10060,9 +10082,9 @@ class App {
           void this.saveNow('hidden');
         } else {
           // 批次 183：从后台回来偶尔会拿到 clientX/Y=0 的触摸；先重排一次。
-          // 批次 208：这一步走"重"档（透明全屏层，200ms）——这两处正是后面
-          // 出现坐标异常的上游，提前压住比事后补救便宜，而且现在它是无感的。
-          this.touch?.recoverDeep('visible');
+          // 批次 214：这里**不**用背包恢复——紧接着 `handleReturnFromBackground`
+          // 会打开暂停菜单，两个面板叠着开会让 uiOpen 的交接算错。
+          this.touch?.recover('visible');
           // 批次 201：先落到暂停页，点一下才横屏全屏回到游戏
           if (this.wasHidden) this.handleReturnFromBackground();
         }
@@ -10070,11 +10092,12 @@ class App {
       { signal: this.listeners.signal },
     );
     // 退出/重进全屏之后同样可能坐标异常（真机日志里正是这一段之后开始拖不动）。
-    // 批次 208：同样改用无感的重档恢复。
+    // 批次 214：全屏切换常常紧跟着"打开暂停菜单"，所以这里只做轻量重排；
+    // 真的丢了坐标，会由 `handlePointerAnomaly` 走隐身背包恢复。
     document.addEventListener(
       'fullscreenchange',
       () => {
-        this.touch?.recoverDeep('fullscreen');
+        this.touch?.recover('fullscreen');
       },
       { signal: this.listeners.signal },
     );
