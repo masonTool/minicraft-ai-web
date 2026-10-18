@@ -6486,7 +6486,11 @@ class App {
       pickup: (itemId, count, extras) => this.inventory.addStack({ id: itemId, count, ...extras }),
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       player: { x: this.physics.x, y: this.physics.y, z: this.physics.z },
-      hurtPlayer: (amount, sourceX, sourceZ, cause) => this.damagePlayer(amount, sourceX, sourceZ, cause),
+      // ⚠️ 第 5 个参数是"谁打的"（僵尸 / 箭矢 / 末影水晶…）。漏掉它不会报错，
+      // 但左上角与死亡卡片就只剩"受到伤害（没有记录到来源）"——实体层明明传了名字，
+      // 桥接层不接等于白传（批次 218 用户"被不明原因打死"就是这个）。
+      hurtPlayer: (amount, sourceX, sourceZ, cause, source) =>
+        this.damagePlayer(amount, sourceX, sourceZ, cause, source),
       // 蜘蛛在亮处中立（批次 93）：亮度取"方块光与折算后的天光"的较大者，
       // 与刷怪判据同一套折算（天光要按昼夜折算，否则夜里也算 15 → 蜘蛛永不打人）
       lightAt: (x, y, z) =>

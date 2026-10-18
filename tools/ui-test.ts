@@ -2406,6 +2406,13 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       appSrc.includes('受到 ${fmt(total)} 点伤害：') &&
       mobSrc.includes("ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name)"),
   );
+  // 桥接层（`EntityContext.hurtPlayer` → `damagePlayer`）必须把第 5 个参数原样转过去：
+  // 少了它，实体层传的生物名白传，所有生物伤害都显示"没有记录到来源"（批次 218）
+  check(
+    '实体伤害的来源名在桥接层没有被丢掉',
+    appSrc.includes('hurtPlayer: (amount, sourceX, sourceZ, cause, source) =>') &&
+      appSrc.includes('this.damagePlayer(amount, sourceX, sourceZ, cause, source)'),
+  );
   check(
     '死亡卡片也写清死因',
     html.includes('class="death-cause"') &&
