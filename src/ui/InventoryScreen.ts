@@ -2486,7 +2486,12 @@ export class InventoryScreen {
           // 批次 159：**按下就沉下去**。触摸端一次轻点要到 `pointerup` 才结算
           //（要跟长按区分），等结算完再给反馈就成了"点了要等一下才选中"。
           // ⚠️ 空槽不给：空槽本来就不可选中，给它"沉下去"会让人以为选中了。
-          if (this.tooltipStacks.has(slot)) this.markPressing(slot);
+          // 批次 184：红底那种"我没有的"也**不选中**，所以不给"相框"，
+          // 只给一下缩放（用户："点击应该只触发点击效果"）。
+          if (this.tooltipStacks.has(slot)) {
+            if (slot.classList.contains('locked')) this.flashLocked(slot);
+            else this.markPressing(slot);
+          }
         }
       },
       true,
@@ -3603,6 +3608,22 @@ export class InventoryScreen {
     if (this.pressingEl && this.pressingEl !== slot) this.pressingEl.classList.remove('pressing');
     this.pressingEl = slot;
     slot?.classList.add('pressing');
+  }
+
+  /**
+   * 红底（我没有的）那一格的点击反馈（批次 184）。
+   *
+   * 它**不能选中**，所以没有 `.selected`；但也不能"点了完全没反应"——
+   * 用户要求"点击应该只触发点击效果，响应配方及物品名称"。名称那条由
+   * `showPickToast` 负责、配方由 `pickCategoryItem → showRecipeFor` 负责，
+   * 这里只补 220ms 的缩放，和 `:active` 差不多的手感。
+   */
+  private flashLocked(slot: HTMLElement): void {
+    slot.classList.remove('tapped');
+    // 强制重排：连点同一格时动画要能重跑
+    void slot.offsetWidth;
+    slot.classList.add('tapped');
+    window.setTimeout(() => slot.classList.remove('tapped'), 260);
   }
 
   /** 收起说明浮层（超时 / 关界面）：先淡出 200ms 再挂 hidden */

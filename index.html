@@ -2204,6 +2204,13 @@
         border-color: #cf7770 #54201c #54201c #cf7770;
       }
       .inv-slot.locked canvas { opacity: .62; filter: grayscale(.35); }
+      /* 红底那格的点击反馈（批次 184）：它不能被选中，所以没有 `.selected`；
+         只缩一下 + 亮一下，表示"这一下收到了"（名称与配方照常响应）。 */
+      @keyframes inv-locked-tap {
+        0% { transform: scale(.9); filter: brightness(1.12); }
+        100% { transform: none; filter: none; }
+      }
+      .inv-slot.locked.tapped { animation: inv-locked-tap .22s ease-out; }
       /* 配方预览里"差的那件"同样是红底（格子里是预览，不是实物） */
       .inv-slot.ghost-missing {
         background: #9b3b35;
