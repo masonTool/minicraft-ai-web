@@ -46,6 +46,22 @@ export const FLAT_LAYERS = {
 /** 超平坦世界的地表高度（生物落点、村庄与地物的参照） */
 export const FLAT_SURFACE_Y = FLAT_LAYERS.grassY;
 
+/**
+ * 各世界类型的"地表基准高度"（批次 238）。
+ *
+ * 出生点搜索、临时落点、读档落地校正都以它为参照。以前这几处把**海平面 64 写死**，
+ * 于是超平坦（地表 y=-61）一个候选都找不到：加载遮罩一直不撤（看起来是"卡死"），
+ * 读档后玩家停在 y=80 悬空、落地校正又只往下扫 48 格（够不到 -61）→ 141 格摔死。
+ *
+ * `default` / `amplified` 用 64 而不是 63：出生点要求**高于海平面**（海边/水下不算），
+ * 这是原来的判据，保持不变。
+ */
+export const WORLD_SURFACE_Y: Record<WorldType, number> = {
+  default: 64,
+  amplified: 64,
+  flat: FLAT_SURFACE_Y,
+};
+
 /** 放大化的起伏倍率：山体高度与峡谷深度都按它放大 */
 export const AMPLIFIED_RELIEF_SCALE = 2.2;
 

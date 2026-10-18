@@ -36,7 +36,7 @@ import { applyClimateGain, biomeForColumn, findLandBiome, type BiomeDef } from '
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { Spline, smoothstep } from './noise/Spline.ts';
-import { AMPLIFIED_RELIEF_SCALE, type WorldType } from './WorldType.ts';
+import { AMPLIFIED_RELIEF_SCALE, FLAT_SURFACE_Y, type WorldType } from './WorldType.ts';
 
 /** 海平面（原版主世界海平面为 y=63） */
 export const SEA_LEVEL = 63;
@@ -489,6 +489,11 @@ export class OverworldGenerator {
    * "先求根再插值高度"完全等价，所以这样做既便宜（4 次采样）又准确。
    */
   surfaceY(x: number, z: number): number {
+    // 超平坦没有噪声地形：地表恒为 FLAT_SURFACE_Y（批次 238）。
+    // 不特判的话，出生点规划会按"一份根本不存在的噪声地形"来选位置，
+    // 和真正生成出来的平地完全对不上。
+    if (this.worldType === 'flat') return FLAT_SURFACE_Y;
+
     const gx = Math.floor(x / CELL_XZ) * CELL_XZ;
     const gz = Math.floor(z / CELL_XZ) * CELL_XZ;
     const tx = (x - gx) / CELL_XZ;

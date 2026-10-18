@@ -112,6 +112,14 @@ export function findSafeSpawn(
   centerX = 0,
   centerZ = 0,
   radius = 48,
+  /**
+   * 地表高度下限（批次 238）：低于它的列不当候选。
+   *
+   * 主世界传海平面（64）——那是"不要在海底/海里出生"的判据；超平坦必须传
+   * `FLAT_SURFACE_Y`（-61），否则每一列都低于 64 被跳过，出生点永远解析不出来
+   * （表现就是加载遮罩不撤、看起来卡死）。
+   */
+  minGroundY = 64,
 ): SafeSpawnPoint | null {
   const heightCache = new Map<string, number | null>();
   const groundAt = (x: number, z: number): number | null => {
@@ -127,7 +135,7 @@ export function findSafeSpawn(
   for (let z = centerZ - radius; z <= centerZ + radius; z += 2) {
     for (let x = centerX - radius; x <= centerX + radius; x += 2) {
       const groundY = groundAt(x, z);
-      if (groundY === null || groundY < 64) continue;
+      if (groundY === null || groundY < minGroundY) continue;
 
       let low = groundY;
       let high = groundY;
@@ -169,14 +177,18 @@ export function planSpawnRegion(
   surfaceAt: (x: number, z: number) => number,
   biomeAt: (x: number, z: number) => string | null,
   radius = 256,
-): { x: number; z: number } {
-  let best = { x: 0, z: 0 };
+  /** 地表高度下限（批次 238）：与 `findSafeSpawn` 同一个参数，超平坦传 `FLAT_SURFACE_Y` */
+  minGroundY = 64,
+): { x: number; z: number; y: number } {
+  // `y` 一起返回：调用方要先把玩家放在"真实地表上方"等区块流出来，
+  // 以前那个位置写死成 y=80（超平坦地表 -61 → 出生点没解析出来就掉 141 格摔死）。
+  let best = { x: 0, z: 0, y: surfaceAt(0, 0) };
   let bestScore = Number.POSITIVE_INFINITY;
   const step = 8;
   for (let z = -radius; z <= radius; z += step) {
     for (let x = -radius; x <= radius; x += step) {
       const center = surfaceAt(x, z);
-      if (center < 64 || center >= WORLD_MAX_Y - 4) continue;
+      if (center < minGroundY || center >= WORLD_MAX_Y - 4) continue;
       let low = center;
       let high = center;
       for (const [dx, dz] of [[-4, 0], [4, 0], [0, -4], [0, 4]] as const) {
@@ -190,7 +202,7 @@ export function planSpawnRegion(
       const score = roughness * 1000 + rank * 80 + Math.hypot(x, z);
       if (score < bestScore) {
         bestScore = score;
-        best = { x, z };
+        best = { x, z, y: center };
       }
     }
   }

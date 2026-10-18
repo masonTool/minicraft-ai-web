@@ -324,9 +324,11 @@ import {
   tillableTo,
 } from './core/registry/tools.ts';
 import { OverworldGenerator } from './core/gen/OverworldGenerator.ts';
+import { WORLD_SURFACE_Y } from './core/gen/WorldType.ts';
 import {
   findSafeSpawn,
   naturalGroundNear,
+  naturalGroundY,
   planSpawnRegion,
 } from './core/world/SpawnPoint.ts';
 // 凋灵骷髅"只要塞里面刷"（批次 115）：要塞的位置要算，而算它需要下界的洞顶/地板/群系
@@ -906,7 +908,15 @@ class App {
   /** 状态效果 HUD（右上角）与它的内容签名（内容没变就不重建 DOM） */
   private readonly effectsHudEl = document.getElementById('effects-hud');
   private effectsHudSignature = '';
-  private spawnPoint: [number, number, number] = [0.5, 80, 0.5];
+  /**
+   * 世界出生点（`tryResolveSpawn` 解析成功后覆盖；新世界还会在 `prepareNewWorldSpawn`
+   * 里先放一个"地表上方"的临时值）。
+   *
+   * ⚠️ 这里的初值只是占位：以前写 80，超平坦世界（地表 -61）读档后一旦走到
+   * "没床 → 回出生点"的路径就是从 80 掉到 -60。现在另有一层兜底——重生后
+   * `requestGroundSettle('respawn')` 会把玩家挪到真实地面（整列扫描）。
+   */
+  private spawnPoint: [number, number, number] = [0.5, 64, 0.5];
   /**
    * 睡出来的**重生点**（B13 / I13，批次 79）。
    *
@@ -2873,13 +2883,22 @@ class App {
   private prepareNewWorldSpawn(): void {
     // 原点恰在大海时，小视距永远加载不到陆地，安全出生点也就无从复核。
     this.biomeGenerator = new OverworldGenerator(this.worldConfig.seed, this.worldConfig.worldType);
+    // 地表高度下限跟着世界类型走（批次 238）：超平坦地表在 y=-61，
+    // 还用海平面 64 的话出生点永远解析不出来（遮罩不撤、看起来卡死）。
+    const surfaceY = WORLD_SURFACE_Y[this.worldConfig.worldType];
     const region = planSpawnRegion(
       (x, z) => this.biomeGenerator!.surfaceY(x, z),
       (x, z) => this.biomeGenerator!.biomeAt(x, z).name,
+      256,
+      surfaceY,
     );
     this.spawnSearchX = region.x;
     this.spawnSearchZ = region.z;
-    this.physics.teleport(region.x + 0.5, 80, region.z + 0.5);
+    // 临时落点放在**真实地表上方**。以前写死 y=80：超平坦地表在 -61，
+    // 出生点一旦没解析出来（或读档落地校正也够不到），玩家就从 80 掉到 -60 —— 141 格，必死。
+    const landingY = region.y + 1.01;
+    this.physics.teleport(region.x + 0.5, landingY, region.z + 0.5);
+    this.spawnPoint = [region.x + 0.5, landingY, region.z + 0.5];
     this.refreshWorld(toChunkCoord(region.x), toChunkCoord(region.z), true);
   }
 
@@ -9556,6 +9575,7 @@ class App {
       this.spawnSearchX,
       this.spawnSearchZ,
       radius,
+      WORLD_SURFACE_Y[this.worldConfig.worldType],
     );
     if (!spawn) return;
 
@@ -9614,8 +9634,14 @@ class App {
     }
 
     const safe =
-      findSafeSpawn(this.world, (bx, bz) => this.biomeNameAt(bx, bz), x, z, 24) ??
-      this.nearestNaturalGround(x, z, 20);
+      findSafeSpawn(
+        this.world,
+        (bx, bz) => this.biomeNameAt(bx, bz),
+        x,
+        z,
+        24,
+        WORLD_SURFACE_Y[this.worldConfig.worldType],
+      ) ?? this.nearestNaturalGround(x, z, 20);
     if (!safe) return;
 
     this.physics.teleport(safe.x, safe.y, safe.z);
@@ -9647,8 +9673,15 @@ class App {
           if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
           const gx = x + dx;
           const gz = z + dz;
-          // 只扫玩家高度附近，别从世界顶往下翻一整列（见 `naturalGroundNear`）
-          const y = naturalGroundNear(this.world, gx, gz, this.physics.y);
+          // 只扫玩家高度附近，别从世界顶往下翻一整列（见 `naturalGroundNear`）。
+          //
+          // ⚠️ 但**玩家自己那一列**要允许整列兜底（批次 238）：存档里的位置可能远高于地表
+          // （超平坦地表 y=-61，而旧存档停在 y=80），48 格的局部扫描永远够不到。
+          // 只对 r=0 放宽——它最多 1 列（~446 次读），而外围仍然走便宜的局部扫描，
+          // 不会在"整片虚空"这种极端情况下每帧翻 1681 列把主线程卡住。
+          const y =
+            naturalGroundNear(this.world, gx, gz, this.physics.y) ??
+            (r === 0 ? naturalGroundY(this.world, gx, gz) : null);
           if (y === null) continue;
           return { x: gx + 0.5, y: y + 1.01, z: gz + 0.5 };
         }

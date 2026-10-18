@@ -15,6 +15,7 @@ import {
   AMPLIFIED_RELIEF_SCALE,
   FLAT_LAYERS,
   FLAT_SURFACE_Y,
+  WORLD_SURFACE_Y,
   WORLD_TYPES,
   WORLD_TYPE_LABELS,
   isWorldType,
@@ -339,6 +340,49 @@ console.log('\n[安全出生点]');
     32,
   );
   check('原点在海里时会预选附近的植被陆地', region.x >= 16);
+}
+
+// ---------------------------------------------------------------- 6b. 超平坦出生点
+
+console.log('\n[超平坦世界的出生点（批次 238）]');
+{
+  // 超平坦：整片世界只有 y<=-61 的三层地面（基岩/泥土/草），其余全是空气
+  const flat: SpawnSearchWorld = {
+    isLoaded: () => true,
+    getBlock: (_x, y, _z) => (y <= FLAT_SURFACE_Y ? Block.GRASS_BLOCK : Block.AIR),
+    isSolid(x, y, z) {
+      const id = this.getBlock(x, y, z);
+      return id !== Block.AIR;
+    },
+  };
+
+  check('超平坦地表就在 -61', FLAT_SURFACE_Y === -61);
+  check(
+    '用海平面判据（64）一列都选不出来 —— 这正是旧版本"进入卡死"的原因',
+    findSafeSpawn(flat, () => 'plains', 0, 0, 8) === null,
+  );
+
+  const flatSpawn = findSafeSpawn(flat, () => 'plains', 0, 0, 8, WORLD_SURFACE_Y.flat);
+  check('按世界类型给下限就能解析出出生点', flatSpawn !== null);
+  check('出生地面是 -61', flatSpawn !== null && flatSpawn.groundY === FLAT_SURFACE_Y);
+  check(
+    '出生高度是地表上一格',
+    flatSpawn !== null && Math.abs(flatSpawn.y - (FLAT_SURFACE_Y + 1.01)) < 1e-6,
+  );
+
+  const flatRegion = planSpawnRegion(() => FLAT_SURFACE_Y, () => 'plains', 32, WORLD_SURFACE_Y.flat);
+  check('出生区域规划带出真实地表高度（临时落点不再写死 80）', flatRegion.y === FLAT_SURFACE_Y);
+
+  // 默认/放大化世界的判据不能被放宽：整片都在海平面以下时仍然一个都不选
+  const underwater = planSpawnRegion(() => 40, () => 'plains', 32);
+  check('默认世界整片低于海平面时不选列（判据没被放宽）', underwater.x === 0 && underwater.y === 40);
+
+  // 旧存档停在 y=80，而地面在 -61：局部扫描够不到，靠近整列扫描兜底
+  check('局部扫描（48 格）够不到超平坦地表', naturalGroundNear(flat, 0, 0, 80) === null);
+  check(
+    '整列扫描能找到（`nearestNaturalGround` 的 r=0 兜底靠这一条）',
+    naturalGroundY(flat, 0, 0) === FLAT_SURFACE_Y,
+  );
 }
 
 // ---------------------------------------------------------------- 7. 时间文案
