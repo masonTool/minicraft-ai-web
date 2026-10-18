@@ -3573,6 +3573,53 @@ PAINTERS.item_ink_sac = (x, y, rng) => {
 };
 
 /**
+ * 烟火之星（批次 192）：一颗**四角星**——中心白、四角金，周围散几点火星。
+ *
+ * 为什么不按颜色画：颜色是**每一颗星自己的数据**（`firework.colors`），
+ * 图标只有一张，画成金色才不会出现"拿在手里是红的、炸出来是蓝的"那种错位。
+ * 原版靠叠加一层颜色贴图区分，我们这里用"名称里带颜色"来表达（见 `itemNames`）。
+ */
+PAINTERS.item_firework_star = (x, y, rng) => {
+  const jitter = rng() * 6 - 3;
+  const cx = 7.5;
+  const cy = 7.5;
+  const dx = Math.abs(x - cx);
+  const dy = Math.abs(y - cy);
+  // 四角星：|dx| + |dy| 小于半径，且两个轴不能同时太宽（收出尖角）
+  const diamond = dx + dy;
+  if (diamond <= 2.2) return [clamp255(250 + jitter), clamp255(246 + jitter), clamp255(226 + jitter), 255];
+  if (diamond <= 4.6 && (dx < 1.2 || dy < 1.2)) {
+    return [clamp255(238 + jitter), clamp255(196 + jitter), clamp255(78 + jitter), 255];
+  }
+  // 四散的几点火星
+  const spark = (x === 2 && y === 3) || (x === 12 && y === 4) || (x === 4 && y === 12) || (x === 11 && y === 11);
+  if (spark) return [clamp255(226 + jitter), clamp255(176 + jitter), clamp255(60 + jitter), 255];
+  return [0, 0, 0, 0];
+};
+
+/**
+ * 烟花火箭（批次 192）：**竖着的一枚**——白纸筒 + 红火箭头 + 下方一根木棍。
+ *
+ * 与"成书"那类图标同一个要求：远远看一眼就知道是哪一类东西。
+ */
+PAINTERS.item_firework_rocket = (x, y, rng) => {
+  const jitter = rng() * 6 - 3;
+  // 尾部木棍（下三分之一，两格宽）
+  if (y >= 11 && y <= 14 && (x === 7 || x === 8)) return [clamp255(128 + jitter), clamp255(96 + jitter), clamp255(58 + jitter), 255];
+  // 纸筒：中间那一段，两侧深一档做圆筒感
+  if (x >= 5 && x <= 10 && y >= 4 && y <= 10) {
+    if (x === 5 || x === 10) return [clamp255(178 + jitter), clamp255(176 + jitter), clamp255(168 + jitter), 255];
+    if (y === 7 || y === 9) return [clamp255(206 + jitter), clamp255(120 + jitter), clamp255(104 + jitter), 255];
+    return [clamp255(236 + jitter), clamp255(234 + jitter), clamp255(226 + jitter), 255];
+  }
+  // 火箭头（尖顶）
+  if (y === 1 && (x === 7 || x === 8)) return [clamp255(212 + jitter), clamp255(62 + jitter), clamp255(52 + jitter), 255];
+  if (y === 2 && x >= 6 && x <= 9) return [clamp255(212 + jitter), clamp255(62 + jitter), clamp255(52 + jitter), 255];
+  if (y === 3 && x >= 5 && x <= 10) return [clamp255(186 + jitter), clamp255(48 + jitter), clamp255(42 + jitter), 255];
+  return [0, 0, 0, 0];
+};
+
+/**
  * 书与笔（批次 190）：一本**摊开的小棕书** + 右上角一支白羽毛。
  *
  * 画法与告示牌图标同一路数——"看出这是什么"优先，不追原版的像素：

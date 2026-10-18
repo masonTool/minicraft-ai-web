@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 589（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 590（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **179**、进行中 **75**、待办 33 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,12 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 192（H16 烟花）：`ItemStack.firework`（`{ flight, colors }`，四处链路一起补）。
+  两件物品：**烟火之星**（火药 + 16 色染料 → 颜色即染料）、**烟花火箭**（纸 + 火药 ×1~3 定档位，
+  加一颗星带颜色）；火箭颜色**取自摆进去的那颗星**，所以这条落在 `CraftingGrid.recompute`
+  （配方表只按 id 匹配）。发射走新实体 `core/entity/Firework.ts`：匀速 10 格/秒上升，
+  引信 1.0 / 1.4 / 1.8 秒，炸开时按颜色出粒子、按距离衰减伤生物（5/6/7）、**不炸地形**。
+  `test:firework` 73 条；配方表 525 → 547；离线套数 123 → **124**。H16 只剩旗帜图案与地图数据。
 - 批次 191（J25 讲台）：新增 `core/container/Lectern.ts`——一格（摊着的那本书）+ 一个页码，
   进 `BlockEntityStore` / `ContainerSave`（第 5 处登记）/ `CONTAINER_BLOCKS` / `containerOfBlockAt`。
   右键把书与笔或成书**放上去**（创造不消耗）、再右击**翻开**（从上次那页接着读）、
@@ -322,11 +328,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 123 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 124 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 123 套离线测试
+npm test                   # typecheck:tools + vitest + 124 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -338,7 +344,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **123 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **124 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。

@@ -143,6 +143,21 @@ export interface EntityContext {
    */
   explode?: (x: number, y: number, z: number, power: number) => void;
   /**
+   * 烟花炸开（批次 192）：粒子颜色、波及范围与音效全归主程序。
+   *
+   * 与 `explode` 分成两个钩子（而不是复用 `explode`）：**烟花不炸地形**，
+   * 而 `explode` 那条是"要不要炸方块由 mobGriefing 决定"——让烟花走进去，
+   * 关掉 `mobGriefing` 之前它就会被当成苦力怕的爆炸处理（那就不是烟花了）。
+   */
+  burstFirework?: (
+    x: number,
+    y: number,
+    z: number,
+    colors: readonly number[],
+    power: number,
+    damage: number,
+  ) => void;
+  /**
    * 击杀经验（I5）：生物死亡时把 `type.xp` 交给主程序记账。
    * 放在这里而不是让实体直接持有经验对象，是为了让实体层不认识"玩家进度"。
    */

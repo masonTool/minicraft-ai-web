@@ -22,6 +22,7 @@ import { ItemEntity } from '../core/entity/ItemEntity.ts';
 import { XpOrb } from '../core/entity/XpOrb.ts';
 import { itemDef } from '../core/registry/items.ts';
 import { Throwable } from '../core/entity/Throwable.ts';
+import { Firework } from '../core/entity/Firework.ts';
 import type { Entity } from '../core/entity/Entity.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
 
@@ -140,6 +141,11 @@ export class EntityRenderer {
       }
       if (entity instanceof Throwable) {
         this.syncThrowable(entity, alive, camera, lightAt);
+        continue;
+      }
+      // 烟花（批次 192）：一枚小火箭往上飞，自发光（它自己是光源）
+      if (entity instanceof Firework) {
+        this.syncFirework(entity, alive, camera);
         continue;
       }
       if (!(entity instanceof ItemEntity)) continue;
@@ -304,6 +310,26 @@ export class EntityRenderer {
     }
 
     mesh.position.set(throwable.x, throwable.y + 0.12, throwable.z);
+    mesh.quaternion.copy(camera.quaternion);
+  }
+
+  /**
+   * 同步一枚烟花火箭（批次 192）。
+   *
+   * 与火球同一条路：**自发光**（`materialForLevel(15)`），朝镜头做 billboard。
+   * 用 `item_firework_rocket` 的图标当贴图——原版在空中也是一枚小火箭的样子。
+   */
+  private syncFirework(firework: Firework, alive: Set<number>, camera: THREE.Camera): void {
+    alive.add(firework.id);
+    let mesh = this.throwableMeshes.get(firework.id);
+    if (!mesh) {
+      mesh = new THREE.Mesh(this.tileSpriteGeometry('item_firework_rocket'), this.baseMaterial);
+      mesh.userData.billboard = true;
+      mesh.material = this.materialForLevel(15);
+      this.throwableMeshes.set(firework.id, mesh);
+      this.object.add(mesh);
+    }
+    mesh.position.set(firework.x, firework.y + 0.1, firework.z);
     mesh.quaternion.copy(camera.quaternion);
   }
 

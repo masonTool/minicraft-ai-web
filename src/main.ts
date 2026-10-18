@@ -431,6 +431,8 @@ import {
 import { SignEditor } from './ui/SignEditor.ts';
 import { BookScreen } from './ui/BookScreen.ts';
 import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
+import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
+import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
 import { UnsupportedScreen } from './ui/UnsupportedScreen.ts';
 import { probeBrowserGl, rendererFailure, type GlSupportFail } from './core/render/webglSupport.ts';
@@ -4718,6 +4720,56 @@ class App {
   }
 
   /**
+   * 发射一枚烟花火箭（批次 192，H16）。
+   *
+   * 与投掷物一样**不需要准星对着东西**——原版最常见的就是对着天空放。
+   * 火箭从眼睛位置起飞，颜色/档位从那一叠的 `firework` 里取。
+   *
+   * @returns 手里不是火箭时返回 false（这一下继续走别的分支）
+   */
+  private launchFirework(): boolean {
+    const stack = this.inventory.get(this.hotbarIndex);
+    if (!stack || !isFireworkRocket(stack)) return false;
+    const flight = stack.firework?.flight ?? 1;
+    const x = this.physics.x;
+    const y = this.physics.eyeY;
+    const z = this.physics.z;
+    this.entities.spawn(new Firework(x, y, z, flight, fireworkColorsOf(stack)));
+    if (!this.isCreative) this.inventory.take(this.hotbarIndex, 1);
+    this.refreshHotbar();
+    this.audio.play('fuse', { x, y, z });
+    this.hand.swing();
+    return true;
+  }
+
+  /**
+   * 烟花炸开（批次 192）。
+   *
+   * 三件事：粒子（按颜色）、音效、**不炸地形**的伤害结算。伤害按距离衰减，
+   * 与 `explodeAt` 那条分开写是刻意的：那个会按 mobGriefing 决定拆不拆方块。
+   */
+  private burstFirework(
+    x: number,
+    y: number,
+    z: number,
+    colors: readonly number[],
+    power: number,
+    damage: number,
+  ): void {
+    this.particles.spawnFirework(x, y, z, colors, power);
+    this.audio.play('explode', { x, y, z });
+    // 波及半径：档位越高越大（3.4 / 3.8 / 4.2 格）
+    const radius = 2 + power;
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity.dead) continue;
+      const distance = Math.hypot(entity.x - x, entity.y - y, entity.z - z);
+      if (distance > radius) continue;
+      const amount = Math.max(1, Math.round(damage * (1 - distance / radius)));
+      entity.hurt(amount, x, z, this.lastEntityContext ?? undefined);
+    }
+  }
+
+  /**
    * 讲台（批次 191，J25）：放书 / 打开阅读。
    *
    * 三条分支（与原版一致的部分写在前面，差异写在 TASKS J25）：
@@ -6076,6 +6128,8 @@ class App {
       },
       playSound: (kind, x, y, z) => this.audio.play(kind, { x, y, z }),
       explode: (x, y, z, power) => this.explodeAt(x, y, z, power),
+      // 烟花（批次 192）：不炸地形，只冒粒子 + 伤生物
+      burstFirework: (x, y, z, colors, power, damage) => this.burstFirework(x, y, z, colors, power, damage),
       spawnDrop: (itemId, count, x, y, z) => this.spawnDrop(itemId, count, x, y, z),
       // 骷髅射箭与玩家走完全同一条路径，两边不会各自漂移
       // 骷髅射箭走与玩家完全同一条路径，两边不会各自漂移
@@ -8231,6 +8285,14 @@ class App {
 
     // 空玻璃瓶接龙息（K4 尾巴）：血息云飘在空气里，所以和投掷一样**不需要准星对着方块**
     if (this.collectDragonBreath()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
+    // 烟花（批次 192）：手里拿着火箭时这一下是"发射"，**不需要准星对着方块**
+    // （原版对着天空放才是最常干的）
+    if (this.launchFirework()) {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN * 2;
       return;

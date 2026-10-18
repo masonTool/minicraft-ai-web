@@ -3368,7 +3368,8 @@ export class InventoryScreen {
         const next = grid.result;
         if (fitCount(next, this.inventory, PLAYER_FILL_ORDER) < next.count) break;
         if (!grid.takeResult()) break;
-        this.inventory.add(next.id, next.count);
+        // 附加数据一起交出去（批次 192：烟花的颜色/档位就在 `next` 里）
+        this.inventory.addStack({ id: next.id, count: next.count, ...stackExtras(next) });
         crafted++;
         // 保底：正经配方都到不了 64 次，只为防"产物又能当原料"那种配方死循环
         if (crafted >= 64) break;
@@ -3384,7 +3385,8 @@ export class InventoryScreen {
     // 而是"做好就收起来"。`Inventory.addStack` 的填充顺序就是**快捷栏 → 主仓库**
     // （`AUTO_FILL_SLOTS` 按槽位下标走，0-8 是快捷栏、9-35 是主仓库）；
     // 两边都满了就丢在脚边——与"背包放不下"的处理一致（`onDrop` = 主程序那边造掉落物）。
-    const taken: ItemStack = { id: product.id, count: product.count };
+    // 附加数据一起交出去：不然"合出来一枚蓝色烟花"到背包里会变成金色
+    const taken: ItemStack = { id: product.id, count: product.count, ...stackExtras(product) };
     if (!grid.takeResult()) return;
     const leftover = this.inventory.addStack(taken);
     if (leftover > 0) this.hooks.onDrop?.(taken.id, leftover);

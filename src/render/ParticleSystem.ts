@@ -280,6 +280,20 @@ export class ParticleSystem {
     this.burst('explosion', x, y, z, 0xffd27a, Math.round(10 * power), 0.5 * power, 6 * power);
   }
 
+  /**
+   * 烟花（批次 192）：**按颜色各炸一撮**，最后补一圈白心。
+   *
+   * 为什么按颜色循环：`burst` 一次只收一个颜色，而一朵烟花可以有 8 种颜色；
+   * 每色一撮既保住了"一朵花里几种颜色"的观感，也不用给粒子池加"多色"字段。
+   */
+  spawnFirework(x: number, y: number, z: number, colors: readonly number[], power = 1.5): void {
+    const list = colors.length > 0 ? colors : [0xffd27a];
+    for (const color of list) {
+      this.burst('explosion', x, y, z, color, Math.round(10 * power), 0.9 * power, 6 * power);
+    }
+    this.burst('explosion', x, y, z, 0xffffff, 6, 0.5, 2.4);
+  }
+
   /** 气泡柱（E22）：泡在水里时身边一直往上冒的小气泡 */
   spawnBubble(x: number, y: number, z: number, count = 3): void {
     this.burst('bubble', x, y, z, 0xbfe6ff, count, 0.22, 0.6);

@@ -35,6 +35,7 @@ import { DYE_COLORS, WOOD_TYPES } from '../registry/colors.ts';
 import { Item, dyeIdByName, dyeItemId } from '../registry/items.ts';
 import { TOOL_SPECS } from '../registry/tools.ts';
 import { DRINKABLE, lingeringIdOf, tippedArrowIdOf } from '../registry/potions.ts';
+import type { ItemStack } from '../container/Inventory.ts';
 
 /**
  * 染料来源（批次 91）。
@@ -95,6 +96,13 @@ const STONE_SLAB_INDEX = SHAPED_PARENTS.findIndex(([, name]) => name === 'stone'
 export interface RecipeResult {
   id: number;
   count: number;
+  /**
+   * 带**附加数据**的产物（批次 192，烟花）：颜色由染料决定，所以产物不能只是一个 id。
+   *
+   * ⚠️ 只放"由配方决定"的数据（染料颜色、飞行档）。像"星的颜色"那种
+   * **由摆进去的原料携带**的数据不在这里——那要读格子里那一叠，见 `CraftingGrid.recompute`。
+   */
+  extra?: Partial<ItemStack>;
 }
 
 export interface ShapelessRecipe {
@@ -1381,6 +1389,47 @@ const CONCRETE_POWDER_RECIPES: readonly Recipe[] = DYE_COLORS.map(
   }),
 );
 
+/**
+ * 烟花（批次 192，H16）：**星 → 火箭**这条链。
+ *
+ *  - 星：`火药 + 染料`，颜色就是那块染料（16 条）；
+ *  - 素火箭：`纸 + 火药 ×N`，N = 飞行档（1~3 条）；
+ *  - 带星火箭：`纸 + 星 + 火药 ×N`（1~3 条）——颜色由**摆进去的那颗星**决定，
+ *    所以产物上不留颜色，由 `CraftingGrid.recompute` 从格子里那颗星拷过来。
+ *
+ * ⚠️ 与原版一致的一条：火药越多飞得越高，而"星"不影响飞行档（原版也是靠额外火药）。
+ */
+const FIREWORK_RECIPES: readonly Recipe[] = [
+  ...DYE_COLORS.map(
+    (color, index): Recipe => ({
+      kind: 'shapeless' as const,
+      result: {
+        id: Item.FIREWORK_STAR,
+        count: 1,
+        extra: { firework: { flight: 0, colors: [rgbToHex(color.rgb)] } },
+      },
+      ingredients: [Item.GUNPOWDER, dyeItemId(index)],
+    }),
+  ),
+  ...[1, 2, 3].flatMap((flight): Recipe[] => [
+    {
+      kind: 'shapeless' as const,
+      result: { id: Item.FIREWORK_ROCKET, count: 1, extra: { firework: { flight, colors: [] } } },
+      ingredients: [Item.PAPER, ...Array.from({ length: flight }, () => Item.GUNPOWDER)],
+    },
+    {
+      kind: 'shapeless' as const,
+      result: { id: Item.FIREWORK_ROCKET, count: 1, extra: { firework: { flight, colors: [] } } },
+      ingredients: [Item.PAPER, Item.FIREWORK_STAR, ...Array.from({ length: flight }, () => Item.GUNPOWDER)],
+    },
+  ]),
+];
+
+/** 染料表的 `[r, g, b]` → 0xRRGGBB（烟花的颜色是按位存的） */
+function rgbToHex(rgb: readonly [number, number, number]): number {
+  return ((rgb[0] & 0xff) << 16) | ((rgb[1] & 0xff) << 8) | (rgb[2] & 0xff);
+}
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...CONTAINER_RECIPES,
@@ -1407,6 +1456,7 @@ export const RECIPES: readonly Recipe[] = [
   ...HANGING_RECIPES,
   ...REDSTONE_RECIPES,
   ...CONCRETE_POWDER_RECIPES,
+  ...FIREWORK_RECIPES,
 ];
 
 interface Normalized {
@@ -1502,24 +1552,37 @@ function shapelessMatches(cells: readonly number[], ingredients: readonly number
   return present.every((id, index) => id === needed[index]);
 }
 
+/** 配方产物 → 可用的那一叠（把 `extra` 摊平；`id`/`count` 永远以配方为准，不许被 `extra` 改掉） */
+export function resultStackOf(result: RecipeResult): ItemStack {
+  const stack: ItemStack = { id: result.id, count: result.count };
+  const extra = result.extra;
+  if (extra) {
+    for (const key of Object.keys(extra) as (keyof ItemStack)[]) {
+      if (key === 'id' || key === 'count') continue;
+      (stack as unknown as Record<string, unknown>)[key] = extra[key];
+    }
+  }
+  return stack;
+}
+
 /**
  * 在 size×size 网格里匹配配方。
  * @param cells 扁平物品 id 数组（长度 size²），0 表示空
  */
-export function matchRecipe(cells: readonly number[], size: 2 | 3): RecipeResult | null {
+export function matchRecipe(cells: readonly number[], size: 2 | 3): ItemStack | null {
   const grid = normalizeGrid(cells, size);
   if (!grid) return null;
 
   for (const recipe of RECIPES) {
     if (recipe.kind === 'shapeless') {
-      if (shapelessMatches(cells, recipe.ingredients)) return { ...recipe.result };
+      if (shapelessMatches(cells, recipe.ingredients)) return resultStackOf(recipe.result);
       continue;
     }
 
     const pattern = normalizePattern(recipe.pattern, recipe.key);
     if (!pattern) continue;
-    if (sameShape(grid, pattern)) return { ...recipe.result };
-    if (recipe.mirror !== false && sameShape(grid, mirrorOf(pattern))) return { ...recipe.result };
+    if (sameShape(grid, pattern)) return resultStackOf(recipe.result);
+    if (recipe.mirror !== false && sameShape(grid, mirrorOf(pattern))) return resultStackOf(recipe.result);
   }
 
   return null;

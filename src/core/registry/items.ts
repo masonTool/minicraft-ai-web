@@ -194,6 +194,10 @@ export const Item = {
    *
    * 不可堆叠：每一本的内容都不一样（与成书同一个理由）。
    */
+  /** 烟火之星（批次 192）：火药 + 染料，是烟花的颜色来源（自己不会飞） */
+  FIREWORK_STAR: 1494,
+  /** 烟花火箭（批次 192）：纸 + 火药（1~3 份决定档位）+ 可选的星 */
+  FIREWORK_ROCKET: 1495,
   BOOK_AND_QUILL: 1496,
   /** 成书（批次 190）：署名之后的样子，`id` 换成它、`title` 记下书名，从此只读 */
   WRITTEN_BOOK: 1497,
@@ -440,6 +444,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
   { id: Item.INK_SAC, name: 'minecraft:ink_sac', tile: 'item_ink_sac' },
+  // 烟花（批次 192，H16）：数据在 `firework`（档位 + 颜色），所以也不可堆叠
+  { id: Item.FIREWORK_STAR, name: 'minecraft:firework_star', tile: 'item_firework_star', maxStack: 1 },
+  { id: Item.FIREWORK_ROCKET, name: 'minecraft:firework_rocket', tile: 'item_firework_rocket', maxStack: 1 },
   // 书与笔 / 成书（批次 190，H16）：内容在 `pages`，所以**不可堆叠**
   { id: Item.BOOK_AND_QUILL, name: 'minecraft:writable_book', tile: 'item_book_and_quill', maxStack: 1 },
   { id: Item.WRITTEN_BOOK, name: 'minecraft:written_book', tile: 'item_written_book', maxStack: 1 },

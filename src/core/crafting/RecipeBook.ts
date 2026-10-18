@@ -14,7 +14,7 @@
 
 import type { Inventory } from '../container/Inventory.ts';
 import type { CraftingGrid } from './CraftingGrid.ts';
-import { RECIPES, type Recipe, type RecipeResult } from './Recipes.ts';
+import { RECIPES, resultStackOf, type Recipe, type RecipeResult } from './Recipes.ts';
 import { SMELTING_RECIPES } from './Smelting.ts';
 import { itemLabel } from '../registry/itemNames.ts';
 import { categoryOf, itemName } from '../registry/items.ts';
@@ -173,8 +173,11 @@ export function craftFromInventory(inventory: Inventory, recipe: Recipe): Recipe
       return null;
     }
   }
-  inventory.add(recipe.result.id, recipe.result.count);
-  return recipe.result;
+  // 用 `resultStackOf` 而不是 `add(id, count)`：烟花这类带附加数据的产物，
+  // 走老那条路会变成"没有颜色的素火箭"（批次 192）
+  const result = resultStackOf(recipe.result);
+  inventory.addStack(result);
+  return result;
 }
 
 /**

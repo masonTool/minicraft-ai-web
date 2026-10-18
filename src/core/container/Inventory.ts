@@ -15,6 +15,7 @@ import { ARMOR_SLOT_BASE, armorSlotAccepts } from '../registry/armor.ts';
 import { itemDef, maxStackOf } from '../registry/items.ts';
 // 书页的规整规则（批次 190）：与编辑界面**同一套**，否则会出现"能打 300 字、读档剩 256 字"
 import { BOOK_TITLE_CHARS, isBlankBook, sanitizePages } from '../items/Book.ts';
+import { sanitizeFirework, type FireworkData } from '../items/Firework.ts';
 
 export interface ItemStack {
   id: number;
@@ -59,6 +60,11 @@ export interface ItemStack {
   pages?: string[];
   /** 成书的标题（只有成书有；书与笔的"书名"在写过程里由界面自己留着） */
   title?: string;
+  /**
+   * 烟花的飞行档与爆炸颜色（批次 192）：烟火之星与烟花火箭共用这一份数据。
+   * 星作为原料时 `flight` 是 0（它自己不会飞）。
+   */
+  firework?: FireworkData;
 }
 
 /**
@@ -111,6 +117,9 @@ export function restoreStack(raw: unknown, depth = 1): ItemStack | null {
   if (typeof candidate.title === 'string' && candidate.title.trim().length > 0) {
     stack.title = candidate.title.trim().slice(0, BOOK_TITLE_CHARS);
   }
+  // 烟花（批次 192）：档位与颜色都要规整；认不出来就当没有这个字段
+  const firework = sanitizeFirework(candidate.firework);
+  if (firework) stack.firework = firework;
   return stack;
 }
 
@@ -173,6 +182,8 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
   // 书页同理要拷一份数组（批次 190）：不拷的话"翻页改字"会改到掉落物/箱子里那份
   if (stack.pages !== undefined) extras.pages = [...stack.pages];
   if (stack.title !== undefined) extras.title = stack.title;
+  // 烟花：颜色数组同样要拷（改了手里的那枚不该改到箱子里那枚）
+  if (stack.firework !== undefined) extras.firework = { flight: stack.firework.flight, colors: [...stack.firework.colors] };
   return extras;
 }
 
@@ -198,6 +209,14 @@ export function sameExtras(a: Partial<ItemStack>, b: Partial<ItemStack>): boolea
   const pagesB = b.pages ?? [];
   if (pagesA.length !== pagesB.length) return false;
   for (let i = 0; i < pagesA.length; i++) if (pagesA[i] !== pagesB[i]) return false;
+  // 烟花（批次 192）：档位或颜色不同就是两种火箭，不能并堆
+  const fireA = a.firework;
+  const fireB = b.firework;
+  if ((fireA?.flight ?? 0) !== (fireB?.flight ?? 0)) return false;
+  const colorsA = fireA?.colors ?? [];
+  const colorsB = fireB?.colors ?? [];
+  if (colorsA.length !== colorsB.length) return false;
+  for (let i = 0; i < colorsA.length; i++) if (colorsA[i] !== colorsB[i]) return false;
   const from = a.enchants ?? {};
   const to = b.enchants ?? {};
   const keys = new Set([...Object.keys(from), ...Object.keys(to)]);

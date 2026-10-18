@@ -919,6 +919,8 @@ export const TILE_ORDER = [
   'item_phantom_membrane',
   // 墨囊（批次 189）：鱿鱼掉的那一颗；书与笔 / 成书（批次 190）
   'item_ink_sac',
+  'item_firework_star',
+  'item_firework_rocket',
   'item_book_and_quill',
   'item_written_book',
   // 矿物块与信标（批次 117，K5）：信标的金字塔底座要用这三种块

@@ -7,6 +7,7 @@
 
 import type { Inventory, ItemStack, SlotSource } from '../container/Inventory.ts';
 import { matchRecipe } from './Recipes.ts';
+import { Item } from '../registry/items.ts';
 
 export class CraftingGrid implements SlotSource {
   private readonly slots: (ItemStack | null)[];
@@ -35,7 +36,15 @@ export class CraftingGrid implements SlotSource {
   }
 
   recompute(): void {
-    this.result = matchRecipe(this.cells(), this.size);
+    const matched = matchRecipe(this.cells(), this.size);
+    // 烟花（批次 192）：火箭的**颜色来自摆进去的那颗星**（星本身带数据，配方里只有 id）。
+    // 放在这里而不是配方表里：配方表是按 id 匹配的，看不到那一叠的 `firework.colors`。
+    if (matched && matched.id === Item.FIREWORK_ROCKET) {
+      const star = this.slots.find((slot) => slot !== null && slot.id === Item.FIREWORK_STAR);
+      const colors = star?.firework?.colors ?? [];
+      if (colors.length > 0) matched.firework = { flight: matched.firework?.flight ?? 1, colors: [...colors] };
+    }
+    this.result = matched;
     this.onChange?.();
   }
 
