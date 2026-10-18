@@ -128,7 +128,8 @@ export const ENCHANTMENTS: readonly EnchantmentDef[] = [
   // 后者缩短等待时间（`survival/Fishing.ts` 的 `waitSecondsFor`）
   { id: 'luck_of_the_sea', name: '海之眷顾', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
   { id: 'lure', name: '诱饵', maxLevel: 3, targets: ['fishing_rod'], weight: 2, implemented: true },
-  { id: 'loyalty', name: '忠诚', maxLevel: 3, targets: ['trident'], weight: 5 },
+  // 忠诚（批次 268）：投出的三叉戟插住后自己飞回手里
+  { id: 'loyalty', name: '忠诚', maxLevel: 3, targets: ['trident'], weight: 5, implemented: true },
   // 穿刺（批次 267）：三叉戟对水生生物每级 +2.5
   { id: 'impaling', name: '穿刺', maxLevel: 5, targets: ['trident'], weight: 2, implemented: true },
   // 激流（批次 267）：在水里/雨中按住使用键向前冲，速度见 `tools.riptideSpeed`

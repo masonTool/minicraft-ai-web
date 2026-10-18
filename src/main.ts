@@ -1442,6 +1442,18 @@ class App {
   private crossbowDrawing = false;
   /** 激流的冷却（秒，批次 267）：防连按飞天 */
   private riptideCooldown = 0;
+  /** 投掷三叉戟的冷却（秒，批次 268） */
+  private tridentThrowCooldown = 0;
+  /**
+   * 飞出去的三叉戟（批次 268）：复用 `Arrow` 当投掷物（它已经会飞、会插住、能被捡）。
+   * `loyalty > 0` 的那几把会在插住 0.3 秒后自己飞回来。
+   */
+  private readonly thrownTridents: {
+    arrow: Arrow;
+    loyalty: number;
+    backTimer: number;
+    returning: boolean;
+  }[] = [];
   private bowDrawing = false;
 
   /** 进食进度（0~1）与"距离下一次咀嚼"的计时 */
@@ -3918,6 +3930,7 @@ class App {
     this.updateBow(dt);
     this.updateCrossbow(dt);
     this.updateRiptide(dt);
+    this.updateThrownTridents(dt);
     this.hand.setDrawPull(this.bowCharge);
     // 轻点是一次性的：
     //  · 落点只活这一帧——破坏/放置/进食/拉弓都已经在上面读过 `this.hit` 了；
@@ -4137,6 +4150,94 @@ class App {
     // 只有"手还拿着弓、而且没开界面"才算正常松手
     if (!holding || this.uiOpen || this.stats.dead) return;
     if (canFire(charge)) this.fireBow(charge);
+  }
+
+  /**
+   * 投掷三叉戟（批次 268）。
+   *
+   * 复用 `Arrow` 当投掷物：它已经会飞、会插住、走近能捡回背包，
+   * 所以只需要换 `itemId`（渲染成三叉戟、捡回来也是三叉戟）与伤害/初速。
+   *
+   * ⚠️ 激流优先：带激流且在水里/雨中时，右键是冲刺，不投掷（与原版一致）。
+   */
+  private throwTrident(): boolean {
+    if (this.heldItemId !== Item.TRIDENT) return false;
+    if (this.tridentThrowCooldown > 0) return false;
+    if (
+      enchantLevel(this.heldEnchants, 'riptide') > 0 &&
+      (this.physics.inWater || this.weather.raining)
+    ) {
+      return false;
+    }
+    // ⚠️ 只有**带忠诚**的三叉戟走这条 Arrow 路径；没忠诚的继续走原有的
+    // `Throwable`（落地掉回物品，走近能捡）——那条路径已经跑了很久，不替换它
+    const loyalty = enchantLevel(this.heldEnchants, 'loyalty');
+    if (loyalty <= 0) return false;
+    this.tridentThrowCooldown = 0.6;
+    // 投出去就离手（创造模式不扣）
+    if (!this.isCreative) {
+      this.inventory.take(this.hotbarIndex, 1);
+      this.refreshHotbar();
+    }
+    const cosPitch = Math.cos(this.pitch);
+    const dirX = -Math.sin(this.yaw) * cosPitch;
+    const dirY = Math.sin(this.pitch);
+    const dirZ = -Math.cos(this.yaw) * cosPitch;
+    const speed = 24;
+    const arrow = this.spawnArrow(
+      this.physics.x + dirX * 0.4,
+      this.physics.eyeY - 0.1,
+      this.physics.z + dirZ * 0.4,
+      { x: dirX * speed, y: dirY * speed + 2, z: dirZ * speed },
+      { fromPlayer: true, damage: 8, pickable: true, itemId: Item.TRIDENT },
+    );
+    this.thrownTridents.push({ arrow, loyalty, backTimer: 0, returning: false });
+    this.audio.play('bow_shoot');
+    this.hand.swing();
+    return true;
+  }
+
+  /**
+   * 忠诚（批次 268）：插住 0.3 秒后自己飞回手里，距离 < 1 格时进背包。
+   *
+   * 没忠诚的三叉戟就留在原地，等玩家走近（`Arrow` 自带的拾取）。
+   */
+  private updateThrownTridents(dt: number): void {
+    this.tridentThrowCooldown = Math.max(0, this.tridentThrowCooldown - dt);
+    for (let i = this.thrownTridents.length - 1; i >= 0; i--) {
+      const entry = this.thrownTridents[i]!;
+      const arrow = entry.arrow;
+      if (arrow.dead) {
+        this.thrownTridents.splice(i, 1);
+        continue;
+      }
+      if (entry.loyalty <= 0) continue;
+
+      if (!entry.returning) {
+        if (!arrow.stuck) continue;
+        entry.backTimer += dt;
+        if (entry.backTimer < 0.3) continue;
+        entry.returning = true;
+      }
+
+      const dx = this.physics.x - arrow.x;
+      const dy = this.physics.eyeY - 0.3 - arrow.y;
+      const dz = this.physics.z - arrow.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance < 1) {
+        arrow.dead = true;
+        this.inventory.add(Item.TRIDENT, 1);
+        this.refreshHotbar();
+        this.thrownTridents.splice(i, 1);
+        continue;
+      }
+      // 每帧朝玩家重设速度：不用做加速度曲线，手感上"飞回来"就够了
+      arrow.stuck = false;
+      const speed = 26;
+      arrow.vx = (dx / distance) * speed;
+      arrow.vy = (dy / distance) * speed;
+      arrow.vz = (dz / distance) * speed;
+    }
   }
 
   /**
@@ -10240,6 +10341,14 @@ class App {
     //（批次 181 删掉了"按住连放"：它在 140ms 就触发，抢在长按破坏之前）
     const tapped = this.touchPlaceRequest;
     if ((!this.rightDown && !tapped && !this.padUse) || this.placeCooldown > 0) return;
+
+    // 带忠诚的三叉戟（批次 268）要排在通用投掷之前：它走 `Arrow` 路径才能"飞回来"，
+    // 没有忠诚的仍然交给下面的 `throwHeld()`（原有 `Throwable` 路径，落地能捡）
+    if (this.throwTrident()) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
 
     // 投掷物优先于放置：手里拿着雪球/鸡蛋/喷溅药水时，这一下是"扔"而不是"放"
     if (this.throwHeld()) {
