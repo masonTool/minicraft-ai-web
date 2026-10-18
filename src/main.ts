@@ -3689,11 +3689,14 @@ class App {
       return;
     }
 
-    // 触摸端（批次 239）：**按下的手指 / 刚抬手的落点**决定目标，准星只做兜底。
-    // 桌面键鼠永远走准星那一条，行为与以前完全一致。
+    // 触摸端（批次 239）：**按下的手指 / 刚抬手的落点**决定目标。
+    // 触摸端没有准星（批次 239 复查）：手指不按 → 没有任何目标。
+    // 桌面键鼠仍走屏幕中央的准星，行为与以前完全一致。
     const screenAim = this.touch?.aimPoint ?? this.touchTapPoint;
     if (screenAim) {
       this.hit = this.hitAtScreen(screenAim.x, screenAim.y);
+    } else if (this.touch !== null) {
+      this.hit = null;
     } else {
       const [dx, dy, dz] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
       this.hit = raycastVoxels(
@@ -3791,7 +3794,9 @@ class App {
       this.setTargetInfo('');
       return;
     }
-    const mob = touchAim ? null : this.mobUnderCrosshair();
+    // 触摸端没有准星（批次 239 复查）：没有手指落点时一个目标都不显示，
+    // 所以这里只在"桌面键鼠"下才看屏幕中央的生物。
+    const mob = touchAim || this.touch !== null ? null : this.mobUnderCrosshair();
     if (mob && !mob.dead) {
       const health = Math.max(0, Math.ceil(mob.health));
       this.setTargetInfo(`${mob.type.name}  ${health}/${mob.type.health}`);
@@ -3830,9 +3835,9 @@ class App {
       return;
     }
     const x = Math.round(aim.x);
-    // 白圈半径 23（乘触摸缩放）+ 一点余量，标签底边落在圈上方；
-    // 手指贴到屏幕上沿时把标签压回可视区内，别让它跑出屏幕
-    const y = Math.round(Math.max(18, aim.y - 28));
+    // 纵向偏移交给 CSS（`.pinned` 的 transform 按白圈半径 × 触摸缩放算），
+    // 这里只贴手指坐标；手指贴到屏幕上沿时压回可视区内，别让标签跑出屏幕。
+    const y = Math.round(Math.max(20, aim.y));
     if (!this.targetPinned) {
       this.targetPinned = true;
       this.targetInfoEl.classList.add('pinned');
@@ -3858,7 +3863,9 @@ class App {
     // 准星对着生物时不算"使用"（批次 219）：那一下是攻击 / 喂食（原版同理，
     // 使用键落在生物身上走的是交互）。不加这条，"按住打怪"会把手里那份肉一起吃掉——
     // 进食变快之后这事更容易撞上。
-    const aimingMob = edible && this.mobUnderCrosshair() !== null;
+    // ⚠️ 触摸端没有准星（批次 239 复查）：这条只在桌面键鼠下判——
+    // 否则"手指按在空白处吃饭"会被屏幕中央恰好站着的生物挡掉。
+    const aimingMob = edible && this.touch === null && this.mobUnderCrosshair() !== null;
     if (!edible || aimingMob || !this.usingItem || this.uiOpen || this.stats.dead) {
       this.eatProgress = 0;
       this.chewTimer = 0;

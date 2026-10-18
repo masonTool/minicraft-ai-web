@@ -291,14 +291,14 @@
         background: rgba(0, 0, 0, .35); padding: 6px 9px; border-radius: 3px;
         text-align: left;
       }
+      /* 准星（只留给桌面键鼠）：触摸端**整个不显示**——目标改由手指落点决定，
+         手指不按就没有任何目标（批次 239 复查，用户："去掉原来的默认的十字光标"）。 */
       #crosshair {
         position: absolute; left: 50%; top: 50%;
         width: 20px; height: 20px; transform: translate(-50%, -50%);
         opacity: .85; mix-blend-mode: difference;
-        /* 触摸端按住时淡出（`body.touch-aiming`）：目标改由手指落点决定，
-           屏幕中央再挂一个十字只会跟白圈抢"我在瞄哪"。 */
-        transition: opacity .12s linear;
       }
+      body.touch-mode #crosshair { display: none; }
       #crosshair::before, #crosshair::after {
         content: ''; position: absolute; background: #fff;
       }
@@ -319,8 +319,10 @@
         text-shadow: 1px 1px 0 #000;
       }
       #target-info.hidden { display: none; }
-      /* 触摸瞄准：标签挂在白圈正上方，而不是屏幕中央 */
-      #target-info.pinned { transform: translate(-50%, -100%); }
+      /* 触摸瞄准：标签挂在白圈正上方（半径 69 × 触摸缩放 + 5px 间隙），而不是屏幕中央 */
+      #target-info.pinned {
+        transform: translate(-50%, calc(-100% - 74px * var(--touch-scale, 1)));
+      }
 
       /* ---------------- 主菜单（批次 109：对齐原版"标题页"的样子） ----------------
          原版基岩版的标题页**没有面板框**：标题 + 一列按钮直接浮在暗色石纹背景上。
@@ -3021,25 +3023,25 @@
          触摸端"点哪打哪"的视觉锚点：按下即出现在手指下，拖动时跟手。
          尺寸跟着 `--touch-scale`（与摇杆/按钮同一个设置项），位置用 JS 的
          `transform` 写，**不能**用 `left/top`——每帧改 left/top 会触发布局。
-         `position: fixed` 是必须的：#touch-ui 有安全区 padding，absolute 会整体偏移。 */
+         `position: fixed` 是必须的：#touch-ui 有安全区 padding，absolute 会整体偏移。
+         ⚠️ 直径是原来的三倍（批次 239 复查，用户："圈再增大为当前的三倍"）：
+            46 → 138，居中用的负 margin 也跟着 23 → 69。 */
       #touch-ring {
         position: fixed; left: 0; top: 0;
-        width: calc(46px * var(--touch-scale, 1));
-        height: calc(46px * var(--touch-scale, 1));
-        margin-left: calc(-23px * var(--touch-scale, 1));
-        margin-top: calc(-23px * var(--touch-scale, 1));
+        width: calc(138px * var(--touch-scale, 1));
+        height: calc(138px * var(--touch-scale, 1));
+        margin-left: calc(-69px * var(--touch-scale, 1));
+        margin-top: calc(-69px * var(--touch-scale, 1));
         border-radius: 50%;
         border: 2px solid rgba(255, 255, 255, .92);
         /* 外层暗影保证在雪地/亮天空上也看得见，内层微光是"圈"的厚度感 */
-        box-shadow: 0 0 8px rgba(0, 0, 0, .35), inset 0 0 6px rgba(255, 255, 255, .28);
+        box-shadow: 0 0 10px rgba(0, 0, 0, .35), inset 0 0 10px rgba(255, 255, 255, .22);
         pointer-events: none;
         opacity: 0;
         transition: opacity .10s linear;
         will-change: transform, opacity;
       }
       #touch-ring.visible { opacity: 1; }
-      /* 手指按住 = 目标由手指决定：准星完全收起（用户口径："彻底不以光标定位"） */
-      body.touch-aiming #crosshair { opacity: 0; }
 
       #touch-stick {
         position: absolute; left: 22px; bottom: 96px;

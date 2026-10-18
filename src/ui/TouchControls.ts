@@ -427,7 +427,8 @@ export class TouchControls {
    * 手指当前的落点（client 坐标）；**只有按住中才非空**。
    *
    * 主程序拿它做"屏幕射线拾取"（批次 239）：挖方块、放方块、开箱子……
-   * 全部以手指底下那一点为准，屏幕中央的准星只留作方向参考（按住时还会淡出）。
+   * 全部以手指底下那一点为准。触摸端**没有准星**（批次 239 复查），
+   * 所以它为空时主程序也不该有任何目标。
    */
   get aimPoint(): { x: number; y: number } | null {
     return this.aim;
@@ -823,7 +824,6 @@ export class TouchControls {
     this.aim = { x, y };
     this.aimRing.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     this.aimRing.classList.add('visible');
-    document.body.classList.add('touch-aiming');
   }
 
   /**
@@ -841,12 +841,10 @@ export class TouchControls {
       this.tapFlashTimer = window.setTimeout(() => {
         this.tapFlashTimer = null;
         this.aimRing.classList.remove('visible');
-        document.body.classList.remove('touch-aiming');
       }, TAP_FLASH_MS);
       return;
     }
     this.aimRing.classList.remove('visible');
-    document.body.classList.remove('touch-aiming');
   }
 
   private clearTapFlash(): void {

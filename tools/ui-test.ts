@@ -1356,9 +1356,15 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       source.includes('translate3d(${x}px, ${y}px, 0)'),
   );
   check(
-    '按住时准星完全收起（目标不再看光标）',
-    indexSource.includes('body.touch-aiming #crosshair { opacity: 0; }') &&
-      source.includes("document.body.classList.add('touch-aiming')"),
+    '触摸端没有十字准星（批次 239 复查：手指不按就没有目标）',
+    indexSource.includes('body.touch-mode #crosshair { display: none; }') &&
+      !source.includes("classList.add('touch-aiming')") &&
+      mainSource.includes('} else if (this.touch !== null) {'),
+  );
+  check(
+    '白圈直径是原来的三倍（46 → 138，居中负 margin 23 → 69）',
+    indexSource.includes('width: calc(138px * var(--touch-scale, 1));') &&
+      indexSource.includes('margin-left: calc(-69px * var(--touch-scale, 1));'),
   );
   check(
     '轻点抬手白圈原地闪一下（长按/拖动抬手立即收起）',
