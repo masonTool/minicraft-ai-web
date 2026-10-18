@@ -289,6 +289,28 @@ export class FeatureWriter {
   }
 
   /**
+   * 雪层的落点（批次 212）：从期望高度附近往下找**真实地面**。
+   *
+   * 为什么不能直接用 `surfaceAbove`：雪原的地表是 `SNOW_BLOCK`，而 `isGround`
+   * 只认草/土/沙 → 校正永远失败、回退成采样器的**近似高度**；
+   * 近似高度允许 1~3 格误差，雪就挂在半空了（用户看到的"雪方块浮在空间"）。
+   *
+   * 这里接受**任何能托住雪的实心方块**（雪块/石头/泥土…），并跳过树干与树叶
+   * （否则会在树顶铺一层雪，看起来同样是"浮着的"）。
+   *
+   * @returns 可以放雪的 y；本区块不拥有这一列 / 找不到合格位置时返回 -1
+   */
+  snowSurfaceAbove(worldX: number, worldZ: number, expectY: number, depth = 6): number {
+    if (!this.owns(worldX, worldZ)) return -1;
+    for (let y = expectY + depth; y >= expectY - depth; y--) {
+      const below = this.get(worldX, y - 1, worldZ);
+      if (below === OUTSIDE || !isSnowSupport(below)) continue;
+      if (isPlantableAt(this.get(worldX, y, worldZ))) return y;
+    }
+    return -1;
+  }
+
+  /**
    * 该列**水面正上方那一格**的 y（睡莲就落在那里）；这一列没有静水就返回 -1。
    *
    * 判据是"这一格是水、上面那一格是空气"——只看水面那一格，不看水有多深：
@@ -1057,6 +1079,19 @@ function isPlantableAt(id: number): boolean {
 }
 
 /**
+ * 能不能托住雪层（批次 212）。
+ *
+ * 比 `isGround` 宽：雪原地面本来就是 SNOW_BLOCK，山坡上是石头，都需要算"地面"。
+ * 但树干/树叶不行——雪铺在树顶上看起来就是悬空的。
+ */
+function isSnowSupport(id: number): boolean {
+  if (id === Block.AIR || id === OUTSIDE) return false;
+  if (!blockDef(id).solid) return false;
+  const name = blockDef(id).name;
+  return !name.includes('_leaves') && !name.includes('_log') && !name.includes('_wood');
+}
+
+/**
  * 该列是否是"可以长树"的普通地面：地表方块合适、上方是空的、还没被别的地物占用。
  */
 function isPlantable(w: FeatureWriter, x: number, y: number, z: number, ground: Set<number>): boolean {
@@ -1464,9 +1499,11 @@ function decorateLocal(w: FeatureWriter, world: FeatureWorld, seed: number, stat
         const wx = originX + x;
         const wz = originZ + z;
         if (hashAt(wx, wz, seed ^ 0x5c0a) >= config.snowCover) continue;
-        const y = w.surfaceAbove(wx, wz, world.surfaceY(wx, wz) + 1);
+        // 用**真实地表**（允许雪块/石头当支撑），而不是近似高度——否则雪会悬空
+        const y = w.snowSurfaceAbove(wx, wz, world.surfaceY(wx, wz) + 1);
+        if (y < 0) continue;
         if (!isPlantableAt(w.get(wx, y, wz))) continue;
-        // 批次 209：**统一 1 层**（= level 0，1/8 格）。
+        // 批次 208：**统一 1 层**（= level 0，1/8 格）。
         // 原来按列哈希给 1~3 层，雪原看起来坑坑洼洼、走路还一深一浅；
         // 原版自然雪层也是整片同高（只有玩家手动堆才会变厚）。
         const layers = 1;

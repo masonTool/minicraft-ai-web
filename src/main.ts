@@ -963,6 +963,17 @@ class App {
    * 手机上**没有 Esc**：原来关界面只有"点空白处"，而系统的返回手势会直接退出页面
    * （PWA 里等于退出游戏）——想关背包反而把游戏关了。
    */
+  /**
+   * 上一帧是不是全屏（批次 212；206 做过、209 回退，现在按用户最新要求恢复）。
+   *
+   * 安卓在全屏里的返回键**常常先退出全屏、而不是派发 `popstate`**：
+   * 方向锁随全屏失效、手机转回竖屏 → 出现"请横屏游玩"。这时候游戏画面还在跑，
+   * 必须顺手把暂停菜单打开（用户要求："点返回到了这个界面，同时游戏内要自动暂停"）。
+   */
+  private lastFullscreen = false;
+  /** 掉出全屏后延时弹暂停的计时器；`popstate` 先到就取消它，避免一次返回处理两次 */
+  private pauseAfterFullscreenTimer: number | null = null;
+
   private readonly backButton = new BackButton({
     pushState: () => {
       try {
@@ -980,14 +991,6 @@ class App {
     },
     closeTopUi: () => this.closeTopUi(),
   });
-  /**
-   * 上一帧是不是全屏（批次 206）。
-   *
-   * 安卓在全屏里的返回键**常常先退出全屏、而不是派发 `popstate`**：方向锁随着全屏一起失效，
-   * 手机转回竖屏 → 竖屏提示整层盖住画面。玩家体感是"按返回被扔到请横屏游玩"，
-   * 而不是"暂停"。这里盯住"从全屏掉出来"这一刻，没有面板就落回暂停菜单。
-   */
-
   private readonly hotbarSlots: HTMLDivElement[] = [];
   /** 聊天与命令输入（左下角消息栏 + 命令输入行） */
   private readonly chat = new ChatInput();
@@ -1667,6 +1670,36 @@ class App {
     // 批次 95 起也靠它决定"快捷栏能不能点、槽位要不要放大"）——
     // 用类名而不是 `@media (pointer: coarse)`，是为了与"操作层是否存在"共用**同一个判据**
     this.touch = isTouchDevice() ? this.createTouchControls() : null;
+    // 掉出全屏 = 安卓返回的一次常见表现（批次 212）：没有面板时补一个暂停菜单。
+    this.lastFullscreen = isFullscreen();
+    document.addEventListener(
+      'fullscreenchange',
+      () => {
+        if (this.disposed) return;
+        const full = isFullscreen();
+        const lost = this.lastFullscreen && !full;
+        this.lastFullscreen = full;
+        if (!lost) return;
+        // 已经有面板（例如在设置里手动退全屏）：只对一次竖屏提示，不叠暂停
+        if (this.isAnyUiOpen()) {
+          syncRotateHint();
+          return;
+        }
+        // 等一下再弹：同一手势若还会派发 popstate，那边会取消这个计时器
+        if (this.pauseAfterFullscreenTimer !== null) {
+          window.clearTimeout(this.pauseAfterFullscreenTimer);
+        }
+        this.pauseAfterFullscreenTimer = window.setTimeout(() => {
+          this.pauseAfterFullscreenTimer = null;
+          if (this.disposed || this.isAnyUiOpen()) return;
+          diag.event('input', 'back.exitFullscreen', {});
+          this.openSettings();
+          syncRotateHint();
+        }, 160);
+      },
+      { signal: this.listeners.signal },
+    );
+
     // 返回键守卫（批次 96）：手机上"返回"先关界面，界面全关完才轮到浏览器（= 退出页面）。
     // 挂在 `popstate` 上而不是 `beforeunload`：前者能拿到"用户想后退"这件事，
     // 又不至于把"刷新/关标签页"也拦下来
@@ -1674,6 +1707,11 @@ class App {
       'popstate',
       () => {
         if (this.disposed) return;
+        // 掉出全屏那一路还在等 → 这次返回已经落到这里了，别让它再弹一次
+        if (this.pauseAfterFullscreenTimer !== null) {
+          window.clearTimeout(this.pauseAfterFullscreenTimer);
+          this.pauseAfterFullscreenTimer = null;
+        }
         // 批次 181：**游戏内没有面板时，返回 = 打开暂停菜单**。
         // 以前这里交给浏览器（PWA 里等于直接退出游戏）——玩家只是想关个界面，
         // 结果把整局退了，这是手机上最容易被劝退的一处。
@@ -10244,6 +10282,10 @@ class App {
     // 从后台回来那一层遮罩挂在 body 上（不在 App 的容器里），要自己摘掉
     this.resumeGateEl?.remove();
     this.resumeGateEl = null;
+    if (this.pauseAfterFullscreenTimer !== null) {
+      window.clearTimeout(this.pauseAfterFullscreenTimer);
+      this.pauseAfterFullscreenTimer = null;
+    }
     document.body.classList.remove('pause-open');
     this.wasHidden = false;
     diag.event('app', 'dispose', { world: this.worldConfig.id });

@@ -2022,16 +2022,22 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '浮层尽早挂上（不等菜单/加载）',
     /installKeyboardGuards\(\);[\s\S]{0,300}installRotateHint\(\);/.test(appSrc),
   );
-  // 批次 209（用户要求回退）：返回键**只走 popstate**，不再把"掉出全屏"当成一次返回。
-  // 批次 206 那套监听在真机上表现不符合预期（同一手势被处理两次/暂停页时机不对）。
+  // 批次 212：掉出全屏（安卓返回的常见表现）且没有面板 → 延时补开暂停菜单；
+  // 同一手势若还派发 popstate，那边会取消计时器，避免一次返回处理两次。
   check(
-    '返回键只走 popstate（掉出全屏不再当成一次返回）',
-    appSrc.includes("addEventListener('popstate'") &&
-      !appSrc.includes('pauseAfterFullscreenTimer') &&
-      !/fullscreenchange'[\s\S]{0,300}openSettings\(\)/.test(appSrc) &&
-      !settingsSrc.includes("classList.add('pause-open')"),
+    '掉出全屏 + 无面板 → 自动打开暂停菜单（与 popstate 去重）',
+    appSrc.includes('pauseAfterFullscreenTimer') &&
+      /fullscreenchange'[\s\S]{0,1600}openSettings\(\)/.test(appSrc) &&
+      appSrc.includes("'back.exitFullscreen'") &&
+      settingsSrc.includes("classList.add('pause-open')"),
   );
-  check('继续游戏不再强制请求全屏（回到批次 205 的行为）', !/closeSettings\(\): void \{[\s\S]{0,400}enterMobilePresentation\(\)/.test(appSrc));
+  check('继续游戏不强制请求全屏（仍回到批次 209 的行为）', !/closeSettings\(\): void \{[\s\S]{0,400}enterMobilePresentation\(\)/.test(appSrc));
+  check(
+    '“请横屏游玩”整屏任意位置都能点（document 捕获）',
+    fullscreenSrc.includes("if (!hint.classList.contains('visible')) return;") &&
+      fullscreenSrc.includes('getComputedStyle(hint).display') &&
+      /\.rotate-hint \{[\s\S]{0,900}pointer-events: auto;/.test(css),
+  );
 
   // ② 工作台 3×3：创造模式左栏仍能切分类
   check(

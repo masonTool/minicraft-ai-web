@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-18 · 提交总数 621（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-18 · 提交总数 622（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **181**、进行中 **76**、待办 30 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -66,6 +66,18 @@ npm run dev            # http://localhost:5173
   第 2 档才退回真开关背包（`autoRecover.uiCycle` + 提示卡；无感那一档记 `autoRecover.deep`）。
   ③ 从后台回来 / 全屏切换也升到重档——这两处正是后面坐标异常的上游。
   `test:ui` 605 → 607（`npm run check` 全绿）。
+- 批次 212（返回键 + 悬空雪）：
+  ① **掉出全屏 = 补开暂停**（恢复 206 的思路、保留 209 的"不强制全屏"）：
+  `fullscreenchange` 检测到从全屏掉出且没有面板 → 160ms 后 `openSettings()`；
+  同一手势若也派发 `popstate`，那边先取消计时器，一次返回只处理一次。
+  `SettingsScreen.show()` 重新挂 `body.pause-open`，竖屏提示（z-index 90）让位给暂停菜单。
+  ② **"请横屏游玩"整屏可点**：点击监听改挂在 document 捕获阶段（任意位置、任意子元素），
+  只有暂停菜单把它 `display:none` 时才跳过，避免抢暂停按钮的点击。
+  ③ **悬空雪**：雪原地面是 `SNOW_BLOCK`，`isGround` 只认草/土/沙 → `surfaceAbove`
+  永远失败、回退到**近似高度**（允许 1~3 格误差），雪就挂在半空。新增
+  `snowSurfaceAbove`：从期望高度 ±6 格内找"上方可放雪、下方是实心方块"的真实地表，
+  并跳过树干/树叶（不在树顶铺雪）。
+  `test:ui` 616、`test:decor` 234（`npm run check` 全绿）。
 - 批次 211（背包操作手感三条 + 提示条）：
   ① **点材料区不再清空配方预览**：`showRecipeGhost` 不再把合成格里的实物倒回背包；
   空手点材料格保持预览（只弹名称），只有"手里拿着东西去点"才收掉预览、开始摆放。

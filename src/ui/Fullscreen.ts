@@ -285,11 +285,20 @@ export function installRotateHint(): void {
   const detail = doc.createElement('span');
   detail.textContent = '点一下进入全屏并横屏 · 把手机横过来也会自动开始';
   hint.append(phone, title, detail);
-  hint.addEventListener('pointerdown', (event) => {
-    event.preventDefault();
-    enterMobilePresentation();
-    syncRotateHint();
-  });
+  // 批次 212：**整屏任何位置**都算点击（不再依赖点中提示层本身）。
+  // 用 document 的捕获阶段：即使有别的浮层压在它上面，这一下也先落到这里。
+  // ⚠️ 暂停菜单开着时 CSS 会把这一层 `display:none`，那种情况下不要抢按钮的点击。
+  doc.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (!hint.classList.contains('visible')) return;
+      if (getComputedStyle(hint).display === 'none') return;
+      event.preventDefault();
+      enterMobilePresentation();
+      syncRotateHint();
+    },
+    true,
+  );
   doc.body.appendChild(hint);
 
   const sync = (): void => syncRotateHint();

@@ -807,6 +807,7 @@ console.log('\n[雪层（批次 37）：雪原地表铺雪]');
   let snowBlocks = 0;
   const layersSeen = new Set<number>();
   const misplaced: string[] = [];
+  const floating: string[] = [];
   for (let seed = 1; seed <= 4; seed++) {
     const chunk = flatChunk(63);
     const states = new Uint8Array(CHUNK_VOLUME);
@@ -817,6 +818,8 @@ console.log('\n[雪层（批次 37）：雪原地表铺雪]');
           if (chunk[Chunk.index(x, y, z)] !== Block.SNOW) continue;
           snowBlocks++;
           if (y !== 64) misplaced.push(`${x},${y},${z}`);
+          // 批次 212：雪层下面必须是实体方块（近似高度会让雪悬空）
+          if (chunk[Chunk.index(x, y - 1, z)] === Block.AIR) floating.push(`${x},${y},${z}`);
           layersSeen.add(snowLayers(states[Chunk.index(x, 64, z)] ?? 0));
         }
       }
@@ -825,7 +828,8 @@ console.log('\n[雪层（批次 37）：雪原地表铺雪]');
   // 256 列 × 密度 0.85 × 4 个种子 ≈ 870 格（草与树会占掉一些，所以只查下限）
   check(`4 个种子的雪原长出 ${snowBlocks} 层雪（期望 500+）`, snowBlocks > 500, `实际 ${snowBlocks}`);
   check('雪都落在地面正上方那一格', misplaced.length === 0, misplaced.slice(0, 3).join(' '));
-  // 批次 209：整片雪原统一 1 层（原版自然雪层也是同高，避免"坑坑洼洼 + 一深一浅"）
+  check('没有悬空的雪（下面都有实体方块）', floating.length === 0, floating.slice(0, 3).join(' '));
+  // 批次 208：整片雪原统一 1 层（原版自然雪层也是同高，避免"坑坑洼洼 + 一深一浅"）
   check(
     `雪层统一为 1 层（实测 ${[...layersSeen].join('/')}）`,
     layersSeen.size === 1 && layersSeen.has(1),

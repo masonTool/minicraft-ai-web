@@ -1243,6 +1243,9 @@ export class SettingsScreen {
     this.renderSubtitle();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
+    // 批次 212：暂停菜单打开时让"请横屏游玩"让位（它 z-index 90，否则会把暂停盖住）。
+    // 掉出全屏后正是这个场景：玩家应该看到"游戏已暂停"，而不是一片"请横屏"。
+    document.body.classList.add('pause-open');
     // 日志条数每次打开都会变，进来时对一次账
     this.refreshDiagnostics();
     // 模式可能被 /gamemode 或主菜单改过：两个开关按真实状态回填
