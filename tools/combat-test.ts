@@ -10,7 +10,7 @@
 import { Mob } from '../src/core/entity/Mob.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { rayBoxDistance, raycastEntities } from '../src/core/interaction/EntityRaycast.ts';
-import { sweepDamage } from '../src/core/registry/tools.ts';
+import { meleeDamage, riptideSpeed, sweepDamage } from '../src/core/registry/tools.ts';
 import { crossbowChargeTime, crossbowVolley } from '../src/core/entity/Bow.ts';
 
 let passed = 0;
@@ -127,6 +127,18 @@ console.log('\n[弩：装填时间与齐射（批次 265）]');
   equal('没箭时射不出', crossbowVolley(true, 0), 0);
   equal('多重射击 = 3 支', crossbowVolley(true, 5), 3);
   equal('普通 = 1 支', crossbowVolley(false, 5), 1);
+}
+
+console.log('\n[三叉戟：穿刺与激流（批次 267）]');
+{
+  const impaling5 = { impaling: 5 };
+  equal('穿刺 V 对水生生物 +12.5', meleeDamage(9, impaling5, undefined, true), 21.5);
+  equal('穿刺 V 对陆生生物不加成', meleeDamage(9, impaling5, undefined, false), 9);
+  equal('没有穿刺时水生也是 9', meleeDamage(9, {}, undefined, true), 9);
+  equal('激流 0 级 = 不冲', riptideSpeed(0), 0);
+  equal('激流 I = 9.5 格/秒', riptideSpeed(1), 9.5);
+  equal('激流 III = 12.5 格/秒', riptideSpeed(3), 12.5);
+  equal('激流超过 III 级按 III 级算', riptideSpeed(9), 12.5);
 }
 
 console.log(`\n战斗测试：${passed} 通过 / ${failed} 失败\n`);

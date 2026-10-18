@@ -289,8 +289,8 @@ console.log('\n[未接效果的附魔要标出来]');
   const { UI_HINT_UNIMPLEMENTED, UNIMPLEMENTED_MARK } = await import('../src/core/crafting/Enchanting.ts');
   const implemented = ENCHANTMENTS.filter((def) => def.implemented === true);
   check(
-    '已接效果的附魔有 33 条（… + 265 多重射击/快速装填、266 穿透）',
-    implemented.length === 33 &&
+    '已接效果的附魔有 35 条（… + 266 穿透、267 穿刺/激流）',
+    implemented.length === 35 &&
       [
         'efficiency',
         'fortune',
@@ -329,6 +329,8 @@ console.log('\n[未接效果的附魔要标出来]');
         'multishot',
         'quick_charge',
         'piercing',
+        'impaling',
+        'riptide',
       ].every((id) => implemented.some((def) => def.id === id)),
     implemented.map((def) => def.id).join(','),
   );

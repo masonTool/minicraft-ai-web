@@ -3216,5 +3216,32 @@ console.log('\n[弩（批次 265）]');
   );
 }
 
+console.log('\n[三叉戟：穿刺 / 激流（批次 267）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const toolsSrc = readFileSync(new URL('../src/core/registry/tools.ts', import.meta.url), 'utf8');
+  const enchantSrc = readFileSync(new URL('../src/core/registry/enchantments.ts', import.meta.url), 'utf8');
+  const impalingAt = enchantSrc.indexOf("id: 'impaling'");
+  const riptideAt = enchantSrc.indexOf("id: 'riptide'");
+  check(
+    '穿刺与激流都标了 implemented',
+    impalingAt >= 0 &&
+      enchantSrc.slice(impalingAt, impalingAt + 160).includes('implemented: true') &&
+      riptideAt >= 0 &&
+      enchantSrc.slice(riptideAt, riptideAt + 160).includes('implemented: true'),
+  );
+  check(
+    '穿刺只对水生生物生效（meleeDamage 第 4 个参数）',
+    toolsSrc.includes("if (aquatic) damage += 2.5 * enchantLevel(enchants, 'impaling');") &&
+      appSrc.includes('mob.type.aquatic === true'),
+  );
+  check(
+    '激流：水里/雨中按使用键冲刺，带 1 秒冷却',
+    appSrc.includes('private updateRiptide(dt: number): void') &&
+      appSrc.includes('!this.physics.inWater && !this.weather.raining') &&
+      appSrc.includes('this.riptideCooldown = 1;'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
