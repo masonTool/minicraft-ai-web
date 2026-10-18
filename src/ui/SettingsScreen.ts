@@ -157,6 +157,10 @@ export interface GameSettings {
   volumeMobs: number;
   volumePlayer: number;
   volumeUi: number;
+  /** 环境音（雨声，批次 233）：默认 1（不额外衰减） */
+  volumeAmbient: number;
+  /** 背景音乐（批次 233）：默认 0.6——音乐是背景，不该和"我挨打了"一样响 */
+  volumeMusic: number;
   /** 鼠标/触摸灵敏度倍率：0.5~2 */
   sensitivity: number;
   /** 角色外观（批次 187）：都是**档位下标**，见 `game/appearance.ts` */
@@ -262,6 +266,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   volumeMobs: 1,
   volumePlayer: 1,
   volumeUi: 1,
+  volumeAmbient: 1,
+  volumeMusic: 0.6,
   sensitivity: 1,
   skinTone: DEFAULT_APPEARANCE.skinTone,
   shirtColor: DEFAULT_APPEARANCE.shirtColor,
@@ -318,6 +324,9 @@ export function loadSettings(): GameSettings {
       volumeMobs: clampNumber(parsed.volumeMobs, 0, 1, DEFAULT_SETTINGS.volumeMobs),
       volumePlayer: clampNumber(parsed.volumePlayer, 0, 1, DEFAULT_SETTINGS.volumePlayer),
       volumeUi: clampNumber(parsed.volumeUi, 0, 1, DEFAULT_SETTINGS.volumeUi),
+      // 环境音 / 音乐（批次 233）：老存档没有这两项 → 回退默认（音乐 0.6）
+      volumeAmbient: clampNumber(parsed.volumeAmbient, 0, 1, DEFAULT_SETTINGS.volumeAmbient),
+      volumeMusic: clampNumber(parsed.volumeMusic, 0, 1, DEFAULT_SETTINGS.volumeMusic),
       sensitivity: clampNumber(parsed.sensitivity, 0.5, 4, DEFAULT_SETTINGS.sensitivity),
       // 外观（批次 187）：坏值/越界一律回退默认档，渲染层不用再判空
       skinTone: appearanceIndex(parsed.skinTone, SKIN_TONES.length, DEFAULT_SETTINGS.skinTone),
@@ -725,6 +734,9 @@ export class SettingsScreen {
     sound.append(this.makeSlider('volumeMobs', '生物音效', '%', 0, 100, 1, 100));
     sound.append(this.makeSlider('volumePlayer', '玩家音效', '%', 0, 100, 1, 100));
     sound.append(this.makeSlider('volumeUi', '界面与环境', '%', 0, 100, 1, 100));
+    // 批次 233：雨声与背景音乐各自一组（原版也是分开的：天气 / 音乐）
+    sound.append(this.makeSlider('volumeAmbient', '环境音（雨声）', '%', 0, 100, 1, 100));
+    sound.append(this.makeSlider('volumeMusic', '背景音乐', '%', 0, 100, 1, 100));
 
     const game = this.section('game');
     this.makeToggle(game, 'daylightCycle', '昼夜循环');

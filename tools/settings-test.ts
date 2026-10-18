@@ -261,24 +261,30 @@ console.log('\n[天气效果 / 自动保存间隔（批次 172，M20）]');
 
 // ---------------------------------------------------------------- 8. 批次 178：四组音量
 
-console.log('\n[四组音量（批次 178）]');
+console.log('\n[六组音量（批次 178 / 233）]');
 {
   check(
-    '四组默认都是 1（默认状态下不该比以前轻）',
+    '四组音效默认都是 1（默认状态下不该比以前轻）',
     DEFAULT_SETTINGS.volumeBlocks === 1 &&
       DEFAULT_SETTINGS.volumeMobs === 1 &&
       DEFAULT_SETTINGS.volumePlayer === 1 &&
       DEFAULT_SETTINGS.volumeUi === 1,
   );
+  // 批次 233：环境音默认 1（不额外衰减），音乐默认 0.6（背景不该和挨打一样响）
+  check(
+    '环境音默认 1、音乐默认 0.6',
+    DEFAULT_SETTINGS.volumeAmbient === 1 && DEFAULT_SETTINGS.volumeMusic === 0.6,
+  );
 
   const storage = new MemoryStorage();
   useStorage(storage);
-  saveSettings({ ...DEFAULT_SETTINGS, volumeMobs: 0.25, volumeUi: 0 });
+  saveSettings({ ...DEFAULT_SETTINGS, volumeMobs: 0.25, volumeUi: 0, volumeAmbient: 0.4, volumeMusic: 0 });
   const roundTrip = loadSettings();
   check(
     '四项都能存下来并读回',
     roundTrip.volumeMobs === 0.25 && roundTrip.volumeUi === 0 && roundTrip.volumeBlocks === 1,
   );
+  check('环境音 / 音乐也能存下来并读回', roundTrip.volumeAmbient === 0.4 && roundTrip.volumeMusic === 0);
 
   // 脏数据：超范围要夹住（0~1），不是原样吃下去
   storage.setItem(KEY, JSON.stringify({ volumeBlocks: 5, volumePlayer: -3, volumeMobs: 'loud' }));
@@ -286,6 +292,15 @@ console.log('\n[四组音量（批次 178）]');
   check('超过 1 的夹到 1', dirty.volumeBlocks === 1);
   check('负数夹到 0', dirty.volumePlayer === 0);
   check('不是数字的回退默认 1', dirty.volumeMobs === 1);
+
+  // 老存档里没有这两项 → 回退默认，而不是 undefined
+  storage.setItem(KEY, JSON.stringify({ volume: 0.5 }));
+  const legacy = loadSettings();
+  check('老存档缺这两项时回退默认', legacy.volumeAmbient === 1 && legacy.volumeMusic === 0.6);
+
+  storage.setItem(KEY, JSON.stringify({ volumeAmbient: 9, volumeMusic: -2 }));
+  const clamped = loadSettings();
+  check('新两项同样夹在 0~1', clamped.volumeAmbient === 1 && clamped.volumeMusic === 0);
 }
 
 // ---------------------------------------------------------------- 9. 批次 202 / 203：视距口径

@@ -149,6 +149,11 @@ export type SoundKind =
   | 'step_gravel'
   | 'step_snow'
   | 'step_wool'
+  // ---- 挖掘中的持续摩擦（批次 233：以前只有"挖断那一下"）
+  | 'dig_stone'
+  | 'dig_wood'
+  | 'dig_soft'
+  | 'dig_glass'
   // ---- 落地 / 受伤 / 死亡（批次 232：以前 `fall` 定义了却从没播过）
   | 'land_soft'
   | 'land_hard'
@@ -356,6 +361,24 @@ const SOUNDS: Record<SoundKind, SoundSpec> = {
   ], { jitter: 70 }),
   step_wool: spec(0.12, [
     noise({ at: 0, dur: 0.07, gain: 1, env: curve([0, 0], [0.25, 1], [1, 0]), filter: 'lowpass', hz: 1100, q: 0.5 }),
+  ], { jitter: 60 }),
+
+  // ---------------------------------------------------------------- 挖掘中的摩擦
+  // 挖矿时每 0.2 秒响一次。判据是"短、闷、比破坏音轻"——它的作用是
+  // 让玩家在方块碎掉之前就知道"我正在挖"，而不是替掉挖断那一声。
+  dig_stone: spec(0.16, [
+    noise({ at: 0, dur: 0.09, gain: 1, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 1800, q: 1.6 }),
+    noise({ at: 0, dur: 0.05, gain: 0.5, env: curve([0, 0], [0.1, 1], [1, 0]), filter: 'highpass', hz: 3600, q: 0.8 }),
+  ], { jitter: 80 }),
+  dig_wood: spec(0.15, [
+    noise({ at: 0, dur: 0.09, gain: 0.9, env: curve([0, 0], [0.2, 1], [1, 0]), filter: 'bandpass', hz: 900, q: 1.8 }),
+    tone({ at: 0, dur: 0.08, gain: 0.3, env: curve([0, 0], [0.15, 1], [1, 0]), wave: 'triangle', hz: 210, pitch: curve([1, 0.8]) }),
+  ], { jitter: 70 }),
+  dig_soft: spec(0.13, [
+    noise({ at: 0, dur: 0.1, gain: 1, env: curve([0, 0], [0.25, 1], [1, 0]), filter: 'lowpass', hz: 1900, q: 0.6 }),
+  ], { jitter: 90 }),
+  dig_glass: spec(0.14, [
+    noise({ at: 0, dur: 0.07, gain: 1, env: curve([0, 0], [0.15, 1], [1, 0]), filter: 'highpass', hz: 4800, q: 0.9 }),
   ], { jitter: 60 }),
 
   // ---------------------------------------------------------------- 落地
@@ -660,7 +683,7 @@ export function soundSpec(kind: SoundKind): SoundSpec | undefined {
  * ⚠️ 这张表**必须是穷尽映射**（`Record<SoundKind, …>`）：加了新音效却忘了分组，
  * 编译期就会报错——而不是等到玩家发现"这个声音调不小"。
  */
-export type SoundGroup = 'blocks' | 'mobs' | 'player' | 'ui';
+export type SoundGroup = 'blocks' | 'mobs' | 'player' | 'ui' | 'ambient' | 'music';
 
 export const SOUND_GROUPS: Readonly<Record<SoundKind, SoundGroup>> = {
   break_stone: 'blocks',
@@ -682,6 +705,10 @@ export const SOUND_GROUPS: Readonly<Record<SoundKind, SoundGroup>> = {
   fence_gate: 'blocks',
   flint: 'blocks',
   shear: 'blocks',
+  dig_stone: 'blocks',
+  dig_wood: 'blocks',
+  dig_soft: 'blocks',
+  dig_glass: 'blocks',
   step: 'player',
   step_grass: 'player',
   step_stone: 'player',
@@ -725,6 +752,8 @@ export const SOUND_GROUP_LABELS: Readonly<Record<SoundGroup, string>> = {
   mobs: '生物音效',
   player: '玩家音效',
   ui: '界面与环境',
+  ambient: '环境音（雨声）',
+  music: '背景音乐',
 };
 
 /**
@@ -807,6 +836,42 @@ export function stepSoundFor(blockName: string): SoundKind {
   return 'step_stone';
 }
 
+/**
+ * 方块名 → 挖掘中的摩擦声（批次 233）。
+ *
+ * 与脚步/破坏同一套材质口径，但只有四档：石头 / 木头 / 松软（草沙土羊毛）/ 玻璃。
+ * 再多分档对"每 0.2 秒响一次"的摩擦声没有意义，反而会听出奇怪的跳变。
+ */
+export function digSoundFor(blockName: string): SoundKind {
+  const name = blockName.replace('minecraft:', '');
+  if (name.includes('glass') || name.includes('ice')) return 'dig_glass';
+  if (
+    name.includes('planks') ||
+    name.includes('log') ||
+    name.includes('wood') ||
+    name.includes('stem') ||
+    name.includes('bamboo') ||
+    name.includes('chest') ||
+    name.includes('table') ||
+    name.endsWith('_sign')
+  ) {
+    return 'dig_wood';
+  }
+  if (
+    name.includes('grass') ||
+    name.includes('leaves') ||
+    name.includes('sand') ||
+    name.includes('gravel') ||
+    name.includes('dirt') ||
+    name.includes('snow') ||
+    name.includes('wool') ||
+    name.includes('carpet')
+  ) {
+    return 'dig_soft';
+  }
+  return 'dig_stone';
+}
+
 /** 方块名 → 放置音效（批次 232：以前所有方块共用一个 `place`） */
 export function placeSoundFor(blockName: string): SoundKind {
   const name = blockName.replace('minecraft:', '');
@@ -880,7 +945,14 @@ export class AudioEngine {
    * 分组的默认值给 1 而不是 0.8：默认状态下"没有这个功能"才是对的，
    * 玩家调过之后才有差别（免得一上来所有声音都比以前小一截）。
    */
-  private readonly groupVolume: Record<SoundGroup, number> = { blocks: 1, mobs: 1, player: 1, ui: 1 };
+  private readonly groupVolume: Record<SoundGroup, number> = {
+    blocks: 1,
+    mobs: 1,
+    player: 1,
+    ui: 1,
+    ambient: 1,
+    music: 1,
+  };
   /** 是否启用（可在设置里关掉；AudioContext 创建失败时为 false） */
   enabled = true;
   /** 监听者位置（玩家），用于距离衰减 */
@@ -896,6 +968,16 @@ export class AudioEngine {
   underwater = false;
   /** 噪声缓冲复用：每次合成都新建 AudioBuffer 会产生大量垃圾 */
   private noiseBuffer: AudioBuffer | null = null;
+  /**
+   * 环境音的循环节点（批次 233，雨声）。
+   *
+   * 与所有"一次性合成"不同，它是**常驻**的：一个循环噪声源 + 两条滤波，
+   * 音量用 `setTargetAtTime` 平滑推拉（晴/雨之间不会"啪"地切换）。
+   * 只有第一次真的需要出声时才建，晴天一分钱不花。
+   */
+  private ambienceGain: GainNode | null = null;
+  /** 音乐声部的结束时刻：与音效的并发上限**分开**计数（音乐不该抢音效的名额） */
+  private musicEnds: number[] = [];
   /** 统计播放次数（调试面板用） */
   played = 0;
   /** 每种音效最近一次的起始时刻（秒，AudioContext 时钟），用于同一声的节流 */
@@ -933,6 +1015,8 @@ export class AudioEngine {
     this.master = null;
     this.reverbSend = null;
     this.noiseBuffer = null;
+    this.ambienceGain = null;
+    this.musicEnds = [];
     this.lastStartAt.clear();
     this.voiceEnds = [];
     if (ctx) void ctx.close().catch(() => undefined);
@@ -1039,6 +1123,128 @@ export class AudioEngine {
     // 环境叫的节流比"受伤"宽：它只是"在场感"，一群牛不该变成合唱
     const throttle = kind.endsWith(':ambient') ? 0.32 : SAME_SOUND_THROTTLE;
     this.playSpec(kind, spec, at, 1, 'mobs', pitch, throttle);
+  }
+
+  /**
+   * 设置环境音强度（批次 233：雨声）。
+   *
+   * `level` 0~1：0 = 停（平滑淡出），1 = 大雨。主程序每帧按天气调一次，
+   * 所以这里不做"状态记忆"，只负责把音量推向目标（`setTargetAtTime`，
+   * 时间常数 0.5 秒——雨停不会"啪"一声断掉）。
+   *
+   * 只有真的需要出声时才建节点：晴天一个常驻节点都不会多。
+   */
+  setAmbience(level: number): void {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running' || !this.master) return;
+    const target = Math.max(0, Math.min(1, level));
+    if (target <= 0.001 && !this.ambienceGain) return;
+
+    const ctx = this.ctx;
+    if (!this.ambienceGain) {
+      const out = ctx.createGain();
+      out.gain.value = 0;
+      const source = ctx.createBufferSource();
+      source.buffer = this.getNoiseBuffer(ctx);
+      source.loop = true;
+
+      // 两层：高频"沙沙"（雨点打在地上）+ 低频"呼呼"（雨幕的体量）
+      const hiss = ctx.createBiquadFilter();
+      hiss.type = 'bandpass';
+      hiss.frequency.value = 2200;
+      hiss.Q.value = 0.45;
+      const hissLevel = ctx.createGain();
+      hissLevel.gain.value = 0.85;
+      source.connect(hiss).connect(hissLevel).connect(out);
+
+      const rumble = ctx.createBiquadFilter();
+      rumble.type = 'lowpass';
+      rumble.frequency.value = 420;
+      rumble.Q.value = 0.6;
+      const rumbleLevel = ctx.createGain();
+      rumbleLevel.gain.value = 0.5;
+      source.connect(rumble).connect(rumbleLevel).connect(out);
+
+      // 缓慢起伏（0.13Hz ≈ 8 秒一轮）：雨不该是一条死平的白噪声
+      const gust = ctx.createOscillator();
+      gust.type = 'sine';
+      gust.frequency.value = 0.13;
+      const gustDepth = ctx.createGain();
+      gustDepth.gain.value = 0.045;
+      gust.connect(gustDepth).connect(out.gain);
+      gust.start();
+
+      source.start(0, Math.random() * 0.8);
+      out.connect(this.master);
+      this.ambienceGain = out;
+    }
+
+    // 0.22 是"大雨"的上限：雨是背景，不该盖过脚步与生物叫
+    const volume = 0.22 * target * this.volume * this.groupVolume.ambient;
+    this.ambienceGain.gain.setTargetAtTime(volume, ctx.currentTime, 0.5);
+  }
+
+  /**
+   * 播一个音乐音符（批次 233，背景音乐）。
+   *
+   * 为什么不用 `play()`：音乐要的是"**可以预约**的音符 + 更湿的混响 + 自己的并发上限"。
+   * 主程序每次给一小段（`MusicDirector` 决定音高/时值/力度），这里只负责发声；
+   * 音符按 `delay` 预约到未来，所以节拍不受帧率影响。
+   *
+   * 音色是"软钢琴/钟"：三角波基频 + 两个正弦谐波，起音很短；
+   * 长音（低音铺底）把起音拉到 0.5 秒，听起来像 pad 而不是"敲了一下"。
+   */
+  playMusicNote(
+    hz: number,
+    options: { duration?: number; velocity?: number; delay?: number; wave?: OscillatorType } = {},
+  ): void {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running' || !this.master) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const duration = Math.max(0.2, Math.min(12, options.duration ?? 2));
+    const delay = Math.max(0, Math.min(12, options.delay ?? 0));
+    const velocity = Math.max(0, Math.min(1, options.velocity ?? 1));
+    const start = now + delay;
+    const end = start + duration;
+
+    // 并发上限只数音乐（24 声够一段和弦 + 余音，又不会在极端情况下堆节点）
+    this.musicEnds = this.musicEnds.filter((timestamp) => timestamp > now);
+    if (this.musicEnds.length >= 24) return;
+    this.musicEnds.push(end);
+
+    const freq = Math.max(20, Math.min(4000, hz));
+    // 音乐整体比音效轻（0.16），主音量/音乐滑杆再乘上去
+    const gain = 0.16 * velocity * this.volume * this.groupVolume.music;
+    if (gain <= 0.0005) return;
+
+    const out = ctx.createGain();
+    const attack = duration > 4 ? 0.5 : 0.015;
+    out.gain.setValueAtTime(0.0001, start);
+    out.gain.linearRampToValueAtTime(gain, start + attack);
+    out.gain.exponentialRampToValueAtTime(0.0001, end);
+    out.connect(this.master);
+    // 音乐比音效湿一档（22% vs 10%）：音符要有"空间"，否则像玩具琴
+    if (this.reverbSend) {
+      const send = ctx.createGain();
+      send.gain.value = 2.2;
+      out.connect(send).connect(this.reverbSend);
+    }
+
+    const partials: Array<[number, number, OscillatorType]> = [
+      [1, 1, options.wave ?? 'triangle'],
+      [2, 0.22, 'sine'],
+      [3, 0.06, 'sine'],
+    ];
+    for (const [ratio, level, wave] of partials) {
+      if (freq * ratio > 16000) continue;
+      const osc = ctx.createOscillator();
+      osc.type = wave;
+      osc.frequency.setValueAtTime(freq * ratio, start);
+      const voice = ctx.createGain();
+      voice.gain.value = level;
+      osc.connect(voice).connect(out);
+      osc.start(start);
+      osc.stop(end + 0.02);
+    }
   }
 
   private playSpec(

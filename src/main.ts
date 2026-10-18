@@ -232,8 +232,9 @@ import {
   nextCameraMode,
   type CameraMode,
 } from './core/viewMode.ts';
-import { AudioEngine, doorSoundFor, stepSoundFor, type SoundKind } from './core/audio/AudioEngine.ts';
+import { AudioEngine, digSoundFor, doorSoundFor, stepSoundFor, type SoundKind } from './core/audio/AudioEngine.ts';
 import { mobVoiceFor, mobVoicePitchFor, mobVoiceSpec } from './core/audio/MobVoices.ts';
+import { MusicDirector } from './core/audio/Music.ts';
 import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './core/resourcepack/ResourcePack.ts';
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
@@ -1218,6 +1219,10 @@ class App {
   private readonly clouds: PotionCloud[] = [];
   /** 音效引擎（程序化合成，不依赖音频文件） */
   private readonly audio = new AudioEngine();
+  /** 背景音乐导演（批次 233）：程序化生成短句，不依赖音乐素材 */
+  private readonly music = new MusicDirector();
+  /** 挖掘摩擦声的节拍（秒）：挖硬方块时每 0.2 秒响一次 */
+  private digSoundTimer = 0;
   /** 脚步音的距离累积器（走满一格半响一声） */
   private stepDistance = 0;
   private lastStepX = 0;
@@ -1939,6 +1944,9 @@ class App {
     this.audio.setGroupVolume('mobs', settings.volumeMobs);
     this.audio.setGroupVolume('player', settings.volumePlayer);
     this.audio.setGroupVolume('ui', settings.volumeUi);
+    // 批次 233：雨声与背景音乐各自一组（老存档没有这两项时 loadSettings 已回退默认）
+    this.audio.setGroupVolume('ambient', settings.volumeAmbient);
+    this.audio.setGroupVolume('music', settings.volumeMusic);
     // 自动保存间隔（批次 172，M20）：改完立刻按新节奏走（下一轮从这里读）
     this.autoSaveInterval = settings.autosaveSeconds;
     this.particles.setDensity(PARTICLE_DENSITY[settings.particles]);
@@ -4476,11 +4484,13 @@ class App {
     if (this.suppressBreaking) {
       this.breakingKey = '';
       this.breakProgress = 0;
+      this.digSoundTimer = 0;
       return;
     }
     if ((!this.leftDown && !this.padAttack) || !this.hit || this.breakCooldown > 0) {
       this.breakingKey = '';
       this.breakProgress = 0;
+      this.digSoundTimer = 0;
       return;
     }
 
@@ -4488,6 +4498,8 @@ class App {
     if (key !== this.breakingKey) {
       this.breakingKey = key;
       this.breakProgress = 0;
+      // 换目标时让第一下摩擦立刻响（否则要等上一个目标的节拍走完）
+      this.digSoundTimer = 0;
     }
 
     const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
@@ -4499,6 +4511,19 @@ class App {
     if (!Number.isFinite(required)) return;
 
     this.breakProgress += required <= 0 ? 1 : dt / required;
+
+    // 挖掘中的持续摩擦（批次 233）：旧版只有"挖断那一下"，挖石头/木头时中间是静音的，
+    // 手感像"按了半天突然掉一块"。节奏 0.2 秒与碎屑/挥手臂同频。
+    // ⚠️ 瞬破的方块（创造模式、草/花这类 `required <= 0.12`）不播：它本来就是一下没。
+    this.digSoundTimer -= dt;
+    if (this.digSoundTimer <= 0 && required > 0.12 && id !== Block.AIR) {
+      this.digSoundTimer = 0.2;
+      this.audio.play(
+        digSoundFor(blockDef(id).name),
+        { x: this.hit.x + 0.5, y: this.hit.y + 0.5, z: this.hit.z + 0.5 },
+        0.75,
+      );
+    }
 
     // 挖掘途中持续掉碎屑 + 挥手臂（原版每挖一下挥一次）
     this.particleTimer -= dt;
@@ -10124,6 +10149,13 @@ class App {
     }
     this.wasOnGroundAudio = p.onGround;
 
+    // ---- 环境音（批次 233）：只有主世界的雨/雪才有；水下听不见（闷响就够）
+    // 雷暴最响、普通雨次之、雪几乎只有一层轻沙沙（原版雪本来就安静）
+    const raining = this.dimension === Dimension.OVERWORLD && this.weather.raining;
+    const rainLevel =
+      !raining || this.audio.underwater ? 0 : this.snowyHere ? 0.3 : this.weather.current === 'thunder' ? 1 : 0.8;
+    this.audio.setAmbience(rainLevel);
+
     // ---- 脚步：按水平位移累积（`frameMove` 在函数开头就算好了）
     this.lastStepX = p.x;
     this.lastStepZ = p.z;
@@ -10146,6 +10178,26 @@ class App {
     const belowId = this.world.getBlock(Math.floor(p.x), Math.floor(p.y - 0.2), Math.floor(p.z));
     const gain = speed > 5 ? 1.15 : speed < 2.6 ? 0.65 : 1;
     this.audio.play(stepSoundFor(blockDef(belowId).name), undefined, gain);
+  }
+
+  /**
+   * 背景音乐（批次 233）：导演决定"什么时候来下一段、弹什么"，引擎按 `delay` 预约。
+   *
+   * 放在主循环而不是 `setInterval`：暂停时 `dt = 0`，音乐自然停在原处，
+   * 不需要额外的暂停/恢复分支（也不会在暂停页里把音符排到未来去）。
+   */
+  private updateMusic(dt: number): void {
+    const notes = this.music.update(dt, {
+      dimension: this.dimension,
+      night: isNight(this.timeOfDay),
+    });
+    for (const note of notes) {
+      this.audio.playMusicNote(note.hz, {
+        duration: note.duration,
+        velocity: note.velocity,
+        delay: note.delay,
+      });
+    }
   }
 
   /** 改视距：相机远裁剪面、雾、区块流式范围一起更新 */
@@ -10522,6 +10574,7 @@ class App {
         this.updatePerfPolicy(frameSeconds);
       }
       this.updateAudio(dt);
+      this.updateMusic(dt);
       this.net.tick(
         this.physics.x,
         this.physics.y,

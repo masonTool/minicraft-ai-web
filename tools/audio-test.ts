@@ -19,6 +19,7 @@ import {
   UNDERWATER_GAIN,
   UNDERWATER_LOWPASS_HZ,
   breakSoundFor,
+  digSoundFor,
   doorSoundFor,
   layersDuration,
   pickLayers,
@@ -30,6 +31,7 @@ import {
   underwaterGain,
   type SoundSpec,
 } from '../src/core/audio/AudioEngine.ts';
+import { MUSIC_SCALES, MusicDirector } from '../src/core/audio/Music.ts';
 import {
   MOB_VOICES,
   MOB_VOICE_IDS,
@@ -202,6 +204,28 @@ console.log('\n[方块材质 → 脚步 / 放置音效（批次 232）]');
   }
   check(`${places.length} 种方块的放置音分类正确`, badPlaces === 0, `不匹配 ${badPlaces} 种`);
   check('未知方块回落到石头放置音', placeSoundFor('minecraft:unknown_block') === 'place_stone');
+
+  // 挖掘中的摩擦（批次 233）：只有四档，但石头/木头/松软/玻璃必须分得开
+  const digs: Array<[string, string]> = [
+    ['minecraft:stone', 'dig_stone'],
+    ['minecraft:deepslate', 'dig_stone'],
+    ['minecraft:oak_planks', 'dig_wood'],
+    ['minecraft:oak_log', 'dig_wood'],
+    ['minecraft:grass_block', 'dig_soft'],
+    ['minecraft:sand', 'dig_soft'],
+    ['minecraft:white_wool', 'dig_soft'],
+    ['minecraft:glass', 'dig_glass'],
+  ];
+  let badDigs = 0;
+  for (const [name, expected] of digs) {
+    if (digSoundFor(name) !== expected) {
+      badDigs++;
+      console.log(`      ${name} → ${digSoundFor(name)}（期望 ${expected}）`);
+    }
+  }
+  check(`${digs.length} 种方块的挖掘音分类正确`, badDigs === 0, `不匹配 ${badDigs} 种`);
+  const digKinds = new Set(digs.map(([name]) => digSoundFor(name)));
+  check('挖掘音覆盖 4 档材质（不会全落到石头）', digKinds.size === 4, [...digKinds].join(','));
 }
 
 // ---------------------------------------------------------------- 2. 覆盖真实方块表
@@ -211,6 +235,7 @@ console.log('\n[真实方块表覆盖检查]');
   const missing: string[] = [];
   const stepKinds = new Map<string, number>();
   const placeKinds = new Map<string, number>();
+  const digKinds = new Map<string, number>();
   for (const def of BLOCKS) {
     if (!def || !def.name) continue;
     const kind = breakSoundFor(def.name);
@@ -219,14 +244,19 @@ console.log('\n[真实方块表覆盖检查]');
     if (!soundSpec(step)) missing.push(`step:${def.name}→${step}`);
     const place = placeSoundFor(def.name);
     if (!soundSpec(place)) missing.push(`place:${def.name}→${place}`);
+    const dig = digSoundFor(def.name);
+    if (!soundSpec(dig)) missing.push(`dig:${def.name}→${dig}`);
     stepKinds.set(step, (stepKinds.get(step) ?? 0) + 1);
     placeKinds.set(place, (placeKinds.get(place) ?? 0) + 1);
+    digKinds.set(dig, (digKinds.get(dig) ?? 0) + 1);
   }
   console.log(`  脚步音分布：${[...stepKinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
   console.log(`  放置音分布：${[...placeKinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
-  check('全部方块的破坏/脚步/放置音都真实存在', missing.length === 0, missing.slice(0, 3).join(' / '));
+  console.log(`  挖掘音分布：${[...digKinds.entries()].map(([k, v]) => `${k} ${v}`).join(' · ')}`);
+  check('全部方块的破坏/脚步/放置/挖掘音都真实存在', missing.length === 0, missing.slice(0, 3).join(' / '));
   check('脚步音至少覆盖 6 种材质', stepKinds.size >= 6, `${stepKinds.size} 种`);
   check('放置音至少覆盖 6 种材质', placeKinds.size >= 6, `${placeKinds.size} 种`);
+  check('挖掘音四档都有真实方块用', digKinds.size === 4, `${digKinds.size} 种`);
 }
 
 // ---------------------------------------------------------------- 3. 引擎行为
@@ -243,6 +273,9 @@ console.log('\n[引擎行为]');
     engine.playStepForBlock('minecraft:grass_block');
     engine.playPlaceForBlock('minecraft:glass', { x: 1, y: 64, z: 1 });
     engine.playVoice('zombie:ambient', mobVoiceSpec('undead', 'ambient'), { x: 1, y: 64, z: 1 });
+    // 批次 233：环境音与音乐在无 AudioContext 时也必须是安全空操作
+    engine.setAmbience(0.7);
+    engine.playMusicNote(220, { duration: 2, velocity: 0.8, delay: 0.5 });
   } catch {
     threw = true;
   }
@@ -327,13 +360,15 @@ console.log('\n[水下闷响（批次 138）]');
 
 // ---------------------------------------------------------------- 6. 音量分组
 
-console.log('\n[音量分组：四组各自可调]');
+console.log('\n[音量分组：六组各自可调]');
 {
   const missing = SOUND_KINDS.filter((kind) => SOUND_GROUPS[kind] === undefined);
   check('每个音效都归到了某一组', missing.length === 0, missing.join(','));
   check(
-    '四组都有中文名（设置界面直接用）',
-    (['blocks', 'mobs', 'player', 'ui'] as const).every((group) => typeof SOUND_GROUP_LABELS[group] === 'string'),
+    '六组都有中文名（设置界面直接用）',
+    (['blocks', 'mobs', 'player', 'ui', 'ambient', 'music'] as const).every(
+      (group) => typeof SOUND_GROUP_LABELS[group] === 'string',
+    ),
   );
 
   check('破坏音效归“方块”', soundGroupOf('break_stone') === 'blocks' && soundGroupOf('break_wood') === 'blocks');
@@ -342,8 +377,15 @@ console.log('\n[音量分组：四组各自可调]');
   check('落地与打击感也归“玩家”', soundGroupOf('land_hard') === 'player' && soundGroupOf('hit_flesh') === 'player');
   check('按钮/达成/交易归“界面”', soundGroupOf('click') === 'ui' && soundGroupOf('achievement') === 'ui' && soundGroupOf('trade') === 'ui');
 
-  // 生物那一组不再有固定的 SOUND_KIND（它们按“种类档案”播），但仍必须是可调的一组
-  check('生物音效不占用普通音效表（按档案播）', SOUND_KINDS.every((kind) => soundGroupOf(kind) !== 'mobs'));
+  // 生物/环境/音乐三组没有固定的 SOUND_KIND：前者按"种类档案"播，
+  // 后两者是**循环/预约**音源（雨声、背景音乐），不走一次性 `play()`
+  check(
+    '生物/环境/音乐不占用普通音效表',
+    SOUND_KINDS.every((kind) => {
+      const group = soundGroupOf(kind);
+      return group !== 'mobs' && group !== 'ambient' && group !== 'music';
+    }),
+  );
 
   for (const group of ['blocks', 'player', 'ui'] as const) {
     const count = SOUND_KINDS.filter((kind) => SOUND_GROUPS[kind] === group).length;
@@ -352,8 +394,8 @@ console.log('\n[音量分组：四组各自可调]');
 
   const engine = new AudioEngine();
   check(
-    '四组默认都是 1（默认状态下不该悄悄变轻）',
-    (['blocks', 'mobs', 'player', 'ui'] as const).every((group) => engine.groupVolumeOf(group) === 1),
+    '六组默认都是 1（默认状态下不该悄悄变轻）',
+    (['blocks', 'mobs', 'player', 'ui', 'ambient', 'music'] as const).every((group) => engine.groupVolumeOf(group) === 1),
   );
   engine.setGroupVolume('mobs', 0);
   check('调到 0 就是这一组全静音', engine.groupVolumeOf('mobs') === 0);
@@ -363,6 +405,9 @@ console.log('\n[音量分组：四组各自可调]');
   check('负数被夹到 0', engine.groupVolumeOf('mobs') === 0);
   engine.setGroupVolume('mobs', 0.35);
   check('正常值原样保留', Math.abs(engine.groupVolumeOf('mobs') - 0.35) < 1e-9);
+  engine.setGroupVolume('ambient', 0.4);
+  engine.setGroupVolume('music', 0.2);
+  check('雨声与音乐可各自调（批次 233）', engine.groupVolumeOf('ambient') === 0.4 && engine.groupVolumeOf('music') === 0.2);
 }
 
 // ---------------------------------------------------------------- 7. 开关类方块
@@ -443,7 +488,60 @@ console.log('\n[生物声音档案：每一种生物都要有环境叫/受伤/�
   check('不同档案的配方互不相同', signatures.size === MOB_VOICE_IDS.length, `${signatures.size}/${MOB_VOICE_IDS.length}`);
 }
 
-// ---------------------------------------------------------------- 9. 兼容性：旧音效还在
+// ---------------------------------------------------------------- 9. 背景音乐（批次 233）
+
+console.log('\n[背景音乐：程序化生成]');
+{
+  // 固定随机数：只验证"结构与范围"，不验证"好不好听"
+  const first = new MusicDirector(() => 0.5);
+  check('第一段不会开局就响（12~26 秒后）', first.nextIn >= 12 && first.nextIn <= 26, String(first.nextIn));
+  check('暂停（dt = 0）时不推进、也不产生音符', first.update(0, { dimension: 'overworld', night: false }).length === 0);
+
+  const notes = first.update(30, { dimension: 'overworld', night: false });
+  check('到点会生成一小段（4~16 个音，含叠音）', notes.length >= 4 && notes.length <= 16, `${notes.length} 个`);
+  check(
+    '每个音符的时值/力度合法',
+    notes.every((note) => note.hz >= 20 && note.hz <= 4000 && note.duration >= 0.2 && note.velocity >= 0 && note.velocity <= 1),
+  );
+  check('音符按时间先后排列（可以按 delay 预约）', notes.every((note, i) => i === 0 || note.delay >= notes[i - 1]!.delay));
+  check('两段之间留白 ≥ 30 秒（背景音乐必须能被忘掉）', first.nextIn >= 30, String(first.nextIn));
+
+  // 音阶：主世界白天的音必须落在 A 小调五声里（允许铺底降八度、五度叠音）
+  const dayScale = new Set(MUSIC_SCALES.day);
+  check(
+    '主世界白天的音都在五声音阶里（含降八度铺底 / 五度叠音）',
+    notes.every((note) => dayScale.has(note.hz) || dayScale.has(note.hz * 2) || dayScale.has(note.hz / 2) || dayScale.has(note.hz / 1.5)),
+    notes.map((note) => note.hz.toFixed(1)).join(','),
+  );
+
+  // 夜里整段降八度（最高的音也不该超过 330Hz）
+  const nightNotes = new MusicDirector(() => 0.5).update(30, { dimension: 'overworld', night: true });
+  check('夜里的音更低沉', nightNotes.every((note) => note.hz <= 330), nightNotes.map((note) => note.hz.toFixed(0)).join(','));
+
+  // 下界/末地各有自己的音阶
+  const netherNotes = new MusicDirector(() => 0.5).update(30, { dimension: 'nether', night: false });
+  const netherScale = new Set(MUSIC_SCALES.nether);
+  check(
+    '下界用自己的音阶（含增四度）',
+    netherNotes.length > 0 &&
+      netherNotes.every(
+        (note) => netherScale.has(note.hz) || netherScale.has(note.hz * 2) || netherScale.has(note.hz / 1.5),
+      ),
+  );
+  const endNotes = new MusicDirector(() => 0.5).update(30, { dimension: 'end', night: false });
+  check('末地的音更高（440Hz 起）', endNotes.some((note) => note.hz >= 440));
+
+  // 只有铺底的那种段落：random 恒为 0.1 → 有三成概率"只留一个和弦"
+  const quiet = new MusicDirector(() => 0.1).update(30, { dimension: 'overworld', night: false });
+  check('安静段落可以只有铺底（不是每次都写旋律）', quiet.length === 1 && quiet[0]!.duration >= 6, `${quiet.length} 个`);
+
+  const resettable = new MusicDirector(() => 0.5);
+  resettable.update(30, { dimension: 'overworld', night: false });
+  resettable.reset();
+  check('reset 后重新从 12~26 秒开始', resettable.nextIn >= 12 && resettable.nextIn <= 26);
+}
+
+// ---------------------------------------------------------------- 10. 兼容性：旧音效还在
 
 console.log('\n[旧音效兼容（验收脚本与控制台还在用这些名字）]');
 {
