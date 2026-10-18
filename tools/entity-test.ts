@@ -18,6 +18,7 @@ import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import { Boat } from '../src/core/entity/Boat.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
 import { VehicleParking } from '../src/core/entity/VehicleParking.ts';
+import { EntityParking } from '../src/core/entity/EntityParking.ts';
 import { HopperMinecart } from '../src/core/entity/HopperMinecart.ts';
 import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from '../src/core/entity/FurnaceMinecart.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
@@ -641,6 +642,82 @@ console.log('\n[载具停放：区块卸载/重载不丢（批次 257）]');
   parking.park('the_nether', 2, -1, { kind: 'furnace', x: 0, y: 32, z: 0, yaw: 0 });
   check('下界只取到下界那一辆', parking.take('the_nether', 2, -1).length === 1);
   check('主世界那一辆还在', parking.take('overworld', 2, -1).length === 1);
+
+  // ---- 存档往返（批次 258）：导出 → 恢复 → 还能按原区块取回
+  const before = new VehicleParking();
+  before.park('overworld', 0, 0, { kind: 'boat', x: 12.5, y: 62, z: 3.5, yaw: 1.2 });
+  before.park('the_nether', -2, 1, { kind: 'hopper', x: -20, y: 40, z: 30, yaw: 0.4 });
+  const dump = before.snapshotAll();
+  check('导出两条记录', dump.length === 2, `${dump.length}`);
+
+  const after = new VehicleParking();
+  after.restoreAll(dump);
+  check('恢复后条数一致', after.size === 2, `${after.size}`);
+  const boat = after.take('overworld', 0, 0);
+  check(
+    '正坐标按原区块取回，朝向保留',
+    boat.length === 1 && boat[0]?.kind === 'boat' && boat[0]?.yaw === 1.2,
+    JSON.stringify(boat[0]),
+  );
+  check('负坐标也落在正确区块（-20 → -2）', after.take('the_nether', -2, 1).length === 1);
+
+  // ---- 脏数据：种类不认识 / 坐标 NaN 都要跳过，别把读档带崩
+  const dirty = new VehicleParking();
+  dirty.restoreAll([
+    { dimension: 'overworld', kind: 'ufo' as never, x: 1, y: 2, z: 3, yaw: 0 },
+    { dimension: 'overworld', kind: 'boat', x: Number.NaN, y: 2, z: 3, yaw: 0 },
+  ]);
+  check('脏记录全部跳过', dirty.size === 0, `${dirty.size}`);
+}
+
+console.log('\n[生物 / 掉落物的区块寄存（批次 258）]');
+{
+  const parking = new EntityParking();
+  parking.park('overworld', 0, 0, {
+    kind: 'mob',
+    typeId: 'cow',
+    x: 5,
+    y: 65,
+    z: 5,
+    yaw: 1.5,
+    health: 7,
+    tamed: true,
+    sitting: false,
+    leashed: true,
+    sheared: true,
+    woolColor: 3,
+  });
+  parking.park('overworld', 0, 0, { kind: 'item', itemId: 12, count: 3, x: 6, y: 65, z: 6 });
+  check('同一区块能存生物与掉落物', parking.size === 2, `${parking.size}`);
+
+  const dump = parking.snapshotAll();
+  const after = new EntityParking();
+  after.restoreAll(dump);
+  const back = after.take('overworld', 0, 0);
+  const mob = back.find((r) => r.kind === 'mob');
+  const item = back.find((r) => r.kind === 'item');
+  check(
+    '生物状态原样带回（血量/驯服/被牵/剪毛/羊毛色）',
+    mob?.kind === 'mob' &&
+      mob.health === 7 &&
+      mob.tamed &&
+      mob.leashed &&
+      mob.sheared &&
+      mob.woolColor === 3,
+    JSON.stringify(mob),
+  );
+  check('掉落物 id 与数量原样带回', item?.kind === 'item' && item.itemId === 12 && item.count === 3);
+  check('取完即删（不会重复生成）', after.take('overworld', 0, 0).length === 0 && after.size === 0);
+
+  // 脏数据：不认识的 kind / 未知坐标 / 数量 0 都跳过
+  const dirty = new EntityParking();
+  // 故意构造脏数据：`as never` 是为了绕过编译期检查——这里测的正是"运行时能挡住"
+  dirty.restoreAll([
+    { dimension: 'overworld', kind: 'ufo', x: 1, y: 2, z: 3 },
+    { dimension: 'overworld', kind: 'item', itemId: 1, count: 0, x: 1, y: 2, z: 3 },
+    { dimension: 'overworld', kind: 'mob', typeId: '', x: 1, y: 2, z: 3 },
+  ] as never);
+  check('脏记录全部跳过', dirty.size === 0, `${dirty.size}`);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

@@ -3048,6 +3048,47 @@ console.log('\n[载具持久化：区块卸载不丢（批次 257）]');
     '按「维度 + 区块」分开存（同一坐标在不同维度不串）',
     parkingSrc.includes('`${dimension}:${cx},${cz}`'),
   );
+
+  // 批次 258：停放的载具要进存档（否则退出游戏就丢）
+  const saveSrc = readFileSync(new URL('../src/core/save/SaveGame.ts', import.meta.url), 'utf8');
+  check(
+    '存档结构里有 vehicles 字段（老存档按"没有"处理）',
+    saveSrc.includes('vehicles?: SavedVehicle[]') && saveSrc.includes("from '../entity/VehicleParking.ts'"),
+  );
+  check(
+    '存盘时导出"停放中 + 已加载"两份，读档时放回登记表',
+    appSrc.includes('vehicles: this.snapshotVehicles(),') &&
+      appSrc.includes('private snapshotVehicles(): SavedVehicle[]') &&
+      appSrc.includes('this.parkedVehicles.restoreAll(data.vehicles);'),
+  );
+  check(
+    '脏数据不会把读档带崩（种类白名单 + 坐标必须是有限数）',
+    parkingSrc.includes('KINDS.has(record.kind)') && parkingSrc.includes('Number.isFinite(record.x)'),
+  );
+
+  // 批次 258：生物与掉落物也进存档
+  const saveSrc2 = readFileSync(new URL('../src/core/save/SaveGame.ts', import.meta.url), 'utf8');
+  const entityParkingSrc = readFileSync(
+    new URL('../src/core/entity/EntityParking.ts', import.meta.url),
+    'utf8',
+  );
+  check(
+    '存档结构有 entities 字段，且记录只含可序列化的字段',
+    saveSrc2.includes('entities?: SavedEntityRecord[]') &&
+      entityParkingSrc.includes("kind: 'mob'") &&
+      entityParkingSrc.includes("kind: 'item'"),
+  );
+  check(
+    '存盘时把"寄存中的 + 已加载的"生物/掉落物一起导出',
+    appSrc.includes('entities: this.snapshotSavedEntities(),') &&
+      appSrc.includes('private snapshotSavedEntities(): SavedEntityRecord[]'),
+  );
+  check(
+    '区块卸载先寄存、加载时造回（与载具同一条路径）',
+    appSrc.includes('this.parkChunkEntities(cx, cz);') &&
+      appSrc.includes('this.restoreChunkEntities(chunk.cx, chunk.cz);') &&
+      appSrc.includes('this.parkedEntities.restoreAll(data.entities);'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
