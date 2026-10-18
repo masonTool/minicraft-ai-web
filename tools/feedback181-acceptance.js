@@ -104,14 +104,19 @@
   fireLook('pointerup', 903, [0, 0], [530, 200]);
   check('拖动中途 client 变 0 时切到 screen 继续转视角', rebased, `${(mc.lookAngles.yaw - yawRebase).toFixed(1)}°`);
 
-  // 连续两次坐标异常：自动开关一次背包（用户手动恢复路径的自动化）
+  // 连续两次坐标异常：走"透明全屏层"重恢复（批次 208——不弹背包，玩家看不出）
   fireLook('pointerdown', 904, [0, 0], [0, 0]);
   await sleep(250);
   fireLook('pointerdown', 905, [0, 0], [0, 0]);
   await sleep(350);
   const diagText = window.__diag?.exportJson?.() ?? '';
-  check('连续坐标异常会自动开关背包恢复', diagText.includes('autoRecover.uiCycle'));
+  check('连续坐标异常走透明层重恢复', diagText.includes('autoRecover.deep'));
+  check(
+    '重恢复不弹背包面板',
+    getComputedStyle(document.getElementById('inventory-screen')).display === 'none',
+  );
   await sleep(900);
+  check('恢复用的透明层会自己摘掉', document.getElementById('touch-recover') === null);
 
   mc.cycleCameraMode();
   await sleep(150);

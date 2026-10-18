@@ -1072,9 +1072,14 @@ class App {
   /** 目标信息的刷新节拍（5Hz，别每帧写 DOM） */
   private targetInfoTimer = 0;
   private targetInfoText = '';
-  /** 触摸坐标异常的时刻（批次 201）：4 秒内连续两次才升级成"自动开关背包" */
+  /** 触摸坐标异常的时刻（批次 201）：4 秒内连续两次才升级成自动恢复 */
   private anomalyTimes: number[] = [];
   private lastAutoRecovery = 0;
+  /**
+   * 连续自动恢复的"档位"（批次 208）：1 = 透明层，2 = 真开关背包。
+   * 安静 10 秒（见 `handlePointerAnomaly`）说明上一次已经救回来了，回到第 0 档。
+   */
+  private recoveryAttempts = 0;
   /**
    * 进度系统"上岗"了没有（世界与存档都读完）。
    *
@@ -2035,11 +2040,14 @@ class App {
   }
 
   /**
-   * 触摸坐标异常（批次 201）。
+   * 触摸坐标异常（批次 201 / 208）。
    *
-   * 用户实测的唯一可靠恢复是"点一下物品栏再关掉"。第一次异常只做轻量重排；
-   * 如果 4 秒内又来一次（说明轻量重排没救回来），就**真的开关一次背包**——
-   * 把用户手里那套动作自动做一遍，而不是让他自己点。
+   * 用户实测的唯一可靠恢复是"点一下物品栏再关掉"。但面板滑进滑出太显眼，
+   * 所以第 1 档改走 `recoverDeep`：**一块看不见的全屏层**代替面板，
+   * 副作用（新全屏层出现又消失 + 触摸层收起 + 失焦 + 重排）一条不少，画面不变。
+   *
+   * 档位按"10 秒内又出问题"升级：安静 10 秒 = 上一次真的救回来了，重新从第 0 档算。
+   * 第 2 档才退回真开关背包——那一步玩家看得见，只留给"透明层也压不住"的情况。
    */
   private handlePointerAnomaly(phase: string): void {
     const now = performance.now();
@@ -2048,9 +2056,22 @@ class App {
     if (this.anomalyTimes.length < 2) return;
     if (now - this.lastAutoRecovery < 5000) return;
     if (this.disposed || this.uiOpen || this.inventoryScreen.isOpen) return;
+
+    if (now - this.lastAutoRecovery > 10_000) this.recoveryAttempts = 0;
     this.lastAutoRecovery = now;
+    this.recoveryAttempts++;
+
+    if (this.recoveryAttempts === 1) {
+      diag.event('input', 'autoRecover.deep', { phase, count: this.anomalyTimes.length });
+      console.info('[touch] 连续坐标异常：透明层重恢复');
+      // 不弹面板、不藏 HUD、也不弹"已自动重置视角"的提示——这条恢复要的就是无感
+      this.touch?.recoverDeep('anomaly');
+      return;
+    }
+
+    this.recoveryAttempts = 0;
     diag.event('input', 'autoRecover.uiCycle', { phase, count: this.anomalyTimes.length });
-    console.info('[touch] 连续坐标异常：自动开关一次背包以恢复视角');
+    console.info('[touch] 透明层没压住：退回开关一次背包');
     // 与用户手动操作同一条路径：失焦 → 开 → 120ms 后关 → 再失焦
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     this.inventoryScreen.openWith('inventory');
@@ -9909,19 +9930,22 @@ class App {
           this.touch?.resetInput('hidden');
           void this.saveNow('hidden');
         } else {
-          // 批次 183：从后台回来偶尔会拿到 clientX/Y=0 的触摸；先重排一次
-          this.touch?.recover('visible');
+          // 批次 183：从后台回来偶尔会拿到 clientX/Y=0 的触摸；先重排一次。
+          // 批次 208：这一步走"重"档（透明全屏层，200ms）——这两处正是后面
+          // 出现坐标异常的上游，提前压住比事后补救便宜，而且现在它是无感的。
+          this.touch?.recoverDeep('visible');
           // 批次 201：先落到暂停页，点一下才横屏全屏回到游戏
           if (this.wasHidden) this.handleReturnFromBackground();
         }
       },
       { signal: this.listeners.signal },
     );
-    // 退出/重进全屏之后同样可能坐标异常（真机日志里正是这一段之后开始拖不动）
+    // 退出/重进全屏之后同样可能坐标异常（真机日志里正是这一段之后开始拖不动）。
+    // 批次 208：同样改用无感的重档恢复。
     document.addEventListener(
       'fullscreenchange',
       () => {
-        this.touch?.recover('fullscreen');
+        this.touch?.recoverDeep('fullscreen');
       },
       { signal: this.listeners.signal },
     );

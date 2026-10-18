@@ -1873,18 +1873,35 @@ console.log('\n[HUD 重复挂载与触摸坐标兜底（批次 183）]');
       touchSrc.includes("this.nudgeLayout('look.down')"),
   );
   check(
-    '回到前台/全屏切换会重置触摸并重排',
-    appSrc.includes("this.touch?.recover('visible')") &&
-      appSrc.includes("this.touch?.recover('fullscreen')"),
+    '回到前台/全屏切换走"重"档恢复（透明层，不是两帧重排）',
+    appSrc.includes("this.touch?.recoverDeep('visible')") &&
+      appSrc.includes("this.touch?.recoverDeep('fullscreen')"),
   );
   check('摇杆不再拿原点算方向', touchSrc.includes('if (event.clientX === 0 && event.clientY === 0) return;'));
   check(
     '拖动中途 client 变 0 会切到 screen/page 继续（不是丢弃）',
     touchSrc.includes("'pointer.rebase'") && touchSrc.includes('this.lookPointSource = alt.source'),
   );
+  // 批次 208：自动恢复不再弹背包（面板滑进滑出太显眼），换成一块看不见的全屏层。
+  // 这条断言盯住三件事：层是新插进来又摘掉的、CSS 在、以及**兜底那条路还在**。
+  const recoverCss = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   check(
-    '连续坐标异常会自动走一次"开关背包"',
+    '重档恢复用临时插入的透明全屏层',
+    touchSrc.includes('recoverDeep(reason: string') &&
+      touchSrc.includes("layer.id = 'touch-recover'") &&
+      touchSrc.includes('layer.remove()') &&
+      touchSrc.includes("'pointer.recover.deep'"),
+  );
+  check(
+    '透明层样式在 index.html 里，且不吃事件',
+    recoverCss.includes('#touch-recover {') &&
+      recoverCss.includes('pointer-events: none; touch-action: none;'),
+  );
+  check(
+    '连续坐标异常先走透明层，压不住才退回"开关背包"兜底',
     appSrc.includes('private handlePointerAnomaly(') &&
+      appSrc.includes('this.recoveryAttempts') &&
+      appSrc.includes("'autoRecover.deep'") &&
       appSrc.includes("'autoRecover.uiCycle'") &&
       appSrc.includes("this.inventoryScreen.openWith('inventory')"),
   );
