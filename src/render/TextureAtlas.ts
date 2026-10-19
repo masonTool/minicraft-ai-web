@@ -6269,3 +6269,7 @@ PAINTERS['glow_lichen'] = noisy(0x6aa87a, 14);
 PAINTERS['glow_berries'] = noisy(0xd8a03a, 16);
 PAINTERS['pointed_dripstone'] = noisy(0x8a6a5a, 12);
 PAINTERS['dripstone_block'] = noisy(0x7a5a4a, 12);
+
+// 洞穴顶部（批次 392）
+PAINTERS['spore_blossom'] = noisy(0xc86a8a, 18);
+PAINTERS['hanging_roots'] = noisy(0x8a6a4a, 12);

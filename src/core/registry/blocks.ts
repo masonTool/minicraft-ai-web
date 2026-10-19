@@ -3278,6 +3278,27 @@ const SPECS: readonly BlockSpec[] = [
   ...GLAZED_TERRACOTTA_SPECS,
   ...BANNER_SPECS,
 
+  // 洞穴顶部的两件（批次 392）：孢子花 / 垂根
+  {
+    id: 662,
+    name: 'minecraft:spore_blossom',
+    tiles: ['spore_blossom', 'spore_blossom', 'spore_blossom'] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    light: 15,
+    lightOpacity: 0,
+  },
+  {
+    id: 663,
+    name: 'minecraft:hanging_roots',
+    tiles: ['hanging_roots', 'hanging_roots', 'hanging_roots'] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+
   // 洞穴装饰（批次 391）：发光地衣 / 发光浆果 / 尖滴石 / 滴水石
   {
     id: 658,
@@ -3830,6 +3851,8 @@ export const Block = {
   GLOW_BERRIES: 659,
   POINTED_DRIPSTONE: 660,
   DRIPSTONE_BLOCK: 661,
+  SPORE_BLOSSOM: 662,
+  HANGING_ROOTS: 663,
   /** 16 色蜡烛从 608 起，顺序与 DYE_COLORS 一致 */
   CANDLE_ID_START: 608,
   /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
@@ -4179,6 +4202,8 @@ HARDNESS.set(Block.GLOW_LICHEN, 0.2);
 HARDNESS.set(Block.GLOW_BERRIES, 0.2);
 HARDNESS.set(Block.POINTED_DRIPSTONE, 1.5);
 HARDNESS.set(Block.DRIPSTONE_BLOCK, 1.5);
+HARDNESS.set(Block.SPORE_BLOSSOM, 0.2);
+HARDNESS.set(Block.HANGING_ROOTS, 0.2);
 for (let i = 0; i < 16; i++) HARDNESS.set(608 + i, 0.1);
 HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);

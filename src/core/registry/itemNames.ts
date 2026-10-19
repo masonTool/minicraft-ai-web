@@ -505,6 +505,8 @@ const EXPLICIT: Record<string, string> = {
   glow_berries: '发光浆果',
   pointed_dripstone: '尖滴石',
   dripstone_block: '滴水石块',
+  spore_blossom: '孢子花',
+  hanging_roots: '垂根',
   white_banner: '白色旗帜',
   orange_banner: '橙色旗帜',
   magenta_banner: '品红色旗帜',

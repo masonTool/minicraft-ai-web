@@ -739,8 +739,10 @@ export class OverworldGenerator {
           if (stoneLike(below)) {
             if (h % 617 === 0) blocks[index] = Block.GLOW_LICHEN;
             else if (h % 1103 === 0) blocks[index] = Block.GLOW_BERRIES;
-          } else if (stoneLike(above) && h % 811 === 0) {
-            blocks[index] = Block.POINTED_DRIPSTONE;
+          } else if (stoneLike(above)) {
+            if (h % 811 === 0) blocks[index] = Block.POINTED_DRIPSTONE;
+            else if (h % 1499 === 0) blocks[index] = Block.SPORE_BLOSSOM;
+            else if (h % 1301 === 0) blocks[index] = Block.HANGING_ROOTS;
           }
         }
       }

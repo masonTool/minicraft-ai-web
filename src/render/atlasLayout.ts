@@ -1061,6 +1061,8 @@ export const TILE_ORDER = [
   'glow_berries',
   'pointed_dripstone',
   'dripstone_block',
+  'spore_blossom',
+  'hanging_roots',
   'banner_white',
   'banner_orange',
   'banner_magenta',

@@ -10005,4 +10005,11 @@
 - [x] B388-3 test:commands 112、advancement 116，离线 131 套全绿
 - 覆盖：游戏规则 **16 → 18（60%）**
 
+## 批次 389：命令补 1 条——/playsound（2026-10-20）
+
+- [x] B389-1 `CommandContext.playSound`；主程序用 `SOUND_KINDS` 白名单校验
+- [x] B389-2 `/playsound <音效>`（未知音效报错，不静默）
+- [x] B389-3 test:commands 114（含未知音效分支），离线 131 套全绿
+- 覆盖：命令 **23 → 24（60%）**
+
 <!-- docs-archive:end -->

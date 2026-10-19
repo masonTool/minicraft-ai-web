@@ -385,7 +385,14 @@ export const GENERATION_SOURCES: readonly GenSource[] = [
     label: '洞穴装饰（发光地衣 / 发光浆果 / 尖滴石 / 滴水石）',
     origin: 'declared',
     where: 'gen/OverworldGenerator.ts 的 decorateCaves',
-    blocks: [Block.GLOW_LICHEN, Block.GLOW_BERRIES, Block.POINTED_DRIPSTONE, Block.DRIPSTONE_BLOCK],
+    blocks: [
+      Block.GLOW_LICHEN,
+      Block.GLOW_BERRIES,
+      Block.POINTED_DRIPSTONE,
+      Block.DRIPSTONE_BLOCK,
+      Block.SPORE_BLOSSOM,
+      Block.HANGING_ROOTS,
+    ],
   },
   {
     key: 'amethyst_geode',
