@@ -842,6 +842,15 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     challenge: true,
   },
   {
+    id: 'minecraft:husbandry/beelocation',
+    parent: 'minecraft:husbandry/root',
+    tab: 'husbandry',
+    title: '移动蜂巢',
+    desc: '拿到一个蜂巢（3 蜜脾 + 6 木板合成，或带精准采集去挖）',
+    icon: Block.BEE_NEST,
+    trigger: { kind: 'obtain', ids: [Block.BEE_NEST] },
+  },
+  {
     id: 'minecraft:husbandry/wax_on',
     parent: 'minecraft:husbandry/root',
     tab: 'husbandry',

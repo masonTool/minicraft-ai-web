@@ -1237,6 +1237,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.HONEY_BOTTLE, count: 1 },
     ingredients: [Item.HONEYCOMB, Item.GLASS_BOTTLE],
   },
+  // 蜂巢（批次 376）：原版蜂箱 = 木板 + 蜜脾；这里直接做成“可搬运的蜂巢”
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.BEE_NEST, count: 1 },
+    pattern: ['PPP', 'HHH', 'PPP'],
+    key: { P: Block.OAK_PLANKS, H: Item.HONEYCOMB },
+  },
   // 涂蜡铜（批次 375）：蜜脾 + 对应氧化度的铜块
   {
     kind: 'shapeless' as const,
