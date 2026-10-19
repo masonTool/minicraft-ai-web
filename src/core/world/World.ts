@@ -17,6 +17,7 @@ import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import type { WorldType } from '../gen/WorldType.ts';
 import { LightEngine, type LightPushStats } from '../light/LightEngine.ts';
 import { blockDef, isClimbableBlock } from '../registry/blocks.ts';
+import { lightNeedsUpdate } from '../light/LightSignature.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
@@ -90,6 +91,17 @@ export class World {
    * 那就不必再去猜光照引擎，直接去那条路上找。
    */
   private noopWrites = 0;
+
+  /**
+   * 因为"挡光与发光都没变"而**跳过**光照 BFS 的写入次数（批次 282，诊断用）。
+   *
+   * 与 `writes` 一起读就能判断快路径的命中率：水的液面变化应当全部落在这里。
+   */
+  private lightSkipped = 0;
+
+  get lightSkippedWrites(): number {
+    return this.lightSkipped;
+  }
 
   get blockWriteCount(): number {
     return this.writes;
@@ -351,6 +363,8 @@ export class World {
   setBlockAndUpdate(worldX: number, worldY: number, worldZ: number, id: number, state = 0): boolean {
     const before = this.getBlock(worldX, worldY, worldZ);
     const beforeState = this.getBlockState(worldX, worldY, worldZ);
+    // 光照要不要重算，**必须在写入之前**取：写完两边都是新值了（判据见 `lightSignature`）
+    const lightChanged = lightNeedsUpdate(before, beforeState, id, state);
     if (!this.setBlock(worldX, worldY, worldZ, id, state)) return false;
     this.writes++;
     // 写入"同一个值"（批次 238）：世界没变，但仍会触发一次完整的光照移除 BFS + 重网格化。
@@ -360,7 +374,10 @@ export class World {
     if (worldY < -64 || worldY >= 320) return true;
     // 记进增量存档：只有"玩家动过"的格子需要落盘
     this.edits.record(this.dimension, toChunkCoord(worldX), toChunkCoord(worldZ), Chunk.index(worldX & 15, worldY, worldZ & 15), id, state);
-    this.light.onBlockChanged(worldX, worldY, worldZ);
+    // 光照快路径（批次 282）：只改状态、挡光与发光都没变 → 跳过整趟 BFS。
+    // 水面高度变了要重烘焙网格，所以下面那条事件**照发**。
+    if (lightChanged) this.light.onBlockChanged(worldX, worldY, worldZ);
+    else this.lightSkipped++;
     this.events.onBlockChanged?.(worldX, worldY, worldZ);
     return true;
   }
@@ -373,6 +390,9 @@ export class World {
     const chunk = this.chunkAt(toChunkCoord(worldX), toChunkCoord(worldZ));
     if (!chunk) return false;
     const beforeState = chunk.getState(worldX & 15, worldY, worldZ & 15);
+    const id = chunk.get(worldX & 15, worldY, worldZ & 15);
+    // 与 `setBlockAndUpdate` 同一条快路径：只看挡光与发光（红石灯亮灭会命中"变了"这一侧）
+    const lightChanged = lightNeedsUpdate(id, beforeState, id, state);
     chunk.setState(worldX & 15, worldY, worldZ & 15, state);
     this.writes++;
     // 同 `setBlockAndUpdate`：状态没变也算一次"原地打转"，单独计数便于定位来源（批次 238）
@@ -386,7 +406,8 @@ export class World {
       chunk.get(worldX & 15, worldY, worldZ & 15),
       state,
     );
-    this.light.onBlockChanged(worldX, worldY, worldZ);
+    if (lightChanged) this.light.onBlockChanged(worldX, worldY, worldZ);
+    else this.lightSkipped++;
     this.events.onBlockChanged?.(worldX, worldY, worldZ);
     return true;
   }

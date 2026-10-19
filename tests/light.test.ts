@@ -11,8 +11,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { Block } from '../src/core/registry/blocks.ts';
+import { withFluidLevel, withPowered } from '../src/core/registry/blockState.ts';
 import { Chunk, WORLD_MAX_Y, WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
 import { LightEngine, type LightAccessor } from '../src/core/light/LightEngine.ts';
+import { lightNeedsUpdate } from '../src/core/light/LightSignature.ts';
 
 /** 最小的世界适配器：把区块塞进一张表，光照引擎只需要读写方块与光照等级 */
 class WorldStub implements LightAccessor {
@@ -304,5 +306,31 @@ describe('光照引擎', () => {
     engine.onBlockChanged(4, 70, 4);
     settle(engine);
     expect(engine.pushStats.spread).toBeGreaterThan(0);
+  });
+});
+
+describe('光照快路径的判据（批次 282）', () => {
+  // 真机日志：fluid 每秒 3000+ 次写入，几乎都是"水的液面 1→2 / 下落位切换"，
+  // 挡光与发光都没变却每次都跑一趟清光 BFS → 光照预算被吃满。
+  it('水的液面变化不需要重算光照（挡光与发光都没变）', () => {
+    expect(lightNeedsUpdate(Block.WATER, withFluidLevel(0, 1), Block.WATER, withFluidLevel(0, 2))).toBe(false);
+    expect(lightNeedsUpdate(Block.WATER, withFluidLevel(0, 0), Block.WATER, withFluidLevel(0, 7))).toBe(false);
+  });
+
+  it('空气 ↔ 水需要重算（挡光 0 → 1）', () => {
+    expect(lightNeedsUpdate(Block.AIR, 0, Block.WATER, 0)).toBe(true);
+    expect(lightNeedsUpdate(Block.WATER, 0, Block.AIR, 0)).toBe(true);
+  });
+
+  it('换一种同样挡光的实心方块不需要重算', () => {
+    expect(lightNeedsUpdate(Block.STONE, 0, Block.DIRT, 0)).toBe(false);
+  });
+
+  it('红石灯亮起必须重算（自发光 0 → 15）', () => {
+    expect(lightNeedsUpdate(Block.REDSTONE_LAMP, 0, Block.REDSTONE_LAMP, withPowered(0, true))).toBe(true);
+  });
+
+  it('光源方块换同样等级的光源不需要重算', () => {
+    expect(lightNeedsUpdate(Block.GLOWSTONE, 0, Block.SEA_LANTERN, 0)).toBe(false);
   });
 });

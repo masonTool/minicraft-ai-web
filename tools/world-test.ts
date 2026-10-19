@@ -34,6 +34,7 @@ import {
 } from '../src/core/world/SpawnPoint.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { LEGACY_WORLD_ID, WorldRegistry, dbNameFor } from '../src/core/save/WorldRegistry.ts';
+import { readFileSync } from 'node:fs';
 import { relativeTime } from '../src/ui/WorldScreen.ts';
 
 let passed = 0;
@@ -395,6 +396,16 @@ console.log('\n[相对时间]');
   check('小时', relativeTime(now - 5 * 3_600_000, now) === '5 小时前');
   check('天', relativeTime(now - 3 * 86_400_000, now) === '3 天前');
   check('未来时间不会显示负数', relativeTime(now + 60_000, now) === '刚刚');
+}
+
+console.log('\n[光照快路径：写入侧的接线（批次 282）]');
+{
+  // 判据本身在 `tests/light.test.ts` 里逐条断言；这里只保证 `World` 的两条写入路径
+  // 真的用了它，而且 `onBlockChanged` 没有被漏在分支外面（漏一处就等于没做）。
+  const src = readFileSync(new URL('../src/core/world/World.ts', import.meta.url), 'utf8');
+  check('两条写入路径都用 lightNeedsUpdate 判定', (src.match(/lightNeedsUpdate\(/g) ?? []).length === 2);
+  check('onBlockChanged 全部在 lightChanged 分支里', (src.match(/if \(lightChanged\) this\.light\.onBlockChanged/g) ?? []).length === 2);
+  check('跳过光照的写入单独计数（诊断）', src.includes('this.lightSkipped++'));
 }
 
 console.log(`\n世界测试：${passed} 通过 / ${failed} 失败`);
