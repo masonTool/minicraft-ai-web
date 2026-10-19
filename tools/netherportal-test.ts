@@ -8,7 +8,7 @@
  *  3. 点燃：填满门方块、带上轴向状态、**不消耗耐久**（这一条由 main 保证，这里断言返回值）
  *  4. 传送坐标：÷8 / ×8、竖直按高度比例并夹紧、末地也去下界
  *  5. 目的地：找已有的门 / 新建门的选位（脚下要实心、框外要空）/ 框被拆掉后清门
- *  6. 站门计时：落地锁定（走出门才重新武装，取代原版 15 秒冷却）
+ *  6. 站门计时：落地宽限（挡住"落地即弹回"，取代原版 15 秒冷却）
  *
  * 运行：npm run test:portal
  */
@@ -28,6 +28,7 @@ import {
   PORTAL_LIGHT,
   PORTAL_MAX_HEIGHT,
   PORTAL_MAX_WIDTH,
+  PORTAL_REENTRY_GRACE_TICKS,
   PORTAL_SEARCH_RADIUS,
   buildPortal,
   canBuildPortalAt,
@@ -392,12 +393,12 @@ console.log('\n[框被拆掉之后清门]');
   equal('框完整时不会被误清', clearBrokenPortalsAround(intact, -1, 63, 0).length, 0);
 }
 
-console.log('\n[站门计时：落地锁定]');
+console.log('\n[站门计时：落地宽限]');
 {
-  const state: PortalStanding = { ticks: 0, locked: false };
+  const state: PortalStanding = { ticks: 0, locked: false, lockedTicks: 0 };
   check('不在门里时不计时、也不传', !stepPortalStanding(state, false, PORTAL_IGNITE_TICKS) && state.ticks === 0);
 
-  // 普通模式：站满 80 tick 才传（这一条是原来就有的手感，别在改锁定时弄丢）
+  // 普通模式：站满 80 tick 才传（这一条是原来就有的手感，别在改宽限时弄丢）
   let traveledAt = 0;
   for (let i = 1; i <= PORTAL_IGNITE_TICKS; i++) {
     if (stepPortalStanding(state, true, PORTAL_IGNITE_TICKS)) {
@@ -408,38 +409,59 @@ console.log('\n[站门计时：落地锁定]');
   equal('普通模式站满 80 tick（4 秒）才传', traveledAt, PORTAL_IGNITE_TICKS);
   equal('传送之后计时归零', state.ticks, 0);
 
-  // 刚落地：人还站在目的地那扇门里，站多久都不该被弹回去
+  // 刚落地：宽限期内不会被弹回去（否则一落地就被弹回原维度）
+  state.ticks = 0;
   state.locked = true;
-  let bounced = false;
-  for (let i = 0; i < 400; i++) {
-    if (stepPortalStanding(state, true, PORTAL_IGNITE_TICKS)) bounced = true;
+  state.lockedTicks = 0;
+  let bouncedDuringGrace = false;
+  for (let i = 1; i <= PORTAL_REENTRY_GRACE_TICKS; i++) {
+    if (stepPortalStanding(state, true, PORTAL_IGNITE_TICKS, PORTAL_REENTRY_GRACE_TICKS)) {
+      bouncedDuringGrace = true;
+    }
   }
-  check('落地锁定期间站在门里 20 秒也不会被弹回去', !bounced);
-  equal('锁定期间站门进度始终是 0', state.ticks, 0);
+  check('落地宽限内站在门里不会被弹回去', !bouncedDuringGrace);
+  check('宽限走完就解除', !state.locked);
+  equal('宽限最后一 tick 开始计入站门', state.ticks, 1);
 
-  // 走出去 → 解除锁定；再进来要重新站满 4 秒（不需要再等 15 秒冷却）
-  stepPortalStanding(state, false, PORTAL_IGNITE_TICKS);
-  check('走出门就解除落地锁定', !state.locked);
-  let ticksInside = 0;
-  while (!stepPortalStanding(state, true, PORTAL_IGNITE_TICKS)) ticksInside++;
-  equal('再进来要重新站满 80 tick', ticksInside + 1, PORTAL_IGNITE_TICKS);
+  // ⚠️ 这是批次 329 的回归点：宽限过后**站着不动**也必须能折返，
+  // 否则玩家回到主世界后站在门里会以为"传送门坏了"
+  let counted = state.ticks;
+  while (!stepPortalStanding(state, true, PORTAL_IGNITE_TICKS, PORTAL_REENTRY_GRACE_TICKS)) counted++;
+  equal('宽限过后站着不动，站满 80 tick 也能折返', counted + 1, PORTAL_IGNITE_TICKS);
 
-  // 创造模式：1 tick 就传，但落地锁定同样生效
-  const creative: PortalStanding = { ticks: 0, locked: false };
-  check('创造模式 1 tick 就传', stepPortalStanding(creative, true, PORTAL_CREATIVE_IGNITE_TICKS));
-  const creativeLocked: PortalStanding = { ticks: 0, locked: true };
+  // 走出去再进来：立刻按正常节奏计时（不吃宽限）
+  state.ticks = 0;
+  state.locked = true;
+  state.lockedTicks = 0;
+  stepPortalStanding(state, false, PORTAL_IGNITE_TICKS, PORTAL_REENTRY_GRACE_TICKS);
+  check('走出门立刻解除宽限', !state.locked);
+  let afterReentry = 0;
+  while (!stepPortalStanding(state, true, PORTAL_IGNITE_TICKS, PORTAL_REENTRY_GRACE_TICKS)) afterReentry++;
+  equal('再进来直接站满 80 tick（不用再等宽限）', afterReentry + 1, PORTAL_IGNITE_TICKS);
+
+  // 创造模式：1 tick 就传，但落地宽限同样生效
+  const creative: PortalStanding = { ticks: 0, locked: false, lockedTicks: 0 };
   check(
-    '创造模式落地锁定同样不会一落地就弹回',
-    !stepPortalStanding(creativeLocked, true, PORTAL_CREATIVE_IGNITE_TICKS),
+    '创造模式 1 tick 就传',
+    stepPortalStanding(creative, true, PORTAL_CREATIVE_IGNITE_TICKS, PORTAL_REENTRY_GRACE_TICKS),
   );
-  stepPortalStanding(creativeLocked, false, PORTAL_CREATIVE_IGNITE_TICKS);
-  check('创造模式走出门后也只需 1 tick', stepPortalStanding(creativeLocked, true, PORTAL_CREATIVE_IGNITE_TICKS));
+  const creativeLocked: PortalStanding = { ticks: 0, locked: true, lockedTicks: 0 };
+  check(
+    '创造模式落地宽限内同样不会弹回',
+    !stepPortalStanding(creativeLocked, true, PORTAL_CREATIVE_IGNITE_TICKS, PORTAL_REENTRY_GRACE_TICKS),
+  );
+  stepPortalStanding(creativeLocked, false, PORTAL_CREATIVE_IGNITE_TICKS, PORTAL_REENTRY_GRACE_TICKS);
+  check(
+    '创造模式走出门后只需 1 tick',
+    stepPortalStanding(creativeLocked, true, PORTAL_CREATIVE_IGNITE_TICKS, PORTAL_REENTRY_GRACE_TICKS),
+  );
 }
 
 console.log('\n[常量与手感数值]');
 {
   equal('站门 4 秒（80 tick）', PORTAL_IGNITE_TICKS, 80);
   equal('创造模式 1 tick', PORTAL_CREATIVE_IGNITE_TICKS, 1);
+  equal('落地宽限 2 秒（40 tick）', PORTAL_REENTRY_GRACE_TICKS, 40);
   equal('水平缩放 1:8', NETHER_SCALE, 8);
   equal('门方块没有对应物品（与 I12 的火焰同一条规矩）', itemDef(Block.NETHER_PORTAL), undefined);
   check('打火石仍然在（点门要用它）', itemDef(Item.FLINT_AND_STEEL) !== undefined);

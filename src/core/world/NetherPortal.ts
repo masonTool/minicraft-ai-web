@@ -18,10 +18,11 @@
  *  - 框被破坏后门随之熄灭（见 `portalClusterAround`）
  *
  * 与原版的差异（写进 TASKS K8）：
- *  - **没有原版那 300 tick（15 秒）传送冷却**：改成"落地时人还站在目的地那扇门里就先不计时，
- *    走出去一次才重新武装"（见 `stepPortalStanding`）。原版那 15 秒会让"进门后想马上折返"
- *    干等 19 秒（15 + 4），手感上就是"传送门没反应"；换成位置锁定后既不会一落地被弹回去，
- *    也不用干等
+ *  - **没有原版那 300 tick（15 秒）传送冷却**：改成"落地后先给 `PORTAL_REENTRY_GRACE_TICKS`
+ *    （2 秒）宽限，免得一落地就被弹回去"（见 `stepPortalStanding`）。原版那 15 秒会让
+ *    "进门后想马上折返"干等 19 秒（15 + 4），手感上就是"传送门没反应"；
+ *    宽限期间站在门里不计时，宽限一过照常站 4 秒就能走——**站着不动也能折返**，
+ *    不需要先走出去（走出去再进来则立刻按正常节奏计时）
  *  - 没有 POI 索引，找门的半径两个方向都取 **16 格**（原版主世界侧是 128 格）。
  *    代价：在距原门 16~128 格处单独建的门不会自动连起来（会各自新建一座）
  *  - 门面是一张**整格**的紫色方块（原版是 1 格厚的平面），没有 4 个朝向的模型
@@ -74,37 +75,54 @@ export const PORTAL_LIGHT = 11;
 
 // ---------------------------------------------------------------- 站门计时
 
+/**
+ * 落地后的宽限（tick）：40 = 2 秒。
+ *
+ * 刚穿过门时人正站在目的地那扇门里，没有这段宽限就会"落地即被弹回去"。
+ * 宽限期一过照常计时——所以玩家站在门里不动也能折返（宽限 + 站门），
+ * 走出去再进来则是立刻按正常节奏计时，不用再多等。
+ */
+export const PORTAL_REENTRY_GRACE_TICKS = 40;
+
 /** 站门计时的状态（主循环每 tick 喂一次 `stepPortalStanding`） */
 export interface PortalStanding {
   /** 站在门里的累计 tick */
   ticks: number;
-  /**
-   * 刚穿过门落地、人还站在**目的地那扇门**里：为真时不计时，必须先走出去一次。
-   *
-   * 这就是替代"传送后 15 秒冷却"的那条规则：目的相同（不会一落地就被弹回去），
-   * 但玩家想立刻折返时只要走出门再站回来即可，不用干等。
-   */
+  /** 刚穿过门落地、还在落地宽限期内：这段时间不计时（否则一落地就被弹回去） */
   locked: boolean;
+  /** 落地宽限已经走了多少 tick */
+  lockedTicks: number;
 }
 
 /**
  * 站门计时一步（纯逻辑，见 `tools/netherportal-test.ts`）。
  *
- * - 不在门里：计时清零 + **解除落地锁定**（走出门 = 重新武装）
- * - 落地锁定中：计时保持 0，这一 tick 不会传送（也不会把人弹回去）
+ * - 不在门里：计时清零、解除落地宽限（走出去再进来 = 立刻按正常节奏计时）
+ * - 落地宽限中：计时保持 0，这一 tick 不会传送
  * - 其余：累计 tick，满 `waitTicks` 返回 true
  *
  * @returns 这一 tick 是否该传送（调用方负责复位计时、切维度）
  */
-export function stepPortalStanding(state: PortalStanding, inPortal: boolean, waitTicks: number): boolean {
+export function stepPortalStanding(
+  state: PortalStanding,
+  inPortal: boolean,
+  waitTicks: number,
+  graceTicks = 0,
+): boolean {
   if (!inPortal) {
     state.ticks = 0;
     state.locked = false;
+    state.lockedTicks = 0;
     return false;
   }
   if (state.locked) {
-    state.ticks = 0;
-    return false;
+    state.lockedTicks++;
+    if (state.lockedTicks < graceTicks) {
+      state.ticks = 0;
+      return false;
+    }
+    // 宽限走完：从这一 tick 起照常计时（站着不动也能折返）
+    state.locked = false;
   }
   state.ticks++;
   if (state.ticks < waitTicks) return false;

@@ -197,6 +197,7 @@ import { FIRE_IGNITE_SECONDS, burnsOnContact, igniteAt } from './core/world/Fire
 import {
   PORTAL_CREATIVE_IGNITE_TICKS,
   PORTAL_IGNITE_TICKS,
+  PORTAL_REENTRY_GRACE_TICKS,
   buildPortal,
   clearBrokenPortalsAround,
   findPortalNear,
@@ -613,7 +614,6 @@ import {
   PENDING_SETTLE_LIMIT,
   PLACE_COOLDOWN,
   PORTAL_ARRIVAL_TIMEOUT_FRAMES,
-  PORTAL_REENTRY_HINT_TICKS,
   RANDOM_TICK_RADIUS,
   REACH,
   RESPAWN_DELAY,
@@ -818,16 +818,13 @@ class App {
   // ---------------------------------------------------------------- 下界传送门（K8）
 
   /**
-   * 站门计时 + "刚落地要先走出这扇门"的锁定（20Hz 结算，普通 80 tick = 4 秒）。
+   * 站门计时 + 落地宽限（20Hz 结算，普通 80 tick = 4 秒）。
    *
    * 这里**没有**原版的 300 tick 传送冷却：落地时人在目的地那扇门里，
-   * `locked` 会把计时压住；走出门一次就解除，想折返的人不用干等 15 秒。
+   * `locked` 只挡 `PORTAL_REENTRY_GRACE_TICKS`（2 秒）——够不让人一落地就被弹回去，
+   * 宽限一过站着不动也能正常折返（走出去再进来则立刻按 4 秒计时）。
    */
-  private portalStanding: PortalStanding = { ticks: 0, locked: false };
-  /** 落地锁定期间站在门里已经多久（只用来决定什么时候给一次提示） */
-  private portalLockHintTicks = 0;
-  /** 「先走出去再回来」的提示是否已经给过（整个会话一次就够） */
-  private portalLockHintShown = false;
+  private portalStanding: PortalStanding = { ticks: 0, locked: false, lockedTicks: 0 };
   /**
    * 末地传送门的落地计时（K9，批次 111）：末地传送门是**碰到就传**
    * （原版如此，不像下界门要站 4 秒），所以只等 1 tick 让物理先站定。
@@ -11219,32 +11216,16 @@ class App {
   /**
    * 站门计时（K8）。按 20Hz 结算：普通模式 80 tick（4 秒）、创造模式 1 tick（原版数值）。
    *
-   * 计时本身在 `stepPortalStanding`（纯逻辑，可离线断言）。这里多出来的两件事：
-   *  - 传送途中不计时；
-   *  - 落地锁定期间站在门里超过 2 秒，给一次"先走出去"的提示——
-   *    这段时间原来靠 15 秒冷却挡着，现在站着不会发生任何事，不说一句会像门坏了。
+   * 计时本身在 `stepPortalStanding`（纯逻辑，可离线断言）；唯一的前提是
+   * 传送途中不计时（目的地的区块还没加载出来）。
    */
   private tickPortal(): void {
     if (this.pendingArrival) return;
     // 创造模式（批次 181 起与"在飞"分开）走瞬发，原版对创造/旁观返回 1
     const wait = this.isCreative ? PORTAL_CREATIVE_IGNITE_TICKS : PORTAL_IGNITE_TICKS;
-    if (stepPortalStanding(this.portalStanding, this.playerInPortal(), wait)) {
+    if (stepPortalStanding(this.portalStanding, this.playerInPortal(), wait, PORTAL_REENTRY_GRACE_TICKS)) {
       this.travelThroughPortal();
-      return;
     }
-    this.maybeHintPortalExit();
-  }
-
-  /** 刚到目的地、人还站在门里：等 2 秒给一句话，说明要走出去才能重新用 */
-  private maybeHintPortalExit(): void {
-    if (!this.portalStanding.locked || !this.playerInPortal()) {
-      this.portalLockHintTicks = 0;
-      return;
-    }
-    if (this.portalLockHintShown) return;
-    if (++this.portalLockHintTicks < PORTAL_REENTRY_HINT_TICKS) return;
-    this.portalLockHintShown = true;
-    this.hudToast.show('走出传送门再进来，就能返回');
   }
 
   /** 传送：算出另一边的坐标，切维度，然后把落地交给 `resolvePortalArrival` */
@@ -11336,8 +11317,8 @@ class App {
 
     if (pending.kind === 'end' || pending.kind === 'spawn') {
       this.pendingArrival = null;
-      // 末地这趟不走下界门：把站门状态整个复位，免得留着一个用不上的锁定
-      this.portalStanding = { ticks: 0, locked: false };
+      // 末地这趟不走下界门：把站门状态整个复位，免得留着一个用不上的宽限
+      this.portalStanding = { ticks: 0, locked: false, lockedTicks: 0 };
       this.endPortalTicks = 0;
       // 末地那一侧先补平台：玩家站在虚空上方落地会直接掉下去
       if (pending.kind === 'end') buildEndArrivalPlatform(this.portalWorld);
@@ -11366,16 +11347,17 @@ class App {
   }
 
   /**
-   * 刚穿过门落地：锁住这扇门，直到玩家走出去一次。
+   * 刚穿过门落地：进入落地宽限期（`PORTAL_REENTRY_GRACE_TICKS`，2 秒）。
    *
    * 这取代了原来的 300 tick（15 秒）传送冷却——落地时人正站在目的地那扇门里，
    * 冷却会把"想马上折返"的人挡 15 秒，再加 4 秒站门，手感就是"门没反应"。
-   * 位置锁定的目的相同（不会一落地就被弹回去），但代价只有"走出门那一步"。
+   * 宽限只挡"落地即弹回"：2 秒一过，站着不动也会照常计时（4 秒后折返），
+   * 不需要先走出去。
    */
   private lockPortalReentry(): void {
     this.portalStanding.ticks = 0;
     this.portalStanding.locked = true;
-    this.portalLockHintTicks = 0;
+    this.portalStanding.lockedTicks = 0;
   }
 
   /**
@@ -12008,10 +11990,9 @@ class App {
     this.lastPlayerX = sx;
     this.lastPlayerZ = sz;
     this.deathEl.classList.add('hidden');
-    // 重生点与传送门无关：站门计时、落地锁定与"传送途中"一律清掉，
-    // 免得死在下界的门里、重生回主世界之后还背着"先走出门"的锁定
-    this.portalStanding = { ticks: 0, locked: false };
-    this.portalLockHintTicks = 0;
+    // 重生点与传送门无关：站门计时、落地宽限与"传送途中"一律清掉，
+    // 免得死在下界的门里、重生回主世界之后还背着落地宽限
+    this.portalStanding = { ticks: 0, locked: false, lockedTicks: 0 };
     this.pendingArrival = null;
     // 重生点可能因为世界被改过（床被拆、地形被挖）而不再安全
     this.requestGroundSettle('respawn');
@@ -13648,7 +13629,7 @@ class App {
     inPortal: boolean;
     /** 站门计时的进度（0~1）：验收脚本靠它确认传送真的在计时 */
     portalProgress: number;
-    /** 刚落地、人还站在目的地那扇门里（要先走出去一次才会重新计时） */
+    /** 还在落地宽限期（挡住"一落地就被弹回去"的那 2 秒） */
     portalLocked: boolean;
   } {
     return {
