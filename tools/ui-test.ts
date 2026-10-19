@@ -626,6 +626,32 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       /\.inv-shell\.pocket-chrome \.inv-rail-left \.inv-pocket-recipe-tab \{[\s\S]{0,300}flex: 1 1 0;/.test(css),
   );
 
+  // 批次 276（用户）：熔炉/锻造台/酿造台等工作站改成"工作台式双栏壳"
+  check(
+    '工作站纳入双栏壳（左背包 + 右操作区）',
+    invSrc.includes('const workstation = isWorkstationMode(this.mode);') &&
+      invSrc.includes("const dual = this.mode === 'inventory' || workbench || workstation;"),
+  );
+  check(
+    '工作站覆盖十种有操作区的模式（纯存储不在此列）',
+    ['furnace', 'smoker', 'blast_furnace', 'smithing', 'anvil', 'grindstone', 'stonecutter', 'brewing', 'enchanting', 'campfire'].every(
+      (mode) => invSrc.includes(`case '${mode}':`),
+    ) &&
+      !invSrc.includes("case 'chest':\n    case 'barrel':"),
+  );
+  check(
+    '工作站分支：左栏主背包、右栏 topArea，藏掉左右轨/页签/装备列',
+    /if \(workstation\) \{[\s\S]{0,1200}this\.panel\.dataset\.pocketTab = 'station';[\s\S]{0,1200}this\.gearEl\.style\.display = 'none';/.test(invSrc) &&
+      /if \(workstation\) \{[\s\S]{0,1600}this\.placeHotbar\(true\);/.test(invSrc),
+  );
+  check(
+    '工作站双栏 CSS：左 auto + 右 1fr、面板加宽、窄屏可上下堆叠',
+    css.includes('.inv-panel.pocket-ui.pocket-dual.station-ui {') &&
+      css.includes('grid-template-columns: auto minmax(0, 1fr);') &&
+      css.includes('width: min(calc(100vw - 24px), 800px);') &&
+      css.includes('@media (max-width: 560px)'),
+  );
+
   // 左栏状态机（批次 181）：只有一个 pane，删掉两套互相打架的布尔
   check('左栏只有一个 pane 状态', invSrc.includes("private pane: 'creative' | 'category' | 'items'"));
   check(

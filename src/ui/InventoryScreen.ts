@@ -192,6 +192,33 @@ export type InventoryPanelMode =
    */
   | 'trade';
 
+/**
+ * 有"操作区"的工作站（批次 276）。
+ *
+ * 这些界面在手机上是"把材料放进去、从产物格取出来"，与工作台同一套双栏壳：
+ * 左栏 = 玩家自己的 7×4 主背包 + 底部快捷栏，右栏 = 该工作站的操作区。
+ *
+ * ⚠️ 纯存储（箱子/木桶/潜影盒/漏斗/投掷器/发射器）不算：它们没有"操作区"，
+ * 继续走原来的单栏面板，避免把这一批的回归面扩到所有容器。
+ */
+export function isWorkstationMode(mode: InventoryPanelMode): boolean {
+  switch (mode) {
+    case 'furnace':
+    case 'smoker':
+    case 'blast_furnace':
+    case 'smithing':
+    case 'anvil':
+    case 'grindstone':
+    case 'stonecutter':
+    case 'brewing':
+    case 'enchanting':
+    case 'campfire':
+      return true;
+    default:
+      return false;
+  }
+}
+
 export interface InventoryScreenHooks {
   onOpenChange?: (open: boolean) => void;
   /**
@@ -2008,9 +2035,11 @@ export class InventoryScreen {
     if (creativePlayer && this.pane === 'category') this.pane = 'creative';
     if (!creativePlayer && this.pane === 'creative') this.pane = 'items';
     const showCreativeItems = creative && this.pane === 'creative';
-    // 玩家背包与世界里的工作台共用同一副双栏壳；其余（箱子/熔炉/铁砧…）走单栏
+    // 玩家背包 / 工作台 / 有操作区的工作站共用同一副双栏壳；
+    // 纯存储容器（箱子/木桶/潜影盒…）仍走单栏面板。
     const workbench = this.mode === 'crafting';
-    const dual = this.mode === 'inventory' || workbench;
+    const workstation = isWorkstationMode(this.mode);
+    const dual = this.mode === 'inventory' || workbench || workstation;
 
     this.panel.classList.toggle('workbench-ui', workbench);
     if (this.creativeToggleBtn) {
@@ -2021,7 +2050,7 @@ export class InventoryScreen {
     // —— 容器类界面：单栏通用面板，页签 / 左右轨 / 配方书落脚点都不参与 ——
     if (!dual) {
       this.panel.classList.remove('pocket-ui', 'pocket-dual');
-      this.panel.classList.remove('creative-ui');
+      this.panel.classList.remove('creative-ui', 'station-ui');
       this.panel.dataset.pocketLeft = '';
       this.shellEl.classList.remove('pocket-chrome');
       this.pocketTabsEl.classList.add('hidden');
@@ -2051,7 +2080,46 @@ export class InventoryScreen {
       return;
     }
 
+    // —— 工作站双栏壳（批次 276）——
+    // 左栏固定是玩家自己的主背包（7×4），右栏是该工作站的操作区。
+    // 与工作台同一副壳、同一套几何；区别只在右栏内容，以及没有左右轨页签。
+    if (workstation) {
+      this.panel.classList.add('pocket-ui', 'pocket-dual', 'station-ui');
+      this.panel.classList.remove('creative-ui');
+      this.panel.dataset.pocketLeft = 'items';
+      // `station` 不是一个可点的页签：它只用来让 CSS 的 armor/crafting 规则不命中
+      this.panel.dataset.pocketTab = 'station';
+      this.shellEl.classList.add('pocket-chrome');
+      this.pocketTabsEl.classList.add('hidden');
+      this.pocketRecipeBar.classList.add('hidden');
+      this.railLeft.classList.add('hidden');
+      this.railRight.classList.add('hidden');
+      // 右轨被藏了 → 成就退到标题栏那颗；工作站没有合成配方书
+      this.achievementsBtn?.classList.remove('hidden');
+      this.railAchievementsEl?.classList.add('hidden');
+      this.recipesBtn?.classList.add('hidden');
+      this.creativeToggleBtn?.classList.add('hidden');
+      this.playerBody.style.display = '';
+      this.personalInventoryTitleEl.style.display = 'none';
+      this.creativeSection.style.display = 'none';
+      this.categoryHostEl.style.display = 'none';
+      this.mainGridEl.style.display = '';
+      this.hotbarGridEl.style.display = '';
+      this.gearEl.style.display = 'none';
+      this.topArea.style.display = '';
+      this.syncCraftArrow(false);
+      this.detachRecipeBook();
+      this.hooks.onCloseRecipes?.();
+      this.restoreInvTabToRail();
+      this.placeHotbar(true);
+      this.syncPocketBodyClass(true);
+      this.lastLeftPane = 'items';
+      this.lastRightCrafting = true;
+      return;
+    }
+
     // —— 双栏壳 ——
+    this.panel.classList.remove('station-ui');
     if (this.pocketTab === 'inventory') this.pocketTab = 'crafting';
     if (workbench) this.pocketTab = 'crafting';
 

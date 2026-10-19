@@ -2530,6 +2530,55 @@
         border-left: 2px solid #8a8a8a;
         box-sizing: border-box;
       }
+      /* ---------------- 工作站双栏（批次 276） ----------------
+         左栏固定 7×40 的玩家主背包（与工作台同一套几何），右栏是该工作站的操作区。
+         面板比普通背包宽：工作站没有左右轨，省下来的 64px 给操作区。 */
+      .inv-panel.pocket-ui.pocket-dual.station-ui {
+        width: min(calc(100vw - 24px), 800px);
+        max-width: min(calc(100vw - 24px), 800px);
+      }
+      .inv-panel.pocket-ui.pocket-dual.station-ui .inv-body {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+      .inv-panel.pocket-ui.pocket-dual.station-ui .inv-top {
+        min-width: 0;
+        /* 铁砧/酿造/切石机这类宽操作区在自己的右栏里滚，不把整块面板撑破。
+           ⚠️ 不能居中：内容高于右栏时，居中的 flex 会把顶部溢出到滚动区之外。 */
+        align-items: flex-start;
+        justify-content: center;
+        overflow: auto;
+      }
+      /* 右栏偏窄时允许横排换行：`.anvil-row` 原本是 nowrap，窄栏会直接溢出 */
+      .inv-panel.pocket-ui.pocket-dual.station-ui .anvil-row,
+      .inv-panel.pocket-ui.pocket-dual.station-ui .enchant-layout {
+        flex-wrap: wrap;
+      }
+      /* 触摸端的面板宽度/高度由 --inv-pocket-* 统一定，station 只是取更宽的那一档 */
+      body.touch-mode .inv-panel.pocket-ui.pocket-dual.station-ui {
+        width: min(calc(100vw - 24px), 800px);
+        max-width: min(calc(100vw - 24px), 800px);
+        height: var(--inv-pocket-h);
+        max-height: var(--inv-pocket-h);
+      }
+      /* 竖屏 / 极窄屏放不下并排：退回"工作站在上、背包在下"，面板自己滚 */
+      @media (max-width: 560px) {
+        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-body {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto auto;
+          overflow-y: auto;
+        }
+        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-top {
+          grid-column: 1;
+          grid-row: 1;
+          height: auto;
+          border-left: 0;
+          border-bottom: 2px solid #8a8a8a;
+        }
+        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-main > .inv-grid {
+          grid-column: 1;
+          grid-row: 2;
+        }
+      }
       .inv-panel.pocket-ui.pocket-dual .inv-gear {
         grid-column: 2;
         grid-row: 1 / span 2;
