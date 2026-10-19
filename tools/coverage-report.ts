@@ -21,6 +21,7 @@ import { BLOCKS, Block, blockDef } from '../src/core/registry/blocks.ts';
 import { CREATIVE_ITEMS } from '../src/core/registry/items.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
 import { BIOMES } from '../src/core/gen/Biome.ts';
+import { NETHER_BIOME_NAMES } from '../src/core/gen/NetherGenerator.ts';
 import { STRUCTURE_KINDS } from '../src/core/gen/Structures.ts';
 import { NETHER_STRUCTURE_KINDS } from '../src/core/gen/Bastion.ts';
 import { ENCHANTMENTS } from '../src/core/registry/enchantments.ts';
@@ -59,7 +60,7 @@ const SPEC = {
   blocks: 700,
   items: 1100,
   mobs: 70,
-  biomes: 72,
+  biomes: 61,
   structures: 30,
   trees: 11,
   enchantments: 38,
@@ -148,9 +149,13 @@ const rows: readonly Row[] = [
   {
     label: '生物群系',
     spec: SPEC.biomes,
-    now: BIOMES.length,
-    basis: 'TASKS §0「约 72 个」',
-    gap: '主世界变体、繁茂洞穴/溶洞',
+    // ⚠️ 分母曾经写 72（"主世界 ~61 + 下界 5 + 末地 6"）——那是把 **1.18 全部群系的
+    // 61** 当成了"主世界"的数量，两边重复计数。批次 401 对着清单逐条核过：
+    // 主世界正好 **50** 个（本项目全部实现），`the_void` 1 个，下界 5 个（另一张表），
+    // 末地 5 个（末端是单一地形，没建群系表）。所以分子要把下界那张表加进来数。
+    now: BIOMES.length + NETHER_BIOME_NAMES.length,
+    basis: '原版 1.18 共 61 个：主世界 50 + the_void + 下界 5 + 末地 5',
+    gap: '末地 5 个 + the_void：都是"只影响雾色/刷怪表"的标注型群系，本项目的末端是单一地形',
   },
   {
     label: '结构',
