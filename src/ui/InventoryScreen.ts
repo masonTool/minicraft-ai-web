@@ -5427,13 +5427,16 @@ export class InventoryScreen {
       }
       // 打开别的界面就不再"与这个村民交易"了（他是一个实体，不是容器）
       this.activeVillager = null;
-
-      if (this.activeContainer) {
-        this.activeContainer.onChange = () => {
-          this.containerDirty = true;
-        };
-      }
       this.rebuildTopArea();
+    }
+
+    // 批次 313：close() 会把 activeContainer.onChange 清空；同一个容器重开时
+    // 上面的 if 不会进来，必须在这里无条件重新挂上，否则炉子还在烧、界面进度不动。
+    if (this.activeContainer) {
+      this.activeContainer.onChange = () => {
+        this.containerDirty = true;
+      };
+      this.containerDirty = true;
     }
 
     // 批次 312：熔炉产物默认留在产物槽；打开界面不再自动收进背包

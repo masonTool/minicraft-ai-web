@@ -887,6 +887,12 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     ),
   );
   check(
+    '同一容器重开也重新挂 onChange，进度不会静止（批次 313）',
+    /if \(this\.activeContainer\) \{[\s\S]{0,160}this\.activeContainer\.onChange = \(\) => \{[\s\S]{0,80}this\.containerDirty = true;/.test(
+      invSrc,
+    ),
+  );
+  check(
     '点创造分类会切回无限物品页',
     /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
   );
