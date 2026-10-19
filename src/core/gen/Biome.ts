@@ -52,6 +52,8 @@ export const Biome = {
   ERODED_BADLANDS: 43,
   // 批次 363：冰刺平原（积雪平原的区域变体）
   ICE_SPIKES: 44,
+  // 批次 366：破碎热带草原（最陡的热带草原）
+  WINDSWEPT_SAVANNA: 45,
   BEACH: 4,
   STONY_SHORE: 5,
   PLAINS: 6,
@@ -847,6 +849,25 @@ export const BIOMES: readonly BiomeDef[] = [
     snowy: false,
     grassColor: 0x90814d,
     foliageColor: 0x9e814d,
+  },
+  {
+    id: Biome.WINDSWEPT_SAVANNA,
+    name: 'windswept_savanna',
+    ocean: false,
+    temperature: [0.3, 1.1],
+    humidity: [-0.35, 0.3],
+    continentalness: [-0.15, 1.1],
+    // 比热带高原（-0.7 下限）更窄：在最陡的一档赢过它
+    erosion: [-1.1, -0.93],
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.GRASS_BLOCK,
+    subSurface: Block.DIRT,
+    subDepth: 3,
+    underwater: Block.DIRT,
+    snowy: false,
+    grassColor: 0xbfb755,
+    foliageColor: 0xaea42a,
   },
   {
     id: Biome.ICE_SPIKES,

@@ -3277,6 +3277,21 @@ const SPECS: readonly BlockSpec[] = [
     lightOpacity: 0,
     itemless: true,
   },
+  // 苔藓族（批次 367）：沼泽里的苔藓块与苔藓地毯
+  {
+    id: 598,
+    name: 'minecraft:moss_block',
+    tiles: ['moss_block', 'moss_block', 'moss_block'] as const,
+  },
+  {
+    id: 599,
+    name: 'minecraft:moss_carpet',
+    tiles: ['moss_block', 'moss_block', 'moss_block'] as const,
+    shape: 'flat' as const,
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
   // 蘑菇岛族（批次 352）：菌丝 + 巨型蘑菇的柄与两种菌盖
   {
     id: 591,
@@ -3662,6 +3677,8 @@ export const Block = {
   ZOMBIE_SPAWNER: 595,
   CAVE_SPIDER_SPAWNER: 596,
   SILVERFISH_SPAWNER: 597,
+  MOSS_BLOCK: 598,
+  MOSS_CARPET: 599,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -3982,6 +3999,8 @@ HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);
 HARDNESS.set(Block.BROWN_MUSHROOM_BLOCK, 0.2);
 HARDNESS.set(Block.RED_MUSHROOM_BLOCK, 0.2);
+HARDNESS.set(Block.MOSS_BLOCK, 0.1);
+HARDNESS.set(Block.MOSS_CARPET, 0.1);
 // 灵魂火把 / 灵魂灯笼：与普通火把同级（一碰就掉）
 HARDNESS.set(Block.SOUL_TORCH, 0);
 HARDNESS.set(Block.SOUL_LANTERN, 3.5);

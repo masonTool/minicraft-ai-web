@@ -806,7 +806,8 @@ interface BiomeFeature {
     | 'dead_bush'
     | 'bamboo'
     | 'huge_mushroom'
-    | 'ice_spike';
+    | 'ice_spike'
+    | 'moss_patch';
   /** 特殊地物密度 */
   specialDensity: number;
   /**
@@ -1110,7 +1111,9 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     flowers: 0.28,
     flowerKinds: [...PLAINS_FLOWERS, Block.BLUE_ORCHID],
     mushrooms: 0.002,
-    specialDensity: 0,
+    // 苔藓小块（批次 367；原版长在繁茂洞穴，这里借花海的湿润地表生成）
+    special: 'moss_patch',
+    specialDensity: 0.008,
   },
   [Biome.OLD_GROWTH_BIRCH_FOREST]: {
     trees: [['birch', 8], ['oak', 1]],
@@ -1187,6 +1190,15 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     mushrooms: 0,
     special: 'dead_bush',
     specialDensity: 0.01,
+  },
+  [Biome.WINDSWEPT_SAVANNA]: {
+    trees: [['acacia', 2], ['oak', 1]],
+    treeDensity: 0.015,
+    grass: 0.12,
+    flowers: 0.003,
+    flowerKinds: [Block.DANDELION],
+    mushrooms: 0,
+    specialDensity: 0,
   },
   [Biome.ICE_SPIKES]: {
     ...EMPTY_FEATURE,
@@ -1829,6 +1841,27 @@ function placeSpecial(
         if (!isPlantable(w, wx, y, wz, SOIL)) continue;
         PLANTERS.bamboo(w, world, wx, wz, rng, woodFor('bamboo'));
         if (stats) stats.specials++;
+        continue;
+      }
+
+      if (kind === 'moss_patch') {
+        if (!isPlantable(w, wx, y, wz, SOIL)) continue;
+        const r = 1 + rng.int(2);
+        let placed = 0;
+        for (let dz = -r; dz <= r; dz++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (dx * dx + dz * dz > r * r) continue;
+            const px = wx + dx;
+            const pz = wz + dz;
+            if (!w.owns(px, pz)) continue;
+            if (rng.chance(0.55)) {
+              if (w.put(px, y, pz, Block.MOSS_BLOCK)) placed++;
+            } else if (rng.chance(0.5)) {
+              if (w.put(px, y, pz, Block.MOSS_CARPET)) placed++;
+            }
+          }
+        }
+        if (placed > 0 && stats) stats.specials += placed;
         continue;
       }
 

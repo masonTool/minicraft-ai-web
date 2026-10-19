@@ -2626,4 +2626,8 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 
 - 批次 359（海洋系）：**守卫者 + 远古守卫者** + 海晶碎片/砂粒（生物 52 → 54）。
 
+- 批次 360（规则）：**fallDamage / fireDamage / drowningDamage**（规则 11 → 14）。
+
+- 批次 361（规则）：**announceAdvancements / sendCommandFeedback**（规则 14 → 16）。
+
 <!-- docs-archive:end -->

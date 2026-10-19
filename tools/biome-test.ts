@@ -117,7 +117,7 @@ check(
 );
 
 console.log('\n[批次 339：森林 / 丛林变体]');
-equal('群系表共 45 种', BIOMES.length, 45);
+equal('群系表共 46 种', BIOMES.length, 46);
 {
   // 批次 346：针叶林/山地/热带草原变体 + 恶地的区域变体
   const at = (temperature: number, humidity: number, erosion: number): string =>
@@ -126,6 +126,8 @@ equal('群系表共 45 种', BIOMES.length, 45);
   equal('原始云杉林（次陡）', at(0, 0.5, -0.7), 'old_growth_spruce_taiga');
   equal('多风森林（暖 + 陡）', at(0.6, 0.5, -0.9), 'windswept_forest');
   equal('热带高原', at(0.6, 0, -0.9), 'savanna_plateau');
+  // 批次 366：更陡的一档归破碎热带草原
+  equal('破碎热带草原', at(0.6, 0, -0.95), 'windswept_savanna');
   // 批次 362：砾石丘陵（暖 + 最陡）
   equal('砾石丘陵', at(-0.2, 0, -0.9), 'windswept_gravelly_hills');
   // 批次 352：蘑菇岛（暖湿 + 平坦）

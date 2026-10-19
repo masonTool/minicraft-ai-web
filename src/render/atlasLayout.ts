@@ -1054,6 +1054,7 @@ export const TILE_ORDER = [
   // 骨块（批次 349）
   'bone_block_side',
   'bone_block_top',
+  'moss_block',
   // 紫水晶族（批次 351）
   'amethyst_block',
   'budding_amethyst',

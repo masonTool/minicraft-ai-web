@@ -6186,3 +6186,6 @@ PAINTERS['red_mushroom_block_side'] = noisy(0xb03a3a, 12);
 // 海晶碎片/砂粒（批次 359）
 PAINTERS['item_prismarine_shard'] = noisy(0x6fc8b8, 20);
 PAINTERS['item_prismarine_crystals'] = noisy(0xd8e8a0, 20);
+
+// 苔藓（批次 367）：偏暗的草绿噪点
+PAINTERS['moss_block'] = noisy(0x5a7a3a, 14);
