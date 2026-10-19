@@ -6336,6 +6336,12 @@ class App {
       // 进度（M7）：击杀。报的是**生物种类 id**而不是这一只——
       // 计数型进度（"怪物猎人"要三种）靠它去重，报成个体就永远凑不齐三种
       this.reportProgress({ kind: 'kill', mob: mob.type.id });
+      // 村庄保卫战（批次 383）：村庄附近击杀掠夺者；累计 5 只算击退一波
+      if (mob.type.id === 'pillager' && this.villagerNear(mob.x, mob.y, mob.z, 64)) {
+        this.raidKills++;
+        if (this.raidKills === 1) this.reportProgress({ kind: 'raid', stage: 1 });
+        if (this.raidKills >= 5) this.reportProgress({ kind: 'raid', stage: 2 });
+      }
     } else {
       // 暴击火花（原版暴击是星星状的白色粒子）
       this.particles.spawnCrit(mob.x, mob.y + 0.7, mob.z, critical ? 8 : 4);
@@ -10071,6 +10077,8 @@ class App {
   /** 群系探索进度：上次报过的群系（批次 371） */
   private lastBiomeName = '';
   private biomeProgressTimer = 0;
+  /** 村庄保卫战计数（批次 383）：在村庄附近击杀的掠夺者数量 */
+  private raidKills = 0;
 
   /** 群系探索进度（批次 371）：只在主世界、每 1.5 秒检查一次 */
   private updateBiomeProgress(dt: number): void {

@@ -462,6 +462,7 @@ console.log('\n[触发种类：没有"只有代码没有数据"的死支路]');
     'breed',
     'dimension',
     'biome',
+    'raid',
     'fish',
     'sleep',
     'dragon',

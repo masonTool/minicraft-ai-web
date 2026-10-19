@@ -70,6 +70,8 @@ export type ProgressEvent =
   | { readonly kind: 'sleep' }
   /** 走进一个群系（批次 371；`biome` 是群系注册名） */
   | { readonly kind: 'biome'; readonly biome: string }
+  /** 村庄保卫战（批次 383）：1 = 在村庄附近击杀掠夺者，2 = 击退一波（5 只） */
+  | { readonly kind: 'raid'; readonly stage: number }
   /** 末影龙倒地 */
   | { readonly kind: 'dragon' }
   /** 不需要条件，由主程序显式授予（根条目用） */
@@ -91,6 +93,8 @@ export interface AdvancementTrigger {
   readonly dimensions?: readonly string[];
   /** 群系注册名（`biome`；省略表示任意群系） */
   readonly biomes?: readonly string[];
+  /** 保卫战的阶段（`raid`；省略表示任意阶段） */
+  readonly raidStage?: number;
   /**
    * 计数型：要命中**几个不同的目标**才算达成（原版的"资深怪物猎人"就是这样）。
    *
@@ -766,6 +770,25 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     desc: '杀死一只凋灵骷髅（下界要塞）',
     icon: Item.COAL,
     trigger: { kind: 'kill', mobs: ['wither_skeleton'] },
+  },
+  {
+    id: 'minecraft:adventure/defend_village',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '保家卫国',
+    desc: '在村庄附近（64 格内）击杀一名掠夺者',
+    icon: Item.EMERALD,
+    trigger: { kind: 'raid', raidStage: 1 },
+  },
+  {
+    id: 'minecraft:adventure/hero_of_the_village',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '村庄英雄',
+    desc: '在村庄附近击退一波掠夺者（累计 5 名）',
+    icon: Block.EMERALD_BLOCK,
+    trigger: { kind: 'raid', raidStage: 2 },
+    challenge: true,
   },
   {
     id: 'minecraft:adventure/explore_10_biomes',

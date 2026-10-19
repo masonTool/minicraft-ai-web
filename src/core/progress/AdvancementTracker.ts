@@ -126,6 +126,10 @@ export class AdvancementTracker {
         return !trigger.dimensions || trigger.dimensions.includes(event.dimension) ? event.dimension : null;
       case 'biome':
         return !trigger.biomes || trigger.biomes.includes(event.biome) ? event.biome : null;
+      case 'raid':
+        return trigger.raidStage === undefined || trigger.raidStage === event.stage
+          ? `raid${event.stage}`
+          : null;
       // 这三件事没有"是哪一种"的差别，去重键固定
       case 'sleep':
       case 'dragon':
