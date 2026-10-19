@@ -1064,6 +1064,9 @@ export const TILE_ORDER = [
   'spawn_egg_parrot',
   'spawn_egg_mooshroom',
   'spawn_egg_endermite',
+  'spawn_egg_vindicator',
+  'spawn_egg_evoker',
+  'spawn_egg_witch',
   'flowering_azalea',
   // 紫水晶族（批次 351）
   'amethyst_block',

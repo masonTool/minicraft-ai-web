@@ -641,6 +641,72 @@ export const BEE_TYPE: MobType = {
 };
 
 /**
+ * 卫道士（批次 379）：村庄系的近战劫掠者，24 血、伤害 13。
+ * 原版随袭击/林地府邸出现；本项目 `naturalSpawn: false`。
+ */
+export const VINDICATOR_TYPE: MobType = {
+  id: 'vindicator',
+  name: '卫道士',
+  health: 24,
+  width: 0.6,
+  height: 1.95,
+  speed: 2.2,
+  hostile: true,
+  attackDamage: 13,
+  followRange: 20,
+  drops: [{ itemId: Item.EMERALD, min: 0, max: 1 }],
+  xp: 5,
+  naturalSpawn: false,
+  bodyColor: 0x8a8f96,
+  accentColor: 0x3a5a3a,
+  eyeHeight: 1.74,
+};
+
+/** 唤魔者（批次 379）：24 血、伤害 6，掉绿宝石；原版放尖牙/召唤恼鬼，这里只保留近战 */
+export const EVOKER_TYPE: MobType = {
+  id: 'evoker',
+  name: '唤魔者',
+  health: 24,
+  width: 0.6,
+  height: 1.95,
+  speed: 1.8,
+  hostile: true,
+  attackDamage: 6,
+  followRange: 20,
+  drops: [{ itemId: Item.EMERALD, min: 0, max: 1 }],
+  xp: 10,
+  naturalSpawn: false,
+  bodyColor: 0x9a9aa8,
+  accentColor: 0xc8a83a,
+  eyeHeight: 1.74,
+};
+
+/** 女巫（批次 379）：26 血，远程（简化成带中毒的箭），掉荧石粉/红石/糖 */
+export const WITCH_TYPE: MobType = {
+  id: 'witch',
+  name: '女巫',
+  health: 26,
+  width: 0.6,
+  height: 1.95,
+  speed: 1.7,
+  hostile: true,
+  attackDamage: 3,
+  followRange: 20,
+  drops: [
+    { itemId: Item.GLOWSTONE_DUST, min: 0, max: 2 },
+    { itemId: Item.REDSTONE, min: 0, max: 2 },
+    { itemId: Item.SUGAR, min: 0, max: 2 },
+  ],
+  xp: 5,
+  naturalSpawn: false,
+  ranged: { range: 10, cooldown: 3, speed: 8, keepDistance: 5, spread: 0.1 },
+  arrowEffect: { effect: 'poison', seconds: 5 },
+  bodyColor: 0x6a4a7a,
+  accentColor: 0x3a6a3a,
+  eyeHeight: 1.74,
+};
+
+/**
  * 末影螨（批次 378）：8 血的小型敌对生物，末影珍珠落地时原版会生成。
  * 本项目没有“珍珠落地生成”的通道，所以 `naturalSpawn: false`，靠刷怪蛋/命令。
  */
@@ -1626,6 +1692,9 @@ export const MOB_TYPES: readonly MobType[] = [
   PARROT_TYPE,
   MOOSHROOM_TYPE,
   ENDERMITE_TYPE,
+  VINDICATOR_TYPE,
+  EVOKER_TYPE,
+  WITCH_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿
