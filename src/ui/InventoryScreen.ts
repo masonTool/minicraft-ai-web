@@ -53,7 +53,7 @@ import {
 } from '../core/crafting/RecipeBook.ts';
 import { RECIPES, type Recipe } from '../core/crafting/Recipes.ts';
 // 熔炼表（批次 185）：判断"这件东西只能烧出来" → 合成箭头上面点亮熔炉图标
-import { SMELTING_RECIPES, fuelSeconds } from '../core/crafting/Smelting.ts';
+import { SMELTING_RECIPES, fuelSeconds, smeltingRecipeFor } from '../core/crafting/Smelting.ts';
 // 工作站"可做列表"（批次 277）：纯逻辑在 core，界面只画格子与填材料
 import {
   STATION_LABELS,
@@ -123,6 +123,7 @@ import {
   BREW_SLOT_COUNT,
   BrewingStand,
 } from '../core/container/BrewingStand.ts';
+import { BREW_RECIPES } from '../core/crafting/Brewing.ts';
 import type { BlockContainer } from '../core/world/BlockEntityStore.ts';
 import {
   CREATIVE_ITEMS,
@@ -681,7 +682,6 @@ export class InventoryScreen {
   private readonly campfireHintEl: HTMLDivElement;
   private readonly furnaceInputSlot: HTMLDivElement;
   private readonly furnaceFuelSlot: HTMLDivElement;
-  private readonly furnaceOutputSlot: HTMLDivElement;
   private readonly flameEl: HTMLDivElement;
   /** 附魔台（H9） */
   private readonly enchantLayout: HTMLDivElement;
@@ -706,11 +706,10 @@ export class InventoryScreen {
   private readonly grindstoneStatusEl: HTMLDivElement;
   private readonly cookFillEl: HTMLElement;
 
-  /** 锻造台（K8 尾巴）：装备格 + 材料格 + 产物格 + 提示行 */
+  /** 锻造台（K8 尾巴）：装备格 + 材料格 + 目标格 + 提示行 */
   private readonly smithingLayout: HTMLDivElement;
   private readonly smithingEquipmentSlot: HTMLDivElement;
   private readonly smithingMaterialSlot: HTMLDivElement;
-  private readonly smithingResultSlot: HTMLDivElement;
   private readonly smithingHintEl: HTMLDivElement;
 
   /** 漏斗（批次 58）：5 格排成一行 + 一行动态提示（锁定/节奏） */
@@ -1021,10 +1020,8 @@ export class InventoryScreen {
     this.campfireHintEl.className = 'anvil-cost';
     this.furnaceInputSlot = this.createSlot();
     this.furnaceFuelSlot = this.createSlot();
-    this.furnaceOutputSlot = this.createSlot();
     this.furnaceFuelSlot.dataset.key = 'furnace:fuel';
     this.furnaceInputSlot.dataset.key = 'furnace:input';
-    this.furnaceOutputSlot.dataset.key = 'furnace:output';
     // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
     this.anvilLayout = document.createElement('div');
     this.anvilLayout.className = 'anvil-layout';
@@ -1069,8 +1066,6 @@ export class InventoryScreen {
     this.smithingEquipmentSlot.dataset.key = 'smithing:equipment';
     this.smithingMaterialSlot = this.createSlot();
     this.smithingMaterialSlot.dataset.key = 'smithing:material';
-    this.smithingResultSlot = this.createSlot();
-    this.smithingResultSlot.dataset.key = 'smithing:result';
     this.smithingHintEl = document.createElement('div');
     this.smithingHintEl.className = 'anvil-cost';
 
@@ -1584,13 +1579,8 @@ export class InventoryScreen {
     // 配方书按钮打开 = **列举该分类的全部物品**（用户明确要求保留这条）。
     // 颜色仍按"现在能不能合成"来分：白底 = 当前材料够且格子放得下，其余红底。
     if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);
-    // 关闭 = 只列"现在能做的" + 之前真正做过、现在缺料的（红底）
-    const craftable = new Set(this.craftableIds());
-    const ids = new Set<number>(craftable);
-    for (const id of this.usedRecipeIds) {
-      if (!craftable.has(id) && recipesForResult(id).length > 0) ids.add(id);
-    }
-    return [...ids].filter(byCategory);
+    // 关闭 = **只列现在能做的**（批次 299：不再保留"用过的缺料"红底项）
+    return [...new Set(this.craftableIds())].filter(byCategory);
   }
 
   /**
@@ -1657,12 +1647,7 @@ export class InventoryScreen {
         this.categoryInfo.textContent =
           `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 全部 ${allInTab} 项（白底 ${craftableInTab} 项现在能做）`;
       } else {
-        const missingInTab = [...this.usedRecipeIds].filter(
-          (id) => !craftable.includes(id) && inTab(id) && recipesForResult(id).length > 0,
-        ).length;
-        this.categoryInfo.textContent =
-          `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 可合成 ${craftableInTab}` +
-          (missingInTab > 0 ? ` · 缺料 ${missingInTab}（红底）` : '');
+        this.categoryInfo.textContent = `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 可合成 ${craftableInTab}`;
       }
     }
     const items = this.categoryItems();
@@ -1693,8 +1678,7 @@ export class InventoryScreen {
       // 提示框（悬停 / 长按）与"点击弹说明"都靠这份数据
       this.tooltipStacks.set(slot, { id: itemId, count: owned > 0 ? owned : 1 });
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
-      const count = slot.querySelector('.inv-count') as HTMLSpanElement | null;
-      if (count && owned > 1) count.textContent = String(owned);
+      // 批次 299（用户）：分类栏只表示"能做/不能做"，不再显示拥有数量
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         this.beginCategoryScrub(event, itemId, slot);
@@ -2553,6 +2537,56 @@ export class InventoryScreen {
     if (this.activeContainer instanceof Campfire) this.activeContainer.paused = false;
   }
 
+  /** 打开工作站先冻住：从"材料一放就自动烧"改成"点目标框才开工"（批次 299） */
+  private pauseStationContainer(): void {
+    if (this.activeContainer instanceof Furnace) this.activeContainer.paused = true;
+    if (this.activeContainer instanceof BrewingStand) this.activeContainer.paused = true;
+    if (this.activeContainer instanceof Campfire) this.activeContainer.paused = true;
+  }
+
+  /**
+   * 手动往格子里放了东西、但还没选配方时，按现有材料反推一个目标。
+   * 这样"完全改成点目标框开始"之后，手动摆料也有目标可点，不会卡住。
+   */
+  private syncStationTargetFromSlots(): void {
+    if (this.stationTargetEntry) return;
+    const container = this.activeContainer;
+    if (isFurnaceMode(this.mode) && container instanceof Furnace) {
+      const input = container.get(FURNACE_INPUT);
+      if (!input) return;
+      const recipe = smeltingRecipeFor(input.id, container.station);
+      if (!recipe) return;
+      this.stationTargetEntry =
+        this.currentStationEntries().find((entry) => entry.resultId === recipe.output.id) ?? null;
+      return;
+    }
+    if (this.mode === 'campfire' && container instanceof Campfire) {
+      for (let i = 0; i < CAMPFIRE_SIZE; i++) {
+        const stack = container.get(i);
+        if (!stack) continue;
+        const recipe = smeltingRecipeFor(stack.id, 'campfire');
+        if (!recipe) continue;
+        this.stationTargetEntry =
+          this.currentStationEntries().find((entry) => entry.resultId === recipe.output.id) ?? null;
+        return;
+      }
+      return;
+    }
+    if (this.mode === 'brewing' && container instanceof BrewingStand) {
+      const ingredient = container.get(BREW_INGREDIENT_SLOT)?.id;
+      if (ingredient === undefined) return;
+      const bottles = BREW_BOTTLE_SLOTS.map((slot) => container.get(slot)?.id).filter(
+        (id): id is number => id !== undefined,
+      );
+      const recipe = BREW_RECIPES.find(
+        (candidate) => candidate.ingredient === ingredient && bottles.includes(candidate.from),
+      );
+      if (!recipe) return;
+      this.stationTargetEntry =
+        this.currentStationEntries().find((entry) => entry.resultId === recipe.to) ?? null;
+    }
+  }
+
   /** 目标框支持哪些站台 */
   private stationTargetSupported(): boolean {
     return (
@@ -2563,25 +2597,57 @@ export class InventoryScreen {
     );
   }
 
-  /** 目标框：没有选中配方就藏起来；红底表示材料不齐，不能点开始 */
+  /**
+   * 目标框（批次 299）：**产物槽与目标槽合并成一格**。
+   *
+   *  - 容器里已有成品（熔炉烧好了 / 锻造台两格齐了）→ 画成品，点一下收取/升级；
+   *  - 否则画选中配方的产物预览：白底 = 点一下开工，红底 = 缺料不可点。
+   */
   private renderStationTarget(): void {
+    const container = this.activeContainer;
+    let actual: ItemStack | null = null;
+    if (isFurnaceMode(this.mode) && container instanceof Furnace) {
+      actual = container.get(FURNACE_OUTPUT);
+    } else if (this.mode === 'smithing' && container instanceof SmithingTable) {
+      actual = container.get(SMITHING_RESULT);
+    }
     const entry = this.stationTargetEntry;
-    const show = this.stationTargetSupported() && entry !== null;
+    const show = this.stationTargetSupported() && (actual !== null || entry !== null);
     const wrap = this.stationTargetEl.parentElement;
     wrap?.classList.toggle('hidden', !show);
-    if (!entry || !show) {
+    this.stationTargetEl.classList.remove('preview-result', 'locked', 'ready');
+    if (!show) {
       this.renderInto(this.stationTargetEl, null);
-      this.stationTargetEl.classList.remove('locked', 'preview-result');
+      return;
+    }
+    if (actual) {
+      this.renderInto(this.stationTargetEl, actual);
+      this.stationTargetEl.classList.add('ready');
+      this.stationTargetEl.title = `点一下收取 ${itemName(actual.id)}`;
+      return;
+    }
+    if (!entry) {
+      this.renderInto(this.stationTargetEl, null);
       return;
     }
     this.renderInto(this.stationTargetEl, { id: entry.resultId, count: entry.resultCount });
     this.stationTargetEl.classList.add('preview-result');
     this.stationTargetEl.classList.toggle('locked', !entry.available);
+    this.stationTargetEl.classList.toggle('ready', entry.available);
     this.stationTargetEl.title = entry.available ? '点一下开始制作' : '材料不齐，不能开始';
   }
 
-  /** 点目标框：白底才真正开始；红底只提示缺什么 */
+  /** 点目标框：已有成品先收取；否则白底开始、红底只提示缺什么 */
   private clickStationTarget(): void {
+    const container = this.activeContainer;
+    if (isFurnaceMode(this.mode) && container instanceof Furnace && container.get(FURNACE_OUTPUT)) {
+      this.takeFurnaceOutput(true);
+      return;
+    }
+    if (this.mode === 'smithing' && container instanceof SmithingTable && container.get(SMITHING_RESULT)) {
+      this.takeSmithingToInventory(true);
+      return;
+    }
     const selected = this.stationTargetEntry;
     if (!selected) return;
     // 点之前按容器现状再算一次：材料被拿走/槽位被占时不能白点
@@ -2632,38 +2698,53 @@ export class InventoryScreen {
       return;
     }
     if (this.activeContainer instanceof SmithingTable) {
-      const result = this.activeContainer.take();
-      if (!result.ok) {
-        this.smithingHintEl.textContent = result.reason;
-        this.smithingHintEl.classList.add('bad');
-        this.refresh();
-        return;
-      }
-      const leftover = this.inventory.addStack(result.output);
-      if (leftover > 0) this.hooks.onDrop?.(result.output.id, leftover);
-      this.stationTargetEntry = null;
-      this.renderStationTarget();
-      this.inventory.notify();
-      this.showMessage(`完成：${itemName(result.output.id)}`);
-      this.refresh();
+      this.takeSmithingToInventory(true);
     }
+  }
+
+  /** 点目标框收取熔炉成品：快捷栏 → 仓库 → 脚边，并结算经验 */
+  private takeFurnaceOutput(refreshAfter: boolean): void {
+    const furnace = this.activeContainer;
+    if (!(furnace instanceof Furnace)) return;
+    const output = furnace.get(FURNACE_OUTPUT);
+    if (!output) return;
+    furnace.set(FURNACE_OUTPUT, null);
+    const leftover = this.inventory.addStack(output);
+    if (leftover > 0) this.hooks.onDrop?.(output.id, leftover);
+    const xp = furnace.takeExperience();
+    if (xp > 0) this.hooks.onFurnaceXp?.(xp);
+    // 批次 299：一次目标框只烧一个单位；还有原料就停在目标框，等下一次点击
+    furnace.paused = true;
+    if (!furnace.get(FURNACE_INPUT)) this.stationTargetEntry = null;
+    this.inventory.notify();
+    if (refreshAfter) this.refresh();
+  }
+
+  /** 点目标框升级锻造台成品：直接进背包，不再经过光标 */
+  private takeSmithingToInventory(refreshAfter: boolean): boolean {
+    const table = this.activeContainer;
+    if (!(table instanceof SmithingTable)) return false;
+    const result = table.take();
+    if (!result.ok) {
+      this.smithingHintEl.textContent = result.reason;
+      this.smithingHintEl.classList.add('bad');
+      if (refreshAfter) this.refresh();
+      return false;
+    }
+    const leftover = this.inventory.addStack(result.output);
+    if (leftover > 0) this.hooks.onDrop?.(result.output.id, leftover);
+    this.stationTargetEntry = null;
+    this.inventory.notify();
+    this.showMessage(`完成：${itemName(result.output.id)}`);
+    if (refreshAfter) this.refresh();
+    return true;
   }
 
   /** 制作完成自动收货：快捷栏 → 主仓库 → 脚边（批次 295） */
   private collectStationOutput(): void {
     if (!this.stationAutoCollect) return;
     if (isFurnaceMode(this.mode) && this.activeContainer instanceof Furnace) {
-      const furnace = this.activeContainer;
-      const output = furnace.get(FURNACE_OUTPUT);
-      if (!output) return;
-      furnace.set(FURNACE_OUTPUT, null);
-      const leftover = this.inventory.addStack(output);
-      if (leftover > 0) this.hooks.onDrop?.(output.id, leftover);
-      const xp = furnace.takeExperience();
-      if (xp > 0) this.hooks.onFurnaceXp?.(xp);
-      // 原料烧完了：目标框收掉，避免下次点它时误以为还能开工
-      if (!furnace.get(FURNACE_INPUT)) this.stationTargetEntry = null;
-      this.inventory.notify();
+      this.takeFurnaceOutput(false);
       return;
     }
     if (this.mode === 'brewing' && this.activeContainer instanceof BrewingStand) {
@@ -3591,13 +3672,6 @@ export class InventoryScreen {
     if (isFurnaceMode(this.mode)) {
       const input = this.registerExisting(this.furnaceInputSlot, 'furnace:input', this.activeContainer!, FURNACE_INPUT);
       const fuel = this.registerExisting(this.furnaceFuelSlot, 'furnace:fuel', this.activeContainer!, FURNACE_FUEL);
-      const output = this.registerExisting(
-        this.furnaceOutputSlot,
-        'furnace:output',
-        this.activeContainer!,
-        FURNACE_OUTPUT,
-        true,
-      );
 
       const left = document.createElement('div');
       left.className = 'furnace-col';
@@ -3610,15 +3684,13 @@ export class InventoryScreen {
       // 烟熏炉/高炉要写清"它只吃什么"：原版靠玩家自己知道，我们的界面里直接说明，
       // 免得玩家把石头塞进烟熏炉、看着它不动以为是坏了
       this.furnaceHintEl.textContent = '';
+      // 批次 299：产物槽与目标槽合并成一个——预览、开工、收取都在这一格
       const targetWrap = document.createElement('div');
       targetWrap.className = 'furnace-col';
-      targetWrap.append(this.buildLabel('目标'), this.stationTargetEl);
-      const outputRow = document.createElement('div');
-      outputRow.className = 'furnace-output-row';
-      outputRow.append(this.buildLabel('产物'), output, targetWrap);
+      targetWrap.append(this.buildLabel('产物 / 目标'), this.stationTargetEl);
       const right = document.createElement('div');
       right.className = 'furnace-col';
-      right.append(outputRow, this.furnaceHintEl);
+      right.append(targetWrap, this.furnaceHintEl);
 
       this.furnaceLayout.replaceChildren(left, middle, right);
       this.topArea.append(this.furnaceLayout, this.stationHintEl);
@@ -3745,22 +3817,19 @@ export class InventoryScreen {
       const table = this.activeContainer instanceof SmithingTable ? this.activeContainer : null;
       const equipment = this.registerExisting(this.smithingEquipmentSlot, 'smithing:equipment', table!, SMITHING_EQUIPMENT);
       const material = this.registerExisting(this.smithingMaterialSlot, 'smithing:material', table!, SMITHING_MATERIAL);
-      // 产物槽：只能取不能放（与铁砧一样，产物是两格算出来的）
-      const result = this.registerExisting(this.smithingResultSlot, 'smithing:result', table!, SMITHING_RESULT, true);
       this.smithingHintEl.textContent = '';
 
       const row = document.createElement('div');
       row.className = 'anvil-row';
+      // 批次 299：产物槽与目标槽合并（预览与"点一下升级"都在这一格）
       const targetWrap = document.createElement('div');
       targetWrap.className = 'furnace-col';
-      targetWrap.append(this.buildLabel('目标'), this.stationTargetEl);
+      targetWrap.append(this.buildLabel('产物 / 目标'), this.stationTargetEl);
       row.append(
         this.buildLabel('钻石装备'),
         equipment,
         this.buildLabel('下界合金锭'),
         material,
-        this.buildLabel('产物'),
-        result,
         targetWrap,
       );
       const side = document.createElement('div');
@@ -4968,6 +5037,9 @@ export class InventoryScreen {
       this.rebuildTopArea();
     }
 
+    // 批次 299：每次打开工作站都先暂停（同容器重开也要），完全改成"点目标框才开始"
+    if (isWorkstationMode(mode)) this.pauseStationContainer();
+
     this.titleEl.textContent = MODE_TITLES[mode];
     // 每次从快捷栏打开玩家背包：落到「物品栏」页（Wiki 左下箱子），左栏是"我的物品"
     if (mode === 'inventory') {
@@ -5185,6 +5257,8 @@ export class InventoryScreen {
       const reason = furnace.rejectReason;
       this.furnaceHintEl.textContent = reason;
       this.furnaceHintEl.classList.toggle('bad', reason !== '');
+      if (!furnace.get(FURNACE_INPUT) && !furnace.get(FURNACE_OUTPUT)) this.stationTargetEntry = null;
+      if (!this.stationTargetEntry) this.syncStationTargetFromSlots();
       this.renderStationTarget();
     }
 
@@ -5200,6 +5274,7 @@ export class InventoryScreen {
       this.campfireHintEl.textContent = reason;
       this.campfireHintEl.classList.toggle('bad', reason !== '');
       if (!campfire.cooking) this.stationTargetEntry = null;
+      if (!this.stationTargetEntry) this.syncStationTargetFromSlots();
       this.renderStationTarget();
     }
 
@@ -5210,6 +5285,10 @@ export class InventoryScreen {
       const left = stand.fuelRemaining;
       this.brewFuelTextEl.textContent = left > 0 ? `还能酿 ${left} 次` : '需要烈焰粉';
       this.brewFuelTextEl.classList.toggle('bad', left <= 0);
+      if (!stand.get(BREW_INGREDIENT_SLOT) && BREW_BOTTLE_SLOTS.every((slot) => !stand.get(slot))) {
+        this.stationTargetEntry = null;
+      }
+      if (!this.stationTargetEntry) this.syncStationTargetFromSlots();
       this.renderStationTarget();
     }
 
@@ -5558,7 +5637,7 @@ export class InventoryScreen {
     if (!preview) return;
     // 产物永远不可堆叠（工具/盔甲），所以手上拿着任何东西都不能直接取
     if (this.held) {
-      this.rejectSlot(this.smithingResultSlot);
+      this.rejectSlot(this.stationTargetEl);
       return;
     }
 
@@ -5809,7 +5888,6 @@ export class InventoryScreen {
     const table = this.activeContainer;
     if (!(table instanceof SmithingTable)) return;
     const outcome = table.outcome;
-    this.smithingResultSlot.classList.toggle('ready', outcome !== null);
     if (outcome) {
       this.smithingHintEl.textContent = `消耗 ${outcome.cost} 个下界合金锭（不要经验）`;
       this.smithingHintEl.classList.remove('bad');

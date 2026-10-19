@@ -713,6 +713,21 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('this.renderStationGhost();'),
   );
   check(
+    '熔炉/锻造台把产物槽与目标槽合并成一格（批次 299）',
+    invSrc.includes("buildLabel('产物 / 目标')") &&
+      !invSrc.includes("'furnace:output'") &&
+      !invSrc.includes("'smithing:result'") &&
+      invSrc.includes('private takeFurnaceOutput') &&
+      invSrc.includes('private takeSmithingToInventory'),
+  );
+  check(
+    '打开工作站先暂停，手动摆料也反推目标；分类栏不显示数量（批次 299）',
+    invSrc.includes('private pauseStationContainer') &&
+      invSrc.includes('private syncStationTargetFromSlots') &&
+      invSrc.includes('if (isWorkstationMode(mode)) this.pauseStationContainer();') &&
+      !invSrc.includes('if (count && owned > 1) count.textContent'),
+  );
+  check(
     '点白底配方会自动填原料与燃料（白底 = 点下去能开工）',
     invSrc.includes('private fillStationRecipe') &&
       invSrc.includes('this.ensureInSlot(furnace, FURNACE_INPUT') &&
@@ -815,11 +830,11 @@ console.log('\n[携带版细节收口（批次 159）]');
   );
   // 批次 206：列表 = "材料够的产物" + （开关开着时）"看过的缺料配方（红底）"
   check(
-    '分类栏列的是能合成的产物；缺料的那批按材料齐不齐标红',
+    '分类栏只列能合成的产物；配方开关打开才列全部并标红',
     invSrc.includes('private craftableIds(): number[]') &&
       invSrc.includes('if (canCraft(counts, recipe).ok) ids.push(recipe.result.id);') &&
       invSrc.includes('if (recipeGridSize(recipe) > this.crafting.size) continue;') &&
-      invSrc.includes('for (const id of this.usedRecipeIds) {') &&
+      invSrc.includes('return [...new Set(this.craftableIds())].filter(byCategory);') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');") &&
       invSrc.includes("classList.toggle('active', leftPane === 'category' && this.showUnowned)") &&
       css.includes('.inv-slot.locked {'),
@@ -958,11 +973,10 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('const showCreativeItems = creative && this.pane === \'creative\';'),
   );
   check(
-    '配方书开关：开=分类全部物品，关=能合成的 + 用过的缺料',
+    '配方书开关：开=分类全部物品，关=只列能合成的（批次 299）',
     invSrc.includes('private showUnowned = false;') &&
       invSrc.includes('if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);') &&
-      invSrc.includes('private readonly usedRecipeIds') &&
-      invSrc.includes('this.usedRecipeIds.add(product.id);') &&
+      invSrc.includes('return [...new Set(this.craftableIds())].filter(byCategory);') &&
       css.includes('.inv-slot.locked {'),
   );
   // 分类栏最多 800 个 canvas，`refresh()` 每次都会走到排布 → 必须按指纹缓存
