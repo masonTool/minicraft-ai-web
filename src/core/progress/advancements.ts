@@ -633,6 +633,62 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     icon: Block.BONE_BLOCK,
     trigger: { kind: 'obtain', ids: [Block.BONE_BLOCK] },
   },
+
+  // ---------------------------------------------------------------- 批次 354：下界与末地的猎物
+  {
+    id: 'minecraft:adventure/kill_a_blaze',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '烈火终结者',
+    desc: '杀死一只烈焰人（下界要塞里才有）',
+    icon: Item.BLAZE_ROD,
+    trigger: { kind: 'kill', mobs: ['blaze'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_ghast',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '恶魂退散',
+    desc: '杀死一只恶魂（它吐的火球可以打回去）',
+    icon: Item.GHAST_TEAR,
+    trigger: { kind: 'kill', mobs: ['ghast'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_piglin',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '猪灵不受欢迎',
+    desc: '杀死一只猪灵（它平时中立，别先动手）',
+    icon: Item.GOLD_INGOT,
+    trigger: { kind: 'kill', mobs: ['piglin'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_hoglin',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '疣猪兽猎人',
+    desc: '杀死一只疣猪兽（下界的野猪）',
+    icon: Item.PORKCHOP,
+    trigger: { kind: 'kill', mobs: ['hoglin'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_shulker',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '拆壳专家',
+    desc: '杀死一只潜影贝（末地城附近）',
+    icon: Item.ENDER_PEARL,
+    trigger: { kind: 'kill', mobs: ['shulker'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_silverfish',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '除虫',
+    desc: '杀死一只蠹虫（要塞的刷怪笼里会冒出来）',
+    icon: Item.BONE,
+    trigger: { kind: 'kill', mobs: ['silverfish'] },
+  },
 ];
 
 /** 按 id 查一条（界面与判定都用它；查不到返回 null） */
