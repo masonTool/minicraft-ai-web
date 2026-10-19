@@ -495,6 +495,8 @@ export class InventoryScreen {
   private stationTargetEntry: StationRecipeEntry | null = null;
   /** 目标条目属于哪个容器：A/B 两座熔炉来回切时，防止把 A 的目标画到 B 上 */
   private stationTargetOwner: BlockContainer | null = null;
+  /** 这一轮熔炉是否已经点过目标开工；没点过时手动摆料只能暂停（批次 324） */
+  private furnaceStarted = false;
   /** 工作站格子里实际摆的是哪条配方（换配方时据此清掉旧料） */
   private stationFilledResultId: number | null = null;
   /** 点过目标框、正在自动收货：产物直接进快捷栏 → 仓库 → 脚边 */
@@ -2357,6 +2359,7 @@ export class InventoryScreen {
     furnace.cookTimeTotal = 0;
     this.selectedStationKey = null;
     this.stationFilledResultId = null;
+    this.furnaceStarted = false;
     this.inventory.notify();
     this.refresh();
   }
@@ -2367,6 +2370,7 @@ export class InventoryScreen {
     if (!container) return;
     if (isFurnaceMode(this.mode) && container instanceof Furnace) {
       container.paused = true;
+      this.furnaceStarted = false;
       this.returnStationStack(container, FURNACE_INPUT);
       this.returnStationStack(container, FURNACE_FUEL);
       this.returnStationStack(container, FURNACE_OUTPUT);
@@ -3057,6 +3061,7 @@ export class InventoryScreen {
     }
     if (this.activeContainer instanceof Furnace) {
       this.activeContainer.paused = false;
+      this.furnaceStarted = true;
       // 批次 312：产物默认留在产物槽，不再自动收进快捷栏/仓库
       this.stationAutoCollect = false;
       this.stationBrewSnapshot = null;
@@ -5132,6 +5137,15 @@ export class InventoryScreen {
   private handleSlotClick(key: string, button: number): void {
     const binding = this.bindings.get(key);
     if (!binding) return;
+    // 批次 324：手动往原料/燃料格放东西或取回时，只要还没点过目标开工，
+    // 就强制保持暂停——不能因为操作槽位而自动开始烧。
+    if (
+      binding.source instanceof Furnace &&
+      (binding.index === FURNACE_INPUT || binding.index === FURNACE_FUEL) &&
+      !this.furnaceStarted
+    ) {
+      binding.source.paused = true;
+    }
     // 熔炉产物槽：点一下直接进背包，不经过光标（批次 309）
     if (binding.source instanceof Furnace && binding.index === FURNACE_OUTPUT) {
       this.takeFurnaceOutput(true);
@@ -5448,6 +5462,7 @@ export class InventoryScreen {
     this.stationTargetEntry = null;
     this.stationTargetOwner = null;
     this.stationFilledResultId = null;
+    this.furnaceStarted = false;
     this.stationAutoCollect = false;
     this.stationBrewSnapshot = null;
     this.stationOrigins.clear();
@@ -5484,6 +5499,10 @@ export class InventoryScreen {
     // 批次 312：熔炉产物默认留在产物槽；打开界面不再自动收进背包
     // 批次 299：每次打开工作站都先暂停（同容器重开也要），完全改成"点目标框才开始"
     if (isWorkstationMode(mode)) this.pauseStationContainer();
+    // 打开时只有本来就在烧的炉子算"已开工"；否则必须重新点目标
+    this.furnaceStarted =
+      this.activeContainer instanceof Furnace &&
+      (this.activeContainer.burnTimeLeft > 0 || this.activeContainer.cookProgress > 0);
 
     this.titleEl.textContent = MODE_TITLES[mode];
     // 每次从快捷栏打开玩家背包：落到「物品栏」页（Wiki 左下箱子），左栏是"我的物品"
@@ -5598,6 +5617,7 @@ export class InventoryScreen {
     this.stationTargetEntry = null;
     this.stationTargetOwner = null;
     this.stationFilledResultId = null;
+    this.furnaceStarted = false;
     this.stationAutoCollect = false;
     this.stationBrewSnapshot = null;
     this.stationOrigins.clear();

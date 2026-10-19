@@ -318,7 +318,7 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
   check('背包补上了关闭键（它原来根本没有）', invSrc.includes("closeButton.className = 'inv-close'") && html.includes('.inv-close {'));
   check(
     '关闭背包会同步关闭携带版配方页（不留下孤立左板）',
-    /close\(\): void \{[\s\S]{0,600}this\.hooks\.onCloseRecipes\?\.\(\)/.test(invSrc),
+    /close\(\): void \{[\s\S]{0,1200}this\.hooks\.onCloseRecipes\?\.\(\)/.test(invSrc),
   );
   // ⚠️ 只查**提示文案那一句**（注释里会解释"原来写的是错的"，会撞到自己）
   const invHint = /hint\.innerHTML = touchDevice([\s\S]*?);\n/.exec(invSrc)?.[1] ?? '';
@@ -779,6 +779,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     invSrc.includes('button === 2 || this.selectedStationKey === key') &&
       invSrc.includes('this.returnStationStack(source, index)') &&
       /private takeFurnaceOutput[\s\S]{0,300}this\.inventory\.addStack\(output\)/.test(invSrc),
+  );
+  check(
+    '手动放置/取回原料燃料时不会自动开工（批次 324）',
+    invSrc.includes('private furnaceStarted') &&
+      invSrc.includes('!this.furnaceStarted') &&
+      invSrc.includes('binding.source.paused = true') &&
+      invSrc.includes('this.furnaceStarted = true'),
   );
   check(
     '熔炉：目标槽/产物槽并排、标签在上、退还仓库在下方（批次 309）',
