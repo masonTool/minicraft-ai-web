@@ -49,8 +49,8 @@ const HAIR = 0x2f2016;
 const SHIRT = 0x00a8a8;
 const PANTS = 0x3b4bb5;
 const SHOES = 0x4a4a52;
-/** 嘴巴 / 老版眼睛的深色（眼睛现在由「眼型 + 瞳色」控制，这个只留给嘴） */
-const EYE = 0x1b2a44;
+/** 嘴巴：暖一点的深玫瑰棕，比深蓝更像嘴唇（面部特写下差别明显） */
+const MOUTH = 0x6b3f3a;
 /** 眼白（批次 333）：虹膜外面那一圈浅色，让眼睛不再是一块深色贴片 */
 const EYE_WHITE = 0xf2ece2;
 /** 鞋底那一圈（比鞋面深）：让脚不是一块方砖 */
@@ -283,7 +283,7 @@ export class PlayerRenderer {
       this.lashMeshes.push(this.addRoleBox(this.head, 0.118, 0.016, 0.02, x, 0.335, -0.256, HAIR, 'hair', 0.8));
     }
     this.addRoleBox(this.head, 0.08, 0.05, 0.06, 0, 0.255, -0.27, SKIN, 'skin', 0.85);
-    this.addBox(this.head, 0.13, 0.03, 0.02, 0, 0.15, -0.255, EYE);
+    this.addBox(this.head, 0.13, 0.03, 0.02, 0, 0.15, -0.255, MOUTH);
 
     this.buildArmor();
 

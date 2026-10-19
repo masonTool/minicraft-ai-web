@@ -1443,7 +1443,7 @@
       }
       .appearance-stage {
         position: relative; flex: 0 0 96px; width: 96px; height: 176px;
-        display: grid; grid-template-rows: 1fr auto;
+        display: grid; grid-template-rows: 1fr auto auto;
         background: linear-gradient(#1a1f24, #0d1013);
         border: 2px solid; border-color: #5a5a5a #c8c8c8 #c8c8c8 #5a5a5a;
         overflow: hidden;
@@ -1452,9 +1452,10 @@
         display: block; width: 100%; height: 100%; min-height: 0;
         touch-action: none; cursor: grab;
       }
+      /* 提示单独占画布下方一行：叠在画布上会盖住头发，脸在全身像里本来就小 */
       .appearance-tip {
-        position: absolute; top: 2px; left: 0; right: 0; text-align: center;
-        font-size: 9px; color: #8f8f8f; pointer-events: none; text-shadow: 1px 1px 0 #000;
+        font-size: 8px; line-height: 1.2; color: #9a9a9a; text-align: center;
+        padding: 0 0 2px; pointer-events: none; text-shadow: 1px 1px 0 #000;
       }
       /* 「全身 / 面部」放在画布下方单独一行：叠在画布上会盖住脚，也点不准 */
       .appearance-focus {
@@ -1478,6 +1479,14 @@
         flex: 1 1 0; min-width: 74px;
         font: inherit; font-size: 12px; line-height: 1.4; padding: 5px 4px;
         text-align: center; white-space: nowrap; cursor: pointer;
+      }
+      /* 竖屏窄屏才上下堆叠：横屏即使只有 640 宽也要并排（高度更紧张）。
+         竖屏下并排会把控件压到 190px 以下（grid 最小列宽）→ 右侧被裁，
+         所以形象居上、控件占满整行。 */
+      @media (max-width: 640px) and (orientation: portrait) {
+        .appearance-hero { flex-direction: column; align-items: center; }
+        .appearance-stage { flex: 0 0 auto; width: 120px; height: 190px; }
+        .appearance-fields { width: 100%; }
       }
       /* 恢复默认（批次 185）：整行一颗键，描边偏红——它是"会改掉所有设置"的动作，
          但不像"删除世界"那样不可逆，所以只做提示色、不加二次确认。 */
