@@ -116,7 +116,20 @@ check(
 );
 
 console.log('\n[批次 339：森林 / 丛林变体]');
-equal('群系表共 34 种', BIOMES.length, 34);
+equal('群系表共 39 种', BIOMES.length, 39);
+{
+  // 批次 346：针叶林/山地/热带草原变体 + 恶地的区域变体
+  const at = (temperature: number, humidity: number, erosion: number): string =>
+    findLandBiome(point({ temperature, humidity, erosion })).name;
+  equal('原始松林（最陡的针叶林）', at(0, 0.5, -1.0), 'old_growth_pine_taiga');
+  equal('原始云杉林（次陡）', at(0, 0.5, -0.7), 'old_growth_spruce_taiga');
+  equal('多风森林（暖 + 陡）', at(0.6, 0.5, -0.9), 'windswept_forest');
+  equal('热带高原', at(0.6, 0, -0.9), 'savanna_plateau');
+  const badlands = BIOMES.find((b) => b.name === 'badlands')!;
+  let wooded = 0;
+  for (let i = 0; i < 200; i++) if (regionVariantAt(badlands, i * 64, i * 64).name === 'wooded_badlands') wooded++;
+  check('疏林恶地能在恶地里按区域出现（200 格里至少 20 片）', wooded >= 20, `命中 ${wooded} 格`);
+}
 {
   // 批次 342：区域变体不参与气候匹配，只按 64 格哈希掷点
   const forest = BIOMES.find((biome) => biome.id === 8)!;
