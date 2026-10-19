@@ -2777,7 +2777,12 @@
       .station-recipe-btn {
         position: absolute; top: 4px; right: 4px; z-index: 3;
       }
-      .station-ui .inv-category-section .inv-search { padding-right: 76px; }
+      .station-recipe-btn.active {
+        background: #dcdec4;
+        border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+        transform: translateY(1px);
+      }
+      .station-ui .inv-category-section .inv-search { padding-right: 96px; }
       /* 分类底部信息栏（批次 185）：当前分类"我有几种 / 共几种"。
          高度固定一行，不能吃掉网格的高度（网格是 flex:1 那一个）。 */
       .inv-category-info {
@@ -2916,7 +2921,7 @@
       }
       .furnace-bottom {
         display: flex; flex-direction: column; width: 264px;
-        margin-top: 34px;
+        margin-top: 8px;
       }
       /* 退还仓库绝对定位在目标/产物下方，不占布局行（批次 316） */
       .furnace-return {

@@ -1255,7 +1255,7 @@ export class InventoryScreen {
     this.stationRecipeBtn = document.createElement('button');
     this.stationRecipeBtn.type = 'button';
     this.stationRecipeBtn.className = 'inv-recipes-btn station-recipe-btn hidden';
-    this.stationRecipeBtn.textContent = '配方书';
+    this.stationRecipeBtn.textContent = touchDevice ? '配方书' : '配方书 (R)';
     this.stationRecipeBtn.addEventListener('click', () => {
       if (this.pane === 'category') {
         this.showUnowned = !this.showUnowned;
