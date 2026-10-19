@@ -556,7 +556,7 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
 
 // ---------------------------------------------------------------- 3. 视野效果
 
-console.log('\n[生物选中标记：角括号 + 脚下光环（批次 275）]');
+console.log('\n[生物选中标记：头顶光环（批次 276）]');
 {
   const marker = new MobOutline();
   check('默认不可见', !marker.object.visible);
@@ -567,21 +567,13 @@ console.log('\n[生物选中标记：角括号 + 脚下光环（批次 275）]')
     '位置贴着生物脚底',
     marker.object.position.x === 3 && marker.object.position.y === 64 && marker.object.position.z === -5,
   );
+  check('只有一个光环（不再有白框/角括号）', marker.object.children.length === 1 && marker.halo.name === 'mob-halo');
+  check('光环是 TorusGeometry（侧看也有厚度，不需要 billboard）', marker.halo.geometry.type === 'TorusGeometry');
   check(
-    '括号按碰撞盒缩放（宽 × 高 × 宽）',
-    Math.abs(marker.brackets.scale.x - (0.9 + 0.04)) < 1e-9 &&
-      Math.abs(marker.brackets.scale.y - (1.4 + 0.04)) < 1e-9 &&
-      Math.abs(marker.brackets.scale.z - (0.9 + 0.04)) < 1e-9,
+    '光环水平躺在头顶上方',
+    Math.abs(marker.halo.rotation.x + Math.PI / 2) < 1e-9 && marker.halo.position.y === 1.4 + 0.14,
   );
-  check(
-    '括号是 8 个角 × 3 段 = 24 条线段（不是一圈完整线框）',
-    marker.brackets.geometry.getAttribute('position').count === 48,
-  );
-  check(
-    '脚下光环水平放置且离地一点点',
-    Math.abs(marker.ring.rotation.x + Math.PI / 2) < 1e-9 && marker.ring.position.y > 0 && marker.ring.position.y < 0.05,
-  );
-  check('光环半径跟着生物宽度（0.9 × 0.62）', Math.abs(marker.ring.scale.x - 0.558) < 1e-9);
+  check('光环半径跟着生物宽度（0.9 × 0.32）', Math.abs(marker.halo.scale.x - 0.288) < 1e-9);
   marker.hide();
   check('hide 之后不可见', !marker.object.visible);
   marker.dispose();

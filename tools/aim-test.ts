@@ -120,12 +120,12 @@ console.log('\n[实体射线]');
 
 console.log('\n[摇杆死区]');
 {
-  check('死区比例是 60%（批次 275 从 20% 加大）', STICK_DEAD_ZONE_RATIO === 0.6, String(STICK_DEAD_ZONE_RATIO));
+  check('死区比例是 100%（批次 276 从 60% 再加大）', STICK_DEAD_ZONE_RATIO === 1, String(STICK_DEAD_ZONE_RATIO));
   check('圆心在死区里', withinStickDeadZone(100, 100, 60, 100, 100));
   check('半径内（60）在死区里', withinStickDeadZone(100, 100, 60, 160, 100));
-  check('半径 + 60% 的边缘仍在死区里（约 40px 保护区）', withinStickDeadZone(100, 100, 60, 196, 100));
-  check('超出 60% 之后不算死区（不会吞掉旁边一大片）', !withinStickDeadZone(100, 100, 60, 199, 100));
-  check('按钮变大时死区同比变大', withinStickDeadZone(100, 100, 80, 228, 100) && !withinStickDeadZone(100, 100, 60, 228, 100));
+  check('半径 × 2 的边缘仍在死区里（整只拇指的活动区）', withinStickDeadZone(100, 100, 60, 220, 100));
+  check('超出半径 × 2 之后不算死区（不会吞掉整片屏幕）', !withinStickDeadZone(100, 100, 60, 223, 100));
+  check('按钮变大时死区同比变大', withinStickDeadZone(100, 100, 80, 260, 100) && !withinStickDeadZone(100, 100, 60, 260, 100));
 }
 
 console.log(`\n瞄准测试：${passed} 通过 / ${failed} 失败`);

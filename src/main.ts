@@ -983,7 +983,7 @@ class App {
   private readonly translucentMaterial: VoxelMaterial;
   private readonly skyColor: THREE.Color;
   private readonly outline = new BlockOutline();
-  /** 生物选中线框（批次 271）：与方块描边互斥，谁被选中就只亮谁 */
+  /** 生物选中光环（批次 271，276 改为头顶光环）：与方块描边互斥，谁被选中就只亮谁 */
   private readonly mobOutline = new MobOutline();
   /** 破坏裂纹与命中面高亮（G2 / G3） */
   private readonly blockOverlay: BlockOverlay;
@@ -3911,7 +3911,7 @@ class App {
     if (this.aimMob !== previousAimMob) this.targetInfoTimer = 0;
 
     if (this.aimMob) {
-      // 生物优先：方块描边与裂纹全部收起，只亮生物包围盒
+      // 生物优先：方块描边与裂纹全部收起，只亮生物头顶的光环
       this.outline.hide();
       this.blockOverlay.hide();
       this.mobOutline.show(this.aimMob);
