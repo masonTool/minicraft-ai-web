@@ -2201,9 +2201,6 @@
       .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-gear {
         flex-direction: column; align-items: center;
       }
-      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-player-preview {
-        width: 72px; height: 148px;
-      }
 
       .inv-panel.pocket-ui {
         position: relative;
@@ -2330,9 +2327,6 @@
       .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-gear {
         grid-column: 2; grid-row: 1; display: flex; flex-direction: column;
         align-items: center; flex: 0 0 auto;
-      }
-      .inv-panel.pocket-ui[data-pocket-tab='armor'] .inv-player-preview {
-        width: 56px; height: 118px; flex: 0 0 auto;
       }
 
       /* 合成页：居中 2×2，不撑高到溢出 */
@@ -2556,6 +2550,18 @@
         height: 190px;
         background: #080808;
       }
+      /* 批次 275：640px 横屏（手机主场景）下，右栏 170px 预览会把 9 列背包挤到裁切。
+         盔甲页把预览收到 90×140、格子降到 40px：
+         9×40 + 8×2 缝 + 40 装备列 + 8 间隙 + 90 预览 ≈ 514px，能放进 552px 的双栏面板。 */
+      @media (max-width: 759px) {
+        .inv-panel.pocket-ui.pocket-dual[data-pocket-tab='armor'] .inv-player-preview {
+          width: 90px;
+          height: 140px;
+        }
+        .inv-panel.pocket-ui.pocket-dual[data-pocket-tab='armor'] .inv-main > .inv-grid {
+          grid-template-columns: repeat(9, 40px);
+        }
+      }
       .inv-panel.pocket-ui.pocket-dual .inv-creative-section {
         grid-column: 1;
         grid-row: 1 / span 2;
@@ -2681,11 +2687,13 @@
 
       /* ---------------- 盔甲与副手（36-40 号槽，竖排一列） ---------------- */
       .inv-grid.inv-armor { grid-template-columns: 42px; }
-      /* 空槽里写"头/胸/腿/靴/副"：触摸端没有悬停提示，只能靠槽位自己说明 */
+      /* 空槽里写"头/胸/腿/靴/副手"：触摸端没有悬停提示，只能靠槽位自己说明。
+         副手是两个字，40px 槽位放不下 14px，单独收一号（批次 275）。 */
       .inv-slot-hint {
         position: absolute; inset: 0; display: grid; place-items: center;
         color: #5f5f5f; font-size: 14px; pointer-events: none; user-select: none;
       }
+      .inv-slot-hint-wide { font-size: 11px; letter-spacing: -0.5px; }
       .inv-slot.has-item .inv-slot-hint { display: none; }
       /* 放不下（例如把石头塞进头盔位）：抖一下，别让玩家以为是点击没生效 */
       @keyframes inv-reject-shake {

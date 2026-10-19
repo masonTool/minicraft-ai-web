@@ -32,6 +32,7 @@
 
 import * as THREE from 'three';
 import { ARMOR_SLOT_COUNT } from '../core/registry/armor.ts';
+import { Item } from '../core/registry/items.ts';
 import type { AppearancePalette } from '../game/appearance.ts';
 
 /** 肤色（与第一人称手臂同一个色，切换人称时不会"换个人"） */
@@ -47,8 +48,10 @@ const HAIR_HI = 0x3f2b1d;
 const SHOE_SOLE = 0x33333a;
 /** 披风（批次 185 外观）：暗红，与皮肤的暖色区分开 */
 const CAPE = 0x9b1b2f;
-/** 副手盾牌的木色（没有盾牌物品，先用一块板表示"副手拿着东西"） */
-const SHIELD = 0x7a5a33;
+/** 副手盾牌（批次 275）：木板 + 深色竖条 + 铁箍，靠三色拼出"盾"的轮廓 */
+const SHIELD_WOOD = 0x7a5a33;
+const SHIELD_DARK = 0x54391f;
+const SHIELD_IRON = 0x9aa0a6;
 
 export interface PlayerPose {
   x: number;
@@ -84,8 +87,8 @@ export class PlayerRenderer {
   private readonly head: THREE.Group;
   /** 披风（批次 185）：挂在背后跟着躯干走，默认不显示 */
   private readonly capeMesh: THREE.Mesh;
-  /** 副手那块板：挂在左臂外侧，默认不显示 */
-  private readonly offhandMesh: THREE.Mesh;
+  /** 副手盾牌（批次 275）：挂在左臂外侧，只有副手放盾牌时才显示 */
+  private readonly offhandGroup: THREE.Group;
   /**
    * 按"角色部位"分组的网格（批次 187 外观）。
    * 换肤色/衣色就是把这几组网格的材质换掉——材质按颜色共享（`materialFor`），
@@ -180,11 +183,18 @@ export class PlayerRenderer {
 
     this.buildArmor();
 
-    // ---- 披风（外观开关）与副手（盾牌位）
+    // ---- 披风（外观开关）与副手盾牌（批次 275）
     this.capeMesh = this.addBox(this.object, 0.46, 0.7, 0.04, 0, 1.1, 0.16, CAPE);
     this.capeMesh.visible = false;
-    this.offhandMesh = this.addBox(this.armL, 0.42, 0.46, 0.06, 0.02, -0.28, -0.14, SHIELD);
-    this.offhandMesh.visible = false;
+    this.offhandGroup = new THREE.Group();
+    this.offhandGroup.position.set(0.02, -0.28, -0.14);
+    this.armL.add(this.offhandGroup);
+    // 盾面 + 上下铁箍 + 中间深色竖条：远看是"盾"，不再是一块方板
+    this.addBox(this.offhandGroup, 0.34, 0.4, 0.06, 0, 0, 0, SHIELD_WOOD);
+    this.addBox(this.offhandGroup, 0.36, 0.05, 0.065, 0, 0.2, 0, SHIELD_IRON);
+    this.addBox(this.offhandGroup, 0.36, 0.05, 0.065, 0, -0.2, 0, SHIELD_IRON);
+    this.addBox(this.offhandGroup, 0.05, 0.4, 0.065, 0, 0, 0, SHIELD_DARK);
+    this.offhandGroup.visible = false;
   }
 
   /**
@@ -215,13 +225,23 @@ export class PlayerRenderer {
     this.capeMesh.visible = visible;
   }
 
-  /** 副手拿着东西时在左臂外侧显示一块板（目前没有盾牌物品，先做"有/没有"） */
-  setOffhand(visible: boolean): void {
-    this.offhandMesh.visible = visible;
+  /**
+   * 副手物品（批次 275）：只有盾牌会画在左臂外侧。
+   *
+   * 以前传的是布尔值——副手放火把/图腾也会画成一块盾牌板，
+   * 看起来像"任何东西都能当盾牌"。现在按真实物品 id 判。
+   */
+  setOffhand(itemId: number | null): void {
+    this.offhandGroup.visible = itemId === Item.SHIELD;
   }
 
   get capeVisible(): boolean {
     return this.capeMesh.visible;
+  }
+
+  /** 验收脚本用：副手盾牌现在可不可见 */
+  get offhandVisible(): boolean {
+    return this.offhandGroup.visible;
   }
 
   /**

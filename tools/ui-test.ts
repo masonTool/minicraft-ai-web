@@ -2643,10 +2643,36 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
       playerSrc.includes('setCape(visible: boolean)') &&
       appSrc.includes('this.playerRenderer.setCape(this.settings.cape);'),
   );
+  // 批次 275（用户）：副手不是"有东西就挂一块板"——只有盾牌才画，且画成盾牌轮廓
   check(
-    '副手有东西时左臂挂一块板（没有盾牌物品，先做有/没有）',
-    playerSrc.includes('setOffhand(visible: boolean)') &&
-      appSrc.includes('this.playerRenderer.setOffhand(this.inventory.get(OFFHAND_SLOT) !== null);'),
+    '副手按物品 id 判：只有盾牌显示',
+    playerSrc.includes('setOffhand(itemId: number | null): void') &&
+      playerSrc.includes('itemId === Item.SHIELD') &&
+      appSrc.includes('this.playerRenderer.setOffhand(this.inventory.get(OFFHAND_SLOT)?.id ?? null);'),
+  );
+  check(
+    '盾牌由多块拼出轮廓，且有验收用的 offhandVisible',
+    playerSrc.includes('private readonly offhandGroup: THREE.Group;') &&
+      playerSrc.includes('get offhandVisible(): boolean') &&
+      playerSrc.includes('SHIELD_IRON'),
+  );
+  check(
+    '3D 预览传副手物品 id（不是布尔）',
+    previewSrc.includes('offhand: number | null,') &&
+      invSrc.includes('this.inventory.get(OFFHAND_SLOT)?.id ?? null'),
+  );
+  check(
+    '装备页副手槽文案写全（副手 + 说明）',
+    invSrc.includes("const hints = ['头', '胸', '腿', '靴', '副手'];") &&
+      invSrc.includes("slot.title = '副手：盾牌 / 火把 / 图腾等';") &&
+      css.includes('.inv-slot-hint-wide'),
+  );
+  check(
+    '640px 横屏盔甲页收窄预览与格子，避免 9 列背包被裁切',
+    css.includes("[data-pocket-tab='armor'] .inv-player-preview") &&
+      css.includes('width: 90px;') &&
+      css.includes("[data-pocket-tab='armor'] .inv-main > .inv-grid") &&
+      css.includes('grid-template-columns: repeat(9, 40px);'),
   );
   // 批次 272（用户）：盔甲页预览被压扁——隐藏时不能拿 24×48 兜底写后备缓冲，
   // 显示后要自动补一帧，切页时也要立刻重绘。

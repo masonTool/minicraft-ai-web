@@ -1217,14 +1217,17 @@ export class InventoryScreen {
   private buildArmorGrid(): HTMLDivElement {
     const grid = document.createElement('div');
     grid.className = 'inv-grid inv-armor';
-    const hints = ['头', '胸', '腿', '靴', '副'];
+    const hints = ['头', '胸', '腿', '靴', '副手'];
     for (let i = 0; i < ARMOR_SIZE + 1; i++) {
       const index = ARMOR_START + i;
       const slot = this.registerSlot(`inv:${index}`, this.inventory, index);
       const hint = document.createElement('span');
-      hint.className = 'inv-slot-hint';
+      hint.className = i === ARMOR_SIZE ? 'inv-slot-hint inv-slot-hint-wide' : 'inv-slot-hint';
       hint.textContent = hints[i]!;
       slot.appendChild(hint);
+      // 批次 275：副手原来只写「副」，玩家联想不到盾牌。触摸端没有悬停提示，
+      // 所以文案写全 + 槽位 title 也说清能放什么。
+      if (i === ARMOR_SIZE) slot.title = '副手：盾牌 / 火把 / 图腾等';
       grid.appendChild(slot);
     }
     return grid;
@@ -4150,7 +4153,8 @@ export class InventoryScreen {
       this.preview3d.update(
         colors,
         this.hooks.isCapeVisible?.() ?? false,
-        this.inventory.get(OFFHAND_SLOT) !== null,
+        // 批次 275：传物品 id，而不是"有没有东西"——只有盾牌会画成盾牌
+        this.inventory.get(OFFHAND_SLOT)?.id ?? null,
         palette,
       );
       return;

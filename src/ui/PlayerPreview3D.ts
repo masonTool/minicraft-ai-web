@@ -30,7 +30,8 @@ export class PlayerPreview3D {
   /** 绕 Y 轴的旋转（拖动画布累加）；默认正面偏 25°（脸朝相机，带一点侧面） */
   private yaw = Math.PI - 0.45;
   private cape = false;
-  private offhand = false;
+  /** 副手物品 id（null = 空；批次 275：只有盾牌会画出来） */
+  private offhand: number | null = null;
   private armor: readonly (number | null)[] = [null, null, null, null];
   private palette: AppearancePalette | null = null;
   /**
@@ -74,7 +75,7 @@ export class PlayerPreview3D {
   update(
     armor: readonly (number | null)[],
     cape: boolean,
-    offhand: boolean,
+    offhand: number | null,
     palette: AppearancePalette | null = null,
   ): void {
     this.armor = armor;

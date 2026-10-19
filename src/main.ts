@@ -3768,9 +3768,9 @@ class App {
     // 盔甲：第三人称画甲片、第一人称只画胸甲袖套，但取色是同一份
     this.applyArmorAppearance();
     if (thirdPerson) {
-      // 外观（批次 185）：披风是设置项，副手有东西就在左臂外侧挂一块板
+      // 外观（批次 185）：披风是设置项；副手只画盾牌（批次 275，按物品 id 判）
       this.playerRenderer.setCape(this.settings.cape);
-      this.playerRenderer.setOffhand(this.inventory.get(OFFHAND_SLOT) !== null);
+      this.playerRenderer.setOffhand(this.inventory.get(OFFHAND_SLOT)?.id ?? null);
       this.playerRenderer.update(
         {
           x: this.physics.x,
