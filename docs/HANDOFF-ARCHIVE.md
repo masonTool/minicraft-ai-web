@@ -2545,4 +2545,10 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
   整段归档、`--print` 进 `npm run check`）与 `tools/batch-next.mjs`（`.codebuddy/batch-seq`
   自增，避免并发会话再次撞号）；顺手修正 J5 / D15 / D21 / B18 四处过期正文。
 
+- 批次 338（D20 群系第一批）：**海洋 4 → 9 种**。`Biome` 新增 `cold_ocean` /
+  `deep_cold_ocean` / `lukewarm_ocean` / `deep_lukewarm_ocean` / `deep_frozen_ocean`
+  （id 23~27）；`biomeForColumn` 改成"先分深度、再分温度"五档（暖水只出现在浅海，
+  没有 `deep_warm_ocean`）；海底材质、海带/海草密度、沉船与海底神殿的群系限定、
+  水生生物刷怪表同步。`test:biome` 37 条，离线 131 套全绿；群系覆盖 **32% → 39%**。
+
 <!-- docs-archive:end -->

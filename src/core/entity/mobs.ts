@@ -553,6 +553,65 @@ export const ZOMBIE_PIGLIN_TYPE: MobType = {
 };
 
 /**
+ * 猪灵（批次 344，J20 下界生态第一只）。
+ *
+ * 与僵尸猪灵共用"中立 + 群体激怒"那一套；区别在掉落与数值：
+ * 原版猪灵 16 血、接触伤害 5、**掉金粒/金锭**，被激怒后成群追人。
+ * ⚠️ 与原版的差异：**不做"金锭以物易物"的界面/手势**（本轮先把生物本身落地）、
+ * 不做"穿金甲就不打你"、不做"跨维度变僵尸猪灵"。
+ */
+export const PIGLIN_TYPE: MobType = {
+  id: 'piglin',
+  name: '猪灵',
+  health: 16,
+  width: 0.6,
+  height: 1.95,
+  speed: 1.9,
+  hostile: true,
+  attackDamage: 5,
+  followRange: 24,
+  drops: [
+    { itemId: Item.GOLD_NUGGET, min: 0, max: 1 },
+    { itemId: Item.GOLD_INGOT, min: 1, max: 1, chance: 0.025 },
+  ],
+  xp: 5,
+  neutral: true,
+  angerRadius: 16,
+  dimension: 'nether',
+  bodyColor: 0xd6a08a,
+  accentColor: 0x8a5a3c,
+  eyeHeight: 1.74,
+};
+
+/**
+ * 疣猪兽（批次 344，J20 第二只）。
+ *
+ * 下界的"野猪"：40 血、伤害 6、跑得快；掉落生猪排与皮革。
+ * 模型复用 `quadruped`（四条短腿 + 鼻吻），所以只需要一条映射。
+ * ⚠️ 与原版的差异：不做"幼体变僵尸疣猪兽"、不做"怕诡异菌"。
+ */
+export const HOGLIN_TYPE: MobType = {
+  id: 'hoglin',
+  name: '疣猪兽',
+  health: 40,
+  width: 1.4,
+  height: 1.4,
+  speed: 2.4,
+  hostile: true,
+  attackDamage: 6,
+  followRange: 24,
+  drops: [
+    { itemId: Item.PORKCHOP, min: 2, max: 4 },
+    { itemId: Item.LEATHER, min: 0, max: 1 },
+  ],
+  xp: 5,
+  dimension: 'nether',
+  bodyColor: 0xd98c7a,
+  accentColor: 0x7a4a3c,
+  eyeHeight: 1.1,
+};
+
+/**
  * 溺尸（批次 123，J15 的下一只）——僵尸的**水生变体**，也是**三叉戟的唯一来源**。
  *
  * 三处招牌：
@@ -1230,6 +1289,9 @@ export const MOB_TYPES: readonly MobType[] = [
   MAGMA_CUBE_SMALL_TYPE,
   // 僵尸猪灵（批次 122）：第一只"平时不打人、打了会招来一群"的敌对生物
   ZOMBIE_PIGLIN_TYPE,
+  // 猪灵 / 疣猪兽（批次 344）：下界生态的第一批
+  PIGLIN_TYPE,
+  HOGLIN_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿

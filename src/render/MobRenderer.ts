@@ -138,6 +138,8 @@ function modelKindOf(typeId: string): ModelKind {
   // 山羊（批次 259）：四足，角暂时用 accent 色的头顶部件代替（`quadruped` 自带鼻吻）
   if (typeId === 'goat') return 'quadruped';
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
+  // 疣猪兽（批次 344）：四足、体型宽
+  if (typeId === 'hoglin') return 'quadruped';
   return 'humanoid';
 }
 

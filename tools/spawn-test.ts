@@ -381,9 +381,16 @@ console.log('\n[维度与空腔（批次 94）]');
   check('大岩浆怪确实会刷（批次 121 起下界的第二只）', open.some((entry) => entry.type.id === 'magma_cube_big'));
   check('僵尸猪灵也会刷（批次 122 起下界的第三只）', open.some((entry) => entry.type.id === 'zombie_piglin'));
   check(
-    '下界里只刷下界那三只（主世界的怪一只都不来）',
+    '下界里只刷下界那五只（主世界的怪一只都不来）',
     netherKinds.length > 0 &&
-      netherKinds.every((id) => id === 'ghast' || id === 'magma_cube_big' || id === 'zombie_piglin'),
+      netherKinds.every(
+        (id) =>
+          id === 'ghast' ||
+          id === 'magma_cube_big' ||
+          id === 'zombie_piglin' ||
+          id === 'piglin' ||
+          id === 'hoglin',
+      ),
     netherKinds.join(','),
   );
 }

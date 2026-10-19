@@ -97,6 +97,9 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'turtle', label: '海龟', id: 1507 },
   { mobId: 'axolotl', label: '美西螈', id: 1508 },
   { mobId: 'bat', label: '蝙蝠', id: 1509 },
+  // 下界生态（批次 344）：猪灵 / 疣猪兽（1511/1512，仍在 MAX_ITEM_ID 1520 之内）
+  { mobId: 'piglin', label: '猪灵', id: 1511 },
+  { mobId: 'hoglin', label: '疣猪兽', id: 1512 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */
