@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 777（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 782（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,33 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 283（用户："后期画质粗糙、界面卡顿" + 诊断日志 `minicraft-diag-2026-10-19T02-32-46`）：
+  **把"加载范围当成模拟范围"这件事收掉，并让光照只在真的变了时重算**。
+  ① 日志事实：前 110 秒 60fps（cpu 5.4ms）；t≈121s 走进新区块（187 区块 / 40 只生物 /
+  623 calls / 496k 三角）后 frameMs 21.9 起再没回去。策略按既有顺序连降：
+  视距 6→5→4、装饰 0→1→2、分辨率 1.0→0.75（像素比 2.0→1.5，只剩物理屏 25% 像素），
+  而帧时间 21.9→22.7→21.3 **一点没变** —— 瓶颈在 CPU，降分辨率只省填充率。
+  ② 根因链（`perf/light` 每 5 秒一条）：`writes` 15k~23k/5s 里 `fluid` 占 **95%**；
+  每次写入无条件走 `onBlockChanged`（unlight BFS ≈23 格 + 重扩散 ≈30 格）→
+  `readded` 40 万/5s、`spread` 55 万/5s = **19.5 万格/秒**，正好吃满手机
+  4000 格/帧 × 45fps ≈ 18 万格/秒的预算 → `pending` 2 万~28 万、`dropped` 2.5 万、
+  `meshQueue` 60~77。CPU 16~18ms ≈ 帧间距 20~22ms，即"纯 CPU 卡"。
+  ③ **撤销批次 281 的流体补排**（`scheduleExposedFluids` / `FluidScanChunk` /
+  `FluidWorld.isLoaded` 全删）：它让**每个加载的区块**都唤醒含水层，正是那 3000 次/秒的来源。
+  ④ **改由生成期保证水连续**：`Aquifer.fill` 接收每列雕刻前的地形顶面，海面以下的列
+  水位强制 ≥ 海平面（原版语义：海底以下就是海的一部分）。实测 36 区块里
+  **悬空水 269 → 0 格**（以前海底被掏空时那层海水悬在空气上，挖开就是"挂着的水"）。
+  ⑤ **光照快路径**（`core/light/LightSignature.ts`）：写入前后 `lightOpacity` 与自发光
+  都没变就跳过 `onBlockChanged`（水的液面 1→7、下落位切换全落在这侧），重网格化照旧。
+  ⑥ **流体模拟窗口**（`core/world/FluidSimWindow.ts`）：只推进玩家 ±3 区块（7×7，
+  与 `RANDOM_TICK_RADIUS` 对齐）内的流体刻，窗口外直接丢弃（远处水静止、语义自愈）；
+  另加每 tick 上限 256（20Hz → 5120 刻/秒，高于观测值，只兜"一 tick 上千个到期"的长帧）。
+  ⑦ **CPU-bound 不再降分辨率**（`CPU_BOUND_RATIO = 0.7`）：`cpu/frameMs ≥ 0.7` 时分辨率
+  不再降档、并在帧时间没恶化时优先还回去——这是"糊着还卡"的唯一出口。
+  ⑧ 诊断补强：`sample` 里**始终**带 `writes/noop/lightSkipped/fluid/rt/fluidFar/fluidDeferred/cpuBound`
+  （以前只有光照积压 >2 万才记，前两分钟是盲区）。
+  门禁：`test:tick` **103**、`test:perfpolicy` **148**、`test:aquifer` **15**、
+  `test:world` **72**、`test:perf`（指纹改 `61dc934b`，地形变了）、离线 **131** 套全绿。
 - 批次 282（用户："第三人称贴墙时能看到墙皮后面的世界"）：**相机不再被强行推过撞点**。
   ① 根因：`clampedCameraDistance` 里还有一层 `Math.max(0.6, …)`。背贴墙时射线撞点可能只有
   0.3 格，`0.6` 的下限把镜头推到撞点**后面**（墙里）；方块内侧面在相邻实心格之间被剔除，

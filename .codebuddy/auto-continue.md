@@ -1877,3 +1877,25 @@
 - [x] B282-2 改成 `max(0, min(3.8, hit - 0.22))`，绝不越过撞点
 - [x] B282-3 相机距离 <0.9 时藏起玩家模型
 - [x] B282-4 门禁：`test:viewmode` 46，离线 131 套全绿
+
+---
+
+## 批次 283：卡顿根因收口（模拟窗口 / 光照快路径 / 生成期水连续，2026-10-19）
+
+> 用户："后期画质粗糙、界面卡顿"，并给出真机诊断
+>（792×360 / DPR3 / Adreno 829，世界 19，雨，视距 4/装饰 2/分辨率 0.75）。
+
+- [x] B283-1 撤销 281 的 `scheduleExposedFluids`：每个加载的区块都唤醒含水层，
+  真机上流体 3000 次/秒 = 95% 的方块写入，光照预算被吃满（`dropped` 2.5 万）
+- [x] B283-2 生成期水连续：`Aquifer.fill` 对"海面以下的列"水位强制 ≥ 海平面；
+  悬空水 269 → 0 格，水量 +19%（都是水下洞穴，原版语义）
+- [x] B283-3 光照快路径：`lightSignature`（挡光×16 + 自发光）不变就不跑 BFS；
+  液面变化只重烘焙网格
+- [x] B283-4 流体模拟窗口：只推进玩家 ±3 区块内的刻（7×7，与随机刻一致），
+  窗口外丢弃；每 tick 上限 256（超出的推迟一格）
+- [x] B283-5 CPU-bound 不降分辨率（`cpu/frameMs ≥ 0.7`），并在没继续恶化时优先还回去
+- [x] B283-6 诊断：`sample` 始终带 writes/noop/lightSkipped/fluid/rt/fluidFar/fluidDeferred/cpuBound
+- [x] B283-7 门禁：`test:tick` 103、`test:perfpolicy` 148、`test:aquifer` 15、`test:world` 72、
+  `test:perf` 指纹 → `61dc934b`，离线 131 套全绿
+- [ ] B283-8 待真机复验：导出里看 `fluidFar`（远>近 = 窗口生效）与
+  `lightSkipped`（≈writes 且 fluid 大 = 快路径命中）；若 `cpu` 仍 ≥18ms，下一刀切生物 AI
