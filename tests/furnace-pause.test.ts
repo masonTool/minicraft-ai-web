@@ -8,6 +8,7 @@ describe('熔炉的"点目标框才开始"（批次 295）', () => {
     furnace.set(FURNACE_INPUT, { id: Item.RAW_IRON, count: 1 });
     furnace.set(FURNACE_FUEL, { id: Item.COAL, count: 1 });
     furnace.paused = true;
+    furnace.started = true;
 
     furnace.tick(2);
     expect(furnace.cookProgress).toBe(0);
@@ -23,11 +24,23 @@ describe('熔炉的"点目标框才开始"（批次 295）', () => {
     const furnace = new Furnace('furnace');
     furnace.set(FURNACE_INPUT, { id: Item.RAW_IRON, count: 1 });
     furnace.set(FURNACE_FUEL, { id: Item.COAL, count: 1 });
+    furnace.started = true;
     furnace.tick(1);
     const burn = furnace.burnTimeLeft;
     furnace.paused = true;
     furnace.tick(5);
     expect(furnace.burnTimeLeft).toBe(burn);
     furnace.paused = false;
+  });
+
+  it('没点目标（started=false）时手动摆料绝不推进（批次 328）', () => {
+    const furnace = new Furnace('furnace');
+    furnace.set(FURNACE_INPUT, { id: Item.RAW_IRON, count: 1 });
+    furnace.set(FURNACE_FUEL, { id: Item.COAL, count: 1 });
+    furnace.paused = false;
+    furnace.started = false;
+    furnace.tick(5);
+    expect(furnace.cookProgress).toBe(0);
+    expect(furnace.burnTimeLeft).toBe(0);
   });
 });

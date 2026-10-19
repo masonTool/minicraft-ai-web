@@ -58,6 +58,14 @@ export class Furnace implements SlotSource {
    * 点目标框再 `paused = false`。关界面/切容器时必须恢复，避免炉子被永久冻住。
    */
   paused = false;
+  /**
+   * 是否已经点过界面上的目标框开工（批次 328）。
+   *
+   * 与 `paused` 分开：手动摆料/关闭界面只改 `paused`，绝不会把 `started` 打开；
+   * `tick` 必须同时满足 `!paused && started` 才推进，避免任何刷新路径让炉子自动烧。
+   * 默认 true 兼容无 UI 的模拟/测试；界面打开空闲炉子时会显式设回 false。
+   */
+  started = true;
 
   onChange: (() => void) | null = null;
 
@@ -118,8 +126,8 @@ export class Furnace implements SlotSource {
 
   /** 推进 dt 秒 */
   tick(dt: number): FurnaceTickResult {
-    // 界面里已摆好配方、还没点目标框：燃料不烧、进度不走（批次 295）
-    if (this.paused) return { changed: false, litChanged: false };
+    // 界面里已摆好配方、还没点目标框：燃料不烧、进度不走（批次 295 / 328）
+    if (this.paused || !this.started) return { changed: false, litChanged: false };
     let changed = false;
     const wasLit = this.isLit;
 

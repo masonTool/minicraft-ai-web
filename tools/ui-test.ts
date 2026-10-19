@@ -795,6 +795,14 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       ),
   );
   check(
+    '熔炉核心 started 硬开关：未点目标即使 paused=false 也不推进（批次 328）',
+    readFileSync(new URL('../src/core/container/Furnace.ts', import.meta.url), 'utf8').includes(
+      'if (this.paused || !this.started)',
+    ) &&
+      invSrc.includes('this.activeContainer.started = true') &&
+      invSrc.includes('this.activeContainer.started = this.furnaceStarted'),
+  );
+  check(
     '熔炉原料/燃料点击绕过双击收集，再点稳定取回（批次 325）',
     invSrc.includes('const furnaceBinding = this.bindings.get(key)') &&
       invSrc.includes('this.handleSlotClick(key, button);') &&

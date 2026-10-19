@@ -2348,6 +2348,7 @@ export class InventoryScreen {
     const furnace = this.activeContainer;
     if (!(furnace instanceof Furnace)) return;
     furnace.paused = true;
+    furnace.started = false;
     this.returnStationStack(furnace, FURNACE_INPUT);
     this.returnStationStack(furnace, FURNACE_FUEL);
     this.returnStationStack(furnace, FURNACE_OUTPUT);
@@ -2370,6 +2371,7 @@ export class InventoryScreen {
     if (!container) return;
     if (isFurnaceMode(this.mode) && container instanceof Furnace) {
       container.paused = true;
+      container.started = false;
       this.furnaceStarted = false;
       this.returnStationStack(container, FURNACE_INPUT);
       this.returnStationStack(container, FURNACE_FUEL);
@@ -3063,6 +3065,7 @@ export class InventoryScreen {
     }
     if (this.activeContainer instanceof Furnace) {
       this.activeContainer.paused = false;
+      this.activeContainer.started = true;
       this.furnaceStarted = true;
       // 批次 312：产物默认留在产物槽，不再自动收进快捷栏/仓库
       this.stationAutoCollect = false;
@@ -5525,6 +5528,10 @@ export class InventoryScreen {
     this.furnaceStarted =
       this.activeContainer instanceof Furnace &&
       (this.activeContainer.burnTimeLeft > 0 || this.activeContainer.cookProgress > 0);
+    if (this.activeContainer instanceof Furnace) {
+      // 硬开关也按当前是否在烧同步：空闲重开必须重新点目标
+      this.activeContainer.started = this.furnaceStarted;
+    }
 
     this.titleEl.textContent = MODE_TITLES[mode];
     // 每次从快捷栏打开玩家背包：落到「物品栏」页（Wiki 左下箱子），左栏是"我的物品"
