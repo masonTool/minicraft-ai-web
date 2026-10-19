@@ -918,6 +918,12 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       !css.includes('.station-recipe-btn'),
   );
   check(
+    '工作站配方书按左栏实测宽度移到中隔线左侧（批次 321）',
+    invSrc.includes("setProperty('--station-left-width'") &&
+      invSrc.includes('getBoundingClientRect().width') &&
+      css.includes('right: calc(100% - var(--station-left-width, 50%) + 8px);'),
+  );
+  check(
     '点创造分类会切回无限物品页',
     /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
   );

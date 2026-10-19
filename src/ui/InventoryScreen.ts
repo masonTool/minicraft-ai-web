@@ -3602,6 +3602,12 @@ export class InventoryScreen {
       this.restoreInvTabToRail();
       this.placeHotbar(true);
       this.syncPocketBodyClass(true);
+      // 量一下左栏实际宽度，供标题栏配方书定位到分隔线左侧（批次 321）
+      const leftEl = showCategory ? this.categoryHostEl : this.mainGridEl;
+      const leftWidth = leftEl.getBoundingClientRect().width;
+      if (leftWidth > 0) {
+        this.panel.style.setProperty('--station-left-width', `${Math.round(leftWidth)}px`);
+      }
       this.lastLeftPane = showCategory ? 'category' : 'items';
       this.lastRightCrafting = true;
       return;

@@ -2236,6 +2236,12 @@
       .inv-panel.pocket-ui .inv-header .inv-recipes-btn:not(.inv-creative-toggle):not(.inv-pocket-recipe-toggle) { display: none; }
       .inv-panel.pocket-ui .inv-header .inv-pocket-recipe-toggle { grid-column: 1; justify-self: end; }
       .inv-panel.pocket-ui .inv-header .inv-close { grid-column: 3; justify-self: end; }
+      /* 工作站里把标题栏配方书拉到左栏分隔线左侧（批次 321） */
+      .inv-panel.pocket-ui.station-ui .inv-header { position: relative; }
+      .inv-panel.pocket-ui.station-ui .inv-header .inv-pocket-recipe-toggle {
+        position: absolute; top: 0;
+        right: calc(100% - var(--station-left-width, 50%) + 8px);
+      }
       /* 批次 159：开关开着 = "本分类全部列出、不拥有的红底"，按下去的样子要跟
          左轨那排分类页签一致（同一套斜面 + 亮一档的底色），否则两种"选中"
          看起来是两种东西。关着 = 只显示自己拥有的。 */
