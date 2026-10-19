@@ -57,7 +57,10 @@ export type StructureKind =
   | 'jungle_temple'
   // 批次 345（D21 第二批）
   | 'witch_hut'
-  | 'pillager_outpost';
+  | 'pillager_outpost'
+  // 批次 347（D21 第三批）
+  | 'ruined_portal'
+  | 'buried_treasure';
 
 /** 一个结构实例：原点 + 包围盒 + 随机源 */
 export interface StructureInstance {
@@ -328,6 +331,36 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
     height: 30,
     // 原版：平原/沙漠/热带草原/针叶林/雪原等开阔地形
     biomes: [Biome.PLAINS, Biome.DESERT, Biome.SAVANNA, Biome.TAIGA, Biome.SNOWY_PLAINS],
+  },
+  {
+    kind: 'ruined_portal',
+    spacing: 40,
+    separation: 8,
+    chance: 0.5,
+    salt: 0xcccc,
+    radius: 12,
+    height: 12,
+    // 主世界各种地形都可能（原版如此），这里挑几个有代表性的
+    biomes: [
+      Biome.PLAINS,
+      Biome.DESERT,
+      Biome.TAIGA,
+      Biome.SNOWY_PLAINS,
+      Biome.SWAMP,
+      Biome.JUNGLE,
+      Biome.SAVANNA,
+    ],
+  },
+  {
+    kind: 'buried_treasure',
+    spacing: 48,
+    separation: 8,
+    chance: 0.6,
+    salt: 0xdddd,
+    radius: 8,
+    height: 8,
+    // 原版埋在海滩的沙下
+    biomes: [Biome.BEACH, Biome.SNOWY_BEACH],
   },
 ];
 
@@ -1310,6 +1343,39 @@ function buildPillagerOutpost(w: FeatureWriter, s: StructureInstance): void {
   torch(w, s.x - 2, base + 9, s.z - 2);
 }
 
+// ---------------------------------------------------------------- 废弃传送门（批次 347）
+
+/** 废弃传送门：残缺黑曜石框 + 火山岩地皮 + 金块 + 箱子（用现有 `dungeon` 表） */
+function buildRuinedPortal(w: FeatureWriter, s: StructureInstance): void {
+  const rng = s.rng;
+  const base = s.y;
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -4; dz <= 4; dz++) {
+      if (rng.chance(0.35)) w.fill(s.x + dx, base, s.z + dz, Block.NETHERRACK);
+    }
+  }
+  // 4 宽 5 高的框（每块 80% 概率还在：原版就是"塌了一半"）
+  for (let y = 1; y <= 5; y++) {
+    for (const dx of [-2, 2] as const) if (rng.chance(0.8)) w.fill(s.x + dx, base + y, s.z, Block.OBSIDIAN);
+  }
+  for (let x = -2; x <= 2; x++) {
+    for (const y of [1, 5] as const) if (rng.chance(0.8)) w.fill(s.x + x, base + y, s.z, Block.OBSIDIAN);
+  }
+  if (rng.chance(0.5)) w.fill(s.x - 1, base + 1, s.z - 1, Block.GOLD_BLOCK);
+  lootChest(w, s.x + 1, base + 1, s.z - 1, 'dungeon');
+}
+
+// ---------------------------------------------------------------- 埋藏的宝藏（批次 347）
+
+/** 海滩沙下的小石室 + 一只宝箱（用现有 `shipwreck_treasure` 表） */
+function buildBuriedTreasure(w: FeatureWriter, s: StructureInstance): void {
+  const y = s.y - 5;
+  clear(w, s.x - 2, y, s.z - 2, s.x + 2, y + 2, s.z + 2);
+  box(w, s.x - 2, y - 1, s.z - 2, s.x + 2, y - 1, s.z + 2, Block.SANDSTONE);
+  walls(w, s.x - 2, y, s.z - 2, s.x + 2, y + 2, s.z + 2, Block.SANDSTONE);
+  lootChest(w, s.x, y, s.z, 'shipwreck_treasure');
+}
+
 // ---------------------------------------------------------------- 建造器表
 
 const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, world: FeatureWorld, seed: number) => void> = {
@@ -1324,6 +1390,8 @@ const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, w
   jungle_temple: (w, s) => buildJungleTemple(w, s),
   witch_hut: (w, s) => buildWitchHut(w, s),
   pillager_outpost: (w, s) => buildPillagerOutpost(w, s),
+  ruined_portal: (w, s) => buildRuinedPortal(w, s),
+  buried_treasure: (w, s) => buildBuriedTreasure(w, s),
 };
 
 /** 结构种类清单（测试用） */
