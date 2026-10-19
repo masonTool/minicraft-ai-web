@@ -2560,11 +2560,55 @@
         height: var(--inv-pocket-h);
         max-height: var(--inv-pocket-h);
       }
+      /* 批次 277：工作站左栏的两个页签 + 可做列表 */
+      .inv-station-tabs {
+        display: none;
+        grid-column: 1;
+        grid-row: 1;
+        align-items: center;
+        gap: 4px;
+        min-height: 0;
+      }
+      .inv-panel.station-ui .inv-station-tabs { display: flex; }
+      .inv-station-tab {
+        font: inherit; font-size: 12px; line-height: 1.2;
+        padding: 3px 10px; cursor: pointer;
+        color: #2b2b2b; background: #a8a8a8;
+        border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      .inv-station-tab.active {
+        background: #dcdec4;
+        border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+      }
+      .inv-station-recipes {
+        display: none;
+        grid-column: 1;
+        grid-row: 2;
+        min-height: 0;
+        overflow-y: auto;
+        flex-direction: column;
+        gap: 6px;
+        align-content: start;
+      }
+      .inv-panel.station-ui .inv-station-recipes { display: flex; }
+      .inv-station-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 40px);
+        gap: 2px;
+        align-content: start;
+      }
+      .inv-station-grid .inv-slot {
+        width: 40px; height: 40px;
+        max-width: 40px; max-height: 40px;
+      }
+      .inv-station-grid .inv-slot canvas { width: 28px; height: 28px; }
+      /* 底部统计行贴底，不要被上面的格子挤没 */
+      .inv-station-recipes .inv-category-info { margin-top: auto; }
       /* 竖屏 / 极窄屏放不下并排：退回"工作站在上、背包在下"，面板自己滚 */
       @media (max-width: 560px) {
         .inv-panel.pocket-ui.pocket-dual.station-ui .inv-body {
           grid-template-columns: minmax(0, 1fr);
-          grid-template-rows: auto auto;
+          grid-template-rows: auto auto auto;
           overflow-y: auto;
         }
         .inv-panel.pocket-ui.pocket-dual.station-ui .inv-top {
@@ -2574,9 +2618,14 @@
           border-left: 0;
           border-bottom: 2px solid #8a8a8a;
         }
-        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-main > .inv-grid {
+        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-station-tabs {
           grid-column: 1;
           grid-row: 2;
+        }
+        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-main > .inv-grid,
+        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-station-recipes {
+          grid-column: 1;
+          grid-row: 3;
         }
       }
       .inv-panel.pocket-ui.pocket-dual .inv-gear {

@@ -641,8 +641,10 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '工作站分支：左栏主背包、右栏 topArea，藏掉左右轨/页签/装备列',
-    /if \(workstation\) \{[\s\S]{0,1200}this\.panel\.dataset\.pocketTab = 'station';[\s\S]{0,1200}this\.gearEl\.style\.display = 'none';/.test(invSrc) &&
-      /if \(workstation\) \{[\s\S]{0,1600}this\.placeHotbar\(true\);/.test(invSrc),
+    invSrc.includes("this.panel.dataset.pocketTab = 'station';") &&
+      invSrc.includes("this.gearEl.style.display = 'none';") &&
+      invSrc.includes('this.placeHotbar(true);') &&
+      invSrc.includes('this.stationRecipeHostEl.style.display'),
   );
   check(
     '工作站双栏 CSS：左 auto + 右 1fr、面板加宽、窄屏可上下堆叠',
@@ -650,6 +652,36 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('grid-template-columns: auto minmax(0, 1fr);') &&
       css.includes('width: min(calc(100vw - 24px), 800px);') &&
       css.includes('@media (max-width: 560px)'),
+  );
+
+  // 批次 277（用户）：工作站左栏也要像工作台一样列"可做/红底"
+  check(
+    '工作站左栏有「可做 / 背包」两个页签',
+    invSrc.includes("['recipes', '可做'],") &&
+      invSrc.includes("['items', '背包'],") &&
+      invSrc.includes('private setStationLeft'),
+  );
+  check(
+    '配方驱动型工作站默认可做列表，铁砧/砂轮/附魔台仍是背包',
+    invSrc.includes("this.stationLeft = this.stationHasRecipes(mode) ? 'recipes' : 'items';") &&
+      /private stationHasRecipes[\s\S]{0,300}mode === 'smithing'[\s\S]{0,200}mode === 'brewing'/.test(invSrc),
+  );
+  check(
+    '刷新时重算可做列表；白底/红底用 inv-slot.locked',
+    invSrc.includes('this.renderStationRecipes();') &&
+      invSrc.includes("slot.classList.add('station-recipe-slot')") &&
+      invSrc.includes('if (!entry.available) slot.classList.add(\'locked\');'),
+  );
+  check(
+    '点白底配方会自动填原料与燃料（白底 = 点下去能开工）',
+    invSrc.includes('private fillStationRecipe') &&
+      invSrc.includes('this.ensureInSlot(furnace, FURNACE_INPUT') &&
+      invSrc.includes('this.ensureInSlot(furnace, FURNACE_FUEL') &&
+      invSrc.includes('this.ensureInSlot(stand, BREW_INGREDIENT_SLOT'),
+  );
+  check(
+    '可做列表 7×40 网格（与左栏背包同一几何）',
+    css.includes('.inv-station-grid {') && css.includes('grid-template-columns: repeat(7, 40px);'),
   );
 
   // 左栏状态机（批次 181）：只有一个 pane，删掉两套互相打架的布尔
