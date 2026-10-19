@@ -147,6 +147,8 @@ function modelKindOf(typeId: string): ModelKind {
   // 潜影贝（批次 344）：暂用四足骨架占位（没有方块型生物骨架）
   if (typeId === 'shulker') return 'quadruped';
   if (typeId === 'bee') return 'bird';
+  if (typeId === 'parrot') return 'bird';
+  if (typeId === 'mooshroom') return 'quadruped';
   // 守卫者（批次 359）：借鱼那套流线骨架
   if (typeId === 'guardian' || typeId === 'elder_guardian') return 'fish';
   return 'humanoid';

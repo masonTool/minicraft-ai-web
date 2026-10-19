@@ -641,6 +641,54 @@ export const BEE_TYPE: MobType = {
 };
 
 /**
+ * 鹦鹉（批次 377）：丛林里的飞行被动生物，6 血、不掉东西。
+ * ⚠️ 不做“驯服后停在肩上”“模仿声音”。
+ */
+export const PARROT_TYPE: MobType = {
+  id: 'parrot',
+  name: '鹦鹉',
+  health: 6,
+  width: 0.5,
+  height: 0.9,
+  speed: 1.8,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 1,
+  flying: true,
+  spawnBiomes: ['jungle', 'sparse_jungle', 'bamboo_jungle'],
+  bodyColor: 0xd84a4a,
+  accentColor: 0x3a6ac8,
+  eyeHeight: 0.7,
+};
+
+/**
+ * 哞菇（批次 377）：蘑菇岛的牛变种，掉牛肉与皮革。
+ * ⚠️ 不做“拿碗挤蘑菇煲”“用剪刀变回牛”。
+ */
+export const MOOSHROOM_TYPE: MobType = {
+  id: 'mooshroom',
+  name: '哞菇',
+  health: 10,
+  width: 0.9,
+  height: 1.4,
+  speed: 1.4,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [
+    { itemId: Item.BEEF, min: 1, max: 3 },
+    { itemId: Item.LEATHER, min: 0, max: 2 },
+  ],
+  xp: 1,
+  spawnBiomes: ['mushroom_fields'],
+  bodyColor: 0xc84a4a,
+  accentColor: 0xf0f0e8,
+  eyeHeight: 1.2,
+};
+
+/**
  * 守卫者（批次 359，海洋系）。
  *
  * 30 血、水下敌对、掉海晶碎片/砂粒。原版守海底神殿，本项目没有
@@ -1553,6 +1601,8 @@ export const MOB_TYPES: readonly MobType[] = [
   GUARDIAN_TYPE,
   ELDER_GUARDIAN_TYPE,
   BEE_TYPE,
+  PARROT_TYPE,
+  MOOSHROOM_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿

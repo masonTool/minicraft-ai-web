@@ -1061,6 +1061,8 @@ export const TILE_ORDER = [
   'item_honeycomb',
   'item_honey_bottle',
   'spawn_egg_bee',
+  'spawn_egg_parrot',
+  'spawn_egg_mooshroom',
   'flowering_azalea',
   // 紫水晶族（批次 351）
   'amethyst_block',

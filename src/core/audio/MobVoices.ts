@@ -457,6 +457,8 @@ const VOICE_BY_ID: Readonly<Record<string, MobVoiceId>> = {
   iron_golem: 'villager',
   pillager: 'villager',
   bee: 'spider',
+  parrot: 'chicken',
+  mooshroom: 'cow',
   guardian: 'drowned',
   elder_guardian: 'drowned',
   skeleton: 'skeleton',
