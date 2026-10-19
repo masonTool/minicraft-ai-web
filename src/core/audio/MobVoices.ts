@@ -466,6 +466,8 @@ const VOICE_BY_ID: Readonly<Record<string, MobVoiceId>> = {
   vex: 'spider',
   illusioner: 'villager',
   wandering_trader: 'villager',
+  trader_llama: 'cow',
+  zombie_villager: 'piglin',
   mooshroom: 'cow',
   guardian: 'drowned',
   elder_guardian: 'drowned',

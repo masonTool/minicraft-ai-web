@@ -153,6 +153,7 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'ravager') return 'quadruped';
   if (typeId === 'vex') return 'bird';
   if (typeId === 'wandering_trader') return 'villager';
+  if (typeId === 'trader_llama') return 'quadruped';
   // 守卫者（批次 359）：借鱼那套流线骨架
   if (typeId === 'guardian' || typeId === 'elder_guardian') return 'fish';
   return 'humanoid';

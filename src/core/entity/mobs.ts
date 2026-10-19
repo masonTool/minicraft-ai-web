@@ -707,6 +707,47 @@ export const WITCH_TYPE: MobType = {
 };
 
 /**
+ * 行商羊驼（批次 381）：流浪商人的驮兽，30 血、被动、掉皮革。
+ * ⚠️ 不做“拴在商人身上 / 吐口水”。
+ */
+export const TRADER_LLAMA_TYPE: MobType = {
+  id: 'trader_llama',
+  name: '行商羊驼',
+  health: 30,
+  width: 0.9,
+  height: 1.9,
+  speed: 1.6,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [{ itemId: Item.LEATHER, min: 0, max: 2 }],
+  xp: 1,
+  naturalSpawn: false,
+  bodyColor: 0xc8b48a,
+  accentColor: 0x8a6a4a,
+  eyeHeight: 1.6,
+};
+
+/** 僵尸村民（批次 381）：24 血、敌对、掉腐肉；不做“虚弱 + 金苹果治愈” */
+export const ZOMBIE_VILLAGER_TYPE: MobType = {
+  id: 'zombie_villager',
+  name: '僵尸村民',
+  health: 24,
+  width: 0.6,
+  height: 1.95,
+  speed: 1.9,
+  hostile: true,
+  attackDamage: 3,
+  followRange: 20,
+  drops: [{ itemId: Item.ROTTEN_FLESH, min: 0, max: 2 }],
+  xp: 5,
+  naturalSpawn: false,
+  bodyColor: 0x5a7a4a,
+  accentColor: 0x3a5a2a,
+  eyeHeight: 1.74,
+};
+
+/**
  * 劫掠兽（批次 380）：100 血、伤害 12 的袭击主力。
  * 原版随袭击出现；本项目 `naturalSpawn: false`。
  */
@@ -1780,6 +1821,8 @@ export const MOB_TYPES: readonly MobType[] = [
   VEX_TYPE,
   ILLUSIONER_TYPE,
   WANDERING_TRADER_TYPE,
+  TRADER_LLAMA_TYPE,
+  ZOMBIE_VILLAGER_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿
