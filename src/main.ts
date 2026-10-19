@@ -12719,6 +12719,7 @@ class App {
     this.meshPool.dispose();
     this.world.dispose();
     this.outline.dispose();
+    this.mobOutline.dispose();
     this.blockOverlay.dispose();
     // 告示牌的文字平面与画布贴图（B12）：每块牌子一份材质，得逐块释放
     this.signRenderer.dispose();

@@ -115,13 +115,15 @@ export const HANDEDNESS_LABELS: Record<Handedness, string> = {
 };
 
 /**
- * 摇杆四周的**死区**（批次 271，用户要求）：这一圈里点按不产生任何目标，
+ * 摇杆四周的**死区**（批次 271，批次 275 加大）：这一圈里点按不产生任何目标，
  * 也不攻击/放置——那是控制移动的大拇指，右手才是操作手。
  *
- * 取摇杆半径的 20%：132px 的摇杆外扩约 13px，既盖住"手指压边"的误差，
- * 又不会把旁边一大片屏幕吞掉。随机身缩放（`--touch-scale`）一起变大。
+ * 批次 271 取半径的 20%（132px 摇杆外扩约 13px）实测仍然太窄：拇指压边/换向时
+ * 很容易蹭进"瞄准区"，于是白圈一闪、目标跳到旁边的方块上。批次 275 按用户要求
+ * 放大到 **60%**（约 40px），形成一个明显大一圈的保护区；死区跟着 `--touch-scale`
+ * 一起缩放，换到左手模式也自动跟到右侧摇杆。
  */
-export const STICK_DEAD_ZONE_RATIO = 0.2;
+export const STICK_DEAD_ZONE_RATIO = 0.6;
 
 /** 点 (x, y) 是否落在"摇杆 + 死区"这个圆里（纯函数，离线测试用） */
 export function withinStickDeadZone(
@@ -281,6 +283,13 @@ export class TouchControls {
     this.stickKnob = document.createElement('div');
     this.stickKnob.className = 'knob';
     this.stickBase.appendChild(this.stickKnob);
+    // 潜行提示（批次 275）：双击摇杆切换潜行后，只在摇杆上套一圈绿色太容易被拇指挡住。
+    // 在摇杆正上方加一枚"潜行"小牌；CSS 只在 `#touch-stick.sneaking` 时显示。
+    const sneakBadge = document.createElement('div');
+    sneakBadge.className = 'sneak-badge';
+    sneakBadge.textContent = '潜行';
+    sneakBadge.setAttribute('aria-hidden', 'true');
+    this.stickBase.appendChild(sneakBadge);
     this.bindStick();
 
     // ---- 右下按钮簇（基岩手机）：
@@ -490,8 +499,9 @@ export class TouchControls {
     }
     this.flying = flying;
     if (flying) {
-      // 起飞时清掉地面潜行亮态
+      // 起飞时清掉地面潜行亮态（状态与摇杆上的绿边/「潜行」小牌必须一起撤）
       this.sneaking = false;
+      this.stickBase.classList.remove('sneaking');
     }
     this.sneakHeld = false;
     this.jumpHeld = false;
@@ -590,10 +600,10 @@ export class TouchControls {
   }
 
   /**
-   * 手指落点是否在摇杆死区里（批次 271）。
+   * 手指落点是否在摇杆死区里（批次 271 / 275）。
    *
    * 命中时**整次手势都不开始**：不出白圈、不选目标、不攻击、不放置，也不转视角。
-   * 摇杆元素自己会吃掉圈内的 pointerdown，这一条管的是"圈外那一小圈"。
+   * 摇杆元素自己会吃掉圈内的 pointerdown，这一条管的是"摇杆外面那一圈保护区"。
    */
   private isInStickDeadZone(clientX: number, clientY: number): boolean {
     const rect = this.stickBase.getBoundingClientRect();

@@ -3117,14 +3117,40 @@
       }
       .touch-button.fly-up::after { content: '▲'; top: 4px; }
       .touch-button.fly-down::after { content: '▼'; bottom: 3px; }
-      /* 双击摇杆潜行时给摇杆一圈提示 */
-      #touch-stick.sneaking { box-shadow: 0 0 0 3px rgba(140, 220, 140, .55); }
+      /* 双击摇杆潜行时的提示（批次 275）：一圈更亮的绿边 + 摇杆芯变绿，
+         再在正上方挂一枚"潜行"小牌——拇指压着摇杆时，只有上方的小牌看得见 */
+      #touch-stick.sneaking {
+        border-color: rgba(190, 255, 190, .9);
+        background: rgba(120, 210, 130, .18);
+        box-shadow: 0 0 0 4px rgba(140, 220, 140, .7), inset 0 0 16px rgba(140, 220, 140, .35);
+      }
+      #touch-stick.sneaking .knob {
+        background: rgba(165, 240, 170, .85);
+        border-color: rgba(225, 255, 225, .95);
+      }
+      #touch-stick .sneak-badge {
+        position: absolute; left: 50%; top: -22px; transform: translateX(-50%);
+        padding: 2px 8px; border-radius: 9px;
+        background: rgba(52, 132, 64, .9); color: #eaffea;
+        font-size: 11px; white-space: nowrap;
+        text-shadow: 0 1px 0 rgba(0, 0, 0, .55);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+        opacity: 0; transition: opacity .15s; pointer-events: none;
+      }
+      #touch-stick.sneaking .sneak-badge { opacity: 1; }
 
       /* 动态摇杆（批次 96）：平时隐形待命，按下才出现在手指下面。
          ⚠️ 只改透明度、不改 display：`beginDynamicStick` 要靠 getBoundingClientRect
          拿到半径与中心（display: none 下这个矩形全是 0，摇杆会"按下去就死"）。 */
       #touch-stick.dynamic { opacity: 0; }
       #touch-stick.dynamic.active { opacity: 1; }
+      /* 动态摇杆 + 潜行（批次 275）：平时整层 opacity:0 会把"潜行"小牌一起藏掉。
+         这里把整层放出来，但**底座与摇杆芯单独隐去**，只留小牌——不按也能看见潜行状态 */
+      #touch-stick.dynamic.sneaking { opacity: 1; }
+      #touch-stick.dynamic.sneaking:not(.active) {
+        background: transparent; border-color: transparent; box-shadow: none;
+      }
+      #touch-stick.dynamic.sneaking:not(.active) .knob { opacity: 0; }
 
       #touch-hint {
         position: absolute; left: 50%; bottom: 214px; transform: translateX(-50%);

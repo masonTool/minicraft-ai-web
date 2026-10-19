@@ -14,7 +14,7 @@ import { Block, blockDef } from '../src/core/registry/blocks.ts';
 import { isSightBlocker, sightBlocked } from '../src/core/interaction/AimTarget.ts';
 import { raycastEntities } from '../src/core/interaction/EntityRaycast.ts';
 import { Entity } from '../src/core/entity/Entity.ts';
-import { withinStickDeadZone } from '../src/ui/TouchControls.ts';
+import { STICK_DEAD_ZONE_RATIO, withinStickDeadZone } from '../src/ui/TouchControls.ts';
 
 let passed = 0;
 let failed = 0;
@@ -120,11 +120,12 @@ console.log('\n[实体射线]');
 
 console.log('\n[摇杆死区]');
 {
+  check('死区比例是 60%（批次 275 从 20% 加大）', STICK_DEAD_ZONE_RATIO === 0.6, String(STICK_DEAD_ZONE_RATIO));
   check('圆心在死区里', withinStickDeadZone(100, 100, 60, 100, 100));
   check('半径内（60）在死区里', withinStickDeadZone(100, 100, 60, 160, 100));
-  check('半径 + 20% 的边缘仍在死区里', withinStickDeadZone(100, 100, 60, 171, 100));
-  check('超出 20% 之后不算死区（不会吞掉旁边一大片）', !withinStickDeadZone(100, 100, 60, 175, 100));
-  check('按钮变大时死区同比变大', withinStickDeadZone(100, 100, 80, 190, 100) && !withinStickDeadZone(100, 100, 60, 190, 100));
+  check('半径 + 60% 的边缘仍在死区里（约 40px 保护区）', withinStickDeadZone(100, 100, 60, 196, 100));
+  check('超出 60% 之后不算死区（不会吞掉旁边一大片）', !withinStickDeadZone(100, 100, 60, 199, 100));
+  check('按钮变大时死区同比变大', withinStickDeadZone(100, 100, 80, 228, 100) && !withinStickDeadZone(100, 100, 60, 228, 100));
 }
 
 console.log(`\n瞄准测试：${passed} 通过 / ${failed} 失败`);

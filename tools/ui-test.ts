@@ -1455,6 +1455,14 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       indexSource.includes('#touch-ui.left-handed #touch-buttons { right: auto; left: 20px; }') &&
       source.includes("return this.handedness === 'left'"),
   );
+  check(
+    '潜行时摇杆上有明确提示（绿边 + 摇杆芯变绿 + 「潜行」小牌）',
+    source.includes("sneakBadge.textContent = '潜行'") &&
+      source.includes("this.stickBase.classList.remove('sneaking')") &&
+      indexSource.includes('#touch-stick.sneaking .knob') &&
+      indexSource.includes('#touch-stick.sneaking .sneak-badge') &&
+      indexSource.includes('#touch-stick.dynamic.sneaking { opacity: 1; }'),
+  );
   check('灵敏度默认 4、范围 0~8（4 是正中间）', DEFAULT_SETTINGS.sensitivity === 4);
   check(
     '瞄准方式 / 左右手都能在设置里切换',

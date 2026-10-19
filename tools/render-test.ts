@@ -30,6 +30,7 @@ import { SHEARED_BODY_COLOR, mobBodyColor } from '../src/render/MobRenderer.ts';
 import { Mob } from '../src/core/entity/Mob.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
+import { MobOutline } from '../src/render/MobOutline.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { srgbColor } from '../src/render/srgb.ts';
 import { tileOriginAt, tileRectAt } from '../src/render/atlasCoords.ts';
@@ -554,6 +555,37 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
 }
 
 // ---------------------------------------------------------------- 3. 视野效果
+
+console.log('\n[生物选中标记：角括号 + 脚下光环（批次 275）]');
+{
+  const marker = new MobOutline();
+  check('默认不可见', !marker.object.visible);
+  const mob = { x: 3, y: 64, z: -5, width: 0.9, height: 1.4 } as unknown as Mob;
+  marker.show(mob);
+  check('显示后可见', marker.object.visible);
+  check(
+    '位置贴着生物脚底',
+    marker.object.position.x === 3 && marker.object.position.y === 64 && marker.object.position.z === -5,
+  );
+  check(
+    '括号按碰撞盒缩放（宽 × 高 × 宽）',
+    Math.abs(marker.brackets.scale.x - (0.9 + 0.04)) < 1e-9 &&
+      Math.abs(marker.brackets.scale.y - (1.4 + 0.04)) < 1e-9 &&
+      Math.abs(marker.brackets.scale.z - (0.9 + 0.04)) < 1e-9,
+  );
+  check(
+    '括号是 8 个角 × 3 段 = 24 条线段（不是一圈完整线框）',
+    marker.brackets.geometry.getAttribute('position').count === 48,
+  );
+  check(
+    '脚下光环水平放置且离地一点点',
+    Math.abs(marker.ring.rotation.x + Math.PI / 2) < 1e-9 && marker.ring.position.y > 0 && marker.ring.position.y < 0.05,
+  );
+  check('光环半径跟着生物宽度（0.9 × 0.62）', Math.abs(marker.ring.scale.x - 0.558) < 1e-9);
+  marker.hide();
+  check('hide 之后不可见', !marker.object.visible);
+  marker.dispose();
+}
 
 console.log('\n[视野效果：预设 / 过渡 / 帧率无关]');
 {
