@@ -60,7 +60,10 @@ export type StructureKind =
   | 'pillager_outpost'
   // 批次 347（D21 第三批）
   | 'ruined_portal'
-  | 'buried_treasure';
+  | 'buried_treasure'
+  // 批次 348（D21 第四批）
+  | 'igloo'
+  | 'ocean_ruins';
 
 /** 一个结构实例：原点 + 包围盒 + 随机源 */
 export interface StructureInstance {
@@ -361,6 +364,37 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
     height: 8,
     // 原版埋在海滩的沙下
     biomes: [Biome.BEACH, Biome.SNOWY_BEACH],
+  },
+  {
+    kind: 'igloo',
+    spacing: 48,
+    separation: 10,
+    chance: 0.5,
+    salt: 0xeeee,
+    radius: 10,
+    height: 10,
+    biomes: [Biome.SNOWY_PLAINS, Biome.SNOWY_TAIGA, Biome.SNOWY_SLOPES],
+  },
+  {
+    kind: 'ocean_ruins',
+    spacing: 24,
+    separation: 6,
+    chance: 0.6,
+    salt: 0xffff,
+    radius: 8,
+    height: 8,
+    biomes: [
+      Biome.OCEAN,
+      Biome.DEEP_OCEAN,
+      Biome.COLD_OCEAN,
+      Biome.DEEP_COLD_OCEAN,
+      Biome.LUKEWARM_OCEAN,
+      Biome.DEEP_LUKEWARM_OCEAN,
+      Biome.WARM_OCEAN,
+      Biome.FROZEN_OCEAN,
+      Biome.DEEP_FROZEN_OCEAN,
+    ],
+    underwater: true,
   },
 ];
 
@@ -1376,6 +1410,45 @@ function buildBuriedTreasure(w: FeatureWriter, s: StructureInstance): void {
   lootChest(w, s.x, y, s.z, 'shipwreck_treasure');
 }
 
+// ---------------------------------------------------------------- 冰屋（批次 348）
+
+/** 雪原小屋：雪块墙 + 冰地板 + 两层内收屋顶 + 箱子（复用 `village_house` 表） */
+function buildIgloo(w: FeatureWriter, s: StructureInstance): void {
+  const base = s.y;
+  clear(w, s.x - 3, base + 1, s.z - 2, s.x + 3, base + 5, s.z + 2);
+  box(w, s.x - 3, base, s.z - 2, s.x + 3, base, s.z + 2, Block.ICE);
+  walls(w, s.x - 3, base + 1, s.z - 2, s.x + 3, base + 3, s.z + 2, Block.SNOW_BLOCK);
+  w.fill(s.x, base + 1, s.z + 2, Block.AIR);
+  w.fill(s.x, base + 2, s.z + 2, Block.AIR);
+  box(w, s.x - 3, base + 4, s.z - 2, s.x + 3, base + 4, s.z + 2, Block.SNOW_BLOCK);
+  box(w, s.x - 2, base + 5, s.z - 1, s.x + 2, base + 5, s.z + 1, Block.SNOW_BLOCK);
+  lootChest(w, s.x + 2, base + 1, s.z - 1, 'village_house');
+  torch(w, s.x - 2, base + 2, s.z);
+}
+
+// ---------------------------------------------------------------- 海底废墟（批次 348）
+
+/** 海床上的残墙与碎块（5×5、高 1~3），箱子复用 `shipwreck_supply` */
+function buildOceanRuins(w: FeatureWriter, s: StructureInstance): void {
+  const rng = s.rng;
+  const base = s.y;
+  const stone = (): number => (rng.chance(0.4) ? Block.MOSSY_COBBLESTONE : Block.SANDSTONE);
+
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      if (Math.abs(dx) !== 2 && Math.abs(dz) !== 2) continue;
+      const height = 1 + rng.int(3);
+      for (let y = 1; y <= height; y++) if (rng.chance(0.75)) w.fill(s.x + dx, base + y, s.z + dz, stone());
+    }
+  }
+  for (let i = 0; i < 8; i++) {
+    const dx = rng.int(5) - 2;
+    const dz = rng.int(5) - 2;
+    if (rng.chance(0.5)) w.fill(s.x + dx, base, s.z + dz, stone());
+  }
+  if (rng.chance(0.5)) lootChest(w, s.x, base + 1, s.z, 'shipwreck_supply');
+}
+
 // ---------------------------------------------------------------- 建造器表
 
 const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, world: FeatureWorld, seed: number) => void> = {
@@ -1392,6 +1465,8 @@ const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, w
   pillager_outpost: (w, s) => buildPillagerOutpost(w, s),
   ruined_portal: (w, s) => buildRuinedPortal(w, s),
   buried_treasure: (w, s) => buildBuriedTreasure(w, s),
+  igloo: (w, s) => buildIgloo(w, s),
+  ocean_ruins: (w, s) => buildOceanRuins(w, s),
 };
 
 /** 结构种类清单（测试用） */
