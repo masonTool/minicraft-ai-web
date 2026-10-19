@@ -658,7 +658,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check(
     '工作站左栏复用物品分类栏 + 配方书开关',
     invSrc.includes("this.panel.dataset.pocketLeft = showCategory ? 'category' : 'items';") &&
-      invSrc.includes('this.stationRecipeBtn') &&
+      invSrc.includes("this.recipesBtn?.classList.remove('hidden')") &&
       invSrc.includes('this.syncRecipeRail(showCategory ? this.categoryTab : null)'),
   );
   check(
@@ -909,16 +909,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check(
     '创造切生存后工作站分类条重新挂回左轨（批次 316）',
     invSrc.includes('this.pocketRecipeBar.parentElement !== this.railLeft') &&
-      invSrc.includes('this.railLeft.replaceChildren(this.pocketRecipeBar, this.invTabEl)') &&
-      invSrc.includes('this.stationRecipeBtn') &&
-      css.includes('.station-recipe-btn'),
+      invSrc.includes('this.railLeft.replaceChildren(this.pocketRecipeBar, this.invTabEl)'),
   );
   check(
-    '工作站配方书恢复 e3503c3 文字样式并向左让开中隔线（批次 319）',
-    invSrc.includes("this.stationRecipeBtn.textContent = '配方书'") &&
-      !invSrc.includes('RECIPE_BOOK_ICON') &&
-      css.includes('position: absolute; top: 4px; right: 10px; z-index: 3;') &&
-      !css.includes('.station-recipe-btn svg'),
+    '配方书恢复 e3503c3 之前的标题栏样式（批次 320）',
+    invSrc.includes("this.recipesBtn?.classList.remove('hidden')") &&
+      !invSrc.includes('stationRecipeBtn') &&
+      !css.includes('.station-recipe-btn'),
   );
   check(
     '点创造分类会切回无限物品页',
