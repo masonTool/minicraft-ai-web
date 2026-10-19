@@ -864,6 +864,15 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     invSrc.includes('this.syncCreativeRails(creativePlayer)'),
   );
   check(
+    '创造模式配方工作站允许停分类，并换成配方分类左轨（批次 310）',
+    invSrc.includes('const creativeStationCategory') &&
+      invSrc.includes('creativePlayer && isWorkstationMode(this.mode) && this.stationHasRecipes()') &&
+      invSrc.includes("this.pane === 'category' && (!creativePlayer || creativeStationCategory)") &&
+      /if \(onRail && this\.pane === 'category' && isWorkstationMode\(this\.mode\) && this\.stationHasRecipes\(\)\)/.test(
+        invSrc,
+      ),
+  );
+  check(
     '点创造分类会切回无限物品页',
     /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
   );

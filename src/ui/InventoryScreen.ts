@@ -3458,7 +3458,14 @@ export class InventoryScreen {
       this.pane = creativePlayer ? 'creative' : 'items';
       this.lastCreative = creativePlayer;
     }
-    if (creativePlayer && this.pane === 'category') this.pane = 'creative';
+    // 批次 310：创造模式下**配方驱动型工作站**允许左栏停在「分类」——
+    // 以前这里一律改回 creative，导致熔炉里点分类完全没反应。
+    // 创造背包/工作台仍保持原来的创造物品栏，不摊生存配方分类。
+    const creativeStationCategory =
+      creativePlayer && isWorkstationMode(this.mode) && this.stationHasRecipes();
+    if (creativePlayer && this.pane === 'category' && !creativeStationCategory) {
+      this.pane = 'creative';
+    }
     if (!creativePlayer && this.pane === 'creative') this.pane = 'items';
     const showCreativeItems = creative && this.pane === 'creative';
     // 玩家背包 / 工作台 / 有操作区的工作站共用同一副双栏壳；
@@ -3579,7 +3586,11 @@ export class InventoryScreen {
     // ⚠️ 批次 159：左栏的主要职责是**物品分类**（`category`），配方书不再嵌进来
     // ——"配方"只是分类栏上"要不要把我没有的也列出来"那一颗开关。
     const leftPane: PocketLeftPane =
-      showCreativeItems ? 'creative' : !creativePlayer && this.pane === 'category' ? 'category' : 'items';
+      showCreativeItems
+        ? 'creative'
+        : this.pane === 'category' && (!creativePlayer || creativeStationCategory)
+          ? 'category'
+          : 'items';
 
     this.panel.classList.add('pocket-ui', 'pocket-dual');
     // 双栏壳：成就放右轨（合成/盔甲上面），标题栏那颗收起——标题栏只有 18px，
@@ -3720,6 +3731,11 @@ export class InventoryScreen {
    * 换分类时左栏里那一格还是同一格（批次 157）。
    */
   private syncCreativeRails(onRail: boolean): void {
+    // 创造模式下，配方驱动型工作站左栏停在「分类」时，左轨必须换成配方分类条；
+    // 否则分类栏没有可点的页签，表现就是“分类切换无效”（批次 310）。
+    if (onRail && this.pane === 'category' && isWorkstationMode(this.mode) && this.stationHasRecipes()) {
+      onRail = false;
+    }
     if (onRail) {
       if (this.creativeTabs.parentElement !== this.railLeft) {
         this.railLeft.replaceChildren();
