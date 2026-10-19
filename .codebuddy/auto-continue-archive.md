@@ -9871,4 +9871,11 @@
 - [x] B371-4 test:advancement 116、离线 131 套全绿
 - 覆盖：进度 **92 → 93（93%）**
 
+## 批次 372：命令补 1 条——/enchant（2026-10-20）
+
+- [x] B372-1 `CommandContext.enchantHeld`；主程序写到手持物品的 `enchants`
+- [x] B372-2 `/enchant <附魔> [等级]`：支持 id 与中文名，超过上限按上限算
+- [x] B372-3 test:commands 109 条（含未知附魔错误分支）
+- 覆盖：命令 **20 → 21（50% → 53%）**
+
 <!-- docs-archive:end -->

@@ -842,6 +842,23 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     challenge: true,
   },
   {
+    id: 'minecraft:husbandry/wax_on',
+    parent: 'minecraft:husbandry/root',
+    tab: 'husbandry',
+    title: '涂蜡',
+    desc: '用蜜脾给一块铜块涂蜡（合成：铜块 + 蜜脾）',
+    icon: Block.WAXED_COPPER_BLOCK,
+    trigger: {
+      kind: 'obtain',
+      ids: [
+        Block.WAXED_COPPER_BLOCK,
+        Block.WAXED_EXPOSED_COPPER,
+        Block.WAXED_WEATHERED_COPPER,
+        Block.WAXED_OXIDIZED_COPPER,
+      ],
+    },
+  },
+  {
     id: 'minecraft:husbandry/obtain_honeycomb',
     parent: 'minecraft:husbandry/root',
     tab: 'husbandry',

@@ -3317,6 +3317,27 @@ const SPECS: readonly BlockSpec[] = [
     name: 'minecraft:bee_nest',
     tiles: ['bee_nest_top', 'bee_nest_top', 'bee_nest_side'] as const,
   },
+  // 涂蜡铜（批次 375）：四种氧化度的整块，贴图与未涂蜡版完全一致
+  {
+    id: 603,
+    name: 'minecraft:waxed_copper_block',
+    tiles: ['copper_block', 'copper_block', 'copper_block'] as const,
+  },
+  {
+    id: 604,
+    name: 'minecraft:waxed_exposed_copper',
+    tiles: ['exposed_copper', 'exposed_copper', 'exposed_copper'] as const,
+  },
+  {
+    id: 605,
+    name: 'minecraft:waxed_weathered_copper',
+    tiles: ['weathered_copper', 'weathered_copper', 'weathered_copper'] as const,
+  },
+  {
+    id: 606,
+    name: 'minecraft:waxed_oxidized_copper',
+    tiles: ['oxidized_copper', 'oxidized_copper', 'oxidized_copper'] as const,
+  },
   // 蘑菇岛族（批次 352）：菌丝 + 巨型蘑菇的柄与两种菌盖
   {
     id: 591,
@@ -3704,9 +3725,13 @@ export const Block = {
   SILVERFISH_SPAWNER: 597,
   MOSS_BLOCK: 598,
   MOSS_CARPET: 599,
-  BEE_NEST: 602,
   AZALEA: 600,
   FLOWERING_AZALEA: 601,
+  BEE_NEST: 602,
+  WAXED_COPPER_BLOCK: 603,
+  WAXED_EXPOSED_COPPER: 604,
+  WAXED_WEATHERED_COPPER: 605,
+  WAXED_OXIDIZED_COPPER: 606,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -4031,6 +4056,10 @@ HARDNESS.set(Block.MOSS_BLOCK, 0.1);
 HARDNESS.set(Block.MOSS_CARPET, 0.1);
 HARDNESS.set(Block.AZALEA, 0.1);
 HARDNESS.set(Block.BEE_NEST, 0.3);
+HARDNESS.set(Block.WAXED_COPPER_BLOCK, 3);
+HARDNESS.set(Block.WAXED_EXPOSED_COPPER, 3);
+HARDNESS.set(Block.WAXED_WEATHERED_COPPER, 3);
+HARDNESS.set(Block.WAXED_OXIDIZED_COPPER, 3);
 HARDNESS.set(Block.FLOWERING_AZALEA, 0.1);
 // 灵魂火把 / 灵魂灯笼：与普通火把同级（一碰就掉）
 HARDNESS.set(Block.SOUL_TORCH, 0);

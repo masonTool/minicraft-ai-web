@@ -1237,6 +1237,27 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.HONEY_BOTTLE, count: 1 },
     ingredients: [Item.HONEYCOMB, Item.GLASS_BOTTLE],
   },
+  // 涂蜡铜（批次 375）：蜜脾 + 对应氧化度的铜块
+  {
+    kind: 'shapeless' as const,
+    result: { id: Block.WAXED_COPPER_BLOCK, count: 1 },
+    ingredients: [Block.COPPER_BLOCK, Item.HONEYCOMB],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: Block.WAXED_EXPOSED_COPPER, count: 1 },
+    ingredients: [Block.EXPOSED_COPPER_BLOCK, Item.HONEYCOMB],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: Block.WAXED_WEATHERED_COPPER, count: 1 },
+    ingredients: [Block.WEATHERED_COPPER_BLOCK, Item.HONEYCOMB],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: Block.WAXED_OXIDIZED_COPPER, count: 1 },
+    ingredients: [Block.OXIDIZED_COPPER_BLOCK, Item.HONEYCOMB],
+  },
 ];
 
 /**
