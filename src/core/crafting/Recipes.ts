@@ -1265,6 +1265,18 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Block.WAXED_OXIDIZED_COPPER, count: 1 },
     ingredients: [Block.OXIDIZED_COPPER_BLOCK, Item.HONEYCOMB],
   },
+  // 遮光玻璃（批次 387）：4 紫水晶碎片 + 1 玻璃
+  {
+    kind: 'shapeless' as const,
+    result: { id: 656, count: 1 },
+    ingredients: [
+      Item.AMETHYST_SHARD,
+      Item.AMETHYST_SHARD,
+      Item.AMETHYST_SHARD,
+      Item.AMETHYST_SHARD,
+      Block.GLASS,
+    ],
+  },
   // 旗帜（批次 386）：6 羊毛 + 1 木棍
   {
     kind: 'shaped' as const,

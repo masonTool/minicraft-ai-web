@@ -3277,6 +3277,15 @@ const SPECS: readonly BlockSpec[] = [
   ...CANDLE_SPECS,
   ...GLAZED_TERRACOTTA_SPECS,
   ...BANNER_SPECS,
+
+  // 遮光玻璃（批次 387）：1.17 的"不透光玻璃"，4 紫水晶碎片 + 1 玻璃
+  {
+    id: 656,
+    name: 'minecraft:tinted_glass',
+    tiles: ['tinted_glass', 'tinted_glass', 'tinted_glass'] as const,
+    opaque: false,
+    lightOpacity: 15,
+  },
   // 骨块（批次 349，D21 化石）：9 骨粉压成一块，化石结构也用它
   {
     id: 587,
@@ -3771,6 +3780,7 @@ export const Block = {
   GLAZED_TERRACOTTA_ID_START: 624,
   /** 16 色旗帜从 640 起 */
   BANNER_ID_START: 640,
+  TINTED_GLASS: 656,
   /** 16 色蜡烛从 608 起，顺序与 DYE_COLORS 一致 */
   CANDLE_ID_START: 608,
   /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
@@ -4114,6 +4124,7 @@ HARDNESS.set(Block.AMETHYST_CLUSTER, 1.5);
 HARDNESS.set(Block.CANDLE, 0.1);
 for (let i = 0; i < 16; i++) HARDNESS.set(624 + i, 1.25);
 for (let i = 0; i < 16; i++) HARDNESS.set(640 + i, 1);
+HARDNESS.set(Block.TINTED_GLASS, 0.3);
 for (let i = 0; i < 16; i++) HARDNESS.set(608 + i, 0.1);
 HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);

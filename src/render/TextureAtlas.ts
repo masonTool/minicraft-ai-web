@@ -6257,3 +6257,6 @@ PAINTERS['banner_brown'] = noisy(0x835432, 18);
 PAINTERS['banner_green'] = noisy(0x5e7c16, 18);
 PAINTERS['banner_red'] = noisy(0xb02e26, 18);
 PAINTERS['banner_black'] = noisy(0x1d1d21, 18);
+
+// 遮光玻璃（批次 387）：暗色半透
+PAINTERS['tinted_glass'] = noisy(0x3a2a4a, 10);
