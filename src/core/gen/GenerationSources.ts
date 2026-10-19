@@ -392,6 +392,7 @@ export const GENERATION_SOURCES: readonly GenSource[] = [
       Block.DRIPSTONE_BLOCK,
       Block.SPORE_BLOSSOM,
       Block.HANGING_ROOTS,
+      Block.ROOTED_DIRT,
     ],
   },
   {

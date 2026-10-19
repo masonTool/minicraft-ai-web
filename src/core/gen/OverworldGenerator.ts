@@ -738,8 +738,15 @@ export class OverworldGenerator {
       for (let z = 0; z < CHUNK_SIZE_Z; z++) {
         for (let x = 0; x < CHUNK_SIZE_X; x++) {
           const index = Chunk.index(x, y, z);
-          if (blocks[index] !== Block.AIR) continue;
           const below = blocks[Chunk.index(x, y - 1, z)]!;
+          if (blocks[index] === Block.DIRT && blocks[Chunk.index(x, y + 1, z)] === Block.AIR) {
+            // 缠根泥土（批次 395）：洞穴顶部的泥土按哈希变体
+            let hd = Math.imul(originX + x + 7, 73856093) ^ Math.imul(originZ + z + 7, 19349663) ^ Math.imul(y + 7, 83492791);
+            hd = Math.imul(hd ^ (hd >>> 13), 1274126177);
+            if (((hd ^ (hd >>> 16)) >>> 0) % 149 === 0) blocks[index] = Block.ROOTED_DIRT;
+            continue;
+          }
+          if (blocks[index] !== Block.AIR) continue;
           const above = blocks[Chunk.index(x, y + 1, z)]!;
           // 三轴混合的整数哈希（同坐标恒定）
           let h = Math.imul(originX + x + 1, 73856093) ^ Math.imul(originZ + z + 1, 19349663) ^ Math.imul(y + 1, 83492791);

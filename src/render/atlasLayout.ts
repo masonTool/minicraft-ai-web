@@ -1063,6 +1063,7 @@ export const TILE_ORDER = [
   'dripstone_block',
   'spore_blossom',
   'hanging_roots',
+  'rooted_dirt',
   'banner_white',
   'banner_orange',
   'banner_magenta',

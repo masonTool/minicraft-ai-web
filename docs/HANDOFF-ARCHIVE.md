@@ -2684,4 +2684,6 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 
 - 批次 388（规则）：**showDeathMessages + disableRaids**（规则 16 → 18，60%）。
 
+- 批次 389（命令）：**/playsound**（命令 23 → 24，60%）。
+
 <!-- docs-archive:end -->

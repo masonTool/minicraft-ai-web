@@ -6273,3 +6273,6 @@ PAINTERS['dripstone_block'] = noisy(0x7a5a4a, 12);
 // 洞穴顶部（批次 392）
 PAINTERS['spore_blossom'] = noisy(0xc86a8a, 18);
 PAINTERS['hanging_roots'] = noisy(0x8a6a4a, 12);
+
+// 缠根泥土（批次 395）
+PAINTERS['rooted_dirt'] = noisy(0x8a6a4a, 14);

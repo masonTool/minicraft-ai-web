@@ -3278,6 +3278,13 @@ const SPECS: readonly BlockSpec[] = [
   ...GLAZED_TERRACOTTA_SPECS,
   ...BANNER_SPECS,
 
+  // 缠根泥土（批次 395）：洞穴顶部的泥土变体
+  {
+    id: 664,
+    name: 'minecraft:rooted_dirt',
+    tiles: ['rooted_dirt', 'rooted_dirt', 'rooted_dirt'] as const,
+  },
+
   // 洞穴顶部的两件（批次 392）：孢子花 / 垂根
   {
     id: 662,
@@ -3853,6 +3860,7 @@ export const Block = {
   DRIPSTONE_BLOCK: 661,
   SPORE_BLOSSOM: 662,
   HANGING_ROOTS: 663,
+  ROOTED_DIRT: 664,
   /** 16 色蜡烛从 608 起，顺序与 DYE_COLORS 一致 */
   CANDLE_ID_START: 608,
   /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
@@ -4204,6 +4212,7 @@ HARDNESS.set(Block.POINTED_DRIPSTONE, 1.5);
 HARDNESS.set(Block.DRIPSTONE_BLOCK, 1.5);
 HARDNESS.set(Block.SPORE_BLOSSOM, 0.2);
 HARDNESS.set(Block.HANGING_ROOTS, 0.2);
+HARDNESS.set(Block.ROOTED_DIRT, 0.5);
 for (let i = 0; i < 16; i++) HARDNESS.set(608 + i, 0.1);
 HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);
