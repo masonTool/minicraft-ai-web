@@ -47,6 +47,10 @@ export interface GameRules {
   fireDamage: boolean;
   /** 溺水是否造成伤害（批次 360） */
   drowningDamage: boolean;
+  /** 达成进度时是否播提示卡/聊天/音效（批次 361） */
+  announceAdvancements: boolean;
+  /** 命令执行成功时是否把结果写进聊天栏（批次 361；错误始终显示） */
+  sendCommandFeedback: boolean;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -64,6 +68,8 @@ export const DEFAULT_GAME_RULES: GameRules = {
   fallDamage: true,
   fireDamage: true,
   drowningDamage: true,
+  announceAdvancements: true,
+  sendCommandFeedback: true,
 };
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */

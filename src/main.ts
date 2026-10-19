@@ -7297,7 +7297,8 @@ class App {
     if (unlocked.length === 0) return;
 
     for (const def of unlocked) {
-      if (!this.suppressProgressToasts) {
+      // 批次 361：`announceAdvancements` 只影响"提示"，不影响达成与存档
+      if (!this.suppressProgressToasts && this.rules.announceAdvancements) {
         this.advancementToast.push(def);
         this.chat.push(`${def.challenge ? '挑战完成' : '进度已达成'}：${def.title}——${def.desc}`, 'system');
         this.audio.play('achievement');
@@ -8962,7 +8963,10 @@ class App {
 
   private commandFeedback(): CommandFeedback {
     return {
-      info: (text) => this.chat.push(text, 'system'),
+      // 批次 361：成功反馈可关；错误始终显示（原版也如此）
+      info: (text) => {
+        if (this.rules.sendCommandFeedback) this.chat.push(text, 'system');
+      },
       error: (text) => this.chat.push(text, 'error'),
     };
   }
