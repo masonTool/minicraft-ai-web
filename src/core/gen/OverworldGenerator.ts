@@ -32,7 +32,16 @@ import { Aquifer } from './Aquifer.ts';
 import { CaveCarver } from './CaveCarver.ts';
 import { bandBlockAt, columnSurface } from './SurfaceRules.ts';
 import { OreGenerator } from './OreGenerator.ts';
-import { Biome, applyClimateGain, biomeById, biomeForColumn, findLandBiome, regionVariantAt, type BiomeDef } from './Biome.ts';
+import {
+  Biome,
+  applyClimateGain,
+  biomeById,
+  biomeForColumn,
+  caveBiomeAt,
+  findLandBiome,
+  regionVariantAt,
+  type BiomeDef,
+} from './Biome.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { Spline, smoothstep } from './noise/Spline.ts';
@@ -736,13 +745,17 @@ export class OverworldGenerator {
           let h = Math.imul(originX + x + 1, 73856093) ^ Math.imul(originZ + z + 1, 19349663) ^ Math.imul(y + 1, 83492791);
           h = Math.imul(h ^ (h >>> 13), 1274126177);
           h = (h ^ (h >>> 16)) >>> 0;
+          const cave = caveBiomeAt(originX + x, y, originZ + z);
+          const lush = cave?.id === Biome.LUSH_CAVES;
           if (stoneLike(below)) {
-            if (h % 617 === 0) blocks[index] = Block.GLOW_LICHEN;
-            else if (h % 1103 === 0) blocks[index] = Block.GLOW_BERRIES;
+            // 繁茂洞穴：地衣/浆果；滴水石洞：少量地衣
+            if (h % (lush ? 317 : 1103) === 0) blocks[index] = Block.GLOW_BERRIES;
+            else if (h % (lush ? 197 : 1601) === 0) blocks[index] = Block.GLOW_LICHEN;
           } else if (stoneLike(above)) {
-            if (h % 811 === 0) blocks[index] = Block.POINTED_DRIPSTONE;
-            else if (h % 1499 === 0) blocks[index] = Block.SPORE_BLOSSOM;
-            else if (h % 1301 === 0) blocks[index] = Block.HANGING_ROOTS;
+            // 滴水石洞：尖滴石/孢子花/垂根更密
+            if (h % (lush ? 2203 : 401) === 0) blocks[index] = Block.POINTED_DRIPSTONE;
+            else if (h % (lush ? 4999 : 701) === 0) blocks[index] = Block.SPORE_BLOSSOM;
+            else if (h % (lush ? 3001 : 901) === 0) blocks[index] = Block.HANGING_ROOTS;
           }
         }
       }

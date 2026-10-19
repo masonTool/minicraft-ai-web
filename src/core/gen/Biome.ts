@@ -54,6 +54,9 @@ export const Biome = {
   ICE_SPIKES: 44,
   // 批次 366：破碎热带草原（最陡的热带草原）
   WINDSWEPT_SAVANNA: 45,
+  // 批次 394：洞穴群系（不进陆地匹配，按 y 与哈希判）
+  LUSH_CAVES: 46,
+  DRIPSTONE_CAVES: 47,
   BEACH: 4,
   STONY_SHORE: 5,
   PLAINS: 6,
@@ -987,6 +990,42 @@ export const BIOMES: readonly BiomeDef[] = [
     foliageColor: 0x6ba941,
   },
   {
+    id: Biome.LUSH_CAVES,
+    name: 'lush_caves',
+    ocean: false,
+    temperature: ANY,
+    humidity: ANY,
+    continentalness: ANY,
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.MOSS_BLOCK,
+    subSurface: Block.MOSS_BLOCK,
+    subDepth: 1,
+    underwater: Block.MOSS_BLOCK,
+    snowy: false,
+    grassColor: 0x8ab689,
+    foliageColor: 0x6da36b,
+  },
+  {
+    id: Biome.DRIPSTONE_CAVES,
+    name: 'dripstone_caves',
+    ocean: false,
+    temperature: ANY,
+    humidity: ANY,
+    continentalness: ANY,
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.STONE,
+    subSurface: Block.DRIPSTONE_BLOCK,
+    subDepth: 1,
+    underwater: Block.STONE,
+    snowy: false,
+    grassColor: 0x8ab689,
+    foliageColor: 0x6da36b,
+  },
+  {
     id: Biome.SNOWY_BEACH,
     name: 'snowy_beach',
     ocean: false,
@@ -1132,7 +1171,10 @@ export const LAND_BIOMES = BIOMES.filter(
     biome.id !== Biome.SNOWY_BEACH &&
     // 批次 353：山峰按高度判，不参与气候平面匹配
     biome.id !== Biome.JAGGED_PEAKS &&
-    biome.id !== Biome.FROZEN_PEAKS,
+    biome.id !== Biome.FROZEN_PEAKS &&
+    // 批次 394：洞穴群系不参与陆地匹配
+    biome.id !== Biome.LUSH_CAVES &&
+    biome.id !== Biome.DRIPSTONE_CAVES,
 );
 
 /**
@@ -1197,6 +1239,22 @@ function specificity(biome: BiomeDef): number {
  * （还要更干、且侵蚀度低，区间窄得多）的采样点全部抢走——
  * 实测表现就是恶地在这个世界里一次都不出现。
  */
+/**
+ * 洞穴群系（批次 394）：按 y 与坐标哈希判。
+ *
+ * ⚠️ 这是**简化版**：原版是独立的三维噪声（且与地表群系无关）。这里只做到
+ * "深处更可能是滴水石洞、浅处更可能是繁茂洞穴"，并让洞穴装饰按它分配密度；
+ * 没有"洞穴群系的生物/地表"那一层。
+ */
+export function caveBiomeAt(x: number, y: number, z: number): BiomeDef | null {
+  if (y > 40) return null;
+  let h = Math.imul(x + 1, 73856093) ^ Math.imul(z + 1, 19349663) ^ Math.imul(y + 1, 83492791);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = (h ^ (h >>> 16)) >>> 0;
+  if (y < 0) return biomeById(h % 3 === 0 ? Biome.LUSH_CAVES : Biome.DRIPSTONE_CAVES);
+  return biomeById(h % 2 === 0 ? Biome.LUSH_CAVES : Biome.DRIPSTONE_CAVES);
+}
+
 export function findLandBiome(point: ClimatePoint): BiomeDef {
   let best = LAND_BIOMES[0]!;
   let bestDistance = Number.POSITIVE_INFINITY;

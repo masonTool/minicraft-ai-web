@@ -11,6 +11,7 @@ import {
   Biome,
   LAND_BIOMES,
   biomeForColumn,
+  caveBiomeAt,
   findLandBiome,
   regionVariantAt,
   type ClimatePoint,
@@ -117,7 +118,7 @@ check(
 );
 
 console.log('\n[批次 339：森林 / 丛林变体]');
-equal('群系表共 46 种', BIOMES.length, 46);
+equal('群系表共 48 种', BIOMES.length, 48);
 {
   // 批次 346：针叶林/山地/热带草原变体 + 恶地的区域变体
   const at = (temperature: number, humidity: number, erosion: number): string =>
@@ -303,6 +304,22 @@ function oceanRatio(): number {
 
 function beachRatio(): number {
   return ((histogram.get('beach') ?? 0) + (histogram.get('stony_shore') ?? 0)) / samples;
+}
+
+
+console.log('\n[批次 394：洞穴群系]');
+{
+  const names = new Set<string>();
+  for (let x = -64; x <= 64; x += 8) {
+    for (let z = -64; z <= 64; z += 8) {
+      for (const y of [-20, 10, 30, 45]) {
+        const biome = caveBiomeAt(x, y, z);
+        if (biome) names.add(biome.name);
+      }
+    }
+  }
+  equal('繁茂洞穴与滴水石洞都能判出来', [...names].sort().join(','), 'dripstone_caves,lush_caves');
+  equal('地表高度以上没有洞穴群系', caveBiomeAt(0, 60, 0), null);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

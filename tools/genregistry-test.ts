@@ -148,6 +148,8 @@ console.log('\n[群系采样：23 个群系各生成一片区块]');
 
   let covered = 0;
   for (const biome of BIOMES) {
+    // 洞穴群系按 y 判（批次 394），不参与地表采样
+    if (biome.name === 'lush_caves' || biome.name === 'dripstone_caves') continue;
     const at = chunkOfBiome(biome.id);
     if (!at) {
       check(`${biome.name}：找得到一个区块`, false, '螺旋找 400 圈都没找到');
@@ -160,7 +162,11 @@ console.log('\n[群系采样：23 个群系各生成一片区块]');
     const missing = [...sampled].filter((id) => !generated.has(id));
     check(`${biome.name}：采样到的方块都在登记表里`, missing.length === 0, namesOf(missing));
   }
-  equal('所有主世界群系都采到了样', covered, BIOMES.length);
+  equal(
+    '所有主世界群系都采到了样（洞穴群系按 y 判，不参与地表采样）',
+    covered,
+    BIOMES.filter((b) => b.name !== 'lush_caves' && b.name !== 'dripstone_caves').length,
+  );
 }
 
 // ---------------------------------------------------------------- 3. 下界与末地采样
