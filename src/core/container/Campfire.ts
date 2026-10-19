@@ -45,6 +45,11 @@ export class Campfire implements SlotSource {
 
   /** 点着了吗（熄灭后不烤，但格子里的东西留着） */
   lit = true;
+  /**
+   * UI 选配方期间的暂停（批次 295，不存档）。
+   * 与炉子/酿造台同一条口径：摆好材料先冻住，点目标框再恢复；关界面必须恢复。
+   */
+  paused = false;
 
   onChange: (() => void) | null = null;
 
@@ -123,6 +128,8 @@ export class Campfire implements SlotSource {
     const cooked: CampfireCooked[] = [];
     const wasLit = this.lit;
     let changed = false;
+    // 界面里已摆好配方、还没点目标框（批次 295）
+    if (this.paused) return { changed: false, cooked, litChanged: false };
 
     for (let index = 0; index < CAMPFIRE_SIZE; index++) {
       const recipe = this.lit ? this.recipeFor(index) : undefined;

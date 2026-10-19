@@ -51,6 +51,13 @@ export class Furnace implements SlotSource {
   cookProgress = 0;
   cookTimeTotal = 0;
   storedExperience = 0;
+  /**
+   * UI 选配方期间的暂停（批次 295，不存档）。
+   *
+   * 用户要求"点目标框才开始制作"：把原料+燃料摆好后先冻住，
+   * 点目标框再 `paused = false`。关界面/切容器时必须恢复，避免炉子被永久冻住。
+   */
+  paused = false;
 
   onChange: (() => void) | null = null;
 
@@ -111,6 +118,8 @@ export class Furnace implements SlotSource {
 
   /** 推进 dt 秒 */
   tick(dt: number): FurnaceTickResult {
+    // 界面里已摆好配方、还没点目标框：燃料不烧、进度不走（批次 295）
+    if (this.paused) return { changed: false, litChanged: false };
     let changed = false;
     const wasLit = this.isLit;
 

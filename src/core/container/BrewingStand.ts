@@ -46,6 +46,11 @@ export class BrewingStand implements SlotSource {
   brewProgress = 0;
   /** 是否正在酿（UI 用它决定进度条显不显示） */
   brewing = false;
+  /**
+   * UI 选配方期间的暂停（批次 295，不存档）。
+   * 与熔炉同一条口径：摆好材料后先冻住，点目标框再恢复；关界面必须恢复。
+   */
+  paused = false;
 
   onChange: (() => void) | null = null;
 
@@ -88,6 +93,8 @@ export class BrewingStand implements SlotSource {
    */
   tick(dt: number): BrewTickResult {
     const result: BrewTickResult = { changed: false, brewed: false };
+    // 界面里已摆好配方、还没点目标框（批次 295）
+    if (this.paused) return result;
     if (!canBrew(this.material, this.bottleIds)) {
       // 条件不满足：进度归零（原版不允许"暂停后接着酿"）
       if (this.brewProgress !== 0) {
