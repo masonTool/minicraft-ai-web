@@ -2775,17 +2775,10 @@
       }
       /* 工作站左半区右上角的配方书按钮（批次 316） */
       .station-recipe-btn {
-        position: absolute; top: 4px; right: 4px; z-index: 3;
-        width: 26px; height: 26px; padding: 0;
-        display: flex; align-items: center; justify-content: center;
+        /* e3503c3 的文字样式；right 从 4px 增到 10px，向左让开中隔线（批次 319） */
+        position: absolute; top: 4px; right: 10px; z-index: 3;
       }
-      .station-recipe-btn svg { display: block; }
-      .station-recipe-btn.active {
-        background: #dcdec4;
-        border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
-        transform: translateY(1px);
-      }
-      .station-ui .inv-category-section .inv-search { padding-right: 38px; }
+      .station-ui .inv-category-section .inv-search { padding-right: 76px; }
       /* 分类底部信息栏（批次 185）：当前分类"我有几种 / 共几种"。
          高度固定一行，不能吃掉网格的高度（网格是 flex:1 那一个）。 */
       .inv-category-info {

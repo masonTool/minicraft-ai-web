@@ -405,14 +405,6 @@ const POCKET_RECIPE_ALL_ICON =
   '<path fill="currentColor" d="M10 2.6a7.4 7.4 0 1 0 4.4 13.35l4.32 4.32 1.7-1.7-4.32-4.32A7.4 7.4 0 0 0 10 2.6zm0 2.4a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>' +
   '</svg>';
 
-/** 工作站左栏的配方书图标（批次 318）：书脊 + 书页 + 三条配方线 */
-const RECIPE_BOOK_ICON =
-  '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">' +
-  '<path fill="#9b4a24" d="M4 3.5h10.5A3.5 3.5 0 0 1 18 7v13.5H7.5A3.5 3.5 0 0 1 4 17z"/>' +
-  '<path fill="#f2d9a6" d="M18 7h2v13.5h-2z"/>' +
-  '<path fill="#d8a33f" d="M7 7.6h7v1.7H7zm0 3.1h7v1.7H7zm0 3.1h5v1.7H7z"/>' +
-  '</svg>';
-
 export class InventoryScreen {
   /** 触摸长按的定时器（长按判定 + 连发），桌面端始终为 null */
   private touchPressTimer: number | null = null;
@@ -1263,10 +1255,8 @@ export class InventoryScreen {
     this.stationRecipeBtn = document.createElement('button');
     this.stationRecipeBtn.type = 'button';
     this.stationRecipeBtn.className = 'inv-recipes-btn station-recipe-btn hidden';
-    // 批次 318（用户）：不要三个字，恢复图标样式
-    this.stationRecipeBtn.innerHTML = RECIPE_BOOK_ICON;
-    this.stationRecipeBtn.title = '配方书';
-    this.stationRecipeBtn.setAttribute('aria-label', '配方书');
+    // 批次 319：恢复 e3503c3 的文字样式
+    this.stationRecipeBtn.textContent = '配方书';
     this.stationRecipeBtn.addEventListener('click', () => {
       if (this.pane === 'category') {
         this.showUnowned = !this.showUnowned;

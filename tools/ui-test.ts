@@ -914,10 +914,11 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.station-recipe-btn'),
   );
   check(
-    '工作站配方书恢复图标而不是文字（批次 318）',
-    invSrc.includes('const RECIPE_BOOK_ICON') &&
-      invSrc.includes('this.stationRecipeBtn.innerHTML = RECIPE_BOOK_ICON') &&
-      css.includes('.station-recipe-btn svg'),
+    '工作站配方书恢复 e3503c3 文字样式并向左让开中隔线（批次 319）',
+    invSrc.includes("this.stationRecipeBtn.textContent = '配方书'") &&
+      !invSrc.includes('RECIPE_BOOK_ICON') &&
+      css.includes('position: absolute; top: 4px; right: 10px; z-index: 3;') &&
+      !css.includes('.station-recipe-btn svg'),
   );
   check(
     '点创造分类会切回无限物品页',
