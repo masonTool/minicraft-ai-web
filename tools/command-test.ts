@@ -26,6 +26,7 @@ import {
   type GameRules,
 } from '../src/core/commands/Commands.ts';
 import type { CommandEntity } from '../src/core/commands/Selectors.ts';
+import { Scoreboard } from '../src/core/world/Scoreboard.ts';
 import {
   DEFAULT_GAME_RULES,
   DIFFICULTIES as RULE_DIFFICULTIES,
@@ -219,6 +220,11 @@ class FakeWorld implements CommandContext {
   }
   onlinePlayers(): string[] {
     return ['玩家(你)'];
+  }
+  /** 记分板（M23，批次 402） */
+  readonly board = new Scoreboard();
+  scoreboard(): Scoreboard {
+    return this.board;
   }
   /** 选择器快照（批次 399）：这一套里没有生物，只交出玩家自己 */
   entities(): readonly CommandEntity[] {
@@ -593,6 +599,86 @@ console.log('\n[批次 396：/particle /target /tell /msg]');
   check('/msg 带来源', out.lastInfo.includes('在吗'), out.lastInfo);
   executeCommand('/particle crit 999', world, out);
   check('粒子数量超限报错', out.lastError.includes('1~200'), out.lastError);
+}
+
+console.log('\n[记分板（M23，批次 402）]');
+{
+  const world = new FakeWorld();
+  const out = new Recorder();
+  const run = (line: string): Recorder => {
+    out.infos.length = 0;
+    out.errors.length = 0;
+    executeCommand(line, world, out);
+    return out;
+  };
+
+  run('/scoreboard objectives add kills dummy 击杀数');
+  check('建目标', world.board.objectiveNames().includes('kills'), out.lastError);
+  check('显示名生效', world.board.objective('kills')?.displayName === '击杀数');
+  check('重名报错', run('/scoreboard objectives add kills').lastError.includes('已经存在'));
+  check('非法名报错', run('/scoreboard objectives add 目标!').lastError.includes('目标名'));
+  check('准则不支持时报错（不假装接受）', run('/scoreboard objectives add food health').lastError.includes('准则'));
+
+  run('/scoreboard players set 甲 kills 3');
+  check('设分', world.board.getScore('甲', 'kills') === 3, out.lastError);
+  run('/scoreboard players add 甲 kills 2');
+  check('加分', world.board.getScore('甲', 'kills') === 5);
+  run('/scoreboard players remove 甲 kills 4');
+  check('减分', world.board.getScore('甲', 'kills') === 1);
+  run('/scoreboard players remove 甲 kills 10');
+  check('可以减成负数（原版也是）', world.board.getScore('甲', 'kills') === -9);
+
+  run('/scoreboard players set 甲 kills 999999999999');
+  check('超过 32 位整数时被夹住', world.board.getScore('甲', 'kills') === 2147483647);
+  run('/scoreboard players get 甲 kills');
+  check('查询回执带数值', out.lastInfo.includes('2147483647'), out.lastInfo);
+
+  run('/scoreboard players set 甲 nope 1');
+  check('目标不存在时报错', out.lastError.includes('不存在'));
+
+  run('/scoreboard players set @p kills 7');
+  check(
+    '@p 解析成玩家昵称当持有人',
+    world.board.getScore(world.playerName_, 'kills') === 7,
+    out.lastError,
+  );
+
+  run('/scoreboard players list 甲');
+  check('列出某人的分数', out.lastInfo.includes('kills='), out.lastInfo);
+
+  run('/scoreboard players reset 甲');
+  check('重置清空该人的分数', world.board.getScore('甲', 'kills') === null);
+
+  run('/scoreboard objectives setdisplay sidebar kills');
+  check('侧边栏显示目标', world.board.display('sidebar') === 'kills');
+  check('槽位名非法报错', run('/scoreboard objectives setdisplay 侧边栏 kills').lastError.includes('槽位'));
+  check('显示不存在的目标报错', run('/scoreboard objectives setdisplay sidebar nope').lastError.includes('不存在'));
+  run('/scoreboard objectives setdisplay sidebar');
+  check('不写目标名 = 清空槽位', world.board.display('sidebar') === null);
+
+  world.board.setScore('乙', 'kills', 4);
+  run('/scoreboard objectives remove kills');
+  check('删目标', world.board.objective('kills') === null);
+  check('删目标连带清掉分数', world.board.getScore('乙', 'kills') === null);
+
+  run('/scoreboard');
+  check('不带子命令时给用法', out.lastError.includes('用法'));
+
+  // 存读档口径：坏条目跳过、好的收下（SaveGame 接进来时靠这个数验收）
+  const restored = new Scoreboard();
+  const skipped = restored.restore({
+    objectives: [
+      { name: 'ok', criterion: 'dummy', displayName: '', scores: [['甲', 3]] },
+      { name: 'bad name', criterion: 'dummy', displayName: '', scores: [] },
+    ],
+    displays: [
+      ['sidebar', 'ok'],
+      ['list', 'missing'],
+    ],
+  });
+  check('restore 跳过非法目标与悬空槽位', skipped === 2, String(skipped));
+  check('restore 收下合法的部分', restored.getScore('甲', 'ok') === 3);
+  check('restore 恢复显示槽位', restored.display('sidebar') === 'ok');
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);

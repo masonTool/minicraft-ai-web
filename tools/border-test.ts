@@ -26,6 +26,7 @@ import {
 } from '../src/core/world/WorldBorder.ts';
 import { executeCommand, type CommandContext } from '../src/core/commands/Commands.ts';
 import type { CommandEntity } from '../src/core/commands/Selectors.ts';
+import { Scoreboard } from '../src/core/world/Scoreboard.ts';
 import { DEFAULT_GAME_RULES, type GameRules } from '../src/core/world/Rules.ts';
 import { BorderRenderer } from '../src/render/BorderRenderer.ts';
 
@@ -213,6 +214,11 @@ console.log('\n[/worldborder：get / set / center]');
     /** 选择器快照（批次 399）：这一套只测边界，没有实体 */
     entities(): readonly CommandEntity[] {
       return [];
+    }
+    /** 记分板（M23，批次 402）：边界测试不碰它 */
+    readonly board = new Scoreboard();
+    scoreboard(): Scoreboard {
+      return this.board;
     }
   }
 

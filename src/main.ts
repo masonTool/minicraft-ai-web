@@ -164,6 +164,8 @@ import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
 // 选择器（批次 399）：`/execute` 需要"当前维度里有哪些实体"的扁平快照
 import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.ts';
+// 记分板（M23，批次 402）
+import { Scoreboard } from './core/world/Scoreboard.ts';
 import {
   TickScheduler,
   randomTickChunk,
@@ -1348,6 +1350,12 @@ class App {
   private readonly effects = new StatusEffects();
   /** 游戏规则（I11）：保存在世界里 */
   private rules: GameRules = { ...DEFAULT_GAME_RULES };
+  /**
+   * 记分板（M23，批次 402）：`/scoreboard` 与 `/execute if score` 共用这一份。
+   * ⚠️ 还没进存档（`Scoreboard.snapshot/restore` 已经写好，缺的是 SaveGame 那个对象仓）；
+   * 侧边栏界面也还没接——两件事都记在 TASKS M23 里，不装作做完了。
+   */
+  private readonly scoreboardState = new Scoreboard();
   /** 配方书：列出所有配方，材料够就能一键合成 */
   private readonly recipeBook: RecipeBook;
   /** 物品提示框（快捷栏与背包共用同一个，位置跟着指针走） */
@@ -9196,6 +9204,7 @@ class App {
         }
         return list;
       },
+      scoreboard: () => this.scoreboardState,
     };
   }
 

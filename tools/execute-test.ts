@@ -27,6 +27,7 @@ import {
 import { DEFAULT_GAME_RULES } from '../src/core/world/Rules.ts';
 import { defaultBorder, type WorldBorder } from '../src/core/world/WorldBorder.ts';
 import { resolveBlockId } from '../src/core/registry/itemNames.ts';
+import { Scoreboard } from '../src/core/world/Scoreboard.ts';
 
 let passed = 0;
 let failed = 0;
@@ -192,6 +193,11 @@ class FakeWorld implements CommandContext {
   }
   onlinePlayers(): string[] {
     return [`${this.playerName_}(你)`];
+  }
+  /** 记分板（M23，批次 402）：`/execute if score` 用它 */
+  readonly board = new Scoreboard();
+  scoreboard(): Scoreboard {
+    return this.board;
   }
   entities(): readonly CommandEntity[] {
     const list: CommandEntity[] = [
@@ -448,11 +454,27 @@ console.log('\n/execute 错误路径');
   const badCoord = run(world, '/execute positioned a b c run say hi');
   check('positioned 坐标不合法时报错', badCoord.errors.some((line) => line.includes('坐标不合法')), badCoord.errors.join('|'));
 
-  const unsupported = run(world, '/execute if score 玩家 kills > 1 run say hi');
+  const unsupported = run(world, '/execute if data 玩家 run say hi');
   check(
-    '未支持的条件（score）明确报"还不支持"',
+    '未支持的条件（data）明确报"还不支持"',
     unsupported.errors.some((line) => line.includes('还不支持')),
     unsupported.errors.join('|'),
+  );
+
+  // score 是支持的（批次 402）：没有分数时条件不成立、且不报错
+  const noScore = run(world, '/execute if score 玩家 kills > 1 run say 分数到了');
+  check('if score 在没有分数时静默不成立', noScore.infos.length === 0 && noScore.errors.length === 0);
+  world.board.addObjective('kills', 'dummy');
+  world.board.setScore('玩家', 'kills', 3);
+  const hasScore = run(world, '/execute if score 玩家 kills > 1 run say 分数到了');
+  check('if score 成立时执行', hasScore.infos.includes('分数到了'), hasScore.errors.join('|'));
+  const reversed = run(world, '/execute unless score 玩家 kills > 5 run say 还没到');
+  check('unless score 反向成立时执行', reversed.infos.includes('还没到'));
+  const badOp = run(world, '/execute if score 玩家 kills ?? 1 run say hi');
+  check(
+    'score 的运算符写错时报错',
+    badOp.errors.some((line) => line.includes('运算符')),
+    badOp.errors.join('|'),
   );
 
   // 嵌套上限：9 层 execute 必须被拦下来，而不是把栈打穿

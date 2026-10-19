@@ -32,10 +32,20 @@ import {
   describeBorder,
   type WorldBorder,
 } from '../world/WorldBorder.ts';
+// 记分板（M23，批次 402）：纯类，规则一条都不依赖世界
+import {
+  SCOREBOARD_SLOTS,
+  SLOT_LABELS,
+  SUPPORTED_CRITERIA,
+  isValidScoreName,
+  type Scoreboard,
+  type ScoreboardSlot,
+} from '../world/Scoreboard.ts';
 // 目标选择器（批次 399）：`/execute` 的目标解析与求值都在这个纯模块里
 import {
   PLAYER_ENTITY_ID,
   describeSelector,
+  isSelector,
   parseSelector,
   resolveSelector,
   type CommandEntity,
@@ -124,6 +134,10 @@ export interface CommandContext {
    * `Selectors.ts`（纯函数，可离线断言）。
    */
   entities(): readonly CommandEntity[];
+
+  // ---- 记分板（M23，批次 402）
+  /** 这个世界的记分板（`/scoreboard` 与 `/execute if score` 共用同一份） */
+  scoreboard(): Scoreboard;
 }
 
 /** 命令反馈的出口（聊天栏） */
@@ -790,6 +804,14 @@ export const COMMANDS: readonly CommandSpec[] = [
       runExecute(args, ctx, out);
     },
   },
+  {
+    name: 'scoreboard',
+    usage: '/scoreboard objectives add|remove|list|setdisplay … / players set|add|remove|get|list|reset …',
+    description: '记分板：目标、分数与显示槽位',
+    run(args, ctx, out) {
+      runScoreboard(args, ctx, out);
+    },
+  },
 ];
 
 export function findCommand(name: string): CommandSpec | undefined {
@@ -896,7 +918,9 @@ interface ExecState {
 
 type ExecCondition =
   | { kind: 'block'; coords: readonly string[]; block: string }
-  | { kind: 'entity'; selector: ParsedSelector };
+  | { kind: 'entity'; selector: ParsedSelector }
+  /** `/execute if score <目标> <目标名> <运算符> <数值>`（批次 402） */
+  | { kind: 'score'; target: string; objective: string; op: string; value: number };
 
 type ExecOp =
   | { kind: 'as'; selector: ParsedSelector }
@@ -982,7 +1006,30 @@ function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
         continue;
       }
 
-      return `execute 还不支持 ${token} ${sub || '<条件>'}（已支持 block / entity）`;
+      if (sub === 'score') {
+        // if score <目标> <目标名> <运算符> <数值>
+        const target = args[index + 2];
+        const objective = args[index + 3];
+        const op = args[index + 4];
+        const rawValue = args[index + 5];
+        if (!target || !objective || !op || rawValue === undefined) {
+          return `用法：/execute ${token} score <目标> <目标名> <运算符> <数值> … run <命令>`;
+        }
+        if (!SCORE_OPERATORS.includes(op)) {
+          return `score 的运算符只能是 ${SCORE_OPERATORS.join(' / ')}：${op}`;
+        }
+        const value = Number(rawValue);
+        if (!Number.isFinite(value)) return `score 的数值不合法：${rawValue}`;
+        ops.push({
+          kind: 'cond',
+          invert: token === 'unless',
+          condition: { kind: 'score', target, objective, op, value },
+        });
+        index += 6;
+        continue;
+      }
+
+      return `execute 还不支持 ${token} ${sub || '<条件>'}（已支持 block / entity / score）`;
     }
 
     return `未知的 execute 子命令：${token}（可用 as / at / positioned / if / unless / run）`;
@@ -1009,7 +1056,62 @@ function evalCondition(condition: ExecCondition, state: ExecState, ctx: CommandC
     );
   }
 
-  return resolveSelector(condition.selector, selectorView(ctx), state.origin, state.executorId).length > 0;
+  if (condition.kind === 'entity') {
+    return resolveSelector(condition.selector, selectorView(ctx), state.origin, state.executorId).length > 0;
+  }
+
+  // `if score`：目标可以写名字，也可以写选择器；**多目标时要求每一个都满足**
+  // （原版按目标逐个求值，写成"任意一个满足"会让 `if score @a kills > 5`
+  //  在只有一个人达标时也放行——那不是玩家想要的语义）
+  const holders = holderNamesOf(condition.target, state, ctx, out);
+  if (holders === null) return false;
+  if (holders.length === 0) return false;
+  const board = ctx.scoreboard();
+  return holders.every((holder) => {
+    const score = board.getScore(holder, condition.objective);
+    if (score === null) return false; // 原版：没有这条分数就是"不成立"，不按 0 算
+    return compareScore(score, condition.op, condition.value);
+  });
+}
+
+/** `if score` 的运算符（只认这六个，写别的当场报错） */
+const SCORE_OPERATORS: readonly string[] = ['<', '<=', '=', '==', '>=', '>'];
+
+function compareScore(score: number, op: string, value: number): boolean {
+  switch (op) {
+    case '<':
+      return score < value;
+    case '<=':
+      return score <= value;
+    case '=':
+    case '==':
+      return score === value;
+    case '>=':
+      return score >= value;
+    case '>':
+      return score > value;
+    default:
+      return false;
+  }
+}
+
+/**
+ * 记分板命令里的"目标"：可以是一个名字（`甲`），也可以是选择器（`@a` / `@e[type=zombie]`）。
+ * 选择器解析失败时**返回 null 并已报错**（与"匹配到 0 个"的 `[]` 区分开）。
+ */
+function holderNamesOf(
+  target: string,
+  state: ExecState,
+  ctx: CommandContext,
+  out: CommandFeedback,
+): string[] | null {
+  if (!isSelector(target)) return [target];
+  const selector = parseSelector(target);
+  if (typeof selector === 'string') {
+    out.error(selector);
+    return null;
+  }
+  return resolveSelector(selector, selectorView(ctx), state.origin, state.executorId).map((entity) => entity.name);
 }
 
 /**
@@ -1111,4 +1213,197 @@ function runExecute(args: string[], ctx: CommandContext, out: CommandFeedback): 
     executorId: selfEntityId(ctx),
   };
   runExecOps(ops, 0, state, ctx, out);
+}
+
+// ---------------------------------------------------------------- /scoreboard（批次 402）
+
+const SCOREBOARD_USAGE =
+  '用法：/scoreboard objectives <add|remove|list|setdisplay> … 或 /scoreboard players <set|add|remove|get|list|reset> …';
+
+function runScoreboard(args: string[], ctx: CommandContext, out: CommandFeedback): void {
+  const branch = (args[0] ?? '').toLowerCase();
+  if (branch === 'objectives') {
+    runScoreboardObjectives(args, ctx, out);
+    return;
+  }
+  if (branch === 'players') {
+    runScoreboardPlayers(args, ctx, out);
+    return;
+  }
+  out.error(SCOREBOARD_USAGE);
+}
+
+function runScoreboardObjectives(args: string[], ctx: CommandContext, out: CommandFeedback): void {
+  const board = ctx.scoreboard();
+  const sub = (args[1] ?? '').toLowerCase();
+
+  if (sub === 'add') {
+    const name = args[2];
+    const criterion = (args[3] ?? 'dummy').toLowerCase();
+    const displayName = args.slice(4).join(' ').trim();
+    if (!name) {
+      out.error('用法：/scoreboard objectives add <名称> [准则] [显示名]');
+      return;
+    }
+    if (!isValidScoreName(name)) {
+      out.error(`目标名只能用字母/数字/下划线，1~16 个字符：${name}`);
+      return;
+    }
+    if (!SUPPORTED_CRITERIA.includes(criterion)) {
+      out.error(`暂不支持准则 ${criterion}（只有 ${SUPPORTED_CRITERIA.join(' / ')}）`);
+      return;
+    }
+    if (!board.addObjective(name, criterion, displayName)) {
+      out.error(`目标 ${name} 已经存在`);
+      return;
+    }
+    out.info(`已创建目标 ${name}（${criterion}${displayName ? `，显示为“${displayName}”` : ''}）`);
+    return;
+  }
+
+  if (sub === 'remove') {
+    const name = args[2];
+    if (!name) {
+      out.error('用法：/scoreboard objectives remove <名称>');
+      return;
+    }
+    if (!board.removeObjective(name)) {
+      out.error(`目标 ${name} 不存在`);
+      return;
+    }
+    out.info(`已删除目标 ${name}（连同它记下的所有分数）`);
+    return;
+  }
+
+  if (sub === 'list') {
+    const names = board.objectiveNames();
+    if (names.length === 0) {
+      out.info('还没有任何记分板目标');
+      return;
+    }
+    const described = names.map((name) => {
+      const objective = board.objective(name)!;
+      const shown = objective.displayName === objective.name ? '' : `，显示为“${objective.displayName}”`;
+      return `${objective.name}（${objective.criterion}${shown}）`;
+    });
+    out.info(`共 ${names.length} 个目标：${described.join('、')}`);
+    return;
+  }
+
+  if (sub === 'setdisplay') {
+    const slot = (args[2] ?? '').toLowerCase() as ScoreboardSlot;
+    if (!SCOREBOARD_SLOTS.includes(slot)) {
+      out.error(`槽位只能是 ${SCOREBOARD_SLOTS.join(' / ')}`);
+      return;
+    }
+    const objective = args[3];
+    if (!objective) {
+      board.setDisplay(slot, null);
+      out.info(`已清空${SLOT_LABELS[slot]}`);
+      return;
+    }
+    if (!board.setDisplay(slot, objective)) {
+      out.error(`目标 ${objective} 不存在`);
+      return;
+    }
+    out.info(`${SLOT_LABELS[slot]}现在显示目标 ${objective}`);
+    return;
+  }
+
+  out.error('用法：/scoreboard objectives <add|remove|list|setdisplay> …');
+}
+
+function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandFeedback): void {
+  const board = ctx.scoreboard();
+  const sub = (args[1] ?? '').toLowerCase();
+  const target = args[2];
+  if (!target) {
+    out.error('用法：/scoreboard players <set|add|remove|get|list|reset> <目标> …');
+    return;
+  }
+
+  // 目标可以是名字，也可以是选择器（`@a` / `@e[type=zombie]`）
+  const position = ctx.position();
+  const state: ExecState = {
+    origin: { x: position.x, y: position.y, z: position.z },
+    executorId: selfEntityId(ctx),
+  };
+  const holders = holderNamesOf(target, state, ctx, out);
+  if (holders === null) return;
+  if (holders.length === 0) {
+    out.error(`目标 ${target} 没有匹配到任何对象`);
+    return;
+  }
+
+  if (sub === 'set' || sub === 'add' || sub === 'remove') {
+    const objective = args[3];
+    const raw = args[4];
+    if (!objective || raw === undefined) {
+      out.error(`用法：/scoreboard players ${sub} <目标> <目标名> <分数>`);
+      return;
+    }
+    const amount = Number(raw);
+    if (!Number.isFinite(amount)) {
+      out.error(`分数必须是数字：${raw}`);
+      return;
+    }
+    if (!board.objective(objective)) {
+      out.error(`目标 ${objective} 不存在`);
+      return;
+    }
+    for (const holder of holders) {
+      if (sub === 'set') {
+        board.setScore(holder, objective, amount);
+        out.info(`已将 ${holder} 的 ${objective} 设为 ${board.getScore(holder, objective)}`);
+      } else if (sub === 'add') {
+        const next = board.addScore(holder, objective, amount);
+        out.info(`已将 ${holder} 的 ${objective} 加至 ${next}`);
+      } else {
+        const next = board.removeScore(holder, objective, amount);
+        out.info(`已将 ${holder} 的 ${objective} 减至 ${next}`);
+      }
+    }
+    return;
+  }
+
+  if (sub === 'get') {
+    const objective = args[3];
+    if (!objective) {
+      out.error('用法：/scoreboard players get <目标> <目标名>');
+      return;
+    }
+    if (!board.objective(objective)) {
+      out.error(`目标 ${objective} 不存在`);
+      return;
+    }
+    for (const holder of holders) {
+      const score = board.getScore(holder, objective);
+      if (score === null) out.info(`${holder} 没有 ${objective} 的分数`);
+      else out.info(`${holder} 的 ${objective} 是 ${score}`);
+    }
+    return;
+  }
+
+  if (sub === 'list') {
+    for (const holder of holders) {
+      const objectives = board.objectivesOf(holder);
+      if (objectives.length === 0) {
+        out.info(`${holder} 还没有任何分数`);
+        continue;
+      }
+      const parts = objectives.map((name) => `${name}=${board.getScore(holder, name)}`);
+      out.info(`${holder}：${parts.join('，')}`);
+    }
+    return;
+  }
+
+  if (sub === 'reset') {
+    for (const holder of holders) {
+      const removed = board.resetHolder(holder);
+      out.info(removed === 0 ? `${holder} 本来就没有分数` : `已清空 ${holder} 的 ${removed} 个目标的分数`);
+    }
+    return;
+  }
+
+  out.error('用法：/scoreboard players <set|add|remove|get|list|reset> <目标> …');
 }

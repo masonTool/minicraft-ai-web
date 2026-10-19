@@ -10083,4 +10083,18 @@
 - [x] B398-4 test:biome 66、terrain:normal 43、genregistry 84，离线 131 套全绿
 - 覆盖：群系 **48 → 50（67% → 69%）**
 
+## 批次 399：目标选择器 + `/execute`（2026-10-20）
+
+- [x] B399-1 `core/commands/Selectors.ts`（纯逻辑）：`@p/@s/@a/@e/@r` +
+      `type=`（竖线多值）/`name=`/`distance=`（`..10`/`5..`/`2..8`）/`limit=`/`sort=`
+- [x] B399-2 `@r` 用 Fisher–Yates（`sort(() => rnd - 0.5)` 不是均匀随机）；`@p` 距离并列优先自己
+- [x] B399-3 `/execute as|at|positioned|if|unless block|entity|run`，任意链式叠加；
+      **先整条解析再执行**，条件不满足静默，嵌套上限 8 层
+- [x] B399-4 派生上下文用 `Object.create(ctx)`（`{...ctx}` 会把类实例原型上的方法整批丢掉）
+- [x] B399-5 `CommandContext.entities()` 新增（main.ts 交出玩家 + 全部 Mob 的快照）
+- [x] B399-6 `test:execute` **65 条**；离线 **132 套**全绿；typecheck 双工程 0 错
+- 覆盖：命令 **27 → 28（68% → 70%）**
+- ⚠️ 差异：无 `scores=`/`team=`/`tag=`（等 M23）、无 `x=/dx=` 方框选择、
+  `@e` 只覆盖生物（掉落物/箭/矿车没有选择器种类映射）
+
 <!-- docs-archive:end -->
