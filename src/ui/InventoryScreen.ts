@@ -531,6 +531,14 @@ export class InventoryScreen {
    * 左栏见 `leftPane`：`items` / `creative` / `recipes` 三选一。
    */
   private pocketTab: PocketInventoryTab = 'crafting';
+  /**
+   * 右栏停在「盔甲」时，玩家在左栏点过的配方（批次 272）。
+   *
+   * 用户："右侧切到装备页时，左侧分类点击不要自动切回合成。"
+   * 所以这里只记住"他想看哪条配方"，等他自己点回「合成」再显示；
+   * 期间**不切页、不填格子**（隐藏的合成格一旦被填，关面板时材料会莫名回背包）。
+   */
+  private pendingRecipeId: number | null = null;
   /** 上一次排布时左栏显示的是哪一份（用来判断要不要给淡入） */
   private lastLeftPane: PocketLeftPane | '' = '';
   /** 上一次排布时右栏是不是"合成"（盔甲 ↔ 合成切换才淡入） */
@@ -1693,11 +1701,17 @@ export class InventoryScreen {
    *  - 只能烧出来的：点亮"熔炉"小图标。
    */
   private showRecipeFor(itemId: number, mode: 'preview' | 'fill' = 'fill'): void {
-    // 点在左栏时右栏可能停在"盔甲"页：切回合成，否则"配方"画在看不见的地方
+    // 批次 272（用户）：右栏停在「盔甲」时，左栏怎么点都不许把它切回合成。
+    // 配方只记下来，等玩家自己点回「合成」再画——否则等于"左栏在偷偷改右栏"。
     if (this.pocketTab !== 'crafting') {
-      this.pocketTab = 'crafting';
-      this.applyInventoryChrome();
+      if (!(this.hooks.isCreative?.() ?? false)) {
+        this.pendingRecipeId = itemId;
+        // 按住滑动时每滑过一件都提示一次会很吵：只在抬手确认那一下提示
+        if (mode === 'fill') this.showMessage('右栏是盔甲，切到合成查看配方');
+      }
+      return;
     }
+    this.pendingRecipeId = null;
     this.clearCraftGhost();
     // 批次 166：创造模式不显示配方（拥有所有方块，看配方没有意义）
     if (this.hooks.isCreative?.() ?? false) return;
@@ -1889,6 +1903,15 @@ export class InventoryScreen {
     diag.event('inventory', 'tab.change', { from: this.pocketTab, to: tab, mode: this.mode });
     this.pocketTab = tab;
     this.applyInventoryChrome();
+    // 批次 272：刚才在盔甲页点过的配方，切回合成时补显示（只画预览，不动物品）
+    if (tab === 'crafting') {
+      const pending = this.pendingRecipeId;
+      this.pendingRecipeId = null;
+      if (pending !== null) {
+        this.showRecipeFor(pending, 'preview');
+        this.refresh();
+      }
+    }
     this.showMessage(tab === 'armor' ? '右栏：盔甲' : '右栏：合成');
   }
 
@@ -1924,7 +1947,9 @@ export class InventoryScreen {
       creative: this.hooks.isCreative?.() ?? false,
       pane: this.pane,
     });
-    this.pocketTab = 'crafting';
+    // 批次 272（用户）：这里**不再写 `pocketTab`**。
+    // 左栏换分类是左栏自己的事，右栏停在「盔甲」就继续停在盔甲；
+    // 工作台的右栏由 `applyInventoryChrome` 强制回合成，不靠这一行。
     this.categoryTab = tab;
     this.categoryPage = 0;
     this.lastRecipeTab = tab;
@@ -3762,6 +3787,8 @@ export class InventoryScreen {
     // 换面板（背包 → 箱子 → 工作台……）时把没结算完的"选数量"收掉：
     // 上半部分的槽位会被重建，留着它等于让一个已经不在屏幕上的格子继续吃手势
     this.endSplit();
+    // 换面板时右栏的"待预览配方"也作废（批次 272）：它只属于刚才那一屏
+    this.pendingRecipeId = null;
     if (this.mode !== mode || this.activeContainer !== container) {
       // 换面板 = 上一个容器"关掉了"（陷阱箱据此撤信号，批次 249）
       if (this.open) this.hooks.onPanelClosed?.();
@@ -3885,6 +3912,8 @@ export class InventoryScreen {
 
   close(): void {
     this.clearTouchPress();
+    // 关界面 = 这一屏的"待预览配方"随之作废（批次 272）
+    this.pendingRecipeId = null;
     if (!this.open || this.closing) return;
     this.hooks.onPanelClosed?.();
     // 携带版合成页的配方书是背包的左半页，不是独立窗口。

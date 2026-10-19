@@ -532,9 +532,25 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('页签 DOM role=pocket-tabs', invSrc.includes("dataset.role = 'pocket-tabs'"));
   check('左上配方图标 role=pocket-recipes', invSrc.includes("dataset.role = 'pocket-recipes'"));
   check('图标页签：右缘合成/盔甲 + 左下物品栏', invSrc.includes('makePocketIconTab') && invSrc.includes('inv-pocket-side'));
-  check('右下合成键只切右栏，不自动打开配方书', /private setPocketTab[\s\S]{0,320}applyInventoryChrome\(\);[\s\S]{0,120}\}/.test(invSrc));
+  const setTabBody = /private setPocketTab\(tab: PocketInventoryTab\): void \{([\s\S]*?)\n  \}/.exec(invSrc)?.[1] ?? '';
+  check(
+    '右下合成键只切右栏，不自动打开配方书',
+    setTabBody.includes('this.applyInventoryChrome();') && !setTabBody.includes('this.hooks.onOpenRecipes'),
+  );
   // 批次 159：左栏的职责是**物品分类**——点分类切的是左栏内容，不再去开配方书
   check('只有左侧分类键切左栏（配方书不再嵌进来）', invSrc.includes('private openPocketCategory(tab: RecipeBookTab)') && !invSrc.includes('this.hooks.onOpenRecipes?.(tab)'));
+  // 批次 272（用户）：右栏停在盔甲时，左栏分类不许把它切回合成。
+  const openCategoryBody = /private openPocketCategory\(tab: RecipeBookTab\): void \{([\s\S]*?)\n  \}/.exec(invSrc)?.[1] ?? '';
+  check('左栏换分类不再写 pocketTab（右栏保持不变）', openCategoryBody.length > 0 && !openCategoryBody.includes('this.pocketTab ='));
+  check(
+    '右栏非合成时只记下待预览配方，不填隐藏的合成格',
+    /if \(this\.pocketTab !== 'crafting'\)[\s\S]{0,300}this\.pendingRecipeId = itemId;/.test(invSrc) &&
+      /if \(this\.pocketTab !== 'crafting'\)[\s\S]{0,300}return;/.test(invSrc),
+  );
+  check(
+    '切回合成时补显示待预览配方（只画预览）',
+    /if \(tab === 'crafting'\)[\s\S]{0,300}this\.showRecipeFor\(pending, 'preview'\)/.test(invSrc),
+  );
   // 批次 206：分类栏与 3×9 仓库在双栏网格里**占同一格**，工作台也不例外——
   // 同时显示就是"多一个浮层"（用户反馈的 3×3 工作台 bug）。
   check(
