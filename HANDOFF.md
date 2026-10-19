@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 795（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 797（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -74,6 +74,12 @@ npm run dev            # http://localhost:5173
   零件（只显隐，不重建几何）。旧存档回退原来的短发深棕造型；总高/碰撞/镜头不变。
   vitest **66**、`test:ui` **798**、离线 **131** 套全绿，`build:fast` 能出包。
   ⚠️ `test:ui` 的 798 已是本轮结束值；此前文档里的 763 是并发会话之前的旧数。
+- 批次 292（真机报错：`Cannot read properties of undefined (reading 'style')`，`b519ab3`）：
+  **背包构造期初始化顺序**。`buildCreativeSection()` 末尾会调
+  `updateCreativeVisibility()` → `applyInventoryChrome()`，而工作站左栏的
+  `stationTabsEl` / `stationRecipeHostEl` 原本在它之后才创建，于是第一次写
+  `style.display` 就炸。修法：两个元素提前到 `buildCreativeSection()` 之前创建，
+  DOM 仍在其后挂载；`test:ui` 加 1 条源码顺序守卫（**799** 条全绿）。
 - 批次 283（用户："后期画质粗糙、界面卡顿" + 诊断日志 `minicraft-diag-2026-10-19T02-32-46`）：
   **把"加载范围当成模拟范围"这件事收掉，并让光照只在真的变了时重算**。
   ① 日志事实：前 110 秒 60fps（cpu 5.4ms）；t≈121s 走进新区块（187 区块 / 40 只生物 /
