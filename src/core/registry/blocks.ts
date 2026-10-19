@@ -3311,6 +3311,12 @@ const SPECS: readonly BlockSpec[] = [
     opaque: false,
     lightOpacity: 0,
   },
+  // 蜂巢（批次 374）：繁花森林里的蜜蜂巢
+  {
+    id: 602,
+    name: 'minecraft:bee_nest',
+    tiles: ['bee_nest_top', 'bee_nest_top', 'bee_nest_side'] as const,
+  },
   // 蘑菇岛族（批次 352）：菌丝 + 巨型蘑菇的柄与两种菌盖
   {
     id: 591,
@@ -3698,6 +3704,7 @@ export const Block = {
   SILVERFISH_SPAWNER: 597,
   MOSS_BLOCK: 598,
   MOSS_CARPET: 599,
+  BEE_NEST: 602,
   AZALEA: 600,
   FLOWERING_AZALEA: 601,
 } as const;
@@ -4023,6 +4030,7 @@ HARDNESS.set(Block.RED_MUSHROOM_BLOCK, 0.2);
 HARDNESS.set(Block.MOSS_BLOCK, 0.1);
 HARDNESS.set(Block.MOSS_CARPET, 0.1);
 HARDNESS.set(Block.AZALEA, 0.1);
+HARDNESS.set(Block.BEE_NEST, 0.3);
 HARDNESS.set(Block.FLOWERING_AZALEA, 0.1);
 // 灵魂火把 / 灵魂灯笼：与普通火把同级（一碰就掉）
 HARDNESS.set(Block.SOUL_TORCH, 0);

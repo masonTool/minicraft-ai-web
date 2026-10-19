@@ -1231,6 +1231,12 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.AMETHYST_SHARD, count: 4 },
     ingredients: [Block.AMETHYST_BLOCK],
   },
+  // 蜂蜜瓶（批次 374）：蜜脾 + 玻璃瓶（原版是拿瓶点蜂巢；这里走合成，理由同“触屏没有定点使用”）
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.HONEY_BOTTLE, count: 1 },
+    ingredients: [Item.HONEYCOMB, Item.GLASS_BOTTLE],
+  },
 ];
 
 /**

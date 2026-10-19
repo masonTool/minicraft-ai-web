@@ -76,6 +76,7 @@ const SPECIAL_BLOCKS: Record<string, readonly number[]> = {
   huge_mushroom: [Block.MUSHROOM_STEM, Block.BROWN_MUSHROOM_BLOCK, Block.RED_MUSHROOM_BLOCK],
   ice_spike: [Block.PACKED_ICE],
   moss_patch: [Block.MOSS_BLOCK, Block.MOSS_CARPET, Block.AZALEA, Block.FLOWERING_AZALEA],
+  bee_nest: [Block.BEE_NEST],
 };
 
 /**

@@ -616,6 +616,31 @@ export const SHULKER_TYPE: MobType = {
 };
 
 /**
+ * 蜜蜂（批次 374，蜜蜂生态）。
+ *
+ * 10 血、飞行、被动；花海/草甸自然生成。巢在草甸里（`bee_nest` 方块）。
+ * ⚠️ 简化：不做蜇人后死亡、不做授粉加速作物、不做蜂巢的“住客”状态。
+ */
+export const BEE_TYPE: MobType = {
+  id: 'bee',
+  name: '蜜蜂',
+  health: 10,
+  width: 0.6,
+  height: 0.6,
+  speed: 1.6,
+  hostile: false,
+  attackDamage: 2,
+  followRange: 0,
+  drops: [],
+  xp: 1,
+  flying: true,
+  spawnBiomes: ['flower_forest', 'meadow'],
+  bodyColor: 0xf2c14e,
+  accentColor: 0x3a2a1a,
+  eyeHeight: 0.4,
+};
+
+/**
  * 守卫者（批次 359，海洋系）。
  *
  * 30 血、水下敌对、掉海晶碎片/砂粒。原版守海底神殿，本项目没有
@@ -1527,6 +1552,7 @@ export const MOB_TYPES: readonly MobType[] = [
   // 海洋系（批次 359）
   GUARDIAN_TYPE,
   ELDER_GUARDIAN_TYPE,
+  BEE_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿

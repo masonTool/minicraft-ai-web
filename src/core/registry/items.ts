@@ -200,6 +200,9 @@ export const Item = {
   /** 海晶碎片 / 海晶砂粒（批次 359）：守卫者的掉落，用来合成海晶石族 */
   PRISMARINE_SHARD: 1522,
   PRISMARINE_CRYSTALS: 1523,
+  /** 蜜脾 / 蜂蜜瓶（批次 374）：蜜蜂生态的两件产物 */
+  HONEYCOMB: 1524,
+  HONEY_BOTTLE: 1525,
   /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
@@ -491,6 +494,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.AMETHYST_SHARD, name: 'minecraft:amethyst_shard', tile: 'item_amethyst_shard' },
   { id: Item.PRISMARINE_SHARD, name: 'minecraft:prismarine_shard', tile: 'item_prismarine_shard' },
   { id: Item.PRISMARINE_CRYSTALS, name: 'minecraft:prismarine_crystals', tile: 'item_prismarine_crystals' },
+  { id: Item.HONEYCOMB, name: 'minecraft:honeycomb', tile: 'item_honeycomb' },
+  { id: Item.HONEY_BOTTLE, name: 'minecraft:honey_bottle', tile: 'item_honey_bottle', maxStack: 1 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
@@ -1540,6 +1545,7 @@ export function blockDrops(blockId: number, ctx: DropContext): { id: number; cou
   // 紫水晶簇（批次 351）：没有精准采集就掉 4 个碎片
   if (blockId === Block.AMETHYST_CLUSTER) return scale({ id: Item.AMETHYST_SHARD, count: 4 });
 
+
   const drop =
     replaceDropFor(blockId, ctx.roll()) ??
     rangeDropFor(blockId, ctx.roll()) ??
@@ -1617,6 +1623,8 @@ export function extraCropDrop(blockId: number, roll: () => number): { id: number
 /** 与"掉落自身"不同的特例 */
 const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.GRASS_BLOCK, { id: Block.DIRT, count: 1 }],
+  // 蜂巢（批次 374）：掉 1 个蜜脾（原版 0~3；这里固定 1，可达性审计也认它）
+  [Block.BEE_NEST, { id: Item.HONEYCOMB, count: 1 }],
   // 小麦（H13）：没熟只能拿回 1 粒种子，熟了才给小麦（种子另算，见 wheatExtraSeeds）
   [Block.WHEAT_STAGE0, { id: Item.WHEAT_SEEDS, count: 1 }],
   [Block.WHEAT_STAGE1, { id: Item.WHEAT_SEEDS, count: 1 }],

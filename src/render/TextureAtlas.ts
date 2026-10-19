@@ -6193,3 +6193,9 @@ PAINTERS['moss_block'] = noisy(0x5a7a3a, 14);
 // 杜鹃（批次 369）
 PAINTERS['azalea'] = noisy(0x5f8a3f, 16);
 PAINTERS['flowering_azalea'] = noisy(0x9a5a8a, 20);
+
+// 蜜蜂族（批次 374）
+PAINTERS['bee_nest_top'] = noisy(0xc9a25a, 12);
+PAINTERS['bee_nest_side'] = noisy(0xb08a42, 14);
+PAINTERS['item_honeycomb'] = noisy(0xe8b84a, 14);
+PAINTERS['item_honey_bottle'] = noisy(0xe8a63a, 18);

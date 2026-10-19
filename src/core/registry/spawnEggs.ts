@@ -108,6 +108,8 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'pillager', label: '掠夺者', id: 1518 },
   { mobId: 'guardian', label: '守卫者', id: 1519 },
   { mobId: 'elder_guardian', label: '远古守卫者', id: 1520 },
+  // 蜜蜂（批次 374）：1521~1525 是物品 id，蛋从 1526 起
+  { mobId: 'bee', label: '蜜蜂', id: 1526 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */

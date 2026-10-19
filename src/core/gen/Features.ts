@@ -807,7 +807,8 @@ interface BiomeFeature {
     | 'bamboo'
     | 'huge_mushroom'
     | 'ice_spike'
-    | 'moss_patch';
+    | 'moss_patch'
+    | 'bee_nest';
   /** 特殊地物密度 */
   specialDensity: number;
   /**
@@ -1039,7 +1040,9 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     flowers: 0.09,
     flowerKinds: PLAINS_FLOWERS,
     mushrooms: 0,
-    specialDensity: 0,
+    // 草甸上的蜂巢（批次 374）
+    special: 'bee_nest',
+    specialDensity: 0.004,
   },
   [Biome.STONY_PEAKS]: EMPTY_FEATURE,
   [Biome.SNOWY_SLOPES]: {
@@ -1841,6 +1844,12 @@ function placeSpecial(
         if (!isPlantable(w, wx, y, wz, SOIL)) continue;
         PLANTERS.bamboo(w, world, wx, wz, rng, woodFor('bamboo'));
         if (stats) stats.specials++;
+        continue;
+      }
+
+      if (kind === 'bee_nest') {
+        if (!isPlantable(w, wx, y, wz, SOIL)) continue;
+        if (w.put(wx, y, wz, Block.BEE_NEST) && stats) stats.specials++;
         continue;
       }
 

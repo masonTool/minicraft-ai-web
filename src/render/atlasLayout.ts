@@ -1056,6 +1056,11 @@ export const TILE_ORDER = [
   'bone_block_top',
   'moss_block',
   'azalea',
+  'bee_nest_top',
+  'bee_nest_side',
+  'item_honeycomb',
+  'item_honey_bottle',
+  'spawn_egg_bee',
   'flowering_azalea',
   // 紫水晶族（批次 351）
   'amethyst_block',
