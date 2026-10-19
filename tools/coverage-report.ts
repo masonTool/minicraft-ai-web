@@ -159,7 +159,7 @@ const rows: readonly Row[] = [
     // 台账要连它一起数，否则"做了 8 种"这件事在这里永远是 7
     now: STRUCTURE_KINDS.length + NETHER_STRUCTURE_KINDS.length,
     basis: '原版 1.18 主世界+下界+末地可探索结构约 30 种',
-    gap: '神殿/哨塔/海底遗迹/化石/冰屋/下界要塞',
+    gap: '女巫小屋/海底废墟/废弃传送门/埋藏的宝藏/掠夺者前哨/冰屋/化石/紫晶洞',
   },
   {
     label: '树种（地物）',
@@ -253,7 +253,7 @@ const rows: readonly Row[] = [
     // 本项目按"能用现有事件判定"的条目一条条补（M7 的差异记录里有清单）
     now: ADVANCEMENTS.length,
     basis: '原版 1.18 进度条目量级（约 100+）',
-    gap: '依赖未实现内容的那些（村民/蜜蜂/信标/鞘翅/要塞/刷怪笼…）',
+    gap: '依赖未实现内容的那些（蜜蜂/鞘翅/袭击/刷怪笼/海洋系…）',
   },
   {
     label: '界面语言',
