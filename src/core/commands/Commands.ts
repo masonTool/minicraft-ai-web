@@ -494,6 +494,32 @@ export const COMMANDS: readonly CommandSpec[] = [
     },
   },
   {
+    name: 'me',
+    usage: '/me <动作>',
+    description: '发一条动作消息（“* 玩家 挥了挥手”）',
+    run(args, ctx, out) {
+      const text = args.join(' ').trim();
+      if (!text) {
+        out.error('用法：/me <动作>');
+        return;
+      }
+      out.info(`* ${ctx.playerName()} ${text}`);
+    },
+  },
+  {
+    name: 'say',
+    usage: '/say <内容>',
+    description: '向聊天栏发一条消息',
+    run(args, _ctx, out) {
+      const text = args.join(' ').trim();
+      if (!text) {
+        out.error('用法：/say <内容>');
+        return;
+      }
+      out.info(text);
+    },
+  },
+  {
     name: 'enchant',
     usage: '/enchant <附魔> [等级]',
     description: '给手持物品附魔（等级默认 1，超过上限按上限算）',

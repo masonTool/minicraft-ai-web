@@ -531,5 +531,17 @@ console.log('\n[批次 372：/enchant]');
   check('未知附魔给出错误', out.lastError.includes('找不到附魔'), out.lastError);
 }
 
+console.log('\n[批次 373：/me 与 /say]');
+{
+  const world = new FakeWorld();
+  const out = new Recorder();
+  executeCommand('/me 挥了挥手', world, out);
+  check('/me 带玩家名', out.lastInfo.includes('* 玩家 挥了挥手'), out.lastInfo);
+  executeCommand('/say 大家好啊', world, out);
+  check('/say 原样发消息', out.lastInfo === '大家好啊', out.lastInfo);
+  executeCommand('/me', world, out);
+  check('/me 空参数给用法', out.lastError.includes('用法'), out.lastError);
+}
+
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
