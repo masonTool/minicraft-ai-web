@@ -330,14 +330,18 @@ console.log('\n[生物表]');
   // 112 加了末影人（第一种会瞬移的、第一种"不主动攻击"的）
   // 批次 115 加了凋灵骷髅（第一种"只在某个结构里刷"的）
   // 批次 189 加了鱿鱼（被动、水生）
-  check('生物表包含 49 种生物（… + 猪灵/蛮兵/疣猪兽/蠹虫/炽足兽）', MOB_TYPES.length === 49, `${MOB_TYPES.length}`);
+  check('生物表包含 50 种生物（… + 猪灵/蛮兵/疣猪兽/蠹虫/炽足兽/潜影贝）', MOB_TYPES.length === 50, `${MOB_TYPES.length}`);
   check(
     '敌对生物要么有攻击力、要么另有一条伤害通道',
     // ⚠️ 恶魂是**刻意的例外**（批次 94）：原版它不近战（撞到人也不掉血），
     // 伤害全在大火球上——所以判据不是"attackDamage > 0"，而是
     // "有攻击力 **或** 会吐会炸的东西（`shootsFireballs` 那类）"
     MOB_TYPES.filter((t) => t.hostile).every(
-      (t) => t.attackDamage > 0 || t.id === 'ghast' || t.id === 'blaze',
+      (t) =>
+        t.attackDamage > 0 ||
+        t.ranged !== undefined || // 批次 344：潜影贝只有远程，没有近战
+        t.id === 'ghast' ||
+        t.id === 'blaze',
     ),
   );
   // 村民（J11，批次 88）是**刻意的例外**：原版杀掉村民什么都不掉也不给经验
@@ -863,6 +867,34 @@ console.log('\n[炽足兽：能站在岩浆表面（批次 344）]');
   const cow = new Mob(mobTypeById('cow')!, 0.5, 64.5, 0.5);
   for (let i = 0; i < 40; i++) cow.tick(lavaCtx, 0.05);
   check('（对照）牛会直接掉下去', cow.y < 60, `y=${cow.y.toFixed(2)}`);
+}
+
+console.log('\n[潜影贝：站着不动、射漂浮箭（批次 344）]');
+{
+  const world = new TestWorld();
+  world.floor(-8, 63, -8, 16, 64);
+  const shots: { x: number; effect?: { effect: string; seconds: number } }[] = [];
+  const player = { x: 6.5, y: 65, z: 0.5 };
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+    spawnArrow: (x, _y, _z, _v, options) => shots.push({ x, effect: options.effect }),
+  };
+  const shulker = new Mob(mobTypeById('shulker')!, 0.5, 64.5, 0.5);
+  const startX = shulker.x;
+  for (let i = 0; i < 60; i++) shulker.tick(ctx, 0.05); // 3 秒
+  check('潜影贝站着不动（stationary）', Math.abs(shulker.x - startX) < 0.05, `x ${startX} → ${shulker.x.toFixed(2)}`);
+  check('潜影贝会射箭', shots.length >= 1, `${shots.length} 发`);
+  check(
+    '箭上带漂浮 10 秒',
+    shots[0]?.effect?.effect === 'levitation' && shots[0]?.effect?.seconds === 10,
+    JSON.stringify(shots[0]?.effect),
+  );
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

@@ -390,6 +390,13 @@ export interface MobType {
    */
   arrowEffect?: { effect: EffectId; seconds: number };
   /**
+   * **不会走动**（批次 344：潜影贝）。
+   *
+   * 只影响远程 AI 的"前进/后退"：它站在原地面朝玩家射击。
+   * 潜影贝在原版会贴墙/贴天花板，本项目没有"附着面"这一层，先让它落地站住。
+   */
+  stationary?: boolean;
+  /**
    * **只在水中自然刷**（批次 123，溺尸）。
    *
    * 刷怪器默认要求"脚下实心 + 两格空气"，而溺尸要**站在水里**（原版它在水中生成、
@@ -1339,8 +1346,8 @@ export class Mob extends Entity {
     const length = Math.max(1e-4, Math.hypot(dx, dz));
 
     // 前进 / 后退 / 站住
-    const approaching = distance > ranged.range * 0.9;
-    this.retreating = distance < ranged.keepDistance;
+    const approaching = !this.type.stationary && distance > ranged.range * 0.9;
+    this.retreating = !this.type.stationary && distance < ranged.keepDistance;
     if (this.retreating) {
       this.moveDirX = -dx / length;
       this.moveDirZ = -dz / length;

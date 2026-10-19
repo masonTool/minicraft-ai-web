@@ -103,6 +103,7 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'piglin_brute', label: '猪灵蛮兵', id: 1513 },
   { mobId: 'silverfish', label: '蠹虫', id: 1514 },
   { mobId: 'strider', label: '炽足兽', id: 1515 },
+  { mobId: 'shulker', label: '潜影贝', id: 1516 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */

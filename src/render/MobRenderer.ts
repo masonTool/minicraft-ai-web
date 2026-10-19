@@ -144,6 +144,8 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'silverfish') return 'spider';
   // 炽足兽（批次 344）：长腿四足
   if (typeId === 'strider') return 'quadruped';
+  // 潜影贝（批次 344）：暂用四足骨架占位（没有方块型生物骨架）
+  if (typeId === 'shulker') return 'quadruped';
   return 'humanoid';
 }
 

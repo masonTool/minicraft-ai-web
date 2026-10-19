@@ -584,6 +584,38 @@ export const PIGLIN_TYPE: MobType = {
 };
 
 /**
+ * 潜影贝（批次 344，J20 收尾）。
+ *
+ * 30 血、**站着不动**（`stationary`）、12 格内每 2 秒射一发，
+ * 命中挂 **漂浮 10 秒**（原版的招牌）。⚠️ 三处简化：
+ *  - 子弹走 `spawnArrow` 通道（本项目没有独立的潜影贝子弹实体，外观是箭）；
+ *  - 不会贴墙/贴天花板（没有"附着面"这一层），落地站住；
+ *  - 模型暂用 `quadruped` 骨架（没有方块型生物骨架）。
+ * 本项目没有"结构生成点上放生物"的通道，所以 `naturalSpawn: false`。
+ */
+export const SHULKER_TYPE: MobType = {
+  id: 'shulker',
+  name: '潜影贝',
+  health: 30,
+  width: 0.9,
+  height: 0.9,
+  speed: 0,
+  hostile: true,
+  attackDamage: 0,
+  followRange: 16,
+  drops: [],
+  xp: 5,
+  naturalSpawn: false,
+  stationary: true,
+  ranged: { range: 12, cooldown: 2, speed: 8, keepDistance: 0, spread: 0 },
+  arrowEffect: { effect: 'levitation', seconds: 10 },
+  dimension: 'end',
+  bodyColor: 0x8a5a9a,
+  accentColor: 0x4a2a5a,
+  eyeHeight: 0.6,
+};
+
+/**
  * 炽足兽（批次 344，J20 第五只）。
  *
  * 下界唯一"走在岩浆上"的被动生物：20 血、掉 2~5 根线。
@@ -1378,6 +1410,7 @@ export const MOB_TYPES: readonly MobType[] = [
   HOGLIN_TYPE,
   SILVERFISH_TYPE,
   STRIDER_TYPE,
+  SHULKER_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿
