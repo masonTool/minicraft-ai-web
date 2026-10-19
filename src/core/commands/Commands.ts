@@ -32,6 +32,17 @@ import {
   describeBorder,
   type WorldBorder,
 } from '../world/WorldBorder.ts';
+// 目标选择器（批次 399）：`/execute` 的目标解析与求值都在这个纯模块里
+import {
+  PLAYER_ENTITY_ID,
+  describeSelector,
+  parseSelector,
+  resolveSelector,
+  type CommandEntity,
+  type ParsedSelector,
+  type SelectorOrigin,
+  type SelectorView,
+} from './Selectors.ts';
 
 export { DIFFICULTIES, DIFFICULTY_LABELS, DEFAULT_GAME_RULES } from '../world/Rules.ts';
 export type { Difficulty, GameRules } from '../world/Rules.ts';
@@ -103,6 +114,16 @@ export interface CommandContext {
 
   // ---- 联机
   onlinePlayers(): string[];
+
+  // ---- 实体快照（批次 399，给选择器用）
+  /**
+   * 当前维度里的全部实体（含玩家自己）的**扁平快照**。
+   *
+   * 为什么不是"按 id 查一只"：`@e[distance=..5]` 要先拿到全部再筛，
+   * 逐个查询等于让调用方实现一遍选择器。这里只交出数据，筛选规则全在
+   * `Selectors.ts`（纯函数，可离线断言）。
+   */
+  entities(): readonly CommandEntity[];
 }
 
 /** 命令反馈的出口（聊天栏） */
@@ -761,6 +782,14 @@ export const COMMANDS: readonly CommandSpec[] = [
       out.error('用法：/worldborder get | set <边长> | center <x> <z>');
     },
   },
+  {
+    name: 'execute',
+    usage: '/execute <as|at|positioned|if|unless> … run <命令>',
+    description: '以指定目标与位置执行一条命令（可链式叠加）',
+    run(args, ctx, out) {
+      runExecute(args, ctx, out);
+    },
+  },
 ];
 
 export function findCommand(name: string): CommandSpec | undefined {
@@ -846,3 +875,240 @@ export function displayItem(name: string): string {
 
 /** 常用方块常量导出（命令默认参数用） */
 export const COMMAND_BLOCKS = { AIR: Block.AIR, STONE: Block.STONE } as const;
+
+// ---------------------------------------------------------------- /execute（批次 399）
+
+/**
+ * `/execute` 的嵌套上限。
+ * 不设上限的话 `/execute run execute run execute run …` 能把调用栈打穿
+ * （而它不是崩在解析层，是崩在第 3000 层——报错信息对玩家毫无意义）。
+ */
+const EXECUTE_MAX_DEPTH = 8;
+
+/** 当前嵌套层数：命令是单线程执行的，模块级计数器足够（`finally` 里一定回退） */
+let executeDepth = 0;
+
+/** 执行状态：`as` 换执行者、`at` 换原点，两者独立（与原版一致） */
+interface ExecState {
+  origin: SelectorOrigin;
+  executorId: string;
+}
+
+type ExecCondition =
+  | { kind: 'block'; coords: readonly string[]; block: string }
+  | { kind: 'entity'; selector: ParsedSelector };
+
+type ExecOp =
+  | { kind: 'as'; selector: ParsedSelector }
+  | { kind: 'at'; selector: ParsedSelector }
+  | { kind: 'positioned'; coords: readonly string[] }
+  | { kind: 'cond'; invert: boolean; condition: ExecCondition }
+  | { kind: 'run'; command: string };
+
+/** 选择器需要的世界视图（只交数据，筛选规则在 `Selectors.ts`） */
+function selectorView(ctx: CommandContext): SelectorView {
+  return {
+    entities: () => ctx.entities(),
+    playerName: () => ctx.playerName(),
+  };
+}
+
+/** 执行者默认是"自己"：按昵称在快照里找玩家 */
+function selfEntityId(ctx: CommandContext): string {
+  const name = ctx.playerName().toLowerCase();
+  const self = ctx.entities().find((entity) => entity.isPlayer && entity.name.toLowerCase() === name);
+  return self?.id ?? PLAYER_ENTITY_ID;
+}
+
+/**
+ * 把一条链式 `/execute` 拆成操作序列。
+ * **先整条解析完再执行**：这样"最后一个 `run` 写错了"不会让前半段已经动了世界
+ * （原版也是这个顺序——语法错就一个副作用都不产生）。
+ */
+function parseExecuteOps(args: readonly string[]): ExecOp[] | string {
+  const ops: ExecOp[] = [];
+  let index = 0;
+
+  while (index < args.length) {
+    const token = (args[index] ?? '').toLowerCase();
+
+    if (token === 'run') {
+      const command = args
+        .slice(index + 1)
+        .join(' ')
+        .trim();
+      if (command.length === 0) return '用法：/execute … run <命令>';
+      ops.push({ kind: 'run', command });
+      return ops;
+    }
+
+    if (token === 'as' || token === 'at') {
+      const text = args[index + 1];
+      if (!text) return `用法：/execute ${token} <目标选择器> … run <命令>`;
+      const selector = parseSelector(text);
+      if (typeof selector === 'string') return selector;
+      ops.push({ kind: token, selector });
+      index += 2;
+      continue;
+    }
+
+    if (token === 'positioned') {
+      const coords = args.slice(index + 1, index + 4);
+      if (coords.length < 3) return '用法：/execute positioned <x> <y> <z> … run <命令>';
+      ops.push({ kind: 'positioned', coords });
+      index += 4;
+      continue;
+    }
+
+    if (token === 'if' || token === 'unless') {
+      const sub = (args[index + 1] ?? '').toLowerCase();
+
+      if (sub === 'block') {
+        const coords = args.slice(index + 2, index + 5);
+        const block = args[index + 5];
+        if (coords.length < 3 || !block) return `用法：/execute ${token} block <x> <y> <z> <方块> … run <命令>`;
+        ops.push({ kind: 'cond', invert: token === 'unless', condition: { kind: 'block', coords, block } });
+        index += 6;
+        continue;
+      }
+
+      if (sub === 'entity') {
+        const text = args[index + 2];
+        if (!text) return `用法：/execute ${token} entity <目标选择器> … run <命令>`;
+        const selector = parseSelector(text);
+        if (typeof selector === 'string') return selector;
+        ops.push({ kind: 'cond', invert: token === 'unless', condition: { kind: 'entity', selector } });
+        index += 3;
+        continue;
+      }
+
+      return `execute 还不支持 ${token} ${sub || '<条件>'}（已支持 block / entity）`;
+    }
+
+    return `未知的 execute 子命令：${token}（可用 as / at / positioned / if / unless / run）`;
+  }
+
+  return '用法：/execute … run <命令>';
+}
+
+/** 求一个条件。坐标与选择器都相对**当前执行原点**（`at` / `positioned` 之后的值） */
+function evalCondition(condition: ExecCondition, state: ExecState, ctx: CommandContext, out: CommandFeedback): boolean {
+  if (condition.kind === 'block') {
+    const position = parsePosition([...condition.coords], state.origin);
+    if (!position) {
+      out.error('execute if block：坐标不合法');
+      return false;
+    }
+    const id = resolveBlockId(condition.block);
+    if (id === undefined) {
+      out.error(`找不到方块：${condition.block}`);
+      return false;
+    }
+    return (
+      ctx.getBlock(Math.floor(position.x), Math.floor(position.y), Math.floor(position.z)) === id
+    );
+  }
+
+  return resolveSelector(condition.selector, selectorView(ctx), state.origin, state.executorId).length > 0;
+}
+
+/**
+ * 派生一个"执行原点被替换掉"的上下文。
+ *
+ * ⚠️ 用 `Object.create(ctx)` 而不是 `{ ...ctx }`：主程序交来的是对象字面量
+ * （展开没问题），但测试里的 `FakeWorld` 是类实例——它的方法在**原型**上，
+ * 展开会把整批方法丢掉，而报错方式是"`ctx.give is not a function`"，
+ * 看起来像命令写错了。
+ */
+function withExecutionOrigin(ctx: CommandContext, origin: SelectorOrigin): CommandContext {
+  const dimension = ctx.position().dimension;
+  const derived = Object.create(ctx) as CommandContext;
+  derived.position = () => ({ x: origin.x, y: origin.y, z: origin.z, dimension });
+  return derived;
+}
+
+function runExecOps(
+  ops: readonly ExecOp[],
+  index: number,
+  state: ExecState,
+  ctx: CommandContext,
+  out: CommandFeedback,
+): void {
+  if (index >= ops.length) return;
+  const op = ops[index]!;
+
+  switch (op.kind) {
+    case 'run': {
+      if (executeDepth >= EXECUTE_MAX_DEPTH) {
+        out.error(`execute 嵌套太深（上限 ${EXECUTE_MAX_DEPTH} 层）`);
+        return;
+      }
+      executeDepth++;
+      try {
+        executeCommand(`/${op.command}`, withExecutionOrigin(ctx, state.origin), out);
+      } finally {
+        executeDepth--;
+      }
+      return;
+    }
+
+    case 'as': {
+      const targets = resolveSelector(op.selector, selectorView(ctx), state.origin, state.executorId);
+      if (targets.length === 0) {
+        out.error(`选择器 ${describeSelector(op.selector)} 没有匹配到任何目标`);
+        return;
+      }
+      for (const target of targets) {
+        // `as` 只换执行者，**不动位置**（位置由 `at` 负责）
+        runExecOps(ops, index + 1, { ...state, executorId: target.id }, ctx, out);
+      }
+      return;
+    }
+
+    case 'at': {
+      const targets = resolveSelector(op.selector, selectorView(ctx), state.origin, state.executorId);
+      if (targets.length === 0) {
+        out.error(`选择器 ${describeSelector(op.selector)} 没有匹配到任何目标`);
+        return;
+      }
+      for (const target of targets) {
+        runExecOps(ops, index + 1, { ...state, origin: { x: target.x, y: target.y, z: target.z } }, ctx, out);
+      }
+      return;
+    }
+
+    case 'positioned': {
+      const position = parsePosition([...op.coords], state.origin);
+      if (!position) {
+        out.error('execute positioned：坐标不合法');
+        return;
+      }
+      runExecOps(ops, index + 1, { ...state, origin: position }, ctx, out);
+      return;
+    }
+
+    case 'cond': {
+      const ok = evalCondition(op.condition, state, ctx, out);
+      const pass = op.invert ? !ok : ok;
+      // 条件不满足时**静默**（原版也是不输出任何东西）
+      if (pass) runExecOps(ops, index + 1, state, ctx, out);
+      return;
+    }
+  }
+}
+
+/** `/execute` 的入口 */
+function runExecute(args: string[], ctx: CommandContext, out: CommandFeedback): void {
+  const ops = parseExecuteOps(args);
+  if (typeof ops === 'string') {
+    out.error(ops);
+    return;
+  }
+
+  const position = ctx.position();
+  const state: ExecState = {
+    origin: { x: position.x, y: position.y, z: position.z },
+    executorId: selfEntityId(ctx),
+  };
+  runExecOps(ops, 0, state, ctx, out);
+}

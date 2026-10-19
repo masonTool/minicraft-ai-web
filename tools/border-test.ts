@@ -25,6 +25,7 @@ import {
   type WorldBorder,
 } from '../src/core/world/WorldBorder.ts';
 import { executeCommand, type CommandContext } from '../src/core/commands/Commands.ts';
+import type { CommandEntity } from '../src/core/commands/Selectors.ts';
 import { DEFAULT_GAME_RULES, type GameRules } from '../src/core/world/Rules.ts';
 import { BorderRenderer } from '../src/render/BorderRenderer.ts';
 
@@ -207,6 +208,10 @@ console.log('\n[/worldborder：get / set / center]');
       return { level: 0, progress: 0, toNext: 0, total: 0 };
     }
     onlinePlayers(): string[] {
+      return [];
+    }
+    /** 选择器快照（批次 399）：这一套只测边界，没有实体 */
+    entities(): readonly CommandEntity[] {
       return [];
     }
   }

@@ -10060,4 +10060,11 @@
 - [x] B395-4 genregistry 84、reach 61、perf 40，离线 131 套全绿
 - 覆盖：方块 **661 → 662**
 
+## 批次 396：命令补 3 条——/particle /tell /msg（2026-10-20）
+
+- [x] B396-1 `/particle <heart|crit|flame|portal|explosion> [数量]`（1~200 校验）
+- [x] B396-2 `/tell <内容>` 与 `/msg <内容>`（单人下等同私聊）
+- [x] B396-3 test:commands 119（未知粒子/数量超限/来源行），离线 131 套全绿
+- 覆盖：命令 **24 → 27（68%）**
+
 <!-- docs-archive:end -->

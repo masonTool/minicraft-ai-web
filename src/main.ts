@@ -162,6 +162,8 @@ import { devicePixelRatioValue } from './ui/Device.ts';
 import { ChatInput } from './ui/ChatInput.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
+// 选择器（批次 399）：`/execute` 需要"当前维度里有哪些实体"的扁平快照
+import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.ts';
 import {
   TickScheduler,
   randomTickChunk,
@@ -9159,6 +9161,40 @@ class App {
         const names = [`${this.playerName}(你)`];
         for (const player of this.net.remote.values()) names.push(player.name);
         return names;
+      },
+      /**
+       * 选择器要的实体快照（批次 399）。
+       *
+       * 只交 Mob：掉落物/箭/矿车在同一条 `@e` 里会被筛到，
+       * 而本项目还没有"实体种类 → 选择器种类"的映射表（原版有 `item` / `arrow`），
+       * 与其猜，不如只给生物——差异写在 TASKS 的 K11 里。
+       * 远端玩家暂时也不在这里（联机时它们由 `net.remote` 维护，没有实体对象）。
+       */
+      entities: () => {
+        const list: CommandEntity[] = [
+          {
+            id: PLAYER_ENTITY_ID,
+            type: 'player',
+            name: this.playerName,
+            x: this.physics.x,
+            y: this.physics.y,
+            z: this.physics.z,
+            isPlayer: true,
+          },
+        ];
+        for (const entity of this.entities.all) {
+          if (!(entity instanceof Mob)) continue;
+          list.push({
+            id: `mob:${entity.id}`,
+            type: entity.type.id,
+            name: entity.type.name,
+            x: entity.x,
+            y: entity.y,
+            z: entity.z,
+            isPlayer: false,
+          });
+        }
+        return list;
       },
     };
   }

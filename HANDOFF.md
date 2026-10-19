@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 957（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 958（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **185**、进行中 **76**、待办 26 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -45,12 +45,18 @@ npm run dev            # http://localhost:5173
 - ⚠️ **批次编号冲突（本轮）**：另一条会话在同一时间段占用了 **272~283**。本轮 7 条用户反馈的
   8 个提交正式编号是 **284~291**；旧 commit message 里写的 272~279 是当时撞号，
   以后引用/回滚请按下面的新号或 commit hash（历史不重写，避免动已推送的分支）。
-- 批次 393（规则）：**spawnRadius**（规则 18 → 19，63%）。
 - 批次 394（D20）：**繁茂洞穴 + 滴水石洞**（群系 46 → 48，67%）；洞穴装饰按群系分配。
 - 批次 395（B16）：**缠根泥土**（方块 661 → 662，洞穴顶部生成）。
 - 批次 396（命令）：**/particle //tell //msg**（命令 24 → 27，68%）。
 - 批次 397（B16）：**苔藓地面 + 垂滴叶**（方块 662 → 664）；perf 指纹 `-6b6f7719`。
 - 批次 398（D20）：**河流 + 冻河**（群系 48 → 50，69%）；按内陆浅水判，不做地形雕刻。
+- 批次 399（命令）：**目标选择器 + `/execute`**（命令 27 → 28，70%）。
+  `core/commands/Selectors.ts` 是纯逻辑（`@p/@s/@a/@e/@r` + type/name/distance/limit/sort）；
+  `/execute` 支持 `as/at/positioned/if|unless block|entity/run` 的任意链式叠加，
+  **先整条解析再执行**、条件不满足静默、嵌套上限 8 层；
+  新增 `test:execute` **65 条**（离线 132 套全绿）。
+  ⚠️ 没有 `scores=`/`team=`/`tag=`（依赖 M23 记分板）与 `x=/dx=` 方框选择；
+  `@e` 只覆盖生物（掉落物/箭/矿车还没有"选择器种类"映射）。
 - ⚠️ **批次编号冲突（第二次）**：并发会话占用了 **295-1~295-4**。本轮两个提交正式编号是
   **297（容器暂停）/ 298（目标框界面）**；旧 commit message 里的 295/296 是撞号。
 - ⚠️ **批次编号冲突（第三次）**：并发会话占用了 **303**。本轮正式编号 **304**；
@@ -161,11 +167,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 130 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 132 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 130 套离线测试
+npm test                   # typecheck:tools + vitest + 132 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -177,7 +183,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **131 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **132 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。

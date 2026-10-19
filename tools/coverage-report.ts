@@ -208,7 +208,7 @@ const rows: readonly Row[] = [
     spec: SPEC.commands,
     now: COMMANDS.length,
     basis: '原版 1.18 单人可用命令（不含权限类）',
-    gap: '/execute、选择器（@a/@e）、记分板、命令方块',
+    gap: '记分板（M23）、命令方块，以及 /clone /data /locate 一族（批次 399 已补 /execute + 选择器）',
   },
   {
     label: '游戏规则',

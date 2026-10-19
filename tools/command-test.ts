@@ -25,6 +25,7 @@ import {
   type Difficulty,
   type GameRules,
 } from '../src/core/commands/Commands.ts';
+import type { CommandEntity } from '../src/core/commands/Selectors.ts';
 import {
   DEFAULT_GAME_RULES,
   DIFFICULTIES as RULE_DIFFICULTIES,
@@ -218,6 +219,20 @@ class FakeWorld implements CommandContext {
   }
   onlinePlayers(): string[] {
     return ['玩家(你)'];
+  }
+  /** 选择器快照（批次 399）：这一套里没有生物，只交出玩家自己 */
+  entities(): readonly CommandEntity[] {
+    return [
+      {
+        id: 'player',
+        type: 'player',
+        name: this.playerName_,
+        x: this.pos.x,
+        y: this.pos.y,
+        z: this.pos.z,
+        isPlayer: true,
+      },
+    ];
   }
 
   /**
