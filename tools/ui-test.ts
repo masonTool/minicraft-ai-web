@@ -824,10 +824,11 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('Math.min(maxStackOf(entry.resultId)'),
   );
   check(
-    '炉子连续制作；关界面堆到 64，开界面自动收进背包（批次 302）',
-    !/private takeFurnaceOutput[\s\S]{0,900}furnace\.paused = true/.test(invSrc) &&
-      invSrc.includes('if (isFurnaceMode(mode) && this.activeContainer instanceof Furnace)') &&
-      invSrc.includes('this.takeFurnaceOutput(false);'),
+    '熔炉产物默认留在产物槽，不再自动收货（批次 312）',
+    !invSrc.includes('this.takeFurnaceOutput(false);') &&
+      invSrc.includes('批次 312：产物默认留在产物槽') &&
+      invSrc.includes('const product = this.registerExisting') &&
+      invSrc.includes('furnaceProductSlot'),
   );
   check(
     '材料格/手上的物品计入拥有；满槽不标红；下方缺料提示已隐藏（批次 302）',
@@ -836,10 +837,19 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       /private renderStationHint\([\s\S]{0,500}classList\.add\('hidden'\)[\s\S]{0,120}return;/.test(invSrc),
   );
   check(
-    '关界面时炉子堆产物到 64，开界面自动收货（批次 302）',
-    /private takeFurnaceOutput[\s\S]{0,700}this\.inventory\.notify/.test(invSrc) &&
-      invSrc.includes('this.takeFurnaceOutput(false);') &&
-      css.includes('.furnace-fuel-options'),
+    '熔炉离开玩家继续烧，产物槽满 64 才停（批次 312）',
+    readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes(
+      '!(container instanceof Furnace) && dx * dx + dy * dy + dz * dz > rangeSq',
+    ),
+  );
+  check(
+    '材料/燃料/备选燃料说明；退还仓库在备选燃料上方（批次 312）',
+    invSrc.includes("inputLabel.textContent = '材料'") &&
+      invSrc.includes("fuelLabel.textContent = '燃料'") &&
+      invSrc.includes("optionsLabel.textContent = '备选燃料'") &&
+      invSrc.includes('bottom.append(returnRow, fuelHint') &&
+      css.includes('.furnace-return-row') &&
+      css.includes('.furnace-slot-side-label'),
   );
   check(
     '点白底配方会尽量装满原料与燃料',
@@ -869,6 +879,12 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes("this.pane = !creativePlayer && this.stationHasRecipes(mode) ? 'category' : 'items'") &&
       invSrc.includes('const showCategory = hasRecipes && !creativePlayer') &&
       invSrc.includes('if (hasRecipes && !creativePlayer)'),
+  );
+  check(
+    '切换创造/生存时工作站左栏立即重置（批次 312）',
+    /if \(creativePlayer !== this\.lastCreative\) \{[\s\S]{0,260}isWorkstationMode\(this\.mode\)[\s\S]{0,120}this\.pane = !creativePlayer && this\.stationHasRecipes\(\)/.test(
+      invSrc,
+    ),
   );
   check(
     '点创造分类会切回无限物品页',

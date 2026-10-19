@@ -3032,7 +3032,8 @@ export class InventoryScreen {
     }
     if (this.activeContainer instanceof Furnace) {
       this.activeContainer.paused = false;
-      this.stationAutoCollect = true;
+      // 批次 312：产物默认留在产物槽，不再自动收进快捷栏/仓库
+      this.stationAutoCollect = false;
       this.stationBrewSnapshot = null;
       this.clearStationHint();
       this.showMessage(`开始制作：${itemName(entry.resultId)}`);
@@ -3101,10 +3102,6 @@ export class InventoryScreen {
   /** 制作完成自动收货：快捷栏 → 主仓库 → 脚边（批次 295） */
   private collectStationOutput(): void {
     if (!this.stationAutoCollect) return;
-    if (isFurnaceMode(this.mode) && this.activeContainer instanceof Furnace) {
-      this.takeFurnaceOutput(false);
-      return;
-    }
     if (this.mode === 'brewing' && this.activeContainer instanceof BrewingStand) {
       const stand = this.activeContainer;
       const snapshot = this.stationBrewSnapshot;
@@ -3451,12 +3448,16 @@ export class InventoryScreen {
     //   左栏放创造物品栏完全放得下。
     const creativePlayer = this.hooks.isCreative?.() ?? false;
     const creative = creativePlayer;
-    // 模式变了（暂停菜单 / /gamemode）→ 左栏回到该模式的默认页。
-    // 这是批次 181 的关键一步：原来创造模式里 `pane` 被强行改回 'items'，
-    // 于是"切到个人仓库再点分类"永远回不去。
+    // 模式变了（暂停菜单 / /gamemode）→ 工作台状态要**立刻**切到新模式：
+    // 创造工作站只留仓库；生存配方工作站回分类。批次 312。
     if (creativePlayer !== this.lastCreative) {
-      this.pane = creativePlayer ? 'creative' : 'items';
       this.lastCreative = creativePlayer;
+      if (isWorkstationMode(this.mode)) {
+        this.pane = !creativePlayer && this.stationHasRecipes() ? 'category' : 'items';
+      } else {
+        this.pane = creativePlayer ? 'creative' : 'items';
+      }
+      this.categoryPage = 0;
     }
     // 批次 311（用户）：创造模式打开工作模块时，左栏只留仓库（items），
     // 不显示分类/搜索，也不挂创造分类或配方分类。
@@ -4001,13 +4002,31 @@ export class InventoryScreen {
 
       const fuelHint = document.createElement('div');
       fuelHint.className = 'furnace-fuel-hint';
-      fuelHint.append(this.furnaceFuelOptionsEl);
+      const optionsLabel = document.createElement('div');
+      optionsLabel.className = 'furnace-options-label';
+      optionsLabel.textContent = '备选燃料';
+      fuelHint.append(optionsLabel, this.furnaceFuelOptionsEl);
+
+      // 批次 312（用户）：材料/燃料槽左侧加文字说明
+      const inputWrap = document.createElement('div');
+      inputWrap.className = 'furnace-slot-with-label';
+      const inputLabel = document.createElement('span');
+      inputLabel.className = 'furnace-slot-side-label';
+      inputLabel.textContent = '材料';
+      inputWrap.append(inputLabel, input);
+
+      const fuelWrap = document.createElement('div');
+      fuelWrap.className = 'furnace-slot-with-label';
+      const fuelLabel = document.createElement('span');
+      fuelLabel.className = 'furnace-slot-side-label';
+      fuelLabel.textContent = '燃料';
+      fuelWrap.append(fuelLabel, fuel);
 
       // 批次 309（用户）：进度箭头垂直居中于原料/燃料，左边缘贴原料槽右边缘；
       // 右边是「目标」槽与「产物」槽，两个文字都在槽上方。
       const core = document.createElement('div');
       core.className = 'furnace-core';
-      core.append(input, this.flameEl, fuel);
+      core.append(inputWrap, this.flameEl, fuelWrap);
 
       const progress = document.createElement('div');
       progress.className = 'furnace-progress';
@@ -4038,13 +4057,14 @@ export class InventoryScreen {
       // 烟熏炉/高炉要写清"它只吃什么"：原版靠玩家自己知道，我们的界面里直接说明，
       // 免得玩家把石头塞进烟熏炉、看着它不动以为是坏了
       this.furnaceHintEl.textContent = '';
-      const actionCol = document.createElement('div');
-      actionCol.className = 'furnace-slot-actions';
-      actionCol.append(this.furnaceReturnBtn, this.furnaceHintEl);
+      // 退还仓库放在备选燃料上方，避免和备选燃料同一行（批次 312）
+      const returnRow = document.createElement('div');
+      returnRow.className = 'furnace-return-row';
+      returnRow.append(this.furnaceReturnBtn);
 
       const bottom = document.createElement('div');
       bottom.className = 'furnace-bottom';
-      bottom.append(fuelHint, actionCol);
+      bottom.append(returnRow, fuelHint, this.furnaceHintEl);
 
       this.furnaceLayout.replaceChildren(stage, bottom);
       this.topArea.append(this.furnaceLayout, this.stationHintEl);
@@ -5416,10 +5436,7 @@ export class InventoryScreen {
       this.rebuildTopArea();
     }
 
-    // 批次 302：关着界面时炉子会把产物堆到 64；下次打开先自动收进背包
-    if (isFurnaceMode(mode) && this.activeContainer instanceof Furnace) {
-      this.takeFurnaceOutput(false);
-    }
+    // 批次 312：熔炉产物默认留在产物槽；打开界面不再自动收进背包
     // 批次 299：每次打开工作站都先暂停（同容器重开也要），完全改成"点目标框才开始"
     if (isWorkstationMode(mode)) this.pauseStationContainer();
 

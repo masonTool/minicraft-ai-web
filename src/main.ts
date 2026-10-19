@@ -10123,7 +10123,9 @@ class App {
       const dx = x + 0.5 - px;
       const dy = y + 0.5 - py;
       const dz = z + 0.5 - pz;
-      if (dx * dx + dy * dy + dz * dz > rangeSq) return;
+      // 批次 312（用户）：熔炉离开玩家视野也要继续烧，产物堆到产物槽 64 为止；
+      // 其他容器（酿造台/营火/漏斗）仍只 tick 附近，避免全图遍历。
+      if (!(container instanceof Furnace) && dx * dx + dy * dy + dz * dz > rangeSq) return;
 
       if (container instanceof Hopper) {
         // 锁定状态从**方块状态**读（红石引擎负责写它），缓存进容器供界面显示
