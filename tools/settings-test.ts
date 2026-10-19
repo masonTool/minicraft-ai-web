@@ -21,13 +21,22 @@ import {
   PARTICLE_DENSITY,
   PARTICLE_LEVELS,
   PARTICLE_LEVEL_LABELS,
+  SENSITIVITY_DEFAULT,
+  SENSITIVITY_MAX,
+  SENSITIVITY_MIN,
+  SETTINGS_VERSION,
+  TOUCH_AIM_MODES,
+  TOUCH_AIM_MODE_LABELS,
   cycleValue,
   defaultViewDistanceFor,
   loadSettings,
   nextCycleValue,
   saveSettings,
+  sensitivityGain,
+  sensitivityLevelFromGain,
   type GameSettings,
 } from '../src/ui/SettingsScreen.ts';
+import { HANDEDNESS_LABELS, HANDEDNESS_MODES } from '../src/ui/TouchControls.ts';
 import { CAMERA_MODES, CAMERA_MODE_LABELS } from '../src/core/viewMode.ts';
 import {
   FRAME_TIME_DROP,
@@ -87,6 +96,14 @@ console.log('\n[默认设置]');
   // 批次 219：触摸端没有独立使用键，进食要借用"长按空处"，1.6 秒 + 280ms 太磨
   check('快速进食默认开（老存档缺字段也按开）', DEFAULT_SETTINGS.fastEat === true && fallback.fastEat === true);
   check('默认视距/视野在合理范围', DEFAULT_SETTINGS.viewDistance >= 4 && DEFAULT_SETTINGS.viewDistance <= 16 && DEFAULT_SETTINGS.fov >= 60 && DEFAULT_SETTINGS.fov <= 110);
+  // 批次 271：灵敏度改成 0~8 档，默认正中间 4
+  check(
+    '灵敏度默认 4（正中间，= 1×）',
+    DEFAULT_SETTINGS.sensitivity === 4 && SENSITIVITY_DEFAULT === 4 && SENSITIVITY_MIN === 0 && SENSITIVITY_MAX === 8,
+  );
+  check('默认瞄准方式是手指落点', DEFAULT_SETTINGS.aimMode === 'finger');
+  check('默认右手模式（摇杆在左）', DEFAULT_SETTINGS.handedness === 'right');
+  check('设置格式版本是 2', DEFAULT_SETTINGS.settingsVersion === SETTINGS_VERSION && SETTINGS_VERSION === 2);
 }
 
 // ---------------------------------------------------------------- 2. 容错
@@ -102,10 +119,11 @@ console.log('\n[设置的容错]');
   storage.setItem(
     KEY,
     JSON.stringify({
+      settingsVersion: SETTINGS_VERSION,
       viewDistance: 999,
       fov: -20,
       volume: 5,
-      sensitivity: 0,
+      sensitivity: -5,
       cameraMode: '从没见过',
       particles: 'super',
       clouds: 'yes',
@@ -118,11 +136,19 @@ console.log('\n[设置的容错]');
   check('视距被夹回上限', messy.viewDistance === 16, String(messy.viewDistance));
   check('视野被夹回下限', messy.fov === 60, String(messy.fov));
   check('音量被夹回 1', messy.volume === 1, String(messy.volume));
-  check('灵敏度被夹回 0.5', messy.sensitivity === 0.5, String(messy.sensitivity));
-  storage.setItem(KEY, JSON.stringify({ sensitivity: 9 }));
-  check('灵敏度上限是 4（批次 209）', loadSettings().sensitivity === 4, String(loadSettings().sensitivity));
-  storage.setItem(KEY, JSON.stringify({ sensitivity: 3.5 }));
-  check('x4 以内的灵敏度能读回来', loadSettings().sensitivity === 3.5);
+  check('灵敏度档位被夹回 0', messy.sensitivity === 0, String(messy.sensitivity));
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, sensitivity: 9 }));
+  check('灵敏度上限是 8（批次 271）', loadSettings().sensitivity === 8, String(loadSettings().sensitivity));
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, sensitivity: 6.7 }));
+  check('档位取整（6.7 → 7）', loadSettings().sensitivity === 7, String(loadSettings().sensitivity));
+
+  // 批次 271：老存档的"倍率"要迁成新档位（1× → 4，不是档位 1）
+  storage.setItem(KEY, JSON.stringify({ sensitivity: 1 }));
+  check('老存档 1× → 档位 4', loadSettings().sensitivity === 4, String(loadSettings().sensitivity));
+  storage.setItem(KEY, JSON.stringify({ sensitivity: 0.5 }));
+  check('老存档 0.5× → 档位 2', loadSettings().sensitivity === 2, String(loadSettings().sensitivity));
+  storage.setItem(KEY, JSON.stringify({ sensitivity: 4 }));
+  check('老存档 4× → 档位 8', loadSettings().sensitivity === 8, String(loadSettings().sensitivity));
   check('非法视角模式回退第一人称', messy.cameraMode === 'first');
   check('非法粒子档位回退"全部"', messy.particles === 'all');
   check('clouds 不是 false 就当开（缺省友好）', messy.clouds === true);
@@ -153,7 +179,7 @@ console.log('\n[保存与读取]');
     viewDistance: 8,
     fov: 90,
     volume: 0.25,
-    sensitivity: 1.75,
+    sensitivity: 6,
     cameraMode: 'third-front',
     particles: 'reduced',
     clouds: false,
@@ -164,6 +190,36 @@ console.log('\n[保存与读取]');
   };
   saveSettings(custom);
   check('保存后读回来完全一致', JSON.stringify(loadSettings()) === JSON.stringify(custom));
+}
+
+// ---------------------------------------------------------------- 3b. 灵敏度 / 瞄准方式 / 左右手（批次 271）
+
+console.log('\n[灵敏度档位 / 瞄准方式 / 左右手（批次 271）]');
+{
+  check('4 档 = 1×（正中间不改变既有手感）', Math.abs(sensitivityGain(4) - 1) < 1e-9);
+  check('0 档 = 0.25×', Math.abs(sensitivityGain(0) - 0.25) < 1e-9, String(sensitivityGain(0)));
+  check('8 档 = 4×（与老滑块的上限一致）', Math.abs(sensitivityGain(8) - 4) < 1e-9, String(sensitivityGain(8)));
+  check('每两档翻一倍', Math.abs(sensitivityGain(6) - 2) < 1e-9 && Math.abs(sensitivityGain(2) - 0.5) < 1e-9);
+  check('越界档位被夹住', sensitivityGain(-3) === sensitivityGain(0) && sensitivityGain(99) === sensitivityGain(8));
+
+  // 迁移用：老倍率 → 最近的档位（0.5→2、1→4、2→6、4→8）
+  check('老倍率 0.5 → 档位 2', sensitivityLevelFromGain(0.5) === 2);
+  check('老倍率 1 → 档位 4', sensitivityLevelFromGain(1) === 4);
+  check('老倍率 2 → 档位 6', sensitivityLevelFromGain(2) === 6);
+  check('老倍率 4 → 档位 8', sensitivityLevelFromGain(4) === 8);
+
+  check('瞄准方式只有两档，且都有中文标签', TOUCH_AIM_MODES.join(',') === 'finger,center' && TOUCH_AIM_MODES.every((mode) => TOUCH_AIM_MODE_LABELS[mode].length > 0));
+  check('左右手只有两档，且都有中文标签', HANDEDNESS_MODES.join(',') === 'right,left' && HANDEDNESS_MODES.every((mode) => HANDEDNESS_LABELS[mode].length > 0));
+
+  const storage = new MemoryStorage();
+  useStorage(storage);
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, aimMode: 'center', handedness: 'left' }));
+  const saved = loadSettings();
+  check('瞄准方式 / 左右手能存下来并读回', saved.aimMode === 'center' && saved.handedness === 'left');
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, aimMode: '自动锁头', handedness: '双手' }));
+  const dirty = loadSettings();
+  check('非法瞄准方式回退手指落点', dirty.aimMode === 'finger');
+  check('非法左右手回退右手模式', dirty.handedness === 'right');
 }
 
 // ---------------------------------------------------------------- 4. 粒子档位

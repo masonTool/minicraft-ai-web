@@ -1333,7 +1333,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   check(
     '轻点先判生物：点到生物 → 一次性攻击请求，否则才放置/交互',
-    mainSource.includes('const tapped = this.mobAtScreen(clientX, clientY);') &&
+    mainSource.includes('const tapped =\n          this.mobAtScreen(aim.x, aim.y)') &&
       mainSource.includes('if (tapped) this.tapAttackRequest = true;'),
   );
   check(
@@ -1356,10 +1356,16 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       source.includes('translate3d(${x}px, ${y}px, 0)'),
   );
   check(
-    '触摸端没有十字准星（批次 239 复查：手指不按就没有目标）',
+    '触摸端默认没有十字准星；选「屏幕中心」瞄准时才装回来（批次 271）',
     indexSource.includes('body.touch-mode #crosshair { display: none; }') &&
+      indexSource.includes('body.touch-mode.aim-center #crosshair { display: block; }') &&
       !source.includes("classList.add('touch-aiming')") &&
-      mainSource.includes('} else if (this.touch !== null) {'),
+      mainSource.includes('} else if (this.touch !== null) {') &&
+      mainSource.includes("document.body.classList.toggle('aim-center'"),
+  );
+  check(
+    '屏幕中心瞄准时白圈收起（目标在正中，不在手指上）',
+    indexSource.includes('body.touch-mode.aim-center #touch-ring { display: none; }'),
   );
   check(
     '白圈直径 92（46 →×3 138 →×2/3 92），负 margin 始终取半径 46',
@@ -1373,9 +1379,10 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       source.includes('this.releaseAim(false);'),
   );
   check(
-    '主程序用按住中的落点做方块射线（准星只是兜底）',
+    '主程序用按住中的落点（或屏幕中心）做方块射线，准星只是兜底',
     source.includes('get aimPoint()') &&
-      mainSource.includes('const screenAim = this.touch?.aimPoint ?? this.touchTapPoint;') &&
+      mainSource.includes('const screenAim = centerAim') &&
+      mainSource.includes('this.screenCenterPoint()') &&
       mainSource.includes('this.hit = this.hitAtScreen(screenAim.x, screenAim.y);'),
   );
   check(
@@ -1394,6 +1401,58 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       mainSource.includes('this.blockOverlay.showGroundHighlight(') &&
       mainSource.includes('this.world.isSelectable(this.hit.x, this.hit.y - 1, this.hit.z)'),
   );
+  // 批次 271：统一生物目标（标签/描边/攻击/右键使用/进食读同一份）
+  check(
+    '只有一个每帧生物目标 aimMob（触屏与桌面同一套判定）',
+    mainSource.includes('private aimMob: Mob | null = null;') &&
+      mainSource.includes('this.aimMob = this.resolveAimMob(screenAim);') &&
+      mainSource.includes('const mob = this.aimMob;'),
+  );
+  check(
+    '生物优先于草/雪：视线判据走 isSightBlocker（不再拿方块距离硬比）',
+    mainSource.includes('private mobSightBlocked(mob: Mob): boolean') &&
+      mainSource.includes('sightBlocked(') &&
+      !mainSource.includes('this.hit.distance < hit.distance'),
+  );
+  check(
+    '移动的生物带迟滞锁（走半步不掉目标）',
+    mainSource.includes('private lockedMobNear(') &&
+      mainSource.includes('AIM_LOCK_RADIUS_PX') &&
+      mainSource.includes('this.projectToScreen('),
+  );
+  check(
+    '瞄准生物时只亮生物包围盒，方块描边收起',
+    mainSource.includes('this.mobOutline.show(this.aimMob)') &&
+      mainSource.includes('this.outline.hide();') &&
+      mainSource.includes('this.blockOverlay.hide();'),
+  );
+  check(
+    '攻击 / 右键使用 / 进食全部读 aimMob（按住打怪不会顺手挖地）',
+    mainSource.includes('const mob = tappedMob && !tappedMob.dead ? tappedMob : this.aimMob;') &&
+      mainSource.includes('const mob = this.tapUseMob ?? this.aimMob;') &&
+      mainSource.includes('const aimingMob = edible && this.aimMob !== null;') &&
+      mainSource.includes('this.suppressBreaking = this.aimMob !== null;'),
+  );
+  check(
+    '摇杆四周有死区（圈内不开始瞄准/攻击）',
+    source.includes('export function withinStickDeadZone(') &&
+      source.includes('this.isInStickDeadZone(event.clientX, event.clientY)') &&
+      source.includes("diag.event('gesture', 'look.deadzone'"),
+  );
+  check(
+    '左右手模式镜像摇杆与按钮（CSS 与动态拇指区同一套边）',
+    indexSource.includes('#touch-ui.left-handed #touch-stick { left: auto; right: 22px; }') &&
+      indexSource.includes('#touch-ui.left-handed #touch-buttons { right: auto; left: 20px; }') &&
+      source.includes("return this.handedness === 'left'"),
+  );
+  check('灵敏度默认 4、范围 0~8（4 是正中间）', DEFAULT_SETTINGS.sensitivity === 4);
+  check(
+    '瞄准方式 / 左右手都能在设置里切换',
+    mainSource.includes('this.settings.aimMode') &&
+      mainSource.includes('settings.handedness') &&
+      mainSource.includes('this.touch?.setHandedness('),
+  );
+
   // 切模式/开关界面/失焦时要清手势，否则另一根手指的旧基准会把摇杆和视角带歪
   check('切飞行前清手势', mainSource.includes("this.touch?.resetInput('flying')"));
   check('界面开关与失焦也清手势', mainSource.includes("'ui.open' : 'ui.close'") && mainSource.includes("resetInput('blur')"));
@@ -2355,7 +2414,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   check(
     '轻点按屏幕坐标选生物（点哪打哪）',
     appSrc.includes('private mobAtScreen(clientX: number, clientY: number): Mob | null') &&
-      appSrc.includes('const tapped = this.mobAtScreen(clientX, clientY);') &&
+      appSrc.includes('this.mobAtScreen(aim.x, aim.y)') &&
       touchSrc.includes('onTap(clientX: number, clientY: number): void;'),
   );
 
@@ -2851,7 +2910,7 @@ console.log('\n[船：物品 / 配方 / 上下船接线（批次 244）]');
   );
   check(
     '触摸端先认载具（点船/点车 = 上去，不是打它/放方块）',
-    appSrc.includes('const tappedBoat = this.vehicleAtScreen(clientX, clientY);') &&
+    appSrc.includes('const tappedBoat = this.vehicleAtScreen(aim.x, aim.y);') &&
       appSrc.includes('const boatTarget = this.tapVehicle ?? this.vehicleUnderCrosshair();'),
   );
 

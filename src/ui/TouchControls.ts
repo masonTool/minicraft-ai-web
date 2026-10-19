@@ -95,6 +95,39 @@ export const STICK_MODE_LABELS: Record<StickMode, string> = {
   dynamic: '跟随手指',
 };
 
+/**
+ * 左右手模式（批次 271）：右手模式摇杆在左、按钮在右；左手模式整个镜像。
+ *
+ * ⚠️ 它不只影响 CSS：动态摇杆的"拇指区"判据与摇杆死区都要跟着换边，
+ * 否则左手模式下左下角仍是摇杆区、右下角反而没有摇杆。
+ */
+export type Handedness = 'right' | 'left';
+export const HANDEDNESS_MODES: readonly Handedness[] = ['right', 'left'];
+export const HANDEDNESS_LABELS: Record<Handedness, string> = {
+  right: '右手（摇杆在左）',
+  left: '左手（摇杆在右）',
+};
+
+/**
+ * 摇杆四周的**死区**（批次 271，用户要求）：这一圈里点按不产生任何目标，
+ * 也不攻击/放置——那是控制移动的大拇指，右手才是操作手。
+ *
+ * 取摇杆半径的 20%：132px 的摇杆外扩约 13px，既盖住"手指压边"的误差，
+ * 又不会把旁边一大片屏幕吞掉。随机身缩放（`--touch-scale`）一起变大。
+ */
+export const STICK_DEAD_ZONE_RATIO = 0.2;
+
+/** 点 (x, y) 是否落在"摇杆 + 死区"这个圆里（纯函数，离线测试用） */
+export function withinStickDeadZone(
+  centerX: number,
+  centerY: number,
+  radius: number,
+  x: number,
+  y: number,
+): boolean {
+  return Math.hypot(x - centerX, y - centerY) <= radius * (1 + STICK_DEAD_ZONE_RATIO);
+}
+
 export interface TouchActions {
   /**
    * 打开暂停 / 设置菜单（批次 104，屏幕上方正中那颗键）。
@@ -212,6 +245,8 @@ export class TouchControls {
   private flying = false;
   private sneakHeld = false;
   private stickMode: StickMode = 'fixed';
+  /** 左右手模式（批次 271）：只影响摇杆/按钮的边与动态摇杆的拇指区 */
+  private handedness: Handedness = 'right';
   /** 上一次"按下跳跃键"的时刻（双击起飞用） */
   private lastJumpDown = 0;
   /** 上一次"按下摇杆"的时刻（双击潜行用） */
@@ -476,6 +511,19 @@ export class TouchControls {
     if (mode === 'fixed') this.resetStick('stickMode');
   }
 
+  /**
+   * 左右手模式（批次 271）：整个操作层左右镜像。
+   *
+   * 用 `#touch-ui` 上的类而不是 `<body>`：操作层不在了（桌面/主菜单）时
+   * 这个类自然也没有意义；动态摇杆的拇指区由 `handedness` 字段判。
+   */
+  setHandedness(mode: Handedness): void {
+    if (this.handedness === mode) return;
+    this.handedness = mode;
+    this.object.classList.toggle('left-handed', mode === 'left');
+    this.resetStick('handedness');
+  }
+
   /** 同步潜行状态（键盘切换时按钮也要跟着变——潜行已不在右簇，只保内部状态） */
   setSneaking(sneaking: boolean): void {
     this.sneaking = sneaking;
@@ -528,7 +576,29 @@ export class TouchControls {
   private isInStickZone(event: PointerEvent): boolean {
     const x = event.clientX / Math.max(1, window.innerWidth);
     const y = event.clientY / Math.max(1, window.innerHeight);
-    return x <= DYNAMIC_STICK_ZONE.maxX && y >= DYNAMIC_STICK_ZONE.minY;
+    if (y < DYNAMIC_STICK_ZONE.minY) return false;
+    // 左手模式的拇指区在**右下**（与 CSS 的镜像保持同一套边）
+    return this.handedness === 'left'
+      ? x >= 1 - DYNAMIC_STICK_ZONE.maxX
+      : x <= DYNAMIC_STICK_ZONE.maxX;
+  }
+
+  /**
+   * 手指落点是否在摇杆死区里（批次 271）。
+   *
+   * 命中时**整次手势都不开始**：不出白圈、不选目标、不攻击、不放置，也不转视角。
+   * 摇杆元素自己会吃掉圈内的 pointerdown，这一条管的是"圈外那一小圈"。
+   */
+  private isInStickDeadZone(clientX: number, clientY: number): boolean {
+    const rect = this.stickBase.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    return withinStickDeadZone(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+      rect.width / 2,
+      clientX,
+      clientY,
+    );
   }
 
   private beginDynamicStick(event: PointerEvent): void {
@@ -540,8 +610,11 @@ export class TouchControls {
     const rect = this.stickBase.getBoundingClientRect();
     const radius = rect.width > 0 ? rect.width / 2 : this.stickRadius;
     this.stickRadius = radius;
+    // 左手模式的摇杆默认贴在右边（CSS `right`）；跟手时必须把 right 让开，
+    // 否则 left/top 与 right 同时生效，盒子会被拉伸
     this.stickBase.style.left = `${event.clientX - radius}px`;
     this.stickBase.style.top = `${event.clientY - radius}px`;
+    this.stickBase.style.right = 'auto';
     this.stickBase.style.bottom = 'auto';
     this.stickBase.classList.add('active');
     this.stickCenterX = event.clientX;
@@ -564,6 +637,7 @@ export class TouchControls {
       this.resetStick('dynamic.release');
       this.stickBase.style.left = '';
       this.stickBase.style.top = '';
+      this.stickBase.style.right = '';
       this.stickBase.style.bottom = '';
     };
     this.lookSurface.addEventListener('pointermove', move);
@@ -663,6 +737,15 @@ export class TouchControls {
       event.preventDefault();
       if (this.stickMode === 'dynamic' && this.stickPointer === null && this.isInStickZone(event)) {
         this.beginDynamicStick(event);
+        return;
+      }
+      // 摇杆四周的死区（批次 271）：这一圈只归移动，不产生目标/攻击/放置
+      if (this.isInStickDeadZone(event.clientX, event.clientY)) {
+        diag.event('gesture', 'look.deadzone', {
+          x: Math.round(event.clientX),
+          y: Math.round(event.clientY),
+          hand: this.handedness,
+        });
         return;
       }
       if (this.lookPointer !== null) return;

@@ -42,6 +42,18 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 271（用户：生物名字/血量 + 触屏三处操作优化）：**统一生物目标**。
+  ① 新增 `core/interaction/AimTarget.ts`：`isSightBlocker` 只把"有碰撞的整格方块"算遮挡——
+  草/花/雪层/水/藤蔓不挡，玻璃/石头/树叶仍挡（站在草里的猪终于能选中）。
+  `raycastEntities` 增加 AABB 外扩容差（0.12 格）与实体过滤器（跳过掉落物/箭）。
+  ② `main.aimMob` 每帧解析一次，触屏（手指落点 / 屏幕中心）与桌面准星同一套；
+  带 **44px 迟滞锁**（乘触摸缩放），生物走半步不掉目标。
+  ③ 标签/描边/攻击/右键使用/进食全部读 `aimMob`；生物目标成立时收起方块描边与裂纹，
+  改画 `render/MobOutline` 的包围盒线框。按住打怪在攻击冷却期也不会再挖脚下方块。
+  ④ 触屏摇杆四周加**死区**（半径 +20%）：圈内按下不开始手势，不选目标/不攻击/不放置。
+  ⑤ 设置新增「左右手模式」（摇杆在左/右）与「瞄准方式」（手指瞄准默认 / 屏幕中心）；
+  灵敏度改 **0~8 档**（默认 4 = 1×，每两档翻倍），老存档的 0.5~4 倍率自动迁移。
+  门禁：`test:aim` **30**（新增）、`test:settings` **94**、`test:ui` **773**，离线 **131** 套全绿。
 - 批次 270（用户："继续下一批"；K3 收口）：**绑定诅咒**——附魔效果 **38 / 38 = 100%**。
   ① `enchantments.isBoundByCurse(enchants)` 纯函数：界面层据此判"能不能脱下"，
   不必关心附魔表怎么存。
@@ -1015,7 +1027,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **130 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **131 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。

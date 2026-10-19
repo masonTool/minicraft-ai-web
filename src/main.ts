@@ -129,6 +129,7 @@ import {
   defaultViewDistanceFor,
   loadSettings,
   saveSettings,
+  sensitivityGain,
   type GameSettings,
   type SettingsChangeMeta,
 } from './ui/SettingsScreen.ts';
@@ -312,8 +313,10 @@ import {
 } from './core/world/WorldBorder.ts';
 import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
+import { AIM_INFLATE, AIM_LOCK_RADIUS_PX, sightBlocked } from './core/interaction/AimTarget.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
+import { MobOutline } from './render/MobOutline.ts';
 import { BlockOverlay, DAMAGE_STAGES } from './render/BlockOverlay.ts';
 import { ParticleSystem } from './render/ParticleSystem.ts';
 import { HandRenderer } from './render/HandRenderer.ts';
@@ -980,6 +983,8 @@ class App {
   private readonly translucentMaterial: VoxelMaterial;
   private readonly skyColor: THREE.Color;
   private readonly outline = new BlockOutline();
+  /** 生物选中线框（批次 271）：与方块描边互斥，谁被选中就只亮谁 */
+  private readonly mobOutline = new MobOutline();
   /** 破坏裂纹与命中面高亮（G2 / G3） */
   private readonly blockOverlay: BlockOverlay;
   private readonly physics = new PlayerPhysics();
@@ -1009,6 +1014,17 @@ class App {
    * 由 `updateAttacking` 统一结算（与准星那条路共用冷却/伤害/耐久）。
    */
   private tapAttackMob: Mob | null = null;
+  /**
+   * **这一帧的瞄准目标**（批次 271）。
+   *
+   * 标签、描边、攻击、右键使用、进食判定全部读它——不再各自调用
+   * `mobUnderCrosshair` / `mobAtScreen`。触屏为"手指落点（或屏幕中心）附近最近的生物"，
+   * 桌面为"准星指向的生物"；两者都先过"视线有没有被整格方块挡住"这一关。
+   *
+   * ⚠️ 它每帧重算，但**带迟滞**：上一帧锁住的生物只要没死、没超距、没被挡、
+   * 投影还落在手指附近，就继续锁着（见 `lockedMobNear`）。
+   */
+  private aimMob: Mob | null = null;
   /**
    * 触摸端"轻点抬手"的落点（批次 239），只活到下一次 `updateInteraction` 结束。
    *
@@ -1629,6 +1645,7 @@ class App {
       this.meshPool,
     );
     this.scene.add(this.outline.object);
+    this.scene.add(this.mobOutline.object);
     this.blockOverlay = new BlockOverlay(atlas);
     this.scene.add(this.blockOverlay.object);
     // 告示牌上的字（B12）：单独一个 Group，里面每块有字的牌子一个平面
@@ -1897,6 +1914,9 @@ class App {
     // 批次 95 起也靠它决定"快捷栏能不能点、槽位要不要放大"）——
     // 用类名而不是 `@media (pointer: coarse)`，是为了与"操作层是否存在"共用**同一个判据**
     this.touch = isTouchDevice() ? this.createTouchControls() : null;
+    // 左右手 / 瞄准方式 / 摇杆模式 / 按钮大小：启动时也要落一次，
+    // 否则存下来的"左手模式"要等玩家进一次设置才生效（批次 271）
+    this.applyTouchChrome();
     // 掉出全屏 = 安卓返回的一次常见表现（批次 212）：没有面板时补一个暂停菜单。
     this.lastFullscreen = isFullscreen();
     document.addEventListener(
@@ -1974,17 +1994,20 @@ class App {
       // 轻点抬起（批次 181）：**先看准星下有没有生物**——
       // 有就是攻击（生物不是可放置面），没有才走"交互 / 放置一次"那条老路
       onTap: (clientX: number, clientY: number) => {
+        // 批次 271：瞄准方式决定"这一下打哪"——手指落点，或屏幕中心的老方式
+        const aim = this.usesCenterAim() ? this.screenCenterPoint() : { x: clientX, y: clientY };
         // 批次 239：记下这一下的落点——**方块目标**也改由它决定（不只是生物）
-        this.touchTapPoint = { x: clientX, y: clientY };
+        this.touchTapPoint = aim;
         // 批次 244：点到船 → 上船（船不是生物，单独一条；优先于生物与方块）
-        const tappedBoat = this.vehicleAtScreen(clientX, clientY);
+        const tappedBoat = this.vehicleAtScreen(aim.x, aim.y);
         if (tappedBoat) {
           this.tapVehicle = tappedBoat;
           this.touchPlaceRequest = true;
           return;
         }
-        // 批次 185：先按**手指落点**找生物（点哪打哪），准星那条路作兜底
-        const tapped = this.mobAtScreen(clientX, clientY);
+        // 批次 185：先按**落点**找生物（点哪打哪）；本帧已经锁住的那只作兜底
+        const tapped =
+          this.mobAtScreen(aim.x, aim.y) ?? (this.aimMob && !this.aimMob.dead ? this.aimMob : null);
         // 批次 242：手上拿着"能对它用的东西"时这一下是**使用**（驯服/喂食/剪毛/坐下），
         // 不是攻击——判断收在 `canUseItemOnMob` 里，触屏与鼠标共用。
         if (tapped && this.canUseItemOnMob(tapped)) {
@@ -2024,6 +2047,8 @@ class App {
   enableTouchControls(): boolean {
     if (this.touch) return true;
     this.touch = this.createTouchControls();
+    // 桌面端临时打开触摸 UI 时，瞄准方式/左右手/摇杆模式也要按设置落一次
+    this.applyTouchChrome();
     return true;
   }
 
@@ -2099,6 +2124,22 @@ class App {
       Math.abs(brightness - 1) < 0.001 ? '' : `brightness(${brightness})`;
   }
 
+  /**
+   * 触摸端的"外观类"设置一次落完（批次 271）。
+   *
+   * 包含：左右手（镜像摇杆/按钮）、瞄准方式（准星显隐）、摇杆模式、按钮大小。
+   * 抽成一处是因为**启动时**与**改设置时**必须走同一条路——以前 `touchStick`
+   * 只在 `applySettings` 里落，存成"跟随手指"重启后要进一次设置才生效。
+   */
+  private applyTouchChrome(): void {
+    const settings = this.settings;
+    // 触摸端选了"屏幕中心"才把十字准星装回来；手指瞄准下保持隐藏（批次 239 的约定）
+    document.body.classList.toggle('aim-center', this.touch !== null && settings.aimMode === 'center');
+    document.documentElement.style.setProperty('--touch-scale', String(settings.touchScale));
+    this.touch?.setHandedness(settings.handedness);
+    this.touch?.setStickMode(settings.touchStick);
+  }
+
   private applySettings(settings: GameSettings, meta?: SettingsChangeMeta): void {
     this.cameraMode = settings.cameraMode;
     // 场景亮度先落（纯显示层，与其他设置没有依赖）
@@ -2152,10 +2193,8 @@ class App {
     // 云 / 粒子上限 / 雨量一起按"设置 × 当前装饰层档位"落下去（见 `applyDecorLevel`）：
     // 设置里关掉的，档位回到 0 也不会自作主张打开
     this.applyDecorLevel();
-    // 触摸摇杆模式（批次 96）：没有触摸层时静默忽略（桌面端这个设置项不该报错）
-    this.touch?.setStickMode(settings.touchStick);
-    // 触摸按钮/摇杆大小（批次 97）：改一个 CSS 变量，摇杆与按钮一起缩放
-    document.documentElement.style.setProperty('--touch-scale', String(settings.touchScale));
+    // 触摸端外观类设置（批次 271：左右手 / 瞄准方式 / 摇杆模式 / 按钮大小）
+    this.applyTouchChrome();
     this.debugEl.style.display = settings.showDebug ? '' : 'none';
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.recipeBook.isOpen) this.recipeBook.render();
@@ -3575,7 +3614,7 @@ class App {
         (e) => {
           if (!this.locked) return;
           // 灵敏度是设置项（0.5~2 倍）：鼠标、触摸、手柄三条路径都要乘上，不然调了没感觉
-          const gain = this.settings.sensitivity;
+          const gain = sensitivityGain(this.settings.sensitivity);
           this.applyLook(e.movementX * MOUSE_SENSITIVITY * gain, e.movementY * MOUSE_SENSITIVITY * gain);
         },
         { signal: this.listeners.signal },
@@ -3826,19 +3865,24 @@ class App {
     // （睡觉时必须挡住破坏/放置：不然躺着还能拆自家床）
     if (this.uiOpen || this.sleeping) {
       this.hit = null;
+      this.aimMob = null;
       this.touchTapPoint = null;
       this.tapUseMob = null;
       this.tapVehicle = null;
       this.outline.hide();
+      this.mobOutline.hide();
       this.blockOverlay.hide();
       this.updateTargetAnchor(null);
       return;
     }
 
-    // 触摸端（批次 239）：**按下的手指 / 刚抬手的落点**决定目标。
-    // 触摸端没有准星（批次 239 复查）：手指不按 → 没有任何目标。
+    // 触摸端（批次 239）：**按下的手指 / 刚抬手的落点**决定目标；
+    // 批次 271 起可以改成"屏幕中心"（老方式，见 settings.aimMode）。
     // 桌面键鼠仍走屏幕中央的准星，行为与以前完全一致。
-    const screenAim = this.touch?.aimPoint ?? this.touchTapPoint;
+    const centerAim = this.usesCenterAim();
+    const screenAim = centerAim
+      ? this.screenCenterPoint()
+      : (this.touch?.aimPoint ?? this.touchTapPoint);
     if (screenAim) {
       this.hit = this.hitAtScreen(screenAim.x, screenAim.y);
     } else if (this.touch !== null) {
@@ -3856,9 +3900,23 @@ class App {
         REACH,
       );
     }
-    const touchAim = screenAim !== null;
+    // 只有"手指落点"这一路才把标签挂到手指上方、才加高亮强度；
+    // 屏幕中心与桌面准星是同一套观感。
+    const touchAim = screenAim !== null && !centerAim;
 
-    if (this.hit) {
+    // 每帧重算一次生物目标（带迟滞），标签/描边/攻击/右键使用都读它
+    const previousAimMob = this.aimMob;
+    this.aimMob = this.resolveAimMob(screenAim);
+    // 目标换了就立刻刷新标签，不等 5Hz 的节拍（否则"指上去"会有 0.2 秒的空白）
+    if (this.aimMob !== previousAimMob) this.targetInfoTimer = 0;
+
+    if (this.aimMob) {
+      // 生物优先：方块描边与裂纹全部收起，只亮生物包围盒
+      this.outline.hide();
+      this.blockOverlay.hide();
+      this.mobOutline.show(this.aimMob);
+    } else if (this.hit) {
+      this.mobOutline.hide();
       const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
       const state = this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z);
       const shape = blockDef(id).shape;
@@ -3908,14 +3966,15 @@ class App {
       }
     } else {
       this.outline.hide();
+      this.mobOutline.hide();
       this.blockOverlay.hide();
     }
 
     // 目标名的锚点：触摸瞄准时挂到手指上方（文字仍是 5Hz，锚点每帧跟手）
-    this.updateTargetAnchor(screenAim);
+    this.updateTargetAnchor(touchAim ? screenAim : null);
 
     // 准星目标名称（批次 181）：5Hz 刷新，避免每帧写 DOM
-    this.updateTargetInfo(dt, touchAim);
+    this.updateTargetInfo(dt);
 
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
@@ -3950,10 +4009,10 @@ class App {
    * 方块的**中文名**、或生物的**名字 + 血量**放在准星正下方。
    * 5Hz 刷新：准星扫过一片方块时不会每帧重建文本节点。
    *
-   * @param touchAim 触摸端正用手指取目标（批次 239）：这时标签挂在手指上方，
-   *                 生物信息不参与——生物那一路仍以准星判定（Tap 攻击另有 `mobAtScreen`）
+   * 生物优先（批次 271）：目标来自 `this.aimMob`（触屏与桌面同一套判定），
+   * 没有生物才显示方块名。目标身份变化时立即刷新，不等 5Hz 的节拍。
    */
-  private updateTargetInfo(dt: number, touchAim = false): void {
+  private updateTargetInfo(dt: number): void {
     this.targetInfoTimer -= dt;
     if (this.targetInfoTimer > 0) return;
     this.targetInfoTimer = 0.2;
@@ -3962,9 +4021,7 @@ class App {
       this.setTargetInfo('');
       return;
     }
-    // 触摸端没有准星（批次 239 复查）：没有手指落点时一个目标都不显示，
-    // 所以这里只在"桌面键鼠"下才看屏幕中央的生物。
-    const mob = touchAim || this.touch !== null ? null : this.mobUnderCrosshair();
+    const mob = this.aimMob;
     if (mob && !mob.dead) {
       const health = Math.max(0, Math.ceil(mob.health));
       this.setTargetInfo(`${mob.type.name}  ${health}/${mob.type.health}`);
@@ -4028,12 +4085,10 @@ class App {
     const potion = this.heldPotion;
     // 药水随时都能喝（不像食物要"没吃饱"），其余条件与进食完全一致
     const edible = potion !== null || (held !== null && canEat(held.food, this.stats.food, MAX_FOOD));
-    // 准星对着生物时不算"使用"（批次 219）：那一下是攻击 / 喂食（原版同理，
-    // 使用键落在生物身上走的是交互）。不加这条，"按住打怪"会把手里那份肉一起吃掉——
-    // 进食变快之后这事更容易撞上。
-    // ⚠️ 触摸端没有准星（批次 239 复查）：这条只在桌面键鼠下判——
-    // 否则"手指按在空白处吃饭"会被屏幕中央恰好站着的生物挡掉。
-    const aimingMob = edible && this.touch === null && this.mobUnderCrosshair() !== null;
+    // 瞄准着生物时不算"使用"（批次 219 / 271）：那一下是攻击 / 喂食（原版同理，
+    // 使用键落在生物身上走的是交互）。不加这条，"按住打怪"会把手里那份肉一起吃掉。
+    // 触屏端也适用：手指按在空白处时 `aimMob` 为 null，不会误挡进食。
+    const aimingMob = edible && this.aimMob !== null;
     if (!edible || aimingMob || !this.usingItem || this.uiOpen || this.stats.dead) {
       this.eatProgress = 0;
       this.chewTimer = 0;
@@ -4426,11 +4481,116 @@ class App {
     return best;
   }
 
+  /** 触摸端是否选了"屏幕中心"瞄准（批次 271；桌面端永远走准星，不受它影响） */
+  private usesCenterAim(): boolean {
+    return this.touch !== null && this.settings.aimMode === 'center';
+  }
+
+  /** 画布中心（client 坐标）：屏幕中心瞄准的落点，也是触摸端准星的锚 */
+  private screenCenterPoint(): { x: number; y: number } {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+
   /**
-   * 准星指向的生物（方块更近时返回 null —— 说明玩家其实在挖方块）。
+   * 这一帧的生物目标（批次 271）。
    *
-   * 抽出来是因为**左键攻击**与**右键对生物使用物品**（剪羊毛、后面的喂食/挤奶）
-   * 需要完全一样的判定，写两份迟早会一边改了另一边没改。
+   * 三条路：
+   *  - 桌面：准星方向（`mobUnderCrosshair`）；
+   *  - 触摸 + 手指落点：`mobAtScreen`（点哪打哪）；
+   *  - 触摸 + 屏幕中心：`mobAtScreen` 传屏幕中心（老方式）。
+   * 都没直接命中时，再问一次"上一帧锁住的那只还在不在附近"（`lockedMobNear`）。
+   **/
+  private resolveAimMob(screenAim: { x: number; y: number } | null): Mob | null {
+    if (this.touch === null) return this.mobUnderCrosshair();
+    if (!screenAim) return null;
+    const direct = this.mobAtScreen(screenAim.x, screenAim.y);
+    if (direct) return direct;
+    return this.lockedMobNear(screenAim);
+  }
+
+  /**
+   * 迟滞锁（批次 271）：生物会走，零宽度的射线每帧都要求"正好指到"就会闪。
+   *
+   * 保持条件（全部满足才继续锁）：
+   *  1. 上一帧那只还活着、仍在攻击距离 + 0.1 格内；
+   *  2. 眼睛到它之间没有被整格方块挡住（草/雪层不算）；
+   *  3. 它的包围盒中心投影到屏幕上，离手指不超过 `AIM_LOCK_RADIUS_PX`。
+   * 手指抬起 / 走出这个圈 / 被挡住 → 立即释放，不做"记忆锁"。
+   */
+  private lockedMobNear(screenAim: { x: number; y: number }): Mob | null {
+    const mob = this.aimMob;
+    if (!mob || mob.dead) return null;
+    const dx = mob.x - this.physics.x;
+    const dy = mob.y + mob.height * 0.5 - this.physics.eyeY;
+    const dz = mob.z - this.physics.z;
+    if (Math.hypot(dx, dy, dz) > ATTACK_RANGE + 0.1) return null;
+    if (this.mobSightBlocked(mob)) return null;
+    const projected = this.projectToScreen(mob.x, mob.y + mob.height * 0.5, mob.z);
+    if (!projected) return null;
+    const radius = AIM_LOCK_RADIUS_PX * Math.max(0.8, this.settings.touchScale);
+    if (Math.hypot(projected.x - screenAim.x, projected.y - screenAim.y) > radius) return null;
+    return mob;
+  }
+
+  /** 世界坐标 → client 坐标（迟滞锁用；相机矩阵可能在上一帧，先更新） */
+  private projectToScreen(x: number, y: number, z: number): { x: number; y: number } | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    this.camera.updateMatrixWorld();
+    const ndc = new THREE.Vector3(x, y, z).project(this.camera);
+    if (!Number.isFinite(ndc.x) || !Number.isFinite(ndc.y) || ndc.z > 1) return null;
+    return {
+      x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
+      y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
+    };
+  }
+
+  /**
+   * 眼睛到生物之间有没有**真正挡视线**的方块（批次 271）。
+   *
+   * 与方块选取的判据分开：草/花/雪层/地毯/水不挡，玻璃/石头/树叶挡。
+   * 这是"站在草里的猪选不中"这个老问题的根治点。
+   */
+  private mobSightBlocked(mob: Mob): boolean {
+    // 迟滞锁没有"命中点"，用包围盒中心（生物被墙挡住一半时本来就该掉锁）
+    return this.sightBlockedTo(mob.x, mob.y + mob.height * 0.5, mob.z);
+  }
+
+  /** 眼睛到某一点的视线是否被整格方块挡住（直击时传**命中点**，高个子的头能露出来） */
+  private sightBlockedTo(x: number, y: number, z: number): boolean {
+    return sightBlocked(
+      (bx, by, bz) => this.world.getBlock(bx, by, bz),
+      this.physics.x,
+      this.physics.eyeY,
+      this.physics.z,
+      x,
+      y,
+      z,
+    );
+  }
+
+  /**
+   * 直击命中点 → 视线终点。
+   *
+   * ⚠️ 命中点带着 AABB 外扩容差，可能落在生物**外侧** 0.12 格（贴着墙时就是墙里），
+   * 直接拿去问视线会把"贴着墙站的生物"误判成被挡住。所以先夹回真实包围盒。
+   */
+  private sightBlockedToMob(mob: Mob, hit: { x: number; y: number; z: number }): boolean {
+    const half = mob.width / 2;
+    return this.sightBlockedTo(
+      Math.min(mob.x + half, Math.max(mob.x - half, hit.x)),
+      Math.min(mob.y + mob.height, Math.max(mob.y, hit.y)),
+      Math.min(mob.z + half, Math.max(mob.z - half, hit.z)),
+    );
+  }
+
+  /**
+   * 准星指向的生物（批次 271 重写）。
+   *
+   * ⚠️ 不再拿 `this.hit.distance` 比远近：方块射线把植物/雪层也算"可选中"，
+   * 于是站在草丛里的猪会被一株草挤掉。现在改用 `sightBlockedToMob`——
+   * 只有整格实体方块才算挡住视线。
    */
   private mobUnderCrosshair(): Mob | null {
     const cosPitch = Math.cos(this.pitch);
@@ -4443,9 +4603,11 @@ class App {
       Math.sin(this.pitch),
       -Math.cos(this.yaw) * cosPitch,
       ATTACK_RANGE,
+      AIM_INFLATE,
+      (entity) => entity instanceof Mob,
     );
     if (!hit || !(hit.entity instanceof Mob)) return null;
-    if (this.hit && this.hit.distance < hit.distance) return null;
+    if (this.sightBlockedToMob(hit.entity, hit)) return null;
     return hit.entity;
   }
 
@@ -4453,7 +4615,7 @@ class App {
    * 屏幕坐标 → 射线 → 生物（批次 185）。
    *
    * 用户："看到一只动物想打它，得先把准星对上去；手机点到它就应该能打到。"
-   * 实现就是把"手指落点"反投影成一条射线，再从**眼睛**沿这个方向找生物：
+   * 实现就是把"手指落点"反投影成一条射线，再从**相机**沿这个方向找生物：
    *  - 用 `unproject` 而不是自己算三角函数，第三人称（相机在身后）也自动正确；
    *  - 距离仍用 `ATTACK_RANGE`，所以"点得着但够不着"不会隔空打；
    *  - 找不到就返回 null，调用方退回"放置方块/交互"那条路。
@@ -4470,10 +4632,12 @@ class App {
     // 射线**从相机**发出：屏幕上的那一点本来就是相机看到的。
     // ⚠️ 不能从眼睛发：第三人称时相机在玩家身后 4 格，方向与屏幕像素对不上，
     // 连"准星正对"都会打不中（批次 185 实测踩过）。
+    this.camera.updateMatrixWorld();
     const origin = this.camera.position.clone();
     const dir = ndc.unproject(this.camera).sub(origin).normalize();
-    // 相机在身后时把射程补上这段距离，最后再用"玩家到生物"的距离卡攻击范围
-    const reach = ATTACK_RANGE + origin.distanceTo(new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z));
+    const eye = new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z);
+    // 相机在身后时把射程补上这段距离，最后再用"眼睛到命中点"卡攻击范围
+    const reach = ATTACK_RANGE + origin.distanceTo(eye);
     const hit = raycastEntities(
       this.entities.all,
       origin.x,
@@ -4483,13 +4647,17 @@ class App {
       dir.y,
       dir.z,
       reach,
+      AIM_INFLATE,
+      (entity) => entity instanceof Mob,
     );
     if (!hit || !(hit.entity instanceof Mob) || hit.entity.dead) return null;
+    const mob = hit.entity;
     // 隔着屏幕点得着、但人离得远 → 不算（第三人称的相机在身后，不能白送射程）
-    const dx = hit.entity.x - this.physics.x;
-    const dz = hit.entity.z - this.physics.z;
-    if (Math.hypot(dx, dz) > ATTACK_RANGE + 1) return null;
-    return hit.entity;
+    const eyeDistance = Math.hypot(hit.x - eye.x, hit.y - eye.y, hit.z - eye.z);
+    if (eyeDistance > ATTACK_RANGE + 0.35) return null;
+    if (Math.hypot(mob.x - this.physics.x, mob.z - this.physics.z) > ATTACK_RANGE + 1) return null;
+    if (this.sightBlockedToMob(mob, hit)) return null;
+    return mob;
   }
 
   // ---------------------------------------------------------------- 船（批次 244，G12）
@@ -5204,9 +5372,8 @@ class App {
     // 射程按"眼睛到命中点"卡：屏幕上点得着、人却够不着的方块不算数
     const eyeDistance = Math.hypot(hit.hitX - eye.x, hit.hitY - eye.y, hit.hitZ - eye.z);
     if (eyeDistance > REACH + 0.05) return null;
-    // `RayHit.distance` 的语义是"射线起点到命中面"。这里改成到眼睛的距离，
-    // 免得 `mobUnderCrosshair` 用 `this.hit.distance < hit.distance` 比远近时
-    // 在第三人称下把方块判得更近（相机在身后，多出的那 4 格会把比较算歪）。
+    // `RayHit.distance` 的语义是"射线起点到命中面"。这里统一改成到**眼睛**的距离：
+    // 第三人称的相机在身后 4 格，不换算的话"方块/生物谁更近"会整体偏掉。
     hit.distance = eyeDistance;
     return hit;
   }
@@ -5220,8 +5387,9 @@ class App {
    * @returns 是否发生了交互（发生了就把这一次右键吃掉，不再放置方块）
    */
   private useOnEntity(): boolean {
-    // 触摸端：这一下点在**手指底下那一只**上（准星可能根本没对着它，批次 242）
-    const mob = this.tapUseMob ?? this.mobUnderCrosshair();
+    // 触摸端：这一下点在**手指底下那一只**上（准星可能根本没对着它，批次 242）；
+    // 批次 271：统一目标兜底，桌面与触屏读同一份
+    const mob = this.tapUseMob ?? this.aimMob;
     if (!mob || mob.dead) return false;
     const held = this.heldItemId;
     // 村民（J11）：空手也**有交互**（打开交易界面）——所以它必须排在
@@ -5856,7 +6024,10 @@ class App {
   }
 
   private updateAttacking(dt: number): void {
-    this.suppressBreaking = false;
+    // 批次 271：只要这一帧瞄着生物，就不许去挖方块——包括**攻击冷却期间**。
+    // 原来这一行是无条件 false，冷却的 0.5 秒里 `updateBreaking` 会拿方块目标继续挖，
+    // 手机上按住一只猪就会把脚下的地挖穿。
+    this.suppressBreaking = this.aimMob !== null;
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     // 触摸"轻点生物"是一次性请求（批次 181）；按住（leftDown）仍然持续攻击
     const tapped = this.tapAttackRequest;
@@ -5869,8 +6040,10 @@ class App {
     const context = this.lastEntityContext;
     if (!context) return;
 
-    const mob = tappedMob && !tappedMob.dead ? tappedMob : this.mobUnderCrosshair();
-    if (!mob) return;
+    // 批次 271：按住时打的是**这一帧的统一目标**（触屏 = 手指/中心那只）；
+    // 轻点那一下仍以点中的那只优先（点哪打哪）
+    const mob = tappedMob && !tappedMob.dead ? tappedMob : this.aimMob;
+    if (!mob || mob.dead) return;
 
     this.attackCooldown = ATTACK_COOLDOWN;
     this.suppressBreaking = true;
@@ -9454,7 +9627,7 @@ class App {
 
     // 视角：右摇杆按帧速率转（与触摸拖动共用 applyLook，因此灵敏度表现一致）
     if (pad.lookDx !== 0 || pad.lookDy !== 0) {
-      const gain = this.settings.sensitivity;
+      const gain = sensitivityGain(this.settings.sensitivity);
       this.applyLook(pad.lookDx * 0.0035 * gain, pad.lookDy * 0.0035 * gain);
     }
 
@@ -12182,7 +12355,7 @@ class App {
         if (!this.uiOpen) {
           const look = this.touch.consumeLook();
           if (look.x !== 0 || look.y !== 0) {
-            const gain = this.settings.sensitivity;
+            const gain = sensitivityGain(this.settings.sensitivity);
             this.applyLook(look.x * TOUCH_SENSITIVITY * gain, look.y * TOUCH_SENSITIVITY * gain);
           }
         } else {

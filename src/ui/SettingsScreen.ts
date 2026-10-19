@@ -20,7 +20,15 @@
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import { FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
-import { STICK_MODES, STICK_MODE_LABELS, isTouchUi, type StickMode } from './TouchControls.ts';
+import {
+  HANDEDNESS_LABELS,
+  HANDEDNESS_MODES,
+  STICK_MODES,
+  STICK_MODE_LABELS,
+  isTouchUi,
+  type Handedness,
+  type StickMode,
+} from './TouchControls.ts';
 import {
   DEFAULT_APPEARANCE,
   PANTS_COLORS,
@@ -61,6 +69,54 @@ export const PARTICLE_DENSITY: Record<ParticleLevel, number> = {
 /** 触摸按钮 / 摇杆的大小倍率范围（批次 97）：0.8× 到 1.4× */
 export const TOUCH_SCALE_MIN = 0.8;
 export const TOUCH_SCALE_MAX = 1.4;
+
+/**
+ * 灵敏度档位（批次 271，用户要求）：0~8，**4 是正中间**（= 1×）。
+ *
+ * 以前存的是 0.5~4 的倍率（默认 1），滑块两头手感不对称：往左只能减半，
+ * 往右能翻四倍。改成档位后两边对称：每两档翻一倍，0=0.25×、4=1×、8=4×。
+ * `sensitivityGain()` 是唯一的换算出处，鼠标/触摸/手柄三条路径都读它。
+ */
+export const SENSITIVITY_MIN = 0;
+export const SENSITIVITY_MAX = 8;
+export const SENSITIVITY_DEFAULT = 4;
+
+/** 档位 → 视角倍率（4 → 1×；每 2 档翻一倍） */
+export function sensitivityGain(level: number): number {
+  const clamped = Math.min(
+    SENSITIVITY_MAX,
+    Math.max(SENSITIVITY_MIN, Number.isFinite(level) ? level : SENSITIVITY_DEFAULT),
+  );
+  return 2 ** ((clamped - SENSITIVITY_DEFAULT) / 2);
+}
+
+/** 旧存档里的倍率 → 新档位（0.5→2、1→4、2→6、4→8），用于设置迁移 */
+export function sensitivityLevelFromGain(gain: number): number {
+  const clamped = Math.min(4, Math.max(0.5, Number.isFinite(gain) ? gain : 1));
+  const level = Math.round(SENSITIVITY_DEFAULT + 2 * Math.log2(clamped));
+  return Math.min(SENSITIVITY_MAX, Math.max(SENSITIVITY_MIN, level));
+}
+
+/**
+ * 触摸端的瞄准方式（批次 271，用户要求）。
+ *  - `finger`：手指落点决定目标（批次 239 起的默认）；
+ *  - `center`：屏幕中央的准星决定目标（批次 239 之前的老方式）。
+ */
+export type TouchAimMode = 'finger' | 'center';
+export const TOUCH_AIM_MODES: readonly TouchAimMode[] = ['finger', 'center'];
+export const TOUCH_AIM_MODE_LABELS: Record<TouchAimMode, string> = {
+  finger: '手指瞄准（默认）',
+  center: '屏幕中心',
+};
+
+/**
+ * 设置格式版本（批次 271）。
+ *
+ * 版本 1 = 灵敏度存的是 0.5~4 的倍率；版本 2 = 灵敏度存 0~8 的档位。
+ * **必须显式存版本**：老默认值 1 在新口径里是"档位 1"，直接 clamp 会把
+ * 所有老玩家的灵敏度从 1× 悄悄降到 0.7×。
+ */
+export const SETTINGS_VERSION = 2;
 
 /**
  * 场景亮度的范围（批次 220）：0.5 ~ 2，1 = 原始亮度。
@@ -141,6 +197,8 @@ type BoolSettingKey =
   | 'fastEat';
 
 export interface GameSettings {
+  /** 设置格式版本（批次 271；见 `SETTINGS_VERSION` 的注释） */
+  settingsVersion: number;
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
   viewDistance: number;
   /** 视野角度（度）：60~110 */
@@ -161,8 +219,12 @@ export interface GameSettings {
   volumeAmbient: number;
   /** 背景音乐（批次 233）：默认 0.6——音乐是背景，不该和"我挨打了"一样响 */
   volumeMusic: number;
-  /** 鼠标/触摸灵敏度倍率：0.5~2 */
+  /** 视角灵敏度档位：0~8，4 = 1×（见 `sensitivityGain`） */
   sensitivity: number;
+  /** 触摸端瞄准方式（批次 271）：手指落点 / 屏幕中心 */
+  aimMode: TouchAimMode;
+  /** 左右手模式（批次 271）：摇杆在左 / 摇杆在右 */
+  handedness: Handedness;
   /** 角色外观（批次 187）：都是**档位下标**，见 `game/appearance.ts` */
   skinTone: number;
   shirtColor: number;
@@ -259,6 +321,7 @@ export interface GameSettings {
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
+  settingsVersion: SETTINGS_VERSION,
   viewDistance: 12,
   fov: 72,
   volume: 0.7,
@@ -268,7 +331,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   volumeUi: 1,
   volumeAmbient: 1,
   volumeMusic: 0.6,
-  sensitivity: 1,
+  sensitivity: SENSITIVITY_DEFAULT,
+  aimMode: 'finger',
+  handedness: 'right',
   skinTone: DEFAULT_APPEARANCE.skinTone,
   shirtColor: DEFAULT_APPEARANCE.shirtColor,
   pantsColor: DEFAULT_APPEARANCE.pantsColor,
@@ -315,7 +380,14 @@ export function loadSettings(): GameSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<GameSettings>;
+    // 版本 1 的灵敏度是 0.5~4 的倍率（默认 1）；版本 2 是 0~8 的档位（默认 4）
+    const storedVersion = typeof parsed.settingsVersion === 'number' ? parsed.settingsVersion : 1;
+    const sensitivity =
+      storedVersion >= SETTINGS_VERSION
+        ? Math.round(clampNumber(parsed.sensitivity, SENSITIVITY_MIN, SENSITIVITY_MAX, SENSITIVITY_DEFAULT))
+        : sensitivityLevelFromGain(clampNumber(parsed.sensitivity, 0.5, 4, 1));
     return {
+      settingsVersion: SETTINGS_VERSION,
       viewDistance: clampNumber(parsed.viewDistance, 4, 16, DEFAULT_SETTINGS.viewDistance),
       fov: clampNumber(parsed.fov, 60, 110, DEFAULT_SETTINGS.fov),
       volume: clampNumber(parsed.volume, 0, 1, DEFAULT_SETTINGS.volume),
@@ -327,7 +399,14 @@ export function loadSettings(): GameSettings {
       // 环境音 / 音乐（批次 233）：老存档没有这两项 → 回退默认（音乐 0.6）
       volumeAmbient: clampNumber(parsed.volumeAmbient, 0, 1, DEFAULT_SETTINGS.volumeAmbient),
       volumeMusic: clampNumber(parsed.volumeMusic, 0, 1, DEFAULT_SETTINGS.volumeMusic),
-      sensitivity: clampNumber(parsed.sensitivity, 0.5, 4, DEFAULT_SETTINGS.sensitivity),
+      sensitivity,
+      // 瞄准方式 / 左右手（批次 271）：只认白名单；老存档没有这两项 → 默认
+      aimMode: TOUCH_AIM_MODES.includes(parsed.aimMode as TouchAimMode)
+        ? (parsed.aimMode as TouchAimMode)
+        : DEFAULT_SETTINGS.aimMode,
+      handedness: HANDEDNESS_MODES.includes(parsed.handedness as Handedness)
+        ? (parsed.handedness as Handedness)
+        : DEFAULT_SETTINGS.handedness,
       // 外观（批次 187）：坏值/越界一律回退默认档，渲染层不用再判空
       skinTone: appearanceIndex(parsed.skinTone, SKIN_TONES.length, DEFAULT_SETTINGS.skinTone),
       shirtColor: appearanceIndex(parsed.shirtColor, SHIRT_COLORS.length, DEFAULT_SETTINGS.shirtColor),
@@ -714,11 +793,28 @@ export class SettingsScreen {
     if (isTouchUi()) {
       this.makeNote(controls, `视野越大，同屏要画的方块越多；手机上最多 ${fovCapFor(true)}°`);
     }
+    // 左右手模式（批次 271，用户要求）：左手模式把摇杆整个挪到右侧
+    this.makeSelect(controls, 'handedness', '左右手模式', HANDEDNESS_MODES, HANDEDNESS_LABELS);
+    // 瞄准方式（批次 271，用户要求）：默认手指落点；可选回老的屏幕中心准星
+    this.makeSelect(controls, 'aimMode', '瞄准方式', TOUCH_AIM_MODES, TOUCH_AIM_MODE_LABELS);
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异，所以给两档自己挑
     this.makeSelect(controls, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
     // 触摸按钮大小（批次 97）：手机上线 44px 只是下限，多大才顺手因人而异
     controls.append(this.makeSlider('touchScale', '触摸按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100));
-    controls.append(this.makeSlider('sensitivity', '灵敏度', '×', 0.5, 4, 0.05));
+    // 灵敏度（批次 271）：0~8 档，4 是正中间（= 1×），两边对称
+    controls.append(
+      this.makeSlider(
+        'sensitivity',
+        '灵敏度',
+        '',
+        SENSITIVITY_MIN,
+        SENSITIVITY_MAX,
+        1,
+        1,
+        (level) => `${level}（×${sensitivityGain(level).toFixed(2)}）`,
+      ),
+    );
+    this.makeNote(controls, '4 是正中间（×1.00）；0 最慢、8 最快');
     this.makeToggle(controls, 'invertY', '反转上下视角');
     // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开；
     // 但它会让"贴着一格高的墙走"变成自己往上跳，有人不喜欢，所以给开关。
@@ -935,6 +1031,7 @@ export class SettingsScreen {
     max: number,
     step: number,
     scale = 1,
+    format?: (value: number) => string,
   ): HTMLLabelElement {
     const row = document.createElement('label');
     // `.wide` = 跨满两列（批次 167）：分组现在是两列栅格，滑杆压到半栏就只剩百来像素，
@@ -951,20 +1048,25 @@ export class SettingsScreen {
     input.step = String(step);
     input.value = String((this.settings[key] as number) * scale);
 
+    const readout = (): string => {
+      const raw = Number(input.value) / scale;
+      return format ? format(raw) : `${input.value}${unit}`;
+    };
+
     const value = document.createElement('i');
-    value.textContent = `${input.value}${unit}`;
+    value.textContent = readout();
 
     input.addEventListener('input', () => {
       const raw = Number(input.value) / scale;
       (this.settings[key] as number) = raw;
-      value.textContent = `${input.value}${unit}`;
+      value.textContent = readout();
       this.commit();
     });
 
     // 恢复默认时按 settings 重画（见 `refreshers`）
     this.refreshers.push(() => {
       input.value = String((this.settings[key] as number) * scale);
-      value.textContent = `${input.value}${unit}`;
+      value.textContent = readout();
     });
 
     row.append(name, input, value);
@@ -1045,6 +1147,8 @@ export class SettingsScreen {
       | 'cameraMode'
       | 'particles'
       | 'touchStick'
+      | 'aimMode'
+      | 'handedness'
       | 'maxFps'
       | 'autosaveSeconds'
       | 'skinTone'
@@ -1064,6 +1168,9 @@ export class SettingsScreen {
         // 逐个分支赋值：`GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查
         if (key === 'cameraMode') this.settings.cameraMode = next as CameraMode;
         else if (key === 'particles') this.settings.particles = next as ParticleLevel;
+        // 瞄准方式 / 左右手（批次 271）：循环行按字符串走，字段本身就是字符串联合
+        else if (key === 'aimMode') this.settings.aimMode = next as TouchAimMode;
+        else if (key === 'handedness') this.settings.handedness = next as Handedness;
         // 帧率上限是**数字**（0/30/60），但选择行按字符串循环（见上面 `FPS_CAP_LABELS`）
         else if (key === 'maxFps') this.settings.maxFps = Number(next);
         // 自动保存间隔同理（`AUTOSAVE_OPTIONS` 是秒数）
