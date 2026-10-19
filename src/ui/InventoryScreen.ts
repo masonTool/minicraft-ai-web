@@ -493,6 +493,8 @@ export class InventoryScreen {
   private readonly stationTargetEl: HTMLDivElement;
   /** 当前选中的工作站配方（目标框里画的就是它） */
   private stationTargetEntry: StationRecipeEntry | null = null;
+  /** 目标条目属于哪个容器：A/B 两座熔炉来回切时，防止把 A 的目标画到 B 上 */
+  private stationTargetOwner: BlockContainer | null = null;
   /** 工作站格子里实际摆的是哪条配方（换配方时据此清掉旧料） */
   private stationFilledResultId: number | null = null;
   /** 点过目标框、正在自动收货：产物直接进快捷栏 → 仓库 → 脚边 */
@@ -2827,11 +2829,20 @@ export class InventoryScreen {
     if (this.activeContainer instanceof Campfire) this.activeContainer.paused = true;
   }
 
+  /** 写入目标条目时一并记录所属容器，切换容器后旧目标自动失效（批次 315） */
+  private setStationTargetEntry(entry: StationRecipeEntry | null): void {
+    this.stationTargetEntry = entry;
+    this.stationTargetOwner = entry ? this.activeContainer : null;
+  }
+
   /**
    * 手动往格子里放了东西、但还没选配方时，按现有材料反推一个目标。
    * 这样"完全改成点目标框开始"之后，手动摆料也有目标可点，不会卡住。
    */
   private syncStationTargetFromSlots(): void {
+    if (this.stationTargetEntry && this.stationTargetOwner !== this.activeContainer) {
+      this.setStationTargetEntry(null);
+    }
     if (this.stationTargetEntry) return;
     const container = this.activeContainer;
     if (isFurnaceMode(this.mode) && container instanceof Furnace) {
@@ -2839,8 +2850,9 @@ export class InventoryScreen {
       if (!input) return;
       const recipe = smeltingRecipeFor(input.id, container.station);
       if (!recipe) return;
-      this.stationTargetEntry =
-        this.currentStationEntries().find((entry) => entry.resultId === recipe.output.id) ?? null;
+      this.setStationTargetEntry(
+        this.currentStationEntries().find((entry) => entry.resultId === recipe.output.id) ?? null,
+      );
       return;
     }
     if (this.mode === 'campfire' && container instanceof Campfire) {
@@ -2849,8 +2861,9 @@ export class InventoryScreen {
         if (!stack) continue;
         const recipe = smeltingRecipeFor(stack.id, 'campfire');
         if (!recipe) continue;
-        this.stationTargetEntry =
-          this.currentStationEntries().find((entry) => entry.resultId === recipe.output.id) ?? null;
+        this.setStationTargetEntry(
+          this.currentStationEntries().find((entry) => entry.resultId === recipe.output.id) ?? null,
+        );
         return;
       }
       return;
@@ -2865,8 +2878,9 @@ export class InventoryScreen {
         (candidate) => candidate.ingredient === ingredient && bottles.includes(candidate.from),
       );
       if (!recipe) return;
-      this.stationTargetEntry =
-        this.currentStationEntries().find((entry) => entry.resultId === recipe.to) ?? null;
+      this.setStationTargetEntry(
+        this.currentStationEntries().find((entry) => entry.resultId === recipe.to) ?? null,
+      );
     }
   }
 
@@ -2932,6 +2946,11 @@ export class InventoryScreen {
    */
   private renderStationTarget(): void {
     const container = this.activeContainer;
+    // A/B 熔炉切换后，旧容器的目标一律作废，绝不再按 resultId 套到新容器上
+    if (this.stationTargetEntry && this.stationTargetOwner !== container) {
+      this.stationTargetEntry = null;
+      this.stationTargetOwner = null;
+    }
     // 熔炉产物改为独立产物槽；目标框只画预览/开始（批次 309）
     let actual: ItemStack | null = null;
     if (this.mode === 'smithing' && container instanceof SmithingTable) {
@@ -2998,7 +3017,7 @@ export class InventoryScreen {
     // 点之前按容器现状再算一次：材料被拿走/槽位被占时不能白点
     let entry = this.currentStationEntries().find((candidate) => candidate.resultId === selected.resultId);
     if (!entry) {
-      this.stationTargetEntry = null;
+      this.setStationTargetEntry(null);
       this.renderStationTarget();
       this.showMessage('这条配方现在做不了');
       return;
@@ -3009,7 +3028,7 @@ export class InventoryScreen {
         entry = { ...entry, available: false, reason: 'missing_fuel' };
       }
     }
-    this.stationTargetEntry = entry;
+    this.setStationTargetEntry(entry);
     if (!entry.available) {
       this.renderStationTarget();
       this.showStationEntryHint(entry);
@@ -3324,7 +3343,7 @@ export class InventoryScreen {
     if (entry) {
       // 按住滑动只把目标框切过去，不动物品；抬手确认（fill）才真正摆料
       if (mode === 'preview') {
-        this.stationTargetEntry = entry;
+        this.setStationTargetEntry(entry);
         this.stationAutoCollect = false;
         this.renderStationTarget();
         if (!entry.available) this.showStationEntryHint(entry);
@@ -3332,7 +3351,7 @@ export class InventoryScreen {
         return;
       }
       if (entry.available) {
-        this.stationTargetEntry = entry;
+        this.setStationTargetEntry(entry);
         if (!this.fillStationRecipe(entry)) {
           this.renderStationTarget();
           this.showStationEntryHint(entry);
@@ -3347,7 +3366,7 @@ export class InventoryScreen {
           this.activeContainer.paused = true;
         }
         this.stationFilledResultId = itemId;
-        this.stationTargetEntry = entry;
+        this.setStationTargetEntry(entry);
         this.stationAutoCollect = false;
         this.renderStationTarget();
         this.clearStationHint();
@@ -3358,7 +3377,7 @@ export class InventoryScreen {
       this.fillStationRecipePartial(entry);
       const after = this.currentStationEntries().find((candidate) => candidate.resultId === entry.resultId) ?? entry;
       this.stationFilledResultId = itemId;
-      this.stationTargetEntry = after;
+      this.setStationTargetEntry(after);
       this.stationAutoCollect = false;
       this.renderStationTarget();
       if (after.available) this.clearStationHint();
@@ -5410,6 +5429,7 @@ export class InventoryScreen {
     // 换面板时右栏的"待预览配方"也作废（批次 272）：它只属于刚才那一屏
     this.pendingRecipeId = null;
     this.stationTargetEntry = null;
+    this.stationTargetOwner = null;
     this.stationFilledResultId = null;
     this.stationAutoCollect = false;
     this.stationBrewSnapshot = null;
@@ -5559,6 +5579,7 @@ export class InventoryScreen {
     // 批次 295：解除"选配方暂停"，否则关掉界面后炉子不再工作
     this.releaseStationPause();
     this.stationTargetEntry = null;
+    this.stationTargetOwner = null;
     this.stationFilledResultId = null;
     this.stationAutoCollect = false;
     this.stationBrewSnapshot = null;

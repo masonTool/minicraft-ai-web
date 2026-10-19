@@ -900,6 +900,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('if (!this.containerDirty && !runningFurnace) return;'),
   );
   check(
+    '目标条目绑定容器，切换两座熔炉不会串目标（批次 315）',
+    invSrc.includes('private stationTargetOwner') &&
+      invSrc.includes('private setStationTargetEntry') &&
+      invSrc.includes('this.stationTargetOwner !== container') &&
+      invSrc.includes('this.stationTargetOwner !== this.activeContainer'),
+  );
+  check(
     '点创造分类会切回无限物品页',
     /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
   );
