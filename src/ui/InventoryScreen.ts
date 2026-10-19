@@ -688,9 +688,8 @@ export class InventoryScreen {
   private readonly campfireHintEl: HTMLDivElement;
   private readonly furnaceInputSlot: HTMLDivElement;
   private readonly furnaceFuelSlot: HTMLDivElement;
-  /** 燃料说明 + 「换燃料」按钮（批次 300） */
+  /** 燃料说明（批次 300：显示当前燃料与手动更换提示） */
   private readonly furnaceFuelTextEl: HTMLSpanElement;
-  private readonly furnaceFuelPickBtn: HTMLButtonElement;
   private readonly flameEl: HTMLDivElement;
   /** 附魔台（H9） */
   private readonly enchantLayout: HTMLDivElement;
@@ -1033,12 +1032,6 @@ export class InventoryScreen {
     this.furnaceInputSlot.dataset.key = 'furnace:input';
     this.furnaceFuelTextEl = document.createElement('span');
     this.furnaceFuelTextEl.className = 'furnace-fuel-text';
-    this.furnaceFuelPickBtn = document.createElement('button');
-    this.furnaceFuelPickBtn.type = 'button';
-    this.furnaceFuelPickBtn.className = 'furnace-fuel-pick';
-    this.furnaceFuelPickBtn.textContent = '换';
-    this.furnaceFuelPickBtn.title = '更换燃料（按背包里的可燃物循环）';
-    this.furnaceFuelPickBtn.addEventListener('click', () => this.cycleFurnaceFuel());
     // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
     this.anvilLayout = document.createElement('div');
     this.anvilLayout.className = 'anvil-layout';
@@ -2365,47 +2358,22 @@ export class InventoryScreen {
       const id = this.inventory.get(i)?.id;
       if (id !== undefined && fuelSeconds(id) > 0) ids.add(id);
     }
-    return [...ids].sort((a, b) => this.fuelRank(a) - this.fuelRank(b) || fuelSeconds(b) - fuelSeconds(a));
+    // 燃烧效率优先（干海带块 200s > 煤 80s > 木板 15s）；同效率再按偏好排序
+    return [...ids].sort((a, b) => fuelSeconds(b) - fuelSeconds(a) || this.fuelRank(a) - this.fuelRank(b));
   }
 
-  /** 主背包里最合适的可燃物（煤/木炭优先，避免一上来抓箱子） */
+  /** 主背包里燃烧效率最高的可燃物 */
   private findBagFuel(): number | null {
     return this.bagFuelOptions()[0] ?? null;
   }
 
-  /** 「换燃料」：在背包里的可燃物之间循环，并保持熔炉暂停（批次 300） */
-  private cycleFurnaceFuel(): void {
-    const furnace = this.activeContainer;
-    if (!(furnace instanceof Furnace)) return;
-    const current = furnace.get(FURNACE_FUEL);
-    const options = this.bagFuelOptions();
-    if (current && !options.includes(current.id)) options.unshift(current.id);
-    if (options.length <= 1) return;
-    const index = current ? options.indexOf(current.id) : -1;
-    const next = options[(index + 1) % options.length]!;
-    if (next !== current?.id && this.bagCountOf(next) < 1) return;
-    if (current) this.returnStationStack(furnace, FURNACE_FUEL);
-    if (!this.putIntoContainer(furnace, FURNACE_FUEL, next, 1)) return;
-    furnace.paused = true;
-    this.inventory.notify();
-    this.refresh();
-  }
-
-  /** 燃料栏说明：当前燃料名 + 「换」按钮；缺燃料时说明可放什么 */
+  /** 燃料栏说明：当前燃料名/数量；空格子明确写"空"，不要写成"燃烧中" */
   private refreshFurnaceFuelHint(furnace: Furnace): void {
     const fuel = furnace.get(FURNACE_FUEL);
-    const options = this.bagFuelOptions();
     this.furnaceFuelTextEl.textContent = fuel
-      ? `燃料：${itemName(fuel.id)}`
-      : furnace.burnTimeLeft > 0
-        ? '燃料：燃烧中'
-        : options.length > 0
-          ? '燃料：未选择'
-          : '燃料：缺（煤 / 木炭 / 木板）';
-    this.furnaceFuelTextEl.title = '煤 / 木炭 / 木板 / 干海带块等可燃物都能当燃料';
-    const canPick = options.length + (fuel ? 1 : 0) > 1;
-    this.furnaceFuelPickBtn.classList.toggle('hidden', !canPick);
-    this.furnaceFuelPickBtn.title = canPick ? '更换燃料（按背包里的可燃物循环）' : '';
+      ? `燃料：${itemName(fuel.id)} ×${fuel.count}`
+      : '燃料：空 · 请放燃料';
+    this.furnaceFuelTextEl.title = '煤 / 木炭 / 木板 / 干海带块等可燃物都能当燃料；点燃料格可手动更换';
   }
 
   private furnaceFuelAvailable(furnace: Furnace | null): boolean {
@@ -2586,24 +2554,39 @@ export class InventoryScreen {
     this.refresh();
   }
 
+  /**
+   * 从背包往某一格尽量装满（上限默认 64）：点一条配方时用户要求"能放多少放多少"。
+   * 返回实际放进去的数量。
+   */
+  private fillSlotFromBag(container: BlockContainer, slot: number, itemId: number): number {
+    const current = container.get(slot);
+    const room = maxStackOf(itemId) - (current?.id === itemId ? current.count : 0);
+    if (room <= 0) return 0;
+    const take = Math.min(room, this.bagCountOf(itemId));
+    if (take <= 0) return 0;
+    return this.ensureInSlot(container, slot, itemId, take) ? take : 0;
+  }
+
   private fillStationRecipe(entry: StationRecipeEntry): boolean {
     if (isFurnaceMode(this.mode)) {
       const furnace = this.activeContainer instanceof Furnace ? this.activeContainer : null;
       if (!furnace) return false;
       const input = entry.inputs[0]!;
-      if (!this.canPut(furnace, FURNACE_INPUT, input.id, input.count)) return false;
-      let fuelId: number | null = null;
-      if (furnace.burnTimeLeft <= 0) {
-        const currentFuel = furnace.get(FURNACE_FUEL);
-        if (!(currentFuel && fuelSeconds(currentFuel.id) > 0)) {
-          const found = this.findBagFuel();
-          if (found === null || !this.canPut(furnace, FURNACE_FUEL, found, 1)) return false;
-          fuelId = found;
-        }
+      if (!this.canPut(furnace, FURNACE_INPUT, input.id, 1)) return false;
+      this.fillSlotFromBag(furnace, FURNACE_INPUT, input.id);
+      if (!furnace.get(FURNACE_INPUT)) return false;
+      // 燃料：从背包里挑**燃烧效率最高**的；现有燃料效率更低就换掉
+      const currentFuel = furnace.get(FURNACE_FUEL);
+      const best = this.findBagFuel();
+      let fuelId = currentFuel && fuelSeconds(currentFuel.id) > 0 ? currentFuel.id : null;
+      if (best !== null && (fuelId === null || fuelSeconds(best) > fuelSeconds(fuelId))) {
+        if (fuelId !== null) this.returnStationStack(furnace, FURNACE_FUEL);
+        fuelId = best;
       }
-      if (!this.ensureInSlot(furnace, FURNACE_INPUT, input.id, input.count)) return false;
-      if (fuelId !== null) this.ensureInSlot(furnace, FURNACE_FUEL, fuelId, 1);
-      return true;
+      if (fuelId === null) return false;
+      if (!this.canPut(furnace, FURNACE_FUEL, fuelId, 1)) return false;
+      this.fillSlotFromBag(furnace, FURNACE_FUEL, fuelId);
+      return furnace.get(FURNACE_FUEL) !== null;
     }
     if (this.mode === 'campfire') {
       const fire = this.activeContainer instanceof Campfire ? this.activeContainer : null;
@@ -2767,6 +2750,14 @@ export class InventoryScreen {
         entry = fresh;
       }
     }
+    // 燃料格空 = 目标红且不可点（即使背包里有燃料，也要先点左栏配方把它放进去）
+    if (entry?.available && isFurnaceMode(this.mode) && container instanceof Furnace) {
+      const fuel = container.get(FURNACE_FUEL);
+      if (!fuel || fuelSeconds(fuel.id) <= 0) {
+        entry = { ...entry, available: false, reason: 'missing_fuel' };
+        this.stationTargetEntry = entry;
+      }
+    }
     const show = this.stationTargetSupported() && (actual !== null || entry !== null);
     const wrap = this.stationTargetEl.parentElement;
     wrap?.classList.toggle('hidden', !show);
@@ -2806,12 +2797,19 @@ export class InventoryScreen {
     const selected = this.stationTargetEntry;
     if (!selected) return;
     // 点之前按容器现状再算一次：材料被拿走/槽位被占时不能白点
-    const entry = this.currentStationEntries().find((candidate) => candidate.resultId === selected.resultId);
+    let entry = this.currentStationEntries().find((candidate) => candidate.resultId === selected.resultId);
     if (!entry) {
       this.stationTargetEntry = null;
       this.renderStationTarget();
       this.showMessage('这条配方现在做不了');
       return;
+    }
+    // 燃料槽空 = 红底不可点（背包里有燃料也不行，要先点左栏配方把它放进去）
+    if (entry.available && isFurnaceMode(this.mode) && container instanceof Furnace) {
+      const fuel = container.get(FURNACE_FUEL);
+      if (!fuel || fuelSeconds(fuel.id) <= 0) {
+        entry = { ...entry, available: false, reason: 'missing_fuel' };
+      }
     }
     this.stationTargetEntry = entry;
     if (!entry.available) {
@@ -2958,7 +2956,7 @@ export class InventoryScreen {
       const input = entry.inputs[0]!;
       if (!container.get(FURNACE_INPUT)) ghost('furnace:input', input.id);
       const fuel = container.get(FURNACE_FUEL);
-      if (!fuel && !this.findBagFuel()) ghost('furnace:fuel', Item.COAL);
+      if (!fuel) ghost('furnace:fuel', this.findBagFuel() ?? Item.COAL);
       return;
     }
     if (this.mode === 'smithing' && container instanceof SmithingTable) {
@@ -2995,17 +2993,18 @@ export class InventoryScreen {
     if (isFurnaceMode(this.mode) && this.activeContainer instanceof Furnace) {
       const furnace = this.activeContainer;
       const input = entry.inputs[0]!;
-      if (this.canPut(furnace, FURNACE_INPUT, input.id, input.count)) {
-        if (this.stationCountOf(input.id, furnace) >= input.count) {
-          this.ensureInSlot(furnace, FURNACE_INPUT, input.id, input.count);
-        }
+      if (this.canPut(furnace, FURNACE_INPUT, input.id, 1)) {
+        this.fillSlotFromBag(furnace, FURNACE_INPUT, input.id);
       }
-      const fuel = furnace.get(FURNACE_FUEL);
-      if (!fuel || fuelSeconds(fuel.id) <= 0) {
-        const found = this.findBagFuel();
-        if (found !== null && this.canPut(furnace, FURNACE_FUEL, found, 1)) {
-          this.ensureInSlot(furnace, FURNACE_FUEL, found, 1);
-        }
+      const currentFuel = furnace.get(FURNACE_FUEL);
+      const best = this.findBagFuel();
+      let fuelId = currentFuel && fuelSeconds(currentFuel.id) > 0 ? currentFuel.id : null;
+      if (best !== null && (fuelId === null || fuelSeconds(best) > fuelSeconds(fuelId))) {
+        if (fuelId !== null) this.returnStationStack(furnace, FURNACE_FUEL);
+        fuelId = best;
+      }
+      if (fuelId !== null && this.canPut(furnace, FURNACE_FUEL, fuelId, 1)) {
+        this.fillSlotFromBag(furnace, FURNACE_FUEL, fuelId);
       }
       furnace.paused = true;
       return;
@@ -3829,7 +3828,7 @@ export class InventoryScreen {
 
       const fuelHint = document.createElement('div');
       fuelHint.className = 'furnace-fuel-hint';
-      fuelHint.append(this.furnaceFuelTextEl, this.furnaceFuelPickBtn);
+      fuelHint.append(this.furnaceFuelTextEl);
       const left = document.createElement('div');
       left.className = 'furnace-col';
       left.append(input, this.flameEl, fuel, fuelHint);

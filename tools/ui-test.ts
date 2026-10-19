@@ -737,19 +737,24 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       !/private takeFurnaceOutput[\s\S]{0,900}stationTargetEntry = null/.test(invSrc),
   );
   check(
-    '燃料优先煤/木炭，并提供「换燃料」说明与循环（批次 300）',
+    '燃料按效率选、装满并给文字说明；空槽目标红（批次 301）',
     invSrc.includes('private bagFuelOptions') &&
       invSrc.includes('private fuelRank') &&
-      invSrc.includes('private cycleFurnaceFuel') &&
+      invSrc.includes('private refreshFurnaceFuelHint') &&
       invSrc.includes('furnaceFuelTextEl') &&
-      invSrc.includes('furnaceFuelPickBtn') &&
+      invSrc.includes('燃料：空 · 请放燃料') &&
+      invSrc.includes('private fillSlotFromBag') &&
+      invSrc.includes('this.bagCountOf(itemId)') &&
+      !invSrc.includes('furnaceFuelPickBtn') &&
+      !invSrc.includes('private cycleFurnaceFuel') &&
+      /fuelSeconds\(fuel\.id\) <= 0/.test(invSrc) &&
       /fuelRank[\s\S]{0,300}Item\.COAL[\s\S]{0,120}Item\.CHARCOAL/.test(invSrc),
   );
   check(
-    '点白底配方会自动填原料与燃料（白底 = 点下去能开工）',
+    '点白底配方会尽量装满原料与燃料',
     invSrc.includes('private fillStationRecipe') &&
-      invSrc.includes('this.ensureInSlot(furnace, FURNACE_INPUT') &&
-      invSrc.includes('this.ensureInSlot(furnace, FURNACE_FUEL') &&
+      invSrc.includes('this.fillSlotFromBag(furnace, FURNACE_INPUT') &&
+      invSrc.includes('this.fillSlotFromBag(furnace, FURNACE_FUEL') &&
       invSrc.includes('this.ensureInSlot(stand, BREW_INGREDIENT_SLOT'),
   );
   check(
