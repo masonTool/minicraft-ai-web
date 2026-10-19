@@ -156,6 +156,97 @@
     check('Esc closes the dropdown but keeps settings open', !openMenu() && mc.settingsState.open === true);
   }
 
+  // ---------------------------------------------------------------- 排版（批次 335）
+  // 用户："按钮类聚合、滑块类聚合；文字与控件挨近；第二列左对齐；过长项缩成半列"
+  const tabs = [...panel.querySelectorAll('.settings-tab')];
+  const groupLayout = {};
+  for (const tab of tabs) {
+    tab.click();
+    await sleep(40);
+    const section = panel.querySelector('.settings-section.active');
+    const blocks = [...section.querySelectorAll('.settings-block')];
+    const rows = [...section.querySelectorAll('.settings-row')];
+    const gapOf = (row) => {
+      const label = row.querySelector('span');
+      const control = row.querySelector('.settings-switch, .settings-dropdown, .settings-cycle, input[type="range"]');
+      if (!label || !control) return 999;
+      return control.getBoundingClientRect().left - label.getBoundingClientRect().right;
+    };
+    groupLayout[tab.textContent] = {
+      dx: section.scrollWidth - section.clientWidth,
+      blocks: blocks.length,
+      rows: rows.length,
+      sliders: section.querySelectorAll('input[type="range"]').length,
+      maxGap: rows.length ? Math.max(...rows.map(gapOf)) : 0,
+      actionRows: section.querySelectorAll('.settings-row.action').length,
+      blockSliders: blocks.map((b) => b.querySelectorAll('input[type="range"]').length),
+      blockControls: blocks.map((b) => b.querySelectorAll('.settings-switch, .settings-dropdown-button, .settings-cycle').length),
+    };
+  }
+  check(
+    'all groups: no horizontal overflow',
+    Object.values(groupLayout).every((g) => g.dx <= 1),
+    Object.entries(groupLayout).map(([k, v]) => `${k}:${v.dx}`).join(' '),
+  );
+  check(
+    'labels and controls are adjacent (gap <= 24px)',
+    Object.values(groupLayout).every((g) => g.maxGap <= 24),
+    Object.entries(groupLayout).map(([k, v]) => `${k}:${v.maxGap}`).join(' '),
+  );
+  check(
+    'game group: one block of switches/dropdowns + one block of half-row actions',
+    groupLayout['游戏'].blocks === 2 &&
+      groupLayout['游戏'].blockSliders[0] === 0 &&
+      groupLayout['游戏'].blockControls[0] >= 4 &&
+      groupLayout['游戏'].actionRows === 2,
+    JSON.stringify(groupLayout['游戏']),
+  );
+  check(
+    'controls group: buttons first, sliders last (separate block)',
+    groupLayout['控制'].blocks === 2 &&
+      groupLayout['控制'].blockSliders[0] === 0 &&
+      groupLayout['控制'].blockSliders[1] === 3 &&
+      groupLayout['控制'].blockControls[1] === 0,
+    JSON.stringify(groupLayout['控制']),
+  );
+  check(
+    'sound group: sliders only (half-row, two per line)',
+    groupLayout['音频'].blocks === 1 &&
+      groupLayout['音频'].sliders === 7 &&
+      groupLayout['音频'].rows === 7,
+    JSON.stringify(groupLayout['音频']),
+  );
+  check(
+    'appearance group: 3D hero + its own slider block',
+    groupLayout['外观'].blocks === 1 && groupLayout['外观'].sliders === 1,
+    JSON.stringify(groupLayout['外观']),
+  );
+  // FOV 从整行缩成半行（用户点名）
+  panel.querySelector('.settings-tab[data-group="controls"]')?.click();
+  await sleep(60);
+  const fovRow = [...panel.querySelectorAll('.settings-section.active .settings-row')].find(
+    (row) => row.querySelector('span')?.textContent === '视野',
+  );
+  const activeSection = panel.querySelector('.settings-section.active');
+  const sectionWidth = activeSection.getBoundingClientRect().width;
+  const fovWidth = fovRow?.getBoundingClientRect().width ?? 0;
+  // 宽屏是两列（FOV 只占半行）；竖屏/窄屏 auto-fit 退回一列，这时占满一列才是对的
+  const twoColumn = sectionWidth >= 474;
+  check(
+    twoColumn ? 'FOV row is half-width (not a full-row block)' : 'narrow screen: FOV uses the single column',
+    !!fovRow && (twoColumn ? fovWidth < sectionWidth * 0.75 : fovWidth <= sectionWidth + 1),
+    `${Math.round(fovWidth)}/${Math.round(sectionWidth)}`,
+  );
+  // 动作按钮 / 下拉按钮高度一致（同一套 padding 与 min-height）
+  const buttonHeights = [
+    ...new Set(
+      [...panel.querySelectorAll('.settings-cycle, .settings-dropdown-button')]
+        .filter((b) => b.offsetParent)
+        .map((b) => Math.round(b.getBoundingClientRect().height)),
+    ),
+  ];
+  check('action/dropdown buttons share one height', buttonHeights.length === 1, buttonHeights.join(','));
+
   // 恢复默认：不在任何分组里，而是设置页最底部的 footer
   const resetButton = panel.querySelector('#settings-reset');
   const footer = panel.querySelector('.settings-footer');

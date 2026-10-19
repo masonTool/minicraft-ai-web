@@ -238,8 +238,8 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   check('配方书的关闭键在手机上是 ✕（PC 才写 "关闭 (R)"）', recipeBook.includes("isTouchUi() ? '✕' : '关闭 (R)'"));
   check('背包标题栏不在手机上说 "配方书 (R)"', inventory.includes("touchDevice ? '配方书' : '配方书 (R)'"));
   check(
-    '设置面板的提示在手机上不提 Esc（改成"点 ‹ 返回"）',
-    settings.includes("touch ? '改动立即生效") && settings.includes('点 ‹ 返回'),
+    '设置页提示只留一句"改动立即生效"（不再提 Esc / 返回）',
+    settings.includes("this.settingsHintEl.textContent = '改动立即生效';"),
   );
 }
 
@@ -1928,7 +1928,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       settingsSource.includes('private makeCreativeRow') &&
       settingsSource.includes('private makeGameModeRow'),
   );
-  check('设置面板里的"视角"下拉还在', settingsSource.includes("this.makeSelect(controls, 'cameraMode', '视角'"));
+  check('设置面板里的"视角"下拉还在', settingsSource.includes("this.makeSelect(controlOptions, 'cameraMode', '视角'"));
   check(
     '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
     !settingsSource.includes("key: 'flying'") && settingsSource.includes('private makeCreativeRow'),
@@ -2139,36 +2139,39 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   check('三端统一：左选项卡 + 右内容', compact.includes('.settings-columns { display: flex; flex-direction: row; gap: 12px;'));
   check(
     '一次只显示当前分组（固定高度下永远不用滚）',
-    compact.includes('.settings-section { display: none; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));'),
+    compact.includes('.settings-section { display: none; flex-direction: column; gap: 8px;'),
   );
-  // 批次 167：用户"视频里面这个选项里面有多个按钮，只是很短的空间，可以适当让它们并排"
+  // 批次 335：分组内按控件类型分块——块内两列并排（窄屏自动退回一列）
   check(
-    '分组内容两列并排（窄屏自动退回一列）',
-    compact.includes('.settings-section.active { display: grid; }') &&
-      compact.includes('grid-template-columns: repeat(auto-fit, minmax(230px, 1fr))'),
+    '同类控件分块聚合，块内两列（窄屏退回一列）',
+    compact.includes('.settings-section.active { display: flex; }') &&
+      compact.includes('.settings-block { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));') &&
+      compact.includes('.settings-block + .settings-block {') &&
+      source.includes('const controlOptions = this.makeBlock(controls);') &&
+      source.includes('const controlSliders = this.makeBlock(controls);') &&
+      source.includes('const gameOptions = this.makeBlock(game);') &&
+      source.includes('const gameActions = this.makeBlock(game);') &&
+      source.includes('const soundSliders = this.makeBlock(sound);'),
   );
   check(
-    '滑杆这类"越长越好用"的行跨满两列',
-    compact.includes(
-      '.settings-row.wide { grid-column: 1 / -1; grid-template-columns: minmax(78px, auto) minmax(0, 1fr) minmax(44px, auto); }',
-    ) &&
-      compact.includes(
-        'body.touch-mode .settings-row.wide { grid-template-columns: minmax(78px, auto) minmax(0, 1fr) minmax(46px, auto); }',
-      ) &&
-      source.includes("row.className = 'settings-row wide';"),
+    '标签与控件紧挨着（pair 两列 / action 三列），第二列左对齐',
+    compact.includes('.settings-row.pair { grid-template-columns: minmax(72px, auto) minmax(0, 1fr); }') &&
+      compact.includes('.settings-row.action { grid-template-columns: minmax(72px, auto) auto minmax(0, 1fr); }') &&
+      source.includes("row.className = 'settings-row pair';") &&
+      source.includes("row.className = 'settings-row action';"),
   );
   // 诊断日志（批次 181）：入口在设置里，读数与按钮挤一行且不许撑破
   check('诊断日志入口在设置里', source.includes('诊断日志') && source.includes('makeDiagnosticsRow'));
   // 批次 220（用户）：只保留「导出」——打点与复制对玩家不产出额外信息
   check(
     '诊断日志只留导出（不再有记录问题 / 复制）',
-    source.includes("make('导出'") && !source.includes("make('记录问题'") && !source.includes("make('复制'"),
+    source.includes("button.textContent = '导出'") &&
+      !source.includes("make('记录问题'") &&
+      !source.includes("make('复制'"),
   );
   check(
     '诊断读数放不下时省略（不撑破设置行）',
-    compact.includes('.diag-block {') &&
-      compact.includes('.diag-status {') &&
-      compact.includes('text-overflow: ellipsis;'),
+    compact.includes('.settings-status {') && compact.includes('text-overflow: ellipsis;'),
   );
   check(
     '页签永远显示（不再分"高屏隐藏/矮屏显示"）',
@@ -2961,7 +2964,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   check(
     '手机视野封 90°，且滑块上限与运行时夹紧共用同一处策略',
     settingsSrc.includes('fovCapFor(isTouchUi())') &&
-      settingsSrc.includes('this.makeNote(controls') &&
+      settingsSrc.includes('this.makeNote(controlSliders') &&
       appSrc.includes('clampFovFor(this.settings.fov, isTouchDevice())') &&
       appSrc.includes('clampFovFor(settings.fov, mobile)'),
   );

@@ -97,8 +97,8 @@ export type StickMode = 'fixed' | 'dynamic';
 /** 设置界面要遍历它（与 `CAMERA_MODES` / `PARTICLE_LEVELS` 同一个套路） */
 export const STICK_MODES: readonly StickMode[] = ['fixed', 'dynamic'];
 export const STICK_MODE_LABELS: Record<StickMode, string> = {
-  fixed: '固定（左下角）',
-  dynamic: '跟随手指',
+  fixed: '固定',
+  dynamic: '跟随',
 };
 
 /**
@@ -110,8 +110,8 @@ export const STICK_MODE_LABELS: Record<StickMode, string> = {
 export type Handedness = 'right' | 'left';
 export const HANDEDNESS_MODES: readonly Handedness[] = ['right', 'left'];
 export const HANDEDNESS_LABELS: Record<Handedness, string> = {
-  right: '右手（摇杆在左）',
-  left: '左手（摇杆在右）',
+  right: '右手',
+  left: '左手',
 };
 
 /**

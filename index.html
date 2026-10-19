@@ -1368,26 +1368,38 @@
         display: flex; flex-direction: column; gap: 6px;
       }
       /* 一次只显示当前分组（组名写在左边的选项卡上，段内标题是重复信息）。
-         ⚠️ 批次 167：分组内容改成**两列并排**——用户原话"在视频里面这个选项里面有
-         多个按钮，它只是很短的空间，你可以适当地让它们并排"。
-         `auto-fit` + 230px 下限：宽窗口（PC / 横屏手机）自动两列、窄屏退回一列，
-         不用另写断点。滑杆行带 `.settings-row.wide` 跨满两列（压到半栏不好拖）。 */
-      .settings-section { display: none; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 10px; align-content: start; flex: 0 0 auto; }
-      .settings-section.active { display: grid; }
+         批次 335：分组内再分「块」——按钮/下拉/开关一块、滑杆一块；
+         块内两列并排，块与块之间一条细分隔线。 */
+      .settings-section {
+        display: none; flex-direction: column; gap: 8px;
+        align-content: start; flex: 0 0 auto;
+      }
+      .settings-section.active { display: flex; }
       .settings-group { display: none; }
       .settings-meta { flex: 0 0 auto; margin: 8px 0 0; }
-      /* 行内三列压紧（批次 167）：标签不再吃 96px、值列 52 → 44，行高由内容+`min-height` 定 */
-      .settings-row { display: grid; grid-template-columns: minmax(78px, auto) minmax(0, 1fr) 44px; align-items: center; gap: 6px; min-width: 0; min-height: 32px; }
-      /* 滑杆 / 文件选择这类"越长越好用"的行占满两列。
-         第三列用 auto：灵敏度读数带 `（×1.00）`，固定 44px 会溢出并把整组撑出横向滚动。 */
-      .settings-row.wide {
-        grid-column: 1 / -1;
-        grid-template-columns: minmax(78px, auto) minmax(0, 1fr) minmax(44px, auto);
+      .settings-block {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 4px 14px; align-content: start; min-width: 0;
       }
-      /* 开关 / 下拉：标签在左、控件贴右（两列，不留一块会被误认为可点的空白） */
-      .settings-row.control-right { grid-template-columns: minmax(78px, auto) minmax(0, 1fr); }
-      .settings-row.control-right .settings-switch,
-      .settings-row.control-right .settings-dropdown { justify-self: end; }
+      .settings-block + .settings-block {
+        margin-top: 2px; padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, .1);
+      }
+      /* 行内三列：标签 | 控件 | 读数。标签与控件紧挨着，第二列左对齐 */
+      .settings-row {
+        display: grid; grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(40px, auto);
+        align-items: center; gap: 6px; min-width: 0; min-height: 32px;
+      }
+      /* 开关 / 下拉：两列（没有读数），控件紧跟标签 */
+      .settings-row.pair { grid-template-columns: minmax(72px, auto) minmax(0, 1fr); }
+      /* 动作行：标签 | 按钮 | 状态文字（资源包 / 日志导出） */
+      .settings-row.action { grid-template-columns: minmax(72px, auto) auto minmax(0, 1fr); }
+      .settings-status {
+        min-width: 0; color: #a8a8a8; font-size: 11px; line-height: 1.3;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      /* 状态文字跟在按钮右边、左对齐（`.settings-row i` 的右对齐特异性更高，单独覆盖） */
+      .settings-row i.settings-status { text-align: left; }
 
       /* ---------------- 暂停菜单那一页（批次 108） ----------------
          同一份 DOM 的两页：`.pause-page.active` 才是当前这一页。
@@ -1414,30 +1426,15 @@
         font: inherit; font-size: 14px; padding: 9px; min-height: 42px; cursor: pointer;
       }
       .settings-row i { font-style: normal; color: var(--mc-text-light); text-align: right; white-space: nowrap; }
-      /* ---------------- 诊断日志（批次 181） ----------------
-         标题 + 读数 + 三个动作挤在一行：横屏手机高度紧张，能不加行就不加行；
-         窄屏放不下时允许换行（flex-wrap），而不是把按钮压扁。 */
-      .diag-block {
-        grid-column: 1 / -1;
-        display: flex; align-items: center; flex-wrap: wrap;
-        gap: 4px 6px; min-width: 0; padding: 3px 0;
-        border-top: 1px solid #a9a9a9;
-      }
-      .diag-title { flex: 0 0 auto; font-size: 12px; color: var(--mc-text-light); }
-      .diag-status {
-        flex: 1 1 96px; min-width: 0; font-size: 11px; color: #a8a8a8;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-      .diag-actions { display: flex; gap: 4px; flex: 0 0 auto; }
-      .diag-actions .diag-button { min-width: 0; padding: 3px 7px; font-size: 11px; }
-      body.touch-mode .diag-actions .diag-button { min-height: 32px; padding: 5px 9px; font-size: 12px; }
+      /* 诊断日志与资源包在批次 335 收成了普通动作行（`.settings-row.action`），
+         不再需要横跨整行的 diag-block 样式。 */
       /* ---------------- 循环切换控件（批次 109） ----------------
          ⚠️ 基岩版的设置界面里**没有复选框、也没有下拉框**：布尔项与"几选一"项
          都是同一颗灰按钮（`开 / 关`、`‹ 中 ›`），点一下换下一个值。
          所以这里不再有自绘开关——按钮的灰色面/黑描边/斜面统一由文件末尾那节
          "界面按钮统一"给（`.settings-cycle` 在那个清单里）。 */
       .settings-cycle {
-        justify-self: start; min-width: 92px; padding: 5px 8px;
+        justify-self: start; min-width: 112px; padding: 5px 8px;
         font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; text-align: center;
       }
       /* ---------------- 开关（批次 334，用户要求 switch） ----------------
@@ -1466,10 +1463,10 @@
          不然会被设置内容区的 `overflow-y: auto` 裁掉。 */
       .settings-dropdown { justify-self: start; min-width: 92px; }
       .settings-dropdown-button {
-        width: 100%; min-width: 92px; padding: 5px 8px;
+        width: 100%; min-width: 112px; padding: 5px 8px;
         font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; text-align: center;
       }
-      body.touch-mode .settings-dropdown-button { min-width: 96px; padding: 6px 8px; font-size: 13px; }
+      body.touch-mode .settings-dropdown-button { min-width: 112px; padding: 6px 8px; font-size: 13px; }
       .settings-dropdown-menu {
         position: fixed; z-index: 70; display: none;
         padding: 2px; overflow-y: auto;
@@ -1621,19 +1618,21 @@
          ⚠️ 判据用 `body.touch-mode` 而不是 `@media (max-width: 900px)`：
          平板（1024×768 触摸屏）也该拿这套，而它不命中那个宽度断点。 */
       body.touch-mode .settings-row {
-        grid-template-columns: minmax(78px, auto) minmax(0, 1fr) 46px; min-height: 34px;
+        grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(42px, auto);
+        min-height: 34px;
       }
-      /* 触摸端的 46px 会盖掉 `.settings-row.wide` 的 auto 值（特异性更高），
-         单独补一条，否则灵敏度读数 `4（×1.00）` 会把整组撑出横向滚动。 */
-      body.touch-mode .settings-row.wide {
-        grid-template-columns: minmax(78px, auto) minmax(0, 1fr) minmax(46px, auto);
-      }
+      body.touch-mode .settings-row.pair { grid-template-columns: minmax(72px, auto) minmax(0, 1fr); }
+      body.touch-mode .settings-row.action { grid-template-columns: minmax(72px, auto) auto minmax(0, 1fr); }
+      body.touch-mode .settings-block { gap: 4px 12px; }
       body.touch-mode .settings-row input[type="range"] { height: 34px; }
       body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
         width: 16px; height: 26px; margin-top: -8px;
       }
-      /* 批次 167：两列并排之后每格只有 ~300px，循环按钮再占 100px 就挤了（热区仍够 34px） */
-      body.touch-mode .settings-cycle { min-width: 88px; padding: 6px 8px; font-size: 13px; }
+      /* 批次 167 / 335：两列并排之后每格只有 ~300px；按钮统一 96px、热区 34px */
+      body.touch-mode .settings-cycle,
+      body.touch-mode .settings-dropdown-button {
+        min-width: 112px; padding: 6px 8px; font-size: 13px;
+      }
       body.touch-mode .settings-tab { min-height: 40px; padding: 8px 10px; }
       body.touch-mode .settings-tabs { flex: 0 0 88px; }
       body.touch-mode .settings-back { height: 38px; font-size: 14px; }
@@ -1666,7 +1665,12 @@
         /* ---- 设置：横屏只有 ~343px 高，一屏放完全靠"更紧的行 + 更密的列" ----
            （批次 167。面板尺寸仍然不变，只是里面的行压到 30px、循环按钮再收一档） */
         body.touch-mode .settings-row { min-height: 30px; }
-        body.touch-mode .settings-cycle { min-width: 80px; padding: 3px 6px; font-size: 12px; }
+        body.touch-mode .settings-block { gap: 2px 12px; }
+        body.touch-mode .settings-block + .settings-block { margin-top: 0; padding-top: 4px; }
+        body.touch-mode .settings-cycle,
+        body.touch-mode .settings-dropdown-button {
+          min-width: 112px; padding: 3px 6px; font-size: 12px;
+        }
         body.touch-mode .settings-hint { margin: 2px 0 6px; font-size: 11px; }
         /* 批次 333：横屏形象区再收一档，给 11 行外观控件留高度 */
         body.touch-mode .appearance-stage { flex-basis: 88px; width: 88px; height: 158px; }

@@ -125,7 +125,7 @@ export function sensitivityLevelFromGain(gain: number): number {
 export type TouchAimMode = 'finger' | 'center';
 export const TOUCH_AIM_MODES: readonly TouchAimMode[] = ['finger', 'center'];
 export const TOUCH_AIM_MODE_LABELS: Record<TouchAimMode, string> = {
-  finger: '手指瞄准（默认）',
+  finger: '手指',
   center: '屏幕中心',
 };
 
@@ -678,7 +678,7 @@ export class SettingsScreen {
   private avatarDrag: { pointerId: number; x: number } | null = null;
   private readonly avatarFocusButtons: HTMLButtonElement[] = [];
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
-  private diagnosticsStatusEl: HTMLDivElement | null = null;
+  private diagnosticsStatusEl: HTMLElement | null = null;
   /**
    * 控件"按当前 settings 重画"的回调表（批次 185，"恢复默认"要用）。
    *
@@ -846,11 +846,6 @@ export class SettingsScreen {
     // 改完立刻在形象上生效。"所以形象区不显示盔甲与副手盾牌（只展示原始角色），
     // 拖动可旋转，另有「面部」特写看眼睛/眉毛/胡须。
     const appearance = this.section('appearance');
-    // 场景亮度（批次 220，用户要求）：户外看不清屏幕时就靠它把画面提亮。
-    // 50%~200%，100% 等于不动——**不改光照本身**，只改屏幕这一层（见 `applySceneBrightness`）。
-    appearance.append(
-      this.makeSlider('brightness', '场景亮度', '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
-    );
 
     const hero = document.createElement('div');
     hero.className = 'appearance-hero';
@@ -969,35 +964,46 @@ export class SettingsScreen {
     );
     this.makeToggle(fields, 'cape', '披风');
 
+    // 外观页只有这一个滑杆：放在形象下方，与上面的"按钮/下拉"分开
+    const appearanceSliders = this.makeBlock(appearance);
+    // 场景亮度（批次 220）：50%~200%，100% 等于不动——只改屏幕这一层（见 `applySceneBrightness`）
+    appearanceSliders.append(
+      this.makeSlider('brightness', '亮度', '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
+    );
+
     this.bindAvatar(canvas);
     this.applyFocusButtons();
 
     const controls = this.section('controls');
+    // 第一块：按钮 / 下拉 / 开关（同类聚在一起）
+    const controlOptions = this.makeBlock(controls);
     // 全屏 / 横屏（批次 181）：手动兜底。放在最上面——"屏幕不对"时玩家第一个找的就是它
     if (this.actions.onToggleFullscreen && this.actions.isFullscreen) {
-      controls.appendChild(this.makeFullscreenRow());
+      controlOptions.appendChild(this.makeFullscreenRow());
     }
-    this.makeSelect(controls, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
-    // 视野（批次 203 从「视频」组搬来）：晕动症的人会往小调，习惯广角的人会往大调，
-    // 只有玩家自己知道——所以它留着（原版也只有这一个视野滑块）。
-    // ⚠️ 但它**有代价**（批次 215）：72°→110° 时水平可视范围约翻倍（≈1.97×），
-    // 视锥里的区块网格与三角形跟着翻，而自适应管不到 FOV → 手机上封 90° 并说明一次。
-    controls.append(
-      this.makeSlider('fov', '视野', '°', FOV_MIN, fovCapFor(isTouchUi()), 1),
+    this.makeSelect(controlOptions, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
+    // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
+    this.makeSelect(controlOptions, 'handedness', '惯用手', HANDEDNESS_MODES, HANDEDNESS_LABELS);
+    // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星
+    this.makeSelect(controlOptions, 'aimMode', '瞄准', TOUCH_AIM_MODES, TOUCH_AIM_MODE_LABELS);
+    // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
+    this.makeSelect(controlOptions, 'touchStick', '摇杆', STICK_MODES, STICK_MODE_LABELS);
+    this.makeToggle(controlOptions, 'invertY', '反转视角');
+    // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开
+    this.makeToggle(controlOptions, 'autoJump', '自动跳跃');
+    // 快速进食（批次 219）：1.0 秒 vs 原版的 1.6 秒，想对齐原版节奏就关掉
+    this.makeToggle(controlOptions, 'fastEat', '快速进食');
+
+    // 第二块：滑杆（视野 / 按钮大小 / 灵敏度）
+    const controlSliders = this.makeBlock(controls);
+    // 视野（批次 203 / 215）：晕动症的人会往小调，习惯广角的人会往大调。
+    // 但它有代价（72°→110° 可视范围约翻倍），而自适应管不到 FOV → 手机上封 90°。
+    controlSliders.append(this.makeSlider('fov', '视野', '°', FOV_MIN, fovCapFor(isTouchUi()), 1));
+    controlSliders.append(
+      this.makeSlider('touchScale', '按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100),
     );
-    if (isTouchUi()) {
-      this.makeNote(controls, `视野越大，同屏要画的方块越多；手机上最多 ${fovCapFor(true)}°`);
-    }
-    // 左右手模式（批次 271，用户要求）：左手模式把摇杆整个挪到右侧
-    this.makeSelect(controls, 'handedness', '左右手模式', HANDEDNESS_MODES, HANDEDNESS_LABELS);
-    // 瞄准方式（批次 271，用户要求）：默认手指落点；可选回老的屏幕中心准星
-    this.makeSelect(controls, 'aimMode', '瞄准方式', TOUCH_AIM_MODES, TOUCH_AIM_MODE_LABELS);
-    // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异，所以给两档自己挑
-    this.makeSelect(controls, 'touchStick', '触摸摇杆', STICK_MODES, STICK_MODE_LABELS);
-    // 触摸按钮大小（批次 97）：手机上线 44px 只是下限，多大才顺手因人而异
-    controls.append(this.makeSlider('touchScale', '触摸按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100));
-    // 灵敏度（批次 271）：0~8 档，4 是正中间（= 1×），两边对称
-    controls.append(
+    // 灵敏度（批次 271）：0~8 档，4 是正中间（= 1×），读数的 ×值已经说明了含义
+    controlSliders.append(
       this.makeSlider(
         'sensitivity',
         '灵敏度',
@@ -1009,39 +1015,38 @@ export class SettingsScreen {
         (level) => `${level}（×${sensitivityGain(level).toFixed(2)}）`,
       ),
     );
-    this.makeNote(controls, '4 是正中间（×1.00）；0 最慢、8 最快');
-    this.makeToggle(controls, 'invertY', '反转上下视角');
-    // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开；
-    // 但它会让"贴着一格高的墙走"变成自己往上跳，有人不喜欢，所以给开关。
-    this.makeToggle(controls, 'autoJump', '自动跳跃');
-    // 快速进食（批次 219）：1.0 秒 vs 原版的 1.6 秒。触摸端没有使用键，
-    // 进食只能借用"按住不动"（100ms），比破坏用的长按判定（400ms）快，
-    // 但原版 1.6 秒在手机上仍然偏磨，所以默认开；想完全对齐原版节奏就关掉。
-    this.makeToggle(controls, 'fastEat', '快速进食（1 秒）');
+    if (isTouchUi()) this.makeNote(controlSliders, `手机视野上限 ${fovCapFor(true)}°`);
 
     const sound = this.section('sound');
-    sound.append(this.makeSlider('volume', '音量', '%', 0, 100, 1, 100));
-    // 分组音量（批次 178，M20 最后一项）：主音量下面四条，各自 0~100%
-    sound.append(this.makeSlider('volumeBlocks', '方块音效', '%', 0, 100, 1, 100));
-    sound.append(this.makeSlider('volumeMobs', '生物音效', '%', 0, 100, 1, 100));
-    sound.append(this.makeSlider('volumePlayer', '玩家音效', '%', 0, 100, 1, 100));
-    sound.append(this.makeSlider('volumeUi', '界面与环境', '%', 0, 100, 1, 100));
-    // 批次 233：雨声与背景音乐各自一组（原版也是分开的：天气 / 音乐）
-    sound.append(this.makeSlider('volumeAmbient', '环境音（雨声）', '%', 0, 100, 1, 100));
-    sound.append(this.makeSlider('volumeMusic', '背景音乐', '%', 0, 100, 1, 100));
+    // 音频页全是滑杆：两列排，主音量与分组音量分开读
+    const soundSliders = this.makeBlock(sound);
+    soundSliders.append(
+      this.makeSlider('volume', '主音量', '%', 0, 100, 1, 100),
+      this.makeSlider('volumeBlocks', '方块音效', '%', 0, 100, 1, 100),
+      this.makeSlider('volumeMobs', '生物音效', '%', 0, 100, 1, 100),
+      this.makeSlider('volumePlayer', '玩家音效', '%', 0, 100, 1, 100),
+      this.makeSlider('volumeUi', '界面音效', '%', 0, 100, 1, 100),
+      this.makeSlider('volumeAmbient', '雨声', '%', 0, 100, 1, 100),
+      this.makeSlider('volumeMusic', '音乐', '%', 0, 100, 1, 100),
+    );
 
     const game = this.section('game');
-    this.makeToggle(game, 'daylightCycle', '昼夜循环');
-    this.makeToggle(game, 'showDebug', '调试信息');
-    // 自动保存间隔（批次 172，M20）：大世界保存那一下会有卡顿，间隔是可调的
-    this.makeSelect(game, 'autosaveSeconds', '自动保存', AUTOSAVE_OPTIONS.map(String), AUTOSAVE_LABELS);
-    // 游戏模式（批次 181）：生存 ↔ 创造。这是唯一的模式入口。
-    if (this.actions.onToggleGameMode && this.actions.gameMode) this.makeGameModeRow();
+    // 第一块：开关与下拉
+    const gameOptions = this.makeBlock(game);
+    this.makeToggle(gameOptions, 'daylightCycle', '昼夜循环');
+    this.makeToggle(gameOptions, 'showDebug', '调试信息');
     // 飞行：只在创造模式里显示（由 `refreshGameModeRows()` 控制显隐）
-    if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow();
-    game.appendChild(this.makeResourcePackRow());
-    // 诊断日志（批次 181）：平时常开、500KB 封顶；批次 220 起这里只留「导出」
-    if (this.actions.onDiagnosticsExport) game.appendChild(this.makeDiagnosticsRow());
+    if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow(gameOptions);
+    // 自动保存间隔（批次 172）：大世界保存那一下会有卡顿，间隔可调
+    this.makeSelect(gameOptions, 'autosaveSeconds', '自动保存', AUTOSAVE_OPTIONS.map(String), AUTOSAVE_LABELS);
+    // 游戏模式（批次 181）：生存 ↔ 创造，唯一的模式入口
+    if (this.actions.onToggleGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);
+
+    // 第二块：导入 / 导出这类动作，各占半行
+    const gameActions = this.makeBlock(game);
+    gameActions.appendChild(this.makeResourcePackRow());
+    // 诊断日志（批次 181）：平时常开、500KB 封顶；批次 220 起只留「导出」
+    if (this.actions.onDiagnosticsExport) gameActions.appendChild(this.makeDiagnosticsRow());
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
     // 这一层留着是为了让"选项卡列"与"内容区"能各自独立收缩/滚动。
     const columns = document.createElement('div');
@@ -1231,6 +1236,19 @@ export class SettingsScreen {
     return note;
   }
 
+  /**
+   * 设置分组里的一块（批次 335）：**同类控件聚在一起**，块内两列、块间一条细分隔线。
+   *
+   * 这样"开关/下拉"与"滑杆"不会交错排；每块自己用 auto-fit 栅格，
+   * 宽屏两列、窄屏自动退回一列。
+   */
+  private makeBlock(host: HTMLElement): HTMLDivElement {
+    const block = document.createElement('div');
+    block.className = 'settings-block';
+    host.appendChild(block);
+    return block;
+  }
+
   /** 造一个滑块设置项 */
   private makeSlider(
     key: keyof GameSettings,
@@ -1246,9 +1264,8 @@ export class SettingsScreen {
     //（用户反馈："点按钮以外的区域，它依然会响按钮"）。滑块自己就是输入控件，
     // 不需要标签转发。
     const row = document.createElement('div');
-    // `.wide` = 跨满两列（批次 167）：分组现在是两列栅格，滑杆压到半栏就只剩百来像素，
-    // 拖起来很别扭；而开关/选择那类"很短"的项正好两两并排。
-    row.className = 'settings-row wide';
+    // 批次 335：滑杆也占半行（一个栅格），不再整行横跨；两列并排更整齐。
+    row.className = 'settings-row slider';
 
     const name = document.createElement('span');
     name.textContent = label;
@@ -1304,9 +1321,8 @@ export class SettingsScreen {
     commit = true,
   ): HTMLButtonElement {
     const row = document.createElement('div');
-    // `control-right`：两列布局，开关贴右（标准设置项观感，也避免左边一颗按钮、
-    // 右边一大片空白让人以为整行都能点）
-    row.className = 'settings-row control-right';
+    // 两列：标签与开关紧挨着（用户："文字和它的开关挨得近一点"）
+    row.className = 'settings-row pair';
 
     const name = document.createElement('span');
     name.textContent = label;
@@ -1354,8 +1370,8 @@ export class SettingsScreen {
     write: (value: T) => void,
   ): HTMLButtonElement {
     const row = document.createElement('div');
-    // 两列布局：下拉按钮贴右，和 switch 一致
-    row.className = 'settings-row control-right';
+    // 两列：标签与下拉紧挨着
+    row.className = 'settings-row pair';
 
     const name = document.createElement('span');
     name.textContent = label;
@@ -1693,43 +1709,31 @@ export class SettingsScreen {
    *   两颗按钮不提供额外能力，却让"出了问题该点哪个"变成一个选择。
    */
   private makeDiagnosticsRow(): HTMLElement {
-    const block = document.createElement('div');
-    block.className = 'diag-block';
+    // 批次 335：从横跨整行的 diag-block 改成普通半行——标签 / 导出 / 读数
+    const row = document.createElement('div');
+    row.className = 'settings-row action';
 
     const title = document.createElement('span');
-    title.className = 'diag-title';
-    title.textContent = '诊断日志';
+    title.textContent = '日志';
 
-    const status = document.createElement('div');
-    status.className = 'diag-status';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-cycle';
+    button.textContent = '导出';
+    button.title = '下载 JSON（最近两次会话，最多 500KB）';
+    button.addEventListener('click', () => {
+      button.blur(); // 手机上点完别一直保持"按下"态
+      const ok = this.actions.onDiagnosticsExport?.() ?? false;
+      this.refreshDiagnostics(ok ? '已导出' : '导出失败');
+    });
+
+    const status = document.createElement('i');
+    status.className = 'settings-status';
     this.diagnosticsStatusEl = status;
 
-    const actions = document.createElement('div');
-    actions.className = 'diag-actions';
-
-    const make = (label: string, hint: string, run: () => void): void => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'settings-cycle diag-button';
-      button.textContent = label;
-      button.title = hint;
-      button.addEventListener('click', () => {
-        button.blur(); // 手机上点完别一直保持"按下"态
-        run();
-      });
-      actions.appendChild(button);
-    };
-
-    if (this.actions.onDiagnosticsExport) {
-      make('导出', '下载 JSON（含最近两次会话，最多 500KB）', () => {
-        const ok = this.actions.onDiagnosticsExport?.() ?? false;
-        this.refreshDiagnostics(ok ? '已导出' : '导出失败');
-      });
-    }
-
-    block.append(title, status, actions);
+    row.append(title, button, status);
     this.refreshDiagnostics();
-    return block;
+    return row;
   }
 
   /**
@@ -1746,7 +1750,7 @@ export class SettingsScreen {
       return;
     }
     const marked = stats.marked ? ' · 已打点' : '';
-    element.textContent = note ?? `${stats.events} 条 · ${stats.kb}KB / 500KB${marked}`;
+    element.textContent = note ?? `${stats.events} 条 · ${stats.kb}KB${marked}`;
   }
 
   /**
@@ -1758,15 +1762,15 @@ export class SettingsScreen {
   private makeFullscreenRow(): HTMLElement {
     // `<div>`：`<label>` 会把点标题文字也转发给按钮
     const row = document.createElement('div');
-    row.className = 'settings-row';
+    row.className = 'settings-row pair';
 
     const name = document.createElement('span');
-    name.textContent = '全屏 / 横屏';
+    name.textContent = '全屏';
 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'settings-cycle';
-    const read = (): string => (this.actions.isFullscreen?.() ? '‹ 已全屏 ›' : '‹ 进入全屏 ›');
+    const read = (): string => (this.actions.isFullscreen?.() ? '已全屏' : '进入全屏');
     button.textContent = read();
     button.addEventListener('click', () => {
       this.actions.onToggleFullscreen?.();
@@ -1782,26 +1786,40 @@ export class SettingsScreen {
 
   /** 资源包导入行（.mcpack / .zip） */
   private makeResourcePackRow(): HTMLElement {
-    // `<div>`：`<label>` 会把点标题文字也转发成"打开文件选择框"
+    // 批次 335：原生文件框太宽，改成"半行 + 导入按钮 + 文件名"，与其它动作行一致
     const row = document.createElement('div');
-    // 文件选择框本身就宽，与滑杆一样跨满两列
-    row.className = 'settings-row wide';
+    row.className = 'settings-row action';
     const name = document.createElement('span');
     name.textContent = '资源包';
 
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.mcpack,.zip,application/zip';
+    input.hidden = true;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-cycle';
+    button.textContent = '导入';
+    button.title = '选择 .mcpack / .zip 资源包';
+    button.addEventListener('click', () => input.click());
+
+    const status = document.createElement('i');
+    status.className = 'settings-status';
+    status.textContent = '未选择';
+
     input.addEventListener('change', () => {
       const file = input.files?.[0];
-      if (file) this.actions.onResourcePack?.(file);
+      if (file) {
+        status.textContent = file.name;
+        status.title = file.name;
+        this.actions.onResourcePack?.(file);
+      }
       // 清空 value：同一个文件再选一次也要能触发 change
       input.value = '';
     });
 
-    const hint = document.createElement('i');
-    hint.textContent = 'mcpack';
-    row.append(name, input, hint);
+    row.append(name, button, status, input);
     return row;
   }
 
@@ -1813,9 +1831,9 @@ export class SettingsScreen {
    * `saveSettings` 会让"上次开过飞行"这种临时状态跨世界粘住。所以它只在打开面板时
    * 按当前状态刷新、切一下立刻生效，不落盘。
    */
-  private makeCreativeRow(): void {
+  private makeCreativeRow(host: HTMLElement): void {
     this.flyingToggle = this.makeSwitch(
-      this.section('game'),
+      host,
       '飞行',
       () => this.actions.isFlying?.() ?? false,
       () => this.actions.onToggleFly?.(),
@@ -1830,9 +1848,9 @@ export class SettingsScreen {
    * 与"飞行"分成两行：模式决定能力（免伤/瞬间破坏/无限物品），飞行只是创造里的一种移动方式。
    * 生存模式下"飞行"那一行会整行隐藏，否则玩家会以为生存也能飞。
    */
-  private makeGameModeRow(): void {
+  private makeGameModeRow(host: HTMLElement): void {
     this.gameModeToggle = this.makeDropdown(
-      this.section('game'),
+      host,
       '游戏模式',
       ['survival', 'creative'] as const,
       GAME_MODE_LABELS,
@@ -1901,7 +1919,8 @@ export class SettingsScreen {
     this.menuHintEl.textContent = touch
       ? `点「${this.resumeButton.textContent ?? '继续游戏'}」或系统返回键返回`
       : this.subtitleText;
-    this.settingsHintEl.textContent = touch ? '改动立即生效 · 点 ‹ 返回 回菜单' : '改动立即生效 · 按 Esc 返回菜单';
+    // 批次 335：设置页只留一句"改动立即生效"——返回按钮与 Esc 本来就看得见/试得到
+    this.settingsHintEl.textContent = '改动立即生效';
   }
 
   get isOpen(): boolean {
