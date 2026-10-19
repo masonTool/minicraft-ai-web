@@ -2690,6 +2690,14 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       html.includes('touch-action: pan-y'),
   );
   check(
+    '超出一行的消息折叠成一行，点击展开/收起（展开状态存在消息对象上）',
+    html.includes('.chat-line.collapsible {') &&
+      html.includes('text-overflow: ellipsis') &&
+      chatSrc.includes('dataset.chatIndex') &&
+      chatSrc.includes('line.expanded = line.expanded !== true') &&
+      chatSrc.includes('html.scrollWidth <= html.clientWidth + 1'),
+  );
+  check(
     '输入行在最上面（左上角），历史在下面',
     chatSrc.includes('this.root.append(this.entryEl, this.hintEl, this.logEl)') &&
       html.includes('.chat-entry {') &&

@@ -410,15 +410,26 @@ console.log('\n[模式、种子与权限]');
   check('生存模式下 /give 被拒绝', denied.lastError.includes('创造模式'));
   const help = new Recorder();
   executeCommand('/help tp', survival, help);
-  check('非创造专用命令（/help）不受影响', help.infos.length === 1 && help.lastInfo.includes('/tp'));
+  check(
+    '非创造专用命令（/help）不受影响，且用法与描述各占一条消息',
+    help.infos.length === 2 && help.infos.join('\n').includes('/tp'),
+    String(help.infos.length),
+  );
 }
 
 console.log('\n[/help]');
 {
   const all = run('/help');
-  check('/help 列出全部命令', all.out.lastInfo.includes(`可用命令（${COMMANDS.length} 条）`));
+  check('/help 标题最后发（聊天栏新消息在上，标题会显示在最上面）', all.out.lastInfo.includes(`可用命令（${COMMANDS.length} 条）`));
+  check(
+    '/help 每条命令单独一条消息（不再拼成一个多行大块）',
+    all.out.infos.length === COMMANDS.length + 1 &&
+      COMMANDS.every((spec) => all.out.infos.some((line) => line.startsWith(spec.usage))),
+    `${all.out.infos.length} 条 / ${COMMANDS.length} 个命令`,
+  );
   const one = run('/help fill');
-  check('/help <命令> 给出用法', one.out.lastInfo.includes('/fill') && one.out.lastInfo.includes('32768'));
+  const oneText = one.out.infos.join('\n');
+  check('/help <命令> 用法与描述分开，且都能看到', oneText.includes('/fill') && oneText.includes('32768'));
   const unknown = run('/help nope');
   check('/help <未知> 报错', unknown.out.lastError.includes('未知的命令'));
 }

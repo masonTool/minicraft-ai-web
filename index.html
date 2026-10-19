@@ -1630,8 +1630,24 @@
         /* 淡出 0.8s：消息整条活 3 秒（2.2s 清晰 + 0.8s 淡出），过渡正好在移出前走完 */
         transition: opacity .8s linear; overflow-wrap: anywhere;
         animation: chat-in var(--dur-med) var(--ease);
-        /* 多行反馈（/help）保留换行 */
+        /* 多行反馈（/gamerule）保留换行 */
         white-space: normal;
+      }
+      /* 多行消息（还有 \n 的旧格式）：保留换行，别再挤成一行 */
+      .chat-line.chat-multiline { white-space: pre-wrap; }
+      /* 超出一行的消息（批次 279）：默认只显示一行（末尾省略号），点一下展开。
+         用 `nowrap + ellipsis` 而不是 `line-clamp`：这样 JS 量 `scrollWidth > clientWidth`
+         就是可靠的"到底有没有超"，不依赖 WebKit 对 clamped 元素 scrollHeight 的实现。 */
+      .chat-line.collapsible {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+      .chat-line.collapsible.expanded {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
       }
       /* 新消息淡入并微微上移（原来是一行行"凭空出现"） */
       @keyframes chat-in {

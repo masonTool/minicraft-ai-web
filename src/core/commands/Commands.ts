@@ -192,11 +192,19 @@ export const COMMANDS: readonly CommandSpec[] = [
           out.error(`未知的命令：${wanted}`);
           return;
         }
-        out.info(`${spec.usage}\n${spec.description}`);
+        // 一条消息只放一行：聊天栏按"新消息在上"渲染，所以先发描述、再发用法，
+        // 屏幕上看到的就是"用法在上、描述在下"。
+        out.info(spec.description);
+        out.info(spec.usage);
         return;
       }
-      const lines = COMMANDS.map((spec) => `${spec.usage} — ${spec.description}`);
-      out.info(`可用命令（${COMMANDS.length} 条）：\n${lines.join('\n')}`);
+      // 每条命令单独一条消息（聊天栏再按实际宽度折叠），不再拼成一个多行大块。
+      // 同样按"新消息在上"倒着发：标题最后发 → 显示在最上面，下面依次是第 1、2…条。
+      for (let i = COMMANDS.length - 1; i >= 0; i--) {
+        const spec = COMMANDS[i]!;
+        out.info(`${spec.usage} — ${spec.description}`);
+      }
+      out.info(`可用命令（${COMMANDS.length} 条）：`);
     },
   },
   {

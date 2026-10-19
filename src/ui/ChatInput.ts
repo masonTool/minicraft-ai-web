@@ -31,6 +31,13 @@ interface ChatLine {
   kind: ChatLineKind;
   /** 到期时间（毫秒）；到点后变淡，再 4 秒后移出 DOM */
   expires: number;
+  /**
+   * 这一行被玩家点开了（批次 279）。
+   *
+   * 状态存在**消息**上而不是 DOM 上：`renderLog` 每次新消息/展开/收起都会重建 DOM，
+   * 存在元素上会被下一帧的 `replaceChildren` 丢掉。
+   */
+  expanded?: boolean;
 }
 
 /**
@@ -151,10 +158,34 @@ export class ChatInput {
     this.logEl.addEventListener(
       'pointerdown',
       (event) => {
+        // 点到一条"超出一行、可折叠"的消息：这一下归折叠/展开，不是"打开聊天"。
+        // 不 preventDefault：拖动滚动时浏览器不会派发 click，正好不会误触发。
+        const foldable = (event.target as Element | null)?.closest?.('.chat-line.collapsible');
+        if (foldable) {
+          event.stopPropagation();
+          return;
+        }
         if (this.open) return;
         event.preventDefault();
         event.stopPropagation();
         this.openWith('', { focus: false });
+      },
+      { signal: this.listeners.signal },
+    );
+    // 折叠消息：点击展开 / 再点收起。用 click 而不是 pointerdown，
+    // 这样"在历史里上下滑动"不会把路过的每一行都展开。
+    this.logEl.addEventListener(
+      'click',
+      (event) => {
+        const element = (event.target as Element | null)?.closest?.('.chat-line.collapsible');
+        if (!element) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const index = Number((element as HTMLElement).dataset.chatIndex);
+        const line = this.messages[index];
+        if (!line) return;
+        line.expanded = line.expanded !== true;
+        element.classList.toggle('expanded', line.expanded);
       },
       { signal: this.listeners.signal },
     );
@@ -316,15 +347,32 @@ export class ChatInput {
       const line = lines[i]!;
       const element = document.createElement('div');
       element.className = `chat-line chat-${line.kind}`;
-      // 多行反馈（/help 那种）在消息栏里要按换行拆开显示
+      // 记住它对应 `messages` 里的下标：点击展开时要改**消息对象**上的状态
+      (element as HTMLElement).dataset.chatIndex = String(start + i);
       element.textContent = line.text;
-      if (line.text.includes('\n')) element.classList.add('chat-multiline');
+      if (line.text.includes('\n')) {
+        // 多行反馈（/gamerule 那种）保留换行；/help 已经是一条一行了
+        element.classList.add('chat-multiline');
+      } else {
+        // 先按"单行"插进去，再用实际布局判断它到底有没有超出：
+        // 放得下就把 `.collapsible` 摘掉（不会出现没必要的点击手势）。
+        element.classList.add('collapsible');
+        if (line.expanded === true) element.classList.add('expanded');
+      }
       // 打开输入框时不要淡出：玩家是来翻历史的，看不清就等于没有
       if (!this.open && now > line.expires) element.classList.add('fading');
       fragment.appendChild(element);
     }
     const previousTop = this.logEl.scrollTop;
     this.logEl.replaceChildren(fragment);
+    // 折叠判定必须在 DOM 里量：`nowrap` 下 `scrollWidth > clientWidth` 就是"超出一行"。
+    // ⚠️ 已展开的行不要摘 `.collapsible`，否则再点一下就没法收起了。
+    for (const element of this.logEl.children) {
+      if (!element.classList.contains('collapsible')) continue;
+      if (element.classList.contains('expanded')) continue;
+      const html = element as HTMLElement;
+      if (html.scrollWidth <= html.clientWidth + 1) element.classList.remove('collapsible');
+    }
     // 只有停在顶部才自动跟到最新；玩家往下翻旧消息时保留原来的滚动位置
     this.logEl.scrollTop = this.stickToTop ? 0 : previousTop;
   }

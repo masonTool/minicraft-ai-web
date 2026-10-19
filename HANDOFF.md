@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 772（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 773（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -42,6 +42,15 @@ npm run dev            # http://localhost:5173
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
   —— 2026-10-15 做过一次**逐条核对**（对着 src/tools 的真实实现重判 37 条），
   勾选状态与代码实况已对齐；以后每完成一项顺手改这两份文件，避免再次漂移
+- 批次 279（用户："/help 太乱，一条一行，超出一行折叠、可点击展开"）：**聊天帮助排版**。
+  ① `Commands` 的 `/help` 改成**每条命令一次 `out.info`**（不再拼多行大块）；
+  标题最后发——聊天栏是"新消息在上"，于是标题显示在最上面、下面依次是各命令。
+  `/help <命令>` 也把用法与描述拆成两条（先描述后用法，显示时用法在上）。
+  ② `ChatInput`：单行消息先按 `.collapsible` 插入，用 `scrollWidth > clientWidth` 判断是否
+  真超出一行；超出则 `nowrap + ellipsis` 折叠，**点击展开/再点收起**。展开状态存在
+  `ChatLine.expanded` 上，`renderLog` 重建 DOM 不会丢；滚动历史时不会误触发（用 click）。
+  ③ 多行消息（`/gamerule` 那种）补 `.chat-multiline { white-space: pre-wrap }`，保留换行。
+  门禁：`test:commands` **104**、`test:ui` **775**，离线 **131** 套全绿。
 - 批次 278（用户："警戒条意义不大，去掉"）：**生物信息条删掉「警戒」行**。
   被动生物只剩「名字 + 生命」（画布 256×58），敌对生物多一条「攻击」（画布 256×74）——
   面板高度按内容裁，不再留一大片空条；`followRange` 仍然参与 AI，只是不再展示。
