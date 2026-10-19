@@ -6239,3 +6239,21 @@ PAINTERS['glazed_terracotta_brown'] = noisy(0x835432, 22);
 PAINTERS['glazed_terracotta_green'] = noisy(0x5e7c16, 22);
 PAINTERS['glazed_terracotta_red'] = noisy(0xb02e26, 22);
 PAINTERS['glazed_terracotta_black'] = noisy(0x1d1d21, 22);
+
+// 旗帜（批次 386）：染料底色 + 一点噪点
+PAINTERS['banner_white'] = noisy(0xf9fffe, 18);
+PAINTERS['banner_orange'] = noisy(0xf9801d, 18);
+PAINTERS['banner_magenta'] = noisy(0xc74ebd, 18);
+PAINTERS['banner_light_blue'] = noisy(0x3ab3da, 18);
+PAINTERS['banner_yellow'] = noisy(0xfed83d, 18);
+PAINTERS['banner_lime'] = noisy(0x80c71f, 18);
+PAINTERS['banner_pink'] = noisy(0xf38baa, 18);
+PAINTERS['banner_gray'] = noisy(0x474f52, 18);
+PAINTERS['banner_light_gray'] = noisy(0x9d9d97, 18);
+PAINTERS['banner_cyan'] = noisy(0x169c9c, 18);
+PAINTERS['banner_purple'] = noisy(0x8932b8, 18);
+PAINTERS['banner_blue'] = noisy(0x3c44aa, 18);
+PAINTERS['banner_brown'] = noisy(0x835432, 18);
+PAINTERS['banner_green'] = noisy(0x5e7c16, 18);
+PAINTERS['banner_red'] = noisy(0xb02e26, 18);
+PAINTERS['banner_black'] = noisy(0x1d1d21, 18);

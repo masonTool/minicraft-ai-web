@@ -1265,6 +1265,103 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Block.WAXED_OXIDIZED_COPPER, count: 1 },
     ingredients: [Block.OXIDIZED_COPPER_BLOCK, Item.HONEYCOMB],
   },
+  // 旗帜（批次 386）：6 羊毛 + 1 木棍
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 0, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(0), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 1, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(1), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 2, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(2), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 3, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(3), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 4, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(4), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 5, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(5), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 6, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(6), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 7, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(7), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 8, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(8), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 9, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(9), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 10, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(10), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 11, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(11), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 12, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(12), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 13, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(13), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 14, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(14), S: Item.STICK },
+  },
+  {
+    kind: 'shaped' as const,
+    result: { id: 640 + 15, count: 1 },
+    pattern: ['WWW', 'WWW', ' S '],
+    key: { W: woolId(15), S: Item.STICK },
+  },
   // 蜡烛（批次 382）：线 + 蜜脾；染色 = 蜡烛 + 染料
   {
     kind: 'shapeless' as const,

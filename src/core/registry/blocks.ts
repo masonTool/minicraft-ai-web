@@ -1471,6 +1471,19 @@ const COPPER_SPECS: readonly BlockSpec[] = COPPER_STAGES.flatMap((stage, index) 
     return base;
   }),
 );
+/** 旗帜（批次 386）：16 色，`cross` 形状（没有布面朝向，先用薄片表示） */
+const BANNER_SPECS: readonly BlockSpec[] = DYE_COLORS.map(
+  (color, index): BlockSpec => ({
+    id: 640 + index,
+    name: `minecraft:${color.name}_banner`,
+    tiles: [`banner_${color.name}`, `banner_${color.name}`, `banner_${color.name}`] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  }),
+);
+
 
 // ---------------------------------------------------------------- 石英与更多石材（批次 42）
 
@@ -3263,6 +3276,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SOUL_LIGHT_SPECS,
   ...CANDLE_SPECS,
   ...GLAZED_TERRACOTTA_SPECS,
+  ...BANNER_SPECS,
   // 骨块（批次 349，D21 化石）：9 骨粉压成一块，化石结构也用它
   {
     id: 587,
@@ -3755,6 +3769,8 @@ export const Block = {
   CANDLE: 607,
   /** 16 色带釉陶瓦从 624 起 */
   GLAZED_TERRACOTTA_ID_START: 624,
+  /** 16 色旗帜从 640 起 */
+  BANNER_ID_START: 640,
   /** 16 色蜡烛从 608 起，顺序与 DYE_COLORS 一致 */
   CANDLE_ID_START: 608,
   /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
@@ -4097,6 +4113,7 @@ HARDNESS.set(Block.BUDDING_AMETHYST, 1.5);
 HARDNESS.set(Block.AMETHYST_CLUSTER, 1.5);
 HARDNESS.set(Block.CANDLE, 0.1);
 for (let i = 0; i < 16; i++) HARDNESS.set(624 + i, 1.25);
+for (let i = 0; i < 16; i++) HARDNESS.set(640 + i, 1);
 for (let i = 0; i < 16; i++) HARDNESS.set(608 + i, 0.1);
 HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);
