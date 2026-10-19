@@ -166,6 +166,13 @@ import { executeCommand, type CommandContext, type CommandFeedback } from './cor
 import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.ts';
 // 记分板（M23，批次 402）
 import { Scoreboard } from './core/world/Scoreboard.ts';
+// 蜂巢的蜂蜜等级与挤蜜（J21，批次 407）
+import {
+  BEE_STING_POISON_AMPLIFIER,
+  BEE_STING_POISON_SECONDS,
+  BeeHives,
+  shouldSting,
+} from './core/world/BeeHive.ts';
 import {
   TickScheduler,
   randomTickChunk,
@@ -1356,6 +1363,15 @@ class App {
    * 侧边栏界面也还没接——两件事都记在 TASKS M23 里，不装作做完了。
    */
   private readonly scoreboardState = new Scoreboard();
+  /** 蜂巢的蜂蜜等级（J21，批次 407）：按坐标存，键里带维度 */
+  private readonly beeHives = new BeeHives();
+  /**
+   * 已经蜇过人的蜜蜂。
+   *
+   * 用 `WeakSet` 而不是给 `Mob` 加字段：只有主程序关心「这只还能不能再蜇」，
+   * 而且生物死亡后自动可回收，不必自己清理。
+   */
+  private readonly stungBees = new WeakSet<Mob>();
   /** 配方书：列出所有配方，材料够就能一键合成 */
   private readonly recipeBook: RecipeBook;
   /** 物品提示框（快捷栏与背包共用同一个，位置跟着指针走） */
@@ -6326,6 +6342,14 @@ class App {
       lootingBonus(this.heldEnchants),
       knockbackLevel,
     );
+    // 被蛰（J21，批次 407）：打了蜜蜂就中毒，而且**一只蜜蜂只蜇一次**。
+    // 只在"真的造成了伤害"（没被无敌帧挡下）时触发，否则连点可以无限续毒。
+    if (applied && shouldSting(mob.type.id, this.stungBees.has(mob))) {
+      this.stungBees.add(mob);
+      this.effects.apply('poison', BEE_STING_POISON_SECONDS, BEE_STING_POISON_AMPLIFIER);
+      this.hudToast.show('被蜜蜂蛰了');
+      this.vibrate(15);
+    }
     // 火焰附加（批次 243）：原版每级 4 秒。只在**真正造成伤害**时点着
     // （无敌帧挡下的那一下不该补火，否则连点可以无限续燃）
     if (applied && fireAspect > 0 && !mob.dead) mob.ignite(4 * fireAspect);
@@ -9729,6 +9753,16 @@ class App {
       this.openBeaconScreen(x, y, z);
       return true;
     }
+    // 蜂巢（J21，批次 407）：拿**玻璃瓶**右键挤一瓶蜂蜜，等级**归 0**（原版就是清空）。
+    // 0 级时返回 false —— 那一下照旧交给"放置方块"，
+    // 而不是空巢也白白吃掉一次右键（玩家会以为卡了）。
+    if (hitBlock === Block.BEE_NEST && this.heldItemId === Item.GLASS_BOTTLE) {
+      if (!this.beeHives.harvest(x, y, z, String(this.dimension))) return false;
+      this.exchangeHeld(Item.GLASS_BOTTLE, Item.HONEY_BOTTLE);
+      this.audio.play('splash', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.hand.swing();
+      return true;
+    }
     if (hitBlock === Block.CRAFTING_TABLE) {
       this.inventoryScreen.openWith('crafting');
       return true;
@@ -13013,6 +13047,8 @@ class App {
         this.announceWeather(weatherBefore);
         this.sky.update(this.timeOfDay, this.camera.position, dt);
       }
+      // 蜂巢的蜂蜜等级按时间回涨（本项目的蜜蜂不认巢，见 `BeeHive.ts` 的差异说明）
+      this.beeHives.tick(dt);
       // 只有主循环传 dt：雾的平滑要按真实时间推进（其它调用点只是"重算一次"）
       this.applyEnvironment(dt);
       mark = this.lap('env', mark);

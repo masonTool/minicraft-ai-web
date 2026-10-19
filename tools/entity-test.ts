@@ -17,6 +17,14 @@ import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../src/core/ent
 import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import { Boat } from '../src/core/entity/Boat.ts';
 import { Horse } from '../src/core/entity/Horse.ts';
+import {
+  BEE_STING_POISON_SECONDS,
+  BeeHives,
+  HONEY_HARVEST_COOLDOWN,
+  HONEY_MAX_LEVEL,
+  HONEY_REGROW_SECONDS,
+  shouldSting,
+} from '../src/core/world/BeeHive.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
 import { VehicleParking } from '../src/core/entity/VehicleParking.ts';
 import { EntityParking } from '../src/core/entity/EntityParking.ts';
@@ -861,6 +869,47 @@ console.log('\n[骑乘：马要驯服、猪装鞍即骑（批次 406）]');
   jumpHorse.onGround = true;
   jumpHorse.tick(ctx({ forward: 0, jump: true }), 0.05);
   check('马按跳跃键会起跳', jumpHorse.vy > 4, `vy=${jumpHorse.vy.toFixed(2)}`);
+}
+
+console.log('\n[蜂巢：蜂蜜等级 / 挤蜜 / 被蛰（J21，批次 407）]');
+{
+  const dim = 'overworld';
+  const hives = new BeeHives();
+
+  // 懒建：第一次碰到的巢按"满蜜"处理，否则玩家会以为挤蜜坏了
+  check('新巢第一次看就是满级（原版自然生成的巢多半带蜜）', hives.level(0, 64, 0, dim) === HONEY_MAX_LEVEL);
+
+  check('满级能挤出一瓶蜂蜜', hives.harvest(0, 64, 0, dim) === true);
+  check('挤完是**归 0**，不是降一级', hives.level(0, 64, 0, dim) === 0);
+  check('0 级挤不出来（调用方要据此放行放置逻辑）', hives.harvest(0, 64, 0, dim) === false);
+
+  // 回涨：先走完冷却，再按档位涨
+  hives.tick(HONEY_HARVEST_COOLDOWN - 0.5);
+  check('冷却期间不涨', hives.level(0, 64, 0, dim) === 0, String(hives.level(0, 64, 0, dim)));
+  hives.tick(0.6);
+  check('冷却走完涨一级', hives.level(0, 64, 0, dim) === 1, String(hives.level(0, 64, 0, dim)));
+  hives.tick(HONEY_REGROW_SECONDS * 10);
+  check('涨到满级就停住', hives.level(0, 64, 0, dim) === HONEY_MAX_LEVEL, String(hives.level(0, 64, 0, dim)));
+
+  // 维度隔离：同一个 (x,y,z) 在主世界与下界是两个巢
+  hives.harvest(8, 64, 8, 'nether');
+  check('下界那个巢被挤过', hives.level(8, 64, 8, 'nether') === 0);
+  check('主世界同坐标不受影响', hives.level(8, 64, 8, dim) === HONEY_MAX_LEVEL);
+
+  // 拆掉方块要清记录，否则原地再放一个会"自带蜂蜜"
+  hives.harvest(4, 64, 4, dim);
+  hives.forget(4, 64, 4, dim);
+  check('拆掉之后重新放 = 新巢（又是满级）', hives.level(4, 64, 4, dim) === HONEY_MAX_LEVEL);
+
+  // 夹取
+  hives.setLevel(2, 64, 2, dim, 99);
+  check('等级被夹到 5', hives.level(2, 64, 2, dim) === HONEY_MAX_LEVEL);
+
+  // 被蛰：一只蜜蜂只蜇一次
+  check('蜜蜂第一下会蛰', shouldSting('bee', false));
+  check('蛰过的蜜蜂不再蛰', !shouldSting('bee', true));
+  check('猪不会蛰人', !shouldSting('pig', false));
+  check('中毒时长是 10 秒（原版普通难度）', BEE_STING_POISON_SECONDS === 10);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
