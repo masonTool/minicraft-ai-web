@@ -695,7 +695,14 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
   // 批次 241：手臂根部多一段布袖；第一人称的肤色/上衣色要跟着外观走
   const cuff = group.children[1] as THREE.Mesh;
   check('手臂根部有布袖（也画了逐面明暗）', cuff.isMesh && cuff.geometry.getAttribute('position').count === 24);
-  hand.setAppearance({ skin: 0xff0000, shirt: 0x0000ff, pants: 0x000000 });
+  hand.setAppearance({
+    skin: 0xff0000,
+    shirt: 0x0000ff,
+    pants: 0x000000,
+    hair: 0x2f2016,
+    hairStyle: 'short',
+    beard: 'none',
+  });
   const armMaterialNow = (group.children[0] as THREE.Mesh).material as THREE.ShaderMaterial;
   const cuffMaterialNow = cuff.material as THREE.ShaderMaterial;
   const skinColor = armMaterialNow.uniforms.uFlatColor!.value as THREE.Color;
