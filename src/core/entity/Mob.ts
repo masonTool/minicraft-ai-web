@@ -406,6 +406,13 @@ export interface MobType {
    */
   aquatic?: boolean;
   /**
+   * 能在**岩浆表面**行走（批次 344：炽足兽）。
+   *
+   * 只影响竖直方向：脚下是岩浆、上面是空气时贴到液面（0.9），否则缓慢上浮。
+   * 水平移动、碰撞、寻路全部沿用普通陆生那一套——它不需要一套新的物理。
+   */
+  lavaWalker?: boolean;
+  /**
    * **只在某几个群系里自然刷**（批次 124 尸壳只要沙漠；批次 125 流浪者要三种雪原）。
    *
    * 填**群系名**（`gen/Biome.ts` 里那些 `desert` / `snowy_plains`），
@@ -697,6 +704,18 @@ export class Mob extends Entity {
       // 这里只做一点阻尼，免得"上一帧的上升速度"永远留着（那样它会一直往上飘）。
       // ⚠️ 位置仍然走 `moveBody`：飞**不等于穿墙**（撞到方块照样被拦下）
       this.vy *= Math.max(0, 1 - 2.5 * dt);
+    } else if (this.type.lavaWalker === true && this.inLava(ctx)) {
+      // 炽足兽（批次 344）：脚下是岩浆、上面是空气 → 贴液面；否则缓慢上浮
+      const bx = Math.floor(this.x);
+      const bz = Math.floor(this.z);
+      const feet = ctx.getBlock(bx, Math.floor(this.y), bz);
+      const above = ctx.getBlock(bx, Math.floor(this.y) + 1, bz);
+      if (feet === Block.LAVA && above === Block.AIR) {
+        this.y = Math.floor(this.y) + 0.9;
+        this.vy = 0;
+      } else {
+        this.vy += (1 - this.vy) * Math.min(1, 6 * dt);
+      }
     } else if (this.type.aquatic === true && this.inWater(ctx)) {
       // 水生生物（批次 189，鱿鱼）：**水里没有重力**，朝"每秒 0.35 格的上浮"收敛再阻尼。
       // 不这么做的话，刷在水里的鱿鱼会直接沉到海底、贴着沙面走（看着像坏了）。
@@ -1699,6 +1718,11 @@ export class Mob extends Entity {
    */
   inWater(ctx: EntityContext): boolean {
     return ctx.getBlock(Math.floor(this.x), Math.floor(this.y + this.height * 0.5), Math.floor(this.z)) === Block.WATER;
+  }
+
+  /** 身体中部是不是岩浆（批次 344：炽足兽） */
+  inLava(ctx: EntityContext): boolean {
+    return ctx.getBlock(Math.floor(this.x), Math.floor(this.y + this.height * 0.5), Math.floor(this.z)) === Block.LAVA;
   }
 
   /**

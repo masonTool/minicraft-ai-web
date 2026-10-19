@@ -330,7 +330,7 @@ console.log('\n[生物表]');
   // 112 加了末影人（第一种会瞬移的、第一种"不主动攻击"的）
   // 批次 115 加了凋灵骷髅（第一种"只在某个结构里刷"的）
   // 批次 189 加了鱿鱼（被动、水生）
-  check('生物表包含 48 种生物（… + 猪灵/猪灵蛮兵/疣猪兽/蠹虫）', MOB_TYPES.length === 48, `${MOB_TYPES.length}`);
+  check('生物表包含 49 种生物（… + 猪灵/蛮兵/疣猪兽/蠹虫/炽足兽）', MOB_TYPES.length === 49, `${MOB_TYPES.length}`);
   check(
     '敌对生物要么有攻击力、要么另有一条伤害通道',
     // ⚠️ 恶魂是**刻意的例外**（批次 94）：原版它不近战（撞到人也不掉血），
@@ -841,6 +841,28 @@ console.log('\n[蝙蝠：会飞的被动生物（批次 261）]');
   check('蝙蝠在空中游荡（水平方向动了）', horizontal > 0.3, `水平位移 ${horizontal.toFixed(2)}`);
   check('不会越飞越远（只在出生点附近绕）', horizontal < 8, `水平位移 ${horizontal.toFixed(2)}`);
   check('高度基本维持（没有掉到地面）', bat.y > startY - 3 && bat.y < startY + 3, `y ${startY.toFixed(1)} → ${bat.y.toFixed(1)}`);
+}
+
+console.log('\n[炽足兽：能站在岩浆表面（批次 344）]');
+{
+  // 空世界（没有实心方块）+ y<=64 全是岩浆：没有 lavaWalker 的生物会直接掉下去
+  const world = new TestWorld();
+  const lavaCtx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (_x, y) => (y <= 64 ? Block.LAVA : 0),
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+  };
+  const strider = new Mob(mobTypeById('strider')!, 0.5, 64.5, 0.5);
+  for (let i = 0; i < 40; i++) strider.tick(lavaCtx, 0.05);
+  check('炽足兽停在岩浆表面（没有沉下去）', strider.y >= 64.5 && strider.y < 65.2, `y=${strider.y.toFixed(2)}`);
+
+  const cow = new Mob(mobTypeById('cow')!, 0.5, 64.5, 0.5);
+  for (let i = 0; i < 40; i++) cow.tick(lavaCtx, 0.05);
+  check('（对照）牛会直接掉下去', cow.y < 60, `y=${cow.y.toFixed(2)}`);
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

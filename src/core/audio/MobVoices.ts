@@ -451,6 +451,8 @@ const VOICE_BY_ID: Readonly<Record<string, MobVoiceId>> = {
   hoglin: 'piglin',
   piglin_brute: 'piglin',
   silverfish: 'spider',
+  // 炽足兽暂时借牛的低声（本项目没有"岩浆生物"档案）
+  strider: 'cow',
   skeleton: 'skeleton',
   stray: 'skeleton',
   wither_skeleton: 'wither_skeleton',

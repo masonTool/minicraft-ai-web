@@ -584,6 +584,34 @@ export const PIGLIN_TYPE: MobType = {
 };
 
 /**
+ * 炽足兽（批次 344，J20 第五只）。
+ *
+ * 下界唯一"走在岩浆上"的被动生物：20 血、掉 2~5 根线。
+ * `lavaWalker` 让它在岩浆表面贴住液面，不沉下去；水平移动沿用普通陆生 AI。
+ * ⚠️ 与原版的差异：**不做"骑乘 + 诡异菌钓竿"**、不做"离开岩浆变红"、
+ * 本项目没有"岩浆里刷怪"的通道，所以 `naturalSpawn: false`（靠刷怪蛋/命令）。
+ */
+export const STRIDER_TYPE: MobType = {
+  id: 'strider',
+  name: '炽足兽',
+  health: 20,
+  width: 0.9,
+  height: 1.7,
+  speed: 1.6,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [{ itemId: Item.STRING, min: 2, max: 5 }],
+  xp: 1,
+  naturalSpawn: false,
+  lavaWalker: true,
+  dimension: 'nether',
+  bodyColor: 0xa64a5a,
+  accentColor: 0x6a2a3a,
+  eyeHeight: 1.5,
+};
+
+/**
  * 蠹虫（批次 344，J20 第四只）。
  *
  * 8 血、伤害 1，节肢家族（**节肢杀手**对它有效）。原版只从要塞的刷怪笼里出来，
@@ -1349,6 +1377,7 @@ export const MOB_TYPES: readonly MobType[] = [
   PIGLIN_BRUTE_TYPE,
   HOGLIN_TYPE,
   SILVERFISH_TYPE,
+  STRIDER_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿

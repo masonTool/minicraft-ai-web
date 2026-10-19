@@ -367,7 +367,7 @@ console.log('\n[工厂与模型]');
   equal('烈焰人仍然不摆腿', describeMobModel(mobTypeById('blaze')!).legs, 0);
   // 批次 94 起：11 → 12 种（加了恶魂）；批次 112 起 12 → 13 种、敌对 7 → 8（加了末影人）；
   // 批次 115 起 13 → 14 种、敌对 8 → 9（加了凋灵骷髅）
-  check('生物表里 48 种，其中 23 种敌对（… / 344 猪灵/蛮兵/疣猪兽/蠹虫）', MOB_TYPES.length === 48 && ALL_HOSTILE_MOBS.length === 23, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
+  check('生物表里 49 种，其中 23 种敌对（… / 344 猪灵/蛮兵/疣猪兽/蠹虫/炽足兽）', MOB_TYPES.length === 49 && ALL_HOSTILE_MOBS.length === 23, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
 }
 
 console.log(`\n蜘蛛测试：${passed} 通过 / ${failed} 失败`);

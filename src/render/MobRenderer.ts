@@ -142,6 +142,8 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'hoglin') return 'quadruped';
   // 蠹虫（批次 344）：借蜘蛛那套"多腿小身体"骨架
   if (typeId === 'silverfish') return 'spider';
+  // 炽足兽（批次 344）：长腿四足
+  if (typeId === 'strider') return 'quadruped';
   return 'humanoid';
 }
 
