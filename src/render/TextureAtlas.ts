@@ -6221,3 +6221,21 @@ PAINTERS['candle_black'] = noisy(0x1d1d21, 14);
 
 // 鞘翅（批次 384）：灰紫色薄翼
 PAINTERS['item_elytra'] = noisy(0x8a7fa8, 16);
+
+// 带釉陶瓦（批次 385）：底色 + 更亮的噪点
+PAINTERS['glazed_terracotta_white'] = noisy(0xf9fffe, 22);
+PAINTERS['glazed_terracotta_orange'] = noisy(0xf9801d, 22);
+PAINTERS['glazed_terracotta_magenta'] = noisy(0xc74ebd, 22);
+PAINTERS['glazed_terracotta_light_blue'] = noisy(0x3ab3da, 22);
+PAINTERS['glazed_terracotta_yellow'] = noisy(0xfed83d, 22);
+PAINTERS['glazed_terracotta_lime'] = noisy(0x80c71f, 22);
+PAINTERS['glazed_terracotta_pink'] = noisy(0xf38baa, 22);
+PAINTERS['glazed_terracotta_gray'] = noisy(0x474f52, 22);
+PAINTERS['glazed_terracotta_light_gray'] = noisy(0x9d9d97, 22);
+PAINTERS['glazed_terracotta_cyan'] = noisy(0x169c9c, 22);
+PAINTERS['glazed_terracotta_purple'] = noisy(0x8932b8, 22);
+PAINTERS['glazed_terracotta_blue'] = noisy(0x3c44aa, 22);
+PAINTERS['glazed_terracotta_brown'] = noisy(0x835432, 22);
+PAINTERS['glazed_terracotta_green'] = noisy(0x5e7c16, 22);
+PAINTERS['glazed_terracotta_red'] = noisy(0xb02e26, 22);
+PAINTERS['glazed_terracotta_black'] = noisy(0x1d1d21, 22);

@@ -1313,6 +1313,19 @@ const CARPET_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
   opaque: false,
   lightOpacity: 0,
 }));
+/** 带釉陶瓦（批次 385）：16 色，由同色陶瓦烧制 */
+const GLAZED_TERRACOTTA_SPECS: readonly BlockSpec[] = DYE_COLORS.map(
+  (color, index): BlockSpec => ({
+    id: 624 + index,
+    name: `minecraft:${color.name}_glazed_terracotta`,
+    tiles: [
+      `glazed_terracotta_${color.name}`,
+      `glazed_terracotta_${color.name}`,
+      `glazed_terracotta_${color.name}`,
+    ] as const,
+  }),
+);
+
 /** 蜡烛（批次 382）：17 色，扁平、可放在地面上，光照 3 */
 const CANDLE_SPECS: readonly BlockSpec[] = [
   {
@@ -3249,6 +3262,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SLIME_BLOCK_SPECS,
   ...SOUL_LIGHT_SPECS,
   ...CANDLE_SPECS,
+  ...GLAZED_TERRACOTTA_SPECS,
   // 骨块（批次 349，D21 化石）：9 骨粉压成一块，化石结构也用它
   {
     id: 587,
@@ -3739,6 +3753,8 @@ export const Block = {
   BONE_BLOCK: 587,
   /** 蜡烛（批次 382） */
   CANDLE: 607,
+  /** 16 色带釉陶瓦从 624 起 */
+  GLAZED_TERRACOTTA_ID_START: 624,
   /** 16 色蜡烛从 608 起，顺序与 DYE_COLORS 一致 */
   CANDLE_ID_START: 608,
   /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
@@ -4080,6 +4096,7 @@ HARDNESS.set(Block.AMETHYST_BLOCK, 1.5);
 HARDNESS.set(Block.BUDDING_AMETHYST, 1.5);
 HARDNESS.set(Block.AMETHYST_CLUSTER, 1.5);
 HARDNESS.set(Block.CANDLE, 0.1);
+for (let i = 0; i < 16; i++) HARDNESS.set(624 + i, 1.25);
 for (let i = 0; i < 16; i++) HARDNESS.set(608 + i, 0.1);
 HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);

@@ -7,6 +7,7 @@
 
 import { Block } from '../registry/blocks.ts';
 import { Item, dyeIdByName } from '../registry/items.ts';
+import { terracottaId } from '../registry/blocks.ts';
 
 /**
  * 这条配方**能进哪种炉子**（批次 46 的烟熏炉与高炉要用）。
@@ -79,6 +80,23 @@ const GREEN_DYE_ID = dyeIdByName('green');
 /** 全部熔炼配方（配方书要列出来，所以导出） */
 
 export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
+  // 带釉陶瓦（批次 385）：同色陶瓦烧制
+  { input: terracottaId(0), output: { id: 624 + 0, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(1), output: { id: 624 + 1, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(2), output: { id: 624 + 2, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(3), output: { id: 624 + 3, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(4), output: { id: 624 + 4, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(5), output: { id: 624 + 5, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(6), output: { id: 624 + 6, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(7), output: { id: 624 + 7, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(8), output: { id: 624 + 8, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(9), output: { id: 624 + 9, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(10), output: { id: 624 + 10, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(11), output: { id: 624 + 11, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(12), output: { id: 624 + 12, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(13), output: { id: 624 + 13, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(14), output: { id: 624 + 14, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
+  { input: terracottaId(15), output: { id: 624 + 15, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
   // 烤马铃薯（H13 续）：原版 0.35 经验
   // 矿物 → 金属锭
   // 烤马铃薯（H13 续）：原版 0.35 经验
