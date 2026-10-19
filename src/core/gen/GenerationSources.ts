@@ -73,6 +73,7 @@ const SPECIAL_BLOCKS: Record<string, readonly number[]> = {
   sugar_cane: [Block.SUGAR_CANE],
   dead_bush: [Block.DEAD_BUSH],
   bamboo: [Block.BAMBOO],
+  huge_mushroom: [Block.MUSHROOM_STEM, Block.BROWN_MUSHROOM_BLOCK, Block.RED_MUSHROOM_BLOCK],
 };
 
 /**

@@ -6173,3 +6173,12 @@ PAINTERS['amethyst_block'] = noisy(0x8a5ec8, 12);
 PAINTERS['budding_amethyst'] = noisy(0x6f47a8, 14);
 PAINTERS['amethyst_cluster'] = noisy(0xb98ee8, 18);
 PAINTERS['item_amethyst_shard'] = noisy(0xa97ce0, 22);
+
+// 蘑菇岛族（批次 352）：菌丝偏灰紫，菌盖红/棕，柄是米色
+PAINTERS['mycelium_top'] = noisy(0x9a8fa8, 14);
+PAINTERS['mycelium_side'] = noisy(0x8a7f96, 12);
+PAINTERS['mushroom_stem'] = noisy(0xd8cdb4, 10);
+PAINTERS['brown_mushroom_block_top'] = noisy(0x9a6a4a, 12);
+PAINTERS['brown_mushroom_block_side'] = noisy(0x8a5a3c, 12);
+PAINTERS['red_mushroom_block_top'] = noisy(0xc84a4a, 12);
+PAINTERS['red_mushroom_block_side'] = noisy(0xb03a3a, 12);

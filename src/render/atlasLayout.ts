@@ -1053,6 +1053,14 @@ export const TILE_ORDER = [
   'budding_amethyst',
   'amethyst_cluster',
   'item_amethyst_shard',
+  // 蘑菇岛族（批次 352）
+  'mycelium_top',
+  'mycelium_side',
+  'mushroom_stem',
+  'brown_mushroom_block_top',
+  'brown_mushroom_block_side',
+  'red_mushroom_block_top',
+  'red_mushroom_block_side',
   // 霜冰（批次 263，冰霜行者踩出来的）
   'frosted_ice',
   // 弩（批次 265）

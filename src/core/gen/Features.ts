@@ -798,7 +798,7 @@ interface BiomeFeature {
    */
   lilyPads?: number;
   /** 特殊地物 */
-  special?: 'cactus' | 'pumpkin' | 'melon' | 'sugar_cane' | 'dead_bush' | 'bamboo';
+  special?: 'cactus' | 'pumpkin' | 'melon' | 'sugar_cane' | 'dead_bush' | 'bamboo' | 'huge_mushroom';
   /** 特殊地物密度 */
   specialDensity: number;
   /**
@@ -1161,6 +1161,18 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     special: 'dead_bush',
     specialDensity: 0.01,
   },
+  [Biome.MUSHROOM_FIELD]: {
+    // 蘑菇岛：没有树，只有巨型蘑菇与成片小蘑菇
+    trees: [],
+    treeDensity: 0,
+    grass: 0,
+    flowers: 0,
+    flowerKinds: NO_FLOWERS,
+    mushrooms: 0.05,
+    special: 'huge_mushroom',
+    specialDensity: 0.02,
+    snowCover: 0,
+  },
   [Biome.SNOWY_BEACH]: {
     ...EMPTY_FEATURE,
     snowCover: 0.8,
@@ -1172,7 +1184,7 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
 // ---------------------------------------------------------------- 地物放置
 
 /** 树可以生长的地表方块 */
-const SOIL = new Set<number>([Block.GRASS_BLOCK, Block.DIRT]);
+const SOIL = new Set<number>([Block.GRASS_BLOCK, Block.DIRT, Block.MYCELIUM]);
 
 /** 沙地（仙人掌/枯木/甘蔗） */
 const SANDY = new Set<number>([Block.SAND, Block.SANDSTONE, Block.TERRACOTTA]);
@@ -1775,6 +1787,23 @@ function placeSpecial(
       if (kind === 'bamboo') {
         if (!isPlantable(w, wx, y, wz, SOIL)) continue;
         PLANTERS.bamboo(w, world, wx, wz, rng, woodFor('bamboo'));
+        if (stats) stats.specials++;
+        continue;
+      }
+
+      if (kind === 'huge_mushroom') {
+        if (!isPlantable(w, wx, y, wz, SOIL)) continue;
+        const cap = rng.chance(0.5) ? Block.RED_MUSHROOM_BLOCK : Block.BROWN_MUSHROOM_BLOCK;
+        const height = 4 + rng.int(2);
+        for (let h = 0; h < height; h++) w.put(wx, y + h, wz, Block.MUSHROOM_STEM);
+        const top = y + height;
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let dz = -2; dz <= 2; dz++) {
+            if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+            w.put(wx + dx, top, wz + dz, cap);
+            if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) w.put(wx + dx, top + 1, wz + dz, cap);
+          }
+        }
         if (stats) stats.specials++;
       }
     }

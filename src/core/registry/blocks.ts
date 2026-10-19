@@ -3248,6 +3248,27 @@ const SPECS: readonly BlockSpec[] = [
     opaque: false,
     light: 5,
   },
+  // 蘑菇岛族（批次 352）：菌丝 + 巨型蘑菇的柄与两种菌盖
+  {
+    id: 591,
+    name: 'minecraft:mycelium',
+    tiles: ['mycelium_top', 'dirt', 'mycelium_side'] as const,
+  },
+  {
+    id: 592,
+    name: 'minecraft:mushroom_stem',
+    tiles: ['mushroom_stem', 'mushroom_stem', 'mushroom_stem'] as const,
+  },
+  {
+    id: 593,
+    name: 'minecraft:brown_mushroom_block',
+    tiles: ['brown_mushroom_block_top', 'brown_mushroom_block_top', 'brown_mushroom_block_side'] as const,
+  },
+  {
+    id: 594,
+    name: 'minecraft:red_mushroom_block',
+    tiles: ['red_mushroom_block_top', 'red_mushroom_block_top', 'red_mushroom_block_side'] as const,
+  },
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -3603,6 +3624,11 @@ export const Block = {
   AMETHYST_BLOCK: 588,
   BUDDING_AMETHYST: 589,
   AMETHYST_CLUSTER: 590,
+  /** 蘑菇岛族（批次 352） */
+  MYCELIUM: 591,
+  MUSHROOM_STEM: 592,
+  BROWN_MUSHROOM_BLOCK: 593,
+  RED_MUSHROOM_BLOCK: 594,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -3919,6 +3945,10 @@ HARDNESS.set(Block.BONE_BLOCK, 2);
 HARDNESS.set(Block.AMETHYST_BLOCK, 1.5);
 HARDNESS.set(Block.BUDDING_AMETHYST, 1.5);
 HARDNESS.set(Block.AMETHYST_CLUSTER, 1.5);
+HARDNESS.set(Block.MYCELIUM, 0.6);
+HARDNESS.set(Block.MUSHROOM_STEM, 0.2);
+HARDNESS.set(Block.BROWN_MUSHROOM_BLOCK, 0.2);
+HARDNESS.set(Block.RED_MUSHROOM_BLOCK, 0.2);
 // 灵魂火把 / 灵魂灯笼：与普通火把同级（一碰就掉）
 HARDNESS.set(Block.SOUL_TORCH, 0);
 HARDNESS.set(Block.SOUL_LANTERN, 3.5);
