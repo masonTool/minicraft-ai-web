@@ -140,6 +140,8 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'cow' || typeId === 'pig' || typeId === 'sheep') return 'quadruped';
   // 疣猪兽（批次 344）：四足、体型宽
   if (typeId === 'hoglin') return 'quadruped';
+  // 蠹虫（批次 344）：借蜘蛛那套"多腿小身体"骨架
+  if (typeId === 'silverfish') return 'spider';
   return 'humanoid';
 }
 

@@ -450,6 +450,7 @@ const VOICE_BY_ID: Readonly<Record<string, MobVoiceId>> = {
   piglin: 'piglin',
   hoglin: 'piglin',
   piglin_brute: 'piglin',
+  silverfish: 'spider',
   skeleton: 'skeleton',
   stray: 'skeleton',
   wither_skeleton: 'wither_skeleton',

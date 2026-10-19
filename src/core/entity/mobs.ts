@@ -584,6 +584,32 @@ export const PIGLIN_TYPE: MobType = {
 };
 
 /**
+ * 蠹虫（批次 344，J20 第四只）。
+ *
+ * 8 血、伤害 1，节肢家族（**节肢杀手**对它有效）。原版只从要塞的刷怪笼里出来，
+ * 本项目还没有"每个笼子各自的生物种类"（K6），所以 `naturalSpawn: false`，
+ * 只能靠刷怪蛋/命令出现。
+ */
+export const SILVERFISH_TYPE: MobType = {
+  id: 'silverfish',
+  name: '蠹虫',
+  health: 8,
+  width: 0.4,
+  height: 0.3,
+  speed: 1.4,
+  hostile: true,
+  attackDamage: 1,
+  followRange: 16,
+  drops: [],
+  xp: 5,
+  naturalSpawn: false,
+  family: 'arthropod',
+  bodyColor: 0x8a8f96,
+  accentColor: 0x5a6068,
+  eyeHeight: 0.2,
+};
+
+/**
  * 猪灵蛮兵（批次 344，J20 第三只）。
  *
  * 与猪灵的区别：**不中立**（见到就打）、50 血、伤害 7，不掉金锭。
@@ -1322,6 +1348,7 @@ export const MOB_TYPES: readonly MobType[] = [
   PIGLIN_TYPE,
   PIGLIN_BRUTE_TYPE,
   HOGLIN_TYPE,
+  SILVERFISH_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿
