@@ -1929,3 +1929,27 @@
 - [x] 292 修复背包构造期 `stationTabsEl` 未初始化导致的 `reading 'style'` 崩溃（`b519ab3`）
 - [x] 293 工作站跨站台配方目录：stationCatalogIds / stationFamilyIds / stationNeedFor（`6c7caac`）
 - [x] 294 工作站左栏复用物品分类 + 配方书；点产物填工作区，站台不对显示「需要xxx」（`ffe6247`）
+
+---
+
+## 批次 295：切后台回来"图标全看不见"（2026-10-19）
+
+> 用户："游戏在后台运行了一段时间，回到前台后，好多图标都看不见了。"
+> 附诊断日志 `minicraft-diag-2026-10-19T05-56-33`：t=272667 `hidden` →
+> t=3257446 `visible`（**后台 49.7 分钟**），回来后 61fps / 137 区块 /
+> `calls/tris/tex/prog` 与后台前一致，全文件零 `error`。
+
+- [x] B295-1 `render/canvasProbe.ts`：取样点 + "全透明 = 画布被清空"判据（纯函数，vitest +13）
+- [x] B295-2 `TextureAtlas`：`paintPixels` / `ensurePixels` / `repaint` / `captureOverride`；
+  重画后走 `markTextureChanged()`（`revision++` 让等轴方块图标缓存整体作废）
+- [x] B295-3 资源包：替换过的贴图留一份 16×16 像素，图集重画时盖回去（否则材质包会悄悄失效）
+- [x] B295-4 `main.recoverCanvasesAfterBackground()`：`visible` / `pageshow(persisted)` /
+  `contextrestored` 三条路都补画（图集探针 + 快捷栏 + 背包 + 配方书 + 生命条 + 告示牌），
+  且排在开暂停菜单之前
+- [x] B295-5 埋点：`ui.canvas.recover{atlas,hiddenMs}` / `ui.atlas.context.lost·restored` /
+  `gl.context.lost·restored`（后两类以前在日志里一条都没有）
+- [x] B295-6 门禁：vitest **83**、`test:ui` 800 → **812**、离线 131 套全绿
+
+**下一步候选**：真机复验——下次切后台回来导出日志，看 `ui.canvas.recover` 里的
+`atlas` 是 `repainted` 还是 `intact`，就能确诊"到底是哪张画布被回收"；
+若 `Sky` 的太阳/月亮/云也出现同款空白，按同一套给那几张 `CanvasTexture` 补重建。

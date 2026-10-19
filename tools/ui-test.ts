@@ -3579,5 +3579,86 @@ console.log('\n[绑定诅咒（批次 270）]');
   );
 }
 
+console.log('\n[切后台回来图标全空（批次 295）]');
+{
+  const atlasSrc = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
+  const probeSrc = readFileSync(new URL('../src/render/canvasProbe.ts', import.meta.url), 'utf8');
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const packSrc = readFileSync(new URL('../src/core/resourcepack/ResourcePack.ts', import.meta.url), 'utf8');
+  const mobBarSrc = readFileSync(new URL('../src/render/MobHealthBar.ts', import.meta.url), 'utf8');
+  const signSrc = readFileSync(new URL('../src/render/SignRenderer.ts', import.meta.url), 'utf8');
+
+  // ---- ① 图集：构造与"被系统回收后重画"必须共用同一条铺像素的路
+  // （拆成两份的话，改了画笔却只重画一份，图标会和世界里的方块对不上）
+  check(
+    '图集铺像素只有一份实现（构造 + 重画共用）',
+    atlasSrc.includes('private paintPixels(): void') &&
+      (atlasSrc.match(/this\.paintPixels\(\)/g) ?? []).length >= 2,
+  );
+  check(
+    '重画后走 markTextureChanged（等轴方块图标缓存随之作废）',
+    /repaint\(\): boolean \{[\s\S]{0,400}this\.markTextureChanged\(\)/.test(atlasSrc),
+  );
+  check(
+    '判据是像素（取样点全透明才算丢），不是只靠 contextlost 事件',
+    atlasSrc.includes('private pixelsIntact(): boolean') &&
+      atlasSrc.includes('ensurePixels(): boolean') &&
+      probeSrc.includes('export function canvasLooksLost') &&
+      atlasSrc.includes('pickOpaqueSamples'),
+  );
+  check(
+    '资源包替换过的贴图会被记住并在重画时盖回去',
+    atlasSrc.includes('captureOverride(tile: string)') &&
+      atlasSrc.includes('for (const [tile, pixels] of this.overrides)') &&
+      packSrc.includes('atlas.captureOverride(tile);'),
+  );
+
+  // ---- ② 回前台：所有"画一次就缓存"的画布都要强制补一遍
+  const recoverBody =
+    /private recoverCanvasesAfterBackground\(\): void \{([\s\S]*?)\n  \}/.exec(appSrc)?.[1] ?? '';
+  check(
+    '补画覆盖六处：图集 / 快捷栏 / 背包 / 配方书 / 生命条 / 告示牌',
+    [
+      'this.atlas.ensurePixels()',
+      'this.refreshHotbar()',
+      'this.inventoryScreen.refresh()',
+      'this.recipeBook.render()',
+      'this.mobHealthBar.invalidate()',
+      'this.signRenderer.repaintAll()',
+    ].every((needle) => recoverBody.includes(needle)),
+    recoverBody.slice(0, 120),
+  );
+  // 顺序有讲究：暂停菜单会把画面盖住，补画必须在它之前（否则玩家关掉菜单还是空白）
+  check(
+    'visible 分支在开暂停菜单之前补画',
+    appSrc.indexOf('this.recoverCanvasesAfterBackground();') >= 0 &&
+      appSrc.indexOf('this.recoverCanvasesAfterBackground();') <
+        appSrc.indexOf('if (this.wasHidden) this.handleReturnFromBackground();'),
+  );
+  check(
+    'bfcache 恢复也走同一条补画路径',
+    appSrc.includes("'pageshow'") && appSrc.includes('if (event.persisted) this.recoverCanvasesAfterBackground();'),
+  );
+  check(
+    '快捷栏图标画布恢复后整排重画',
+    appSrc.includes("icon.addEventListener('contextrestored', () => this.refreshHotbar());"),
+  );
+  check('生命条能强制重画（清 key）', /invalidate\(\): void \{\s*\n\s*this\.lastKey = '';/.test(mobBarSrc));
+  check('告示牌文字能按缓存重铺', signSrc.includes('repaintAll(): void') && signSrc.includes('this.paint(entry, entry.lines)'));
+
+  // ---- ③ 埋点：这两类"丢失"以前在真机日志里一条都没有，只能靠猜
+  check(
+    '图集/WebGL 上下文的"丢"与"回"都有日志',
+    appSrc.includes("diag.event('error', 'gl.context.lost'") &&
+      appSrc.includes("diag.event('app', 'gl.context.restored'") &&
+      appSrc.includes("diag.event('error', 'ui.atlas.context.lost'") &&
+      appSrc.includes("diag.event('app', 'ui.atlas.context.restored'"),
+  );
+  check(
+    '补画本身也记一条（带 hiddenMs，能看出是不是长时间后台之后）',
+    appSrc.includes("diag.event('app', 'ui.canvas.recover', {") && appSrc.includes('hiddenMs: Math.round(hiddenMs)'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 801（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 805（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -94,6 +94,27 @@ npm run dev            # http://localhost:5173
   ③ 右栏改成竖排（操作区在上、提示在下），熔炉/酿造台允许换行，窄栏不会溢出；
   ④ 铁砧/砂轮/附魔台/切石机没有固定产物表，仍显示 7×4 背包。
   `test:ui` 从 799 加到 **800**；`check:fast`、全量 `npm test`（131 套）、`build:fast` 全绿。
+- 批次 295（用户："游戏在后台运行了一段时间，回到前台后好多图标都看不见了" +
+  诊断 `minicraft-diag-2026-10-19T05-56-33`）：**2D 画布被系统回收后没人重画**。
+  ① 日志事实：t=272667 `hidden` → t=3257446 `visible`（**后台 49.7 分钟**），回来后
+  61fps / 137 区块 / `frames+1`，`calls/tris/tex/prog` 与后台前**完全一致**，
+  且全文件 `cat:error` 零命中 → 不是主循环挂了、也不是 WebGL 上下文丢
+  （那会整屏 3D 黑掉，而不是"只有图标空"）。
+  ② 根因：纹理图集是 256×1008 的 2D canvas，也是**所有物品图标的唯一来源**；
+  安卓 Chrome 在页面长时间隐藏时会丢掉 canvas 的后备存储（WebGL 纹理不受影响）。
+  而图标全是"值变了才重画"的缓存：`refreshHotbar` 只在背包变化时跑、`BlockIcon`
+  只按 `atlas.revision` 失效、`MobHealthBar` 只认血量、告示牌只认文字 —— 于是
+  回来后**没有任何路径会重画**，空白一直留着。
+  ③ 修法：新增 `render/canvasProbe.ts`（纯函数）+ `TextureAtlas.paintPixels/ensurePixels/
+  repaint/captureOverride`；回前台 `recoverCanvasesAfterBackground()` 先探针校验图集
+  （取样点全透明才重铺，25 万像素的代价只付在真丢了的时候），再无条件补画
+  快捷栏/背包/配方书/生命条/告示牌，并**排在开暂停菜单之前**；`pageshow(persisted)`
+  与 `contextrestored`（图集 2D + 快捷栏图标）走同一条路。
+  ④ 资源包：替换过的 16×16 像素留一份（`captureOverride`），重画时盖回去——
+  否则玩家的材质包会在一次切后台后悄悄退回程序化贴图。
+  ⑤ 埋点补齐：`app/ui.canvas.recover{atlas,hiddenMs}`、`ui.atlas.context.lost·restored`、
+  `error/gl.context.lost`、`app/gl.context.restored`（后两类以前一条日志都没有）。
+  门禁：vitest **83**（`tests/canvas-probe.test.ts` 13 条）、`test:ui` 800 → **812**，离线 131 套全绿。
 - 批次 283（用户："后期画质粗糙、界面卡顿" + 诊断日志 `minicraft-diag-2026-10-19T02-32-46`）：
   **把"加载范围当成模拟范围"这件事收掉，并让光照只在真的变了时重算**。
   ① 日志事实：前 110 秒 60fps（cpu 5.4ms）；t≈121s 走进新区块（187 区块 / 40 只生物 /
