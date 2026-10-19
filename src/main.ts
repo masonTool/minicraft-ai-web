@@ -6337,7 +6337,7 @@ class App {
       // 计数型进度（"怪物猎人"要三种）靠它去重，报成个体就永远凑不齐三种
       this.reportProgress({ kind: 'kill', mob: mob.type.id });
       // 村庄保卫战（批次 383）：村庄附近击杀掠夺者；累计 5 只算击退一波
-      if (mob.type.id === 'pillager' && this.villagerNear(mob.x, mob.y, mob.z, 64)) {
+      if (!this.rules.disableRaids && mob.type.id === 'pillager' && this.villagerNear(mob.x, mob.y, mob.z, 64)) {
         this.raidKills++;
         if (this.raidKills === 1) this.reportProgress({ kind: 'raid', stage: 1 });
         if (this.raidKills >= 5) this.reportProgress({ kind: 'raid', stage: 2 });
@@ -11719,7 +11719,9 @@ class App {
         // 死亡卡片也写清死因（"被僵尸打死"和"掉进岩浆"的应对完全不同）
         const last = this.stats.lastDamage;
         if (this.deathCauseEl) {
-          this.deathCauseEl.textContent = last ? `（${damageReason(last.cause, last.source)}）` : '';
+          // 批次 388：`showDeathMessages` 控制死亡卡片上的死因
+          this.deathCauseEl.textContent =
+            this.rules.showDeathMessages && last ? `（${damageReason(last.cause, last.source)}）` : '';
         }
         // 死亡也进诊断日志（批次 218）：死因、当时的位置与饥饿值，事后能复盘
         diag.event('survival', 'death', {

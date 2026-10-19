@@ -51,6 +51,10 @@ export interface GameRules {
   announceAdvancements: boolean;
   /** 命令执行成功时是否把结果写进聊天栏（批次 361；错误始终显示） */
   sendCommandFeedback: boolean;
+  /** 死亡卡片上是否写死因（批次 388；本项目没有聊天死亡消息） */
+  showDeathMessages: boolean;
+  /** 是否禁用村庄保卫战进度（批次 388） */
+  disableRaids: boolean;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -70,6 +74,8 @@ export const DEFAULT_GAME_RULES: GameRules = {
   drowningDamage: true,
   announceAdvancements: true,
   sendCommandFeedback: true,
+  showDeathMessages: true,
+  disableRaids: false,
 };
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */
