@@ -763,6 +763,24 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     icon: Item.COAL,
     trigger: { kind: 'kill', mobs: ['wither_skeleton'] },
   },
+  {
+    id: 'minecraft:adventure/kill_a_pillager',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '还你一箭',
+    desc: '杀死一名掠夺者（前哨附近）',
+    icon: Item.CROSSBOW,
+    trigger: { kind: 'kill', mobs: ['pillager'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_iron_golem',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '忘恩负义',
+    desc: '杀死一只铁傀儡（它平时守村，不会主动打你）',
+    icon: Item.IRON_INGOT,
+    trigger: { kind: 'kill', mobs: ['iron_golem'] },
+  },
 
   // ---------------------------------------------------------------- 批次 356：矿物块与工作站
   {

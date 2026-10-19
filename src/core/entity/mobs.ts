@@ -616,6 +616,63 @@ export const SHULKER_TYPE: MobType = {
 };
 
 /**
+ * 铁傀儡（批次 358，J24 第一批）。
+ *
+ * 100 血、伤害 15、**中立**（被打才还手）。原版由村民生成，本项目没有
+ * "村庄 → 生物"的通道，所以 `naturalSpawn: false`，只能靠刷怪蛋/命令。
+ */
+export const IRON_GOLEM_TYPE: MobType = {
+  id: 'iron_golem',
+  name: '铁傀儡',
+  health: 100,
+  width: 1.4,
+  height: 2.7,
+  speed: 1.6,
+  hostile: true,
+  attackDamage: 15,
+  followRange: 16,
+  drops: [
+    { itemId: Item.IRON_INGOT, min: 3, max: 5 },
+    { itemId: Block.POPPY, min: 0, max: 2 },
+  ],
+  xp: 5,
+  neutral: true,
+  naturalSpawn: false,
+  bodyColor: 0xd8d8d0,
+  accentColor: 0x8a8a80,
+  eyeHeight: 2.5,
+};
+
+/**
+ * 掠夺者（批次 358，J24 第二批）。
+ *
+ * 24 血、**远程**（弩），掉绿宝石与箭。原版随巡逻队/前哨出现，
+ * 本项目没有巡逻队，所以 `naturalSpawn: false`。
+ */
+export const PILLAGER_TYPE: MobType = {
+  id: 'pillager',
+  name: '掠夺者',
+  health: 24,
+  width: 0.6,
+  height: 1.95,
+  speed: 2.0,
+  hostile: true,
+  attackDamage: 3,
+  followRange: 20,
+  drops: [
+    { itemId: Item.EMERALD, min: 0, max: 2 },
+    { itemId: Item.ARROW, min: 0, max: 2 },
+  ],
+  xp: 5,
+  naturalSpawn: false,
+  ranged: { range: 12, cooldown: 3, speed: 12, keepDistance: 4, spread: 0.05 },
+  arrowEffect: { effect: 'slowness', seconds: 5 },
+  bodyColor: 0x8a8f96,
+  accentColor: 0x4a4f56,
+  eyeHeight: 1.74,
+};
+
+/**
  * 炽足兽（批次 344，J20 第五只）。
  *
  * 下界唯一"走在岩浆上"的被动生物：20 血、掉 2~5 根线。
@@ -1411,6 +1468,9 @@ export const MOB_TYPES: readonly MobType[] = [
   SILVERFISH_TYPE,
   STRIDER_TYPE,
   SHULKER_TYPE,
+  // J24 村庄系（批次 358）
+  IRON_GOLEM_TYPE,
+  PILLAGER_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿

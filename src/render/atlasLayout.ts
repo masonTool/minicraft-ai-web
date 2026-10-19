@@ -1045,6 +1045,8 @@ export const TILE_ORDER = [
   'spawn_egg_silverfish',
   'spawn_egg_strider',
   'spawn_egg_shulker',
+  'spawn_egg_iron_golem',
+  'spawn_egg_pillager',
   // 骨块（批次 349）
   'bone_block_side',
   'bone_block_top',
