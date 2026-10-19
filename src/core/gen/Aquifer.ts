@@ -97,9 +97,17 @@ export class Aquifer {
 
   /**
    * 把雕刻后的地下空洞灌满流体。只填空气，所以不会破坏已有的海水/岩浆。
+   *
+   * @param columnTop 每个 16×16 列的**地形顶面**（雕刻前算好的，`z * 16 + x`）。
+   *   用来保证"水下的洞穴与海连成一片"，见下面的说明。不传就退回纯噪声水位。
    * @returns 本次填充的水与岩浆方块数（供统计脚本与测试使用）
    */
-  fill(blocks: BlockArray, originX: number, originZ: number): { water: number; lava: number } {
+  fill(
+    blocks: BlockArray,
+    originX: number,
+    originZ: number,
+    columnTop?: ArrayLike<number>,
+  ): { water: number; lava: number } {
     this.prepareLevels(originX, originZ);
 
     const stride = CHUNK_SIZE_X + LEVEL_MARGIN * 2;
@@ -108,8 +116,20 @@ export class Aquifer {
 
     for (let z = 0; z < CHUNK_SIZE_Z; z++) {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
-        const level = this.levels[(z + LEVEL_MARGIN) * stride + (x + LEVEL_MARGIN)]!;
-        const highest = Math.floor(level);
+        const rawLevel = this.levels[(z + LEVEL_MARGIN) * stride + (x + LEVEL_MARGIN)]!;
+        /**
+         * **水下的列，水位强制不低于海平面**（批次 282）。
+         *
+         * 为什么必须有这一条：地表灌水（`applySurface`）发生在**雕刻之前**，
+         * 所以海底之下被雕刻器掏空时，上面那层海水会**悬在空气上**——
+         * 一挖开就是"挂着的水"，而水在加载后不会自己流（批次 281 已撤销）。
+         *
+         * 原版的做法等价于此：海底以下的含水层就是海的一部分，洞穴是水的。
+         * 于是"水面 → 洞穴"天然连续，不需要任何补排/流动来补救。
+         */
+        const surface = columnTop ? columnTop[z * CHUNK_SIZE_X + x]! : WORLD_MIN_Y - 1;
+        const minLevel = surface < this.seaLevel ? this.seaLevel : WORLD_MIN_Y + 1;
+        const highest = Math.floor(rawLevel > minLevel ? rawLevel : minLevel);
         if (highest <= WORLD_MIN_Y + 1) continue;
 
         const worldX = originX + x;

@@ -184,6 +184,14 @@ export class OverworldGenerator {
   // 复用缓冲区，避免每次生成都重新分配
   private readonly climateGrid = new Float32Array(GRID_XZ * GRID_XZ * CHANNELS);
   private readonly densityGrid = new Float32Array(GRID_XZ * GRID_XZ * GRID_Y);
+  /**
+   * 每列**雕刻前**的地形顶面（`z * 16 + x`，批次 282）。
+   *
+   * 含水层要用它判断"这一列是不是在海面以下"：是的话水位强制到海平面，
+   * 让海底被掏空出来的洞穴与海连成一片，而不是留一层悬空的水
+   * （水在加载后不会自己流，见 `Aquifer.fill` 的说明）。
+   */
+  private readonly columnTop = new Int16Array(CHUNK_SIZE_X * CHUNK_SIZE_Z);
   /** 粗网格节点的地表高度缓存（地物/结构会反复查询同一片区域） */
   private readonly surfaceYCache = new Map<number, number>();
 
@@ -634,7 +642,7 @@ export class OverworldGenerator {
 
     // 雕刻顺序对齐原版：地形 → 地表规则 → 雕刻 → 含水层 → 矿石
     this.carver.carve(blocks, originX, originZ);
-    this.aquifer.fill(blocks, originX, originZ);
+    this.aquifer.fill(blocks, originX, originZ, this.columnTop);
     this.oreGenerator.generate(blocks, cx, cz, (wx, wz) => this.erosion.getValue(wx, 0, wz));
 
     return blocks;
@@ -736,6 +744,8 @@ export class OverworldGenerator {
             break;
           }
         }
+        // 记录"雕刻前的地形顶面"：含水层据此判断这一列是否在水下（见 `columnTop`）
+        this.columnTop[z * CHUNK_SIZE_X + x] = top;
         if (top < WORLD_MIN_Y) continue;
 
         const raw = this.climateAt(worldX, worldZ);

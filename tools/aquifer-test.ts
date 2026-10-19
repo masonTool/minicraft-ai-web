@@ -115,6 +115,39 @@ console.log('\n[含水层：填充]');
   check('水位以下的流体不高于海平面', yMaxWater <= SEA_LEVEL + 1, `最高 y=${yMaxWater}`);
 }
 
+console.log('\n[含水层：流体连续性（批次 282）]');
+{
+  // 批次的由来：地表灌水发生在雕刻**之前**，所以海底被掏空时那层海水会悬在空气上；
+  // 而批次 281 的"加载后补排流动"已经撤销（真机上把光照预算吃满）。
+  // 正确做法是在生成期就让水连续：水下的列，含水层水位不低于海平面。
+  const generator = new OverworldGenerator(SEED);
+  let hanging = 0;
+  let water = 0;
+  let underwaterCavesWater = 0;
+
+  for (let cx = 0; cx < CHUNKS; cx++) {
+    for (let cz = 0; cz < CHUNKS; cz++) {
+      const blocks = generator.generate(cx, cz);
+      for (let z = 0; z < 16; z++) {
+        for (let x = 0; x < 16; x++) {
+          for (let y = WORLD_MIN_Y + 1; y < SEA_LEVEL + 1; y++) {
+            if (blocks[Chunk.index(x, y, z)] !== Block.WATER) continue;
+            water++;
+            if (blocks[Chunk.index(x, y - 1, z)] === Block.AIR) hanging++;
+            // 海底以下的洞穴里的水：算一次"确实连到海里"的旁证
+            if (y < SEA_LEVEL - 1 && blocks[Chunk.index(x, y + 1, z)] === Block.WATER) underwaterCavesWater++;
+          }
+        }
+      }
+    }
+  }
+
+  console.log(`    海平面以下的水 ${water} 格，悬空水 ${hanging} 格`);
+  check('海平面以下没有"悬在空气上的水"', hanging === 0, `悬空 ${hanging} 格`);
+  check('水下的体量正常（不是被抽干）', water > 10000, `水 ${water} 格`);
+  check('海底以下的洞穴确实有水（与海连成一片）', underwaterCavesWater > 0, String(underwaterCavesWater));
+}
+
 console.log('\n[含水层：边界与确定性]');
 {
   const a = new OverworldGenerator(SEED).generate(3, 2);
