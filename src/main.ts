@@ -1111,6 +1111,13 @@ class App {
   /** 刚刚切到过后台：下一次回到前台要先落到暂停页（见 `handleReturnFromBackground`） */
   private wasHidden = false;
   /**
+   * 切到后台的时刻（`performance.now()`，批次 295）。
+   *
+   * 只用来判断两件事：① 后台待了多久（诊断日志里要能看出"图标空掉"是不是
+   * 长时间隐藏之后）② 短期快切不必付图集探针的回读成本。
+   */
+  private hiddenAtMs = 0;
+  /**
    * 启动期的渐进视距（批次 100）：开局先只请求 3 格半径，之后每 0.5 秒往外涨一格。
    *
    * 见 `core/world/StartupRamp.ts` 的文件头：开新世界原来是一次性把整个视距
@@ -2281,6 +2288,38 @@ class App {
   }
 
   /**
+   * 回到前台：把所有"画一次就缓存"的画布补一遍（批次 295）。
+   *
+   * **真机现象**：切后台近 50 分钟后回来，3D 世界 60fps 一切正常，
+   * 但快捷栏/背包里的图标全是空的（诊断日志里没有任何 error，`tex/prog/calls`
+   * 与后台前完全一致 —— 说明不是 WebGL 上下文丢了）。
+   *
+   * **根因**：安卓 Chrome 在页面长时间隐藏时会丢掉 2D canvas 的后备存储；
+   * 而本项目的图标全是"从图集裁一刀、画一次就缓存"的产物，缓存失效条件只有
+   * "数据变了"，所以回来后没有任何一条路径会重画。
+   *
+   * 修复不依赖"到底是哪张画布被回收"：**所有一次性画布一起补**。
+   * 图集是唯一昂贵的那张（25 万像素），所以先用取样点问一句"内容还在吗"。
+   */
+  private recoverCanvasesAfterBackground(): void {
+    const hiddenMs = this.hiddenAtMs > 0 ? performance.now() - this.hiddenAtMs : 0;
+    this.hiddenAtMs = 0;
+
+    const repainted = this.atlas.ensurePixels();
+    // 剩下的都是几十次 drawImage 的量级，无条件重画
+    this.refreshHotbar(); // 快捷栏 9 张（方块图标随 atlas.revision 自动重建）
+    if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
+    if (this.recipeBook.isOpen) this.recipeBook.render();
+    this.mobHealthBar.invalidate(); // 下一帧 show() 必重画
+    this.signRenderer.repaintAll(); // 牌子上的字（画布贴图）
+
+    diag.event('app', 'ui.canvas.recover', {
+      atlas: repainted ? 'repainted' : 'intact',
+      hiddenMs: Math.round(hiddenMs),
+    });
+  }
+
+  /**
    * 从后台回来（批次 201，用户要求）：
    * **先不显示游戏页面，显示暂停页面；点一下才横屏全屏回到游戏。**
    *
@@ -3203,6 +3242,9 @@ class App {
       icon.className = 'icon';
       icon.width = 32;
       icon.height = 32;
+      // 批次 295：单张图标画布也可能被系统回收。恢复事件到了就整排重画一次
+      // （9 次 drawImage，比逐张记账便宜，也不会漏掉"刚发生过变化"的槽位）
+      icon.addEventListener('contextrestored', () => this.refreshHotbar());
       slot.appendChild(icon);
 
       const count = document.createElement('span');
@@ -12313,9 +12355,14 @@ class App {
         if (document.visibilityState === 'hidden') {
           // 切后台时手指的按下/抬起可能收不到：把输入清零，回来不会"自己一直走"
           this.wasHidden = true;
+          if (this.hiddenAtMs === 0) this.hiddenAtMs = performance.now();
           this.touch?.resetInput('hidden');
           void this.saveNow('hidden');
         } else {
+          // 批次 295：系统可能把 2D 画布的后备存储回收掉（图集一空，所有从它裁出来的
+          // 图标就都是透明的）。**必须排在开暂停菜单之前**：玩家关掉暂停页时
+          // 看到的就已经是补好的画面，而不是"回来还是空白、要再进出一次界面才好"。
+          this.recoverCanvasesAfterBackground();
           // 批次 183：从后台回来偶尔会拿到 clientX/Y=0 的触摸；先重排一次。
           // 批次 214：这里**不**用背包恢复——紧接着 `handleReturnFromBackground`
           // 会打开暂停菜单，两个面板叠着开会让 uiOpen 的交接算错。
@@ -12323,6 +12370,49 @@ class App {
           // 批次 201：先落到暂停页，点一下才横屏全屏回到游戏
           if (this.wasHidden) this.handleReturnFromBackground();
         }
+      },
+      { signal: this.listeners.signal },
+    );
+    // 批次 295：bfcache 恢复（前进/后退）不一定派发 `visibilitychange`，
+    // 但画布同样可能被系统回收过——同一条补画路径再走一遍。
+    window.addEventListener(
+      'pageshow',
+      (event) => {
+        if (event.persisted) this.recoverCanvasesAfterBackground();
+      },
+      { signal: this.listeners.signal },
+    );
+    // 批次 295：上下文丢失以前**一条日志都没有**，真机出现"图标全空 / 画面全黑"
+    // 只能靠猜。这里补齐四个点：图集 2D 上下文与渲染用 WebGL 上下文各"丢/回"。
+    this.atlas.canvas.addEventListener(
+      'contextlost',
+      () => {
+        diag.event('error', 'ui.atlas.context.lost', {});
+      },
+      { signal: this.listeners.signal },
+    );
+    this.atlas.canvas.addEventListener(
+      'contextrestored',
+      () => {
+        // 图集自己会重画（`TextureAtlas` 构造器里那条监听），这里补图标画布与日志
+        diag.event('app', 'ui.atlas.context.restored', {});
+        this.recoverCanvasesAfterBackground();
+      },
+      { signal: this.listeners.signal },
+    );
+    this.renderer.domElement.addEventListener(
+      'webglcontextlost',
+      () => {
+        diag.event('error', 'gl.context.lost', {});
+      },
+      { signal: this.listeners.signal },
+    );
+    this.renderer.domElement.addEventListener(
+      'webglcontextrestored',
+      () => {
+        diag.event('app', 'gl.context.restored', {});
+        // three 会自己重建 GL 资源，但我们的 2D 画布（图标/文字）不会——一起补
+        this.recoverCanvasesAfterBackground();
       },
       { signal: this.listeners.signal },
     );

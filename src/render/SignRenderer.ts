@@ -120,6 +120,17 @@ export class SignRenderer {
     }
   }
 
+  /**
+   * 把每块牌子的文字重画一遍（批次 295）。
+   *
+   * 文字画在 2D canvas 上（`CanvasTexture`），切后台回来可能被系统清空；
+   * 而 `sync()` 只在"文字变了"时重画。按缓存的 `lines` 重铺一遍即可，
+   * 数量就是当前可见的牌子（通常个位数）。
+   */
+  repaintAll(): void {
+    for (const entry of this.entries.values()) this.paint(entry, entry.lines);
+  }
+
   /** 当前显示的牌子有多少张（验收与调试用） */
   get count(): number {
     return this.entries.size;

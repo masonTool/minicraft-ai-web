@@ -94,6 +94,16 @@ export class MobHealthBar {
     this.object.visible = false;
   }
 
+  /**
+   * 让下一帧 `show()` 一定重画画布（批次 295）。
+   *
+   * 切后台回来时，系统可能已经把这张 2D 画布清空；而这里的"只在血量变化时重画"
+   * 会让它永远停在空白状态——清掉 key 就行，重画代价只是 256×40 的一遍圆角矩形。
+   */
+  invalidate(): void {
+    this.lastKey = '';
+  }
+
   dispose(): void {
     this.texture.dispose();
     (this.object.material as THREE.Material).dispose();
