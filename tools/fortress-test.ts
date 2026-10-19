@@ -358,9 +358,13 @@ console.log('\n[下界疣：掉落]');
 
 console.log('\n[刷怪笼：表与判据]');
 {
-  equal('表里只有一种笼子', SPAWNER_DEFS.length, 1);
-  equal('它出烈焰人', SPAWNER_DEFS[0]?.mobId, 'blaze');
+  // 批次 365：加了三只（地牢僵尸 / 矿井洞穴蜘蛛 / 要塞蠹虫）
+  equal('表里有四种笼子', SPAWNER_DEFS.length, 4);
+  equal('第一个出烈焰人', SPAWNER_DEFS[0]?.mobId, 'blaze');
   check('`spawnerDefFor` 认得出刷怪笼', spawnerDefFor(Block.SPAWNER) !== undefined);
+  equal('僵尸笼子出僵尸', spawnerDefFor(Block.ZOMBIE_SPAWNER)?.mobId, 'zombie');
+  equal('矿井笼子出洞穴蜘蛛', spawnerDefFor(Block.CAVE_SPIDER_SPAWNER)?.mobId, 'cave_spider');
+  equal('要塞笼子出蠹虫', spawnerDefFor(Block.SILVERFISH_SPAWNER)?.mobId, 'silverfish');
   equal('别的方块不是笼子', spawnerDefFor(Block.STONE), undefined);
 
   equal('硬度 5（原版）', blockHardness(Block.SPAWNER), 5);

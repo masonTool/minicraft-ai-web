@@ -253,7 +253,7 @@ const VILLAGE = [
   ...Array.from({ length: 16 }, (_unused, i) => bedId(i)),
 ];
 
-const MINESHAFT = [Block.OAK_LOG, Block.OAK_PLANKS, Block.OAK_FENCE, Block.CHEST, Block.TORCH];
+const MINESHAFT = [Block.OAK_LOG, Block.OAK_PLANKS, Block.OAK_FENCE, Block.CHEST, Block.TORCH, Block.CAVE_SPIDER_SPAWNER];
 const STRONGHOLD = [
   Block.STONE_BRICKS,
   Block.MOSSY_STONE_BRICKS,
@@ -265,8 +265,9 @@ const STRONGHOLD = [
   Block.LAVA,
   Block.END_PORTAL_FRAME,
   Block.CHEST,
+  Block.SILVERFISH_SPAWNER,
 ];
-const DUNGEON = [Block.MOSSY_COBBLESTONE, Block.COBBLESTONE, Block.CHEST];
+const DUNGEON = [Block.MOSSY_COBBLESTONE, Block.COBBLESTONE, Block.CHEST, Block.ZOMBIE_SPAWNER];
 // 沉船：船体木料按群系换（六种都可能），箱子里是战利品表
 const SHIPWRECK = [...ALL_WOOD_BLOCKS, Block.CHEST];
 const OCEAN_MONUMENT = [
@@ -355,6 +356,13 @@ export const GENERATION_SOURCES: readonly GenSource[] = [
   { key: 'mineshaft', label: '废弃矿井', origin: 'declared', where: 'gen/Structures.ts 的 buildMineshaft', blocks: MINESHAFT },
   { key: 'stronghold', label: '要塞', origin: 'declared', where: 'gen/Structures.ts 的 buildStronghold', blocks: STRONGHOLD },
   { key: 'dungeon', label: '地牢', origin: 'declared', where: 'gen/Structures.ts 的 buildDungeon', blocks: DUNGEON },
+  {
+    key: 'spawners',
+    label: '刷怪笼（批次 365：烈焰人 / 僵尸 / 洞穴蜘蛛 / 蠹虫）',
+    origin: 'declared',
+    where: 'gen/Structures.ts 与 gen/NetherFortress.ts',
+    blocks: [Block.SPAWNER, Block.ZOMBIE_SPAWNER, Block.CAVE_SPIDER_SPAWNER, Block.SILVERFISH_SPAWNER],
+  },
   { key: 'shipwreck', label: '沉船', origin: 'declared', where: 'gen/Structures.ts 的 buildShipwreck', blocks: SHIPWRECK },
   {
     key: 'ocean_monument',

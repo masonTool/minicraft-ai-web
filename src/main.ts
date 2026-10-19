@@ -7613,7 +7613,8 @@ class App {
    * 与 `populateVillage` 只在主世界跑是同一条讲究——**别把"碰巧没有"当成"不会发生"**。
    */
   private scanSpawnersInChunk(cx: number, cz: number): void {
-    if (this.dimension !== Dimension.NETHER) return;
+    // 批次 365：地牢/矿井/要塞也会放刷怪笼了，主世界同样要扫（末地没有）
+    if (this.dimension === Dimension.END) return;
     const chunk = this.world.getChunk(cx, cz);
     if (!chunk) return;
     const originX = cx * 16;
@@ -7621,7 +7622,7 @@ class App {
     for (let y = WORLD_MIN_Y; y <= WORLD_MAX_Y; y++) {
       for (let lz = 0; lz < 16; lz++) {
         for (let lx = 0; lx < 16; lx++) {
-          if (chunk.blocks[Chunk.index(lx, y, lz)] !== Block.SPAWNER) continue;
+          if (!spawnerDefFor(chunk.blocks[Chunk.index(lx, y, lz)]!)) continue;
           this.noteSpawner(originX + lx, y, originZ + lz);
         }
       }

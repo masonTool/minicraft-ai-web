@@ -929,6 +929,8 @@ function buildMineshaft(w: FeatureWriter, s: StructureInstance, _world: FeatureW
       clear(w, rx - ex, y, rz - ez, rx + ex, y + 3, rz + ez);
       box(w, rx - ex - 1, y - 1, rz - ez - 1, rx + ex + 1, y - 1, rz + ez + 1, plank);
       lootChest(w, rx + ex, y, rz + ez, 'mineshaft');
+      // 废弃矿井的招牌：洞穴蜘蛛刷怪笼（批次 365）
+      if (rng.chance(0.6)) w.fill(rx, y, rz, Block.CAVE_SPIDER_SPAWNER);
       torch(w, rx, y + 3, rz, 0);
       // 支撑柱与可能的粗铁块（原版矿井里的"矿车箱"）
       w.fill(rx - ex, y, rz - ez, log);
@@ -983,6 +985,8 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
   for (let i = 0; i < 5; i++) {
     box(w, libX + 2 + i * 2, y, libZ + 1, libX + 2 + i * 2, y + 2, libZ + 1, Block.OAK_PLANKS);
   }
+  // 图书馆角落的蠹虫刷怪笼（批次 365）
+  w.fill(libX + 12, y, libZ + 7, Block.SILVERFISH_SPAWNER);
   lootChest(w, libX + 1, y, libZ + 4, 'stronghold_library');
   lootChest(w, libX + 13, y, libZ + 8, 'stronghold_library');
   torch(w, libX + 7, y + 4, libZ + 5, 0);
@@ -1062,8 +1066,9 @@ function buildDungeon(w: FeatureWriter, s: StructureInstance): void {
   }
   clear(w, s.x - size + 1, y + 1, s.z - size + 1, s.x + size - 1, y + 3, s.z + size - 1);
 
-  // 中央箱子 + 火把
+  // 中央箱子 + 火把；角落一只僵尸刷怪笼（批次 365）
   lootChest(w, s.x, y + 1, s.z, 'dungeon');
+  w.fill(s.x + 2, y + 1, s.z + 2, Block.ZOMBIE_SPAWNER);
   torch(w, s.x - size + 1, y + 1, s.z - size + 1, 0);
   torch(w, s.x + size - 1, y + 1, s.z + size - 1, 0);
 }

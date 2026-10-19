@@ -3248,6 +3248,35 @@ const SPECS: readonly BlockSpec[] = [
     opaque: false,
     light: 5,
   },
+  // 分物种刷怪笼（批次 365）：同一张贴图、不同方块 id —— 与原版 K6 的
+  // "一种生物一个 id"取舍一致（方块状态只有 1 字节，装不下 NBT）
+  {
+    id: 595,
+    name: 'minecraft:zombie_spawner',
+    tiles: ['spawner', 'spawner', 'spawner'] as const,
+    solid: true,
+    opaque: false,
+    lightOpacity: 0,
+    itemless: true,
+  },
+  {
+    id: 596,
+    name: 'minecraft:cave_spider_spawner',
+    tiles: ['spawner', 'spawner', 'spawner'] as const,
+    solid: true,
+    opaque: false,
+    lightOpacity: 0,
+    itemless: true,
+  },
+  {
+    id: 597,
+    name: 'minecraft:silverfish_spawner',
+    tiles: ['spawner', 'spawner', 'spawner'] as const,
+    solid: true,
+    opaque: false,
+    lightOpacity: 0,
+    itemless: true,
+  },
   // 蘑菇岛族（批次 352）：菌丝 + 巨型蘑菇的柄与两种菌盖
   {
     id: 591,
@@ -3629,6 +3658,10 @@ export const Block = {
   MUSHROOM_STEM: 592,
   BROWN_MUSHROOM_BLOCK: 593,
   RED_MUSHROOM_BLOCK: 594,
+  /** 分物种刷怪笼（批次 365） */
+  ZOMBIE_SPAWNER: 595,
+  CAVE_SPIDER_SPAWNER: 596,
+  SILVERFISH_SPAWNER: 597,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */

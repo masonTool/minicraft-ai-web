@@ -36,7 +36,7 @@ export interface SpawnerDef {
   readonly activeRadius: number;
 }
 
-/** 全部刷怪笼（目前一种：下界要塞里的烈焰人笼子） */
+/** 全部刷怪笼（批次 365 起：下界要塞的烈焰人 + 地牢/矿井/要塞三种） */
 export const SPAWNER_DEFS: readonly SpawnerDef[] = [
   {
     block: Block.SPAWNER,
@@ -45,6 +45,33 @@ export const SPAWNER_DEFS: readonly SpawnerDef[] = [
     radius: 8,
     interval: 8,
     spawnRange: 4,
+    activeRadius: 16,
+  },
+  {
+    block: Block.ZOMBIE_SPAWNER,
+    mobId: 'zombie',
+    maxNearby: 2,
+    radius: 8,
+    interval: 10,
+    spawnRange: 3,
+    activeRadius: 16,
+  },
+  {
+    block: Block.CAVE_SPIDER_SPAWNER,
+    mobId: 'cave_spider',
+    maxNearby: 2,
+    radius: 8,
+    interval: 12,
+    spawnRange: 3,
+    activeRadius: 16,
+  },
+  {
+    block: Block.SILVERFISH_SPAWNER,
+    mobId: 'silverfish',
+    maxNearby: 2,
+    radius: 8,
+    interval: 12,
+    spawnRange: 3,
     activeRadius: 16,
   },
 ];
