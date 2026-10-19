@@ -84,7 +84,7 @@ describe('工作站可做列表（批次 277）', () => {
       expect(stationNeedFor(Item.IRON_INGOT, 'smithing')?.station).toBe('furnace');
       expect(stationNeedFor(netheriteUpgradeList()[0]!.result, 'furnace')?.station).toBe('smithing');
       expect(stationNeedFor(BREW_RECIPES[0]!.to, 'furnace')?.station).toBe('brewing');
-      expect(stationNeedFor(Item.DIRT, 'furnace')).toBe(null);
+      expect(stationNeedFor(Block.DIRT, 'furnace')).toBe(null);
     });
 
     it('"需要xxx"带上原料，界面才能画图标与名字', () => {
