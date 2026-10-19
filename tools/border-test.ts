@@ -136,6 +136,9 @@ console.log('\n[/worldborder：get / set / center]');
     enchantHeld(): boolean {
       return false;
     }
+    playSound(): boolean {
+      return false;
+    }
     give(): number {
       return 0;
     }

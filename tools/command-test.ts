@@ -110,6 +110,11 @@ class FakeWorld implements CommandContext {
   setWorldSpawn(x: number, y: number, z: number): void {
     this.worldSpawn = { x, y, z };
   }
+  played: string[] = [];
+  playSound(name: string): boolean {
+    this.played.push(name);
+    return name === 'click';
+  }
   enchanted: { id: string; level: number } | null = null;
   enchantHeld(id: string, level: number): boolean {
     this.enchanted = { id, level };
@@ -541,6 +546,16 @@ console.log('\n[批次 373：/me 与 /say]');
   check('/say 原样发消息', out.lastInfo === '大家好啊', out.lastInfo);
   executeCommand('/me', world, out);
   check('/me 空参数给用法', out.lastError.includes('用法'), out.lastError);
+}
+
+console.log('\n[批次 389：/playsound]');
+{
+  const world = new FakeWorld();
+  const out = new Recorder();
+  executeCommand('/playsound click', world, out);
+  check('认识的音效会播放', world.played.includes('click') && out.lastInfo.includes('click'), out.lastInfo);
+  executeCommand('/playsound nope', world, out);
+  check('不认识的音效给出错误', out.lastError.includes('找不到音效'), out.lastError);
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);

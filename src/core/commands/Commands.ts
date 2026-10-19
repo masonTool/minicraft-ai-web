@@ -48,6 +48,8 @@ export interface CommandContext {
   setWorldSpawn(x: number, y: number, z: number): void;
   /** 给手持物品附魔（`/enchant`，批次 372）；成功返回 true */
   enchantHeld(id: string, level: number): boolean;
+  /** 播一个音效（`/playsound`，批次 389）；名字不认识返回 false */
+  playSound(name: string): boolean;
   /** 成功返回实际给出的数量，物品名不认识返回 -1 */
   give(itemName: string, count: number): number;
   clearInventory(): number;
@@ -491,6 +493,23 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       ctx.setWorldSpawn(pos.x, pos.y, pos.z);
       out.info(`已将世界出生点设置为 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
+    },
+  },
+  {
+    name: 'playsound',
+    usage: '/playsound <音效>',
+    description: '在玩家所在位置播一个音效（名字见音效设置里的分组）',
+    run(args, ctx, out) {
+      const name = args[0];
+      if (!name) {
+        out.error('用法：/playsound <音效>');
+        return;
+      }
+      if (!ctx.playSound(name)) {
+        out.error(`找不到音效：${name}`);
+        return;
+      }
+      out.info(`已播放音效 ${name}`);
     },
   },
   {

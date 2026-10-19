@@ -263,7 +263,14 @@ import {
   nextCameraMode,
   type CameraMode,
 } from './core/viewMode.ts';
-import { AudioEngine, digSoundFor, doorSoundFor, stepSoundFor, type SoundKind } from './core/audio/AudioEngine.ts';
+import {
+  AudioEngine,
+  SOUND_KINDS,
+  digSoundFor,
+  doorSoundFor,
+  stepSoundFor,
+  type SoundKind,
+} from './core/audio/AudioEngine.ts';
 import { mobVoiceFor, mobVoicePitchFor, mobVoiceSpec } from './core/audio/MobVoices.ts';
 import { MusicDirector } from './core/audio/Music.ts';
 import { DamageFlash } from './ui/DamageFlash.ts';
@@ -9020,6 +9027,11 @@ class App {
         this.spawnPoint = [x, y, z];
       },
       // 批次 372：/enchant 给手持物品附魔
+      playSound: (name) => {
+        if (!(SOUND_KINDS as readonly string[]).includes(name)) return false;
+        this.audio.play(name as SoundKind);
+        return true;
+      },
       enchantHeld: (id, level) => {
         const stack = this.inventory.get(this.hotbarIndex);
         if (!stack) return false;
