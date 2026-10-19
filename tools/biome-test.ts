@@ -121,6 +121,8 @@ equal(
   findLandBiome(point({ temperature: 0, humidity: 0.9, erosion: 0.5, weirdness: 0.5 })).name,
   'dark_forest',
 );
+
+
 equal(
   '稀疏丛林',
   findLandBiome(point({ temperature: 0.7, humidity: 0.5, erosion: 0.2, weirdness: -0.5 })).name,

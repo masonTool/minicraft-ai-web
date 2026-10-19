@@ -32,7 +32,7 @@ import { Aquifer } from './Aquifer.ts';
 import { CaveCarver } from './CaveCarver.ts';
 import { bandBlockAt, columnSurface } from './SurfaceRules.ts';
 import { OreGenerator } from './OreGenerator.ts';
-import { applyClimateGain, biomeForColumn, findLandBiome, type BiomeDef } from './Biome.ts';
+import { applyClimateGain, biomeById, biomeForColumn, findLandBiome, type BiomeDef } from './Biome.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { Spline, smoothstep } from './noise/Spline.ts';
@@ -194,6 +194,8 @@ export class OverworldGenerator {
   private readonly columnTop = new Int16Array(CHUNK_SIZE_X * CHUNK_SIZE_Z);
   /** 粗网格节点的地表高度缓存（地物/结构会反复查询同一片区域） */
   private readonly surfaceYCache = new Map<number, number>();
+  /** 陆地群系按 4 格粗格缓存（批次 340 的 3×3 多数投票要用 9 个邻格） */
+  private readonly landBiomeCache = new Map<string, number>();
 
   /**
    * 起伏倍率：默认 1，放大化世界把山体与峡谷的幅度整体放大。
@@ -522,19 +524,99 @@ export class OverworldGenerator {
    * 供地物与结构使用；与 `applySurface` 里的判定完全同一套逻辑。
    */
   columnBiome(x: number, z: number): BiomeDef {
-    const raw = this.climateAt(x, z);
-    return biomeForColumn(
-      {
-        temperature: raw.temperature,
-        humidity: raw.humidity,
-        continentalness: raw.continent,
-        erosion: raw.erosion,
-        depth: 0,
-        weirdness: raw.weirdness,
-      },
-      this.surfaceY(x, z),
-      SEA_LEVEL,
-    );
+    const top = this.surfaceY(x, z);
+    // 海洋 / 海岸仍按"地表高度 + 温度"判（那是水线决定的，不能平滑）
+    if (top <= SEA_LEVEL) {
+      const raw = this.climateAt(x, z);
+      return biomeForColumn(this.climatePointOf(raw), top, SEA_LEVEL);
+    }
+    return this.smoothedLandBiomeAt(x, z);
+  }
+
+  private climatePointOf(raw: {
+    continent: number;
+    erosion: number;
+    weirdness: number;
+    temperature: number;
+    humidity: number;
+  }): {
+    temperature: number;
+    humidity: number;
+    continentalness: number;
+    erosion: number;
+    depth: number;
+    weirdness: number;
+  } {
+    return {
+      temperature: raw.temperature,
+      humidity: raw.humidity,
+      continentalness: raw.continent,
+      erosion: raw.erosion,
+      depth: 0,
+      weirdness: raw.weirdness,
+    };
+  }
+
+  /** 4 格粗网格上的陆地群系（只依赖气候；缓存，避免 9 邻域重复采样） */
+  private landBiomeAtCell(cellX: number, cellZ: number): number {
+    const key = `${cellX},${cellZ}`;
+    const hit = this.landBiomeCache.get(key);
+    if (hit !== undefined) return hit;
+    const x = cellX * CELL_XZ + (CELL_XZ >> 1);
+    const z = cellZ * CELL_XZ + (CELL_XZ >> 1);
+    const biome = findLandBiome(applyClimateGain(this.climatePointOf(this.climateAt(x, z))));
+    if (this.landBiomeCache.size > 200_000) this.landBiomeCache.clear();
+    this.landBiomeCache.set(key, biome.id);
+    return biome.id;
+  }
+
+  /**
+   * 陆地群系平滑（批次 340）：在 **3×3 个 4 格粗格**上做多数投票。
+   *
+   * 为什么需要它：1.18 的群系边界是**平滑**的（原版先低分辨率采样再放大/模糊），
+   * 而这里是逐列点采样。宽区间群系看不出来，但"变体"必须比母群系窄才赢——
+   * 一窄就会被噪声切成"一格一换"的碎片（实测花海 24 格碎成 19 块）。
+   *
+   * 判据：**取 3×3 里票数最多的那个**（平票时保留中心格）。
+   *
+   * ⚠️ 第一版写的是"至少 5/9 票才改判，否则保留中心"——那样**孤立单格永远不会被吸收**
+   * （它自己是中心、9 格里只有 1 票），碎片一个都消不掉。改成"多数即改判"之后，
+   * 3 格以下的窄带会被邻格吞掉：这是想要的效果（宁可不出现，也不要"一格一换"）。
+   */
+  private smoothedLandBiomeAt(x: number, z: number): BiomeDef {
+    const cx = Math.floor(x / CELL_XZ);
+    const cz = Math.floor(z / CELL_XZ);
+    const ids = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let center = 0;
+    let k = 0;
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const id = this.landBiomeAtCell(cx + dx, cz + dz);
+        ids[k++] = id;
+        if (dx === 0 && dz === 0) center = id;
+      }
+    }
+    const countOf = (id: number): number => {
+      let n = 0;
+      for (let i = 0; i < 9; i++) if (ids[i] === id) n++;
+      return n;
+    };
+    let winner = center;
+    let best = countOf(center);
+    let tie = false;
+    for (let i = 0; i < 9; i++) {
+      const id = ids[i]!;
+      if (id === winner) continue;
+      const n = countOf(id);
+      if (n > best) {
+        best = n;
+        winner = id;
+        tie = false;
+      } else if (n === best) {
+        tie = true;
+      }
+    }
+    return biomeById(tie ? center : winner);
   }
 
   /**
@@ -749,18 +831,11 @@ export class OverworldGenerator {
         if (top < WORLD_MIN_Y) continue;
 
         const raw = this.climateAt(worldX, worldZ);
-        const biome = biomeForColumn(
-          {
-            temperature: raw.temperature,
-            humidity: raw.humidity,
-            continentalness: raw.continent,
-            erosion: raw.erosion,
-            depth: 0,
-            weirdness: raw.weirdness,
-          },
-          top,
-          SEA_LEVEL,
-        );
+        // 海洋/海岸按水线判；陆地走 3×3 多数投票（与 `columnBiome` 同一套口径）
+        const biome =
+          top <= SEA_LEVEL
+            ? biomeForColumn(this.climatePointOf(raw), top, SEA_LEVEL)
+            : this.smoothedLandBiomeAt(worldX, worldZ);
         const underwater = top < SEA_LEVEL;
 
         // 地表分层交给 SurfaceRules：群系地表 → 次表层 → （恶地的）深层彩色色带

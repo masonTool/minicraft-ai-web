@@ -9498,4 +9498,20 @@
 
 ---
 
+## 批次 337：文档门禁 + 批次编号器（2026-10-20）
+
+> 触发：两份"必读"又长回去了（auto-continue 1990 行、HANDOFF 1100+ 行），
+> 承诺的"只留最近 N 批"没有任何闸门；同时批次编号被并发会话撞了三次。
+
+- [x] B337-1 新增 `tools/audit-docs.mjs`：auto-continue 只留最近 3 个批次小节（上限 320 行）、
+  HANDOFF §1 只留最近 6 条批次记录（上限 340 行）；`--print` 只检查，`npm run docs:trim` 整段搬迁到归档
+- [x] B337-2 `npm run check` 接入 `audit:docs`
+- [x] B337-3 新增 `tools/batch-next.mjs` + `.codebuddy/batch-seq`：`npm run batch:next` 分配下一个编号
+- [x] B337-4 一次性瘦身：auto-continue **1990 → 110 行**、HANDOFF **1100+ → 313 行**（旧批次进归档，一字未改）
+- [x] B337-5 修正过期正文：J5（被动生物已实现清单）、D15（下界要塞已落地）、D21（去掉已完成结构）、
+  B18（弩 / 忠诚 / 穿刺 / 激流 / 横扫已做）
+- 门禁：`audit:docs` / `audit:tasks` / `audit:diffs` 全绿
+
+---
+
 <!-- docs-archive:end -->
