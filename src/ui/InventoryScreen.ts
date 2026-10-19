@@ -53,7 +53,13 @@ import {
 } from '../core/crafting/RecipeBook.ts';
 import { RECIPES, type Recipe } from '../core/crafting/Recipes.ts';
 // 熔炼表（批次 185）：判断"这件东西只能烧出来" → 合成箭头上面点亮熔炉图标
-import { SMELTING_RECIPES, fuelSeconds, smeltingRecipeFor } from '../core/crafting/Smelting.ts';
+import {
+  FURNACE_STATIONS,
+  SMELTING_RECIPES,
+  cookSeconds,
+  fuelSeconds,
+  smeltingRecipeFor,
+} from '../core/crafting/Smelting.ts';
 // 工作站"可做列表"（批次 277）：纯逻辑在 core，界面只画格子与填材料
 import {
   STATION_LABELS,
@@ -2192,6 +2198,11 @@ export class InventoryScreen {
     this.refresh();
   }
 
+  /** 手上那叠是不是从玩家背包拿起来的（选中不影响"背包里还有"的判断） */
+  private heldFromInventory(): boolean {
+    return this.held !== null && this.touchOrigin?.source === this.inventory;
+  }
+
   /** 主背包 + 快捷栏里的数量（工作站只从这里拿材料，盔甲/副手不算） */
   private bagCountOf(itemId: number): number {
     let total = 0;
@@ -2199,6 +2210,8 @@ export class InventoryScreen {
       const stack = this.inventory.get(i);
       if (stack && stack.id === itemId) total += stack.count;
     }
+    // 从背包选中（拿在手上）仍算背包拥有：燃料备选区不能因为选中就少一种
+    if (this.heldFromInventory() && this.held!.id === itemId) total += this.held!.count;
     return total;
   }
 
@@ -2363,6 +2376,8 @@ export class InventoryScreen {
       const id = this.inventory.get(i)?.id;
       if (id !== undefined && fuelSeconds(id) > 0) ids.add(id);
     }
+    // 选中的燃料也还"存在"：不能因为拿在手上就从备选区消失
+    if (this.held && fuelSeconds(this.held.id) > 0) ids.add(this.held.id);
     // 燃烧效率优先（干海带块 200s > 煤 80s > 木板 15s）；同效率再按偏好排序
     return [...ids].sort((a, b) => fuelSeconds(b) - fuelSeconds(a) || this.fuelRank(a) - this.fuelRank(b));
   }
@@ -2388,7 +2403,10 @@ export class InventoryScreen {
   /** 燃料备选区：把背包里的可燃物直接列在燃料格下方，点一下换上 */
   private renderFurnaceFuelOptions(furnace: Furnace): void {
     const current = furnace.get(FURNACE_FUEL);
-    const ids = [...new Set([...(current ? [current.id] : []), ...this.bagFuelOptions()])];
+    // 固定按燃烧效率从高到低排；不把"当前燃料"挪到最前面，否则点一下顺序就变了
+    const ids = [...new Set([...this.bagFuelOptions(), ...(current ? [current.id] : [])])].sort(
+      (a, b) => fuelSeconds(b) - fuelSeconds(a) || this.fuelRank(a) - this.fuelRank(b),
+    );
     if (ids.length === 0 || (current !== null && ids.length <= 1)) {
       this.furnaceFuelOptionsEl.classList.add('hidden');
       this.furnaceFuelOptionsEl.replaceChildren();
@@ -2397,7 +2415,8 @@ export class InventoryScreen {
     }
     const counts = ids.map((id) => {
       const inBag = this.bagCountOf(id);
-      return inBag + (current?.id === id ? current.count : 0);
+      const heldHere = !this.heldFromInventory() && this.held?.id === id ? this.held.count : 0;
+      return inBag + heldHere + (current?.id === id ? current.count : 0);
     });
     const key = ids.map((id, i) => `${id}:${counts[i]}`).join(',') + `|${current?.id ?? ''}`;
     if (key === this.furnaceFuelOptionsStamp && this.furnaceFuelOptionsEl.childElementCount > 0) return;
@@ -2414,9 +2433,14 @@ export class InventoryScreen {
       canvas.width = 22;
       canvas.height = 22;
       drawItemIcon(canvas, this.atlas, id, 20);
+      // 中文名直接写在图标下面（触摸端没有 hover，title 看不到）
+      const name = document.createElement('span');
+      name.className = 'furnace-fuel-name';
+      name.textContent = itemName(id);
       const count = document.createElement('span');
+      count.className = 'furnace-fuel-count';
       count.textContent = counts[index]! > 1 ? String(counts[index]) : '';
-      button.append(canvas, count);
+      button.append(canvas, name, count);
       button.addEventListener('click', () => this.selectFurnaceFuel(id));
       fragment.appendChild(button);
     });
@@ -2443,6 +2467,21 @@ export class InventoryScreen {
     return this.findBagFuel() !== null;
   }
 
+  /**
+   * 燃料格里"实际有燃料"（批次 303）：选中燃料格里的物品时，它只是拿在手上，
+   * 仍然算在燃料格里；从背包选中的燃料不算（必须点下方备选放进去）。
+   */
+  private furnaceHasSlotFuel(furnace: Furnace): boolean {
+    const fuel = furnace.get(FURNACE_FUEL);
+    if (fuel && fuelSeconds(fuel.id) > 0) return true;
+    return (
+      this.held !== null &&
+      fuelSeconds(this.held.id) > 0 &&
+      this.touchOrigin?.source === furnace &&
+      this.touchOrigin.index === FURNACE_FUEL
+    );
+  }
+
   private brewingFuelAvailable(stand: BrewingStand | null): boolean {
     if (stand && stand.fuelLeft > 0) return true;
     if (stand?.get(BREW_FUEL_SLOT)?.id === Item.BLAZE_POWDER) return true;
@@ -2460,7 +2499,9 @@ export class InventoryScreen {
   /** 背包 + 工作站格子里某件东西的总数（原料已经放进格子时不该标"缺料"） */
   private stationCountOf(itemId: number, container: BlockContainer | null): number {
     // 手上拿着的那叠也算"拥有"：从熔炉材料格选中时不应该把配方变红（批次 302）
-    let total = this.bagCountOf(itemId) + (this.held?.id === itemId ? this.held.count : 0);
+    // 从背包选中的已经算进 `bagCountOf`，别重复加
+    let total = this.bagCountOf(itemId);
+    if (!this.heldFromInventory() && this.held?.id === itemId) total += this.held.count;
     const size = this.stationSlotCount(container);
     if (container) {
       for (let i = 0; i < size; i++) {
@@ -2777,6 +2818,50 @@ export class InventoryScreen {
   }
 
   /**
+   * 目标框上显示的"预计制作数量"（批次 303）：
+   * 取原料数量、燃料还能烧的次数、产物 64 上限三者最小。
+   */
+  private expectedFurnaceOutput(entry: StationRecipeEntry): number {
+    const furnace = this.activeContainer;
+    if (!(furnace instanceof Furnace)) return entry.resultCount;
+    const input = entry.inputs[0]!;
+    const recipe = smeltingRecipeFor(input.id, furnace.station);
+    if (!recipe) return entry.resultCount;
+
+    let inputCount = 0;
+    const inSlot = furnace.get(FURNACE_INPUT);
+    if (inSlot?.id === input.id) inputCount += inSlot.count;
+    inputCount += this.bagCountOf(input.id);
+    if (
+      this.held?.id === input.id &&
+      this.touchOrigin?.source === furnace &&
+      this.touchOrigin.index === FURNACE_INPUT
+    ) {
+      inputCount += this.held.count;
+    }
+
+    const cook = cookSeconds(recipe, furnace.station);
+    let fuelTime = furnace.burnTimeLeft;
+    const fuel = furnace.get(FURNACE_FUEL);
+    if (fuel && fuelSeconds(fuel.id) > 0) {
+      fuelTime += fuel.count * fuelSeconds(fuel.id) * FURNACE_STATIONS[furnace.station].timeScale;
+    }
+    if (
+      this.held &&
+      fuelSeconds(this.held.id) > 0 &&
+      this.touchOrigin?.source === furnace &&
+      this.touchOrigin.index === FURNACE_FUEL
+    ) {
+      fuelTime += this.held.count * fuelSeconds(this.held.id) * FURNACE_STATIONS[furnace.station].timeScale;
+    }
+    const batches = cook > 0 ? Math.floor(fuelTime / cook) : 0;
+    return Math.max(
+      0,
+      Math.min(maxStackOf(entry.resultId), Math.min(inputCount, batches) * entry.resultCount),
+    );
+  }
+
+  /**
    * 目标框（批次 299）：**产物槽与目标槽合并成一格**。
    *
    *  - 容器里已有成品（熔炉烧好了 / 锻造台两格齐了）→ 画成品，点一下收取/升级；
@@ -2801,8 +2886,7 @@ export class InventoryScreen {
     }
     // 燃料格空 = 目标红且不可点（即使背包里有燃料，也要先点左栏配方把它放进去）
     if (entry?.available && isFurnaceMode(this.mode) && container instanceof Furnace) {
-      const fuel = container.get(FURNACE_FUEL);
-      if (!fuel || fuelSeconds(fuel.id) <= 0) {
+      if (!this.furnaceHasSlotFuel(container)) {
         entry = { ...entry, available: false, reason: 'missing_fuel' };
         this.stationTargetEntry = entry;
       }
@@ -2825,11 +2909,19 @@ export class InventoryScreen {
       this.renderInto(this.stationTargetEl, null);
       return;
     }
-    this.renderInto(this.stationTargetEl, { id: entry.resultId, count: entry.resultCount });
+    // 炉子显示"预计能做多少个"；其他工作站仍按配方产物数量
+    const expected =
+      isFurnaceMode(this.mode) && container instanceof Furnace
+        ? this.expectedFurnaceOutput(entry)
+        : entry.resultCount;
+    const previewCount = expected > 0 ? expected : entry.resultCount;
+    this.renderInto(this.stationTargetEl, { id: entry.resultId, count: previewCount });
     this.stationTargetEl.classList.add('preview-result');
     this.stationTargetEl.classList.toggle('locked', !entry.available);
     this.stationTargetEl.classList.toggle('ready', entry.available);
-    this.stationTargetEl.title = entry.available ? '点一下开始制作' : '材料不齐，不能开始';
+    this.stationTargetEl.title = entry.available
+      ? `点一下开始制作${expected > 0 ? `（预计 ${expected} 个）` : ''}`
+      : '材料或燃料不足，不能开始';
   }
 
   /** 点目标框：已有成品先收取；否则白底开始、红底只提示缺什么 */
@@ -2855,8 +2947,7 @@ export class InventoryScreen {
     }
     // 燃料槽空 = 红底不可点（背包里有燃料也不行，要先点左栏配方把它放进去）
     if (entry.available && isFurnaceMode(this.mode) && container instanceof Furnace) {
-      const fuel = container.get(FURNACE_FUEL);
-      if (!fuel || fuelSeconds(fuel.id) <= 0) {
+      if (!this.furnaceHasSlotFuel(container)) {
         entry = { ...entry, available: false, reason: 'missing_fuel' };
       }
     }

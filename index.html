@@ -2884,16 +2884,21 @@
       }
       .furnace-fuel-options.hidden { display: none; }
       .furnace-fuel-option {
-        position: relative; width: 26px; height: 26px; padding: 0;
+        position: relative; width: 42px; height: 46px; padding: 1px 0 0;
         cursor: pointer; background: #b8b8b8;
         border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+        display: flex; flex-direction: column; align-items: center; gap: 0;
       }
       .furnace-fuel-option.active {
         border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
         box-shadow: inset 0 0 0 1px #6aa84f;
       }
       .furnace-fuel-option canvas { width: 20px; height: 20px; }
-      .furnace-fuel-option span {
+      .furnace-fuel-name {
+        max-width: 38px; font-size: 8px; line-height: 1.1; color: #2b2b2b;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .furnace-fuel-count {
         position: absolute; right: 0; bottom: 0;
         font-size: 9px; line-height: 1; color: #fff;
         text-shadow: 1px 1px 0 #000;

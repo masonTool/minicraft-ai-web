@@ -759,6 +759,21 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.furnace-fuel-options'),
   );
   check(
+    '燃料备选区顺序固定按燃烧效率、中文名可见；选中不影响可选/槽内燃料（批次 303）',
+    invSrc.includes('[...new Set([...this.bagFuelOptions(), ...(current ? [current.id] : [])])].sort') &&
+      invSrc.includes("name.className = 'furnace-fuel-name'") &&
+      invSrc.includes('name.textContent = itemName(id)') &&
+      invSrc.includes('private heldFromInventory') &&
+      invSrc.includes('this.held && fuelSeconds(this.held.id) > 0') &&
+      invSrc.includes('private furnaceHasSlotFuel'),
+  );
+  check(
+    '目标框显示预计制作数量（批次 303）',
+    invSrc.includes('private expectedFurnaceOutput') &&
+      invSrc.includes('const previewCount = expected > 0 ? expected : entry.resultCount') &&
+      invSrc.includes('Math.min(maxStackOf(entry.resultId)'),
+  );
+  check(
     '炉子连续制作；关界面堆到 64，开界面自动收进背包（批次 302）',
     !/private takeFurnaceOutput[\s\S]{0,900}furnace\.paused = true/.test(invSrc) &&
       invSrc.includes('if (isFurnaceMode(mode) && this.activeContainer instanceof Furnace)') &&
@@ -766,7 +781,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '材料格/手上的物品计入拥有；满槽不标红；下方缺料提示已隐藏（批次 302）',
-    invSrc.includes('this.held?.id === itemId ? this.held.count : 0') &&
+    invSrc.includes('if (!this.heldFromInventory() && this.held?.id === itemId)') &&
       !invSrc.includes('current.count + input.count > maxStackOf(input.id)') &&
       /private renderStationHint\([\s\S]{0,500}classList\.add\('hidden'\)[\s\S]{0,120}return;/.test(invSrc),
   );
