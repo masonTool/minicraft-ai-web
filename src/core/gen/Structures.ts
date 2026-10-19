@@ -54,7 +54,10 @@ export type StructureKind =
   | 'woodland_mansion'
   // 批次 341（D21 第一批）
   | 'desert_pyramid'
-  | 'jungle_temple';
+  | 'jungle_temple'
+  // 批次 345（D21 第二批）
+  | 'witch_hut'
+  | 'pillager_outpost';
 
 /** 一个结构实例：原点 + 包围盒 + 随机源 */
 export interface StructureInstance {
@@ -303,6 +306,28 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
     height: 24,
     // 三种丛林都可能有（原版也生成在竹林与稀疏丛林）
     biomes: [Biome.JUNGLE, Biome.SPARSE_JUNGLE, Biome.BAMBOO_JUNGLE],
+  },
+  {
+    kind: 'witch_hut',
+    spacing: 32,
+    separation: 8,
+    chance: 0.6,
+    salt: 0xaaaa,
+    radius: 14,
+    height: 16,
+    // 原版只生成在沼泽
+    biomes: [Biome.SWAMP],
+  },
+  {
+    kind: 'pillager_outpost',
+    spacing: 32,
+    separation: 8,
+    chance: 0.7,
+    salt: 0xbbbb,
+    radius: 16,
+    height: 30,
+    // 原版：平原/沙漠/热带草原/针叶林/雪原等开阔地形
+    biomes: [Biome.PLAINS, Biome.DESERT, Biome.SAVANNA, Biome.TAIGA, Biome.SNOWY_PLAINS],
   },
 ];
 
@@ -1233,6 +1258,58 @@ function buildJungleTemple(w: FeatureWriter, s: StructureInstance): void {
   torch(w, s.x + 2, base + 2, s.z - 1);
 }
 
+// ---------------------------------------------------------------- 女巫小屋（批次 345）
+
+/** 沼泽里的高脚小屋：云杉木、四根柱子、炼药锅/工作台/箱子 */
+function buildWitchHut(w: FeatureWriter, s: StructureInstance): void {
+  const base = s.y;
+  const plank = Wood.spruce?.planks ?? Block.OAK_PLANKS;
+  const log = Wood.spruce?.log ?? Block.OAK_LOG;
+  clear(w, s.x - 3, base + 1, s.z - 3, s.x + 3, base + 7, s.z + 3);
+
+  for (const [dx, dz] of [[-3, -3], [3, -3], [-3, 3], [3, 3]] as const) {
+    for (let y = 1; y <= 2; y++) w.fill(s.x + dx, base + y, s.z + dz, log);
+  }
+  const floorY = base + 3;
+  box(w, s.x - 3, floorY, s.z - 3, s.x + 3, floorY, s.z + 3, plank);
+  walls(w, s.x - 3, floorY + 1, s.z - 3, s.x + 3, floorY + 3, s.z + 3, plank);
+  // 南侧门
+  w.fill(s.x, floorY + 1, s.z + 3, Block.AIR);
+  w.fill(s.x, floorY + 2, s.z + 3, Block.AIR);
+  // 屋顶（一层平台 + 向内收一圈）
+  box(w, s.x - 4, floorY + 4, s.z - 4, s.x + 4, floorY + 4, s.z + 4, plank);
+  box(w, s.x - 2, floorY + 5, s.z - 2, s.x + 2, floorY + 5, s.z + 2, plank);
+
+  w.fill(s.x - 2, floorY + 1, s.z - 2, Block.CAULDRON);
+  w.fill(s.x + 2, floorY + 1, s.z - 2, Block.CRAFTING_TABLE);
+  lootChest(w, s.x + 2, floorY + 1, s.z + 2, 'witch_hut');
+  torch(w, s.x, floorY + 2, s.z);
+}
+
+// ---------------------------------------------------------------- 掠夺者前哨（批次 345）
+
+/** 三层深色橡木塔；没有掠夺者（J24 未做），只作为可探索建筑与箱子来源 */
+function buildPillagerOutpost(w: FeatureWriter, s: StructureInstance): void {
+  const base = s.y;
+  const plank = Wood.dark_oak?.planks ?? Block.OAK_PLANKS;
+  const log = Wood.dark_oak?.log ?? Block.OAK_LOG;
+  clear(w, s.x - 3, base, s.z - 3, s.x + 3, base + 13, s.z + 3);
+
+  for (let level = 0; level < 3; level++) {
+    const y = base + level * 4;
+    box(w, s.x - 3, y, s.z - 3, s.x + 3, y, s.z + 3, plank);
+    walls(w, s.x - 3, y + 1, s.z - 3, s.x + 3, y + 3, s.z + 3, plank);
+    for (const [dx, dz] of [[-3, -3], [3, -3], [-3, 3], [3, 3]] as const) {
+      for (let t = 1; t <= 3; t++) w.fill(s.x + dx, y + t, s.z + dz, log);
+    }
+    // 上一层地板留一个 1×1 洞（不铺梯子，玩家可以自己搭）
+    if (level < 2) w.fill(s.x + 2, y, s.z + 2, Block.AIR);
+  }
+  box(w, s.x - 4, base + 12, s.z - 4, s.x + 4, base + 12, s.z + 4, plank);
+  lootChest(w, s.x, base + 9, s.z, 'outpost');
+  torch(w, s.x - 2, base + 9, s.z - 2);
+}
+
 // ---------------------------------------------------------------- 建造器表
 
 const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, world: FeatureWorld, seed: number) => void> = {
@@ -1245,6 +1322,8 @@ const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, w
   woodland_mansion: (w, s, world) => buildWoodlandMansion(w, s, world),
   desert_pyramid: (w, s) => buildDesertPyramid(w, s),
   jungle_temple: (w, s) => buildJungleTemple(w, s),
+  witch_hut: (w, s) => buildWitchHut(w, s),
+  pillager_outpost: (w, s) => buildPillagerOutpost(w, s),
 };
 
 /** 结构种类清单（测试用） */

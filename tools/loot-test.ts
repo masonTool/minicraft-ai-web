@@ -216,7 +216,9 @@ console.log('\n[填充：按表把箱子填上]');
     chunk.set(1, 40, 1, Block.CHEST, withChestLoot(0, dungeonIndex));
     chunk.set(3, 41, 3, Block.CHEST, withChestLoot(0, dungeonIndex));
     chunk.set(5, 40, 5, Block.CHEST, 0); // 玩家自己放的
-    chunk.set(7, 40, 7, Block.CHEST, withChestLoot(0, 15)); // 表序号越界 → 查不到表
+    // ⚠️ 批次 345 起表数正好 15 张 = 状态位能表示的最大值，
+    // "越界序号"已经**不可能从方块状态里出现**（`withChestLoot` 会夹到 15），
+    // 所以不再构造那一格；`lootTableByIndex` 的越界保护仍由纯函数测试覆盖。
     return chunk;
   }
 
@@ -235,7 +237,6 @@ console.log('\n[填充：按表把箱子填上]');
   );
   if (!first || !second) throw new Error('填充失败：带表的箱子应当被建出来');
   check('玩家的箱子没被碰（连容器都没创建）', store.get(Dimension.OVERWORLD, 5, 40, 5) === undefined);
-  check('表序号越界的箱子被跳过（不会崩、也不会乱填）', store.get(Dimension.OVERWORLD, 7, 40, 7) === undefined);
   check('填过的箱子都置了 looted', (first as Chest).looted === true && (second as Chest).looted === true);
 
   // 内容必须是这张表里列出的东西

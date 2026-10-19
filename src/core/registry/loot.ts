@@ -329,6 +329,41 @@ export const LOOT_TABLES: readonly LootTable[] = [
       empty(5),
     ],
   },
+  // ---- 批次 345：女巫小屋 / 掠夺者前哨（D21 第二批）
+  // ⚠️ 加完这两张表正好 **15/15**（4 位状态位的上限）；下一个结构要么复用表，
+  // 要么先把箱子状态位扩宽/换编码。
+  {
+    key: 'witch_hut',
+    name: '女巫小屋',
+    rollsMin: 2,
+    rollsMax: 5,
+    entries: [
+      entry(Item.GLOWSTONE_DUST, 1, 4, 6),
+      entry(Item.REDSTONE, 1, 4, 6),
+      entry(Item.GUNPOWDER, 1, 4, 5),
+      entry(Item.SPIDER_EYE, 1, 3, 4),
+      entry(Item.SUGAR, 1, 3, 4),
+      entry(Item.GLASS_BOTTLE, 1, 3, 3),
+      entry(Item.EMERALD, 1, 2, 2),
+      empty(5),
+    ],
+  },
+  {
+    key: 'outpost',
+    name: '掠夺者前哨',
+    rollsMin: 3,
+    rollsMax: 6,
+    entries: [
+      entry(Item.ARROW, 4, 12, 8),
+      entry(Item.BREAD, 1, 3, 6),
+      entry(Item.IRON_INGOT, 1, 3, 5),
+      entry(Item.EMERALD, 1, 3, 4),
+      entry(Item.STRING, 1, 4, 4),
+      entry(Item.CROSSBOW, 1, 1, 2),
+      entry(Item.DIAMOND, 1, 1, 1),
+      empty(5),
+    ],
+  },
 ];
 
 /** 序号 1 起的表（0 = 这一格没有战利品表，是玩家自己放的箱子） */

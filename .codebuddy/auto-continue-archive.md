@@ -9633,4 +9633,12 @@
 - [ ] B344-14 仍缺：炽足兽（岩浆行走）、蠹虫、潜影贝
 - 门禁：test:mob 132、spawn 56、reach 61、spider 62、audio 86
 
+## 批次 344 第四批：蠹虫（2026-10-20）
+
+- [x] B344-15 `SILVERFISH_TYPE`：8 血 / 伤害 1 / 节肢家族 / `naturalSpawn:false`
+- [x] B344-16 刷怪蛋 1514 + 图集 + `spider` 骨架 + 声音复用 spider
+- [x] B344-17 口径同步：生物 47→48、敌对 22→23、蛋 43→44、敌对-自然差 7→8
+- [x] B344-18 炽足兽（第五批）与潜影贝（第六批）均已落地
+- 门禁：test:mob 132、spider 62、reach 61
+
 <!-- docs-archive:end -->
