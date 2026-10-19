@@ -13,11 +13,15 @@
  *    `return SUCCESS`，走不到后面的 `hurtAndBreak`。这是个容易改错的"原版怪癖"，
  *    所以写在这里而不是散在调用处
  *  - 坐标缩放：主世界 ↔ 下界 水平 **÷8 / ×8**，竖直按两个维度的高度比例换算再夹紧
- *  - 站门计时：普通模式 **80 tick（4 秒）**、创造模式 **1 tick**；传送后 **300 tick 冷却**
+ *  - 站门计时：普通模式 **80 tick（4 秒）**、创造模式 **1 tick**
  *  - 到达时优先**找已有的门**（16 格半径），找不到就**照着原地新建一座 2×3 的门**
  *  - 框被破坏后门随之熄灭（见 `portalClusterAround`）
  *
  * 与原版的差异（写进 TASKS K8）：
+ *  - **没有原版那 300 tick（15 秒）传送冷却**：改成"落地时人还站在目的地那扇门里就先不计时，
+ *    走出去一次才重新武装"（见 `stepPortalStanding`）。原版那 15 秒会让"进门后想马上折返"
+ *    干等 19 秒（15 + 4），手感上就是"传送门没反应"；换成位置锁定后既不会一落地被弹回去，
+ *    也不用干等
  *  - 没有 POI 索引，找门的半径两个方向都取 **16 格**（原版主世界侧是 128 格）。
  *    代价：在距原门 16~128 格处单独建的门不会自动连起来（会各自新建一座）
  *  - 门面是一张**整格**的紫色方块（原版是 1 格厚的平面），没有 4 个朝向的模型
@@ -34,8 +38,6 @@ export type PortalAxis = 'x' | 'z';
 /** 站门多久会被传送（tick）：普通 80（4 秒）、创造 1（原版 `getPortalWaitTime`） */
 export const PORTAL_IGNITE_TICKS = 80;
 export const PORTAL_CREATIVE_IGNITE_TICKS = 1;
-/** 传送后的冷却（tick）：300 = 15 秒（原版数值），免得一落地就被传回去 */
-export const PORTAL_COOLDOWN_TICKS = 300;
 
 /** 门的尺寸上限（原版 21×21；新建的门固定 2×3，与原版 `PortalForcer` 一致） */
 export const PORTAL_MAX_WIDTH = 21;
@@ -69,6 +71,46 @@ export const PORTAL_SITE_RADIUS = 4;
 
 /** 门方块自己发的光（原版 11） */
 export const PORTAL_LIGHT = 11;
+
+// ---------------------------------------------------------------- 站门计时
+
+/** 站门计时的状态（主循环每 tick 喂一次 `stepPortalStanding`） */
+export interface PortalStanding {
+  /** 站在门里的累计 tick */
+  ticks: number;
+  /**
+   * 刚穿过门落地、人还站在**目的地那扇门**里：为真时不计时，必须先走出去一次。
+   *
+   * 这就是替代"传送后 15 秒冷却"的那条规则：目的相同（不会一落地就被弹回去），
+   * 但玩家想立刻折返时只要走出门再站回来即可，不用干等。
+   */
+  locked: boolean;
+}
+
+/**
+ * 站门计时一步（纯逻辑，见 `tools/netherportal-test.ts`）。
+ *
+ * - 不在门里：计时清零 + **解除落地锁定**（走出门 = 重新武装）
+ * - 落地锁定中：计时保持 0，这一 tick 不会传送（也不会把人弹回去）
+ * - 其余：累计 tick，满 `waitTicks` 返回 true
+ *
+ * @returns 这一 tick 是否该传送（调用方负责复位计时、切维度）
+ */
+export function stepPortalStanding(state: PortalStanding, inPortal: boolean, waitTicks: number): boolean {
+  if (!inPortal) {
+    state.ticks = 0;
+    state.locked = false;
+    return false;
+  }
+  if (state.locked) {
+    state.ticks = 0;
+    return false;
+  }
+  state.ticks++;
+  if (state.ticks < waitTicks) return false;
+  state.ticks = 0;
+  return true;
+}
 
 /** 传送门逻辑看到的世界 */
 export interface PortalWorld {

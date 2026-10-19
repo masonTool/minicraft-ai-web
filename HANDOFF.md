@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 868（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 869（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -98,6 +98,17 @@ npm run dev            # http://localhost:5173
   **297（容器暂停）/ 298（目标框界面）**；旧 commit message 里的 295/296 是撞号。
 - ⚠️ **批次编号冲突（第三次）**：并发会话占用了 **303**。本轮正式编号 **304**；
   旧 commit message 里的 303 是撞号。
+- 批次 329（用户："进入下界门后要等一下才能返回，传送门不能立刻生效"）：
+  根因不在找门/建门：落地时设了 `PORTAL_COOLDOWN_TICKS = 300`（15 秒）冷却，
+  而玩家落地正站在目的地那扇门里，`tickPortal` 在冷却期每 tick 都清零站门计时——
+  想返回要等 **15 秒冷却 + 4 秒站门 = 19 秒**（创造模式的 1 tick 也被一起挡住）。
+  ① 删掉 300 tick 冷却，改成 `PortalStanding.locked`（`stepPortalStanding` 纯逻辑，可离线断言）：
+     落地锁住这扇门，**走出门一次**才重新武装；站着不动不会被弹回去，
+     想折返只需「出门 → 再进来 → 4 秒」（创造 1 tick）；
+  ② 锁定期间站超过 2 秒给一次 HUD 提示「走出传送门再进来，就能返回」（整个会话一次）；
+  ③ `survivalState.portalCooldown` 换成 `portalLocked`。
+  `test:portal` **105** 条（新增 10 条：锁定不弹回 / 出门解锁 / 再进 80 tick / 创造 1 tick），
+  离线 **131** 套、`build:fast` 全绿。
 - 批次 328（用户："还是不行，未开工关闭重开仍自动开始"；`d541dd8`）：
   根因：只靠 UI 的 `paused` 仍可能被某条路径解除，炉子核心 tick 本身没有"是否开工"的概念。
   ① `Furnace` 新增 `started` 硬开关，`tick` 必须 `!paused && started`；
