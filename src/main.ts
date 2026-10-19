@@ -4881,7 +4881,7 @@ class App {
     );
     const origin = this.camera.position.clone();
     const dir = ndc.unproject(this.camera).sub(origin).normalize();
-    const reach = 5 + origin.distanceTo(new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z));
+    const reach = REACH + origin.distanceTo(new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z));
     const hit = raycastEntities(
       this.entities.all,
       origin.x,
@@ -7794,7 +7794,7 @@ class App {
    *
    * ⚠️ **不需要准星对着方块**（原版也不要求）：浮标朝你看的方向飞出去，
    * 落在水里才有下文、落在岸上就自己收回来。若要求"准星必须指着水面"，
-   * 就会撞上那个 4.5 格的交互距离——而钓鱼本来就要往远处抛。
+   * 就会撞上方块交互距离——而钓鱼本来就要往远处抛。
    */
   private useFishingRod(): void {
     if (this.uiOpen || this.stats.dead) return;

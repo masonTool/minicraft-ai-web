@@ -1819,6 +1819,21 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
     mainSource.includes('REACH + origin.distanceTo(eye)') &&
       mainSource.includes('if (eyeDistance > REACH + 0.05) return null;'),
   );
+  {
+    // 批次 336（用户："只能操作四五格，正式版能到 10 格左右"）
+    const tuning = readFileSync(new URL('../src/game/tuning.ts', import.meta.url), 'utf8');
+    check(
+      '交互距离：放置/破坏 10 格、近战 7.5 格（近战仍短于放置）',
+      tuning.includes('export const REACH = 10;') &&
+        tuning.includes('export const ATTACK_RANGE = 7.5;'),
+    );
+    check(
+      '载具点选共用放置距离（不再单写 5 格）',
+      mainSource.includes(
+        'const reach = REACH + origin.distanceTo(new THREE.Vector3(this.physics.x, this.physics.eyeY, this.physics.z));',
+      ) && !mainSource.includes('const reach = 5 + origin.distanceTo('),
+    );
+  }
   check(
     '触摸瞄准时命中面更亮 + 整块微光（准星那一路不变）',
     mainSource.includes('const strength = touchAim ? TOUCH_HIGHLIGHT_STRENGTH : 1;') &&
