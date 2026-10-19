@@ -2749,6 +2749,7 @@
          三份内容**占的是同一个格子**（col 1、row 1/span 2），切换只换内容：
          面板宽高、两栏的分界、右栏的位置全都不动——这就是"不该跳"的落点。 */
       .inv-panel.pocket-ui.pocket-dual .inv-category-section {
+        position: relative;
         grid-column: 1;
         grid-row: 1 / span 2;
         display: none;
@@ -2772,6 +2773,11 @@
         min-width: 0;
         box-sizing: border-box;
       }
+      /* 工作站左半区右上角的配方书按钮（批次 316） */
+      .station-recipe-btn {
+        position: absolute; top: 4px; right: 4px; z-index: 3;
+      }
+      .station-ui .inv-category-section .inv-search { padding-right: 76px; }
       /* 分类底部信息栏（批次 185）：当前分类"我有几种 / 共几种"。
          高度固定一行，不能吃掉网格的高度（网格是 flex:1 那一个）。 */
       .inv-category-info {
@@ -2896,6 +2902,7 @@
         transition: width .1s linear;
       }
       .furnace-slot-row {
+        position: relative;
         display: flex; align-items: center; gap: 8px; margin-left: 8px;
       }
       .furnace-slot-col {
@@ -2909,16 +2916,13 @@
       }
       .furnace-bottom {
         display: flex; flex-direction: column; width: 264px;
-        margin-top: 6px;
+        margin-top: 34px;
       }
-      /* 退还仓库在备选燃料上方（批次 312） */
-      .furnace-return-row {
-        display: flex; justify-content: flex-end;
-        width: 100%; padding-right: 10px;
-      }
+      /* 退还仓库绝对定位在目标/产物下方，不占布局行（批次 316） */
       .furnace-return {
+        position: absolute; top: calc(100% + 4px); right: 0;
         font: inherit; font-size: 11px; line-height: 1.2;
-        padding: 3px 6px; cursor: pointer;
+        padding: 3px 6px; cursor: pointer; white-space: nowrap;
         color: #2b2b2b; background: #c9b28f;
         border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }

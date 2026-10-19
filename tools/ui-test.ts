@@ -658,7 +658,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check(
     '工作站左栏复用物品分类栏 + 配方书开关',
     invSrc.includes("this.panel.dataset.pocketLeft = showCategory ? 'category' : 'items';") &&
-      invSrc.includes('this.recipesBtn?.classList.remove(\'hidden\')') &&
+      invSrc.includes('this.stationRecipeBtn') &&
       invSrc.includes('this.syncRecipeRail(showCategory ? this.categoryTab : null)'),
   );
   check(
@@ -778,7 +778,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     '熔炉：目标槽/产物槽并排、标签在上、退还仓库在下方（批次 309）',
     invSrc.includes("targetLabel.textContent = '目标'") &&
       invSrc.includes("productLabel.textContent = '产物'") &&
-      invSrc.includes('slotRow.append(targetCol, productCol)') &&
+      invSrc.includes('slotRow.append(targetCol, productCol, this.furnaceReturnBtn)') &&
       invSrc.includes('stage.append(core, progress, slotRow)') &&
       invSrc.includes('furnaceProductSlot') &&
       css.includes('.furnace-slot-label') &&
@@ -847,8 +847,8 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     invSrc.includes("inputLabel.textContent = '材料'") &&
       invSrc.includes("fuelLabel.textContent = '燃料'") &&
       invSrc.includes("optionsLabel.textContent = '备选燃料'") &&
-      invSrc.includes('bottom.append(returnRow, fuelHint') &&
-      css.includes('.furnace-return-row') &&
+      invSrc.includes('bottom.append(fuelHint, this.furnaceHintEl)') &&
+      css.includes('position: absolute; top: calc(100% + 4px); right: 0;') &&
       css.includes('.furnace-slot-side-label'),
   );
   check(
@@ -905,6 +905,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('private setStationTargetEntry') &&
       invSrc.includes('this.stationTargetOwner !== container') &&
       invSrc.includes('this.stationTargetOwner !== this.activeContainer'),
+  );
+  check(
+    '创造切生存后工作站分类条重新挂回左轨（批次 316）',
+    invSrc.includes('this.pocketRecipeBar.parentElement !== this.railLeft') &&
+      invSrc.includes('this.railLeft.replaceChildren(this.pocketRecipeBar, this.invTabEl)') &&
+      invSrc.includes('this.stationRecipeBtn') &&
+      css.includes('.station-recipe-btn'),
   );
   check(
     '点创造分类会切回无限物品页',

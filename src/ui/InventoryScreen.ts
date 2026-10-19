@@ -589,6 +589,8 @@ export class InventoryScreen {
   private craftStationEl: HTMLDivElement | null = null;
   /** 经典 UI 标题栏上的「配方书」文字按钮；携带版改用左上图标条 */
   private recipesBtn: HTMLButtonElement | null = null;
+  /** 工作站左半区右上角的「配方书」按钮（批次 316） */
+  private stationRecipeBtn: HTMLButtonElement | null = null;
   /** 携带版左上：配方书五个分类图标 */
   private readonly pocketRecipeBar: HTMLDivElement;
   /** 携带版底栏：合成 / 盔甲 / 物品栏 */
@@ -1248,6 +1250,22 @@ export class InventoryScreen {
     this.categoryHostEl.className = 'inv-category-section';
     this.categoryHostEl.dataset.role = 'pocket-category-host';
     this.buildCategorySection();
+
+    // 工作站左半区右上角的配方书按钮（批次 316）
+    this.stationRecipeBtn = document.createElement('button');
+    this.stationRecipeBtn.type = 'button';
+    this.stationRecipeBtn.className = 'inv-recipes-btn station-recipe-btn hidden';
+    this.stationRecipeBtn.textContent = '配方书';
+    this.stationRecipeBtn.addEventListener('click', () => {
+      if (this.pane === 'category') {
+        this.showUnowned = !this.showUnowned;
+        this.categoryPage = 0;
+      } else {
+        this.openPocketCategory(this.lastRecipeTab);
+      }
+      this.applyInventoryChrome();
+    });
+    this.categoryHostEl.appendChild(this.stationRecipeBtn);
 
     // 工作站左栏（批次 277）：可做 / 背包 两个页签 + 可做列表。
     // ⚠️ 必须在 `buildCreativeSection()` 之前建好：后者会调 `updateCreativeVisibility()`
@@ -3530,6 +3548,7 @@ export class InventoryScreen {
       this.restoreInvTabToRail();
       // 容器界面照旧给这颗按钮；创造模式下不要（同一口径，见下面那条注释）
       if (this.recipesBtn) this.recipesBtn.classList.toggle('hidden', creativePlayer);
+      this.stationRecipeBtn?.classList.add('hidden');
       // 容器界面没有右轨 → 成就用标题栏那颗；右轨那颗跟着藏
       this.achievementsBtn?.classList.remove('hidden');
       this.railAchievementsEl?.classList.add('hidden');
@@ -3568,13 +3587,22 @@ export class InventoryScreen {
       this.mainGridEl.style.display = showCategory ? 'none' : '';
       this.hotbarGridEl.style.display = '';
       if (showCategory) this.renderCategoryGrid();
+      // 工作站里配方书固定放到左半区右上角，标题栏那颗不再显示（批次 316）
+      this.recipesBtn?.classList.add('hidden');
       if (hasRecipes && !creativePlayer) {
+        // 从创造物品栏切回来后，railLeft 里可能还是创造分类条：
+        // pocketRecipeBar 已经脱离 DOM，必须重新挂回去，否则分类按钮消失（批次 316）
+        if (this.pocketRecipeBar.parentElement !== this.railLeft) {
+          this.railLeft.replaceChildren(this.pocketRecipeBar, this.invTabEl);
+        } else if (this.invTabEl.parentElement !== this.railLeft) {
+          this.railLeft.appendChild(this.invTabEl);
+        }
         this.pocketRecipeBar.classList.remove('hidden');
         this.railLeft.classList.remove('hidden');
-        this.recipesBtn?.classList.remove('hidden');
-        if (this.recipesBtn) {
-          this.recipesBtn.classList.toggle('active', showCategory && this.showUnowned);
-          this.recipesBtn.title = this.showUnowned
+        if (this.stationRecipeBtn) {
+          this.stationRecipeBtn.classList.toggle('hidden', !showCategory);
+          this.stationRecipeBtn.classList.toggle('active', showCategory && this.showUnowned);
+          this.stationRecipeBtn.title = this.showUnowned
             ? '配方书：正在列出所有工作站的配方 · 点一下只看本工作站现在能做的'
             : '只看本工作站现在能做的 · 点一下列出所有工作站的配方';
         }
@@ -3584,6 +3612,7 @@ export class InventoryScreen {
         this.pocketRecipeBar.classList.add('hidden');
         this.railLeft.classList.add('hidden');
         this.recipesBtn?.classList.add('hidden');
+        this.stationRecipeBtn?.classList.add('hidden');
       }
       this.gearEl.style.display = 'none';
       this.topArea.style.display = '';
@@ -3680,6 +3709,8 @@ export class InventoryScreen {
         ? '配方书：正在列出该分类的全部物品 · 点一下只看现在能合成的'
         : '只看现在能合成的（含用过的缺料）· 点一下列出该分类全部物品';
     }
+    // 工作站专用的左栏配方书按钮离开工作站时必须收起（批次 316）
+    this.stationRecipeBtn?.classList.add('hidden');
 
     // 换栏内容时给一下淡入：**位置不动**，只是让人看见"这一栏换了一份"
     if (this.open) {
@@ -4072,7 +4103,8 @@ export class InventoryScreen {
 
       const slotRow = document.createElement('div');
       slotRow.className = 'furnace-slot-row';
-      slotRow.append(targetCol, productCol);
+      // 退还仓库绝对定位在目标/产物下方，不占布局行（批次 316）
+      slotRow.append(targetCol, productCol, this.furnaceReturnBtn);
 
       const stage = document.createElement('div');
       stage.className = 'furnace-stage';
@@ -4081,14 +4113,9 @@ export class InventoryScreen {
       // 烟熏炉/高炉要写清"它只吃什么"：原版靠玩家自己知道，我们的界面里直接说明，
       // 免得玩家把石头塞进烟熏炉、看着它不动以为是坏了
       this.furnaceHintEl.textContent = '';
-      // 退还仓库放在备选燃料上方，避免和备选燃料同一行（批次 312）
-      const returnRow = document.createElement('div');
-      returnRow.className = 'furnace-return-row';
-      returnRow.append(this.furnaceReturnBtn);
-
       const bottom = document.createElement('div');
       bottom.className = 'furnace-bottom';
-      bottom.append(returnRow, fuelHint, this.furnaceHintEl);
+      bottom.append(fuelHint, this.furnaceHintEl);
 
       this.furnaceLayout.replaceChildren(stage, bottom);
       this.topArea.append(this.furnaceLayout, this.stationHintEl);
