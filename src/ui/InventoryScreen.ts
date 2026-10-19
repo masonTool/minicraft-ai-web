@@ -4208,33 +4208,41 @@ export class InventoryScreen {
       this.registerExisting(this.brewIngredientSlot, `brewing:${BREW_INGREDIENT_SLOT}`, stand!, BREW_INGREDIENT_SLOT);
       this.registerExisting(this.brewFuelSlot, `brewing:${BREW_FUEL_SLOT}`, stand!, BREW_FUEL_SLOT);
 
+      // 批次 331（用户）：左侧竖排「药水 → 材料 → 燃料」，右边是进度，再右边是目标；
+      // 退还仓库绝对定位在目标下方，不占流布局（目标列自己留 padding）。
       const bottles = document.createElement('div');
       bottles.className = 'brewing-bottles';
       bottles.append(...this.brewBottleSlots);
-      const bottleCol = document.createElement('div');
-      bottleCol.className = 'brewing-col';
-      bottleCol.append(this.buildLabel('药水（最多 3 瓶同时酿）'), bottles);
-
-      const materialCol = document.createElement('div');
-      materialCol.className = 'brewing-col';
-      materialCol.append(this.buildLabel('材料'), this.brewIngredientSlot);
-
-      const fuelCol = document.createElement('div');
-      fuelCol.className = 'brewing-col';
-      fuelCol.append(this.buildLabel('燃料'), this.brewFuelSlot);
-
-      const targetCol = document.createElement('div');
-      targetCol.className = 'brewing-col';
-      targetCol.append(this.buildLabel('目标'), this.stationTargetEl);
+      const line = (labelText: string, content: HTMLElement, title = ''): HTMLDivElement => {
+        const row = document.createElement('div');
+        row.className = 'brewing-line';
+        const label = document.createElement('span');
+        label.className = 'brewing-line-label';
+        label.textContent = labelText;
+        if (title) label.title = title;
+        row.append(label, content);
+        return row;
+      };
+      const left = document.createElement('div');
+      left.className = 'brewing-left';
+      left.append(
+        line('药水', bottles, '最多 3 瓶同时酿'),
+        line('材料', this.brewIngredientSlot),
+        line('燃料', this.brewFuelSlot),
+      );
 
       const middle = document.createElement('div');
       middle.className = 'brewing-middle';
       const track = document.createElement('div');
       track.className = 'furnace-cook';
       track.appendChild(this.brewProgressEl);
-      middle.append(track, this.brewFuelTextEl, this.brewReturnBtn);
+      middle.append(track, this.brewFuelTextEl);
 
-      this.brewingLayout.replaceChildren(bottleCol, middle, materialCol, fuelCol, targetCol);
+      const targetCol = document.createElement('div');
+      targetCol.className = 'brewing-col brewing-target-col';
+      targetCol.append(this.buildLabel('目标'), this.stationTargetEl, this.brewReturnBtn);
+
+      this.brewingLayout.replaceChildren(left, middle, targetCol);
       this.topArea.append(this.brewingLayout, this.stationHintEl);
       return;
     }

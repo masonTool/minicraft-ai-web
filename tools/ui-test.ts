@@ -728,6 +728,16 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('if (this.putIntoContainer(stand, slot, bottle!.id, bottle!.count)) bottled++;'),
   );
   check(
+    '酿造台布局：左药水/材料/燃料，右进度与目标，退还按钮绝对定位（批次 331）',
+    invSrc.includes("line('药水', bottles") &&
+      invSrc.includes("line('材料', this.brewIngredientSlot)") &&
+      invSrc.includes("line('燃料', this.brewFuelSlot)") &&
+      invSrc.includes('this.brewingLayout.replaceChildren(left, middle, targetCol)') &&
+      css.includes('.brewing-left {') &&
+      css.includes('.brewing-target-col {') &&
+      /\.brewing-target-col \.furnace-return \{[\s\S]{0,120}position: absolute/.test(css),
+  );
+  check(
     '工作站分类栏白底 = 当前站台能做（含燃料）；红底用 inv-slot.locked',
     invSrc.includes('const craftable = this.stationHasRecipes()') &&
       invSrc.includes('.filter((entry) => entry.available)') &&

@@ -3007,21 +3007,38 @@
       }
 
       /* ---------------- 酿造台（H10） ---------------- */
+      /*
+       * 批次 331（用户）：左侧竖排「药水 → 材料 → 燃料」，右边进度，再右边目标；
+       * 退还仓库在目标下方，绝对定位、不参与流布局。
+       */
       .brewing-layout {
-        display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap;
-        margin: 6px 0 10px; padding: 8px 4px;
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        margin: 6px 0 10px; padding: 8px 0;
+      }
+      .brewing-left { display: flex; flex-direction: column; gap: 6px; }
+      .brewing-line { display: flex; align-items: center; gap: 4px; }
+      .brewing-line-label {
+        flex: 0 0 24px; width: 24px;
+        font-size: 11px; line-height: 1; color: #4a4a4a; white-space: nowrap;
       }
       /* 三个药水槽横排（与原版一致：三瓶同时酿，摆在同一条线上最直观） */
-      .brewing-bottles { display: flex; gap: 6px; }
+      .brewing-bottles { display: flex; gap: 4px; }
       .brewing-col { display: flex; flex-direction: column; align-items: flex-start; }
-      .brewing-middle { display: flex; flex-direction: column; gap: 4px; width: 96px; }
-      /* 与熔炉同一条蓝色箭头（基础规则见 `.furnace-cook`），只是宽度跟着这一列 */
-      .brewing-middle .furnace-cook { width: 96px; }
-      /* 退还按钮在中间列里按正常流排，不吃熔炉那条绝对定位 */
-      .brewing-middle .furnace-return {
-        position: static; align-self: flex-start; margin-top: 2px;
+      /* 目标列自己留出底部空间给退还按钮；按钮绝对定位，不挤压进度/左侧 */
+      .brewing-target-col {
+        position: relative; align-items: center;
+        padding-bottom: 24px;
       }
-      .brewing-fuel-text { font-size: 11px; color: #2b5a2b; white-space: nowrap; }
+      .brewing-target-col .furnace-return {
+        position: absolute; top: auto; right: 0; bottom: 0;
+      }
+      .brewing-middle {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 4px; width: 72px;
+      }
+      /* 与熔炉同一条蓝色箭头（基础规则见 `.furnace-cook`），只是宽度跟着这一列 */
+      .brewing-middle .furnace-cook { width: 72px; }
+      .brewing-fuel-text { font-size: 11px; color: #2b5a2b; white-space: nowrap; text-align: center; }
       .brewing-fuel-text.bad { color: #7a2020; }
 
       .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 3px; justify-content: center; }
