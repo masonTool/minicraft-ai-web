@@ -136,6 +136,13 @@ console.log('\n[群系采样：23 个群系各生成一片区块]');
         if (gen.columnBiome(x, z).id === biomeId) return { cx: Math.floor(x / 16), cz: Math.floor(z / 16) };
       }
     }
+    // 批次 342：区域变体（繁花森林/原始白桦林）是"母群系里 12~15% 的 64 格小片"，
+    // 稀疏螺旋（每圈 8 个点）很容易整圈都踩不到。补一遍密集网格兜底。
+    for (let cz = -96; cz <= 96; cz++) {
+      for (let cx = -96; cx <= 96; cx++) {
+        if (gen.columnBiome(cx * 16 + 8, cz * 16 + 8).id === biomeId) return { cx, cz };
+      }
+    }
     return null;
   };
 
@@ -153,7 +160,7 @@ console.log('\n[群系采样：23 个群系各生成一片区块]');
     const missing = [...sampled].filter((id) => !generated.has(id));
     check(`${biome.name}：采样到的方块都在登记表里`, missing.length === 0, namesOf(missing));
   }
-  equal('23 个主世界群系都采到了样', covered, BIOMES.length);
+  equal('34 个主世界群系都采到了样', covered, BIOMES.length);
 }
 
 // ---------------------------------------------------------------- 3. 下界与末地采样

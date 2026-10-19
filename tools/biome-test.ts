@@ -12,6 +12,7 @@ import {
   LAND_BIOMES,
   biomeForColumn,
   findLandBiome,
+  regionVariantAt,
   type ClimatePoint,
 } from '../src/core/gen/Biome.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
@@ -115,7 +116,20 @@ check(
 );
 
 console.log('\n[批次 339：森林 / 丛林变体]');
-equal('群系表共 32 种', BIOMES.length, 32);
+equal('群系表共 34 种', BIOMES.length, 34);
+{
+  // 批次 342：区域变体不参与气候匹配，只按 64 格哈希掷点
+  const forest = BIOMES.find((biome) => biome.id === 8)!;
+  const flower = BIOMES.find((biome) => biome.id === 32)!;
+  const hits = [] as string[];
+  for (let i = 0; i < 200; i++) {
+    const found = regionVariantAt(forest, i * 64, i * 64);
+    if (found.id === flower.id) hits.push(`${i}`);
+  }
+  check('繁花森林能在森林里按区域出现（200 格里至少有 10 片）', hits.length >= 10, `命中 ${hits.length} 格`);
+  check('区域变体是确定性的（同坐标两次一致）', regionVariantAt(forest, 128, 128).id === regionVariantAt(forest, 128, 128).id);
+  equal('区域变体不参与气候匹配', LAND_BIOMES.some((biome) => biome.variantOf !== undefined), false);
+}
 equal(
   '深色森林',
   findLandBiome(point({ temperature: 0, humidity: 0.9, erosion: 0.5, weirdness: 0.5 })).name,

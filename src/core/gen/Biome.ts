@@ -34,6 +34,9 @@ export const Biome = {
   SPARSE_JUNGLE: 29,
   BAMBOO_JUNGLE: 30,
   SNOWY_BEACH: 31,
+  // 批次 342：低频率区域变体（不参与气候匹配）
+  FLOWER_FOREST: 32,
+  OLD_GROWTH_BIRCH_FOREST: 33,
   BEACH: 4,
   STONY_SHORE: 5,
   PLAINS: 6,
@@ -76,6 +79,16 @@ export interface BiomeDef {
   readonly depth: Range;
   /** 奇异度 */
   readonly weirdness: Range;
+  /**
+   * 区域变体（批次 342）：它的母群系 id。
+   *
+   * 变体**不参与气候匹配**（`LAND_BIOMES` 会把它过滤掉），而是在母群系命中之后，
+   * 按 **64 格粗格** 的哈希决定"这一片是不是变体"。原因：窄气候区间在 4 格粗格上
+   * 只有 1~2 格宽，无论怎么平滑都会被切成碎片；而 64 格哈希天然给出成片的区域。
+   */
+  readonly variantOf?: number;
+  /** 变体占比（0~100，按 64 格粗格掷点） */
+  readonly regionChance?: number;
 
   /** 地表方块 */
   readonly surface: number;
@@ -685,6 +698,47 @@ export const BIOMES: readonly BiomeDef[] = [
     foliageColor: 0x30bb0b,
   },
   {
+    id: Biome.FLOWER_FOREST,
+    name: 'flower_forest',
+    ocean: false,
+    // 气候区间给全集：它**不参与匹配**，只在森林命中之后按 64 格区域掷点
+    temperature: ANY,
+    humidity: ANY,
+    continentalness: ANY,
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    variantOf: Biome.FOREST,
+    regionChance: 12,
+    surface: Block.GRASS_BLOCK,
+    subSurface: Block.DIRT,
+    subDepth: 3,
+    underwater: Block.DIRT,
+    snowy: false,
+    grassColor: 0x79c05a,
+    foliageColor: 0x59ae30,
+  },
+  {
+    id: Biome.OLD_GROWTH_BIRCH_FOREST,
+    name: 'old_growth_birch_forest',
+    ocean: false,
+    temperature: ANY,
+    humidity: ANY,
+    continentalness: ANY,
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    variantOf: Biome.BIRCH_FOREST,
+    regionChance: 15,
+    surface: Block.GRASS_BLOCK,
+    subSurface: Block.DIRT,
+    subDepth: 3,
+    underwater: Block.DIRT,
+    snowy: false,
+    grassColor: 0x88bb67,
+    foliageColor: 0x6ba941,
+  },
+  {
     id: Biome.SNOWY_BEACH,
     name: 'snowy_beach',
     ocean: false,
@@ -819,15 +873,42 @@ export function biomeById(id: number): BiomeDef {
   return BIOME_TABLE[id] ?? BIOME_TABLE[0]!;
 }
 
-/** 只在这些群系里做陆地表层匹配（海洋/海岸单独判） */
+/** 只在这些群系里做陆地表层匹配（海洋/海岸单独判；区域变体也不参与） */
 export const LAND_BIOMES = BIOMES.filter(
   (biome) =>
     !biome.ocean &&
+    biome.variantOf === undefined &&
     biome.id !== Biome.BEACH &&
     biome.id !== Biome.STONY_SHORE &&
     // 批次 339：积雪沙滩与沙滩同一个判定通道，不能进陆地匹配
     biome.id !== Biome.SNOWY_BEACH,
 );
+
+/**
+ * 64 格粗格上的确定性哈希（批次 342）。用整数混合而不是 `Math.random`：
+ * 同一个坐标必须永远给出同一个结论（存档/联机/跨区块重放都依赖这一点）。
+ */
+function regionHash(x: number, z: number, salt: number): number {
+  let h = (Math.imul(x, 374761393) + Math.imul(z, 668265263) + Math.imul(salt, 1442695041)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) | 0;
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+/**
+ * 母群系 → 区域变体（批次 342）。`x/z` 是**世界坐标**，内部按 64 格切格。
+ * 没有变体命中时原样返回母群系。
+ */
+export function regionVariantAt(base: BiomeDef, x: number, z: number): BiomeDef {
+  for (const biome of BIOMES) {
+    if (biome.variantOf !== base.id) continue;
+    const chance = biome.regionChance ?? 0;
+    if (chance <= 0) continue;
+    const cx = Math.floor(x / 64);
+    const cz = Math.floor(z / 64);
+    if (regionHash(cx, cz, biome.id) % 100 < chance) return biome;
+  }
+  return base;
+}
 
 /**
  * 只在陆地群系里找最近匹配

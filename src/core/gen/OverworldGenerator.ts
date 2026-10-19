@@ -32,7 +32,7 @@ import { Aquifer } from './Aquifer.ts';
 import { CaveCarver } from './CaveCarver.ts';
 import { bandBlockAt, columnSurface } from './SurfaceRules.ts';
 import { OreGenerator } from './OreGenerator.ts';
-import { applyClimateGain, biomeById, biomeForColumn, findLandBiome, type BiomeDef } from './Biome.ts';
+import { applyClimateGain, biomeById, biomeForColumn, findLandBiome, regionVariantAt, type BiomeDef } from './Biome.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { Spline, smoothstep } from './noise/Spline.ts';
@@ -374,7 +374,7 @@ export class OverworldGenerator {
    * depth 维度目前恒为 0（所有群系的 depth 区间都是全集，不影响匹配结果）。
    */
   biomeAt(x: number, z: number): BiomeDef {
-    return findLandBiome(
+    const base = findLandBiome(
       applyClimateGain({
         temperature: this.temperature.getValue(x, 0, z),
         humidity: this.humidity.getValue(x, 0, z),
@@ -384,6 +384,8 @@ export class OverworldGenerator {
         weirdness: this.ridges.getValue(x, 0, z),
       }),
     );
+    // 批次 342：母群系命中之后，再按 64 格区域决定是不是变体
+    return regionVariantAt(base, x, z);
   }
 
   /**
@@ -564,7 +566,8 @@ export class OverworldGenerator {
     if (hit !== undefined) return hit;
     const x = cellX * CELL_XZ + (CELL_XZ >> 1);
     const z = cellZ * CELL_XZ + (CELL_XZ >> 1);
-    const biome = findLandBiome(applyClimateGain(this.climatePointOf(this.climateAt(x, z))));
+    const base = findLandBiome(applyClimateGain(this.climatePointOf(this.climateAt(x, z))));
+    const biome = regionVariantAt(base, x, z);
     if (this.landBiomeCache.size > 200_000) this.landBiomeCache.clear();
     this.landBiomeCache.set(key, biome.id);
     return biome.id;
