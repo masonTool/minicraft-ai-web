@@ -293,6 +293,42 @@ export const LOOT_TABLES: readonly LootTable[] = [
       empty(6),
     ],
   },
+  // ---- 批次 341：沙漠神殿 / 丛林神庙（D21 第一批）
+  {
+    key: 'desert_pyramid',
+    name: '沙漠神殿',
+    rollsMin: 2,
+    rollsMax: 6,
+    entries: [
+      entry(Item.GOLD_INGOT, 1, 4, 6),
+      entry(Item.IRON_INGOT, 1, 4, 6),
+      entry(Item.EMERALD, 1, 3, 4),
+      entry(Item.BONE, 1, 5, 4),
+      entry(Item.STRING, 1, 4, 3),
+      entry(Item.GUNPOWDER, 1, 4, 3),
+      entry(Item.DIAMOND, 1, 2, 2),
+      entry(Item.GOLDEN_APPLE, 1, 1, 1),
+      entry(Item.SADDLE, 1, 1, 1), // 原版沙漠神殿的招牌掉落之一
+      empty(5),
+    ],
+  },
+  {
+    key: 'jungle_temple',
+    name: '丛林神庙',
+    rollsMin: 2,
+    rollsMax: 5,
+    entries: [
+      entry(Item.EMERALD, 1, 3, 6),
+      entry(Item.GOLD_INGOT, 1, 3, 5),
+      entry(Item.IRON_INGOT, 1, 3, 5),
+      entry(Item.BONE, 1, 5, 4),
+      entry(Item.STRING, 1, 4, 3),
+      entry(Item.GUNPOWDER, 1, 3, 3),
+      entry(Item.DIAMOND, 1, 2, 2),
+      entry(Item.GOLDEN_APPLE, 1, 1, 1),
+      empty(5),
+    ],
+  },
 ];
 
 /** 序号 1 起的表（0 = 这一格没有战利品表，是玩家自己放的箱子） */

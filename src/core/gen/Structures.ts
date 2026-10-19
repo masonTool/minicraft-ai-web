@@ -51,7 +51,10 @@ export type StructureKind =
   | 'dungeon'
   | 'shipwreck'
   | 'ocean_monument'
-  | 'woodland_mansion';
+  | 'woodland_mansion'
+  // 批次 341（D21 第一批）
+  | 'desert_pyramid'
+  | 'jungle_temple';
 
 /** 一个结构实例：原点 + 包围盒 + 随机源 */
 export interface StructureInstance {
@@ -278,6 +281,28 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
     // 批次 339 补上深色森林之后，林地府邸回到原版的群系限定
     // （以前群系表里没有 dark_forest，只能退化成"森林里的稀有大型木质建筑"）
     biomes: [Biome.DARK_FOREST, Biome.FOREST],
+  },
+  {
+    kind: 'desert_pyramid',
+    spacing: 40,
+    separation: 8,
+    chance: 0.8,
+    salt: 0x8888,
+    radius: 24,
+    height: 24,
+    // 原版沙漠神殿只生成在沙漠
+    biomes: [Biome.DESERT],
+  },
+  {
+    kind: 'jungle_temple',
+    spacing: 40,
+    separation: 8,
+    chance: 0.75,
+    salt: 0x9999,
+    radius: 20,
+    height: 24,
+    // 三种丛林都可能有（原版也生成在竹林与稀疏丛林）
+    biomes: [Biome.JUNGLE, Biome.SPARSE_JUNGLE, Biome.BAMBOO_JUNGLE],
   },
 ];
 
@@ -1146,6 +1171,68 @@ function buildWoodlandMansion(w: FeatureWriter, s: StructureInstance, world: Fea
   }
 }
 
+// ---------------------------------------------------------------- 沙漠神殿（批次 341）
+
+/**
+ * 沙漠神殿：21×21 四级阶梯金字塔。
+ *
+ * ⚠️ 与原版的差异：原版宝库在地下的一个房间里（入口是向下的阶梯）；
+ * 这里把宝库放在**基座层**、由北侧 1×3 走廊直通——地形起伏下挖竖井要额外一套
+ * 支撑/梯子处理，先把"有房间、有四个箱子、有战利品"这条主干做出来。
+ */
+function buildDesertPyramid(w: FeatureWriter, s: StructureInstance): void {
+  const base = s.y;
+  box(w, s.x - 10, base, s.z - 10, s.x + 10, base, s.z + 10, Block.SANDSTONE);
+
+  for (const [radius, dy] of [[10, 0], [7, 4], [4, 8], [2, 12]] as const) {
+    box(w, s.x - radius, base + dy + 1, s.z - radius, s.x + radius, base + dy + 4, s.z + radius, Block.SANDSTONE);
+    // 每级顶面一圈切制砂岩（原版那种"描边"）
+    box(w, s.x - radius, base + dy + 4, s.z - radius, s.x + radius, base + dy + 4, s.z + radius, Block.CUT_SANDSTONE);
+  }
+  box(w, s.x - 2, base + 17, s.z - 2, s.x + 2, base + 17, s.z + 2, Block.SMOOTH_SANDSTONE);
+
+  // 北侧入口 → 中央宝库
+  clear(w, s.x, base + 1, s.z - 10, s.x, base + 3, s.z - 1);
+  clear(w, s.x - 3, base + 1, s.z - 1, s.x + 3, base + 3, s.z + 3);
+  lootChest(w, s.x - 3, base + 1, s.z - 1, 'desert_pyramid');
+  lootChest(w, s.x + 3, base + 1, s.z - 1, 'desert_pyramid');
+  lootChest(w, s.x - 3, base + 1, s.z + 3, 'desert_pyramid');
+  lootChest(w, s.x + 3, base + 1, s.z + 3, 'desert_pyramid');
+  torch(w, s.x, base + 2, s.z + 1);
+}
+
+// ---------------------------------------------------------------- 丛林神庙（批次 341）
+
+/** 丛林神庙：13×13 三级阶梯，苔石斑驳，南侧入口通中央密室 */
+function buildJungleTemple(w: FeatureWriter, s: StructureInstance): void {
+  const rng = s.rng;
+  const base = s.y;
+  const stone = (): number => (rng.chance(0.35) ? Block.MOSSY_COBBLESTONE : Block.COBBLESTONE);
+
+  for (let x = -6; x <= 6; x++) {
+    for (let z = -6; z <= 6; z++) w.fill(s.x + x, base, s.z + z, stone());
+  }
+
+  for (const [radius, dy] of [[6, 0], [4, 3], [2, 6]] as const) {
+    for (let y = 1; y <= 3; y++) {
+      for (let x = -radius; x <= radius; x++) {
+        for (let z = -radius; z <= radius; z++) w.fill(s.x + x, base + dy + y, s.z + z, stone());
+      }
+    }
+    for (let x = -radius; x <= radius; x++) {
+      w.fill(s.x + x, base + dy + 3, s.z - radius, Block.CHISELED_STONE_BRICKS);
+      w.fill(s.x + x, base + dy + 3, s.z + radius, Block.CHISELED_STONE_BRICKS);
+    }
+  }
+
+  // 南侧入口 → 中央密室
+  clear(w, s.x, base + 1, s.z + 6, s.x, base + 2, s.z + 2);
+  clear(w, s.x - 2, base + 1, s.z - 2, s.x + 2, base + 2, s.z + 2);
+  lootChest(w, s.x, base + 1, s.z - 2, 'jungle_temple');
+  torch(w, s.x - 2, base + 2, s.z - 1);
+  torch(w, s.x + 2, base + 2, s.z - 1);
+}
+
 // ---------------------------------------------------------------- 建造器表
 
 const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, world: FeatureWorld, seed: number) => void> = {
@@ -1156,6 +1243,8 @@ const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, w
   shipwreck: (w, s) => buildShipwreck(w, s),
   ocean_monument: (w, s, world, seed) => buildOceanMonument(w, s, world, seed),
   woodland_mansion: (w, s, world) => buildWoodlandMansion(w, s, world),
+  desert_pyramid: (w, s) => buildDesertPyramid(w, s),
+  jungle_temple: (w, s) => buildJungleTemple(w, s),
 };
 
 /** 结构种类清单（测试用） */

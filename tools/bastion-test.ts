@@ -231,7 +231,8 @@ console.log('\n[配方：两块建材各一条，鎏金黑石没有配方]');
 console.log('\n[两张战利品表：追加在表尾]');
 {
   // 批次 111（K9）在表尾追加了第 11 张（要塞传送门房），所以这里跟着 +1
-  equal('表的总数 8 → 10（批次 111 起是 11）', LOOT_TABLES.length, 11);
+  // 批次 341 追加沙漠神殿/丛林神庙两张 → 13（仍 < 4 位状态位的 15 张上限）
+  equal('表的总数是 13（批次 341 起）', LOOT_TABLES.length, 13);
   equal('宝库表在倒数第二位', LOOT_TABLES[8]?.key, 'bastion_treasure');
   equal('杂物表是最后一张', LOOT_TABLES[9]?.key, 'bastion_other');
   equal('序号从 1 起（宝库 = 9）', lootTableIndex('bastion_treasure'), 9);
