@@ -168,7 +168,7 @@ import {
   type ScheduledTick,
   type TickWorld,
 } from './core/tick/RandomTicks.ts';
-import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
+import { fluidTick, scheduleExposedFluids, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
 import { scrapeResult } from './core/world/Copper.ts';
 import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
@@ -926,6 +926,8 @@ class App {
     schedule: (x, y, z, delay) => {
       this.scheduler.schedule(x, y, z, this.dimension, delay);
     },
+    // 区块加载时扫"暴露的流体"会查到边界外：未加载的邻居不能当空气
+    isLoaded: (x, z) => this.world.isLoaded(x, z),
   };
   /**
    * 区块级降水刻（批次 47）：下雪时**空气里自己长出第一层雪**。
@@ -1695,6 +1697,9 @@ class App {
         this.restoreVehicles(chunk.cx, chunk.cz);
         // 生物与掉落物（批次 258）：同一条恢复路径
         this.restoreChunkEntities(chunk.cx, chunk.cz);
+        // 流体（批次 281）：自然生成的水/岩浆没有计划刻，海边、洞穴口、含水层顶
+        // 即使贴着空气也不会自己流；加载时把"暴露的那一层"补排进计划刻。
+        scheduleExposedFluids(this.fluidWorld, chunk);
         this.chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz);
         this.refreshLoadingState();
       },
