@@ -810,6 +810,62 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     trigger: { kind: 'obtain', ids: [Item.PRISMARINE_SHARD] },
   },
 
+  // ---------------------------------------------------------------- 批次 364：下界合金与末影
+  {
+    id: 'minecraft:story/obtain_ancient_debris',
+    parent: 'minecraft:story/root',
+    tab: 'minecraft',
+    title: '远古残骸',
+    desc: '在下界 Y<15 挖到远古残骸',
+    icon: Block.ANCIENT_DEBRIS,
+    trigger: { kind: 'obtain', ids: [Block.ANCIENT_DEBRIS] },
+  },
+  {
+    id: 'minecraft:story/obtain_netherite_ingot',
+    parent: 'minecraft:story/root',
+    tab: 'minecraft',
+    title: '下界合金',
+    desc: '用 4 个下界合金碎片 + 4 个金锭合成下界合金锭',
+    icon: Item.NETHERITE_INGOT,
+    trigger: { kind: 'obtain', ids: [Item.NETHERITE_INGOT] },
+  },
+  {
+    id: 'minecraft:story/obtain_ender_chest',
+    parent: 'minecraft:story/root',
+    tab: 'minecraft',
+    title: '末影箱',
+    desc: '合成一个末影箱（8 黑曜石 + 1 末影之眼）',
+    icon: Block.ENDER_CHEST,
+    trigger: { kind: 'obtain', ids: [Block.ENDER_CHEST] },
+  },
+  {
+    id: 'minecraft:adventure/obtain_ender_pearl',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '末影珍珠',
+    desc: '从末影人身上拿到一颗末影珍珠',
+    icon: Item.ENDER_PEARL,
+    trigger: { kind: 'obtain', ids: [Item.ENDER_PEARL] },
+  },
+  {
+    id: 'minecraft:adventure/obtain_blaze_powder',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '烈焰粉',
+    desc: '把烈焰棒磨成烈焰粉（酿造材料）',
+    icon: Item.BLAZE_POWDER,
+    trigger: { kind: 'obtain', ids: [Item.BLAZE_POWDER] },
+  },
+  {
+    id: 'minecraft:adventure/obtain_slime_ball',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '黏液球',
+    desc: '从史莱姆身上拿到一个黏液球',
+    icon: Item.SLIME_BALL,
+    trigger: { kind: 'obtain', ids: [Item.SLIME_BALL] },
+  },
+
   // ---------------------------------------------------------------- 批次 356：矿物块与工作站
   {
     id: 'minecraft:story/obtain_iron_block',
