@@ -764,6 +764,16 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     trigger: { kind: 'kill', mobs: ['wither_skeleton'] },
   },
   {
+    id: 'minecraft:adventure/kill_a_wither',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '凋灵终结者',
+    desc: '击败凋灵（4 块灵魂沙 + 3 个凋灵骷髅头召唤）',
+    icon: Item.NETHER_STAR,
+    trigger: { kind: 'kill', mobs: ['wither'] },
+    challenge: true,
+  },
+  {
     id: 'minecraft:adventure/kill_a_pillager',
     parent: 'minecraft:adventure/root',
     tab: 'adventure',

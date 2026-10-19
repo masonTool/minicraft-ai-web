@@ -8573,6 +8573,10 @@ class App {
     };
     this.lastEntityContext = context;
     this.entities.update(context, dt);
+    // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
+    const witherAlive = this.aliveWither() !== null;
+    if (this.witherWasAlive && !witherAlive) this.reportProgress({ kind: 'kill', mob: 'wither' });
+    this.witherWasAlive = witherAlive;
     // 船先动、人再贴上去：顺序不能反，否则相机会比船慢一帧（看着像"人在水里拖着船"）
     this.syncRiderToVehicle();
     // 拴绳（批次 256）：动物动完之后再画绳子，否则线段会落后一帧
@@ -10053,6 +10057,9 @@ class App {
    * 三种状态各有各的样子：末影龙是紫色、凋灵是暗红、凋灵的**护盾期**闪蓝
    * （那 5 秒打它不掉血，玩家必须看得出来，否则会以为"打不动是 bug"）。
    */
+  /** 凋灵是否活着（批次 370：用来在它倒下的那一帧补一条击杀进度） */
+  private witherWasAlive = false;
+
   private updateBossBar(): void {
     if (!this.bossBarEl || !this.bossFillEl) return;
     const dragon = this.endDragon;

@@ -118,10 +118,13 @@ console.log('\n[进度表：触发条件都"打得中"]');
   const emptyIds = ADVANCEMENTS.filter((def) => def.trigger.ids !== undefined && def.trigger.ids.length === 0);
   check('没有"给了空 id 列表"的条目', emptyIds.length === 0);
 
+  // 凋灵是独立实体（`Wither.ts`，不在 `MobType` 表里），主程序在它倒下时补发 kill
   const badMobs = ADVANCEMENTS.flatMap((def) =>
-    (def.trigger.mobs ?? []).filter((mob) => mobTypeById(mob) === undefined).map((mob) => `${def.id}:${mob}`),
+    (def.trigger.mobs ?? [])
+      .filter((mob) => mob !== 'wither' && mobTypeById(mob) === undefined)
+      .map((mob) => `${def.id}:${mob}`),
   );
-  check('击杀/繁殖引用的生物都在生物表里', badMobs.length === 0, badMobs.join(','));
+  check('击杀/繁殖引用的生物都在生物表里（凋灵除外）', badMobs.length === 0, badMobs.join(','));
 
   const known: string[] = [Dimension.OVERWORLD, Dimension.NETHER, Dimension.END];
   const badDimensions = ADVANCEMENTS.flatMap((def) =>
