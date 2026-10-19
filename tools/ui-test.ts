@@ -775,14 +775,17 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes("this.furnaceReturnBtn.textContent = '退还仓库'"),
   );
   check(
-    '熔炉：箭头进度→目标→产物槽，退还仓库在槽下方（批次 308）',
+    '熔炉：目标槽/产物槽并排、标签在上、退还仓库在下方（批次 309）',
     invSrc.includes("targetLabel.textContent = '目标'") &&
-      invSrc.includes('right.append(this.stationTargetEl, this.furnaceReturnBtn') &&
-      invSrc.includes('progressRow.append(this.cookTrackElement(), targetLabel)') &&
-      css.includes("grid-template-columns: 132px 100px 74px") &&
-      css.includes('.furnace-middle .furnace-cook') &&
+      invSrc.includes("productLabel.textContent = '产物'") &&
+      invSrc.includes('slotRow.append(targetCol, productCol)') &&
+      invSrc.includes('stage.append(core, progress, slotRow)') &&
+      invSrc.includes('furnaceProductSlot') &&
+      css.includes('.furnace-slot-label') &&
+      css.includes('bottom: calc(100% + 2px)') &&
+      css.includes('margin-left: -44px') &&
       css.includes('clip-path: polygon(0 0, 82% 0, 100% 50%') &&
-      css.includes('repeating-linear-gradient('),
+      css.includes('rgba(90, 90, 90, .38)'),
   );
   check(
     '燃料备选顺序按效率 + 物品 id 固定，点击只更新高亮不重建（批次 306）',
@@ -799,11 +802,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       !/fillStationRecipe[\s\S]{0,1200}fuelSeconds\(best\) > fuelSeconds\(fuelId\)/.test(invSrc),
   );
   check(
-    '点燃料在快捷栏上方弹介绍；熔炉布局固定三列（批次 307）',
+    '点燃料在快捷栏上方弹中文介绍；熔炉核心/进度/槽位分层（批次 307/309）',
     invSrc.includes('private showFuelToast') &&
       invSrc.includes('this.showFuelToast(itemId)') &&
-      css.includes('grid-template-columns: 132px 100px 74px') &&
-      css.includes('align-items: start'),
+      invSrc.includes('title.textContent = itemLabel(itemId)') &&
+      css.includes('.furnace-stage') &&
+      css.includes('.furnace-core') &&
+      css.includes('.furnace-progress'),
   );
   check(
     '熔炉燃料文字已移除；refresh 有重入保护（批次 307）',

@@ -696,6 +696,8 @@ export class InventoryScreen {
   private readonly campfireHintEl: HTMLDivElement;
   private readonly furnaceInputSlot: HTMLDivElement;
   private readonly furnaceFuelSlot: HTMLDivElement;
+  /** 真正的产物槽（批次 309）：与目标预览分开，生成物落在这里 */
+  private readonly furnaceProductSlot: HTMLDivElement;
   /** 燃料说明（批次 300：显示当前燃料与手动更换提示） */
   private readonly furnaceFuelTextEl: HTMLSpanElement;
   /** 燃料备选区（批次 302）：背包里的可燃物直接列出来，点一下换上 */
@@ -1044,8 +1046,10 @@ export class InventoryScreen {
     this.campfireHintEl.className = 'anvil-cost';
     this.furnaceInputSlot = this.createSlot();
     this.furnaceFuelSlot = this.createSlot();
+    this.furnaceProductSlot = this.createSlot();
     this.furnaceFuelSlot.dataset.key = 'furnace:fuel';
     this.furnaceInputSlot.dataset.key = 'furnace:input';
+    this.furnaceProductSlot.dataset.key = 'furnace:product';
     this.furnaceFuelTextEl = document.createElement('span');
     this.furnaceFuelTextEl.className = 'furnace-fuel-text';
     this.furnaceFuelOptionsEl = document.createElement('div');
@@ -2923,10 +2927,9 @@ export class InventoryScreen {
    */
   private renderStationTarget(): void {
     const container = this.activeContainer;
+    // 熔炉产物改为独立产物槽；目标框只画预览/开始（批次 309）
     let actual: ItemStack | null = null;
-    if (isFurnaceMode(this.mode) && container instanceof Furnace) {
-      actual = container.get(FURNACE_OUTPUT);
-    } else if (this.mode === 'smithing' && container instanceof SmithingTable) {
+    if (this.mode === 'smithing' && container instanceof SmithingTable) {
       actual = container.get(SMITHING_RESULT);
     }
     // 每次重画都按当前槽位/背包重算一遍可用性：材料用完后目标要变红，而不是保留旧白底
@@ -2981,10 +2984,6 @@ export class InventoryScreen {
   /** 点目标框：已有成品先收取；否则白底开始、红底只提示缺什么 */
   private clickStationTarget(): void {
     const container = this.activeContainer;
-    if (isFurnaceMode(this.mode) && container instanceof Furnace && container.get(FURNACE_OUTPUT)) {
-      this.takeFurnaceOutput(true);
-      return;
-    }
     if (this.mode === 'smithing' && container instanceof SmithingTable && container.get(SMITHING_RESULT)) {
       this.takeSmithingToInventory(true);
       return;
@@ -3987,37 +3986,62 @@ export class InventoryScreen {
     if (isFurnaceMode(this.mode)) {
       const input = this.registerExisting(this.furnaceInputSlot, 'furnace:input', this.activeContainer!, FURNACE_INPUT);
       const fuel = this.registerExisting(this.furnaceFuelSlot, 'furnace:fuel', this.activeContainer!, FURNACE_FUEL);
+      const product = this.registerExisting(
+        this.furnaceProductSlot,
+        'furnace:product',
+        this.activeContainer!,
+        FURNACE_OUTPUT,
+        true,
+      );
 
       const fuelHint = document.createElement('div');
       fuelHint.className = 'furnace-fuel-hint';
-      // 批次 307（用户）：燃料文字不要了，只留图标；介绍改在快捷栏上方弹。
       fuelHint.append(this.furnaceFuelOptionsEl);
 
-      // 批次 306（用户）：布局回退到最初的样子——左列原料/火焰/燃料，中间进度，右边目标
-      const left = document.createElement('div');
-      left.className = 'furnace-col';
-      left.append(input, this.flameEl, fuel, fuelHint);
+      // 批次 309（用户）：进度箭头垂直居中于原料/燃料，左边缘贴原料槽右边缘；
+      // 右边是「目标」槽与「产物」槽，两个文字都在槽上方。
+      const core = document.createElement('div');
+      core.className = 'furnace-core';
+      core.append(input, this.flameEl, fuel);
 
-      // 批次 308（用户）：进度箭头在原料/燃料右侧，箭头最右端写「目标」，
-      // 目标右边是产物槽；退还按钮放在产物槽下方。
-      const middle = document.createElement('div');
-      middle.className = 'furnace-middle';
-      const progressRow = document.createElement('div');
-      progressRow.className = 'furnace-progress-row';
+      const progress = document.createElement('div');
+      progress.className = 'furnace-progress';
+      progress.append(this.cookTrackElement());
+
       const targetLabel = document.createElement('div');
-      targetLabel.className = 'furnace-target-label';
+      targetLabel.className = 'furnace-slot-label';
       targetLabel.textContent = '目标';
-      progressRow.append(this.cookTrackElement(), targetLabel);
-      middle.appendChild(progressRow);
+      const targetCol = document.createElement('div');
+      targetCol.className = 'furnace-slot-col';
+      targetCol.append(targetLabel, this.stationTargetEl);
+
+      const productLabel = document.createElement('div');
+      productLabel.className = 'furnace-slot-label';
+      productLabel.textContent = '产物';
+      const productCol = document.createElement('div');
+      productCol.className = 'furnace-slot-col';
+      productCol.append(productLabel, product);
+
+      const slotRow = document.createElement('div');
+      slotRow.className = 'furnace-slot-row';
+      slotRow.append(targetCol, productCol);
+
+      const stage = document.createElement('div');
+      stage.className = 'furnace-stage';
+      stage.append(core, progress, slotRow);
 
       // 烟熏炉/高炉要写清"它只吃什么"：原版靠玩家自己知道，我们的界面里直接说明，
       // 免得玩家把石头塞进烟熏炉、看着它不动以为是坏了
       this.furnaceHintEl.textContent = '';
-      const right = document.createElement('div');
-      right.className = 'furnace-col furnace-output-col';
-      right.append(this.stationTargetEl, this.furnaceReturnBtn, this.furnaceHintEl);
+      const actionCol = document.createElement('div');
+      actionCol.className = 'furnace-slot-actions';
+      actionCol.append(this.furnaceReturnBtn, this.furnaceHintEl);
 
-      this.furnaceLayout.replaceChildren(left, middle, right);
+      const bottom = document.createElement('div');
+      bottom.className = 'furnace-bottom';
+      bottom.append(fuelHint, actionCol);
+
+      this.furnaceLayout.replaceChildren(stage, bottom);
       this.topArea.append(this.furnaceLayout, this.stationHintEl);
       return;
     }
@@ -5047,6 +5071,11 @@ export class InventoryScreen {
   private handleSlotClick(key: string, button: number): void {
     const binding = this.bindings.get(key);
     if (!binding) return;
+    // 熔炉产物槽：点一下直接进背包，不经过光标（批次 309）
+    if (binding.source instanceof Furnace && binding.index === FURNACE_OUTPUT) {
+      this.takeFurnaceOutput(true);
+      return;
+    }
     // 铁砧产物：不是普通搬运——要先查等级、扣等级、扣材料再重算（H8）
     if (binding.source instanceof Anvil && binding.index === ANVIL_RESULT) {
       this.handleAnvilTake();

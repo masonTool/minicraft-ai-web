@@ -2865,18 +2865,46 @@
 
       /* ---------------- 熔炉 ---------------- */
       .furnace-layout {
-        position: relative;
-        display: grid;
-        grid-template-columns: 132px 100px 74px;
-        align-items: start; justify-content: center; column-gap: 0;
+        display: flex; flex-direction: column; align-items: center;
         margin: 6px 0 10px; padding: 8px 4px;
       }
-      .furnace-col {
+      .furnace-stage { display: flex; align-items: center; }
+      .furnace-core {
         display: flex; flex-direction: column; align-items: center; gap: 6px;
-        width: 100%; min-width: 0;
+        width: 132px;
       }
-      .furnace-output-col { margin-left: 6px; }
-      /* 退还仓库放在产物/目标槽下方（批次 308） */
+      /* 进度箭头：左边缘贴到 44px 原料/燃料槽的右边缘（132 列居中 → x=88） */
+      .furnace-progress { width: 72px; margin-left: -44px; }
+      .furnace-progress .furnace-cook {
+        position: relative; width: 72px; height: 16px;
+        background: rgba(0, 0, 0, .28); overflow: hidden;
+        clip-path: polygon(0 0, 82% 0, 100% 50%, 82% 100%, 0 100%);
+      }
+      .furnace-progress .furnace-cook i {
+        display: block; height: 100%; width: 0;
+        background: linear-gradient(90deg, #cfe6ff, #6fa8dc);
+        transition: width .1s linear;
+      }
+      .furnace-slot-row {
+        display: flex; align-items: center; gap: 8px; margin-left: 8px;
+      }
+      .furnace-slot-col {
+        position: relative; width: 44px; height: 44px;
+      }
+      .furnace-slot-label {
+        position: absolute; left: 50%; bottom: calc(100% + 2px);
+        transform: translateX(-50%);
+        font-size: 11px; line-height: 1; color: #4a4a4a;
+        white-space: nowrap;
+      }
+      .furnace-bottom {
+        display: grid; grid-template-columns: 168px 96px;
+        align-items: start; margin-top: 6px;
+      }
+      .furnace-slot-actions {
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+      }
+      /* 退还仓库放在目标/产物槽下方（批次 309） */
       .furnace-return {
         font: inherit; font-size: 11px; line-height: 1.2;
         padding: 3px 6px; cursor: pointer;
@@ -2884,7 +2912,7 @@
         border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
       .furnace-return.hidden { display: none; }
-      /* 燃料备选（批次 305）：小图标横排，可换行，不写名字；批次 308 下移一点 */
+      /* 燃料备选：小图标横排、可换行；批次 308 下移一点 */
       .furnace-fuel-hint {
         display: flex; flex-direction: column; align-items: center; gap: 3px;
         width: 132px; max-width: 132px; margin-top: 8px;
@@ -2916,10 +2944,15 @@
         text-shadow: 1px 1px 0 #000;
       }
 
-      /* 火焰（批次 308）：三条竖线，不再是一整块圆柱形 */
+      /* 火焰（批次 309）：空槽也显示三条灰色线，燃烧时用彩色线填充 */
       .furnace-flame {
-        position: relative; width: 18px; height: 20px;
-        background: transparent; overflow: hidden;
+        position: relative; width: 18px; height: 20px; overflow: hidden;
+        background: repeating-linear-gradient(
+          90deg,
+          transparent 0 3px,
+          rgba(90, 90, 90, .38) 3px 5px,
+          transparent 5px 6px
+        );
       }
       .furnace-flame i {
         position: absolute; left: 0; bottom: 0; width: 100%; height: 0;
@@ -2929,33 +2962,14 @@
           #ffb13b 3px 5px,
           transparent 5px 6px
         );
-        border-radius: 3px 3px 0 0;
         transition: height .1s linear;
         filter: drop-shadow(0 0 2px rgba(255, 140, 20, .65));
       }
       .furnace-flame.lit i { filter: drop-shadow(0 0 5px rgba(255, 150, 30, .9)); }
-      .furnace-middle { width: 100%; }
-      .furnace-progress-row {
-        display: flex; align-items: center; width: 100%;
-      }
-      .furnace-middle .furnace-cook {
-        position: relative; flex: 1 1 auto; height: 16px;
-        background: rgba(0, 0, 0, .28); overflow: hidden;
-        clip-path: polygon(0 0, 82% 0, 100% 50%, 82% 100%, 0 100%);
-      }
-      .furnace-middle .furnace-cook i {
-        display: block; height: 100%; width: 0;
-        background: linear-gradient(90deg, #cfe6ff, #6fa8dc);
-        transition: width .1s linear;
-      }
-      .furnace-target-label {
-        flex: 0 0 26px; text-align: center;
-        font-size: 11px; line-height: 1.1; color: #4a4a4a;
-      }
       @media (max-width: 430px) {
-        .furnace-layout {
-          grid-template-columns: 120px 88px 70px;
-        }
+        .furnace-core { width: 112px; }
+        .furnace-progress { margin-left: -34px; }
+        .furnace-bottom { grid-template-columns: 158px 96px; }
         .furnace-fuel-hint,
         .furnace-fuel-options { width: 112px; max-width: 112px; }
       }
