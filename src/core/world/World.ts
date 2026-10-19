@@ -93,7 +93,7 @@ export class World {
   private noopWrites = 0;
 
   /**
-   * 因为"挡光与发光都没变"而**跳过**光照 BFS 的写入次数（批次 282，诊断用）。
+   * 因为"挡光与发光都没变"而**跳过**光照 BFS 的写入次数（批次 283，诊断用）。
    *
    * 与 `writes` 一起读就能判断快路径的命中率：水的液面变化应当全部落在这里。
    */
@@ -374,7 +374,7 @@ export class World {
     if (worldY < -64 || worldY >= 320) return true;
     // 记进增量存档：只有"玩家动过"的格子需要落盘
     this.edits.record(this.dimension, toChunkCoord(worldX), toChunkCoord(worldZ), Chunk.index(worldX & 15, worldY, worldZ & 15), id, state);
-    // 光照快路径（批次 282）：只改状态、挡光与发光都没变 → 跳过整趟 BFS。
+    // 光照快路径（批次 283）：只改状态、挡光与发光都没变 → 跳过整趟 BFS。
     // 水面高度变了要重烘焙网格，所以下面那条事件**照发**。
     if (lightChanged) this.light.onBlockChanged(worldX, worldY, worldZ);
     else this.lightSkipped++;

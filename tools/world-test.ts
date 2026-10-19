@@ -398,7 +398,7 @@ console.log('\n[相对时间]');
   check('未来时间不会显示负数', relativeTime(now + 60_000, now) === '刚刚');
 }
 
-console.log('\n[光照快路径：写入侧的接线（批次 282）]');
+console.log('\n[光照快路径：写入侧的接线（批次 283）]');
 {
   // 判据本身在 `tests/light.test.ts` 里逐条断言；这里只保证 `World` 的两条写入路径
   // 真的用了它，而且 `onBlockChanged` 没有被漏在分支外面（漏一处就等于没做）。

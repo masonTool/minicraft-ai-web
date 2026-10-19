@@ -185,7 +185,7 @@ export class OverworldGenerator {
   private readonly climateGrid = new Float32Array(GRID_XZ * GRID_XZ * CHANNELS);
   private readonly densityGrid = new Float32Array(GRID_XZ * GRID_XZ * GRID_Y);
   /**
-   * 每列**雕刻前**的地形顶面（`z * 16 + x`，批次 282）。
+   * 每列**雕刻前**的地形顶面（`z * 16 + x`，批次 283）。
    *
    * 含水层要用它判断"这一列是不是在海面以下"：是的话水位强制到海平面，
    * 让海底被掏空出来的洞穴与海连成一片，而不是留一层悬空的水

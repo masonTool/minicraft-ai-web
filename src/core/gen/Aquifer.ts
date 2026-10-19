@@ -118,7 +118,7 @@ export class Aquifer {
       for (let x = 0; x < CHUNK_SIZE_X; x++) {
         const rawLevel = this.levels[(z + LEVEL_MARGIN) * stride + (x + LEVEL_MARGIN)]!;
         /**
-         * **水下的列，水位强制不低于海平面**（批次 282）。
+         * **水下的列，水位强制不低于海平面**（批次 283）。
          *
          * 为什么必须有这一条：地表灌水（`applySurface`）发生在**雕刻之前**，
          * 所以海底之下被雕刻器掏空时，上面那层海水会**悬在空气上**——
