@@ -2817,7 +2817,12 @@ export class InventoryScreen {
 
   /** 打开工作站先冻住：从"材料一放就自动烧"改成"点目标框才开工"（批次 299） */
   private pauseStationContainer(): void {
-    if (this.activeContainer instanceof Furnace) this.activeContainer.paused = true;
+    if (this.activeContainer instanceof Furnace) {
+      // 批次 314：炉子正在烧（还有燃烧时间/烧炼进度）时，重开界面**不能暂停**，
+      // 否则会出现"关着在烧、一打开进度停住"的现象。
+      const running = this.activeContainer.burnTimeLeft > 0 || this.activeContainer.cookProgress > 0;
+      this.activeContainer.paused = !running;
+    }
     if (this.activeContainer instanceof BrewingStand) this.activeContainer.paused = true;
     if (this.activeContainer instanceof Campfire) this.activeContainer.paused = true;
   }
@@ -5621,7 +5626,15 @@ export class InventoryScreen {
 
   /** 容器内容变化后的节流刷新（由主循环调用） */
   tickUi(dt: number): void {
-    if (!this.open || !this.containerDirty) return;
+    if (!this.open) return;
+    // 批次 314：炉子正在烧时即使 onDirty 漏了，也按 0.1s 主动刷新进度条/火焰，
+    // 彻底避免"后台在烧、界面静止"。
+    const runningFurnace =
+      isFurnaceMode(this.mode) &&
+      this.activeContainer instanceof Furnace &&
+      !this.activeContainer.paused &&
+      (this.activeContainer.burnTimeLeft > 0 || this.activeContainer.cookProgress > 0);
+    if (!this.containerDirty && !runningFurnace) return;
     this.containerRefreshTimer += dt;
     if (this.containerRefreshTimer < CONTAINER_REFRESH_INTERVAL) return;
     this.containerRefreshTimer = 0;

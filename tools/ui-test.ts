@@ -893,6 +893,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     ),
   );
   check(
+    '运行中的熔炉重开不暂停，并主动按 0.1s 刷新界面（批次 314）',
+    invSrc.includes('const running = this.activeContainer.burnTimeLeft > 0') &&
+      invSrc.includes('this.activeContainer.paused = !running') &&
+      invSrc.includes('const runningFurnace =') &&
+      invSrc.includes('if (!this.containerDirty && !runningFurnace) return;'),
+  );
+  check(
     '点创造分类会切回无限物品页',
     /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
   );
