@@ -27,6 +27,7 @@ import { SPAWN_EGG_SPECS, spawnEggTile } from '../core/registry/spawnEggs.ts';
 import { mobTypeById } from '../core/entity/mobs.ts';
 
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from './atlasLayout.ts';
+import { canvasLooksLost, is2dContextLost, pickOpaqueSamples, type PixelSample } from './canvasProbe.ts';
 
 export { ATLAS_COLUMNS, TILE_SIZE, TILE_ORDER };
 export type { TileName } from './atlasLayout.ts';
@@ -5834,6 +5835,25 @@ export class TextureAtlas {
   private readonly opacities = new Map<string, number>();
   /** 画布像素被**外部**改写（资源包替换）的次数，见 `markTextureChanged` */
   private revisionValue = 0;
+  /** 唯一那份 2D 上下文（重画、回读像素都要用） */
+  private readonly context: CanvasRenderingContext2D;
+  /**
+   * "画完时一定不透明"的几个取样点（见 `canvasProbe.ts`）。
+   *
+   * 安卓 Chrome 在页面长时间隐藏后会把 2D 画布的后备存储丢掉，回来时画布是透明的；
+   * 而 WebGL 纹理不受影响 → 世界照常、所有从图集裁出来的图标全空。判据只能是像素：
+   * 回前台时回读这几格，全空就把整张图集重画一遍。
+   */
+  private samples: PixelSample[] = [];
+  /**
+   * 资源包替换过的贴图（16×16 的像素）。
+   *
+   * 重画图集时是"从画笔重新铺一遍"，不记这份就会被悄悄退回程序化贴图——
+   * 玩家装过的材质包在一次切后台后失效，这种 bug 几乎没人能联想到。
+   */
+  private readonly overrides = new Map<string, ImageData>();
+  /** 上下文正丢着（等 `contextrestored` 再画） */
+  private repaintPending = false;
 
   constructor() {
     const columns = ATLAS_COLUMNS;
@@ -5845,31 +5865,20 @@ export class TextureAtlas {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('无法获取 2D 绘图上下文');
 
-    const image = ctx.createImageData(canvas.width, canvas.height);
-    const data = image.data;
-
-    for (let index = 0; index < TILE_ORDER.length; index++) {
-      const name = TILE_ORDER[index]!;
-      const painter = PAINTERS[name] ?? noisy(128, 14);
-      const rng = makeRng(hashString(name));
-      const originX = (index % columns) * TILE_SIZE;
-      const originY = Math.floor(index / columns) * TILE_SIZE;
-      for (let y = 0; y < TILE_SIZE; y++) {
-        for (let x = 0; x < TILE_SIZE; x++) {
-          const [r, g, b, a] = painter(x, y, rng);
-          const px = ((originY + y) * canvas.width + originX + x) * 4;
-          data[px] = r;
-          data[px + 1] = g;
-          data[px + 2] = b;
-          data[px + 3] = a;
-        }
-      }
-    }
-    ctx.putImageData(image, 0, 0);
-
     this.canvas = canvas;
     this.columns = columns;
     this.rows = rows;
+    this.context = ctx;
+    this.paintPixels();
+
+    // 2D 画布也会被系统回收。事件不是判据（兼容性有限，见 `canvasProbe.ts`），
+    // 但"知道了就立刻补"是最省事的一条路：`contextrestored` 到了直接重画。
+    canvas.addEventListener('contextlost', () => {
+      this.repaintPending = true;
+    });
+    canvas.addEventListener('contextrestored', () => {
+      this.repaint();
+    });
 
     const texture = new THREE.CanvasTexture(canvas);
     // ⚠️ 保持 three 的默认行为（flipY = true）：上传时把画布整体垂直翻转，
@@ -5931,6 +5940,113 @@ export class TextureAtlas {
     this.averageColors.clear();
     this.opacities.clear();
     this.texture.needsUpdate = true;
+  }
+
+  /**
+   * 按**确定性的画笔**重铺整张图集。
+   *
+   * 构造时与"画布被系统回收后"共用这一条路：贴图全是 `makeRng(hashString(名字))` 的
+   * 纯函数产物，所以重画出来的像素与第一次逐字节一致——不需要备份整张图。
+   * 唯一要额外盖回去的是资源包替换过的那些贴图（见 `overrides`）。
+   */
+  private paintPixels(): void {
+    const canvas = this.canvas;
+    const ctx = this.context;
+    const image = ctx.createImageData(canvas.width, canvas.height);
+    const data = image.data;
+
+    for (let index = 0; index < TILE_ORDER.length; index++) {
+      const name = TILE_ORDER[index]!;
+      const painter = PAINTERS[name] ?? noisy(128, 14);
+      const rng = makeRng(hashString(name));
+      const originX = (index % this.columns) * TILE_SIZE;
+      const originY = Math.floor(index / this.columns) * TILE_SIZE;
+      for (let y = 0; y < TILE_SIZE; y++) {
+        for (let x = 0; x < TILE_SIZE; x++) {
+          const [r, g, b, a] = painter(x, y, rng);
+          const px = ((originY + y) * canvas.width + originX + x) * 4;
+          data[px] = r;
+          data[px + 1] = g;
+          data[px + 2] = b;
+          data[px + 3] = a;
+        }
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+
+    for (const [tile, pixels] of this.overrides) {
+      const origin = this.tileSource(tile);
+      ctx.putImageData(pixels, origin.x, origin.y);
+    }
+
+    // 取样点取自"刚铺完的程序化像素"：分散在几个窗口里，只要还有一个不透明
+    // 就说明画布内容还在（见 `canvasProbe.ts` 的取舍）
+    this.samples = pickOpaqueSamples(data, canvas.width);
+  }
+
+  /**
+   * 画布内容还在吗？
+   *
+   * 只回读几个取样点（每处 1×1）。判据是**像素**不是事件：`contextlost` 只有部分
+   * 浏览器发，而"被回收成透明"在任何 WebView 里都是同一个样子。
+   */
+  private pixelsIntact(): boolean {
+    if (this.samples.length === 0) return true; // 没有判据时宁可不动
+    if (is2dContextLost(this.context)) return false;
+    const lost = canvasLooksLost(this.samples, (sample) => {
+      try {
+        return this.context.getImageData(sample.x, sample.y, 1, 1).data;
+      } catch {
+        return null; // 上下文正丢着：读不出来，按"丢"处理
+      }
+    });
+    return !lost;
+  }
+
+  /**
+   * 回到前台 / 上下文恢复后调一次：内容没了就重画。
+   *
+   * @returns 是否真的重画了（诊断日志用；玩家无感）
+   */
+  ensurePixels(): boolean {
+    if (this.repaintPending) return false; // 上下文还没回来，等 `contextrestored`
+    if (this.pixelsIntact()) return false;
+    return this.repaint();
+  }
+
+  /**
+   * 立刻重铺整张图集；上下文正丢着时只记一个待办（等恢复事件）。
+   *
+   * 重画之后必须走 `markTextureChanged()`：`revision++` 会让所有等轴方块图标
+   * （`ui/BlockIcon.ts` 按图集像素拼的）整体作废，纹理也会重新上传一次。
+   */
+  repaint(): boolean {
+    if (is2dContextLost(this.context)) {
+      this.repaintPending = true;
+      return false;
+    }
+    this.paintPixels();
+    this.markTextureChanged();
+    this.repaintPending = false;
+    return true;
+  }
+
+  /**
+   * 记住一张被资源包替换过的贴图（16×16 像素）。
+   *
+   * 只在"图集被系统回收 → 重画"时用到：不记的话，重画会把玩家的材质包
+   * 悄悄退回程序化贴图。每张 1KB，正常资源包最多几百张。
+   */
+  captureOverride(tile: string): void {
+    const index = TILE_INDEX.get(tile);
+    if (index === undefined) return;
+    const originX = (index % this.columns) * TILE_SIZE;
+    const originY = Math.floor(index / this.columns) * TILE_SIZE;
+    try {
+      this.overrides.set(tile, this.context.getImageData(originX, originY, TILE_SIZE, TILE_SIZE));
+    } catch {
+      // 画布正丢着（极罕见）：放弃记这一张，重画时退回程序化贴图
+    }
   }
 
   /** 贴图在图集中的列号（供 UI 从图集裁切图标） */

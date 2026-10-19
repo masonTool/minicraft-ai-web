@@ -158,6 +158,8 @@ export async function applyResourcePack(file: File, atlas: TextureAtlas, packNam
       const row = Math.floor(index / ATLAS_COLUMNS);
       ctx.clearRect(column * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
       ctx.drawImage(bitmap, column * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      // 记一份像素：图集被系统回收后要按原样重画（否则玩家的材质包会悄悄失效）
+      atlas.captureOverride(tile);
       bitmap.close?.();
       result.replaced.push(tile);
     } catch {
