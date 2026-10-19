@@ -3,10 +3,14 @@ import {
   brewingStationRecipes,
   furnaceStationRecipes,
   smithingStationRecipes,
+  stationCatalogIds,
+  stationFamilyIds,
+  stationNeedFor,
 } from '../src/core/crafting/StationRecipes.ts';
 import { BREW_RECIPES } from '../src/core/crafting/Brewing.ts';
 import { netheriteUpgradeList } from '../src/core/crafting/Smithing.ts';
 import { Item } from '../src/core/registry/items.ts';
+import { Block } from '../src/core/registry/blocks.ts';
 
 function countsOf(entries: Readonly<Record<number, number>>) {
   return (id: number): number => entries[id] ?? 0;
@@ -53,6 +57,47 @@ describe('工作站可做列表（批次 277）', () => {
       expect(
         smithingStationRecipes(countsOf({ [first.equipment]: 1, [Item.NETHERITE_INGOT]: 1 }))[0]?.available,
       ).toBe(true);
+    });
+  });
+
+  describe('跨站台目录（批次 293）', () => {
+    it('目录包含熔炼/锻造/酿造的产物且不重复', () => {
+      const ids = stationCatalogIds();
+      expect(ids).toContain(Item.IRON_INGOT);
+      expect(ids).toContain(netheriteUpgradeList()[0]!.result);
+      expect(ids).toContain(BREW_RECIPES[0]!.to);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('同一族的站台共用一张产物表（烟熏炉也能看见金属，点开提示高炉）', () => {
+      const smokerIds = stationFamilyIds('smoker');
+      expect(smokerIds).toContain(Item.IRON_INGOT);
+      expect(smokerIds).toContain(Item.BAKED_POTATO);
+      expect(stationFamilyIds('smithing')).toContain(netheriteUpgradeList()[0]!.result);
+      expect(stationFamilyIds('brewing')).toContain(BREW_RECIPES[0]!.to);
+    });
+
+    it('当前站台做不了时指出正确的站台', () => {
+      expect(stationNeedFor(Item.IRON_INGOT, 'smoker')?.station).toBe('blast_furnace');
+      expect(stationNeedFor(Item.BAKED_POTATO, 'blast_furnace')?.station).toBe('smoker');
+      expect(stationNeedFor(Block.GLASS, 'blast_furnace')?.station).toBe('furnace');
+      expect(stationNeedFor(Item.IRON_INGOT, 'smithing')?.station).toBe('furnace');
+      expect(stationNeedFor(netheriteUpgradeList()[0]!.result, 'furnace')?.station).toBe('smithing');
+      expect(stationNeedFor(BREW_RECIPES[0]!.to, 'furnace')?.station).toBe('brewing');
+      expect(stationNeedFor(Item.DIRT, 'furnace')).toBe(null);
+    });
+
+    it('"需要xxx"带上原料，界面才能画图标与名字', () => {
+      const need = stationNeedFor(Item.IRON_INGOT, 'smithing');
+      expect(need?.inputs).toEqual([{ id: Item.RAW_IRON, count: 1 }]);
+      expect(need?.label).toBe('熔炉');
+      const upgrade = stationNeedFor(netheriteUpgradeList()[0]!.result, 'furnace');
+      expect(upgrade?.inputs[1]).toEqual({ id: Item.NETHERITE_INGOT, count: 1 });
+      const brew = stationNeedFor(BREW_RECIPES[0]!.to, 'furnace');
+      expect(brew?.inputs).toEqual([
+        { id: BREW_RECIPES[0]!.from, count: 1 },
+        { id: BREW_RECIPES[0]!.ingredient, count: 1 },
+      ]);
     });
   });
 

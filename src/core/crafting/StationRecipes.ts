@@ -23,6 +23,19 @@ export type StationRecipeReason =
   | 'missing_material'
   | 'slot_occupied';
 
+/** 能列"可做列表"的站台（批次 293：熔炉系 + 锻造台 + 酿造台） */
+export type StationRecipeStation = FurnaceStation | 'smithing' | 'brewing';
+
+/** 站台中文名（"需要xxx"提示与列表标题共用） */
+export const STATION_LABELS: Readonly<Record<StationRecipeStation, string>> = {
+  furnace: '熔炉',
+  smoker: '烟熏炉（或熔炉）',
+  blast_furnace: '高炉（或熔炉）',
+  campfire: '营火',
+  smithing: '锻造台',
+  brewing: '酿造台',
+};
+
 /** 红底时给玩家看的一句话（按"最具体 → 最笼统"排，由调用方选中的那一条直接显示） */
 export const STATION_REASON_LABELS: Readonly<Record<StationRecipeReason, string>> = {
   missing_input: '缺原料',
@@ -131,4 +144,102 @@ export function brewingStationRecipes(
       reason,
     );
   });
+}
+
+/**
+ * 所有工作站配方的**产物 id**（批次 293）。
+ *
+ * 左栏"物品分类"在配方书打开时要能列全：熔炉系的烧炼、锻造台升级、酿造台药水
+ * 都在这里，去重后按普通物品分类页签筛选。点到一个当前站台做不了的产物时，
+ * 界面用 `stationNeedFor()` 告诉玩家"需要xxx"。
+ */
+export function stationCatalogIds(): number[] {
+  const ids: number[] = [];
+  const seen = new Set<number>();
+  const push = (id: number): void => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  for (const recipe of SMELTING_RECIPES) push(recipe.output.id);
+  for (const { result } of netheriteUpgradeList()) push(result);
+  for (const { to } of BREW_RECIPES) push(to);
+  return ids;
+}
+
+/**
+ * 某个站台"这一族"的全部产物（批次 293）。
+ *
+ * 熔炉系的四个站台共用整张烧炼表：烟熏炉虽然只做食物，左栏也要能看见
+ * "铁锭（红底）→ 需要高炉"，否则玩家永远不会知道该换哪座炉子。
+ */
+export function stationFamilyIds(station: StationRecipeStation): number[] {
+  if (station === 'smithing') return netheriteUpgradeList().map(({ result }) => result);
+  if (station === 'brewing') return BREW_RECIPES.map(({ to }) => to);
+  return SMELTING_RECIPES.map(({ output }) => output.id);
+}
+
+/** "这个产物需要哪个站台"的答案（界面在工作区下方画图标 + 名字） */
+export interface StationNeed {
+  readonly station: StationRecipeStation;
+  readonly label: string;
+  readonly inputs: readonly { readonly id: number; readonly count: number }[];
+  readonly resultId: number;
+}
+
+/**
+ * 当前站台做不了这个产物时，返回它该去哪个站台（批次 293）。
+ *
+ * 熔炉系内部会挑更专一的那个：食物 → 烟熏炉、矿物/金属 → 高炉；
+ * 当前不在熔炉系里（锻造台/酿造台/背包）则统一指向熔炉。
+ * 找不到任何站台配方时返回 null（界面显示"没有可用的配方"）。
+ */
+export function stationNeedFor(
+  itemId: number,
+  current: StationRecipeStation | null,
+): StationNeed | null {
+  const smelt = SMELTING_RECIPES.find((recipe) => recipe.output.id === itemId);
+  if (smelt) {
+    const kind = smelt.kind ?? 'none';
+    let station: FurnaceStation = 'furnace';
+    const inFurnaceFamily =
+      current === 'furnace' || current === 'smoker' || current === 'blast_furnace' || current === 'campfire';
+    if (inFurnaceFamily) {
+      if (kind === 'food' && current !== 'smoker') station = 'smoker';
+      else if (kind === 'metal' && current !== 'blast_furnace') station = 'blast_furnace';
+    }
+    return {
+      station,
+      label: STATION_LABELS[station],
+      inputs: [{ id: smelt.input, count: 1 }],
+      resultId: itemId,
+    };
+  }
+
+  const upgrade = netheriteUpgradeList().find(({ result }) => result === itemId);
+  if (upgrade) {
+    return {
+      station: 'smithing',
+      label: STATION_LABELS.smithing,
+      inputs: [
+        { id: upgrade.equipment, count: 1 },
+        { id: Item.NETHERITE_INGOT, count: SMITHING_INGOT_COST },
+      ],
+      resultId: itemId,
+    };
+  }
+
+  const brew = BREW_RECIPES.find(({ to }) => to === itemId);
+  if (brew) {
+    return {
+      station: 'brewing',
+      label: STATION_LABELS.brewing,
+      inputs: [
+        { id: brew.from, count: 1 },
+        { id: brew.ingredient, count: 1 },
+      ],
+      resultId: itemId,
+    };
+  }
+  return null;
 }
