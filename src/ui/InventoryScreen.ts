@@ -700,7 +700,7 @@ export class InventoryScreen {
   private readonly furnaceFuelTextEl: HTMLSpanElement;
   /** 燃料备选区（批次 302）：背包里的可燃物直接列出来，点一下换上 */
   private readonly furnaceFuelOptionsEl: HTMLDivElement;
-  private furnaceFuelOptionsStamp = '';
+  private furnaceFuelOptionIds: number[] = [];
   /** 退还全部（批次 305）：把熔炉三格里的东西一次放回仓库 */
   private readonly furnaceReturnBtn: HTMLButtonElement;
   private readonly flameEl: HTMLDivElement;
@@ -2409,7 +2409,9 @@ export class InventoryScreen {
     // 选中的燃料也还"存在"：不能因为拿在手上就从备选区消失
     if (this.held && fuelSeconds(this.held.id) > 0) ids.add(this.held.id);
     // 燃烧效率优先（干海带块 200s > 煤 80s > 木板 15s）；同效率再按偏好排序
-    return [...ids].sort((a, b) => fuelSeconds(b) - fuelSeconds(a) || this.fuelRank(a) - this.fuelRank(b));
+    return [...ids].sort(
+      (a, b) => fuelSeconds(b) - fuelSeconds(a) || this.fuelRank(a) - this.fuelRank(b) || a - b,
+    );
   }
 
   /** 主背包里燃烧效率最高的可燃物 */
@@ -2423,6 +2425,9 @@ export class InventoryScreen {
     if (!(furnace instanceof Furnace)) return;
     const current = furnace.get(FURNACE_FUEL);
     if (current?.id === itemId) return;
+    // 先确认这种燃料确实还有，避免换失败后把原来的燃料也弄丢
+    const available = this.bagCountOf(itemId) + (this.held?.id === itemId ? this.held.count : 0);
+    if (available < 1) return;
     if (current) this.returnStationStack(furnace, FURNACE_FUEL);
     if (!this.canPut(furnace, FURNACE_FUEL, itemId, 1)) return;
     this.fillSlotFromBag(furnace, FURNACE_FUEL, itemId);
@@ -2435,12 +2440,12 @@ export class InventoryScreen {
     const current = furnace.get(FURNACE_FUEL);
     // 固定按燃烧效率从高到低排；不把"当前燃料"挪到最前面，否则点一下顺序就变了
     const ids = [...new Set([...this.bagFuelOptions(), ...(current ? [current.id] : [])])].sort(
-      (a, b) => fuelSeconds(b) - fuelSeconds(a) || this.fuelRank(a) - this.fuelRank(b),
+      (a, b) => fuelSeconds(b) - fuelSeconds(a) || this.fuelRank(a) - this.fuelRank(b) || a - b,
     );
     if (ids.length === 0 || (current !== null && ids.length <= 1)) {
       this.furnaceFuelOptionsEl.classList.add('hidden');
       this.furnaceFuelOptionsEl.replaceChildren();
-      this.furnaceFuelOptionsStamp = '';
+      this.furnaceFuelOptionIds = [];
       return;
     }
     const counts = ids.map((id) => {
@@ -2448,9 +2453,21 @@ export class InventoryScreen {
       const heldHere = !this.heldFromInventory() && this.held?.id === id ? this.held.count : 0;
       return inBag + heldHere + (current?.id === id ? current.count : 0);
     });
-    const key = ids.map((id, i) => `${id}:${counts[i]}`).join(',') + `|${current?.id ?? ''}`;
-    if (key === this.furnaceFuelOptionsStamp && this.furnaceFuelOptionsEl.childElementCount > 0) return;
-    this.furnaceFuelOptionsStamp = key;
+    // 顺序没变就原地更新高亮/数量，绝不重建 DOM——否则点击时看起来像图标在换位
+    const sameOrder =
+      ids.length === this.furnaceFuelOptionIds.length &&
+      ids.every((id, index) => id === this.furnaceFuelOptionIds[index]);
+    if (sameOrder && this.furnaceFuelOptionsEl.childElementCount === ids.length) {
+      const buttons = Array.from(this.furnaceFuelOptionsEl.children) as HTMLElement[];
+      ids.forEach((id, index) => {
+        const button = buttons[index]!;
+        button.classList.toggle('active', current?.id === id);
+        const count = button.querySelector<HTMLElement>('.furnace-fuel-count');
+        if (count) count.textContent = counts[index]! > 1 ? String(counts[index]) : '';
+      });
+      return;
+    }
+    this.furnaceFuelOptionIds = ids;
     this.furnaceFuelOptionsEl.classList.remove('hidden');
     const fragment = document.createDocumentFragment();
     ids.forEach((id, index) => {
@@ -3951,28 +3968,14 @@ export class InventoryScreen {
       fuelHint.className = 'furnace-fuel-hint';
       fuelHint.append(this.furnaceFuelTextEl, this.furnaceFuelOptionsEl);
 
-      // 批次 305（用户）：上方原料，下方燃料，中间火焰 + 向右箭头指向目标
-      const inputWrap = document.createElement('div');
-      inputWrap.className = 'furnace-col';
-      inputWrap.append(this.buildLabel('原料'), input);
-
-      const flowArrow = document.createElement('div');
-      flowArrow.className = 'furnace-flow-arrow';
-      flowArrow.textContent = '→';
-      const flowRight = document.createElement('div');
-      flowRight.className = 'furnace-flow-right';
-      flowRight.append(flowArrow, this.cookTrackElement());
-      const flow = document.createElement('div');
-      flow.className = 'furnace-flow';
-      flow.append(this.flameEl, flowRight);
-
-      const fuelWrap = document.createElement('div');
-      fuelWrap.className = 'furnace-col';
-      fuelWrap.append(this.buildLabel('燃料'), fuel, fuelHint);
-
+      // 批次 306（用户）：布局回退到最初的样子——左列原料/火焰/燃料，中间进度，右边目标
       const left = document.createElement('div');
-      left.className = 'furnace-col furnace-left';
-      left.append(inputWrap, flow, fuelWrap);
+      left.className = 'furnace-col';
+      left.append(input, this.flameEl, fuel, fuelHint);
+
+      const middle = document.createElement('div');
+      middle.className = 'furnace-middle';
+      middle.appendChild(this.cookTrackElement());
 
       // 烟熏炉/高炉要写清"它只吃什么"：原版靠玩家自己知道，我们的界面里直接说明，
       // 免得玩家把石头塞进烟熏炉、看着它不动以为是坏了
@@ -3982,10 +3985,11 @@ export class InventoryScreen {
       targetWrap.className = 'furnace-col';
       targetWrap.append(this.buildLabel('产物 / 目标'), this.stationTargetEl);
       const right = document.createElement('div');
-      right.className = 'furnace-col furnace-right';
-      right.append(targetWrap, this.furnaceReturnBtn, this.furnaceHintEl);
+      right.className = 'furnace-col';
+      right.append(targetWrap, this.furnaceHintEl);
 
-      this.furnaceLayout.replaceChildren(left, right);
+      // 退还按钮放整个工作区右上角（批次 306）
+      this.furnaceLayout.replaceChildren(left, middle, right, this.furnaceReturnBtn);
       this.topArea.append(this.furnaceLayout, this.stationHintEl);
       return;
     }

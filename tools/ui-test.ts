@@ -775,13 +775,20 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes("this.furnaceReturnBtn.textContent = '退还全部'"),
   );
   check(
-    '熔炉布局：原料上、燃料下、中间火焰+右箭头指向目标（批次 305）',
-    invSrc.includes("this.buildLabel('原料')") &&
-      invSrc.includes("this.buildLabel('燃料')") &&
-      invSrc.includes("flowArrow.textContent = '→'") &&
-      invSrc.includes("right.append(targetWrap, this.furnaceReturnBtn") &&
-      css.includes('.furnace-flow-arrow') &&
-      css.includes('@keyframes furnace-flicker'),
+    '熔炉布局回退到最初版本；退还按钮固定在右上角（批次 306）',
+    invSrc.includes('left.append(input, this.flameEl, fuel, fuelHint)') &&
+      invSrc.includes('this.furnaceLayout.replaceChildren(left, middle, right, this.furnaceReturnBtn)') &&
+      css.includes('.furnace-return {') &&
+      css.includes('position: absolute; top: 2px; right: 2px;') &&
+      !invSrc.includes('furnace-flow-arrow') &&
+      !css.includes('@keyframes furnace-flicker'),
+  );
+  check(
+    '燃料备选顺序按效率 + 物品 id 固定，点击只更新高亮不重建（批次 306）',
+    /fuelSeconds\(b\) - fuelSeconds\(a\)[\s\S]{0,120}\|\| a - b/.test(invSrc) &&
+      invSrc.includes('const sameOrder') &&
+      invSrc.includes("button.classList.toggle('active'") &&
+      invSrc.includes('this.furnaceFuelOptionIds = ids'),
   );
   check(
     '目标框显示预计制作数量（批次 303）',
