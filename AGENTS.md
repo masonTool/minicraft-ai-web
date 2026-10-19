@@ -24,6 +24,7 @@
 | --- | --- |
 | 想知道某个模块当时怎么做的、为什么这么做 | [`docs/HANDOFF-ARCHIVE.md`](./docs/HANDOFF-ARCHIVE.md) |
 | 动手前想避开已经踩过的坑（渲染/光照/地形/界面/生物 AI） | [`docs/EXPERIENCE.md`](./docs/EXPERIENCE.md) |
+| **要改任意“操作型工作站”（熔炉/酿造台/营火/锻造台…）** | [`docs/STATION-LOGIC.md`](./docs/STATION-LOGIC.md)（通用契约 + 站台矩阵 + 接入 checklist） |
 | 想知道"这一项和原版哪里不一样" | `TASKS.md` 文末的差异台账（脚本生成） |
 
 ## 3. 命令：内循环用快的，提交前用全的

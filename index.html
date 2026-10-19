@@ -2896,14 +2896,20 @@
         font-size: 11px; line-height: 1; color: #4a4a4a;
         white-space: nowrap;
       }
-      /* 进度箭头：左边缘贴到 44px 原料/燃料槽的右边缘（132 列居中 → x=88） */
-      .furnace-progress { width: 72px; margin-left: -44px; }
-      .furnace-progress .furnace-cook {
-        position: relative; width: 72px; height: 16px;
+      /*
+       * 进度箭头（批次 330）：熔炉与酿造台共用同一套外观，宽度由各自布局定。
+       * 原来整条规则挂在 `.furnace-progress` 下，酿造台的 `.furnace-cook`
+       * 没有高度/背景/填充色，进度条一直是"看不见的 0 高度"。
+       */
+      .furnace-cook {
+        position: relative; height: 16px;
         background: rgba(0, 0, 0, .28); overflow: hidden;
         clip-path: polygon(0 0, 82% 0, 100% 50%, 82% 100%, 0 100%);
       }
-      .furnace-progress .furnace-cook i {
+      /* 熔炉：左边缘贴到 44px 原料/燃料槽的右边缘（132 列居中 → x=88） */
+      .furnace-progress { width: 72px; margin-left: -44px; }
+      .furnace-progress .furnace-cook { width: 72px; }
+      .furnace-cook i {
         display: block; height: 100%; width: 0;
         background: linear-gradient(90deg, #cfe6ff, #6fa8dc);
         transition: width .1s linear;
@@ -3009,7 +3015,13 @@
       .brewing-bottles { display: flex; gap: 6px; }
       .brewing-col { display: flex; flex-direction: column; align-items: flex-start; }
       .brewing-middle { display: flex; flex-direction: column; gap: 4px; width: 96px; }
-      .brewing-fuel-text { font-size: 11px; color: #2b5a2b; }
+      /* 与熔炉同一条蓝色箭头（基础规则见 `.furnace-cook`），只是宽度跟着这一列 */
+      .brewing-middle .furnace-cook { width: 96px; }
+      /* 退还按钮在中间列里按正常流排，不吃熔炉那条绝对定位 */
+      .brewing-middle .furnace-return {
+        position: static; align-self: flex-start; margin-top: 2px;
+      }
+      .brewing-fuel-text { font-size: 11px; color: #2b5a2b; white-space: nowrap; }
       .brewing-fuel-text.bad { color: #7a2020; }
 
       .inv-grid { display: grid; grid-template-columns: repeat(9, 42px); gap: 3px; justify-content: center; }

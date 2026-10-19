@@ -23,6 +23,7 @@ import {
   serializeContainers,
 } from '../src/core/save/ContainerSave.ts';
 import { ChunkEdits, packEdit, packEditId, packEditState } from '../src/core/save/ChunkEdits.ts';
+import { BREW_SECONDS, BREWS_PER_BLAZE_POWDER } from '../src/core/crafting/Brewing.ts';
 
 let passed = 0;
 let failed = 0;
@@ -284,6 +285,24 @@ console.log('\n[容器内容：序列化 → 反序列化]');
   equal('酿造台的材料还在', stand2.get(3)?.id, Item.NETHER_WART);
   equal('酿造台剩下的燃料次数还在', stand2.fuelLeft, 17);
   close('酿造台的酿造进度还在', stand2.brewProgress, 6.5);
+
+  // 批次 330：外部数据被手改过时，燃料次数与进度都要夹回合法区间
+  // （进度 > 20 会让界面进度条溢出；次数 > 20 等于凭空多酿）
+  const dirtyBrew = JSON.parse(JSON.stringify(data)) as typeof data;
+  const brewingEntry = dirtyBrew.find((entry) => entry.kind === 'brewing')!;
+  brewingEntry.brewing = { fuelLeft: 999, brewProgress: 999 };
+  const dirtyStore = new BlockEntityStore();
+  restoreContainers(dirtyStore, dirtyBrew);
+  const clamped = dirtyStore.getBrewingStand('overworld', 14, 64, 10)!;
+  equal('越界的燃料次数被夹到上限', clamped.fuelLeft, BREWS_PER_BLAZE_POWDER);
+  equal('越界的酿造进度被夹到上限', clamped.brewProgress, BREW_SECONDS);
+
+  brewingEntry.brewing = { fuelLeft: -5, brewProgress: -3 };
+  const negativeStore = new BlockEntityStore();
+  restoreContainers(negativeStore, dirtyBrew);
+  const clampedNegative = negativeStore.getBrewingStand('overworld', 14, 64, 10)!;
+  equal('负数燃料次数被夹到 0', clampedNegative.fuelLeft, 0);
+  equal('负数酿造进度被夹到 0', clampedNegative.brewProgress, 0);
 
   equal('附魔台的装备还在', restored.getEnchantTable('overworld', 12, 64, 10)?.get(0)?.id, sword);
   equal('铁砧两格的附魔还在', restored.getAnvil('overworld', 13, 64, 10)?.get(1)?.enchants?.sharpness, 3);

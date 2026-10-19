@@ -29,6 +29,7 @@ import {
   DRINKABLE,
   POTION_IDS,
   POTION_VARIANTS,
+  isPotion,
   lingeringIdOf,
   splashIdOf,
   variantBaseId,
@@ -139,6 +140,24 @@ function buildRecipes(): BrewIngredient[] {
   }
 
   return recipes;
+}
+
+/**
+ * 这一件东西能不能放进三个药水槽（批次 330，漏斗与手动放置共用）。
+ *
+ * 水瓶不是 `POTIONS` 里的条目（它是酿造的起点、不是效果药水），所以单独放行；
+ * **空玻璃瓶不算**——原版的药水槽只认"装了东西的瓶子"。
+ */
+export function isBottleItem(itemId: number): boolean {
+  return itemId === Item.WATER_BOTTLE || isPotion(itemId);
+}
+
+/** 酿造材料集合（来自配方表，不手抄；旧红石 id 归一后再查） */
+const INGREDIENTS: ReadonlySet<number> = new Set(BREW_RECIPES.map((recipe) => recipe.ingredient));
+
+/** 这一件东西能不能放进材料槽（批次 330） */
+export function isBrewIngredient(itemId: number): boolean {
+  return INGREDIENTS.has(canonicalIngredient(itemId));
 }
 
 /** 查这条配方；没有配方返回 null */

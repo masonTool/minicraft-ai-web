@@ -51,6 +51,14 @@ export class BrewingStand implements SlotSource {
    * 与熔炉同一条口径：摆好材料后先冻住，点目标框再恢复；关界面必须恢复。
    */
   paused = false;
+  /**
+   * 是否已经点过界面上的目标框开工（批次 330，与熔炉 `started` 同构，不存档）。
+   *
+   * 与 `paused` 分开：手动摆料/关闭界面只改 `paused`，绝不会把 `started` 打开；
+   * `tick` 必须同时满足 `!paused && started` 才推进，避免任何刷新路径让台子自动开酿。
+   * 默认 true 兼容无 UI 的模拟/测试与旧存档。
+   */
+  started = true;
 
   onChange: (() => void) | null = null;
 
@@ -87,28 +95,33 @@ export class BrewingStand implements SlotSource {
   }
 
   /**
-   * 推进 dt 秒；由主程序对附近的酿造台调用（与熔炉同一条 tick 通道）。
+   * 推进 dt 秒；由主程序对当前维度的酿造台调用（与熔炉同一条 tick 通道）。
    * 与熔炉一样**自己通知 `onChange`**：界面靠它知道"进度条该重画了"，
-   * 否则开着界面看酿造台会是一条永远不动的进度条。
+   * 否则开着界面看酿造台会是一条永远不动的进度条（批次 330 修）。
    */
   tick(dt: number): BrewTickResult {
     const result: BrewTickResult = { changed: false, brewed: false };
-    // 界面里已摆好配方、还没点目标框（批次 295）
-    if (this.paused) return result;
+    // 界面里已摆好配方、还没点目标框（批次 295 / 330）
+    if (this.paused || !this.started) return result;
     if (!canBrew(this.material, this.bottleIds)) {
       // 条件不满足：进度归零（原版不允许"暂停后接着酿"）
-      if (this.brewProgress !== 0) {
+      if (this.brewProgress !== 0 || this.brewing) {
         this.brewProgress = 0;
+        this.brewing = false;
         result.changed = true;
+        this.onChange?.();
       }
-      this.brewing = false;
       return result;
     }
 
     // 没燃料了就先"吃"一份烈焰粉换 20 次
     if (this.fuelLeft <= 0) {
       if (!this.hasFuel) {
-        this.brewing = false;
+        if (this.brewing) {
+          this.brewing = false;
+          result.changed = true;
+          this.onChange?.();
+        }
         return result;
       }
       const fuelStack = this.slots[BREW_FUEL_SLOT]!;
@@ -116,23 +129,28 @@ export class BrewingStand implements SlotSource {
       if (fuelStack.count <= 0) this.slots[BREW_FUEL_SLOT] = null;
       this.fuelLeft = BREWS_PER_BLAZE_POWDER;
       result.changed = true;
+      this.onChange?.();
     }
 
     this.brewing = true;
     this.brewProgress += dt;
     result.changed = true;
-    if (this.brewProgress < BREW_SECONDS) return result;
+    if (this.brewProgress < BREW_SECONDS) {
+      // ⚠️ 进度推进也必须通知界面（批次 330）：否则开着界面看到的是不动的进度条
+      this.onChange?.();
+      return result;
+    }
 
     // 酿成一轮：三个槽一起换
     this.brewProgress = 0;
     this.fuelLeft -= 1;
-    const changed = applyBrew(this.material!, this.bottleIds);
+    const brewedSlots = applyBrew(this.material!, this.bottleIds);
     this.consumeMaterial();
-    for (const { index, to } of changed) {
+    for (const { index, to } of brewedSlots) {
       const stack = this.slots[index]!;
       this.slots[index] = { ...stack, id: to };
     }
-    result.brewed = changed.length > 0;
+    result.brewed = brewedSlots.length > 0;
     if (this.fuelLeft <= 0) this.brewing = false;
     this.onChange?.();
     return result;

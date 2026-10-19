@@ -21,6 +21,7 @@ import type { FurnaceStation } from '../crafting/Smelting.ts';
 import { ANVIL_SIZE, Anvil } from '../container/Anvil.ts';
 import { EnchantTable } from '../container/EnchantTable.ts';
 import { BREW_SLOT_COUNT, BrewingStand } from '../container/BrewingStand.ts';
+import { BREW_SECONDS, BREWS_PER_BLAZE_POWDER } from '../crafting/Brewing.ts';
 import { SMITHING_SIZE, SmithingTable } from '../container/SmithingTable.ts';
 import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
 import { GRINDSTONE_SIZE, Grindstone } from '../container/Grindstone.ts';
@@ -318,8 +319,10 @@ export function restoreContainers(store: BlockEntityStore, data: readonly Serial
       container.refreshTotals();
     }
     if (container instanceof BrewingStand && entry.brewing) {
-      container.fuelLeft = numberOr(entry.brewing.fuelLeft, 0);
-      container.brewProgress = numberOr(entry.brewing.brewProgress, 0);
+      // 批次 330：外部数据可能被手改过，夹回合法区间——
+      // 进度 > 20 会让界面进度条溢出、燃料次数 > 20 等于凭空多酿
+      container.fuelLeft = clampInt(entry.brewing.fuelLeft, 0, BREWS_PER_BLAZE_POWDER);
+      container.brewProgress = clampNumber(entry.brewing.brewProgress, 0, BREW_SECONDS);
     }
     if (container instanceof Chest) {
       // 旧存档没有这个字段：缺省 false 是安全的（那只箱子本来就还没被战利品表填过）
@@ -338,4 +341,14 @@ export function restoreContainers(store: BlockEntityStore, data: readonly Serial
 /** 有限数字兜底（NaN / Infinity / undefined 一律回退） */
 function numberOr(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/** 有限数字兜底 + 夹到区间（批次 330） */
+function clampNumber(value: unknown, min: number, max: number): number {
+  return Math.max(min, Math.min(max, numberOr(value, min)));
+}
+
+/** 有限整数兜底 + 夹到区间（充能次数这类"只能是整数"的字段） */
+function clampInt(value: unknown, min: number, max: number): number {
+  return Math.round(clampNumber(value, min, max));
 }

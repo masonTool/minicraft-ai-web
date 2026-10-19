@@ -50,6 +50,13 @@ export class Campfire implements SlotSource {
    * 与炉子/酿造台同一条口径：摆好材料先冻住，点目标框再恢复；关界面必须恢复。
    */
   paused = false;
+  /**
+   * 是否已经点过界面上的目标框开工（批次 330，与熔炉/酿造台同构，不存档）。
+   *
+   * 与 `paused` 分开：手动摆料/关闭界面只改 `paused`，绝不会把 `started` 打开；
+   * `tick` 必须同时满足 `!paused && started` 才推进。默认 true 兼容无 UI 的模拟/测试。
+   */
+  started = true;
 
   onChange: (() => void) | null = null;
 
@@ -128,8 +135,8 @@ export class Campfire implements SlotSource {
     const cooked: CampfireCooked[] = [];
     const wasLit = this.lit;
     let changed = false;
-    // 界面里已摆好配方、还没点目标框（批次 295）
-    if (this.paused) return { changed: false, cooked, litChanged: false };
+    // 界面里已摆好配方、还没点目标框（批次 295 / 330）
+    if (this.paused || !this.started) return { changed: false, cooked, litChanged: false };
 
     for (let index = 0; index < CAMPFIRE_SIZE; index++) {
       const recipe = this.lit ? this.recipeFor(index) : undefined;

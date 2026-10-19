@@ -684,16 +684,48 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.inv-station-hint-row'),
   );
   check(
-    '目标框：熔炉/锻造台/酿造台都点一下才制作，产物自动进快捷栏/仓库/脚边（批次 295）',
+    '目标框：熔炉/锻造台/酿造台都点一下才制作（批次 295 / 330）',
     invSrc.includes('private clickStationTarget') &&
       invSrc.includes('this.activeContainer.paused = false') &&
       invSrc.includes('this.activeContainer instanceof SmithingTable') &&
       invSrc.includes('this.activeContainer instanceof BrewingStand') &&
-      invSrc.includes('private collectStationOutput') &&
       invSrc.includes('this.inventory.addStack(output)') &&
       invSrc.includes('this.hooks.onDrop?.(output.id, leftover)') &&
       css.includes('.station-target') &&
       css.includes('.furnace-col.hidden'),
+  );
+  check(
+    '酿造台产物留在药水槽、不再自动收货（批次 330，对齐熔炉产物槽）',
+    !invSrc.includes('private collectStationOutput') &&
+      !invSrc.includes('stationBrewSnapshot') &&
+      invSrc.includes('this.activeContainer instanceof BrewingStand') &&
+      invSrc.includes('this.stationAutoCollect = false'),
+  );
+  check(
+    '酿造台与熔炉同一套进度箭头；运行中 0.1s 主动刷新（批次 330）',
+    /\.furnace-cook \{/.test(css) &&
+      css.includes('.brewing-middle .furnace-cook') &&
+      invSrc.includes('const runningBrew =') &&
+      invSrc.includes('if (!this.containerDirty && !runningFurnace && !runningBrew && !runningCampfire) return;'),
+  );
+  check(
+    '酿造台/营火都有 started 硬开关，关界面按是否开工决定继续（批次 330）',
+    readFileSync(new URL('../src/core/container/BrewingStand.ts', import.meta.url), 'utf8').includes(
+      'if (this.paused || !this.started)',
+    ) &&
+      readFileSync(new URL('../src/core/container/Campfire.ts', import.meta.url), 'utf8').includes(
+        'if (this.paused || !this.started)',
+      ) &&
+      invSrc.includes('this.activeContainer.started = this.brewStarted') &&
+      invSrc.includes('this.activeContainer.started = this.campfireStarted') &&
+      invSrc.includes('this.activeContainer.paused = !this.brewStarted') &&
+      invSrc.includes('this.activeContainer.paused = !this.campfireStarted'),
+  );
+  check(
+    '酿造台：三瓶一起摆料 + 退还仓库（批次 330）',
+    invSrc.includes('private returnBrewingContents') &&
+      invSrc.includes("this.brewReturnBtn.textContent = '退还仓库'") &&
+      invSrc.includes('if (this.putIntoContainer(stand, slot, bottle!.id, bottle!.count)) bottled++;'),
   );
   check(
     '工作站分类栏白底 = 当前站台能做（含燃料）；红底用 inv-slot.locked',
@@ -876,9 +908,9 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       /private renderStationHint\([\s\S]{0,500}classList\.add\('hidden'\)[\s\S]{0,120}return;/.test(invSrc),
   );
   check(
-    '熔炉离开玩家继续烧，产物槽满 64 才停（批次 312）',
-    readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8').includes(
-      '!(container instanceof Furnace) && dx * dx + dy * dy + dz * dz > rangeSq',
+    '熔炉与酿造台离开玩家继续跑，营火/漏斗仍限 64 格（批次 312 / 330）',
+    /!\(container instanceof Furnace\)[\s\S]{0,160}!\(container instanceof BrewingStand\)[\s\S]{0,160}> rangeSq/.test(
+      readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'),
     ),
   );
   check(
@@ -932,11 +964,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     ),
   );
   check(
-    '运行中的熔炉重开不暂停，并主动按 0.1s 刷新界面（批次 314）',
+    '运行中的机器重开不暂停，并主动按 0.1s 刷新界面（批次 314 / 330）',
     invSrc.includes('const running = this.activeContainer.burnTimeLeft > 0') &&
       invSrc.includes('this.activeContainer.paused = !running') &&
       invSrc.includes('const runningFurnace =') &&
-      invSrc.includes('if (!this.containerDirty && !runningFurnace) return;'),
+      invSrc.includes('const runningBrew =') &&
+      invSrc.includes('const runningCampfire =') &&
+      invSrc.includes('if (!this.containerDirty && !runningFurnace && !runningBrew && !runningCampfire) return;'),
   );
   check(
     '目标条目绑定容器，切换两座熔炉不会串目标（批次 315）',

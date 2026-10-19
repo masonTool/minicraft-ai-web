@@ -48,7 +48,8 @@ import { LECTERN_SIZE, Lectern } from './Lectern.ts';
 import { STONECUTTER_INPUT, STONECUTTER_SIZE, Stonecutter } from './Stonecutter.ts';
 import { sameExtras, type ItemStack } from './Inventory.ts';
 import { fuelSeconds, smeltingRecipeFor } from '../crafting/Smelting.ts';
-import { maxStackOf } from '../registry/items.ts';
+import { isBottleItem, isBrewIngredient } from '../crafting/Brewing.ts';
+import { maxStackOf, Item } from '../registry/items.ts';
 import type { BlockContainer } from '../world/BlockEntityStore.ts';
 
 /** 附魔台的格数（它没有导出的尺寸常量——原版就是"装备 + 青金石"两格） */
@@ -57,7 +58,14 @@ const ENCHANT_SLOT_COUNT = 2;
 const EMPTY_SLOTS: readonly number[] = [];
 const ALL_CHEST_SLOTS: readonly number[] = range(CHEST_SIZE);
 const ALL_CAMPFIRE_SLOTS: readonly number[] = range(CAMPFIRE_SIZE);
-const BREWING_SLOTS: readonly number[] = [...BREW_BOTTLE_SLOTS, BREW_INGREDIENT_SLOT, BREW_FUEL_SLOT];
+/**
+ * 酿造台允许自动输入的槽位，**顺序就是优先级**（批次 330）：
+ * 燃料 → 材料 → 药水。
+ *
+ * 烈焰粉同时是"燃料"和"力量药水的材料"，所以必须让它先落到燃料槽；
+ * 如果按 0/1/2/3/4 的顺序，漏斗会把粉末塞进材料槽，台子却永远点不着。
+ */
+const BREWING_SLOTS: readonly number[] = [BREW_FUEL_SLOT, BREW_INGREDIENT_SLOT, ...BREW_BOTTLE_SLOTS];
 
 /** [0, count) 的整数列表（`Array.from` 的简写，避免每处各写一遍回调） */
 function range(count: number): readonly number[] {
@@ -144,6 +152,13 @@ function slotHasRoom(container: BlockContainer, slot: number, stack: ItemStack):
 function kindAccepts(container: BlockContainer, slot: number, itemId: number): boolean {
   if (container instanceof Campfire) return smeltingRecipeFor(itemId, 'campfire') !== undefined;
   if (container instanceof Furnace && slot === FURNACE_FUEL) return fuelSeconds(itemId) > 0;
+  // 酿造台（批次 330）：三类槽位各认各的，避免漏斗把石头塞进瓶子槽、把材料塞进燃料槽
+  if (container instanceof BrewingStand) {
+    if (BREW_BOTTLE_SLOTS.some((bottle) => bottle === slot)) return isBottleItem(itemId);
+    if (slot === BREW_INGREDIENT_SLOT) return isBrewIngredient(itemId);
+    if (slot === BREW_FUEL_SLOT) return itemId === Item.BLAZE_POWDER;
+    return false;
+  }
   return true;
 }
 
@@ -189,6 +204,14 @@ export function peekTake(container: BlockContainer): { slot: number; stack: Item
   if (container instanceof Furnace) {
     const output = container.get(FURNACE_OUTPUT);
     return output ? { slot: FURNACE_OUTPUT, stack: output } : null;
+  }
+  // 酿造台（批次 330）：**只取三个药水槽**（成品/瓶子），绝不抽走材料与燃料
+  if (container instanceof BrewingStand) {
+    for (const slot of BREW_BOTTLE_SLOTS) {
+      const stack = container.get(slot);
+      if (stack) return { slot, stack };
+    }
+    return null;
   }
   for (const slot of acceptingSlots(container)) {
     const stack = container.get(slot);

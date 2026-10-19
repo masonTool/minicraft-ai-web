@@ -10111,10 +10111,12 @@ class App {
   }
 
   /**
-   * 推进附近的熔炉与酿造台。
-   * 只 tick 玩家周围 64 格内的容器，避免容器多了以后每帧全量遍历。
+   * 推进熔炉、酿造台与附近的营火/漏斗。
    *
-   * 两种容器都**自己会通知 `onChange`**（见各自的 `tick`），所以这里不需要看返回值：
+   * 熔炉与酿造台是"机器"：**离开视野也继续跑**（批次 312 / 330）；
+   * 营火与漏斗仍只 tick 玩家周围 64 格，避免容器多了以后每帧全量遍历。
+   *
+   * 两种机器都**自己会通知 `onChange`**（见各自的 `tick`），所以这里不需要看返回值：
    * 界面开着的容器会因此被标脏、按节流重绘进度条。
    */
   private tickContainers(dt: number): void {
@@ -10132,9 +10134,15 @@ class App {
       const dx = x + 0.5 - px;
       const dy = y + 0.5 - py;
       const dz = z + 0.5 - pz;
-      // 批次 312（用户）：熔炉离开玩家视野也要继续烧，产物堆到产物槽 64 为止；
-      // 其他容器（酿造台/营火/漏斗）仍只 tick 附近，避免全图遍历。
-      if (!(container instanceof Furnace) && dx * dx + dy * dy + dz * dz > rangeSq) return;
+      // 批次 312 / 330：熔炉与酿造台离开玩家视野也要继续跑；
+      // 营火/漏斗仍只 tick 附近，避免全图遍历。
+      if (
+        !(container instanceof Furnace) &&
+        !(container instanceof BrewingStand) &&
+        dx * dx + dy * dy + dz * dz > rangeSq
+      ) {
+        return;
+      }
 
       if (container instanceof Hopper) {
         // 锁定状态从**方块状态**读（红石引擎负责写它），缓存进容器供界面显示
@@ -10159,6 +10167,15 @@ class App {
         return;
       }
 
+      // 酿造台：独立分支（批次 330）。以前靠 `as Furnace` 走下面那一段，
+      // `isLit` / `litChanged` 都是 undefined，只是碰巧被 `syncLitState` 的
+      // "不是炉子/营火就 return" 兜住了——这种巧合不能当契约。
+      if (container instanceof BrewingStand) {
+        container.tick(dt);
+        return;
+      }
+
+      // 走到这里的只剩炉子系（烟熏炉/高炉都是 Furnace 实例，站台存在实例上）
       const furnace = container as Furnace;
       const furnaceResult = furnace.tick(dt);
       // 烧起来/熄灭了就把方块状态同步过去：点火贴图与 13 级光都靠这一位（批次 47）
