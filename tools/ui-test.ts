@@ -728,6 +728,24 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       !invSrc.includes('if (count && owned > 1) count.textContent'),
   );
   check(
+    '换配方先清空旧槽并放回原背包格；制作完成后目标框保留（批次 300）',
+    invSrc.includes('stationOrigins = new Map') &&
+      invSrc.includes('private returnStationStack') &&
+      invSrc.includes('private clearStationSlotsForNewRecipe') &&
+      invSrc.includes('this.stationFilledResultId !== itemId') &&
+      invSrc.includes('this.clearStationSlotsForNewRecipe();') &&
+      !/private takeFurnaceOutput[\s\S]{0,900}stationTargetEntry = null/.test(invSrc),
+  );
+  check(
+    '燃料优先煤/木炭，并提供「换燃料」说明与循环（批次 300）',
+    invSrc.includes('private bagFuelOptions') &&
+      invSrc.includes('private fuelRank') &&
+      invSrc.includes('private cycleFurnaceFuel') &&
+      invSrc.includes('furnaceFuelTextEl') &&
+      invSrc.includes('furnaceFuelPickBtn') &&
+      /fuelRank[\s\S]{0,300}Item\.COAL[\s\S]{0,120}Item\.CHARCOAL/.test(invSrc),
+  );
+  check(
     '点白底配方会自动填原料与燃料（白底 = 点下去能开工）',
     invSrc.includes('private fillStationRecipe') &&
       invSrc.includes('this.ensureInSlot(furnace, FURNACE_INPUT') &&

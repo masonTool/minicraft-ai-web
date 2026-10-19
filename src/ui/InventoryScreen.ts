@@ -487,10 +487,16 @@ export class InventoryScreen {
   private readonly stationTargetEl: HTMLDivElement;
   /** 当前选中的工作站配方（目标框里画的就是它） */
   private stationTargetEntry: StationRecipeEntry | null = null;
+  /** 工作站格子里实际摆的是哪条配方（换配方时据此清掉旧料） */
+  private stationFilledResultId: number | null = null;
   /** 点过目标框、正在自动收货：产物直接进快捷栏 → 仓库 → 脚边 */
   private stationAutoCollect = false;
   /** 酿造台开始时的三瓶药水快照：变了就说明这一轮酿好了（自动收货用） */
   private stationBrewSnapshot: (number | undefined)[] | null = null;
+  /** 自动填进工作站的物品来自哪个背包格（换配方时尽量放回原格） */
+  private readonly stationOrigins = new Map<string, { bagIndex: number; itemId: number }>();
+  /** `takeFromBag` 最近一次实际取件的背包下标 */
+  private lastBagTakeIndex = -1;
   /** 分类物品网格 */
   private categoryGrid!: HTMLDivElement;
   /** 分类物品那一栏的搜索框（只在"全部"那一栏出现） */
@@ -682,6 +688,9 @@ export class InventoryScreen {
   private readonly campfireHintEl: HTMLDivElement;
   private readonly furnaceInputSlot: HTMLDivElement;
   private readonly furnaceFuelSlot: HTMLDivElement;
+  /** 燃料说明 + 「换燃料」按钮（批次 300） */
+  private readonly furnaceFuelTextEl: HTMLSpanElement;
+  private readonly furnaceFuelPickBtn: HTMLButtonElement;
   private readonly flameEl: HTMLDivElement;
   /** 附魔台（H9） */
   private readonly enchantLayout: HTMLDivElement;
@@ -1022,6 +1031,14 @@ export class InventoryScreen {
     this.furnaceFuelSlot = this.createSlot();
     this.furnaceFuelSlot.dataset.key = 'furnace:fuel';
     this.furnaceInputSlot.dataset.key = 'furnace:input';
+    this.furnaceFuelTextEl = document.createElement('span');
+    this.furnaceFuelTextEl.className = 'furnace-fuel-text';
+    this.furnaceFuelPickBtn = document.createElement('button');
+    this.furnaceFuelPickBtn.type = 'button';
+    this.furnaceFuelPickBtn.className = 'furnace-fuel-pick';
+    this.furnaceFuelPickBtn.textContent = '换';
+    this.furnaceFuelPickBtn.title = '更换燃料（按背包里的可燃物循环）';
+    this.furnaceFuelPickBtn.addEventListener('click', () => this.cycleFurnaceFuel());
     // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
     this.anvilLayout = document.createElement('div');
     this.anvilLayout.className = 'anvil-layout';
@@ -2204,6 +2221,7 @@ export class InventoryScreen {
       if (!stack || stack.id !== itemId) continue;
       const taken = this.inventory.take(i, remaining);
       if (!taken) continue;
+      this.lastBagTakeIndex = i;
       remaining -= taken.count;
       if (first) first.count += taken.count;
       else first = taken;
@@ -2221,7 +2239,12 @@ export class InventoryScreen {
     if (!this.canPut(container, slot, itemId, count)) return false;
     const taken = this.takeFromBag(itemId, count);
     if (!taken) return false;
+    // 记下来源格：换配方时优先放回玩家原来那一格（批次 300）
+    const key = `${this.mode}:${slot}`;
     const current = container.get(slot);
+    if (this.lastBagTakeIndex >= 0 && (!current || !this.stationOrigins.has(key))) {
+      this.stationOrigins.set(key, { bagIndex: this.lastBagTakeIndex, itemId });
+    }
     if (current) {
       current.count += taken.count;
       container.set(slot, current);
@@ -2252,13 +2275,137 @@ export class InventoryScreen {
     return this.putIntoContainer(container, slot, itemId, count);
   }
 
-  /** 主背包里第一种可燃物（煤/木炭/木板…） */
-  private findBagFuel(): number | null {
+  /**
+   * 把工作站某一格的东西放回背包（批次 300）。
+   *
+   * 优先放回自动填充时的来源格；来源格被占了再走 `addStack`，绝不覆盖玩家别的东西。
+   */
+  private returnStationStack(container: BlockContainer, slot: number): void {
+    const stack = container.get(slot);
+    const key = `${this.mode}:${slot}`;
+    const origin = this.stationOrigins.get(key);
+    this.stationOrigins.delete(key);
+    if (!stack) return;
+    container.set(slot, null);
+    let remaining = stack.count;
+    if (origin && origin.itemId === stack.id) {
+      const current = this.inventory.get(origin.bagIndex);
+      if (!current) {
+        this.inventory.set(origin.bagIndex, { ...stack, count: remaining });
+        remaining = 0;
+      } else if (current.id === stack.id) {
+        const room = maxStackOf(current.id) - current.count;
+        const moved = Math.min(room, remaining);
+        if (moved > 0) {
+          current.count += moved;
+          remaining -= moved;
+          this.inventory.set(origin.bagIndex, current);
+        }
+      }
+    }
+    if (remaining > 0) {
+      const leftover = this.inventory.addStack({ ...stack, count: remaining });
+      if (leftover > 0) this.hooks.onDrop?.(stack.id, leftover);
+    }
+    this.inventory.notify();
+  }
+
+  /** 换一条配方：先把上一套材料/燃料/产物清出来，放回背包 */
+  private clearStationSlotsForNewRecipe(): void {
+    const container = this.activeContainer;
+    if (!container) return;
+    if (isFurnaceMode(this.mode) && container instanceof Furnace) {
+      container.paused = true;
+      this.returnStationStack(container, FURNACE_INPUT);
+      this.returnStationStack(container, FURNACE_FUEL);
+      this.returnStationStack(container, FURNACE_OUTPUT);
+      const xp = container.takeExperience();
+      if (xp > 0) this.hooks.onFurnaceXp?.(xp);
+      // 换配方不再沿用上一轮的烧炼进度；已经烧掉的燃料时间保留
+      container.cookProgress = 0;
+      container.cookTimeTotal = 0;
+      return;
+    }
+    if (this.mode === 'smithing' && container instanceof SmithingTable) {
+      this.returnStationStack(container, SMITHING_EQUIPMENT);
+      this.returnStationStack(container, SMITHING_MATERIAL);
+      container.refresh();
+      return;
+    }
+    if (this.mode === 'brewing' && container instanceof BrewingStand) {
+      container.paused = true;
+      for (const slot of BREW_BOTTLE_SLOTS) this.returnStationStack(container, slot);
+      this.returnStationStack(container, BREW_INGREDIENT_SLOT);
+      this.returnStationStack(container, BREW_FUEL_SLOT);
+      container.brewProgress = 0;
+      container.brewing = false;
+      return;
+    }
+    if (this.mode === 'campfire' && container instanceof Campfire) {
+      container.paused = true;
+      for (let i = 0; i < CAMPFIRE_SIZE; i++) this.returnStationStack(container, i);
+    }
+  }
+
+  /** 燃料偏好：煤/木炭优先，实在没有再考虑木板/箱子这类可燃方块 */
+  private fuelRank(itemId: number): number {
+    if (itemId === Item.COAL || itemId === Item.CHARCOAL) return 0;
+    if (itemId === Block.DRIED_KELP_BLOCK) return 1;
+    if (itemId === Block.OAK_LOG || itemId === Block.OAK_PLANKS) return 2;
+    if (itemId === Item.STICK || itemId === Block.OAK_LEAVES) return 3;
+    // 箱子/工作台也能烧，但优先度最低：避免"点个配方把仓库箱子烧了"
+    if (itemId === Block.CHEST || itemId === Block.CRAFTING_TABLE) return 5;
+    return 4;
+  }
+
+  /** 背包里所有可燃物（去重，按偏好排序）；「换燃料」按钮也用它 */
+  private bagFuelOptions(): number[] {
+    const ids = new Set<number>();
     for (let i = HOTBAR_START; i < MAIN_START + MAIN_SIZE; i++) {
       const id = this.inventory.get(i)?.id;
-      if (id !== undefined && fuelSeconds(id) > 0) return id;
+      if (id !== undefined && fuelSeconds(id) > 0) ids.add(id);
     }
-    return null;
+    return [...ids].sort((a, b) => this.fuelRank(a) - this.fuelRank(b) || fuelSeconds(b) - fuelSeconds(a));
+  }
+
+  /** 主背包里最合适的可燃物（煤/木炭优先，避免一上来抓箱子） */
+  private findBagFuel(): number | null {
+    return this.bagFuelOptions()[0] ?? null;
+  }
+
+  /** 「换燃料」：在背包里的可燃物之间循环，并保持熔炉暂停（批次 300） */
+  private cycleFurnaceFuel(): void {
+    const furnace = this.activeContainer;
+    if (!(furnace instanceof Furnace)) return;
+    const current = furnace.get(FURNACE_FUEL);
+    const options = this.bagFuelOptions();
+    if (current && !options.includes(current.id)) options.unshift(current.id);
+    if (options.length <= 1) return;
+    const index = current ? options.indexOf(current.id) : -1;
+    const next = options[(index + 1) % options.length]!;
+    if (next !== current?.id && this.bagCountOf(next) < 1) return;
+    if (current) this.returnStationStack(furnace, FURNACE_FUEL);
+    if (!this.putIntoContainer(furnace, FURNACE_FUEL, next, 1)) return;
+    furnace.paused = true;
+    this.inventory.notify();
+    this.refresh();
+  }
+
+  /** 燃料栏说明：当前燃料名 + 「换」按钮；缺燃料时说明可放什么 */
+  private refreshFurnaceFuelHint(furnace: Furnace): void {
+    const fuel = furnace.get(FURNACE_FUEL);
+    const options = this.bagFuelOptions();
+    this.furnaceFuelTextEl.textContent = fuel
+      ? `燃料：${itemName(fuel.id)}`
+      : furnace.burnTimeLeft > 0
+        ? '燃料：燃烧中'
+        : options.length > 0
+          ? '燃料：未选择'
+          : '燃料：缺（煤 / 木炭 / 木板）';
+    this.furnaceFuelTextEl.title = '煤 / 木炭 / 木板 / 干海带块等可燃物都能当燃料';
+    const canPick = options.length + (fuel ? 1 : 0) > 1;
+    this.furnaceFuelPickBtn.classList.toggle('hidden', !canPick);
+    this.furnaceFuelPickBtn.title = canPick ? '更换燃料（按背包里的可燃物循环）' : '';
   }
 
   private furnaceFuelAvailable(furnace: Furnace | null): boolean {
@@ -2611,7 +2758,15 @@ export class InventoryScreen {
     } else if (this.mode === 'smithing' && container instanceof SmithingTable) {
       actual = container.get(SMITHING_RESULT);
     }
-    const entry = this.stationTargetEntry;
+    // 每次重画都按当前槽位/背包重算一遍可用性：材料用完后目标要变红，而不是保留旧白底
+    let entry = this.stationTargetEntry;
+    if (entry) {
+      const fresh = this.currentStationEntries().find((candidate) => candidate.resultId === entry!.resultId);
+      if (fresh) {
+        this.stationTargetEntry = fresh;
+        entry = fresh;
+      }
+    }
     const show = this.stationTargetSupported() && (actual !== null || entry !== null);
     const wrap = this.stationTargetEl.parentElement;
     wrap?.classList.toggle('hidden', !show);
@@ -2713,9 +2868,8 @@ export class InventoryScreen {
     if (leftover > 0) this.hooks.onDrop?.(output.id, leftover);
     const xp = furnace.takeExperience();
     if (xp > 0) this.hooks.onFurnaceXp?.(xp);
-    // 批次 299：一次目标框只烧一个单位；还有原料就停在目标框，等下一次点击
+    // 批次 299：一次目标框只烧一个单位；目标框保留，原料/燃料不足时由界面变红
     furnace.paused = true;
-    if (!furnace.get(FURNACE_INPUT)) this.stationTargetEntry = null;
     this.inventory.notify();
     if (refreshAfter) this.refresh();
   }
@@ -2733,7 +2887,7 @@ export class InventoryScreen {
     }
     const leftover = this.inventory.addStack(result.output);
     if (leftover > 0) this.hooks.onDrop?.(result.output.id, leftover);
-    this.stationTargetEntry = null;
+    // 目标框保留：装备/锭用完后会按当前材料变红，而不是整条配方消失
     this.inventory.notify();
     this.showMessage(`完成：${itemName(result.output.id)}`);
     if (refreshAfter) this.refresh();
@@ -2762,8 +2916,7 @@ export class InventoryScreen {
         changed = true;
       }
       if (changed) this.inventory.notify();
-      // 三瓶都收走了：目标框收掉
-      if (BREW_BOTTLE_SLOTS.every((slot) => !stand.get(slot))) this.stationTargetEntry = null;
+      // 目标框保留：三瓶收走后按当前材料变红，不整条消失
     }
   }
 
@@ -2779,14 +2932,6 @@ export class InventoryScreen {
     }
     const leftover = this.inventory.addStack(output);
     if (leftover > 0) this.hooks.onDrop?.(output.id, leftover);
-    let empty = true;
-    for (let i = 0; i < CAMPFIRE_SIZE; i++) {
-      if (this.activeContainer.get(i)) {
-        empty = false;
-        break;
-      }
-    }
-    if (empty) this.stationTargetEntry = null;
     this.inventory.notify();
     return true;
   }
@@ -3009,6 +3154,11 @@ export class InventoryScreen {
    */
   private showStationRecipeFor(itemId: number, mode: 'preview' | 'fill'): void {
     const entry = this.currentStationEntries().find((candidate) => candidate.resultId === itemId);
+    // 换目标：先把上一套材料/燃料/产物清回背包，再摆新配方（批次 300）
+    if (entry && mode === 'fill' && this.stationFilledResultId !== itemId) {
+      this.clearStationSlotsForNewRecipe();
+      this.stationFilledResultId = null;
+    }
     if (entry) {
       // 按住滑动只把目标框切过去，不动物品；抬手确认（fill）才真正摆料
       if (mode === 'preview') {
@@ -3020,7 +3170,9 @@ export class InventoryScreen {
         return;
       }
       if (entry.available) {
+        this.stationTargetEntry = entry;
         if (!this.fillStationRecipe(entry)) {
+          this.renderStationTarget();
           this.showStationEntryHint(entry);
           return;
         }
@@ -3032,6 +3184,7 @@ export class InventoryScreen {
         ) {
           this.activeContainer.paused = true;
         }
+        this.stationFilledResultId = itemId;
         this.stationTargetEntry = entry;
         this.stationAutoCollect = false;
         this.renderStationTarget();
@@ -3042,6 +3195,7 @@ export class InventoryScreen {
       // 红底：已有材料摆进去，缺的留空；目标框红、不可点开始
       this.fillStationRecipePartial(entry);
       const after = this.currentStationEntries().find((candidate) => candidate.resultId === entry.resultId) ?? entry;
+      this.stationFilledResultId = itemId;
       this.stationTargetEntry = after;
       this.stationAutoCollect = false;
       this.renderStationTarget();
@@ -3673,9 +3827,12 @@ export class InventoryScreen {
       const input = this.registerExisting(this.furnaceInputSlot, 'furnace:input', this.activeContainer!, FURNACE_INPUT);
       const fuel = this.registerExisting(this.furnaceFuelSlot, 'furnace:fuel', this.activeContainer!, FURNACE_FUEL);
 
+      const fuelHint = document.createElement('div');
+      fuelHint.className = 'furnace-fuel-hint';
+      fuelHint.append(this.furnaceFuelTextEl, this.furnaceFuelPickBtn);
       const left = document.createElement('div');
       left.className = 'furnace-col';
-      left.append(input, this.flameEl, fuel);
+      left.append(input, this.flameEl, fuel, fuelHint);
 
       const middle = document.createElement('div');
       middle.className = 'furnace-middle';
@@ -5010,8 +5167,10 @@ export class InventoryScreen {
     // 换面板时右栏的"待预览配方"也作废（批次 272）：它只属于刚才那一屏
     this.pendingRecipeId = null;
     this.stationTargetEntry = null;
+    this.stationFilledResultId = null;
     this.stationAutoCollect = false;
     this.stationBrewSnapshot = null;
+    this.stationOrigins.clear();
     if (this.mode !== mode || this.activeContainer !== container) {
       // 换面板 = 上一个容器"关掉了"（陷阱箱据此撤信号，批次 249）
       if (this.open) this.hooks.onPanelClosed?.();
@@ -5151,8 +5310,10 @@ export class InventoryScreen {
     // 批次 295：解除"选配方暂停"，否则关掉界面后炉子不再工作
     this.releaseStationPause();
     this.stationTargetEntry = null;
+    this.stationFilledResultId = null;
     this.stationAutoCollect = false;
     this.stationBrewSnapshot = null;
+    this.stationOrigins.clear();
     if (!this.open || this.closing) return;
     this.hooks.onPanelClosed?.();
     // 携带版合成页的配方书是背包的左半页，不是独立窗口。
@@ -5257,7 +5418,8 @@ export class InventoryScreen {
       const reason = furnace.rejectReason;
       this.furnaceHintEl.textContent = reason;
       this.furnaceHintEl.classList.toggle('bad', reason !== '');
-      if (!furnace.get(FURNACE_INPUT) && !furnace.get(FURNACE_OUTPUT)) this.stationTargetEntry = null;
+      this.refreshFurnaceFuelHint(furnace);
+      // 目标框不因槽位空而清掉：配方保留，材料不足时变红（批次 300）
       if (!this.stationTargetEntry) this.syncStationTargetFromSlots();
       this.renderStationTarget();
     }
@@ -5273,7 +5435,7 @@ export class InventoryScreen {
       if (reason === '' && !campfire.lit) reason = '营火熄灭了（拿打火石右键可以重新点燃）';
       this.campfireHintEl.textContent = reason;
       this.campfireHintEl.classList.toggle('bad', reason !== '');
-      if (!campfire.cooking) this.stationTargetEntry = null;
+      // 目标框保留，材料不足时变红
       if (!this.stationTargetEntry) this.syncStationTargetFromSlots();
       this.renderStationTarget();
     }
@@ -5285,9 +5447,7 @@ export class InventoryScreen {
       const left = stand.fuelRemaining;
       this.brewFuelTextEl.textContent = left > 0 ? `还能酿 ${left} 次` : '需要烈焰粉';
       this.brewFuelTextEl.classList.toggle('bad', left <= 0);
-      if (!stand.get(BREW_INGREDIENT_SLOT) && BREW_BOTTLE_SLOTS.every((slot) => !stand.get(slot))) {
-        this.stationTargetEntry = null;
-      }
+      // 目标框保留，材料不足时变红
       if (!this.stationTargetEntry) this.syncStationTargetFromSlots();
       this.renderStationTarget();
     }
