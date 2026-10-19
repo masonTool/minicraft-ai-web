@@ -6199,3 +6199,22 @@ PAINTERS['bee_nest_top'] = noisy(0xc9a25a, 12);
 PAINTERS['bee_nest_side'] = noisy(0xb08a42, 14);
 PAINTERS['item_honeycomb'] = noisy(0xe8b84a, 14);
 PAINTERS['item_honey_bottle'] = noisy(0xe8a63a, 18);
+
+// 蜡烛（批次 382）：未染色偏米白，16 色按染料色
+PAINTERS['candle'] = noisy(0xd8c8a8, 10);
+PAINTERS['candle_white'] = noisy(0xf9fffe, 14);
+PAINTERS['candle_orange'] = noisy(0xf9801d, 14);
+PAINTERS['candle_magenta'] = noisy(0xc74ebd, 14);
+PAINTERS['candle_light_blue'] = noisy(0x3ab3da, 14);
+PAINTERS['candle_yellow'] = noisy(0xfed83d, 14);
+PAINTERS['candle_lime'] = noisy(0x80c71f, 14);
+PAINTERS['candle_pink'] = noisy(0xf38baa, 14);
+PAINTERS['candle_gray'] = noisy(0x474f52, 14);
+PAINTERS['candle_light_gray'] = noisy(0x9d9d97, 14);
+PAINTERS['candle_cyan'] = noisy(0x169c9c, 14);
+PAINTERS['candle_purple'] = noisy(0x8932b8, 14);
+PAINTERS['candle_blue'] = noisy(0x3c44aa, 14);
+PAINTERS['candle_brown'] = noisy(0x835432, 14);
+PAINTERS['candle_green'] = noisy(0x5e7c16, 14);
+PAINTERS['candle_red'] = noisy(0xb02e26, 14);
+PAINTERS['candle_black'] = noisy(0x1d1d21, 14);

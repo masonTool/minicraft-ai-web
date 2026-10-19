@@ -1265,6 +1265,92 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Block.WAXED_OXIDIZED_COPPER, count: 1 },
     ingredients: [Block.OXIDIZED_COPPER_BLOCK, Item.HONEYCOMB],
   },
+  // 蜡烛（批次 382）：线 + 蜜脾；染色 = 蜡烛 + 染料
+  {
+    kind: 'shapeless' as const,
+    result: { id: Block.CANDLE, count: 1 },
+    ingredients: [Item.STRING, Item.HONEYCOMB],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 0, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('white')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 1, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('orange')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 2, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('magenta')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 3, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('light_blue')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 4, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('yellow')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 5, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('lime')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 6, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('pink')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 7, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('gray')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 8, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('light_gray')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 9, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('cyan')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 10, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('purple')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 11, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('blue')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 12, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('brown')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 13, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('green')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 14, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('red')],
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: 608 + 15, count: 1 },
+    ingredients: [Block.CANDLE, dyeIdByName('black')],
+  },
 ];
 
 /**

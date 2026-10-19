@@ -1313,6 +1313,32 @@ const CARPET_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
   opaque: false,
   lightOpacity: 0,
 }));
+/** 蜡烛（批次 382）：17 色，扁平、可放在地面上，光照 3 */
+const CANDLE_SPECS: readonly BlockSpec[] = [
+  {
+    id: 607,
+    name: 'minecraft:candle',
+    tiles: ['candle', 'candle', 'candle'] as const,
+    shape: 'flat' as const,
+    solid: false,
+    opaque: false,
+    light: 3,
+    lightOpacity: 0,
+  },
+  ...DYE_COLORS.map(
+    (color, index): BlockSpec => ({
+      id: 608 + index,
+      name: `minecraft:${color.name}_candle`,
+      tiles: [`candle_${color.name}`, `candle_${color.name}`, `candle_${color.name}`] as const,
+      shape: 'flat' as const,
+      solid: false,
+      opaque: false,
+      light: 3,
+      lightOpacity: 0,
+    }),
+  ),
+];
+
 
 /**
  * 雪层（B11 / K11）。
@@ -3222,6 +3248,7 @@ const SPECS: readonly BlockSpec[] = [
   ...MINERAL_AND_BEACON_SPECS,
   ...SLIME_BLOCK_SPECS,
   ...SOUL_LIGHT_SPECS,
+  ...CANDLE_SPECS,
   // 骨块（批次 349，D21 化石）：9 骨粉压成一块，化石结构也用它
   {
     id: 587,
@@ -3710,6 +3737,10 @@ export const Block = {
   DARK_OAK_SAPLING: WOOD_SAPLING_ID_START + 5,
   /** 骨块（批次 349）：化石的建材，也是 9 骨粉的压缩块 */
   BONE_BLOCK: 587,
+  /** 蜡烛（批次 382） */
+  CANDLE: 607,
+  /** 16 色蜡烛从 608 起，顺序与 DYE_COLORS 一致 */
+  CANDLE_ID_START: 608,
   /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
   AMETHYST_BLOCK: 588,
   BUDDING_AMETHYST: 589,
@@ -4048,6 +4079,8 @@ HARDNESS.set(Block.BONE_BLOCK, 2);
 HARDNESS.set(Block.AMETHYST_BLOCK, 1.5);
 HARDNESS.set(Block.BUDDING_AMETHYST, 1.5);
 HARDNESS.set(Block.AMETHYST_CLUSTER, 1.5);
+HARDNESS.set(Block.CANDLE, 0.1);
+for (let i = 0; i < 16; i++) HARDNESS.set(608 + i, 0.1);
 HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);
 HARDNESS.set(Block.BROWN_MUSHROOM_BLOCK, 0.2);
