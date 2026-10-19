@@ -180,7 +180,14 @@ export function nextCycleValue(values: readonly string[], raw: unknown): string 
  * 批次 107 改成"四组一次全展开 + 行高压紧"（更符合"展示得更多"的反馈）；
  * 只有矮屏（横屏手机）放不下时才退回页签分页——判据见 index.html。
  */
-export const SETTING_GROUPS = ['appearance', 'controls', 'sound', 'game'] as const;
+/**
+ * 分组顺序 = 使用频率（用户要求："把游戏挪到第一个，按使用频率排序"）。
+ *  - 游戏：进世界后最常改（模式 / 飞行 / 自动保存 / 昼夜）
+ *  - 控制：视角、灵敏度、摇杆、跳跃与进食开关
+ *  - 外观：角色形象，属于"捏一次就很少动"
+ *  - 音频：调好之后基本不再进来
+ */
+export const SETTING_GROUPS = ['game', 'controls', 'appearance', 'sound'] as const;
 
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
@@ -631,6 +638,34 @@ export class SettingsScreen {
   /** 四颗角色预设按钮（批次 333）：手动改任一外观项后全部取消高亮 */
   private readonly presetButtons: HTMLButtonElement[] = [];
   /**
+   * 下拉菜单（批次 334）：同一时间只允许一个展开。
+   *
+   * 菜单挂在 `<body>` 上并 `position: fixed`——设置内容区是滚动容器，
+   * 菜单若留在行内会被 `overflow-y: auto` 裁掉。
+   */
+  private openDropdown: { button: HTMLButtonElement; menu: HTMLDivElement } | null = null;
+  /** 所有下拉菜单（`destroy` 时一并摘掉） */
+  private readonly dropdownMenus: HTMLDivElement[] = [];
+  /** 每个控件的"按真实状态重画"回调（switch / 下拉共用；飞行与游戏模式受外部状态影响） */
+  private readonly controlSync = new Map<HTMLButtonElement, () => void>();
+  /** 外部点击 / 滚动 / 转屏时收起下拉菜单 */
+  private readonly onDocumentPointerDown = (event: PointerEvent): void => {
+    const open = this.openDropdown;
+    if (!open) return;
+    const target = event.target as Node | null;
+    if (target && (open.menu.contains(target) || open.button.contains(target))) return;
+    this.closeDropdown();
+  };
+  private readonly onSettingsScroll = (): void => this.closeDropdown();
+  private readonly onWindowResize = (): void => this.closeDropdown();
+  /** Esc 先收下拉菜单；没有菜单时才让 App 的返回逻辑接管 */
+  private readonly onDocumentKeyDown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape' || !this.openDropdown) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeDropdown();
+  };
+  /**
    * 设置页的角色形象（批次 333）：复用背包那台 `PlayerPreview3D`。
    *
    * 懒创建（第一次真正显示外观页才建 WebGL 上下文）；失败就退回 2D 剪影。
@@ -1007,30 +1042,35 @@ export class SettingsScreen {
     game.appendChild(this.makeResourcePackRow());
     // 诊断日志（批次 181）：平时常开、500KB 封顶；批次 220 起这里只留「导出」
     if (this.actions.onDiagnosticsExport) game.appendChild(this.makeDiagnosticsRow());
-    // 恢复默认（批次 185，用户要求）：一行一颗键，放在"游戏"组最下面——
-    // 它影响的是**所有**分组，所以不塞进任何一组，而是整页的最后一个动作。
-    const resetRow = document.createElement('div');
-    resetRow.className = 'settings-row wide settings-reset-row';
-    const resetButton = document.createElement('button');
-    resetButton.type = 'button';
-    resetButton.id = 'settings-reset';
-    resetButton.className = 'settings-reset';
-    resetButton.textContent = '恢复默认设置';
-    resetButton.addEventListener('click', () => this.resetDefaults());
-    resetRow.appendChild(resetButton);
-    game.appendChild(resetRow);
-
     // 页签与内容裹一层：三端统一"左边一列页签 + 右边内容"（原版就是这样）。
     // 这一层留着是为了让"选项卡列"与"内容区"能各自独立收缩/滚动。
     const columns = document.createElement('div');
     columns.className = 'settings-columns';
     columns.append(tabs, body);
 
-    settingsPage.append(header, this.settingsHintEl, columns);
+    // 恢复默认（批次 185 / 334）：它影响**所有**分组，所以放在设置页最底部、
+    // 内容滚动区之外——不管当前停在哪个页签，它都在下方，而不是塞进某一组里。
+    const footer = document.createElement('div');
+    footer.className = 'settings-footer';
+    const resetButton = document.createElement('button');
+    resetButton.type = 'button';
+    resetButton.id = 'settings-reset';
+    resetButton.className = 'settings-reset';
+    resetButton.textContent = '恢复默认设置';
+    resetButton.addEventListener('click', () => this.resetDefaults());
+    footer.appendChild(resetButton);
+
+    settingsPage.append(header, this.settingsHintEl, columns, footer);
 
     this.root.append(panel);
     panel.append(menuPage, settingsPage);
     host.appendChild(this.root);
+
+    // 批次 334：下拉菜单挂在 body 上，需要三条"收起来"的信号
+    document.addEventListener('pointerdown', this.onDocumentPointerDown, true);
+    document.addEventListener('keydown', this.onDocumentKeyDown, true);
+    this.root.addEventListener('scroll', this.onSettingsScroll, true);
+    window.addEventListener('resize', this.onWindowResize);
 
     this.setActiveGroup(SETTING_GROUPS[0]);
     this.setPage('menu');
@@ -1091,8 +1131,10 @@ export class SettingsScreen {
     for (const [key, element] of this.pages) element.classList.toggle('active', key === page);
     // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），进设置页时对一次账
     if (page === 'settings' && this.flyingToggle) {
-      this.flyingToggle.textContent = SettingsScreen.onOff(this.actions.isFlying?.() ?? false);
+      this.controlSync.get(this.flyingToggle)?.();
     }
+    // 切页时下拉菜单必须收起：它锚在上一页的按钮上
+    this.closeDropdown();
     // 批次 333：设置页刚显示出来时补一帧形象
     if (page === 'settings') this.refreshAvatar();
   }
@@ -1155,6 +1197,8 @@ export class SettingsScreen {
       tab.classList.toggle('active', on);
       tab.setAttribute('aria-pressed', String(on));
     }
+    // 切分组时收起下拉菜单（菜单锚在上一个分组的按钮上）
+    this.closeDropdown();
     // 批次 333：形象画布只在真正显示外观页时才有尺寸，切回来要补一帧
     if (this.open && group === 'appearance') this.refreshAvatar();
   }
@@ -1197,8 +1241,11 @@ export class SettingsScreen {
     step: number,
     scale = 1,
     format?: (value: number) => string,
-  ): HTMLLabelElement {
-    const row = document.createElement('label');
+  ): HTMLDivElement {
+    // ⚠️ 行容器一律用 `<div>`：`<label>` 会把**点击整行**转发给里面的控件
+    //（用户反馈："点按钮以外的区域，它依然会响按钮"）。滑块自己就是输入控件，
+    // 不需要标签转发。
+    const row = document.createElement('div');
     // `.wide` = 跨满两列（批次 167）：分组现在是两列栅格，滑杆压到半栏就只剩百来像素，
     // 拖起来很别扭；而开关/选择那类"很短"的项正好两两并排。
     row.className = 'settings-row wide';
@@ -1240,39 +1287,182 @@ export class SettingsScreen {
   }
 
   /**
-   * 造一个原版的"循环切换"行（批次 109）。
+   * 造一个**开关**行（批次 334，用户要求："只有两个选项的开关类，用 switch 组件"）。
    *
-   * ⚠️ 基岩版的设置界面里**没有下拉框、也没有复选框**：所有"几个选项里挑一个"的
-   * 设置项都是同一颗灰按钮，点一下换下一个值（显示成 `‹ 中 ›`），布尔项就是 `开 / 关`。
-   * 这不是我们的发明——用户点名要"跟他做的一模一样"，而且它顺带省掉了手机上
-   * "点开下拉框、再点一个选项"那一步（原生 `<select>` 在手机上还是系统弹层，
-   * 完全无法做像素风）。
+   * ⚠️ 行容器是 `<div>` 而不是 `<label>`：`<label>` 会把点击整行转发给里面的控件，
+   * 表现就是"点按钮右边/标签文字也会触发按钮"。这里只有开关自己有 click 监听。
    *
-   * @param read   当前值 → 按钮上显示的文字
-   * @param cycle  点一下 → 换到下一个值，返回新的显示文字
+   * @param read  读真实状态（飞行/游戏模式这类可能被外部改掉）
+   * @param write 写状态（只负责改值，不 commit）
    */
-  private makeCycleRow(host: HTMLElement, label: string, read: () => string, cycle: () => string): HTMLButtonElement {
-    const row = document.createElement('label');
-    row.className = 'settings-row';
+  private makeSwitch(
+    host: HTMLElement,
+    label: string,
+    read: () => boolean,
+    write: () => void,
+    /** 飞行这类"不写进设置"的开关传 false */
+    commit = true,
+  ): HTMLButtonElement {
+    const row = document.createElement('div');
+    // `control-right`：两列布局，开关贴右（标准设置项观感，也避免左边一颗按钮、
+    // 右边一大片空白让人以为整行都能点）
+    row.className = 'settings-row control-right';
 
     const name = document.createElement('span');
     name.textContent = label;
 
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'settings-cycle';
-    button.textContent = read();
+    button.className = 'settings-switch';
+    button.setAttribute('role', 'switch');
+    const knob = document.createElement('span');
+    knob.className = 'settings-switch-knob';
+    knob.setAttribute('aria-hidden', 'true');
+    button.appendChild(knob);
+
+    const sync = (): void => {
+      const on = read();
+      button.setAttribute('aria-checked', String(on));
+      button.classList.toggle('on', on);
+    };
     button.addEventListener('click', () => {
-      button.textContent = cycle();
+      write();
+      sync();
+      if (commit) this.commit();
     });
-    // 恢复默认时按 settings 重画（见 `refreshers`）
-    this.refreshers.push(() => {
-      button.textContent = read();
-    });
+    this.controlSync.set(button, sync);
+    this.refreshers.push(sync);
+    sync();
 
     row.append(name, button);
     host.appendChild(row);
     return button;
+  }
+
+  /**
+   * 造一个**下拉按钮**行（批次 334，用户要求："多个选项的用下拉按钮"）。
+   *
+   * 菜单挂到 `<body>`、`position: fixed`：设置内容区是滚动容器，留在行内会被裁掉。
+   * 只有按钮能展开、只有选项能选择；点行内其它位置不会触发任何东西。
+   */
+  private makeDropdown<T extends string>(
+    host: HTMLElement,
+    label: string,
+    values: readonly T[],
+    labels: Record<T, string>,
+    read: () => T,
+    write: (value: T) => void,
+  ): HTMLButtonElement {
+    const row = document.createElement('div');
+    // 两列布局：下拉按钮贴右，和 switch 一致
+    row.className = 'settings-row control-right';
+
+    const name = document.createElement('span');
+    name.textContent = label;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-dropdown';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-dropdown-button';
+    button.setAttribute('aria-haspopup', 'listbox');
+    button.setAttribute('aria-expanded', 'false');
+
+    const menu = document.createElement('div');
+    menu.className = 'settings-dropdown-menu';
+    menu.setAttribute('role', 'listbox');
+    menu.style.display = 'none';
+    document.body.appendChild(menu);
+    this.dropdownMenus.push(menu);
+
+    const optionButtons: Array<{ value: T; button: HTMLButtonElement }> = [];
+    const sync = (): void => {
+      const current = read();
+      button.textContent = `‹ ${labels[current]} › ▾`;
+      for (const option of optionButtons) {
+        const on = option.value === current;
+        option.button.classList.toggle('selected', on);
+        option.button.setAttribute('aria-selected', String(on));
+      }
+    };
+
+    for (const value of values) {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'settings-dropdown-option';
+      option.setAttribute('role', 'option');
+      option.textContent = labels[value];
+      option.addEventListener('click', () => {
+        if (read() !== value) write(value);
+        sync();
+        this.closeDropdown();
+        this.commit();
+      });
+      menu.appendChild(option);
+      optionButtons.push({ value, button: option });
+    }
+
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (this.openDropdown?.button === button) {
+        this.closeDropdown();
+        return;
+      }
+      sync();
+      this.openDropdownMenu(button, menu);
+    });
+
+    this.controlSync.set(button, sync);
+    this.refreshers.push(sync);
+    sync();
+
+    wrap.appendChild(button);
+    row.append(name, wrap, document.createElement('i'));
+    host.appendChild(row);
+    return button;
+  }
+
+  /**
+   * 展开一个下拉菜单（同一时间只保留一个）。
+   *
+   * 上下两侧取空间更大的一侧，并把菜单高度夹在可用空间内（超出就内部滚动）——
+   * 否则 6 个选项的外观下拉会被"往上顶"到盖住整个标题栏。
+   */
+  private openDropdownMenu(button: HTMLButtonElement, menu: HTMLDivElement): void {
+    this.closeDropdown();
+    const rect = button.getBoundingClientRect();
+    menu.style.display = 'block';
+    menu.style.visibility = 'hidden';
+    menu.style.width = `${Math.max(rect.width, 132)}px`;
+    menu.style.maxHeight = 'none';
+
+    const desired = Math.min(240, menu.scrollHeight);
+    const spaceBelow = innerHeight - rect.bottom - 6;
+    const spaceAbove = rect.top - 6;
+    const openUp = spaceBelow < desired && spaceAbove > spaceBelow;
+    const available = Math.max(80, openUp ? spaceAbove : spaceBelow);
+    menu.style.maxHeight = `${Math.min(desired, available)}px`;
+
+    const menuRect = menu.getBoundingClientRect();
+    // 右对齐到按钮右沿（控件本身靠右，菜单跟着靠右更自然）
+    const left = Math.min(Math.max(4, rect.right - menuRect.width), Math.max(4, innerWidth - menuRect.width - 4));
+    let top = openUp ? rect.top - menuRect.height - 2 : rect.bottom + 2;
+    top = Math.max(4, Math.min(top, innerHeight - menuRect.height - 4));
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menu.style.visibility = 'visible';
+    button.setAttribute('aria-expanded', 'true');
+    this.openDropdown = { button, menu };
+  }
+
+  /** 收起下拉菜单（点外面 / 滚动 / 转屏 / 切页都会调） */
+  private closeDropdown(): void {
+    const open = this.openDropdown;
+    if (!open) return;
+    open.menu.style.display = 'none';
+    open.button.setAttribute('aria-expanded', 'false');
+    this.openDropdown = null;
   }
 
   /**
@@ -1295,11 +1485,6 @@ export class SettingsScreen {
     // 给一句确认：面板上没有独立的 toast，借用设置页那行提示，2 秒后恢复原文
     this.settingsHintEl.textContent = '已恢复默认设置';
     window.setTimeout(() => this.renderSubtitle(), 2000);
-  }
-
-  /** 布尔项的按钮文字：原版就是写"开 / 关"两个字 */
-  private static onOff(value: boolean): string {
-    return value ? '‹ 开 ›' : '‹ 关 ›';
   }
 
   /**
@@ -1439,42 +1624,60 @@ export class SettingsScreen {
     values: readonly T[],
     labels: Record<T, string>,
   ): HTMLButtonElement {
-    const current = (): T => cycleValue(values, this.settings[key]) as T;
-    return this.makeCycleRow(
+    return this.makeDropdown(
       options,
       label,
-      () => `‹ ${labels[current()]} ›`,
-      () => {
-        const next = nextCycleValue(values, this.settings[key]) as T;
-        // 逐个分支赋值：`GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查
-        if (key === 'cameraMode') this.settings.cameraMode = next as CameraMode;
-        else if (key === 'particles') this.settings.particles = next as ParticleLevel;
-        // 瞄准方式 / 左右手（批次 271）：循环行按字符串走，字段本身就是字符串联合
-        else if (key === 'aimMode') this.settings.aimMode = next as TouchAimMode;
-        else if (key === 'handedness') this.settings.handedness = next as Handedness;
-        // 帧率上限是**数字**（0/30/60），但选择行按字符串循环（见上面 `FPS_CAP_LABELS`）
-        else if (key === 'maxFps') this.settings.maxFps = Number(next);
-        // 自动保存间隔同理（`AUTOSAVE_OPTIONS` 是秒数）
-        else if (key === 'autosaveSeconds') this.settings.autosaveSeconds = Number(next);
-        // 外观档位（批次 187）：循环行按字符串走，存回数字下标
-        else if (key === 'skinTone') this.settings.skinTone = Number(next);
-        else if (key === 'shirtColor') this.settings.shirtColor = Number(next);
-        else if (key === 'pantsColor') this.settings.pantsColor = Number(next);
-        else if (key === 'hairColor') this.settings.hairColor = Number(next);
-        else if (key === 'hairStyle') this.settings.hairStyle = Number(next);
-        else if (key === 'beard') this.settings.beard = Number(next);
-        // 批次 333：眼型 / 瞳色 / 年龄体型 / 身架
-        else if (key === 'eyes') this.settings.eyes = Number(next);
-        else if (key === 'eyeColor') this.settings.eyeColor = Number(next);
-        else if (key === 'build') this.settings.build = Number(next);
-        else if (key === 'frame') this.settings.frame = Number(next);
-        else this.settings.touchStick = next as StickMode;
-        this.commit();
-        // 外观以外的选择行也调一次无妨：只改一行文字，成本可忽略
-        this.refreshPresetRow();
-        return `‹ ${labels[next]} ›`;
-      },
+      values,
+      labels,
+      () => cycleValue(values, this.settings[key]) as T,
+      (next) => this.assignSelectValue(key, next),
     );
+  }
+
+  /**
+   * 把下拉选中的值写回 `GameSettings`。
+   *
+   * `GameSettings[key]` 在联合键下会退化成 never，直接下标赋值过不了类型检查，
+   * 所以仍然逐个分支赋值；`cycleValue` 已保证字符串一定是合法档位。
+   */
+  private assignSelectValue(
+    key:
+      | 'cameraMode'
+      | 'particles'
+      | 'touchStick'
+      | 'aimMode'
+      | 'handedness'
+      | 'maxFps'
+      | 'autosaveSeconds'
+      | 'skinTone'
+      | 'shirtColor'
+      | 'pantsColor'
+      | 'hairColor'
+      | 'hairStyle'
+      | 'beard'
+      | 'eyes'
+      | 'eyeColor'
+      | 'build'
+      | 'frame',
+    next: string,
+  ): void {
+    if (key === 'cameraMode') this.settings.cameraMode = next as CameraMode;
+    else if (key === 'particles') this.settings.particles = next as ParticleLevel;
+    else if (key === 'aimMode') this.settings.aimMode = next as TouchAimMode;
+    else if (key === 'handedness') this.settings.handedness = next as Handedness;
+    else if (key === 'maxFps') this.settings.maxFps = Number(next);
+    else if (key === 'autosaveSeconds') this.settings.autosaveSeconds = Number(next);
+    else if (key === 'skinTone') this.settings.skinTone = Number(next);
+    else if (key === 'shirtColor') this.settings.shirtColor = Number(next);
+    else if (key === 'pantsColor') this.settings.pantsColor = Number(next);
+    else if (key === 'hairColor') this.settings.hairColor = Number(next);
+    else if (key === 'hairStyle') this.settings.hairStyle = Number(next);
+    else if (key === 'beard') this.settings.beard = Number(next);
+    else if (key === 'eyes') this.settings.eyes = Number(next);
+    else if (key === 'eyeColor') this.settings.eyeColor = Number(next);
+    else if (key === 'build') this.settings.build = Number(next);
+    else if (key === 'frame') this.settings.frame = Number(next);
+    else this.settings.touchStick = next as StickMode;
   }
 
   /**
@@ -1553,7 +1756,8 @@ export class SettingsScreen {
    * 所以这里点完延后一点再回填文案；不然玩家会看到"点了没反应"。
    */
   private makeFullscreenRow(): HTMLElement {
-    const row = document.createElement('label');
+    // `<div>`：`<label>` 会把点标题文字也转发给按钮
+    const row = document.createElement('div');
     row.className = 'settings-row';
 
     const name = document.createElement('span');
@@ -1578,7 +1782,8 @@ export class SettingsScreen {
 
   /** 资源包导入行（.mcpack / .zip） */
   private makeResourcePackRow(): HTMLElement {
-    const row = document.createElement('label');
+    // `<div>`：`<label>` 会把点标题文字也转发成"打开文件选择框"
+    const row = document.createElement('div');
     // 文件选择框本身就宽，与滑杆一样跨满两列
     row.className = 'settings-row wide';
     const name = document.createElement('span');
@@ -1609,15 +1814,13 @@ export class SettingsScreen {
    * 按当前状态刷新、切一下立刻生效，不落盘。
    */
   private makeCreativeRow(): void {
-    this.flyingToggle = this.makeCycleRow(
+    this.flyingToggle = this.makeSwitch(
       this.section('game'),
       '飞行',
-      () => SettingsScreen.onOff(this.actions.isFlying?.() ?? false),
-      () => {
-        this.actions.onToggleFly?.();
-        // 以真实状态为准回填（切换可能被拒绝/立刻被别的逻辑改回去）
-        return SettingsScreen.onOff(this.actions.isFlying?.() ?? false);
-      },
+      () => this.actions.isFlying?.() ?? false,
+      () => this.actions.onToggleFly?.(),
+      // 飞行不写进 localStorage（见上面注释），所以切换后不必保存设置
+      false,
     );
   }
 
@@ -1628,40 +1831,35 @@ export class SettingsScreen {
    * 生存模式下"飞行"那一行会整行隐藏，否则玩家会以为生存也能飞。
    */
   private makeGameModeRow(): void {
-    this.gameModeToggle = this.makeCycleRow(
+    this.gameModeToggle = this.makeDropdown(
       this.section('game'),
       '游戏模式',
-      () => `‹ ${GAME_MODE_LABELS[this.actions.gameMode?.() ?? 'survival']} ›`,
-      () => {
-        this.actions.onToggleGameMode?.();
-        const mode = this.actions.gameMode?.() ?? 'survival';
-        this.refreshGameModeRows();
-        return `‹ ${GAME_MODE_LABELS[mode]} ›`;
-      },
+      ['survival', 'creative'] as const,
+      GAME_MODE_LABELS,
+      () => this.actions.gameMode?.() ?? 'survival',
+      () => this.actions.onToggleGameMode?.(),
     );
   }
 
   /** 打开面板 / 切模式之后，把两个开关的文案与显隐对齐真实状态 */
   refreshGameModeRows(): void {
     const mode = this.actions.gameMode?.() ?? 'survival';
-    if (this.gameModeToggle) this.gameModeToggle.textContent = `‹ ${GAME_MODE_LABELS[mode]} ›`;
+    if (this.gameModeToggle) this.controlSync.get(this.gameModeToggle)?.();
     if (this.flyingToggle) {
-      this.flyingToggle.textContent = SettingsScreen.onOff(this.actions.isFlying?.() ?? false);
+      this.controlSync.get(this.flyingToggle)?.();
       const row = this.flyingToggle.closest<HTMLElement>('.settings-row');
       if (row) row.style.display = mode === 'creative' ? '' : 'none';
     }
   }
 
-  /** 造一个开关设置项（原版形态：一颗"‹ 开 ›/‹ 关 ›"的灰按钮，点一下切换） */
+  /** 造一个布尔开关（switch 组件；只有开关本身能点，整行不转发） */
   private makeToggle(options: HTMLElement, key: BoolSettingKey, label: string): HTMLButtonElement {
-    return this.makeCycleRow(
+    return this.makeSwitch(
       options,
       label,
-      () => SettingsScreen.onOff(this.settings[key]),
+      () => this.settings[key],
       () => {
         this.settings[key] = !this.settings[key];
-        this.commit();
-        return SettingsScreen.onOff(this.settings[key]);
       },
     );
   }
@@ -1752,6 +1950,8 @@ export class SettingsScreen {
    */
   hide(): void {
     this.open = false;
+    // 下拉菜单挂在 body 上，面板关掉时必须一起收起（否则会孤零零留在页面上）
+    this.closeDropdown();
     document.body.classList.remove('pause-open');
     // 已经在等 / 没显示：不重复排计时器
     if (this.hideTimer !== null) return;
@@ -1777,6 +1977,14 @@ export class SettingsScreen {
     this.avatar?.dispose();
     this.avatar = null;
     this.avatarFailed = false;
+    // 批次 334：下拉菜单挂在 body 上，监听与节点都要清干净
+    this.closeDropdown();
+    for (const menu of this.dropdownMenus) menu.remove();
+    this.dropdownMenus.length = 0;
+    document.removeEventListener('pointerdown', this.onDocumentPointerDown, true);
+    document.removeEventListener('keydown', this.onDocumentKeyDown, true);
+    this.root.removeEventListener('scroll', this.onSettingsScroll, true);
+    window.removeEventListener('resize', this.onWindowResize);
     this.root.remove();
     document.body.classList.remove('pause-open');
   }

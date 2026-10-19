@@ -20,7 +20,13 @@
   // ---- 初始状态
   const initial = mc.settingsState;
   check('pause menu hidden initially', initial.open === false);
-  check('view distance applied from settings', initial.viewDistance === initial.settings.viewDistance, `${initial.viewDistance}`);
+  // 开局有渐进视距（StartupRamp）：刚进世界时 applied 可能还低于设置上限，
+  // 所以只断言"不超过设置、且大于 0"；后面改成 4 时再断言精确值。
+  check(
+    'view distance applied from settings (startup ramp may be below the cap)',
+    initial.viewDistance > 0 && initial.viewDistance <= initial.settings.viewDistance,
+    `${initial.viewDistance}/${initial.settings.viewDistance}`,
+  );
 
   // ---- 打开暂停菜单：这一页只应该有几个"主要按钮"
   mc.openSettings();
@@ -52,6 +58,9 @@
   const settingsPage = panel.querySelector(".pause-page[data-page='settings']");
   check('settings button opens the settings page', !!settingsPage && settingsPage.classList.contains('active'));
   check('pause menu page is hidden while in settings', !menuPage.classList.contains('active'));
+  // 面板会记住上次停的页签；验收固定从「游戏」组开始找控件
+  document.querySelector('.settings-tab[data-group="game"]')?.click();
+  await sleep(80);
 
   const sliders = panel.querySelectorAll('input[type="range"]');
   check(
@@ -59,25 +68,105 @@
     sliders.length >= 4,
     `${sliders.length}`,
   );
-  // ⚠️ 批次 109 起开关与下拉都换成了原版的"循环按钮"（`‹ 开 ›` / `‹ 中 ›`）：
-  //   基岩版设置界面里既没有复选框也没有下拉框，所以这里按 `.settings-cycle` 数。
-  const cycles = panel.querySelectorAll('.settings-cycle');
-  check('cycle buttons present (toggles + choices)', cycles.length >= 8, `${cycles.length}`);
+  // 批次 334（用户）：布尔项 = switch，多选项 = 下拉按钮；行容器是 div，
+  // 点行内空白/标题不该触发控件。
+  const switches = [...panel.querySelectorAll('.settings-switch')];
+  const dropdowns = [...panel.querySelectorAll('.settings-dropdown-button')];
+  check('switch toggles present (booleans)', switches.length >= 4, `${switches.length}`);
+  check('dropdown buttons present (multi-choice)', dropdowns.length >= 4, `${dropdowns.length}`);
   check(
     'no native checkbox/select left (they cannot be pixel-styled)',
     panel.querySelectorAll('input[type="checkbox"], select').length === 0,
     `${panel.querySelectorAll('input[type="checkbox"], select').length}`,
   );
-  const cycleText = [...cycles].map((b) => b.textContent ?? '').join(' | ');
-  check('cycle buttons show the原版 arrow form', /\u2039 .+ \u203a/.test(cycleText), cycleText.slice(0, 60));
-  // 点一下真的会换值（拿"云"那一项试：开 ↔ 关）
-  const cloudButton = [...cycles].find((b) => (b.textContent ?? '').includes('开') || (b.textContent ?? '').includes('关'));
-  if (cloudButton) {
-    const before = cloudButton.textContent;
-    cloudButton.click();
+  check(
+    'left tabs are ordered by usage: game / controls / appearance / sound',
+    [...panel.querySelectorAll('.settings-tab')].map((t) => t.textContent ?? '').join('|') === '游戏|控制|外观|音频',
+    [...panel.querySelectorAll('.settings-tab')].map((t) => t.textContent ?? '').join('|'),
+  );
+  const visibleRow = (label) =>
+    [...panel.querySelectorAll('.settings-section.active .settings-row')].find(
+      (row) => row.querySelector('span')?.textContent === label,
+    );
+  const openMenu = () =>
+    [...document.querySelectorAll('.settings-dropdown-menu')].find(
+      (menu) => menu.style.display !== 'none' && menu.style.display !== '',
+    ) ?? null;
+
+  // switch：点开关本身会换值
+  const debugRow = visibleRow('调试信息');
+  const debugSwitch = debugRow?.querySelector('.settings-switch');
+  if (debugSwitch) {
+    const before = debugSwitch.getAttribute('aria-checked');
+    debugSwitch.click();
+    await sleep(80);
+    check('tapping a switch really flips it', debugSwitch.getAttribute('aria-checked') !== before, `${before} -> ${debugSwitch.getAttribute('aria-checked')}`);
+    // 点同一行的标题文字：不应该转发给开关（用户反馈的 bug）
+    const after = debugSwitch.getAttribute('aria-checked');
+    debugRow.querySelector('span')?.click();
+    await sleep(80);
+    check(
+      'clicking the row title does NOT toggle the switch',
+      debugSwitch.getAttribute('aria-checked') === after,
+      `${after} -> ${debugSwitch.getAttribute('aria-checked')}`,
+    );
+    debugSwitch.click(); // 复原
     await sleep(60);
-    check('tapping a toggle really flips it', cloudButton.textContent !== before, `${before} -> ${cloudButton.textContent}`);
   }
+
+  // 下拉：点按钮展开、选一项生效并收起；点标题不展开
+  const autosaveRow = visibleRow('自动保存');
+  const autosaveButton = autosaveRow?.querySelector('.settings-dropdown-button');
+  if (autosaveButton) {
+    const before = autosaveButton.textContent ?? '';
+    autosaveButton.click();
+    await sleep(80);
+    const menu = openMenu();
+    check('dropdown opens a list on click', !!menu, menu ? `${menu.querySelectorAll('.settings-dropdown-option').length} options` : 'no menu');
+    autosaveButton.click(); // 收起
+    await sleep(80);
+    autosaveRow.querySelector('span')?.click();
+    await sleep(80);
+    check('clicking the row title does NOT open the dropdown', !openMenu());
+    autosaveButton.click();
+    await sleep(80);
+    const menu2 = openMenu();
+    const other = menu2 ? [...menu2.querySelectorAll('.settings-dropdown-option')].find((o) => !o.classList.contains('selected')) : null;
+    if (other) {
+      other.click();
+      await sleep(100);
+      check('choosing a dropdown option applies it', (autosaveButton.textContent ?? '') !== before, `${before} -> ${autosaveButton.textContent}`);
+      check('dropdown closes after choosing', !openMenu());
+      // 复原成原值
+      autosaveButton.click();
+      await sleep(80);
+      const backMenu = openMenu();
+      const back = backMenu
+        ? [...backMenu.querySelectorAll('.settings-dropdown-option')].find((o) => before.includes(o.textContent ?? ''))
+        : null;
+      back?.click();
+      await sleep(60);
+    }
+    // Esc：只收下拉，不应该把整个设置页关掉
+    autosaveButton.click();
+    await sleep(80);
+    check('dropdown can be opened for Esc test', !!openMenu());
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(80);
+    check('Esc closes the dropdown but keeps settings open', !openMenu() && mc.settingsState.open === true);
+  }
+
+  // 恢复默认：不在任何分组里，而是设置页最底部的 footer
+  const resetButton = panel.querySelector('#settings-reset');
+  const footer = panel.querySelector('.settings-footer');
+  check(
+    'restore-defaults sits at the bottom of the whole settings page',
+    !!resetButton &&
+      resetButton.closest('.settings-footer') === footer &&
+      resetButton.closest('.settings-section') === null &&
+      footer?.parentElement === settingsPage,
+    resetButton ? `parent=${resetButton.parentElement?.className}` : 'missing',
+  );
 
   // ---- "‹ 返回"回到暂停菜单（面板**还开着**：这一层只是退一级）
   const back = panel.querySelector('.settings-back');

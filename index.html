@@ -1378,8 +1378,16 @@
       .settings-meta { flex: 0 0 auto; margin: 8px 0 0; }
       /* 行内三列压紧（批次 167）：标签不再吃 96px、值列 52 → 44，行高由内容+`min-height` 定 */
       .settings-row { display: grid; grid-template-columns: minmax(78px, auto) minmax(0, 1fr) 44px; align-items: center; gap: 6px; min-width: 0; min-height: 32px; }
-      /* 滑杆 / 文件选择这类"越长越好用"的行占满两列 */
-      .settings-row.wide { grid-column: 1 / -1; }
+      /* 滑杆 / 文件选择这类"越长越好用"的行占满两列。
+         第三列用 auto：灵敏度读数带 `（×1.00）`，固定 44px 会溢出并把整组撑出横向滚动。 */
+      .settings-row.wide {
+        grid-column: 1 / -1;
+        grid-template-columns: minmax(78px, auto) minmax(0, 1fr) minmax(44px, auto);
+      }
+      /* 开关 / 下拉：标签在左、控件贴右（两列，不留一块会被误认为可点的空白） */
+      .settings-row.control-right { grid-template-columns: minmax(78px, auto) minmax(0, 1fr); }
+      .settings-row.control-right .settings-switch,
+      .settings-row.control-right .settings-dropdown { justify-self: end; }
 
       /* ---------------- 暂停菜单那一页（批次 108） ----------------
          同一份 DOM 的两页：`.pause-page.active` 才是当前这一页。
@@ -1405,7 +1413,7 @@
       .pause-action {
         font: inherit; font-size: 14px; padding: 9px; min-height: 42px; cursor: pointer;
       }
-      .settings-row i { font-style: normal; color: var(--mc-text-light); text-align: right; }
+      .settings-row i { font-style: normal; color: var(--mc-text-light); text-align: right; white-space: nowrap; }
       /* ---------------- 诊断日志（批次 181） ----------------
          标题 + 读数 + 三个动作挤在一行：横屏手机高度紧张，能不加行就不加行；
          窄屏放不下时允许换行（flex-wrap），而不是把按钮压扁。 */
@@ -1432,6 +1440,60 @@
         justify-self: start; min-width: 92px; padding: 5px 8px;
         font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; text-align: center;
       }
+      /* ---------------- 开关（批次 334，用户要求 switch） ----------------
+         只有开关本身能点：行容器是 `<div>`，不会像 `<label>` 那样把整行点击转发进来。 */
+      .settings-switch {
+        position: relative; justify-self: start;
+        width: 52px; height: 26px; padding: 0; cursor: pointer;
+        background: #2f2f2f; border: 2px solid var(--mc-outline); border-radius: 0;
+        box-shadow: inset 2px 2px 0 rgba(0, 0, 0, .75), inset -2px -2px 0 rgba(255, 255, 255, .18);
+      }
+      .settings-switch-knob {
+        position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+        background: #b9b9b9; border: 2px solid var(--mc-outline);
+        box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #6a6a6a;
+        transition: left .12s var(--ease);
+      }
+      .settings-switch.on { background: #3f6f2d; }
+      .settings-switch.on .settings-switch-knob { left: 28px; background: #9be06d; }
+      .settings-switch:active { box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .18), inset -2px -2px 0 rgba(0, 0, 0, .75); }
+      body.touch-mode .settings-switch { width: 58px; height: 30px; }
+      body.touch-mode .settings-switch-knob { width: 22px; height: 22px; }
+      body.touch-mode .settings-switch.on .settings-switch-knob { left: 30px; }
+
+      /* ---------------- 下拉按钮（批次 334，用户要求多选项用下拉） ----------------
+         菜单是 `position: fixed` 挂在 body 上（见 SettingsScreen#openDropdownMenu），
+         不然会被设置内容区的 `overflow-y: auto` 裁掉。 */
+      .settings-dropdown { justify-self: start; min-width: 92px; }
+      .settings-dropdown-button {
+        width: 100%; min-width: 92px; padding: 5px 8px;
+        font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; text-align: center;
+      }
+      body.touch-mode .settings-dropdown-button { min-width: 96px; padding: 6px 8px; font-size: 13px; }
+      .settings-dropdown-menu {
+        position: fixed; z-index: 70; display: none;
+        padding: 2px; overflow-y: auto;
+        background: var(--mc-panel); color: var(--mc-text);
+        border: 2px solid var(--mc-outline); border-radius: 0;
+        box-shadow: var(--panel-shadow);
+      }
+      .settings-dropdown-option {
+        display: block; width: 100%; padding: 5px 8px;
+        font: inherit; font-size: 12px; line-height: 1.4; text-align: left;
+        color: var(--mc-text); background: transparent;
+        border: 0; cursor: pointer; white-space: nowrap;
+      }
+      .settings-dropdown-option:hover { background: #cfe8c2; }
+      .settings-dropdown-option.selected { background: #6cc349; color: #10230a; }
+      body.touch-mode .settings-dropdown-option { min-height: 34px; padding: 7px 9px; font-size: 13px; }
+
+      /* ---------------- 恢复默认（批次 334）：固定在整个设置页最底部 ----------------
+         它影响所有分组，所以放在内容滚动区之外，不跟随某个页签。 */
+      .settings-footer {
+        flex: 0 0 auto; margin-top: 4px; padding-top: 6px;
+        border-top: 1px solid rgba(255, 255, 255, .14);
+      }
+      .settings-footer .settings-reset { width: 100%; }
       /* ---------------- 角色形象（批次 296） ----------------
          用户："在设置中要能看到角色的形象，就像游戏内那种 3D 形象。"
          外观页改成「左 3D 形象 + 右控件」：横屏手机上内容区只有 ~230px 高，
@@ -1561,6 +1623,11 @@
       body.touch-mode .settings-row {
         grid-template-columns: minmax(78px, auto) minmax(0, 1fr) 46px; min-height: 34px;
       }
+      /* 触摸端的 46px 会盖掉 `.settings-row.wide` 的 auto 值（特异性更高），
+         单独补一条，否则灵敏度读数 `4（×1.00）` 会把整组撑出横向滚动。 */
+      body.touch-mode .settings-row.wide {
+        grid-template-columns: minmax(78px, auto) minmax(0, 1fr) minmax(46px, auto);
+      }
       body.touch-mode .settings-row input[type="range"] { height: 34px; }
       body.touch-mode .settings-row input[type="range"]::-webkit-slider-thumb {
         width: 16px; height: 26px; margin-top: -8px;
@@ -1601,9 +1668,15 @@
         body.touch-mode .settings-row { min-height: 30px; }
         body.touch-mode .settings-cycle { min-width: 80px; padding: 3px 6px; font-size: 12px; }
         body.touch-mode .settings-hint { margin: 2px 0 6px; font-size: 11px; }
-        /* 批次 296：横屏形象区再收一档，给 11 行外观控件留高度 */
+        /* 批次 333：横屏形象区再收一档，给 11 行外观控件留高度 */
         body.touch-mode .appearance-stage { flex-basis: 88px; width: 88px; height: 158px; }
         body.touch-mode .appearance-preset { min-width: 62px; padding: 4px 3px; font-size: 11px; }
+        /* 批次 334：横屏高度紧张，switch 与底部恢复默认再收一档 */
+        body.touch-mode .settings-switch { width: 50px; height: 26px; }
+        body.touch-mode .settings-switch-knob { width: 18px; height: 18px; }
+        body.touch-mode .settings-switch.on .settings-switch-knob { left: 26px; }
+        body.touch-mode .settings-footer { margin-top: 2px; padding-top: 4px; }
+        body.touch-mode .settings-footer .settings-reset { min-height: 28px; padding: 3px 8px; font-size: 12px; }
       }
 
       /* ---------------- 状态效果 HUD ---------------- */
@@ -4014,7 +4087,8 @@
          文字 #e0e0e0 / 阴影 #3f3f3f / 悬停 #ffffa0。 */
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
-          .settings-tab, .settings-cycle, .appearance-preset, .appearance-focus-button,
+          .settings-tab, .settings-cycle, .settings-dropdown-button,
+          .appearance-preset, .appearance-focus-button,
           .adv-close, .recipe-close, .recipe-page-button,
           .inv-page-button, .inv-close, .unsupported-button, .install-hint button) {
         background: var(--btn-bg);
@@ -4026,7 +4100,8 @@
       }
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
-          .settings-tab, .settings-cycle, .appearance-preset, .appearance-focus-button,
+          .settings-tab, .settings-cycle, .settings-dropdown-button,
+          .appearance-preset, .appearance-focus-button,
           .adv-close, .recipe-close, .recipe-page-button,
           .inv-page-button, .inv-close, .unsupported-button, .install-hint button):not(:disabled):hover {
         background: var(--mc-face-hover);
@@ -4034,7 +4109,8 @@
       }
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
           .world-card-actions button, .pause-action, .settings-back,
-          .settings-tab, .settings-cycle, .appearance-preset, .appearance-focus-button,
+          .settings-tab, .settings-cycle, .settings-dropdown-button,
+          .appearance-preset, .appearance-focus-button,
           .adv-close, .recipe-close, .recipe-page-button,
           .inv-page-button, .inv-close, .unsupported-button, .install-hint button):not(:disabled):active {
         /* 斜面反转 = 凹进去（原版靠这个表达"按下了"，不靠位移） */

@@ -224,20 +224,37 @@
     [...section.querySelectorAll('.appearance-fields .settings-row')].find(
       (row) => row.querySelector('span')?.textContent === label,
     );
-  const cycleRow = async (label) => {
-    rowByLabel(label)?.querySelector('button')?.click();
+  // 批次 334：多选项改成"下拉按钮"——先展开菜单，再点一个不是当前的选项
+  const chooseNext = async (label) => {
+    const row = rowByLabel(label);
+    const button = row?.querySelector('.settings-dropdown-button');
+    if (!button) return;
+    button.click();
+    await sleep(120);
+    const menu = [...document.querySelectorAll('.settings-dropdown-menu')].find(
+      (m) => m.style.display !== 'none' && m.style.display !== '',
+    );
+    const option = [...(menu?.querySelectorAll('.settings-dropdown-option') ?? [])].find(
+      (o) => !o.classList.contains('selected'),
+    );
+    option?.click();
     await sleep(300);
   };
 
   const hairBefore = mc.settingsState.settings.hairStyle;
-  await cycleRow('发型');
+  await chooseNext('发型');
   const hairAfter = mc.settingsState.settings.hairStyle;
-  check('点「发型」立刻写回设置', hairAfter !== hairBefore, `${hairBefore} -> ${hairAfter}`);
+  check('通过下拉改「发型」立刻写回设置', hairAfter !== hairBefore, `${hairBefore} -> ${hairAfter}`);
   check('手动改任一项后四颗预设都不高亮（自定义）', activePreset() === '', activePreset() || '(自定义)');
-  check('手动改发型后形象同步', avatar.palette.hairStyle !== 'ponytail' || hairAfter === 2, `${avatar.palette.hairStyle}`);
+  const hairNames = ['short', 'long', 'ponytail', 'bald', 'bob', 'messy'];
+  check(
+    '手动改发型后形象同步',
+    avatar.palette.hairStyle === hairNames[hairAfter],
+    `${avatar.palette.hairStyle} / index ${hairAfter}`,
+  );
 
   const eyeBefore = model.eyeMetrics.style;
-  await cycleRow('眼型');
+  await chooseNext('眼型');
   check(
     '点「眼型」立刻作用到模型（眼白/睫毛/眉毛一起变）',
     model.eyeMetrics.style !== eyeBefore,

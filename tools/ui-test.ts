@@ -182,7 +182,15 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   // ---- ③ 设置分组：页签与 section 一一对应（漏一组 = 有一页设置永远看不到）
   // 批次 187：新增「外观」页（肤色/上衣/裤子/披风）
   // 批次 203：删掉「视频」页（性能四行没了，只剩视野 → 并进「控制」）
-  equal('四个分组（外观/控制/音频/游戏）', SETTING_GROUPS.length, 4);
+  equal('四个分组（游戏/控制/外观/音频）', SETTING_GROUPS.length, 4);
+  check(
+    '分组按使用频率排序，游戏在最前（批次 334）',
+    SETTING_GROUPS[0] === 'game' &&
+      SETTING_GROUPS.indexOf('controls') === 1 &&
+      SETTING_GROUPS.indexOf('appearance') === 2 &&
+      SETTING_GROUPS.indexOf('sound') === 3,
+    SETTING_GROUPS.join(','),
+  );
   check('分组里有「外观」', SETTING_GROUPS.includes('appearance') && SETTING_GROUP_LABELS.appearance === '外观');
   check('不再有「视频」页（视野已并进控制）', !SETTING_GROUPS.includes('graphics' as never));
   check('每个分组都有中文名', SETTING_GROUPS.every((group) => (SETTING_GROUP_LABELS[group] ?? '').length > 0));
@@ -2034,8 +2042,37 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
   );
   // ⑤ 开关/滑杆不再是胶囊与圆点（这两处是最容易被当成"遗留下来的老样式"的地方）
   check('滑块是方块而不是圆点', !/range"\]::-webkit-slider-thumb \{[^}]*border-radius: 50%/.test(compact));
+  // 批次 334（用户）：布尔项用 switch、多选项用下拉；行容器必须是 div，
+  // `<label>` 会把整行点击转发给按钮（"点按钮以外区域也响按钮"的根因）。
   check('设置项没有再用原生 checkbox/select', !compact.includes('input[type="checkbox"]') && !compact.includes('settings-select'));
-  check('开关/几选一都走 .settings-cycle（原版形态）', compact.includes('.settings-cycle {'));
+  check('布尔开关走 .settings-switch', compact.includes('.settings-switch {') && compact.includes('.settings-switch-knob {'));
+  check(
+    '多选项走 .settings-dropdown（按钮 + 固定定位菜单）',
+    compact.includes('.settings-dropdown-button {') &&
+      compact.includes('.settings-dropdown-menu {') &&
+      compact.includes('position: fixed; z-index: 70;'),
+  );
+  {
+    const settingsSrcText = readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8');
+    check(
+      '设置行容器不再用 label（整行不会转发点击）',
+      !/const row = document\.createElement\('label'\)/.test(settingsSrcText) &&
+        settingsSrcText.includes("const row = document.createElement('div');"),
+    );
+    check(
+      '下拉菜单挂在 body 上（不被滚动区裁切）',
+      settingsSrcText.includes('document.body.appendChild(menu)') &&
+        settingsSrcText.includes('this.openDropdownMenu(button, menu)'),
+      '菜单在 openDropdownMenu 里定位',
+    );
+  }
+  check(
+    '恢复默认在所有分组之外、整页最底部（批次 334）',
+    compact.includes('.settings-footer {') &&
+      /const footer = document\.createElement\('div'\);[\s\S]{0,400}settingsPage\.append\(header, this\.settingsHintEl, columns, footer\)/.test(
+        readFileSync(new URL('../src/ui/SettingsScreen.ts', import.meta.url), 'utf8'),
+      ),
+  );
 
   // ⑤ "界面能左右滑"是一条真出现过的 bug：`overflow-y: auto` 会把另一轴
   //    的 `visible` 计算成 `auto`，于是整屏能被左右拖动。锁死这条规则不能被删掉。
@@ -2112,7 +2149,12 @@ console.log('\n[暂停/设置面板：固定尺寸 + 统一标题栏（批次 11
   );
   check(
     '滑杆这类"越长越好用"的行跨满两列',
-    compact.includes('.settings-row.wide { grid-column: 1 / -1; }') &&
+    compact.includes(
+      '.settings-row.wide { grid-column: 1 / -1; grid-template-columns: minmax(78px, auto) minmax(0, 1fr) minmax(44px, auto); }',
+    ) &&
+      compact.includes(
+        'body.touch-mode .settings-row.wide { grid-template-columns: minmax(78px, auto) minmax(0, 1fr) minmax(46px, auto); }',
+      ) &&
       source.includes("row.className = 'settings-row wide';"),
   );
   // 诊断日志（批次 181）：入口在设置里，读数与按钮挤一行且不许撑破
