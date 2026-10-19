@@ -9827,4 +9827,11 @@
 - [x] B365-5 test:fortress 100、genregistry 83、recipebook 144，离线 131 套全绿
 - 覆盖：方块 592 → 595（85%）
 
+## 批次 366：D20 第八批——破碎热带草原（2026-10-20）
+
+- [x] B366-1 `windswept_savanna`：热带草原的最陡侵蚀档（比高原更窄才赢）
+- [x] B366-2 金合欢 + 少量橡木、草密度 0.12
+- [x] B366-3 test:biome 61、terrain:normal 43（中位斑块 21/21）、genregistry 84
+- 覆盖：群系 **45 → 46（63% → 64%）**
+
 <!-- docs-archive:end -->

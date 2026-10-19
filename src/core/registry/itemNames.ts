@@ -508,6 +508,8 @@ const EXPLICIT: Record<string, string> = {
   red_mushroom_block: '红色蘑菇块',
   moss_block: '苔藓块',
   moss_carpet: '苔藓地毯',
+  azalea: '杜鹃花丛',
+  flowering_azalea: '盛开的杜鹃花丛',
   zombie_spawner: '僵尸刷怪笼',
   cave_spider_spawner: '洞穴蜘蛛刷怪笼',
   silverfish_spawner: '蠹虫刷怪笼',

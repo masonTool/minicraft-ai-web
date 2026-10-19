@@ -6189,3 +6189,7 @@ PAINTERS['item_prismarine_crystals'] = noisy(0xd8e8a0, 20);
 
 // 苔藓（批次 367）：偏暗的草绿噪点
 PAINTERS['moss_block'] = noisy(0x5a7a3a, 14);
+
+// 杜鹃（批次 369）
+PAINTERS['azalea'] = noisy(0x5f8a3f, 16);
+PAINTERS['flowering_azalea'] = noisy(0x9a5a8a, 20);

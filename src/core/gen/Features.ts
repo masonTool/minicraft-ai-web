@@ -1855,7 +1855,13 @@ function placeSpecial(
             const pz = wz + dz;
             if (!w.owns(px, pz)) continue;
             if (rng.chance(0.55)) {
-              if (w.put(px, y, pz, Block.MOSS_BLOCK)) placed++;
+              if (w.put(px, y, pz, Block.MOSS_BLOCK)) {
+                placed++;
+                // 苔藓上偶尔冒一丛杜鹃（批次 369）
+                if (rng.chance(0.12)) {
+                  w.put(px, y + 1, pz, rng.chance(0.5) ? Block.AZALEA : Block.FLOWERING_AZALEA);
+                }
+              }
             } else if (rng.chance(0.5)) {
               if (w.put(px, y, pz, Block.MOSS_CARPET)) placed++;
             }

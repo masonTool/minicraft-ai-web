@@ -1055,6 +1055,8 @@ export const TILE_ORDER = [
   'bone_block_side',
   'bone_block_top',
   'moss_block',
+  'azalea',
+  'flowering_azalea',
   // 紫水晶族（批次 351）
   'amethyst_block',
   'budding_amethyst',
