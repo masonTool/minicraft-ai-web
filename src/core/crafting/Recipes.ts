@@ -1219,6 +1219,18 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     key: { B: Item.BONE_MEAL },
   },
   { kind: 'shapeless' as const, result: { id: Item.BONE_MEAL, count: 9 }, ingredients: [Block.BONE_BLOCK] },
+  // 紫水晶（批次 351）：4 碎片 ↔ 1 块
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.AMETHYST_BLOCK, count: 1 },
+    pattern: ['AA', 'AA'],
+    key: { A: Item.AMETHYST_SHARD },
+  },
+  {
+    kind: 'shapeless' as const,
+    result: { id: Item.AMETHYST_SHARD, count: 4 },
+    ingredients: [Block.AMETHYST_BLOCK],
+  },
 ];
 
 /**

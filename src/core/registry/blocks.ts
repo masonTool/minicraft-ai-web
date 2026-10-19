@@ -3228,6 +3228,26 @@ const SPECS: readonly BlockSpec[] = [
     name: 'minecraft:bone_block',
     tiles: ['bone_block_top', 'bone_block_top', 'bone_block_side'] as const,
   },
+  // 紫水晶族（批次 351，D21 收尾）：紫晶洞的三层壳
+  {
+    id: 588,
+    name: 'minecraft:amethyst_block',
+    tiles: ['amethyst_block', 'amethyst_block', 'amethyst_block'] as const,
+  },
+  {
+    id: 589,
+    name: 'minecraft:budding_amethyst',
+    tiles: ['budding_amethyst', 'budding_amethyst', 'budding_amethyst'] as const,
+  },
+  {
+    id: 590,
+    name: 'minecraft:amethyst_cluster',
+    tiles: ['amethyst_cluster', 'amethyst_cluster', 'amethyst_cluster'] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    light: 5,
+  },
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -3579,6 +3599,10 @@ export const Block = {
   DARK_OAK_SAPLING: WOOD_SAPLING_ID_START + 5,
   /** 骨块（批次 349）：化石的建材，也是 9 骨粉的压缩块 */
   BONE_BLOCK: 587,
+  /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
+  AMETHYST_BLOCK: 588,
+  BUDDING_AMETHYST: 589,
+  AMETHYST_CLUSTER: 590,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -3892,6 +3916,9 @@ HARDNESS.set(Block.BEACON, 3);
 // 粘液块（批次 120）：原版硬度 **0**（徒手一拍就碎，只是碎得"黏"）
 HARDNESS.set(Block.SLIME_BLOCK, 0);
 HARDNESS.set(Block.BONE_BLOCK, 2);
+HARDNESS.set(Block.AMETHYST_BLOCK, 1.5);
+HARDNESS.set(Block.BUDDING_AMETHYST, 1.5);
+HARDNESS.set(Block.AMETHYST_CLUSTER, 1.5);
 // 灵魂火把 / 灵魂灯笼：与普通火把同级（一碰就掉）
 HARDNESS.set(Block.SOUL_TORCH, 0);
 HARDNESS.set(Block.SOUL_LANTERN, 3.5);

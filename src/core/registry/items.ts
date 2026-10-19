@@ -195,6 +195,8 @@ export const Item = {
   LEAD: 1487,
   /** 弩（批次 265）：装填一次、松手发射；多重射击一次三支 */
   CROSSBOW: 1510,
+  /** 紫水晶碎片（批次 351）：紫水晶簇的掉落，4 个压成一块紫水晶块 */
+  AMETHYST_SHARD: 1521,
   /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
@@ -483,6 +485,7 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.LEAD, name: 'minecraft:lead', tile: 'item_lead' },
   // 弩（批次 265）：耐久与弓同档（原版 465），一次装填一发
   { id: Item.CROSSBOW, name: 'minecraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465 },
+  { id: Item.AMETHYST_SHARD, name: 'minecraft:amethyst_shard', tile: 'item_amethyst_shard' },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料
@@ -615,7 +618,7 @@ const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, .
 // 批次 259：第二批被动生物要 5 枚新刷怪蛋，原 1500 上限不够（1500~1504 已用），
 // 扩到 1510 留几个空位。批次 265 又要给弩让一格，继续扩到 1520。
 // 这个数只是"数组长度"，扩大不影响已有 id。
-const MAX_ITEM_ID = 1520;
+const MAX_ITEM_ID = 1530;
 
 /** 按 id 索引的物品表（未定义的 id 为 undefined） */
 export const ITEMS: (ItemDef | undefined)[] = new Array(MAX_ITEM_ID).fill(undefined);
@@ -1529,6 +1532,9 @@ export function blockDrops(blockId: number, ctx: DropContext): { id: number; cou
   if (deadCoral !== undefined) return scale({ id: deadCoral, count: 1 });
 
   // 5~8) 概率替换 → **区间数量掉落**（鎏金黑石 2~5 金粒）→ 常规掉落 → 额外概率掉落
+  // 紫水晶簇（批次 351）：没有精准采集就掉 4 个碎片
+  if (blockId === Block.AMETHYST_CLUSTER) return scale({ id: Item.AMETHYST_SHARD, count: 4 });
+
   const drop =
     replaceDropFor(blockId, ctx.roll()) ??
     rangeDropFor(blockId, ctx.roll()) ??

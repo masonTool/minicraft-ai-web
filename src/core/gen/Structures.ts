@@ -65,7 +65,8 @@ export type StructureKind =
   | 'igloo'
   | 'ocean_ruins'
   // 批次 349（D21 收尾）
-  | 'fossil';
+  | 'fossil'
+  | 'amethyst_geode';
 
 /** 一个结构实例：原点 + 包围盒 + 随机源 */
 export interface StructureInstance {
@@ -410,6 +411,30 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
     biomes: [Biome.DESERT, Biome.SWAMP, Biome.SNOWY_TAIGA],
     // 固定埋深：-20 左右（原版化石大致在这一带）
     undergroundY: () => -20,
+  },
+  {
+    kind: 'amethyst_geode',
+    spacing: 64,
+    separation: 12,
+    chance: 0.35,
+    salt: 0x2345,
+    radius: 10,
+    height: 10,
+    biomes: [
+      Biome.PLAINS,
+      Biome.DESERT,
+      Biome.FOREST,
+      Biome.TAIGA,
+      Biome.SNOWY_PLAINS,
+      Biome.SAVANNA,
+      Biome.JUNGLE,
+      Biome.SWAMP,
+      Biome.BADLANDS,
+      Biome.MEADOW,
+      Biome.WINDSWEPT_HILLS,
+    ],
+    // 紫晶洞在 deepslate 层附近（-30 左右）
+    undergroundY: () => -30,
   },
 ];
 
@@ -1486,6 +1511,36 @@ function buildFossil(w: FeatureWriter, s: StructureInstance): void {
   w.fill(s.x, y + 1, s.z, Block.COAL_ORE);
 }
 
+// ---------------------------------------------------------------- 紫晶洞（批次 351）
+
+/** 三层球壳：平滑玄武岩 → 方解石 → 紫水晶块；中心芽床，六个方向各一簇 */
+function buildAmethystGeode(w: FeatureWriter, s: StructureInstance): void {
+  const cy = s.y;
+  const sphere = (radius: number, id: number): void => {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (dx * dx + dy * dy + dz * dz <= radius * radius) w.fill(s.x + dx, cy + dy, s.z + dz, id);
+        }
+      }
+    }
+  };
+  sphere(7, Block.SMOOTH_BASALT);
+  sphere(5, Block.CALCITE);
+  sphere(4, Block.AMETHYST_BLOCK);
+  w.fill(s.x, cy, s.z, Block.BUDDING_AMETHYST);
+  for (const [dx, dy, dz] of [
+    [3, 0, 0],
+    [-3, 0, 0],
+    [0, 3, 0],
+    [0, -3, 0],
+    [0, 0, 3],
+    [0, 0, -3],
+  ] as const) {
+    w.fill(s.x + dx, cy + dy, s.z + dz, Block.AMETHYST_CLUSTER);
+  }
+}
+
 // ---------------------------------------------------------------- 建造器表
 
 const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, world: FeatureWorld, seed: number) => void> = {
@@ -1505,6 +1560,7 @@ const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, w
   igloo: (w, s) => buildIgloo(w, s),
   ocean_ruins: (w, s) => buildOceanRuins(w, s),
   fossil: (w, s) => buildFossil(w, s),
+  amethyst_geode: (w, s) => buildAmethystGeode(w, s),
 };
 
 /** 结构种类清单（测试用） */

@@ -1048,6 +1048,11 @@ export const TILE_ORDER = [
   // 骨块（批次 349）
   'bone_block_side',
   'bone_block_top',
+  // 紫水晶族（批次 351）
+  'amethyst_block',
+  'budding_amethyst',
+  'amethyst_cluster',
+  'item_amethyst_shard',
   // 霜冰（批次 263，冰霜行者踩出来的）
   'frosted_ice',
   // 弩（批次 265）

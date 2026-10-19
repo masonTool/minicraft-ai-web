@@ -369,6 +369,19 @@ export const GENERATION_SOURCES: readonly GenSource[] = [
     blocks: WOODLAND_MANSION,
   },
   {
+    key: 'amethyst_geode',
+    label: '紫晶洞（批次 351）',
+    origin: 'declared',
+    where: 'gen/Structures.ts 的 buildAmethystGeode',
+    blocks: [
+      Block.SMOOTH_BASALT,
+      Block.CALCITE,
+      Block.AMETHYST_BLOCK,
+      Block.BUDDING_AMETHYST,
+      Block.AMETHYST_CLUSTER,
+    ],
+  },
+  {
     key: 'bastion_remnant',
     label: '堡垒遗迹',
     origin: 'declared',

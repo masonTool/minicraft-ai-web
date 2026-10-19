@@ -9684,4 +9684,12 @@
 - [x] B347-4 test:structure 43（13 种主世界）、genregistry 77、loot 74
 - 覆盖：结构 **13 → 15（43% → 50%）**，离线 131 套全绿
 
+## 批次 348：D21 结构第四批——冰屋 + 海底废墟（2026-10-20）
+
+- [x] B348-1 `igloo`：雪原雪块小屋（冰地板、两层内收屋顶、箱子）
+- [x] B348-2 `ocean_ruins`：海床残墙 5×5、高 1~3、沙岩/苔石斑驳、`underwater: true`
+- [x] B348-3 继续复用现有战利品表（village_house / shipwreck_supply）
+- [x] B348-4 test:structure 43（15 种主世界）、genregistry 77，离线 131 套全绿
+- 覆盖：结构 **15 → 17（50% → 57%）**
+
 <!-- docs-archive:end -->
