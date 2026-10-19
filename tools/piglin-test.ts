@@ -215,7 +215,7 @@ console.log('\n[它带来的那条金子路]');
 
 console.log('\n[猪灵以物易物（批次 344）]');
 {
-  equal('表里有 8 项', BARTER_TABLE.length, 8);
+  equal('表里有 9 项', BARTER_TABLE.length, 9);
   check('权重和大于 0', BARTER_TOTAL_WEIGHT > 0);
   equal('每项数量区间合法', BARTER_TABLE.every((e) => e.min >= 1 && e.max >= e.min), true);
   equal('每项都有中文名', BARTER_TABLE.every((e) => itemLabel(e.itemId).length > 0), true);

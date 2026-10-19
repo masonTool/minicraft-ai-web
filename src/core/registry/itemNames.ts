@@ -500,6 +500,7 @@ const EXPLICIT: Record<string, string> = {
   bone_block: '骨块',
   candle: '蜡烛',
   tinted_glass: '遮光玻璃',
+  crying_obsidian: '哭泣的黑曜石',
   white_banner: '白色旗帜',
   orange_banner: '橙色旗帜',
   magenta_banner: '品红色旗帜',

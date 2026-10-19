@@ -36,6 +36,7 @@ export const BARTER_TABLE: readonly BarterEntry[] = [
   { itemId: Item.GOLD_NUGGET, min: 2, max: 6, weight: 6 },
   // 黑曜石是方块物品（沿用方块 id），没有独立的 `Item.OBSIDIAN`
   { itemId: Block.OBSIDIAN, min: 1, max: 2, weight: 2 },
+  { itemId: Block.CRYING_OBSIDIAN, min: 1, max: 3, weight: 2 },
 ];
 
 /** 表里所有条目的权重和（断言与调试用） */

@@ -577,6 +577,10 @@ console.log('\n[七、方块侧：生成 + 配方 + 掉落（不再拿"掉自己
  */
 const BLOCK_MECHANISM_SOURCES: readonly { label: string; ids: readonly number[] }[] = [
   {
+    label: '哭泣的黑曜石（猪灵以物易物）',
+    ids: [657],
+  },
+  {
     label: '耕地与四种作物（种下去就是第 0 阶）',
     ids: [
       Block.FARMLAND,

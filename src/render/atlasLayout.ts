@@ -1056,6 +1056,7 @@ export const TILE_ORDER = [
   'bone_block_top',
   'candle',
   'tinted_glass',
+  'crying_obsidian',
   'banner_white',
   'banner_orange',
   'banner_magenta',

@@ -6260,3 +6260,6 @@ PAINTERS['banner_black'] = noisy(0x1d1d21, 18);
 
 // 遮光玻璃（批次 387）：暗色半透
 PAINTERS['tinted_glass'] = noisy(0x3a2a4a, 10);
+
+// 哭泣的黑曜石（批次 390）：深紫黑 + 紫色泪点
+PAINTERS['crying_obsidian'] = noisy(0x2a1a3a, 16);

@@ -9990,4 +9990,12 @@
 - [x] B386-4 reach 61、harvest 58、recipebook 144、crafting 43，离线 131 套全绿
 - 覆盖：方块 **637 → 653**、配方 **598 → 614**
 
+## 批次 387：B16 遮光玻璃（2026-10-20）
+
+- [x] B387-1 方块 `minecraft:tinted_glass`（id 656，挡光等级 15、不遮挡邻居）
+- [x] B387-2 配方：4 紫水晶碎片 + 1 玻璃（与原版同构）
+- [x] B387-3 中文名 / 图集 / 硬度 0.3
+- [x] B387-4 reach 61、harvest 58、recipebook 144、crafting 43，离线 131 套全绿
+- 覆盖：方块 **653 → 654**
+
 <!-- docs-archive:end -->
