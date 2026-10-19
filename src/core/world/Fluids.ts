@@ -21,15 +21,6 @@ import {
   withFallingFluid,
   withFluidLevel,
 } from '../registry/blockState.ts';
-import {
-  CHUNK_SIZE_X,
-  CHUNK_SIZE_Z,
-  SECTION_COUNT,
-  SECTION_HEIGHT,
-  WORLD_MAX_Y,
-  WORLD_MIN_Y,
-} from './Chunk.ts';
-
 export const WATER = Block.WATER;
 export const LAVA = Block.LAVA;
 
@@ -50,13 +41,6 @@ export interface FluidWorld {
   setFluid(x: number, y: number, z: number, id: number, state: number): boolean;
   /** 排入计划刻队列 */
   schedule(x: number, y: number, z: number, delayTicks: number): void;
-  /**
-   * 该 XZ 所在的区块是否已加载（可选）。
-   *
-   * 区块加载时扫"贴着空气的流体"会查到边界外：未加载区块的 `getBlock` 返回空气，
-   * 不挡住的话会把"世界边缘"当成空气，排出一堆注定写不进去的流动刻。
-   */
-  isLoaded?(worldX: number, worldZ: number): boolean;
 }
 
 export function isFluid(id: number): boolean {
@@ -202,95 +186,6 @@ const NEIGHBOURS: ReadonlyArray<readonly [number, number, number]> = [
   [0, 0, 1],
   [0, 0, -1],
 ];
-
-/** 只依赖区块里已有的方块数组；测试可以用普通数组当替身 */
-export interface FluidScanChunk {
-  readonly cx: number;
-  readonly cz: number;
-  readonly blocks: ArrayLike<number>;
-  /** 每个 16 高 section 的非空气方块数（用来跳过大片空气） */
-  readonly sectionCounts: ArrayLike<number>;
-}
-
-/**
- * 区块加载时**补排**计划刻（批次 281）。
- *
- * 地形生成（海洋、地下含水层、岩浆湖）只写方块、不会给它们排计划刻；
- * 于是水/岩浆即使贴着空气（海边、洞穴口、含水层顶）也不会自己流，
- * 必须等玩家在旁边挖一格、`wakeFluidsAround` 把它叫醒。
- *
- * 这里扫一遍区块里**贴着空气的流体**并把它们排进计划刻。只排"暴露"的那一层：
- * 海洋中间那些四面都是水的格子不会进队列，否则一加载区块就会有几千个空转刻。
- *
- * @returns 排进队列的格数（验收/诊断用）
- */
-export function scheduleExposedFluids(world: FluidWorld, chunk: FluidScanChunk): number {
-  if (chunk.sectionCounts.length < SECTION_COUNT) return 0;
-  const baseX = chunk.cx * CHUNK_SIZE_X;
-  const baseZ = chunk.cz * CHUNK_SIZE_Z;
-  const blocks = chunk.blocks;
-  let scheduled = 0;
-
-  for (let section = 0; section < SECTION_COUNT; section++) {
-    // 整段都是空气的跳过：绝大多数 section 在加载时都是空的
-    if ((chunk.sectionCounts[section] ?? 0) === 0) continue;
-    const sectionBase = section * SECTION_HEIGHT;
-    for (let ly = 0; ly < SECTION_HEIGHT; ly++) {
-      const worldY = WORLD_MIN_Y + sectionBase + ly;
-      // 一个 section 里按 y → z → x 连续排；这里把行首下标提到循环外
-      const rowBase = (sectionBase + ly) * CHUNK_SIZE_Z * CHUNK_SIZE_X;
-      for (let z = 0; z < CHUNK_SIZE_Z; z++) {
-        const index = rowBase + z * CHUNK_SIZE_X;
-        for (let x = 0; x < CHUNK_SIZE_X; x++) {
-          const id = blocks[index + x]!;
-          if (id !== WATER && id !== LAVA) continue;
-          if (!touchesAir(world, chunk, baseX + x, worldY, baseZ + z, x, z)) continue;
-          world.schedule(baseX + x, worldY, baseZ + z, flowDelay(id));
-          scheduled++;
-        }
-      }
-    }
-  }
-  return scheduled;
-}
-
-/**
- * 这一格流体**下方或四邻**有没有空气（上方不算：水不会往上流）。
- *
- * 只排"流得动"的格子：海洋表面每个水块上方都是空气，但下方/四周都是水，
- * 排进去只会空转；一个区块几百个水面块一起进队列，很容易把 `TickScheduler`
- * 的 4096 容量挤爆，真正该流的边缘反而排不进去。
- *
- * 区块**内部**直接读方块数组（一次数组访问，比 `world.getBlock` 的坐标换算便宜很多）；
- * 边界外才问世界——未加载的邻居当成"不是空气"，避免把世界边缘当洞口。
- */
-function touchesAir(
-  world: FluidWorld,
-  chunk: FluidScanChunk,
-  worldX: number,
-  worldY: number,
-  worldZ: number,
-  localX: number,
-  localZ: number,
-): boolean {
-  for (const [dx, dy, dz] of NEIGHBOURS) {
-    // 水/岩浆只往下和水平流；上方是空气不代表它会动
-    if (dy > 0) continue;
-    const nx = localX + dx;
-    const nz = localZ + dz;
-    const ny = worldY + dy;
-    if (ny < WORLD_MIN_Y || ny >= WORLD_MAX_Y) continue;
-    if (nx >= 0 && nx < CHUNK_SIZE_X && nz >= 0 && nz < CHUNK_SIZE_Z) {
-      const index = ((ny - WORLD_MIN_Y) * CHUNK_SIZE_Z + nz) * CHUNK_SIZE_X + nx;
-      if (chunk.blocks[index] === Block.AIR) return true;
-      continue;
-    }
-    // 出了本区块：未加载的邻居不算空气
-    if (world.isLoaded && !world.isLoaded(worldX + dx, worldZ + dz)) continue;
-    if (world.getBlock(worldX + dx, ny, worldZ + dz) === Block.AIR) return true;
-  }
-  return false;
-}
 
 /**
  * 一次流动刻：处理 (x,y,z) 这一格液体。

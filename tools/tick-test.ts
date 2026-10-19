@@ -33,7 +33,6 @@ import {
   WATER_SPREAD,
   canFlowInto,
   fluidTick,
-  scheduleExposedFluids,
   spreadDistance,
   wakeFluidAt,
   wakeFluidNeighbours,
@@ -456,60 +455,6 @@ console.log('\n[流体：唤醒]');
   fresh.set(0, 63, 0, Block.STONE);
   const wokenSelf = wakeFluidAt(fresh, 0, 64, 0);
   check('唤醒包含液体自己（刚放下的水才会开始流）', wokenSelf >= 1 && fresh.scheduled.some((entry) => entry.x === 0 && entry.z === 0));
-}
-
-console.log('\n[流体：区块加载时补排计划刻（批次 281）]');
-{
-  // 自然生成的水/岩浆没有计划刻：加载时要扫出"贴着空气"的那一层补排。
-  // 完全包在石头里的水不该进队列（否则一大片地下水会让计划刻空转）。
-  const world = new FakeWorld();
-  const chunk = new Chunk(0, 0);
-  const x = 1;
-  const y = 64;
-  const z = 1;
-  chunk.set(x, y, z, Block.WATER);
-  chunk.set(x, y - 1, z, Block.STONE);
-  chunk.set(x, y + 1, z, Block.STONE);
-  chunk.set(x + 1, y, z, Block.STONE);
-  chunk.set(x - 1, y, z, Block.STONE);
-  chunk.set(x, y, z + 1, Block.STONE);
-  chunk.set(x, y, z - 1, Block.STONE);
-  check('四面都包住的水不排计划刻', scheduleExposedFluids(world, chunk) === 0 && world.scheduled.length === 0);
-
-  // 挖开下面一格 → 它"贴着空气"，加载时应该被补排
-  chunk.set(x, y - 1, z, Block.AIR);
-  const below = scheduleExposedFluids(world, chunk);
-  check('下方暴露的水会被排进计划刻', below === 1 && world.scheduled[0]?.y === y, String(below));
-
-  // 只有上方是空气、下面/四周都实心的水面：它流不动，不要排（否则海洋表面会塞满队列）
-  const surfaceWorld = new FakeWorld();
-  const surface = new Chunk(0, 0);
-  surface.set(5, 70, 5, Block.WATER);
-  surface.set(5, 69, 5, Block.STONE);
-  surface.set(4, 70, 5, Block.STONE);
-  surface.set(6, 70, 5, Block.STONE);
-  surface.set(5, 70, 4, Block.STONE);
-  surface.set(5, 70, 6, Block.STONE);
-  check('只有上方是空气的水面不排计划刻（它流不动）', scheduleExposedFluids(surfaceWorld, surface) === 0);
-
-  // 岸边：水的一侧是空气 → 加载时要排
-  surface.set(6, 70, 5, Block.AIR);
-  const shoreCount = scheduleExposedFluids(surfaceWorld, surface);
-  check('岸边（侧面是空气）的水会被排进计划刻', shoreCount === 1, String(shoreCount));
-
-  // 区块边界外未加载：不能把"未加载"当空气（否则会往虚空流水）
-  const borderWorld = new FakeWorld();
-  borderWorld.loaded = false;
-  const border = new Chunk(0, 0);
-  border.set(0, 64, 0, Block.WATER);
-  border.set(0, 63, 0, Block.STONE);
-  border.set(0, 65, 0, Block.STONE);
-  border.set(1, 64, 0, Block.STONE);
-  border.set(0, 64, 1, Block.STONE);
-  border.set(0, 64, -1, Block.STONE);
-  // x=-1 在区块外、且未加载；FakeWorld 会返回空气，isLoaded 必须挡住它
-  const borderCount = scheduleExposedFluids(borderWorld, border);
-  check('未加载的邻居不算空气（不会把世界边缘当洞口）', borderCount === 0, String(borderCount));
 }
 
 console.log('\n[小麦生长（H13）]');
