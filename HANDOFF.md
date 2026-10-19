@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 838（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 840（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -98,6 +98,11 @@ npm run dev            # http://localhost:5173
   **297（容器暂停）/ 298（目标框界面）**；旧 commit message 里的 295/296 是撞号。
 - ⚠️ **批次编号冲突（第三次）**：并发会话占用了 **303**。本轮正式编号 **304**；
   旧 commit message 里的 303 是撞号。
+- 批次 314（用户补充："确实在运作，只是界面没刷新"；`989ea6f`）：
+  ① 打开熔炉时若 `burnTimeLeft>0` 或 `cookProgress>0`（正在烧），**不再暂停**；
+  ② `tickUi` 对运行中的熔炉每 0.1s **主动 refresh**，不再完全依赖 `containerDirty`；
+  ③ 重开后进度条/火焰/燃料持续更新，不会出现"关着在烧、打开静止"。
+  `test:ui` **847**、vitest **87**、离线 **131** 套、`build:fast` 全绿。
 - 批次 313（用户："点目标后界面卡住但炉子在跑；关熔炉再进进度不走" + 日志 `minicraft-diag-2026-10-19T12-38-33-014`；`89aacc3`）：
   根因：`close()` 把 `activeContainer.onChange` 置空，同一容器重开时 `openWith` 的
   `if (mode/container 变了)` 不成立，没有重新挂上，所以炉子继续烧、界面收不到脏标记。
