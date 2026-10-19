@@ -603,14 +603,29 @@ console.log('\n[生物头顶信息条（批次 277）]');
       info.object.position.y < 64 + 1.4 + 1,
   );
   check(
-    '宽 0.9 的生物 → 条宽 1.44、高按画布比例',
+    '宽 0.9 的生物 → 条宽 1.44、高按敌对面板比例（74/256）',
     Math.abs(info.object.scale.x - 1.44) < 1e-9 &&
-      Math.abs(info.object.scale.y - 1.44 * (96 / 256)) < 1e-9,
+      Math.abs(info.object.scale.y - 1.44 * (74 / 256)) < 1e-9,
   );
   const infoImage = (info.object.material as THREE.SpriteMaterial).map?.image as
     | { width?: number; height?: number }
     | undefined;
-  check('画布纹理是 256×96', infoImage?.width === 256 && infoImage?.height === 96);
+  check('敌对生物的画布是 256×74（名字 + 生命 + 攻击）', infoImage?.width === 256 && infoImage?.height === 74);
+
+  // 被动生物没有攻击行，面板更矮
+  const cow = {
+    ...zombie,
+    id: 8,
+    type: { id: 'cow', name: '牛', health: 10, hostile: false, attackDamage: 0, followRange: 0 },
+  } as unknown as Mob;
+  info.show(cow);
+  const passiveImage = (info.object.material as THREE.SpriteMaterial).map?.image as
+    | { width?: number; height?: number }
+    | undefined;
+  check(
+    '被动生物的画布是 256×58（只有名字 + 生命）',
+    passiveImage?.height === 58 && Math.abs(info.object.scale.y - 1.44 * (58 / 256)) < 1e-9,
+  );
 
   // 体型差异只影响世界尺寸，不改变画布分辨率
   const tiny = { ...zombie, width: 0.2 } as unknown as Mob;

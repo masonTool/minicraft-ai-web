@@ -7,11 +7,11 @@
  * 做法：一张 CanvasTexture + `THREE.Sprite`（永远面向相机）：
  *  - 名字（敌对偏红、被动偏青）；
  *  - 生命条（红/黄/绿按比例变色）+ 当前/上限；
- *  - 敌对生物多两行小条：**攻击力**与**警戒范围**（两个都是 `MobType` 里真实存在的数值）。
+ *  - 敌对生物多一行**攻击力**（`MobType.attackDamage`，真实数值）。
  *
  * ⚠️ 为什么没有"防御"：本项目的生物**没有护甲/防御属性**，伤害在 `Mob.hurt` 里直接扣血。
- * 硬画一条防御条只能是假数据，所以这里展示两个真实可用的项；以后真加了护甲机制，
- * 在 `drawFace` 里多一行即可。
+ * 硬画一条防御条只能是假数据；以后真加了护甲机制，在 `drawFace` 里多一行即可。
+ * 同一批还去掉了"警戒范围"条（用户："这个意义不大"）。
  *
  * 性能：Canvas 只在"目标或血量变化"时重画（换目标、挨打），每帧只更新 Sprite 的
  * 位置与缩放；不会跟着渲染帧重绘文字。
@@ -22,15 +22,16 @@ import type { Mob } from '../core/entity/Mob.ts';
 
 /** 画布尺寸（像素）：文字用 18px/13px，256 宽在 1.2~3.2 格的世界尺寸下足够清楚 */
 const CANVAS_W = 256;
-const CANVAS_H = 96;
+/** 被动生物只有「名字 + 生命」，敌对生物多一行「攻击」——高度按内容裁，别留一大片空面板 */
+const CANVAS_H_PASSIVE = 58;
+const CANVAS_H_HOSTILE = 74;
 /** 条的世界宽度（格）：按生物宽度放大，但夹在 1.2~3.2 之间 */
 const BAR_MIN_WIDTH = 1.2;
 const BAR_MAX_WIDTH = 3.2;
 /** 条离头顶的高度（格） */
 const BAR_LIFT = 0.14;
-/** 敌对生物额外两条小条的最大值（归一化用）：攻击 10 点、警戒 35 格 */
+/** 攻击条归一化用的最大值（10 点） */
 const ATTACK_MAX = 10;
-const FOLLOW_MAX = 35;
 
 const COLORS = {
   panel: 'rgba(12, 16, 20, 0.72)',
@@ -44,7 +45,6 @@ const COLORS = {
   text: '#f2fbff',
   muted: 'rgba(242, 251, 255, 0.72)',
   attack: '#f0a04b',
-  follow: '#79b8e8',
 };
 
 export class MobInfoBar {
@@ -62,7 +62,7 @@ export class MobInfoBar {
   constructor(canvas?: HTMLCanvasElement) {
     this.canvas = canvas ?? document.createElement('canvas');
     this.canvas.width = CANVAS_W;
-    this.canvas.height = CANVAS_H;
+    this.canvas.height = CANVAS_H_PASSIVE;
     const context = this.canvas.getContext('2d');
     if (!context) throw new Error('无法获取 2D 绘图上下文');
     this.context = context;
@@ -89,16 +89,18 @@ export class MobInfoBar {
   /** 套在某只生物身上（每帧调一次：生物会走；内容只在变化时重画） */
   show(mob: Mob): void {
     const width = Math.min(BAR_MAX_WIDTH, Math.max(BAR_MIN_WIDTH, mob.width * 1.6));
-    const height = width * (CANVAS_H / CANVAS_W);
+    const panelHeight = mob.type.hostile ? CANVAS_H_HOSTILE : CANVAS_H_PASSIVE;
+    const height = width * (panelHeight / CANVAS_W);
     this.object.scale.set(width, height, 1);
     this.object.position.set(mob.x, mob.y + mob.height + BAR_LIFT + height / 2, mob.z);
 
     const health = Math.max(0, Math.ceil(mob.health));
     const maxHealth = Math.max(1, Math.ceil(mob.type.health));
-    const key = `${mob.id}|${mob.type.id}|${health}|${maxHealth}`;
+    const key = `${mob.id}|${mob.type.id}|${health}|${maxHealth}|${panelHeight}`;
     if (key !== this.lastKey) {
       this.lastKey = key;
-      this.drawFace(mob, health, maxHealth);
+      if (this.canvas.height !== panelHeight) this.canvas.height = panelHeight;
+      this.drawFace(mob, health, maxHealth, panelHeight);
     }
     this.object.visible = true;
   }
@@ -112,12 +114,12 @@ export class MobInfoBar {
     (this.object.material as THREE.Material).dispose();
   }
 
-  private drawFace(mob: Mob, health: number, maxHealth: number): void {
+  private drawFace(mob: Mob, health: number, maxHealth: number, panelHeight: number): void {
     const ctx = this.context;
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.clearRect(0, 0, CANVAS_W, panelHeight);
 
     // 面板：圆角 + 细描边，压住背后的草地/雪地
-    roundRect(ctx, 1, 1, CANVAS_W - 2, CANVAS_H - 2, 10);
+    roundRect(ctx, 1, 1, CANVAS_W - 2, panelHeight - 2, 10);
     ctx.fillStyle = COLORS.panel;
     ctx.fill();
     ctx.strokeStyle = COLORS.panelBorder;
@@ -130,10 +132,10 @@ export class MobInfoBar {
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.fillStyle = hostile ? COLORS.nameHostile : COLORS.namePassive;
-    ctx.fillText(mob.type.name, 12, 19);
+    ctx.fillText(mob.type.name, 12, 17);
 
     // 生命条
-    const hpY = 34;
+    const hpY = 29;
     const hpH = 11;
     const hpX = 36;
     // 右侧留 56px 给数值，条不要压到文字下面
@@ -152,23 +154,15 @@ export class MobInfoBar {
       return;
     }
 
-    // 敌对：攻击力 / 警戒范围（都是真实数据）
+    // 敌对：攻击力（真实字段，归一化到 10 点）
     const atk = Math.max(0, mob.type.attackDamage);
-    const follow = Math.max(0, mob.type.followRange);
-    const rowY = 58;
-    const rowGap = 19;
+    const rowY = 51;
     smallLabel(ctx, '攻击', 12, rowY + 4);
     bar(ctx, hpX, rowY, hpW, 8, atk / ATTACK_MAX, COLORS.attack);
     ctx.font = '12px system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = 'right';
     ctx.fillText(`${atk.toFixed(1)}`, CANVAS_W - 12, rowY + 4);
-
-    smallLabel(ctx, '警戒', 12, rowY + rowGap + 4);
-    bar(ctx, hpX, rowY + rowGap, hpW, 8, follow / FOLLOW_MAX, COLORS.follow);
-    ctx.fillStyle = COLORS.muted;
-    ctx.textAlign = 'right';
-    ctx.fillText(`${Math.round(follow)}格`, CANVAS_W - 12, rowY + rowGap + 4);
 
     this.texture.needsUpdate = true;
   }
