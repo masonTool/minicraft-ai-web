@@ -318,7 +318,7 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
   check('背包补上了关闭键（它原来根本没有）', invSrc.includes("closeButton.className = 'inv-close'") && html.includes('.inv-close {'));
   check(
     '关闭背包会同步关闭携带版配方页（不留下孤立左板）',
-    /close\(\): void \{[\s\S]{0,260}this\.hooks\.onCloseRecipes\?\.\(\)/.test(invSrc),
+    /close\(\): void \{[\s\S]{0,600}this\.hooks\.onCloseRecipes\?\.\(\)/.test(invSrc),
   );
   // ⚠️ 只查**提示文案那一句**（注释里会解释"原来写的是错的"，会撞到自己）
   const invHint = /hint\.innerHTML = touchDevice([\s\S]*?);\n/.exec(invSrc)?.[1] ?? '';
@@ -674,10 +674,9 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       /private stationHasRecipes[\s\S]{0,300}mode === 'smithing'[\s\S]{0,200}mode === 'brewing'/.test(invSrc),
   );
   check(
-    '工作站左栏复用分类栏，点产物填工作区/提示需要xxx（批次 293）',
-    invSrc.includes('stationCatalogIds') &&
-      invSrc.includes('stationFamilyIds') &&
-      invSrc.includes('stationNeedFor') &&
+    '工作站左栏只列当前站台逐条产物，点产物填工作区（批次 295）',
+    invSrc.includes('this.currentStationEntries()') &&
+      invSrc.includes('entry.available') &&
       invSrc.includes('this.categoryHostEl.style.display = showCategory') &&
       invSrc.includes('private showStationRecipeFor') &&
       invSrc.includes('private showStationNeed') &&
@@ -685,10 +684,33 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.inv-station-hint-row'),
   );
   check(
+    '目标框：熔炉/锻造台/酿造台都点一下才制作，产物自动进快捷栏/仓库/脚边（批次 295）',
+    invSrc.includes('private clickStationTarget') &&
+      invSrc.includes('this.activeContainer.paused = false') &&
+      invSrc.includes('this.activeContainer instanceof SmithingTable') &&
+      invSrc.includes('this.activeContainer instanceof BrewingStand') &&
+      invSrc.includes('private collectStationOutput') &&
+      invSrc.includes('this.inventory.addStack(output)') &&
+      invSrc.includes('this.hooks.onDrop?.(output.id, leftover)') &&
+      css.includes('.station-target') &&
+      css.includes('.furnace-col.hidden'),
+  );
+  check(
     '工作站分类栏白底 = 当前站台能做（含燃料）；红底用 inv-slot.locked',
     invSrc.includes('const craftable = this.stationHasRecipes()') &&
       invSrc.includes('.filter((entry) => entry.available)') &&
       invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');"),
+  );
+  check(
+    '默认只列材料齐全的；配方书打开才列本工作站全部（批次 295）',
+    invSrc.includes('.filter((entry) => this.showUnowned || entry.available)') &&
+      invSrc.includes('const entries = this.currentStationEntries();'),
+  );
+  check(
+    '红底配方把缺的材料画成红底预览（批次 295）',
+    invSrc.includes('private renderStationGhost') &&
+      invSrc.includes("binding.element.classList.add('ghost-missing')") &&
+      invSrc.includes('this.renderStationGhost();'),
   );
   check(
     '点白底配方会自动填原料与燃料（白底 = 点下去能开工）',
@@ -1161,7 +1183,7 @@ console.log('\n[分类栏永远空：detachRecipeBook 顺手把它藏了（批�
   // 只有确实存在筛选条件（搜索词、或"显示全部"）时才需要解释为什么空着。
   check(
     '配方开关关着时空栏留白（有筛选条件时才解释）',
-    invSrc.includes('if (this.categoryQuery.length > 0 || this.showUnowned) {') &&
+    invSrc.includes('if (this.categoryQuery.length > 0 || this.showUnowned || this.stationHasRecipes()) {') &&
       !invSrc.includes('背包里共 ${this.ownedItemIds().length}'),
   );
 }
@@ -2406,7 +2428,7 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   // ④ 配方开关关着 + 空栏 = 空白（不再写"这一栏里你还没有东西…"）
   check(
     '配方开关关着时空栏留白（只在有筛选条件时解释）',
-    invSrc.includes('if (this.categoryQuery.length > 0 || this.showUnowned) {') &&
+    invSrc.includes('if (this.categoryQuery.length > 0 || this.showUnowned || this.stationHasRecipes()) {') &&
       !invSrc.includes('这一栏里你还没有东西'),
   );
   // ⑤ 红底"我没有的"：不选中，只给点击反馈 + 名称 + 配方

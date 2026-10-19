@@ -2590,6 +2590,23 @@
         justify-content: center;
       }
       .inv-panel.station-ui .furnace-layout { flex-wrap: wrap; }
+      /* 熔炉的"产物 / 目标"并排：目标框点一下才开始（批次 295） */
+      .furnace-output-row {
+        display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;
+        justify-content: center;
+      }
+      .inv-slot.station-target {
+        cursor: pointer;
+        box-shadow: inset 0 0 0 2px rgba(120, 200, 255, .45);
+      }
+      .inv-slot.station-target.locked {
+        cursor: not-allowed;
+        box-shadow: inset 0 0 0 2px rgba(180, 60, 60, .55);
+      }
+      .inv-slot.station-target.hidden { display: none; }
+      /* 目标框没选中配方时连"目标"这行标题一起藏掉 */
+      .inv-panel.station-ui .furnace-col.hidden,
+      .inv-panel.station-ui .brewing-col.hidden { display: none; }
       /* 右栏偏窄时允许横排换行：`.anvil-row` 原本是 nowrap，窄栏会直接溢出 */
       .inv-panel.pocket-ui.pocket-dual.station-ui .anvil-row,
       .inv-panel.pocket-ui.pocket-dual.station-ui .enchant-layout {

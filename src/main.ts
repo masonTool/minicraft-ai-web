@@ -10013,9 +10013,13 @@ class App {
 
       if (container instanceof Campfire) {
         const result = container.tick(dt);
-        // 烤好的东西**弹出来**（原版如此：营火没有产物槽，成品掉在柴堆上）
+        // 烤好的东西**弹出来**（原版如此：营火没有产物槽，成品掉在柴堆上）。
+        // 批次 295：如果玩家正开着这座营火、且点过目标框，就由界面收进背包
+        //（快捷栏 → 仓库 → 脚边），不再掉在柴堆上。
         for (const entry of result.cooked) {
-          this.spawnDrop(entry.output.id, entry.output.count, x + 0.5, y + 0.7, z + 0.5);
+          if (!this.inventoryScreen.collectCampfireOutput(container, entry.output)) {
+            this.spawnDrop(entry.output.id, entry.output.count, x + 0.5, y + 0.7, z + 0.5);
+          }
         }
         this.syncLitState(x, y, z, container.lit, result.litChanged);
         return;
