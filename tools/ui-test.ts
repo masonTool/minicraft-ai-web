@@ -788,6 +788,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('this.furnaceStarted = true'),
   );
   check(
+    '熔炉原料/燃料点击绕过双击收集，再点稳定取回（批次 325）',
+    invSrc.includes('const furnaceBinding = this.bindings.get(key)') &&
+      invSrc.includes('this.handleSlotClick(key, button);') &&
+      invSrc.indexOf('const furnaceBinding = this.bindings.get(key)') <
+        invSrc.indexOf('const isDouble = this.lastClick?.key === key'),
+  );
+  check(
     '熔炉：目标槽/产物槽并排、标签在上、退还仓库在下方（批次 309）',
     invSrc.includes("targetLabel.textContent = '目标'") &&
       invSrc.includes("productLabel.textContent = '产物'") &&

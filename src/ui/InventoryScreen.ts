@@ -4817,6 +4817,18 @@ export class InventoryScreen {
         return;
       }
     }
+    // 批次 325：熔炉原料/燃料的点击单独走"选中 / 再点取回"，
+    // 不能被双击收集或 Shift 快速移动抢先处理。
+    const furnaceBinding = this.bindings.get(key);
+    if (
+      furnaceBinding &&
+      furnaceBinding.source instanceof Furnace &&
+      (furnaceBinding.index === FURNACE_INPUT || furnaceBinding.index === FURNACE_FUEL) &&
+      !shift
+    ) {
+      this.handleSlotClick(key, button);
+      return;
+    }
     // **双击收集**（批次 128）：同一格在 400ms 内点第二下 → 把容器里的同类凑满一整堆。
     // ⚠️ 放在最前面：双击的那一下不该再按"普通左键"走一遍（那会先把光标上的东西放下）
     const now = performance.now();
@@ -5186,6 +5198,7 @@ export class InventoryScreen {
       this.selectedStationKey = key;
       binding.element.classList.add('selected');
       this.selectedEl = binding.element;
+      this.showMessage('已选中 · 再点一次放回仓库');
       return;
     }
     // 点了别的格子：熔炉原料/燃料的选中态取消
