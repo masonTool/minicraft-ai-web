@@ -3029,6 +3029,8 @@
         position: relative; align-items: center;
         padding-bottom: 24px;
       }
+      /* 目标框（含"目标"标题）单独一层：藏它时不会把退还按钮一起藏掉 */
+      .brewing-target-wrap { display: flex; flex-direction: column; align-items: center; }
       .brewing-target-col .furnace-return {
         position: absolute; top: auto; right: 0; bottom: 0;
       }

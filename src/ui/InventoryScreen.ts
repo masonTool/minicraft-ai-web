@@ -4238,9 +4238,14 @@ export class InventoryScreen {
       track.appendChild(this.brewProgressEl);
       middle.append(track, this.brewFuelTextEl);
 
+      // ⚠️ 目标框没选中配方时，`renderStationTarget` 会把它的**父元素**藏起来；
+      // 退还按钮不能住在那个父元素里，否则"台子里有东西但没目标"时按钮一起消失。
+      const targetWrap = document.createElement('div');
+      targetWrap.className = 'brewing-target-wrap';
+      targetWrap.append(this.buildLabel('目标'), this.stationTargetEl);
       const targetCol = document.createElement('div');
       targetCol.className = 'brewing-col brewing-target-col';
-      targetCol.append(this.buildLabel('目标'), this.stationTargetEl, this.brewReturnBtn);
+      targetCol.append(targetWrap, this.brewReturnBtn);
 
       this.brewingLayout.replaceChildren(left, middle, targetCol);
       this.topArea.append(this.brewingLayout, this.stationHintEl);

@@ -733,6 +733,8 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes("line('材料', this.brewIngredientSlot)") &&
       invSrc.includes("line('燃料', this.brewFuelSlot)") &&
       invSrc.includes('this.brewingLayout.replaceChildren(left, middle, targetCol)') &&
+      invSrc.includes("targetWrap.className = 'brewing-target-wrap'") &&
+      invSrc.includes('targetCol.append(targetWrap, this.brewReturnBtn)') &&
       css.includes('.brewing-left {') &&
       css.includes('.brewing-target-col {') &&
       /\.brewing-target-col \.furnace-return \{[\s\S]{0,120}position: absolute/.test(css),
