@@ -9577,4 +9577,17 @@
 
 ---
 
+## 批次 342：低频率区域变体 + 繁花森林 / 原始白桦林（2026-10-20）
+
+> 批次 339/340 的结论：窄气候带无论怎么平滑都成不了片。这一批换机制。
+
+- [x] B342-1 `BiomeDef.variantOf` / `regionChance`；变体不进 `LAND_BIOMES`（不参与气候匹配）
+- [x] B342-2 `regionVariantAt(base, x, z)`：64 格粗格整数哈希（确定性），母群系命中后掷点
+- [x] B342-3 繁花森林 = 森林 12%、原始白桦林 = 白桦林 15%（34 种，47%）
+- [x] B342-4 `OverworldGenerator.biomeAt` / `landBiomeAtCell` 都套用同一层
+- [x] B342-5 实测：90k 采样里繁花 164 格 / 原始白桦 142 格；中位斑块 24/26 不变
+- 门禁：test:biome 45、terrain:normal 43、genregistry 72，离线 131 套全绿
+
+---
+
 <!-- docs-archive:end -->

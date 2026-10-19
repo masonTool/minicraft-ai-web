@@ -22,6 +22,7 @@ import { Item, itemDef, maxStackOf } from '../src/core/registry/items.ts';
 import { itemLabel } from '../src/core/registry/itemNames.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
 import { matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { BARTER_TABLE, BARTER_TOTAL_WEIGHT, barterRoll } from '../src/core/items/Barter.ts';
 import { describeMobModel } from '../src/render/MobRenderer.ts';
 import { HOSTILE_MOBS, MOB_TYPES, ZOMBIE_PIGLIN_TYPE, mobTypeById } from '../src/core/entity/mobs.ts';
 import { Mob, provokedBy } from '../src/core/entity/Mob.ts';
@@ -208,6 +209,30 @@ console.log('\n[它带来的那条金子路]');
   const nine = Array.from({ length: 9 }, () => Item.GOLD_NUGGET);
   equal('9 金粒 → 1 金锭', matchRecipe(nine, 3)?.id, Item.GOLD_INGOT);
   equal('1 金锭 → 9 金粒', matchRecipe([Item.GOLD_INGOT], 2)?.count, 9);
+}
+
+// ---------------------------------------------------------------- 5. 以物易物（批次 344）
+
+console.log('\n[猪灵以物易物（批次 344）]');
+{
+  equal('表里有 8 项', BARTER_TABLE.length, 8);
+  check('权重和大于 0', BARTER_TOTAL_WEIGHT > 0);
+  equal('每项数量区间合法', BARTER_TABLE.every((e) => e.min >= 1 && e.max >= e.min), true);
+  equal('每项都有中文名', BARTER_TABLE.every((e) => itemLabel(e.itemId).length > 0), true);
+
+  // 用"落在某一项权重区间中点"的随机值，逐项验证选取边界
+  let prefix = 0;
+  for (const entry of BARTER_TABLE) {
+    const r = (prefix + entry.weight / 2) / BARTER_TOTAL_WEIGHT;
+    equal(`权重落在 ${itemLabel(entry.itemId)} 上`, barterRoll(() => r).itemId, entry.itemId);
+    prefix += entry.weight;
+  }
+  equal('random=0 抽第一项', barterRoll(() => 0).itemId, BARTER_TABLE[0]!.itemId);
+  equal('random=0 取数量下限', barterRoll(() => 0).count, BARTER_TABLE[0]!.min);
+  const lastEntry = BARTER_TABLE[BARTER_TABLE.length - 1]!;
+  equal('random≈1 抽最后一项', barterRoll(() => 0.999999).itemId, lastEntry.itemId);
+  check('random≈1 不越过数量上限', barterRoll(() => 0.999999).count <= lastEntry.max);
+  equal('金锭是交易货币（原版如此）', itemLabel(Item.GOLD_INGOT), '金锭');
 }
 
 console.log(`\n僵尸猪灵测试：${passed} 通过 / ${failed} 失败`);

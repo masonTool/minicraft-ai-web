@@ -505,6 +505,7 @@ import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
 import { SHIELD_KNOCKBACK, canBlockDamage, isFrontalAttack, isShield, shieldWear } from './core/items/Shield.ts';
 import { clockAngleDeg, compassAngleDeg, horizontalDistance } from './core/items/Navigation.ts';
 import { emptyMapData, markExplored } from './core/items/Map.ts';
+import { barterRoll } from './core/items/Barter.ts';
 import { MapScreen } from './ui/MapScreen.ts';
 import { ToolHud } from './ui/ToolHud.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
@@ -5597,6 +5598,9 @@ class App {
     // 村民（J11）：空手也**有交互**（打开交易界面）——所以它必须排在
     // "手上没东西就返回 false"那一条之前
     if (mob instanceof Villager) return this.useOnVillager(mob, held);
+    // 猪灵以物易物（批次 344）：拿金锭点它 = 换一件战利品
+    // （原版是"丢在地上"，触屏上没有"丢到指定位置"的手势，改成点它）
+    if (mob.type.id === 'piglin' && held === Item.GOLD_INGOT) return this.barterWithPiglin(mob);
     // 已驯服的宠物（批次 242）：空手点一下 = 坐下 / 起来（原版就是这个手势）
     // 拴绳（批次 256）：拿绳子点动物 = 拴上 / 解开（绳子不消耗，原版也如此）
     if (held === Item.LEAD) return this.toggleLeash(mob);
@@ -5642,6 +5646,27 @@ class App {
   }
 
   /**
+   * 猪灵以物易物（批次 344）：扣 1 个金锭，按 `Barter` 的表丢回一件战利品。
+   *
+   * ⚠️ 原版要"把金锭丢在它附近"，这里改成"拿金锭点它"——触屏上没有
+   * "把物品丢到指定位置"的手势（见 TASKS J20 的差异注记）。
+   */
+  private barterWithPiglin(mob: Mob): boolean {
+    if (mob.dead || mob.type.id !== 'piglin') return false;
+    if (!this.inventory.consume(Item.GOLD_INGOT, 1)) {
+      this.hudToast.show('需要 1 个金锭才能和猪灵换东西');
+      return false;
+    }
+    const loot = barterRoll();
+    this.hand.swing();
+    this.refreshHotbar();
+    this.spawnDrop(loot.itemId, loot.count, mob.x, mob.y + 0.8, mob.z);
+    this.playMobVoice(mob);
+    this.hudToast.show(`猪灵收下金锭，丢回 ${itemLabel(loot.itemId)} ×${loot.count}`);
+    return true;
+  }
+
+  /**
    * 手上这件东西能不能对这只生物"使用"（批次 242）。
    *
    * 触屏上"点生物"原本一律是攻击（批次 181），于是**拿着骨头点狼也是打它**
@@ -5656,6 +5681,8 @@ class App {
   private canUseItemOnMob(mob: Mob): boolean {
     const held = this.heldItemId;
     if (mob instanceof Villager) return true;
+    // 猪灵（批次 344）：拿金锭点它是"换东西"，不是打它
+    if (mob.type.id === 'piglin' && held === Item.GOLD_INGOT) return true;
     if (mob.tamed && held === undefined) return true;
     if (held === undefined) return false;
     if (mobAcceptsTame(mob.type, held)) return true;
