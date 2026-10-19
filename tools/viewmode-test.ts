@@ -5,7 +5,7 @@
  *  1. 循环顺序：第一人称 → 背后 → 正面 → 第一人称（`V` 键与设置下拉框共用这一份）
  *  2. 相机摆位：第一人称就架在眼睛上；背后 = 沿视线反方向退；正面 = 沿视线方向前移并回头
  *  3. 视角方向的正负号（yaw=0 时视线是 -Z；背后视角必须落在 +Z 侧）
- *  4. 贴墙时的距离裁剪：撞到方块提前停、太近有下限、没撞到就用满距离
+ *  4. 贴墙时的距离裁剪：撞到方块提前停、**绝不越过撞点**、没撞到就用满距离
  *  5. 设置往返：`GameSettings.cameraMode` 的默认值、非法值回退
  *  6. 玩家模型摆姿态：走路摆腿（左右腿反相）、挥手叠加在持手侧、俯仰夹紧、亮度衰减
  *
@@ -17,7 +17,7 @@ import {
   CAMERA_MODE_LABELS,
   CAMERA_MODES,
   CAMERA_CLEARANCE,
-  MIN_CAMERA_DISTANCE,
+  CLOSE_CAMERA_HIDE_PLAYER,
   THIRD_PERSON_DISTANCE,
   cameraPlacement,
   clampedCameraDistance,
@@ -127,11 +127,20 @@ console.log('\n[贴墙时的距离裁剪]');
     close(clampedCameraDistance(10), THIRD_PERSON_DISTANCE),
   );
   check(
-    '贴脸（命中距离 0.1）→ 夹到最近距离，而不是负数',
-    close(clampedCameraDistance(0.1), MIN_CAMERA_DISTANCE),
+    '贴脸（命中距离 0.1）→ 夹到 0，绝不越过撞点（越过就会进墙里透视）',
+    close(clampedCameraDistance(0.1), 0),
     String(clampedCameraDistance(0.1)),
   );
-  check('相机不会越过撞点', clampedCameraDistance(1.5) < 1.5);
+  check(
+    '撞点很近（0.5）→ 停在撞点之前 0.22，而不是被强行推到 0.6',
+    close(clampedCameraDistance(0.5), 0.5 - CAMERA_CLEARANCE),
+    String(clampedCameraDistance(0.5)),
+  );
+  check('相机不会越过撞点', clampedCameraDistance(1.5) < 1.5 && clampedCameraDistance(0.3) < 0.3);
+  check(
+    '相机被墙压到很近时藏玩家模型（阈值 0.9）',
+    CLOSE_CAMERA_HIDE_PLAYER === 0.9 && clampedCameraDistance(0.8) < CLOSE_CAMERA_HIDE_PLAYER,
+  );
 }
 
 // ---------------------------------------------------------------- 4. 设置往返

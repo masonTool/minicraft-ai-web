@@ -24,8 +24,14 @@ export const CAMERA_MODE_LABELS: Record<CameraMode, string> = {
 export const THIRD_PERSON_DISTANCE = 3.8;
 /** 相机与方块之间至少留出的空隙，避免贴脸时把镜头卡进方块里 */
 export const CAMERA_CLEARANCE = 0.22;
-/** 相机被方块顶到时的最近距离（再近就变成"贴着玩家后脑勺"了） */
-export const MIN_CAMERA_DISTANCE = 0.6;
+/**
+ * 相机被墙压到这个距离以内时，镜头基本已经贴到后脑勺：
+ * 玩家模型要藏起来（否则会看到模型的内部），镜头本身继续沿射线靠近眼睛。
+ *
+ * 它**不是**相机距离的下限——下限会把镜头强行推过撞点、推进墙里，
+ * 表现就是"贴着墙时能透视看到墙后的世界"（批次 282 修掉的正是这个）。
+ */
+export const CLOSE_CAMERA_HIDE_PLAYER = 0.9;
 
 export interface Vec3 {
   x: number;
@@ -58,7 +64,10 @@ export function nextCameraMode(mode: CameraMode): CameraMode {
  */
 export function clampedCameraDistance(hitDistance: number | null): number {
   if (hitDistance === null) return THIRD_PERSON_DISTANCE;
-  return Math.max(MIN_CAMERA_DISTANCE, Math.min(THIRD_PERSON_DISTANCE, hitDistance - CAMERA_CLEARANCE));
+  // ⚠️ 这里**不能**再套一个 `Math.max(0.6, …)`：玩家背贴墙时撞点可能只有 0.3，
+  // 强行留 0.6 会把镜头推到撞点**后面**（墙里）。方块的面在相邻实心格之间被剔除，
+  // 从墙里看出去就是"墙皮后面还有一个世界"的透视。宁可镜头贴到眼睛，也不越过撞点。
+  return Math.max(0, Math.min(THIRD_PERSON_DISTANCE, hitDistance - CAMERA_CLEARANCE));
 }
 
 /**

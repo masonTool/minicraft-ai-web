@@ -254,6 +254,7 @@ import {
   CAMERA_MODE_LABELS,
   THIRD_PERSON_DISTANCE,
   CAMERA_CLEARANCE,
+  CLOSE_CAMERA_HIDE_PLAYER,
   cameraPlacement,
   clampedCameraDistance,
   nextCameraMode,
@@ -3736,8 +3737,11 @@ class App {
     this.camera.rotation.set(placement.pitch, placement.yaw, 0);
 
     const thirdPerson = this.cameraMode !== 'first';
-    // 隐身（K4 尾巴）：第三人称看不到自己；第一人称的手仍然照画（原版也是这样）
-    this.playerRenderer.setVisible(thirdPerson && !this.effects.invisible);
+    // 贴墙时相机会被压到离眼睛很近（可能为 0）：这时玩家模型会挡在镜头里/穿进头部，
+    // 藏掉它。隐身（K4 尾巴）同理——第三人称看不到自己；第一人称的手仍然照画。
+    // 注意 `distance` 是**裁剪后**的真实距离，不是固定的 3.8。
+    const closeCamera = thirdPerson && distance < CLOSE_CAMERA_HIDE_PLAYER;
+    this.playerRenderer.setVisible(thirdPerson && !closeCamera && !this.effects.invisible);
     this.hand.setVisible(!thirdPerson);
     // 盔甲：第三人称画甲片、第一人称只画胸甲袖套，但取色是同一份
     this.applyArmorAppearance();
