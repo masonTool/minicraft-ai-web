@@ -2630,4 +2630,6 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 
 - 批次 361（规则）：**announceAdvancements / sendCommandFeedback**（规则 14 → 16）。
 
+- 批次 362（D20 第六批）：**砾石丘陵 + 侵蚀恶地**（群系 42 → 44，61%）。
+
 <!-- docs-archive:end -->

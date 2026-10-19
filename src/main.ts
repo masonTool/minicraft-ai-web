@@ -9002,6 +9002,13 @@ class App {
         this.refreshWorld(toChunkCoord(x), toChunkCoord(z), true);
         return true;
       },
+      // 批次 368：/spawnpoint 与 /setworldspawn
+      setPersonalSpawn: (x, y, z) => {
+        this.bedSpawn = { x, y, z, dimension: this.dimension as DimensionId };
+      },
+      setWorldSpawn: (x, y, z) => {
+        this.spawnPoint = [x, y, z];
+      },
       give: (name, count) => {
         const id = resolveItemId(name);
         if (id === undefined) return -1;

@@ -41,6 +41,10 @@ export interface CommandContext {
   playerName(): string;
   position(): { x: number; y: number; z: number; dimension: string };
   teleport(x: number, y: number, z: number, dimension?: string): boolean;
+  /** 设置个人重生点（`/spawnpoint`，批次 368） */
+  setPersonalSpawn(x: number, y: number, z: number): void;
+  /** 设置世界出生点（`/setworldspawn`，批次 368） */
+  setWorldSpawn(x: number, y: number, z: number): void;
   /** 成功返回实际给出的数量，物品名不认识返回 -1 */
   give(itemName: string, count: number): number;
   clearInventory(): number;
@@ -456,6 +460,34 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       out.info(`已放置 ${translateName(name)} 于 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
+    },
+  },
+  {
+    name: 'spawnpoint',
+    usage: '/spawnpoint [x y z]',
+    description: '设置个人重生点（不带坐标 = 当前位置）',
+    run(args, ctx, out) {
+      const pos = args.length >= 3 ? parsePosition(args.slice(0, 3), ctx.position()) : ctx.position();
+      if (!pos) {
+        out.error('用法：/spawnpoint [x y z]');
+        return;
+      }
+      ctx.setPersonalSpawn(pos.x, pos.y, pos.z);
+      out.info(`已将重生点设置为 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
+    },
+  },
+  {
+    name: 'setworldspawn',
+    usage: '/setworldspawn [x y z]',
+    description: '设置世界出生点（不带坐标 = 当前位置）',
+    run(args, ctx, out) {
+      const pos = args.length >= 3 ? parsePosition(args.slice(0, 3), ctx.position()) : ctx.position();
+      if (!pos) {
+        out.error('用法：/setworldspawn [x y z]');
+        return;
+      }
+      ctx.setWorldSpawn(pos.x, pos.y, pos.z);
+      out.info(`已将世界出生点设置为 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
     },
   },
   {

@@ -73,15 +73,6 @@
 
 ---
 
-## 批次 365：K6 分物种刷怪笼（2026-10-20）
-
-- [x] B365-1 三个 itemless 方块：僵尸 / 洞穴蜘蛛 / 蠹虫刷怪笼（id 595~597，同贴图）
-- [x] B365-2 地牢中央放僵尸笼、矿井尽头放洞穴蜘蛛笼、要塞图书馆放蠹虫笼
-- [x] B365-3 主线程区块扫描从"只扫下界"放宽到主世界，判据改用 `spawnerDefFor`
-- [x] B365-4 生成来源登记四种笼子；中文名与 fortress 断言同步
-- [x] B365-5 test:fortress 100、genregistry 83、recipebook 144，离线 131 套全绿
-- 覆盖：方块 592 → 595（85%）
-
 ## 批次 366：D20 第八批——破碎热带草原（2026-10-20）
 
 - [x] B366-1 `windswept_savanna`：热带草原的最陡侵蚀档（比高原更窄才赢）
@@ -96,3 +87,10 @@
 - [x] B367-3 贴图/中文名/硬度/生成来源全部接上
 - [x] B367-4 离线 131 套全绿
 - 覆盖：方块 **595 → 597（85%）**
+
+## 批次 368：命令补 2 条——/spawnpoint 与 /setworldspawn（2026-10-20）
+
+- [x] B368-1 `CommandContext` 新增 `setPersonalSpawn` / `setWorldSpawn`
+- [x] B368-2 `/spawnpoint [x y z]`（个人重生点）/ `/setworldspawn [x y z]`（世界出生点）
+- [x] B368-3 主程序接到 `bedSpawn` 与 `spawnPoint`；`test:commands` 107 条
+- 覆盖：命令 **18 → 20（45% → 50%）**

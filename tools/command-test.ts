@@ -102,6 +102,14 @@ class FakeWorld implements CommandContext {
     this.pos = { x, y, z, dimension: dimension ?? this.pos.dimension };
     return true;
   }
+  personalSpawn: { x: number; y: number; z: number } | null = null;
+  worldSpawn: { x: number; y: number; z: number } | null = null;
+  setPersonalSpawn(x: number, y: number, z: number): void {
+    this.personalSpawn = { x, y, z };
+  }
+  setWorldSpawn(x: number, y: number, z: number): void {
+    this.worldSpawn = { x, y, z };
+  }
   give(_itemName: string, _count: number): number {
     throw new Error('give 应该由测试覆盖');
   }
@@ -495,6 +503,17 @@ console.log('\n[/xp 命令]');
   const unknown = run('/xp nope', world);
   check('未知子命令给出用法', unknown.out.lastError.includes('用法'), unknown.out.lastError);
   check('失败时等级没被改动', world.experience.level === 30, String(world.experience.level));
+}
+
+console.log('\n[批次 368：/spawnpoint 与 /setworldspawn]');
+{
+  const world = new FakeWorld();
+  const out = new Recorder();
+  executeCommand('/spawnpoint', world, out);
+  check('不带坐标 → 设在玩家当前位置', world.personalSpawn?.x === 10.5 && world.personalSpawn?.z === -3.5, JSON.stringify(world.personalSpawn));
+  executeCommand('/setworldspawn 1 70 2', world, out);
+  check('带坐标 → 设在世界出生点', world.worldSpawn?.x === 1 && world.worldSpawn?.y === 70 && world.worldSpawn?.z === 2, JSON.stringify(world.worldSpawn));
+  check('两条命令都有成功反馈', out.infos.length >= 2, `${out.infos.length}`);
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);

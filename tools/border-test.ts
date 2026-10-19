@@ -131,6 +131,8 @@ console.log('\n[/worldborder：get / set / center]');
     teleport(): boolean {
       return true;
     }
+    setPersonalSpawn(): void {}
+    setWorldSpawn(): void {}
     give(): number {
       return 0;
     }
