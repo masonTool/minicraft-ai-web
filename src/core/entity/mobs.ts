@@ -584,6 +584,35 @@ export const PIGLIN_TYPE: MobType = {
 };
 
 /**
+ * 猪灵蛮兵（批次 344，J20 第三只）。
+ *
+ * 与猪灵的区别：**不中立**（见到就打）、50 血、伤害 7，不掉金锭。
+ * 原版它守在堡垒遗迹里；本项目没有"堡垒遗迹专属刷怪"通道，所以
+ * `naturalSpawn: false`，只能靠刷怪蛋/命令出现（与蝙蝠同一条诚实取舍）。
+ */
+export const PIGLIN_BRUTE_TYPE: MobType = {
+  id: 'piglin_brute',
+  name: '猪灵蛮兵',
+  health: 50,
+  width: 0.6,
+  height: 1.95,
+  speed: 1.8,
+  hostile: true,
+  attackDamage: 7,
+  followRange: 24,
+  drops: [
+    { itemId: Item.GOLD_NUGGET, min: 0, max: 1 },
+    { itemId: Item.GOLD_INGOT, min: 1, max: 1, chance: 0.025 },
+  ],
+  xp: 5,
+  naturalSpawn: false,
+  dimension: 'nether',
+  bodyColor: 0xc98a6a,
+  accentColor: 0x6a3a24,
+  eyeHeight: 1.74,
+};
+
+/**
  * 疣猪兽（批次 344，J20 第二只）。
  *
  * 下界的"野猪"：40 血、伤害 6、跑得快；掉落生猪排与皮革。
@@ -1291,6 +1320,7 @@ export const MOB_TYPES: readonly MobType[] = [
   ZOMBIE_PIGLIN_TYPE,
   // 猪灵 / 疣猪兽（批次 344）：下界生态的第一批
   PIGLIN_TYPE,
+  PIGLIN_BRUTE_TYPE,
   HOGLIN_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,

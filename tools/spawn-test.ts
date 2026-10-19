@@ -389,6 +389,7 @@ console.log('\n[维度与空腔（批次 94）]');
           id === 'magma_cube_big' ||
           id === 'zombie_piglin' ||
           id === 'piglin' ||
+          id === 'piglin_brute' ||
           id === 'hoglin',
       ),
     netherKinds.join(','),

@@ -1041,6 +1041,7 @@ export const TILE_ORDER = [
   // 下界生态（批次 344）：猪灵 / 疣猪兽
   'spawn_egg_piglin',
   'spawn_egg_hoglin',
+  'spawn_egg_piglin_brute',
   // 霜冰（批次 263，冰霜行者踩出来的）
   'frosted_ice',
   // 弩（批次 265）

@@ -449,6 +449,7 @@ const VOICE_BY_ID: Readonly<Record<string, MobVoiceId>> = {
   // 批次 344：猪灵复用同一套"猪人"档案；疣猪兽暂时也借它（本项目没有猪叫档案）
   piglin: 'piglin',
   hoglin: 'piglin',
+  piglin_brute: 'piglin',
   skeleton: 'skeleton',
   stray: 'skeleton',
   wither_skeleton: 'wither_skeleton',

@@ -9590,4 +9590,19 @@
 
 ---
 
+## 批次 343：M7 进度补 14 条（2026-10-20）
+
+> 框架早就是"加一行数据"（10 种触发条件），这一批只补**触发源已经存在**的条目。
+
+- [x] B343-1 story：`mine_wood`（木料表派生，不手抄 6 个 log id）、`mine_gold`
+- [x] B343-2 nether：`obtain_blaze_rod`、`find_fortress`（下界疣）、`create_beacon`
+- [x] B343-3 adventure：四种怪物单杀、`kill_all_mobs`（挑战，按敌对表派生）、
+  `place_sign`、`lightning_rod`
+- [x] B343-4 husbandry：`breed_all`（挑战，4 种家畜）；end：`kill_enderman`
+- [x] B343-5 两处口径修正：place 类只用于种植（告示牌改走 obtain）；
+  岩浆桶没有可达来源，**不做**（不编假条目）
+- 门禁：test:advancement 116，离线 131 套全绿；进度 **26 → 40（40%）**
+
+---
+
 <!-- docs-archive:end -->
