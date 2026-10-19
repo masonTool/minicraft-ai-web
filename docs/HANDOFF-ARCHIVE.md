@@ -2704,4 +2704,12 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
 
 - 批次 398（D20）：**河流 + 冻河**（群系 48 → 50，69%）；按内陆浅水判，不做地形雕刻。
 
+- 批次 399（命令）：**目标选择器 + `/execute`**（命令 27 → 28，70%）。
+  `core/commands/Selectors.ts` 是纯逻辑（`@p/@s/@a/@e/@r` + type/name/distance/limit/sort）；
+  `/execute` 支持 `as/at/positioned/if|unless block|entity/run` 的任意链式叠加，
+  **先整条解析再执行**、条件不满足静默、嵌套上限 8 层；
+  新增 `test:execute` **65 条**（离线 132 套全绿）。
+  ⚠️ 没有 `scores=`/`team=`/`tag=`（依赖 M23 记分板）与 `x=/dx=` 方框选择；
+  `@e` 只覆盖生物（掉落物/箭/矿车还没有"选择器种类"映射）。
+
 <!-- docs-archive:end -->

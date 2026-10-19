@@ -10122,4 +10122,19 @@
 - ⚠️ 剩下 6 个（末地 5 + `the_void`）是标注型群系，只影响雾色/刷怪表，**没做也不是缺口**
 - ⚠️ 这一批**没有**发明"恶地/山地/草原小变体"——原版没有的群系不该为凑数而加
 
+## 批次 402：M23 记分板第一批（2026-10-20）
+
+- [x] B402-1 `core/world/Scoreboard.ts`（纯类）：目标（`dummy`）、分数（32 位夹取）、
+      显示槽位（sidebar/list/below_name）、`snapshot()`/`restore()`（读档逐条校验并返回跳过数）
+- [x] B402-2 `/scoreboard objectives add|remove|list|setdisplay` +
+      `players set|add|remove|get|list|reset`；持有人可写选择器（`@p`/`@e[...]` 展开成名字）
+- [x] B402-3 `/execute if|unless score <目标> <目标名> <运算符> <值>`（6 种运算符）
+- [x] B402-4 ⚠️ 坑：`addObjective` 必须**同时建出分数表**，否则"目标建好了但一分写不进去"
+      （setScore 靠"这张表在不在"判断目标是否存在）
+- [x] B402-5 ⚠️ 坑：目标名可以是 alnum，**持有人名必须是"非空、≤16、无空白"**——
+      用目标名那套正则判持有人会把中文昵称（"玩家"）全判非法，读档后整张表为空
+- [x] B402-6 `command-test` +24 条（144 通过）、`execute-test` +4 条（69 通过）
+- 覆盖：命令 **28 → 29（70% → 73%）**；条目 186 / 77 / 24（M23 转 `[~]`）
+- ⚠️ 还没做：存档仓、侧边栏 HUD、队伍
+
 <!-- docs-archive:end -->
