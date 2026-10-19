@@ -3278,6 +3278,26 @@ const SPECS: readonly BlockSpec[] = [
   ...GLAZED_TERRACOTTA_SPECS,
   ...BANNER_SPECS,
 
+  // 繁茂洞穴植物（批次 397）：小型 / 大型垂滴叶
+  {
+    id: 665,
+    name: 'minecraft:small_dripleaf',
+    tiles: ['small_dripleaf', 'small_dripleaf', 'small_dripleaf'] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 666,
+    name: 'minecraft:big_dripleaf',
+    tiles: ['big_dripleaf', 'big_dripleaf', 'big_dripleaf'] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+
   // 缠根泥土（批次 395）：洞穴顶部的泥土变体
   {
     id: 664,
@@ -3861,6 +3881,8 @@ export const Block = {
   SPORE_BLOSSOM: 662,
   HANGING_ROOTS: 663,
   ROOTED_DIRT: 664,
+  SMALL_DRIPLEAF: 665,
+  BIG_DRIPLEAF: 666,
   /** 16 色蜡烛从 608 起，顺序与 DYE_COLORS 一致 */
   CANDLE_ID_START: 608,
   /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
@@ -4213,6 +4235,8 @@ HARDNESS.set(Block.DRIPSTONE_BLOCK, 1.5);
 HARDNESS.set(Block.SPORE_BLOSSOM, 0.2);
 HARDNESS.set(Block.HANGING_ROOTS, 0.2);
 HARDNESS.set(Block.ROOTED_DIRT, 0.5);
+HARDNESS.set(Block.SMALL_DRIPLEAF, 0.2);
+HARDNESS.set(Block.BIG_DRIPLEAF, 0.2);
 for (let i = 0; i < 16; i++) HARDNESS.set(608 + i, 0.1);
 HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);

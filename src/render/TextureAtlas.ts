@@ -6276,3 +6276,7 @@ PAINTERS['hanging_roots'] = noisy(0x8a6a4a, 12);
 
 // 缠根泥土（批次 395）
 PAINTERS['rooted_dirt'] = noisy(0x8a6a4a, 14);
+
+// 垂滴叶（批次 397）
+PAINTERS['small_dripleaf'] = noisy(0x5a8a4a, 14);
+PAINTERS['big_dripleaf'] = noisy(0x4a7a3a, 16);

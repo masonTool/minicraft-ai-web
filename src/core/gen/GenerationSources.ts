@@ -393,6 +393,12 @@ export const GENERATION_SOURCES: readonly GenSource[] = [
       Block.SPORE_BLOSSOM,
       Block.HANGING_ROOTS,
       Block.ROOTED_DIRT,
+      Block.MOSS_BLOCK,
+      Block.MOSS_CARPET,
+      Block.AZALEA,
+      Block.FLOWERING_AZALEA,
+      Block.SMALL_DRIPLEAF,
+      Block.BIG_DRIPLEAF,
     ],
   },
   {

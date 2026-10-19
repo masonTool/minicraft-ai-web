@@ -754,6 +754,18 @@ export class OverworldGenerator {
           h = (h ^ (h >>> 16)) >>> 0;
           const cave = caveBiomeAt(originX + x, y, originZ + z);
           const lush = cave?.id === Biome.LUSH_CAVES;
+          if (lush && stoneLike(below) && h % 7 === 0) {
+            // 繁茂洞穴（批次 397）：把石头地面换成苔藓，再按哈希长植物
+            blocks[Chunk.index(x, y - 1, z)] = Block.MOSS_BLOCK;
+            if (h % 3 === 0) blocks[index] = Block.GLOW_BERRIES;
+            else if (h % 5 === 0) blocks[index] = Block.AZALEA;
+            else if (h % 11 === 0) blocks[index] = Block.FLOWERING_AZALEA;
+            else if (h % 17 === 0) blocks[index] = Block.SMALL_DRIPLEAF;
+            else if (h % 23 === 0) blocks[index] = Block.BIG_DRIPLEAF;
+            else if (h % 13 === 0) blocks[index] = Block.MOSS_CARPET;
+            else if (h % 29 === 0) blocks[index] = Block.GLOW_LICHEN;
+            continue;
+          }
           if (stoneLike(below)) {
             // 繁茂洞穴：地衣/浆果；滴水石洞：少量地衣
             if (h % (lush ? 317 : 1103) === 0) blocks[index] = Block.GLOW_BERRIES;

@@ -508,6 +508,8 @@ const EXPLICIT: Record<string, string> = {
   spore_blossom: '孢子花',
   hanging_roots: '垂根',
   rooted_dirt: '缠根泥土',
+  small_dripleaf: '小型垂滴叶',
+  big_dripleaf: '大型垂滴叶',
   white_banner: '白色旗帜',
   orange_banner: '橙色旗帜',
   magenta_banner: '品红色旗帜',
