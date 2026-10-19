@@ -169,6 +169,7 @@ import {
   type TickWorld,
 } from './core/tick/RandomTicks.ts';
 import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts';
+import { FLUID_TICKS_PER_TICK, isWithinFluidSim } from './core/world/FluidSimWindow.ts';
 import { scrapeResult } from './core/world/Copper.ts';
 import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
@@ -449,6 +450,7 @@ import { hardenAround } from './core/world/Concrete.ts';
 // 移动端降级策略（批次 130，TASKS N7）：动态分辨率 / 自适应视距 / 限帧 / 粒子总量。
 // 策略本身是**纯函数**（`test:perfpolicy` 逐条钉住），这里只负责把结果落到渲染器与粒子上
 import {
+  CPU_BOUND_RATIO,
   DESKTOP_PIXEL_RATIO_CAP,
   MOBILE_INITIAL_RESOLUTION,
   MOBILE_PIXEL_RATIO_CAP,
@@ -943,6 +945,17 @@ class App {
   private randomTickChanges = 0;
   /** 流体流动改动的累计次数（验收用） */
   private fluidChanges = 0;
+  /** 因为"玩家不在附近"被冻结的流体刻数（批次 283，诊断用） */
+  private fluidTicksFar = 0;
+  /** 因为"本 tick 预算用尽"被推迟一格的流体刻数（批次 283，诊断用） */
+  private fluidTicksDeferred = 0;
+  /**
+   * 上一份 5 秒采样里"是不是卡在 CPU"（批次 283）。
+   *
+   * 判据见 `CPU_BOUND_RATIO`：`cpu 段 / 帧时间 ≥ 0.7`。策略用它来决定
+   * "要不要降分辨率"——CPU 卡的时候降了也白降，只会把近处糊掉。
+   */
+  private cpuBound = false;
   /** 爆炸炸掉的方块数（验收用） */
   private explosionBlocks = 0;
   /** 状态效果 HUD（右上角）与它的内容签名（内容没变就不重建 DOM） */
@@ -1413,7 +1426,15 @@ class App {
    * `rt` / `fluid` 是已经能分开统计的两路来源；
    * 若 `writes` 明显大于 `rt + fluid`，剩下的就只可能在红石 / 降雪 / 玩家 / 联机那几条路上。
    */
-  private lastWriteStats = { writes: 0, noop: 0, rt: 0, fluid: 0 };
+  private lastWriteStats = {
+    writes: 0,
+    noop: 0,
+    lightSkipped: 0,
+    rt: 0,
+    fluid: 0,
+    fluidFar: 0,
+    fluidDeferred: 0,
+  };
   /** 手机背板画到 1.5 而不是 2：填充率大约少一半，自适应仍可在这顶下面升降 */
   private readonly pixelRatioCap = isTouchDevice() ? MOBILE_PIXEL_RATIO_CAP : DESKTOP_PIXEL_RATIO_CAP;
   /** 调试用：把帧时间固定成这个值（毫秒），0 表示用真实值。验收脚本靠它稳定复现"掉帧" */
@@ -8922,7 +8943,29 @@ class App {
    */
   private tickWorldBlocks(dt: number): void {
     // 1) 计划刻：流体等延迟处理
-    for (const pos of this.scheduler.advance()) this.runScheduledTick(pos);
+    //
+    // 两条限制（批次 283，见 `FluidSimWindow`）：
+    //  - **模拟窗口**：玩家周围 7×7 区块之外的水保持静止（原地丢弃这次刻）。
+    //    以前加载范围就是模拟范围，视距 6 时有 169 个区块的水在 20Hz 推进，
+    //    真机上占掉 95% 的方块写入与整份光照预算；
+    //  - **每 tick 上限**：`advance()` 会把所有到期任务一次交出（容量 4096），
+    //    一 tick 上千个流体刻就是一个 26ms 长帧；超出的推迟一格。
+    const px = this.physics.x;
+    const pz = this.physics.z;
+    let ran = 0;
+    for (const pos of this.scheduler.advance()) {
+      if (!isWithinFluidSim(px, pz, pos.x, pos.z)) {
+        this.fluidTicksFar++;
+        continue;
+      }
+      if (ran >= FLUID_TICKS_PER_TICK) {
+        this.scheduler.schedule(pos.x, pos.y, pos.z, pos.dimension, 1);
+        this.fluidTicksDeferred++;
+        continue;
+      }
+      this.runScheduledTick(pos);
+      ran++;
+    }
 
     // 2) 随机刻：数量由游戏规则 randomTickSpeed 控制（0 = 关闭）
     const speed = this.rules.randomTickSpeed;
@@ -11793,13 +11836,20 @@ class App {
     const mobile = isTouchDevice();
     // 视距上限：手机另有一个更小的上限（屏幕小，不需要展示那么远），见 `viewDistanceCapFor`
     const cap = viewDistanceCapFor(this.settings.viewDistance, mobile);
-    const { state, action } = perfPolicyStep(before, frameSeconds, frameTime, {
-      adaptiveResolution: this.settings.adaptiveResolution,
-      adaptiveViewDistance: this.settings.adaptiveViewDistance,
-      viewDistanceCap: cap,
-      // 分辨率是最后手段：手机只降到 0.75，桌面才允许到 0.5
-      resolutionFloor: mobile ? MOBILE_RESOLUTION_MIN : RESOLUTION_MIN,
-    });
+    const { state, action } = perfPolicyStep(
+      before,
+      frameSeconds,
+      frameTime,
+      {
+        adaptiveResolution: this.settings.adaptiveResolution,
+        adaptiveViewDistance: this.settings.adaptiveViewDistance,
+        viewDistanceCap: cap,
+        // 分辨率是最后手段：手机只降到 0.75，桌面才允许到 0.5
+        resolutionFloor: mobile ? MOBILE_RESOLUTION_MIN : RESOLUTION_MIN,
+      },
+      // CPU 卡的时候降分辨率没有意义（见 `CPU_BOUND_RATIO`）
+      this.cpuBound,
+    );
     this.perf = state;
     if (action === null) return;
 
@@ -11933,27 +11983,47 @@ class App {
     const frameAvgMs = frames > 0 ? Math.round((this.sampleMs / frames) * 10) / 10 : 0;
     this.sampleFrames = 0;
     this.sampleMs = 0;
+
+    // CPU-bound 判据（批次 283）：喂给降档策略，决定"还能不能动分辨率"
+    const cpuBound = frameAvgMs > 0 && phases.total >= frameAvgMs * CPU_BOUND_RATIO;
+    this.cpuBound = cpuBound;
+
+    /**
+     * 5 秒窗口内的增量。**这几项以前只在光照积压（pending > 2 万）时才记**
+     * （批次 283 修）：真机日志里前两分钟完全是盲区，而"流体在疯狂改方块"
+     * 恰恰是从第一分钟就开始了——越早看到越容易定位。
+     */
+    const writes = this.world.blockWriteCount;
+    const noop = this.world.noopWriteCount;
+    const lightSkipped = this.world.lightSkippedWrites;
+    const rt = this.randomTickChanges;
+    const fluid = this.fluidChanges;
+    const fluidFar = this.fluidTicksFar;
+    const fluidDeferred = this.fluidTicksDeferred;
+    const prev = this.lastWriteStats;
+
     diag.event('perf', 'sample', {
       ...this.perfSnapshot(),
       frameAvgMs,
       cpu: phases.total,
+      cpuBound,
       phases: phases.avg,
+      writes: writes - prev.writes,
+      noop: noop - prev.noop,
+      lightSkipped: lightSkipped - prev.lightSkipped,
+      fluid: fluid - prev.fluid,
+      rt: rt - prev.rt,
+      fluidFar: fluidFar - prev.fluidFar,
+      fluidDeferred: fluidDeferred - prev.fluidDeferred,
     });
 
-    // 光照队列积压时记一条"谁在灌"（批次 217 / 231）。
+    // 光照队列积压时再记一条"谁在灌"（批次 217 / 231）。
     // 2026-10-18 那份真机日志里队列涨到 308 万格、`readded` 每 5 秒 50 万格，
     // 但"到底谁在改方块"只能反推（按 `change` 折算约 1300 次/秒）。
     // 所以这里把**来源 + 真实写入次数**一起记下来：
     //  - `spread`：`spread()` 自己再扩散压进去的（以前完全没统计，正是"越治越多"那一段）；
-    //  - `dropped` / `overflow`：上限已经在丢任务 / 移除 BFS 已经超步数（光照会暂时不准）；
-    //  - `writes`：`setBlockAndUpdate + setStateAndUpdate` 的真实调用数；
-    //  - `noop`：其中"写了同一个值"的次数——它高就说明有子系统在拿写方块当心跳；
-    //  - `rt` / `fluid`：随机刻与流体各改了多少（这两个计数器本来就有，只是一直没进日志）。
+    //  - `dropped` / `overflow`：上限已经在丢任务 / 移除 BFS 已经超步数（光照会暂时不准）。
     const pending = this.world.lightWorkCount;
-    const writes = this.world.blockWriteCount;
-    const noop = this.world.noopWriteCount;
-    const rt = this.randomTickChanges;
-    const fluid = this.fluidChanges;
     if (pending > 20_000) {
       const now = this.world.lightPushStats;
       diag.event('perf', 'light', {
@@ -11965,14 +12035,14 @@ class App {
         spread: now.spread - this.lastLightStats.spread,
         dropped: now.dropped - this.lastLightStats.dropped,
         overflow: now.overflow - this.lastLightStats.overflow,
-        writes: writes - this.lastWriteStats.writes,
-        noop: noop - this.lastWriteStats.noop,
-        rt: rt - this.lastWriteStats.rt,
-        fluid: fluid - this.lastWriteStats.fluid,
+        writes: writes - prev.writes,
+        noop: noop - prev.noop,
+        rt: rt - prev.rt,
+        fluid: fluid - prev.fluid,
       });
     }
     this.lastLightStats = { ...this.world.lightPushStats };
-    this.lastWriteStats = { writes, noop, rt, fluid };
+    this.lastWriteStats = { writes, noop, lightSkipped, rt, fluid, fluidFar, fluidDeferred };
   }
 
   /**

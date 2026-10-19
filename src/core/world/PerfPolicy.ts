@@ -109,6 +109,19 @@ export const VIEW_DISTANCE_MIN = 4;
  */
 export const MOBILE_RESOLUTION_MIN = 0.75;
 
+/**
+ * CPU 段占总帧时间的比例超过它，就认为"这一帧卡在 CPU"（批次 283）。
+ *
+ * 判据来自 `FramePhaseMeter`：`cpu ≈ frameMs` 是 CPU 卡（光照/网格/实体），
+ * `cpu ≪ frameMs` 是 GPU/合成卡。两者的修法**相反**：
+ *  - CPU 卡：降分辨率毫无帮助（它只省填充率），只会把近处糊掉；
+ *  - GPU 卡：降分辨率才是有用的那一步。
+ *
+ * 真机日志（792×360 / Adreno 829）里 `cpu` 16~18ms、帧间距 21~22ms → 占比 0.8，
+ * 而策略当时已经把分辨率从 1.0 降到 0.75，帧时间**一点没变**（21.9 → 22.7 → 21.3）。
+ */
+export const CPU_BOUND_RATIO = 0.7;
+
 /** 帧时间超过它就算"卡"（毫秒，约 45fps）→ 降档 */
 export const FRAME_TIME_DROP = 22;
 /** 帧时间低于它就算"有余量"（约 59fps）→ 升档 */
@@ -306,12 +319,15 @@ export function effectivePixelRatio(
  * @param dt 秒
  * @param frameTimeMs 这一帧的真实耗时（毫秒）。`main.simulateFrameTime` 会把
  *        它固定成一个高值，用来在浏览器里复现"掉帧"
+ * @param cpuBound 是否"卡在 CPU"（`cpu 段 / 帧时间 ≥ CPU_BOUND_RATIO`）。
+ *        默认 false = 按老规矩办（GPU 卡的可能性更大），这样老测试与老行为不变。
  */
 export function perfPolicyStep(
   state: PerfState,
   dt: number,
   frameTimeMs: number,
   tuning: PerfTuning,
+  cpuBound = false,
 ): { state: PerfState; action: PerfAction } {
   const frameTimeAvg = state.frameTimeAvg + (frameTimeMs - state.frameTimeAvg) * FRAME_TIME_SMOOTHING;
   const cooldown = Math.max(0, state.cooldown - dt);
@@ -346,6 +362,11 @@ export function perfPolicyStep(
       return { state: next, action: 'decor-down' };
     }
     if (tuning.adaptiveResolution && next.resolutionScale > floor) {
+      // CPU 卡的时候降分辨率**没用**（批次 283）：它只省填充率，不减光照/网格/实体。
+      // 真机日志就是这么糊掉的：视距到 4、装饰到 2 之后又连降三档，
+      // 帧时间 21.9 → 22.7 → 21.3 —— 一点没变，近处却只剩 25% 像素。
+      // 这里就停手：宁可保持在 0.75 以上清楚，也不再为"无效的降档"付画质。
+      if (cpuBound) return { state: next, action: null };
       // ⚠️ 顺序是"先取整、再夹地板"，不能反过来：
       // `round1(Math.max(floor, ...))` 会把 0.75 再喂给 `round1`，而 `Math.round(7.5)` = 8
       // ——于是最后一档永远落不到 0.75，表现为"每 3 秒降一次、画面却不再变化"。
@@ -358,13 +379,19 @@ export function perfPolicyStep(
   }
 
   // ---- 升档：**严格倒着来**——先把分辨率还满（近处清晰优先），最后才放视距
-  if (hasRoom) {
+  //
+  // CPU-bound 时分辨率**不吃 CPU**（它只影响填充率），所以即便帧时间还没降到
+  // `FRAME_TIME_RAISE` 以下，也可以把它还回去：这是"糊着还卡"唯一的出口。
+  const canRestoreResolution = hasRoom || (cpuBound && frameTimeAvg <= FRAME_TIME_DROP);
+  if (canRestoreResolution) {
     if (tuning.adaptiveResolution && next.resolutionScale < RESOLUTION_MAX) {
       // 与降档同一条规矩：先取整、再夹上限（见降档那一处的说明）
       next.resolutionScale = Math.min(RESOLUTION_MAX, round1(next.resolutionScale + RESOLUTION_STEP));
       next.cooldown = RESOLUTION_RAISE_COOLDOWN;
       return { state: next, action: 'resolution-up' };
     }
+  }
+  if (hasRoom) {
     // 倒着来的第二顺位：把装饰层还回来（云与粒子回来了，近处观感才算完整）。
     // 门控与降档那侧同一个（见上面的说明）
     if (tuning.adaptiveViewDistance && next.decorLevel > 0) {

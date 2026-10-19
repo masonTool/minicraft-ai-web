@@ -38,7 +38,8 @@ import {
   wakeFluidNeighbours,
   type FluidWorld,
 } from '../src/core/world/Fluids.ts';
-import { Chunk } from '../src/core/world/Chunk.ts';
+import { FLUID_SIM_RADIUS_CHUNKS, FLUID_TICKS_PER_TICK, isWithinFluidSim } from '../src/core/world/FluidSimWindow.ts';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 let failed = 0;
@@ -592,6 +593,26 @@ console.log('\n[甜浆果丛与可可豆的生长（批次 49）]');
     check(`朝向 ${facing} 能找到自己贴着的原木`, cocoaBehavior(w, 0, 64, 0, pass));
     equal(`朝向 ${facing} 长到了第 1 阶段`, w.getBlock(0, 64, 0), Block.COCOA_STAGE1);
   }
+}
+
+console.log('\n[流体模拟窗口（批次 283）]');
+{
+  // 真机日志：加载范围被当成了模拟范围（视距 6 时 169 个区块的水都在 20Hz 推进），
+  // 流体占掉 95% 的方块写入与整份光照预算。这里把"窗口内才推进"写成纯函数。
+  check('玩家所在区块一定在窗口内', isWithinFluidSim(0.5, 0.5, 0, 0));
+  check('半径 3 个区块（7×7）内仍在窗口内', isWithinFluidSim(0.5, 0.5, 3 * 16 + 8, -3 * 16 + 8));
+  check('第 4 个区块外就不在窗口内', !isWithinFluidSim(0.5, 0.5, 4 * 16 + 1, 0));
+  check('负数坐标按区间对齐（-64 在第 3 个区块内）', isWithinFluidSim(-0.5, -0.5, -64, -64));
+  check('负数坐标按区间对齐（-65 在第 4 个区块外）', !isWithinFluidSim(-0.5, -0.5, -65, -65));
+  check('竖直方向不限（洞穴里的水也要算）', isWithinFluidSim(0.5, 0.5, 1, 1));
+  check('窗口半径与随机刻一致（都是 3 个区块）', FLUID_SIM_RADIUS_CHUNKS === 3);
+  check('每 tick 流体刻上限是 256（20Hz → 5120 刻/秒，高于观测值）', FLUID_TICKS_PER_TICK === 256);
+
+  // 接线：主循环必须真的用了这两个旋钮（漏一处就等于没做）
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('主循环按窗口过滤流体刻', mainSrc.includes('isWithinFluidSim(px, pz, pos.x, pos.z)'));
+  check('主循环有每 tick 上限并推迟而不是丢弃', mainSrc.includes('this.scheduler.schedule(pos.x, pos.y, pos.z, pos.dimension, 1)'));
+  check('被冻结/被推迟的刻都有计数（诊断）', mainSrc.includes('this.fluidTicksFar++') && mainSrc.includes('this.fluidTicksDeferred++'));
 }
 
 console.log(`\nTick 测试：${passed} 通过 / ${failed} 失败`);

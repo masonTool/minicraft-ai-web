@@ -556,5 +556,78 @@ console.log('\n[视野封顶]');
   equal('超大的值被夹到上限', clampFovFor(999, false), FOV_MAX);
 }
 
+// ---------------------------------------------------------------- CPU-bound：别再糊了（批次 283）
+
+console.log('\n[CPU 卡住时不再降分辨率]');
+{
+  // 真机日志：视距到 4、装饰到 2 之后，策略又连降三档分辨率（1.0 → 0.75），
+  // 帧时间 21.9 → 22.7 → 21.3 —— 一点没变，近处却只剩 25% 像素。
+  // 因为瓶颈在 CPU（光照 BFS），降分辨率只省填充率。
+  const stuck: PerfState = {
+    ...initialPerfState(VIEW_DISTANCE_MIN),
+    // 稳态：平滑帧时间已经跟到 23ms（> FRAME_TIME_DROP），不是刚掉帧那一瞬间
+    frameTimeAvg: 23,
+    viewDistance: VIEW_DISTANCE_MIN,
+    decorLevel: DECOR_LEVEL_MAX,
+    resolutionScale: 0.9,
+  };
+
+  const stepOnce = (cpuBound: boolean, frameMs = 23): { action: string; state: PerfState } => {
+    let current = stuck;
+    let action = '';
+    for (let t = 0; t < 6; t += 1 / 60) {
+      const step = perfPolicyStep(current, 1 / 60, frameMs, MOBILE, cpuBound);
+      current = step.state;
+      if (step.action) {
+        action = step.action;
+        break;
+      }
+    }
+    return { action, state: current };
+  };
+
+  const gpu = stepOnce(false);
+  equal('GPU 卡：视距/装饰到底之后仍然降分辨率（老行为）', gpu.action, 'resolution-down');
+  check('GPU 卡：降到了 0.8', Math.abs(gpu.state.resolutionScale - 0.8) < 1e-9, String(gpu.state.resolutionScale));
+
+  const cpu = stepOnce(true);
+  equal('CPU 卡：不再降分辨率（降了也不省 CPU）', cpu.action, '');
+  check('CPU 卡：分辨率保持 0.9', Math.abs(cpu.state.resolutionScale - 0.9) < 1e-9, String(cpu.state.resolutionScale));
+}
+
+console.log('\n[CPU 卡但没继续恶化：把分辨率还回去]');
+{
+  // 0.75 档、帧时间 20ms：> FRAME_TIME_RAISE(17) 所以"没有余量"，< 22 所以也不降档。
+  // 老逻辑永远停在这里（"糊着还卡"）；而分辨率本来就不吃 CPU，应该还回去。
+  const state: PerfState = {
+    ...initialPerfState(VIEW_DISTANCE_MIN),
+    frameTimeAvg: 20,
+    viewDistance: VIEW_DISTANCE_MIN,
+    decorLevel: DECOR_LEVEL_MAX,
+    resolutionScale: MOBILE_RESOLUTION_MIN,
+  };
+
+  const firstAction = (cpuBound: boolean): { action: string; state: PerfState } => {
+    let current = state;
+    let action = '';
+    for (let t = 0; t < 12; t += 1 / 60) {
+      const step = perfPolicyStep(current, 1 / 60, 20, MOBILE, cpuBound);
+      current = step.state;
+      if (step.action) {
+        action = step.action;
+        break;
+      }
+    }
+    return { action, state: current };
+  };
+
+  equal('GPU 卡：卡在"不升不降"区间，保持 0.75', firstAction(false).action, '');
+  const cpu = firstAction(true);
+  equal('CPU 卡：把分辨率还回一档（近处清晰优先）', cpu.action, 'resolution-up');
+  // ⚠️ 从地板 0.75 加上 0.1 再 `round1` 会得到 0.9（`Math.round(8.5) = 9`），
+  // 这是既有的取整口径（见降档那一处的注释），这里只断言"确实还回去了"。
+  check('还回后高于 0.75（近处恢复清晰）', cpu.state.resolutionScale > MOBILE_RESOLUTION_MIN, String(cpu.state.resolutionScale));
+}
+
 console.log(`\n降级策略测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
