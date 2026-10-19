@@ -72,6 +72,17 @@ console.log('\n[海陆分类：按实际地表高度]');
   equal('略低于海平面 → 普通海洋', land({}, sea - 8), 'ocean');
   equal('寒带浅海 → 寒带海洋', land({ temperature: -0.8 }, sea - 8), 'frozen_ocean');
   equal('热带浅海 → 热带海洋', land({ temperature: 0.8 }, sea - 8), 'warm_ocean');
+  // 批次 338：海洋按「深度 × 温度」补到 9 种（原版口径）
+  equal('寒带浅海（-0.3）→ cold_ocean', land({ temperature: -0.3 }, sea - 8), 'cold_ocean');
+  equal('寒带深海（-0.3）→ deep_cold_ocean', land({ temperature: -0.3 }, sea - 20), 'deep_cold_ocean');
+  equal('温水浅海（0.3）→ lukewarm_ocean', land({ temperature: 0.3 }, sea - 8), 'lukewarm_ocean');
+  equal('温水深海（0.3）→ deep_lukewarm_ocean', land({ temperature: 0.3 }, sea - 20), 'deep_lukewarm_ocean');
+  equal('冻洋深海（-0.8）→ deep_frozen_ocean', land({ temperature: -0.8 }, sea - 20), 'deep_frozen_ocean');
+  equal('海洋群系共 9 种', BIOMES.filter((biome) => biome.ocean).length, 9);
+  check(
+    '暖水海洋没有 deep 变体（原版也没有 deep_warm_ocean）',
+    !BIOMES.some((biome) => biome.name === 'deep_warm_ocean'),
+  );
   equal('紧贴海平面 → 沙滩', land({}, sea), 'beach');
   equal('强侵蚀海岸 → 石岸', land({ erosion: -0.8 }, sea), 'stony_shore');
   check('明显高于海平面就不再是海洋/沙滩', !land({}, sea + 10).includes('ocean') && land({}, sea + 10) !== 'beach');

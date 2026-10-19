@@ -178,7 +178,18 @@ const VILLAGE_BIOMES = [
   Biome.MEADOW,
 ];
 
-const OCEAN_BIOMES = [Biome.OCEAN, Biome.DEEP_OCEAN, Biome.WARM_OCEAN, Biome.FROZEN_OCEAN];
+const OCEAN_BIOMES = [
+  Biome.OCEAN,
+  Biome.DEEP_OCEAN,
+  Biome.WARM_OCEAN,
+  Biome.FROZEN_OCEAN,
+  // 批次 338 补齐的五种海洋：沉船在任意海洋都可能出现（原版如此）
+  Biome.COLD_OCEAN,
+  Biome.DEEP_COLD_OCEAN,
+  Biome.LUKEWARM_OCEAN,
+  Biome.DEEP_LUKEWARM_OCEAN,
+  Biome.DEEP_FROZEN_OCEAN,
+];
 
 const STRUCTURE_DEFS: readonly StructureDef[] = [
   {
@@ -245,7 +256,15 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
     salt: 0x6666,
     radius: 26,
     height: 26,
-    biomes: [Biome.DEEP_OCEAN, Biome.OCEAN, Biome.FROZEN_OCEAN],
+    // 原版海底神殿不出现在暖水 / 温水海洋，所以只加寒带的两档（批次 338）
+    biomes: [
+      Biome.DEEP_OCEAN,
+      Biome.OCEAN,
+      Biome.FROZEN_OCEAN,
+      Biome.COLD_OCEAN,
+      Biome.DEEP_COLD_OCEAN,
+      Biome.DEEP_FROZEN_OCEAN,
+    ],
     underwater: true,
   },
   {

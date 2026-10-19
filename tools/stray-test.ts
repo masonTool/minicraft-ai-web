@@ -138,7 +138,10 @@ console.log('\n[群系限定：写进去的名字必须真的存在]');
       check(`${label}列的「${name}」是真群系（打错字就会变成"一只都不刷"且无人察觉）`, biomeNames.has(name));
     }
   }
-  check('流浪者要三种雪原 + 冻洋的冰面', (STRAY_TYPE.spawnBiomes ?? []).join(',') === 'snowy_plains,snowy_taiga,snowy_slopes,frozen_ocean');
+  check(
+    '流浪者要三种雪原 + 两种冻洋的冰面',
+    (STRAY_TYPE.spawnBiomes ?? []).join(',') === 'snowy_plains,snowy_taiga,snowy_slopes,frozen_ocean,deep_frozen_ocean',
+  );
 }
 
 // ---------------------------------------------------------------- 3. 箭上的效果

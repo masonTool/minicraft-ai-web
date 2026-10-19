@@ -95,7 +95,12 @@ console.log('\n[鱿鱼：海里那只]');
   check('**刷在水里**（`spawnInWater`）', SQUID_TYPE.spawnInWater === true);
   check('**水里不受重力**（`aquatic`）', SQUID_TYPE.aquatic === true);
   check('水下不看天光（`ignoreLight`）', SQUID_TYPE.ignoreLight === true);
-  equal('只在四种海洋里刷', (SQUID_TYPE.spawnBiomes ?? []).join(','), 'ocean,deep_ocean,warm_ocean,frozen_ocean');
+  // 批次 338 把海洋补到 9 种，鱿鱼是"所有海洋都刷"的那一档
+  equal(
+    '只在九种海洋里刷',
+    (SQUID_TYPE.spawnBiomes ?? []).join(','),
+    'ocean,deep_ocean,warm_ocean,frozen_ocean,cold_ocean,deep_cold_ocean,lukewarm_ocean,deep_lukewarm_ocean,deep_frozen_ocean',
+  );
   check('（对照）牛没有 `aquatic`', mobTypeById('cow')!.aquatic !== true);
 
   // 掉落：墨囊 1~3

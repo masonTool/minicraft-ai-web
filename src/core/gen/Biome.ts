@@ -8,8 +8,9 @@
  *
  * ⚠️ 诚实说明：官方的 61 个主世界群系参数表在 wiki 上（对自动抓取返回 403），
  * 拿不到原始数据。这里实现的是**机制完全一致**的匹配算法 + 一份经过校准的
- * 18 个代表性群系子集，覆盖海洋/海岸/平原/森林/针叶林/雪原/沙漠/热带草原/丛林/
- * 沼泽/山地/裸岩这些主干。补齐到 61 个只需继续往表里加区间，不需要改算法。
+ * 28 个代表性群系子集（批次 338 把海洋补齐到 9 种），覆盖海洋/海岸/平原/森林/
+ * 针叶林/雪原/沙漠/热带草原/丛林/沼泽/山地/裸岩这些主干。
+ * 补齐到 61 个只需继续往表里加区间，不需要改算法。
  */
 
 import { Block } from '../registry/blocks.ts';
@@ -20,6 +21,13 @@ export const Biome = {
   OCEAN: 1,
   FROZEN_OCEAN: 2,
   WARM_OCEAN: 3,
+  // 批次 338（D20 第一批）：把"海洋"从 4 种扩到 9 种。
+  // 原版的海洋是「深度 × 温度」两个维度的组合，这里补上缺的 5 种。
+  COLD_OCEAN: 23,
+  DEEP_COLD_OCEAN: 24,
+  LUKEWARM_OCEAN: 25,
+  DEEP_LUKEWARM_OCEAN: 26,
+  DEEP_FROZEN_OCEAN: 27,
   BEACH: 4,
   STONY_SHORE: 5,
   PLAINS: 6,
@@ -161,6 +169,99 @@ export const BIOMES: readonly BiomeDef[] = [
     snowy: false,
     grassColor: 0x8eb971,
     foliageColor: 0x71a74d,
+  },
+
+  // ---- 批次 338：海洋的温度 / 深度细分（原版 9 种，这里补齐 5 种）
+  // 海底材质与原版一致：寒带与深海是砾石，温水是沙。
+  {
+    id: Biome.COLD_OCEAN,
+    name: 'cold_ocean',
+    ocean: true,
+    temperature: [-0.45, -0.15],
+    humidity: ANY,
+    continentalness: [-0.75, -0.42],
+    erosion: ANY,
+    depth: [0, 1.1],
+    weirdness: ANY,
+    surface: Block.GRAVEL,
+    subSurface: Block.GRAVEL,
+    subDepth: 2,
+    underwater: Block.GRAVEL,
+    snowy: false,
+    grassColor: 0x8eb971,
+    foliageColor: 0x71a74d,
+  },
+  {
+    id: Biome.DEEP_COLD_OCEAN,
+    name: 'deep_cold_ocean',
+    ocean: true,
+    temperature: [-0.45, -0.15],
+    humidity: ANY,
+    continentalness: [-1.1, -0.65],
+    erosion: ANY,
+    depth: [0, 1.1],
+    weirdness: ANY,
+    surface: Block.GRAVEL,
+    subSurface: Block.STONE,
+    subDepth: 2,
+    underwater: Block.GRAVEL,
+    snowy: false,
+    grassColor: 0x8eb971,
+    foliageColor: 0x71a74d,
+  },
+  {
+    id: Biome.LUKEWARM_OCEAN,
+    name: 'lukewarm_ocean',
+    ocean: true,
+    temperature: [0.15, 0.55],
+    humidity: ANY,
+    continentalness: [-0.75, -0.42],
+    erosion: ANY,
+    depth: [0, 1.1],
+    weirdness: ANY,
+    surface: Block.SAND,
+    subSurface: Block.SAND,
+    subDepth: 2,
+    underwater: Block.SAND,
+    snowy: false,
+    grassColor: 0x8eb971,
+    foliageColor: 0x71a74d,
+  },
+  {
+    id: Biome.DEEP_LUKEWARM_OCEAN,
+    name: 'deep_lukewarm_ocean',
+    ocean: true,
+    temperature: [0.15, 0.55],
+    humidity: ANY,
+    continentalness: [-1.1, -0.65],
+    erosion: ANY,
+    depth: [0, 1.1],
+    weirdness: ANY,
+    surface: Block.SAND,
+    subSurface: Block.STONE,
+    subDepth: 2,
+    underwater: Block.SAND,
+    snowy: false,
+    grassColor: 0x8eb971,
+    foliageColor: 0x71a74d,
+  },
+  {
+    id: Biome.DEEP_FROZEN_OCEAN,
+    name: 'deep_frozen_ocean',
+    ocean: true,
+    temperature: [-1.1, -0.45],
+    humidity: ANY,
+    continentalness: [-1.1, -0.65],
+    erosion: ANY,
+    depth: [0, 1.1],
+    weirdness: ANY,
+    surface: Block.GRAVEL,
+    subSurface: Block.STONE,
+    subDepth: 2,
+    underwater: Block.GRAVEL,
+    snowy: true,
+    grassColor: 0x80b497,
+    foliageColor: 0x60a17b,
   },
 
   // ---- 海岸
@@ -716,10 +817,22 @@ export function biomeForColumn(climate: ClimatePoint, groundY: number, seaLevel:
   const gain = applyClimateGain(climate);
 
   if (groundY < seaLevel - 1) {
-    if (groundY < seaLevel - 14) return biomeById(Biome.DEEP_OCEAN);
-    if (gain.temperature < -0.45) return biomeById(Biome.FROZEN_OCEAN);
-    if (gain.temperature > 0.5) return biomeById(Biome.WARM_OCEAN);
-    return biomeById(Biome.OCEAN);
+    // 批次 338：先分「深 / 浅」，再按温度分五档（原版就是这两个维度的组合）。
+    // ⚠️ 原版没有 deep_warm_ocean：暖水海洋只出现在浅海，深海那一档落到 deep_lukewarm。
+    const deep = groundY < seaLevel - 14;
+    if (gain.temperature < -0.45) {
+      return biomeById(deep ? Biome.DEEP_FROZEN_OCEAN : Biome.FROZEN_OCEAN);
+    }
+    if (gain.temperature < -0.15) {
+      return biomeById(deep ? Biome.DEEP_COLD_OCEAN : Biome.COLD_OCEAN);
+    }
+    if (gain.temperature > 0.55) {
+      return biomeById(deep ? Biome.DEEP_LUKEWARM_OCEAN : Biome.WARM_OCEAN);
+    }
+    if (gain.temperature > 0.15) {
+      return biomeById(deep ? Biome.DEEP_LUKEWARM_OCEAN : Biome.LUKEWARM_OCEAN);
+    }
+    return biomeById(deep ? Biome.DEEP_OCEAN : Biome.OCEAN);
   }
 
   // 沙滩只留**水线上下各一格**（2 格）的窄带。

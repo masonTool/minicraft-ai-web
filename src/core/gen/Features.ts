@@ -872,6 +872,14 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     // 珊瑚礁（批次 51）：原版**只有暖水海洋**有珊瑚，这里也是唯一配了 `coral` 的群系
     coral: 0.1,
   },
+  // 批次 338 新增的五种海洋：寒带与温水。
+  // 原版：寒带海洋有海带（比温带稀）、温水海洋只有海草（珊瑚只在暖水），
+  // 深海那一档的海带比浅海更密——与已有的 deep_ocean / frozen_ocean 保持同一套口径。
+  [Biome.COLD_OCEAN]: { ...EMPTY_FEATURE, kelp: 0.06, seagrass: 0.2 },
+  [Biome.DEEP_COLD_OCEAN]: { ...EMPTY_FEATURE, kelp: 0.1, seagrass: 0.22 },
+  [Biome.LUKEWARM_OCEAN]: { ...EMPTY_FEATURE, seagrass: 0.2 },
+  [Biome.DEEP_LUKEWARM_OCEAN]: { ...EMPTY_FEATURE, seagrass: 0.2 },
+  [Biome.DEEP_FROZEN_OCEAN]: { ...EMPTY_FEATURE, seagrass: 0.12 },
   [Biome.BEACH]: { ...EMPTY_FEATURE, special: 'sugar_cane', specialDensity: 0.02 },
   [Biome.STONY_SHORE]: EMPTY_FEATURE,
 
