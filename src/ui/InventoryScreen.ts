@@ -1053,7 +1053,7 @@ export class InventoryScreen {
     this.furnaceReturnBtn = document.createElement('button');
     this.furnaceReturnBtn.type = 'button';
     this.furnaceReturnBtn.className = 'furnace-return hidden';
-    this.furnaceReturnBtn.textContent = '退还全部';
+    this.furnaceReturnBtn.textContent = '退还仓库';
     this.furnaceReturnBtn.title = '把熔炉里的原料、燃料和产物全部放回仓库';
     this.furnaceReturnBtn.addEventListener('click', () => this.returnFurnaceContents());
     // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
@@ -2479,7 +2479,7 @@ export class InventoryScreen {
       button.type = 'button';
       button.className = 'furnace-fuel-option';
       if (current?.id === id) button.classList.add('active');
-      button.title = `${itemName(id)}（可烧 ${fuelSeconds(id)} 秒）`;
+      button.title = `${itemLabel(id)}（可烧 ${fuelSeconds(id)} 秒）`;
       const canvas = document.createElement('canvas');
       canvas.width = 22;
       canvas.height = 22;
@@ -3998,23 +3998,26 @@ export class InventoryScreen {
       left.className = 'furnace-col';
       left.append(input, this.flameEl, fuel, fuelHint);
 
+      // 批次 308（用户）：进度箭头在原料/燃料右侧，箭头最右端写「目标」，
+      // 目标右边是产物槽；退还按钮放在产物槽下方。
       const middle = document.createElement('div');
       middle.className = 'furnace-middle';
-      middle.appendChild(this.cookTrackElement());
+      const progressRow = document.createElement('div');
+      progressRow.className = 'furnace-progress-row';
+      const targetLabel = document.createElement('div');
+      targetLabel.className = 'furnace-target-label';
+      targetLabel.textContent = '目标';
+      progressRow.append(this.cookTrackElement(), targetLabel);
+      middle.appendChild(progressRow);
 
       // 烟熏炉/高炉要写清"它只吃什么"：原版靠玩家自己知道，我们的界面里直接说明，
       // 免得玩家把石头塞进烟熏炉、看着它不动以为是坏了
       this.furnaceHintEl.textContent = '';
-      // 批次 299：产物槽与目标槽合并成一个——预览、开工、收取都在这一格
-      const targetWrap = document.createElement('div');
-      targetWrap.className = 'furnace-col';
-      targetWrap.append(this.buildLabel('产物 / 目标'), this.stationTargetEl);
       const right = document.createElement('div');
-      right.className = 'furnace-col';
-      right.append(targetWrap, this.furnaceHintEl);
+      right.className = 'furnace-col furnace-output-col';
+      right.append(this.stationTargetEl, this.furnaceReturnBtn, this.furnaceHintEl);
 
-      // 退还按钮放整个工作区右上角（批次 306）
-      this.furnaceLayout.replaceChildren(left, middle, right, this.furnaceReturnBtn);
+      this.furnaceLayout.replaceChildren(left, middle, right);
       this.topArea.append(this.furnaceLayout, this.stationHintEl);
       return;
     }
@@ -5852,7 +5855,7 @@ export class InventoryScreen {
     this.pickToastEl.textContent = '';
     const title = document.createElement('div');
     title.className = 'tooltip-title';
-    title.textContent = itemName(itemId);
+    title.textContent = itemLabel(itemId);
     const description = document.createElement('div');
     description.className = 'tooltip-desc';
     const items = Math.max(1, Math.floor(seconds / 10));

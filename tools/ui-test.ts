@@ -768,20 +768,21 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('private furnaceHasSlotFuel'),
   );
   check(
-    '熔炉原料/燃料选中只高亮不拿起；退还全部按钮（批次 305）',
+    '熔炉原料/燃料选中只高亮不拿起；退还仓库按钮（批次 305/308）',
     invSrc.includes('this.selectedStationKey === key') &&
       /source instanceof Furnace && \(index === FURNACE_INPUT \|\| index === FURNACE_FUEL\)/.test(invSrc) &&
       invSrc.includes('private returnFurnaceContents') &&
-      invSrc.includes("this.furnaceReturnBtn.textContent = '退还全部'"),
+      invSrc.includes("this.furnaceReturnBtn.textContent = '退还仓库'"),
   );
   check(
-    '熔炉布局回退到最初版本；退还按钮固定在右上角（批次 306）',
-    invSrc.includes('left.append(input, this.flameEl, fuel, fuelHint)') &&
-      invSrc.includes('this.furnaceLayout.replaceChildren(left, middle, right, this.furnaceReturnBtn)') &&
-      css.includes('.furnace-return {') &&
-      css.includes('position: absolute; top: 2px; right: 2px;') &&
-      !invSrc.includes('furnace-flow-arrow') &&
-      !css.includes('@keyframes furnace-flicker'),
+    '熔炉：箭头进度→目标→产物槽，退还仓库在槽下方（批次 308）',
+    invSrc.includes("targetLabel.textContent = '目标'") &&
+      invSrc.includes('right.append(this.stationTargetEl, this.furnaceReturnBtn') &&
+      invSrc.includes('progressRow.append(this.cookTrackElement(), targetLabel)') &&
+      css.includes("grid-template-columns: 132px 100px 74px") &&
+      css.includes('.furnace-middle .furnace-cook') &&
+      css.includes('clip-path: polygon(0 0, 82% 0, 100% 50%') &&
+      css.includes('repeating-linear-gradient('),
   );
   check(
     '燃料备选顺序按效率 + 物品 id 固定，点击只更新高亮不重建（批次 306）',
@@ -801,7 +802,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     '点燃料在快捷栏上方弹介绍；熔炉布局固定三列（批次 307）',
     invSrc.includes('private showFuelToast') &&
       invSrc.includes('this.showFuelToast(itemId)') &&
-      css.includes('grid-template-columns: 140px 70px 140px') &&
+      css.includes('grid-template-columns: 132px 100px 74px') &&
       css.includes('align-items: start'),
   );
   check(
