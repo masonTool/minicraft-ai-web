@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 877（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 879（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -63,6 +63,14 @@ npm run dev            # http://localhost:5173
   盔甲片与身体同子树，一起收放。
   门禁：vitest **98**（`tests/appearance.test.ts` 13 条）、`test:ui` **866**、
   `test:viewmode` **53**、`test:render` 145、离线 **131** 套全绿，`build:fast` 能出包。
+  ⑤ **自动化验收**（新增 `tools/appearance-acceptance.js` + `tools/appearance-check.sh`）：
+  横屏 844×390 **35 项全过**——3D 形象真的画出来（readPixels 有非透明像素）、
+  不显示盔甲/副手、四预设点选与高亮、换预设后设置/眼型/体型/画布像素一起变、
+  手动改任一项变自定义、全身/面部视角、拖动旋转、外观页无横向溢出。
+  竖屏 430×932 复查：形象与控件上下堆叠、无横向溢出；桌面 1440×900 并排、面板在视口内。
+  视觉复核后顺手修：提示文字从画布顶部移到下方独立一行（不再压住头发）、
+  嘴巴从深蓝改成暖玫瑰棕；同时修正既有 `settings-acceptance.js` 的视距断言
+  （手机上限就是 6，"设成 6"是空操作；改用真实渲染数 `drawnCount` 比较 6→4）。
 - 批次 284（用户："右栏切到装备页时，左侧分类不要自动切回合成"；旧号 272，`5735eb2`）：
   `openPocketCategory` 不再写 `pocketTab`；右栏非合成时 `showRecipeFor` 只记 `pendingRecipeId`，
   不填隐藏合成格；切回合成时以只读预览补显示。`test:ui` +4。

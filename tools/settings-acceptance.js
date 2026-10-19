@@ -14,6 +14,7 @@
   const mc = window.__mc;
   const lines = [];
   const check = (label, ok, detail) => lines.push(`${ok ? '[OK]  ' : '[FAIL]'} ${label}${detail ? `  ->  ${detail}` : ''}`);
+  const info = (text) => lines.push(`  ${text}`);
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   // ---- 初始状态
@@ -90,18 +91,36 @@
   );
 
   // ---- 改设置：应当立即生效（不必停在设置页上）
-  const beforeChunks = mc.info.chunks;
-  mc.updateSettings({ viewDistance: 6, fov: 90, volume: 0.5, sensitivity: 1.5 });
+  //
+  // ⚠️ 批次 203 起手机端视距上限就是 6，写死"设成 6"在手机上等于没改（旧断言因此
+  // 永远拿 137 → 137 判失败）。而且 `info.chunks` 是**已加载**区块数，真正的
+  // "画了几个"在 `chunkRenderer.drawnCount`（批次 204 把两者拆开了）。
+  // 这里改成"在设备上限之下再降一档"，用真实渲染数比较。
+  const beforeDrawn = mc.chunkRenderer.drawnCount;
+  const targetView = Math.max(4, Math.min(6, initial.viewDistance - 2));
+  const canShrink = targetView < initial.viewDistance;
+  mc.updateSettings({ viewDistance: targetView, fov: 90, volume: 0.5, sensitivity: 1.5 });
   const after = mc.settingsState;
-  check('view distance applied live', after.viewDistance === 6, `${after.viewDistance}`);
+  check('view distance applied live', after.viewDistance === targetView, `${after.viewDistance}`);
   check('fov applied to camera', Math.abs(after.fov - 90) < 0.01, `${after.fov}`);
   check('sensitivity stored', after.settings.sensitivity === 1.5, `${after.settings.sensitivity}`);
 
-  // 视距变小 → 渲染的区块应当变少（等一会儿让卸载跑完）
+  // 视距变小 → 真正画出来的区块应当变少（等一会儿让可见性重算）
   await sleep(2500);
-  const chunks = mc.info.chunks;
-  check(`fewer chunks rendered after shrinking view (${beforeChunks} -> ${chunks})`, chunks < beforeChunks, `${chunks}`);
+  const drawn = mc.chunkRenderer.drawnCount;
+  if (canShrink) {
+    check(
+      `fewer chunks drawn after shrinking view (${beforeDrawn} -> ${drawn})`,
+      drawn < beforeDrawn,
+      `${drawn}`,
+    );
+  } else {
+    info(`设备视距已在 ${initial.viewDistance}，无法再降；跳过"画得更少"比较`);
+  }
   check('fog pushed out with view distance', true);
+  // 回到 6，下面的持久化断言仍按 6 检查
+  mc.updateSettings({ viewDistance: 6 });
+  await sleep(200);
 
   // ---- 持久化
   const raw = localStorage.getItem('bedrock-settings') ?? '';
