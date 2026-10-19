@@ -2815,9 +2815,11 @@ export class InventoryScreen {
     this.stationHintEl.replaceChildren();
   }
 
-  /** 离开工作站/关界面：把"选配方后暂停"的容器恢复，避免炉子/酿造台被永久冻住 */
+  /** 离开工作站/关界面：只有已经点过目标的熔炉才恢复运行，没开工的继续保持暂停 */
   private releaseStationPause(): void {
-    if (this.activeContainer instanceof Furnace) this.activeContainer.paused = false;
+    if (this.activeContainer instanceof Furnace) {
+      this.activeContainer.paused = !this.furnaceStarted;
+    }
     if (this.activeContainer instanceof BrewingStand) this.activeContainer.paused = false;
     if (this.activeContainer instanceof Campfire) this.activeContainer.paused = false;
   }

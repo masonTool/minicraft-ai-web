@@ -788,6 +788,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('this.furnaceStarted = true'),
   );
   check(
+    '未点目标关闭熔炉后不会自动开始（批次 327）',
+    invSrc.includes('this.activeContainer.paused = !this.furnaceStarted') &&
+      /private releaseStationPause[\s\S]{0,220}this\.activeContainer\.paused = !this\.furnaceStarted/.test(
+        invSrc,
+      ),
+  );
+  check(
     '熔炉原料/燃料点击绕过双击收集，再点稳定取回（批次 325）',
     invSrc.includes('const furnaceBinding = this.bindings.get(key)') &&
       invSrc.includes('this.handleSlotClick(key, button);') &&
