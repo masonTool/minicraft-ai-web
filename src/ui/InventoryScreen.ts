@@ -690,6 +690,9 @@ export class InventoryScreen {
   private readonly furnaceFuelSlot: HTMLDivElement;
   /** 燃料说明（批次 300：显示当前燃料与手动更换提示） */
   private readonly furnaceFuelTextEl: HTMLSpanElement;
+  /** 燃料备选区（批次 302）：背包里的可燃物直接列出来，点一下换上 */
+  private readonly furnaceFuelOptionsEl: HTMLDivElement;
+  private furnaceFuelOptionsStamp = '';
   private readonly flameEl: HTMLDivElement;
   /** 附魔台（H9） */
   private readonly enchantLayout: HTMLDivElement;
@@ -1032,6 +1035,8 @@ export class InventoryScreen {
     this.furnaceInputSlot.dataset.key = 'furnace:input';
     this.furnaceFuelTextEl = document.createElement('span');
     this.furnaceFuelTextEl.className = 'furnace-fuel-text';
+    this.furnaceFuelOptionsEl = document.createElement('div');
+    this.furnaceFuelOptionsEl.className = 'furnace-fuel-options';
     // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
     this.anvilLayout = document.createElement('div');
     this.anvilLayout.className = 'anvil-layout';
@@ -2367,13 +2372,68 @@ export class InventoryScreen {
     return this.bagFuelOptions()[0] ?? null;
   }
 
+  /** 点备选区里的某种燃料：换进燃料格（尽量装满），不自动开工 */
+  private selectFurnaceFuel(itemId: number): void {
+    const furnace = this.activeContainer;
+    if (!(furnace instanceof Furnace)) return;
+    const current = furnace.get(FURNACE_FUEL);
+    if (current?.id === itemId) return;
+    if (current) this.returnStationStack(furnace, FURNACE_FUEL);
+    if (!this.canPut(furnace, FURNACE_FUEL, itemId, 1)) return;
+    this.fillSlotFromBag(furnace, FURNACE_FUEL, itemId);
+    this.inventory.notify();
+    this.refresh();
+  }
+
+  /** 燃料备选区：把背包里的可燃物直接列在燃料格下方，点一下换上 */
+  private renderFurnaceFuelOptions(furnace: Furnace): void {
+    const current = furnace.get(FURNACE_FUEL);
+    const ids = [...new Set([...(current ? [current.id] : []), ...this.bagFuelOptions()])];
+    if (ids.length === 0 || (current !== null && ids.length <= 1)) {
+      this.furnaceFuelOptionsEl.classList.add('hidden');
+      this.furnaceFuelOptionsEl.replaceChildren();
+      this.furnaceFuelOptionsStamp = '';
+      return;
+    }
+    const counts = ids.map((id) => {
+      const inBag = this.bagCountOf(id);
+      return inBag + (current?.id === id ? current.count : 0);
+    });
+    const key = ids.map((id, i) => `${id}:${counts[i]}`).join(',') + `|${current?.id ?? ''}`;
+    if (key === this.furnaceFuelOptionsStamp && this.furnaceFuelOptionsEl.childElementCount > 0) return;
+    this.furnaceFuelOptionsStamp = key;
+    this.furnaceFuelOptionsEl.classList.remove('hidden');
+    const fragment = document.createDocumentFragment();
+    ids.forEach((id, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'furnace-fuel-option';
+      if (current?.id === id) button.classList.add('active');
+      button.title = `${itemName(id)}（可烧 ${fuelSeconds(id)} 秒）`;
+      const canvas = document.createElement('canvas');
+      canvas.width = 22;
+      canvas.height = 22;
+      drawItemIcon(canvas, this.atlas, id, 20);
+      const count = document.createElement('span');
+      count.textContent = counts[index]! > 1 ? String(counts[index]) : '';
+      button.append(canvas, count);
+      button.addEventListener('click', () => this.selectFurnaceFuel(id));
+      fragment.appendChild(button);
+    });
+    this.furnaceFuelOptionsEl.replaceChildren(fragment);
+  }
+
   /** 燃料栏说明：当前燃料名/数量；空格子明确写"空"，不要写成"燃烧中" */
   private refreshFurnaceFuelHint(furnace: Furnace): void {
     const fuel = furnace.get(FURNACE_FUEL);
+    const hasOptions = this.bagFuelOptions().length > 0;
     this.furnaceFuelTextEl.textContent = fuel
       ? `燃料：${itemName(fuel.id)} ×${fuel.count}`
-      : '燃料：空 · 请放燃料';
-    this.furnaceFuelTextEl.title = '煤 / 木炭 / 木板 / 干海带块等可燃物都能当燃料；点燃料格可手动更换';
+      : hasOptions
+        ? '燃料：空 · 请选择下方燃料'
+        : '燃料：空 · 请放燃料';
+    this.furnaceFuelTextEl.title = '煤 / 木炭 / 木板 / 干海带块等可燃物都能当燃料；点下方备选或手动拖入';
+    this.renderFurnaceFuelOptions(furnace);
   }
 
   private furnaceFuelAvailable(furnace: Furnace | null): boolean {
@@ -2399,7 +2459,8 @@ export class InventoryScreen {
 
   /** 背包 + 工作站格子里某件东西的总数（原料已经放进格子时不该标"缺料"） */
   private stationCountOf(itemId: number, container: BlockContainer | null): number {
-    let total = this.bagCountOf(itemId);
+    // 手上拿着的那叠也算"拥有"：从熔炉材料格选中时不应该把配方变红（批次 302）
+    let total = this.bagCountOf(itemId) + (this.held?.id === itemId ? this.held.count : 0);
     const size = this.stationSlotCount(container);
     if (container) {
       for (let i = 0; i < size; i++) {
@@ -2415,7 +2476,8 @@ export class InventoryScreen {
     if (!entry.available) return entry;
     const input = entry.inputs[0]!;
     const current = furnace.get(FURNACE_INPUT);
-    if (current && (current.id !== input.id || current.count + input.count > maxStackOf(input.id))) {
+    // 只看"是不是同一种"：格子装满 64 个仍然可以继续烧，不能因此标红
+    if (current && current.id !== input.id) {
       return { ...entry, available: false, reason: 'slot_occupied' };
     }
     // 燃料槽里塞了不可燃的东西 → 白底也点不动，先标出来
@@ -2440,7 +2502,7 @@ export class InventoryScreen {
     const input = entry.inputs[0]!;
     for (let i = 0; i < CAMPFIRE_SIZE; i++) {
       const stack = fire.get(i);
-      if (!stack || (stack.id === input.id && stack.count < maxStackOf(input.id))) return entry;
+      if (!stack || stack.id === input.id) return entry;
     }
     return { ...entry, available: false, reason: 'slot_occupied' };
   }
@@ -2449,19 +2511,11 @@ export class InventoryScreen {
     if (!entry.available) return entry;
     const [equipment, material] = entry.inputs;
     const currentEquipment = table.get(SMITHING_EQUIPMENT);
-    if (
-      currentEquipment &&
-      (currentEquipment.id !== equipment!.id ||
-        currentEquipment.count + equipment!.count > maxStackOf(equipment!.id))
-    ) {
+    if (currentEquipment && currentEquipment.id !== equipment!.id) {
       return { ...entry, available: false, reason: 'slot_occupied' };
     }
     const currentMaterial = table.get(SMITHING_MATERIAL);
-    if (
-      currentMaterial &&
-      (currentMaterial.id !== material!.id ||
-        currentMaterial.count + material!.count > maxStackOf(material!.id))
-    ) {
+    if (currentMaterial && currentMaterial.id !== material!.id) {
       return { ...entry, available: false, reason: 'slot_occupied' };
     }
     return entry;
@@ -2471,11 +2525,7 @@ export class InventoryScreen {
     if (!entry.available) return entry;
     const [bottle, ingredient] = entry.inputs;
     const currentIngredient = stand.get(BREW_INGREDIENT_SLOT);
-    if (
-      currentIngredient &&
-      (currentIngredient.id !== ingredient!.id ||
-        currentIngredient.count + ingredient!.count > maxStackOf(ingredient!.id))
-    ) {
+    if (currentIngredient && currentIngredient.id !== ingredient!.id) {
       return { ...entry, available: false, reason: 'slot_occupied' };
     }
     // 燃料槽里塞了别的东西（且不是在酿的状态）→ 填不进去
@@ -2560,11 +2610,28 @@ export class InventoryScreen {
    */
   private fillSlotFromBag(container: BlockContainer, slot: number, itemId: number): number {
     const current = container.get(slot);
-    const room = maxStackOf(itemId) - (current?.id === itemId ? current.count : 0);
-    if (room <= 0) return 0;
+    let room = maxStackOf(itemId) - (current?.id === itemId ? current.count : 0);
+    let placed = 0;
+    // 材料格里的东西被"选中"到手上了：点目标时先把它放回格子，不能因此做不了
+    if (room > 0 && this.held?.id === itemId) {
+      const move = Math.min(room, this.held.count);
+      if (move > 0) {
+        if (current && current.id === itemId) {
+          current.count += move;
+          container.set(slot, current);
+        } else {
+          container.set(slot, { ...this.held, count: move });
+        }
+        this.held.count -= move;
+        if (this.held.count <= 0) this.held = null;
+        room -= move;
+        placed += move;
+      }
+    }
+    if (room <= 0) return placed;
     const take = Math.min(room, this.bagCountOf(itemId));
-    if (take <= 0) return 0;
-    return this.ensureInSlot(container, slot, itemId, take) ? take : 0;
+    if (take <= 0) return placed;
+    return this.ensureInSlot(container, slot, itemId, take) ? placed + take : placed;
   }
 
   private fillStationRecipe(entry: StationRecipeEntry): boolean {
@@ -2636,24 +2703,6 @@ export class InventoryScreen {
   }
 
   // ---------------------------------------------------------------- 工作站提示（批次 293）
-
-  /** 站台对应的方块图标（"需要xxx"标题左边那颗） */
-  private stationBlockId(station: StationRecipeStation): number {
-    switch (station) {
-      case 'smoker':
-        return Block.SMOKER;
-      case 'blast_furnace':
-        return Block.BLAST_FURNACE;
-      case 'campfire':
-        return Block.CAMPFIRE;
-      case 'smithing':
-        return Block.SMITHING_TABLE;
-      case 'brewing':
-        return Block.BREWING_STAND;
-      default:
-        return Block.FURNACE;
-    }
-  }
 
   private clearStationHint(): void {
     this.stationHintEl.classList.add('hidden');
@@ -2866,8 +2915,7 @@ export class InventoryScreen {
     if (leftover > 0) this.hooks.onDrop?.(output.id, leftover);
     const xp = furnace.takeExperience();
     if (xp > 0) this.hooks.onFurnaceXp?.(xp);
-    // 批次 299：一次目标框只烧一个单位；目标框保留，原料/燃料不足时由界面变红
-    furnace.paused = true;
+    // 批次 302：点过目标框后连续制作；这里不再暂停，产物出来就收走
     this.inventory.notify();
     if (refreshAfter) this.refresh();
   }
@@ -3061,62 +3109,17 @@ export class InventoryScreen {
    * 显示在工作区下方。" 所以标题给站台，下面一行给"原料 → 产物"，最后一行给原因。
    */
   private renderStationHint(
-    title: string,
-    station: StationRecipeStation,
-    inputs: readonly { id: number; count: number }[],
-    resultId: number,
-    resultCount: number,
-    detail: string,
+    _title: string,
+    _station: StationRecipeStation,
+    _inputs: readonly { id: number; count: number }[],
+    _resultId: number,
+    _resultCount: number,
+    _detail: string,
   ): void {
-    const el = this.stationHintEl;
-    el.replaceChildren();
-    el.classList.remove('hidden');
-
-    const head = document.createElement('div');
-    head.className = 'inv-station-hint-title';
-    const stationIcon = document.createElement('canvas');
-    stationIcon.width = 18;
-    stationIcon.height = 18;
-    drawItemIcon(stationIcon, this.atlas, this.stationBlockId(station), 16);
-    const titleText = document.createElement('span');
-    titleText.textContent = title;
-    head.append(stationIcon, titleText);
-
-    const row = document.createElement('div');
-    row.className = 'inv-station-hint-row';
-    inputs.forEach((input, index) => {
-      if (index > 0) {
-        const plus = document.createElement('span');
-        plus.textContent = '+';
-        row.appendChild(plus);
-      }
-      const have = this.stationCountOf(input.id, this.activeContainer) >= input.count;
-      row.appendChild(this.stationHintItem(input.id, input.count, have));
-    });
-    const arrow = document.createElement('span');
-    arrow.textContent = '→';
-    row.appendChild(arrow);
-    row.appendChild(this.stationHintItem(resultId, resultCount, true));
-
-    const detailEl = document.createElement('div');
-    detailEl.className = 'inv-station-hint-detail';
-    detailEl.textContent = detail;
-
-    el.append(head, row, detailEl);
-  }
-
-  private stationHintItem(itemId: number, count: number, have: boolean): HTMLSpanElement {
-    const cell = document.createElement('span');
-    cell.className = 'inv-station-hint-item';
-    if (!have) cell.classList.add('missing');
-    const canvas = document.createElement('canvas');
-    canvas.width = 20;
-    canvas.height = 20;
-    drawItemIcon(canvas, this.atlas, itemId, 18);
-    const name = document.createElement('span');
-    name.textContent = `${itemName(itemId)}${count > 1 ? ` ×${count}` : ''}`;
-    cell.append(canvas, name);
-    return cell;
+    // 批次 302（用户）：工作区下方不再写"缺什么/需要xxx"，红底与空格已经说明问题
+    this.stationHintEl.replaceChildren();
+    this.stationHintEl.classList.add('hidden');
+    return;
   }
 
   /** 当前站台缺料/缺燃料/槽位占用：把原因和原料画在下面 */
@@ -3828,7 +3831,7 @@ export class InventoryScreen {
 
       const fuelHint = document.createElement('div');
       fuelHint.className = 'furnace-fuel-hint';
-      fuelHint.append(this.furnaceFuelTextEl);
+      fuelHint.append(this.furnaceFuelTextEl, this.furnaceFuelOptionsEl);
       const left = document.createElement('div');
       left.className = 'furnace-col';
       left.append(input, this.flameEl, fuel, fuelHint);
@@ -5195,6 +5198,10 @@ export class InventoryScreen {
       this.rebuildTopArea();
     }
 
+    // 批次 302：关着界面时炉子会把产物堆到 64；下次打开先自动收进背包
+    if (isFurnaceMode(mode) && this.activeContainer instanceof Furnace) {
+      this.takeFurnaceOutput(false);
+    }
     // 批次 299：每次打开工作站都先暂停（同容器重开也要），完全改成"点目标框才开始"
     if (isWorkstationMode(mode)) this.pauseStationContainer();
 

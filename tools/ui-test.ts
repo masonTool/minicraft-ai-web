@@ -742,13 +742,39 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('private fuelRank') &&
       invSrc.includes('private refreshFurnaceFuelHint') &&
       invSrc.includes('furnaceFuelTextEl') &&
-      invSrc.includes('燃料：空 · 请放燃料') &&
+      invSrc.includes('燃料：空 · 请选择下方燃料') &&
       invSrc.includes('private fillSlotFromBag') &&
       invSrc.includes('this.bagCountOf(itemId)') &&
       !invSrc.includes('furnaceFuelPickBtn') &&
       !invSrc.includes('private cycleFurnaceFuel') &&
       /fuelSeconds\(fuel\.id\) <= 0/.test(invSrc) &&
       /fuelRank[\s\S]{0,300}Item\.COAL[\s\S]{0,120}Item\.CHARCOAL/.test(invSrc),
+  );
+  check(
+    '燃料备选区：背包可燃物列在燃料格下方，点一下换上（批次 302）',
+    invSrc.includes('furnaceFuelOptionsEl = document.createElement') &&
+      invSrc.includes('private selectFurnaceFuel') &&
+      invSrc.includes('private renderFurnaceFuelOptions') &&
+      invSrc.includes('furnace-fuel-option') &&
+      css.includes('.furnace-fuel-options'),
+  );
+  check(
+    '炉子连续制作；关界面堆到 64，开界面自动收进背包（批次 302）',
+    !/private takeFurnaceOutput[\s\S]{0,900}furnace\.paused = true/.test(invSrc) &&
+      invSrc.includes('if (isFurnaceMode(mode) && this.activeContainer instanceof Furnace)') &&
+      invSrc.includes('this.takeFurnaceOutput(false);'),
+  );
+  check(
+    '材料格/手上的物品计入拥有；满槽不标红；下方缺料提示已隐藏（批次 302）',
+    invSrc.includes('this.held?.id === itemId ? this.held.count : 0') &&
+      !invSrc.includes('current.count + input.count > maxStackOf(input.id)') &&
+      /private renderStationHint\([\s\S]{0,500}classList\.add\('hidden'\)[\s\S]{0,120}return;/.test(invSrc),
+  );
+  check(
+    '关界面时炉子堆产物到 64，开界面自动收货（批次 302）',
+    /private takeFurnaceOutput[\s\S]{0,700}this\.inventory\.notify/.test(invSrc) &&
+      invSrc.includes('this.takeFurnaceOutput(false);') &&
+      css.includes('.furnace-fuel-options'),
   );
   check(
     '点白底配方会尽量装满原料与燃料',

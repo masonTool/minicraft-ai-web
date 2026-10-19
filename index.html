@@ -2871,12 +2871,32 @@
       .furnace-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
       /* 燃料说明 + 换燃料（批次 300）：别让玩家以为系统会乱抓箱子当燃料 */
       .furnace-fuel-hint {
-        display: flex; align-items: center; gap: 4px;
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
         max-width: 96px; font-size: 10px; color: #4a4a4a;
         line-height: 1.25; text-align: center;
       }
       .furnace-fuel-text {
         min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .furnace-fuel-options {
+        display: flex; flex-wrap: wrap; gap: 2px; justify-content: center;
+        width: 96px; max-width: 96px;
+      }
+      .furnace-fuel-options.hidden { display: none; }
+      .furnace-fuel-option {
+        position: relative; width: 26px; height: 26px; padding: 0;
+        cursor: pointer; background: #b8b8b8;
+        border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      .furnace-fuel-option.active {
+        border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
+        box-shadow: inset 0 0 0 1px #6aa84f;
+      }
+      .furnace-fuel-option canvas { width: 20px; height: 20px; }
+      .furnace-fuel-option span {
+        position: absolute; right: 0; bottom: 0;
+        font-size: 9px; line-height: 1; color: #fff;
+        text-shadow: 1px 1px 0 #000;
       }
 
       .furnace-flame {
