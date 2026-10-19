@@ -12064,7 +12064,15 @@ class App {
     // 死亡界面上的点击/长按不该带进重生后的第一帧
     this.touch?.resetInput('respawn');
     const point = this.resolveRespawnPoint();
-    const [sx, sy, sz] = [point.x, point.y, point.z];
+    // 批次 393：没有床时，重生点在世界出生点周围 ±spawnRadius 内散开
+    let scatterX = 0;
+    let scatterZ = 0;
+    if (!this.bedSpawn && this.rules.spawnRadius > 0) {
+      const r = this.rules.spawnRadius;
+      scatterX = (Math.random() * 2 - 1) * r;
+      scatterZ = (Math.random() * 2 - 1) * r;
+    }
+    const [sx, sy, sz] = [point.x + scatterX, point.y, point.z + scatterZ];
     // 床重生点可能在世界出生点之外的维度（在下界死掉、床在主世界）：
     // `resolveRespawnPoint` 已经切好了维度，这里只负责把人放上去
     this.physics.teleport(sx, sy, sz);

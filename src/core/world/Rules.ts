@@ -55,6 +55,8 @@ export interface GameRules {
   showDeathMessages: boolean;
   /** 是否禁用村庄保卫战进度（批次 388） */
   disableRaids: boolean;
+  /** 世界出生点的散布半径（批次 393；没有床时的重生位置） */
+  spawnRadius: number;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -76,6 +78,7 @@ export const DEFAULT_GAME_RULES: GameRules = {
   sendCommandFeedback: true,
   showDeathMessages: true,
   disableRaids: false,
+  spawnRadius: 10,
 };
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */
