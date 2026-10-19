@@ -641,6 +641,28 @@ export const BEE_TYPE: MobType = {
 };
 
 /**
+ * 末影螨（批次 378）：8 血的小型敌对生物，末影珍珠落地时原版会生成。
+ * 本项目没有“珍珠落地生成”的通道，所以 `naturalSpawn: false`，靠刷怪蛋/命令。
+ */
+export const ENDERMITE_TYPE: MobType = {
+  id: 'endermite',
+  name: '末影螨',
+  health: 8,
+  width: 0.4,
+  height: 0.3,
+  speed: 1.6,
+  hostile: true,
+  attackDamage: 2,
+  followRange: 16,
+  drops: [],
+  xp: 3,
+  naturalSpawn: false,
+  bodyColor: 0x6a4a8a,
+  accentColor: 0x3a2a5a,
+  eyeHeight: 0.2,
+};
+
+/**
  * 鹦鹉（批次 377）：丛林里的飞行被动生物，6 血、不掉东西。
  * ⚠️ 不做“驯服后停在肩上”“模仿声音”。
  */
@@ -1603,6 +1625,7 @@ export const MOB_TYPES: readonly MobType[] = [
   BEE_TYPE,
   PARROT_TYPE,
   MOOSHROOM_TYPE,
+  ENDERMITE_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿

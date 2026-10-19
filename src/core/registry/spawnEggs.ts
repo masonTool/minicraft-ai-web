@@ -112,6 +112,7 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'bee', label: '蜜蜂', id: 1526 },
   { mobId: 'parrot', label: '鹦鹉', id: 1527 },
   { mobId: 'mooshroom', label: '哞菇', id: 1528 },
+  { mobId: 'endermite', label: '末影螨', id: 1529 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */

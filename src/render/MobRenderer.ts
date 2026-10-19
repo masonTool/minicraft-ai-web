@@ -149,6 +149,7 @@ function modelKindOf(typeId: string): ModelKind {
   if (typeId === 'bee') return 'bird';
   if (typeId === 'parrot') return 'bird';
   if (typeId === 'mooshroom') return 'quadruped';
+  if (typeId === 'endermite') return 'spider';
   // 守卫者（批次 359）：借鱼那套流线骨架
   if (typeId === 'guardian' || typeId === 'elder_guardian') return 'fish';
   return 'humanoid';
