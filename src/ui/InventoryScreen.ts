@@ -3061,7 +3061,7 @@ export class InventoryScreen {
       this.stationAutoCollect = false;
       this.stationBrewSnapshot = null;
       this.clearStationHint();
-      this.showMessage(`开始制作：${itemName(entry.resultId)}`);
+      this.showMessage(`开始制作：${itemLabel(entry.resultId)}`);
       this.refresh();
       return;
     }
@@ -3070,7 +3070,7 @@ export class InventoryScreen {
       this.stationAutoCollect = true;
       this.stationBrewSnapshot = BREW_BOTTLE_SLOTS.map((slot) => this.activeContainer?.get(slot)?.id);
       this.clearStationHint();
-      this.showMessage(`开始酿造：${itemName(entry.resultId)}`);
+      this.showMessage(`开始酿造：${itemLabel(entry.resultId)}`);
       this.refresh();
       return;
     }
@@ -3079,7 +3079,7 @@ export class InventoryScreen {
       this.stationAutoCollect = true;
       this.stationBrewSnapshot = null;
       this.clearStationHint();
-      this.showMessage(`开始烤制：${itemName(entry.resultId)}`);
+      this.showMessage(`开始烤制：${itemLabel(entry.resultId)}`);
       this.refresh();
       return;
     }

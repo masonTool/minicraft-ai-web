@@ -2241,6 +2241,11 @@
       .inv-panel.pocket-ui.station-ui .inv-header .inv-pocket-recipe-toggle {
         position: absolute; top: 0;
         right: calc(100% - var(--station-left-width, 50%) + 8px);
+        /* 再向左挪半个按钮宽度（批次 322） */
+        transform: translateX(-50%);
+      }
+      .inv-panel.pocket-ui.station-ui .inv-header .inv-pocket-recipe-toggle.active {
+        transform: translate(-50%, 1px);
       }
       /* 批次 159：开关开着 = "本分类全部列出、不拥有的红底"，按下去的样子要跟
          左轨那排分类页签一致（同一套斜面 + 亮一档的底色），否则两种"选中"

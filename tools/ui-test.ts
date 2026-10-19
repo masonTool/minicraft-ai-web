@@ -924,6 +924,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('right: calc(100% - var(--station-left-width, 50%) + 8px);'),
   );
   check(
+    '配方书再左移半个按钮宽度；开始制作用中文名（批次 322）',
+    css.includes('transform: translateX(-50%);') &&
+      css.includes('transform: translate(-50%, 1px);') &&
+      invSrc.includes('开始制作：${itemLabel(entry.resultId)}') &&
+      !invSrc.includes('开始制作：${itemName(entry.resultId)}'),
+  );
+  check(
     '点创造分类会切回无限物品页',
     /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
   );
