@@ -1953,3 +1953,5 @@
 **下一步候选**：真机复验——下次切后台回来导出日志，看 `ui.canvas.recover` 里的
 `atlas` 是 `repainted` 还是 `intact`，就能确诊"到底是哪张画布被回收"；
 若 `Sky` 的太阳/月亮/云也出现同款空白，按同一套给那几张 `CanvasTexture` 补重建。
+- [x] 297 容器层暂停：Furnace/BrewingStand/Campfire 的 paused 与 tick 短路（`b036097`）
+- [x] 298 工作站左栏只列当前站台产物；点目标框才开始；完成后快捷栏→仓库→脚边（`ea9932c`）
