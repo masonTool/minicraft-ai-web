@@ -1200,11 +1200,9 @@ export class InventoryScreen {
     this.categoryHostEl.dataset.role = 'pocket-category-host';
     this.buildCategorySection();
 
-    this.creativeSection = document.createElement('div');
-    this.creativeSection.className = 'inv-creative-section';
-    this.buildCreativeSection();
-
-    // 工作站左栏（批次 277）：可做 / 背包 两个页签 + 可做列表
+    // 工作站左栏（批次 277）：可做 / 背包 两个页签 + 可做列表。
+    // ⚠️ 必须在 `buildCreativeSection()` 之前建好：后者会调 `updateCreativeVisibility()`
+    // → `applyInventoryChrome()`，而那里会直接写这两个元素的 display。
     this.stationTabsEl = document.createElement('div');
     this.stationTabsEl.className = 'inv-station-tabs';
     this.stationTabsEl.dataset.role = 'station-tabs';
@@ -1228,6 +1226,10 @@ export class InventoryScreen {
     this.stationRecipeInfoEl = document.createElement('div');
     this.stationRecipeInfoEl.className = 'inv-category-info';
     this.stationRecipeHostEl.append(this.stationRecipeGridEl, this.stationRecipeInfoEl);
+
+    this.creativeSection = document.createElement('div');
+    this.creativeSection.className = 'inv-creative-section';
+    this.buildCreativeSection();
 
     // 携带版统一双栏：左栏在“玩家物品 / 创造物品 / 可做列表”之间切换，右栏是合成/装备/工作站。
     // 放进 playerBody 才能与 mainColumn / gear 共用同一套两栏网格。

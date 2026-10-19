@@ -662,6 +662,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('private setStationLeft'),
   );
   check(
+    '工作站左栏元素先于 buildCreativeSection 创建（否则构造期 applyInventoryChrome 会读到 undefined）',
+    invSrc.indexOf('this.stationTabsEl = document.createElement') <
+      invSrc.indexOf('this.buildCreativeSection();') &&
+      invSrc.indexOf('this.stationRecipeHostEl = document.createElement') <
+        invSrc.indexOf('this.buildCreativeSection();'),
+  );
+  check(
     '配方驱动型工作站默认可做列表，铁砧/砂轮/附魔台仍是背包',
     invSrc.includes("this.stationLeft = this.stationHasRecipes(mode) ? 'recipes' : 'items';") &&
       /private stationHasRecipes[\s\S]{0,300}mode === 'smithing'[\s\S]{0,200}mode === 'brewing'/.test(invSrc),
