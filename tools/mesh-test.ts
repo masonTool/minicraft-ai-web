@@ -78,6 +78,36 @@ console.log('\n[平坦石板：应当彻底合并]');
   check('每个顶点都带有贴图起点属性 aTile', tile !== undefined && tile.count === uv.count);
 }
 
+console.log('\n[植物（十字）贴图方向：茎在下面]');
+{
+  // 回归（批次 273 尾巴）：图集改成"v=0 = 贴图底边"之后，十字面必须跟着改，
+  // 否则所有植物上下颠倒（批次 273 只修了方块侧面，漏了这条手工写 UV 的路径）。
+  const chunk = new Chunk(0, 0);
+  chunk.set(0, 64, 0, Block.SHORT_GRASS);
+  const section = Chunk.sectionOf(64);
+  const result = meshSection(chunk, section, atlasStub, makeContext(chunk, () => 15));
+
+  let vertices = 0;
+  let wrongBottom = 0;
+  let wrongTop = 0;
+  for (const geometry of [result.solid, result.translucent]) {
+    if (!geometry) continue;
+    const pos = geometry.getAttribute('position');
+    const uv = geometry.getAttribute('uv');
+    for (let i = 0; i < pos.count; i++) {
+      vertices++;
+      const localY = pos.getY(i);
+      // 两片薄面各 4 个顶点：底边 y=0、顶边 y=1（正反面共用顶点）
+      if (localY === 0 && uv.getY(i) !== 0) wrongBottom++;
+      if (localY === 1 && uv.getY(i) !== 1) wrongTop++;
+    }
+  }
+  console.log(`    十字顶点 ${vertices} 个`);
+  check('一株植物 = 两片薄面 = 8 个顶点', vertices === 8, `实际 ${vertices}`);
+  check('底边顶点采贴图底边（v=0）', wrongBottom === 0, `${wrongBottom} 个反了`);
+  check('顶边顶点采贴图顶边（v=1）', wrongTop === 0, `${wrongTop} 个反了`);
+}
+
 console.log('\n[材质不同：只能合并同材质的区域]');
 {
   const chunk = new Chunk(0, 0);

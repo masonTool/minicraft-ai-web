@@ -1431,8 +1431,8 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       mainSource.includes('this.projectToScreen('),
   );
   check(
-    '瞄准生物时只亮头顶信息条，方块描边收起',
-    mainSource.includes('this.mobInfo.show(this.aimMob)') &&
+    '瞄准生物时只亮头顶生命条，方块描边收起',
+    mainSource.includes('this.mobHealthBar.show(this.aimMob)') &&
       mainSource.includes('this.outline.hide();') &&
       mainSource.includes('this.blockOverlay.hide();'),
   );

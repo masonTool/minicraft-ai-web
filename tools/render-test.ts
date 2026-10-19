@@ -30,7 +30,7 @@ import { SHEARED_BODY_COLOR, mobBodyColor } from '../src/render/MobRenderer.ts';
 import { Mob } from '../src/core/entity/Mob.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
-import { MobInfoBar } from '../src/render/MobInfoBar.ts';
+import { MobHealthBar } from '../src/render/MobHealthBar.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { srgbColor } from '../src/render/srgb.ts';
 import { tileOriginAt, tileRectAt } from '../src/render/atlasCoords.ts';
@@ -556,7 +556,7 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
 
 // ---------------------------------------------------------------- 3. 视野效果
 
-console.log('\n[生物头顶信息条（批次 277）]');
+console.log('\n[生物头顶生命条（批次 280）]');
 {
   /** Node 里没有 DOM：给一个只有方法壳子的 2D context，Sprite 的画布纹理不需要真的画 */
   const fakeContext = new Proxy(
@@ -572,8 +572,8 @@ console.log('\n[生物头顶信息条（批次 277）]');
     getContext: () => fakeContext,
   } as unknown as HTMLCanvasElement;
 
-  const info = new MobInfoBar(fakeCanvas);
-  check('默认不可见', !info.object.visible);
+  const bar = new MobHealthBar(fakeCanvas);
+  check('默认不可见', !bar.object.visible);
 
   const zombie = {
     id: 7,
@@ -583,61 +583,44 @@ console.log('\n[生物头顶信息条（批次 277）]');
     width: 0.9,
     height: 1.4,
     health: 12,
-    type: {
-      id: 'zombie',
-      name: '僵尸',
-      health: 20,
-      hostile: true,
-      attackDamage: 3,
-      followRange: 35,
-    },
+    type: { id: 'zombie', name: '僵尸', health: 20, hostile: true, attackDamage: 3, followRange: 35 },
   } as unknown as Mob;
 
-  info.show(zombie);
-  check('显示后可见', info.object.visible);
+  bar.show(zombie);
+  check('显示后可见', bar.object.visible);
   check(
-    '信息条在头顶上方',
-    info.object.position.x === 3 &&
-      info.object.position.z === -5 &&
-      info.object.position.y > 64 + 1.4 &&
-      info.object.position.y < 64 + 1.4 + 1,
+    '生命条在头顶上方',
+    bar.object.position.x === 3 &&
+      bar.object.position.z === -5 &&
+      bar.object.position.y > 64 + 1.4 &&
+      bar.object.position.y < 64 + 1.4 + 1,
   );
   check(
-    '宽 0.9 的生物 → 条宽 1.44、高按敌对面板比例（74/256）',
-    Math.abs(info.object.scale.x - 1.44) < 1e-9 &&
-      Math.abs(info.object.scale.y - 1.44 * (74 / 256)) < 1e-9,
+    '宽 0.9 的生物 → 条宽 1.44、高按 40/256 的比例',
+    Math.abs(bar.object.scale.x - 1.44) < 1e-9 &&
+      Math.abs(bar.object.scale.y - 1.44 * (40 / 256)) < 1e-9,
   );
-  const infoImage = (info.object.material as THREE.SpriteMaterial).map?.image as
+  const image = (bar.object.material as THREE.SpriteMaterial).map?.image as
     | { width?: number; height?: number }
     | undefined;
-  check('敌对生物的画布是 256×74（名字 + 生命 + 攻击）', infoImage?.width === 256 && infoImage?.height === 74);
-
-  // 被动生物没有攻击行，面板更矮
-  const cow = {
-    ...zombie,
-    id: 8,
-    type: { id: 'cow', name: '牛', health: 10, hostile: false, attackDamage: 0, followRange: 0 },
-  } as unknown as Mob;
-  info.show(cow);
-  const passiveImage = (info.object.material as THREE.SpriteMaterial).map?.image as
-    | { width?: number; height?: number }
-    | undefined;
-  check(
-    '被动生物的画布是 256×58（只有名字 + 生命）',
-    passiveImage?.height === 58 && Math.abs(info.object.scale.y - 1.44 * (58 / 256)) < 1e-9,
-  );
+  check('画布固定 256×40（不再按敌对/被动改高度）', image?.width === 256 && image?.height === 40);
 
   // 体型差异只影响世界尺寸，不改变画布分辨率
   const tiny = { ...zombie, width: 0.2 } as unknown as Mob;
-  info.show(tiny);
-  check('小体型按最小宽度 1.2 显示', Math.abs(info.object.scale.x - 1.2) < 1e-9);
+  bar.show(tiny);
+  check('小体型按最小宽度 1.1 显示', Math.abs(bar.object.scale.x - 1.1) < 1e-9);
   const huge = { ...zombie, width: 16 } as unknown as Mob;
-  info.show(huge);
-  check('大体型封顶 3.2（不会挡住半个屏幕）', Math.abs(info.object.scale.x - 3.2) < 1e-9);
+  bar.show(huge);
+  check('大体型封顶 2.4（不会挡住半个屏幕）', Math.abs(bar.object.scale.x - 2.4) < 1e-9);
 
-  info.hide();
-  check('hide 之后不可见', !info.object.visible);
-  info.dispose();
+  // 掉血只重画画布，不改变 Sprite 尺寸
+  const scaleBefore = bar.object.scale.x;
+  bar.show({ ...huge, health: 1 } as unknown as Mob);
+  check('掉血后尺寸不变、仍然可见', bar.object.visible && bar.object.scale.x === scaleBefore);
+
+  bar.hide();
+  check('hide 之后不可见', !bar.object.visible);
+  bar.dispose();
 }
 
 console.log('\n[视野效果：预设 / 过渡 / 帧率无关]');

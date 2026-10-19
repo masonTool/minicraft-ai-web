@@ -440,7 +440,10 @@ function emitCross(
 
   for (const [x0, z0, x1, z1] of planes) {
     const vertexBase = buf.pos.length / 3;
-    // 顶点顺序：左下 → 右下 → 右上 → 左上（贴图 v=0 在顶部，与图集绘制方向一致）
+    // 顶点顺序：左下 → 右下 → 右上 → 左上。
+    // v 的方向与其它面一致：**v=0 在贴图底边**（批次 273 之后 flipY=true，
+    // 图集原点就是"贴图左下角"）。曾经这里按"v=0 在顶部"写，草方块侧面修好之后
+    // 所有植物就跟着上下颠倒了。
     const corners: readonly (readonly [number, number, number])[] = [
       [x0, y0, z0],
       [x1, y0, z1],
@@ -450,7 +453,8 @@ function emitCross(
     for (let i = 0; i < 4; i++) {
       const corner = corners[i]!;
       buf.pos.push(x + corner[0], y + corner[1], z + corner[2]);
-      buf.uv.push(i === 1 || i === 2 ? 1 : 0, i >= 2 ? 0 : 1);
+      // 底边（i=0,1）v=0、顶边（i=2,3）v=1 —— 与 `atlasCoords` 的"v=0=贴图底边"一致
+      buf.uv.push(i === 1 || i === 2 ? 1 : 0, i >= 2 ? 1 : 0);
       buf.tile.push(tileU, tileV);
       // 植物不吃 AO，也不做方向性明暗，直接取所在格的平滑光照（与原版一致）
       buf.light.push(sky / 15, blk / 15);
