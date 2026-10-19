@@ -642,7 +642,7 @@ const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: st
     label: '生成侧没写的几样',
     // ⚠️ 裂纹深板岩砖**不在**这一族了：批次 119 按原版补上了"深板岩砖 → 熔炼 → 裂纹"那条
     // 批次 351：方解石与平滑玄武岩随紫晶洞一起进了世界生成，从这一族里拿掉
-    ids: idsNamed('ice', 'packed_ice', 'nether_sprouts'),
+    ids: idsNamed('ice', 'nether_sprouts'),
     reason: '世界生成里没有它们（原版分别在冰原/诡异森林），也没有配方',
   },
 
@@ -754,7 +754,7 @@ const blockGaps: number[] = [];
   // 而不是"某条链断在中间"——正是这一栏该有的样子
   // 批次 339：竹林 → 竹子 → 脚手架、深色森林 → 深色橡木树叶，两族从白名单里还掉了（25 → 20）
   equal(
-    '方块侧缺口总数（批次 351 之后：18 条）',
+    '方块侧缺口总数（批次 363 之后：17 条）',
     blockGaps.length,
     BLOCK_EXEMPT.reduce((sum, family) => sum + family.ids.length, 0),
   );

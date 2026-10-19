@@ -117,7 +117,7 @@ check(
 );
 
 console.log('\n[批次 339：森林 / 丛林变体]');
-equal('群系表共 44 种', BIOMES.length, 44);
+equal('群系表共 45 种', BIOMES.length, 45);
 {
   // 批次 346：针叶林/山地/热带草原变体 + 恶地的区域变体
   const at = (temperature: number, humidity: number, erosion: number): string =>
@@ -142,6 +142,12 @@ equal('群系表共 44 种', BIOMES.length, 44);
   let eroded = 0;
   for (let i = 0; i < 200; i++) if (regionVariantAt(badlands, i * 64, i * 64).name === 'eroded_badlands') eroded++;
   check('侵蚀恶地能在恶地里按区域出现（200 格里至少 15 片）', eroded >= 15, `命中 ${eroded} 格`);
+  // 批次 363：冰刺平原是积雪平原的区域变体
+  const snowy = BIOMES.find((b) => b.name === 'snowy_plains')!;
+  let spikes = 0;
+  for (let i = 0; i < 200; i++) if (regionVariantAt(snowy, i * 64, i * 64).name === 'ice_spikes') spikes++;
+  check('冰刺平原能在积雪平原里按区域出现（200 格里至少 10 片）', spikes >= 10, `命中 ${spikes} 格`);
+  equal('冰刺平原地表是雪块', BIOMES.find((b) => b.name === 'ice_spikes')?.surface, Block.SNOW_BLOCK);
 }
 {
   // 批次 342：区域变体不参与气候匹配，只按 64 格哈希掷点

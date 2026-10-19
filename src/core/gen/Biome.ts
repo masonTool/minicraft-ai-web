@@ -50,6 +50,8 @@ export const Biome = {
   // 批次 362：砾石丘陵 + 侵蚀恶地
   WINDSWEPT_GRAVELLY_HILLS: 42,
   ERODED_BADLANDS: 43,
+  // 批次 363：冰刺平原（积雪平原的区域变体）
+  ICE_SPIKES: 44,
   BEACH: 4,
   STONY_SHORE: 5,
   PLAINS: 6,
@@ -845,6 +847,27 @@ export const BIOMES: readonly BiomeDef[] = [
     snowy: false,
     grassColor: 0x90814d,
     foliageColor: 0x9e814d,
+  },
+  {
+    id: Biome.ICE_SPIKES,
+    name: 'ice_spikes',
+    ocean: false,
+    temperature: ANY,
+    humidity: ANY,
+    continentalness: ANY,
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    // 积雪平原的 64 格区域变体：地表雪块 + 密集冰刺
+    variantOf: Biome.SNOWY_PLAINS,
+    regionChance: 12,
+    surface: Block.SNOW_BLOCK,
+    subSurface: Block.SNOW_BLOCK,
+    subDepth: 2,
+    underwater: Block.GRAVEL,
+    snowy: true,
+    grassColor: 0x80b497,
+    foliageColor: 0x60a17b,
   },
   {
     id: Biome.JAGGED_PEAKS,

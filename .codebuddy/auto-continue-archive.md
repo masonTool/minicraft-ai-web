@@ -9781,4 +9781,11 @@
 - [x] B359-5 test:mob 137、spider 62、reach 61、advancement 116，离线 131 套全绿
 - 覆盖：生物 **52 → 54（74% → 77%）**，进度 **82 → 85**
 
+## 批次 360：游戏规则补 3 条——伤害开关（2026-10-20）
+
+- [x] B360-1 `fallDamage` / `fireDamage` / `drowningDamage`（原版同名 gamerule）
+- [x] B360-2 在 `applyIncomingDamage` 一处收口（所有伤害来源都经过它）
+- [x] B360-3 test:commands 104，离线 131 套全绿
+- 覆盖：游戏规则 **11 → 14（37% → 47%）**
+
 <!-- docs-archive:end -->

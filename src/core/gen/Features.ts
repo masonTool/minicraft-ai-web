@@ -798,7 +798,15 @@ interface BiomeFeature {
    */
   lilyPads?: number;
   /** 特殊地物 */
-  special?: 'cactus' | 'pumpkin' | 'melon' | 'sugar_cane' | 'dead_bush' | 'bamboo' | 'huge_mushroom';
+  special?:
+    | 'cactus'
+    | 'pumpkin'
+    | 'melon'
+    | 'sugar_cane'
+    | 'dead_bush'
+    | 'bamboo'
+    | 'huge_mushroom'
+    | 'ice_spike';
   /** 特殊地物密度 */
   specialDensity: number;
   /**
@@ -1179,6 +1187,12 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     mushrooms: 0,
     special: 'dead_bush',
     specialDensity: 0.01,
+  },
+  [Biome.ICE_SPIKES]: {
+    ...EMPTY_FEATURE,
+    special: 'ice_spike',
+    specialDensity: 0.03,
+    snowCover: 0.3,
   },
   [Biome.JAGGED_PEAKS]: {
     ...EMPTY_FEATURE,
@@ -1815,6 +1829,20 @@ function placeSpecial(
         if (!isPlantable(w, wx, y, wz, SOIL)) continue;
         PLANTERS.bamboo(w, world, wx, wz, rng, woodFor('bamboo'));
         if (stats) stats.specials++;
+        continue;
+      }
+
+      if (kind === 'ice_spike') {
+        const ground = w.get(wx, y - 1, wz);
+        if (ground !== Block.SNOW_BLOCK && ground !== Block.PACKED_ICE && ground !== Block.ICE) continue;
+        const height = 3 + rng.int(5);
+        let placed = 0;
+        for (let h = 0; h < height; h++) if (w.put(wx, y + h, wz, Block.PACKED_ICE)) placed++;
+        // 底部偶尔加粗一格，看起来才像"冰刺"而不是柱子
+        if (placed > 0 && rng.chance(0.5)) {
+          w.put(wx + (rng.chance(0.5) ? 1 : -1), y, wz, Block.PACKED_ICE);
+        }
+        if (placed > 0 && stats) stats.specials++;
         continue;
       }
 

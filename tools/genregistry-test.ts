@@ -160,7 +160,7 @@ console.log('\n[群系采样：23 个群系各生成一片区块]');
     const missing = [...sampled].filter((id) => !generated.has(id));
     check(`${biome.name}：采样到的方块都在登记表里`, missing.length === 0, namesOf(missing));
   }
-  equal('42 个主世界群系都采到了样', covered, BIOMES.length);
+  equal('所有主世界群系都采到了样', covered, BIOMES.length);
 }
 
 // ---------------------------------------------------------------- 3. 下界与末地采样
