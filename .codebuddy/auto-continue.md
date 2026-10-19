@@ -1962,3 +1962,4 @@
 - [x] 303 页面压后台立即暂停：hidden/pagehide/blur 共用 enterBackground（整帧跳过 + 存盘 + audio.suspend），
   回前台 resumeFromBackground 统一补画布→暂停页；blur 仅非输入态生效，进出全屏 800ms 忽略窗口，
   pointerdown 兜底解冻（`4c91a93`）
+- [x] 304 燃料备选固定按效率排序+中文名；目标显示预计产量；从背包/熔炉选中物品仍算存在（`252829b`）
