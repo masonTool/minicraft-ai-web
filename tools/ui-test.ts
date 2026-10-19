@@ -203,6 +203,20 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
+  // 批次 274（用户）：指南针/时钟读数不能压在跳跃键上——触摸端挪到按钮簇左侧，
+  // 右偏移吃 --touch-scale，底偏移避开快捷栏右侧背包键。
+  check(
+    '触摸端读数在跳跃键簇左侧（右偏移吃触摸缩放）',
+    compact.includes('body.touch-mode .tool-hud { right: calc(20px + 76px * var(--touch-scale, 1) + 12px); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }'),
+  );
+  check(
+    '横屏读数让开 64px 跳跃键（底偏移 120px，避开背包键）',
+    compact.includes('right: calc(20px + 64px * var(--touch-scale, 1) + 12px); bottom: calc(120px + env(safe-area-inset-bottom, 0px));'),
+  );
+  check(
+    '竖屏读数让开 70px 跳跃键',
+    compact.includes('right: calc(14px + 70px * var(--touch-scale, 1) + 12px); bottom: calc(144px + env(safe-area-inset-bottom, 0px));'),
+  );
   // ⚠️ 批次 110：**触摸端不再自己写面板尺寸**——"换个界面就换一个宽高"正是从
   //    `body.touch-mode .settings-panel { width: ... }` 这类规则来的，所以这条要反向断言。
   //    （先剥掉注释：上面说明里正好引用了这句，不去掉会自己撞自己）

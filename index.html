@@ -3493,6 +3493,32 @@
         #touch-hint { bottom: calc(178px + env(safe-area-inset-bottom, 0px)); }
       }
 
+      /* ---------------- 指南针/时钟读数（触摸端安全位，批次 274） ----------------
+         用户："读数会跑到右下角、跟跳跃键叠在一起。"
+         触摸端的右下角被**跳跃键簇**占着（创造飞行时还要再叠上升/下降两颗），
+         表盘放正上方或右下角都躲不开；这里统一挪到**跳跃键簇左侧**：
+           right = 按钮簇的右边距 + 最宽那颗（跳跃键）× 触摸缩放 + 12px 间隙；
+           bottom 抬到 110px 以上，避开快捷栏右侧的背包键（约占 65~109px）。
+         只在 `body.touch-mode` 下覆盖，桌面端仍用原来的右下角。 */
+      body.touch-mode .tool-hud {
+        right: calc(20px + 76px * var(--touch-scale, 1) + 12px);
+        bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+      }
+      /* 横屏手机：按钮簇更靠下、跳跃键 64px（见上面 max-height: 480px 那条） */
+      @media (max-height: 480px) {
+        body.touch-mode .tool-hud {
+          right: calc(20px + 64px * var(--touch-scale, 1) + 12px);
+          bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+        }
+      }
+      /* 竖屏：按钮簇右边距 14px、跳跃键 70px、底部 132px */
+      @media (orientation: portrait) and (max-width: 900px) {
+        body.touch-mode .tool-hud {
+          right: calc(14px + 70px * var(--touch-scale, 1) + 12px);
+          bottom: calc(144px + env(safe-area-inset-bottom, 0px));
+        }
+      }
+
       /* ---------------- 面板入场（批次 28 → 142 改底部滑入） ----------------
          基岩版 Wiki：「从屏幕底部淡入并上移」。关闭走 panel-out。 */
       @keyframes panel-in {
