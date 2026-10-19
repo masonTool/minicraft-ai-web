@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 782（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 784（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -67,8 +67,15 @@ npm run dev            # http://localhost:5173
   不再降档、并在帧时间没恶化时优先还回去——这是"糊着还卡"的唯一出口。
   ⑧ 诊断补强：`sample` 里**始终**带 `writes/noop/lightSkipped/fluid/rt/fluidFar/fluidDeferred/cpuBound`
   （以前只有光照积压 >2 万才记，前两分钟是盲区）。
+  ⑨ **复验自动化**（B283-8）：`src/game/diagPerf.ts` + `npm run diag:perf -- <导出.json>`，
+  把"窗口生效 / 快路径命中 / CPU 是否卡 / 光照是否还积压"直接打印成结论；
+  判据由 `test:diag` 断言（89 条），并拿**改动前**那份真机导出复现出基线：
+  CPU 13.6/18.4ms（74%）、流体占写入 **94%**（≈3359 次/秒）、队列峰值 282234、
+  丢弃 41594、分辨率最低 0.75 / 视距最低 4 / 装饰最高 2。
+  旧版导出缺 `fluidFar/lightSkipped` 时提示"无法判断"，不会假装通过。
   门禁：`test:tick` **103**、`test:perfpolicy` **148**、`test:aquifer` **15**、
-  `test:world` **72**、`test:perf`（指纹改 `61dc934b`，地形变了）、离线 **131** 套全绿。
+  `test:world` **72**、`test:diag` **89**、`test:perf`（指纹改 `61dc934b`，地形变了）、
+  离线 **131** 套全绿。
 - 批次 282（用户："第三人称贴墙时能看到墙皮后面的世界"）：**相机不再被强行推过撞点**。
   ① 根因：`clampedCameraDistance` 里还有一层 `Math.max(0.6, …)`。背贴墙时射线撞点可能只有
   0.3 格，`0.6` 的下限把镜头推到撞点**后面**（墙里）；方块内侧面在相邻实心格之间被剔除，

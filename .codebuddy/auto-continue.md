@@ -1897,5 +1897,10 @@
 - [x] B283-6 诊断：`sample` 始终带 writes/noop/lightSkipped/fluid/rt/fluidFar/fluidDeferred/cpuBound
 - [x] B283-7 门禁：`test:tick` 103、`test:perfpolicy` 148、`test:aquifer` 15、`test:world` 72、
   `test:perf` 指纹 → `61dc934b`，离线 131 套全绿
-- [ ] B283-8 待真机复验：导出里看 `fluidFar`（远>近 = 窗口生效）与
-  `lightSkipped`（≈writes 且 fluid 大 = 快路径命中）；若 `cpu` 仍 ≥18ms，下一刀切生物 AI
+- [x] B283-8 真机复验**自动化**：新增 `src/game/diagPerf.ts` + `npm run diag:perf -- <导出.json>`，
+  判据（fluidFar / lightSkipped / cpuBound / pending / dropped）由 `test:diag` 断言（89 条）。
+  拿 2026-10-19T02-32-46 那份**改动前**的导出跑通，复现出基线：
+  CPU 13.6/18.4ms（74%）、流体 218325/231551 = **94%**（≈3359 次/秒）、
+  队列峰值 282234、丢弃 41594、分辨率最低 0.75、视距最低 4、装饰最高 2。
+  旧版导出缺 `fluidFar/lightSkipped` 时会明确提示"无法判断"，不会假装通过。
+  ⏭ 下一次真机导出直接用这条命令看结论；若 `cpu` 仍 ≥18ms，下一刀切生物 AI。
