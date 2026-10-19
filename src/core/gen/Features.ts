@@ -1229,6 +1229,12 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     specialDensity: 0.02,
     snowCover: 0,
   },
+  [Biome.RIVER]: {
+    ...EMPTY_FEATURE,
+  },
+  [Biome.FROZEN_RIVER]: {
+    ...EMPTY_FEATURE,
+  },
   [Biome.LUSH_CAVES]: {
     ...EMPTY_FEATURE,
   },

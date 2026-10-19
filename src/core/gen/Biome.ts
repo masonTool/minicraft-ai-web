@@ -57,6 +57,9 @@ export const Biome = {
   // 批次 394：洞穴群系（不进陆地匹配，按 y 与哈希判）
   LUSH_CAVES: 46,
   DRIPSTONE_CAVES: 47,
+  // 批次 398：内陆浅水 = 河流（不参与陆地匹配）
+  RIVER: 48,
+  FROZEN_RIVER: 49,
   BEACH: 4,
   STONY_SHORE: 5,
   PLAINS: 6,
@@ -1026,6 +1029,42 @@ export const BIOMES: readonly BiomeDef[] = [
     foliageColor: 0x6da36b,
   },
   {
+    id: Biome.RIVER,
+    name: 'river',
+    ocean: false,
+    temperature: ANY,
+    humidity: ANY,
+    continentalness: ANY,
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.SAND,
+    subSurface: Block.SAND,
+    subDepth: 2,
+    underwater: Block.SAND,
+    snowy: false,
+    grassColor: 0x8ab689,
+    foliageColor: 0x6da36b,
+  },
+  {
+    id: Biome.FROZEN_RIVER,
+    name: 'frozen_river',
+    ocean: false,
+    temperature: ANY,
+    humidity: ANY,
+    continentalness: ANY,
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.SAND,
+    subSurface: Block.SAND,
+    subDepth: 2,
+    underwater: Block.SAND,
+    snowy: true,
+    grassColor: 0x80b497,
+    foliageColor: 0x60a17b,
+  },
+  {
     id: Biome.SNOWY_BEACH,
     name: 'snowy_beach',
     ocean: false,
@@ -1174,7 +1213,10 @@ export const LAND_BIOMES = BIOMES.filter(
     biome.id !== Biome.FROZEN_PEAKS &&
     // 批次 394：洞穴群系不参与陆地匹配
     biome.id !== Biome.LUSH_CAVES &&
-    biome.id !== Biome.DRIPSTONE_CAVES,
+    biome.id !== Biome.DRIPSTONE_CAVES &&
+    // 批次 398：河流按水线判，不参与陆地匹配
+    biome.id !== Biome.RIVER &&
+    biome.id !== Biome.FROZEN_RIVER,
 );
 
 /**
@@ -1297,6 +1339,10 @@ export function biomeForColumn(climate: ClimatePoint, groundY: number, seaLevel:
   const gain = applyClimateGain(climate);
 
   if (groundY < seaLevel - 1) {
+    // 批次 398：内陆浅水（离海远、水深 ≤4）判成河流 / 冻河
+    if (groundY >= seaLevel - 4 && gain.continentalness > 0.05) {
+      return biomeById(gain.temperature < -0.45 ? Biome.FROZEN_RIVER : Biome.RIVER);
+    }
     // 批次 338：先分「深 / 浅」，再按温度分五档（原版就是这两个维度的组合）。
     // ⚠️ 原版没有 deep_warm_ocean：暖水海洋只出现在浅海，深海那一档落到 deep_lukewarm。
     const deep = groundY < seaLevel - 14;

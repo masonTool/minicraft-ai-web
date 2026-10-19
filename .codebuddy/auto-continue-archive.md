@@ -10052,4 +10052,12 @@
 - [x] B394-5 test:biome 63、genregistry 84、perf 40，离线 131 套全绿
 - 覆盖：群系 **46 → 48（64% → 67%）**
 
+## 批次 395：1.17 缠根泥土（2026-10-20）
+
+- [x] B395-1 方块 `minecraft:rooted_dirt`（id 664，硬度 0.5）
+- [x] B395-2 `decorateCaves`：洞穴顶部暴露的泥土按坐标哈希变成缠根泥土
+- [x] B395-3 生成来源、中文名、图集、贴图
+- [x] B395-4 genregistry 84、reach 61、perf 40，离线 131 套全绿
+- 覆盖：方块 **661 → 662**
+
 <!-- docs-archive:end -->

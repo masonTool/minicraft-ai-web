@@ -118,7 +118,7 @@ check(
 );
 
 console.log('\n[批次 339：森林 / 丛林变体]');
-equal('群系表共 48 种', BIOMES.length, 48);
+equal('群系表共 50 种', BIOMES.length, 50);
 {
   // 批次 346：针叶林/山地/热带草原变体 + 恶地的区域变体
   const at = (temperature: number, humidity: number, erosion: number): string =>
@@ -320,6 +320,26 @@ console.log('\n[批次 394：洞穴群系]');
   }
   equal('繁茂洞穴与滴水石洞都能判出来', [...names].sort().join(','), 'dripstone_caves,lush_caves');
   equal('地表高度以上没有洞穴群系', caveBiomeAt(0, 60, 0), null);
+}
+
+
+console.log('\n[批次 398：河流 / 冻河]');
+{
+  equal(
+    '内陆浅水 → 河流',
+    biomeForColumn(point({ temperature: 0, continentalness: 0.5 }), 61, 63).name,
+    'river',
+  );
+  equal(
+    '寒冷内陆浅水 → 冻河',
+    biomeForColumn(point({ temperature: -0.8, continentalness: 0.5 }), 61, 63).name,
+    'frozen_river',
+  );
+  equal(
+    '近海浅水仍是海洋',
+    biomeForColumn(point({ temperature: 0, continentalness: -0.3 }), 61, 63).name,
+    'ocean',
+  );
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
