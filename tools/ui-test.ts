@@ -759,13 +759,29 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.furnace-fuel-options'),
   );
   check(
-    '燃料备选区顺序固定按燃烧效率、中文名可见；选中不影响可选/槽内燃料（批次 303）',
+    '燃料备选区顺序固定按燃烧效率；只显示小图标+数量（批次 305）',
     invSrc.includes('[...new Set([...this.bagFuelOptions(), ...(current ? [current.id] : [])])].sort') &&
-      invSrc.includes("name.className = 'furnace-fuel-name'") &&
-      invSrc.includes('name.textContent = itemName(id)') &&
+      invSrc.includes("count.className = 'furnace-fuel-count'") &&
+      !invSrc.includes('furnace-fuel-name') &&
       invSrc.includes('private heldFromInventory') &&
       invSrc.includes('this.held && fuelSeconds(this.held.id) > 0') &&
       invSrc.includes('private furnaceHasSlotFuel'),
+  );
+  check(
+    '熔炉原料/燃料选中只高亮不拿起；退还全部按钮（批次 305）',
+    invSrc.includes('this.selectedStationKey === key') &&
+      /source instanceof Furnace && \(index === FURNACE_INPUT \|\| index === FURNACE_FUEL\)/.test(invSrc) &&
+      invSrc.includes('private returnFurnaceContents') &&
+      invSrc.includes("this.furnaceReturnBtn.textContent = '退还全部'"),
+  );
+  check(
+    '熔炉布局：原料上、燃料下、中间火焰+右箭头指向目标（批次 305）',
+    invSrc.includes("this.buildLabel('原料')") &&
+      invSrc.includes("this.buildLabel('燃料')") &&
+      invSrc.includes("flowArrow.textContent = '→'") &&
+      invSrc.includes("right.append(targetWrap, this.furnaceReturnBtn") &&
+      css.includes('.furnace-flow-arrow') &&
+      css.includes('@keyframes furnace-flicker'),
   );
   check(
     '目标框显示预计制作数量（批次 303）',

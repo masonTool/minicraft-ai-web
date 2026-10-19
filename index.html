@@ -2865,57 +2865,94 @@
 
       /* ---------------- 熔炉 ---------------- */
       .furnace-layout {
-        display: flex; align-items: center; gap: 14px;
+        display: flex; align-items: center; justify-content: center; gap: 18px;
         margin: 6px 0 10px; padding: 8px 4px;
       }
+      .furnace-left { gap: 4px; }
+      .furnace-right { gap: 5px; }
       .furnace-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-      /* 燃料说明 + 换燃料（批次 300）：别让玩家以为系统会乱抓箱子当燃料 */
+      /* 燃料说明 + 燃料备选（批次 305）：小图标横排，可换行，不写名字 */
       .furnace-fuel-hint {
-        display: flex; flex-direction: column; align-items: center; gap: 4px;
-        max-width: 96px; font-size: 10px; color: #4a4a4a;
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        width: 132px; max-width: 132px; font-size: 10px; color: #4a4a4a;
         line-height: 1.25; text-align: center;
       }
       .furnace-fuel-text {
-        min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .furnace-fuel-options {
-        display: flex; flex-wrap: wrap; gap: 2px; justify-content: center;
-        width: 96px; max-width: 96px;
+        display: flex; flex-wrap: wrap; gap: 3px; justify-content: center;
+        width: 132px; max-width: 132px;
       }
       .furnace-fuel-options.hidden { display: none; }
       .furnace-fuel-option {
-        position: relative; width: 42px; height: 46px; padding: 1px 0 0;
+        position: relative; width: 28px; height: 28px; padding: 0;
         cursor: pointer; background: #b8b8b8;
         border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
-        display: flex; flex-direction: column; align-items: center; gap: 0;
+        display: flex; align-items: center; justify-content: center;
       }
       .furnace-fuel-option.active {
         border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
         box-shadow: inset 0 0 0 1px #6aa84f;
       }
       .furnace-fuel-option canvas { width: 20px; height: 20px; }
-      .furnace-fuel-name {
-        max-width: 38px; font-size: 8px; line-height: 1.1; color: #2b2b2b;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
       .furnace-fuel-count {
-        position: absolute; right: 0; bottom: 0;
+        position: absolute; right: 1px; bottom: 0;
         font-size: 9px; line-height: 1; color: #fff;
         text-shadow: 1px 1px 0 #000;
       }
+      /* 原料 → 目标：中间火焰 + 向右箭头 */
+      .furnace-flow {
+        display: flex; align-items: center; justify-content: center;
+        gap: 7px; width: 132px; padding: 1px 0;
+      }
+      .furnace-flow-right {
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        width: 76px;
+      }
+      .furnace-flow-arrow {
+        font-size: 20px; font-weight: 700; line-height: 1;
+        color: #4a4a4a; text-shadow: 0 1px 0 #fff;
+      }
+      .furnace-return {
+        font: inherit; font-size: 11px; line-height: 1.2;
+        padding: 3px 10px; cursor: pointer;
+        color: #2b2b2b; background: #c9b28f;
+        border: 2px solid; border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
+      }
+      .furnace-return.hidden { display: none; }
 
+      /* 火焰（批次 305）：外炉膛 + 内焰 + 跳动的火舌，比原来的方条更接近火 */
       .furnace-flame {
-        position: relative; width: 18px; height: 20px;
-        background: rgba(0, 0, 0, .28); border-radius: 3px; overflow: hidden;
+        position: relative; width: 26px; height: 30px;
+        background: radial-gradient(ellipse at 50% 80%, #3a1400 0%, #160700 70%);
+        border-radius: 48% 48% 42% 42% / 62% 62% 38% 38%;
+        overflow: hidden; box-shadow: inset 0 0 8px #000;
       }
       .furnace-flame i {
-        position: absolute; left: 0; bottom: 0; width: 100%; height: 0;
-        background: linear-gradient(#ffd76a, #ff8a1e); transition: height .1s linear;
+        position: absolute; left: 50%; bottom: 0; width: 20px; height: 0;
+        transform: translateX(-50%);
+        background: radial-gradient(ellipse at 50% 85%, #fff6b0 0 18%, #ffd24a 42%, #ff7a18 70%, rgba(255, 90, 0, 0) 72%);
+        border-radius: 50% 50% 38% 38% / 65% 65% 35% 35%;
+        transition: height .1s linear;
       }
-      .furnace-flame.lit i { box-shadow: 0 0 6px #ff9a2e; }
-      .furnace-middle { width: 70px; }
+      .furnace-flame i::before {
+        content: ''; position: absolute; left: 50%; bottom: 8%;
+        width: 46%; height: 55%; transform: translateX(-50%);
+        background: radial-gradient(circle at 50% 80%, #fffbe0 0 25%, #ffcf3a 65%, rgba(255, 160, 0, 0) 70%);
+        border-radius: 50% 50% 40% 40% / 70% 70% 30% 30%;
+        animation: furnace-flicker .38s infinite alternate ease-in-out;
+      }
+      .furnace-flame.lit {
+        box-shadow: inset 0 0 8px #000, 0 0 10px rgba(255, 145, 30, .8);
+      }
+      .furnace-flame.lit i { box-shadow: 0 0 8px #ff9a2e; }
+      @keyframes furnace-flicker {
+        from { transform: translateX(-50%) scale(.82) skewX(-4deg); opacity: .78; }
+        to { transform: translateX(-50%) scale(1.08) skewX(4deg); opacity: 1; }
+      }
       .furnace-cook {
-        height: 12px; background: rgba(0, 0, 0, .28);
+        height: 10px; width: 72px; background: rgba(0, 0, 0, .28);
         border-radius: 3px; overflow: hidden;
       }
       .furnace-cook i {

@@ -655,6 +655,8 @@ export class InventoryScreen {
   private heldOriginEl: HTMLElement | null = null;
   /** 当前正被标记成"选中"的那一格（每次刷新先把旧的摘掉，避免高亮残留） */
   private selectedEl: HTMLElement | null = null;
+  /** 熔炉原料/燃料的"选中"格：只高亮，不把物品拿起来（批次 305） */
+  private selectedStationKey: string | null = null;
   /** 正被按下（还没抬手）的那一格：给它"沉下去"的样子，抬手就摘 */
   private pressingEl: HTMLElement | null = null;
   /**
@@ -699,6 +701,8 @@ export class InventoryScreen {
   /** 燃料备选区（批次 302）：背包里的可燃物直接列出来，点一下换上 */
   private readonly furnaceFuelOptionsEl: HTMLDivElement;
   private furnaceFuelOptionsStamp = '';
+  /** 退还全部（批次 305）：把熔炉三格里的东西一次放回仓库 */
+  private readonly furnaceReturnBtn: HTMLButtonElement;
   private readonly flameEl: HTMLDivElement;
   /** 附魔台（H9） */
   private readonly enchantLayout: HTMLDivElement;
@@ -1043,6 +1047,12 @@ export class InventoryScreen {
     this.furnaceFuelTextEl.className = 'furnace-fuel-text';
     this.furnaceFuelOptionsEl = document.createElement('div');
     this.furnaceFuelOptionsEl.className = 'furnace-fuel-options';
+    this.furnaceReturnBtn = document.createElement('button');
+    this.furnaceReturnBtn.type = 'button';
+    this.furnaceReturnBtn.className = 'furnace-return hidden';
+    this.furnaceReturnBtn.textContent = '退还全部';
+    this.furnaceReturnBtn.title = '把熔炉里的原料、燃料和产物全部放回仓库';
+    this.furnaceReturnBtn.addEventListener('click', () => this.returnFurnaceContents());
     // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
     this.anvilLayout = document.createElement('div');
     this.anvilLayout.className = 'anvil-layout';
@@ -2321,6 +2331,26 @@ export class InventoryScreen {
     this.inventory.notify();
   }
 
+  /** 退还全部：熔炉里的原料、燃料、产物一次放回仓库（批次 305） */
+  private returnFurnaceContents(): void {
+    const furnace = this.activeContainer;
+    if (!(furnace instanceof Furnace)) return;
+    furnace.paused = true;
+    this.returnStationStack(furnace, FURNACE_INPUT);
+    this.returnStationStack(furnace, FURNACE_FUEL);
+    this.returnStationStack(furnace, FURNACE_OUTPUT);
+    const xp = furnace.takeExperience();
+    if (xp > 0) this.hooks.onFurnaceXp?.(xp);
+    furnace.burnTimeLeft = 0;
+    furnace.burnTimeTotal = 0;
+    furnace.cookProgress = 0;
+    furnace.cookTimeTotal = 0;
+    this.selectedStationKey = null;
+    this.stationFilledResultId = null;
+    this.inventory.notify();
+    this.refresh();
+  }
+
   /** 换一条配方：先把上一套材料/燃料/产物清出来，放回背包 */
   private clearStationSlotsForNewRecipe(): void {
     const container = this.activeContainer;
@@ -2433,14 +2463,11 @@ export class InventoryScreen {
       canvas.width = 22;
       canvas.height = 22;
       drawItemIcon(canvas, this.atlas, id, 20);
-      // 中文名直接写在图标下面（触摸端没有 hover，title 看不到）
-      const name = document.createElement('span');
-      name.className = 'furnace-fuel-name';
-      name.textContent = itemName(id);
+      // 批次 305（用户）：只放小图标，不写名字；数量可有可无
       const count = document.createElement('span');
       count.className = 'furnace-fuel-count';
       count.textContent = counts[index]! > 1 ? String(counts[index]) : '';
-      button.append(canvas, name, count);
+      button.append(canvas, count);
       button.addEventListener('click', () => this.selectFurnaceFuel(id));
       fragment.appendChild(button);
     });
@@ -3923,13 +3950,29 @@ export class InventoryScreen {
       const fuelHint = document.createElement('div');
       fuelHint.className = 'furnace-fuel-hint';
       fuelHint.append(this.furnaceFuelTextEl, this.furnaceFuelOptionsEl);
-      const left = document.createElement('div');
-      left.className = 'furnace-col';
-      left.append(input, this.flameEl, fuel, fuelHint);
 
-      const middle = document.createElement('div');
-      middle.className = 'furnace-middle';
-      middle.appendChild(this.cookTrackElement());
+      // 批次 305（用户）：上方原料，下方燃料，中间火焰 + 向右箭头指向目标
+      const inputWrap = document.createElement('div');
+      inputWrap.className = 'furnace-col';
+      inputWrap.append(this.buildLabel('原料'), input);
+
+      const flowArrow = document.createElement('div');
+      flowArrow.className = 'furnace-flow-arrow';
+      flowArrow.textContent = '→';
+      const flowRight = document.createElement('div');
+      flowRight.className = 'furnace-flow-right';
+      flowRight.append(flowArrow, this.cookTrackElement());
+      const flow = document.createElement('div');
+      flow.className = 'furnace-flow';
+      flow.append(this.flameEl, flowRight);
+
+      const fuelWrap = document.createElement('div');
+      fuelWrap.className = 'furnace-col';
+      fuelWrap.append(this.buildLabel('燃料'), fuel, fuelHint);
+
+      const left = document.createElement('div');
+      left.className = 'furnace-col furnace-left';
+      left.append(inputWrap, flow, fuelWrap);
 
       // 烟熏炉/高炉要写清"它只吃什么"：原版靠玩家自己知道，我们的界面里直接说明，
       // 免得玩家把石头塞进烟熏炉、看着它不动以为是坏了
@@ -3939,10 +3982,10 @@ export class InventoryScreen {
       targetWrap.className = 'furnace-col';
       targetWrap.append(this.buildLabel('产物 / 目标'), this.stationTargetEl);
       const right = document.createElement('div');
-      right.className = 'furnace-col';
-      right.append(targetWrap, this.furnaceHintEl);
+      right.className = 'furnace-col furnace-right';
+      right.append(targetWrap, this.furnaceReturnBtn, this.furnaceHintEl);
 
-      this.furnaceLayout.replaceChildren(left, middle, right);
+      this.furnaceLayout.replaceChildren(left, right);
       this.topArea.append(this.furnaceLayout, this.stationHintEl);
       return;
     }
@@ -4991,6 +5034,22 @@ export class InventoryScreen {
     const slot = source.get(index);
     const hadHeld = this.held !== null;
 
+    // 批次 305（用户）：熔炉原料/燃料点一下只"选中"，不拿起、不浮起、不离开原格
+    if (!this.held && slot && source instanceof Furnace && (index === FURNACE_INPUT || index === FURNACE_FUEL)) {
+      this.selectedEl?.classList.remove('selected');
+      if (this.selectedStationKey === key) {
+        this.selectedStationKey = null;
+        this.selectedEl = null;
+        return;
+      }
+      this.selectedStationKey = key;
+      binding.element.classList.add('selected');
+      this.selectedEl = binding.element;
+      return;
+    }
+    // 点了别的格子：熔炉原料/燃料的选中态取消
+    this.selectedStationKey = null;
+
     // 产物槽等只取不放：手里拿着东西再点它属于“不可放置点”。
     // 不交换、不把物品塞进产物槽；只取消当前选取并把东西送回来源。
     if (this.held && takeOnly) {
@@ -5264,6 +5323,7 @@ export class InventoryScreen {
     this.stationAutoCollect = false;
     this.stationBrewSnapshot = null;
     this.stationOrigins.clear();
+    this.selectedStationKey = null;
     if (this.mode !== mode || this.activeContainer !== container) {
       // 换面板 = 上一个容器"关掉了"（陷阱箱据此撤信号，批次 249）
       if (this.open) this.hooks.onPanelClosed?.();
@@ -5411,6 +5471,7 @@ export class InventoryScreen {
     this.stationAutoCollect = false;
     this.stationBrewSnapshot = null;
     this.stationOrigins.clear();
+    this.selectedStationKey = null;
     if (!this.open || this.closing) return;
     this.hooks.onPanelClosed?.();
     // 携带版合成页的配方书是背包的左半页，不是独立窗口。
@@ -5515,6 +5576,8 @@ export class InventoryScreen {
       const reason = furnace.rejectReason;
       this.furnaceHintEl.textContent = reason;
       this.furnaceHintEl.classList.toggle('bad', reason !== '');
+      const hasItems = [FURNACE_INPUT, FURNACE_FUEL, FURNACE_OUTPUT].some((slot) => furnace.get(slot));
+      this.furnaceReturnBtn.classList.toggle('hidden', !hasItems);
       this.refreshFurnaceFuelHint(furnace);
       // 目标框不因槽位空而清掉：配方保留，材料不足时变红（批次 300）
       if (!this.stationTargetEntry) this.syncStationTargetFromSlots();
@@ -5614,6 +5677,17 @@ export class InventoryScreen {
     if (this.selectedEl && this.selectedEl !== this.heldOriginEl) {
       this.selectedEl.classList.remove('selected');
       this.selectedEl = null;
+    }
+    // 熔炉原料/燃料的选中态：刷新重绘后补回来（物品本身不动）
+    if (this.held) this.selectedStationKey = null;
+    if (this.selectedStationKey) {
+      const selected = this.bindings.get(this.selectedStationKey);
+      if (selected) {
+        selected.element.classList.add('selected');
+        this.selectedEl = selected.element;
+      } else {
+        this.selectedStationKey = null;
+      }
     }
     if (this.held && this.heldOriginEl) {
       this.renderInto(this.heldOriginEl, this.held);
