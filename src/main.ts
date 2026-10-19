@@ -9126,6 +9126,10 @@ class App {
    * 然后交给 `PlayerStats` 走无敌帧。生物攻击、中毒、瞬间伤害都从这里进。
    */
   private applyIncomingDamage(amount: number, cause: DamageCause, source?: string): void {
+    // 批次 360：三条"伤害开关"规则（原版同名 gamerule）
+    if (cause === 'fall' && !this.rules.fallDamage) return;
+    if (cause === 'fire' && !this.rules.fireDamage) return;
+    if (cause === 'drown' && !this.rules.drowningDamage) return;
     const scaled = amount * this.effects.incomingDamageMultiplier();
     if (scaled <= 0) return;
     // `source` 只用于左上角的"为什么掉血"（"僵尸"/"世界边界"…），不参与数值结算

@@ -41,6 +41,12 @@ export interface GameRules {
   doInsomnia: boolean;
   /** 死亡后是否跳过死亡界面立即重生（批次 255） */
   doImmediateRespawn: boolean;
+  /** 摔落是否造成伤害（批次 360） */
+  fallDamage: boolean;
+  /** 火焰是否造成伤害（批次 360） */
+  fireDamage: boolean;
+  /** 溺水是否造成伤害（批次 360） */
+  drowningDamage: boolean;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -55,6 +61,9 @@ export const DEFAULT_GAME_RULES: GameRules = {
   doWeatherCycle: true,
   doInsomnia: true,
   doImmediateRespawn: false,
+  fallDamage: true,
+  fireDamage: true,
+  drowningDamage: true,
 };
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */
