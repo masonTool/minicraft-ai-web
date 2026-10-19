@@ -18,6 +18,16 @@
  */
 
 import { CAMERA_MODES, CAMERA_MODE_LABELS, type CameraMode } from '../core/viewMode.ts';
+// 界面语言（M8，批次 403）：表与当前语言都在这个纯模块里
+import {
+  DEFAULT_LANGUAGE,
+  LANGUAGES,
+  LANGUAGE_NAMES,
+  isLanguage,
+  setLanguage,
+  t,
+  type Language,
+} from '../core/i18n/I18n.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import { FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
 import {
@@ -226,6 +236,12 @@ type BoolSettingKey =
 export interface GameSettings {
   /** 设置格式版本（批次 271；见 `SETTINGS_VERSION` 的注释） */
   settingsVersion: number;
+  /**
+   * 界面语言（M8，批次 403）：`zh` / `en`。
+   * ⚠️ 切换后要**重开面板**才全部生效：文案是在构建 DOM 时写进去的，
+   * 已经建好的节点不会自己重读语言（`applyLanguage()` 只覆盖挂了 ref 的那几处）。
+   */
+  language: Language;
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
   viewDistance: number;
   /** 视野角度（度）：60~110 */
@@ -361,6 +377,7 @@ export interface GameSettings {
 
 export const DEFAULT_SETTINGS: GameSettings = {
   settingsVersion: SETTINGS_VERSION,
+  language: DEFAULT_LANGUAGE,
   viewDistance: 12,
   fov: 72,
   volume: 0.7,
@@ -434,6 +451,8 @@ export function loadSettings(): GameSettings {
         : sensitivityLevelFromGain(clampNumber(parsed.sensitivity, 0.5, 4, 1));
     return {
       settingsVersion: SETTINGS_VERSION,
+      // 语言：只认 zh / en，写坏了回退默认（不做"从标签推断"——存档里的选择优先）
+      language: isLanguage(parsed.language) ? parsed.language : DEFAULT_SETTINGS.language,
       viewDistance: clampNumber(parsed.viewDistance, 4, 16, DEFAULT_SETTINGS.viewDistance),
       fov: clampNumber(parsed.fov, 60, 110, DEFAULT_SETTINGS.fov),
       volume: clampNumber(parsed.volume, 0, 1, DEFAULT_SETTINGS.volume),
@@ -631,6 +650,32 @@ export class SettingsScreen {
   private readonly panel: HTMLDivElement;
   /** 副标题原文：触摸端不显示"按 Esc 继续游戏"这类键盘提示，所以原文留着、渲染时再决定 */
   private subtitleText = '按 Esc 继续游戏';
+
+  /**
+   * 挂了"文案键"的节点（批次 403）：切语言之后逐个重写 textContent。
+   *
+   * 只收**不随状态变化**的静态文案。像"当前模式：创造"这种由数据拼出来的文案
+   * 不能挂在这里——刷新一次就会把数据覆盖成模板字。
+   */
+  private readonly labelBindings: Array<{ element: HTMLElement; key: string }> = [];
+
+  /** 写一次文案并登记；之后 `applyLanguage()` 会跟着刷新 */
+  private bindLabel(element: HTMLElement, key: string): void {
+    element.textContent = t(key);
+    this.labelBindings.push({ element, key });
+  }
+
+  /**
+   * 按当前语言重写所有登记的文案。
+   *
+   * 为什么要单独一步：语言是模块级状态（见 `I18n.ts` 文件头），**不参与依赖追踪**，
+   * 所以"改了设置"不会自动让已经建好的 DOM 重画。在 `show()` 里叫它，
+   * 每次打开面板都对一次账——切完语言关掉再打开就能看到新文案。
+   */
+  applyLanguage(): void {
+    setLanguage(this.settings.language);
+    for (const { element, key } of this.labelBindings) element.textContent = t(key);
+  }
   /** "飞行"那个开关（非持久设置，见 `makeCreativeRow`；只在创造模式里显示） */
   private flyingToggle: HTMLButtonElement | null = null;
   /** "游戏模式"那个开关（生存 ↔ 创造） */
@@ -711,7 +756,7 @@ export class SettingsScreen {
     // 与设置页共用同一个三列骨架，切页时标题不会移位。
     const menuTitle = document.createElement('b');
     menuTitle.className = 'settings-title';
-    menuTitle.textContent = '游戏已暂停';
+    this.bindLabel(menuTitle, 'pause.title');
     const menuHeader = this.makeHeader(menuTitle, null);
 
     this.menuHintEl = document.createElement('div');
@@ -724,14 +769,14 @@ export class SettingsScreen {
     this.resumeButton.type = 'button';
     this.resumeButton.id = 'pause-resume';
     this.resumeButton.className = 'pause-action primary';
-    this.resumeButton.textContent = '继续游戏';
+    this.bindLabel(this.resumeButton, 'pause.resume');
     this.resumeButton.addEventListener('click', () => this.actions.onResume());
 
     const settingsButton = document.createElement('button');
     settingsButton.type = 'button';
     settingsButton.id = 'pause-settings';
     settingsButton.className = 'pause-action';
-    settingsButton.textContent = '设置';
+    this.bindLabel(settingsButton, 'pause.settings');
     settingsButton.addEventListener('click', () => this.setPage('settings'));
 
     // 成就 / 进度（M7）：原版基岩版的暂停菜单里就有这一项
@@ -739,7 +784,7 @@ export class SettingsScreen {
     achievements.type = 'button';
     achievements.id = 'pause-achievements';
     achievements.className = 'pause-action';
-    achievements.textContent = '成就';
+    this.bindLabel(achievements, 'pause.achievements');
     achievements.addEventListener('click', () => this.actions.onOpenAdvancements?.());
     achievements.style.display = this.actions.onOpenAdvancements ? '' : 'none';
 
@@ -748,7 +793,7 @@ export class SettingsScreen {
     exitToMenu.type = 'button';
     exitToMenu.id = 'pause-exit';
     exitToMenu.className = 'pause-action';
-    exitToMenu.textContent = '保存并退出到主菜单';
+    this.bindLabel(exitToMenu, 'pause.exit');
     exitToMenu.addEventListener('click', () => this.actions.onExitToMenu?.());
 
     // "退出"只在游戏里有意义；主菜单打开这个面板时（没有当前世界）就藏起来。
@@ -808,7 +853,7 @@ export class SettingsScreen {
       tab.type = 'button';
       tab.className = 'settings-tab';
       tab.dataset.group = group;
-      tab.textContent = SETTING_GROUP_LABELS[group];
+      this.bindLabel(tab, `settings.group.${group}`);
       tab.addEventListener('click', () => this.setActiveGroup(group));
       this.tabs.set(group, tab);
       tabs.appendChild(tab);
@@ -822,7 +867,11 @@ export class SettingsScreen {
       section.className = 'settings-section';
       section.dataset.group = group;
       // 分类小标题只在桌面端显示（手机端页签上已经写着组名了，再来一行纯属占地方）
-      section.appendChild(this.makeGroup(SETTING_GROUP_LABELS[group]));
+      {
+        const heading = this.makeGroup(t(`settings.group.${group}`));
+        this.bindLabel(heading, `settings.group.${group}`);
+        section.appendChild(heading);
+      }
       this.sections.set(group, section);
       body.appendChild(section);
     }
@@ -1039,6 +1088,22 @@ export class SettingsScreen {
     if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow(gameOptions);
     // 自动保存间隔（批次 172）：大世界保存那一下会有卡顿，间隔可调
     this.makeSelect(gameOptions, 'autosaveSeconds', '自动保存', AUTOSAVE_OPTIONS.map(String), AUTOSAVE_LABELS);
+    // 界面语言（M8，批次 403）。放在"游戏"组最后一行：它跟难度/模式那种
+    // "进去之前调一次"的东西同一性质，不值得单开一组（一组的行数掉到 1 行就该问
+    // "它还算一个分类吗"——这条判据在 SETTING_GROUPS 的注释里）。
+    this.makeDropdown(
+      gameOptions,
+      t('settings.language'),
+      LANGUAGES,
+      { ...LANGUAGE_NAMES },
+      () => this.settings.language,
+      (next) => {
+        this.settings.language = next;
+        setLanguage(next);
+        saveSettings(this.settings);
+        this.applyLanguage();
+      },
+    );
     // 游戏模式（批次 181）：生存 ↔ 创造，唯一的模式入口
     if (this.actions.onToggleGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);
 
@@ -1943,6 +2008,8 @@ export class SettingsScreen {
     }
     this.root.classList.remove('closing');
     this.renderSubtitle();
+    // 语言可能在别处被改过（设置项 / 存档载入）：每次打开都对一次文案
+    this.applyLanguage();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
     // 批次 333：面板可见之后形象画布才有尺寸，补一帧（隐藏期间 render 会直接返回）

@@ -1966,9 +1966,26 @@ console.log('\n[暂停菜单分两层（批次 108）]');
   check('定义了两页（menu / settings）', source.includes("export const PAUSE_PAGES = ['menu', 'settings'] as const;"));
   check('切页只切 class（不重建 DOM）', source.includes("element.classList.toggle('active', key === page);"));
   // 用户点名要的"几个主要按钮"：继续游戏 / 设置 / 保存并退出
-  check('暂停菜单有「继续游戏」', source.includes("this.resumeButton.textContent = '继续游戏';"));
-  check('暂停菜单有「设置」按钮（点进二级页）', source.includes("settingsButton.textContent = '设置';"));
-  check('暂停菜单有「保存并退出到主菜单」', source.includes("exitToMenu.textContent = '保存并退出到主菜单';"));
+  //
+  // ⚠️ 批次 403 起文案改走 i18n 键（`bindLabel(el, 'pause.resume')`），
+  // 所以这里要**同时**验两处：界面绑了哪个键 + 中文表里那个键的中文是什么。
+  // 只验源码里的字符串会漏掉"键写错但中文表里恰好也有"的情况。
+  const i18nSource = readFileSync(new URL('../src/core/i18n/I18n.ts', import.meta.url), 'utf8');
+  check(
+    '暂停菜单有「继续游戏」',
+    source.includes("this.bindLabel(this.resumeButton, 'pause.resume');") &&
+      i18nSource.includes("'pause.resume': '继续游戏',"),
+  );
+  check(
+    '暂停菜单有「设置」按钮（点进二级页）',
+    source.includes("this.bindLabel(settingsButton, 'pause.settings');") &&
+      i18nSource.includes("'pause.settings': '设置',"),
+  );
+  check(
+    '暂停菜单有「保存并退出到主菜单」',
+    source.includes("this.bindLabel(exitToMenu, 'pause.exit');") &&
+      i18nSource.includes("'pause.exit': '保存并退出到主菜单',"),
+  );
   // 设置页有返回；「继续游戏」不该再和滑块挤在同一页上
   check('设置页有 ‹ 返回', source.includes("'‹ 返回'"));
   check('设置页上不再并排放着动作按钮', !source.includes("className = 'settings-buttons'"));

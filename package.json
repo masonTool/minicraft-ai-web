@@ -19,6 +19,7 @@
     "test:quickmove": "esbuild tools/quickmove-test.ts --bundle --platform=node --format=esm --outfile=.tmp/quickmove-test.mjs --log-level=error && node .tmp/quickmove-test.mjs",
     "test:inventory": "esbuild tools/inventory-test.ts --bundle --platform=node --format=esm --outfile=.tmp/inventory-test.mjs --log-level=error && node .tmp/inventory-test.mjs",
     "test:crafting": "esbuild tools/crafting-test.ts --bundle --platform=node --format=esm --outfile=.tmp/crafting-test.mjs --log-level=error && node .tmp/crafting-test.mjs",
+    "test:i18n": "esbuild tools/i18n-test.ts --bundle --platform=node --format=esm --outfile=.tmp/i18n-test.mjs --log-level=error && node .tmp/i18n-test.mjs",
     "test:furnace": "esbuild tools/furnace-test.ts --bundle --platform=node --format=esm --outfile=.tmp/furnace-test.mjs --log-level=error && node .tmp/furnace-test.mjs",
     "test:entity": "esbuild tools/entity-test.ts --bundle --platform=node --format=esm --outfile=.tmp/entity-test.mjs --log-level=error && node .tmp/entity-test.mjs",
     "test:shapes": "esbuild tools/shapes-test.ts --bundle --platform=node --format=esm --outfile=.tmp/shapes-test.mjs --log-level=error && node .tmp/shapes-test.mjs",
