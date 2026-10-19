@@ -316,7 +316,7 @@ import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { AIM_INFLATE, AIM_LOCK_RADIUS_PX, sightBlocked } from './core/interaction/AimTarget.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
 import { BlockOutline } from './render/BlockOutline.ts';
-import { MobOutline } from './render/MobOutline.ts';
+import { MobInfoBar } from './render/MobInfoBar.ts';
 import { BlockOverlay, DAMAGE_STAGES } from './render/BlockOverlay.ts';
 import { ParticleSystem } from './render/ParticleSystem.ts';
 import { HandRenderer } from './render/HandRenderer.ts';
@@ -983,8 +983,8 @@ class App {
   private readonly translucentMaterial: VoxelMaterial;
   private readonly skyColor: THREE.Color;
   private readonly outline = new BlockOutline();
-  /** 生物选中光环（批次 271，276 改为头顶光环）：与方块描边互斥，谁被选中就只亮谁 */
-  private readonly mobOutline = new MobOutline();
+  /** 生物头顶信息条（名字 / 生命 / 敌对生物的攻击与警戒）：与方块描边互斥 */
+  private readonly mobInfo = new MobInfoBar();
   /** 破坏裂纹与命中面高亮（G2 / G3） */
   private readonly blockOverlay: BlockOverlay;
   private readonly physics = new PlayerPhysics();
@@ -1645,7 +1645,7 @@ class App {
       this.meshPool,
     );
     this.scene.add(this.outline.object);
-    this.scene.add(this.mobOutline.object);
+    this.scene.add(this.mobInfo.object);
     this.blockOverlay = new BlockOverlay(atlas);
     this.scene.add(this.blockOverlay.object);
     // 告示牌上的字（B12）：单独一个 Group，里面每块有字的牌子一个平面
@@ -3870,7 +3870,7 @@ class App {
       this.tapUseMob = null;
       this.tapVehicle = null;
       this.outline.hide();
-      this.mobOutline.hide();
+      this.mobInfo.hide();
       this.blockOverlay.hide();
       this.updateTargetAnchor(null);
       return;
@@ -3911,12 +3911,12 @@ class App {
     if (this.aimMob !== previousAimMob) this.targetInfoTimer = 0;
 
     if (this.aimMob) {
-      // 生物优先：方块描边与裂纹全部收起，只亮生物头顶的光环
+      // 生物优先：方块描边与裂纹全部收起，只留生物头顶的信息条
       this.outline.hide();
       this.blockOverlay.hide();
-      this.mobOutline.show(this.aimMob);
+      this.mobInfo.show(this.aimMob);
     } else if (this.hit) {
-      this.mobOutline.hide();
+      this.mobInfo.hide();
       const id = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
       const state = this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z);
       const shape = blockDef(id).shape;
@@ -3966,7 +3966,7 @@ class App {
       }
     } else {
       this.outline.hide();
-      this.mobOutline.hide();
+      this.mobInfo.hide();
       this.blockOverlay.hide();
     }
 
@@ -12719,7 +12719,7 @@ class App {
     this.meshPool.dispose();
     this.world.dispose();
     this.outline.dispose();
-    this.mobOutline.dispose();
+    this.mobInfo.dispose();
     this.blockOverlay.dispose();
     // 告示牌的文字平面与画布贴图（B12）：每块牌子一份材质，得逐块释放
     this.signRenderer.dispose();

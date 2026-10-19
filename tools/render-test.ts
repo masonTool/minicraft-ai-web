@@ -30,7 +30,7 @@ import { SHEARED_BODY_COLOR, mobBodyColor } from '../src/render/MobRenderer.ts';
 import { Mob } from '../src/core/entity/Mob.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
-import { MobOutline } from '../src/render/MobOutline.ts';
+import { MobInfoBar } from '../src/render/MobInfoBar.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { srgbColor } from '../src/render/srgb.ts';
 import { tileOriginAt, tileRectAt } from '../src/render/atlasCoords.ts';
@@ -556,27 +556,73 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
 
 // ---------------------------------------------------------------- 3. 视野效果
 
-console.log('\n[生物选中标记：头顶光环（批次 276）]');
+console.log('\n[生物头顶信息条（批次 277）]');
 {
-  const marker = new MobOutline();
-  check('默认不可见', !marker.object.visible);
-  const mob = { x: 3, y: 64, z: -5, width: 0.9, height: 1.4 } as unknown as Mob;
-  marker.show(mob);
-  check('显示后可见', marker.object.visible);
+  /** Node 里没有 DOM：给一个只有方法壳子的 2D context，Sprite 的画布纹理不需要真的画 */
+  const fakeContext = new Proxy(
+    {},
+    {
+      get: () => () => undefined,
+      set: () => true,
+    },
+  ) as unknown as CanvasRenderingContext2D;
+  const fakeCanvas = {
+    width: 0,
+    height: 0,
+    getContext: () => fakeContext,
+  } as unknown as HTMLCanvasElement;
+
+  const info = new MobInfoBar(fakeCanvas);
+  check('默认不可见', !info.object.visible);
+
+  const zombie = {
+    id: 7,
+    x: 3,
+    y: 64,
+    z: -5,
+    width: 0.9,
+    height: 1.4,
+    health: 12,
+    type: {
+      id: 'zombie',
+      name: '僵尸',
+      health: 20,
+      hostile: true,
+      attackDamage: 3,
+      followRange: 35,
+    },
+  } as unknown as Mob;
+
+  info.show(zombie);
+  check('显示后可见', info.object.visible);
   check(
-    '位置贴着生物脚底',
-    marker.object.position.x === 3 && marker.object.position.y === 64 && marker.object.position.z === -5,
+    '信息条在头顶上方',
+    info.object.position.x === 3 &&
+      info.object.position.z === -5 &&
+      info.object.position.y > 64 + 1.4 &&
+      info.object.position.y < 64 + 1.4 + 1,
   );
-  check('只有一个光环（不再有白框/角括号）', marker.object.children.length === 1 && marker.halo.name === 'mob-halo');
-  check('光环是 TorusGeometry（侧看也有厚度，不需要 billboard）', marker.halo.geometry.type === 'TorusGeometry');
   check(
-    '光环水平躺在头顶上方',
-    Math.abs(marker.halo.rotation.x + Math.PI / 2) < 1e-9 && marker.halo.position.y === 1.4 + 0.14,
+    '宽 0.9 的生物 → 条宽 1.44、高按画布比例',
+    Math.abs(info.object.scale.x - 1.44) < 1e-9 &&
+      Math.abs(info.object.scale.y - 1.44 * (96 / 256)) < 1e-9,
   );
-  check('光环半径跟着生物宽度（0.9 × 0.32）', Math.abs(marker.halo.scale.x - 0.288) < 1e-9);
-  marker.hide();
-  check('hide 之后不可见', !marker.object.visible);
-  marker.dispose();
+  const infoImage = (info.object.material as THREE.SpriteMaterial).map?.image as
+    | { width?: number; height?: number }
+    | undefined;
+  check('画布纹理是 256×96', infoImage?.width === 256 && infoImage?.height === 96);
+
+  // 体型差异只影响世界尺寸，不改变画布分辨率
+  const tiny = { ...zombie, width: 0.2 } as unknown as Mob;
+  info.show(tiny);
+  check('小体型按最小宽度 1.2 显示', Math.abs(info.object.scale.x - 1.2) < 1e-9);
+  const huge = { ...zombie, width: 16 } as unknown as Mob;
+  info.show(huge);
+  check('大体型封顶 3.2（不会挡住半个屏幕）', Math.abs(info.object.scale.x - 3.2) < 1e-9);
+
+  info.hide();
+  check('hide 之后不可见', !info.object.visible);
+  info.dispose();
 }
 
 console.log('\n[视野效果：预设 / 过渡 / 帧率无关]');
