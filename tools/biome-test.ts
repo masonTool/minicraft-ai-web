@@ -104,7 +104,8 @@ equal(
 equal('炎热干燥 → 沙漠', findLandBiome(point({ temperature: 0.7, humidity: -0.8, erosion: 0.2 })).name, 'desert');
 equal('炎热潮湿 → 丛林', findLandBiome(point({ temperature: 0.7, humidity: 0.7, erosion: 0.2 })).name, 'jungle');
 equal('温暖适湿 → 平原', findLandBiome(point({ temperature: 0, humidity: 0, erosion: 0.2 })).name, 'plains');
-equal('强侵蚀 → 山地', findLandBiome(point({ temperature: 0, humidity: 0, erosion: -0.8 })).name, 'windswept_hills');
+equal('强侵蚀 → 砾石丘陵', findLandBiome(point({ temperature: 0, humidity: 0, erosion: -0.9 })).name, 'windswept_gravelly_hills');
+equal('中等侵蚀 → 多风丘陵', findLandBiome(point({ temperature: 0, humidity: 0, erosion: -0.8 })).name, 'windswept_hills');
 equal(
   '强侵蚀 + 寒冷 → 雪坡',
   findLandBiome(point({ temperature: -0.8, humidity: 0, erosion: -0.8 })).name,
@@ -116,7 +117,7 @@ check(
 );
 
 console.log('\n[批次 339：森林 / 丛林变体]');
-equal('群系表共 42 种', BIOMES.length, 42);
+equal('群系表共 44 种', BIOMES.length, 44);
 {
   // 批次 346：针叶林/山地/热带草原变体 + 恶地的区域变体
   const at = (temperature: number, humidity: number, erosion: number): string =>
@@ -125,6 +126,8 @@ equal('群系表共 42 种', BIOMES.length, 42);
   equal('原始云杉林（次陡）', at(0, 0.5, -0.7), 'old_growth_spruce_taiga');
   equal('多风森林（暖 + 陡）', at(0.6, 0.5, -0.9), 'windswept_forest');
   equal('热带高原', at(0.6, 0, -0.9), 'savanna_plateau');
+  // 批次 362：砾石丘陵（暖 + 最陡）
+  equal('砾石丘陵', at(-0.2, 0, -0.9), 'windswept_gravelly_hills');
   // 批次 352：蘑菇岛（暖湿 + 平坦）
   equal('蘑菇岛', at(0.7, 0.9, 0.8), 'mushroom_fields');
   equal('蘑菇岛地表是菌丝', BIOMES.find((b) => b.name === 'mushroom_fields')?.surface, Block.MYCELIUM);
@@ -136,6 +139,9 @@ equal('群系表共 42 种', BIOMES.length, 42);
   let wooded = 0;
   for (let i = 0; i < 200; i++) if (regionVariantAt(badlands, i * 64, i * 64).name === 'wooded_badlands') wooded++;
   check('疏林恶地能在恶地里按区域出现（200 格里至少 20 片）', wooded >= 20, `命中 ${wooded} 格`);
+  let eroded = 0;
+  for (let i = 0; i < 200; i++) if (regionVariantAt(badlands, i * 64, i * 64).name === 'eroded_badlands') eroded++;
+  check('侵蚀恶地能在恶地里按区域出现（200 格里至少 15 片）', eroded >= 15, `命中 ${eroded} 格`);
 }
 {
   // 批次 342：区域变体不参与气候匹配，只按 64 格哈希掷点
