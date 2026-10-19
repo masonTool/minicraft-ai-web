@@ -16,6 +16,7 @@ import { ItemEntity, ITEM_FIRE_SECONDS, ITEM_LIFETIME } from '../src/core/entity
 import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../src/core/entity/XpOrb.ts';
 import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import { Boat } from '../src/core/entity/Boat.ts';
+import { Horse } from '../src/core/entity/Horse.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
 import { VehicleParking } from '../src/core/entity/VehicleParking.ts';
 import { EntityParking } from '../src/core/entity/EntityParking.ts';
@@ -802,6 +803,64 @@ console.log('\n[穿透箭：命中后继续飞（批次 266）]');
   served = first;
   ordinary.tick(noChannelCtx, 0.05);
   check('没有引雷的箭不报落雷点', plainStrikes === 0, `${plainStrikes}`);
+}
+
+console.log('\n[骑乘：马要驯服、猪装鞍即骑（批次 406）]');
+{
+  const world: PhysicsWorld = {
+    collisionAt: (_x, y) => (y < 0 ? 'full' : null),
+    isLiquid: () => false,
+  };
+  const ctx = (input: { forward?: number; jump?: boolean } = {}): EntityContext => ({
+    world,
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: () => 0,
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+    vehicleInput: { forward: input.forward ?? 1, strafe: 0, sprint: false, jump: input.jump === true },
+  });
+
+  const pig = createMob(mobTypeById('pig')!, 0.5, 0.05, 0.5);
+  const horse = createMob(mobTypeById('horse')!, 0.5, 0.05, 0.5);
+  const strider = createMob(mobTypeById('strider')!, 0.5, 0.05, 0.5);
+
+  // 工厂是"能不能骑"的唯一入口：造错的类会静默变成"能喂不能骑"
+  check('工厂造出来的猪是可骑乘的那个类', pig instanceof Horse);
+  check('工厂造出来的炽足兽也可骑乘', strider instanceof Horse);
+  check('猪不需要驯服（原版装鞍即骑）', (pig as Horse).needsTaming === false);
+  check('炽足兽也不需要驯服', (strider as Horse).needsTaming === false);
+  check('猪骑着不能跳', (pig as Horse).canJump === false);
+  check('马仍然需要驯服', (horse as Horse).needsTaming === true);
+  check('马骑着能跳', (horse as Horse).canJump === true);
+
+  // 装上鞍、有人骑：按前进朝 -Z 走（与船/矿车同一口径）
+  const mountedPig = createMob(mobTypeById('pig')!, 0.5, 0.05, 0.5) as Horse;
+  mountedPig.saddled = true;
+  mountedPig.passenger = 'player';
+  mountedPig.rideYaw = 0;
+  const z0 = mountedPig.z;
+  for (let i = 0; i < 40; i++) mountedPig.tick(ctx(), 0.05);
+  check('骑着猪按前进会朝 -Z 走', mountedPig.z < z0 - 0.5, `z ${z0.toFixed(2)} → ${mountedPig.z.toFixed(2)}`);
+
+  // 没人骑的猪不该吃驾驶输入
+  const emptyPig = createMob(mobTypeById('pig')!, 0.5, 0.05, 0.5) as Horse;
+  const ez = emptyPig.z;
+  for (let i = 0; i < 40; i++) emptyPig.tick(ctx(), 0.05);
+  check('没人骑的猪不吃驾驶输入', Math.abs(emptyPig.z - ez) < 0.6, `z ${ez.toFixed(2)} → ${emptyPig.z.toFixed(2)}`);
+
+  // 跳跃：猪跳不起来，马能跳（同一段代码，靠 canJump 分叉）
+  const jumpPig = createMob(mobTypeById('pig')!, 0.5, 0.05, 0.5) as Horse;
+  jumpPig.passenger = 'player';
+  jumpPig.tick(ctx({ forward: 0, jump: true }), 0.05);
+  check('猪按跳跃键不起跳', jumpPig.vy < 1, `vy=${jumpPig.vy.toFixed(2)}`);
+
+  const jumpHorse = createMob(mobTypeById('horse')!, 0.5, 0.05, 0.5) as Horse;
+  jumpHorse.passenger = 'player';
+  jumpHorse.onGround = true;
+  jumpHorse.tick(ctx({ forward: 0, jump: true }), 0.05);
+  check('马按跳跃键会起跳', jumpHorse.vy > 4, `vy=${jumpHorse.vy.toFixed(2)}`);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

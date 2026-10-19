@@ -42,7 +42,19 @@ export function createMob(type: MobType, x: number, y: number, z: number): Mob {
   if (type.id === PHANTOM_TYPE.id) return new Phantom(x, y, z);
   // 骑乘系（批次 253）：马/驴/骡/羊驼都是 `Horse`（多一个 `passenger` 与骑乘 AI）。
   // 与村民同一个理由：`new Mob(HORSE_TYPE, …)` 会造出一匹"能喂能驯、但骑不上去"的马。
-  if (type.id === 'horse' || type.id === 'donkey' || type.id === 'mule' || type.id === 'llama') {
+  //
+  // 猪与炽足兽（批次 406）也走这里：它们的差别只是"不用驯服、不能跳"，
+  // 写在 `Horse.needsTaming` / `canJump` 上。**必须加在这一行**——
+  // 漏掉的表现是"整片地图上的猪都不能骑"，而调试时看到的那只猪（刷怪蛋召的）
+  // 如果恰好走了另一条路径，就会误以为是"装鞍没生效"。
+  if (
+    type.id === 'horse' ||
+    type.id === 'donkey' ||
+    type.id === 'mule' ||
+    type.id === 'llama' ||
+    type.id === 'pig' ||
+    type.id === 'strider'
+  ) {
     return new Horse(type, x, y, z);
   }
   // 蝙蝠（批次 261）：会飞的那一只，走自己的空中游荡 AI

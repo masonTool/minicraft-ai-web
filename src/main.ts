@@ -5622,7 +5622,7 @@ class App {
     // 拴绳（批次 256）：拿绳子点动物 = 拴上 / 解开（绳子不消耗，原版也如此）
     if (held === Item.LEAD) return this.toggleLeash(mob);
     // 装鞍（批次 254）：拿鞍点已驯服的马，鞍被消耗
-    if (mob instanceof Horse && mob.tamed && held === Item.SADDLE) {
+    if (mob instanceof Horse && (mob.tamed || !mob.needsTaming) && held === Item.SADDLE) {
       if (mob.saddled) {
         this.hudToast.show('这匹马已经有鞍了');
         return true;
@@ -5635,7 +5635,7 @@ class App {
       return true;
     }
     // 马（批次 253）：驯服后空手点它 = **上马**（不是坐下）；没鞍先提示
-    if (mob instanceof Horse && mob.tamed && held === undefined) {
+    if (mob instanceof Horse && (mob.tamed || !mob.needsTaming) && held === undefined) {
       if (!mob.saddled) {
         this.hudToast.show('先给它装上鞍');
         return true;
@@ -5704,7 +5704,13 @@ class App {
     if (held === undefined) return false;
     if (mobAcceptsTame(mob.type, held)) return true;
     // 鞍（批次 254）：对着已驯服的马是"装鞍"，不是打它
-    if (held === Item.SADDLE && mob instanceof Horse && mob.tamed) return true;
+    // 鞍（批次 254 / 406）：已驯服的马，或**不需要驯服**的猪/炽足兽，装鞍不是打它
+    if (held === Item.SADDLE && mob instanceof Horse && (mob.tamed || !mob.needsTaming)) return true;
+    // 猪 / 炽足兽（批次 406）：**装过鞍之后空手点它就是上车**。
+    // 没这一行的话 `useItemOnMob` 里的上坐骑分支永远进不去——
+    // 因为它们不 tamed，而上面那条 `mob.tamed && held === undefined` 不成立，
+    // 表现在界面上就是"鞍装上了、点它却只能挨一下打"。
+    if (mob instanceof Horse && !mob.needsTaming && mob.saddled && held === undefined) return true;
     // 拴绳（批次 256）：拿绳子点任何生物都是"拴/解"，不是打
     if (held === Item.LEAD) return true;
     if (held === Item.SHEARS || held === Item.BUCKET) return true;
