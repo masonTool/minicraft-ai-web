@@ -1819,6 +1819,76 @@ function rgbToHex(rgb: readonly [number, number, number]): number {
   return ((rgb[0] & 0xff) << 16) | ((rgb[1] & 0xff) << 8) | (rgb[2] & 0xff);
 }
 
+/**
+ * 方块族补齐（批次 400）：一批"原版确实有配方、本仓库漏了"的方块。
+ *
+ * 挑法不是拍脑袋：先遍历 `BLOCKS`，找出"既不是任何配方的产物、也不是熔炼产物"
+ * 的方块（253 个），再逐个判断"原版有没有合成配方"——**只留原版真有的**。
+ * 于是石头/矿石/树叶/原木/生成类方块（菌丝、哭泣的黑曜石、垂滴叶…）都被排除在外，
+ * 而平滑砂岩/平滑石头/裂纹砖那一族本来就走**熔炼**（`Smelting.ts` 早就有），也不在这里。
+ *
+ * ⚠️ 明确**不做**的（记在 TASKS B16，不凭印象写原料数量）：
+ * 海晶石 / 海晶石砖 / 暗海晶石 / 海晶灯 四条——它们的原料配比需要对着 wiki 逐条核，
+ * 猜错就是"能合出来但和原版不一样"，比缺着更难查。
+ */
+const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
+  // 黏土块（原版 4 个黏土球 2×2）
+  { kind: 'shaped', result: { id: Block.CLAY, count: 1 }, pattern: ['CC', 'CC'], key: { C: Item.CLAY_BALL } },
+  // 浮冰（原版 9 块冰 3×3）
+  { kind: 'shaped', result: { id: Block.PACKED_ICE, count: 1 }, pattern: ['III', 'III', 'III'], key: { I: Block.ICE } },
+  // 粗铜块（原版 9 个粗铜 3×3）
+  { kind: 'shaped', result: { id: Block.RAW_COPPER_BLOCK, count: 1 }, pattern: ['RRR', 'RRR', 'RRR'], key: { R: Item.RAW_COPPER } },
+  // 西瓜（原版 9 片西瓜 3×3）
+  { kind: 'shaped', result: { id: Block.MELON, count: 1 }, pattern: ['MMM', 'MMM', 'MMM'], key: { M: Item.MELON_SLICE } },
+  // 末地石砖（原版 2×2 产 4）
+  {
+    kind: 'shaped',
+    result: { id: Block.END_STONE_BRICKS, count: 4 },
+    pattern: ['EE', 'EE'],
+    key: { E: Block.END_STONE },
+  },
+  // 末地烛：烈焰棒压在紫珀块上 → 4 根（原版竖排两个）
+  {
+    kind: 'shaped',
+    result: { id: Block.END_ROD, count: 4 },
+    pattern: ['B', 'P'],
+    key: { B: Item.BLAZE_ROD, P: Block.PURPUR_BLOCK },
+  },
+  // 苔藓地毯：两块苔藓竖着叠 → 3 块（原版）
+  { kind: 'shaped', result: { id: Block.MOSS_CARPET, count: 3 }, pattern: ['M', 'M'], key: { M: Block.MOSS_BLOCK } },
+  // 苔石 / 苔石砖：圆石 / 石砖 + 藤蔓（原版是无序配方）
+  {
+    kind: 'shapeless',
+    result: { id: Block.MOSSY_COBBLESTONE, count: 1 },
+    ingredients: [Block.COBBLESTONE, Block.VINE],
+  },
+  {
+    kind: 'shapeless',
+    result: { id: Block.MOSSY_STONE_BRICKS, count: 1 },
+    ingredients: [Block.STONE_BRICKS, Block.VINE],
+  },
+  // 下界疣块（原版 9 个下界疣 3×3）
+  {
+    kind: 'shaped',
+    result: { id: Block.NETHER_WART_BLOCK, count: 1 },
+    pattern: ['WWW', 'WWW', 'WWW'],
+    key: { W: Item.NETHER_WART },
+  },
+  /**
+   * 带釉陶瓦 16 色（原版：8 块同色陶瓦围一圈 + 1 个同色染料 → 8 块）。
+   * 颜色必须一一对应，理由与羊毛/地毯/床那三条一致——
+   * 写成"任意染料"会让玩家拿红染料合出白釉陶瓦，还以为是显示错了。
+   */
+  ...DYE_COLORS.map(
+    (_color, index): Recipe => ({
+      kind: 'shaped' as const,
+      result: { id: Block.GLAZED_TERRACOTTA_ID_START + index, count: 8 },
+      pattern: ['TTT', 'TDT', 'TTT'],
+      key: { T: terracottaId(index), D: dyeItemId(index) },
+    }),
+  ),
+];
+
 export const RECIPES: readonly Recipe[] = [
   ...BASE_RECIPES,
   ...CONTAINER_RECIPES,
@@ -1846,6 +1916,7 @@ export const RECIPES: readonly Recipe[] = [
   ...REDSTONE_RECIPES,
   ...CONCRETE_POWDER_RECIPES,
   ...FIREWORK_RECIPES,
+  ...WORLD_BLOCK_RECIPES,
 ];
 
 interface Normalized {

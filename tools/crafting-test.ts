@@ -4,7 +4,7 @@
  * 运行：npm run test:crafting
  */
 
-import { Block, WOOL_ID_START, woolId } from '../src/core/registry/blocks.ts';
+import { Block, WOOL_ID_START, terracottaId, woolId } from '../src/core/registry/blocks.ts';
 import { DYE_COLORS } from '../src/core/registry/colors.ts';
 import { Item, dyeItemId } from '../src/core/registry/items.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
@@ -230,9 +230,9 @@ console.log('\n[合成网格：木棍进阶链]');
   //      酿造材料 2（发酵蜘蛛眼、闪烁的西瓜片）、
   //      染色玻璃 16 + 彩色陶瓦 16（此前这两族一个配方都没有）
   equal(
-    '配方表规模（旧明细 205 − 手写橡木 4 + 木制族 24 + 锁链与铁粒 3 + 铜 17 + 石材变体 53 + 石英链 5 + 切石机 1 + 砂岩家族 11 + 烟熏炉与高炉 7 + 营火 12 + 食物与杂物 7 + 甜浆果与可可豆 2 + 干海带 2 + 蛋糕与花盆 2 + 脚手架 1 + 阳光传感器 1 + 绊线钩 1 + TNT 1 + 可疑的炖菜 5 + 漏斗 1 + 投掷器 1 + 发射器 1 + 木桶 1 + 骨粉 1 + 堆肥桶 1 + 末影箱 1 + 潜影盒 1 + 瓜类种子 2 + 床 16 + 告示牌 6 + 钓竿 1 + 黑石家族 2 + 避雷针 1 + 黑石变体 7 + 展示框与画 17 + 工作站四件 4 + 染料与染色族 49 + 烈焰粉 1 + 末影之眼 1 + 矿物块与信标 7 + 红石元件与补漏 19 + 史莱姆 3 + 岩浆怪 2 + 缓降药水 2 + 混凝土粉末 16 + 音符盒 1 + 炼药锅 1 + 墨囊与灰染料 2 + 书与笔 1 + 烟花 22 + 盾牌 1 + 指南针与时钟 2 + 地图 1 + 灵魂光源 5 + 船 1 + 铁轨与矿车 2 + 动力/探测轨 2 + 激活轨与测重板 3 + 标靶 1 + 陷阱箱 1 + 漏斗矿车 1 + 动力矿车 1 + 鞍 1 + 拴绳 1 + 弩 1；明细见上）',
+    '配方表规模（旧明细 205 − 手写橡木 4 + 木制族 24 + 锁链与铁粒 3 + 铜 17 + 石材变体 53 + 石英链 5 + 切石机 1 + 砂岩家族 11 + 烟熏炉与高炉 7 + 营火 12 + 食物与杂物 7 + 甜浆果与可可豆 2 + 干海带 2 + 蛋糕与花盆 2 + 脚手架 1 + 阳光传感器 1 + 绊线钩 1 + TNT 1 + 可疑的炖菜 5 + 漏斗 1 + 投掷器 1 + 发射器 1 + 木桶 1 + 骨粉 1 + 堆肥桶 1 + 末影箱 1 + 潜影盒 1 + 瓜类种子 2 + 床 16 + 告示牌 6 + 钓竿 1 + 黑石家族 2 + 避雷针 1 + 黑石变体 7 + 展示框与画 17 + 工作站四件 4 + 染料与染色族 49 + 烈焰粉 1 + 末影之眼 1 + 矿物块与信标 7 + 红石元件与补漏 19 + 史莱姆 3 + 岩浆怪 2 + 缓降药水 2 + 混凝土粉末 16 + 音符盒 1 + 炼药锅 1 + 墨囊与灰染料 2 + 书与笔 1 + 烟花 22 + 盾牌 1 + 指南针与时钟 2 + 地图 1 + 灵魂光源 5 + 船 1 + 铁轨与矿车 2 + 动力/探测轨 2 + 激活轨与测重板 3 + 标靶 1 + 陷阱箱 1 + 漏斗矿车 1 + 动力矿车 1 + 鞍 1 + 拴绳 1 + 弩 1 + 方块族补漏 26；明细见上）',
     RECIPES.length,
-    615,
+    641,
   );
 }
 
@@ -280,6 +280,75 @@ console.log('\n[羊毛染色：16 色]');
   check('两种染料不能合成羊毛', matchRecipe(dyeOnly, 2) === null);
 
   equal('蓝色羊毛的 id 与起始值一致', woolId(11), WOOL_ID_START + 11);
+}
+
+console.log('\n[方块族补漏（批次 400）]');
+{
+  // 判据：每一条都"摆出来能出、摆错就不出"，只看配方表总数不算测过
+  const clay = grid(2, ['CC', 'CC'], { C: Item.CLAY_BALL });
+  equal('4 个黏土球 → 黏土块', matchRecipe(clay, 2)?.id, Block.CLAY);
+
+  const ice = grid(3, ['III', 'III', 'III'], { I: Block.ICE });
+  equal('9 块冰 → 浮冰', matchRecipe(ice, 3)?.id, Block.PACKED_ICE);
+
+  const copper = grid(3, ['RRR', 'RRR', 'RRR'], { R: Item.RAW_COPPER });
+  equal('9 个粗铜 → 粗铜块', matchRecipe(copper, 3)?.id, Block.RAW_COPPER_BLOCK);
+
+  const melon = grid(3, ['MMM', 'MMM', 'MMM'], { M: Item.MELON_SLICE });
+  equal('9 片西瓜 → 西瓜', matchRecipe(melon, 3)?.id, Block.MELON);
+  equal('西瓜产量是 1 个整块', matchRecipe(melon, 3)?.count, 1);
+
+  const endBricks = grid(2, ['EE', 'EE'], { E: Block.END_STONE });
+  equal('4 末地石 → 末地石砖', matchRecipe(endBricks, 2)?.id, Block.END_STONE_BRICKS);
+  equal('末地石砖产量 4', matchRecipe(endBricks, 2)?.count, 4);
+
+  const rod = grid(2, ['B·', 'P·'], { B: Item.BLAZE_ROD, P: Block.PURPUR_BLOCK });
+  equal('烈焰棒 + 紫珀块 → 末地烛', matchRecipe(rod, 2)?.id, Block.END_ROD);
+  equal('末地烛产量 4', matchRecipe(rod, 2)?.count, 4);
+
+  const carpet = grid(2, ['M·', 'M·'], { M: Block.MOSS_BLOCK });
+  equal('两块苔藓竖排 → 苔藓地毯', matchRecipe(carpet, 2)?.id, Block.MOSS_CARPET);
+  equal('苔藓地毯产量 3', matchRecipe(carpet, 2)?.count, 3);
+  check(
+    '两块苔藓横排不出地毯（原版是竖排）',
+    matchRecipe(grid(2, ['MM', '··'], { M: Block.MOSS_BLOCK }), 2)?.id !== Block.MOSS_CARPET,
+  );
+
+  const mossy = grid(2, ['CV', '··'], { C: Block.COBBLESTONE, V: Block.VINE });
+  equal('圆石 + 藤蔓 → 苔石', matchRecipe(mossy, 2)?.id, Block.MOSSY_COBBLESTONE);
+
+  const mossyBricks = grid(2, ['SV', '··'], { S: Block.STONE_BRICKS, V: Block.VINE });
+  equal('石砖 + 藤蔓 → 苔石砖', matchRecipe(mossyBricks, 2)?.id, Block.MOSSY_STONE_BRICKS);
+
+  const wart = grid(3, ['WWW', 'WWW', 'WWW'], { W: Item.NETHER_WART });
+  equal('9 个下界疣 → 下界疣块', matchRecipe(wart, 3)?.id, Block.NETHER_WART_BLOCK);
+
+  // 带釉陶瓦 16 色：颜色必须一一对应（与羊毛/地毯/床同一条口径）
+  const whiteGlaze = grid(3, ['TTT', 'TDT', 'TTT'], {
+    T: terracottaId(0),
+    D: dyeItemId(0),
+  });
+  equal('8 白陶瓦 + 1 白染料 → 白色带釉陶瓦', matchRecipe(whiteGlaze, 3)?.id, Block.GLAZED_TERRACOTTA_ID_START);
+  equal('带釉陶瓦产量 8', matchRecipe(whiteGlaze, 3)?.count, 8);
+
+  const blackGlaze = grid(3, ['TTT', 'TDT', 'TTT'], {
+    T: terracottaId(15),
+    D: dyeItemId(15),
+  });
+  equal(
+    '黑色那一头也一一对应（id 从 624 起顺排）',
+    matchRecipe(blackGlaze, 3)?.id,
+    Block.GLAZED_TERRACOTTA_ID_START + 15,
+  );
+
+  const wrongDye = grid(3, ['TTT', 'TDT', 'TTT'], {
+    T: terracottaId(0),
+    D: dyeItemId(15),
+  });
+  check(
+    '白陶瓦 + 黑染料不会出白色带釉陶瓦（颜色不串）',
+    matchRecipe(wrongDye, 3)?.id !== Block.GLAZED_TERRACOTTA_ID_START,
+  );
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
