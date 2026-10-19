@@ -10059,6 +10059,21 @@ class App {
    */
   /** 凋灵是否活着（批次 370：用来在它倒下的那一帧补一条击杀进度） */
   private witherWasAlive = false;
+  /** 群系探索进度：上次报过的群系（批次 371） */
+  private lastBiomeName = '';
+  private biomeProgressTimer = 0;
+
+  /** 群系探索进度（批次 371）：只在主世界、每 1.5 秒检查一次 */
+  private updateBiomeProgress(dt: number): void {
+    if (this.dimension !== Dimension.OVERWORLD) return;
+    this.biomeProgressTimer += dt;
+    if (this.biomeProgressTimer < 1.5) return;
+    this.biomeProgressTimer = 0;
+    const name = this.biomeNameAt(this.physics.x, this.physics.z);
+    if (!name || name === this.lastBiomeName) return;
+    this.lastBiomeName = name;
+    this.reportProgress({ kind: 'biome', biome: name });
+  }
 
   private updateBossBar(): void {
     if (!this.bossBarEl || !this.bossFillEl) return;
@@ -12816,6 +12831,8 @@ class App {
       this.updateLightning(dt);
       // 刷怪笼（批次 92）：下界要塞里的笼子按倒计时生成烈焰人
       this.updateSpawners(dt);
+      // 群系探索（批次 371）：每 1.5 秒看一次脚下群系，变了就报一条进度
+      this.updateBiomeProgress(dt);
       // 信标（K5，批次 117）：光柱逐帧同步、效果每秒挂一次
       this.updateBeacons(dt);
       // 世界边界（K12，批次 175）：蓝墙逐帧摆位、越界判推回与伤害

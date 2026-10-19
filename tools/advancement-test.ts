@@ -109,7 +109,11 @@ console.log('\n[进度表：触发条件都"打得中"]');
   const impossible = ADVANCEMENTS.filter((def) => {
     const need = def.trigger.needCount;
     if (need === undefined) return false;
-    const pool = def.trigger.ids?.length ?? def.trigger.mobs?.length ?? def.trigger.dimensions?.length;
+    const pool =
+      def.trigger.ids?.length ??
+      def.trigger.mobs?.length ??
+      def.trigger.dimensions?.length ??
+      def.trigger.biomes?.length;
     if (pool === undefined) return true;
     return need > pool;
   });
@@ -457,6 +461,7 @@ console.log('\n[触发种类：没有"只有代码没有数据"的死支路]');
     'kill',
     'breed',
     'dimension',
+    'biome',
     'fish',
     'sleep',
     'dragon',

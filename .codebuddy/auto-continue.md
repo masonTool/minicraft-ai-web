@@ -73,13 +73,6 @@
 
 ---
 
-## 批次 368：命令补 2 条——/spawnpoint 与 /setworldspawn（2026-10-20）
-
-- [x] B368-1 `CommandContext` 新增 `setPersonalSpawn` / `setWorldSpawn`
-- [x] B368-2 `/spawnpoint [x y z]`（个人重生点）/ `/setworldspawn [x y z]`（世界出生点）
-- [x] B368-3 主程序接到 `bedSpawn` 与 `spawnPoint`；`test:commands` 107 条
-- 覆盖：命令 **18 → 20（45% → 50%）**
-
 ## 批次 369：B16 杜鹃族——杜鹃花丛 + 盛开的杜鹃花丛（2026-10-20）
 
 - [x] B369-1 两个 cross 方块（id 600/601），贴图与中文名齐
@@ -93,3 +86,11 @@
 - [x] B370-2 `kill_a_wither`（挑战）；test:advancement 允许 wither 这一条例外
 - [x] B370-3 离线 131 套全绿
 - 覆盖：进度 **91 → 92（92%）**
+
+## 批次 371：M7 补 1 条——冒险家（群系探索触发）（2026-10-20）
+
+- [x] B371-1 新触发 `biome`（ProgressEvent + trigger.biomes + tracker 去重计数）
+- [x] B371-2 主程序每 1.5 秒看一次脚下群系，变了就报；只在主世界
+- [x] B371-3 `探索 10 个群系`（列出 12 个代表群系，池子 > 10）
+- [x] B371-4 test:advancement 116、离线 131 套全绿
+- 覆盖：进度 **92 → 93（93%）**

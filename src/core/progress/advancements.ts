@@ -68,6 +68,8 @@ export type ProgressEvent =
   | { readonly kind: 'trade' }
   /** 睡了一觉（睡到天亮） */
   | { readonly kind: 'sleep' }
+  /** 走进一个群系（批次 371；`biome` 是群系注册名） */
+  | { readonly kind: 'biome'; readonly biome: string }
   /** 末影龙倒地 */
   | { readonly kind: 'dragon' }
   /** 不需要条件，由主程序显式授予（根条目用） */
@@ -87,6 +89,8 @@ export interface AdvancementTrigger {
   readonly mobs?: readonly string[];
   /** 维度 id（`dimension`） */
   readonly dimensions?: readonly string[];
+  /** 群系注册名（`biome`；省略表示任意群系） */
+  readonly biomes?: readonly string[];
   /**
    * 计数型：要命中**几个不同的目标**才算达成（原版的"资深怪物猎人"就是这样）。
    *
@@ -762,6 +766,33 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     desc: '杀死一只凋灵骷髅（下界要塞）',
     icon: Item.COAL,
     trigger: { kind: 'kill', mobs: ['wither_skeleton'] },
+  },
+  {
+    id: 'minecraft:adventure/explore_10_biomes',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '冒险家',
+    desc: '走过 10 个不同的生物群系（不要求一次走完）',
+    icon: Block.GRASS_BLOCK,
+    trigger: {
+      kind: 'biome',
+      needCount: 10,
+      // 列出 12 个代表性群系：池子要大于 10，否则这条永远达不成
+      biomes: [
+        'plains',
+        'forest',
+        'birch_forest',
+        'dark_forest',
+        'taiga',
+        'desert',
+        'savanna',
+        'jungle',
+        'swamp',
+        'badlands',
+        'snowy_plains',
+        'ocean',
+      ],
+    },
   },
   {
     id: 'minecraft:adventure/kill_a_wither',

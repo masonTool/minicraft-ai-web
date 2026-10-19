@@ -9842,4 +9842,11 @@
 - [x] B367-4 离线 131 套全绿
 - 覆盖：方块 **595 → 597（85%）**
 
+## 批次 368：命令补 2 条——/spawnpoint 与 /setworldspawn（2026-10-20）
+
+- [x] B368-1 `CommandContext` 新增 `setPersonalSpawn` / `setWorldSpawn`
+- [x] B368-2 `/spawnpoint [x y z]`（个人重生点）/ `/setworldspawn [x y z]`（世界出生点）
+- [x] B368-3 主程序接到 `bedSpawn` 与 `spawnPoint`；`test:commands` 107 条
+- 覆盖：命令 **18 → 20（45% → 50%）**
+
 <!-- docs-archive:end -->
