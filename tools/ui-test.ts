@@ -2634,6 +2634,19 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
     playerSrc.includes('setOffhand(visible: boolean)') &&
       appSrc.includes('this.playerRenderer.setOffhand(this.inventory.get(OFFHAND_SLOT) !== null);'),
   );
+  // 批次 272（用户）：盔甲页预览被压扁——隐藏时不能拿 24×48 兜底写后备缓冲，
+  // 显示后要自动补一帧，切页时也要立刻重绘。
+  check(
+    '预览隐藏时不写画布尺寸（不再用 24×48 兜底）',
+    previewSrc.includes('if (width <= 0 || height <= 0) return;') && !previewSrc.includes('Math.max(24, this.canvas.clientWidth)'),
+  );
+  check(
+    '预览监听尺寸变化并在 dispose 里断开',
+    previewSrc.includes('new ResizeObserver') &&
+      previewSrc.includes('this.resizeObserver?.disconnect();'),
+  );
+  const setTabBody = /private setPocketTab\(tab: PocketInventoryTab\): void \{([\s\S]*?)\n  \}/.exec(invSrc)?.[1] ?? '';
+  check('切页后立刻重绘预览（盔甲页尺寸更大）', setTabBody.includes('this.refreshPlayerPreview();'));
 }
 
 console.log('\n[角色创建：外观（批次 187）]');

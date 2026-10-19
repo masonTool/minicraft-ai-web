@@ -33,6 +33,14 @@ export class PlayerPreview3D {
   private offhand = false;
   private armor: readonly (number | null)[] = [null, null, null, null];
   private palette: AppearancePalette | null = null;
+  /**
+   * 画布尺寸变化时自动补一帧（批次 272）。
+   *
+   * 盔甲页的预览比物品栏页大一号（CSS 改宽高），而切换页签只改布局、不一定会
+   * 走到 `refresh()`。没有这个观察器时，画布会保留"隐藏时"那套后备尺寸，
+   * 被 CSS 拉伸之后就是用户看到的"人扁了，拖一下才恢复"。
+   */
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
@@ -44,6 +52,11 @@ export class PlayerPreview3D {
     this.camera.lookAt(0, 1.0, 0);
     this.model = new PlayerRenderer(this.scene, () => 1);
     this.model.setVisible(true);
+    // 页签切换 / 转屏 / 面板尺寸变化都会改 CSS 尺寸，观察器负责补渲染
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.render());
+      this.resizeObserver.observe(this.canvas);
+    }
   }
 
   /** 当前朝向（弧度），验收脚本用 */
@@ -73,8 +86,12 @@ export class PlayerPreview3D {
 
   /** 按当前画布的 CSS 尺寸渲染一帧 */
   render(): void {
-    const width = Math.max(24, this.canvas.clientWidth);
-    const height = Math.max(48, this.canvas.clientHeight);
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    // 批次 272：面板隐藏时 clientWidth/Height 是 0。以前拿 24×48 兜底写进后备缓冲，
+    // 于是"隐藏时渲染过"的那一帧会把画布变成 24×48，显示出来后就被 CSS 拉扁。
+    // 隐藏期间直接不画，等 ResizeObserver / 切页后的显式 refresh 再补。
+    if (width <= 0 || height <= 0) return;
     const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2);
     // `false`：不动内联样式（尺寸归 CSS 管），只改后备缓冲
     this.renderer.setPixelRatio(dpr);
@@ -109,6 +126,8 @@ export class PlayerPreview3D {
   }
 
   dispose(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.model.dispose();
     this.renderer.dispose();
   }

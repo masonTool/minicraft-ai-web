@@ -1903,6 +1903,9 @@ export class InventoryScreen {
     diag.event('inventory', 'tab.change', { from: this.pocketTab, to: tab, mode: this.mode });
     this.pocketTab = tab;
     this.applyInventoryChrome();
+    // 批次 272：切页会改预览画布的 CSS 尺寸（盔甲页更大）。这里**立刻重绘一帧**，
+    // 否则画布还停在隐藏时那套后备尺寸，显示出来就是被拉扁的。
+    this.refreshPlayerPreview();
     // 批次 272：刚才在盔甲页点过的配方，切回合成时补显示（只画预览，不动物品）
     if (tab === 'crafting') {
       const pending = this.pendingRecipeId;
