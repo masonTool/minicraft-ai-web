@@ -53,6 +53,16 @@ export function netheriteUpgradeCount(): number {
   return NETHERITE_UPGRADE.size;
 }
 
+/**
+ * 全部升级组合（批次 277：锻造台左栏的"可做列表"要从这里生成）。
+ *
+ * 返回数组而不是 Map：界面只遍历、不查表，数组的顺序稳定（工具种类 → 盔甲），
+ * 列表每次画出来的顺序也就稳定。
+ */
+export function netheriteUpgradeList(): readonly { equipment: number; result: number }[] {
+  return [...NETHERITE_UPGRADE].map(([equipment, result]) => ({ equipment, result }));
+}
+
 export interface SmithingOutcome {
   /** 产物（永远 1 件） */
   output: ItemStack;
