@@ -2776,13 +2776,16 @@
       /* 工作站左半区右上角的配方书按钮（批次 316） */
       .station-recipe-btn {
         position: absolute; top: 4px; right: 4px; z-index: 3;
+        width: 26px; height: 26px; padding: 0;
+        display: flex; align-items: center; justify-content: center;
       }
+      .station-recipe-btn svg { display: block; }
       .station-recipe-btn.active {
         background: #dcdec4;
         border-color: #5a5a5a #ffffff #ffffff #5a5a5a;
         transform: translateY(1px);
       }
-      .station-ui .inv-category-section .inv-search { padding-right: 96px; }
+      .station-ui .inv-category-section .inv-search { padding-right: 38px; }
       /* 分类底部信息栏（批次 185）：当前分类"我有几种 / 共几种"。
          高度固定一行，不能吃掉网格的高度（网格是 flex:1 那一个）。 */
       .inv-category-info {

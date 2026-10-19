@@ -914,6 +914,12 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('.station-recipe-btn'),
   );
   check(
+    '工作站配方书恢复图标而不是文字（批次 318）',
+    invSrc.includes('const RECIPE_BOOK_ICON') &&
+      invSrc.includes('this.stationRecipeBtn.innerHTML = RECIPE_BOOK_ICON') &&
+      css.includes('.station-recipe-btn svg'),
+  );
+  check(
     '点创造分类会切回无限物品页',
     /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
   );
