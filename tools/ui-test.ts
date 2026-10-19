@@ -37,7 +37,12 @@ import { TOUCH_TOOLTIP_MS } from '../src/ui/Tooltip.ts';
 import { TOUCH_LONG_PRESS_MS } from '../src/ui/InventoryScreen.ts';
 import { damageReason } from '../src/core/survival/DamageNotice.ts';
 import { BackButton } from '../src/ui/BackButton.ts';
-import { STICK_MODES, STICK_MODE_LABELS, isTouchUi } from '../src/ui/TouchControls.ts';
+import {
+  STICK_MODES,
+  STICK_MODE_LABELS,
+  TOUCH_BREAK_LONG_PRESS_MS,
+  isTouchUi,
+} from '../src/ui/TouchControls.ts';
 import {
   DEFAULT_SETTINGS,
   SETTING_GROUP_LABELS,
@@ -1305,10 +1310,15 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('触摸层里不再有"飞行"按钮（已搬进设置面板）', !source.includes("makeIconButton('fly'"));
   check('视角按钮回到顶部（批次 181，与设置里的视角项共用循环）', source.includes("makeIconButton('view'"));
   // 批次 181：删掉 140ms 的"按住连续放置"（它会抢在长按破坏之前），只留一个长按阈值
-  check('只有一个长按阈值（280ms）', source.includes('const LONG_PRESS_MS = 280'));
+  check(
+    '只有一个长按阈值，且已按用户反馈调到 400ms（批次 272）',
+    TOUCH_BREAK_LONG_PRESS_MS === 400 &&
+      source.includes('const LONG_PRESS_MS = TOUCH_BREAK_LONG_PRESS_MS;'),
+    String(TOUCH_BREAK_LONG_PRESS_MS),
+  );
   check('连续放置已删除（不再有 PLACE_HOLD_MS / onPlaceHoldStart）', !source.includes('PLACE_HOLD_MS') && !source.includes('onPlaceHoldStart'));
   check('轻点与长按分工写在注释里', source.includes('轻点') && source.includes('破坏 / 持续攻击'));
-  // 批次 219/224：进食/举盾/拉弓"按住不动即生效"，不走那 280ms 长按判定。
+  // 批次 219/224：进食/举盾/拉弓"按住不动即生效"，不走破坏用的长按判定（现 400ms）。
   // 读手势状态而不是回调置位的布尔量——后者在"按下被界面抢走指针"时会卡在 true
   check(
     '触摸层暴露 holding（按住不动 100ms、漂移 ≤ 6px）',
@@ -1324,7 +1334,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   // 轻点落在生物上要"攻击优先"，不能顺手把方块放到它身上
   const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   check(
-    'usingItem 在触摸端走"按下即使用"（不等 280ms 长按阈值）',
+    'usingItem 在触摸端走"按下即使用"（不等 400ms 长按阈值）',
     mainSource.includes('return this.leftDown || this.touch.holding;'),
   );
   check(
