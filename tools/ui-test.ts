@@ -795,6 +795,10 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
         invSrc.indexOf('const isDouble = this.lastClick?.key === key'),
   );
   check(
+    '熔炉原料/燃料不支持长按拆数量，长按直接按右键取回（批次 325）',
+    /beginSplit[\s\S]{0,500}binding\.source instanceof Furnace[\s\S]{0,300}return false;/.test(invSrc),
+  );
+  check(
     '熔炉：目标槽/产物槽并排、标签在上、退还仓库在下方（批次 309）',
     invSrc.includes("targetLabel.textContent = '目标'") &&
       invSrc.includes("productLabel.textContent = '产物'") &&

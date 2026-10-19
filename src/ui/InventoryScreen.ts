@@ -4987,6 +4987,13 @@ export class InventoryScreen {
   private beginSplit(slot: HTMLDivElement, key: string, startX: number): boolean {
     const binding = this.bindings.get(key);
     if (!binding || binding.takeOnly) return false;
+    // 熔炉原料/燃料不支持拆数量：长按直接走右键“放回仓库”（批次 325）
+    if (
+      binding.source instanceof Furnace &&
+      (binding.index === FURNACE_INPUT || binding.index === FURNACE_FUEL)
+    ) {
+      return false;
+    }
     const stack = binding.source.get(binding.index);
     if (!canSplitStack(stack, this.held !== null)) return false;
     const bar = slot.querySelector<HTMLElement>('.inv-split-bar');
