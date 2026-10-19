@@ -10672,14 +10672,14 @@ class App {
 
     // ---- 刷怪蛋（批次 174，J17）：对着方块右击生成一只生物。
     // 排在功能方块之前：拿着蛋点箱子时，那一下应该是"生出生物"而不是"打开箱子"。
-    // 创造模式（= 会飞）不消耗，与原版一致。
+    // ⚠️ 批次 274：**创造模式也要消耗**。原版刷怪蛋是"一枚换一只"，创造模式并不例外；
+    // 之前按"创造不消耗方块"的规则一刀切，于是创造里蛋永远用不完（用户报的就是这个）。
+    // 其他方块/物品的"创造不消耗"逻辑不受影响，这里只针对刷怪蛋。
     const eggMob = spawnEggMobOf(this.heldItemId ?? -1);
     if (eggMob) {
       if (this.spawnMob(eggMob, this.hit.x, this.hit.y + 1, this.hit.z)) {
-        if (!this.isCreative) {
-          this.inventory.take(this.hotbarIndex, 1);
-          this.refreshHotbar();
-        }
+        this.inventory.take(this.hotbarIndex, 1);
+        this.refreshHotbar();
         this.audio.play('place', { x: this.hit.x + 0.5, y: this.hit.y + 1, z: this.hit.z + 0.5 });
         this.hand.swing();
       }

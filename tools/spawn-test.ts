@@ -7,6 +7,7 @@
  * （光照、地面方块、距离、上限）单独拆出来验证。
  */
 
+import { readFileSync } from 'node:fs';
 import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
 // 史莱姆那条高度线（批次 120）：断言里按它比，别写死 40
 import { SLIME_SPAWN_MAX_Y } from '../src/core/world/Slime.ts';
@@ -439,6 +440,15 @@ console.log('\n[刷怪蛋（批次 174，J17）：每种生物一枚，创造专
   check(
     '刷怪蛋没有配方（原版也没有：给了配方就不叫创造专属了）',
     RECIPES.every((recipe) => !SPAWN_EGG_SPECS.some((_spec, index) => recipe.result.id === spawnEggItemId(index))),
+  );
+
+  // 批次 274：创造模式也要消耗。刷怪蛋是"一枚换一只"，不能套用"创造不消耗方块"那条。
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const eggUse = /const eggMob = spawnEggMobOf[\s\S]{0,600}?placeCooldown = PLACE_COOLDOWN \* 2;/.exec(mainSrc)?.[0] ?? '';
+  check(
+    '刷怪蛋在创造模式也消耗（不再有 !isCreative 守卫）',
+    eggUse.includes('this.inventory.take(this.hotbarIndex, 1)') && !eggUse.includes('!this.isCreative'),
+    eggUse ? eggUse.slice(0, 100) : '没找到刷怪蛋的使用分支',
   );
 }
 
