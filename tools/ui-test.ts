@@ -775,6 +775,12 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes("this.furnaceReturnBtn.textContent = '退还仓库'"),
   );
   check(
+    '熔炉原料/燃料可放回仓库，产物可进快捷栏/仓库（批次 323）',
+    invSrc.includes('button === 2 || this.selectedStationKey === key') &&
+      invSrc.includes('this.returnStationStack(source, index)') &&
+      /private takeFurnaceOutput[\s\S]{0,300}this\.inventory\.addStack\(output\)/.test(invSrc),
+  );
+  check(
     '熔炉：目标槽/产物槽并排、标签在上、退还仓库在下方（批次 309）',
     invSrc.includes("targetLabel.textContent = '目标'") &&
       invSrc.includes("productLabel.textContent = '产物'") &&

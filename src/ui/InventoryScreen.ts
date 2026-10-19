@@ -5156,12 +5156,17 @@ export class InventoryScreen {
     const slot = source.get(index);
     const hadHeld = this.held !== null;
 
-    // 批次 305（用户）：熔炉原料/燃料点一下只"选中"，不拿起、不浮起、不离开原格
+    // 批次 323（用户）：熔炉原料/燃料仍可选中，但也要能放回仓库：
+    //   - 右键直接放回仓库；
+    //   - 左键第一次选中，再点同一格放回仓库；
+    //   - 手里拿着东西点它仍然是正常放置（从仓库放进熔炉）。
     if (!this.held && slot && source instanceof Furnace && (index === FURNACE_INPUT || index === FURNACE_FUEL)) {
       this.selectedEl?.classList.remove('selected');
-      if (this.selectedStationKey === key) {
+      if (button === 2 || this.selectedStationKey === key) {
         this.selectedStationKey = null;
         this.selectedEl = null;
+        this.returnStationStack(source, index);
+        this.refresh();
         return;
       }
       this.selectedStationKey = key;
