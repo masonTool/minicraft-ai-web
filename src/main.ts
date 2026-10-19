@@ -9027,6 +9027,27 @@ class App {
         this.spawnPoint = [x, y, z];
       },
       // 批次 372：/enchant 给手持物品附魔
+      spawnParticle: (name, x, y, z, count) => {
+        switch (name) {
+          case 'heart':
+            this.particles.spawnHearts(x, y + 0.5, z, 1);
+            return true;
+          case 'crit':
+            this.particles.spawnCrit(x, y + 0.5, z, count);
+            return true;
+          case 'flame':
+            this.particles.spawnFlame(x, y + 0.5, z, 0xff9a1f, count);
+            return true;
+          case 'portal':
+            this.particles.spawnPortal(x, y + 0.5, z, count, 0.5);
+            return true;
+          case 'explosion':
+            this.particles.spawnExplosion(x, y + 0.5, z, 2);
+            return true;
+          default:
+            return false;
+        }
+      },
       playSound: (name) => {
         if (!(SOUND_KINDS as readonly string[]).includes(name)) return false;
         this.audio.play(name as SoundKind);

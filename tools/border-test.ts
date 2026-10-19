@@ -139,6 +139,9 @@ console.log('\n[/worldborder：get / set / center]');
     playSound(): boolean {
       return false;
     }
+    spawnParticle(): boolean {
+      return false;
+    }
     give(): number {
       return 0;
     }

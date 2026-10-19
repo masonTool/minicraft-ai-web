@@ -50,6 +50,8 @@ export interface CommandContext {
   enchantHeld(id: string, level: number): boolean;
   /** 播一个音效（`/playsound`，批次 389）；名字不认识返回 false */
   playSound(name: string): boolean;
+  /** 在指定位置生成粒子（`/particle`，批次 396）；名字不认识返回 false */
+  spawnParticle(name: string, x: number, y: number, z: number, count: number): boolean;
   /** 成功返回实际给出的数量，物品名不认识返回 -1 */
   give(itemName: string, count: number): number;
   clearInventory(): number;
@@ -493,6 +495,55 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       ctx.setWorldSpawn(pos.x, pos.y, pos.z);
       out.info(`已将世界出生点设置为 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
+    },
+  },
+  {
+    name: 'particle',
+    usage: '/particle <类型> [数量]',
+    description: '在玩家位置生成粒子（heart / crit / flame / portal / explosion）',
+    run(args, ctx, out) {
+      const kind = args[0];
+      if (!kind) {
+        out.error('用法：/particle <类型> [数量]');
+        return;
+      }
+      const count = args[1] === undefined ? 8 : Number(args[1]);
+      if (!Number.isInteger(count) || count < 1 || count > 200) {
+        out.error('数量必须是 1~200 的整数');
+        return;
+      }
+      const pos = ctx.position();
+      if (!ctx.spawnParticle(kind, pos.x, pos.y, pos.z, count)) {
+        out.error(`找不到粒子：${kind}`);
+        return;
+      }
+      out.info(`已生成 ${count} 个 ${kind} 粒子`);
+    },
+  },
+  {
+    name: 'tell',
+    usage: '/tell <内容>',
+    description: '给自己发一条私聊（单人下等同 /say）',
+    run(args, ctx, out) {
+      const text = args.join(' ').trim();
+      if (!text) {
+        out.error('用法：/tell <内容>');
+        return;
+      }
+      out.info(`[${ctx.playerName()} -> 你] ${text}`);
+    },
+  },
+  {
+    name: 'msg',
+    usage: '/msg <内容>',
+    description: '同 /tell',
+    run(args, ctx, out) {
+      const text = args.join(' ').trim();
+      if (!text) {
+        out.error('用法：/msg <内容>');
+        return;
+      }
+      out.info(`[${ctx.playerName()} -> 你] ${text}`);
     },
   },
   {

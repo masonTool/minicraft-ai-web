@@ -110,6 +110,11 @@ class FakeWorld implements CommandContext {
   setWorldSpawn(x: number, y: number, z: number): void {
     this.worldSpawn = { x, y, z };
   }
+  particles: string[] = [];
+  spawnParticle(name: string): boolean {
+    this.particles.push(name);
+    return name !== 'nope';
+  }
   played: string[] = [];
   playSound(name: string): boolean {
     this.played.push(name);
@@ -556,6 +561,23 @@ console.log('\n[批次 389：/playsound]');
   check('认识的音效会播放', world.played.includes('click') && out.lastInfo.includes('click'), out.lastInfo);
   executeCommand('/playsound nope', world, out);
   check('不认识的音效给出错误', out.lastError.includes('找不到音效'), out.lastError);
+}
+
+
+console.log('\n[批次 396：/particle /target /tell /msg]');
+{
+  const world = new FakeWorld();
+  const out = new Recorder();
+  executeCommand('/particle crit 12', world, out);
+  check('认识的粒子会生成', world.particles.includes('crit') && out.lastInfo.includes('12'), out.lastInfo);
+  executeCommand('/particle nope', world, out);
+  check('未知粒子给出错误', out.lastError.includes('找不到粒子'), out.lastError);
+  executeCommand('/tell 你好', world, out);
+  check('/tell 带来源', out.lastInfo.includes('玩家') && out.lastInfo.includes('你好'), out.lastInfo);
+  executeCommand('/msg 在吗', world, out);
+  check('/msg 带来源', out.lastInfo.includes('在吗'), out.lastInfo);
+  executeCommand('/particle crit 999', world, out);
+  check('粒子数量超限报错', out.lastError.includes('1~200'), out.lastError);
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);
