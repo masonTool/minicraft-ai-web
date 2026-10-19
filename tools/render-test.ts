@@ -32,6 +32,8 @@ import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { srgbColor } from '../src/render/srgb.ts';
+import { tileOriginAt, tileRectAt } from '../src/render/atlasCoords.ts';
+import { ATLAS_COLUMNS, TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { ChunkRenderer } from '../src/render/ChunkRenderer.ts';
 import type { MeshWorkerPool } from '../src/render/MeshWorkerPool.ts';
 import { Chunk } from '../src/core/world/Chunk.ts';
@@ -178,6 +180,41 @@ console.log('\n[图集几何工具：UV 与逐面明暗]');
   applyFaceUvs(box, stubAtlas, ['stone', 'grass_top', 'grass_side', 'dirt', 'stone', 'stone']);
   check('不同面可以取不同贴图', faceUv(box, 2, 0)[0] === TILE_RECTS.grass_side![0], String(faceUv(box, 2, 0)[0]));
   check('第 3 个面取到 grass_top', faceUv(box, 1, 0)[0] === TILE_RECTS.grass_top![0]);
+
+  // ---- 图集坐标（批次 273）：flipY=true 下 v=0 是画布底边
+  //
+  // 回归点：草方块侧面的画法把草画在画布**顶部**（grass_side 的 y<3）。
+  // 侧面几何体的底边顶点 uv.y=0、顶边=1；只有当 v=0 对应画布底边时，
+  // 顶边才会采到草。曾经关掉 flipY 之后整张贴图上下颠倒，草长到了脚下。
+  const rows = Math.ceil(TILE_ORDER.length / ATLAS_COLUMNS);
+  const grassIndex = TILE_ORDER.indexOf('grass_side');
+  const grassRow = Math.floor(grassIndex / ATLAS_COLUMNS);
+  const [originU, originV] = tileOriginAt(grassIndex, ATLAS_COLUMNS, rows);
+  check(
+    '草方块侧面的图集原点在贴图底边（不是顶边）',
+    grassIndex >= 0 &&
+      Math.abs(originU - (grassIndex % ATLAS_COLUMNS) / ATLAS_COLUMNS) < 1e-12 &&
+      Math.abs(originV - (1 - (grassRow + 1) / rows)) < 1e-12,
+    `origin=${originU},${originV} row=${grassRow}/${rows}`,
+  );
+  const spanV = 1 / rows;
+  check(
+    '侧面底边顶点采到贴图底边、顶边顶点采到贴图顶边（草在上）',
+    Math.abs(originV + 0 * spanV - (1 - (grassRow + 1) / rows)) < 1e-12 &&
+      Math.abs(originV + 1 * spanV - (1 - grassRow / rows)) < 1e-12 &&
+      originV < originV + spanV,
+  );
+  // 内缩用真实量级（半像素 ≈ 0.0005），不能用 0.01——那已经接近半张贴图了
+  const rect = tileRectAt(grassIndex, ATLAS_COLUMNS, rows, 0.001, 0.001);
+  check(
+    'uv() 的矩形是左下 → 右上，且两轴向内收缩',
+    rect[1] > 1 - (grassRow + 1) / rows &&
+      rect[3] < 1 - grassRow / rows &&
+      rect[0] > (grassIndex % ATLAS_COLUMNS) / ATLAS_COLUMNS &&
+      rect[2] < (grassIndex % ATLAS_COLUMNS + 1) / ATLAS_COLUMNS &&
+      rect[1] < rect[3],
+    rect.map((v) => v.toFixed(4)).join(','),
+  );
 
   check('blockFaceTiles 返回六张贴图且顺序为 [侧,侧,顶,底,侧,侧]', (() => {
     const tiles = blockDef(Block.GRASS_BLOCK).tiles;

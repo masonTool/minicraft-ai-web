@@ -18,6 +18,7 @@ import {
 } from '../core/registry/colors.ts';
 import { COPPER_STAGES } from '../core/registry/blocks.ts';
 import { POTIONS, TIPPED_ARROWS, potionById, potionColor } from '../core/registry/potions.ts';
+import { tileOriginAt, tileRectAt } from './atlasCoords.ts';
 import { ARMOR_TYPES, ALL_ARMOR_MATERIALS } from '../core/registry/armor.ts';
 import { ALL_TOOL_MATERIALS, TOOL_KINDS } from '../core/registry/tools.ts';
 // 刷怪蛋（批次 174）：蛋形只有一副，颜色取自该生物自己的 bodyColor/accentColor ——
@@ -5871,13 +5872,15 @@ export class TextureAtlas {
     this.rows = rows;
 
     const texture = new THREE.CanvasTexture(canvas);
-    // ⚠️ three 的 Texture 默认 flipY = true，上传时会整个垂直翻转，
-    // 于是 v=0 对应画布的**最后一行**，与 uv() 里「v=0 是画布顶部」的假设正好相反。
+    // ⚠️ 保持 three 的默认行为（flipY = true）：上传时把画布整体垂直翻转，
+    // 于是 v=0 对应画布的**最后一行**。这正好与几何体的 UV 约定一致——
+    // 侧面底边顶点是 uv.y = 0，顶边是 1（见 `atlasCoords` 的文件头）。
     //
-    // 单行图集时这个错位被掩盖了（首行与末行是同一行），只导致每张贴图上下镜像；
-    // 改成网格后立刻暴露：石头（第 0 行）采到了最后一行的 stained_glass_yellow，
-    // 整片地面变成带边框网格的亮黄色。关掉 flipY 才能让 v=0 真正对应画布顶部。
-    texture.flipY = false;
+    // 曾经为了修"多行图集采错行"把它设成 false（让 v=0 直接对画布顶部），
+    // 行号是对了，但每张贴图都跟着上下颠倒：草方块侧面的草长到了脚下。
+    // 正确做法是保留 flipY，并让 `tileOriginAt` / `tileRectAt` 按 1-(r+1)/rows
+    // 把行号翻过来——两件事必须一起改，只改一边就是现在的 bug。
+    texture.flipY = true;
     texture.magFilter = THREE.NearestFilter;
     // 缩小方向走 mipmap（批次 237）：这是"远处干净、走动时不闪"的来源。
     // 放大方向仍然是 Nearest —— 近处方块的像素风不能糊。
@@ -5945,9 +5948,7 @@ export class TextureAtlas {
    */
   tileOrigin(tile: string): [number, number] {
     const index = TILE_INDEX.get(tile) ?? 0;
-    const cols = this.columns;
-    const rows = this.rows;
-    return [(index % cols) / cols, Math.floor(index / cols) / rows];
+    return tileOriginAt(index, this.columns, this.rows);
   }
 
   /** 单张贴图占图集的 UV 尺寸（所有贴图相同） */
@@ -5960,23 +5961,13 @@ export class TextureAtlas {
     return 0.5 / TILE_SIZE;
   }
 
-  /** 返回贴图在图集中的 [u0, v0, u1, v1]，已做半像素内缩以避免图集渗色 */
+  /** 返回贴图在图集中的 [u0, v0, u1, v1]（左下 → 右上），已做半像素内缩以避免图集渗色 */
   uv(tile: string): [number, number, number, number] {
     const index = TILE_INDEX.get(tile) ?? 0;
-    const cols = this.columns;
-    const rows = this.rows;
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-
     // 半像素内缩，避免相邻贴图渗色
-    const insetU = 0.5 / (TILE_SIZE * cols);
-    const insetV = 0.5 / (TILE_SIZE * rows);
-
-    const u0 = col / cols + insetU;
-    const u1 = (col + 1) / cols - insetU;
-    const v0 = row / rows + insetV;
-    const v1 = (row + 1) / rows - insetV;
-    return [u0, v0, u1, v1];
+    const insetU = 0.5 / (TILE_SIZE * this.columns);
+    const insetV = 0.5 / (TILE_SIZE * this.rows);
+    return tileRectAt(index, this.columns, this.rows, insetU, insetV);
   }
 
   /**

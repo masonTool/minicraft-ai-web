@@ -20,6 +20,7 @@ import { CHUNK_BLOCK_COUNT, generateChunkBlocks, takeGeneratedStates } from '../
 import { meshSection, type MeshContext, type TileUvSource } from '../core/mesh/ChunkMesher.ts';
 import { Chunk, SECTION_COUNT, WORLD_MAX_Y, WORLD_MIN_Y } from '../core/world/Chunk.ts';
 import { ATLAS_COLUMNS, TILE_ORDER } from '../render/atlasLayout.ts';
+import { tileOriginAt } from '../render/atlasCoords.ts';
 
 // ---------------------------------------------------------------- 消息类型
 
@@ -110,8 +111,7 @@ const ATLAS_ROWS = Math.ceil(TILE_ORDER.length / ATLAS_COLUMNS);
  */
 const tileUv: TileUvSource = {
   tileOrigin(tile: string): [number, number] {
-    const index = TILE_INDEX.get(tile) ?? 0;
-    return [(index % ATLAS_COLUMNS) / ATLAS_COLUMNS, Math.floor(index / ATLAS_COLUMNS) / ATLAS_ROWS];
+    return tileOriginAt(TILE_INDEX.get(tile) ?? 0, ATLAS_COLUMNS, ATLAS_ROWS);
   },
 };
 
