@@ -56,11 +56,17 @@ import { RECIPES, type Recipe } from '../core/crafting/Recipes.ts';
 import { SMELTING_RECIPES, fuelSeconds } from '../core/crafting/Smelting.ts';
 // 工作站"可做列表"（批次 277）：纯逻辑在 core，界面只画格子与填材料
 import {
+  STATION_LABELS,
   STATION_REASON_LABELS,
   brewingStationRecipes,
   furnaceStationRecipes,
   smithingStationRecipes,
+  stationCatalogIds,
+  stationFamilyIds,
+  stationNeedFor,
+  type StationNeed,
   type StationRecipeEntry,
+  type StationRecipeStation,
 } from '../core/crafting/StationRecipes.ts';
 // 配方的**摆放位置**（批次 29）：左栏点一件物品要把它怎么摆画进合成格
 import { recipeLayout } from '../core/crafting/RecipeLayout.ts';
@@ -476,6 +482,8 @@ export class InventoryScreen {
   private stationRecipeStamp = '';
   /** 当前这一栏的条目（点击时按 dataset 下标回查） */
   private stationRecipeEntries: StationRecipeEntry[] = [];
+  /** 工作区下方那块"需要xxx / 缺什么"的说明（批次 293） */
+  private readonly stationHintEl: HTMLDivElement;
   /** 分类物品网格 */
   private categoryGrid!: HTMLDivElement;
   /** 分类物品那一栏的搜索框（只在"全部"那一栏出现） */
@@ -1227,6 +1235,11 @@ export class InventoryScreen {
     this.stationRecipeInfoEl.className = 'inv-category-info';
     this.stationRecipeHostEl.append(this.stationRecipeGridEl, this.stationRecipeInfoEl);
 
+    // 工作区下方的"需要xxx / 缺什么"（批次 293）：每个工作站重建上半区时挂到 topArea 里
+    this.stationHintEl = document.createElement('div');
+    this.stationHintEl.className = 'inv-station-hint hidden';
+    this.stationHintEl.dataset.role = 'station-hint';
+
     this.creativeSection = document.createElement('div');
     this.creativeSection.className = 'inv-creative-section';
     this.buildCreativeSection();
@@ -1542,6 +1555,14 @@ export class InventoryScreen {
       if (this.categoryTab !== 'all' && recipeBookTab(id) !== this.categoryTab) return false;
       return query.length === 0 || matchesQuery(id, query);
     };
+    // 批次 293：工作站左栏列"配方产物"而不是合成产物。
+    // 关 = 本工作站的全部产物（含红底缺料）；开 = 所有工作站的产物（点错站台会提示需要xxx）。
+    if (this.stationHasRecipes()) {
+      // 关：本工作站这一族的全部产物（烟熏炉也能看见"铁锭 → 需要高炉"）
+      // 开：所有工作站的产物（熔炉里也能看见"下界合金镐 → 需要锻造台"）
+      const source = this.showUnowned ? stationCatalogIds() : stationFamilyIds(this.stationRecipeKey());
+      return [...new Set(source)].filter(byCategory);
+    }
     // 配方书按钮打开 = **列举该分类的全部物品**（用户明确要求保留这条）。
     // 颜色仍按"现在能不能合成"来分：白底 = 当前材料够且格子放得下，其余红底。
     if (this.showUnowned) return CREATIVE_ITEMS.filter(byCategory);
@@ -1573,12 +1594,15 @@ export class InventoryScreen {
     // ⚠️ 只有"分类 / 搜索词 / 开关 / 页码 / 背包内容"真的变了才重建：
     //    `refresh()` 每次都会走到这里，而无脑重建等于每次搬东西都重画上百个图标。
     const key = [
+      this.mode,
       this.categoryTab,
       this.categoryQuery,
       this.showUnowned ? 'all' : 'owned',
       this.categoryPage,
       this.inventoryStamp(),
       this.craftingStamp(),
+      // 工作站格子里的东西也会影响白红（批次 293）
+      this.stationHasRecipes() ? this.stationContainerStamp() : '',
       // 用过的配方集合也会影响列表（缺料那一批红底项）
       [...this.usedRecipeIds].sort((a, b) => a - b).join(','),
     ].join('|');
@@ -1590,9 +1614,22 @@ export class InventoryScreen {
 
     // 搜索框只在"全部"那一栏出现（与创造栏、配方书同一口径）
     this.categorySearch.style.display = this.categoryTab === 'all' ? '' : 'none';
+    this.categorySearch.placeholder = this.stationHasRecipes()
+      ? this.showUnowned
+        ? '搜索所有工作站的配方产物…'
+        : `搜索${STATION_LABELS[this.stationRecipeKey()]}能做的物品…`
+      : '搜索可合成的物品…';
     // 底部统计：开关打开时报"这一栏共多少 / 其中现在能做多少"，
     // 关闭时报"现在能做多少 / 用过的缺料多少"。**不受搜索词影响**。
-    {
+    if (this.stationHasRecipes()) {
+      const inTab = (id: number): boolean => this.categoryTab === 'all' || recipeBookTab(id) === this.categoryTab;
+      const entries = this.currentStationEntries();
+      const available = entries.filter((entry) => entry.available && inTab(entry.resultId)).length;
+      const label = STATION_LABELS[this.stationRecipeKey()];
+      this.categoryInfo.textContent = this.showUnowned
+        ? `${label} · 本工作站可做 ${available} · 全部工作站 ${stationCatalogIds().filter(inTab).length} 项`
+        : `${label} · 可做 ${available} / ${stationFamilyIds(this.stationRecipeKey()).filter(inTab).length}（红底 = 缺料或需要别的站台）`;
+    } else {
       const inTab = (id: number): boolean => this.categoryTab === 'all' || recipeBookTab(id) === this.categoryTab;
       const craftable = this.craftableIds();
       const craftableInTab = craftable.filter(inTab).length;
@@ -1623,7 +1660,10 @@ export class InventoryScreen {
     const fragment = document.createDocumentFragment();
     // 红底的判据是**材料齐不齐**，不是"仓库里有没有成品"：
     // 能做但还没做出来的东西是正常项（点击看配方），只有缺料的才红。
-    const craftable = new Set(this.craftableIds());
+    // 工作站：白底 = 当前站台 + 原料 + 燃料都够（批次 293）。
+    const craftable = this.stationHasRecipes()
+      ? new Set(this.currentStationEntries().filter((entry) => entry.available).map((entry) => entry.resultId))
+      : new Set(this.craftableIds());
     for (const itemId of visible) {
       const owned = this.inventory.countOf(itemId);
       const slot = this.createSlot();
@@ -1700,6 +1740,14 @@ export class InventoryScreen {
       held: this.held?.id ?? null,
       heldCount: this.held?.count ?? 0,
     });
+
+    // 批次 293：工作站左栏点产物 = 把配方填进右栏（或提示需要哪个站台）。
+    // 不能走下面"创造模式拿到手上"那条路——工作站里拿在手上没有意义。
+    if (this.stationHasRecipes()) {
+      this.showStationRecipeFor(itemId, mode);
+      this.refresh();
+      return;
+    }
 
     if (mode === 'fill' && (this.hooks.isCreative?.() ?? false)) {
       // 创造：再点同一件 = 取消选中；否则把仓库里那叠拿到手上（复制品语义另说）
@@ -1791,6 +1839,11 @@ export class InventoryScreen {
    *  - 只能烧出来的：点亮"熔炉"小图标。
    */
   private showRecipeFor(itemId: number, mode: 'preview' | 'fill' = 'fill'): void {
+    // 批次 293：工作站有自己的一套"填进操作区"逻辑，不走合成格。
+    if (this.stationHasRecipes()) {
+      this.showStationRecipeFor(itemId, mode);
+      return;
+    }
     // 批次 272（用户）：右栏停在「盔甲」时，左栏怎么点都不许把它切回合成。
     // 配方只记下来，等玩家自己点回「合成」再画——否则等于"左栏在偷偷改右栏"。
     if (this.pocketTab !== 'crafting') {
@@ -1970,6 +2023,7 @@ export class InventoryScreen {
         // 左下箱子只切左栏：生存时从"物品分类"回到玩家物品；
         // 创造时在"无限物品"与"个人仓库"之间切换（批次 181：只动 pane）
         this.pane = 'items';
+        this.clearStationHint();
         this.hooks.onCloseRecipes?.();
         this.restoreInvTabToRail();
         this.applyInventoryChrome();
@@ -2047,6 +2101,7 @@ export class InventoryScreen {
     this.categoryPage = 0;
     this.lastRecipeTab = tab;
     this.pane = 'category';
+    this.clearStationHint();
     // ⚠️ 换到不显示搜索框的分类时清掉搜索词：否则那是个**看不见的过滤器**，
     //    列表会一直空着，而玩家已经没有输入框可以取消它（"分类栏怎么全空了"）。
     if (tab !== 'all') {
@@ -2074,18 +2129,46 @@ export class InventoryScreen {
     );
   }
 
+  /** 当前模式对应的纯逻辑站台名（用于"需要xxx"与目录） */
+  private stationRecipeKey(): StationRecipeStation {
+    switch (this.mode) {
+      case 'smoker':
+      case 'blast_furnace':
+      case 'campfire':
+      case 'smithing':
+      case 'brewing':
+        return this.mode;
+      default:
+        return 'furnace';
+    }
+  }
+
+  /** 当前工作站的全部可做条目（含红底）；分类栏与点击填充共用同一份 */
+  private currentStationEntries(): StationRecipeEntry[] {
+    if (!this.stationHasRecipes()) return [];
+    this.stationRecipeEntries = this.computeStationRecipes();
+    return this.stationRecipeEntries;
+  }
+
+  /** 工作站格子内容的指纹（放进/取出一件东西后分类栏要重算白红） */
+  private stationContainerStamp(): string {
+    const container = this.activeContainer;
+    if (!container) return '';
+    const size = this.stationSlotCount(container);
+    let stamp = `${this.mode}:`;
+    for (let i = 0; i < size; i++) {
+      const stack = container.get(i);
+      stamp += stack ? `${stack.id}x${stack.count},` : '-,';
+    }
+    return stamp;
+  }
+
   private setStationLeft(left: 'recipes' | 'items'): void {
     if (this.stationLeft === left) return;
     this.stationLeft = left;
     this.stationRecipeStamp = '';
     this.applyInventoryChrome();
     this.refresh();
-  }
-
-  private updateStationTabs(): void {
-    for (const button of this.stationTabsEl.querySelectorAll<HTMLElement>('.inv-station-tab')) {
-      button.classList.toggle('active', button.dataset.stationLeft === this.stationLeft);
-    }
   }
 
   /** 主背包 + 快捷栏里的数量（工作站只从这里拿材料，盔甲/副手不算） */
@@ -2412,6 +2495,164 @@ export class InventoryScreen {
     return false;
   }
 
+  // ---------------------------------------------------------------- 工作站提示（批次 293）
+
+  /** 站台对应的方块图标（"需要xxx"标题左边那颗） */
+  private stationBlockId(station: StationRecipeStation): number {
+    switch (station) {
+      case 'smoker':
+        return Block.SMOKER;
+      case 'blast_furnace':
+        return Block.BLAST_FURNACE;
+      case 'campfire':
+        return Block.CAMPFIRE;
+      case 'smithing':
+        return Block.SMITHING_TABLE;
+      case 'brewing':
+        return Block.BREWING_STAND;
+      default:
+        return Block.FURNACE;
+    }
+  }
+
+  private clearStationHint(): void {
+    this.stationHintEl.classList.add('hidden');
+    this.stationHintEl.replaceChildren();
+  }
+
+  /**
+   * 工作区下方的说明：站台图标 + "需要xxx" + 原料/产物图标与名字。
+   *
+   * 用户要求："如果打开的不是对应的工作台，右侧则显示需要xxx，把图标和名字说明
+   * 显示在工作区下方。" 所以标题给站台，下面一行给"原料 → 产物"，最后一行给原因。
+   */
+  private renderStationHint(
+    title: string,
+    station: StationRecipeStation,
+    inputs: readonly { id: number; count: number }[],
+    resultId: number,
+    resultCount: number,
+    detail: string,
+  ): void {
+    const el = this.stationHintEl;
+    el.replaceChildren();
+    el.classList.remove('hidden');
+
+    const head = document.createElement('div');
+    head.className = 'inv-station-hint-title';
+    const stationIcon = document.createElement('canvas');
+    stationIcon.width = 18;
+    stationIcon.height = 18;
+    drawItemIcon(stationIcon, this.atlas, this.stationBlockId(station), 16);
+    const titleText = document.createElement('span');
+    titleText.textContent = title;
+    head.append(stationIcon, titleText);
+
+    const row = document.createElement('div');
+    row.className = 'inv-station-hint-row';
+    inputs.forEach((input, index) => {
+      if (index > 0) {
+        const plus = document.createElement('span');
+        plus.textContent = '+';
+        row.appendChild(plus);
+      }
+      const have = this.stationCountOf(input.id, this.activeContainer) >= input.count;
+      row.appendChild(this.stationHintItem(input.id, input.count, have));
+    });
+    const arrow = document.createElement('span');
+    arrow.textContent = '→';
+    row.appendChild(arrow);
+    row.appendChild(this.stationHintItem(resultId, resultCount, true));
+
+    const detailEl = document.createElement('div');
+    detailEl.className = 'inv-station-hint-detail';
+    detailEl.textContent = detail;
+
+    el.append(head, row, detailEl);
+  }
+
+  private stationHintItem(itemId: number, count: number, have: boolean): HTMLSpanElement {
+    const cell = document.createElement('span');
+    cell.className = 'inv-station-hint-item';
+    if (!have) cell.classList.add('missing');
+    const canvas = document.createElement('canvas');
+    canvas.width = 20;
+    canvas.height = 20;
+    drawItemIcon(canvas, this.atlas, itemId, 18);
+    const name = document.createElement('span');
+    name.textContent = `${itemName(itemId)}${count > 1 ? ` ×${count}` : ''}`;
+    cell.append(canvas, name);
+    return cell;
+  }
+
+  /** 当前站台缺料/缺燃料/槽位占用：把原因和原料画在下面 */
+  private showStationEntryHint(entry: StationRecipeEntry): void {
+    const reason = entry.reason ? STATION_REASON_LABELS[entry.reason] : '现在做不了';
+    this.renderStationHint(
+      reason,
+      this.stationRecipeKey(),
+      entry.inputs,
+      entry.resultId,
+      entry.resultCount,
+      `${reason} · ${itemName(entry.resultId)}`,
+    );
+  }
+
+  /** 当前站台做不了这件产物：告诉玩家该去哪个站台 */
+  private showStationNeed(need: StationNeed): void {
+    const current = STATION_LABELS[this.stationRecipeKey()];
+    this.renderStationHint(
+      `需要${need.label}`,
+      need.station,
+      need.inputs,
+      need.resultId,
+      1,
+      `当前打开的是${current}；在${need.label}里制作 ${itemName(need.resultId)}`,
+    );
+  }
+
+  /**
+   * 工作站左栏点产物（批次 293）：
+   *  - 当前站台有这条配方且能做 → 把原料 + 燃料填进右栏；
+   *  - 有配方但缺东西 → 在工作区下方说清缺什么；
+   *  - 当前站台做不了 → 显示"需要xxx"与原料/产物图标。
+   */
+  private showStationRecipeFor(itemId: number, mode: 'preview' | 'fill'): void {
+    const entry = this.currentStationEntries().find((candidate) => candidate.resultId === itemId);
+    if (entry) {
+      if (!entry.available) {
+        this.showStationEntryHint(entry);
+        return;
+      }
+      if (mode === 'preview') {
+        // 按住滑动只预览：不动物品，也不弹"需要xxx"（它是能做出来的）
+        this.clearStationHint();
+        return;
+      }
+      if (!this.fillStationRecipe(entry)) {
+        this.showStationEntryHint(entry);
+        return;
+      }
+      this.clearStationHint();
+      this.inventory.notify();
+      return;
+    }
+
+    const need = stationNeedFor(itemId, this.stationRecipeKey());
+    if (need) {
+      this.showStationNeed(need);
+      return;
+    }
+    this.renderStationHint(
+      '没有可用的配方',
+      this.stationRecipeKey(),
+      [],
+      itemId,
+      1,
+      '这个物品不在熔炉 / 锻造台 / 酿造台的配方表里',
+    );
+  }
+
   /** 画工作站左栏的可做列表（白 = 现在能开工，红 = 缺东西/槽位占着） */
   private renderStationRecipes(): void {
     if (!this.open || !isWorkstationMode(this.mode) || !this.stationHasRecipes()) return;
@@ -2545,34 +2786,49 @@ export class InventoryScreen {
     // 左栏固定是玩家自己的主背包（7×4），右栏是该工作站的操作区。
     // 与工作台同一副壳、同一套几何；区别只在右栏内容，以及没有左右轨页签。
     if (workstation) {
+      const hasRecipes = this.stationHasRecipes();
+      // 批次 293（用户）：配方驱动型工作站与工作台同一套左栏——物品分类 + 配方书按钮。
+      // 点分类里的产物时，右栏要么把配方填进去，要么在下方提示"需要xxx"。
+      const showCategory = hasRecipes && this.pane === 'category';
       this.panel.classList.add('pocket-ui', 'pocket-dual', 'station-ui');
       this.panel.classList.remove('creative-ui');
-      this.panel.dataset.pocketLeft = 'items';
+      this.panel.dataset.pocketLeft = showCategory ? 'category' : 'items';
       // `station` 不是一个可点的页签：它只用来让 CSS 的 armor/crafting 规则不命中
       this.panel.dataset.pocketTab = 'station';
       this.shellEl.classList.add('pocket-chrome');
       this.pocketTabsEl.classList.add('hidden');
-      this.pocketRecipeBar.classList.add('hidden');
-      this.railLeft.classList.add('hidden');
       this.railRight.classList.add('hidden');
-      // 右轨被藏了 → 成就退到标题栏那颗；工作站没有合成配方书
+      // 右轨被藏了 → 成就退到标题栏那颗
       this.achievementsBtn?.classList.remove('hidden');
       this.railAchievementsEl?.classList.add('hidden');
-      this.recipesBtn?.classList.add('hidden');
       this.creativeToggleBtn?.classList.add('hidden');
       this.playerBody.style.display = '';
       this.personalInventoryTitleEl.style.display = 'none';
       this.creativeSection.style.display = 'none';
-      this.categoryHostEl.style.display = 'none';
-      // 批次 277：配方驱动型工作站左栏默认"可做列表"，点「背包」切回 7×4 主背包。
-      const hasRecipes = this.stationHasRecipes();
-      if (!hasRecipes) this.stationLeft = 'items';
-      const showRecipes = hasRecipes && this.stationLeft === 'recipes';
-      this.stationTabsEl.style.display = hasRecipes ? '' : 'none';
-      this.stationRecipeHostEl.style.display = showRecipes ? '' : 'none';
-      this.mainGridEl.style.display = showRecipes ? 'none' : '';
+      // 旧版「可做 / 背包」两页签不再承担左栏；分类栏与 7×4 背包二选一
+      this.stationTabsEl.style.display = 'none';
+      this.stationRecipeHostEl.style.display = 'none';
+      this.categoryHostEl.style.display = showCategory ? 'flex' : 'none';
+      this.mainGridEl.style.display = showCategory ? 'none' : '';
       this.hotbarGridEl.style.display = '';
-      this.updateStationTabs();
+      if (showCategory) this.renderCategoryGrid();
+      if (hasRecipes) {
+        this.pocketRecipeBar.classList.remove('hidden');
+        this.railLeft.classList.remove('hidden');
+        this.recipesBtn?.classList.remove('hidden');
+        if (this.recipesBtn) {
+          this.recipesBtn.classList.toggle('active', showCategory && this.showUnowned);
+          this.recipesBtn.title = this.showUnowned
+            ? '配方书：正在列出所有工作站的配方 · 点一下只看本工作站现在能做的'
+            : '只看本工作站现在能做的 · 点一下列出所有工作站的配方';
+        }
+        this.syncRecipeRail(showCategory ? this.categoryTab : null);
+        this.invTabEl.classList.toggle('active', !showCategory);
+      } else {
+        this.pocketRecipeBar.classList.add('hidden');
+        this.railLeft.classList.add('hidden');
+        this.recipesBtn?.classList.add('hidden');
+      }
       this.gearEl.style.display = 'none';
       this.topArea.style.display = '';
       this.syncCraftArrow(false);
@@ -2581,7 +2837,7 @@ export class InventoryScreen {
       this.restoreInvTabToRail();
       this.placeHotbar(true);
       this.syncPocketBodyClass(true);
-      this.lastLeftPane = 'items';
+      this.lastLeftPane = showCategory ? 'category' : 'items';
       this.lastRightCrafting = true;
       return;
     }
@@ -2981,6 +3237,7 @@ export class InventoryScreen {
   /** 重建上半部分 */
   private rebuildTopArea(): void {
     this.topArea.replaceChildren();
+    this.clearStationHint();
     this.clearBindings('craft:');
     this.clearBindings('furnace:');
     this.clearBindings('chest:');
@@ -3027,7 +3284,7 @@ export class InventoryScreen {
       right.append(this.buildLabel('产物'), output, this.furnaceHintEl);
 
       this.furnaceLayout.replaceChildren(left, middle, right);
-      this.topArea.appendChild(this.furnaceLayout);
+      this.topArea.append(this.furnaceLayout, this.stationHintEl);
       return;
     }
 
@@ -3044,7 +3301,7 @@ export class InventoryScreen {
       const layout = document.createElement('div');
       layout.className = 'stonecutter-layout';
       layout.append(this.campfireLayout, side);
-      this.topArea.appendChild(layout);
+      this.topArea.append(layout, this.stationHintEl);
       return;
     }
 
@@ -3079,7 +3336,7 @@ export class InventoryScreen {
       middle.append(track, this.brewFuelTextEl);
 
       this.brewingLayout.replaceChildren(bottleCol, middle, materialCol, fuelCol);
-      this.topArea.appendChild(this.brewingLayout);
+      this.topArea.append(this.brewingLayout, this.stationHintEl);
       return;
     }
 
@@ -3162,7 +3419,7 @@ export class InventoryScreen {
       side.className = 'anvil-side';
       side.append(this.smithingHintEl);
       this.smithingLayout.replaceChildren(row, side);
-      this.topArea.appendChild(this.smithingLayout);
+      this.topArea.append(this.smithingLayout, this.stationHintEl);
       return;
     }
 
@@ -4339,10 +4596,13 @@ export class InventoryScreen {
       for (const grid of Object.values(this.grids)) grid.drainTo(this.inventory);
       this.mode = mode;
       this.activeContainer = container ?? null;
-      // 工作站左栏默认回到"可做列表"（铁砧/砂轮/附魔台没有配方表 → 背包）
+      // 批次 293：有配方表的工作站默认左栏 = 物品分类（与工作台一致）；
+      // 铁砧/砂轮/附魔台/切石机没有固定产物表 → 仍显示 7×4 背包。
       if (isWorkstationMode(mode)) {
-        this.stationLeft = this.stationHasRecipes(mode) ? 'recipes' : 'items';
+        this.pane = this.stationHasRecipes(mode) ? 'category' : 'items';
+        this.categoryPage = 0;
         this.stationRecipeStamp = '';
+        this.clearStationHint();
       }
       // 打开别的界面就不再"与这个村民交易"了（他是一个实体，不是容器）
       this.activeVillager = null;

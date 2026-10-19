@@ -2543,11 +2543,53 @@
       .inv-panel.pocket-ui.pocket-dual.station-ui .inv-top {
         min-width: 0;
         /* 铁砧/酿造/切石机这类宽操作区在自己的右栏里滚，不把整块面板撑破。
-           ⚠️ 不能居中：内容高于右栏时，居中的 flex 会把顶部溢出到滚动区之外。 */
-        align-items: flex-start;
-        justify-content: center;
+           ⚠️ 不能居中：内容高于右栏时，居中的 flex 会把顶部溢出到滚动区之外。
+           批次 293：工作区 + 下方"需要xxx"改成竖排，说明永远贴在工作区下面。 */
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
         overflow: auto;
       }
+      /* 工作区下方那块提示（批次 293）：站台图标 + 需要xxx + 原料/产物图标与名字 */
+      .inv-station-hint {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0 0 8px;
+        padding: 6px 8px;
+        background: rgba(0, 0, 0, .08);
+        border: 1px solid rgba(0, 0, 0, .18);
+        color: #2b2b2b;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .inv-station-hint.hidden { display: none; }
+      .inv-station-hint-title {
+        display: flex; align-items: center; gap: 6px;
+        font-weight: 700; color: #5a2b00;
+      }
+      .inv-station-hint-title canvas { width: 18px; height: 18px; }
+      .inv-station-hint-row {
+        display: flex; align-items: center; gap: 6px;
+        flex-wrap: wrap;
+      }
+      .inv-station-hint-item {
+        display: inline-flex; align-items: center; gap: 3px;
+        min-width: 0;
+      }
+      .inv-station-hint-item canvas { width: 20px; height: 20px; }
+      .inv-station-hint-item.missing { color: #7a2020; }
+      .inv-station-hint-detail { color: #4a4a4a; }
+      /* 工作区在右栏里居中；窄栏时允许换行（左右排不下就上下排） */
+      .inv-panel.station-ui .furnace-layout,
+      .inv-panel.station-ui .anvil-layout,
+      .inv-panel.station-ui .brewing-layout,
+      .inv-panel.station-ui .stonecutter-layout {
+        justify-content: center;
+      }
+      .inv-panel.station-ui .furnace-layout { flex-wrap: wrap; }
       /* 右栏偏窄时允许横排换行：`.anvil-row` 原本是 nowrap，窄栏会直接溢出 */
       .inv-panel.pocket-ui.pocket-dual.station-ui .anvil-row,
       .inv-panel.pocket-ui.pocket-dual.station-ui .enchant-layout {
@@ -2608,7 +2650,7 @@
       @media (max-width: 560px) {
         .inv-panel.pocket-ui.pocket-dual.station-ui .inv-body {
           grid-template-columns: minmax(0, 1fr);
-          grid-template-rows: auto auto auto;
+          grid-template-rows: auto minmax(0, 1fr);
           overflow-y: auto;
         }
         .inv-panel.pocket-ui.pocket-dual.station-ui .inv-top {
@@ -2618,14 +2660,11 @@
           border-left: 0;
           border-bottom: 2px solid #8a8a8a;
         }
-        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-station-tabs {
-          grid-column: 1;
-          grid-row: 2;
-        }
+        .inv-panel.pocket-ui.pocket-dual.station-ui .inv-category-section,
         .inv-panel.pocket-ui.pocket-dual.station-ui .inv-main > .inv-grid,
         .inv-panel.pocket-ui.pocket-dual.station-ui .inv-station-recipes {
           grid-column: 1;
-          grid-row: 3;
+          grid-row: 2;
         }
       }
       .inv-panel.pocket-ui.pocket-dual .inv-gear {

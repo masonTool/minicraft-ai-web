@@ -654,12 +654,12 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       css.includes('@media (max-width: 560px)'),
   );
 
-  // 批次 277（用户）：工作站左栏也要像工作台一样列"可做/红底"
+  // 批次 293（用户）：工作站左栏直接复用工作台的物品分类栏，不再用自定义可做页签
   check(
-    '工作站左栏有「可做 / 背包」两个页签',
-    invSrc.includes("['recipes', '可做'],") &&
-      invSrc.includes("['items', '背包'],") &&
-      invSrc.includes('private setStationLeft'),
+    '工作站左栏复用物品分类栏 + 配方书开关',
+    invSrc.includes("this.panel.dataset.pocketLeft = showCategory ? 'category' : 'items';") &&
+      invSrc.includes('this.recipesBtn?.classList.remove(\'hidden\')') &&
+      invSrc.includes('this.syncRecipeRail(showCategory ? this.categoryTab : null)'),
   );
   check(
     '工作站左栏元素先于 buildCreativeSection 创建（否则构造期 applyInventoryChrome 会读到 undefined）',
@@ -669,15 +669,26 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
         invSrc.indexOf('this.buildCreativeSection();'),
   );
   check(
-    '配方驱动型工作站默认可做列表，铁砧/砂轮/附魔台仍是背包',
-    invSrc.includes("this.stationLeft = this.stationHasRecipes(mode) ? 'recipes' : 'items';") &&
+    '配方驱动型工作站默认左栏 = 物品分类；铁砧/砂轮/附魔台仍是背包',
+    invSrc.includes("this.pane = this.stationHasRecipes(mode) ? 'category' : 'items';") &&
       /private stationHasRecipes[\s\S]{0,300}mode === 'smithing'[\s\S]{0,200}mode === 'brewing'/.test(invSrc),
   );
   check(
-    '刷新时重算可做列表；白底/红底用 inv-slot.locked',
-    invSrc.includes('this.renderStationRecipes();') &&
-      invSrc.includes("slot.classList.add('station-recipe-slot')") &&
-      invSrc.includes('if (!entry.available) slot.classList.add(\'locked\');'),
+    '工作站左栏复用分类栏，点产物填工作区/提示需要xxx（批次 293）',
+    invSrc.includes('stationCatalogIds') &&
+      invSrc.includes('stationFamilyIds') &&
+      invSrc.includes('stationNeedFor') &&
+      invSrc.includes('this.categoryHostEl.style.display = showCategory') &&
+      invSrc.includes('private showStationRecipeFor') &&
+      invSrc.includes('private showStationNeed') &&
+      css.includes('.inv-station-hint') &&
+      css.includes('.inv-station-hint-row'),
+  );
+  check(
+    '工作站分类栏白底 = 当前站台能做（含燃料）；红底用 inv-slot.locked',
+    invSrc.includes('const craftable = this.stationHasRecipes()') &&
+      invSrc.includes('.filter((entry) => entry.available)') &&
+      invSrc.includes("if (!craftable.has(itemId)) slot.classList.add('locked');"),
   );
   check(
     '点白底配方会自动填原料与燃料（白底 = 点下去能开工）',
@@ -705,7 +716,10 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     '点创造分类会切回无限物品页',
     /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
   );
-  check('点箱子页签回到我的物品', /this\.pane = 'items';\s*\n\s*this\.hooks\.onCloseRecipes/.test(invSrc));
+  check(
+    '点箱子页签回到我的物品',
+    /this\.pane = 'items';\s*\n\s*(?:this\.clearStationHint\(\);\s*\n\s*)?this\.hooks\.onCloseRecipes/.test(invSrc),
+  );
   check('关界面放不下的手持物品会掉在脚边（不留在光标上）', invSrc.includes('if (leftover > 0) this.hooks.onDrop?.(stack.id, leftover)'));
   check('快捷栏 dock 固定到整屏底部', css.includes('position: fixed; left: 0; right: 0; bottom: 0;') && css.includes('width: 100vw;'));
   check(
@@ -981,8 +995,8 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
   // 批次 166 改口径：**创造模式根本不显示配方**（拥有所有方块，看配方没意义），
   // 点物品就只是"拿起它"——创造栏那个调用点保留，但 `showRecipeFor` 会提前返回
   check(
-    '创造模式点物品不展示配方（showRecipeFor 先挡掉创造模式）',
-    /private showRecipeFor\(itemId: number, mode: 'preview' \| 'fill' = 'fill'\): void \{[\s\S]{0,600}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) return;/.test(invSrc),
+    '创造模式点物品不展示配方（工作站分支之后仍先挡掉创造模式）',
+    /private showRecipeFor\(itemId: number, mode: 'preview' \| 'fill' = 'fill'\): void \{[\s\S]{0,1200}if \(this\.hooks\.isCreative\?\.\(\) \?\? false\) return;/.test(invSrc),
   );
   // 空槽不可选中：按下那一层"沉下去"只给有东西的格子
   // 空槽不给选中反馈（批次 184：红底那种"我没有的"同样不给，只闪一下）
