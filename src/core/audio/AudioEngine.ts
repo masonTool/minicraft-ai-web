@@ -1113,6 +1113,19 @@ export class AudioEngine {
   }
 
   /**
+   * 页面进后台时挂起（批次 303）。
+   *
+   * 主循环 `dt = 0` 只能让音乐导演不再排新音符：雨声是**常驻循环节点**、
+   * 已经预约到未来的音符也还在播——只有挂起 AudioContext 才真的安静。
+   * 恢复走既有的 `resume()`（它本来就会处理 `suspended`）。
+   */
+  suspend(): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    void ctx.suspend().catch(() => undefined);
+  }
+
+  /**
    * 关掉 AudioContext（批次 181）。
    *
    * 应用内"保存并退出到主菜单"会销毁整局 App；不关 context 的话，

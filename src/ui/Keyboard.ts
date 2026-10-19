@@ -35,6 +35,19 @@ function isTextControl(element: Element | null): element is HTMLElement {
 }
 
 /**
+ * 焦点是否落在文本输入控件上（批次 303）。
+ *
+ * `main` 用它在 `blur` 里区分两种完全不同的情况：
+ *  - 正在打字（聊天 / 告示牌 / 搜索框）时的 blur 往往只是软键盘/输入法在动，
+ *    页面并没有被"压到后台"，冻结世界会让打字像卡住；
+ *  - 没有输入焦点时的 blur 才是真的切走（切 App / 下拉通知栏 / 切窗口）。
+ */
+export function isEditingText(): boolean {
+  const active = document.activeElement;
+  return isTextControl(active) || (active instanceof HTMLElement && active.isContentEditable);
+}
+
+/**
  * 键盘占掉的高度（px）：`视觉视口高度 + 它的偏移` 与布局视口之间的差。
  * 没有 `visualViewport`（桌面旧内核）时一直是 0。
  */

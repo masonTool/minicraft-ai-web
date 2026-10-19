@@ -160,7 +160,7 @@ import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
 import { ChatInput } from './ui/ChatInput.ts';
-import { installKeyboardGuards } from './ui/Keyboard.ts';
+import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
 import {
   TickScheduler,
@@ -1111,6 +1111,22 @@ class App {
   /** 刚刚切到过后台：下一次回到前台要先落到暂停页（见 `handleReturnFromBackground`） */
   private wasHidden = false;
   /**
+   * 页面被藏起来 / 失去焦点：主循环**整帧跳过**（批次 303）。
+   *
+   * 与 `settingsScreen.isOpen` 不是一回事：那个表示"玩家自己打开了暂停页"，
+   * 这个表示"浏览器把页面收走了"（切 App / 锁屏 / 下拉通知栏 / 切窗口）。
+   * 两者都要停模拟，但只有后者需要在回来时补画布并落到暂停页；
+   * 它也是唯一该挂起 `AudioContext` 的时机（雨声是常驻循环）。
+   */
+  private backgroundPaused = false;
+  /**
+   * 在这个时刻之前忽略 `blur`（批次 303）。
+   *
+   * 进出全屏时部分内核会顺带派发一次 blur/focus（点"继续游戏"回游戏、安卓返回掉出全屏
+   * 都撞过）。那不是"玩家切走了"，照字面处理会立刻又弹一次暂停页，甚至来回打转。
+   */
+  private ignoreBlurUntilMs = 0;
+  /**
    * 切到后台的时刻（`performance.now()`，批次 295）。
    *
    * 只用来判断两件事：① 后台待了多久（诊断日志里要能看出"图标空掉"是不是
@@ -1958,6 +1974,8 @@ class App {
       'fullscreenchange',
       () => {
         if (this.disposed) return;
+        // 批次 303：进出全屏可能顺带派发 blur/focus，别把它当成"切 App"
+        this.ignoreBlurUntilMs = performance.now() + 800;
         const full = isFullscreen();
         const lost = this.lastFullscreen && !full;
         this.lastFullscreen = full;
@@ -2320,6 +2338,72 @@ class App {
   }
 
   /**
+   * 进入后台：冻结整帧 + 存盘 + 挂起音频（批次 303）。
+   *
+   * **幂等**：`hidden` / `pagehide` / `blur` 会前后脚到达（安卓切 App 时往往
+   * 同时派发 blur 与 visibilitychange），重复调用不会重复存盘、重复记日志。
+   *
+   * 三条都算"真后台"（用户要求：下拉通知栏 / 切窗口也一样）——回来一律落暂停页。
+   */
+  private enterBackground(reason: 'hidden' | 'pagehide' | 'blur'): void {
+    if (this.disposed) return;
+    const first = !this.backgroundPaused;
+    this.backgroundPaused = true;
+    this.wasHidden = true;
+    // hidden 与 pagehide 可能先后到达：只清一次输入、只存一次
+    if (this.hiddenAtMs === 0) {
+      this.hiddenAtMs = performance.now();
+      // blur 那条路在监听器里已经清过一次（输入框聚焦时也要清），这里不再重复记日志
+      if (reason !== 'blur') this.touch?.resetInput('hidden');
+      void this.saveNow('hidden');
+    }
+    if (first) {
+      // 雨声是常驻循环、音符是预约的：dt=0 停不掉已经在跑的音频线程
+      this.audio.suspend();
+      diag.event('app', 'pause.background', { reason });
+    }
+  }
+
+  /**
+   * 回前台：解冻 + 补画布 + 落暂停页（批次 303）。
+   *
+   * `visible` / `focus` / `pageshow(persisted)` 三条路共用，且必须**幂等**：
+   * 安卓切 App 回来时 `focus` 与 `visibilitychange` 往往同时到达，
+   * 第二个信号看到标记已清就直接返回，不会补两次画布、弹两次暂停页。
+   */
+  private resumeFromBackground(reason: 'visible' | 'focus'): void {
+    if (this.disposed) return;
+    if (!this.backgroundPaused && !this.wasHidden) return;
+    this.leaveBackground(reason);
+    // 只有真的被藏过才可能有画布回收与触摸坐标映射重算；
+    // blur 期间页面一直在画，不做这两件会闪一下的事
+    if (reason === 'visible') {
+      // ⚠️ 必须排在开暂停菜单之前（玩家关掉暂停页时画布已经补好了）
+      this.recoverCanvasesAfterBackground();
+      this.touch?.recover('visible');
+    } else {
+      // 这次没走补画：别把"后台时长"的起点留给下一次
+      this.hiddenAtMs = 0;
+    }
+    // 回来先落到暂停页：其它面板（背包/聊天/告示牌）由它收起
+    if (this.wasHidden) this.handleReturnFromBackground();
+  }
+
+  /** 解除冻结：重置 `lastTime`（后台那几分钟不是"一帧"）并恢复音频 */
+  private leaveBackground(reason: 'visible' | 'focus'): void {
+    if (!this.backgroundPaused) return;
+    this.backgroundPaused = false;
+    // 后台几分钟回来时 rawDt 会是几分钟：不重置的话第一帧会被夹成 0.1s 的"瞬移"
+    this.lastTime = performance.now();
+    this.audio.resume();
+    diag.event('app', 'resume.background', {
+      reason,
+      fullscreen: isFullscreen(),
+      hiddenMs: this.hiddenAtMs > 0 ? Math.round(performance.now() - this.hiddenAtMs) : 0,
+    });
+  }
+
+  /**
    * 从后台回来（批次 201，用户要求）：
    * **先不显示游戏页面，显示暂停页面；点一下才横屏全屏回到游戏。**
    *
@@ -2333,7 +2417,6 @@ class App {
   private handleReturnFromBackground(): void {
     if (this.disposed) return;
     this.wasHidden = false;
-    diag.event('app', 'resume.background', { fullscreen: isFullscreen() });
     // 回来先落到暂停页：其它面板（背包/聊天/告示牌）一律先收起
     if (this.chat.isOpen) this.chat.close();
     if (this.signEditor.isOpen) this.signEditor.close();
@@ -2361,6 +2444,8 @@ class App {
     // pointerdown 而不是 click：全屏必须在用户手势的调用栈里发出
     gate.addEventListener('pointerdown', (event) => {
       event.preventDefault();
+      // 请求全屏可能顺带派发 blur/focus：先立一个窗口，别让它把刚解冻的游戏又冻回去
+      this.ignoreBlurUntilMs = performance.now() + 800;
       enterMobilePresentation();
       this.dismissResumeGate();
     });
@@ -2374,6 +2459,10 @@ class App {
   private dismissResumeGate(): void {
     this.resumeGateEl?.remove();
     this.resumeGateEl = null;
+    // 双保险：万一某条 resume 事件丢了，玩家点这一下也必须真的解冻
+    this.backgroundPaused = false;
+    // "点击继续"是确定的手势：音频在非手势的 visible 里被自动播放策略挡住时，这里补一次
+    this.audio.resume();
     if (this.settingsScreen.isOpen) this.closeSettings();
     document.body.classList.remove('pause-open');
     syncRotateHint();
@@ -3728,11 +3817,45 @@ class App {
       },
       { signal: this.listeners.signal },
     );
-    // 窗口失焦（切 App / 下拉通知栏）时手指的抬起可能永远收不到：
+    // 窗口失焦（切 App / 下拉通知栏 / 切窗口）时手指的抬起可能永远收不到：
     // 清零输入，回来不会出现"摇杆一直朝某个方向"或"视角还在转"
-    window.addEventListener('blur', () => this.touch?.resetInput('blur'), {
-      signal: this.listeners.signal,
-    });
+    // 批次 303：页面仍然 `visible` 的这条路（下拉通知栏）以前**完全没暂停**，
+    // 世界照常全速跑、玩家却看不见也控制不了——现在与真后台同一条路径。
+    window.addEventListener(
+      'blur',
+      () => {
+        this.touch?.resetInput('blur');
+        // 进出全屏会顺带派发 blur（见 `ignoreBlurUntilMs`）：那不是切走
+        if (performance.now() < this.ignoreBlurUntilMs) return;
+        // 正在打字（聊天/告示牌/搜索）时 blur 往往只是软键盘/输入法在动：
+        // 页面并没有被"压到后台"，冻结世界会让打字像卡住
+        if (isEditingText()) return;
+        if (document.visibilityState === 'visible') this.enterBackground('blur');
+      },
+      { signal: this.listeners.signal },
+    );
+    window.addEventListener(
+      'focus',
+      () => {
+        // 切 App 时 focus 可能先于 `visibilitychange=visible` 到达、此时页面仍 hidden：
+        // 补画布交给 visible 那条；这里只收拾"页面一直在前台、只是失去焦点"
+        if (document.visibilityState === 'visible' && this.backgroundPaused) {
+          this.resumeFromBackground('focus');
+        }
+      },
+      { signal: this.listeners.signal },
+    );
+    // 兜底（批次 303）：少数 WebView 会漏掉 focus/visible，画面会**永久冻住**。
+    // 页面明明可见、玩家已经在点了，就说明后台已经结束——这时自己解冻并落回暂停页。
+    window.addEventListener(
+      'pointerdown',
+      () => {
+        if (this.backgroundPaused && document.visibilityState === 'visible') {
+          this.resumeFromBackground('visible');
+        }
+      },
+      { signal: this.listeners.signal, capture: true },
+    );
   }
 
   /**
@@ -12353,36 +12476,29 @@ class App {
     }
 
     // 切后台/关页面前补一次保存：移动端切走随时可能被系统回收
+    // 批次 303：**这一刻就要真的暂停**（以前只记 `wasHidden`，世界还在跑）。
     document.addEventListener(
       'visibilitychange',
       () => {
-        if (document.visibilityState === 'hidden') {
-          // 切后台时手指的按下/抬起可能收不到：把输入清零，回来不会"自己一直走"
-          this.wasHidden = true;
-          if (this.hiddenAtMs === 0) this.hiddenAtMs = performance.now();
-          this.touch?.resetInput('hidden');
-          void this.saveNow('hidden');
-        } else {
-          // 批次 295：系统可能把 2D 画布的后备存储回收掉（图集一空，所有从它裁出来的
-          // 图标就都是透明的）。**必须排在开暂停菜单之前**：玩家关掉暂停页时
-          // 看到的就已经是补好的画面，而不是"回来还是空白、要再进出一次界面才好"。
-          this.recoverCanvasesAfterBackground();
-          // 批次 183：从后台回来偶尔会拿到 clientX/Y=0 的触摸；先重排一次。
-          // 批次 214：这里**不**用背包恢复——紧接着 `handleReturnFromBackground`
-          // 会打开暂停菜单，两个面板叠着开会让 uiOpen 的交接算错。
-          this.touch?.recover('visible');
-          // 批次 201：先落到暂停页，点一下才横屏全屏回到游戏
-          if (this.wasHidden) this.handleReturnFromBackground();
-        }
+        if (document.visibilityState === 'hidden') this.enterBackground('hidden');
+        else this.resumeFromBackground('visible');
       },
       { signal: this.listeners.signal },
     );
+    // 批次 303：部分 WebView 只派发 `pagehide`、不派发 `visibilitychange`；
+    // 与 hidden 共用同一条"冻结 + 存盘"路径（`hiddenAtMs` 让两者只存一次）。
+    window.addEventListener('pagehide', () => this.enterBackground('pagehide'), {
+      signal: this.listeners.signal,
+    });
     // 批次 295：bfcache 恢复（前进/后退）不一定派发 `visibilitychange`，
-    // 但画布同样可能被系统回收过——同一条补画路径再走一遍。
+    // 但画布同样可能被系统回收过；批次 303 起它还负责把冻结状态收掉、落回暂停页。
     window.addEventListener(
       'pageshow',
       (event) => {
-        if (event.persisted) this.recoverCanvasesAfterBackground();
+        if (!event.persisted) return;
+        if (this.backgroundPaused || this.wasHidden) this.resumeFromBackground('visible');
+        // 兜底：标记不知为何已被清掉时，至少把"画一次就缓存"的画布补一遍
+        else this.recoverCanvasesAfterBackground();
       },
       { signal: this.listeners.signal },
     );
@@ -12491,9 +12607,17 @@ class App {
     const frame = (): void => {
       // 退出世界后不再排下一帧（否则旧 App 会继续画一个已经拆掉的世界）
       if (this.disposed) return;
+      const now = performance.now();
+      // 页面在后台（批次 303）：物理、生存、区块加载/光照/网格化、渲染**一个都不做**。
+      // 只把 lastTime 往前推——回来时 rawDt 才不会变成"一帧卡了几分钟"。
+      // ⚠️ 仍然要排下一帧：解冻是靠 `visible`/`focus` 事件，循环不能自己停死。
+      if (this.backgroundPaused) {
+        this.lastTime = now;
+        schedule();
+        return;
+      }
       // 帧号进日志：复现时能对上"第几帧开始卡"
       diag.log.frame++;
-      const now = performance.now();
       // 限帧（批次 130，N7）：上限只决定"这一帧来得太早就不画"。
       // ⚠️ 跳过时必须**继续排下一帧**（`schedule()` 后再 return）——
       // 直接 return 会让循环停住，画面就此冻住（最容易写错的一处）
@@ -12513,7 +12637,8 @@ class App {
       // 暂停菜单 / 后台回来的"点击继续"层开着时，**整局模拟停住**（批次 228）：
       // 循环里物理、生存 tick、实体、粒子、昼夜、天气、方块 tick 全部吃 `dt`；
       // 渲染与性能采样仍用真实帧时间（`frameSeconds`），画面不会冻结在黑屏。
-      const paused = this.settingsScreen.isOpen || this.resumeGateEl !== null;
+      const paused =
+        this.backgroundPaused || this.settingsScreen.isOpen || this.resumeGateEl !== null;
       const dt = paused ? 0 : Math.min(rawDt, 0.1);
       const frameSeconds = Math.min(rawDt, 2);
       this.lastTime = now;
@@ -12855,6 +12980,9 @@ class App {
     }
     document.body.classList.remove('pause-open');
     this.wasHidden = false;
+    // 批次 303：冻结标记跟着这一局一起清掉，下一局从"运行中"开始
+    this.backgroundPaused = false;
+    this.ignoreBlurUntilMs = 0;
     diag.event('app', 'dispose', { world: this.worldConfig.id });
     this.listeners.abort();
     this.backButton.reset();

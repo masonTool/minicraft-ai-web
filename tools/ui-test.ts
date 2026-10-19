@@ -2675,7 +2675,10 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   // 掉到 9fps 时诊断里只看到 100ms）
   check(
     '物理 dt 与测量帧间距分开（暂停时模拟 dt 归零）',
-    appSrc.includes('const paused = this.settingsScreen.isOpen || this.resumeGateEl !== null;') &&
+    // 批次 303：暂停判据多了"页面在后台"这一条，断言按多行写法匹配
+    /const paused =\s*\n\s*this\.backgroundPaused \|\| this\.settingsScreen\.isOpen \|\| this\.resumeGateEl !== null;/.test(
+      appSrc,
+    ) &&
       appSrc.includes('const dt = paused ? 0 : Math.min(rawDt, 0.1);') &&
       appSrc.includes('const frameSeconds = Math.min(rawDt, 2);') &&
       appSrc.includes('this.updatePerfPolicy(frameSeconds);'),
@@ -3714,15 +3717,19 @@ console.log('\n[切后台回来图标全空（批次 295）]');
     recoverBody.slice(0, 120),
   );
   // 顺序有讲究：暂停菜单会把画面盖住，补画必须在它之前（否则玩家关掉菜单还是空白）
+  // 批次 303：回前台的流程收进 `resumeFromBackground()`，顺序断言也改成只看这个方法体
+  const resumeBody =
+    /private resumeFromBackground\(reason: 'visible' \| 'focus'\): void \{([\s\S]*?)\n  \}/.exec(appSrc)?.[1] ?? '';
   check(
-    'visible 分支在开暂停菜单之前补画',
-    appSrc.indexOf('this.recoverCanvasesAfterBackground();') >= 0 &&
-      appSrc.indexOf('this.recoverCanvasesAfterBackground();') <
-        appSrc.indexOf('if (this.wasHidden) this.handleReturnFromBackground();'),
+    '回前台在开暂停菜单之前补画',
+    resumeBody.includes('this.recoverCanvasesAfterBackground();') &&
+      resumeBody.indexOf('this.recoverCanvasesAfterBackground();') <
+        resumeBody.indexOf('this.handleReturnFromBackground();'),
   );
   check(
     'bfcache 恢复也走同一条补画路径',
-    appSrc.includes("'pageshow'") && appSrc.includes('if (event.persisted) this.recoverCanvasesAfterBackground();'),
+    appSrc.includes("'pageshow'") &&
+      /if \(!event\.persisted\) return;[\s\S]{0,200}this\.resumeFromBackground\('visible'\)/.test(appSrc),
   );
   check(
     '快捷栏图标画布恢复后整排重画',
@@ -3742,6 +3749,73 @@ console.log('\n[切后台回来图标全空（批次 295）]');
   check(
     '补画本身也记一条（带 hiddenMs，能看出是不是长时间后台之后）',
     appSrc.includes("diag.event('app', 'ui.canvas.recover', {") && appSrc.includes('hiddenMs: Math.round(hiddenMs)'),
+  );
+}
+
+console.log('\n[页面压后台立即暂停（批次 303）]');
+{
+  const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const audioSrc = readFileSync(new URL('../src/core/audio/AudioEngine.ts', import.meta.url), 'utf8');
+  const keyboardSrc = readFileSync(new URL('../src/ui/Keyboard.ts', import.meta.url), 'utf8');
+
+  const enterBody =
+    /private enterBackground\(reason: 'hidden' \| 'pagehide' \| 'blur'\): void \{([\s\S]*?)\n  \}/.exec(appSrc)?.[1] ?? '';
+  const leaveBody =
+    /private leaveBackground\(reason: 'visible' \| 'focus'\): void \{([\s\S]*?)\n  \}/.exec(appSrc)?.[1] ?? '';
+
+  // 用户："页面压后台需要直接暂停游戏，现在没有暂停"——关键是**隐藏那一刻**就置位，
+  // 而不是等回到前台再开暂停页（那时世界已经跑过一截了）。
+  check(
+    '切后台立刻置冻结标记，且排在存盘之前',
+    enterBody.includes('this.backgroundPaused = true;') &&
+      enterBody.indexOf('this.backgroundPaused = true;') < enterBody.indexOf("this.saveNow('hidden')"),
+  );
+  check(
+    'hidden / pagehide / blur 三条信号共用同一个入口',
+    appSrc.includes("if (document.visibilityState === 'hidden') this.enterBackground('hidden');") &&
+      appSrc.includes("window.addEventListener('pagehide', () => this.enterBackground('pagehide')") &&
+      appSrc.includes("this.enterBackground('blur')"),
+  );
+  check(
+    '页面在后台时主循环整帧跳过（物理/区块/渲染都不做）',
+    /if \(this\.backgroundPaused\) \{[\s\S]{0,160}this\.lastTime = now;[\s\S]{0,80}schedule\(\);[\s\S]{0,40}return;/.test(appSrc),
+  );
+  check(
+    '暂停判据包含后台标记（漏清时有双保险）',
+    appSrc.includes('this.backgroundPaused || this.settingsScreen.isOpen || this.resumeGateEl !== null'),
+  );
+  check('回前台重置 lastTime（后台那几分钟不算一帧）', leaveBody.includes('this.lastTime = performance.now();'));
+  check(
+    '进后台挂起音频、回前台恢复（雨声是常驻循环，dt=0 停不掉）',
+    enterBody.includes('this.audio.suspend();') &&
+      leaveBody.includes('this.audio.resume();') &&
+      /suspend\(\): void \{[\s\S]{0,240}ctx\.suspend\(\)/.test(audioSrc),
+  );
+  check(
+    'blur 只在非输入态才算后台（聊天/告示牌打字时不会把世界冻住）',
+    appSrc.includes('if (isEditingText()) return;') &&
+      keyboardSrc.includes('export function isEditingText()'),
+  );
+  check(
+    'focus 只收拾"页面仍可见"的失焦（真后台交给 visible）',
+    appSrc.includes("if (document.visibilityState === 'visible' && this.backgroundPaused) {") &&
+      appSrc.includes("this.resumeFromBackground('focus')"),
+  );
+  check(
+    '进出全屏引起的 blur 有忽略窗口（否则"继续游戏"会立刻又被冻回去）',
+    appSrc.includes('private ignoreBlurUntilMs = 0;') &&
+      appSrc.includes('if (performance.now() < this.ignoreBlurUntilMs) return;'),
+  );
+  check(
+    '兜底：页面可见时点一下必定解冻（少数 WebView 会漏 focus/visible）',
+    appSrc.includes('if (this.backgroundPaused && document.visibilityState === \'visible\') {') &&
+      appSrc.includes("this.resumeFromBackground('visible')"),
+  );
+  check(
+    '"点击继续"顺手解冻并恢复音频（手势里恢复最稳）',
+    /private dismissResumeGate\(\): void \{[\s\S]{0,500}this\.backgroundPaused = false;[\s\S]{0,200}this\.audio\.resume\(\);/.test(
+      appSrc,
+    ),
   );
 }
 
