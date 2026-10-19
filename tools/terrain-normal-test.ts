@@ -428,7 +428,9 @@ for (const worldType of worldTypes) {
   // 海边一定碎成很多小条。把它们算进"陆地群系斑块"，中位数就永远只有个位数，
   // 量的不是"树林成不成片"而是"海岸线有多长"——这是批次 106 之后同类口径错误的第二次。
   {
-    const excluded = new Set(['beach', 'stony_shore']);
+    // snowy_beach（批次 339）与 beach / stony_shore 同一类：它是水线上下两格的窄带，
+    // 混进来量到的只会是"海岸线有多长"。
+    const excluded = new Set(['beach', 'stony_shore', 'snowy_beach']);
     const land = (i: number): boolean =>
       grid.heights[i]! >= SEA_LEVEL && !excluded.has(grid.names[grid.biomes[i]!]!);
     const patches = componentSizes(N, land, (i) => grid.biomes[i]!);

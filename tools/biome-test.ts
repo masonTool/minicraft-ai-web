@@ -85,6 +85,7 @@ console.log('\n[海陆分类：按实际地表高度]');
   );
   equal('紧贴海平面 → 沙滩', land({}, sea), 'beach');
   equal('强侵蚀海岸 → 石岸', land({ erosion: -0.8 }, sea), 'stony_shore');
+  equal('寒冷海岸 → 积雪沙滩', land({ temperature: -0.8 }, sea), 'snowy_beach');
   check('明显高于海平面就不再是海洋/沙滩', !land({}, sea + 10).includes('ocean') && land({}, sea + 10) !== 'beach');
 }
 
@@ -112,6 +113,25 @@ check(
   '陆地匹配绝不会返回海洋或沙滩',
   [0, 1, 2, 3, 4, 5].every((id) => LAND_BIOMES.some((biome) => biome.id === id) === false),
 );
+
+console.log('\n[批次 339：森林 / 丛林变体]');
+equal('群系表共 32 种', BIOMES.length, 32);
+equal(
+  '深色森林',
+  findLandBiome(point({ temperature: 0, humidity: 0.9, erosion: 0.5, weirdness: 0.5 })).name,
+  'dark_forest',
+);
+equal(
+  '稀疏丛林',
+  findLandBiome(point({ temperature: 0.7, humidity: 0.5, erosion: 0.2, weirdness: -0.5 })).name,
+  'sparse_jungle',
+);
+equal(
+  '竹林',
+  findLandBiome(point({ temperature: 0.7, humidity: 0.9, erosion: 0.2, weirdness: 0.5 })).name,
+  'bamboo_jungle',
+);
+
 
 console.log('\n[地表方块随群系变化]');
 {

@@ -275,9 +275,9 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
     salt: 0x7777,
     radius: 26,
     height: 30,
-    // ⚠️ 我们的群系表里没有深色森林（dark_forest 不在 23 个群系里），
-    // 林地府邸退化为"森林里的稀有大型木质建筑"
-    biomes: [Biome.FOREST],
+    // 批次 339 补上深色森林之后，林地府邸回到原版的群系限定
+    // （以前群系表里没有 dark_forest，只能退化成"森林里的稀有大型木质建筑"）
+    biomes: [Biome.DARK_FOREST, Biome.FOREST],
   },
 ];
 

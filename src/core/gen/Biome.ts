@@ -8,7 +8,8 @@
  *
  * ⚠️ 诚实说明：官方的 61 个主世界群系参数表在 wiki 上（对自动抓取返回 403），
  * 拿不到原始数据。这里实现的是**机制完全一致**的匹配算法 + 一份经过校准的
- * 28 个代表性群系子集（批次 338 把海洋补齐到 9 种），覆盖海洋/海岸/平原/森林/
+ * 32 个代表性群系子集（批次 338 把海洋补齐到 9 种、339 补森林/丛林变体），
+ * 覆盖海洋/海岸/平原/森林/
  * 针叶林/雪原/沙漠/热带草原/丛林/沼泽/山地/裸岩这些主干。
  * 补齐到 61 个只需继续往表里加区间，不需要改算法。
  */
@@ -28,6 +29,11 @@ export const Biome = {
   LUKEWARM_OCEAN: 25,
   DEEP_LUKEWARM_OCEAN: 26,
   DEEP_FROZEN_OCEAN: 27,
+  // 批次 339（D20 第二批）：森林/丛林/山地的变体
+  DARK_FOREST: 28,
+  SPARSE_JUNGLE: 29,
+  BAMBOO_JUNGLE: 30,
+  SNOWY_BEACH: 31,
   BEACH: 4,
   STONY_SHORE: 5,
   PLAINS: 6,
@@ -617,6 +623,85 @@ export const BIOMES: readonly BiomeDef[] = [
     grassColor: 0x80b497,
     foliageColor: 0x60a17b,
   },
+
+  // ---- 批次 339：森林 / 丛林 / 山地变体 + 积雪沙滩
+  // 这几个都是"已有群系的更具体子集"：靠**多约束一个维度**在参数空间里赢过母群系
+  // （`specificity()` 先比约束维度数，再比总宽度）。
+  {
+    id: Biome.DARK_FOREST,
+    name: 'dark_forest',
+    ocean: false,
+    temperature: [-0.45, 0.3],
+    // ⚠️ 变体群系**不要拿 weirdness 切**：它来自高频的 ridges 噪声，
+    // 一刀下去会把陆地切成"一格一换"的碎斑（`test:terrain:normal` 的中位斑块会从 15 掉到 4）。
+    // 这里只用温度/湿度/侵蚀三个低频维度，靠"多约束一个维度"赢过母群系。
+    humidity: [0.85, 1.1],
+    continentalness: [-0.15, 1.1],
+    erosion: [0.2, 1.1],
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.GRASS_BLOCK,
+    subSurface: Block.DIRT,
+    subDepth: 3,
+    underwater: Block.DIRT,
+    snowy: false,
+    grassColor: 0x507a32,
+    foliageColor: 0x3f5f22,
+  },
+  {
+    id: Biome.SPARSE_JUNGLE,
+    name: 'sparse_jungle',
+    ocean: false,
+    temperature: [0.3, 1.1],
+    humidity: [0.3, 0.55],
+    continentalness: [-0.15, 1.1],
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.GRASS_BLOCK,
+    subSurface: Block.DIRT,
+    subDepth: 3,
+    underwater: Block.DIRT,
+    snowy: false,
+    grassColor: 0x59c93c,
+    foliageColor: 0x30bb0b,
+  },
+  {
+    id: Biome.BAMBOO_JUNGLE,
+    name: 'bamboo_jungle',
+    ocean: false,
+    temperature: [0.3, 1.1],
+    humidity: [0.75, 1.1],
+    continentalness: [-0.15, 1.1],
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.GRASS_BLOCK,
+    subSurface: Block.DIRT,
+    subDepth: 3,
+    underwater: Block.DIRT,
+    snowy: false,
+    grassColor: 0x59c93c,
+    foliageColor: 0x30bb0b,
+  },
+  {
+    id: Biome.SNOWY_BEACH,
+    name: 'snowy_beach',
+    ocean: false,
+    temperature: [-1.1, -0.45],
+    humidity: ANY,
+    continentalness: [-0.42, -0.15],
+    erosion: ANY,
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.SNOW_BLOCK,
+    subSurface: Block.SAND,
+    subDepth: 3,
+    underwater: Block.SAND,
+    snowy: true,
+    grassColor: 0x80b497,
+    foliageColor: 0x60a17b,
+  },
 ];
 
 if (BIOMES.length !== Object.keys(Biome).length) {
@@ -736,7 +821,12 @@ export function biomeById(id: number): BiomeDef {
 
 /** 只在这些群系里做陆地表层匹配（海洋/海岸单独判） */
 export const LAND_BIOMES = BIOMES.filter(
-  (biome) => !biome.ocean && biome.id !== Biome.BEACH && biome.id !== Biome.STONY_SHORE,
+  (biome) =>
+    !biome.ocean &&
+    biome.id !== Biome.BEACH &&
+    biome.id !== Biome.STONY_SHORE &&
+    // 批次 339：积雪沙滩与沙滩同一个判定通道，不能进陆地匹配
+    biome.id !== Biome.SNOWY_BEACH,
 );
 
 /**
@@ -843,6 +933,8 @@ export function biomeForColumn(climate: ClimatePoint, groundY: number, seaLevel:
   // 收成 `-1..0` 之后沙滩回到水线那一圈，`+1` 及以上算陆地（与画面上"沙到水边为止"一致）。
   if (groundY >= seaLevel - 1 && groundY <= seaLevel) {
     if (gain.erosion < -0.6) return biomeById(Biome.STONY_SHORE);
+    // 批次 339：寒冷海岸是积雪沙滩（原版 snowy_beach）
+    if (gain.temperature < -0.45) return biomeById(Biome.SNOWY_BEACH);
     return biomeById(Biome.BEACH);
   }
 

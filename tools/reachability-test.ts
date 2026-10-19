@@ -644,16 +644,7 @@ const BLOCK_EXEMPT: readonly { label: string; ids: readonly number[]; reason: st
     ids: idsNamed('calcite', 'ice', 'packed_ice', 'smooth_basalt', 'nether_sprouts'),
     reason: '世界生成里没有它们（原版分别在山地/冰原/玄武岩三角洲/诡异森林），也没有配方',
   },
-  {
-    label: '竹子与脚手架',
-    ids: idsNamed('bamboo', 'scaffolding'),
-    reason: '竹子生成侧没写（原版长在丛林），脚手架那条配方因此永远做不出来',
-  },
-  {
-    label: '深色橡木树叶',
-    ids: idsNamed('dark_oak_leaves'),
-    reason: '本项目没有深色森林群系，林地府邸只写木板/台阶/原木——那片树的叶子无从获得',
-  },
+
   {
     label: '死珊瑚',
     ids: idsNamed(
@@ -758,10 +749,11 @@ const blockGaps: number[] = [];
   // → 120（史莱姆 → 粘液球 → 粘性活塞）后 45 条（6 族）
   // → **131（混凝土粉末遇水凝固）后 33 条（5 族）**：混凝土那一族 14 种还掉，
   //    但**灰/黑两色的混凝土与粉末**要留在白名单里（它们断在染料上，并入下面那一族）
-  // 剩下的每一条都是"缺一整块内容"（鱿鱼与墨囊、丛林竹子、珊瑚死亡机制、深色森林、生成侧没写的几件），
+  // 剩下的每一条都是"缺一整块内容"（鱿鱼与墨囊、珊瑚死亡机制、生成侧没写的几件），
   // 而不是"某条链断在中间"——正是这一栏该有的样子
+  // 批次 339：竹林 → 竹子 → 脚手架、深色森林 → 深色橡木树叶，两族从白名单里还掉了（25 → 20）
   equal(
-    '方块侧缺口总数（批次 189 之后：25 条）',
+    '方块侧缺口总数（批次 339 之后：20 条）',
     blockGaps.length,
     BLOCK_EXEMPT.reduce((sum, family) => sum + family.ids.length, 0),
   );

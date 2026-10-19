@@ -1061,6 +1061,44 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     special: 'dead_bush',
     specialDensity: 0.01,
   },
+
+  // ---- 批次 339：森林 / 丛林 / 山地变体 + 积雪沙滩
+  [Biome.DARK_FOREST]: {
+    // 深色森林的招牌是深色橡木：树冠压得低、蘑菇多
+    trees: [['dark_oak', 6], ['big_oak', 2], ['birch', 1]],
+    treeDensity: 0.09,
+    grass: 0.08,
+    flowers: 0.006,
+    flowerKinds: [Block.POPPY, Block.DANDELION],
+    mushrooms: 0.02,
+    special: 'pumpkin',
+    specialDensity: 0.001,
+  },
+  [Biome.SPARSE_JUNGLE]: {
+    trees: [['jungle', 2], ['oak', 1]],
+    treeDensity: 0.025,
+    grass: 0.18,
+    flowers: 0.006,
+    flowerKinds: [Block.BLUE_ORCHID],
+    mushrooms: 0.004,
+    special: 'melon',
+    specialDensity: 0.002,
+  },
+  [Biome.BAMBOO_JUNGLE]: {
+    // 竹林：竹子是第 11 种"树"，PLANTERS 里已经能单独种一丛
+    trees: [['bamboo', 6], ['jungle', 1]],
+    treeDensity: 0.06,
+    grass: 0.2,
+    flowers: 0.004,
+    flowerKinds: [Block.BLUE_ORCHID],
+    mushrooms: 0.004,
+    special: 'melon',
+    specialDensity: 0.004,
+  },
+  [Biome.SNOWY_BEACH]: {
+    ...EMPTY_FEATURE,
+    snowCover: 0.8,
+  },
 };
 
 /** 群的密度再乘一次（雨林比森林更"满"） */

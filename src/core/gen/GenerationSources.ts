@@ -90,6 +90,12 @@ function featureBlocks(): number[] {
   for (const feature of Object.values(BIOME_FEATURES)) {
     // 树：原木 + 木板 + 树叶（`woodFor` 就是那一套，别自己按 kind 拼 id）
     for (const [kind] of feature.trees) {
+      // 竹是"第 11 种树"，但它的计划器只写 BAMBOO（`woodFor('bamboo')` 返回橡木只是为了
+      // 满足类型）——这里必须单独收，否则竹林会被判成"生成了未登记的方块"（批次 339）
+      if (kind === 'bamboo') {
+        add(Block.BAMBOO);
+        continue;
+      }
       const wood = woodFor(kind);
       add(wood.log);
       add(wood.planks);
