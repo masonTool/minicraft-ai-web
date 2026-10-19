@@ -702,6 +702,10 @@ console.log('\n[手持物品：切物品 / 挥手动画 / 亮度]');
     hair: 0x2f2016,
     hairStyle: 'short',
     beard: 'none',
+    eyes: 'calm',
+    eye: 0x3a2a1e,
+    build: 'adult',
+    frame: 'normal',
   });
   const armMaterialNow = (group.children[0] as THREE.Mesh).material as THREE.ShaderMaterial;
   const cuffMaterialNow = cuff.material as THREE.ShaderMaterial;

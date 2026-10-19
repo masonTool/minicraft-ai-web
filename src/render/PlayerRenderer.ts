@@ -33,7 +33,15 @@
 import * as THREE from 'three';
 import { ARMOR_SLOT_COUNT } from '../core/registry/armor.ts';
 import { Item } from '../core/registry/items.ts';
-import type { AppearancePalette } from '../game/appearance.ts';
+import {
+  bodyProportions,
+  eyeProfileOf,
+  type AppearancePalette,
+  type BodyBuild,
+  type BodyFrame,
+  type EyeProfile,
+  type EyeStyle,
+} from '../game/appearance.ts';
 
 /** 肤色（与第一人称手臂同一个色，切换人称时不会"换个人"） */
 const SKIN = 0xdc9a6b;
@@ -41,7 +49,10 @@ const HAIR = 0x2f2016;
 const SHIRT = 0x00a8a8;
 const PANTS = 0x3b4bb5;
 const SHOES = 0x4a4a52;
+/** 嘴巴 / 老版眼睛的深色（眼睛现在由「眼型 + 瞳色」控制，这个只留给嘴） */
 const EYE = 0x1b2a44;
+/** 眼白（批次 333）：虹膜外面那一圈浅色，让眼睛不再是一块深色贴片 */
+const EYE_WHITE = 0xf2ece2;
 /** 鞋底那一圈（比鞋面深）：让脚不是一块方砖 */
 const SHOE_SOLE = 0x33333a;
 /** 披风（批次 185 外观）：暗红，与皮肤的暖色区分开 */
@@ -50,6 +61,8 @@ const CAPE = 0x9b1b2f;
 const SHIELD_WOOD = 0x7a5a33;
 const SHIELD_DARK = 0x54391f;
 const SHIELD_IRON = 0x9aa0a6;
+/** 手臂枢轴的出厂 x（批次 333：肩宽按体型比例缩放时以它为基准） */
+const ARM_PIVOT_X = 0.375;
 
 export interface PlayerPose {
   x: number;
@@ -92,14 +105,15 @@ export class PlayerRenderer {
    * 换肤色/衣色就是把这几组网格的材质换掉——材质按颜色共享（`materialFor`），
    * 所以同一件颜色不会重复创建。
    */
-  private readonly roleMeshes: Record<'skin' | 'shirt' | 'pants' | 'hair', THREE.Mesh[]> = {
+  private readonly roleMeshes: Record<'skin' | 'shirt' | 'pants' | 'hair' | 'eye', THREE.Mesh[]> = {
     skin: [],
     shirt: [],
     pants: [],
     hair: [],
+    eye: [],
   };
   /**
-   * 发型 / 胡须的可显隐零件（批次 279）。
+   * 发型 / 胡须的可显隐零件（批次 279 / 296）。
    *
    * 为什么按"零件组"分而不是重建几何：切预设只改 visible，不新建 Mesh；
    * 眉毛虽同用发色，但**不放进 `hairMeshes`**——光头不该连眉毛一起消失。
@@ -107,8 +121,37 @@ export class PlayerRenderer {
   private readonly hairMeshes: THREE.Mesh[] = [];
   private readonly longHairMeshes: THREE.Mesh[] = [];
   private readonly ponytailMeshes: THREE.Mesh[] = [];
+  /** 齐耳短发（批次 333）：两侧垂发 + 齐刘海 */
+  private readonly bobMeshes: THREE.Mesh[] = [];
+  /** 翘发（批次 333）：短发上的几撮外翘 */
+  private readonly messyMeshes: THREE.Mesh[] = [];
   private readonly stubbleMeshes: THREE.Mesh[] = [];
   private readonly fullBeardMeshes: THREE.Mesh[] = [];
+  /** 山羊胡（批次 333）：下巴一撮 + 上唇两条 */
+  private readonly goateeMeshes: THREE.Mesh[] = [];
+  /**
+   * 眼睛零件（批次 333）：眼白 / 虹膜 / 上睫毛 / 眉毛。
+   *
+   * 眼型只改尺寸与显隐，不重建几何；眉毛带 `sign`（左 -1 / 右 +1）用来做镜像倾斜。
+   */
+  private readonly scleraMeshes: THREE.Mesh[] = [];
+  private readonly irisMeshes: THREE.Mesh[] = [];
+  private readonly lashMeshes: THREE.Mesh[] = [];
+  private readonly brows: Array<{ mesh: THREE.Mesh; sign: 1 | -1 }> = [];
+  /**
+   * 体型比例（批次 333）：只缩放 x/z，不动高度。
+   *
+   * `region` 决定用哪一组倍率：躯干同时吃宽/深，四肢只吃粗细；
+   * 盔甲片与身体在同一子树里，会跟着一起收放。
+   */
+  private readonly bodyParts: Array<{ mesh: THREE.Mesh; region: 'torso' | 'arm' | 'leg' }> = [];
+  /** 每块网格的出厂缩放（比例计算必须从它重新乘，否则会一帧帧累积） */
+  private readonly baseScales = new Map<THREE.Mesh, THREE.Vector3>();
+  /** 当前生效的眼型 / 体型（验收脚本读取） */
+  private currentEye: EyeProfile = eyeProfileOf('calm');
+  private currentEyeStyle: EyeStyle = 'calm';
+  private currentBuild: BodyBuild = 'adult';
+  private currentFrame: BodyFrame = 'normal';
   /**
    * 每块网格的明暗系数（批次 241）。
    *
@@ -187,6 +230,20 @@ export class PlayerRenderer {
     this.addHairBox(this.longHairMeshes, this.head, 0.09, 0.42, 0.3, -0.24, 0.08, 0.05);
     this.addHairBox(this.ponytailMeshes, this.head, 0.14, 0.14, 0.14, 0, 0.3, 0.27);
     this.addHairBox(this.ponytailMeshes, this.head, 0.14, 0.42, 0.14, 0, 0.02, 0.31, 0.92);
+    // 马尾的发绳（批次 333）：压暗一档的小方块，远看能分出"扎起来的那一束"
+    this.addHairBox(this.ponytailMeshes, this.head, 0.16, 0.06, 0.16, 0, 0.35, 0.27, 0.5);
+    // 齐耳短发（批次 333）：后脑 + 两侧垂到下颌 + 齐刘海
+    this.addHairBox(this.bobMeshes, this.head, 0.5, 0.46, 0.1, 0, 0.03, 0.22);
+    this.addHairBox(this.bobMeshes, this.head, 0.09, 0.4, 0.36, 0.24, 0.06, 0.0);
+    this.addHairBox(this.bobMeshes, this.head, 0.09, 0.4, 0.36, -0.24, 0.06, 0.0);
+    this.addHairBox(this.bobMeshes, this.head, 0.5, 0.1, 0.06, 0, 0.43, -0.245, 1.18);
+    // 翘发（批次 333）：短发上的几撮外翘，少年感的主要来源之一
+    const tuftA = this.addHairBox(this.messyMeshes, this.head, 0.15, 0.17, 0.15, 0.14, 0.5, 0.02, 1.1);
+    tuftA.rotation.z = -0.38;
+    const tuftB = this.addHairBox(this.messyMeshes, this.head, 0.13, 0.15, 0.13, -0.13, 0.51, 0.04, 1.08);
+    tuftB.rotation.z = 0.34;
+    const tuftC = this.addHairBox(this.messyMeshes, this.head, 0.12, 0.13, 0.12, 0.0, 0.53, 0.1, 1.15);
+    tuftC.rotation.z = 0.18;
     // 胡须：胡茬（下颚一圈）与络腮胡（下颚 + 两颊 + 八字胡），默认隐藏
     this.addHairBox(this.stubbleMeshes, this.head, 0.44, 0.1, 0.06, 0, 0.07, -0.245, 0.8);
     this.addHairBox(this.stubbleMeshes, this.head, 0.1, 0.09, 0.06, 0.205, 0.12, -0.22, 0.8);
@@ -195,11 +252,19 @@ export class PlayerRenderer {
     this.addHairBox(this.fullBeardMeshes, this.head, 0.12, 0.16, 0.08, 0.22, 0.12, -0.22, 0.75);
     this.addHairBox(this.fullBeardMeshes, this.head, 0.12, 0.16, 0.08, -0.22, 0.12, -0.22, 0.75);
     this.addHairBox(this.fullBeardMeshes, this.head, 0.24, 0.04, 0.03, 0, 0.195, -0.26, 0.9);
+    // 山羊胡（批次 333）：下巴一撮 + 上唇两条
+    this.addHairBox(this.goateeMeshes, this.head, 0.16, 0.14, 0.06, 0, 0.015, -0.245, 0.8);
+    this.addHairBox(this.goateeMeshes, this.head, 0.08, 0.03, 0.03, 0.055, 0.19, -0.262, 0.9);
+    this.addHairBox(this.goateeMeshes, this.head, 0.08, 0.03, 0.03, -0.055, 0.19, -0.262, 0.9);
     for (const group of [
       this.longHairMeshes,
       this.ponytailMeshes,
+      this.bobMeshes,
+      this.messyMeshes,
       this.stubbleMeshes,
       this.fullBeardMeshes,
+      this.goateeMeshes,
+      this.lashMeshes,
     ]) {
       for (const mesh of group) mesh.visible = false;
     }
@@ -207,11 +272,16 @@ export class PlayerRenderer {
     this.addRoleBox(this.head, 0.033, 0.11, 0.08, 0.2615, 0.24, 0.0, SKIN, 'skin', 0.9);
     this.addRoleBox(this.head, 0.033, 0.11, 0.08, -0.2615, 0.24, 0.0, SKIN, 'skin', 0.9);
     // 五官贴在 -Z 面（正脸朝 -Z）：眉 + 眼 + 鼻 + 嘴
-    // 眉毛跟发色走，但不进 `hairMeshes`：光头时眉毛要留着
-    this.addRoleBox(this.head, 0.11, 0.02, 0.02, 0.13, 0.355, -0.255, HAIR, 'hair');
-    this.addRoleBox(this.head, 0.11, 0.02, 0.02, -0.13, 0.355, -0.255, HAIR, 'hair');
-    this.addBox(this.head, 0.1, 0.09, 0.02, 0.13, 0.3, -0.255, EYE);
-    this.addBox(this.head, 0.1, 0.09, 0.02, -0.13, 0.3, -0.255, EYE);
+    // 眉毛跟发色走，但不进 `hairMeshes`：光头时眉毛要留着。
+    // 批次 333：眉毛的宽/高/倾斜由眼型决定（`applyEyes`），这里只记正负号做镜像。
+    this.brows.push({ mesh: this.addRoleBox(this.head, 0.13, 0.028, 0.02, 0.13, 0.36, -0.255, HAIR, 'hair'), sign: 1 });
+    this.brows.push({ mesh: this.addRoleBox(this.head, 0.13, 0.028, 0.02, -0.13, 0.36, -0.255, HAIR, 'hair'), sign: -1 });
+    // 眼睛（批次 333）：眼白 + 虹膜 + 上睫毛。原来是一整块深色方块，看不出"在看哪"。
+    for (const x of [0.13, -0.13]) {
+      this.scleraMeshes.push(this.addBox(this.head, 0.105, 0.075, 0.02, x, 0.3, -0.254, EYE_WHITE));
+      this.irisMeshes.push(this.addRoleBox(this.head, 0.055, 0.065, 0.02, x, 0.3, -0.264, 0x3a2a1e, 'eye'));
+      this.lashMeshes.push(this.addRoleBox(this.head, 0.118, 0.016, 0.02, x, 0.335, -0.256, HAIR, 'hair', 0.8));
+    }
     this.addRoleBox(this.head, 0.08, 0.05, 0.06, 0, 0.255, -0.27, SKIN, 'skin', 0.85);
     this.addBox(this.head, 0.13, 0.03, 0.02, 0, 0.15, -0.255, EYE);
 
@@ -229,36 +299,164 @@ export class PlayerRenderer {
     this.addBox(this.offhandGroup, 0.36, 0.05, 0.065, 0, -0.2, 0, SHIELD_IRON);
     this.addBox(this.offhandGroup, 0.05, 0.4, 0.065, 0, 0, 0, SHIELD_DARK);
     this.offhandGroup.visible = false;
+
+    // 批次 333：体型比例的快照必须在**全部零件（含盔甲/披风/盾牌）建好之后**再做，
+    // 否则晚建的甲片拿不到自己的出厂尺寸。
+    this.captureBodyParts();
   }
 
   /**
-   * 换外观（批次 187 / 279）：肤色 / 上衣 / 裤子 / 发色，并按发型与胡须显隐零件。
+   * 换外观（批次 187 / 279 / 296）：颜色、发型、胡须、眼睛、体型全部在这里落地。
    *
-   * 只换材质引用、只改 visible，不动几何；材质按颜色共享，重复调用同一套配色不会新建对象。
+   * 只换材质引用、只改 visible / scale，不动几何；材质按颜色共享，
+   * 重复调用同一套配色不会新建对象。
    */
   setAppearance(palette: AppearancePalette): void {
     // 每块都乘上自己的明暗系数（批次 241）：同一部位拆细之后仍然"换一套衣服全跟着变"
-    for (const mesh of this.roleMeshes.skin) {
-      mesh.material = this.materialFor(shadeHex(palette.skin, this.meshShade.get(mesh) ?? 1));
-    }
-    for (const mesh of this.roleMeshes.shirt) {
-      mesh.material = this.materialFor(shadeHex(palette.shirt, this.meshShade.get(mesh) ?? 1));
-    }
-    for (const mesh of this.roleMeshes.pants) {
-      mesh.material = this.materialFor(shadeHex(palette.pants, this.meshShade.get(mesh) ?? 1));
-    }
-    for (const mesh of this.roleMeshes.hair) {
-      mesh.material = this.materialFor(shadeHex(palette.hair, this.meshShade.get(mesh) ?? 1));
+    const roleColors: Array<['skin' | 'shirt' | 'pants' | 'hair' | 'eye', number]> = [
+      ['skin', palette.skin],
+      ['shirt', palette.shirt],
+      ['pants', palette.pants],
+      ['hair', palette.hair],
+      ['eye', palette.eye],
+    ];
+    for (const [role, color] of roleColors) {
+      for (const mesh of this.roleMeshes[role]) {
+        mesh.material = this.materialFor(shadeHex(color, this.meshShade.get(mesh) ?? 1));
+      }
     }
 
     // 发型：光头藏掉短发零件（眉毛不在 `hairMeshes` 里，仍然保留）
-    const long = palette.hairStyle === 'long' || palette.hairStyle === 'ponytail';
-    for (const mesh of this.hairMeshes) mesh.visible = palette.hairStyle !== 'bald';
+    const style = palette.hairStyle;
+    const long = style === 'long' || style === 'ponytail';
+    for (const mesh of this.hairMeshes) mesh.visible = style !== 'bald';
     for (const mesh of this.longHairMeshes) mesh.visible = long;
-    for (const mesh of this.ponytailMeshes) mesh.visible = palette.hairStyle === 'ponytail';
-    // 胡须：胡茬在所有非"无"档出现；络腮胡只在 full 出现
-    for (const mesh of this.stubbleMeshes) mesh.visible = palette.beard !== 'none';
+    for (const mesh of this.ponytailMeshes) mesh.visible = style === 'ponytail';
+    for (const mesh of this.bobMeshes) mesh.visible = style === 'bob';
+    for (const mesh of this.messyMeshes) mesh.visible = style === 'messy';
+
+    // 胡须：胡茬在 stubble/full 出现；络腮胡只在 full；山羊胡只在 goatee
+    for (const mesh of this.stubbleMeshes) {
+      mesh.visible = palette.beard === 'stubble' || palette.beard === 'full';
+    }
     for (const mesh of this.fullBeardMeshes) mesh.visible = palette.beard === 'full';
+    for (const mesh of this.goateeMeshes) mesh.visible = palette.beard === 'goatee';
+
+    // 眼型（尺寸 + 睫毛 + 眉形）与体型比例
+    this.applyEyes(palette.eyes);
+    this.applyProportions(palette.build, palette.frame);
+  }
+
+  /**
+   * 眼型：只改眼白/虹膜的缩放、睫毛显隐、眉毛宽度与倾角。
+   *
+   * 三种眼型的目标尺寸在 `appearance.ts#eyeProfileOf` 里（纯函数，可离线断言）。
+   */
+  private applyEyes(style: EyeStyle): void {
+    const profile = eyeProfileOf(style);
+    this.currentEye = profile;
+    this.currentEyeStyle = style;
+    for (const mesh of this.scleraMeshes) {
+      mesh.scale.x = profile.scleraWidth;
+      mesh.scale.y = profile.scleraHeight;
+    }
+    for (const mesh of this.irisMeshes) {
+      mesh.scale.x = profile.irisWidth;
+      mesh.scale.y = profile.irisHeight;
+    }
+    for (const mesh of this.lashMeshes) mesh.visible = profile.lash;
+    for (const { mesh, sign } of this.brows) {
+      mesh.scale.x = profile.browWidth;
+      mesh.scale.y = profile.browHeight;
+      // 左右镜像：同一个倾角在两边看起来才是对称的拱眉
+      mesh.rotation.z = sign * profile.browTilt;
+    }
+  }
+
+  /**
+   * 体型比例（批次 333）：只缩放横向，不动任何高度。
+   *
+   * 缩放必须从**出厂尺寸**重新乘（`baseScales`），否则连续调用会把倍率累积下去。
+   */
+  private applyProportions(build: BodyBuild, frame: BodyFrame): void {
+    const p = bodyProportions(build, frame);
+    this.currentBuild = build;
+    this.currentFrame = frame;
+    for (const part of this.bodyParts) {
+      const base = this.baseScales.get(part.mesh);
+      if (!base) continue;
+      if (part.region === 'torso') {
+        part.mesh.scale.x = base.x * p.torsoWidth;
+        part.mesh.scale.z = base.z * p.torsoDepth;
+      } else {
+        part.mesh.scale.x = base.x * p.limb;
+        part.mesh.scale.z = base.z * p.limb;
+      }
+    }
+    this.armL.position.x = ARM_PIVOT_X * p.armSpread;
+    this.armR.position.x = -ARM_PIVOT_X * p.armSpread;
+  }
+
+  /**
+   * 记录"哪些网格跟着体型变"以及它们的出厂尺寸（批次 333）。
+   *
+   * - 手臂 / 腿：整个子树（含护肩、护腿、靴子）；
+   * - 躯干：根节点直接挂着的网格（胸甲、腰带、髋部护甲），头是一个 Group，不会被收进来；
+   * - 披风与副手盾牌排除（盾牌挂在手臂下，跟着枢轴走就够，不需要再变形）。
+   */
+  private captureBodyParts(): void {
+    const collect = (root: THREE.Object3D, region: 'arm' | 'leg'): void => {
+      root.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (this.isUnder(mesh, this.offhandGroup)) return;
+        this.bodyParts.push({ mesh, region });
+      });
+    };
+    collect(this.armL, 'arm');
+    collect(this.armR, 'arm');
+    collect(this.legL, 'leg');
+    collect(this.legR, 'leg');
+    for (const child of this.object.children) {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || mesh === this.capeMesh) continue;
+      this.bodyParts.push({ mesh, region: 'torso' });
+    }
+  }
+
+  private isUnder(node: THREE.Object3D, ancestor: THREE.Object3D): boolean {
+    let current: THREE.Object3D | null = node;
+    while (current) {
+      if (current === ancestor) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
+  /** 验收脚本用：当前眼型的实际尺寸 */
+  get eyeMetrics(): {
+    style: EyeStyle;
+    lash: boolean;
+    scleraWidth: number;
+    scleraHeight: number;
+    irisWidth: number;
+    browWidth: number;
+    browTilt: number;
+  } {
+    return { style: this.currentEyeStyle, ...this.currentEye };
+  }
+
+  /** 验收脚本用：当前体型比例（只读） */
+  get bodyMetrics(): {
+    build: BodyBuild;
+    frame: BodyFrame;
+    armSpread: number;
+    limb: number;
+    torsoWidth: number;
+    torsoDepth: number;
+  } {
+    const p = bodyProportions(this.currentBuild, this.currentFrame);
+    return { build: this.currentBuild, frame: this.currentFrame, ...p };
   }
 
   /** 验收脚本用：这块网格在所属部位里的明暗系数（1 = 正色） */
@@ -341,6 +539,7 @@ export class PlayerRenderer {
     const mesh = new THREE.Mesh(this.geometry, material);
     mesh.position.set(x, y, z);
     mesh.scale.set(width, height, depth);
+    this.baseScales.set(mesh, mesh.scale.clone());
     // 默认不显示：没穿盔甲时身上不该多出一层白壳
     mesh.visible = false;
     parent.add(mesh);
@@ -395,7 +594,7 @@ export class PlayerRenderer {
     y: number,
     z: number,
     color: number,
-    role: 'skin' | 'shirt' | 'pants' | 'hair',
+    role: 'skin' | 'shirt' | 'pants' | 'hair' | 'eye',
     /** 明暗系数（1 = 正色；出厂色只在没走 `setAppearance` 时起作用） */
     shade = 1,
   ): THREE.Mesh {
@@ -435,6 +634,8 @@ export class PlayerRenderer {
     const mesh = new THREE.Mesh(this.geometry, this.materialFor(color));
     mesh.position.set(x, y, z);
     mesh.scale.set(width, height, depth);
+    // 批次 333：记下出厂尺寸，体型比例每次从它重新乘（避免倍率累积）
+    this.baseScales.set(mesh, mesh.scale.clone());
     parent.add(mesh);
     return mesh;
   }

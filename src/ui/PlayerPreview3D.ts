@@ -22,18 +22,28 @@ import * as THREE from 'three';
 import { PlayerRenderer } from '../render/PlayerRenderer.ts';
 import type { AppearancePalette } from '../game/appearance.ts';
 
+/**
+ * 预览视角（批次 333）：全身 / 面部特写。
+ *
+ * 设置页要把「眼睛、眉毛、胡须」这些细节露出来，96px 宽的全身像里脸只有 40px，
+ * 根本看不出眼型差别；所以给一档专门的头部特写（相机推到脖子高度）。
+ */
+export type PreviewFocus = 'full' | 'face';
+
 export class PlayerPreview3D {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private readonly model: PlayerRenderer;
   /** 绕 Y 轴的旋转（拖动画布累加）；默认正面偏 25°（脸朝相机，带一点侧面） */
-  private yaw = Math.PI - 0.45;
+  private yaw: number;
   private cape = false;
   /** 副手物品 id（null = 空；批次 275：只有盾牌会画出来） */
   private offhand: number | null = null;
   private armor: readonly (number | null)[] = [null, null, null, null];
   private palette: AppearancePalette | null = null;
+  /** 当前视角（批次 333） */
+  private focus: PreviewFocus = 'full';
   /**
    * 画布尺寸变化时自动补一帧（批次 272）。
    *
@@ -43,7 +53,12 @@ export class PlayerPreview3D {
    */
   private resizeObserver: ResizeObserver | null = null;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    /** 初始朝向（弧度）：背包用默认的侧 25°，设置页会给更正一点的角度 */
+    initialYaw = Math.PI - 0.45,
+  ) {
+    this.yaw = initialYaw;
     this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
     this.renderer.setClearColor(0x000000, 0);
     this.camera = new THREE.PerspectiveCamera(30, 0.5, 0.1, 20);
@@ -58,6 +73,18 @@ export class PlayerPreview3D {
       this.resizeObserver = new ResizeObserver(() => this.render());
       this.resizeObserver.observe(this.canvas);
     }
+  }
+
+  /** 切全身 / 面部特写（批次 333） */
+  setFocus(focus: PreviewFocus): void {
+    if (this.focus === focus) return;
+    this.focus = focus;
+    this.render();
+  }
+
+  /** 当前视角（验收脚本用） */
+  get currentFocus(): PreviewFocus {
+    return this.focus;
   }
 
   /** 当前朝向（弧度），验收脚本用 */
@@ -97,10 +124,7 @@ export class PlayerPreview3D {
     // `false`：不动内联样式（尺寸归 CSS 管），只改后备缓冲
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(width, height, false);
-    this.camera.aspect = width / height;
-    // 画布很窄（盔甲页 56×118）：把相机往后拉一点，避免手臂被裁掉
-    this.camera.position.z = 4.4 * Math.max(1, 0.62 / this.camera.aspect);
-    this.camera.updateProjectionMatrix();
+    this.applyCamera(width / height);
 
     // 外观（批次 187）：肤色 / 上衣 / 裤子；没传过就用模型出厂配色
     if (this.palette) this.model.setAppearance(this.palette);
@@ -124,6 +148,30 @@ export class PlayerPreview3D {
       () => ({ sky: 15, block: 0 }),
     );
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * 按视角与画布宽高比摆相机（批次 333）。
+   *
+   * 全身沿用原来的距离（很窄的盔甲页预览会把相机往后拉，避免手臂被裁掉）；
+   * 面部特写按"要装下 0.64 格宽的头 + 一点余量"反算距离，窄画布同样自动后退。
+   */
+  private applyCamera(aspect: number): void {
+    if (this.focus === 'face') {
+      this.camera.fov = 26;
+      const halfFov = Math.tan((26 * Math.PI) / 360);
+      // 头宽 0.5 格，留到 0.64 格：眼睛/眉毛/胡须都在这个范围里
+      const distance = 0.64 / (2 * halfFov * Math.max(0.2, aspect));
+      this.camera.position.set(0, 1.72, Math.max(1.2, distance));
+      this.camera.lookAt(0, 1.7, 0);
+    } else {
+      this.camera.fov = 30;
+      // 画布很窄（盔甲页 56×118）：把相机往后拉一点，避免手臂被裁掉
+      this.camera.position.set(0, 1.05, 4.4 * Math.max(1, 0.62 / Math.max(0.2, aspect)));
+      this.camera.lookAt(0, 1.0, 0);
+    }
+    this.camera.aspect = aspect;
+    this.camera.updateProjectionMatrix();
   }
 
   dispose(): void {

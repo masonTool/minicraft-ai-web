@@ -32,8 +32,16 @@ import {
 import {
   BEARD_STYLES,
   BEARD_STYLE_LABELS,
+  BODY_BUILDS,
+  BODY_BUILD_LABELS,
+  BODY_FRAMES,
+  BODY_FRAME_LABELS,
   CHARACTER_PRESETS,
   DEFAULT_APPEARANCE,
+  EYE_COLORS,
+  EYE_COLOR_LABELS,
+  EYE_STYLES,
+  EYE_STYLE_LABELS,
   HAIR_COLORS,
   HAIR_COLOR_LABELS,
   HAIR_STYLES,
@@ -46,8 +54,11 @@ import {
   SKIN_TONE_LABELS,
   appearanceIndex,
   applyCharacterPreset,
+  paletteOf,
   presetIndexOf,
 } from '../game/appearance.ts';
+import { PlayerPreview3D, type PreviewFocus } from './PlayerPreview3D.ts';
+import { drawPlayerPreview } from './PlayerPreview.ts';
 
 /**
  * 粒子效果强度。
@@ -243,6 +254,14 @@ export interface GameSettings {
   hairStyle: number;
   beard: number;
   /**
+   * 批次 333（用户："区分角色主要看头发、胡须、眼睛"）：
+   * 眼型 / 瞳色，以及只改横向比例的年龄体型与身架。
+   */
+  eyes: number;
+  eyeColor: number;
+  build: number;
+  frame: number;
+  /**
    * 场景亮度（批次 220）：1 = 原始亮度，0.5~2（设置里显示成 50%~200%）。
    *
    * 只影响**渲染画布**（天空、地形、生物、粒子全在一起），不影响 HUD 与各个面板，
@@ -353,6 +372,10 @@ export const DEFAULT_SETTINGS: GameSettings = {
   hairColor: DEFAULT_APPEARANCE.hairColor,
   hairStyle: DEFAULT_APPEARANCE.hairStyle,
   beard: DEFAULT_APPEARANCE.beard,
+  eyes: DEFAULT_APPEARANCE.eyes,
+  eyeColor: DEFAULT_APPEARANCE.eyeColor,
+  build: DEFAULT_APPEARANCE.build,
+  frame: DEFAULT_APPEARANCE.frame,
   brightness: 1,
   cameraMode: 'first',
   particles: 'all',
@@ -430,6 +453,11 @@ export function loadSettings(): GameSettings {
       hairColor: appearanceIndex(parsed.hairColor, HAIR_COLORS.length, DEFAULT_SETTINGS.hairColor),
       hairStyle: appearanceIndex(parsed.hairStyle, HAIR_STYLES.length, DEFAULT_SETTINGS.hairStyle),
       beard: appearanceIndex(parsed.beard, BEARD_STYLES.length, DEFAULT_SETTINGS.beard),
+      // 批次 333：眼型 / 瞳色 / 年龄体型 / 身架，坏值逐项回退（老存档没有这几个字段）
+      eyes: appearanceIndex(parsed.eyes, EYE_STYLES.length, DEFAULT_SETTINGS.eyes),
+      eyeColor: appearanceIndex(parsed.eyeColor, EYE_COLORS.length, DEFAULT_SETTINGS.eyeColor),
+      build: appearanceIndex(parsed.build, BODY_BUILDS.length, DEFAULT_SETTINGS.build),
+      frame: appearanceIndex(parsed.frame, BODY_FRAMES.length, DEFAULT_SETTINGS.frame),
       // 场景亮度（批次 220）：超范围夹住，坏值回到 1（= 不滤镜）
       brightness: clampNumber(parsed.brightness, BRIGHTNESS_MIN, BRIGHTNESS_MAX, DEFAULT_SETTINGS.brightness),
       cameraMode: CAMERA_MODES.includes(parsed.cameraMode as CameraMode)
@@ -600,8 +628,20 @@ export class SettingsScreen {
   private flyingToggle: HTMLButtonElement | null = null;
   /** "游戏模式"那个开关（生存 ↔ 创造） */
   private gameModeToggle: HTMLButtonElement | null = null;
-  /** "角色形象"那一行（批次 279）：手动改任一外观项后要立刻变回"自定义" */
-  private presetButton: HTMLButtonElement | null = null;
+  /** 四颗角色预设按钮（批次 333）：手动改任一外观项后全部取消高亮 */
+  private readonly presetButtons: HTMLButtonElement[] = [];
+  /**
+   * 设置页的角色形象（批次 333）：复用背包那台 `PlayerPreview3D`。
+   *
+   * 懒创建（第一次真正显示外观页才建 WebGL 上下文）；失败就退回 2D 剪影。
+   * 只按需渲染：切外观项 / 拖动 / 尺寸变化时才画一帧，不跟主循环。
+   */
+  private avatarCanvas: HTMLCanvasElement | null = null;
+  private avatar: PlayerPreview3D | null = null;
+  private avatarFailed = false;
+  private avatarFocus: PreviewFocus = 'full';
+  private avatarDrag: { pointerId: number; x: number } | null = null;
+  private readonly avatarFocusButtons: HTMLButtonElement[] = [];
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
   private diagnosticsStatusEl: HTMLDivElement | null = null;
   /**
@@ -765,61 +805,137 @@ export class SettingsScreen {
     // 这些**字段保留**：老存档照旧能读（不会因为字段消失而整份回退），
     // 值由主程序按设备定死（见 `main` 构造里那几行）。`maxFps` 同理。
 
-    // ---- 外观（批次 187）：肤色 / 上衣 / 裤子 / 披风
+    // ---- 外观（批次 187 / 296）：左边 3D 形象、右边全部可调项
     //
-    // 用户："想创建角色、把他搞得漂亮一点"。这里先给**档位**而不是自由取色
-    //（模型是方块拼的，自由取色很容易调成一坨），改完第三人称与背包 3D 预览同时生效。
+    // 用户："在设置中要能看到角色的形象，就像游戏内那种 3D 形象；各个元素都支持改动，
+    // 改完立刻在形象上生效。"所以形象区不显示盔甲与副手盾牌（只展示原始角色），
+    // 拖动可旋转，另有「面部」特写看眼睛/眉毛/胡须。
     const appearance = this.section('appearance');
     // 场景亮度（批次 220，用户要求）：户外看不清屏幕时就靠它把画面提亮。
     // 50%~200%，100% 等于不动——**不改光照本身**，只改屏幕这一层（见 `applySceneBrightness`）。
     appearance.append(
       this.makeSlider('brightness', '场景亮度', '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
     );
-    // 批次 279（用户）：先选一个整体形象，再逐项微调（预设 = 一键套用，不是第二份状态）
-    this.makePresetRow(appearance);
+
+    const hero = document.createElement('div');
+    hero.className = 'appearance-hero';
+    const stage = document.createElement('div');
+    stage.className = 'appearance-stage';
+    const canvas = document.createElement('canvas');
+    canvas.className = 'appearance-avatar';
+    canvas.setAttribute('aria-label', '角色形象预览（可拖动旋转）');
+    this.avatarCanvas = canvas;
+    stage.appendChild(canvas);
+
+    const focusRow = document.createElement('div');
+    focusRow.className = 'appearance-focus';
+    for (const [focus, label] of [
+      ['full', '全身'],
+      ['face', '面部'],
+    ] as const) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'appearance-focus-button';
+      button.textContent = label;
+      button.dataset.focus = focus;
+      button.addEventListener('click', () => {
+        this.avatarFocus = focus;
+        this.applyFocusButtons();
+        this.avatar?.setFocus(focus);
+        this.refreshAvatar();
+      });
+      this.avatarFocusButtons.push(button);
+      focusRow.appendChild(button);
+    }
+    stage.appendChild(focusRow);
+
+    const tip = document.createElement('span');
+    tip.className = 'appearance-tip';
+    tip.textContent = '拖动旋转';
+    stage.appendChild(tip);
+
+    const fields = document.createElement('div');
+    fields.className = 'appearance-fields';
+
+    hero.append(stage, fields);
+    appearance.appendChild(hero);
+
+    // 批次 333（用户："预设 4 个"）：四颗按钮直接点选，比"点一下换一个"少点三次
+    this.makePresetRow(fields);
     this.makeSelect(
-      appearance,
-      'skinTone',
-      '肤色',
-      SKIN_TONES.map((_, i) => String(i)),
-      Object.fromEntries(SKIN_TONE_LABELS.map((label, i) => [String(i), label])),
-    );
-    this.makeSelect(
-      appearance,
-      'hairColor',
-      '发色',
-      HAIR_COLORS.map((_, i) => String(i)),
-      Object.fromEntries(HAIR_COLOR_LABELS.map((label, i) => [String(i), label])),
-    );
-    this.makeSelect(
-      appearance,
+      fields,
       'hairStyle',
       '发型',
       HAIR_STYLES.map((_, i) => String(i)),
       Object.fromEntries(HAIR_STYLES.map((style, i) => [String(i), HAIR_STYLE_LABELS[style]])),
     );
     this.makeSelect(
-      appearance,
+      fields,
+      'hairColor',
+      '发色',
+      HAIR_COLORS.map((_, i) => String(i)),
+      Object.fromEntries(HAIR_COLOR_LABELS.map((label, i) => [String(i), label])),
+    );
+    this.makeSelect(
+      fields,
       'beard',
       '胡须',
       BEARD_STYLES.map((_, i) => String(i)),
       Object.fromEntries(BEARD_STYLES.map((style, i) => [String(i), BEARD_STYLE_LABELS[style]])),
     );
     this.makeSelect(
-      appearance,
+      fields,
+      'eyes',
+      '眼型',
+      EYE_STYLES.map((_, i) => String(i)),
+      Object.fromEntries(EYE_STYLES.map((style, i) => [String(i), EYE_STYLE_LABELS[style]])),
+    );
+    this.makeSelect(
+      fields,
+      'eyeColor',
+      '瞳色',
+      EYE_COLORS.map((_, i) => String(i)),
+      Object.fromEntries(EYE_COLOR_LABELS.map((label, i) => [String(i), label])),
+    );
+    this.makeSelect(
+      fields,
+      'build',
+      '年龄',
+      BODY_BUILDS.map((_, i) => String(i)),
+      Object.fromEntries(BODY_BUILDS.map((build, i) => [String(i), BODY_BUILD_LABELS[build]])),
+    );
+    this.makeSelect(
+      fields,
+      'frame',
+      '身架',
+      BODY_FRAMES.map((_, i) => String(i)),
+      Object.fromEntries(BODY_FRAMES.map((frame, i) => [String(i), BODY_FRAME_LABELS[frame]])),
+    );
+    this.makeSelect(
+      fields,
+      'skinTone',
+      '肤色',
+      SKIN_TONES.map((_, i) => String(i)),
+      Object.fromEntries(SKIN_TONE_LABELS.map((label, i) => [String(i), label])),
+    );
+    this.makeSelect(
+      fields,
       'shirtColor',
       '上衣',
       SHIRT_COLORS.map((_, i) => String(i)),
       Object.fromEntries(SHIRT_COLOR_LABELS.map((label, i) => [String(i), label])),
     );
     this.makeSelect(
-      appearance,
+      fields,
       'pantsColor',
       '裤子',
       PANTS_COLORS.map((_, i) => String(i)),
       Object.fromEntries(PANTS_COLOR_LABELS.map((label, i) => [String(i), label])),
     );
-    this.makeToggle(appearance, 'cape', '披风');
+    this.makeToggle(fields, 'cape', '披风');
+
+    this.bindAvatar(canvas);
+    this.applyFocusButtons();
 
     const controls = this.section('controls');
     // 全屏 / 横屏（批次 181）：手动兜底。放在最上面——"屏幕不对"时玩家第一个找的就是它
@@ -977,6 +1093,8 @@ export class SettingsScreen {
     if (page === 'settings' && this.flyingToggle) {
       this.flyingToggle.textContent = SettingsScreen.onOff(this.actions.isFlying?.() ?? false);
     }
+    // 批次 333：设置页刚显示出来时补一帧形象
+    if (page === 'settings') this.refreshAvatar();
   }
 
   /** 当前停在哪一页（验收脚本/调试用） */
@@ -1037,6 +1155,8 @@ export class SettingsScreen {
       tab.classList.toggle('active', on);
       tab.setAttribute('aria-pressed', String(on));
     }
+    // 批次 333：形象画布只在真正显示外观页时才有尺寸，切回来要补一帧
+    if (this.open && group === 'appearance') this.refreshAvatar();
   }
 
   /** 当前分组（验收脚本/调试用） */
@@ -1183,37 +1303,112 @@ export class SettingsScreen {
   }
 
   /**
-   * 角色形象预设（批次 279）：点一下套用一整套外观，之后仍可逐项微调。
+   * 角色形象预设（批次 279 → 296）：四颗按钮，点一下套用一整套外观。
    *
-   * 显示的是**反查结果**而不是"上次点了哪个"：手动改过肤色/上衣之后自动变成
-   * "自定义"，不会出现"写着青壮年、实际是别的配色"这种谎。
+   * 高亮的是**反查结果**而不是"上次点了哪个"：手动改过任一项之后四颗全灭，
+   * 就是"自定义"，不会出现"写着成年男性、实际是别的配色"这种谎。
    */
   private makePresetRow(host: HTMLElement): void {
-    this.presetButton = this.makeCycleRow(
-      host,
-      '角色形象',
-      () => {
-        const index = presetIndexOf(this.settings);
-        return `‹ ${index >= 0 ? CHARACTER_PRESETS[index]!.label : '自定义'} ›`;
-      },
-      () => {
-        const index = presetIndexOf(this.settings);
-        // 自定义（-1）→ 第一个预设；否则按顺序循环
-        const next = (index + 1) % CHARACTER_PRESETS.length;
-        applyCharacterPreset(this.settings, next);
-        this.commit();
-        // 其余外观行的按钮文字也要跟着变（肤色/发色/发型/胡须/上衣/裤子）
+    const row = document.createElement('div');
+    row.className = 'appearance-presets';
+    for (const [index, preset] of CHARACTER_PRESETS.entries()) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'appearance-preset';
+      button.dataset.preset = preset.id;
+      button.textContent = preset.label;
+      button.addEventListener('click', () => {
+        applyCharacterPreset(this.settings, index);
+        // 其余外观行的按钮文字也要跟着变（发型/发色/胡须/眼型/体型/服装）
         for (const refresh of this.refreshers) refresh();
-        return `‹ ${CHARACTER_PRESETS[next]!.label} ›`;
-      },
+        this.commit();
+      });
+      this.presetButtons.push(button);
+      row.appendChild(button);
+    }
+    host.appendChild(row);
+    this.refreshPresetRow();
+  }
+
+  /** 手动改了任一外观项：四颗预设按钮按反查结果重新高亮（都不匹配 = 自定义） */
+  private refreshPresetRow(): void {
+    if (this.presetButtons.length === 0) return;
+    const index = presetIndexOf(this.settings);
+    this.presetButtons.forEach((button, i) => {
+      const on = i === index;
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-pressed', String(on));
+    });
+  }
+
+  /**
+   * 设置页的角色形象（批次 333）。
+   *
+   * 只展示**原始角色**：盔甲四件套与副手盾牌一律传空（用户明确要求），
+   * 披风跟随外观开关。拖动旋转；「面部」视角把相机推到头部，方便调眼睛/胡须。
+   *
+   * WebGL 不可用时退回 2D 剪影（配色还能看），面板功能不受影响。
+   */
+  private refreshAvatar(): void {
+    const canvas = this.avatarCanvas;
+    if (!canvas) return;
+    // 只在「设置页 · 外观分组」真正显示时创建/绘制：否则一打开暂停菜单就会白占一个
+    // WebGL 上下文（手机上的上下文数量是有限资源），而且隐藏时画布尺寸为 0、画了也没用。
+    if (!this.open || this.currentPage !== 'settings' || this.activeGroup !== 'appearance') return;
+    const palette = paletteOf(this.settings);
+    if (!this.avatar && !this.avatarFailed) {
+      try {
+        // 比背包更正一点的初始角度：设置页主要看脸
+        this.avatar = new PlayerPreview3D(canvas, Math.PI - 0.18);
+        this.avatar.setFocus(this.avatarFocus);
+      } catch {
+        this.avatarFailed = true;
+      }
+    }
+    if (this.avatar) {
+      this.avatar.setFocus(this.avatarFocus);
+      this.avatar.update([null, null, null, null], this.settings.cape, null, palette);
+      return;
+    }
+    drawPlayerPreview(
+      canvas,
+      { helmet: null, chest: null, legs: null, boots: null },
+      null,
+      96,
+      palette,
     );
   }
 
-  /** 手动改了肤色/发色等任一项：形象行立刻从预设名变回「自定义」 */
-  private refreshPresetRow(): void {
-    if (!this.presetButton) return;
-    const index = presetIndexOf(this.settings);
-    this.presetButton.textContent = `‹ ${index >= 0 ? CHARACTER_PRESETS[index]!.label : '自定义'} ›`;
+  /** 画布上的拖动 = 转一圈（与背包预览同一套手感） */
+  private bindAvatar(canvas: HTMLCanvasElement): void {
+    canvas.addEventListener('pointerdown', (event) => {
+      this.avatarDrag = { pointerId: event.pointerId, x: event.clientX };
+      canvas.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+    canvas.addEventListener('pointermove', (event) => {
+      const drag = this.avatarDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const deltaX = event.clientX - drag.x;
+      drag.x = event.clientX;
+      this.avatar?.rotateBy(deltaX);
+      event.preventDefault();
+    });
+    const end = (event: PointerEvent): void => {
+      if (this.avatarDrag?.pointerId === event.pointerId) this.avatarDrag = null;
+    };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('lostpointercapture', end);
+  }
+
+  /** 「全身 / 面部」两颗按钮的高亮 */
+  private applyFocusButtons(): void {
+    for (const button of this.avatarFocusButtons) {
+      const on = button.dataset.focus === this.avatarFocus;
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-pressed', String(on));
+    }
   }
 
   /**
@@ -1235,7 +1430,11 @@ export class SettingsScreen {
       | 'pantsColor'
       | 'hairColor'
       | 'hairStyle'
-      | 'beard',
+      | 'beard'
+      | 'eyes'
+      | 'eyeColor'
+      | 'build'
+      | 'frame',
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
@@ -1264,6 +1463,11 @@ export class SettingsScreen {
         else if (key === 'hairColor') this.settings.hairColor = Number(next);
         else if (key === 'hairStyle') this.settings.hairStyle = Number(next);
         else if (key === 'beard') this.settings.beard = Number(next);
+        // 批次 333：眼型 / 瞳色 / 年龄体型 / 身架
+        else if (key === 'eyes') this.settings.eyes = Number(next);
+        else if (key === 'eyeColor') this.settings.eyeColor = Number(next);
+        else if (key === 'build') this.settings.build = Number(next);
+        else if (key === 'frame') this.settings.frame = Number(next);
         else this.settings.touchStick = next as StickMode;
         this.commit();
         // 外观以外的选择行也调一次无妨：只改一行文字，成本可忽略
@@ -1465,6 +1669,9 @@ export class SettingsScreen {
   private commit(reset = false): void {
     saveSettings(this.settings);
     this.actions.onChange(this.settings, reset ? { reset: true } : undefined);
+    // 批次 333：改完立刻在设置页的形象上生效，同时按当前下标重新高亮预设
+    this.refreshPresetRow();
+    this.refreshAvatar();
   }
 
   /** 存档信息（打开时刷新） */
@@ -1521,6 +1728,8 @@ export class SettingsScreen {
     this.renderSubtitle();
     this.setPage(page ?? (this.actions.onExitToMenu ? 'menu' : 'settings'));
     this.root.classList.remove('hidden');
+    // 批次 333：面板可见之后形象画布才有尺寸，补一帧（隐藏期间 render 会直接返回）
+    this.refreshAvatar();
     // 批次 213：标记"暂停界面开着"。
     // 掉出全屏时"请横屏游玩"（z-index 90）会**盖在**暂停菜单（50）上面：
     // 先让游戏暂停，再让玩家看到横屏提示；点一下转横屏后提示消失，正好看到暂停页。
@@ -1564,6 +1773,10 @@ export class SettingsScreen {
       window.clearTimeout(this.hideTimer);
       this.hideTimer = null;
     }
+    // 批次 333：形象自带一台 WebGL 渲染器，销毁面板时要一起释放
+    this.avatar?.dispose();
+    this.avatar = null;
+    this.avatarFailed = false;
     this.root.remove();
     document.body.classList.remove('pause-open');
   }

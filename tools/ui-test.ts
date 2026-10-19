@@ -3073,7 +3073,7 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
   check('切页后立刻重绘预览（盔甲页尺寸更大）', setTabBody.includes('this.refreshPlayerPreview();'));
 }
 
-console.log('\n[角色创建：外观（批次 187）]');
+console.log('\n[角色创建：外观（批次 187 / 296）]');
 {
   const appSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   const invSrc = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
@@ -3089,36 +3089,78 @@ console.log('\n[角色创建：外观（批次 187）]');
       settingsSrc.includes('hairColor: number;') &&
       settingsSrc.includes('hairStyle: number;') &&
       settingsSrc.includes('beard: number;') &&
-      settingsSrc.includes('appearanceIndex(parsed.skinTone'),
+      settingsSrc.includes('eyes: number;') &&
+      settingsSrc.includes('eyeColor: number;') &&
+      settingsSrc.includes('build: number;') &&
+      settingsSrc.includes('frame: number;') &&
+      settingsSrc.includes('appearanceIndex(parsed.skinTone') &&
+      settingsSrc.includes('appearanceIndex(parsed.eyes'),
   );
   check(
-    '外观页：角色形象 + 肤色/发色/发型/胡须/上衣/裤子/披风',
-    /this\.makePresetRow\(appearance\)/.test(settingsSrc) &&
-      /this\.makeSelect\(\s*appearance,\s*'skinTone'/.test(settingsSrc) &&
-      /this\.makeSelect\(\s*appearance,\s*'hairColor'/.test(settingsSrc) &&
-      /this\.makeSelect\(\s*appearance,\s*'hairStyle'/.test(settingsSrc) &&
-      /this\.makeSelect\(\s*appearance,\s*'beard'/.test(settingsSrc) &&
-      /this\.makeSelect\(\s*appearance,\s*'shirtColor'/.test(settingsSrc) &&
-      /this\.makeSelect\(\s*appearance,\s*'pantsColor'/.test(settingsSrc) &&
-      settingsSrc.includes("this.makeToggle(appearance, 'cape', '披风')"),
+    '外观页：3D 形象 + 四颗预设 + 发型/发色/胡须/眼型/瞳色/年龄/身架/服装',
+    /this\.makePresetRow\(fields\)/.test(settingsSrc) &&
+      settingsSrc.includes('this.avatarCanvas = canvas') &&
+      settingsSrc.includes('new PlayerPreview3D(canvas, Math.PI - 0.18)') &&
+      /this\.makeSelect\(\s*fields,\s*'hairStyle'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'hairColor'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'beard'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'eyes'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'eyeColor'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'build'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'frame'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'skinTone'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'shirtColor'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*fields,\s*'pantsColor'/.test(settingsSrc) &&
+      settingsSrc.includes("this.makeToggle(fields, 'cape', '披风')"),
   );
   check(
-    '模型按部位换材质（肤色/上衣/裤子/头发），并按发型/胡须显隐零件',
-    playerSrc.includes("roleMeshes: Record<'skin' | 'shirt' | 'pants' | 'hair', THREE.Mesh[]>") &&
+    '设置页形象只展示原始角色：盔甲与副手一律传空',
+    /this\.avatar\.update\(\[null, null, null, null\], this\.settings\.cape, null, palette\)/.test(settingsSrc),
+  );
+  check(
+    '设置页形象有「全身 / 面部」两档视角（面部才看得清眼睛与胡须）',
+    previewSrc.includes("export type PreviewFocus = 'full' | 'face'") &&
+      previewSrc.includes('setFocus(focus: PreviewFocus): void') &&
+      previewSrc.includes('this.camera.fov = 26') &&
+      settingsSrc.includes("['face', '面部']") &&
+      settingsSrc.includes('this.avatar?.setFocus(focus)'),
+  );
+  check(
+    '模型按部位换材质（肤色/上衣/裤子/头发/虹膜），并按发型/胡须/眼型显隐零件',
+    playerSrc.includes("roleMeshes: Record<'skin' | 'shirt' | 'pants' | 'hair' | 'eye', THREE.Mesh[]>") &&
       playerSrc.includes('setAppearance(palette: AppearancePalette): void') &&
-      playerSrc.includes('this.roleMeshes.skin') &&
-      playerSrc.includes('this.roleMeshes.pants') &&
-      playerSrc.includes('this.roleMeshes.hair') &&
-      playerSrc.includes("palette.hairStyle !== 'bald'") &&
-      playerSrc.includes("palette.beard === 'full'"),
+      playerSrc.includes("['skin', palette.skin]") &&
+      playerSrc.includes("['pants', palette.pants]") &&
+      playerSrc.includes("['hair', palette.hair]") &&
+      playerSrc.includes("['eye', palette.eye]") &&
+      playerSrc.includes('this.roleMeshes[role]') &&
+      playerSrc.includes("style !== 'bald'") &&
+      playerSrc.includes("palette.beard === 'full'") &&
+      playerSrc.includes('applyEyes(palette.eyes)'),
   );
   check(
-    '四个角色预设：青壮年 / 中年 / 老人 / 女孩，选中后可继续微调',
-    /export const CHARACTER_PRESETS[\s\S]{0,800}label: '青壮年'[\s\S]{0,300}label: '中年'[\s\S]{0,300}label: '老人'[\s\S]{0,300}label: '女孩'/.test(
+    '头发/胡须/眼睛各有新增档位（齐耳、翘发、山羊胡、三种眼型）',
+    /HAIR_STYLES = \['short', 'long', 'ponytail', 'bald', 'bob', 'messy'\]/.test(
+      readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
+    ) &&
+      /BEARD_STYLES = \['none', 'stubble', 'full', 'goatee'\]/.test(
+        readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
+      ) &&
+      /EYE_STYLES = \['calm', 'bright', 'round'\]/.test(
+        readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
+      ) &&
+      playerSrc.includes('this.bobMeshes') &&
+      playerSrc.includes('this.messyMeshes') &&
+      playerSrc.includes('this.goateeMeshes') &&
+      playerSrc.includes('this.lashMeshes'),
+  );
+  check(
+    '四个角色预设：成年男性 / 成年女性 / 少年男性 / 少年女性，选中后可继续微调',
+    /export const CHARACTER_PRESETS[\s\S]{0,1200}label: '成年男性'[\s\S]{0,400}label: '成年女性'[\s\S]{0,400}label: '少年男性'[\s\S]{0,400}label: '少年女性'/.test(
       readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
     ) &&
       settingsSrc.includes('presetIndexOf(this.settings)') &&
-      settingsSrc.includes('applyCharacterPreset(this.settings, next)'),
+      settingsSrc.includes('applyCharacterPreset(this.settings, index)'),
   );
   check(
     '改设置立刻作用到第三人称、第一人称手臂与 3D 预览',
@@ -3126,7 +3168,8 @@ console.log('\n[角色创建：外观（批次 187）]');
       appSrc.includes('this.playerRenderer.setAppearance(palette);') &&
       appSrc.includes('this.hand.setAppearance(palette);') &&
       invSrc.includes('this.hooks.appearance?.() ?? paletteOf(null)') &&
-      previewSrc.includes('this.model.setAppearance(this.palette)'),
+      previewSrc.includes('this.model.setAppearance(this.palette)') &&
+      settingsSrc.includes('this.refreshAvatar();'),
   );
 }
 

@@ -26,6 +26,7 @@ import {
 } from '../src/core/viewMode.ts';
 import { DEFAULT_SETTINGS, loadSettings } from '../src/ui/SettingsScreen.ts';
 import { PlayerRenderer, shadeHex } from '../src/render/PlayerRenderer.ts';
+import { DEFAULT_APPEARANCE, paletteOf } from '../src/game/appearance.ts';
 
 let passed = 0;
 let failed = 0;
@@ -251,6 +252,34 @@ console.log('\n[玩家模型]');
   check('shadeHex 压暗一半', shadeHex(0x808080, 0.5) === 0x404040);
   check('shadeHex 提亮 1.06（四舍五入）', shadeHex(0x808080, 1.06) === 0x888888);
   check('shadeHex 提亮封顶 255（不会溢出成别的颜色）', shadeHex(0xffffff, 1.5) === 0xffffff);
+
+  // 批次 333（用户："区分角色主要看头发、胡须、眼睛"）：眼型与体型只改零件尺寸/显隐
+  model.setAppearance(paletteOf({ ...DEFAULT_APPEARANCE, eyes: 0, build: 0, frame: 0 }));
+  const calmEye = model.eyeMetrics;
+  const adultBody = model.bodyMetrics;
+  model.setAppearance(paletteOf({ ...DEFAULT_APPEARANCE, eyes: 1 }));
+  const brightEye = model.eyeMetrics;
+  check('明亮眼型有上睫毛，沉稳眼型没有', brightEye.lash && !calmEye.lash);
+  check(
+    '明亮眼型的眼白比沉稳眼型更大',
+    brightEye.scleraWidth > calmEye.scleraWidth && brightEye.scleraHeight > calmEye.scleraHeight,
+  );
+  check('沉稳眼型的眉毛更粗', calmEye.browWidth > brightEye.browWidth);
+  model.setAppearance(paletteOf({ ...DEFAULT_APPEARANCE, eyes: 2 }));
+  check('圆眼型的虹膜比沉稳眼型大', model.eyeMetrics.irisWidth > calmEye.irisWidth);
+
+  model.setAppearance(paletteOf({ ...DEFAULT_APPEARANCE, build: 1, frame: 0 }));
+  const teenBody = model.bodyMetrics;
+  check('少年体型四肢更细、躯干更窄', teenBody.limb < adultBody.limb && teenBody.torsoWidth < adultBody.torsoWidth);
+  model.setAppearance(paletteOf({ ...DEFAULT_APPEARANCE, build: 0, frame: 1 }));
+  const slimBody = model.bodyMetrics;
+  model.setAppearance(paletteOf({ ...DEFAULT_APPEARANCE, build: 0, frame: 2 }));
+  const broadBody = model.bodyMetrics;
+  check(
+    '纤细 < 标准 < 魁梧（只改横向比例）',
+    slimBody.limb < adultBody.limb && adultBody.limb < broadBody.limb,
+  );
+  check('体型不改头的位置（总高/枢轴不变）', close(head!.position.y, 1.46));
 
   model.dispose();
   check('dispose 后从场景移除', !scene.children.includes(root));
