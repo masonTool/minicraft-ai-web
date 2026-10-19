@@ -9667,4 +9667,13 @@
 - [x] B345-4 test:structure 43（11 种主世界结构）、loot 74、bastion 85、genregistry 72
 - 门禁：离线 131 套全绿；结构 **11 → 13（43%）**
 
+## 批次 346：D20 群系第三批——针叶林/山地/草原变体（2026-10-20）
+
+- [x] B346-1 old_growth_pine_taiga / old_growth_spruce_taiga：按**侵蚀度**细分（低频、不成碎块）
+- [x] B346-2 windswept_forest（暖+陡）/ savanna_plateau（干+陡）
+- [x] B346-3 wooded_badlands：走 64 格区域变体（恶地的 20%）
+- [x] B346-4 地物：巨型云杉/云杉、橡木+白桦、金合欢；针叶林带甜浆果
+- [x] B346-5 test:biome 50、terrain:normal 43（中位斑块 24/26），离线 131 套全绿
+- 覆盖：群系 **34 → 39（47% → 54%）**
+
 <!-- docs-archive:end -->

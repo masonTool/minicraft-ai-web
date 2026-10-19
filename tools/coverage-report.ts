@@ -159,7 +159,7 @@ const rows: readonly Row[] = [
     // 台账要连它一起数，否则"做了 8 种"这件事在这里永远是 7
     now: STRUCTURE_KINDS.length + NETHER_STRUCTURE_KINDS.length,
     basis: '原版 1.18 主世界+下界+末地可探索结构约 30 种',
-    gap: '化石/紫晶洞',
+    gap: '紫晶洞',
   },
   {
     label: '树种（地物）',

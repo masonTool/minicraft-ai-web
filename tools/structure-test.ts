@@ -359,7 +359,7 @@ console.log('\n[真实地形抽样：16×16 区块]');
 
 console.log('\n[结构定义表]');
 // 批次 341 加了沙漠神殿与丛林神庙（主世界 9 种；下界/末地的堡垒、要塞、末地城另有入口）
-check('十五种主世界结构全部登记', STRUCTURE_KINDS.length === 15, STRUCTURE_KINDS.join(','));
+check('十六种主世界结构全部登记', STRUCTURE_KINDS.length === 16, STRUCTURE_KINDS.join(','));
 check('结构建材名可读（调试面板会用到）', blockDef(Block.PRISMARINE).name === 'minecraft:prismarine');
 check(
   '结构用到的方块都在注册表里',

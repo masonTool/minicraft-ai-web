@@ -1211,6 +1211,14 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     result: { id: Item.BONE_MEAL, count: 3 },
     ingredients: [Item.BONE],
   },
+  // 骨块（批次 349）：9 骨粉压成一块，也能拆回去（原版两向都有）
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.BONE_BLOCK, count: 1 },
+    pattern: ['BBB', 'BBB', 'BBB'],
+    key: { B: Item.BONE_MEAL },
+  },
+  { kind: 'shapeless' as const, result: { id: Item.BONE_MEAL, count: 9 }, ingredients: [Block.BONE_BLOCK] },
 ];
 
 /**

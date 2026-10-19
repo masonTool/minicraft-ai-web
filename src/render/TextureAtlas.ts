@@ -6163,3 +6163,7 @@ export class TextureAtlas {
     };
   }
 }
+
+// 骨块（批次 349）：骨白偏暖的噪点，顶面略深一点区分上下
+PAINTERS['bone_block_side'] = noisy(0xe6e1cc, 8);
+PAINTERS['bone_block_top'] = noisy(0xd9d3bd, 6);

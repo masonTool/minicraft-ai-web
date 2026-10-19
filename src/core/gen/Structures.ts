@@ -63,7 +63,9 @@ export type StructureKind =
   | 'buried_treasure'
   // 批次 348（D21 第四批）
   | 'igloo'
-  | 'ocean_ruins';
+  | 'ocean_ruins'
+  // 批次 349（D21 收尾）
+  | 'fossil';
 
 /** 一个结构实例：原点 + 包围盒 + 随机源 */
 export interface StructureInstance {
@@ -395,6 +397,19 @@ const STRUCTURE_DEFS: readonly StructureDef[] = [
       Biome.DEEP_FROZEN_OCEAN,
     ],
     underwater: true,
+  },
+  {
+    kind: 'fossil',
+    spacing: 48,
+    separation: 8,
+    chance: 0.4,
+    salt: 0x1234,
+    radius: 8,
+    height: 8,
+    // 原版埋在沙漠/沼泽/针叶林的地下
+    biomes: [Biome.DESERT, Biome.SWAMP, Biome.SNOWY_TAIGA],
+    // 固定埋深：-20 左右（原版化石大致在这一带）
+    undergroundY: () => -20,
   },
 ];
 
@@ -1449,6 +1464,28 @@ function buildOceanRuins(w: FeatureWriter, s: StructureInstance): void {
   if (rng.chance(0.5)) lootChest(w, s.x, base + 1, s.z, 'shipwreck_supply');
 }
 
+// ---------------------------------------------------------------- 化石（批次 349）
+
+/** 地下骨块"脊柱 + 肋骨"，中心一块煤矿（原版的化石确实会裹煤） */
+function buildFossil(w: FeatureWriter, s: StructureInstance): void {
+  const rng = s.rng;
+  const y = s.y;
+  const alongX = rng.chance(0.5);
+  for (let i = 0; i < 5; i++) {
+    const x = s.x + (alongX ? i - 2 : 0);
+    const z = s.z + (alongX ? 0 : i - 2);
+    w.fill(x, y, z, Block.BONE_BLOCK);
+    if (i % 2 === 1) {
+      // 肋骨：脊柱两侧各立一根 2 格高的骨块
+      for (const side of [-1, 1] as const) {
+        w.fill(alongX ? x : x + side, y, alongX ? z + side : z, Block.BONE_BLOCK);
+        w.fill(alongX ? x : x + side, y + 1, alongX ? z + side : z, Block.BONE_BLOCK);
+      }
+    }
+  }
+  w.fill(s.x, y + 1, s.z, Block.COAL_ORE);
+}
+
 // ---------------------------------------------------------------- 建造器表
 
 const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, world: FeatureWorld, seed: number) => void> = {
@@ -1467,6 +1504,7 @@ const BUILDERS: Record<StructureKind, (w: FeatureWriter, s: StructureInstance, w
   buried_treasure: (w, s) => buildBuriedTreasure(w, s),
   igloo: (w, s) => buildIgloo(w, s),
   ocean_ruins: (w, s) => buildOceanRuins(w, s),
+  fossil: (w, s) => buildFossil(w, s),
 };
 
 /** 结构种类清单（测试用） */

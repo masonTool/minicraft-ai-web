@@ -3222,6 +3222,12 @@ const SPECS: readonly BlockSpec[] = [
   ...MINERAL_AND_BEACON_SPECS,
   ...SLIME_BLOCK_SPECS,
   ...SOUL_LIGHT_SPECS,
+  // 骨块（批次 349，D21 化石）：9 骨粉压成一块，化石结构也用它
+  {
+    id: 587,
+    name: 'minecraft:bone_block',
+    tiles: ['bone_block_top', 'bone_block_top', 'bone_block_side'] as const,
+  },
 ].sort((a, b) => a.id - b.id);
 
 /** 方块 id 常量，避免代码里出现魔法数字 */
@@ -3571,6 +3577,8 @@ export const Block = {
   JUNGLE_SAPLING: WOOD_SAPLING_ID_START + 3,
   ACACIA_SAPLING: WOOD_SAPLING_ID_START + 4,
   DARK_OAK_SAPLING: WOOD_SAPLING_ID_START + 5,
+  /** 骨块（批次 349）：化石的建材，也是 9 骨粉的压缩块 */
+  BONE_BLOCK: 587,
 } as const;
 
 /** 花盆里能种的一株植物：物品（种进去时手里拿的）+ 贴图（渲染用）+ 中文名 */
@@ -3883,6 +3891,7 @@ HARDNESS.set(Block.EMERALD_BLOCK, 5);
 HARDNESS.set(Block.BEACON, 3);
 // 粘液块（批次 120）：原版硬度 **0**（徒手一拍就碎，只是碎得"黏"）
 HARDNESS.set(Block.SLIME_BLOCK, 0);
+HARDNESS.set(Block.BONE_BLOCK, 2);
 // 灵魂火把 / 灵魂灯笼：与普通火把同级（一碰就掉）
 HARDNESS.set(Block.SOUL_TORCH, 0);
 HARDNESS.set(Block.SOUL_LANTERN, 3.5);

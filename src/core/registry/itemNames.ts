@@ -497,6 +497,7 @@ const EXPLICIT: Record<string, string> = {
   // 生物掉落物（这几件此前**根本没有词条**，一直被染料区压着显示成染料名）
   rotten_flesh: '腐肉',
   bone: '骨头',
+  bone_block: '骨块',
   bone_meal: '骨粉',
   pumpkin_seeds: '南瓜籽',
   melon_seeds: '西瓜籽',
