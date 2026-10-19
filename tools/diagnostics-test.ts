@@ -20,6 +20,13 @@ import {
   type LogSession,
 } from '../src/game/diagnostics.ts';
 import { DiagnosticsRuntime, DIAG_STORAGE_KEY } from '../src/game/diagnosticsRuntime.ts';
+import {
+  collectPerfEvents,
+  summarizePerf,
+  type LightWindow,
+  type PerfWindow,
+  type RawDiagEvent,
+} from '../src/game/diagPerf.ts';
 
 let passed = 0;
 let failed = 0;
@@ -328,6 +335,106 @@ class FakeStorage {
   const stored = decodeSessions(storage.getItem(DIAG_STORAGE_KEY));
   check('落盘内容能解析回来', stored.length === 1 && stored[0]!.events.length > 0);
   check('落盘不会超过 500KB', (storage.getItem(DIAG_STORAGE_KEY) ?? '').length <= 500_000);
+}
+
+console.log('\n[性能复盘：判据本身（批次 283，B283-8）]');
+{
+  // ① 改动之前的真机日志（792×360 / Adreno 829）：帧 21~22ms、CPU 17~18ms、
+  //    流体 1.7 万次/5s（≈3000+/秒）、光照队列 25 万格并开始丢任务。
+  const before: PerfWindow[] = [
+    { t: 0, frameAvgMs: 21.9, cpu: 18.3, res: 1, view: 5, decor: 0, writes: 17800, fluid: 16900, lightSkipped: 0, fluidFar: 0, rt: 6 },
+    { t: 5000, frameAvgMs: 22.7, cpu: 18.1, res: 1, view: 4, decor: 1, writes: 19000, fluid: 18000, lightSkipped: 0, fluidFar: 0, rt: 8 },
+    { t: 10000, frameAvgMs: 21.3, cpu: 17.4, res: 0.75, view: 4, decor: 2, writes: 17765, fluid: 16784, lightSkipped: 0, fluidFar: 0, rt: 7 },
+  ];
+  const beforeLight: LightWindow[] = [
+    { t: 5000, pending: 265552, dropped: 0, readded: 422358, spread: 553227, change: 54030 },
+    { t: 10000, pending: 253893, dropped: 25466, readded: 371326, spread: 512920, change: 48095 },
+  ];
+  const old = summarizePerf(before, beforeLight);
+  equal('旧日志判为 CPU 卡', old.verdict, 'cpu-bound');
+  check('流体占写入 90% 以上', old.fluidShare > 0.9, old.fluidShare.toFixed(2));
+  equal('旧日志没有跳过光照（快路径还没上）', old.lightSkipRate, 0);
+  check('流体改动 >3000 次/秒（与真机观测一致）', old.fluidPerSecond > 3000, String(old.fluidPerSecond));
+  check('结论指出 CPU 卡', old.findings.some((f) => f.startsWith('CPU 卡')), old.findings.join(' | '));
+  check('结论指出流体占写入', old.findings.some((f) => f.startsWith('流体占方块写入')));
+  check('结论指出光照仍积压', old.findings.some((f) => f.startsWith('光照仍在积压')));
+  check('结论指出光照在丢任务', old.findings.some((f) => f.startsWith('光照在丢任务')));
+  check('结论指出画质被压低', old.findings.some((f) => f.startsWith('画质被压低')));
+  equal('降档轨迹：分辨率最低 0.75', old.res.min, 0.75);
+  equal('降档轨迹：视距最低 4', old.view.min, 4);
+  equal('降档轨迹：装饰最高 2', old.decor.max, 2);
+
+  // ② 改动之后应有的样子：流体改动掉到 180 次/秒、远处冻结 1.2 万刻、
+  //    写入里有 1000 次被光照快路径跳过、帧时间回到 16.7ms。
+  const after: PerfWindow[] = [];
+  for (let i = 0; i < 6; i++) {
+    after.push({
+      t: i * 5000,
+      frameAvgMs: 16.7,
+      cpu: 9.5,
+      cpuBound: false,
+      res: 1,
+      view: 6,
+      decor: 0,
+      writes: 1100,
+      fluid: 900,
+      lightSkipped: 1000,
+      fluidFar: 12000,
+      fluidDeferred: 3,
+      rt: 5,
+    });
+  }
+  const fixed = summarizePerf(after);
+  equal('改后判为正常', fixed.verdict, 'ok');
+  check('结论指出模拟窗口生效', fixed.findings.some((f) => f.startsWith('模拟窗口生效')), fixed.findings.join(' | '));
+  check('结论指出光照快路径命中', fixed.findings.some((f) => f.startsWith('光照快路径命中')));
+  check('流体改动 <1500 次/秒（不再"仍然偏高"）', fixed.fluidPerSecond < 1500, String(fixed.fluidPerSecond));
+  check('高命中率：跳过光照 ≈ 91%', fixed.lightSkipRate > 0.9, fixed.lightSkipRate.toFixed(2));
+  equal('没有再降分辨率', fixed.res.min, 1);
+  equal('视距没有再被压', fixed.view.min, 6);
+
+  // ③ 没采样的导出不能除以零，也不能假装"没问题"
+  const empty = summarizePerf([], []);
+  equal('空导出：窗口数 0', empty.windows, 0);
+  check('空导出会说清楚（不是静默通过）', empty.findings[0]!.includes('没有性能采样'), empty.findings.join(' | '));
+}
+
+console.log('\n[性能复盘：原始事件 → 采样]');
+{
+  const events: RawDiagEvent[] = [
+    { t: 100, cat: 'app', name: 'boot', data: {} },
+    {
+      t: 5000,
+      cat: 'perf',
+      name: 'sample',
+      data: {
+        frameAvgMs: 21.4,
+        cpu: 16.1,
+        cpuBound: true,
+        res: 0.75,
+        view: 4,
+        decor: 2,
+        buffer: '1188×540',
+        writes: 15167,
+        fluid: 14477,
+        lightSkipped: 690,
+        fluidFar: 4321,
+        fluidDeferred: 0,
+        rt: 9,
+      },
+    },
+    { t: 5000, cat: 'perf', name: 'light', data: { pending: 81833, dropped: 0, readded: 424915, spread: 557378, change: 49225 } },
+    { t: 5100, cat: 'gesture', name: 'look.down', data: {} },
+    { t: 6000, cat: 'perf', name: 'sample', data: { res: 1 } },
+    { t: 7000, cat: 'perf', name: 'sample', data: { frameAvgMs: 16.6, cpu: 9.1 } },
+  ];
+  const { windows, lights } = collectPerfEvents(events);
+  equal('只收完整的 sample（缺 frameAvgMs/cpu 的丢掉）', windows.length, 2);
+  equal('light 单独收', lights.length, 1);
+  equal('背板像素从 "1188×540" 解析', windows[0]!.pixels, 1188 * 540);
+  equal('cpuBound 透传', windows[0]!.cpuBound, true);
+  equal('fluidFar 透传', windows[0]!.fluidFar, 4321);
+  equal('light 的 pending 透传', lights[0]!.pending, 81833);
 }
 
 console.log(`\n结果：${passed} 通过，${failed} 失败`);
