@@ -6263,3 +6263,9 @@ PAINTERS['tinted_glass'] = noisy(0x3a2a4a, 10);
 
 // 哭泣的黑曜石（批次 390）：深紫黑 + 紫色泪点
 PAINTERS['crying_obsidian'] = noisy(0x2a1a3a, 16);
+
+// 洞穴装饰（批次 391）
+PAINTERS['glow_lichen'] = noisy(0x6aa87a, 14);
+PAINTERS['glow_berries'] = noisy(0xd8a03a, 16);
+PAINTERS['pointed_dripstone'] = noisy(0x8a6a5a, 12);
+PAINTERS['dripstone_block'] = noisy(0x7a5a4a, 12);

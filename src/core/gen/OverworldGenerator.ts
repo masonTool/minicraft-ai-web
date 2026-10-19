@@ -716,6 +716,37 @@ export class OverworldGenerator {
     return surface;
   }
 
+
+  /**
+   * 洞穴装饰（批次 391）：在**露天的洞穴空气**里撒发光地衣 / 发光浆果 / 尖滴石。
+   *
+   * 为什么放在雕刻之后：这时洞穴已经是空气了，只需要看"空气格的上下是不是石头"。
+   * 用坐标哈希而不是随机数：同一个种子/坐标必须永远得到同样的结果（存档、联机、跨区块重放）。
+   */
+  private decorateCaves(blocks: BlockArray, originX: number, originZ: number): void {
+    const stoneLike = (id: number): boolean => id === Block.STONE || id === Block.DEEPSLATE;
+    for (let y = 5; y < 56; y++) {
+      for (let z = 0; z < CHUNK_SIZE_Z; z++) {
+        for (let x = 0; x < CHUNK_SIZE_X; x++) {
+          const index = Chunk.index(x, y, z);
+          if (blocks[index] !== Block.AIR) continue;
+          const below = blocks[Chunk.index(x, y - 1, z)]!;
+          const above = blocks[Chunk.index(x, y + 1, z)]!;
+          // 三轴混合的整数哈希（同坐标恒定）
+          let h = Math.imul(originX + x + 1, 73856093) ^ Math.imul(originZ + z + 1, 19349663) ^ Math.imul(y + 1, 83492791);
+          h = Math.imul(h ^ (h >>> 13), 1274126177);
+          h = (h ^ (h >>> 16)) >>> 0;
+          if (stoneLike(below)) {
+            if (h % 617 === 0) blocks[index] = Block.GLOW_LICHEN;
+            else if (h % 1103 === 0) blocks[index] = Block.GLOW_BERRIES;
+          } else if (stoneLike(above) && h % 811 === 0) {
+            blocks[index] = Block.POINTED_DRIPSTONE;
+          }
+        }
+      }
+    }
+  }
+
   generate(cx: number, cz: number, out?: BlockArray): BlockArray {
     const blocks = out ?? createBlockArray();
     if (out) blocks.fill(0);
@@ -732,6 +763,7 @@ export class OverworldGenerator {
     this.carver.carve(blocks, originX, originZ);
     this.aquifer.fill(blocks, originX, originZ, this.columnTop);
     this.oreGenerator.generate(blocks, cx, cz, (wx, wz) => this.erosion.getValue(wx, 0, wz));
+    this.decorateCaves(blocks, originX, originZ);
 
     return blocks;
   }

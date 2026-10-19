@@ -381,6 +381,13 @@ export const GENERATION_SOURCES: readonly GenSource[] = [
     blocks: WOODLAND_MANSION,
   },
   {
+    key: 'cave_decor',
+    label: '洞穴装饰（发光地衣 / 发光浆果 / 尖滴石 / 滴水石）',
+    origin: 'declared',
+    where: 'gen/OverworldGenerator.ts 的 decorateCaves',
+    blocks: [Block.GLOW_LICHEN, Block.GLOW_BERRIES, Block.POINTED_DRIPSTONE, Block.DRIPSTONE_BLOCK],
+  },
+  {
     key: 'amethyst_geode',
     label: '紫晶洞（批次 351）',
     origin: 'declared',

@@ -9998,4 +9998,11 @@
 - [x] B387-4 reach 61、harvest 58、recipebook 144、crafting 43，离线 131 套全绿
 - 覆盖：方块 **653 → 654**
 
+## 批次 388：游戏规则补 2 条——死亡提示 / 禁用袭击（2026-10-20）
+
+- [x] B388-1 `showDeathMessages`：控制死亡卡片上的死因（本项目没有聊天死亡消息）
+- [x] B388-2 `disableRaids`：关掉后不再累计村庄保卫战
+- [x] B388-3 test:commands 112、advancement 116，离线 131 套全绿
+- 覆盖：游戏规则 **16 → 18（60%）**
+
 <!-- docs-archive:end -->

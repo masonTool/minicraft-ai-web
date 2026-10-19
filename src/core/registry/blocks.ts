@@ -3278,6 +3278,42 @@ const SPECS: readonly BlockSpec[] = [
   ...GLAZED_TERRACOTTA_SPECS,
   ...BANNER_SPECS,
 
+  // 洞穴装饰（批次 391）：发光地衣 / 发光浆果 / 尖滴石 / 滴水石
+  {
+    id: 658,
+    name: 'minecraft:glow_lichen',
+    tiles: ['glow_lichen', 'glow_lichen', 'glow_lichen'] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    light: 7,
+    lightOpacity: 0,
+  },
+  {
+    id: 659,
+    name: 'minecraft:glow_berries',
+    tiles: ['glow_berries', 'glow_berries', 'glow_berries'] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    light: 14,
+    lightOpacity: 0,
+  },
+  {
+    id: 660,
+    name: 'minecraft:pointed_dripstone',
+    tiles: ['pointed_dripstone', 'pointed_dripstone', 'pointed_dripstone'] as const,
+    shape: 'cross' as const,
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+  },
+  {
+    id: 661,
+    name: 'minecraft:dripstone_block',
+    tiles: ['dripstone_block', 'dripstone_block', 'dripstone_block'] as const,
+  },
+
   // 哭泣的黑曜石（批次 390）：猪灵以物易物的产物，发 10 级光
   {
     id: 657,
@@ -3790,6 +3826,10 @@ export const Block = {
   BANNER_ID_START: 640,
   TINTED_GLASS: 656,
   CRYING_OBSIDIAN: 657,
+  GLOW_LICHEN: 658,
+  GLOW_BERRIES: 659,
+  POINTED_DRIPSTONE: 660,
+  DRIPSTONE_BLOCK: 661,
   /** 16 色蜡烛从 608 起，顺序与 DYE_COLORS 一致 */
   CANDLE_ID_START: 608,
   /** 紫水晶族（批次 351）：紫晶洞的三层壳 + 晶簇 */
@@ -4135,6 +4175,10 @@ for (let i = 0; i < 16; i++) HARDNESS.set(624 + i, 1.25);
 for (let i = 0; i < 16; i++) HARDNESS.set(640 + i, 1);
 HARDNESS.set(Block.TINTED_GLASS, 0.3);
 HARDNESS.set(Block.CRYING_OBSIDIAN, 50);
+HARDNESS.set(Block.GLOW_LICHEN, 0.2);
+HARDNESS.set(Block.GLOW_BERRIES, 0.2);
+HARDNESS.set(Block.POINTED_DRIPSTONE, 1.5);
+HARDNESS.set(Block.DRIPSTONE_BLOCK, 1.5);
 for (let i = 0; i < 16; i++) HARDNESS.set(608 + i, 0.1);
 HARDNESS.set(Block.MYCELIUM, 0.6);
 HARDNESS.set(Block.MUSHROOM_STEM, 0.2);
