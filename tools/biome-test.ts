@@ -116,7 +116,7 @@ check(
 );
 
 console.log('\n[批次 339：森林 / 丛林变体]');
-equal('群系表共 40 种', BIOMES.length, 40);
+equal('群系表共 42 种', BIOMES.length, 42);
 {
   // 批次 346：针叶林/山地/热带草原变体 + 恶地的区域变体
   const at = (temperature: number, humidity: number, erosion: number): string =>
@@ -128,6 +128,10 @@ equal('群系表共 40 种', BIOMES.length, 40);
   // 批次 352：蘑菇岛（暖湿 + 平坦）
   equal('蘑菇岛', at(0.7, 0.9, 0.8), 'mushroom_fields');
   equal('蘑菇岛地表是菌丝', BIOMES.find((b) => b.name === 'mushroom_fields')?.surface, Block.MYCELIUM);
+  // 批次 353：山峰按高度分带
+  equal('高山（冷） → 冻峰', biomeForColumn(point({ temperature: -0.8, erosion: -0.8 }), 63 + 80, 63).name, 'frozen_peaks');
+  equal('高山（温） → 尖峭山峰', biomeForColumn(point({ temperature: 0, erosion: -0.8 }), 63 + 80, 63).name, 'jagged_peaks');
+  equal('不到高度 → 仍是多风丘陵', biomeForColumn(point({ temperature: 0, erosion: -0.8 }), 63 + 30, 63).name, 'windswept_hills');
   const badlands = BIOMES.find((b) => b.name === 'badlands')!;
   let wooded = 0;
   for (let i = 0; i < 200; i++) if (regionVariantAt(badlands, i * 64, i * 64).name === 'wooded_badlands') wooded++;

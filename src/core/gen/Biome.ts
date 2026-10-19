@@ -44,6 +44,9 @@ export const Biome = {
   SAVANNA_PLATEAU: 37,
   WOODED_BADLANDS: 38,
   MUSHROOM_FIELD: 39,
+  // 批次 353：按**高度**分带的高山群系（不靠气候平面匹配）
+  JAGGED_PEAKS: 40,
+  FROZEN_PEAKS: 41,
   BEACH: 4,
   STONY_SHORE: 5,
   PLAINS: 6,
@@ -800,6 +803,42 @@ export const BIOMES: readonly BiomeDef[] = [
     foliageColor: 0x9e814d,
   },
   {
+    id: Biome.JAGGED_PEAKS,
+    name: 'jagged_peaks',
+    ocean: false,
+    temperature: [-0.45, 0.35],
+    humidity: ANY,
+    continentalness: [0.1, 1.1],
+    erosion: [-1.1, -0.45],
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.STONE,
+    subSurface: Block.STONE,
+    subDepth: 4,
+    underwater: Block.GRAVEL,
+    snowy: false,
+    grassColor: 0x8ab689,
+    foliageColor: 0x6da36b,
+  },
+  {
+    id: Biome.FROZEN_PEAKS,
+    name: 'frozen_peaks',
+    ocean: false,
+    temperature: [-1.1, -0.45],
+    humidity: ANY,
+    continentalness: [0.1, 1.1],
+    erosion: [-1.1, -0.5],
+    depth: ANY,
+    weirdness: ANY,
+    surface: Block.SNOW_BLOCK,
+    subSurface: Block.STONE,
+    subDepth: 3,
+    underwater: Block.GRAVEL,
+    snowy: true,
+    grassColor: 0x80b497,
+    foliageColor: 0x60a17b,
+  },
+  {
     id: Biome.MUSHROOM_FIELD,
     name: 'mushroom_fields',
     ocean: false,
@@ -1002,7 +1041,10 @@ export const LAND_BIOMES = BIOMES.filter(
     biome.id !== Biome.BEACH &&
     biome.id !== Biome.STONY_SHORE &&
     // 批次 339：积雪沙滩与沙滩同一个判定通道，不能进陆地匹配
-    biome.id !== Biome.SNOWY_BEACH,
+    biome.id !== Biome.SNOWY_BEACH &&
+    // 批次 353：山峰按高度判，不参与气候平面匹配
+    biome.id !== Biome.JAGGED_PEAKS &&
+    biome.id !== Biome.FROZEN_PEAKS,
 );
 
 /**
@@ -1138,6 +1180,12 @@ export function biomeForColumn(climate: ClimatePoint, groundY: number, seaLevel:
     // 批次 339：寒冷海岸是积雪沙滩（原版 snowy_beach）
     if (gain.temperature < -0.45) return biomeById(Biome.SNOWY_BEACH);
     return biomeById(Biome.BEACH);
+  }
+
+  // 批次 353：高山带按**高度**分带。
+  // 气候平面里再窄的区间也表达不了"山顶"——山峰是地形高度决定的，不是气候决定的。
+  if (groundY >= seaLevel + 55 && gain.erosion < -0.4) {
+    return biomeById(gain.temperature < -0.45 ? Biome.FROZEN_PEAKS : Biome.JAGGED_PEAKS);
   }
 
   return findLandBiome(gain);

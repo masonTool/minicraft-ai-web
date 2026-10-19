@@ -1161,6 +1161,14 @@ export const BIOME_FEATURES: Record<number, BiomeFeature> = {
     special: 'dead_bush',
     specialDensity: 0.01,
   },
+  [Biome.JAGGED_PEAKS]: {
+    ...EMPTY_FEATURE,
+    snowCover: 0.1,
+  },
+  [Biome.FROZEN_PEAKS]: {
+    ...EMPTY_FEATURE,
+    snowCover: 0.9,
+  },
   [Biome.MUSHROOM_FIELD]: {
     // 蘑菇岛：没有树，只有巨型蘑菇与成片小蘑菇
     trees: [],

@@ -32,7 +32,7 @@ import { Aquifer } from './Aquifer.ts';
 import { CaveCarver } from './CaveCarver.ts';
 import { bandBlockAt, columnSurface } from './SurfaceRules.ts';
 import { OreGenerator } from './OreGenerator.ts';
-import { applyClimateGain, biomeById, biomeForColumn, findLandBiome, regionVariantAt, type BiomeDef } from './Biome.ts';
+import { Biome, applyClimateGain, biomeById, biomeForColumn, findLandBiome, regionVariantAt, type BiomeDef } from './Biome.ts';
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { Spline, smoothstep } from './noise/Spline.ts';
@@ -532,6 +532,9 @@ export class OverworldGenerator {
       const raw = this.climateAt(x, z);
       return biomeForColumn(this.climatePointOf(raw), top, SEA_LEVEL);
     }
+    // 批次 353：山峰按高度判，不能走"气候平面 + 平滑"
+    const peak = biomeForColumn(this.climatePointOf(this.climateAt(x, z)), top, SEA_LEVEL);
+    if (peak.id === Biome.JAGGED_PEAKS || peak.id === Biome.FROZEN_PEAKS) return peak;
     return this.smoothedLandBiomeAt(x, z);
   }
 
@@ -835,10 +838,12 @@ export class OverworldGenerator {
 
         const raw = this.climateAt(worldX, worldZ);
         // 海洋/海岸按水线判；陆地走 3×3 多数投票（与 `columnBiome` 同一套口径）
+        const columnBiome = biomeForColumn(this.climatePointOf(raw), top, SEA_LEVEL);
+        const isPeak =
+          columnBiome.id === Biome.JAGGED_PEAKS || columnBiome.id === Biome.FROZEN_PEAKS;
+        // 批次 353：山峰按高度判，不参与"气候平面 + 平滑"
         const biome =
-          top <= SEA_LEVEL
-            ? biomeForColumn(this.climatePointOf(raw), top, SEA_LEVEL)
-            : this.smoothedLandBiomeAt(worldX, worldZ);
+          top <= SEA_LEVEL || isPeak ? columnBiome : this.smoothedLandBiomeAt(worldX, worldZ);
         const underwater = top < SEA_LEVEL;
 
         // 地表分层交给 SurfaceRules：群系地表 → 次表层 → （恶地的）深层彩色色带
