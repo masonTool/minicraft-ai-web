@@ -576,6 +576,63 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     icon: Item.ENDER_PEARL,
     trigger: { kind: 'kill', mobs: ['enderman'] },
   },
+
+  // ---------------------------------------------------------------- 批次 350：导航与装备
+  // 全部是"拿到某件东西"，来源都已在生存里成立（合成或结构宝箱）。
+  {
+    id: 'minecraft:adventure/obtain_map',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '制图师',
+    desc: '合成一张空白地图（8 纸 + 1 指南针）',
+    icon: Item.MAP,
+    trigger: { kind: 'obtain', ids: [Item.MAP] },
+  },
+  {
+    id: 'minecraft:adventure/obtain_compass',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '指北',
+    desc: '合成一个指南针（4 铁锭 + 1 红石）',
+    icon: Item.COMPASS,
+    trigger: { kind: 'obtain', ids: [Item.COMPASS] },
+  },
+  {
+    id: 'minecraft:adventure/obtain_clock',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '时间就是金钱',
+    desc: '合成一个时钟（4 金锭 + 1 红石）',
+    icon: Item.CLOCK,
+    trigger: { kind: 'obtain', ids: [Item.CLOCK] },
+  },
+  {
+    id: 'minecraft:adventure/obtain_saddle',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '备鞍',
+    desc: '拿到一个鞍（沙漠神殿的宝箱里会有）',
+    icon: Item.SADDLE,
+    trigger: { kind: 'obtain', ids: [Item.SADDLE] },
+  },
+  {
+    id: 'minecraft:adventure/obtain_crossbow',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '弩箭上弦',
+    desc: '合成一把弩（掠夺者前哨的箱子里也会有）',
+    icon: Item.CROSSBOW,
+    trigger: { kind: 'obtain', ids: [Item.CROSSBOW] },
+  },
+  {
+    id: 'minecraft:adventure/obtain_bone_block',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '骨中寻宝',
+    desc: '拿到一块骨块（9 骨粉压成，或去挖化石）',
+    icon: Block.BONE_BLOCK,
+    trigger: { kind: 'obtain', ids: [Block.BONE_BLOCK] },
+  },
 ];
 
 /** 按 id 查一条（界面与判定都用它；查不到返回 null） */
