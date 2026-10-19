@@ -669,8 +669,8 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
         invSrc.indexOf('this.buildCreativeSection();'),
   );
   check(
-    '配方驱动型工作站默认左栏 = 物品分类；铁砧/砂轮/附魔台仍是背包',
-    invSrc.includes("this.pane = this.stationHasRecipes(mode) ? 'category' : 'items';") &&
+    '生存配方工作站默认分类；创造只留仓库；铁砧/砂轮/附魔台仍是背包',
+    invSrc.includes("this.pane = !creativePlayer && this.stationHasRecipes(mode) ? 'category' : 'items';") &&
       /private stationHasRecipes[\s\S]{0,300}mode === 'smithing'[\s\S]{0,200}mode === 'brewing'/.test(invSrc),
   );
   check(
@@ -864,13 +864,11 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     invSrc.includes('this.syncCreativeRails(creativePlayer)'),
   );
   check(
-    '创造模式配方工作站允许停分类，并换成配方分类左轨（批次 310）',
-    invSrc.includes('const creativeStationCategory') &&
-      invSrc.includes('creativePlayer && isWorkstationMode(this.mode) && this.stationHasRecipes()') &&
-      invSrc.includes("this.pane === 'category' && (!creativePlayer || creativeStationCategory)") &&
-      /if \(onRail && this\.pane === 'category' && isWorkstationMode\(this\.mode\) && this\.stationHasRecipes\(\)\)/.test(
-        invSrc,
-      ),
+    '创造模式工作模块只留仓库，不挂分类/搜索（批次 311）',
+    invSrc.includes('const creativeWorkstation') &&
+      invSrc.includes("this.pane = !creativePlayer && this.stationHasRecipes(mode) ? 'category' : 'items'") &&
+      invSrc.includes('const showCategory = hasRecipes && !creativePlayer') &&
+      invSrc.includes('if (hasRecipes && !creativePlayer)'),
   );
   check(
     '点创造分类会切回无限物品页',
