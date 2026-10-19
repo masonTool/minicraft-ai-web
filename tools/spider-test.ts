@@ -266,8 +266,8 @@ console.log('\n[洞穴蜘蛛：更小、有毒、不自然刷]');
   // "不自然刷、但算敌对"的那几档：洞穴蜘蛛、烈焰人、**史莱姆与岩浆怪的中/小两档**
   // （它们只从分裂里出现）、**幻翼**（失眠触发）以及**猪灵蛮兵**（批次 344：只随刷怪蛋/命令）
   check(
-    '所有敌对表比"会自然刷的"多 11 种（… + 猪灵蛮兵 / 蠹虫 / 潜影贝 / 铁傀儡 / 掠夺者）',
-    ALL_HOSTILE_MOBS.length === HOSTILE_MOBS.length + 11,
+    '所有敌对表比"会自然刷的"多 13 种（… + 守卫者 / 远古守卫者）',
+    ALL_HOSTILE_MOBS.length === HOSTILE_MOBS.length + 13,
     `${ALL_HOSTILE_MOBS.length} vs ${HOSTILE_MOBS.length}`,
   );
 
@@ -367,7 +367,7 @@ console.log('\n[工厂与模型]');
   equal('烈焰人仍然不摆腿', describeMobModel(mobTypeById('blaze')!).legs, 0);
   // 批次 94 起：11 → 12 种（加了恶魂）；批次 112 起 12 → 13 种、敌对 7 → 8（加了末影人）；
   // 批次 115 起 13 → 14 种、敌对 8 → 9（加了凋灵骷髅）
-  check('生物表里 52 种，其中 26 种敌对（… + 铁傀儡/掠夺者）', MOB_TYPES.length === 52 && ALL_HOSTILE_MOBS.length === 26, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
+  check('生物表里 54 种，其中 28 种敌对（… + 守卫者/远古守卫者）', MOB_TYPES.length === 54 && ALL_HOSTILE_MOBS.length === 28, `${MOB_TYPES.length}/${ALL_HOSTILE_MOBS.length}`);
 }
 
 console.log(`\n蜘蛛测试：${passed} 通过 / ${failed} 失败`);

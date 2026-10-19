@@ -106,6 +106,8 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'shulker', label: '潜影贝', id: 1516 },
   { mobId: 'iron_golem', label: '铁傀儡', id: 1517 },
   { mobId: 'pillager', label: '掠夺者', id: 1518 },
+  { mobId: 'guardian', label: '守卫者', id: 1519 },
+  { mobId: 'elder_guardian', label: '远古守卫者', id: 1520 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */

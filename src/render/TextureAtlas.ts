@@ -6182,3 +6182,7 @@ PAINTERS['brown_mushroom_block_top'] = noisy(0x9a6a4a, 12);
 PAINTERS['brown_mushroom_block_side'] = noisy(0x8a5a3c, 12);
 PAINTERS['red_mushroom_block_top'] = noisy(0xc84a4a, 12);
 PAINTERS['red_mushroom_block_side'] = noisy(0xb03a3a, 12);
+
+// 海晶碎片/砂粒（批次 359）
+PAINTERS['item_prismarine_shard'] = noisy(0x6fc8b8, 20);
+PAINTERS['item_prismarine_crystals'] = noisy(0xd8e8a0, 20);

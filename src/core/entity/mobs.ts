@@ -616,6 +616,59 @@ export const SHULKER_TYPE: MobType = {
 };
 
 /**
+ * 守卫者（批次 359，海洋系）。
+ *
+ * 30 血、水下敌对、掉海晶碎片/砂粒。原版守海底神殿，本项目没有
+ * "结构 → 生物"的通道，所以 `naturalSpawn: false`，靠刷怪蛋/命令。
+ * ⚠️ 原版的激光束简化为近战接触伤害（没有独立的激光实体）。
+ */
+export const GUARDIAN_TYPE: MobType = {
+  id: 'guardian',
+  name: '守卫者',
+  health: 30,
+  width: 0.9,
+  height: 0.9,
+  speed: 1.8,
+  hostile: true,
+  attackDamage: 4,
+  followRange: 16,
+  drops: [
+    { itemId: Item.PRISMARINE_SHARD, min: 0, max: 2 },
+    { itemId: Item.PRISMARINE_CRYSTALS, min: 0, max: 1 },
+    { itemId: Item.COD, min: 1, max: 1, chance: 0.5 },
+  ],
+  xp: 10,
+  naturalSpawn: false,
+  aquatic: true,
+  bodyColor: 0x4a9a8a,
+  accentColor: 0x2a5a52,
+  eyeHeight: 0.7,
+};
+
+/** 远古守卫者（批次 359）：守卫者的放大版，80 血、伤害 8 */
+export const ELDER_GUARDIAN_TYPE: MobType = {
+  id: 'elder_guardian',
+  name: '远古守卫者',
+  health: 80,
+  width: 1.8,
+  height: 1.8,
+  speed: 1.4,
+  hostile: true,
+  attackDamage: 8,
+  followRange: 20,
+  drops: [
+    { itemId: Item.PRISMARINE_SHARD, min: 2, max: 3 },
+    { itemId: Item.PRISMARINE_CRYSTALS, min: 1, max: 2 },
+  ],
+  xp: 10,
+  naturalSpawn: false,
+  aquatic: true,
+  bodyColor: 0x3a7a6a,
+  accentColor: 0x1a3a32,
+  eyeHeight: 1.4,
+};
+
+/**
  * 铁傀儡（批次 358，J24 第一批）。
  *
  * 100 血、伤害 15、**中立**（被打才还手）。原版由村民生成，本项目没有
@@ -1471,6 +1524,9 @@ export const MOB_TYPES: readonly MobType[] = [
   // J24 村庄系（批次 358）
   IRON_GOLEM_TYPE,
   PILLAGER_TYPE,
+  // 海洋系（批次 359）
+  GUARDIAN_TYPE,
+  ELDER_GUARDIAN_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿

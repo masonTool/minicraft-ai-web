@@ -781,6 +781,34 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     icon: Item.IRON_INGOT,
     trigger: { kind: 'kill', mobs: ['iron_golem'] },
   },
+  {
+    id: 'minecraft:adventure/kill_a_guardian',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '深海守卫',
+    desc: '杀死一只守卫者（海底神殿附近）',
+    icon: Item.PRISMARINE_SHARD,
+    trigger: { kind: 'kill', mobs: ['guardian'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_an_elder_guardian',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '远古的凝视',
+    desc: '击败一只远古守卫者（80 血，会给你挖掘疲劳）',
+    icon: Item.PRISMARINE_CRYSTALS,
+    trigger: { kind: 'kill', mobs: ['elder_guardian'] },
+    challenge: true,
+  },
+  {
+    id: 'minecraft:story/obtain_prismarine_shard',
+    parent: 'minecraft:story/root',
+    tab: 'minecraft',
+    title: '海晶',
+    desc: '拿到一片海晶碎片（守卫者掉落）',
+    icon: Item.PRISMARINE_SHARD,
+    trigger: { kind: 'obtain', ids: [Item.PRISMARINE_SHARD] },
+  },
 
   // ---------------------------------------------------------------- 批次 356：矿物块与工作站
   {

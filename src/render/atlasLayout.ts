@@ -1047,6 +1047,10 @@ export const TILE_ORDER = [
   'spawn_egg_shulker',
   'spawn_egg_iron_golem',
   'spawn_egg_pillager',
+  'spawn_egg_guardian',
+  'spawn_egg_elder_guardian',
+  'item_prismarine_shard',
+  'item_prismarine_crystals',
   // 骨块（批次 349）
   'bone_block_side',
   'bone_block_top',

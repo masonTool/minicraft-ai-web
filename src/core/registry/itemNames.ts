@@ -506,6 +506,8 @@ const EXPLICIT: Record<string, string> = {
   mushroom_stem: '蘑菇柄',
   brown_mushroom_block: '棕色蘑菇块',
   red_mushroom_block: '红色蘑菇块',
+  prismarine_shard: '海晶碎片',
+  prismarine_crystals: '海晶砂粒',
   bone_meal: '骨粉',
   pumpkin_seeds: '南瓜籽',
   melon_seeds: '西瓜籽',
