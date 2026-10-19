@@ -116,6 +116,10 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'vindicator', label: '卫道士', id: 1530 },
   { mobId: 'evoker', label: '唤魔者', id: 1531 },
   { mobId: 'witch', label: '女巫', id: 1532 },
+  { mobId: 'ravager', label: '劫掠兽', id: 1533 },
+  { mobId: 'vex', label: '恼鬼', id: 1534 },
+  { mobId: 'illusioner', label: '幻术师', id: 1535 },
+  { mobId: 'wandering_trader', label: '流浪商人', id: 1536 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */

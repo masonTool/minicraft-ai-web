@@ -707,6 +707,87 @@ export const WITCH_TYPE: MobType = {
 };
 
 /**
+ * 劫掠兽（批次 380）：100 血、伤害 12 的袭击主力。
+ * 原版随袭击出现；本项目 `naturalSpawn: false`。
+ */
+export const RAVAGER_TYPE: MobType = {
+  id: 'ravager',
+  name: '劫掠兽',
+  health: 100,
+  width: 1.2,
+  height: 2.2,
+  speed: 2.0,
+  hostile: true,
+  attackDamage: 12,
+  followRange: 24,
+  drops: [{ itemId: Item.SADDLE, min: 0, max: 1 }],
+  xp: 20,
+  naturalSpawn: false,
+  bodyColor: 0x6a5a4a,
+  accentColor: 0x3a2a1a,
+  eyeHeight: 1.9,
+};
+
+/** 恼鬼（批次 380）：14 血、飞行、伤害 9，不掉落 */
+export const VEX_TYPE: MobType = {
+  id: 'vex',
+  name: '恼鬼',
+  health: 14,
+  width: 0.4,
+  height: 0.8,
+  speed: 2.4,
+  hostile: true,
+  attackDamage: 9,
+  followRange: 20,
+  drops: [],
+  xp: 3,
+  naturalSpawn: false,
+  flying: true,
+  bodyColor: 0x8a9ab8,
+  accentColor: 0x4a5a7a,
+  eyeHeight: 0.6,
+};
+
+/** 幻术师（批次 380）：32 血、远程（弓），掉绿宝石 */
+export const ILLUSIONER_TYPE: MobType = {
+  id: 'illusioner',
+  name: '幻术师',
+  health: 32,
+  width: 0.6,
+  height: 1.95,
+  speed: 1.9,
+  hostile: true,
+  attackDamage: 4,
+  followRange: 20,
+  drops: [{ itemId: Item.EMERALD, min: 0, max: 1 }],
+  xp: 10,
+  naturalSpawn: false,
+  ranged: { range: 12, cooldown: 3, speed: 12, keepDistance: 5, spread: 0.05 },
+  bodyColor: 0x9a9ab8,
+  accentColor: 0x5a5a8a,
+  eyeHeight: 1.74,
+};
+
+/** 流浪商人（批次 380）：20 血、被动、不掉落；交易界面未做，先作为生物存在 */
+export const WANDERING_TRADER_TYPE: MobType = {
+  id: 'wandering_trader',
+  name: '流浪商人',
+  health: 20,
+  width: 0.6,
+  height: 1.95,
+  speed: 1.6,
+  hostile: false,
+  attackDamage: 0,
+  followRange: 0,
+  drops: [],
+  xp: 1,
+  naturalSpawn: false,
+  bodyColor: 0x4a6a9a,
+  accentColor: 0xc8a83a,
+  eyeHeight: 1.74,
+};
+
+/**
  * 末影螨（批次 378）：8 血的小型敌对生物，末影珍珠落地时原版会生成。
  * 本项目没有“珍珠落地生成”的通道，所以 `naturalSpawn: false`，靠刷怪蛋/命令。
  */
@@ -1695,6 +1776,10 @@ export const MOB_TYPES: readonly MobType[] = [
   VINDICATOR_TYPE,
   EVOKER_TYPE,
   WITCH_TYPE,
+  RAVAGER_TYPE,
+  VEX_TYPE,
+  ILLUSIONER_TYPE,
+  WANDERING_TRADER_TYPE,
   // 溺尸（批次 123）：主世界水里那一只，也是三叉戟的唯一来源
   DROWNED_TYPE,
   // 尸壳（批次 124）：沙漠里的僵尸变体，白天不烧、打人让人饥饿

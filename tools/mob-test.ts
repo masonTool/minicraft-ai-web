@@ -330,7 +330,7 @@ console.log('\n[生物表]');
   // 112 加了末影人（第一种会瞬移的、第一种"不主动攻击"的）
   // 批次 115 加了凋灵骷髅（第一种"只在某个结构里刷"的）
   // 批次 189 加了鱿鱼（被动、水生）
-  check('生物表包含 61 种生物（… + 末影螨 + 卫道士/唤魔者/女巫）', MOB_TYPES.length === 61, `${MOB_TYPES.length}`);
+  check('生物表包含 65 种生物（… + 劫掠兽/恼鬼/幻术师/流浪商人）', MOB_TYPES.length === 65, `${MOB_TYPES.length}`);
   check(
     '敌对生物要么有攻击力、要么另有一条伤害通道',
     // ⚠️ 恶魂是**刻意的例外**（批次 94）：原版它不近战（撞到人也不掉血），
@@ -349,7 +349,7 @@ console.log('\n[生物表]');
   // 兔/山羊也在这条白名单里：原版它们掉兔皮/角，而本项目还没有那两件物品，
   // 所以**故意不给假掉落**（写进 TASKS 的差异）
   // 蜜蜂（批次 374）：原版也不掉东西
-  const noDropIds = new Set(['villager', 'fox', 'rabbit', 'goat', 'panda', 'turtle', 'axolotl', 'bat', 'bee', 'parrot']);
+  const noDropIds = new Set(['villager', 'fox', 'rabbit', 'goat', 'panda', 'turtle', 'axolotl', 'bat', 'bee', 'parrot', 'wandering_trader']);
   check(
     '被动动物都有掉落；村民/狐狸/兔/山羊与宠物没有（原版如此或物品未做）',
     MOB_TYPES.filter(
