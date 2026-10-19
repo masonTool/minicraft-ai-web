@@ -9727,4 +9727,12 @@
 - [x] B352-4 生成来源（special → 三种蘑菇块）、SOIL 加入菌丝
 - [x] B352-5 test:biome 52、terrain:normal 43（中位斑块 24/26），离线 131 套全绿
 
+## 批次 353：D20 第五批——按高度分带的山峰（2026-10-20）
+
+- [x] B353-1 新增 jagged_peaks / frozen_peaks（40/41），**不参与气候平面匹配**
+- [x] B353-2 `biomeForColumn` 高度分支：地表 ≥ 海平面+55 且侵蚀低 → 山峰（冷=冻峰）
+- [x] B353-3 `columnBiome` / `applySurface` 都先判山峰，再走平滑
+- [x] B353-4 test:biome 55、genregistry 80、terrain:normal 43，离线 131 套全绿
+- 覆盖：群系 **40 → 42（56% → 58%）**
+
 <!-- docs-archive:end -->
