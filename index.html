@@ -2866,10 +2866,15 @@
       /* ---------------- 熔炉 ---------------- */
       .furnace-layout {
         position: relative;
-        display: flex; align-items: center; gap: 14px;
+        display: grid;
+        grid-template-columns: 140px 70px 140px;
+        align-items: start; justify-content: center; gap: 14px;
         margin: 6px 0 10px; padding: 26px 4px 8px;
       }
-      .furnace-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+      .furnace-col {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        width: 100%; min-width: 0;
+      }
       /* 退还按钮固定在熔炉工作区右上角（批次 306） */
       .furnace-return {
         position: absolute; top: 2px; right: 2px; z-index: 2;
@@ -2920,15 +2925,23 @@
         background: linear-gradient(#ffd76a, #ff8a1e); transition: height .1s linear;
       }
       .furnace-flame.lit i { box-shadow: 0 0 6px #ff9a2e; }
-      .furnace-middle { width: 70px; }
+      .furnace-middle { width: 100%; }
       .furnace-cook {
-        height: 12px; background: rgba(0, 0, 0, .28);
+        height: 12px; width: 100%; background: rgba(0, 0, 0, .28);
         border-radius: 3px; overflow: hidden;
       }
       .furnace-cook i {
         display: block; height: 100%; width: 0;
         background: linear-gradient(90deg, #cfe6ff, #6fa8dc);
         transition: width .1s linear;
+      }
+      @media (max-width: 430px) {
+        .furnace-layout {
+          grid-template-columns: 120px 50px 120px;
+          gap: 8px;
+        }
+        .furnace-fuel-hint,
+        .furnace-fuel-options { width: 112px; max-width: 112px; }
       }
 
       /* ---------------- 酿造台（H10） ---------------- */

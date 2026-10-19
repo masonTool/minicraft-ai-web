@@ -791,6 +791,27 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes('this.furnaceFuelOptionIds = ids'),
   );
   check(
+    '点目标不换掉玩家已选燃料；格子满也不误判失败（批次 307）',
+    invSrc.includes('当前燃料') &&
+      invSrc.includes('const readyToStart') &&
+      invSrc.includes('this.fillSlotFromBag(furnace, FURNACE_FUEL, fuel.id)') &&
+      !/fillStationRecipe[\s\S]{0,1200}fuelSeconds\(best\) > fuelSeconds\(fuelId\)/.test(invSrc),
+  );
+  check(
+    '点燃料在快捷栏上方弹介绍；熔炉布局固定三列（批次 307）',
+    invSrc.includes('private showFuelToast') &&
+      invSrc.includes('this.showFuelToast(itemId)') &&
+      css.includes('grid-template-columns: 140px 70px 140px') &&
+      css.includes('align-items: start'),
+  );
+  check(
+    '熔炉燃料文字已移除；refresh 有重入保护（批次 307）',
+    !invSrc.includes('fuelHint.append(this.furnaceFuelTextEl') &&
+      invSrc.includes('private refreshing = false') &&
+      invSrc.includes('if (this.refreshing)') &&
+      invSrc.includes('this.refreshPending = true'),
+  );
+  check(
     '目标框显示预计制作数量（批次 303）',
     invSrc.includes('private expectedFurnaceOutput') &&
       invSrc.includes('const previewCount = expected > 0 ? expected : entry.resultCount') &&

@@ -820,6 +820,9 @@ export class InventoryScreen {
   private activeContainer: BlockContainer | null = null;
   private containerDirty = false;
   private containerRefreshTimer = 0;
+  /** 重入保护：自动收货会在 refresh 里 notify，不能递归重画造成进度/高亮错乱 */
+  private refreshing = false;
+  private refreshPending = false;
 
   private held: ItemStack | null = null;
   private open = false;
@@ -2423,6 +2426,7 @@ export class InventoryScreen {
   private selectFurnaceFuel(itemId: number): void {
     const furnace = this.activeContainer;
     if (!(furnace instanceof Furnace)) return;
+    this.showFuelToast(itemId);
     const current = furnace.get(FURNACE_FUEL);
     if (current?.id === itemId) return;
     // 先确认这种燃料确实还有，避免换失败后把原来的燃料也弄丢
@@ -2724,20 +2728,26 @@ export class InventoryScreen {
       const furnace = this.activeContainer instanceof Furnace ? this.activeContainer : null;
       if (!furnace) return false;
       const input = entry.inputs[0]!;
-      if (!this.canPut(furnace, FURNACE_INPUT, input.id, 1)) return false;
-      this.fillSlotFromBag(furnace, FURNACE_INPUT, input.id);
-      if (!furnace.get(FURNACE_INPUT)) return false;
-      // 燃料：从背包里挑**燃烧效率最高**的；现有燃料效率更低就换掉
-      const currentFuel = furnace.get(FURNACE_FUEL);
-      const best = this.findBagFuel();
-      let fuelId = currentFuel && fuelSeconds(currentFuel.id) > 0 ? currentFuel.id : null;
-      if (best !== null && (fuelId === null || fuelSeconds(best) > fuelSeconds(fuelId))) {
-        if (fuelId !== null) this.returnStationStack(furnace, FURNACE_FUEL);
-        fuelId = best;
+      const currentInput = furnace.get(FURNACE_INPUT);
+      if (currentInput && currentInput.id !== input.id) return false;
+      // 原料已在格子里（哪怕满 64）就不要再"加 1 个"：上限判断会误报失败
+      if (!currentInput) {
+        if (!this.canPut(furnace, FURNACE_INPUT, input.id, 1)) return false;
+        this.fillSlotFromBag(furnace, FURNACE_INPUT, input.id);
       }
-      if (fuelId === null) return false;
-      if (!this.canPut(furnace, FURNACE_FUEL, fuelId, 1)) return false;
-      this.fillSlotFromBag(furnace, FURNACE_FUEL, fuelId);
+      if (!furnace.get(FURNACE_INPUT)) return false;
+
+      // 燃料：**尊重玩家已经选好的燃料**；只有空格子才从背包取最高效的
+      const currentFuel = furnace.get(FURNACE_FUEL);
+      if (currentFuel && fuelSeconds(currentFuel.id) > 0) {
+        // 同种燃料还有空间就补满；满 64 也不报错
+        this.fillSlotFromBag(furnace, FURNACE_FUEL, currentFuel.id);
+      } else {
+        const best = this.findBagFuel();
+        if (best === null) return false;
+        if (!this.canPut(furnace, FURNACE_FUEL, best, 1)) return false;
+        this.fillSlotFromBag(furnace, FURNACE_FUEL, best);
+      }
       return furnace.get(FURNACE_FUEL) !== null;
     }
     if (this.mode === 'campfire') {
@@ -3001,11 +3011,25 @@ export class InventoryScreen {
       this.showStationEntryHint(entry);
       return;
     }
-    // 按住滑动只预览过、没真正摆料时，点目标框要先把材料补进去
-    if (!this.fillStationRecipe(entry)) {
+    // 已经在格子里的材料/燃料不要为了"补满"再动一次：
+    // 目标点击只负责开工，不能把玩家选好的第三种燃料换回第一种（批次 307）
+    const furnace = this.activeContainer instanceof Furnace ? this.activeContainer : null;
+    const readyToStart =
+      furnace !== null &&
+      furnace.get(FURNACE_INPUT)?.id === entry.inputs[0]!.id &&
+      this.furnaceHasSlotFuel(furnace);
+    if (!readyToStart && !this.fillStationRecipe(entry)) {
       this.renderStationTarget();
-      this.showStationEntryHint(entry);
+      this.showMessage('原料或燃料放不进去，先清一下熔炉格子');
       return;
+    }
+    // 已经能开工：只把原料/当前燃料补满，绝不换掉玩家选的燃料
+    if (furnace && readyToStart) {
+      this.fillSlotFromBag(furnace, FURNACE_INPUT, entry.inputs[0]!.id);
+      const fuel = furnace.get(FURNACE_FUEL);
+      if (fuel && fuelSeconds(fuel.id) > 0) {
+        this.fillSlotFromBag(furnace, FURNACE_FUEL, fuel.id);
+      }
     }
     if (this.activeContainer instanceof Furnace) {
       this.activeContainer.paused = false;
@@ -3180,13 +3204,13 @@ export class InventoryScreen {
         this.fillSlotFromBag(furnace, FURNACE_INPUT, input.id);
       }
       const currentFuel = furnace.get(FURNACE_FUEL);
-      const best = this.findBagFuel();
-      let fuelId = currentFuel && fuelSeconds(currentFuel.id) > 0 ? currentFuel.id : null;
-      if (best !== null && (fuelId === null || fuelSeconds(best) > fuelSeconds(fuelId))) {
-        if (fuelId !== null) this.returnStationStack(furnace, FURNACE_FUEL);
-        fuelId = best;
-      }
-      if (fuelId !== null && this.canPut(furnace, FURNACE_FUEL, fuelId, 1)) {
+      const fuelId =
+        currentFuel && fuelSeconds(currentFuel.id) > 0 ? currentFuel.id : this.findBagFuel();
+      if (
+        fuelId !== null &&
+        (!currentFuel || currentFuel.id === fuelId) &&
+        this.canPut(furnace, FURNACE_FUEL, fuelId, 1)
+      ) {
         this.fillSlotFromBag(furnace, FURNACE_FUEL, fuelId);
       }
       furnace.paused = true;
@@ -3966,7 +3990,8 @@ export class InventoryScreen {
 
       const fuelHint = document.createElement('div');
       fuelHint.className = 'furnace-fuel-hint';
-      fuelHint.append(this.furnaceFuelTextEl, this.furnaceFuelOptionsEl);
+      // 批次 307（用户）：燃料文字不要了，只留图标；介绍改在快捷栏上方弹。
+      fuelHint.append(this.furnaceFuelOptionsEl);
 
       // 批次 306（用户）：布局回退到最初的样子——左列原料/火焰/燃料，中间进度，右边目标
       const left = document.createElement('div');
@@ -5547,8 +5572,15 @@ export class InventoryScreen {
   }
 
   refresh(): void {
-    // 批次 295：点过目标框的炉子，产物一出来就直接收进背包（快捷栏 → 仓库 → 脚边）
-    this.collectStationOutput();
+    // 批次 307：自动收货会在 refresh 内 notify；重入会让进度/选中状态互相覆盖
+    if (this.refreshing) {
+      this.refreshPending = true;
+      return;
+    }
+    this.refreshing = true;
+    try {
+      // 批次 295：点过目标框的炉子，产物一出来就直接收进背包（快捷栏 → 仓库 → 脚边）
+      this.collectStationOutput();
     for (const [key, binding] of this.bindings) {
       if (/^(furnace|smithing|brewing):/.test(key)) binding.element.classList.remove('ghost-missing');
     }
@@ -5714,6 +5746,13 @@ export class InventoryScreen {
     this.refreshPlayerPreview();
     // 工作站左栏的"可做列表"（批次 277）：模式/材料/槽位变化后重算
     this.renderStationRecipes();
+    } finally {
+      this.refreshing = false;
+      if (this.refreshPending) {
+        this.refreshPending = false;
+        this.refresh();
+      }
+    }
   }
 
   /** 供主程序 / 验收：当前携带版页签（经典 UI 下也会返回上次值，但不影响布局） */
@@ -5799,6 +5838,26 @@ export class InventoryScreen {
       description.textContent = line;
       this.pickToastEl.appendChild(description);
     }
+    this.pickToastEl.classList.remove('hidden', 'leaving');
+    this.placePickToast();
+    window.clearTimeout(this.pickToastTimer);
+    window.clearTimeout(this.pickToastFadeTimer);
+    this.pickToastTimer = window.setTimeout(() => this.hidePickToast(), PICK_TOAST_MS);
+  }
+
+  /** 点燃料时在快捷栏上方显示它的介绍（批次 307） */
+  private showFuelToast(itemId: number): void {
+    const seconds = fuelSeconds(itemId);
+    if (seconds <= 0) return;
+    this.pickToastEl.textContent = '';
+    const title = document.createElement('div');
+    title.className = 'tooltip-title';
+    title.textContent = itemName(itemId);
+    const description = document.createElement('div');
+    description.className = 'tooltip-desc';
+    const items = Math.max(1, Math.floor(seconds / 10));
+    description.textContent = `燃料 · 可燃烧 ${seconds} 秒（普通熔炉约 ${items} 个）`;
+    this.pickToastEl.append(title, description);
     this.pickToastEl.classList.remove('hidden', 'leaving');
     this.placePickToast();
     window.clearTimeout(this.pickToastTimer);
