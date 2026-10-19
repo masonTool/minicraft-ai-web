@@ -110,6 +110,11 @@ class FakeWorld implements CommandContext {
   setWorldSpawn(x: number, y: number, z: number): void {
     this.worldSpawn = { x, y, z };
   }
+  enchanted: { id: string; level: number } | null = null;
+  enchantHeld(id: string, level: number): boolean {
+    this.enchanted = { id, level };
+    return true;
+  }
   give(_itemName: string, _count: number): number {
     throw new Error('give 应该由测试覆盖');
   }
@@ -514,6 +519,16 @@ console.log('\n[批次 368：/spawnpoint 与 /setworldspawn]');
   executeCommand('/setworldspawn 1 70 2', world, out);
   check('带坐标 → 设在世界出生点', world.worldSpawn?.x === 1 && world.worldSpawn?.y === 70 && world.worldSpawn?.z === 2, JSON.stringify(world.worldSpawn));
   check('两条命令都有成功反馈', out.infos.length >= 2, `${out.infos.length}`);
+}
+
+console.log('\n[批次 372：/enchant]');
+{
+  const world = new FakeWorld();
+  const out = new Recorder();
+  executeCommand('/enchant 锋利 5', world, out);
+  check('按中文名找到附魔并夹到上限', world.enchanted?.id === 'sharpness' && world.enchanted?.level === 5, JSON.stringify(world.enchanted));
+  executeCommand('/enchant 不存在的附魔', world, out);
+  check('未知附魔给出错误', out.lastError.includes('找不到附魔'), out.lastError);
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);

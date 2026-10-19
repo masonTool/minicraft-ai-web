@@ -18,6 +18,7 @@
 import { resolveBlockId, resolveItemId, translateName, itemLabel } from '../registry/itemNames.ts';
 import { Block } from '../registry/blocks.ts';
 import { mobTypeById, MOB_TYPES } from '../entity/mobs.ts';
+import { ENCHANTMENTS } from '../registry/enchantments.ts';
 import {
   DIFFICULTIES,
   DIFFICULTY_LABELS,
@@ -45,6 +46,8 @@ export interface CommandContext {
   setPersonalSpawn(x: number, y: number, z: number): void;
   /** 设置世界出生点（`/setworldspawn`，批次 368） */
   setWorldSpawn(x: number, y: number, z: number): void;
+  /** 给手持物品附魔（`/enchant`，批次 372）；成功返回 true */
+  enchantHeld(id: string, level: number): boolean;
   /** 成功返回实际给出的数量，物品名不认识返回 -1 */
   give(itemName: string, count: number): number;
   clearInventory(): number;
@@ -488,6 +491,34 @@ export const COMMANDS: readonly CommandSpec[] = [
       }
       ctx.setWorldSpawn(pos.x, pos.y, pos.z);
       out.info(`已将世界出生点设置为 ${Math.floor(pos.x)} ${Math.floor(pos.y)} ${Math.floor(pos.z)}`);
+    },
+  },
+  {
+    name: 'enchant',
+    usage: '/enchant <附魔> [等级]',
+    description: '给手持物品附魔（等级默认 1，超过上限按上限算）',
+    run(args, ctx, out) {
+      const key = args[0];
+      if (!key) {
+        out.error('用法：/enchant <附魔> [等级]');
+        return;
+      }
+      const def = ENCHANTMENTS.find((entry) => entry.id === key || entry.name === key);
+      if (!def) {
+        out.error(`找不到附魔：${key}`);
+        return;
+      }
+      const requested = args[1] === undefined ? 1 : Number(args[1]);
+      if (!Number.isInteger(requested) || requested < 1) {
+        out.error('等级必须是正整数');
+        return;
+      }
+      const level = Math.min(requested, def.maxLevel);
+      if (!ctx.enchantHeld(def.id, level)) {
+        out.error('手上没有可附魔的物品');
+        return;
+      }
+      out.info(`已给手持物品附上 ${def.name} ${level}`);
     },
   },
   {

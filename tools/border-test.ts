@@ -133,6 +133,9 @@ console.log('\n[/worldborder：get / set / center]');
     }
     setPersonalSpawn(): void {}
     setWorldSpawn(): void {}
+    enchantHeld(): boolean {
+      return false;
+    }
     give(): number {
       return 0;
     }

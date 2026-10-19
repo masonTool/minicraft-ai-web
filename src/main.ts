@@ -9013,6 +9013,15 @@ class App {
       setWorldSpawn: (x, y, z) => {
         this.spawnPoint = [x, y, z];
       },
+      // 批次 372：/enchant 给手持物品附魔
+      enchantHeld: (id, level) => {
+        const stack = this.inventory.get(this.hotbarIndex);
+        if (!stack) return false;
+        stack.enchants = { ...(stack.enchants ?? {}), [id]: level };
+        this.refreshHotbar();
+        this.inventoryScreen.refresh();
+        return true;
+      },
       give: (name, count) => {
         const id = resolveItemId(name);
         if (id === undefined) return -1;
