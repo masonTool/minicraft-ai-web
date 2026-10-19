@@ -30,7 +30,14 @@ import {
   type StickMode,
 } from './TouchControls.ts';
 import {
+  BEARD_STYLES,
+  BEARD_STYLE_LABELS,
+  CHARACTER_PRESETS,
   DEFAULT_APPEARANCE,
+  HAIR_COLORS,
+  HAIR_COLOR_LABELS,
+  HAIR_STYLES,
+  HAIR_STYLE_LABELS,
   PANTS_COLORS,
   PANTS_COLOR_LABELS,
   SHIRT_COLORS,
@@ -38,6 +45,8 @@ import {
   SKIN_TONES,
   SKIN_TONE_LABELS,
   appearanceIndex,
+  applyCharacterPreset,
+  presetIndexOf,
 } from '../game/appearance.ts';
 
 /**
@@ -225,10 +234,14 @@ export interface GameSettings {
   aimMode: TouchAimMode;
   /** 左右手模式（批次 271）：摇杆在左 / 摇杆在右 */
   handedness: Handedness;
-  /** 角色外观（批次 187）：都是**档位下标**，见 `game/appearance.ts` */
+  /** 角色外观（批次 187 / 279）：都是**档位下标**，见 `game/appearance.ts` */
   skinTone: number;
   shirtColor: number;
   pantsColor: number;
+  /** 发色 / 发型 / 胡须（批次 279，角色预设与装扮） */
+  hairColor: number;
+  hairStyle: number;
+  beard: number;
   /**
    * 场景亮度（批次 220）：1 = 原始亮度，0.5~2（设置里显示成 50%~200%）。
    *
@@ -337,6 +350,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   skinTone: DEFAULT_APPEARANCE.skinTone,
   shirtColor: DEFAULT_APPEARANCE.shirtColor,
   pantsColor: DEFAULT_APPEARANCE.pantsColor,
+  hairColor: DEFAULT_APPEARANCE.hairColor,
+  hairStyle: DEFAULT_APPEARANCE.hairStyle,
+  beard: DEFAULT_APPEARANCE.beard,
   brightness: 1,
   cameraMode: 'first',
   particles: 'all',
@@ -411,6 +427,9 @@ export function loadSettings(): GameSettings {
       skinTone: appearanceIndex(parsed.skinTone, SKIN_TONES.length, DEFAULT_SETTINGS.skinTone),
       shirtColor: appearanceIndex(parsed.shirtColor, SHIRT_COLORS.length, DEFAULT_SETTINGS.shirtColor),
       pantsColor: appearanceIndex(parsed.pantsColor, PANTS_COLORS.length, DEFAULT_SETTINGS.pantsColor),
+      hairColor: appearanceIndex(parsed.hairColor, HAIR_COLORS.length, DEFAULT_SETTINGS.hairColor),
+      hairStyle: appearanceIndex(parsed.hairStyle, HAIR_STYLES.length, DEFAULT_SETTINGS.hairStyle),
+      beard: appearanceIndex(parsed.beard, BEARD_STYLES.length, DEFAULT_SETTINGS.beard),
       // 场景亮度（批次 220）：超范围夹住，坏值回到 1（= 不滤镜）
       brightness: clampNumber(parsed.brightness, BRIGHTNESS_MIN, BRIGHTNESS_MAX, DEFAULT_SETTINGS.brightness),
       cameraMode: CAMERA_MODES.includes(parsed.cameraMode as CameraMode)
@@ -581,6 +600,8 @@ export class SettingsScreen {
   private flyingToggle: HTMLButtonElement | null = null;
   /** "游戏模式"那个开关（生存 ↔ 创造） */
   private gameModeToggle: HTMLButtonElement | null = null;
+  /** "角色形象"那一行（批次 279）：手动改任一外观项后要立刻变回"自定义" */
+  private presetButton: HTMLButtonElement | null = null;
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
   private diagnosticsStatusEl: HTMLDivElement | null = null;
   /**
@@ -754,12 +775,35 @@ export class SettingsScreen {
     appearance.append(
       this.makeSlider('brightness', '场景亮度', '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
     );
+    // 批次 279（用户）：先选一个整体形象，再逐项微调（预设 = 一键套用，不是第二份状态）
+    this.makePresetRow(appearance);
     this.makeSelect(
       appearance,
       'skinTone',
       '肤色',
       SKIN_TONES.map((_, i) => String(i)),
       Object.fromEntries(SKIN_TONE_LABELS.map((label, i) => [String(i), label])),
+    );
+    this.makeSelect(
+      appearance,
+      'hairColor',
+      '发色',
+      HAIR_COLORS.map((_, i) => String(i)),
+      Object.fromEntries(HAIR_COLOR_LABELS.map((label, i) => [String(i), label])),
+    );
+    this.makeSelect(
+      appearance,
+      'hairStyle',
+      '发型',
+      HAIR_STYLES.map((_, i) => String(i)),
+      Object.fromEntries(HAIR_STYLES.map((style, i) => [String(i), HAIR_STYLE_LABELS[style]])),
+    );
+    this.makeSelect(
+      appearance,
+      'beard',
+      '胡须',
+      BEARD_STYLES.map((_, i) => String(i)),
+      Object.fromEntries(BEARD_STYLES.map((style, i) => [String(i), BEARD_STYLE_LABELS[style]])),
     );
     this.makeSelect(
       appearance,
@@ -1139,6 +1183,40 @@ export class SettingsScreen {
   }
 
   /**
+   * 角色形象预设（批次 279）：点一下套用一整套外观，之后仍可逐项微调。
+   *
+   * 显示的是**反查结果**而不是"上次点了哪个"：手动改过肤色/上衣之后自动变成
+   * "自定义"，不会出现"写着青壮年、实际是别的配色"这种谎。
+   */
+  private makePresetRow(host: HTMLElement): void {
+    this.presetButton = this.makeCycleRow(
+      host,
+      '角色形象',
+      () => {
+        const index = presetIndexOf(this.settings);
+        return `‹ ${index >= 0 ? CHARACTER_PRESETS[index]!.label : '自定义'} ›`;
+      },
+      () => {
+        const index = presetIndexOf(this.settings);
+        // 自定义（-1）→ 第一个预设；否则按顺序循环
+        const next = (index + 1) % CHARACTER_PRESETS.length;
+        applyCharacterPreset(this.settings, next);
+        this.commit();
+        // 其余外观行的按钮文字也要跟着变（肤色/发色/发型/胡须/上衣/裤子）
+        for (const refresh of this.refreshers) refresh();
+        return `‹ ${CHARACTER_PRESETS[next]!.label} ›`;
+      },
+    );
+  }
+
+  /** 手动改了肤色/发色等任一项：形象行立刻从预设名变回「自定义」 */
+  private refreshPresetRow(): void {
+    if (!this.presetButton) return;
+    const index = presetIndexOf(this.settings);
+    this.presetButton.textContent = `‹ ${index >= 0 ? CHARACTER_PRESETS[index]!.label : '自定义'} ›`;
+  }
+
+  /**
    * 造一个循环切换的设置项（视角 / 粒子效果 / 触摸摇杆）。
    * 选项只有两三个，用循环按钮比下拉框直观，也才是原版的样子。
    */
@@ -1154,7 +1232,10 @@ export class SettingsScreen {
       | 'autosaveSeconds'
       | 'skinTone'
       | 'shirtColor'
-      | 'pantsColor',
+      | 'pantsColor'
+      | 'hairColor'
+      | 'hairStyle'
+      | 'beard',
     label: string,
     values: readonly T[],
     labels: Record<T, string>,
@@ -1180,8 +1261,13 @@ export class SettingsScreen {
         else if (key === 'skinTone') this.settings.skinTone = Number(next);
         else if (key === 'shirtColor') this.settings.shirtColor = Number(next);
         else if (key === 'pantsColor') this.settings.pantsColor = Number(next);
+        else if (key === 'hairColor') this.settings.hairColor = Number(next);
+        else if (key === 'hairStyle') this.settings.hairStyle = Number(next);
+        else if (key === 'beard') this.settings.beard = Number(next);
         else this.settings.touchStick = next as StickMode;
         this.commit();
+        // 外观以外的选择行也调一次无妨：只改一行文字，成本可忽略
+        this.refreshPresetRow();
         return `‹ ${labels[next]} ›`;
       },
     );

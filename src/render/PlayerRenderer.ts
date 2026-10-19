@@ -42,8 +42,6 @@ const SHIRT = 0x00a8a8;
 const PANTS = 0x3b4bb5;
 const SHOES = 0x4a4a52;
 const EYE = 0x1b2a44;
-/** 头发的亮部（刘海）：同色系提一档，远看能分出"发际线" */
-const HAIR_HI = 0x3f2b1d;
 /** 鞋底那一圈（比鞋面深）：让脚不是一块方砖 */
 const SHOE_SOLE = 0x33333a;
 /** 披风（批次 185 外观）：暗红，与皮肤的暖色区分开 */
@@ -94,11 +92,23 @@ export class PlayerRenderer {
    * 换肤色/衣色就是把这几组网格的材质换掉——材质按颜色共享（`materialFor`），
    * 所以同一件颜色不会重复创建。
    */
-  private readonly roleMeshes: Record<'skin' | 'shirt' | 'pants', THREE.Mesh[]> = {
+  private readonly roleMeshes: Record<'skin' | 'shirt' | 'pants' | 'hair', THREE.Mesh[]> = {
     skin: [],
     shirt: [],
     pants: [],
+    hair: [],
   };
+  /**
+   * 发型 / 胡须的可显隐零件（批次 279）。
+   *
+   * 为什么按"零件组"分而不是重建几何：切预设只改 visible，不新建 Mesh；
+   * 眉毛虽同用发色，但**不放进 `hairMeshes`**——光头不该连眉毛一起消失。
+   */
+  private readonly hairMeshes: THREE.Mesh[] = [];
+  private readonly longHairMeshes: THREE.Mesh[] = [];
+  private readonly ponytailMeshes: THREE.Mesh[] = [];
+  private readonly stubbleMeshes: THREE.Mesh[] = [];
+  private readonly fullBeardMeshes: THREE.Mesh[] = [];
   /**
    * 每块网格的明暗系数（批次 241）。
    *
@@ -164,18 +174,42 @@ export class PlayerRenderer {
     this.head = this.makePivot(0, 1.46, 0);
     this.addRoleBox(this.head, 0.5, 0.5, 0.5, 0, 0.25, 0, SKIN, 'skin');
     // 头发：顶盖 + 后脑 + 两侧鬓角 + 刘海（正面留出脸）
-    this.addBox(this.head, 0.52, 0.13, 0.52, 0, 0.44, 0, HAIR);
-    this.addBox(this.head, 0.52, 0.37, 0.11, 0, 0.28, 0.2, HAIR);
+    this.addHairBox(this.hairMeshes, this.head, 0.52, 0.13, 0.52, 0, 0.44, 0);
+    this.addHairBox(this.hairMeshes, this.head, 0.52, 0.37, 0.11, 0, 0.28, 0.2);
     // 鬓角：外沿 0.272（头盔内径是 0.28，不能被顶穿）
-    this.addBox(this.head, 0.044, 0.2, 0.44, 0.25, 0.38, 0.02, HAIR);
-    this.addBox(this.head, 0.044, 0.2, 0.44, -0.25, 0.38, 0.02, HAIR);
-    this.addBox(this.head, 0.52, 0.07, 0.08, 0, 0.465, -0.235, HAIR_HI);
+    this.addHairBox(this.hairMeshes, this.head, 0.044, 0.2, 0.44, 0.25, 0.38, 0.02);
+    this.addHairBox(this.hairMeshes, this.head, 0.044, 0.2, 0.44, -0.25, 0.38, 0.02);
+    // 刘海：比发色亮一档（原来的 HAIR_HI ≈ 1.34 倍），远看能分出"发际线"
+    this.addHairBox(this.hairMeshes, this.head, 0.52, 0.07, 0.08, 0, 0.465, -0.235, 1.34);
+    // 长发：后脑一片 + 两侧垂发；马尾再多一束尾巴（默认隐藏，批次 279）
+    this.addHairBox(this.longHairMeshes, this.head, 0.5, 0.5, 0.09, 0, 0.05, 0.22);
+    this.addHairBox(this.longHairMeshes, this.head, 0.09, 0.42, 0.3, 0.24, 0.08, 0.05);
+    this.addHairBox(this.longHairMeshes, this.head, 0.09, 0.42, 0.3, -0.24, 0.08, 0.05);
+    this.addHairBox(this.ponytailMeshes, this.head, 0.14, 0.14, 0.14, 0, 0.3, 0.27);
+    this.addHairBox(this.ponytailMeshes, this.head, 0.14, 0.42, 0.14, 0, 0.02, 0.31, 0.92);
+    // 胡须：胡茬（下颚一圈）与络腮胡（下颚 + 两颊 + 八字胡），默认隐藏
+    this.addHairBox(this.stubbleMeshes, this.head, 0.44, 0.1, 0.06, 0, 0.07, -0.245, 0.8);
+    this.addHairBox(this.stubbleMeshes, this.head, 0.1, 0.09, 0.06, 0.205, 0.12, -0.22, 0.8);
+    this.addHairBox(this.stubbleMeshes, this.head, 0.1, 0.09, 0.06, -0.205, 0.12, -0.22, 0.8);
+    this.addHairBox(this.fullBeardMeshes, this.head, 0.46, 0.18, 0.08, 0, 0.03, -0.245, 0.75);
+    this.addHairBox(this.fullBeardMeshes, this.head, 0.12, 0.16, 0.08, 0.22, 0.12, -0.22, 0.75);
+    this.addHairBox(this.fullBeardMeshes, this.head, 0.12, 0.16, 0.08, -0.22, 0.12, -0.22, 0.75);
+    this.addHairBox(this.fullBeardMeshes, this.head, 0.24, 0.04, 0.03, 0, 0.195, -0.26, 0.9);
+    for (const group of [
+      this.longHairMeshes,
+      this.ponytailMeshes,
+      this.stubbleMeshes,
+      this.fullBeardMeshes,
+    ]) {
+      for (const mesh of group) mesh.visible = false;
+    }
     // 耳朵：外沿 0.278（与鬓角错开 0.006，避免两个平面重合打架），戴上头盔正好被罩住
     this.addRoleBox(this.head, 0.033, 0.11, 0.08, 0.2615, 0.24, 0.0, SKIN, 'skin', 0.9);
     this.addRoleBox(this.head, 0.033, 0.11, 0.08, -0.2615, 0.24, 0.0, SKIN, 'skin', 0.9);
     // 五官贴在 -Z 面（正脸朝 -Z）：眉 + 眼 + 鼻 + 嘴
-    this.addBox(this.head, 0.11, 0.02, 0.02, 0.13, 0.355, -0.255, HAIR);
-    this.addBox(this.head, 0.11, 0.02, 0.02, -0.13, 0.355, -0.255, HAIR);
+    // 眉毛跟发色走，但不进 `hairMeshes`：光头时眉毛要留着
+    this.addRoleBox(this.head, 0.11, 0.02, 0.02, 0.13, 0.355, -0.255, HAIR, 'hair');
+    this.addRoleBox(this.head, 0.11, 0.02, 0.02, -0.13, 0.355, -0.255, HAIR, 'hair');
     this.addBox(this.head, 0.1, 0.09, 0.02, 0.13, 0.3, -0.255, EYE);
     this.addBox(this.head, 0.1, 0.09, 0.02, -0.13, 0.3, -0.255, EYE);
     this.addRoleBox(this.head, 0.08, 0.05, 0.06, 0, 0.255, -0.27, SKIN, 'skin', 0.85);
@@ -198,9 +232,9 @@ export class PlayerRenderer {
   }
 
   /**
-   * 换外观（批次 187）：肤色 / 上衣 / 裤子。
+   * 换外观（批次 187 / 279）：肤色 / 上衣 / 裤子 / 发色，并按发型与胡须显隐零件。
    *
-   * 只换材质引用，不动几何；材质按颜色共享，重复调用同一套配色不会新建对象。
+   * 只换材质引用、只改 visible，不动几何；材质按颜色共享，重复调用同一套配色不会新建对象。
    */
   setAppearance(palette: AppearancePalette): void {
     // 每块都乘上自己的明暗系数（批次 241）：同一部位拆细之后仍然"换一套衣服全跟着变"
@@ -213,6 +247,18 @@ export class PlayerRenderer {
     for (const mesh of this.roleMeshes.pants) {
       mesh.material = this.materialFor(shadeHex(palette.pants, this.meshShade.get(mesh) ?? 1));
     }
+    for (const mesh of this.roleMeshes.hair) {
+      mesh.material = this.materialFor(shadeHex(palette.hair, this.meshShade.get(mesh) ?? 1));
+    }
+
+    // 发型：光头藏掉短发零件（眉毛不在 `hairMeshes` 里，仍然保留）
+    const long = palette.hairStyle === 'long' || palette.hairStyle === 'ponytail';
+    for (const mesh of this.hairMeshes) mesh.visible = palette.hairStyle !== 'bald';
+    for (const mesh of this.longHairMeshes) mesh.visible = long;
+    for (const mesh of this.ponytailMeshes) mesh.visible = palette.hairStyle === 'ponytail';
+    // 胡须：胡茬在所有非"无"档出现；络腮胡只在 full 出现
+    for (const mesh of this.stubbleMeshes) mesh.visible = palette.beard !== 'none';
+    for (const mesh of this.fullBeardMeshes) mesh.visible = palette.beard === 'full';
   }
 
   /** 验收脚本用：这块网格在所属部位里的明暗系数（1 = 正色） */
@@ -349,13 +395,30 @@ export class PlayerRenderer {
     y: number,
     z: number,
     color: number,
-    role: 'skin' | 'shirt' | 'pants',
+    role: 'skin' | 'shirt' | 'pants' | 'hair',
     /** 明暗系数（1 = 正色；出厂色只在没走 `setAppearance` 时起作用） */
     shade = 1,
   ): THREE.Mesh {
     const mesh = this.addBox(parent, width, height, depth, x, y, z, color);
     this.roleMeshes[role].push(mesh);
     this.meshShade.set(mesh, shade);
+    return mesh;
+  }
+
+  /** 发色零件：进 `roleMeshes.hair`，同时记进某个可显隐的零件组 */
+  private addHairBox(
+    group: THREE.Mesh[],
+    parent: THREE.Object3D,
+    width: number,
+    height: number,
+    depth: number,
+    x: number,
+    y: number,
+    z: number,
+    shade = 1,
+  ): THREE.Mesh {
+    const mesh = this.addRoleBox(parent, width, height, depth, x, y, z, HAIR, 'hair', shade);
+    group.push(mesh);
     return mesh;
   }
 

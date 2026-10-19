@@ -2760,21 +2760,39 @@ console.log('\n[角色创建：外观（批次 187）]');
     settingsSrc.includes('skinTone: number;') &&
       settingsSrc.includes('shirtColor: number;') &&
       settingsSrc.includes('pantsColor: number;') &&
+      settingsSrc.includes('hairColor: number;') &&
+      settingsSrc.includes('hairStyle: number;') &&
+      settingsSrc.includes('beard: number;') &&
       settingsSrc.includes('appearanceIndex(parsed.skinTone'),
   );
   check(
-    '外观页：肤色 / 上衣 / 裤子 / 披风四行',
-    /this\.makeSelect\(\s*appearance,\s*'skinTone'/.test(settingsSrc) &&
+    '外观页：角色形象 + 肤色/发色/发型/胡须/上衣/裤子/披风',
+    /this\.makePresetRow\(appearance\)/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*appearance,\s*'skinTone'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*appearance,\s*'hairColor'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*appearance,\s*'hairStyle'/.test(settingsSrc) &&
+      /this\.makeSelect\(\s*appearance,\s*'beard'/.test(settingsSrc) &&
       /this\.makeSelect\(\s*appearance,\s*'shirtColor'/.test(settingsSrc) &&
       /this\.makeSelect\(\s*appearance,\s*'pantsColor'/.test(settingsSrc) &&
       settingsSrc.includes("this.makeToggle(appearance, 'cape', '披风')"),
   );
   check(
-    '模型按部位换材质（肤色/上衣/裤子），不改几何',
-    playerSrc.includes("roleMeshes: Record<'skin' | 'shirt' | 'pants', THREE.Mesh[]>") &&
+    '模型按部位换材质（肤色/上衣/裤子/头发），并按发型/胡须显隐零件',
+    playerSrc.includes("roleMeshes: Record<'skin' | 'shirt' | 'pants' | 'hair', THREE.Mesh[]>") &&
       playerSrc.includes('setAppearance(palette: AppearancePalette): void') &&
-      playerSrc.includes("this.roleMeshes.skin") &&
-      playerSrc.includes("this.roleMeshes.pants"),
+      playerSrc.includes('this.roleMeshes.skin') &&
+      playerSrc.includes('this.roleMeshes.pants') &&
+      playerSrc.includes('this.roleMeshes.hair') &&
+      playerSrc.includes("palette.hairStyle !== 'bald'") &&
+      playerSrc.includes("palette.beard === 'full'"),
+  );
+  check(
+    '四个角色预设：青壮年 / 中年 / 老人 / 女孩，选中后可继续微调',
+    /export const CHARACTER_PRESETS[\s\S]{0,800}label: '青壮年'[\s\S]{0,300}label: '中年'[\s\S]{0,300}label: '老人'[\s\S]{0,300}label: '女孩'/.test(
+      readFileSync(new URL('../src/game/appearance.ts', import.meta.url), 'utf8'),
+    ) &&
+      settingsSrc.includes('presetIndexOf(this.settings)') &&
+      settingsSrc.includes('applyCharacterPreset(this.settings, next)'),
   );
   check(
     '改设置立刻作用到第三人称、第一人称手臂与 3D 预览',
