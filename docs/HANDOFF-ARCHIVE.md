@@ -2540,4 +2540,9 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
   移到 **11.5 格**处返回 null——正好卡在 10 格。
   门禁：`test:ui` **873**（新增 2 条常量/载具源码守卫）、`test:settings` 94、离线 131 套全绿。
 
+- 批次 337（文档系统收口）：两份必读回到 **318 / 113 行**。新增 `tools/audit-docs.mjs`
+  （auto-continue 最近 3 个批次小节、HANDOFF 最近 6 条，行数上限写死；`npm run docs:trim`
+  整段归档、`--print` 进 `npm run check`）与 `tools/batch-next.mjs`（`.codebuddy/batch-seq`
+  自增，避免并发会话再次撞号）；顺手修正 J5 / D15 / D21 / B18 四处过期正文。
+
 <!-- docs-archive:end -->

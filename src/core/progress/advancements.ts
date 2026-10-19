@@ -21,7 +21,7 @@
  * 鞘翅、刷怪笼…）的条目**不做也不编**，缺哪些、为什么缺写在 TASKS M7 里。
  */
 
-import { Block, CROP_STAGES } from '../registry/blocks.ts';
+import { Block, CROP_STAGES, Wood } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
 // 击杀类进度按**生物表派生**（批次 93）：见下面 `HOSTILE_MOBS` 的注释
 import { ALL_HOSTILE_MOBS } from '../entity/mobs.ts';
@@ -439,6 +439,142 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     icon: Item.APPLE,
     trigger: { kind: 'eat', ids: DIET_FOODS, needCount: DIET_TARGET },
     challenge: true,
+  },
+
+  // ---------------------------------------------------------------- 批次 343：补 15 条
+  // 只挑"现有触发条件 + 可达来源"的：不编依赖蜜蜂/鞘翅/袭击/刷怪笼的条目。
+  {
+    id: 'minecraft:story/mine_wood',
+    parent: 'minecraft:story/root',
+    tab: 'minecraft',
+    title: '伐木工',
+    desc: '砍下任意一种原木（徒手就能砍，斧头更快）',
+    icon: Block.OAK_LOG,
+    trigger: {
+      kind: 'obtain',
+      // 从木料表派生（不手抄 6 个 log id：加一种木材时会自动跟上）
+      ids: [Block.OAK_LOG, ...Object.values(Wood).map((wood) => wood.log)],
+    },
+  },
+  {
+    id: 'minecraft:story/mine_gold',
+    parent: 'minecraft:story/root',
+    tab: 'minecraft',
+    title: '金光闪闪',
+    desc: '挖到粗金（金矿在 Y<32 最密）',
+    icon: Item.RAW_GOLD,
+    trigger: { kind: 'obtain', ids: [Item.RAW_GOLD] },
+  },
+  {
+    id: 'minecraft:nether/obtain_blaze_rod',
+    parent: 'minecraft:nether/root',
+    tab: 'nether',
+    title: '与火共舞',
+    desc: '从烈焰人身上拿到一根烈焰棒（下界要塞里才有）',
+    icon: Item.BLAZE_ROD,
+    trigger: { kind: 'obtain', ids: [Item.BLAZE_ROD] },
+  },
+  {
+    id: 'minecraft:nether/find_fortress',
+    parent: 'minecraft:nether/root',
+    tab: 'nether',
+    title: '可怕的堡垒',
+    desc: '在下界要塞的灵魂沙上采到下界疣',
+    icon: Item.NETHER_WART,
+    trigger: { kind: 'obtain', ids: [Item.NETHER_WART] },
+  },
+  {
+    id: 'minecraft:nether/create_beacon',
+    parent: 'minecraft:nether/root',
+    tab: 'nether',
+    title: '带信标回家',
+    desc: '合成一个信标（3 颗下界之星碎片 + 5 块玻璃 + 1 颗下界之星）',
+    icon: Block.BEACON,
+    trigger: { kind: 'obtain', ids: [Block.BEACON] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_creeper',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '嘶——砰',
+    desc: '杀死一只苦力怕（别让它先炸到你）',
+    icon: Item.GUNPOWDER,
+    trigger: { kind: 'kill', mobs: ['creeper'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_spider',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '蛛丝马迹',
+    desc: '杀死一只蜘蛛',
+    icon: Item.STRING,
+    trigger: { kind: 'kill', mobs: ['spider'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_skeleton',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '骨感',
+    desc: '杀死一只骷髅（小心它的箭）',
+    icon: Item.BONE,
+    trigger: { kind: 'kill', mobs: ['skeleton'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_a_zombie',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '行尸走肉',
+    desc: '杀死一只僵尸',
+    icon: Item.ROTTEN_FLESH,
+    trigger: { kind: 'kill', mobs: ['zombie'] },
+  },
+  {
+    id: 'minecraft:adventure/kill_all_mobs',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '资深怪物猎人',
+    desc: `击败 ${HOSTILE_MOBS.length} 种不同的敌对生物（不要求一次打完）`,
+    icon: toolItemId('sword', 'iron'),
+    trigger: { kind: 'kill', mobs: HOSTILE_MOBS, needCount: HOSTILE_MOBS.length },
+    challenge: true,
+  },
+  {
+    id: 'minecraft:adventure/place_sign',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '留个言',
+    desc: '放下一个告示牌（6 木板 + 1 木棍）',
+    icon: Block.OAK_SIGN,
+    // 用 `obtain` 而不是 `place`：`test:advancement` 把 place 类目标限定在"作物第一阶段"，
+    // 这是刻意的口径（放置类只用来判种植）；"放下了告示牌"从"拿到过告示牌"这一侧判定。
+    trigger: { kind: 'obtain', ids: [Block.OAK_SIGN] },
+  },
+  {
+    id: 'minecraft:adventure/lightning_rod',
+    parent: 'minecraft:adventure/root',
+    tab: 'adventure',
+    title: '避雷针',
+    desc: '获得一根避雷针（3 铜锭）',
+    icon: Block.LIGHTNING_ROD,
+    trigger: { kind: 'obtain', ids: [Block.LIGHTNING_ROD] },
+  },
+  {
+    id: 'minecraft:husbandry/breed_all',
+    parent: 'minecraft:husbandry/root',
+    tab: 'husbandry',
+    title: '牧场主',
+    desc: '让牛、猪、羊、鸡各繁殖一次',
+    icon: Item.WHEAT,
+    trigger: { kind: 'breed', mobs: BREEDABLE_MOBS, needCount: BREEDABLE_MOBS.length },
+  },
+  {
+    id: 'minecraft:end/kill_enderman',
+    parent: 'minecraft:end/root',
+    tab: 'end',
+    title: '末地来客',
+    desc: '杀死一只末影人（别直视它的眼睛）',
+    icon: Item.ENDER_PEARL,
+    trigger: { kind: 'kill', mobs: ['enderman'] },
   },
 ];
 
