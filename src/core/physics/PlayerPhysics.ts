@@ -110,9 +110,39 @@ export class PlayerPhysics {
   lastLandingSpeed = 0;
 
   readonly width = 0.6;
-  readonly height = 1.8;
-  readonly eyeHeight = 1.62;
   readonly stepHeight = 0.6;
+
+  /**
+   * 站立高度与潜行高度（F9，批次 404）。原版分别是 1.8 与 1.5。
+   *
+   * 为什么这 0.3 格值得单独做：它决定"能不能钻进 1.5 格高的缝"——
+   * 矿洞里那些"上面一格是半砖/楼梯"的通道，站立态是过不去的，
+   * 而原版玩家蹲一下就过去了。之前这里写死 1.8，表现是"蹲着也钻不过去"。
+   */
+  readonly standHeight = 1.8;
+  readonly sneakHeight = 1.5;
+
+  /** 脚下到眼睛的高度：站立 1.62、潜行 1.27（原版数值；视角跟着一起降才像蹲着） */
+  readonly standEyeHeight = 1.62;
+  readonly sneakEyeHeight = 1.27;
+
+  /**
+   * 当前是否蹲着。
+   *
+   * 两个来源：**按住潜行**，或**头顶空间不够、站不起来**
+   * （原版也是这个行为——钻进 1.5 格的洞之后松开潜行不会穿进天花板）。
+   * 每帧在 `update()` 开头重算，别的地方只读。
+   */
+  crouching = false;
+
+  /** 碰撞盒高度（跟着姿态走）。所有碰撞/挤缝判定都读这里，不要各自取常量 */
+  get height(): number {
+    return this.crouching ? this.sneakHeight : this.standHeight;
+  }
+
+  get eyeHeight(): number {
+    return this.crouching ? this.sneakEyeHeight : this.standEyeHeight;
+  }
 
   get eyeY(): number {
     return this.y + this.eyeHeight;
@@ -155,6 +185,11 @@ export class PlayerPhysics {
     }
 
     this.inWater = world.isLiquid(Math.floor(this.x), Math.floor(this.y + 0.4), Math.floor(this.z));
+
+    // 姿态（F9，批次 404）：按住潜行就蹲；**头顶不够高时站不起来**，
+    // 松手也保持蹲姿。不这么做的话，蹲着钻进 1.5 格高的缝、一松手就把
+    // 碰撞盒弹回 1.8 —— 人会卡在天花板里（原版是靠"强制潜行"避免的）。
+    this.crouching = input.sneak || !this.hasStandingRoom(world);
 
     // 攀爬（B11）：脚下那一格或身体中段那一格是梯子/藤蔓/锁链，就算"贴住了"。
     // 采两个点是为了照顾"人站在梯子底部、身体只有上半段挨着"的情况。
@@ -236,6 +271,25 @@ export class PlayerPhysics {
     }
 
     this.move(world, this.vx * dt, this.vy * dt, this.vz * dt);
+  }
+
+  /**
+   * 站直所需的空间够不够（F9，批次 404）。
+   *
+   * 判据是"用**站立高度**造一个盒子，看它现在会不会撞进方块"：
+   * 蹲在 1.5 格高的洞里时，站立盒子必然顶到天花板 → 站不起来 → 保持蹲姿。
+   *
+   * 两个数值上的讲究（都是踩过的坑）：
+   *  - 起点抬 `+0.02`：站在地面上时 `y` 常常是 `2.99999…`，直接 `floor` 会把
+   *    脚下那块地当成"挡住了"，于是人永远站不起来；
+   *  - 终点收 `-0.02`：贴着天花板时同理，会把"刚好 1.5 格"判成过不去，
+   *    而原版那 0.3 格的余量本来就该容得下。
+   */
+  private hasStandingRoom(world: PhysicsWorld): boolean {
+    // 交给共享的 `collides`（它认台阶/楼梯那种非完整方块），自己再写一遍
+    // 体素枚举会漏掉"天花板是半砖"的情况——而半砖天花板正是最常见的 1.5 格缝
+    const box = boxAt(this.x, this.y + 0.02, this.z, this.width, this.standHeight - 0.04);
+    return !collides(world, box);
   }
 
   /**

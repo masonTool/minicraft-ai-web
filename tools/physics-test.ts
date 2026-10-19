@@ -284,5 +284,72 @@ console.log('\n[常量]');
   check('补速不会超过疾跑本身（否则像被弹射）', SPRINT_JUMP_BOOST < SPRINT_SPEED);
 }
 
+console.log('\n[姿态：潜行 1.5 格高（F9，批次 404）]');
+{
+  // 走廊在 x ≥ 4，天花板是"上半格"的半砖 → 净高 64 → 65.5 = **1.5 格**
+  const halfCeilingWorld = (ceiling: 'half' | 'full'): PhysicsWorld => ({
+    collisionAt(x: number, y: number, z: number) {
+      void z;
+      if (y < 64) return 'full' as const;
+      if (y !== 65 || x < 4) return null;
+      // 上半格：局部盒 [0, 0.5, 0, 1, 1, 1] → 天花板底面在 65.5
+      return ceiling === 'half' ? ([[0, 0.5, 0, 1, 1, 1]] as const) : ('full' as const);
+    },
+    isLiquid: () => false,
+    isClimbable: () => false,
+  });
+
+  // ① 空地上：站立
+  const standing = standOnGround(0.5);
+  standing.update(makeWorld(), input(), YAW_PLUS_X, DT, false);
+  equal('空地上站着时高度是 1.8', standing.height, 1.8);
+  equal('眼高 1.62', standing.eyeHeight, 1.62);
+  check('空地上不会自己蹲下', !standing.crouching);
+
+  // ② 按潜行：变矮、视角跟着降
+  const sneaking = standOnGround(0.5);
+  sneaking.update(makeWorld(), input({ sneak: true }), YAW_PLUS_X, DT, false);
+  check('按潜行就蹲下', sneaking.crouching);
+  equal('潜行高度 1.5（不是 1.8）', sneaking.height, 1.5);
+  equal('潜行眼高 1.27', sneaking.eyeHeight, 1.27);
+  check('视角确实降低了 0.35 格', Math.abs((64 + 1.62) - sneaking.eyeY - 0.35) < 1e-9, `eyeY=${sneaking.eyeY}`);
+  check('碰撞盒跟着变矮', Math.abs(sneaking.box().maxY - sneaking.box().minY - 1.5) < 1e-9);
+
+  // ③ 1.5 格缝：蹲着能钻进去，站着进不去
+  const through = standOnGround(3.0);
+  const world15 = halfCeilingWorld('half');
+  for (let i = 0; i < 120; i++) {
+    through.update(world15, input({ forward: 1, sneak: true }), YAW_PLUS_X, DT, false);
+  }
+  check('蹲着钻进了 1.5 格高的缝（x 走到走廊里）', through.x > 4.2, `x=${through.x.toFixed(2)}`);
+
+  const blocked = standOnGround(3.0);
+  for (let i = 0; i < 120; i++) {
+    blocked.update(world15, input({ forward: 1 }), YAW_PLUS_X, DT, false);
+  }
+  check('站着被挡在缝外', blocked.x < 3.8, `x=${blocked.x.toFixed(2)}`);
+
+  // ④ 缝里松开潜行：站不起来（强制蹲），也不会被顶进天花板
+  const inside = standOnGround(5.0);
+  inside.update(world15, input(), YAW_PLUS_X, DT, false);
+  check('缝里松手仍然蹲着（站不起来）', inside.crouching);
+  equal('高度还是 1.5', inside.height, 1.5);
+  check('没有被顶起来（y 仍在地面）', Math.abs(inside.y - 64) < 0.05, `y=${inside.y.toFixed(3)}`);
+
+  // ⑤ 走出缝之后松手：站回来
+  const outside = standOnGround(2.0);
+  outside.update(world15, input(), YAW_PLUS_X, DT, false);
+  check('缝外松手就站直', !outside.crouching);
+  equal('高度回到 1.8', outside.height, 1.8);
+
+  // ⑥ 负对照：净高 1.0 的洞，蹲着也过不去（没把玩家改成 1 格高）
+  const tight = standOnGround(3.0);
+  const world10 = halfCeilingWorld('full');
+  for (let i = 0; i < 120; i++) {
+    tight.update(world10, input({ forward: 1, sneak: true }), YAW_PLUS_X, DT, false);
+  }
+  check('1 格高的洞蹲着也进不去', tight.x < 3.8, `x=${tight.x.toFixed(2)}`);
+}
+
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);
 process.exit(failed === 0 ? 0 : 1);
