@@ -6218,3 +6218,6 @@ PAINTERS['candle_brown'] = noisy(0x835432, 14);
 PAINTERS['candle_green'] = noisy(0x5e7c16, 14);
 PAINTERS['candle_red'] = noisy(0xb02e26, 14);
 PAINTERS['candle_black'] = noisy(0x1d1d21, 14);
+
+// 鞘翅（批次 384）：灰紫色薄翼
+PAINTERS['item_elytra'] = noisy(0x8a7fa8, 16);

@@ -203,6 +203,8 @@ export const Item = {
   /** 蜜脾 / 蜂蜜瓶（批次 374）：蜜蜂生态的两件产物 */
   HONEYCOMB: 1524,
   HONEY_BOTTLE: 1525,
+  /** 鞘翅（批次 384）：末地城宝箱的稀有掉落，装备在胸甲槽 */
+  ELYTRA: 1539,
   /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
@@ -496,6 +498,7 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.PRISMARINE_CRYSTALS, name: 'minecraft:prismarine_crystals', tile: 'item_prismarine_crystals' },
   { id: Item.HONEYCOMB, name: 'minecraft:honeycomb', tile: 'item_honeycomb' },
   { id: Item.HONEY_BOTTLE, name: 'minecraft:honey_bottle', tile: 'item_honey_bottle', maxStack: 1 },
+  { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
   // 墨囊（批次 189）：鱿鱼的掉落，黑色染料与"书与笔"的原料

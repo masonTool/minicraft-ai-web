@@ -212,6 +212,8 @@ export const LOOT_TABLES: readonly LootTable[] = [
       entry(Item.LAPIS_LAZULI, 1, 4, 3),
       entry(Item.GOLDEN_APPLE, 1, 1, 2),
       entry(toolItemId('sword', 'diamond'), 1, 1, 1),
+      // 鞘翅（批次 384）：末地船独有的稀有战利品
+      entry(Item.ELYTRA, 1, 1, 1),
       empty(3),
     ],
   },

@@ -1077,6 +1077,7 @@ export const TILE_ORDER = [
   'bee_nest_side',
   'item_honeycomb',
   'item_honey_bottle',
+  'item_elytra',
   'spawn_egg_bee',
   'spawn_egg_parrot',
   'spawn_egg_mooshroom',

@@ -576,6 +576,16 @@ export const ADVANCEMENTS: readonly AdvancementDef[] = [
     trigger: { kind: 'breed', mobs: BREEDABLE_MOBS, needCount: BREEDABLE_MOBS.length },
   },
   {
+    id: 'minecraft:end/obtain_elytra',
+    parent: 'minecraft:end/root',
+    tab: 'end',
+    title: '天空之上',
+    desc: '从末地城的宝箱里拿到鞘翅',
+    icon: Item.ELYTRA,
+    trigger: { kind: 'obtain', ids: [Item.ELYTRA] },
+    challenge: true,
+  },
+  {
     id: 'minecraft:end/kill_enderman',
     parent: 'minecraft:end/root',
     tab: 'end',

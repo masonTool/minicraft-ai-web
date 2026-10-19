@@ -25,6 +25,7 @@ import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
 import { ALL_HOSTILE_MOBS, MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
 import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
 import { fishingEntryIds } from '../src/core/registry/fishing.ts';
+import { lootItemIds } from '../src/core/registry/loot.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
 import { armorItemId } from '../src/core/registry/armor.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
@@ -163,6 +164,8 @@ console.log('\n[可达性：进度的目标在生存里真的拿得到]');
     for (const drop of type.drops) obtainable.add(drop.itemId);
   }
   for (const id of fishingEntryIds()) obtainable.add(id);
+  // 宝箱战利品也是真实来源（鞘翅只从末地城宝箱出，没有配方）
+  for (const id of lootItemIds()) obtainable.add(id);
 
   check('可获取集合不是空的（对照用）', obtainable.size > 100, String(obtainable.size));
 
@@ -174,7 +177,7 @@ console.log('\n[可达性：进度的目标在生存里真的拿得到]');
       if (!obtainable.has(id)) unreachable.push(`${def.id}:${itemDef(id)?.name ?? id}`);
     }
   }
-  check('每条 `obtain` 的目标都能拿到（合成/熔炼/掉落/钓鱼）', unreachable.length === 0, unreachable.join(','));
+  check('每条 `obtain` 的目标都能拿到（合成/熔炼/掉落/钓鱼/宝箱）', unreachable.length === 0, unreachable.join(','));
 
   // 附魔台本身要能造出来，否则"附魔师"永远达不成
   check('附魔台可以合成（"附魔师"的前提）', RECIPES.some((r) => r.result.id === Block.ENCHANTING_TABLE));
