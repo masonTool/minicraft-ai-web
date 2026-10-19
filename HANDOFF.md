@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-19 · 提交总数 866（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-19 · 提交总数 868（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 287 项 —— 已完成 **183**、进行中 **76**、待办 28 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -98,6 +98,13 @@ npm run dev            # http://localhost:5173
   **297（容器暂停）/ 298（目标框界面）**；旧 commit message 里的 295/296 是撞号。
 - ⚠️ **批次编号冲突（第三次）**：并发会话占用了 **303**。本轮正式编号 **304**；
   旧 commit message 里的 303 是撞号。
+- 批次 328（用户："还是不行，未开工关闭重开仍自动开始"；`d541dd8`）：
+  根因：只靠 UI 的 `paused` 仍可能被某条路径解除，炉子核心 tick 本身没有"是否开工"的概念。
+  ① `Furnace` 新增 `started` 硬开关，`tick` 必须 `!paused && started`；
+  ② 只有点目标才 `started=true`；打开空闲炉子、手动摆料、退还仓库、换配方都设 false；
+  ③ 正在燃烧的炉子关界面后继续保持 started=true，离屏继续跑；
+  ④ 无 UI 模拟默认 started=true，兼容旧存档/测试。
+  `test:ui` **858**、vitest **88**（新增 started=false 不推进）、离线 **131** 套、`build:fast` 全绿。
 - 批次 327（用户："没点开始，关闭熔炉再打开会自动开始"；`b3e9fde`）：
   ① `releaseStationPause` 不再无条件解除熔炉暂停；
   ② 只有 `furnaceStarted`（点过目标/打开时本来就在烧）才继续运行；
