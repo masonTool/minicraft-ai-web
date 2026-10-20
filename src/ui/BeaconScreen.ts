@@ -20,6 +20,7 @@ import {
   BEACON_POWERS,
   BEACON_REGEN_MIN_LEVEL,
   BEACON_REGEN_POWER,
+  BEACON_SECONDARY_MIN_LEVEL,
   beaconPrimaryAmplifier,
   beaconSummary,
 } from '../core/world/Beacon.ts';
@@ -32,18 +33,21 @@ export interface BeaconScreenState {
   readonly primary: number;
   /** 要不要生命恢复 */
   readonly regen: boolean;
+  /** 次级主效果下标（0 = 没选；只有 4 级金字塔能用） */
+  readonly secondary: number;
 }
 
 export class BeaconScreen {
   readonly root: HTMLDivElement;
 
   /** 选了效果（点一下就回调，见文件头第 1 条） */
-  onChoose: ((primaryIndex: number, regen: boolean) => void) | null = null;
+  onChoose: ((primaryIndex: number, regen: boolean, secondaryIndex: number) => void) | null = null;
   /** 面板关闭（无论是按完成还是 `Esc`）时回调：App 用它把输入权交回去 */
   onClose: (() => void) | null = null;
 
   private readonly summaryEl: HTMLDivElement;
   private readonly primaryButtons: HTMLButtonElement[] = [];
+  private readonly secondaryButtons: HTMLButtonElement[] = [];
   private readonly regenButton: HTMLButtonElement;
   private open = false;
 
@@ -73,12 +77,29 @@ export class BeaconScreen {
 
     const secondaryRow = this.buildRow('次级效果');
     this.regenButton = this.buildButton(BEACON_REGEN_POWER.label);
-    this.regenButton.addEventListener('click', () => this.choose(this.selectedPrimary, !this.selectedRegen));
+    this.regenButton.addEventListener('click', () =>
+      // 生命恢复与"次级主效果"互斥（原版次级只能选一条）
+      this.choose(this.selectedPrimary, !this.selectedRegen, 0),
+    );
     secondaryRow.buttons.appendChild(this.regenButton);
     const regenHint = document.createElement('div');
     regenHint.className = 'beacon-screen-hint';
     regenHint.textContent = `要 ${BEACON_REGEN_MIN_LEVEL} 级以上的金字塔才有`;
     secondaryRow.buttons.appendChild(regenHint);
+
+    // 次级主效果（批次 560）：4 级金字塔才能从五条主效果里再选一条
+    const secondaryPowerRow = this.buildRow('次级主效果');
+    for (let i = 0; i < BEACON_POWERS.length; i++) {
+      const power = BEACON_POWERS[i]!;
+      const button = this.buildButton(power.label);
+      button.addEventListener('click', () => this.choose(this.selectedPrimary, false, i + 1));
+      this.secondaryButtons.push(button);
+      secondaryPowerRow.buttons.appendChild(button);
+    }
+    const secondaryHint = document.createElement('div');
+    secondaryHint.className = 'beacon-screen-hint';
+    secondaryHint.textContent = `要 ${BEACON_SECONDARY_MIN_LEVEL} 级金字塔才有`;
+    secondaryPowerRow.buttons.appendChild(secondaryHint);
 
     const hint = document.createElement('div');
     hint.className = 'beacon-screen-hint';
@@ -92,6 +113,7 @@ export class BeaconScreen {
     panel.appendChild(this.summaryEl);
     panel.appendChild(primaryRow.root);
     panel.appendChild(secondaryRow.root);
+    panel.appendChild(secondaryPowerRow.root);
     panel.appendChild(hint);
     panel.appendChild(done);
     this.root.appendChild(panel);
@@ -109,6 +131,7 @@ export class BeaconScreen {
 
   private selectedPrimary = 0;
   private selectedRegen = false;
+  private selectedSecondary = 0;
 
   private buildRow(label: string): { root: HTMLDivElement; buttons: HTMLDivElement } {
     const root = document.createElement('div');
@@ -139,6 +162,7 @@ export class BeaconScreen {
   show(state: BeaconScreenState): void {
     this.selectedPrimary = state.primary;
     this.selectedRegen = state.regen;
+    this.selectedSecondary = state.secondary;
     this.open = true;
     this.root.classList.remove('hidden');
     this.refresh(state.level);
@@ -160,14 +184,24 @@ export class BeaconScreen {
     this.regenButton.classList.toggle('beacon-screen-button-on', this.selectedRegen && regenUsable);
     const level2 = beaconPrimaryAmplifier(level) + 1;
     this.regenButton.textContent = `${BEACON_REGEN_POWER.label} I`;
+    // 次级主效果：4 级起；固定 I 级，所以按钮上把等级写出来
+    const secondaryUsable = level >= BEACON_SECONDARY_MIN_LEVEL;
+    for (let i = 0; i < this.secondaryButtons.length; i++) {
+      const button = this.secondaryButtons[i]!;
+      button.disabled = !secondaryUsable;
+      button.classList.toggle('beacon-screen-button-on', this.selectedSecondary === i + 1 && secondaryUsable);
+      button.textContent = `${BEACON_POWERS[i]!.label} I`;
+    }
     this.summaryEl.dataset.primaryLevel = String(level2);
+    this.summaryEl.dataset.secondaryLevel = secondaryUsable ? '1' : '0';
   }
 
   /** 点某个效果：先记进"当前选择"（界面立刻高亮），再回调主程序去写方块状态 */
-  private choose(primaryIndex: number, regen = this.selectedRegen): void {
+  private choose(primaryIndex: number, regen = this.selectedRegen, secondary = this.selectedSecondary): void {
     this.selectedPrimary = primaryIndex;
     this.selectedRegen = regen;
-    this.onChoose?.(primaryIndex, regen);
+    this.selectedSecondary = secondary;
+    this.onChoose?.(primaryIndex, regen, secondary);
   }
 
   /** 收起面板（按完成或 `Esc`） */

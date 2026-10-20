@@ -791,6 +791,14 @@ const BEACON_PRIMARY_SHIFT = 4;
 const BEACON_PRIMARY_MASK = 0b111;
 /** 生命恢复那一位（bit7）：只有三级以上的金字塔能用它 */
 const BEACON_REGEN_BIT = 0b1 << 7;
+/**
+ * 次级效果的主效果下标（批次 560，bits 0-2）：四级金字塔才能用。
+ *
+ * bits 0-3 在信标上本来就没用（信标没有朝向/水位），拿低 3 位存"第二条主效果"。
+ * `0` 仍然表示"没选"。
+ */
+const BEACON_SECONDARY_SHIFT = 0;
+const BEACON_SECONDARY_MASK = 0b111;
 
 export function beaconPrimary(state: number): number {
   return (state >> BEACON_PRIMARY_SHIFT) & BEACON_PRIMARY_MASK;
@@ -807,6 +815,15 @@ export function beaconRegen(state: number): boolean {
 
 export function withBeaconRegen(state: number, on: boolean): number {
   return on ? state | BEACON_REGEN_BIT : state & ~BEACON_REGEN_BIT;
+}
+
+export function beaconSecondary(state: number): number {
+  return (state >> BEACON_SECONDARY_SHIFT) & BEACON_SECONDARY_MASK;
+}
+
+export function withBeaconSecondary(state: number, index: number): number {
+  const mask = BEACON_SECONDARY_MASK << BEACON_SECONDARY_SHIFT;
+  return (state & ~mask) | ((index & BEACON_SECONDARY_MASK) << BEACON_SECONDARY_SHIFT);
 }
 
 // ---------------------------------------------------------------- 末地传送门框架（K9，批次 111）

@@ -366,6 +366,7 @@ import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
   beaconRegen,
+  beaconSecondary,
   delayOf,
   hasEndPortalEye,
   isFenceGateOpen,
@@ -376,6 +377,7 @@ import {
   portalAxis,
   withBeaconPrimary,
   withBeaconRegen,
+  withBeaconSecondary,
   withDelay,
   withEndPortalEye,
   withFenceGateOpen,
@@ -394,7 +396,9 @@ import {
 // 信标（K5，批次 117）：等级/范围/效果是纯逻辑（`world/Beacon.ts`），
 // 界面与光柱各自一份（与告示牌的"文字表 / 编辑框 / 渲染器"三件套同构）
 import {
+  BEACON_EFFECT_SECONDS,
   BEACON_REGEN_MIN_LEVEL,
+  BEACON_SECONDARY_MIN_LEVEL,
   beaconEffects,
   beaconLevel,
   beaconRange,
@@ -2074,7 +2078,8 @@ class App {
 
     // 信标（K5，批次 117）：界面里点一下就把那条效果写进**方块状态**（见
     // `applyBeaconChoice`），关掉时把输入权交回去；光柱的组挂在场景里、逐帧 sync
-    this.beaconScreen.onChoose = (primary, regen) => this.applyBeaconChoice(primary, regen);
+    this.beaconScreen.onChoose = (primary, regen, secondary) =>
+      this.applyBeaconChoice(primary, regen, secondary);
     this.beaconScreen.onClose = () => {
       this.editingBeacon = null;
       this.handleInventoryOpen(false);
@@ -9014,7 +9019,13 @@ class App {
       if (!refresh) continue;
       if (Math.hypot(px - x, py - y, pz - z) > beaconRange(entry.level)) continue;
       const state = this.world.getBlockState(x, y, z);
-      for (const spec of beaconEffects(entry.level, beaconPrimary(state), beaconRegen(state))) {
+      for (const spec of beaconEffects(
+        entry.level,
+        beaconPrimary(state),
+        beaconRegen(state),
+        BEACON_EFFECT_SECONDS,
+        beaconSecondary(state),
+      )) {
         this.effects.apply(spec.effect, spec.seconds, spec.amplifier);
       }
     }
@@ -9073,6 +9084,7 @@ class App {
       level: beaconLevel(this.world, x, y, z),
       primary: beaconPrimary(state),
       regen: beaconRegen(state),
+      secondary: beaconSecondary(state),
     });
     // 与背包/告示牌同一个入口：释放指针锁、收起触摸层
     this.handleInventoryOpen(true);
@@ -9087,7 +9099,7 @@ class App {
    * ⚠️ 够不到的能力**在这里也拦一道**（界面会把按钮置灰，但传进来的是外部数据）：
    * 没有金字塔时选主效果会写成"选了也没用"（等级 0 不挂效果），三级以下要生命恢复会被丢掉。
    */
-  private applyBeaconChoice(primary: number, regen: boolean): void {
+  private applyBeaconChoice(primary: number, regen: boolean, secondary = 0): void {
     const target = this.editingBeacon;
     if (!target) return;
     const { x, y, z } = target;
@@ -9095,9 +9107,12 @@ class App {
 
     const level = beaconLevel(this.world, x, y, z);
     const current = this.world.getBlockState(x, y, z);
-    const next = withBeaconRegen(
-      withBeaconPrimary(current, primary),
-      regen && level >= BEACON_REGEN_MIN_LEVEL,
+    const next = withBeaconSecondary(
+      withBeaconRegen(
+        withBeaconPrimary(current, primary),
+        regen && level >= BEACON_REGEN_MIN_LEVEL,
+      ),
+      level >= BEACON_SECONDARY_MIN_LEVEL ? secondary : 0,
     );
     this.world.setStateAndUpdate(x, y, z, next);
     this.net.sendBlock(x, y, z, Block.BEACON, next, this.dimension);
@@ -9106,7 +9121,12 @@ class App {
     if (entry) entry.level = level;
     this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     // 立刻按新状态刷一遍界面：选中的那一条要马上变绿（否则玩家会以为没点上）
-    this.beaconScreen.show({ level, primary: beaconPrimary(next), regen: beaconRegen(next) });
+    this.beaconScreen.show({
+      level,
+      primary: beaconPrimary(next),
+      regen: beaconRegen(next),
+      secondary: beaconSecondary(next),
+    });
   }
 
   /** 正在编辑的那座信标（界面点"效果"时要写哪一格） */

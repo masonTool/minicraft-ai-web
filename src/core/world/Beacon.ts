@@ -14,8 +14,6 @@
  * ⚠️ 与原版的差异（记在 TASKS K5）：
  *  - 原版还要求"底座那一圈上方必须是空气/透明方块"（不然埋在山里的金字塔不算数），
  *    本项目**不查**这一条——它只影响"把金字塔砌在洞里"这种少见摆法；
- *  - 原版四级时次级效果**还能再选一个主效果**（比如"速度 + 急迫"），
- *    本项目把次级收成**只有生命恢复**一档（界面也因此只有一行）；
  *  - 原版的光柱会被**染色玻璃**染成对应颜色，本项目不做（光柱一律白）；
  *  - 原版的信标每 4 秒刷一次效果，这里是**每秒刷一次、时长 3 秒**
  *    （离开范围后还会留 2 秒，与原版"离开后效果还在"手感一致）。
@@ -76,6 +74,8 @@ export const BEACON_REGEN_POWER: BeaconPower = {
 };
 /** 生命恢复需要几级金字塔（原版 3 级起） */
 export const BEACON_REGEN_MIN_LEVEL = 3;
+/** 第二条主效果需要 4 级金字塔（原版：4 级才能把次级换成任意主效果） */
+export const BEACON_SECONDARY_MIN_LEVEL = 4;
 /** 效果时长（秒）：每秒刷一次，所以它会一直续着；离开范围后还能留一会儿 */
 export const BEACON_EFFECT_SECONDS = 3;
 
@@ -133,6 +133,7 @@ export function beaconEffects(
   primaryIndex: number,
   regen: boolean,
   seconds = BEACON_EFFECT_SECONDS,
+  secondaryIndex = 0,
 ): BeaconEffectSpec[] {
   if (level <= 0) return [];
   const specs: BeaconEffectSpec[] = [];
@@ -141,6 +142,11 @@ export function beaconEffects(
   // 生命恢复永远是 I（原版如此），而且三级起才给
   if (regen && level >= BEACON_REGEN_MIN_LEVEL) {
     specs.push({ effect: BEACON_REGEN_POWER.effect, seconds, amplifier: 0 });
+  }
+  // 次级主效果（批次 560）：四级才能选，且固定 I 级（原版如此）
+  const secondary = secondaryIndex > 0 ? BEACON_POWERS[secondaryIndex - 1] : undefined;
+  if (secondary && level >= BEACON_SECONDARY_MIN_LEVEL) {
+    specs.push({ effect: secondary.effect, seconds, amplifier: 0 });
   }
   return specs;
 }

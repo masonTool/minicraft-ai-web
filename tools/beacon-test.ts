@@ -24,8 +24,10 @@ import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import {
   beaconPrimary,
   beaconRegen,
+  beaconSecondary,
   withBeaconPrimary,
   withBeaconRegen,
+  withBeaconSecondary,
 } from '../src/core/registry/blockState.ts';
 import {
   BEACON_BASE_BLOCKS,
@@ -213,6 +215,12 @@ console.log('\n[方块状态：选中的效果记在信标那一格里]');
     equal(`主效果下标 ${index} 写得进读得出`, beaconPrimary(withBeaconPrimary(0, index)), index);
   }
   equal('生命恢复那一位读写往返', beaconRegen(withBeaconRegen(0, true)), true);
+  equal('次级主效果默认没选', beaconSecondary(0), 0);
+  equal('次级主效果读写往返', beaconSecondary(withBeaconSecondary(0, 3)), 3);
+  check(
+    '次级主效果不碰主效果/生命恢复',
+    beaconPrimary(withBeaconSecondary(0, 3)) === 0 && !beaconRegen(withBeaconSecondary(0, 3)),
+  );
   check(
     '两位互不干扰（写了主效果再开生命恢复，主效果还在）',
     beaconPrimary(withBeaconRegen(withBeaconPrimary(0, 3), true)) === 3,
@@ -312,6 +320,26 @@ console.log('\n[范围与效果]');
   equal('第二条就是生命恢复', beaconEffects(3, 1, true)[1]?.effect, 'regeneration');
   equal('生命恢复永远是 I 级（原版如此）', beaconEffects(4, 1, true)[1]?.amplifier, 0);
   equal('力量那条也在表里（下标 5）', beaconEffects(1, 5, false)[0]?.effect, 'strength');
+  equal(
+    '三级还选不了次级主效果（原版四级起）',
+    beaconEffects(3, 1, false, BEACON_EFFECT_SECONDS, 2).length,
+    1,
+  );
+  equal(
+    '四级能再选一条主效果',
+    beaconEffects(4, 1, false, BEACON_EFFECT_SECONDS, 2).length,
+    2,
+  );
+  equal(
+    '次级那条是急迫、固定 I 级',
+    beaconEffects(4, 1, false, BEACON_EFFECT_SECONDS, 2)[1]?.effect,
+    'haste',
+  );
+  equal(
+    '次级主效果不会升到 II 级',
+    beaconEffects(4, 1, false, BEACON_EFFECT_SECONDS, 2)[1]?.amplifier,
+    0,
+  );
 
   equal('文案：没有底座时说的是"没有底座、摆 3×3 才工作"', beaconSummary(0).includes('没有金字塔底座'), true);
   check('文案：有底座时写清了几级与半径', beaconSummary(3).includes('3 级') && beaconSummary(3).includes('40'));
