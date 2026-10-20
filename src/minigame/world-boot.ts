@@ -16,6 +16,7 @@ import { MeshWorkerPool } from '../render/MeshWorkerPool.ts';
 import { TextureAtlas } from '../render/TextureAtlas.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { World } from '../core/world/World.ts';
+import { PlayerPhysics, type PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { workerHostToLike } from '../platform/wx/worker-like.ts';
 import { createMainThreadWorker } from './main-thread-worker.ts';
@@ -69,11 +70,11 @@ function createHud(): {
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = 'rgba(0, 0, 0, 0.64)';
       context.fillRect(0, 0, canvas.width, canvas.height);
-      context.font = '28px monospace';
+      context.font = '24px monospace';
       context.textBaseline = 'top';
       context.fillStyle = '#ffffff';
       lines.forEach((line, index) => {
-        context.fillText(line.slice(0, 78), 18, 16 + index * 54);
+        context.fillText(line.slice(0, 84), 18, 16 + index * 46);
       });
       texture.needsUpdate = true;
     },
@@ -178,56 +179,105 @@ async function boot(): Promise<void> {
     onChunkUnloaded: (cx, cz) => chunkRenderer.onChunkUnloaded(cx, cz),
   };
 
-  const centerCx = 0;
-  const centerCz = 0;
-  world.update(centerCx, centerCz, VIEW_RADIUS);
-
-  const target = new THREE.Vector3(8, 80, 8);
-  let yaw = Math.PI * 0.25;
-  let pitch = 0.38;
-  const distance = 38;
-  let cameraReady = false;
-  const updateCamera = (): void => {
-    const horizontal = Math.cos(pitch) * distance;
-    camera.position.set(
-      target.x + Math.cos(yaw) * horizontal,
-      target.y + Math.sin(pitch) * distance,
-      target.z + Math.sin(yaw) * horizontal,
-    );
-    camera.lookAt(target);
+  // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
+  const physics = new PlayerPhysics();
+  const playerInput: PlayerInput = {
+    forward: 0,
+    strafe: 0,
+    jump: false,
+    sneak: false,
+    sprint: false,
   };
-  updateCamera();
+  let yaw = Math.PI * 0.25;
+  let pitch = -0.15;
+  let playerReady = false;
+  let movePointerId: number | null = null;
+  let lookPointerId: number | null = null;
+  let jumpPointerId: number | null = null;
+  let moveOriginX = 0;
+  let moveOriginY = 0;
+  let lastLookX = 0;
+  let lastLookY = 0;
+  let lastFrameTime = 0;
 
-  let dragging = false;
-  let lastX = 0;
-  let lastY = 0;
-  wx.onTouchStart((event) => {
-    const touch = event.touches?.[0];
-    if (!touch) return;
-    dragging = true;
-    lastX = touch.clientX;
-    lastY = touch.clientY;
-  });
-  wx.onTouchMove((event) => {
-    if (!dragging) return;
-    const touch = event.touches?.[0];
-    if (!touch) return;
-    yaw -= (touch.clientX - lastX) * 0.008;
-    pitch = Math.max(0.05, Math.min(1.2, pitch + (touch.clientY - lastY) * 0.008));
-    lastX = touch.clientX;
-    lastY = touch.clientY;
+  const updateCamera = (): void => {
+    camera.position.set(physics.x, physics.eyeY, physics.z);
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+  };
+
+  const spawnPlayer = (): void => {
+    const surface = world.getSurfaceBlockY(8, 8) ?? 64;
+    physics.teleport(8.5, surface + 1.01, 8.5);
+    playerReady = true;
     updateCamera();
+  };
+
+  const resetMove = (): void => {
+    movePointerId = null;
+    playerInput.forward = 0;
+    playerInput.strafe = 0;
+  };
+
+  platform.input.onPointer('down', (event) => {
+    const x = event.clientX;
+    const y = event.clientY;
+    if (x < width * 0.45 && movePointerId === null) {
+      movePointerId = event.pointerId;
+      moveOriginX = x;
+      moveOriginY = y;
+      return;
+    }
+    if (x > width * 0.82 && y > height * 0.68 && jumpPointerId === null) {
+      jumpPointerId = event.pointerId;
+      playerInput.jump = true;
+      return;
+    }
+    if (lookPointerId === null) {
+      lookPointerId = event.pointerId;
+      lastLookX = x;
+      lastLookY = y;
+    }
   });
-  wx.onTouchEnd(() => {
-    dragging = false;
+
+  platform.input.onPointer('move', (event) => {
+    if (event.pointerId === movePointerId) {
+      const dx = (event.clientX - moveOriginX) / 64;
+      const dy = (event.clientY - moveOriginY) / 64;
+      const deadzone = 0.12;
+      playerInput.strafe = Math.abs(dx) < deadzone ? 0 : Math.max(-1, Math.min(1, dx));
+      playerInput.forward = Math.abs(dy) < deadzone ? 0 : Math.max(-1, Math.min(1, -dy));
+      return;
+    }
+    if (event.pointerId === lookPointerId) {
+      yaw -= (event.clientX - lastLookX) * 0.006;
+      pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lastLookY) * 0.006));
+      lastLookX = event.clientX;
+      lastLookY = event.clientY;
+      updateCamera();
+    }
   });
+
+  const releasePointer = (event: { pointerId: number }): void => {
+    if (event.pointerId === movePointerId) resetMove();
+    if (event.pointerId === lookPointerId) lookPointerId = null;
+    if (event.pointerId === jumpPointerId) {
+      jumpPointerId = null;
+      playerInput.jump = false;
+    }
+  };
+  platform.input.onPointer('up', releasePointer);
+  platform.input.onPointer('cancel', releasePointer);
+
+  updateCamera();
 
   const hud = createHud();
   hud.update([
-    `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}`,
+    `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  PLAYER`,
     `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  WORKER ${workerState}`,
     'CHUNKS ...  DRAWN ...  LIGHT ...',
     'FPS ...  MS ...  TRI ...  CALLS ...',
+    'LEFT DRAG MOVE  ·  RIGHT DRAG LOOK  ·  TAP RIGHT-BOTTOM JUMP',
   ]);
 
   let frames = 0;
@@ -262,17 +312,35 @@ async function boot(): Promise<void> {
     get calls() {
       return sceneCalls;
     },
+    get x() {
+      return physics.x;
+    },
+    get y() {
+      return physics.y;
+    },
+    get z() {
+      return physics.z;
+    },
+    get onGround() {
+      return physics.onGround;
+    },
   };
 
   const frame = (time: number): void => {
     frames += 1;
+    const dt = lastFrameTime > 0 ? Math.min(0.05, (time - lastFrameTime) / 1000) : 0.016;
+    lastFrameTime = time;
 
-    if (!cameraReady && world.chunks.size > 0) {
-      const surface = world.getSurfaceBlockY(8, 8) ?? 64;
-      target.set(8, surface + 5, 8);
-      cameraReady = true;
-      updateCamera();
+    // 等脚下区块加载完再落玩家，避免出生就掉进虚空
+    if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
+    if (playerReady && world.isLoaded(physics.x, physics.z)) {
+      physics.update(world, playerInput, yaw, dt, false, 1, 1, false);
+      if (physics.y < -40) spawnPlayer();
     }
+    updateCamera();
+
+    const centerCx = Math.floor(physics.x / 16);
+    const centerCz = Math.floor(physics.z / 16);
 
     world.update(centerCx, centerCz, VIEW_RADIUS);
     world.processLighting(LIGHT_BUDGET);
@@ -290,10 +358,11 @@ async function boot(): Promise<void> {
         `[WX-020] fps=${fps} ms=${ms.toFixed(1)} chunks=${world.chunks.size} drawn=${chunkRenderer.drawnCount} light=${world.lightWorkCount} queue=${chunkRenderer.queueLength} tri=${sceneTriangles} calls=${sceneCalls}`,
       );
       hud.update([
-        `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}`,
+        `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  P ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)} G${physics.onGround ? 1 : 0}`,
         `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  WORKER ${workerState}`,
         `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
+        'LEFT DRAG MOVE  ·  RIGHT DRAG LOOK  ·  TAP RIGHT-BOTTOM JUMP',
       ]);
       frames = 0;
       lastReport = time;

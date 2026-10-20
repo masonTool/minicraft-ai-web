@@ -8,7 +8,7 @@
 
 ## 0. 当前状态（新会话 / 换设备先读这一页）
 
-> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新提交 `d102894`（清理提交待填）
+> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新提交 `dbced2b`
 > 只要这一页和 §5 任务表是最新的，换会话/换机器就不会丢上下文。
 
 ### 0.1 一眼看进度
@@ -16,8 +16,8 @@
 | 项 | 值 |
 | --- | --- |
 | 当前阶段 | M1 平台层收尾 → M2 UI |
-| 当前任务 | **WX-020B：抽 `UiPort` + 玩家/输入接线**（下一步） |
-| 刚完成 | WX-020A 真实世界预览通过；WX-018 共享 Worker；WX-011~017、01B/01C |
+| 当前任务 | **WX-020B：抽 `UiPort` + 背包/方块交互**（玩家/输入第一块已接） |
+| 刚完成 | WX-020B 第一块：第一人称 `PlayerPhysics` + 平台 pointer 摇杆/视角/跳跃；WX-020A 真实世界预览；WX-018 共享 Worker；WX-011~017、01B/01C |
 | 正式壳 | `minigame/`（压力场景，801 draw call 基线） |
 | 真实世界 | `minigame-world/`（WX-020A，当前可看完整地形） |
 | 平台基座 | `vendor/minigame-adapter/`（870d66f + 本分支补丁） |
@@ -30,7 +30,8 @@
 | 环境 | `weixin-minigame-helper`（iPhone 12/13 预览，iOS 17，SDK 3.7.1） |
 | 图集 | `TextureAtlas` 209ms，256×1040 |
 | 世界 | 37 chunks / 37 drawn / light 0 / queue 0 |
-| 几何 | 约 243k triangles / 239 draw calls |
+| 玩家 | 第一人称，出生在 `P 9,67,9 G1`（落地） |
+| 几何 | 第一人称视角约 89.7k triangles / 98 draw calls |
 | 帧率 | 主线程降级：启动约 12s，稳定后 121fps / 8.3ms |
 | Worker | helper 里 `wx.createWorker` 不回 pong，自动降级主线程；真机行为待复测 |
 
@@ -400,7 +401,7 @@ flex/absolute/grid 子集。
 | WX-010 | 小游戏构建体系 | vendored 适配器 + esbuild IIFE + ES2017 + 4MB/语法检查；worker 产物并入 WX-018 | WX-005 | 2 | [x] |
 | WX-011 | 平台接口与探测 | `src/platform/types.ts` + `wx/tt/web` 探测；Web 版行为不变 | WX-010 | 1 | [x] |
 | WX-012 | canvas / system / lifecycle | 复用适配器 Canvas/WxInfo/WxEvent；补 `visibilitychange`、`matchMedia`、安全区 | WX-011 | 1.5 | [x] |
-| WX-013 | 输入适配 | 适配器 touch 事件之上合成 pointerdown/move/up；多点、摇杆、视角 | WX-012 | 1.5 | [~] |
+| WX-013 | 输入适配 | 适配器 touch 之上合成 pointer；左摇杆/右视角/跳跃已用平台 pointer 验证 | WX-012 | 1.5 | [x] |
 | WX-014 | storage 适配 | 复用适配器 `localStorage`；`asDomStorage`/JSON 辅助已就绪；设置/世界清单接线在 WX-020/025 | WX-011 | 0.5 | [~] |
 | WX-015 | FileSystem 封装 | 原子写（临时文件 + rename）、目录/配额/错误处理 | WX-011 | 2 | [x] |
 | WX-016 | 存档适配 | `FileSaveGame` 与 `SaveGame` 同 API（meta/player/容器/牌子/展示框/成就/区块）；接线在 WX-020 | WX-015 | 3 | [x] |
@@ -416,7 +417,7 @@ flex/absolute/grid 子集。
 | ID | 任务 | 验收 / 产出 | 依赖 | 人日 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | WX-020A | 真实世界启动（无 UI） | `minigame-world`：图集/材质/World/ChunkRenderer；helper 预览已出完整地形，worker 超时自动降级主线程 | WX-018 | 3 | [x] |
-| WX-020B | 抽 `UiPort` + App 条件启动 | `main.ts` 只加导出与启动分支；Web 版回归通过 | WX-020A | 3 | [ ] |
+| WX-020B | 抽 `UiPort` + App 条件启动 | 第一人称/pointer/物理已接；`UiPort`、背包/方块交互、`main.ts` 条件启动待做 | WX-020A | 3 | [~] |
 | WX-021 | UI 工具包 A | 面板/按钮三态/文字/图标/基础布局（9-slice、像素风） | WX-020B | 3 | [ ] |
 | WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020B | 2 | [ ] |
 | WX-022 | UI 工具包 B | 滚动/页签/滑块/开关/输入框 | WX-021 | 2 | [ ] |
@@ -424,7 +425,7 @@ flex/absolute/grid 子集。
 | WX-024 | 主菜单 | 首页/世界列表/新建世界（含删除确认） | WX-022 | 2 | [ ] |
 | WX-025 | 加载/错误/暂停/设置 | 加载遮罩、不支持设备、竖屏提示、暂停菜单、设置页 | WX-022 | 3 | [ ] |
 | WX-026 | HUD | 生命/饥饿/氧气/护甲/经验/快捷栏/准星/破坏进度/Boss 条 | WX-023 | 2 | [ ] |
-| WX-027 | 触摸控件 | 摇杆/跳跃/飞行/潜行/攻击/放置/快捷栏 | WX-013, WX-026 | 3 | [ ] |
+| WX-027 | 触摸控件 | 基础摇杆/视角/跳跃已接；攻击/放置/快捷栏/飞行/潜行待做 | WX-013, WX-026 | 3 | [~] |
 | WX-028 | 背包 + 2×2 合成 + 创造栏 | 拿起/放下/合并/交换/快速移动/丢弃 | WX-023 | 3 | [ ] |
 | WX-029 | 工作台 + 配方书 | 3×3 合成、可做列表、点配方填格 | WX-028 | 3 | [ ] |
 
@@ -570,7 +571,8 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-020A 修复 | 开发者工具 `self` 只读：原生 self 直接用，微信真机才桥接 `worker`；新增 `npm run test:worker`（Node vm 模拟只读 self），ping + 真实生成回包通过 | `1a63221` |
 | 2026-10-20 | WX-020A 自动化 | 开发者工具 automator 可连、`Tool.getInfo` 正常，但 `App.callFunction/captureScreenshot/CDPEnable` 与 `Game.*` 全部超时：官方 automator 只覆盖小程序 App/Page，小游戏无此上下文 | `d102894` |
 | 2026-10-20 | WX-020A 预览 | 改用 `weixin-minigame-helper`：真实地形出现；CHUNKS 37 / DRAWN 37 / LIGHT 0 / Q 0 / TRI ~243k / CALLS ~239；稳定后 FPS 121 / MS 8.3（worker 超时后主线程降级） | `1737c9e` |
-| 2026-10-20 | 清理/看板 | 删除 WX-001 自写 shim、WX-006 适配器对比工程与旧构建脚本；正式入口/worker 目录改名；新增 §0 状态看板与接手清单 | 本次提交 |
+| 2026-10-20 | 清理/看板 | 删除 WX-001 自写 shim、WX-006 适配器对比工程与旧构建脚本；正式入口/worker 目录改名；新增 §0 状态看板与接手清单 | `dbced2b` |
+| 2026-10-20 | WX-020B 第一块 | 真实世界接入第一人称：`PlayerPhysics` + 平台 pointer；左摇杆/右视角/右下跳跃；helper 预览 `P 9,67,9 G1`、37 chunks、89.7k tri、98 calls、121fps | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
