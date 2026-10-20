@@ -17,7 +17,7 @@ export interface MainMenuInfo {
 }
 
 export interface MainMenu {
-  open(): void;
+  open(screen?: 'title' | 'worlds'): void;
   close(): void;
   isOpen(): boolean;
   setInfo(info: MainMenuInfo): void;
@@ -242,8 +242,8 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   redraw();
 
   return {
-    open(): void {
-      screen = 'title';
+    open(nextScreen: Screen = 'title'): void {
+      screen = nextScreen;
       page = 0;
       setOpen(true);
     },

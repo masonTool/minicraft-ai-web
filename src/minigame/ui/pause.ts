@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
 
-export type PauseAction = 'resume' | 'save' | 'settings' | null;
+export type PauseAction = 'resume' | 'settings' | 'menu' | 'delete' | null;
 
 export interface PauseMenu {
   toggle(): void;
@@ -41,13 +41,14 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
   scene.add(mesh);
 
   const panelWidth = 460;
-  const panelHeight = 340;
+  const panelHeight = 390;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   const panel: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
-  const resume: Rect = { x: panelX + 60, y: panelY + 92, w: panelWidth - 120, h: 52 };
-  const save: Rect = { x: panelX + 60, y: panelY + 158, w: panelWidth - 120, h: 52 };
-  const settings: Rect = { x: panelX + 60, y: panelY + 224, w: panelWidth - 120, h: 52 };
+  const resume: Rect = { x: panelX + 60, y: panelY + 92, w: panelWidth - 120, h: 46 };
+  const settings: Rect = { x: panelX + 60, y: panelY + 150, w: panelWidth - 120, h: 46 };
+  const menu: Rect = { x: panelX + 60, y: panelY + 208, w: panelWidth - 120, h: 46 };
+  const deleteWorld: Rect = { x: panelX + 60, y: panelY + 266, w: panelWidth - 120, h: 46 };
 
   let open = false;
 
@@ -61,18 +62,19 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
     context.fillStyle = 'rgba(0, 0, 0, 0.62)';
     context.fillRect(0, 0, canvas.width, canvas.height);
     drawPanel(context, panel);
-    drawText(context, 'PAUSED', panelX + 28, panelY + 22, 32, '#ffffff');
+    drawText(context, '暂停', panelX + 28, panelY + 20, 32, '#ffffff');
     drawText(
       context,
-      'WORLD SAVED AUTOMATICALLY',
+      '世界会自动保存',
       panelX + 28,
-      panelY + 64,
+      panelY + 62,
       15,
       'rgba(255, 255, 255, 0.55)',
     );
-    drawButton(context, resume, 'RESUME', 'normal', 24);
-    drawButton(context, save, 'SAVE NOW', 'normal', 22);
-    drawButton(context, settings, 'SETTINGS', 'normal', 20);
+    drawButton(context, resume, '继续游戏', 'normal', 22);
+    drawButton(context, settings, '设置', 'normal', 20);
+    drawButton(context, menu, '保存并返回主菜单', 'normal', 17);
+    drawButton(context, deleteWorld, '删除本世界', 'normal', 17);
     texture.needsUpdate = true;
   };
 
@@ -101,13 +103,17 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
         setOpen(false);
         return 'resume';
       }
-      if (contains(save, x, y)) {
-        setOpen(false);
-        return 'save';
-      }
       if (contains(settings, x, y)) {
         setOpen(false);
         return 'settings';
+      }
+      if (contains(menu, x, y)) {
+        setOpen(false);
+        return 'menu';
+      }
+      if (contains(deleteWorld, x, y)) {
+        setOpen(false);
+        return 'delete';
       }
       setOpen(false);
       return 'resume';

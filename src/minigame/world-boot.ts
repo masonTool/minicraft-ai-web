@@ -1093,8 +1093,14 @@ async function boot(): Promise<void> {
     if (ui.isPauseOpen()) {
       uiPointerId = event.pointerId;
       const action = ui.handlePauseTap(x, y, width, height);
-      if (action === 'save') void persist(true);
       if (action === 'settings') ui.openSettings();
+      if (action === 'menu') {
+        void (async () => {
+          await persist(true);
+          ui.openMainMenu('worlds');
+        })();
+      }
+      if (action === 'delete') void deleteSave();
       return;
     }
     // 顶部居中暂停
