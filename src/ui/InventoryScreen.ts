@@ -1974,7 +1974,7 @@ export class InventoryScreen {
       // 批次 299（用户）：分类栏只表示"能做/不能做"，不再显示拥有数量
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        this.beginCategoryScrub(event, itemId, slot);
+        this.beginCategoryScrub(event, itemId);
       });
       fragment.appendChild(slot);
     }
@@ -2150,7 +2150,7 @@ export class InventoryScreen {
   }
 
   /** 按下分类格：进入"按住滑动预览"，只做预览，不动物品（批次 211） */
-  private beginCategoryScrub(event: PointerEvent, itemId: number, slot: HTMLElement): void {
+  private beginCategoryScrub(event: PointerEvent, itemId: number): void {
     this.categoryScrub = {
       pointerId: event.pointerId,
       itemId,
@@ -2160,7 +2160,8 @@ export class InventoryScreen {
       lastX: event.clientX,
       lastY: event.clientY,
     };
-    this.showPickToast(slot);
+    // 不在按下时弹名称：滚动列表时手指总会经过格子，浮层会一路跟着跳。
+    // 只有抬手确认（没有滑动）才由 `endCategoryScrub` 弹一次。
     this.pickCategoryItem(itemId, 'preview');
   }
 
@@ -2186,8 +2187,7 @@ export class InventoryScreen {
     const itemId = Number(slot.dataset.itemId);
     if (!Number.isFinite(itemId) || itemId === scrub.itemId) return;
     scrub.itemId = itemId;
-    this.showPickToast(slot);
-    // 手指滑到哪一格，哪一格就闪一下（和单独点击的反馈一致）
+    // 只闪一下格子；名称浮层等真正选中再弹
     this.flashLocked(slot);
     this.pickCategoryItem(itemId, 'preview');
   }
@@ -2197,7 +2197,13 @@ export class InventoryScreen {
     const scrub = this.categoryScrub;
     if (!scrub) return;
     this.categoryScrub = null;
-    if (!cancel && !scrub.moved) this.pickCategoryItem(scrub.itemId, 'fill');
+    if (!cancel && !scrub.moved) {
+      const slot = this.categoryGrid.querySelector<HTMLElement>(
+        `.category-slot[data-item-id="${scrub.itemId}"]`,
+      );
+      if (slot) this.showPickToast(slot);
+      this.pickCategoryItem(scrub.itemId, 'fill');
+    }
   }
 
   /**
@@ -4385,6 +4391,8 @@ export class InventoryScreen {
     this.heldOriginEl = slot;
     // 这是**复制品**（没有来源格）：放到已有物品的格子上时直接覆盖、旧的销毁
     this.heldFromCreative = true;
+    // 确认是"点"而不是"滑"之后，才显示物品名称浮层
+    this.showPickToast(slot);
     // 创造模式下点一件东西也要看到"它由什么组成"（右栏在合成时）
     this.showRecipeFor(itemId);
     this.hooks.onMove?.();
@@ -5160,13 +5168,21 @@ export class InventoryScreen {
         // 用户的原话："点合成区应该是显示那一格的名称，而不是把配方清空"。
         // 预览只是展示，不是真实材料；点它唯一的结果就是下面那条名称提示。
         if (slot) {
-          this.showPickToast(slot);
+          // 创造格/分类格按下时还不知道是"点"还是"滑"：此处先不弹名称浮层，
+          // 真正选中后由 `pickCreativeSlot` / `endCategoryScrub` 弹。
+          // 否则一滚列表就满屏提示。
+          if (
+            !slot.classList.contains('creative-slot') &&
+            !slot.classList.contains('category-slot')
+          ) {
+            this.showPickToast(slot);
+          }
           // 批次 159：**按下就沉下去**。触摸端一次轻点要到 `pointerup` 才结算
           //（要跟长按区分），等结算完再给反馈就成了"点了要等一下才选中"。
           // ⚠️ 空槽不给：空槽本来就不可选中，给它"沉下去"会让人以为选中了。
           // 批次 184：红底那种"我没有的"也**不选中**，所以不给"相框"，
           // 只给一下缩放（用户："点击应该只触发点击效果"）。
-          if (this.tooltipStacks.has(slot)) {
+          if (!slot.classList.contains('creative-slot') && this.tooltipStacks.has(slot)) {
             // 批次 209：**分类栏一律只给"点一下"的缩放**，绝不给 `.pressing`
             // （那套是"相框选中"的白色底，用户反复反馈"红底点一下变白"）。
             if (slot.classList.contains('category-slot') || slot.classList.contains('locked')) {

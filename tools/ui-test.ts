@@ -1291,7 +1291,9 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
     invSrc.includes("private pickCategoryItem(itemId: number, mode: 'preview' | 'fill' = 'fill')") &&
       invSrc.includes('private beginCategoryScrub(') &&
       invSrc.includes('this.pickCategoryItem(itemId, \'preview\');') &&
-      invSrc.includes('if (!cancel && !scrub.moved) this.pickCategoryItem(scrub.itemId, \'fill\');'),
+      /if \(!cancel && !scrub\.moved\) \{[\s\S]{0,260}?this\.pickCategoryItem\(scrub\.itemId, 'fill'\);/.test(
+        invSrc,
+      ),
   );
   check(
     '材料不齐时结果槽也画出产物（只读预览）',
@@ -1337,11 +1339,20 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('if (moved || Math.abs(this.creativeGrid.scrollTop - startScroll) > 1) return;') &&
       invSrc.includes('private pickCreativeSlot('),
   );
+  check(
+    '滑动时不出物品名称浮层，只有真正点中才弹',
+    invSrc.includes("!slot.classList.contains('creative-slot') &&") &&
+      invSrc.includes("!slot.classList.contains('category-slot')") &&
+      invSrc.includes('this.showPickToast(slot);\n    // 创造模式下点一件东西') &&
+      !invSrc.includes('this.showPickToast(slot);\n    this.pickCategoryItem(itemId, \'preview\');'),
+  );
   // 空槽不可选中：按下那一层"沉下去"只给有东西的格子
   // 空槽不给选中反馈（批次 184：红底那种"我没有的"同样不给，只闪一下）
   check(
     '空槽不给选中反馈',
-    /if \(this\.tooltipStacks\.has\(slot\)\) \{[\s\S]{0,400}this\.markPressing\(slot\);/.test(invSrc),
+    /if \(!slot\.classList\.contains\('creative-slot'\) && this\.tooltipStacks\.has\(slot\)\) \{[\s\S]{0,400}this\.markPressing\(slot\);/.test(
+      invSrc,
+    ),
   );
   // 丢物（批次 206）：面板空白与窗外暗色区域都丢；
   // 判据是"不在任何交互元素里"，而不是死认 target === root/shell。
