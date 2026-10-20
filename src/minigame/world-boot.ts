@@ -1444,6 +1444,25 @@ async function boot(): Promise<void> {
       if (action === 'delete') void deleteSave();
       if (typeof action === 'object' && action?.type === 'create') void createWorld(action);
       if (typeof action === 'object' && action?.type === 'deleteWorld') void removeWorld(action.id);
+      if (typeof action === 'object' && action?.type === 'editWorld') {
+        const entry = worlds.find((world) => world.id === action.id);
+        if (entry) {
+          entry.name = action.name;
+          entry.gameMode = action.gameMode;
+          entry.difficulty = action.difficulty;
+          if (entry.id === currentWorldId) {
+            currentWorld.name = action.name;
+            currentWorld.gameMode = action.gameMode;
+            currentWorld.difficulty = action.difficulty;
+            gameMode = action.gameMode;
+            ui.setCreativeMode(gameMode === 'creative');
+          }
+          platform.storage.set('wx.worlds', JSON.stringify(worlds));
+          refreshWorldInfo(world.edits.totalEdits);
+          ui.openMainMenu('worlds');
+          ui.showToast('世界已更新');
+        }
+      }
       if (typeof action === 'object' && action?.type === 'world') void switchWorld(action.id);
       return;
     }

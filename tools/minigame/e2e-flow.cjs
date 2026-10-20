@@ -141,6 +141,15 @@ async function main() {
     );
     const beforeCount = worlds.worldCount;
 
+    // 编辑世界：打开 → 保存 → 回世界列表
+    await tap(540, 174.5);
+    const editOpen = await waitState((state) => state.screen === 'edit', '世界编辑弹窗未打开');
+    await tap(512, 368.5);
+    const editSaved = await waitState(
+      (state) => state.screen === 'worlds' && state.worldCount === beforeCount,
+      '世界编辑保存后未回世界列表',
+    );
+
     await tap(512, 110.5);
     await waitState((state) => state.screen === 'create', '点“新建世界”后未进入表单');
 
@@ -307,7 +316,7 @@ async function main() {
     );
 
     console.log('PASS');
-    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, sneakOn, flyOn, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
+    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, editOpen, editSaved, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, sneakOn, flyOn, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
   } catch (error) {
     await page.screenshot({ path: '/tmp/e2e-fail.png' }).catch(() => undefined);
     console.error('FAIL:', error.message);

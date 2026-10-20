@@ -57,7 +57,7 @@ export interface MiniGameUi {
   ): void;
   handleFurnaceTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): FurnaceAction;
   isMainMenuOpen(): boolean;
-  mainMenuScreen(): 'title' | 'worlds' | 'create';
+  mainMenuScreen(): 'title' | 'worlds' | 'create' | 'edit';
   settingsTab(): string;
   openMainMenu(screen?: 'title' | 'worlds'): void;
   closeMainMenu(): void;
@@ -284,7 +284,7 @@ export function createCanvasUi(
     isMainMenuOpen(): boolean {
       return mainMenu.isOpen();
     },
-    mainMenuScreen(): 'title' | 'worlds' | 'create' {
+    mainMenuScreen(): 'title' | 'worlds' | 'create' | 'edit' {
       return mainMenu.getScreen();
     },
     settingsTab(): string {

@@ -9,6 +9,13 @@ export type MainMenuAction =
   | { type: 'world'; id: string }
   | { type: 'deleteWorld'; id: string }
   | {
+      type: 'editWorld';
+      id: string;
+      name: string;
+      gameMode: 'survival' | 'creative';
+      difficulty: 'peaceful' | 'easy' | 'normal' | 'hard';
+    }
+  | {
       type: 'create';
       name: string;
       seed: number | null;
@@ -43,7 +50,7 @@ export interface MainMenu {
   render(renderer: THREE.WebGLRenderer): void;
 }
 
-type Screen = 'title' | 'worlds' | 'create';
+type Screen = 'title' | 'worlds' | 'create' | 'edit';
 
 /** 启动主菜单：标题页 → 游戏 → 世界卡片（对齐网页版流程） */
 export function createMainMenu(
@@ -110,10 +117,25 @@ export function createMainMenu(
     const enter = enterButton(index);
     return { x: enter.x - 76, y: enter.y, w: 68, h: 36 };
   };
+  const cardEditButton = (index: number): Rect => {
+    const del = cardDeleteButton(index);
+    return { x: del.x - 76, y: del.y, w: 68, h: 36 };
+  };
+  const editNameField: Rect = { x: panelX + 60, y: panelY + 112, w: panelWidth - 120, h: 44 };
+  const editModeField: Rect = { x: panelX + 60, y: panelY + 174, w: panelWidth - 120, h: 44 };
+  const editDifficultyField: Rect = { x: panelX + 60, y: panelY + 236, w: panelWidth - 120, h: 44 };
+  const editSave: Rect = { x: panelX + 60, y: panelY + 330, w: panelWidth - 120, h: 44 };
+  const editCancel: Rect = { x: panelX + 60, y: panelY + 384, w: panelWidth - 120, h: 34 };
 
   let open = true;
   let screen: Screen = 'title';
   let page = 0;
+  let editing: {
+    id: string;
+    name: string;
+    modeIndex: number;
+    difficultyIndex: number;
+  } | null = null;
   const PAGE_SIZE = 3;
   const pageCount = (): number => Math.max(1, Math.ceil(info.worlds.length / PAGE_SIZE));
   const draft = {
@@ -364,7 +386,7 @@ export function createMainMenu(
         18,
         '#ffffff',
         'left',
-        row.w - 140,
+        row.w - 300,
       );
       const typeLabel = { default: '默认', flat: '超平坦', amplified: '放大化' }[
         world.worldType ?? 'default'
@@ -384,7 +406,7 @@ export function createMainMenu(
         11,
         'rgba(190, 215, 235, 0.65)',
         'left',
-        row.w - 230,
+        row.w - 320,
       );
       const played = world.playTime ?? 0;
       const playedLabel = played >= 60 ? `${Math.round(played / 60)} 分钟` : `${Math.round(played)} 秒`;
@@ -404,8 +426,9 @@ export function createMainMenu(
         11,
         'rgba(170, 200, 220, 0.55)',
         'left',
-        row.w - 140,
+        row.w - 300,
       );
+      drawButton(context, cardEditButton(index), '编辑', 'normal', 14);
       drawButton(context, cardDeleteButton(index), '删除', 'normal', 14);
       drawButton(context, enterButton(index), '进入', 'normal', 15);
     });
@@ -466,6 +489,38 @@ export function createMainMenu(
     drawButton(context, createButton, '创建并进入', 'normal', 19);
   };
 
+  const drawEdit = (): void => {
+    if (!context || !editing) return;
+    drawButton(context, back, '‹ 返回', 'normal', 16);
+    drawText(context, '编辑世界', panelX + 150, panelY + 22, 26, '#ffffff');
+
+    const field = (rect: Rect, label: string, value: string): void => {
+      if (!context) return;
+      drawText(context, label, panelX + 34, rect.y + 10, 15, 'rgba(225, 238, 248, 0.8)');
+      context.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      context.fillRect(rect.x, rect.y, rect.w, rect.h);
+      context.strokeStyle = 'rgba(180, 210, 230, 0.55)';
+      context.lineWidth = 2;
+      context.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
+      drawText(context, value, rect.x + 10, rect.y + 10, 15, '#ffffff', 'left', rect.w - 20);
+    };
+    field(editNameField, '名称', editing.name || '世界名称');
+    field(editModeField, '模式', GAME_MODE_LABELS[editing.modeIndex] ?? '生存');
+    field(editDifficultyField, '难度', DIFFICULTY_LABELS[editing.difficultyIndex] ?? '普通');
+    drawText(
+      context,
+      '名称 / 模式 / 难度可改；种子与地形不变',
+      panelX + 34,
+      panelY + 296,
+      13,
+      'rgba(200, 225, 240, 0.65)',
+      'left',
+      panelWidth - 68,
+    );
+    drawButton(context, editCancel, '取消', 'normal', 16);
+    drawButton(context, editSave, '保存', 'normal', 18);
+  };
+
   const redraw = (): void => {
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
@@ -478,6 +533,7 @@ export function createMainMenu(
     else {
       drawPanel(context, panel);
       if (screen === 'worlds') drawWorlds();
+      else if (screen === 'edit') drawEdit();
       else drawCreate();
     }
     texture.needsUpdate = true;
@@ -524,6 +580,55 @@ export function createMainMenu(
         if (contains(settings, x, y)) {
           // 由 UiPort.openSettings 统一关闭，先记录 settingsFromMenu
           return 'settings';
+        }
+        return null;
+      }
+
+      if (screen === 'edit' && editing) {
+        if (contains(back, x, y) || contains(editCancel, x, y)) {
+          editing = null;
+          screen = 'worlds';
+          redraw();
+          return null;
+        }
+        if (contains(editNameField, x, y)) {
+          void requestText?.(editing.name)
+            .then((value) => {
+              if (value !== null && editing) {
+                editing.name = value.slice(0, 24);
+                redraw();
+              }
+            })
+            .catch(() => undefined);
+          return null;
+        }
+        if (contains(editModeField, x, y)) {
+          editing.modeIndex = (editing.modeIndex + 1) % 2;
+          redraw();
+          return null;
+        }
+        if (contains(editDifficultyField, x, y)) {
+          editing.difficultyIndex = (editing.difficultyIndex + 1) % 4;
+          redraw();
+          return null;
+        }
+        if (contains(editSave, x, y)) {
+          const world = info.worlds.find((item) => item.id === editing?.id);
+          const action = {
+            type: 'editWorld' as const,
+            id: editing.id,
+            name: editing.name.trim() || world?.name || '世界',
+            gameMode: (editing.modeIndex === 1 ? 'creative' : 'survival') as
+              | 'survival'
+              | 'creative',
+            difficulty: (['peaceful', 'easy', 'normal', 'hard'] as const)[
+              editing.difficultyIndex
+            ]!,
+          };
+          editing = null;
+          screen = 'worlds';
+          redraw();
+          return action;
         }
         return null;
       }
@@ -619,6 +724,19 @@ export function createMainMenu(
       const visible = info.worlds.slice(start, start + PAGE_SIZE);
       for (let i = 0; i < visible.length; i++) {
         const world = visible[i]!;
+        if (contains(cardEditButton(i), x, y)) {
+          editing = {
+            id: world.id,
+            name: world.name,
+            modeIndex: world.gameMode === 'creative' ? 1 : 0,
+            difficultyIndex: ({ peaceful: 0, easy: 1, normal: 2, hard: 3 } as const)[
+              world.difficulty ?? 'normal'
+            ],
+          };
+          screen = 'edit';
+          redraw();
+          return null;
+        }
         if (contains(cardDeleteButton(i), x, y)) {
           return { type: 'deleteWorld', id: world.id };
         }
