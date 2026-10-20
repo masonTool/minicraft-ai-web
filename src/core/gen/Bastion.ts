@@ -236,6 +236,9 @@ export function buildBastion(w: FeatureWriter, inst: BastionInstance): void {
 
   // ---- 6) 宝箱：房间正中偏里一格（`bastion_treasure` 那张表）
   lootChest(w, inst.x + 10, inst.y + 1, inst.z, 'bastion_treasure');
+  // 桥面上的一只普通箱子（批次 473，原版 `bastion_other`）：
+  // 宝库那张表是"通关奖励"（下界合金锭），桥面这只才是路过的补给
+  lootChest(w, inst.x + 4, inst.y + 1, inst.z + 3, 'bastion_other');
 
   // ---- 7) 桥面上零星嵌几块鎏金黑石（2~4 块，位置由 rng 决定但**落在桥面范围内**）
   const gildedOnBridge = 2 + rng.int(3);

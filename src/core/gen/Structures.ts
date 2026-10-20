@@ -1253,6 +1253,10 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
       for (const dx of [-3, 3]) {
         for (const dz of [-3, 3]) torch(w, room.x + dx, room.y, room.z + dz, 0);
       }
+    } else if (room.kind === 'crossing') {
+      // 十字口的箱子（批次 473，原版 `stronghold_crossing`）：
+      // 之前十字口是纯通道，整座要塞只有走廊/图书馆/传送门房三处能开箱子
+      lootChest(w, room.x - 2, room.y, room.z - 2, 'stronghold_crossing');
     } else if (room.kind === 'cell') {
       // 牢房：四角木栅栏围出两个隔间 + 一只箱子
       for (const dx of [-2, 2]) {
@@ -1888,7 +1892,9 @@ function buildOceanRuins(w: FeatureWriter, s: StructureInstance): void {
     const dz = rng.int(5) - 2;
     if (rng.chance(0.5)) w.fill(s.x + dx, base, s.z + dz, stone());
   }
-  if (rng.chance(0.5)) lootChest(w, s.x, base + 1, s.z, 'shipwreck_supply');
+  // 海底废墟自己的表（批次 473）：原版这里就是 `ocean_ruins`（煤/小麦/绿宝石/钓竿），
+  // 以前借的是沉船补给表——物品池对不上（沉船那套是"航海物资"）
+  if (rng.chance(0.5)) lootChest(w, s.x, base + 1, s.z, 'ocean_ruins');
 }
 
 // ---------------------------------------------------------------- 化石（批次 349）

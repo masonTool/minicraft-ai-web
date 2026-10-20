@@ -446,6 +446,39 @@ export const LOOT_TABLES: readonly LootTable[] = [
       empty(3),
     ],
   },
+  // ---- 批次 473：再补三张（原版有、我们一直借别人的表）
+  {
+    key: 'stronghold_crossing',
+    name: '要塞十字口',
+    rollsMin: 2,
+    rollsMax: 4,
+    entries: [
+      entry(Item.ENDER_PEARL, 1, 1, 3),
+      entry(Item.DIAMOND, 1, 2, 3),
+      entry(Item.GOLD_INGOT, 1, 3, 4),
+      entry(Item.IRON_INGOT, 1, 4, 5),
+      entry(Item.BREAD, 1, 3, 4),
+      entry(Item.APPLE, 1, 3, 4),
+      entry(Item.COAL, 1, 4, 4),
+      entry(Item.BOOK, 1, 2, 3),
+      empty(3),
+    ],
+  },
+  {
+    key: 'ocean_ruins',
+    name: '海底废墟',
+    rollsMin: 2,
+    rollsMax: 4,
+    entries: [
+      entry(Item.COAL, 1, 4, 5),
+      entry(Item.WHEAT, 1, 3, 4),
+      entry(Item.GOLD_INGOT, 1, 2, 3),
+      entry(Item.EMERALD, 1, 2, 3),
+      entry(Item.ROTTEN_FLESH, 1, 3, 4),
+      entry(Item.FISHING_ROD, 1, 1, 2),
+      empty(4),
+    ],
+  },
 ];
 
 /** 序号 1 起的表（0 = 这一格没有战利品表，是玩家自己放的箱子） */
