@@ -145,6 +145,10 @@ async function boot(): Promise<void> {
             typeof (item as WorldEntry).name === 'string' &&
             typeof (item as WorldEntry).seed === 'number',
         )
+        .map((entry) => ({
+          ...entry,
+          name: entry.name === 'MY WORLD' ? '我的世界' : entry.name,
+        }))
         .slice(0, 3);
     } catch {
       return [];
@@ -152,7 +156,7 @@ async function boot(): Promise<void> {
   };
   let worlds = parseWorlds(platform.storage.get('wx.worlds'));
   if (worlds.length === 0) {
-    worlds = [{ id: 'wx-default', name: 'MY WORLD', seed: 0x5eed }];
+    worlds = [{ id: 'wx-default', name: '我的世界', seed: 0x5eed }];
   }
   let currentWorldId = platform.storage.get('wx.worldId') ?? worlds[0]!.id;
   let currentWorld = worlds.find((world) => world.id === currentWorldId) ?? worlds[0]!;
@@ -717,7 +721,7 @@ async function boot(): Promise<void> {
       await clearSave();
       worlds = worlds.filter((world) => world.id !== currentWorldId);
       if (worlds.length === 0) {
-        worlds = [{ id: 'wx-default', name: 'MY WORLD', seed: 0x5eed }];
+        worlds = [{ id: 'wx-default', name: '我的世界', seed: 0x5eed }];
       }
       currentWorld = worlds[0]!;
       currentWorldId = currentWorld.id;
@@ -753,7 +757,7 @@ async function boot(): Promise<void> {
     try {
       const entry: WorldEntry = {
         id: `w${Date.now().toString(36)}`,
-        name: `WORLD ${worlds.length + 1}`,
+        name: `世界 ${worlds.length + 1}`,
         seed: nextSeed,
       };
       worlds.push(entry);
