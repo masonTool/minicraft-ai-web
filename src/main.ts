@@ -128,6 +128,7 @@ import { isVillagerFood, levelName, recordTradeUse, tradeBlocker, tradeDemand, t
 import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
 import { routineTarget, villagerArrived, villagerRoutine } from './core/world/VillagerRoutine.ts';
 import { isPanicThreat, nearestPanicThreat } from './core/entity/VillagerPanic.ts';
+import { ruleAccepts, targetRuleFor } from './core/entity/TargetRules.ts';
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
 // 刷怪笼里旋转的迷你生物（批次 487）：收集逻辑是纯函数，渲染在 MobRenderer
 import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
@@ -483,10 +484,6 @@ import {
 import { nearbyStandingSpot } from './core/gen/StructureCreatures.ts';
 import { ironGolemPatternAt, shouldSpawnVillageGolem } from './core/world/GolemSummon.ts';
 import {
-  GUARD_ATTACK_COOLDOWN,
-  GUARD_ATTACK_RANGE,
-  GUARD_DAMAGE,
-  GUARD_RANGE,
   nearestHostileTarget,
 } from './core/world/GuardAI.ts';
 // 村庄袭击（批次 475）：状态机是纯逻辑，生成/结算在这一层
@@ -8305,34 +8302,50 @@ class App {
   /** 正在威胁村民的生物（批次 511）：铁傀儡优先打这一批 */
   private readonly panicThreats = new Set<Mob>();
 
+  /**
+   * 会主动打架的生物（J3 第一批，批次 512）。
+   *
+   * 规则表在 `core/entity/TargetRules.ts`：铁傀儡打敌对、野狼捕猎小动物、
+   * 驯服的狼帮主人打敌对。**不再写死 `type.id === 'iron_golem'`**——
+   * 加一种会打架的生物 = 表里加一行。
+   *
+   * 与批次 474 相比行为不变（铁傀儡还是最近优先、并列按 id 定序、1.2 秒一拳 7 点）。
+   */
   private tickGuardians(context: EntityContext, dt: number): void {
+    const mobs: Mob[] = [];
     const hostiles: Mob[] = [];
     for (const entity of this.entities.all) {
-      if (entity instanceof Mob && !entity.dead && entity.type.hostile) hostiles.push(entity);
+      if (!(entity instanceof Mob) || entity.dead) continue;
+      mobs.push(entity);
+      if (entity.type.hostile) hostiles.push(entity);
     }
-    if (hostiles.length === 0) return;
-    for (const entity of this.entities.all) {
-      if (!(entity instanceof Mob) || entity.dead || entity.type.id !== 'iron_golem') continue;
+    if (mobs.length === 0) return;
+
+    for (const entity of mobs) {
+      const rule = targetRuleFor(entity.type.id, entity.tamed === true);
+      if (!rule) continue;
       entity.guardCooldown = Math.max(0, entity.guardCooldown - dt);
-      // 批次 511：先打"正在威胁村民"的那一只；没有这样的目标再退回"最近的敌对生物"
-      const priority = hostiles.filter((mob) => this.panicThreats.has(mob));
+
+      const accept = (candidate: Mob): boolean => candidate !== entity && ruleAccepts(rule, candidate);
+      // 批次 511：只对"打敌对生物"的规则做恐慌优先（狼不参与村庄防守）
+      const priority = rule.hostileOnly ? hostiles.filter((mob) => this.panicThreats.has(mob) && accept(mob)) : [];
       const hit =
         (priority.length > 0
-          ? nearestHostileTarget(entity, priority, GUARD_RANGE, (mob) => mob.type.hostile)
-          : null) ?? nearestHostileTarget(entity, hostiles, GUARD_RANGE, (mob) => mob.type.hostile);
+          ? nearestHostileTarget(entity, priority, rule.range, accept)
+          : null) ?? nearestHostileTarget(entity, mobs, rule.range, accept);
       if (!hit) continue;
       // 无论远近都先朝它走：距离够了再由下面的分支出手
       entity.guardToward(hit.target.x, hit.target.z);
-      if (hit.distance > GUARD_ATTACK_RANGE || entity.guardCooldown > 0) continue;
-      entity.guardCooldown = GUARD_ATTACK_COOLDOWN;
+      if (hit.distance > rule.attackRange || entity.guardCooldown > 0) continue;
+      entity.guardCooldown = rule.cooldown;
       hit.target.hurt(
-        GUARD_DAMAGE,
+        rule.damage,
         hit.target.x - entity.x,
         hit.target.z - entity.z,
         context,
         0,
         0,
-        { kind: 'mob', mobId: 'iron_golem' },
+        { kind: 'mob', mobId: entity.type.id },
       );
     }
   }

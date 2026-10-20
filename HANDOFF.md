@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1078（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1079（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **234**、进行中 **49**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -210,11 +210,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 155 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 156 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 155 套离线测试
+npm test                   # typecheck:tools + vitest + 156 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -226,7 +226,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **155 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **156 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
@@ -319,20 +319,21 @@ npm run agent:setup        # 跨机器自检
 - 批次 509（J11 尾巴）：**村民每日补货 + 价格浮动**。`TradeOffer.demand`（0~6，
   成交 +1 / 跨日 -1），`tradePriceDelta = floor(demand/2)`（最多 +3）加在第一样收货上；
   `recordTradeUse` 统一记账（次数夹到 `maxUses`）；`Villager.restock()` 由
-  `advanceDay` 驱动（只补已加载的村民）；`demand` 随实体寄存与存档往返（老存档 → 0）；
-  交易界面把需求量进指纹——价格变了要重建那几行，否则显示旧价。
+  `advanceDay` 驱动（只补已加载的村民）；`demand` 随寄存/存档往返，交易界面按需求重建价格行。
   `test:villager` 141 → **170 条**。J11 仍 `[~]`：白天去上班（POI 走动）与躲僵尸还没做。
 - 批次 510（J11 尾巴）：**村民作息走动**。`core/world/VillagerRoutine.ts` 纯函数：
   白天（0.02~0.45）去工作站、其它时间去床边；`routineTarget` / `villagerArrived`
   决定目的地与"到了没有"；主程序每 0.5 秒下发一次 `walkToward`（`guardToward`
   只写 moveDir），到点 `standStill`。家（床脚）在村庄人口生成时设好，
   家与工作站坐标随存档与实体寄存往返（脏坐标整份丢弃）。
-  `test:villager` 170 → **200 条**。顺带修掉 `test:spawn` 的偶发红灯：
-  下界刷怪采样 30 → 120 轮（三种怪的池子，30 轮偶尔漏一只），连跑 5 次稳定。
-  ⚠️ J11 仍 `[~]`：**不躲僵尸**（要恐慌状态与铁傀儡联动）还没做；
-  走位是直线、不绕路（村里够用，不占每帧寻路预算）。
-- 批次 511（J11 收口）：**村民恐慌 + 铁傀儡联动**。`VillagerPanic.ts`：僵尸系/灾厄系
-  10 种为威胁、8 格内取最近、反向跑 6 格；恐慌 5 秒、速度 ×1.35（`Mob.speedMultiplier()`
-  钩子）。主程序每 0.5 秒扫威胁，恐慌源进 `panicThreats`，**铁傀儡优先打它**；
+  `test:villager` 170 → **200 条**；顺带把 `test:spawn` 下界采样 30 → 120 轮（修偶发红灯）。
+  ⚠️ 走位是直线、不绕路（村里够用，不占每帧寻路预算）。
+- 批次 511（J11 收口）：**村民恐慌 + 铁傀儡联动**。`VillagerPanic.ts`：僵尸系/灾厄系 10 种为
+  威胁、8 格内取最近、反向跑 6 格；恐慌 5 秒、速度 ×1.35（`Mob.speedMultiplier()` 钩子）。
+  主程序每 0.5 秒扫威胁，恐慌源进 `panicThreats`，**铁傀儡优先打它**；
   作息排在守卫之前（优先集先生成）。`test:villager` 200 → **227 条**；
   **J11 勾掉**（233 → **234**、进行中 50 → **49**）。⚠️ 无恐慌粒子/举手、无 gossip。
+- 批次 512（J3 第一批）：**目标选择器规则表**。`TargetRules.ts`：铁傀儡打敌对、
+  野狼捕猎羊兔鸡、驯服狼打敌对；`tickGuardians` 不再写死 `iron_golem`
+  （行为与 474 一致，`test:golem` 27 条原样过）。`test:target` **42 条**，套数 155 → **156**。
+  ⚠️ 仍缺：雪傀儡远程雪球、开门/游泳、"被打后追玩家"仍在 `Mob.tick`。
