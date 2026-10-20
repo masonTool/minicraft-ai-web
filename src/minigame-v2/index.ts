@@ -16,6 +16,9 @@ import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
 import { UiLayer, box, button, slider, slot, text, toggle, type UiElement } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
+import { Chest } from '../core/container/Chest.ts';
+import { Furnace } from '../core/container/Furnace.ts';
+import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
 import { blockForItem, itemIconTile } from '../core/registry/items.ts';
@@ -117,6 +120,9 @@ let menuScreen: 'title' | 'worlds' | 'create' | 'edit' = 'title';
 let paused = false;
 let settingsOpen = false;
 let chatOpen = false;
+let containerOpen = false;
+let openedContainer: Chest | Furnace | null = null;
+let containerTitle = '';
 const chatMessages: string[] = ['v2 本地聊天', '输入 /help 查看命令'];
 let chatInput = '';
 let inventoryOpen = false;
@@ -656,6 +662,7 @@ const persistWorld = async (): Promise<void> => {
       if (edits) records.push({ dimension, cx, cz, edits });
     }
     await save.saveChunks(records);
+    await save.saveContainers(serializeContainers(world.containers));
     await save.saveMeta(save.buildMeta(world.seed, world.edits.totalEdits));
     world.edits.markSaved();
   } catch (error) {
@@ -703,6 +710,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
     for (const record of await save.loadAllChunkEdits()) {
       world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
     }
+    restoreContainers(world.containers, await save.loadContainers());
     const loaded = await save.loadPlayer();
     if (loaded) {
       physics.teleport(loaded.x, loaded.y, loaded.z);
@@ -1028,6 +1036,76 @@ const showTitle = (): void => {
   );
 };
 
+const showContainer = (): void => {
+  if (!openedContainer) return;
+  containerOpen = true;
+  const isFurnace = openedContainer instanceof Furnace;
+  const slots = isFurnace ? 3 : 27;
+  const cols = isFurnace ? 3 : 9;
+  const slotSize = 50;
+  const gap = 5;
+  const panelW = 620;
+  const panelH = 340;
+  const panelX = (1024 - panelW) / 2;
+  const panelY = (uiHeight - panelH) / 2;
+  const gridW = cols * slotSize + (cols - 1) * gap;
+  const gridX = panelX + (panelW - gridW) / 2;
+  const gridY = panelY + 100;
+  const elements: UiElement[] = [
+    text(panelX + 26, panelY + 20, 420, 40, containerTitle, { fontSize: 28, color: '#ffffff' }),
+    button(panelX + panelW - 68, panelY + 20, 42, 42, 'X', () => {
+      containerOpen = false;
+      openedContainer = null;
+      showHud();
+    }, { background: 'rgba(30,38,46,0.95)', border: 'rgba(180,215,235,0.35)', radius: 8 }),
+    text(gridX, gridY - 28, gridW, 24, isFurnace ? '材料 / 燃料 / 产物' : '点击取出；空槽可放入当前快捷栏物品', {
+      fontSize: 13,
+      color: 'rgba(200,220,235,0.7)',
+    }),
+  ];
+  for (let i = 0; i < slots; i++) {
+    const stack = openedContainer.get(i);
+    elements.push(slot(gridX + (i % cols) * (slotSize + gap), gridY + Math.floor(i / cols) * (slotSize + gap), slotSize, 400 + i, stack?.id ?? 0, stack?.count ?? 0, false, () => {
+      const current = openedContainer?.get(i);
+      if (current) {
+        const remaining = inventory.add(current.id, current.count);
+        openedContainer?.set(i, remaining > 0 ? { id: current.id, count: remaining } : null);
+      } else {
+        const held = inventory.get(selectedSlot);
+        if (held) {
+          openedContainer?.set(i, held);
+          inventory.set(selectedSlot, null);
+        }
+      }
+      showContainer();
+    }));
+  }
+  ui.setRoot(box(0, 0, 1024, uiHeight, [
+    box(0, 0, 1024, uiHeight, [], { background: 'rgba(0,0,0,0.55)' }),
+    box(panelX, panelY, panelW, panelH, elements, {
+      background: 'rgba(16,22,28,0.97)',
+      border: 'rgba(170,205,230,0.45)',
+      borderWidth: 2,
+      radius: 12,
+    }),
+  ]));
+};
+
+const openContainerAt = (hit: RayHit): boolean => {
+  const id = world.getBlock(hit.x, hit.y, hit.z);
+  if (id === Block.CHEST) {
+    openedContainer = world.containers.getOrCreateChest('overworld', hit.x, hit.y, hit.z);
+    containerTitle = '箱子';
+  } else if (id === Block.FURNACE) {
+    openedContainer = world.containers.getOrCreateFurnace('overworld', hit.x, hit.y, hit.z);
+    containerTitle = '熔炉';
+  } else {
+    return false;
+  }
+  showContainer();
+  return true;
+};
+
 const pushChat = (line: string): void => {
   chatMessages.push(line);
   if (chatMessages.length > 9) chatMessages.splice(0, chatMessages.length - 9);
@@ -1285,6 +1363,7 @@ const breakAt = (hit: RayHit): void => {
 };
 
 const placeAt = (hit: RayHit): void => {
+  if (openContainerAt(hit)) return;
   const stack = inventory.get(selectedSlot);
   if (!stack) return;
   const x = hit.x + hit.nx;
@@ -1312,7 +1391,7 @@ platform.input.onPointer('down', (event) => {
   lastDownX = event.clientX;
   lastDownY = event.clientY;
   if (ui.handlePointer('down', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
-  if (!started || paused || settingsOpen || inventoryOpen || chatOpen) return;
+  if (!started || paused || settingsOpen || inventoryOpen || chatOpen || containerOpen) return;
   if (event.clientX < platform.system.width / 2) {
     movePointer = event.pointerId;
     moveX = event.clientX;
@@ -1407,6 +1486,7 @@ const frame = (): void => {
       settings: settingsOpen,
       inventoryOpen,
       chatOpen,
+      containerOpen,
       sneaking,
     }),
   );
@@ -1434,7 +1514,7 @@ const frame = (): void => {
     input.jump = true;
     jumpQueued = false;
   }
-  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen) {
+  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen) {
     physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, settings.autoJump);
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;
