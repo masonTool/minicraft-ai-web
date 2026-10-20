@@ -7,6 +7,7 @@
 
 import { Block } from '../src/core/registry/blocks.ts';
 import { ironGolemPatternAt, shouldSpawnVillageGolem } from '../src/core/world/GolemSummon.ts';
+import { GUARD_RANGE, nearestHostileTarget } from '../src/core/world/GuardAI.ts';
 
 let passed = 0;
 let failed = 0;
@@ -118,6 +119,46 @@ console.log('\n[村庄守卫的门槛]');
   check('已经有一只傀儡 → 不再生成（否则每加载一次多一只）', !shouldSpawnVillageGolem(6, 1));
   check('傀儡上限可以调（测试/以后做多村庄时用）', shouldSpawnVillageGolem(6, 1, 2));
   check('一个村民都没有 → 不生成', !shouldSpawnVillageGolem(0, 0));
+}
+
+
+console.log('\n[守卫的目标选择（批次 474）]');
+{
+  /** 造一个候选：只要 x/z/type.id/dead 四样（Mob 天然满足这个形状） */
+  const at = (id: string, x: number, z: number, dead = false) => ({ x, y: 64, z, type: { id }, dead });
+  const hostile = (m: { type: { id: string } }): boolean => m.type.id !== 'villager';
+
+  const near = at('zombie', 3, 0);
+  const far = at('skeleton', 10, 0);
+  equal('最近的优先', nearestHostileTarget({ x: 0, y: 64, z: 0 }, [far, near], GUARD_RANGE, hostile)?.target.type.id, 'zombie');
+  equal(
+    '超出半径的不算',
+    nearestHostileTarget({ x: 0, y: 64, z: 0 }, [at('zombie', 20, 0)], GUARD_RANGE, hostile),
+    null,
+  );
+  equal(
+    '死的不算',
+    nearestHostileTarget({ x: 0, y: 64, z: 0 }, [at('zombie', 2, 0, true)], GUARD_RANGE, hostile),
+    null,
+  );
+  equal(
+    '非敌对（村民）不算',
+    nearestHostileTarget({ x: 0, y: 64, z: 0 }, [at('villager', 2, 0)], GUARD_RANGE, hostile),
+    null,
+  );
+  equal('一个候选都没有 → null', nearestHostileTarget({ x: 0, y: 64, z: 0 }, [], GUARD_RANGE, hostile), null);
+
+  // 距离并列 → 按 type.id 定序（否则守卫会在两只僵尸之间来回抖）
+  const a = at('zombie', 4, 0);
+  const b = at('creeper', 0, 4);
+  const first = nearestHostileTarget({ x: 0, y: 64, z: 0 }, [a, b], GUARD_RANGE, hostile);
+  const second = nearestHostileTarget({ x: 0, y: 64, z: 0 }, [b, a], GUARD_RANGE, hostile);
+  equal('并列时按 type.id 定序（与遍历顺序无关）', first?.target.type.id, 'creeper');
+  equal('换个顺序结果一致', second?.target.type.id, first?.target.type.id);
+
+  // 水平距离：目标在半空不该被算得更远
+  const overhead = { x: 2, y: 90, z: 0, type: { id: 'zombie' }, dead: false };
+  equal('按水平距离算（半空的不吃亏）', nearestHostileTarget({ x: 0, y: 64, z: 0 }, [overhead], GUARD_RANGE, hostile)?.distance, 2);
 }
 
 console.log(`\n铁傀儡测试：${passed} 通过 / ${failed} 失败`);

@@ -436,6 +436,13 @@ import {
 } from './core/gen/Structures.ts';
 import { nearbyStandingSpot } from './core/gen/StructureCreatures.ts';
 import { ironGolemPatternAt, shouldSpawnVillageGolem } from './core/world/GolemSummon.ts';
+import {
+  GUARD_ATTACK_COOLDOWN,
+  GUARD_ATTACK_RANGE,
+  GUARD_DAMAGE,
+  GUARD_RANGE,
+  nearestHostileTarget,
+} from './core/world/GuardAI.ts';
 import { bastionCreatureSpawnsAt, nearestBastion } from './core/gen/Bastion.ts';
 import { fortressCreatureSpawnsAt, nearestFortress } from './core/gen/NetherFortress.ts';
 import { endCityCreatureSpawnsAt, nearestEndCity } from './core/gen/EndStructures.ts';
@@ -7737,6 +7744,43 @@ class App {
   }
 
   /**
+   * 村庄守卫的每一帧（批次 474）：给每只铁傀儡挑一个最近的敌对生物，
+   * 走近了就按冷却出手。
+   *
+   * 判据在 `core/world/GuardAI.ts`（纯函数：最近的优先、并列按 type.id 定序），
+   * 这里只做"收集候选 + 下指令 + 结算伤害"。
+   *
+   * ⚠️ 铁傀儡自己 `hostile: false`，所以它**不会被自己选成目标**；
+   * 候选里也只取 `type.hostile` 的生物（村民、动物、其他傀儡都不在内）。
+   */
+  private tickGuardians(context: EntityContext, dt: number): void {
+    const hostiles: Mob[] = [];
+    for (const entity of this.entities.all) {
+      if (entity instanceof Mob && !entity.dead && entity.type.hostile) hostiles.push(entity);
+    }
+    if (hostiles.length === 0) return;
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity.dead || entity.type.id !== 'iron_golem') continue;
+      entity.guardCooldown = Math.max(0, entity.guardCooldown - dt);
+      const hit = nearestHostileTarget(entity, hostiles, GUARD_RANGE, (mob) => mob.type.hostile);
+      if (!hit) continue;
+      // 无论远近都先朝它走：距离够了再由下面的分支出手
+      entity.guardToward(hit.target.x, hit.target.z);
+      if (hit.distance > GUARD_ATTACK_RANGE || entity.guardCooldown > 0) continue;
+      entity.guardCooldown = GUARD_ATTACK_COOLDOWN;
+      hit.target.hurt(
+        GUARD_DAMAGE,
+        hit.target.x - entity.x,
+        hit.target.z - entity.z,
+        context,
+        0,
+        0,
+        { kind: 'mob', mobId: 'iron_golem' },
+      );
+    }
+  }
+
+  /**
    * 铁傀儡召唤（批次 472）：南瓜 + 4 块铁块摆成一竖一横。
    *
    * 形状判定在 `core/world/GolemSummon.ts`（纯函数）；这里负责清掉那 5 格、
@@ -9107,6 +9151,9 @@ class App {
       },
     };
     this.lastEntityContext = context;
+    // 村庄守卫（批次 474）：铁傀儡在实体 tick **之前**拿到指令（朝谁走、打不打），
+    // 实体自己只负责按 `moveDir` 移动——见 `Mob.guardToward` 的注释
+    this.tickGuardians(context, dt);
     this.entities.update(context, dt);
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;

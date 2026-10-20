@@ -1446,6 +1446,32 @@ export class Mob extends Entity {
     ctx.playSound?.('bow_shoot', this.x, this.y, this.z);
   }
 
+  /**
+   * 守卫指令（批次 474，铁傀儡）：朝 (x, z) 走，直到下一帧再下新指令。
+   *
+   * 为什么不塞进 `tick` 的目标选择：那里的 `chasing` 一整套都按"追玩家"写死
+   * （视线、隐身、宠物跟随、求偶、拴绳…），把守卫硬插进去会牵动每一条分支。
+   * 而守卫只需要"朝某点走"——`tick` 的游荡分支本来每帧都读 `moveDir`，
+   * 主程序在 `entities.update` **之前**下指令就够了。
+   *
+   * ⚠️ 顺带把 `wanderTimer` 推后：它到期时会**重新随机一个方向**，
+   * 不推的话守卫每 2~6 秒就会突然拐弯一下（看起来像卡住了）。
+   */
+  guardToward(x: number, z: number): void {
+    const dx = x - this.x;
+    const dz = z - this.z;
+    const length = Math.hypot(dx, dz);
+    if (length < 1e-4) return;
+    this.moveDirX = dx / length;
+    this.moveDirZ = dz / length;
+    this.yaw = Math.atan2(dx, dz);
+    this.idle = false;
+    this.wanderTimer = Math.max(this.wanderTimer, 0.6);
+  }
+
+  /** 守卫的攻击冷却（批次 474）：实体自己记，主程序每帧递减 */
+  guardCooldown = 0;
+
   protected move(chasing: boolean, dt: number): void {
     // 状态效果直接乘在速度上：缓慢 -15%/级、速度 +20%/级（数值来自 `StatusEffects`，与玩家同源）
     const speed = (chasing ? this.type.speed * 1.12 : this.type.speed * 0.5) * this.effects.moveSpeedMultiplier();
