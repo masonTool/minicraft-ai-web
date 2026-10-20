@@ -23,6 +23,7 @@ import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
+import { createHotbar } from './ui/hotbar.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { workerHostToLike } from '../platform/wx/worker-like.ts';
 import { createMainThreadWorker } from './main-thread-worker.ts';
@@ -196,6 +197,7 @@ async function boot(): Promise<void> {
   scene.add(outline);
 
   const HOTBAR = [Block.OAK_PLANKS, Block.STONE, Block.DIRT, Block.GRASS_BLOCK, Block.OAK_LOG, Block.GLASS];
+  const hotbar = createHotbar(atlas, HOTBAR);
   let selectedSlot = 0;
   let currentHit: RayHit | null = null;
   let targetLabel = '-';
@@ -260,6 +262,7 @@ async function boot(): Promise<void> {
     yaw = loadedPlayer.yaw;
     pitch = loadedPlayer.pitch;
     selectedSlot = Math.max(0, Math.min(HOTBAR.length - 1, loadedPlayer.selectedSlot));
+    hotbar.setSelected(selectedSlot);
     playerReady = true;
   }
 
@@ -418,6 +421,7 @@ async function boot(): Promise<void> {
 
   const cycleSlot = (): void => {
     selectedSlot = (selectedSlot + 1) % HOTBAR.length;
+    hotbar.setSelected(selectedSlot);
   };
 
   const handleRightTap = (_x: number, y: number): void => {
@@ -612,6 +616,7 @@ async function boot(): Promise<void> {
     sceneTriangles = renderer.info.render.triangles;
     sceneCalls = renderer.info.render.calls;
     hud.render(renderer);
+    hotbar.render(renderer);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

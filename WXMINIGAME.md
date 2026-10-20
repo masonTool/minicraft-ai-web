@@ -17,7 +17,7 @@
 | --- | --- |
 | 当前阶段 | M1 平台层收尾 → M2 UI |
 | 当前任务 | **WX-020B：抽 `UiPort` + 背包 UI**（第一人称/准星/挖放/快捷栏/存档/音频已接） |
-| 刚完成 | WX-020B 前三块：第一人称 + 平台 pointer；准星/选中框/挖放/6 格快捷栏；FileSaveGame 存档 + 读档恢复 + AudioEngine 音效；WX-020A 真实世界预览；WX-018 共享 Worker；WX-011~017、01B/01C |
+| 刚完成 | WX-020B 前三块：第一人称 + 平台 pointer；准星/选中框/挖放；FileSaveGame 存档 + 读档恢复 + AudioEngine 音效；WX-021 第一个 canvas 组件（底部快捷栏）；WX-020A 真实世界预览；WX-018 共享 Worker；WX-011~017、01B/01C |
 | 正式壳 | `minigame/`（压力场景，801 draw call 基线） |
 | 真实世界 | `minigame-world/`（WX-020A，当前可看完整地形） |
 | 平台基座 | `vendor/minigame-adapter/`（870d66f + 本分支补丁） |
@@ -421,7 +421,7 @@ flex/absolute/grid 子集。
 | --- | --- | --- | --- | --- | --- |
 | WX-020A | 真实世界启动（无 UI） | `minigame-world`：图集/材质/World/ChunkRenderer；helper 预览已出完整地形，worker 超时自动降级主线程 | WX-018 | 3 | [x] |
 | WX-020B | 抽 `UiPort` + App 条件启动 | 第一人称/pointer/准星/挖放/快捷栏/存档/音频已接；`UiPort`、背包 UI、`main.ts` 条件启动待做 | WX-020A | 3 | [~] |
-| WX-021 | UI 工具包 A | 面板/按钮三态/文字/图标/基础布局（9-slice、像素风） | WX-020B | 3 | [ ] |
+| WX-021 | UI 工具包 A | 快捷栏组件已完成（图集图标/选中框）；面板/按钮三态/文字/9-slice 待做 | WX-020B | 3 | [~] |
 | WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020B | 2 | [ ] |
 | WX-022 | UI 工具包 B | 滚动/页签/滑块/开关/输入框 | WX-021 | 2 | [ ] |
 | WX-023 | UI 工具包 C | 槽位/拖拽/长按 Tooltip/Toast/进度条 | WX-021 | 3 | [ ] |
@@ -578,6 +578,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-020B 第一块 | 真实世界接入第一人称：`PlayerPhysics` + 平台 pointer；左摇杆/右视角/右下跳跃；helper 预览 `P 9,67,9 G1`、37 chunks、89.7k tri、98 calls、121fps | `f868573` |
 | 2026-10-20 | WX-020B 第二块 | 准星射线 + 选中框 + 挖/放 + 6 格快捷栏；helper 预览 `T grass_block`、`SLOT 1/6`、229k tri / 254 calls / 119fps | `e097a6b` |
 | 2026-10-20 | WX-020B 第三块 | FileSaveGame 接线：玩家/快捷栏/区块增量落盘；`FileStore.mkdir` 修复父目录；15s 自动保存 + 切后台保存；重开 `save ready 0 chunks player`；AudioEngine 挖放音效 | `db58faa` |
+| 2026-10-20 | WX-021 开始 | 新增 canvas 快捷栏组件：6 格真实图集图标、白框选中；helper 截图确认底部快捷栏 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 

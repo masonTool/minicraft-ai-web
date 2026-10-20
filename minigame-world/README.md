@@ -40,7 +40,7 @@ L tap cycle/drag move · R drag look/tap top place mid break bottom jump
 
 - `P x,y,z G0/1`：玩家坐标、是否落地；
 - `T ...`：准星命中的方块（黑色选中框会套住它）；
-- `SLOT 1/6`：快捷栏当前槽位；
+- `SLOT 1/6`：快捷栏当前槽位；底部 6 格是真实图集图标，白框为当前槽位；
 - 左半屏拖动 = 摇杆，轻点 = 切快捷栏；
 - 右半屏拖动 = 视角，轻点分区：上 = 放方块、中 = 挖方块、下 = 跳跃；
 - `WORKER wx` 表示真机 worker 可用；`main` 表示自动降级主线程；
