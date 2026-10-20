@@ -93,6 +93,12 @@ async function main() {
     // 标题 → 设置 → 返回：必须回到标题，不能进入世界
     await tap(512, DESIGN.height * 0.5 + 78);
     const titleSettings = await waitState((state) => state.settings, '标题页设置未打开');
+    await tap(388, 112.5);
+    await waitState((state) => state.settingsTab === 'game', '标题设置游戏页未切换');
+    await tap(521, 112.5);
+    await waitState((state) => state.settingsTab === 'controls', '标题设置控制页未切换');
+    await tap(654, 112.5);
+    await waitState((state) => state.settingsTab === 'sound', '标题设置声音页未切换');
     await tap(774, 58.5);
     const titleAgain = await waitState(
       (state) => state.menuOpen && state.screen === 'title' && !state.settings,
@@ -128,10 +134,9 @@ async function main() {
     const paused = await waitState((state) => state.paused, '点暂停后没有打开暂停面板');
 
     await tap(512, 214.5);
-    const settings = await waitState(
-      (state) => state.settings && state.settingsTab === 'video',
-      '暂停→设置未打开视频页',
-    );
+    const settings = await waitState((state) => state.settings, '暂停→设置未打开');
+    await tap(260, 112.5);
+    await waitState((state) => state.settingsTab === 'video', '视频页 tab 未切换');
 
     await tap(521, 112);
     const controls = await waitState(
@@ -172,13 +177,22 @@ async function main() {
     const worldsBeforeCreative = backToWorlds.worldCount;
     await tap(512, 110.5);
     await waitState((state) => state.screen === 'create', '第二次新建世界失败');
+    // 类型：默认→超平坦；难度：普通→困难；模式：生存→创造
+    await tap(600, 234.5);
+    await tap(600, 284.5);
     await tap(600, 335);
     await page.waitForTimeout(500);
     await page.screenshot({ path: '/tmp/e2e-create-creative.png' });
     await tap(512, 414.5);
     const creative = await waitState(
-      (state) => state.inGame && state.gameMode === 'creative' && state.chunks > 0 && state.drawn > 0,
-      '创造世界没有按选择的模式创建并进入',
+      (state) =>
+        state.inGame &&
+        state.gameMode === 'creative' &&
+        state.worldType === 'flat' &&
+        state.difficulty === 'hard' &&
+        state.chunks > 0 &&
+        state.drawn > 0,
+      '超平坦/困难/创造世界没有按选择创建并进入',
       30000,
     );
     assert(creative.worldCount === worldsBeforeCreative + 1, '创造世界数量未增加', creative);
@@ -196,8 +210,25 @@ async function main() {
     );
     assert(switched.currentWorldId !== creative.currentWorldId, '切换世界后 currentWorldId 未变化', switched);
 
+    // 世界卡片删除：自动确认，校验世界数量减少
+    await frame.evaluate(() => {
+      wx.showModal = (options) => {
+        options?.success?.({ confirm: true, cancel: false });
+      };
+    });
+    await tap(512, 86);
+    await waitState((state) => state.paused, '删除用例暂停失败');
+    await tap(512, 272.5);
+    const beforeDelete = await waitState((state) => state.screen === 'worlds', '删除用例返回世界列表失败');
+    await tap(616, 250.5);
+    const afterDelete = await waitState(
+      (state) => state.screen === 'worlds' && state.worldCount === beforeDelete.worldCount - 1,
+      '删除非当前世界后数量未减少',
+      10000,
+    );
+
     console.log('PASS');
-    console.log(JSON.stringify({ title, titleSettings, titleAgain, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched }, null, 2));
+    console.log(JSON.stringify({ title, titleSettings, titleAgain, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched, titleSettings, beforeDelete, afterDelete }, null, 2));
   } catch (error) {
     await page.screenshot({ path: '/tmp/e2e-fail.png' }).catch(() => undefined);
     console.error('FAIL:', error.message);

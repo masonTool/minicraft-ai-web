@@ -1955,6 +1955,8 @@ async function boot(): Promise<void> {
         worldCount: worlds.length,
         currentWorldId,
         gameMode,
+        worldType: currentWorld.worldType,
+        difficulty: currentWorld.difficulty,
         health: playerHealth,
         chunks: world.chunks.size,
         drawn: chunkRenderer.drawnCount,
