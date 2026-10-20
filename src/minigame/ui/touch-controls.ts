@@ -97,6 +97,7 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
     // 右侧按钮：与 world-boot 的 y 分区对应
     const bx = canvas.width * 0.88;
     button(bx, canvas.height * 0.3, 44, 'PLACE');
+    button(canvas.width * 0.72, canvas.height * 0.58, 30, 'ATK', false, 12);
     button(bx, canvas.height * 0.58, 48, 'MINE');
     button(bx, canvas.height * 0.84, 46, 'JUMP');
 

@@ -494,6 +494,53 @@ async function boot(): Promise<void> {
   };
   dropOne = dropItem;
 
+  interface HitParticle {
+    mesh: THREE.Mesh;
+    vx: number;
+    vy: number;
+    vz: number;
+    age: number;
+    life: number;
+  }
+  const particles: HitParticle[] = [];
+  const spawnHitParticles = (x: number, y: number, z: number, color: number): void => {
+    for (let i = 0; i < 6; i++) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.08, 0.08),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }),
+      );
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+      particles.push({
+        mesh,
+        vx: (Math.random() - 0.5) * 2.4,
+        vy: 1 + Math.random() * 1.5,
+        vz: (Math.random() - 0.5) * 2.4,
+        age: 0,
+        life: 0.45,
+      });
+    }
+  };
+
+  const updateParticles = (dt: number): void => {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const particle = particles[i]!;
+      particle.age += dt;
+      particle.vy -= 12 * dt;
+      particle.mesh.position.x += particle.vx * dt;
+      particle.mesh.position.y += particle.vy * dt;
+      particle.mesh.position.z += particle.vz * dt;
+      const material = particle.mesh.material as THREE.MeshBasicMaterial;
+      material.opacity = Math.max(0, 1 - particle.age / particle.life);
+      if (particle.age >= particle.life) {
+        scene.remove(particle.mesh);
+        particle.mesh.geometry.dispose();
+        material.dispose();
+        particles.splice(i, 1);
+      }
+    }
+  };
+
   const updateDrops = (dt: number): void => {
     for (let i = drops.length - 1; i >= 0; i--) {
       const drop = drops[i]!;
@@ -763,10 +810,25 @@ async function boot(): Promise<void> {
     if (id === Block.AIR || id === Block.BEDROCK) return;
     audio?.playBreakForBlock(blockDef(id).name, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
     world.setBlockAndUpdate(x, y, z, Block.AIR);
+    spawnHitParticles(x + 0.5, y + 0.5, z + 0.5, dropColor(id));
     inventory.add(id, 1);
     ui.syncInventory(inventory.serialize(), selectedSlot);
     ui.showToast(`+ ${blockDef(id).name.replace('minecraft:', '')}`);
     requestSave();
+  };
+
+  const swingAttack = (): void => {
+    if (!currentHit) {
+      ui.showToast('NO TARGET');
+      return;
+    }
+    const id = world.getBlock(currentHit.x, currentHit.y, currentHit.z);
+    spawnHitParticles(
+      currentHit.x + 0.5,
+      currentHit.y + 0.5,
+      currentHit.z + 0.5,
+      dropColor(id),
+    );
   };
 
   const placeTarget = (): void => {
@@ -892,6 +954,12 @@ async function boot(): Promise<void> {
       moveOriginY = y;
       moveStartTime = Date.now();
       moveMoved = false;
+      return;
+    }
+    // 右侧 ATK 按钮：不进入视角拖动
+    if (x > width * 0.66 && x < width * 0.78 && y > height * 0.5 && y < height * 0.66) {
+      uiPointerId = event.pointerId;
+      swingAttack();
       return;
     }
     if (lookPointerId === null) {
@@ -1082,6 +1150,7 @@ async function boot(): Promise<void> {
     updateCamera();
     updateTarget();
     updateDrops(dt);
+    updateParticles(dt);
 
     if (mining) {
       if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen() || ui.isInventoryOpen()) {
