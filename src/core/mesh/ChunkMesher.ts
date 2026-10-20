@@ -27,6 +27,8 @@
 
 import * as THREE from 'three';
 import { Block, blockDef, blockTiles, faceTileOn, pottedPlantTile, type BlockDef } from '../registry/blocks.ts';
+// 水浸（批次 469）：状态位在 blockState 里
+import { isWaterlogged } from '../registry/blockState.ts';
 import {
   FLOWER_POT_RIM,
   canConnectTo,
@@ -729,6 +731,27 @@ export function meshSection(
         if (isCrossShape(def.shape)) {
           emitCross(emit, x, y, z, worldY);
           continue;
+        }
+
+        // ---- 水浸（批次 469）：额外输出一层**整格的水**（走半透明通道）
+        //
+        // 原版的含水方块就是"水填满这一格的剩余空间"，所以这里用整格盒子再画一遍，
+        // 而不是跟着方块自己的形状走（跟着形状画，台阶下面那一半是干的，看着像 bug）。
+        // 邻居剔除只做"水/含水方块"——它们会自己画那一面，重复画会让 alpha 叠深。
+        if (isWaterlogged(chunk.getState(x, worldY, z))) {
+          const waterEmit: EmitContext = {
+            ...emit,
+            buf: buffers.translucent,
+            def: blockDef(Block.WATER),
+            isTranslucent: true,
+          };
+          for (const face of FACES) {
+            const [dx, dy, dz] = face.dir;
+            const neighborId = sampleBlock(x + dx, y + dy, z + dz);
+            if (neighborId === Block.WATER) continue;
+            if (isWaterlogged(ctx.getBlockState(originX + x + dx, worldY + dy, originZ + z + dz))) continue;
+            emitFace(waterEmit, x, y, z, worldY, face, UNIT_BOX);
+          }
         }
 
         // ---- 非完整方块：逐个盒子输出

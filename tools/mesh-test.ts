@@ -13,7 +13,8 @@
 
 import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
-import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { Block, blockDef, slabId } from '../src/core/registry/blocks.ts';
+import { withWaterlogged } from '../src/core/registry/blockState.ts';
 import { Chunk, SECTION_COUNT, Chunk as ChunkClass } from '../src/core/world/Chunk.ts';
 import { isFullBlockShape } from '../src/core/registry/blockShapes.ts';
 
@@ -213,6 +214,27 @@ console.log('\n[真实地形：合并率]');
   console.log(`    逐面 ${naive} 个三角形 → 贪心后 ${triangles}（${(ratio * 100).toFixed(1)}%）`);
   check('真实地形产生了三角形', triangles > 0, `${triangles}`);
   check('贪心网格化把三角形压掉至少 25%', ratio < 0.75, `实际 ${(ratio * 100).toFixed(1)}%`);
+}
+
+
+console.log('\n[水浸方块：额外输出一层水面（批次 469）]');
+{
+  // 一块含水台阶（4,64,4）与一块干台阶（8,64,4）做对照
+  const chunk = new Chunk(0, 0);
+  const slab = slabId(0);
+  chunk.set(4, 64, 4, slab, withWaterlogged(0, true));
+  chunk.set(8, 64, 4, slab, 0);
+
+  const ctx: MeshContext = {
+    getBlock: (wx, wy, wz) => (wx >= 0 && wx < 16 && wz >= 0 && wz < 16 ? chunk.get(wx, wy, wz) : Block.AIR),
+    getBlockState: (wx, wy, wz) => (wx >= 0 && wx < 16 && wz >= 0 && wz < 16 ? chunk.getState(wx, wy, wz) : 0),
+    getSkyLight: () => 15,
+    getBlockLight: () => 0,
+  };
+  const result = meshSection(chunk, Chunk.sectionOf(64), atlasStub, ctx);
+  // 只有含水那块会进半透明通道：整格盒子 6 面 × 2 三角形 = 12
+  check('含水台阶在半透明通道里输出了 12 个三角形（6 面）', triangleCount(result.translucent) === 12, `${triangleCount(result.translucent)}`);
+  check('实心通道里两块台阶都在（各自若干面）', triangleCount(result.solid) > 0);
 }
 
 console.log(`\n网格化测试：${passed} 通过 / ${failed} 失败\n`);
