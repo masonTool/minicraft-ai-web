@@ -199,9 +199,13 @@ async function boot(): Promise<void> {
     stickMode = mode;
     const s = Math.max(0.75, Math.min(1.5, scale));
     jumpRadiusPx = 46 * s * uiScale;
-    jumpCenterX = (leftHanded ? safe.left + 24 + 46 * s : safe.right - 24 - 46 * s) * uiScale;
+    jumpCenterX = leftHanded
+      ? safe.left + (24 + 46 * s) * uiScale
+      : safe.right - (24 + 46 * s) * uiScale;
     jumpCenterY = height - safeBottomPx - (116 + 46 * s) * uiScale;
-    stickCenterX = (leftHanded ? safe.right - 26 - 80 * s : safe.left + 26 + 80 * s) * uiScale;
+    stickCenterX = leftHanded
+      ? safe.right - (26 + 80 * s) * uiScale
+      : safe.left + (26 + 80 * s) * uiScale;
     stickCenterY = height - safeBottomPx - (116 + 80 * s) * uiScale;
     stickHitRadius = 110 * s * uiScale;
   };
@@ -919,7 +923,8 @@ async function boot(): Promise<void> {
   };
 
   const spawnPlayer = (): void => {
-    physics.teleport(spawnPoint.x + 0.5, spawnPoint.y + 1.01, spawnPoint.z + 0.5);
+    const surface = world.getSurfaceBlockY(spawnPoint.x, spawnPoint.z) ?? spawnPoint.y;
+    physics.teleport(spawnPoint.x + 0.5, surface + 1.01, spawnPoint.z + 0.5);
     fallStartY = null;
     playerReady = true;
     updateCamera();
@@ -1970,6 +1975,11 @@ async function boot(): Promise<void> {
         touchScale: currentSettings.touchScale,
         stickMode: currentSettings.stickMode,
         health: playerHealth,
+        x: physics.x,
+        y: physics.y,
+        z: physics.z,
+        sneaking,
+        flying,
         chunks: world.chunks.size,
         drawn: chunkRenderer.drawnCount,
       });

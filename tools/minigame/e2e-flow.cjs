@@ -40,6 +40,7 @@ async function main() {
     hasTouch: true,
   });
   const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
   let latestState = null;
   page.on('console', (message) => {
     const text = message.text();
@@ -67,12 +68,18 @@ async function main() {
     return null;
   };
 
-  const tap = async (x, y) => {
+  const point = async (x, y) => {
     const box = await page.locator('iframe').boundingBox();
     assert(box, '找不到 iframe 位置');
-    const px = box.x + (x / DESIGN.width) * box.width;
-    const py = box.y + (y / DESIGN.height) * box.height;
-    await page.touchscreen.tap(px, py);
+    return {
+      x: box.x + (x / DESIGN.width) * box.width,
+      y: box.y + (y / DESIGN.height) * box.height,
+    };
+  };
+
+  const tap = async (x, y) => {
+    const p = await point(x, y);
+    await page.touchscreen.tap(p.x, p.y);
   };
 
   const waitState = async (predicate, message, timeout = 15000) => {
@@ -218,6 +225,30 @@ async function main() {
     );
     assert(creative.worldCount === worldsBeforeCreative + 1, '创造世界数量未增加', creative);
 
+    // 双击摇杆潜行，再双击恢复
+    const stickCenter = await point(106, 277);
+    const joystickDouble = async () => {
+      await page.touchscreen.tap(stickCenter.x, stickCenter.y);
+      await page.waitForTimeout(80);
+      await page.touchscreen.tap(stickCenter.x, stickCenter.y);
+    };
+    await joystickDouble();
+    const sneakOn = await waitState((state) => state.sneaking, '双击摇杆没有开启潜行');
+    await joystickDouble();
+    await waitState((state) => !state.sneaking, '双击摇杆没有关闭潜行', 5000);
+
+    // 双击跳跃开飞行，再双击关闭
+    const jumpCenter = await point(954, 311);
+    const jumpDouble = async () => {
+      await page.touchscreen.tap(jumpCenter.x, jumpCenter.y);
+      await page.waitForTimeout(80);
+      await page.touchscreen.tap(jumpCenter.x, jumpCenter.y);
+    };
+    await jumpDouble();
+    const flyOn = await waitState((state) => state.flying, '双击跳跃没有开启飞行', 5000);
+    await jumpDouble();
+    await waitState((state) => !state.flying, '双击跳跃没有关闭飞行', 5000);
+
     // 切回默认世界：验证非当前世界的原地切换
     await tap(512, 86);
     await waitState((state) => state.paused, '创造世界暂停失败');
@@ -232,7 +263,9 @@ async function main() {
     assert(switched.currentWorldId !== creative.currentWorldId, '切换世界后 currentWorldId 未变化', switched);
 
     // 世界卡片删除：自动确认，校验世界数量减少
-    await frame.evaluate(() => {
+    const liveFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
+    assert(liveFrame, '删除用例找不到当前 iframe');
+    await liveFrame.evaluate(() => {
       wx.showModal = (options) => {
         options?.success?.({ confirm: true, cancel: false });
       };
@@ -274,7 +307,7 @@ async function main() {
     );
 
     console.log('PASS');
-    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
+    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, sneakOn, flyOn, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
   } catch (error) {
     await page.screenshot({ path: '/tmp/e2e-fail.png' }).catch(() => undefined);
     console.error('FAIL:', error.message);
