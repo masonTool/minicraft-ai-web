@@ -348,6 +348,7 @@ const EXPLICIT: Record<string, string> = {
   music_disc_13: '唱片「13」',
   music_disc_cat: '唱片「Cat」',
   music_disc_ward: '唱片「Ward」',
+  totem_of_undying: '不死图腾',
   // 投掷器（批次 59，H14）：通电就朝朝向那一格吐一件（对面是容器就塞进去）
   dropper: '投掷器',
   dispenser: '发射器',

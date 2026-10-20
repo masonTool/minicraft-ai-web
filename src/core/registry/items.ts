@@ -233,6 +233,12 @@ export const Item = {
   MUSIC_DISC_CAT: 1601,
   MUSIC_DISC_WARD: 1602,
   /**
+   * 不死图腾（批次 498，B18）：唯一来源是**唤魔者**（原版也是它必掉）。
+   *
+   * 它不参与任何合成/装备——只在你背包里躺着，等那一下致命的伤害。
+   */
+  TOTEM_OF_UNDYING: 1548,
+  /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
    * 它的用途与原版一致：**缓降药水**（`Brewing` 的 `VARIANT_INGREDIENTS`）
@@ -532,6 +538,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.MUSIC_DISC_13, name: 'minecraft:music_disc_13', tile: 'item_music_disc_13', maxStack: 1 },
   { id: Item.MUSIC_DISC_CAT, name: 'minecraft:music_disc_cat', tile: 'item_music_disc_cat', maxStack: 1 },
   { id: Item.MUSIC_DISC_WARD, name: 'minecraft:music_disc_ward', tile: 'item_music_disc_ward', maxStack: 1 },
+  // 不死图腾（批次 498）：原版不能叠
+  { id: Item.TOTEM_OF_UNDYING, name: 'minecraft:totem_of_undying', tile: 'item_totem_of_undying', maxStack: 1 },
   { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },

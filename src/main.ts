@@ -191,6 +191,13 @@ import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.
 // 记分板（M23，批次 402）
 import { Scoreboard } from './core/world/Scoreboard.ts';
 import { shouldEchoCommandResult } from './core/world/Rules.ts';
+// 不死图腾（批次 498）：判定是纯函数，音效也在同一个模块里
+import {
+  TOTEM_REGENERATION,
+  TOTEM_RESCUE_HEALTH,
+  shouldRescueWithTotem,
+  totemSoundSpec,
+} from './core/items/Totem.ts';
 // 旁观模式（批次 491）：能力判定全在 GameMode.ts
 import { canFly, canInteract, hasBlockCollision, isSpectatorMode } from './core/world/GameMode.ts';
 import { Teams } from './core/world/Teams.ts';
@@ -10387,6 +10394,39 @@ class App {
     if (scaled <= 0) return;
     // `source` 只用于左上角的"为什么掉血"（"僵尸"/"世界边界"…），不参与数值结算
     this.stats.damage(scaled, cause, source);
+
+    // 不死图腾（批次 498）：**这一下会致死**才救。
+    // 放在这里而不是 `damagePlayer`：溺水/着火/窒息/饥饿都不走那条路，
+    // 而原版这些死因一样能救——`applyIncomingDamage` 是所有扣血的唯一入口。
+    if (this.stats.dead) this.tryRescueWithTotem(cause);
+  }
+
+  /**
+   * 用不死图腾救一次（批次 498）。
+   *
+   * 顺序要紧：**先确认背包里真有**，再回血——否则会出现"没图腾却回了 1 滴血"。
+   * 原版还会清掉身上的负面效果并给 40 秒生命恢复 II，这里照做（没有伤害吸收）。
+   *
+   * @returns 有没有救成（没图腾时返回 false，死亡流程照常走）
+   */
+  private tryRescueWithTotem(cause: DamageCause): boolean {
+    if (!shouldRescueWithTotem(this.stats.health, this.inventory.countOf(Item.TOTEM_OF_UNDYING) > 0, cause)) {
+      return false;
+    }
+    if (!this.inventory.consume(Item.TOTEM_OF_UNDYING, 1)) return false;
+
+    this.stats.heal(TOTEM_RESCUE_HEALTH - this.stats.health);
+    this.effects.clear();
+    this.effects.apply('regeneration', TOTEM_REGENERATION.seconds, TOTEM_REGENERATION.amplifier);
+    this.audio.playVoice('totem:rescue', totemSoundSpec(), {
+      x: this.physics.x,
+      y: this.physics.y + 1,
+      z: this.physics.z,
+    });
+    this.chat.push('不死图腾救了你一命', 'system');
+    this.hudToast.show('不死图腾救了你一命');
+    this.refreshHotbar();
+    return true;
   }
 
   /**

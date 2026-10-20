@@ -1149,6 +1149,8 @@ export const TILE_ORDER = [
   'item_music_disc_13',
   'item_music_disc_cat',
   'item_music_disc_ward',
+  // 不死图腾（批次 498）
+  'item_totem_of_undying',
   'item_popped_chorus_fruit',
   'item_prismarine_crystals',
   // 骨块（批次 349）

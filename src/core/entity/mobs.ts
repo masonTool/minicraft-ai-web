@@ -675,7 +675,11 @@ export const EVOKER_TYPE: MobType = {
   hostile: true,
   attackDamage: 6,
   followRange: 20,
-  drops: [{ itemId: Item.EMERALD, min: 0, max: 1 }],
+  // 不死图腾（批次 498）：原版唤魔者**必掉** 1 个，这是它唯一的来源
+  drops: [
+    { itemId: Item.EMERALD, min: 0, max: 1 },
+    { itemId: Item.TOTEM_OF_UNDYING, min: 1, max: 1 },
+  ],
   xp: 10,
   naturalSpawn: false,
   bodyColor: 0x9a9aa8,

@@ -6606,6 +6606,28 @@ PAINTERS['item_music_disc_13'] = musicDiscPainter([176, 68, 60]);
 PAINTERS['item_music_disc_cat'] = musicDiscPainter([94, 176, 96]);
 PAINTERS['item_music_disc_ward'] = musicDiscPainter([96, 132, 200]);
 
+/**
+ * 不死图腾（批次 498）：金色的小木偶。
+ *
+ * 16×16 下画不出五官，用"金身 + 一对绿眼睛 + 红色的嘴"来认——
+ * 原版图腾最显眼的就是那张脸。
+ */
+PAINTERS['item_totem_of_undying'] = (x, y) => {
+  // 身体：中间那一条金色（x 4~11、y 1~14），两侧留透明
+  const inBody = x >= 4 && x <= 11 && y >= 1 && y <= 14;
+  if (!inBody) {
+    // 头顶那对"角"（y 0~1，x 3 与 12）
+    if (y === 0 && (x === 3 || x === 12)) return [212, 170, 62, 255];
+    return [0, 0, 0, 0];
+  }
+  // 脸：眼睛（y 5~6）+ 嘴（y 9~10）
+  if ((y === 5 || y === 6) && (x === 5 || x === 6 || x === 9 || x === 10)) return [64, 168, 92, 255];
+  if ((y === 9 || y === 10) && x >= 6 && x <= 9) return [168, 62, 48, 255];
+  // 金身：纵向渐变（上亮下暗），两侧压暗当边缘
+  const shade = 1.16 - (y / 14) * 0.34 - (x === 4 || x === 11 ? 0.18 : 0);
+  return [clamp255(224 * shade), clamp255(182 * shade), clamp255(72 * shade), 255];
+};
+
 PAINTERS['item_chorus_fruit'] = noisy(0x8f5fae, 24);
 PAINTERS['item_popped_chorus_fruit'] = noisy(0xbf8fd6, 24);
 PAINTERS['item_prismarine_crystals'] = noisy(0xd8e8a0, 20);

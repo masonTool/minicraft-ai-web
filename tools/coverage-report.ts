@@ -22,6 +22,7 @@ import { CREATIVE_ITEMS } from '../src/core/registry/items.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
 import { BIOMES } from '../src/core/gen/Biome.ts';
 import { NETHER_BIOME_NAMES } from '../src/core/gen/NetherGenerator.ts';
+import { END_BIOME_NAMES } from '../src/core/gen/EndGenerator.ts';
 import { STRUCTURE_KINDS } from '../src/core/gen/Structures.ts';
 import { NETHER_STRUCTURE_KINDS } from '../src/core/gen/Bastion.ts';
 import { END_STRUCTURE_KINDS } from '../src/core/gen/EndStructures.ts';
@@ -152,11 +153,14 @@ const rows: readonly Row[] = [
     spec: SPEC.biomes,
     // ⚠️ 分母曾经写 72（"主世界 ~61 + 下界 5 + 末地 6"）——那是把 **1.18 全部群系的
     // 61** 当成了"主世界"的数量，两边重复计数。批次 401 对着清单逐条核过：
-    // 主世界正好 **50** 个（本项目全部实现），`the_void` 1 个，下界 5 个（另一张表），
-    // 末地 5 个（末端是单一地形，没建群系表）。所以分子要把下界那张表加进来数。
-    now: BIOMES.length + NETHER_BIOME_NAMES.length,
-    basis: '原版 1.18 共 61 个：主世界 50 + the_void + 下界 5 + 末地 5',
-    gap: '末地 5 个 + the_void：都是"只影响雾色/刷怪表"的标注型群系，本项目的末端是单一地形',
+    // 主世界正好 **50** 个（本项目全部实现），下界 5 个（另一张表），末地 5 个，
+    // `the_void` 1 个。
+    // 批次 498 修正：末地那 5 个**早就实现了**（`EndGenerator.ts` 的 `EndBiome` 0~4 +
+    // `biomeAt` 按"离主岛距离/岛大小"分带），只是分子一直没把它数进去——
+    // 所以这条从 55/61 变成 60/61，差的只剩 `the_void`（空世界，本项目不做）。
+    now: BIOMES.length + NETHER_BIOME_NAMES.length + END_BIOME_NAMES.length - 1,
+    basis: '原版 1.18 共 61 个：主世界 50 + 下界 5 + 末地 5 + the_void 1',
+    gap: 'the_void（整个世界只有空气，本项目不做）',
   },
   {
     label: '结构',
