@@ -51,6 +51,7 @@ export interface SettingsMenu {
   open(): void;
   close(): void;
   isOpen(): boolean;
+  getTab(): Tab;
   handleTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): SettingsAction;
   handleScrollMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
   handleScrollUp(): void;
@@ -251,6 +252,9 @@ export function createSettingsMenu(
     },
     isOpen(): boolean {
       return open;
+    },
+    getTab(): Tab {
+      return tab;
     },
     handleTap(clientX: number, clientY: number, sw: number, sh: number): SettingsAction {
       if (!open) return null;

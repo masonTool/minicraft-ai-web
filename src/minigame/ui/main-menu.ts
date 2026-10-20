@@ -37,6 +37,7 @@ export interface MainMenu {
   open(screen?: 'title' | 'worlds'): void;
   close(): void;
   isOpen(): boolean;
+  getScreen(): Screen;
   setInfo(info: MainMenuInfo): void;
   handleTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
   render(renderer: THREE.WebGLRenderer): void;
@@ -500,6 +501,9 @@ export function createMainMenu(
     },
     isOpen(): boolean {
       return open;
+    },
+    getScreen(): Screen {
+      return screen;
     },
     setInfo(next: MainMenuInfo): void {
       info = { ...next };

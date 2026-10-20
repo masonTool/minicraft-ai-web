@@ -712,6 +712,7 @@ async function boot(): Promise<void> {
   const liveFurnaces = new Set<Furnace>();
   const MINE_TIME = 0.6;
   let lastFrameTime = 0;
+  let lastTestStateAt = 0;
   ui.setFlying(flying);
   const toggleFlight = (): void => {
     if (gameMode !== 'creative') {
@@ -1218,6 +1219,22 @@ async function boot(): Promise<void> {
     await persist();
     await enterWorld(target);
   };
+
+  (globalThis as unknown as { __wxFlow?: () => unknown }).__wxFlow = () => ({
+    screen: ui.mainMenuScreen(),
+    menuOpen: ui.isMainMenuOpen(),
+    paused: ui.isPauseOpen(),
+    settings: ui.isSettingsOpen(),
+    settingsTab: ui.settingsTab(),
+    inventory: ui.isInventoryOpen(),
+    inGame: !ui.isMainMenuOpen() && playerReady,
+    worldCount: worlds.length,
+    currentWorldId,
+    gameMode,
+    health: playerHealth,
+    chunks: world.chunks.size,
+    drawn: chunkRenderer.drawnCount,
+  });
 
   const resetMove = (): void => {
     movePointerId = null;
@@ -1900,6 +1917,27 @@ async function boot(): Promise<void> {
     }
     solid.setTime(time * 0.001);
     translucent.setTime(time * 0.001);
+
+    if (time - lastTestStateAt >= 1000) {
+      lastTestStateAt = time;
+      const state = JSON.stringify({
+        screen: ui.mainMenuScreen(),
+        menuOpen: ui.isMainMenuOpen(),
+        paused: ui.isPauseOpen(),
+        settings: ui.isSettingsOpen(),
+        settingsTab: ui.settingsTab(),
+        inventory: ui.isInventoryOpen(),
+        inGame: !ui.isMainMenuOpen() && playerReady,
+        worldCount: worlds.length,
+        currentWorldId,
+        gameMode,
+        health: playerHealth,
+        chunks: world.chunks.size,
+        drawn: chunkRenderer.drawnCount,
+      });
+      console.log('[FLOW]', state);
+      platform.storage.set('wx.testState', state);
+    }
 
     if (time - lastReport >= 1000) {
       const ms = frames > 0 ? (time - lastReport) / frames : 0;
