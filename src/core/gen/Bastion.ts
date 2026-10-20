@@ -255,6 +255,86 @@ export function buildBastion(w: FeatureWriter, inst: BastionInstance): void {
 }
 
 /**
+ * 堡垒的第二种形制：**居住区**（原版 housing 拼图的意思，批次 522）。
+ *
+ * 原版堡垒由 bridge / housing / stables / treasure 四种拼图随机拼；本项目是手写建筑，
+ * 所以这里只做第二种：一座两层的方形主楼 + 四座角楼，楼梯贴墙，箱子在屋里。
+ * 与桥形共用同一套建材与"鎏金黑石可撬"的口径。
+ */
+export function buildBastionHousing(w: FeatureWriter, inst: BastionInstance): void {
+  // ---- 0) 清空（含角楼范围）
+  rel(w, inst, -9, 0, -9, 9, 14, 9, Block.AIR);
+
+  // ---- 1) 基座：黑石平台 + 磨制黑石包边
+  rel(w, inst, -8, 0, -8, 8, 0, 8, BLACKSTONE);
+  for (const z of [-8, 8]) rel(w, inst, -8, 0, z, 8, 0, z, POLISHED);
+  for (const x of [-8, 8]) rel(w, inst, x, 0, -8, x, 0, 8, POLISHED);
+
+  // ---- 2) 主楼：11×11 外壳、两层（y=1..9），楼板在 y=4
+  for (let y = 1; y <= 9; y++) {
+    for (let z = -5; z <= 5; z++) {
+      for (let x = -5; x <= 5; x++) {
+        const edge = x === -5 || x === 5 || z === -5 || z === 5;
+        if (y === 9) w.fill(inst.x + x, inst.y + y, inst.z + z, BRICKS);
+        else if (edge) w.fill(inst.x + x, inst.y + y, inst.z + z, BRICKS);
+      }
+    }
+  }
+  // 楼板（中间留 3×3 给楼梯井，见下）
+  rel(w, inst, -4, 4, -4, 4, 4, 4, POLISHED);
+  rel(w, inst, 2, 4, -4, 4, 4, -1, Block.AIR);
+
+  // ---- 3) 门与窗
+  rel(w, inst, 5, 1, -1, 5, 3, 1, Block.AIR);
+  for (const y of [2, 7]) {
+    for (const z of [-3, 3]) {
+      w.fill(inst.x + 5, inst.y + y, inst.z + z, Block.AIR);
+      w.fill(inst.x - 5, inst.y + y, inst.z + z, Block.AIR);
+    }
+  }
+
+  // ---- 4) 楼梯：贴东墙（x=3），从 y=1 上到 y=4
+  for (let i = 0; i < 4; i++) {
+    rel(w, inst, 3, i + 1, -4 + i, 3, i + 1, -4 + i, STAIRS);
+    rel(w, inst, 3, i + 2, -4 + i, 3, i + 4, -4 + i, Block.AIR);
+  }
+
+  // ---- 5) 鎏金黑石：四角上下各一块（两层都能撬）
+  for (const y of [1, 8]) {
+    for (const x of [-4, 4]) {
+      for (const z of [-4, 4]) w.fill(inst.x + x, inst.y + y, inst.z + z, GILDED);
+    }
+  }
+
+  // ---- 6) 箱子：一楼角落里一只、二楼一只（都是 `bastion_other`）
+  lootChest(w, inst.x - 3, inst.y + 1, inst.z - 3, 'bastion_other');
+  lootChest(w, inst.x - 3, inst.y + 5, inst.z - 3, 'bastion_other');
+
+  // ---- 7) 四座角楼：3×3、高 7 格，给轮廓一点原版那种"塔"的感觉
+  for (const [tx, tz] of [
+    [-7, -7],
+    [7, -7],
+    [-7, 7],
+    [7, 7],
+  ] as const) {
+    rel(w, inst, tx - 1, 0, tz - 1, tx + 1, 6, tz + 1, BRICKS);
+    rel(w, inst, tx, 1, tz, tx, 5, tz, Block.AIR);
+    w.fill(inst.x + tx, inst.y + 7, inst.z + tz, GILDED);
+  }
+
+  // ---- 8) 门两侧火把（夜里能一眼找到入口）
+  w.fill(inst.x + 6, inst.y + 2, inst.z - 2, Block.TORCH);
+  w.fill(inst.x + 6, inst.y + 2, inst.z + 2, Block.TORCH);
+}
+
+/** 这一座是"桥形"还是"居住区"：由坐标哈希决定，同一座永远同一形制 */
+export type BastionVariant = 'treasure' | 'housing';
+
+export function bastionVariant(inst: BastionInstance): BastionVariant {
+  return hashAt(inst.x, inst.z, inst.seed ^ (BASTION_SALT + 0x2b2b)) < 0.5 ? 'treasure' : 'housing';
+}
+
+/**
  * 生成一个区块里属于它的堡垒。
  *
  * 与 `Structures.ts#generateStructures` 同一个套路：遍历可能覆盖到本区块的单元，
@@ -270,7 +350,9 @@ export function generateBastions(w: FeatureWriter, seed: number, world: BastionW
     for (let dcx = -reach; dcx <= reach; dcx++) {
       const instance = bastionCandidate(baseCellX + dcx, baseCellZ + dcz, seed, world);
       if (!instance || !bastionIntersects(instance, w.cx, w.cz)) continue;
-      buildBastion(w, instance);
+      // 批次 522：桥形 / 居住区两种形制（同一座永远同一形制，跨区块重放一致）
+      if (bastionVariant(instance) === 'housing') buildBastionHousing(w, instance);
+      else buildBastion(w, instance);
     }
   }
 }

@@ -33,6 +33,8 @@ import {
   NETHER_STRUCTURE_KINDS,
   netherFossilCandidate,
   buildBastion,
+  buildBastionHousing,
+  bastionVariant,
   generateBastions,
   type BastionInstance,
   type BastionWorld,
@@ -111,8 +113,10 @@ function makeRegion(): Region {
       const cx = instance.x >> 4;
       const cz = instance.z >> 4;
       // ⚠️ 这正是真实生成的做法：**每个相交区块各自重放一遍**（只写落在自己区块的部分）
+      // 批次 522：按形制分派，与 `generateBastions` 走同一条路
+      const build = bastionVariant(instance) === 'housing' ? buildBastionHousing : buildBastion;
       for (let dcz = -1; dcz <= 1; dcz++) {
-        for (let dcx = -1; dcx <= 1; dcx++) buildBastion(this.writerFor(cx + dcx, cz + dcz), instance);
+        for (let dcx = -1; dcx <= 1; dcx++) build(this.writerFor(cx + dcx, cz + dcz), instance);
       }
     },
     at(x, y, z) {
@@ -344,7 +348,16 @@ console.log('\n[布局：桥 + 宝库 + 箱子 + 鎏金黑石]');
     basaltBiome: NetherBiome.BASALT_DELTAS,
     soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
   };
-  const instance = bastionInstanceForTest(0, 0, SEED, world)!;
+  // 批次 522：布局断言只针对**桥形**（居住区在下面单独验），所以要挑一座桥形的
+  let treasure: BastionInstance | null = null;
+  for (let cellZ = -6; cellZ <= 6 && !treasure; cellZ++) {
+    for (let cellX = -6; cellX <= 6 && !treasure; cellX++) {
+      const candidate = bastionInstanceForTest(cellX, cellZ, SEED, world);
+      if (candidate && bastionVariant(candidate) === 'treasure') treasure = candidate;
+    }
+  }
+  check('找得到一座桥形堡垒', treasure !== null);
+  const instance = treasure!;
 
   // ⚠️ 一座堡垒横跨 3 个区块（桥长 25 格），所以测试要**按区块切片**看，
   // 单个区块的数组装不下它（这正是"结构要在每个相交区块里各自重放"的由来）
@@ -467,15 +480,21 @@ console.log('\n[真实下界：状态通道端到端]');
     const at = (x: number, y: number, z: number): number =>
       blocks[Chunk.index(x - cx * CHUNK_SIZE_X, y, z - cz * CHUNK_SIZE_Z)]!;
 
-    // 桥面必须真的被写进了区块
+    // 批次 522：两种形制共用"基座是黑石/磨制黑石"这条判据
     const deck = at(instance.x, instance.y, instance.z);
-    check('真实生成出来的桥面是黑石/磨制黑石', deck === Block.BLACKSTONE || deck === Block.POLISHED_BLACKSTONE, String(deck));
+    check(
+      '真实生成出来的基座是黑石/磨制黑石/黑石砖',
+      deck === Block.BLACKSTONE || deck === Block.POLISHED_BLACKSTONE || deck === Block.POLISHED_BLACKSTONE_BRICKS,
+      String(deck),
+    );
 
-    // 宝库的箱子可能落在相邻区块（桥长 25 格），所以**按箱子自己所在的区块**再生成一次，
-    // 这才是"下界第一次写方块状态"真正要走的那条路
-    const chestX = instance.x + 10;
+    // 箱子可能落在相邻区块，所以**按箱子自己所在的区块**再生成一次，
+    // 这才是"下界第一次写方块状态"真正要走的那条路。
+    // 桥形：宝库正中（+10, +1, 0）挂 `bastion_treasure`；居住区：一楼角落挂 `bastion_other`。
+    const variant = bastionVariant(instance);
+    const chestX = variant === 'housing' ? instance.x - 3 : instance.x + 10;
     const chestY = instance.y + 1;
-    const chestZ = instance.z;
+    const chestZ = variant === 'housing' ? instance.z - 3 : instance.z;
     const chestCx = chestX >> 4;
     const chestCz = chestZ >> 4;
     const chestBlocks = generateChunkBlocks(chestCx, chestCz, SEED, Dimension.NETHER);
@@ -483,11 +502,15 @@ console.log('\n[真实下界：状态通道端到端]');
     const chestLocalX = chestX - chestCx * CHUNK_SIZE_X;
     const chestLocalZ = chestZ - chestCz * CHUNK_SIZE_Z;
 
-    equal('宝库里真有箱子这一格', chestBlocks[Chunk.index(chestLocalX, chestY, chestLocalZ)], Block.CHEST);
+    equal('容器那一格真的是箱子', chestBlocks[Chunk.index(chestLocalX, chestY, chestLocalZ)], Block.CHEST);
     check('箱子所在的区块把状态一起交了出来（下界第一次写状态）', chestStates !== null);
     if (chestStates) {
       const index = chestLootIndex(chestStates[Chunk.index(chestLocalX, chestY, chestLocalZ)]!);
-      equal('状态里写着宝库表的序号', index, lootTableIndex('bastion_treasure'));
+      equal(
+        '状态里写着对应战利品表的序号',
+        index,
+        lootTableIndex(variant === 'housing' ? 'bastion_other' : 'bastion_treasure'),
+      );
     }
     // 对照：同一个区块在**没有堡垒**时不该有任何状态（状态是"按需分配"的）
     const plainCx = cx + 200;
@@ -652,6 +675,43 @@ console.log('\n[堡垒生物锚点在真实生成里有空间（批次 458）]')
   }
 }
 
+
+console.log('\n[第二种形制：居住区（批次 522）]');
+{
+  // 形制由坐标哈希决定：同一座永远同一形制，整体上两种都会出现
+  const variants = new Set<string>();
+  for (let i = 0; i < 64; i++) {
+    variants.add(bastionVariant({ cellX: 0, cellZ: 0, x: i * 37, y: 40, z: i * 53, seed: SEED }));
+  }
+  equal('两种形制都会出现', variants.size, 2);
+
+  const inst: BastionInstance = { cellX: 0, cellZ: 0, x: 0, y: 40, z: 0, seed: SEED };
+  equal('同一座问两次形制不变', bastionVariant(inst), bastionVariant({ ...inst }));
+
+  const region = makeRegion();
+  for (let dcz = -1; dcz <= 1; dcz++) {
+    for (let dcx = -1; dcx <= 1; dcx++) buildBastionHousing(region.writerFor(dcx, dcz), inst);
+  }
+  let bricks = 0;
+  let gilded = 0;
+  let chests = 0;
+  let torches = 0;
+  for (let y = 40; y <= 56; y++) {
+    for (let z = -9; z <= 9; z++) {
+      for (let x = -9; x <= 9; x++) {
+        const id = region.at(x, y, z);
+        if (id === Block.POLISHED_BLACKSTONE_BRICKS) bricks++;
+        if (id === Block.GILDED_BLACKSTONE) gilded++;
+        if (id === Block.CHEST) chests++;
+        if (id === Block.TORCH) torches++;
+      }
+    }
+  }
+  check('主楼墙体 > 150 格', bricks > 150, String(bricks));
+  equal('鎏金黑石 12 块（四角上下 + 四座角楼顶）', gilded, 12);
+  equal('屋里两只箱子', chests, 2);
+  equal('门口两支火把', torches, 2);
+}
 
 console.log('\n[最近堡垒遗迹（批次 465，/locate structure）]');
 {
