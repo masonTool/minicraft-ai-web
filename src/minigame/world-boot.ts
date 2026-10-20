@@ -144,6 +144,29 @@ async function boot(): Promise<void> {
   const camera = new THREE.PerspectiveCamera(72, width / height, 0.1, 320);
   camera.rotation.order = 'YXZ';
 
+  // 第一人称手臂：Web 手机版画面右下角可见；手持方块随快捷栏变化
+  const hand = new THREE.Group();
+  hand.position.set(0.58, -0.58, -1.2);
+  hand.rotation.set(0.55, -0.15, -0.35);
+  hand.scale.setScalar(0.62);
+  const arm = new THREE.Mesh(
+    new THREE.BoxGeometry(0.24, 0.62, 0.24),
+    new THREE.MeshBasicMaterial({ color: 0xc98a63 }),
+  );
+  hand.add(arm);
+  const heldCube = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 0.3, 0.3),
+    new THREE.MeshBasicMaterial({ color: 0x8a6a45 }),
+  );
+  heldCube.position.set(0, 0.36, -0.04);
+  heldCube.scale.setScalar(0.72);
+  heldCube.visible = false;
+  hand.add(heldCube);
+  camera.add(hand);
+  scene.add(camera);
+  let handTime = 0;
+  let handItem = -1;
+
   const atlasShape = { tileSpan: atlas.tileSpan, tileInset: atlas.tileInset };
   const solid = new VoxelMaterial(atlas.texture, atlasShape);
   const translucent = new VoxelMaterial(atlas.texture, { translucent: true, ...atlasShape });
@@ -1369,6 +1392,21 @@ async function boot(): Promise<void> {
       if (physics.y < -40) spawnPlayer();
     }
     updateCamera();
+    handTime += dt;
+    const heldNow = inventory.get(selectedSlot);
+    if (heldNow) {
+      heldCube.visible = true;
+      if (handItem !== heldNow.id) {
+        handItem = heldNow.id;
+        (heldCube.material as THREE.MeshBasicMaterial).color.setHex(dropColor(heldNow.id));
+      }
+    } else {
+      heldCube.visible = false;
+      handItem = -1;
+    }
+    const moving = Math.abs(playerInput.forward) + Math.abs(playerInput.strafe) > 0.1;
+    hand.position.x = 0.58 + Math.cos(handTime * 3.5) * (moving ? 0.014 : 0.006);
+    hand.position.y = -0.58 + Math.sin(handTime * 7) * (moving ? 0.024 : 0.01);
     updateTarget();
     updateDrops(dt);
     updateParticles(dt);
