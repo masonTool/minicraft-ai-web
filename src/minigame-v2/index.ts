@@ -987,6 +987,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   await persistWorld();
   clearDrops();
   clearPigs();
+  clearZombies();
   if (save) {
     save.close();
     save = null;
@@ -1742,6 +1743,57 @@ const clearPigs = (): void => {
   pigsSpawned = false;
 };
 
+const spawnZombie = (x: number, y: number, z: number): void => {
+  const group = new THREE.Group();
+  const skin = new THREE.MeshBasicMaterial({ color: 0x4f7f45 });
+  const shirt = new THREE.MeshBasicMaterial({ color: 0x3b5f8a });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), shirt);
+  body.position.y = 1.0;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skin);
+  head.position.y = 1.55;
+  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), skin);
+  leftArm.position.set(-0.4, 1.05, -0.15);
+  leftArm.rotation.x = -1.2;
+  const rightArm = leftArm.clone();
+  rightArm.position.x = 0.4;
+  for (const [lx, lz] of [[-0.16, 0], [0.16, 0]] as const) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.8, 0.24), new THREE.MeshBasicMaterial({ color: 0x2f4560 }));
+    leg.position.set(lx, 0.4, lz);
+    group.add(leg);
+  }
+  group.add(body, head, leftArm, rightArm);
+  group.position.set(x, y, z);
+  scene.add(group);
+  zombies.push({ group, x, y, z, hp: 12, dirX: 1, dirZ: 0, wander: 2 });
+};
+
+const clearZombies = (): void => {
+  for (const zombie of zombies) {
+    scene.remove(zombie.group);
+    zombie.group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+      }
+    });
+  }
+  zombies.length = 0;
+  zombieSpawned = false;
+};
+
+const removeZombie = (index: number): void => {
+  const zombie = zombies[index];
+  if (!zombie) return;
+  scene.remove(zombie.group);
+  zombie.group.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      (child.material as THREE.Material).dispose();
+    }
+  });
+  zombies.splice(index, 1);
+};
+
 const addDrop = (id: number, count: number, x: number, y: number, z: number): void => {
   const colors: Record<string, number> = {
     building: 0x9b7b4f,
@@ -1963,7 +2015,9 @@ interface PigMob {
   wander: number;
 }
 const pigs: PigMob[] = [];
+const zombies: PigMob[] = [];
 let pigsSpawned = false;
+let zombieSpawned = false;
 let damageFlashUntil = 0;
 let xpLevel = 0;
 let xpIntoLevel = 0;
@@ -2109,6 +2163,44 @@ const tickPigs = (dt: number): void => {
   }
 };
 
+const tickZombies = (dt: number): void => {
+  for (const zombie of zombies) {
+    const dx = physics.x - zombie.x;
+    const dz = physics.z - zombie.z;
+    const dist = Math.hypot(dx, dz);
+    let dirX = zombie.dirX;
+    let dirZ = zombie.dirZ;
+    if (dist < 16) {
+      dirX = dx / Math.max(0.001, dist);
+      dirZ = dz / Math.max(0.001, dist);
+    } else {
+      zombie.wander -= dt;
+      if (zombie.wander <= 0) {
+        const angle = Math.random() * Math.PI * 2;
+        dirX = Math.cos(angle);
+        dirZ = Math.sin(angle);
+        zombie.wander = 2 + Math.random() * 3;
+      }
+    }
+    const nx = zombie.x + dirX * 1.05 * dt;
+    const nz = zombie.z + dirZ * 1.05 * dt;
+    const surface = world.getSurfaceBlockY(Math.floor(nx), Math.floor(nz));
+    if (surface !== null && Math.abs(surface + 1 - zombie.y) <= 1.2) {
+      zombie.x = nx;
+      zombie.z = nz;
+      zombie.y = surface + 1;
+      zombie.dirX = dirX;
+      zombie.dirZ = dirZ;
+    }
+    zombie.group.position.set(zombie.x, zombie.y, zombie.z);
+    zombie.group.rotation.y = Math.atan2(dirX, dirZ);
+    if (dist < 1.35 && Date.now() > ((zombie as unknown as { attackAt?: number }).attackAt ?? 0)) {
+      (zombie as unknown as { attackAt?: number }).attackAt = Date.now() + 1200;
+      applyDamage(2, '僵尸');
+    }
+  }
+};
+
 const removePig = (index: number): void => {
   const pig = pigs[index];
   if (!pig) return;
@@ -2142,6 +2234,27 @@ const tryAttackMob = (clientX: number, clientY: number): boolean => {
       addDrop(Item.PORKCHOP, 1, pig.x, pig.y + 0.5, pig.z);
       gainXp(3);
       removePig(i);
+    }
+    showHud();
+    return true;
+  }
+  for (let i = zombies.length - 1; i >= 0; i--) {
+    const zombie = zombies[i]!;
+    const distance = Math.hypot(zombie.x - physics.x, zombie.z - physics.z);
+    if (distance > 5) continue;
+    const projected = new THREE.Vector3(zombie.x, zombie.y + 0.9, zombie.z).project(camera);
+    if (projected.z > 1) continue;
+    const designX = ((projected.x + 1) / 2) * 1024;
+    const designY = ((1 - projected.y) / 2) * uiHeight;
+    const touchX = (clientX / Math.max(1, platform.system.width)) * 1024;
+    const touchY = (clientY / Math.max(1, platform.system.height)) * uiHeight;
+    if (Math.hypot(designX - touchX, designY - touchY) > 88) continue;
+    zombie.hp -= 4;
+    audio.play('break_wood');
+    if (zombie.hp <= 0) {
+      addDrop(Item.ROTTEN_FLESH, 1, zombie.x, zombie.y + 0.5, zombie.z);
+      gainXp(5);
+      removeZombie(i);
     }
     showHud();
     return true;
@@ -2324,6 +2437,7 @@ const frame = (): void => {
       cameraMode,
       dead,
       pigs: pigs.length,
+      zombies: zombies.length,
       drops: droppedItems.length,
       xpLevel,
       flying,
@@ -2484,7 +2598,17 @@ const frame = (): void => {
       pigsSpawned = true;
     }
   }
-  if (playerReady && !paused) tickPigs(dt);
+  if (playerReady && !zombieSpawned && worldTime > 0.55) {
+    const surface = world.getSurfaceBlockY(spawn.x - 5, spawn.z - 4);
+    if (surface !== null) {
+      spawnZombie(spawn.x - 5, surface + 1, spawn.z - 4);
+      zombieSpawned = true;
+    }
+  }
+  if (playerReady && !paused) {
+    tickPigs(dt);
+    tickZombies(dt);
+  }
 
   if (started && save && !paused && now - lastAutoSave > 15000) {
     lastAutoSave = now;
@@ -2507,6 +2631,22 @@ if (wxTestApi) {
       for (let i = 0; i < 36; i++) inventory.set(i, null);
       selectedSlot = 0;
       showHud();
+    },
+    spawnZombie: () => {
+      const surface = world.getSurfaceBlockY(Math.floor(physics.x + 3), Math.floor(physics.z + 3));
+      if (surface === null) return { spawned: false };
+      spawnZombie(Math.floor(physics.x + 3), surface + 1, Math.floor(physics.z + 3));
+      zombieSpawned = true;
+      return { spawned: true };
+    },
+    killZombie: () => {
+      const zombie = zombies[0];
+      if (!zombie) return { killed: false };
+      addDrop(Item.ROTTEN_FLESH, 1, zombie.x, zombie.y + 0.5, zombie.z);
+      gainXp(5);
+      removeZombie(0);
+      showHud();
+      return { killed: true };
     },
     killPig: () => {
       const pig = pigs[0];

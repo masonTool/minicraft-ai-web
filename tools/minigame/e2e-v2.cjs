@@ -88,6 +88,12 @@ const assert = (condition, message, state) => {
     5000,
   );
 
+  // 僵尸生成/击杀
+  await pigFrame.evaluate(() => wx.__v2Test?.spawnZombie?.());
+  const zombieSpawned = await waitState((state) => state.zombies > 0, '僵尸没有生成', 5000);
+  await pigFrame.evaluate(() => wx.__v2Test?.killZombie?.());
+  const zombieGone = await waitState((state) => state.zombies === 0, '僵尸没有死亡', 5000);
+
   // 创造双击跳跃：起飞/落地
   const flightFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
   assert(flightFrame, '飞行用例找不到 iframe');
@@ -248,7 +254,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
+      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, zombieSpawned, zombieGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),
