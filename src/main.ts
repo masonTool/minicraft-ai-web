@@ -2769,15 +2769,19 @@ class App {
     if (this.wasHidden) this.handleReturnFromBackground();
   }
 
-  /** 解除冻结：重置 `lastTime`（后台那几分钟不是"一帧"）并恢复音频 */
+  /**
+   * 解除冻结：只重置 `lastTime`（后台那几分钟不是"一帧"）。
+   *
+   * ⚠️ 不再在这里 `audio.resume()`：游戏内回来一定会落到暂停页，
+   * 先 resume 再由主循环 suspend 会有一小段声音漏出来，而且和首次手势的
+   * `unlockAudio` 抢同一个 AudioContext，容易出现"暂停页开着但声音还在响"。
+   * 音频统一由 `syncPauseAudio` 按暂停状态决定。
+   */
   private leaveBackground(reason: 'visible' | 'focus'): void {
     if (!this.backgroundPaused) return;
     this.backgroundPaused = false;
     // 后台几分钟回来时 rawDt 会是几分钟：不重置的话第一帧会被夹成 0.1s 的"瞬移"
     this.lastTime = performance.now();
-    this.audio.resume();
-    // 若回来仍停在暂停页，主循环会在下一帧按 paused 重新挂起
-    this.audioPaused = false;
     diag.event('app', 'resume.background', {
       reason,
       fullscreen: isFullscreen(),
@@ -2809,6 +2813,9 @@ class App {
     // 用户口径是"从后台回来无论如何都进暂停页面"。
     if (this.settingsScreen.isOpen) this.settingsScreen.show();
     else this.openSettings();
+    // 暂停页已经出现：立刻把音频按住，不等下一帧。
+    // 后台恢复时 `leaveBackground` 不再抢着 resume，这里才是唯一的恢复/暂停决策点。
+    this.syncPauseAudio(true);
   }
 
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
@@ -14712,8 +14719,13 @@ class App {
       { signal: this.listeners.signal },
     );
 
-    // 浏览器要求音频必须由用户手势解锁：第一次点击/按键时创建 AudioContext
+    // 浏览器要求音频必须由用户手势解锁：第一次点击/按键时创建 AudioContext。
+    // ⚠️ 暂停页开着时不能 resume：这一下通常点在"请横屏"或暂停菜单上，
+    // 之后主循环因为 `audioPaused` 已经是 true，不会再 suspend，
+    // 结果就是"页面显示已暂停，声音却一直在响"（批次 536 用户反馈）。
     const unlockAudio = (): void => {
+      // 暂停页开着时留着监听：等玩家真的回到游戏后的下一次手势再解锁
+      if (this.backgroundPaused || this.settingsScreen.isOpen) return;
       this.audio.resume();
       window.removeEventListener('pointerdown', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);

@@ -4408,9 +4408,10 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
   );
   check('回前台重置 lastTime（后台那几分钟不算一帧）', leaveBody.includes('this.lastTime = performance.now();'));
   check(
-    '进后台挂起音频、回前台恢复（雨声是常驻循环，dt=0 停不掉）',
+    '进后台挂起音频，回前台由暂停状态决定是否恢复',
     enterBody.includes('this.audio.suspend();') &&
-      leaveBody.includes('this.audio.resume();') &&
+      appSrc.includes('private syncPauseAudio(paused: boolean): void') &&
+      /if \(!this\.backgroundPaused\) this\.audio\.resume\(\);/.test(appSrc) &&
       /suspend\(\): void \{[\s\S]{0,240}ctx\.suspend\(\)/.test(audioSrc),
   );
   check(
@@ -4440,9 +4441,16 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       appSrc.includes("this.resumeFromBackground('visible')"),
   );
   check(
-    '后台恢复后的解冻与音频恢复仍由 leaveBackground 统一负责',
+    '后台恢复只解冻循环，不抢着恢复音频（避免暂停页开着声音却响了）',
     leaveBody.includes('this.backgroundPaused = false;') &&
-      leaveBody.includes('this.audio.resume();'),
+      !leaveBody.includes('this.audio.resume();') &&
+      appSrc.includes('this.syncPauseAudio(true);'),
+  );
+  check(
+    '暂停页开着时首次手势不会解锁音频',
+    /const unlockAudio = \(\): void => \{[\s\S]{0,320}?if \(this\.backgroundPaused \|\| this\.settingsScreen\.isOpen\) return;[\s\S]{0,160}?this\.audio\.resume\(\);/.test(
+      appSrc,
+    ),
   );
 }
 
