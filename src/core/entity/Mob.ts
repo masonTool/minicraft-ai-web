@@ -639,6 +639,12 @@ export class Mob extends Entity {
    */
   attackAnim = 0;
 
+  /**
+   * 远程出手动作剩余秒数（J12 尾巴，批次 553）：拉弓/投三叉戟时把双臂抬向前。
+   * 与近战的 `attackAnim` 分开——远程没有"挥下"那一下，抬臂瞄准的姿势也不一样。
+   */
+  rangedAnim = 0;
+
   /** 求爱剩余秒数（>0 表示正在找配偶）与两次繁殖之间的冷却 */
   private loveTimer = 0;
   private breedCooldown = 0;
@@ -787,6 +793,7 @@ export class Mob extends Entity {
     this.tickAquatic(ctx, dt);
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.attackAnim > 0) this.attackAnim = Math.max(0, this.attackAnim - dt);
+    if (this.rangedAnim > 0) this.rangedAnim = Math.max(0, this.rangedAnim - dt);
     if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
     // 效果要在 AI 之前结算：缓慢/速度影响的正是这一帧的移动速度
     this.tickEffects(ctx, dt);
@@ -1565,6 +1572,8 @@ export class Mob extends Entity {
         },
       );
     }
+    // 远程出手动作（J12 尾巴）：真的把箭/三叉戟放出去才抬臂
+    this.rangedAnim = ATTACK_ANIM_SECONDS;
     ctx.playSound?.('bow_shoot', this.x, this.y, this.z);
   }
 

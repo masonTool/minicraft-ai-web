@@ -1039,6 +1039,12 @@ console.log('\n[出手动画（J12）]');
   check('命中时重置动画计时', mobSrc.includes('this.attackAnim = ATTACK_ANIM_SECONDS'));
   check('渲染层每帧读动画曲线', rendererSrc.includes('attackSwingAmount(mob.attackAnim)'));
   check('手臂绕肩关节转（不是绕自己中心）', rendererSrc.includes('spec.pivot && rotX !== 0'));
+
+  // 远程动作（批次 553）：与近战分开计时，发射时才抬臂
+  const skeleton = new Mob(mobTypeById('skeleton')!, 0, 64, 0);
+  check('远程出手计时初始为 0', skeleton.rangedAnim === 0);
+  check('发射时重置远程计时', mobSrc.includes('this.rangedAnim = ATTACK_ANIM_SECONDS'));
+  check('渲染层远程双臂抬向前', rendererSrc.includes('aiming ? -1.25 * rangedSwing'));
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);

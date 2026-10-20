@@ -1209,6 +1209,9 @@ export class MobRenderer {
       let flap = 0;
       // 出手摆动（J12）：0.35 秒的正弦曲线，没在攻击时恒为 0
       const attackSwing = attackSwingAmount(mob.attackAnim);
+      // 远程动作（J12 尾巴）：拉弓/扔三叉戟时双臂抬向前，不是近战那种上下挥
+      const rangedSwing = attackSwingAmount(mob.rangedAnim);
+      const aiming = mob.rangedAnim > 0;
       if (visual.kind === 'dragon') {
         const speed = Math.hypot(mob.vx, mob.vz);
         flap = Math.sin(this.elapsed * (5 + speed * 0.15)) * 0.55;
@@ -1234,7 +1237,10 @@ export class MobRenderer {
         let rotY = 0;
         let rotZ = 0;
         if (visual.kind === 'crystal') rotY = visual.spin;
-        else if (spec.swingArm !== undefined) rotX = -attackSwing * spec.swingArm;
+        else if (spec.swingArm !== undefined) {
+          // 远程：双臂一起抬向前（弓/三叉戟的"举起来"），近战：左右臂交替挥
+          rotX = aiming ? -1.25 * rangedSwing : -attackSwing * spec.swingArm;
+        }
         else if (spec.swing !== undefined) rotX = legSwing * spec.swing;
         else if (i < visual.legCount) {
           if (visual.kind === 'dragon') rotZ = i % 2 === 0 ? flap : -flap;
