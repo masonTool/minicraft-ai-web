@@ -1506,9 +1506,12 @@ function buildWoodlandMansion(w: FeatureWriter, s: StructureInstance, world: Fea
   const stair = Wood.dark_oak!.stairs;
 
   const plan = planMansion(s.x, base, s.z, () => rng.next(), {
-    // 一层最多（4~5）、二层 3~4、顶层 1~2：外壳跟着房间数收进
-    roomCounts: [4 + rng.int(2), 3 + rng.int(2), 1 + rng.int(2)],
-    radii: [16, 12, 8],
+    // 批次 519：规模对齐原版（原来合计只有 8~11 间，走两步就逛完）。
+    // 一层 9~12、二层 6~9、顶层 2~4（合计 17~25 间）。
+    // ⚠️ 半径 21 是**卡着外壳来的**：房间半宽最大 4、外壳再 +1 = 5，
+    // 21 + 5 = 26 正好等于结构半径；再大就会伸出结构盒被 `w.owns` 裁掉。
+    roomCounts: [9 + rng.int(4), 6 + rng.int(4), 2 + rng.int(3)],
+    radii: [21, 16, 10],
   });
 
   const floors = new Map<number, typeof plan.rooms[number][]>();

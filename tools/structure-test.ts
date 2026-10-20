@@ -29,7 +29,7 @@ import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/Terrai
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { planMineshaft } from '../src/core/gen/MineshaftLayout.ts';
 import { planStronghold } from '../src/core/gen/StrongholdLayout.ts';
-import { planMansion } from '../src/core/gen/MansionLayout.ts';
+import { mansionRoomHalf, planMansion } from '../src/core/gen/MansionLayout.ts';
 import { lootTableIndex } from '../src/core/registry/loot.ts';
 import {
   STRUCTURE_CREATURE_KINDS,
@@ -1142,6 +1142,26 @@ console.log('\n[林地府邸的房间网格拼图（批次 463）]');
     new Set(plan.rooms.map((room) => room.kind)).size >= 3,
     [...new Set(plan.rooms.map((room) => room.kind))].join(','),
   );
+
+  // ---- 批次 519：规模对齐原版（一层 9~12、二层 6~9、顶层 2~4）
+  const big = planMansion(0, 40, 0, lcg(77), { roomCounts: [12, 9, 4], radii: [21, 16, 10] });
+  check('大规模布局房间数在上限内', big.rooms.length <= 12 + 9 + 4, String(big.rooms.length));
+  check('大规模布局至少 17 间（原来最多 11 间）', big.rooms.length >= 17, String(big.rooms.length));
+  const perFloor = [0, 1, 2].map((floor) => big.rooms.filter((room) => room.floor === floor).length);
+  check('每层都按配置放满（12 / 9 / 4）', perFloor[0] === 12 && perFloor[1] === 9 && perFloor[2] === 4, perFloor.join('/'));
+  equal('走廊数仍 = 房间数 - 层数', big.links.length, big.rooms.length - 3);
+  equal('楼梯仍是两层', big.stairs.length, 2);
+
+  const bigKeys = new Set(big.rooms.map((room) => `${room.floor}:${room.x},${room.z}`));
+  equal('大规模布局同层不重叠', bigKeys.size, big.rooms.length);
+  let outside = 0;
+  for (const room of big.rooms) {
+    // 外壳 = 房间半宽 + 1（与 `buildWoodlandMansion` 的 `half + 1` 同一条）
+    const extent = Math.abs(room.x) + mansionRoomHalf(room.kind) + 1;
+    const extentZ = Math.abs(room.z) + mansionRoomHalf(room.kind) + 1;
+    if (extent > 26 || extentZ > 26) outside++;
+  }
+  equal('外壳不超出结构半径 26', outside, 0);
 
   // ---- 真实生成：深色橡木木板 / 大门 / 箱子 / 玻璃
   const seed = 20261014;

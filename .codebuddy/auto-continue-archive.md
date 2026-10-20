@@ -11519,4 +11519,12 @@
 - [x] B513-4 `test:target` 42 → **51 条**
 - ⚠️ J3 仍缺：开门、游泳、"被打后追玩家"并入选择器
 
+## 批次 515：追玩家判据并入纯函数（J3 第三批）（2026-10-20）
+
+- [x] B515-1 `core/entity/ChaseRules.ts`：`isPacified` + `shouldChasePlayer`（六维纯判据）
+- [x] B515-2 `Mob.updateAi` 改成只取数（光照/距离/记仇），不再自己拼条件
+- [x] B515-3 记仇仍由 `hurt()` 按 `HurtSource` 置位（环境伤害不记仇，批次 471）
+- [x] B515-4 `test:chase` **26 条**；`test:mob` 146 条原样通过；套数 156 → **157**
+- ⚠️ J3 仍缺：开门、游泳
+
 <!-- docs-archive:end -->
