@@ -115,10 +115,11 @@ function boot() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 300);
-  const target = new THREE.Vector3(0, 0.5, 0);
+  const target = new THREE.Vector3(0, 1, 0);
   let yaw = Math.PI * 0.25;
   let pitch = 0.55;
-  const distance = 26;
+  // 压力场景铺到 ±16，相机要退远才能看全
+  const distance = 46;
 
   const updateCamera = () => {
     const horizontal = Math.cos(pitch) * distance;
@@ -159,11 +160,34 @@ function boot() {
   ground.instanceMatrix.needsUpdate = true;
   scene.add(ground);
 
+  // 与 WX-001 完全相同的压力场景：768 个独立 Mesh（~769 draw call）
+  const stressGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const stressMaterial = new THREE.MeshLambertMaterial({ map: makeGroundTexture() });
+  let stressCount = 0;
+  for (let sx = 0; sx < 32; sx += 1) {
+    for (let sz = 0; sz < 32; sz += 1) {
+      const cx = sx - 16;
+      const cz = sz - 16;
+      if (Math.abs(cx) < 8 && Math.abs(cz) < 8) continue;
+      const cube = new THREE.Mesh(stressGeometry, stressMaterial);
+      cube.position.set(cx, 0.5 + ((sx * 7 + sz * 13) % 3), cz);
+      scene.add(cube);
+      stressCount += 1;
+    }
+  }
+  console.log('[WX-006] stress meshes', stressCount);
+  hud.update([
+    `WX-006 ADAPTER  ${width}x${height} dpr ${view.devicePixelRatio}  STRESS ${stressCount}`,
+    `GL ${glVersion}`,
+    `GL ${glRenderer}`,
+    'FPS ...  MS ...  TRI ...  CALLS ...',
+  ]);
+
   const marker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0x2dff88 }),
   );
-  marker.position.set(0, 1.2, 0);
+  marker.position.set(0, 4.5, 0);
   scene.add(marker);
 
   let dragging = false;
@@ -193,17 +217,22 @@ function boot() {
   let frames = 0;
   let fps = 0;
   let lastReport = 0;
+  // renderer.info 每次 render() 重置：必须在主场景之后、HUD 之前抓
+  let sceneTriangles = 0;
+  let sceneCalls = 0;
   const frame = (time) => {
     frames += 1;
     if (time - lastReport >= 1000) {
-      const stats = renderer.info.render;
+      const ms = frames > 0 ? (time - lastReport) / frames : 0;
       fps = frames;
-      console.log(`[WX-006] fps=${frames} tri=${stats.triangles} calls=${stats.calls}`);
+      console.log(
+        `[WX-006] fps=${fps} ms=${ms.toFixed(1)} tri=${sceneTriangles} calls=${sceneCalls}`,
+      );
       hud.update([
-        `WX-006 ADAPTER  ${width}x${height} dpr ${view.devicePixelRatio}`,
+        `WX-006 ADAPTER  ${width}x${height} dpr ${view.devicePixelRatio}  STRESS ${stressCount}`,
         `GL ${glVersion}`,
         `GL ${glRenderer}`,
-        `FPS ${fps}  TRI ${stats.triangles}  CALLS ${stats.calls}`,
+        `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
       ]);
       frames = 0;
       lastReport = time;
@@ -211,6 +240,8 @@ function boot() {
     marker.rotation.y += 0.012;
     renderer.clear();
     renderer.render(scene, camera);
+    sceneTriangles = renderer.info.render.triangles;
+    sceneCalls = renderer.info.render.calls;
     hud.render(renderer);
     requestAnimationFrame(frame);
   };

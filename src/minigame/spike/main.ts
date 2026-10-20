@@ -117,10 +117,11 @@ function boot(): void {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, screen.width / screen.height, 0.1, 300);
-  const target = new THREE.Vector3(0, 0.5, 0);
+  const target = new THREE.Vector3(0, 1, 0);
   let yaw = Math.PI * 0.25;
   let pitch = 0.55;
-  let distance = 26;
+  // 压力场景铺到 ±16，相机要退远才能看全
+  let distance = 46;
 
   const updateCamera = (): void => {
     const horizontal = Math.cos(pitch) * distance;
@@ -162,11 +163,36 @@ function boot(): void {
   ground.instanceMatrix.needsUpdate = true;
   scene.add(ground);
 
+  // 压力场景：768 个**独立 Mesh**（不是 Instanced），故意制造 ~769 个 draw call。
+  // 目的：如果适配器把每个 WebGL 方法都包了一层，这里会把开销放大到肉眼可见。
+  const stressGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const stressMaterial = new THREE.MeshLambertMaterial({ map: makeGroundTexture() });
+  let stressCount = 0;
+  for (let sx = 0; sx < 32; sx += 1) {
+    for (let sz = 0; sz < 32; sz += 1) {
+      const cx = sx - 16;
+      const cz = sz - 16;
+      // 中央 16×16 留给原来的地面，压力方块围成一圈
+      if (Math.abs(cx) < 8 && Math.abs(cz) < 8) continue;
+      const cube = new THREE.Mesh(stressGeometry, stressMaterial);
+      cube.position.set(cx, 0.5 + ((sx * 7 + sz * 13) % 3), cz);
+      scene.add(cube);
+      stressCount += 1;
+    }
+  }
+  console.log('[WX-001] stress meshes', stressCount);
+  hud.update([
+    `WX-001 SHIM  ${screen.width}x${screen.height} dpr ${screen.dpr}  STRESS ${stressCount}`,
+    `GL ${glVersion}`,
+    `GL ${glRenderer}`,
+    'FPS ...  MS ...  TRI ...  CALLS ...',
+  ]);
+
   const marker = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 1.2),
     new THREE.MeshBasicMaterial({ color: 0xff2d55 }),
   );
-  marker.position.set(0, 1.2, 0);
+  marker.position.set(0, 4.5, 0);
   scene.add(marker);
 
   // 触摸转视角：验证 wx.onTouch* 的坐标与多点事件
@@ -199,17 +225,23 @@ function boot(): void {
   let frames = 0;
   let fps = 0;
   let lastReport = 0;
+  // ⚠️ renderer.info 在每次 render() 时重置；HUD 是第二次 render，
+  // 所以必须在主场景 render 之后、HUD render 之前把数字抓下来。
+  let sceneTriangles = 0;
+  let sceneCalls = 0;
   const frame = (time: number): void => {
     frames += 1;
     if (time - lastReport >= 1000) {
-      const stats = renderer.info.render;
+      const ms = frames > 0 ? (time - lastReport) / frames : 0;
       fps = frames;
-      console.log(`[WX-001] fps=${frames} tri=${stats.triangles} calls=${stats.calls}`);
+      console.log(
+        `[WX-001] fps=${fps} ms=${ms.toFixed(1)} tri=${sceneTriangles} calls=${sceneCalls}`,
+      );
       hud.update([
-        `WX-001 SHIM  ${screen.width}x${screen.height} dpr ${screen.dpr}`,
+        `WX-001 SHIM  ${screen.width}x${screen.height} dpr ${screen.dpr}  STRESS ${stressCount}`,
         `GL ${glVersion}`,
         `GL ${glRenderer}`,
-        `FPS ${fps}  TRI ${stats.triangles}  CALLS ${stats.calls}`,
+        `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
       ]);
       frames = 0;
       lastReport = time;
@@ -217,6 +249,8 @@ function boot(): void {
     marker.rotation.y += 0.012;
     renderer.clear();
     renderer.render(scene, camera);
+    sceneTriangles = renderer.info.render.triangles;
+    sceneCalls = renderer.info.render.calls;
     hud.render(renderer);
     requestAnimationFrame(frame);
   };

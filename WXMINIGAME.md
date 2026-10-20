@@ -285,8 +285,8 @@ flex/absolute/grid 子集。
 | ID | 任务 | 验收 / 产出 | 依赖 | 人日 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | WX-000 | 建立 worktree/分支/任务表；关闭本 worktree 的 auto-continue | 本文件 + `AGENTS.md` 提示 + `.codebuddy/auto-continue.off` | — | 0.5 | [x] |
-| WX-001 | 微信小游戏最小工程 | `minigame/` 能导入开发者工具；three r186 画出单区块 | WX-000 | 2 | [~] |
-| WX-002 | 真机基线测量 | 帧率/帧时间/内存峰值/启动耗时/webgl2/包体，写入 §7 | WX-001 | 2 | [ ] |
+| WX-001 | 微信小游戏最小工程 | `minigame/` 能导入开发者工具；three r186 画出单区块 | WX-000 | 2 | [x] |
+| WX-002 | 真机基线测量 | 帧率/帧时间/内存峰值/启动耗时/webgl2/包体，写入 §7 | WX-001 | 2 | [~] |
 | WX-003 | Worker 打包与通道验证 | 单 worker 能加载，复制 vs Transferable 的耗时数据 | WX-001 | 1.5 | [ ] |
 | WX-004 | 图集与 2D canvas 验证 | `TextureAtlas` 的 createImageData/putImageData/drawImage 可用 | WX-001 | 1 | [ ] |
 | WX-006 | `minigame-adapter` 接入 spike | 从 `references/` 引入适配器 + three r186，构建第二份 `game.js`；与 WX-001 对比帧率/兼容性 | WX-001 | 2 | [~] |
@@ -446,12 +446,14 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 | 日期 | 任务 | 结论 / 改动 | 提交 |
 | --- | --- | --- | --- |
 | 2026-10-20 | WX-000 | 建立 `wxminigame` worktree/分支；新增本任务表；`AGENTS.md` 加分支提示；关闭本 worktree 的 auto-continue | `5cfc584` |
-| 2026-10-20 | WX-001 | 最小工程已构建：`minigame/game.js` 1172KB（gzip 208KB）；three r186 + InstancedMesh + CanvasTexture + 触摸；**待真机导入验证** | `f7eaeba` |
+| 2026-10-20 | WX-001 | 最小工程已构建并**真机验证通过**：`minigame/game.js` 1174KB（gzip 208KB）；three r186 + InstancedMesh + CanvasTexture + 触摸；WebGL2 / 61fps（轻场景） | `f7eaeba` |
 | 2026-10-20 | 适配器评估 | 结论：`minigame-adapter` 可复用于平台层，**不能**跑现有 DOM/CSS UI；新增 §2.5 与 WX-006/007 | `3878a65` |
-| 2026-10-20 | WX-006 | 适配器版 `game.js` 已构建：1301KB（gzip 235KB）；动态 require 用 esbuild 插件替换；**待真机与 WX-001 对比** | `3878a65` |
+| 2026-10-20 | WX-006 | 适配器版 `game.js` 已构建并**真机验证通过**：1303KB（gzip 235KB）；WebGL2 / 61fps（轻场景），无 `??` 语法错误 | `3878a65` |
 | 2026-10-20 | WX-002 预置 | 两份 spike 加屏上 HUD（版本/GL/FPS/TRI/分辨率）；红/绿方块区分 SHIM/ADAPTER | `d8b3337` |
 | 2026-10-20 | WX-021 决策 | DOM/CSS 全模拟实测需 75~110 人日（子集），决定不做；UI 走 canvas 工具包，详见 §2.6 | `2e03430` |
-| 2026-10-20 | WX-002 修复 | 真机报 `Unexpected token ?`：两个 spike 构建 target `es2020 → es2017`，产物已无 `??`/`?.` | 本次提交 |
+| 2026-10-20 | WX-002 修复 | 真机报 `Unexpected token ?`：两个 spike 构建 target `es2020 → es2017`，产物已无 `??`/`?.` | `4015bdf` |
+| 2026-10-20 | WX-002 真机 | WX-001 / WX-006 均 WebGL2（OpenGL ES 3.2）、793×360 dpr3、61fps（轻场景）；适配器版无报错 | — |
+| 2026-10-20 | WX-002 修正 | HUD 的 `TRI 2/CALLS 1` 是二次 render 重置 info 的统计 bug；改为主场景后抓取，并加 768 独立 Mesh 压力场景 + `MS` 指标，待复测 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -465,7 +467,7 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 | **真机 JS 语法** | 模拟器支持 ES2020，真机 JSCore 不支持 `??`/`?.`，报 `Unexpected token ?` | 构建 target 固定 `es2017`；产物用 grep 检查 `??`/`?.` | 已修复（WX-002） |
 | **抖音 WebGL2** | 官方小游戏 canvas 只保证 WebGL1；three r186 只支持 WebGL2 | M6 单独 Gate；必要时 three 0.162 + WebGL1 适配 | 未验证 |
 | **适配器假 DOM** | `getElementById`/`querySelector` 返回占位对象，UI 代码会“看起来没报错但什么都不显示” | 小游戏 UI/游戏代码禁止依赖假 DOM；只经 `UiPort`/`src/platform` 访问 | 待约束 |
-| **适配器 WebGL 包装** | `Canvas.getContext` 对每个方法加包装，draw call 多时可能明显掉帧 | WX-006 对比帧率；WebGL 跳过全量包装，只解 `texImage2D` 参数 | 待验证 |
+| **适配器 WebGL 包装** | `Canvas.getContext` 对每个方法加包装，draw call 多时可能明显掉帧 | WX-006 轻场景与 shim 同为 61fps；已加 768 draw call 压力场景，待复测 | 轻场景无差异，压力待测 |
 | **three WebGL1 守卫** | 适配器把 `WebGLRenderingContext` 换成空函数；若真机判定成 WebGL1 会直接抛错 | WX-006 真机确认；必要时删掉该 fake / 改成 WebGL2 构造器 | 待验证 |
 | **适配器动态 require** | `HTMLScriptElement.js` 的动态 require 会让打包器扫描整个 references（WX-006 实测 4292 错） | spike 用插件替换；正式移植直接删掉 HTMLScriptElement | 已在 spike 绕过 |
 | **适配器仅微信** | 全量 `wx.*`；抖音不能复用 | 平台层按 `wx/tt` 分开；抖音 M6 另写 | 已知 |
