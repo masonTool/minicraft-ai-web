@@ -164,13 +164,13 @@ export class WorldScreen {
 
     const listLabel = document.createElement('div');
     listLabel.className = 'world-group-label';
-    listLabel.append('世界');
+    listLabel.append(t('world.list'));
     this.worldCountEl = document.createElement('span');
     this.worldCountEl.className = 'world-count';
     listLabel.appendChild(this.worldCountEl);
 
     worlds.append(
-      this.makeNav('游戏', () => this.setView('home')),
+      this.makeNav(t('menu.play'), () => this.setView('home')),
       newEntry,
       listLabel,
       this.listEl,
@@ -183,14 +183,14 @@ export class WorldScreen {
 
     this.nameInput = document.createElement('input');
     this.nameInput.type = 'text';
-    this.nameInput.placeholder = '留空则自动命名';
+    this.nameInput.placeholder = t('world.namePlaceholder');
     this.nameInput.maxLength = 24;
     this.nameInput.className = 'world-input';
 
     this.seedInput = document.createElement('input');
     this.seedInput.type = 'text';
     this.seedInput.inputMode = 'numeric';
-    this.seedInput.placeholder = '留空 = 随机';
+    this.seedInput.placeholder = t('world.seedPlaceholder');
     this.seedInput.className = 'world-input';
 
     const reroll = document.createElement('button');
@@ -256,11 +256,11 @@ export class WorldScreen {
     // 第二行只剩类型一格、难度与模式被挤到下面，整张表单多出两行高度）。
     // 现在三行字段两两并排 → 一行说明 → 跨满两列的创建键，横屏手机一屏就能看全。
     form.append(
-      this.makeRow('世界名称', this.nameInput, null),
-      this.makeRow('世界种子', this.seedInput, reroll),
-      this.makeRow('世界类型', this.typeSelect, null),
-      this.makeRow('难度', this.difficultySelect, null),
-      this.makeRow('游戏模式', this.gameModeSelect, null),
+      this.makeRow(t('world.name'), this.nameInput, null),
+      this.makeRow(t('world.seed'), this.seedInput, reroll),
+      this.makeRow(t('world.type'), this.typeSelect, null),
+      this.makeRow(t('world.difficulty'), this.difficultySelect, null),
+      this.makeRow(t('world.gameMode'), this.gameModeSelect, null),
       this.typeHintEl,
       createButton,
     );
@@ -268,9 +268,9 @@ export class WorldScreen {
 
     const hint = document.createElement('div');
     hint.className = 'world-hint';
-    hint.textContent = '相同的种子会生成相同的地形；超平坦世界只有一层草地。';
+    hint.textContent = t('world.hint');
 
-    create.append(this.makeNav('创建新世界', () => this.setView('worlds')), form, hint);
+    create.append(this.makeNav(t('world.createTitle'), () => this.setView('worlds')), form, hint);
 
     panel.append(home, worlds, create);
     this.root.append(panel);
@@ -405,13 +405,13 @@ export class WorldScreen {
     // 验收脚本按这个类名找"进这张存档"（`.world-card-actions button` 会把"删除"也算进来，
     // 靠"第一个匹配"来定含义太脆）
     enter.className = 'world-enter';
-    enter.textContent = '进入';
+    enter.textContent = t('world.enter');
     enter.addEventListener('click', () => this.actions.onEnter(world));
 
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'danger';
-    remove.textContent = '删除';
+    remove.textContent = t('world.delete');
     remove.addEventListener('click', () => {
       if (confirm(`删除「${world.name}」？该世界的存档会一起删掉，无法恢复。`)) {
         this.actions.onDelete(world);

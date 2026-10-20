@@ -98,15 +98,6 @@
 
 ---
 
-## 批次 418：M8 i18n 扩到"控制"组（2026-10-20）
-
-- [x] B418-1 十条新键：cameraMode / handedness / aimMode / touchStick / invertY / autoJump /
-      fastEat / fov / touchScale / sensitivity（中英各一条）
-- [x] B418-2 `ui-test` 两条按字面量匹配的断言（"视角下拉还在""视野并进控制"）改成按**键**匹配——
-      这是文案搬家必然要付的账，早改早省事
-- 覆盖：文案表 **18 → 28 条**；"界面语言"行仍记 50%
-- ⚠️ 剩下"外观/音频"两组 + 背包/成就/主菜单，仍是 M8 主体
-
 ## 批次 419：M8 i18n 扩到"音频"组 + 外观两档视角（2026-10-20）
 
 - [x] B419-1 七条音量滑杆：volume / volumeBlocks / volumeMobs / volumePlayer /
@@ -124,3 +115,12 @@
 - ⚠️ 主菜单**启动时构建**：切语言后要刷新页面才全变（设置面板是"重开即生效"）
 - ⚠️ 新建世界表单的文案（'游戏模式' / '创建新世界'）没动：被 ui-test 按字面量断言着，
   换键要连带改断言，留给下一批
+
+## 批次 421：M8 i18n 扩到世界列表与新建表单（2026-10-20）
+
+- [x] B421-1 十二条键：world.list / name / seed / type / difficulty / gameMode /
+      namePlaceholder / seedPlaceholder / hint / createTitle / enter / delete
+- [x] B421-2 `ui-test` 三条按字面量匹配的断言改成按键（"表单有游戏模式"、
+      "返回世界列表"、"说明排在字段最后"）
+- 覆盖：文案表 **46 → 58 条**；主菜单三个视图（首页 / 列表 / 新建）全部有英文
+- ⚠️ 主菜单仍在启动时构建：切语言要刷新页面

@@ -82,6 +82,19 @@ const ZH: Readonly<Record<string, string>> = {
   'menu.back': '‹ 返回',
   'menu.reroll': '随机',
   'menu.create': '创建并进入',
+  // ---- 世界列表与新建表单
+  'world.list': '世界',
+  'world.name': '世界名称',
+  'world.seed': '世界种子',
+  'world.type': '世界类型',
+  'world.difficulty': '难度',
+  'world.gameMode': '游戏模式',
+  'world.namePlaceholder': '留空则自动命名',
+  'world.seedPlaceholder': '留空 = 随机',
+  'world.hint': '相同的种子会生成相同的地形；超平坦世界只有一层草地。',
+  'world.createTitle': '创建新世界',
+  'world.enter': '进入',
+  'world.delete': '删除',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -131,6 +144,18 @@ const EN: Readonly<Record<string, string>> = {
   'menu.back': '‹ Back',
   'menu.reroll': 'Random',
   'menu.create': 'Create & Enter',
+  'world.list': 'Worlds',
+  'world.name': 'World Name',
+  'world.seed': 'Seed',
+  'world.type': 'World Type',
+  'world.difficulty': 'Difficulty',
+  'world.gameMode': 'Game Mode',
+  'world.namePlaceholder': 'Leave blank to auto-name',
+  'world.seedPlaceholder': 'Blank = random',
+  'world.hint': 'Same seed means same terrain; a superflat world is a single grass layer.',
+  'world.createTitle': 'Create World',
+  'world.enter': 'Enter',
+  'world.delete': 'Delete',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {

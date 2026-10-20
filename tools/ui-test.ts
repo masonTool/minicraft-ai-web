@@ -1913,7 +1913,11 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check('老存档迁移：flying=true 视为创造', mainSource.includes("else if (data.flying) this.setGameMode('creative')"));
   check('生存模式拒绝起飞（能力看模式）', mainSource.includes('if (value && !this.isCreative)'));
   const worldSource = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
-  check('新建世界表单有"游戏模式"', worldSource.includes("'游戏模式'") && worldSource.includes('gameModeSelect'));
+  check(
+    '新建世界表单有"游戏模式"',
+    // 批次 421：文案走 i18n 键，验"绑了哪个键"
+    worldSource.includes("t('world.gameMode')") && worldSource.includes('gameModeSelect'),
+  );
   check(
     '首页显示构建时间与提交标题（批次 182）',
     worldSource.includes("build.id = 'world-build'") &&
@@ -2036,7 +2040,10 @@ console.log('\n[主菜单分层（批次 108）]');
   check('新建表单的提交按钮有专属 id', source.includes("createButton.id = 'world-create-button';"));
   check('首页品牌信号是 MINECRAFT + 基岩版标识', source.includes("logo.textContent = 'MINECRAFT';") && source.includes('world-edition'));
   check('世界列表按视图展开并带缩略图', source.includes("this.panel.dataset.view = view;") && source.includes('world-card-thumb'));
-  check('新建世界返回世界列表（不是跳回首页）', source.includes("this.makeNav('创建新世界', () => this.setView('worlds'))"));
+  check(
+    '新建世界返回世界列表（不是跳回首页）',
+    source.includes("this.makeNav(t('world.createTitle'), () => this.setView('worlds'))"),
+  );
   // 三个浏览器验收脚本都要走完这三步，一处漏了就会在主页上卡住
   // （⚠️ 路径是 `../tools/`：测试被打包到 `.tmp/ui-test.mjs` 里跑，`import.meta.url`
   //   的基准是那个临时文件，不是本文件——与上面 `../index.html` 同一个道理）
@@ -2790,7 +2797,7 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   );
   check(
     '新建世界表单：说明排在字段最后、创建键跨满两列',
-    /this\.makeRow\('游戏模式', this\.gameModeSelect, null\),\s*this\.typeHintEl,\s*createButton,/.test(worldSrc) &&
+    /this\.makeRow\(t\('world\.gameMode'\), this\.gameModeSelect, null\),\s*this\.typeHintEl,\s*createButton,/.test(worldSrc) &&
       css.includes('.world-new > .world-primary { grid-column: 1 / -1; }'),
   );
   // ④ 配方开关关着 + 空栏 = 空白（不再写"这一栏里你还没有东西…"）

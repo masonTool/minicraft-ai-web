@@ -86,6 +86,10 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'menu.footer',
     'menu.newWorld',
     'menu.empty',
+    'world.list',
+    'world.gameMode',
+    'world.createTitle',
+    'world.enter',
     ...['game', 'controls', 'appearance', 'sound'].map((group) => `settings.group.${group}`),
   ];
   const missing = required.filter((key) => !keys.has(key));
