@@ -433,13 +433,20 @@ async function boot(): Promise<void> {
     },
   );
 
-  ui.setStats({
-    health: loadedPlayer?.health ?? 20,
-    food: loadedPlayer?.food ?? 20,
-    air: loadedPlayer?.air ?? 300,
-    armor: 0,
-    xp: loadedPlayer?.xp?.progress ?? 0,
-  });
+  let playerHealth = loadedPlayer?.health ?? 20;
+  let playerFood = loadedPlayer?.food ?? 20;
+  let playerAir = loadedPlayer?.air ?? 300;
+  const playerXp = loadedPlayer?.xp?.progress ?? 0;
+  const refreshVitals = (): void => {
+    ui.setStats({
+      health: playerHealth,
+      food: playerFood,
+      air: playerAir,
+      armor: 0,
+      xp: playerXp,
+    });
+  };
+  refreshVitals();
   const refreshWorldInfo = (edits: number): void => {
     ui.setWorldInfo({
       worlds: worlds.map((entry) => ({ id: entry.id, name: entry.name })),
@@ -629,6 +636,118 @@ async function boot(): Promise<void> {
     }
   };
 
+  interface BossState {
+    group: THREE.Group;
+    health: number;
+    max: number;
+    cooldown: number;
+    aggro: boolean;
+  }
+  let boss: BossState | null = null;
+  let bossSpawned = false;
+
+  const spawnBoss = (): void => {
+    if (bossSpawned) return;
+    const bx = Math.floor(physics.x - Math.sin(yaw) * 12);
+    const bz = Math.floor(physics.z - Math.cos(yaw) * 12);
+    if (!world.isLoaded(bx, bz)) return;
+    const surface = world.getSurfaceBlockY(bx, bz);
+    if (surface === null) return;
+
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(1.7, 1.7, 1.7),
+      new THREE.MeshBasicMaterial({ color: 0x4a2b68 }),
+    );
+    group.add(body);
+    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xe08bff });
+    for (const ex of [-0.38, 0.38]) {
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.08), eyeMaterial);
+      eye.position.set(ex, 0.22, 0.86);
+      group.add(eye);
+    }
+    group.position.set(bx + 0.5, surface + 2.4, bz + 0.5);
+    scene.add(group);
+    boss = { group, health: 100, max: 100, cooldown: 0, aggro: false };
+    bossSpawned = true;
+    ui.setBoss('虚空守卫', boss.health, boss.max);
+    ui.showToast('虚空守卫出现了');
+  };
+
+  const killBoss = (): void => {
+    if (!boss) return;
+    scene.remove(boss.group);
+    boss.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      mesh.geometry?.dispose();
+      const material = mesh.material as THREE.Material | undefined;
+      material?.dispose();
+    });
+    boss = null;
+    ui.setBoss(null, 0, 0);
+    ui.showToast('虚空守卫已被击败');
+    dropItem({ id: Block.GLOWSTONE, count: 4 });
+    scheduleSave?.();
+  };
+
+  const updateBoss = (dt: number): void => {
+    if (!boss) return;
+    const group = boss.group;
+    const dx = physics.x - group.position.x;
+    const dz = physics.z - group.position.z;
+    const distance = Math.hypot(dx, dz);
+    const surface = world.getSurfaceBlockY(
+      Math.floor(group.position.x),
+      Math.floor(group.position.z),
+    );
+    if (surface !== null) {
+      group.position.y = surface + 2.4 + Math.sin(Date.now() * 0.002) * 0.22;
+    }
+    group.rotation.y = Math.atan2(dx, dz);
+    if (!boss.aggro) return;
+
+    if (distance > 4.5 && distance < 24) {
+      const speed = 0.65;
+      group.position.x += (dx / distance) * speed * dt;
+      group.position.z += (dz / distance) * speed * dt;
+    }
+
+    boss.cooldown = Math.max(0, boss.cooldown - dt);
+    if (distance < 5.2 && boss.cooldown <= 0) {
+      boss.cooldown = 2.2;
+      playerHealth = Math.max(0, playerHealth - 1);
+      refreshVitals();
+      ui.showToast('-1 生命');
+      if (playerHealth <= 0) {
+        playerHealth = 20;
+        refreshVitals();
+        spawnPlayer();
+        ui.showToast('你被击败了');
+      }
+    }
+  };
+
+  const tryHitBoss = (): boolean => {
+    if (!boss) return false;
+    const dx = boss.group.position.x - physics.x;
+    const dy = boss.group.position.y - physics.eyeY;
+    const dz = boss.group.position.z - physics.z;
+    const distance = Math.hypot(dx, dy, dz);
+    if (distance > 7.5) return false;
+    const cosPitch = Math.cos(pitch);
+    const fx = -Math.sin(yaw) * cosPitch;
+    const fy = Math.sin(pitch);
+    const fz = -Math.cos(yaw) * cosPitch;
+    const dot = (dx * fx + dy * fy + dz * fz) / Math.max(0.001, distance);
+    if (dot < 0.94) return false;
+    boss.aggro = true;
+    boss.health = Math.max(0, boss.health - 20);
+    ui.setBoss('虚空守卫', boss.health, boss.max);
+    spawnHitParticles(boss.group.position.x, boss.group.position.y, boss.group.position.z, 0xd08bff);
+    if (boss.health <= 0) killBoss();
+    return true;
+  };
+
   const spawnPlayer = (): void => {
     const surface = world.getSurfaceBlockY(8, 8) ?? 64;
     physics.teleport(8.5, surface + 1.01, 8.5);
@@ -650,10 +769,10 @@ async function boot(): Promise<void> {
       flying,
       gameMode: 'survival',
       timeOfDay: 0.3,
-      health: 20,
-      food: 20,
+      health: playerHealth,
+      food: playerFood,
       saturation: 5,
-      air: 300,
+      air: playerAir,
       exhaustion: 0,
       inventory: inventory.serialize(),
       selectedSlot,
@@ -884,6 +1003,7 @@ async function boot(): Promise<void> {
   };
 
   const swingAttack = (): void => {
+    if (tryHitBoss()) return;
     if (!currentHit) {
       ui.showToast('NO TARGET');
       return;
@@ -1321,6 +1441,16 @@ async function boot(): Promise<void> {
 
     // 等脚下区块加载完再落玩家，避免出生就掉进虚空
     if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
+    if (playerReady && !bossSpawned && !ui.isMainMenuOpen()) spawnBoss();
+    if (
+      !ui.isMainMenuOpen() &&
+      !ui.isPauseOpen() &&
+      !ui.isSettingsOpen() &&
+      !ui.isChestOpen() &&
+      !ui.isFurnaceOpen()
+    ) {
+      updateBoss(dt);
+    }
     if (
       ui.isMainMenuOpen() ||
       ui.isPauseOpen() ||
