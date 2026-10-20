@@ -74,20 +74,52 @@ export interface SpawnContext {
    * 不传按 1 算（不影响任何现有生物）。
    */
   spawnWeightScale?: (type: MobType) => number;
+  /**
+   * 当前难度下的**敌对生物上限**（批次 499）。
+   *
+   * 不传按普通难度的 24（离线测试与旧的调用方行为不变）；**0 表示这一档不刷敌对**
+   * （和平难度）。难度表里的 `spawnCap` 以前从没被读过——"和平不刷怪 / 简单怪更少 /
+   * 困难怪更多"这三条其实一直没生效。
+   */
+  hostileLimit?: number;
 }
 
 /** 生成尝试间隔（秒） */
 const SPAWN_INTERVAL = 2;
+/**
+ * 被动生物的补刷间隔（秒，批次 499）。
+ *
+ * 与敌对**分开计时**：以前共用 2 秒那一个周期，于是十几只牛羊会在半分钟内
+ * 全部涌到玩家身边。原版动物是**区块生成时成群出现**的，不会围着你刷新——
+ * 这里保留"补刷"（否则被吃光/被杀的动物永远不回来），但把节奏放到 10 秒一轮。
+ */
+const PASSIVE_INTERVAL = 10;
 const HOSTILE_LIMIT = 24;
-const PASSIVE_LIMIT = 16;
+/**
+ * 被动生物上限（批次 499）：16 → **8**。
+ *
+ * 原版按"可刷区块数 / 289"折算，视距 4（约 113 个区块）只有 **4 只**左右；
+ * 8 是"接近原版密度"与"动物仍然是食物/皮革来源"之间的折中。
+ * ⚠️ 只数**自然生成的动物**（`PASSIVE_MOBS`）：村民/铁傀儡占的是原版的 MISC 名额，
+ * 不该把动物挤掉（见 `main.updateMobSpawning`）。
+ */
+export const PASSIVE_LIMIT = 8;
 
-const HOSTILE_MIN_DISTANCE = 16;
+/**
+ * 敌对生物的最小/最大生成距离（格，批次 499）。
+ *
+ * 下限 16 → **24**：原版就是 24 格内绝不刷怪，玩家不会"转身就有怪"。
+ * 上限 48 保留：本项目视距被自适应压到 4 时加载区只有约 64 格半径，
+ * 再远刷出来的怪玩家根本看不见，只是白占 CPU。
+ */
+const HOSTILE_MIN_DISTANCE = 24;
 const HOSTILE_MAX_DISTANCE = 48;
 /** 敌对生物只在地表以下刷（原版主世界刷怪高度上限约 y=70） */
 const HOSTILE_MAX_Y = 70;
 
-const PASSIVE_MIN_DISTANCE = 8;
-const PASSIVE_MAX_DISTANCE = 32;
+/** 被动生物的生成距离（格，批次 499）：8~32 → 24~48，不再贴着玩家冒出来 */
+const PASSIVE_MIN_DISTANCE = 24;
+const PASSIVE_MAX_DISTANCE = 48;
 /**
  * 一轮被动刷怪里，原本要花在"水里"的比例（批次 189）。
  *
@@ -105,10 +137,29 @@ const DESPAWN_DISTANCE = 96;
 const WORLD_MIN_Y = -64;
 const WORLD_MAX_Y = 320;
 
-
+/**
+ * 当前难度下的敌对生物上限（批次 499）。
+ *
+ * 难度表（`Rules.ts` 的 `DIFFICULTY_PROFILES[*].spawnCap`）从批次 1 起就有这个字段，
+ * 但**从来没有人读过它**：`TASKS.md` 里 I7 那句"和平不刷敌对生物、刷怪上限倍率"
+ * 一直是文档漂移。接上之后：和平 0 / 简单 12 / 普通 24 / 困难 36。
+ *
+ * @param difficultyScale 难度的 `spawnCap` 倍率（`spawnCap <= 0` 表示这一档不刷）
+ */
+export function hostileLimitFor(difficultyScale: number): number {
+  if (!(difficultyScale > 0)) return 0;
+  return Math.round(HOSTILE_LIMIT * difficultyScale);
+}
 
 export class MobSpawner {
   private timer = SPAWN_INTERVAL;
+  /**
+   * 被动生物自己的计时器（批次 499）。
+   *
+   * 初值 0：进世界第一轮就补一次，开局很快能看到动物（也是 `test:spawn`
+   * 那条"一次 update 就能刷出被动生物"的前提）。
+   */
+  private passiveTimer = 0;
 
   /** 随机源可注入，便于离线测试用确定性序列复现 */
   constructor(private readonly random: () => number = Math.random) {}
@@ -122,15 +173,22 @@ export class MobSpawner {
    * @returns 本次实际生成的生物数
    */
   update(dt: number, ctx: SpawnContext): number {
-    this.timer -= dt;
-    if (this.timer > 0) return 0;
-    this.timer = SPAWN_INTERVAL;
-
-    if (!ctx.player) return 0;
-
     let spawned = 0;
-    if (ctx.hostileCount < HOSTILE_LIMIT) spawned += this.trySpawnHostile(ctx);
-    if (ctx.passiveCount < PASSIVE_LIMIT) spawned += this.trySpawnPassive(ctx);
+
+    this.timer -= dt;
+    if (this.timer <= 0) {
+      this.timer = SPAWN_INTERVAL;
+      // 难度倍率（批次 499）：和平 0 / 简单 12 / 普通 24 / 困难 36
+      const limit = ctx.hostileLimit ?? HOSTILE_LIMIT;
+      if (ctx.player && ctx.hostileCount < limit) spawned += this.trySpawnHostile(ctx);
+    }
+
+    this.passiveTimer -= dt;
+    if (this.passiveTimer <= 0) {
+      this.passiveTimer = PASSIVE_INTERVAL;
+      if (ctx.player && ctx.passiveCount < PASSIVE_LIMIT) spawned += this.trySpawnPassive(ctx);
+    }
+
     return spawned;
   }
 
@@ -202,7 +260,10 @@ export class MobSpawner {
       ctx.spawn(type, x + 0.5, y, z + 0.5);
       this.spawnedHostile++;
       spawned++;
-      if (spawned >= 3) break; // 一个周期最多刷 3 只，避免瞬间刷一堆
+      // 一个周期最多刷 **1** 只（批次 499，原为 3）：3 只/2 秒 = 16 秒就能把 24 只
+      // 名额填满，体感是"怪一片一片地冒出来"。改成 1 只后填满要 ~48 秒，
+      // 与原版"慢慢积攒"一致（原版也是每区块低频尝试）。
+      if (spawned >= 1) break;
     }
     return spawned;
   }

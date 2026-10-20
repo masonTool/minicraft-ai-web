@@ -96,7 +96,7 @@ import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy } from './core/entity/Mob.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
-import { mobTypeById } from './core/entity/mobs.ts';
+import { PASSIVE_MOBS, mobTypeById } from './core/entity/mobs.ts';
 // 村民（J11，批次 88）：造生物的工厂 + 实体本体 + 那一层的纯数据（职业 / 交易表）
 import { createMob } from './core/entity/MobFactory.ts';
 // 船（批次 244，G12）：载具实体与"上下船"全在主程序这一层
@@ -391,7 +391,12 @@ import {
   normalizeBorder,
   type WorldBorder,
 } from './core/world/WorldBorder.ts';
-import { MobSpawner, MOB_DESPAWN_DISTANCE, type SpawnContext } from './core/entity/MobSpawner.ts';
+import {
+  MobSpawner,
+  MOB_DESPAWN_DISTANCE,
+  hostileLimitFor,
+  type SpawnContext,
+} from './core/entity/MobSpawner.ts';
 import { raycastEntities } from './core/interaction/EntityRaycast.ts';
 import { AIM_INFLATE, AIM_LOCK_RADIUS_PX, sightBlocked } from './core/interaction/AimTarget.ts';
 import { VoxelMaterial } from './render/VoxelMaterial.ts';
@@ -9211,7 +9216,11 @@ class App {
         ) {
           entity.dead = true;
         }
-      } else {
+      } else if (PASSIVE_MOBS.includes(entity.type)) {
+        // 只数**自然刷出来的动物**（批次 499）：村民 / 铁傀儡 / 马商队占的是原版的
+        // MISC 名额，把它们算进那 8 只动物里，一个村子就会让动物"绝迹"
+        //（村民自己有 10 个以上，动物名额永远满）。`PASSIVE_MOBS` 已经排除了
+        // `naturalSpawn: false` 的那些（村民、铁傀儡、守卫者…）。
         passiveCount++;
       }
     }
@@ -9219,6 +9228,9 @@ class App {
     // doMobSpawning 关掉后连刷怪逻辑都不跑（刷怪笼与 /summon 不受影响）
     if (!this.rules.doMobSpawning) return;
 
+    // 难度倍率（批次 499）：以前 `difficultyProfile().spawnCap` 从没被读过，
+    // 于是"和平不刷怪 / 简单怪少一半 / 困难多一半"三条一直没生效
+    const difficulty = difficultyProfile(this.difficulty);
     const ctx: SpawnContext = {
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       // 天光要按昼夜折算：我们的光照引擎里地表天光恒为 15，
@@ -9244,6 +9256,8 @@ class App {
       // 月亮相位影响史莱姆的刷怪密度（批次 120）：`MoonPhase` 里那个函数一直等着史莱姆
       spawnWeightScale: (type) =>
         type.spawnZone === 'slime_chunk' ? this.slimeSpawnFactorNow() : 1,
+      // 敌对上限随难度缩放（批次 499）：和平 0 / 简单 12 / 普通 24 / 困难 36
+      hostileLimit: difficulty.hostileSpawning ? hostileLimitFor(difficulty.spawnCap) : 0,
     };
     this.mobSpawner.update(dt, ctx);
   }

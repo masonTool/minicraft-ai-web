@@ -8,7 +8,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { MobSpawner, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
+import { MobSpawner, PASSIVE_LIMIT, type SpawnContext } from '../src/core/entity/MobSpawner.ts';
 // 史莱姆那条高度线（批次 120）：断言里按它比，别写死 40
 import { SLIME_SPAWN_MAX_Y } from '../src/core/world/Slime.ts';
 import { MOB_TYPES } from '../src/core/entity/mobs.ts';
@@ -74,6 +74,8 @@ function makeContext(
     biomeAt?: (x: number, z: number) => string | null;
     /** 地表那一格是什么（批次 242：雪层也算地表） */
     ground?: number;
+    /** 难度倍率折算后的敌对上限（批次 499）：不传 = 普通难度的 24 */
+    hostileLimit?: number;
   },
 ): SpawnContext {
   return {
@@ -102,6 +104,7 @@ function makeContext(
     spawn: (type, x, y, z) => options.spawned.push({ type, x, y, z }),
     hostileCount: options.hostile ?? 0,
     passiveCount: options.passive ?? 0,
+    ...(options.hostileLimit === undefined ? {} : { hostileLimit: options.hostileLimit }),
   };
 }
 
@@ -244,14 +247,16 @@ console.log('\n[距离限制]');
   const ctx = makeContext({ sky: 5, block: 0, spawned });
   runCycles(new MobSpawner(), ctx, 40);
   const distances = spawned.map((s) => Math.hypot(s.x - 0.5, s.z - 0.5));
-  check('敌对生物不会刷在玩家 16 格以内', distances.every((d) => d >= 16 - 1.5), `最近 ${Math.min(...distances).toFixed(1)}`);
+  // 批次 499：下限 16 → 24（原版就是 24 格内绝不刷怪，玩家不会"转身就有怪"）
+  check('敌对生物不会刷在玩家 24 格以内', distances.every((d) => d >= 24 - 1.5), `最近 ${Math.min(...distances).toFixed(1)}`);
   check('敌对生物不会刷在玩家 48 格以外', distances.every((d) => d <= 48 + 1.5), `最远 ${Math.max(...distances).toFixed(1)}`);
 
   const passive: Spawned[] = [];
   const passiveCtx = makeContext({ sky: 15, block: 0, spawned: passive });
   runCycles(new MobSpawner(), passiveCtx, 40);
   const passiveDistances = passive.map((s) => Math.hypot(s.x - 0.5, s.z - 0.5));
-  check('被动生物刷在 8~32 格之间', passiveDistances.every((d) => d >= 8 - 1.5 && d <= 32 + 1.5),
+  // 批次 499：8~32 → 24~48，动物不再贴着玩家冒出来
+  check('被动生物刷在 24~48 格之间', passiveDistances.every((d) => d >= 24 - 1.5 && d <= 48 + 1.5),
     `${Math.min(...passiveDistances).toFixed(1)} ~ ${Math.max(...passiveDistances).toFixed(1)}`);
 }
 
@@ -304,9 +309,9 @@ console.log('\n[生成上限]');
   check('敌对生物达到上限 24 后不再生成', spawned.every((s) => !s.type.hostile), `其中敌对 ${spawned.filter((s) => s.type.hostile).length} 只`);
 
   const passiveFull: Spawned[] = [];
-  const passiveCtx = makeContext({ sky: 15, block: 0, spawned: passiveFull, passive: 16 });
+  const passiveCtx = makeContext({ sky: 15, block: 0, spawned: passiveFull, passive: PASSIVE_LIMIT });
   runCycles(new MobSpawner(), passiveCtx, 50);
-  check('被动生物达到上限 16 后不再生成', passiveFull.length === 0, `${passiveFull.length} 只`);
+  check(`被动生物达到上限 ${PASSIVE_LIMIT} 后不再生成`, passiveFull.length === 0, `${passiveFull.length} 只`);
 }
 
 console.log('\n[没有玩家时不生成]');
@@ -325,8 +330,45 @@ console.log('\n[节流]');
   const ctx = makeContext({ sky: 5, block: 0, spawned });
   // 每帧 0.05 秒，40 帧 = 2 秒 → 只应该触发一次生成周期
   for (let i = 0; i < 40; i++) spawner.update(0.05, ctx);
-  // 一个生成周期最多刷 3 只敌对（实现里的上限）
-  check('2 秒内只触发一次生成周期（最多 3 只）', spawned.length <= 3, `${spawned.length} 只`);
+  // 一个生成周期最多刷 1 只敌对（批次 499，原为 3 只）
+  check('2 秒内只触发一次生成周期（最多 1 只）', spawned.length <= 1, `${spawned.length} 只`);
+}
+
+console.log('\n[刷怪节奏与难度倍率（批次 499）]');
+{
+  // ① 每轮最多 1 只：40 轮（80 秒）刷不出 40 只以上
+  const paced: Spawned[] = [];
+  runCycles(new MobSpawner(), makeContext({ sky: 5, block: 0, spawned: paced }), 40);
+  const hostiles = paced.filter((s) => s.type.hostile).length;
+  check('一轮最多刷 1 只敌对（不会"一片一片"地冒）', hostiles <= 40, `${hostiles} 只`);
+  check('而且照样刷得出来（上限没把功能掐掉）', hostiles > 0, `${hostiles} 只`);
+
+  // ② 和平难度：hostileLimit = 0 → 一只都不刷
+  const peaceful: Spawned[] = [];
+  const peacefulCtx = makeContext({ sky: 5, block: 0, spawned: peaceful, hostileLimit: 0 });
+  runCycles(new MobSpawner(), peacefulCtx, 30);
+  check(
+    '和平难度（hostileLimit 0）不刷敌对生物',
+    peaceful.every((s) => !s.type.hostile),
+    `其中敌对 ${peaceful.filter((s) => s.type.hostile).length} 只`,
+  );
+
+  // ③ 简单难度：上限 12，满 12 只就不再刷（原来这个倍率根本没接线）
+  const easy: Spawned[] = [];
+  const easyCtx = makeContext({ sky: 5, block: 0, spawned: easy, hostileLimit: 12, hostile: 12 });
+  runCycles(new MobSpawner(), easyCtx, 30);
+  check(
+    '难度上限（简单 12）满了就不再生成',
+    easy.every((s) => !s.type.hostile),
+    `其中敌对 ${easy.filter((s) => s.type.hostile).length} 只`,
+  );
+
+  // ④ 被动补刷走自己的 10 秒节奏：20 秒里最多 2 只（原来 2 秒一轮，20 秒能刷 10 只）
+  const animals: Spawned[] = [];
+  const animalCtx = makeContext({ sky: 15, block: 0, spawned: animals, hostileLimit: 0 });
+  const slow = new MobSpawner();
+  for (let i = 0; i < 20; i++) slow.update(1.0, animalCtx);
+  check('被动生物 10 秒才补一轮（20 秒最多 2 只）', animals.length <= 2, `${animals.length} 只`);
 }
 
 console.log('\n[性能：被动刷怪不再逐格扫描（C6 高度图）]');
