@@ -62,8 +62,13 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   const panelY = (canvas.height - panelHeight) / 2;
   const panel: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
 
-  const play: Rect = { x: panelX + 70, y: panelY + 198, w: panelWidth - 140, h: 56 };
-  const settings: Rect = { x: panelX + 70, y: panelY + 272, w: panelWidth - 140, h: 48 };
+  const play: Rect = {
+    x: canvas.width / 2 - 260,
+    y: canvas.height * 0.5,
+    w: 520,
+    h: 52,
+  };
+  const settings: Rect = { x: play.x, y: play.y + 68, w: play.w, h: 52 };
   const back: Rect = { x: panelX + 28, y: panelY + 18, w: 104, h: 36 };
   const newWorld: Rect = { x: panelX + 70, y: panelY + 74, w: panelWidth - 140, h: 40 };
   const deleteSave: Rect = { x: panelX + 70, y: panelY + 382, w: panelWidth - 140, h: 36 };
@@ -104,39 +109,49 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
 
   const drawTitle = (): void => {
     if (!context) return;
+    const cx = canvas.width / 2;
     context.save();
-    context.shadowColor = 'rgba(0, 0, 0, 0.85)';
-    context.shadowBlur = 8;
-    context.shadowOffsetY = 4;
-    drawText(context, 'MINECRAFT', panelX + 40, panelY + 22, 50, '#ffffff');
+    context.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    context.shadowBlur = 10;
+    context.shadowOffsetY = 5;
+    drawText(context, 'MINECRAFT', cx, canvas.height * 0.1, 70, '#ffffff', 'center', canvas.width - 80);
     context.restore();
+
     context.fillStyle = 'rgba(126, 176, 92, 0.96)';
-    context.fillRect(panelX + 42, panelY + 82, 282, 26);
+    context.fillRect(cx - 180, canvas.height * 0.1 + 70, 360, 28);
     drawText(
       context,
       '基岩版 1.18 · 微信小游戏',
-      panelX + 54,
-      panelY + 86,
+      cx,
+      canvas.height * 0.1 + 74,
       15,
       '#0e1a0c',
+      'center',
+      340,
     );
     drawText(
       context,
       '原生生存、创造与多世界存档',
-      panelX + 42,
-      panelY + 116,
-      15,
+      cx,
+      canvas.height * 0.1 + 118,
+      18,
       'rgba(225, 238, 248, 0.78)',
+      'center',
+      canvas.width - 120,
     );
-    drawButton(context, play, '游戏', 'normal', 24);
-    drawButton(context, settings, '设置', 'normal', 20);
+
+    drawButton(context, play, '游戏', 'normal', 22);
+    drawButton(context, settings, '设置', 'normal', 21);
+
     drawText(
       context,
       '非官方 · 存档保存在本机',
-      panelX + 42,
-      panelY + panelHeight - 26,
+      cx,
+      canvas.height - 28,
       12,
-      'rgba(165, 195, 215, 0.5)',
+      'rgba(200, 220, 235, 0.55)',
+      'center',
+      canvas.width - 80,
     );
   };
 
@@ -228,9 +243,11 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       return;
     }
     drawBackdrop();
-    drawPanel(context, panel);
     if (screen === 'title') drawTitle();
-    else drawWorlds();
+    else {
+      drawPanel(context, panel);
+      drawWorlds();
+    }
     texture.needsUpdate = true;
   };
 
