@@ -14,7 +14,7 @@
  */
 
 import { t } from '../core/i18n/I18n.ts';
-import { MAP_GRID, MAP_CHUNK_SPAN, exploredCount, isExplored, mapOffset, type MapData } from '../core/items/Map.ts';
+import { MAP_GRID, exploredCount, isExplored, mapOffset, mapSpanOf, type MapData } from '../core/items/Map.ts';
 
 /** 画布内部边长（CSS 会把它缩到面板上；固定值让绘制逻辑与屏幕无关） */
 const CANVAS_SIZE = 320;
@@ -84,7 +84,12 @@ export class MapScreen {
     this.titleEl.textContent = title;
     this.draw(map, player);
     const explored = exploredCount(map);
-    this.footerEl.textContent = `探索 ${explored} / ${MAP_GRID * MAP_GRID} 格（${Math.round((explored / (MAP_GRID * MAP_GRID)) * 100)}%）· 北在上`;
+    // 批次 505：一格覆盖多少方块随缩放翻倍（scale 0 = 1 区块、1 = 2、2 = 4）
+    const chunksPerCell = 1 << map.scale;
+    const lockText = map.locked ? ' · 已锁定' : '';
+    this.footerEl.textContent =
+      `探索 ${explored} / ${MAP_GRID * MAP_GRID} 格（${Math.round((explored / (MAP_GRID * MAP_GRID)) * 100)}%）` +
+      ` · 1 格 = ${chunksPerCell} 个区块 · 北在上${lockText}`;
     this.open = true;
     this.root.classList.remove('hidden');
     this.root.tabIndex = -1;
@@ -110,13 +115,16 @@ export class MapScreen {
     ctx.fillStyle = '#cbbd9c';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
+    // 缩放（批次 505）：一格覆盖的方块数随 scale 翻倍，画格子与玩家位置都要用它
+    const span = mapSpanOf(map);
+
     // 已探索的格子：绿色 + 按下标做一点色相抖动（同一片不会看起来像一块塑料板）
     for (let cz = 0; cz < MAP_GRID; cz++) {
       for (let cx = 0; cx < MAP_GRID; cx++) {
         // 取"这一格的左上角"去问位图：`isExplored` 自己会按区块取整，
         // 所以这里不需要再关心半格偏移
-        const worldX = map.originX + (cx - MAP_GRID / 2) * MAP_CHUNK_SPAN;
-        const worldZ = map.originZ + (cz - MAP_GRID / 2) * MAP_CHUNK_SPAN;
+        const worldX = map.originX + (cx - MAP_GRID / 2) * span;
+        const worldZ = map.originZ + (cz - MAP_GRID / 2) * span;
         if (!isExplored(map, worldX, worldZ)) continue;
         const tint = ((cx * 7 + cz * 13) % 5) * 6;
         ctx.fillStyle = `rgb(${96 + tint}, ${140 + tint}, ${72 + tint})`;
@@ -146,8 +154,8 @@ export class MapScreen {
 
     // 玩家：红三角，尖端朝前
     const offset = mapOffset(map, player.x, player.z);
-    const px = center + (offset.dx / MAP_CHUNK_SPAN) * CELL;
-    const pz = center + (offset.dz / MAP_CHUNK_SPAN) * CELL;
+    const px = center + (offset.dx / span) * CELL;
+    const pz = center + (offset.dz / span) * CELL;
     if (px > -CELL && px < CANVAS_SIZE + CELL && pz > -CELL && pz < CANVAS_SIZE + CELL) {
       ctx.save();
       ctx.translate(px, pz);

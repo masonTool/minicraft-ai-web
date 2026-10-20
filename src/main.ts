@@ -2048,6 +2048,9 @@ class App {
         onTrade: (villager, index) => void this.performTrade(villager, index),
         // 织布机（J25，批次 503）：界面负责扣料与改图案，这里只响一声
         onLoomApply: () => this.audio.play('shear', { x: this.physics.x, y: this.physics.y + 1, z: this.physics.z }),
+        // 制图台（批次 505）：纸张/地图的声音，界面只报事件
+        onCartographyCraft: () =>
+          this.audio.play('item_move', { x: this.physics.x, y: this.physics.y + 1, z: this.physics.z }),
         // 熔炉产物被取空时结算烧炼经验（I5）
         // 熔炉经验（原版取出产物时给）：炉子就在身旁，掉在玩家脚下即可
         onFurnaceXp: (amount) => this.spawnXpOrbs(amount, this.physics.x, this.physics.y + 0.5, this.physics.z),
@@ -11334,6 +11337,14 @@ class App {
       this.inventoryScreen.openWith('loom', this.world.containers.getOrCreateLoom(this.dimension, x, y, z));
       return true;
     }
+    // 制图台（K7，批次 505）：地图 + 纸/空地图/玻璃板 → 放大 / 复制 / 锁定
+    if (hitBlock === Block.CARTOGRAPHY_TABLE) {
+      this.inventoryScreen.openWith(
+        'cartography',
+        this.world.containers.getOrCreateCartographyTable(this.dimension, x, y, z),
+      );
+      return true;
+    }
     // 砂轮（H15，批次 188）：洗附魔 / 拼耐久。记下坐标是为了让返还的经验球冒在砂轮上方
     if (hitBlock === Block.GRINDSTONE) {
       this.grindstonePos = { x, y, z };
@@ -11879,6 +11890,8 @@ class App {
     if (block === Block.GRINDSTONE) return store.getOrCreateGrindstone(dimension, x, y, z);
     // 织布机（批次 503）：旗帜/染料按坐标存，拆掉时才会掉出来（成品格是算出来的，不倒）
     if (block === Block.LOOM) return store.getOrCreateLoom(dimension, x, y, z);
+    // 制图台（批次 505）：地图/材料按坐标存，拆掉时才会掉出来
+    if (block === Block.CARTOGRAPHY_TABLE) return store.getOrCreateCartographyTable(dimension, x, y, z);
     // 讲台（批次 191）：摊着的那本书按坐标存，拆掉时才会掉出来
     if (block === Block.LECTERN) return store.getOrCreateLectern(dimension, x, y, z);
     if (block === Block.ENCHANTING_TABLE) return store.getOrCreateEnchantTable(dimension, x, y, z);

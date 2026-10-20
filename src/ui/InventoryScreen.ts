@@ -107,6 +107,12 @@ import {
 import { STONECUTTER_INPUT, Stonecutter } from '../core/container/Stonecutter.ts';
 // 织布机（J25，批次 503）：旗帜 + 染料 → 成品，图案是物品数据（批次 502）
 import { LOOM_BANNER, LOOM_DYE, LOOM_OUTPUT, LOOM_PATTERNS, Loom } from '../core/container/Loom.ts';
+// 制图台（K7，批次 505）：地图 + 材料 → 复制 / 放大 / 锁定
+import {
+  CARTO_MAP,
+  CARTO_MATERIAL,
+  CartographyTable,
+} from '../core/container/CartographyTable.ts';
 import { BANNER_PATTERNS } from '../core/registry/blockState.ts';
 // 村民交易（J11，批次 88）：职业/交易表在注册表那一层（纯数据），界面只读不算
 import { Villager } from '../core/entity/Villager.ts';
@@ -202,6 +208,8 @@ export type InventoryPanelMode =
   | 'stonecutter'
   /** 织布机（J25，批次 503）：旗帜 + 染料两格 + 一列图案，点一下印一件 */
   | 'loom'
+  /** 制图台（K7，批次 505）：地图 + 材料 → 复制 / 放大 / 锁定（点一下直接进背包） */
+  | 'cartography'
   /** 漏斗（批次 58）：5 格排成一行，内容由方块自己每 0.4 秒搬一次 */
   | 'hopper'
   /** 投掷器（批次 59）：3×3 九格，内容由红石脉冲往外吐（界面里只存货与朝向） */
@@ -238,6 +246,7 @@ export function isWorkstationMode(mode: InventoryPanelMode): boolean {
     case 'grindstone':
     case 'stonecutter':
     case 'loom':
+    case 'cartography':
     case 'brewing':
     case 'enchanting':
     case 'campfire':
@@ -329,6 +338,8 @@ export interface InventoryScreenHooks {
    * （与砂轮返经验同一个分工：界面不持有音频，也不知道音量设置）。
    */
   onLoomApply?: (pattern: number) => void;
+  /** 制图台做成一件（批次 505）：界面扣材料、主程序只响一声 */
+  onCartographyCraft?: () => void;
   /**
    * **把手上/某一格的东西丢进世界**（批次 128，Q / Ctrl+Q / 点界面外）。
    *
@@ -779,6 +790,13 @@ export class InventoryScreen {
   private readonly loomListEl: HTMLDivElement;
   private readonly loomHintEl: HTMLDivElement;
 
+  /** 制图台（K7，批次 505）：地图格 + 材料格 + 一个"制作"按钮 + 提示行 */
+  private readonly cartographyLayout: HTMLDivElement;
+  private readonly cartographyMapSlot: HTMLDivElement;
+  private readonly cartographyMaterialSlot: HTMLDivElement;
+  private readonly cartographyCraftButton: HTMLButtonElement;
+  private readonly cartographyHintEl: HTMLDivElement;
+
   /**
    * 村民交易（J11，批次 88）：左边是他本人的状态（职业/等级/经验），右边是一列交易。
    *
@@ -1158,6 +1176,21 @@ export class InventoryScreen {
     this.loomListEl.className = 'stonecutter-list';
     this.loomHintEl = document.createElement('div');
     this.loomHintEl.className = 'anvil-cost';
+
+    // 制图台（K7，批次 505）：左边两格，右边一个"制作"按钮
+    this.cartographyLayout = document.createElement('div');
+    this.cartographyLayout.className = 'stonecutter-layout';
+    this.cartographyMapSlot = this.createSlot();
+    this.cartographyMapSlot.dataset.key = `cartography:${CARTO_MAP}`;
+    this.cartographyMaterialSlot = this.createSlot();
+    this.cartographyMaterialSlot.dataset.key = `cartography:${CARTO_MATERIAL}`;
+    this.cartographyCraftButton = document.createElement('button');
+    this.cartographyCraftButton.type = 'button';
+    this.cartographyCraftButton.className = 'stonecutter-option';
+    this.cartographyCraftButton.textContent = '制作';
+    this.cartographyCraftButton.addEventListener('click', () => this.handleCartographyCraft());
+    this.cartographyHintEl = document.createElement('div');
+    this.cartographyHintEl.className = 'anvil-cost';
 
     // 村民交易（J11，批次 88）：左边是他的状态，右边是一列交易（没有收货格）
     this.tradeLayout = document.createElement('div');
@@ -4138,6 +4171,7 @@ export class InventoryScreen {
     this.clearBindings('smithing:');
     this.clearBindings('stonecutter:');
     this.clearBindings('loom:');
+    this.clearBindings('cartography:');
     this.clearBindings('campfire:');
     this.clearBindings('brewing:');
     this.clearBindings('hopper:');
@@ -4440,6 +4474,39 @@ export class InventoryScreen {
 
       this.loomLayout.replaceChildren(left, right);
       this.topArea.appendChild(this.loomLayout);
+      return;
+    }
+
+    if (this.mode === 'cartography') {
+      const table = this.activeContainer instanceof CartographyTable ? this.activeContainer : null;
+      const map = this.registerExisting(this.cartographyMapSlot, `cartography:${CARTO_MAP}`, table!, CARTO_MAP);
+      const material = this.registerExisting(
+        this.cartographyMaterialSlot,
+        `cartography:${CARTO_MATERIAL}`,
+        table!,
+        CARTO_MATERIAL,
+      );
+      this.cartographyHintEl.textContent = '';
+
+      const left = document.createElement('div');
+      left.className = 'stonecutter-col';
+      left.append(
+        this.buildLabel('已填好的地图'),
+        map,
+        this.buildLabel('材料：纸 / 空地图 / 玻璃板'),
+        material,
+        this.cartographyHintEl,
+      );
+
+      const right = document.createElement('div');
+      right.className = 'stonecutter-right';
+      right.append(
+        this.buildLabel('纸=放大 · 空地图=复制 · 玻璃板=锁定'),
+        this.cartographyCraftButton,
+      );
+
+      this.cartographyLayout.replaceChildren(left, right);
+      this.topArea.appendChild(this.cartographyLayout);
       return;
     }
 
@@ -6049,6 +6116,7 @@ export class InventoryScreen {
     }
     if (this.mode === 'stonecutter') this.refreshStonecutter();
     if (this.mode === 'loom') this.refreshLoom();
+    if (this.mode === 'cartography') this.refreshCartography();
     if (this.mode === 'trade') this.refreshTrade();
     // 批次 295：红底配方缺的那几件画成红底预览
     this.renderStationGhost();
@@ -6683,6 +6751,47 @@ export class InventoryScreen {
     this.refresh();
   }
 
+  /** 刷新制图台：按钮可用状态与提示行都跟着两格变（批次 505） */
+  private refreshCartography(): void {
+    const table = this.activeContainer;
+    if (!(table instanceof CartographyTable)) return;
+    const planned = table.plan();
+    const hint = this.cartographyHintEl;
+    hint.classList.remove('bad');
+    if (!planned.ok) {
+      this.cartographyCraftButton.disabled = true;
+      hint.textContent = planned.reason;
+      return;
+    }
+    this.cartographyCraftButton.disabled = false;
+    const texts: Record<string, string> = {
+      zoom: '放大一格：覆盖范围翻倍（消耗 1 张纸）',
+      copy: '复制一张：位图完全一样（消耗 1 张空地图，原件保留）',
+      lock: '锁定：之后走过的地方不再记录（消耗 1 块玻璃板）',
+    };
+    hint.textContent = texts[planned.plan.action] ?? '';
+  }
+
+  /** 点"制作"：产物直接进背包（与切石机/交易同源；放不下就落到光标上） */
+  private handleCartographyCraft(): void {
+    const table = this.activeContainer;
+    if (!(table instanceof CartographyTable)) return;
+    if (this.held) {
+      this.rejectSlot(this.cartographyLayout);
+      return;
+    }
+    const result = table.craft();
+    if (!result.ok) {
+      this.cartographyHintEl.textContent = result.reason;
+      this.cartographyHintEl.classList.add('bad');
+      return;
+    }
+    const leftover = this.inventory.addStack({ ...result.plan.result });
+    if (leftover > 0) this.held = { ...result.plan.result, count: leftover };
+    this.hooks.onCartographyCraft?.();
+    this.refresh();
+  }
+
   /** 刷新锻造台的提示行：没产物时解释为什么，有产物时把代价说清楚 */
   private refreshSmithing(): void {
     const table = this.activeContainer;
@@ -6824,6 +6933,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   smithing: '锻造台',
   stonecutter: '切石机',
   loom: '织布机',
+  cartography: '制图台',
   brewing: '酿造台',
   hopper: '漏斗',
   trade: '与村民交易',

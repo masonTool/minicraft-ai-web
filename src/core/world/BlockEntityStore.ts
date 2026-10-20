@@ -24,6 +24,7 @@ import { Furnace } from '../container/Furnace.ts';
 import { Grindstone } from '../container/Grindstone.ts';
 import { Lectern } from '../container/Lectern.ts';
 import { Loom } from '../container/Loom.ts';
+import { CartographyTable } from '../container/CartographyTable.ts';
 import { Hopper } from '../container/Hopper.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
@@ -47,7 +48,8 @@ export type BlockContainer =
   | Barrel
   | Grindstone
   | Lectern
-  | Loom;
+  | Loom
+  | CartographyTable;
 export type ContainerKind =
   | 'furnace'
   | 'chest'
@@ -64,7 +66,8 @@ export type ContainerKind =
   | 'shulker_box'
   | 'grindstone'
   | 'lectern'
-  | 'loom';
+  | 'loom'
+  | 'cartography';
 
 /**
  * **带方块实体的方块**（= 装得下东西的方块）的 id 名单。
@@ -106,6 +109,8 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   Block.LECTERN,
   // 织布机（批次 503）：旗帜/染料按坐标存，走开再回来还在台面上
   Block.LOOM,
+  // 制图台（批次 505）：地图/材料按坐标存
+  Block.CARTOGRAPHY_TABLE,
   Block.ENCHANTING_TABLE,
   Block.CAMPFIRE,
   // 三种炉子：站台不同，但都是按坐标存着的容器
@@ -258,6 +263,20 @@ export class BlockEntityStore {
     const grindstone = new Grindstone();
     this.put({ dimension, x, y, z, container: grindstone });
     return grindstone;
+  }
+
+  getCartographyTable(dimension: DimensionId, x: number, y: number, z: number): CartographyTable | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof CartographyTable ? container : undefined;
+  }
+
+  /** 制图台的两格也按坐标存（与织布机同一个理由） */
+  getOrCreateCartographyTable(dimension: DimensionId, x: number, y: number, z: number): CartographyTable {
+    const existing = this.getCartographyTable(dimension, x, y, z);
+    if (existing) return existing;
+    const table = new CartographyTable();
+    this.put({ dimension, x, y, z, container: table });
+    return table;
   }
 
   getLoom(dimension: DimensionId, x: number, y: number, z: number): Loom | undefined {

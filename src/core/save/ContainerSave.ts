@@ -27,6 +27,7 @@ import { STONECUTTER_SIZE, Stonecutter } from '../container/Stonecutter.ts';
 import { GRINDSTONE_SIZE, Grindstone } from '../container/Grindstone.ts';
 import { LECTERN_SIZE, Lectern } from '../container/Lectern.ts';
 import { LOOM_SIZE, Loom } from '../container/Loom.ts';
+import { CARTO_SIZE, CartographyTable } from '../container/CartographyTable.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../container/Campfire.ts';
 import { BARREL_SIZE, Barrel } from '../container/Barrel.ts';
 import { DISPENSER_SIZE, Dispenser } from '../container/Dispenser.ts';
@@ -64,6 +65,8 @@ export const SLOT_COUNTS: Readonly<Record<ContainerKind, number>> = {
   lectern: LECTERN_SIZE,
   // 织布机（批次 503）：旗帜 / 染料 / 成品三格
   loom: LOOM_SIZE,
+  // 制图台（批次 505）：地图 / 材料两格（产物直接进背包，没有产物格）
+  cartography: CARTO_SIZE,
 };
 
 export interface SerializedContainer {
@@ -126,6 +129,7 @@ export function kindOf(container: BlockContainer): ContainerKind {
   if (container instanceof Grindstone) return 'grindstone';
   if (container instanceof Lectern) return 'lectern';
   if (container instanceof Loom) return 'loom';
+  if (container instanceof CartographyTable) return 'cartography';
   if (container instanceof Campfire) return 'campfire';
   if (container instanceof Hopper) return 'hopper';
   // ⚠️ 顺序要紧：发射器是投掷器的**子类**，先判子类，否则发射器会被存成投掷器
@@ -155,6 +159,7 @@ function containerFor(
   if (kind === 'grindstone') return store.getOrCreateGrindstone(dimension, x, y, z);
   if (kind === 'lectern') return store.getOrCreateLectern(dimension, x, y, z);
   if (kind === 'loom') return store.getOrCreateLoom(dimension, x, y, z);
+  if (kind === 'cartography') return store.getOrCreateCartographyTable(dimension, x, y, z);
   if (kind === 'campfire') return store.getOrCreateCampfire(dimension, x, y, z);
   if (kind === 'hopper') return store.getOrCreateHopper(dimension, x, y, z);
   if (kind === 'dropper') return store.getOrCreateDropper(dimension, x, y, z);

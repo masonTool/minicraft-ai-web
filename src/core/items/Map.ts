@@ -25,6 +25,14 @@ export const MAP_HALF = MAP_GRID / 2;
 export const MAP_COVER_BLOCKS = MAP_GRID * MAP_CHUNK_SPAN;
 /** 位图字节数（32×32 / 8） */
 export const MAP_BIT_BYTES = (MAP_GRID * MAP_GRID) / 8;
+/**
+ * 最大缩放档（批次 505）：0 = 一格一个区块（覆盖 512 格），
+ * 1 = 一格两个区块（1024），2 = 一格四个区块（2048）。
+ *
+ * 再往上一格就是 8 个区块（4096 格），而本项目视距只有 8~12 个区块——
+ * 整张图会变成"四个点"，没有使用价值，所以封在 2。
+ */
+export const MAP_MAX_SCALE = 2;
 
 export interface MapData {
   /** 地图中心（世界坐标，取整到方块） */
@@ -32,6 +40,10 @@ export interface MapData {
   originZ: number;
   /** 已探索位图（base64，128 字节） */
   bits: string;
+  /** 缩放档（批次 505）：0~2；老存档没有这个字段 → 0 */
+  scale: number;
+  /** 锁定（批次 505）：锁定后不再记录新格子（原版的"锁定地图"） */
+  locked?: boolean;
 }
 
 /** 新建一张空地图，中心钉在 (x, z) 所在的那一格（向下取整） */
@@ -40,13 +52,20 @@ export function emptyMapData(x: number, z: number): MapData {
     originX: Math.floor(Number.isFinite(x) ? x : 0),
     originZ: Math.floor(Number.isFinite(z) ? z : 0),
     bits: encodeBits(new Uint8Array(MAP_BIT_BYTES)),
+    scale: 0,
   };
+}
+
+/** 这一格在地图上覆盖多少方块（随缩放翻倍） */
+export function mapSpanOf(data: MapData): number {
+  return MAP_CHUNK_SPAN << data.scale;
 }
 
 /** 世界坐标 → 地图格下标；出界返回 -1 */
 export function mapCellIndex(data: MapData, x: number, z: number): number {
-  const cx = Math.floor((x - data.originX) / MAP_CHUNK_SPAN) + MAP_HALF;
-  const cz = Math.floor((z - data.originZ) / MAP_CHUNK_SPAN) + MAP_HALF;
+  const span = mapSpanOf(data);
+  const cx = Math.floor((x - data.originX) / span) + MAP_HALF;
+  const cz = Math.floor((z - data.originZ) / span) + MAP_HALF;
   if (cx < 0 || cx >= MAP_GRID || cz < 0 || cz >= MAP_GRID) return -1;
   return cz * MAP_GRID + cx;
 }
@@ -66,6 +85,8 @@ export function isExplored(data: MapData, x: number, z: number): boolean {
  * @returns 新的地图数据；**已经记过 / 出界**时返回 null（调用方据此跳过写回）
  */
 export function markExplored(data: MapData, x: number, z: number): MapData | null {
+  // 锁定地图不再长格子（原版行为：锁定后连自己走过的地方也不记）
+  if (data.locked) return null;
   const index = mapCellIndex(data, x, z);
   if (index < 0) return null;
   const bytes = decodeBits(data.bits);
@@ -92,7 +113,7 @@ export function exploredCount(data: MapData): number {
  */
 export function sanitizeMap(raw: unknown): MapData | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
-  const candidate = raw as { originX?: unknown; originZ?: unknown; bits?: unknown };
+  const candidate = raw as { originX?: unknown; originZ?: unknown; bits?: unknown; scale?: unknown; locked?: unknown };
   const originX = typeof candidate.originX === 'number' && Number.isFinite(candidate.originX) ? Math.floor(candidate.originX) : 0;
   const originZ = typeof candidate.originZ === 'number' && Number.isFinite(candidate.originZ) ? Math.floor(candidate.originZ) : 0;
   // 位图长度不对（旧版本、手改过）就换成一张全空的：宁可"这一片没探索"，
@@ -110,7 +131,12 @@ export function sanitizeMap(raw: unknown): MapData | undefined {
       // 坏 base64：保持全零
     }
   }
-  return { originX, originZ, bits: encodeBits(bytes) };
+  const scaleRaw = candidate.scale;
+  const scale =
+    typeof scaleRaw === 'number' && Number.isFinite(scaleRaw)
+      ? Math.max(0, Math.min(MAP_MAX_SCALE, Math.floor(scaleRaw)))
+      : 0;
+  return { originX, originZ, bits: encodeBits(bytes), scale, locked: candidate.locked === true };
 }
 
 /** base64 → 位图（长度永远补齐到 `MAP_BIT_BYTES`；坏数据给全零） */
@@ -132,6 +158,42 @@ export function encodeBits(bytes: Uint8Array): string {
   let raw = '';
   for (let i = 0; i < MAP_BIT_BYTES; i++) raw += String.fromCharCode(bytes[i] ?? 0);
   return btoa(raw);
+}
+
+/**
+ * 放大一格（批次 505）：2×2 旧格 OR 成一格，覆盖范围翻倍、中心不动。
+ *
+ * 对齐方式是**按中心**：旧下标 `i` → `floor((i-16)/2)+16`。
+ * 这样 15/16、17/18 各自成对，中心那条线不会被切开
+ * （按 `floor(i/2)` 直接折会把中心错开半格，玩家的位置会偏）。
+ *
+ * @returns 新的地图数据；已经到最大缩放时返回 null（界面据此拒绝）
+ */
+export function zoomOutMap(data: MapData): MapData | null {
+  if (data.scale >= MAP_MAX_SCALE) return null;
+  const from = decodeBits(data.bits);
+  const to = new Uint8Array(MAP_BIT_BYTES);
+  for (let cz = 0; cz < MAP_GRID; cz++) {
+    for (let cx = 0; cx < MAP_GRID; cx++) {
+      const oldIndex = cz * MAP_GRID + cx;
+      if ((from[oldIndex >> 3]! & (1 << (oldIndex & 7))) === 0) continue;
+      const nx = Math.floor((cx - MAP_HALF) / 2) + MAP_HALF;
+      const nz = Math.floor((cz - MAP_HALF) / 2) + MAP_HALF;
+      const index = nz * MAP_GRID + nx;
+      to[index >> 3]! |= 1 << (index & 7);
+    }
+  }
+  return { ...data, bits: encodeBits(to), scale: data.scale + 1 };
+}
+
+/** 复制一张地图（位图字符串不可变，浅拷就够；改一份不会动到另一份） */
+export function copyMap(data: MapData): MapData {
+  return { ...data };
+}
+
+/** 锁定一张地图（之后 `markExplored` 一律返回 null） */
+export function lockMap(data: MapData): MapData {
+  return { ...data, locked: true };
 }
 
 /** 地图中心那一格方块坐标（界面画玩家位置时用） */

@@ -525,6 +525,8 @@ for (const id of [
   Block.LECTERN,
   Block.FLETCHING_TABLE,
   Block.LOOM,
+  // 制图台（批次 505）：木头做的，斧头更快、徒手也能采
+  Block.CARTOGRAPHY_TABLE,
   Block.PUMPKIN,
   Block.MELON,
   Block.BAMBOO,

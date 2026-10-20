@@ -1303,6 +1303,9 @@ export const TILE_ORDER = [
   // 鞍与拴绳（批次 254/256）
   'item_saddle',
   'item_lead',
+  // 制图台（批次 505）：顶面摊开的地图 + 罗盘、侧面的纸卷
+  'cartography_table_top',
+  'cartography_table_side',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

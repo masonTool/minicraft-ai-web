@@ -3256,6 +3256,20 @@ export const LECTERN_ID = 543;
 export const FLETCHING_TABLE_ID = 544;
 export const GRINDSTONE_ID = 545;
 export const LOOM_ID = 546;
+/**
+ * 制图台（批次 505，K7 尾巴）。
+ *
+ * ⚠️ id 取 **720**（洞穴藤蔓 719 的下一个），不是 547：
+ * 547 及之后早被刷怪笼/唱片机/钟/盔甲架等占掉了，方块表要求 id 连续、不能挑空档。
+ */
+export const CARTOGRAPHY_TABLE_ID = 720;
+
+const CARTOGRAPHY_TABLE_SPEC: BlockSpec = {
+  id: CARTOGRAPHY_TABLE_ID,
+  name: 'minecraft:cartography_table',
+  // 顶面：摊开的地图 + 罗盘；底面：木板；侧面：纸卷与木框
+  tiles: ['cartography_table_top', 'oak_planks', 'cartography_table_side'],
+};
 
 const WORKSTATION_SPECS: readonly BlockSpec[] = [
   {
@@ -3526,6 +3540,7 @@ const SPECS: readonly BlockSpec[] = [
   BELL_SPEC,
   ARMOR_STAND_SPEC,
   CAVE_VINES_SPEC,
+  CARTOGRAPHY_TABLE_SPEC,
   ...BANNER_SPECS,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
@@ -4143,6 +4158,8 @@ export const Block = {
   FLETCHING_TABLE: FLETCHING_TABLE_ID,
   GRINDSTONE: GRINDSTONE_ID,
   LOOM: LOOM_ID,
+  // ---- 制图台（批次 505）：复制 / 放大 / 锁定地图
+  CARTOGRAPHY_TABLE: CARTOGRAPHY_TABLE_ID,
   // ---- 下界疣（批次 92）：长在灵魂沙上的作物，酿造链的第一件原料
   NETHER_WART_STAGE0: NETHER_WART_ID_START,
   NETHER_WART_STAGE1: NETHER_WART_ID_START + 1,
@@ -4732,6 +4749,8 @@ HARDNESS.set(Block.LECTERN, 2.5);
 HARDNESS.set(Block.FLETCHING_TABLE, 2.5);
 HARDNESS.set(Block.GRINDSTONE, 2);
 HARDNESS.set(Block.LOOM, 2.5);
+// 制图台 2.5（木头档，斧最快）
+HARDNESS.set(Block.CARTOGRAPHY_TABLE, 2.5);
 // 切石机 3.5（原版与石头同档），要镐
 HARDNESS.set(Block.STONECUTTER, 3.5);
 

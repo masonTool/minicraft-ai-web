@@ -334,6 +334,7 @@ const EXPLICIT: Record<string, string> = {
   fletching_table: '制箭台',
   grindstone: '砂轮',
   loom: '织布机',
+  cartography_table: '制图台',
   // 烟熏炉与高炉（H6，批次 46）、营火（批次 47）
   smoker: '烟熏炉',
   blast_furnace: '高炉',
