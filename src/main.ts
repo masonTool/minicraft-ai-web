@@ -422,7 +422,14 @@ import {
 // 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子。
 // `nearestStronghold`（批次 114）是"最近的要塞"的**轻量**版本：要塞是地下结构，
 // 位置不看地形，所以末影之眼每次出手都算得起（见那个函数的注释）
-import { nearestStronghold, structureCreatureSpawnsAt, structureInstanceForTest } from './core/gen/Structures.ts';
+import {
+  STRUCTURE_KINDS,
+  nearestStronghold,
+  nearestStructure,
+  structureCreatureSpawnsAt,
+  structureInstanceForTest,
+  type StructureKind,
+} from './core/gen/Structures.ts';
 import { nearbyStandingSpot } from './core/gen/StructureCreatures.ts';
 import { bastionCreatureSpawnsAt } from './core/gen/Bastion.ts';
 import { fortressCreatureSpawnsAt } from './core/gen/NetherFortress.ts';
@@ -9596,6 +9603,25 @@ class App {
         return list;
       },
       scoreboard: () => this.scoreboardState,
+      // 批次 464：/locate structure —— 结构位置是"种子 + 候选规则"的纯函数，
+      // 主线程用同一个生成器重算一遍即可（不需要 Worker 的生成器）
+      locateStructure: (kind) => {
+        if (this.dimension !== Dimension.OVERWORLD) return null;
+        const generator = this.biomeGenerator;
+        if (!generator) return null;
+        if (!(STRUCTURE_KINDS as readonly string[]).includes(kind)) return null;
+        const p = this.physics;
+        return nearestStructure(
+          kind as StructureKind,
+          p.x,
+          p.z,
+          {
+            surfaceY: (x, z) => generator.surfaceY(x, z),
+            columnBiome: (x, z) => generator.biomeAt(x, z),
+          },
+          this.worldConfig.seed,
+        );
+      },
       advancements: () => this.advancements,
       biomeNameAt: (x: number, z: number) => {
         // 生成器还没准备好（开局第一帧）时返回 null：搜索会跳过这一列

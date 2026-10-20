@@ -22,6 +22,7 @@ import {
   nearestStronghold,
   structureCreatureSpawnsAt,
   structureInstanceForTest,
+  nearestStructure,
   type StructureKind,
 } from '../src/core/gen/Structures.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
@@ -1182,6 +1183,37 @@ console.log('\n[林地府邸的房间网格拼图（批次 463）]');
     check('窗户（玻璃）在', glass > 10, `${glass} 格`);
     check('府邸表箱子至少两只', mansionChests >= 2, `${mansionChests} 只`);
   }
+}
+
+console.log('\n[/locate structure 的结构检索（批次 464）]');
+{
+  const seed = 20261014;
+  const world = new OverworldGenerator(seed);
+  const hit = nearestStructure('village', 0, 0, world, seed);
+  check('从原点能找到一座村庄', hit !== null, JSON.stringify(hit));
+  if (hit) {
+    equal('返回的种类对', hit.kind, 'village');
+    check('距离是正的且算得对', Math.abs(hit.distance - Math.hypot(hit.x, hit.z)) < 1e-6, `${hit.distance}`);
+    // 与"直接求那个单元的实例"必须是同一个位置（否则 /locate 会指错地方）
+    const cellSize = 32 * 16;
+    const cellX = Math.floor(hit.x / cellSize);
+    const cellZ = Math.floor(hit.z / cellSize);
+    let sameCell = false;
+    for (let dcz = -1; dcz <= 1 && !sameCell; dcz++) {
+      for (let dcx = -1; dcx <= 1 && !sameCell; dcx++) {
+        const instance = structureInstanceForTest('village', cellX + dcx, cellZ + dcz, world, seed);
+        if (instance && instance.x === hit.x && instance.z === hit.z) sameCell = true;
+      }
+    }
+    check('位置与"直接求实例"一致（/locate 不会指错）', sameCell, `${hit.x},${hit.z}`);
+  }
+  check('要塞也找得到（间距 96 区块也覆盖得住）', nearestStructure('stronghold', 0, 0, world, seed) !== null);
+  equal('结构名写错返回 null（不抛错）', nearestStructure('not_a_structure' as never, 0, 0, world, seed), null);
+  equal(
+    '同样的查询两次结果一致',
+    JSON.stringify(nearestStructure('village', 300, 400, world, seed)),
+    JSON.stringify(nearestStructure('village', 300, 400, world, seed)),
+  );
 }
 
 console.log(`\n结构测试：${passed} 通过 / ${failed} 失败`);

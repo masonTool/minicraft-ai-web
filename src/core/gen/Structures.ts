@@ -632,6 +632,52 @@ export function generateStructures(
   }
 }
 
+/** `/locate structure` 的查询结果（世界坐标 + 到查询点的水平距离） */
+export interface StructureSearchHit {
+  readonly kind: StructureKind;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly distance: number;
+}
+
+/**
+ * 找离 (fromX, fromZ) 最近的一个**指定种类**的结构（批次 464，`/locate structure`）。
+ *
+ * 结构与地形一样是"种子 + 候选规则"的纯函数，所以主线程不需要 Worker 的生成器：
+ * 只要按该结构的 spacing 枚举周围的单元、重算候选点，就得到与生成时**完全一致**
+ * 的位置（`candidateFor` 已经把地形/群系/水陆都判过一遍，返回 null 就是"那里没有"）。
+ *
+ * @param cellRadius 向外数几个单元（默认 2）。村庄 spacing 32 区块 = 512 格，
+ *   所以默认覆盖大约 ±1000 格；要塞 96 区块时覆盖 ±3000 格。
+ */
+export function nearestStructure(
+  kind: StructureKind,
+  fromX: number,
+  fromZ: number,
+  world: FeatureWorld,
+  seed: number,
+  cellRadius = 2,
+): StructureSearchHit | null {
+  const def = STRUCTURE_DEFS.find((entry) => entry.kind === kind);
+  if (!def) return null;
+  const cellSize = def.spacing * 16;
+  const baseCellX = Math.floor(fromX / cellSize);
+  const baseCellZ = Math.floor(fromZ / cellSize);
+  let best: StructureSearchHit | null = null;
+  for (let dcz = -cellRadius; dcz <= cellRadius; dcz++) {
+    for (let dcx = -cellRadius; dcx <= cellRadius; dcx++) {
+      const instance = candidateFor(def, baseCellX + dcx, baseCellZ + dcz, world, seed);
+      if (!instance) continue;
+      const distance = Math.hypot(instance.x - fromX, instance.z - fromZ);
+      if (best === null || distance < best.distance) {
+        best = { kind, x: instance.x, y: instance.y, z: instance.z, distance };
+      }
+    }
+  }
+  return best;
+}
+
 /** 建立统计对象 */
 export function newStructureStats(): StructureStats {
   return { counts: emptyCounts() };

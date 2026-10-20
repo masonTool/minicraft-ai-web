@@ -145,6 +145,14 @@ export interface CommandContext {
    * 传 null 表示这一列还查不到（区块没生成好）——搜索会跳过它。
    */
   biomeNameAt(x: number, z: number): string | null;
+  /**
+   * 找最近的结构（批次 464，`/locate structure`）。
+   *
+   * 为什么放在 ctx 而不是命令层直接算：结构与地形一样要"种子 + 生成器"，
+   * 那两样只有主程序有；命令层只负责把结果翻译成人话。
+   * 返回 null = 这个维度还不支持（下界/末地各自的结构入口是另一批）。
+   */
+  locateStructure?(kind: string): { x: number; y: number; z: number; distance: number } | null;
 
   // ---- 进度（M7，批次 415）
   /** 这份存档的进度跟踪器（`/advancement` 用它授/收） */
@@ -884,10 +892,25 @@ export const COMMANDS: readonly CommandSpec[] = [
     run(args, ctx, out) {
       const kind = (args[0] ?? '').toLowerCase();
       const target = args[1];
-      if (kind !== 'biome' || !target) {
-        // ⚠️ 只做 biome：structure 需要在**主线程**枚举十几个结构的候选点，
-        // 而结构生成跑在 Worker 里（主线程拿不到），得先新开一条查询通道。
-        out.error('用法：/locate biome <群系名>（structure 还没做，见 TASKS K11）');
+      if (!target || (kind !== 'biome' && kind !== 'structure')) {
+        out.error('用法：/locate biome <群系名> | /locate structure <结构名>');
+        return;
+      }
+      // ---- 结构（批次 464）：结构位置是"种子 + 候选规则"的纯函数，
+      //      主线程重算一遍即可，不需要 Worker 的生成器
+      if (kind === 'structure') {
+        if (!ctx.locateStructure) {
+          out.error('这个维度还不支持 /locate structure（目前只做了主世界）');
+          return;
+        }
+        const hit = ctx.locateStructure(target.toLowerCase());
+        if (!hit) {
+          out.error(`附近没有找到 ${target}（结构名要用 village / stronghold / mineshaft 这类）`);
+          return;
+        }
+        out.info(
+          `最近的 ${target} 在 ${hit.x}, ${hit.y}, ${hit.z}（约 ${Math.round(hit.distance)} 格）`,
+        );
         return;
       }
       const position = ctx.position();

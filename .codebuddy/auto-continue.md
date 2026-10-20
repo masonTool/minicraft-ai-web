@@ -375,3 +375,18 @@
       同层不重叠 / 半径 + 真实生成（深色橡木木板 > 800、门、窗、箱子 ≥ 2）
 - ⚠️ 差异：原版 50+ 房间、房间之间是门框；这里 3~6 间/层、房间之间是开口
 - 至此"大结构拼图"收尾：村庄（455）/ 矿井（460-461）/ 要塞（462）/ 府邸（463）
+
+## 批次 464：/locate structure（2026-10-20）
+
+- [x] B464-1 `Structures.nearestStructure(kind, x, z, world, seed, cellRadius)`：
+      按该结构的 spacing 枚举周围单元、`candidateFor` 重算候选点、取最近
+- [x] B464-2 `CommandContext.locateStructure?`（可选，主线程注入）；
+      命令层只负责翻译成"最近的 X 在 x,y,z（约 N 格）"
+- [x] B464-3 main 注入：用 `biomeGenerator` 的 surfaceY/columnBiome 构造 FeatureWorld
+- [x] B464-4 `test:structure` 125 → **132**（找得到村庄/要塞、位置与
+      `structureInstanceForTest` 一致、错名返回 null、确定性）
+- [x] B464-5 `test:commands` **184**：假世界注入命中 → 回执带坐标与距离；
+      错名 → "没有找到"；缺参数 → 用法
+- ⚠️ 只做主世界；下界/末地各自的结构入口是另一批
+- **教训**：K11 里"主线程拿不到生成器"是误判——结构位置本来就是纯函数，
+  主线程有种子与地形查询就能重算。以后遇到"要跨线程拿生成器"先想想这条

@@ -239,6 +239,13 @@ class FakeWorld implements CommandContext {
   biomeNameAt(): string | null {
     return null;
   }
+  /**
+   * 最近的结构（批次 464）：假世界只认 `village`，返回一个固定位置。
+   * ⚠️ 故意**不**实现下界/末地的分派——那两个维度在真实现里也返回 null。
+   */
+  locateStructure(kind: string): { x: number; y: number; z: number; distance: number } | null {
+    return kind === 'village' ? { x: 120, y: 64, z: -80, distance: 144 } : null;
+  }
   /** 选择器快照（批次 399）：这一套里没有生物，只交出玩家自己 */
   entities(): readonly CommandEntity[] {
     return [
@@ -779,10 +786,17 @@ console.log('\n[/locate biome（批次 416）]');
   };
   check('缺参数报用法', run3('/locate biome').lastError.includes('用法'));
   check(
-    'structure 明确说还没做（不假装支持）',
-    run3('/locate structure village').lastError.includes('还没做'),
+    'structure 能找到（批次 464：主线程重算候选点，不需要 Worker）',
+    run3('/locate structure village').lastInfo.includes('120, 64, -80'),
+    out.lastInfo,
+  );
+  check('回执里带距离', run3('/locate structure village').lastInfo.includes('144 格'), out.lastInfo);
+  check(
+    '结构名不认识时报告没找到（不是静默成功）',
+    run3('/locate structure stronghold').lastError.includes('没有找到'),
     out.lastError,
   );
+  check('缺结构名报用法', run3('/locate structure').lastError.includes('用法'));
   check('假世界查不到群系时报告没找到', run3('/locate biome plains').lastError.includes('没有找到'));
 }
 
