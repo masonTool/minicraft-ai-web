@@ -358,6 +358,11 @@ export class UiLayer {
     return this.root ? search(this.root) : null;
   }
 
+  /** 节点位置变化后重绘 HUD（不重建根节点）。 */
+  refresh(): void {
+    this.draw();
+  }
+
   render(renderer: THREE.WebGLRenderer): void {
     renderer.clearDepth();
     renderer.render(this.scene, this.camera);

@@ -1495,12 +1495,16 @@ const showHud = (): void => {
         borderWidth: 2,
         radius: 60,
       }),
-      box(stickLeft + 36, stickTop + 36, 48, 48, [], {
-        background: sneaking ? 'rgba(120,190,120,0.55)' : 'rgba(245,247,250,0.35)',
-        border: 'rgba(255,255,255,0.75)',
-        borderWidth: 1,
-        radius: 24,
-      }),
+      (() => {
+        const knob = box(stickLeft + 36 + stickOffsetX, stickTop + 36 + stickOffsetY, 48, 48, [], {
+          background: sneaking ? 'rgba(120,190,120,0.55)' : 'rgba(245,247,250,0.35)',
+          border: 'rgba(255,255,255,0.75)',
+          borderWidth: 1,
+          radius: 24,
+        });
+        hudStickKnob = knob;
+        return knob;
+      })(),
       button(jumpLeft, jumpTop, 92, 92, '跳', () => {
         jumpQueued = true;
       }, {
@@ -1615,6 +1619,11 @@ let playerReady = false;
 let jumpQueued = false;
 let sneaking = false;
 let lastStickTap = 0;
+let stickOffsetX = 0;
+let stickOffsetY = 0;
+let hudStickKnob: { x: number; y: number; w: number; h: number } | null = null;
+let stickLeftCached = 24;
+let stickTopCached = uiHeight - 216;
 let movePointer: number | null = null;
 let lookPointer: number | null = null;
 let moveX = 0;
@@ -1707,6 +1716,8 @@ platform.input.onPointer('down', (event) => {
   const stickTop = uiHeight - 216;
   const inStick = designX >= stickLeft && designX <= stickLeft + 120 && designY >= stickTop && designY <= stickTop + 120;
   if (inStick) {
+    stickLeftCached = stickLeft;
+    stickTopCached = stickTop;
     movePointer = event.pointerId;
     moveX = ((stickLeft + 60) / 1024) * platform.system.width;
     moveY = ((stickTop + 60) / uiHeight) * platform.system.height;
@@ -1738,6 +1749,17 @@ platform.input.onPointer('move', (event) => {
       input.strafe = 0;
       input.forward = 0;
     }
+    const rawX = ((event.clientX - moveX) / Math.max(1, platform.system.width)) * 1024;
+    const rawY = ((event.clientY - moveY) / Math.max(1, platform.system.height)) * uiHeight;
+    const length = Math.hypot(rawX, rawY);
+    const scale = length > 34 ? 34 / length : 1;
+    stickOffsetX = rawX * scale;
+    stickOffsetY = rawY * scale;
+    if (hudStickKnob) {
+      hudStickKnob.x = ((stickLeftCached + 36 + stickOffsetX));
+      hudStickKnob.y = ((stickTopCached + 36 + stickOffsetY));
+      ui.refresh();
+    }
   } else if (event.pointerId === lookPointer) {
     if (Math.hypot(event.clientX - lookX, event.clientY - lookY) > 8) lookMoved = true;
     yaw -= (event.clientX - lookX) * 0.005 * settings.sensitivity;
@@ -1755,6 +1777,13 @@ const release = (event: { pointerId: number; clientX: number; clientY: number })
     movePointer = null;
     input.forward = 0;
     input.strafe = 0;
+    stickOffsetX = 0;
+    stickOffsetY = 0;
+    if (hudStickKnob) {
+      hudStickKnob.x = stickLeftCached + 36;
+      hudStickKnob.y = stickTopCached + 36;
+      ui.refresh();
+    }
   }
   if (event.pointerId === lookPointer) {
     if (!lookMoved && currentHit) {
