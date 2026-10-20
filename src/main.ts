@@ -127,6 +127,8 @@ import { planVillagePopulation, type VillageWorldView } from './core/world/Villa
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
 // 刷怪笼里旋转的迷你生物（批次 487）：收集逻辑是纯函数，渲染在 MobRenderer
 import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
+// 唱片机（批次 489）：旋律是纯数据，播放走 AudioEngine 的同一条合成通道
+import { discDuration, discSoundKind, discSoundSpec } from './core/audio/DiscMelody.ts';
 import { spawnerDefFor } from './core/registry/spawners.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { EndGenerator, endPillarTops } from './core/gen/EndGenerator.ts';
@@ -6864,6 +6866,8 @@ class App {
     // 命令方块（批次 477）：方块没了，命令也要清——不清的话"同一位置重摆一个"
     // 会凭空继承上一块的命令（与告示牌那条同一个坑）
     if (brokenId === Block.COMMAND_BLOCK) this.commandBlocks.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
+    // 唱片机（批次 489）：方块没了，里面那张唱片要掉出来（否则唱片会凭空消失）
+    if (brokenId === Block.JUKEBOX) this.dropJukeboxDisc(this.hit.x, this.hit.y, this.hit.z);
 
     // 展示框（B14）：框拆了，**里面挂着的那件东西也要还给玩家**——
     // 它不在方块状态里，不管的话就是"拆一个框，里面那把附魔剑凭空消失"
@@ -10633,6 +10637,61 @@ class App {
   }
 
   /**
+   * 唱片机（批次 489）：右键放唱片 / 空手取出。
+   *
+   * 放进去就**自己播**（不需要"再点一下播放"）：旋律在 `audio/DiscMelody.ts` 里，
+   * 这里只负责把 spec 交给 `AudioEngine.playVoice`——与生物叫声、雨声同一条通道。
+   *
+   * 取出时把唱片**掉在机器上方**而不是直接塞背包：原版也是掉落物
+   * （玩家可能满包，直接塞会静默丢东西）。
+   */
+  private useJukebox(x: number, y: number, z: number): boolean {
+    const key = `${x},${y},${z}`;
+    const loaded = this.jukeboxDiscs.get(key);
+    if (loaded !== undefined) {
+      this.jukeboxDiscs.delete(key);
+      this.spawnDrop(loaded, 1, x + 0.5, y + 1.05, z + 0.5);
+      this.audio.play('place_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.chat.push('取出了唱片', 'system');
+      return true;
+    }
+
+    const name = this.discNameOf(this.heldItemId);
+    if (!name) {
+      this.chat.push('这里能放唱片（唱片可以在废弃矿井 / 地牢的箱子里找到）', 'system');
+      return true;
+    }
+    if (!this.inventory.consume(this.heldItemId!, 1)) return true;
+    this.refreshHotbar();
+    this.jukeboxDiscs.set(key, this.heldItemId!);
+    const spec = discSoundSpec(name);
+    if (spec) this.audio.playVoice(discSoundKind(name), spec, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.chat.push(`正在播放唱片：${name}（${Math.round(discDuration(name))} 秒）`, 'system');
+    return true;
+  }
+
+  /** 唱片物品 → 曲名（`null` = 不是唱片）；曲名与 `audio/DiscMelody.ts` 的表一一对应 */
+  private discNameOf(itemId: number | undefined): string | null {
+    if (itemId === Item.MUSIC_DISC_13) return '13';
+    if (itemId === Item.MUSIC_DISC_CAT) return 'cat';
+    if (itemId === Item.MUSIC_DISC_WARD) return 'ward';
+    return null;
+  }
+
+  /**
+   * 唱片机被拆掉时把唱片还回来（批次 489）。
+   *
+   * 与"右键取出"共用同一份掉落逻辑——两处各写一遍的话，迟早有一处忘了掉。
+   */
+  private dropJukeboxDisc(x: number, y: number, z: number): void {
+    const key = `${x},${y},${z}`;
+    const loaded = this.jukeboxDiscs.get(key);
+    if (loaded === undefined) return;
+    this.jukeboxDiscs.delete(key);
+    this.spawnDrop(loaded, 1, x + 0.5, y + 0.5, z + 0.5);
+  }
+
+  /**
    * 音符盒（批次 173，G9）：**潜行右击换音高、普通右击演奏**。
    *
    * 单独一个方法（而不是塞进 `useFunctionalBlock`）是因为它要**知道有没有潜行**：
@@ -10703,6 +10762,8 @@ class App {
       this.hand.swing();
       return true;
     }
+    // 唱片机（批次 489）：右键放唱片 / 空手取出
+    if (hitBlock === Block.JUKEBOX) return this.useJukebox(x, y, z);
     if (hitBlock === Block.CRAFTING_TABLE) {
       this.inventoryScreen.openWith('crafting');
       return true;
@@ -11143,6 +11204,13 @@ class App {
   private patrolMobs: Mob[] = [];
   /** 巡逻队队长（击杀它必掉不祥之兆） */
   private patrolLeader: Mob | null = null;
+  /**
+   * 唱片机里放着的唱片（批次 489）：坐标 → 唱片物品 id。
+   *
+   * ⚠️ 不进存档：原版唱片机会记住里面的唱片，这里没有"方块实体"那一层
+   * （与告示牌文字、命令方块同一处缺口），差异记在 TASKS G9。
+   */
+  private readonly jukeboxDiscs = new Map<string, number>();
   /** 旧版"击杀 5 只算一波"的计数（只在没有真袭击时兜底进度） */
   private raidKills = 0;
 

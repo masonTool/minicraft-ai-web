@@ -114,8 +114,10 @@ console.log('\n[配方：8 木板围一圈 + 正中 1 颗红石]');
   const missing = grid3(['PPP', 'PR P', 'PPP'], { P: Block.OAK_PLANKS, R: Item.REDSTONE });
   equal('少一块木板 → 什么也做不出来', matchRecipe(missing, 3), null);
   // 红石换成别的（原版只有红石能触发它）
-  const wrong = grid3(['PPP', 'PDP', 'PPP'], { P: Block.OAK_PLANKS, D: Item.DIAMOND });
-  equal('正中放钻石 → 什么也做不出来', matchRecipe(wrong, 3), null);
+  // 批次 489：同样的摆法、中间换成钻石，现在能做出**唱片机**（原版也是 8 木板 + 钻石）。
+  // 这条从"什么也做不出来"改成"做出来的是唱片机"——它顺带证明了两个配方不会互相顶掉
+  const jukebox = grid3(['PPP', 'PDP', 'PPP'], { P: Block.OAK_PLANKS, D: Item.DIAMOND });
+  equal('正中放钻石 → 做出唱片机', matchRecipe(jukebox, 3)?.id, Block.JUKEBOX);
   check(
     '表里只有一条音符盒配方（多一条会让配方书里出现两个同样的产物）',
     RECIPES.filter((recipe) => recipe.result.id === Block.NOTE_BLOCK).length === 1,

@@ -31,6 +31,7 @@
     "test:banner": "esbuild tools/banner-test.ts --bundle --platform=node --format=esm --outfile=.tmp/banner-test.mjs --log-level=error && node .tmp/banner-test.mjs",
     "test:spawnerdecor": "esbuild tools/spawnerdecor-test.ts --bundle --platform=node --format=esm --outfile=.tmp/spawnerdecor-test.mjs --log-level=error && node .tmp/spawnerdecor-test.mjs",
     "test:rules": "esbuild tools/rules-test.ts --bundle --platform=node --format=esm --outfile=.tmp/rules-test.mjs --log-level=error && node .tmp/rules-test.mjs",
+    "test:disc": "esbuild tools/disc-test.ts --bundle --platform=node --format=esm --outfile=.tmp/disc-test.mjs --log-level=error && node .tmp/disc-test.mjs",
     "audit:blocks": "esbuild tools/block-gap-audit.ts --bundle --platform=node --format=esm --outfile=.tmp/block-gap.mjs --log-level=error && node .tmp/block-gap.mjs",
     "audit:recipes": "esbuild tools/recipe-audit.ts --bundle --platform=node --format=esm --outfile=.tmp/recipe-audit.mjs --log-level=error && node .tmp/recipe-audit.mjs",
     "test:i18n": "esbuild tools/i18n-test.ts --bundle --platform=node --format=esm --outfile=.tmp/i18n-test.mjs --log-level=error && node .tmp/i18n-test.mjs",

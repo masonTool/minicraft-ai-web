@@ -224,6 +224,15 @@ export const Item = {
   /** 鞘翅（批次 384）：末地城宝箱的稀有掉落，装备在胸甲槽 */
   ELYTRA: 1539,
   /**
+   * 唱片（批次 489）：三张，曲名与原版一致（`13` / `cat` / `ward`）。
+   *
+   * 旋律不是录音，是 `core/audio/DiscMelody.ts` 里用振荡器现场合成的——
+   * 所以"加一张唱片"= 在那张表里多写一串音符。
+   */
+  MUSIC_DISC_13: 1600,
+  MUSIC_DISC_CAT: 1601,
+  MUSIC_DISC_WARD: 1602,
+  /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
    * 它的用途与原版一致：**缓降药水**（`Brewing` 的 `VARIANT_INGREDIENTS`）
@@ -519,6 +528,10 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.NETHER_BRICK, name: 'minecraft:nether_brick', tile: 'item_nether_brick' },
   { id: Item.CHORUS_FRUIT, name: 'minecraft:chorus_fruit', tile: 'item_chorus_fruit' },
   { id: Item.POPPED_CHORUS_FRUIT, name: 'minecraft:popped_chorus_fruit', tile: 'item_popped_chorus_fruit' },
+  // 唱片（批次 489）：`stack: 1`（原版唱片不能叠）
+  { id: Item.MUSIC_DISC_13, name: 'minecraft:music_disc_13', tile: 'item_music_disc_13', maxStack: 1 },
+  { id: Item.MUSIC_DISC_CAT, name: 'minecraft:music_disc_cat', tile: 'item_music_disc_cat', maxStack: 1 },
+  { id: Item.MUSIC_DISC_WARD, name: 'minecraft:music_disc_ward', tile: 'item_music_disc_ward', maxStack: 1 },
   { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
@@ -1029,6 +1042,8 @@ const FUNCTIONAL = new Set<number>([
   Block.GLOWSTONE,
   // 命令方块（批次 477）：只有"装着命令 + 红石脉冲"这一种身份，不需要容器界面
   Block.COMMAND_BLOCK,
+  // 唱片机（批次 489）
+  Block.JUKEBOX,
   // ---- 红石元件（都是"有信号才做事"的功能方块）
   Block.REDSTONE_WIRE,
   Block.REDSTONE_TORCH,

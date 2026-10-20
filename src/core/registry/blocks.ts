@@ -2224,6 +2224,20 @@ const LODESTONE_SPEC: BlockSpec = {
  */
 export const RESPAWN_ANCHOR_ID = 714;
 
+/**
+ * 唱片机（批次 489）：id **716**，接在命令方块之后。
+ *
+ * 右键放唱片 / 空手取出；放进去之后**自己播**（旋律在 `audio/DiscMelody.ts`）。
+ * 原版是 8 木板 + 1 钻石；这里沿用同一个配方。
+ */
+export const JUKEBOX_ID = 716;
+
+const JUKEBOX_SPEC: BlockSpec = {
+  id: JUKEBOX_ID,
+  name: 'minecraft:jukebox',
+  tiles: ['jukebox_top', 'jukebox_side', 'jukebox_side'],
+};
+
 /** 命令方块（批次 477）：id **715**，接在重生锚之后 */
 export const COMMAND_BLOCK_ID = 715;
 
@@ -3447,6 +3461,7 @@ const SPECS: readonly BlockSpec[] = [
   LODESTONE_SPEC,
   RESPAWN_ANCHOR_SPEC,
   COMMAND_BLOCK_SPEC,
+  JUKEBOX_SPEC,
   ...BANNER_SPECS,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
@@ -4013,6 +4028,8 @@ export const Block = {
   RESPAWN_ANCHOR: RESPAWN_ANCHOR_ID,
   // ---- 命令方块（批次 477）：红石上升沿执行一格命令
   COMMAND_BLOCK: COMMAND_BLOCK_ID,
+  // ---- 唱片机（批次 489）：右键放唱片、自己播旋律
+  JUKEBOX: JUKEBOX_ID,
   // ---- 16 色旗帜（批次 484）：占两格、无碰撞
   WHITE_BANNER: BANNER_ID_START + 0,
   ORANGE_BANNER: BANNER_ID_START + 1,
@@ -4600,6 +4617,8 @@ HARDNESS.set(Block.RESPAWN_ANCHOR, 5);
 // 命令方块（批次 477）：原版 -1（基岩级、挖不掉）；这里给 5 并**不设挖掘等级**，
 // 方便玩家拆掉重摆（原版只能靠创造模式）
 HARDNESS.set(Block.COMMAND_BLOCK, 5);
+// 唱片机（批次 489）：原版 2.0，木镐就能挖
+HARDNESS.set(Block.JUKEBOX, 2);
 
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);

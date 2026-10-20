@@ -844,6 +844,9 @@ export const TILE_ORDER = [
   // 命令方块（批次 477）：橙色底 + 中心刻环（顶）/ 中间横槽（侧）
   'command_block_top',
   'command_block_side',
+  // 唱片机（批次 489）：顶面（唱片槽）/ 侧面（木板 + 边条）
+  'jukebox_top',
+  'jukebox_side',
   // 铁轨弯道（批次 478）：四个方向各一张（直轨沿用原来的 `rail`）
   'rail_east_west',
   'rail_ne',
@@ -1123,6 +1126,10 @@ export const TILE_ORDER = [
   'item_prismarine_shard',
   'item_nether_brick',
   'item_chorus_fruit',
+  // 唱片（批次 489）
+  'item_music_disc_13',
+  'item_music_disc_cat',
+  'item_music_disc_ward',
   'item_popped_chorus_fruit',
   'item_prismarine_crystals',
   // 骨块（批次 349）

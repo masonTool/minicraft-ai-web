@@ -37,7 +37,7 @@ npm run check:fast     # typecheck + 单测 + 只跑被本次改动命中的离�
 npm run build:fast     # 只验"能不能出包"（关 sourcemap，产物内容与正式构建一致）
 
 # —— 提交前（全量，约 10s）——
-npm run check          # typecheck + 144 套离线测试 + 三张台账，任一失败即非零退出
+npm run check          # typecheck + 145 套离线测试 + 三张台账，任一失败即非零退出
                        # （CI 也跑同一道：.github/workflows/check.yml）
 ```
 

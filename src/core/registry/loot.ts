@@ -125,6 +125,9 @@ export const LOOT_TABLES: readonly LootTable[] = [
       entry(Item.DIAMOND, 1, 2, 1),
       entry(Item.GOLDEN_APPLE, 1, 1, 1),
       entry(armorItemId('chestplate', 'iron'), 1, 1, 1),
+      // 唱片（批次 489）：原版地牢 / 矿井箱子是唱片的主要来源之一
+      entry(Item.MUSIC_DISC_13, 1, 1, 2),
+      entry(Item.MUSIC_DISC_CAT, 1, 1, 2),
       empty(5),
     ],
   },
@@ -196,6 +199,8 @@ export const LOOT_TABLES: readonly LootTable[] = [
       entry(Item.DIAMOND, 1, 2, 2),
       entry(Item.GOLDEN_APPLE, 1, 1, 1),
       entry(armorItemId('chestplate', 'diamond'), 1, 1, 1),
+      // 唱片「Ward」（批次 489）：原版就是在林地府邸里
+      entry(Item.MUSIC_DISC_WARD, 1, 1, 2),
       empty(3),
     ],
   },

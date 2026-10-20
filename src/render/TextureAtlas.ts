@@ -6415,6 +6415,48 @@ PAINTERS['stripped_birch_log'] = noisy(0xc4b27a, 16);
 PAINTERS['stripped_jungle_log'] = noisy(0x9a6e4e, 16);
 PAINTERS['stripped_acacia_log'] = noisy(0xac6438, 16);
 PAINTERS['stripped_dark_oak_log'] = noisy(0x48361f, 16);
+/**
+ * 唱片机（批次 489）：顶面是木板 + 中心 8×8 的唱片槽，侧面是木板 + 上下深色边条。
+ * 顶上那个"槽"就是"这里能放唱片"的唯一视觉提示，所以画得比周围的木板暗一档。
+ */
+PAINTERS.jukebox_top = (x, y) => {
+  const dx = Math.abs(x - 7.5);
+  const dy = Math.abs(y - 7.5);
+  if (dx < 4 && dy < 4) {
+    // 槽底：正中间那一小块亮一点（唱片标签的反光）
+    if (dx < 1.5 && dy < 1.5) return [70, 62, 55, 255];
+    return [26, 24, 22, 255];
+  }
+  const grain = y % 4 === 1 ? 0.86 : 1;
+  return [clamp255(158 * grain), clamp255(120 * grain), clamp255(76 * grain), 255];
+};
+
+PAINTERS.jukebox_side = (x, y) => {
+  if (y < 2 || y > 13) return [58, 44, 30, 255];
+  const grain = x % 4 === 2 ? 0.88 : 1;
+  return [clamp255(150 * grain), clamp255(114 * grain), clamp255(72 * grain), 255];
+};
+
+/**
+ * 唱片（批次 489）：圆盘 + 中心标签。标签色是**三种曲子唯一的区别**——
+ * 16×16 下画不出纹路，只能靠颜色让人一眼分出这是哪一张。
+ */
+function musicDiscPainter(label: readonly [number, number, number]): Painter {
+  return (x, y) => {
+    const r = Math.hypot(x - 7.5, y - 7.5);
+    if (r > 7) return [0, 0, 0, 0];
+    if (r < 1.6) return [label[0], label[1], label[2], 255];
+    if (r < 2.4) return [42, 42, 46, 255];
+    // 盘面：每两像素一圈暗纹（比纯黑更像"压出来的沟"）
+    const ring = Math.round(r) % 2 === 0 ? 1 : 0.82;
+    return [clamp255(30 * ring), clamp255(30 * ring), clamp255(34 * ring), 255];
+  };
+}
+
+PAINTERS['item_music_disc_13'] = musicDiscPainter([176, 68, 60]);
+PAINTERS['item_music_disc_cat'] = musicDiscPainter([94, 176, 96]);
+PAINTERS['item_music_disc_ward'] = musicDiscPainter([96, 132, 200]);
+
 PAINTERS['item_chorus_fruit'] = noisy(0x8f5fae, 24);
 PAINTERS['item_popped_chorus_fruit'] = noisy(0xbf8fd6, 24);
 PAINTERS['item_prismarine_crystals'] = noisy(0xd8e8a0, 20);
