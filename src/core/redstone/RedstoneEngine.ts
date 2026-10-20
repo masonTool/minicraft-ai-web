@@ -30,6 +30,7 @@ import {
   sixFacingOffset,
   sixFacingOpposite,
   withSixFacing,
+  isComparatorSubtract,
   isDisarmed,
   isDoorOpen,
   isDoorUpper,
@@ -39,6 +40,7 @@ import {
   isTrapdoorOpen,
   isTripwireAttached,
   tripwireWireDirection,
+  withComparatorSubtract,
   withDisarmed,
   withDoorOpen,
   withDoorUpper,
@@ -91,6 +93,14 @@ export interface RedstoneWorld {
    * 引擎每轮问一句"还亮着吗"，到期由主程序主动喊一次 `onBlockChanged`。
    */
   isTargetPowered?(x: number, y: number, z: number): boolean;
+  /**
+   * 这一格的容器能给出多强的比较器信号（0~15，批次 544）。
+   *
+   * 与 `getSkyLight` / `isRodPowered` 同一条分工：引擎只认"强度"，
+   * "箱子里装了多少"由主程序按 `ContainerSignal` 算好。不传就当 0
+   * （老离线桩不必为了它搭一套箱子）。
+   */
+  containerSignal?(x: number, y: number, z: number): number;
 }
 
 /**
@@ -380,6 +390,20 @@ export class RedstoneEngine {
     if (world.getBlock(x, y, z) !== Block.DAYLIGHT_DETECTOR) return false;
     const state = world.getState(x, y, z);
     if (!world.setState(x, y, z, withInverted(state, !isInverted(state)))) return false;
+    this.markDirty(x, y, z);
+    this.flush(world);
+    return true;
+  }
+
+  /**
+   * 玩家右键比较器（批次 544）：在"比较"与"减法"之间切换（原版行为）。
+   *
+   * 只改 state 的 bit0；不需要额外的脉冲表——模式变了重算一次就够了。
+   */
+  toggleComparatorMode(world: RedstoneWorld, x: number, y: number, z: number): boolean {
+    if (world.getBlock(x, y, z) !== Block.COMPARATOR) return false;
+    const state = world.getState(x, y, z);
+    if (!world.setState(x, y, z, withComparatorSubtract(state, !isComparatorSubtract(state)))) return false;
     this.markDirty(x, y, z);
     this.flush(world);
     return true;
@@ -1181,8 +1205,24 @@ export class RedstoneEngine {
         return { dx: front[0], dy: 0, dz: front[1], strength };
       }
       case Block.COMPARATOR: {
-        // 简化：比较器把背面的输入强度直通到正面输出
-        const strength = this.inputStrength(world, this.wirePower, x + back[0], y, z + back[1]);
+        // 背面 = 红石输入与**容器信号**里更强的那一个（原版：容器直接读装满度）
+        const backX = x + back[0];
+        const backZ = z + back[1];
+        const backSignal = Math.max(
+          this.cellSignal(world, this.wirePower, backX, y, backZ),
+          this.inputStrength(world, this.wirePower, backX, y, backZ),
+          world.containerSignal?.(backX, y, backZ) ?? 0,
+        );
+        // 减法模式（批次 544）：再减掉**侧面**（左/右）更强的那个输入，最低 0
+        const sideA = [-front[1], front[0]];
+        const sideB = [front[1], -front[0]];
+        const sideSignal = Math.max(
+          this.cellSignal(world, this.wirePower, x + sideA[0], y, z + sideA[1]),
+          this.cellSignal(world, this.wirePower, x + sideB[0], y, z + sideB[1]),
+          this.inputStrength(world, this.wirePower, x + sideA[0], y, z + sideA[1]),
+          this.inputStrength(world, this.wirePower, x + sideB[0], y, z + sideB[1]),
+        );
+        const strength = comparatorOutput(backSignal, sideSignal, isComparatorSubtract(state));
         return { dx: front[0], dy: 0, dz: front[1], strength };
       }
       case Block.OBSERVER: {
@@ -1198,6 +1238,25 @@ export class RedstoneEngine {
   private backInput(world: RedstoneWorld, strengths: Map<string, number>, x: number, y: number, z: number, state: number): number {
     const back = FACING_OFFSET[(facingOf(state) + 2) & 3]!;
     return this.inputStrength(world, strengths, x + back[0], y, z + back[1]);
+  }
+
+  /**
+   * **这一格自己**作为电源/导线的强度（批次 544）。
+   *
+   * 与 `inputStrength` 的分工：那个问"这一格的邻居能给它多少"，
+   * 这个问"这一格本身就是电源吗"。比较器的侧面输入、背面贴红石块都要用它——
+   * 只问邻居的话，"红石块直接贴在比较器侧面"会被当成 0。
+   */
+  private cellSignal(world: RedstoneWorld, strengths: Map<string, number>, x: number, y: number, z: number): number {
+    let best = strengths.get(keyOf(x, y, z)) ?? 0;
+    const id = world.getBlock(x, y, z);
+    if (id === Block.REDSTONE_BLOCK || id === Block.REDSTONE_TORCH) best = 15;
+    else if (id === Block.LEVER || isButtonId(id)) {
+      if (isPowered(world.getState(x, y, z))) best = 15;
+    } else if (id === Block.REPEATER && (this.repeaterOutput.get(keyOf(x, y, z)) ?? false)) {
+      best = 15;
+    }
+    return best;
   }
 
   /** 某个位置的输入强度：相邻粉的强度、相邻电源的 15、相邻中继器输出 */
@@ -1371,6 +1430,19 @@ export function canPush(id: number): boolean {
 /** 中继器延迟档位（0~3 → 1~4 红石刻） */
 function delayTicksOf(state: number): number {
   return (state >> 4) & 0b11;
+}
+
+/**
+ * 比较器的输出（批次 544，纯函数）。
+ *
+ * 比较模式 = 背面；减法模式 = max(0, 背面 − 侧面)。
+ * 抽出来是为了让"9 − 4 = 5"这种算术能单独断言，不必搭一整条红石线。
+ */
+export function comparatorOutput(back: number, side: number, subtract: boolean): number {
+  const clamp = (value: number): number => Math.max(0, Math.min(15, Math.floor(value)));
+  const b = clamp(back);
+  if (!subtract) return b;
+  return Math.max(0, b - clamp(side));
 }
 
 /** 查询某格红石粉的强度（0 表示没电；调试面板与测试用） */

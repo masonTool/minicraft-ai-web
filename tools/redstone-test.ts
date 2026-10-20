@@ -18,9 +18,12 @@
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
 import { isButtonId, isPlateId } from '../src/core/redstone/RedstoneEngine.ts';
 import { Item, itemDef } from '../src/core/registry/items.ts';
+import { Chest } from '../src/core/container/Chest.ts';
+import { containerSignalStrength } from '../src/core/world/ContainerSignal.ts';
 // 配方（批次 119）：这一节要断言"红石元件的配方就是原版那一条"
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
 import {
+  isComparatorSubtract,
   isDoorOpen,
   isDoorUpper,
   isFenceGateOpen,
@@ -36,6 +39,7 @@ import {
 import {
   RedstoneEngine,
   canPush,
+  comparatorOutput,
   weightedPlateSignal,
   wirePowerOf,
   type RedstoneWorld,
@@ -100,6 +104,17 @@ class StubWorld implements RedstoneWorld {
 
   entityCountAt(x: number, y: number, z: number): number {
     return this.entityCounts.get(StubWorld.key(x, y, z)) ?? 0;
+  }
+
+  /** 比较器读容器（批次 544）：测试里直接按坐标塞一个强度 */
+  private readonly containerSignals = new Map<string, number>();
+
+  setContainerSignal(x: number, y: number, z: number, strength: number): void {
+    this.containerSignals.set(StubWorld.key(x, y, z), strength);
+  }
+
+  containerSignal(x: number, y: number, z: number): number {
+    return this.containerSignals.get(StubWorld.key(x, y, z)) ?? 0;
   }
 
   /** 标靶（批次 248）：被"打中"的格子 */
@@ -744,6 +759,54 @@ console.log('\n[木质按钮 / 压力板的判定收敛（批次 444）]');
   check('石按钮算按钮、不算压力板', isButtonId(Block.STONE_BUTTON) && !isPlateId(Block.STONE_BUTTON));
   check('石压力板算压力板、不算按钮', isPlateId(Block.STONE_PRESSURE_PLATE) && !isButtonId(Block.STONE_PRESSURE_PLATE));
   check('木板本身既不是按钮也不是压力板', !isButtonId(Block.OAK_PLANKS) && !isPlateId(Block.OAK_PLANKS));
+}
+
+console.log('\n[比较器：读容器 + 减法模式（批次 544）]');
+{
+  // ---- 纯逻辑：装满度公式
+  const chest = new Chest();
+  check('空箱子信号为 0', containerSignalStrength(chest) === 0);
+  chest.set(0, { id: Block.COBBLESTONE, count: 64 });
+  check('一格满箱 → 1', containerSignalStrength(chest) === 1, String(containerSignalStrength(chest)));
+  for (let i = 0; i < 27; i++) chest.set(i, { id: Block.COBBLESTONE, count: 64 });
+  check('27 格全满 → 15', containerSignalStrength(chest) === 15, String(containerSignalStrength(chest)));
+
+  equal('比较模式：背面 9 → 9', comparatorOutput(9, 15, false), 9);
+  equal('减法模式：9 − 4 = 5', comparatorOutput(9, 4, true), 5);
+  equal('减法模式：9 − 15 夹到 0', comparatorOutput(9, 15, true), 0);
+  equal('超过 15 一律夹到 15', comparatorOutput(20, 0, false), 15);
+
+  // ---- 接线：背面容器 → 比较器 → 粉 → 灯
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.COMPARATOR, withFacing(0, 1));
+  world.setBlock(1, Y, 0, Block.REDSTONE_WIRE, 0);
+  world.setBlock(2, Y, 0, Block.REDSTONE_LAMP, 0);
+  world.setContainerSignal(-1, Y, 0, 9);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+
+  equal('背面的容器信号直通到粉', wirePowerOf(engine, 1, Y, 0), 9);
+  check('灯被点亮', isPowered(world.getState(2, Y, 0)));
+
+  // ---- 侧面 15：比较模式不受影响；切成减法模式后输出 0
+  world.setBlock(0, Y, 1, Block.REDSTONE_BLOCK, 0);
+  engine.onBlockChanged(world, 0, Y, 1);
+  step(engine, world, 0.1);
+  equal('比较模式忽略侧面输入', wirePowerOf(engine, 1, Y, 0), 9);
+
+  check('右键切换成减法模式', engine.toggleComparatorMode(world, 0, Y, 0));
+  check('状态位真的变了', isComparatorSubtract(world.getState(0, Y, 0)));
+  step(engine, world, 0.3);
+  equal('减法模式：9 - 15 夹到 0', wirePowerOf(engine, 1, Y, 0), 0);
+  check('灯熄灭（等过 0.2 秒余辉）', !isPowered(world.getState(2, Y, 0)));
+
+  // ---- 切回比较模式，容器清空 → 0
+  check('再切回比较模式', engine.toggleComparatorMode(world, 0, Y, 0));
+  world.setContainerSignal(-1, Y, 0, 0);
+  engine.onBlockChanged(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  equal('空容器输出 0', wirePowerOf(engine, 1, Y, 0), 0);
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);

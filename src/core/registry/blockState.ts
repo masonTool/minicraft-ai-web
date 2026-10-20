@@ -657,6 +657,23 @@ export function withDelay(state: number, delay: number): number {
   return (state & ~DELAY_MASK) | ((delay & 0b11) << 4);
 }
 
+/**
+ * 比较器的**减法模式**（批次 544，原版右键切换）。
+ *
+ * 占 bit0：比较器不用 TOP（那是台阶/门/雪层的事），facing 占 bits 1-2、
+ * 延迟段 bits 4-5 只属于中继器，所以 bit0 是干净的。
+ * 关着 = 比较模式（输出背面信号），开着 = 减法模式（背面 − 侧面）。
+ */
+const COMPARATOR_SUBTRACT_MASK = 0b1;
+
+export function isComparatorSubtract(state: number): boolean {
+  return (state & COMPARATOR_SUBTRACT_MASK) !== 0;
+}
+
+export function withComparatorSubtract(state: number, subtract: boolean): number {
+  return subtract ? state | COMPARATOR_SUBTRACT_MASK : state & ~COMPARATOR_SUBTRACT_MASK;
+}
+
 // ---------------------------------------------------------------- 正在燃烧（炉子 / 营火）
 
 /**

@@ -237,6 +237,7 @@ import { FLUID_TICKS_PER_TICK, isWithinFluidSim } from './core/world/FluidSimWin
 import { scrapeResult } from './core/world/Copper.ts';
 import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
 import { FallingBlocks } from './core/world/FallingBlocks.ts';
+import { containerSignalStrength } from './core/world/ContainerSignal.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
 // 雷电与避雷针（批次 83）：规则（落点选择 / 杆头坐标 / 脉冲表）在 `world/Lightning.ts`，
 // 主程序只做"世界里的副作用"（伤害、点火、粒子、给电路重算）
@@ -913,6 +914,11 @@ class App {
     // 避雷针（批次 83）：另一个——"被雷劈中的那 0.4 秒"由上面的脉冲表拿着，
     // 引擎每轮问一句就够了（与阳光传感器问天光完全同一条）
     isRodPowered: (x, y, z) => this.rodPulses.isPowered(x, y, z),
+    // 比较器读容器（批次 544）：按装满度给 0~15；不是容器/未加载时 0
+    containerSignal: (x, y, z) => {
+      const container = this.containerOfBlockAt(x, y, z);
+      return container ? containerSignalStrength(container) : 0;
+    },
   };
   /**
    * TNT 的引信（批次 56）：点燃之后"闪 4 秒再炸"，这份状态跨帧存在这里。
@@ -11737,6 +11743,12 @@ class App {
       this.world.setStateAndUpdate(x, y, z, withDelay(state, (delayOf(state) + 1) & 3));
       this.particles.spawnRedstoneDust(x + 0.5, y + 0.5, z + 0.5, 3);
       return true;
+    }
+    if (hitBlock === Block.COMPARATOR) {
+      // 右键在"比较"与"减法"之间切换（批次 544，原版行为）
+      const toggled = this.redstone.toggleComparatorMode(this.redstoneWorld, x, y, z);
+      if (toggled) this.particles.spawnRedstoneDust(x + 0.5, y + 0.5, z + 0.5, 3);
+      return toggled;
     }
 
     // 末地传送门框架（K9，批次 111）：手上是**末影之眼**就按一只进去；
