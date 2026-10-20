@@ -22,8 +22,9 @@ import {
   validateLootTables,
   type LootTable,
 } from '../src/core/registry/loot.ts';
-import { Item, itemDef, itemName } from '../src/core/registry/items.ts';
-import { fillLootChests } from '../src/core/world/LootFill.ts';
+import { Item, durabilityOf, itemDef, itemName } from '../src/core/registry/items.ts';
+import { fillLootChests, lootDurabilityDamage } from '../src/core/world/LootFill.ts';
+import { toolItemId } from '../src/core/registry/tools.ts';
 import { BlockEntityStore, type BlockContainer } from '../src/core/world/BlockEntityStore.ts';
 import { CHEST_SIZE, Chest } from '../src/core/container/Chest.ts';
 import { SLOT_COUNTS, serializeContainer, restoreContainers } from '../src/core/save/ContainerSave.ts';
@@ -366,6 +367,17 @@ console.log('\n[马铠：K10 最后缺的一类（批次 570）]');
     check(`${itemName(id)}有图标`, (itemDef(id)?.tile.length ?? 0) > 0);
   }
   check('四档马铠都不可堆叠', armors.every((id) => itemDef(id)?.maxStack === 1));
+}
+
+console.log('\n[战利品随机耐久（批次 573）]');
+{
+  const pick = toolItemId('pickaxe', 'iron');
+  const low = lootDurabilityDamage(pick, 0);
+  const high = lootDurabilityDamage(pick, 1);
+  check('装备带正耐久损耗', low > 0 && high > 0, `${low} / ${high}`);
+  check('0~1 的随机数映射到 10%~90%', low < high);
+  equal('没有耐久的物品不塞损耗', lootDurabilityDamage(Item.STICK, 0.5), 0);
+  check('损耗不会直接打满', lootDurabilityDamage(pick, 1) < durabilityOf(pick));
 }
 
 console.log(`\n战利品测试：${passed} 通过 / ${failed} 失败`);

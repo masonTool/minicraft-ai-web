@@ -26,6 +26,7 @@ import { CHEST_SIZE } from '../container/Chest.ts';
 import { PositionalRng } from '../gen/Features.ts';
 import type { DimensionId } from '../gen/Dimension.ts';
 import type { ItemStack } from '../container/Inventory.ts';
+import { durabilityOf } from '../registry/items.ts';
 
 export interface LootFillStats {
   /** 本次填了几只箱子 */
@@ -92,6 +93,19 @@ export function fillLootChests(
   return stats;
 }
 
+/**
+ * 战利品里的工具/盔甲带随机耐久（批次 573）：原版结构箱子里的装备通常已被用过，
+ * 这里取耐久上限的 **10%~90%** 损耗；没有耐久的物品返回 0。
+ *
+ * @param roll 0~1 的随机数（`PositionalRng` 给，保证同一只箱子内容确定）
+ */
+export function lootDurabilityDamage(itemId: number, roll: number): number {
+  const max = durabilityOf(itemId);
+  if (!(max > 1)) return 0;
+  const fraction = 0.1 + Math.max(0, Math.min(1, roll)) * 0.8;
+  return Math.min(max - 1, Math.max(1, Math.floor(max * fraction)));
+}
+
 /** 把掷出来的战利品塞进**随机的空格子**（原版也是随机槽位，看起来才像"翻出来的"） */
 function placeLoot(
   chest: { get(index: number): ItemStack | null; set(index: number, stack: ItemStack | null): void },
@@ -107,6 +121,8 @@ function placeLoot(
     const pick = Math.min(free.length - 1, rng.int(free.length));
     const slot = free[pick]!;
     free.splice(pick, 1);
-    chest.set(slot, { id: stack.id, count: stack.count });
+    // 装备带随机耐久（批次 573）：同一只箱子的耐久也由位置随机源决定
+    const damage = lootDurabilityDamage(stack.id, rng.next());
+    chest.set(slot, damage > 0 ? { id: stack.id, count: stack.count, damage } : { id: stack.id, count: stack.count });
   }
 }
