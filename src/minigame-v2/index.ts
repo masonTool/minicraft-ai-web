@@ -169,6 +169,12 @@ interface V2Settings {
   autoJump: boolean;
   fingerAim: boolean;
   sound: boolean;
+  volume: number;
+  volumeBlocks: number;
+  volumeUi: number;
+  skinColor: string;
+  shirtColor: string;
+  pantsColor: string;
 }
 
 const SETTINGS_KEY = 'wx.v2.settings';
@@ -181,6 +187,12 @@ const defaultSettings: V2Settings = {
   autoJump: false,
   fingerAim: true,
   sound: true,
+  volume: 0.7,
+  volumeBlocks: 1,
+  volumeUi: 1,
+  skinColor: '#e0ac69',
+  shirtColor: '#3b6ea5',
+  pantsColor: '#2f3f5a',
 };
 const readSettings = (): V2Settings => {
   try {
@@ -196,6 +208,12 @@ const readSettings = (): V2Settings => {
       autoJump: parsed.autoJump === true,
       fingerAim: parsed.fingerAim !== false,
       sound: parsed.sound !== false,
+      volume: Math.max(0, Math.min(1, Number(parsed.volume ?? 0.7))),
+      volumeBlocks: Math.max(0, Math.min(1, Number(parsed.volumeBlocks ?? 1))),
+      volumeUi: Math.max(0, Math.min(1, Number(parsed.volumeUi ?? 1))),
+      skinColor: typeof parsed.skinColor === 'string' ? parsed.skinColor : '#e0ac69',
+      shirtColor: typeof parsed.shirtColor === 'string' ? parsed.shirtColor : '#3b6ea5',
+      pantsColor: typeof parsed.pantsColor === 'string' ? parsed.pantsColor : '#2f3f5a',
     };
   } catch {
     return { ...defaultSettings };
@@ -203,7 +221,7 @@ const readSettings = (): V2Settings => {
 };
 const settings = readSettings();
 const audio = new AudioEngine();
-audio.volume = settings.sound ? 0.7 : 0;
+audio.volume = settings.sound ? settings.volume : 0;
 audio.enabled = settings.sound;
 let audioResumed = false;
 const persistSettings = (): void => {
@@ -246,7 +264,9 @@ const showSettings = (): void => {
     camera.fov = settings.fov;
     camera.updateProjectionMatrix();
     audio.enabled = settings.sound;
-    audio.volume = settings.sound ? 0.7 : 0;
+    audio.volume = settings.sound ? settings.volume : 0;
+    audio.setGroupVolume('blocks', settings.volumeBlocks);
+    audio.setGroupVolume('ui', settings.volumeUi);
     showSettings();
   };
 
@@ -285,18 +305,52 @@ const showSettings = (): void => {
       settings.sound = value;
       apply();
     }));
-    row(text(panelX + 24, rowY + 10, panelW - 48, 40, 'v2 音频引擎尚未接入，开关先保存偏好', {
-      fontSize: 16,
+    row(slider(panelX + 24, rowY, panelW - 48, 50, '主音量', 0, 1, 0.05, settings.volume, (value) => {
+      settings.volume = value;
+      apply();
+    }));
+    row(slider(panelX + 24, rowY, panelW - 48, 50, '方块音效', 0, 1, 0.05, settings.volumeBlocks, (value) => {
+      settings.volumeBlocks = value;
+      apply();
+    }));
+    row(slider(panelX + 24, rowY, panelW - 48, 50, 'UI 音效', 0, 1, 0.05, settings.volumeUi, (value) => {
+      settings.volumeUi = value;
+      apply();
+    }));
+    row(text(panelX + 24, rowY + 10, panelW - 48, 30, '生物/玩家/环境/音乐分组待接入', {
+      fontSize: 14,
       color: 'rgba(200, 220, 235, 0.65)',
     }));
   } else {
-    row(text(panelX + 24, rowY + 10, panelW - 48, 40, '角色外观/皮肤编辑器：待 UI Kit 二期迁移', {
-      fontSize: 16,
-      color: 'rgba(200, 220, 235, 0.65)',
-    }));
-    row(text(panelX + 24, rowY + 10, panelW - 48, 40, '当前已对齐：亮度、视距、灵敏度、瞄准、声音偏好', {
-      fontSize: 16,
-      color: 'rgba(200, 220, 235, 0.65)',
+    const skinColors = ['#e0ac69', '#c68642', '#8d5524', '#f1c27d', '#d9a066'];
+    const shirtColors = ['#3b6ea5', '#4f8a5b', '#a5523b', '#6b5b95', '#2f3f5a'];
+    const pantsColors = ['#2f3f5a', '#3d3d3d', '#5b4636', '#6d7b8d', '#1f2a36'];
+    const cycle = (list: string[], value: string): string => {
+      const index = list.indexOf(value);
+      return list[(index + 1) % list.length]!;
+    };
+    const previewX = panelX + panelW - 260;
+    const previewY = panelY + 120;
+    row(button(panelX + 24, rowY, 380, 50, `肤色`, () => {
+      settings.skinColor = cycle(skinColors, settings.skinColor);
+      apply();
+    }, { background: settings.skinColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
+    row(button(panelX + 24, rowY, 380, 50, `上衣`, () => {
+      settings.shirtColor = cycle(shirtColors, settings.shirtColor);
+      apply();
+    }, { background: settings.shirtColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
+    row(button(panelX + 24, rowY, 380, 50, `裤子`, () => {
+      settings.pantsColor = cycle(pantsColors, settings.pantsColor);
+      apply();
+    }, { background: settings.pantsColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
+    rows.push(box(previewX, previewY, 140, 140, [], { background: settings.skinColor, radius: 8 }));
+    rows.push(box(previewX + 15, previewY + 130, 110, 120, [], { background: settings.shirtColor, radius: 6 }));
+    rows.push(box(previewX + 25, previewY + 240, 40, 90, [], { background: settings.pantsColor, radius: 5 }));
+    rows.push(box(previewX + 75, previewY + 240, 40, 90, [], { background: settings.pantsColor, radius: 5 }));
+    rows.push(text(previewX - 30, previewY + 330, 220, 24, '2D 预览 · 3D 模型待接入', {
+      fontSize: 12,
+      color: 'rgba(200, 220, 235, 0.6)',
+      align: 'center',
     }));
   }
 
