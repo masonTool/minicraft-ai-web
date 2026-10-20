@@ -312,8 +312,28 @@ const handleDrop = (fromIndex: number, toIndex: number): void => {
   if (fromIndex < 100 && toIndex >= 100 && toIndex < craftEnd) {
     const stack = inventory.get(fromIndex);
     if (!stack) return;
-    crafting.set(toIndex - 100, stack);
-    inventory.set(fromIndex, null);
+    const target = crafting.get(toIndex - 100);
+    if (target) {
+      if (target.id === stack.id) {
+        target.count += stack.count;
+        crafting.set(toIndex - 100, target);
+        inventory.set(fromIndex, null);
+      } else {
+        inventory.set(fromIndex, target);
+        crafting.set(toIndex - 100, stack);
+      }
+    } else {
+      crafting.set(toIndex - 100, stack);
+      inventory.set(fromIndex, null);
+    }
+    showInventory();
+    return;
+  }
+  if (fromIndex >= 100 && fromIndex < craftEnd && toIndex >= 100 && toIndex < craftEnd) {
+    const a = crafting.get(fromIndex - 100);
+    const b = crafting.get(toIndex - 100);
+    crafting.set(fromIndex - 100, b);
+    crafting.set(toIndex - 100, a);
     showInventory();
     return;
   }
@@ -1037,6 +1057,15 @@ const showHud = (): void => {
           showHud();
         });
       }),
+      button(902, uiHeight - 104, 70, 70, '跳', () => {
+        jumpQueued = true;
+      }, {
+        background: 'rgba(255, 255, 255, 0.18)',
+        border: 'rgba(255, 255, 255, 0.42)',
+        borderWidth: 2,
+        radius: 35,
+        fontSize: 22,
+      }),
     ]),
   );
 };
@@ -1126,6 +1155,7 @@ const input: PlayerInput = {
 let yaw = 0;
 let pitch = 0;
 let playerReady = false;
+let jumpQueued = false;
 let movePointer: number | null = null;
 let lookPointer: number | null = null;
 let moveX = 0;
@@ -1307,12 +1337,17 @@ const frame = (): void => {
     }
   }
 
+  if (jumpQueued) {
+    input.jump = true;
+    jumpQueued = false;
+  }
   if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen) {
     physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, settings.autoJump);
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
   }
+  input.jump = false;
 
   chunks.processQueue(4, centerCx, centerCz);
   chunks.applyViewDistance(centerCx, centerCz, settings.viewDistance);
