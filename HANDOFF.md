@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1125（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1126（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **235**、进行中 **48**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -51,7 +51,7 @@ npm run dev            # http://localhost:5173
   （白），动物不采样图集（`instanceColor`）→ 深色剪影；`atlas` 是 `boot()` 级单例，空图集被带进
   下一局（这就是"重进也白"）。修法：两张画布都挂事件、`repaint()` 双上下文检查、`ensureUploaded()`、
   恢复时强制 `repaint()`、回前台补两刀、`App` 构造兜底。埋点带 `uploadBefore/uploadAfter/sourcePixels`。
-  门禁：`canvas-probe` 13→17、`test:ui` 875→883、161 套全绿。⚠️ `Sky` 的云/日月纹理仍无重画入口。
+  门禁：`canvas-probe` 13→17、`test:ui` 875→883、162 套全绿。⚠️ `Sky` 的云/日月纹理仍无重画入口。
 - 批次 528（植被再压一档 + 飞行起步改成加速过程）：
   ① `FOLIAGE_DARKEN` 0.88 → **0.8**（−20%）：用户觉得还不够沉。
   ② 创造飞行不再"按一下就满速"：加速度从固定 90 改成 `speed / FLY_RAMP_SECONDS`（**0.65 s**），
@@ -191,11 +191,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 161 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 162 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 161 套离线测试
+npm test                   # typecheck:tools + vitest + 162 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -207,7 +207,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **161 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **162 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
@@ -321,3 +321,9 @@ npm run agent:setup        # 跨机器自检
 - 批次 529（世界创建验收）：`test:worldmatrix` **21 条**——60 组组合创建/字段/持久化、
   10 组出生点与出生区块、四档难度语义、UI 三项传参守卫；`WorldRegistry.create` 对
   type/mode/difficulty 一律先规范化。套数 160 → **161**。
+- 批次 530（显示修复）：**"骨块/蓝色旗帜等方块没有着色"的根因是图集超出纹理上限**。
+  1234 张贴图 × 16 列 = 78 行，上传画布高 **2496px > 2048**，第 64 行（下标 1024）之后
+  整批不上传——骨块正好从第 64 行开始，所以"一批方块同时白掉"。
+  列数 16 → **32**（39 行、1024×1248），新增 `test:textures` **22 条**：
+  尺寸上限 / 画笔齐全 / 方块贴图名存在 / 越界区行号 / 骨块与旗帜机制完整。套数 161 → **162**。
+  结论：**这些方块是显示问题，不是机制缺失**（骨块 9 骨粉互转、旗帜 4 图案与织布机都在）。

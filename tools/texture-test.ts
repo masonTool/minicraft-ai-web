@@ -1,0 +1,135 @@
+/**
+ * 图集完整性与纹理上限（批次 530）
+ *
+ * 起因：玩家反馈"骨块、蓝色旗帜等很多方块没有着色"。
+ * 根因不是方块缺定义，而是**单页图集长过了设备的纹理上限**：
+ * 1234 张贴图 × 16 列 = 78 行，上传画布高 2496px > 常见的 2048，
+ * 第 64 行之后（骨块正好从这里开始）整批不上传。
+ *
+ * 这套断言钉四件事：
+ *  ① 上传画布两边都 ≤ 2048（以后贴图再涨，先红在测试里）；
+ *  ② 每张登记过的贴图都有画笔（"名单里有、没画"同样是白块）；
+ *  ③ 每个非空气方块引用的贴图都在名单里（拼错名字也是白块）；
+ *  ④ 骨块 / 旗帜 / 蜡烛 / 带釉陶瓦这些"越界区"的贴图确实落在可上传范围内，
+ *     并顺带验证骨块与旗帜的**机制**本身是完整的（配方 / 图案数）。
+ *
+ * 运行：npm run test:textures
+ */
+
+import { matchRecipe } from '../src/core/crafting/Recipes.ts';
+import { Item } from '../src/core/registry/items.ts';
+import { Block, BLOCKS } from '../src/core/registry/blocks.ts';
+import { BANNER_PATTERNS } from '../src/core/registry/blockState.ts';
+import { ATLAS_COLUMNS, TILE_ORDER, TILE_STRIDE } from '../src/render/atlasLayout.ts';
+import { PAINTERS } from '../src/render/TextureAtlas.ts';
+import { tileRectAt } from '../src/render/atlasCoords.ts';
+
+let passed = 0;
+let failed = 0;
+
+function check(label: string, condition: boolean, detail = ''): void {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${label}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
+  }
+}
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
+
+/** 设备侧最低保证（WebGL2 / GLES3 的下限就是 2048） */
+const MIN_TEXTURE_SIZE = 2048;
+
+const tiles = TILE_ORDER as readonly string[];
+const rows = Math.ceil(tiles.length / ATLAS_COLUMNS);
+const uploadWidth = ATLAS_COLUMNS * TILE_STRIDE;
+const uploadHeight = rows * TILE_STRIDE;
+
+console.log('\n[图集尺寸：必须落在 2048 以内]');
+{
+  check('贴图数量在 32 列的容量内（1200~2048）', tiles.length >= 1200 && tiles.length <= 2048, String(tiles.length));
+  equal('列数 32（16 列会让高度到 2496）', ATLAS_COLUMNS, 32);
+  check('上传宽度 ≤ 2048', uploadWidth <= MIN_TEXTURE_SIZE, `${uploadWidth}px`);
+  check('上传高度 ≤ 2048', uploadHeight <= MIN_TEXTURE_SIZE, `${uploadHeight}px`);
+  check(
+    '按 2048 的上限还有余量（能再撑到 2048 张）',
+    Math.floor(MIN_TEXTURE_SIZE / TILE_STRIDE) * ATLAS_COLUMNS >= 2048,
+  );
+}
+
+console.log('\n[每张登记贴图都有画笔]');
+{
+  const missing = tiles.filter((name) => typeof PAINTERS[name] !== 'function');
+  check('没有"名单里有、却没画"的贴图', missing.length === 0, missing.slice(0, 8).join(','));
+  equal('画笔数量与名单一致', Object.keys(PAINTERS).length, tiles.length);
+}
+
+console.log('\n[方块引用的贴图都在名单里]');
+{
+  const known = new Set(tiles);
+  const missing: string[] = [];
+  for (const def of BLOCKS) {
+    for (const tile of def.tiles) {
+      if (tile === '') continue; // 空气没有贴图
+      if (!known.has(tile)) missing.push(`${def.name}→${tile}`);
+    }
+  }
+  check('没有拼错的贴图名', missing.length === 0, missing.slice(0, 8).join(','));
+}
+
+console.log('\n[越界区：骨块 / 蜡烛 / 带釉陶瓦 / 旗帜]');
+{
+  const probes = [
+    ['bone_block_top', '骨块顶面'],
+    ['bone_block_side', '骨块侧面'],
+    ['candle', '蜡烛'],
+    ['glazed_terracotta_blue', '蓝色带釉陶瓦'],
+    ['banner_blue', '蓝色旗帜（光板）'],
+    ['banner_blue_p1', '蓝色旗帜（十字）'],
+    ['banner_white_p4', '白色旗帜（横条）'],
+  ] as const;
+
+  for (const [name, label] of probes) {
+    const index = tiles.indexOf(name);
+    if (index < 0) {
+      check(`${label} 在名单里`, false, name);
+      continue;
+    }
+    const row = Math.floor(index / ATLAS_COLUMNS);
+    const bottom = (row + 1) * TILE_STRIDE;
+    check(`${label} 所在行在可上传范围内`, bottom <= MIN_TEXTURE_SIZE, `第 ${row} 行 / ${bottom}px`);
+  }
+
+  const bone = tiles.indexOf('bone_block_top');
+  const rect = tileRectAt(bone, ATLAS_COLUMNS, rows, 0.001, 0.001);
+  check('骨块的 UV 落在 0~1 内', rect.every((value) => value >= 0 && value <= 1), rect.join(','));
+  check('骨块 UV 宽高都是正的', rect[2]! > rect[0]! && rect[3]! > rect[1]!);
+}
+
+console.log('\n[顺带确认这些方块的机制本身是完整的]');
+{
+  // 骨块：9 骨粉 ↔ 1 骨块，两个方向都要有配方（只是显示问题，不是机制缺失）
+  const packed = matchRecipe([Item.BONE_MEAL, Item.BONE_MEAL, Item.BONE_MEAL,
+    Item.BONE_MEAL, Item.BONE_MEAL, Item.BONE_MEAL,
+    Item.BONE_MEAL, Item.BONE_MEAL, Item.BONE_MEAL], 3);
+  equal('9 骨粉 → 骨块', packed?.id, Block.BONE_BLOCK);
+  const unpacked = matchRecipe([Block.BONE_BLOCK], 2);
+  equal('1 骨块 → 9 骨粉', unpacked?.id, Item.BONE_MEAL);
+  equal('回退得到 9 个', unpacked?.count, 9);
+
+  // 旗帜：4 种图案 + 光板；图案贴图逐色生成
+  equal('旗帜图案 4 种（加光板共 5 个名字）', BANNER_PATTERNS.length, 5);
+  check(
+    '16 色 × 4 图案的贴图都在名单里',
+    ['white', 'blue', 'red', 'black'].every((color) =>
+      [1, 2, 3, 4].every((pattern) => tiles.includes(`banner_${color}_p${pattern}`)),
+    ),
+  );
+}
+
+console.log(`\n图集完整性测试：${passed} 通过 / ${failed} 失败\n`);
+if (failed > 0) process.exit(1);

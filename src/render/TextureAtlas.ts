@@ -601,7 +601,7 @@ export function foliage(rgb: readonly [number, number, number]): [number, number
   ];
 }
 
-const PAINTERS: Record<string, Painter> = {
+export const PAINTERS: Record<string, Painter> = {
   stone: STONE_BASE(),
   cobblestone: cobblestonePainter,
   dirt: layered(134, 8, 9, [1.0, 0.85, 0.68]),
