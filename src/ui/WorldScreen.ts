@@ -14,6 +14,7 @@
  * 进世界的动作交回给调用方（`main.ts` 的 boot）。这样这个模块在 Node 里也能测。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import {
   WORLD_TYPES,
   WORLD_TYPE_HINTS,
@@ -89,7 +90,7 @@ export class WorldScreen {
 
     const subtitle = document.createElement('div');
     subtitle.className = 'world-hint';
-    subtitle.textContent = '原生生存、创造与多世界存档';
+    subtitle.textContent = t('menu.tagline');
 
     const menu = document.createElement('div');
     menu.className = 'world-menu';
@@ -106,7 +107,7 @@ export class WorldScreen {
     const play = document.createElement('button');
     play.type = 'button';
     play.className = 'world-primary';
-    play.textContent = '游戏';
+    play.textContent = t('menu.play');
     play.addEventListener('click', () => this.setView('worlds'));
 
     menu.append(play);
@@ -116,7 +117,7 @@ export class WorldScreen {
       const settings = document.createElement('button');
       settings.type = 'button';
       settings.className = 'world-secondary';
-      settings.textContent = '设置';
+      settings.textContent = t('menu.settings');
       settings.addEventListener('click', () => this.actions.onSettings?.());
       menu.append(settings);
     }
@@ -134,7 +135,7 @@ export class WorldScreen {
     const footer = document.createElement('div');
     footer.className = 'world-footer';
     const footerNote = document.createElement('div');
-    footerNote.textContent = '非官方 Web 复刻 · 存档保存在此设备';
+    footerNote.textContent = t('menu.footer');
     // 批次 182：当前版本的构建时间 + 提交标题——手机上确认"是不是最新那一版"用
     const build = document.createElement('div');
     build.className = 'world-build';
@@ -158,7 +159,7 @@ export class WorldScreen {
     newEntry.type = 'button';
     newEntry.className = 'world-primary';
     newEntry.id = 'world-new-button';
-    newEntry.textContent = '＋ 新建世界';
+    newEntry.textContent = t('menu.newWorld');
     newEntry.addEventListener('click', () => this.setView('create'));
 
     const listLabel = document.createElement('div');
@@ -195,7 +196,7 @@ export class WorldScreen {
     const reroll = document.createElement('button');
     reroll.type = 'button';
     reroll.className = 'world-mini';
-    reroll.textContent = '随机';
+    reroll.textContent = t('menu.reroll');
     reroll.addEventListener('click', () => {
       this.seedInput.value = String(randomSeed());
     });
@@ -240,7 +241,7 @@ export class WorldScreen {
     createButton.type = 'button';
     createButton.className = 'world-primary';
     createButton.id = 'world-create-button';
-    createButton.textContent = '创建并进入';
+    createButton.textContent = t('menu.create');
     createButton.addEventListener('click', () => this.createAndEnter());
 
     // 种子框里回车也直接创建（手输种子是最常见的动作）
@@ -295,7 +296,7 @@ export class WorldScreen {
     const back = document.createElement('button');
     back.type = 'button';
     back.className = 'world-back';
-    back.textContent = '‹ 返回';
+    back.textContent = t('menu.back');
     back.addEventListener('click', onBack);
 
     const label = document.createElement('b');
@@ -359,7 +360,7 @@ export class WorldScreen {
     if (worlds.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'world-empty';
-      empty.textContent = '还没有存档——点上面「＋ 新建世界」开一个。';
+      empty.textContent = t('menu.empty');
       this.listEl.appendChild(empty);
       return;
     }

@@ -2023,7 +2023,8 @@ console.log('\n[主菜单分层（批次 108）]');
   // 首页**只留两颗按钮**（基岩版标题页就是"游戏 / 设置"）。
   // 批次 107 那版有四颗，其中"开始游戏"会直接进最近玩的世界——用户当场反问
   // "进入游戏，进入什么呢？"，所以这条断言防的就是那四颗回来。
-  check('首页第一颗是「游戏」', source.includes("play.textContent = '游戏';"));
+  // 批次 420：文案走 i18n 键（`play.textContent = t('menu.play')`），中文表里那条由 i18n 测试管
+  check('首页第一颗是「游戏」', source.includes("play.textContent = t('menu.play');"));
   // ⚠️ 防的是批次 107 那版：首页四颗按钮、其中"开始游戏"会**直接进最近玩的世界**
   //（用户当场反问"进入游戏，进入什么呢？"）。`quickStart` 这个方法连同那颗按钮一起删掉了。
   check('首页不再有"开始游戏"那颗一键入口', !source.includes("'开始游戏'") && !source.includes('quickStart'));

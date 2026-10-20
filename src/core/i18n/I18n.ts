@@ -72,6 +72,16 @@ const ZH: Readonly<Record<string, string>> = {
   'settings.row.volumeMusic': '音乐',
   'settings.avatar.full': '全身',
   'settings.avatar.face': '面部',
+  // ---- 主菜单（M8：启动时构建，切语言后要刷新页面才全变，见 TASKS M8 的注记）
+  'menu.tagline': '原生生存、创造与多世界存档',
+  'menu.play': '游戏',
+  'menu.settings': '设置',
+  'menu.footer': '非官方 Web 复刻 · 存档保存在此设备',
+  'menu.newWorld': '＋ 新建世界',
+  'menu.empty': '还没有存档——点上面「＋ 新建世界」开一个。',
+  'menu.back': '‹ 返回',
+  'menu.reroll': '随机',
+  'menu.create': '创建并进入',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -112,6 +122,15 @@ const EN: Readonly<Record<string, string>> = {
   'settings.row.volumeMusic': 'Music',
   'settings.avatar.full': 'Full Body',
   'settings.avatar.face': 'Face',
+  'menu.tagline': 'Survival, Creative and Multiple Worlds',
+  'menu.play': 'Play',
+  'menu.settings': 'Settings',
+  'menu.footer': 'Unofficial web remake · saves live on this device',
+  'menu.newWorld': '+ New World',
+  'menu.empty': 'No worlds yet — use “+ New World” above to create one.',
+  'menu.back': '‹ Back',
+  'menu.reroll': 'Random',
+  'menu.create': 'Create & Enter',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
