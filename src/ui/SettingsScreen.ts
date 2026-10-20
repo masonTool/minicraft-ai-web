@@ -909,8 +909,8 @@ export class SettingsScreen {
     const focusRow = document.createElement('div');
     focusRow.className = 'appearance-focus';
     for (const [focus, label] of [
-      ['full', '全身'],
-      ['face', '面部'],
+      ['full', t('settings.avatar.full')],
+      ['face', t('settings.avatar.face')],
     ] as const) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -1070,13 +1070,13 @@ export class SettingsScreen {
     // 音频页全是滑杆：两列排，主音量与分组音量分开读
     const soundSliders = this.makeBlock(sound);
     soundSliders.append(
-      this.makeSlider('volume', '主音量', '%', 0, 100, 1, 100),
-      this.makeSlider('volumeBlocks', '方块音效', '%', 0, 100, 1, 100),
-      this.makeSlider('volumeMobs', '生物音效', '%', 0, 100, 1, 100),
-      this.makeSlider('volumePlayer', '玩家音效', '%', 0, 100, 1, 100),
-      this.makeSlider('volumeUi', '界面音效', '%', 0, 100, 1, 100),
-      this.makeSlider('volumeAmbient', '雨声', '%', 0, 100, 1, 100),
-      this.makeSlider('volumeMusic', '音乐', '%', 0, 100, 1, 100),
+      this.makeSlider('volume', t('settings.row.volume'), '%', 0, 100, 1, 100),
+      this.makeSlider('volumeBlocks', t('settings.row.volumeBlocks'), '%', 0, 100, 1, 100),
+      this.makeSlider('volumeMobs', t('settings.row.volumeMobs'), '%', 0, 100, 1, 100),
+      this.makeSlider('volumePlayer', t('settings.row.volumePlayer'), '%', 0, 100, 1, 100),
+      this.makeSlider('volumeUi', t('settings.row.volumeUi'), '%', 0, 100, 1, 100),
+      this.makeSlider('volumeAmbient', t('settings.row.volumeAmbient'), '%', 0, 100, 1, 100),
+      this.makeSlider('volumeMusic', t('settings.row.volumeMusic'), '%', 0, 100, 1, 100),
     );
 
     const game = this.section('game');

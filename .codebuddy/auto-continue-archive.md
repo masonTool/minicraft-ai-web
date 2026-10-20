@@ -10302,4 +10302,18 @@
 - ⚠️ 没做 `/advancement grant <id> through|until <子>`（"一路授予到某条"）——收益低，
   而且它依赖"父链顺序"，本项目 `grant()` 是显式授予、不检查父链
 
+## 批次 416：K11 /locate biome（2026-10-20）
+
+- [x] B416-1 `core/gen/Locate.ts`：`findNearestBiome(probe, target, origin, opts)`——
+      **正方形环**由近到远、步长 16 格、半径上限 640 格；脚下就是时距离 0 立刻返回
+- [x] B416-2 环内采样点固定 8 个（四角 + 四边中点），顺序固定 → 同输入同答案
+- [x] B416-3 `/locate biome <名称>`；`CommandContext.biomeNameAt(x,z)`
+      （主线程是一次气候噪声查询，很便宜；生成器没好时返回 null，搜索跳过该列）
+- [x] B416-4 `test:commands` 157 → **166 条**
+- 覆盖：命令 **30 → 31（75% → 78%）**
+- ⚠️ **`/locate structure` 明确没做**：结构候选点要在 Worker 的生成器里枚举，
+  主线程拿不到；命令里会直说"还没做"，不假装支持
+- ⚠️ 上一轮我把 `/locate` 说成"最划算的一条"，核过之后发现 structure 那半边被 Worker 挡着；
+  真正能做的是 biome 这半边
+
 <!-- docs-archive:end -->

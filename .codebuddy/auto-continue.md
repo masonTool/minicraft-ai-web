@@ -98,20 +98,6 @@
 
 ---
 
-## 批次 416：K11 /locate biome（2026-10-20）
-
-- [x] B416-1 `core/gen/Locate.ts`：`findNearestBiome(probe, target, origin, opts)`——
-      **正方形环**由近到远、步长 16 格、半径上限 640 格；脚下就是时距离 0 立刻返回
-- [x] B416-2 环内采样点固定 8 个（四角 + 四边中点），顺序固定 → 同输入同答案
-- [x] B416-3 `/locate biome <名称>`；`CommandContext.biomeNameAt(x,z)`
-      （主线程是一次气候噪声查询，很便宜；生成器没好时返回 null，搜索跳过该列）
-- [x] B416-4 `test:commands` 157 → **166 条**
-- 覆盖：命令 **30 → 31（75% → 78%）**
-- ⚠️ **`/locate structure` 明确没做**：结构候选点要在 Worker 的生成器里枚举，
-  主线程拿不到；命令里会直说"还没做"，不假装支持
-- ⚠️ 上一轮我把 `/locate` 说成"最划算的一条"，核过之后发现 structure 那半边被 Worker 挡着；
-  真正能做的是 biome 这半边
-
 ## 批次 417：M8 i18n 扩到"游戏"组（2026-10-20）
 
 - [x] B417-1 五条新文案键：`settings.row.daylightCycle / showDebug / autosave / flying / gameMode`
@@ -130,3 +116,12 @@
       这是文案搬家必然要付的账，早改早省事
 - 覆盖：文案表 **18 → 28 条**；"界面语言"行仍记 50%
 - ⚠️ 剩下"外观/音频"两组 + 背包/成就/主菜单，仍是 M8 主体
+
+## 批次 419：M8 i18n 扩到"音频"组 + 外观两档视角（2026-10-20）
+
+- [x] B419-1 七条音量滑杆：volume / volumeBlocks / volumeMobs / volumePlayer /
+      volumeUi / volumeAmbient / volumeMusic
+- [x] B419-2 外观两档视角：`settings.avatar.full` / `settings.avatar.face`
+- [x] B419-3 `ui-test` 里 `['face', '面部']` 那条断言改成按**键**匹配
+- 覆盖：文案表 **28 → 37 条**；设置界面四个分组整页有英文（外观编辑器细项除外）
+- ⚠️ 下一块是"设置之外"的界面：背包 / 成就 / 主菜单（那些文件更大，建议一批一个界面）

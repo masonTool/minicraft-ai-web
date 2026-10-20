@@ -62,6 +62,16 @@ const ZH: Readonly<Record<string, string>> = {
   'settings.row.fov': '视野',
   'settings.row.touchScale': '按钮大小',
   'settings.row.sensitivity': '灵敏度',
+  // ---- 设置行（"音频"组 + 外观里的两个视角按钮）
+  'settings.row.volume': '主音量',
+  'settings.row.volumeBlocks': '方块音效',
+  'settings.row.volumeMobs': '生物音效',
+  'settings.row.volumePlayer': '玩家音效',
+  'settings.row.volumeUi': '界面音效',
+  'settings.row.volumeAmbient': '雨声',
+  'settings.row.volumeMusic': '音乐',
+  'settings.avatar.full': '全身',
+  'settings.avatar.face': '面部',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -93,6 +103,15 @@ const EN: Readonly<Record<string, string>> = {
   'settings.row.fov': 'Field of View',
   'settings.row.touchScale': 'Button Size',
   'settings.row.sensitivity': 'Sensitivity',
+  'settings.row.volume': 'Master Volume',
+  'settings.row.volumeBlocks': 'Block Sounds',
+  'settings.row.volumeMobs': 'Mob Sounds',
+  'settings.row.volumePlayer': 'Player Sounds',
+  'settings.row.volumeUi': 'UI Sounds',
+  'settings.row.volumeAmbient': 'Weather Sounds',
+  'settings.row.volumeMusic': 'Music',
+  'settings.avatar.full': 'Full Body',
+  'settings.avatar.face': 'Face',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {

@@ -3210,7 +3210,8 @@ console.log('\n[角色创建：外观（批次 187 / 296）]');
     previewSrc.includes("export type PreviewFocus = 'full' | 'face'") &&
       previewSrc.includes('setFocus(focus: PreviewFocus): void') &&
       previewSrc.includes('this.camera.fov = 26') &&
-      settingsSrc.includes("['face', '面部']") &&
+      // 批次 419：标签走 i18n 键（`['face', t('settings.avatar.face')]`）
+      settingsSrc.includes("['face', t('settings.avatar.face')]") &&
       settingsSrc.includes('this.avatar?.setFocus(focus)'),
   );
   check(

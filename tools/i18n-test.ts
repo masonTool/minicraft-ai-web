@@ -77,6 +77,10 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'settings.row.fastEat',
     'settings.row.fov',
     'settings.row.touchScale',
+    'settings.row.volume',
+    'settings.row.volumeMusic',
+    'settings.avatar.full',
+    'settings.avatar.face',
     ...['game', 'controls', 'appearance', 'sound'].map((group) => `settings.group.${group}`),
   ];
   const missing = required.filter((key) => !keys.has(key));
