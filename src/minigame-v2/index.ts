@@ -15,6 +15,7 @@ import { Sky } from '../render/Sky.ts';
 import { Weather } from '../render/Weather.ts';
 import type { MeshWorkerPool } from '../render/MeshWorkerPool.ts';
 import { WxMeshWorkerPool } from './wx-mesh-pool.ts';
+import { SaveController } from './save-controller.ts';
 import { MobSystem } from './mobs.ts';
 import { ContainerSystem } from './containers.ts';
 import { drawBlockIcon } from './block-icon.ts';
@@ -27,7 +28,7 @@ import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
 import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital, type UiElement, type UiRingNode } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
-import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
+import { restoreContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import type { ShapedRecipe, ShapelessRecipe } from '../core/crafting/Recipes.ts';
 import { CREATIVE_ITEMS, categoryOf, foodInfoById, saturationFrom } from '../core/registry/items.ts';
@@ -39,9 +40,7 @@ import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { WorldRegistry, type WorldSummary } from '../core/save/WorldRegistry.ts';
-import { FileSaveGame } from '../platform/file-save.ts';
-import { ChunkEdits } from '../core/save/ChunkEdits.ts';
-import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
+import type { PlayerSave } from '../core/save/SaveGame.ts';
 import { OverworldGenerator } from '../core/gen/OverworldGenerator.ts';
 import { planSpawnRegion } from '../core/world/SpawnPoint.ts';
 import { WORLD_SURFACE_Y } from '../core/gen/WorldType.ts';
@@ -193,10 +192,6 @@ const registryStorage = {
 const registry = new WorldRegistry(registryStorage as Storage);
 let currentWorld: WorldSummary | null = null;
 let worldPage = 0;
-let save: FileSaveGame | null = null;
-let saving = false;
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let playMark = Date.now();
 let spawn = { x: 0, z: 0, y: 80 };
 const planSpawn = (seed: number, type: WorldType): { x: number; z: number; y: number } => {
   const generator = new OverworldGenerator(seed, type);
@@ -806,43 +801,13 @@ const snapshotPlayer = (): PlayerSave => ({
   dragonDefeated: false,
 });
 
-const persistWorld = async (): Promise<void> => {
-  if (!save || !currentWorld || saving) return;
-  saving = true;
-  try {
-    currentWorld.lastPlayed = Date.now();
-    currentWorld.playTime = (currentWorld.playTime ?? 0) + Math.max(0, (Date.now() - playMark) / 1000);
-    playMark = Date.now();
-    registry.update(currentWorld.id, {
-      lastPlayed: currentWorld.lastPlayed,
-      playTime: currentWorld.playTime,
-    });
-    await save.savePlayer(snapshotPlayer());
-    const records: ChunkSaveRecord[] = [];
-    for (const key of world.edits.dirtyKeys()) {
-      const { dimension, cx, cz } = ChunkEdits.parseKey(key);
-      const edits = world.edits.serialize(dimension, cx, cz);
-      if (edits) records.push({ dimension, cx, cz, edits });
-    }
-    await save.saveChunks(records);
-    await save.saveContainers(serializeContainers(world.containers));
-    await save.saveMeta(save.buildMeta(world.seed, world.edits.totalEdits));
-    world.edits.markSaved();
-  } catch (error) {
-    console.warn('[v2] save failed', error);
-  } finally {
-    saving = false;
-  }
-};
-
-const requestSave = (): void => {
-  if (!save) return;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    void persistWorld();
-  }, 1200);
-};
+const saveController = new SaveController({
+  platform,
+  registry,
+  getCurrentWorld: () => currentWorld,
+  getWorld: () => world,
+  snapshotPlayer: () => snapshotPlayer(),
+});
 
 const clearDrops = (): void => {
   for (const drop of droppedItems) {
@@ -854,24 +819,18 @@ const clearDrops = (): void => {
 };
 
 const mountWorld = async (entry: WorldSummary): Promise<void> => {
-  await persistWorld();
+  await saveController.persist();
   clearDrops();
   mobs.clearAll();
   pigsSpawned = false;
   sheepSpawned = false;
   zombieSpawned = false;
-  if (save) {
-    save.close();
-    save = null;
-  }
-
   world.events = {};
   chunks.disposeAll();
   world = new World(entry.seed, entry.worldType, 1);
   chunks = createChunkRenderer(meshPool);
   workerFallbackAt = meshPool ? performance.now() : 0;
   currentWorld = entry;
-  playMark = Date.now();
   registry.update(entry.id, { lastPlayed: Date.now() });
   spawn = planSpawn(entry.seed, entry.worldType);
   physics.teleport(spawn.x + 0.5, spawn.y + 1.01, spawn.z + 0.5);
@@ -895,7 +854,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   playerReadyAt = 0;
   lastAutoSave = Date.now();
   try {
-    save = await FileSaveGame.open(entry.id, platform.files);
+    const save = await saveController.open(entry.id);
     for (const record of await save.loadAllChunkEdits()) {
       world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
     }
@@ -1062,7 +1021,7 @@ const confirmDelete = async (name: string): Promise<boolean> => {
 const removeWorld = async (entry: WorldSummary): Promise<void> => {
   if (!(await confirmDelete(entry.name))) return;
   try {
-    await FileSaveGame.deleteWorld(entry.id, platform.files);
+    await SaveController.deleteWorld(entry.id, platform);
   } catch (error) {
     console.warn('[v2] delete save failed', error);
   }
@@ -1650,7 +1609,7 @@ const showPause = (): void => {
       }),
       button(panelX + 90, panelY + 258, 300, 42, '保存并返回菜单', () => {
         void (async () => {
-          await persistWorld();
+          await saveController.persist();
           started = false;
           paused = false;
           showWorlds();
@@ -1825,7 +1784,7 @@ const breakAt = (hit: RayHit): void => {
   world.setBlockAndUpdate(hit.x, hit.y, hit.z, Block.AIR);
   audio.play('break_stone', { x: hit.x, y: hit.y, z: hit.z });
   gainXp(1);
-  requestSave();
+  saveController.request();
 };
 
 const placeAt = (hit: RayHit): void => {
@@ -1856,7 +1815,7 @@ const placeAt = (hit: RayHit): void => {
   lastAction = 'placed';
   inventory.set(selectedSlot, stack.count > 0 ? stack : null);
   audio.play('place', { x, y, z });
-  requestSave();
+  saveController.request();
   showHud();
 };
 
@@ -2302,9 +2261,9 @@ const frame = (): void => {
     }
   }
 
-  if (started && save && !paused && now - lastAutoSave > 15000) {
+  if (started && saveController.isOpen && !paused && now - lastAutoSave > 15000) {
     lastAutoSave = now;
-    void persistWorld();
+    void saveController.persist();
   }
   ui.render(renderer);
   if (settings.showDebug && started && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containers.isOpen && now - lastDebugHud > 1000) {
