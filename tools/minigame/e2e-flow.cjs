@@ -123,9 +123,10 @@ async function main() {
     await tap(521, 112.5);
     await waitState((state) => state.settingsTab === 'controls', '标题设置未切到控制页');
     await tap(600, 383.5);
+    await tap(687, 160.5);
     const tuned = await waitState(
-      (state) => state.brightness > 1 && state.leftHanded,
-      '亮度/左手模式修改未生效',
+      (state) => state.brightness > 1 && state.leftHanded && state.aimMode === 'center',
+      '亮度/左手/瞄准方式修改未生效',
     );
     await tap(774, 58.5);
     const titleAgain = await waitState(
@@ -135,10 +136,14 @@ async function main() {
     assert(!titleAgain.inGame, '标题页关闭设置后错误进入了游戏', titleAgain);
     await tap(512, DESIGN.height * 0.5 + 78);
     const reopened = await waitState(
-      (state) => state.settings && state.brightness === tuned.brightness && state.leftHanded === tuned.leftHanded,
+      (state) => state.settings && state.brightness === tuned.brightness &&
+        state.leftHanded === tuned.leftHanded &&
+        state.aimMode === tuned.aimMode,
       '设置关闭再打开后修改丢失',
     );
     // 恢复默认，避免影响后续触摸坐标用例
+    await tap(687, 160.5);
+    await waitState((state) => state.aimMode === 'finger', '瞄准方式未切回手指', 5000);
     await tap(600, 383.5);
     await tap(260, 112.5);
     await tap(419, 381.5);

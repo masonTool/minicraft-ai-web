@@ -26,6 +26,7 @@ export interface SettingsValues {
   touchScale: number;
   groupVolumes: Record<SoundGroup, number>;
   stickMode: 'fixed' | 'dynamic';
+  aimMode: 'finger' | 'center';
   brightness: number;
 }
 
@@ -42,6 +43,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   touchScale: 1,
   groupVolumes: { blocks: 1, mobs: 1, player: 1, ui: 1, ambient: 1, music: 1 },
   stickMode: 'fixed',
+  aimMode: 'finger',
   brightness: 1,
 };
 
@@ -118,8 +120,9 @@ export function createSettingsMenu(
   });
   const invertSwitch: Rect = { x: panelX + 60, y: panelY + 384, w: panelWidth - 120, h: 28 };
   const sensitivitySlider: Rect = { x: panelX + 60, y: panelY + 198, w: panelWidth - 120, h: 30 };
-  const cameraButton: Rect = { x: panelX + 60, y: panelY + 118, w: 260, h: 42 };
-  const stickButton: Rect = { x: panelX + 340, y: panelY + 118, w: 260, h: 42 };
+  const cameraButton: Rect = { x: panelX + 60, y: panelY + 118, w: 170, h: 42 };
+  const stickButton: Rect = { x: panelX + 240, y: panelY + 118, w: 170, h: 42 };
+  const aimButton: Rect = { x: panelX + 420, y: panelY + 118, w: 190, h: 42 };
   const autoJumpSwitch: Rect = { x: panelX + 60, y: panelY + 310, w: panelWidth - 120, h: 28 };
   const leftHandedSwitch: Rect = { x: panelX + 60, y: panelY + 348, w: panelWidth - 120, h: 28 };
   const touchScaleSlider: Rect = { x: panelX + 60, y: panelY + 258, w: panelWidth - 120, h: 30 };
@@ -152,13 +155,20 @@ export function createSettingsMenu(
           : values.cameraMode === 'third-back'
             ? '第三人称（背后）'
             : '第三人称（正面）';
-      drawButton(context, cameraButton, `相机：${cameraLabel}`, 'normal', 16);
+      drawButton(context, cameraButton, `相机：${cameraLabel}`, 'normal', 14);
       drawButton(
         context,
         stickButton,
         `摇杆：${values.stickMode === 'fixed' ? '固定' : '动态'}`,
         'normal',
-        16,
+        14,
+      );
+      drawButton(
+        context,
+        aimButton,
+        `瞄准：${values.aimMode === 'center' ? '中心' : '手指'}`,
+        'normal',
+        14,
       );
       const sensitivityValue = (values.sensitivity - 0.5) / 1.5;
       drawSlider(context, sensitivitySlider, sensitivityValue, '灵敏度', `×${values.sensitivity.toFixed(1)}`);
@@ -287,6 +297,11 @@ export function createSettingsMenu(
       }
 
       if (tab === 'controls') {
+        if (contains(aimButton, x, y)) {
+          values.aimMode = values.aimMode === 'finger' ? 'center' : 'finger';
+          notify();
+          return null;
+        }
         if (contains(stickButton, x, y)) {
           values.stickMode = values.stickMode === 'fixed' ? 'dynamic' : 'fixed';
           notify();

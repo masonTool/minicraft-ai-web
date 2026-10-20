@@ -138,6 +138,7 @@ async function boot(): Promise<void> {
         sensitivity: Math.max(0.5, Math.min(2, Number(parsed.sensitivity) || DEFAULT_SETTINGS.sensitivity)),
         autoJump: parsed.autoJump !== false,
         stickMode: parsed.stickMode === 'dynamic' ? 'dynamic' : 'fixed',
+        aimMode: parsed.aimMode === 'center' ? 'center' : 'finger',
         brightness: Math.max(0.5, Math.min(2, Number(parsed.brightness) || 1)),
         volume: Math.max(0, Math.min(1, Number(parsed.volume) || DEFAULT_SETTINGS.volume)),
         groupVolumes: {
@@ -191,6 +192,7 @@ async function boot(): Promise<void> {
   let stickCenterY = height - safeBottomPx - (116 + 80) * uiScale;
   let stickHitRadius = 110 * uiScale;
   let stickMode: 'fixed' | 'dynamic' = savedSettings.stickMode;
+  let aimMode: 'finger' | 'center' = savedSettings.aimMode;
   const applyTouchLayout = (
     leftHanded: boolean,
     scale: number,
@@ -628,6 +630,8 @@ async function boot(): Promise<void> {
         autoJump = settings.autoJump;
         solid.skyBrightness = settings.brightness;
         translucent.skyBrightness = settings.brightness;
+        aimMode = settings.aimMode;
+        ui.setCrosshairVisible(aimMode === 'center');
         applyTouchLayout(settings.leftHanded, settings.touchScale, settings.stickMode);
         ui.setTouchLayout(settings.leftHanded, settings.touchScale, settings.stickMode);
         if (audio) {
@@ -652,7 +656,7 @@ async function boot(): Promise<void> {
 
   ui.setCreativeMode(gameMode === 'creative');
   ui.setPauseGameMode(gameMode);
-  ui.setCrosshairVisible(false);
+  ui.setCrosshairVisible(aimMode === 'center');
   let playerHealth = Math.max(1, loadedPlayer?.health ?? 20);
   let playerFood = loadedPlayer?.food ?? 20;
   let playerAir = loadedPlayer?.air ?? 300;
@@ -1301,12 +1305,30 @@ async function boot(): Promise<void> {
   };
 
   const updateTarget = (): void => {
-    // Web 手机版：触摸端以手指落点取目标，没有屏幕中心准星。
-    if (aimScreen) {
-      updateTargetAt(aimScreen.x, aimScreen.y);
+    if (aimMode === 'finger') {
+      // Web 手机版：触摸端以手指落点取目标，没有屏幕中心准星。
+      if (aimScreen) {
+        updateTargetAt(aimScreen.x, aimScreen.y);
+        return;
+      }
+      currentHit = null;
+      applyTargetHit();
       return;
     }
-    currentHit = null;
+    const cosPitch = Math.cos(pitch);
+    const dx = -Math.sin(yaw) * cosPitch;
+    const dy = Math.sin(pitch);
+    const dz = -Math.cos(yaw) * cosPitch;
+    currentHit = raycastVoxels(
+      (x, y, z) => world.isSelectable(x, y, z),
+      physics.x,
+      physics.eyeY,
+      physics.z,
+      dx,
+      dy,
+      dz,
+      8,
+    );
     applyTargetHit();
   };
 
@@ -2039,6 +2061,7 @@ async function boot(): Promise<void> {
         leftHanded: currentSettings.leftHanded,
         touchScale: currentSettings.touchScale,
         stickMode: currentSettings.stickMode,
+        aimMode: currentSettings.aimMode,
         health: playerHealth,
         x: physics.x,
         y: physics.y,
