@@ -14,6 +14,7 @@ export interface StatsOverlay {
   setMining(progress: number | null): void;
   setError(message: string | null): void;
   hasError(): boolean;
+  setBoss(name: string | null, health: number, max: number): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -46,6 +47,7 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
   let stats: PlayerStats = { health: 20, food: 20, air: 300, armor: 0, xp: 0 };
   let mining: number | null = null;
   let error: string | null = null;
+  let boss: { name: string; health: number; max: number } | null = null;
 
   const heart = (x: number, y: number, size: number, filled: boolean): void => {
     if (!context) return;
@@ -94,6 +96,20 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
       );
       texture.needsUpdate = true;
       return;
+    }
+
+    if (boss) {
+      const barWidth = Math.min(560, canvas.width - 100);
+      const x = (canvas.width - barWidth) / 2;
+      const y = canvas.height * 0.9;
+      drawText(context, boss.name, canvas.width / 2, y + 2, 14, '#ffffff', 'center', barWidth);
+      context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      context.fillRect(x, y, barWidth, 18);
+      context.fillStyle = '#b34acb';
+      context.fillRect(x, y, barWidth * Math.max(0, Math.min(1, boss.health / Math.max(1, boss.max))), 18);
+      context.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      context.lineWidth = 2;
+      context.strokeRect(x + 1, y + 1, barWidth - 2, 16);
     }
 
     // 准星
@@ -174,6 +190,10 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
     },
     hasError(): boolean {
       return error !== null;
+    },
+    setBoss(name: string | null, health: number, max: number): void {
+      boss = name ? { name, health, max } : null;
+      redraw();
     },
     render(renderer: THREE.WebGLRenderer): void {
       renderer.clearDepth();
