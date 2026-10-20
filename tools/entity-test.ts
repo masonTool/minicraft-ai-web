@@ -16,6 +16,12 @@ import { ItemEntity, ITEM_FIRE_SECONDS, ITEM_LIFETIME } from '../src/core/entity
 import { ORB_VALUES, XP_ORB_LIFETIME, XpOrb, splitXpOrbs } from '../src/core/entity/XpOrb.ts';
 import { EntityManager } from '../src/core/entity/EntityManager.ts';
 import { Boat } from '../src/core/entity/Boat.ts';
+import {
+  VEHICLE_MAX_HEALTH,
+  applyVehicleDamage,
+  vehicleDropFor,
+  vehicleHitDamage,
+} from '../src/core/world/VehicleBreach.ts';
 import { Horse } from '../src/core/entity/Horse.ts';
 import {
   BEE_STING_POISON_SECONDS,
@@ -910,6 +916,40 @@ console.log('\n[蜂巢：蜂蜜等级 / 挤蜜 / 被蛰（J21，批次 407）]')
   check('蛰过的蜜蜂不再蛰', !shouldSting('bee', true));
   check('猪不会蛰人', !shouldSting('pig', false));
   check('中毒时长是 10 秒（原版普通难度）', BEE_STING_POISON_SECONDS === 10);
+}
+
+console.log('\n[载具被敲坏 + doEntityDrops（批次 435）]');
+{
+  check('船与矿车的耐久都是 6', VEHICLE_MAX_HEALTH === 6);
+
+  // 耐久边界：第 6 点坏，第 5 点不坏
+  let health = VEHICLE_MAX_HEALTH;
+  let brokenAt = 0;
+  for (let hit = 1; hit <= 6; hit++) {
+    const result = applyVehicleDamage(health, 1);
+    health = result.health;
+    if (result.broken) brokenAt = hit;
+  }
+  check('徒手敲 6 下才坏（第 5 下不坏）', brokenAt === 6, `第 ${brokenAt} 下坏`);
+
+  const overkill = applyVehicleDamage(2, 5);
+  check('伤害超过剩余耐久时归零而不是负数', overkill.health === 0 && overkill.broken);
+
+  // 创造模式一击必坏
+  check('创造模式一击必坏', applyVehicleDamage(VEHICLE_MAX_HEALTH, vehicleHitDamage(1, true)).broken);
+  check('生存模式按工具伤害（徒手至少 1）', vehicleHitDamage(0, false) === 1 && vehicleHitDamage(3, false) === 3);
+
+  // 掉落：开着掉、关着一件都不掉
+  check('船掉橡木船', vehicleDropFor('boat', true) === Item.OAK_BOAT);
+  check('矿车掉矿车', vehicleDropFor('minecart', true) === Item.MINECART);
+  check('漏斗矿车掉漏斗矿车', vehicleDropFor('hopper_minecart', true) === Item.HOPPER_MINECART);
+  check('动力矿车掉动力矿车', vehicleDropFor('furnace_minecart', true) === Item.FURNACE_MINECART);
+  check(
+    'doEntityDrops 关掉时四种载具都不掉',
+    (['boat', 'minecart', 'hopper_minecart', 'furnace_minecart'] as const).every(
+      (kind) => vehicleDropFor(kind, false) === null,
+    ),
+  );
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

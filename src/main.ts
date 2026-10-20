@@ -205,6 +205,14 @@ import {
   shouldIgnite,
 } from './core/world/Lightning.ts';
 import { FIRE_IGNITE_SECONDS, burnsOnContact, igniteAt, setFireTickEnabled } from './core/world/Fire.ts';
+// 载具被敲坏（批次 435）：耐久与掉落都是纯函数
+import {
+  VEHICLE_MAX_HEALTH,
+  applyVehicleDamage,
+  vehicleDropFor,
+  vehicleHitDamage,
+  type VehicleKind as BreachVehicleKind,
+} from './core/world/VehicleBreach.ts';
 import {
   PORTAL_CREATIVE_IGNITE_TICKS,
   PORTAL_IGNITE_TICKS,
@@ -1363,6 +1371,14 @@ class App {
    * 侧边栏界面也还没接——两件事都记在 TASKS M23 里，不装作做完了。
    */
   private readonly scoreboardState = new Scoreboard();
+  /**
+   * 载具的剩余耐久（批次 435）：按实体对象存。
+   *
+   * 用 `WeakMap` 而不是给 `Boat`/`Minecart` 加字段：这两个类是**纯物理**的
+   * （没有任何生命值概念），为一个"敲坏"把状态塞进去，会让它们从此背着一份
+   * 只有玩家攻击才用的数据。载具被移除后条目自动可回收。
+   */
+  private readonly vehicleHealth = new WeakMap<object, number>();
   /** 设置里的"显示调试信息"（批次 409）：与 `/gamerule reducedDebugInfo` 一起决定面板可见 */
   private showDebugSetting = true;
   /** 蜂巢的蜂蜜等级（J21，批次 407）：按坐标存，键里带维度 */
@@ -4972,6 +4988,40 @@ class App {
   }
 
   /** 上载具（船 / 矿车）：两者共用"停跑玩家物理 + 每帧贴位置"那一套 */
+  /**
+   * 敲一下载具（批次 435）：掉耐久、坏了就移除并按 `doEntityDrops` 掉物品。
+   *
+   * 三个细节都是"不做就会被当成 bug"的：
+   *  - 正骑着它时先**下车**：实体已经没了还骑着，下一帧相机/移动全乱；
+   *  - 创造模式一击必坏（`vehicleHitDamage`），生存按手上工具；
+   *  - `doEntityDrops` 关掉时**只移除、不掉落**——这是那条规则存在的唯一意义。
+   */
+  private damageVehicle(vehicle: Rideable): void {
+    const kind: BreachVehicleKind = vehicle instanceof Boat
+      ? 'boat'
+      : vehicle instanceof HopperMinecart
+        ? 'hopper_minecart'
+        : vehicle instanceof FurnaceMinecart
+          ? 'furnace_minecart'
+          : 'minecart';
+    const current = this.vehicleHealth.get(vehicle) ?? VEHICLE_MAX_HEALTH;
+    const hit = vehicleHitDamage(this.heldTool?.attack ?? 1, this.isCreative);
+    const result = applyVehicleDamage(current, hit);
+    this.hand.swing();
+    this.audio.play('break_wood', { x: vehicle.x, y: vehicle.y, z: vehicle.z });
+    if (!result.broken) {
+      this.vehicleHealth.set(vehicle, result.health);
+      return;
+    }
+
+    // 坏了：先把人放下来，再移除，最后掉落
+    if (this.ridingVehicle === vehicle) this.dismountVehicle();
+    this.vehicleHealth.delete(vehicle);
+    vehicle.dead = true;
+    const drop = vehicleDropFor(kind, this.rules.doEntityDrops);
+    if (drop !== null) this.spawnDrop(drop, 1, vehicle.x, vehicle.y + 0.3, vehicle.z);
+  }
+
   private mountVehicle(vehicle: Rideable): boolean {
     if (this.ridingVehicle || vehicle.dead || this.mountCooldown > 0) return false;
     // 马（批次 253/254）：没驯服、或驯服了还没装鞍，都骑不上去
@@ -6320,7 +6370,18 @@ class App {
     // 批次 271：按住时打的是**这一帧的统一目标**（触屏 = 手指/中心那只）；
     // 轻点那一下仍以点中的那只优先（点哪打哪）
     const mob = tappedMob && !tappedMob.dead ? tappedMob : this.aimMob;
-    if (!mob || mob.dead) return;
+    if (!mob || mob.dead) {
+      // 载具（批次 435）：准星对着船/矿车时左键是**敲它**。
+      // 放在生物之后：生物优先（原版也是先判实体命中，而生物总在载具之上）。
+      const vehicle = this.vehicleUnderCrosshair();
+      if (vehicle && !vehicle.dead) {
+        this.attackCooldown = ATTACK_COOLDOWN;
+        this.suppressBreaking = true;
+        this.breakProgress = 0;
+        this.damageVehicle(vehicle);
+      }
+      return;
+    }
 
     this.attackCooldown = ATTACK_COOLDOWN;
     this.suppressBreaking = true;

@@ -69,6 +69,14 @@ export interface GameRules {
    * 不会自己熄灭——这与原版一致（原版关掉的是"火被随机刻处理"，不是"删掉所有火"）。
    */
   doFireTick: boolean;
+  /**
+   * 实体类的掉落（批次 435）：载具被敲坏时掉不掉东西。
+   *
+   * 与 `doTileDrops`（挖方块）、`doMobLoot`（生物战利品）是三件事：
+   * 原版分这三条，是因为"关掉掉落"常常是为了**不留垃圾**，
+   * 而载具掉落是玩家最常想关的那一类（矿车掉一地会卡在轨道上）。
+   */
+  doEntityDrops: boolean;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -93,6 +101,7 @@ export const DEFAULT_GAME_RULES: GameRules = {
   spawnRadius: 10,
   reducedDebugInfo: false,
   doFireTick: true,
+  doEntityDrops: true,
 };
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */
