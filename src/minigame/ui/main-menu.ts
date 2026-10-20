@@ -522,7 +522,7 @@ export function createMainMenu(
           return null;
         }
         if (contains(settings, x, y)) {
-          setOpen(false);
+          // 由 UiPort.openSettings 统一关闭，先记录 settingsFromMenu
           return 'settings';
         }
         return null;

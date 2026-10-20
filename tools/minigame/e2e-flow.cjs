@@ -54,7 +54,10 @@ async function main() {
   page.on('pageerror', (error) => console.error('[pageerror]', error.message));
 
   await page.goto(URL, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(8000);
+  await page.waitForTimeout(2000);
+  latestState = null;
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(9000);
 
   const frame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
   assert(frame, '找不到小游戏 iframe');
@@ -86,6 +89,16 @@ async function main() {
   try {
     const title = await waitState((state) => state.screen === 'title', '未停在标题页');
     assert(title.menuOpen, '标题页 menuOpen 应为 true', title);
+
+    // 标题 → 设置 → 返回：必须回到标题，不能进入世界
+    await tap(512, DESIGN.height * 0.5 + 78);
+    const titleSettings = await waitState((state) => state.settings, '标题页设置未打开');
+    await tap(774, 58.5);
+    const titleAgain = await waitState(
+      (state) => state.menuOpen && state.screen === 'title' && !state.settings,
+      '标题页设置关闭后没有回到标题',
+    );
+    assert(!titleAgain.inGame, '标题页关闭设置后错误进入了游戏', titleAgain);
 
     await tap(512, DESIGN.height * 0.5 + 26);
     const worlds = await waitState(
@@ -184,7 +197,7 @@ async function main() {
     assert(switched.currentWorldId !== creative.currentWorldId, '切换世界后 currentWorldId 未变化', switched);
 
     console.log('PASS');
-    console.log(JSON.stringify({ title, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched }, null, 2));
+    console.log(JSON.stringify({ title, titleSettings, titleAgain, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched }, null, 2));
   } catch (error) {
     await page.screenshot({ path: '/tmp/e2e-fail.png' }).catch(() => undefined);
     console.error('FAIL:', error.message);
