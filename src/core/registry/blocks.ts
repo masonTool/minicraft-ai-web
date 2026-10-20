@@ -2161,6 +2161,42 @@ const SHULKER_BOX_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/**
+ * 16 色潜影盒（批次 451，B54 里"16 色族"那条缺口）。
+ *
+ * 无色那一个（482）**保持原 id 不动**：存档里存的就是它，重排会让老存档里的
+ * 潜影盒变成别的颜色。16 色接在蜂蜜块（696）之后，顺序与 `DYE_COLORS` 一致。
+ *
+ * 三张贴图每色一套（顶/底/侧）——不共用调色板是因为渲染层没有"方块 tint"这一层，
+ * 而给潜影盒单独加一套染色通道的成本远高于多 48 张 16×16 的图集格子。
+ */
+export const SHULKER_BOX_COLOR_START = 697;
+
+const COLORED_SHULKER_SPECS: readonly BlockSpec[] = DYE_COLORS.map((color, index) => ({
+  id: SHULKER_BOX_COLOR_START + index,
+  name: `minecraft:${color.name}_shulker_box`,
+  tiles: [`shulker_top_${color.name}`, `shulker_bottom_${color.name}`, `shulker_side_${color.name}`],
+}));
+
+/** 全部潜影盒（无色 + 16 色）：容器登记、掉落带内容、活塞推不动都认这一张表 */
+export const SHULKER_BOX_IDS: readonly number[] = [
+  SHULKER_BOX_ID,
+  ...COLORED_SHULKER_SPECS.map((spec) => spec.id),
+];
+
+const SHULKER_BOX_ID_SET = new Set<number>(SHULKER_BOX_IDS);
+
+/** 这一块是不是潜影盒（任意颜色）。容器/掉落/活塞那几处特判都改问它 */
+export function isShulkerBox(id: number): boolean {
+  return SHULKER_BOX_ID_SET.has(id);
+}
+
+/** 某种颜色的潜影盒 id（颜色名与 `DYE_COLORS` 同序）；无色返回 482 */
+export function shulkerBoxId(colorName: string): number | undefined {
+  const index = DYE_COLORS.findIndex((color) => color.name === colorName);
+  return index < 0 ? undefined : SHULKER_BOX_COLOR_START + index;
+}
+
 
 // ---------------------------------------------------------------- 树苗（批次 75，B47）
 
@@ -3306,6 +3342,7 @@ const SPECS: readonly BlockSpec[] = [
   ...CAULDRON_SPECS,
   ...ENDER_CHEST_SPECS,
   ...SHULKER_BOX_SPECS,
+  ...COLORED_SHULKER_SPECS,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
   ...BED_SPECS,
@@ -4421,7 +4458,8 @@ HARDNESS.set(Block.CAULDRON, 2);
 // 末影箱（批次 71）：原版 22.5（黑曜石那一档，挖起来很慢）+ 要**钻石镐**才掉（见 tools）
 HARDNESS.set(Block.ENDER_CHEST, 22.5);
 // 潜影盒（批次 72）：原版 2（要镐，但木质镐就够——见 tools.ts）
-HARDNESS.set(Block.SHULKER_BOX, 2);
+// 16 色同硬度（批次 451）
+for (const id of SHULKER_BOX_IDS) HARDNESS.set(id, 2);
 // 海绵 / 湿海绵（批次 449）：原版 0.6，徒手就能拆（锄更快，但不强制）
 HARDNESS.set(Block.SPONGE, 0.6);
 HARDNESS.set(Block.WET_SPONGE, 0.6);

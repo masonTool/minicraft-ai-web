@@ -5727,6 +5727,29 @@ PAINTERS.sponge = spongePainter([196, 190, 92], 0.68);
 PAINTERS.wet_sponge = spongePainter([116, 146, 132], 0.64);
 
 /**
+ * 16 色潜影盒（批次 451）：与无色那套**同一个画法**，只把基色换成染料色。
+ *
+ * 基色直接取 `DYE_COLORS`（与羊毛/床/染色玻璃同一张表），
+ * 所以"白色潜影盒"与"白色羊毛"是同一个白——玩家一眼能对上族。
+ */
+for (const color of DYE_COLORS) {
+  const base = color.rgb;
+  PAINTERS[`shulker_top_${color.name}`] = (x, y, rng) => {
+    const r = Math.hypot(x - 7.5, y - 7.5);
+    if (r < 4.6) return shulkerShell(x, y, rng, base, 1.12);
+    const ridge = Math.abs(x - y) <= 1 || Math.abs(x + y - 15) <= 1;
+    return shulkerShell(x, y, rng, base, ridge ? 0.72 : 0.94);
+  };
+  PAINTERS[`shulker_bottom_${color.name}`] = (x, y, rng) => shulkerShell(x, y, rng, base, 0.9);
+  PAINTERS[`shulker_side_${color.name}`] = (x, y, rng) => {
+    if (y === 6 || y === 9) return shulkerShell(x, y, rng, base, 0.62);
+    const half = y < 6 ? 1.06 : 0.96;
+    const col = x % 8 === 0 ? 0.9 : 1;
+    return shulkerShell(x, y, rng, base, half * col);
+  };
+}
+
+/**
  * 蜂蜜块（批次 450）：琥珀色底 + 4 像素一格的蜂巢网格。
  *
  * 原版顶面是六边形蜂巢、侧面是竖着的蜂蜜流痕；六边形在这个分辨率下画不出细节，

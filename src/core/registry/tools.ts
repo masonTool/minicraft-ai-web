@@ -34,6 +34,7 @@ import {
   copperId,
   slabId,
   stairsId,
+  SHULKER_BOX_IDS,
   stoneVariantId,
   terracottaId,
   woolId,
@@ -438,7 +439,8 @@ requirePickaxe(
 );
 
 // 漏斗（批次 58）：原版与铁块同一档，**木质镐就能挖**（徒手挖得动但一无所获）
-requirePickaxe(0, [Block.HOPPER, Block.SHULKER_BOX]);
+// 潜影盒 16 色同档（批次 451）：与无色那一个完全一样
+requirePickaxe(0, [Block.HOPPER, ...SHULKER_BOX_IDS]);
 
 // ---- 石镐（tier 1）：铁/铜/青金石矿与粗金属块
 requirePickaxe(1, [

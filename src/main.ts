@@ -372,6 +372,8 @@ import { Block, BLOCKS, blockDef, woolId,
   stripResult,
   // 蜂蜜块（批次 450）：摔落减免的判据
   isHoneyBlock,
+  // 潜影盒（批次 451）：无色 + 16 色，特判一律问这个（别再逐 id 比）
+  isShulkerBox,
 } from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
@@ -6742,8 +6744,8 @@ class App {
 
     // 潜影盒（批次 72）：内容**不**原地倒出来，而是跟着掉落的物品走（下一步用得上）。
     // 顺序要紧：先把内容取出来、再把容器从表里删掉，最后掉落时挂到物品上。
-    const shulkerContents = brokenId === Block.SHULKER_BOX ? shulkerContentsOf(this.world.containers.getShulkerBox(this.dimension, this.hit.x, this.hit.y, this.hit.z)) : undefined;
-    if (brokenId === Block.SHULKER_BOX) this.world.containers.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
+    const shulkerContents = isShulkerBox(brokenId) ? shulkerContentsOf(this.world.containers.getShulkerBox(this.dimension, this.hit.x, this.hit.y, this.hit.z)) : undefined;
+    if (isShulkerBox(brokenId)) this.world.containers.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
     this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
     // 批次 185（用户："水旁边的方块挖掉之后水不会流"）：
@@ -6783,7 +6785,7 @@ class App {
       });
       if (drop) {
         // 潜影盒（批次 72）：掉出来的**那一份物品带着内容物**——捡起来再放下，东西还在
-        const extras = drop.id === Block.SHULKER_BOX && shulkerContents ? { contents: shulkerContents } : undefined;
+        const extras = isShulkerBox(drop.id) && shulkerContents ? { contents: shulkerContents } : undefined;
         this.spawnDrop(drop.id, drop.count, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5, extras);
         // 花盆（批次 52）：拆盆时**里面那株植物也掉出来**（原版如此）——
         // 不这么做，玩家会看到"拆一个盆，辛苦种的花没了"，而方块本身看不出问题
@@ -10060,7 +10062,7 @@ class App {
       return true;
     }
     // 潜影盒（批次 72）：与箱子同一条"头顶压着就打不开"的规矩，27 格
-    if (hitBlock === Block.SHULKER_BOX) {
+    if (isShulkerBox(hitBlock)) {
       if (this.isCoveredAbove(x, y, z)) {
         this.chat.push('潜影盒上面压着方块，打不开（挪开它）', 'system');
         return true;
@@ -10507,7 +10509,7 @@ class App {
     }
     if (blockId === Block.DISPENSER) this.world.containers.getOrCreateDispenser(target, x, y, z);
     // 潜影盒（批次 72）：放下时也要建（物品里可能带着内容，见放置路径）
-    if (blockId === Block.SHULKER_BOX) this.world.containers.getOrCreateShulkerBox(target, x, y, z);
+    if (isShulkerBox(blockId)) this.world.containers.getOrCreateShulkerBox(target, x, y, z);
   }
 
   /**
@@ -10646,7 +10648,7 @@ class App {
     if (block === Block.DROPPER) return store.getOrCreateDropper(dimension, x, y, z);
     if (block === Block.DISPENSER) return store.getOrCreateDispenser(dimension, x, y, z);
     // 潜影盒：漏斗**可以**往里塞（原版也是如此，与末影箱相反）
-    if (block === Block.SHULKER_BOX) return store.getOrCreateShulkerBox(dimension, x, y, z);
+    if (isShulkerBox(block)) return store.getOrCreateShulkerBox(dimension, x, y, z);
     if (block === Block.BREWING_STAND) return store.getOrCreateBrewingStand(dimension, x, y, z);
     if (block === Block.ANVIL) return store.getOrCreateAnvil(dimension, x, y, z);
     if (block === Block.SMITHING_TABLE) return store.getOrCreateSmithingTable(dimension, x, y, z);
@@ -11577,7 +11579,7 @@ class App {
       // 潜影盒（批次 72）：物品里带着的内容**倒回方块**（原版如此）。
       // 空盒子也照样建一个容器——放着不管的话，第一次打开界面才建，
       // 而"被漏斗塞东西"这条路径会先撞上"这一格没有容器"
-      if (blockId === Block.SHULKER_BOX) {
+      if (isShulkerBox(blockId)) {
         const box = this.world.containers.getOrCreateShulkerBox(this.dimension, x, y, z);
         fillShulkerBox(box, held?.contents);
       }

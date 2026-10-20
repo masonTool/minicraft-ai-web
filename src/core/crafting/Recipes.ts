@@ -29,6 +29,7 @@ import {
   signId,
   terracottaId,
   woolId,
+  SHULKER_BOX_COLOR_START,
 } from '../registry/blocks.ts';
 import { ARMOR_SPECS } from '../registry/armor.ts';
 import { DYE_COLORS, WOOD_TYPES } from '../registry/colors.ts';
@@ -217,6 +218,19 @@ const WOOL_RECIPES: readonly Recipe[] = DYE_COLORS.map((_color, index) => ({
   kind: 'shapeless' as const,
   result: { id: woolId(index), count: 1 },
   ingredients: [woolId(0), dyeItemId(index)],
+}));
+
+/**
+ * 16 色潜影盒（批次 451）：无色潜影盒 + 染料 → 对应颜色（原版是无序配方）。
+ *
+ * ⚠️ 原版**任意颜色的盒子**都能再染成别的颜色（盒内内容保留）；配方系统只能匹配
+ * 具体物品 id，所以这里只写"无色 + 染料"。要支持"红盒 + 蓝染料 → 蓝盒"，
+ * 得先给配方引擎加"按族匹配"的能力——那是配方引擎的事，不是这一批。
+ */
+const SHULKER_DYE_RECIPES: readonly Recipe[] = DYE_COLORS.map((_color, index) => ({
+  kind: 'shapeless' as const,
+  result: { id: SHULKER_BOX_COLOR_START + index, count: 1 },
+  ingredients: [Block.SHULKER_BOX, dyeItemId(index)],
 }));
 
 /**
@@ -2013,6 +2027,7 @@ export const RECIPES: readonly Recipe[] = [
   ...FURNACE_VARIANT_RECIPES,
   ...WOOL_RECIPES,
   ...CARPET_RECIPES,
+  ...SHULKER_DYE_RECIPES,
   ...BED_RECIPES,
   ...DYE_COLOR_RECIPES,
   ...SHAPED_BLOCK_RECIPES,

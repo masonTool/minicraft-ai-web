@@ -25,6 +25,7 @@ import {
   DEAD_CORAL_FAN_ID_START,
   DEAD_CORAL_ID_START,
   NETHER_WART_RIPE_STAGE,
+  SHULKER_BOX_IDS,
   SIGN_IDS,
   STONE_VARIANT_IDS,
   WHEAT_STAGES,
@@ -1022,7 +1023,8 @@ const FUNCTIONAL = new Set<number>([
   // 末影箱（批次 71）：右键打开的 27 格容器（内容跟着玩家走，走到哪都是同一箱）
   Block.ENDER_CHEST,
   // 潜影盒（批次 72）：27 格容器，挖下来时**内容跟着物品一起走**
-  Block.SHULKER_BOX,
+  // 16 色同档（批次 451）：无色 + 16 色一起登记
+  ...SHULKER_BOX_IDS,
   Block.CHEST,
   Block.GLOWSTONE,
   // ---- 红石元件（都是"有信号才做事"的功能方块）

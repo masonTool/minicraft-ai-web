@@ -15,6 +15,39 @@ export const TILE_SIZE = 16;
  */
 export const ATLAS_COLUMNS = 16;
 
+/**
+ * 16 色潜影盒的三张贴图名（批次 451）：顶 / 底 / 侧。
+ *
+ * 颜色名与 `core/registry/colors.ts` 的 `DYE_COLORS` 同序。这里**不能**直接
+ * import 那张表：atlasLayout 是给网格化 Worker 用的最小模块，引注册表会把
+ * 整个方块表拖进 Worker。两份一致性由断言守着（遍历 `SHULKER_BOX_IDS`
+ * 检查每张 `tiles` 都在 `TILE_ORDER` 里）。
+ */
+const SHULKER_COLOR_NAMES = [
+  'white',
+  'orange',
+  'magenta',
+  'light_blue',
+  'yellow',
+  'lime',
+  'pink',
+  'gray',
+  'light_gray',
+  'cyan',
+  'purple',
+  'blue',
+  'brown',
+  'green',
+  'red',
+  'black',
+] as const;
+
+const SHULKER_COLOR_TILES = SHULKER_COLOR_NAMES.flatMap((color) => [
+  `shulker_top_${color}`,
+  `shulker_bottom_${color}`,
+  `shulker_side_${color}`,
+]);
+
 /** 图集中的贴图顺序（索引即图集列号，必须稳定） */
 export const TILE_ORDER = [
   'stone',
@@ -795,6 +828,8 @@ export const TILE_ORDER = [
   'shulker_top',
   'shulker_bottom',
   'shulker_side',
+  // 16 色潜影盒（批次 451）：每色三张，共 48 张
+  ...SHULKER_COLOR_TILES,
   // 海绵 / 湿海绵（批次 449）：六个面同一张——干的是土黄多孔，湿的是深一档的青褐
   'sponge',
   'wet_sponge',

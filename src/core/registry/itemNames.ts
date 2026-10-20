@@ -123,6 +123,8 @@ for (const [color, cn] of Object.entries(COLORS_CN)) {
   put(`${color}_concrete_powder`, `${cn}混凝土粉末`);
   put(`${color}_stained_glass`, `${cn}染色玻璃`);
   put(`${color}_stained_glass_pane`, `${cn}染色玻璃板`);
+  // 潜影盒（批次 451）：16 色，与羊毛同一条配色表驱动
+  put(`${color}_shulker_box`, `${cn}潜影盒`);
 }
 put('terracotta', '陶瓦');
 put('glass', '玻璃');

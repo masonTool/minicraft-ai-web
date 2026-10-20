@@ -27,7 +27,7 @@ import { Hopper } from '../container/Hopper.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
 import { Campfire } from '../container/Campfire.ts';
-import { Block } from '../registry/blocks.ts';
+import { Block, SHULKER_BOX_IDS } from '../registry/blocks.ts';
 import type { FurnaceStation } from '../crafting/Smelting.ts';
 import type { DimensionId } from '../gen/Dimension.ts';
 
@@ -90,7 +90,8 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   // 列进来对齐原版（带方块实体的方块推不动），也免得以后被当成疏漏
   Block.ENDER_CHEST,
   // 潜影盒（批次 72）：内容在方块上（被挖走时才进物品），所以活塞一样推不动
-  Block.SHULKER_BOX,
+  // 16 色同档（批次 451）
+  ...SHULKER_BOX_IDS,
   Block.BARREL,
   Block.BREWING_STAND,
   Block.ANVIL,
