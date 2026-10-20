@@ -257,32 +257,113 @@ export class ChunkRenderer {
     return chunks.length > 0 ? { chunks, transfer } : null;
   }
 
+  /**
+   * 把一个区块内各 section 的几何合并成一份。
+   *
+   * 16 层各自成 mesh 时，37 个区块约 300+ draw calls；合并后每区块最多
+   * 实心/透明各 1 个，提交开销大幅下降。position 的 y 直接加上 section 的
+   * baseY，合并后 mesh.position.y = 0。
+   */
+  private mergeSectionGeometries(
+    parts: Array<{ geometry: THREE.BufferGeometry; baseY: number }>,
+  ): THREE.BufferGeometry | null {
+    const valid = parts.filter((part) => part.geometry.index);
+    if (valid.length === 0) return null;
+
+    let vertexCount = 0;
+    let indexCount = 0;
+    for (const part of valid) {
+      vertexCount += part.geometry.getAttribute('position').count;
+      indexCount += part.geometry.index!.count;
+    }
+
+    const position = new Float32Array(vertexCount * 3);
+    const uv = new Float32Array(vertexCount * 2);
+    const tile = new Float32Array(vertexCount * 2);
+    const light = new Float32Array(vertexCount * 2);
+    const shade = new Float32Array(vertexCount);
+    const index = new Uint32Array(indexCount);
+
+    let vertexOffset = 0;
+    let indexOffset = 0;
+    for (const part of valid) {
+      const geometry = part.geometry;
+      const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+      const uvAttr = geometry.getAttribute('uv') as THREE.BufferAttribute;
+      const tileAttr = geometry.getAttribute('aTile') as THREE.BufferAttribute;
+      const lightAttr = geometry.getAttribute('aLight') as THREE.BufferAttribute;
+      const shadeAttr = geometry.getAttribute('aShade') as THREE.BufferAttribute;
+      const sourceIndex = geometry.index!;
+
+      for (let i = 0; i < pos.count; i++) {
+        const target = (vertexOffset + i) * 3;
+        position[target] = pos.getX(i);
+        position[target + 1] = pos.getY(i) + part.baseY;
+        position[target + 2] = pos.getZ(i);
+        const targetUv = (vertexOffset + i) * 2;
+        uv[targetUv] = uvAttr.getX(i);
+        uv[targetUv + 1] = uvAttr.getY(i);
+        const targetTile = (vertexOffset + i) * 2;
+        tile[targetTile] = tileAttr.getX(i);
+        tile[targetTile + 1] = tileAttr.getY(i);
+        light[targetTile] = lightAttr.getX(i);
+        light[targetTile + 1] = lightAttr.getY(i);
+        shade[vertexOffset + i] = shadeAttr.getX(i);
+      }
+      for (let i = 0; i < sourceIndex.count; i++) {
+        index[indexOffset + i] = sourceIndex.getX(i) + vertexOffset;
+      }
+      vertexOffset += pos.count;
+      indexOffset += sourceIndex.count;
+      geometry.dispose();
+    }
+
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    merged.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    merged.setAttribute('aTile', new THREE.BufferAttribute(tile, 2));
+    merged.setAttribute('aLight', new THREE.BufferAttribute(light, 2));
+    merged.setAttribute('aShade', new THREE.BufferAttribute(shade, 1));
+    merged.setIndex(new THREE.BufferAttribute(index, 1));
+    return merged;
+  }
+
   /** Worker 结果 → 场景网格 */
   private applyMeshes(key: string, response: MeshResponse): void {
     const offsetX = response.cx * 16;
     const offsetZ = response.cz * 16;
-    const meshes: THREE.Mesh[] = [];
+    const solidParts: Array<{ geometry: THREE.BufferGeometry; baseY: number }> = [];
+    const translucentParts: Array<{ geometry: THREE.BufferGeometry; baseY: number }> = [];
     let triangles = 0;
 
     for (const section of response.sections) {
       const baseY = WORLD_MIN_Y + section.section * 16;
-
       if (section.solid) {
         const geometry = createGeometry(section.solid);
-        const mesh = new THREE.Mesh(geometry, this.solidMaterial);
-        mesh.position.set(offsetX, baseY, offsetZ);
-        mesh.frustumCulled = true;
-        meshes.push(mesh);
         triangles += geometry.index!.count / 3;
+        solidParts.push({ geometry, baseY });
       }
       if (section.translucent) {
         const geometry = createGeometry(section.translucent);
-        const mesh = new THREE.Mesh(geometry, this.translucentMaterial);
-        mesh.position.set(offsetX, baseY, offsetZ);
-        mesh.frustumCulled = true;
-        meshes.push(mesh);
         triangles += geometry.index!.count / 3;
+        translucentParts.push({ geometry, baseY });
       }
+    }
+
+    const meshes: THREE.Mesh[] = [];
+    const solidGeometry = this.mergeSectionGeometries(solidParts);
+    if (solidGeometry) {
+      const mesh = new THREE.Mesh(solidGeometry, this.solidMaterial);
+      mesh.position.set(offsetX, 0, offsetZ);
+      mesh.frustumCulled = true;
+      meshes.push(mesh);
+    }
+    const translucentGeometry = this.mergeSectionGeometries(translucentParts);
+    if (translucentGeometry) {
+      const mesh = new THREE.Mesh(translucentGeometry, this.translucentMaterial);
+      mesh.position.set(offsetX, 0, offsetZ);
+      mesh.frustumCulled = true;
+      meshes.push(mesh);
     }
 
     this.replaceMeshes(key, response.cx, response.cz, meshes, triangles);
@@ -293,28 +374,38 @@ export class ChunkRenderer {
     const key = chunkKey(cx, cz);
     const offsetX = cx * 16;
     const offsetZ = cz * 16;
-    const meshes: THREE.Mesh[] = [];
+    const solidParts: Array<{ geometry: THREE.BufferGeometry; baseY: number }> = [];
+    const translucentParts: Array<{ geometry: THREE.BufferGeometry; baseY: number }> = [];
     let triangles = 0;
 
     for (let section = 0; section < SECTION_COUNT; section++) {
       if (chunk.sectionIsEmpty(section)) continue;
       const { solid, translucent } = meshSection(chunk, section, this.atlas, this.world);
       const baseY = WORLD_MIN_Y + section * 16;
-
       if (solid) {
-        const mesh = new THREE.Mesh(solid, this.solidMaterial);
-        mesh.position.set(offsetX, baseY, offsetZ);
-        mesh.frustumCulled = true;
-        meshes.push(mesh);
         triangles += solid.index!.count / 3;
+        solidParts.push({ geometry: solid, baseY });
       }
       if (translucent) {
-        const mesh = new THREE.Mesh(translucent, this.translucentMaterial);
-        mesh.position.set(offsetX, baseY, offsetZ);
-        mesh.frustumCulled = true;
-        meshes.push(mesh);
         triangles += translucent.index!.count / 3;
+        translucentParts.push({ geometry: translucent, baseY });
       }
+    }
+
+    const meshes: THREE.Mesh[] = [];
+    const solidGeometry = this.mergeSectionGeometries(solidParts);
+    if (solidGeometry) {
+      const mesh = new THREE.Mesh(solidGeometry, this.solidMaterial);
+      mesh.position.set(offsetX, 0, offsetZ);
+      mesh.frustumCulled = true;
+      meshes.push(mesh);
+    }
+    const translucentGeometry = this.mergeSectionGeometries(translucentParts);
+    if (translucentGeometry) {
+      const mesh = new THREE.Mesh(translucentGeometry, this.translucentMaterial);
+      mesh.position.set(offsetX, 0, offsetZ);
+      mesh.frustumCulled = true;
+      meshes.push(mesh);
     }
 
     this.replaceMeshes(key, cx, cz, meshes, triangles);
