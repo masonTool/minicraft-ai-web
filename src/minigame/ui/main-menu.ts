@@ -7,6 +7,7 @@ export type MainMenuAction =
   | 'new'
   | 'delete'
   | { type: 'world'; id: string }
+  | { type: 'deleteWorld'; id: string }
   | {
       type: 'create';
       name: string;
@@ -89,7 +90,6 @@ export function createMainMenu(
   const settings: Rect = { x: play.x, y: play.y + 68, w: play.w, h: 52 };
   const back: Rect = { x: panelX + 28, y: panelY + 18, w: 104, h: 36 };
   const newWorld: Rect = { x: panelX + 70, y: panelY + 74, w: panelWidth - 140, h: 40 };
-  const deleteSave: Rect = { x: panelX + 70, y: panelY + 382, w: panelWidth - 140, h: 36 };
   const prevPage: Rect = { x: panelX + panelWidth - 100, y: panelY + 20, w: 30, h: 30 };
   const nextPage: Rect = { x: panelX + panelWidth - 62, y: panelY + 20, w: 30, h: 30 };
 
@@ -102,6 +102,10 @@ export function createMainMenu(
   const enterButton = (index: number): Rect => {
     const row = worldRow(index);
     return { x: row.x + row.w - 104, y: row.y + 14, w: 88, h: 36 };
+  };
+  const cardDeleteButton = (index: number): Rect => {
+    const enter = enterButton(index);
+    return { x: enter.x - 76, y: enter.y, w: 68, h: 36 };
   };
 
   let open = true;
@@ -287,9 +291,9 @@ export function createMainMenu(
         'left',
         row.w - 140,
       );
+      drawButton(context, cardDeleteButton(index), '删除', 'normal', 14);
       drawButton(context, enterButton(index), '进入', 'normal', 15);
     });
-    drawButton(context, deleteSave, '删除当前世界', 'normal', 15);
   };
 
   const drawField = (row: number, label: string, value: string, placeholder: boolean): void => {
@@ -468,7 +472,6 @@ export function createMainMenu(
         redraw();
         return null;
       }
-      if (contains(deleteSave, x, y)) return 'delete';
       if (pageCount() > 1) {
         if (contains(prevPage, x, y) && page > 0) {
           page -= 1;
@@ -485,6 +488,9 @@ export function createMainMenu(
       const visible = info.worlds.slice(start, start + PAGE_SIZE);
       for (let i = 0; i < visible.length; i++) {
         const world = visible[i]!;
+        if (contains(cardDeleteButton(i), x, y)) {
+          return { type: 'deleteWorld', id: world.id };
+        }
         if (contains(worldRow(i), x, y) || contains(enterButton(i), x, y)) {
           if (world.id !== info.currentId) return { type: 'world', id: world.id };
           setOpen(false);

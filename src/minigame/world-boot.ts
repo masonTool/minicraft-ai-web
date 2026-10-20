@@ -981,6 +981,32 @@ async function boot(): Promise<void> {
     }
   };
 
+  const removeWorld = async (id: string): Promise<void> => {
+    if (id === currentWorldId) {
+      await deleteSave();
+      return;
+    }
+    if (
+      !(await confirmModal(
+        '删除世界？',
+        '该世界的存档会一起删掉，无法恢复。当前世界不受影响。',
+      ))
+    ) {
+      return;
+    }
+    try {
+      await FileSaveGame.deleteWorld(id, platform.files);
+      worlds = worlds.filter((world) => world.id !== id);
+      platform.storage.set('wx.worlds', JSON.stringify(worlds));
+      refreshWorldInfo(0);
+      ui.openMainMenu('worlds');
+      ui.showToast('世界已删除');
+    } catch (error) {
+      ui.showToast('删除失败');
+      console.warn('[WX-020] 删除世界失败', error);
+    }
+  };
+
   const createWorld = async (draft: {
     name: string;
     seed: number | null;
@@ -1214,6 +1240,7 @@ async function boot(): Promise<void> {
       if (action === 'settings') ui.openSettings();
       if (action === 'delete') void deleteSave();
       if (typeof action === 'object' && action?.type === 'create') void createWorld(action);
+      if (typeof action === 'object' && action?.type === 'deleteWorld') void removeWorld(action.id);
       if (typeof action === 'object' && action?.type === 'world') void switchWorld(action.id);
       return;
     }
