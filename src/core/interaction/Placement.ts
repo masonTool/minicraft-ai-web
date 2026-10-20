@@ -21,7 +21,13 @@ import { Block, JUNGLE_LOG_ID, blockDef, cropOf, isRailId, stemKindOf } from '..
 // 铁轨形状（批次 478）：放下去按四邻自动接成直轨或弯道
 import { pickRailShape, pickRailSlope, withRailShape } from '../world/RailShape.ts';
 import { withBannerTop } from '../registry/blockState.ts';
-import { pickPaintingVariant } from '../registry/paintings.ts';
+import {
+  MULTI_PAINTINGS_LARGE_FIRST,
+  MULTI_PAINTING_VARIANT,
+  pickPaintingVariant,
+  type MultiPainting,
+} from '../registry/paintings.ts';
+import { paintingCells, pickPaintingThatFits } from '../world/Paintings.ts';
 import {
   FACING_OFFSET,
   MAX_SNOW_LAYERS,
@@ -471,7 +477,27 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       if (facing === null) return null;
       if (!blockDef(input.blockAt(-nx, 0, -nz)).solid) return null;
       if (def.shape === 'painting') {
-        // 挂上去是哪一幅：单格画在 7 幅里随机挑一幅（多格拼贴还没做，见 `paintings.ts`）
+        // 多格画（批次 495）：**从大到小**试一遍，放得下就挂大的。
+        // "右"是面向墙时的右手边：facing 顺时针转 90°（0 北 → +x、1 东 → +z…）
+        const RIGHT: readonly (readonly [number, number])[] = [
+          [1, 0],
+          [0, 1],
+          [-1, 0],
+          [0, -1],
+        ];
+        const [rightX, rightZ] = RIGHT[facing] ?? [1, 0];
+        const fits = (painting: MultiPainting): boolean =>
+          paintingCells({ x: 0, y: 0, z: 0 }, painting, rightX!, rightZ!).every(
+            (cell) =>
+              input.blockAt(cell.x, cell.y, cell.z) === Block.AIR &&
+              blockDef(input.blockAt(cell.x - nx, cell.y, cell.z - nz)).solid,
+          );
+        if (pickPaintingThatFits(MULTI_PAINTINGS_LARGE_FIRST, fits)) {
+          // 具体是哪一幅由 main 再算一次（这里只给哨兵档位）：`planPlacement`
+          // 返回的 state 只有一个字节，塞不下一幅画的名字
+          return { state: withPaintingVariant(withFacing(0, facing), MULTI_PAINTING_VARIANT) };
+        }
+        // 放不下任何多格画 → 退回单格画（在 7 幅里随机挑一幅）
         const variant = pickPaintingVariant(input.random ?? Math.random);
         return { state: withPaintingVariant(withFacing(0, facing), variant) };
       }

@@ -353,6 +353,9 @@ import {
   withTrapdoorOpen,
   // 旗帜（批次 484）：两格高，破坏时要分辨上下半
   isBannerTop,
+  // 多格画（批次 495）：哨兵档位与朝向
+  facingOf,
+  paintingVariantOf,
 } from './core/registry/blockState.ts';
 // 信标（K5，批次 117）：等级/范围/效果是纯逻辑（`world/Beacon.ts`），
 // 界面与光柱各自一份（与告示牌的"文字表 / 编辑框 / 渲染器"三件套同构）
@@ -619,6 +622,21 @@ import {
 } from './core/world/ItemFrame.ts';
 import { ItemFrameRenderer, type FrameRenderItem } from './render/ItemFrameRenderer.ts';
 import { ArmorStandRenderer, type ArmorStandRenderItem } from './render/ArmorStandRenderer.ts';
+import { PaintingRenderer, type PaintingRenderItem } from './render/PaintingRenderer.ts';
+import {
+  PaintingStore,
+  paintingCellKey,
+  paintingCells,
+  pickPaintingThatFits,
+  restorePaintings,
+  serializePaintings,
+} from './core/world/Paintings.ts';
+import {
+  MULTI_PAINTINGS_LARGE_FIRST,
+  MULTI_PAINTING_VARIANT,
+  multiPaintingByName,
+  paintingSubTile,
+} from './core/registry/paintings.ts';
 // 成就 / 进度（M7，批次 87）：数据与判定在 core/progress/*（纯逻辑），
 // 这里只做"在事件处报一声 + 弹提示 + 面板入口 + 随存档走"四件事
 import { AdvancementTracker } from './core/progress/AdvancementTracker.ts';
@@ -1373,6 +1391,8 @@ class App {
   private readonly itemFrameRenderer: ItemFrameRenderer;
   /** 盔甲架上穿着的装备（批次 493）：与展示框同一条"表 + 渲染器"的路 */
   private readonly armorStandRenderer: ArmorStandRenderer;
+  /** 多格拼贴的画面（批次 495）：每格一个平面、贴自己的子图 */
+  private readonly paintingRenderer: PaintingRenderer;
   /**
    * 成就 / 进度（M7，批次 87）。
    *
@@ -1896,6 +1916,9 @@ class App {
     // 盔甲架上穿着的装备（批次 493）：架子本体走区块网格，这里只画装备
     this.armorStandRenderer = new ArmorStandRenderer();
     this.scene.add(this.armorStandRenderer.group);
+    // 多格画（批次 495）：方块是透明的哨兵格，画面全部由这里画
+    this.paintingRenderer = new PaintingRenderer(atlas);
+    this.scene.add(this.paintingRenderer.group);
     this.signEditor.onSave = (lines) => this.applySignText(lines);
     this.signEditor.onClose = () => {
       this.editingSign = null;
@@ -2972,6 +2995,12 @@ class App {
     const restoredStands = restoreArmorStands(this.armorStands, armorStands);
     if (restoredStands > 0) console.info(`[save] 读回 ${restoredStands} 个盔甲架`);
 
+    // 多格画（批次 495）：只存锚点，读回时按尺寸重建每一格
+    const paintings = await this.save.loadPaintings();
+    this.paintings.clear();
+    const restoredPaintings = restorePaintings(this.paintings, paintings);
+    if (restoredPaintings > 0) console.info(`[save] 读回 ${restoredPaintings} 幅多格画`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -3141,6 +3170,8 @@ class App {
       await this.save.saveCommandBlocks(this.commandBlocks.serialize());
       // 盔甲架（批次 492）：同一条
       await this.save.saveArmorStands(serializeArmorStands(this.armorStands));
+      // 多格画（批次 495）：只存锚点
+      await this.save.savePaintings(serializePaintings(this.paintings));
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -6912,6 +6943,8 @@ class App {
     if (brokenId === Block.COMMAND_BLOCK) this.commandBlocks.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
     // 唱片机（批次 489）：方块没了，里面那张唱片要掉出来（否则唱片会凭空消失）
     if (brokenId === Block.JUKEBOX) this.dropJukeboxDisc(this.hit.x, this.hit.y, this.hit.z);
+    // 多格画（批次 495）：拆任意一格带走整幅（1×1 的画查不到表，交给常规掉落）
+    if (brokenId === Block.PAINTING) this.breakMultiPainting(this.hit.x, this.hit.y, this.hit.z);
     // 盔甲架（批次 492）：架子拆了，穿在身上的装备也要还回来
     if (brokenId === Block.ARMOR_STAND) {
       if (this.isCreative) this.armorStands.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
@@ -7727,6 +7760,35 @@ class App {
     });
     for (const entry of stale) this.dropArmorStandContents(entry.x, entry.y, entry.z);
     this.armorStandRenderer.update(items);
+  }
+
+  /**
+   * 多格画（批次 495）：把表里的每一格变成"一张贴着自己子图的平面"。
+   *
+   * 与展示框/盔甲架同一条对账路；不同的是**不还东西**——画被拆时
+   * `breakMultiPainting` 已经整体处理过了，这里只负责"方块没了就不画"。
+   */
+  private syncPaintings(): void {
+    const items: PaintingRenderItem[] = [];
+    this.paintings.forEach((cell) => {
+      if (cell.dimension !== this.dimension) return;
+      if (!this.world.getChunk(toChunkCoord(cell.x), toChunkCoord(cell.z))) return;
+      if (this.world.getBlock(cell.x, cell.y, cell.z) !== Block.PAINTING) return;
+      const painting = multiPaintingByName(cell.name);
+      items.push({
+        key: paintingCellKey(cell.dimension, cell.x, cell.y, cell.z),
+        x: cell.x,
+        y: cell.y,
+        z: cell.z,
+        tile: painting ? paintingSubTile(painting, cell.col, cell.row) : 'painting_multi',
+        light: Math.max(
+          this.world.getSkyLight(cell.x, cell.y, cell.z),
+          this.world.getBlockLight(cell.x, cell.y, cell.z),
+        ),
+        state: this.world.getBlockState(cell.x, cell.y, cell.z),
+      });
+    });
+    this.paintingRenderer.update(items);
   }
 
   // ---------------------------------------------------------------- 成就 / 进度（M7，批次 87）
@@ -10720,6 +10782,59 @@ class App {
   }
 
   /**
+   * 挂上一幅多格画（批次 495）。
+   *
+   * 放置判定已经在 `planPlacement` 里做过一遍（"从大到小、放得下就挂大的"），
+   * 但那里只能返回一个字节的状态位，所以这里**重新算一次**：
+   * 真正的尺寸/名字要写进表、其余格子的方块也要一个个放下去。
+   * 重复一次判定的代价可以忽略（一次放置只发生一次）。
+   */
+  private placeMultiPainting(x: number, y: number, z: number, state: number, blockId: number): void {
+    const facing = facingOf(state);
+    const RIGHT: readonly (readonly [number, number])[] = [
+      [1, 0],
+      [0, 1],
+      [-1, 0],
+      [0, -1],
+    ];
+    const [rightX, rightZ] = RIGHT[facing] ?? [1, 0];
+    const fits = (painting: { width: number; height: number }): boolean =>
+      paintingCells({ x, y, z }, painting as never, rightX!, rightZ!).every((cell) => {
+        const id = this.world.getBlock(cell.x, cell.y, cell.z);
+        return (id === Block.AIR || id === blockId) && blockDef(this.world.getBlock(cell.x, cell.y - 1, cell.z)).solid;
+      });
+    const painting = pickPaintingThatFits(MULTI_PAINTINGS_LARGE_FIRST, fits);
+    if (!painting) return;
+    const cells = this.paintings.place(this.dimension, { x, y, z }, painting, rightX!, rightZ!);
+    for (const cell of cells) {
+      if (cell.x === x && cell.y === y && cell.z === z) continue;
+      this.world.setBlockAndUpdate(cell.x, cell.y, cell.z, blockId, state);
+      this.net.sendBlock(cell.x, cell.y, cell.z, blockId, state, this.dimension);
+    }
+    this.syncPaintings();
+  }
+
+  /**
+   * 拆掉一幅画（批次 495）：任意一格被敲掉，整幅都跟着掉。
+   *
+   * 返回**是否处理过**——否则 `brokenId` 是 1×1 的画时这里什么都不做，
+   * 让常规的"方块掉自己"接管。
+   */
+  private breakMultiPainting(x: number, y: number, z: number): boolean {
+    const removed = this.paintings.removeAt(this.dimension, x, y, z);
+    if (!removed) return false;
+    for (const cell of removed.cells) {
+      if (cell.x === x && cell.y === y && cell.z === z) continue;
+      this.world.setBlockAndUpdate(cell.x, cell.y, cell.z, Block.AIR);
+      this.net.sendBlock(cell.x, cell.y, cell.z, Block.AIR, 0, this.dimension);
+      this.particles.spawnBlockBreak(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5, this.blockParticleColor(Block.PAINTING));
+    }
+    if (!this.isCreative) this.spawnDrop(Block.PAINTING, 1, x + 0.5, y + 0.5, z + 0.5);
+    this.syncPaintings();
+    return true;
+  }
+
+  /**
    * 盔甲架（批次 492）：拿装备右键**穿上**；空手右键**取下一件**。
    *
    * 槽位由 `armorSlotForItem` 从 `armor.ts` 的注册表反查（与"能不能穿"同一条判据），
@@ -11374,6 +11489,8 @@ class App {
   private readonly jukeboxDiscs = new Map<string, number>();
   /** 盔甲架上的装备（批次 492）：按坐标存，随存档走 */
   private readonly armorStands = new ArmorStandStore();
+  /** 多格拼贴的画（批次 495）：每格一条，拆任意一格带走整幅 */
+  private readonly paintings = new PaintingStore();
   /** 旧版"击杀 5 只算一波"的计数（只在没有真袭击时兜底进度） */
   private raidKills = 0;
 
@@ -12591,6 +12708,11 @@ class App {
     // 只会留一个空气洞（水不会回来），"在海底修一条路"就没法做了
     const placeState = waterloggedPlacementState(blockId, plan.state, existing);
     if (this.world.setBlockAndUpdate(x, y, z, blockId, placeState)) {
+      // 多格画（批次 495）：`planPlacement` 只返回了哨兵档位，具体是哪一幅、
+      // 占哪几格在这里补上（它要查世界，纯函数那边只有 `blockAt` 一个探针）
+      if (blockId === Block.PAINTING && paintingVariantOf(placeState) === MULTI_PAINTING_VARIANT) {
+        this.placeMultiPainting(x, y, z, placeState, blockId);
+      }
       if (plan.extra) {
         const { dx, dy, dz, id, state } = plan.extra;
         this.world.setBlockAndUpdate(x + dx, y + dy, z + dz, id, state);
@@ -14349,6 +14471,8 @@ class App {
         this.syncFrames();
         // 盔甲架上的装备（批次 493）：同一个节拍（理由一样：区块流式加载没有事件）
         this.syncArmorStands();
+        // 多格画（批次 495）：同一个节拍
+        this.syncPaintings();
       }
       // 背包对账（M7）：每秒一次。**不是**为了"发现新东西"（那个由 `onChange` 立刻管），
       // 而是兜底"东西早就在背包里、而它的父条目刚刚才达成"这类顺序问题——
@@ -14613,6 +14737,7 @@ class App {
     this.signRenderer.dispose();
     this.itemFrameRenderer.dispose();
     this.armorStandRenderer.dispose();
+    this.paintingRenderer.dispose();
     this.beaconBeamRenderer.dispose();
     this.borderRenderer.dispose();
     // 浮标（批次 81）：懒建的，可能一次都没抛过竿

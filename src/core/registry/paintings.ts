@@ -105,6 +105,17 @@ export const VANILLA_PAINTING_COUNT = 26;
  */
 export const PAINTING_VARIANT_LIMIT = 8;
 
+/**
+ * **多格画的哨兵档位**（批次 495）。
+ *
+ * 1×1 的 7 幅占 0~6，7 是这一族里唯一的空档——于是"这一格属于一幅多格画"
+ * 用它表示，具体是哪一幅、占在第几格去 `world/Paintings.ts` 的表里查。
+ *
+ * 哨兵格的方块贴图是**全透明**（`painting_multi`）：画面由 `ArmorStandRenderer`
+ * 那条路单独画，方块自己不该再画一遍（否则会盖住或与它 z-fighting）。
+ */
+export const MULTI_PAINTING_VARIANT = 7;
+
 /** 第 index 幅画；越界（脏存档/脏状态）返回 undefined */
 export function paintingVariant(index: number): PaintingVariant | undefined {
   return Number.isInteger(index) ? PAINTING_VARIANTS[index] : undefined;
@@ -112,6 +123,8 @@ export function paintingVariant(index: number): PaintingVariant | undefined {
 
 /** 第 index 幅画的贴图名；越界时回退到第 0 幅（渲染路径不该因为脏数据整块消失） */
 export function paintingTile(index: number): string {
+  // 哨兵档位（多格画）：方块本身透明，画面由渲染器画（批次 495）
+  if (index === MULTI_PAINTING_VARIANT) return 'painting_multi';
   return (PAINTING_VARIANTS[index] ?? PAINTING_VARIANTS[0]!).tile;
 }
 

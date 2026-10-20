@@ -23,7 +23,12 @@ import {
   restorePaintings,
   serializePaintings,
 } from '../src/core/world/Paintings.ts';
+import * as THREE from 'three';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { MULTI_PAINTING_VARIANT, paintingTile } from '../src/core/registry/paintings.ts';
+import { PaintingRenderer } from '../src/render/PaintingRenderer.ts';
+import type { TextureAtlas } from '../src/render/TextureAtlas.ts';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 let failed = 0;
@@ -158,6 +163,60 @@ console.log('\n[键的写法]');
 {
   equal('带维度前缀', paintingCellKey('overworld', 1, 2, 3), 'overworld|1,2,3');
   check('不同维度的同名坐标是两个键', paintingCellKey('overworld', 1, 2, 3) !== paintingCellKey('nether', 1, 2, 3));
+}
+
+
+console.log('\n[哨兵档位：多格画的那一格（批次 495）]');
+{
+  equal('哨兵是 7（1×1 的 7 幅占 0~6）', MULTI_PAINTING_VARIANT, 7);
+  equal('哨兵格的贴图是全透明的占位', paintingTile(MULTI_PAINTING_VARIANT), 'painting_multi');
+  check('这张占位图确实登记进图集了', TILE_ORDER.includes('painting_multi'));
+  check('1×1 的贴图不受影响', paintingTile(0) === 'painting_kebab');
+}
+
+console.log('\n[渲染层：每格一个平面（批次 495）]');
+{
+  // 假图集：只要 `uv()` 与 `texture`（渲染器只用这两个）
+  const fakeAtlas = {
+    texture: new THREE.Texture(),
+    uv: () => [0, 0, 1, 1] as [number, number, number, number],
+  } as unknown as TextureAtlas;
+  const renderer = new PaintingRenderer(fakeAtlas);
+
+  renderer.update([]);
+  equal('一开始没有格子', renderer.cellCount, 0);
+
+  const state = 0; // facing 0
+  renderer.update([
+    { key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_donkey_kong_0_0', light: 15, state },
+    { key: 'overworld|1,64,0', x: 1, y: 64, z: 0, tile: 'painting_donkey_kong_1_0', light: 15, state },
+  ]);
+  equal('两格画两个平面', renderer.cellCount, 2);
+
+  // 重复更新不翻倍
+  renderer.update([
+    { key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_donkey_kong_0_0', light: 15, state },
+    { key: 'overworld|1,64,0', x: 1, y: 64, z: 0, tile: 'painting_donkey_kong_1_0', light: 15, state },
+  ]);
+  equal('重复更新不翻倍', renderer.cellCount, 2);
+
+  // 换子图 / 换光照：不崩
+  renderer.update([{ key: 'overworld|0,64,0', x: 0, y: 64, z: 0, tile: 'painting_match_0_0', light: 3, state: 2 }]);
+  equal('移除不在列表里的格子', renderer.cellCount, 1);
+
+  // 平面位置朝法线方向挪了一点（避免与透明方块面打架）
+  const mesh = renderer.group.children[0] as THREE.Mesh;
+  check('平面被推出墙面一点（0.031）', Math.abs(mesh.position.z % 1) > 0.01, `${mesh.position.z}`);
+  renderer.dispose();
+}
+
+console.log('\n[接线守卫：放置 / 破坏 / 存读档真的接了]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('放置时补写整幅（哨兵状态才走）', /paintingVariantOf\(placeState\) === MULTI_PAINTING_VARIANT[\s\S]{0,80}placeMultiPainting/.test(mainSrc));
+  check('拆任意一格带走整幅', /brokenId === Block\.PAINTING\) this\.breakMultiPainting/.test(mainSrc));
+  check('渲染对账在主循环的节拍里', /this\.syncPaintings\(\);/.test(mainSrc));
+  check('存读档接上了', /savePaintings\(serializePaintings/.test(mainSrc) && /restorePaintings\(this\.paintings/.test(mainSrc));
 }
 
 console.log(`\n多格画测试：${passed} 通过 / ${failed} 失败`);

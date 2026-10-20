@@ -968,6 +968,8 @@ export const TILE_ORDER = [
   'painting_bomb',
   'painting_plant',
   'painting_wasteland',
+  // 多格画的哨兵格：方块面全透明（画面由渲染器画，见 `registry/paintings.ts`）
+  'painting_multi',
   // 多格画（批次 494）：每幅按格拆成 w×h 张子图，拼起来才是整幅
   ...MULTI_PAINTINGS.flatMap((painting) =>
     Array.from({ length: painting.height }, (_unusedRow, row) =>

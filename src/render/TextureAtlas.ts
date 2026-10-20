@@ -3693,6 +3693,9 @@ for (const painting of MULTI_PAINTINGS) {
  * 所以"像不像原版那一幅"只到"一眼能认出是什么"的程度：
  * 烤肉串是一根串着肉的签子、炸弹是一个带引线的黑球、植物是一盆绿植……
  */
+/** 多格画的哨兵格（批次 495）：整张透明——真正的画面由 `PaintingRenderer` 画 */
+PAINTERS.painting_multi = () => [0, 0, 0, 0];
+
 PAINTERS.painting_kebab = paintingPainter([46, 30, 22], [
   [1, 1, 14, 14, [58, 38, 26]],
   [7, 1, 1, 14, [198, 198, 202]],

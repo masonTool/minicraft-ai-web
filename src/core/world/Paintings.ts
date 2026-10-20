@@ -18,10 +18,17 @@ import { multiPaintingByName, type MultiPainting } from '../registry/paintings.t
 /** 一格画所属的那幅画 */
 export interface PaintingCell {
   readonly dimension: string;
+  /** 这一格自己的坐标（清方块时要用——只有锚点 + 行列推不出来，因为朝向决定"右"是哪个方向） */
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
   /** 锚点（左上角那一格；放置时命中的就是它） */
   readonly ax: number;
   readonly ay: number;
   readonly az: number;
+  /** 向右是哪个方向（±1 的 x 或 z）：存档与清方块都要用它 */
+  readonly rightX: number;
+  readonly rightZ: number;
   /** 画的名字（`donkey_kong` 这类，与 `MULTI_PAINTINGS` 一致） */
   readonly name: string;
   readonly width: number;
@@ -114,9 +121,14 @@ export class PaintingStore {
     for (const cell of cells) {
       const entry: PaintingCell = {
         dimension,
+        x: cell.x,
+        y: cell.y,
+        z: cell.z,
         ax: anchor.x,
         ay: anchor.y,
         az: anchor.z,
+        rightX,
+        rightZ,
         name: painting.name,
         width: painting.width,
         height: painting.height,
@@ -141,26 +153,18 @@ export class PaintingStore {
     const painting = multiPaintingByName(cell.name);
     const width = painting?.width ?? cell.width;
     const height = painting?.height ?? cell.height;
+    // 表里每格都记着锚点，所以"同一幅画"= 同维度 + 同锚点。
+    // 直接扫一遍整张表（一幅最大 16 格、几百幅也就上万条），
+    // 比"用锚点 + 行列去推坐标"稳——推的时候一旦朝向记错，就会漏删几格。
     const removed: PaintingCell[] = [];
-    for (let row = 0; row < height; row++) {
-      for (let col = 0; col < width; col++) {
-        // 锚点 + 右下：这里不需要朝向——表里每格都记着自己的坐标，
-        // 只要把"锚点矩形"里存在的条目删掉就行
-        const key = paintingCellKey(dimension, cell.ax + col, cell.ay - row, cell.az);
-        const hit = this.cells.get(key);
-        if (!hit) continue;
-        removed.push(hit);
-        this.cells.delete(key);
-      }
-    }
-    // ⚠️ 画可能是"向左铺"的（朝向不同，锚点在右边），上面那个循环只覆盖"向右向下"。
-    // 兜底：把同一锚点、同一维度的条目全部删掉（数量上限几十条，代价可忽略）
     for (const [key, entry] of [...this.cells]) {
       if (entry.dimension !== cell.dimension) continue;
       if (entry.ax !== cell.ax || entry.ay !== cell.ay || entry.az !== cell.az) continue;
-      if (!removed.includes(entry)) removed.push(entry);
+      removed.push(entry);
       this.cells.delete(key);
     }
+    void width;
+    void height;
     return { anchor: cell, cells: removed };
   }
 
@@ -205,25 +209,14 @@ export interface SerializedPainting {
 export function serializePaintings(store: PaintingStore): SerializedPainting[] {
   const out: SerializedPainting[] = [];
   for (const anchor of store.anchors()) {
-    // 从锚点那一格与它右边那一格推出朝向（宽度为 1 时推不出来，记 0）
-    let rightX = 0;
-    let rightZ = 0;
-    if (anchor.width > 1) {
-      const right = store.get(anchor.dimension, anchor.ax + 1, anchor.ay, anchor.az);
-      if (right) {
-        rightX = 1;
-      } else {
-        rightZ = -1;
-      }
-    }
     out.push({
       dimension: anchor.dimension,
       x: anchor.ax,
       y: anchor.ay,
       z: anchor.az,
       name: anchor.name,
-      rightX,
-      rightZ,
+      rightX: anchor.rightX,
+      rightZ: anchor.rightZ,
     });
   }
   return out;
