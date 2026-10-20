@@ -90,6 +90,8 @@ export class ChunkRenderer {
       const position = mesh.geometry.getAttribute('position');
       if (!light || !shadeAttr || !position) continue;
 
+      // 批次 567：归一化字节属性由 `BufferAttribute.getX` 自动还原成 0~1，
+      // 这里不再额外除 255（否则会变成 0~1/255）
       const step = Math.max(1, Math.floor(light.count / 8));
       for (let i = 0; i < light.count; i += step) {
         const y = position.getY(i) + mesh.position.y;
@@ -399,6 +401,18 @@ export class ChunkRenderer {
     return `${arrays.position.length / 3}:${arrays.index.length}`;
   }
 
+  /** 把 0~1 浮点或 0~255 字节写进归一化字节属性 */
+  private static writeUnitBytes(target: Uint8Array, source: Float32Array | Uint8Array): void {
+    if (source instanceof Uint8Array) {
+      target.set(source);
+      return;
+    }
+    for (let i = 0; i < source.length; i++) {
+      const v = source[i]!;
+      target[i] = v <= 0 ? 0 : v >= 1 ? 255 : Math.round(v * 255);
+    }
+  }
+
   private acquireGeometry(arrays: GeometryArrays): THREE.BufferGeometry {
     const key = ChunkRenderer.geometryPoolKey(arrays);
     const bucket = this.geometryPool.get(key);
@@ -415,8 +429,8 @@ export class ChunkRenderer {
     (position.array as Float32Array).set(arrays.position);
     (uv.array as Float32Array).set(arrays.uv);
     (tile.array as Float32Array).set(arrays.tile);
-    (light.array as Float32Array).set(arrays.light);
-    (shade.array as Float32Array).set(arrays.shade);
+    ChunkRenderer.writeUnitBytes(light.array as Uint8Array, arrays.light);
+    ChunkRenderer.writeUnitBytes(shade.array as Uint8Array, arrays.shade);
     (index.array as Uint32Array).set(arrays.index);
     position.needsUpdate = true;
     uv.needsUpdate = true;

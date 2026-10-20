@@ -865,9 +865,25 @@ export interface GeometryArrays {
   position: Float32Array;
   uv: Float32Array;
   tile: Float32Array;
-  light: Float32Array;
-  shade: Float32Array;
+  /**
+   * 光照与明暗（批次 567，N1）：**0~1 的浮点或 0~255 的字节**都可以。
+   * 字节属性用 `normalized: true` 上传，GPU 端仍是 0~1，着色器不用改；
+   * 每个顶点因此从 12 字节（3 个 float）降到 3 字节。
+   */
+  light: Float32Array | Uint8Array;
+  shade: Float32Array | Uint8Array;
   index: Uint32Array;
+}
+
+/** 0~1 浮点 → 0~255 字节；已经是字节就原样返回（Worker 侧不重复量化） */
+function quantizeUnit(values: Float32Array | Uint8Array): Uint8Array {
+  if (values instanceof Uint8Array) return values;
+  const out = new Uint8Array(values.length);
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i]!;
+    out[i] = v <= 0 ? 0 : v >= 1 ? 255 : Math.round(v * 255);
+  }
+  return out;
 }
 
 /**
@@ -880,8 +896,9 @@ export function createGeometry(arrays: GeometryArrays): THREE.BufferGeometry {
   geometry.setAttribute('position', new THREE.BufferAttribute(arrays.position, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(arrays.uv, 2));
   geometry.setAttribute('aTile', new THREE.BufferAttribute(arrays.tile, 2));
-  geometry.setAttribute('aLight', new THREE.BufferAttribute(arrays.light, 2));
-  geometry.setAttribute('aShade', new THREE.BufferAttribute(arrays.shade, 1));
+  // 光照/明暗用归一化字节上传（批次 567，N1）：GPU 端仍是 0~1，着色器不变
+  geometry.setAttribute('aLight', new THREE.BufferAttribute(quantizeUnit(arrays.light), 2, true));
+  geometry.setAttribute('aShade', new THREE.BufferAttribute(quantizeUnit(arrays.shade), 1, true));
   geometry.setIndex(new THREE.BufferAttribute(arrays.index, 1));
   geometry.computeBoundingSphere();
   return geometry;

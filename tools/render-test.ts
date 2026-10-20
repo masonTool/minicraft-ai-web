@@ -51,6 +51,7 @@ import { srgbColor } from '../src/render/srgb.ts';
 import { tileOriginAt, tileRectAt, tileSpanAt } from '../src/render/atlasCoords.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_PADDING, TILE_SIZE, TILE_STRIDE } from '../src/render/atlasLayout.ts';
 import { ChunkRenderer } from '../src/render/ChunkRenderer.ts';
+import { createGeometry } from '../src/core/mesh/ChunkMesher.ts';
 import type { MeshWorkerPool } from '../src/render/MeshWorkerPool.ts';
 import { Chunk } from '../src/core/world/Chunk.ts';
 import type { World } from '../src/core/world/World.ts';
@@ -114,8 +115,8 @@ console.log('\n[区块网格原子替换]');
     position: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
     uv: new Float32Array(6),
     tile: new Float32Array(6),
-    light: new Float32Array(6),
-    shade: new Float32Array(3),
+    light: new Uint8Array(6),
+    shade: new Uint8Array(3),
     index: new Uint32Array([0, 1, 2]),
   };
 
@@ -168,6 +169,7 @@ function faceUv(geometry: THREE.BufferGeometry, face: number, corner: number): [
 }
 
 function colored(geometry: THREE.BufferGeometry, corner: number): number {
+  // 批次 567：aShade 可能是归一化字节，`getX` 已经自动还原成 0~1
   return (geometry.getAttribute('aShade') as THREE.BufferAttribute).getX(corner);
 }
 
@@ -1022,8 +1024,8 @@ console.log('\n[只画视距之内的区块]');
     position: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
     uv: new Float32Array(6),
     tile: new Float32Array(6),
-    light: new Float32Array(6),
-    shade: new Float32Array(3),
+    light: new Uint8Array(6),
+    shade: new Uint8Array(3),
     index: new Uint32Array([0, 1, 2]),
   };
 
@@ -1235,6 +1237,33 @@ console.log('\n[区块几何复用池（N3 / 批次 566）]');
   check('重刷时优先从池里取', rendererSrc.includes('this.acquireGeometry('));
   check('卸载时回池而不是直接 dispose', rendererSrc.includes('this.releaseGeometry(mesh.geometry)'));
   check('整体销毁会释放池', rendererSrc.includes('this.disposePool()'));
+}
+
+console.log('\n[顶点光照/明暗量化（N1 / 批次 567）]');
+{
+  const geometry = createGeometry({
+    position: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    uv: new Float32Array(6),
+    tile: new Float32Array(6),
+    light: new Float32Array([0, 0, 0.5, 0.5, 1, 1]),
+    shade: new Float32Array([0, 0.5, 1]),
+    index: new Uint32Array([0, 1, 2]),
+  });
+  const light = geometry.getAttribute('aLight') as THREE.BufferAttribute;
+  const shade = geometry.getAttribute('aShade') as THREE.BufferAttribute;
+  check('aLight 变成字节数组', light.array instanceof Uint8Array);
+  check('aShade 变成字节数组', shade.array instanceof Uint8Array);
+  check('字节属性标记为 normalized（着色器仍读 0~1）', light.normalized && shade.normalized);
+  check(
+    '0/0.5/1 量化成 0/128/255（getX 已还原成 0~1）',
+    light.getX(0) === 0 && Math.abs(light.getX(1) - 128 / 255) < 1e-6 && light.getX(2) === 1,
+  );
+  check('明暗中值量化到 128', Math.abs(shade.getX(1) - 128 / 255) < 1e-6);
+  check(
+    '每个顶点省下 9 字节（3 个 float → 3 个 byte）',
+    light.array.byteLength + shade.array.byteLength === 9,
+    `${light.array.byteLength + shade.array.byteLength}`,
+  );
 }
 
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);

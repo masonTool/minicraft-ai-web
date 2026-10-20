@@ -74,8 +74,8 @@ export interface GeometryPayload {
   position: Float32Array;
   uv: Float32Array;
   tile: Float32Array;
-  light: Float32Array;
-  shade: Float32Array;
+  light: Uint8Array;
+  shade: Uint8Array;
   index: Uint32Array;
 }
 
@@ -193,8 +193,8 @@ function meshChunk(req: MeshRequest): { response: MeshResponse; transfer: Transf
       position: geometry.getAttribute('position').array as Float32Array,
       uv: geometry.getAttribute('uv').array as Float32Array,
       tile: geometry.getAttribute('aTile').array as Float32Array,
-      light: geometry.getAttribute('aLight').array as Float32Array,
-      shade: geometry.getAttribute('aShade').array as Float32Array,
+      light: geometry.getAttribute('aLight').array as Uint8Array,
+      shade: geometry.getAttribute('aShade').array as Uint8Array,
       index: geometry.getIndex()!.array as Uint32Array,
     };
     transfer.push(
