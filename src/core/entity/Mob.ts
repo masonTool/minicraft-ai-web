@@ -103,6 +103,17 @@ export const PET_FOLLOW_STOP = 2.2;
  * 超过这个距离就朝主人走——**不传送**（牵着的东西突然瞬移会很怪）。
  */
 export const LEASH_STOP = 3.5;
+
+/**
+ * 绳子绷紧后的牵引增速（批次 575）：距离超过停止距离越多，被拉得越快。
+ *
+ * 只做速度倍率（最多 +140%），不做“绳子长度约束/强制位移”——
+ * 原版被拴住的生物会有一个朝玩家的额外拉力，这里用提速近似。
+ */
+export function leashPullBoost(excess: number): number {
+  if (!(excess > 0)) return 0;
+  return Math.min(1.4, excess * 0.35);
+}
 /**
  * 已驯服的宠物离主人超过这个距离就**传送**过去（格）。
  *
@@ -623,6 +634,8 @@ export class Mob extends Entity {
    * 真正系在谁身上由主程序记（一次只牵一只），这里只负责"有人牵我"时别乱逛。
    */
   leashed = false;
+  /** 拴绳绷紧量（超出停止距离的格数；批次 575 用它算牵引增速） */
+  private leashTension = 0;
 
   /**
    * 手里还有没有三叉戟（批次 235；只有 `throwsTrident` 的生物用）。
@@ -1355,6 +1368,7 @@ export class Mob extends Entity {
     if (this.leashed && player) {
       this.yaw = Math.atan2(dx, dz);
       const leashDistance = Math.sqrt(distanceSq);
+      this.leashTension = Math.max(0, leashDistance - LEASH_STOP);
       if (leashDistance > LEASH_STOP) {
         const length = Math.max(1e-4, leashDistance);
         this.moveDirX = dx / length;
@@ -1666,7 +1680,9 @@ export class Mob extends Entity {
     const speed =
       (chasing ? this.type.speed * 1.12 : this.type.speed * 0.5) *
       this.effects.moveSpeedMultiplier() *
-      this.speedMultiplier();
+      this.speedMultiplier() *
+      // 被牵且绳子绷紧时被拽着走（批次 575）
+      (this.leashed ? 1 + leashPullBoost(this.leashTension) : 1);
     let targetVx = 0;
     let targetVz = 0;
 

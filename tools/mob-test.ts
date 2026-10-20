@@ -16,7 +16,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { ATTACK_ANIM_SECONDS, Mob, attackSwingAmount } from '../src/core/entity/Mob.ts';
+import { ATTACK_ANIM_SECONDS, Mob, attackSwingAmount, leashPullBoost } from '../src/core/entity/Mob.ts';
 import { Pathfinder, type BlockSampler } from '../src/core/entity/Pathfinder.ts';
 import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
@@ -860,6 +860,11 @@ console.log('\n[拴绳：牵着的动物跟着走（批次 256）]');
   const after = Math.abs(8.5 - cow.x);
   check('被牵着的动物会朝主人走近', after < before - 2, `${before.toFixed(1)} → ${after.toFixed(1)}`);
   check('走到绳子长度（3.5 格）附近就停', after > 2 && after < 5.5, `距离 ${after.toFixed(2)}`);
+
+  // 牵引增速（批次 575）：没绷紧不加速，越远越快，但有上限
+  equal('没超出绳长不加速', leashPullBoost(0), 0);
+  check('绷得越紧拉得越快', leashPullBoost(4) > leashPullBoost(1));
+  check('牵引增速有上限（不会无限快）', leashPullBoost(100) === 1.4);
 }
 
 console.log('\n[蝙蝠：会飞的被动生物（批次 261）]');
