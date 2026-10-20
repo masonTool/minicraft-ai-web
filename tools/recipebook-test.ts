@@ -28,6 +28,9 @@ import {
 import { RECIPES, type Recipe } from '../src/core/crafting/Recipes.ts';
 import { recipeLayout, stationLabel, trimPattern } from '../src/core/crafting/RecipeLayout.ts';
 import { SMELTING_RECIPES } from '../src/core/crafting/Smelting.ts';
+import { stationItemsFor } from '../src/core/crafting/RecipeStations.ts';
+import { BREW_RECIPES } from '../src/core/crafting/Brewing.ts';
+import { netheriteUpgradeList } from '../src/core/crafting/Smithing.ts';
 import {
   RECIPE_BOOK_TABS,
   RECIPE_BOOK_TABS_POCKET,
@@ -524,6 +527,42 @@ console.log('\n[配方书：标签栏（批次 133，对齐基岩版）]');
     '',
   );
   equal('页面上的归属与 `recipeBookTab` 一致', all.filter((entry) => entry.tab !== recipeBookTab(entry.result.id)).length, 0);
+}
+
+// ---------------------------------------------------------------- 产物 → 工作站
+//
+// 批次 531（用户）：红底物品要告诉玩家"需要什么站台"。以前只有工作台/熔炉两种，
+// 而且食物、金属这种多站台路线只显示熔炉；酿造台/切石机/锻造台/织布机/制图台全漏。
+console.log('\n[配方书：产物需要什么工作站（批次 531）]');
+{
+  const stations = (itemId: number): number[] => stationItemsFor(itemId);
+  equal('平滑石头 → 熔炉', stations(Block.SMOOTH_STONE).join(','), String(Block.FURNACE));
+
+  const cooked = SMELTING_RECIPES.find((recipe) => recipe.kind === 'food')!;
+  check(
+    '熟食同时列出熔炉 / 烟熏炉 / 营火',
+    [Block.FURNACE, Block.SMOKER, Block.CAMPFIRE].every((id) => stations(cooked.output.id).includes(id)),
+    stations(cooked.output.id).join(','),
+  );
+
+  const metal = SMELTING_RECIPES.find((recipe) => recipe.kind === 'metal')!;
+  check(
+    '金属同时列出熔炉 / 高炉',
+    [Block.FURNACE, Block.BLAST_FURNACE].every((id) => stations(metal.output.id).includes(id)),
+    stations(metal.output.id).join(','),
+  );
+
+  check('3×3 配方列出工作台', stations(Block.FURNACE).includes(Block.CRAFTING_TABLE));
+  check('2×2 配方不列工作台（木棍）', !stations(Item.STICK).includes(Block.CRAFTING_TABLE));
+  check('酿造产物列出酿造台', stations(BREW_RECIPES[0]!.to).includes(Block.BREWING_STAND));
+  check('切石机产物列出切石机', stations(Block.STONE_BRICKS).includes(Block.STONECUTTER));
+  check(
+    '下界合金升级列出锻造台',
+    stations(netheriteUpgradeList()[0]!.result).includes(Block.SMITHING_TABLE),
+  );
+  check('旗帜列出织布机', stations(Block.WHITE_BANNER).includes(Block.LOOM));
+  check('已填地图列出制图台', stations(Item.FILLED_MAP).includes(Block.CARTOGRAPHY_TABLE));
+  equal('没有站台路线的原材料的返回空数组', stations(Item.DIAMOND).length, 0);
 }
 
 function labelOfUnknown(id: number): boolean {

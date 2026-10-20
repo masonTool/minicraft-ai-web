@@ -121,12 +121,12 @@
     const inv = mc.inventoryScreen;
     inv.pickCategoryItem(270); // 斧/镐一类 3×3 配方
     await sleep(300);
-    const badge = document.querySelector('.inv-craft-station');
+    const badges = [...document.querySelectorAll('.inv-craft-station-icon')];
     check('红底物品没有选中态', document.querySelectorAll('.inv-slot.selected, .inv-slot.pressing').length === 0);
     check(
       '3×3 配方在箭头旁点亮"工作台"',
-      !!badge && !badge.classList.contains('hidden') && badge.title.includes('工作台'),
-      badge ? badge.title : 'missing',
+      badges.length > 0 && badges.some((badge) => badge.title.includes('工作台')),
+      badges.map((badge) => badge.title).join(',') || 'missing',
     );
   }
 

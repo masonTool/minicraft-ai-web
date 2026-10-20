@@ -2385,23 +2385,32 @@
       .inv-craft-grid.size-2 { grid-template-columns: repeat(2, 42px); }
       .inv-craft-grid.size-3 { grid-template-columns: repeat(3, 42px); }
       .inv-arrow { position: relative; font-size: 22px; color: #4a4a4a; }
-      /* 箭头上面那颗"要工作台 / 要熔炉"的小图标（批次 185）。
-         竖排合成（手机上就是竖排）时改挂在箭头右侧：上方是 2×2 材料格，
-         挂上去会盖住最后一排。 */
-      .inv-craft-station {
-        position: absolute; left: 50%; top: -4px;
-        transform: translate(-50%, -100%);
-        width: 20px; height: 20px; display: grid; place-items: center;
-        background: #3a3a3a; border: 2px solid;
-        border-color: #d0d0d0 #4a4a4a #4a4a4a #d0d0d0;
-        box-shadow: 0 1px 0 rgba(0, 0, 0, .4);
+      /* 箭头旁边"需要什么站台"的图标组（批次 185，批次 531 支持多个）。
+         横排合成：在箭头上方正中间排开；竖排合成（手机）改挂箭头右侧竖排——
+         上方是 2×2 材料格，挂上去会盖住最后一排。
+         图标本身是按钮（可点击看说明），容器不接手势。 */
+      .inv-craft-stations {
+        position: absolute; left: 50%; bottom: calc(100% + 4px);
+        transform: translateX(-50%);
+        display: flex; align-items: center; justify-content: center; gap: 3px;
+        flex-wrap: wrap; max-width: 128px;
         z-index: 2; pointer-events: none;
       }
-      .inv-craft-station.hidden { display: none; }
-      .inv-craft-station canvas { width: 14px; height: 14px; image-rendering: pixelated; }
-      .inv-craft.inv-craft-vertical .inv-craft-station {
-        left: auto; right: -22px; top: 50%;
+      .inv-craft-stations.hidden { display: none; }
+      .inv-craft-station-icon {
+        width: 20px; height: 20px; padding: 0; flex: 0 0 auto;
+        display: grid; place-items: center; cursor: pointer;
+        background: #3a3a3a; border: 2px solid; border-radius: 0;
+        border-color: #d0d0d0 #4a4a4a #4a4a4a #d0d0d0;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, .4);
+        pointer-events: auto; touch-action: manipulation;
+      }
+      .inv-craft-station-icon:active { background: #5a5a5a; }
+      .inv-craft-station-icon canvas { width: 14px; height: 14px; image-rendering: pixelated; }
+      .inv-craft.inv-craft-vertical .inv-craft-stations {
+        left: auto; right: -24px; top: 50%; bottom: auto;
         transform: translateY(-50%);
+        flex-direction: column; flex-wrap: nowrap; max-width: 24px;
       }
       /* 能合成 / 能取走的槽位：一层柔和的强调底（比原来纯色块更"活"） */
       .inv-slot.ready {

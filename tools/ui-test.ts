@@ -3029,11 +3029,14 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     invSrc.includes("slot.classList.contains('locked')") && invSrc.includes('flashLocked'),
   );
   check(
-    '3×3 配方点亮"要工作台"、只能烧的物资点亮"要熔炉"',
-    invSrc.includes("this.craftStation = 'workbench';") &&
-      invSrc.includes("this.craftStation = 'furnace';") &&
-      invSrc.includes("station.className = 'inv-craft-station hidden'") &&
-      css.includes('.inv-craft-station'),
+    '箭头旁列出所需站台（工作台/熔炉/烟熏炉/高炉/营火/酿造台/切石机/锻造台/织布机/制图台）',
+    invSrc.includes('this.craftStations = stationItemsFor(itemId);') &&
+      invSrc.includes('this.craftStations = canMakeNow ? [] : stationItemsFor(itemId);') &&
+      invSrc.includes("stations.className = 'inv-craft-stations hidden'") &&
+      invSrc.includes('private makeCraftStationIcon') &&
+      invSrc.includes('this.showPickToast(button);') &&
+      css.includes('.inv-craft-stations') &&
+      css.includes('.inv-craft-station-icon'),
   );
   check(
     '箭头方向只改字形，不抹掉小图标',

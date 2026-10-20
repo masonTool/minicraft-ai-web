@@ -53,10 +53,12 @@ import {
   type RecipeBookTab,
 } from '../core/crafting/RecipeBook.ts';
 import { RECIPES, type Recipe } from '../core/crafting/Recipes.ts';
+// 产物 → 工作站（批次 531）：工作台 / 熔炉 / 烟熏炉 / 高炉 / 营火 / 酿造台 /
+// 切石机 / 锻造台 / 织布机 / 制图台，箭头上面可能同时列多个。
+import { stationItemsFor } from '../core/crafting/RecipeStations.ts';
 // 熔炼表（批次 185）：判断"这件东西只能烧出来" → 合成箭头上面点亮熔炉图标
 import {
   FURNACE_STATIONS,
-  SMELTING_RECIPES,
   cookSeconds,
   fuelSeconds,
   smeltingRecipeFor,
@@ -609,11 +611,16 @@ export class InventoryScreen {
    */
   private previewResult: { id: number; count: number } | null = null;
   /**
-   * 当前预览的配方"要什么工作台"（批次 185）：合成箭头上面那颗小图标。
-   * `workbench` = 3×3 摆不下、`furnace` = 只能烧出来、`null` = 当前就能做。
+   * 当前预览的配方需要哪些工作站（批次 531）。
+   *
+   * 空数组 = 当前 2×2 就能做（只可能缺材料，不需要站台）。
+   * 多个 = 这件产物有多种路线（食物：熔炉/烟熏炉/营火；金属：熔炉/高炉），
+   * 界面上按顺序横排/竖排在箭头旁边。
    */
-  private craftStation: 'workbench' | 'furnace' | null = null;
-  private craftStationEl: HTMLDivElement | null = null;
+  private craftStations: number[] = [];
+  private craftStationsEl: HTMLDivElement | null = null;
+  /** 站台图标上一次画出来的 id 串（没变就不重建 canvas） */
+  private craftStationsStamp = '';
   /** 经典 UI 标题栏上的「配方书」文字按钮；携带版改用左上图标条 */
   private recipesBtn: HTMLButtonElement | null = null;
   /** 携带版左上：配方书五个分类图标 */
@@ -1989,18 +1996,28 @@ export class InventoryScreen {
     // 批次 166：创造模式不显示配方（拥有所有方块，看配方没有意义）
     if (this.hooks.isCreative?.() ?? false) return;
     const recipe = this.bestRecipeFor(itemId);
+    // 没有任何合成配方：只可能是站台产物（烧/酿/切/升级/织/制图）。
+    // 把所有能产出它的站台都列出来（食物可能同时有熔炉/烟熏炉/营火）。
     if (!recipe) {
-      if (SMELTING_RECIPES.some((entry) => entry.output.id === itemId)) this.craftStation = 'furnace';
+      this.craftStations = stationItemsFor(itemId);
       return;
     }
+    // 配方需要 3×3、当前背包只有 2×2：列出所有站台路线（工作台一定在第一位）。
     if (recipeGridSize(recipe) > this.crafting.size) {
-      this.craftStation = 'workbench';
+      this.craftStations = stationItemsFor(itemId);
       return;
     }
+    // 2×2 就能摆下：白底（材料够）不显示站台；
+    // 红底（只缺材料）只在它**还有别的站台路线**时才列出来（例如石砖还能切石机切）。
+    // 完全没有站台路线的红底物品（木棍缺木板）只靠合成格的红底材料表达。
+    const canMakeNow = canCraft({ countOf: (id) => this.craftCount(id) }, recipe).ok;
+    this.craftStations = canMakeNow ? [] : stationItemsFor(itemId);
     // 只有"抬手确认"那一下才真正把材料摆进格子；按住滑动只做预览，
     // 否则每滑过一件就动物品/重建列表，手指底下的格子会被换掉。
     if (mode === 'fill' && fillCraftingGrid(this.inventory, this.crafting, recipe)) {
       this.previewResult = null;
+      // 摆成功了就是"当前能做"，不需要任何站台提示
+      this.craftStations = [];
       return;
     }
     this.showRecipeGhost(recipe);
@@ -2025,24 +2042,54 @@ export class InventoryScreen {
   }
 
   /**
-   * 箭头上面那颗小图标（批次 185）：这件东西"要工作台"还是"要熔炉"。
+   * 箭头旁边的工作站图标（批次 185，批次 531 改成多个）。
    *
-   * 用户的原话是"在箭头那个上方，会显示小小的一个工作台图标"——放在箭头里而不是
-   * 另外占一行，是为了不把 2×2 合成区撑高（横屏高度本来就紧张）。
+   * 用户口径：
+   *  - 这件东西需要什么站台就显示什么图标；
+   *  - 有多种路线时以箭头为中心排开（食物的熔炉/烟熏炉/营火，金属的熔炉/高炉）；
+   *  - 图标可点，点开显示该站台物品的说明。
+   *
+   * 放在箭头里而不是另占一行，是为了不把 2×2 合成区撑高（横屏高度本来紧张）。
    */
-  private syncCraftStation(): void {
-    const el = this.craftStationEl;
+  private syncCraftStations(): void {
+    const el = this.craftStationsEl;
     if (!el) return;
-    const station = this.mode === 'inventory' || this.mode === 'crafting' ? this.craftStation : null;
-    el.classList.toggle('hidden', !station);
-    if (!station) return;
-    const icon = el.firstElementChild;
-    if (icon instanceof HTMLCanvasElement) {
-      drawItemIcon(icon, this.atlas, station === 'workbench' ? Block.CRAFTING_TABLE : Block.FURNACE, 16);
-    } else {
-      el.textContent = station === 'workbench' ? '台' : '炉';
-    }
-    el.title = station === 'workbench' ? '需要工作台（3×3）' : '需要在熔炉里烧炼';
+    const stations = this.mode === 'inventory' || this.mode === 'crafting' ? this.craftStations : [];
+    const stamp = stations.join(',');
+    el.classList.toggle('hidden', stations.length === 0);
+    if (stamp === this.craftStationsStamp) return;
+    this.craftStationsStamp = stamp;
+    const icons = stations.map((id) => this.makeCraftStationIcon(id));
+    el.replaceChildren(...icons);
+  }
+
+  /** 一个可点击的工作站图标（真实物品图标 + 悬停/点击说明） */
+  private makeCraftStationIcon(itemId: number): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'inv-craft-station-icon';
+    button.dataset.tooltip = '';
+    button.title = itemLabel(itemId);
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 16;
+    drawItemIcon(canvas, this.atlas, itemId, 16);
+    button.appendChild(canvas);
+    // 与背包格子共用同一套说明数据：桌面悬停、手机长按都能看到；
+    // 轻点则由下面的 click 直接弹说明（touch 的主手势）。
+    this.tooltipStacks.set(button, { id: itemId, count: 1 });
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      // 桌面悬停时可能已经有一块跟随指针的提示框：先收掉，避免和"点击说明"叠在一起
+      this.tooltip.hide();
+      this.showPickToast(button);
+    });
+    return button;
   }
 
   /** 材料不齐：把配方"画"进合成格（缺的红底），让人一眼看出差什么 */
@@ -2072,7 +2119,7 @@ export class InventoryScreen {
 
   private clearCraftGhost(): void {
     // 预览收了，"要工作台/要熔炉"的标记与结果槽预览也一起收（批次 185 / 206）
-    this.craftStation = null;
+    this.craftStations = [];
     this.previewResult = null;
     if (!this.craftGhost) return;
     this.craftGhost = null;
@@ -4632,17 +4679,13 @@ export class InventoryScreen {
     glyph.className = 'inv-arrow-glyph';
     glyph.textContent = '→';
     arrow.appendChild(glyph);
-    // 箭头上面那颗"要工作台 / 要熔炉"的小图标（批次 185）。始终建、默认隐藏：
-    // 只在"点了一件摆不下或烧出来的东西"时露出来，切换预览时由 `syncCraftStation` 收放。
-    const station = document.createElement('div');
-    station.className = 'inv-craft-station hidden';
-    station.dataset.role = 'craft-station';
-    const stationIcon = document.createElement('canvas');
-    stationIcon.width = 16;
-    stationIcon.height = 16;
-    station.appendChild(stationIcon);
-    arrow.appendChild(station);
-    this.craftStationEl = station;
+    // 箭头旁边的"需要什么站台"图标组（批次 185，批次 531 支持多个）。
+    // 始终建、默认隐藏：切换预览时由 `syncCraftStations` 收放。
+    const stations = document.createElement('div');
+    stations.className = 'inv-craft-stations hidden';
+    stations.dataset.role = 'craft-stations';
+    arrow.appendChild(stations);
+    this.craftStationsEl = stations;
 
     const layout = document.createElement('div');
     layout.className = 'inv-craft';
@@ -6024,8 +6067,8 @@ export class InventoryScreen {
       // 预览产物是只读的：与真实产物不同的底色，避免玩家以为点了能拿
       this.resultElement.classList.toggle('preview-result', real === null && result !== null);
       this.resultElement.classList.add('take-only');
-      // 批次 185：箭头上面那颗"要工作台/要熔炉"的小图标
-      this.syncCraftStation();
+      // 批次 185 / 531：箭头旁边的工作站图标（可能有多颗）
+      this.syncCraftStations();
     }
 
     if (isFurnaceMode(this.mode) && this.activeContainer instanceof Furnace) {

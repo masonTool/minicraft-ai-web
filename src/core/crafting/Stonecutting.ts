@@ -144,6 +144,22 @@ export function isStonecuttingInput(itemId: number): boolean {
 }
 
 /**
+ * 这张表里**所有**能被切出来的产物 id（批次 531）。
+ *
+ * 配方书要回答"这件东西能不能靠切石机做"，而 `stonecuttingOffers` 是
+ * "输入 → 产物"的正向查询。这里在模块加载时反向建一次集合，避免界面上
+ * 每画一个红底物品就遍历整张表。
+ */
+const STONECUTTING_OUTPUTS: ReadonlySet<number> = new Set(
+  [...TABLE.values()].flatMap((offers) => offers.map((offer) => offer.output)),
+);
+
+/** 这件物品是不是切石机的产物（某一种输入能切出它） */
+export function isStonecuttingOutput(itemId: number): boolean {
+  return STONECUTTING_OUTPUTS.has(itemId);
+}
+
+/**
  * 能切出来的东西（没有则空数组）。
  *
  * 返回的是**副本**：调用方（界面）会把它渲染成一列按钮，
