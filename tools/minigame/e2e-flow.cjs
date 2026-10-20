@@ -82,6 +82,16 @@ async function main() {
     await page.touchscreen.tap(p.x, p.y);
   };
 
+  const ensurePause = async () => {
+    await tap(512, 86);
+    try {
+      await waitState((state) => state.paused, '暂停未打开', 1600);
+    } catch {
+      await tap(512, 86);
+      await waitState((state) => state.paused, '暂停未打开（重试后）', 5000);
+    }
+  };
+
   const waitState = async (predicate, message, timeout = 15000) => {
     const started = Date.now();
     let last = null;
@@ -167,7 +177,7 @@ async function main() {
     assert(ingame.health === 20, '新世界生命应为 20', ingame);
     await page.screenshot({ path: '/tmp/e2e-created.png' });
 
-    await tap(512, 86);
+    await ensurePause();
     const paused = await waitState((state) => state.paused, '点暂停后没有打开暂停面板');
 
     await tap(512, 214.5);
@@ -186,6 +196,22 @@ async function main() {
     await tap(512, 156.5);
     const resumed = await waitState((state) => state.inGame && !state.paused, '继续游戏没有回到世界');
 
+    // 暂停切换生存/创造，再切回
+    await ensurePause();
+    await waitState((state) => state.paused, '模式切换用例暂停失败');
+    await tap(512, 385.5);
+    const modeCreative = await waitState(
+      (state) => state.gameMode === 'creative',
+      '暂停菜单没有切到创造模式',
+    );
+    await tap(512, 385.5);
+    const modeSurvival = await waitState(
+      (state) => state.gameMode === 'survival',
+      '暂停菜单没有切回生存模式',
+    );
+    await tap(512, 156.5);
+    await waitState((state) => state.inGame && !state.paused, '模式切换后继续游戏失败');
+
     // 背包：打开/关闭
     await tap(865, 414);
     const inventory = await waitState((state) => state.inventory, '点击快捷栏背包没有打开背包');
@@ -193,7 +219,7 @@ async function main() {
     const inventoryClosed = await waitState((state) => !state.inventory, '背包关闭失败');
 
     // 设置四个页签
-    await tap(512, 86);
+    await ensurePause();
     await waitState((state) => state.paused, '第二次暂停失败');
     await tap(512, 214.5);
     await waitState((state) => state.settings, '第二次打开设置失败');
@@ -259,7 +285,7 @@ async function main() {
     await waitState((state) => !state.flying, '双击跳跃没有关闭飞行', 5000);
 
     // 切回默认世界：验证非当前世界的原地切换
-    await tap(512, 86);
+    await ensurePause();
     await waitState((state) => state.paused, '创造世界暂停失败');
     await tap(512, 272.5);
     const worldsAgain = await waitState((state) => state.screen === 'worlds', '返回世界列表失败');
@@ -279,7 +305,7 @@ async function main() {
         options?.success?.({ confirm: true, cancel: false });
       };
     });
-    await tap(512, 86);
+    await ensurePause();
     await waitState((state) => state.paused, '删除用例暂停失败');
     await tap(512, 272.5);
     const beforeDelete = await waitState((state) => state.screen === 'worlds', '删除用例返回世界列表失败');
@@ -293,7 +319,7 @@ async function main() {
     // 删除当前世界：进入 → 暂停 → 删除本世界 → 应回世界列表，不重启
     await tap(702, 174.5);
     await waitState((state) => state.inGame && state.chunks > 0, '删除当前世界用例进入失败');
-    await tap(512, 86);
+    await ensurePause();
     await waitState((state) => state.paused, '删除当前世界用例暂停失败');
     await tap(512, 330.5);
     const afterCurrentDelete = await waitState(
@@ -316,7 +342,7 @@ async function main() {
     );
 
     console.log('PASS');
-    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, editOpen, editSaved, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, sneakOn, flyOn, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
+    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, editOpen, editSaved, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, modeCreative, modeSurvival, sneakOn, flyOn, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
   } catch (error) {
     await page.screenshot({ path: '/tmp/e2e-fail.png' }).catch(() => undefined);
     console.error('FAIL:', error.message);

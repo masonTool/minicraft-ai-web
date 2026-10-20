@@ -35,6 +35,7 @@ export interface MiniGameUi {
   handleInventoryUp(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
   togglePause(): void;
   isPauseOpen(): boolean;
+  setPauseGameMode(mode: 'survival' | 'creative'): void;
   handlePauseTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): PauseAction;
   openSettings(): void;
   isSettingsOpen(): boolean;
@@ -208,6 +209,9 @@ export function createCanvasUi(
     },
     isPauseOpen(): boolean {
       return pause.isOpen();
+    },
+    setPauseGameMode(mode: 'survival' | 'creative'): void {
+      pause.setGameMode(mode);
     },
     handlePauseTap(clientX, clientY, sw, sh): PauseAction {
       return pause.isOpen() ? pause.handleTap(clientX, clientY, sw, sh) : null;

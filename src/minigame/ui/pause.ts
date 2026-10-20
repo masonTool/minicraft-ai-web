@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
 
-export type PauseAction = 'resume' | 'settings' | 'menu' | 'delete' | null;
+export type PauseAction = 'resume' | 'settings' | 'menu' | 'delete' | 'gameMode' | null;
 
 export interface PauseMenu {
   toggle(): void;
   close(): void;
   isOpen(): boolean;
+  setGameMode(mode: 'survival' | 'creative'): void;
   handleTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): PauseAction;
   render(renderer: THREE.WebGLRenderer): void;
 }
@@ -49,8 +50,10 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
   const settings: Rect = { x: panelX + 60, y: panelY + 150, w: panelWidth - 120, h: 46 };
   const menu: Rect = { x: panelX + 60, y: panelY + 208, w: panelWidth - 120, h: 46 };
   const deleteWorld: Rect = { x: panelX + 60, y: panelY + 266, w: panelWidth - 120, h: 46 };
+  const gameModeButton: Rect = { x: panelX + 60, y: panelY + 324, w: panelWidth - 120, h: 40 };
 
   let open = false;
+  let gameMode: 'survival' | 'creative' = 'survival';
 
   const redraw = (): void => {
     if (!context) return;
@@ -75,6 +78,13 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
     drawButton(context, settings, '设置', 'normal', 20);
     drawButton(context, menu, '保存并返回主菜单', 'normal', 17);
     drawButton(context, deleteWorld, '删除本世界', 'normal', 17);
+    drawButton(
+      context,
+      gameModeButton,
+      `游戏模式：${gameMode === 'creative' ? '创造' : '生存'}`,
+      'normal',
+      15,
+    );
     texture.needsUpdate = true;
   };
 
@@ -95,6 +105,10 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
     isOpen(): boolean {
       return open;
     },
+    setGameMode(mode: 'survival' | 'creative'): void {
+      gameMode = mode;
+      redraw();
+    },
     handleTap(clientX: number, clientY: number, sw: number, sh: number): PauseAction {
       if (!open) return null;
       const x = (clientX / Math.max(1, sw)) * canvas.width;
@@ -114,6 +128,9 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
       if (contains(deleteWorld, x, y)) {
         setOpen(false);
         return 'delete';
+      }
+      if (contains(gameModeButton, x, y)) {
+        return 'gameMode';
       }
       setOpen(false);
       return 'resume';

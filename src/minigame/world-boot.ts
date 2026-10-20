@@ -651,6 +651,7 @@ async function boot(): Promise<void> {
   );
 
   ui.setCreativeMode(gameMode === 'creative');
+  ui.setPauseGameMode(gameMode);
   let playerHealth = Math.max(1, loadedPlayer?.health ?? 20);
   let playerFood = loadedPlayer?.food ?? 20;
   let playerAir = loadedPlayer?.air ?? 300;
@@ -1171,6 +1172,7 @@ async function boot(): Promise<void> {
     playerAir = loadedPlayer?.air ?? 300;
     gameMode = entry.gameMode;
     ui.setCreativeMode(gameMode === 'creative');
+  ui.setPauseGameMode(gameMode);
     refreshVitals();
     damageFlash = 0;
     ui.setDamageFlash(0);
@@ -1456,6 +1458,7 @@ async function boot(): Promise<void> {
             currentWorld.difficulty = action.difficulty;
             gameMode = action.gameMode;
             ui.setCreativeMode(gameMode === 'creative');
+  ui.setPauseGameMode(gameMode);
           }
           platform.storage.set('wx.worlds', JSON.stringify(worlds));
           refreshWorldInfo(world.edits.totalEdits);
@@ -1488,6 +1491,20 @@ async function boot(): Promise<void> {
         })();
       }
       if (action === 'delete') void deleteSave();
+      if (action === 'gameMode') {
+        gameMode = gameMode === 'creative' ? 'survival' : 'creative';
+        if (gameMode === 'survival') {
+          flying = false;
+          ui.setFlying(false);
+        }
+        currentWorld.gameMode = gameMode;
+        ui.setCreativeMode(gameMode === 'creative');
+  ui.setPauseGameMode(gameMode);
+        ui.setPauseGameMode(gameMode);
+        platform.storage.set('wx.worlds', JSON.stringify(worlds));
+        scheduleSave?.();
+        ui.showToast(`游戏模式：${gameMode === 'creative' ? '创造' : '生存'}`);
+      }
       return;
     }
     // 顶部居中暂停
