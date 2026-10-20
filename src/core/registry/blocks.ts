@@ -2557,20 +2557,22 @@ export const TARGET_ID = 584;
  *
  * 弯道四张、直轨两张；`stateTiles` 返回的必须是图集里注册过的 key。
  */
-export function railTileFor(state: number): string {
+export function railTileFor(state: number, prefix = 'rail'): string {
   switch (railShapeOf(state)) {
     case 'east_west':
-      return 'rail_east_west';
+      return `${prefix}_east_west`;
     case 'north_east':
-      return 'rail_ne';
+      return `${prefix}_ne`;
     case 'north_west':
-      return 'rail_nw';
+      return `${prefix}_nw`;
     case 'south_east':
-      return 'rail_se';
+      return `${prefix}_se`;
     case 'south_west':
-      return 'rail_sw';
+      return `${prefix}_sw`;
     default:
-      return 'rail';
+      // 直轨（南北）与坡道都用直轨那张：坡道的几何是 4 段阶梯，
+      // 贴图按面拉伸之后本来就看着像斜的
+      return prefix;
   }
 }
 
@@ -2604,10 +2606,12 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
     name: 'minecraft:powered_rail',
     tiles: ['powered_rail', 'powered_rail', 'powered_rail'],
     // 通电状态换贴图：红石引擎在 `recompute` 里写 `powered` 位，渲染层照它取图
-    stateTiles: (state) =>
-      isPowered(state)
-        ? ['powered_rail_on', 'powered_rail_on', 'powered_rail_on']
-        : ['powered_rail', 'powered_rail', 'powered_rail'],
+    stateTiles: (state) => {
+      // 通电仍用统一亮图（批次 482：形状 × 通断会翻成 40 张图，而亮轨看不出弯直）
+      if (isPowered(state)) return ['powered_rail_on', 'powered_rail_on', 'powered_rail_on'];
+      const key = railTileFor(state, 'powered_rail');
+      return [key, key, key];
+    },
     shape: 'rail',
     solid: false,
     opaque: false,
@@ -2617,10 +2621,12 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
     id: DETECTOR_RAIL_ID,
     name: 'minecraft:detector_rail',
     tiles: ['detector_rail', 'detector_rail', 'detector_rail'],
-    stateTiles: (state) =>
-      isPowered(state)
-        ? ['detector_rail_on', 'detector_rail_on', 'detector_rail_on']
-        : ['detector_rail', 'detector_rail', 'detector_rail'],
+    stateTiles: (state) => {
+      // 通电仍用统一亮图（批次 482：形状 × 通断会翻成 40 张图，而亮轨看不出弯直）
+      if (isPowered(state)) return ['detector_rail_on', 'detector_rail_on', 'detector_rail_on'];
+      const key = railTileFor(state, 'detector_rail');
+      return [key, key, key];
+    },
     shape: 'rail',
     solid: false,
     opaque: false,
@@ -2630,10 +2636,12 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
     id: ACTIVATOR_RAIL_ID,
     name: 'minecraft:activator_rail',
     tiles: ['activator_rail', 'activator_rail', 'activator_rail'],
-    stateTiles: (state) =>
-      isPowered(state)
-        ? ['activator_rail_on', 'activator_rail_on', 'activator_rail_on']
-        : ['activator_rail', 'activator_rail', 'activator_rail'],
+    stateTiles: (state) => {
+      // 通电仍用统一亮图（批次 482：形状 × 通断会翻成 40 张图，而亮轨看不出弯直）
+      if (isPowered(state)) return ['activator_rail_on', 'activator_rail_on', 'activator_rail_on'];
+      const key = railTileFor(state, 'activator_rail');
+      return [key, key, key];
+    },
     shape: 'rail',
     solid: false,
     opaque: false,

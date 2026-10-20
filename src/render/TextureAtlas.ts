@@ -1825,23 +1825,52 @@ function railCornerPainter(
 PAINTERS.rail = railPainter([104, 80, 56], [176, 176, 184]);
 // 四个弯：北+东 / 北+西 / 南+东 / 南+西（`dirs` 里 dz > 0 = 图的下方）
 // 东西向直轨（批次 478）：把南北向那张转 90°——轨道变成两条横线、枕木变竖线
-PAINTERS.rail_east_west = (x, y) => {
-  const onRail = (y >= 2 && y <= 4) || (y >= 11 && y <= 13);
-  if (onRail && x > 0) {
-    const shine = y === 3 || y === 12 ? 1.22 : 1;
-    return [clamp255(176 * shine), clamp255(176 * shine), clamp255(184 * shine), 255];
-  }
-  if (x % 4 === 2 && y > 0) {
-    const grain = y % 3 === 0 ? 0.84 : 1;
-    return [clamp255(104 * grain), clamp255(80 * grain), clamp255(56 * grain), 255];
-  }
-  return [0, 0, 0, 0];
-};
+/** 东西向直轨：把南北向那张转 90°（轨道变横线、枕木变竖线） */
+function railPainterEastWest(
+  sleeper: readonly [number, number, number],
+  steel: readonly [number, number, number],
+  glow = false,
+): Painter {
+  return (x, y) => {
+    const onRail = (y >= 2 && y <= 4) || (y >= 11 && y <= 13);
+    if (onRail && x > 0) {
+      const shine = (y === 3 || y === 12 ? 1.22 : 1) * (glow ? 1.28 : 1);
+      return [clamp255(steel[0] * shine), clamp255(steel[1] * shine), clamp255(steel[2] * shine), 255];
+    }
+    if (x % 4 === 2 && y > 0) {
+      const grain = y % 3 === 0 ? 0.84 : 1;
+      return [clamp255(sleeper[0] * grain), clamp255(sleeper[1] * grain), clamp255(sleeper[2] * grain), 255];
+    }
+    return [0, 0, 0, 0];
+  };
+}
+
+PAINTERS.rail_east_west = railPainterEastWest([104, 80, 56], [176, 176, 184]);
 
 PAINTERS.rail_ne = railCornerPainter([104, 80, 56], [176, 176, 184], [0, -1], [1, 0]);
 PAINTERS.rail_nw = railCornerPainter([104, 80, 56], [176, 176, 184], [0, -1], [-1, 0]);
 PAINTERS.rail_se = railCornerPainter([104, 80, 56], [176, 176, 184], [0, 1], [1, 0]);
 PAINTERS.rail_sw = railCornerPainter([104, 80, 56], [176, 176, 184], [0, 1], [-1, 0]);
+
+// 动力 / 探测 / 激活铁轨的形状贴图（批次 482）：与普通铁轨同一套画法，只换配色。
+// ⚠️ 只做**断电**这套：通电时仍用原来的 `*_on`（整条亮起的金/红轨），
+// 因为"形状 × 通断"会翻成 40 张图，而通电时那条亮轨本来就看不出弯直
+const RAIL_SHAPE_SPECS: readonly {
+  prefix: string;
+  sleeper: readonly [number, number, number];
+  steel: readonly [number, number, number];
+}[] = [
+  { prefix: 'powered_rail', sleeper: [150, 122, 48], steel: [206, 172, 74] },
+  { prefix: 'detector_rail', sleeper: [116, 116, 122], steel: [166, 166, 174] },
+  { prefix: 'activator_rail', sleeper: [126, 78, 70], steel: [196, 104, 96] },
+];
+for (const spec of RAIL_SHAPE_SPECS) {
+  PAINTERS[`${spec.prefix}_east_west`] = railPainterEastWest(spec.sleeper, spec.steel);
+  PAINTERS[`${spec.prefix}_ne`] = railCornerPainter(spec.sleeper, spec.steel, [0, -1], [1, 0]);
+  PAINTERS[`${spec.prefix}_nw`] = railCornerPainter(spec.sleeper, spec.steel, [0, -1], [-1, 0]);
+  PAINTERS[`${spec.prefix}_se`] = railCornerPainter(spec.sleeper, spec.steel, [0, 1], [1, 0]);
+  PAINTERS[`${spec.prefix}_sw`] = railCornerPainter(spec.sleeper, spec.steel, [0, 1], [-1, 0]);
+}
 // 动力铁轨：金枕木 + 金轨；通电版整体提亮（原版是"金轨亮起来"）
 PAINTERS.powered_rail = railPainter([150, 122, 48], [206, 172, 74]);
 PAINTERS.powered_rail_on = railPainter([188, 152, 58], [245, 206, 96], true);

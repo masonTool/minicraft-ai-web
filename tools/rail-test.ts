@@ -27,6 +27,7 @@ import { meshBoxes } from '../src/core/registry/blockShapes.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
+import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 
 let passed = 0;
 let failed = 0;
@@ -221,6 +222,33 @@ console.log('\n[坡道（批次 481）]');
   climber.tick(slopeCtx, 0.05);
   check('向东开上坡：车被抬起来', climber.y > 0.2, `y=${climber.y.toFixed(2)}`);
   check('抬升量跟着格内位置走（≈ 0.3）', Math.abs(climber.y - Math.max(0, Math.min(1, climber.x))) < 0.12, `y=${climber.y.toFixed(2)} x=${climber.x.toFixed(2)}`);
+}
+
+
+console.log('\n[特殊铁轨的形状贴图（批次 482）]');
+{
+  const prefixes = ['powered_rail', 'detector_rail', 'activator_rail'] as const;
+  for (const prefix of prefixes) {
+    const eastWest = railTileFor(withRailShape(0, 'east_west'), prefix);
+    const corner = railTileFor(withRailShape(0, 'south_east'), prefix);
+    equal(`${prefix} 东西向用 ${prefix}_east_west`, eastWest, `${prefix}_east_west`);
+    equal(`${prefix} 弯道用 ${prefix}_se`, corner, `${prefix}_se`);
+    equal(`${prefix} 直轨还是原图`, railTileFor(0, prefix), prefix);
+  }
+
+  // ⚠️ 每条贴图都必须在图集名单里：漏一张不会报错，只会静默回退成"没贴图"
+  const missing: string[] = [];
+  for (const prefix of ['rail', ...prefixes]) {
+    for (const shape of RAIL_SHAPES) {
+      const key = railTileFor(withRailShape(0, shape), prefix);
+      if (!TILE_ORDER.includes(key)) missing.push(`${prefix}/${shape} → ${key}`);
+    }
+  }
+  equal('四种铁轨 × 十种形状的贴图都在图集名单里', missing.length, 0);
+  check('（缺的是）', missing.length === 0, missing.slice(0, 4).join(' '));
+
+  // 坡道用直轨贴图（几何是阶梯，贴图会被拉伸成斜面）
+  equal('坡道回落到直轨贴图', railTileFor(withRailShape(0, 'ascending_east')), 'rail');
 }
 
 console.log(`\n铁轨测试：${passed} 通过 / ${failed} 失败`);
