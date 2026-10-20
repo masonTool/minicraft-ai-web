@@ -244,6 +244,8 @@ export class WorldScreen {
     this.seedInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.createAndEnter();
     });
+    // 改了种子就把"种子要填数字"的红字恢复正常说明
+    this.seedInput.addEventListener('input', () => this.updateTypeHint());
     this.nameInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') this.createAndEnter();
     });
@@ -433,8 +435,13 @@ export class WorldScreen {
       danger: true,
     });
     if (!ok) return;
-    await this.actions.onDelete(world);
-    this.render();
+    try {
+      await this.actions.onDelete(world);
+    } catch (error) {
+      console.error('[world] 删除失败', error);
+    } finally {
+      this.render();
+    }
   }
 
   /** 游戏内的小型确认弹窗（只有确认 / 取消两个出口，点遮罩不关） */
