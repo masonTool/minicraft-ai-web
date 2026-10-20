@@ -4,57 +4,33 @@
  *
  * 与 `build-spike.mjs` 的区别：
  *   - 入口是 `tools/minigame/spike-adapter/entry.mjs`
- *   - 引入 `references/minigame-publisher/minigame-adapter`（本地参考，gitignored）
- *   - 产物输出到独立目录 `minigame-adapter-spike/`，不覆盖 WX-001 的 `minigame/`
+ *   - 引入 `vendor/minigame-adapter`（vendored 870d66f + 本分支补丁）
+ *   - 产物输出到独立目录 `minigame-adapter-spike/`，不覆盖正式 `minigame/`
  *
  * 用法：`npm run build:minigame:adapter`
  */
 
 import { build } from 'esbuild';
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const adapterEntry = join(root, 'references', 'minigame-publisher', 'minigame-adapter', 'index.js');
+const adapterEntry = join(root, 'vendor', 'minigame-adapter', 'index.js');
 const outDir = join(root, 'minigame-adapter-spike');
 const outfile = join(outDir, 'game.js');
 
 if (!existsSync(adapterEntry)) {
   console.error(
-    '[minigame] ✗ 找不到参考适配器：\n' +
+    '[minigame] ✗ 找不到 vendored 适配器：\n' +
       `  ${adapterEntry}\n` +
-      '  请先把 minigame-publisher 放到 references/ 下（该目录已 gitignore）。',
+      '  适配器应当在 vendor/minigame-adapter/（随仓库提交）。',
   );
   process.exit(1);
 }
 
 mkdirSync(outDir, { recursive: true });
-
-/**
- * 适配器的 `HTMLScriptElement.js` 里有一句动态 require：
- *   require(`../${url.host + url.pathname}`)
- * esbuild 会把它当成“可能加载任意文件”，于是把 references 下的
- * node_modules/.git/README 全都扫进来，直接爆几千个错误。
- *
- * 我们的 spike 不使用 script 标签，替换成运行时报错即可；
- * 正式移植时这一块会直接删掉（小游戏用打包期静态入口）。
- */
-const stubDynamicScriptRequire = {
-  name: 'stub-dynamic-script-require',
-  setup(pluginBuild) {
-    pluginBuild.onLoad({ filter: /minigame-adapter[\\/]HTMLScriptElement\.js$/ }, async (args) => {
-      const source = await readFile(args.path, 'utf8');
-      const patched = source.replace(
-        /require\(`\.\.\/\$\{url\.host \+ url\.pathname\}`\);/,
-        'throw new Error("适配器动态脚本加载未实现（spike 不使用 script 标签）");',
-      );
-      return { contents: patched, loader: 'js' };
-    });
-  },
-};
 
 await build({
   absWorkingDir: root,
@@ -65,11 +41,13 @@ await build({
   target: ['es2017'],
   platform: 'browser',
   outfile,
+  define: {
+    __WX_LABEL__: JSON.stringify('WX-006 ADAPTER'),
+  },
   legalComments: 'none',
   sourcemap: false,
   minify: false,
   logLevel: 'info',
-  plugins: [stubDynamicScriptRequire],
 });
 
 const bytes = statSync(outfile).size;

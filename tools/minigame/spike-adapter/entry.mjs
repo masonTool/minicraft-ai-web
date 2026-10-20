@@ -1,20 +1,21 @@
 /**
- * WX-006 spike：minigame-adapter + three r186
+ * 微信小游戏入口（WX-010 起用 vendored 适配器）
  *
- * 与 WX-001 的 shim 版对比：
- *   - WX-001 用我们自己写的 `src/minigame/spike/wx-env.ts`
- *   - 这里用参考项目 `minigame-adapter`（870d66f）的完整兼容层
+ * 早期它是 WX-006 的对比 spike；现在适配器已经 vendored 到
+ * `vendor/minigame-adapter/` 并打过补丁，这里改为走正式启动层
+ * `src/platform/wx/bootstrap.ts`，不再依赖 `references/`。
  *
- * 目的：确认适配器能不能让 three r186 在微信小游戏里拿到 WebGL2 并正常渲染；
- * 同时观察适配器对 Canvas.getContext 的包装是否明显拖慢帧率。
+ * 当前画面仍是压力场景（WX-020 接入真实 App/UiPort 后会替换掉）。
  *
- * ⚠️ 这个入口只在本地 spike 使用，适配器从 `references/` 直接引入，不提交到仓库；
- * 正式方案（WX-007 之后）才会把必要模块选择性移植到 `src/platform/wx/**`。
+ * ⚠️ 必须最先 import bootstrap：适配器要先注入 window/document，three 才能初始化。
  */
 
-import './define-globals.mjs';
-import '../../../references/minigame-publisher/minigame-adapter/index.js';
+import '../../../src/platform/wx/bootstrap.ts';
 import * as THREE from 'three';
+
+/** 构建期注入：正式版 WX-010 FORMAL，对比 spike WX-006 ADAPTER */
+const HUD_LABEL = __WX_LABEL__;
+const TAG = `[${HUD_LABEL}]`;
 
 const doc = globalThis.document;
 const view = globalThis;
@@ -100,14 +101,14 @@ function boot() {
   const gl = renderer.getContext();
   const glVersion = String(gl.getParameter(gl.VERSION));
   const glRenderer = String(gl.getParameter(gl.RENDERER));
-  console.log('[WX-006] adapter', 'inner', width, height, 'dpr', view.devicePixelRatio);
-  console.log('[WX-006] navigator', view.navigator?.platform, view.navigator?.userAgent);
-  console.log('[WX-006] GL_VERSION', glVersion);
-  console.log('[WX-006] GL_RENDERER', glRenderer);
+  console.log(`${TAG} adapter`, 'inner', width, height, 'dpr', view.devicePixelRatio);
+  console.log(`${TAG} navigator`, view.navigator?.platform, view.navigator?.userAgent);
+  console.log(`${TAG} GL_VERSION`, glVersion);
+  console.log(`${TAG} GL_RENDERER`, glRenderer);
 
   const hud = createHud();
   hud.update([
-    `WX-006 ADAPTER  ${width}x${height} dpr ${view.devicePixelRatio}`,
+    `${HUD_LABEL}  ${width}x${height} dpr ${view.devicePixelRatio}`,
     `GL ${glVersion}`,
     `GL ${glRenderer}`,
     'FPS ...  TRI ...  CALLS ...',
@@ -175,9 +176,9 @@ function boot() {
       stressCount += 1;
     }
   }
-  console.log('[WX-006] stress meshes', stressCount);
+  console.log(`${TAG} stress meshes`, stressCount);
   hud.update([
-    `WX-006 ADAPTER  ${width}x${height} dpr ${view.devicePixelRatio}  STRESS ${stressCount}`,
+    `${HUD_LABEL}  ${width}x${height} dpr ${view.devicePixelRatio}  STRESS ${stressCount}`,
     `GL ${glVersion}`,
     `GL ${glRenderer}`,
     'FPS ...  MS ...  TRI ...  CALLS ...',
@@ -226,10 +227,10 @@ function boot() {
       const ms = frames > 0 ? (time - lastReport) / frames : 0;
       fps = frames;
       console.log(
-        `[WX-006] fps=${fps} ms=${ms.toFixed(1)} tri=${sceneTriangles} calls=${sceneCalls}`,
+        `${TAG} fps=${fps} ms=${ms.toFixed(1)} tri=${sceneTriangles} calls=${sceneCalls}`,
       );
       hud.update([
-        `WX-006 ADAPTER  ${width}x${height} dpr ${view.devicePixelRatio}  STRESS ${stressCount}`,
+        `${HUD_LABEL}  ${width}x${height} dpr ${view.devicePixelRatio}  STRESS ${stressCount}`,
         `GL ${glVersion}`,
         `GL ${glRenderer}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
@@ -251,9 +252,9 @@ function boot() {
 try {
   boot();
 } catch (error) {
-  console.error('[WX-006] boot failed', error);
+  console.error(`${TAG} boot failed`, error);
   wx.showModal({
-    title: 'WX-006 启动失败',
+    title: `${HUD_LABEL} 启动失败`,
     content: String(error && error.stack ? error.stack : error),
     showCancel: false,
   });

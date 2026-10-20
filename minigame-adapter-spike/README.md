@@ -1,7 +1,8 @@
 # minigame-adapter spike（WX-006）
 
-用参考项目 `references/minigame-publisher/minigame-adapter`（870d66f）替换 WX-001 的自写垫片，
+用 vendored 适配器 `vendor/minigame-adapter`（870d66f + 本分支补丁）替换 WX-001 的自写垫片，
 验证 **适配器 + three r186** 在微信小游戏里能不能拿到 WebGL2、帧率是否可接受。
+这个工程保留为 WX-006 的对比基线；正式开发用 `minigame/` 与 `npm run build:minigame:formal`。
 
 ## 跑起来
 
@@ -10,7 +11,7 @@
 npm run build:minigame:adapter
 ```
 
-前提：`references/minigame-publisher/minigame-adapter` 存在（该目录已 gitignore）。
+前提：`vendor/minigame-adapter/` 存在（随仓库提交）。
 
 然后：
 

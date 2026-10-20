@@ -15,7 +15,7 @@
 | 主线 worktree | `/Users/mason/DouDou/minicraft-ai-web`（`main`，继续推进自己的队列） |
 | 任务 ID | `WX-NNN`，与主线“批次 NNN”完全隔离 |
 | 提交前缀 | `WX-NNN: ...` |
-| 状态记号 | `[ ]` 待办 · `[~]` 进行中 · `[x]` 完成 · `[!]` 阻塞 |
+| 状态记号 | `[ ]` 待办 · `[~]` 进行中 · `[x]` 完成 · `[!]` 阻塞 · `[»]` 已并入后续任务（不再单独验收） |
 
 **目标**：把现有 Web 游戏移植成**微信小游戏**，保留 `src/core` 的游戏逻辑，
 重写 UI 与平台层；微信跑通后再单独评估抖音。
@@ -167,6 +167,11 @@ Worker（改写）、xmldom（只有在需要时）。
 | 10 | 新增 | 没有 `matchMedia`/`history` | 补最小实现，或把调用点改成平台接口 |
 | 11 | `HTMLScriptElement.js` | 动态 `require(\`../${...}\`)` 会让 esbuild 扫描整个 references（含 node_modules/.git），WX-006 实测报 4292 个错 | 正式移植时删掉整个 `HTMLScriptElement`；spike 用 esbuild 插件替换成运行时抛错 |
 
+> **落地状态（WX-010）**：#1（删动态 require）、#2（pointer）、#3（visibilitychange）、
+> #4（matchMedia）、#6（Worker.addEventListener）已在 `vendor/minigame-adapter/` 内完成；
+> 同时删掉了未使用的 `dom/xmldom`（CommonJS，esbuild 会告警，且本项目不用 XML）。
+> #7/#8/#9 分别由 WX-016 / WX-019 / WX-01A 负责。
+
 ### 2.5.5 UI 的结论
 
 - 适配器**不能**让 `src/ui/**` 与 `index.html` 的 CSS 直接跑起来；
@@ -203,6 +208,11 @@ Worker（改写）、xmldom（只有在需要时）。
 4. **仍然不做 DOM/CSS 模拟**（见 §2.6）；UI 走自研 canvas 工具包。
 5. 内存峰值/启动耗时这两项基线还没测，放到 WX-010 正式构建后用开发者工具补；
    它们不影响 Go 结论（性能主项已达标）。
+
+> **补充（用户确认）**：`minigame-adapter` 本身已经在其参考项目中长期验证，
+> 不需要再单独做适配器验收。本次真机只验证「three r186 + WebGL2 + 适配器」这条组合。
+> 因此 M0 到此关闭；Worker 与图集不再单设门禁，分别并入 WX-018 / WX-020 的开发内验证。
+> 下一步直接进入 **WX-010 正式构建体系**。
 
 ---
 
@@ -312,9 +322,9 @@ flex/absolute/grid 子集。
 | --- | --- | --- | --- | --- | --- |
 | WX-000 | 建立 worktree/分支/任务表；关闭本 worktree 的 auto-continue | 本文件 + `AGENTS.md` 提示 + `.codebuddy/auto-continue.off` | — | 0.5 | [x] |
 | WX-001 | 微信小游戏最小工程 | `minigame/` 能导入开发者工具；three r186 画出单区块 | WX-000 | 2 | [x] |
-| WX-002 | 真机基线测量 | 帧率/帧时间/内存峰值/启动耗时/webgl2/包体，写入 §7 | WX-001 | 2 | [~] |
-| WX-003 | Worker 打包与通道验证 | 单 worker 能加载，复制 vs Transferable 的耗时数据 | WX-001 | 1.5 | [ ] |
-| WX-004 | 图集与 2D canvas 验证 | `TextureAtlas` 的 createImageData/putImageData/drawImage 可用 | WX-001 | 1 | [ ] |
+| WX-002 | 真机基线测量 | 帧率/帧时间/webgl2/压力场景已测；真实游戏的内存/启动并入 WX-041 | WX-001 | 2 | [x] |
+| WX-003 | Worker 集成验证 | 不再单设门禁：并入 WX-018（单 worker、复制 vs Transferable、两池合并） | WX-001 | 1.5 | [»] |
+| WX-004 | 图集 / 2D canvas 验证 | 不再单设门禁：并入 WX-020（首次真实启动时验证 TextureAtlas 全路径） | WX-001 | 1 | [»] |
 | WX-006 | `minigame-adapter` 接入 spike | 从 `references/` 引入适配器 + three r186，构建第二份 `game.js`；与 WX-001 对比帧率/兼容性 | WX-001 | 2 | [x] |
 | WX-007 | 适配器取舍与补丁清单 | 决定整包/选择性移植；确认 §2.5.4 的补丁是否都必要，写入 §7 | WX-006 | 1 | [x] |
 | WX-005 | Go/No-Go 结论与性能预算 | 结论写进 §7；不达标则给出降级方案 | WX-002~004, WX-006~007 | 0.5 | [x] |
@@ -323,7 +333,7 @@ flex/absolute/grid 子集。
 
 | ID | 任务 | 验收 / 产出 | 依赖 | 人日 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| WX-010 | 小游戏构建体系 | `tools/minigame/build.mjs`（esbuild 多入口）+ worker IIFE 产物 | WX-005 | 2 | [ ] |
+| WX-010 | 小游戏构建体系 | vendored 适配器 + esbuild IIFE + ES2017 + 4MB/语法检查；worker 产物并入 WX-018 | WX-005 | 2 | [x] |
 | WX-011 | 平台接口与探测 | `src/platform/types.ts` + `wx/tt/web` 探测；Web 版行为不变 | WX-010 | 1 | [ ] |
 | WX-012 | canvas / system / lifecycle | 复用适配器 Canvas/WxInfo/WxEvent；补 `visibilitychange`、`matchMedia`、安全区 | WX-011 | 1.5 | [ ] |
 | WX-013 | 输入适配 | 适配器 touch 事件之上合成 pointerdown/move/up；多点、摇杆、视角 | WX-012 | 1.5 | [ ] |
@@ -444,8 +454,9 @@ git push
 cd /Users/mason/DouDou/minicraft-ai-web-wxminigame
 npm install            # worktree 没有 node_modules
 npm run dev            # 确认 Web 版仍可跑（对照用）
-npm run build:minigame         # 生成 minigame/game.js（WX-001 自写 shim）
-npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 适配器版）
+npm run build:minigame:formal   # 正式版 → minigame/game.js（vendored 适配器）
+npm run build:minigame          # 旧自写 shim（会覆盖 minigame/game.js，仅对比用）
+npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006 对比）
 ```
 
 > ⚠️ **构建目标必须是 es2017 或更低**：微信真机 JSCore 不支持 ES2020 的
@@ -481,7 +492,9 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 | 2026-10-20 | WX-002 真机 | WX-001 / WX-006 均 WebGL2（OpenGL ES 3.2）、793×360 dpr3、61fps（轻场景）；适配器版无报错 | — |
 | 2026-10-20 | WX-002 修正 | HUD 的 `TRI 2/CALLS 1` 是二次 render 重置 info 的统计 bug；改为主场景后抓取，并加压力场景 + `MS` 指标 | `56633a0` |
 | 2026-10-20 | WX-002/006 复测 | 两版压力场景均 61fps / 16.6ms / 801 calls / 12,720 tri；`STRESS 799` 是 32×32 去掉中央 15×15；适配器无可测开销 | — |
-| 2026-10-20 | WX-005/007 | **Go**；采用适配器作为平台层基座，保留 ctx 包装，只补 pointer/matchMedia/visibilitychange/HTMLScriptElement/Worker/存储/键盘/WebSocket；UI 仍自研 canvas | 本次提交 |
+| 2026-10-20 | WX-005/007 | **Go**；采用适配器作为平台层基座，保留 ctx 包装，只补 pointer/matchMedia/visibilitychange/HTMLScriptElement/Worker/存储/键盘/WebSocket；UI 仍自研 canvas | `5579bd8` |
+| 2026-10-20 | M0 关闭 | 用户确认适配器已在参考项目验证，不再单独验收；WX-003/004 并入 WX-018/WX-020；直接进入 WX-010 | `5579bd8` |
+| 2026-10-20 | WX-010 | 适配器 vendored 到 `vendor/minigame-adapter/`（870d66f）+ 5 条补丁；正式构建 1232KB / gzip 221KB，`??` 0；入口切到 vendored 适配器 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -494,15 +507,15 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 | **微信 WebGL2 / 内存** | 低端 Android 可能拿不到 WebGL2 或内存不足 | WebGL2 已真机确认；内存峰值待 WX-010 后补测 | WebGL2 通过，内存待测 |
 | **真机 JS 语法** | 模拟器支持 ES2020，真机 JSCore 不支持 `??`/`?.`，报 `Unexpected token ?` | 构建 target 固定 `es2017`；产物用 grep 检查 `??`/`?.` | 已修复（WX-002） |
 | **抖音 WebGL2** | 官方小游戏 canvas 只保证 WebGL1；three r186 只支持 WebGL2 | M6 单独 Gate；必要时 three 0.162 + WebGL1 适配 | 未验证 |
-| **适配器假 DOM** | `getElementById`/`querySelector` 返回占位对象，UI 代码会“看起来没报错但什么都不显示” | 小游戏 UI/游戏代码禁止依赖假 DOM；只经 `UiPort`/`src/platform` 访问 | 待约束 |
+| **适配器假 DOM** | `getElementById`/`querySelector` 返回占位对象，UI 代码会“看起来没报错但什么都不显示” | 已写入 `vendor/minigame-adapter/README.md` 与 §2.6：禁止依赖假 DOM，只经 `UiPort`/`src/platform` 访问 | 约束已落地 |
 | **适配器 WebGL 包装** | `Canvas.getContext` 对每个方法加包装，draw call 多时可能明显掉帧 | 801 draw call 压力场景下两版均 16.6ms，无可测差异；保留包装 | 已排除 |
 | **three WebGL1 守卫** | 适配器把 `WebGLRenderingContext` 换成空函数；若真机判定成 WebGL1 会直接抛错 | WX-006 真机确认；必要时删掉该 fake / 改成 WebGL2 构造器 | 待验证 |
-| **适配器动态 require** | `HTMLScriptElement.js` 的动态 require 会让打包器扫描整个 references（WX-006 实测 4292 错） | spike 用插件替换；正式移植直接删掉 HTMLScriptElement | 已在 spike 绕过 |
+| **适配器动态 require** | `HTMLScriptElement.js` 的动态 require 会让打包器扫描整个 references（WX-006 实测 4292 错） | vendored 副本已删掉动态 require；同时移除未使用的 `dom/xmldom` | 已修复（WX-010） |
 | **适配器仅微信** | 全量 `wx.*`；抖音不能复用 | 平台层按 `wx/tt` 分开；抖音 M6 另写 | 已知 |
 | **Layout 插件限制** | 只有微信、需插件权限；不支持完整 CSS/拖拽/输入法 | 只做 WX-021B 小规模验证；核心 UI 仍自研 canvas 工具包 | 待验证 |
 | **UI 工作量** | 34 个模块、约 500 个 DOM 节点、4,200 行 CSS | 先做工具包 + 闭环；MVP 砍非核心界面 | 进行中 |
 | **`main.ts` 冲突** | 主线持续改 14,400 行入口 | 只做最小接口改动；每 3~5 个任务 merge 一次 | 进行中 |
-| **Worker 单线程** | 生成/网格化抢一个 worker，卡顿 | 合并队列 + 分片；必要时主线程时间切片 | 未验证 |
+| **Worker 单线程** | 生成/网格化抢一个 worker，卡顿 | WX-018 合并两池 + 分片；必要时主线程时间切片 | WX-018 处理 |
 | **存档** | 杀进程/写一半导致丢档 | 原子写 + 备份 + 迁移测试 | 未开始 |
 | **IP / 合规** | “Minecraft / 我的世界 / 基岩版” 侵权风险 | 提审前改名/去商标；软著/备案并行 | 未开始 |
 | **iOS 内存** | 小游戏内存上限低，易被回收 | 视距降级、纹理释放、内存警告处理 | 未验证 |
