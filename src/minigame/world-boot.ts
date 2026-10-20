@@ -214,13 +214,13 @@ async function boot(): Promise<void> {
 
   const renderer = new THREE.WebGLRenderer({
     canvas: doc.canvas,
-    antialias: false,
+    antialias: true,
     alpha: false,
   });
   bootRenderer = renderer;
-  renderer.setPixelRatio(
-    Math.min(view.devicePixelRatio || 1, platform.kind === 'wx' ? 1.5 : 2),
-  );
+  const maxRenderDpr = Math.min(view.devicePixelRatio || 1, 2);
+  let renderDpr = maxRenderDpr;
+  renderer.setPixelRatio(renderDpr);
   renderer.setSize(width, height, false);
   renderer.setClearColor(0x8fc7ff, 1);
   renderer.autoClear = false;
@@ -713,6 +713,9 @@ async function boot(): Promise<void> {
   const MINE_TIME = 0.6;
   let lastFrameTime = 0;
   let lastTestStateAt = 0;
+  let perfAccum = 0;
+  let perfFrames = 0;
+  let lastDprChange = 0;
   ui.setFlying(flying);
   const toggleFlight = (): void => {
     if (gameMode !== 'creative') {
@@ -1912,11 +1915,32 @@ async function boot(): Promise<void> {
       }
       // WX-020A：先保证能看到完整地形；正式版应恢复“光照收敛后再网格化”的门闩，
       // 否则会把未收敛的光照烘焙进网格（App 里的 pendingSettle 会补刷）。
-      chunkRenderer.processQueue(MESH_BUDGET, centerCx, centerCz);
+      // 主线程网格化：掉帧时自动减少每帧提交量，优先保操作手感
+      const meshBudget = dt > 0.033 ? 2 : dt > 0.02 ? 4 : MESH_BUDGET;
+      chunkRenderer.processQueue(meshBudget, centerCx, centerCz);
       chunkRenderer.applyViewDistance(centerCx, centerCz, viewRadius);
     }
     solid.setTime(time * 0.001);
     translucent.setTime(time * 0.001);
+
+    perfAccum += dt;
+    perfFrames += 1;
+    if (perfAccum >= 1.5 && time - lastDprChange >= 2500) {
+      const sampleFps = perfFrames / perfAccum;
+      let nextDpr = renderDpr;
+      if (sampleFps < 42 && renderDpr > 1.5) nextDpr = Math.max(1.5, renderDpr - 0.2);
+      else if (sampleFps > 56 && renderDpr < maxRenderDpr) {
+        nextDpr = Math.min(maxRenderDpr, renderDpr + 0.1);
+      }
+      perfAccum = 0;
+      perfFrames = 0;
+      if (Math.abs(nextDpr - renderDpr) > 0.001) {
+        renderDpr = nextDpr;
+        renderer.setPixelRatio(renderDpr);
+        lastDprChange = time;
+        console.log(`[PERF] dpr=${renderDpr.toFixed(2)} fps=${sampleFps.toFixed(0)}`);
+      }
+    }
 
     if (time - lastTestStateAt >= 1000) {
       lastTestStateAt = time;
