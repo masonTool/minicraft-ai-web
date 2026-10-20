@@ -471,6 +471,19 @@ export function fogRadiusStep(
 }
 
 /**
+ * 限帧判据的**容差**（毫秒）。
+ *
+ * 60Hz 屏的刷新间隔是 16.67ms，而 `1000 / 60` 向上取整是 **17**——17 > 16.67，
+ * 于是每一帧都判"来得太早"被跳过，**选"60 帧"实际只剩 30 帧**（120Hz 屏上
+ * 更糟：8.33ms 的刷新要连跳两帧才画一次，变成 40 帧且节奏不均，看起比 30 帧还抖）。
+ *
+ * 减掉 1ms 之后判据变成"不早于目标帧时间"，60 档在任何 60Hz 设备上正好满帧；
+ * 30 档仍然稳定在 30（60Hz 下 33.34ms 一次）。容差取 1 而不是更大，是因为再大
+ * 就等于把上限抬到 65 帧以上，30Hz 屏反而会算错。
+ */
+const FRAME_CAP_TOLERANCE_MS = 1;
+
+/**
  * 限帧：这一帧该不该跳过（毫秒）。
  *
  * `maxFps <= 0` 表示不限帧（返回 0）。⚠️ 限帧**不改变画面**，它省的是 GPU 与电池——
@@ -478,7 +491,8 @@ export function fogRadiusStep(
  */
 export function frameIntervalMs(maxFps: number): number {
   if (!Number.isFinite(maxFps) || maxFps <= 0) return 0;
-  return Math.round(1000 / maxFps);
+  // 容差见 `FRAME_CAP_TOLERANCE_MS`：不取整，否则 60 档会被取整到 17ms 掉一半帧
+  return Math.max(0, 1000 / maxFps - FRAME_CAP_TOLERANCE_MS);
 }
 
 /** 画质档对应的**粒子硬上限**（场上同时存在的粒子上限） */

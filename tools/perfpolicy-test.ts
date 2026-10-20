@@ -360,9 +360,27 @@ console.log('\n[限帧与粒子总量（另外两个旋钮）]');
 {
   equal('不限帧：0', frameIntervalMs(0), 0);
   equal('负数也当不限', frameIntervalMs(-30), 0);
-  equal('60 帧 → 16.7ms 取整 17', frameIntervalMs(60), 17);
-  equal('30 帧 → 33ms', frameIntervalMs(30), 33);
+  // ⚠️ 这里断的是**行为**不是常数：`1000/60` 取整成 17ms 会让 60Hz 屏隔帧全跳，
+  // 选"60 帧"实际只剩 30 帧（120Hz 屏上变成 40 帧且节奏不均）。见 `framecap` 那段
+  check('60 帧的间隔必须小于 60Hz 的 16.67ms', frameIntervalMs(60) < 1000 / 60, `实际 ${frameIntervalMs(60)}ms`);
   check('帧率上限越高、间隔越小', frameIntervalMs(120) < frameIntervalMs(60));
+
+  /** 按 rAF 时间戳模拟限帧：一秒里真正画了多少帧 */
+  const simulatedFps = (maxFps: number, refreshHz: number): number => {
+    const interval = frameIntervalMs(maxFps);
+    let last = 0;
+    let drawn = 0;
+    for (let i = 1; i <= refreshHz; i++) {
+      const now = (i * 1000) / refreshHz;
+      if (interval > 0 && now - last < interval) continue;
+      last = now;
+      drawn++;
+    }
+    return drawn;
+  };
+  equal('60Hz 屏选"60 帧"→ 真的 60 帧', simulatedFps(60, 60), 60);
+  equal('60Hz 屏选"30 帧"→ 30 帧', simulatedFps(30, 60), 30);
+  equal('120Hz 屏选"60 帧"→ 60 帧（不是 40）', simulatedFps(60, 120), 60);
 
   equal('粒子关掉 → 上限 0', particleBudgetFor('off'), 0);
   equal('粒子减半 → 120', particleBudgetFor('reduced'), 120);
