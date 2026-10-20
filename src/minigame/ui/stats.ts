@@ -16,6 +16,7 @@ export interface StatsOverlay {
   hasError(): boolean;
   setBoss(name: string | null, health: number, max: number): void;
   setTarget(name: string | null): void;
+  setCrosshairVisible(visible: boolean): void;
   setDamageFlash(value: number): void;
   showDeath(cause: string): void;
   hideDeath(): void;
@@ -63,6 +64,7 @@ export function createStats(
   let error: string | null = null;
   let boss: { name: string; health: number; max: number } | null = null;
   let targetName: string | null = null;
+  let crosshairVisible = true;
   let damageFlash = 0;
   let deathCause: string | null = null;
 
@@ -191,9 +193,10 @@ export function createStats(
       context.strokeRect(x + 1, y + 1, barWidth - 2, 16);
     }
 
-    // 准星：白色细十字 + 深色描边
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
+    if (crosshairVisible) {
+      // 准星：白色细十字 + 深色描边
     context.fillStyle = 'rgba(0, 0, 0, 0.45)';
     context.fillRect(cx - 12, cy - 2, 24, 4);
     context.fillRect(cx - 2, cy - 12, 4, 24);
@@ -211,6 +214,7 @@ export function createStats(
       drawText(context, targetName, cx, cy + 24, 14, '#f5f5f5', 'center', width - 12);
     }
     context.fillRect(cx - 1, cy - 11, 2, 22);
+    }
 
     const baseY = canvas.height - 96 - safeBottomDesign;
     // 右移避开左侧摇杆；生命 320-560，饥饿 610-810
@@ -285,6 +289,11 @@ export function createStats(
       const next = name && name !== '-' ? name : null;
       if (targetName === next) return;
       targetName = next;
+      redraw();
+    },
+    setCrosshairVisible(visible: boolean): void {
+      if (crosshairVisible === visible) return;
+      crosshairVisible = visible;
       redraw();
     },
     setDamageFlash(value: number): void {

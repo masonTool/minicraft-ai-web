@@ -67,6 +67,7 @@ export interface MiniGameUi {
   setStats(stats: PlayerStats): void;
   setBoss(name: string | null, health: number, max: number): void;
   setTarget(name: string | null): void;
+  setCrosshairVisible(visible: boolean): void;
   setDamageFlash(value: number): void;
   showDeath(cause: string): void;
   hideDeath(): void;
@@ -319,6 +320,9 @@ export function createCanvasUi(
     },
     setTarget(name: string | null): void {
       stats.setTarget(name);
+    },
+    setCrosshairVisible(visible: boolean): void {
+      stats.setCrosshairVisible(visible);
     },
     setDamageFlash(value: number): void {
       stats.setDamageFlash(value);

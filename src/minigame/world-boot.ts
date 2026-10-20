@@ -652,6 +652,7 @@ async function boot(): Promise<void> {
 
   ui.setCreativeMode(gameMode === 'creative');
   ui.setPauseGameMode(gameMode);
+  ui.setCrosshairVisible(false);
   let playerHealth = Math.max(1, loadedPlayer?.health ?? 20);
   let playerFood = loadedPlayer?.food ?? 20;
   let playerAir = loadedPlayer?.air ?? 300;
@@ -716,6 +717,8 @@ async function boot(): Promise<void> {
   let moveMoved = false;
   let lastLookX = 0;
   let lastLookY = 0;
+  let aimScreen: { x: number; y: number } | null = null;
+  const aimRaycaster = new THREE.Raycaster();
   let lookStartX = 0;
   let lookStartY = 0;
   let lookStartTime = 0;
@@ -1261,21 +1264,7 @@ async function boot(): Promise<void> {
     if (stickMode === 'dynamic') ui.setStickOrigin(0, 0, false);
   };
 
-  const updateTarget = (): void => {
-    const cosPitch = Math.cos(pitch);
-    const dx = -Math.sin(yaw) * cosPitch;
-    const dy = Math.sin(pitch);
-    const dz = -Math.cos(yaw) * cosPitch;
-    currentHit = raycastVoxels(
-      (x, y, z) => world.isSelectable(x, y, z),
-      physics.x,
-      physics.eyeY,
-      physics.z,
-      dx,
-      dy,
-      dz,
-      8,
-    );
+  const applyTargetHit = (): void => {
     if (!currentHit) {
       outline.visible = false;
       targetLabel = '-';
@@ -1286,6 +1275,39 @@ async function boot(): Promise<void> {
     outline.position.set(currentHit.x + 0.5, currentHit.y + 0.5, currentHit.z + 0.5);
     targetLabel = itemLabel(world.getBlock(currentHit.x, currentHit.y, currentHit.z));
     ui.setTarget(targetLabel);
+  };
+
+  const updateTargetAt = (screenX: number, screenY: number): void => {
+    camera.updateMatrixWorld();
+    aimRaycaster.setFromCamera(
+      new THREE.Vector2(
+        (screenX / Math.max(1, width)) * 2 - 1,
+        -(screenY / Math.max(1, height)) * 2 + 1,
+      ),
+      camera,
+    );
+    const direction = aimRaycaster.ray.direction;
+    currentHit = raycastVoxels(
+      (x, y, z) => world.isSelectable(x, y, z),
+      physics.x,
+      physics.eyeY,
+      physics.z,
+      direction.x,
+      direction.y,
+      direction.z,
+      8,
+    );
+    applyTargetHit();
+  };
+
+  const updateTarget = (): void => {
+    // Web 手机版：触摸端以手指落点取目标，没有屏幕中心准星。
+    if (aimScreen) {
+      updateTargetAt(aimScreen.x, aimScreen.y);
+      return;
+    }
+    currentHit = null;
+    applyTargetHit();
   };
 
   const cancelMining = (): void => {
@@ -1672,6 +1694,8 @@ async function boot(): Promise<void> {
       lookStartY = y;
       lookStartTime = Date.now();
       lookMoved = false;
+      aimScreen = { x, y };
+      updateTargetAt(x, y);
       if (x > width * 0.45 && y > height * 0.78) {
         jumpHeld = true;
         jumpQueued = true;
@@ -1725,7 +1749,9 @@ async function boot(): Promise<void> {
       );
       lastLookX = event.clientX;
       lastLookY = event.clientY;
+      aimScreen = { x: event.clientX, y: event.clientY };
       updateCamera();
+      updateTargetAt(event.clientX, event.clientY);
     }
   });
 
@@ -1778,8 +1804,11 @@ async function boot(): Promise<void> {
         event.clientX > width * 0.45 &&
         Date.now() - lookStartTime < 350
       ) {
+        aimScreen = { x: event.clientX, y: event.clientY };
+        updateTargetAt(event.clientX, event.clientY);
         handleRightTap(event.clientX, event.clientY);
       }
+      aimScreen = null;
       lookPointerId = null;
     }
   };
