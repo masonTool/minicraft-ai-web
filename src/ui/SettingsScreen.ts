@@ -1108,18 +1108,11 @@ export class SettingsScreen {
     controlSliders.append(
       this.makeSlider('touchScale', t('settings.row.touchScale'), '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100),
     );
-    // 灵敏度（批次 522）：1~8 档，4 = 4×（上一版最快档）；读数里的 ×值就是实际倍率
+    // 灵敏度（批次 522）：1~8 档，4 = 4×（上一版最快档）。
+    // 读数**只显示档位数字**（用户明确要求不要后面那个倍率括号）：
+    // 倍率是内部口径，摆出来反而让人以为要自己换算。
     controlSliders.append(
-      this.makeSlider(
-        'sensitivity',
-        t('settings.row.sensitivity'),
-        '',
-        SENSITIVITY_MIN,
-        SENSITIVITY_MAX,
-        1,
-        1,
-        (level) => `${level}（×${sensitivityGain(level).toFixed(2)}）`,
-      ),
+      this.makeSlider('sensitivity', t('settings.row.sensitivity'), '', SENSITIVITY_MIN, SENSITIVITY_MAX, 1),
     );
     // 批次 521 起桌面的上限也收到 90°，这句"手机视野上限 90°"的说明反而成了噪音
     // （滑杆右端就写着 90），所以撤掉。
@@ -1361,7 +1354,13 @@ export class SettingsScreen {
     return block;
   }
 
-  /** 造一个滑块设置项 */
+  /**
+   * 造一个滑块设置项。
+   *
+   * 读数一律是"控件值 + 单位"（`%` / `°` / 空）。批次 522 去掉了 `format` 回调：
+   * 它只为"灵敏度 4（×1.00）"那一条存在，而用户要求那半句括号不要——
+   * 留着一条永远没人传的可选参数，下次改的人还得先猜它有没有用。
+   */
   private makeSlider(
     key: keyof GameSettings,
     label: string,
@@ -1370,7 +1369,6 @@ export class SettingsScreen {
     max: number,
     step: number,
     scale = 1,
-    format?: (value: number) => string,
   ): HTMLDivElement {
     // ⚠️ 行容器一律用 `<div>`：`<label>` 会把**点击整行**转发给里面的控件
     //（用户反馈："点按钮以外的区域，它依然会响按钮"）。滑块自己就是输入控件，
@@ -1389,10 +1387,7 @@ export class SettingsScreen {
     input.step = String(step);
     input.value = String((this.settings[key] as number) * scale);
 
-    const readout = (): string => {
-      const raw = Number(input.value) / scale;
-      return format ? format(raw) : `${input.value}${unit}`;
-    };
+    const readout = (): string => `${input.value}${unit}`;
 
     const value = document.createElement('i');
     value.textContent = readout();
