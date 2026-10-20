@@ -27,7 +27,10 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
   camera.position.z = 1;
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(2, (2 * canvas.height) / canvas.width),
+    new THREE.PlaneGeometry(
+      2,
+      2 * (canvas.height / canvas.width) * (screenWidth / Math.max(1, screenHeight)),
+    ),
     new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,

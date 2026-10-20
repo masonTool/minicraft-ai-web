@@ -93,8 +93,8 @@ export function createCanvasUi(
   screenHeight: number,
   callbacks: CanvasUiCallbacks = {},
 ): MiniGameUi {
-  const hud = createHud();
-  const hotbar = createHotbar(atlas, blocks);
+  const hud = createHud(screenWidth, screenHeight);
+  const hotbar = createHotbar(atlas, blocks, screenWidth, screenHeight);
   const inventory = createInventory(atlas, slots, screenWidth, screenHeight, {
     takeSelectedOne: callbacks.onTakeSelectedItem,
     takeItem: callbacks.onTakeItem,

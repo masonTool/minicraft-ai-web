@@ -90,10 +90,20 @@ async function boot(): Promise<void> {
     return;
   }
 
-  const width = view.innerWidth;
-  const height = view.innerHeight;
-
   const platform = wxPlatform();
+  // 逻辑视口必须用 windowWidth/windowHeight（真正可绘制/可触摸区域），
+  // 不能用 screenWidth/screenHeight：后者含状态栏/导航栏，会让 UI 纹理比例
+  // 与视口比例不一致（纵向压扁），触摸坐标也会整体偏移。
+  const width = platform.system.width || view.innerWidth;
+  const height = platform.system.height || view.innerHeight;
+  console.log('[WX-020] viewport', {
+    width,
+    height,
+    screenWidth: view.innerWidth,
+    screenHeight: view.innerHeight,
+    dpr: platform.system.dpr,
+    safeArea: platform.system.safeArea,
+  });
   console.log('[WX-020] platform', platform.kind, platform.system);
 
   const atlasStarted = Date.now();

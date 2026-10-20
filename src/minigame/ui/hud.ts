@@ -7,11 +7,11 @@ export interface Hud {
 }
 
 /** 顶部文本 HUD：诊断指标与操作提示 */
-export function createHud(): Hud {
+export function createHud(screenWidth: number, screenHeight: number): Hud {
   const doc = (globalThis as unknown as { document: Document }).document;
   const canvas = doc.createElement('canvas');
   canvas.width = 1024;
-  canvas.height = 256;
+  canvas.height = Math.max(320, Math.round((1024 * screenHeight) / Math.max(1, screenWidth)));
   const context = canvas.getContext('2d');
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -21,7 +21,7 @@ export function createHud(): Hud {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
   camera.position.z = 1;
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(2, 0.5),
+    new THREE.PlaneGeometry(2, 2),
     new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -29,7 +29,7 @@ export function createHud(): Hud {
       depthWrite: false,
     }),
   );
-  mesh.position.set(0, 0.72, 0);
+  mesh.position.set(0, 0, 0);
   scene.add(mesh);
 
   return {

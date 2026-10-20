@@ -14,7 +14,12 @@ export interface Hotbar {
  * 用图集里的真实 tile 画图标，避免再维护一套物品图标资源。
  * 只在切换槽位时重画 2D canvas；每帧只渲染一张全屏四边形。
  */
-export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Hotbar {
+export function createHotbar(
+  atlas: TextureAtlas,
+  blocks: readonly number[],
+  screenWidth: number,
+  screenHeight: number,
+): Hotbar {
   const slotSize = 64;
   const gap = 8;
   const padding = 8;
@@ -39,8 +44,12 @@ export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Ho
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
   camera.position.z = 1;
+  const designWidth = 1024;
+  const planeWidth = (2 * width) / designWidth;
+  const planeHeight =
+    (2 * (height / designWidth) * screenWidth) / Math.max(1, screenHeight);
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(2, (2 * height) / width),
+    new THREE.PlaneGeometry(planeWidth, planeHeight),
     new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -48,8 +57,8 @@ export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Ho
       depthWrite: false,
     }),
   );
-  // 贴底：plane 高度 < 1，中心放到底边上方
-  mesh.position.set(0, -1 + height / width, 0);
+  // 保持设计尺寸并贴底：宽度/高度按 1024 设计宽等比缩放
+  mesh.position.set(0, -1 + planeHeight / 2, 0);
   scene.add(mesh);
 
   const drawSlot = (index: number, selected: boolean): void => {
