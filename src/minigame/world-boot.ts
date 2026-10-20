@@ -443,9 +443,7 @@ async function boot(): Promise<void> {
   const inventory = new Inventory();
   if (loadedPlayer) inventory.restore(loadedPlayer.inventory);
   // 空槽补起始方块：既覆盖新世界，也让旧存档（只有 1 格）能补齐快捷栏
-  for (let i = 0; i < HOTBAR.length; i++) {
-    if (!inventory.get(i)) inventory.add(HOTBAR[i]!, 64);
-  }
+  // Web 生存模式新世界初始背包为空，不再预填 9 组方块
   const hotbarBlocks = HOTBAR.map((_, index) => inventory.get(index)?.id ?? 0);
   let scheduleSave: (() => void) | null = null;
   let dropOne: ((item: ItemStack) => void) | null = null;
@@ -673,6 +671,12 @@ async function boot(): Promise<void> {
     });
   };
   refreshWorldInfo(world.edits.totalEdits || save?.meta?.edits || 0);
+  // 新建/切换世界后重启回来：跳过标题页，直接进入目标世界（对齐 Web“创建并进入”）
+  const pendingWorldId = platform.storage.get('wx.pendingWorldId');
+  if (pendingWorldId) {
+    platform.storage.set('wx.pendingWorldId', '');
+    ui.closeMainMenu();
+  }
 
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
@@ -1006,6 +1010,11 @@ async function boot(): Promise<void> {
 
   const restartApp = (): void => {
     setTimeout(() => {
+      const restart = (wx as any).restartMiniProgram;
+      if (typeof restart === 'function') {
+        restart({});
+        return;
+      }
       const exit = (wx as any).exitMiniProgram;
       if (typeof exit === 'function') exit({});
     }, 900);
@@ -1035,8 +1044,8 @@ async function boot(): Promise<void> {
   const deleteSave = async (): Promise<void> => {
     if (
       !(await confirmModal(
-        'DELETE WORLD?',
-        'Deletes this world and its blocks. The game will switch to another world and restart.',
+        `删除「${currentWorld.name}」？`,
+        '该世界的存档会一起删掉，无法恢复。删除后会切到下一个世界。',
       ))
     ) {
       return;
@@ -1062,7 +1071,7 @@ async function boot(): Promise<void> {
       platform.storage.set('wx.worldId', currentWorldId);
       save = null;
       refreshWorldInfo(0);
-      ui.showToast('WORLD DELETED');
+      ui.showToast('世界已删除');
       console.log('[WX-020] world deleted', currentWorldId);
       restartApp();
     } catch (error) {
@@ -1079,7 +1088,7 @@ async function boot(): Promise<void> {
     }
     if (
       !(await confirmModal(
-        '删除世界？',
+        `删除「${worlds.find((world) => world.id === id)?.name ?? '这个世界'}」？`,
         '该世界的存档会一起删掉，无法恢复。当前世界不受影响。',
       ))
     ) {
@@ -1112,7 +1121,15 @@ async function boot(): Promise<void> {
     try {
       const entry: WorldEntry = {
         id: `w${Date.now().toString(36)}`,
-        name: draft.name.trim() || `世界 ${worlds.length + 1}`,
+        name: draft.name.trim() || (() => {
+          const prefix: Record<WorldType, string> = {
+            default: '新的世界',
+            flat: '超平坦世界',
+            amplified: '放大化世界',
+          };
+          const same = worlds.filter((world) => world.worldType === draft.worldType).length + 1;
+          return `${prefix[draft.worldType]} ${same}`;
+        })(),
         seed: nextSeed,
         worldType: draft.worldType,
         difficulty: draft.difficulty,
@@ -1128,6 +1145,7 @@ async function boot(): Promise<void> {
       platform.storage.set('wx.worlds', JSON.stringify(worlds));
       platform.storage.set('wx.worldId', entry.id);
       platform.storage.set('wx.worldSeed', String(nextSeed));
+      platform.storage.set('wx.pendingWorldId', entry.id);
       // 旧世界已经落过盘；停止本次会话的旧 save，避免退出前写回旧世界。
       save = null;
       saveStatus = 'deleted';
@@ -1148,6 +1166,7 @@ async function boot(): Promise<void> {
     if (!target) return;
     await persist();
     platform.storage.set('wx.worldId', id);
+    platform.storage.set('wx.pendingWorldId', id);
     save = null;
     saveStatus = 'deleted';
     currentWorld = target;

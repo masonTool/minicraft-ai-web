@@ -125,7 +125,7 @@ export function createMainMenu(
   const WORLD_TYPES = ['default', 'flat', 'amplified'] as const;
   const WORLD_TYPE_LABELS = ['默认', '超平坦', '放大化'] as const;
   const DIFFICULTIES = ['peaceful', 'easy', 'normal', 'hard'] as const;
-  const DIFFICULTY_LABELS = ['和平', '简单', '普通', '困难'] as const;
+  const DIFFICULTY_LABELS = ['和平（peaceful）', '简单（easy）', '普通（normal）', '困难（hard）'] as const;
   const GAME_MODES = ['survival', 'creative'] as const;
   const GAME_MODE_LABELS = ['生存', '创造'] as const;
   const createField = (row: number): Rect => ({
@@ -280,6 +280,15 @@ export function createMainMenu(
       );
     }
 
+    drawText(
+      context,
+      `存档 ${info.worlds.length}`,
+      panelX + 34,
+      panelY + 100,
+      13,
+      'rgba(200, 225, 240, 0.7)',
+    );
+
     page = Math.min(page, pageCount() - 1);
     const start = page * PAGE_SIZE;
     const visible = info.worlds.slice(start, start + PAGE_SIZE);
@@ -426,19 +435,32 @@ export function createMainMenu(
     if (!context) return;
     drawButton(context, back, '‹ 返回', 'normal', 16);
     drawText(context, '新建世界', panelX + 150, panelY + 22, 26, '#ffffff');
-    drawField(0, '名称', draft.name || '未命名', draft.name.length === 0);
+    drawField(0, '名称', draft.name || '世界名称', draft.name.length === 0);
     drawField(1, '种子', draft.seed || '留空随机', draft.seed.length === 0);
     drawButton(context, reroll, '随机', 'normal', 13);
     drawField(2, '类型', WORLD_TYPE_LABELS[draft.typeIndex]!, false);
     drawField(3, '难度', DIFFICULTY_LABELS[draft.difficultyIndex]!, false);
     drawField(4, '模式', GAME_MODE_LABELS[draft.modeIndex]!, false);
+    const hints: Record<string, string> = {
+      default: '完整世界：群系、树木、矿石、村庄… 生存推荐',
+      flat: '只有三层平地：没有树木、村庄与矿石',
+      amplified: '与默认内容相同，陆地起伏更大、山更高',
+    };
+    const type = WORLD_TYPES[draft.typeIndex]!;
+    const hint = hints[type]!;
     drawText(
       context,
-      '类型 / 难度 / 模式：点一下切换',
+      type === 'flat' && draft.modeIndex === 0
+        ? `${hint} — 生存模式建议改默认或创造`
+        : hint,
       panelX + 34,
       panelY + 346,
-      13,
-      'rgba(200, 225, 240, 0.6)',
+      12,
+      type === 'flat' && draft.modeIndex === 0
+        ? 'rgba(255, 190, 120, 0.9)'
+        : 'rgba(200, 225, 240, 0.7)',
+      'left',
+      panelWidth - 68,
     );
     drawButton(context, createButton, '创建并进入', 'normal', 19);
   };
@@ -555,7 +577,7 @@ export function createMainMenu(
           const seed = parsed !== null && Number.isFinite(parsed) ? Math.floor(parsed) : null;
           return {
             type: 'create',
-            name: draft.name.trim() || `世界 ${info.worlds.length + 1}`,
+            name: draft.name.trim(),
             seed,
             worldType: WORLD_TYPES[draft.typeIndex]!,
             difficulty: DIFFICULTIES[draft.difficultyIndex]!,
