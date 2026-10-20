@@ -333,8 +333,13 @@ console.log('\n[睡觉：什么时候能睡]');
   check('0.0（日出）不算夜晚', !isNight(0));
   check('时间取模：-0.25 等价于 0.75（夜晚）', isNight(-0.25));
 
-  const base = { timeOfDay: 0.75, thundering: false, dead: false, monstersNear: false };
-  equal('夜里、床边没怪 → 能睡', sleepRefusal(base), null);
+  const base = { timeOfDay: 0.75, thundering: false, dead: false, monstersNear: false, obstructed: false };
+  equal('夜里、床边没怪、床顶空 → 能睡', sleepRefusal(base), null);
+  equal(
+    '床顶被实心方块挡住 → 不能睡（比怪物更优先）',
+    sleepRefusal({ ...base, obstructed: true, monstersNear: true }),
+    '床的上方被挡住了，先清出空间',
+  );
   equal(
     '白天 → 不能睡',
     sleepRefusal({ ...base, timeOfDay: 0.25 }),

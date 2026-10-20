@@ -80,6 +80,8 @@ export interface SleepContext {
   dead: boolean;
   /** 床附近有没有敌对生物（用 `monstersNearBed` 算好再传进来） */
   monstersNear: boolean;
+  /** 床的上方是不是被实心方块挡住了（批次 556：原版床需要两格净空） */
+  obstructed: boolean;
 }
 
 /**
@@ -90,6 +92,7 @@ export interface SleepContext {
  */
 export function sleepRefusal(context: SleepContext): string | null {
   if (context.dead) return '你正躺着，先起来再说';
+  if (context.obstructed) return '床的上方被挡住了，先清出空间';
   if (context.monstersNear) return '你现在无法休息，附近有怪物';
   if (!isNight(context.timeOfDay) && !context.thundering) {
     return '你只能在夜晚或雷暴时入睡';

@@ -7583,13 +7583,21 @@ class App {
     if (this.sleeping) return true;
 
     // 重生点与"附近有没有怪物"都按**床脚**那一格算（原版的重生点也在床脚）
-    const [fx, fy, fz] = bedFootPos(x, y, z, this.world.getBlockState(x, y, z));
+    const state = this.world.getBlockState(x, y, z);
+    const [fx, fy, fz] = bedFootPos(x, y, z, state);
+    // 床顶遮挡（批次 556）：床脚与床头两格的上方都必须是"不实心"的，
+    // 否则躺不下——原版会提示 "the bed is obstructed"
+    const [ox, oy, oz] = bedOtherHalf(x, y, z, state);
+    const obstructed =
+      blockDef(this.world.getBlock(fx, fy + 1, fz)).solid ||
+      blockDef(this.world.getBlock(ox, oy + 1, oz)).solid;
     const refusal = sleepRefusal({
       timeOfDay: this.timeOfDay,
       // 雷暴时白天也能睡（原版规则）
       thundering: this.weather.current === 'thunder',
       dead: this.stats.dead,
       monstersNear: this.hostileMobsNear(fx, fy, fz),
+      obstructed,
     });
     if (refusal !== null) {
       this.chat.push(refusal, 'system');
