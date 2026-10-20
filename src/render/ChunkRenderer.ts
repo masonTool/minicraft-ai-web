@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { createGeometry, meshSection } from '../core/mesh/ChunkMesher.ts';
+import { createGeometry, meshSection, type GeometryArrays } from '../core/mesh/ChunkMesher.ts';
 import { SECTION_COUNT, WORLD_MIN_Y, type Chunk } from '../core/world/Chunk.ts';
 import { chunkKey, type World } from '../core/world/World.ts';
 import type { TextureAtlas } from './TextureAtlas.ts';
@@ -36,6 +36,17 @@ interface QueueItem {
 
 export class ChunkRenderer {
   private readonly rendered = new Map<string, ChunkMeshes>();
+  /**
+   * 几何体复用池（批次 566，N3）：区块重刷时如果顶点/索引数量完全一样，
+   * 直接把数组 `set` 回旧 `BufferGeometry`，避免重新分配属性与 GPU 缓冲。
+   *
+   * 只按“顶点数:索引数”分桶：同一区块反复改一格（最常见）通常落在同一桶里；
+   * 形状不同的区块仍然新建，不会为了复用去做昂贵的扩容/搬迁。
+   */
+  private readonly geometryPool = new Map<string, THREE.BufferGeometry[]>();
+  private pooledGeometryCount = 0;
+  private static readonly MAX_POOL_PER_KEY = 4;
+  private static readonly MAX_POOL_TOTAL = 64;
   private readonly queue: QueueItem[] = [];
   private readonly queued = new Set<string>();
   /** 每个区块最近一次派发的请求序号，用于丢弃过期结果 */
@@ -279,7 +290,7 @@ export class ChunkRenderer {
       const baseY = WORLD_MIN_Y + section.section * 16;
 
       if (section.solid) {
-        const geometry = createGeometry(section.solid);
+        const geometry = this.acquireGeometry(section.solid);
         const mesh = new THREE.Mesh(geometry, this.solidMaterial);
         mesh.position.set(offsetX, baseY, offsetZ);
         mesh.frustumCulled = true;
@@ -287,7 +298,7 @@ export class ChunkRenderer {
         triangles += geometry.index!.count / 3;
       }
       if (section.translucent) {
-        const geometry = createGeometry(section.translucent);
+        const geometry = this.acquireGeometry(section.translucent);
         const mesh = new THREE.Mesh(geometry, this.translucentMaterial);
         mesh.position.set(offsetX, baseY, offsetZ);
         mesh.frustumCulled = true;
@@ -379,18 +390,90 @@ export class ChunkRenderer {
     return this.drawnChunks;
   }
 
+  /** 当前池里有多少个可复用的几何体（诊断与断言用） */
+  get pooledGeometryCountValue(): number {
+    return this.pooledGeometryCount;
+  }
+
+  private static geometryPoolKey(arrays: GeometryArrays): string {
+    return `${arrays.position.length / 3}:${arrays.index.length}`;
+  }
+
+  private acquireGeometry(arrays: GeometryArrays): THREE.BufferGeometry {
+    const key = ChunkRenderer.geometryPoolKey(arrays);
+    const bucket = this.geometryPool.get(key);
+    const reused = bucket?.pop();
+    if (!reused) return createGeometry(arrays);
+    this.pooledGeometryCount--;
+
+    const position = reused.getAttribute('position') as THREE.BufferAttribute;
+    const uv = reused.getAttribute('uv') as THREE.BufferAttribute;
+    const tile = reused.getAttribute('aTile') as THREE.BufferAttribute;
+    const light = reused.getAttribute('aLight') as THREE.BufferAttribute;
+    const shade = reused.getAttribute('aShade') as THREE.BufferAttribute;
+    const index = reused.getIndex()!;
+    (position.array as Float32Array).set(arrays.position);
+    (uv.array as Float32Array).set(arrays.uv);
+    (tile.array as Float32Array).set(arrays.tile);
+    (light.array as Float32Array).set(arrays.light);
+    (shade.array as Float32Array).set(arrays.shade);
+    (index.array as Uint32Array).set(arrays.index);
+    position.needsUpdate = true;
+    uv.needsUpdate = true;
+    tile.needsUpdate = true;
+    light.needsUpdate = true;
+    shade.needsUpdate = true;
+    index.needsUpdate = true;
+    reused.computeBoundingSphere();
+    return reused;
+  }
+
+  /** 旧几何不立刻 dispose：形状相同的下一次重刷可以直接写回它 */
+  private releaseGeometry(geometry: THREE.BufferGeometry): void {
+    if (this.pooledGeometryCount >= ChunkRenderer.MAX_POOL_TOTAL) {
+      geometry.dispose();
+      return;
+    }
+    const position = geometry.getAttribute('position');
+    const index = geometry.getIndex();
+    if (!position || !index) {
+      geometry.dispose();
+      return;
+    }
+    const key = `${position.count}:${index.count}`;
+    const bucket = this.geometryPool.get(key) ?? [];
+    if (bucket.length >= ChunkRenderer.MAX_POOL_PER_KEY) {
+      geometry.dispose();
+      return;
+    }
+    bucket.push(geometry);
+    this.geometryPool.set(key, bucket);
+    this.pooledGeometryCount++;
+  }
+
+  /** 只释放池里的几何（`disposeAll` 与测试用） */
+  private disposePool(): void {
+    for (const bucket of this.geometryPool.values()) {
+      for (const geometry of bucket) geometry.dispose();
+    }
+    this.geometryPool.clear();
+    this.pooledGeometryCount = 0;
+  }
+
   private dispose(key: string): void {
     const entry = this.rendered.get(key);
     if (!entry) return;
     for (const mesh of entry.meshes) {
       this.scene.remove(mesh);
-      mesh.geometry.dispose();
+      // N3（批次 566）：先回池，池满/形状太偏才真的 dispose
+      this.releaseGeometry(mesh.geometry);
     }
     this.rendered.delete(key);
   }
 
   disposeAll(): void {
     for (const key of [...this.rendered.keys()]) this.dispose(key);
+    this.disposePool();
     this.queue.length = 0;
     this.queued.clear();
     this.pending.clear();

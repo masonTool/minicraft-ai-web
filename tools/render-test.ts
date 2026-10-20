@@ -1228,5 +1228,14 @@ console.log('\n[光照收敛后全量重刷（E23 / 批次 565）]');
   check('没有网格先不标记，等网格出来再刷', mainSrc.includes('chunkMeshCount > 0'));
 }
 
+console.log('\n[区块几何复用池（N3 / 批次 566）]');
+{
+  const rendererSrc = readFileSync(new URL('../src/render/ChunkRenderer.ts', import.meta.url), 'utf8');
+  check('有按形状分桶的几何池', rendererSrc.includes('geometryPool = new Map'));
+  check('重刷时优先从池里取', rendererSrc.includes('this.acquireGeometry('));
+  check('卸载时回池而不是直接 dispose', rendererSrc.includes('this.releaseGeometry(mesh.geometry)'));
+  check('整体销毁会释放池', rendererSrc.includes('this.disposePool()'));
+}
+
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
