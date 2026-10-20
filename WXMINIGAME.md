@@ -838,3 +838,10 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 - 本文件是这里唯一的“进行中”口径；`HANDOFF.md` 仅用于了解主线历史，不要照着它推进。
 - 如果主线改了 `src/core/**` 或 `src/main.ts`，先 `git merge origin/main`，再继续当前任务。
 - 如果某个 WX 任务必须改主线正在改的文件，先在 §8 记风险，再动；改完在提交正文里写明。
+
+
+## 2026-10-20 · main 同步流程
+
+- 新增 `WXMINIGAME_SYNC.md`：分支职责、merge 步骤、冲突边界、UI 迁移规则、Definition of Done。
+- 新增 `npm run sync:audit`：自动按 CORE/UI/PLATFORM/BUILD 分类 main 变更，扫描 adapter 风险，`--run` 跑 typecheck/小游戏构建/离线门禁。
+- merge commit 自动审计 `HEAD^1..HEAD^2`，只审 main 这次带进来的文件。

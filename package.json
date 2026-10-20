@@ -11,6 +11,8 @@
     "build:minigame:formal": "node tools/minigame/build.mjs",
     "build:minigame:world": "node tools/minigame/build-world.mjs",
     "test:worker": "node tools/minigame/test-worker-shim.mjs",
+    "sync:audit": "node tools/minigame/sync-audit.mjs",
+    "sync:audit:run": "node tools/minigame/sync-audit.mjs --run",
     "test:minigame:flow": "NODE_PATH=$(npm root -g)/@playwright/cli/node_modules node tools/minigame/e2e-flow.cjs",
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
