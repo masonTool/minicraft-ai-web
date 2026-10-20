@@ -850,6 +850,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   saturation = 5;
   foodExhaustion = 0;
   hazardTimer = 0;
+  regenTimer = 0;
   fallPeakY = spawn.y + 1;
   wasOnGround = false;
   landedOnce = false;
@@ -1544,6 +1545,7 @@ const respawn = (): void => {
   saturation = 5;
   foodExhaustion = 0;
   starvationTimer = 0;
+  regenTimer = 0;
   fallPeakY = spawn.y + 1;
   wasOnGround = false;
   landedOnce = false;
@@ -1701,6 +1703,7 @@ let fallPeakY = 80;
 let wasOnGround = false;
 let landedOnce = false;
 let starvationTimer = 0;
+let regenTimer = 0;
 let hazardTimer = 0;
 let dead = false;
 let lastDamageCause = '';
@@ -2170,6 +2173,17 @@ const frame = (): void => {
       }
     } else {
       starvationTimer = 0;
+    }
+    if (food >= 18 && health < 20) {
+      regenTimer += dt;
+      if (regenTimer >= 4) {
+        regenTimer = 0;
+        health = Math.min(20, health + 1);
+        saturation = Math.max(0, saturation - 0.5);
+        showHud();
+      }
+    } else {
+      regenTimer = 0;
     }
     if (health <= 0 && !dead) {
       dropInventory();
