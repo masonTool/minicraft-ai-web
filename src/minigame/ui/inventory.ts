@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ItemStack } from '../../core/container/Inventory.ts';
+import { CraftingGrid } from '../../core/crafting/CraftingGrid.ts';
 import { Block } from '../../core/registry/blocks.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { drawBlockIcon } from './icons.ts';
@@ -11,6 +12,13 @@ export type InventoryAction =
   | { type: 'move'; from: number; to: number }
   | { type: 'give'; id: number }
   | null;
+
+export interface InventoryCallbacks {
+  /** 从当前快捷栏取 1 个材料；没有则返回 null */
+  takeSelectedOne?: () => ItemStack | null;
+  /** 把合成格/产物放回真实背包 */
+  addStack?: (stack: ItemStack) => void;
+}
 
 export interface Inventory {
   toggle(): void;
@@ -35,6 +43,7 @@ export function createInventory(
   slots: readonly (ItemStack | null)[],
   screenWidth: number,
   screenHeight: number,
+  callbacks: InventoryCallbacks = {},
 ): Inventory {
   const doc = (globalThis as unknown as { document: Document }).document;
   const canvas = doc.createElement('canvas');
@@ -67,7 +76,8 @@ export function createInventory(
   const gap = 6;
   const gridWidth = cols * slot + (cols - 1) * gap;
   const gridHeight = rows * slot + (rows - 1) * gap;
-  const panelWidth = gridWidth + 40;
+  const craftWidth = 220;
+  const panelWidth = gridWidth + 40 + craftWidth;
   const panelHeight = gridHeight + 120;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
@@ -76,7 +86,12 @@ export function createInventory(
   const creativeButton: Rect = { x: panelX + 20, y: panelY + panelHeight - 48, w: 150, h: 36 };
   const gridX = panelX + 20;
   const gridY = panelY + 56;
+  const craftX = gridX + gridWidth + 24;
+  const craftY = gridY + 38;
+  const craftGap = 6;
+  const outputRect: Rect = { x: craftX + 2 * (slot + craftGap) + 26, y: craftY + 24, w: slot, h: slot };
 
+  const crafting = new CraftingGrid(2);
   const creativeBlocks = Object.values(Block).filter(
     (value): value is number => typeof value === 'number' && value > 0,
   ).slice(0, 45);
@@ -85,6 +100,7 @@ export function createInventory(
   let selected = 0;
   let mode: 'inventory' | 'creative' = 'inventory';
   let pendingGive: number | null = null;
+  let pendingCraft: number | null = null;
   let currentSlots: readonly (ItemStack | null)[] = slots;
   let drag: { from: number; startX: number; startY: number; x: number; y: number; moved: boolean } | null =
     null;
@@ -147,6 +163,56 @@ export function createInventory(
       }
     }
 
+    if (mode === 'inventory') {
+      drawText(context, 'CRAFTING', craftX, panelY + 18, 20, '#ffffff');
+      for (let i = 0; i < 4; i++) {
+        const x = craftX + (i % 2) * (slot + craftGap);
+        const y = craftY + Math.floor(i / 2) * (slot + craftGap);
+        context.fillStyle = 'rgba(0, 0, 0, 0.42)';
+        context.fillRect(x, y, slot, slot);
+        context.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        context.lineWidth = 2;
+        context.strokeRect(x + 1, y + 1, slot - 2, slot - 2);
+        const stack = crafting.get(i);
+        if (stack) {
+          drawBlockIcon(context, atlas, stack.id, x, y, slot);
+          if (stack.count > 1) {
+            drawText(context, `${stack.count}`, x + slot - 4, y + slot - 18, 14, '#ffffff', 'right', 34);
+          }
+        }
+      }
+
+      drawText(
+        context,
+        '>',
+        craftX + 2 * (slot + craftGap) + 4,
+        craftY + 18,
+        28,
+        'rgba(255, 255, 255, 0.7)',
+        'center',
+      );
+      context.fillStyle = 'rgba(0, 0, 0, 0.42)';
+      context.fillRect(outputRect.x, outputRect.y, outputRect.w, outputRect.h);
+      context.strokeStyle = 'rgba(255, 220, 140, 0.8)';
+      context.lineWidth = 2;
+      context.strokeRect(outputRect.x + 1, outputRect.y + 1, outputRect.w - 2, outputRect.h - 2);
+      if (crafting.result) {
+        drawBlockIcon(context, atlas, crafting.result.id, outputRect.x, outputRect.y, outputRect.w);
+        if (crafting.result.count > 1) {
+          drawText(
+            context,
+            `${crafting.result.count}`,
+            outputRect.x + outputRect.w - 4,
+            outputRect.y + outputRect.h - 18,
+            14,
+            '#ffffff',
+            'right',
+            34,
+          );
+        }
+      }
+    }
+
     drawButton(
       context,
       creativeButton,
@@ -193,18 +259,35 @@ export function createInventory(
     return null;
   };
 
+  const craftCellRect = (index: number): { x: number; y: number } => ({
+    x: craftX + (index % 2) * (slot + craftGap),
+    y: craftY + Math.floor(index / 2) * (slot + craftGap),
+  });
+
+  const drainCrafting = (): void => {
+    for (let i = 0; i < 4; i++) {
+      const stack = crafting.get(i);
+      if (stack) callbacks.addStack?.(stack);
+      crafting.set(i, null);
+    }
+  };
+
   redraw();
 
   return {
     toggle(): void {
+      if (open) drainCrafting();
       drag = null;
       pendingGive = null;
+      pendingCraft = null;
       mode = 'inventory';
       setOpen(!open);
     },
     close(): void {
+      if (open) drainCrafting();
       drag = null;
       pendingGive = null;
+      pendingCraft = null;
       mode = 'inventory';
       setOpen(false);
     },
@@ -243,6 +326,20 @@ export function createInventory(
         return true;
       }
 
+      for (let i = 0; i < 4; i++) {
+        const cell = craftCellRect(i);
+        if (contains({ x: cell.x, y: cell.y, w: slot, h: slot }, x, y)) {
+          pendingCraft = i;
+          redraw();
+          return true;
+        }
+      }
+      if (contains(outputRect, x, y)) {
+        pendingCraft = 4;
+        redraw();
+        return true;
+      }
+
       const index = slotAt(x, y);
       if (index === null) {
         drag = null;
@@ -275,6 +372,27 @@ export function createInventory(
         pendingGive = null;
         redraw();
         return { type: 'give', id };
+      }
+      if (pendingCraft !== null) {
+        const slotIndex = pendingCraft;
+        pendingCraft = null;
+        if (slotIndex === 4) {
+          if (crafting.result) {
+            callbacks.addStack?.(crafting.result);
+            crafting.takeResult();
+          }
+        } else {
+          const stack = crafting.get(slotIndex);
+          if (stack) {
+            callbacks.addStack?.(stack);
+            crafting.set(slotIndex, null);
+          } else {
+            const one = callbacks.takeSelectedOne?.();
+            if (one) crafting.set(slotIndex, one);
+          }
+        }
+        redraw();
+        return null;
       }
       if (!drag) return null;
       const current = drag;

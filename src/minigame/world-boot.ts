@@ -20,7 +20,7 @@ import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { Block, blockDef } from '../core/registry/blocks.ts';
 import { maxStackOf } from '../core/registry/items.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
-import { Inventory } from '../core/container/Inventory.ts';
+import { Inventory, type ItemStack } from '../core/container/Inventory.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
@@ -227,6 +227,21 @@ async function boot(): Promise<void> {
         inventory.add(id, 64);
         ui.syncInventory(inventory.serialize(), selectedSlot);
         ui.showToast(`+ ${blockDef(id).name.replace('minecraft:', '')} x64`);
+        scheduleSave?.();
+      },
+      onTakeSelectedItem: (): ItemStack | null => {
+        const stack = inventory.get(selectedSlot);
+        if (!stack) return null;
+        const one: ItemStack = { id: stack.id, count: 1 };
+        stack.count -= 1;
+        if (stack.count <= 0) inventory.set(selectedSlot, null);
+        ui.syncInventory(inventory.serialize(), selectedSlot);
+        scheduleSave?.();
+        return one;
+      },
+      onAddStack: (stack) => {
+        inventory.addStack(stack);
+        ui.syncInventory(inventory.serialize(), selectedSlot);
         scheduleSave?.();
       },
       onMoveItem: (from, to) => {

@@ -51,6 +51,8 @@ export interface CanvasUiCallbacks {
   onSwapSlot?: (index: number) => void;
   onMoveItem?: (from: number, to: number) => void;
   onGiveBlock?: (id: number) => void;
+  onTakeSelectedItem?: () => ItemStack | null;
+  onAddStack?: (stack: ItemStack) => void;
   onSettingsChange?: (values: SettingsValues) => void;
   onRequestText?: (current: string) => Promise<string | null>;
 }
@@ -66,7 +68,10 @@ export function createCanvasUi(
 ): MiniGameUi {
   const hud = createHud();
   const hotbar = createHotbar(atlas, blocks);
-  const inventory = createInventory(atlas, slots, screenWidth, screenHeight);
+  const inventory = createInventory(atlas, slots, screenWidth, screenHeight, {
+    takeSelectedOne: callbacks.onTakeSelectedItem,
+    addStack: callbacks.onAddStack,
+  });
   inventory.setSelected(selectedSlot);
   const pause = createPauseMenu(screenWidth, screenHeight);
   const settings = createSettingsMenu(
