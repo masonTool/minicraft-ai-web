@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { World } from '../core/world/World.ts';
 import { TextureAtlas } from '../render/TextureAtlas.ts';
 import { ChunkRenderer } from '../render/ChunkRenderer.ts';
+import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
@@ -85,27 +86,96 @@ world.events = {
   onBlockChanged: (x, _y, z) => chunks.enqueueAround(x, z),
 };
 
-const spawn = { x: 0, z: 0, y: 70 };
-camera.position.set(spawn.x + 8, spawn.y + 8, spawn.z + 8);
-camera.lookAt(spawn.x, spawn.y, spawn.z);
+const physics = new PlayerPhysics();
+const input: PlayerInput = {
+  forward: 0,
+  strafe: 0,
+  jump: false,
+  sneak: false,
+  sprint: false,
+};
+let yaw = 0;
+let pitch = 0;
+let playerReady = false;
+let movePointer: number | null = null;
+let lookPointer: number | null = null;
+let moveX = 0;
+let moveY = 0;
+let lookX = 0;
+let lookY = 0;
 
-let ready = false;
+platform.input.onPointer('down', (event) => {
+  if (event.clientX < platform.system.width / 2) {
+    movePointer = event.pointerId;
+    moveX = event.clientX;
+    moveY = event.clientY;
+  } else if (lookPointer === null) {
+    lookPointer = event.pointerId;
+    lookX = event.clientX;
+    lookY = event.clientY;
+  }
+});
+
+platform.input.onPointer('move', (event) => {
+  if (event.pointerId === movePointer) {
+    input.strafe = Math.max(-1, Math.min(1, (event.clientX - moveX) / 56));
+    input.forward = Math.max(-1, Math.min(1, -(event.clientY - moveY) / 56));
+    if (Math.hypot(event.clientX - moveX, event.clientY - moveY) < 8) {
+      input.strafe = 0;
+      input.forward = 0;
+    }
+  } else if (event.pointerId === lookPointer) {
+    yaw -= (event.clientX - lookX) * 0.005;
+    pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lookY) * 0.005));
+    lookX = event.clientX;
+    lookY = event.clientY;
+  }
+});
+
+const release = (event: { pointerId: number }): void => {
+  if (event.pointerId === movePointer) {
+    movePointer = null;
+    input.forward = 0;
+    input.strafe = 0;
+  }
+  if (event.pointerId === lookPointer) lookPointer = null;
+};
+platform.input.onPointer('up', release);
+platform.input.onPointer('cancel', release);
+
+camera.rotation.order = 'YXZ';
+
+const spawn = { x: 0, z: 0 };
+let lastTime = performance.now();
+
 const frame = (): void => {
-  const centerCx = Math.floor(camera.position.x / 16);
-  const centerCz = Math.floor(camera.position.z / 16);
+  const now = performance.now();
+  const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
+  lastTime = now;
+
+  const centerCx = Math.floor(physics.x / 16);
+  const centerCz = Math.floor(physics.z / 16);
   world.update(centerCx, centerCz, 2);
-  if (!ready && world.isLoaded(spawn.x, spawn.z)) {
+
+  if (!playerReady && world.isLoaded(spawn.x, spawn.z)) {
     const surface = world.getSurfaceBlockY(spawn.x, spawn.z);
     if (surface !== null) {
-      camera.position.set(spawn.x + 8, surface + 9, spawn.z + 8);
-      camera.lookAt(spawn.x, surface, spawn.z);
-      ready = true;
+      physics.teleport(spawn.x + 0.5, surface + 1.01, spawn.z + 0.5);
+      playerReady = true;
     }
   }
+
+  if (playerReady) {
+    physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, false);
+    camera.position.set(physics.x, physics.eyeY, physics.z);
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+  }
+
   chunks.processQueue(4, centerCx, centerCz);
   chunks.applyViewDistance(centerCx, centerCz, 2);
-  solid.setTime(performance.now() * 0.001);
-  translucent.setTime(performance.now() * 0.001);
+  solid.setTime(now * 0.001);
+  translucent.setTime(now * 0.001);
   renderer.clear();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
