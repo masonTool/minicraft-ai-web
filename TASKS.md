@@ -4021,6 +4021,11 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       （`isCreativeMode` / `isSpectatorMode` / `canFly` / `canInteract` /
       `hasBlockCollision` / `canTakeDamage`）——**旁观与创造在三件事上不同**
       （穿墙、不能交互、免伤），用 `isCreative` 顶替会在这三处全错。
+      —— **批次 534 补齐旁观者的免伤/拾取/仇恨口径**：`damagePlayer` 改用
+      `canTakeDamage`（原来只挡创造，旁观会掉岩浆/虚空血）、`pickup` 用
+      `canPickUpItems`（旁观不捡东西）、怪物用 `playerInvisible: 隐身 || 旁观`
+      （原版旁观者不被追）、生存环境按旁观者保持饱食/氧气且**连虚空伤害也没有**；
+      生存状态栏与经验条对旁观隐藏。
       物理层换一个"`collisionAt` 永远 null"的世界代理实现穿墙（`World` 不必知道
       玩家是不是旁观者）；`setGameMode` 内部处理"旁观强制飞、切回生存强制落地"；
       `/gamemode` 收 `survival|creative|spectator` 与缩写 `s|c|sp`。

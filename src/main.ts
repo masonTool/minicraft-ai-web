@@ -208,7 +208,15 @@ import {
   totemSoundSpec,
 } from './core/items/Totem.ts';
 // 旁观模式（批次 491）：能力判定全在 GameMode.ts
-import { canFly, canInteract, hasBlockCollision, isSpectatorMode, startsFlying } from './core/world/GameMode.ts';
+import {
+  canFly,
+  canInteract,
+  canPickUpItems,
+  canTakeDamage,
+  hasBlockCollision,
+  isSpectatorMode,
+  startsFlying,
+} from './core/world/GameMode.ts';
 import { Teams } from './core/world/Teams.ts';
 // 蜂巢的蜂蜜等级与挤蜜（J21，批次 407）
 import {
@@ -9632,7 +9640,8 @@ class App {
     /** 攻击者（批次 264，荆棘反伤）：只有生物近战会带 */
     attacker?: DamageAttacker,
   ): void {
-    if (this.isCreative) return;
+    // 创造与旁观都免伤（批次 534：原先只挡了创造，旁观会掉岩浆/虚空血）
+    if (!canTakeDamage(this.gameMode)) return;
     // 难度倍率：和平难度下生物不造成伤害（原版和平难度敌对生物根本不生成）
     const damage = amount * difficultyProfile(this.difficulty).mobDamage;
     if (damage <= 0) return;
@@ -9804,7 +9813,11 @@ class App {
       world: this.world,
       playerBox: this.physics.box(),
       // 批次 63：拾取要连附加数据一起收（原先只收 id + 数量 → "附魔镐掉地上捡起来变白板"）
-      pickup: (itemId, count, extras) => this.inventory.addStack({ id: itemId, count, ...extras }),
+      pickup: (itemId, count, extras) => {
+        // 旁观者不能捡东西（批次 534）；返回原数量，物品留在地上
+        if (!canPickUpItems(this.gameMode)) return count;
+        return this.inventory.addStack({ id: itemId, count, ...extras });
+      },
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
       // 会开门的生物（村民/灾厄村民，批次 516）：寻路把关着的门当可走格，
       // 贴近时由 `toggleDoor` 真的推开（它已经处理了上下半与音效）
@@ -9942,7 +9955,8 @@ class App {
       ignitePlayer: (seconds) => this.stats.ignite(seconds),
       // 隐身（K4 尾巴）：敌对生物看不见你就不追（原版隐形后 8 格内还是会被发现，
       // 这里简化成"完全不追"，见 TASKS K4 的差异记录）
-      playerInvisible: this.effects.invisible,
+      // 旁观者在怪物眼里不存在（批次 534）
+      playerInvisible: this.effects.invisible || this.isSpectator,
       // 船（批次 244）：只有"有人在驾驶"时才把输入交出去——空船不该自己开
       vehicleInput: this.ridingVehicle
         ? {
@@ -13696,9 +13710,10 @@ class App {
 
     // 玩家信息播报（批次 206）：受伤 / 回血 / 饥饿 / 氧气 / 着火，统一进左上角聊天栏
     this.emitPlayerNotices();
-    // 创造模式整条生存状态栏与经验条都不显示（批次 230，对齐原版）
-    this.vitalsHud.update(this.stats, this.isCreative);
-    this.xpHud.update(this.experience, this.isCreative);
+    // 创造/旁观整条生存状态栏与经验条都不显示（批次 230/534，对齐原版）
+    const noVitals = this.isCreative || this.isSpectator;
+    this.vitalsHud.update(this.stats, noVitals);
+    this.xpHud.update(this.experience, noVitals);
     this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM
@@ -13965,7 +13980,8 @@ class App {
         : this.pendingFallDistance,
       y: p.y,
       // 批次 181：能力看模式，不再看"在不在飞"
-      creative: this.isCreative,
+      creative: this.isCreative || this.isSpectator,
+      spectator: this.isSpectator,
       // 难度与游戏规则影响饥饿/回复（和平难度饿不死、回血更快）
       naturalRegeneration: this.rules.naturalRegeneration,
       starveRate: difficultyProfile(this.difficulty).starveRate,

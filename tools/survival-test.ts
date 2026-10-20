@@ -290,6 +290,13 @@ console.log('\n[创造模式与重生]');
   const voidStats = new PlayerStats();
   runTicks(voidStats, 1, env({ creative: true, y: VOID_DAMAGE_Y - 5 }));
   check('创造模式掉虚空仍受伤（每 tick 4 点）', voidStats.health === MAX_HEALTH - 4, `剩余 ${voidStats.health}`);
+
+  // 批次 534：旁观者连虚空伤害也没有，且饱食/氧气保持满值
+  const spectatorStats = new PlayerStats();
+  runTicks(spectatorStats, 5, env({ creative: true, spectator: true, y: VOID_DAMAGE_Y - 5, eyeInWater: true }));
+  check('旁观者不掉虚空血', spectatorStats.health === MAX_HEALTH, `剩余 ${spectatorStats.health}`);
+  check('旁观者饱食度保持满值', spectatorStats.food === 20);
+  check('旁观者氧气保持满值', spectatorStats.air === 300);
   runTicks(voidStats, 10, env({ creative: true, y: VOID_DAMAGE_Y - 5 }));
   check('创造模式掉虚空会死（不会卡在虚空里）', voidStats.dead, `剩余 ${voidStats.health}`);
   check('虚空伤害的原因记为 void', voidStats.lastDamage?.cause === 'void');

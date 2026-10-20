@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-21 · 提交总数 1149（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-21 · 提交总数 1150（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **234**、进行中 **48**、待办 5 条（另有 1 条主动放弃）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -331,6 +331,9 @@ npm run agent:setup        # 跨机器自检
   按 `>255` 拆三通道修复，`test:textures` 22 → **29 条**。Node/浏览器/游戏截图三层验证。
 - 批次 532：删除非原版 caves / floating_islands（旧存档回落 default）；**旁观穿地**
   （`startsFlying` 三处保证起飞）与**正面相机**（`y = -dir.y`，射线同向）修复。套数 162 → **161**。
-- 批次 533（原版世界类型补全）：新增 **large_biomes**（群系气候采样 /4、面积 ×4）与
-  **single_biome**（创建时选群系，一路传到 Worker）。`test:world` 82 条、worldmatrix 60 组；
-  浏览器实测单一沙漠表层一致（含 Worker 生成）、大型群系可加载。
+- 批次 533：新增 **large_biomes**（群系 /4、面积 ×4）与 **single_biome**（创建时选群系，
+  贯通 Worker）。`test:world` 82 条；浏览器实测单一沙漠表层一致、大型群系可加载。
+- 批次 534（旁观者口径对齐）：**穿墙是原版行为，保留**；修掉四处偏离——原来会掉岩浆/
+  虚空血、会捡东西、会被怪追、会掉饥饿/氧气。现在 `canTakeDamage` / `canPickUpItems` /
+  `playerInvisible: 旁观` / 生存环境 `creative + spectator`，HUD 隐藏。
+  浏览器实测：旁观者 y=-100 时生命/饱食/氧气都不变。

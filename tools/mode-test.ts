@@ -17,6 +17,8 @@ import {
   normalizeGameMode,
   startsFlying,
   canFly,
+  canPickUpItems,
+  canTakeDamage,
 } from '../src/core/world/GameMode.ts';
 import { WorldRegistry } from '../src/core/save/WorldRegistry.ts';
 
@@ -72,6 +74,10 @@ console.log('\n[一、模式取值]');
   check('创造进入世界时从地面开始（不默认飞）', !startsFlying('creative'));
   check('生存不默认飞', !startsFlying('survival'));
   check('旁观允许飞行', canFly('spectator'));
+  check('旁观者免伤', !canTakeDamage('spectator'));
+  check('旁观者不能捡东西', !canPickUpItems('spectator'));
+  check('创造可以捡东西', canPickUpItems('creative'));
+  check('生存可以捡东西、会受伤', canPickUpItems('survival') && canTakeDamage('survival'));
 }
 
 console.log('\n[二、世界清单]');

@@ -94,6 +94,8 @@ export interface SurvivalEnvironment {
   y: number;
   /** 创造模式：不受伤、不消耗饥饿、不会饿死、不溺水（**虚空除外**，原版同口径） */
   creative: boolean;
+  /** 旁观者（批次 534）：与创造一样保持饱食/氧气，但**连虚空伤害也没有** */
+  spectator?: boolean;
   /** 饥饿值高时是否自然回血（游戏规则 naturalRegeneration，缺省开） */
   naturalRegeneration?: boolean;
   /** 自然回复的间隔倍率（难度；越小回得越快，缺省 1） */
@@ -386,7 +388,7 @@ export class PlayerStats {
       this.fireTickTimer = 0;
       // 虚空是创造模式**唯一**还会受伤的自然伤害（原版同口径）：
       // 掉出世界必须有反馈，否则玩家会在虚空里无限下坠，只能靠飞回来
-      if (env.y <= VOID_DAMAGE_Y) {
+      if (!env.spectator && env.y <= VOID_DAMAGE_Y) {
         this.hurtResistantTime = 0;
         this.lastDamageAmount = 0;
         this.damage(4, 'void');

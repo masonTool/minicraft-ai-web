@@ -2917,9 +2917,10 @@ console.log('\n[状态栏贴快捷栏两端 + 仙人掌接触（批次 222）]')
     xpHudSrc.includes('|${creative}') && xpHudSrc.includes('creative || (xp.level === 0'),
   );
   check(
-    '主循环把 isCreative 传给两条 HUD',
-    appSrc.includes('this.vitalsHud.update(this.stats, this.isCreative)') &&
-      appSrc.includes('this.xpHud.update(this.experience, this.isCreative)'),
+    '主循环把创造/旁观一起传给两条 HUD',
+    appSrc.includes('const noVitals = this.isCreative || this.isSpectator;') &&
+      appSrc.includes('this.vitalsHud.update(this.stats, noVitals)') &&
+      appSrc.includes('this.xpHud.update(this.experience, noVitals)'),
   );
   check(
     '创造模式不播报饥饿/氧气/着火（假提示与噪音）',

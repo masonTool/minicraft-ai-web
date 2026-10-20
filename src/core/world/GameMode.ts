@@ -87,3 +87,8 @@ export function hasBlockCollision(mode: GameMode): boolean {
 export function canTakeDamage(mode: GameMode): boolean {
   return mode === 'survival';
 }
+
+/** 能不能捡起地上的物品：旁观者不能（原版同口径）；创造可以 */
+export function canPickUpItems(mode: GameMode): boolean {
+  return mode !== 'spectator';
+}
