@@ -55,6 +55,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: fals
 renderer.setPixelRatio(Math.min(platform.system.dpr, 2));
 renderer.setSize(platform.system.width, platform.system.height, false);
 renderer.autoClear = false;
+renderer.setClearColor(0x0b141c, 1);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87b9e8);
@@ -83,6 +84,7 @@ const drawBlockIcon = (
 
 const ui = new UiLayer(platform.system.width, platform.system.height, drawBlockIcon);
 const uiHeight = ui.height;
+let started = false;
 let paused = false;
 let settingsOpen = false;
 let inventoryOpen = false;
@@ -209,10 +211,11 @@ const showSettings = (): void => {
       box(panelX, panelY, panelW, panelH, [
         ...tabButtons,
         ...rows,
-        button(panelX + panelW - 196, panelY + panelH - 64, 172, 44, '返回游戏', () => {
+        button(panelX + panelW - 196, panelY + panelH - 64, 172, 44, started ? '返回游戏' : '返回标题', () => {
           settingsOpen = false;
           paused = false;
-          showHud();
+          if (started) showHud();
+          else showTitle();
         }, { background: 'rgba(30, 38, 46, 0.95)', border: 'rgba(190, 220, 240, 0.35)', radius: 8 }),
       ], { background: 'rgba(16, 22, 28, 0.97)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
     ]),
@@ -279,6 +282,30 @@ const showInventory = (): void => {
   ]));
 };
 
+const showTitle = (): void => {
+  const horizon = uiHeight * 0.56;
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: '#0d1a24' }),
+      box(0, horizon, 1024, uiHeight - horizon, [], { background: '#1b2a28' }),
+      box(72, horizon - 150, 300, 150, [], { background: '#182b33' }),
+      box(300, horizon - 210, 260, 210, [], { background: '#1b3038' }),
+      box(560, horizon - 110, 360, 110, [], { background: '#17262d' }),
+      text(0, 38, 1024, 80, 'MINECRAFT', { fontSize: 68, color: '#f2f7fa', align: 'center' }),
+      text(0, 118, 1024, 36, 'v2 · main core', { fontSize: 18, color: 'rgba(220,238,245,0.75)', align: 'center' }),
+      button(312, horizon + 34, 400, 58, '开始游戏', () => {
+        started = true;
+        paused = false;
+        showHud();
+      }, { background: 'rgba(60, 110, 90, 0.96)', border: 'rgba(190, 235, 215, 0.55)', radius: 8 }),
+      button(312, horizon + 108, 400, 54, '设置', () => {
+        settingsOpen = true;
+        showSettings();
+      }, { background: 'rgba(32, 42, 50, 0.95)', border: 'rgba(190, 220, 240, 0.4)', radius: 8 }),
+    ]),
+  );
+};
+
 const showHud = (): void => {
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
@@ -322,7 +349,7 @@ const showPause = (): void => {
   );
 };
 
-showHud();
+showTitle();
 
 const atlas = new TextureAtlas();
 const solid = new VoxelMaterial(atlas.texture, {
@@ -427,7 +454,7 @@ platform.input.onPointer('down', (event) => {
   lastDownX = event.clientX;
   lastDownY = event.clientY;
   if (ui.handlePointer('down', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
-  if (paused || settingsOpen || inventoryOpen) return;
+  if (!started || paused || settingsOpen || inventoryOpen) return;
   if (event.clientX < platform.system.width / 2) {
     movePointer = event.pointerId;
     moveX = event.clientX;
@@ -488,6 +515,13 @@ const frame = (): void => {
   const now = performance.now();
   const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
+
+  if (!started) {
+    renderer.clear();
+    ui.render(renderer);
+    requestAnimationFrame(frame);
+    return;
+  }
 
   const centerCx = Math.floor(physics.x / 16);
   const centerCz = Math.floor(physics.z / 16);
