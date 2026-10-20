@@ -23,6 +23,7 @@ import {
   FIRE_SPREAD_CHANCE,
   canPlaceFire,
   fireBehavior,
+  soulFireBehavior,
   hasFuelAround,
   igniteAt,
   isFlammable,
@@ -378,6 +379,46 @@ console.log('\n[营火也会烫人（批次 48）]');
   check('三座炉子都不会（烧的是里面，不是炉壳）', [Block.FURNACE, Block.SMOKER, Block.BLAST_FURNACE].every((id) => !burnsOnContact(id, withLitState(0, true))));
   // 与"火方块被水浇灭"那套规则不冲突：营火是独立方块，判据只有"点着没点着"
   check('营火点着时与火方块走同一条路（都是"贴上去就烧"）', burnsOnContact(Block.CAMPFIRE, withLitState(0, true)) === burnsOnContact(Block.FIRE, 0));
+}
+
+console.log('\n[灵魂火（批次 546）]');
+{
+  const world = new FakeWorld();
+  const def = blockDef(Block.SOUL_FIRE);
+  equal('灵魂火亮度是 10（普通火 15）', def.light, 10);
+  check('灵魂火没有物品形态', def.itemless === true);
+  check('灵魂火走植物那套 cross 形状', def.shape === 'cross');
+  check('灵魂火会被随机刻处理（不蔓延，但要检查支撑/水/雨）', hasRandomTick(Block.SOUL_FIRE));
+
+  // 灵魂沙上点出来的是灵魂火
+  world.set(0, 63, 0, Block.SOUL_SAND);
+  check('灵魂沙上打火石 → 灵魂火', igniteAt(world, 0, 64, 0) && world.getBlock(0, 64, 0) === Block.SOUL_FIRE);
+  check('灵魂火会点燃贴着它的实体', burnsOnContact(Block.SOUL_FIRE, 0));
+
+  // 普通石头上还是普通火
+  world.set(2, 63, 2, Block.STONE);
+  check('普通石头上打火石 → 普通火', igniteAt(world, 2, 64, 2) && world.getBlock(2, 64, 2) === Block.FIRE);
+
+  // 支撑还在：随机刻什么都不做
+  check('脚下是灵魂沙时不熄灭', !soulFireBehavior(world, 0, 64, 0, sequence([0])) && world.getBlock(0, 64, 0) === Block.SOUL_FIRE);
+
+  // 支撑没了：随机刻把它清掉
+  world.set(0, 63, 0, Block.STONE);
+  check('脚下换成石头后随机刻熄灭', soulFireBehavior(world, 0, 64, 0, sequence([0])) && world.getBlock(0, 64, 0) === Block.AIR);
+
+  // 下雨：露天灵魂火被浇灭
+  world.set(0, 63, 0, Block.SOUL_SAND);
+  world.set(0, 64, 0, Block.SOUL_FIRE);
+  world.raining = true;
+  world.skyLight = 15;
+  check('雨天露天的灵魂火被浇灭', soulFireBehavior(world, 0, 64, 0, sequence([0])) && world.getBlock(0, 64, 0) === Block.AIR);
+
+  // 水贴着火：浇灭
+  world.raining = false;
+  world.set(0, 64, 0, Block.SOUL_FIRE);
+  world.set(1, 64, 0, Block.WATER);
+  check('贴着水时灵魂火被浇灭', soulFireBehavior(world, 0, 64, 0, sequence([0])) && world.getBlock(0, 64, 0) === Block.AIR);
+  check('灵魂火不会烧掉灵魂沙（没有蔓延逻辑）', world.getBlock(0, 63, 0) === Block.SOUL_SAND);
 }
 
 console.log(`\n火焰测试：${passed} 通过 / ${failed} 失败`);

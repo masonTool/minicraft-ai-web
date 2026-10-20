@@ -329,6 +329,8 @@ const EXPLICIT: Record<string, string> = {
   // 火焰（I12）与下界传送门（K8）：都没有物品（背包里拿不到），
   // 但方块的调试信息、主菜单与提示里要用到这两个名字
   fire: '火焰',
+  // 灵魂火（批次 546）：同样没有物品，但调试信息与提示要用名字
+  soul_fire: '灵魂火',
   nether_portal: '下界传送门',
   // 下界合金（K8 尾巴）
   netherite_block: '下界合金块',

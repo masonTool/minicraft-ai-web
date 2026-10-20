@@ -222,6 +222,8 @@ export const TILE_ORDER = [
   'oak_fence_gate',
   // 火焰（I12）：走植物那套 cross 形状，所以是一张"贴着透明背景的火苗"
   'fire',
+  // 灵魂火（批次 546）：同一张火苗轮廓，青蓝配色
+  'soul_fire',
   // 下界合金（K8 尾巴）
   'netherite_block',
   'smithing_table_top',

@@ -1416,25 +1416,35 @@ for (const wood of WOOD_TYPES) {
  * 火苗高度按列取两条正弦叠加，于是边缘是锯齿状的火舌而不是一块方砖——
  * 这张贴图贴在 `cross` 的两片交叉薄面上，所以左右边缘的锯齿会被看得很清楚。
  */
-PAINTERS.fire = (x, y, rng) => {
-  // 每列的火苗高度（约 8~14 像素）
-  const height =
-    10 + Math.round(Math.sin(x * 0.8) * 2.2 + Math.sin(x * 2.1) * 1.1) + (hashString(`fire${x}`) % 3);
-  const up = 15 - y; // 距底部的行数（0 = 最底一行）
-  if (up > height) return [0, 0, 0, 0];
+function flamePainter(
+  seed: string,
+  from: readonly [number, number, number],
+  to: readonly [number, number, number],
+): (x: number, y: number, rng: () => number) => [number, number, number, number] {
+  return (x, y, rng) => {
+    // 每列的火苗高度（约 8~14 像素）
+    const height =
+      10 + Math.round(Math.sin(x * 0.8) * 2.2 + Math.sin(x * 2.1) * 1.1) + (hashString(`${seed}${x}`) % 3);
+    const up = 15 - y; // 距底部的行数（0 = 最底一行）
+    if (up > height) return [0, 0, 0, 0];
 
-  // 靠中心与靠底部更热：t=0 在底、t=1 在火苗尖
-  const t = up / Math.max(1, height);
-  const center = 1 - Math.abs(x - 7.5) / 8;
-  const heat = Math.max(0, Math.min(1, (1 - t) * (0.55 + center * 0.45)));
-  const jitter = rng() * 16 - 8;
-  return [
-    clamp255(198 + heat * 57 + jitter),
-    clamp255(58 + heat * 158 + jitter),
-    clamp255(18 + heat * 42),
-    255,
-  ];
-};
+    // 靠中心与靠底部更热：t=0 在底、t=1 在火苗尖
+    const t = up / Math.max(1, height);
+    const center = 1 - Math.abs(x - 7.5) / 8;
+    const heat = Math.max(0, Math.min(1, (1 - t) * (0.55 + center * 0.45)));
+    const jitter = rng() * 16 - 8;
+    return [
+      clamp255(from[0] + (to[0] - from[0]) * heat + jitter),
+      clamp255(from[1] + (to[1] - from[1]) * heat + jitter),
+      clamp255(from[2] + (to[2] - from[2]) * heat),
+      255,
+    ];
+  };
+}
+
+PAINTERS.fire = flamePainter('fire', [198, 58, 18], [255, 216, 60]);
+// 灵魂火（批次 546）：同一套火苗轮廓，配色换成青蓝
+PAINTERS.soul_fire = flamePainter('soulfire', [28, 110, 190], [150, 240, 255]);
 
 PAINTERS.item_clay_ball = lump(
   [

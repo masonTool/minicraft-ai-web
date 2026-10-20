@@ -59,7 +59,9 @@ export const CAMPFIRE_IGNITE_SECONDS = 5;
  * 判据按"方块 + 状态"而不是只按 id：营火点着与熄灭是同一个方块的两种状态。
  */
 export function burnsOnContact(blockId: number, state: number): boolean {
-  if (blockId === Block.FIRE || blockId === Block.LAVA) return true;
+  // 灵魂火（批次 546）同样会点燃贴着它的实体；原版的伤害比普通火高，
+  // 这里先复用同一条着火机制（差异记在 TASKS B20）
+  if (blockId === Block.FIRE || blockId === Block.SOUL_FIRE || blockId === Block.LAVA) return true;
   return blockId === Block.CAMPFIRE && isLitState(state);
 }
 
@@ -296,10 +298,42 @@ export const fireBehavior: RandomTickBehavior = (
 };
 
 /**
+ * 灵魂火（批次 546）：**不蔓延、不烧燃料**，只做三件事——
+ * 被水浇灭、被雨浇灭、脚下的灵魂沙/灵魂土没了就灭。
+ *
+ * 原版灵魂火也只烧在灵魂沙/灵魂土上；这里把"支撑"做成随机刻检查，
+ * 而不是每次方块变动都扫一遍（与雪层/铜氧化同一档开销）。
+ */
+export const soulFireBehavior: RandomTickBehavior = (
+  world: TickWorld,
+  x: number,
+  y: number,
+  z: number,
+): boolean => {
+  if (world.raining && (world.skyLightAt?.(x, y, z) ?? 0) >= 15) {
+    return world.setBlock(x, y, z, Block.AIR);
+  }
+  if (isTouchingWater(world, x, y, z)) {
+    return world.setBlock(x, y, z, Block.AIR);
+  }
+  const below = world.getBlock(x, y - 1, z);
+  if (below !== Block.SOUL_SAND && below !== Block.SOUL_SOIL) {
+    return world.setBlock(x, y, z, Block.AIR);
+  }
+  return false;
+};
+
+/**
  * 打火石点火：在命中面的外侧放一格火。
  * 判定失败（没有立足点、已经有方块）返回 false，调用方据此**不消耗耐久**。
  */
 export function igniteAt(world: TickWorld, x: number, y: number, z: number): boolean {
+  if (world.getBlock(x, y, z) !== Block.AIR) return false;
+  // 灵魂沙/灵魂土上面点出来的是**灵魂火**（原版）；其它情况才走普通火
+  const below = world.getBlock(x, y - 1, z);
+  if (below === Block.SOUL_SAND || below === Block.SOUL_SOIL) {
+    return world.setBlock(x, y, z, Block.SOUL_FIRE);
+  }
   if (!canPlaceFire(world, x, y, z)) return false;
   return world.setBlock(x, y, z, FIRE);
 }

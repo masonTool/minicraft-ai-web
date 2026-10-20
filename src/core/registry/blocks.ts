@@ -1266,6 +1266,27 @@ const FIRE_SPECS: readonly BlockSpec[] = [
 ];
 
 /**
+ * 灵魂火（批次 546，B20 最后一件）：只能点在**灵魂沙/灵魂土**上，亮度 10（普通火 15）。
+ *
+ * 形状复用 `cross`，与普通火同一个网格化路径；颜色靠 `soul_fire` 贴图区分。
+ * **不蔓延**：随机刻只做"被水/雨浇灭 + 支撑没了就灭"，不走 `fireBehavior` 的烧燃料逻辑。
+ */
+export const SOUL_FIRE_ID = 721;
+const SOUL_FIRE_SPECS: readonly BlockSpec[] = [
+  {
+    id: SOUL_FIRE_ID,
+    name: 'minecraft:soul_fire',
+    tiles: ['soul_fire', 'soul_fire', 'soul_fire'],
+    shape: 'cross',
+    solid: false,
+    opaque: false,
+    light: 10,
+    lightOpacity: 0,
+    itemless: true,
+  },
+];
+
+/**
  * 下界传送门方块（K8）。
  *
  * 形状上它就是一块"整格"，但**没有任何碰撞**（可以走进去）、**不遮挡**邻居、
@@ -3557,6 +3578,7 @@ const SPECS: readonly BlockSpec[] = [
   ...MINERAL_AND_BEACON_SPECS,
   ...SLIME_BLOCK_SPECS,
   ...SOUL_LIGHT_SPECS,
+  ...SOUL_FIRE_SPECS,
   ...CANDLE_SPECS,
   ...GLAZED_TERRACOTTA_SPECS,
 
@@ -3991,6 +4013,7 @@ export const Block = {
   OAK_FENCE_GATE: 290,
   /** 火焰（I12）：没有物品，只能靠打火石点燃 */
   FIRE: 291,
+  SOUL_FIRE: SOUL_FIRE_ID,
   /** 下界传送门（K8）：黑曜石框点燃后填满框内的那 2×3 格 */
   NETHER_PORTAL: 292,
   /** 下界合金（K8 尾巴）：储物方块与锻造台 */
@@ -4730,6 +4753,7 @@ HARDNESS.set(Block.FARMLAND, 0.6);
 HARDNESS.set(Block.BREWING_STAND, 0.5);
 // 火焰硬度 0：徒手一拍即灭（`breakSeconds` 直接返回 0，不做任何计时）
 HARDNESS.set(Block.FIRE, 0);
+HARDNESS.set(Block.SOUL_FIRE, 0);
 // 下界传送门硬度 -1：**挖不动**（`breakSeconds` 返回 Infinity）。
 // 原版就是这样——想熄门只能敲框，敲一下门就整片灭掉（见 `NetherPortal.ts`）
 HARDNESS.set(Block.NETHER_PORTAL, -1);

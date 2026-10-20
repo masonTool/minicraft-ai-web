@@ -6645,8 +6645,9 @@ class App {
     this.damageHeldTool();
     this.audio.play('flint', { x, y, z });
     this.hand.swing();
-    // 联机：把这一格火广播给队友（否则只有自己这边在烧）
-    this.net.sendBlock(x, y, z, Block.FIRE, 0, this.dimension);
+    // 联机：把这一格火广播给队友（否则只有自己这边在烧）；
+    // 灵魂沙上点出来的是灵魂火，所以要读实际方块 id，不能写死 `Block.FIRE`
+    this.net.sendBlock(x, y, z, this.world.getBlock(x, y, z), 0, this.dimension);
     this.refreshHotbar();
     return true;
   }

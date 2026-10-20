@@ -62,7 +62,7 @@ import {
 } from '../registry/blockState.ts';
 // 炼药锅接雨（批次 177，G13 收尾）：判据与概率都在 `world/Cauldron.ts` 里（纯函数）
 import { CAULDRON_RAIN_CHANCE, cauldronAcceptsRain } from '../world/Cauldron.ts';
-import { fireBehavior } from '../world/Fire.ts';
+import { fireBehavior, soulFireBehavior } from '../world/Fire.ts';
 import { COPPER_IDS, copperWeatherBehavior } from '../world/Copper.ts';
 
 /** 随机刻看到的世界 */
@@ -712,6 +712,8 @@ export const RANDOM_TICK_BEHAVIORS = new Map<number, RandomTickBehavior>([
   [Block.WARPED_NYLIUM, makeNyliumBehavior(Block.WARPED_NYLIUM)],
   // 火焰（I12）：蔓延 / 被水与雨浇灭 / 没燃料就熄灭
   [Block.FIRE, fireBehavior],
+  // 灵魂火（批次 546）：不蔓延，只检查水/雨与脚下的灵魂沙
+  [Block.SOUL_FIRE, soulFireBehavior],
   // 藤蔓（B11）：往下长 + 往旁边蔓延
   [Block.VINE, vineBehavior],
   // 铜的氧化（批次 40）：16 个铜方块都要登记——随机刻是按"当前这个 id"查行为的
