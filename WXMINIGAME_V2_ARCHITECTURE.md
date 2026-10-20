@@ -32,6 +32,7 @@ v2
                  recipe-book.ts    配方匹配/取料/填格纯逻辑
                  inventory-tabs.ts 背包壳/物品/创造/配方页与合成面板 UI
                  quality.ts        画质分级/FPS 自适应
+                 chat.ts           本地聊天/命令面板
                  save-controller.ts
                                    打开/防抖保存/脏区块/容器/玩家写入
                  wx-mesh-pool.ts   微信真实 Worker 网格化
@@ -107,6 +108,7 @@ v2
 - 抽取 `recipe-book.ts`：配方尺寸匹配、背包取 1 份材料、填合成格
 - 抽取 `inventory-tabs.ts`：背包壳、物品/创造/配方三页、合成面板；组合根只注入状态与回调
 - 抽取 `quality.ts`：DPR 分级、低帧降级、稳定回升、天气可见性
+- 抽取 `chat.ts`：本地聊天、命令解析与面板 UI，组合根注入世界/传送/天气回调
 - 抽取 `save-controller.ts`：存档打开/关闭/防抖保存/脏区块/容器/玩家写入
 
 ## 已知架构债务
