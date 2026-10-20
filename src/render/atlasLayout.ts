@@ -6,6 +6,7 @@
  * 若把这份数据留在 TextureAtlas 里，Worker 就会连带打进整个带 DOM 依赖的模块。
  */
 import { MULTI_PAINTINGS, paintingSubTile } from '../core/registry/paintings.ts';
+import { DYE_COLORS } from '../core/registry/colors.ts';
 
 
 export const TILE_SIZE = 16;
@@ -1165,6 +1166,10 @@ export const TILE_ORDER = [
   'rooted_dirt',
   'small_dripleaf',
   'big_dripleaf',
+  // 旗帜图案（批次 497）：16 色 × 4 种图案 = 64 张。光板仍用上面的 `banner_<color>`
+  ...DYE_COLORS.flatMap((color) =>
+    Array.from({ length: 4 }, (_unused, index) => `banner_${color.name}_p${index + 1}`),
+  ),
   'banner_white',
   'banner_orange',
   'banner_magenta',

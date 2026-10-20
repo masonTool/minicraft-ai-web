@@ -8,9 +8,21 @@
  *  ④ 放置（占两格、上方必须是空气、下方要实心）。
  */
 
-import { Block, BANNER_ID_START, blockDef, isBannerId } from '../src/core/registry/blocks.ts';
+import { Block, BANNER_ID_START, bannerPatternTile, blockDef, isBannerId } from '../src/core/registry/blocks.ts';
 import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { facingOf, isBannerTop, isWallMounted, withBannerTop } from '../src/core/registry/blockState.ts';
+import {
+  BANNER_PATTERNS,
+  bannerPatternOf,
+  facingOf,
+  isBannerTop,
+  isWallMounted,
+  nextBannerPattern,
+  withBannerPattern,
+  withBannerTop,
+} from '../src/core/registry/blockState.ts';
+import { DYE_COLORS } from '../src/core/registry/colors.ts';
+import { TILE_ORDER } from '../src/render/atlasLayout.ts';
+import { readFileSync } from 'node:fs';
 import { planPlacement } from '../src/core/interaction/Placement.ts';
 import { itemLabel } from '../src/core/registry/itemNames.ts';
 
@@ -163,6 +175,50 @@ console.log('\n[挂墙（批次 486）]');
   // 立地几何不受影响
   const standing = meshBoxes('banner', 0);
   check('立地的杆在格心', Math.abs(standing[0]![0]! - 7 / 16) < 1e-6, `${standing[0]![0]}`);
+}
+
+
+console.log('\n[图案：状态位与循环（批次 497）]');
+{
+  equal('图案一共 5 档（光板 + 4 种）', BANNER_PATTERNS.length, 5);
+  equal('默认是光板', bannerPatternOf(0), 0);
+  equal('写第 3 种', bannerPatternOf(withBannerPattern(0, 3)), 3);
+  equal('越界会夹到最后一档', bannerPatternOf(withBannerPattern(0, 99)), 4);
+  equal('负数夹到 0', bannerPatternOf(withBannerPattern(0, -5)), 0);
+
+  // 转一圈回到光板
+  let state = 0;
+  const seen: number[] = [];
+  for (let i = 0; i < 5; i++) {
+    state = nextBannerPattern(state);
+    seen.push(bannerPatternOf(state));
+  }
+  equal('右键五次回到光板', seen.join(','), '1,2,3,4,0');
+
+  // 与"上半格"位互不干扰
+  const upper = withBannerTop(withBannerPattern(0, 2), true);
+  equal('图案写在 bit0-2 不与上半位打架', bannerPatternOf(upper), 2);
+  equal('上半位还在', isBannerTop(upper), true);
+  equal('改成第 4 种后上半位不变', isBannerTop(withBannerPattern(upper, 4)), true);
+
+  equal('光板用原来那张贴图', bannerPatternTile('white', 0), 'banner_white');
+  equal('有图案换成带后缀的', bannerPatternTile('white', 3), 'banner_white_p3');
+
+  // 16 色 × 4 图案 = 64 张，全部要在图集里（漏一张会静默回退成别的图）
+  const missing: string[] = [];
+  for (const color of DYE_COLORS) {
+    for (let index = 1; index <= 4; index++) {
+      const tile = bannerPatternTile(color.name, index);
+      if (!TILE_ORDER.includes(tile)) missing.push(tile);
+    }
+  }
+  equal('64 张图案贴图全部登记进图集', missing.length, 0);
+  check('（缺的是）', missing.length === 0, missing.slice(0, 4).join(' '));
+
+  // 接线守卫
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('右键旗帜会换图案', /isBannerId\(hitBlock\)\) return this\.cycleBannerPattern/.test(mainSrc));
+  check('上下半格都改（只改下半会两半不一样）', /const half = dy === 1 \? \(next \| 0b100000\)/.test(mainSrc));
 }
 
 console.log(`\n旗帜测试：${passed} 通过 / ${failed} 失败`);

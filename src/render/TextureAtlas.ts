@@ -6664,6 +6664,35 @@ PAINTERS['glazed_terracotta_red'] = noisy(0xb02e26, 22);
 PAINTERS['glazed_terracotta_black'] = noisy(0x1d1d21, 22);
 
 // 旗帜（批次 386）：染料底色 + 一点噪点
+/**
+ * 旗帜图案（批次 497）：底色 + 一层"墨"。
+ *
+ * 墨的颜色按底色亮度选（亮底用深墨、暗底用浅墨）——白旗上画白纹等于没画。
+ * 四种图案都是"几何形状"，16×16 下画得清楚：
+ *  1 十字（竖条 + 横条）、2 边框、3 斜纹、4 横条。
+ */
+function bannerPatternPainter(base: readonly [number, number, number], pattern: number): Painter {
+  const luminance = (base[0] * 0.299 + base[1] * 0.587 + base[2] * 0.114) / 255;
+  const ink: readonly [number, number, number] = luminance > 0.6 ? [32, 32, 36] : [242, 242, 238];
+  return (x, y, rng) => {
+    let on = false;
+    if (pattern === 1) on = (x >= 6 && x <= 9) || (y >= 6 && y <= 9);
+    else if (pattern === 2) on = x <= 1 || x >= 14 || y <= 1 || y >= 14;
+    else if (pattern === 3) on = Math.abs(x - y) <= 1;
+    else if (pattern === 4) on = y >= 6 && y <= 9;
+    if (on) return [ink[0], ink[1], ink[2], 255];
+    // 底色带一点噪点（与光板那 16 张同一套观感）
+    const noise = 1 + (rng() - 0.5) * 0.06;
+    return [clamp255(base[0] * noise), clamp255(base[1] * noise), clamp255(base[2] * noise), 255];
+  };
+}
+
+for (const color of DYE_COLORS) {
+  for (let index = 1; index <= 4; index++) {
+    PAINTERS[`banner_${color.name}_p${index}`] = bannerPatternPainter(color.rgb, index);
+  }
+}
+
 PAINTERS['banner_white'] = noisy(0xf9fffe, 18);
 PAINTERS['banner_orange'] = noisy(0xf9801d, 18);
 PAINTERS['banner_magenta'] = noisy(0xc74ebd, 18);

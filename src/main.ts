@@ -356,6 +356,10 @@ import {
   // 多格画（批次 495）：哨兵档位与朝向
   facingOf,
   paintingVariantOf,
+  // 旗帜图案（批次 497）：右键换一种图案
+  BANNER_PATTERNS,
+  bannerPatternOf,
+  nextBannerPattern,
   // 洞穴藤蔓（批次 496）：有浆果的那节掉一颗发光浆果
   caveVinesHaveBerries,
 } from './core/registry/blockState.ts';
@@ -410,6 +414,8 @@ import { Block, BLOCKS, blockDef, woolId,
   blockAfterBreak,
   // 潜影盒（批次 451）：无色 + 16 色，特判一律问这个（别再逐 id 比）
   isShulkerBox,
+  // 旗帜（批次 497）：右键换图案
+  isBannerId,
 } from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
@@ -10859,6 +10865,32 @@ class App {
   }
 
   /**
+   * 换旗帜图案（批次 497）：右键一次换下一种，转一圈回到光板。
+   *
+   * 上下半格都要改（旗帜是两格高、两半各自存状态位）——只改下半的话，
+   * 上半那半截的贴图还是旧图案，看起来像"上下两半不一样"。
+   *
+   * ⚠️ 与原版的差异：原版要用**织布机 + 染料**、图案还会叠加成 6 层；
+   * 这里做成"右键循环"（免材料、只有一层图案），理由是没有织布机界面那套 UI。
+   */
+  private cycleBannerPattern(x: number, y: number, z: number): boolean {
+    const state = this.world.getBlockState(x, y, z);
+    const baseY = isBannerTop(state) ? y - 1 : y;
+    const next = nextBannerPattern(state);
+    for (let dy = 0; dy < 2; dy++) {
+      const oy = baseY + dy;
+      if (!isBannerId(this.world.getBlock(x, oy, z))) continue;
+      const half = dy === 1 ? (next | 0b100000) : (next & ~0b100000);
+      this.world.setStateAndUpdate(x, oy, z, half);
+      this.net.sendBlock(x, oy, z, this.world.getBlock(x, oy, z), half, this.dimension);
+    }
+    this.audio.play('click', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.hand.swing();
+    this.chat.push(`旗帜图案：${BANNER_PATTERNS[bannerPatternOf(next)] ?? '无'}`, 'system');
+    return true;
+  }
+
+  /**
    * 盔甲架（批次 492）：拿装备右键**穿上**；空手右键**取下一件**。
    *
    * 槽位由 `armorSlotForItem` 从 `armor.ts` 的注册表反查（与"能不能穿"同一条判据），
@@ -11062,6 +11094,8 @@ class App {
     if (hitBlock === Block.JUKEBOX) return this.useJukebox(x, y, z);
     // 盔甲架（批次 492）：拿装备右键穿上；空手右键取下一件
     if (hitBlock === Block.ARMOR_STAND) return this.useArmorStand(x, y, z);
+    // 旗帜（批次 497）：右键换一种图案（0 → 十字 → 边框 → 斜纹 → 横条 → 0）
+    if (isBannerId(hitBlock)) return this.cycleBannerPattern(x, y, z);
     // 钟（批次 490）：右键敲响
     if (hitBlock === Block.BELL) return this.ringBell(x, y, z);
     if (hitBlock === Block.CRAFTING_TABLE) {

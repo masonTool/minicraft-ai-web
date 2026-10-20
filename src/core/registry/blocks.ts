@@ -11,7 +11,7 @@ import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { TreeKind } from '../gen/Features.ts';
 import { anchorLight } from '../world/RespawnAnchor.ts';
 import { railShapeOf } from '../world/RailShape.ts';
-import { caveVinesHaveBerries } from './blockState.ts';
+import { bannerPatternOf, caveVinesHaveBerries } from './blockState.ts';
 import { isWaterlogged, withWaterlogged } from './blockState.ts';
 import {
   cauldronLevelOf,
@@ -1531,12 +1531,28 @@ const BANNER_SPECS: readonly BlockSpec[] = DYE_COLORS.map(
     id: BANNER_ID_START + index,
     name: `minecraft:${color.name}_banner`,
     tiles: [`banner_${color.name}`, `banner_${color.name}`, `banner_${color.name}`] as const,
+    // 图案（批次 497）：底色在 id 里，状态位只存"烫了哪种图案"
+    stateTiles: (state) => {
+      const tile = bannerPatternTile(color.name, bannerPatternOf(state));
+      return [tile, tile, tile];
+    },
     shape: 'banner' as const,
     solid: false,
     opaque: false,
     lightOpacity: 0,
   }),
 );
+
+/**
+ * 旗帜的贴图名（批次 497）：光板用 `banner_<color>`，有图案用 `banner_<color>_p<n>`。
+ *
+ * 为什么不做"图层叠加"：方块渲染一条路径只采样一张瓦片；而 16 色 × 4 图案
+ * 一共 64 张图，图集完全放得下——比给渲染管线加一层混合便宜得多。
+ */
+export function bannerPatternTile(colorName: string, pattern: number): string {
+  if (pattern <= 0) return `banner_${colorName}`;
+  return `banner_${colorName}_p${Math.min(4, pattern)}`;
+}
 
 /** 这一块是不是旗帜（放置/破坏/掉落都认它） */
 export function isBannerId(id: number): boolean {

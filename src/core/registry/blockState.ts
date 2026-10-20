@@ -318,6 +318,31 @@ const DOOR_UPPER_MASK = 0b100000;
  */
 const BANNER_TOP_MASK = 0b100000;
 
+/**
+ * 旗帜的**图案**（批次 497，B19）：bit0-2 存图案编号（0 = 光板）。
+ *
+ * 底色不需要状态位——16 色是 16 个不同的方块 id（640~655），
+ * 所以状态位只用来表达"烫了哪种图案"。
+ */
+const BANNER_PATTERN_MASK = 0b111;
+
+/** 图案编号 → 名字（渲染与提示共用；0 是光板） */
+export const BANNER_PATTERNS: readonly string[] = ['无', '十字', '边框', '斜纹', '横条'];
+
+export function bannerPatternOf(state: number): number {
+  return state & BANNER_PATTERN_MASK;
+}
+
+export function withBannerPattern(state: number, pattern: number): number {
+  const clamped = Math.max(0, Math.min(BANNER_PATTERNS.length - 1, Math.floor(pattern)));
+  return (state & ~BANNER_PATTERN_MASK) | clamped;
+}
+
+/** 右键一次换成下一种图案（0 → 1 → … → 4 → 0） */
+export function nextBannerPattern(state: number): number {
+  return withBannerPattern(state, (bannerPatternOf(state) + 1) % BANNER_PATTERNS.length);
+}
+
 export function isBannerTop(state: number): boolean {
   return (state & BANNER_TOP_MASK) !== 0;
 }
