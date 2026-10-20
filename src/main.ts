@@ -445,6 +445,8 @@ import {
 } from './core/world/GuardAI.ts';
 // 村庄袭击（批次 475）：状态机是纯逻辑，生成/结算在这一层
 import { Raid, countsAsRaidKill, type RaidRaiderSpec } from './core/world/Raid.ts';
+// 掠夺者巡逻队（批次 476）：纯判据在模块里，计时与生成在这一层
+import { PATROL_INTERVAL_SECONDS, patrolSpawnPoint, planPatrol, shouldTryPatrol } from './core/world/Patrol.ts';
 import { bastionCreatureSpawnsAt, nearestBastion } from './core/gen/Bastion.ts';
 import { fortressCreatureSpawnsAt, nearestFortress } from './core/gen/NetherFortress.ts';
 import { endCityCreatureSpawnsAt, nearestEndCity } from './core/gen/EndStructures.ts';
@@ -6661,11 +6663,19 @@ class App {
       // 进度（M7）：击杀。报的是**生物种类 id**而不是这一只——
       // 计数型进度（"怪物猎人"要三种）靠它去重，报成个体就永远凑不齐三种
       this.reportProgress({ kind: 'kill', mob: mob.type.id });
-      // 不祥之兆（批次 475）：原版只有"带着旗帜的队长"掉，本项目没有队长概念，
-      // 用 10% 概率近似——不然袭击这条线永远触发不了（与要塞之眼那种"拿不到就断链"同一类坑）
-      if (!this.rules.disableRaids && mob.type.id === 'pillager' && Math.random() < 0.1) {
-        this.effects.apply('bad_omen', 6000, 0);
-        this.chat.push('你染上了不祥之兆：带着它走进村庄会引来袭击', 'system');
+      // 不祥之兆（批次 475/476）：原版是"击杀巡逻队队长（带旗那只）"必掉。
+      // 巡逻队是本批补上的，所以这里以"队长"为主；其余掠夺者留 3% 兜底
+      //（否则玩家一直在地下挖矿、遇不到巡逻队时，袭击这条线就永远触发不了）
+      if (!this.rules.disableRaids && mob.type.id === 'pillager') {
+        const isLeader = mob === this.patrolLeader;
+        if (isLeader || Math.random() < 0.03) {
+          this.effects.apply('bad_omen', 6000, 0);
+          this.chat.push(
+            isLeader ? '你击败了巡逻队队长：染上了不祥之兆' : '你染上了不祥之兆：带着它走进村庄会引来袭击',
+            'system',
+          );
+        }
+        if (isLeader) this.patrolLeader = null;
       }
       // 村庄袭击（批次 475）：只有"袭击里的那只、且死在袭击半径内"才算
       if (countsAsRaidKill(mob.type.id, mob.x, mob.z, this.raid)) {
@@ -7753,6 +7763,63 @@ class App {
     );
     if (!spot) return;
     this.entities.spawn(createMob(type, spot.x + 0.5, spot.y, spot.z + 0.5));
+  }
+
+  /**
+   * 掠夺者巡逻队（批次 476）：每 90 秒尝试一次，在玩家周围 24~48 格的地表
+   * 生成 3~5 只掠夺者（有 25% 概率夹一只卫道士）。
+   *
+   * 与袭击的区别：巡逻队**没有状态机**，生成之后就是普通的敌对生物
+   * （`hostile: true`，看到玩家/村民就打，离得远就按游荡逻辑乱走）。
+   *
+   * 三条"不"写在 `shouldTryPatrol` 里：和平难度、已有一组活着、间隔未到。
+   */
+  private tickPatrol(dt: number): void {
+    this.patrolTimer += dt;
+    if (this.patrolMobs.length > 0) {
+      // 只做记账清理：实体本身由实体表在死亡时移除
+      this.patrolMobs = this.patrolMobs.filter((mob) => !mob.dead);
+      if (this.patrolLeader?.dead) this.patrolLeader = null;
+    }
+    if (
+      !shouldTryPatrol({
+        elapsed: this.patrolTimer,
+        interval: PATROL_INTERVAL_SECONDS,
+        peaceful: this.difficulty === 'peaceful',
+        activePatrol: this.patrolMobs.length,
+      })
+    ) {
+      return;
+    }
+    this.patrolTimer = 0;
+    // 巡逻队只在地表刷（原版也是）：下界/末地没有掠夺者巡逻队
+    if (this.dimension !== Dimension.OVERWORLD) return;
+
+    const members = planPatrol(() => Math.random());
+    const origin = patrolSpawnPoint(this.physics.x, this.physics.z, () => Math.random());
+    const generator = this.biomeGenerator;
+    const guessY = generator ? generator.surfaceY(origin.x, origin.z) + 1 : Math.floor(this.physics.y);
+    const spot = nearbyStandingSpot(
+      (x, y, z) =>
+        this.world.getBlock(x, y, z) === Block.AIR &&
+        this.world.getBlock(x, y + 1, z) === Block.AIR &&
+        blockDef(this.world.getBlock(x, y - 1, z)).solid,
+      origin.x,
+      guessY,
+      origin.z,
+      8,
+    );
+    if (!spot) return;
+
+    for (const member of members) {
+      const type = mobTypeById(member.kind);
+      if (!type) continue;
+      const mob = createMob(type, spot.x + 0.5, spot.y, spot.z + 0.5);
+      this.entities.spawn(mob);
+      this.patrolMobs.push(mob);
+      if (member.leader) this.patrolLeader = mob;
+    }
+    this.chat.push('附近出现了掠夺者巡逻队', 'system');
   }
 
   /**
@@ -9273,6 +9340,8 @@ class App {
     // 村庄袭击（批次 475）：触发/推进波次都在实体 tick 之前——新刷出来的劫掠者
     // 这一帧就能动，不会"先站一帧再走"
     this.tickRaid(dt);
+    // 掠夺者巡逻队（批次 476）：与袭击互不影响，只是另一组会游荡的怪
+    this.tickPatrol(dt);
     // 村庄守卫（批次 474）：铁傀儡在实体 tick **之前**拿到指令（朝谁走、打不打），
     // 实体自己只负责按 `moveDir` 移动——见 `Mob.guardToward` 的注释
     this.tickGuardians(context, dt);
@@ -10895,6 +10964,11 @@ class App {
   /** 村庄保卫战计数（批次 383）：在村庄附近击杀的掠夺者数量 */
   /** 进行中的袭击（批次 475）。null = 没有袭击 */
   private raid: Raid | null = null;
+  /** 巡逻队（批次 476）：计时 + 活着的成员 */
+  private patrolTimer = 0;
+  private patrolMobs: Mob[] = [];
+  /** 巡逻队队长（击杀它必掉不祥之兆） */
+  private patrolLeader: Mob | null = null;
   /** 旧版"击杀 5 只算一波"的计数（只在没有真袭击时兜底进度） */
   private raidKills = 0;
 
