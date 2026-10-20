@@ -25,6 +25,7 @@ import {
 } from '../audio/MobVoices.ts';
 import { shouldChasePlayer } from './ChaseRules.ts';
 import { opensDoors } from './DoorRules.ts';
+import { swimVerticalSpeed } from './SwimRules.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 
 /** 与玩家一致的常量（原版数值） */
@@ -645,6 +646,8 @@ export class Mob extends Entity {
   private hopTimer = 0;
   /** 泡水/淋雨的掉血计时（批次 112，末影人） */
   private waterTimer = 0;
+  /** 追击目标的 y（批次 517：水里判断"目标在上方"用；不在追击时为 null） */
+  private swimTargetY: number | null = null;
   /** 空闲瞬移的计时（批次 112）；初值随机，免得一群末影人齐刷刷一起瞬移 */
   private teleportTimer = IDLE_TELEPORT_MIN + Math.random() * (IDLE_TELEPORT_MAX - IDLE_TELEPORT_MIN);
   private attackCooldown = 0;
@@ -770,6 +773,14 @@ export class Mob extends Entity {
       // 上岸它就掉回普通重力那一条（原版鱿鱼在岸上也是一坨软体）
       this.vy += (AQUATIC_DRIFT_SPEED - this.vy) * Math.min(1, 4 * dt);
       this.vy = Math.max(-1.2, Math.min(1.2, this.vy));
+    } else if (this.inWater(ctx)) {
+      // 游泳（批次 517）：普通生物掉进水里会沉底，这里给一个向上的速度。
+      // 判据全在纯函数里（头露出水面就不再推、目标在下方时只缓慢上浮）。
+      const headAboveWater =
+        ctx.getBlock(Math.floor(this.x), Math.floor(this.y + this.height * 0.9), Math.floor(this.z)) !== Block.WATER;
+      const targetAbove = this.swimTargetY !== null && this.swimTargetY > this.y + 0.2;
+      this.vy = swimVerticalSpeed({ submerged: true, headAboveWater, targetAbove, vy: this.vy });
+      this.applyClimbing(ctx);
     } else {
       this.vy -= GRAVITY * dt;
       if (this.vy < -60) this.vy = -60;
@@ -1169,6 +1180,9 @@ export class Mob extends Entity {
 
     // 隐身的玩家不会被盯上（K4 尾巴）：已经追到一半的会停下来（下一帧就不满足条件了）
     const chasing = shouldChasePlayer(chaseInput);
+
+    // 水里上浮要用"目标在上方吗"（批次 517）：不在追击时置空
+    this.swimTargetY = chasing && player ? player.y : null;
 
     // 会开门的生物走到门前就把门推开（批次 516）。
     // 放在寻路之后、移动之前：A* 已经把门当可走格，这里只负责让它真的开

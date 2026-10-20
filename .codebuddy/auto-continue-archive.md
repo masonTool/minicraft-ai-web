@@ -11511,4 +11511,12 @@
 - [x] B512-4 `test:target` **42 条**；`test:golem` 27 条原样通过；套数 155 → **156**
 - ⚠️ 仍缺：雪傀儡远程雪球、开门/游泳、"被打后追玩家"并入选择器
 
+## 批次 513：雪傀儡远程雪球（J3 第二批）（2026-10-20）
+
+- [x] B513-1 `TargetRule.ranged` + 雪傀儡规则（10 格 / 1.5 秒 / 0 伤害 / hostileOnly）
+- [x] B513-2 主程序 `rule.ranged` 分支 + `throwSnowballFrom`（复用 `spawnThrowable`）
+- [x] B513-3 初速 12、抬升 2.4（补偿重力，平射十格会砸地）
+- [x] B513-4 `test:target` 42 → **51 条**
+- ⚠️ J3 仍缺：开门、游泳、"被打后追玩家"并入选择器
+
 <!-- docs-archive:end -->

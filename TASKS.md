@@ -2855,7 +2855,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
 - [x] J1b 实体渲染：方块类掉落物用迷你立方体、非方块物品用朝向镜头的平面；
       已完成：`render/EntityRenderer.ts` —— 方块类掉落物用迷你立方体、非方块用品用朝向镜头的平面；
       逐实体光照采样与同类掉落物合并（`EntityManager.mergeItemEntities`）也已实现
-- [~] J3 生物 AI：目标选择器、寻路（A*）、避障、跳跃、开门、游泳
+- [x] J3 生物 AI：目标选择器、寻路（A*）、避障、跳跃、开门、游泳
       已实现：A* 寻路 `core/entity/Pathfinder.ts`（对角防夹、+0.6 跳台阶、下落代价）+
       追击与游荡、悬崖掉头；
       —— **批次 512 做了目标选择器第一批**：`core/entity/TargetRules.ts` 规则表
@@ -2873,7 +2873,10 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       —— **批次 516 补上开门**：`DoorRules.ts`（村民/掠夺者/卫道士/唤魔者/幻术师/女巫
       会开木门）+ `PathOptions.isDoor`（关着的门算可走格）+ `EntityContext.openDoor`；
       主程序复用 `toggleDoor`（上下半与音效一处处理）。`test:doors` **13 条**。
-      **仍缺**：游泳（寻路细节）。
+      —— **批次 517 补上游泳**：`SwimRules.ts` 纯函数（泡在水里且头在水下才推、
+      追击时 2.6 / 自然上浮 0.6、头露出水面不再推），`Mob` 在水里走这条纵向速度；
+      水生生物那条分支排在前面（不抢鱿鱼）。`test:swim` **16 条**。
+      **J3 收口**：目标选择器（512~515）、开门（516）、游泳（517）全部落地。
 - [x] J4 敌对生物：**已实现**僵尸/骷髅/苦力怕 + 末影龙
       —— **批次 508 口径校准：本条已完整**（`mobs.ts` 里 shulker / evoker / witch /
       illusioner / guardian / elder_guardian 都有定义，配合结构生物通道生成）（`core/entity/EndBoss.ts`：盘旋 → 俯冲 →

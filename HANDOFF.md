@@ -34,9 +34,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1084（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1085（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 288 项 —— 已完成 **234**、进行中 **49**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 288 项 —— 已完成 **235**、进行中 **48**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -210,11 +210,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 158 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 159 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 158 套离线测试
+npm test                   # typecheck:tools + vitest + 159 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -226,7 +226,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **158 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **159 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
@@ -328,12 +328,12 @@ npm run agent:setup        # 跨机器自检
   `test:villager` 200 → **227 条**；**J11 勾掉**（234 / 49）。⚠️ 无恐慌粒子、无 gossip。
 - 批次 512（J3 第一批）：**目标选择器规则表**。铁傀儡打敌对、野狼捕猎羊兔鸡、驯服狼打敌对；
   `tickGuardians` 不再写死 `iron_golem`。`test:target` **42 条**，套数 155 → **156**。
-- 批次 513（J3 第二批）：**雪傀儡远程雪球**（10 格 / 1.5 秒 / 0 伤害 + 击退，抬升 2.4）。
-  `test:target` 42 → **51 条**。⚠️ J3 仍缺：开门、游泳、"被打后追玩家"并入选择器。
+- 批次 513（J3 第二批）：**雪傀儡远程雪球**（10 格 / 1.5 秒 / 0 伤害 + 击退）。`test:target` → **51 条**。
 - 批次 514（文档对齐）：修正 12 处过期"还没做"，并把**末影箱配方换回原版**（8 黑曜石 + 1 末影之眼）。
-- 批次 515（J3 第三批）：**"追玩家"判据抽成纯函数**。`ChaseRules.ts`：`isPacified`
-  （记仇优先于亮处中立）+ `shouldChasePlayer`（敌对/中立/光照/记仇/隐身/距离）；`Mob.updateAi`
-  只取数不拼 `&&`（行为不变，`test:mob` 146 条原样过）。`test:chase` **26 条**，套数 → **157**。
+- 批次 515（J3 第三批）：**"追玩家"判据抽成纯函数**。`ChaseRules.ts` + `Mob.updateAi` 只取数
+  （行为不变）。`test:chase` **26 条**，套数 → **157**。
 - 批次 516（J3 尾巴）：**生物开门**。`DoorRules.ts` + `PathOptions.isDoor` +
   `EntityContext.openDoor`，主程序复用 `toggleDoor`。`test:doors` **13 条**，套数 → **158**。
   ⚠️ J3 只剩游泳。
+- 批次 517（J3 收口）：**生物游泳**。`SwimRules.ts`（水下才推、头出水不推、追击 2.6 / 自然 0.6），
+  `Mob` 在 `aquatic` 之后接上。`test:swim` **16 条**，套数 → **159**；**J3 勾掉**（235 / 48）。
