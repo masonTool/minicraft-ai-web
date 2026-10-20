@@ -49,11 +49,11 @@ src/platform/            # 平台接口 + 各平台实现（新增）
   wx/                    # 微信小游戏实现
   tt/                    # 抖音（M6 再加）
 src/minigame/            # 小游戏入口 + canvas UI（新增）
-  main.ts                # game.js 的入口
+  main.ts                # 正式入口（WX-010 起）
+  spike/                 # WX-001 技术验证（验完可删）
   ui/                    # canvas UI 工具包与各界面
-vite.minigame.config.ts  # 小游戏构建（新增）
-minigame/                # game.json / project.config.json / 产物骨架（新增）
-tools/minigame/          # 小游戏专用校验脚本（新增）
+minigame/                # game.json / project.config.json / game.js 产物（新增）
+tools/minigame/          # 小游戏构建与校验（build-spike.mjs / build.mjs）
 ```
 
 原则：**平台差异只允许出现在 `src/platform/**`**；
@@ -119,7 +119,7 @@ npm run check:fast
 | ID | 任务 | 验收 / 产出 | 依赖 | 人日 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | WX-000 | 建立 worktree/分支/任务表；关闭本 worktree 的 auto-continue | 本文件 + `AGENTS.md` 提示 + `.codebuddy/auto-continue.off` | — | 0.5 | [x] |
-| WX-001 | 微信小游戏最小工程 | `minigame/` 能导入开发者工具；three r186 画出单区块 | WX-000 | 2 | [ ] |
+| WX-001 | 微信小游戏最小工程 | `minigame/` 能导入开发者工具；three r186 画出单区块 | WX-000 | 2 | [~] |
 | WX-002 | 真机基线测量 | 帧率/帧时间/内存峰值/启动耗时/webgl2/包体，写入 §7 | WX-001 | 2 | [ ] |
 | WX-003 | Worker 打包与通道验证 | 单 worker 能加载，复制 vs Transferable 的耗时数据 | WX-001 | 1.5 | [ ] |
 | WX-004 | 图集与 2D canvas 验证 | `TextureAtlas` 的 createImageData/putImageData/drawImage 可用 | WX-001 | 1 | [ ] |
@@ -129,7 +129,7 @@ npm run check:fast
 
 | ID | 任务 | 验收 / 产出 | 依赖 | 人日 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| WX-010 | 小游戏构建体系 | `vite.minigame.config.ts` + `game.json` + `project.config.json` + worker IIFE 产物 | WX-005 | 2 | [ ] |
+| WX-010 | 小游戏构建体系 | `tools/minigame/build.mjs`（esbuild 多入口）+ worker IIFE 产物 | WX-005 | 2 | [ ] |
 | WX-011 | 平台接口与探测 | `src/platform/types.ts` + `wx/tt/web` 探测；Web 版行为不变 | WX-010 | 1 | [ ] |
 | WX-012 | canvas / system / lifecycle | 上屏/离屏 canvas、DPR、安全区、横屏、onShow/onHide | WX-011 | 2 | [ ] |
 | WX-013 | 输入适配 | `wx.onTouch*` → pointer 事件；多点、摇杆、视角 | WX-012 | 2 | [ ] |
@@ -219,7 +219,8 @@ cd /Users/mason/DouDou/minicraft-ai-web-wxminigame
 # 1. 选一个依赖已满足的 [ ]，改成 [~]，写一句“这次要做什么”
 # 2. 实现
 npm run check:fast      # typecheck + 单测 + 命中的离线套件
-npm run build:fast      # 确认能出包
+npm run build:fast      # 确认 Web 版能出包
+npm run build:minigame  # 确认小游戏产物能生成（minigame/game.js）
 
 # 3. review diff（架构 / 回归 / 平台差异）
 # 4. 提交
@@ -244,9 +245,11 @@ git push
 cd /Users/mason/DouDou/minicraft-ai-web-wxminigame
 npm install            # worktree 没有 node_modules
 npm run dev            # 确认 Web 版仍可跑（对照用）
+npm run build:minigame # 生成 minigame/game.js（WX-001 spike）
 ```
 
-- 微信开发者工具：WX-001 生成 `minigame/` 后导入。
+- 微信开发者工具：导入 `minigame/`（项目类型选**小游戏**；真机预览要把
+  `project.config.json` 的 `appid` 换成自己的 AppID）。
 - 本 worktree 已放 `.codebuddy/auto-continue.off`：**不要删**。
   主线的自动继续钩子指向主工作区的脚本，不关掉会按主线队列在这个 worktree 里乱跑。
 
@@ -256,7 +259,8 @@ npm run dev            # 确认 Web 版仍可跑（对照用）
 
 | 日期 | 任务 | 结论 / 改动 | 提交 |
 | --- | --- | --- | --- |
-| 2026-10-20 | WX-000 | 建立 `wxminigame` worktree/分支；新增本任务表；`AGENTS.md` 加分支提示；关闭本 worktree 的 auto-continue | 本次提交 |
+| 2026-10-20 | WX-000 | 建立 `wxminigame` worktree/分支；新增本任务表；`AGENTS.md` 加分支提示；关闭本 worktree 的 auto-continue | `5cfc584` |
+| 2026-10-20 | WX-001 | 最小工程已构建：`minigame/game.js` 1170KB（gzip 207KB）；three r186 + InstancedMesh + CanvasTexture + 触摸；**待真机导入验证** | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -266,6 +270,7 @@ npm run dev            # 确认 Web 版仍可跑（对照用）
 
 | 风险 | 影响 | 应对 | 状态 |
 | --- | --- | --- | --- |
+| **微信 WebGL2 / 内存** | 低端 Android 可能拿不到 WebGL2 或内存不足 | WX-002 真机基线；不达标先降视距/锁 30fps | 未验证（spike 待导入） |
 | **抖音 WebGL2** | 官方小游戏 canvas 只保证 WebGL1；three r186 只支持 WebGL2 | M6 单独 Gate；必要时 three 0.162 + WebGL1 适配 | 未验证 |
 | **UI 工作量** | 34 个模块、约 500 个 DOM 节点、4,200 行 CSS | 先做工具包 + 闭环；MVP 砍非核心界面 | 进行中 |
 | **`main.ts` 冲突** | 主线持续改 14,400 行入口 | 只做最小接口改动；每 3~5 个任务 merge 一次 | 进行中 |

@@ -19,3 +19,7 @@ shot-*.png
 
 # 参考资料（本地存档的网页 / 截图；4.7MB 的 mhtml 进仓库会永久留在历史里）
 references/
+
+# 微信小游戏构建产物（`npm run build:minigame` 生成）
+minigame/game.js
+minigame/game.js.map

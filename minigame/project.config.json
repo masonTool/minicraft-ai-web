@@ -1,0 +1,16 @@
+{
+  "description": "Minicraft 微信小游戏移植 spike（WX-001）",
+  "appid": "touristappid",
+  "projectname": "minicraft-wxminigame",
+  "compileType": "game",
+  "miniprogramRoot": "./",
+  "setting": {
+    "es6": false,
+    "enhance": false,
+    "postcss": false,
+    "minified": false,
+    "urlCheck": false,
+    "checkSiteMap": false
+  },
+  "libVersion": "latest"
+}
