@@ -226,6 +226,10 @@ console.log('\n[/worldborder：get / set / center]');
     advancements(): AdvancementTracker {
       return this.progressTracker;
     }
+    /** 群系名（批次 416）：`/locate biome` 用它；假世界固定返回 null */
+    biomeNameAt(): string | null {
+      return null;
+    }
   }
 
   const run = (args: string): { world: FakeWorld; info: string; error: string } => {

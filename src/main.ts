@@ -9241,6 +9241,11 @@ class App {
       },
       scoreboard: () => this.scoreboardState,
       advancements: () => this.advancements,
+      biomeNameAt: (x: number, z: number) => {
+        // 生成器还没准备好（开局第一帧）时返回 null：搜索会跳过这一列
+        const generator = this.biomeGenerator;
+        return generator ? generator.biomeAt(x, z).name : null;
+      },
     };
   }
 

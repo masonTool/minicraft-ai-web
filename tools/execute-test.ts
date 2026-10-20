@@ -205,6 +205,10 @@ class FakeWorld implements CommandContext {
   advancements(): AdvancementTracker {
     return this.progressTracker;
   }
+  /** 群系名（批次 416）：`/locate biome` 用它；假世界固定返回 null */
+  biomeNameAt(): string | null {
+    return null;
+  }
   entities(): readonly CommandEntity[] {
     const list: CommandEntity[] = [
       {

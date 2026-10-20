@@ -10,6 +10,7 @@
 
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
+import { findNearestBiome } from '../src/core/gen/Locate.ts';
 import {
   COMMANDS,
   commandNames,
@@ -232,6 +233,10 @@ class FakeWorld implements CommandContext {
   readonly progressTracker = new AdvancementTracker();
   advancements(): AdvancementTracker {
     return this.progressTracker;
+  }
+  /** 群系名（批次 416）：`/locate biome` 用它；假世界固定返回 null */
+  biomeNameAt(): string | null {
+    return null;
   }
   /** 选择器快照（批次 399）：这一套里没有生物，只交出玩家自己 */
   entities(): readonly CommandEntity[] {
@@ -731,6 +736,49 @@ console.log('\n[进度命令 /advancement（批次 415）]');
     check('收回父条目连带收回子条目', !world.progressTracker.isEarned(child.id), child.id);
     check('父条目本身也收回了', !world.progressTracker.isEarned(parent.id));
   }
+}
+
+console.log('\n[/locate biome（批次 416）]');
+{
+  // ---- 纯逻辑：假探针（脚下 80×80 是平原，正东 100 格外是沙漠，其余是海洋）
+  const probe = (x: number, z: number): string | null => {
+    if (x > 100) return 'desert';
+    if (Math.abs(x) < 40 && Math.abs(z) < 40) return 'plains';
+    return 'ocean';
+  };
+  const here = findNearestBiome(probe, 'plains', { x: 0, z: 0 });
+  check('脚下就是目标群系时立刻返回（距离 0）', here !== null && here.distance === 0, JSON.stringify(here));
+
+  const desert = findNearestBiome(probe, 'desert', { x: 0, z: 0 });
+  check('按环由近到远找到沙漠', desert !== null && desert.x > 100, JSON.stringify(desert));
+  check('沙漠确实比海洋远（先命中的是近的那一环）', desert !== null && desert.ring >= 40);
+
+  const none = findNearestBiome(() => 'ocean', 'desert', { x: 0, z: 0 }, { maxRadius: 64 });
+  check('半径内没有就返回 null（不是死循环）', none === null);
+
+  const a = findNearestBiome(probe, 'desert', { x: 7, z: -3 });
+  const b = findNearestBiome(probe, 'desert', { x: 7, z: -3 });
+  check('同样的输入两次结果完全一致（验收脚本靠这个）', JSON.stringify(a) === JSON.stringify(b), JSON.stringify(a));
+
+  const unknown = findNearestBiome(() => null, 'plains', { x: 0, z: 0 }, { maxRadius: 32 });
+  check('探针全返回 null（区块没生成）时也只是"没找到"', unknown === null);
+
+  // ---- 命令层
+  const world = new FakeWorld();
+  const out = new Recorder();
+  const run3 = (line: string): Recorder => {
+    out.infos.length = 0;
+    out.errors.length = 0;
+    executeCommand(line, world, out);
+    return out;
+  };
+  check('缺参数报用法', run3('/locate biome').lastError.includes('用法'));
+  check(
+    'structure 明确说还没做（不假装支持）',
+    run3('/locate structure village').lastError.includes('还没做'),
+    out.lastError,
+  );
+  check('假世界查不到群系时报告没找到', run3('/locate biome plains').lastError.includes('没有找到'));
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);

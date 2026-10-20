@@ -34,6 +34,7 @@ import {
 } from '../world/WorldBorder.ts';
 import type { AdvancementTracker } from '../progress/AdvancementTracker.ts';
 import { advancementById } from '../progress/advancements.ts';
+import { findNearestBiome } from '../gen/Locate.ts';
 // 记分板（M23，批次 402）：纯类，规则一条都不依赖世界
 import {
   SCOREBOARD_SLOTS,
@@ -136,6 +137,13 @@ export interface CommandContext {
    * `Selectors.ts`（纯函数，可离线断言）。
    */
   entities(): readonly CommandEntity[];
+
+  // ---- 世界查询（批次 416：`/locate`）
+  /**
+   * (x, z) 处的群系名（主线程上是一次气候噪声查询，很便宜）。
+   * 传 null 表示这一列还查不到（区块没生成好）——搜索会跳过它。
+   */
+  biomeNameAt(x: number, z: number): string | null;
 
   // ---- 进度（M7，批次 415）
   /** 这份存档的进度跟踪器（`/advancement` 用它授/收） */
@@ -808,6 +816,33 @@ export const COMMANDS: readonly CommandSpec[] = [
     description: '以指定目标与位置执行一条命令（可链式叠加）',
     run(args, ctx, out) {
       runExecute(args, ctx, out);
+    },
+  },
+  {
+    name: 'locate',
+    usage: '/locate biome <群系名>',
+    description: '找最近的指定群系（按区块环搜索，半径 640 格）',
+    run(args, ctx, out) {
+      const kind = (args[0] ?? '').toLowerCase();
+      const target = args[1];
+      if (kind !== 'biome' || !target) {
+        // ⚠️ 只做 biome：structure 需要在**主线程**枚举十几个结构的候选点，
+        // 而结构生成跑在 Worker 里（主线程拿不到），得先新开一条查询通道。
+        out.error('用法：/locate biome <群系名>（structure 还没做，见 TASKS K11）');
+        return;
+      }
+      const position = ctx.position();
+      const hit = findNearestBiome((x, z) => ctx.biomeNameAt(x, z), target, position);
+      if (!hit) {
+        out.error(`640 格内没有找到 ${target}（试试点名更常见的群系，或者先走远一点）`);
+        return;
+      }
+      const first = hit.distance === 0;
+      out.info(
+        first
+          ? `你脚下就是 ${target}（${hit.x}, ${hit.z}）`
+          : `最近的 ${target} 在 ${hit.x}, ${hit.z}（约 ${Math.round(hit.distance)} 格）`,
+      );
     },
   },
   {
