@@ -11,6 +11,8 @@
  */
 
 import '../../../src/platform/wx/bootstrap.ts';
+import { detectPlatformKind } from '../../../src/platform/detect.ts';
+import { wxPlatform } from '../../../src/platform/wx/index.ts';
 import * as THREE from 'three';
 
 /** 构建期注入：正式版 WX-010 FORMAL，对比 spike WX-006 ADAPTER */
@@ -88,6 +90,20 @@ function createHud() {
 function boot() {
   const width = view.innerWidth;
   const height = view.innerHeight;
+
+  // WX-011：初始化平台层（storage/files/lifecycle/input/audio/worker/socket/keyboard）
+  let platformLine = 'platform: n/a';
+  try {
+    const platform = wxPlatform();
+    platformLine = `platform ${platform.kind} sdk ${
+      platform.system.sdkVersion ?? '?'
+    } bench ${platform.system.benchmarkLevel ?? '?'}`;
+    console.log(`${TAG} ${platformLine}`, platform.system, 'detected', detectPlatformKind());
+  } catch (error) {
+    console.error(`${TAG} platform init failed`, error);
+    platformLine = `platform: FAIL ${String(error)}`;
+  }
+
   const renderer = new THREE.WebGLRenderer({
     canvas: doc.canvas,
     antialias: false,
@@ -110,7 +126,7 @@ function boot() {
   hud.update([
     `${HUD_LABEL}  ${width}x${height} dpr ${view.devicePixelRatio}`,
     `GL ${glVersion}`,
-    `GL ${glRenderer}`,
+    `${platformLine}`,
     'FPS ...  TRI ...  CALLS ...',
   ]);
 
@@ -180,7 +196,7 @@ function boot() {
   hud.update([
     `${HUD_LABEL}  ${width}x${height} dpr ${view.devicePixelRatio}  STRESS ${stressCount}`,
     `GL ${glVersion}`,
-    `GL ${glRenderer}`,
+    `${platformLine}`,
     'FPS ...  MS ...  TRI ...  CALLS ...',
   ]);
 
@@ -232,7 +248,7 @@ function boot() {
       hud.update([
         `${HUD_LABEL}  ${width}x${height} dpr ${view.devicePixelRatio}  STRESS ${stressCount}`,
         `GL ${glVersion}`,
-        `GL ${glRenderer}`,
+        `${platformLine}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
       ]);
       frames = 0;
