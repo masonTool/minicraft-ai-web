@@ -106,6 +106,32 @@ const drawBlockIcon = (
   ctx.drawImage(atlas.canvas, source.x, source.y, TILE_SIZE, TILE_SIZE, x + inset, y + inset, size - inset * 2, size - inset * 2);
 };
 
+const playerModel = new THREE.Group();
+const skinMaterial = new THREE.MeshBasicMaterial({ color: 0xe0ac69 });
+const shirtMaterial = new THREE.MeshBasicMaterial({ color: 0x3b6ea5 });
+const pantsMaterial = new THREE.MeshBasicMaterial({ color: 0x2f3f5a });
+const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMaterial);
+headMesh.position.y = 1.55;
+const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), shirtMaterial);
+bodyMesh.position.y = 1.0;
+const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), skinMaterial);
+leftArm.position.set(-0.4, 1.05, 0);
+const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), skinMaterial);
+rightArm.position.set(0.4, 1.05, 0);
+const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.8, 0.24), pantsMaterial);
+leftLeg.position.set(-0.16, 0.4, 0);
+const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.8, 0.24), pantsMaterial);
+rightLeg.position.set(0.16, 0.4, 0);
+playerModel.add(headMesh, bodyMesh, leftArm, rightArm, leftLeg, rightLeg);
+playerModel.visible = false;
+scene.add(playerModel);
+
+const applyPlayerAppearance = (): void => {
+  skinMaterial.color.set(settings.skinColor);
+  shirtMaterial.color.set(settings.shirtColor);
+  pantsMaterial.color.set(settings.pantsColor);
+};
+
 const outline = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.006, 1.006, 1.006)),
   new THREE.LineBasicMaterial({ color: 0x1b1b1b, transparent: true, opacity: 0.85, depthTest: false }),
@@ -226,10 +252,12 @@ const readSettings = (): V2Settings => {
   }
 };
 const settings = readSettings();
+applyPlayerAppearance();
 const audio = new AudioEngine();
 audio.volume = settings.sound ? settings.volume : 0;
 audio.enabled = settings.sound;
 let audioResumed = false;
+let cameraMode: 'first' | 'third' = 'first';
 const persistSettings = (): void => {
   platform.storage.set(SETTINGS_KEY, JSON.stringify(settings));
 };
@@ -273,6 +301,7 @@ const showSettings = (): void => {
     audio.volume = settings.sound ? settings.volume : 0;
     audio.setGroupVolume('blocks', settings.volumeBlocks);
     audio.setGroupVolume('ui', settings.volumeUi);
+    applyPlayerAppearance();
     showSettings();
   };
 
@@ -1180,19 +1209,24 @@ const showHud = (): void => {
   menuScreen = 'title';
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
-      text(24, 18, 290, 40, `${currentWorld?.name ?? '世界'} · v2`, { fontSize: 22, color: '#ffffff' }),
-      button(330, 18, 130, 48, '聊天', () => {
+      text(24, 18, 250, 40, `${currentWorld?.name ?? '世界'} · v2`, { fontSize: 22, color: '#ffffff' }),
+      button(284, 18, 110, 48, '聊天', () => {
         showChat();
       }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
-      button(480, 18, 140, 48, '背包', () => {
+      button(404, 18, 110, 48, cameraMode === 'first' ? '第一人称' : '第三人称', () => {
+        cameraMode = cameraMode === 'first' ? 'third' : 'first';
+        playerModel.visible = cameraMode === 'third';
+        showHud();
+      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
+      button(524, 18, 130, 48, '背包', () => {
         inventoryOpen = true;
         showInventory();
       }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
-      button(640, 18, 160, 48, '设置', () => {
+      button(664, 18, 130, 48, '设置', () => {
         paused = true;
         showSettings();
       }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
-      button(824, 18, 176, 48, '暂停', () => {
+      button(804, 18, 160, 48, '暂停', () => {
         paused = true;
         showPause();
       }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
@@ -1487,6 +1521,7 @@ const frame = (): void => {
       inventoryOpen,
       chatOpen,
       containerOpen,
+      cameraMode,
       sneaking,
     }),
   );
@@ -1516,7 +1551,17 @@ const frame = (): void => {
   }
   if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen) {
     physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, settings.autoJump);
-    camera.position.set(physics.x, physics.eyeY, physics.z);
+    playerModel.position.set(physics.x, physics.y, physics.z);
+    playerModel.rotation.y = yaw;
+    if (cameraMode === 'third') {
+      const cosPitch = Math.cos(pitch);
+      const fx = -Math.sin(yaw) * cosPitch;
+      const fy = Math.sin(pitch);
+      const fz = -Math.cos(yaw) * cosPitch;
+      camera.position.set(physics.x - fx * 3.2, physics.eyeY - fy * 3.2 + 0.35, physics.z - fz * 3.2);
+    } else {
+      camera.position.set(physics.x, physics.eyeY, physics.z);
+    }
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
   }
