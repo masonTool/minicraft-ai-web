@@ -1664,6 +1664,12 @@ const frame = (): void => {
       inventoryOpen,
       chatOpen,
       containerOpen,
+      containerSlots: openedContainer
+        ? Array.from(
+            { length: openedContainer instanceof Chest ? 27 : 3 },
+            (_, index) => openedContainer?.get(index)?.id ?? 0,
+          )
+        : [],
       lastAction,
       target: currentHit ? `${world.getBlock(currentHit.x, currentHit.y, currentHit.z)}@${currentHit.x},${currentHit.y},${currentHit.z}` : '',
       held: inventory.get(selectedSlot)?.id ?? 0,
@@ -1728,6 +1734,11 @@ const frame = (): void => {
 const wxTestApi = (globalThis as unknown as { wx?: { __v2Test?: unknown } }).wx;
 if (wxTestApi) {
   wxTestApi.__v2Test = {
+    fillChestFirst: (id = 1, count = 2) => {
+      openedContainer?.set(0, { id, count });
+      showContainer();
+      return { id, count };
+    },
     openChestAtFeet: () => {
       const x = Math.floor(physics.x);
       const y = Math.max(0, Math.floor(physics.y) - 1);

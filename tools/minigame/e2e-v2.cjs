@@ -93,6 +93,14 @@ const assert = (condition, message, state) => {
   });
   console.log('container hook', JSON.stringify(hook));
   const containerOpen = await waitState((state) => state.containerOpen, '容器没有打开', 5000);
+  await liveFrame.evaluate(() => wx.__v2Test?.fillChestFirst?.(1, 2));
+  await waitState((state) => state.containerSlots?.[0] === 1, '箱子预置物品失败', 5000);
+  await tap(292, 192);
+  const containerTaken = await waitState(
+    (state) => state.inventory?.[0] === 1 && state.containerSlots?.[0] === 0,
+    '从箱子取出物品失败',
+    5000,
+  );
   await tap(775, 108);
   const containerClosed = await waitState((state) => !state.containerOpen, '容器没有关闭', 5000);
 
