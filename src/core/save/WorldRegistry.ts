@@ -94,8 +94,10 @@ export class WorldRegistry {
       id: options.id ?? uniqueId(this.worlds, now),
       name: options.name?.trim() || defaultName(this.worlds, options.worldType ?? 'default'),
       seed: options.seed ?? randomSeed(),
-      worldType: options.worldType ?? 'default',
-      difficulty: options.difficulty ?? 'normal',
+      // 批次 529：三种创建参数一律在这里收口，非 UI 调用传脏值也不会写进清单
+      worldType: isWorldType(options.worldType) ? options.worldType : 'default',
+      // 批次 529：与 gameMode 同口径——非法值落到普通，而不是先写进清单等读盘才修
+      difficulty: normalizeDifficulty(options.difficulty),
       gameMode: normalizeGameMode(options.gameMode),
       createdAt: now,
       lastPlayed: now,
@@ -128,7 +130,8 @@ export class WorldRegistry {
       id,
       name: options.name,
       seed,
-      worldType: options.worldType ?? 'default',
+      // 批次 529：三种创建参数一律在这里收口，非 UI 调用传脏值也不会写进清单
+      worldType: isWorldType(options.worldType) ? options.worldType : 'default',
       difficulty: options.difficulty,
       gameMode: options.gameMode,
       // 认领时不重置游玩时长：存档里已经有 meta 了，后面 update 会同步回来
