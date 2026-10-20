@@ -1874,6 +1874,37 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['WWW', 'WWW', 'WWW'],
     key: { W: Item.NETHER_WART },
   },
+  // ---- 海晶石族（批次 411）：批次 400 明确记着"这四条没做，原料配比要按 wiki 核"，
+  // 现在按原版的形状补上。四条互相咬合（碎片 → 石 → 砖/灯），所以放在一起：
+  // 只补其中一条会让另一条的原料在生存里拿不到。
+  // ① 4 个海晶碎片 2×2 → 1 块海晶石
+  {
+    kind: 'shaped',
+    result: { id: Block.PRISMARINE, count: 1 },
+    pattern: ['SS', 'SS'],
+    key: { S: Item.PRISMARINE_SHARD },
+  },
+  // ② 4 块海晶石 2×2 → 4 块海晶石砖
+  {
+    kind: 'shaped',
+    result: { id: Block.PRISMARINE_BRICKS, count: 4 },
+    pattern: ['PP', 'PP'],
+    key: { P: Block.PRISMARINE },
+  },
+  // ③ 8 块海晶石围一圈 + 1 个黑色染料 → 1 块暗海晶石（原版就是"围一圈"）
+  {
+    kind: 'shaped',
+    result: { id: Block.DARK_PRISMARINE, count: 1 },
+    pattern: ['PPP', 'PDP', 'PPP'],
+    key: { P: Block.PRISMARINE, D: dyeItemId(15) },
+  },
+  // ④ 海晶石与海晶碎片交替摆满 3×3 → 1 块海晶灯（原版是棋盘格）
+  {
+    kind: 'shaped',
+    result: { id: Block.SEA_LANTERN, count: 1 },
+    pattern: ['SPS', 'PSP', 'SPS'],
+    key: { S: Item.PRISMARINE_SHARD, P: Block.PRISMARINE },
+  },
   /**
    * 带釉陶瓦 16 色（原版：8 块同色陶瓦围一圈 + 1 个同色染料 → 8 块）。
    * 颜色必须一一对应，理由与羊毛/地毯/床那三条一致——

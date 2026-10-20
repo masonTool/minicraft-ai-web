@@ -230,9 +230,9 @@ console.log('\n[合成网格：木棍进阶链]');
   //      酿造材料 2（发酵蜘蛛眼、闪烁的西瓜片）、
   //      染色玻璃 16 + 彩色陶瓦 16（此前这两族一个配方都没有）
   equal(
-    '配方表规模（旧明细 205 − 手写橡木 4 + 木制族 24 + 锁链与铁粒 3 + 铜 17 + 石材变体 53 + 石英链 5 + 切石机 1 + 砂岩家族 11 + 烟熏炉与高炉 7 + 营火 12 + 食物与杂物 7 + 甜浆果与可可豆 2 + 干海带 2 + 蛋糕与花盆 2 + 脚手架 1 + 阳光传感器 1 + 绊线钩 1 + TNT 1 + 可疑的炖菜 5 + 漏斗 1 + 投掷器 1 + 发射器 1 + 木桶 1 + 骨粉 1 + 堆肥桶 1 + 末影箱 1 + 潜影盒 1 + 瓜类种子 2 + 床 16 + 告示牌 6 + 钓竿 1 + 黑石家族 2 + 避雷针 1 + 黑石变体 7 + 展示框与画 17 + 工作站四件 4 + 染料与染色族 49 + 烈焰粉 1 + 末影之眼 1 + 矿物块与信标 7 + 红石元件与补漏 19 + 史莱姆 3 + 岩浆怪 2 + 缓降药水 2 + 混凝土粉末 16 + 音符盒 1 + 炼药锅 1 + 墨囊与灰染料 2 + 书与笔 1 + 烟花 22 + 盾牌 1 + 指南针与时钟 2 + 地图 1 + 灵魂光源 5 + 船 1 + 铁轨与矿车 2 + 动力/探测轨 2 + 激活轨与测重板 3 + 标靶 1 + 陷阱箱 1 + 漏斗矿车 1 + 动力矿车 1 + 鞍 1 + 拴绳 1 + 弩 1 + 方块族补漏 26；明细见上）',
+    '配方表规模（旧明细 205 − 手写橡木 4 + 木制族 24 + 锁链与铁粒 3 + 铜 17 + 石材变体 53 + 石英链 5 + 切石机 1 + 砂岩家族 11 + 烟熏炉与高炉 7 + 营火 12 + 食物与杂物 7 + 甜浆果与可可豆 2 + 干海带 2 + 蛋糕与花盆 2 + 脚手架 1 + 阳光传感器 1 + 绊线钩 1 + TNT 1 + 可疑的炖菜 5 + 漏斗 1 + 投掷器 1 + 发射器 1 + 木桶 1 + 骨粉 1 + 堆肥桶 1 + 末影箱 1 + 潜影盒 1 + 瓜类种子 2 + 床 16 + 告示牌 6 + 钓竿 1 + 黑石家族 2 + 避雷针 1 + 黑石变体 7 + 展示框与画 17 + 工作站四件 4 + 染料与染色族 49 + 烈焰粉 1 + 末影之眼 1 + 矿物块与信标 7 + 红石元件与补漏 19 + 史莱姆 3 + 岩浆怪 2 + 缓降药水 2 + 混凝土粉末 16 + 音符盒 1 + 炼药锅 1 + 墨囊与灰染料 2 + 书与笔 1 + 烟花 22 + 盾牌 1 + 指南针与时钟 2 + 地图 1 + 灵魂光源 5 + 船 1 + 铁轨与矿车 2 + 动力/探测轨 2 + 激活轨与测重板 3 + 标靶 1 + 陷阱箱 1 + 漏斗矿车 1 + 动力矿车 1 + 鞍 1 + 拴绳 1 + 弩 1 + 方块族补漏 26 + 海晶石族 4；明细见上）',
     RECIPES.length,
-    641,
+    645,
   );
 }
 
@@ -348,6 +348,33 @@ console.log('\n[方块族补漏（批次 400）]');
   check(
     '白陶瓦 + 黑染料不会出白色带釉陶瓦（颜色不串）',
     matchRecipe(wrongDye, 3)?.id !== Block.GLAZED_TERRACOTTA_ID_START,
+  );
+}
+
+console.log('\n[海晶石族（批次 411）]');
+{
+  const shard = Item.PRISMARINE_SHARD;
+  const stone = grid(2, ['SS', 'SS'], { S: shard });
+  equal('4 个海晶碎片 → 海晶石', matchRecipe(stone, 2)?.id, Block.PRISMARINE);
+  equal('海晶石产量 1', matchRecipe(stone, 2)?.count, 1);
+
+  const bricks = grid(2, ['PP', 'PP'], { P: Block.PRISMARINE });
+  equal('4 块海晶石 → 海晶石砖', matchRecipe(bricks, 2)?.id, Block.PRISMARINE_BRICKS);
+  equal('海晶石砖产量 4', matchRecipe(bricks, 2)?.count, 4);
+
+  const dark = grid(3, ['PPP', 'PDP', 'PPP'], { P: Block.PRISMARINE, D: dyeItemId(15) });
+  equal('8 海晶石 + 黑染料 → 暗海晶石', matchRecipe(dark, 3)?.id, Block.DARK_PRISMARINE);
+  check(
+    '只有**黑**染料能出暗海晶石（颜色不串）',
+    matchRecipe(grid(3, ['PPP', 'PDP', 'PPP'], { P: Block.PRISMARINE, D: dyeItemId(1) }), 3)?.id !==
+      Block.DARK_PRISMARINE,
+  );
+
+  const lantern = grid(3, ['SPS', 'PSP', 'SPS'], { S: shard, P: Block.PRISMARINE });
+  equal('海晶石与碎片交替 → 海晶灯', matchRecipe(lantern, 3)?.id, Block.SEA_LANTERN);
+  check(
+    '少一块碎片就不成海晶灯（棋盘格是硬要求）',
+    matchRecipe(grid(3, ['SPS', 'PSP', 'SPP'], { S: shard, P: Block.PRISMARINE }), 3)?.id !== Block.SEA_LANTERN,
   );
 }
 
