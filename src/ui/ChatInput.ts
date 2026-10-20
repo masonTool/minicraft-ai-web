@@ -577,15 +577,26 @@ export class ChatInput {
     const help = document.createElement('button');
     help.type = 'button';
     help.className = 'chat-help-link';
+    // 不让这个行内按钮抢走输入框的焦点：否则手机键盘会“收起再弹起”，
+    // 部分 WebView 会因此留下一条右侧黑边。
+    help.tabIndex = -1;
     help.textContent = 'help';
     help.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       event.stopPropagation();
+      // 已经是 /help：再点没有任何反应，也不重建提示行（用户要求那行字保持原样）
+      if (this.inputEl.value === '/help') return;
       this.inputEl.value = '/help';
-      this.inputEl.focus();
+      // 只在输入框本来没聚焦时才 focus：点链接时输入框通常已经聚焦，
+      // 再 focus 一次会让手机键盘先收起再弹出（右侧会出现一条黑边）。
+      if (document.activeElement !== this.inputEl) this.inputEl.focus();
       const end = this.inputEl.value.length;
       this.inputEl.setSelectionRange(end, end);
-      this.updateHint();
+      // ⚠️ 不要 updateHint：提示行保持“输入命令（/help 查看全部）…”原样
+    });
+    help.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
     });
     this.hintEl.append(help, text.slice(index + token.length));
   }

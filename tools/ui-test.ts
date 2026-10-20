@@ -3531,6 +3531,8 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     chatSrc.includes('private renderHint(text: string): void') &&
       chatSrc.includes("help.className = 'chat-help-link'") &&
       chatSrc.includes("this.inputEl.value = '/help';") &&
+      chatSrc.includes("if (this.inputEl.value === '/help') return;") &&
+      !/help\.addEventListener\('pointerdown'[\s\S]{0,700}?this\.updateHint\(\);/.test(chatSrc) &&
       !chatSrc.includes('chat-help-row') &&
       html.includes('.chat-help-link {'),
   );
