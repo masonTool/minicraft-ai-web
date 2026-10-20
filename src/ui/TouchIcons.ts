@@ -31,8 +31,10 @@ const PATHS: Readonly<Record<TouchIconName, string>> = {
   chat: '<path d="M4 5.4A2.4 2.4 0 0 1 6.4 3h11.2A2.4 2.4 0 0 1 20 5.4v7.2a2.4 2.4 0 0 1-2.4 2.4H9.6L4 20z"/>',
   // 暂停/设置：两条竖杠（基岩版手机屏幕上方正中的那颗键）
   pause: '<rect x="6" y="4.4" width="4.2" height="15.2" rx="1.4"/><rect x="13.8" y="4.4" width="4.2" height="15.2" rx="1.4"/>',
-  // 视角：人物剪影（第一/第三人称切换）
-  view: '<circle cx="12" cy="7.2" r="3.2"/><path d="M4.8 20c0-4.1 3.2-6.6 7.2-6.6s7.2 2.5 7.2 6.6z"/>',
+  // 视角：望远镜（批次 528，用户要求把人物剪影换成望远镜）
+  // 斜放的镜筒 + 目镜 + 物镜环 + 底座；镜片用半透明圆点区分方向。
+  view:
+    '<g transform="rotate(-33 12 12)"><rect x="1.8" y="9.2" width="13" height="5.6" rx="1"/><rect x="14" y="7.8" width="3" height="8.4" rx="1"/><rect x="16.6" y="6.4" width="4.2" height="11.2" rx="1"/><circle cx="20.2" cy="12" r="2.2" opacity=".55"/></g><rect x="2.2" y="18.2" width="6.4" height="2.2" rx="1.1"/>',
 };
 
 /** 图标对应的中文说明（`aria-label` 与长按提示用） */

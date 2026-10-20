@@ -1788,10 +1788,13 @@
         position: fixed; left: 10px; top: calc(8px + env(safe-area-inset-top, 0px));
         z-index: 8;
         width: min(52vw, 620px); display: flex; flex-direction: column; gap: 2px;
-        /* 字号（批次 220，用户："显示的文字请小一倍字号"）：13px 的一半是 6.5px，
-           手机上基本读不清，取 8px；改这一个变量就能整体缩放，别的地方不要写死 px */
-        --chat-font-size: 8px;
-        font-size: var(--chat-font-size); line-height: 1.45; pointer-events: none;
+        /* 字号（批次 528）：**出现时 = 展开时 ×2**。
+           - 展开聊天（输入框 / 提示 / 历史）统一 12px，翻 120 行也读得清；
+           - 收起时弹出的消息用 24px，扫一眼就能看到（原来 8px 太小）。
+           改这里一处即可，别的地方不要写死 px。 */
+        --chat-open-size: 12px;
+        --chat-pop-size: 24px;
+        font-size: var(--chat-open-size); line-height: 1.45; pointer-events: none;
         /* 面板本身不滚动：滚的是里面的 .chat-log，输入框始终留在原地。
            ⚠️ 别把 `--kb-inset` 减在这里：横屏手机本身只有 ~390px 高，键盘一弹
            再减 250px 就把整块压成 0 高（输入框被 flex 挤没），看起来就是"闪一下不见了"。
@@ -1822,15 +1825,16 @@
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         max-height: max(56px, calc(100dvh - var(--kb-inset, 0px) - 180px));
-        /* 翻历史时用回可读字号（批次 220）：HUD 上 8px 够看，连翻 120 行就太小了 */
-        font-size: 11px;
+        /* 批次 528：展开后与输入框 / 提示同字号，不再"下面大一号" */
+        font-size: var(--chat-open-size);
       }
       /* 键盘弹出时布局视口不再变矮（viewport 是 resizes-visual，批次 184）：
          聊天已经在顶部、输入框不会被键盘挡住，这里只需要把历史高度再收一点，
          由上面那条 `max-height` 里的 `--kb-inset` 负责（由 `ui/Keyboard.ts` 维护）。 */
+      /* 收起时（弹出消息）字号是展开时的两倍；用 em 留白，两种字号都不会挤/散 */
+      #chat:not(.open) .chat-line { font-size: var(--chat-pop-size); }
       .chat-line {
-        /* 边距跟着字号一起收（批次 220）：字号减半后还按 3/8 留白会显得很松 */
-        padding: 2px 6px; border-radius: var(--radius-sm); color: #fff;
+        padding: .16em .45em; border-radius: var(--radius-sm); color: #fff;
         background: rgba(0, 0, 0, .42);
         border-left: 2px solid rgba(255, 255, 255, .18);
         text-shadow: 1px 1px 0 #000;
@@ -1870,18 +1874,18 @@
       .chat-line.chat-warning { color: #ffd98a; border-left-color: #d8a028; }
       .chat-line.fading { opacity: .45; }
       .chat-hint {
-        padding: 2px 6px; color: #c8c8c8; font-size: 10px;
+        padding: 2px 6px; color: #c8c8c8; font-size: var(--chat-open-size);
         background: rgba(0, 0, 0, .35); border-radius: 3px;
       }
       .chat-input {
-        font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 3px;
+        font: inherit; font-size: var(--chat-open-size); padding: 5px 8px; border-radius: 3px;
         background: rgba(0, 0, 0, .78); color: #fff; border: 1px solid #ffffff44;
         outline: none;
       }
       /* 触屏的"发送"按钮：与输入框同一行（手机虚拟键盘不一定给 Enter 的 keydown） */
       .chat-send {
         align-self: flex-start; margin-top: 2px; padding: 8px 16px;
-        font: inherit; font-size: 13px; color: #fff; cursor: pointer;
+        font: inherit; font-size: var(--chat-open-size); color: #fff; cursor: pointer;
         background: #3a7d33; border: 1px solid #ffffff55; border-radius: 4px;
         min-height: 36px;
       }
@@ -3695,18 +3699,24 @@
       #touch-pause {
         position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px));
         transform: translateX(-50%);
-        display: flex; align-items: center; gap: 6px;
+        display: flex; align-items: center; gap: 4px;
         pointer-events: none;
       }
-      /* 批次 181：暂停 / 视角 / 聊天三颗**方形小键**（原来是 52px 圆角暂停键）。
-         方形是为了与基岩版顶部那一排一致，也更省横屏宽度。 */
+      /* 批次 528（用户）：顶部三键缩到原来的 **1/2**（44px → 22px），
+         顺序 = 聊天 / 暂停 / 视角（左侧聊天、中间暂停、右侧望远镜）。
+         视觉只有 22px，手指按不准，所以用伪元素把**热区**外扩 6px（约 34px），
+         图标本身不变大。 */
       #touch-pause .touch-button {
-        width: calc(44px * var(--touch-scale, 1));
-        height: calc(44px * var(--touch-scale, 1));
+        position: relative;
+        width: calc(22px * var(--touch-scale, 1));
+        height: calc(22px * var(--touch-scale, 1));
         border-radius: 0;
         pointer-events: auto;
         background: rgba(0, 0, 0, .34);
         border-color: rgba(255, 255, 255, .42);
+      }
+      #touch-pause .touch-button::before {
+        content: ''; position: absolute; inset: -6px;
       }
 
       /* ---------------- 快捷栏两侧的背包 / 聊天（批次 107） ----------------

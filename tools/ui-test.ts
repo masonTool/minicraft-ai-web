@@ -204,7 +204,7 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   const compact = html.replace(/\s+/g, ' ');
   for (const [label, needle] of [
     ['顶部暂停键容器', '#touch-pause {'],
-    ['顶部三键尺寸吃 --touch-scale（44px 是平台热区下限）', '#touch-pause .touch-button { width: calc(44px * var(--touch-scale, 1));'],
+    ['顶部三键尺寸吃 --touch-scale（批次 528：视觉 22px = 原 44px 的 1/2）', '#touch-pause .touch-button { position: relative; width: calc(22px * var(--touch-scale, 1));'],
     // 暂停菜单那一页（批次 108）：一页只放"几个主要按钮"，竖排
     ['暂停菜单的主按钮竖排', '.pause-actions { display: flex; flex-direction: column; gap: 8px;'],
     ['手机上暂停按钮热区 46px', 'body.touch-mode .pause-action { min-height: 46px; font-size: 15px; }'],
@@ -274,7 +274,7 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 快捷栏右侧只留背包（聊天搬到顶部，批次 181）
     ['背包按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
     ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
-    ['顶部三键是方形小键', '#touch-pause { position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 6px;'],
+    ['顶部三键是方形小键', '#touch-pause { position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px;'],
     ['准星下方有目标名称', '#target-info {'],
     ['游戏内一行提示在快捷栏上方', '#hud-toast {'],
     // 切石机（H11，批次 44）：候选列表与候选按钮的样式被误删时这里会红
@@ -1727,8 +1727,8 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   check('背包挂进快捷栏（不参与那 9 格的宽度计算）', source.includes("document.getElementById('hotbar')"));
   check(
-    '顶部三键：暂停 / 视角 / 聊天（批次 181）',
-    source.includes('pauseBar.append(this.pauseButton, viewButton, chatButton)'),
+    '顶部三键：聊天 / 暂停 / 视角（批次 528，用户指定左中右）',
+    source.includes('pauseBar.append(chatButton, this.pauseButton, viewButton)'),
   );
   check('聊天不再挂在快捷栏左侧', !source.includes("'touch-hotbar-chat'"));
   check('触摸层里不再有"飞行"按钮（已搬进设置面板）', !source.includes("makeIconButton('fly'"));
@@ -3346,10 +3346,19 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       chatSrc.includes('performance.now() - this.openedAt < 350') &&
       chatSrc.includes("closest?.('#touch-pause')"),
   );
-  // 批次 220（用户）：字号小一倍、消息 1 秒消失、显示期间点一下进聊天（不弹键盘）
+  // 批次 528（用户）：收起时弹出的消息 = 展开后字号的 2 倍；展开区四处统一
   check(
-    '聊天字号走一个变量（用户要求"小一倍"）',
-    html.includes('--chat-font-size: 8px;') && html.includes('font-size: var(--chat-font-size);'),
+    '聊天字号：展开 12px / 弹出 24px（严格 2 倍）',
+    html.includes('--chat-open-size: 12px;') &&
+      html.includes('--chat-pop-size: 24px;') &&
+      html.includes('#chat:not(.open) .chat-line { font-size: var(--chat-pop-size); }') &&
+      html.includes('font-size: var(--chat-open-size);'),
+  );
+  check(
+    '展开后的输入框 / 提示 / 历史同字号（不再大一号）',
+    /#chat\.open \.chat-log \{[\s\S]{0,400}?font-size: var\(--chat-open-size\);/.test(html) &&
+      /\.chat-hint \{[\s\S]{0,80}?font-size: var\(--chat-open-size\);/.test(html) &&
+      /\.chat-input \{[\s\S]{0,80}?font-size: var\(--chat-open-size\);/.test(html),
   );
   check(
     '消息 3 秒后彻底消失（2.2s 清晰 + 0.8s 淡出）',

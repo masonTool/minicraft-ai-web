@@ -382,7 +382,8 @@ export class TouchControls {
     chatButton.classList.add('chat');
     const pauseBar = document.createElement('div');
     pauseBar.id = 'touch-pause';
-    pauseBar.append(this.pauseButton, viewButton, chatButton);
+    // 批次 528（用户）：左聊天 / 中暂停 / 右视角（视角改用望远镜图标）
+    pauseBar.append(chatButton, this.pauseButton, viewButton);
 
     // ---- 操作提示
     this.hint = document.createElement('div');
