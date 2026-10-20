@@ -14,7 +14,10 @@ import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
-import { UiLayer, box, button, slider, text, toggle } from './ui-kit/index.ts';
+import { UiLayer, box, button, slider, slot, text, toggle, type UiElement } from './ui-kit/index.ts';
+import { Inventory } from '../core/container/Inventory.ts';
+import { Block, blockTiles } from '../core/registry/blocks.ts';
+import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 
 /**
@@ -61,10 +64,31 @@ const camera = new THREE.PerspectiveCamera(
   320,
 );
 
-const ui = new UiLayer(platform.system.width, platform.system.height);
+const drawBlockIcon = (
+  ctx: CanvasRenderingContext2D,
+  blockId: number,
+  x: number,
+  y: number,
+  size: number,
+): void => {
+  const tile = blockTiles(blockId, 0)[0];
+  const tileIndex = (TILE_ORDER as readonly string[]).indexOf(tile);
+  if (tileIndex < 0) return;
+  const sx = (tileIndex % ATLAS_COLUMNS) * TILE_SIZE;
+  const sy = Math.floor(tileIndex / ATLAS_COLUMNS) * TILE_SIZE;
+  const inset = Math.max(2, Math.floor(size * 0.1));
+  ctx.drawImage(atlas.canvas, sx, sy, TILE_SIZE, TILE_SIZE, x + inset, y + inset, size - inset * 2, size - inset * 2);
+};
+
+const ui = new UiLayer(platform.system.width, platform.system.height, drawBlockIcon);
 const uiHeight = ui.height;
 let paused = false;
 let settingsOpen = false;
+let inventoryOpen = false;
+let inventoryTab: 'items' | 'creative' = 'items';
+let selectedSlot = 0;
+const inventory = new Inventory();
+const creativeBlocks = Object.values(Block).filter((value): value is number => typeof value === 'number' && value > 0).slice(0, 45);
 let activeSettingsTab: 'game' | 'controls' | 'appearance' | 'sound' = 'game';
 
 interface V2Settings {
@@ -194,10 +218,65 @@ const showSettings = (): void => {
   );
 };
 
+const showInventory = (): void => {
+  inventoryOpen = true;
+  const panelW = 880;
+  const panelH = Math.min(620, uiHeight - 28);
+  const panelX = (1024 - panelW) / 2;
+  const panelY = (uiHeight - panelH) / 2;
+  const railW = 180;
+  const slotSize = 54;
+  const gap = 6;
+  const gridX = panelX + railW + 30;
+  const gridY = panelY + 92;
+  const elements: UiElement[] = [
+    text(panelX + 24, panelY + 20, 200, 42, '背包', { fontSize: 30, color: '#ffffff' }),
+    button(panelX + 24, panelY + 86, railW - 24, 52, '物品', () => {
+      inventoryTab = 'items';
+      showInventory();
+    }, { background: inventoryTab === 'items' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
+    button(panelX + 24, panelY + 150, railW - 24, 52, '创造', () => {
+      inventoryTab = 'creative';
+      showInventory();
+    }, { background: inventoryTab === 'creative' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
+    button(panelX + panelW - 72, panelY + 20, 44, 44, 'X', () => {
+      inventoryOpen = false;
+      paused = false;
+      showHud();
+    }, { background: 'rgba(30, 38, 46, 0.95)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
+  ];
+  if (inventoryTab === 'items') {
+    for (let i = 0; i < 36; i++) {
+      const stack = inventory.get(i);
+      elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
+        selectedSlot = i;
+        showInventory();
+      }));
+    }
+  } else {
+    for (let i = 0; i < creativeBlocks.length; i++) {
+      const id = creativeBlocks[i]!;
+      elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, id, 0, false, () => {
+        inventory.add(id, 64);
+        showInventory();
+      }));
+    }
+    elements.push(text(gridX, gridY + 5 * (slotSize + gap) + 12, 640, 30, '点方块放入背包；物品页查看/选中', { fontSize: 15, color: 'rgba(200, 220, 235, 0.65)' }));
+  }
+  ui.setRoot(box(0, 0, 1024, uiHeight, [
+    box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
+    box(panelX, panelY, panelW, panelH, elements, { background: 'rgba(16, 22, 28, 0.97)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
+  ]));
+};
+
 const showHud = (): void => {
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
       text(24, 18, 460, 40, 'MINECRAFT v2 · main core', { fontSize: 22, color: '#ffffff' }),
+      button(480, 18, 140, 48, '背包', () => {
+        inventoryOpen = true;
+        showInventory();
+      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
       button(640, 18, 160, 48, '设置', () => {
         paused = true;
         showSettings();
@@ -288,7 +367,7 @@ platform.input.onPointer('down', (event) => {
   lastDownX = event.clientX;
   lastDownY = event.clientY;
   if (ui.handlePointer('down', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
-  if (paused) return;
+  if (paused || settingsOpen || inventoryOpen) return;
   if (event.clientX < platform.system.width / 2) {
     movePointer = event.pointerId;
     moveX = event.clientX;
@@ -351,7 +430,7 @@ const frame = (): void => {
     }
   }
 
-  if (playerReady && !paused && !settingsOpen) {
+  if (playerReady && !paused && !settingsOpen && !inventoryOpen) {
     physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, false);
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;

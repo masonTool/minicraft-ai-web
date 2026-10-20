@@ -59,7 +59,15 @@ export interface UiSliderNode extends UiNode {
   onChange: (value: number) => void;
 }
 
-export type UiElement = UiNode | UiTextNode | UiButtonNode | UiToggleNode | UiSliderNode;
+export interface UiSlotNode extends UiNode {
+  kind: 'slot';
+  itemId: number;
+  count: number;
+  selected: boolean;
+  onTap: () => void;
+}
+
+export type UiElement = UiNode | UiTextNode | UiButtonNode | UiToggleNode | UiSliderNode | UiSlotNode;
 
 export function box(x: number, y: number, w: number, h: number, children: UiElement[] = [], style: UiStyle = {}): UiNode {
   return { x, y, w, h, style, children };
@@ -108,6 +116,18 @@ export function slider(
   return { kind: 'slider', x, y, w, h, label, min, max, step, value, onChange };
 }
 
+export function slot(
+  x: number,
+  y: number,
+  size: number,
+  itemId: number,
+  count: number,
+  selected: boolean,
+  onTap: () => void,
+): UiSlotNode {
+  return { kind: 'slot', x, y, w: size, h: size, itemId, count, selected, onTap };
+}
+
 export function row(
   x: number,
   y: number,
@@ -151,8 +171,15 @@ export class UiLayer {
   private root: UiElement | null = null;
   private buttons: UiButtonNode[] = [];
   private activeSlider: UiSliderNode | null = null;
+  private slots: UiSlotNode[] = [];
+  private readonly drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void;
 
-  constructor(screenWidth: number, screenHeight: number) {
+  constructor(
+    screenWidth: number,
+    screenHeight: number,
+    drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void,
+  ) {
+    this.drawIcon = drawIcon;
     const scale = Math.min(2, (globalThis as unknown as { devicePixelRatio?: number }).devicePixelRatio ?? 1);
     this.designHeight = (DESIGN_WIDTH * screenHeight) / Math.max(1, screenWidth);
     this.canvas = document.createElement('canvas');
@@ -225,6 +252,14 @@ export class UiLayer {
       }
     }
 
+    for (let i = this.slots.length - 1; i >= 0; i--) {
+      const item = this.slots[i]!;
+      if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
+        item.onTap();
+        return true;
+      }
+    }
+
     const hit = this.findControl(x, y);
     if (!hit) return false;
     if (hit.kind === 'toggle') {
@@ -274,6 +309,7 @@ export class UiLayer {
     const ctx = this.context;
     ctx.clearRect(0, 0, DESIGN_WIDTH, this.designHeight);
     this.buttons = [];
+    this.slots = [];
     if (this.root) this.drawNode(this.root, ctx);
     this.texture.needsUpdate = true;
   }
@@ -287,6 +323,26 @@ export class UiLayer {
       ctx.textBaseline = 'top';
       const x = style.align === 'center' ? node.x + node.w / 2 : style.align === 'right' ? node.x + node.w : node.x;
       ctx.fillText(node.text, x, node.y, node.w);
+      return;
+    }
+
+    if ('kind' in node && node.kind === 'slot') {
+      ctx.fillStyle = node.selected ? 'rgba(100, 140, 160, 0.92)' : 'rgba(30, 38, 46, 0.92)';
+      roundedRect(ctx, node.x, node.y, node.w, node.h, 6);
+      ctx.fill();
+      ctx.strokeStyle = node.selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.32)';
+      ctx.lineWidth = node.selected ? 3 : 1.5;
+      roundedRect(ctx, node.x + 1, node.y + 1, node.w - 2, node.h - 2, 5);
+      ctx.stroke();
+      if (node.itemId > 0) this.drawIcon?.(ctx, node.itemId, node.x, node.y, node.w);
+      if (node.count > 0) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(String(node.count), node.x + node.w - 5, node.y + node.h - 4);
+      }
+      this.slots.push(node);
       return;
     }
 

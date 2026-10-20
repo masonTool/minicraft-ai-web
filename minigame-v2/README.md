@@ -4,7 +4,8 @@
 
 - main 的 World / TextureAtlas / ChunkRenderer
 - wx adapter + 主线程 Worker seam
-- 无 UI、无玩家、无存档
+- 基础 HUD/暂停/设置/背包 UI（UI Kit MVP）
+- PlayerPhysics / 基础触摸 / 文件存档
 
 ## 构建
 
