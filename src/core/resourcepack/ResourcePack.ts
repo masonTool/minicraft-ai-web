@@ -16,6 +16,16 @@
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../../render/atlasLayout.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 
+/**
+ * 当前平台是否支持资源包解压。
+ *
+ * 浏览器有 `DecompressionStream('deflate-raw')`；微信小游戏没有，
+ * UI 应据此隐藏/禁用资源包入口，而不是让玩家点了才报错（WX-01B/WX-025）。
+ */
+export function canReadResourcePacks(): boolean {
+  return typeof DecompressionStream === 'function';
+}
+
 /** zip 里解出来的一项 */
 export interface ZipEntry {
   name: string;
@@ -52,6 +62,9 @@ const LOCAL_SIGNATURE = 0x04034b50;
  * 以中央目录为准才可靠）。
  */
 export async function readZipEntries(buffer: ArrayBuffer, accept: (name: string) => boolean): Promise<ZipEntry[]> {
+  if (!canReadResourcePacks()) {
+    throw new Error('当前平台不支持资源包解压（缺少 DecompressionStream）');
+  }
   const view = new DataView(buffer);
   const bytes = new Uint8Array(buffer);
 
