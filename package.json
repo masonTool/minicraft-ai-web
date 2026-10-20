@@ -33,6 +33,7 @@
     "test:cartography": "esbuild tools/cartography-test.ts --bundle --platform=node --format=esm --outfile=.tmp/cartography-test.mjs --log-level=error && node .tmp/cartography-test.mjs",
     "test:attack": "esbuild tools/attack-test.ts --bundle --platform=node --format=esm --outfile=.tmp/attack-test.mjs --log-level=error && node .tmp/attack-test.mjs",
     "test:target": "esbuild tools/target-test.ts --bundle --platform=node --format=esm --outfile=.tmp/target-test.mjs --log-level=error && node .tmp/target-test.mjs",
+    "test:chase": "esbuild tools/chase-test.ts --bundle --platform=node --format=esm --outfile=.tmp/chase-test.mjs --log-level=error && node .tmp/chase-test.mjs",
     "test:spawnerdecor": "esbuild tools/spawnerdecor-test.ts --bundle --platform=node --format=esm --outfile=.tmp/spawnerdecor-test.mjs --log-level=error && node .tmp/spawnerdecor-test.mjs",
     "test:rules": "esbuild tools/rules-test.ts --bundle --platform=node --format=esm --outfile=.tmp/rules-test.mjs --log-level=error && node .tmp/rules-test.mjs",
     "test:disc": "esbuild tools/disc-test.ts --bundle --platform=node --format=esm --outfile=.tmp/disc-test.mjs --log-level=error && node .tmp/disc-test.mjs",

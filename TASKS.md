@@ -2866,7 +2866,11 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       雪球 0 伤害 + 击退），主程序按 `rule.ranged` 走投掷分支
       （`spawnThrowable('snowball')`，与玩家/发射器同一条通道，抬升 2.4 补偿重力）。
       `test:target` 42 → **51 条**。
-      **仍缺**：开门、游泳；"被玩家打之后追玩家"仍留在 `Mob.tick` 里（还没并进选择器）。
+      —— **批次 515 把"追玩家"也抽成纯函数**：`core/entity/ChaseRules.ts`
+      （敌对/中立/亮处/记仇/隐身/距离六维，`isPacified` + `shouldChasePlayer`），
+      `Mob.updateAi` 只负责取光照与距离，不再自己拼 `&&`。行为与之前一致
+      （`test:mob` 146 条原样通过），`test:chase` **26 条**。
+      **仍缺**：开门、游泳（寻路细节）。
 - [x] J4 敌对生物：**已实现**僵尸/骷髅/苦力怕 + 末影龙
       —— **批次 508 口径校准：本条已完整**（`mobs.ts` 里 shulker / evoker / witch /
       illusioner / guardian / elder_guardian 都有定义，配合结构生物通道生成）（`core/entity/EndBoss.ts`：盘旋 → 俯冲 →

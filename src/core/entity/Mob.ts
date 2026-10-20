@@ -23,6 +23,7 @@ import {
   type MobVoiceEvent,
   type MobVoiceId,
 } from '../audio/MobVoices.ts';
+import { shouldChasePlayer } from './ChaseRules.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 
 /** 与玩家一致的常量（原版数值） */
@@ -1132,14 +1133,21 @@ export class Mob extends Entity {
     const dz = player ? player.z - this.z : 0;
     const distanceSq = dx * dx + dz * dz;
 
-    // 亮处中立（批次 93，蜘蛛）：亮度够亮就不主动攻击（原版招牌行为）。
-    // ⚠️ 但**被打过之后会记仇**（`angerTimer`）——不然白天戳它一下它还在发呆，
-    // 看着就像"AI 坏了"
-    const pacified =
-      this.angerTimer <= 0 &&
-      (this.type.neutral === true ||
-        (this.type.neutralInLight !== undefined &&
-          (ctx.lightAt?.(this.x, this.y + this.height * 0.5, this.z) ?? 0) >= this.type.neutralInLight));
+    // 亮处中立（批次 93，蜘蛛）与"要不要追玩家"的判据（批次 515）：
+    // 六个维度（敌对/中立/亮处/记仇/隐身/距离）收在纯函数里，
+    // 这样"为什么这只怪不追我"能逐条断言，而不是读五行 `&&`。
+    // 记仇计时由 `hurt()` 按 `HurtSource` 置位（环境伤害不记仇，见批次 471）。
+    const chaseInput = {
+      hostile: this.type.hostile,
+      neutral: this.type.neutral === true,
+      neutralInLight: this.type.neutralInLight,
+      angerRemaining: this.angerTimer,
+      lightLevel: ctx.lightAt?.(this.x, this.y + this.height * 0.5, this.z) ?? 0,
+      playerPresent: player !== null,
+      playerInvisible: ctx.playerInvisible === true,
+      distanceSq,
+      followRange: this.type.followRange,
+    };
 
     // **被注视激怒**（批次 112，末影人）：玩家的准星落在它头上就翻脸。
     // 放在 `chasing` 之前：激怒是**这一帧就要生效**的状态改变（原版也是瞪到就翻脸），
@@ -1159,12 +1167,7 @@ export class Mob extends Entity {
     }
 
     // 隐身的玩家不会被盯上（K4 尾巴）：已经追到一半的会停下来（下一帧就不满足条件了）
-    const chasing =
-      this.type.hostile &&
-      !pacified &&
-      player !== null &&
-      ctx.playerInvisible !== true &&
-      distanceSq <= this.type.followRange * this.type.followRange;
+    const chasing = shouldChasePlayer(chaseInput);
 
     // 朝向目标的单位方向（批次 93）：**没有路时**给会爬墙的生物直推用（见 `move`）
     if (chasing && player) {

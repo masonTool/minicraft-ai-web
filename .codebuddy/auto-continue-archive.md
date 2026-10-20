@@ -11491,4 +11491,16 @@
 - [x] B510-6 `test:villager` 170 → **200 条**；`test:spawn` 下界采样 30 → 120 轮（修偶发）
 - ⚠️ 仍缺：不躲僵尸（恐慌与铁傀儡联动）；走位是直线、不绕路
 
+## 批次 511：村民恐慌 + 铁傀儡联动（J11 收口）（2026-10-20）
+
+- [x] B511-1 `core/entity/VillagerPanic.ts`：10 种威胁 id、8 格内最近、反向逃跑 6 格、
+  恐慌 5 秒、速度 ×1.35
+- [x] B511-2 `Mob.speedMultiplier()` 钩子（默认 1）；`Villager` 恐慌时覆盖
+- [x] B511-3 `Villager.panicFrom` / `panicStep` / `advancePanic` / `movementScale`
+- [x] B511-4 主程序每 0.5 秒扫威胁 → 恐慌源进 `panicThreats`；铁傀儡**优先**打它
+- [x] B511-5 作息排在守卫之前结算（优先集必须先有）
+- [x] B511-6 `test:villager` 200 → **227 条**
+- [x] B511-7 **J11 勾掉**：完成 233 → **234**、进行中 50 → **49**
+- ⚠️ 差异：没有恐慌粒子/举手动画、没有 gossip 与声望
+
 <!-- docs-archive:end -->
