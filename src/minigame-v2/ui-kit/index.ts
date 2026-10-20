@@ -231,6 +231,7 @@ export class UiLayer {
   private buttons: UiButtonNode[] = [];
   private activeSlider: UiSliderNode | null = null;
   private activeButton: UiButtonNode | null = null;
+  private lastRefresh = 0;
   private dragSlot: { node: UiSlotNode; startX: number; startY: number; moved: boolean } | null = null;
   private slots: UiSlotNode[] = [];
   private icons: UiIconNode[] = [];
@@ -395,7 +396,10 @@ export class UiLayer {
   }
 
   /** 节点位置变化后重绘 HUD（不重建根节点）。 */
-  refresh(): void {
+  refresh(force = false): void {
+    const now = performance.now();
+    if (!force && now - this.lastRefresh < 33) return;
+    this.lastRefresh = now;
     this.draw();
   }
 

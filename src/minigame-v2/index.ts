@@ -74,7 +74,7 @@ const doc = (globalThis as unknown as { document: any }).document;
 const canvas = doc.canvas as HTMLCanvasElement;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
-renderer.setPixelRatio(Math.min(platform.system.dpr, 2));
+renderer.setPixelRatio(Math.min(platform.system.dpr, 1.5));
 renderer.setSize(platform.system.width, platform.system.height, false);
 renderer.autoClear = false;
 renderer.setClearColor(0x0b141c, 1);
@@ -2185,7 +2185,7 @@ const updateAimRing = (clientX: number, clientY: number, visible: boolean): void
     hudAimRing.x = designX - 48;
     hudAimRing.y = designY - 48;
   }
-  ui.refresh();
+  ui.refresh(true);
 };
 
 const tickPigs = (dt: number): void => {
@@ -2404,7 +2404,7 @@ const release = (event: { pointerId: number; clientX: number; clientY: number })
     if (hudStickKnob) {
       hudStickKnob.x = stickLeftCached + 36;
       hudStickKnob.y = stickTopCached + 36;
-      ui.refresh();
+      ui.refresh(true);
     }
   }
   if (event.pointerId === lookPointer) {
@@ -2430,7 +2430,12 @@ let fpsFrames = 0;
 let fpsStartedAt = performance.now();
 let lastDebugHud = 0;
 let lastFurnaceUi = 0;
+let lastWorldCx = Number.NaN;
+let lastWorldCz = Number.NaN;
+let lastViewDistance = -1;
 let lastAutoSave = 0;
+let lowFpsSeconds = 0;
+let qualityReduced = false;
 
 const frame = (): void => {
   const now = performance.now();
@@ -2441,6 +2446,18 @@ const frame = (): void => {
     fps = (fpsFrames * 1000) / (now - fpsStartedAt);
     fpsFrames = 0;
     fpsStartedAt = now;
+  }
+  if (playerReady && !qualityReduced && fps > 0 && fps < 28) {
+    lowFpsSeconds += dt;
+    if (lowFpsSeconds > 3) {
+      qualityReduced = true;
+      lowFpsSeconds = 0;
+      renderer.setPixelRatio(1);
+      renderer.setSize(platform.system.width, platform.system.height, false);
+      showToast('已降低渲染分辨率以保持流畅');
+    }
+  } else if (fps >= 28) {
+    lowFpsSeconds = 0;
   }
 
   const screen = !started
@@ -2463,6 +2480,7 @@ const frame = (): void => {
       currentWorldId: currentWorld?.id ?? '',
       currentWorldName: currentWorld?.name ?? '',
       gameMode: currentWorld?.gameMode ?? 'survival',
+      fps,
       chunks: world.chunks.size,
       drawn: chunks.drawnCount,
       x: physics.x,
@@ -2515,7 +2533,13 @@ const frame = (): void => {
 
   const centerCx = Math.floor(physics.x / 16);
   const centerCz = Math.floor(physics.z / 16);
-  world.update(centerCx, centerCz, settings.viewDistance);
+  const centerChanged = centerCx !== lastWorldCx || centerCz !== lastWorldCz || settings.viewDistance !== lastViewDistance;
+  if (centerChanged) {
+    world.update(centerCx, centerCz, settings.viewDistance);
+    lastWorldCx = centerCx;
+    lastWorldCz = centerCz;
+    lastViewDistance = settings.viewDistance;
+  }
 
   if (!playerReady && world.isLoaded(spawn.x, spawn.z)) {
     const surface = world.getSurfaceBlockY(spawn.x, spawn.z);
@@ -2635,7 +2659,11 @@ const frame = (): void => {
     }
   }
 
-  chunks.processQueue(4, centerCx, centerCz);
+  const queueStart = performance.now();
+  for (let i = 0; i < 4; i++) {
+    chunks.processQueue(1, centerCx, centerCz);
+    if (performance.now() - queueStart > 4) break;
+  }
   chunks.applyViewDistance(centerCx, centerCz, settings.viewDistance);
   solid.setTime(now * 0.001);
   translucent.setTime(now * 0.001);
