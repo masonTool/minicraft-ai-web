@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { drawButton, drawPanel, drawText } from './widgets.ts';
+import { drawButton, drawText } from './widgets.ts';
 
 export interface Hud {
   update(lines: readonly string[]): void;
@@ -36,24 +36,29 @@ export function createHud(): Hud {
     update(lines: readonly string[]): void {
       if (!context) return;
       context.clearRect(0, 0, canvas.width, canvas.height);
-      const panelWidth = Math.min(720, canvas.width - 280);
-      const panelHeight = lines.length * 30 + 20;
-      drawPanel(context, { x: 12, y: 8, w: panelWidth, h: panelHeight });
+      const panelWidth = Math.min(380, canvas.width - 240);
+      const panelHeight = lines.length * 20 + 16;
+      const panelX = canvas.width - panelWidth - 12;
+      context.fillStyle = 'rgba(0, 0, 0, 0.44)';
+      context.fillRect(panelX, 8, panelWidth, panelHeight);
+      context.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      context.lineWidth = 1;
+      context.strokeRect(panelX + 0.5, 8.5, panelWidth - 1, panelHeight - 1);
       lines.forEach((line, index) => {
         drawText(
           context,
           line,
-          24,
-          18 + index * 30,
-          18,
-          index === 0 ? 'rgba(165, 225, 250, 1)' : 'rgba(255, 255, 255, 0.92)',
+          panelX + 9,
+          17 + index * 20,
+          12,
+          index === 0 ? 'rgba(180, 230, 250, 1)' : 'rgba(255, 255, 255, 0.9)',
           'left',
-          panelWidth - 24,
+          panelWidth - 18,
         );
       });
-      // 右上角 MENU/BAG：与 world-boot 的触摸区对应
-      drawButton(context, { x: canvas.width - 236, y: 8, w: 96, h: 40 }, 'MENU', 'normal', 18);
-      drawButton(context, { x: canvas.width - 132, y: 8, w: 118, h: 40 }, 'BAG', 'normal', 20);
+      // 左上角 MENU/BAG：与 world-boot 的触摸区对应
+      drawButton(context, { x: 12, y: 8, w: 86, h: 36 }, '菜单', 'normal', 16);
+      drawButton(context, { x: 106, y: 8, w: 96, h: 36 }, '背包', 'normal', 17);
       texture.needsUpdate = true;
     },
     render(renderer: THREE.WebGLRenderer): void {

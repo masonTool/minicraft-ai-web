@@ -15,6 +15,7 @@ export interface StatsOverlay {
   setError(message: string | null): void;
   hasError(): boolean;
   setBoss(name: string | null, health: number, max: number): void;
+  setTarget(name: string | null): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -48,6 +49,7 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
   let mining: number | null = null;
   let error: string | null = null;
   let boss: { name: string; health: number; max: number } | null = null;
+  let targetName: string | null = null;
 
   const heart = (x: number, y: number, size: number, filled: boolean): void => {
     if (!context) return;
@@ -112,14 +114,25 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
       context.strokeRect(x + 1, y + 1, barWidth - 2, 16);
     }
 
-    // 准星
+    // 准星：白色细十字 + 深色描边
     const cx = canvas.width / 2;
     const cy = canvas.height / 2;
-    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    context.fillRect(cx - 13, cy - 2, 26, 4);
-    context.fillRect(cx - 2, cy - 13, 4, 26);
-    context.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    context.fillRect(cx - 11, cy - 1, 22, 2);
+    context.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    context.fillRect(cx - 12, cy - 2, 24, 4);
+    context.fillRect(cx - 2, cy - 12, 4, 24);
+    context.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    context.fillRect(cx - 10, cy - 1, 20, 2);
+    context.fillRect(cx - 1, cy - 10, 2, 20);
+
+    if (targetName) {
+      const width = Math.min(260, targetName.length * 13 + 22);
+      context.fillStyle = 'rgba(0, 0, 0, 0.68)';
+      context.fillRect(cx - width / 2, cy + 20, width, 24);
+      context.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      context.lineWidth = 1;
+      context.strokeRect(cx - width / 2 + 0.5, cy + 20.5, width - 1, 23);
+      drawText(context, targetName, cx, cy + 24, 14, '#f5f5f5', 'center', width - 12);
+    }
     context.fillRect(cx - 1, cy - 11, 2, 22);
 
     const baseY = canvas.height - 96;
@@ -137,9 +150,6 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
       context.fillStyle = filled ? '#c98a3a' : 'rgba(30, 30, 34, 0.75)';
       context.fillRect(startX + 290 + i * 20, baseY + 3, 16, 16);
     }
-
-    drawText(context, `HP ${Math.ceil(stats.health)}/20`, startX, baseY - 24, 15, '#ffffff');
-    drawText(context, `FOOD ${Math.ceil(stats.food)}/20`, startX + 290, baseY - 24, 15, '#ffffff');
 
     if (stats.armor > 0) {
       drawText(context, `ARMOR ${stats.armor}`, startX + 500, baseY - 24, 15, '#b9d7ff');
@@ -193,6 +203,12 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
     },
     setBoss(name: string | null, health: number, max: number): void {
       boss = name ? { name, health, max } : null;
+      redraw();
+    },
+    setTarget(name: string | null): void {
+      const next = name && name !== '-' ? name : null;
+      if (targetName === next) return;
+      targetName = next;
       redraw();
     },
     render(renderer: THREE.WebGLRenderer): void {

@@ -814,12 +814,14 @@ async function boot(): Promise<void> {
     if (!currentHit) {
       outline.visible = false;
       targetLabel = '-';
+      ui.setTarget(null);
       return;
     }
     outline.visible = true;
     outline.position.set(currentHit.x + 0.5, currentHit.y + 0.5, currentHit.z + 0.5);
     targetLabel = blockDef(world.getBlock(currentHit.x, currentHit.y, currentHit.z))
       .name.replace('minecraft:', '');
+    ui.setTarget(targetLabel);
   };
 
   const cancelMining = (): void => {
@@ -934,13 +936,13 @@ async function boot(): Promise<void> {
       if (action === 'settings') ui.openSettings();
       return;
     }
-    // 右上角 MENU / BAG
-    if (x > width * 0.7 && x < width * 0.86 && y < height * 0.22) {
+    // 左上角 MENU / BAG
+    if (x < width * 0.13 && y < height * 0.12) {
       uiPointerId = event.pointerId;
       ui.togglePause();
       return;
     }
-    if (x > width * 0.86 && y < height * 0.22) {
+    if (x >= width * 0.13 && x < width * 0.24 && y < height * 0.12) {
       uiPointerId = event.pointerId;
       ui.toggleInventory();
       return;
@@ -1086,11 +1088,10 @@ async function boot(): Promise<void> {
   updateCamera();
 
   ui.updateStatus([
-    `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  PLAYER`,
-    `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T -  SLOT 1/${HOTBAR.length}`,
-    `CHUNKS ...  DRAWN ...  LIGHT ...  SAVE ${saveStatus}  AUD ${audioStatus}`,
-    'FPS ...  MS ...  TRI ...  CALLS ...',
-    'L move · R look · tap place/break/jump · MENU/BAG',
+    `基岩版  ${width}x${height}`,
+    `坐标 -  工作线程 ${workerState}`,
+    `目标 -  槽位 1/${HOTBAR.length}`,
+    `存档 ${saveStatus}  音频 ${audioStatus}`,
   ]);
 
   let frames = 0;
@@ -1221,11 +1222,10 @@ async function boot(): Promise<void> {
         `[WX-020] fps=${fps} ms=${ms.toFixed(1)} chunks=${world.chunks.size} drawn=${chunkRenderer.drawnCount} light=${world.lightWorkCount} queue=${chunkRenderer.queueLength} tri=${sceneTriangles} calls=${sceneCalls}`,
       );
       ui.updateStatus([
-        `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  P ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)} G${physics.onGround ? 1 : 0}`,
-        `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T ${targetLabel}  SLOT ${selectedSlot + 1}/${HOTBAR.length}`,
-        `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}  SAVE ${saveStatus}  AUD ${audioStatus}`,
-        `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
-        'L move · R look · tap place/break/jump · MENU/BAG',
+        `基岩版 ${fps}FPS ${ms.toFixed(1)}ms`,
+        `坐标 ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)} ${physics.onGround ? '落地' : '空中'}`,
+        `目标 ${targetLabel}  槽位 ${selectedSlot + 1}/${HOTBAR.length}`,
+        `存档 ${saveStatus}  音频 ${audioStatus}`,
       ]);
       frames = 0;
       lastReport = time;

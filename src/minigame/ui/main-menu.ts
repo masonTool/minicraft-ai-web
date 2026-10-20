@@ -90,24 +90,29 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
     context.fillStyle = backdrop;
     context.fillRect(0, 0, canvas.width, canvas.height);
     drawPanel(context, panel);
-    drawText(context, 'BEDROCK', panelX + 40, panelY + 24, 46, '#ffffff');
-    context.fillStyle = 'rgba(125, 215, 245, 0.95)';
-    context.fillRect(panelX + 42, panelY + 78, 240, 4);
+    context.save();
+    context.shadowColor = 'rgba(0, 0, 0, 0.85)';
+    context.shadowBlur = 8;
+    context.shadowOffsetY = 4;
+    drawText(context, 'MINECRAFT', panelX + 40, panelY + 22, 50, '#ffffff');
+    context.restore();
+    context.fillStyle = 'rgba(126, 176, 92, 0.96)';
+    context.fillRect(panelX + 42, panelY + 82, 282, 26);
     drawText(
       context,
-      'WECHAT MINI GAME',
-      panelX + 42,
-      panelY + 88,
-      18,
-      'rgba(190, 225, 250, 0.8)',
+      '基岩版 1.18 · 微信小游戏',
+      panelX + 54,
+      panelY + 86,
+      15,
+      '#0e1a0c',
     );
     drawText(
       context,
-      'SURVIVAL / CREATIVE',
+      '原生生存、创造与多世界存档',
       panelX + 42,
       panelY + 116,
       15,
-      'rgba(255, 255, 255, 0.45)',
+      'rgba(225, 238, 248, 0.78)',
     );
     const visibleWorlds = info.worlds.slice(0, 3);
     visibleWorlds.forEach((world, index) => {
@@ -128,10 +133,10 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       'left',
       panelWidth - 84,
     );
-    drawButton(context, play, 'PLAY', 'normal', 26);
-    drawButton(context, settings, 'SETTINGS', 'normal', 22);
-    drawButton(context, newWorld, 'NEW WORLD', 'normal', 18);
-    drawButton(context, deleteSave, 'DELETE WORLD', 'normal', 16);
+    drawButton(context, play, '游戏', 'normal', 24);
+    drawButton(context, settings, '设置', 'normal', 20);
+    drawButton(context, newWorld, '新建世界', 'normal', 17);
+    drawButton(context, deleteSave, '删除世界', 'normal', 16);
     texture.needsUpdate = true;
   };
 

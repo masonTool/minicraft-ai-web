@@ -57,11 +57,11 @@ export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Ho
     const x = padding + index * (slotSize + gap);
     const y = padding;
     const gradient = context.createLinearGradient(0, y, 0, y + slotSize);
-    gradient.addColorStop(0, 'rgba(48, 60, 70, 0.72)');
-    gradient.addColorStop(1, 'rgba(8, 12, 16, 0.78)');
+    gradient.addColorStop(0, selected ? 'rgba(92, 112, 128, 0.86)' : 'rgba(58, 64, 70, 0.9)');
+    gradient.addColorStop(1, selected ? 'rgba(30, 42, 52, 0.9)' : 'rgba(24, 28, 32, 0.92)');
     context.fillStyle = gradient;
     context.fillRect(x, y, slotSize, slotSize);
-    context.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    context.fillStyle = selected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)';
     context.fillRect(x + 2, y + 2, slotSize - 4, 3);
     context.strokeStyle = selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.38)';
     context.lineWidth = selected ? 4 : 2;
@@ -73,6 +73,15 @@ export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Ho
   const redraw = (): void => {
     if (!context) return;
     context.clearRect(0, 0, width, height);
+    context.fillStyle = 'rgba(24, 26, 28, 0.92)';
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = 'rgba(255, 255, 255, 0.18)';
+    context.fillRect(2, 2, width - 4, 3);
+    context.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    context.fillRect(2, height - 5, width - 4, 3);
+    context.strokeStyle = 'rgba(205, 210, 215, 0.6)';
+    context.lineWidth = 3;
+    context.strokeRect(1.5, 1.5, width - 3, height - 3);
     for (let i = 0; i < slotCount; i++) drawSlot(i, i === currentSelected);
     texture.needsUpdate = true;
   };

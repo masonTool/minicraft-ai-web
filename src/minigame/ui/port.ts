@@ -40,6 +40,7 @@ export interface MiniGameUi {
   handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
   setStats(stats: PlayerStats): void;
   setBoss(name: string | null, health: number, max: number): void;
+  setTarget(name: string | null): void;
   setMining(progress: number | null): void;
   showError(message: string | null): void;
   setFlying(active: boolean): void;
@@ -190,6 +191,9 @@ export function createCanvasUi(
     },
     setBoss(name: string | null, health: number, max: number): void {
       stats.setBoss(name, health, max);
+    },
+    setTarget(name: string | null): void {
+      stats.setTarget(name);
     },
     setMining(progress: number | null): void {
       stats.setMining(progress);
