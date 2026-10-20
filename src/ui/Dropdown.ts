@@ -135,7 +135,15 @@ export class Dropdown<T extends string> {
       },
       { capture: true, signal },
     );
-    document.addEventListener('scroll', () => this.close(), { capture: true, signal });
+    document.addEventListener(
+      'scroll',
+      (event) => {
+        // 菜单自己内部滚动（选项多时）不算"页面滚走了"
+        if (event.target instanceof Node && this.menu.contains(event.target)) return;
+        this.close();
+      },
+      { capture: true, signal },
+    );
     window.addEventListener('resize', () => this.close(), { signal });
 
     activeDropdown = this;

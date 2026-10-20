@@ -3789,13 +3789,13 @@
       #touch-pause {
         position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px));
         transform: translateX(-50%);
-        display: flex; align-items: center; gap: 4px;
+        display: flex; align-items: center; gap: 8px;
         pointer-events: none;
       }
       /* 批次 528（用户）：顶部三键缩到原来的 **1/2**（44px → 22px），
          顺序 = 聊天 / 暂停 / 视角（左侧聊天、中间暂停、右侧望远镜）。
-         视觉只有 22px，手指按不准，所以用伪元素把**热区**外扩 6px（约 34px），
-         图标本身不变大。 */
+         视觉只有 22px，手指按不准，所以用伪元素把**热区**外扩 3px（28px）；
+         gap 取 8px，三颗的热区不互相压住（否则中间那颗会被左右抢走）。 */
       #touch-pause .touch-button {
         position: relative;
         width: calc(22px * var(--touch-scale, 1));
@@ -3806,7 +3806,7 @@
         border-color: rgba(255, 255, 255, .42);
       }
       #touch-pause .touch-button::before {
-        content: ''; position: absolute; inset: -6px;
+        content: ''; position: absolute; inset: -3px;
       }
 
       /* ---------------- 快捷栏两侧的背包 / 聊天（批次 107） ----------------

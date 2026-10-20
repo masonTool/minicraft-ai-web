@@ -283,7 +283,7 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 快捷栏右侧只留背包（聊天搬到顶部，批次 181）
     ['背包按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
     ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
-    ['顶部三键是方形小键', '#touch-pause { position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px;'],
+    ['顶部三键是方形小键', '#touch-pause { position: absolute; left: 50%; top: calc(8px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px;'],
     ['准星下方有目标名称', '#target-info {'],
     ['游戏内一行提示在快捷栏上方', '#hud-toast {'],
     // 切石机（H11，批次 44）：候选列表与候选按钮的样式被误删时这里会红
