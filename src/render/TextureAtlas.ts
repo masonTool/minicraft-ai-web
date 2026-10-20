@@ -5758,6 +5758,28 @@ PAINTERS.lodestone_side = (x, y, rng) => {
  * ⚠️ 充能越高越亮是**方块发光的档位**（`stateLight`），不是贴图变化——
  * 贴图不随档位换（原版会换 5 张，这里省掉，记在 TASKS）。
  */
+/**
+ * 命令方块（批次 477）：橙色底 + 中心一圈刻痕。
+ *
+ * 原版顶面是一个齿轮、侧面是一道横槽。这个分辨率下画齿轮只会糊成一团，
+ * 所以顶面用"中心亮、外圈一圈暗环"表达"这里有个机关"，侧面一道横槽。
+ */
+PAINTERS.command_block_top = (x, y, rng) => {
+  const BASE: readonly [number, number, number] = [198, 118, 62];
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  const v = (r < 3 ? 1.16 : r < 5 ? 0.72 : 1) * (1 + rng() * 0.08 - 0.04);
+  return [clamp255(BASE[0] * v), clamp255(BASE[1] * v), clamp255(BASE[2] * v), 255];
+};
+
+PAINTERS.command_block_side = (_x, y, rng) => {
+  const BASE: readonly [number, number, number] = [198, 118, 62];
+  // 横槽：y 6~9 压暗一档；槽的上下沿再压一道，看起来是"刻进去的缝"
+  const slot = y >= 6 && y <= 9;
+  const edge = y === 5 || y === 10;
+  const v = (slot ? 0.7 : edge ? 0.85 : 1) * (1 + rng() * 0.08 - 0.04);
+  return [clamp255(BASE[0] * v), clamp255(BASE[1] * v), clamp255(BASE[2] * v), 255];
+};
+
 PAINTERS.respawn_anchor_top = (x, y, rng) => {
   const OBSIDIAN: readonly [number, number, number] = [36, 24, 46];
   const r = Math.hypot(x - 7.5, y - 7.5);

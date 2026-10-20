@@ -144,6 +144,9 @@ export function isRedstoneComponent(id: number): boolean {
     case Block.DEEPSLATE_REDSTONE_ORE:
     // 陷阱箱（批次 249）：打开时当电源（`powered` 位由主程序在开箱/关箱时写）
     case Block.TRAPPED_CHEST:
+    // 命令方块（批次 477）：通电的**上升沿**执行一次命令（与投掷器同一套路，
+    // 都是"引擎判定脉冲、后果交给外面"）。不进这张表的话洪泛根本走不到它
+    case Block.COMMAND_BLOCK:
     // 漏斗（批次 58）：通电就**锁定**（不推也不吸）——这是原版的"漏斗闸门"玩法
     case Block.HOPPER:
     // 投掷器（批次 59）：通电的**上升沿**吐一件出去（它是"负载"，
@@ -328,6 +331,20 @@ export class RedstoneEngine {
    * 引擎这一侧——引擎只负责判定"这里来了一个上升沿"，吐这件事交给 main。
    */
   onDispense?: (x: number, y: number, z: number) => void;
+
+  /** 已经"因为通电而执行过"的命令方块（上升沿判定用，与投掷器同一套路） */
+  private readonly commandPrimed = new Set<string>();
+
+  /**
+   * 命令方块被红石**脉冲**触发时的回调（批次 477）。
+   *
+   * 与投掷器同一条分工：引擎只判定"这里来了一个上升沿"，命令内容与执行
+   * 都不在引擎这一侧（`world/CommandBlocks.ts` 存文字、main 执行）。
+   *
+   * ⚠️ 只做**脉冲**方块：通着电不会反复执行，断电再来一次才执行第二次
+   * （原版循环方块是每 20 tick 一次，需要"保持开启"那个开关，本批不做）。
+   */
+  onCommandBlock?: (x: number, y: number, z: number) => void;
 
   /** 玩家右键拉杆：开 ↔ 关 */
   toggleLever(world: RedstoneWorld, x: number, y: number, z: number): boolean {
@@ -1006,6 +1023,19 @@ export class RedstoneEngine {
             world.setState(nx, ny, nz, withPowered(state, shouldLock));
             this.markDirty(nx, ny, nz);
             changed = true;
+          }
+          break;
+        }
+        case Block.COMMAND_BLOCK: {
+          // 命令方块（批次 477）：与投掷器同一个上升沿判定，但**没有延迟**
+          // （原版命令方块是瞬时执行的，投掷器那 4 tick 是它自己的规则）
+          const commandKey = keyOf(nx, ny, nz);
+          const fired = this.commandPrimed.has(commandKey);
+          if (input > 0 && !fired) {
+            this.commandPrimed.add(commandKey);
+            this.onCommandBlock?.(nx, ny, nz);
+          } else if (input <= 0 && fired) {
+            this.commandPrimed.delete(commandKey);
           }
           break;
         }

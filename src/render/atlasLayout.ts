@@ -841,6 +841,9 @@ export const TILE_ORDER = [
   // 重生锚（批次 454）：顶面中心的发光口 + 侧面（黑曜石底 + 一道紫色裂纹）
   'respawn_anchor_top',
   'respawn_anchor_side',
+  // 命令方块（批次 477）：橙色底 + 中心刻环（顶）/ 中间横槽（侧）
+  'command_block_top',
+  'command_block_side',
   // 瓜藤（批次 77）：8 个阶段各一张（茎越长越高）+ 结果的那一张
   'pumpkin_stem_stage0',
   'pumpkin_stem_stage1',

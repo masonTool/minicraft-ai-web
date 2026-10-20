@@ -60,6 +60,7 @@ import { growTreeAt, type TreeWorld } from './core/world/TreeGrowth.ts';
 // 支撑没了、该掉的就掉（批次 78，B49）：判据在 `Support.ts`（纯函数 + 注入世界）
 import { sweepHangingsAround, sweepUnsupported, type SupportWorld } from './core/world/Support.ts';
 import { absorbWater } from './core/world/Sponge.ts';
+import { CommandBlockStore } from './core/world/CommandBlocks.ts';
 import {
   RESPAWN_ANCHOR_MAX_CHARGE,
   anchorCharge,
@@ -570,6 +571,7 @@ import {
   signKey,
 } from './core/world/SignText.ts';
 import { SignEditor } from './ui/SignEditor.ts';
+import { CommandBlockEditor } from './ui/CommandBlockEditor.ts';
 import { BookScreen } from './ui/BookScreen.ts';
 import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
 import { SHIELD_KNOCKBACK, canBlockDamage, isFrontalAttack, isShield, shieldWear } from './core/items/Shield.ts';
@@ -864,6 +866,12 @@ class App {
   private readonly toolHud: ToolHud;
   /** 侧边栏记分板（M23，批次 456） */
   private readonly scoreboardHud: ScoreboardHud;
+  /** 命令方块输入框（批次 477） */
+  private readonly commandBlockEditor: CommandBlockEditor;
+  /** 命令方块的内容表（按坐标，随存档走） */
+  private readonly commandBlocks = new CommandBlockStore();
+  /** 正在编辑的命令方块坐标（"完成"时写回这里） */
+  private editingCommandBlock: { x: number; y: number; z: number } | null = null;
   /** 天空：渐变穹顶 / 太阳月亮 / 星空 / 云 */
   private readonly sky: Sky;
   /** 天气：晴 / 雨 / 雷暴 */
@@ -1722,6 +1730,10 @@ class App {
     this.redstone.onDispense = (x, y, z) => {
       this.dispenseFrom(x, y, z);
     };
+    // 命令方块（批次 477）：同样是"引擎判定上升沿、内容与执行交给外面"
+    this.redstone.onCommandBlock = (x, y, z) => {
+      this.runCommandBlock(x, y, z);
+    };
     this.deathEl = deathEl;
     this.deathCauseEl = deathEl.querySelector<HTMLElement>('.death-cause');
     this.vitalsHud = new VitalsHud(vitalsEl);
@@ -1732,6 +1744,17 @@ class App {
     this.toolHud = new ToolHud(document.getElementById('hud') ?? container);
     // 侧边栏记分板（M23，批次 456）：右上角，只在 `/scoreboard objectives setdisplay sidebar` 之后出现
     this.scoreboardHud = new ScoreboardHud(document.getElementById('hud') ?? container);
+    // 命令方块（批次 477）：保存时把文字写进表；关闭时把输入权交回去
+    this.commandBlockEditor = new CommandBlockEditor(document.getElementById('hud') ?? container);
+    this.commandBlockEditor.onSave = (command) => {
+      const target = this.editingCommandBlock;
+      if (!target) return;
+      this.commandBlocks.set(this.dimension, target.x, target.y, target.z, command);
+      this.chat.push(command ? `命令已保存：/${command}` : '已清空这一格的命令', 'system');
+    };
+    this.commandBlockEditor.onClose = () => {
+      this.editingCommandBlock = null;
+    };
     // 准星下方的目标名称（批次 181）：手机上"这是什么东西"原来只能靠猜
     this.targetInfoEl = document.createElement('div');
     this.targetInfoEl.id = 'target-info';
@@ -2892,6 +2915,11 @@ class App {
     const skippedTeams = this.teamState.restore(teams);
     if (skippedTeams > 0) console.info(`[save] 队伍跳过了 ${skippedTeams} 条坏数据`);
 
+    // 命令方块（批次 477）：同一条分工——存档只搬运，坏条目由 restore 跳过
+    const commandBlocks = await this.save.loadCommandBlocks();
+    const skippedCommands = this.commandBlocks.restore(commandBlocks);
+    if (skippedCommands > 0) console.info(`[save] 命令方块跳过了 ${skippedCommands} 条坏数据`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -3057,6 +3085,8 @@ class App {
       await this.save.saveScoreboard(this.scoreboardState.snapshot());
       // 队伍（批次 468）：同一条
       await this.save.saveTeams(this.teamState.snapshot());
+      // 命令方块（批次 477）：按坐标的文本表，整份覆盖写
+      await this.save.saveCommandBlocks(this.commandBlocks.serialize());
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -6810,6 +6840,9 @@ class App {
     // "在同一个位置重新放一块牌子"会凭空继承上一块的字（而且存档里留着一份没有方块的文字）。
     // 火焰/爆炸把牌子烧掉时走不到这里，由 `syncSigns` 那趟对账兜底（发现不是牌子就丢掉）
     if (isSign(brokenId)) this.clearSignText(this.hit.x, this.hit.y, this.hit.z);
+    // 命令方块（批次 477）：方块没了，命令也要清——不清的话"同一位置重摆一个"
+    // 会凭空继承上一块的命令（与告示牌那条同一个坑）
+    if (brokenId === Block.COMMAND_BLOCK) this.commandBlocks.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
 
     // 展示框（B14）：框拆了，**里面挂着的那件东西也要还给玩家**——
     // 它不在方块状态里，不管的话就是"拆一个框，里面那把附魔剑凭空消失"
@@ -7820,6 +7853,32 @@ class App {
       if (member.leader) this.patrolLeader = mob;
     }
     this.chat.push('附近出现了掠夺者巡逻队', 'system');
+  }
+
+  /**
+   * 打开命令方块的输入框（批次 477）。
+   *
+   * 记录坐标是因为"完成"回调里要写回**那一格**——输入框本身不知道自己在哪。
+   */
+  private openCommandBlockEditor(x: number, y: number, z: number): void {
+    this.editingCommandBlock = { x, y, z };
+    const current = this.commandBlocks.get(this.dimension, x, y, z) ?? null;
+    this.commandBlockEditor.show(current, '命令方块（红石脉冲时执行）');
+  }
+
+  /**
+   * 红石脉冲到达命令方块（批次 477）：取出这一格的命令并执行。
+   *
+   * 走的是与聊天框**完全同一个**入口（`executeCommand` + `commandContext`），
+   * 所以命令方块能做的事和玩家手打的一样多；输出进聊天，方便调试。
+   *
+   * ⚠️ 没有命令就什么都不做（原版会报"命令方块没有命令"）——这里只在聊天里提示一次，
+   * 免得红石钟每 0.2 秒刷一屏。
+   */
+  private runCommandBlock(x: number, y: number, z: number): void {
+    const command = this.commandBlocks.get(this.dimension, x, y, z);
+    if (!command) return;
+    executeCommand(`/${command}`, this.commandContext(), this.commandFeedback());
   }
 
   /**
@@ -10507,6 +10566,11 @@ class App {
     // 告示牌（B12，批次 80）：右键打开编辑框（按形状判定，落地/挂墙都算）
     if (hitShape === 'sign') {
       this.openSignEditor(x, y, z, hitBlock);
+      return true;
+    }
+    // 命令方块（批次 477）：右键打开输入框。与告示牌同一条口径——潜行时走放置/破坏
+    if (hitBlock === Block.COMMAND_BLOCK) {
+      this.openCommandBlockEditor(x, y, z);
       return true;
     }
     // 物品展示框（B14，批次 86）：右键 = 挂上去 / 转 45° / 换一件。
@@ -14167,6 +14231,7 @@ class App {
     this.xpHud.dispose();
     this.toolHud.dispose();
     this.scoreboardHud.dispose();
+    this.commandBlockEditor.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();
     this.touch = null;

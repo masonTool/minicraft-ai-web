@@ -1027,6 +1027,8 @@ const FUNCTIONAL = new Set<number>([
   ...SHULKER_BOX_IDS,
   Block.CHEST,
   Block.GLOWSTONE,
+  // 命令方块（批次 477）：只有"装着命令 + 红石脉冲"这一种身份，不需要容器界面
+  Block.COMMAND_BLOCK,
   // ---- 红石元件（都是"有信号才做事"的功能方块）
   Block.REDSTONE_WIRE,
   Block.REDSTONE_TORCH,

@@ -991,6 +991,36 @@
         .scoreboard-hud { top: 6px; right: 6px; font-size: 11px; padding: 4px 6px; }
       }
 
+      /* 命令方块输入框（批次 477）：一行命令 + 完成/取消。
+         与告示牌编辑器同一套布局口径（居中、遮罩、真按钮），只是只有一行 */
+      .command-block-editor {
+        position: fixed; inset: 0; z-index: 40;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0, 0, 0, .45);
+      }
+      .command-block-editor.hidden { display: none; }
+      .command-block-panel {
+        display: flex; flex-direction: column; gap: 10px;
+        min-width: 320px; max-width: 540px;
+        padding: 14px 16px;
+        background: #2b2b33; border-radius: 8px;
+        color: #eee; box-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+      }
+      .command-block-title { font-size: 13px; opacity: .8; }
+      .command-block-input {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 14px; padding: 8px 10px;
+        border-radius: 4px; border: 1px solid #555;
+        background: #1c1c22; color: #fff;
+      }
+      .command-block-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+      .command-block-button {
+        padding: 6px 14px; border-radius: 4px;
+        border: 1px solid #666; background: #3a3a44;
+        color: #eee; cursor: pointer; font-size: 13px;
+      }
+      .command-block-button.primary { background: #4c8d3a; border-color: #5ea646; }
+
       /* 书与笔 / 成书（批次 190，H16）：一页文本 + 翻页 + 完成/署名。
          与告示牌编辑器同一套写法与层叠层（12，盖住背包、在提示框之下）。
          手机横屏是主场景：面板高度封顶、文本区自己滚，按钮固定在底部 */

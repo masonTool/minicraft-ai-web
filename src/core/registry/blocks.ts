@@ -2210,6 +2210,15 @@ const LODESTONE_SPEC: BlockSpec = {
  */
 export const RESPAWN_ANCHOR_ID = 714;
 
+/** 命令方块（批次 477）：id **715**，接在重生锚之后 */
+export const COMMAND_BLOCK_ID = 715;
+
+const COMMAND_BLOCK_SPEC: BlockSpec = {
+  id: COMMAND_BLOCK_ID,
+  name: 'minecraft:command_block',
+  tiles: ['command_block_top', 'command_block_side', 'command_block_side'],
+};
+
 const RESPAWN_ANCHOR_SPEC: BlockSpec = {
   id: RESPAWN_ANCHOR_ID,
   name: 'minecraft:respawn_anchor',
@@ -3378,6 +3387,7 @@ const SPECS: readonly BlockSpec[] = [
   ...COLORED_SHULKER_SPECS,
   LODESTONE_SPEC,
   RESPAWN_ANCHOR_SPEC,
+  COMMAND_BLOCK_SPEC,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
   ...BED_SPECS,
@@ -3942,6 +3952,8 @@ export const Block = {
   LODESTONE: LODESTONE_ID,
   // ---- 重生锚（批次 454）：充能 0~4 存在状态位里，右键设重生点
   RESPAWN_ANCHOR: RESPAWN_ANCHOR_ID,
+  // ---- 命令方块（批次 477）：红石上升沿执行一格命令
+  COMMAND_BLOCK: COMMAND_BLOCK_ID,
   // ---- 瓜藤（批次 77，见 `STEM_SPECS`）：8 阶段 + 结果的茎
   PUMPKIN_STEM_STAGE0: PUMPKIN_STEM_ID_START,
   MELON_STEM_STAGE0: MELON_STEM_ID_START,
@@ -4508,6 +4520,9 @@ HARDNESS.set(Block.HONEY_BLOCK, 0);
 HARDNESS.set(Block.LODESTONE, 3.5);
 // 重生锚（批次 454）：原版 5，**要钻石镐**（黑曜石那一档）
 HARDNESS.set(Block.RESPAWN_ANCHOR, 5);
+// 命令方块（批次 477）：原版 -1（基岩级、挖不掉）；这里给 5 并**不设挖掘等级**，
+// 方便玩家拆掉重摆（原版只能靠创造模式）
+HARDNESS.set(Block.COMMAND_BLOCK, 5);
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);
 // 瓜藤（批次 77）：与作物一样一碰就掉（茎与结果的茎都是）

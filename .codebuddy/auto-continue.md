@@ -534,3 +534,19 @@
 - [x] B476-6 新套件 `test:patrol` **24 条**；套数 **138 → 139**
 - **J24 勾掉**：完成 **192 → 193**、进行中 79 → 78
 - ⚠️ 仍缺：劫掠兽、难度影响波数、袭击进度条 HUD、队长旗帜（只是逻辑上的组长）
+
+## 批次 477：命令方块（M5 最后一块）（2026-10-20）
+
+- [x] B477-1 方块 715 `command_block` + 中文名 + 硬度 5 + 两张贴图（橙底 + 中心刻环/横槽）
+- [x] B477-2 `world/CommandBlocks.ts`：按坐标存一行命令（上限 128、去开头斜杠、
+      换行折空格）、空串 = 删除、快照往返、坏条目跳过计数
+- [x] B477-3 `ui/CommandBlockEditor.ts`：一行输入框（Enter/完成保存、Esc/取消放弃、
+      真按钮给手机）+ `index.html` 的 `.command-block-*` 样式
+- [x] B477-4 `RedstoneEngine.onCommandBlock` + `commandPrimed` 上升沿集合；
+      **命令方块要进 `isRedstoneComponent`**，否则洪泛根本走不到它（第一版就栽在这）
+- [x] B477-5 main：右键打开编辑器、保存写表、红石脉冲执行（与聊天框同一个
+      `executeCommand` + `commandContext`）、挖掉方块清命令
+- [x] B477-6 存档第 10 仓 `commandBlocks`（DB_VERSION 7 → 8）
+- [x] B477-7 新套件 `test:commandblock` **26 条**；`test:reach` 把命令方块
+      写进"创造专属"白名单（原版也拿不到）
+- ⚠️ 只做脉冲方块：循环/连锁、条件/保持开启、命令方块矿车都没做

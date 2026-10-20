@@ -340,6 +340,7 @@ const EXPLICIT: Record<string, string> = {
   campfire: '营火',
   // 漏斗（批次 58，H14）：本项目第一件"会自己搬东西"的方块
   hopper: '漏斗',
+  command_block: '命令方块',
   // 投掷器（批次 59，H14）：通电就朝朝向那一格吐一件（对面是容器就塞进去）
   dropper: '投掷器',
   dispenser: '发射器',
