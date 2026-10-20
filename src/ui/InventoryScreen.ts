@@ -1067,7 +1067,7 @@ export class InventoryScreen {
     this.furnaceReturnBtn.type = 'button';
     this.furnaceReturnBtn.className = 'furnace-return hidden';
     this.furnaceReturnBtn.textContent = t('inventory.returnToStorage');
-    this.furnaceReturnBtn.title = '把熔炉里的原料、燃料和产物全部放回仓库';
+    this.furnaceReturnBtn.title = t('inventory.returnFurnaceHint');
     this.furnaceReturnBtn.addEventListener('click', () => this.returnFurnaceContents());
     // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
     this.anvilLayout = document.createElement('div');
@@ -1082,7 +1082,7 @@ export class InventoryScreen {
     this.anvilNameInput.type = 'text';
     this.anvilNameInput.className = 'anvil-name';
     this.anvilNameInput.maxLength = 40;
-    this.anvilNameInput.placeholder = '重命名为……（可留空）';
+    this.anvilNameInput.placeholder = t('inventory.renamePlaceholder');
     this.anvilNameInput.addEventListener('input', () => {
       const anvil = this.activeContainer;
       if (anvil instanceof Anvil) anvil.setName(this.anvilNameInput.value);
@@ -1167,7 +1167,7 @@ export class InventoryScreen {
     this.brewReturnBtn.type = 'button';
     this.brewReturnBtn.className = 'furnace-return hidden';
     this.brewReturnBtn.textContent = t('inventory.returnToStorage');
-    this.brewReturnBtn.title = '把酿造台里的药水、材料和燃料全部放回仓库';
+    this.brewReturnBtn.title = t('inventory.returnBrewHint');
     this.brewReturnBtn.addEventListener('click', () => this.returnBrewingContents());
 
     this.flameEl = document.createElement('div');
@@ -1270,8 +1270,8 @@ export class InventoryScreen {
     this.stationTabsEl.className = 'inv-station-tabs';
     this.stationTabsEl.dataset.role = 'station-tabs';
     for (const [key, label] of [
-      ['recipes', '可做'],
-      ['items', '背包'],
+      ['recipes', t('inventory.tab.craftable')],
+      ['items', t('inventory.tab.items')],
     ] as const) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -1465,7 +1465,7 @@ export class InventoryScreen {
     this.creativeSearch = document.createElement('input');
     this.creativeSearch.type = 'text';
     this.creativeSearch.className = 'inv-search';
-    this.creativeSearch.placeholder = '搜索物品…';
+    this.creativeSearch.placeholder = t('inventory.searchItems');
     this.creativeSearch.addEventListener('input', () => {
       this.creativeQuery = this.creativeSearch.value.trim().toLowerCase();
       // 搜索是从头筛一遍，页码当然要回到第 1 页
@@ -1526,7 +1526,7 @@ export class InventoryScreen {
     this.categorySearch.type = 'text';
     this.categorySearch.className = 'inv-search';
     // 批次 206：这一栏列的是"能合成什么"，搜索的也是产物名（不是仓库里的东西）
-    this.categorySearch.placeholder = '搜索可合成的物品…';
+    this.categorySearch.placeholder = t('inventory.searchCraftable');
     this.categorySearch.addEventListener('input', () => {
       this.categoryQuery = this.categorySearch.value.trim().toLowerCase();
       this.renderCategoryGrid();

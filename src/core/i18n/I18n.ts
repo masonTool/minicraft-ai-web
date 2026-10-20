@@ -106,6 +106,14 @@ const ZH: Readonly<Record<string, string>> = {
   'inventory.fuelOptions': '备选燃料',
   'inventory.product': '产物',
   'inventory.target': '目标',
+  // ---- 背包第二批（批次 423）：搜索栏、工作站页签、两条长提示
+  'inventory.searchItems': '搜索物品…',
+  'inventory.searchCraftable': '搜索可合成的物品…',
+  'inventory.renamePlaceholder': '重命名为……（可留空）',
+  'inventory.tab.craftable': '可做',
+  'inventory.tab.items': '背包',
+  'inventory.returnFurnaceHint': '把熔炉里的原料、燃料和产物全部放回仓库',
+  'inventory.returnBrewHint': '把酿造台里的药水、材料和燃料全部放回仓库',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -177,6 +185,13 @@ const EN: Readonly<Record<string, string>> = {
   'inventory.fuelOptions': 'Other Fuels',
   'inventory.product': 'Output',
   'inventory.target': 'Target',
+  'inventory.searchItems': 'Search items…',
+  'inventory.searchCraftable': 'Search craftable items…',
+  'inventory.renamePlaceholder': 'Rename to… (optional)',
+  'inventory.tab.craftable': 'Craftable',
+  'inventory.tab.items': 'Inventory',
+  'inventory.returnFurnaceHint': 'Move every input, fuel and output back to storage',
+  'inventory.returnBrewHint': 'Move every potion, ingredient and fuel back to storage',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
