@@ -1057,7 +1057,8 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check('合成/装备右栏与左侧玩家物品独立切换', invSrc.includes('const rightShowsCrafting') && invSrc.includes("this.gearEl.style.display = rightShowsCrafting ? 'none' : ''"));
   check(
     '工作台自动摊开左侧物品分类并沿用同一副双栏壳（创造模式除外）',
-    invSrc.includes("if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) this.openPocketCategory('all');") &&
+    invSrc.includes("if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) {") &&
+      invSrc.includes('this.openPocketCategory(this.lastRecipeTab);') &&
       invSrc.includes("classList.toggle('workbench-ui', workbench)"),
   );
   check('携带版创造栏是半屏可容纳的 7 列 40px 槽位', css.includes('grid-template-columns: repeat(7, 40px)'));
@@ -1460,7 +1461,8 @@ console.log('\n[创造模式不给配方入口（批次 163）]');
   // 批次 181：创造模式左轨**始终**挂创造分类（切到个人仓库也不搬走）
   check(
     '创造模式的工作台不摊配方分类',
-    invSrc.includes("if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) this.openPocketCategory('all');") &&
+    invSrc.includes("if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) {") &&
+      invSrc.includes('this.openPocketCategory(this.lastRecipeTab);') &&
       invSrc.includes('this.syncCreativeRails(creativePlayer)'),
   );
   // "有没有配方书"按**玩家模式**判，不按"当前哪一屏"判——工作台里人也还在创造模式
@@ -3044,10 +3046,27 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     invSrc.includes('const creative = creativePlayer;'),
   );
 
-  // ③ 切分类回到顶部
+  // ③ 分类栏状态保持 + 常驻滚动条
   check(
-    '切分类把网格滚回顶部',
-    invSrc.includes('this.creativeGrid.scrollTop = 0;') && invSrc.includes('this.categoryGrid.scrollTop = 0;'),
+    '分类的滚动位置和搜索词在切换/关闭后保持',
+    invSrc.includes('private readonly categoryScrollByTab = new Map<RecipeBookTab, number>();') &&
+      invSrc.includes('private readonly categorySearchByTab = new Map<RecipeBookTab, string>();') &&
+      invSrc.includes('this.categoryScrollByTab.set(this.categoryTab, this.categoryGrid.scrollTop);') &&
+      invSrc.includes('this.categoryGrid.scrollTop = this.categoryScrollByTab.get(this.categoryTab) ?? 0;'),
+  );
+  check(
+    '分类列表超过一屏时常驻自绘滚动条',
+    invSrc.includes('private syncCategoryScrollbar(): void') &&
+      invSrc.includes("this.categoryScrollTrack.className = 'inv-category-scrollbar';") &&
+      css.includes('.inv-category-scrollbar {') &&
+      css.includes('overflow-y: scroll;') &&
+      css.includes('scrollbar-width: none;'),
+  );
+  // ④ 点仓库时原分类取消高亮
+  check(
+    '点仓库后原物品分类取消选中',
+    invSrc.includes("this.syncRecipeRail(null);") &&
+      invSrc.includes("this.pane === 'creative' && element.dataset.category === this.creativeCategory"),
   );
 
   // ④ 分类底部统计（批次 206：可合成 N / 缺料 M）

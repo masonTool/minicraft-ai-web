@@ -538,6 +538,18 @@ export class InventoryScreen {
   private categoryGrid!: HTMLDivElement;
   /** 分类物品那一栏的搜索框（只在"全部"那一栏出现） */
   private categorySearch!: HTMLInputElement;
+  /**
+   * 每个分类各自的滚动位置与搜索词（批次 538）。
+   *
+   * 用户要求：点去仓库/别处再点回来、甚至关掉背包再打开，分类栏仍停在原处，
+   * 搜索框里刚才输入的字也还在。按 tab 分开存，切到"自然"再切回"全部"
+   * 不会把"全部"的搜索词当成"自然"的隐藏过滤器。
+   */
+  private readonly categoryScrollByTab = new Map<RecipeBookTab, number>();
+  private readonly categorySearchByTab = new Map<RecipeBookTab, string>();
+  /** 常驻的自绘滚动条（iOS 的 overlay 滚动条不会一直显示） */
+  private categoryScrollTrack!: HTMLDivElement;
+  private categoryScrollThumb!: HTMLDivElement;
   /** 左栏分类底部那行统计（批次 185：当前分类我有几种 / 共几种） */
   private categoryInfo!: HTMLDivElement;
   private categoryPrev!: HTMLButtonElement;
@@ -1333,6 +1345,8 @@ export class InventoryScreen {
     this.categoryHostEl = document.createElement('div');
     this.categoryHostEl.className = 'inv-category-section';
     this.categoryHostEl.dataset.role = 'pocket-category-host';
+    // 自绘滚动条以它为定位父级（桌面/安卓/iOS 三种布局都要成立）
+    this.categoryHostEl.style.position = 'relative';
     this.buildCategorySection();
 
 
@@ -1396,7 +1410,14 @@ export class InventoryScreen {
 
     // 转屏会改视口尺寸（面板宽高里有 100vw/100dvh）：重排一次把尺寸对齐
     if (typeof window !== 'undefined') {
-      window.addEventListener('resize', () => this.applyPocketLayout(), { signal: this.listeners.signal });
+      window.addEventListener(
+        'resize',
+        () => {
+          this.applyPocketLayout();
+          this.syncCategoryScrollbar();
+        },
+        { signal: this.listeners.signal },
+      );
     }
 
     this.heldElement = document.createElement('div');
@@ -1601,12 +1622,59 @@ export class InventoryScreen {
     // 批次 206：这一栏列的是"能合成什么"，搜索的也是产物名（不是仓库里的东西）
     this.categorySearch.placeholder = t('inventory.searchCraftable');
     this.categorySearch.addEventListener('input', () => {
-      this.categoryQuery = this.categorySearch.value.trim().toLowerCase();
+      const raw = this.categorySearch.value;
+      this.categorySearchByTab.set(this.categoryTab, raw);
+      this.categoryQuery = raw.trim().toLowerCase();
+      // 输入新搜索词时回到顶部：恢复的是"离开时"的位置，不是新结果的中间
+      this.categoryScrollByTab.set(this.categoryTab, 0);
       this.renderCategoryGrid();
     });
 
     this.categoryGrid = document.createElement('div');
     this.categoryGrid.className = 'inv-grid inv-category';
+    // 滚动位置按分类记住：点到仓库/别处再回来仍然停在原处
+    this.categoryGrid.addEventListener(
+      'scroll',
+      () => {
+        this.categoryScrollByTab.set(this.categoryTab, this.categoryGrid.scrollTop);
+        this.syncCategoryScrollbar();
+      },
+      { passive: true },
+    );
+
+    // iOS 的滚动条是"划过才出现"的 overlay，无法用 CSS 常驻；
+    // 这里画一根自己的细滚动条，桌面/安卓/iOS 行为一致。
+    this.categoryScrollTrack = document.createElement('div');
+    this.categoryScrollTrack.className = 'inv-category-scrollbar';
+    this.categoryScrollThumb = document.createElement('div');
+    this.categoryScrollThumb.className = 'inv-category-scroll-thumb';
+    this.categoryScrollTrack.appendChild(this.categoryScrollThumb);
+    this.categoryScrollTrack.style.display = 'none';
+    // 拖拇指滚动列表（track 本身不接手势，避免挡住物品格）
+    this.categoryScrollThumb.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const grid = this.categoryGrid;
+      const max = grid.scrollHeight - grid.clientHeight;
+      const trackH = this.categoryScrollTrack.clientHeight;
+      const thumbH = this.categoryScrollThumb.offsetHeight;
+      const span = Math.max(1, trackH - thumbH);
+      const startY = event.clientY;
+      const startTop = grid.scrollTop;
+      this.categoryScrollThumb.setPointerCapture(event.pointerId);
+      const onMove = (move: PointerEvent): void => {
+        const ratio = (move.clientY - startY) / span;
+        grid.scrollTop = startTop + ratio * max;
+      };
+      const onUp = (): void => {
+        this.categoryScrollThumb.removeEventListener('pointermove', onMove);
+        this.categoryScrollThumb.removeEventListener('pointerup', onUp);
+        this.categoryScrollThumb.removeEventListener('pointercancel', onUp);
+      };
+      this.categoryScrollThumb.addEventListener('pointermove', onMove);
+      this.categoryScrollThumb.addEventListener('pointerup', onUp);
+      this.categoryScrollThumb.addEventListener('pointercancel', onUp);
+    });
 
     this.categoryPager = document.createElement('div');
     this.categoryPager.className = 'inv-pager';
@@ -1626,7 +1694,13 @@ export class InventoryScreen {
     this.categoryInfo.className = 'inv-category-info';
     this.categoryInfo.dataset.role = 'category-info';
 
-    this.categoryHostEl.append(this.categorySearch, this.categoryGrid, this.categoryPager, this.categoryInfo);
+    this.categoryHostEl.append(
+      this.categorySearch,
+      this.categoryGrid,
+      this.categoryScrollTrack,
+      this.categoryPager,
+      this.categoryInfo,
+    );
   }
 
   /**
@@ -1835,6 +1909,9 @@ export class InventoryScreen {
 
     for (const child of Array.from(this.categoryGrid.children)) this.tooltipStacks.delete(child as HTMLElement);
     this.categoryGrid.replaceChildren(fragment);
+    // replaceChildren 会把 scrollTop 打回 0：重建后要回到这个分类上次的位置
+    this.categoryGrid.scrollTop = this.categoryScrollByTab.get(this.categoryTab) ?? 0;
+    this.syncCategoryScrollbar();
     // 重建之后把"手上那叠"的落点按 id 找回来并补上选中态（刷新尾部不会再给分类栏补）
     if (this.held) {
       const cell = this.categoryGrid.querySelector<HTMLElement>(`.category-slot[data-item-id="${this.held.id}"]`);
@@ -1852,6 +1929,25 @@ export class InventoryScreen {
     this.categoryPrev.disabled = this.categoryPage <= 0;
     this.categoryNext.disabled = this.categoryPage >= pages - 1;
     this.categoryPager.classList.toggle('hidden', scrollMode || pages <= 1);
+  }
+
+  /** 同步自绘滚动条：只有内容超出一屏时才显示，拇指高度/位置按比例算 */
+  private syncCategoryScrollbar(): void {
+    const track = this.categoryScrollTrack;
+    const thumb = this.categoryScrollThumb;
+    if (!track || !thumb || !this.categoryGrid) return;
+    const grid = this.categoryGrid;
+    const max = grid.scrollHeight - grid.clientHeight;
+    const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'category';
+    track.style.display = visible ? 'block' : 'none';
+    if (!visible) return;
+    track.style.top = `${grid.offsetTop}px`;
+    track.style.height = `${grid.clientHeight}px`;
+    const trackH = grid.clientHeight;
+    const thumbH = Math.max(18, Math.round((grid.clientHeight / grid.scrollHeight) * trackH));
+    thumb.style.height = `${thumbH}px`;
+    const top = max > 0 ? (grid.scrollTop / max) * Math.max(0, trackH - thumbH) : 0;
+    thumb.style.transform = `translateY(${top}px)`;
   }
 
   private flipCategoryPage(delta: number): void {
@@ -2202,6 +2298,8 @@ export class InventoryScreen {
         this.pane = 'items';
         this.clearStationHint();
         this.hooks.onCloseRecipes?.();
+        // 批次 538：回仓库时原分类立即取消高亮（生存/工作站/创造三套轨道都覆盖）
+        this.syncRecipeRail(null);
         this.restoreInvTabToRail();
         this.applyInventoryChrome();
         return;
@@ -2274,22 +2372,31 @@ export class InventoryScreen {
     // 批次 272（用户）：这里**不再写 `pocketTab`**。
     // 左栏换分类是左栏自己的事，右栏停在「盔甲」就继续停在盔甲；
     // 工作台的右栏由 `applyInventoryChrome` 强制回合成，不靠这一行。
+    // 先存下当前分类的滚动位置/搜索词，再切到目标分类
+    this.categoryScrollByTab.set(this.categoryTab, this.categoryGrid.scrollTop);
+    this.categorySearchByTab.set(this.categoryTab, this.categorySearch.value);
+    const same = this.categoryTab === tab;
     this.categoryTab = tab;
     this.categoryPage = 0;
     this.lastRecipeTab = tab;
     this.pane = 'category';
     this.clearStationHint();
-    // ⚠️ 换到不显示搜索框的分类时清掉搜索词：否则那是个**看不见的过滤器**，
-    //    列表会一直空着，而玩家已经没有输入框可以取消它（"分类栏怎么全空了"）。
+    // 每个分类用自己的搜索词：非"全部"的分类没有搜索框，必须为空，
+    // 否则会变成一个看不见的过滤器，让列表一直空着。
+    const savedSearch = same ? this.categorySearch.value : (this.categorySearchByTab.get(tab) ?? '');
+    this.categorySearch.value = savedSearch;
+    this.categoryQuery = savedSearch.trim().toLowerCase();
     if (tab !== 'all') {
-      this.categoryQuery = '';
       this.categorySearch.value = '';
+      this.categoryQuery = '';
     }
     this.applyInventoryChrome();
-    // 批次 185：切分类回到顶部（与创造栏同一条口径）。
     // 必须放在 applyInventoryChrome 之后——里面会 renderCategoryGrid() 重建格子。
-    this.categoryGrid.scrollTop = 0;
-    this.showMessage(`分类：${RECIPE_BOOK_TAB_LABELS[tab]}`);
+    // 恢复该分类上次离开时的滚动位置，而不是一律回顶。
+    this.categoryGrid.scrollTop = this.categoryScrollByTab.get(tab) ?? 0;
+    // 刚显示出来的栏可能还没完成布局，下一帧再量一次
+    requestAnimationFrame(() => this.syncCategoryScrollbar());
+    if (!same) this.showMessage(`分类：${RECIPE_BOOK_TAB_LABELS[tab]}`);
   }
 
   // ---------------------------------------------------------------- 工作站可做列表（批次 277）
@@ -3764,7 +3871,10 @@ export class InventoryScreen {
       this.categoryHostEl.style.display = showCategory ? 'flex' : 'none';
       this.mainGridEl.style.display = showCategory ? 'none' : '';
       this.hotbarGridEl.style.display = '';
-      if (showCategory) this.renderCategoryGrid();
+      if (showCategory) {
+        this.renderCategoryGrid();
+        requestAnimationFrame(() => this.syncCategoryScrollbar());
+      }
       if (hasRecipes && !creativePlayer) {
         // 从创造物品栏切回来后，railLeft 里可能还是创造分类条：
         // pocketRecipeBar 已经脱离 DOM，必须重新挂回去，否则分类按钮消失（批次 316）
@@ -3836,7 +3946,10 @@ export class InventoryScreen {
 
     this.creativeSection.style.display = leftPane === 'creative' ? '' : 'none';
     this.categoryHostEl.style.display = leftPane === 'category' ? 'flex' : 'none';
-    if (leftPane === 'category') this.renderCategoryGrid();
+    if (leftPane === 'category') {
+      this.renderCategoryGrid();
+      requestAnimationFrame(() => this.syncCategoryScrollbar());
+    }
     // 批次 159/206：左栏是物品分类时，那片 3×9 仓库必须一起藏掉。
     // ⚠️ 以前工作台是"例外"（`leftPane === 'category' && !workbench`），但两者在
     // `pocket-dual` 网格里**占的是同一格**（col 1 / row 2）——工作台 + 分类栏时
@@ -4068,7 +4181,12 @@ export class InventoryScreen {
   private updateTabHighlight(): void {
     for (const child of Array.from(this.creativeTabs.children)) {
       const element = child as HTMLElement;
-      element.classList.toggle('active', element.dataset.category === this.creativeCategory);
+      // 左栏已经切回"仓库"（pane = items）时，原分类要取消高亮。
+      // 只比较 creativeCategory 的话，回仓库后旧分类还会亮着。
+      element.classList.toggle(
+        'active',
+        this.pane === 'creative' && element.dataset.category === this.creativeCategory,
+      );
     }
   }
 
@@ -5834,7 +5952,10 @@ export class InventoryScreen {
     // 否则主程序的 openRecipeBook 会把模式改回普通 inventory。
     // 批次 164：**创造模式的工作台不用摊开配方分类**——它就是拿来合成的。
     // 生存模式才按基岩版把左侧摊成"按分类找东西"。
-    if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) this.openPocketCategory('all');
+    if (mode === 'crafting' && !(this.hooks.isCreative?.() ?? false)) {
+      // 重新打开工作台时回到上次的分类与滚动位置，而不是强制回 "全部"
+      this.openPocketCategory(this.lastRecipeTab);
+    }
   }
 
   toggle(): void {

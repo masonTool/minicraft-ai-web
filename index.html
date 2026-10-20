@@ -3370,11 +3370,30 @@
            改成吃掉左栏剩余高度并滚动——用户要求"格子铺满区域，铺满后上下滑"。 */
         flex: 1 1 auto;
         max-height: none;
-        overflow-y: auto;
+        /* 批次 538（用户）：超过一屏时滚动条要常驻。
+           原生滚动条在 iOS 是"划过才出现"的 overlay，所以隐藏它，
+           改由 `.inv-category-scrollbar` 自绘一根始终可见的细条。 */
+        overflow-y: scroll;
+        overflow-x: hidden;
+        scrollbar-width: none;
         overscroll-behavior: contain;
         /* 批次 211：纵向仍是滚动列表；**横向拖动交给 JS** 做"按住滑动看配方" */
         touch-action: pan-y;
       }
+      .inv-grid.inv-category::-webkit-scrollbar { display: none; width: 0; height: 0; }
+      /* 自绘常驻滚动条：父级 `.inv-category-section` 已经是 position: relative */
+      .inv-category-scrollbar {
+        position: absolute; right: 1px; width: 6px;
+        background: rgba(0, 0, 0, .26);
+        border-radius: 3px; z-index: 3; pointer-events: none;
+      }
+      .inv-category-scroll-thumb {
+        position: absolute; left: 0; top: 0; width: 100%; min-height: 18px;
+        background: #9a9a9a; border: 1px solid #4a4a4a;
+        border-radius: 3px; box-sizing: border-box;
+        pointer-events: auto; cursor: pointer; touch-action: none;
+      }
+      .inv-category-scroll-thumb:hover { background: #b8b8b8; }
       .inv-grid.inv-category .inv-slot { width: 40px; height: 40px; max-width: 40px; max-height: 40px; }
       .inv-grid.inv-category .inv-slot canvas { width: 28px; height: 28px; }
       /* 我没有的那些：红底（配方开关打开时才可能出现在这一栏里） */
