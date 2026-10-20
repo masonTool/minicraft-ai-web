@@ -24,6 +24,8 @@ import { craftFromInventory } from '../core/crafting/RecipeBook.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { Inventory, type ItemStack } from '../core/container/Inventory.ts';
 import type { Chest } from '../core/container/Chest.ts';
+import type { Furnace } from '../core/container/Furnace.ts';
+import { isFuel, stationOfBlock } from '../core/crafting/Smelting.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
@@ -474,6 +476,8 @@ async function boot(): Promise<void> {
   let sneaking = false;
   let mining: { x: number; y: number; z: number; elapsed: number; pointerId: number } | null = null;
   let openedChest: Chest | null = null;
+  let openedFurnace: Furnace | null = null;
+  const liveFurnaces = new Set<Furnace>();
   const MINE_TIME = 0.6;
   let lastFrameTime = 0;
   ui.setFlying(flying);
@@ -886,18 +890,44 @@ async function boot(): Promise<void> {
     if (openedChest) ui.setChest(chestSnapshot(), playerHotbarSnapshot());
   };
 
+  const furnaceSnapshot = (): Array<ItemStack | null> =>
+    Array.from({ length: 3 }, (_, index) => openedFurnace?.get(index) ?? null);
+  const refreshFurnace = (): void => {
+    if (!openedFurnace) return;
+    const burn = openedFurnace.burnTimeTotal > 0
+      ? openedFurnace.burnTimeLeft / openedFurnace.burnTimeTotal
+      : 0;
+    const cook = openedFurnace.cookTimeTotal > 0
+      ? openedFurnace.cookProgress / openedFurnace.cookTimeTotal
+      : 0;
+    ui.setFurnace(furnaceSnapshot(), playerHotbarSnapshot(), burn, cook);
+  };
+
+  const openFurnaceAt = (x: number, y: number, z: number, station: ReturnType<typeof stationOfBlock>): void => {
+    if (!station) return;
+    const furnace = world.containers.getOrCreateFurnace(world.dimension, x, y, z, station);
+    openedFurnace = furnace;
+    liveFurnaces.add(furnace);
+    furnace.paused = false;
+    ui.openFurnace(furnace.stationName, furnaceSnapshot(), playerHotbarSnapshot());
+  };
+
   const useTarget = (): void => {
     updateTarget();
     if (!currentHit) return;
     const id = world.getBlock(currentHit.x, currentHit.y, currentHit.z);
-    if (id !== Block.CHEST) return;
-    openedChest = world.containers.getOrCreateChest(
-      world.dimension,
-      currentHit.x,
-      currentHit.y,
-      currentHit.z,
-    );
-    ui.openChest('箱子', chestSnapshot(), playerHotbarSnapshot());
+    if (id === Block.CHEST) {
+      openedChest = world.containers.getOrCreateChest(
+        world.dimension,
+        currentHit.x,
+        currentHit.y,
+        currentHit.z,
+      );
+      ui.openChest('箱子', chestSnapshot(), playerHotbarSnapshot());
+      return;
+    }
+    const station = stationOfBlock(id);
+    if (station) openFurnaceAt(currentHit.x, currentHit.y, currentHit.z, station);
   };
 
   const placeTarget = (): void => {
@@ -1025,6 +1055,49 @@ async function boot(): Promise<void> {
         }
       }
       if (!ui.isChestOpen()) openedChest = null;
+      return;
+    }
+    // 熔炉打开时，点击只走熔炉界面
+    if (ui.isFurnaceOpen()) {
+      uiPointerId = event.pointerId;
+      const action = ui.handleFurnaceTap(x, y, width, height);
+      if (action?.type === 'take' && openedFurnace) {
+        const stack = openedFurnace.get(action.index);
+        if (stack) {
+          openedFurnace.set(action.index, null);
+          inventory.addStack(stack);
+          ui.syncInventory(inventory.serialize(), selectedSlot);
+          refreshFurnace();
+          scheduleSave?.();
+        }
+      }
+      if (action?.type === 'put' && openedFurnace) {
+        const stack = inventory.get(action.index);
+        if (stack) {
+          const input = openedFurnace.get(0);
+          const fuel = openedFurnace.get(1);
+          let target = -1;
+          if (isFuel(stack.id) && (!fuel || fuel.id === stack.id)) target = 1;
+          else if (!input || input.id === stack.id) target = 0;
+          else if (!fuel || fuel.id === stack.id) target = 1;
+          if (target < 0) {
+            ui.showToast('炉子已满');
+          } else {
+            const dest = openedFurnace.get(target);
+            if (dest && dest.id === stack.id) {
+              dest.count += stack.count;
+              openedFurnace.set(target, dest);
+            } else {
+              openedFurnace.set(target, stack);
+            }
+            inventory.set(action.index, null);
+            ui.syncInventory(inventory.serialize(), selectedSlot);
+            refreshFurnace();
+            scheduleSave?.();
+          }
+        }
+      }
+      if (!ui.isFurnaceOpen()) openedFurnace = null;
       return;
     }
 
@@ -1233,7 +1306,13 @@ async function boot(): Promise<void> {
 
     // 等脚下区块加载完再落玩家，避免出生就掉进虚空
     if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
-    if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen() || ui.isChestOpen()) {
+    if (
+      ui.isMainMenuOpen() ||
+      ui.isPauseOpen() ||
+      ui.isSettingsOpen() ||
+      ui.isChestOpen() ||
+      ui.isFurnaceOpen()
+    ) {
       playerInput.forward = 0;
       playerInput.strafe = 0;
       playerInput.jump = false;
@@ -1249,9 +1328,20 @@ async function boot(): Promise<void> {
     updateTarget();
     updateDrops(dt);
     updateParticles(dt);
+    for (const furnace of liveFurnaces) {
+      const result = furnace.tick(dt);
+      if (furnace === openedFurnace && result.changed) refreshFurnace();
+    }
 
     if (mining) {
-      if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen() || ui.isInventoryOpen() || ui.isChestOpen()) {
+      if (
+        ui.isMainMenuOpen() ||
+        ui.isPauseOpen() ||
+        ui.isSettingsOpen() ||
+        ui.isInventoryOpen() ||
+        ui.isChestOpen() ||
+        ui.isFurnaceOpen()
+      ) {
         cancelMining();
       } else {
         const id = world.getBlock(mining.x, mining.y, mining.z);

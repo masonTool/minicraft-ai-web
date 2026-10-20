@@ -8,6 +8,7 @@ import { createInventory } from './inventory.ts';
 import { createPauseMenu, type PauseAction } from './pause.ts';
 import { createSettingsMenu, type SettingsValues } from './settings.ts';
 import { createChestScreen, type ChestAction } from './chest.ts';
+import { createFurnaceScreen, type FurnaceAction } from './furnace.ts';
 import { createOverlay } from './overlay.ts';
 import { createMainMenu, type MainMenuAction, type MainMenuInfo } from './main-menu.ts';
 import { createStats, type PlayerStats } from './stats.ts';
@@ -41,6 +42,16 @@ export interface MiniGameUi {
   isChestOpen(): boolean;
   setChest(chest: readonly (ItemStack | null)[], player: readonly (ItemStack | null)[]): void;
   handleChestTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): ChestAction;
+  openFurnace(name: string, slots: readonly (ItemStack | null)[], player: readonly (ItemStack | null)[]): void;
+  closeFurnace(): void;
+  isFurnaceOpen(): boolean;
+  setFurnace(
+    slots: readonly (ItemStack | null)[],
+    player: readonly (ItemStack | null)[],
+    burn: number,
+    cook: number,
+  ): void;
+  handleFurnaceTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): FurnaceAction;
   isMainMenuOpen(): boolean;
   setWorldInfo(info: MainMenuInfo): void;
   handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
@@ -103,6 +114,7 @@ export function createCanvasUi(
   const overlay = createOverlay(screenWidth, screenHeight);
   const mainMenu = createMainMenu(screenWidth, screenHeight);
   const chestScreen = createChestScreen(atlas, screenWidth, screenHeight);
+  const furnaceScreen = createFurnaceScreen(atlas, screenWidth, screenHeight);
   const stats = createStats(screenWidth, screenHeight);
   const touchControls = createTouchControls(screenWidth, screenHeight);
   let settingsFromMenu = false;
@@ -122,7 +134,7 @@ export function createCanvasUi(
       inventory.setSelected(selectedSlot);
     },
     toggleInventory(): void {
-      if (pause.isOpen() || settings.isOpen() || chestScreen.isOpen()) return;
+      if (pause.isOpen() || settings.isOpen() || chestScreen.isOpen() || furnaceScreen.isOpen()) return;
       inventory.toggle();
     },
     isInventoryOpen(): boolean {
@@ -150,6 +162,7 @@ export function createCanvasUi(
       if (settings.isOpen()) settings.close();
       if (inventory.isOpen()) inventory.close();
       if (chestScreen.isOpen()) chestScreen.close();
+      if (furnaceScreen.isOpen()) furnaceScreen.close();
       pause.toggle();
     },
     isPauseOpen(): boolean {
@@ -163,6 +176,7 @@ export function createCanvasUi(
       mainMenu.close();
       inventory.close();
       chestScreen.close();
+      furnaceScreen.close();
       pause.close();
       settings.open();
     },
@@ -192,6 +206,7 @@ export function createCanvasUi(
       inventory.close();
       pause.close();
       settings.close();
+      furnaceScreen.close();
       chestScreen.open(name, chest, player);
     },
     closeChest(): void {
@@ -205,6 +220,25 @@ export function createCanvasUi(
     },
     handleChestTap(clientX: number, clientY: number, sw: number, sh: number): ChestAction {
       return chestScreen.isOpen() ? chestScreen.handleTap(clientX, clientY, sw, sh) : null;
+    },
+    openFurnace(name: string, slots: readonly (ItemStack | null)[], player: readonly (ItemStack | null)[]): void {
+      inventory.close();
+      pause.close();
+      settings.close();
+      chestScreen.close();
+      furnaceScreen.open(name, slots, player);
+    },
+    closeFurnace(): void {
+      furnaceScreen.close();
+    },
+    isFurnaceOpen(): boolean {
+      return furnaceScreen.isOpen();
+    },
+    setFurnace(slots, player, burn, cook): void {
+      furnaceScreen.setSlots(slots, player, burn, cook);
+    },
+    handleFurnaceTap(clientX: number, clientY: number, sw: number, sh: number): FurnaceAction {
+      return furnaceScreen.isOpen() ? furnaceScreen.handleTap(clientX, clientY, sw, sh) : null;
     },
     isMainMenuOpen(): boolean {
       return mainMenu.isOpen();
@@ -258,6 +292,10 @@ export function createCanvasUi(
       }
       if (chestScreen.isOpen()) {
         chestScreen.render(renderer);
+        return;
+      }
+      if (furnaceScreen.isOpen()) {
+        furnaceScreen.render(renderer);
         return;
       }
       touchControls.render(renderer);
