@@ -214,6 +214,8 @@ function defaultName(worlds: readonly WorldSummary[], worldType: WorldType): str
     default: '新的世界',
     flat: '超平坦世界',
     amplified: '放大化世界',
+    caves: '洞穴世界',
+    floating_islands: '浮空岛世界',
   };
   const same = worlds.filter((world) => world.worldType === worldType).length + 1;
   return `${prefix[worldType]} ${same}`;

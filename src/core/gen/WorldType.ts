@@ -1,22 +1,26 @@
 /**
  * 世界类型（新建世界时选）
  *
- * 目前三种：
+ * 目前五种：
  *  - `default`：默认的 1.18 密度噪声地形（主世界）
  *  - `flat`：超平坦——一层基岩 + 泥土 + 草方块，其余全是空气（原版"经典"预设的高度）
  *  - `amplified`：放大化——地形的起伏幅度乘一个系数，山更高、峡谷更深
+ *  - `caves`（批次 483）：整个主世界只剩洞穴网络（密度场直接由"噪声等值面附近"决定）
+ *  - `floating_islands`（批次 483）：默认地形 + 地表之上的一层层浮空岛
  *
  * 放在独立模块里：生成器、Worker 协议、存档与世界列表都要用，谁都不该反过来依赖谁。
  */
 
-export type WorldType = 'default' | 'flat' | 'amplified';
+export type WorldType = 'default' | 'flat' | 'amplified' | 'caves' | 'floating_islands';
 
-export const WORLD_TYPES: readonly WorldType[] = ['default', 'flat', 'amplified'];
+export const WORLD_TYPES: readonly WorldType[] = ['default', 'flat', 'amplified', 'caves', 'floating_islands'];
 
 export const WORLD_TYPE_LABELS: Record<WorldType, string> = {
   default: '默认（山地与海洋）',
   flat: '超平坦（一层草地）',
   amplified: '放大化（更高的山）',
+  caves: '洞穴世界（只有洞穴，没有地表）',
+  floating_islands: '浮空岛（地表之上还有岛）',
 };
 
 /**
@@ -30,6 +34,8 @@ export const WORLD_TYPE_HINTS: Record<WorldType, string> = {
   default: '完整世界：群系、树木、矿石、村庄、要塞… 生存模式推荐',
   amplified: '与默认相同的全部内容，只是陆地起伏更大、山更高',
   flat: '只有三层平地：没有树木、村庄与矿石（适合建筑/创造）',
+  caves: '整个主世界被掏空成一张洞穴网络：没有地表、没有天空，只有岩壁与洞腔。⚠️ 树与结构仍会生成（可能长在洞里）',
+  floating_islands: '与默认相同的地形，但地表之上还有一层层浮空岛；适合探索与建筑',
 };
 
 /** 超平坦世界的分层（从 y = -64 起，与原版"经典"预设一致） */
@@ -60,6 +66,9 @@ export const WORLD_SURFACE_Y: Record<WorldType, number> = {
   default: 64,
   amplified: 64,
   flat: FLAT_SURFACE_Y,
+  // 洞穴世界没有地表：出生点仍按海平面那一层找（那里多半是洞腔）
+  caves: 64,
+  floating_islands: 64,
 };
 
 /** 放大化的起伏倍率：山体高度与峡谷深度都按它放大 */

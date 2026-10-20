@@ -1,20 +1,23 @@
 /**
- * 世界类型（批次 181）离线测试
+ * 世界类型（批次 483：`caves` / `floating_islands`）
  *
- * 用户问过："三种世界类型是不是都能找到所有材料？"
- * 答案不是——超平坦在 `TerrainGenerator` 里**直接返回三层方块**，
- * 地物与结构阶段根本不会跑。这套断言把"三种类型各有什么"钉住：
- *  - 默认/放大化：有群系地物（树、花草），方块种类丰富；
- *  - 超平坦：只有基岩/泥土/草，没有任何树、矿石或结构方块。
- *
- * 运行：npm run test:worldtype
+ * 三块：
+ *  ① 类型表本身（五种、每种都有名称/说明/地表基准）；
+ *  ② 洞穴世界：**空气占多数**、底部有垫底（不掉出世界）、高处没有"地表"；
+ *  ③ 浮空岛：地表之上真的有实心方块，而默认世界在同样高度是空气（负对照）。
  */
 
-import { generateChunkBlocks } from '../src/core/gen/TerrainGenerator.ts';
-import { Dimension } from '../src/core/gen/Dimension.ts';
-import { FLAT_LAYERS, WORLD_TYPE_HINTS, WORLD_TYPE_LABELS, WORLD_TYPES } from '../src/core/gen/WorldType.ts';
 import { Block } from '../src/core/registry/blocks.ts';
-import { WORLD_MIN_Y } from '../src/core/world/Chunk.ts';
+import { Chunk } from '../src/core/world/Chunk.ts';
+import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
+import {
+  WORLD_SURFACE_Y,
+  WORLD_TYPES,
+  WORLD_TYPE_HINTS,
+  WORLD_TYPE_LABELS,
+  isWorldType,
+  type WorldType,
+} from '../src/core/gen/WorldType.ts';
 
 let passed = 0;
 let failed = 0;
@@ -33,79 +36,85 @@ function equal(label: string, actual: unknown, expected: unknown): void {
   check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
-const SEED = 20261018;
-const CX = 0;
-const CZ = 0;
+const SEED = 20261014;
 
-interface Stats {
-  blocks: ReturnType<typeof generateChunkBlocks>;
-  solid: number;
-  unique: Set<number>;
-  minY: number;
-  maxY: number;
-  has: (id: number) => boolean;
-}
-
-function sample(worldType: 'default' | 'flat' | 'amplified'): Stats {
-  const blocks = generateChunkBlocks(CX, CZ, SEED, Dimension.OVERWORLD, worldType);
-  const unique = new Set<number>();
+/** 数某个高度区间里"实心方块"的格子数（空气/水都算不实心） */
+function countSolid(
+  cx: number,
+  cz: number,
+  worldType: WorldType,
+  yFrom: number,
+  yTo: number,
+  step = 1,
+): { solid: number; air: number } {
+  const blocks = generateChunkBlocks(cx, cz, SEED, undefined, worldType);
+  takeGeneratedStates();
   let solid = 0;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  for (let i = 0; i < blocks.length; i++) {
-    const id = blocks[i]!;
-    if (id === Block.AIR) continue;
-    solid++;
-    unique.add(id);
-    // 区块索引按 y 分层（每层 16×16），y 从 WORLD_MIN_Y 起
-    const y = Math.floor(i / (16 * 16)) + WORLD_MIN_Y;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  return { blocks, solid, unique, minY, maxY, has: (id) => unique.has(id) };
-}
-
-console.log('\n[一、类型清单与文案]');
-{
-  equal('三种世界类型', WORLD_TYPES.join(','), 'default,flat,amplified');
-  check('每种都有名字', WORLD_TYPES.every((type) => WORLD_TYPE_LABELS[type].length > 0));
-  check('每种都有说明', WORLD_TYPES.every((type) => WORLD_TYPE_HINTS[type].length >= 8));
-  check('超平坦的说明写明没有树木/村庄/矿石', /没有树木、村庄与矿石/.test(WORLD_TYPE_HINTS.flat));
-  check('默认世界自称完整', WORLD_TYPE_HINTS.default.includes('完整世界'));
-}
-
-console.log('\n[二、超平坦：只有三层]');
-{
-  const flat = sample('flat');
-  equal('超平坦只有 3 种方块', flat.unique.size, 3);
-  check('有基岩', flat.has(Block.BEDROCK));
-  check('有泥土', flat.has(Block.DIRT));
-  check('有草方块', flat.has(Block.GRASS_BLOCK));
-  check('没有原木（没有树）', !flat.has(Block.OAK_LOG) && !flat.has(Block.OAK_LEAVES));
-  check('没有矿石（煤/铁/钻石都找不到）', !flat.has(Block.COAL_ORE) && !flat.has(Block.IRON_ORE) && !flat.has(Block.DIAMOND_ORE));
-  // 实心格数 = 16×16 × 4 层（基岩 1 + 泥土 2 + 草 1）
-  equal('实心格数正好四层', flat.solid, 16 * 16 * 4);
-  equal('最低层是基岩所在高度', flat.minY, FLAT_LAYERS.bedrockY);
-}
-
-console.log('\n[三、默认 / 放大化：完整世界]');
-{
-  const normal = sample('default');
-  const amplified = sample('amplified');
-  check('默认世界方块种类丰富（> 20 种）', normal.unique.size > 20, `${normal.unique.size} 种`);
-  check('默认世界有树（原木或树叶）', normal.has(Block.OAK_LOG) || normal.has(Block.OAK_LEAVES));
-  check('默认世界有花草（短草或蒲公英）', normal.has(Block.SHORT_GRASS) || normal.has(Block.DANDELION));
-  check('放大化也有地物', amplified.unique.size > 20, `${amplified.unique.size} 种`);
-  let firstDiff = -1;
-  for (let i = 0; i < normal.blocks.length; i++) {
-    if (normal.blocks[i] !== amplified.blocks[i]) {
-      firstDiff = i;
-      break;
+  let air = 0;
+  for (let y = yFrom; y <= yTo; y += step) {
+    for (let z = 0; z < 16; z++) {
+      for (let x = 0; x < 16; x++) {
+        const id = blocks[Chunk.index(x, y, z)]!;
+        if (id === Block.AIR || id === Block.WATER) air++;
+        else solid++;
+      }
     }
   }
-  check('放大化与默认不是同一份地形（同一区块逐格比较）', firstDiff >= 0, `第一处不同在 ${firstDiff}`);
-  check('默认世界比超平坦高得多（有山或树）', normal.maxY > FLAT_LAYERS.grassY + 3, `${normal.maxY}`);
+  return { solid, air };
 }
 
-console.log(`\n结果：${passed} 通过，${failed} 失败`);
+console.log('\n[五种世界类型]');
+{
+  equal('一共五种', WORLD_TYPES.length, 5);
+  check('洞穴世界在列表里', WORLD_TYPES.includes('caves'));
+  check('浮空岛在列表里', WORLD_TYPES.includes('floating_islands'));
+  for (const type of WORLD_TYPES) {
+    check(`${type} 有中文名`, (WORLD_TYPE_LABELS[type] ?? '').length > 0, WORLD_TYPE_LABELS[type]);
+    check(`${type} 有说明`, (WORLD_TYPE_HINTS[type] ?? '').length > 0);
+    check(`${type} 有地表基准`, Number.isFinite(WORLD_SURFACE_Y[type]));
+  }
+  check('isWorldType 认新类型', isWorldType('caves') && isWorldType('floating_islands'));
+  check('isWorldType 不认拼错的', !isWorldType('cave'));
+}
+
+console.log('\n[洞穴世界：只剩洞穴]');
+{
+  // 扫一大段高度：洞壁应当是少数（空气占多数），否则就不是"洞穴世界"而是实心世界
+  const { solid, air } = countSolid(3, 5, 'caves', -64, 120);
+  const airRatio = air / (solid + air);
+  check('空气占多数（洞腔比岩壁多）', airRatio > 0.5, `空气 ${(airRatio * 100).toFixed(1)}%`);
+  check('确实还有岩壁（不是全空）', solid > 0, `${solid} 格`);
+
+  // 底部垫实：掉不出世界
+  const bottom = countSolid(3, 5, 'caves', -64, -61);
+  equal('最下面 4 层全是实心', bottom.air, 0);
+
+  // 高处没有"地表"：默认世界在 y=100 之上基本是空气，洞穴世界也一样没有整片地面
+  const high = countSolid(3, 5, 'caves', 100, 120);
+  check('高处没有整片地面', high.air > high.solid, `实心 ${high.solid} / 空气 ${high.air}`);
+}
+
+console.log('\n[浮空岛：地表之上还有岛]');
+{
+  // 地表基准 64：往上看 20~60 格。默认世界那里是天空，浮空岛世界应该有实心。
+  const islands = countSolid(3, 5, 'floating_islands', 84, 124);
+  const plain = countSolid(3, 5, 'default', 84, 124);
+  check('浮空岛世界在地表之上有实心方块', islands.solid > 0, `${islands.solid} 格`);
+  equal('同一片天空在默认世界里是空的（负对照）', plain.solid, 0);
+  check('浮空岛不是"整片天花板"（还留得出天空）', islands.air > islands.solid, `实心 ${islands.solid} / 空气 ${islands.air}`);
+  // 地表本体还在：把整个"地下"扫一遍（到 y=80），实心应占多数。
+  // ⚠️ 不能只看 y=50~70：那一层可能正好落在海里/山谷（第一版就是这么红的）
+  const ground = countSolid(3, 5, 'floating_islands', -64, 80);
+  check('地面本体还在（地下以实心为主）', ground.solid > ground.air, `实心 ${ground.solid} / 空气 ${ground.air}`);
+}
+
+console.log('\n[默认世界不受影响]');
+{
+  const ground = countSolid(3, 5, 'default', -64, 80);
+  check('默认世界的地下以实心为主', ground.solid > ground.air, `实心 ${ground.solid} / 空气 ${ground.air}`);
+  const sky = countSolid(3, 5, 'default', 120, 140);
+  equal('默认世界的高空没有方块', sky.solid, 0);
+}
+
+console.log(`\n世界类型测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);

@@ -83,12 +83,20 @@ const SEED = 20261014;
 
 console.log('\n[世界类型]');
 {
-  check('三种类型齐全', WORLD_TYPES.join('|') === 'default|flat|amplified');
+  // 批次 483 加了 caves / floating_islands（五种）
+  check(
+    '五种类型齐全（批次 483 加了洞穴世界与浮空岛）',
+    WORLD_TYPES.join('|') === 'default|flat|amplified|caves|floating_islands',
+    WORLD_TYPES.join('|'),
+  );
   check(
     '每种类型都有中文标签',
     WORLD_TYPES.every((type) => typeof WORLD_TYPE_LABELS[type] === 'string' && WORLD_TYPE_LABELS[type].length > 0),
   );
-  check('isWorldType 认得合法值', isWorldType('flat') && isWorldType('amplified') && isWorldType('default'));
+  check(
+    'isWorldType 认得合法值',
+    WORLD_TYPES.every((type) => isWorldType(type)),
+  );
   check('isWorldType 拒绝脏数据', !isWorldType('nope') && !isWorldType(3) && !isWorldType(null));
 
   let inRange = true;
