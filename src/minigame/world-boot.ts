@@ -15,6 +15,9 @@ import { MeshWorkerPool } from '../render/MeshWorkerPool.ts';
 import { TextureAtlas } from '../render/TextureAtlas.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { World } from '../core/world/World.ts';
+import { OverworldGenerator } from '../core/gen/OverworldGenerator.ts';
+import { planSpawnRegion } from '../core/world/SpawnPoint.ts';
+import { WORLD_SURFACE_Y } from '../core/gen/WorldType.ts';
 import { PlayerPhysics, type PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { Block, blockDef } from '../core/registry/blocks.ts';
@@ -361,6 +364,16 @@ async function boot(): Promise<void> {
   platform.storage.set('wx.worldId', currentWorldId);
   platform.storage.set('wx.worlds', JSON.stringify(worlds));
   let world = new World(worldSeed, currentWorld.worldType, 1, createWorker);
+  const planSpawn = (seed: number, type: WorldType): { x: number; y: number; z: number } => {
+    const generator = new OverworldGenerator(seed, type);
+    return planSpawnRegion(
+      (x, z) => generator.surfaceY(x, z),
+      (x, z) => generator.biomeAt(x, z).name,
+      128,
+      WORLD_SURFACE_Y[type],
+    );
+  };
+  let spawnPoint = planSpawn(worldSeed, currentWorld.worldType);
   // 微信 worker 对含 ArrayBuffer 的嵌套消息序列化不完整，网格化请求会丢掉 chunks；
   // 地形生成只传数字，可以继续走 worker；网格化改主线程执行。
   const meshCreateWorker =
@@ -676,6 +689,7 @@ async function boot(): Promise<void> {
   refreshWorldInfo(world.edits.totalEdits || save?.meta?.edits || 0);
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
+  physics.teleport(spawnPoint.x + 0.5, spawnPoint.y + 1.01, spawnPoint.z + 0.5);
   const playerInput: PlayerInput = {
     forward: 0,
     strafe: 0,
@@ -903,8 +917,7 @@ async function boot(): Promise<void> {
   };
 
   const spawnPlayer = (): void => {
-    const surface = world.getSurfaceBlockY(8, 8) ?? 64;
-    physics.teleport(8.5, surface + 1.01, 8.5);
+    physics.teleport(spawnPoint.x + 0.5, spawnPoint.y + 1.01, spawnPoint.z + 0.5);
     fallStartY = null;
     playerReady = true;
     updateCamera();
@@ -1114,6 +1127,8 @@ async function boot(): Promise<void> {
     wireWorldEvents();
 
     currentWorld = entry;
+    spawnPoint = planSpawn(entry.seed, entry.worldType);
+    physics.teleport(spawnPoint.x + 0.5, spawnPoint.y + 1.01, spawnPoint.z + 0.5);
     currentWorldId = entry.id;
     playMark = Date.now();
     currentWorld.lastPlayed = playMark;
@@ -1802,7 +1817,7 @@ async function boot(): Promise<void> {
     lastFrameTime = time;
 
     // 等脚下区块加载完再落玩家，避免出生就掉进虚空
-    if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
+    if (!playerReady && world.isLoaded(spawnPoint.x, spawnPoint.z)) spawnPlayer();
     if (
       ui.isMainMenuOpen() ||
       ui.isPauseOpen() ||
