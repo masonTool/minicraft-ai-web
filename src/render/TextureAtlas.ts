@@ -6187,6 +6187,7 @@ PAINTERS['red_mushroom_block_side'] = noisy(0xb03a3a, 12);
 PAINTERS['item_prismarine_shard'] = noisy(0x6fc8b8, 20);
 PAINTERS['item_nether_brick'] = noisy(0x4a2a2a, 26);
 PAINTERS['hay_block'] = noisy(0xd8b23a, 22);
+PAINTERS['honeycomb_block'] = noisy(0xe8a33d, 18);
 PAINTERS['item_chorus_fruit'] = noisy(0x8f5fae, 24);
 PAINTERS['item_popped_chorus_fruit'] = noisy(0xbf8fd6, 24);
 PAINTERS['item_prismarine_crystals'] = noisy(0xd8e8a0, 20);

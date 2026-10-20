@@ -1881,6 +1881,13 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['CC', 'CC'],
     key: { C: Item.POPPED_CHORUS_FRUIT },
   },
+  // ---- 蜜脾块（批次 440）：4 个蜜脾 2×2 → 1 块
+  {
+    kind: 'shaped',
+    result: { id: Block.HONEYCOMB_BLOCK, count: 1 },
+    pattern: ['HH', 'HH'],
+    key: { H: Item.HONEYCOMB },
+  },
   // ---- 磨制玄武岩 / 蓝冰（批次 439）
   {
     kind: 'shaped',

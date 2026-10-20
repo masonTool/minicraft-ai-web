@@ -242,6 +242,8 @@ const BASE_SPECS: readonly BlockSpec[] = [
   // 磨制玄武岩 / 蓝冰（批次 439）：复用已有贴图（玄武岩侧面、浮冰），不新画
   { id: 674, name: 'minecraft:polished_basalt', tiles: ['basalt_side', 'basalt_side', 'basalt_side'] },
   { id: 675, name: 'minecraft:blue_ice', tiles: ['packed_ice', 'packed_ice', 'packed_ice'] },
+  // 蜜脾块（批次 440）：纯装饰方块，没有行为
+  { id: 676, name: 'minecraft:honeycomb_block', tiles: ['honeycomb_block', 'honeycomb_block', 'honeycomb_block'] },
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -3933,6 +3935,8 @@ export const Block = {
   POLISHED_BASALT: 674,
   /** 蓝冰（批次 439）：9 块浮冰 3×3 → 1 块（原版比例） */
   BLUE_ICE: 675,
+  /** 蜜脾块（批次 440）：4 个蜜脾 2×2 → 1 块，纯装饰 */
+  HONEYCOMB_BLOCK: 676,
   WAXED_COPPER_BLOCK: 603,
   WAXED_EXPOSED_COPPER: 604,
   WAXED_WEATHERED_COPPER: 605,
@@ -4284,6 +4288,7 @@ for (const id of [Block.OAK_WOOD, Block.SPRUCE_WOOD, Block.BIRCH_WOOD, Block.JUN
 HARDNESS.set(Block.POLISHED_BASALT, 1.25);
 // 蓝冰比浮冰硬得多（原版 2.8）
 HARDNESS.set(Block.BLUE_ICE, 2.8);
+HARDNESS.set(Block.HONEYCOMB_BLOCK, 0.6);
 HARDNESS.set(Block.WAXED_COPPER_BLOCK, 3);
 HARDNESS.set(Block.WAXED_EXPOSED_COPPER, 3);
 HARDNESS.set(Block.WAXED_WEATHERED_COPPER, 3);
