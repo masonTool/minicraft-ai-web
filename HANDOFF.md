@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1103（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1104（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **235**、进行中 **48**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -52,6 +52,15 @@ npm run dev            # http://localhost:5173
   下一局（这就是"重进也白"）。修法：两张画布都挂事件、`repaint()` 双上下文检查、`ensureUploaded()`、
   恢复时强制 `repaint()`、回前台补两刀、`App` 构造兜底。埋点带 `uploadBefore/uploadAfter/sourcePixels`。
   门禁：`canvas-probe` 13→17、`test:ui` 875→883、160 套全绿。⚠️ `Sky` 的云/日月纹理仍无重画入口。
+- 批次 523（体感收尾：草尖细线 / 草尖抖动 / 方块太"轻"）：
+  ① 植物贴图**不许有 1 像素宽的竖条**：叶尖原本收成 1 像素（花的茎与叶同理）——屏幕上就是
+     "极细的线"，且 mipmap 第一个把它平均掉（覆盖率 0.25~0.5）→ 时有时无=抖。现在叶片
+     全高 2 像素、花茎 2 像素；新增 `paintedThinColumns()` 断言（草/蕨/花/甘蔗/竹子=0）。
+  ② alphaTest 阈值按**屏幕空间 4×4 Bayer** 打散 ±0.03（`ALPHA_DITHER_BAND`）：骑在阈值上的
+     草尖不再整片翻转；近处（mip0 的 alpha 只有 0/1）完全不受影响。
+  ③ 面明暗加深（用户："方块不够沉重、偏亮"）：侧 0.8/0.6 → **0.72/0.54**、底 0.5 → **0.42**，
+     顶面仍 1.0。`atlasMesh.FACE_SHADE` 与 `ChunkMesher.RAW_FACES` 必须一起改；生物那套
+     `BOX_FACE_SHADE` 同步压 10%（否则站在墙边会显得比墙亮）。
 - 批次 521（画质收尾 + 触屏默认值；用户反馈"斜线有毛刺 / 动物建模略糙"）：
   ① 描边改**屏幕空间 ribbon**：`LineSegments` 的 `linewidth` 在 WebGL 里不生效（1px 硬边、
      斜棱成阶梯），现在按像素算宽 + 两侧渐隐 = 自带抗锯齿，12 棱 × 2 三角形一次提交。
@@ -75,16 +84,6 @@ npm run dev            # http://localhost:5173
   ④ 零成本：`Math.round(1000/60)=17ms` 把 60 帧压成 **30 帧**（120Hz 变 40 帧且不均）；
      near 0.1 → **0.25**；水面起伏按距离渐隐 + 云层各向异性；天空/雾加 **±0.5/255 Bayer 抖色**。
   （MSAA 当批没做，521 补上并留了回退开关。）
-- 批次 502（物品数据，E21 尾巴 / 织布机前置）：**旗帜图案跟着物品走**。
-  `ItemStack.bannerPattern`（1~4，0 不写字段）补进四处链路
-  （`restoreStack` / `stackExtras` / `sameExtras` / `Transfer.cloneExtras`），
-  挖旗帜时写进掉落物（`breakBannerPair` 以**下半格**为准，老存档上半格没图案）、
-  放置时由 `PlacementInput.bannerPattern` 写回方块状态（上下半格同一份）。
-  ⚠️ 顺带修掉批次 497 的**撞位**：图案原来占 bit0-2，与朝向位（bit1-2）重叠，
-  挂墙旗换一次图案会被改朝向（当时只在立地旗上验过）；现在编码为
-  **bit0 / bit4 / bit6**，`test:banner` 补了"换图案不碰朝向/挂墙位"两条。
-  `test:banner` 57 → **67 条**、`test:inventory` 89 → **103 条**。
-  ⚠️ 差异：图案仍只有 4 种、单层；织布机界面是批次 503。
 - 批次 503（J25 收口）：**织布机**。`core/container/Loom.ts` 三格（旗帜 / 染料 /
   **算出来的成品**）+ `BlockEntityStore` / `ContainerSave` / `Transfer` 三处登记
   （`loom` 种类、`[LOOM_BANNER, LOOM_DYE]` 可塞、成品进 `isComputedResultSlot`）+

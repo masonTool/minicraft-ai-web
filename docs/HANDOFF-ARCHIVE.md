@@ -3170,4 +3170,15 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
   `test:villager` 122 → **141 条**（往返 / 脏数据 6 类 / 寄存 JSON 往返）。
   ⚠️ 仍是 `[~]`：村民不会走去上班、没有每日刷新与价格浮动（批次 507 的计划）。
 
+- 批次 502（物品数据，E21 尾巴 / 织布机前置）：**旗帜图案跟着物品走**。
+  `ItemStack.bannerPattern`（1~4，0 不写字段）补进四处链路
+  （`restoreStack` / `stackExtras` / `sameExtras` / `Transfer.cloneExtras`），
+  挖旗帜时写进掉落物（`breakBannerPair` 以**下半格**为准，老存档上半格没图案）、
+  放置时由 `PlacementInput.bannerPattern` 写回方块状态（上下半格同一份）。
+  ⚠️ 顺带修掉批次 497 的**撞位**：图案原来占 bit0-2，与朝向位（bit1-2）重叠，
+  挂墙旗换一次图案会被改朝向（当时只在立地旗上验过）；现在编码为
+  **bit0 / bit4 / bit6**，`test:banner` 补了"换图案不碰朝向/挂墙位"两条。
+  `test:banner` 57 → **67 条**、`test:inventory` 89 → **103 条**。
+  ⚠️ 差异：图案仍只有 4 种、单层；织布机界面是批次 503。
+
 <!-- docs-archive:end -->
