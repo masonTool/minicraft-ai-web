@@ -24,6 +24,7 @@ import {
   vehicleHitDamage,
 } from '../src/core/world/VehicleBreach.ts';
 import { Horse, horseArmorTier } from '../src/core/entity/Horse.ts';
+import { mobAppearanceKey } from '../src/render/MobRenderer.ts';
 import {
   BEE_STING_POISON_SECONDS,
   BeeHives,
@@ -1008,8 +1009,13 @@ console.log('\n[骑乘：马要驯服、猪装鞍即骑（批次 406）]');
   const armored = createMob(mobTypeById('horse')!, 0.5, 0.05, 0.5) as Horse;
   check('马能装马铠', armored.canWearHorseArmor);
   check('猪不能装马铠', !(pig as Horse).canWearHorseArmor);
+  const plainKey = mobAppearanceKey(armored);
   armored.armor = Item.DIAMOND_HORSE_ARMOR;
   equal('钻石马铠 11 点护甲', armored.armorPoints, 11);
+  check(
+    '装马铠会触发外观重建（key 带档位）',
+    mobAppearanceKey(armored) !== plainKey && mobAppearanceKey(armored).includes('horse-armor:diamond'),
+  );
   const before = armored.health;
   armored.hurt(10, 0, 0, ctx(), 0, 0, { kind: 'mob' });
   check('马铠挡下部分生物伤害', armored.health > before - 10 && armored.health < before, `${before} → ${armored.health}`);

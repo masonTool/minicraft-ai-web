@@ -24,6 +24,7 @@ import {
   type MobEquipment,
 } from '../core/entity/MobEquipment.ts';
 import { Villager } from '../core/entity/Villager.ts';
+import { Horse, horseArmorTier, type HorseArmorTier } from '../core/entity/Horse.ts';
 import { DYE_COLORS } from '../core/registry/colors.ts';
 import { VILLAGER_IDLE_ROBE, VILLAGER_SKIN_COLOR } from '../core/registry/villagerTrades.ts';
 import { applyBoxFaceShade } from './boxShading.ts';
@@ -77,7 +78,9 @@ export function mobAppearanceKey(mob: Mob): string {
   // 个体装备（J27）：盔甲材质与主手武器都在 `createVisual` 里定色，
   // 溺尸扔出三叉戟后主手会变空，必须靠指纹触发一次重建
   const equipment = mobEquipmentKey(mob.equipment);
-  return equipment ? `${base}|${equipment}` : base;
+  // 马铠（批次 572）：换/装马铠要在 `createVisual` 里换甲片颜色，必须触发重建
+  const horseArmor = mob instanceof Horse && mob.armor !== null ? horseArmorTier(mob.armor) : null;
+  return [base, equipment, horseArmor ? `horse-armor:${horseArmor}` : ''].filter((part) => part !== '').join('|');
 }
 
 type ModelKind =
@@ -640,6 +643,54 @@ function horseBoxes(type: MobType): BoxSpec[] {
     // 尾巴 + 鬃毛
     { width: w * 0.1, height: h * 0.22, depth: w * 0.1, x: 0, y: bodyY + bodyHeight * 0.3, z: -bodyLength * 0.55, color: 'accent' },
     { width: w * 0.08, height: neckHeight * 0.8, depth: w * 0.12, x: 0, y: neckY, z: bodyLength * 0.29, color: 'accent' },
+  ];
+}
+
+/** 四档马铠的甲片颜色（批次 572） */
+const HORSE_ARMOR_TINT: Readonly<Record<HorseArmorTier, number>> = {
+  leather: 0x8a5a32,
+  iron: 0xd8d8de,
+  golden: 0xf0c84a,
+  diamond: 0x6adfd6,
+};
+
+/**
+ * 马铠（批次 572）：在躯干与脖子上各罩一块甲片。
+ *
+ * 只做"看得见的覆盖件"，不做缰绳/马镫；颜色按档位走 `tint`，
+ * 与玩家盔甲片（`equipmentBoxes`）同一个渲染通道。
+ */
+function horseArmorBoxes(type: MobType, tier: HorseArmorTier): BoxSpec[] {
+  const w = type.width;
+  const h = type.height;
+  const legHeight = h * 0.52;
+  const bodyHeight = h * 0.3;
+  const bodyY = legHeight + bodyHeight / 2;
+  const bodyLength = w * 1.5;
+  const neckHeight = h * 0.34;
+  const neckY = bodyY + bodyHeight * 0.5 + neckHeight * 0.4;
+  const tint = HORSE_ARMOR_TINT[tier];
+  return [
+    {
+      width: w * 0.72,
+      height: bodyHeight * 0.92,
+      depth: bodyLength * 0.9,
+      x: 0,
+      y: bodyY,
+      z: 0,
+      color: 'body',
+      tint,
+    },
+    {
+      width: w * 0.34,
+      height: neckHeight * 0.72,
+      depth: w * 0.38,
+      x: 0,
+      y: neckY,
+      z: bodyLength * 0.36,
+      color: 'body',
+      tint,
+    },
   ];
 }
 
@@ -1347,7 +1398,13 @@ export class MobRenderer {
     const type = mob.type;
     const kind = modelKindOf(type.id);
     // 装备件追加在骨架之后（下标不变，眼睛等部位的 `legCount` 判定不受影响）
-    const specs = [...modelBoxes(kind, type), ...equipmentBoxes(kind, type, mob.equipment)];
+    const horseArmor =
+      mob instanceof Horse && mob.armor !== null ? horseArmorTier(mob.armor) : null;
+    const specs = [
+      ...modelBoxes(kind, type),
+      ...equipmentBoxes(kind, type, mob.equipment),
+      ...(horseArmor ? horseArmorBoxes(type, horseArmor) : []),
+    ];
 
     const partColors = new Uint32Array(specs.length);
     // ⚠️ 主色与点缀色都走函数（不是 `type.bodyColor`）：羊的毛色与村民的长袍色
