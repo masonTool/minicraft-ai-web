@@ -2041,7 +2041,8 @@ export class InventoryScreen {
       contentRight = Math.max(contentRight, slots[i]!.getBoundingClientRect().right);
     }
     const width = track.offsetWidth || 6;
-    const left = contentRight - hostRect.left + 4;
+    // 与内容留出 8px：不压最后一列，也不至于离得太远
+    const left = contentRight - hostRect.left + 8;
     return Math.min(Math.max(0, left), Math.max(0, host.clientWidth - width - 1));
   }
 

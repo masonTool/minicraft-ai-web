@@ -3637,8 +3637,8 @@
       /* 创造栏自己滚：翻页条因此始终留在视野里（宽屏上原来要滚到面板底部才能翻页） */
       .inv-grid.inv-creative {
         grid-template-columns: repeat(12, 34px); gap: 2px;
-        /* 右侧留出 10px：滚动条显示在内容外侧的留白里，不压图标 */
-        max-height: 46vh; overflow-y: auto; padding-right: 10px;
+        /* 右侧留出 16px：滚动条与物品之间留约 8px 的空隙，不贴图标 */
+        max-height: 46vh; overflow-y: auto; padding-right: 16px;
       }
 
       /* ---------------- 创造物品栏：分类、搜索与分页 ---------------- */
