@@ -23,8 +23,9 @@ import {
   type LootTable,
 } from '../src/core/registry/loot.ts';
 import { Item, durabilityOf, itemDef, itemName } from '../src/core/registry/items.ts';
-import { fillLootChests, lootDurabilityDamage } from '../src/core/world/LootFill.ts';
+import { fillLootChests, lootDurabilityDamage, lootEnchantment } from '../src/core/world/LootFill.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
+import { enchantmentById } from '../src/core/registry/enchantments.ts';
 import { BlockEntityStore, type BlockContainer } from '../src/core/world/BlockEntityStore.ts';
 import { CHEST_SIZE, Chest } from '../src/core/container/Chest.ts';
 import { SLOT_COUNTS, serializeContainer, restoreContainers } from '../src/core/save/ContainerSave.ts';
@@ -378,6 +379,19 @@ console.log('\n[战利品随机耐久（批次 573）]');
   check('0~1 的随机数映射到 10%~90%', low < high);
   equal('没有耐久的物品不塞损耗', lootDurabilityDamage(Item.STICK, 0.5), 0);
   check('损耗不会直接打满', lootDurabilityDamage(pick, 1) < durabilityOf(pick));
+}
+
+console.log('\n[战利品随机附魔（批次 574）]');
+{
+  const pick = toolItemId('pickaxe', 'iron');
+  equal('概率没命中就不附魔', lootEnchantment(pick, 0.9, 0, 0), null);
+  equal('不能附魔的物品不会硬附', lootEnchantment(Item.STICK, 0, 0.5, 0.5), null);
+  const enchanted = lootEnchantment(pick, 0, 0.5, 0.5);
+  check('能附魔的装备会带一条', enchanted !== null);
+  const def = enchanted ? enchantmentById(enchanted.id) : undefined;
+  check('附魔 id 在附魔表里', def !== undefined);
+  check('等级在 1~最高级之间', (enchanted?.level ?? 0) >= 1 && (enchanted?.level ?? 0) <= (def?.maxLevel ?? 0));
+  check('附魔不超宝藏限制（非宝藏）', def?.treasure !== true);
 }
 
 console.log(`\n战利品测试：${passed} 通过 / ${failed} 失败`);

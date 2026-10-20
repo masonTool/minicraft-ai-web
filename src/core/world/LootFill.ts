@@ -27,6 +27,7 @@ import { PositionalRng } from '../gen/Features.ts';
 import type { DimensionId } from '../gen/Dimension.ts';
 import type { ItemStack } from '../container/Inventory.ts';
 import { durabilityOf } from '../registry/items.ts';
+import { enchantKindOf, offeringFor } from '../crafting/Enchanting.ts';
 
 export interface LootFillStats {
   /** 本次填了几只箱子 */
@@ -106,6 +107,39 @@ export function lootDurabilityDamage(itemId: number, roll: number): number {
   return Math.min(max - 1, Math.max(1, Math.floor(max * fraction)));
 }
 
+/**
+ * 战利品附魔（批次 574）：结构箱子里的装备有 25% 概率带一条随机附魔。
+ *
+ * 只在"能附魔"的物品上生效（工具/盔甲/弓），从附魔台的同一张表里按权重挑，
+ * 等级 1~最高级。原版还分宝藏附魔与多条附魔，这里只做一条非宝藏。
+ *
+ * @param chanceRoll 命中概率用
+ * @param pickRoll 选附魔用（按权重）
+ * @param levelRoll 选等级用
+ */
+export function lootEnchantment(
+  itemId: number,
+  chanceRoll: number,
+  pickRoll: number,
+  levelRoll: number,
+): { id: string; level: number } | null {
+  if (chanceRoll >= 0.25) return null;
+  const pool = offeringFor(enchantKindOf(itemId));
+  if (pool.length === 0) return null;
+  const total = pool.reduce((sum, def) => sum + def.weight, 0);
+  let target = Math.max(0, Math.min(1, pickRoll)) * total;
+  let chosen = pool[0]!;
+  for (const def of pool) {
+    target -= def.weight;
+    if (target <= 0) {
+      chosen = def;
+      break;
+    }
+  }
+  const level = Math.max(1, Math.min(chosen.maxLevel, 1 + Math.floor(Math.max(0, Math.min(1, levelRoll)) * chosen.maxLevel)));
+  return { id: chosen.id, level };
+}
+
 /** 把掷出来的战利品塞进**随机的空格子**（原版也是随机槽位，看起来才像"翻出来的"） */
 function placeLoot(
   chest: { get(index: number): ItemStack | null; set(index: number, stack: ItemStack | null): void },
@@ -123,6 +157,10 @@ function placeLoot(
     free.splice(pick, 1);
     // 装备带随机耐久（批次 573）：同一只箱子的耐久也由位置随机源决定
     const damage = lootDurabilityDamage(stack.id, rng.next());
-    chest.set(slot, damage > 0 ? { id: stack.id, count: stack.count, damage } : { id: stack.id, count: stack.count });
+    const enchant = lootEnchantment(stack.id, rng.next(), rng.next(), rng.next());
+    const item: ItemStack = { id: stack.id, count: stack.count };
+    if (damage > 0) item.damage = damage;
+    if (enchant) item.enchants = { [enchant.id]: enchant.level };
+    chest.set(slot, item);
   }
 }
