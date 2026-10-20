@@ -38,6 +38,7 @@ export interface Inventory {
   toggle(): void;
   close(): void;
   openCraftingTable(): void;
+  setCreativeMode(enabled: boolean): void;
   isOpen(): boolean;
   setSelected(index: number): void;
   setSlots(slots: readonly (ItemStack | null)[]): void;
@@ -128,6 +129,7 @@ export function createInventory(
   let open = false;
   let selected = 0;
   let mode: 'inventory' | 'creative' | 'recipes' = 'inventory';
+  let creativeAllowed = false;
   let pendingGive: number | null = null;
   let pendingCraft: number | null = null;
   let pendingCommand: 'quick' | 'drop' | null = null;
@@ -294,13 +296,15 @@ export function createInventory(
       }
     }
 
-    drawButton(
-      context,
-      creativeButton,
-      mode === 'creative' ? 'BACK TO BAG' : 'CREATIVE',
-      'normal',
-      16,
-    );
+    if (creativeAllowed) {
+      drawButton(
+        context,
+        creativeButton,
+        mode === 'creative' ? 'BACK TO BAG' : 'CREATIVE',
+        'normal',
+        16,
+      );
+    }
     drawButton(
       context,
       recipesButton,
@@ -465,6 +469,11 @@ export function createInventory(
       craftSize = 2;
       setOpen(false);
     },
+    setCreativeMode(enabled: boolean): void {
+      creativeAllowed = enabled;
+      if (!enabled && mode === 'creative') mode = 'inventory';
+      redraw();
+    },
     openCraftingTable(): void {
       if (open) drainCrafting();
       clearTooltip();
@@ -498,7 +507,7 @@ export function createInventory(
         setOpen(false);
         return true;
       }
-      if (contains(creativeButton, x, y)) {
+      if (creativeAllowed && contains(creativeButton, x, y)) {
         mode = mode === 'creative' ? 'inventory' : 'creative';
         drag = null;
         pendingGive = null;

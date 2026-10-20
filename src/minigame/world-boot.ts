@@ -559,6 +559,7 @@ async function boot(): Promise<void> {
     savedSettings,
   );
 
+  ui.setCreativeMode(gameMode === 'creative');
   let playerHealth = Math.max(1, loadedPlayer?.health ?? 20);
   let playerFood = loadedPlayer?.food ?? 20;
   let playerAir = loadedPlayer?.air ?? 300;

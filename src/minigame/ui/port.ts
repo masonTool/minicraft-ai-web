@@ -26,6 +26,7 @@ export interface MiniGameUi {
   syncInventory(slots: readonly (ItemStack | null)[], selectedSlot: number): void;
   toggleInventory(): void;
   openCraftingTable(): void;
+  setCreativeMode(enabled: boolean): void;
   isInventoryOpen(): boolean;
   handleInventoryDown(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
   handleInventoryMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
@@ -149,6 +150,9 @@ export function createCanvasUi(
     toggleInventory(): void {
       if (pause.isOpen() || settings.isOpen() || chestScreen.isOpen() || furnaceScreen.isOpen()) return;
       inventory.toggle();
+    },
+    setCreativeMode(enabled: boolean): void {
+      inventory.setCreativeMode(enabled);
     },
     openCraftingTable(): void {
       pause.close();
