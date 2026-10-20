@@ -1433,13 +1433,38 @@ const pushChat = (line: string): void => {
 const sendChat = (value: string): void => {
   const text = value.trim();
   if (!text) return;
-  if (text === '/help') {
-    pushChat('/help · /seed · /time');
+  const [command, ...args] = text.split(/\s+/);
+  if (command === '/help') {
+    pushChat('/help · /seed · /pos · /heal');
+    pushChat('/gamemode survival|creative · /tp x y z');
     pushChat('聊天为 v2 本地日志，尚未接联机');
-  } else if (text === '/seed') {
+  } else if (command === '/seed') {
     pushChat(`种子 ${currentWorld?.seed ?? '-'}`);
-  } else if (text === '/time') {
+  } else if (command === '/pos' || command === '/time') {
     pushChat(`坐标 ${physics.x.toFixed(1)}, ${physics.y.toFixed(1)}, ${physics.z.toFixed(1)}`);
+  } else if (command === '/heal') {
+    health = 20;
+    food = 20;
+    saturation = 5;
+    pushChat('生命/饥饿已恢复');
+  } else if (command === '/gamemode') {
+    const mode = args[0] === 'creative' ? 'creative' : args[0] === 'survival' ? 'survival' : null;
+    if (!mode) {
+      pushChat('用法：/gamemode survival|creative');
+    } else if (currentWorld) {
+      currentWorld.gameMode = mode;
+      registry.update(currentWorld.id, { gameMode: mode });
+      pushChat(`游戏模式：${mode === 'creative' ? '创造' : '生存'}`);
+    }
+  } else if (command === '/tp') {
+    const [x, y, z] = args.map(Number);
+    if (![x, y, z].every((n) => Number.isFinite(n))) {
+      pushChat('用法：/tp x y z');
+    } else {
+      physics.teleport(x!, y!, z!);
+      fallPeakY = y!;
+      pushChat(`已传送到 ${x}, ${y}, ${z}`);
+    }
   } else {
     pushChat(`我：${text}`);
   }
