@@ -5442,6 +5442,9 @@ class App {
    */
   private savedEntityOf(entity: object): SavedEntity | null {
     if (entity instanceof ItemEntity) {
+      // 白板物品不写 extras：绝大多数掉落物都是"一堆圆石"，
+      // 给每条记录都塞一个空对象会让存档无止境地胖下去
+      const extras = Object.keys(entity.extras).length > 0 ? { ...entity.extras } : undefined;
       return {
         kind: 'item',
         itemId: entity.itemId,
@@ -5449,6 +5452,7 @@ class App {
         x: entity.x,
         y: entity.y,
         z: entity.z,
+        extras,
       };
     }
     if (entity instanceof Mob) {
@@ -5466,6 +5470,9 @@ class App {
         leashed: entity.leashed,
         sheared: entity.sheared,
         woolColor: entity.woolColor,
+        baby: entity.baby,
+        growSeconds: entity.growRemaining,
+        effects: entity.effects.count > 0 ? entity.effects.serialize() : undefined,
       };
     }
     return null;
@@ -5483,7 +5490,9 @@ class App {
   /** 把一条存档记录造回实体（批次 258） */
   private spawnSavedEntity(record: SavedEntity): void {
     if (record.kind === 'item') {
-      this.entities.spawn(new ItemEntity(record.itemId, record.count, record.x, record.y, record.z));
+      this.entities.spawn(
+        new ItemEntity(record.itemId, record.count, record.x, record.y, record.z, undefined, record.extras),
+      );
       return;
     }
     const type = mobTypeById(record.typeId);
@@ -5496,6 +5505,9 @@ class App {
     mob.leashed = record.leashed;
     mob.sheared = record.sheared;
     mob.woolColor = record.woolColor;
+    // 幼体必须在 `spawn` 之前设好：它要一并把碰撞盒缩到 BABY_SCALE
+    if (record.baby) mob.makeBaby(record.growSeconds);
+    mob.effects.restore(record.effects);
     this.entities.spawn(mob);
     // 被牵的只记最后一只（与 `toggleLeash` 的"一次一只"一致）
     if (mob.leashed) this.leashedMob = mob;

@@ -703,6 +703,8 @@ console.log('\n[生物 / 掉落物的区块寄存（批次 258）]');
     leashed: true,
     sheared: true,
     woolColor: 3,
+    baby: false,
+    growSeconds: 0,
   });
   parking.park('overworld', 0, 0, { kind: 'item', itemId: 12, count: 3, x: 6, y: 65, z: 6 });
   check('同一区块能存生物与掉落物', parking.size === 2, `${parking.size}`);
@@ -735,6 +737,129 @@ console.log('\n[生物 / 掉落物的区块寄存（批次 258）]');
     { dimension: 'overworld', kind: 'mob', typeId: '', x: 1, y: 2, z: 3 },
   ] as never);
   check('脏记录全部跳过', dirty.size === 0, `${dirty.size}`);
+}
+
+console.log('\n[实体的附加数据随存档往返（批次 445）]');
+{
+  // JSON 往返是真实存档的路径：Date/undefined/函数都会在这里现原形
+  const parking = new EntityParking();
+  parking.park('overworld', 0, 0, {
+    kind: 'mob',
+    typeId: 'cow',
+    x: 1,
+    y: 64,
+    z: 1,
+    yaw: 0,
+    health: 10,
+    tamed: false,
+    sitting: false,
+    leashed: false,
+    sheared: false,
+    woolColor: 0,
+    baby: true,
+    growSeconds: 321,
+    effects: [{ id: 'poison', amplifier: 1, ticks: 200, ambient: false }],
+  });
+  parking.park('overworld', 0, 0, {
+    kind: 'item',
+    itemId: 3,
+    count: 1,
+    x: 2,
+    y: 64,
+    z: 2,
+    extras: {
+      damage: 12,
+      enchants: { efficiency: 3 },
+      name: '镐子',
+      contents: [{ id: 7, count: 2 }, null, { id: 9, count: 1, damage: 4 }],
+    },
+  });
+
+  const round = new EntityParking();
+  round.restoreAll(JSON.parse(JSON.stringify(parking.snapshotAll())) as never);
+  const back = round.take('overworld', 0, 0);
+  const mob = back.find((r) => r.kind === 'mob');
+  const item = back.find((r) => r.kind === 'item');
+
+  check(
+    '幼体标记与剩余成长秒数原样带回',
+    mob?.kind === 'mob' && mob.baby && mob.growSeconds === 321,
+    JSON.stringify(mob),
+  );
+  check(
+    '生物的状态效果原样带回',
+    mob?.kind === 'mob' && mob.effects?.[0]?.id === 'poison' && mob.effects[0]?.ticks === 200,
+    JSON.stringify(mob),
+  );
+  check(
+    '掉落物的耐久/附魔/改名原样带回',
+    item?.kind === 'item' &&
+      item.extras?.damage === 12 &&
+      item.extras?.enchants?.efficiency === 3 &&
+      item.extras?.name === '镐子',
+    JSON.stringify(item),
+  );
+  check(
+    '潜影盒内容物（含空槽）原样带回',
+    item?.kind === 'item' && item.extras?.contents?.length === 3 && item.extras.contents[1] === null,
+    JSON.stringify(item?.kind === 'item' ? item.extras?.contents : null),
+  );
+
+  // 脏数据：非法效果项被剔除、非幼体的成长计时归零、非法附魔等级不落盘
+  const dirty = new EntityParking();
+  dirty.restoreAll([
+    {
+      dimension: 'overworld',
+      kind: 'mob',
+      typeId: 'cow',
+      x: 1,
+      y: 2,
+      z: 3,
+      baby: false,
+      growSeconds: 999,
+      effects: [{ id: '', amplifier: 0, ticks: 0, ambient: false }, { id: 'poison', ticks: -5 }],
+    },
+    {
+      dimension: 'overworld',
+      kind: 'item',
+      itemId: 1,
+      count: 1,
+      x: 1,
+      y: 2,
+      z: 3,
+      extras: { damage: -3, enchants: { efficiency: 0 }, name: '' },
+    },
+  ] as never);
+  const dirtyBack = dirty.take('overworld', 0, 0);
+  const dirtyMob = dirtyBack.find((r) => r.kind === 'mob');
+  const dirtyItem = dirtyBack.find((r) => r.kind === 'item');
+  check(
+    '成年体的残留成长计时归零',
+    dirtyMob?.kind === 'mob' && dirtyMob.baby === false && dirtyMob.growSeconds === 0,
+    JSON.stringify(dirtyMob),
+  );
+  check(
+    '非法效果项被整条剔除（不留下空数组）',
+    dirtyMob?.kind === 'mob' && dirtyMob.effects === undefined,
+    JSON.stringify(dirtyMob),
+  );
+  check(
+    '非法附加数据不落盘（负耐久/0 级附魔/空名字）',
+    dirtyItem?.kind === 'item' && dirtyItem.extras === undefined,
+    JSON.stringify(dirtyItem),
+  );
+
+  // 实体那一侧：makeBaby 要能接着存档里的成长进度走
+  const cow = createMob(mobTypeById('cow')!, 0, 64, 0);
+  cow.makeBaby(123);
+  check('makeBaby 接受剩余成长秒数', cow.baby && cow.growRemaining === 123, `${cow.growRemaining}`);
+  cow.effects.restore([{ id: 'poison', amplifier: 2, ticks: 100, ambient: false }]);
+  const dumped = cow.effects.serialize();
+  check(
+    '生物的效果能存能读',
+    dumped.length === 1 && dumped[0]?.id === 'poison' && dumped[0]?.amplifier === 2,
+    JSON.stringify(dumped),
+  );
 }
 
 console.log('\n[穿透箭：命中后继续飞（批次 266）]');

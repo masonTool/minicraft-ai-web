@@ -1643,13 +1643,21 @@ export class Mob extends Entity {
    * 变成幼体（生成时调）。
    *
    * 碰撞盒一起缩小——不然小小的身体配着成年的碰撞盒，会出现"隔着半格就撞上"的怪手感。
+   *
+   * @param growSeconds 剩余成长秒数（批次 445：读档恢复时传存档里的值，
+   *        否则一只快要长大的幼体读档后会重新开始 20 分钟）
    */
-  makeBaby(): void {
+  makeBaby(growSeconds: number = BABY_GROW_SECONDS): void {
     this.baby = true;
     this.width = this.type.width * BABY_SCALE;
     this.height = this.type.height * BABY_SCALE;
-    this.growTimer = BABY_GROW_SECONDS;
+    this.growTimer = Number.isFinite(growSeconds) ? Math.max(1, growSeconds) : BABY_GROW_SECONDS;
     this.fedCount = 0;
+  }
+
+  /** 幼体剩余成长秒数（存档用；成年体返回 0） */
+  get growRemaining(): number {
+    return this.baby ? Math.max(0, this.growTimer) : 0;
   }
 
   /** 直接让这只生物进入求爱（测试与命令用，省得先喂一遍） */
