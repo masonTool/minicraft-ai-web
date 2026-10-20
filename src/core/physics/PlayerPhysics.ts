@@ -86,6 +86,14 @@ export interface PhysicsWorld extends CollisionWorld {
    * 玩家看到的就是"顶着仙人掌一直抖"。同样做成可选成员，老 stub 世界不用改。
    */
   isHazardous?(x: number, y: number, z: number): boolean;
+  /**
+   * 这一格的水把实体往哪推（F9 尾巴，批次 447）。
+   *
+   * 可选成员：老的 stub 世界不必实现，不给就是"水不推人"。
+   * 判据收在 `world/FluidFlow.ts`（纯函数），物理层只负责把返回的
+   * **目标速度偏移**折进这一帧的速度里。
+   */
+  waterFlow?(x: number, y: number, z: number): { x: number; y: number; z: number } | null;
 }
 
 function approach(current: number, target: number, maxDelta: number): number {
@@ -261,8 +269,16 @@ export class PlayerPhysics {
     const speed = baseSpeed * speedMultiplier * (inCobweb ? COBWEB_SPEED_FACTOR : 1);
 
     const accelerate = flying ? 90 : this.onGround ? 48 : 10;
-    this.vx = approach(this.vx, dirX * speed, accelerate * dt);
-    this.vz = approach(this.vz, dirZ * speed, accelerate * dt);
+    /**
+     * 水流推动（F9 尾巴，批次 447）。
+     *
+     * 折进**目标速度**而不是每帧加一个增量：`approach` 下一帧就会把增量拉回去，
+     * 那样"站在水流里"的表现会和静水一模一样（这一条在实现时先写错过一次）。
+     * 逆流时玩家的游泳速度仍然大于它，所以还能前进——与原版一致。
+     */
+    const flow = this.inWater && !flying ? (world.waterFlow?.(this.x, this.y + 0.4, this.z) ?? null) : null;
+    this.vx = approach(this.vx, dirX * speed + (flow?.x ?? 0), accelerate * dt);
+    this.vz = approach(this.vz, dirZ * speed + (flow?.z ?? 0), accelerate * dt);
 
     if (flying) {
       const vertical = (input.jump ? 1 : 0) - (input.sneak ? 1 : 0);
@@ -279,7 +295,8 @@ export class PlayerPhysics {
       // 被动下沉：**收敛到 -0.8**，不是按重力一直加速。
       // 原来这里是 `vy -= GRAVITY * 0.25 * dt`，60 帧能掉到 -4——比"主动下潜"还快，
       // 于是"按潜行往下去"反而比"不动"更慢，一测就露馅（批次 428 的断言抓到的）。
-      this.vy = approach(this.vy, PASSIVE_SINK_SPEED, 6 * dt);
+      // 水柱（上方也是水）把目标下沉速度再压低一点，"站在瀑布下"才看得出来
+      this.vy = approach(this.vy, PASSIVE_SINK_SPEED + (flow?.y ?? 0), 6 * dt);
       if (input.jump) {
         // 上浮（原版：水里按跳跃=往上划）
         this.vy = 3.4 * jumpMultiplier;

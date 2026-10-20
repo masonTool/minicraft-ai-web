@@ -12,6 +12,7 @@
 import { Chunk } from './Chunk.ts';
 import { ChunkEdits } from '../save/ChunkEdits.ts';
 import { BlockEntityStore } from './BlockEntityStore.ts';
+import { waterFlowAt, type FluidFlow } from './FluidFlow.ts';
 import { heightToY, type HeightmapKind } from './Heightmap.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import type { WorldType } from '../gen/WorldType.ts';
@@ -361,6 +362,23 @@ export class World {
     if (worldY < -64 || worldY >= 320) return false;
     return blockDef(this.getBlock(worldX, worldY, worldZ)).liquid;
   }
+
+  /**
+   * 水流推动（F9 尾巴，批次 447）：物理层只问"这一格的水往哪推"。
+   *
+   * 判据在 `FluidFlow.ts`（纯函数）；这里只做一次"能力适配"——
+   * 那个模块要的是 `getState`，而世界里的入口叫 `getBlockState`。
+   */
+  waterFlow(worldX: number, worldY: number, worldZ: number): FluidFlow | null {
+    if (worldY < -64 || worldY >= 320) return null;
+    return waterFlowAt(this.flowWorld, worldX, worldY, worldZ);
+  }
+
+  /** `WaterFlow` 需要的最小读接口（复用箭头函数，别每次调用都造两个闭包） */
+  private readonly flowWorld = {
+    getBlock: (x: number, y: number, z: number): number => this.getBlock(x, y, z),
+    getState: (x: number, y: number, z: number): number => this.getBlockState(x, y, z),
+  };
 
   /** 该方块是否阻挡射线（选取方块用） */
   isSelectable(worldX: number, worldY: number, worldZ: number): boolean {

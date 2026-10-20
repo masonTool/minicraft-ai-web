@@ -22,6 +22,9 @@ import {
 } from '../src/core/physics/PlayerPhysics.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 import { moveBody } from '../src/core/physics/EntityMotion.ts';
+import { FLOW_DRIFT_SPEED, waterFlowAt, type FlowWorld } from '../src/core/world/FluidFlow.ts';
+import { Block } from '../src/core/registry/blocks.ts';
+import { withFluidLevel } from '../src/core/registry/blockState.ts';
 
 let passed = 0;
 let failed = 0;
@@ -488,6 +491,79 @@ console.log('\n[蛛网减速（批次 441）]');
   const noHook = standOnGround(2.5);
   for (let i = 0; i < 40; i++) noHook.update(plain, input({ forward: 1 }), YAW_PLUS_X, DT, false);
   check('没接 isCobweb 的世界不受影响', Math.abs(noHook.x - stuck.x) > 0.2, `x=${noHook.x.toFixed(2)}`);
+}
+
+console.log('\n[水流推动（批次 447）]');
+{
+  // 假水世界：cells 里有键的就是水，值是液面等级（0 = 水源，越大越薄）
+  const cells = new Map<string, number>();
+  const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+  const put = (x: number, y: number, z: number, level: number): void => {
+    cells.set(key(x, y, z), withFluidLevel(0, level));
+  };
+  const flowWorld: FlowWorld = {
+    getBlock: (x, y, z) => (cells.has(key(x, y, z)) ? Block.WATER : Block.AIR),
+    getState: (x, y, z) => cells.get(key(x, y, z)) ?? 0,
+  };
+
+  // 一潭静水：四邻同厚度 → 不推
+  put(0, 0, 0, 0);
+  put(1, 0, 0, 0);
+  put(-1, 0, 0, 0);
+  check('静水不推人', waterFlowAt(flowWorld, 0.5, 0.5, 0.5) === null);
+
+  // 水源在东边更薄的水旁 → 朝 +x 推
+  cells.clear();
+  put(0, 0, 0, 0);
+  put(1, 0, 0, 3);
+  const downstream = waterFlowAt(flowWorld, 0.5, 0.5, 0.5);
+  check(
+    '朝更薄的那一侧推（水源 → 下游）',
+    downstream?.x === FLOW_DRIFT_SPEED && downstream?.z === 0,
+    JSON.stringify(downstream),
+  );
+
+  // 上游（更厚）不加推力，只认下游
+  cells.clear();
+  put(0, 0, 0, 3);
+  put(-1, 0, 0, 1);
+  put(1, 0, 0, 5);
+  const bothSides = waterFlowAt(flowWorld, 0.5, 0.5, 0.5);
+  check('两侧都有水时只推向下游（等级更大的一侧）', bothSides?.x === FLOW_DRIFT_SPEED, JSON.stringify(bothSides));
+
+  // 上方也是水：水柱向下按
+  cells.clear();
+  put(0, 0, 0, 0);
+  put(0, 1, 0, 0);
+  const fall = waterFlowAt(flowWorld, 0.5, 0.5, 0.5);
+  check('水柱把人往下按', (fall?.y ?? 0) < 0, JSON.stringify(fall));
+
+  // 不是水 → null
+  cells.clear();
+  check('不是水就不推', waterFlowAt(flowWorld, 0.5, 0.5, 0.5) === null);
+
+  // ---- 接到玩家物理上：不按方向时被水带着走，静水里原地不动
+  const pool = (drift: number): PhysicsWorld => ({
+    collisionAt: (_x, y) => (y < 64 ? ('full' as const) : null),
+    isLiquid: () => true,
+    isClimbable: () => false,
+    waterFlow: () => ({ x: drift, y: 0, z: 0 }),
+  });
+
+  const pushed = standOnGround(2);
+  for (let i = 0; i < 120; i++) pushed.update(pool(FLOW_DRIFT_SPEED), input({}), YAW_PLUS_X, DT, false);
+  check('站在水里会被水流带着走（2 秒 > 0.8 格）', pushed.x - 2 > 0.8, `x=${pushed.x.toFixed(2)}`);
+
+  const still = standOnGround(2);
+  for (let i = 0; i < 120; i++) still.update(pool(0), input({}), YAW_PLUS_X, DT, false);
+  check('静水里不会被推走', Math.abs(still.x - 2) < 0.2, `x=${still.x.toFixed(2)}`);
+
+  // 逆流：玩家的游泳速度大于水流漂移，仍然能往前
+  const upstream = standOnGround(2);
+  for (let i = 0; i < 120; i++) {
+    upstream.update(pool(-FLOW_DRIFT_SPEED), input({ forward: 1 }), YAW_PLUS_X, DT, false);
+  }
+  check('逆流仍然游得动', upstream.x - 2 > 0.5, `x=${upstream.x.toFixed(2)}`);
 }
 
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);
