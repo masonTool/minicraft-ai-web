@@ -4075,8 +4075,10 @@ console.log('\n[切后台回来图标全空（批次 295）]');
   );
 
   // ---- ② 回前台：所有"画一次就缓存"的画布都要强制补一遍
+  // 批次 523 起这个方法多了一个 `retry` 参数（事件之后那一两帧再补一刀），
+  // 所以正则要允许可选参数 —— 否则整段取不到，下面的断言会全部"假失败"。
   const recoverBody =
-    /private recoverCanvasesAfterBackground\(\): void \{([\s\S]*?)\n  \}/.exec(appSrc)?.[1] ?? '';
+    /private recoverCanvasesAfterBackground\((?:retry = false)?\): void \{([\s\S]*?)\n  \}/.exec(appSrc)?.[1] ?? '';
   check(
     '补画覆盖六处：图集 / 快捷栏 / 背包 / 配方书 / 生命条 / 告示牌',
     [
@@ -4122,6 +4124,50 @@ console.log('\n[切后台回来图标全空（批次 295）]');
   check(
     '补画本身也记一条（带 hiddenMs，能看出是不是长时间后台之后）',
     appSrc.includes("diag.event('app', 'ui.canvas.recover', {") && appSrc.includes('hiddenMs: Math.round(hiddenMs)'),
+  );
+
+  // ---- ④ 批次 523：图集有**两张**画布，上传那张必须有自己的生命线
+  //
+  // 真机（2026-10-20 两份日志）：`atlas: "intact"` 之后整个世界白、只剩黑色生物；
+  // 退出重进 / 换世界都还是白，只有刷新才好。根因是"源画布还在、上传画布被清空"，
+  // 而 three 恢复上下文时重新上传的正是那张空画布。
+  check(
+    '上传画布也有自己的"丢/回"监听（不能只挂源画布）',
+    /uploadCanvas\.addEventListener\('contextlost'/.test(atlasSrc) &&
+      /uploadCanvas\.addEventListener\('contextrestored'/.test(atlasSrc),
+  );
+  check(
+    '重铺上传画布是一条独立的路（ensureUploaded），且会重传纹理',
+    /ensureUploaded\(\): boolean \{[\s\S]{0,400}this\.syncUploadCanvas\(\)[\s\S]{0,200}this\.texture\.needsUpdate = true/.test(
+      atlasSrc,
+    ),
+  );
+  check(
+    'repaint 同时检查两张画布（避免"源画布重画成功、上传仍是空"的半成品）',
+    /repaint\(\): boolean \{[\s\S]{0,400}is2dContextLost\(this\.context\) \|\| is2dContextLost\(this\.uploadContext\)/.test(
+      atlasSrc,
+    ),
+  );
+  check(
+    '补画无条件覆盖上传画布与图标缓存（不依赖源画布探针）',
+    recoverBody.includes('this.atlas.ensureUploaded()') && recoverBody.includes('clearBlockIconCache()'),
+  );
+  check(
+    'GL 上下文恢复后强制重铺图集（three 重传的可能是空画布）',
+    /'webglcontextrestored'[\s\S]{0,900}this\.atlas\.repaint\(\)/.test(appSrc) &&
+      /'webglcontextrestored'[\s\S]{0,1200}clearBlockIconCache\(\)/.test(appSrc),
+  );
+  check(
+    '进世界时兜底铺一次（图集是 boot 级单例，不然重进/换世界都还是白）',
+    appSrc.includes('const atlasUploaded = atlas.ensureUploaded();') &&
+      appSrc.includes("diag.event('app', 'atlas.ensure'"),
+  );
+  check(
+    '探针能区分"源画布"与"上传画布"（日志里才看得出是哪张丢了）',
+    atlasSrc.includes('probeUpload(): boolean | null') &&
+      atlasSrc.includes('probeSource(): boolean | null') &&
+      atlasSrc.includes('uploadSampleAt(') &&
+      probeSrc.includes('export function uploadSampleAt'),
   );
 }
 

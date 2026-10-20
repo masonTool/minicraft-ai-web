@@ -78,3 +78,31 @@ export function is2dContextLost(context: unknown): boolean {
   const api = context as { isContextLost?: () => boolean } | null;
   return typeof api?.isContextLost === 'function' ? api.isContextLost() : false;
 }
+
+/**
+ * 把"源图集画布"上的取样点换算到"上传图集画布"上（批次 523）。
+ *
+ * **为什么需要这条换算**：图集有两张画布——源画布每格 16×16 紧挨着，
+ * 上传画布每格 `stride`（= 16 + 两侧边距）且内容居中。系统回收 2D 后备存储时
+ * 是**按单张画布**决定的：真机上出现过"源画布还在、上传画布空了"，
+ * 于是 GPU 重新上传时拿到的是一整张透明图集（表现：整个世界被 alphaTest 丢掉，
+ * 只剩天空/云/雨这类不采样图集的东西）。
+ *
+ * 要在上传画布上问同一句话，就得把取样点搬过去：先按 `tileSize` 定位是哪一格，
+ * 再取格内偏移。
+ */
+export function uploadSampleAt(
+  sample: PixelSample,
+  columns: number,
+  tileSize: number,
+  stride: number,
+  padding: number,
+): PixelSample {
+  const index = Math.floor(sample.y / tileSize) * columns + Math.floor(sample.x / tileSize);
+  const col = index % columns;
+  const row = Math.floor(index / columns);
+  return {
+    x: col * stride + padding + (sample.x % tileSize),
+    y: row * stride + padding + (sample.y % tileSize),
+  };
+}

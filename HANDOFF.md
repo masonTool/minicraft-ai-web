@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1101（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1103（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **235**、进行中 **48**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -43,6 +43,15 @@ npm run dev            # http://localhost:5173
   —— 2026-10-15 对着 src/tools 真实实现逐条核对过 37 条；以后每完成一项顺手改这两份文件
 - ⚠️ **批次号撞过四次**（272~283 / 295-x / 303 / 499~500；其中 499/500 各有两个提交：`11f8606`
   刷怪密度 / `cde231c` 鞘翅、`f3226c7` 寻路 / `03ee988` 测试）：引用旧提交一律按 **hash**，本批取 **521**。
+- 批次 523（真机"压后台回来**世界全白 + 只剩黑色动物**、重进/换世界都白、只有刷新才好"；
+  日志 `T08-51-19`/`T10-26-43`）：两次都是 `resume.background` 后 15~35ms `gl.context.lost`、
+  1 秒后 restored，而 `ui.canvas.recover` 始终报 `atlas: "intact"`（帧号/触摸全程 60fps）。
+  根因：图集有**两张**画布，探针只测源画布；这次"源还在、上传画布 `uploadCanvas`（4 倍大）空了"
+  → 报 intact → three 恢复上下文后从空画布重传 → 地形全被 `covered < 0.5` discard，只剩天空/云/雨
+  （白），动物不采样图集（`instanceColor`）→ 深色剪影；`atlas` 是 `boot()` 级单例，空图集被带进
+  下一局（这就是"重进也白"）。修法：两张画布都挂事件、`repaint()` 双上下文检查、`ensureUploaded()`、
+  恢复时强制 `repaint()`、回前台补两刀、`App` 构造兜底。埋点带 `uploadBefore/uploadAfter/sourcePixels`。
+  门禁：`canvas-probe` 13→17、`test:ui` 875→883、160 套全绿。⚠️ `Sky` 的云/日月纹理仍无重画入口。
 - 批次 521（画质收尾 + 触屏默认值；用户反馈"斜线有毛刺 / 动物建模略糙"）：
   ① 描边改**屏幕空间 ribbon**：`LineSegments` 的 `linewidth` 在 WebGL 里不生效（1px 硬边、
      斜棱成阶梯），现在按像素算宽 + 两侧渐隐 = 自带抗锯齿，12 棱 × 2 三角形一次提交。
@@ -66,15 +75,6 @@ npm run dev            # http://localhost:5173
   ④ 零成本：`Math.round(1000/60)=17ms` 把 60 帧压成 **30 帧**（120Hz 变 40 帧且不均）；
      near 0.1 → **0.25**；水面起伏按距离渐隐 + 云层各向异性；天空/雾加 **±0.5/255 Bayer 抖色**。
   （MSAA 当批没做，521 补上并留了回退开关。）
-- 批次 501（持久化，J11 尾巴）：**村民的职业与交易进度进存档**。`VillagerSavedState`
-  （职业 / 交易经验 / 每条交易的已用次数）挂到 `SavedMob.villager`，无业村民不写这个键；
-  读档时 `Villager.restoreState` 按"职业 + 经验"**重建等级与交易清单**（不存派生值，
-  改交易表后老存档自动跟上），`uses` 长度与重建结果对不上时**整份丢弃**——
-  错位会把"这一条卖完了"落到另一条交易上，比次数重置难查得多。
-  写入口在 `savedEntityOf`、读入口在 `spawnSavedEntity`（必须在 `spawn` 之前，
-  否则第一帧 AI 会先重新认领）。认领的工作站坐标仍不落盘（只用于显示）。
-  `test:villager` 122 → **141 条**（往返 / 脏数据 6 类 / 寄存 JSON 往返）。
-  ⚠️ 仍是 `[~]`：村民不会走去上班、没有每日刷新与价格浮动（批次 507 的计划）。
 - 批次 502（物品数据，E21 尾巴 / 织布机前置）：**旗帜图案跟着物品走**。
   `ItemStack.bannerPattern`（1~4，0 不写字段）补进四处链路
   （`restoreStack` / `stackExtras` / `sameExtras` / `Transfer.cloneExtras`），

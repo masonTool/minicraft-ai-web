@@ -705,6 +705,7 @@ import { EntityRenderer } from './render/EntityRenderer.ts';
 import { InventoryScreen } from './ui/InventoryScreen.ts';
 import { TouchControls, bindHotbarTouch, isTouchDevice } from './ui/TouchControls.ts';
 import { drawItemIcon } from './ui/ItemIcon.ts';
+import { clearBlockIconCache } from './ui/BlockIcon.ts';
 import { updateDurabilityBar } from './ui/SlotVisuals.ts';
 import {
   blockForItem,
@@ -1915,6 +1916,18 @@ class App {
     );
     this.camera.rotation.order = 'YXZ';
 
+    // 图集是 `boot()` 建的**跨世界单例**（`new TextureAtlas()` 只跑一次）：
+    // 上一局如果赶上"上传画布被系统清空"，这张空图集会被原样带进下一局，
+    // 表现就是"退出重进、换世界都还是白，非得刷新页面"。每次进世界先铺一遍
+    // 上传画布（1ms 量级），让"重进游戏"也成为一条自愈路径，而不只是刷新。
+    // 进世界这一刻上传画布还有没有内容：`false` = 从上一局带进来的空图集（自愈命中的证据）
+    const atlasUploadBefore = atlas.probeUpload();
+    const atlasUploaded = atlas.ensureUploaded();
+    diag.event('app', 'atlas.ensure', {
+      upload: atlasUploaded ? 'synced' : 'pending',
+      uploadBefore: atlasUploadBefore,
+      uploadAfter: atlas.probeUpload(),
+    });
     // 贴图尺寸与内缩交给着色器：贪心网格化合并出的大四边形要沿面平铺贴图
     const atlasShape = { tileSpan: atlas.tileSpan, tileInset: atlas.tileInset };
     this.solidMaterial = new VoxelMaterial(atlas.texture, atlasShape);
@@ -2606,16 +2619,32 @@ class App {
    * 而本项目的图标全是"从图集裁一刀、画一次就缓存"的产物，缓存失效条件只有
    * "数据变了"，所以回来后没有任何一条路径会重画。
    *
-   * 修复不依赖"到底是哪张画布被回收"：**所有一次性画布一起补**。
-   * 图集是唯一昂贵的那张（25 万像素），所以先用取样点问一句"内容还在吗"。
+   * ## 批次 523：补上"派生画布"这一半
+   *
+   * 上面那套只覆盖了**源**画布（`atlas.canvas`）与几张 UI 画布。真机上还有第二种形态：
+   * `gl.context.lost → restored`，而**上传画布（`uploadCanvas`，4 倍大）被单独清空**。
+   * 那时源画布探针报 `intact` → 什么都不补 → three 重新上传一张空图集 →
+   * 地形全被 `alphaTest` 丢掉、只剩天空/云/雨（白）和不采样图集的纯色生物（黑）。
+   * 更糟的是图集是 `boot()` 建的**跨世界单例**，所以退出重进、换世界都还是白，
+   * 只有刷新页面才会 `new TextureAtlas()`。
+   *
+   * 因此这里补三件"无条件"的事：重铺上传画布、作废方块图标缓存、再重画 UI 画布。
    */
-  private recoverCanvasesAfterBackground(): void {
+  private recoverCanvasesAfterBackground(retry = false): void {
     const hiddenMs = this.hiddenAtMs > 0 ? performance.now() - this.hiddenAtMs : 0;
     this.hiddenAtMs = 0;
 
+    // 补之前先留一份"上传画布还有没有内容"：这就是"世界全白"的直接判据
+    // （`false` = 空了，`null` = 读不出来，`true` = 还在）
+    const uploadBefore = this.atlas.probeUpload();
     const repainted = this.atlas.ensurePixels();
+    // 上传画布与源画布是**两张**画布、分开回收：源画布重画过就不必再铺一次
+    const uploaded = repainted || this.atlas.ensureUploaded();
+    // 等轴方块图标缓存只在 `atlas.revision` 变化时失效；源画布"intact"时 revision 不变，
+    // 缓存里那些 34×34 的小画布即便被清空也不会重建 → 背包/快捷栏里的方块图标全空。
+    clearBlockIconCache();
     // 剩下的都是几十次 drawImage 的量级，无条件重画
-    this.refreshHotbar(); // 快捷栏 9 张（方块图标随 atlas.revision 自动重建）
+    this.refreshHotbar(); // 快捷栏 9 张（方块图标缓存刚作废 → 这里会重建）
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.recipeBook.isOpen) this.recipeBook.render();
     this.mobHealthBar.invalidate(); // 下一帧 show() 必重画
@@ -2623,8 +2652,36 @@ class App {
 
     diag.event('app', 'ui.canvas.recover', {
       atlas: repainted ? 'repainted' : 'intact',
+      // `pending` = 2D 上下文还丢着，等它自己的 `contextrestored`
+      upload: uploaded ? 'synced' : 'pending',
+      // 三态探针：true/false/null（null = 读不出来）。和上面的 atlas 成对看，
+      // 才分得清"源画布丢"与"上传画布丢"——这两者的修法不一样（见文件头注释）。
+      uploadBefore,
+      uploadPixels: this.atlas.probeUpload(),
+      sourcePixels: this.atlas.probeSource(),
       hiddenMs: Math.round(hiddenMs),
+      // retry = 事件之后那一两帧的补刀（不是玩家又切了一次后台）
+      retry,
     });
+  }
+
+  /**
+   * 回前台 / GL 上下文恢复之后再补一轮（批次 523）。
+   *
+   * `recoverCanvasesAfterBackground()` 只在事件到达那一刻跑一次；如果此时某张 2D
+   * 上下文还没恢复，`drawImage` 全是空操作，而之后没有任何一次重画。
+   * 这里用"下一帧 + 400ms"两次幂等补刀；成本可忽略（上传画布重铺是 1ms 量级）。
+   *
+   * 日志上仍用同一个事件名，靠 `retry: true` 与 `hiddenMs: 0` 区分——
+   * 排查时"retry 里 upload 从 pending 变 synced"就是上下文晚于事件恢复的直接证据。
+   */
+  private scheduleCanvasRecover(): void {
+    const again = (): void => {
+      if (this.disposed) return;
+      this.recoverCanvasesAfterBackground(true);
+    };
+    requestAnimationFrame(again);
+    window.setTimeout(again, 400);
   }
 
   /**
@@ -2670,6 +2727,8 @@ class App {
     if (reason === 'visible') {
       // ⚠️ 必须排在开暂停菜单之前（玩家关掉暂停页时画布已经补好了）
       this.recoverCanvasesAfterBackground();
+      // 批次 523：2D 上下文可能比 visible 晚一步恢复，再补两刀（幂等）
+      this.scheduleCanvasRecover();
       this.touch?.recover('visible');
     } else {
       // 这次没走补画：别把"后台时长"的起点留给下一次
@@ -14565,16 +14624,22 @@ class App {
         if (!event.persisted) return;
         if (this.backgroundPaused || this.wasHidden) this.resumeFromBackground('visible');
         // 兜底：标记不知为何已被清掉时，至少把"画一次就缓存"的画布补一遍
-        else this.recoverCanvasesAfterBackground();
+        else {
+          this.recoverCanvasesAfterBackground();
+          this.scheduleCanvasRecover();
+        }
       },
       { signal: this.listeners.signal },
     );
     // 批次 295：上下文丢失以前**一条日志都没有**，真机出现"图标全空 / 画面全黑"
     // 只能靠猜。这里补齐四个点：图集 2D 上下文与渲染用 WebGL 上下文各"丢/回"。
+    // 批次 523：每条都带上"两张图集画布各自还在不在"，否则下次仍然只能猜是哪张丢了。
     this.atlas.canvas.addEventListener(
       'contextlost',
       () => {
-        diag.event('error', 'ui.atlas.context.lost', {});
+        diag.event('error', 'ui.atlas.context.lost', {
+          uploadPixels: this.atlas.probeUpload(),
+        });
       },
       { signal: this.listeners.signal },
     );
@@ -14582,24 +14647,50 @@ class App {
       'contextrestored',
       () => {
         // 图集自己会重画（`TextureAtlas` 构造器里那条监听），这里补图标画布与日志
-        diag.event('app', 'ui.atlas.context.restored', {});
+        diag.event('app', 'ui.atlas.context.restored', {
+          uploadPixels: this.atlas.probeUpload(),
+        });
         this.recoverCanvasesAfterBackground();
+        this.scheduleCanvasRecover();
       },
       { signal: this.listeners.signal },
     );
     this.renderer.domElement.addEventListener(
       'webglcontextlost',
       () => {
-        diag.event('error', 'gl.context.lost', {});
+        // 「整个世界白、只剩黑色生物」就是从这一行开始的。趁恢复之前先记下
+        // 两张图集画布的状态：恢复之后 probe 只会看到"已经被我们补好"的样子。
+        diag.event('error', 'gl.context.lost', {
+          sourcePixels: this.atlas.probeSource(),
+          uploadPixels: this.atlas.probeUpload(),
+        });
       },
       { signal: this.listeners.signal },
     );
     this.renderer.domElement.addEventListener(
       'webglcontextrestored',
       () => {
-        diag.event('app', 'gl.context.restored', {});
-        // three 会自己重建 GL 资源，但我们的 2D 画布（图标/文字）不会——一起补
+        // three 会重建 `properties` 并重新上传所有纹理，但**上传源**可能已经被系统清空：
+        // 源画布探针报 intact、上传画布却是空的 → GPU 拿到的是一整张透明图集
+        // → 地形/水/树叶/手持物全被 alphaTest 丢掉，只剩天空/云/雨（白）+ 纯色生物（黑）。
+        // 所以这里不依赖探针，直接重铺（含 GPU 重传），并作废派生图标缓存。
+        //
+        // `uploadBefore: false` 就是这类事故的直接指纹（补之前上传画布是空的）；
+        // `uploadAfter: true` 说明这一次真的补回来了。
+        const uploadBefore = this.atlas.probeUpload();
+        const repainted = this.atlas.repaint();
+        const uploaded = repainted || this.atlas.ensureUploaded();
+        clearBlockIconCache();
+        diag.event('app', 'gl.context.restored', {
+          repaint: repainted ? 'ok' : 'pending',
+          upload: uploaded ? 'synced' : 'pending',
+          uploadBefore,
+          uploadAfter: this.atlas.probeUpload(),
+          sourcePixels: this.atlas.probeSource(),
+        });
+        // three 自己重建 GL 资源，但我们的 2D 画布（图标/文字）不会——一起补
         this.recoverCanvasesAfterBackground();
+        this.scheduleCanvasRecover();
       },
       { signal: this.listeners.signal },
     );

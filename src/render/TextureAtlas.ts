@@ -35,7 +35,14 @@ import {
   TILE_STRIDE,
   type TileName,
 } from './atlasLayout.ts';
-import { canvasLooksLost, is2dContextLost, pickOpaqueSamples, type PixelSample } from './canvasProbe.ts';
+import {
+  PROBE_ALPHA_MIN,
+  canvasLooksLost,
+  is2dContextLost,
+  pickOpaqueSamples,
+  uploadSampleAt,
+  type PixelSample,
+} from './canvasProbe.ts';
 
 export { ATLAS_COLUMNS, TILE_SIZE, TILE_ORDER };
 export type { TileName } from './atlasLayout.ts';
@@ -6364,6 +6371,14 @@ export class TextureAtlas {
     canvas.addEventListener('contextrestored', () => {
       this.repaint();
     });
+    // ⚠️ 上传画布同样要挂（批次 523）：两张画布的后备存储是**分别**回收的。
+    // 少了这两条，"上传画布被清空"就永远等不到补救时机 —— 探针只看源画布还报 intact。
+    uploadCanvas.addEventListener('contextlost', () => {
+      this.repaintPending = true;
+    });
+    uploadCanvas.addEventListener('contextrestored', () => {
+      this.repaint();
+    });
 
     const texture = new THREE.CanvasTexture(uploadCanvas);
     // ⚠️ 保持 three 的默认行为（flipY = true）：上传时把画布整体垂直翻转，
@@ -6546,13 +6561,75 @@ export class TextureAtlas {
   }
 
   /**
+   * 只重铺**上传画布**（批次 523）。
+   *
+   * 为什么不能只靠 `ensurePixels()`：它问的是源画布"像素还在吗"。真机上出现过
+   * **源画布在、上传画布被清空**——这时源画布探针报 `intact`，于是什么都不做，
+   * 而 GPU 恢复上下文后从这张空画布重新上传，得到一整张透明图集：
+   * 地形/水/树叶/手持物全部被 `alphaTest` 丢掉，只剩天空、云、雨（白）和
+   * 不采样图集的纯色生物（黑）。
+   *
+   * 代价只有每格 8 次 `drawImage`（三百多格，1ms 量级），所以**无条件**跑：
+   * 它不重画程序化像素，也不碰 `revision`（图标缓存由调用方显式作废）。
+   *
+   * @returns 是否成功重铺；`false` 表示 2D 上下文正丢着（已挂 `repaintPending` 等恢复事件）
+   */
+  ensureUploaded(): boolean {
+    if (is2dContextLost(this.context) || is2dContextLost(this.uploadContext)) {
+      this.repaintPending = true;
+      return false;
+    }
+    this.syncUploadCanvas();
+    this.texture.needsUpdate = true;
+    return true;
+  }
+
+  /**
+   * 上传画布上"与源画布取样点同一批位置"还有没有不透明像素（**诊断用**）。
+   *
+   * - `true`  → 至少一个点有内容
+   * - `false` → 取样点全透明（上传画布被系统清空了，正是白屏的那次）
+   * - `null`  → 读不出来（上下文正丢着）或没有取样点，判不了
+   *
+   * ⚠️ 只写进诊断日志，**不要拿它当重画判据**：重建整张图集要几十毫秒，
+   * 而"重铺上传画布"只要 1ms——判据说白了也省不下什么，真丢了就直接铺。
+   */
+  probeUpload(): boolean | null {
+    if (this.samples.length === 0) return null;
+    if (is2dContextLost(this.uploadContext)) return null;
+    for (const sample of this.samples) {
+      const point = uploadSampleAt(sample, this.columns, TILE_SIZE, TILE_STRIDE, TILE_PADDING);
+      try {
+        const rgba = this.uploadContext.getImageData(point.x, point.y, 1, 1).data;
+        if ((rgba[3] ?? 0) >= PROBE_ALPHA_MIN) return true;
+      } catch {
+        return null;
+      }
+    }
+    return false;
+  }
+
+  /** 源画布内容还在不在（诊断用：与 `probeUpload()` 成对看才分得清是哪张丢了） */
+  probeSource(): boolean | null {
+    if (this.samples.length === 0) return null;
+    if (is2dContextLost(this.context)) return null;
+    try {
+      return this.pixelsIntact();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * 立刻重铺整张图集；上下文正丢着时只记一个待办（等恢复事件）。
    *
    * 重画之后必须走 `markTextureChanged()`：`revision++` 会让所有等轴方块图标
    * （`ui/BlockIcon.ts` 按图集像素拼的）整体作废，纹理也会重新上传一次。
    */
   repaint(): boolean {
-    if (is2dContextLost(this.context)) {
+    // 两张画布都要能画：源画布决定像素，上传画布决定 GPU 拿到什么。
+    // 只检查前者会出现"源画布重画成功、上传画布仍是空的"这种半成品状态。
+    if (is2dContextLost(this.context) || is2dContextLost(this.uploadContext)) {
       this.repaintPending = true;
       return false;
     }

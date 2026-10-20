@@ -14,6 +14,7 @@ import {
   canvasLooksLost,
   is2dContextLost,
   pickOpaqueSamples,
+  uploadSampleAt,
   type PixelSample,
 } from '../src/render/canvasProbe.ts';
 
@@ -124,5 +125,47 @@ describe('画布探针：上下文丢失 API 的兼容处理', () => {
   it('有该方法时如实返回', () => {
     expect(is2dContextLost({ isContextLost: () => true })).toBe(true);
     expect(is2dContextLost({ isContextLost: () => false })).toBe(false);
+  });
+});
+
+/**
+ * 源画布取样点 → 上传画布同一像素（批次 523）。
+ *
+ * 这条换算支撑的是"上传画布被单独清空"那个真机 bug：
+ * 图集有两张画布，源画布每格 16×16 紧挨着，上传画布每格 32（内容居中 + 四周 8 纹素边距）。
+ * 换算错了不会崩，只会让探针读到一个**边上**的像素（可能本来就是透明），
+ * 于是日志里永远报 `false`，排查时反而把人带偏。
+ */
+describe('画布探针：源画布 → 上传画布的坐标换算', () => {
+  const COLUMNS = 16;
+  const TILE = 16;
+  const STRIDE = 32;
+  const PAD = 8;
+  const at = (x: number, y: number): PixelSample =>
+    uploadSampleAt({ x, y }, COLUMNS, TILE, STRIDE, PAD);
+
+  it('第一格左上角落到内容区的左上角（跳过边距）', () => {
+    expect(at(0, 0)).toEqual({ x: PAD, y: PAD });
+  });
+
+  it('格内偏移保持原地不动（16 纹素内容不会被拉伸）', () => {
+    expect(at(5, 7)).toEqual({ x: PAD + 5, y: PAD + 7 });
+    expect(at(15, 15)).toEqual({ x: PAD + 15, y: PAD + 15 });
+  });
+
+  it('同一行的下一格：横向跳到下一个 stride', () => {
+    expect(at(16, 0)).toEqual({ x: STRIDE + PAD, y: PAD });
+    expect(at(16 + 3, 9)).toEqual({ x: STRIDE + PAD + 3, y: PAD + 9 });
+  });
+
+  it('换行：纵向跳到下一个 stride，列号归零', () => {
+    expect(at(0, 16)).toEqual({ x: PAD, y: STRIDE + PAD });
+    // 第 2 行第 0 列（按 16 列换行）
+    expect(at(16 * COLUMNS, 0)).toEqual({ x: PAD, y: STRIDE + PAD });
+    // 第 1 行第 3 列：横向 3 个 stride，纵向 1 个 stride
+    expect(at(16 * 3, 16 * 1)).toEqual({
+      x: STRIDE * 3 + PAD,
+      y: STRIDE + PAD,
+    });
   });
 });

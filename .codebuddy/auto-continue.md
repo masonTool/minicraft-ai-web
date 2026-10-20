@@ -126,14 +126,6 @@
 
 ---
 
-## 批次 519：林地府邸房间数（结构布局深度第一批）（2026-10-20）
-
-- [x] B519-1 规模 8~11 → **17~25** 间（一层 9~12、二层 6~9、顶层 2~4）
-- [x] B519-2 半径 16/12/8 → **21/16/10**，按"房间半宽 4 + 外壳 1"卡在结构半径 26 内
-- [x] B519-3 外壳按每层包围盒收进（原逻辑不动）；楼梯仍两层、垂直对齐
-- [x] B519-4 `test:structure` 补 8 条：每层放满 / 不重叠 / 走廊数 / 楼梯数 / 外壳不越界
-- ⚠️ 仍缺：要塞多层、堡垒变体（布局深度的后两批）
-
 ## 批次 521：要塞上下两层（结构深度第二批）（2026-10-20）
 
 - [x] B520-1 `StrongholdLayout` 增加 `includePortal`（下层不放第二个传送门）
@@ -150,3 +142,16 @@
 - [x] B522-4 `test:bastion` 106 → **110 条**（变体稳定/两种都出现/居住区墙体/鎏金/箱子/火把）
 - [x] B522-5 结构布局深度收口（府邸 / 要塞 / 堡垒）
 - ⚠️ 差异：原版 4 种拼图（bridge/housing/stables/treasure）仍未全做
+
+## 批次 523：图集"上传画布"被单独回收 → 世界全白（2026-10-20）
+
+> 真机两份日志（`T08-51-19` / `T10-26-43`）：压后台回来整个世界全白、只剩黑色动物；
+> 退出重进 / 换世界都白，只有刷新页面才恢复。
+
+- [x] B523-1 上传画布（512×2016）挂 `contextlost/contextrestored`；`repaint()` 双上下文检查
+- [x] B523-2 新增 `ensureUploaded()`（只重铺上传画布 + `needsUpdate`）与 `probeUpload()/probeSource()`
+- [x] B523-3 `webglcontextrestored` 里强制 `atlas.repaint()` + `clearBlockIconCache()`
+- [x] B523-4 回前台 / GL 恢复后补两刀（rAF + 400ms，幂等）；`App` 构造兜底 `ensureUploaded()`
+- [x] B523-5 埋点：`uploadBefore/uploadAfter/uploadPixels/sourcePixels/retry` + `atlas.ensure`
+- 门禁：`tests/canvas-probe` 13 → **17**、`test:ui` 875 → **883**、离线 160 套全绿
+- ⚠️ 未做：`Sky` 的云/日月 canvas 纹理仍没有重画入口（同类隐患，丢了只会少云/日月）
