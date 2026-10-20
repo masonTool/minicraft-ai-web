@@ -1708,4 +1708,20 @@ const frame = (): void => {
 };
 
 
+
+const wxTestApi = (globalThis as unknown as { wx?: { __v2Test?: unknown } }).wx;
+if (wxTestApi) {
+  wxTestApi.__v2Test = {
+    openChestAtFeet: () => {
+      const x = Math.floor(physics.x);
+      const y = Math.max(0, Math.floor(physics.y) - 1);
+      const z = Math.floor(physics.z);
+      world.setBlockAndUpdate(x, y, z, Block.CHEST);
+      openedContainer = world.containers.getOrCreateChest('overworld', x, y, z);
+      containerTitle = '箱子';
+      showContainer();
+      return { x, y, z };
+    },
+  };
+}
 requestAnimationFrame(frame);

@@ -81,6 +81,21 @@ const assert = (condition, message, state) => {
   await tap(512, 313);
   const resumed = await waitState((state) => !state.paused && state.screen === 'game', '暂停没有继续');
 
+  const liveFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
+  assert(liveFrame, '容器用例找不到 iframe');
+  const hook = await liveFrame.evaluate(() => {
+    try {
+      const api = wx.__v2Test;
+      return { has: typeof api?.openChestAtFeet, value: api?.openChestAtFeet?.() };
+    } catch (error) {
+      return { error: String(error) };
+    }
+  });
+  console.log('container hook', JSON.stringify(hook));
+  const containerOpen = await waitState((state) => state.containerOpen, '容器没有打开', 5000);
+  await tap(775, 108);
+  const containerClosed = await waitState((state) => !state.containerOpen, '容器没有关闭', 5000);
+
   await tap(550, 42);
   const inventory = await waitState((state) => state.inventoryOpen && state.screen === 'inventory', '背包没有打开');
   await tap(902, 56);
