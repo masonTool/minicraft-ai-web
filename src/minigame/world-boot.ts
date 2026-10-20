@@ -347,7 +347,12 @@ async function boot(): Promise<void> {
   platform.storage.set('wx.worldId', currentWorldId);
   platform.storage.set('wx.worlds', JSON.stringify(worlds));
   const world = new World(worldSeed, currentWorld.worldType, 1, createWorker);
-  const meshPool = new MeshWorkerPool(1, createWorker);
+  // 微信 worker 对含 ArrayBuffer 的嵌套消息序列化不完整，网格化请求会丢掉 chunks；
+  // 地形生成只传数字，可以继续走 worker；网格化改主线程执行。
+  const meshCreateWorker =
+    workerState === 'wx' ? () => createMainThreadWorker() : createWorker;
+  const meshPool = new MeshWorkerPool(1, meshCreateWorker);
+  console.log('[WX-020] mesh mode', workerState === 'wx' ? 'main' : 'worker');
   const chunkRenderer = new ChunkRenderer(
     scene,
     atlas,

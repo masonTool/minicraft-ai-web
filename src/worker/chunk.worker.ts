@@ -239,8 +239,16 @@ export function handleWorkerRequest(req: WorkerRequest): {
   response: WorkerResponse;
   transfer: Transferable[];
 } {
+  if (!req || typeof req !== 'object' || typeof req.type !== 'string') {
+    return { response: { type: 'pong', id: 0 }, transfer: [] };
+  }
+
   if (req.type === 'ping') {
     return { response: { type: 'pong', id: req.id }, transfer: [] };
+  }
+
+  if (req.type === 'mesh' && !Array.isArray(req.chunks)) {
+    return { response: { type: 'pong', id: 0 }, transfer: [] };
   }
 
   if (req.type === 'generate') {

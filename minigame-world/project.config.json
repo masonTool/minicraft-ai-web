@@ -33,7 +33,16 @@
   "libVersion": "latest",
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "type": "folder",
+        "value": ".weixin-minigame-helper"
+      },
+      {
+        "type": "folder",
+        "value": "workers/.cache"
+      }
+    ],
     "include": []
   },
   "isGameTourist": false,
