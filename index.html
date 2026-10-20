@@ -4752,6 +4752,27 @@
       /* ⚠️ 刻意**不**包含 `.inv-tabs`：那一行分类标签是"单行横向滚动"的
          （窄屏上一个都换行不下），锁掉就不会滚了（见 `ui-test` 里那条断言）。 */
 
+      /* ---------------- PC 专用显示增强（批次 539） ----------------
+         只匹配"精确指针 + 宽屏"：手机/平板/触摸本不受影响。
+         最近的尺寸都是按横屏手机（~844×390）压的，1440p/4K 上 HUD 会小得
+         像缩略图；这里把快捷栏、生命/饥饿、调试信息、聊天字号整体放大约 20%。
+         不改手机端的任何断点。 */
+      @media (pointer: fine) and (min-width: 1024px) {
+        #hud {
+          --hotbar-slot: 52px;
+          --hotbar-gap: 4px;
+          --hotbar-pad: 5px;
+        }
+        #hotbar .slot canvas { width: 40px; height: 40px; }
+        #vitals { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+        .vital-row svg.vital-icon { width: 22px; height: 22px; }
+        #debug { font-size: 13px; line-height: 1.5; }
+        #chat { --chat-open-size: 14px; }
+        .world-panel { font-size: 14px; }
+        .world-primary { font-size: 15px; padding: 10px; }
+        .world-secondary { font-size: 14px; padding: 10px; }
+      }
+
       /* ---------------- 减少动效（无障碍） ----------------
          系统里开了"减少动态效果"就把动画与过渡全部关掉：
          前庭功能敏感的人不该被面板缩放、脉冲这类动画晃到。

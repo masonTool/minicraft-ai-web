@@ -97,6 +97,8 @@ console.log('\n[默认设置]');
   // 批次 219：触摸端没有独立使用键，进食要借用"长按空处"，1.6 秒 + 280ms 太磨
   check('快速进食默认开（老存档缺字段也按开）', DEFAULT_SETTINGS.fastEat === true && fallback.fastEat === true);
   check('默认视距/视野在合理范围', DEFAULT_SETTINGS.viewDistance >= 4 && DEFAULT_SETTINGS.viewDistance <= 16 && DEFAULT_SETTINGS.fov >= 45 && DEFAULT_SETTINGS.fov <= 90);
+  // 批次 539：桌面默认视距拉到上限 16（手机进世界时会被换成 6）
+  check('桌面默认视距拉满 16', DEFAULT_SETTINGS.viewDistance === 16);
   // 批次 521：视野默认 60°（基岩版同款），范围 45~90
   check('视野默认 60°', DEFAULT_SETTINGS.fov === 60 && fallback.fov === 60, String(DEFAULT_SETTINGS.fov));
   // 批次 522：灵敏度重新定标 —— 默认显示 4，但实际倍率 = 上一版的最快档（4×）

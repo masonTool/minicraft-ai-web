@@ -424,7 +424,8 @@ export interface GameSettings {
 export const DEFAULT_SETTINGS: GameSettings = {
   settingsVersion: SETTINGS_VERSION,
   language: DEFAULT_LANGUAGE,
-  viewDistance: 12,
+  // 批次 539：桌面默认拉到滑杆上限 16；自适应仍会在掉帧时往回收。
+  viewDistance: 16,
   // 视野默认 60°（批次 521，用户要求；基岩版默认也是 60），范围 45~90 见 `FOV_MIN/FOV_MAX`
   fov: 60,
   volume: 0.7,
@@ -473,12 +474,12 @@ const STORAGE_KEY = 'bedrock-settings';
  * 这台设备的**视距上限**（批次 202 引入，批次 203 改语义）。
  *
  * ⚠️ 这里必须按设备分开，不能直接用 `DEFAULT_SETTINGS.viewDistance`：
- *  - 那个 12 是**桌面**默认值；手机上限是 `MOBILE_VIEW_DISTANCE_MAX`（8）；
+ *  - 桌面默认值现在是 16（视距滑杆上限）；手机上限是 `MOBILE_VIEW_DISTANCE_MAX`（8）；
  *  - 批次 202 之前"恢复默认"把 12 原样写回去，手机上等于一次性请求 489 个区块
  *    （`World.update` 在半径 12 下的候选圈；半径 8 是 225 个）——体感就是"恢复默认反而更卡"。
  *
  * 批次 203 起玩家**已经没有视距滑块**，所以这个函数返回的是"自适应策略允许涨到哪"：
- * 桌面上就是 12（`DEFAULT_SETTINGS`），手机上是 8。开局仍然只有
+ * 桌面上就是 16（`DEFAULT_SETTINGS`），手机上是 8。开局仍然只有
  * `MOBILE_VIEW_DISTANCE`（6）——那由渐进视距 `StartupRamp` 慢慢涨到上限。
  */
 export function defaultViewDistanceFor(touch: boolean): number {

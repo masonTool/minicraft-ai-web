@@ -1977,9 +1977,11 @@ class App {
     // 网格化放在独立 Worker 池里：地形生成的 Worker 忙于长任务，混在一起会互相拖慢。
     // 留 2 个核心给主线程（渲染 + 物理），最多用 2 个做网格化。
     // 手机核心又小又挤：再开两个网格化 Worker 会跟主线程抢同一颗大核，表现为一卡一卡
+    // PC（批次 539）：桌面 CPU 核心更多，网格化从最多 2 个提到最多 4 个，
+    // 让区块生成/重建更快摊开，减少跑图时的长帧卡顿；手机仍是 1 个，避免抢大核。
     const meshWorkers = isTouchDevice()
       ? 1
-      : Math.max(1, Math.min(2, (navigator.hardwareConcurrency ?? 4) - 2));
+      : Math.max(2, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 2));
     this.meshPool = new MeshWorkerPool(meshWorkers);
     this.chunkRenderer = new ChunkRenderer(
       this.scene,
@@ -2199,7 +2201,7 @@ class App {
     //
     //  - 两档自适应一律打开：它们就是"我们替玩家做决定"的那套策略（掉帧时先收视距、
     //    再关装饰层、最后降分辨率）；老存档里关过它们的，进世界时重新接管。
-    //  - 视距回到这台设备的上限（手机 8 / 桌面 12），**并忽略存下来的旧值**：
+    //  - 视距回到这台设备的上限（手机 8 / 桌面 16），**并忽略存下来的旧值**：
     //    没有滑块之后，旧值只会是"以前在别的设备上拖过的数字"（手机上是 489 个区块的坑）。
     this.settings.adaptiveResolution = true;
     this.settings.adaptiveViewDistance = true;

@@ -4550,5 +4550,28 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
   );
 }
 
+// 批次 539：PC 专用显示/操作优化。必须只命中桌面精确指针，不能碰手机。
+{
+  const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const tuningSource = readFileSync(new URL('../src/game/tuning.ts', import.meta.url), 'utf8');
+  check(
+    'PC 宽屏放大 HUD（手机断点不变）',
+    htmlSource.includes('@media (pointer: fine) and (min-width: 1024px)') &&
+      htmlSource.includes('--hotbar-slot: 52px;') &&
+      htmlSource.includes('#chat { --chat-open-size: 14px; }'),
+  );
+  check(
+    'PC 鼠标灵敏度降低（触摸常量不变）',
+    /export const MOUSE_SENSITIVITY = 0\.0014;/.test(tuningSource) &&
+      /export const TOUCH_SENSITIVITY = 0\.0034;/.test(tuningSource),
+  );
+  check(
+    'PC 网格式 Worker 最多 4 个（手机仍是 1）',
+    mainSource.includes('Math.max(2, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 2))') &&
+      mainSource.includes('? 1\n      : Math.max(2'),
+  );
+}
+
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
