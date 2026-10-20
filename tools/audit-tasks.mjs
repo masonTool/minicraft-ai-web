@@ -243,7 +243,13 @@ if (!claimCommits) {
      * 那边用来决定"跑哪些套件"，这边用来核对文档里的"91 套"，
      * 两处不一致就会变成"文档说 91、实际只跑 89"这种最难发现的漂。
      */
-    const NON_SUITE_KEYS = new Set(['test:unit', 'test:unit:watch', 'test:offline', 'test:offline:changed']);
+    const NON_SUITE_KEYS = new Set([
+    'test:unit',
+    'test:unit:watch',
+    'test:offline',
+    'test:offline:changed',
+    'test:minigame:flow',
+  ]);
     declared = names.filter((key) => !NON_SUITE_KEYS.has(key)).length;
   } catch {
     declared = 0;

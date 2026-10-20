@@ -59,7 +59,13 @@ const jobs = Math.max(1, Number(valueOf('--jobs')) || Math.max(1, cpus().length 
  *  - `test:offline` / `test:offline:changed`：就是本脚本。
  *    ⚠️ `tools/audit-tasks.mjs` 里有**同一份**排除名单（它要数"91 套"这个数）。
  */
-const NON_SUITE_KEYS = new Set(['test:unit', 'test:unit:watch', 'test:offline', 'test:offline:changed']);
+const NON_SUITE_KEYS = new Set([
+    'test:unit',
+    'test:unit:watch',
+    'test:offline',
+    'test:offline:changed',
+    'test:minigame:flow',
+  ]);
 
 // ------------------------------------------------------------------ 套件清单
 
