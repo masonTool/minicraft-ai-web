@@ -970,8 +970,18 @@ const requestSave = (): void => {
   }, 1200);
 };
 
+const clearDrops = (): void => {
+  for (const drop of droppedItems) {
+    scene.remove(drop.mesh);
+    drop.mesh.geometry.dispose();
+    (drop.mesh.material as THREE.Material).dispose();
+  }
+  droppedItems.length = 0;
+};
+
 const mountWorld = async (entry: WorldSummary): Promise<void> => {
   await persistWorld();
+  clearDrops();
   if (save) {
     save.close();
     save = null;
@@ -1675,6 +1685,38 @@ const showHud = (): void => {
   );
 };
 
+const dropInventory = (): void => {
+  const colors: Record<string, number> = {
+    building: 0x9b7b4f,
+    tools: 0x8a9aa8,
+    armor: 0x6f7f8f,
+    natural: 0x5c9b4f,
+    wool: 0xd8d8d8,
+    food: 0xc77a3a,
+    ores: 0x8f8f9f,
+    functional: 0x7a6a52,
+    brewing: 0x8a5a8a,
+    none: 0x999999,
+  };
+  const baseX = physics.x;
+  const baseY = physics.y + 0.6;
+  const baseZ = physics.z;
+  for (let i = 0; i < 36; i++) {
+    const stack = inventory.get(i);
+    if (!stack) continue;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.3, 0.3),
+      new THREE.MeshBasicMaterial({ color: colors[categoryOf(stack.id)] ?? 0x999999 }),
+    );
+    const x = baseX + (Math.random() - 0.5) * 1.2;
+    const z = baseZ + (Math.random() - 0.5) * 1.2;
+    mesh.position.set(x, baseY, z);
+    scene.add(mesh);
+    droppedItems.push({ mesh, id: stack.id, count: stack.count, x, y: baseY, z, bob: Math.random() * Math.PI * 2, pickupAt: Date.now() + 1500 });
+    inventory.set(i, null);
+  }
+};
+
 const applyDamage = (amount: number, cause: string): void => {
   if (amount <= 0 || dead) return;
   health = Math.max(0, health - amount);
@@ -1836,6 +1878,17 @@ let landedOnce = false;
 let starvationTimer = 0;
 let dead = false;
 let lastDamageCause = '';
+interface DroppedItem {
+  mesh: THREE.Mesh;
+  id: number;
+  count: number;
+  x: number;
+  y: number;
+  z: number;
+  bob: number;
+  pickupAt: number;
+}
+const droppedItems: DroppedItem[] = [];
 let damageFlashUntil = 0;
 let xpLevel = 0;
 let xpIntoLevel = 0;
@@ -2128,6 +2181,7 @@ const frame = (): void => {
       held: inventory.get(selectedSlot)?.id ?? 0,
       cameraMode,
       dead,
+      drops: droppedItems.length,
       xpLevel,
       flying,
       health,
@@ -2230,9 +2284,27 @@ const frame = (): void => {
       starvationTimer = 0;
     }
     if (health <= 0 && !dead) {
+      dropInventory();
       dead = true;
       paused = true;
       showDeath();
+    }
+  }
+
+  for (let i = droppedItems.length - 1; i >= 0; i--) {
+    const drop = droppedItems[i]!;
+    drop.bob += dt * 2;
+    drop.mesh.rotation.y += dt * 1.4;
+    drop.mesh.position.y = drop.y + Math.sin(drop.bob) * 0.08;
+    if (!dead && !paused && Date.now() >= drop.pickupAt && Math.hypot(drop.x - physics.x, drop.z - physics.z) < 1.6 && Math.abs(drop.y - physics.y) < 2) {
+      drop.count = inventory.add(drop.id, drop.count);
+      if (drop.count <= 0) {
+        scene.remove(drop.mesh);
+        drop.mesh.geometry.dispose();
+        (drop.mesh.material as THREE.Material).dispose();
+        droppedItems.splice(i, 1);
+        showHud();
+      }
     }
   }
 
