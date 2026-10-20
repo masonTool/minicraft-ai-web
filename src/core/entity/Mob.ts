@@ -31,6 +31,7 @@ import { swimVerticalSpeed } from './SwimRules.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 import {
   applyMobArmor,
+  equipmentDropDamage,
   equipmentDrops,
   rollMobEquipment,
   type MobEquipment,
@@ -2218,7 +2219,15 @@ export class Mob extends Entity {
     // 个体装备（J27）：每件独立 8.5%（抢夺每级 +1%）。
     // 放在种类掉落之后、羊毛之前：顺序不影响结果，但读起来是"先种类、再个体、最后特例"。
     for (const itemId of equipmentDrops(this.equipment, Math.random, looting)) {
-      ctx.spawnDrop(itemId, 1, this.x, this.y + this.height * 0.5, this.z);
+      const damage = equipmentDropDamage(itemId, Math.random);
+      ctx.spawnDrop(
+        itemId,
+        1,
+        this.x,
+        this.y + this.height * 0.5,
+        this.z,
+        damage > 0 ? { damage } : undefined,
+      );
     }
 
     // 羊毛按**自己身上的颜色**掉，所以进不了 drops 表；

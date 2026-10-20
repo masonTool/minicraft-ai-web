@@ -13,6 +13,7 @@ import {
   EQUIPMENT_DROP_CHANCE,
   applyMobArmor,
   armorTint,
+  equipmentDropDamage,
   equipmentDrops,
   mobArmorPoints,
   mobEquipmentKey,
@@ -22,7 +23,7 @@ import {
   weaponTint,
 } from '../src/core/entity/MobEquipment.ts';
 import { armorInfoById, armorItemId } from '../src/core/registry/armor.ts';
-import { Item } from '../src/core/registry/items.ts';
+import { Item, durabilityOf } from '../src/core/registry/items.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
 
 let passed = 0;
@@ -123,6 +124,13 @@ console.log('\n[掉落概率]');
   );
   check('抢夺每级 +1%：looting=10 时 0.1 也掉', equipmentDrops({ head: IRON_HELMET }, constant(0.1), 10).length === 1);
   check('白板不掉任何东西', equipmentDrops({}, constant(0)).length === 0);
+
+  // 掉落耐久（批次 563）：有耐久的装备带 0~60% 损耗，且不会直接掉成 0 耐久
+  const max = durabilityOf(IRON_HELMET);
+  const wear = equipmentDropDamage(IRON_HELMET, constant(0.5));
+  check('掉落装备带耐久损耗', wear > 0 && wear < max, `${wear} / ${max}`);
+  check('random=0 时至少磨 1 点（不是崭新）', equipmentDropDamage(IRON_HELMET, constant(0)) === 1);
+  check('没有耐久的物品不硬塞损耗', equipmentDropDamage(Item.STICK, constant(0.5)) === 0);
 }
 
 console.log('\n[存档清洗]');

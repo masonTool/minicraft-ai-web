@@ -20,7 +20,7 @@ import {
   totalToughness,
   type ArmorInfo,
 } from '../registry/armor.ts';
-import { Item, itemDef } from '../registry/items.ts';
+import { Item, durabilityOf, itemDef } from '../registry/items.ts';
 import { toolInfoById, toolItemId, type ToolMaterial, type ToolType } from '../registry/tools.ts';
 
 /** 会自然生成的五种盔甲材质（下界合金只靠锻造，不会出现在生物身上） */
@@ -209,6 +209,19 @@ export function equipmentDrops(
     if (random() < chance) drops.push(id);
   }
   return drops;
+}
+
+/**
+ * 掉落装备的耐久损耗（批次 563）：原版掉落的装备通常已经用过一段，
+ * 不是崭新的。这里取耐久上限的 **0~60%**，并保证至少 1 点损耗
+ * （满耐久掉落看起来像"刚合出来的"，反而失真）。
+ *
+ * 没有耐久的物品（比如弓有、箭没有）返回 0。
+ */
+export function equipmentDropDamage(itemId: number, random: () => number): number {
+  const max = durabilityOf(itemId);
+  if (!(max > 0)) return 0;
+  return Math.max(1, Math.min(max - 1, Math.floor(random() * max * 0.6)));
 }
 
 /** 渲染/重建模型用的稳定指纹（装备没变就不重建） */
