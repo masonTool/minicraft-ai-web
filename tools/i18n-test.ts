@@ -20,6 +20,7 @@ import {
   resetLanguageForTest,
   setLanguage,
   t,
+  tp,
 } from '../src/core/i18n/I18n.ts';
 
 let passed = 0;
@@ -158,6 +159,35 @@ console.log('\n[语言码判定]');
   check('navigator 给 en-US → 英文', detectLanguage('en-US') === 'en');
   check('navigator 给 fr-FR → 回退默认（不出现半中半英）', detectLanguage('fr-FR') === DEFAULT_LANGUAGE);
   check('没有 navigator 标签时回退默认', detectLanguage(undefined) === DEFAULT_LANGUAGE);
+}
+
+console.log('\n[占位符（批次 425）]');
+{
+  resetLanguageForTest();
+  check(
+    '占位符被替换',
+    tp('station.startMakingWithCount', { count: 3, unit: '个' }) === '点一下开始制作（预计 3 个）',
+    tp('station.startMakingWithCount', { count: 3, unit: '个' }),
+  );
+  setLanguage('en');
+  check(
+    '英文模板用的是同一套占位符',
+    tp('station.startMakingWithCount', { count: 2, unit: 'items' }) === 'Tap to start crafting (about 2 items)',
+    tp('station.startMakingWithCount', { count: 2, unit: 'items' }),
+  );
+  resetLanguageForTest();
+  check(
+    '缺参数时**保留占位符原文**（不变成空串，一眼能看出漏传）',
+    tp('station.startMakingWithCount', { count: 1 }).includes('{unit}'),
+    tp('station.startMakingWithCount', { count: 1 }),
+  );
+  check('数字参数会被转成字符串', tp('station.startMakingWithCount', { count: 42, unit: '件' }).includes('42'));
+  check('未知键返回键名（与 t 同一口径）', tp('no.such.key', { a: 1 }) === 'no.such.key');
+  // 两条完整句子而不是拼接：这条防止有人回头把 "a + b" 的写法加回来
+  check(
+    '不带数量的那条是完整句子（不是半句）',
+    t('station.startMaking', 'zh') === '点一下开始制作' && !t('station.startMaking', 'zh').includes('（'),
+  );
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);

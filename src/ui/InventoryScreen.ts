@@ -21,7 +21,7 @@
  * 关闭界面时手上的物品、合成网格里的材料都会自动收回背包，不会丢失。
  */
 
-import { t } from '../core/i18n/I18n.ts';
+import { t, tp } from '../core/i18n/I18n.ts';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { drawItemIcon } from './ItemIcon.ts';
 import { itemIconTile } from '../core/registry/items.ts';
@@ -3091,10 +3091,15 @@ export class InventoryScreen {
     this.stationTargetEl.classList.add('preview-result');
     this.stationTargetEl.classList.toggle('locked', !entry.available);
     this.stationTargetEl.classList.toggle('ready', entry.available);
-    const unit = this.mode === 'brewing' ? '瓶' : '个';
+    // ⚠️ 这里原来是**拼句子**（`点一下开始制作${...}`）。i18n 之后拼不得：
+    // 英文语序与中文不同，"前半句 + 括号补充"拼出来的句子在英文里会读不通。
+    // 所以拆成两条**完整句子**，由占位符填数字与单位。
+    const unit = this.mode === 'brewing' ? t('unit.bottle') : t('unit.item');
     this.stationTargetEl.title = entry.available
-      ? `点一下开始制作${expected > 0 ? `（预计 ${expected} ${unit}）` : ''}`
-      : '材料或燃料不足，不能开始';
+      ? expected > 0
+        ? tp('station.startMakingWithCount', { count: expected, unit })
+        : t('station.startMaking')
+      : t('station.notEnough');
   }
 
   /** 点目标框：已有成品先收取；否则白底开始、红底只提示缺什么 */

@@ -120,6 +120,12 @@ const ZH: Readonly<Record<string, string>> = {
   'station.villagerIdle': '他还没有工作——在他附近放一个工作站（堆肥桶 / 高炉 / 烟熏炉 / 酿造台 / 切石机 / 木桶 / 锻造台），他过几秒就会认领。',
   'station.stonecutterHint': '放进石料（石头 / 砂岩 / 深板岩 / 石英 / 铜块…）后会列出能切的东西',
   'station.fuelHint': '煤 / 木炭 / 木板 / 干海带块等可燃物都能当燃料；点下方备选或手动拖入',
+  // ---- 带占位符的句子（批次 425）：**拆成两条完整句子**，不靠拼字符串
+  'station.startMaking': '点一下开始制作',
+  'station.startMakingWithCount': '点一下开始制作（预计 {count} {unit}）',
+  'station.notEnough': '材料或燃料不足，不能开始',
+  'unit.item': '个',
+  'unit.bottle': '瓶',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -203,6 +209,11 @@ const EN: Readonly<Record<string, string>> = {
   'station.villagerIdle': 'He has no job yet — place a workstation nearby (composter / blast furnace / smoker / brewing stand / stonecutter / barrel / smithing table) and he will claim it in a few seconds.',
   'station.stonecutterHint': 'Add stone-type blocks (stone / sandstone / deepslate / quartz / copper…) to list what can be cut',
   'station.fuelHint': 'Coal, charcoal, planks, dried kelp blocks and other burnables all work; pick below or drag one in',
+  'station.startMaking': 'Tap to start crafting',
+  'station.startMakingWithCount': 'Tap to start crafting (about {count} {unit})',
+  'station.notEnough': 'Not enough materials or fuel to start',
+  'unit.item': 'items',
+  'unit.bottle': 'bottles',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
@@ -265,6 +276,25 @@ export function t(key: string, language: Language = current): string {
   const fallback = ZH[key];
   if (typeof fallback === 'string' && fallback.length > 0) return fallback;
   return key;
+}
+
+/**
+ * 带占位符的查表：`tp('station.expected', { count: 3, unit: '个' })`。
+ *
+ * 为什么单独一个函数而不是给 `t()` 加参数：`t()` 的第二个参数已经是**语言**
+ * （`t('pause.resume', 'en')`），再塞一个 params 会变成"第二个参数既可能是语言
+ * 也可能是对象"——那种签名在运行时只能靠类型猜，出错时报的是别的字段。
+ *
+ * 两条约定：
+ *  1. **占位符是 `{name}`**，不是 `${}` / `%s`：前者不会和模板字符串打架；
+ *  2. **缺参数时保留占位符原文**（不替换成空串、也不抛错）——
+ *     界面上显示 `{count}` 一眼能看出漏传了，空串则像"排版坏了"。
+ */
+export function tp(key: string, params: Record<string, string | number>): string {
+  return t(key).replace(/\{(\w+)\}/g, (match, name: string) => {
+    const value = params[name];
+    return value === undefined ? match : String(value);
+  });
 }
 
 /**
