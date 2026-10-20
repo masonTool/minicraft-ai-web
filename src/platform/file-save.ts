@@ -181,6 +181,8 @@ export class FileSaveGame {
   }
 
   async saveChunks(records: ChunkSaveRecord[]): Promise<void> {
+    if (records.length === 0) return;
+    await this.files.mkdir(this.chunkDir);
     for (const record of records) {
       await this.files.write(
         this.chunkPath(record.dimension, record.cx, record.cz),
@@ -281,6 +283,7 @@ export class FileSaveGame {
   }
 
   private async writeJson(name: string, value: unknown): Promise<void> {
+    await this.files.mkdir(this.worldDir);
     await this.files.write(`${this.worldDir}/${name}`, encodeJson(value));
   }
 }

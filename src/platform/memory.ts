@@ -32,6 +32,9 @@ function copyBuffer(data: ArrayBuffer): ArrayBuffer {
 export function createMemoryFiles(): FileStore {
   const files = new Map<string, ArrayBuffer>();
   return {
+    async mkdir(): Promise<void> {
+      /* 内存文件系统没有目录概念 */
+    },
     async write(path: string, data: ArrayBuffer | string): Promise<void> {
       if (typeof data === 'string') {
         files.set(path, new TextEncoder().encode(data).buffer);

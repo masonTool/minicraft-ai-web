@@ -19,6 +19,10 @@ import { World } from '../core/world/World.ts';
 import { PlayerPhysics, type PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { Block, blockDef } from '../core/registry/blocks.ts';
+import { AudioEngine } from '../core/audio/AudioEngine.ts';
+import { ChunkEdits } from '../core/save/ChunkEdits.ts';
+import { FileSaveGame } from '../platform/file-save.ts';
+import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { workerHostToLike } from '../platform/wx/worker-like.ts';
 import { createMainThreadWorker } from './main-thread-worker.ts';
@@ -196,6 +200,34 @@ async function boot(): Promise<void> {
   let currentHit: RayHit | null = null;
   let targetLabel = '-';
 
+  // 文件存档：先读玩家与区块增量，再让 World 生成地形时叠加
+  let save: FileSaveGame | null = null;
+  let saveStatus = 'off';
+  let loadedPlayer: PlayerSave | null = null;
+  try {
+    save = await FileSaveGame.open('wx-default', platform.files);
+    const records = await save.loadAllChunkEdits();
+    for (const record of records) {
+      world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
+    }
+    loadedPlayer = await save.loadPlayer();
+    saveStatus = 'ready';
+    console.log('[WX-020] save ready', records.length, 'chunks', loadedPlayer ? 'player' : 'new');
+  } catch (error) {
+    saveStatus = 'off';
+    console.warn('[WX-020] 存档不可用，本次不保存', error);
+  }
+
+  // 音频：真机用 createWebAudioContext；没有音频设备时自动关闭
+  let audio: AudioEngine | null = null;
+  let audioStatus = 'off';
+  try {
+    audio = new AudioEngine(() => platform.audio.createContext() as unknown as AudioContext);
+    audioStatus = 'ready';
+  } catch (error) {
+    console.warn('[WX-020] 音频不可用', error);
+  }
+
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
   const playerInput: PlayerInput = {
@@ -223,6 +255,14 @@ async function boot(): Promise<void> {
   let jumpQueued = false;
   let lastFrameTime = 0;
 
+  if (loadedPlayer) {
+    physics.teleport(loadedPlayer.x, loadedPlayer.y, loadedPlayer.z);
+    yaw = loadedPlayer.yaw;
+    pitch = loadedPlayer.pitch;
+    selectedSlot = Math.max(0, Math.min(HOTBAR.length - 1, loadedPlayer.selectedSlot));
+    playerReady = true;
+  }
+
   const updateCamera = (): void => {
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;
@@ -235,6 +275,75 @@ async function boot(): Promise<void> {
     playerReady = true;
     updateCamera();
   };
+
+  let saving = false;
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const snapshotPlayer = (): PlayerSave => {
+    const inventory = Array.from({ length: 41 }, () => null) as PlayerSave['inventory'];
+    inventory[0] = { id: HOTBAR[selectedSlot] ?? Block.OAK_PLANKS, count: 1 };
+    return {
+      x: physics.x,
+      y: physics.y,
+      z: physics.z,
+      yaw,
+      pitch,
+      dimension: world.dimension,
+      flying: false,
+      gameMode: 'survival',
+      timeOfDay: 0.3,
+      health: 20,
+      food: 20,
+      saturation: 5,
+      air: 300,
+      exhaustion: 0,
+      inventory,
+      selectedSlot: 0,
+      dragonDefeated: false,
+    };
+  };
+
+  const persist = async (): Promise<void> => {
+    if (!save || saving) return;
+    saving = true;
+    saveStatus = 'saving';
+    try {
+      await save.savePlayer(snapshotPlayer());
+      const records: ChunkSaveRecord[] = [];
+      for (const key of world.edits.dirtyKeys()) {
+        const { dimension, cx, cz } = ChunkEdits.parseKey(key);
+        const edits = world.edits.serialize(dimension, cx, cz);
+        if (edits) records.push({ dimension, cx, cz, edits });
+      }
+      await save.saveChunks(records);
+      await save.saveMeta(save.buildMeta(world.seed, world.edits.totalEdits));
+      world.edits.markSaved();
+      saveStatus = 'ok';
+      console.log('[WX-020] saved', records.length, 'chunks', world.edits.totalEdits, 'edits');
+    } catch (error) {
+      saveStatus = 'error';
+      console.warn('[WX-020] 保存失败', error);
+    } finally {
+      saving = false;
+    }
+  };
+
+  const requestSave = (): void => {
+    if (!save) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void persist();
+    }, 1200);
+  };
+
+  platform.lifecycle.onHide(() => {
+    void persist();
+  });
+  // 15 秒兜底自动保存；挖放会额外触发 1.2s 去抖保存
+  setInterval(() => {
+    void persist();
+  }, 15000);
 
   const resetMove = (): void => {
     movePointerId = null;
@@ -273,7 +382,13 @@ async function boot(): Promise<void> {
     if (!currentHit) return;
     const id = world.getBlock(currentHit.x, currentHit.y, currentHit.z);
     if (id === Block.AIR || id === Block.BEDROCK) return;
+    audio?.playBreakForBlock(blockDef(id).name, {
+      x: currentHit.x + 0.5,
+      y: currentHit.y + 0.5,
+      z: currentHit.z + 0.5,
+    });
     world.setBlockAndUpdate(currentHit.x, currentHit.y, currentHit.z, Block.AIR);
+    requestSave();
   };
 
   const placeTarget = (): void => {
@@ -295,7 +410,10 @@ async function boot(): Promise<void> {
     ) {
       return;
     }
-    world.setBlockAndUpdate(px, py, pz, HOTBAR[selectedSlot] ?? Block.OAK_PLANKS);
+    const blockId = HOTBAR[selectedSlot] ?? Block.OAK_PLANKS;
+    world.setBlockAndUpdate(px, py, pz, blockId);
+    audio?.playPlaceForBlock(blockDef(blockId).name, { x: px + 0.5, y: py + 0.5, z: pz + 0.5 });
+    requestSave();
   };
 
   const cycleSlot = (): void => {
@@ -313,6 +431,8 @@ async function boot(): Promise<void> {
   };
 
   platform.input.onPointer('down', (event) => {
+    audio?.resume();
+    if (audio) audioStatus = 'on';
     const x = event.clientX;
     const y = event.clientY;
     if (x < width * 0.45 && movePointerId === null) {
@@ -379,7 +499,7 @@ async function boot(): Promise<void> {
   hud.update([
     `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  PLAYER`,
     `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T -  SLOT 1/${HOTBAR.length}`,
-    'CHUNKS ...  DRAWN ...  LIGHT ...',
+    `CHUNKS ...  DRAWN ...  LIGHT ...  SAVE ${saveStatus}  AUD ${audioStatus}`,
     'FPS ...  MS ...  TRI ...  CALLS ...',
     'L tap cycle/drag move · R drag look/tap top place mid break bottom jump',
   ]);
@@ -434,6 +554,12 @@ async function boot(): Promise<void> {
     get slot() {
       return selectedSlot;
     },
+    get save() {
+      return saveStatus;
+    },
+    get audio() {
+      return audioStatus;
+    },
   };
 
   const frame = (time: number): void => {
@@ -473,7 +599,7 @@ async function boot(): Promise<void> {
       hud.update([
         `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  P ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)} G${physics.onGround ? 1 : 0}`,
         `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T ${targetLabel}  SLOT ${selectedSlot + 1}/${HOTBAR.length}`,
-        `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}`,
+        `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}  SAVE ${saveStatus}  AUD ${audioStatus}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
         'L tap cycle/drag move · R drag look/tap top place mid break bottom jump',
       ]);

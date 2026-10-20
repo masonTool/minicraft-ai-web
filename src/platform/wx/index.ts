@@ -104,6 +104,13 @@ function wxFiles(): FileStore {
     path.startsWith(root) ? path : `${root}/${path.replace(/^\/+/, '')}`;
 
   return {
+    async mkdir(path: string): Promise<void> {
+      try {
+        fs.mkdirSync(full(path), true);
+      } catch {
+        /* 已存在/并发创建：忽略 */
+      }
+    },
     async write(path: string, data: ArrayBuffer | string): Promise<void> {
       const target = full(path);
       const temp = `${target}.tmp`;

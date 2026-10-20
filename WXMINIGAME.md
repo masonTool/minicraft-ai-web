@@ -16,8 +16,8 @@
 | 项 | 值 |
 | --- | --- |
 | 当前阶段 | M1 平台层收尾 → M2 UI |
-| 当前任务 | **WX-020B：抽 `UiPort` + 背包/存档**（第一人称/准星/挖放/快捷栏已接） |
-| 刚完成 | WX-020B 前两块：第一人称 `PlayerPhysics` + 平台 pointer；准星射线/选中框/挖放/6 格快捷栏；WX-020A 真实世界预览；WX-018 共享 Worker；WX-011~017、01B/01C |
+| 当前任务 | **WX-020B：抽 `UiPort` + 背包 UI**（第一人称/准星/挖放/快捷栏/存档/音频已接） |
+| 刚完成 | WX-020B 前三块：第一人称 + 平台 pointer；准星/选中框/挖放/6 格快捷栏；FileSaveGame 存档 + 读档恢复 + AudioEngine 音效；WX-020A 真实世界预览；WX-018 共享 Worker；WX-011~017、01B/01C |
 | 正式壳 | `minigame/`（压力场景，801 draw call 基线） |
 | 真实世界 | `minigame-world/`（WX-020A，当前可看完整地形） |
 | 平台基座 | `vendor/minigame-adapter/`（870d66f + 本分支补丁） |
@@ -31,8 +31,10 @@
 | 图集 | `TextureAtlas` 209ms，256×1040 |
 | 世界 | 37 chunks / 37 drawn / light 0 / queue 0 |
 | 玩家 | 第一人称，出生在 `P 9,67,9 G1`（落地） |
-| 交互 | 准星命中 `grass_block`，黑色选中框；`SLOT 1/6` 快捷栏 |
-| 几何 | 第一人称视角约 229k triangles / 254 draw calls（视距 3） |
+| 交互 | 准星命中方块，黑色选中框；`SLOT 1/6` 快捷栏 |
+| 存档 | `SAVE ok`；重开预览 `save ready 0 chunks player`，玩家位置成功恢复 |
+| 音频 | `AUD ready`；首次触摸解锁，挖放调用材质音效 |
+| 几何 | 第一人称视角约 323k triangles / 362 draw calls（视距 3，俯视） |
 | 帧率 | 主线程降级：启动约 12s，稳定后 121fps / 8.3ms |
 | Worker | helper 里 `wx.createWorker` 不回 pong，自动降级主线程；真机行为待复测 |
 
@@ -405,8 +407,8 @@ flex/absolute/grid 子集。
 | WX-013 | 输入适配 | 适配器 touch 之上合成 pointer；左摇杆/右视角/跳跃已用平台 pointer 验证 | WX-012 | 1.5 | [x] |
 | WX-014 | storage 适配 | 复用适配器 `localStorage`；`asDomStorage`/JSON 辅助已就绪；设置/世界清单接线在 WX-020/025 | WX-011 | 0.5 | [~] |
 | WX-015 | FileSystem 封装 | 原子写（临时文件 + rename）、目录/配额/错误处理 | WX-011 | 2 | [x] |
-| WX-016 | 存档适配 | `FileSaveGame` 与 `SaveGame` 同 API（meta/player/容器/牌子/展示框/成就/区块）；接线在 WX-020 | WX-015 | 3 | [x] |
-| WX-017 | 音频适配 | 复用适配器 `AudioContext`；`AudioEngine` 支持注入工厂；接线在 WX-020 | WX-011 | 0.5 | [x] |
+| WX-016 | 存档适配 | `FileSaveGame` 已在 `minigame-world` 接线：玩家/快捷栏/区块增量落盘，重开恢复；15s 自动保存 + 切后台保存 | WX-015 | 3 | [x] |
+| WX-017 | 音频适配 | `AudioEngine` 注入 `createWebAudioContext`；挖放音效已接，HUD `AUD ready`；真机音色待听 | WX-011 | 0.5 | [x] |
 | WX-018 | Worker 适配 | `workers/chunk.worker.js` + wx shim；`World`/`MeshWorkerPool` 支持 `createWorker` 注入；同一路径共享 host + 多订阅 | WX-013 | 2 | [x] |
 | WX-019 | 网络适配（可后置） | 平台 `wx.connectSocket` 已实现；`NetClient` 接线可后置 | WX-011 | 1 | [~] |
 | WX-01A | 键盘/文本输入 | 平台 `wx.showKeyboard` 已实现；聊天/告示牌/世界名接线在 WX-034 | WX-013 | 1 | [~] |
@@ -418,7 +420,7 @@ flex/absolute/grid 子集。
 | ID | 任务 | 验收 / 产出 | 依赖 | 人日 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | WX-020A | 真实世界启动（无 UI） | `minigame-world`：图集/材质/World/ChunkRenderer；helper 预览已出完整地形，worker 超时自动降级主线程 | WX-018 | 3 | [x] |
-| WX-020B | 抽 `UiPort` + App 条件启动 | 第一人称/pointer/准星/挖放/6 格快捷栏已接；`UiPort`、背包/存档、`main.ts` 条件启动待做 | WX-020A | 3 | [~] |
+| WX-020B | 抽 `UiPort` + App 条件启动 | 第一人称/pointer/准星/挖放/快捷栏/存档/音频已接；`UiPort`、背包 UI、`main.ts` 条件启动待做 | WX-020A | 3 | [~] |
 | WX-021 | UI 工具包 A | 面板/按钮三态/文字/图标/基础布局（9-slice、像素风） | WX-020B | 3 | [ ] |
 | WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020B | 2 | [ ] |
 | WX-022 | UI 工具包 B | 滚动/页签/滑块/开关/输入框 | WX-021 | 2 | [ ] |
@@ -575,6 +577,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | 清理/看板 | 删除 WX-001 自写 shim、WX-006 适配器对比工程与旧构建脚本；正式入口/worker 目录改名；新增 §0 状态看板与接手清单 | `dbced2b` |
 | 2026-10-20 | WX-020B 第一块 | 真实世界接入第一人称：`PlayerPhysics` + 平台 pointer；左摇杆/右视角/右下跳跃；helper 预览 `P 9,67,9 G1`、37 chunks、89.7k tri、98 calls、121fps | `f868573` |
 | 2026-10-20 | WX-020B 第二块 | 准星射线 + 选中框 + 挖/放 + 6 格快捷栏；helper 预览 `T grass_block`、`SLOT 1/6`、229k tri / 254 calls / 119fps | `e097a6b` |
+| 2026-10-20 | WX-020B 第三块 | FileSaveGame 接线：玩家/快捷栏/区块增量落盘；`FileStore.mkdir` 修复父目录；15s 自动保存 + 切后台保存；重开 `save ready 0 chunks player`；AudioEngine 挖放音效 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 

@@ -83,6 +83,8 @@ export interface KeyValueStore {
 
 /** 文件存储：存档（区块增量、容器、成就等） */
 export interface FileStore {
+  /** 递归创建目录；已存在时应静默成功 */
+  mkdir(path: string): Promise<void>;
   write(path: string, data: ArrayBuffer | string): Promise<void>;
   read(path: string): Promise<ArrayBuffer>;
   remove(path: string): Promise<void>;
