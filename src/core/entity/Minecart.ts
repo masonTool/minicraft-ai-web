@@ -18,7 +18,7 @@
 import { Entity, type EntityContext } from './Entity.ts';
 import { Block } from '../registry/blocks.ts';
 import { isPowered } from '../registry/blockState.ts';
-import { railExitDirection, railShapeOf } from '../world/RailShape.ts';
+import { railExitDirection, railShapeOf, railSlopeHeight } from '../world/RailShape.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
 
 /** 矿车碰撞盒（格）：比一格窄一点，过门/过洞不容易卡 */
@@ -123,6 +123,18 @@ export class Minecart extends Entity {
     }
 
     moveBody(ctx.world, this, this.vx * dt, this.vy * dt, this.vz * dt);
+
+    // 坡道（批次 481）：把车**抬到坡面**上（只抬不压——下坡靠重力自己滑下去）。
+    // 为什么放在 moveBody 之后：位置已经按速度走完，这时才知道车落在坡道的哪一段。
+    if (onRail) {
+      const surface = railY + railSlopeHeight(railShapeOf(ctx.getState?.(railX, railY, railZ) ?? 0), this.x - railX, this.z - railZ);
+      if (this.y < surface) {
+        this.y = surface;
+        if (this.vy < 0) this.vy = 0;
+        this.onGround = true;
+      }
+    }
+
     if (this.onGround && this.vy < 0) this.vy = 0;
   }
 

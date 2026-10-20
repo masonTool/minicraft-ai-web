@@ -2594,7 +2594,7 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
       const key = railTileFor(state);
       return [key, key, key];
     },
-    shape: 'flat',
+    shape: 'rail',
     solid: false,
     opaque: false,
     lightOpacity: 0,
@@ -2608,7 +2608,7 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
       isPowered(state)
         ? ['powered_rail_on', 'powered_rail_on', 'powered_rail_on']
         : ['powered_rail', 'powered_rail', 'powered_rail'],
-    shape: 'flat',
+    shape: 'rail',
     solid: false,
     opaque: false,
     lightOpacity: 0,
@@ -2621,7 +2621,7 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
       isPowered(state)
         ? ['detector_rail_on', 'detector_rail_on', 'detector_rail_on']
         : ['detector_rail', 'detector_rail', 'detector_rail'],
-    shape: 'flat',
+    shape: 'rail',
     solid: false,
     opaque: false,
     lightOpacity: 0,
@@ -2634,7 +2634,7 @@ export const RAIL_SPECS: readonly BlockSpec[] = [
       isPowered(state)
         ? ['activator_rail_on', 'activator_rail_on', 'activator_rail_on']
         : ['activator_rail', 'activator_rail', 'activator_rail'],
-    shape: 'flat',
+    shape: 'rail',
     solid: false,
     opaque: false,
     lightOpacity: 0,

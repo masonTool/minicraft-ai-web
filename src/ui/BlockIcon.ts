@@ -181,6 +181,8 @@ export function isoBoxesForShape(shape: BlockShape): readonly IsoBox[] | null {
     case 'tripwire_hook':
     case 'lily_pad':
     case 'flat':
+    // 铁轨（批次 481）：物品栏里按平面精灵图（与原版一致，坡道也是）
+    case 'rail':
     // 流体不可能是方块物品（`items.ts` 注册时跳过 `liquid`），这里只是把联合类型收全
     case 'fluid':
       return null;

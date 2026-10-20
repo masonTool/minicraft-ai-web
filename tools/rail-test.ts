@@ -13,12 +13,17 @@ import { railTileFor } from '../src/core/registry/blocks.ts';
 import { withPowered } from '../src/core/registry/blockState.ts';
 import {
   RAIL_SHAPES,
+  isSlopeRail,
   pickRailShape,
+  pickRailSlope,
   railDirections,
   railExitDirection,
+  railRiseDirection,
   railShapeOf,
+  railSlopeHeight,
   withRailShape,
 } from '../src/core/world/RailShape.ts';
+import { meshBoxes } from '../src/core/registry/blockShapes.ts';
 import { Minecart } from '../src/core/entity/Minecart.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
@@ -48,7 +53,8 @@ console.log('\n[状态位：形状只占 bit0-2]');
   }
   equal('写形状不会动 powered 位', withPowered(withRailShape(0, 'south_east'), true) & 0b1000, 0b1000);
   equal('powered 位保留时形状还在', railShapeOf(withPowered(withRailShape(0, 'south_east'), true)), 'south_east');
-  equal('越界的编号读成南北向（不崩）', railShapeOf(0b111), 'north_south');
+  // 编号 0~9 都合法（批次 481 加了 4 条坡道），真正越界的是 15（低 3 位全 1 + 高位 1）
+  equal('越界的编号读成南北向（不崩）', railShapeOf(0b10111), 'north_south');
 }
 
 console.log('\n[放置时的自动连接]');
@@ -144,6 +150,77 @@ console.log('\n[方向表]');
   check('两条边不共线', dirs[0]!.dx * dirs[1]!.dx + dirs[0]!.dz * dirs[1]!.dz === 0);
   const straight = railDirections('east_west');
   check('直轨两条边相反', straight[0]!.dx * straight[1]!.dx + straight[0]!.dz * straight[1]!.dz === -1);
+}
+
+
+console.log('\n[坡道（批次 481）]');
+{
+  // ① 十种形状都能编码/解码，且 powered 位不被挤掉
+  equal('一共十种形状', RAIL_SHAPES.length, 10);
+  for (const shape of RAIL_SHAPES) {
+    equal(`写 ${shape} 再读回来`, railShapeOf(withRailShape(0, shape)), shape);
+  }
+  equal(
+    '坡道与 powered 共存',
+    railShapeOf(withPowered(withRailShape(0, 'ascending_north'), true)),
+    'ascending_north',
+  );
+  equal('坡道不会被读成平面形状', isSlopeRail(railShapeOf(withRailShape(0, 'ascending_east'))), true);
+  equal('平面形状不是坡道', isSlopeRail(railShapeOf(withRailShape(0, 'south_east'))), false);
+
+  // ② 抬升方向
+  equal('ascending_north 朝北抬', railRiseDirection('ascending_north')?.dz, -1);
+  equal('ascending_east 朝东抬', railRiseDirection('ascending_east')?.dx, 1);
+  equal('平面形状没有抬升方向', railRiseDirection('east_west'), null);
+
+  // ③ 格内高度：低端 0、高端 1、中点 0.5
+  equal('坡道低端高度 0', railSlopeHeight('ascending_east', 0, 0.5), 0);
+  equal('坡道高端高度 1', railSlopeHeight('ascending_east', 1, 0.5), 1);
+  equal('坡道中点 0.5', railSlopeHeight('ascending_east', 0.5, 0.5), 0.5);
+  equal('朝西抬：东边是低端', railSlopeHeight('ascending_west', 0, 0.5), 1);
+  equal('平面形状高度恒 0', railSlopeHeight('north_south', 0.7, 0.3), 0);
+
+  // ④ 放置时的坡道判定
+  const none = { north: false, south: false, east: false, west: false };
+  equal('北侧高一格 → 朝北的坡道', pickRailSlope({ ...none, north: true }, 'z'), 'ascending_north');
+  equal('西侧高一格 → 朝西的坡道', pickRailSlope({ ...none, west: true }, 'x'), 'ascending_west');
+  equal('没有高差 → 不是坡道', pickRailSlope(none, 'z'), null);
+  equal('两侧都高（夹在沟里）→ 不是坡道', pickRailSlope({ ...none, north: true, south: true }, 'z'), null);
+  equal('南北都高、东西单侧高 → 取东西那侧', pickRailSlope({ north: true, south: true, east: true, west: false }, 'x'), 'ascending_east');
+
+  // ⑤ 几何：平面 1 个盒子、坡道 4 段且逐段抬高
+  const flatBoxes = meshBoxes('rail', withRailShape(0, 'north_south'));
+  equal('平面铁轨仍是 1 个薄盒', flatBoxes.length, 1);
+  check('平面盒高 1/16', Math.abs(flatBoxes[0]![4] - 1 / 16) < 1e-6, `${flatBoxes[0]![4]}`);
+  const slopeBoxes = meshBoxes('rail', withRailShape(0, 'ascending_east'));
+  equal('坡道是 4 段阶梯', slopeBoxes.length, 4);
+  check(
+    '阶梯逐段抬高（东端最高）',
+    slopeBoxes.every((box, index) => Math.abs(box[4] - (index + 1) / 4) < 1e-6),
+    slopeBoxes.map((box) => box[4].toFixed(2)).join(','),
+  );
+
+  // ⑥ 矿车会被抬到坡面上
+  const flatWorld: PhysicsWorld = {
+    collisionAt: (_x, y) => (y < 0 ? 'full' : null),
+    isLiquid: () => false,
+  };
+  const slopeCtx: EntityContext = {
+    world: flatWorld,
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (_x, y) => (y === 0 ? Block.RAIL : Block.AIR),
+    getState: () => withRailShape(0, 'ascending_east'),
+    player: null,
+    hurtPlayer: () => {},
+    spawnDrop: () => {},
+  };
+  const climber = new Minecart(0.2, 0.05, 0.5);
+  climber.vx = 2;
+  climber.vz = 0;
+  climber.tick(slopeCtx, 0.05);
+  check('向东开上坡：车被抬起来', climber.y > 0.2, `y=${climber.y.toFixed(2)}`);
+  check('抬升量跟着格内位置走（≈ 0.3）', Math.abs(climber.y - Math.max(0, Math.min(1, climber.x))) < 0.12, `y=${climber.y.toFixed(2)} x=${climber.x.toFixed(2)}`);
 }
 
 console.log(`\n铁轨测试：${passed} 通过 / ${failed} 失败`);

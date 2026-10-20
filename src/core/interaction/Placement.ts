@@ -19,7 +19,7 @@
 
 import { Block, JUNGLE_LOG_ID, blockDef, cropOf, isRailId, stemKindOf } from '../registry/blocks.ts';
 // 铁轨形状（批次 478）：放下去按四邻自动接成直轨或弯道
-import { pickRailShape, withRailShape } from '../world/RailShape.ts';
+import { pickRailShape, pickRailSlope, withRailShape } from '../world/RailShape.ts';
 import { pickPaintingVariant } from '../registry/paintings.ts';
 import {
   FACING_OFFSET,
@@ -449,22 +449,37 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       // 悬空的红石粉——外观上它就平贴在方块侧面，看着就不对。
       if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
 
-      // 铁轨（批次 478）：按四邻的**铁轨**自动接成直轨或弯道。
-      // 原版也是这样"放下去就自动连"，玩家不需要手动选形状。
-      if (isRailId(input.blockId)) {
-        const connections = {
-          north: isRailId(input.blockAt(0, 0, -1)),
-          south: isRailId(input.blockAt(0, 0, 1)),
-          east: isRailId(input.blockAt(1, 0, 0)),
-          west: isRailId(input.blockAt(-1, 0, 0)),
-        };
-        // 没有可接的邻居时沿玩家朝向铺：`facingFromYaw` 0/2 = 南北、1/3 = 东西
-        const facing = facingFromYaw(input.yaw);
-        const axis: 'x' | 'z' = facing === 0 || facing === 2 ? 'z' : 'x';
-        return { state: withRailShape(0, pickRailShape(connections, axis)) };
-      }
-
       return { state: 0 };
+    }
+
+    /**
+     * 铁轨（批次 478/481）：按四邻**铁轨**自动接成直轨或弯道；某一侧地面高一格时铺坡道。
+     *
+     * 原版也是"放下去就自动连"，玩家不需要手动选形状。坡道的判据是
+     * "沿某一侧的那一格被实心方块占着、且它上面是空气"——等价于"那一侧地面高一格"。
+     * ⚠️ 与原版的差异：原版看的是**相邻轨道**的高度差，这里看的是地面高差
+     * （相邻格还没铺轨时也能一次铺对，但对着墙放会被判成坡道）。
+     */
+    case 'rail': {
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      const highSide = {
+        north: blockDef(input.blockAt(0, 0, -1)).solid && input.blockAt(0, 1, -1) === Block.AIR,
+        south: blockDef(input.blockAt(0, 0, 1)).solid && input.blockAt(0, 1, 1) === Block.AIR,
+        east: blockDef(input.blockAt(1, 0, 0)).solid && input.blockAt(1, 1, 0) === Block.AIR,
+        west: blockDef(input.blockAt(-1, 0, 0)).solid && input.blockAt(-1, 1, 0) === Block.AIR,
+      };
+      // 没有可接的邻居时沿玩家朝向铺：`facingFromYaw` 0/2 = 南北、1/3 = 东西
+      const facing = facingFromYaw(input.yaw);
+      const axis: 'x' | 'z' = facing === 0 || facing === 2 ? 'z' : 'x';
+      const slope = pickRailSlope(highSide, axis);
+      if (slope) return { state: withRailShape(0, slope) };
+      const connections = {
+        north: isRailId(input.blockAt(0, 0, -1)),
+        south: isRailId(input.blockAt(0, 0, 1)),
+        east: isRailId(input.blockAt(1, 0, 0)),
+        west: isRailId(input.blockAt(-1, 0, 0)),
+      };
+      return { state: withRailShape(0, pickRailShape(connections, axis)) };
     }
 
     case 'snow': {

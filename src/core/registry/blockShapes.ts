@@ -10,6 +10,7 @@
  */
 
 import { blockDef } from './blocks.ts';
+import { railRiseDirection, railShapeOf } from '../world/RailShape.ts';
 import {
   CAKE_SLICES,
   FACING_OFFSET,
@@ -182,6 +183,8 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     // 差别只在**放置/支撑判据**（只认灵魂沙，见 `blockState.ts` 的形状注释）
     case 'nether_wart':
     case 'flat':
+    // 铁轨（批次 481）：与 `flat` 一样不挡路——玩家能直接从轨道上走过去
+    case 'rail':
     // 珊瑚扇（批次 51）：一片薄面，原版可以直接游过去
     case 'coral_fan':
     // 告示牌（批次 80）：原版告示牌**不挡路**（能从牌子里走过去），所以没有碰撞盒。
@@ -404,6 +407,32 @@ export function isFullBlockShape(shape: BlockShape, state: number): boolean {
   return false;
 }
 
+/**
+ * 铁轨的几何（批次 481）。
+ *
+ * 平面形状 = 1/16 平板（与 `flat` 完全一样）；坡道 = 4 段阶梯，从低端逐段抬到 1 格。
+ * 4 段而不是更多：阶梯越多越像斜面，但碰撞与网格化的盒子数也跟着涨；
+ * 4 段在这个尺度下已经"看着是坡"，而玩家走上去时自动抬步也刚好接得上。
+ */
+function railBoxes(state: number): readonly LocalBox[] {
+  const shape = railShapeOf(state);
+  const rise = railRiseDirection(shape);
+  if (!rise) return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
+  const boxes: LocalBox[] = [];
+  const steps = 4;
+  for (let i = 0; i < steps; i++) {
+    // 沿上坡方向切成 4 段；每段高度 = (i+1)/4（高的一端最后画）
+    const t0 = i / steps;
+    const t1 = (i + 1) / steps;
+    const height = (i + 1) / steps;
+    if (rise.dx > 0) boxes.push([t0, 0, 0, t1, height, 1]);
+    else if (rise.dx < 0) boxes.push([1 - t1, 0, 0, 1 - t0, height, 1]);
+    else if (rise.dz > 0) boxes.push([0, 0, t0, 1, height, t1]);
+    else boxes.push([0, 0, 1 - t1, 1, height, 1 - t0]);
+  }
+  return boxes;
+}
+
 export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = {}): readonly LocalBox[] {
   if (shape === 'fluid') {
     // 液面高度由状态位决定：水源接近满格、越流越薄、下落时填满
@@ -452,6 +481,10 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'lily_pad':
       // 睡莲与"贴地薄板"长得一样（都是 1/16 的一层），差别只在碰撞（见 `collisionBoxes`）
       return [[0, 0, 0, 1, FLAT_HEIGHT, 1]];
+    case 'rail':
+      // 铁轨（批次 481）：平面走 1/16 平板，坡道走 4 段阶梯（近似斜面）。
+      // 4 段是"看着像斜坡"与"盒子数别太多"之间的折中：每段 1/4 宽、抬高 1/4 格
+      return railBoxes(state);
     case 'coral_fan':
       return coralFanBoxes(state);
     case 'scaffolding':

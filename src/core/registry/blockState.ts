@@ -33,6 +33,14 @@ export type BlockShape =
   | 'fence_gate'
   | 'torch'
   | 'ladder'
+  /**
+   * 铁轨（批次 481）：平面时是 1/16 的平板（与 `flat` 同几何），
+   * 坡道时是 4 段阶梯（`meshBoxes` 按 state 区分）。
+   *
+   * 为什么要从 `flat` 拆出来：`flat` 还被红石粉/压力板/地毯共用，
+   * 而 `meshBoxes(shape, state)` **拿不到方块 id**——不拆就分不出"这是铁轨还是红石粉"。
+   */
+  | 'rail'
   /** 堆肥桶（批次 70）：四面板条 + 2/16 桶底，顶面敞口 */
   | 'composter'
   | 'pane'

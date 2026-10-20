@@ -1,21 +1,28 @@
 /**
- * 铁轨的形状（批次 478，G12 的弯道）
+ * 铁轨的形状（批次 478 弯道 / 481 坡道，G12）
  *
- * 原版铁轨有 10 种形状（直/弯/坡 × 朝向）。这一批只做**平面**的 6 种：
- * 2 条直轨（南北 / 东西）+ 4 个弯（东南 / 西南 / 东北 / 西北）；坡道还没做
- * （它要"抬升 1 格 + 与相邻格高度连续"，属于另一档）。
+ * 原版铁轨有 10 种形状（直/弯/坡 × 朝向）。这里全部做了：
+ * 2 条直轨（南北 / 东西）+ 4 个弯（东南 / 西南 / 东北 / 西北）+ 4 条坡道。
  *
- * 状态编码用 **bit0-2**（0~5）：
- *  - `flat` 这个形状是铁轨 / 红石粉 / 压力板 / 地毯共用的，而**按族复用状态位**
- *    是本项目的老规矩（同一位在不同方块族里有不同含义）；红石粉用 bit0-3 存强度，
- *    但它与铁轨不会出现在同一格，所以不冲突；
- *  - **bit3 是 `powered`**（动力/探测/激活铁轨用它），形状必须避开。
- *
- * 老存档里直轨的 state 是 0 → 读成"南北向直轨"，与改造前的渲染完全一致。
+ * 状态编码：**bit0-2 放低 3 位、bit4 放第 4 位**。
+ *  - `flat`/`rail` 这个形状是铁轨 / 红石粉 / 压力板 / 地毯共用的，而**按族复用状态位**
+ *    是本项目的老规矩；红石粉用 bit0-3 存强度，但它与铁轨不会出现在同一格；
+ *  - **bit3 是 `powered`**（动力/探测/激活铁轨用它），所以形状的高位只能放 bit4；
+ *  - 老存档里直轨的 state 是 0 → 读成"南北向直轨"，与改造前的渲染完全一致。
  */
 
-/** 铁轨的六种平面形状 */
-export type RailShape = 'north_south' | 'east_west' | 'south_east' | 'south_west' | 'north_east' | 'north_west';
+/** 铁轨的十种形状：6 种平面 + 4 种坡道 */
+export type RailShape =
+  | 'north_south'
+  | 'east_west'
+  | 'south_east'
+  | 'south_west'
+  | 'north_east'
+  | 'north_west'
+  | 'ascending_north'
+  | 'ascending_south'
+  | 'ascending_east'
+  | 'ascending_west';
 
 /** 按状态位里的编号排列（顺序就是写进状态的数字，改动会让老存档错位） */
 export const RAIL_SHAPES: readonly RailShape[] = [
@@ -25,9 +32,18 @@ export const RAIL_SHAPES: readonly RailShape[] = [
   'south_west',
   'north_east',
   'north_west',
+  'ascending_north',
+  'ascending_south',
+  'ascending_east',
+  'ascending_west',
 ];
 
-const RAIL_SHAPE_MASK = 0b111;
+/** 形状编码的低三位 */
+const RAIL_SHAPE_LOW_MASK = 0b111;
+/** 形状编码的第四位（bit4；bit3 是 powered） */
+const RAIL_SHAPE_HIGH_BIT = 0b10000;
+const RAIL_SHAPE_MASK = RAIL_SHAPE_LOW_MASK | RAIL_SHAPE_HIGH_BIT;
+
 /** 每种形状的编号（写状态用） */
 export const RAIL_SHAPE_INDEX: Readonly<Record<RailShape, number>> = {
   north_south: 0,
@@ -36,20 +52,25 @@ export const RAIL_SHAPE_INDEX: Readonly<Record<RailShape, number>> = {
   south_west: 3,
   north_east: 4,
   north_west: 5,
+  ascending_north: 6,
+  ascending_south: 7,
+  ascending_east: 8,
+  ascending_west: 9,
 };
 
 /** 状态位 → 形状（越界读成南北向，与默认值一致） */
 export function railShapeOf(state: number): RailShape {
-  const index = state & RAIL_SHAPE_MASK;
+  const index = (state & RAIL_SHAPE_LOW_MASK) | (((state & RAIL_SHAPE_HIGH_BIT) >> 4) << 3);
   return RAIL_SHAPES[index] ?? 'north_south';
 }
 
-/** 改形状；只动 bit0-2，`powered` 位原样保留 */
+/** 改形状；只动 bit0-2 与 bit4，`powered`（bit3）原样保留 */
 export function withRailShape(state: number, shape: RailShape): number {
-  return (state & ~RAIL_SHAPE_MASK) | RAIL_SHAPE_INDEX[shape];
+  const index = RAIL_SHAPE_INDEX[shape];
+  return (state & ~RAIL_SHAPE_MASK) | (index & RAIL_SHAPE_LOW_MASK) | (((index >> 3) & 1) << 4);
 }
 
-/** 一条边的方向（弯道的两条边就是这个表的两个元素） */
+/** 一条边的方向（弯道的两条边、坡道的抬升方向都用它） */
 export interface RailDirection {
   readonly dx: number;
   readonly dz: number;
@@ -60,9 +81,40 @@ const SOUTH: RailDirection = { dx: 0, dz: 1 };
 const EAST: RailDirection = { dx: 1, dz: 0 };
 const WEST: RailDirection = { dx: -1, dz: 0 };
 
-/** 形状 → 它连接的边（直轨两个相对，弯道两个相邻） */
+/** 这一种是不是坡道（两端不在同一高度） */
+export function isSlopeRail(shape: RailShape): boolean {
+  return shape.startsWith('ascending_');
+}
+
+/**
+ * 坡道**抬升的方向**（朝哪一端升高）；平面形状返回 null。
+ *
+ * `ascending_north` = 北端高一格，所以沿 -z 走是上坡。
+ */
+export function railRiseDirection(shape: RailShape): RailDirection | null {
+  switch (shape) {
+    case 'ascending_north':
+      return NORTH;
+    case 'ascending_south':
+      return SOUTH;
+    case 'ascending_east':
+      return EAST;
+    case 'ascending_west':
+      return WEST;
+    default:
+      return null;
+  }
+}
+
+/** 形状 → 它连接的边（直轨两个相对、弯道两个相邻、坡道沿抬升轴） */
 export function railDirections(shape: RailShape): readonly [RailDirection, RailDirection] {
   switch (shape) {
+    case 'ascending_north':
+    case 'ascending_south':
+      return [NORTH, SOUTH];
+    case 'ascending_east':
+    case 'ascending_west':
+      return [EAST, WEST];
     case 'north_south':
       return [NORTH, SOUTH];
     case 'east_west':
@@ -78,9 +130,9 @@ export function railDirections(shape: RailShape): readonly [RailDirection, RailD
   }
 }
 
-/** 直轨返回 true（矿车在直轨上不做转向） */
+/** 直轨返回 true（矿车在直轨与坡道上都不做"拐弯"，坡道只做爬升） */
 export function isStraightRail(shape: RailShape): boolean {
-  return shape === 'north_south' || shape === 'east_west';
+  return shape === 'north_south' || shape === 'east_west' || isSlopeRail(shape);
 }
 
 /** 放置时的四邻连接情况（由调用方按邻居是否是铁轨填） */
@@ -130,11 +182,34 @@ export function pickRailShape(connections: RailConnections, playerAxis: 'x' | 'z
 }
 
 /**
- * 弯道上"从某一侧进来之后往哪边走"（批次 479 矿车转向用）。
+ * 放置时要不要铺成坡道（批次 481）。
+ *
+ * 判据是原版那条：**沿某一侧的地面比这一格高一格**（高一格 = 那一列的方块顶面
+ * 正好高 1）——这时铺坡道，矿车才能爬上去；铺平轨的话车会撞在台阶上停下。
+ *
+ * @param highSide 哪一侧的地面高一格（由调用方按方块查询算出来）
+ * @param playerAxis 都没有高差时用不到，只用来保持一致的行为
+ */
+export function pickRailSlope(
+  highSide: { north: boolean; south: boolean; east: boolean; west: boolean },
+  playerAxis: 'x' | 'z',
+): RailShape | null {
+  const { north, south, east, west } = highSide;
+  // 同一轴两侧都高（夹在沟里）→ 不做坡道（原版也只认一侧）
+  if (north && !south) return 'ascending_north';
+  if (south && !north) return 'ascending_south';
+  if (east && !west) return 'ascending_east';
+  if (west && !east) return 'ascending_west';
+  void playerAxis;
+  return null;
+}
+
+/**
+ * 弯道上"从某一侧进来之后往哪边走"（矿车转向用）。
  *
  * @param shape 弯道形状
  * @param inDx 进入速度的方向（不必归一化，只用来定"从哪条边进来"）
- * @returns 出弯的方向（单位向量）；直轨返回 null（不需要转向）
+ * @returns 出弯的方向（单位向量）；直轨/坡道返回 null（不需要拐弯）
  */
 export function railExitDirection(shape: RailShape, inDx: number, inDz: number): RailDirection | null {
   if (isStraightRail(shape)) return null;
@@ -145,4 +220,19 @@ export function railExitDirection(shape: RailShape, inDx: number, inDz: number):
   // 进来时速度是"朝格内"，而边的方向是"从格心朝边界"，所以进弯边 = 点积**相反**的那条。
   // 换句话说：出弯边就是点积**为正**的那条（与进入方向同向的那条边是出口）
   return dotFirst >= dotSecond ? first : second;
+}
+
+/**
+ * 坡道上"这一格内的相对高度"（0 = 低端、1 = 高端）。
+ *
+ * @param shape 坡道形状
+ * @param localX 格内局部坐标（0~1）
+ * @param localZ 格内局部坐标（0~1）
+ */
+export function railSlopeHeight(shape: RailShape, localX: number, localZ: number): number {
+  const rise = railRiseDirection(shape);
+  if (!rise) return 0;
+  // 沿抬升方向投影：低端是 0、高端是 1
+  const t = rise.dx > 0 ? localX : rise.dx < 0 ? 1 - localX : rise.dz > 0 ? localZ : 1 - localZ;
+  return Math.max(0, Math.min(1, t));
 }

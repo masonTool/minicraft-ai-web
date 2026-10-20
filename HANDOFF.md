@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1041（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1042（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **193**、进行中 **78**、待办 17 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -247,6 +247,12 @@ npm run dev            # http://localhost:5173
   逐个调 `ctx.damageEntity`（环境伤害，所以不会让生物记仇）；`/loot give <表> [数量]`
   用现有 `rollLoot` 掷点、按 **id** 直接塞背包（`ctx.giveById`）。
   `test:commands` 227 → **236 条**，命令覆盖 **34 → 36（90%）**。
+- 批次 481（G12）：**铁轨坡道**。形状扩到十种（6 平面 + 4 坡道），编码改成
+  **bit0-2 + bit4**（bit3 是 `powered`；老存档 bit4=0 所以编号不变）。
+  铁轨从 `flat` 拆出独立的 `rail` 形状——`meshBoxes(shape, state)` 拿不到方块 id，
+  不拆就分不出"铁轨还是红石粉"。坡道画成 **4 段阶梯**（逐段抬高 1/4）。
+  放置时按"某一侧地面高一格"自动铺坡道；矿车按格内位置被抬到坡面。
+  `test:rail` 40 → **77 条**。
 - 批次 473（结构内容）：**战利品表 20 → 22**。新增 `stronghold_crossing`
   （要塞十字口）与 `ocean_ruins`（海底废墟，原先借用沉船补给表——物品池对不上）；
   要塞十字口与海底废墟各放了箱子，堡垒遗迹桥面也加了一只 `bastion_other`
