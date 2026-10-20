@@ -4103,7 +4103,7 @@ console.log('\n[位移 / 横扫附魔（批次 262）]');
   );
   check(
     '深海探索者 / 灵魂疾行 接在每帧移速上（靴子附魔 × 状态效果）',
-    appSrc.includes('this.effects.moveSpeedMultiplier() * this.movementEnchantMultiplier()') &&
+    /this\.effects\.moveSpeedMultiplier\(\)\s*\*\s*this\.movementEnchantMultiplier\(\)/.test(appSrc) &&
       appSrc.includes("enchantLevel(boots, 'depth_strider')") &&
       appSrc.includes("enchantLevel(boots, 'soul_speed')") &&
       appSrc.includes('below === Block.SOUL_SAND || below === Block.SOUL_SOIL'),

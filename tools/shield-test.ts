@@ -14,14 +14,17 @@
  * 运行：npm run test:shield
  */
 
+import { readFileSync } from 'node:fs';
 import { Item, CREATIVE_ITEMS, itemDef, durabilityOf, maxStackOf } from '../src/core/registry/items.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { itemLabel, itemDescription, hasDescription } from '../src/core/registry/itemNames.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
 import {
+  SHIELD_DISABLE_SECONDS,
   SHIELD_DURABILITY,
   SHIELD_KNOCKBACK,
+  SHIELD_SLOWDOWN,
   canBlockDamage,
   isFrontalAttack,
   isShield,
@@ -56,7 +59,7 @@ console.log('\n[物品]');
   check('创造栏里能拿到', CREATIVE_ITEMS.includes(Item.SHIELD));
   check('有说明', hasDescription(Item.SHIELD));
   check('说明写了"按住右键"与"挡"', itemDescription(Item.SHIELD).includes('右键') && itemDescription(Item.SHIELD).includes('挡'));
-  check('说明写清了差异（斧头不破防）', itemDescription(Item.SHIELD).includes('斧头'));
+  check('说明写了斧头会破防', itemDescription(Item.SHIELD).includes('斧头') && itemDescription(Item.SHIELD).includes('破防'));
 }
 
 console.log('\n[配方]');
@@ -78,9 +81,12 @@ console.log('\n[能挡什么]');
 {
   check('近战（generic）能挡', canBlockDamage('generic'));
   check('箭矢（projectile）能挡', canBlockDamage('projectile'));
-  for (const cause of ['explosion', 'fire', 'fall', 'poison', 'drown', 'lava', 'cactus', 'suffocate', 'starve', 'void', 'lightning', 'nonsense']) {
+  check('正面爆炸（explosion）能挡', canBlockDamage('explosion'));
+  for (const cause of ['fire', 'fall', 'poison', 'drown', 'lava', 'cactus', 'suffocate', 'starve', 'void', 'lightning', 'nonsense']) {
     check(`${cause} 挡不住`, !canBlockDamage(cause));
   }
+  equal('举盾减速到 30%', SHIELD_SLOWDOWN, 0.3);
+  equal('斧头破防 5 秒', SHIELD_DISABLE_SECONDS, 5);
 }
 
 console.log('\n[正面判定]');
@@ -118,6 +124,14 @@ console.log('\n[是不是盾牌]');
   check('（对照）木板不是', !isShield({ id: Block.OAK_PLANKS, count: 1 }));
   check('null 不是', !isShield(null));
   check('undefined 不是', !isShield(undefined));
+}
+
+console.log('\n[接线守卫（批次 551）]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('举盾减速接进物理倍率', mainSrc.includes('(this.isShieldUp ? SHIELD_SLOWDOWN : 1)'));
+  check('斧头命中写入破防计时', mainSrc.includes('this.shieldDisabled = SHIELD_DISABLE_SECONDS'));
+  check('破防期间 `isShieldUp` 为假', mainSrc.includes('this.shieldDisabled > 0'));
 }
 
 console.log(`\n盾牌测试：${passed} 通过 / ${failed} 失败`);

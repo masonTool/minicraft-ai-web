@@ -635,7 +635,15 @@ import { SignEditor } from './ui/SignEditor.ts';
 import { CommandBlockEditor } from './ui/CommandBlockEditor.ts';
 import { BookScreen } from './ui/BookScreen.ts';
 import { isWritableBook, isWrittenBook } from './core/items/Book.ts';
-import { SHIELD_KNOCKBACK, canBlockDamage, isFrontalAttack, isShield, shieldWear } from './core/items/Shield.ts';
+import {
+  SHIELD_DISABLE_SECONDS,
+  SHIELD_KNOCKBACK,
+  SHIELD_SLOWDOWN,
+  canBlockDamage,
+  isFrontalAttack,
+  isShield,
+  shieldWear,
+} from './core/items/Shield.ts';
 import { clockAngleDeg, compassAngleDeg, horizontalDistance } from './core/items/Navigation.ts';
 import { emptyMapData, markExplored } from './core/items/Map.ts';
 import { barterRoll } from './core/items/Barter.ts';
@@ -1758,6 +1766,8 @@ class App {
   private breakProgress = 0;
   private breakCooldown = 0;
   private placeCooldown = 0;
+  /** 盾牌被斧头破防的剩余秒数（批次 551） */
+  private shieldDisabled = 0;
   private leftDown = false;
   private rightDown = false;
 
@@ -4767,6 +4777,7 @@ class App {
 
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
+    this.shieldDisabled = Math.max(0, this.shieldDisabled - dt);
 
     this.updateAttacking(dt);
     this.updateBreaking(dt);
@@ -9756,9 +9767,20 @@ class App {
     const damage = amount * difficultyProfile(this.difficulty).mobDamage;
     if (damage <= 0) return;
 
-    // 盾牌（批次 194）：正面挡近战与箭矢——**挡下不等于受伤**，所以音效与震动都在下面才播
+    // 斧头破防（批次 551）：攻击者主手是斧 → 盾牌失效 5 秒，这一下也挡不住。
+    // 攻击者只有在"生物近战"时才会传进来（`DamageAttacker`），箭矢/爆炸没有主手。
+    const attackerWeapon = attacker instanceof Mob ? attacker.equipment.mainHand : undefined;
+    const axeHit = attackerWeapon !== undefined && toolInfoById(attackerWeapon)?.type === 'axe';
+    if (axeHit && this.isShieldUp) {
+      this.shieldDisabled = SHIELD_DISABLE_SECONDS;
+      this.audio.play('break_wood', { x: this.physics.x, y: this.physics.eyeY, z: this.physics.z });
+      this.chat.push('盾牌被斧头破防（5 秒）', 'system');
+    }
+
+    // 盾牌（批次 194）：正面挡近战、箭矢与爆炸——**挡下不等于受伤**，所以音效与震动都在下面才播
     if (
       this.isShieldUp &&
+      !axeHit &&
       canBlockDamage(cause) &&
       isFrontalAttack(-Math.sin(this.yaw), -Math.cos(this.yaw), sourceX - this.physics.x, sourceZ - this.physics.z)
     ) {
@@ -9816,7 +9838,7 @@ class App {
    * 触摸端是**按住空处**（准星没对着方块时长按）。创造模式不需要挡（本来就不受伤）。
    */
   private get isShieldUp(): boolean {
-    if (this.isCreative || !this.usingItem) return false;
+    if (this.isCreative || !this.usingItem || this.shieldDisabled > 0) return false;
     return isShield(this.inventory.get(this.hotbarIndex)) || isShield(this.inventory.get(OFFHAND_SLOT));
   }
 
@@ -15091,8 +15113,10 @@ class App {
           this.yaw,
           dt,
           this.flying,
-          // 状态效果 × 靴子附魔（批次 262：深海探索者 / 灵魂疾行）
-          this.effects.moveSpeedMultiplier() * this.movementEnchantMultiplier(),
+          // 状态效果 × 靴子附魔（批次 262）× 举盾减速（批次 551：原版 30%）
+          this.effects.moveSpeedMultiplier() *
+            this.movementEnchantMultiplier() *
+            (this.isShieldUp ? SHIELD_SLOWDOWN : 1),
           this.effects.jumpMultiplier(),
           // 自动跳跃（批次 206）：飞行时不跳（`update` 里那条分支本来也不走）
           this.settings.autoJump,
