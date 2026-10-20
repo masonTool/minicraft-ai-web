@@ -7,6 +7,7 @@ import { createHotbar } from './hotbar.ts';
 import { createInventory } from './inventory.ts';
 import { createPauseMenu, type PauseAction } from './pause.ts';
 import { createSettingsMenu, type SettingsValues } from './settings.ts';
+import { createChestScreen, type ChestAction } from './chest.ts';
 import { createOverlay } from './overlay.ts';
 import { createMainMenu, type MainMenuAction, type MainMenuInfo } from './main-menu.ts';
 import { createStats, type PlayerStats } from './stats.ts';
@@ -35,6 +36,11 @@ export interface MiniGameUi {
   handleSettingsTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
   handleSettingsScrollMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
   handleSettingsScrollUp(): void;
+  openChest(name: string, chest: readonly (ItemStack | null)[], player: readonly (ItemStack | null)[]): void;
+  closeChest(): void;
+  isChestOpen(): boolean;
+  setChest(chest: readonly (ItemStack | null)[], player: readonly (ItemStack | null)[]): void;
+  handleChestTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): ChestAction;
   isMainMenuOpen(): boolean;
   setWorldInfo(info: MainMenuInfo): void;
   handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
@@ -96,6 +102,7 @@ export function createCanvasUi(
   );
   const overlay = createOverlay(screenWidth, screenHeight);
   const mainMenu = createMainMenu(screenWidth, screenHeight);
+  const chestScreen = createChestScreen(atlas, screenWidth, screenHeight);
   const stats = createStats(screenWidth, screenHeight);
   const touchControls = createTouchControls(screenWidth, screenHeight);
   let settingsFromMenu = false;
@@ -115,7 +122,7 @@ export function createCanvasUi(
       inventory.setSelected(selectedSlot);
     },
     toggleInventory(): void {
-      if (pause.isOpen() || settings.isOpen()) return;
+      if (pause.isOpen() || settings.isOpen() || chestScreen.isOpen()) return;
       inventory.toggle();
     },
     isInventoryOpen(): boolean {
@@ -142,6 +149,7 @@ export function createCanvasUi(
     togglePause(): void {
       if (settings.isOpen()) settings.close();
       if (inventory.isOpen()) inventory.close();
+      if (chestScreen.isOpen()) chestScreen.close();
       pause.toggle();
     },
     isPauseOpen(): boolean {
@@ -154,6 +162,7 @@ export function createCanvasUi(
       settingsFromMenu = mainMenu.isOpen();
       mainMenu.close();
       inventory.close();
+      chestScreen.close();
       pause.close();
       settings.open();
     },
@@ -178,6 +187,24 @@ export function createCanvasUi(
     },
     handleSettingsScrollUp(): void {
       if (settings.isOpen()) settings.handleScrollUp();
+    },
+    openChest(name: string, chest: readonly (ItemStack | null)[], player: readonly (ItemStack | null)[]): void {
+      inventory.close();
+      pause.close();
+      settings.close();
+      chestScreen.open(name, chest, player);
+    },
+    closeChest(): void {
+      chestScreen.close();
+    },
+    isChestOpen(): boolean {
+      return chestScreen.isOpen();
+    },
+    setChest(chest: readonly (ItemStack | null)[], player: readonly (ItemStack | null)[]): void {
+      chestScreen.setSlots(chest, player);
+    },
+    handleChestTap(clientX: number, clientY: number, sw: number, sh: number): ChestAction {
+      return chestScreen.isOpen() ? chestScreen.handleTap(clientX, clientY, sw, sh) : null;
     },
     isMainMenuOpen(): boolean {
       return mainMenu.isOpen();
@@ -229,12 +256,17 @@ export function createCanvasUi(
         stats.render(renderer);
         return;
       }
+      if (chestScreen.isOpen()) {
+        chestScreen.render(renderer);
+        return;
+      }
       touchControls.render(renderer);
       stats.render(renderer);
       hud.render(renderer);
       hotbar.render(renderer);
       inventory.render(renderer);
       overlay.render(renderer);
+      chestScreen.render(renderer);
       pause.render(renderer);
       settings.render(renderer);
     },

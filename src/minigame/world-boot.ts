@@ -23,6 +23,7 @@ import { itemLabel } from '../core/registry/itemNames.ts';
 import { craftFromInventory } from '../core/crafting/RecipeBook.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { Inventory, type ItemStack } from '../core/container/Inventory.ts';
+import type { Chest } from '../core/container/Chest.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
@@ -472,6 +473,7 @@ async function boot(): Promise<void> {
   let flying = loadedPlayer?.flying ?? false;
   let sneaking = false;
   let mining: { x: number; y: number; z: number; elapsed: number; pointerId: number } | null = null;
+  let openedChest: Chest | null = null;
   const MINE_TIME = 0.6;
   let lastFrameTime = 0;
   ui.setFlying(flying);
@@ -876,6 +878,28 @@ async function boot(): Promise<void> {
     );
   };
 
+  const chestSnapshot = (): Array<ItemStack | null> =>
+    Array.from({ length: 27 }, (_, index) => openedChest?.get(index) ?? null);
+  const playerHotbarSnapshot = (): Array<ItemStack | null> =>
+    Array.from({ length: 9 }, (_, index) => inventory.get(index));
+  const refreshChest = (): void => {
+    if (openedChest) ui.setChest(chestSnapshot(), playerHotbarSnapshot());
+  };
+
+  const useTarget = (): void => {
+    updateTarget();
+    if (!currentHit) return;
+    const id = world.getBlock(currentHit.x, currentHit.y, currentHit.z);
+    if (id !== Block.CHEST) return;
+    openedChest = world.containers.getOrCreateChest(
+      world.dimension,
+      currentHit.x,
+      currentHit.y,
+      currentHit.z,
+    );
+    ui.openChest('箱子', chestSnapshot(), playerHotbarSnapshot());
+  };
+
   const placeTarget = (): void => {
     updateTarget();
     if (!currentHit) return;
@@ -923,8 +947,10 @@ async function boot(): Promise<void> {
       jumpQueued = true;
     } else if (y <= height * 0.45) {
       placeTarget();
+    } else if (y <= height * 0.78) {
+      useTarget();
     }
-    // 中间区域改为按住破坏，由 mining 状态在帧里推进
+    // 中间区域按住仍是破坏；短按用于打开箱子
   };
 
   platform.input.onPointer('down', (event) => {
@@ -971,6 +997,34 @@ async function boot(): Promise<void> {
     if (ui.isInventoryOpen()) {
       uiPointerId = event.pointerId;
       ui.handleInventoryDown(x, y, width, height);
+      return;
+    }
+    // 箱子打开时，点击只走箱子界面
+    if (ui.isChestOpen()) {
+      uiPointerId = event.pointerId;
+      const action = ui.handleChestTap(x, y, width, height);
+      if (action?.type === 'take' && openedChest) {
+        const stack = openedChest.get(action.index);
+        if (stack) {
+          openedChest.set(action.index, null);
+          inventory.addStack(stack);
+          ui.syncInventory(inventory.serialize(), selectedSlot);
+          refreshChest();
+          scheduleSave?.();
+        }
+      }
+      if (action?.type === 'put' && openedChest) {
+        const stack = inventory.get(action.index);
+        if (stack) {
+          const remaining = openedChest.add(stack.id, stack.count);
+          if (remaining <= 0) inventory.set(action.index, null);
+          else stack.count = remaining;
+          ui.syncInventory(inventory.serialize(), selectedSlot);
+          refreshChest();
+          scheduleSave?.();
+        }
+      }
+      if (!ui.isChestOpen()) openedChest = null;
       return;
     }
 
@@ -1179,7 +1233,7 @@ async function boot(): Promise<void> {
 
     // 等脚下区块加载完再落玩家，避免出生就掉进虚空
     if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
-    if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen()) {
+    if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen() || ui.isChestOpen()) {
       playerInput.forward = 0;
       playerInput.strafe = 0;
       playerInput.jump = false;
@@ -1197,7 +1251,7 @@ async function boot(): Promise<void> {
     updateParticles(dt);
 
     if (mining) {
-      if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen() || ui.isInventoryOpen()) {
+      if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen() || ui.isInventoryOpen() || ui.isChestOpen()) {
         cancelMining();
       } else {
         const id = world.getBlock(mining.x, mining.y, mining.z);
