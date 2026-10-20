@@ -267,3 +267,16 @@
 - [x] B455-7 `test:structure` 46 → **54 条**（布局不重叠/门朝街/确定性/地形不通不放）
 - 实测：**2 → 8 栋/村庄**（3 个村庄 24 栋、床 48 格、工作站 33）
 - ⚠️ 仍不是原版 jigsaw（无门对门接口匹配、无高度分层、无钟楼岗楼）；铁傀儡归 J24
+
+## 批次 456：记分板存档 + 侧边栏 HUD（M23 收尾两件）（2026-10-20）
+
+- [x] B456-1 `SaveGame` 第 8 个对象仓 `scoreboard`：DB_VERSION **5 → 6**，
+      `onupgradeneeded` 补建（老存档自动升级，缺这一份只是侧边栏为空）
+- [x] B456-2 `loadScoreboard` / `saveScoreboard`（整份覆盖写，同成就进度）
+- [x] B456-3 `Scoreboard.sidebarView()`：标题（显示名）+ 按分数**降序** + 截到 **15 行**
+      （纯数据，离线可断言；没有 sidebar 槽位返回 null）
+- [x] B456-4 `ui/ScoreboardHud.ts`：右上角（左上被生命/饥饿占着）、签名比对、
+      内容不变不动 DOM；手机横屏再缩一号；`dispose` 随 HUD 一起清
+- [x] B456-5 main 五处接线：load / save / 每帧 update / 字段 / dispose
+- [x] B456-6 `test:save` **+19 条**（JSON 往返 / 坏数据逐条跳过 / 排序 / 15 行截断 / 清槽位）
+- M23 仍 `[~]`：只剩**队伍**（队友免伤、碰撞开关、名字颜色）

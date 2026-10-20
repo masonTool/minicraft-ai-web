@@ -963,6 +963,34 @@
         .tool-hud-needle::before { height: 18px; }
       }
 
+      /* 侧边栏记分板（M23，批次 456）：右上角一小块排行，最多 15 行。
+         放在右上而不是左上：左上已经被生命/饥饿占了（VitalsHud）。
+         不接指针事件，避免挡住右上角可能出现的按钮 */
+      .scoreboard-hud {
+        position: fixed; top: 10px; right: 10px; z-index: 12;
+        min-width: 108px; max-width: 200px;
+        padding: 5px 8px;
+        background: rgba(0, 0, 0, .45);
+        border-radius: 6px;
+        color: #f2efe4;
+        font-size: 12px; line-height: 1.45;
+        text-shadow: 1px 1px 0 rgba(0, 0, 0, .75);
+        pointer-events: none;
+      }
+      .scoreboard-hud.hidden { display: none; }
+      .scoreboard-title {
+        margin-bottom: 2px;
+        font-weight: 700; text-align: center;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .scoreboard-row { display: flex; justify-content: space-between; gap: 10px; }
+      .scoreboard-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .scoreboard-value { color: #ffd75e; font-variant-numeric: tabular-nums; }
+      /* 手机横屏：再缩一号（高度只有 360~430，15 行也放得下） */
+      @media (max-height: 430px) {
+        .scoreboard-hud { top: 6px; right: 6px; font-size: 11px; padding: 4px 6px; }
+      }
+
       /* 书与笔 / 成书（批次 190，H16）：一页文本 + 翻页 + 完成/署名。
          与告示牌编辑器同一套写法与层叠层（12，盖住背包、在提示框之下）。
          手机横屏是主场景：面板高度封顶、文本区自己滚，按钮固定在底部 */

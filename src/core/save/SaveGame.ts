@@ -13,6 +13,9 @@
  *   5. **signs**：告示牌上的文字（B12，批次 80；序列化在 `world/SignText.ts`）
  *   6. **frames**：物品展示框里挂着的东西（B14，批次 86；序列化在 `world/ItemFrame.ts`）
  *   7. **advancements**：成就/进度（M7，批次 87；序列化在 `progress/AdvancementTracker.ts`）
+ *   8. **scoreboard**：记分板（M23，批次 456；序列化在 `world/Scoreboard.ts` 的 `snapshot`）
+ *
+ * 仓库版本：现在 **6**（每加一个对象仓 +1，`onupgradeneeded` 会补建，老存档自动升级）。
  *
  * 为什么用 IndexedDB 而不是 localStorage：
  *   localStorage 只能存字符串且容量约 5MB，把二进制转 base64 还会再胖 33%；
@@ -26,6 +29,7 @@ import type { SerializedContainer } from './ContainerSave.ts';
 import type { SerializedSign } from '../world/SignText.ts';
 import type { SerializedFrame } from '../world/ItemFrame.ts';
 import type { SerializedAdvancements } from '../progress/AdvancementTracker.ts';
+import type { ScoreboardSnapshot } from '../world/Scoreboard.ts';
 import type { SavedVehicle } from '../entity/VehicleParking.ts';
 import type { SavedEntityRecord } from '../entity/EntityParking.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
@@ -38,7 +42,7 @@ import { SAVE_VERSION, migratePlayer } from './SaveMigrations.ts';
 export { SAVE_VERSION };
 
 /** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const STORE_META = 'meta';
 import type { ItemStack } from '../container/Inventory.ts';
 import type { GameMode } from '../world/GameMode.ts';
@@ -73,6 +77,14 @@ const STORE_FRAMES = 'frames';
  * 仓库版本从 4 升到 5，老存档自动补建。
  */
 const STORE_ADVANCEMENTS = 'advancements';
+/**
+ * 记分板（M23，批次 456）——第 8 个对象仓。
+ *
+ * 内容是一份 `ScoreboardSnapshot`（目标 + 分数 + 显示槽位），**整份覆盖写**：
+ * 条数以十计，与成就进度同一档；它也不属于任何坐标，是纯世界状态。
+ * 仓库版本从 5 升到 6，老存档自动补建（缺这一份时侧边栏就是空的，不会坏）。
+ */
+const STORE_SCOREBOARD = 'scoreboard';
 
 export interface SaveMeta {
   seed: number;
@@ -255,6 +267,7 @@ export class SaveGame {
         if (!db.objectStoreNames.contains(STORE_SIGNS)) db.createObjectStore(STORE_SIGNS);
         if (!db.objectStoreNames.contains(STORE_FRAMES)) db.createObjectStore(STORE_FRAMES);
         if (!db.objectStoreNames.contains(STORE_ADVANCEMENTS)) db.createObjectStore(STORE_ADVANCEMENTS);
+        if (!db.objectStoreNames.contains(STORE_SCOREBOARD)) db.createObjectStore(STORE_SCOREBOARD);
       };
       const db = await promisify(request);
       const save = new SaveGame(db, worldId);
@@ -475,6 +488,25 @@ export class SaveGame {
   async saveAdvancements(progress: SerializedAdvancements): Promise<void> {
     await this.transaction(STORE_ADVANCEMENTS, 'readwrite', (store) => {
       store.put(progress, 'advancements');
+    });
+  }
+
+  /**
+   * 读记分板（M23，批次 456）。
+   *
+   * 校验在 `Scoreboard.restore`（坏的条目跳过、好的收下，返回跳过的条数）；
+   * 存档这一层只负责搬运——与成就进度同一条分工。
+   */
+  async loadScoreboard(): Promise<ScoreboardSnapshot | null> {
+    const value = await this.transaction(STORE_SCOREBOARD, 'readonly', (store) =>
+      promisify(store.get('scoreboard') as IDBRequest<ScoreboardSnapshot | undefined>),
+    );
+    return value ?? null;
+  }
+
+  async saveScoreboard(snapshot: ScoreboardSnapshot): Promise<void> {
+    await this.transaction(STORE_SCOREBOARD, 'readwrite', (store) => {
+      store.put(snapshot, 'scoreboard');
     });
   }
 

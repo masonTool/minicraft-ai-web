@@ -52,6 +52,15 @@ export interface ScoreEntry {
   value: number;
 }
 
+/** 侧边栏最多显示多少行（原版也是 15） */
+export const SIDEBAR_MAX_ROWS = 15;
+
+/** 侧边栏视图（纯数据；HUD 只负责画） */
+export interface SidebarView {
+  title: string;
+  rows: ScoreEntry[];
+}
+
 /** 存读档用的扁平快照（Map 不能直接进 JSON） */
 export interface ScoreboardSnapshot {
   objectives: Array<{ name: string; criterion: string; displayName: string; scores: Array<[string, number]> }>;
@@ -144,6 +153,23 @@ export class Scoreboard {
 
   display(slot: ScoreboardSlot): string | null {
     return this.displays.get(slot) ?? null;
+  }
+
+  /**
+   * 侧边栏要显示的内容（批次 456）：标题 + 按分数降序的行（最多 15 行，原版如此）。
+   *
+   * 抽成纯数据而不是让 HUD 自己去问：`ui/ScoreboardHud` 只负责画，
+   * "显示哪个目标、按什么顺序、截到几行"这三条都能离线断言。
+   * 没有 sidebar 槽位时返回 null（HUD 整块收起）。
+   */
+  sidebarView(): SidebarView | null {
+    const name = this.displays.get('sidebar');
+    if (!name) return null;
+    const objective = this.objectives.get(name);
+    return {
+      title: objective?.displayName ?? name,
+      rows: this.listScores(name).slice(0, SIDEBAR_MAX_ROWS),
+    };
   }
 
   // ------------------------------------------------------------ 分数

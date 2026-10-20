@@ -551,6 +551,7 @@ import { emptyMapData, markExplored } from './core/items/Map.ts';
 import { barterRoll } from './core/items/Barter.ts';
 import { MapScreen } from './ui/MapScreen.ts';
 import { ToolHud } from './ui/ToolHud.ts';
+import { ScoreboardHud } from './ui/ScoreboardHud.ts';
 import { fireworkColorsOf, isFireworkRocket } from './core/items/Firework.ts';
 import { Firework } from './core/entity/Firework.ts';
 // 设备不支持时的整屏提示（A10，批次 85）：判定在 core/render/webglSupport.ts（纯逻辑、可断言）
@@ -834,6 +835,8 @@ class App {
   private readonly xpHud: XpHud;
   /** 指南针 / 时钟的读数（批次 195）：主手拿着它们时才有内容 */
   private readonly toolHud: ToolHud;
+  /** 侧边栏记分板（M23，批次 456） */
+  private readonly scoreboardHud: ScoreboardHud;
   /** 天空：渐变穹顶 / 太阳月亮 / 星空 / 云 */
   private readonly sky: Sky;
   /** 天气：晴 / 雨 / 雷暴 */
@@ -1696,6 +1699,8 @@ class App {
     this.xpHud = new XpHud(document.getElementById('hud') ?? container);
     // 指南针/时钟读数（批次 195）：与生命/经验挂在同一个 `#hud` 里
     this.toolHud = new ToolHud(document.getElementById('hud') ?? container);
+    // 侧边栏记分板（M23，批次 456）：右上角，只在 `/scoreboard objectives setdisplay sidebar` 之后出现
+    this.scoreboardHud = new ScoreboardHud(document.getElementById('hud') ?? container);
     // 准星下方的目标名称（批次 181）：手机上"这是什么东西"原来只能靠猜
     this.targetInfoEl = document.createElement('div');
     this.targetInfoEl.id = 'target-info';
@@ -2842,6 +2847,12 @@ class App {
     const restoredProgress = this.advancements.restore(progress);
     if (restoredProgress > 0) console.info(`[save] 已还原 ${restoredProgress} 条成就进度`);
 
+    // 记分板（M23，批次 456）：与进度同一条分工——存档只搬运，坏条目由
+    // `Scoreboard.restore` 跳过（返回值是跳过的条数）
+    const scoreboard = await this.save.loadScoreboard();
+    const skippedScores = this.scoreboardState.restore(scoreboard);
+    if (skippedScores > 0) console.info(`[save] 记分板跳过了 ${skippedScores} 条坏数据`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -3003,6 +3014,8 @@ class App {
       await this.save.saveFrames(serializeFrames(this.itemFrames));
       // 成就 / 进度（M7）：整份覆盖写（`serialize` 按表的顺序排，diff 稳定）
       await this.save.saveAdvancements(this.advancements.serialize());
+      // 记分板（M23，批次 456）：整份覆盖写
+      await this.save.saveScoreboard(this.scoreboardState.snapshot());
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -12188,6 +12201,8 @@ class App {
     this.vitalsHud.update(this.stats, this.isCreative);
     this.xpHud.update(this.experience, this.isCreative);
     this.updateToolHud();
+    // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM
+    this.scoreboardHud.update(this.scoreboardState.sidebarView());
     // 地图探索（批次 196）：跨区块才扫一遍背包
     this.updateMapExploration();
     this.chat.update();
@@ -13624,6 +13639,7 @@ class App {
     this.vitalsHud.dispose();
     this.xpHud.dispose();
     this.toolHud.dispose();
+    this.scoreboardHud.dispose();
     // 触摸层：先清手势计时器，再摘 DOM
     this.touch?.dispose();
     this.touch = null;

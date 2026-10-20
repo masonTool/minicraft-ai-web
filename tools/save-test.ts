@@ -22,6 +22,7 @@ import {
   restoreContainers,
   serializeContainers,
 } from '../src/core/save/ContainerSave.ts';
+import { Scoreboard, SIDEBAR_MAX_ROWS } from '../src/core/world/Scoreboard.ts';
 import { ChunkEdits, packEdit, packEditId, packEditState } from '../src/core/save/ChunkEdits.ts';
 import { BREW_SECONDS, BREWS_PER_BLAZE_POWDER } from '../src/core/crafting/Brewing.ts';
 
@@ -394,3 +395,72 @@ console.log('\n[容器内容：空容器与脏数据]');
 
 console.log(`\n存档测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
+
+console.log('\n[记分板存读档（M23，批次 456）]');
+{
+  const board = new Scoreboard();
+  board.addObjective('points', 'dummy', '得分');
+  board.addObjective('deaths', 'dummy');
+  board.setScore('Alice', 'points', 12);
+  board.setScore('Bob', 'points', 7);
+  board.setScore('alice', 'deaths', 3); // 大小写不同、同一持有人
+  board.setDisplay('sidebar', 'points');
+
+  // ① 快照 → JSON → 读回：目标、分数、显示槽位都要在
+  const roundTrip = new Scoreboard();
+  roundTrip.restore(JSON.parse(JSON.stringify(board.snapshot())));
+  equal('目标数读回来', roundTrip.objectiveCount, 2);
+  equal('显示名读回来', roundTrip.objective('points')?.displayName, '得分');
+  equal('分数读回来', roundTrip.getScore('Alice', 'points'), 12);
+  equal('大小写不同的持有人是同一个人', roundTrip.getScore('ALICE', 'deaths'), 3);
+  equal('侧边栏槽位读回来', roundTrip.display('sidebar'), 'points');
+  equal('两次快照完全一致', JSON.stringify(roundTrip.snapshot()), JSON.stringify(board.snapshot()));
+
+  // ② 坏数据逐条跳过（不是整份丢掉）
+  const broken = {
+    objectives: [
+      { name: 'ok', criterion: 'dummy', displayName: '好的', scores: [['A', 5]] as Array<[string, number]> },
+      { name: 'bad', criterion: 'health', displayName: '坏准则', scores: [] as Array<[string, number]> },
+      { name: '', criterion: 'dummy', displayName: '空名', scores: [] as Array<[string, number]> },
+    ],
+    displays: [['sidebar', 'ok'], ['sidebar', 'missing']] as Array<['sidebar', string]>,
+  };
+  const salvaged = new Scoreboard();
+  const skipped = salvaged.restore(broken as never);
+  equal('只有一条目标活下来', salvaged.objectiveCount, 1);
+  equal('三条坏数据被跳过', skipped, 3);
+  equal('活下来的分数还在', salvaged.getScore('A', 'ok'), 5);
+  equal('指向不存在目标的槽位被丢掉、好槽位保留', salvaged.display('sidebar'), 'ok');
+
+  // ③ 没有存档（老存档）→ 空板，不报错
+  const empty = new Scoreboard();
+  equal('没有存档时跳过量是 0', empty.restore(null), 0);
+  equal('空板没有侧边栏', empty.sidebarView(), null);
+}
+
+console.log('\n[侧边栏视图（批次 456）]');
+{
+  const board = new Scoreboard();
+  board.addObjective('points', 'dummy', '本周得分');
+  board.setDisplay('sidebar', 'points');
+  const view = board.sidebarView();
+  equal('标题用显示名', view?.title, '本周得分');
+  equal('没有分数时是空列表', view?.rows.length, 0);
+
+  board.setScore('Bob', 'points', 3);
+  board.setScore('Alice', 'points', 9);
+  board.setScore('Carol', 'points', 6);
+  const ranked = board.sidebarView();
+  equal('按分数降序', ranked?.rows.map((row) => row.holder).join(','), 'Alice,Carol,Bob');
+  equal('第一名是 Alice', ranked?.rows[0]?.value, 9);
+
+  // 最多 15 行（原版侧边栏上限）
+  for (let i = 0; i < 20; i++) board.setScore(`p${i}`, 'points', 100 + i);
+  const capped = board.sidebarView();
+  equal('最多 15 行', capped?.rows.length, SIDEBAR_MAX_ROWS);
+  equal('截断时保留最高的那个', capped?.rows[0]?.holder, 'p19');
+
+  // 没设 sidebar 槽位 → null（HUD 整块收起）
+  board.setDisplay('sidebar', null);
+  equal('清掉槽位后没有视图', board.sidebarView(), null);
+}
