@@ -43,6 +43,11 @@ import { Biome } from './Biome.ts';
 import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld, OUTSIDE } from './Features.ts';
 import { planVillageLayout, type VillageDoorFacing, type VillagePieceKind } from './VillageLayout.ts';
 import { creatureAnchorsFor, type StructureCreatureKind } from './StructureCreatures.ts';
+import {
+  MINESHAFT_CORRIDOR_HALF,
+  MINESHAFT_ROOM_HALF,
+  planMineshaft,
+} from './MineshaftLayout.ts';
 
 // ---------------------------------------------------------------- 类型
 
@@ -1032,78 +1037,83 @@ function buildHouse(
 
 // ---------------------------------------------------------------- 废弃矿井
 
+/**
+ * 废弃矿井（批次 460 改造）：从"递归随机分叉"换成**节点网格 + 走廊边**的拼图。
+ *
+ * 布局在 `MineshaftLayout.ts`（纯函数）：节点落在 8 格网格上、互不重叠、广度优先
+ * 扩展所以**全部连通**；这里只负责按零件画方块（走廊 / 十字口 / 房间）。
+ *
+ * ⚠️ 本批只做**平面**：原版矿井是多层、层间靠楼梯连着，那一层要"段的高度连续"
+ * 这套约束，单独一批（差异记在 TASKS）。
+ */
 function buildMineshaft(w: FeatureWriter, s: StructureInstance, _world: FeatureWorld, _seed: number): void {
   const rng = s.rng;
   const log = Block.OAK_LOG;
   const plank = Block.OAK_PLANKS;
   const fence = Block.OAK_FENCE;
 
-  // 走廊：3 高 3 宽，木支撑每 4 格
-  const dig = (x: number, y: number, z: number, dirX: number, dirZ: number, length: number, depth: number): void => {
-    for (let i = 0; i < length; i++) {
-      const cx = x + dirX * i;
-      const cz = z + dirZ * i;
-      // 3×3 截面
-      const px = dirX === 0 ? 1 : 0;
-      const pz = dirZ === 0 ? 1 : 0;
-      clear(w, cx - px, y, cz - pz, cx + px, y + 2, cz + pz);
-      // 地面铺木板，避免踩在虚空上
-      for (let dx = -px; dx <= px; dx++) {
-        for (let dz = -pz; dz <= pz; dz++) w.fill(cx + dx, y - 1, cz + dz, plank);
-      }
-      // 蛛网（批次 442）：矿井里"角落里挂着几缕"才是原版的样子，
-      // 而且它同时解决了**蛛网在生存里拿不到**这件事（此前只能创造里放）。
-      // 放在顶角而不是通道中央：中央会把人粘在半路，玩起来只剩烦。
-      if (rng.chance(0.15)) {
-        w.fill(cx - px, y + 2, cz - pz, Block.COBWEB);
-        if (rng.chance(0.5)) w.fill(cx + px, y + 2, cz + pz, Block.COBWEB);
-      }
+  const plan = planMineshaft(s.x, s.y, s.z, () => rng.next(), {
+    // 8~13 个节点（原版矿井是一片，4~6 个节点会显得太空）
+    target: 8 + rng.int(6),
+    maxRadius: 24,
+  });
 
-      // 木支撑（拱形：两根立柱 + 一根横梁）
+  const dirVec = (dir: number): [number, number] =>
+    dir === 0 ? [1, 0] : dir === 1 ? [-1, 0] : dir === 2 ? [0, 1] : [0, -1];
+
+  // ---- 走廊段：3 宽 3 高，柱子每 4 格、火把每 12 格、顶角偶尔挂蛛网
+  for (const segment of plan.segments) {
+    const [dx, dz] = dirVec(segment.dir);
+    const px = dz !== 0 ? 1 : 0;
+    const pz = dx !== 0 ? 1 : 0;
+    for (let i = 0; i <= segment.length; i++) {
+      const cx = segment.x + dx * i;
+      const cz = segment.z + dz * i;
+      clear(w, cx - px, segment.y, cz - pz, cx + px, segment.y + 2, cz + pz);
+      for (let ox = -px; ox <= px; ox++) {
+        for (let oz = -pz; oz <= pz; oz++) w.fill(cx + ox, segment.y - 1, cz + oz, plank);
+      }
+      // 蛛网（批次 442）：顶角挂几缕——同时它也是"生存里怎么拿到蛛网"的答案
+      if (rng.chance(0.12)) {
+        w.fill(cx - px, segment.y + 2, cz - pz, Block.COBWEB);
+        if (rng.chance(0.5)) w.fill(cx + px, segment.y + 2, cz + pz, Block.COBWEB);
+      }
+      // 木支撑（拱形：两根立柱 + 一根横梁）。立柱底是木板、上面是栅栏——
+      // 与改造前同一套观感（直接全用栅栏会显得"空"，且栅栏数量也少一半）
       if (i % 4 === 0) {
-        w.fill(cx - px, y, cz - pz, plank);
-        w.fill(cx + px, y, cz + pz, plank);
-        w.fill(cx - px, y + 1, cz - pz, fence);
-        w.fill(cx + px, y + 1, cz + pz, fence);
-        w.fill(cx, y + 2, cz, plank);
-        if (i % 12 === 0) torch(w, cx, y + 1, cz, 0);
+        w.fill(cx - px, segment.y, cz - pz, plank);
+        w.fill(cx + px, segment.y, cz + pz, plank);
+        w.fill(cx - px, segment.y + 1, cz - pz, fence);
+        w.fill(cx + px, segment.y + 1, cz + pz, fence);
+        w.fill(cx, segment.y + 2, cz, plank);
+        if (i % 12 === 0) torch(w, cx, segment.y + 1, cz, 0);
       }
     }
+  }
 
-    // 分叉与继续延伸
-    if (depth <= 0) return;
-    const branches = 1 + rng.int(3);
-    for (let b = 0; b < branches; b++) {
-      const bx = x + dirX * (4 + rng.int(Math.max(1, length - 4)));
-      const bz = z + dirZ * (4 + rng.int(Math.max(1, length - 4)));
-      const turn = rng.chance(0.5);
-      const nx = turn ? (rng.chance(0.5) ? 1 : -1) : dirX;
-      const nz = turn ? 0 : rng.chance(0.5) ? 1 : -1;
-      const ny = y + (rng.chance(0.3) ? (rng.chance(0.5) ? 5 : -5) : 0);
-      if (ny < -60 || ny > 55) continue;
-      dig(bx, ny, bz, nx, nz, 10 + rng.int(18), depth - 1);
+  // ---- 节点：十字口（3×3）与房间（7×7，带箱子/刷怪笼）
+  for (const node of plan.nodes) {
+    const half = node.kind === 'room' ? MINESHAFT_ROOM_HALF : MINESHAFT_CORRIDOR_HALF;
+    const height = node.kind === 'room' ? 3 : 2;
+    clear(w, node.x - half, node.y, node.z - half, node.x + half, node.y + height, node.z + half);
+    box(w, node.x - half, node.y - 1, node.z - half, node.x + half, node.y - 1, node.z + half, plank);
+    for (const [sx, sz] of [
+      [-half, -half],
+      [half, -half],
+      [-half, half],
+      [half, half],
+    ] as const) {
+      w.fill(node.x + sx, node.y, node.z + sz, log);
+      w.fill(node.x + sx, node.y + 1, node.z + sz, log);
     }
-
-    // 走廊尽头的小房间
-    if (rng.chance(0.7)) {
-      const rx = x + dirX * (length - 2);
-      const rz = z + dirZ * (length - 2);
-      const ex = dirX === 0 ? 3 : 0;
-      const ez = dirZ === 0 ? 3 : 0;
-      clear(w, rx - ex, y, rz - ez, rx + ex, y + 3, rz + ez);
-      box(w, rx - ex - 1, y - 1, rz - ez - 1, rx + ex + 1, y - 1, rz + ez + 1, plank);
-      lootChest(w, rx + ex, y, rz + ez, 'mineshaft');
+    if (node.kind === 'room') {
+      lootChest(w, node.x, node.y, node.z, 'mineshaft');
       // 废弃矿井的招牌：洞穴蜘蛛刷怪笼（批次 365）
-      if (rng.chance(0.6)) w.fill(rx, y, rz, Block.CAVE_SPIDER_SPAWNER);
-      torch(w, rx, y + 3, rz, 0);
-      // 支撑柱与可能的粗铁块（原版矿井里的"矿车箱"）
-      w.fill(rx - ex, y, rz - ez, log);
-      w.fill(rx + ex, y, rz + ez, log);
+      if (rng.chance(0.6)) w.fill(node.x, node.y, node.z - 2, Block.CAVE_SPIDER_SPAWNER);
+      torch(w, node.x - 2, node.y + 3, node.z - 2, 0);
+      w.fill(node.x + 2, node.y, node.z + 2, log);
     }
-  };
-
-  // 主巷道沿 X 方向铺开
-  dig(s.x - 14, s.y, s.z, 1, 0, 28, 2);
+  }
 }
 
 // ---------------------------------------------------------------- 要塞

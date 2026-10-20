@@ -26,6 +26,8 @@ import {
 } from '../src/core/gen/Structures.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
+import { planMineshaft } from '../src/core/gen/MineshaftLayout.ts';
+import { lootTableIndex } from '../src/core/registry/loot.ts';
 import {
   STRUCTURE_CREATURE_KINDS,
   STRUCTURE_CREATURES,
@@ -559,7 +561,7 @@ console.log('\n[矿井里的蛛网（批次 442）]');
   const sources = readFileSync(new URL('../src/core/gen/GenerationSources.ts', import.meta.url), 'utf8');
   check(
     '废弃矿井生成时会挂蛛网',
-    structures.includes('w.fill(cx - px, y + 2, cz - pz, Block.COBWEB)'),
+    structures.includes('w.fill(cx - px, segment.y + 2, cz - pz, Block.COBWEB)'),
   );
   check(
     '生成来源表也把蛛网算进矿井（可达性审计靠这张表）',
@@ -793,6 +795,124 @@ console.log('\n[结构生物在真实地形上都能落地（批次 457）]');
     }
     equal('每一个锚点都在 3 格内找到了落点（一只都不会丢）', placed, spawns.length);
     check('没有落不下的锚点', missing.length === 0, missing.slice(0, 3).join(' '));
+  }
+}
+
+console.log('\n[废弃矿井的拼图布局（批次 460）]');
+{
+  /** 确定性随机源（与其它测试同一套 LCG） */
+  const lcg = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  };
+  const dirVec = (dir: number): [number, number] =>
+    dir === 0 ? [1, 0] : dir === 1 ? [-1, 0] : dir === 2 ? [0, 1] : [0, -1];
+
+  const plan = planMineshaft(0, 40, 0, lcg(7), { target: 10 });
+  equal('半径够时节点数 = 目标数', plan.nodes.length, 10);
+  equal('段数 = 节点数 - 1（是一棵树，没有环）', plan.segments.length, plan.nodes.length - 1);
+
+  const keys = new Set(plan.nodes.map((node) => `${node.x},${node.z}`));
+  equal('节点互不重叠（网格唯一）', keys.size, plan.nodes.length);
+
+  let dangling = 0;
+  const adjacency = new Map<string, string[]>();
+  for (const segment of plan.segments) {
+    const [dx, dz] = dirVec(segment.dir);
+    const from = `${segment.x},${segment.z}`;
+    const to = `${segment.x + dx * segment.length},${segment.z + dz * segment.length}`;
+    if (!keys.has(to)) dangling++;
+    // 双向邻接表（连通性检查用）
+    if (!adjacency.has(from)) adjacency.set(from, []);
+    if (!adjacency.has(to)) adjacency.set(to, []);
+    adjacency.get(from)!.push(to);
+    adjacency.get(to)!.push(from);
+  }
+  equal('每条走廊的终点都是一个节点（没有断头路）', dangling, 0);
+
+  // 连通性：从起点 BFS 能走到每一个节点
+  const startKey = `${plan.nodes[0]!.x},${plan.nodes[0]!.z}`;
+  const seen = new Set<string>([startKey]);
+  const queue = [startKey];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const next of adjacency.get(current) ?? []) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      queue.push(next);
+    }
+  }
+  equal('全部节点与起点连通（不会出现走不到的孤岛）', seen.size, plan.nodes.length);
+
+  check(
+    '全部节点在半径 24 内',
+    plan.nodes.every((node) => Math.hypot(node.x, node.z) <= 24),
+    `最远 ${Math.max(...plan.nodes.map((node) => Math.hypot(node.x, node.z))).toFixed(1)}`,
+  );
+  check(
+    '房间是少数（五分之一左右）',
+    plan.nodes.filter((node) => node.kind === 'room').length <= Math.ceil(plan.nodes.length / 2),
+  );
+
+  equal(
+    '同样的种子两次布局完全一致（跨区块重放的前提）',
+    JSON.stringify(planMineshaft(0, 40, 0, lcg(7), { target: 10 })),
+    JSON.stringify(plan),
+  );
+  equal(
+    '半径 0 时只剩起点（负对照）',
+    planMineshaft(0, 40, 0, lcg(7), { target: 10, maxRadius: 0 }).nodes.length,
+    1,
+  );
+
+  // ---- 真实生成：找一个矿井，数它铺下去的方块
+  const seed = 20261014;
+  const world = new OverworldGenerator(seed);
+  let shaft = null;
+  for (let cellZ = -24; cellZ <= 24 && !shaft; cellZ++) {
+    for (let cellX = -24; cellX <= 24 && !shaft; cellX++) {
+      shaft = structureInstanceForTest('mineshaft', cellX, cellZ, world, seed);
+    }
+  }
+  check('找得到一个废弃矿井', shaft !== null);
+  if (shaft) {
+    const cx0 = Math.floor((shaft.x - 28) / 16);
+    const cx1 = Math.floor((shaft.x + 28) / 16);
+    const cz0 = Math.floor((shaft.z - 28) / 16);
+    const cz1 = Math.floor((shaft.z + 28) / 16);
+    let planks = 0;
+    let fences = 0;
+    let cobwebs = 0;
+    let lootChests = 0;
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const blocks = generateChunkBlocks(cx, cz, seed);
+        const states = takeGeneratedStates() ?? new Uint8Array(blocks.length);
+        // ⚠️ 矿井在地下、y 可以是**负数**（`undergroundY` 是 -10..40）：
+        // 从 0 开始扫会一块都数不到（第一版就是这么红的）
+        for (let y = -64; y < 200; y++) {
+          for (let z = 0; z < 16; z++) {
+            for (let x = 0; x < 16; x++) {
+              const index = Chunk.index(x, y, z);
+              const id = blocks[index]!;
+              if (id === Block.OAK_PLANKS) planks++;
+              else if (id === Block.OAK_FENCE) fences++;
+              else if (id === Block.COBWEB) cobwebs++;
+              else if (id === Block.CHEST && chestLootIndex(states[index]!) === lootTableIndex('mineshaft')) lootChests++;
+            }
+          }
+        }
+      }
+    }
+    check('走廊铺满了木板（> 300 格）', planks > 300, `${planks} 格`);
+    // 柱子从 i%4==0 开始，段两端的柱子会被**节点自身的木柱**覆盖（同位置写两次），
+    // 所以实际留下来的只有段中部那几根——数量级对就行，不追求精确值
+    check('木支撑立柱在（栅栏 > 15 格）', fences > 15, `${fences} 格`);
+    check('顶角挂着蛛网', cobwebs > 0, `${cobwebs} 格`);
+    check('房间里有挂着矿井表的箱子', lootChests > 0, `${lootChests} 只`);
   }
 }
 
