@@ -27,6 +27,7 @@ export interface MiniGameUi {
   toggleInventory(): void;
   openCraftingTable(): void;
   setCreativeMode(enabled: boolean): void;
+  setTouchLayout(leftHanded: boolean, scale: number): void;
   isInventoryOpen(): boolean;
   handleInventoryDown(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
   handleInventoryMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
@@ -131,6 +132,8 @@ export function createCanvasUi(
   const furnaceScreen = createFurnaceScreen(atlas, screenWidth, screenHeight);
   const stats = createStats(screenWidth, screenHeight, safeArea);
   const touchControls = createTouchControls(screenWidth, screenHeight, safeArea);
+  const initialUiSettings = initialSettings ?? DEFAULT_SETTINGS;
+  touchControls.setLayout(initialUiSettings.leftHanded, initialUiSettings.touchScale);
   let settingsFromMenu = false;
 
   return {
@@ -153,6 +156,9 @@ export function createCanvasUi(
     },
     setCreativeMode(enabled: boolean): void {
       inventory.setCreativeMode(enabled);
+    },
+    setTouchLayout(leftHanded: boolean, scale: number): void {
+      touchControls.setLayout(leftHanded, scale);
     },
     openCraftingTable(): void {
       pause.close();

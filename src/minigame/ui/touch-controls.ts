@@ -4,6 +4,7 @@ import { drawText } from './widgets.ts';
 export interface TouchControls {
   setFlying(active: boolean): void;
   setSneaking(active: boolean): void;
+  setLayout(leftHanded: boolean, scale: number): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -49,10 +50,13 @@ export function createTouchControls(
   const designScale = 1024 / Math.max(1, screenWidth);
   const safeTop = (safeArea?.top ?? 0) * designScale;
   const safeLeft = (safeArea?.left ?? 0) * designScale;
+  const safeRight = (safeArea?.right ?? screenWidth) * designScale;
   const safeBottom = Math.max(0, screenHeight - (safeArea?.bottom ?? screenHeight)) * designScale;
 
   let flying = false;
   let sneaking = false;
+  let leftHanded = false;
+  let touchScale = 1;
 
   const circle = (x: number, y: number, radius: number, fill: string, stroke: string): void => {
     if (!context) return;
@@ -96,12 +100,15 @@ export function createTouchControls(
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 摇杆：Web 132px / 屏宽 844 ≈ 160 设计单位
-    const stickRadius = 80;
-    const stickX = safeLeft + 26 + stickRadius;
+    // 摇杆：Web 132px / 屏宽 844 ≈ 160 设计单位；左手模式镜像到右侧
+    const scale = touchScale;
+    const stickRadius = 80 * scale;
+    const stickX = leftHanded
+      ? safeRight - 26 - stickRadius
+      : safeLeft + 26 + stickRadius;
     const stickY = canvas.height - safeBottom - 116 - stickRadius;
     circle(stickX, stickY, stickRadius, 'rgba(255, 255, 255, 0.13)', 'rgba(255, 255, 255, 0.3)');
-    circle(stickX, stickY, 34, 'rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0.8)');
+    circle(stickX, stickY, 34 * scale, 'rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0.8)');
     if (sneaking) {
       drawText(context, '潜行', stickX, stickY - stickRadius - 22, 15, 'rgba(255, 255, 255, 0.85)', 'center');
     }
@@ -120,9 +127,11 @@ export function createTouchControls(
     const bagY = canvas.height - safeBottom - 84;
     squareButton(bagX, bagY, bagSize, () => drawBagIcon(bagX + bagSize / 2, bagY + bagSize / 2));
 
-    // 右下跳跃：Web 76px / 844 ≈ 92 设计单位
-    const jumpRadius = 46;
-    const jumpX = canvas.width - safeLeft - 24 - jumpRadius;
+    // 右下跳跃：Web 76px / 844 ≈ 92 设计单位；左手模式镜像到左侧
+    const jumpRadius = 46 * scale;
+    const jumpX = leftHanded
+      ? safeLeft + 24 + jumpRadius
+      : safeRight - 24 - jumpRadius;
     const jumpY = canvas.height - safeBottom - 116 - jumpRadius;
     circle(jumpX, jumpY, jumpRadius, 'rgba(255, 255, 255, 0.16)', 'rgba(255, 255, 255, 0.34)');
     context.fillStyle = 'rgba(255, 255, 255, 0.9)';
@@ -181,6 +190,13 @@ export function createTouchControls(
     setSneaking(active: boolean): void {
       if (sneaking === active) return;
       sneaking = active;
+      redraw();
+    },
+    setLayout(nextLeftHanded: boolean, nextScale: number): void {
+      const scale = Math.max(0.75, Math.min(1.5, nextScale));
+      if (leftHanded === nextLeftHanded && touchScale === scale) return;
+      leftHanded = nextLeftHanded;
+      touchScale = scale;
       redraw();
     },
     render(renderer: THREE.WebGLRenderer): void {

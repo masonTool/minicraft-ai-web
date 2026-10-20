@@ -158,12 +158,22 @@ async function boot(): Promise<void> {
   const bagSize = 50 * uiScale;
   const bagLeft = 840 * uiScale;
   const bagTop = height - safeBottomPx - 84 * uiScale;
-  const jumpRadiusPx = 46 * uiScale;
-  const jumpCenterX = (1024 - 24 - 46) * uiScale;
-  const jumpCenterY = height - safeBottomPx - (116 + 46) * uiScale;
-  const stickCenterX = (Math.max(0, safe.left) + 26 + 80) * uiScale;
-  const stickCenterY = height - safeBottomPx - (116 + 80) * uiScale;
-  const stickHitRadius = 110 * uiScale;
+  let jumpRadiusPx = 46 * uiScale;
+  let jumpCenterX = (safe.right - 24 - 46) * uiScale;
+  let jumpCenterY = height - safeBottomPx - (116 + 46) * uiScale;
+  let stickCenterX = (safe.left + 26 + 80) * uiScale;
+  let stickCenterY = height - safeBottomPx - (116 + 80) * uiScale;
+  let stickHitRadius = 110 * uiScale;
+  const applyTouchLayout = (leftHanded: boolean, scale: number): void => {
+    const s = Math.max(0.75, Math.min(1.5, scale));
+    jumpRadiusPx = 46 * s * uiScale;
+    jumpCenterX = (leftHanded ? safe.left + 24 + 46 * s : safe.right - 24 - 46 * s) * uiScale;
+    jumpCenterY = height - safeBottomPx - (116 + 46 * s) * uiScale;
+    stickCenterX = (leftHanded ? safe.right - 26 - 80 * s : safe.left + 26 + 80 * s) * uiScale;
+    stickCenterY = height - safeBottomPx - (116 + 80 * s) * uiScale;
+    stickHitRadius = 110 * s * uiScale;
+  };
+  applyTouchLayout(savedSettings.leftHanded, savedSettings.touchScale);
 
   const atlasStarted = Date.now();
   const atlas = new TextureAtlas();
@@ -554,6 +564,8 @@ async function boot(): Promise<void> {
         cameraMode = settings.cameraMode;
         lookSensitivity = settings.sensitivity;
         autoJump = settings.autoJump;
+        applyTouchLayout(settings.leftHanded, settings.touchScale);
+        ui.setTouchLayout(settings.leftHanded, settings.touchScale);
         if (audio) audio.volume = settings.volume;
         platform.storage.set(SETTINGS_KEY, JSON.stringify(settings));
         if (settings.sound) {

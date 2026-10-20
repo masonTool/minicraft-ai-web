@@ -21,6 +21,8 @@ export interface SettingsValues {
   sensitivity: number;
   autoJump: boolean;
   volume: number;
+  leftHanded: boolean;
+  touchScale: number;
 }
 
 export const DEFAULT_SETTINGS: SettingsValues = {
@@ -32,6 +34,8 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   sensitivity: 1,
   autoJump: true,
   volume: 0.7,
+  leftHanded: false,
+  touchScale: 1,
 };
 
 export type SettingsAction = 'back' | null;
@@ -96,10 +100,12 @@ export function createSettingsMenu(
   const distanceSlider: Rect = { x: panelX + 60, y: panelY + 255, w: panelWidth - 120, h: 30 };
   const soundSwitch: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
   const volumeSlider: Rect = { x: panelX + 60, y: panelY + 235, w: panelWidth - 120, h: 30 };
-  const invertSwitch: Rect = { x: panelX + 60, y: panelY + 350, w: panelWidth - 120, h: 30 };
-  const cameraButton: Rect = { x: panelX + 60, y: panelY + 128, w: panelWidth - 120, h: 46 };
-  const sensitivitySlider: Rect = { x: panelX + 60, y: panelY + 230, w: panelWidth - 120, h: 30 };
-  const autoJumpSwitch: Rect = { x: panelX + 60, y: panelY + 300, w: panelWidth - 120, h: 30 };
+  const invertSwitch: Rect = { x: panelX + 60, y: panelY + 384, w: panelWidth - 120, h: 28 };
+  const sensitivitySlider: Rect = { x: panelX + 60, y: panelY + 198, w: panelWidth - 120, h: 30 };
+  const cameraButton: Rect = { x: panelX + 60, y: panelY + 118, w: panelWidth - 120, h: 42 };
+  const autoJumpSwitch: Rect = { x: panelX + 60, y: panelY + 310, w: panelWidth - 120, h: 28 };
+  const leftHandedSwitch: Rect = { x: panelX + 60, y: panelY + 348, w: panelWidth - 120, h: 28 };
+  const touchScaleSlider: Rect = { x: panelX + 60, y: panelY + 258, w: panelWidth - 120, h: 30 };
 
   const values: SettingsValues = { ...initial };
   let tab: Tab = 'video';
@@ -131,16 +137,16 @@ export function createSettingsMenu(
       drawButton(context, cameraButton, `相机：${cameraLabel}`, 'normal', 18);
       const sensitivityValue = (values.sensitivity - 0.5) / 1.5;
       drawSlider(context, sensitivitySlider, sensitivityValue, '灵敏度', `×${values.sensitivity.toFixed(1)}`);
-      drawSwitch(context, autoJumpSwitch, '自动跳跃', values.autoJump);
-      drawSwitch(context, invertSwitch, '反转视角', values.invertLook);
-      drawText(
+      drawSlider(
         context,
-        '摇杆固定左下 · 其他区域拖动视角',
-        panelX + 28,
-        panelY + 398,
-        14,
-        'rgba(255, 255, 255, 0.5)',
+        touchScaleSlider,
+        (values.touchScale - 0.75) / 0.75,
+        '触摸按钮大小',
+        `${Math.round(values.touchScale * 100)}%`,
       );
+      drawSwitch(context, autoJumpSwitch, '自动跳跃', values.autoJump);
+      drawSwitch(context, leftHandedSwitch, '左手模式', values.leftHanded);
+      drawSwitch(context, invertSwitch, '反转视角', values.invertLook);
     } else if (tab === 'video') {
       const fovValue = (values.fov - 60) / 40;
       drawSlider(context, fovSlider, fovValue, '视野', `${values.fov}°`);
@@ -247,8 +253,19 @@ export function createSettingsMenu(
           notify();
           return null;
         }
+        const touchScale = hitSlider(touchScaleSlider, x, y);
+        if (touchScale !== null) {
+          values.touchScale = Math.round((0.75 + touchScale * 0.75) * 100) / 100;
+          notify();
+          return null;
+        }
         if (contains(autoJumpSwitch, x, y)) {
           values.autoJump = !values.autoJump;
+          notify();
+          return null;
+        }
+        if (contains(leftHandedSwitch, x, y)) {
+          values.leftHanded = !values.leftHanded;
           notify();
           return null;
         }
