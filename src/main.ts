@@ -5773,6 +5773,16 @@ class App {
     }
     if (entity instanceof Mob) {
       if (entity.type.id === REMOTE_PLAYER_TYPE.id) return null;
+      // 村民的职业/经验/交易次数（批次 501）：无业村民不写这个键，
+      // 与"白板物品不写 extras"同一条理由——绝大多数实体没有这份数据。
+      const villager =
+        entity instanceof Villager && entity.professionId !== null
+          ? {
+              profession: entity.professionId,
+              xp: entity.tradeXp,
+              uses: entity.offers.map((offer) => offer.uses),
+            }
+          : undefined;
       return {
         kind: 'mob',
         typeId: entity.type.id,
@@ -5789,6 +5799,7 @@ class App {
         baby: entity.baby,
         growSeconds: entity.growRemaining,
         effects: entity.effects.count > 0 ? entity.effects.serialize() : undefined,
+        ...(villager ? { villager } : {}),
       };
     }
     return null;
@@ -5824,6 +5835,9 @@ class App {
     // 幼体必须在 `spawn` 之前设好：它要一并把碰撞盒缩到 BABY_SCALE
     if (record.baby) mob.makeBaby(record.growSeconds);
     mob.effects.restore(record.effects);
+    // 村民的职业与交易进度（批次 501）：必须在 `spawn` 之前恢复——
+    // 入场后的第一帧就会跑 AI，晚一步会出现"先重新认领、再被覆盖"的中间态
+    if (mob instanceof Villager) mob.restoreState(record.villager);
     this.entities.spawn(mob);
     // 被牵的只记最后一只（与 `toggleLeash` 的"一次一只"一致）
     if (mob.leashed) this.leashedMob = mob;

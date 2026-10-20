@@ -10,7 +10,8 @@
  *  2. **不躲僵尸**：原版的恐慌与铁傀儡生成留到 J22；
  *  3. **繁殖退化成与牛羊同一条链**：原版要"意愿"（够多的食物 + 够多的床），
  *     本项目喂一份食物就进入求爱（`Mob` 那套），所以村民会像牛羊一样自己凑对生娃；
- *  4. **交易与职业不进存档**：生物本身就不存档（J2），所以退出重进世界会"换一批村民"。
+ *  4. **不存"认领的工作站坐标"**：区块重载后职业还在（批次 501 起职业/经验/交易次数
+ *     都随实体寄存走），但"白天去哪上班"本来就还没做，所以坐标不落盘。
  *
  * 认领工作站的扫描是**有上限的**（见 `WORKSTATION_SCAN_RANGE`）：每只无业村民每 2~4 秒
  * 扫一次 17×7×17 的盒子。这个数字是"体感（8 格内看得见）"与"每帧开销"的折中，
@@ -23,6 +24,7 @@ import {
   PROFESSIONS,
   findWorkstationNear,
   levelForTradeXp,
+  offersForLevel,
   offersUnlockedAt,
   professionById,
   professionForWorkstation,
@@ -41,6 +43,22 @@ export interface WorkstationPos {
   y: number;
   z: number;
 }
+
+/**
+ * 存档里的一份村民状态（批次 501）。
+ *
+ * **只存推不出来的东西**：职业、交易经验、每条交易的已用次数。
+ * 等级由 `tradeXp` 算出来、交易清单一律按"职业 + 等级"重建，
+ * 所以改交易表之后老存档会自动跟上（代价见 `restoreState` 的注释）。
+ */
+export interface VillagerSavedState {
+  profession: string;
+  xp: number;
+  uses: readonly number[];
+}
+
+/** 存档里的交易经验上限：脏数据（手改存档）不该把进度条撑成天文数字 */
+const MAX_SAVED_TRADE_XP = 1_000_000;
 
 export class Villager extends Mob {
   /** 职业（null = 无业：还没认领工作站） */
@@ -97,6 +115,45 @@ export class Villager extends Mob {
     this.workstation = workstation;
     // 1 级那一批就是"入门交易"（原版认领职业那一刻给的也是这些）
     this.offers = offersUnlockedAt(profession, 1);
+    return true;
+  }
+
+  /**
+   * 从存档恢复职业与交易进度（批次 501）。
+   *
+   * 恢复的是**推不出来**的那三样：职业、交易经验、每条交易的已用次数。
+   * 等级由 `tradeXp` 算、`offers` 按"职业 + 等级"重建——这样改交易表之后
+   * 老存档会自动用上新表，不会带着一份过期的交易快照。
+   *
+   * ⚠️ `uses` 与重建后的 `offers` **长度对不上时整份丢弃**：错位的次数会让
+   * "这一条卖完了"落到另一条交易上，那比"次数重置"难查得多。
+   *
+   * @returns 是否真的恢复了（脏职业 / 幼体 / 空数据都是 false，调用方不必回滚）
+   */
+  restoreState(state: VillagerSavedState | undefined): boolean {
+    if (!state || this.baby) return false;
+    if (typeof state.profession !== 'string') return false;
+    const profession = professionById(state.profession as VillagerProfessionId);
+    if (!profession) return false;
+
+    const xp = Number.isFinite(state.xp)
+      ? Math.max(0, Math.min(MAX_SAVED_TRADE_XP, Math.floor(state.xp)))
+      : 0;
+    this.professionId = profession.id;
+    this.tradeXp = xp;
+    // 注意顺序：先写 tradeXp，`level` 才是恢复后的等级
+    this.offers = offersForLevel(profession, this.level);
+
+    if (Array.isArray(state.uses) && state.uses.length === this.offers.length) {
+      for (let index = 0; index < this.offers.length; index++) {
+        const offer = this.offers[index]!;
+        const used = state.uses[index];
+        if (typeof used !== 'number' || !Number.isFinite(used)) continue;
+        offer.uses = Math.max(0, Math.min(offer.maxUses, Math.floor(used)));
+      }
+    }
+    // 工作站坐标不落盘（见文件头第 4 条）
+    this.workstation = null;
     return true;
   }
 

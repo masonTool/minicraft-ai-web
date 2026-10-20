@@ -16,6 +16,7 @@
  */
 
 import type { DroppedExtras } from './Entity.ts';
+import type { VillagerSavedState } from './Villager.ts';
 
 /** 存档里的一条状态效果（与 `StatusEffects.serialize()` 同形） */
 export interface SavedMobEffect {
@@ -44,6 +45,8 @@ export interface SavedMob {
   growSeconds: number;
   /** 身上的状态效果；没有效果时省略（存档里绝大多数生物都没有） */
   effects?: SavedMobEffect[];
+  /** 村民的职业与交易进度（批次 501）；非村民、无业村民都不写这个键 */
+  villager?: VillagerSavedState;
 }
 
 export interface SavedItemEntity {
@@ -101,6 +104,28 @@ function sanitizeEffects(data: unknown): SavedMobEffect[] | undefined {
     });
   }
   return out.length > 0 ? out : undefined;
+}
+
+/**
+ * 村民附加数据的浅校验（批次 501）。
+ *
+ * 与 `sanitizeEffects` 同一条分工：这里**只校验形状**（职业是不是非空字符串、
+ * 数字是不是有限数），"这个职业认不认识"交给 `Villager.restoreState`——
+ * 它才持有职业表，重复一份必然漂。
+ */
+function sanitizeVillager(data: unknown): VillagerSavedState | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const record = data as { profession?: unknown; xp?: unknown; uses?: unknown };
+  if (typeof record.profession !== 'string' || record.profession.length === 0) return undefined;
+  const xp =
+    typeof record.xp === 'number' && Number.isFinite(record.xp) ? Math.max(0, Math.floor(record.xp)) : 0;
+  const uses: number[] = [];
+  if (Array.isArray(record.uses)) {
+    for (const value of record.uses) {
+      uses.push(typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0);
+    }
+  }
+  return { profession: record.profession, xp, uses };
 }
 
 /** 一层附加数据（掉落物本身，或潜影盒里的一格）的浅校验 */
@@ -208,6 +233,7 @@ export class EntityParking {
           growSeconds:
             baby && Number.isFinite(record.growSeconds) ? Math.max(1, record.growSeconds) : 0,
           effects: sanitizeEffects(record.effects),
+          villager: sanitizeVillager(record.villager),
         });
       } else if (record.kind === 'item') {
         if (!Number.isFinite(record.itemId) || !Number.isFinite(record.count) || record.count <= 0) continue;

@@ -32,6 +32,7 @@ import { MOB_TYPES, PASSIVE_MOBS, HOSTILE_MOBS, VILLAGER_TYPE, mobTypeById } fro
 import { mobEats, Mob } from '../src/core/entity/Mob.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
 import { Villager } from '../src/core/entity/Villager.ts';
+import { EntityParking, type SavedEntityRecord } from '../src/core/entity/EntityParking.ts';
 import { mobAccentColor, mobAppearanceKey, mobBodyColor } from '../src/render/MobRenderer.ts';
 import { fishingEntryIds } from '../src/core/registry/fishing.ts';
 import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
@@ -412,6 +413,119 @@ console.log('\n[进度：与村民交易]');
   tracker.grant('minecraft:adventure/root');
   const after = tracker.handle({ kind: 'trade' });
   check('亮过根条目之后能拿到', after.some((item) => item.id === 'minecraft:adventure/trade'));
+}
+
+// ---------------------------------------------------------------- 9. 存档往返
+
+console.log('\n[存档：职业与交易进度（批次 501）]');
+{
+  const source = new Villager(0.5, 64, 0.5);
+  source.assignProfession('librarian');
+  source.addTradeXp(80); // 老手 3 级
+  source.offers[0]!.uses = 3;
+  const saved = {
+    profession: source.professionId!,
+    xp: source.tradeXp,
+    uses: source.offers.map((offer) => offer.uses),
+  };
+
+  const restored = new Villager(0, 64, 0);
+  equal('恢复成功', restored.restoreState(saved), true);
+  equal('职业回来了', restored.professionId, 'librarian');
+  equal('经验回来了', restored.tradeXp, 80);
+  equal('等级由经验算出来（3 级）', restored.level, 3);
+  equal('交易清单按等级重建', restored.offers.length, offersForLevel(professionById('librarian')!, 3).length);
+  equal('已交易次数跟着回来', restored.offers[0]!.uses, 3);
+
+  const dirty = new Villager(0, 64, 0);
+  equal('不认识的职业：拒绝恢复', dirty.restoreState({ profession: 'astronaut', xp: 10, uses: [] }), false);
+  equal('拒绝之后还是无业', dirty.professionId, null);
+  equal('没有数据：拒绝恢复', dirty.restoreState(undefined), false);
+
+  const negative = new Villager(0, 64, 0);
+  negative.restoreState({ profession: 'farmer', xp: -50, uses: [] });
+  equal('负经验夹到 0', negative.tradeXp, 0);
+  equal('负经验还是 1 级', negative.level, 1);
+
+  // 次数上限：先按 5 级的交易条数造一份长度正确的 uses，再逐项超限
+  const maxed = new Villager(0, 64, 0);
+  const overUses = offersForLevel(professionById('farmer')!, 5).map(() => 999);
+  maxed.restoreState({ profession: 'farmer', xp: 1e9, uses: overUses });
+  equal('经验上限夹住（不会撑成天文数字）', maxed.tradeXp, 1_000_000);
+  check('次数不超过 maxUses', maxed.offers.every((offer) => offer.uses <= offer.maxUses));
+
+  const mismatch = new Villager(0, 64, 0);
+  mismatch.restoreState({ profession: 'farmer', xp: 0, uses: [5] });
+  check(
+    'uses 长度对不上时整份丢弃（职业与经验照常恢复）',
+    mismatch.professionId === 'farmer' && mismatch.offers.every((offer) => offer.uses === 0),
+  );
+
+  const child = new Villager(0, 64, 0);
+  child.makeBaby();
+  equal('幼体不恢复职业', child.restoreState({ profession: 'farmer', xp: 10, uses: [] }), false);
+}
+
+console.log('\n[存档：实体寄存把村民状态带上]');
+{
+  const parking = new EntityParking();
+  parking.park('overworld', 0, 0, {
+    kind: 'mob',
+    typeId: 'villager',
+    x: 2,
+    y: 64,
+    z: 3,
+    yaw: 0,
+    health: 20,
+    tamed: false,
+    sitting: false,
+    leashed: false,
+    sheared: false,
+    woolColor: 0,
+    baby: false,
+    growSeconds: 0,
+    villager: { profession: 'librarian', xp: 80, uses: [3, 1] },
+  });
+  // 走一遍 JSON（存档层就是这么序列化的），确认字段不是"只在内存里"
+  const records = JSON.parse(JSON.stringify(parking.snapshotAll())) as SavedEntityRecord[];
+  const revived = new EntityParking();
+  revived.restoreAll(records);
+  const [record] = revived.take('overworld', 0, 0);
+  equal(
+    '寄存往返保住职业',
+    record && record.kind === 'mob' ? record.villager?.profession : undefined,
+    'librarian',
+  );
+  equal(
+    '寄存往返保住交易次数',
+    record && record.kind === 'mob' ? record.villager?.uses[0] : undefined,
+    3,
+  );
+
+  // 脏数据：职业不是字符串 → 整个 villager 键丢掉（不能让读档炸掉）
+  const dirtyParking = new EntityParking();
+  dirtyParking.restoreAll([
+    {
+      dimension: 'overworld',
+      kind: 'mob',
+      typeId: 'villager',
+      x: 0,
+      y: 64,
+      z: 0,
+      yaw: 0,
+      health: 20,
+      tamed: false,
+      sitting: false,
+      leashed: false,
+      sheared: false,
+      woolColor: 0,
+      baby: false,
+      growSeconds: 0,
+      villager: { profession: 42, xp: 'x', uses: [] },
+    },
+  ] as unknown as SavedEntityRecord[]);
+  const [bad] = dirtyParking.take('overworld', 0, 0);
+  equal('脏 villager 字段整个丢掉', bad && bad.kind === 'mob' ? bad.villager : 'kept', undefined);
 }
 
 // ---------------------------------------------------------------- 收尾
