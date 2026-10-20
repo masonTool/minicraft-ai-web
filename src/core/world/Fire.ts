@@ -228,6 +228,20 @@ export function canPlaceFire(world: TickWorld, x: number, y: number, z: number):
  * 火焰的随机刻行为。
  * @returns 是否改动了世界
  */
+/**
+ * 火是否被随机刻处理（`/gamerule doFireTick`，批次 433）。
+ *
+ * 为什么用模块级状态：随机刻的行为表是**按方块 id 查函数**（`[Block.FIRE, fireBehavior]`），
+ * 那条查表路径没有"选项"参数可传。要给它开口子得改 `RandomTicks` 的整张表签名，
+ * 而这里要的只是一个全局开关——与 `I18n` 的当前语言是同一类取舍，
+ * 代价同样是"改它不会自动通知谁"，所以主程序在**设置/规则变化时显式调一次**。
+ */
+let fireTickEnabled = true;
+
+export function setFireTickEnabled(enabled: boolean): void {
+  fireTickEnabled = enabled;
+}
+
 export const fireBehavior: RandomTickBehavior = (
   world: TickWorld,
   x: number,
@@ -235,6 +249,8 @@ export const fireBehavior: RandomTickBehavior = (
   z: number,
   random: RandomSource,
 ): boolean => {
+  // 规则关掉时**完全不处理**：不蔓延、不烧方块、不熄灭（已经点着的火留着）
+  if (!fireTickEnabled) return false;
   // ---- 1) 下雨 + 露天 → 浇灭（原版：雨把露天的火浇灭）
   if (world.raining && (world.skyLightAt?.(x, y, z) ?? 0) >= 15) {
     return world.setBlock(x, y, z, Block.AIR);

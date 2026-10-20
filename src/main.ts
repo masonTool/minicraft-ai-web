@@ -204,7 +204,7 @@ import {
   rodTipPoint,
   shouldIgnite,
 } from './core/world/Lightning.ts';
-import { FIRE_IGNITE_SECONDS, burnsOnContact, igniteAt } from './core/world/Fire.ts';
+import { FIRE_IGNITE_SECONDS, burnsOnContact, igniteAt, setFireTickEnabled } from './core/world/Fire.ts';
 import {
   PORTAL_CREATIVE_IGNITE_TICKS,
   PORTAL_IGNITE_TICKS,
@@ -2752,6 +2752,8 @@ class App {
     // 难度优先用存档里的（玩家可能在游戏里改过），没有就用世界清单里新建时选的
     this.difficulty = data.difficulty ? normalizeDifficulty(data.difficulty) : this.worldConfig.difficulty;
     this.rules = normalizeGameRules(data.gameRules);
+    // 读档时也要把"火要不要处理"推给模块级开关（否则读档后开关停在旧世界/默认值上）
+    setFireTickEnabled(this.rules.doFireTick);
     this.effects.restore(data.effects);
     // 旧存档没有 xp 字段：视为 0 级，而不是 NaN
     this.experience.restore(data.xp);
@@ -9167,6 +9169,9 @@ class App {
       gameRules: () => this.rules,
       setGameRule: (key, value) => {
         this.rules[key] = value;
+        // 火系统的开关是模块级状态（见 `Fire.setFireTickEnabled` 的注释）：
+        // 规则变了必须**显式**推过去，否则 `/gamerule doFireTick false` 要等下次读档才生效
+        if (key === 'doFireTick') setFireTickEnabled(value as boolean);
         // 昼夜循环这类规则同时写回设置（设置是"这台设备的默认"，规则是"这个世界的当前值"）
         if (key === 'doDaylightCycle') this.settings.daylightCycle = value as boolean;
       },

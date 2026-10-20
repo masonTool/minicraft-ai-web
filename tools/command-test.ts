@@ -410,6 +410,10 @@ console.log('\n[难度与游戏规则]');
   const reduced = run('/gamerule reducedDebugInfo true');
   check('reducedDebugInfo 能设成 true', reduced.world.rules.reducedDebugInfo === true, reduced.out.lastError);
   check('规则列表里能看到它（不必记名字）', run('/gamerule').out.lastInfo.includes('reducedDebugInfo'));
+  // 批次 433：doFireTick（火是否蔓延与熄灭）
+  const fire = run('/gamerule doFireTick false');
+  check('doFireTick 能设成 false', fire.world.rules.doFireTick === false, fire.out.lastError);
+  check('规则列表里能看到 doFireTick', run('/gamerule').out.lastInfo.includes('doFireTick'));
   check('布尔规则不接受 1（只认 true/false）', run('/gamerule reducedDebugInfo 1').out.lastError.length > 0);
 
   const read = run('/gamerule doMobSpawning');

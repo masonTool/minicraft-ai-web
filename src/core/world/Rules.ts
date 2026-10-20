@@ -62,6 +62,13 @@ export interface GameRules {
    * 本项目退化成**整块收起调试面板**（面板每一行都带坐标，逐行裁剪不如直接收起）。
    */
   reducedDebugInfo: boolean;
+  /**
+   * 火是否蔓延与熄灭（批次 433）。原版这条规则叫 `doFireTick`。
+   *
+   * ⚠️ 关掉之后**已经点着的火还在**（也还会伤人），只是不再蔓延、不再烧掉方块、
+   * 不会自己熄灭——这与原版一致（原版关掉的是"火被随机刻处理"，不是"删掉所有火"）。
+   */
+  doFireTick: boolean;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -85,6 +92,7 @@ export const DEFAULT_GAME_RULES: GameRules = {
   disableRaids: false,
   spawnRadius: 10,
   reducedDebugInfo: false,
+  doFireTick: true,
 };
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */
