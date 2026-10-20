@@ -21,6 +21,7 @@
  * 关闭界面时手上的物品、合成网格里的材料都会自动收回背包，不会丢失。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import { drawItemIcon } from './ItemIcon.ts';
 import { itemIconTile } from '../core/registry/items.ts';
@@ -886,7 +887,7 @@ export class InventoryScreen {
     const header = document.createElement('div');
     header.className = 'inv-header';
     this.titleEl = document.createElement('b');
-    this.titleEl.textContent = '物品栏';
+    this.titleEl.textContent = t('inventory.title');
     const hint = document.createElement('span');
     hint.className = 'inv-header-hint';
     // 触摸端没有左右键之分，提示改成"轻点"的说法，免得玩家找不到右键
@@ -1065,7 +1066,7 @@ export class InventoryScreen {
     this.furnaceReturnBtn = document.createElement('button');
     this.furnaceReturnBtn.type = 'button';
     this.furnaceReturnBtn.className = 'furnace-return hidden';
-    this.furnaceReturnBtn.textContent = '退还仓库';
+    this.furnaceReturnBtn.textContent = t('inventory.returnToStorage');
     this.furnaceReturnBtn.title = '把熔炉里的原料、燃料和产物全部放回仓库';
     this.furnaceReturnBtn.addEventListener('click', () => this.returnFurnaceContents());
     // 铁砧（H8）：左格 + 右格 + 产物格 + 改名输入框
@@ -1165,7 +1166,7 @@ export class InventoryScreen {
     this.brewReturnBtn = document.createElement('button');
     this.brewReturnBtn.type = 'button';
     this.brewReturnBtn.className = 'furnace-return hidden';
-    this.brewReturnBtn.textContent = '退还仓库';
+    this.brewReturnBtn.textContent = t('inventory.returnToStorage');
     this.brewReturnBtn.title = '把酿造台里的药水、材料和燃料全部放回仓库';
     this.brewReturnBtn.addEventListener('click', () => this.returnBrewingContents());
 
@@ -1184,7 +1185,7 @@ export class InventoryScreen {
     // 携带版分页（批次 140）要单独显隐主背包，快捷栏则**始终留下**
     this.personalInventoryTitleEl = document.createElement('div');
     this.personalInventoryTitleEl.className = 'inv-personal-title';
-    this.personalInventoryTitleEl.textContent = '物品栏';
+    this.personalInventoryTitleEl.textContent = t('inventory.title');
     this.mainGridEl = this.buildGrid(MAIN_START, MAIN_SIZE, 'inv-grid', 'inv');
     this.hotbarGridEl = this.buildGrid(HOTBAR_START, HOTBAR_SIZE, 'inv-grid inv-hotbar', 'inv');
     // 经典：快捷栏在面板内；携带版由 applyInventoryChrome 挪到 hotbarDock
@@ -1197,7 +1198,7 @@ export class InventoryScreen {
     // Wiki 盔甲页右栏标题「盔甲」
     this.armorTitleEl = document.createElement('div');
     this.armorTitleEl.className = 'inv-armor-title';
-    this.armorTitleEl.textContent = '盔甲';
+    this.armorTitleEl.textContent = t('inventory.armor');
     // 玩家预览（批次 141）：盔甲列旁边那块小人，原版有、我们也要有位置
     this.playerPreviewEl = document.createElement('canvas');
     this.playerPreviewEl.className = 'inv-player-preview';
@@ -3510,7 +3511,7 @@ export class InventoryScreen {
     if (entries.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = '这一栏暂时没有可做的配方';
+      empty.textContent = t('inventory.noRecipes');
       fragment.appendChild(empty);
     }
     this.stationRecipeGridEl.replaceChildren(fragment);
@@ -4034,7 +4035,7 @@ export class InventoryScreen {
     if (items.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'inv-empty';
-      empty.textContent = '没有匹配的物品';
+      empty.textContent = t('inventory.noMatch');
       fragment.appendChild(empty);
     }
 
@@ -4117,7 +4118,7 @@ export class InventoryScreen {
       fuelHint.className = 'furnace-fuel-hint';
       const optionsLabel = document.createElement('div');
       optionsLabel.className = 'furnace-options-label';
-      optionsLabel.textContent = '备选燃料';
+      optionsLabel.textContent = t('inventory.fuelOptions');
       fuelHint.append(optionsLabel, this.furnaceFuelOptionsEl);
 
       // 批次 312（用户）：材料/燃料槽左侧加文字说明
@@ -4125,14 +4126,14 @@ export class InventoryScreen {
       inputWrap.className = 'furnace-slot-with-label';
       const inputLabel = document.createElement('span');
       inputLabel.className = 'furnace-slot-side-label';
-      inputLabel.textContent = '材料';
+      inputLabel.textContent = t('inventory.material');
       inputWrap.append(inputLabel, input);
 
       const fuelWrap = document.createElement('div');
       fuelWrap.className = 'furnace-slot-with-label';
       const fuelLabel = document.createElement('span');
       fuelLabel.className = 'furnace-slot-side-label';
-      fuelLabel.textContent = '燃料';
+      fuelLabel.textContent = t('inventory.fuel');
       fuelWrap.append(fuelLabel, fuel);
 
       // 批次 309（用户）：进度箭头垂直居中于原料/燃料，左边缘贴原料槽右边缘；
@@ -4147,14 +4148,14 @@ export class InventoryScreen {
 
       const targetLabel = document.createElement('div');
       targetLabel.className = 'furnace-slot-label';
-      targetLabel.textContent = '目标';
+      targetLabel.textContent = t('inventory.target');
       const targetCol = document.createElement('div');
       targetCol.className = 'furnace-slot-col';
       targetCol.append(targetLabel, this.stationTargetEl);
 
       const productLabel = document.createElement('div');
       productLabel.className = 'furnace-slot-label';
-      productLabel.textContent = '产物';
+      productLabel.textContent = t('inventory.product');
       const productCol = document.createElement('div');
       productCol.className = 'furnace-slot-col';
       productCol.append(productLabel, product);

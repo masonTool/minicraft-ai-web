@@ -732,7 +732,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   check(
     '酿造台：三瓶一起摆料 + 退还仓库（批次 330）',
     invSrc.includes('private returnBrewingContents') &&
-      invSrc.includes("this.brewReturnBtn.textContent = '退还仓库'") &&
+      invSrc.includes("this.brewReturnBtn.textContent = t('inventory.returnToStorage')") &&
       invSrc.includes('if (this.putIntoContainer(stand, slot, bottle!.id, bottle!.count)) bottled++;'),
   );
   check(
@@ -824,7 +824,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
     invSrc.includes('this.selectedStationKey === key') &&
       /source instanceof Furnace && \(index === FURNACE_INPUT \|\| index === FURNACE_FUEL\)/.test(invSrc) &&
       invSrc.includes('private returnFurnaceContents') &&
-      invSrc.includes("this.furnaceReturnBtn.textContent = '退还仓库'"),
+      invSrc.includes("this.furnaceReturnBtn.textContent = t('inventory.returnToStorage')"),
   );
   check(
     '熔炉原料/燃料可放回仓库，产物可进快捷栏/仓库（批次 323）',
@@ -867,8 +867,8 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '熔炉：目标槽/产物槽并排、标签在上、退还仓库在下方（批次 309）',
-    invSrc.includes("targetLabel.textContent = '目标'") &&
-      invSrc.includes("productLabel.textContent = '产物'") &&
+    invSrc.includes("targetLabel.textContent = t('inventory.target')") &&
+      invSrc.includes("productLabel.textContent = t('inventory.product')") &&
       invSrc.includes('slotRow.append(targetCol, productCol, this.furnaceReturnBtn)') &&
       invSrc.includes('stage.append(core, progress, slotRow)') &&
       invSrc.includes('furnaceProductSlot') &&
@@ -935,9 +935,10 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '材料/燃料/备选燃料说明；退还仓库在备选燃料上方（批次 312）',
-    invSrc.includes("inputLabel.textContent = '材料'") &&
-      invSrc.includes("fuelLabel.textContent = '燃料'") &&
-      invSrc.includes("optionsLabel.textContent = '备选燃料'") &&
+    // 批次 422：三个标签走 i18n 键（中文表里那几条由 i18n 测试管）
+    invSrc.includes("inputLabel.textContent = t('inventory.material')") &&
+      invSrc.includes("fuelLabel.textContent = t('inventory.fuel')") &&
+      invSrc.includes("optionsLabel.textContent = t('inventory.fuelOptions')") &&
       invSrc.includes('bottom.append(fuelHint, this.furnaceHintEl)') &&
       css.includes('position: absolute; top: calc(100% + 4px); right: 0;') &&
       css.includes('.furnace-slot-side-label'),

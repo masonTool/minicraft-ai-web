@@ -98,15 +98,6 @@
 
 ---
 
-## 批次 419：M8 i18n 扩到"音频"组 + 外观两档视角（2026-10-20）
-
-- [x] B419-1 七条音量滑杆：volume / volumeBlocks / volumeMobs / volumePlayer /
-      volumeUi / volumeAmbient / volumeMusic
-- [x] B419-2 外观两档视角：`settings.avatar.full` / `settings.avatar.face`
-- [x] B419-3 `ui-test` 里 `['face', '面部']` 那条断言改成按**键**匹配
-- 覆盖：文案表 **28 → 37 条**；设置界面四个分组整页有英文（外观编辑器细项除外）
-- ⚠️ 下一块是"设置之外"的界面：背包 / 成就 / 主菜单（那些文件更大，建议一批一个界面）
-
 ## 批次 420：M8 i18n 扩到主菜单首页（2026-10-20）
 
 - [x] B420-1 九条键：menu.tagline / play / settings / footer / newWorld / empty / back / reroll / create
@@ -124,3 +115,12 @@
       "返回世界列表"、"说明排在字段最后"）
 - 覆盖：文案表 **46 → 58 条**；主菜单三个视图（首页 / 列表 / 新建）全部有英文
 - ⚠️ 主菜单仍在启动时构建：切语言要刷新页面
+
+## 批次 422：M8 i18n 背包/工作站面板第一批（2026-10-20）
+
+- [x] B422-1 十条键：inventory.title / armor / returnToStorage / noMatch / noRecipes /
+      material / fuel / fuelOptions / product / target
+- [x] B422-2 `ui-test` 四条按字面量匹配的断言改成按键（酿造台退还仓库、熔炉退还仓库、
+      材料/燃料/备选燃料、目标/产物）
+- 覆盖：文案表 **58 → 68 条**
+- ⚠️ 背包界面很大（5000+ 行），**分几批做**：下一批是页签与搜索/筛选栏

@@ -95,6 +95,17 @@ const ZH: Readonly<Record<string, string>> = {
   'world.createTitle': '创建新世界',
   'world.enter': '进入',
   'world.delete': '删除',
+  // ---- 背包与工作站面板（批��� 422 起；先做标题/空态/熔炼那几个标签）
+  'inventory.title': '物品栏',
+  'inventory.armor': '盔甲',
+  'inventory.returnToStorage': '退还仓库',
+  'inventory.noMatch': '没有匹配的物品',
+  'inventory.noRecipes': '这一栏暂时没有可做的配方',
+  'inventory.material': '材料',
+  'inventory.fuel': '燃料',
+  'inventory.fuelOptions': '备选燃料',
+  'inventory.product': '产物',
+  'inventory.target': '目标',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -156,6 +167,16 @@ const EN: Readonly<Record<string, string>> = {
   'world.createTitle': 'Create World',
   'world.enter': 'Enter',
   'world.delete': 'Delete',
+  'inventory.title': 'Inventory',
+  'inventory.armor': 'Armor',
+  'inventory.returnToStorage': 'Return to Storage',
+  'inventory.noMatch': 'No matching items',
+  'inventory.noRecipes': 'Nothing craftable in this tab right now',
+  'inventory.material': 'Input',
+  'inventory.fuel': 'Fuel',
+  'inventory.fuelOptions': 'Other Fuels',
+  'inventory.product': 'Output',
+  'inventory.target': 'Target',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {

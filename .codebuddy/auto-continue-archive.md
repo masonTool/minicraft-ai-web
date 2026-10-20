@@ -10335,4 +10335,13 @@
 - 覆盖：文案表 **18 → 28 条**；"界面语言"行仍记 50%
 - ⚠️ 剩下"外观/音频"两组 + 背包/成就/主菜单，仍是 M8 主体
 
+## 批次 419：M8 i18n 扩到"音频"组 + 外观两档视角（2026-10-20）
+
+- [x] B419-1 七条音量滑杆：volume / volumeBlocks / volumeMobs / volumePlayer /
+      volumeUi / volumeAmbient / volumeMusic
+- [x] B419-2 外观两档视角：`settings.avatar.full` / `settings.avatar.face`
+- [x] B419-3 `ui-test` 里 `['face', '面部']` 那条断言改成按**键**匹配
+- 覆盖：文案表 **28 → 37 条**；设置界面四个分组整页有英文（外观编辑器细项除外）
+- ⚠️ 下一块是"设置之外"的界面：背包 / 成就 / 主菜单（那些文件更大，建议一批一个界面）
+
 <!-- docs-archive:end -->

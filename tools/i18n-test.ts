@@ -90,6 +90,10 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'world.gameMode',
     'world.createTitle',
     'world.enter',
+    'inventory.title',
+    'inventory.armor',
+    'inventory.returnToStorage',
+    'inventory.noMatch',
     ...['game', 'controls', 'appearance', 'sound'].map((group) => `settings.group.${group}`),
   ];
   const missing = required.filter((key) => !keys.has(key));
