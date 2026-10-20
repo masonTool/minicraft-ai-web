@@ -15,6 +15,7 @@ import { Sky } from '../render/Sky.ts';
 import { Weather } from '../render/Weather.ts';
 import type { MeshWorkerPool } from '../render/MeshWorkerPool.ts';
 import { WxMeshWorkerPool } from './wx-mesh-pool.ts';
+import { MobSystem } from './mobs.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -28,7 +29,7 @@ import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafti
 import { CREATIVE_ITEMS, Item, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
-import { BED_IDS, Block, WOOL_ID_START, blockDef, blockTiles } from '../core/registry/blocks.ts';
+import { BED_IDS, Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
 import { sleepRefusal } from '../core/survival/Sleep.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
@@ -1001,9 +1002,10 @@ const clearDrops = (): void => {
 const mountWorld = async (entry: WorldSummary): Promise<void> => {
   await persistWorld();
   clearDrops();
-  clearPigs();
-  clearZombies();
-  clearSheep();
+  mobs.clearAll();
+  pigsSpawned = false;
+  sheepSpawned = false;
+  zombieSpawned = false;
   if (save) {
     save.close();
     save = null;
@@ -1616,11 +1618,7 @@ const showToast = (message: string): void => {
 const trySleep = (hit: RayHit): boolean => {
   const id = world.getBlock(hit.x, hit.y, hit.z);
   if (!BED_IDS.includes(id)) return false;
-  const monstersNear = zombies.some((zombie) =>
-    Math.abs(zombie.x - (hit.x + 0.5)) <= 8 &&
-    Math.abs(zombie.y - (hit.y + 0.5)) <= 5 &&
-    Math.abs(zombie.z - (hit.z + 0.5)) <= 8,
-  );
+  const monstersNear = mobs.hasHostileNear(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
   const refusal = sleepRefusal({
     timeOfDay: worldTime,
     thundering: weather.snapshot().kind === 'thunder',
@@ -1767,140 +1765,6 @@ const showHud = (): void => {
         : []),
     ]),
   );
-};
-
-const spawnPig = (x: number, y: number, z: number): void => {
-  const group = new THREE.Group();
-  const pink = new THREE.MeshBasicMaterial({ color: 0xf0a8a0 });
-  const snoutMat = new THREE.MeshBasicMaterial({ color: 0xd98f88 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 1.0), pink);
-  body.position.y = 0.62;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.5), pink);
-  head.position.set(0, 0.78, -0.65);
-  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.12), snoutMat);
-  snout.position.set(0, 0.72, -0.92);
-  group.add(body, head, snout);
-  for (const [lx, lz] of [[-0.22, -0.32], [0.22, -0.32], [-0.22, 0.32], [0.22, 0.32]] as const) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.45, 0.18), pink);
-    leg.position.set(lx, 0.22, lz);
-    group.add(leg);
-  }
-  group.position.set(x, y, z);
-  scene.add(group);
-  pigs.push({ group, x, y, z, hp: 10, dirX: 1, dirZ: 0, wander: 2 });
-};
-
-const clearPigs = (): void => {
-  for (const pig of pigs) {
-    scene.remove(pig.group);
-    pig.group.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
-        (child.material as THREE.Material).dispose();
-      }
-    });
-  }
-  pigs.length = 0;
-  pigsSpawned = false;
-};
-
-const spawnZombie = (x: number, y: number, z: number): void => {
-  const group = new THREE.Group();
-  const skin = new THREE.MeshBasicMaterial({ color: 0x4f7f45 });
-  const shirt = new THREE.MeshBasicMaterial({ color: 0x3b5f8a });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), shirt);
-  body.position.y = 1.0;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skin);
-  head.position.y = 1.55;
-  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), skin);
-  leftArm.position.set(-0.4, 1.05, -0.15);
-  leftArm.rotation.x = -1.2;
-  const rightArm = leftArm.clone();
-  rightArm.position.x = 0.4;
-  for (const [lx, lz] of [[-0.16, 0], [0.16, 0]] as const) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.8, 0.24), new THREE.MeshBasicMaterial({ color: 0x2f4560 }));
-    leg.position.set(lx, 0.4, lz);
-    group.add(leg);
-  }
-  group.add(body, head, leftArm, rightArm);
-  group.position.set(x, y, z);
-  scene.add(group);
-  zombies.push({ group, x, y, z, hp: 12, dirX: 1, dirZ: 0, wander: 2 });
-};
-
-const clearZombies = (): void => {
-  for (const zombie of zombies) {
-    scene.remove(zombie.group);
-    zombie.group.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
-        (child.material as THREE.Material).dispose();
-      }
-    });
-  }
-  zombies.length = 0;
-  zombieSpawned = false;
-};
-
-const spawnSheep = (x: number, y: number, z: number): void => {
-  const group = new THREE.Group();
-  const wool = new THREE.MeshBasicMaterial({ color: 0xf2f2ee });
-  const skin = new THREE.MeshBasicMaterial({ color: 0xd8c7b8 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 1.0), wool);
-  body.position.y = 0.72;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), wool);
-  head.position.set(0, 0.95, -0.62);
-  const face = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.1), skin);
-  face.position.set(0, 0.9, -0.86);
-  group.add(body, head, face);
-  for (const [lx, lz] of [[-0.24, -0.3], [0.24, -0.3], [-0.24, 0.3], [0.24, 0.3]] as const) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), skin);
-    leg.position.set(lx, 0.25, lz);
-    group.add(leg);
-  }
-  group.position.set(x, y, z);
-  scene.add(group);
-  sheep.push({ group, x, y, z, hp: 8, dirX: -1, dirZ: 0, wander: 2 });
-};
-
-const clearSheep = (): void => {
-  for (const mob of sheep) {
-    scene.remove(mob.group);
-    mob.group.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
-        (child.material as THREE.Material).dispose();
-      }
-    });
-  }
-  sheep.length = 0;
-  sheepSpawned = false;
-};
-
-const removeSheep = (index: number): void => {
-  const mob = sheep[index];
-  if (!mob) return;
-  scene.remove(mob.group);
-  mob.group.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      child.geometry.dispose();
-      (child.material as THREE.Material).dispose();
-    }
-  });
-  sheep.splice(index, 1);
-};
-
-const removeZombie = (index: number): void => {
-  const zombie = zombies[index];
-  if (!zombie) return;
-  scene.remove(zombie.group);
-  zombie.group.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      child.geometry.dispose();
-      (child.material as THREE.Material).dispose();
-    }
-  });
-  zombies.splice(index, 1);
 };
 
 const addDrop = (id: number, count: number, x: number, y: number, z: number): void => {
@@ -2130,19 +1994,6 @@ interface DroppedItem {
 }
 const droppedItems: DroppedItem[] = [];
 
-interface MobState {
-  group: THREE.Group;
-  x: number;
-  y: number;
-  z: number;
-  hp: number;
-  dirX: number;
-  dirZ: number;
-  wander: number;
-}
-const pigs: MobState[] = [];
-const zombies: MobState[] = [];
-const sheep: MobState[] = [];
 let pigsSpawned = false;
 let zombieSpawned = false;
 let sheepSpawned = false;
@@ -2266,175 +2117,16 @@ const updateAimRing = (clientX: number, clientY: number, visible: boolean): void
   ui.refresh(true);
 };
 
-const tickPigs = (dt: number): void => {
-  for (const pig of pigs) {
-    pig.wander -= dt;
-    if (pig.wander <= 0) {
-      const angle = Math.random() * Math.PI * 2;
-      pig.dirX = Math.cos(angle);
-      pig.dirZ = Math.sin(angle);
-      pig.wander = 2 + Math.random() * 3;
-    }
-    const nx = pig.x + pig.dirX * 1.15 * dt;
-    const nz = pig.z + pig.dirZ * 1.15 * dt;
-    const surface = world.getSurfaceBlockY(Math.floor(nx), Math.floor(nz));
-    if (surface !== null && Math.abs(surface + 1 - pig.y) <= 1.2) {
-      pig.x = nx;
-      pig.z = nz;
-      pig.y = surface + 1;
-    } else {
-      pig.dirX *= -1;
-      pig.dirZ *= -1;
-    }
-    pig.group.position.set(pig.x, pig.y, pig.z);
-    pig.group.rotation.y = Math.atan2(pig.dirX, pig.dirZ);
-  }
-};
-
-const tickZombies = (dt: number): void => {
-  for (const zombie of zombies) {
-    const dx = physics.x - zombie.x;
-    const dz = physics.z - zombie.z;
-    const dist = Math.hypot(dx, dz);
-    let dirX = zombie.dirX;
-    let dirZ = zombie.dirZ;
-    if (dist < 16) {
-      dirX = dx / Math.max(0.001, dist);
-      dirZ = dz / Math.max(0.001, dist);
-    } else {
-      zombie.wander -= dt;
-      if (zombie.wander <= 0) {
-        const angle = Math.random() * Math.PI * 2;
-        dirX = Math.cos(angle);
-        dirZ = Math.sin(angle);
-        zombie.wander = 2 + Math.random() * 3;
-      }
-    }
-    const nx = zombie.x + dirX * 1.05 * dt;
-    const nz = zombie.z + dirZ * 1.05 * dt;
-    const surface = world.getSurfaceBlockY(Math.floor(nx), Math.floor(nz));
-    if (surface !== null && Math.abs(surface + 1 - zombie.y) <= 1.2) {
-      zombie.x = nx;
-      zombie.z = nz;
-      zombie.y = surface + 1;
-      zombie.dirX = dirX;
-      zombie.dirZ = dirZ;
-    }
-    zombie.group.position.set(zombie.x, zombie.y, zombie.z);
-    zombie.group.rotation.y = Math.atan2(dirX, dirZ);
-    if (dist < 1.35 && Date.now() > ((zombie as unknown as { attackAt?: number }).attackAt ?? 0)) {
-      (zombie as unknown as { attackAt?: number }).attackAt = Date.now() + 1200;
-      applyDamage(2, '僵尸');
-    }
-  }
-};
-
-const tickSheep = (dt: number): void => {
-  for (const mob of sheep) {
-    mob.wander -= dt;
-    if (mob.wander <= 0) {
-      const angle = Math.random() * Math.PI * 2;
-      mob.dirX = Math.cos(angle);
-      mob.dirZ = Math.sin(angle);
-      mob.wander = 2 + Math.random() * 3;
-    }
-    const nx = mob.x + mob.dirX * 0.85 * dt;
-    const nz = mob.z + mob.dirZ * 0.85 * dt;
-    const surface = world.getSurfaceBlockY(Math.floor(nx), Math.floor(nz));
-    if (surface !== null && Math.abs(surface + 1 - mob.y) <= 1.2) {
-      mob.x = nx;
-      mob.z = nz;
-      mob.y = surface + 1;
-    } else {
-      mob.dirX *= -1;
-      mob.dirZ *= -1;
-    }
-    mob.group.position.set(mob.x, mob.y, mob.z);
-    mob.group.rotation.y = Math.atan2(mob.dirX, mob.dirZ);
-  }
-};
-
-const removePig = (index: number): void => {
-  const pig = pigs[index];
-  if (!pig) return;
-  scene.remove(pig.group);
-  pig.group.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      child.geometry.dispose();
-      (child.material as THREE.Material).dispose();
-    }
-  });
-  pigs.splice(index, 1);
-};
-
-const tryAttackMob = (clientX: number, clientY: number): boolean => {
-  if (pigs.length === 0) return false;
-  camera.updateMatrixWorld();
-  for (let i = pigs.length - 1; i >= 0; i--) {
-    const pig = pigs[i]!;
-    const distance = Math.hypot(pig.x - physics.x, pig.z - physics.z);
-    if (distance > 5) continue;
-    const projected = new THREE.Vector3(pig.x, pig.y + 0.65, pig.z).project(camera);
-    if (projected.z > 1) continue;
-    const designX = ((projected.x + 1) / 2) * 1024;
-    const designY = ((1 - projected.y) / 2) * uiHeight;
-    const touchX = (clientX / Math.max(1, platform.system.width)) * 1024;
-    const touchY = (clientY / Math.max(1, platform.system.height)) * uiHeight;
-    if (Math.hypot(designX - touchX, designY - touchY) > 88) continue;
-    pig.hp -= 4;
-    audio.play('break_wood');
-    if (pig.hp <= 0) {
-      addDrop(Item.PORKCHOP, 1, pig.x, pig.y + 0.5, pig.z);
-      gainXp(3);
-      removePig(i);
-    }
-    showHud();
-    return true;
-  }
-  for (let i = sheep.length - 1; i >= 0; i--) {
-    const mob = sheep[i]!;
-    const distance = Math.hypot(mob.x - physics.x, mob.z - physics.z);
-    if (distance > 5) continue;
-    const projected = new THREE.Vector3(mob.x, mob.y + 0.8, mob.z).project(camera);
-    if (projected.z > 1) continue;
-    const designX = ((projected.x + 1) / 2) * 1024;
-    const designY = ((1 - projected.y) / 2) * uiHeight;
-    const touchX = (clientX / Math.max(1, platform.system.width)) * 1024;
-    const touchY = (clientY / Math.max(1, platform.system.height)) * uiHeight;
-    if (Math.hypot(designX - touchX, designY - touchY) > 88) continue;
-    mob.hp -= 4;
-    audio.play('break_wood');
-    if (mob.hp <= 0) {
-      addDrop(WOOL_ID_START, 1, mob.x, mob.y + 0.5, mob.z);
-      gainXp(1);
-      removeSheep(i);
-    }
-    showHud();
-    return true;
-  }
-  for (let i = zombies.length - 1; i >= 0; i--) {
-    const zombie = zombies[i]!;
-    const distance = Math.hypot(zombie.x - physics.x, zombie.z - physics.z);
-    if (distance > 5) continue;
-    const projected = new THREE.Vector3(zombie.x, zombie.y + 0.9, zombie.z).project(camera);
-    if (projected.z > 1) continue;
-    const designX = ((projected.x + 1) / 2) * 1024;
-    const designY = ((1 - projected.y) / 2) * uiHeight;
-    const touchX = (clientX / Math.max(1, platform.system.width)) * 1024;
-    const touchY = (clientY / Math.max(1, platform.system.height)) * uiHeight;
-    if (Math.hypot(designX - touchX, designY - touchY) > 88) continue;
-    zombie.hp -= 4;
-    audio.play('break_wood');
-    if (zombie.hp <= 0) {
-      addDrop(Item.ROTTEN_FLESH, 1, zombie.x, zombie.y + 0.5, zombie.z);
-      gainXp(5);
-      removeZombie(i);
-    }
-    showHud();
-    return true;
-  }
-  return false;
-};
+const mobs = new MobSystem({
+  scene,
+  getPlayer: () => ({ x: physics.x, y: physics.y, z: physics.z }),
+  surfaceY: (x, z) => world.getSurfaceBlockY(x, z),
+  onDamage: (amount, cause) => applyDamage(amount, cause),
+  onDrop: (id, count, x, y, z) => addDrop(id, count, x, y, z),
+  onXp: (amount) => gainXp(amount),
+  onHit: () => audio.play('break_wood'),
+  onUi: () => showHud(),
+});
 
 platform.input.onPointer('down', (event) => {
   if (!audioResumed) {
@@ -2531,7 +2223,7 @@ const release = (event: { pointerId: number; clientX: number; clientY: number })
     }
   }
   if (event.pointerId === lookPointer) {
-    if (!lookMoved && tryAttackMob(event.clientX, event.clientY)) {
+    if (!lookMoved && mobs.tryAttack(event.clientX, event.clientY, camera, platform.system.width, platform.system.height, uiHeight)) {
       lookMoved = true;
     } else if (!lookMoved && currentHit) {
       if (Date.now() - lookStartTime >= 350) breakAt(currentHit);
@@ -2664,9 +2356,9 @@ const frame = (): void => {
       held: inventory.get(selectedSlot)?.id ?? 0,
       cameraMode,
       dead,
-      pigs: pigs.length,
-      zombies: zombies.length,
-      sheep: sheep.length,
+      pigs: mobs.counts.pigs,
+      zombies: mobs.counts.zombies,
+      sheep: mobs.counts.sheep,
       drops: droppedItems.length,
       xpLevel,
       flying,
@@ -2851,30 +2543,28 @@ const frame = (): void => {
   if (playerReady && !pigsSpawned) {
     const surface = world.getSurfaceBlockY(spawn.x + 3, spawn.z + 2);
     if (surface !== null) {
-      spawnPig(spawn.x + 3, surface + 1, spawn.z + 2);
+      mobs.spawnPig(spawn.x + 3, surface + 1, spawn.z + 2);
       pigsSpawned = true;
     }
   }
   if (playerReady && !sheepSpawned) {
     const surface = world.getSurfaceBlockY(spawn.x - 2, spawn.z + 3);
     if (surface !== null) {
-      spawnSheep(spawn.x - 2, surface + 1, spawn.z + 3);
+      mobs.spawnSheep(spawn.x - 2, surface + 1, spawn.z + 3);
       sheepSpawned = true;
     }
   }
   if (playerReady && !zombieSpawned && worldTime > 0.55) {
     const surface = world.getSurfaceBlockY(spawn.x - 5, spawn.z - 4);
     if (surface !== null) {
-      spawnZombie(spawn.x - 5, surface + 1, spawn.z - 4);
+      mobs.spawnZombie(spawn.x - 5, surface + 1, spawn.z - 4);
       zombieSpawned = true;
     }
   }
   if (playerReady && !paused) {
     mobAccum += dt;
     if (mobAccum >= 0.05) {
-      tickPigs(mobAccum);
-      tickSheep(mobAccum);
-      tickZombies(mobAccum);
+      mobs.tick(mobAccum);
       mobAccum = 0;
     }
   }
@@ -2906,36 +2596,24 @@ if (wxTestApi && isDesktopRuntime) {
     spawnZombie: () => {
       const surface = world.getSurfaceBlockY(Math.floor(physics.x + 3), Math.floor(physics.z + 3));
       if (surface === null) return { spawned: false };
-      spawnZombie(Math.floor(physics.x + 3), surface + 1, Math.floor(physics.z + 3));
+      mobs.spawnZombie(Math.floor(physics.x + 3), surface + 1, Math.floor(physics.z + 3));
       zombieSpawned = true;
       return { spawned: true };
     },
     killSheep: () => {
-      const mob = sheep[0];
-      if (!mob) return { killed: false };
-      addDrop(WOOL_ID_START, 1, mob.x, mob.y + 0.5, mob.z);
-      gainXp(1);
-      removeSheep(0);
-      showHud();
-      return { killed: true };
+      const killed = mobs.killSheep();
+      if (killed) showHud();
+      return { killed };
     },
     killZombie: () => {
-      const zombie = zombies[0];
-      if (!zombie) return { killed: false };
-      addDrop(Item.ROTTEN_FLESH, 1, zombie.x, zombie.y + 0.5, zombie.z);
-      gainXp(5);
-      removeZombie(0);
-      showHud();
-      return { killed: true };
+      const killed = mobs.killZombie();
+      if (killed) showHud();
+      return { killed };
     },
     killPig: () => {
-      const pig = pigs[0];
-      if (!pig) return { killed: false };
-      addDrop(Item.PORKCHOP, 1, pig.x, pig.y + 0.5, pig.z);
-      gainXp(3);
-      removePig(0);
-      showHud();
-      return { killed: true };
+      const killed = mobs.killPig();
+      if (killed) showHud();
+      return { killed };
     },
     setGameMode: (mode: 'survival' | 'creative' = 'creative') => {
       if (currentWorld) {

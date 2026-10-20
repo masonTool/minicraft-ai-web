@@ -24,6 +24,7 @@ v2
   src/minigame-v2
                  index.ts          组合根：启动、世界生命周期、帧循环、UI 状态
                  ui-kit/           Canvas UI（Box/Text/Button/Slider/Slot/Icon/Ring/Vital）
+                 mobs.ts           猪/羊/僵尸：模型/游走/追击/攻击
                  wx-mesh-pool.ts   微信真实 Worker 网格化
                  chunk-worker-entry.ts
                                    微信 worker.onMessage 入口
@@ -91,6 +92,7 @@ v2
 - 测试入口 `wx.__v2Test` 只在桌面运行时安装，真机不暴露
 - 抽取 `createChunkRenderer`，去掉初始/mount/Worker 回退三处重复构造
 - 状态/调试 HUD 暴露 `qualityTier` 与 `meshBackend`
+- 抽取 `MobSystem`：猪/羊/僵尸模型、游走、追击、攻击、击杀统一，组合根减少约 350 行
 
 ## 已知架构债务
 
@@ -99,14 +101,14 @@ v2
    - HUD/容器/设置/背包 UI
    - 生物/掉落/生存
    - 存档/自动保存
-2. 猪/羊/僵尸各自有模型和 tick 代码，重复进一步增加；应优先抽成 `mobs/` 模块
+2. 猪/羊/僵尸的通用建模/AI 已抽到 `mobs.ts`；后续可继续补更多生物种类与正式 AI
 3. 容器/背包 UI 与游戏逻辑仍耦合在组合根
 4. `WorkerHost.post` 忽略 transfer，Worker 消息仍可能发生结构化克隆拷贝
 5. Settings/Inventory 尚未按 Web DOM 结构拆分组件
 
 ## 建议拆分顺序
 
-1. `mobs/`：MobState、spawn、tick、攻击、掉落
+1. ~~`mobs/`：MobState、spawn、tick、攻击、掉落~~（已完成）
 2. `containers/`：箱子/熔炉面板与存取
 3. `inventory/`：背包/合成/配方书
 4. `save/`：snapshot/persist/load/mountWorld
