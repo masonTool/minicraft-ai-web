@@ -14,11 +14,12 @@
 - [x] `src/core/worker/WorkerLike.ts`（additive 平台 seam）
 - [x] `npm run typecheck` 通过
 - [x] 主线程 Worker 垫片（复用 main `chunk.worker` 的生成/网格化）
+- [x] v2 core 冒烟：main World 生成 9 个区块（`npm run test:v2-core`）
 
 ## 尚未完成
 
 - [ ] SaveGame / IndexedDB seam
-- [ ] v2 最小世界渲染启动
+- [ ] v2 最小世界渲染启动（core 生成已通，差渲染器）
 - [ ] 触摸输入
 - [ ] UI Kit
 - [ ] Settings / Inventory 按 Web 结构重做
