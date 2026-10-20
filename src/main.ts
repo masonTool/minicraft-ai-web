@@ -362,6 +362,8 @@ import { Block, BLOCKS, blockDef, woolId,
   isBed,
   isSign,
   saplingTreeOf,
+  // 剥皮（批次 443）：原木 → 剥皮原木的映射，右键交互用
+  stripResult,
 } from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
@@ -6000,6 +6002,26 @@ class App {
    *  - 成功时消耗 1 点斧头耐久。
    * 判定本身是纯函数（`Copper.ts#scrapeResult`），所以能离线断言。
    */
+  /**
+   * 剥皮（批次 443）：手上是**斧头**、准星对着原木 → 变成剥皮原木（原版行为）。
+   *
+   * 与原版一致的三点：只有斧头能剥、剥完消耗 1 点耐久、**不是合成**——
+   * 所以映射表在方块注册表里（`stripResult`），不写成配方。
+   */
+  private stripLog(x: number, y: number, z: number): boolean {
+    if (this.heldTool?.type !== 'axe') return false;
+    const target = this.world.getBlock(x, y, z);
+    const stripped = stripResult(target);
+    if (stripped === undefined) return false;
+
+    this.world.setBlockAndUpdate(x, y, z, stripped);
+    this.net.sendBlock(x, y, z, stripped, 0, this.dimension);
+    this.audio.play('break_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.damageHeldTool();
+    this.hand.swing();
+    return true;
+  }
+
   private scrapeCopper(x: number, y: number, z: number): boolean {
     if (this.heldTool?.type !== 'axe') return false;
     const target = this.world.getBlock(x, y, z);
@@ -11255,6 +11277,13 @@ class App {
     }
 
     // 斧头刮铜（批次 40）：手上是斧头、准星对着锈了的铜 → 刮掉一层
+    // 剥皮（批次 443）：与刮铜同一个入口、同一个键（斧头右键），所以排在一起
+    if (this.stripLog(this.hit.x, this.hit.y, this.hit.z)) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN * 2;
+      return;
+    }
+
     if (this.scrapeCopper(this.hit.x, this.hit.y, this.hit.z)) {
       this.placeCooldown = PLACE_COOLDOWN;
       return;

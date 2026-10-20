@@ -6189,6 +6189,13 @@ PAINTERS['item_nether_brick'] = noisy(0x4a2a2a, 26);
 PAINTERS['hay_block'] = noisy(0xd8b23a, 22);
 PAINTERS['honeycomb_block'] = noisy(0xe8a33d, 18);
 PAINTERS['cobweb'] = noisy(0xe9eef2, 40);
+// 剥皮原木（批次 443）：比同种木材的 bark 亮一档，用 wood 色画（原版剥皮后露的就是木质部）
+PAINTERS['stripped_oak_log'] = noisy(0x9a7648, 16);
+PAINTERS['stripped_spruce_log'] = noisy(0x745a36, 16);
+PAINTERS['stripped_birch_log'] = noisy(0xc4b27a, 16);
+PAINTERS['stripped_jungle_log'] = noisy(0x9a6e4e, 16);
+PAINTERS['stripped_acacia_log'] = noisy(0xac6438, 16);
+PAINTERS['stripped_dark_oak_log'] = noisy(0x48361f, 16);
 PAINTERS['item_chorus_fruit'] = noisy(0x8f5fae, 24);
 PAINTERS['item_popped_chorus_fruit'] = noisy(0xbf8fd6, 24);
 PAINTERS['item_prismarine_crystals'] = noisy(0xd8e8a0, 20);

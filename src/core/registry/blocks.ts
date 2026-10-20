@@ -246,6 +246,13 @@ const BASE_SPECS: readonly BlockSpec[] = [
   { id: 676, name: 'minecraft:honeycomb_block', tiles: ['honeycomb_block', 'honeycomb_block', 'honeycomb_block'] },
   // 蛛网（批次 441）：能穿过、会减速；渲染用一张带透明感的贴图
   { id: 677, name: 'minecraft:cobweb', tiles: ['cobweb', 'cobweb', 'cobweb'], solid: false, opaque: false, lightOpacity: 0 },
+  // 剥皮原木（批次 443）：颜色比原木浅一档，贴图由 TextureAtlas 现画
+  { id: 678, name: 'minecraft:stripped_oak_log', tiles: ['stripped_oak_log', 'stripped_oak_log', 'stripped_oak_log'] },
+  { id: 679, name: 'minecraft:stripped_spruce_log', tiles: ['stripped_spruce_log', 'stripped_spruce_log', 'stripped_spruce_log'] },
+  { id: 680, name: 'minecraft:stripped_birch_log', tiles: ['stripped_birch_log', 'stripped_birch_log', 'stripped_birch_log'] },
+  { id: 681, name: 'minecraft:stripped_jungle_log', tiles: ['stripped_jungle_log', 'stripped_jungle_log', 'stripped_jungle_log'] },
+  { id: 682, name: 'minecraft:stripped_acacia_log', tiles: ['stripped_acacia_log', 'stripped_acacia_log', 'stripped_acacia_log'] },
+  { id: 683, name: 'minecraft:stripped_dark_oak_log', tiles: ['stripped_dark_oak_log', 'stripped_dark_oak_log', 'stripped_dark_oak_log'] },
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -3944,6 +3951,13 @@ export const Block = {
    * 所以它是 `solid: false` —— 碰撞上当作空气，减速靠 `isCobwebBlock` 逐帧问。
    */
   COBWEB: 677,
+  /** 六种剥皮原木（批次 443）：斧头右键原木得到（原版行为，不是合成） */
+  STRIPPED_OAK_LOG: 678,
+  STRIPPED_SPRUCE_LOG: 679,
+  STRIPPED_BIRCH_LOG: 680,
+  STRIPPED_JUNGLE_LOG: 681,
+  STRIPPED_ACACIA_LOG: 682,
+  STRIPPED_DARK_OAK_LOG: 683,
   WAXED_COPPER_BLOCK: 603,
   WAXED_EXPOSED_COPPER: 604,
   WAXED_WEATHERED_COPPER: 605,
@@ -4298,6 +4312,10 @@ HARDNESS.set(Block.BLUE_ICE, 2.8);
 HARDNESS.set(Block.HONEYCOMB_BLOCK, 0.6);
 // 蛛网：剑挖得快（原版 4，且只有剑/剪刀效率正常）；这里统一 4
 HARDNESS.set(Block.COBWEB, 4);
+// 剥皮原木：与原木同级
+for (const id of [Block.STRIPPED_OAK_LOG, Block.STRIPPED_SPRUCE_LOG, Block.STRIPPED_BIRCH_LOG, Block.STRIPPED_JUNGLE_LOG, Block.STRIPPED_ACACIA_LOG, Block.STRIPPED_DARK_OAK_LOG]) {
+  HARDNESS.set(id, 2);
+}
 HARDNESS.set(Block.WAXED_COPPER_BLOCK, 3);
 HARDNESS.set(Block.WAXED_EXPOSED_COPPER, 3);
 HARDNESS.set(Block.WAXED_WEATHERED_COPPER, 3);
@@ -4761,6 +4779,27 @@ export function isHardnessRegistered(id: number): boolean {
  * 物理层每帧都问一次，所以它必须是"一次查表"的便宜操作——
  * 与 `isClimbableBlock` 同一个口径，别在这里写 `blockDef(...).name === 'minecraft:cobweb'`。
  */
+/**
+ * 原木 → 剥皮原木（批次 443）。
+ *
+ * 原版是用斧头右键原木"刮掉一层树皮"，**不是合成**。所以这张表放在方块注册表里、
+ * 由 `main` 的右键交互读，而不是写成配方——写成配方会让玩家能在工作台里
+ * 凭空剥皮，与原版手感差得很远。
+ */
+const STRIPPED_VARIANT = new Map<number, number>([
+  [5, 678], // oak_log → stripped_oak_log（5 是橡木原木的固定 id）
+  [102, 679], // spruce_log
+  [107, 680], // birch_log
+  [112, 681], // jungle_log
+  [117, 682], // acacia_log
+  [122, 683], // dark_oak_log
+]);
+
+/** 这个方块能不能被斧头剥皮；不能就返回 undefined */
+export function stripResult(id: number): number | undefined {
+  return STRIPPED_VARIANT.get(id);
+}
+
 export function isCobwebBlock(id: number): boolean {
   return id === Block.COBWEB;
 }

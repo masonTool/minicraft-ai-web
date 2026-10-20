@@ -45,6 +45,8 @@ import {
   stainedGlassId,
   terracottaId,
   woolId,
+  // 剥皮（批次 443）：交互型来源，闭包里要用
+  stripResult,
 } from '../src/core/registry/blocks.ts';
 import {
   BLOCK_ITEM_ID_LIMIT,
@@ -726,6 +728,14 @@ const blockGaps: number[] = [];
       const upgraded = netheriteUpgradeOf(id);
       if (upgraded !== undefined && blockReach.has(id)) add(upgraded);
     }
+    // 斧头剥皮（批次 443）：**交互型来源**，与"熔炼""锻造"同级——
+    // 拿到原木就等于拿到剥皮原木（只要手里有斧头，而斧头有配方）。
+    // 不把这条写进闭包的话，六种剥皮原木会全被报成"拿不到"，
+    // 然后只能塞白名单——那是在给"审计没建模的东西"记黑账。
+    for (let id = 0; id < BLOCK_ITEM_ID_LIMIT; id++) {
+      const stripped = stripResult(id);
+      if (stripped !== undefined && blockReach.has(id)) add(stripped);
+    }
   }
 
   for (let id = 1; id < BLOCK_ITEM_ID_LIMIT; id++) {
@@ -740,6 +750,11 @@ const blockGaps: number[] = [];
   check('**深板岩拿得到**（生成侧：地下的主干方块）', blockReach.has(Block.DEEPSLATE));
   check('**磨制黑石拿得到**（堡垒遗迹生成）', blockReach.has(Block.POLISHED_BLACKSTONE));
   check('（对照）空 id 不会被算成缺口', !blockGaps.includes(Block.AIR));
+  // 斧头剥皮（批次 443）：拿到原木就等于拿到剥皮原木
+  check(
+    '**剥皮原木拿得到**（斧头右键原木，交互型来源）',
+    blockReach.has(Block.STRIPPED_OAK_LOG) && blockReach.has(Block.STRIPPED_DARK_OAK_LOG),
+  );
 }
 
 {
