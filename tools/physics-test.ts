@@ -34,7 +34,8 @@ import {
   waterFlowAt,
   type FlowWorld,
 } from '../src/core/world/FluidFlow.ts';
-import { Block } from '../src/core/registry/blocks.ts';
+import { Block, CONCRETE_POWDER_ID_START } from '../src/core/registry/blocks.ts';
+import { FALL_STEP_SECONDS, FallingBlocks, isFallingBlock } from '../src/core/world/FallingBlocks.ts';
 import { withFluidLevel } from '../src/core/registry/blockState.ts';
 
 let passed = 0;
@@ -680,6 +681,76 @@ console.log('\n[蜂蜜块（批次 450）]');
   freeFall.z = 0.5;
   for (let i = 0; i < 60; i++) freeFall.update(honeyWall(false), input({}), YAW_PLUS_X, DT, false);
   check('没有蜜块时会一直加速（负对照）', freeFall.vy < -5, `vy=${freeFall.vy.toFixed(2)}`);
+}
+
+console.log('\n[下落方块（批次 543）]');
+{
+  const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+  const world = {
+    blocks: new Map<string, { id: number; state: number }>(),
+    set(x: number, y: number, z: number, id: number, state = 0): void {
+      this.blocks.set(key(x, y, z), { id, state });
+    },
+    getBlock(x: number, y: number, z: number): number {
+      return this.blocks.get(key(x, y, z))?.id ?? Block.AIR;
+    },
+    getBlockState(x: number, y: number, z: number): number {
+      return this.blocks.get(key(x, y, z))?.state ?? 0;
+    },
+    setBlock(x: number, y: number, z: number, id: number, state = 0): boolean {
+      this.set(x, y, z, id, state);
+      return true;
+    },
+  };
+
+  check(
+    '沙子/红沙/沙砾/混凝土粉末都会下落',
+    [Block.SAND, Block.RED_SAND, Block.GRAVEL, CONCRETE_POWDER_ID_START].every(isFallingBlock),
+  );
+  check('石头与空气不会下落', !isFallingBlock(Block.STONE) && !isFallingBlock(Block.AIR));
+
+  const fb = new FallingBlocks();
+  world.set(0, 64, 0, Block.STONE);
+  world.set(0, 65, 0, Block.SAND);
+  check('有支撑的沙子不登记', !fb.wake(world, 0, 65, 0) && fb.pending === 0);
+
+  // 抽掉沙子下面那格：`wakeAfterChange` 要看上面那一格
+  world.set(0, 65, 0, Block.AIR);
+  world.set(0, 66, 0, Block.SAND);
+  fb.wakeAfterChange(world, 0, 65, 0);
+  check('抽掉支撑后上面的沙子开始下落', fb.pending === 1, `pending=${fb.pending}`);
+
+  fb.tick(world, FALL_STEP_SECONDS);
+  check('一个步长下落一格', world.getBlock(0, 65, 0) === Block.SAND && world.getBlock(0, 66, 0) === Block.AIR);
+
+  for (let i = 0; i < 20; i++) fb.tick(world, FALL_STEP_SECONDS);
+  check('落到地面就停住', world.getBlock(0, 65, 0) === Block.SAND && fb.pending === 0);
+  check('没有穿过地面', world.getBlock(0, 64, 0) === Block.STONE);
+
+  // 两格高的沙柱：下面那块先落，上面那块跟着落，最后仍然叠在一起
+  world.set(0, 70, 0, Block.SAND);
+  world.set(0, 71, 0, Block.SAND);
+  fb.wake(world, 0, 70, 0);
+  fb.wake(world, 0, 71, 0);
+  for (let i = 0; i < 100; i++) fb.tick(world, FALL_STEP_SECONDS);
+  check(
+    '整柱沙子一起落到底（65/66）',
+    world.getBlock(0, 65, 0) === Block.SAND && world.getBlock(0, 66, 0) === Block.SAND,
+    `65=${world.getBlock(0, 65, 0)} 66=${world.getBlock(0, 66, 0)}`,
+  );
+  check('整柱落完之后没有残留记录', fb.pending === 0);
+
+  // 水不是支撑：沙子会穿过水，落到水下面的石头上（水被替换掉）
+  world.set(0, 58, 0, Block.STONE);
+  world.set(0, 59, 0, Block.WATER);
+  world.set(0, 60, 0, Block.SAND);
+  fb.wake(world, 0, 60, 0);
+  for (let i = 0; i < 20; i++) fb.tick(world, FALL_STEP_SECONDS);
+  check('沙子穿过水并落在石头上', world.getBlock(0, 59, 0) === Block.SAND && world.getBlock(0, 60, 0) === Block.AIR);
+
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('方块变动后唤醒下落方块', mainSrc.includes('fallingBlocks.wakeAfterChange(this.world, x, y, z)'));
+  check('主循环推进下落方块', mainSrc.includes('fallingBlocks.tick(this.world, dt)'));
 }
 
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);

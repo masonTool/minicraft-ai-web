@@ -236,6 +236,7 @@ import { fluidTick, wakeFluidAt, type FluidWorld } from './core/world/Fluids.ts'
 import { FLUID_TICKS_PER_TICK, isWithinFluidSim } from './core/world/FluidSimWindow.ts';
 import { scrapeResult } from './core/world/Copper.ts';
 import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
+import { FallingBlocks } from './core/world/FallingBlocks.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
 // 雷电与避雷针（批次 83）：规则（落点选择 / 杆头坐标 / 脉冲表）在 `world/Lightning.ts`，
 // 主程序只做"世界里的副作用"（伤害、点火、粒子、给电路重算）
@@ -918,6 +919,8 @@ class App {
    * 它需要一个很小的世界接口（读写方块与状态），爆炸本身是回调 → 走既有的 `explodeAt`。
    */
   private readonly primedTnt = new PrimedTnt();
+  /** 下落方块（批次 543）：沙子/沙砾/混凝土粉末失去支撑时一格一格掉 */
+  private readonly fallingBlocks = new FallingBlocks();
   private readonly tntWorld: TntWorld = {
     getBlock: (x, y, z) => this.world.getBlock(x, y, z),
     getState: (x, y, z) => this.world.getBlockState(x, y, z),
@@ -1842,6 +1845,8 @@ class App {
     },
   ) {
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType, this.worldConfig.singleBiome);
+    // 下落方块表只对当前世界有效；换世界/重开时清空，避免旧坐标落到新世界
+    this.fallingBlocks.clear();
     this.gameMode = normalizeGameMode(this.worldConfig.gameMode);
     // 旁观模式（批次 532）：新世界没有存档时也要立刻起飞，否则无碰撞 + 重力 = 穿地
     this.flying = startsFlying(this.gameMode);
@@ -2089,6 +2094,8 @@ class App {
         this.pendingSettle.push(x, y, z);
         // 红石：方块一变就重算受影响的电路（放粉、开关、活塞推拉都走这条路径）
         this.redstone.onBlockChanged(this.redstoneWorld, x, y, z);
+        // 下落方块（批次 543）：看这一格自己与上面那一格，谁失去支撑谁开始掉
+        this.fallingBlocks.wakeAfterChange(this.world, x, y, z);
       },
     };
 
@@ -10048,6 +10055,8 @@ class App {
     this.tickGuardians(context, dt);
     // 每帧重置寻路预算（批次 500）：放在实体 tick 之前，`canPathSearch` 才能正确递减
     this.pathSearchesLeft = PATH_SEARCH_BUDGET_PER_FRAME;
+    // 下落方块（批次 543）：一格一格往下挪，写方块会走 `onBlockChanged` 触发重建
+    this.fallingBlocks.tick(this.world, dt);
     this.entities.update(context, dt);
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;
