@@ -1648,6 +1648,8 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.GRASS_BLOCK, { id: Block.DIRT, count: 1 }],
   // 蜂巢（批次 374）：掉 1 个蜜脾（原版 0~3；这里固定 1，可达性审计也认它）
   [Block.BEE_NEST, { id: Item.HONEYCOMB, count: 1 }],
+  // 蛛网（批次 441）：拆了掉线（原版用剪刀才掉蛛网本身；这里统一掉线，写明差异）
+  [Block.COBWEB, { id: Item.STRING, count: 1 }],
   // 紫颂植株（批次 414）：掉 1 个紫颂果（原版每节 0~1 个）。不接这一条的话，
   // 紫颂果与紫珀块整条链在生存里都拿不到（创造里有、生存里没有 = 可达性审计会红）
   [Block.CHORUS_PLANT, { id: Item.CHORUS_FRUIT, count: 1 }],

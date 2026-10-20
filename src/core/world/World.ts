@@ -16,7 +16,7 @@ import { heightToY, type HeightmapKind } from './Heightmap.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import type { WorldType } from '../gen/WorldType.ts';
 import { LightEngine, type LightPushStats } from '../light/LightEngine.ts';
-import { blockDef, isClimbableBlock } from '../registry/blocks.ts';
+import { blockDef, isClimbableBlock, isCobwebBlock } from '../registry/blocks.ts';
 import { lightNeedsUpdate } from '../light/LightSignature.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
@@ -313,6 +313,18 @@ export class World {
   isClimbable(worldX: number, worldY: number, worldZ: number): boolean {
     if (worldY < -64 || worldY >= 320) return false;
     return isClimbableBlock(this.getBlock(worldX, worldY, worldZ));
+  }
+
+  /**
+   * 这一格是不是蛛网（批次 441）。
+   *
+   * 单独一个查询而不是让物理层直接 `getBlock` + 查表：物理层的世界接口是
+   * **按能力**定的（`isLiquid` / `isClimbable` / 现在多一个 `isCobweb`），
+   * 这样测试里给个假世界就能验"粘住"这件事，不用造一整个世界。
+   */
+  isCobweb(worldX: number, worldY: number, worldZ: number): boolean {
+    if (worldY < -64 || worldY >= 320) return false;
+    return isCobwebBlock(this.getBlock(worldX, worldY, worldZ));
   }
 
   /**

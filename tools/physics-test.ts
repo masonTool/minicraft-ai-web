@@ -460,5 +460,35 @@ console.log('\n[爬行：一格高的洞（F9，批次 430）]');
   check('也确实被挡住了', againstWall.x < 3.8, `x=${againstWall.x.toFixed(2)}`);
 }
 
+console.log('\n[蛛网减速（批次 441）]');
+{
+  const flat = (web: boolean): PhysicsWorld => ({
+    collisionAt: (_x, y) => (y < 64 ? ('full' as const) : null),
+    isLiquid: () => false,
+    isClimbable: () => false,
+    // 整条走廊 x ≥ 2 都是蛛网
+    isCobweb: (x: number) => web && x >= 2,
+  });
+
+  // ① 不在网里：正常速度
+  const free = standOnGround(0.5);
+  for (let i = 0; i < 40; i++) free.update(flat(true), input({ forward: 1 }), YAW_PLUS_X, DT, false);
+  check('网外正常前进（2 秒走出 1 格以上）', free.x > 1.5, `x=${free.x.toFixed(2)}`);
+
+  // ② 网里：同样时间走得明显更短
+  const stuck = standOnGround(2.5);
+  for (let i = 0; i < 40; i++) stuck.update(flat(true), input({ forward: 1 }), YAW_PLUS_X, DT, false);
+  const stuckDistance = stuck.x - 2.5;
+  const freeDistance = free.x - 0.5;
+  check('网里走得更短（被粘住）', stuckDistance < freeDistance * 0.6, `网里 ${stuckDistance.toFixed(2)} / 网外 ${freeDistance.toFixed(2)}`);
+  check('但不是完全动不了（退化成减速而不是卡死）', stuckDistance > 0.1, `网里 ${stuckDistance.toFixed(2)}`);
+
+  // ③ 世界没实现 isCobweb 时不报错、也不减速（可选钩子）
+  const plain: PhysicsWorld = { collisionAt: (_x, y) => (y < 64 ? ('full' as const) : null), isLiquid: () => false, isClimbable: () => false };
+  const noHook = standOnGround(2.5);
+  for (let i = 0; i < 40; i++) noHook.update(plain, input({ forward: 1 }), YAW_PLUS_X, DT, false);
+  check('没接 isCobweb 的世界不受影响', Math.abs(noHook.x - stuck.x) > 0.2, `x=${noHook.x.toFixed(2)}`);
+}
+
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);
 process.exit(failed === 0 ? 0 : 1);

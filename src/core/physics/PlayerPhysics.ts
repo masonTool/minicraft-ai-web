@@ -51,6 +51,8 @@ const CLIMB_ACCEL = 30;
 
 /** 单次步进的最大位移，超过就拆成多步，避免高速穿透薄墙 */
 const MAX_STEP = 0.4;
+/** 蛛网里的水平速度系数（批次 441） */
+export const COBWEB_SPEED_FACTOR = 0.25;
 /** 爬行的前瞻距离（格）：比半个身位略远一点，走到洞口前一两帧就开始爬 */
 const CRAWL_PROBE = 0.45;
 
@@ -71,6 +73,11 @@ export interface PhysicsWorld extends CollisionWorld {
    * 不提供时一律按"不能攀爬"处理——与 `TickWorld` 的 `skyLightAt` / `raining` 同一个套路。
    */
   isClimbable?(x: number, y: number, z: number): boolean;
+  /**
+   * 这一格是不是蛛网（批次 441）：能穿过去，但**水平速度只剩 1/4**。
+   * 可选——不给就是不减速（假世界不必都实现它）。
+   */
+  isCobweb?(x: number, y: number, z: number): boolean;
   /**
    * 这一格是不是"贴上去会掉血"的方块（目前只有仙人掌，批次 222）。
    *
@@ -246,7 +253,12 @@ export class PlayerPhysics {
           : input.sprint
             ? SPRINT_SPEED
             : WALK_SPEED;
-    const speed = baseSpeed * speedMultiplier;
+    // 蛛网（批次 441）：原版是"陷在里面动不了"，这里退化成**水平速度 ×0.25**——
+    // 真按原版做需要"每 tick 把速度清零"，那样玩家在网里会完全推不动，
+    // 在没有"挖掉网"这条交互之前会显得像卡死。×0.25 已经能明显感觉到"被粘住"。
+    const inCobweb =
+      !flying && world.isCobweb?.(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)) === true;
+    const speed = baseSpeed * speedMultiplier * (inCobweb ? COBWEB_SPEED_FACTOR : 1);
 
     const accelerate = flying ? 90 : this.onGround ? 48 : 10;
     this.vx = approach(this.vx, dirX * speed, accelerate * dt);

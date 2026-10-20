@@ -244,6 +244,8 @@ const BASE_SPECS: readonly BlockSpec[] = [
   { id: 675, name: 'minecraft:blue_ice', tiles: ['packed_ice', 'packed_ice', 'packed_ice'] },
   // 蜜脾块（批次 440）：纯装饰方块，没有行为
   { id: 676, name: 'minecraft:honeycomb_block', tiles: ['honeycomb_block', 'honeycomb_block', 'honeycomb_block'] },
+  // 蛛网（批次 441）：能穿过、会减速；渲染用一张带透明感的贴图
+  { id: 677, name: 'minecraft:cobweb', tiles: ['cobweb', 'cobweb', 'cobweb'], solid: false, opaque: false, lightOpacity: 0 },
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -3937,6 +3939,11 @@ export const Block = {
   BLUE_ICE: 675,
   /** 蜜脾块（批次 440）：4 个蜜脾 2×2 → 1 块，纯装饰 */
   HONEYCOMB_BLOCK: 676,
+  /**
+   * 蛛网（批次 441）：**能穿过去但会把人粘住**（不是实心方块）。
+   * 所以它是 `solid: false` —— 碰撞上当作空气，减速靠 `isCobwebBlock` 逐帧问。
+   */
+  COBWEB: 677,
   WAXED_COPPER_BLOCK: 603,
   WAXED_EXPOSED_COPPER: 604,
   WAXED_WEATHERED_COPPER: 605,
@@ -4289,6 +4296,8 @@ HARDNESS.set(Block.POLISHED_BASALT, 1.25);
 // 蓝冰比浮冰硬得多（原版 2.8）
 HARDNESS.set(Block.BLUE_ICE, 2.8);
 HARDNESS.set(Block.HONEYCOMB_BLOCK, 0.6);
+// 蛛网：剑挖得快（原版 4，且只有剑/剪刀效率正常）；这里统一 4
+HARDNESS.set(Block.COBWEB, 4);
 HARDNESS.set(Block.WAXED_COPPER_BLOCK, 3);
 HARDNESS.set(Block.WAXED_EXPOSED_COPPER, 3);
 HARDNESS.set(Block.WAXED_WEATHERED_COPPER, 3);
@@ -4746,6 +4755,16 @@ export function isHardnessRegistered(id: number): boolean {
  * 按**形状**判定而不是列方块 id：加一种木材、以后加铁梯子都自动跟上——
  * 这正是"同族方块的行为一律按形状判定"那条经验（批次 38 踩过）。
  */
+/**
+ * 这一格是不是蛛网（批次 441）。
+ *
+ * 物理层每帧都问一次，所以它必须是"一次查表"的便宜操作——
+ * 与 `isClimbableBlock` 同一个口径，别在这里写 `blockDef(...).name === 'minecraft:cobweb'`。
+ */
+export function isCobwebBlock(id: number): boolean {
+  return id === Block.COBWEB;
+}
+
 export function isClimbableBlock(id: number): boolean {
   const shape = blockDef(id).shape;
   // 脚手架（批次 53）：原版能顺着它往上爬——加一个形状，攀爬就自动跟上了
