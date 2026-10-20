@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import type { ItemStack } from '../../core/container/Inventory.ts';
 import { CraftingGrid } from '../../core/crafting/CraftingGrid.ts';
+import { buildRecipeEntries, type RecipeEntry } from '../../core/crafting/RecipeBook.ts';
+import type { Recipe } from '../../core/crafting/Recipes.ts';
 import { Block, blockDef } from '../../core/registry/blocks.ts';
+import { itemName } from '../../core/registry/items.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { drawBlockIcon } from './icons.ts';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
@@ -13,6 +16,7 @@ export type InventoryAction =
   | { type: 'give'; id: number }
   | { type: 'quick' }
   | { type: 'drop' }
+  | { type: 'craftRecipe'; recipe: Recipe }
   | null;
 
 export interface InventoryCallbacks {
@@ -89,6 +93,7 @@ export function createInventory(
   const quickButton: Rect = { x: panelX + 190, y: panelY + panelHeight - 48, w: 110, h: 36 };
   const dropButton: Rect = { x: panelX + 312, y: panelY + panelHeight - 48, w: 90, h: 36 };
   const workbenchButton: Rect = { x: panelX + 420, y: panelY + panelHeight - 48, w: 130, h: 36 };
+  const recipesButton: Rect = { x: panelX + 560, y: panelY + panelHeight - 48, w: 120, h: 36 };
   const gridX = panelX + 20;
   const gridY = panelY + 56;
   const craftX = gridX + gridWidth + 24;
@@ -111,10 +116,12 @@ export function createInventory(
 
   let open = false;
   let selected = 0;
-  let mode: 'inventory' | 'creative' = 'inventory';
+  let mode: 'inventory' | 'creative' | 'recipes' = 'inventory';
   let pendingGive: number | null = null;
   let pendingCraft: number | null = null;
   let pendingCommand: 'quick' | 'drop' | null = null;
+  let pendingRecipe: Recipe | null = null;
+  let recipeRows: RecipeEntry[] = [];
   let tooltip: { text: string; index: number } | null = null;
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
   let tooltipTimer: ReturnType<typeof setTimeout> | null = null;
@@ -139,10 +146,21 @@ export function createInventory(
     context.fillStyle = 'rgba(0, 0, 0, 0.58)';
     context.fillRect(0, 0, canvas.width, canvas.height);
     drawPanel(context, panelRect);
-    drawText(context, mode === 'creative' ? 'CREATIVE' : 'INVENTORY', panelX + 20, panelY + 18, 26, '#ffffff');
     drawText(
       context,
-      mode === 'creative' ? 'TAP A BLOCK = GET 64' : 'TAP HOTBAR = SELECT · TAP ITEM = SWAP',
+      mode === 'recipes' ? 'RECIPES' : mode === 'creative' ? 'CREATIVE' : 'INVENTORY',
+      panelX + 20,
+      panelY + 18,
+      26,
+      '#ffffff',
+    );
+    drawText(
+      context,
+      mode === 'recipes'
+        ? 'TAP A CRAFTABLE RECIPE'
+        : mode === 'creative'
+          ? 'TAP A BLOCK = GET 64'
+          : 'TAP HOTBAR = SELECT · TAP ITEM = SWAP',
       panelX + 20,
       panelY + 48,
       13,
@@ -152,7 +170,35 @@ export function createInventory(
     );
     drawButton(context, closeRect, 'X', 'normal', 24);
 
-    for (let i = 0; i < cols * rows; i++) {
+    if (mode === 'recipes') {
+      const source = {
+        countOf: (itemId: number): number =>
+          currentSlots.reduce((total, stack) => total + (stack?.id === itemId ? stack.count : 0), 0),
+      };
+      recipeRows = buildRecipeEntries(source)
+        .filter((entry) => entry.craftable)
+        .slice(0, 6);
+      if (recipeRows.length === 0) {
+        drawText(context, 'NO CRAFTABLE RECIPES', gridX, gridY + 20, 18, 'rgba(255, 255, 255, 0.55)');
+      }
+      recipeRows.forEach((entry, index) => {
+        const y = gridY + index * 42;
+        context.fillStyle = 'rgba(0, 0, 0, 0.36)';
+        context.fillRect(gridX, y, gridWidth, 38);
+        drawText(
+          context,
+          `${itemName(entry.result.id)}${entry.result.count > 1 ? ` x${entry.result.count}` : ''}`,
+          gridX + 10,
+          y + 10,
+          16,
+          '#ffffff',
+          'left',
+          gridWidth - 20,
+        );
+      });
+    }
+
+    for (let i = 0; i < cols * rows && mode !== 'recipes'; i++) {
       const { x, y } = slotRect(i);
       context.fillStyle = 'rgba(0, 0, 0, 0.42)';
       context.fillRect(x, y, slot, slot);
@@ -238,6 +284,13 @@ export function createInventory(
       mode === 'creative' ? 'BACK TO BAG' : 'CREATIVE',
       'normal',
       16,
+    );
+    drawButton(
+      context,
+      recipesButton,
+      mode === 'recipes' ? 'BACK TO BAG' : 'RECIPES',
+      'normal',
+      15,
     );
     if (mode === 'inventory') {
       drawButton(context, quickButton, 'QUICK', 'normal', 16);
@@ -340,6 +393,7 @@ export function createInventory(
       pendingGive = null;
       pendingCraft = null;
       pendingCommand = null;
+      pendingRecipe = null;
       mode = 'inventory';
       setOpen(!open);
     },
@@ -350,6 +404,7 @@ export function createInventory(
       pendingGive = null;
       pendingCraft = null;
       pendingCommand = null;
+      pendingRecipe = null;
       mode = 'inventory';
       setOpen(false);
     },
@@ -378,6 +433,15 @@ export function createInventory(
         mode = mode === 'creative' ? 'inventory' : 'creative';
         drag = null;
         pendingGive = null;
+        pendingRecipe = null;
+        redraw();
+        return true;
+      }
+      if (contains(recipesButton, x, y)) {
+        mode = mode === 'recipes' ? 'inventory' : 'recipes';
+        drag = null;
+        pendingGive = null;
+        pendingRecipe = null;
         redraw();
         return true;
       }
@@ -385,6 +449,16 @@ export function createInventory(
         const index = slotAt(x, y);
         pendingGive = index === null ? null : (creativeBlocks[index] ?? null);
         redraw();
+        return true;
+      }
+      if (mode === 'recipes') {
+        if (x >= gridX && x <= gridX + gridWidth && y >= gridY) {
+          const index = Math.floor((y - gridY) / 42);
+          if (index >= 0 && index < recipeRows.length) {
+            pendingRecipe = recipeRows[index]!.recipe;
+            redraw();
+          }
+        }
         return true;
       }
 
@@ -463,6 +537,11 @@ export function createInventory(
     },
     handleUp(clientX: number, clientY: number, sw: number, sh: number): InventoryAction {
       if (!open) return null;
+      if (pendingRecipe !== null) {
+        const recipe = pendingRecipe;
+        pendingRecipe = null;
+        return { type: 'craftRecipe', recipe };
+      }
       if (pendingCommand !== null) {
         const command = pendingCommand;
         pendingCommand = null;

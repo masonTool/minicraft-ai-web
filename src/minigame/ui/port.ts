@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { ItemStack } from '../../core/container/Inventory.ts';
+import type { Recipe } from '../../core/crafting/Recipes.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { createHud } from './hud.ts';
 import { createHotbar } from './hotbar.ts';
@@ -55,6 +56,7 @@ export interface CanvasUiCallbacks {
   onAddStack?: (stack: ItemStack) => void;
   onQuickMove?: () => void;
   onDropItem?: () => void;
+  onCraftRecipe?: (recipe: Recipe) => void;
   onSettingsChange?: (values: SettingsValues) => void;
   onRequestText?: (current: string) => Promise<string | null>;
 }
@@ -125,6 +127,7 @@ export function createCanvasUi(
       if (action?.type === 'give') callbacks.onGiveBlock?.(action.id);
       if (action?.type === 'quick') callbacks.onQuickMove?.();
       if (action?.type === 'drop') callbacks.onDropItem?.();
+      if (action?.type === 'craftRecipe') callbacks.onCraftRecipe?.(action.recipe);
       return true;
     },
     togglePause(): void {

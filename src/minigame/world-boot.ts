@@ -18,7 +18,8 @@ import { World } from '../core/world/World.ts';
 import { PlayerPhysics, type PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { Block, blockDef } from '../core/registry/blocks.ts';
-import { maxStackOf } from '../core/registry/items.ts';
+import { itemName, maxStackOf } from '../core/registry/items.ts';
+import { craftFromInventory } from '../core/crafting/RecipeBook.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { Inventory, type ItemStack } from '../core/container/Inventory.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
@@ -336,6 +337,16 @@ async function boot(): Promise<void> {
         ui.syncInventory(inventory.serialize(), selectedSlot);
         dropOne?.(one);
         ui.showToast(`DROPPED ${blockDef(one.id).name.replace('minecraft:', '')}`);
+        scheduleSave?.();
+      },
+      onCraftRecipe: (recipe) => {
+        const result = craftFromInventory(inventory, recipe);
+        if (!result) {
+          ui.showToast('MISSING MATERIALS');
+          return;
+        }
+        ui.syncInventory(inventory.serialize(), selectedSlot);
+        ui.showToast(`+ ${itemName(result.id)} x${result.count}`);
         scheduleSave?.();
       },
       onMoveItem: (from, to) => {
