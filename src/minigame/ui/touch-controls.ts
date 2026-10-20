@@ -61,7 +61,14 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
   let flying = false;
   let sneaking = false;
 
-  const button = (x: number, y: number, radius: number, label: string, active = false): void => {
+  const button = (
+    x: number,
+    y: number,
+    radius: number,
+    label: string,
+    active = false,
+    fontSize = 16,
+  ): void => {
     circle(
       x,
       y,
@@ -69,7 +76,7 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
       active ? 'rgba(70, 140, 90, 0.65)' : 'rgba(20, 24, 28, 0.5)',
       active ? 'rgba(180, 255, 200, 0.95)' : 'rgba(255, 255, 255, 0.55)',
     );
-    drawText(context!, label, x, y - 9, 16, 'rgba(255, 255, 255, 0.9)', 'center');
+    drawText(context!, label, x, y - fontSize / 2, fontSize, 'rgba(255, 255, 255, 0.9)', 'center');
   };
 
   const redraw = (): void => {
@@ -84,8 +91,8 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
     drawText(context, 'MOVE', jx, jy - 76, 14, 'rgba(255, 255, 255, 0.55)', 'center');
 
     // 飞行/潜行开关：左侧中部，避开摇杆
-    button(jx, canvas.height * 0.38, 34, 'FLY', flying);
-    button(jx + 88, canvas.height * 0.38, 30, 'SNEAK', sneaking);
+    button(jx, canvas.height * 0.38, 34, 'FLY', flying, 14);
+    button(jx + 88, canvas.height * 0.38, 30, 'SNEAK', sneaking, 12);
 
     // 右侧按钮：与 world-boot 的 y 分区对应
     const bx = canvas.width * 0.88;

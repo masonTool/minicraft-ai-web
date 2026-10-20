@@ -50,6 +50,7 @@ export interface CanvasUiCallbacks {
   onSelectSlot?: (index: number) => void;
   onSwapSlot?: (index: number) => void;
   onMoveItem?: (from: number, to: number) => void;
+  onGiveBlock?: (id: number) => void;
   onSettingsChange?: (values: SettingsValues) => void;
   onRequestText?: (current: string) => Promise<string | null>;
 }
@@ -114,6 +115,7 @@ export function createCanvasUi(
       if (action?.type === 'select') callbacks.onSelectSlot?.(action.index);
       if (action?.type === 'swap') callbacks.onSwapSlot?.(action.index);
       if (action?.type === 'move') callbacks.onMoveItem?.(action.from, action.to);
+      if (action?.type === 'give') callbacks.onGiveBlock?.(action.id);
       return true;
     },
     togglePause(): void {

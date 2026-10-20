@@ -223,6 +223,12 @@ async function boot(): Promise<void> {
         ui.syncInventory(inventory.serialize(), selectedSlot);
         scheduleSave?.();
       },
+      onGiveBlock: (id) => {
+        inventory.add(id, 64);
+        ui.syncInventory(inventory.serialize(), selectedSlot);
+        ui.showToast(`+ ${blockDef(id).name.replace('minecraft:', '')} x64`);
+        scheduleSave?.();
+      },
       onMoveItem: (from, to) => {
         if (from === to) return;
         const source = inventory.get(from);

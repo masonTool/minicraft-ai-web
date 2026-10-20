@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ItemStack } from '../../core/container/Inventory.ts';
+import { Block } from '../../core/registry/blocks.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { drawBlockIcon } from './icons.ts';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
@@ -8,6 +9,7 @@ export type InventoryAction =
   | { type: 'select'; index: number }
   | { type: 'swap'; index: number }
   | { type: 'move'; from: number; to: number }
+  | { type: 'give'; id: number }
   | null;
 
 export interface Inventory {
@@ -66,16 +68,23 @@ export function createInventory(
   const gridWidth = cols * slot + (cols - 1) * gap;
   const gridHeight = rows * slot + (rows - 1) * gap;
   const panelWidth = gridWidth + 40;
-  const panelHeight = gridHeight + 76;
+  const panelHeight = gridHeight + 120;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   const panelRect: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
   const closeRect: Rect = { x: panelX + panelWidth - 50, y: panelY + 12, w: 36, h: 36 };
+  const creativeButton: Rect = { x: panelX + 20, y: panelY + panelHeight - 48, w: 150, h: 36 };
   const gridX = panelX + 20;
   const gridY = panelY + 56;
 
+  const creativeBlocks = Object.values(Block).filter(
+    (value): value is number => typeof value === 'number' && value > 0,
+  ).slice(0, 45);
+
   let open = false;
   let selected = 0;
+  let mode: 'inventory' | 'creative' = 'inventory';
+  let pendingGive: number | null = null;
   let currentSlots: readonly (ItemStack | null)[] = slots;
   let drag: { from: number; startX: number; startY: number; x: number; y: number; moved: boolean } | null =
     null;
@@ -97,10 +106,10 @@ export function createInventory(
     context.fillStyle = 'rgba(0, 0, 0, 0.58)';
     context.fillRect(0, 0, canvas.width, canvas.height);
     drawPanel(context, panelRect);
-    drawText(context, 'INVENTORY', panelX + 20, panelY + 18, 26, '#ffffff');
+    drawText(context, mode === 'creative' ? 'CREATIVE' : 'INVENTORY', panelX + 20, panelY + 18, 26, '#ffffff');
     drawText(
       context,
-      'TAP HOTBAR = SELECT · TAP ITEM = SWAP',
+      mode === 'creative' ? 'TAP A BLOCK = GET 64' : 'TAP HOTBAR = SELECT · TAP ITEM = SWAP',
       panelX + 20,
       panelY + 48,
       13,
@@ -115,9 +124,19 @@ export function createInventory(
       context.fillStyle = 'rgba(0, 0, 0, 0.42)';
       context.fillRect(x, y, slot, slot);
       context.strokeStyle =
-        i === selected ? '#ffffff' : i < 9 ? 'rgba(190, 220, 255, 0.55)' : 'rgba(255, 255, 255, 0.25)';
-      context.lineWidth = i === selected ? 4 : 2;
+        mode === 'inventory' && i === selected
+          ? '#ffffff'
+          : i < 9
+            ? 'rgba(190, 220, 255, 0.55)'
+            : 'rgba(255, 255, 255, 0.25)';
+      context.lineWidth = mode === 'inventory' && i === selected ? 4 : 2;
       context.strokeRect(x + 1, y + 1, slot - 2, slot - 2);
+
+      if (mode === 'creative') {
+        const id = creativeBlocks[i];
+        if (id) drawBlockIcon(context, atlas, id, x, y, slot);
+        continue;
+      }
 
       const stack = i < 41 ? currentSlots[i] : null;
       if (stack && stack.count > 0) {
@@ -127,6 +146,14 @@ export function createInventory(
         }
       }
     }
+
+    drawButton(
+      context,
+      creativeButton,
+      mode === 'creative' ? 'BACK TO BAG' : 'CREATIVE',
+      'normal',
+      16,
+    );
 
     // 拖拽中的物品跟随手指
     if (drag?.moved) {
@@ -171,10 +198,14 @@ export function createInventory(
   return {
     toggle(): void {
       drag = null;
+      pendingGive = null;
+      mode = 'inventory';
       setOpen(!open);
     },
     close(): void {
       drag = null;
+      pendingGive = null;
+      mode = 'inventory';
       setOpen(false);
     },
     isOpen(): boolean {
@@ -196,6 +227,19 @@ export function createInventory(
       if (contains(closeRect, x, y)) {
         drag = null;
         setOpen(false);
+        return true;
+      }
+      if (contains(creativeButton, x, y)) {
+        mode = mode === 'creative' ? 'inventory' : 'creative';
+        drag = null;
+        pendingGive = null;
+        redraw();
+        return true;
+      }
+      if (mode === 'creative') {
+        const index = slotAt(x, y);
+        pendingGive = index === null ? null : (creativeBlocks[index] ?? null);
+        redraw();
         return true;
       }
 
@@ -225,7 +269,14 @@ export function createInventory(
       redraw();
     },
     handleUp(clientX: number, clientY: number, sw: number, sh: number): InventoryAction {
-      if (!open || !drag) return null;
+      if (!open) return null;
+      if (pendingGive !== null) {
+        const id = pendingGive;
+        pendingGive = null;
+        redraw();
+        return { type: 'give', id };
+      }
+      if (!drag) return null;
       const current = drag;
       drag = null;
       const x = (clientX / Math.max(1, sw)) * canvas.width;
