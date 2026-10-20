@@ -653,6 +653,9 @@ export class Mob extends Entity {
    */
   rangedAnim = 0;
 
+  /** 被闪电充能的苦力怕（批次 564）：爆炸威力从 3 提到 6 */
+  charged = false;
+
   /** 求爱剩余秒数（>0 表示正在找配偶）与两次繁殖之间的冷却 */
   private loveTimer = 0;
   private breedCooldown = 0;
@@ -1457,7 +1460,8 @@ export class Mob extends Entity {
             ctx.playSound?.('fuse', this.x, this.y, this.z);
           }
           if (this.fuse >= CREEPER_FUSE_TIME) {
-            ctx.explode?.(this.x, this.y + 0.5, this.z, 3);
+            // 充能苦力怕（批次 564）：原版爆炸威力翻倍（约 6）
+            ctx.explode?.(this.x, this.y + 0.5, this.z, this.charged ? 6 : 3);
             this.fuse = 0;
             this.dead = true;
           }
@@ -2205,6 +2209,17 @@ export class Mob extends Entity {
   /**
    * @param looting 「抢夺」等级：原版把每种掉落的数量上限抬高这么多（`uniform(min, max + level)`）
    */
+  /**
+   * 移除但不掉战利品（批次 564：雷击转换）。
+   *
+   * 猪变僵尸猪灵、村民变女巫是**同一个实体换了种类**，不是"死了"：
+   * 若走普通死亡会掉猪肉/经验，还会让转换后的生物身上多出一份战利品。
+   */
+  removeWithoutDrops(): void {
+    this.lootDropped = true;
+    this.dead = true;
+  }
+
   private dropLoot(ctx?: EntityContext, looting = 0): void {
     if (!ctx) return;
     // 幼体不掉落也不给经验（原版行为：小动物杀了白杀）

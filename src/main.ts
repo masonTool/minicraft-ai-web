@@ -258,6 +258,8 @@ import {
   RodPulses,
   STRIKE_INTERVAL_MAX,
   STRIKE_INTERVAL_MIN,
+  lightningChargesCreeper,
+  lightningTransformFor,
   pickStrike,
   rodTipPoint,
   shouldIgnite,
@@ -9348,6 +9350,9 @@ class App {
     }
     const context = this.lastEntityContext;
     if (context) {
+      // 雷击转换（批次 564）：猪 → 僵尸猪灵、村民 → 女巫、苦力怕 → 充能。
+      // 转换先记下来，等伤害循环跑完再换，避免边遍历边删实体。
+      const transforms: { mob: Mob; typeId: string }[] = [];
       for (const entity of this.entities.all) {
         if (entity.dead) continue;
         if (Math.abs(entity.x - tip.x) > radius) continue;
@@ -9355,6 +9360,15 @@ class App {
         if (Math.abs(entity.z - tip.z) > radius) continue;
         if (!(entity instanceof Mob)) continue;
         entity.hurt(LIGHTNING_DAMAGE, entity.x - tip.x, entity.z - tip.z, context, 0, 0, { kind: 'environment' });
+        if (entity.dead) continue;
+        const transformed = lightningTransformFor(entity.type.id);
+        if (transformed) transforms.push({ mob: entity, typeId: transformed });
+        else if (lightningChargesCreeper(entity.type.id)) entity.charged = true;
+      }
+      for (const { mob, typeId } of transforms) {
+        const { x, y, z } = mob;
+        mob.removeWithoutDrops();
+        this.spawnMob(typeId, Math.floor(x), Math.floor(y), Math.floor(z));
       }
     }
   }

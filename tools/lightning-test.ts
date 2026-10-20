@@ -41,6 +41,8 @@ import {
   ROD_ATTRACT_RANGE,
   ROD_PULSE_SECONDS,
   RodPulses,
+  lightningChargesCreeper,
+  lightningTransformFor,
   pickStrike,
   rodTipPoint,
   shouldIgnite,
@@ -384,6 +386,15 @@ console.log('\n[配方：3 个铜锭竖排]');
   equal('3 个铜锭 → 1 根避雷针', rod?.id, ROD);
   equal('产量 1', rod?.count, 1);
   check('只有 2 个铜锭合不出', matchRecipe(grid(['C', 'C', '·'], { C: Item.COPPER_INGOT }), 3)?.id !== ROD);
+}
+
+console.log('\n[雷击转换（批次 564）]');
+{
+  equal('猪会被劈成僵尸猪灵', lightningTransformFor('pig'), 'zombie_piglin');
+  equal('村民会被劈成女巫', lightningTransformFor('villager'), 'witch');
+  equal('其它生物不转换', lightningTransformFor('cow'), null);
+  check('苦力怕会充能', lightningChargesCreeper('creeper'));
+  check('猪不会被充能', !lightningChargesCreeper('pig'));
 }
 
 console.log(`\n避雷针测试：${passed} 通过 / ${failed} 失败`);

@@ -38,6 +38,23 @@ export const ROD_PULSE_SECONDS = 0.4;
 export const STRIKE_INTERVAL_MIN = 4;
 export const STRIKE_INTERVAL_MAX = 16;
 
+/**
+ * 雷击会把这种生物变成什么（批次 564）：猪 → 僵尸猪灵、村民 → 女巫。
+ *
+ * 做成纯表而不是在主程序里写 if：转换目标是原版规则的一部分，
+ * 离线测试要能逐条断言（并且以后加"蘑菇牛 → 哞菇"之类只改这一张表）。
+ */
+export function lightningTransformFor(typeId: string): string | null {
+  if (typeId === 'pig') return 'zombie_piglin';
+  if (typeId === 'villager') return 'witch';
+  return null;
+}
+
+/** 雷击会不会让苦力怕充能（原版闪电苦力怕爆炸威力翻倍） */
+export function lightningChargesCreeper(typeId: string): boolean {
+  return typeId === 'creeper';
+}
+
 export interface Position {
   readonly x: number;
   readonly y: number;
