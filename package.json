@@ -11,6 +11,7 @@
     "build:minigame": "node tools/minigame/build-spike.mjs",
     "build:minigame:adapter": "node tools/minigame/build-adapter-spike.mjs",
     "build:minigame:formal": "node tools/minigame/build.mjs",
+    "build:minigame:world": "node tools/minigame/build-world.mjs",
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
     "gen:stats": "esbuild tools/gen-stats.ts --bundle --platform=node --format=esm --outfile=.tmp/gen-stats.mjs --log-level=error && node .tmp/gen-stats.mjs",

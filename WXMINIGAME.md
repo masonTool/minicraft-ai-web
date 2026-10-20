@@ -341,7 +341,7 @@ flex/absolute/grid 子集。
 | WX-015 | FileSystem 封装 | 原子写（临时文件 + rename）、目录/配额/错误处理 | WX-011 | 2 | [x] |
 | WX-016 | 存档适配 | `FileSaveGame` 与 `SaveGame` 同 API（meta/player/容器/牌子/展示框/成就/区块）；接线在 WX-020 | WX-015 | 3 | [x] |
 | WX-017 | 音频适配 | 复用适配器 `AudioContext`；`AudioEngine` 支持注入工厂；接线在 WX-020 | WX-011 | 0.5 | [x] |
-| WX-018 | Worker 适配 | 产物已构建：`workers/chunk.worker.js` + wx 全局 shim；两池合并/BigInt 降级在 WX-020 接线 | WX-013 | 2 | [~] |
+| WX-018 | Worker 适配 | `workers/chunk.worker.js` + wx shim；`World`/`MeshWorkerPool` 支持 `createWorker` 注入；同一路径共享 host + 多订阅 | WX-013 | 2 | [x] |
 | WX-019 | 网络适配（可后置） | 平台 `wx.connectSocket` 已实现；`NetClient` 接线可后置 | WX-011 | 1 | [~] |
 | WX-01A | 键盘/文本输入 | 平台 `wx.showKeyboard` 已实现；聊天/告示牌/世界名接线在 WX-034 | WX-013 | 1 | [~] |
 | WX-01B | 资源包降级 | `canReadResourcePacks()` 已加；UI 隐藏/降级在 WX-025 | WX-011 | 1 | [x] |
@@ -351,9 +351,10 @@ flex/absolute/grid 子集。
 
 | ID | 任务 | 验收 / 产出 | 依赖 | 人日 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| WX-020 | 抽 `UiPort` + App 条件启动 | `main.ts` 只加导出与启动分支；Web 版回归通过 | WX-010 | 3 | [ ] |
-| WX-021 | UI 工具包 A | 面板/按钮三态/文字/图标/基础布局（9-slice、像素风） | WX-020 | 3 | [ ] |
-| WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020 | 2 | [ ] |
+| WX-020A | 真实世界启动（无 UI） | `minigame-world`：图集/材质/World/ChunkRenderer/共享 Worker；真机能出地形 | WX-018 | 3 | [~] |
+| WX-020B | 抽 `UiPort` + App 条件启动 | `main.ts` 只加导出与启动分支；Web 版回归通过 | WX-020A | 3 | [ ] |
+| WX-021 | UI 工具包 A | 面板/按钮三态/文字/图标/基础布局（9-slice、像素风） | WX-020B | 3 | [ ] |
+| WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020B | 2 | [ ] |
 | WX-022 | UI 工具包 B | 滚动/页签/滑块/开关/输入框 | WX-021 | 2 | [ ] |
 | WX-023 | UI 工具包 C | 槽位/拖拽/长按 Tooltip/Toast/进度条 | WX-021 | 3 | [ ] |
 | WX-024 | 主菜单 | 首页/世界列表/新建世界（含删除确认） | WX-022 | 2 | [ ] |
@@ -454,7 +455,8 @@ git push
 cd /Users/mason/DouDou/minicraft-ai-web-wxminigame
 npm install            # worktree 没有 node_modules
 npm run dev            # 确认 Web 版仍可跑（对照用）
-npm run build:minigame:formal   # 正式版 → minigame/game.js（vendored 适配器）
+npm run build:minigame:formal   # 正式版 → minigame/game.js（压力场景）
+npm run build:minigame:world    # 真实世界 → minigame-world/game.js（WX-020A）
 npm run build:minigame          # 旧自写 shim（会覆盖 minigame/game.js，仅对比用）
 npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006 对比）
 ```
@@ -497,10 +499,12 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | 2026-10-20 | WX-010 | 适配器 vendored 到 `vendor/minigame-adapter/`（870d66f）+ 5 条补丁；正式构建 1232KB / gzip 221KB，`??` 0；入口切到 vendored 适配器 | `969adba` |
 | 2026-10-20 | WX-011/012 | 平台接口 + Web/微信实现：system/canvas/storage/files/lifecycle/input/audio/worker/socket/keyboard；6 个单测；入口启动时初始化平台；正式构建 1242KB / gzip 223KB | `f51a4f5` |
 | 2026-10-20 | WX-014/015 | 平台 storage + wx FileStore 原子写完成；新增 `asDomStorage`/`readJson`/`writeJson`；单测 106 全过 | `adeb625` |
-| 2026-10-20 | WX-016 | 新增 `FileSaveGame`：meta/player/容器/牌子/展示框/成就/区块（紧凑二进制）落文件；与 IndexedDB 版同 API；单测 108 | 本次提交 |
+| 2026-10-20 | WX-016 | 新增 `FileSaveGame`：meta/player/容器/牌子/展示框/成就/区块（紧凑二进制）落文件；与 IndexedDB 版同 API；单测 108 | `948a015` |
 | 2026-10-20 | WX-017 | `AudioEngine` 支持注入 AudioContext 工厂（默认行为不变）；微信端可传 createWebAudioContext；音频测试 86 通过 | `948a015` |
 | 2026-10-20 | WX-018 | 真实区块 Worker 打成 `workers/chunk.worker.js`（1097KB / gzip 242KB）+ wx 全局 shim；主包合计 2339KB；入口启动时记录 BigInt 能力 | `086953c` |
-| 2026-10-20 | WX-01B/01C | `canReadResourcePacks()` 能力检测；平台单测 10 个（探测/存储/文件/文件存档/DOM 适配），单元测试 108 全过 | 本次提交 |
+| 2026-10-20 | WX-01B/01C | `canReadResourcePacks()` 能力检测；平台单测 10 个（探测/存储/文件/文件存档/DOM 适配），单元测试 108 全过 | `96ea23b` |
+| 2026-10-20 | WX-018 | `World`/`MeshWorkerPool` 支持 `createWorker` 注入；wx worker 按脚本路径复用 + 多订阅；`World` 过滤非 `generated` 响应 | 本次提交 |
+| 2026-10-20 | WX-020A | 新增 `minigame-world`：TextureAtlas + VoxelMaterial + World + ChunkRenderer + 共享 Worker；game.js 1929KB / worker 1097KB / 合计 3026KB；**待真机首块地形** | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -522,7 +526,8 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | **UI 工作量** | 34 个模块、约 500 个 DOM 节点、4,200 行 CSS | 先做工具包 + 闭环；MVP 砍非核心界面 | 进行中 |
 | **`main.ts` 冲突** | 主线持续改 14,400 行入口 | 只做最小接口改动；每 3~5 个任务 merge 一次 | 进行中 |
 | **Worker 单线程** | 生成/网格化抢一个 worker，卡顿 | WX-018 合并两池 + 分片；必要时主线程时间切片 | Worker 产物已就绪，接线在 WX-020 |
-| **BigInt（Worker/Random）** | `Random.ts` 的 SplitMix64 用 BigInt；老引擎无 BigInt 时 Worker 运行时报错 | esbuild 已把 `1n` 降成 `BigInt("...")`；入口记录 `typeof BigInt`；无 BigInt 时降级到主线程/提示 | 待真机确认 |
+| **BigInt（Worker/Random）** | `Random.ts` 的 SplitMix64 用 BigInt；老引擎无 BigInt 时 Worker 运行时报错 | esbuild 已把 `1n` 降成 `BigInt("...")`；`world-boot` 启动前检查，不支持直接弹窗 | WX-020A 真机确认 |
+| **真实世界首启** | 图集生成、共享 worker、光照/网格队列在真机上可能爆内存或卡顿 | `minigame-world` HUD 记录 ATLAS/CHUNKS/LIGHT/Q/FPS；不达标先降视距/图集分帧 | 待真机 |
 | **存档** | 杀进程/写一半导致丢档 | 原子写 + 备份 + 迁移测试 | 未开始 |
 | **IP / 合规** | “Minecraft / 我的世界 / 基岩版” 侵权风险 | 提审前改名/去商标；软著/备案并行 | 未开始 |
 | **iOS 内存** | 小游戏内存上限低，易被回收 | 视距降级、纹理释放、内存警告处理 | 未验证 |

@@ -1,0 +1,16 @@
+{
+  "description": "Minicraft 微信小游戏真实世界启动（WX-020）",
+  "appid": "wx5bfe973b5421e5bb",
+  "projectname": "minicraft-wx-world",
+  "compileType": "game",
+  "miniprogramRoot": "./",
+  "setting": {
+    "es6": false,
+    "enhance": false,
+    "postcss": false,
+    "minified": false,
+    "urlCheck": false,
+    "checkSiteMap": false
+  },
+  "libVersion": "latest"
+}

@@ -3,6 +3,7 @@ import { asDomStorage, readJson, writeJson } from '../src/platform/dom-storage.t
 import { assertPlatformKind, detectPlatformKind } from '../src/platform/detect.ts';
 import { decodeChunkEdits, encodeChunkEdits, FileSaveGame } from '../src/platform/file-save.ts';
 import { createMemoryFiles, createMemoryStorage } from '../src/platform/memory.ts';
+import { workerHostToLike } from '../src/platform/wx/worker-like.ts';
 
 describe('platform detect', () => {
   it('prefers wx over the fake document injected by the adapter', () => {
@@ -109,6 +110,38 @@ describe('file save', () => {
     const decoded = decodeChunkEdits(encoded);
     expect(decoded && [...decoded.indices]).toEqual([1]);
     expect(decoded && [...decoded.packed]).toEqual([2]);
+  });
+});
+
+describe('worker host adapter', () => {
+  it('fans out one native message to multiple World/Mesh listeners', () => {
+    const nativeListeners = new Set<(data: any) => void>();
+    let posted: unknown;
+    const host = {
+      post(message: unknown) {
+        posted = message;
+      },
+      onMessage(callback: (data: any) => void) {
+        nativeListeners.add(callback);
+        return () => nativeListeners.delete(callback);
+      },
+      terminate() {
+        nativeListeners.clear();
+      },
+    };
+
+    const worker = workerHostToLike(host);
+    const worldMessages: any[] = [];
+    const meshMessages: any[] = [];
+    worker.addEventListener('message', (event) => worldMessages.push(event.data));
+    worker.addEventListener('message', (event) => meshMessages.push(event.data));
+
+    worker.postMessage({ type: 'generate', id: 1 });
+    for (const listener of nativeListeners) listener({ type: 'generated', id: 1 });
+
+    expect(posted).toEqual({ type: 'generate', id: 1 });
+    expect(worldMessages).toEqual([{ type: 'generated', id: 1 }]);
+    expect(meshMessages).toEqual([{ type: 'generated', id: 1 }]);
   });
 });
 

@@ -24,6 +24,9 @@ references/
 minigame/game.js
 minigame/game.js.map
 minigame/workers/
+minigame-world/game.js
+minigame-world/game.js.map
+minigame-world/workers/
 minigame-adapter-spike/game.js
 minigame-adapter-spike/game.js.map
 

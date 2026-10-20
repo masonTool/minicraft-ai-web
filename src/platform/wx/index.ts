@@ -233,8 +233,13 @@ function wxAudio(): AudioFactory {
 
 function wxWorkers(): WorkerFactory {
   const wx = getWxApi();
+  // 微信同时只允许一个 worker；同一 scriptPath 复用一个 host，
+  // 让 World（地形生成）与 MeshWorkerPool（网格化）共享同一条消息通道。
+  const hosts = new Map<string, WorkerHost>();
   return {
     create(scriptPath: string): WorkerHost {
+      const existing = hosts.get(scriptPath);
+      if (existing) return existing;
       if (typeof wx.createWorker !== 'function') {
         throw new PlatformNotImplementedError('WorkerFactory', 'wx');
       }
@@ -242,17 +247,26 @@ function wxWorkers(): WorkerFactory {
       if (!worker) {
         throw new Error(`创建 worker 失败：${scriptPath}`);
       }
-      return {
+      const subscribers = new Set<(data: any) => void>();
+      worker.onMessage((data: any) => {
+        for (const callback of subscribers) callback(data);
+      });
+      const host: WorkerHost = {
         post(message: unknown): void {
           worker.postMessage(message);
         },
         onMessage(callback: (data: any) => void): () => void {
-          worker.onMessage((data: any) => callback(data));
-          // 原生没有 offMessage；返回空卸载函数
-          return () => {};
+          subscribers.add(callback);
+          return () => subscribers.delete(callback);
         },
-        terminate: () => worker.terminate(),
+        terminate(): void {
+          subscribers.clear();
+          hosts.delete(scriptPath);
+          worker.terminate();
+        },
       };
+      hosts.set(scriptPath, host);
+      return host;
     },
   };
 }

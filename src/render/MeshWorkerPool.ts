@@ -8,20 +8,25 @@
  * 递增序号判断"这个结果是不是已经作废了"）。
  */
 
+import type { CreateWorker, WorkerLike } from '../core/worker/WorkerLike.ts';
 import type { MeshRequest, MeshResponse } from '../worker/chunk.worker.ts';
 
 export class MeshWorkerPool {
-  private readonly workers: Worker[] = [];
+  private readonly workers: WorkerLike[] = [];
   private readonly callbacks = new Map<number, (response: MeshResponse) => void>();
   private roundRobin = 0;
   private nextId = 1;
 
-  constructor(workerCount = 1) {
+  constructor(
+    workerCount = 1,
+    createWorker: CreateWorker = () =>
+      new Worker(new URL('../worker/chunk.worker.ts', import.meta.url), { type: 'module' }),
+  ) {
     const count = Math.max(1, workerCount);
     for (let i = 0; i < count; i++) {
-      const worker = new Worker(new URL('../worker/chunk.worker.ts', import.meta.url), { type: 'module' });
-      worker.addEventListener('message', (event: MessageEvent<MeshResponse>) => {
-        const data = event.data;
+      const worker = createWorker();
+      worker.addEventListener('message', (event) => {
+        const data = event.data as MeshResponse;
         if (data.type !== 'meshed') return;
         const callback = this.callbacks.get(data.id);
         if (!callback) return;

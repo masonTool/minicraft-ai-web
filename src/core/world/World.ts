@@ -20,6 +20,7 @@ import { blockDef, isClimbableBlock } from '../registry/blocks.ts';
 import { lightNeedsUpdate } from '../light/LightSignature.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
+import type { CreateWorker, WorkerLike } from '../worker/WorkerLike.ts';
 import type { GenerateRequest, GenerateResponse } from '../../worker/chunk.worker.ts';
 
 export function chunkKey(cx: number, cz: number): string {
@@ -43,7 +44,7 @@ export interface WorldEvents {
 export class World {
   readonly chunks = new Map<string, Chunk>();
 
-  private readonly workers: Worker[] = [];
+  private readonly workers: WorkerLike[] = [];
   private readonly loading = new Set<string>();
   private readonly pending = new Map<number, string>();
   /** 当前期望保留的区块集合，由 update() 维护 */
@@ -121,11 +122,22 @@ export class World {
     /** 世界类型：默认 / 超平坦 / 放大化（只影响主世界地形） */
     readonly worldType: WorldType = 'default',
     workerCount: number = Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 1)),
+    /**
+     * Worker 工厂（WX-018/WX-020）：默认仍是浏览器 module worker；
+     * 小游戏传一个返回共享 wx worker 的工厂。
+     */
+    createWorker: CreateWorker = () =>
+      new Worker(new URL('../../worker/chunk.worker.ts', import.meta.url), { type: 'module' }),
   ) {
     this.light = new LightEngine(this);
     for (let i = 0; i < workerCount; i++) {
-      const worker = new Worker(new URL('../../worker/chunk.worker.ts', import.meta.url), { type: 'module' });
-      worker.addEventListener('message', (event: MessageEvent<GenerateResponse>) => this.onGenerated(event.data));
+      const worker = createWorker();
+      worker.addEventListener('message', (event) => {
+        // 小游戏里生成与网格化共用一个 worker，这里必须过滤掉 meshed 响应
+        const data = event.data as GenerateResponse;
+        if (data.type !== 'generated') return;
+        this.onGenerated(data);
+      });
       this.workers.push(worker);
     }
   }
