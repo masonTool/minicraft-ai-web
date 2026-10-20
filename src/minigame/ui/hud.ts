@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { drawButton } from './widgets.ts';
 
 export interface Hud {
   update(lines: readonly string[]): void;
@@ -43,6 +44,8 @@ export function createHud(): Hud {
       lines.forEach((line, index) => {
         context.fillText(line.slice(0, 84), 18, 16 + index * 46);
       });
+      // 右上角 BAG：与 world-boot 的 x>0.86 / y<0.22 触摸区对应
+      drawButton(context, { x: canvas.width - 132, y: 8, w: 118, h: 40 }, 'BAG', 'normal', 20);
       texture.needsUpdate = true;
     },
     render(renderer: THREE.WebGLRenderer): void {

@@ -421,7 +421,7 @@ flex/absolute/grid 子集。
 | --- | --- | --- | --- | --- | --- |
 | WX-020A | 真实世界启动（无 UI） | `minigame-world`：图集/材质/World/ChunkRenderer；helper 预览已出完整地形，worker 超时自动降级主线程 | WX-018 | 3 | [x] |
 | WX-020B | 抽 `UiPort` + App 条件启动 | 独立 `src/minigame/main.ts`（未改 Web `main.ts`，避免 14k 行 UI 进包）、`MiniGameUi`、快捷栏、9×3 背包、真实 41 格 Inventory（放置消耗/挖掘拾取/存档） | WX-020A | 3 | [x] |
-| WX-021 | UI 工具包 A | 快捷栏 + 9×3 背包面板已完成；按钮三态/9-slice/通用文字排版待做 | WX-020B | 3 | [~] |
+| WX-021 | UI 工具包 A | 快捷栏/9×3 背包/9-slice 面板/按钮三态/文字截断已完成；滚动列表/输入框/槽位拖拽待 WX-022/023 | WX-020B | 3 | [~] |
 | WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020B | 2 | [ ] |
 | WX-022 | UI 工具包 B | 滚动/页签/滑块/开关/输入框 | WX-021 | 2 | [ ] |
 | WX-023 | UI 工具包 C | 槽位/拖拽/长按 Tooltip/Toast/进度条 | WX-021 | 3 | [ ] |
@@ -582,6 +582,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-020B 第四块 | 抽出 `MiniGameUi`（HUD/快捷栏/背包）；右上角背包入口；9×3 面板、点选/点外关闭；helper 临时默认打开截图验证布局 | `21a74a5` |
 | 2026-10-20 | WX-020B 第五块 | 新增独立小游戏入口 `src/minigame/main.ts`：先注入适配器再启动 world-boot，不把 14k 行 Web UI 打进小游戏包；build-world 切到该入口，helper 复测 37 chunks/121fps/存档正常 | `9ed3ae1` |
 | 2026-10-20 | WX-020B 收口 | 真实 41 格 `Inventory`：读档恢复、空槽补 64 起始方块、放置扣数量、挖掘进背包、存档写回真实槽位；helper `save ready ... player` / `saved` 正常 | `04ede23` |
+| 2026-10-20 | WX-021 基础件 | 新增 widgets.ts：9-slice 面板、按钮三态、文字截断/对齐；背包改用面板 + X 按钮；HUD 右上角显示可点击 BAG；helper 截图验证 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 

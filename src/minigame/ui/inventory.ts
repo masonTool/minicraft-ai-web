@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { drawBlockIcon } from './icons.ts';
+import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
 
 export interface Inventory {
   toggle(): void;
@@ -60,6 +61,8 @@ export function createInventory(
   const panelHeight = gridHeight + 76;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
+  const panelRect: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
+  const closeRect: Rect = { x: panelX + panelWidth - 50, y: panelY + 12, w: 36, h: 36 };
   const gridX = panelX + 20;
   const gridY = panelY + 56;
 
@@ -83,19 +86,19 @@ export function createInventory(
     context.fillStyle = 'rgba(0, 0, 0, 0.58)';
     context.fillRect(0, 0, canvas.width, canvas.height);
 
-    context.fillStyle = 'rgba(20, 24, 28, 0.96)';
-    context.fillRect(panelX, panelY, panelWidth, panelHeight);
-    context.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    context.lineWidth = 3;
-    context.strokeRect(panelX + 1.5, panelY + 1.5, panelWidth - 3, panelHeight - 3);
-
-    context.fillStyle = '#ffffff';
-    context.font = '28px monospace';
-    context.textBaseline = 'top';
-    context.fillText('INVENTORY', panelX + 20, panelY + 16);
-    context.font = '18px monospace';
-    context.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    context.fillText('TAP OUTSIDE TO CLOSE', panelX + panelWidth - 250, panelY + 24);
+    drawPanel(context, panelRect);
+    drawText(context, 'INVENTORY', panelX + 20, panelY + 18, 28, '#ffffff');
+    drawText(
+      context,
+      'TAP OUTSIDE TO CLOSE',
+      panelX + panelWidth - 64,
+      panelY + 22,
+      16,
+      'rgba(255, 255, 255, 0.55)',
+      'right',
+      180,
+    );
+    drawButton(context, closeRect, 'X', 'normal', 24);
 
     for (let i = 0; i < cols * rows; i++) {
       const { x, y } = slotRect(i);
@@ -134,6 +137,11 @@ export function createInventory(
       if (!open) return false;
       const x = (clientX / Math.max(1, sw)) * canvas.width;
       const y = (clientY / Math.max(1, sh)) * canvas.height;
+
+      if (contains(closeRect, x, y)) {
+        setOpen(false);
+        return true;
+      }
 
       for (let i = 0; i < blocks.length; i++) {
         const rect = slotRect(i);
