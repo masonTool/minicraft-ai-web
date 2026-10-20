@@ -44,6 +44,7 @@ L tap cycle/drag move · R drag look/tap top place mid break bottom jump
 - 左半屏拖动 = 摇杆，轻点 = 切快捷栏；
 - 右半屏拖动 = 视角，轻点分区：上 = 放方块、中 = 挖方块、下 = 跳跃；
 - 右上角 = 背包面板（9×3，前 6 格是快捷栏方块，点选后关闭）；
+- 背包是真实 41 格 `Inventory`：新世界/空槽补 64 个起始方块，放置扣数量、挖掘进背包，存档写回真实槽位；
 - `WORKER wx` 表示真机 worker 可用；`main` 表示自动降级主线程；
 - `SAVE ready/ok/error`：文件存档状态；`AUD ready/on`：音频状态；
 - 玩家位置、快捷栏、方块改动会存到 `wxfile://usr/save/wx-default/`，15 秒自动保存、挖放后 1.2 秒去抖保存、切后台立即保存；重开预览会恢复玩家。

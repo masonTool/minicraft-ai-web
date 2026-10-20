@@ -19,6 +19,7 @@ import { PlayerPhysics, type PlayerInput } from '../core/physics/PlayerPhysics.t
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { Block, blockDef } from '../core/registry/blocks.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
+import { Inventory } from '../core/container/Inventory.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
@@ -148,7 +149,6 @@ async function boot(): Promise<void> {
   scene.add(outline);
 
   const HOTBAR = [Block.OAK_PLANKS, Block.STONE, Block.DIRT, Block.GRASS_BLOCK, Block.OAK_LOG, Block.GLASS];
-  const ui = createCanvasUi(atlas, HOTBAR, width, height);
   let selectedSlot = 0;
   let currentHit: RayHit | null = null;
   let targetLabel = '-';
@@ -180,6 +180,16 @@ async function boot(): Promise<void> {
   } catch (error) {
     console.warn('[WX-020] 音频不可用', error);
   }
+
+  // 真实 41 格背包：读档恢复；新世界给 6 格起始方块（各 64）
+  const inventory = new Inventory();
+  if (loadedPlayer) inventory.restore(loadedPlayer.inventory);
+  // 空槽补起始方块：既覆盖新世界，也让旧存档（只有 1 格）能补齐快捷栏
+  for (let i = 0; i < HOTBAR.length; i++) {
+    if (!inventory.get(i)) inventory.add(HOTBAR[i]!, 64);
+  }
+  const hotbarBlocks = HOTBAR.map((_, index) => inventory.get(index)?.id ?? 0);
+  const ui = createCanvasUi(atlas, hotbarBlocks, width, height);
 
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
@@ -235,8 +245,6 @@ async function boot(): Promise<void> {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   const snapshotPlayer = (): PlayerSave => {
-    const inventory = Array.from({ length: 41 }, () => null) as PlayerSave['inventory'];
-    inventory[0] = { id: HOTBAR[selectedSlot] ?? Block.OAK_PLANKS, count: 1 };
     return {
       x: physics.x,
       y: physics.y,
@@ -252,8 +260,8 @@ async function boot(): Promise<void> {
       saturation: 5,
       air: 300,
       exhaustion: 0,
-      inventory,
-      selectedSlot: 0,
+      inventory: inventory.serialize(),
+      selectedSlot,
       dragonDefeated: false,
     };
   };
@@ -343,6 +351,7 @@ async function boot(): Promise<void> {
       z: currentHit.z + 0.5,
     });
     world.setBlockAndUpdate(currentHit.x, currentHit.y, currentHit.z, Block.AIR);
+    inventory.add(id, 1);
     requestSave();
   };
 
@@ -365,8 +374,13 @@ async function boot(): Promise<void> {
     ) {
       return;
     }
-    const blockId = HOTBAR[selectedSlot] ?? Block.OAK_PLANKS;
+    const stack = inventory.get(selectedSlot);
+    if (!stack) return;
+    const blockId = stack.id;
+    if (blockDef(blockId).id === 0) return;
     world.setBlockAndUpdate(px, py, pz, blockId);
+    stack.count -= 1;
+    if (stack.count <= 0) inventory.set(selectedSlot, null);
     audio?.playPlaceForBlock(blockDef(blockId).name, { x: px + 0.5, y: py + 0.5, z: pz + 0.5 });
     requestSave();
   };
