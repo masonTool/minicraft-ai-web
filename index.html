@@ -309,6 +309,19 @@
       }
       #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
       #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
+      /* 攻击冷却条（G8，批次 506）：准星下面一小段，冷却满了就隐藏。
+         触摸端也显示——按住攻击时它是唯一能看出"还要等多久"的东西。 */
+      #attack-cooldown {
+        position: absolute; left: 50%; top: calc(50% + 16px);
+        width: 44px; height: 3px; margin-left: -22px;
+        background: rgba(0, 0, 0, .45); border-radius: 2px;
+        overflow: hidden; pointer-events: none; z-index: 7;
+      }
+      #attack-cooldown.hidden { display: none; }
+      #attack-cooldown > i {
+        display: block; height: 100%; width: 0;
+        background: #e6e6e6; border-radius: 2px;
+      }
       /* 准星下方的目标名称（批次 181）：口袋里/手机上"这是什么"只能靠它 */
       #target-info {
         position: fixed; left: 50%; top: calc(50% + 24px);

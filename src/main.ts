@@ -40,6 +40,8 @@ import {
 import { damageReason } from './core/survival/DamageNotice.ts';
 import { VitalsHud } from './ui/VitalsHud.ts';
 import { XpHud } from './ui/XpHud.ts';
+import { AttackCooldownHud } from './ui/AttackCooldownHud.ts';
+import { attackCooldownFor } from './core/combat/AttackSpeed.ts';
 import { Experience, rollBlockXp } from './core/survival/Experience.ts';
 import { bookshelfPower, pickEnchants } from './core/crafting/Enchanting.ts';
 import {
@@ -716,7 +718,6 @@ import {
 import { CAKE_SLICE_FOOD, canEat, eatSecondsFor } from './core/registry/food.ts';
 // 调参常量 / 世界配置 / 纯工具：**批次 101 从本文件搬出去的**（详见各文件头）
 import {
-  ATTACK_COOLDOWN,
   ATTACK_RANGE,
   BREAK_COOLDOWN,
   CHEW_INTERVAL,
@@ -920,6 +921,7 @@ class App {
   private readonly endBackground = new THREE.Color(END_SKY);
   private readonly vitalsHud: VitalsHud;
   private readonly xpHud: XpHud;
+  private readonly attackCooldownHud: AttackCooldownHud;
   /** 指南针 / 时钟的读数（批次 195）：主手拿着它们时才有内容 */
   private readonly toolHud: ToolHud;
   /** 侧边栏记分板（M23，批次 456） */
@@ -1144,6 +1146,8 @@ class App {
   private lastPlayerZ = 0;
   /** 近战冷却 */
   private attackCooldown = 0;
+  /** 这一次攻击的总冷却（秒）——逐武器不同，界面按它算进度 */
+  private attackCooldownMax = 0;
   /** 本帧打中了生物，就不再破坏方块（否则会连脚下的方块一起挖掉） */
   private suppressBreaking = false;
   /** 上一帧的实体上下文（攻击生物时要把掉落物交回给世界） */
@@ -1828,6 +1832,8 @@ class App {
     // 经验条挂在 HUD 根上而不是 #vitals 里：它是绝对定位的独立一行，
     // 塞进 #vitals 那个 flex 列会被挤到别的地方
     this.xpHud = new XpHud(document.getElementById('hud') ?? container);
+    // 攻击冷却条（G8，批次 506）：准星正下方
+    this.attackCooldownHud = new AttackCooldownHud(document.getElementById('hud') ?? container);
     // 指南针/时钟读数（批次 195）：与生命/经验挂在同一个 `#hud` 里
     this.toolHud = new ToolHud(document.getElementById('hud') ?? container);
     // 侧边栏记分板（M23，批次 456）：右上角，只在 `/scoreboard objectives setdisplay sidebar` 之后出现
@@ -6743,7 +6749,8 @@ class App {
       // 放在生物之后：生物优先（原版也是先判实体命中，而生物总在载具之上）。
       const vehicle = this.vehicleUnderCrosshair();
       if (vehicle && !vehicle.dead) {
-        this.attackCooldown = ATTACK_COOLDOWN;
+        this.attackCooldown = attackCooldownFor(this.heldTool);
+        this.attackCooldownMax = this.attackCooldown;
         this.suppressBreaking = true;
         this.breakProgress = 0;
         this.damageVehicle(vehicle);
@@ -6751,7 +6758,8 @@ class App {
       return;
     }
 
-    this.attackCooldown = ATTACK_COOLDOWN;
+    this.attackCooldown = attackCooldownFor(this.heldTool);
+    this.attackCooldownMax = this.attackCooldown;
     this.suppressBreaking = true;
     this.breakProgress = 0;
     this.breakingKey = '';
@@ -13427,6 +13435,7 @@ class App {
     // 创造模式整条生存状态栏与经验条都不显示（批次 230，对齐原版）
     this.vitalsHud.update(this.stats, this.isCreative);
     this.xpHud.update(this.experience, this.isCreative);
+    this.attackCooldownHud.update(this.attackCooldown, this.attackCooldownMax);
     this.updateToolHud();
     // 记分板侧边栏（M23，批次 456）：每帧喂一次，HUD 内部按签名比对、内容没变不动 DOM
     this.scoreboardHud.update(this.scoreboardState.sidebarView());
@@ -14873,6 +14882,7 @@ class App {
     // 静态 HUD 容器（#vitals / #hud）要清干净：不清的话重进世界会叠出第二套血条与经验条
     this.vitalsHud.dispose();
     this.xpHud.dispose();
+    this.attackCooldownHud.dispose();
     this.toolHud.dispose();
     this.scoreboardHud.dispose();
     this.commandBlockEditor.dispose();
@@ -15411,6 +15421,7 @@ class App {
   /** 调试用：清空攻击冷却，让下一次按下左键立刻生效（自动化验收用） */
   resetAttackCooldown(): void {
     this.attackCooldown = 0;
+    this.attackCooldownMax = 0;
   }
 
   /** 调试用：生成器统计 */
