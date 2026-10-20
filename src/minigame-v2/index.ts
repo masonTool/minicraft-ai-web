@@ -149,6 +149,7 @@ let chatOpen = false;
 let containerOpen = false;
 let openedContainer: Chest | Furnace | null = null;
 let containerTitle = '';
+let lastAction = '';
 const chatMessages: string[] = ['v2 本地聊天', '输入 /help 查看命令'];
 let chatInput = '';
 let inventoryOpen = false;
@@ -1121,6 +1122,7 @@ const showContainer = (): void => {
 };
 
 const openContainerAt = (hit: RayHit): boolean => {
+  lastAction = 'probe-open';
   const id = world.getBlock(hit.x, hit.y, hit.z);
   if (id === Block.CHEST) {
     openedContainer = world.containers.getOrCreateChest('overworld', hit.x, hit.y, hit.z);
@@ -1131,6 +1133,7 @@ const openContainerAt = (hit: RayHit): boolean => {
   } else {
     return false;
   }
+  lastAction = 'open-container';
   showContainer();
   return true;
 };
@@ -1391,21 +1394,27 @@ const updateHitAt = (clientX: number, clientY: number): void => {
 };
 
 const breakAt = (hit: RayHit): void => {
+  lastAction = 'break';
   world.setBlockAndUpdate(hit.x, hit.y, hit.z, Block.AIR);
   audio.play('break_stone', { x: hit.x, y: hit.y, z: hit.z });
   requestSave();
 };
 
 const placeAt = (hit: RayHit): void => {
+  lastAction = 'place';
   if (openContainerAt(hit)) return;
   const stack = inventory.get(selectedSlot);
   if (!stack) return;
   const x = hit.x + hit.nx;
   const y = hit.y + hit.ny;
   const z = hit.z + hit.nz;
-  if (world.getBlock(x, y, z) !== Block.AIR || blockDef(stack.id).id === 0) return;
+  if (world.getBlock(x, y, z) !== Block.AIR || blockDef(stack.id).id === 0) {
+    lastAction = 'place-blocked';
+    return;
+  }
   if (!world.setBlockAndUpdate(x, y, z, stack.id)) return;
   stack.count -= 1;
+  lastAction = 'placed';
   inventory.set(selectedSlot, stack.count > 0 ? stack : null);
   audio.play('place', { x, y, z });
   requestSave();
@@ -1521,6 +1530,7 @@ const frame = (): void => {
       inventoryOpen,
       chatOpen,
       containerOpen,
+      lastAction,
       target: currentHit ? `${world.getBlock(currentHit.x, currentHit.y, currentHit.z)}@${currentHit.x},${currentHit.y},${currentHit.z}` : '',
       held: inventory.get(selectedSlot)?.id ?? 0,
       cameraMode,
