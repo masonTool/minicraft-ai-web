@@ -986,6 +986,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   wasOnGround = false;
   dead = false;
   hudInputBlockUntil = Date.now() + 400;
+  lastAutoSave = Date.now();
   try {
     save = await FileSaveGame.open(entry.id, platform.files);
     for (const record of await save.loadAllChunkEdits()) {
@@ -1942,6 +1943,7 @@ let fpsFrames = 0;
 let fpsStartedAt = performance.now();
 let lastDebugHud = 0;
 let lastFurnaceUi = 0;
+let lastAutoSave = 0;
 
 const frame = (): void => {
   const now = performance.now();
@@ -2100,6 +2102,10 @@ const frame = (): void => {
   translucent.setTime(now * 0.001);
   renderer.clear();
   renderer.render(scene, camera);
+  if (started && save && !paused && now - lastAutoSave > 15000) {
+    lastAutoSave = now;
+    void persistWorld();
+  }
   ui.render(renderer);
   if (settings.showDebug && started && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen && now - lastDebugHud > 1000) {
     lastDebugHud = now;
