@@ -12,7 +12,14 @@
  * 运行：npm run test:physics
  */
 
-import { PlayerPhysics, SPRINT_JUMP_BOOST, SPRINT_SPEED, WALK_SPEED, type PlayerInput } from '../src/core/physics/PlayerPhysics.ts';
+import {
+  PlayerPhysics,
+  SPRINT_JUMP_BOOST,
+  SPRINT_SPEED,
+  SWIM_DIVE_SPEED,
+  WALK_SPEED,
+  type PlayerInput,
+} from '../src/core/physics/PlayerPhysics.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 import { moveBody } from '../src/core/physics/EntityMotion.ts';
 
@@ -349,6 +356,42 @@ console.log('\n[姿态：潜行 1.5 格高（F9，批次 404）]');
     tight.update(world10, input({ forward: 1, sneak: true }), YAW_PLUS_X, DT, false);
   }
   check('1 格高的洞蹲着也进不去', tight.x < 3.8, `x=${tight.x.toFixed(2)}`);
+}
+
+console.log('\n[水中上下：跳跃上浮 / 潜行下潜（F9，批次 428）]');
+{
+  // 整个世界都是水（y < 100 全是液体、没有实心方块）
+  const water: PhysicsWorld = {
+    collisionAt: () => null,
+    isLiquid: (_x, y) => y < 100,
+    isClimbable: () => false,
+  };
+  const startIn = (y: number): PlayerPhysics => {
+    const physics = new PlayerPhysics();
+    physics.x = 0.5;
+    physics.y = y;
+    physics.z = 0.5;
+    return physics;
+  };
+
+  // ① 按跳跃 → 上浮
+  const up = startIn(50);
+  for (let i = 0; i < 30; i++) up.update(water, input({ jump: true }), YAW_PLUS_X, DT, false);
+  check('水里按跳跃会上浮', up.y > 50.3, `y=${up.y.toFixed(2)}`);
+
+  // ② 按潜行 → 下潜（这一批新接的）
+  const down = startIn(50);
+  for (let i = 0; i < 60; i++) down.update(water, input({ sneak: true }), YAW_PLUS_X, DT, false);
+  check('水里按潜行会下潜', down.y < 49.5, `y=${down.y.toFixed(2)}`);
+  check('下潜速度不超过 SWIM_DIVE_SPEED（不会像石头一样砸下去）', down.vy >= -SWIM_DIVE_SPEED - 0.2, `vy=${down.vy.toFixed(2)}`);
+
+  // ③ 什么都不按 → 只有 1/4 重力，沉得很慢（比按潜行慢）
+  const idle = startIn(50);
+  for (let i = 0; i < 60; i++) idle.update(water, input(), YAW_PLUS_X, DT, false);
+  check('不按键时缓慢下沉', idle.y < 50 && idle.y > down.y, `idle=${idle.y.toFixed(2)} dive=${down.y.toFixed(2)}`);
+
+  // ④ 下潜不会把人送到无底：竖直速度被夹在 -4
+  check('竖直速度下限仍是 -4', down.vy >= -4, `vy=${down.vy.toFixed(2)}`);
 }
 
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);

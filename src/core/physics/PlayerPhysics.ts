@@ -16,6 +16,12 @@ export const WALK_SPEED = 4.317;
 export const SPRINT_SPEED = 5.612;
 export const SNEAK_SPEED = 1.295;
 export const SWIM_SPEED = 2.2;
+/** 水中按住潜行的下潜速度（格/秒） */
+export const SWIM_DIVE_SPEED = 1.6;
+/** 下潜速度的收敛加速度（让"松手"平滑一点，不要一下子停住） */
+const SWIM_DIVE_ACCEL = 10;
+/** 水里什么都不按时**被动下沉**的速度（格/秒）——比主动下潜慢，否则"下潜"没有意义 */
+const PASSIVE_SINK_SPEED = -0.8;
 export const FLY_SPEED = 10.9;
 export const FLY_SPRINT_SPEED = 21.8;
 
@@ -230,8 +236,19 @@ export class PlayerPhysics {
       // 贴在梯子上往下滑**不算摔落**：否则从梯子上溜下来会摔伤
       this.fallStartY = null;
     } else if (this.inWater) {
-      this.vy -= GRAVITY * 0.25 * dt;
-      if (input.jump) this.vy = 3.4 * jumpMultiplier;
+      // 被动下沉：**收敛到 -0.8**，不是按重力一直加速。
+      // 原来这里是 `vy -= GRAVITY * 0.25 * dt`，60 帧能掉到 -4——比"主动下潜"还快，
+      // 于是"按潜行往下去"反而比"不动"更慢，一测就露馅（批次 428 的断言抓到的）。
+      this.vy = approach(this.vy, PASSIVE_SINK_SPEED, 6 * dt);
+      if (input.jump) {
+        // 上浮（原版：水里按跳跃=往上划）
+        this.vy = 3.4 * jumpMultiplier;
+      } else if (input.sneak) {
+        // **下潜**（F9，批次 428）：按住潜行往下划。原版就是这个键位，
+        // 之前没接，表现是"在水里只能往上、想潜下去只能等慢慢沉"（0.25 重力，很慢）。
+        // 用 `approach` 而不是直接赋速度：松手时不会突然停住，手感与攀爬那段一致。
+        this.vy = approach(this.vy, -SWIM_DIVE_SPEED, SWIM_DIVE_ACCEL * dt);
+      }
       if (this.vy < -4) this.vy = -4;
       this.fallStartY = null;
     } else {
