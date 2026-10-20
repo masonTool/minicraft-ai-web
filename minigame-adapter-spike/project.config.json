@@ -1,0 +1,16 @@
+{
+  "description": "Minicraft 微信小游戏适配器 spike（WX-006）",
+  "appid": "touristappid",
+  "projectname": "minicraft-wx-adapter-spike",
+  "compileType": "game",
+  "miniprogramRoot": "./",
+  "setting": {
+    "es6": false,
+    "enhance": false,
+    "postcss": false,
+    "minified": false,
+    "urlCheck": false,
+    "checkSiteMap": false
+  },
+  "libVersion": "latest"
+}

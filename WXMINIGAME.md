@@ -96,6 +96,90 @@ npm run check:fast
 
 ---
 
+## 2.5 适配器评估：`minigame-adapter`（870d66f）
+
+参考项目：`references/minigame-publisher`（本地，gitignored）；
+适配器源码在 `references/minigame-publisher/minigame-adapter`，
+上游仓库 `git@github.com:masonTool/minigame-adapter.git`，当前版本 `870d66f`（54 个 JS，328KB）。
+
+> 参考项目里的 `minigame-html-src` 是一个 three.js 3D 游戏（Tower Ball / moto3m），
+> 它的 H5 版本**没有 DOM/CSS 界面**，所有画面都在 canvas 里。适配器就是为这种项目写的。
+
+### 2.5.1 结论
+
+**平台层可复用，UI 不能复用。**
+
+| 能力 | 适配器现状 | 对本项目 |
+| --- | --- | --- |
+| `window` / `document` / Canvas | 有，但是**假 DOM** | 可给 three/库用，不能跑现有 UI |
+| `document.getElementById` / `querySelector` | 返回 `faker` / `body` | **禁止**游戏/UI 代码依赖 |
+| CSS 布局 / `getComputedStyle` | 没有（`CSSStyleDeclaration` 只处理 margin） | 4,200 行 CSS 不可复用 |
+| `classList` / 滚动 / 输入框 | 没有完整实现 | 现有 `src/ui/**` 跑不起来 |
+| 2D Canvas / 离屏 Canvas | 有，含 DPR、`getBoundingClientRect`、事件代理 | 可直接用 |
+| WebGL2 | 不限制版本，但会包装所有 context 方法 | 可用，需测性能 |
+| Image / Audio / AudioContext | 有（基于 `wx.createImage` / `createInnerAudioContext` / `createWebAudioContext`） | 音频可直接用 |
+| localStorage | 有（基于 `wx.*StorageSync`） | 可直接用 |
+| XHR / Fetch / Blob / FileReader / URL | 有（XHR 支持 arraybuffer、本地文件） | 资源包可复用一部分 |
+| Worker | 只有 `wx.createWorker`，单 worker，无 `addEventListener` | 需补 |
+| WebSocket | 没有 | 需补（联机可后置） |
+| IndexedDB | 没有 | 存档仍需自己写文件适配 |
+| FileSystem 封装 | 只在 XHR 内部用过 `getFileSystemManager` | 需自己封装 |
+| 触摸事件 | `touchstart/move/end/cancel` | 需再加 pointer 事件 |
+| 前后台 | `focus/blur/pause/resume` | 需再加 `visibilitychange` |
+| 键盘 / 输入法 | 没有 | 需自己接 `wx.showKeyboard` |
+| 抖音 | 没有（全是 `wx.*`） | M6 另写 `tt` 实现 |
+
+### 2.5.2 对工期的实际影响
+
+- 能省：Canvas/Image/Audio/localStorage/XHR/Blob/FileReader/触摸基础/前后台，
+  大约 **3~5 人日**（M1 平台层从 ~19 人日降到 ~16）。
+- 不能省：**UI 重写（8~12 周）**、存档文件化、Worker 改造、键盘/输入、WebSocket、抖音。
+- 净影响：总量约 **106 → 108 人日**（新增适配器 spike 与补丁验证），
+  但**降低了 three.js/资源加载的启动风险**，这是它最大的价值。
+
+### 2.5.3 接入策略（推荐 B，spike 用 A）
+
+| 方案 | 做法 | 优点 | 缺点 |
+| --- | --- | --- | --- |
+| A. 整包引用（只做 spike） | 从 `references/` 本地路径 import，构建一个 `game.js` | 最快验证；不提交适配器源码 | 依赖本地 references，不可复现 |
+| **B. 选择性移植（正式，推荐）** | 只把需要的模块放进 `src/platform/wx/vendor/`，加补丁 | 可控；不把假 DOM 暴露给游戏/UI | 多 3~5 人日 |
+| C. git submodule | 和原项目一样引 submodule | 上游同步方便 | 构建/CI 复杂，假 DOM 仍在 |
+
+**正式实现只保留这些模块**：Canvas、Image、Audio/AudioContext、localStorage、
+XHR/Fetch/Blob/FileReader/URL、TouchEvent/WxEvent、WxInfo/Screen/navigator、
+Worker（改写）、xmldom（只有在需要时）。
+**不保留**：Document/HTMLElement/CSSStyleDeclaration 里的“假布局”语义
+——最多保留 `createElement('canvas')` 这一条，避免误以为 DOM 可用。
+
+### 2.5.4 必做补丁清单
+
+| # | 位置 | 问题 | 补法 |
+| --- | --- | --- | --- |
+| 1 | `Canvas.js` `getContext` | 对 WebGL 上下文逐个包装方法，可能拖慢 draw call | WebGL 跳过全量包装，只对 `texImage2D`/`texSubImage2D`/`drawImage` 解 `$proxyTarget` |
+| 2 | `WxEvent.js` | 只有 touch 事件，没有 pointer | 由 touch 合成 `pointerdown/move/up/cancel`（带 `pointerId`、`pointerType='touch'`、`buttons`） |
+| 3 | `WxEvent.js` | 没有 `visibilitychange` | `wx.onShow/onHide` 同时向 `document` 派发 `visibilitychange` |
+| 4 | `window.js` | 没有 `matchMedia` | 补 `matchMedia('(pointer: coarse)').matches === true`，否则现有 `isTouchDevice()` 返回 false |
+| 5 | `window.js` | 把 `WebGLRenderingContext` 换成空函数 | 真机验证 three r186 的 “WebGL1 not supported” 守卫；必要时删掉/改成 WebGL2 构造器 |
+| 6 | `Worker.js` | 无 `addEventListener`、单 worker、路径是 URL 对象 | 补 `addEventListener('message')`；脚本路径改构建期常量；合并两套池子 |
+| 7 | 新增 | 没有 IndexedDB / FileStore | 用 `wx.getFileSystemManager()` 写 `src/platform/wx/file-store.ts`，原子写 |
+| 8 | 新增 | 没有 WebSocket | `wx.connectSocket` 包一个 `Socket` 接口（MVP 可后置） |
+| 9 | 新增 | 没有键盘/输入法 | `wx.showKeyboard` + 自绘输入框（聊天/告示牌/世界名） |
+| 10 | 新增 | 没有 `matchMedia`/`history` | 补最小实现，或把调用点改成平台接口 |
+| 11 | `HTMLScriptElement.js` | 动态 `require(\`../${...}\`)` 会让 esbuild 扫描整个 references（含 node_modules/.git），WX-006 实测报 4292 个错 | 正式移植时删掉整个 `HTMLScriptElement`；spike 用 esbuild 插件替换成运行时抛错 |
+
+### 2.5.5 UI 的结论
+
+- 适配器**不能**让 `src/ui/**` 与 `index.html` 的 CSS 直接跑起来；
+  `Document` 是 fake，`getElementById` 返回一个占位节点，元素没有布局。
+- 参考项目里的 `Layout` 插件（`requirePlugin('Layout')`）是一个 flexbox 风格的
+  canvas UI 引擎，支持 `<view>/<text>/<image>/<scrollview>`、样式对象、`on('click')`、
+  `style.transform`、ticker。它可以作为**菜单/设置/排行榜**的候选方案，
+  但**不支持**完整的 CSS、拖拽物品、输入法、像素风九宫格细节；而且只有微信有。
+- 因此：**核心 UI 仍按原计划自研 canvas UI 工具包**；
+  `Layout` 只做一次小规模可行性验证（WX-021B），不通过就放弃。
+
+---
+
 ## 3. 里程碑
 
 | 里程碑 | 目标 | 出口条件 |
@@ -123,7 +207,9 @@ npm run check:fast
 | WX-002 | 真机基线测量 | 帧率/帧时间/内存峰值/启动耗时/webgl2/包体，写入 §7 | WX-001 | 2 | [ ] |
 | WX-003 | Worker 打包与通道验证 | 单 worker 能加载，复制 vs Transferable 的耗时数据 | WX-001 | 1.5 | [ ] |
 | WX-004 | 图集与 2D canvas 验证 | `TextureAtlas` 的 createImageData/putImageData/drawImage 可用 | WX-001 | 1 | [ ] |
-| WX-005 | Go/No-Go 结论与性能预算 | 结论写进 §7；不达标则给出降级方案 | WX-002~004 | 0.5 | [ ] |
+| WX-006 | `minigame-adapter` 接入 spike | 从 `references/` 引入适配器 + three r186，构建第二份 `game.js`；与 WX-001 对比帧率/兼容性 | WX-001 | 2 | [~] |
+| WX-007 | 适配器取舍与补丁清单 | 决定整包/选择性移植；确认 §2.5.4 的补丁是否都必要，写入 §7 | WX-006 | 1 | [ ] |
+| WX-005 | Go/No-Go 结论与性能预算 | 结论写进 §7；不达标则给出降级方案 | WX-002~004, WX-006~007 | 0.5 | [ ] |
 
 ### M1 · 平台层
 
@@ -131,12 +217,12 @@ npm run check:fast
 | --- | --- | --- | --- | --- | --- |
 | WX-010 | 小游戏构建体系 | `tools/minigame/build.mjs`（esbuild 多入口）+ worker IIFE 产物 | WX-005 | 2 | [ ] |
 | WX-011 | 平台接口与探测 | `src/platform/types.ts` + `wx/tt/web` 探测；Web 版行为不变 | WX-010 | 1 | [ ] |
-| WX-012 | canvas / system / lifecycle | 上屏/离屏 canvas、DPR、安全区、横屏、onShow/onHide | WX-011 | 2 | [ ] |
-| WX-013 | 输入适配 | `wx.onTouch*` → pointer 事件；多点、摇杆、视角 | WX-012 | 2 | [ ] |
-| WX-014 | storage 适配 | `localStorage` → `wx.setStorageSync`；设置/世界清单/诊断 | WX-011 | 1 | [ ] |
+| WX-012 | canvas / system / lifecycle | 复用适配器 Canvas/WxInfo/WxEvent；补 `visibilitychange`、`matchMedia`、安全区 | WX-011 | 1.5 | [ ] |
+| WX-013 | 输入适配 | 适配器 touch 事件之上合成 pointerdown/move/up；多点、摇杆、视角 | WX-012 | 1.5 | [ ] |
+| WX-014 | storage 适配 | 复用适配器 `localStorage`；补 `Storage` 接口；设置/世界清单/诊断 | WX-011 | 0.5 | [ ] |
 | WX-015 | FileSystem 封装 | 原子写（临时文件 + rename）、目录/配额/错误处理 | WX-011 | 2 | [ ] |
 | WX-016 | 存档适配 | IndexedDB 7 个仓 → 文件；`SaveGame` API 不变 | WX-015 | 3 | [ ] |
-| WX-017 | 音频适配 | `AudioContext` → `wx.createWebAudioContext()` | WX-011 | 1 | [ ] |
+| WX-017 | 音频适配 | 复用适配器 `AudioContext`；验证振荡器/滤波器/压缩器/延迟节点 | WX-011 | 0.5 | [ ] |
 | WX-018 | Worker 适配 | 合并“生成池 + 网格池”为单 worker 队列；消息复制 | WX-013 | 2 | [ ] |
 | WX-019 | 网络适配（可后置） | `WebSocket` → `wx.connectSocket`；wss + 域名白名单 | WX-011 | 1 | [ ] |
 | WX-01A | 键盘/文本输入 | `wx.showKeyboard` 支撑聊天、告示牌、世界名 | WX-013 | 1 | [ ] |
@@ -149,6 +235,7 @@ npm run check:fast
 | --- | --- | --- | --- | --- | --- |
 | WX-020 | 抽 `UiPort` + App 条件启动 | `main.ts` 只加导出与启动分支；Web 版回归通过 | WX-010 | 3 | [ ] |
 | WX-021 | UI 工具包 A | 面板/按钮三态/文字/图标/基础布局（9-slice、像素风） | WX-020 | 3 | [ ] |
+| WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020 | 2 | [ ] |
 | WX-022 | UI 工具包 B | 滚动/页签/滑块/开关/输入框 | WX-021 | 2 | [ ] |
 | WX-023 | UI 工具包 C | 槽位/拖拽/长按 Tooltip/Toast/进度条 | WX-021 | 3 | [ ] |
 | WX-024 | 主菜单 | 首页/世界列表/新建世界（含删除确认） | WX-022 | 2 | [ ] |
@@ -205,8 +292,9 @@ npm run check:fast
 | --- | --- | --- | --- | --- |
 | WX-090 | 合并 `origin/main` + 冲突处理 | 合并后 `check:fast` 通过；冲突结论记 §8 | 每 3~5 个任务 / 每周 | [~] |
 | WX-091 | 通用改动回流 `main` 评估 | 列出可 cherry-pick 的提交 | 每个里程碑 | [ ] |
+| WX-092 | 适配器上游同步 | 若走 vendored 副本：对比 `masonTool/minigame-adapter` 新提交，只 cherry-pick 必要补丁 | 每个里程碑 | [ ] |
 
-**总量**：约 **106 人日**（≈ 5 个月单人；2~3 人并行约 3~4 个月，UI 是瓶颈）。
+**总量**：约 **108 人日**（≈ 5 个月单人；2~3 人并行约 3~4 个月，UI 是瓶颈）。
 不含审核/版号等待。
 
 ---
@@ -245,7 +333,8 @@ git push
 cd /Users/mason/DouDou/minicraft-ai-web-wxminigame
 npm install            # worktree 没有 node_modules
 npm run dev            # 确认 Web 版仍可跑（对照用）
-npm run build:minigame # 生成 minigame/game.js（WX-001 spike）
+npm run build:minigame         # 生成 minigame/game.js（WX-001 自写 shim）
+npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 适配器版）
 ```
 
 - 微信开发者工具：导入 `minigame/`（项目类型选**小游戏**；真机预览要把
@@ -260,7 +349,9 @@ npm run build:minigame # 生成 minigame/game.js（WX-001 spike）
 | 日期 | 任务 | 结论 / 改动 | 提交 |
 | --- | --- | --- | --- |
 | 2026-10-20 | WX-000 | 建立 `wxminigame` worktree/分支；新增本任务表；`AGENTS.md` 加分支提示；关闭本 worktree 的 auto-continue | `5cfc584` |
-| 2026-10-20 | WX-001 | 最小工程已构建：`minigame/game.js` 1170KB（gzip 207KB）；three r186 + InstancedMesh + CanvasTexture + 触摸；**待真机导入验证** | 本次提交 |
+| 2026-10-20 | WX-001 | 最小工程已构建：`minigame/game.js` 1170KB（gzip 207KB）；three r186 + InstancedMesh + CanvasTexture + 触摸；**待真机导入验证** | `f7eaeba` |
+| 2026-10-20 | 适配器评估 | 结论：`minigame-adapter` 可复用于平台层，**不能**跑现有 DOM/CSS UI；新增 §2.5 与 WX-006/007 | 本次提交 |
+| 2026-10-20 | WX-006 | 适配器版 `game.js` 已构建：1299KB（gzip 234KB）；动态 require 用 esbuild 插件替换；**待真机与 WX-001 对比** | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -272,6 +363,12 @@ npm run build:minigame # 生成 minigame/game.js（WX-001 spike）
 | --- | --- | --- | --- |
 | **微信 WebGL2 / 内存** | 低端 Android 可能拿不到 WebGL2 或内存不足 | WX-002 真机基线；不达标先降视距/锁 30fps | 未验证（spike 待导入） |
 | **抖音 WebGL2** | 官方小游戏 canvas 只保证 WebGL1；three r186 只支持 WebGL2 | M6 单独 Gate；必要时 three 0.162 + WebGL1 适配 | 未验证 |
+| **适配器假 DOM** | `getElementById`/`querySelector` 返回占位对象，UI 代码会“看起来没报错但什么都不显示” | 小游戏 UI/游戏代码禁止依赖假 DOM；只经 `UiPort`/`src/platform` 访问 | 待约束 |
+| **适配器 WebGL 包装** | `Canvas.getContext` 对每个方法加包装，draw call 多时可能明显掉帧 | WX-006 对比帧率；WebGL 跳过全量包装，只解 `texImage2D` 参数 | 待验证 |
+| **three WebGL1 守卫** | 适配器把 `WebGLRenderingContext` 换成空函数；若真机判定成 WebGL1 会直接抛错 | WX-006 真机确认；必要时删掉该 fake / 改成 WebGL2 构造器 | 待验证 |
+| **适配器动态 require** | `HTMLScriptElement.js` 的动态 require 会让打包器扫描整个 references（WX-006 实测 4292 错） | spike 用插件替换；正式移植直接删掉 HTMLScriptElement | 已在 spike 绕过 |
+| **适配器仅微信** | 全量 `wx.*`；抖音不能复用 | 平台层按 `wx/tt` 分开；抖音 M6 另写 | 已知 |
+| **Layout 插件限制** | 只有微信、需插件权限；不支持完整 CSS/拖拽/输入法 | 只做 WX-021B 小规模验证；核心 UI 仍自研 canvas 工具包 | 待验证 |
 | **UI 工作量** | 34 个模块、约 500 个 DOM 节点、4,200 行 CSS | 先做工具包 + 闭环；MVP 砍非核心界面 | 进行中 |
 | **`main.ts` 冲突** | 主线持续改 14,400 行入口 | 只做最小接口改动；每 3~5 个任务 merge 一次 | 进行中 |
 | **Worker 单线程** | 生成/网格化抢一个 worker，卡顿 | 合并队列 + 分片；必要时主线程时间切片 | 未验证 |
