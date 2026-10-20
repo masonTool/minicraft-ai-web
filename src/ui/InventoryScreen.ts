@@ -4881,25 +4881,11 @@ export class InventoryScreen {
       { signal: this.listeners.signal },
     );
 
-    // 点面板里的空白处 = **丢弃**（批次 206，用户反复提的那条）。
+    // 点**整个背包弹窗之外**的游戏场景才丢弃（批次 536 用户澄清）。
     //
-    // 以前这里写的是"取消选中、原位退回"——理由是"面板内不属于窗口外"。
-    // 但在手机上，面板背景几乎铺满整屏，玩家真正能点到的"窗口外"只有边缘一条缝；
-    // 手指点在两栏之间/格子之外的空处时，看到的正是"外面"，期待的就是丢出去。
-    // 这个项目里没有"点空白取消"的其它入口损失（Esc / ✕ 都能关、再点原格也能放回）。
-    this.panel.addEventListener('pointerdown', (event) => {
-      const target = event.target as HTMLElement;
-      if (!this.held) return;
-      if (target.closest('.inv-slot, button, input, .recipe-cell')) return;
-      event.preventDefault();
-      event.stopPropagation();
-      // 鼠标右键只丢一个（Wiki 原文），触摸/左键丢整叠
-      this.dropHeldStack(event.button === 2 ? 1 : this.held.count);
-    });
-
-    // 点界面外（含 shell 留白、快捷栏 dock 以外的暗色区域）：同样丢进世界。
-    // 判据从"target 必须是 root/shell"放宽成"**不在任何交互元素里**"——
-    // 原来点两栏之间的缝、或某个装饰层什么都不发生，玩家就会以为"丢弃没做"。
+    // ⚠️ 不要再给 `this.panel` 挂"点空白就丢"：右侧工作台/合成区也是这个
+    // 弹窗的一部分，原来那条监听会把工作台空白处误判成"界面外"，
+    // 选中物品后点一下工作台就把东西丢出去了。
     this.root.addEventListener('pointerdown', (event) => {
       const target = event.target as HTMLElement;
       // 批次 209：快捷栏 dock 的**空白处**也算界面外（用户习惯点快捷栏左右两侧丢东西）。

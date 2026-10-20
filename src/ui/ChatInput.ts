@@ -587,11 +587,18 @@ export class ChatInput {
       // 已经是 /help：再点没有任何反应，也不重建提示行（用户要求那行字保持原样）
       if (this.inputEl.value === '/help') return;
       this.inputEl.value = '/help';
-      // 只在输入框本来没聚焦时才 focus：点链接时输入框通常已经聚焦，
-      // 再 focus 一次会让手机键盘先收起再弹出（右侧会出现一条黑边）。
-      if (document.activeElement !== this.inputEl) this.inputEl.focus();
+      // ⚠️ 不要在这里 focus：输入框没聚焦时这一下会唤起软键盘/滚动视口，
+      // 游戏最右侧会留下一条竖向黑边（批次 536 用户反馈）。
+      // 玩家要发送时自己点一下输入框即可。
       const end = this.inputEl.value.length;
       this.inputEl.setSelectionRange(end, end);
+      // 兜底：设置值/选区后个别内核会把页面横向滚出几像素，露出右侧黑边。
+      // 下一帧把滚动归零并让画布按当前 innerWidth 重新同步一次。
+      requestAnimationFrame(() => {
+        if (document.documentElement.scrollLeft !== 0) document.documentElement.scrollLeft = 0;
+        if (document.body.scrollLeft !== 0) document.body.scrollLeft = 0;
+        window.dispatchEvent(new Event('resize'));
+      });
       // ⚠️ 不要 updateHint：提示行保持“输入命令（/help 查看全部）…”原样
     });
     help.addEventListener('click', (event) => {

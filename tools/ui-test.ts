@@ -2636,8 +2636,11 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   // 关界面时合成格里的残留回到背包（原版："关闭界面时，合成格中残留的物品会自动回到背包"）
   check('关背包时把合成格里的东西退回背包', inventorySrc.includes('this.returnCraftingToInventory();'));
   check('放不下的留在格子里（不凭空消失）', /returnCraftingToInventory[\s\S]{0,500}addStack\(stack\) > 0\) continue/.test(inventorySrc));
-  // 左键点暗处全部丢出、右键只丢一个
-  check('右键点空白只丢 1 个（左键才全丢）', inventorySrc.includes('event.button === 2 ? 1 : this.held.count'));
+  // 左键点弹窗外全部丢出、右键只丢一个（弹窗内的空白不再丢）
+  check(
+    '右键点弹窗外只丢 1 个（左键才全丢）',
+    inventorySrc.includes('event.button === 2 ? 1 : (this.held?.count ?? 0)'),
+  );
   // ---- 批次 136 逐条对 Wiki 原文时抓出来的两处**行为**偏差（不是"函数存在"就算数）
   {
     // 位置断言：这一支必须**落在右键那一块里**，且后面紧跟"放下 + 拿起"（= 交换）
@@ -3066,8 +3069,11 @@ console.log('\n[用户第二轮反馈（批次 185）]');
 
   // ⑥ 丢弃 / 关闭动画期间重开
   check(
-    '点界面外空处丢弃（面板空白与窗外都算）',
-    invSrc.includes('private dropHeldStack(') && invSrc.includes('this.hooks.onDrop(stack.id, drop);'),
+    '只有点背包弹窗之外的场景才丢弃（右侧工作台区域不再误丢）',
+    invSrc.includes('private dropHeldStack(') &&
+      invSrc.includes('this.hooks.onDrop(stack.id, drop);') &&
+      invSrc.includes('if (this.panel.contains(target)) return;') &&
+      !invSrc.includes("this.panel.addEventListener('pointerdown'"),
   );
   check(
     '关闭动画没走完就重开：取消关闭，不会"打开了却看不见"',
@@ -3533,6 +3539,8 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       chatSrc.includes("this.inputEl.value = '/help';") &&
       chatSrc.includes("if (this.inputEl.value === '/help') return;") &&
       !/help\.addEventListener\('pointerdown'[\s\S]{0,700}?this\.updateHint\(\);/.test(chatSrc) &&
+      !/help\.addEventListener\('pointerdown'[\s\S]{0,500}?this\.inputEl\.focus\(\)/.test(chatSrc) &&
+      chatSrc.includes("window.dispatchEvent(new Event('resize'))") &&
       !chatSrc.includes('chat-help-row') &&
       html.includes('.chat-help-link {'),
   );
