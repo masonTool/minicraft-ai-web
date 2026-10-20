@@ -237,6 +237,7 @@ import { FLUID_TICKS_PER_TICK, isWithinFluidSim } from './core/world/FluidSimWin
 import { scrapeResult } from './core/world/Copper.ts';
 import { PrimedTnt, type TntWorld } from './core/world/PrimedTnt.ts';
 import { FallingBlocks } from './core/world/FallingBlocks.ts';
+import { conduitRadius } from './core/world/Conduit.ts';
 import { containerSignalStrength } from './core/world/ContainerSignal.ts';
 import { fillLootChests } from './core/world/LootFill.ts';
 // 雷电与避雷针（批次 83）：规则（落点选择 / 杆头坐标 / 脉冲表）在 `world/Lightning.ts`，
@@ -927,6 +928,9 @@ class App {
   private readonly primedTnt = new PrimedTnt();
   /** 下落方块（批次 543）：沙子/沙砾/混凝土粉末失去支撑时一格一格掉 */
   private readonly fallingBlocks = new FallingBlocks();
+  /** 已放置的潮涌核心（批次 547）：方块变动时维护，每 0.5 秒校验一次框架 */
+  private readonly conduits = new Map<string, { x: number; y: number; z: number }>();
+  private conduitTimer = 0;
   private readonly tntWorld: TntWorld = {
     getBlock: (x, y, z) => this.world.getBlock(x, y, z),
     getState: (x, y, z) => this.world.getBlockState(x, y, z),
@@ -1853,6 +1857,7 @@ class App {
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType, this.worldConfig.singleBiome);
     // 下落方块表只对当前世界有效；换世界/重开时清空，避免旧坐标落到新世界
     this.fallingBlocks.clear();
+    this.conduits.clear();
     this.gameMode = normalizeGameMode(this.worldConfig.gameMode);
     // 旁观模式（批次 532）：新世界没有存档时也要立刻起飞，否则无碰撞 + 重力 = 穿地
     this.flying = startsFlying(this.gameMode);
@@ -2102,6 +2107,12 @@ class App {
         this.redstone.onBlockChanged(this.redstoneWorld, x, y, z);
         // 下落方块（批次 543）：看这一格自己与上面那一格，谁失去支撑谁开始掉
         this.fallingBlocks.wakeAfterChange(this.world, x, y, z);
+        // 潮涌核心（批次 547）：放置/挖掉时维护索引；框架变化由 0.5 秒一次的校验处理
+        if (this.world.getBlock(x, y, z) === Block.CONDUIT) {
+          this.conduits.set(`${x},${y},${z}`, { x, y, z });
+        } else {
+          this.conduits.delete(`${x},${y},${z}`);
+        }
       },
     };
 
@@ -8513,6 +8524,35 @@ class App {
    *
    * 与批次 474 相比行为不变（铁傀儡还是最近优先、并列按 id 定序、1.2 秒一拳 7 点）。
    */
+  /**
+   * 潮涌核心（批次 547）：每 0.5 秒校验一次框架，玩家在半径内就续 3 秒潮涌能量。
+   *
+   * 校验不放在每帧：框架是静态建筑，0.5 秒的延迟感觉不到；而 7×7×7 的壳体
+   * 扫描有 218 格，每帧扫一遍不值。
+   */
+  private tickConduits(dt: number): void {
+    if (this.conduits.size === 0) return;
+    this.conduitTimer -= dt;
+    if (this.conduitTimer > 0) return;
+    this.conduitTimer = 0.5;
+
+    for (const [key, pos] of this.conduits) {
+      if (!this.world.isLoaded(pos.x, pos.z)) continue;
+      if (this.world.getBlock(pos.x, pos.y, pos.z) !== Block.CONDUIT) {
+        this.conduits.delete(key);
+        continue;
+      }
+      const radius = conduitRadius(this.world, pos.x, pos.y, pos.z);
+      if (radius <= 0) continue;
+      const dx = this.physics.x - pos.x;
+      const dy = this.physics.y - pos.y;
+      const dz = this.physics.z - pos.z;
+      if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
+      // 每 0.5 秒续一次 3 秒：离开范围后还会保留约 2.5 秒，与原版的"效果不是瞬间消失"一致
+      this.applyEffectByName('conduit_power', 3, 0);
+    }
+  }
+
   private tickGuardians(context: EntityContext, dt: number): void {
     const mobs: Mob[] = [];
     const hostiles: Mob[] = [];
@@ -10064,6 +10104,8 @@ class App {
     this.pathSearchesLeft = PATH_SEARCH_BUDGET_PER_FRAME;
     // 下落方块（批次 543）：一格一格往下挪，写方块会走 `onBlockChanged` 触发重建
     this.fallingBlocks.tick(this.world, dt);
+    // 潮涌核心（批次 547）：框架校验与潮涌能量续期
+    this.tickConduits(dt);
     this.entities.update(context, dt);
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;

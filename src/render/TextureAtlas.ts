@@ -1446,6 +1446,46 @@ PAINTERS.fire = flamePainter('fire', [198, 58, 18], [255, 216, 60]);
 // 灵魂火（批次 546）：同一套火苗轮廓，配色换成青蓝
 PAINTERS.soul_fire = flamePainter('soulfire', [28, 110, 190], [150, 240, 255]);
 
+/** 潮涌核心（批次 547）：深色海晶石外壳 + 中间那只发光的"眼" */
+PAINTERS.conduit = (x, y, rng) => {
+  const dx = x - 7.5;
+  const dy = y - 7.5;
+  const d = Math.hypot(dx, dy);
+  const jitter = rng() * 10 - 5;
+  if (d > 7.2) return [clamp255(34 + jitter), clamp255(52 + jitter), clamp255(62 + jitter), 255];
+  if (d < 2.1) return [clamp255(120 + jitter), clamp255(240 + jitter), clamp255(230 + jitter), 255];
+  const ring = 0.5 + 0.5 * Math.sin(d * 2.4);
+  return [
+    clamp255(40 + ring * 30 + jitter),
+    clamp255(90 + ring * 60 + jitter),
+    clamp255(96 + ring * 50 + jitter),
+    255,
+  ];
+};
+
+/** 海洋之心（批次 547）：深蓝底 + 中心亮青 */
+PAINTERS.item_heart_of_the_sea = (x, y, rng) => {
+  const d = Math.hypot(x - 7.5, y - 7.5);
+  const heat = Math.max(0, 1 - d / 8);
+  const jitter = rng() * 8 - 4;
+  return [
+    clamp255(18 + heat * 70 + jitter),
+    clamp255(70 + heat * 170 + jitter),
+    clamp255(130 + heat * 120 + jitter),
+    255,
+  ];
+};
+
+/** 鹦鹉螺壳（批次 547）：米色螺旋 */
+PAINTERS.item_nautilus_shell = (x, y, rng) => {
+  const d = Math.hypot(x - 8, y - 8);
+  const spiral = Math.sin(d * 1.8 + Math.atan2(y - 8, x - 8) * 2);
+  if (d > 7.2) return [0, 0, 0, 0];
+  const shade = 0.75 + spiral * 0.15;
+  const jitter = rng() * 10 - 5;
+  return [clamp255(205 * shade + jitter), clamp255(180 * shade + jitter), clamp255(140 * shade + jitter), 255];
+};
+
 PAINTERS.item_clay_ball = lump(
   [
     [168, 168, 178],

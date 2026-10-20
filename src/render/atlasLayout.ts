@@ -309,6 +309,8 @@ export const TILE_ORDER = [
   // ---- 海晶石家族
   'prismarine',
   'prismarine_bricks',
+  // 潮涌核心（批次 547）
+  'conduit',
   'dark_prismarine',
   'sea_lantern',
   // ---- 下界
@@ -1204,6 +1206,9 @@ export const TILE_ORDER = [
   'item_music_disc_ward',
   // 不死图腾（批次 498）
   'item_totem_of_undying',
+  // 潮涌核心材料（批次 547）
+  'item_heart_of_the_sea',
+  'item_nautilus_shell',
   'item_popped_chorus_fruit',
   'item_prismarine_crystals',
   // 骨块（批次 349）

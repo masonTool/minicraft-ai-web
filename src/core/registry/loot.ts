@@ -413,6 +413,8 @@ export const LOOT_TABLES: readonly LootTable[] = [
       entry(Item.IRON_INGOT, 1, 4, 4),
       entry(Item.COOKED_COD, 1, 3, 3),
       entry(Item.GOLDEN_APPLE, 1, 1, 1),
+      // 海洋之心（批次 547）：原版埋藏宝藏的招牌，潮涌核心的核心材料
+      entry(Item.HEART_OF_THE_SEA, 1, 1, 1),
       empty(3),
     ],
   },

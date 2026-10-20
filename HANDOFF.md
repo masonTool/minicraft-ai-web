@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-21 · 提交总数 1159（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-21 · 提交总数 1160（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 289 项 —— 已完成 **235**、进行中 **48**、待办 5 条（另有 1 条主动放弃）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -191,11 +191,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 162 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 163 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 162 套离线测试
+npm test                   # typecheck:tools + vitest + 163 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -207,7 +207,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **162 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **163 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
@@ -336,4 +336,4 @@ npm run agent:setup        # 跨机器自检
   虚空血、会捡东西、会被怪追、会掉饥饿/氧气。现在 `canTakeDamage` / `canPickUpItems` /
   `playerInvisible: 旁观` / 生存环境 `creative + spectator`，HUD 隐藏。
   浏览器实测：旁观者 y=-100 时生命/饱食/氧气都不变。
-- 批次 540~546（J27 装备 + J12 攻击动画 + B8 水流/下落方块 + K2 比较器 + K4 药水 + B20 灵魂火）：15%/件盔甲与主手武器、护甲 1.9 公式减伤、8.5% 掉落；0.35 秒攻击动画；水流推力扩到生物/掉落物；沙/沙砾/混凝土粉末每 0.1 秒下落一格；比较器读容器装满度 + 减法模式；水肺（河豚）与跳跃（兔脚）药水；灵魂火（亮度 10、只认灵魂沙/土、不蔓延）。`test:equipment` 40、`test:mob` 155、`test:physics` 112、`test:redstone` 151、`test:brewing` 2415、`test:fire` 91 条，套数 161 → **162**。
+- 批次 540~547（J27 装备 + J12 攻击动画 + B8 水流/下落方块 + K2 比较器 + K4 药水 + B20 灵魂火 + B18 潮涌核心）：15%/件盔甲与主手武器、护甲 1.9 公式减伤、8.5% 掉落；0.35 秒攻击动画；水流推力扩到生物/掉落物；沙/沙砾/混凝土粉末每 0.1 秒下落一格；比较器读容器装满度 + 减法模式；水肺（河豚）与跳跃（兔脚）药水；灵魂火；潮涌核心（16/30/42 块框架 → 32/48/64 格）。`test:equipment` 40、`test:mob` 155、`test:physics` 112、`test:redstone` 151、`test:brewing` 2415、`test:fire` 91、`test:conduit` 19 条，套数 161 → **163**。

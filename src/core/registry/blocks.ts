@@ -1286,6 +1286,17 @@ const SOUL_FIRE_SPECS: readonly BlockSpec[] = [
   },
 ];
 
+/** 潮涌核心（批次 547）：海底神殿的通关奖励，亮度 15 */
+export const CONDUIT_ID = 722;
+const CONDUIT_SPECS: readonly BlockSpec[] = [
+  {
+    id: CONDUIT_ID,
+    name: 'minecraft:conduit',
+    tiles: ['conduit', 'conduit', 'conduit'],
+    light: 15,
+  },
+];
+
 /**
  * 下界传送门方块（K8）。
  *
@@ -3579,6 +3590,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SLIME_BLOCK_SPECS,
   ...SOUL_LIGHT_SPECS,
   ...SOUL_FIRE_SPECS,
+  ...CONDUIT_SPECS,
   ...CANDLE_SPECS,
   ...GLAZED_TERRACOTTA_SPECS,
 
@@ -4014,6 +4026,7 @@ export const Block = {
   /** 火焰（I12）：没有物品，只能靠打火石点燃 */
   FIRE: 291,
   SOUL_FIRE: SOUL_FIRE_ID,
+  CONDUIT: CONDUIT_ID,
   /** 下界传送门（K8）：黑曜石框点燃后填满框内的那 2×3 格 */
   NETHER_PORTAL: 292,
   /** 下界合金（K8 尾巴）：储物方块与锻造台 */
@@ -4608,6 +4621,7 @@ HARDNESS.set(Block.GOLD_BLOCK, 3);
 HARDNESS.set(Block.DIAMOND_BLOCK, 5);
 HARDNESS.set(Block.EMERALD_BLOCK, 5);
 HARDNESS.set(Block.BEACON, 3);
+HARDNESS.set(Block.CONDUIT, 3);
 // 粘液块（批次 120）：原版硬度 **0**（徒手一拍就碎，只是碎得"黏"）
 HARDNESS.set(Block.SLIME_BLOCK, 0);
 HARDNESS.set(Block.BONE_BLOCK, 2);

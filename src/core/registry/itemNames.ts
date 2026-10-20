@@ -358,6 +358,8 @@ const EXPLICIT: Record<string, string> = {
   music_disc_cat: '唱片「Cat」',
   music_disc_ward: '唱片「Ward」',
   totem_of_undying: '不死图腾',
+  heart_of_the_sea: '海洋之心',
+  nautilus_shell: '鹦鹉螺壳',
   // 投掷器（批次 59，H14）：通电就朝朝向那一格吐一件（对面是容器就塞进去）
   dropper: '投掷器',
   dispenser: '发射器',
@@ -444,6 +446,7 @@ const EXPLICIT: Record<string, string> = {
   prismarine_bricks: '海晶石砖',
   dark_prismarine: '暗海晶石',
   sea_lantern: '海晶灯',
+  conduit: '潮涌核心',
   // 下界
   netherrack: '下界岩',
   soul_sand: '灵魂沙',

@@ -90,9 +90,9 @@ export const FISHING_POOLS: readonly FishingPool[] = [
     name: '宝藏',
     weight: 5,
     luckPerLevel: 2.5,
-    // 原版宝藏池是 6 项（弓 / 附魔书 / 钓竿 / 命名牌 / 鹦鹉螺壳 / 鞍），
-    // 后三件本项目都还没有那件物品 → **只留能诚实给出的三项**
-    entries: [entry(Item.BOW, 1), entry(Item.BOOK, 1, true), entry(Item.FISHING_ROD, 1)],
+    // 原版宝藏池是 6 项（弓 / 附魔书 / 钓竿 / 命名牌 / 鹦鹉螺壳 / 鞍）；
+    // 批次 547 补上鹦鹉螺壳后，只剩命名牌与鞍还没有那两件物品
+    entries: [entry(Item.BOW, 1), entry(Item.BOOK, 1, true), entry(Item.FISHING_ROD, 1), entry(Item.NAUTILUS_SHELL, 1)],
   },
 ];
 

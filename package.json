@@ -124,6 +124,7 @@
     "test:tipped": "esbuild tools/tipped-arrow-test.ts --bundle --platform=node --format=esm --outfile=.tmp/tipped-arrow-test.mjs --log-level=error && node .tmp/tipped-arrow-test.mjs",
     "test:theme": "esbuild tools/theme-test.ts --bundle --platform=node --format=esm --outfile=.tmp/theme-test.mjs --log-level=error && node .tmp/theme-test.mjs",
     "test:fire": "esbuild tools/fire-test.ts --bundle --platform=node --format=esm --outfile=.tmp/fire-test.mjs --log-level=error && node .tmp/fire-test.mjs",
+    "test:conduit": "esbuild tools/conduit-test.ts --bundle --platform=node --format=esm --outfile=.tmp/conduit-test.mjs --log-level=error && node .tmp/conduit-test.mjs",
     "test:portal": "esbuild tools/netherportal-test.ts --bundle --platform=node --format=esm --outfile=.tmp/netherportal-test.mjs --log-level=error && node .tmp/netherportal-test.mjs",
     "test:netherite": "esbuild tools/netherite-test.ts --bundle --platform=node --format=esm --outfile=.tmp/netherite-test.mjs --log-level=error && node .tmp/netherite-test.mjs",
     "test:loot": "esbuild tools/loot-test.ts --bundle --platform=node --format=esm --outfile=.tmp/loot-test.mjs --log-level=error && node .tmp/loot-test.mjs",

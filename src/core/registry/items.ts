@@ -241,6 +241,14 @@ export const Item = {
    */
   TOTEM_OF_UNDYING: 1548,
   /**
+   * 海洋之心（批次 547）：埋藏宝藏里的那一颗，**潮涌核心**的唯一核心材料。
+   */
+  HEART_OF_THE_SEA: 1560,
+  /**
+   * 鹦鹉螺壳（批次 547）：钓鱼宝藏池 / 溺尸掉落；潮涌核心要 8 个。
+   */
+  NAUTILUS_SHELL: 1561,
+  /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
    * 它的用途与原版一致：**缓降药水**（`Brewing` 的 `VARIANT_INGREDIENTS`）
@@ -543,6 +551,9 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.MUSIC_DISC_WARD, name: 'minecraft:music_disc_ward', tile: 'item_music_disc_ward', maxStack: 1 },
   // 不死图腾（批次 498）：原版不能叠
   { id: Item.TOTEM_OF_UNDYING, name: 'minecraft:totem_of_undying', tile: 'item_totem_of_undying', maxStack: 1 },
+  // 潮涌核心的两件材料（批次 547）：海洋之心与鹦鹉螺壳
+  { id: Item.HEART_OF_THE_SEA, name: 'minecraft:heart_of_the_sea', tile: 'item_heart_of_the_sea' },
+  { id: Item.NAUTILUS_SHELL, name: 'minecraft:nautilus_shell', tile: 'item_nautilus_shell' },
   { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },

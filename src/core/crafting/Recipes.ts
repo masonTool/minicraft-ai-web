@@ -805,6 +805,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     pattern: ['GGG', 'GNG', 'OOO'],
     key: { G: Block.GLASS, N: Item.NETHER_STAR, O: Block.OBSIDIAN },
   },
+  // 潮涌核心（批次 547，原版图案）：中间一颗海洋之心、周围 8 个鹦鹉螺壳
+  {
+    kind: 'shaped' as const,
+    result: { id: Block.CONDUIT, count: 1 },
+    pattern: ['SSS', 'SHS', 'SSS'],
+    key: { S: Item.NAUTILUS_SHELL, H: Item.HEART_OF_THE_SEA },
+  },
   // ---- 食物与杂物（批次 48，B17）
   // 金锭 ↔ 金粒（与铁粒同一套两向配方）
   { kind: 'shapeless' as const, result: { id: Item.GOLD_INGOT, count: 1 }, ingredients: Array<number>(9).fill(Item.GOLD_NUGGET) },

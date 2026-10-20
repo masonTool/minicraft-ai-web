@@ -195,7 +195,11 @@ console.log('\n[战利品表：三个池子]');
   const bookEntries = FISHING_POOLS.flatMap((pool) => pool.entries).filter((entry) => entry.enchantedBook === true);
   equal('只有宝藏池里那本书是"附魔书"', `${bookEntries.length},${bookEntries[0]?.id}`, `${1},${Item.BOOK}`);
   const treasure = FISHING_POOLS.find((pool) => pool.key === 'treasure')!;
-  equal('宝藏池三项：弓 / 附魔书 / 钓竿', treasure.entries.map((entry) => entry.id).join(','), [Item.BOW, Item.BOOK, Item.FISHING_ROD].join(','));
+  equal(
+    '宝藏池四项：弓 / 附魔书 / 钓竿 / 鹦鹉螺壳',
+    treasure.entries.map((entry) => entry.id).join(','),
+    [Item.BOW, Item.BOOK, Item.FISHING_ROD, Item.NAUTILUS_SHELL].join(','),
+  );
   check('杂物池里有睡莲与绊线钩（原版 junk 的招牌）', treasure !== undefined && fishingEntryIds().includes(Block.LILY_PAD) && fishingEntryIds().includes(Block.TRIPWIRE_HOOK));
 }
 
