@@ -30,7 +30,8 @@ v2
                  inventory-catalog.ts
                                    创造五分类与页签映射
                  recipe-book.ts    配方匹配/取料/填格纯逻辑
-                 inventory-tabs.ts 创造/配方页签 UI 构建
+                 inventory-tabs.ts 物品/创造/配方页与合成面板 UI
+                 quality.ts        画质分级/FPS 自适应
                  wx-mesh-pool.ts   微信真实 Worker 网格化
                  chunk-worker-entry.ts
                                    微信 worker.onMessage 入口
@@ -103,6 +104,7 @@ v2
 - 抽取 `drawBlockIcon` 与创造分类纯逻辑，组合根不再依赖图集布局
 - 抽取 `recipe-book.ts`：配方尺寸匹配、背包取 1 份材料、填合成格
 - 抽取 `inventory-tabs.ts`：物品/创造/配方三页 + 合成面板 UI 构建，组合根只注入状态与回调
+- 抽取 `quality.ts`：DPR 分级、低帧降级、稳定回升、天气可见性
 
 ## 已知架构债务
 

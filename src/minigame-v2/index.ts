@@ -18,6 +18,7 @@ import { WxMeshWorkerPool } from './wx-mesh-pool.ts';
 import { MobSystem } from './mobs.ts';
 import { ContainerSystem } from './containers.ts';
 import { drawBlockIcon } from './block-icon.ts';
+import { QualityManager } from './quality.ts';
 import type { V2CreativeCategory } from './inventory-catalog.ts';
 import { fillRecipe as fillRecipeFromInventory } from './recipe-book.ts';
 import { buildCraftingPanel, buildCreativeTab, buildItemTab, buildRecipeTab } from './inventory-tabs.ts';
@@ -323,6 +324,7 @@ const readSettings = (): V2Settings => {
   }
 };
 let cameraMode: 'first' | 'third' = 'first';
+let quality: QualityManager;
 let currentFov = 72;
 const settings = readSettings();
 cameraMode = settings.view;
@@ -398,9 +400,7 @@ const showSettings = (): void => {
     }));
     row(button(panelX + 24, rowY, panelW - 48, 50, `画质：${settings.quality === 'auto' ? '自动' : settings.quality === 'high' ? '高' : '性能'}`, () => {
       settings.quality = settings.quality === 'auto' ? 'high' : settings.quality === 'high' ? 'low' : 'auto';
-      if (settings.quality === 'high') qualityTier = 2;
-      if (settings.quality === 'low') qualityTier = 0;
-      applyQuality();
+      quality.syncMode();
       apply();
     }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
   } else if (activeSettingsTab === 'controls') {
@@ -893,8 +893,6 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   xpIntoLevel = 0;
   hudInputBlockUntil = Date.now() + 400;
   playerReadyAt = 0;
-  poorFpsSeconds = 0;
-  goodFpsSeconds = 0;
   lastAutoSave = Date.now();
   try {
     save = await FileSaveGame.open(entry.id, platform.files);
@@ -1406,7 +1404,7 @@ const showHud = (): void => {
       text(24, 18, 240, 36, `${currentWorld?.name ?? '世界'}`, { fontSize: 19, color: '#ffffff' }),
       ...(settings.showDebug
         ? [
-            text(24, 58, 380, 24, `FPS ${fps.toFixed(0)} · 画质${qualityTier} · ${meshBackend} · 区块 ${chunks.drawnCount}/${world.chunks.size} · ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)}`, {
+            text(24, 58, 380, 24, `FPS ${fps.toFixed(0)} · 画质${quality.tier} · ${meshBackend} · 区块 ${chunks.drawnCount}/${world.chunks.size} · ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)}`, {
               fontSize: 12,
               color: 'rgba(220,240,250,0.8)',
             }),
@@ -2014,30 +2012,23 @@ let lastWorldCx = Number.NaN;
 let lastWorldCz = Number.NaN;
 let lastViewDistance = -1;
 let lastAutoSave = 0;
-let qualityTier = 2;
-let lastQualityChange = 0;
 let lastFrameAt = 0;
 let lastViewApply = 0;
 let mobAccum = 0;
 let weatherAccum = 0;
 let playerReadyAt = 0;
-let poorFpsSeconds = 0;
-let goodFpsSeconds = 0;
-
-const effectiveViewDistance = (): number =>
-  qualityTier === 0 ? Math.min(settings.viewDistance, 1) : settings.viewDistance;
-
-const applyQuality = (): void => {
-  const dpr = qualityTier === 2 ? 1.5 : qualityTier === 1 ? 1.25 : 1;
-  renderer.setPixelRatio(Math.min(platform.system.dpr, dpr));
-  renderer.setSize(platform.system.width, platform.system.height, false);
-  weather.object.visible = qualityTier > 0;
-  lastViewDistance = -1;
-  lastViewApply = 0;
-  if (started && !settingsOpen) {
-    showToast(qualityTier === 2 ? '画质：高' : qualityTier === 1 ? '画质：中' : '画质：性能');
-  }
-};
+quality = new QualityManager({
+  renderer,
+  weatherObject: weather.object,
+  platform,
+  getSettings: () => settings,
+  canToast: () => started && !settingsOpen,
+  toast: (message) => showToast(message),
+  onViewDistanceChanged: () => {
+    lastViewDistance = -1;
+    lastViewApply = 0;
+  },
+});
 
 const frame = (): void => {
   const now = performance.now();
@@ -2054,26 +2045,7 @@ const frame = (): void => {
     fpsFrames = 0;
     fpsStartedAt = now;
   }
-  if (settings.quality === 'auto' && playerReady && playerReadyAt > 0 && now - playerReadyAt > 8000 && fps > 0) {
-    if (fps < 55) {
-      poorFpsSeconds += dt;
-      goodFpsSeconds = 0;
-    } else if (fps >= 58) {
-      goodFpsSeconds += dt;
-      poorFpsSeconds = 0;
-    }
-    if (poorFpsSeconds > 3 && qualityTier > 0 && now - lastQualityChange > 8000) {
-      qualityTier = (qualityTier - 1) as 0 | 1 | 2;
-      lastQualityChange = now;
-      poorFpsSeconds = 0;
-      applyQuality();
-    } else if (goodFpsSeconds > 10 && qualityTier < 2 && now - lastQualityChange > 10000) {
-      qualityTier = (qualityTier + 1) as 0 | 1 | 2;
-      lastQualityChange = now;
-      goodFpsSeconds = 0;
-      applyQuality();
-    }
-  }
+  quality.update(fps, dt, now, playerReady, playerReadyAt);
 
   const screen = !started
     ? settingsOpen
@@ -2096,7 +2068,7 @@ const frame = (): void => {
       currentWorldName: currentWorld?.name ?? '',
       gameMode: currentWorld?.gameMode ?? 'survival',
       fps,
-      qualityTier,
+      qualityTier: quality.tier,
       meshBackend,
       chunks: world.chunks.size,
       drawn: chunks.drawnCount,
@@ -2141,7 +2113,7 @@ const frame = (): void => {
   const centerCx = Math.floor(physics.x / 16);
   const centerCz = Math.floor(physics.z / 16);
   if (playerReady && playerReadyAt === 0) playerReadyAt = now;
-  const viewDistance = effectiveViewDistance();
+  const viewDistance = quality.viewDistance;
   const centerChanged = centerCx !== lastWorldCx || centerCz !== lastWorldCz || viewDistance !== lastViewDistance;
   if (centerChanged) {
     world.update(centerCx, centerCz, viewDistance);
