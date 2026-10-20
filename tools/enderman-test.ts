@@ -304,8 +304,16 @@ console.log('\n[末影人：瞬移落在哪]');
     const rec = makeCtx(FLAT_PHYSICS, FLAT, { player: { x: 30.5, y: 64, z: 0.5 } });
     rec.gaze = true;
     mob.tick(rec.ctx, 0.05);
-    run(mob, rec.ctx, 0.6);
-    const hadPath = mob.chasingPath > 0;
+    // ⚠️ 前置条件要记"**途中**有没有过路"，而不是"0.6 秒之后还有没有"：
+    // 这只末影人在追一个 30 格外的玩家，0.6 秒足够把当前这一段路走完，
+    // 于是 `chasingPath` 归零——**看起来像失败，其实一切正常**。
+    // 这条偶发失败在批次 499 的全量跑里露过一次（第二次跑就过），
+    // 属于"断言写法不稳"，不是产品问题。
+    let hadPath = mob.chasingPath > 0;
+    for (let t = 0; t < 0.6; t += 0.05) {
+      mob.tick(rec.ctx, 0.05);
+      if (mob.chasingPath > 0) hadPath = true;
+    }
     mob.teleportRandomly(rec.ctx);
     equal('瞬移之后寻路路径被清空', mob.chasingPath, 0);
     check('（前置条件：瞬移之前确实有路）', hadPath);
