@@ -75,6 +75,7 @@ const assert = (condition, message, state) => {
     40000,
   );
   assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
+  assert(inGame.health === 20 && inGame.food === 20, '初始生命/饥饿应为 20', inGame);
 
   // 摇杆拖动：玩家坐标应变化
   const stickCenter = point(84, 317);

@@ -21,7 +21,8 @@ import { Furnace } from '../core/container/Furnace.ts';
 import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
-import { CREATIVE_ITEMS, blockForItem, categoryOf, itemIconTile } from '../core/registry/items.ts';
+import { CREATIVE_ITEMS, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
+import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
@@ -905,9 +906,9 @@ const snapshotPlayer = (): PlayerSave => ({
   dimension: 'overworld',
   flying: false,
   timeOfDay: 0,
-  health: 20,
-  food: 20,
-  saturation: 5,
+  health,
+  food,
+  saturation,
   air: 300,
   exhaustion: 0,
   inventory: inventory.serialize(),
@@ -977,6 +978,12 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   playerReady = false;
   inventory.clear();
   selectedSlot = 0;
+  health = 20;
+  food = 20;
+  saturation = 5;
+  foodExhaustion = 0;
+  fallPeakY = spawn.y + 1;
+  wasOnGround = false;
   hudInputBlockUntil = Date.now() + 400;
   try {
     save = await FileSaveGame.open(entry.id, platform.files);
@@ -990,6 +997,9 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
       yaw = loaded.yaw;
       pitch = loaded.pitch;
       if (loaded.inventory) inventory.restore(loaded.inventory);
+      health = Math.max(0, Math.min(20, loaded.health));
+      food = Math.max(0, Math.min(20, loaded.food));
+      saturation = Math.max(0, Math.min(20, loaded.saturation));
       selectedSlot = Math.max(0, Math.min(8, loaded.selectedSlot ?? 0));
       playerReady = true;
     }
@@ -1512,8 +1522,8 @@ const showHud = (): void => {
         playerModel.visible = cameraMode === 'third';
         showHud();
       }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
-      vital(242, uiHeight - 140, 16, 'heart', 20),
-      vital(612, uiHeight - 140, 16, 'food', 20),
+      vital(242, uiHeight - 140, 16, 'heart', health),
+      vital(612, uiHeight - 140, 16, 'food', food),
       text(0, uiHeight - 108, 1024, 24, inventory.get(selectedSlot) ? itemLabel(inventory.get(selectedSlot)!.id) : '空手', {
         fontSize: 14,
         color: 'rgba(255,255,255,0.92)',
@@ -1665,6 +1675,13 @@ let pitch = 0;
 let playerReady = false;
 let jumpQueued = false;
 let sneaking = false;
+let health = 20;
+let food = 20;
+let saturation = 5;
+let foodExhaustion = 0;
+let fallPeakY = 80;
+let wasOnGround = false;
+let starvationTimer = 0;
 let lastStickTap = 0;
 let stickOffsetX = 0;
 let stickOffsetY = 0;
@@ -1728,6 +1745,17 @@ const placeAt = (hit: RayHit): void => {
   if (openContainerAt(hit)) return;
   const stack = inventory.get(selectedSlot);
   if (!stack) return;
+  const foodInfo = foodInfoById(stack.id);
+  if (foodInfo) {
+    if (!canEat(foodInfo, food, 20)) return;
+    food = Math.min(20, food + foodInfo.hunger);
+    saturation = Math.min(food, saturation + saturationFrom(foodInfo));
+    stack.count -= 1;
+    inventory.set(selectedSlot, stack.count > 0 ? stack : null);
+    audio.play('eat');
+    showHud();
+    return;
+  }
   const x = hit.x + hit.nx;
   const y = hit.y + hit.ny;
   const z = hit.z + hit.nz;
@@ -1923,6 +1951,9 @@ const frame = (): void => {
       target: currentHit ? `${world.getBlock(currentHit.x, currentHit.y, currentHit.z)}@${currentHit.x},${currentHit.y},${currentHit.z}` : '',
       held: inventory.get(selectedSlot)?.id ?? 0,
       cameraMode,
+      health,
+      food,
+      saturation,
       sneaking,
     }),
   );
@@ -1975,6 +2006,51 @@ const frame = (): void => {
     camera.rotation.x = pitch;
   }
   input.jump = false;
+
+  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen) {
+    if (!physics.onGround) {
+      fallPeakY = Math.max(fallPeakY, physics.y);
+    } else {
+      if (!wasOnGround) {
+        const drop = fallPeakY - physics.y;
+        if (drop > 3) {
+          health = Math.max(0, health - Math.floor(drop - 3));
+          showHud();
+        }
+      }
+      fallPeakY = physics.y;
+    }
+    wasOnGround = physics.onGround;
+
+    const moving = Math.abs(input.forward) + Math.abs(input.strafe) > 0.1;
+    foodExhaustion += dt * (moving ? 0.03 : 0.005);
+    if (foodExhaustion >= 4) {
+      foodExhaustion -= 4;
+      if (food > 0) {
+        food -= 1;
+        showHud();
+      }
+    }
+    if (food <= 0) {
+      starvationTimer += dt;
+      if (starvationTimer >= 1) {
+        starvationTimer = 0;
+        health = Math.max(0, health - 1);
+        showHud();
+      }
+    } else {
+      starvationTimer = 0;
+    }
+    if (health <= 0) {
+      health = 20;
+      food = 20;
+      saturation = 5;
+      foodExhaustion = 0;
+      fallPeakY = spawn.y + 1;
+      physics.teleport(spawn.x + 0.5, spawn.y + 1.01, spawn.z + 0.5);
+      showHud();
+    }
+  }
 
   chunks.processQueue(4, centerCx, centerCz);
   chunks.applyViewDistance(centerCx, centerCz, settings.viewDistance);
