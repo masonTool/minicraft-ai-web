@@ -1510,6 +1510,12 @@ const showHud = (): void => {
         playerModel.visible = cameraMode === 'third';
         showHud();
       }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
+      text(242, uiHeight - 142, 260, 18, '生命 20/20', { fontSize: 11, color: 'rgba(255,225,225,0.85)' }),
+      box(242, uiHeight - 124, 250, 7, [], { background: 'rgba(0,0,0,0.5)', radius: 3 }),
+      box(242, uiHeight - 124, 250, 7, [], { background: '#d94b4b', radius: 3 }),
+      text(522, uiHeight - 142, 260, 18, '饥饿 20/20', { fontSize: 11, color: 'rgba(255,240,210,0.85)' }),
+      box(522, uiHeight - 124, 250, 7, [], { background: 'rgba(0,0,0,0.5)', radius: 3 }),
+      box(522, uiHeight - 124, 250, 7, [], { background: '#d9a441', radius: 3 }),
       text(0, uiHeight - 108, 1024, 24, inventory.get(selectedSlot) ? itemLabel(inventory.get(selectedSlot)!.id) : '空手', {
         fontSize: 14,
         color: 'rgba(255,255,255,0.92)',
