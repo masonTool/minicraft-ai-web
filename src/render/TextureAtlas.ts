@@ -96,10 +96,31 @@ type Painter = (x: number, y: number, rng: () => number) => RGBA;
 
 const clamp255 = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
 
+/**
+ * 灰度噪声画笔。
+ *
+ * @param base **0~255 的亮度**，或 **0xRRGGBB 的打包颜色**（批次 531）。
+ *
+ * ⚠️ 以前这里只支持亮度，但调用处有 95 张图写的是 `noisy(0xRRGGBB, ...)`：
+ * 24 位色被当成亮度加进 `v`，`clamp255` 一夹就变成**纯白**——骨块、蓝色旗帜、
+ * 带釉陶瓦、蜡烛全都没有颜色。石头是 128 灰，所以一直没被发现。
+ *
+ * 现在 `base > 255` 就按打包色拆三通道；≤ 255 仍走灰度（老调用的语义不变），
+ * `tint` 照旧在通道上相乘（草地那种"灰底染绿"的写法依赖它）。
+ */
 function noisy(base: number, spread: number, tint: [number, number, number] = [1, 1, 1]): Painter {
+  const packed = base > 255;
+  const baseR = packed ? (base >> 16) & 0xff : base;
+  const baseG = packed ? (base >> 8) & 0xff : base;
+  const baseB = packed ? base & 0xff : base;
   return (_x, _y, rng) => {
-    const v = base + (rng() * 2 - 1) * spread;
-    return [clamp255(v * tint[0]), clamp255(v * tint[1]), clamp255(v * tint[2]), 255];
+    const v = (rng() * 2 - 1) * spread;
+    return [
+      clamp255((baseR + v) * tint[0]),
+      clamp255((baseG + v) * tint[1]),
+      clamp255((baseB + v) * tint[2]),
+      255,
+    ];
   };
 }
 

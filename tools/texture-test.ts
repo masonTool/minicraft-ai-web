@@ -110,6 +110,49 @@ console.log('\n[越界区：骨块 / 蜡烛 / 带釉陶瓦 / 旗帜]');
   check('骨块 UV 宽高都是正的', rect[2]! > rect[0]! && rect[3]! > rect[1]!);
 }
 
+console.log('\n[画笔颜色：24 位色不能被当成亮度]');
+{
+  // 批次 531 的根因：`noisy(0xRRGGBB, ...)` 把 24 位色当亮度，clamp 后全白。
+  // 这里直接调用画笔（不依赖画布），把"有颜色的贴图"逐个钉住色相。
+  const rng = () => 0.5;
+  const sample = (name: string): [number, number, number] => {
+    const painter = PAINTERS[name];
+    if (!painter) return [-1, -1, -1];
+    const [r, g, b] = painter(8, 8, rng);
+    return [r, g, b];
+  };
+
+  const bone = sample('bone_block_top');
+  check('骨块是米色（R > G > B）', bone[0] > bone[1] && bone[1] > bone[2], bone.join(','));
+  check('骨块不是纯白', !(bone[0] === 255 && bone[1] === 255 && bone[2] === 255), bone.join(','));
+
+  const blue = sample('banner_blue');
+  check('蓝色旗帜是蓝的（B 最大）', blue[2] > blue[0] && blue[2] > blue[1], blue.join(','));
+  const red = sample('banner_red');
+  check('红色旗帜是红的（R 最大）', red[0] > red[1] && red[0] > red[2], red.join(','));
+  const glazed = sample('glazed_terracotta_blue');
+  check('蓝色带釉陶瓦是蓝的', glazed[2] > glazed[0], glazed.join(','));
+  const candle = sample('candle');
+  check('蜡烛不是纯白', !(candle[0] === 255 && candle[1] === 255 && candle[2] === 255), candle.join(','));
+
+  // 全表扫描：纯白只允许出现在"本来就是白色"的那几张（glass/white wool/...）。
+  // 修复前这里会有 95 张（骨块、16 色旗帜、16 色带釉陶瓦、蜡烛……）。
+  const allowedWhite = new Set([
+    'glass',
+    'wool_white',
+    'stained_glass_white',
+    'carpet_white',
+    'shulker_top_white',
+    'concrete_powder_white',
+  ]);
+  const unexpected = (TILE_ORDER as readonly string[]).filter((name) => {
+    if (allowedWhite.has(name)) return false;
+    const p = PAINTERS[name]?.(8, 8, rng);
+    return p !== undefined && p[0] === 255 && p[1] === 255 && p[2] === 255;
+  });
+  check('除了 6 张本来该白的，没有别的纯白贴图', unexpected.length === 0, unexpected.slice(0, 10).join(','));
+}
+
 console.log('\n[顺带确认这些方块的机制本身是完整的]');
 {
   // 骨块：9 骨粉 ↔ 1 骨块，两个方向都要有配方（只是显示问题，不是机制缺失）
