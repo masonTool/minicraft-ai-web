@@ -184,6 +184,7 @@ let inventoryTab: 'items' | 'creative' | 'recipes' = 'items';
 let recipePage = 0;
 let recipeSize: 2 | 3 = 2;
 let recipeQuery = '';
+let creativeQuery = '';
 let inventoryHint = '';
 let selectedSlot = 0;
 const inventory = new Inventory();
@@ -685,14 +686,35 @@ const showInventory = (): void => {
       }, (from, to) => handleDrop(from.index, to.index)));
     }
   } else if (inventoryTab === 'creative') {
-    for (let i = 0; i < creativeBlocks.length; i++) {
-      const id = creativeBlocks[i]!;
+    const query = creativeQuery.trim().toLowerCase();
+    const list = creativeBlocks.filter((id) => !query || itemLabel(id).toLowerCase().includes(query));
+    elements.push(button(gridX, panelY + 52, 150, 30, creativeQuery ? `搜索：${creativeQuery}` : '搜索方块', () => {
+      void askText(creativeQuery, 20).then((value) => {
+        if (value !== null) {
+          creativeQuery = value;
+          showInventory();
+        }
+      });
+    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6 }));
+    elements.push(button(gridX + 160, panelY + 52, 100, 30, '整理背包', () => {
+      const stacks = [];
+      for (let i = 0; i < 36; i++) {
+        const stack = inventory.get(i);
+        if (stack) stacks.push({ id: stack.id, count: stack.count });
+      }
+      stacks.sort((a, b) => a.id - b.id);
+      for (let i = 0; i < 36; i++) inventory.set(i, stacks[i] ?? null);
+      selectedSlot = 0;
+      showInventory();
+    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6 }));
+    for (let i = 0; i < list.length; i++) {
+      const id = list[i]!;
       elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, i, id, 0, false, () => {
         inventory.add(id, 64);
         showInventory();
       }));
     }
-    elements.push(text(gridX, gridY + 5 * (slotSize + gap) + 12, 640, 30, '点方块放入背包；物品页查看/选中', { fontSize: 15, color: 'rgba(200, 220, 235, 0.65)' }));
+    elements.push(text(gridX, gridY + 5 * (slotSize + gap) + 12, 640, 30, `点方块放入背包（${list.length} 项）`, { fontSize: 14, color: 'rgba(200, 220, 235, 0.65)' }));
   } else {
     const query = recipeQuery.trim().toLowerCase();
     const recipes = RECIPES.filter((recipe) => recipeFits(recipe, recipeSize)).filter((recipe) => {
@@ -1108,7 +1130,7 @@ const showWorlds = (): void => {
   const buttons: UiElement[] = visible.flatMap((world, index) => {
     const y = 140 + index * 52;
     return [
-      button(252, y, 380, 46, `${world.name}  ·  ${difficultyLabel(world.difficulty)} / ${modeLabel(world.gameMode)}`, () => void mountWorld(world), {
+      button(252, y, 380, 46, `${world.name} · ${difficultyLabel(world.difficulty)}/${modeLabel(world.gameMode)} · ${Math.round((world.playTime ?? 0) / 60)}m`, () => void mountWorld(world), {
         background: 'rgba(34, 48, 44, 0.95)',
         border: 'rgba(180, 225, 205, 0.38)',
         radius: 8,

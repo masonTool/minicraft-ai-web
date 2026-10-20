@@ -38,6 +38,7 @@
 - [x] Inventory 拖拽交换 + HUD 快捷栏选中
 - [x] 2x2/3x3 合成切换、产物、材料拖入/关闭返还（CraftingGrid）
 - [x] 配方书：2x2/3x3 过滤、搜索、6 条分页、产物图标/一键填格
+- [x] 创造栏搜索/整理；世界卡片累计游玩时间
 - [ ] Inventory 完整态：更多分类/拖拽细节
 - [ ] Settings / Inventory 按 Web 结构重做
 - [x] 小游戏构建脚本与包体（`build:minigame:v2`，2.2MB）
