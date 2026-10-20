@@ -252,6 +252,11 @@ class FakeWorld implements CommandContext {
   locateStructure(kind: string): { x: number; y: number; z: number; distance: number } | null {
     return kind === 'village' ? { x: 120, y: 64, z: -80, distance: 144 } : null;
   }
+  /** 方块信息（批次 479）：假世界只有 (0,64,0) 是石头，其余空气 */
+  blockInfoAt(x: number, y: number, z: number): { id: number; name: string; state: number } | null {
+    if (x === 0 && y === 64 && z === 0) return { id: 1, name: 'minecraft:stone', state: 0 };
+    return null;
+  }
   /** 选择器快照（批次 399）：这一套里没有生物，只交出玩家自己 */
   entities(): readonly CommandEntity[] {
     return [
@@ -781,6 +786,25 @@ console.log('\n[记分板（M23，批次 402）]');
     world.teams_.join('pair', 'B');
     return world.teams_.sameTeam('A', 'B') && !world.teams_.sameTeam('A', 'C');
   })());
+
+
+  // ---- /data（批次 479）
+  run('/data get entity @s');
+  check('读自己的位置', out.lastInfo.includes('Pos = ['), out.lastInfo);
+  check('回执里带类型', out.lastInfo.includes('player'), out.lastInfo);
+  run('/data get entity @e[type=zombie]');
+  check('没有匹配时报错', out.lastError.includes('没有匹配到'), out.lastError);
+  run('/data get block 0 64 0');
+  check('读方块', out.lastInfo.includes('minecraft:stone'), out.lastInfo);
+  check('回执带状态位', out.lastInfo.includes('状态位'), out.lastInfo);
+  run('/data get block 1 64 0');
+  check('空气格报错', out.lastError.includes('空气'), out.lastError);
+  run('/data get block 0 64');
+  check('坐标不全报用法', out.lastError.includes('用法'), out.lastError);
+  run('/data merge entity @s');
+  check('只支持 get（merge 明确拒绝）', out.lastError.includes('用法'), out.lastError);
+  run('/data get');
+  check('缺参数报用法', out.lastError.includes('用法'), out.lastError);
 
   run('/scoreboard players reset 甲');
   check('重置清空该人的分数', world.board.getScore('甲', 'kills') === null);

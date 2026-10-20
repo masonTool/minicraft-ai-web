@@ -10020,6 +10020,12 @@ class App {
       teams: () => this.teamState,
       // 批次 464：/locate structure —— 结构位置是"种子 + 候选规则"的纯函数，
       // 主线程用同一个生成器重算一遍即可（不需要 Worker 的生成器）
+      // 批次 479：/data get block —— 只交出"是什么、状态位多少"
+      blockInfoAt: (x, y, z) => {
+        const id = this.world.getBlock(x, y, z);
+        if (id === Block.AIR) return null;
+        return { id, name: blockDef(id).name, state: this.world.getBlockState(x, y, z) };
+      },
       locateStructure: (kind) => {
         const p = this.physics;
         const seed = this.worldConfig.seed;

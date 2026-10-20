@@ -158,6 +158,14 @@ export interface CommandContext {
    */
   locateStructure?(kind: string): { x: number; y: number; z: number; distance: number } | null;
 
+  /**
+   * 读一格的方块信息（批次 479，`/data get block`）。
+   *
+   * 返回 null = 空气或这一列还没加载。只交出"是什么、状态位多少"，
+   * 容器内容、告示牌文字这些**方块实体**数据不在这里（要另一条通道）。
+   */
+  blockInfoAt?(x: number, y: number, z: number): { id: number; name: string; state: number } | null;
+
   // ---- 进度（M7，批次 415）
   /** 队伍（批次 468，`/team` 用它） */
   teams(): Teams;
@@ -935,6 +943,14 @@ export const COMMANDS: readonly CommandSpec[] = [
     },
   },
   {
+    name: 'data',
+    usage: '/data get entity <选择器> | /data get block <x> <y> <z>',
+    description: '读实体/方块的数据（只做 get，不做 merge/modify）',
+    run(args, ctx, out) {
+      runData(args, ctx, out);
+    },
+  },
+  {
     name: 'team',
     usage: '/team add|remove|list|join|leave|modify …',
     description: '队伍：建队、拉人、改颜色与友好伤害（免伤/碰撞还没接，见 TASKS M23）',
@@ -1475,6 +1491,80 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
   }
 
   out.error('用法：/scoreboard objectives <add|remove|list|setdisplay> …');
+}
+
+/**
+ * `/data`（批次 479）。
+ *
+ * 只做 `get`：原版的 `merge` / `modify` 要"按路径写 NBT"，本项目的实体与方块
+ * 数据是强类型的字段（坐标、血量、状态位），没有一棵可写的 NBT 树——
+ * 与其造一棵假的，不如只把"读得到什么"做扎实。
+ *
+ * 读出来的是**人话**（Pos = [1.5, 64.0, -3.2]），不是 JSON：
+ * 这是个调试命令，玩家要看的是"它在哪、是什么"。
+ */
+function runData(args: string[], ctx: CommandContext, out: CommandFeedback): void {
+  const usage = '用法：/data get entity <选择器> | /data get block <x> <y> <z>';
+  const mode = (args[0] ?? '').toLowerCase();
+  const kind = (args[1] ?? '').toLowerCase();
+  if (mode !== 'get' || (kind !== 'entity' && kind !== 'block')) {
+    out.error(usage);
+    return;
+  }
+
+  if (kind === 'entity') {
+    const target = args[2];
+    if (!target) {
+      out.error('用法：/data get entity <选择器>');
+      return;
+    }
+    const position = ctx.position();
+    const state: ExecState = {
+      origin: { x: position.x, y: position.y, z: position.z },
+      executorId: selfEntityId(ctx),
+    };
+    // 名字（非选择器）也当实体名处理：原版 `@e` 与 `Steve` 都收
+    const selector = parseSelector(target);
+    if (typeof selector === 'string') {
+      out.error(selector);
+      return;
+    }
+    const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
+    if (found.length === 0) {
+      out.error(`没有匹配到实体：${target}`);
+      return;
+    }
+    // 最多列 5 只（原版也是"只显示第一个 + 数量"，这里折中）
+    for (const entity of found.slice(0, 5)) {
+      out.info(
+        `${entity.type}（${entity.name}）：Pos = [${entity.x.toFixed(1)}, ${entity.y.toFixed(1)}, ${entity.z.toFixed(1)}]`,
+         );
+    }
+    if (found.length > 5) out.info(`……还有 ${found.length - 5} 个匹配`);
+    return;
+  }
+
+  // ---- block
+  const rawX = args[2];
+  const rawY = args[3];
+  const rawZ = args[4];
+  const x = Number(rawX);
+  const y = Number(rawY);
+  const z = Number(rawZ);
+  if (rawX === undefined || rawY === undefined || rawZ === undefined || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+    out.error('用法：/data get block <x> <y> <z>（三个整数）');
+    return;
+  }
+  if (!ctx.blockInfoAt) {
+    out.error('这个维度读不到方块数据');
+    return;
+  }
+  const info = ctx.blockInfoAt(Math.floor(x), Math.floor(y), Math.floor(z));
+  if (!info) {
+    out.error(`(${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) 是空气或还没加载`);
+    return;
+  }
+  out.info(`(${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) = ${info.name}（状态位 ${info.state}）`);
 }
 
 /**
