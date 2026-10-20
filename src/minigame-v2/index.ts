@@ -1333,6 +1333,14 @@ const showContainer = (): void => {
       fontSize: 13,
       color: 'rgba(200,220,235,0.7)',
     }),
+    ...(isFurnace
+      ? [
+          text(panelX + 26, panelY + 62, panelW - 52, 24, `熔炼进度 ${Math.round((openedContainer as Furnace).cookRatio * 100)}%`, {
+            fontSize: 14,
+            color: '#9fe0ff',
+          }),
+        ]
+      : []),
   ];
   for (let i = 0; i < slots; i++) {
     const stack = openedContainer.get(i);
@@ -1855,6 +1863,7 @@ let fps = 0;
 let fpsFrames = 0;
 let fpsStartedAt = performance.now();
 let lastDebugHud = 0;
+let lastFurnaceUi = 0;
 
 const frame = (): void => {
   const now = performance.now();
@@ -1912,6 +1921,14 @@ const frame = (): void => {
       sneaking,
     }),
   );
+
+  if (started && openedContainer instanceof Furnace) {
+    openedContainer.tick(dt);
+    if (containerOpen && now - lastFurnaceUi > 500) {
+      lastFurnaceUi = now;
+      showContainer();
+    }
+  }
 
   if (!started) {
     renderer.clear();
