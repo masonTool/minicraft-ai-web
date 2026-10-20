@@ -643,8 +643,10 @@ console.log('\n[结构里的生物（批次 457）]');
     tableKinds.join(','),
   );
   check(
-    '四种主世界结构都有生物表',
-    ['ocean_monument', 'woodland_mansion', 'pillager_outpost', 'village'].every((kind) => tableKinds.includes(kind)),
+    '五种主世界结构都有生物表（批次 466 加了雪屋地下室）',
+    ['ocean_monument', 'woodland_mansion', 'pillager_outpost', 'village', 'igloo'].every((kind) =>
+      tableKinds.includes(kind),
+    ),
   );
 
   // ② 映射：每种结构生物都能查到 MobType，且自身都不自然刷
@@ -1214,6 +1216,64 @@ console.log('\n[/locate structure 的结构检索（批次 464）]');
     JSON.stringify(nearestStructure('village', 300, 400, world, seed)),
     JSON.stringify(nearestStructure('village', 300, 400, world, seed)),
   );
+}
+
+console.log('\n[雪屋地下室（批次 466）]');
+{
+  const seed = 20261014;
+  const world = new OverworldGenerator(seed);
+  let igloo = null;
+  for (let cellZ = -8; cellZ <= 8 && !igloo; cellZ++) {
+    for (let cellX = -8; cellX <= 8 && !igloo; cellX++) {
+      igloo = structureInstanceForTest('igloo', cellX, cellZ, world, seed);
+    }
+  }
+  check('找得到一个雪屋', igloo !== null);
+  if (igloo) {
+    const cx0 = Math.floor((igloo.x - 8) / 16);
+    const cx1 = Math.floor((igloo.x + 8) / 16);
+    const cz0 = Math.floor((igloo.z - 8) / 16);
+    const cz1 = Math.floor((igloo.z + 8) / 16);
+    let ladders = 0;
+    let brewing = 0;
+    let iglooChests = 0;
+    let undergroundAir = 0;
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const blocks = generateChunkBlocks(cx, cz, seed);
+        const states = takeGeneratedStates() ?? new Uint8Array(blocks.length);
+        for (let y = -64; y < 200; y++) {
+          for (let z = 0; z < 16; z++) {
+            for (let x = 0; x < 16; x++) {
+              const index = Chunk.index(x, y, z);
+              const id = blocks[index]!;
+              if (id === Block.LADDER) ladders++;
+              else if (id === Block.BREWING_STAND) brewing++;
+              else if (id === Block.CHEST && chestLootIndex(states[index]!) === lootTableIndex('igloo')) iglooChests++;
+              // 地下室在地面下 5 格：那一层的空气就是"屋子"
+              else if (id === Block.AIR && y === igloo.y - 4) undergroundAir++;
+            }
+          }
+        }
+      }
+    }
+    check('竖井里有梯子（5 格以上）', ladders >= 5, `${ladders} 格`);
+    equal('地下室有一台酿造台', brewing, 1);
+    check('箱子至少两只（小屋 + 地下室）', iglooChests >= 2, `${iglooChests} 只`);
+    check('地下室是空的（能站人）', undergroundAir > 20, `${undergroundAir} 格空气`);
+
+    // 僵尸村民的锚点落在地下室里
+    const creatures = structureCreatureSpawnsAt(
+      Math.floor(igloo.x / 16),
+      Math.floor(igloo.z / 16),
+      world,
+      seed,
+    ).filter((spawn) => spawn.kind === 'zombie_villager');
+    check('地下室里排出了一只僵尸村民', creatures.length >= 1, `${creatures.length} 只`);
+    if (creatures[0]) {
+      equal('锚点高度 = 地面下 4 格', creatures[0].y, igloo.y - 4);
+    }
+  }
 }
 
 console.log(`\n结构测试：${passed} 通过 / ${failed} 失败`);

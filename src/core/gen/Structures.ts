@@ -1840,6 +1840,32 @@ function buildIgloo(w: FeatureWriter, s: StructureInstance): void {
   box(w, s.x - 2, base + 5, s.z - 1, s.x + 2, base + 5, s.z + 1, Block.SNOW_BLOCK);
   lootChest(w, s.x + 2, base + 1, s.z - 1, 'igloo');
   torch(w, s.x - 2, base + 2, s.z);
+
+  // ---- 地下室（批次 466）：原版雪屋下面那间"关着村民的小屋"。
+  // 这里是 7×5×3 的石室 + 一只箱子 + 一台酿造台，**僵尸村民由结构生物通道生成**
+  //（`StructureCreatures` 的 igloo 锚点）。村子里的"活村民"不放——那要走
+  // `Villager` 子类，与村庄人口同一套机制，不是这一批的范围。
+  const uy = base - 5;
+  // 地板 + 四壁 + 天花
+  for (let y = uy; y <= uy + 3; y++) {
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        const edge = Math.abs(dx) === 3 || Math.abs(dz) === 2 || y === uy || y === uy + 3;
+        if (edge) w.fill(s.x + dx, y, s.z + dz, Block.COBBLESTONE);
+      }
+    }
+  }
+  // 内部空间
+  clear(w, s.x - 2, uy + 1, s.z - 1, s.x + 2, uy + 2, s.z + 1);
+  // 竖井：从屋里 (x+2, z+1) 往下 5 格，梯子贴东墙
+  for (let y = uy + 1; y <= base; y++) {
+    w.fill(s.x + 2, y, s.z + 1, Block.AIR);
+    w.fillState(s.x + 2, y, s.z + 1, Block.LADDER, withFacing(0, 1));
+  }
+  // 地下室的箱子（`igloo` 表里有金苹果）与酿造台
+  lootChest(w, s.x - 2, uy + 1, s.z - 1, 'igloo');
+  w.fill(s.x + 1, uy + 1, s.z - 1, Block.BREWING_STAND);
+  torch(w, s.x, uy + 2, s.z + 1);
 }
 
 // ---------------------------------------------------------------- 海底废墟（批次 348）

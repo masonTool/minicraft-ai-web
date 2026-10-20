@@ -35,6 +35,7 @@ export type StructureCreatureKind =
   | 'pillager'
   | 'iron_golem'
   | 'shulker'
+  | 'zombie_villager'
   | 'piglin'
   | 'piglin_brute'
   | 'wither_skeleton';
@@ -87,6 +88,9 @@ export const STRUCTURE_CREATURES: Readonly<Partial<Record<StructureKind, readonl
   ],
   // 村庄（buildVillage）：水井旁边站一只铁傀儡（原版村庄的守卫）
   village: [{ kind: 'iron_golem', dx: 3, dz: 0, dy: 1 }],
+  // 雪屋地下室（批次 466）：原版那间石室里关着一只僵尸村民
+  // （地下室在地面下 5 格，内部从 base-4 起，所以 dy = -4）
+  igloo: [{ kind: 'zombie_villager', dx: 0, dz: 0, dy: -4 }],
 };
 
 /** 某个结构该有哪些生物（没有就返回空数组） */
