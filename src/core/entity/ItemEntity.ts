@@ -19,6 +19,10 @@ import { Entity, entityIntersectsBox, type DroppedExtras, type EntityContext } f
 import { moveBody, type MovingBody } from '../physics/EntityMotion.ts';
 import { Block } from '../registry/blocks.ts';
 import { isFireproofItem } from '../registry/items.ts';
+import { flowPush, waterFlowAt } from '../world/FluidFlow.ts';
+
+/** 老离线桩不传 `getState` 时的兜底（与 Mob 同一口径） */
+const NO_BLOCK_STATE = (): number => 0;
 
 const GRAVITY = 32;
 const MAX_FALL_SPEED = 20;
@@ -103,6 +107,19 @@ export class ItemEntity extends Entity implements MovingBody {
       const waterDrag = Math.pow(0.8, dt * 20);
       this.vx *= waterDrag;
       this.vz *= waterDrag;
+      // 水流推动（B8 尾巴）：与生物共用 `flowPush`，只叠水平加速度；
+      // 竖直不接（掉落物本来就有浮力，再叠下压会把水里的东西按到底）
+      const flow = waterFlowAt(
+        { getBlock: ctx.getBlock, getState: ctx.getState ?? NO_BLOCK_STATE },
+        this.x,
+        this.y + 0.12,
+        this.z,
+      );
+      if (flow) {
+        const pushed = flowPush(this.vx, this.vz, flow, dt);
+        this.vx = pushed.x;
+        this.vz = pushed.z;
+      }
     } else {
       this.vy -= GRAVITY * dt;
       if (this.vy < -MAX_FALL_SPEED) this.vy = -MAX_FALL_SPEED;

@@ -12,6 +12,7 @@
  * 运行：npm run test:physics
  */
 
+import { readFileSync } from 'node:fs';
 import {
   FLY_RAMP_SECONDS,
   FLY_SPEED,
@@ -26,7 +27,13 @@ import {
 } from '../src/core/physics/PlayerPhysics.ts';
 import type { PhysicsWorld } from '../src/core/physics/PlayerPhysics.ts';
 import { moveBody } from '../src/core/physics/EntityMotion.ts';
-import { FLOW_DRIFT_SPEED, waterFlowAt, type FlowWorld } from '../src/core/world/FluidFlow.ts';
+import {
+  FLOW_DRIFT_SPEED,
+  FLOW_ENTITY_ACCEL,
+  flowPush,
+  waterFlowAt,
+  type FlowWorld,
+} from '../src/core/world/FluidFlow.ts';
 import { Block } from '../src/core/registry/blocks.ts';
 import { withFluidLevel } from '../src/core/registry/blockState.ts';
 
@@ -585,6 +592,21 @@ console.log('\n[水流推动（批次 447）]');
   // 不是水 → null
   cells.clear();
   check('不是水就不推', waterFlowAt(flowWorld, 0.5, 0.5, 0.5) === null);
+
+  // ---- 生物/掉落物：只叠加速度，不覆盖它们自己的移动意图
+  const flowRight = { x: FLOW_DRIFT_SPEED, y: 0, z: 0 };
+  const pushedMob = flowPush(2, -1, flowRight, 0.5);
+  check('顺流时在原速度上加速（不是直接改成漂流速度）', pushedMob.x > 2 && pushedMob.z === -1, JSON.stringify(pushedMob));
+  check('静水（flow=null）原样返回', flowPush(2, -1, null, 0.5).x === 2);
+  check('dt=0 不产生位移', flowPush(2, -1, flowRight, 0).x === 2);
+  const upstreamMob = flowPush(2, 0, { x: -FLOW_DRIFT_SPEED, y: 0, z: 0 }, 1 / 60);
+  check('逆流仍保留正向速度（不会只能顺流）', upstreamMob.x > 0, JSON.stringify(upstreamMob));
+  check('推力强度是有限值', FLOW_ENTITY_ACCEL > 0 && FLOW_ENTITY_ACCEL < 20);
+
+  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const itemSrc = readFileSync(new URL('../src/core/entity/ItemEntity.ts', import.meta.url), 'utf8');
+  check('生物移动前调用 flowPush', mobSrc.includes('flowPush(this.vx, this.vz, flow, dt)'));
+  check('掉落物在水里也调用 flowPush', itemSrc.includes('flowPush(this.vx, this.vz, flow, dt)'));
 
   // ---- 接到玩家物理上：不按方向时被水带着走，静水里原地不动
   const pool = (drift: number): PhysicsWorld => ({

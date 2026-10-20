@@ -15,6 +15,7 @@ import { Entity, type EntityContext } from './Entity.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
 import { Block, blockDef, woolId } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
+import { flowPush, waterFlowAt } from '../world/FluidFlow.ts';
 import { StatusEffects, type EffectId } from '../survival/StatusEffects.ts';
 import {
   ambientIntervalFor,
@@ -43,6 +44,9 @@ import {
 export const WOOL_REGROW_SECONDS = 30;
 
 export const CREEPER_FUSE_TIME = 1.5;
+
+/** 老离线桩不传 `getState` 时的兜底（水流只读液面等级，没有状态就按 0） */
+const NO_BLOCK_STATE = (): number => 0;
 
 /** 近战出手动画时长（秒，J12）：一次挥臂 0.35 秒，足够看清但不拖慢 1 秒的出手节奏 */
 export const ATTACK_ANIM_SECONDS = 0.35;
@@ -825,6 +829,23 @@ export class Mob extends Entity {
       this.vy -= GRAVITY * dt;
       if (this.vy < -60) this.vy = -60;
       this.applyClimbing(ctx);
+    }
+
+    // 水流推动（B8 尾巴）：只叠**水平**加速度，不覆盖 AI 写的移动意图。
+    // 竖直那一份不接：水生生物本来就有浮力，再叠"上方是水就往下按"会让鱿鱼沉底
+    // （瀑布下压只保留给玩家，见 `PlayerPhysics`）。掉落物走同一条 `flowPush`。
+    if (this.inWater(ctx)) {
+      const flow = waterFlowAt(
+        { getBlock: ctx.getBlock, getState: ctx.getState ?? NO_BLOCK_STATE },
+        this.x,
+        this.y + this.height * 0.5,
+        this.z,
+      );
+      if (flow) {
+        const pushed = flowPush(this.vx, this.vz, flow, dt);
+        this.vx = pushed.x;
+        this.vz = pushed.z;
+      }
     }
 
     moveBody(ctx.world, this, this.vx * dt, this.vy * dt, this.vz * dt);
