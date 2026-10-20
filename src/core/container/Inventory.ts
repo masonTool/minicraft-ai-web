@@ -50,6 +50,14 @@ export interface ItemStack {
    */
   contents?: (ItemStack | null)[];
   /**
+   * 磁石绑定（批次 453）：**指南针**指向哪一块磁石。
+   *
+   * 原版记在物品 NBT 里（`LodestonePos` + `LodestoneDimension`）。这里只存
+   * 坐标 + 维度——指南针的读数只看这两个数（见 `main.updateToolHud`）。
+   * 绑在两个不同磁石上的指南针**不能并堆**（`sameExtras` 会拦）。
+   */
+  lodestone?: { x: number; y: number; z: number; dimension: string };
+  /**
    * **书页**（批次 190，书与笔 / 成书）：每一页一段文字。
    *
    * 与 `contents` 一样是"整块数据"，但它是**纯文本**，所以校验简单得多：
@@ -130,6 +138,23 @@ export function restoreStack(raw: unknown, depth = 1): ItemStack | null {
   // 地图（批次 196）：中心与位图都过一遍校验（位图长度不对就换成全空）
   const map = sanitizeMap(candidate.map);
   if (map) stack.map = map;
+  // 磁石绑定（批次 453）：三个坐标都得是有限数，维度得是三个之一；
+  // 坏存档只丢掉这一个字段，不影响指南针本身
+  const lodestone = candidate.lodestone;
+  if (
+    lodestone &&
+    Number.isFinite(lodestone.x) &&
+    Number.isFinite(lodestone.y) &&
+    Number.isFinite(lodestone.z) &&
+    (lodestone.dimension === 'overworld' || lodestone.dimension === 'nether' || lodestone.dimension === 'end')
+  ) {
+    stack.lodestone = {
+      x: Math.floor(lodestone.x),
+      y: Math.floor(lodestone.y),
+      z: Math.floor(lodestone.z),
+      dimension: lodestone.dimension,
+    };
+  }
   return stack;
 }
 
@@ -196,6 +221,8 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
   if (stack.firework !== undefined) extras.firework = { flight: stack.firework.flight, colors: [...stack.firework.colors] };
   // 地图：`map` 里的 `bits` 是字符串（不可变），整体拷一份对象即可
   if (stack.map !== undefined) extras.map = { ...stack.map };
+  // 磁石绑定（批次 453）：四个原始值，拷一份对象即可
+  if (stack.lodestone !== undefined) extras.lodestone = { ...stack.lodestone };
   return extras;
 }
 
@@ -233,6 +260,12 @@ export function sameExtras(a: Partial<ItemStack>, b: Partial<ItemStack>): boolea
   if ((a.map?.originX ?? 0) !== (b.map?.originX ?? 0)) return false;
   if ((a.map?.originZ ?? 0) !== (b.map?.originZ ?? 0)) return false;
   if ((a.map?.bits ?? '') !== (b.map?.bits ?? '')) return false;
+  // 磁石绑定（批次 453）：绑在**不同磁石**上的两枚指南针不能并堆，
+  // 否则"我这枚指家的指南针"会被并进"指矿场的那枚"，读数当场变掉
+  if ((a.lodestone?.x ?? 0) !== (b.lodestone?.x ?? 0)) return false;
+  if ((a.lodestone?.y ?? 0) !== (b.lodestone?.y ?? 0)) return false;
+  if ((a.lodestone?.z ?? 0) !== (b.lodestone?.z ?? 0)) return false;
+  if ((a.lodestone?.dimension ?? '') !== (b.lodestone?.dimension ?? '')) return false;
   const from = a.enchants ?? {};
   const to = b.enchants ?? {};
   const keys = new Set([...Object.keys(from), ...Object.keys(to)]);

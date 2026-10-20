@@ -1922,6 +1922,13 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['HH', 'HH'],
     key: { H: Item.HONEY_BOTTLE },
   },
+  // ---- 磁石（批次 453）：8 雕纹石砖 + 1 下界合金锭（原版配方）
+  {
+    kind: 'shaped',
+    result: { id: Block.LODESTONE, count: 1 },
+    pattern: ['SSS', 'SNS', 'SSS'],
+    key: { S: Block.CHISELED_STONE_BRICKS, N: Item.NETHERITE_INGOT },
+  },
   // ---- 磨制玄武岩 / 蓝冰（批次 439）
   {
     kind: 'shaped',

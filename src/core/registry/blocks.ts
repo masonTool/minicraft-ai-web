@@ -271,6 +271,7 @@ const BASE_SPECS: readonly BlockSpec[] = [
   // 蜂蜜块（批次 450）：站在上面**跳不起来**、贴着侧面下滑被限速、摔上去只受 20% 伤害。
   // 原版还有"被活塞推动时粘走相邻方块"——本项目没有"活塞推方块实体"那条路，记在差异里
   { id: 696, name: 'minecraft:honey_block', tiles: ['honey_block', 'honey_block', 'honey_block'] },
+
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -2152,6 +2153,8 @@ export const SPONGE_ID = 694;
 export const WET_SPONGE_ID = 695;
 /** 蜂蜜块（批次 450，接在海绵之后） */
 export const HONEY_BLOCK_ID = 696;
+/** 磁石（批次 453）：接在 16 色潜影盒（697~712）之后 */
+export const LODESTONE_ID = 713;
 
 const SHULKER_BOX_SPECS: readonly BlockSpec[] = [
   {
@@ -2183,6 +2186,19 @@ export const SHULKER_BOX_IDS: readonly number[] = [
   SHULKER_BOX_ID,
   ...COLORED_SHULKER_SPECS.map((spec) => spec.id),
 ];
+
+/**
+ * 磁石（批次 453）。
+ *
+ * id **713**：697~712 被 16 色潜影盒占着（批次 451），所以接在最后。
+ * `SPECS` 末尾会按 id 排序，写在数组哪个位置都行——但 id 必须对得上，
+ * 否则构建表的"id 连续"校验会当场抛错（这是好事，宁可启动失败也不要静默错位）。
+ */
+const LODESTONE_SPEC: BlockSpec = {
+  id: LODESTONE_ID,
+  name: 'minecraft:lodestone',
+  tiles: ['lodestone_top', 'lodestone_side', 'lodestone_side'],
+};
 
 const SHULKER_BOX_ID_SET = new Set<number>(SHULKER_BOX_IDS);
 
@@ -3343,6 +3359,7 @@ const SPECS: readonly BlockSpec[] = [
   ...ENDER_CHEST_SPECS,
   ...SHULKER_BOX_SPECS,
   ...COLORED_SHULKER_SPECS,
+  LODESTONE_SPEC,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
   ...BED_SPECS,
@@ -3903,6 +3920,8 @@ export const Block = {
   WET_SPONGE: WET_SPONGE_ID,
   // ---- 蜂蜜块（批次 450）：粘住实体（跳跃取消 / 贴面下滑限速 / 摔落减伤）
   HONEY_BLOCK: HONEY_BLOCK_ID,
+  // ---- 磁石（批次 453）：手持指南针右键它，指南针就改指这里
+  LODESTONE: LODESTONE_ID,
   // ---- 瓜藤（批次 77，见 `STEM_SPECS`）：8 阶段 + 结果的茎
   PUMPKIN_STEM_STAGE0: PUMPKIN_STEM_ID_START,
   MELON_STEM_STAGE0: MELON_STEM_ID_START,
@@ -4465,6 +4484,8 @@ HARDNESS.set(Block.SPONGE, 0.6);
 HARDNESS.set(Block.WET_SPONGE, 0.6);
 // 蜂蜜块（批次 450）：原版硬度 0（徒手一拍就掉，但挖起来黏糊糊的慢）
 HARDNESS.set(Block.HONEY_BLOCK, 0);
+// 磁石（批次 453）：原版 3.5，**必须用镐**（徒手挖得动但一无所获）
+HARDNESS.set(Block.LODESTONE, 3.5);
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);
 // 瓜藤（批次 77）：与作物一样一碰就掉（茎与结果的茎都是）

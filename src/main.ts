@@ -8493,13 +8493,20 @@ class App {
   private updateToolHud(): void {
     const held = this.heldItemId ?? null;
     if (held === Item.COMPASS) {
+      // 磁石（批次 453）：绑过磁石的指南针指向那块磁石，没绑过才指出生点。
+      // 原版跨维度时指针会乱转；这里按"指不到"处理（角度 0、距离 0），
+      // 因为"随机乱转"在这个 HUD 里只会让人以为坏了
+      const bound = this.inventory.get(this.hotbarIndex)?.lodestone;
+      const sameDimension = bound ? bound.dimension === this.dimension : false;
       const [sx, , sz] = this.spawnPoint;
-      const dx = sx - this.physics.x;
-      const dz = sz - this.physics.z;
+      const tx = bound && sameDimension ? bound.x : sx;
+      const tz = bound && sameDimension ? bound.z : sz;
+      const dx = tx - this.physics.x;
+      const dz = tz - this.physics.z;
       this.toolHud.update(
         'compass',
-        compassAngleDeg(this.yaw, dx, dz),
-        horizontalDistance(this.physics.x, this.physics.z, sx, sz),
+        bound && !sameDimension ? 0 : compassAngleDeg(this.yaw, dx, dz),
+        bound && !sameDimension ? 0 : horizontalDistance(this.physics.x, this.physics.z, tx, tz),
       );
       return;
     }
@@ -10786,6 +10793,30 @@ class App {
    * 玻璃挡 0 级——这两个在原版都**不挡**箱子，用 `opaque` 会误伤。
    */
   /**
+   * 磁石绑定（批次 453）：手持指南针右键磁石 → 把指南针的指向钉在这一格。
+   *
+   * 原版把坐标记在**物品**上（不是"玩家记住"），所以这里改的是主手那一份栈：
+   * 把指南针丢给别人、放进箱子，指向会跟着走（这也是 `sameExtras` 要拦并堆的原因）。
+   */
+  private bindLodestone(x: number, y: number, z: number): boolean {
+    if (this.heldItemId !== Item.COMPASS) return false;
+    if (this.world.getBlock(x, y, z) !== Block.LODESTONE) return false;
+    const stack = this.inventory.get(this.hotbarIndex);
+    if (!stack || stack.id !== Item.COMPASS) return false;
+    const already =
+      stack.lodestone?.x === x &&
+      stack.lodestone?.y === y &&
+      stack.lodestone?.z === z &&
+      stack.lodestone.dimension === this.dimension;
+    stack.lodestone = { x, y, z, dimension: this.dimension };
+    this.refreshHotbar();
+    if (!already) this.chat.push('指南针已绑定到这块磁石', 'system');
+    this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.vibrate(6);
+    return true;
+  }
+
+  /**
    * 海绵吸水（批次 449）：吸到了就变成湿海绵。
    *
    * 吸水那一侧走世界的 `setBlockAndUpdate`（不是裸 `setBlock`）：
@@ -11436,6 +11467,14 @@ class App {
     }
 
     if (this.scrapeCopper(this.hit.x, this.hit.y, this.hit.z)) {
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
+    // 磁石（批次 453）：手持指南针右键磁石 → 把指向钉在这一格。
+    // 排在放置之前：指南针不是方块物品，落到下面只会什么都不做
+    if (this.bindLodestone(this.hit.x, this.hit.y, this.hit.z)) {
+      this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN;
       return;
     }

@@ -5727,6 +5727,30 @@ PAINTERS.sponge = spongePainter([196, 190, 92], 0.68);
 PAINTERS.wet_sponge = spongePainter([116, 146, 132], 0.64);
 
 /**
+ * 磁石（批次 453）：石灰底 + 一道深色凹槽。
+ *
+ * 原版顶面是一个"刻出来的圆环"、侧面是一条竖槽——这个分辨率下画不出圆环的层次，
+ * 用"环形的暗带 + 中心亮一档"表达就够了：玩家看的是"这块石头中间有个方槽"。
+ */
+PAINTERS.lodestone_top = (x, y, rng) => {
+  const STONE: readonly [number, number, number] = [128, 126, 124];
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  // 凹槽：半径 3~5 的一圈压暗，中心反而亮一点（刻出来的底）
+  const scale = r < 2.6 ? 0.86 : r < 5.4 ? 0.66 : 1;
+  const v = scale * (1 + rng() * 0.08 - 0.04);
+  return [clamp255(STONE[0] * v), clamp255(STONE[1] * v), clamp255(STONE[2] * v), 255];
+};
+
+PAINTERS.lodestone_side = (x, y, rng) => {
+  const STONE: readonly [number, number, number] = [128, 126, 124];
+  // 竖槽：正中 2 像素宽，上下贯通；槽底按 4 像素一段略有明暗，
+  // 不然整条槽是一条死板的直线（看着像贴图错位而不是"刻出来的槽"）
+  const groove = x === 7 || x === 8;
+  const v = (groove ? 0.62 + (y % 4) * 0.025 : 1) * (1 + rng() * 0.08 - 0.04);
+  return [clamp255(STONE[0] * v), clamp255(STONE[1] * v), clamp255(STONE[2] * v), 255];
+};
+
+/**
  * 16 色潜影盒（批次 451）：与无色那套**同一个画法**，只把基色换成染料色。
  *
  * 基色直接取 `DYE_COLORS`（与羊毛/床/染色玻璃同一张表），

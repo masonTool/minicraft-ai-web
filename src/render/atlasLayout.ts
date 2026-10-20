@@ -835,6 +835,9 @@ export const TILE_ORDER = [
   'wet_sponge',
   // 蜂蜜块（批次 450）：琥珀色 + 六边形蜂巢纹（顶面/侧面同一张，原版侧面也带纹）
   'honey_block',
+  // 磁石（批次 453）：顶面一圈凹槽、侧面一条竖槽（原版顶面是"刻出来的圆环"）
+  'lodestone_top',
+  'lodestone_side',
   // 瓜藤（批次 77）：8 个阶段各一张（茎越长越高）+ 结果的那一张
   'pumpkin_stem_stage0',
   'pumpkin_stem_stage1',

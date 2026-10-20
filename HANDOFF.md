@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1013（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1014（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **190**、进行中 **80**、待办 18 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -106,6 +106,11 @@ npm run dev            # http://localhost:5173
   ② `stripped_log` 6 种：已有，审计只认 `oak_stripped_log` 而实际叫
   `stripped_oak_log`（这就是 B54 记的命名坑）。修完审计只剩
   `mud`（1.19 不做）+ `lodestone` + `respawn_anchor`。
+- 批次 453（内容）：**磁石**。绑定坐标记在**物品**上（`ItemStack.lodestone`，
+  四处数据链路一起补：`restoreStack` / `stackExtras` / `sameExtras` / 深拷），
+  手持指南针右键磁石即绑定，HUD 改指磁石（跨维度按"指不到"处理）。
+  配方 8 雕纹石砖 + 1 下界合金锭。方块 **710 → 711**、配方 **687**，
+  `test:inventory` 77 → **89**。
 - ⚠️ **批次编号冲突（第二次）**：并发会话占用了 **295-1~295-4**。本轮两个提交正式编号是
   **297（容器暂停）/ 298（目标框界面）**；旧 commit message 里的 295/296 是撞号。
 - ⚠️ **批次编号冲突（第三次）**：并发会话占用了 **303**。本轮正式编号 **304**；

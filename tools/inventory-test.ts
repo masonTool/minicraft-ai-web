@@ -6,7 +6,9 @@
  * 比开浏览器验证快得多，也不必担心渲染干扰。
  */
 
-import { Block, BLOCKS } from '../src/core/registry/blocks.ts';
+import { Block, BLOCKS, blockDef } from '../src/core/registry/blocks.ts';
+import { blockLabel } from '../src/core/registry/itemNames.ts';
+import { restoreStack, sameExtras, stackExtras } from '../src/core/container/Inventory.ts';
 import {
   ITEMS,
   Item,
@@ -262,6 +264,46 @@ console.log('\n[开发期物资：开关 / 去重 / 非堆叠发放（批次 181
   check('清单比 36 格多（所以确实会有放不下的）', DEV_KIT_ITEMS.length > TOTAL_SLOTS);
   check('放不下时如实报告（控制台用）', result.skipped.length > 0);
   equal('放进去的件数 = 36 - 跳过的件数', result.granted + result.skipped.length, DEV_KIT_ITEMS.length);
+}
+
+console.log('\n[磁石与指南针绑定（批次 453）]');
+{
+  // ① 方块本身
+  equal('磁石的注册名', blockDef(Block.LODESTONE).name, 'minecraft:lodestone');
+  equal('磁石中文名', blockLabel(Block.LODESTONE), '磁石');
+  check('磁石是实心整格', blockDef(Block.LODESTONE).solid);
+
+  // ② 绑定数据：进存档、读回来还在
+  const raw = { id: Item.COMPASS, count: 1, lodestone: { x: 12, y: 64, z: -3, dimension: 'overworld' } };
+  const restored = restoreStack(raw);
+  equal('坐标读回来', restored?.lodestone?.x, 12);
+  equal('维度读回来', restored?.lodestone?.dimension, 'overworld');
+  check('整数化（小数坐标被 floor）', restoreStack({ ...raw, lodestone: { x: 12.9, y: 64, z: -3, dimension: 'nether' } })?.lodestone?.x === 12);
+  check('坏维度被丢掉，指南针本身还在', restoreStack({ ...raw, lodestone: { x: 1, y: 2, z: 3, dimension: 'moon' } })?.lodestone === undefined);
+  check('坏坐标被丢掉', restoreStack({ ...raw, lodestone: { x: Number.NaN, y: 2, z: 3, dimension: 'end' } })?.lodestone === undefined);
+
+  // ③ 搬运要深拷：改一件不能动到另一件
+  const original = { id: Item.COMPASS, count: 1, lodestone: { x: 1, y: 2, z: 3, dimension: 'overworld' } };
+  const copy = { id: Item.COMPASS, count: 1, ...stackExtras(original) };
+  if (copy.lodestone) copy.lodestone.x = 99;
+  equal('拷出去的那份改了，原件不变', original.lodestone.x, 1);
+
+  // ④ 并堆判定：绑在不同磁石上的两枚指南针不能并成一堆
+  check(
+    '绑不同磁石 → 不能并堆',
+    !sameExtras(
+      { lodestone: { x: 1, y: 2, z: 3, dimension: 'overworld' } },
+      { lodestone: { x: 9, y: 2, z: 3, dimension: 'overworld' } },
+    ),
+  );
+  check(
+    '绑同一块磁石 → 可以并堆',
+    sameExtras(
+      { lodestone: { x: 1, y: 2, z: 3, dimension: 'overworld' } },
+      { lodestone: { x: 1, y: 2, z: 3, dimension: 'overworld' } },
+    ),
+  );
+  check('一枚绑了、一枚没绑 → 不能并堆', !sameExtras({ lodestone: { x: 1, y: 2, z: 3, dimension: 'overworld' } }, {}));
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
