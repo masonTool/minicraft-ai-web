@@ -128,7 +128,16 @@ hairMesh.position.y = 1.83;
 const beardMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.16, 0.1), hairMaterial);
 beardMesh.position.set(0, 1.4, -0.27);
 beardMesh.visible = false;
-playerModel.add(headMesh, bodyMesh, leftArm, rightArm, leftLeg, rightLeg, hairMesh, beardMesh);
+const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x3b2a1a });
+const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.04), eyeMaterial);
+leftEye.position.set(-0.12, 1.62, -0.26);
+const rightEye = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.04), eyeMaterial);
+rightEye.position.set(0.12, 1.62, -0.26);
+const capeMaterial = new THREE.MeshBasicMaterial({ color: 0x8a2b2b });
+const capeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.9, 0.06), capeMaterial);
+capeMesh.position.set(0, 1.05, 0.18);
+capeMesh.visible = false;
+playerModel.add(headMesh, bodyMesh, leftArm, rightArm, leftLeg, rightLeg, hairMesh, beardMesh, leftEye, rightEye, capeMesh);
 playerModel.visible = false;
 scene.add(playerModel);
 
@@ -140,6 +149,8 @@ const applyPlayerAppearance = (): void => {
   hairMesh.visible = settings.hairStyle !== 'none';
   hairMesh.scale.set(1, settings.hairStyle === 'long' ? 2.2 : 1, 1);
   beardMesh.visible = settings.beard;
+  eyeMaterial.color.set(settings.eyeColor);
+  capeMesh.visible = settings.cape;
 };
 
 const outline = new THREE.LineSegments(
@@ -221,6 +232,8 @@ interface V2Settings {
   hairStyle: 'none' | 'short' | 'long';
   hairColor: string;
   beard: boolean;
+  eyeColor: string;
+  cape: boolean;
 }
 
 const SETTINGS_KEY = 'wx.v2.settings';
@@ -242,6 +255,8 @@ const defaultSettings: V2Settings = {
   hairStyle: 'short',
   hairColor: '#3b2a1a',
   beard: false,
+  eyeColor: '#3b2a1a',
+  cape: false,
 };
 const readSettings = (): V2Settings => {
   try {
@@ -266,6 +281,8 @@ const readSettings = (): V2Settings => {
       hairStyle: parsed.hairStyle === 'none' || parsed.hairStyle === 'long' ? parsed.hairStyle : 'short',
       hairColor: typeof parsed.hairColor === 'string' ? parsed.hairColor : '#3b2a1a',
       beard: parsed.beard === true,
+      eyeColor: typeof parsed.eyeColor === 'string' ? parsed.eyeColor : '#3b2a1a',
+      cape: parsed.cape === true,
     };
   } catch {
     return { ...defaultSettings };
@@ -416,12 +433,25 @@ const showSettings = (): void => {
       settings.beard = !settings.beard;
       apply();
     }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
+    rows.push(button(leftX, topY + gapY * 3, w, 44, '眼睛颜色', () => {
+      settings.eyeColor = cycle(hairColors, settings.eyeColor);
+      apply();
+    }, { background: settings.eyeColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
+    rows.push(button(rightX, topY + gapY * 3, w, 44, settings.cape ? '披风：开' : '披风：关', () => {
+      settings.cape = !settings.cape;
+      apply();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
 
     const previewX = panelX + panelW - 210;
     const previewY = panelY + 110;
     rows.push(box(previewX, previewY, 120, 120, [], { background: settings.skinColor, radius: 8 }));
     if (settings.hairStyle !== 'none') {
       rows.push(box(previewX - 4, previewY - 10, 128, 24, [], { background: settings.hairColor, radius: 6 }));
+    }
+    rows.push(box(previewX + 30, previewY + 48, 12, 8, [], { background: settings.eyeColor, radius: 2 }));
+    rows.push(box(previewX + 66, previewY + 48, 12, 8, [], { background: settings.eyeColor, radius: 2 }));
+    if (settings.cape) {
+      rows.push(box(previewX + 10, previewY + 120, 100, 120, [], { background: '#8a2b2b', radius: 4 }));
     }
     if (settings.beard) {
       rows.push(box(previewX + 28, previewY + 82, 64, 14, [], { background: settings.hairColor, radius: 4 }));
