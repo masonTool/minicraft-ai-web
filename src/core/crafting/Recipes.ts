@@ -1881,6 +1881,19 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['CC', 'CC'],
     key: { C: Item.POPPED_CHORUS_FRUIT },
   },
+  // ---- 磨制玄武岩 / 蓝冰（批次 439）
+  {
+    kind: 'shaped',
+    result: { id: Block.POLISHED_BASALT, count: 4 },
+    pattern: ['BB', 'BB'],
+    key: { B: Block.BASALT },
+  },
+  {
+    kind: 'shaped',
+    result: { id: Block.BLUE_ICE, count: 1 },
+    pattern: ['III', 'III', 'III'],
+    key: { I: Block.PACKED_ICE },
+  },
   // ---- 六面树皮的木头（批次 438）：4 根同种原木 2×2 → 3 块（原版就是这个比例）
   ...([
     ['oak', Block.OAK_LOG, Block.OAK_WOOD],

@@ -239,6 +239,9 @@ const BASE_SPECS: readonly BlockSpec[] = [
   { id: 671, name: 'minecraft:jungle_wood', tiles: ['jungle_log_side', 'jungle_log_side', 'jungle_log_side'] },
   { id: 672, name: 'minecraft:acacia_wood', tiles: ['acacia_log_side', 'acacia_log_side', 'acacia_log_side'] },
   { id: 673, name: 'minecraft:dark_oak_wood', tiles: ['dark_oak_log_side', 'dark_oak_log_side', 'dark_oak_log_side'] },
+  // 磨制玄武岩 / 蓝冰（批次 439）：复用已有贴图（玄武岩侧面、浮冰），不新画
+  { id: 674, name: 'minecraft:polished_basalt', tiles: ['basalt_side', 'basalt_side', 'basalt_side'] },
+  { id: 675, name: 'minecraft:blue_ice', tiles: ['packed_ice', 'packed_ice', 'packed_ice'] },
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -3926,6 +3929,10 @@ export const Block = {
   JUNGLE_WOOD: 671,
   ACACIA_WOOD: 672,
   DARK_OAK_WOOD: 673,
+  /** 磨制玄武岩（批次 439）：4 块玄武岩 2×2 → 4 块 */
+  POLISHED_BASALT: 674,
+  /** 蓝冰（批次 439）：9 块浮冰 3×3 → 1 块（原版比例） */
+  BLUE_ICE: 675,
   WAXED_COPPER_BLOCK: 603,
   WAXED_EXPOSED_COPPER: 604,
   WAXED_WEATHERED_COPPER: 605,
@@ -4274,6 +4281,9 @@ HARDNESS.set(Block.HAY_BLOCK, 0.5);
 for (const id of [Block.OAK_WOOD, Block.SPRUCE_WOOD, Block.BIRCH_WOOD, Block.JUNGLE_WOOD, Block.ACACIA_WOOD, Block.DARK_OAK_WOOD]) {
   HARDNESS.set(id, 2);
 }
+HARDNESS.set(Block.POLISHED_BASALT, 1.25);
+// 蓝冰比浮冰硬得多（原版 2.8）
+HARDNESS.set(Block.BLUE_ICE, 2.8);
 HARDNESS.set(Block.WAXED_COPPER_BLOCK, 3);
 HARDNESS.set(Block.WAXED_EXPOSED_COPPER, 3);
 HARDNESS.set(Block.WAXED_WEATHERED_COPPER, 3);

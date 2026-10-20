@@ -591,6 +591,8 @@ const EXPLICIT: Record<string, string> = {
   jungle_wood: '丛林木头',
   acacia_wood: '金合欢木头',
   dark_oak_wood: '深色橡木木头',
+  polished_basalt: '磨制玄武岩',
+  blue_ice: '蓝冰',
   chorus_fruit: '紫颂果',
   popped_chorus_fruit: '爆裂紫颂果',
   prismarine_crystals: '海晶砂粒',
