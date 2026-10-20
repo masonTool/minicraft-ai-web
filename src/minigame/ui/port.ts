@@ -9,6 +9,7 @@ import { createSettingsMenu, type SettingsValues } from './settings.ts';
 import { createOverlay } from './overlay.ts';
 import { createMainMenu, type MainMenuAction } from './main-menu.ts';
 import { createStats, type PlayerStats } from './stats.ts';
+import { createTouchControls } from './touch-controls.ts';
 
 /**
  * 小游戏 UI 端口（WX-020B）
@@ -74,6 +75,7 @@ export function createCanvasUi(
   const overlay = createOverlay(screenWidth, screenHeight);
   const mainMenu = createMainMenu(screenWidth, screenHeight);
   const stats = createStats(screenWidth, screenHeight);
+  const touchControls = createTouchControls(screenWidth, screenHeight);
   let settingsFromMenu = false;
 
   return {
@@ -179,6 +181,7 @@ export function createCanvasUi(
         settings.render(renderer);
         return;
       }
+      touchControls.render(renderer);
       stats.render(renderer);
       hud.render(renderer);
       hotbar.render(renderer);
