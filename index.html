@@ -2063,6 +2063,119 @@
         from { opacity: 0; transform: translateY(4px); }
         to { opacity: 1; transform: none; }
       }
+
+      /* ================================================================
+         命令帮助弹窗（批次 533）
+         `/help` 不再刷聊天历史；左边命令列表、右边说明 + 表单生成器。
+         视觉沿用设置/世界面板：深色底 + 3px 像素斜面 + 暗投影。
+         ================================================================ */
+      #command-help {
+        position: fixed; inset: 0; z-index: 64;
+        display: flex; align-items: center; justify-content: center;
+        padding: 12px; background: rgba(0, 0, 0, .58);
+      }
+      #command-help.hidden { display: none; }
+      .cmd-help-panel {
+        width: min(92vw, 880px); height: min(88dvh, 620px);
+        display: flex; flex-direction: column; overflow: hidden;
+        padding: 12px 14px;
+        background: var(--mc-menu-bg); color: var(--mc-text-light);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+        font-size: 13px; text-shadow: 1px 1px 0 var(--mc-text-shadow);
+      }
+      .cmd-help-header {
+        display: flex; align-items: center; gap: 10px;
+        flex: 0 0 auto; padding-bottom: 8px;
+        border-bottom: 2px solid rgba(255, 255, 255, .16);
+      }
+      .cmd-help-title { font-size: 15px; color: #fff; white-space: nowrap; }
+      .cmd-help-search { flex: 1 1 auto; min-width: 0; }
+      .cmd-help-close {
+        flex: 0 0 auto; font: inherit; font-size: 13px; line-height: 1;
+        min-width: 28px; min-height: 26px; padding: 0 7px; cursor: pointer;
+        background: var(--btn-bg); color: var(--btn-text);
+        border: 2px solid var(--mc-outline);
+        box-shadow: inset 2px 2px 0 var(--mc-edge-light), inset -2px -2px 0 var(--mc-edge-dark);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+      }
+      .cmd-help-body {
+        display: flex; gap: 12px; flex: 1 1 auto; min-height: 0; padding-top: 10px;
+      }
+      .cmd-help-list {
+        width: 184px; flex: 0 0 184px; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 2px; padding-right: 4px;
+      }
+      .cmd-help-item {
+        display: block; width: 100%; text-align: left;
+        background: transparent; border: 0; border-left: 3px solid transparent;
+        color: #d8d8d8; padding: 6px 8px; cursor: pointer; font: inherit;
+      }
+      .cmd-help-item:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+      .cmd-help-item.active {
+        background: rgba(108, 195, 73, .16);
+        border-left-color: #6cc349; color: #c8f5b5;
+      }
+      .cmd-help-item-name { display: block; font-size: 12px; color: inherit; }
+      .cmd-help-item-desc {
+        display: block; margin-top: 1px; font-size: 10px; color: #9a9a9a;
+        line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .cmd-help-item.active .cmd-help-item-desc { color: #a9c99b; }
+      .cmd-help-empty { padding: 8px; color: #999; font-size: 11px; }
+      .cmd-help-detail { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding-right: 2px; }
+      .cmd-help-detail-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .cmd-help-detail-head b { font-size: 16px; color: #fff; }
+      .cmd-help-tag {
+        padding: 1px 5px; font-size: 9px; color: #ffd98a;
+        background: rgba(0, 0, 0, .25); border: 1px solid #8a6f2f;
+      }
+      .cmd-help-usage {
+        margin-top: 6px; padding: 6px 8px;
+        background: rgba(0, 0, 0, .32); border-left: 3px solid #6cc349;
+        color: #fff; font-size: 11px; line-height: 1.45; word-break: break-all;
+      }
+      .cmd-help-desc {
+        margin: 7px 0 10px; color: #c8c8c8; font-size: 12px; line-height: 1.55;
+      }
+      .cmd-help-form {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px 10px;
+      }
+      .cmd-help-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .cmd-help-field label { font-size: 10px; color: #a8a8a8; }
+      .cmd-help-field .world-input { width: 100%; box-sizing: border-box; }
+      .cmd-help-combo-custom { margin-top: 4px; }
+      .cmd-help-combo-custom[hidden] { display: none; }
+      .cmd-help-preview {
+        margin-top: 10px; padding: 8px; min-height: 30px;
+        background: rgba(0, 0, 0, .38); border: 2px solid rgba(255, 255, 255, .14);
+        color: #b8f09a; font-size: 12px; line-height: 1.4; word-break: break-all;
+      }
+      .cmd-help-preview.bad { color: #ff9b8a; }
+      .cmd-help-error { min-height: 14px; margin-top: 4px; color: #ff9b8a; font-size: 10px; }
+      .cmd-help-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+      .cmd-help-fill {
+        font: inherit; font-size: 13px; min-height: 34px; padding: 6px 16px; cursor: pointer;
+        background: #3f6f2d; color: #fff; border: 2px solid var(--mc-outline);
+        box-shadow: inset 2px 2px 0 var(--mc-edge-light), inset -2px -2px 0 var(--mc-edge-dark);
+        text-shadow: 1px 1px 0 var(--mc-text-shadow);
+      }
+      .cmd-help-fill:not(:disabled):hover { background: #4a8236; }
+      .cmd-help-fill:disabled { opacity: .5; cursor: default; }
+      body.touch-mode .cmd-help-panel {
+        width: 96vw; height: min(92dvh, calc(100dvh - 24px)); padding: 10px;
+      }
+      body.touch-mode .cmd-help-item { min-height: 40px; }
+      body.touch-mode .cmd-help-field .world-input { font-size: 13px; padding: 7px 8px; }
+      @media (max-width: 620px) {
+        .cmd-help-body { flex-direction: column; }
+        .cmd-help-list {
+          width: 100%; flex: 0 0 auto; max-height: 104px;
+          flex-direction: row; overflow-x: auto; overflow-y: hidden;
+        }
+        .cmd-help-item { min-width: 132px; }
+      }
       .chat-line.chat-system { color: #d8e6b0; border-left-color: #a9c46b; }
       .chat-line.chat-error { color: #ff9a8a; border-left-color: #e0604c; }
       .chat-line.chat-player { color: #fff; border-left-color: #7db6f0; }

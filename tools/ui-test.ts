@@ -3493,14 +3493,38 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       html.includes('transition: opacity .8s linear;'),
   );
   check(
-    '显示期间点一下直接进聊天（只有 .chat-log 接手势）',
+    '显示期间点消息立刻消失（不再自动进入聊天）',
     html.includes('#chat.peek .chat-log { pointer-events: auto;') &&
       chatSrc.includes("this.root.classList.toggle('peek', !this.open && lines.length > 0);") &&
-      chatSrc.includes("this.openWith('', { focus: false });"),
+      chatSrc.includes('this.dismissVisible();') &&
+      chatSrc.includes('private dismissVisible(): void') &&
+      !chatSrc.includes("this.openWith('', { focus: false });"),
+  );
+  // 批次 533（用户）：/help 改成独立弹窗，不再往聊天历史刷介绍
+  const helpSrc = readFileSync(new URL('../src/ui/CommandHelpScreen.ts', import.meta.url), 'utf8');
+  check(
+    '/help 打开独立弹窗（不写聊天历史）',
+    appSrc.includes('const help = /^\\/help(?:\\s+(.+))?\\s*$/i.exec(text.trim());') &&
+      appSrc.includes('if (help) {') &&
+      appSrc.includes('this.commandHelp.show(help[1]?.trim().split(/\\s+/)[0]);'),
   );
   check(
-    '点消息进来不聚焦输入框（手机不弹键盘）',
-    chatSrc.includes('if (options.focus !== false) {') && chatSrc.includes('this.inputEl.focus();'),
+    '命令帮助弹窗能搜索、切换命令、用表单生成并填入聊天框',
+    helpSrc.includes('commandHelpEntries()') &&
+      helpSrc.includes('buildCommand(entry, this.variantIndex, this.values)') &&
+      helpSrc.includes("this.searchEl.placeholder = '搜索命令…'") &&
+      helpSrc.includes("fill.textContent = '填入聊天框'") &&
+      appSrc.includes('this.commandHelp.onUse = (command) =>') &&
+      appSrc.includes('this.chat.openWith(command, { focus: true });'),
+  );
+  check(
+    '命令帮助弹窗接入返回层级/界面开关/销毁',
+    appSrc.includes('this.commandHelp.isOpen') &&
+      appSrc.includes('if (this.commandHelp.isOpen) this.commandHelp.close();') &&
+      appSrc.includes('this.commandHelp.destroy();') &&
+      html.includes('#command-help {') &&
+      html.includes('.cmd-help-panel {') &&
+      html.includes('.cmd-help-item.active {'),
   );
   // 批次 221（用户："把天气变化的信息也提示一下"）：自然转换 / 睡觉放晴 / /weather 三条路径
   // 都必须汇到同一个播报入口，否则总有一条变化不会出现在消息栏里

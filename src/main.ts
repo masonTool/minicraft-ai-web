@@ -193,6 +193,7 @@ import { BackButton } from './ui/BackButton.ts';
 import { StartupRamp } from './core/world/StartupRamp.ts';
 import { devicePixelRatioValue } from './ui/Device.ts';
 import { ChatInput } from './ui/ChatInput.ts';
+import { CommandHelpScreen } from './ui/CommandHelpScreen.ts';
 import { installKeyboardGuards, isEditingText } from './ui/Keyboard.ts';
 import { executeCommand, type CommandContext, type CommandFeedback } from './core/commands/Commands.ts';
 // 选择器（批次 399）：`/execute` 需要"当前维度里有哪些实体"的扁平快照
@@ -1374,6 +1375,8 @@ class App {
   private readonly hotbarSlots: HTMLDivElement[] = [];
   /** 聊天与命令输入（左下角消息栏 + 命令输入行） */
   private readonly chat = new ChatInput();
+  /** `/help` 的独立命令帮助弹窗（批次 533：不再往聊天历史里刷命令列表） */
+  private readonly commandHelp = new CommandHelpScreen();
   /**
    * 告示牌上的文字（B12，批次 80）：一张"按坐标存"的表 + 编辑器 + 渲染器。
    *
@@ -2163,6 +2166,13 @@ class App {
 
     this.chat.onSubmit = (text) => this.handleChatSubmit(text);
     this.chat.onOpenChange = (open) => this.handleChatOpen(open);
+    // `/help` 弹窗：开/关沿用"界面打开就停用移动与交互"；
+    // 点“填入聊天框”只把命令放进输入框，由玩家自己按发送。
+    this.commandHelp.onOpenChange = (open) => this.handleInventoryOpen(open);
+    this.commandHelp.onUse = (command) => {
+      this.commandHelp.close();
+      this.chat.openWith(command, { focus: true });
+    };
     this.inventory.onChange = () => {
       this.refreshHotbar();
       this.inventoryScreen.refresh();
@@ -2427,6 +2437,7 @@ class App {
       this.recipeBook.isOpen ||
       this.advancementScreen.isOpen ||
       this.inventoryScreen.isOpen ||
+      this.commandHelp.isOpen ||
       this.settingsScreen.isOpen
     );
   }
@@ -2438,7 +2449,8 @@ class App {
    * 与 `uiOpen` 那套不同，这里必须一次只关一层——不然"按一下返回"会把界面全关掉。
    */
   private closeTopUi(): boolean {
-    if (this.signEditor.isOpen) this.signEditor.close();
+    if (this.commandHelp.isOpen) this.commandHelp.close();
+    else if (this.signEditor.isOpen) this.signEditor.close();
     else if (this.bookScreen.isOpen) this.bookScreen.close();
     else if (this.mapScreen.isOpen) this.mapScreen.close();
     else if (this.beaconScreen.isOpen) this.beaconScreen.close();
@@ -2790,6 +2802,7 @@ class App {
     this.wasHidden = false;
     // 回来先落到暂停页：其它面板（背包/聊天/告示牌）一律先收起
     if (this.chat.isOpen) this.chat.close();
+    if (this.commandHelp.isOpen) this.commandHelp.close();
     if (this.signEditor.isOpen) this.signEditor.close();
     if (this.beaconScreen.isOpen) this.beaconScreen.close();
     if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
@@ -10371,6 +10384,13 @@ class App {
 
   /** 聊天栏/命令输入共用的提交入口 */
   private handleChatSubmit(text: string): void {
+    // `/help` 不走聊天反馈：打开独立的命令帮助弹窗（批次 533）。
+    // `/help give` 会直接定位到 give 的生成器。
+    const help = /^\/help(?:\s+(.+))?\s*$/i.exec(text.trim());
+    if (help) {
+      this.commandHelp.show(help[1]?.trim().split(/\s+/)[0]);
+      return;
+    }
     // 以 / 开头 = 命令；否则是普通发言
     if (text.startsWith('/')) {
       executeCommand(text, this.commandContext(), this.commandFeedback());
@@ -15210,6 +15230,7 @@ class App {
     this.inventoryScreen.dispose();
     this.settingsScreen.destroy();
     this.chat.dispose();
+    this.commandHelp.destroy();
     this.signEditor.dispose();
     this.bookScreen.dispose();
     this.mapScreen.dispose();

@@ -152,24 +152,17 @@ export class ChatInput {
     host.appendChild(this.root);
 
     this.inputEl.addEventListener('keydown', (event) => this.onInputKeyDown(event));
-    // 显示期间点一下 ⇒ 直接进入聊天（批次 220）。
+    // 批次 533（用户）：显示期间点一下消息 = **立刻消失**，不再自动进入聊天。
     // 只在 `#chat.peek` 期间有效（CSS 给 `.chat-log` 开了 pointer-events），
     // 所以没有消息时这一层根本不接手势，不会抢走转视角。
-    // `focus: false`：手机不弹键盘；`stopPropagation`：这一下不该再落到视角/放置上。
+    // 打开输入框仍然走顶部聊天键 / T 键。
     this.logEl.addEventListener(
       'pointerdown',
       (event) => {
-        // 点到一条"超出一行、可折叠"的消息：这一下归折叠/展开，不是"打开聊天"。
-        // 不 preventDefault：拖动滚动时浏览器不会派发 click，正好不会误触发。
-        const foldable = (event.target as Element | null)?.closest?.('.chat-line.collapsible');
-        if (foldable) {
-          event.stopPropagation();
-          return;
-        }
         if (this.open) return;
         event.preventDefault();
         event.stopPropagation();
-        this.openWith('', { focus: false });
+        this.dismissVisible();
       },
       { signal: this.listeners.signal },
     );
@@ -178,6 +171,8 @@ export class ChatInput {
     this.logEl.addEventListener(
       'click',
       (event) => {
+        // 收起状态下点击是"让消息立刻消失"，不是展开
+        if (!this.open) return;
         const element = (event.target as Element | null)?.closest?.('.chat-line.collapsible');
         if (!element) return;
         event.preventDefault();
@@ -245,6 +240,20 @@ export class ChatInput {
     while (this.messages.length > MAX_STORED_LINES) this.messages.shift();
     this.renderLog();
     console.info(`[chat] ${text}`);
+  }
+
+  /**
+   * 收起时点消息：让**当前屏幕上那几条**立刻消失（批次 533）。
+   *
+   * 只移除可见的这一段，更早的历史仍在 `messages` 里；之后按 T / 聊天键打开
+   * 输入框还能翻到它们。这样“点一下清屏”不会把聊天记录整份毁掉。
+   */
+  private dismissVisible(): void {
+    const { start, lines } = this.visibleRange(performance.now());
+    if (lines.length === 0) return;
+    this.messages.splice(start, lines.length);
+    this.renderedStart = -1;
+    this.renderLog();
   }
 
   openWith(prefill = '', options: ChatOpenOptions = {}): void {

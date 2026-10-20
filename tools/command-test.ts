@@ -8,6 +8,11 @@
  * 运行：npm run test:commands
  */
 
+import {
+  buildCommand,
+  commandHelpEntries,
+  type CommandHelpField,
+} from '../src/core/commands/CommandHelp.ts';
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
 import { findNearestBiome } from '../src/core/gen/Locate.ts';
@@ -1040,6 +1045,144 @@ console.log('\n[/clone 区域复制（批次 431）]');
   check('位移必须是数字', run4('/clone 0 0 0 1 1 1 ~ ~ ~').lastError.includes('位移'));
   check('模式写错报错', run4('/clone 0 0 0 1 1 1 5 0 0 nope').lastError.includes('模式'));
   check('超上限报错', run4('/clone 0 0 0 99 99 99 0 0 0').lastError.includes('上限'));
+}
+
+// ---------------------------------------------------------------- /help 生成器
+//
+// 批次 533（用户）：/help 改成独立弹窗，并且能用表单生成命令。
+// 这一组只测纯逻辑：usage → 字段 → 回拼命令；DOM 由 ui-test 守。
+{
+  const equal = (label: string, actual: unknown, expected: unknown): void => {
+    check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+  };
+  const entries = commandHelpEntries();
+  const byName = new Map(entries.map((entry) => [entry.name, entry]));
+  const fieldsOf = (name: string, variant = 0) => {
+    const entry = byName.get(name)!;
+    return entry.variants[variant]!.parts
+      .filter((part) => part.kind === 'field')
+      .map((part) => (part as { kind: 'field'; field: CommandHelpField }).field);
+  };
+  const field = (name: string, label: string, variant = 0) => {
+    const found = fieldsOf(name, variant).find((item) => item.label === label);
+    check(`${name} 有「${label}」字段`, found !== undefined);
+    return found!;
+  };
+
+  equal('帮助条目覆盖全部命令', entries.length, COMMANDS.length);
+  check('每条命令都有用法与说明', entries.every((entry) => entry.usage.length > 0 && entry.description.length > 0));
+  check('每条命令至少有一个变体', entries.every((entry) => entry.variants.length > 0));
+
+  {
+    const item = field('give', '物品');
+    const count = field('give', '数量');
+    equal(
+      'give 能生成完整命令',
+      buildCommand(byName.get('give')!, 0, { [item.key]: 'stone', [count.key]: '64' }),
+      '/give stone 64',
+    );
+    equal(
+      'give 的必填项没填时返回 null',
+      buildCommand(byName.get('give')!, 0, { [count.key]: '64' }),
+      null,
+    );
+  }
+
+  {
+    const time = field('time', '时间');
+    equal('time 的固定选项 + 数字自定义是 combo', time.kind, 'combo');
+    equal(
+      'time 能生成 /time set noon',
+      buildCommand(byName.get('time')!, 0, { [time.key]: 'noon' }),
+      '/time set noon',
+    );
+    equal(
+      'time 的自定义数字优先',
+      buildCommand(byName.get('time')!, 0, { [time.key]: 'day', [`${time.key}__custom`]: '1000' }),
+      '/time set 1000',
+    );
+    equal(
+      '选了自定义但没填数字时不允许生成',
+      buildCommand(byName.get('time')!, 0, { [time.key]: '__custom__' }),
+      null,
+    );
+  }
+
+  {
+    const weather = field('weather', '天气');
+    equal('weather 是下拉', weather.kind, 'select');
+    equal('weather 的 clear 在天气语境下叫晴天', weather.options![0]!.label, '晴天');
+  }
+
+  {
+    const action = field('effect', '操作');
+    const effect = field('effect', '效果');
+    equal('effect 的操作是下拉', action.kind, 'select');
+    equal('effect 的效果是下拉', effect.kind, 'select');
+    equal('effect 的 clear 在效果语境下叫清除', action.options![1]!.label, '清除');
+  }
+
+  {
+    const dimension = field('tp', '维度');
+    equal('tp 的维度是可选下拉', dimension.kind, 'select');
+    check('tp 的维度可以不填', dimension.optional);
+  }
+
+  {
+    const entry = byName.get('worldborder')!;
+    equal('worldborder 拆成三个变体', entry.variants.length, 3);
+    check('worldborder 变体名不重复', new Set(entry.variants.map((variant) => variant.label)).size === 3);
+  }
+
+  {
+    const entry = byName.get('xp')!;
+    equal('xp 拆成三个变体', entry.variants.length, 3);
+    const points = fieldsOf('xp', 0)[0]!;
+    equal('xp add 能生成命令', buildCommand(entry, 0, { [points.key]: '10' }), '/xp add 10');
+  }
+
+  {
+    const help = field('help', '命令');
+    equal('help 的命令参数是下拉', help.kind, 'select');
+    check('help 的命令参数可以不填', help.optional);
+    equal('help 不填参数时生成 /help', buildCommand(byName.get('help')!, 0, {}), '/help');
+  }
+
+  {
+    const entry = byName.get('team')!;
+    const mode = field('team', '操作');
+    equal('team 的操作是下拉', mode.kind, 'select');
+    check('team 能生成带模式的命令', (buildCommand(entry, 0, {}) ?? '').startsWith('/team '));
+  }
+
+  {
+    const entry = byName.get('scoreboard')!;
+    check(
+      'scoreboard 两个变体的名字能区分（记分项/玩家）',
+      entry.variants.length === 2 && entry.variants[0]!.label !== entry.variants[1]!.label,
+      entry.variants.map((variant) => variant.label).join(' | '),
+    );
+  }
+
+  {
+    const entry = byName.get('execute')!;
+    const fields = fieldsOf('execute');
+    const rest = fields.find((item) => item.label === '其余参数')!;
+    const command = fields.find((item) => item.label === '命令')!;
+    equal(
+      'execute 的 … 不会把后面的 run <命令> 吞掉',
+      buildCommand(entry, 0, { [rest.key]: '@s', [command.key]: 'say hi' }),
+      '/execute as @s run say hi',
+    );
+  }
+
+  {
+    const spawn = byName.get('spawnpoint')!;
+    equal('spawnpoint 的 [x y z] 合成一个坐标字段', fieldsOf('spawnpoint').length, 1);
+    equal('spawnpoint 可以只生成 /spawnpoint', buildCommand(spawn, 0, {}), '/spawnpoint');
+  }
+
+  equal('没有参数的 /seed 直接生成', buildCommand(byName.get('seed')!, 0, {}), '/seed');
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);
