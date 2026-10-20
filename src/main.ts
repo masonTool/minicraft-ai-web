@@ -435,6 +435,7 @@ import {
   type StructureKind,
 } from './core/gen/Structures.ts';
 import { nearbyStandingSpot } from './core/gen/StructureCreatures.ts';
+import { ironGolemPatternAt, shouldSpawnVillageGolem } from './core/world/GolemSummon.ts';
 import { bastionCreatureSpawnsAt, nearestBastion } from './core/gen/Bastion.ts';
 import { fortressCreatureSpawnsAt, nearestFortress } from './core/gen/NetherFortress.ts';
 import { endCityCreatureSpawnsAt, nearestEndCity } from './core/gen/EndStructures.ts';
@@ -7682,13 +7683,100 @@ class App {
       getState: (x, y, z) => this.world.getBlockState(x, y, z),
       villagerNear: (x, y, z, radius) => this.villagerNear(x, y, z, radius),
     };
-    for (const plan of planVillagePopulation(view, cx, cz)) {
+    const plans = planVillagePopulation(view, cx, cz);
+    for (const plan of plans) {
       const villager = new Villager(plan.x + 0.5, plan.y, plan.z + 0.5);
       // 身边有工作站就直接认领（村庄里"这栋房子摆什么，住的就是谁"）——
       // 认领的是**哪一格**也一并记下来，与 J11 那套"认领工作站"是同一份数据
       if (plan.professionId !== null) villager.assignProfession(plan.professionId, plan.workstation);
       this.entities.spawn(villager);
     }
+    // 铁傀儡（批次 472）：原版"3 个村民 + 3 张床"就有村庄守卫。
+    // 放在村民生成之后数——本区块的村民此刻已经在实体表里了
+    if (plans.length > 0) this.trySpawnVillageGolem(plans);
+  }
+
+  /**
+   * 村庄守卫（批次 472）：村庄里凑够 3 个村民就派一只铁傀儡。
+   *
+   * 判据抽在 `shouldSpawnVillageGolem`（纯函数）里；这里只负责"数人"与"找地方"——
+   * 半径 48 格，原版也是这个量级（村庄的判定范围）。
+   *
+   * ⚠️ 已经有一只就不再放：区块反复加载时 `populateVillage` 会再走一遍，
+   * 不判"附近有没有"的话每加载一次就多一只。
+   */
+  private trySpawnVillageGolem(plans: readonly { x: number; y: number; z: number }[]): void {
+    const type = mobTypeById('iron_golem');
+    if (!type) return;
+    const centerX = plans.reduce((sum, plan) => sum + plan.x, 0) / plans.length;
+    const centerZ = plans.reduce((sum, plan) => sum + plan.z, 0) / plans.length;
+
+    let villagers = 0;
+    let golems = 0;
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity.dead) continue;
+      if (Math.hypot(entity.x - centerX, entity.z - centerZ) > 48) continue;
+      if (entity.type.id === 'iron_golem') golems++;
+      else if (entity instanceof Villager) villagers++;
+    }
+    if (!shouldSpawnVillageGolem(villagers, golems)) return;
+
+    const spot = nearbyStandingSpot(
+      (sx, sy, sz) =>
+        this.world.getBlock(sx, sy, sz) === Block.AIR &&
+        this.world.getBlock(sx, sy + 1, sz) === Block.AIR &&
+        blockDef(this.world.getBlock(sx, sy - 1, sz)).solid,
+      Math.round(centerX),
+      // 用村民脚下那一层当地面基准（`plan.y` 就是村民站的方块高度）
+      Math.round(plans.reduce((sum, plan) => sum + plan.y, 0) / plans.length),
+      Math.round(centerZ),
+      4,
+    );
+    if (!spot) return;
+    this.entities.spawn(createMob(type, spot.x + 0.5, spot.y, spot.z + 0.5));
+  }
+
+  /**
+   * 铁傀儡召唤（批次 472）：南瓜 + 4 块铁块摆成一竖一横。
+   *
+   * 形状判定在 `core/world/GolemSummon.ts`（纯函数）；这里负责清掉那 5 格、
+   * 把傀儡放在底部一排的中心。**清方块要走 `setBlockAndUpdate`**：直接改区块数据
+   * 会让画面上留着 5 块空气位置的旧网格。
+   */
+  private trySummonIronGolem(x: number, y: number, z: number): boolean {
+    const pattern = ironGolemPatternAt(
+      (bx, by, bz) => this.world.getBlock(bx, by, bz),
+      x,
+      y,
+      z,
+      Block.PUMPKIN,
+      Block.IRON_BLOCK,
+    );
+    if (!pattern) return false;
+    const type = mobTypeById('iron_golem');
+    if (!type) return false;
+
+    const dx = pattern.axis === 'x' ? 1 : 0;
+    const dz = pattern.axis === 'z' ? 1 : 0;
+    const cells: Array<[number, number, number]> = [
+      [x, y, z],
+      [x, y - 1, z],
+      [x - dx, y - 2, z - dz],
+      [x, y - 2, z],
+      [x + dx, y - 2, z + dz],
+    ];
+    for (const [bx, by, bz] of cells) {
+      this.world.setBlockAndUpdate(bx, by, bz, Block.AIR);
+      this.net.sendBlock(bx, by, bz, Block.AIR, 0, this.dimension);
+    }
+    this.wakeFluidsAround(x, y, z);
+
+    const golem = createMob(type, x + 0.5, y - 2, z + 0.5);
+    this.entities.spawn(golem);
+    this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5, this.blockParticleColor(Block.IRON_BLOCK), 10);
+    this.chat.push('铁傀儡站了起来', 'system');
+    return true;
   }
 
   // ---------------------------------------------------------------- 结构里的生物（批次 457）
@@ -11868,6 +11956,8 @@ class App {
       if (blockId === Block.BEACON) this.noteBeacon(x, y, z);
       // 凋灵骷髅头（批次 116）：摆上去之后看看"4 块灵魂沙 + 3 颗头"齐了没有
       if (blockId === Block.WITHER_SKELETON_SKULL) this.trySummonWither(x, y, z);
+      // 铁傀儡（批次 472）：南瓜放上去之后看看下面那 4 块铁块摆齐了没有
+      if (blockId === Block.PUMPKIN) this.trySummonIronGolem(x, y, z);
       // 海绵（批次 449）：放下就把周围的水吸掉；吸到了就变成湿海绵。
       // ⚠️ 必须在下面那次 `net.sendBlock` **之前**做——否则远端会收到"海绵"，
       // 而本地已经是湿海绵了（两条消息顺序反了，队友看到的方块就永远不一致）

@@ -466,3 +466,16 @@
 - [x] B471-6 `test:entity` 178 → **186**；enderman/spider/piglin 三套原有的
       "玩家打它"断言补上 `{ kind: 'player' }`（这是语义变化的正确后果，不是放宽）
 - ⚠️ 队友免伤还需要"玩家打玩家"，那是联机会话的事；`Teams.sameTeam()` 已就位
+
+## 批次 472：铁傀儡的两条生成路径（J24 前半）（2026-10-20）
+
+- [x] B472-1 `core/world/GolemSummon.ts`（纯函数）：南瓜 + 一竖一横 4 铁块的形状判定，
+      支持沿 X / Z 两个方向（`GolemAxis`）
+- [x] B472-2 `main.trySummonIronGolem`：放置南瓜时检查 → 清 5 格 → 生成傀儡
+      （清方块走 `setBlockAndUpdate` + 广播，否则画面上留旧网格）
+- [x] B472-3 `shouldSpawnVillageGolem(villagers, golems, max)`：3 村民门槛 + 已有一只就不再放
+- [x] B472-4 `populateVillage` 里数半径 48 格内的村民/傀儡，够了就在村庄中心找位生成
+- [x] B472-5 新套件 `test:golem` **19 条**（4 种摆法 / 缺块 / 断排 / 非南瓜 / 门槛四态）；
+      套数 **136 → 137**
+- ⚠️ 铁傀儡**还不会打架**：AI 只盯玩家，"守卫村庄"要 J3 的目标选择器
+- 待补：掠夺者与巡逻队、袭击波次（不祥之兆 / 村庄英雄）
