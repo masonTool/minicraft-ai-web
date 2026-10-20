@@ -118,6 +118,9 @@ async function boot(): Promise<void> {
   const jumpRadiusPx = 46 * uiScale;
   const jumpCenterX = (1024 - 24 - 46) * uiScale;
   const jumpCenterY = height - safeBottomPx - (116 + 46) * uiScale;
+  const stickCenterX = (Math.max(0, safe.left) + 26 + 80) * uiScale;
+  const stickCenterY = height - safeBottomPx - (116 + 80) * uiScale;
+  const stickHitRadius = 110 * uiScale;
 
   const atlasStarted = Date.now();
   const atlas = new TextureAtlas();
@@ -1222,7 +1225,10 @@ async function boot(): Promise<void> {
       return;
     }
 
-    if (x < width * 0.45 && movePointerId === null) {
+    if (
+      Math.hypot(x - stickCenterX, y - stickCenterY) <= stickHitRadius &&
+      movePointerId === null
+    ) {
       movePointerId = event.pointerId;
       moveOriginX = x;
       moveOriginY = y;
@@ -1254,11 +1260,11 @@ async function boot(): Promise<void> {
       lookStartY = y;
       lookStartTime = Date.now();
       lookMoved = false;
-      if (y > height * 0.78) {
+      if (x > width * 0.45 && y > height * 0.78) {
         jumpHeld = true;
         jumpQueued = true;
       }
-      if (y > height * 0.45 && y < height * 0.78 && currentHit) {
+      if (x > width * 0.45 && y > height * 0.45 && y < height * 0.78 && currentHit) {
         mining = {
           x: currentHit.x,
           y: currentHit.y,
@@ -1352,7 +1358,11 @@ async function boot(): Promise<void> {
     if (event.pointerId === lookPointerId) {
       if (mining?.pointerId === event.pointerId) cancelMining();
       jumpHeld = false;
-      if (!lookMoved && Date.now() - lookStartTime < 350) {
+      if (
+        !lookMoved &&
+        event.clientX > width * 0.45 &&
+        Date.now() - lookStartTime < 350
+      ) {
         handleRightTap(event.clientX, event.clientY);
       }
       lookPointerId = null;
