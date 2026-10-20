@@ -17,6 +17,7 @@
 
 import type { DroppedExtras } from './Entity.ts';
 import type { VillagerSavedState } from './Villager.ts';
+import { MAX_TRADE_DEMAND } from '../registry/villagerTrades.ts';
 
 /** 存档里的一条状态效果（与 `StatusEffects.serialize()` 同形） */
 export interface SavedMobEffect {
@@ -115,7 +116,7 @@ function sanitizeEffects(data: unknown): SavedMobEffect[] | undefined {
  */
 function sanitizeVillager(data: unknown): VillagerSavedState | undefined {
   if (!data || typeof data !== 'object') return undefined;
-  const record = data as { profession?: unknown; xp?: unknown; uses?: unknown };
+  const record = data as { profession?: unknown; xp?: unknown; uses?: unknown; demand?: unknown };
   if (typeof record.profession !== 'string' || record.profession.length === 0) return undefined;
   const xp =
     typeof record.xp === 'number' && Number.isFinite(record.xp) ? Math.max(0, Math.floor(record.xp)) : 0;
@@ -125,7 +126,18 @@ function sanitizeVillager(data: unknown): VillagerSavedState | undefined {
       uses.push(typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0);
     }
   }
-  return { profession: record.profession, xp, uses };
+  // 需求量（批次 509）：与 uses 同形、同长度校验（错位会落到别的交易上）
+  const demand: number[] = [];
+  if (Array.isArray(record.demand)) {
+    for (const value of record.demand) {
+      demand.push(
+        typeof value === 'number' && Number.isFinite(value)
+          ? Math.max(0, Math.min(MAX_TRADE_DEMAND, Math.floor(value)))
+          : 0,
+      );
+    }
+  }
+  return { profession: record.profession, xp, uses, ...(demand.length > 0 ? { demand } : {}) };
 }
 
 /** 一层附加数据（掉落物本身，或潜影盒里的一格）的浅校验 */

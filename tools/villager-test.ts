@@ -58,7 +58,12 @@ import {
   professionById,
   professionForWorkstation,
   totalOfferCount,
+  MAX_TRADE_DEMAND,
+  adjustedTradeCosts,
+  recordTradeUse,
   tradeBlocker,
+  tradeDemand,
+  tradePriceDelta,
   tradeSettlement,
 } from '../src/core/registry/villagerTrades.ts';
 
@@ -469,7 +474,8 @@ console.log('\n[存档：职业与交易进度（批次 501）]');
 console.log('\n[存档：实体寄存把村民状态带上]');
 {
   const parking = new EntityParking();
-  parking.park('overworld', 0, 0, {
+  parking.restoreAll([{
+    dimension: 'overworld',
     kind: 'mob',
     typeId: 'villager',
     x: 2,
@@ -485,7 +491,7 @@ console.log('\n[存档：实体寄存把村民状态带上]');
     baby: false,
     growSeconds: 0,
     villager: { profession: 'librarian', xp: 80, uses: [3, 1] },
-  });
+  }]);
   // 走一遍 JSON（存档层就是这么序列化的），确认字段不是"只在内存里"
   const records = JSON.parse(JSON.stringify(parking.snapshotAll())) as SavedEntityRecord[];
   const revived = new EntityParking();
@@ -526,6 +532,178 @@ console.log('\n[存档：实体寄存把村民状态带上]');
   ] as unknown as SavedEntityRecord[]);
   const [bad] = dirtyParking.take('overworld', 0, 0);
   equal('脏 villager 字段整个丢掉', bad && bad.kind === 'mob' ? bad.villager : 'kept', undefined);
+}
+
+
+// ---------------------------------------------------------------- 需求与每日补货（批次 509）
+
+console.log('\n[需求与涨价]');
+{
+  const farmer = professionById('farmer')!;
+  const offer = offersForLevel(farmer, 1)[0]!;
+  const baseCosts = offer.cost.map((cost) => ({ ...cost }));
+
+  equal('初始需求 0', tradeDemand(offer), 0);
+  equal('初始不涨价', tradePriceDelta(offer), 0);
+  equal(
+    '初始价格就是表价',
+    JSON.stringify(adjustedTradeCosts(offer)),
+    JSON.stringify(baseCosts),
+  );
+
+  recordTradeUse(offer);
+  equal('成交一次：次数 +1', offer.uses, 1);
+  equal('成交一次：需求 +1', tradeDemand(offer), 1);
+  equal('1 点需求还不涨价', tradePriceDelta(offer), 0);
+
+  recordTradeUse(offer);
+  equal('2 点需求：+1', tradePriceDelta(offer), 1);
+  equal('第一样收货 +1', adjustedTradeCosts(offer)[0]!.count, baseCosts[0]!.count + 1);
+  if (baseCosts.length > 1) {
+    equal('第二样不涨', adjustedTradeCosts(offer)[1]!.count, baseCosts[1]!.count);
+  }
+  equal('不改原表（结算必须拿副本）', offer.cost[0]!.count, baseCosts[0]!.count);
+
+  for (let i = 0; i < 12; i++) recordTradeUse(offer);
+  equal('需求量封顶', tradeDemand(offer), MAX_TRADE_DEMAND);
+  equal('涨价封顶 +3', tradePriceDelta(offer), 3);
+  check('成交次数不超过上限', offer.uses <= offer.maxUses, `${offer.uses} / ${offer.maxUses}`);
+  for (let i = 0; i < 40; i++) recordTradeUse(offer);
+  equal('次数刷到上限就停住', offer.uses, offer.maxUses);
+
+  // 阻塞判据必须按**涨价后**的价格算，否则界面说能做、实际扣不够。
+  // 用一条**没用完**的交易（上面那条的次数已经刷满了）
+  const priced = offersForLevel(farmer, 1)[0]!;
+  priced.demand = 4; // → +2
+  const costs = adjustedTradeCosts(priced);
+  const justShort: Record<number, number> = {};
+  for (const cost of costs) justShort[cost.id] = cost.count;
+  justShort[costs[0]!.id] = costs[0]!.count - 1;
+  equal('差一个就拦住', tradeBlocker(priced, bag(justShort)), '材料不够（还差 1 个）');
+
+  const enough: Record<number, number> = {};
+  for (const cost of costs) enough[cost.id] = cost.count;
+  equal('给够就放行', tradeBlocker(priced, bag(enough)), null);
+
+  equal(
+    '结算拿的是涨价后的数量',
+    tradeSettlement(priced).take[0]!.count,
+    costs[0]!.count,
+  );
+}
+
+console.log('\n[每日补货]');
+{
+  const villager = new Villager(0, 64, 0);
+  villager.assignProfession('farmer');
+  const offer = villager.offers[0]!;
+  for (let i = 0; i < 4; i++) recordTradeUse(offer);
+  const demandBefore = tradeDemand(offer);
+  equal('补货前用掉 4 次', offer.uses, 4);
+
+  equal('补货条数 = 交易条数', villager.restock(), villager.offers.length);
+  equal('次数清零', offer.uses, 0);
+  equal('需求降 1', tradeDemand(offer), demandBefore - 1);
+
+  equal('无业村民没有可补的', new Villager(0, 64, 0).restock(), 0);
+}
+
+console.log('\n[需求进存档]');
+{
+  const source = new Villager(0, 64, 0);
+  source.assignProfession('farmer');
+  source.offers[0]!.uses = 2;
+  source.offers[0]!.demand = 4;
+
+  const restored = new Villager(0, 64, 0);
+  restored.restoreState({
+    profession: 'farmer',
+    xp: 0,
+    uses: source.offers.map((offer) => offer.uses),
+    demand: source.offers.map((offer) => tradeDemand(offer)),
+  });
+  equal('需求往返', tradeDemand(restored.offers[0]!), 4);
+  equal('价格按需求算回来', tradePriceDelta(restored.offers[0]!), 2);
+
+  const mismatched = new Villager(0, 64, 0);
+  mismatched.restoreState({
+    profession: 'farmer',
+    xp: 0,
+    uses: source.offers.map((offer) => offer.uses),
+    demand: [9],
+  });
+  equal('长度不符整份丢弃', tradeDemand(mismatched.offers[0]!), 0);
+
+  const dirty = new Villager(0, 64, 0);
+  dirty.restoreState({
+    profession: 'farmer',
+    xp: 0,
+    uses: source.offers.map((offer) => offer.uses),
+    demand: source.offers.map(() => 999),
+  });
+  equal('脏数据夹到上限', tradeDemand(dirty.offers[0]!), MAX_TRADE_DEMAND);
+
+  const missing = new Villager(0, 64, 0);
+  missing.restoreState({
+    profession: 'farmer',
+    xp: 0,
+    uses: source.offers.map((offer) => offer.uses),
+  });
+  equal('老存档没有 demand → 0', tradeDemand(missing.offers[0]!), 0);
+}
+
+console.log('\n[需求随实体寄存往返]');
+{
+  const parking = new EntityParking();
+  parking.restoreAll([{
+    dimension: 'overworld',
+    kind: 'mob',
+    typeId: 'villager',
+    x: 1,
+    y: 64,
+    z: 1,
+    yaw: 0,
+    health: 20,
+    tamed: false,
+    sitting: false,
+    leashed: false,
+    sheared: false,
+    woolColor: 0,
+    baby: false,
+    growSeconds: 0,
+    villager: { profession: 'farmer', xp: 0, uses: [1], demand: [5] },
+  }]);
+  const [record] = parking.take('overworld', 0, 0);
+  equal(
+    '寄存往返保住需求',
+    record && record.kind === 'mob' ? record.villager?.demand?.[0] : undefined,
+    5,
+  );
+
+  const dirtyParking = new EntityParking();
+  dirtyParking.restoreAll([{
+    dimension: 'overworld',
+    kind: 'mob',
+    typeId: 'villager',
+    x: 1,
+    y: 64,
+    z: 1,
+    yaw: 0,
+    health: 20,
+    tamed: false,
+    sitting: false,
+    leashed: false,
+    sheared: false,
+    woolColor: 0,
+    baby: false,
+    growSeconds: 0,
+    villager: { profession: 'farmer', xp: 0, uses: [1, 2], demand: [999, 'x'] },
+  }] as unknown as SavedEntityRecord[]);
+  const [dirtyRecord] = dirtyParking.take('overworld', 0, 0);
+  const dirtyDemand =
+    dirtyRecord && dirtyRecord.kind === 'mob' ? dirtyRecord.villager?.demand : undefined;
+  equal('脏需求夹到上限', dirtyDemand?.[0], MAX_TRADE_DEMAND);
+  equal('非数字需求归 0', dirtyDemand?.[1], 0);
 }
 
 // ---------------------------------------------------------------- 收尾

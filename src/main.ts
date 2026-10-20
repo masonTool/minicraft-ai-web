@@ -123,7 +123,7 @@ import {
  */
 type Rideable = Boat | Minecart | Horse;
 import { Villager } from './core/entity/Villager.ts';
-import { isVillagerFood, levelName, tradeBlocker, tradeSettlement } from './core/registry/villagerTrades.ts';
+import { isVillagerFood, levelName, recordTradeUse, tradeBlocker, tradeDemand, tradeSettlement } from './core/registry/villagerTrades.ts';
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
 import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
@@ -5789,6 +5789,7 @@ class App {
               profession: entity.professionId,
               xp: entity.tradeXp,
               uses: entity.offers.map((offer) => offer.uses),
+              demand: entity.offers.map((offer) => tradeDemand(offer)),
             }
           : undefined;
       return {
@@ -6301,7 +6302,8 @@ class App {
       );
     }
 
-    offer.uses++;
+    // 次数 +1、需求 +1（批次 509：买得越多越贵，最多 +3）
+    recordTradeUse(offer);
     const levels = villager.addTradeXp(offer.xp);
     this.audio.play('trade', { x: villager.x, y: villager.y, z: villager.z });
     this.particles.spawnHearts(villager.x, villager.y + villager.type.height, villager.z, 0.5);
@@ -7395,6 +7397,11 @@ class App {
   private advanceDay(): void {
     this.dayCount++;
     this.sky.setMoonPhase(moonPhaseFor(this.dayCount));
+    // 村民每日补货（批次 509）：次数清零、需求各降 1。
+    // 只补**已加载**的村民；没加载的那批保留昨天的次数，下次加载后再跨日才补。
+    for (const entity of this.entities.all) {
+      if (entity instanceof Villager && !entity.dead) entity.restock();
+    }
     // 失眠（批次 126）：又一天没睡；新的一夜可以再派一批幻翼
     this.daysWithoutSleep++;
     this.phantomSpawnedTonight = false;

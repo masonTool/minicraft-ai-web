@@ -21,13 +21,17 @@
 import type { EntityContext } from './Entity.ts';
 import { Mob } from './Mob.ts';
 import {
+  MAX_TRADE_DEMAND,
   PROFESSIONS,
+  adjustedTradeCosts,
   findWorkstationNear,
   levelForTradeXp,
   offersForLevel,
   offersUnlockedAt,
   professionById,
   professionForWorkstation,
+  tradeDemand,
+  tradePriceDelta,
   type TradeOffer,
   type VillagerProfession,
   type VillagerProfessionId,
@@ -55,6 +59,8 @@ export interface VillagerSavedState {
   profession: string;
   xp: number;
   uses: readonly number[];
+  /** 每条交易的需求量（批次 509）；老存档没有 → 按 0 */
+  demand?: readonly number[];
 }
 
 /** 存档里的交易经验上限：脏数据（手改存档）不该把进度条撑成天文数字 */
@@ -152,6 +158,15 @@ export class Villager extends Mob {
         offer.uses = Math.max(0, Math.min(offer.maxUses, Math.floor(used)));
       }
     }
+    // 需求量同样按长度对齐；老存档（没有这个字段）就当 0
+    if (Array.isArray(state.demand) && state.demand.length === this.offers.length) {
+      for (let index = 0; index < this.offers.length; index++) {
+        const offer = this.offers[index]!;
+        const demand = state.demand[index];
+        if (typeof demand !== 'number' || !Number.isFinite(demand)) continue;
+        offer.demand = Math.max(0, Math.min(MAX_TRADE_DEMAND, Math.floor(demand)));
+      }
+    }
     // 工作站坐标不落盘（见文件头第 4 条）
     this.workstation = null;
     return true;
@@ -181,6 +196,23 @@ export class Villager extends Mob {
     return after - before;
   }
 
+  /**
+   * 新的一天补货（批次 509）：次数清零、需求各降 1。
+   *
+   * 原版一天补两次（上午/下午），本项目一天一次——20 分钟一天的节奏下，
+   * 两次会让"卖完"这件事几乎不存在；一次是"用得完、但也等得起"的折中。
+   *
+   * @returns 重置了几条交易（界面上可以据此冒一串绿星）
+   */
+  restock(): number {
+    if (!this.profession) return 0;
+    for (const offer of this.offers) {
+      offer.uses = 0;
+      offer.demand = Math.max(0, tradeDemand(offer) - 1);
+    }
+    return this.offers.length;
+  }
+
   override tick(ctx: EntityContext, dt: number): void {
     super.tick(ctx, dt);
     if (this.dead) return;
@@ -208,7 +240,15 @@ export class Villager extends Mob {
     profession: string | null;
     level: number;
     xp: number;
-    offers: Array<{ result: number; count: number; uses: number; maxUses: number }>;
+    offers: Array<{
+      result: number;
+      count: number;
+      uses: number;
+      maxUses: number;
+      demand: number;
+      priceDelta: number;
+      cost: Array<{ id: number; count: number }>;
+    }>;
   } {
     return {
       profession: this.professionId,
@@ -219,6 +259,9 @@ export class Villager extends Mob {
         count: offer.result.count,
         uses: offer.uses,
         maxUses: offer.maxUses,
+        demand: tradeDemand(offer),
+        priceDelta: tradePriceDelta(offer),
+        cost: adjustedTradeCosts(offer),
       })),
     };
   }

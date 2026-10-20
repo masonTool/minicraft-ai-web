@@ -116,7 +116,7 @@ import {
 import { BANNER_PATTERNS } from '../core/registry/blockState.ts';
 // 村民交易（J11，批次 88）：职业/交易表在注册表那一层（纯数据），界面只读不算
 import { Villager } from '../core/entity/Villager.ts';
-import { levelName, tradeBlocker } from '../core/registry/villagerTrades.ts';
+import { adjustedTradeCosts, levelName, tradeBlocker, tradeDemand } from '../core/registry/villagerTrades.ts';
 import { CAMPFIRE_SIZE, Campfire } from '../core/container/Campfire.ts';
 import { Dispenser } from '../core/container/Dispenser.ts';
 import { DROPPER_SIZE, Dropper } from '../core/container/Dropper.ts';
@@ -6509,7 +6509,9 @@ export class InventoryScreen {
     const villager = this.activeVillager;
     if (!villager) return;
 
-    const fingerprint = `${villager.id}:${villager.professionId ?? '-'}:${villager.level}`;
+    // 需求量进指纹（批次 509）：价格变了就得重建那几行，否则显示的还是旧价
+    const demandKey = villager.offers.map((offer) => tradeDemand(offer)).join(',');
+    const fingerprint = `${villager.id}:${villager.professionId ?? '-'}:${villager.level}:${demandKey}`;
     if (fingerprint !== this.tradeFingerprint) {
       this.tradeFingerprint = fingerprint;
       this.tradeListEl.replaceChildren();
@@ -6532,7 +6534,7 @@ export class InventoryScreen {
         // 左半：他收的东西（1~2 样，逐样一个小图标 + 数量）
         const costs = document.createElement('span');
         costs.className = 'trade-cost';
-        for (const cost of offer.cost) {
+        for (const cost of adjustedTradeCosts(offer)) {
           const canvas = document.createElement('canvas');
           canvas.width = 24;
           canvas.height = 24;

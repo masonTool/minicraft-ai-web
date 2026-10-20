@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1075（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1076（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **233**、进行中 **50**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -555,3 +555,9 @@ npm run agent:setup        # 跨机器自检
   **J4 敌对生物**（shulker/evoker/witch/illusioner/guardian 都有定义）、
   **J6 战斗**（逐武器冷却在 507 落地）、**J9 弹射物**（引雷 269 已做，原文过期）。
   完成 227 → **233**、进行中 56 → **50**。仍开着的都是真尾巴（多人与 i18n 由用户处理）。
+- 批次 509（J11 尾巴）：**村民每日补货 + 价格浮动**。`TradeOffer.demand`（0~6，
+  成交 +1 / 跨日 -1），`tradePriceDelta = floor(demand/2)`（最多 +3）加在第一样收货上；
+  `recordTradeUse` 统一记账（次数夹到 `maxUses`）；`Villager.restock()` 由
+  `advanceDay` 驱动（只补已加载的村民）；`demand` 随实体寄存与存档往返（老存档 → 0）；
+  交易界面把需求量进指纹——价格变了要重建那几行，否则显示旧价。
+  `test:villager` 141 → **170 条**。J11 仍 `[~]`：白天去上班（POI 走动）与躲僵尸还没做。

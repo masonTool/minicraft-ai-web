@@ -379,6 +379,50 @@ export interface TradeOffer extends TradeSpec {
   /** 这一条是第几级解锁的（界面按它分组显示；升级时新增的那一批就是新等级） */
   readonly level: number;
   uses: number;
+  /**
+   * 需求量（批次 509）：成交一次 +1、每日补货 -1，价格按它上浮。
+   * 老存档没有这个字段 → 0（与"从没涨过价"同义）。
+   */
+  demand?: number;
+}
+
+/**
+ * 需求量上限（批次 509）。
+ *
+ * 每成交一次 +1、每天补货 -1；价格 = `floor(demand / 2)`，所以 6 点正好顶到 **+3**。
+ * 原版 demand 没有明确上限、还能被声望/难度左右，这里收成一个可断言的数。
+ */
+export const MAX_TRADE_DEMAND = 6;
+
+/** 这一条现在欠多少"需求"（脏数据夹到 0~上限） */
+export function tradeDemand(offer: TradeOffer): number {
+  const raw = offer.demand;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.min(MAX_TRADE_DEMAND, Math.floor(raw)));
+}
+
+/**
+ * 涨价幅度（加在第一样收货物品上）。
+ *
+ * 每 2 点需求 +1，最多 +3 —— 原版是"买得越多越贵"，本项目把它做成**确定性**的：
+ * 同样次数一定得到同样价格，离线可断言、玩家也不会觉得是随机被宰。
+ */
+export function tradePriceDelta(offer: TradeOffer): number {
+  return Math.min(3, Math.floor(tradeDemand(offer) / 2));
+}
+
+/** 这一条交易**现在**要收什么（第一样按需求涨价） */
+export function adjustedTradeCosts(offer: TradeOffer): TradeCost[] {
+  const delta = tradePriceDelta(offer);
+  const costs = offer.cost.map((cost) => ({ ...cost }));
+  if (delta > 0 && costs.length > 0) costs[0]!.count += delta;
+  return costs;
+}
+
+/** 成交一次：次数 +1、需求 +1（封顶） */
+export function recordTradeUse(offer: TradeOffer): void {
+  offer.uses = Math.min(offer.maxUses, offer.uses + 1);
+  offer.demand = Math.min(MAX_TRADE_DEMAND, tradeDemand(offer) + 1);
 }
 
 /**
@@ -420,8 +464,8 @@ export interface TradeInventory {
  * 原版的两条提示也是这个顺序（"村民今天不卖了"比"你缺 3 个小麦"更根本）。
  */
 export function tradeBlocker(offer: TradeOffer, inventory: TradeInventory): string | null {
-  if (offer.uses >= offer.maxUses) return '这条交易今天已经用完了（本项目不做每日刷新）';
-  for (const cost of offer.cost) {
+  if (offer.uses >= offer.maxUses) return '这条交易今天已经用完了（明天补货）';
+  for (const cost of adjustedTradeCosts(offer)) {
     const have = inventory.countOf(cost.id);
     if (have < cost.count) return `材料不够（还差 ${cost.count - have} 个）`;
   }
@@ -438,7 +482,7 @@ export function tradeSettlement(offer: TradeOffer): { take: TradeCost[]; give: {
   // ⚠️ 要**逐项**拷，不能只拷数组：`[...offer.cost]` 拿到的是同一批对象，
   // 调用方（或断言）改一下 `take[0].count` 就把表里那条交易的价格改了
   // （这类"数组拷了、元素没拷"的坑在本项目栽过不止一次）
-  return { take: offer.cost.map((cost) => ({ ...cost })), give: { ...offer.result } };
+  return { take: adjustedTradeCosts(offer), give: { ...offer.result } };
 }
 
 /**
