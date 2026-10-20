@@ -3171,6 +3171,22 @@ PAINTERS.item_brick = (x, y, rng) => {
 /** 空像素（透明） */
 const EMPTY: RGBA = [0, 0, 0, 0];
 
+/**
+ * 十字植物贴图的**透明边**（批次 525）：不透明像素只允许落在 [1, 14] 这个方框里。
+ *
+ * 为什么必须有它：十字薄面的 UV 是 0~1，而着色器用 `fract(平铺坐标)` 把它映射回
+ * 贴图内部——**整数处的 fract 会从 1 掉回 0**（贴图的上下/左右本来就是"接"在一起的）。
+ * 于是恰好落在面顶边上的那一行像素，采到的是贴图**最下面那一行**；而草的下边缘
+ * 是不透明的草根，于是十字面的顶边就画出一条**极细的十字线**。
+ * 各向异性过滤沿长轴跨出贴图时、以及薄面底边与地面共面时，读到的也是这两行。
+ *
+ * 让**四边都留一纹素透明**之后，上面这些路径读到的永远是透明：面顶边即使回绕到
+ * 第 15 行也是空的，底边也不会与地面打架。代价是草根离地 1/16 格（约 1.5 厘米），
+ * 肉眼不可见。
+ */
+const PLANT_MIN = 1;
+const PLANT_MAX = 14;
+
 /** 一片叶子：起始列、宽度（固定 2，叶尖收成 1）、顶端高度、倾斜方向、色相档（0~1） */
 interface Blade {
   baseX: number;
@@ -3210,7 +3226,8 @@ function bladesPainter(rgb: readonly [number, number, number], blades: number, t
     // 覆盖率从 50% 掉到 23%。这里一律用无符号右移。
     const seed = hashString(`blade${i}:${salt}`);
     const slot = blades > 1 ? Math.round((i * 13) / (blades - 1)) : 7;
-    const baseX = Math.min(14, Math.max(0, slot + (seed % 3) - 1));
+    // 列范围收进 [1, 13]：每片叶子 2 像素宽，占 1..14，四边各留 1 纹素透明（见 `PLANT_MIN`）
+    const baseX = Math.min(PLANT_MAX - 1, Math.max(PLANT_MIN, slot + (seed % 3) - 1));
     // 高度要有明显差异：全都一样高就像一排栅栏，不像一丛草（蕨类整体更高）
     const height = Math.max(5, tall - 5 + ((seed >>> 5) % 6));
     list.push({
@@ -3222,6 +3239,7 @@ function bladesPainter(rgb: readonly [number, number, number], blades: number, t
   }
 
   return (x, y, rng) => {
+    if (y > PLANT_MAX) return EMPTY; // 底行留空（见 `PLANT_MIN` 的注释）
     let blade: Blade | null = null;
     for (const candidate of list) {
       if (y < candidate.top) continue;
@@ -3265,7 +3283,7 @@ function flowerPainter(stem: readonly [number, number, number], petal: readonly 
     // 茎：**两像素宽**（批次 524）。以前是 1 像素宽、9 行高的一条竖线——和草尖一样，
     // 它在屏幕上就是"极细的线"，mipmap 一平均还会断成虚线。
     const stemX = 7 + (hashString(`${salt}stem`) % 2);
-    if (y >= 7 && (x === stemX || x === stemX + 1)) {
+    if (y >= 7 && y <= PLANT_MAX && (x === stemX || x === stemX + 1)) {
       const v = 1 + (rng() * 0.16 - 0.08);
       return [clamp255(stem[0] * v), clamp255(stem[1] * v), clamp255(stem[2] * v), 255];
     }
@@ -3312,7 +3330,7 @@ function mushroomPainter(cap: readonly [number, number, number], stem: readonly 
       return [clamp255(cap[0] * v * s), clamp255(cap[1] * v * s), clamp255(cap[2] * v * s), 255];
     }
     // 菌柄：两像素宽，位于中央
-    if (y > 7 && Math.abs(x - 7.5) < 1.5) {
+    if (y > 7 && y <= PLANT_MAX && Math.abs(x - 7.5) < 1.5) {
       const v = 1 + (rng() * 0.1 - 0.05);
       return [clamp255(stem[0] * v), clamp255(stem[1] * v), clamp255(stem[2] * v), 255];
     }
@@ -3338,10 +3356,13 @@ function stalkPainter(
   const spans: Array<[number, number]> = [];
   const gap = Math.max(width + 1, Math.floor(16 / stalks));
   for (let i = 0; i < stalks; i++) {
-    const x0 = Math.min(16 - width, i * gap + 1);
+    const x0 = Math.min(PLANT_MAX - width + 1, Math.max(PLANT_MIN, i * gap + 1));
     spans.push([x0, x0 + width - 1]);
   }
   return (x, y, rng) => {
+    // 上下各留一纹素（见 `PLANT_MIN`）：秆原来一直顶到画布最上一行，
+    // 那一行会被十字面的"回绕"读到（fract(1)=0 → 采到最下一行），必须留空
+    if (y < PLANT_MIN || y > PLANT_MAX) return EMPTY;
     const span = spans.find(([a, b]) => x >= a && x <= b);
     if (!span) return EMPTY;
     // 节点：每 5 像素一条横向色带
@@ -3355,6 +3376,7 @@ function stalkPainter(
 
 /** 枯木：几根没有叶子的枯枝 */
 const DEAD_BUSH_PAINTER: Painter = (x, y, rng) => {
+  if (x < PLANT_MIN || x > PLANT_MAX || y > PLANT_MAX) return EMPTY;
   const column = hashString(`bush${x}`);
   if (column % 100 >= 43) return EMPTY;
   const top = 4 + (column >> 4) % 8;
@@ -6310,6 +6332,30 @@ export function paintedCoverage(name: TileName, size = 16): number {
  * 十字植物的贴图应当为 **0**：叶子/花茎/秆一律 ≥ 2 像素宽，收窄的观感交给
  * "高度不同"表达。同样是跑画笔算、不碰 canvas，离线可断言。
  */
+
+/**
+ * 某张程序化贴图的**最外一圈**里有多少个不透明像素（批次 525）。
+ *
+ * 十字植物的贴图必须是 **0**：薄面 UV 是 0~1，而 `fract(平铺坐标)` 在整数处会把
+ * 1 掉回 0 —— 面顶边那一行会采到贴图最下面一行（草根，不透明），于是顶边画出一条
+ * 极细的十字线；各向异性跨出贴图、薄面底边与地面共面走的也是这条路径。
+ * 四边留一纹素透明之后，这些路径读到的永远是空。
+ */
+export function paintedEdgeOpaque(name: TileName, size = 16): number {
+  const painter = PAINTERS[name] ?? noisy(128, 14);
+  const rng = makeRng(hashString(name));
+  let edge = 0;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // 必须按顺序把每个像素都画一遍：画笔吃的是共享 rng，跳过内圈会让后续像素错位
+      const alpha = painter(x, y, rng)[3];
+      const isEdge = x === 0 || y === 0 || x === size - 1 || y === size - 1;
+      if (isEdge && alpha >= 128) edge++;
+    }
+  }
+  return edge;
+}
+
 export function paintedThinColumns(name: TileName, size = 16): number {
   const painter = PAINTERS[name] ?? noisy(128, 14);
   const rng = makeRng(hashString(name));

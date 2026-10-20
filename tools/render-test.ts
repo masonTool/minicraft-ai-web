@@ -25,6 +25,7 @@ import {
   ATLAS_ANISOTROPY_MOBILE,
   clampAnisotropy,
   paintedCoverage,
+  paintedEdgeOpaque,
   paintedThinColumns,
   type TextureAtlas,
 } from '../src/render/TextureAtlas.ts';
@@ -1085,6 +1086,22 @@ console.log('\n[植物贴图：不许有 1 像素宽的竖条]');
   for (const tile of ['short_grass', 'fern', 'dandelion', 'poppy', 'sugar_cane', 'bamboo'] as const) {
     const thin = paintedThinColumns(tile);
     check(`${tile} 没有孤立的 1 像素竖条`, thin === 0, `${thin} 个`);
+  }
+}
+
+// ---------------------------------------------------------------- 植物贴图的四边必须透明（批次 525）
+//
+// 用户："植物的十字形状上面有一条很细的十字的线"。
+// 机制：薄面 UV 是 0~1，着色器用 `fract(平铺坐标)` 映射回贴图 —— **整数处 fract 从 1 掉回 0**，
+// 所以落在面**顶边**上的那一行像素采到的是贴图**最下面一行**（不透明的草根），
+// 于是两条面的顶边各画出一条线、合起来就是一个极细的十字。
+// 只要四边留一纹素透明，这条路径（以及各向异性越界、底边与地面共面）读到的就永远是空。
+
+console.log('\n[植物贴图的四边必须透明]');
+{
+  for (const tile of ['short_grass', 'fern', 'dandelion', 'poppy', 'sugar_cane', 'bamboo', 'red_mushroom'] as const) {
+    const edge = paintedEdgeOpaque(tile);
+    check(`${tile} 最外一圈是透明的`, edge === 0, `${edge} 个不透明像素`);
   }
 }
 
