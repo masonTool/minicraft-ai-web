@@ -77,6 +77,12 @@ export interface UiIconNode extends UiNode {
   onTap: () => void;
 }
 
+export interface UiVitalNode extends UiNode {
+  kind: 'vital';
+  vital: 'heart' | 'food';
+  count: number;
+}
+
 export interface UiRingNode extends UiNode {
   kind: 'ring';
   visible: boolean;
@@ -90,7 +96,8 @@ export type UiElement =
   | UiSliderNode
   | UiSlotNode
   | UiIconNode
-  | UiRingNode;
+  | UiRingNode
+  | UiVitalNode;
 
 export function box(x: number, y: number, w: number, h: number, children: UiElement[] = [], style: UiStyle = {}): UiNode {
   return { x, y, w, h, style, children };
@@ -166,6 +173,16 @@ export function icon(
 
 export function ring(x: number, y: number, size: number, visible = false): UiRingNode {
   return { kind: 'ring', x, y, w: size, h: size, visible };
+}
+
+export function vital(
+  x: number,
+  y: number,
+  size: number,
+  vitalType: 'heart' | 'food',
+  count: number,
+): UiVitalNode {
+  return { kind: 'vital', x, y, w: size * 10 + 9, h: size, vital: vitalType, count };
 }
 
 export function row(
@@ -440,6 +457,35 @@ export class UiLayer {
         ctx.stroke();
       }
       this.icons.push(node);
+      return;
+    }
+
+    if ('kind' in node && node.kind === 'vital') {
+      const size = node.h;
+      const gap = 1;
+      for (let i = 0; i < 10; i++) {
+        const cx = node.x + i * (size + gap) + size / 2;
+        const cy = node.y + size / 2;
+        const filled = node.count >= (i + 1) * 2;
+        ctx.fillStyle = filled ? (node.vital === 'heart' ? '#e5484d' : '#e0a03a') : 'rgba(0,0,0,0.55)';
+        ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+        ctx.lineWidth = 1;
+        if (node.vital === 'heart') {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy + size * 0.35);
+          ctx.bezierCurveTo(cx - size * 0.55, cy - size * 0.1, cx - size * 0.32, cy - size * 0.5, cx, cy - size * 0.2);
+          ctx.bezierCurveTo(cx + size * 0.32, cy - size * 0.5, cx + size * 0.55, cy - size * 0.1, cx, cy + size * 0.35);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.ellipse(cx, cy - size * 0.1, size * 0.32, size * 0.24, 0.4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillRect(cx - size * 0.05, cy + size * 0.05, size * 0.12, size * 0.32);
+        }
+      }
       return;
     }
 

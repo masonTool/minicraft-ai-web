@@ -14,7 +14,7 @@ import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
-import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, type UiElement, type UiRingNode } from './ui-kit/index.ts';
+import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital, type UiElement, type UiRingNode } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
 import { Chest } from '../core/container/Chest.ts';
 import { Furnace } from '../core/container/Furnace.ts';
@@ -187,6 +187,7 @@ let recipeQuery = '';
 let creativeQuery = '';
 let inventoryHint = '';
 let selectedSlot = 0;
+let hudInputBlockUntil = 0;
 const inventory = new Inventory();
 let crafting = new CraftingGrid(2);
 const creativeItems = CREATIVE_ITEMS;
@@ -976,6 +977,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   playerReady = false;
   inventory.clear();
   selectedSlot = 0;
+  hudInputBlockUntil = Date.now() + 400;
   try {
     save = await FileSaveGame.open(entry.id, platform.files);
     for (const record of await save.loadAllChunkEdits()) {
@@ -1510,12 +1512,8 @@ const showHud = (): void => {
         playerModel.visible = cameraMode === 'third';
         showHud();
       }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
-      text(242, uiHeight - 142, 260, 18, '生命 20/20', { fontSize: 11, color: 'rgba(255,225,225,0.85)' }),
-      box(242, uiHeight - 124, 250, 7, [], { background: 'rgba(0,0,0,0.5)', radius: 3 }),
-      box(242, uiHeight - 124, 250, 7, [], { background: '#d94b4b', radius: 3 }),
-      text(522, uiHeight - 142, 260, 18, '饥饿 20/20', { fontSize: 11, color: 'rgba(255,240,210,0.85)' }),
-      box(522, uiHeight - 124, 250, 7, [], { background: 'rgba(0,0,0,0.5)', radius: 3 }),
-      box(522, uiHeight - 124, 250, 7, [], { background: '#d9a441', radius: 3 }),
+      vital(242, uiHeight - 140, 16, 'heart', 20),
+      vital(612, uiHeight - 140, 16, 'food', 20),
       text(0, uiHeight - 108, 1024, 24, inventory.get(selectedSlot) ? itemLabel(inventory.get(selectedSlot)!.id) : '空手', {
         fontSize: 14,
         color: 'rgba(255,255,255,0.92)',
@@ -1524,6 +1522,7 @@ const showHud = (): void => {
       ...Array.from({ length: 9 }, (_, i) => {
         const stack = inventory.get(i);
         return slot(242 + i * 60, uiHeight - 76, 54, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
+          if (Date.now() < hudInputBlockUntil) return;
           selectedSlot = i;
           showHud();
         });
