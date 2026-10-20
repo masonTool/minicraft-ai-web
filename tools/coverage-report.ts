@@ -226,7 +226,15 @@ const rows: readonly Row[] = [
     spec: SPEC.rules,
     now: Object.keys(DEFAULT_GAME_RULES).length,
     basis: '原版 1.18 `/gamerule` 条目数',
-    gap: '天气/生物/方块类规则',
+    // 剩下的 10 条**逐条列出来**（批次 409 对着规则表核过一遍）：
+    // 这批不是"没做"，而是"没有可挂的子系统"，以及"单人里本来就恒等"。
+    //  ① 依赖未实现子系统（6）：doFireTick（无火焰蔓延）、doEntityDrops（载具/展示框不掉落）、
+    //     doPatrolSpawning（无巡逻队）、doTraderSpawning（流浪商人无自发刷新）、
+    //     freezeDamage（无细雪/冻伤）、doLimitedCrafting（无配方锁定）
+    //  ② 与本项目无关（4）：commandBlockOutput / maxCommandChainLength / logAdminCommands
+    //     （没有命令方块）、playersSleepingPercentage（单人下恒为 100）
+    // ⚠️ 不为了凑百分数先把条目登记上——"能设但不起作用"比缺着更难查（见附魔那两行的口径）
+    gap: '6 条依赖未实现子系统 + 4 条与本项目无关（逐条列在注释里）',
   },
   {
     label: '红石元件（含门类负载）',

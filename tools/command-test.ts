@@ -393,6 +393,12 @@ console.log('\n[难度与游戏规则]');
   check('数值规则可设置', speed.world.rules.randomTickSpeed === 10);
   const clamped = run('/gamerule randomTickSpeed 999');
   check('数值规则会被夹紧', clamped.world.rules.randomTickSpeed === 100, String(clamped.world.rules.randomTickSpeed));
+  // 批次 409：reducedDebugInfo（调试面板收起）
+  const reduced = run('/gamerule reducedDebugInfo true');
+  check('reducedDebugInfo 能设成 true', reduced.world.rules.reducedDebugInfo === true, reduced.out.lastError);
+  check('规则列表里能看到它（不必记名字）', run('/gamerule').out.lastInfo.includes('reducedDebugInfo'));
+  check('布尔规则不接受 1（只认 true/false）', run('/gamerule reducedDebugInfo 1').out.lastError.length > 0);
+
   const read = run('/gamerule doMobSpawning');
   check('只给规则名时是查询', read.out.lastInfo.includes('doMobSpawning = true'));
   const list = run('/gamerule');

@@ -1363,6 +1363,8 @@ class App {
    * 侧边栏界面也还没接——两件事都记在 TASKS M23 里，不装作做完了。
    */
   private readonly scoreboardState = new Scoreboard();
+  /** 设置里的"显示调试信息"（批次 409）：与 `/gamerule reducedDebugInfo` 一起决定面板可见 */
+  private showDebugSetting = true;
   /** 蜂巢的蜂蜜等级（J21，批次 407）：按坐标存，键里带维度 */
   private readonly beeHives = new BeeHives();
   /**
@@ -2288,7 +2290,10 @@ class App {
     this.applyDecorLevel();
     // 触摸端外观类设置（批次 271：左右手 / 瞄准方式 / 摇杆模式 / 按钮大小）
     this.applyTouchChrome();
-    this.debugEl.style.display = settings.showDebug ? '' : 'none';
+    // 调试面板的可见性由**设置开关与 `/gamerule reducedDebugInfo` 共同**决定，
+    // 每帧在 `updateDebug` 里按这两者算（规则优先：它模拟的是服务端不肯给你坐标）
+    this.showDebugSetting = settings.showDebug;
+    this.debugEl.style.display = settings.showDebug && !this.rules.reducedDebugInfo ? '' : 'none';
     if (this.inventoryScreen.isOpen) this.inventoryScreen.refresh();
     if (this.recipeBook.isOpen) this.recipeBook.render();
     this.applyEnvironment();
@@ -12629,6 +12634,10 @@ class App {
   }
 
   private updateDebug(dt: number): void {
+    // `/gamerule reducedDebugInfo true`（批次 409）：整块收起，且**不影响帧率统计**
+    // （`frames`/`fpsTimer` 要先走完，否则关掉面板再打开会显示一个错的 fps）
+    const debugVisible = this.showDebugSetting && !this.rules.reducedDebugInfo;
+    this.debugEl.style.display = debugVisible ? '' : 'none';
     this.frames++;
     this.fpsTimer += dt;
     if (this.fpsTimer >= 0.5) {
@@ -12636,6 +12645,9 @@ class App {
       this.frames = 0;
       this.fpsTimer = 0;
     }
+
+    // 收起时直接返回：面板里每一行都带坐标/种子，逐行裁剪不如不写
+    if (!debugVisible) return;
 
     const p = this.physics;
     const cx = toChunkCoord(p.x);

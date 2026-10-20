@@ -57,6 +57,11 @@ export interface GameRules {
   disableRaids: boolean;
   /** 世界出生点的散布半径（批次 393；没有床时的重生位置） */
   spawnRadius: number;
+  /**
+   * 是否隐藏调试信息（批次 409）。原版是"多人里不让玩家读坐标"的防作弊规则。
+   * 本项目退化成**整块收起调试面板**（面板每一行都带坐标，逐行裁剪不如直接收起）。
+   */
+  reducedDebugInfo: boolean;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -79,6 +84,7 @@ export const DEFAULT_GAME_RULES: GameRules = {
   showDeathMessages: true,
   disableRaids: false,
   spawnRadius: 10,
+  reducedDebugInfo: false,
 };
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */

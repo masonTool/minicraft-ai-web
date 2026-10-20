@@ -10175,4 +10175,21 @@
 - [x] B405-3 TASKS 勾 `[x]` 并写清每一件在哪（下次审计不要重复补）
 - ⚠️ 触屏没有 Shift 键：靠"双击退化"补上是**设计选择**，不是缺口
 
+## 批次 406：J19 猪 / 炽足兽骑乘（2026-10-20）
+
+- [x] B406-1 先核现状：`Horse`（批次 253/254）已实现 `passenger` / `rideYaw` /
+      `saddled` / 跳跃 / 苹果驯服，`Rideable = Boat | Minecart | Horse` 也已接好。
+      ⚠️ 上一轮我说"完全没有 riding 代码"是**grep 写窄了**（只搜 riding/rider/mount，
+      而字段叫 `passenger`/`rideYaw`）——记一笔，别再按印象下结论
+- [x] B406-2 `Horse.needsTaming`：马/驴/骡/羊驼 true，猪/炽足兽 **false**（原版装鞍即骑）
+- [x] B406-3 `Horse.canJump`：猪/炽足兽 false（原版它们跳不了），跳跃分支加守卫
+- [x] B406-4 `MobFactory`：pig / strider 也走 `Horse`（"能不能骑"的唯一入口）
+- [x] B406-5 `canUseItemOnMob`：**装鞍后空手点猪/炽足兽 = 上车**。
+      漏这条会表现成"鞍装上了、点它却只能打一下"（它们不 tamed，
+      而原本那条 `mob.tamed && held === undefined` 不成立）
+- [x] B406-6 `main` 的装鞍/上车条件放宽成 `mob.tamed || !mob.needsTaming`
+- [x] B406-7 `test:entity` 118 → **129 条**
+- ⚠️ 没做：胡萝卜钓竿转向（用方向键直接驾驭，记在差异台账）、马背包（J8）、
+  拴绳"把生物拉回来"的物理（现在只是牵着跟随）
+
 <!-- docs-archive:end -->

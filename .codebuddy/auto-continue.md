@@ -98,23 +98,6 @@
 
 ---
 
-## 批次 406：J19 猪 / 炽足兽骑乘（2026-10-20）
-
-- [x] B406-1 先核现状：`Horse`（批次 253/254）已实现 `passenger` / `rideYaw` /
-      `saddled` / 跳跃 / 苹果驯服，`Rideable = Boat | Minecart | Horse` 也已接好。
-      ⚠️ 上一轮我说"完全没有 riding 代码"是**grep 写窄了**（只搜 riding/rider/mount，
-      而字段叫 `passenger`/`rideYaw`）——记一笔，别再按印象下结论
-- [x] B406-2 `Horse.needsTaming`：马/驴/骡/羊驼 true，猪/炽足兽 **false**（原版装鞍即骑）
-- [x] B406-3 `Horse.canJump`：猪/炽足兽 false（原版它们跳不了），跳跃分支加守卫
-- [x] B406-4 `MobFactory`：pig / strider 也走 `Horse`（"能不能骑"的唯一入口）
-- [x] B406-5 `canUseItemOnMob`：**装鞍后空手点猪/炽足兽 = 上车**。
-      漏这条会表现成"鞍装上了、点它却只能打一下"（它们不 tamed，
-      而原本那条 `mob.tamed && held === undefined` 不成立）
-- [x] B406-6 `main` 的装鞍/上车条件放宽成 `mob.tamed || !mob.needsTaming`
-- [x] B406-7 `test:entity` 118 → **129 条**
-- ⚠️ 没做：胡萝卜钓竿转向（用方向键直接驾驭，记在差异台账）、马背包（J8）、
-  拴绳"把生物拉回来"的物理（现在只是牵着跟随）
-
 ## 批次 407：J21 蜜蜂生态收口（2026-10-20）
 
 - [x] B407-1 `core/world/BeeHive.ts`（纯规则）：等级 0~5、`harvest()` 挤完**归 0**（原版清空，
@@ -143,3 +126,16 @@
 - ⚠️ 水井顶用整块圆石（原版砂岩台阶）：没有通用 `stone_slab` 常量，不值得为装饰顶接 id 换算
 - ⚠️ 教训：候选清单里我一度把"沉船/废弃矿井/海底神殿/林地府邸/末地城"列成缺口，
   **它们早都实现了**——判断缺什么必须去读注册表，不能凭印象（这次台账和印象一起错）
+
+## 批次 409：I11 第 20 条规则 + 剩余 10 条核清（2026-10-20）
+
+- [x] B409-1 `reducedDebugInfo`：原版是多人防作弊（不让读坐标），本项目退化成**整块收起调试面板**
+- [x] B409-2 接线在 `updateDebug`：每帧按「设置里的 showDebug && !规则」算可见性；
+      先走完 fps 统计再早退，否则关掉再打开会显示一个错的 fps
+- [x] B409-3 把剩下 10 条**逐条核了一遍**并写进覆盖度台账注释：
+      6 条依赖未实现子系统（doFireTick / doEntityDrops / doPatrolSpawning /
+      doTraderSpawning / freezeDamage / doLimitedCrafting），
+      4 条与本项目无关（命令方块三条 + 单人下恒等的 playersSleepingPercentage）
+- [x] B409-4 `test:commands` 144 → **147 条**
+- 覆盖：游戏规则 **19 → 20（63% → 67%）**
+- ⚠️ 这 10 条没有先登记成"能设但不起作用"——与附魔那两行同一口径，假接受比缺着更难查
