@@ -19,7 +19,7 @@ import { type BlockArray, CHUNK_SIZE_X, CHUNK_SIZE_Z, Chunk, WORLD_MAX_Y, WORLD_
 import { DoublePerlinNoise, NormalNoise } from './noise/PerlinNoise.ts';
 import { Random } from './noise/Random.ts';
 import { FeatureWriter, hashAt, PositionalRng } from './Features.ts';
-import { generateBastions } from './Bastion.ts';
+import { generateBastions, generateNetherFossils } from './Bastion.ts';
 import { generateFortresses, type FortressWorld } from './NetherFortress.ts';
 
 /** 岩浆海面高度（原版下界岩浆海在 y=32） */
@@ -410,12 +410,16 @@ export class NetherGenerator {
       ceilingAt: (x: number, z: number) => this.ceilingAt(x, z),
       biomeAt: (x: number, z: number) => this.biomeAt(x, z),
       basaltBiome: NetherBiome.BASALT_DELTAS,
+      soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
     };
   }
 
   generateStructures(w: FeatureWriter, seed: number): void {
     const world = this.structureWorld();
     generateBastions(w, seed, world);
+    // 下界化石（批次 410）：小件，先于要塞落地——要塞要长下界疣、要放刷怪笼，
+    // 让它占完整地盘比留一节骨架要紧（与"要塞在堡垒之后"同一个理由）
+    generateNetherFossils(w, seed, world);
     // ⚠️ 顺序有讲究：**要塞在后**。两座结构各有各的单元网格与盐（同样的种子下位置无关），
     // 万一候选点凑得很近，后写的会把先写的盖掉一点——让要塞（要长下界疣、要放刷怪笼）
     // 占到完整的地盘，比"桥被切掉一截"要紧

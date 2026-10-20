@@ -157,6 +157,7 @@ function makeFortressWorld(overrides: Partial<FortressWorld> = {}): FortressWorl
     ceilingAt: () => 40 + FORTRESS_CLEARANCE + 4,
     biomeAt: () => NetherBiome.NETHER_WASTES,
     basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
     ...overrides,
   };
 }
@@ -236,6 +237,7 @@ console.log('\n[要塞：真的会出现在下界的区块里]');
     ceilingAt: (x, z) => generator.ceilingAt(x, z),
     biomeAt: (x, z) => generator.biomeAt(x, z),
     basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
   };
   let inst: FortressInstance | null = null;
   for (let i = 0; i < 400 && !inst; i++) inst = fortressInstanceForTest(i, 0, SEED, realWorld);
