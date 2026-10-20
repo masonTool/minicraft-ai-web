@@ -19,7 +19,7 @@
  */
 
 import * as THREE from 'three';
-import { TextureAtlas } from './render/TextureAtlas.ts';
+import { ATLAS_ANISOTROPY_DESKTOP, ATLAS_ANISOTROPY_MOBILE, TextureAtlas } from './render/TextureAtlas.ts';
 import { ChunkRenderer } from './render/ChunkRenderer.ts';
 import { MeshWorkerPool } from './render/MeshWorkerPool.ts';
 import {
@@ -1878,6 +1878,10 @@ class App {
     this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), this.perf.resolutionScale, this.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
+    // 图集各向异性（批次 425）：只在拿到 renderer 之后才能开（three 会按设备上限夹）。
+    // 斜视地面/墙壁时 LOD 由长轴决定，没有它会糊成一块色；图集已加 8 纹素边距，
+    // 足迹跨出去看到的是自己的外扩而不是邻居贴图（见 TextureAtlas.syncUploadCanvas）。
+    this.atlas.setAnisotropy(isTouchDevice() ? ATLAS_ANISOTROPY_MOBILE : ATLAS_ANISOTROPY_DESKTOP);
     // 场景亮度（批次 220）：设置里的值只在"玩家改设置"时才走 `applySettings`，
     // 启动时必须先落一次，否则存档里调过的亮度要等玩家进一次设置才生效
     this.applySceneBrightness(this.settings.brightness);

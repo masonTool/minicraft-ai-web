@@ -20,7 +20,13 @@
 import * as THREE from 'three';
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
 import { Item } from '../src/core/registry/items.ts';
-import { paintedCoverage, type TextureAtlas } from '../src/render/TextureAtlas.ts';
+import {
+  ATLAS_ANISOTROPY_DESKTOP,
+  ATLAS_ANISOTROPY_MOBILE,
+  clampAnisotropy,
+  paintedCoverage,
+  type TextureAtlas,
+} from '../src/render/TextureAtlas.ts';
 import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from '../src/render/atlasMesh.ts';
 import { PARTICLE_POOL, ParticleSystem } from '../src/render/ParticleSystem.ts';
 import { ScreenEffects } from '../src/render/ScreenEffects.ts';
@@ -256,6 +262,18 @@ console.log('\n[图集几何工具：UV 与逐面明暗]');
       paddedRect.map((v) => v.toFixed(5)).join(','),
     );
   }
+
+  // ---- 各向异性档位（批次 425）
+  check('0/负数/NaN 都落到 1（GL 里 0 是非法值）', [0, -3, Number.NaN].every((v) => clampAnisotropy(v) === 1));
+  equal('4 原样保留', clampAnisotropy(4), 4);
+  equal('过大被夹到 16', clampAnisotropy(999), 16);
+  check('手机档不超过桌面档', ATLAS_ANISOTROPY_MOBILE <= ATLAS_ANISOTROPY_DESKTOP);
+  // 4× 的足迹约 ±2 纹素、8× 约 ±4：边距必须罩得住，否则侧视时会采到邻居贴图
+  check(
+    '边距罩得住桌面档的取样足迹（每侧 ≥ 档位/2 纹素）',
+    TILE_PADDING * 2 >= ATLAS_ANISOTROPY_DESKTOP,
+    `padding ${TILE_PADDING} vs ${ATLAS_ANISOTROPY_DESKTOP}×`,
+  );
 
   check('blockFaceTiles 返回六张贴图且顺序为 [侧,侧,顶,底,侧,侧]', (() => {
     const tiles = blockDef(Block.GRASS_BLOCK).tiles;

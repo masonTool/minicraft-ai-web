@@ -42,6 +42,26 @@ export type { TileName } from './atlasLayout.ts';
 
 const TILE_INDEX = new Map<string, number>(TILE_ORDER.map((n, i) => [n, i]));
 
+/**
+ * 图集各向异性档位（批次 425）。
+ *
+ * 足迹长度大约是"长轴/短轴"的比值：手机上常见的斜视地面在 4~8 倍，4× 已经能救回
+ * 大部分细节，再多是给纹理带宽付账；台式的视场更大、更常贴着地面平视，给 8×。
+ * 两者都在 8 纹素边距之内（4× 足迹 ±2、8× ±4）。
+ */
+export const ATLAS_ANISOTROPY_MOBILE = 4;
+export const ATLAS_ANISOTROPY_DESKTOP = 8;
+
+/**
+ * 把各向异性档位夹进 GPU 支持的范围（1~16）。
+ *
+ * 单独抽成函数是为了能离线断言：0 / 负数 / NaN 都必须落到 1（= 关闭），
+ * 而不是被 `Math.min` 夹成 0（0 在 GL 里是非法值，部分驱动会直接报错）。
+ */
+export function clampAnisotropy(level: number): number {
+  return Math.max(1, Math.min(16, Math.round(level) || 1));
+}
+
 /** 确定性随机数（xorshift32），保证每次生成的贴图完全一致 */
 function makeRng(seed: number): () => number {
   let s = seed >>> 0 || 0x9e3779b9;
@@ -6582,6 +6602,26 @@ export class TextureAtlas {
   /** 单张贴图**内容区**占图集的 UV 尺寸（所有贴图相同） */
   get tileSpan(): [number, number] {
     return tileSpanAt(this.columns, this.rows, TILE_PADDING);
+  }
+
+  /**
+   * 各向异性过滤档位（批次 425）。
+   *
+   * 没有它的时候，LOD 由**取样足迹的长轴**决定：侧看地面/墙壁（几乎与视线平行）时
+   * 一个像素能跨十几个纹素，整张贴图被糊成一个色块，走动时还闪。各向异性过滤按
+   * 短轴定 LOD、沿长轴多采几次，地面与树叶的细节才能在斜视时保住。
+   *
+   * 能这么做的前提是上传图集有边距（见 `syncUploadCanvas`）：足迹沿长轴跨出去
+   * 看到的是自己的边缘外扩，而不是邻居贴图的颜色。
+   *
+   * `level` 会被 three 夹到设备上限（不支持各向异性的设备上等于没设）。
+   * 这是**采样状态**，改它要重新上传一次纹理（几 MB，只在启动时做一次）。
+   */
+  setAnisotropy(level: number): void {
+    const clamped = clampAnisotropy(level);
+    if (this.texture.anisotropy === clamped) return;
+    this.texture.anisotropy = clamped;
+    this.texture.needsUpdate = true;
   }
 
   /** 归一化的半像素内缩，着色器用它把采样点限制在贴图内部 */
