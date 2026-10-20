@@ -2754,4 +2754,11 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
   拖拽均分/每格一个、点空白丢出（触屏同一条 `pointerdown` 通道，批次 128/161）。
   `test:cursor` 69 + `test:inventory` 77 全绿。触屏没有 Shift 键，靠双击退化补上是**设计选择**。
 
+- 批次 406（J19）：**猪 / 炽足兽可骑乘**。核过之后发现马/驴/骡/羊驼的骑乘
+  批次 253/254 早就有（我上一轮说"完全没有 riding 代码"是 grep 漏了 `passenger`/`rideYaw`），
+  所以这一批只补缺口：`Horse.needsTaming`（猪/炽足兽不用驯服）、`canJump`（不能跳），
+  `MobFactory` 把 pig/strider 也交给 `Horse`，`canUseItemOnMob` 补"装鞍后空手点 = 上车"。
+  `test:entity` 118 → **129 条**。
+  ⚠️ 胡萝卜钓竿转向、马背包、拴绳"拉回来"的物理仍未做。
+
 <!-- docs-archive:end -->
