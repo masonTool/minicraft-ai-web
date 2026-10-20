@@ -20,6 +20,7 @@ import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
+import { WorldRegistry, type WorldSummary } from '../core/save/WorldRegistry.ts';
 
 /**
  * main 的 World 直接 `new Worker(new URL(...))`。
@@ -92,6 +93,8 @@ let inventoryTab: 'items' | 'creative' = 'items';
 let selectedSlot = 0;
 const inventory = new Inventory();
 const creativeBlocks = Object.values(Block).filter((value): value is number => typeof value === 'number' && value > 0).slice(0, 45);
+const registry = new WorldRegistry();
+let currentWorld: WorldSummary | null = null;
 let activeSettingsTab: 'game' | 'controls' | 'appearance' | 'sound' = 'game';
 
 interface V2Settings {
@@ -282,6 +285,56 @@ const showInventory = (): void => {
   ]));
 };
 
+const mountWorld = (entry: WorldSummary): void => {
+  world.events = {};
+  chunks.disposeAll();
+  world = new World(entry.seed, entry.worldType, 1);
+  chunks = new ChunkRenderer(scene, atlas, world, solid.material, translucent.material, null);
+  world.events = {
+    onChunkLoaded: (chunk) => chunks.onChunkLoaded(chunk.cx, chunk.cz),
+    onChunkUnloaded: (cx, cz) => chunks.onChunkUnloaded(cx, cz),
+    onBlockChanged: (x, _y, z) => chunks.enqueueAround(x, z),
+  };
+  currentWorld = entry;
+  registry.update(entry.id, { lastPlayed: Date.now() });
+  spawn.x = 0;
+  spawn.z = 0;
+  physics.teleport(0.5, 80, 0.5);
+  playerReady = false;
+  started = true;
+  paused = false;
+  settingsOpen = false;
+  inventoryOpen = false;
+  showHud();
+};
+
+const showWorlds = (): void => {
+  const worlds = registry.list();
+  const buttons: UiElement[] = worlds.slice(0, 6).map((world, index) =>
+    button(272, 176 + index * 62, 480, 50, world.name, () => mountWorld(world), {
+      background: 'rgba(34, 48, 44, 0.95)',
+      border: 'rgba(180, 225, 205, 0.38)',
+      radius: 8,
+    }),
+  );
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: '#0d1a24' }),
+      text(0, 44, 1024, 60, '选择世界', { fontSize: 44, color: '#f2f7fa', align: 'center' }),
+      ...buttons,
+      button(272, 176 + Math.max(1, Math.min(6, worlds.length)) * 62 + 8, 480, 52, '新建世界', () => {
+        const created = registry.create({});
+        mountWorld(created);
+      }, { background: 'rgba(60, 110, 90, 0.96)', border: 'rgba(190, 235, 215, 0.55)', radius: 8 }),
+      button(272, 176 + Math.max(1, Math.min(6, worlds.length)) * 62 + 72, 480, 46, '返回标题', () => showTitle(), {
+        background: 'rgba(32, 42, 50, 0.95)',
+        border: 'rgba(190, 220, 240, 0.4)',
+        radius: 8,
+      }),
+    ]),
+  );
+};
+
 const showTitle = (): void => {
   const horizon = uiHeight * 0.56;
   ui.setRoot(
@@ -294,9 +347,7 @@ const showTitle = (): void => {
       text(0, 38, 1024, 80, 'MINECRAFT', { fontSize: 68, color: '#f2f7fa', align: 'center' }),
       text(0, 118, 1024, 36, 'v2 · main core', { fontSize: 18, color: 'rgba(220,238,245,0.75)', align: 'center' }),
       button(312, horizon + 34, 400, 58, '开始游戏', () => {
-        started = true;
-        paused = false;
-        showHud();
+        showWorlds();
       }, { background: 'rgba(60, 110, 90, 0.96)', border: 'rgba(190, 235, 215, 0.55)', radius: 8 }),
       button(312, horizon + 108, 400, 54, '设置', () => {
         settingsOpen = true;
@@ -309,7 +360,7 @@ const showTitle = (): void => {
 const showHud = (): void => {
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
-      text(24, 18, 460, 40, 'MINECRAFT v2 · main core', { fontSize: 22, color: '#ffffff' }),
+      text(24, 18, 460, 40, `${currentWorld?.name ?? '世界'} · v2`, { fontSize: 22, color: '#ffffff' }),
       button(480, 18, 140, 48, '背包', () => {
         inventoryOpen = true;
         showInventory();
@@ -365,8 +416,8 @@ const translucent = new VoxelMaterial(atlas.texture, {
 solid.skyBrightness = settings.brightness;
 translucent.skyBrightness = settings.brightness;
 
-const world = new World(0x5eed, 'default', 1);
-const chunks = new ChunkRenderer(
+let world = new World(0x5eed, 'default', 1);
+let chunks = new ChunkRenderer(
   scene,
   atlas,
   world,

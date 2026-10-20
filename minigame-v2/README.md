@@ -4,7 +4,7 @@
 
 - main 的 World / TextureAtlas / ChunkRenderer
 - wx adapter + 主线程 Worker seam
-- 静态标题页（开始游戏后才生成世界）
+- 静态标题页 + 世界列表/新建（WorldRegistry）
 - 基础 HUD/暂停/设置/背包 UI（UI Kit MVP）
 - PlayerPhysics / 基础触摸 / 文件存档
 
