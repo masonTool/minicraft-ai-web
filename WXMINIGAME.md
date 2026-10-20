@@ -8,7 +8,7 @@
 
 ## 0. 当前状态（新会话 / 换设备先读这一页）
 
-> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `edfe4ce`
+> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `8b461d5`
 > 只要这一页和 §5 任务表是最新的，换会话/换机器就不会丢上下文。
 
 ### 0.1 一眼看进度
@@ -584,7 +584,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-020B 收口 | 真实 41 格 `Inventory`：读档恢复、空槽补 64 起始方块、放置扣数量、挖掘进背包、存档写回真实槽位；helper `save ready ... player` / `saved` 正常 | `04ede23` |
 | 2026-10-20 | WX-021 基础件 | 新增 widgets.ts：9-slice 面板、按钮三态、文字截断/对齐；背包改用面板 + X 按钮；HUD 右上角显示可点击 BAG；helper 截图验证 | `e51ea8d` |
 | 2026-10-20 | WX-021/025 | 暂停面板：PAUSED/RESUME/SAVE NOW/SETTINGS(禁用)；MENU/BAG 分开；暂停冻结移动/跳跃；helper 截图验证 | `edfe4ce` |
-| 2026-10-20 | WX-022/025 | 设置页：VIDEO/GAME 页签、FOV/视距滑块、声音/反转视角开关、BACK；设置实时改相机/视距/音频；SETTINGS 启用；helper 截图验证 | 本次提交 |
+| 2026-10-20 | WX-022/025 | 设置页：VIDEO/GAME 页签、FOV/视距滑块、声音/反转视角开关、BACK；设置实时改相机/视距/音频；SETTINGS 启用；helper 截图验证 | `8b461d5` |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
