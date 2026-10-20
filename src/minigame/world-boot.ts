@@ -26,6 +26,7 @@ import { Inventory, type ItemStack } from '../core/container/Inventory.ts';
 import type { Chest } from '../core/container/Chest.ts';
 import type { Furnace } from '../core/container/Furnace.ts';
 import { isFuel, stationOfBlock } from '../core/crafting/Smelting.ts';
+import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
@@ -222,6 +223,7 @@ async function boot(): Promise<void> {
     for (const record of records) {
       world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
     }
+    restoreContainers(world.containers, await save.loadContainers());
     loadedPlayer = await save.loadPlayer();
     saveStatus = 'ready';
     console.log('[WX-020] save ready', records.length, 'chunks', loadedPlayer ? 'player' : 'new');
@@ -669,11 +671,21 @@ async function boot(): Promise<void> {
         if (edits) records.push({ dimension, cx, cz, edits });
       }
       await save.saveChunks(records);
+      const containers = serializeContainers(world.containers);
+      await save.saveContainers(containers);
       await save.saveMeta(save.buildMeta(world.seed, world.edits.totalEdits));
       world.edits.markSaved();
       saveStatus = 'ok';
       if (manual) ui.showToast('SAVED');
-      console.log('[WX-020] saved', records.length, 'chunks', world.edits.totalEdits, 'edits');
+      console.log(
+        '[WX-020] saved',
+        records.length,
+        'chunks',
+        world.edits.totalEdits,
+        'edits',
+        containers.length,
+        'containers',
+      );
     } catch (error) {
       saveStatus = 'error';
       ui.showToast('SAVE FAILED');
