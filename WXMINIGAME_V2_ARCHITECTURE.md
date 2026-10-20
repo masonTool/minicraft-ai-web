@@ -26,6 +26,9 @@ v2
                  ui-kit/           Canvas UI（Box/Text/Button/Slider/Slot/Icon/Ring/Vital）
                  mobs.ts           猪/羊/僵尸：模型/游走/追击/攻击
                  containers.ts     箱子/熔炉状态、面板、存取、熔炉 tick
+                 block-icon.ts     背包/HUD 物品图标与图集 UV
+                 inventory-catalog.ts
+                                   创造五分类与页签映射
                  wx-mesh-pool.ts   微信真实 Worker 网格化
                  chunk-worker-entry.ts
                                    微信 worker.onMessage 入口
@@ -95,6 +98,7 @@ v2
 - 状态/调试 HUD 暴露 `qualityTier` 与 `meshBackend`
 - 抽取 `MobSystem`：猪/羊/僵尸模型、游走、追击、攻击、击杀统一，组合根减少约 350 行
 - 抽取 `ContainerSystem`：箱子/熔炉打开、存取、面板、熔炉 tick 移出组合根
+- 抽取 `drawBlockIcon` 与创造分类纯逻辑，组合根不再依赖图集布局
 
 ## 已知架构债务
 

@@ -17,6 +17,8 @@ import type { MeshWorkerPool } from '../render/MeshWorkerPool.ts';
 import { WxMeshWorkerPool } from './wx-mesh-pool.ts';
 import { MobSystem } from './mobs.ts';
 import { ContainerSystem } from './containers.ts';
+import { drawBlockIcon } from './block-icon.ts';
+import { CREATIVE_CATEGORIES, creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -25,13 +27,12 @@ import { Inventory } from '../core/container/Inventory.ts';
 import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
-import { CREATIVE_ITEMS, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
+import { CREATIVE_ITEMS, categoryOf, foodInfoById, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
-import { BED_IDS, Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
+import { BED_IDS, Block, blockDef } from '../core/registry/blocks.ts';
 import { sleepRefusal } from '../core/survival/Sleep.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
-import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { WorldRegistry, type WorldSummary } from '../core/save/WorldRegistry.ts';
@@ -95,28 +96,6 @@ const camera = new THREE.PerspectiveCamera(
   320,
 );
 
-const drawBlockIcon = (
-  ctx: CanvasRenderingContext2D,
-  blockId: number,
-  x: number,
-  y: number,
-  size: number,
-): void => {
-  const block = blockForItem(blockId);
-  const inset = Math.max(2, Math.floor(size * 0.1));
-  if (block !== undefined) {
-    const tile = blockTiles(block, 0)[0];
-    const tileIndex = (TILE_ORDER as readonly string[]).indexOf(tile);
-    if (tileIndex < 0) return;
-    const sx = (tileIndex % ATLAS_COLUMNS) * TILE_SIZE;
-    const sy = Math.floor(tileIndex / ATLAS_COLUMNS) * TILE_SIZE;
-    ctx.drawImage(atlas.canvas, sx, sy, TILE_SIZE, TILE_SIZE, x + inset, y + inset, size - inset * 2, size - inset * 2);
-    return;
-  }
-  const source = atlas.tileSource(itemIconTile(blockId));
-  ctx.drawImage(atlas.canvas, source.x, source.y, TILE_SIZE, TILE_SIZE, x + inset, y + inset, size - inset * 2, size - inset * 2);
-};
-
 const playerModel = new THREE.Group();
 const skinMaterial = new THREE.MeshBasicMaterial({ color: 0xe0ac69 });
 const shirtMaterial = new THREE.MeshBasicMaterial({ color: 0x3b6ea5 });
@@ -177,7 +156,7 @@ const outline = new THREE.LineSegments(
 outline.visible = false;
 scene.add(outline);
 
-const ui = new UiLayer(platform.system.width, platform.system.height, drawBlockIcon);
+const ui = new UiLayer(platform.system.width, platform.system.height, (ctx, id, x, y, size) => drawBlockIcon(atlas, ctx, id, x, y, size));
 const uiHeight = ui.height;
 let started = false;
 let meshBackend: 'worker' | 'main' = 'main';
@@ -201,29 +180,6 @@ let hudInputBlockUntil = 0;
 const inventory = new Inventory();
 let crafting = new CraftingGrid(2);
 const creativeItems = CREATIVE_ITEMS;
-type V2CreativeCategory = 'all' | 'building' | 'equipment' | 'items' | 'nature';
-const CREATIVE_CATEGORIES: Array<{ key: V2CreativeCategory; label: string }> = [
-  { key: 'all', label: '全部' },
-  { key: 'building', label: '建筑' },
-  { key: 'equipment', label: '装备' },
-  { key: 'items', label: '物品' },
-  { key: 'nature', label: '自然' },
-];
-const creativeTabFor = (id: number): Exclude<V2CreativeCategory, 'all'> => {
-  switch (categoryOf(id)) {
-    case 'building':
-      return 'building';
-    case 'tools':
-    case 'armor':
-      return 'equipment';
-    case 'natural':
-    case 'wool':
-    case 'food':
-      return 'nature';
-    default:
-      return 'items';
-  }
-};
 let creativeCategory: V2CreativeCategory = 'all';
 let creativePage = 0;
 const registryStorage = {
