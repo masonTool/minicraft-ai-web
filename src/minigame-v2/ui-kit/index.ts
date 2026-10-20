@@ -77,6 +77,11 @@ export interface UiIconNode extends UiNode {
   onTap: () => void;
 }
 
+export interface UiRingNode extends UiNode {
+  kind: 'ring';
+  visible: boolean;
+}
+
 export type UiElement =
   | UiNode
   | UiTextNode
@@ -84,7 +89,8 @@ export type UiElement =
   | UiToggleNode
   | UiSliderNode
   | UiSlotNode
-  | UiIconNode;
+  | UiIconNode
+  | UiRingNode;
 
 export function box(x: number, y: number, w: number, h: number, children: UiElement[] = [], style: UiStyle = {}): UiNode {
   return { x, y, w, h, style, children };
@@ -156,6 +162,10 @@ export function icon(
   style: UiStyle = {},
 ): UiIconNode {
   return { kind: 'icon', x, y, w: size, h: size, icon: kind, onTap, style };
+}
+
+export function ring(x: number, y: number, size: number, visible = false): UiRingNode {
+  return { kind: 'ring', x, y, w: size, h: size, visible };
 }
 
 export function row(
@@ -430,6 +440,19 @@ export class UiLayer {
         ctx.stroke();
       }
       this.icons.push(node);
+      return;
+    }
+
+    if ('kind' in node && node.kind === 'ring') {
+      if (!node.visible) return;
+      ctx.beginPath();
+      ctx.arc(node.x + node.w / 2, node.y + node.h / 2, node.w / 2, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
       return;
     }
 

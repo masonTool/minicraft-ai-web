@@ -14,7 +14,7 @@ import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
-import { UiLayer, box, button, icon, slider, slot, text, toggle, type UiElement } from './ui-kit/index.ts';
+import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, type UiElement, type UiRingNode } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
 import { Chest } from '../core/container/Chest.ts';
 import { Furnace } from '../core/container/Furnace.ts';
@@ -1514,6 +1514,11 @@ const showHud = (): void => {
         radius: 46,
         fontSize: 26,
       }),
+      (() => {
+        const node = ring(0, 0, 96, false);
+        hudAimRing = node;
+        return node;
+      })(),
       ...(!settings.fingerAim
         ? [
             box(510, uiHeight / 2 - 10, 4, 20, [], { background: 'rgba(255,255,255,0.85)' }),
@@ -1622,6 +1627,7 @@ let lastStickTap = 0;
 let stickOffsetX = 0;
 let stickOffsetY = 0;
 let hudStickKnob: { x: number; y: number; w: number; h: number } | null = null;
+let hudAimRing: UiRingNode | null = null;
 let stickLeftCached = 24;
 let stickTopCached = uiHeight - 216;
 let movePointer: number | null = null;
@@ -1696,6 +1702,18 @@ const placeAt = (hit: RayHit): void => {
   showHud();
 };
 
+const updateAimRing = (clientX: number, clientY: number, visible: boolean): void => {
+  if (!hudAimRing) return;
+  hudAimRing.visible = visible;
+  if (visible) {
+    const designX = (clientX / Math.max(1, platform.system.width)) * 1024;
+    const designY = (clientY / Math.max(1, platform.system.height)) * uiHeight;
+    hudAimRing.x = designX - 48;
+    hudAimRing.y = designY - 48;
+  }
+  ui.refresh();
+};
+
 platform.input.onPointer('down', (event) => {
   if (!audioResumed) {
     audioResumed = true;
@@ -1736,6 +1754,8 @@ platform.input.onPointer('down', (event) => {
     lookY = event.clientY;
     lookMoved = false;
     lookStartTime = Date.now();
+    updateAimRing(event.clientX, event.clientY, true);
+    updateAimRing(event.clientX, event.clientY, true);
     updateHitAt(event.clientX, event.clientY);
   }
 });
@@ -1767,6 +1787,7 @@ platform.input.onPointer('move', (event) => {
     pitch = Math.max(-1.2, Math.min(1.2, pitch - pitchDelta));
     lookX = event.clientX;
     lookY = event.clientY;
+    updateAimRing(event.clientX, event.clientY, true);
     updateHitAt(event.clientX, event.clientY);
   }
 });
