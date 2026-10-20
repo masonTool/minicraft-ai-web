@@ -21,6 +21,9 @@ import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { WorldRegistry, type WorldSummary } from '../core/save/WorldRegistry.ts';
+import { FileSaveGame } from '../platform/file-save.ts';
+import { ChunkEdits } from '../core/save/ChunkEdits.ts';
+import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
 import { OverworldGenerator } from '../core/gen/OverworldGenerator.ts';
 import { planSpawnRegion } from '../core/world/SpawnPoint.ts';
 import { WORLD_SURFACE_Y } from '../core/gen/WorldType.ts';
@@ -101,6 +104,10 @@ const inventory = new Inventory();
 const creativeBlocks = Object.values(Block).filter((value): value is number => typeof value === 'number' && value > 0).slice(0, 45);
 const registry = new WorldRegistry();
 let currentWorld: WorldSummary | null = null;
+let save: FileSaveGame | null = null;
+let saving = false;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let playMark = Date.now();
 let spawn = { x: 0, z: 0, y: 80 };
 const planSpawn = (seed: number, type: WorldType): { x: number; z: number; y: number } => {
   const generator = new OverworldGenerator(seed, type);
@@ -308,7 +315,69 @@ const showInventory = (): void => {
   ]));
 };
 
-const mountWorld = (entry: WorldSummary): void => {
+const snapshotPlayer = (): PlayerSave => ({
+  x: physics.x,
+  y: physics.y,
+  z: physics.z,
+  yaw,
+  pitch,
+  dimension: 'overworld',
+  flying: false,
+  timeOfDay: 0,
+  health: 20,
+  food: 20,
+  saturation: 5,
+  air: 300,
+  exhaustion: 0,
+  inventory: inventory.serialize(),
+  selectedSlot,
+  dragonDefeated: false,
+});
+
+const persistWorld = async (): Promise<void> => {
+  if (!save || !currentWorld || saving) return;
+  saving = true;
+  try {
+    currentWorld.lastPlayed = Date.now();
+    currentWorld.playTime = (currentWorld.playTime ?? 0) + Math.max(0, (Date.now() - playMark) / 1000);
+    playMark = Date.now();
+    registry.update(currentWorld.id, {
+      lastPlayed: currentWorld.lastPlayed,
+      playTime: currentWorld.playTime,
+    });
+    await save.savePlayer(snapshotPlayer());
+    const records: ChunkSaveRecord[] = [];
+    for (const key of world.edits.dirtyKeys()) {
+      const { dimension, cx, cz } = ChunkEdits.parseKey(key);
+      const edits = world.edits.serialize(dimension, cx, cz);
+      if (edits) records.push({ dimension, cx, cz, edits });
+    }
+    await save.saveChunks(records);
+    await save.saveMeta(save.buildMeta(world.seed, world.edits.totalEdits));
+    world.edits.markSaved();
+  } catch (error) {
+    console.warn('[v2] save failed', error);
+  } finally {
+    saving = false;
+  }
+};
+
+const requestSave = (): void => {
+  if (!save) return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void persistWorld();
+  }, 1200);
+};
+
+const mountWorld = async (entry: WorldSummary): Promise<void> => {
+  await persistWorld();
+  if (save) {
+    save.close();
+    save = null;
+  }
+
   world.events = {};
   chunks.disposeAll();
   world = new World(entry.seed, entry.worldType, 1);
@@ -319,10 +388,30 @@ const mountWorld = (entry: WorldSummary): void => {
     onBlockChanged: (x, _y, z) => chunks.enqueueAround(x, z),
   };
   currentWorld = entry;
+  playMark = Date.now();
   registry.update(entry.id, { lastPlayed: Date.now() });
   spawn = planSpawn(entry.seed, entry.worldType);
   physics.teleport(spawn.x + 0.5, spawn.y + 1.01, spawn.z + 0.5);
   playerReady = false;
+  inventory.clear();
+  selectedSlot = 0;
+  try {
+    save = await FileSaveGame.open(entry.id, platform.files);
+    for (const record of await save.loadAllChunkEdits()) {
+      world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
+    }
+    const loaded = await save.loadPlayer();
+    if (loaded) {
+      physics.teleport(loaded.x, loaded.y, loaded.z);
+      yaw = loaded.yaw;
+      pitch = loaded.pitch;
+      if (loaded.inventory) inventory.restore(loaded.inventory);
+      selectedSlot = Math.max(0, Math.min(8, loaded.selectedSlot ?? 0));
+      playerReady = true;
+    }
+  } catch (error) {
+    console.warn('[v2] load save failed', error);
+  }
   started = true;
   paused = false;
   settingsOpen = false;
@@ -432,7 +521,7 @@ const showCreate = (): void => {
             difficulty: DIFFICULTIES[draft.difficultyIndex]!,
             gameMode: GAME_MODES[draft.modeIndex]!,
           });
-          mountWorld(created);
+          void mountWorld(created);
         }, {
           background: 'rgba(60, 110, 90, 0.96)',
           border: 'rgba(190, 235, 215, 0.55)',
@@ -451,7 +540,7 @@ const showCreate = (): void => {
 const showWorlds = (): void => {
   const worlds = registry.list();
   const buttons: UiElement[] = worlds.slice(0, 6).map((world, index) =>
-    button(272, 176 + index * 62, 480, 50, world.name, () => mountWorld(world), {
+    button(272, 176 + index * 62, 480, 50, world.name, () => void mountWorld(world), {
       background: 'rgba(34, 48, 44, 0.95)',
       border: 'rgba(180, 225, 205, 0.38)',
       radius: 8,
@@ -620,6 +709,7 @@ const updateHitAt = (clientX: number, clientY: number): void => {
 
 const breakAt = (hit: RayHit): void => {
   world.setBlockAndUpdate(hit.x, hit.y, hit.z, Block.AIR);
+  requestSave();
 };
 
 const placeAt = (hit: RayHit): void => {
@@ -632,6 +722,7 @@ const placeAt = (hit: RayHit): void => {
   if (!world.setBlockAndUpdate(x, y, z, stack.id)) return;
   stack.count -= 1;
   inventory.set(selectedSlot, stack.count > 0 ? stack : null);
+  requestSave();
   showHud();
 };
 
