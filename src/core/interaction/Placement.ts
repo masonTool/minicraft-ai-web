@@ -371,14 +371,32 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
     }
 
     case 'banner': {
-      // 旗帜（批次 484）：占**两格**（下半 + 上半），与原版一致。
-      // ① 下方要实心（杆立在地上）；② 上方一格必须是空气，否则只放得下下半格、
-      //    上面那半截会凭空消失（门那条判据踩过同样的坑）
-      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      // 旗帜（批次 484/486）：占**两格**（下半 + 上半），与原版一致。
+      // 上方那一格必须是空气——否则只放得下下半格、上面那半截会凭空消失
+      // （门那条判据踩过同样的坑）
       if (input.blockAt(0, 1, 0) !== Block.AIR) return null;
+
+      // 立地：下方要有实心方块（杆立在地上）
+      if (ny > 0) {
+        if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+        return {
+          state: 0,
+          extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withBannerTop(0, true) },
+        };
+      }
+
+      // 挂墙（批次 486）：与火把同一套 `wallMounted` + `facing`——旗面朝外、
+      // 杆贴在命中的那一面上。不能挂天花板（原版也不行）
+      if (ny < 0) return null;
+      // ⚠️ `facingFromNormal` 给的是"指向墙"的方向（火把用它），而旗帜的 facing
+      // 是"旗面朝外"的方向——所以要 +2 取反（第一版直接用了它，四面旗全朝墙里）
+      const intoWall = facingFromNormal(nx, nz);
+      if (intoWall === null) return null;
+      const wallFacing = ((intoWall + 2) & 3) as 0 | 1 | 2 | 3;
+      const hanging = withWallMounted(withFacing(0, wallFacing), true);
       return {
-        state: 0,
-        extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withBannerTop(0, true) },
+        state: hanging,
+        extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withBannerTop(hanging, true) },
       };
     }
 

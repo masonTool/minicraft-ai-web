@@ -410,6 +410,48 @@ export function isFullBlockShape(shape: BlockShape, state: number): boolean {
 }
 
 /**
+ * 旗帜的几何（批次 484 立地 / 486 挂墙）。
+ *
+ * 统一是"一根杆 + 一面 12/16 宽、1/16 厚的布"：
+ *  - **立地**：杆在格心、布朝 -z 展开；
+ *  - **挂墙**：杆贴在命中的那一面（`facing` 的反方向），布朝 `facing` 展开。
+ *
+ * 上下半用同一套盒子（两格叠起来就是 2 格高的旗）——`BANNER_TOP_MASK`
+ * 只用来"知道自己在上面"，几何不用变。
+ */
+function bannerBoxes(state: number): readonly LocalBox[] {
+  const t = 1 / 16;
+  if (!isWallMounted(state)) {
+    return [
+      [7 * t, 0, 7 * t, 9 * t, 1, 9 * t],
+      [2 * t, 0, 2 * t, 14 * t, 1, 3 * t],
+    ];
+  }
+  switch (facingOf(state)) {
+    case 0: // 旗面朝北（墙在南侧）
+      return [
+        [7 * t, 0, 15 * t, 9 * t, 1, 1],
+        [2 * t, 0, 2 * t, 14 * t, 1, 3 * t],
+      ];
+    case 2: // 朝南（墙在北侧）
+      return [
+        [7 * t, 0, 0, 9 * t, 1, t],
+        [2 * t, 0, 13 * t, 14 * t, 1, 14 * t],
+      ];
+    case 1: // 朝东（墙在西侧）
+      return [
+        [0, 0, 7 * t, t, 1, 9 * t],
+        [13 * t, 0, 2 * t, 14 * t, 1, 14 * t],
+      ];
+    default: // 朝西（墙在东侧）
+      return [
+        [15 * t, 0, 7 * t, 1, 1, 9 * t],
+        [2 * t, 0, 2 * t, 3 * t, 1, 14 * t],
+      ];
+  }
+}
+
+/**
  * 铁轨的几何（批次 481）。
  *
  * 平面形状 = 1/16 平板（与 `flat` 完全一样）；坡道 = 4 段阶梯，从低端逐段抬到 1 格。
@@ -488,13 +530,8 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       // 4 段是"看着像斜坡"与"盒子数别太多"之间的折中：每段 1/4 宽、抬高 1/4 格
       return railBoxes(state);
     case 'banner':
-      // 旗帜（批次 484）：中间一根杆 + 一面 12/16 宽、1/16 厚的布（向 -z 展开）。
-      // 上下半用同一套盒子，两格叠起来就是 2 格高的旗——上半格的高度靠 `BANNER_TOP_MASK`
-      // 只用来"知道自己在上面"，几何不用变
-      return [
-        [7 / 16, 0, 7 / 16, 9 / 16, 1, 9 / 16],
-        [2 / 16, 0, 2 / 16, 14 / 16, 1, 3 / 16],
-      ];
+      // 旗帜（批次 484 立地 / 486 挂墙）：见 `bannerBoxes`
+      return bannerBoxes(state);
     case 'coral_fan':
       return coralFanBoxes(state);
     case 'scaffolding':

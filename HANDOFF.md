@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1046（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1047（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **195**、进行中 **79**、待办 14 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -271,6 +271,10 @@ npm run dev            # http://localhost:5173
   村庄会埋在岩壁间——在 `generateChunkBlocks` 里与超平坦同一位置提前返回。
   `test:worldtype` 30 → **34 条**（含"默认世界有地表植被"的负对照、
   "浮空岛的地物与默认世界一致"）。
+- 批次 486（E21）：**旗帜挂墙**。与火把同一套 `wallMounted` + `facing`；
+  ⚠️ `facingFromNormal` 给的是"指向墙"的方向，旗帜要 +2 取反（第一版四面旗全朝墙里）；
+  几何按朝向四选一（杆贴墙、布朝外）。`test:banner` 26 → **42 条**。
+  E21 只剩"图案"与"刷怪笼迷你生物"。
 - 批次 473（结构内容）：**战利品表 20 → 22**。新增 `stronghold_crossing`
   （要塞十字口）与 `ocean_ruins`（海底废墟，原先借用沉船补给表——物品池对不上）；
   要塞十字口与海底废墟各放了箱子，堡垒遗迹桥面也加了一只 `bastion_other`

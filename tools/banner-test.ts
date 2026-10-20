@@ -10,7 +10,7 @@
 
 import { Block, BANNER_ID_START, blockDef, isBannerId } from '../src/core/registry/blocks.ts';
 import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
-import { isBannerTop, withBannerTop } from '../src/core/registry/blockState.ts';
+import { facingOf, isBannerTop, isWallMounted, withBannerTop } from '../src/core/registry/blockState.ts';
 import { planPlacement } from '../src/core/interaction/Placement.ts';
 import { itemLabel } from '../src/core/registry/itemNames.ts';
 
@@ -72,12 +72,14 @@ console.log('\n[几何：一根杆 + 一面布]');
 
 console.log('\n[放置：占两格]');
 {
-  function place(options: { below?: number; above?: number } = {}): ReturnType<typeof planPlacement> {
+  function place(
+    options: { below?: number; above?: number; normal?: [number, number, number] } = {},
+  ): ReturnType<typeof planPlacement> {
     const below = options.below ?? Block.STONE;
     const above = options.above ?? Block.AIR;
     return planPlacement({
       blockId: Block.WHITE_BANNER,
-      normal: [0, 1, 0],
+      normal: options.normal ?? [0, 1, 0],
       hitX: 0.5,
       hitY: 63,
       hitZ: 0.5,
@@ -104,6 +106,63 @@ console.log('\n[放置：占两格]');
 
   equal('上方被占住 → 放不下（不剩半面旗）', place({ above: Block.STONE }), null);
   equal('下方是空的 → 放不下（杆立不住）', place({ below: Block.AIR }), null);
+}
+
+
+console.log('\n[挂墙（批次 486）]');
+{
+  function place(
+    options: { below?: number; above?: number; normal?: [number, number, number] } = {},
+  ): ReturnType<typeof planPlacement> {
+    const below = options.below ?? Block.STONE;
+    const above = options.above ?? Block.AIR;
+    return planPlacement({
+      blockId: Block.WHITE_BANNER,
+      normal: options.normal ?? [0, 1, 0],
+      hitX: 0.5,
+      hitY: 63,
+      hitZ: 0.5,
+      yaw: 0,
+      sneaking: false,
+      blockAt: (dx, dy, dz) => {
+        if (dx !== 0 || dz !== 0) return Block.AIR;
+        if (dy === -1) return below;
+        if (dy === 1) return above;
+        return Block.AIR;
+      },
+      hitBlock: below,
+      hitState: 0,
+    });
+  }
+
+  // 点北墙的南面（normal 朝南）→ 旗面朝南
+  const south = place({ normal: [0, 0, 1] });
+  check('点侧面能挂墙', south !== null);
+  equal('挂墙标记', isWallMounted(south?.state ?? 0), true);
+  equal('旗面朝南', facingOf(south?.state ?? 0), 2);
+  equal('上半格也带着挂墙与朝向', isWallMounted(south?.extra?.state ?? 0), true);
+  equal('上半格朝向一致', facingOf(south?.extra?.state ?? 0), 2);
+  equal('上半格带着上半位', isBannerTop(south?.extra?.state ?? 0), true);
+
+  equal('点西墙的东面 → 朝东', facingOf(place({ normal: [1, 0, 0] })?.state ?? 0), 1);
+  equal('点东墙的西面 → 朝西', facingOf(place({ normal: [-1, 0, 0] })?.state ?? 0), 3);
+  equal('点南墙的北面 → 朝北', facingOf(place({ normal: [0, 0, -1] })?.state ?? 0), 0);
+
+  equal('不能挂天花板', place({ normal: [0, -1, 0] }), null);
+  equal('上方被占 → 挂不了（不剩半面旗）', place({ normal: [0, 0, 1], above: Block.STONE }), null);
+
+  // 几何：挂墙的杆贴墙、布朝外
+  const hangingBoxes = meshBoxes('banner', south!.state);
+  equal('挂墙也是两个盒子', hangingBoxes.length, 2);
+  const pole = hangingBoxes[0]!;
+  const cloth = hangingBoxes[1]!;
+  check('杆贴在墙那一侧（z 靠 0）', pole[2]! < 1 / 16 + 1e-6, `z0=${pole[2]}`);
+  check('布在杆的外侧（朝南展开）', cloth[5]! > pole[5]!, `布 z1=${cloth[5]} 杆 z1=${pole[5]}`);
+  check('布的 z 跨度是 1/16 厚', Math.abs(cloth[5]! - cloth[2]! - 1 / 16) < 1e-6, `${cloth[5]! - cloth[2]!}`);
+
+  // 立地几何不受影响
+  const standing = meshBoxes('banner', 0);
+  check('立地的杆在格心', Math.abs(standing[0]![0]! - 7 / 16) < 1e-6, `${standing[0]![0]}`);
 }
 
 console.log(`\n旗帜测试：${passed} 通过 / ${failed} 失败`);
