@@ -40,6 +40,7 @@ export interface UiButtonNode extends UiNode {
   kind: 'button';
   label: string;
   onClick?: () => void;
+  onRelease?: () => void;
 }
 
 export interface UiToggleNode extends UiNode {
@@ -115,8 +116,9 @@ export function button(
   label: string,
   onClick: () => void,
   style: UiStyle = {},
+  onRelease?: () => void,
 ): UiButtonNode {
-  return { kind: 'button', x, y, w, h, label, onClick, style };
+  return { kind: 'button', x, y, w, h, label, onClick, style, onRelease };
 }
 
 export function toggle(
@@ -228,6 +230,7 @@ export class UiLayer {
   private root: UiElement | null = null;
   private buttons: UiButtonNode[] = [];
   private activeSlider: UiSliderNode | null = null;
+  private activeButton: UiButtonNode | null = null;
   private dragSlot: { node: UiSlotNode; startX: number; startY: number; moved: boolean } | null = null;
   private slots: UiSlotNode[] = [];
   private icons: UiIconNode[] = [];
@@ -299,6 +302,11 @@ export class UiLayer {
       return true;
     }
     if (phase === 'up') {
+      if (this.activeButton) {
+        this.activeButton.onRelease?.();
+        this.activeButton = null;
+        return true;
+      }
       if (this.activeSlider) {
         this.activeSlider = null;
         return true;
@@ -332,6 +340,7 @@ export class UiLayer {
     for (let i = this.buttons.length - 1; i >= 0; i--) {
       const item = this.buttons[i]!;
       if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
+        this.activeButton = item;
         item.onClick?.();
         return true;
       }

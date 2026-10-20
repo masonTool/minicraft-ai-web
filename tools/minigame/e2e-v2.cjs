@@ -77,6 +77,21 @@ const assert = (condition, message, state) => {
   assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
   assert(inGame.health === 20 && inGame.food === 20, '初始生命/饥饿应为 20', inGame);
 
+  // 创造双击跳跃：起飞/落地
+  const flightFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
+  assert(flightFrame, '飞行用例找不到 iframe');
+  await flightFrame.evaluate(() => wx.__v2Test?.setGameMode?.('creative'));
+  const jumpPoint = point(962, 319);
+  await page.touchscreen.tap(jumpPoint.x, jumpPoint.y);
+  await page.waitForTimeout(80);
+  await page.touchscreen.tap(jumpPoint.x, jumpPoint.y);
+  const flyingOn = await waitState((state) => state.flying, '双击跳跃没有起飞', 5000);
+  await page.waitForTimeout(100);
+  await page.touchscreen.tap(jumpPoint.x, jumpPoint.y);
+  await page.waitForTimeout(80);
+  await page.touchscreen.tap(jumpPoint.x, jumpPoint.y);
+  const flyingOff = await waitState((state) => !state.flying, '双击跳跃没有落地', 5000);
+
   // 死亡 → 重生
   const deathFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
   assert(deathFrame, '死亡用例找不到 iframe');
@@ -222,7 +237,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, deathScreen, respawned, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
+      { title, worlds, create, inGame, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),

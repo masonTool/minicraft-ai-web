@@ -904,7 +904,7 @@ const snapshotPlayer = (): PlayerSave => ({
   yaw,
   pitch,
   dimension: 'overworld',
-  flying: false,
+  flying,
   timeOfDay: 0,
   health,
   food,
@@ -987,6 +987,8 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   wasOnGround = false;
   landedOnce = false;
   dead = false;
+  flying = false;
+  flyVertical = 0;
   xpLevel = 0;
   xpIntoLevel = 0;
   hudInputBlockUntil = Date.now() + 400;
@@ -1008,6 +1010,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
       saturation = Math.max(0, Math.min(20, loaded.saturation));
       xpLevel = Math.max(0, loaded.xp?.level ?? 0);
       xpIntoLevel = Math.max(0, loaded.xp?.partial ?? 0);
+      flying = loaded.flying === true;
       selectedSlot = Math.max(0, Math.min(8, loaded.selectedSlot ?? 0));
       playerReady = true;
     }
@@ -1459,6 +1462,7 @@ const sendChat = (value: string): void => {
       pushChat('用法：/gamemode survival|creative');
     } else if (currentWorld) {
       currentWorld.gameMode = mode;
+      if (mode !== 'creative') flying = false;
       registry.update(currentWorld.id, { gameMode: mode });
       pushChat(`游戏模式：${mode === 'creative' ? '创造' : '生存'}`);
     }
@@ -1596,7 +1600,42 @@ const showHud = (): void => {
         hudStickKnob = knob;
         return knob;
       })(),
+      ...(flying
+        ? [
+            button(jumpLeft + 16, jumpTop - 72, 60, 60, '升', () => {
+              flyVertical = 1;
+            }, {
+              background: 'rgba(40,72,34,0.86)',
+              border: 'rgba(198,240,185,0.8)',
+              borderWidth: 2,
+              radius: 30,
+              fontSize: 18,
+            }, () => {
+              flyVertical = 0;
+            }),
+            button(jumpLeft - 68, jumpTop + 20, 60, 60, '降', () => {
+              flyVertical = -1;
+            }, {
+              background: 'rgba(40,72,34,0.86)',
+              border: 'rgba(198,240,185,0.8)',
+              borderWidth: 2,
+              radius: 30,
+              fontSize: 18,
+            }, () => {
+              flyVertical = 0;
+            }),
+          ]
+        : []),
       button(jumpLeft, jumpTop, 92, 92, '跳', () => {
+        const nowTap = Date.now();
+        if (currentWorld?.gameMode === 'creative' && nowTap - lastJumpTap < 320) {
+          lastJumpTap = 0;
+          flying = !flying;
+          flyVertical = 0;
+          showHud();
+          return;
+        }
+        lastJumpTap = nowTap;
         jumpQueued = true;
       }, {
         background: 'rgba(40,72,34,0.86)',
@@ -1785,6 +1824,9 @@ let damageFlashUntil = 0;
 let xpLevel = 0;
 let xpIntoLevel = 0;
 let lastStickTap = 0;
+let flying = false;
+let flyVertical = 0;
+let lastJumpTap = 0;
 let stickOffsetX = 0;
 let stickOffsetY = 0;
 let hudStickKnob: { x: number; y: number; w: number; h: number } | null = null;
@@ -2068,6 +2110,7 @@ const frame = (): void => {
       cameraMode,
       dead,
       xpLevel,
+      flying,
       health,
       food,
       saturation,
@@ -2107,7 +2150,17 @@ const frame = (): void => {
     jumpQueued = false;
   }
   if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen) {
-    physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, settings.autoJump);
+    const jumpHeld = input.jump;
+    const sneakHeld = input.sneak;
+    if (flying) {
+      input.jump = jumpHeld || flyVertical > 0;
+      input.sneak = sneakHeld || flyVertical < 0;
+    }
+    physics.update(world as unknown as PhysicsWorld, input, yaw, dt, flying, 1, 1, settings.autoJump);
+    if (flying) {
+      input.jump = jumpHeld;
+      input.sneak = sneakHeld;
+    }
     playerModel.position.set(physics.x, physics.y, physics.z);
     playerModel.rotation.y = yaw;
     if (cameraMode === 'third') {
@@ -2191,6 +2244,13 @@ if (wxTestApi) {
       for (let i = 0; i < 36; i++) inventory.set(i, null);
       selectedSlot = 0;
       showHud();
+    },
+    setGameMode: (mode: 'survival' | 'creative' = 'creative') => {
+      if (currentWorld) {
+        currentWorld.gameMode = mode;
+        registry.update(currentWorld.id, { gameMode: mode });
+      }
+      return { mode };
     },
     setHealth: (value = 0) => {
       health = value;
