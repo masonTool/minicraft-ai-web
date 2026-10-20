@@ -17,6 +17,8 @@ import { itemDef, maxStackOf } from '../registry/items.ts';
 import { BOOK_TITLE_CHARS, isBlankBook, sanitizePages } from '../items/Book.ts';
 import { sanitizeFirework, type FireworkData } from '../items/Firework.ts';
 import { sanitizeMap, type MapData } from '../items/Map.ts';
+import { BANNER_PATTERNS } from '../registry/blockState.ts';
+import { isBannerId } from '../registry/blocks.ts';
 
 export interface ItemStack {
   id: number;
@@ -80,6 +82,14 @@ export interface ItemStack {
    * 只有"已填好的地图"带这个字段；空地图（`MAP`）什么都不带——它还没绑定到任何区域。
    */
   map?: MapData;
+  /**
+   * 旗帜图案（批次 502）：0/缺省 = 光板，1~4 = `BANNER_PATTERNS` 里那几种。
+   *
+   * 图案本来就是**物品属性**（原版记在 NBT 的 `BlockEntityTag.Patterns` 里），
+   * 但在批次 497 之前只存在方块状态位里——于是"挖下来再放下"图案就没了。
+   * 这里把它挂到栈上，挖方块时写进掉落物、放置时再写回方块状态。
+   */
+  bannerPattern?: number;
 }
 
 /**
@@ -155,6 +165,18 @@ export function restoreStack(raw: unknown, depth = 1): ItemStack | null {
       dimension: lodestone.dimension,
     };
   }
+  // 旗帜图案（批次 502）：只收 1~4 的整数——0 就是光板（不写字段），
+  // 越界/小数/字符串一律当光板，免得坏存档让客户端去查一张不存在的贴图
+  const pattern = candidate.bannerPattern;
+  if (
+    isBannerId(candidate.id) &&
+    typeof pattern === 'number' &&
+    Number.isInteger(pattern) &&
+    pattern >= 1 &&
+    pattern < BANNER_PATTERNS.length
+  ) {
+    stack.bannerPattern = pattern;
+  }
   return stack;
 }
 
@@ -223,6 +245,8 @@ export function stackExtras(stack: ItemStack): Partial<ItemStack> {
   if (stack.map !== undefined) extras.map = { ...stack.map };
   // 磁石绑定（批次 453）：四个原始值，拷一份对象即可
   if (stack.lodestone !== undefined) extras.lodestone = { ...stack.lodestone };
+  // 旗帜图案（批次 502）：一个数，直接拷
+  if (stack.bannerPattern !== undefined) extras.bannerPattern = stack.bannerPattern;
   return extras;
 }
 
@@ -266,6 +290,8 @@ export function sameExtras(a: Partial<ItemStack>, b: Partial<ItemStack>): boolea
   if ((a.lodestone?.y ?? 0) !== (b.lodestone?.y ?? 0)) return false;
   if ((a.lodestone?.z ?? 0) !== (b.lodestone?.z ?? 0)) return false;
   if ((a.lodestone?.dimension ?? '') !== (b.lodestone?.dimension ?? '')) return false;
+  // 旗帜图案（批次 502）：光板与带图案的旗帜不能并堆（并了图案就没了）
+  if ((a.bannerPattern ?? 0) !== (b.bannerPattern ?? 0)) return false;
   const from = a.enchants ?? {};
   const to = b.enchants ?? {};
   const keys = new Set([...Object.keys(from), ...Object.keys(to)]);

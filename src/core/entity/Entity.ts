@@ -45,6 +45,8 @@ export interface DroppedExtras {
    * 所以这里只写"形状"，由 `ItemEntity.toStack()` 交给主程序拼成真正的 `ItemStack`。
    */
   contents?: (DroppedStack | null)[];
+  /** 旗帜图案（批次 502）：挖下来的带图案旗帜，捡起来还是那一面 */
+  bannerPattern?: number;
 }
 
 /** 内容物里那一层（同样只写形状，不引容器层） */

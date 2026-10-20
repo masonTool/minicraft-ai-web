@@ -9121,6 +9121,10 @@ class App {
   private breakBannerPair(x: number, y: number, z: number): void {
     const state = this.world.getBlockState(x, y, z);
     const baseY = isBannerTop(state) ? y - 1 : y;
+    // 图案以**下半格**为准（批次 502）：老存档里可能有"上半没带图案"的旗，
+    // 拆上半时若读自己那一格就会掉一面光板
+    const pattern = bannerPatternOf(this.world.getBlockState(x, baseY, z));
+    const extras = pattern > 0 ? { bannerPattern: pattern } : undefined;
 
     for (let dy = 0; dy < 2; dy++) {
       const oy = baseY + dy;
@@ -9131,7 +9135,7 @@ class App {
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
       const drop = dropFor(id);
-      if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5);
+      if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5, extras);
     }
   }
 
@@ -12822,6 +12826,8 @@ class App {
       stateAt: (dx, dy, dz) => this.world.getBlockState(x + dx, y + dy, z + dz),
       hitBlock: this.world.getBlock(this.hit.x, this.hit.y, this.hit.z),
       hitState: this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z),
+      // 旗帜图案（批次 502）：图案跟着物品走，"挖下来再放下"才不丢
+      bannerPattern: this.inventory.get(this.hotbarIndex)?.bannerPattern,
     });
     if (!plan) return;
 

@@ -193,6 +193,8 @@ function cloneExtras(stack: ItemStack): ItemStack {
   if (stack.firework !== undefined) copy.firework = { flight: stack.firework.flight, colors: [...stack.firework.colors] };
   // 地图（批次 196）：漏斗搬一张地图，中心与已探索位图不能丢
   if (stack.map !== undefined) copy.map = { ...stack.map };
+  // 旗帜图案（批次 502）：漏斗搬一面带图案的旗帜，图案不能丢
+  if (stack.bannerPattern !== undefined) copy.bannerPattern = stack.bannerPattern;
   return copy;
 }
 

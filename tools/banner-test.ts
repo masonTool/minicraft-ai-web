@@ -19,6 +19,7 @@ import {
   nextBannerPattern,
   withBannerPattern,
   withBannerTop,
+  withFacing,
 } from '../src/core/registry/blockState.ts';
 import { DYE_COLORS } from '../src/core/registry/colors.ts';
 import { TILE_ORDER } from '../src/render/atlasLayout.ts';
@@ -85,7 +86,12 @@ console.log('\n[几何：一根杆 + 一面布]');
 console.log('\n[放置：占两格]');
 {
   function place(
-    options: { below?: number; above?: number; normal?: [number, number, number] } = {},
+    options: {
+      below?: number;
+      above?: number;
+      normal?: [number, number, number];
+      pattern?: number;
+    } = {},
   ): ReturnType<typeof planPlacement> {
     const below = options.below ?? Block.STONE;
     const above = options.above ?? Block.AIR;
@@ -97,6 +103,7 @@ console.log('\n[放置：占两格]');
       hitZ: 0.5,
       yaw: 0,
       sneaking: false,
+      bannerPattern: options.pattern,
       blockAt: (dx, dy, dz) => {
         if (dx !== 0 || dz !== 0) return Block.AIR;
         if (dy === -1) return below;
@@ -116,6 +123,13 @@ console.log('\n[放置：占两格]');
   equal('上半格带着上半位', isBannerTop(plan?.extra?.state ?? 0), true);
   equal('上半格在这一格的正上方', `${plan?.extra?.dx},${plan?.extra?.dy},${plan?.extra?.dz}`, '0,1,0');
 
+  // 图案跟着物品走（批次 502）：上下半格都要带同一份
+  const patterned = place({ pattern: 3 });
+  equal('图案写进下半格', bannerPatternOf(patterned?.state ?? 0), 3);
+  equal('上半格带同一图案', bannerPatternOf(patterned?.extra?.state ?? 0), 3);
+  equal('上半位与图案互不干扰', isBannerTop(patterned?.extra?.state ?? 0), true);
+  equal('不给图案就是光板', bannerPatternOf(plan?.state ?? 0), 0);
+
   equal('上方被占住 → 放不下（不剩半面旗）', place({ above: Block.STONE }), null);
   equal('下方是空的 → 放不下（杆立不住）', place({ below: Block.AIR }), null);
 }
@@ -124,7 +138,12 @@ console.log('\n[放置：占两格]');
 console.log('\n[挂墙（批次 486）]');
 {
   function place(
-    options: { below?: number; above?: number; normal?: [number, number, number] } = {},
+    options: {
+      below?: number;
+      above?: number;
+      normal?: [number, number, number];
+      pattern?: number;
+    } = {},
   ): ReturnType<typeof planPlacement> {
     const below = options.below ?? Block.STONE;
     const above = options.above ?? Block.AIR;
@@ -136,6 +155,7 @@ console.log('\n[挂墙（批次 486）]');
       hitZ: 0.5,
       yaw: 0,
       sneaking: false,
+      bannerPattern: options.pattern,
       blockAt: (dx, dy, dz) => {
         if (dx !== 0 || dz !== 0) return Block.AIR;
         if (dy === -1) return below;
@@ -155,6 +175,13 @@ console.log('\n[挂墙（批次 486）]');
   equal('上半格也带着挂墙与朝向', isWallMounted(south?.extra?.state ?? 0), true);
   equal('上半格朝向一致', facingOf(south?.extra?.state ?? 0), 2);
   equal('上半格带着上半位', isBannerTop(south?.extra?.state ?? 0), true);
+
+  // 挂墙同样要带图案（批次 502），而且不能把朝向挤掉
+  const patternedWall = place({ normal: [0, 0, 1], pattern: 2 });
+  equal('挂墙的下半格带图案', bannerPatternOf(patternedWall?.state ?? 0), 2);
+  equal('挂墙的上半格带同一图案', bannerPatternOf(patternedWall?.extra?.state ?? 0), 2);
+  equal('图案不影响朝向', facingOf(patternedWall?.state ?? 0), 2);
+  equal('图案不影响挂墙标记', isWallMounted(patternedWall?.state ?? 0), true);
 
   equal('点西墙的东面 → 朝东', facingOf(place({ normal: [1, 0, 0] })?.state ?? 0), 1);
   equal('点东墙的西面 → 朝西', facingOf(place({ normal: [-1, 0, 0] })?.state ?? 0), 3);
@@ -197,9 +224,12 @@ console.log('\n[图案：状态位与循环（批次 497）]');
 
   // 与"上半格"位互不干扰
   const upper = withBannerTop(withBannerPattern(0, 2), true);
-  equal('图案写在 bit0-2 不与上半位打架', bannerPatternOf(upper), 2);
+  equal('图案与上半位互不干扰', bannerPatternOf(upper), 2);
   equal('上半位还在', isBannerTop(upper), true);
   equal('改成第 4 种后上半位不变', isBannerTop(withBannerPattern(upper, 4)), true);
+  // 批次 502 修掉的撞位：图案原来占 bit0-2，与朝向（bit1-2）重叠
+  equal('换图案不碰朝向位（挂墙旗不会转向）', facingOf(withBannerPattern(withFacing(0, 2), 3)), 2);
+  equal('换图案不碰挂墙位', isWallMounted(withBannerPattern(0b1000, 4)), true);
 
   equal('光板用原来那张贴图', bannerPatternTile('white', 0), 'banner_white');
   equal('有图案换成带后缀的', bannerPatternTile('white', 3), 'banner_white_p3');

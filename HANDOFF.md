@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1065（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1066（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **201**、进行中 **79**、待办 8 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -305,7 +305,17 @@ npm run dev            # http://localhost:5173
   写入口在 `savedEntityOf`、读入口在 `spawnSavedEntity`（必须在 `spawn` 之前，
   否则第一帧 AI 会先重新认领）。认领的工作站坐标仍不落盘（只用于显示）。
   `test:villager` 122 → **141 条**（往返 / 脏数据 6 类 / 寄存 JSON 往返）。
-  ⚠️ 仍是 `[~]`：村民不会走去上班、没有每日刷新与价格浮动（批次 506 的计划）。
+  ⚠️ 仍是 `[~]`：村民不会走去上班、没有每日刷新与价格浮动（批次 507 的计划）。
+- 批次 502（物品数据，E21 尾巴 / 织布机前置）：**旗帜图案跟着物品走**。
+  `ItemStack.bannerPattern`（1~4，0 不写字段）补进四处链路
+  （`restoreStack` / `stackExtras` / `sameExtras` / `Transfer.cloneExtras`），
+  挖旗帜时写进掉落物（`breakBannerPair` 以**下半格**为准，老存档上半格没图案）、
+  放置时由 `PlacementInput.bannerPattern` 写回方块状态（上下半格同一份）。
+  ⚠️ 顺带修掉批次 497 的**撞位**：图案原来占 bit0-2，与朝向位（bit1-2）重叠，
+  挂墙旗换一次图案会被改朝向（当时只在立地旗上验过）；现在编码为
+  **bit0 / bit4 / bit6**，`test:banner` 补了"换图案不碰朝向/挂墙位"两条。
+  `test:banner` 57 → **67 条**、`test:inventory` 89 → **103 条**。
+  ⚠️ 差异：图案仍只有 4 种、单层；织布机界面（带染料消耗、去掉右键循环）是批次 503。
 - 批次 473（结构内容）：**战利品表 20 → 22**。新增 `stronghold_crossing`
   （要塞十字口）与 `ocean_ruins`（海底废墟，原先借用沉船补给表——物品池对不上）；
   要塞十字口与海底废墟各放了箱子，堡垒遗迹桥面也加了一只 `bastion_other`

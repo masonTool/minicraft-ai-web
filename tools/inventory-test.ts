@@ -22,6 +22,8 @@ import { translateName } from '../src/core/registry/itemNames.ts';
 import { HOTBAR_SIZE, Inventory, OFFHAND_SLOT, TOTAL_SLOTS } from '../src/core/container/Inventory.ts';
 import { DEV_KIT_ITEMS, devKitRequested, grantDevKit } from '../src/game/startupKit.ts';
 import { toolItemId } from '../src/core/registry/tools.ts';
+import { Chest } from '../src/core/container/Chest.ts';
+import { tryInsertOne } from '../src/core/container/Transfer.ts';
 
 let passed = 0;
 let failed = 0;
@@ -304,6 +306,33 @@ console.log('\n[磁石与指南针绑定（批次 453）]');
     ),
   );
   check('一枚绑了、一枚没绑 → 不能并堆', !sameExtras({ lodestone: { x: 1, y: 2, z: 3, dimension: 'overworld' } }, {}));
+}
+
+console.log('\n[旗帜图案跟着物品走（批次 502）]');
+{
+  const banner = { id: Block.RED_BANNER, count: 1, bannerPattern: 2 };
+  equal('图案读回来', restoreStack(banner)?.bannerPattern, 2);
+  equal('第 4 种图案（上限）读回来', restoreStack({ ...banner, bannerPattern: 4 })?.bannerPattern, 4);
+  equal('0 当光板（不写字段）', restoreStack({ ...banner, bannerPattern: 0 })?.bannerPattern, undefined);
+  equal('越界当光板', restoreStack({ ...banner, bannerPattern: 9 })?.bannerPattern, undefined);
+  equal('小数当光板', restoreStack({ ...banner, bannerPattern: 1.5 })?.bannerPattern, undefined);
+  equal('字符串当光板', restoreStack({ ...banner, bannerPattern: '2' })?.bannerPattern, undefined);
+  equal('没有这个字段就是光板', restoreStack({ id: Block.RED_BANNER, count: 1 })?.bannerPattern, undefined);
+  equal(
+    '非旗帜带着这个字段也丢掉（石头不该有图案）',
+    restoreStack({ id: Block.STONE, count: 1, bannerPattern: 2 })?.bannerPattern,
+    undefined,
+  );
+
+  equal('stackExtras 带上图案', stackExtras(banner).bannerPattern, 2);
+  check('光板与带图案不能并堆', !sameExtras({ bannerPattern: 1 }, {}));
+  check('同一图案可以并堆', sameExtras({ bannerPattern: 1 }, { bannerPattern: 1 }));
+  check('不同图案不能并堆', !sameExtras({ bannerPattern: 1 }, { bannerPattern: 2 }));
+
+  // 第四处链路：漏斗/搬运的 cloneExtras（漏了这一处，搬一趟图案就没了）
+  const chest = new Chest();
+  check('漏斗塞得进去', tryInsertOne(chest, banner));
+  equal('搬过去图案还在', chest.get(0)?.bannerPattern, 2);
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);

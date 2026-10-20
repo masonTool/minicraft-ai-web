@@ -319,23 +319,33 @@ const DOOR_UPPER_MASK = 0b100000;
 const BANNER_TOP_MASK = 0b100000;
 
 /**
- * 旗帜的**图案**（批次 497，B19）：bit0-2 存图案编号（0 = 光板）。
+ * 旗帜的**图案**（批次 497；**批次 502 改位**）：3 位存图案编号（0 = 光板）。
+ *
+ * ⚠️ 原来占 bit0-2，与 `FACING_MASK = 0b110` **撞位**——挂墙旗帜换一次图案，
+ * 低位的朝向就跟着被改掉（第一批只在立地旗上验过，挂墙那面会当场转向）。
+ * 改用旗帜自己空着的三位：**bit0 / bit4 / bit6**
+ * （bit1-2 朝向、bit3 挂墙、bit5 上半、bit7 留给以后的水浸）。
  *
  * 底色不需要状态位——16 色是 16 个不同的方块 id（640~655），
  * 所以状态位只用来表达"烫了哪种图案"。
  */
-const BANNER_PATTERN_MASK = 0b111;
+const BANNER_PATTERN_MASK = 0b1010001;
 
 /** 图案编号 → 名字（渲染与提示共用；0 是光板） */
 export const BANNER_PATTERNS: readonly string[] = ['无', '十字', '边框', '斜纹', '横条'];
 
 export function bannerPatternOf(state: number): number {
-  return state & BANNER_PATTERN_MASK;
+  return (state & 0b1) | (((state >> 4) & 0b1) << 1) | (((state >> 6) & 0b1) << 2);
 }
 
 export function withBannerPattern(state: number, pattern: number): number {
   const clamped = Math.max(0, Math.min(BANNER_PATTERNS.length - 1, Math.floor(pattern)));
-  return (state & ~BANNER_PATTERN_MASK) | clamped;
+  return (
+    (state & ~BANNER_PATTERN_MASK) |
+    (clamped & 0b1) |
+    (((clamped >> 1) & 0b1) << 4) |
+    (((clamped >> 2) & 0b1) << 6)
+  );
 }
 
 /** 右键一次换成下一种图案（0 → 1 → … → 4 → 0） */

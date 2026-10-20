@@ -20,7 +20,7 @@
 import { Block, JUNGLE_LOG_ID, blockDef, cropOf, isRailId, stemKindOf } from '../registry/blocks.ts';
 // 铁轨形状（批次 478）：放下去按四邻自动接成直轨或弯道
 import { pickRailShape, pickRailSlope, withRailShape } from '../world/RailShape.ts';
-import { withBannerTop, withCaveVinesBerries } from '../registry/blockState.ts';
+import { withBannerPattern, withBannerTop, withCaveVinesBerries } from '../registry/blockState.ts';
 import {
   MULTI_PAINTINGS_LARGE_FIRST,
   MULTI_PAINTING_VARIANT,
@@ -63,6 +63,11 @@ export interface PlacementInput {
   yaw: number;
   /** 玩家是否潜行（潜行时不做"点击方块打开界面"之类的交互，但这里不影响形状） */
   sneaking: boolean;
+  /**
+   * 手持物品带的旗帜图案（批次 502）：0/缺省 = 光板。
+   * 图案是物品属性（挖下来再放下要保留），而状态位只能由这里写进方块。
+   */
+  bannerPattern?: number;
   /** 查询相对位置的方块 id */
   blockAt(dx: number, dy: number, dz: number): number;
   /** 查询相对位置的方块状态（藤蔓"再挂一面"要用；不提供时按 0 处理） */
@@ -404,12 +409,17 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       // （门那条判据踩过同样的坑）
       if (input.blockAt(0, 1, 0) !== Block.AIR) return null;
 
+      // 图案（批次 502）：从手持物品带过来，上下半格都要写同一份
+      // （批次 497 的教训：只改下半会让两半的图案不一样）
+      const pattern = input.bannerPattern ?? 0;
+
       // 立地：下方要有实心方块（杆立在地上）
       if (ny > 0) {
         if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+        const state = withBannerPattern(0, pattern);
         return {
-          state: 0,
-          extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withBannerTop(0, true) },
+          state,
+          extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withBannerTop(state, true) },
         };
       }
 
@@ -421,7 +431,7 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       const intoWall = facingFromNormal(nx, nz);
       if (intoWall === null) return null;
       const wallFacing = ((intoWall + 2) & 3) as 0 | 1 | 2 | 3;
-      const hanging = withWallMounted(withFacing(0, wallFacing), true);
+      const hanging = withBannerPattern(withWallMounted(withFacing(0, wallFacing), true), pattern);
       return {
         state: hanging,
         extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withBannerTop(hanging, true) },
