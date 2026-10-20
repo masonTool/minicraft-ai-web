@@ -69,7 +69,22 @@ export interface UiSlotNode extends UiNode {
   onDrop?: (from: UiSlotNode, to: UiSlotNode) => void;
 }
 
-export type UiElement = UiNode | UiTextNode | UiButtonNode | UiToggleNode | UiSliderNode | UiSlotNode;
+export type UiIconKind = 'chat' | 'pause' | 'view';
+
+export interface UiIconNode extends UiNode {
+  kind: 'icon';
+  icon: UiIconKind;
+  onTap: () => void;
+}
+
+export type UiElement =
+  | UiNode
+  | UiTextNode
+  | UiButtonNode
+  | UiToggleNode
+  | UiSliderNode
+  | UiSlotNode
+  | UiIconNode;
 
 export function box(x: number, y: number, w: number, h: number, children: UiElement[] = [], style: UiStyle = {}): UiNode {
   return { x, y, w, h, style, children };
@@ -132,6 +147,17 @@ export function slot(
   return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop };
 }
 
+export function icon(
+  x: number,
+  y: number,
+  size: number,
+  kind: UiIconKind,
+  onTap: () => void,
+  style: UiStyle = {},
+): UiIconNode {
+  return { kind: 'icon', x, y, w: size, h: size, icon: kind, onTap, style };
+}
+
 export function row(
   x: number,
   y: number,
@@ -177,6 +203,7 @@ export class UiLayer {
   private activeSlider: UiSliderNode | null = null;
   private dragSlot: { node: UiSlotNode; startX: number; startY: number; moved: boolean } | null = null;
   private slots: UiSlotNode[] = [];
+  private icons: UiIconNode[] = [];
   private readonly drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void;
 
   constructor(
@@ -267,6 +294,14 @@ export class UiLayer {
       return true;
     }
 
+    for (let i = this.icons.length - 1; i >= 0; i--) {
+      const item = this.icons[i]!;
+      if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
+        item.onTap();
+        return true;
+      }
+    }
+
     for (let i = this.buttons.length - 1; i >= 0; i--) {
       const item = this.buttons[i]!;
       if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
@@ -333,6 +368,7 @@ export class UiLayer {
     ctx.clearRect(0, 0, DESIGN_WIDTH, this.designHeight);
     this.buttons = [];
     this.slots = [];
+    this.icons = [];
     if (this.root) this.drawNode(this.root, ctx);
     this.texture.needsUpdate = true;
   }
@@ -346,6 +382,49 @@ export class UiLayer {
       ctx.textBaseline = 'top';
       const x = style.align === 'center' ? node.x + node.w / 2 : style.align === 'right' ? node.x + node.w : node.x;
       ctx.fillText(node.text, x, node.y, node.w);
+      return;
+    }
+
+    if ('kind' in node && node.kind === 'icon') {
+      const style = node.style ?? {};
+      ctx.fillStyle = style.background ?? 'rgba(12,16,20,0.82)';
+      ctx.beginPath();
+      ctx.arc(node.x + node.w / 2, node.y + node.h / 2, node.w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      if (style.border) {
+        ctx.strokeStyle = style.border;
+        ctx.lineWidth = style.borderWidth ?? 2;
+        ctx.stroke();
+      }
+      const cx = node.x + node.w / 2;
+      const cy = node.y + node.h / 2;
+      const r = node.w * 0.18;
+      ctx.strokeStyle = '#f5f7fa';
+      ctx.fillStyle = '#f5f7fa';
+      ctx.lineWidth = 2.5;
+      if (node.icon === 'pause') {
+        ctx.fillRect(cx - r * 1.2, cy - r * 1.4, r * 0.9, r * 2.8);
+        ctx.fillRect(cx + r * 0.3, cy - r * 1.4, r * 0.9, r * 2.8);
+      } else if (node.icon === 'chat') {
+        roundedRect(ctx, cx - r * 1.8, cy - r * 1.3, r * 3.6, r * 2.4, r * 0.6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 0.6, cy + r * 1.1);
+        ctx.lineTo(cx - r * 1.2, cy + r * 1.9);
+        ctx.lineTo(cx + r * 0.1, cy + r * 1.1);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 2.2, cy);
+        ctx.lineTo(cx + r * 2.2, cy);
+        ctx.moveTo(cx, cy - r * 2.2);
+        ctx.lineTo(cx, cy + r * 2.2);
+        ctx.stroke();
+      }
+      this.icons.push(node);
       return;
     }
 

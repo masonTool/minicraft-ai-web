@@ -76,6 +76,31 @@ const assert = (condition, message, state) => {
   );
   assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
 
+  // 摇杆拖动：玩家坐标应变化
+  const stickCenter = point(84, 317);
+  const beforeMove = await waitState((state) => state.screen === 'game', '摇杆用例未进入游戏');
+  await page.mouse.move(stickCenter.x, stickCenter.y);
+  await page.mouse.down();
+  await page.mouse.move(stickCenter.x, stickCenter.y - 70, { steps: 8 });
+  await page.waitForTimeout(900);
+  await page.mouse.up();
+  const afterMove = await waitState(
+    (state) => Math.hypot(state.x - beforeMove.x, state.z - beforeMove.z) > 0.15,
+    '摇杆拖动没有移动玩家',
+    5000,
+  );
+
+  // 双击摇杆开/关潜行
+  const joystickDouble = async () => {
+    await page.touchscreen.tap(stickCenter.x, stickCenter.y);
+    await page.waitForTimeout(80);
+    await page.touchscreen.tap(stickCenter.x, stickCenter.y);
+  };
+  await joystickDouble();
+  const sneakOn = await waitState((state) => state.sneaking, '双击摇杆没有开启潜行', 5000);
+  await joystickDouble();
+  await waitState((state) => !state.sneaking, '双击摇杆没有关闭潜行', 5000);
+
   await tap(510, 36);
   const paused = await waitState((state) => state.paused && state.screen === 'pause', '暂停没有打开');
   await tap(402, 313);
@@ -155,7 +180,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
+      { title, worlds, create, inGame, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),

@@ -14,7 +14,7 @@ import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
-import { UiLayer, box, button, slider, slot, text, toggle, type UiElement } from './ui-kit/index.ts';
+import { UiLayer, box, button, icon, slider, slot, text, toggle, type UiElement } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
 import { Chest } from '../core/container/Chest.ts';
 import { Furnace } from '../core/container/Furnace.ts';
@@ -1466,20 +1466,18 @@ const showHud = (): void => {
             }),
           ]
         : []),
-      button(434, 14, 44, 44, '聊', () => {
-        showChat();
-      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2, radius: 22, fontSize: 16 }),
-      button(488, 14, 44, 44, 'Ⅱ', () => {
+      icon(434, 14, 44, 'chat', () => showChat(), { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
+      icon(488, 14, 44, 'pause', () => {
         paused = true;
         showPause();
-      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2, radius: 22, fontSize: 18 }),
-      button(542, 14, 44, 44, '视', () => {
+      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
+      icon(542, 14, 44, 'view', () => {
         cameraMode = cameraMode === 'first' ? 'third' : 'first';
         settings.view = cameraMode;
         persistSettings();
         playerModel.visible = cameraMode === 'third';
         showHud();
-      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2, radius: 22, fontSize: 16 }),
+      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
       ...Array.from({ length: 9 }, (_, i) => {
         const stack = inventory.get(i);
         return slot(242 + i * 60, uiHeight - 76, 54, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
