@@ -16,6 +16,10 @@ export interface StatsOverlay {
   hasError(): boolean;
   setBoss(name: string | null, health: number, max: number): void;
   setTarget(name: string | null): void;
+  setDamageFlash(value: number): void;
+  showDeath(cause: string): void;
+  hideDeath(): void;
+  isDead(): boolean;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -59,6 +63,8 @@ export function createStats(
   let error: string | null = null;
   let boss: { name: string; health: number; max: number } | null = null;
   let targetName: string | null = null;
+  let damageFlash = 0;
+  let deathCause: string | null = null;
 
   const foodIcon = (x: number, y: number, size: number, filled: boolean): void => {
     if (!context) return;
@@ -110,6 +116,42 @@ export function createStats(
   const redraw = (): void => {
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (deathCause) {
+      context.fillStyle = 'rgba(10, 0, 0, 0.82)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      const width = Math.min(460, canvas.width - 80);
+      const x = (canvas.width - width) / 2;
+      const y = canvas.height * 0.3;
+      drawPanel(context, { x, y, w: width, h: 170 });
+      drawText(context, '你死了！', canvas.width / 2, y + 24, 34, '#ff8a8a', 'center');
+      drawText(
+        context,
+        deathCause,
+        canvas.width / 2,
+        y + 78,
+        16,
+        'rgba(255, 235, 235, 0.86)',
+        'center',
+        width - 40,
+      );
+      drawText(
+        context,
+        '点击屏幕重生',
+        canvas.width / 2,
+        y + 122,
+        18,
+        '#ffffff',
+        'center',
+      );
+      texture.needsUpdate = true;
+      return;
+    }
+
+    if (damageFlash > 0) {
+      context.fillStyle = `rgba(190, 20, 20, ${0.42 * damageFlash})`;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     if (error) {
       context.fillStyle = 'rgba(0, 0, 0, 0.82)';
@@ -244,6 +286,24 @@ export function createStats(
       if (targetName === next) return;
       targetName = next;
       redraw();
+    },
+    setDamageFlash(value: number): void {
+      const next = Math.max(0, Math.min(1, value));
+      if (Math.abs(next - damageFlash) < 0.01) return;
+      damageFlash = next;
+      redraw();
+    },
+    showDeath(cause: string): void {
+      deathCause = cause;
+      redraw();
+    },
+    hideDeath(): void {
+      if (deathCause === null) return;
+      deathCause = null;
+      redraw();
+    },
+    isDead(): boolean {
+      return deathCause !== null;
     },
     render(renderer: THREE.WebGLRenderer): void {
       renderer.clearDepth();

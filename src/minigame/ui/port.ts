@@ -59,6 +59,10 @@ export interface MiniGameUi {
   setStats(stats: PlayerStats): void;
   setBoss(name: string | null, health: number, max: number): void;
   setTarget(name: string | null): void;
+  setDamageFlash(value: number): void;
+  showDeath(cause: string): void;
+  hideDeath(): void;
+  isDead(): boolean;
   setMining(progress: number | null): void;
   showError(message: string | null): void;
   setFlying(active: boolean): void;
@@ -272,6 +276,18 @@ export function createCanvasUi(
     setTarget(name: string | null): void {
       stats.setTarget(name);
     },
+    setDamageFlash(value: number): void {
+      stats.setDamageFlash(value);
+    },
+    showDeath(cause: string): void {
+      stats.showDeath(cause);
+    },
+    hideDeath(): void {
+      stats.hideDeath();
+    },
+    isDead(): boolean {
+      return stats.isDead();
+    },
     setMining(progress: number | null): void {
       stats.setMining(progress);
     },
@@ -301,6 +317,10 @@ export function createCanvasUi(
         return;
       }
       if (stats.hasError()) {
+        stats.render(renderer);
+        return;
+      }
+      if (stats.isDead()) {
         stats.render(renderer);
         return;
       }

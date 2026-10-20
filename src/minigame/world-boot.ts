@@ -466,7 +466,7 @@ async function boot(): Promise<void> {
     platform.system.safeArea,
   );
 
-  let playerHealth = loadedPlayer?.health ?? 20;
+  let playerHealth = Math.max(1, loadedPlayer?.health ?? 20);
   let playerFood = loadedPlayer?.food ?? 20;
   let playerAir = loadedPlayer?.air ?? 300;
   const playerXp = loadedPlayer?.xp?.progress ?? 0;
@@ -480,6 +480,17 @@ async function boot(): Promise<void> {
     });
   };
   refreshVitals();
+  let damageFlash = 0;
+  let fallStartY: number | null = null;
+  const applyDamage = (amount: number, cause: string): void => {
+    if (amount <= 0 || ui.isDead()) return;
+    playerHealth = Math.max(0, playerHealth - amount);
+    refreshVitals();
+    damageFlash = Math.min(1, 0.32 + amount / 8);
+    ui.setDamageFlash(damageFlash);
+    ui.showToast(`-${amount} 生命`);
+    if (playerHealth <= 0) ui.showDeath(cause);
+  };
   const refreshWorldInfo = (edits: number): void => {
     ui.setWorldInfo({
       worlds: worlds.map((entry) => ({ id: entry.id, name: entry.name })),
@@ -675,8 +686,21 @@ async function boot(): Promise<void> {
   const spawnPlayer = (): void => {
     const surface = world.getSurfaceBlockY(8, 8) ?? 64;
     physics.teleport(8.5, surface + 1.01, 8.5);
+    fallStartY = null;
     playerReady = true;
     updateCamera();
+  };
+
+  const respawnPlayer = (): void => {
+    playerHealth = 20;
+    refreshVitals();
+    damageFlash = 0;
+    ui.setDamageFlash(0);
+    ui.hideDeath();
+    fallStartY = null;
+    spawnPlayer();
+    scheduleSave?.();
+    ui.showToast('已重生');
   };
 
   let saving = false;
@@ -1052,6 +1076,11 @@ async function boot(): Promise<void> {
       if (typeof action === 'object' && action?.type === 'world') void switchWorld(action.id);
       return;
     }
+    // 死亡遮罩：任意点击重生
+    if (ui.isDead()) {
+      uiPointerId = event.pointerId;
+      return;
+    }
     // 暂停面板优先：暂停时所有点击只走 UI
     if (ui.isSettingsOpen()) {
       uiPointerId = event.pointerId;
@@ -1253,7 +1282,9 @@ async function boot(): Promise<void> {
       return;
     }
     if (event.pointerId === uiPointerId) {
-      if (ui.isSettingsOpen()) {
+      if (ui.isDead()) {
+        respawnPlayer();
+      } else if (ui.isSettingsOpen()) {
         ui.handleSettingsScrollUp();
       } else if (ui.isInventoryOpen()) {
         ui.handleInventoryUp(event.clientX, event.clientY, width, height);
@@ -1378,7 +1409,8 @@ async function boot(): Promise<void> {
       ui.isSettingsOpen() ||
       ui.isInventoryOpen() ||
       ui.isChestOpen() ||
-      ui.isFurnaceOpen()
+      ui.isFurnaceOpen() ||
+      ui.isDead()
     ) {
       playerInput.forward = 0;
       playerInput.strafe = 0;
@@ -1392,6 +1424,19 @@ async function boot(): Promise<void> {
       if (physics.y < -40) spawnPlayer();
     }
     updateCamera();
+    if (flying) {
+      fallStartY = null;
+    } else if (!physics.onGround && physics.vy < -0.2) {
+      fallStartY = fallStartY === null ? physics.y : Math.max(fallStartY, physics.y);
+    } else if (physics.onGround && fallStartY !== null) {
+      const distance = fallStartY - physics.y;
+      fallStartY = null;
+      if (distance > 3) applyDamage(Math.floor(distance - 3), '摔落伤害');
+    }
+    if (damageFlash > 0) {
+      damageFlash = Math.max(0, damageFlash - dt * 1.4);
+      ui.setDamageFlash(damageFlash);
+    }
     handTime += dt;
     const heldNow = inventory.get(selectedSlot);
     if (heldNow) {
@@ -1422,7 +1467,8 @@ async function boot(): Promise<void> {
         ui.isSettingsOpen() ||
         ui.isInventoryOpen() ||
         ui.isChestOpen() ||
-        ui.isFurnaceOpen()
+        ui.isFurnaceOpen() ||
+        ui.isDead()
       ) {
         cancelMining();
       } else {
