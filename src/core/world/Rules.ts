@@ -77,6 +77,20 @@ export interface GameRules {
    * 而载具掉落是玩家最常想关的那一类（矿车掉一地会卡在轨道上）。
    */
   doEntityDrops: boolean;
+  /**
+   * 是否生成掠夺者**巡逻队**（批次 488）。原版 1.14 起就有这一条。
+   *
+   * 巡逻队是批次 476 加的，但这条规则一直没跟上——也就是说"做了功能、
+   * 玩家却关不掉它"。与 `disableRaids` 是两件事：那条管袭击，这条管地表游荡的小队。
+   */
+  doPatrolSpawning: boolean;
+  /**
+   * 命令方块执行命令时是否把结果写进聊天栏（批次 488）。原版 1.9 起就有。
+   *
+   * 与 `sendCommandFeedback` 分开：命令方块常常接在红石钟上，
+   * 每 0.2 秒刷一屏输出正是玩家想关掉的东西。
+   */
+  commandBlockOutput: boolean;
 }
 
 export const DEFAULT_GAME_RULES: GameRules = {
@@ -102,7 +116,19 @@ export const DEFAULT_GAME_RULES: GameRules = {
   reducedDebugInfo: false,
   doFireTick: true,
   doEntityDrops: true,
+  doPatrolSpawning: true,
+  commandBlockOutput: true,
 };
+
+/**
+ * 命令的执行结果该不该写进聊天栏（批次 488，纯函数）。
+ *
+ * 两条规则分工：命令方块看 `commandBlockOutput`，玩家手打看 `sendCommandFeedback`。
+ * 抽成纯函数是为了能离线断言——main 里只剩"调它一下"。
+ */
+export function shouldEchoCommandResult(rules: GameRules, fromCommandBlock: boolean): boolean {
+  return fromCommandBlock ? rules.commandBlockOutput : rules.sendCommandFeedback;
+}
 
 /** 难度的具体系数（伤害倍率、刷怪上限倍率等） */
 export interface DifficultyProfile {

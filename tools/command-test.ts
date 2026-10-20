@@ -440,6 +440,13 @@ console.log('\n[难度与游戏规则]');
   // 批次 409：reducedDebugInfo（调试面板收起）
   const reduced = run('/gamerule reducedDebugInfo true');
   check('reducedDebugInfo 能设成 true', reduced.world.rules.reducedDebugInfo === true, reduced.out.lastError);
+  // 批次 488：两条"功能做了、规则跟上"的开关
+  const patrolRule = run('/gamerule doPatrolSpawning false');
+  check('doPatrolSpawning 能关（巡逻队）', patrolRule.world.rules.doPatrolSpawning === false, patrolRule.out.lastError);
+  const blockRule = run('/gamerule commandBlockOutput false');
+  check('commandBlockOutput 能关（命令方块输出）', blockRule.world.rules.commandBlockOutput === false, blockRule.out.lastError);
+  const patrolBack = run('/gamerule doPatrolSpawning true');
+  check('还能再打开', patrolBack.world.rules.doPatrolSpawning === true);
   check('规则列表里能看到它（不必记名字）', run('/gamerule').out.lastInfo.includes('reducedDebugInfo'));
   // 批次 433：doFireTick（火是否蔓延与熄灭）
   const fire = run('/gamerule doFireTick false');

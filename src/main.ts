@@ -176,6 +176,7 @@ import { executeCommand, type CommandContext, type CommandFeedback } from './cor
 import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.ts';
 // 记分板（M23，批次 402）
 import { Scoreboard } from './core/world/Scoreboard.ts';
+import { shouldEchoCommandResult } from './core/world/Rules.ts';
 import { Teams } from './core/world/Teams.ts';
 // 蜂巢的蜂蜜等级与挤蜜（J21，批次 407）
 import {
@@ -7840,6 +7841,8 @@ class App {
         interval: PATROL_INTERVAL_SECONDS,
         peaceful: this.difficulty === 'peaceful',
         activePatrol: this.patrolMobs.length,
+        // 批次 488：`/gamerule doPatrolSpawning false` 能彻底停掉巡逻队
+        enabled: this.rules.doPatrolSpawning,
       })
     ) {
       return;
@@ -7898,7 +7901,9 @@ class App {
   private runCommandBlock(x: number, y: number, z: number): void {
     const command = this.commandBlocks.get(this.dimension, x, y, z);
     if (!command) return;
-    executeCommand(`/${command}`, this.commandContext(), this.commandFeedback());
+    // 命令方块走 `commandBlockOutput` 而不是 `sendCommandFeedback`（批次 488）：
+    // 接在红石钟上的方块每 0.2 秒刷一屏输出，正是玩家想关掉的东西
+    executeCommand(`/${command}`, this.commandContext(), this.commandFeedback(true));
   }
 
   /**
@@ -9878,11 +9883,12 @@ class App {
     if (open && document.pointerLockElement) document.exitPointerLock();
   }
 
-  private commandFeedback(): CommandFeedback {
+  private commandFeedback(fromCommandBlock = false): CommandFeedback {
     return {
-      // 批次 361：成功反馈可关；错误始终显示（原版也如此）
+      // 批次 361 / 488：成功反馈可关（命令方块另有 `commandBlockOutput`）；
+      // 错误始终显示（原版也如此）
       info: (text) => {
-        if (this.rules.sendCommandFeedback) this.chat.push(text, 'system');
+        if (shouldEchoCommandResult(this.rules, fromCommandBlock)) this.chat.push(text, 'system');
       },
       error: (text) => this.chat.push(text, 'error'),
     };

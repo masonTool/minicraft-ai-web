@@ -69,12 +69,15 @@ console.log('\n[一组几只、谁是队长]');
 
 console.log('\n[要不要生成]');
 {
-  const base = { elapsed: PATROL_INTERVAL_SECONDS, interval: PATROL_INTERVAL_SECONDS, peaceful: false, activePatrol: 0 };
+  const base = { elapsed: PATROL_INTERVAL_SECONDS, interval: PATROL_INTERVAL_SECONDS, peaceful: false, activePatrol: 0, enabled: true };
   check('条件都满足 → 生成', shouldTryPatrol(base));
   check('和平难度不刷', !shouldTryPatrol({ ...base, peaceful: true }));
   check('已有一组活着不刷（否则会叠成一群）', !shouldTryPatrol({ ...base, activePatrol: 1 }));
   check('间隔没到不刷', !shouldTryPatrol({ ...base, elapsed: PATROL_INTERVAL_SECONDS - 1 }));
   check('间隔恰好到 → 刷', shouldTryPatrol({ ...base, elapsed: PATROL_INTERVAL_SECONDS }));
+  // 批次 488：`/gamerule doPatrolSpawning false` 要能彻底停掉
+  check('规则关掉就不刷', !shouldTryPatrol({ ...base, enabled: false }));
+  check('规则关掉 + 刚和平也不行（两条各自成立）', !shouldTryPatrol({ ...base, enabled: false, peaceful: true }));
 }
 
 console.log('\n[落点：玩家周围的一圈]');

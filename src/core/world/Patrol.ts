@@ -59,7 +59,15 @@ export function shouldTryPatrol(options: {
   readonly interval: number;
   readonly peaceful: boolean;
   readonly activePatrol: number;
+  /**
+   * 游戏规则 `doPatrolSpawning`（批次 488）。
+   *
+   * 巡逻队是 476 加的、规则是 488 补的：中间那段时间"做了功能却关不掉"，
+   * 玩家用 `/gamerule doPatrolSpawning false` 应该能彻底停掉它们。
+   */
+  readonly enabled: boolean;
 }): boolean {
+  if (!options.enabled) return false;
   if (options.peaceful) return false;
   if (options.activePatrol > 0) return false;
   return options.elapsed >= options.interval;
