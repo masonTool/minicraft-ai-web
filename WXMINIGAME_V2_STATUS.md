@@ -13,10 +13,10 @@
 - [x] `src/platform` 平台层迁入
 - [x] `src/core/worker/WorkerLike.ts`（additive 平台 seam）
 - [x] `npm run typecheck` 通过
+- [x] 主线程 Worker 垫片（复用 main `chunk.worker` 的生成/网格化）
 
 ## 尚未完成
 
-- [ ] 主线程 Worker 垫片（复用 main `chunk.worker` 的生成/网格化）
 - [ ] SaveGame / IndexedDB seam
 - [ ] v2 最小世界渲染启动
 - [ ] 触摸输入
@@ -26,8 +26,7 @@
 
 ## 下一步顺序
 
-1. 给 main worker 增加可复用的 `handleWorkerRequest`（additive），平台层实现 `MainThreadWorker`。
-2. 用平台 SaveGame 承接 IndexedDB。
+1. 用平台 SaveGame 承接 IndexedDB。
 3. 写 v2 最小启动：World + TextureAtlas + ChunkRenderer 画出一个区块。
 4. 再接 PlayerPhysics / 输入。
 5. 最后做 UI Kit。
