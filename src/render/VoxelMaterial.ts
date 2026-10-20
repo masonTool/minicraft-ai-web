@@ -12,7 +12,7 @@
  */
 
 import * as THREE from 'three';
-import { ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD } from './alphaCoverage.ts';
+import { ALPHA_DITHER_BAND, ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD } from './alphaCoverage.ts';
 import { GLSL_DITHER } from './dither.ts';
 
 /**
@@ -96,6 +96,11 @@ uniform float uAlphaTest;
  * 实心层 0.4、半透明层 0（那一层本来就不做 alphaTest）。
  */
 uniform float uAlphaLift;
+/**
+ * 阈值抖动幅度（批次 523，见 alphaCoverage.ts 的 ALPHA_DITHER_BAND）。
+ * 实心层 0.06（±0.03）、半透明层 0 —— 那层没有 alphaTest，抖动只会白算。
+ */
+uniform float uAlphaDither;
 /** 单张贴图占图集的 UV 尺寸，以及半像素内缩比例 */
 uniform vec2 uTileSpan;
 uniform float uTileInset;
@@ -169,7 +174,18 @@ void main() {
   // 常量与 alphaCoverage.ts 同源（那边是离线断言的唯一口径）。
   float alphaLod = clamp(log2(max(rho, 0.0001)), 0.0, ${ALPHA_LIFT_MAX_LOD.toFixed(1)});
   float covered = min(1.0, texel.a * (1.0 + uAlphaLift * alphaLod));
-  if (covered < uAlphaTest) discard;
+
+  // ---- 阈值抖动（批次 523）
+  //
+  // alphaTest 是**硬阈值**：covered 刚好骑在 0.5 上的像素（草尖、叶缘）在镜头
+  // 平移一个像素时就会整体翻过去，肉眼就是"草尖在抖"。把阈值按**屏幕空间**的
+  // 4×4 Bayer 打散 ±0.03：这些像素被摊成一片细密的点，而且每个点的取舍固定挂在
+  // 它自己的屏幕位置上 —— 平移时不再整片一起翻。配合已经打开的 MSAA，
+  // 这些点还会被覆盖率再抹一次。
+  //
+  // 半透明层 uAlphaTest = 0、uAlphaDither = 0，这个分支对它完全透明（永远不 discard）。
+  float threshold = uAlphaTest + (bayer4(gl_FragCoord.xy) - 0.5) * uAlphaDither;
+  if (covered < threshold) discard;
 
   // 两条光各走一次原版曲线（level / (4 - 3·level)），亮度取较大者：
   // 洞里只有块光、白天只有天光。
@@ -238,6 +254,7 @@ export class VoxelMaterial {
       uAlphaTest: { value: translucent ? 0 : 0.5 },
       // 半透明层没有 alphaTest（阈值 0），补偿也就没有意义——保持 0，省一次乘法的影响
       uAlphaLift: { value: translucent ? 0 : ALPHA_LIFT_PER_LOD },
+      uAlphaDither: { value: translucent ? 0 : ALPHA_DITHER_BAND },
       uTileSpan: { value: new THREE.Vector2(span[0], span[1]) },
       uTileInset: { value: options.tileInset ?? 0 },
       uAtlasSize: { value: atlasSize },

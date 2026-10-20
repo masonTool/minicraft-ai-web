@@ -129,7 +129,7 @@ const RAW_FACES: readonly {
     // -X（东/西侧面）
     dir: [-1, 0, 0],
     tile: 2,
-    shade: 0.6,
+    shade: 0.54,
     corners: [
       { pos: [0, 1, 0], uv: [0, 1] },
       { pos: [0, 0, 0], uv: [0, 0] },
@@ -141,7 +141,7 @@ const RAW_FACES: readonly {
     // +X
     dir: [1, 0, 0],
     tile: 2,
-    shade: 0.6,
+    shade: 0.54,
     corners: [
       { pos: [1, 1, 1], uv: [0, 1] },
       { pos: [1, 0, 1], uv: [0, 0] },
@@ -153,7 +153,7 @@ const RAW_FACES: readonly {
     // -Y（底面，最暗）
     dir: [0, -1, 0],
     tile: 1,
-    shade: 0.5,
+    shade: 0.42,
     corners: [
       { pos: [1, 0, 1], uv: [1, 0] },
       { pos: [0, 0, 1], uv: [0, 0] },
@@ -177,7 +177,7 @@ const RAW_FACES: readonly {
     // -Z（北侧面）
     dir: [0, 0, -1],
     tile: 2,
-    shade: 0.8,
+    shade: 0.72,
     corners: [
       { pos: [1, 0, 0], uv: [0, 0] },
       { pos: [0, 0, 0], uv: [1, 0] },
@@ -189,7 +189,7 @@ const RAW_FACES: readonly {
     // +Z（南侧面）
     dir: [0, 0, 1],
     tile: 2,
-    shade: 0.8,
+    shade: 0.72,
     corners: [
       { pos: [0, 0, 1], uv: [0, 0] },
       { pos: [1, 0, 1], uv: [1, 0] },

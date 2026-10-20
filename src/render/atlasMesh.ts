@@ -31,8 +31,15 @@ export const FACE_UV_PATTERN: readonly (readonly [number, number])[] = [
   [1, 0],
 ];
 
-/** 六面亮度：顶面最亮、底面最暗，模仿原版的假光照 */
-export const FACE_SHADE: readonly number[] = [0.8, 0.8, 1, 0.5, 0.62, 0.62];
+/**
+ * 六面亮度：顶面最亮、底面最暗，模仿原版的假光照。
+ *
+ * 顺序与 `BoxGeometry` 的面顺序一致：+X -X +Y -Y +Z -Z。
+ * 数值与 `ChunkMesher.RAW_FACES` **必须一样**（同一个方块拿在手上和放在地上不该有两种亮度）：
+ * 批次 523 一起加深（侧面 0.8/0.6 → 0.72/0.54、底面 0.5 → 0.42），
+ * 让方块看起来"被上面的光照着"、更压得住。
+ */
+export const FACE_SHADE: readonly number[] = [0.54, 0.54, 1, 0.42, 0.72, 0.72];
 
 /** 把图集里各贴图的 UV 写进几何体（几何体每个面固定 4 个顶点） */
 export function applyFaceUvs(

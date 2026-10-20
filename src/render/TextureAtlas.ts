@@ -3225,10 +3225,14 @@ function bladesPainter(rgb: readonly [number, number, number], blades: number, t
     let blade: Blade | null = null;
     for (const candidate of list) {
       if (y < candidate.top) continue;
-      // 叶尖 2 行收成 1 像素，并按 `lean` 偏向左/右那半，肉眼就是"叶尖歪了一下"
+      // 叶尖 2 行按 `lean` 整体右移 1 格（"叶尖歪了一下"），但**宽度始终是 2 像素**。
+      //
+      // 批次 523：以前叶尖收成 1 像素，那正是用户看到的"草尖上的极细的线"——
+      // 它比旁边窄一半、又会在 mipmap 里第一个被平均掉，镜头一平移就时有时无
+      // （"草尖在抖"）。收窄的观感改由"每片叶子高度不同"表达（见上面的 `height`）。
       const tip = y < candidate.top + 2;
       const x0 = tip ? candidate.baseX + (candidate.lean > 0 ? 1 : 0) : candidate.baseX;
-      if (x >= x0 && x < x0 + (tip ? 1 : 2)) {
+      if (x >= x0 && x < x0 + 2) {
         blade = candidate;
         break;
       }
@@ -3258,14 +3262,15 @@ function bladesPainter(rgb: readonly [number, number, number], blades: number, t
  */
 function flowerPainter(stem: readonly [number, number, number], petal: readonly [number, number, number], salt: string): Painter {
   return (x, y, rng) => {
-    // 茎：竖直 1 像素，从 y=15 到 y=7，略微弯曲
+    // 茎：**两像素宽**（批次 523）。以前是 1 像素宽、9 行高的一条竖线——和草尖一样，
+    // 它在屏幕上就是"极细的线"，mipmap 一平均还会断成虚线。
     const stemX = 7 + (hashString(`${salt}stem`) % 2);
-    if (y >= 7 && Math.abs(x - stemX) <= 0.5) {
+    if (y >= 7 && (x === stemX || x === stemX + 1)) {
       const v = 1 + (rng() * 0.16 - 0.08);
       return [clamp255(stem[0] * v), clamp255(stem[1] * v), clamp255(stem[2] * v), 255];
     }
-    // 茎上的一片小叶
-    if (y >= 10 && y <= 11 && (x === stemX - 2 || x === stemX + 2)) {
+    // 茎上的一片小叶：同样两像素宽（单个像素的小叶就是一小段"线"）
+    if (y >= 10 && y <= 11 && (x === stemX - 3 || x === stemX - 2 || x === stemX + 3 || x === stemX + 4)) {
       return [clamp255(stem[0] * 0.9), clamp255(stem[1] * 1.05), clamp255(stem[2] * 0.85), 255];
     }
     // 花瓣：中心 (7.5, 4)，半径随角度抖动
@@ -6292,6 +6297,36 @@ export function paintedCoverage(name: TileName, size = 16): number {
     }
   }
   return solid / (size * size);
+}
+
+/**
+ * 某张程序化贴图里**"只有 1 像素宽"的不透明像素**有几个（批次 523）。
+ *
+ * 判据：左右两个邻格都是透明的（贴图边缘按透明算）。这类竖条就是用户说的
+ * "草尖上的极细的线"——它在屏幕上是 1~2 个像素宽的一条线，而且**在 mipmap 里第一个
+ * 被平均掉**：2×2 平均后覆盖率只有 0.25~0.5，alphaTest 一啃就断，镜头平移时
+ * 那段线时有时无，看起来就是"草尖在抖"。
+ *
+ * 十字植物的贴图应当为 **0**：叶子/花茎/秆一律 ≥ 2 像素宽，收窄的观感交给
+ * "高度不同"表达。同样是跑画笔算、不碰 canvas，离线可断言。
+ */
+export function paintedThinColumns(name: TileName, size = 16): number {
+  const painter = PAINTERS[name] ?? noisy(128, 14);
+  const rng = makeRng(hashString(name));
+  const opaque: boolean[] = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) opaque.push(painter(x, y, rng)[3] >= 128);
+  }
+  let thin = 0;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!opaque[y * size + x]) continue;
+      const left = x > 0 && opaque[y * size + x - 1];
+      const right = x < size - 1 && opaque[y * size + x + 1];
+      if (!left && !right) thin++;
+    }
+  }
+  return thin;
 }
 
 export class TextureAtlas {

@@ -25,6 +25,7 @@ import {
   ATLAS_ANISOTROPY_MOBILE,
   clampAnisotropy,
   paintedCoverage,
+  paintedThinColumns,
   type TextureAtlas,
 } from '../src/render/TextureAtlas.ts';
 import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from '../src/render/atlasMesh.ts';
@@ -40,7 +41,7 @@ import { buildOutlineGeometry } from '../src/render/BlockOutline.ts';
 import { applyBoxFaceShade } from '../src/render/boxShading.ts';
 import { MobHealthBar } from '../src/render/MobHealthBar.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
-import { ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../src/render/alphaCoverage.ts';
+import { ALPHA_DITHER_BAND, ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../src/render/alphaCoverage.ts';
 import { GLSL_DITHER } from '../src/render/dither.ts';
 import { readFileSync } from 'node:fs';
 import { srgbColor } from '../src/render/srgb.ts';
@@ -285,8 +286,8 @@ console.log('\n[图集几何工具：UV 与逐面明暗]');
 
   applyFaceShade(box, FACE_SHADE);
   check(
-    '逐面明暗：顶面最亮、底面最暗、侧面居中',
-    close(colored(box, 8), 1) && close(colored(box, 12), 0.5) && close(colored(box, 0), 0.8) && close(colored(box, 20), 0.62),
+    '逐面明暗：顶面最亮、底面最暗、侧面居中（批次 523 加深）',
+    close(colored(box, 8), 1) && close(colored(box, 12), 0.42) && close(colored(box, 0), 0.54) && close(colored(box, 20), 0.72),
     `顶 ${colored(box, 8)} / 底 ${colored(box, 12)} / 侧 ${colored(box, 0)}`,
   );
 
@@ -657,7 +658,15 @@ console.log('\n[镂空贴图的覆盖率补偿（批次 520）]');
     '着色器里的 LOD 上限由常量注入',
     solid.material.fragmentShader.includes(`0.0, ${ALPHA_LIFT_MAX_LOD.toFixed(1)})`),
   );
-  check('alphaTest 用的是补偿后的值', solid.material.fragmentShader.includes('if (covered < uAlphaTest) discard;'));
+  check('alphaTest 用的是补偿后的值', solid.material.fragmentShader.includes('float covered = min(1.0, texel.a * (1.0 + uAlphaLift * alphaLod));'));
+  // 批次 523：硬阈值 + 屏幕空间抖色（草尖不再整片翻转）
+  check(
+    '阈值按屏幕空间 4×4 Bayer 打散（草尖不再整片翻）',
+    solid.material.fragmentShader.includes('float threshold = uAlphaTest + (bayer4(gl_FragCoord.xy) - 0.5) * uAlphaDither;') &&
+      solid.material.fragmentShader.includes('if (covered < threshold) discard;'),
+  );
+  equal('实心层的抖动幅度 = ALPHA_DITHER_BAND', solid.material.uniforms.uAlphaDither!.value, ALPHA_DITHER_BAND);
+  equal('半透明层不抖（那层没有 alphaTest，抖了只是白算）', translucent.material.uniforms.uAlphaDither!.value, 0);
   solid.material.dispose();
   translucent.material.dispose();
 }
@@ -1062,6 +1071,21 @@ console.log('\n[十字植物贴图的覆盖率下限]');
   }
   // 树叶是实心方块（不靠 alphaTest），覆盖率必须是 100% —— 用户眼中"画质好"的对照组
   equal('树叶是不透明整块（覆盖率 100%）', paintedCoverage('oak_leaves'), 1);
+}
+
+// ---------------------------------------------------------------- 植物贴图不许有 1 像素宽的竖条（批次 523）
+//
+// 用户："看矮草的时候……草尖部分有那种极细的细线"。根因是叶尖收了 1 像素宽：
+// 那是屏幕上 1~2 px 的一条线，而且 mipmap 第一个把它平均掉（覆盖率 0.25~0.5），
+// alphaTest 一啃就断 —— 镜头一平移就时有时无，也就是"草尖在抖"。
+// 规矩：十字植物的每一段不透明像素左右至少有一个同伴（≥ 2 像素宽）。
+
+console.log('\n[植物贴图：不许有 1 像素宽的竖条]');
+{
+  for (const tile of ['short_grass', 'fern', 'dandelion', 'poppy', 'sugar_cane', 'bamboo'] as const) {
+    const thin = paintedThinColumns(tile);
+    check(`${tile} 没有孤立的 1 像素竖条`, thin === 0, `${thin} 个`);
+  }
 }
 
 // ---------------------------------------------------------------- 选中描边（批次 521）
