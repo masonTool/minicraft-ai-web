@@ -232,6 +232,8 @@ interface V2Settings {
   volume: number;
   volumeBlocks: number;
   volumeUi: number;
+  leftHanded: boolean;
+  view: 'first' | 'third';
   skinColor: string;
   shirtColor: string;
   pantsColor: string;
@@ -258,6 +260,8 @@ const defaultSettings: V2Settings = {
   volume: 0.7,
   volumeBlocks: 1,
   volumeUi: 1,
+  leftHanded: false,
+  view: 'first',
   skinColor: '#e0ac69',
   shirtColor: '#3b6ea5',
   pantsColor: '#2f3f5a',
@@ -287,6 +291,8 @@ const readSettings = (): V2Settings => {
       volume: Math.max(0, Math.min(1, Number(parsed.volume ?? 0.7))),
       volumeBlocks: Math.max(0, Math.min(1, Number(parsed.volumeBlocks ?? 1))),
       volumeUi: Math.max(0, Math.min(1, Number(parsed.volumeUi ?? 1))),
+      leftHanded: parsed.leftHanded === true,
+      view: parsed.view === 'third' ? 'third' : 'first',
       skinColor: typeof parsed.skinColor === 'string' ? parsed.skinColor : '#e0ac69',
       shirtColor: typeof parsed.shirtColor === 'string' ? parsed.shirtColor : '#3b6ea5',
       pantsColor: typeof parsed.pantsColor === 'string' ? parsed.pantsColor : '#2f3f5a',
@@ -303,13 +309,15 @@ const readSettings = (): V2Settings => {
     return { ...defaultSettings };
   }
 };
+let cameraMode: 'first' | 'third' = 'first';
 const settings = readSettings();
+cameraMode = settings.view;
+playerModel.visible = cameraMode === 'third';
 applyPlayerAppearance();
 const audio = new AudioEngine();
 audio.volume = settings.sound ? settings.volume : 0;
 audio.enabled = settings.sound;
 let audioResumed = false;
-let cameraMode: 'first' | 'third' = 'first';
 const persistSettings = (): void => {
   platform.storage.set(SETTINGS_KEY, JSON.stringify(settings));
 };
@@ -385,6 +393,10 @@ const showSettings = (): void => {
     }));
     row(toggle(panelX + 24, rowY, panelW - 48, 50, '手指落点瞄准', settings.fingerAim, (value) => {
       settings.fingerAim = value;
+      apply();
+    }));
+    row(toggle(panelX + 24, rowY, panelW - 48, 50, '左手模式', settings.leftHanded, (value) => {
+      settings.leftHanded = value;
       apply();
     }));
   } else if (activeSettingsTab === 'sound') {
@@ -1328,6 +1340,8 @@ const showHud = (): void => {
       }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
       button(404, 18, 110, 48, cameraMode === 'first' ? '第一人称' : '第三人称', () => {
         cameraMode = cameraMode === 'first' ? 'third' : 'first';
+        settings.view = cameraMode;
+        persistSettings();
         playerModel.visible = cameraMode === 'third';
         showHud();
       }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
@@ -1553,7 +1567,9 @@ platform.input.onPointer('down', (event) => {
   lastDownY = event.clientY;
   if (ui.handlePointer('down', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
   if (!started || paused || settingsOpen || inventoryOpen || chatOpen || containerOpen) return;
-  if (event.clientX < platform.system.width / 2) {
+  const leftSide = event.clientX < platform.system.width / 2;
+  const moveSide = settings.leftHanded ? !leftSide : leftSide;
+  if (moveSide) {
     movePointer = event.pointerId;
     moveX = event.clientX;
     moveY = event.clientY;

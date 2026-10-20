@@ -21,24 +21,24 @@
 - [x] SaveGame / IndexedDB seam（FileSaveGame 内存冒烟通过）
 - [x] v2 最小世界渲染启动（main World + TextureAtlas + ChunkRenderer，截图已验证）
 - [x] v2 出包：`minigame-v2/game.js` 约 2.2MB
-- [ ] 触摸输入
+- [x] 触摸输入
 - [x] PlayerPhysics + 基础触摸（左半屏移动 / 右半屏视角）
 - [x] 方块交互：轻点放置、长按破坏、快捷栏扣减
 - [x] HUD 跳跃按钮、潜行开关、方块选中框；合成格拖入不再吞物品
 - [x] v2 标题页/开始游戏门控（标题页不生成世界）
 - [x] UI Kit：Box/Text/Button/Toggle/Slider、命中、Canvas 叠加、HUD/暂停
-- [x] v2 设置页：四页；亮度/视距/灵敏度/FOV/反转Y/自动跳跃/声音偏好
+- [x] v2 设置页：四页；亮度/视距/灵敏度/FOV/反转Y/自动跳跃/左右手/视角/声音与分组音量
 - [x] 声音：WebAudio 垫片 + 放置/破坏音效（无音频上下文时自动降级）
-- [ ] 外观/皮肤编辑
+- [x] 外观基础编辑（颜色/发型/胡须/眼睛/披风/眼型/年龄/身架）
 - [x] 3D 玩家模型 + 第一/第三人称切换（使用肤色/上衣/裤子）
 - [x] 外观：发型/发色/胡须/眼睛颜色/披风 + 3D 模型同步
 - [x] 眼型/年龄/身架 + 3D 模型同步
-- [ ] 完整声音/分组音量
+- [x] 基础声音与分组音量（主/方块/UI；其余分组待接）
 - [x] Inventory MVP：物品/创造左侧分类、36/45 格、图标、数量、选中、创造取方块、显式关闭
 - [x] Inventory 拖拽交换 + HUD 快捷栏选中
 - [x] 2x2/3x3 合成切换、产物、材料拖入/关闭返还（CraftingGrid）
 - [x] 配方书：2x2/3x3 过滤、搜索、6 条分页、产物图标/一键填格
-- [ ] Inventory 完整态：拖拽边界/更多分类
+- [ ] Inventory 完整态：更多分类/拖拽细节
 - [ ] Settings / Inventory 按 Web 结构重做
 - [x] 小游戏构建脚本与包体（`build:minigame:v2`，2.2MB）
 
