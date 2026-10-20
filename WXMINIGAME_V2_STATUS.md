@@ -53,6 +53,7 @@
 - [x] 昼夜天空（Sky + 日月星云 + 随时间方块亮度），时间写入存档
 - [x] 性能：60FPS 上限、分级画质（自动/高/性能）、UI 33ms 节流、world.update 按区块
 - [x] 真实 Worker 网格化（微信 worker.onMessage 入口 + 2.5s 无响应回退主线程）
+- [x] 调试 HUD/状态显示画质档与 meshBackend（worker/main）
 - [x] 天气（雨/雪粒子/闪电/存档）+ /weather clear|rain|thunder
 - [x] 2x2/3x3 合成切换、产物、材料拖入/关闭返还（CraftingGrid）
 - [x] 配方书：2x2/3x3 过滤、搜索、6 条分页、产物图标/一键填格

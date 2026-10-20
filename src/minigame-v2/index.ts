@@ -180,6 +180,8 @@ scene.add(outline);
 const ui = new UiLayer(platform.system.width, platform.system.height, drawBlockIcon);
 const uiHeight = ui.height;
 let started = false;
+let meshBackend: 'worker' | 'main' = 'main';
+let workerFallbackAt = 0;
 let menuScreen: 'title' | 'worlds' | 'create' | 'edit' = 'title';
 let paused = false;
 let settingsOpen = false;
@@ -1654,7 +1656,7 @@ const showHud = (): void => {
       text(24, 18, 240, 36, `${currentWorld?.name ?? '世界'}`, { fontSize: 19, color: '#ffffff' }),
       ...(settings.showDebug
         ? [
-            text(24, 58, 380, 24, `FPS ${fps.toFixed(0)} · 区块 ${chunks.drawnCount}/${world.chunks.size} · ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)}`, {
+            text(24, 58, 380, 24, `FPS ${fps.toFixed(0)} · 画质${qualityTier} · ${meshBackend} · 区块 ${chunks.drawnCount}/${world.chunks.size} · ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)}`, {
               fontSize: 12,
               color: 'rgba(220,240,250,0.8)',
             }),
@@ -2024,6 +2026,7 @@ let meshPool = (() => {
     return null;
   }
 })();
+meshBackend = meshPool ? 'worker' : 'main';
 
 let world = new World(0x5eed, 'default', 1);
 let chunks = new ChunkRenderer(
@@ -2466,7 +2469,6 @@ let lastViewApply = 0;
 let mobAccum = 0;
 let weatherAccum = 0;
 let playerReadyAt = 0;
-let workerFallbackAt = 0;
 let poorFpsSeconds = 0;
 let goodFpsSeconds = 0;
 
@@ -2543,6 +2545,7 @@ const frame = (): void => {
       gameMode: currentWorld?.gameMode ?? 'survival',
       fps,
       qualityTier,
+      meshBackend,
       chunks: world.chunks.size,
       drawn: chunks.drawnCount,
       x: physics.x,
@@ -2730,6 +2733,7 @@ const frame = (): void => {
   if (meshPool && workerFallbackAt > 0 && now - workerFallbackAt > 2500 && chunks.drawnCount === 0) {
     chunks.disposeAll();
     meshPool = null;
+    meshBackend = 'main';
     workerFallbackAt = 0;
     chunks = new ChunkRenderer(scene, atlas, world, solid.material, translucent.material, null);
     world.events = {
