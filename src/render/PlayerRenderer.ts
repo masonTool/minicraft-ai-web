@@ -80,6 +80,14 @@ export interface PlayerPose {
   flying: boolean;
   /** 潜行（批次 185）：蹲下 + 前倾，腿的摆幅减半（原版"蹲着走"的观感） */
   sneaking?: boolean;
+  /**
+   * 游泳（F9，批次 432）：**身体横过来**贴在水面附近，手臂前伸划水。
+   *
+   * ⚠️ 这是**纯视觉**状态，物理上不改变任何判定（高度/碰撞/速度都在 `PlayerPhysics`）。
+   * 独立一个字段而不是复用 `sneaking`：水里蹲下和游泳是两回事，
+   * 复用会让"在水里按潜行下潜"时模型也缩成一团。
+   */
+  swimming?: boolean;
 }
 
 /** 亮度采样：返回该点的天光/方块光（区块未加载时返回 null） */
@@ -686,11 +694,15 @@ export class PlayerRenderer {
     if (!this.object.visible) return;
 
     const sneak = !!pose.sneaking && !pose.flying;
+    // 游泳优先于潜行：水里按潜行是"下潜"，不是"蹲着"，所以姿态用横着的那一套
+    const swim = !!pose.swimming && !pose.flying;
     // 潜行：整体下沉 0.12 格并前倾 0.22 rad。模型是一整块（没有脊柱关节），
     // 前倾绕脚底转，看起来就是"缩着身子走"。
-    this.object.position.set(pose.x, pose.y - (sneak ? 0.12 : 0), pose.z);
+    // 游泳：**前倾到 1.25 rad（约 72°）**并抬 0.35 格——绕脚底转的时候人会整个沉到
+    // 水面以下，抬这一下是让"趴在水面上"看起来对（数值靠目测，见 TASKS 的注记）。
+    this.object.position.set(pose.x, pose.y + (swim ? 0.35 : sneak ? -0.12 : 0), pose.z);
     this.object.rotation.y = pose.yaw;
-    this.object.rotation.x = sneak ? 0.22 : 0;
+    this.object.rotation.x = swim ? 1.25 : sneak ? 0.22 : 0;
 
     // 走路：两条腿反相，手臂与腿反相（原版就是这个节奏）；蹲着走幅度减半
     const walk = pose.flying ? 0 : Math.sin(pose.walkPhase) * pose.walkAmount * (sneak ? 0.42 : 0.85);
@@ -698,8 +710,8 @@ export class PlayerRenderer {
     this.legR.rotation.x = -walk;
     // 挥手：0→1→0 的一次前甩，叠加在走路摆臂上
     const swing = Math.sin(Math.min(1, pose.swing) * Math.PI) * 1.5;
-    // 潜行时两条手臂略向前收（原版蹲着时手臂是夹着的）
-    const tuck = sneak ? 0.22 : 0;
+    // 潜行时两条手臂略向前收（原版蹲着时手臂是夹着的）；游泳时前伸划水
+    const tuck = sneak ? 0.22 : swim ? 1.35 : 0;
     this.armL.rotation.x = -walk * 0.8 - tuck;
     this.armR.rotation.x = walk * 0.8 - swing - tuck;
     // 飞行时手臂张开一点，看起来像在飘

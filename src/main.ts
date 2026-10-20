@@ -3992,6 +3992,8 @@ class App {
           walkAmount: this.walkAmount,
           swing: this.hand.swingProgress,
           flying: this.flying,
+          // 游泳姿态（F9，批次 432）：泡在水里就横过来（纯视觉，不影响任何物理判定）
+          swimming: this.physics.inWater && !this.flying,
           // 潜行姿态（批次 185）：键盘 Shift、触摸"潜行"键、手柄任一条都算
           sneaking:
             this.keys.has('ShiftLeft') ||

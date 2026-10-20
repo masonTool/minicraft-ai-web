@@ -3098,7 +3098,8 @@ console.log('\n[收尾四项：返回层级 / 成就入口 / 潜行 / 设置精�
     '潜行有姿态（下沉 + 前倾 + 摆幅减半）',
     playerSrc.includes('sneaking?: boolean') &&
       playerSrc.includes("this.object.rotation.order = 'YXZ'") &&
-      playerSrc.includes('pose.y - (sneak ? 0.12 : 0)') &&
+      // 批次 432：下沉量改成三目（游泳优先），但"潜行下沉 0.12"这条语义没变
+      playerSrc.includes('sneak ? -0.12 : 0') &&
       appSrc.includes('(this.touch?.input.sneak ?? false)'),
   );
   check(
@@ -4174,6 +4175,20 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
     /private dismissResumeGate\(\): void \{[\s\S]{0,500}this\.backgroundPaused = false;[\s\S]{0,200}this\.audio\.resume\(\);/.test(
       appSrc,
     ),
+  );
+}
+
+// 批次 432：游泳的**视觉**姿态。⚠️ 视觉效果只能人眼确认（浏览器里泡水里看第三人称），
+// 这里只钉住"这条分支还在、且不吃错状态"——防止以后重构时被静默删掉。
+{
+  const rendererSrc = readFileSync(new URL('../src/render/PlayerRenderer.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('游泳姿态由 swimming 字段驱动（不是复用潜行）', rendererSrc.includes('swimming?: boolean'));
+  check('游泳时身体横过来（前倾 1.25 rad）', rendererSrc.includes('swim ? 1.25 : sneak ? 0.22 : 0'));
+  check('游泳时手臂前伸划水', rendererSrc.includes('swim ? 1.35 : 0'));
+  check(
+    '主程序按"泡在水里且没飞"传状态',
+    mainSrc.includes('swimming: this.physics.inWater && !this.flying'),
   );
 }
 
