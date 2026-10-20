@@ -122,7 +122,13 @@ const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.8, 0.24), pantsMate
 leftLeg.position.set(-0.16, 0.4, 0);
 const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.8, 0.24), pantsMaterial);
 rightLeg.position.set(0.16, 0.4, 0);
-playerModel.add(headMesh, bodyMesh, leftArm, rightArm, leftLeg, rightLeg);
+const hairMaterial = new THREE.MeshBasicMaterial({ color: 0x3b2a1a });
+const hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.16, 0.54), hairMaterial);
+hairMesh.position.y = 1.83;
+const beardMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.16, 0.1), hairMaterial);
+beardMesh.position.set(0, 1.4, -0.27);
+beardMesh.visible = false;
+playerModel.add(headMesh, bodyMesh, leftArm, rightArm, leftLeg, rightLeg, hairMesh, beardMesh);
 playerModel.visible = false;
 scene.add(playerModel);
 
@@ -130,6 +136,10 @@ const applyPlayerAppearance = (): void => {
   skinMaterial.color.set(settings.skinColor);
   shirtMaterial.color.set(settings.shirtColor);
   pantsMaterial.color.set(settings.pantsColor);
+  hairMaterial.color.set(settings.hairColor);
+  hairMesh.visible = settings.hairStyle !== 'none';
+  hairMesh.scale.set(1, settings.hairStyle === 'long' ? 2.2 : 1, 1);
+  beardMesh.visible = settings.beard;
 };
 
 const outline = new THREE.LineSegments(
@@ -208,6 +218,9 @@ interface V2Settings {
   skinColor: string;
   shirtColor: string;
   pantsColor: string;
+  hairStyle: 'none' | 'short' | 'long';
+  hairColor: string;
+  beard: boolean;
 }
 
 const SETTINGS_KEY = 'wx.v2.settings';
@@ -226,6 +239,9 @@ const defaultSettings: V2Settings = {
   skinColor: '#e0ac69',
   shirtColor: '#3b6ea5',
   pantsColor: '#2f3f5a',
+  hairStyle: 'short',
+  hairColor: '#3b2a1a',
+  beard: false,
 };
 const readSettings = (): V2Settings => {
   try {
@@ -247,6 +263,9 @@ const readSettings = (): V2Settings => {
       skinColor: typeof parsed.skinColor === 'string' ? parsed.skinColor : '#e0ac69',
       shirtColor: typeof parsed.shirtColor === 'string' ? parsed.shirtColor : '#3b6ea5',
       pantsColor: typeof parsed.pantsColor === 'string' ? parsed.pantsColor : '#2f3f5a',
+      hairStyle: parsed.hairStyle === 'none' || parsed.hairStyle === 'long' ? parsed.hairStyle : 'short',
+      hairColor: typeof parsed.hairColor === 'string' ? parsed.hairColor : '#3b2a1a',
+      beard: parsed.beard === true,
     };
   } catch {
     return { ...defaultSettings };
@@ -361,29 +380,56 @@ const showSettings = (): void => {
     const skinColors = ['#e0ac69', '#c68642', '#8d5524', '#f1c27d', '#d9a066'];
     const shirtColors = ['#3b6ea5', '#4f8a5b', '#a5523b', '#6b5b95', '#2f3f5a'];
     const pantsColors = ['#2f3f5a', '#3d3d3d', '#5b4636', '#6d7b8d', '#1f2a36'];
+    const hairColors = ['#3b2a1a', '#151515', '#7a4a22', '#c9a45b', '#9e9e9e'];
     const cycle = (list: string[], value: string): string => {
       const index = list.indexOf(value);
       return list[(index + 1) % list.length]!;
     };
-    const previewX = panelX + panelW - 260;
-    const previewY = panelY + 120;
-    row(button(panelX + 24, rowY, 380, 50, `肤色`, () => {
+    const leftX = panelX + 24;
+    const rightX = panelX + 250;
+    const topY = panelY + 108;
+    const w = 205;
+    const gapY = 52;
+    const styleLabels: Record<'none' | 'short' | 'long', string> = { none: '无', short: '短', long: '长' };
+    rows.push(button(leftX, topY, w, 44, '肤色', () => {
       settings.skinColor = cycle(skinColors, settings.skinColor);
       apply();
     }, { background: settings.skinColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
-    row(button(panelX + 24, rowY, 380, 50, `上衣`, () => {
+    rows.push(button(leftX, topY + gapY, w, 44, '上衣', () => {
       settings.shirtColor = cycle(shirtColors, settings.shirtColor);
       apply();
     }, { background: settings.shirtColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
-    row(button(panelX + 24, rowY, 380, 50, `裤子`, () => {
+    rows.push(button(leftX, topY + gapY * 2, w, 44, '裤子', () => {
       settings.pantsColor = cycle(pantsColors, settings.pantsColor);
       apply();
     }, { background: settings.pantsColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
-    rows.push(box(previewX, previewY, 140, 140, [], { background: settings.skinColor, radius: 8 }));
-    rows.push(box(previewX + 15, previewY + 130, 110, 120, [], { background: settings.shirtColor, radius: 6 }));
-    rows.push(box(previewX + 25, previewY + 240, 40, 90, [], { background: settings.pantsColor, radius: 5 }));
-    rows.push(box(previewX + 75, previewY + 240, 40, 90, [], { background: settings.pantsColor, radius: 5 }));
-    rows.push(text(previewX - 30, previewY + 330, 220, 24, '2D 预览 · 3D 模型待接入', {
+    rows.push(button(rightX, topY, w, 44, `发型：${styleLabels[settings.hairStyle]}`, () => {
+      const order: Array<'none' | 'short' | 'long'> = ['none', 'short', 'long'];
+      settings.hairStyle = order[(order.indexOf(settings.hairStyle) + 1) % order.length]!;
+      apply();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
+    rows.push(button(rightX, topY + gapY, w, 44, '发色', () => {
+      settings.hairColor = cycle(hairColors, settings.hairColor);
+      apply();
+    }, { background: settings.hairColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
+    rows.push(button(rightX, topY + gapY * 2, w, 44, settings.beard ? '胡须：开' : '胡须：关', () => {
+      settings.beard = !settings.beard;
+      apply();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
+
+    const previewX = panelX + panelW - 210;
+    const previewY = panelY + 110;
+    rows.push(box(previewX, previewY, 120, 120, [], { background: settings.skinColor, radius: 8 }));
+    if (settings.hairStyle !== 'none') {
+      rows.push(box(previewX - 4, previewY - 10, 128, 24, [], { background: settings.hairColor, radius: 6 }));
+    }
+    if (settings.beard) {
+      rows.push(box(previewX + 28, previewY + 82, 64, 14, [], { background: settings.hairColor, radius: 4 }));
+    }
+    rows.push(box(previewX + 12, previewY + 112, 96, 100, [], { background: settings.shirtColor, radius: 6 }));
+    rows.push(box(previewX + 22, previewY + 205, 34, 76, [], { background: settings.pantsColor, radius: 5 }));
+    rows.push(box(previewX + 62, previewY + 205, 34, 76, [], { background: settings.pantsColor, radius: 5 }));
+    rows.push(text(previewX - 50, previewY + 292, 220, 24, '3D 模型同步 · 2D 预览', {
       fontSize: 12,
       color: 'rgba(200, 220, 235, 0.6)',
       align: 'center',
