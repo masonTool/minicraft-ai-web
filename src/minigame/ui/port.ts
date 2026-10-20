@@ -8,6 +8,7 @@ import { createPauseMenu, type PauseAction } from './pause.ts';
 import { createSettingsMenu, type SettingsValues } from './settings.ts';
 import { createOverlay } from './overlay.ts';
 import { createMainMenu, type MainMenuAction } from './main-menu.ts';
+import { createStats, type PlayerStats } from './stats.ts';
 
 /**
  * 小游戏 UI 端口（WX-020B）
@@ -31,6 +32,7 @@ export interface MiniGameUi {
   handleSettingsTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
   isMainMenuOpen(): boolean;
   handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
+  setStats(stats: PlayerStats): void;
   showToast(message: string): void;
   setLoading(progress: number | null, text?: string): void;
   render(renderer: THREE.WebGLRenderer): void;
@@ -64,6 +66,7 @@ export function createCanvasUi(
   );
   const overlay = createOverlay(screenWidth, screenHeight);
   const mainMenu = createMainMenu(screenWidth, screenHeight);
+  const stats = createStats(screenWidth, screenHeight);
   let settingsFromMenu = false;
 
   return {
@@ -134,6 +137,9 @@ export function createCanvasUi(
     handleMainMenuTap(clientX, clientY, sw, sh): MainMenuAction {
       return mainMenu.isOpen() ? mainMenu.handleTap(clientX, clientY, sw, sh) : null;
     },
+    setStats(next: PlayerStats): void {
+      stats.setStats(next);
+    },
     showToast(message: string): void {
       overlay.showToast(message);
     },
@@ -150,6 +156,7 @@ export function createCanvasUi(
         settings.render(renderer);
         return;
       }
+      stats.render(renderer);
       hud.render(renderer);
       hotbar.render(renderer);
       inventory.render(renderer);

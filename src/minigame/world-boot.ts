@@ -238,6 +238,14 @@ async function boot(): Promise<void> {
     },
   );
 
+  ui.setStats({
+    health: loadedPlayer?.health ?? 20,
+    food: loadedPlayer?.food ?? 20,
+    air: loadedPlayer?.air ?? 300,
+    armor: 0,
+    xp: loadedPlayer?.xp?.progress ?? 0,
+  });
+
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
   const playerInput: PlayerInput = {
