@@ -32,6 +32,7 @@ import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
 import { createCanvasUi } from './ui/port.ts';
 import { showBootError } from './ui/boot-error.ts';
+import { DEFAULT_SETTINGS, type SettingsValues } from './ui/settings.ts';
 import {
   cameraPlacement,
   clampedCameraDistance,
@@ -101,6 +102,35 @@ async function boot(): Promise<void> {
   }
 
   const platform = wxPlatform();
+  const SETTINGS_KEY = 'wx.settings';
+  const readSettings = (): SettingsValues => {
+    try {
+      const raw = platform.storage.get(SETTINGS_KEY);
+      if (!raw) return { ...DEFAULT_SETTINGS };
+      const parsed = JSON.parse(raw) as Partial<SettingsValues>;
+      const mode = parsed.cameraMode;
+      return {
+        ...DEFAULT_SETTINGS,
+        ...parsed,
+        fov: Math.max(50, Math.min(110, Number(parsed.fov) || DEFAULT_SETTINGS.fov)),
+        renderDistance: Math.max(2, Math.min(8, Math.round(Number(parsed.renderDistance) || DEFAULT_SETTINGS.renderDistance))),
+        sound: parsed.sound !== false,
+        invertLook: parsed.invertLook === true,
+        cameraMode: mode === 'third-back' || mode === 'third-front' ? mode : 'first',
+        sensitivity: Math.max(0.5, Math.min(2, Number(parsed.sensitivity) || DEFAULT_SETTINGS.sensitivity)),
+        autoJump: parsed.autoJump !== false,
+        volume: Math.max(0, Math.min(1, Number(parsed.volume) || DEFAULT_SETTINGS.volume)),
+      };
+    } catch {
+      return { ...DEFAULT_SETTINGS };
+    }
+  };
+  const savedSettings = readSettings();
+  viewRadius = savedSettings.renderDistance;
+  invertLook = savedSettings.invertLook;
+  cameraMode = savedSettings.cameraMode;
+  lookSensitivity = savedSettings.sensitivity;
+  autoJump = savedSettings.autoJump;
   // 逻辑视口必须用 windowWidth/windowHeight（真正可绘制/可触摸区域），
   // 不能用 screenWidth/screenHeight：后者含状态栏/导航栏，会让 UI 纹理比例
   // 与视口比例不一致（纵向压扁），触摸坐标也会整体偏移。
@@ -154,7 +184,7 @@ async function boot(): Promise<void> {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x8fc7ff);
-  const camera = new THREE.PerspectiveCamera(72, width / height, 0.1, 320);
+  const camera = new THREE.PerspectiveCamera(savedSettings.fov, width / height, 0.1, 320);
   camera.rotation.order = 'YXZ';
 
   // 第一人称手臂：Web 手机版画面右下角可见；手持方块随快捷栏变化
@@ -320,6 +350,7 @@ async function boot(): Promise<void> {
   let audioStatus = 'off';
   try {
     audio = new AudioEngine(() => platform.audio.createContext() as unknown as AudioContext);
+    audio.volume = savedSettings.volume;
     audioStatus = 'ready';
   } catch (error) {
     console.warn('[WX-020] 音频不可用', error);
@@ -492,6 +523,8 @@ async function boot(): Promise<void> {
         cameraMode = settings.cameraMode;
         lookSensitivity = settings.sensitivity;
         autoJump = settings.autoJump;
+        if (audio) audio.volume = settings.volume;
+        platform.storage.set(SETTINGS_KEY, JSON.stringify(settings));
         if (settings.sound) {
           audio?.resume();
           if (audio) audioStatus = 'on';
@@ -502,6 +535,7 @@ async function boot(): Promise<void> {
       },
     },
     platform.system.safeArea,
+    savedSettings,
   );
 
   let playerHealth = Math.max(1, loadedPlayer?.health ?? 20);

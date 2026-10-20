@@ -20,7 +20,19 @@ export interface SettingsValues {
   cameraMode: CameraMode;
   sensitivity: number;
   autoJump: boolean;
+  volume: number;
 }
+
+export const DEFAULT_SETTINGS: SettingsValues = {
+  fov: 72,
+  renderDistance: 3,
+  sound: true,
+  invertLook: false,
+  cameraMode: 'first',
+  sensitivity: 1,
+  autoJump: true,
+  volume: 0.7,
+};
 
 export type SettingsAction = 'back' | null;
 
@@ -83,6 +95,7 @@ export function createSettingsMenu(
   const fovSlider: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
   const distanceSlider: Rect = { x: panelX + 60, y: panelY + 255, w: panelWidth - 120, h: 30 };
   const soundSwitch: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
+  const volumeSlider: Rect = { x: panelX + 60, y: panelY + 235, w: panelWidth - 120, h: 30 };
   const invertSwitch: Rect = { x: panelX + 60, y: panelY + 350, w: panelWidth - 120, h: 30 };
   const cameraButton: Rect = { x: panelX + 60, y: panelY + 128, w: panelWidth - 120, h: 46 };
   const sensitivitySlider: Rect = { x: panelX + 60, y: panelY + 230, w: panelWidth - 120, h: 30 };
@@ -149,9 +162,10 @@ export function createSettingsMenu(
       );
     } else {
       drawSwitch(context, soundSwitch, '声音', values.sound);
+      drawSlider(context, volumeSlider, values.volume, '主音量', `${Math.round(values.volume * 100)}%`);
       drawText(
         context,
-        '点按切换',
+        '点按切换 / 拖动滑杆调音量',
         panelX + 28,
         panelY + 330,
         15,
@@ -258,6 +272,12 @@ export function createSettingsMenu(
       } else {
         if (contains(soundSwitch, x, y)) {
           values.sound = !values.sound;
+          notify();
+          return null;
+        }
+        const volume = hitSlider(volumeSlider, x, y);
+        if (volume !== null) {
+          values.volume = Math.round(volume * 100) / 100;
           notify();
           return null;
         }

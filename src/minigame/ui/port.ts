@@ -6,7 +6,7 @@ import { createHud } from './hud.ts';
 import { createHotbar } from './hotbar.ts';
 import { createInventory } from './inventory.ts';
 import { createPauseMenu, type PauseAction } from './pause.ts';
-import { createSettingsMenu, type SettingsValues } from './settings.ts';
+import { createSettingsMenu, DEFAULT_SETTINGS, type SettingsValues } from './settings.ts';
 import { createChestScreen, type ChestAction } from './chest.ts';
 import { createFurnaceScreen, type FurnaceAction } from './furnace.ts';
 import { createOverlay } from './overlay.ts';
@@ -105,6 +105,7 @@ export function createCanvasUi(
   screenHeight: number,
   callbacks: CanvasUiCallbacks = {},
   safeArea?: UiSafeArea,
+  initialSettings?: SettingsValues,
 ): MiniGameUi {
   const hud = createHud(screenWidth, screenHeight, safeArea);
   const hotbar = createHotbar(atlas, blocks, screenWidth, screenHeight, safeArea);
@@ -119,7 +120,7 @@ export function createCanvasUi(
   const settings = createSettingsMenu(
     screenWidth,
     screenHeight,
-    { fov: 72, renderDistance: 3, sound: true, invertLook: false, cameraMode: 'first', sensitivity: 1, autoJump: true },
+    initialSettings ?? DEFAULT_SETTINGS,
     (values) => callbacks.onSettingsChange?.(values),
     callbacks.onRequestText,
   );
