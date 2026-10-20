@@ -1,5 +1,10 @@
 # AGENTS.md · AI 会话入口
 
+> ⚠️ **当前 worktree 是 `wxminigame` 分支，不是主线。**
+> 先读 [`WXMINIGAME.md`](./WXMINIGAME.md)，它是这里唯一的进度口径。
+> **不要**执行 `TASKS.md` / `HANDOFF.md` / `.codebuddy/auto-continue.md` 里的主线队列；
+> 主线任务仍在 `/Users/mason/DouDou/minicraft-ai-web`（`main`）推进。
+
 > 「Minecraft 基岩版 1.18 复刻（Web / WebGL2）」。
 > **先读这一份（1 分钟），再按下面的表决定要不要展开**——
 > 这个仓库的文档以前有 8000+ 行"每次会话都全读"，那是最贵的一笔开销，
