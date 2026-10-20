@@ -26,6 +26,7 @@ export interface SettingsValues {
   touchScale: number;
   groupVolumes: Record<SoundGroup, number>;
   stickMode: 'fixed' | 'dynamic';
+  brightness: number;
 }
 
 export const DEFAULT_SETTINGS: SettingsValues = {
@@ -41,6 +42,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   touchScale: 1,
   groupVolumes: { blocks: 1, mobs: 1, player: 1, ui: 1, ambient: 1, music: 1 },
   stickMode: 'fixed',
+  brightness: 1,
 };
 
 export type SettingsAction = 'back' | null;
@@ -104,6 +106,7 @@ export function createSettingsMenu(
   const backButton: Rect = { x: panelX + panelWidth - 128, y: panelY + 18, w: 100, h: 38 };
   const fovSlider: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
   const distanceSlider: Rect = { x: panelX + 60, y: panelY + 255, w: panelWidth - 120, h: 30 };
+  const brightnessSlider: Rect = { x: panelX + 60, y: panelY + 345, w: panelWidth - 120, h: 30 };
   const soundSwitch: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
   const volumeSlider: Rect = { x: panelX + 60, y: panelY + 235, w: panelWidth - 120, h: 30 };
   const groupRect = (index: number): Rect => ({
@@ -179,13 +182,12 @@ export function createSettingsMenu(
         '视距',
         `${values.renderDistance}`,
       );
-      drawText(
+      drawSlider(
         context,
-        '修改立即生效',
-        panelX + 28,
-        panelY + 330,
-        15,
-        'rgba(255, 255, 255, 0.5)',
+        brightnessSlider,
+        (values.brightness - 0.5) / 1.5,
+        '亮度',
+        `${Math.round(values.brightness * 100)}%`,
       );
     } else if (tab === 'sound') {
       drawSwitch(context, soundSwitch, '声音', values.sound);
@@ -332,6 +334,12 @@ export function createSettingsMenu(
         const distance = hitSlider(distanceSlider, x, y);
         if (distance !== null) {
           values.renderDistance = Math.round(2 + distance * 4);
+          notify();
+          return null;
+        }
+        const brightness = hitSlider(brightnessSlider, x, y);
+        if (brightness !== null) {
+          values.brightness = Math.round((0.5 + brightness * 1.5) * 100) / 100;
           notify();
           return null;
         }

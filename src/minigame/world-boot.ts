@@ -123,6 +123,7 @@ async function boot(): Promise<void> {
         sensitivity: Math.max(0.5, Math.min(2, Number(parsed.sensitivity) || DEFAULT_SETTINGS.sensitivity)),
         autoJump: parsed.autoJump !== false,
         stickMode: parsed.stickMode === 'dynamic' ? 'dynamic' : 'fixed',
+        brightness: Math.max(0.5, Math.min(2, Number(parsed.brightness) || 1)),
         volume: Math.max(0, Math.min(1, Number(parsed.volume) || DEFAULT_SETTINGS.volume)),
         groupVolumes: {
           blocks: Math.max(0, Math.min(1, Number(parsed.groupVolumes?.blocks) || 1)),
@@ -269,8 +270,8 @@ async function boot(): Promise<void> {
   const translucent = new VoxelMaterial(atlas.texture, { translucent: true, ...atlasShape });
   solid.setFog(0x8fc7ff, 40, 180);
   translucent.setFog(0x8fc7ff, 40, 180);
-  solid.skyBrightness = 1;
-  translucent.skyBrightness = 1;
+  solid.skyBrightness = savedSettings.brightness;
+  translucent.skyBrightness = savedSettings.brightness;
 
   // 真机优先 worker；预览环境 worker 不通时自动降级主线程，保证地形能出来。
   const { worker: sharedWorker, state: workerState } = await chooseWorker(platform);
@@ -586,6 +587,8 @@ async function boot(): Promise<void> {
         cameraMode = settings.cameraMode;
         lookSensitivity = settings.sensitivity;
         autoJump = settings.autoJump;
+        solid.skyBrightness = settings.brightness;
+        translucent.skyBrightness = settings.brightness;
         applyTouchLayout(settings.leftHanded, settings.touchScale, settings.stickMode);
         ui.setTouchLayout(settings.leftHanded, settings.touchScale, settings.stickMode);
         if (audio) {

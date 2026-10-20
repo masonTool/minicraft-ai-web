@@ -263,10 +263,49 @@ export function createMainMenu(
         world.id === info.currentId ? 'rgba(150, 220, 245, 0.9)' : 'rgba(160, 190, 210, 0.3)';
       context.lineWidth = 2;
       context.strokeRect(row.x + 1, row.y + 1, row.w - 2, row.h - 2);
+      const thumbX = row.x + 10;
+      const thumbY = row.y + 8;
+      const thumbW = 48;
+      const thumbH = 48;
+      context.fillStyle = 'rgba(120, 190, 240, 0.85)';
+      context.fillRect(thumbX, thumbY, thumbW, thumbH);
+      if (world.worldType === 'flat') {
+        context.fillStyle = 'rgba(104, 156, 58, 0.95)';
+        context.fillRect(thumbX, thumbY + thumbH - 16, thumbW, 16);
+      } else if (world.worldType === 'amplified') {
+        context.fillStyle = 'rgba(78, 96, 112, 0.95)';
+        context.beginPath();
+        context.moveTo(thumbX, thumbY + thumbH);
+        context.lineTo(thumbX + 16, thumbY + 12);
+        context.lineTo(thumbX + 28, thumbY + 28);
+        context.lineTo(thumbX + 38, thumbY + 6);
+        context.lineTo(thumbX + thumbW, thumbY + thumbH);
+        context.closePath();
+        context.fill();
+        context.fillStyle = 'rgba(235, 245, 255, 0.85)';
+        context.fillRect(thumbX + 36, thumbY + 2, 7, 7);
+      } else {
+        context.fillStyle = 'rgba(104, 156, 58, 0.95)';
+        context.beginPath();
+        context.moveTo(thumbX, thumbY + thumbH);
+        context.lineTo(thumbX, thumbY + 26);
+        context.lineTo(thumbX + 14, thumbY + 18);
+        context.lineTo(thumbX + 30, thumbY + 24);
+        context.lineTo(thumbX + thumbW, thumbY + 18);
+        context.lineTo(thumbX + thumbW, thumbY + thumbH);
+        context.closePath();
+        context.fill();
+        context.fillStyle = 'rgba(112, 80, 52, 0.95)';
+        context.fillRect(thumbX, thumbY + 34, thumbW, 14);
+      }
+      context.strokeStyle = 'rgba(200, 225, 240, 0.5)';
+      context.lineWidth = 2;
+      context.strokeRect(thumbX + 1, thumbY + 1, thumbW - 2, thumbH - 2);
+
       drawText(
         context,
         world.name,
-        row.x + 16,
+        row.x + 68,
         row.y + 10,
         18,
         '#ffffff',
@@ -286,12 +325,12 @@ export function createMainMenu(
       drawText(
         context,
         `${typeLabel} · ${difficultyLabel} · ${modeLabel} · 种子 ${info.seed}`,
-        row.x + 16,
+        row.x + 68,
         row.y + 30,
         11,
         'rgba(190, 215, 235, 0.65)',
         'left',
-        row.w - 140,
+        row.w - 230,
       );
       const played = world.playTime ?? 0;
       const playedLabel = played >= 60 ? `${Math.round(played / 60)} 分钟` : `${Math.round(played)} 秒`;
@@ -306,7 +345,7 @@ export function createMainMenu(
       drawText(
         context,
         `上次游玩 ${lastLabel} · 已游玩 ${playedLabel} · 改动 ${info.edits} 格`,
-        row.x + 16,
+        row.x + 68,
         row.y + 47,
         11,
         'rgba(170, 200, 220, 0.55)',
