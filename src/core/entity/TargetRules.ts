@@ -11,8 +11,7 @@
  * 判据全在纯函数里：`targetRuleFor` 给出这一只的攻击参数，`ruleAccepts` 判"这一目标算不算"。
  * 主程序只负责遍历、下指令、结算伤害——**不要再往 `Mob.tick` 的"追玩家"分支里塞**。
  *
- * ⚠️ 雪傀儡暂时没有规则：它原版是**远程扔雪球**（0 伤害 + 击退），
- * 要接就得复用投掷物通道，留给下一批（J3 的第二批）。
+ * 雪傀儡（批次 513）也在这张表里：远程扔雪球（0 伤害 + 击退），射程 10、1.5 秒一颗。
  */
 
 export interface TargetRule {
@@ -26,9 +25,15 @@ export interface TargetRule {
   readonly damage: number;
   /** 只认这些生物 id；`null` = 不按 id 白名单，改用 `hostileOnly` */
   readonly ids: ReadonlySet<string> | null;
-  /** 只打 `hostile` 生物（铁傀儡/驯服狼） */
+  /** 只打 `hostile` 生物（铁傀儡/驯服狼/雪傀儡） */
   readonly hostileOnly: boolean;
+  /** 远程攻击（雪傀儡扔雪球）：不近战，到了射程就投 */
+  readonly ranged: boolean;
 }
+
+/** 雪傀儡的雪球初速与抬升（格/秒）：抬升用来补偿重力，不然十格外一定打空 */
+export const SNOW_GOLEM_THROW_SPEED = 12;
+export const SNOW_GOLEM_THROW_ARC = 2.4;
 
 /** 野狼的猎物：原版会捕猎的小动物 */
 const WOLF_PREY: ReadonlySet<string> = new Set(['sheep', 'rabbit', 'chicken']);
@@ -40,6 +45,7 @@ const IRON_GOLEM_RULE: TargetRule = {
   damage: 7,
   ids: null,
   hostileOnly: true,
+  ranged: false,
 };
 
 const WILD_WOLF_RULE: TargetRule = {
@@ -49,12 +55,29 @@ const WILD_WOLF_RULE: TargetRule = {
   damage: 4,
   ids: WOLF_PREY,
   hostileOnly: false,
+  ranged: false,
 };
 
 const TAMED_WOLF_RULE: TargetRule = {
   ...WILD_WOLF_RULE,
   ids: null,
   hostileOnly: true,
+  ranged: false,
+};
+
+/**
+ * 雪傀儡（批次 513）：**远程扔雪球**（0 伤害 + 击退，与原版一致）。
+ *
+ * 射程 10 格、1.5 秒一颗；它不会近战——到了射程就投，被贴脸也只会后退着扔。
+ */
+const SNOW_GOLEM_RULE: TargetRule = {
+  range: 10,
+  attackRange: 10,
+  cooldown: 1.5,
+  damage: 0,
+  ids: null,
+  hostileOnly: true,
+  ranged: true,
 };
 
 /**
@@ -65,6 +88,7 @@ const TAMED_WOLF_RULE: TargetRule = {
 export function targetRuleFor(typeId: string, tamed: boolean): TargetRule | null {
   if (typeId === 'iron_golem') return IRON_GOLEM_RULE;
   if (typeId === 'wolf') return tamed ? TAMED_WOLF_RULE : WILD_WOLF_RULE;
+  if (typeId === 'snow_golem') return SNOW_GOLEM_RULE;
   return null;
 }
 

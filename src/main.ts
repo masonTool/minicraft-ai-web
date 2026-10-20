@@ -128,7 +128,12 @@ import { isVillagerFood, levelName, recordTradeUse, tradeBlocker, tradeDemand, t
 import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
 import { routineTarget, villagerArrived, villagerRoutine } from './core/world/VillagerRoutine.ts';
 import { isPanicThreat, nearestPanicThreat } from './core/entity/VillagerPanic.ts';
-import { ruleAccepts, targetRuleFor } from './core/entity/TargetRules.ts';
+import {
+  SNOW_GOLEM_THROW_ARC,
+  SNOW_GOLEM_THROW_SPEED,
+  ruleAccepts,
+  targetRuleFor,
+} from './core/entity/TargetRules.ts';
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
 // 刷怪笼里旋转的迷你生物（批次 487）：收集逻辑是纯函数，渲染在 MobRenderer
 import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
@@ -8338,6 +8343,11 @@ class App {
       entity.guardToward(hit.target.x, hit.target.z);
       if (hit.distance > rule.attackRange || entity.guardCooldown > 0) continue;
       entity.guardCooldown = rule.cooldown;
+      // 远程规则（雪傀儡）：到了射程就投雪球，不近战
+      if (rule.ranged) {
+        this.throwSnowballFrom(entity, hit.target);
+        continue;
+      }
       hit.target.hurt(
         rule.damage,
         hit.target.x - entity.x,
@@ -8348,6 +8358,35 @@ class App {
         { kind: 'mob', mobId: entity.type.id },
       );
     }
+  }
+
+  /**
+   * 雪傀儡投一颗雪球（批次 513）。
+   *
+   * 走的是玩家/发射器同一条 `spawnThrowable`：雪球本身 0 伤害、只带击退
+   * （`Throwable` 的 snowball 分支），与原版一致。
+   * 抬升 `SNOW_GOLEM_THROW_ARC` 用来补偿重力——平射十格外会砸进地里。
+   */
+  private throwSnowballFrom(source: Mob, target: Mob): void {
+    const sx = source.x;
+    const sy = source.y + source.type.height * 0.75;
+    const sz = source.z;
+    const dx = target.x - sx;
+    const dz = target.z - sz;
+    const distance = Math.max(0.2, Math.hypot(dx, dz));
+    const vy =
+      ((target.y + target.type.height * 0.5 - sy) / distance) * SNOW_GOLEM_THROW_SPEED + SNOW_GOLEM_THROW_ARC;
+    this.spawnThrowable(
+      sx,
+      sy,
+      sz,
+      { x: (dx / distance) * SNOW_GOLEM_THROW_SPEED, y: vy, z: (dz / distance) * SNOW_GOLEM_THROW_SPEED },
+      'snowball',
+      Item.SNOWBALL,
+      undefined,
+      false,
+    );
+    this.audio.play('bow_shoot', { x: sx, y: sy, z: sz });
   }
 
   /**

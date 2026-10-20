@@ -11,7 +11,12 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { ruleAccepts, targetRuleFor } from '../src/core/entity/TargetRules.ts';
+import {
+  SNOW_GOLEM_THROW_ARC,
+  SNOW_GOLEM_THROW_SPEED,
+  ruleAccepts,
+  targetRuleFor,
+} from '../src/core/entity/TargetRules.ts';
 import {
   GUARD_ATTACK_COOLDOWN,
   GUARD_ATTACK_RANGE,
@@ -58,7 +63,7 @@ console.log('\n[规则表：谁有攻击规则]');
   check('驯服的狼有规则', targetRuleFor('wolf', true) !== null);
   equal('羊没有规则', targetRuleFor('sheep', false), null);
   equal('僵尸没有规则（它追玩家走 Mob.tick）', targetRuleFor('zombie', false), null);
-  equal('雪傀儡暂时没有规则（远程雪球是下一批）', targetRuleFor('snow_golem', false), null);
+  check('雪傀儡有规则（批次 513）', targetRuleFor('snow_golem', false) !== null);
 }
 
 console.log('\n[规则表：参数]');
@@ -78,6 +83,13 @@ console.log('\n[规则表：参数]');
   const tamed = targetRuleFor('wolf', true)!;
   check('驯服狼只打敌对', tamed.hostileOnly && tamed.ids === null);
   check('驯服狼比野狼快（间隔更短或相同）', tamed.cooldown <= wild.cooldown + 1e-9);
+
+  const snow = targetRuleFor('snow_golem', false)!;
+  equal('雪傀儡射程', snow.range, 10);
+  equal('雪傀儡出手间隔', snow.cooldown, 1.5);
+  equal('雪傀儡不靠雪球造成伤害（原版 0 点，只有击退）', snow.damage, 0);
+  check('雪傀儡是远程', snow.ranged && snow.hostileOnly);
+  check('雪傀儡的初速与抬升是正数', SNOW_GOLEM_THROW_SPEED > 0 && SNOW_GOLEM_THROW_ARC > 0);
 }
 
 // ---------------------------------------------------------------- 2. 目标判定
@@ -96,6 +108,10 @@ console.log('\n[ruleAccepts：谁能打谁]');
   check('野狼不打牛', !ruleAccepts(wild, mob('cow', 0, 0)));
   check('野狼不打僵尸', !ruleAccepts(wild, mob('zombie', 0, 0, true)));
   check('野狼不打其它狼', !ruleAccepts(wild, mob('wolf', 0, 0)));
+
+  const snow = targetRuleFor('snow_golem', false)!;
+  check('雪傀儡打僵尸', ruleAccepts(snow, mob('zombie', 0, 0, true)));
+  check('雪傀儡不打羊', !ruleAccepts(snow, mob('sheep', 0, 0)));
 
   const tamed = targetRuleFor('wolf', true)!;
   check('驯服狼打僵尸', ruleAccepts(tamed, mob('zombie', 0, 0, true)));
@@ -167,7 +183,9 @@ console.log('\n[接线守卫]');
 
   const rulesSrc = readFileSync(new URL('../src/core/entity/TargetRules.ts', import.meta.url), 'utf8');
   check('规则表里有狼', rulesSrc.includes("typeId === 'wolf'"));
-  check('规则表里没有雪傀儡（下一批）', !rulesSrc.includes("typeId === 'snow_golem'"));
+  check('规则表里有雪傀儡', rulesSrc.includes("typeId === 'snow_golem'"));
+  check('主程序给远程规则单独一条分支', mainSrc.includes('if (rule.ranged)'));
+  check('雪球走共用投掷通道', mainSrc.includes("'snowball'") && mainSrc.includes('throwSnowballFrom'));
 }
 
 console.log(`\n目标规则测试：${passed} 通过 / ${failed} 失败\n`);

@@ -11467,4 +11467,28 @@
 - [x] B508-6 J9 弹射物：七种都有，引雷 269 已做（原注记过期）
 - [x] B508-7 完成 227 → **233**、进行中 56 → **50**、待办仍 5
 
+## 批次 509：村民每日补货 + 价格浮动（J11 尾巴）（2026-10-20）
+
+- [x] B509-1 `TradeOffer.demand`（0~6）+ `tradeDemand` / `tradePriceDelta`
+  （floor(demand/2)，最多 +3）+ `adjustedTradeCosts`（加在第一样收货上）
+- [x] B509-2 `recordTradeUse`：次数 +1（夹到 maxUses）、需求 +1（封顶）
+- [x] B509-3 `Villager.restock()`：次数清零、需求 -1；`advanceDay` 遍历已加载村民调用
+- [x] B509-4 `tradeBlocker` / `tradeSettlement` 改走调整后的价格（否则"显示能做、实际扣不够"）
+- [x] B509-5 `demand` 进村民存档与实体寄存（`sanitizeVillager` 逐项夹紧、长度不符整份丢弃）
+- [x] B509-6 交易界面：价格用调整后的数量；需求量进指纹（价格变了重建行）
+- [x] B509-7 `test:villager` 141 → **170 条**
+- ⚠️ 差异：原版一天补两次，这里一天一次；价格不随难度/声望变（只随需求）
+
+## 批次 510：村民作息走动（J11 尾巴）（2026-10-20）
+
+- [x] B510-1 `core/world/VillagerRoutine.ts`（纯函数）：白天去工作站、其它时间去床边；
+  `normalizeTimeOfDay` / `villagerRoutine` / `routineTarget` / `villagerArrived`
+- [x] B510-2 `Villager.home` + `setHome` / `walkToward` / `standStill`
+  （`idle` 是 protected，走动与停住都收在实体自己身上）
+- [x] B510-3 村庄人口生成时把**招他来的那张床**设为家
+- [x] B510-4 家 / 工作站坐标进存档与实体寄存（`sanitizePoint` 逐项校验，脏数据整份丢）
+- [x] B510-5 主程序每 0.5 秒下发作息指令（在实体 tick 之前）
+- [x] B510-6 `test:villager` 170 → **200 条**；`test:spawn` 下界采样 30 → 120 轮（修偶发）
+- ⚠️ 仍缺：不躲僵尸（恐慌与铁傀儡联动）；走位是直线、不绕路
+
 <!-- docs-archive:end -->

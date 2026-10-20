@@ -80,7 +80,7 @@
       ⑥ `MapScreen` 的格子换算要跟着 `scale` 走（现在写死 512 格 → 32 格）。
       ⚠️ 差异：一格 = `scale+1` 个区块（原版按方块像素）；不做"地图挂在展示框里"。
 
-**队列已清空（批次 512 之后）**。下一批候选（写成散文，钩子不捡）：
+**队列已清空（批次 513 之后）**。下一批候选（写成散文，钩子不捡）：
 1. **506 AI 目标选择器**：全仓没有 target selector，生物只追玩家；先做纯逻辑。
 2. **507 结构布局深度**：林地府邸 3~6 间/层（原版 50+）、要塞单层、堡垒只有一种布局。
 3. **508 村民体系第二批**：走动/POI/每日刷新/价格浮动（依赖 501 的持久化）。
@@ -122,30 +122,6 @@
 
 ---
 
-## 批次 509：村民每日补货 + 价格浮动（J11 尾巴）（2026-10-20）
-
-- [x] B509-1 `TradeOffer.demand`（0~6）+ `tradeDemand` / `tradePriceDelta`
-  （floor(demand/2)，最多 +3）+ `adjustedTradeCosts`（加在第一样收货上）
-- [x] B509-2 `recordTradeUse`：次数 +1（夹到 maxUses）、需求 +1（封顶）
-- [x] B509-3 `Villager.restock()`：次数清零、需求 -1；`advanceDay` 遍历已加载村民调用
-- [x] B509-4 `tradeBlocker` / `tradeSettlement` 改走调整后的价格（否则"显示能做、实际扣不够"）
-- [x] B509-5 `demand` 进村民存档与实体寄存（`sanitizeVillager` 逐项夹紧、长度不符整份丢弃）
-- [x] B509-6 交易界面：价格用调整后的数量；需求量进指纹（价格变了重建行）
-- [x] B509-7 `test:villager` 141 → **170 条**
-- ⚠️ 差异：原版一天补两次，这里一天一次；价格不随难度/声望变（只随需求）
-
-## 批次 510：村民作息走动（J11 尾巴）（2026-10-20）
-
-- [x] B510-1 `core/world/VillagerRoutine.ts`（纯函数）：白天去工作站、其它时间去床边；
-  `normalizeTimeOfDay` / `villagerRoutine` / `routineTarget` / `villagerArrived`
-- [x] B510-2 `Villager.home` + `setHome` / `walkToward` / `standStill`
-  （`idle` 是 protected，走动与停住都收在实体自己身上）
-- [x] B510-3 村庄人口生成时把**招他来的那张床**设为家
-- [x] B510-4 家 / 工作站坐标进存档与实体寄存（`sanitizePoint` 逐项校验，脏数据整份丢）
-- [x] B510-5 主程序每 0.5 秒下发作息指令（在实体 tick 之前）
-- [x] B510-6 `test:villager` 170 → **200 条**；`test:spawn` 下界采样 30 → 120 轮（修偶发）
-- ⚠️ 仍缺：不躲僵尸（恐慌与铁傀儡联动）；走位是直线、不绕路
-
 ## 批次 511：村民恐慌 + 铁傀儡联动（J11 收口）（2026-10-20）
 
 - [x] B511-1 `core/entity/VillagerPanic.ts`：10 种威胁 id、8 格内最近、反向逃跑 6 格、
@@ -165,3 +141,11 @@
 - [x] B512-3 恐慌优先只给 `hostileOnly` 规则（狼不参与村庄防守）
 - [x] B512-4 `test:target` **42 条**；`test:golem` 27 条原样通过；套数 155 → **156**
 - ⚠️ 仍缺：雪傀儡远程雪球、开门/游泳、"被打后追玩家"并入选择器
+
+## 批次 513：雪傀儡远程雪球（J3 第二批）（2026-10-20）
+
+- [x] B513-1 `TargetRule.ranged` + 雪傀儡规则（10 格 / 1.5 秒 / 0 伤害 / hostileOnly）
+- [x] B513-2 主程序 `rule.ranged` 分支 + `throwSnowballFrom`（复用 `spawnThrowable`）
+- [x] B513-3 初速 12、抬升 2.4（补偿重力，平射十格会砸地）
+- [x] B513-4 `test:target` 42 → **51 条**
+- ⚠️ J3 仍缺：开门、游泳、"被打后追玩家"并入选择器
