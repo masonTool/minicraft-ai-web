@@ -11,6 +11,8 @@ export type InventoryAction =
   | { type: 'swap'; index: number }
   | { type: 'move'; from: number; to: number }
   | { type: 'give'; id: number }
+  | { type: 'quick' }
+  | { type: 'drop' }
   | null;
 
 export interface InventoryCallbacks {
@@ -84,6 +86,8 @@ export function createInventory(
   const panelRect: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
   const closeRect: Rect = { x: panelX + panelWidth - 50, y: panelY + 12, w: 36, h: 36 };
   const creativeButton: Rect = { x: panelX + 20, y: panelY + panelHeight - 48, w: 150, h: 36 };
+  const quickButton: Rect = { x: panelX + 190, y: panelY + panelHeight - 48, w: 110, h: 36 };
+  const dropButton: Rect = { x: panelX + 312, y: panelY + panelHeight - 48, w: 90, h: 36 };
   const gridX = panelX + 20;
   const gridY = panelY + 56;
   const craftX = gridX + gridWidth + 24;
@@ -101,6 +105,7 @@ export function createInventory(
   let mode: 'inventory' | 'creative' = 'inventory';
   let pendingGive: number | null = null;
   let pendingCraft: number | null = null;
+  let pendingCommand: 'quick' | 'drop' | null = null;
   let currentSlots: readonly (ItemStack | null)[] = slots;
   let drag: { from: number; startX: number; startY: number; x: number; y: number; moved: boolean } | null =
     null;
@@ -220,6 +225,10 @@ export function createInventory(
       'normal',
       16,
     );
+    if (mode === 'inventory') {
+      drawButton(context, quickButton, 'QUICK', 'normal', 16);
+      drawButton(context, dropButton, 'DROP 1', 'normal', 15);
+    }
 
     // 拖拽中的物品跟随手指
     if (drag?.moved) {
@@ -280,6 +289,7 @@ export function createInventory(
       drag = null;
       pendingGive = null;
       pendingCraft = null;
+      pendingCommand = null;
       mode = 'inventory';
       setOpen(!open);
     },
@@ -288,6 +298,7 @@ export function createInventory(
       drag = null;
       pendingGive = null;
       pendingCraft = null;
+      pendingCommand = null;
       mode = 'inventory';
       setOpen(false);
     },
@@ -322,6 +333,17 @@ export function createInventory(
       if (mode === 'creative') {
         const index = slotAt(x, y);
         pendingGive = index === null ? null : (creativeBlocks[index] ?? null);
+        redraw();
+        return true;
+      }
+
+      if (contains(quickButton, x, y)) {
+        pendingCommand = 'quick';
+        redraw();
+        return true;
+      }
+      if (contains(dropButton, x, y)) {
+        pendingCommand = 'drop';
         redraw();
         return true;
       }
@@ -367,6 +389,11 @@ export function createInventory(
     },
     handleUp(clientX: number, clientY: number, sw: number, sh: number): InventoryAction {
       if (!open) return null;
+      if (pendingCommand !== null) {
+        const command = pendingCommand;
+        pendingCommand = null;
+        return { type: command };
+      }
       if (pendingGive !== null) {
         const id = pendingGive;
         pendingGive = null;

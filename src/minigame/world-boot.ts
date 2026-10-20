@@ -204,6 +204,7 @@ async function boot(): Promise<void> {
   }
   const hotbarBlocks = HOTBAR.map((_, index) => inventory.get(index)?.id ?? 0);
   let scheduleSave: (() => void) | null = null;
+  let dropOne: ((item: ItemStack) => void) | null = null;
   const ui = createCanvasUi(
     atlas,
     hotbarBlocks,
@@ -244,6 +245,61 @@ async function boot(): Promise<void> {
       onAddStack: (stack) => {
         inventory.addStack(stack);
         ui.syncInventory(inventory.serialize(), selectedSlot);
+        scheduleSave?.();
+      },
+      onQuickMove: () => {
+        const stack = inventory.get(selectedSlot);
+        if (!stack) {
+          ui.showToast('NO ITEM');
+          return;
+        }
+        let target = -1;
+        for (let i = 9; i < 36; i++) {
+          const slot = inventory.get(i);
+          if (slot?.id === stack.id && slot.count < maxStackOf(stack.id)) {
+            target = i;
+            break;
+          }
+        }
+        if (target < 0) {
+          for (let i = 9; i < 36; i++) {
+            if (!inventory.get(i)) {
+              target = i;
+              break;
+            }
+          }
+        }
+        if (target < 0) {
+          ui.showToast('BAG FULL');
+          return;
+        }
+        const dest = inventory.get(target);
+        if (dest && dest.id === stack.id) {
+          const moved = Math.min(maxStackOf(stack.id) - dest.count, stack.count);
+          dest.count += moved;
+          stack.count -= moved;
+          inventory.set(target, dest);
+          inventory.set(selectedSlot, stack.count > 0 ? stack : null);
+        } else {
+          inventory.set(target, stack);
+          inventory.set(selectedSlot, null);
+        }
+        ui.syncInventory(inventory.serialize(), selectedSlot);
+        ui.showToast('MOVED');
+        scheduleSave?.();
+      },
+      onDropItem: () => {
+        const stack = inventory.get(selectedSlot);
+        if (!stack) {
+          ui.showToast('NO ITEM');
+          return;
+        }
+        const one: ItemStack = { id: stack.id, count: 1 };
+        stack.count -= 1;
+        if (stack.count <= 0) inventory.set(selectedSlot, null);
+        ui.syncInventory(inventory.serialize(), selectedSlot);
+        dropOne?.(one);
+        ui.showToast(`DROPPED ${blockDef(one.id).name.replace('minecraft:', '')}`);
         scheduleSave?.();
       },
       onMoveItem: (from, to) => {
@@ -347,6 +403,86 @@ async function boot(): Promise<void> {
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
+  };
+
+  interface DroppedItem {
+    mesh: THREE.Mesh;
+    item: ItemStack;
+    vx: number;
+    vy: number;
+    vz: number;
+    age: number;
+  }
+  const drops: DroppedItem[] = [];
+  const dropColor = (id: number): number => {
+    const colors: Record<number, number> = {
+      [Block.GRASS_BLOCK]: 0x6a9c3a,
+      [Block.DIRT]: 0x8a5a32,
+      [Block.STONE]: 0x8a8a8a,
+      [Block.COBBLESTONE]: 0x777777,
+      [Block.OAK_PLANKS]: 0xb48a50,
+      [Block.OAK_LOG]: 0x6b4a2a,
+      [Block.GLASS]: 0x9fd8e8,
+      [Block.SAND]: 0xd8c88a,
+      [Block.GLOWSTONE]: 0xf0d36a,
+    };
+    return colors[id] ?? 0xcccccc;
+  };
+
+  const dropItem = (item: ItemStack): void => {
+    const cosPitch = Math.cos(pitch);
+    const dx = -Math.sin(yaw) * cosPitch;
+    const dz = -Math.cos(yaw) * cosPitch;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.28, 0.28),
+      new THREE.MeshBasicMaterial({ color: dropColor(item.id) }),
+    );
+    mesh.position.set(physics.x + dx * 1.1, physics.eyeY - 0.3, physics.z + dz * 1.1);
+    scene.add(mesh);
+    drops.push({ mesh, item, vx: dx * 1.6, vy: 1.2, vz: dz * 1.6, age: 0 });
+  };
+  dropOne = dropItem;
+
+  const updateDrops = (dt: number): void => {
+    for (let i = drops.length - 1; i >= 0; i--) {
+      const drop = drops[i]!;
+      drop.age += dt;
+      drop.vy -= 18 * dt;
+      drop.mesh.position.x += drop.vx * dt;
+      drop.mesh.position.y += drop.vy * dt;
+      drop.mesh.position.z += drop.vz * dt;
+      drop.mesh.rotation.y += dt * 2;
+      const ground = world.getSurfaceBlockY(
+        Math.floor(drop.mesh.position.x),
+        Math.floor(drop.mesh.position.z),
+      );
+      if (ground !== null && drop.mesh.position.y < ground + 0.2) {
+        drop.mesh.position.y = ground + 0.2;
+        drop.vy = 0;
+        drop.vx = 0;
+        drop.vz = 0;
+      }
+      const distance = Math.hypot(
+        drop.mesh.position.x - physics.x,
+        drop.mesh.position.y - physics.y,
+        drop.mesh.position.z - physics.z,
+      );
+      if (drop.age > 0.7 && distance < 1.6) {
+        inventory.addStack(drop.item);
+        ui.syncInventory(inventory.serialize(), selectedSlot);
+        ui.showToast(`+ ${blockDef(drop.item.id).name.replace('minecraft:', '')}`);
+        scene.remove(drop.mesh);
+        drop.mesh.geometry.dispose();
+        (drop.mesh.material as THREE.Material).dispose();
+        drops.splice(i, 1);
+        scheduleSave?.();
+      } else if (drop.age > 30) {
+        scene.remove(drop.mesh);
+        drop.mesh.geometry.dispose();
+        (drop.mesh.material as THREE.Material).dispose();
+        drops.splice(i, 1);
+      }
+    }
   };
 
   const spawnPlayer = (): void => {
@@ -847,6 +983,7 @@ async function boot(): Promise<void> {
     }
     updateCamera();
     updateTarget();
+    updateDrops(dt);
 
     if (mining) {
       if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen() || ui.isInventoryOpen()) {

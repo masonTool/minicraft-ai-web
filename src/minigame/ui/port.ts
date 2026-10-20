@@ -53,6 +53,8 @@ export interface CanvasUiCallbacks {
   onGiveBlock?: (id: number) => void;
   onTakeSelectedItem?: () => ItemStack | null;
   onAddStack?: (stack: ItemStack) => void;
+  onQuickMove?: () => void;
+  onDropItem?: () => void;
   onSettingsChange?: (values: SettingsValues) => void;
   onRequestText?: (current: string) => Promise<string | null>;
 }
@@ -121,6 +123,8 @@ export function createCanvasUi(
       if (action?.type === 'swap') callbacks.onSwapSlot?.(action.index);
       if (action?.type === 'move') callbacks.onMoveItem?.(action.from, action.to);
       if (action?.type === 'give') callbacks.onGiveBlock?.(action.id);
+      if (action?.type === 'quick') callbacks.onQuickMove?.();
+      if (action?.type === 'drop') callbacks.onDropItem?.();
       return true;
     },
     togglePause(): void {
