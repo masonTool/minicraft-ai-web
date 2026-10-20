@@ -178,6 +178,32 @@ Worker（改写）、xmldom（只有在需要时）。
 - 因此：**核心 UI 仍按原计划自研 canvas UI 工具包**；
   `Layout` 只做一次小规模可行性验证（WX-021B），不通过就放弃。
 
+### 2.5.6 真机结论（2026-10-20）
+
+同一台设备，两个 spike 使用完全相同的场景：
+
+| 版本 | 场景 | 分辨率/dpr | GL | FPS | MS | TRI | CALLS |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| WX-001 SHIM | 压力场景 | 793×360 / 3 | WebGL 2.0 (OpenGL ES 3.2) | 61 | 16.6 | 12720 | 801 |
+| WX-006 ADAPTER | 压力场景 | 793×360 / 3 | WebGL 2.0 (OpenGL ES 3.2) | 61 | 16.6 | 12720 | 801 |
+
+> `STRESS 799` 是 32×32 去掉中央 15×15 后的压力方块数；`CALLS 801` =
+> 799 个独立 Mesh + 1 个地面 InstancedMesh + 1 个标记方块。
+> 两版数字完全一致，说明适配器对 `Canvas.getContext` 的包装在 801 draw call 下
+> **没有可测开销**。
+
+**结论：Go。**
+
+1. **采用 `minigame-adapter` 作为平台层基座**（Canvas/Image/Audio/localStorage/
+   XHR/Blob/FileReader/触摸/前后台），正式实现选择性 vendored 到仓库内，固定 `870d66f`。
+2. **保留** `Canvas.getContext` 的包装（实测无开销，且它负责 Image 的 `$proxyTarget` 解包）。
+3. **只补以下缺口**：pointer 事件合成、`matchMedia`、`visibilitychange`、
+   `HTMLScriptElement` 动态 require（删）、Worker 的 `addEventListener`/单 worker、
+   IndexedDB→文件、键盘输入、WebSocket。
+4. **仍然不做 DOM/CSS 模拟**（见 §2.6）；UI 走自研 canvas 工具包。
+5. 内存峰值/启动耗时这两项基线还没测，放到 WX-010 正式构建后用开发者工具补；
+   它们不影响 Go 结论（性能主项已达标）。
+
 ---
 
 ## 2.6 为什么不做“DOM/CSS 全模拟”
@@ -289,9 +315,9 @@ flex/absolute/grid 子集。
 | WX-002 | 真机基线测量 | 帧率/帧时间/内存峰值/启动耗时/webgl2/包体，写入 §7 | WX-001 | 2 | [~] |
 | WX-003 | Worker 打包与通道验证 | 单 worker 能加载，复制 vs Transferable 的耗时数据 | WX-001 | 1.5 | [ ] |
 | WX-004 | 图集与 2D canvas 验证 | `TextureAtlas` 的 createImageData/putImageData/drawImage 可用 | WX-001 | 1 | [ ] |
-| WX-006 | `minigame-adapter` 接入 spike | 从 `references/` 引入适配器 + three r186，构建第二份 `game.js`；与 WX-001 对比帧率/兼容性 | WX-001 | 2 | [~] |
-| WX-007 | 适配器取舍与补丁清单 | 决定整包/选择性移植；确认 §2.5.4 的补丁是否都必要，写入 §7 | WX-006 | 1 | [ ] |
-| WX-005 | Go/No-Go 结论与性能预算 | 结论写进 §7；不达标则给出降级方案 | WX-002~004, WX-006~007 | 0.5 | [ ] |
+| WX-006 | `minigame-adapter` 接入 spike | 从 `references/` 引入适配器 + three r186，构建第二份 `game.js`；与 WX-001 对比帧率/兼容性 | WX-001 | 2 | [x] |
+| WX-007 | 适配器取舍与补丁清单 | 决定整包/选择性移植；确认 §2.5.4 的补丁是否都必要，写入 §7 | WX-006 | 1 | [x] |
+| WX-005 | Go/No-Go 结论与性能预算 | 结论写进 §7；不达标则给出降级方案 | WX-002~004, WX-006~007 | 0.5 | [x] |
 
 ### M1 · 平台层
 
@@ -453,7 +479,9 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 | 2026-10-20 | WX-021 决策 | DOM/CSS 全模拟实测需 75~110 人日（子集），决定不做；UI 走 canvas 工具包，详见 §2.6 | `2e03430` |
 | 2026-10-20 | WX-002 修复 | 真机报 `Unexpected token ?`：两个 spike 构建 target `es2020 → es2017`，产物已无 `??`/`?.` | `4015bdf` |
 | 2026-10-20 | WX-002 真机 | WX-001 / WX-006 均 WebGL2（OpenGL ES 3.2）、793×360 dpr3、61fps（轻场景）；适配器版无报错 | — |
-| 2026-10-20 | WX-002 修正 | HUD 的 `TRI 2/CALLS 1` 是二次 render 重置 info 的统计 bug；改为主场景后抓取，并加 768 独立 Mesh 压力场景 + `MS` 指标，待复测 | 本次提交 |
+| 2026-10-20 | WX-002 修正 | HUD 的 `TRI 2/CALLS 1` 是二次 render 重置 info 的统计 bug；改为主场景后抓取，并加压力场景 + `MS` 指标 | `56633a0` |
+| 2026-10-20 | WX-002/006 复测 | 两版压力场景均 61fps / 16.6ms / 801 calls / 12,720 tri；`STRESS 799` 是 32×32 去掉中央 15×15；适配器无可测开销 | — |
+| 2026-10-20 | WX-005/007 | **Go**；采用适配器作为平台层基座，保留 ctx 包装，只补 pointer/matchMedia/visibilitychange/HTMLScriptElement/Worker/存储/键盘/WebSocket；UI 仍自研 canvas | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -463,11 +491,11 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 
 | 风险 | 影响 | 应对 | 状态 |
 | --- | --- | --- | --- |
-| **微信 WebGL2 / 内存** | 低端 Android 可能拿不到 WebGL2 或内存不足 | WX-002 真机基线；不达标先降视距/锁 30fps | 未验证（spike 待导入） |
+| **微信 WebGL2 / 内存** | 低端 Android 可能拿不到 WebGL2 或内存不足 | WebGL2 已真机确认；内存峰值待 WX-010 后补测 | WebGL2 通过，内存待测 |
 | **真机 JS 语法** | 模拟器支持 ES2020，真机 JSCore 不支持 `??`/`?.`，报 `Unexpected token ?` | 构建 target 固定 `es2017`；产物用 grep 检查 `??`/`?.` | 已修复（WX-002） |
 | **抖音 WebGL2** | 官方小游戏 canvas 只保证 WebGL1；three r186 只支持 WebGL2 | M6 单独 Gate；必要时 three 0.162 + WebGL1 适配 | 未验证 |
 | **适配器假 DOM** | `getElementById`/`querySelector` 返回占位对象，UI 代码会“看起来没报错但什么都不显示” | 小游戏 UI/游戏代码禁止依赖假 DOM；只经 `UiPort`/`src/platform` 访问 | 待约束 |
-| **适配器 WebGL 包装** | `Canvas.getContext` 对每个方法加包装，draw call 多时可能明显掉帧 | WX-006 轻场景与 shim 同为 61fps；已加 768 draw call 压力场景，待复测 | 轻场景无差异，压力待测 |
+| **适配器 WebGL 包装** | `Canvas.getContext` 对每个方法加包装，draw call 多时可能明显掉帧 | 801 draw call 压力场景下两版均 16.6ms，无可测差异；保留包装 | 已排除 |
 | **three WebGL1 守卫** | 适配器把 `WebGLRenderingContext` 换成空函数；若真机判定成 WebGL1 会直接抛错 | WX-006 真机确认；必要时删掉该 fake / 改成 WebGL2 构造器 | 待验证 |
 | **适配器动态 require** | `HTMLScriptElement.js` 的动态 require 会让打包器扫描整个 references（WX-006 实测 4292 错） | spike 用插件替换；正式移植直接删掉 HTMLScriptElement | 已在 spike 绕过 |
 | **适配器仅微信** | 全量 `wx.*`；抖音不能复用 | 平台层按 `wx/tt` 分开；抖音 M6 另写 | 已知 |
