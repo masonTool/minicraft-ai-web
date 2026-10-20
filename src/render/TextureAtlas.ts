@@ -587,10 +587,10 @@ function crackPainter(stage: number): Painter {
  * 藤蔓、睡莲。石头 / 木头 / 土 / 沙 / 花瓣一概不动——它们已经被认定是合适的，
  * 而且花瓣压暗会变成"脏花"。
  *
- * 0.88 ≈ 降 12%。这是**观感**参数不是物理量：还要更沉就往下调（0.8 明显更暗，
+ * 0.8 ≈ 降 20%（批次 528 从 0.88 再压一档：用户觉得还不够沉）。这是**观感**参数不是物理量：还要更沉就往下调（0.8 明显更暗，
  * 0.95 几乎看不出），只需要改这一个数。
  */
-export const FOLIAGE_DARKEN = 0.88;
+export const FOLIAGE_DARKEN = 0.8;
 
 /** 把一组 RGB 按 `FOLIAGE_DARKEN` 压暗（草地/植物族专用，导出给离线断言） */
 export function foliage(rgb: readonly [number, number, number]): [number, number, number] {

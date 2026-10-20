@@ -24,6 +24,28 @@ const SWIM_DIVE_ACCEL = 10;
 const PASSIVE_SINK_SPEED = -0.8;
 export const FLY_SPEED = 10.9;
 export const FLY_SPRINT_SPEED = 21.8;
+/**
+ * 创造飞行从静止到满速要多久（秒，批次 528）。
+ *
+ * 用户：初始应该慢，然后是一个加速度的过程，不要一下就很快。
+ * 以前飞行的加速度是固定的 **90 格/秒²**，0 → 10.9 只要 0.12 秒——按一下前进
+ * 几乎等于瞬移。现在改成**按档位换算加速度**：`accel = speed / 0.65`，
+ * 于是普通飞行（10.9）与冲刺飞行（21.8）都是 0.65 秒到满速，两档手感一致。
+ *
+ * 松手减速走**同一个斜率**（对称）：所以松手后还会滑一小段，而不是啪地停住。
+ * 垂直方向同样用它：起跳/俯冲也是渐进的。
+ */
+export const FLY_RAMP_SECONDS = 0.65;
+/**
+ * 松手到停住要多久（秒）——**比加速短**。
+ *
+ * 加速慢是为了"起步不突兀"，但松手也慢就是另一种难受：搭建筑、贴墙摆方块时
+ * 会冲过头一大截（10.9 格/秒 × 0.65 秒 ≈ 3.5 格）。所以两个方向不对称：
+ * 踩下去像有惯性的载具，松开像踩了刹车。
+ */
+const FLY_BRAKE_SECONDS = 0.3;
+/** 飞行的最低加速度（格/秒²）：再慢的档位也不至于推不动 */
+const FLY_ACCEL_MIN = 4;
 
 const GRAVITY = 32;
 
@@ -318,7 +340,21 @@ export class PlayerPhysics {
         world.isHoney?.(Math.floor(this.x), honeyFeetY, Math.floor(this.z + 0.45)) === true ||
         world.isHoney?.(Math.floor(this.x), honeyFeetY, Math.floor(this.z - 0.45)) === true);
 
-    const accelerate = flying ? 90 : gliding && !this.inWater ? GLIDE_ACCEL : this.onGround ? 48 : 10;
+    /**
+     * 加速度（格/秒²）。飞行单独一条（批次 528）：按多久到满速反算，
+     * 不再是固定的 90 —— 见 `FLY_RAMP_SECONDS`。
+     */
+    const accelerate = flying
+      ? Math.max(
+          FLY_ACCEL_MIN,
+          // 有方向输入 → 慢慢加速；松手 → 快一点停住（见 FLY_BRAKE_SECONDS）
+          (dirX !== 0 || dirZ !== 0) ? speed / FLY_RAMP_SECONDS : speed / FLY_BRAKE_SECONDS,
+        )
+      : gliding && !this.inWater
+        ? GLIDE_ACCEL
+        : this.onGround
+          ? 48
+          : 10;
     /**
      * 水流推动（F9 尾巴，批次 447）。
      *
@@ -332,7 +368,8 @@ export class PlayerPhysics {
 
     if (flying) {
       const vertical = (input.jump ? 1 : 0) - (input.sneak ? 1 : 0);
-      this.vy = approach(this.vy, vertical * speed * 0.85, 90 * dt);
+      // 垂直也走同一条加速曲线：按下跳跃/潜行是渐渐升起/降下，不是弹射
+      this.vy = approach(this.vy, vertical * speed * 0.85, accelerate * dt);
       this.onGround = false;
       this.fallStartY = null;
     } else if (gliding && !this.inWater) {

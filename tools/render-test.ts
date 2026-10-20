@@ -1113,9 +1113,9 @@ console.log('\n[植物贴图：不许有 1 像素宽的竖条]');
 console.log('\n[草地与植物整体压暗]');
 {
   // 用户："草方块和植物的亮度太高了" —— 只压这一族（草方块/草/蕨/甘蔗/竹子/花茎/藤/睡莲）
-  check('压暗系数在 (0.8, 1) 之间（还在压、但没压成黑）', FOLIAGE_DARKEN > 0.8 && FOLIAGE_DARKEN < 1, String(FOLIAGE_DARKEN));
-  equal('foliage 真的乘上系数（100 → 88）', foliage([100, 100, 100])[0], 88);
-  equal('白不会溢出', foliage([255, 255, 255])[0], 224);
+  check('压暗系数在 [0.75, 1) 之间（还在压、但没压成黑）', FOLIAGE_DARKEN >= 0.75 && FOLIAGE_DARKEN < 1, String(FOLIAGE_DARKEN));
+  equal('foliage 真的乘上系数（100 → 80）', foliage([100, 100, 100])[0], 80);
+  equal('白不会溢出', foliage([255, 255, 255])[0], 204);
 
   // 结构守卫：这一族必须走 `foliage()` / `FOLIAGE_DARKEN`，否则改回去了也没人发现
   const atlasSrc = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');

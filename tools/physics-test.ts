@@ -13,6 +13,9 @@
  */
 
 import {
+  FLY_RAMP_SECONDS,
+  FLY_SPEED,
+  FLY_SPRINT_SPEED,
   HONEY_SLIDE_SPEED,
   PlayerPhysics,
   SPRINT_JUMP_BOOST,
@@ -171,6 +174,46 @@ console.log('\n[冲刺跳]');
   const still = standOnGround();
   still.update(world, input({ sprint: true, jump: true }), YAW_PLUS_X, DT, false);
   check('不按方向冲刺跳没有水平推力', Math.abs(still.vx) < 1e-6, `vx=${still.vx}`);
+}
+
+console.log('\n[创造飞行：起步慢、0.65 秒到满速（批次 528）]');
+{
+  const world = makeWorld(null);
+  const ticks = Math.round(FLY_RAMP_SECONDS / DT);
+
+  /** 从静止开始按前进，返回第 1 帧 / 到点 / 再按一段之后的速度 */
+  function ramp(sprint: boolean): { first: number; atRamp: number; later: number } {
+    const physics = new PlayerPhysics();
+    physics.y = 70; // 空中：假世界在 y>=64 没有碰撞
+    const step = (): void => {
+      physics.update(world, input({ forward: 1, sprint }), YAW_PLUS_X, DT, true);
+    };
+    step();
+    const first = physics.vx;
+    for (let i = 1; i < ticks; i++) step();
+    const atRamp = physics.vx;
+    for (let i = 0; i < ticks; i++) step();
+    return { first, atRamp, later: physics.vx };
+  }
+
+  const walk = ramp(false);
+  check('第一帧只到满速的一小部分（不再一下就很快）', walk.first < FLY_SPEED * 0.25, `vx=${walk.first.toFixed(2)}`);
+  check('过半程时还没到满速（是一个加速度过程）', walk.first > 0 && walk.first < walk.atRamp);
+  check('0.65 秒后到达普通飞行速度', Math.abs(walk.atRamp - FLY_SPEED) < 0.3, `vx=${walk.atRamp.toFixed(2)}`);
+  check('继续按着不会超过满速', walk.later <= FLY_SPEED + 1e-6, `vx=${walk.later.toFixed(3)}`);
+
+  const sprint = ramp(true);
+  check('冲刺档也是同一段时间到满速（手感一致）', Math.abs(sprint.atRamp - FLY_SPRINT_SPEED) < 0.6, `vx=${sprint.atRamp.toFixed(2)}`);
+  check('冲刺档同样起步慢', sprint.first < FLY_SPRINT_SPEED * 0.25, `vx=${sprint.first.toFixed(2)}`);
+
+  // 松手：同一个斜率减速，会滑一小段（不是啪地停住）
+  const glide = new PlayerPhysics();
+  glide.y = 70;
+  for (let i = 0; i < ticks * 2; i++) glide.update(world, input({ forward: 1 }), YAW_PLUS_X, DT, true);
+  glide.update(world, input(), YAW_PLUS_X, DT, true);
+  check('松手后还会滑一段（有惯性）', glide.vx > FLY_SPEED * 0.6, `vx=${glide.vx.toFixed(2)}`);
+  for (let i = 0; i < ticks * 2; i++) glide.update(world, input(), YAW_PLUS_X, DT, true);
+  check('最终会停下来', Math.abs(glide.vx) < 0.05, `vx=${glide.vx.toFixed(3)}`);
 }
 
 console.log('\n[非整格地面：雪层 / 台阶不再抖跳]');
