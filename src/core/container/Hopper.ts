@@ -44,6 +44,14 @@ export interface HopperEnv {
   /** 头顶那一格的容器（拉件用）；没有就返回 null */
   above(): BlockContainer | null;
   /**
+   * 目标不是"格子容器"时的特殊投放（批次 555：堆肥桶）。
+   *
+   * 堆肥桶只有等级、没有 5 个槽，`tryInsertOne` 那套完全不适用。返回 true 表示
+   * **这一件已经被目标吃掉**，漏斗应当从自己的槽里扣掉它；false 表示不接收。
+   * 可选——老离线桩不给就是"没有特殊目标"。
+   */
+  tryPush?(stack: ItemStack): boolean;
+  /**
    * 从头顶那一片掉落物里吸一件（主程序负责找范围、扣数量）。
    * 返回 null 表示头顶没有掉落物。**只能返回 count = 1 的栈**。
    */
@@ -150,7 +158,8 @@ export class Hopper implements SlotSource {
     // ① 先推：自己不为空就试着往朝向那一格送一件
     if (!this.isEmpty) {
       const target = env.target();
-      if (target) moved = this.pushOut(target);
+      // 普通容器优先；不是容器时再问特殊目标（堆肥桶），两者都没有就什么都不做
+      if (target || env.tryPush) moved = this.pushOut(target, env);
     }
 
     // ② 再拉：头顶的容器、头顶的掉落物（顺序与原版 pullItems 一致）
@@ -179,11 +188,15 @@ export class Hopper implements SlotSource {
    * 原版是从第一个非空槽开始试；这里退化成"继续往后试"，
    * 差别只出现在"自己混装了好几格、而目标只收其中某一种"的情形。
    */
-  private pushOut(target: BlockContainer): boolean {
+  private pushOut(target: BlockContainer | null, env: HopperEnv): boolean {
     for (let index = 0; index < HOPPER_SIZE; index++) {
       const stack = this.slots[index];
       if (!stack) continue;
-      if (!tryInsertOne(target, stack)) continue;
+      // 特殊目标（堆肥桶）：它自己决定吃不吃这一件；吃完就从漏斗扣
+      const special = env.tryPush?.(stack) ?? false;
+      if (!special) {
+        if (!target || !tryInsertOne(target, stack)) continue;
+      }
       stack.count -= 1;
       if (stack.count <= 0) this.slots[index] = null;
       return true;

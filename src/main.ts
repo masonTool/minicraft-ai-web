@@ -6823,6 +6823,26 @@ class App {
     return true;
   }
 
+  /**
+   * 漏斗往堆肥桶里塞一件（批次 555）。
+   *
+   * 与玩家右键共用 `compostStep` 的概率表；区别是"谁扣物品"——
+   * 玩家那条扣背包，这条由 `Hopper.pushOut` 从自己的槽里扣。
+   * 桶满或这件不能堆肥时返回 false，漏斗会继续试下一格/下一件。
+   */
+  private pushToComposter(x: number, y: number, z: number, stack: ItemStack): boolean {
+    if (!this.world.isLoaded(x, z)) return false;
+    if (this.world.getBlock(x, y, z) !== Block.COMPOSTER) return false;
+    const state = this.world.getBlockState(x, y, z);
+    const level = composterLevelOf(state);
+    const next = compostStep(level, stack.id, Math.random);
+    if (next === null) return false;
+    this.setComposterLevel(x, y, z, withComposterLevel(state, next));
+    const grew = next > level;
+    this.particles.spawnBlockBreak(x, y + 0.9, z, this.blockParticleColor(Block.COMPOSTER), grew ? 5 : 2);
+    return true;
+  }
+
   /** 写堆肥等级：走带光照/网格/增量存档的那条路，并广播给队友 */
   private setComposterLevel(x: number, y: number, z: number, state: number): void {
     this.world.setBlockAndUpdate(x, y, z, Block.COMPOSTER, state);
@@ -12358,6 +12378,8 @@ class App {
       target: () => this.containerOfBlockAt(x + dx, y + dy, z + dz),
       above: () => this.containerOfBlockAt(x, y + 1, z),
       suck: () => this.suckItemAbove(x, y, z),
+      // 堆肥桶（批次 555）：它不是 5 格容器，由这里直接吃一件
+      tryPush: (stack) => this.pushToComposter(x + dx, y + dy, z + dz, stack),
     };
   }
 

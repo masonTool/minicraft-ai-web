@@ -14,6 +14,7 @@
  * 运行：npm run test:hopper
  */
 
+import { readFileSync } from 'node:fs';
 import { Block, blockDef, blockHardness } from '../src/core/registry/blocks.ts';
 import { describeState, hopperOutputOf, hopperOutputOffset, withHopperLocked, withHopperOutput } from '../src/core/registry/blockState.ts';
 import { collisionBoxes, isFullBlockShape, meshBoxes } from '../src/core/registry/blockShapes.ts';
@@ -81,11 +82,13 @@ function envOf(options: {
   target?: Chest | Furnace | null;
   above?: Chest | Furnace | null;
   suck?: () => { id: number; count: number } | null;
+  tryPush?: (stack: { id: number; count: number }) => boolean;
 }): HopperEnv {
   return {
     target: () => options.target ?? null,
     above: () => options.above ?? null,
     suck: () => options.suck?.() ?? null,
+    ...(options.tryPush ? { tryPush: options.tryPush } : {}),
   };
 }
 
@@ -390,6 +393,35 @@ console.log('\n[配方：5 铁锭 + 箱子]');
   equal('少一个铁锭做不出（对照）', matchRecipe([I, Block.AIR, I, Block.AIR, C, I, Block.AIR, I, Block.AIR], 3), null);
   equal('把箱子摆错位置做不出（对照）', matchRecipe([I, Block.AIR, I, I, I, I, Block.AIR, I, Block.AIR], 3), null);
   equal('中心是木板也做不出（必须是箱子）', matchRecipe([I, Block.AIR, I, I, Block.OAK_PLANKS, I, Block.AIR, I, Block.AIR], 3), null);
+}
+
+console.log('\n[特殊目标：堆肥桶（批次 555）]');
+{
+  const hopper = new Hopper();
+  hopper.set(0, { id: Item.WHEAT, count: 2 });
+  let accepted = 0;
+  const moved = hopper.tick(
+    0.4,
+    envOf({
+      tryPush: (stack) => {
+        if (stack.id !== Item.WHEAT) return false;
+        accepted++;
+        return true;
+      },
+    }),
+  );
+  check('目标不是容器时也会尝试特殊投放', moved.moved);
+  equal('特殊目标吃掉一件后漏斗扣一件', hopper.get(0)?.count, 1);
+  equal('只尝试了一次', accepted, 1);
+
+  const rejected = new Hopper();
+  rejected.set(0, { id: Item.WHEAT, count: 1 });
+  const result = rejected.tick(0.4, envOf({ tryPush: () => false }));
+  check('目标不收时不搬（物品留在漏斗里）', !result.moved && rejected.get(0)?.count === 1);
+
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('主程序给漏斗接了 tryPush', mainSrc.includes('tryPush: (stack) => this.pushToComposter'));
+  check('堆肥桶与玩家右键共用 compostStep', mainSrc.includes('compostStep(level, stack.id, Math.random)'));
 }
 
 console.log(`\n漏斗测试：${passed} 通过 / ${failed} 失败`);
