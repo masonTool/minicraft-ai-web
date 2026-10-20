@@ -582,6 +582,8 @@ const EXPLICIT: Record<string, string> = {
   cave_spider_spawner: '洞穴蜘蛛刷怪笼',
   silverfish_spawner: '蠹虫刷怪笼',
   prismarine_shard: '海晶碎片',
+  // 下界砖（批次 413）
+  nether_brick: '下界砖',
   prismarine_crystals: '海晶砂粒',
   bone_meal: '骨粉',
   pumpkin_seeds: '南瓜籽',

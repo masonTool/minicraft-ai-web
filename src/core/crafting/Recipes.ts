@@ -1874,6 +1874,18 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['WWW', 'WWW', 'WWW'],
     key: { W: Item.NETHER_WART },
   },
+  // ---- 下界砖（批次 413）：原版是"4 块砖 → 1 个砖块"，反过来"1 个砖块 → 4 块砖"
+  {
+    kind: 'shaped',
+    result: { id: Block.NETHER_BRICKS, count: 1 },
+    pattern: ['BB', 'BB'],
+    key: { B: Item.NETHER_BRICK },
+  },
+  {
+    kind: 'shapeless',
+    result: { id: Item.NETHER_BRICK, count: 4 },
+    ingredients: [Block.NETHER_BRICKS],
+  },
   // ---- 海晶石族（批次 411）：批次 400 明确记着"这四条没做，原料配比要按 wiki 核"，
   // 现在按原版的形状补上。四条互相咬合（碎片 → 石 → 砖/灯），所以放在一起：
   // 只补其中一条会让另一条的原料在生存里拿不到。

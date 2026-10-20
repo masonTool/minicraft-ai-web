@@ -251,6 +251,7 @@ console.log('\n[配方书列表]');
   check('黏土块烧成陶瓦', smeltOf(Block.CLAY) === Block.TERRACOTTA, String(smeltOf(Block.CLAY)));
   check('石砖烧成裂纹石砖', smeltOf(Block.STONE_BRICKS) === Block.CRACKED_STONE_BRICKS);
   check('玄武岩烧成平滑玄武岩', smeltOf(Block.BASALT) === Block.SMOOTH_BASALT);
+  check('下界岩烧成下界砖（原版里唯一的生存来源）', smeltOf(Block.NETHERRACK) === Item.NETHER_BRICK, String(smeltOf(Block.NETHERRACK)));
   check('每条熔炼配方都有输入与产物', SMELTING_RECIPES.every((recipe) => recipe.input > 0 && recipe.output.id > 0));
 
   // 所有配方的产物与材料都必须有中文名（否则界面会出现英文 id）

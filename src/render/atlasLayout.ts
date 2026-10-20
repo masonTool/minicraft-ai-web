@@ -1050,6 +1050,7 @@ export const TILE_ORDER = [
   'spawn_egg_guardian',
   'spawn_egg_elder_guardian',
   'item_prismarine_shard',
+  'item_nether_brick',
   'item_prismarine_crystals',
   // 骨块（批次 349）
   'bone_block_side',

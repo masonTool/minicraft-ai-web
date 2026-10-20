@@ -203,6 +203,19 @@ export const Item = {
   /** 蜜脾 / 蜂蜜瓶（批次 374）：蜜蜂生态的两件产物 */
   HONEYCOMB: 1524,
   HONEY_BOTTLE: 1525,
+  /**
+   * 下界砖（批次 413）：**1540**，同时把 `MAX_ITEM_ID` 抬到 1545。
+   *
+   * ⚠️ 别在 1526~1538 里找空号——那一段是刷怪蛋（蜜蜂 1526、鹦鹉 1527、
+   * 然后一路到僵尸村民 1538），看着有空其实是别的蛋占着；
+   * 注册表对重复 id 会**当场抛错**（"物品 id 1527 被重复注册：
+   * nether_brick 与 spawn_egg_parrot"），我就是连着踩了两次这么发现的。
+   * 干脆抬上限、用 1540：**新物品排在刷怪蛋之后**，以后再加也不会往蛋堆里插。
+   *
+   * 它解锁的是"下界砖块 ↔ 4 块下界砖"那一对配方：之前这块砖根本不存在，
+   * 所以下界砖块只能靠结构/创造拿到，配方审计里一直挂着它也补不了。
+   */
+  NETHER_BRICK: 1540,
   /** 鞘翅（批次 384）：末地城宝箱的稀有掉落，装备在胸甲槽 */
   ELYTRA: 1539,
   /**
@@ -498,6 +511,7 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.PRISMARINE_CRYSTALS, name: 'minecraft:prismarine_crystals', tile: 'item_prismarine_crystals' },
   { id: Item.HONEYCOMB, name: 'minecraft:honeycomb', tile: 'item_honeycomb' },
   { id: Item.HONEY_BOTTLE, name: 'minecraft:honey_bottle', tile: 'item_honey_bottle', maxStack: 1 },
+  { id: Item.NETHER_BRICK, name: 'minecraft:nether_brick', tile: 'item_nether_brick' },
   { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
@@ -631,7 +645,7 @@ const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, .
 // 批次 259：第二批被动生物要 5 枚新刷怪蛋，原 1500 上限不够（1500~1504 已用），
 // 扩到 1510 留几个空位。批次 265 又要给弩让一格，继续扩到 1520。
 // 这个数只是"数组长度"，扩大不影响已有 id。
-const MAX_ITEM_ID = 1540;
+const MAX_ITEM_ID = 1545;
 
 /** 按 id 索引的物品表（未定义的 id 为 undefined） */
 export const ITEMS: (ItemDef | undefined)[] = new Array(MAX_ITEM_ID).fill(undefined);
