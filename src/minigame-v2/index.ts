@@ -21,6 +21,12 @@ import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { WorldRegistry, type WorldSummary } from '../core/save/WorldRegistry.ts';
+import { OverworldGenerator } from '../core/gen/OverworldGenerator.ts';
+import { planSpawnRegion } from '../core/world/SpawnPoint.ts';
+import { WORLD_SURFACE_Y } from '../core/gen/WorldType.ts';
+import type { WorldType } from '../core/gen/WorldType.ts';
+import type { Difficulty } from '../core/world/Rules.ts';
+import type { GameMode } from '../core/world/GameMode.ts';
 
 /**
  * main 的 World 直接 `new Worker(new URL(...))`。
@@ -95,6 +101,23 @@ const inventory = new Inventory();
 const creativeBlocks = Object.values(Block).filter((value): value is number => typeof value === 'number' && value > 0).slice(0, 45);
 const registry = new WorldRegistry();
 let currentWorld: WorldSummary | null = null;
+let spawn = { x: 0, z: 0, y: 80 };
+const planSpawn = (seed: number, type: WorldType): { x: number; z: number; y: number } => {
+  const generator = new OverworldGenerator(seed, type);
+  return planSpawnRegion(
+    (x, z) => generator.surfaceY(x, z),
+    (x, z) => generator.biomeAt(x, z).name,
+    128,
+    WORLD_SURFACE_Y[type],
+  );
+};
+const WORLD_TYPES: WorldType[] = ['default', 'flat', 'amplified'];
+const WORLD_TYPE_LABELS = ['默认', '超平坦', '放大化'];
+const DIFFICULTIES: Difficulty[] = ['peaceful', 'easy', 'normal', 'hard'];
+const DIFFICULTY_LABELS = ['和平（peaceful）', '简单（easy）', '普通（normal）', '困难（hard）'];
+const GAME_MODES: GameMode[] = ['survival', 'creative'];
+const GAME_MODE_LABELS = ['生存', '创造'];
+const draft = { name: '', seed: '', typeIndex: 0, difficultyIndex: 2, modeIndex: 0 };
 let activeSettingsTab: 'game' | 'controls' | 'appearance' | 'sound' = 'game';
 
 interface V2Settings {
@@ -297,15 +320,132 @@ const mountWorld = (entry: WorldSummary): void => {
   };
   currentWorld = entry;
   registry.update(entry.id, { lastPlayed: Date.now() });
-  spawn.x = 0;
-  spawn.z = 0;
-  physics.teleport(0.5, 80, 0.5);
+  spawn = planSpawn(entry.seed, entry.worldType);
+  physics.teleport(spawn.x + 0.5, spawn.y + 1.01, spawn.z + 0.5);
   playerReady = false;
   started = true;
   paused = false;
   settingsOpen = false;
   inventoryOpen = false;
   showHud();
+};
+
+const askText = async (
+  current: string,
+  maxLength: number,
+): Promise<string | null> => {
+  try {
+    const value = await platform.keyboard.show({ defaultValue: current, maxLength });
+    return value === null ? null : value.slice(0, maxLength);
+  } catch {
+    return null;
+  }
+};
+
+const showCreate = (): void => {
+  const panelW = 800;
+  const panelH = Math.min(640, uiHeight - 32);
+  const panelX = (1024 - panelW) / 2;
+  const panelY = (uiHeight - panelH) / 2;
+  const fieldX = panelX + 230;
+  const fieldW = panelW - 270;
+  let y = panelY + 78;
+  const row = (): number => {
+    const current = y;
+    y += 56;
+    return current;
+  };
+  const nameY = row();
+  const seedY = row();
+  const typeY = row();
+  const difficultyY = row();
+  const modeY = row();
+
+  const textField = (value: string, ry: number, onTap: () => void): UiElement => {
+    return button(fieldX, ry, fieldW, 46, value, onTap, {
+      background: 'rgba(22, 30, 36, 0.95)',
+      border: 'rgba(180, 215, 235, 0.35)',
+      radius: 8,
+    });
+  };
+
+  const hint = (() => {
+    const type = WORLD_TYPES[draft.typeIndex]!;
+    if (type === 'flat') return '只有三层平地：没有树木、村庄与矿石';
+    if (type === 'amplified') return '与默认内容相同，陆地起伏更大、山更高';
+    return '完整世界：群系、树木、矿石、村庄… 生存推荐';
+  })();
+
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
+      box(panelX, panelY, panelW, panelH, [
+        text(panelX + 30, panelY + 20, 400, 44, '新建世界', { fontSize: 30, color: '#ffffff' }),
+        text(panelX + 30, nameY + 12, 190, 32, '名称', { fontSize: 19, color: '#dcecf5' }),
+        textField(draft.name || '世界名称', nameY, () => {
+          void askText(draft.name, 24).then((value) => {
+            if (value !== null) {
+              draft.name = value;
+              showCreate();
+            }
+          });
+        }),
+        text(panelX + 30, seedY + 12, 190, 32, '种子', { fontSize: 19, color: '#dcecf5' }),
+        textField(draft.seed || '留空随机', seedY, () => {
+          void askText(draft.seed, 12).then((value) => {
+            if (value !== null) {
+              draft.seed = value.replace(/[^0-9]/g, '');
+              showCreate();
+            }
+          });
+        }),
+        text(panelX + 30, typeY + 12, 190, 32, '类型', { fontSize: 19, color: '#dcecf5' }),
+        textField(WORLD_TYPE_LABELS[draft.typeIndex]!, typeY, () => {
+          draft.typeIndex = (draft.typeIndex + 1) % WORLD_TYPES.length;
+          showCreate();
+        }),
+        text(panelX + 30, difficultyY + 12, 190, 32, '难度', { fontSize: 19, color: '#dcecf5' }),
+        textField(DIFFICULTY_LABELS[draft.difficultyIndex]!, difficultyY, () => {
+          draft.difficultyIndex = (draft.difficultyIndex + 1) % DIFFICULTIES.length;
+          showCreate();
+        }),
+        text(panelX + 30, modeY + 12, 190, 32, '模式', { fontSize: 19, color: '#dcecf5' }),
+        textField(GAME_MODE_LABELS[draft.modeIndex]!, modeY, () => {
+          draft.modeIndex = (draft.modeIndex + 1) % GAME_MODES.length;
+          showCreate();
+        }),
+        text(panelX + 30, modeY + 56, panelW - 60, 30, hint, {
+          fontSize: 14,
+          color: 'rgba(200, 225, 240, 0.72)',
+        }),
+        button(panelX + 30, panelY + panelH - 58, 220, 44, '返回世界列表', () => showWorlds(), {
+          background: 'rgba(32, 42, 50, 0.95)',
+          border: 'rgba(190, 220, 240, 0.4)',
+          radius: 8,
+        }),
+        button(panelX + panelW - 340, panelY + panelH - 58, 310, 44, '创建并进入', () => {
+          const seed = draft.seed.trim() ? Number(draft.seed) : undefined;
+          const created = registry.create({
+            name: draft.name,
+            seed: seed !== undefined && Number.isFinite(seed) ? seed : undefined,
+            worldType: WORLD_TYPES[draft.typeIndex]!,
+            difficulty: DIFFICULTIES[draft.difficultyIndex]!,
+            gameMode: GAME_MODES[draft.modeIndex]!,
+          });
+          mountWorld(created);
+        }, {
+          background: 'rgba(60, 110, 90, 0.96)',
+          border: 'rgba(190, 235, 215, 0.55)',
+          radius: 8,
+        }),
+      ], {
+        background: 'rgba(16, 22, 28, 0.97)',
+        border: 'rgba(170, 205, 230, 0.45)',
+        borderWidth: 2,
+        radius: 12,
+      }),
+    ]),
+  );
 };
 
 const showWorlds = (): void => {
@@ -323,8 +463,7 @@ const showWorlds = (): void => {
       text(0, 44, 1024, 60, '选择世界', { fontSize: 44, color: '#f2f7fa', align: 'center' }),
       ...buttons,
       button(272, 176 + Math.max(1, Math.min(6, worlds.length)) * 62 + 8, 480, 52, '新建世界', () => {
-        const created = registry.create({});
-        mountWorld(created);
+        showCreate();
       }, { background: 'rgba(60, 110, 90, 0.96)', border: 'rgba(190, 235, 215, 0.55)', radius: 8 }),
       button(272, 176 + Math.max(1, Math.min(6, worlds.length)) * 62 + 72, 480, 46, '返回标题', () => showTitle(), {
         background: 'rgba(32, 42, 50, 0.95)',
@@ -559,7 +698,6 @@ platform.input.onPointer('cancel', release);
 
 camera.rotation.order = 'YXZ';
 
-const spawn = { x: 0, z: 0 };
 let lastTime = performance.now();
 
 const frame = (): void => {
