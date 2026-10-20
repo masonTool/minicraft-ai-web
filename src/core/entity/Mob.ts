@@ -24,6 +24,7 @@ import {
   type MobVoiceId,
 } from '../audio/MobVoices.ts';
 import { shouldChasePlayer } from './ChaseRules.ts';
+import { opensDoors } from './DoorRules.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
 
 /** 与玩家一致的常量（原版数值） */
@@ -1169,6 +1170,10 @@ export class Mob extends Entity {
     // 隐身的玩家不会被盯上（K4 尾巴）：已经追到一半的会停下来（下一帧就不满足条件了）
     const chasing = shouldChasePlayer(chaseInput);
 
+    // 会开门的生物走到门前就把门推开（批次 516）。
+    // 放在寻路之后、移动之前：A* 已经把门当可走格，这里只负责让它真的开
+    if (chasing && opensDoors(this.type.id)) this.openDoorsAhead(ctx);
+
     // 朝向目标的单位方向（批次 93）：**没有路时**给会爬墙的生物直推用（见 `move`）
     if (chasing && player) {
       const length = Math.max(1e-4, Math.sqrt(distanceSq));
@@ -1317,6 +1322,8 @@ export class Mob extends Entity {
           if (this.repathTimer <= 0 && (ctx.canPathSearch?.() ?? true)) {
             const found = this.pathfinder.find(this.x, this.y, this.z, player.x, player.y, player.z, {
               heightBlocks: this.bodyBlocks,
+              // 会开门的生物：把关着的门当可走格（真正开门在 `openDoorsAhead`）
+              isDoor: opensDoors(this.type.id) ? ctx.isClosedDoor : undefined,
             });
             this.path = found ?? [];
             this.pathIndex = 0;
@@ -1503,6 +1510,25 @@ export class Mob extends Entity {
     this.yaw = Math.atan2(dx, dz);
     this.idle = false;
     this.wanderTimer = Math.max(this.wanderTimer, 0.6);
+  }
+
+  /**
+   * 把路径上**前面两格内**的门打开（批次 516）。
+   *
+   * 只认前两格：远处的门提前开等于给玩家报信，而且门自己会关回去
+   * （本项目门不会自动关，但提前开也没有意义）。上下半由主程序的 `openDoor` 一起处理。
+   */
+  private openDoorsAhead(ctx: EntityContext): void {
+    const open = ctx.openDoor;
+    if (!open) return;
+    const end = Math.min(this.path.length, this.pathIndex + 2);
+    for (let i = this.pathIndex; i < end; i++) {
+      const node = this.path[i]!;
+      const distance = Math.hypot(node.x + 0.5 - this.x, node.z + 0.5 - this.z);
+      if (distance > 2.6) break;
+      if (ctx.isClosedDoor?.(node.x, node.y, node.z) !== true) continue;
+      open(node.x, node.y, node.z);
+    }
   }
 
   /** 守卫的攻击冷却（批次 474）：实体自己记，主程序每帧递减 */

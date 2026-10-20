@@ -7156,6 +7156,12 @@ class App {
    * 否则会出现"半扇门"。按形状判定之后，往木材表加一种木头、或以后加铁门，
    * 这里都不用再动。
    */
+  /** 这一格是不是"关着的门"（批次 516）：开着的门本来就不挡路，不用特殊处理 */
+  private isClosedDoorAt(x: number, y: number, z: number): boolean {
+    if (blockDef(this.world.getBlock(x, y, z)).shape !== 'door') return false;
+    return !isDoorOpen(this.world.getBlockState(x, y, z));
+  }
+
   private toggleDoor(x: number, y: number, z: number): void {
     const state = this.world.getBlockState(x, y, z);
     const baseY = isDoorUpper(state) ? y - 1 : y;
@@ -9678,6 +9684,12 @@ class App {
       // 批次 63：拾取要连附加数据一起收（原先只收 id + 数量 → "附魔镐掉地上捡起来变白板"）
       pickup: (itemId, count, extras) => this.inventory.addStack({ id: itemId, count, ...extras }),
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+      // 会开门的生物（村民/灾厄村民，批次 516）：寻路把关着的门当可走格，
+      // 贴近时由 `toggleDoor` 真的推开（它已经处理了上下半与音效）
+      isClosedDoor: (x, y, z) => this.isClosedDoorAt(x, y, z),
+      openDoor: (x, y, z) => {
+        if (this.isClosedDoorAt(x, y, z)) this.toggleDoor(x, y, z);
+      },
       player: { x: this.physics.x, y: this.physics.y, z: this.physics.z },
       // ⚠️ 第 5 个参数是"谁打的"（僵尸 / 箭矢 / 末影水晶…）。漏掉它不会报错，
       // 但左上角与死亡卡片就只剩"受到伤害（没有记录到来源）"——实体层明明传了名字，

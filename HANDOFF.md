@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1082（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1083（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **234**、进行中 **49**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -210,11 +210,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 157 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 158 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 157 套离线测试
+npm test                   # typecheck:tools + vitest + 158 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -226,7 +226,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **157 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **158 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
@@ -323,17 +323,17 @@ npm run agent:setup        # 跨机器自检
   家与工作站坐标随存档与实体寄存往返（脏坐标整份丢弃）。
   `test:villager` 170 → **200 条**；顺带把 `test:spawn` 下界采样 30 → 120 轮（修偶发红灯）。
   ⚠️ 走位是直线、不绕路（村里够用，不占每帧寻路预算）。
-- 批次 511（J11 收口）：**村民恐慌 + 铁傀儡联动**。`VillagerPanic.ts`：僵尸系/灾厄系 10 种为
-  威胁、8 格内取最近、反向跑 6 格；恐慌 5 秒、速度 ×1.35（`Mob.speedMultiplier()` 钩子）。
-  主程序每 0.5 秒扫威胁，恐慌源进 `panicThreats`，**铁傀儡优先打它**；
-  作息排在守卫之前（优先集先生成）。`test:villager` 200 → **227 条**；
-  **J11 勾掉**（233 → **234**、进行中 50 → **49**）。⚠️ 无恐慌粒子/举手、无 gossip。
+- 批次 511（J11 收口）：**村民恐慌 + 铁傀儡联动**。`VillagerPanic.ts`：10 种威胁、8 格内最近、
+  反向跑 6 格、恐慌 5 秒、速度 ×1.35；恐慌源进 `panicThreats`，**铁傀儡优先打它**。
+  `test:villager` 200 → **227 条**；**J11 勾掉**（234 / 49）。⚠️ 无恐慌粒子、无 gossip。
 - 批次 512（J3 第一批）：**目标选择器规则表**。铁傀儡打敌对、野狼捕猎羊兔鸡、驯服狼打敌对；
   `tickGuardians` 不再写死 `iron_golem`。`test:target` **42 条**，套数 155 → **156**。
 - 批次 513（J3 第二批）：**雪傀儡远程雪球**（10 格 / 1.5 秒 / 0 伤害 + 击退，抬升 2.4）。
   `test:target` 42 → **51 条**。⚠️ J3 仍缺：开门、游泳、"被打后追玩家"并入选择器。
-- 批次 514（文档对齐）：修正 12 处过期"还没做"（J8/J13/J11/E22/M21/K10/C7/B33/涂蜡等），
-  并把**末影箱配方换回原版**（8 黑曜石 + 1 末影之眼）。台账口径不变：234 / 49 / 5。
+- 批次 514（文档对齐）：修正 12 处过期"还没做"，并把**末影箱配方换回原版**（8 黑曜石 + 1 末影之眼）。
 - 批次 515（J3 第三批）：**"追玩家"判据抽成纯函数**。`ChaseRules.ts`：`isPacified`
   （记仇优先于亮处中立）+ `shouldChasePlayer`（敌对/中立/光照/记仇/隐身/距离）；`Mob.updateAi`
   只取数不拼 `&&`（行为不变，`test:mob` 146 条原样过）。`test:chase` **26 条**，套数 → **157**。
+- 批次 516（J3 尾巴）：**生物开门**。`DoorRules.ts` + `PathOptions.isDoor` +
+  `EntityContext.openDoor`，主程序复用 `toggleDoor`。`test:doors` **13 条**，套数 → **158**。
+  ⚠️ J3 只剩游泳。

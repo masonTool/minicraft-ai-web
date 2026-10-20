@@ -2870,7 +2870,10 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       （敌对/中立/亮处/记仇/隐身/距离六维，`isPacified` + `shouldChasePlayer`），
       `Mob.updateAi` 只负责取光照与距离，不再自己拼 `&&`。行为与之前一致
       （`test:mob` 146 条原样通过），`test:chase` **26 条**。
-      **仍缺**：开门、游泳（寻路细节）。
+      —— **批次 516 补上开门**：`DoorRules.ts`（村民/掠夺者/卫道士/唤魔者/幻术师/女巫
+      会开木门）+ `PathOptions.isDoor`（关着的门算可走格）+ `EntityContext.openDoor`；
+      主程序复用 `toggleDoor`（上下半与音效一处处理）。`test:doors` **13 条**。
+      **仍缺**：游泳（寻路细节）。
 - [x] J4 敌对生物：**已实现**僵尸/骷髅/苦力怕 + 末影龙
       —— **批次 508 口径校准：本条已完整**（`mobs.ts` 里 shulker / evoker / witch /
       illusioner / guardian / elder_guardian 都有定义，配合结构生物通道生成）（`core/entity/EndBoss.ts`：盘旋 → 俯冲 →

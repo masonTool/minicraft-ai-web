@@ -32,6 +32,13 @@ export interface PathOptions {
   maxFall?: number;
   /** 单次搜索扩展的最大节点数（防止极端地形下卡住） */
   maxNodes?: number;
+  /**
+   * 这一格是不是**关着的木门**（批次 516，会开门的生物才传）。
+   *
+   * 关着的门在方块表里是实心的，不特殊处理就永远走不过去；
+   * 传了它之后 A* 会把门当作可走格，由实体在贴近时真的把门打开。
+   */
+  isDoor?: (x: number, y: number, z: number) => boolean;
 }
 
 const WORLD_BOTTOM = -64;
@@ -87,17 +94,35 @@ export class Pathfinder {
     return blockDef(this.world.getBlock(x, y, z)).solid;
   }
 
-  private isPassable(x: number, y: number, z: number, height: number): boolean {
+  /** 身体那一格挡不挡路（门在"会开门"的搜索里不算挡路） */
+  private blocksMove(x: number, y: number, z: number, isDoor?: (bx: number, by: number, bz: number) => boolean): boolean {
+    if (!this.isSolid(x, y, z)) return false;
+    return !(isDoor?.(x, y, z) ?? false);
+  }
+
+  private isPassable(
+    x: number,
+    y: number,
+    z: number,
+    height: number,
+    isDoor?: (bx: number, by: number, bz: number) => boolean,
+  ): boolean {
     for (let i = 0; i < height; i++) {
-      if (this.isSolid(x, y + i, z)) return false;
+      if (this.blocksMove(x, y + i, z, isDoor)) return false;
     }
     return true;
   }
 
   /** 该位置能否站立：脚下有实心支撑，且身体空间通行 */
-  canStandAt(x: number, y: number, z: number, height = 2): boolean {
+  canStandAt(
+    x: number,
+    y: number,
+    z: number,
+    height = 2,
+    isDoor?: (bx: number, by: number, bz: number) => boolean,
+  ): boolean {
     if (!this.isSolid(x, y - 1, z)) return false;
-    return this.isPassable(x, y, z, height);
+    return this.isPassable(x, y, z, height, isDoor);
   }
 
   /**
@@ -167,7 +192,7 @@ export class Pathfinder {
         return this.reconstruct(current);
       }
 
-      this.collectNeighbors(current, height, maxFall);
+      this.collectNeighbors(current, height, maxFall, options.isDoor);
       for (const neighbor of this.neighborBuffer) {
         const neighborKey = keyOf(neighbor.x, neighbor.y, neighbor.z);
         if (closed.has(neighborKey)) continue;
@@ -199,7 +224,12 @@ export class Pathfinder {
     return null;
   }
 
-  private collectNeighbors(node: SearchNode, height: number, maxFall: number): void {
+  private collectNeighbors(
+    node: SearchNode,
+    height: number,
+    maxFall: number,
+    isDoor?: (bx: number, by: number, bz: number) => boolean,
+  ): void {
     const out = this.neighborBuffer;
     out.length = 0;
 
@@ -211,24 +241,26 @@ export class Pathfinder {
 
       if (diagonal) {
         // 不允许从两个实心方块的夹角斜穿过去
-        const blockedA = this.isSolid(nx, node.y, node.z) && this.isSolid(nx, node.y + 1, node.z);
-        const blockedB = this.isSolid(node.x, node.y, nz) && this.isSolid(node.x, node.y + 1, nz);
+        const blockedA =
+          this.blocksMove(nx, node.y, node.z, isDoor) && this.blocksMove(nx, node.y + 1, node.z, isDoor);
+        const blockedB =
+          this.blocksMove(node.x, node.y, nz, isDoor) && this.blocksMove(node.x, node.y + 1, nz, isDoor);
         if (blockedA || blockedB) continue;
       }
 
       // 1) 同一层直接走
-      if (this.canStandAt(nx, node.y, nz, height)) {
+      if (this.canStandAt(nx, node.y, nz, height, isDoor)) {
         out.push({ x: nx, y: node.y, z: nz, cost: stepCost });
         continue;
       }
       // 2) 上一层（跳一格的台阶）
-      if (this.canStandAt(nx, node.y + 1, nz, height)) {
+      if (this.canStandAt(nx, node.y + 1, nz, height, isDoor)) {
         out.push({ x: nx, y: node.y + 1, z: nz, cost: stepCost + 0.6 });
         continue;
       }
       // 3) 往下落（最多 maxFall 格）
       for (let drop = 1; drop <= maxFall; drop++) {
-        if (this.canStandAt(nx, node.y - drop, nz, height)) {
+        if (this.canStandAt(nx, node.y - drop, nz, height, isDoor)) {
           out.push({ x: nx, y: node.y - drop, z: nz, cost: stepCost + drop * 0.4 });
           break;
         }

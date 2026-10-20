@@ -96,6 +96,14 @@ export interface EntityContext {
   /** 读取方块 id（生物寻路用） */
   getBlock: (x: number, y: number, z: number) => number;
   /**
+   * 这一格是不是**关着的木门**（批次 516）。
+   *
+   * 会开门的生物（村民/灾厄村民）寻路时把门当可走格；不传就当"没有门"。
+   */
+  isClosedDoor?: (x: number, y: number, z: number) => boolean;
+  /** 把这一格门打开（上下半一起；批次 516） */
+  openDoor?: (x: number, y: number, z: number) => void;
+  /**
    * 这一帧还允不允许再跑一次 A*（批次 500）。
    *
    * 主程序按"每帧预算"回答（`PATH_SEARCH_BUDGET_PER_FRAME` 次）；**不传 = 不限**，
