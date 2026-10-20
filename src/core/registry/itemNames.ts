@@ -14,7 +14,7 @@
  * 文案是给界面用的，两者改动的理由和频率都不一样。
  */
 
-import { BLOCKS, COPPER_STAGES, CORAL_KIND_CN } from './blocks.ts';
+import { BLOCKS, COPPER_STAGES, CORAL_KIND_CN, blockHardness } from './blocks.ts';
 import {
   CATEGORY_LABELS,
   categoryOf,
@@ -32,7 +32,13 @@ import { tippedArrowEffects } from '../survival/TippedArrow.ts';
 import { SPAWN_EGG_SPECS, spawnEggTile } from './spawnEggs.ts';
 import { enchantmentById, romanLevel } from './enchantments.ts';
 import { FOOD_TABLE, saturationFrom } from './food.ts';
-import { TOOL_SPECS, durabilityLabel, toolInfoById } from './tools.ts';
+import {
+  TOOL_SPECS,
+  durabilityLabel,
+  efficientToolType,
+  harvestRequirement,
+  toolInfoById,
+} from './tools.ts';
 import { durabilityBar, rarityOf, type ItemRarity } from './itemVisuals.ts';
 
 // ---------------------------------------------------------------- 规则生成
@@ -876,6 +882,8 @@ for (const [id, name] of Object.entries(REDSTONE_CN)) put(id, name);
  * 普通建材不写（写"一种方块"没有意义）。
  */
 const DESCRIPTIONS: Record<string, string> = {
+  // 平滑石头（批次 528，用户点名）：它没有专门说明时只剩标题 + 英文 id
+  smooth_stone: '由石头在熔炉里烧成的平滑建材；也用来合成铁砧。',
   coal: '燃料：能烧炼 8 个物品；也是火把的主要材料。',
   charcoal: '燃料：能烧炼 8 个物品；用原木在熔炉里烧出来，去不了煤矿时的替代品。',
   stick: '合成材料：工具手柄、火把、梯子、栅栏都要它。',
@@ -1382,6 +1390,109 @@ export function itemDescription(itemId: number): string {
   return DESCRIPTIONS[key] ?? '';
 }
 
+/** 方块形状的一句话说明（通用说明用；没列到的走"完整方块"） */
+const BLOCK_SHAPE_HINTS: Readonly<Record<string, string>> = {
+  slab: '台阶：只占半格高，可以上下叠成完整方块。',
+  stairs: '楼梯：可以朝四个方向摆，走上去会自动上台阶。',
+  fence: '栅栏：能挡住玩家与生物，但挡不住跳跃。',
+  wall: '墙：会连接相邻的墙与方块，比完整方块矮一点。',
+  door: '门：占两格高，右键开关；僵尸能撞开木门。',
+  trapdoor: '活板门：一格薄板，右键开关，可以贴地或贴顶。',
+  fence_gate: '栅栏门：右键开关，开着时中间能走过去。',
+  torch: '火把：能贴在方块顶面或侧面，提供光照。',
+  ladder: '梯子：贴在墙上，可以攀爬。',
+  rail: '铁轨：铺在地上供矿车行驶。',
+  banner: '旗帜：占两格高，可以染色。',
+  pane: '薄板：占一格宽、很薄，可以当窗或隔断。',
+  cross: '植物：没有碰撞，可以从中间走过去；通常要种在土/沙/水上。',
+  coral_fan: '珊瑚扇：一片薄薄的扇形，能落在方块顶上或贴在侧面。',
+  head: '头：只占半格见方，可以放在方块顶面。',
+  cactus: '仙人掌：四面向内缩，碰到会受伤。',
+  lantern: '灯笼：落地的小灯，会发光。',
+  flat: '薄片：只占 1/16 格高，通常不挡路。',
+  lily_pad: '睡莲：浮在水面上的薄叶片，可以站上去。',
+  composter: '堆肥桶：可以把植物类物品堆成骨粉。',
+  bell: '钟：立在地上，右键敲响。',
+  armor_stand: '盔甲架：可以挂上盔甲与手持物品。',
+  cave_vines: '洞穴藤蔓：从洞顶垂下来，可以攀爬。',
+  snow: '雪层：可以一层层叠高，踩上去会陷下去一点。',
+};
+
+/** 方块采集等级的中文名（0 = 木/金） */
+const HARVEST_TIER_CN = ['木/金', '石', '铁', '钻石', '下界合金'] as const;
+/** 工具种类的中文名 */
+const TOOL_KIND_CN: Readonly<Record<string, string>> = {
+  pickaxe: '镐',
+  axe: '斧',
+  shovel: '锹',
+  hoe: '锄',
+  sword: '剑',
+  shears: '剪刀',
+  trident: '三叉戟',
+};
+
+/**
+ * 通用物品说明（批次 528）。
+ *
+ * 背景：`DESCRIPTIONS` 只给"有信息量"的物品手写了文案，其余物品的提示框
+ * 只剩标题 + 英文 id + 类别。用户点平滑石头时看到的就是这种空说明。
+ *
+ * 这里**按注册表里的真实数据**拼一段兜底说明：方块形状、采集要求、
+ * 是否发光/液体/可穿过、食物数值、工具/盔甲属性。它不是手写文案的替代品，
+ * 但保证任何一件物品点开都有可读内容，而且不会写错数值。
+ */
+export function genericItemDescription(itemId: number): string {
+  const def = itemDef(itemId);
+  if (!def) return '';
+  const category = `分类：${categoryLabel(itemId)}。`;
+
+  if (def.block !== undefined) {
+    const block = BLOCKS[def.block];
+    if (block) {
+      const parts: string[] = [BLOCK_SHAPE_HINTS[block.shape] ?? '完整方块：可以铺地、砌墙，也能用来搭建筑。'];
+      if (block.liquid) {
+        parts.push('液体：可以用桶装起来。');
+      } else {
+        if (block.light > 0) parts.push(`自身发光（亮度 ${block.light}），可以照亮周围。`);
+        if (!block.solid) parts.push('没有碰撞，可以从中间走过去。');
+        const hardness = blockHardness(block.id);
+        if (hardness < 0) {
+          parts.push('不可破坏：生存模式里挖不动。');
+        } else {
+          const need = harvestRequirement(block.id);
+          const fast = efficientToolType(block.id);
+          if (need) {
+            const tier = HARVEST_TIER_CN[need.tier] ?? String(need.tier);
+            const tool = TOOL_KIND_CN[need.tool] ?? need.tool;
+            parts.push(`采集：需要${tier}${tool}以上；等级不够时挖得动，但不会掉落。`);
+          } else if (fast) {
+            const tool = TOOL_KIND_CN[fast] ?? fast;
+            parts.push(`采集：徒手也能挖下来，用${tool}会更快。`);
+          } else {
+            parts.push('采集：徒手即可挖下来。');
+          }
+        }
+      }
+      parts.push(category);
+      return parts.join(' ');
+    }
+  }
+
+  const parts: string[] = [];
+  if (def.food) {
+    parts.push(`食物：恢复 ${def.food.hunger} 点饥饿值。`);
+  } else if (def.tool) {
+    const kind = TOOL_KIND_CN[def.tool.type] ?? def.tool.type;
+    parts.push(`工具/武器（${kind}）：耐久 ${def.tool.durability}。`);
+  } else if (def.armor) {
+    parts.push(`盔甲：提供 ${def.armor.defense} 点护甲值，耐久 ${def.armor.durability}。`);
+  }
+  parts.push(category);
+  if (def.maxStack > 0) parts.push(`最多 ${def.maxStack} 个/格。`);
+  parts.push('可以在配方书里查看它由什么合成、或能用来做什么。');
+  return parts.join('');
+}
+
 /** 是否有专门写过的说明（界面用它决定要不要额外显示"类别/堆叠"那行） */
 export function hasDescription(itemId: number): boolean {
   const def = itemDef(itemId);
@@ -1433,7 +1544,11 @@ export function itemTooltip(
   const rawName = def?.name ?? 'unknown';
   // 工具与盔甲都用同一个 damage 字段存耐久，这里一并取出来显示
   const durable = toolInfoById(itemId) ?? armorInfoById(itemId);
-  const description = itemDescription(itemId);
+  // 手写说明优先；没有手写文案时用注册表数据生成一段兜底说明（批次 528），
+  // 保证提示框不再只剩"标题 + 英文 id"。
+  const explicitDescription = itemDescription(itemId);
+  const description =
+    explicitDescription.length > 0 ? explicitDescription : genericItemDescription(itemId);
   const durability = durable && damage !== undefined ? durabilityLabel(durable, damage) : '';
   const bar = durabilityBar(damage, durable?.durability ?? 0);
   // 附魔逐条列出（`效率 IV`、`耐久 III`），由界面一条一行地排——
@@ -1449,7 +1564,9 @@ export function itemTooltip(
     enchants: enchantLines,
     // 附魔的东西按"稀有"上色（与 `rarityOf` 同一个判断）
     rarity: rarityOf(itemId, enchants),
-    showMeta: description.length === 0 && durability.length === 0 && enchantLines.length === 0,
+    // 类别/堆叠那行的判据仍然看"有没有手写说明"：兜底说明是通用描述，
+    // 类别与堆叠上限仍然是额外信息，不该被它顶掉。
+    showMeta: explicitDescription.length === 0 && durability.length === 0 && enchantLines.length === 0,
     category: categoryLabel(itemId),
     maxStack: maxStackOf(itemId),
     count,

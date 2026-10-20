@@ -108,8 +108,9 @@ console.log('\n[物品说明]');
   check('钻石矿石的说明提到挖矿层级', itemDescription(Block.DIAMOND_ORE).includes('铁镐'));
   check('深层铁矿有专门说明', hasDescription(Block.DEEPSLATE_IRON_ORE) && itemDescription(Block.DEEPSLATE_IRON_ORE).includes('深板岩'));
   check('工作台说明提到合成', itemDescription(Block.CRAFTING_TABLE).includes('合成'));
-  // 普通建材没有专门说明：说明是空串，信息交给提示框的"类别 / 堆叠"那一行（避免两行重复）
-  check('普通建材不写说明，交给类别行兜底', !hasDescription(Block.GRANITE) && itemDescription(Block.GRANITE) === '');
+  // 普通建材没有**手写**说明；批次 528 起提示框用注册表数据生成一段兜底说明，
+  // 所以 `itemDescription` 仍为空，但 `itemTooltip().description` 不再是空串。
+  check('普通建材没有手写说明（保留 hasDescription 语义）', !hasDescription(Block.GRANITE) && itemDescription(Block.GRANITE) === '');
 
   const tooltip = itemTooltip(Item.COAL, 12);
   check('提示框：标题是中文名', tooltip.title === '煤炭', tooltip.title);
@@ -118,7 +119,20 @@ console.log('\n[物品说明]');
   check('提示框：专门写过说明时不再重复显示类别行', tooltip.showMeta === false);
 
   const plain = itemTooltip(Block.GRANITE);
-  check('提示框：没写过说明的只显示类别行，说明为空', plain.showMeta === true && plain.description === '');
+  check(
+    '提示框：没写过说明也有兜底文案（不再是空说明）',
+    plain.showMeta === true && plain.description.length > 0 && plain.description.includes('方块'),
+    plain.description,
+  );
+  const smooth = itemTooltip(Block.SMOOTH_STONE);
+  check(
+    '平滑石头有专门说明（熔炉烧制 / 铁砧）',
+    smooth.description.includes('熔炉') && smooth.description.includes('铁砧'),
+    smooth.description,
+  );
+  // 任何一件创造物品点开都不能只有标题 + 英文 id
+  const empty = CREATIVE_ITEMS.filter((id) => itemTooltip(id).description.length === 0);
+  check('所有创造物品都有可读说明', empty.length === 0, `空说明 ${empty.length} 件`);
 }
 
 // ---------------------------------------------------------------- 3. 材料清单
