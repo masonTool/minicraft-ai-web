@@ -92,7 +92,12 @@ export interface MeshResponse {
 }
 
 export type WorkerRequest = GenerateRequest | MeshRequest;
-export type WorkerResponse = GenerateResponse | MeshResponse;
+export interface PongResponse {
+  type: 'pong';
+  id: number;
+}
+
+export type WorkerResponse = GenerateResponse | MeshResponse | PongResponse;
 
 /** 只依赖几何体的读取接口，避免 Worker 里引入 three 的类型 */
 interface GeometryLike {
@@ -229,10 +234,19 @@ interface WorkerScope {
   addEventListener(type: 'message', listener: (event: MessageEvent<WorkerRequest>) => void): void;
 }
 
-const ctx = self as unknown as WorkerScope;
-
-ctx.addEventListener('message', (event) => {
-  const req = event.data;
+/**
+ * 纯消息处理：Worker 入口与主线程降级共用。
+ *
+ * 这是 additive 平台 seam：Web Worker 行为不变，平台层可以 import 本函数
+ * 在主线程执行同一套生成/网格化逻辑。
+ */
+export function handleWorkerRequest(req: WorkerRequest): {
+  response: WorkerResponse;
+  transfer: Transferable[];
+} {
+  if (!req || typeof req !== 'object' || typeof req.type !== 'string') {
+    return { response: { type: 'pong', id: 0 }, transfer: [] };
+  }
 
   if (req.type === 'generate') {
     const blocks = generateChunkBlocks(
@@ -249,18 +263,32 @@ ctx.addEventListener('message', (event) => {
       id: req.id,
       cx: req.cx,
       cz: req.cz,
-      // 转移所有权：零拷贝交给主线程
       blocks: blocks.buffer as ArrayBuffer,
       states: states ? (states.buffer as ArrayBuffer) : null,
     };
     const transfer: Transferable[] = [response.blocks];
     if (response.states) transfer.push(response.states);
-    ctx.postMessage(response, transfer);
-    return;
+    return { response, transfer };
   }
 
   if (req.type === 'mesh') {
-    const { response, transfer } = meshChunk(req);
-    ctx.postMessage(response, transfer);
+    return meshChunk(req);
   }
-});
+
+  return { response: { type: 'pong', id: 0 }, transfer: [] };
+}
+
+// 只有真正的 Worker 作用域才注册监听：
+// - Web Worker / wx worker 里没有 document；
+// - 主线程（Web 或小游戏 fake DOM）有 document，不能在这里注册。
+const ctx =
+  typeof self !== 'undefined' && typeof document === 'undefined'
+    ? (self as unknown as WorkerScope)
+    : null;
+
+if (ctx) {
+  ctx.addEventListener('message', (event) => {
+    const { response, transfer } = handleWorkerRequest(event.data);
+    ctx.postMessage(response, transfer);
+  });
+}
