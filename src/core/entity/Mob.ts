@@ -1505,9 +1505,22 @@ export class Mob extends Entity {
   /** 守卫的攻击冷却（批次 474）：实体自己记，主程序每帧递减 */
   guardCooldown = 0;
 
+  /**
+   * 移动速度倍率（批次 511）：默认 1；子类可覆盖。
+   *
+   * 第一个用户是村民恐慌（×1.35）。做成钩子而不是给 `Mob` 加 `panicking` 字段，
+   * 是因为"恐慌"只属于村民，基类不该认识它。
+   */
+  protected speedMultiplier(): number {
+    return 1;
+  }
+
   protected move(chasing: boolean, dt: number): void {
     // 状态效果直接乘在速度上：缓慢 -15%/级、速度 +20%/级（数值来自 `StatusEffects`，与玩家同源）
-    const speed = (chasing ? this.type.speed * 1.12 : this.type.speed * 0.5) * this.effects.moveSpeedMultiplier();
+    const speed =
+      (chasing ? this.type.speed * 1.12 : this.type.speed * 0.5) *
+      this.effects.moveSpeedMultiplier() *
+      this.speedMultiplier();
     let targetVx = 0;
     let targetVz = 0;
 

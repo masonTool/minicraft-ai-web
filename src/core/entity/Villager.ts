@@ -37,6 +37,11 @@ import {
   type VillagerProfessionId,
 } from '../registry/villagerTrades.ts';
 import { VILLAGER_TYPE } from './mobs.ts';
+import {
+  VILLAGER_PANIC_SECONDS,
+  VILLAGER_PANIC_SPEED,
+  fleePointFrom,
+} from './VillagerPanic.ts';
 
 /** 无业村民隔多久再找一次工作站（秒，带随机抖动，免得一村人同时扫） */
 const CLAIM_RETRY_MIN = 2;
@@ -90,6 +95,11 @@ export class Villager extends Mob {
   home: WorkstationPos | null = null;
 
   private claimTimer = CLAIM_RETRY_MIN + Math.random() * (CLAIM_RETRY_MAX - CLAIM_RETRY_MIN);
+
+  /** 恐慌剩余秒数（批次 511）；> 0 时由主程序驱动逃跑 */
+  private panicTimer = 0;
+  /** 逃跑目标（世界坐标） */
+  private fleeTarget: { x: number; z: number } | null = null;
 
   constructor(x: number, y: number, z: number) {
     super(VILLAGER_TYPE, x, y, z);
@@ -229,6 +239,7 @@ export class Villager extends Mob {
 
   override tick(ctx: EntityContext, dt: number): void {
     super.tick(ctx, dt);
+    this.advancePanic(dt);
     if (this.dead) return;
 
     // "嗯…" 的环境叫（批次 232 起）由 `Mob.tickVoice` 统一负责：
@@ -247,6 +258,47 @@ export class Villager extends Mob {
     this.assignProfession(profession.id, { x: found.x, y: found.y, z: found.z });
     ctx.spawnHearts?.(this.x, this.y + this.type.height, this.z, 0.6);
     ctx.playMobVoice?.('villager', 'ambient', this.x, this.y + this.type.height * 0.6, this.z);
+  }
+
+  get panicking(): boolean {
+    return this.panicTimer > 0;
+  }
+
+  get panicSeconds(): number {
+    return this.panicTimer;
+  }
+
+  /**
+   * 看到威胁：记下恐慌计时并算出逃跑目标（批次 511）。
+   *
+   * 每次重新看到都会**刷新计时与方向**：威胁一直跟着，就该一直跑；
+   * 目标点每次按当前位置重算，不会"朝一个已经跑过头的老坐标跑"。
+   */
+  panicFrom(threatX: number, threatZ: number): void {
+    this.panicTimer = VILLAGER_PANIC_SECONDS;
+    this.fleeTarget = fleePointFrom(this.x, this.z, threatX, threatZ);
+  }
+
+  /** 朝逃跑目标走一步（主程序每 0.5 秒调一次） */
+  panicStep(): void {
+    if (!this.fleeTarget) return;
+    this.walkToward(this.fleeTarget.x, this.fleeTarget.z);
+  }
+
+  /** 恐慌计时递减（抽出来是为了能离线断言，不必构造 EntityContext） */
+  advancePanic(dt: number): void {
+    if (this.panicTimer <= 0) return;
+    this.panicTimer = Math.max(0, this.panicTimer - dt);
+    if (this.panicTimer === 0) this.fleeTarget = null;
+  }
+
+  protected override speedMultiplier(): number {
+    return this.panicking ? VILLAGER_PANIC_SPEED : 1;
+  }
+
+  /** 调试与断言用：当前移动倍率（恐慌时 1.35，平时 1） */
+  get movementScale(): number {
+    return this.speedMultiplier();
   }
 
   /** 设家（床脚）：村庄人口在生成时调用（批次 510） */

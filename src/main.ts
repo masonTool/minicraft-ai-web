@@ -127,6 +127,7 @@ import { isVillagerFood, levelName, recordTradeUse, tradeBlocker, tradeDemand, t
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
 import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
 import { routineTarget, villagerArrived, villagerRoutine } from './core/world/VillagerRoutine.ts';
+import { isPanicThreat, nearestPanicThreat } from './core/entity/VillagerPanic.ts';
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
 // 刷怪笼里旋转的迷你生物（批次 487）：收集逻辑是纯函数，渲染在 MobRenderer
 import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
@@ -8265,8 +8266,29 @@ class App {
    * 到点后 `standStill()`，否则游荡 AI 马上又把人带走。
    */
   private tickVillagerRoutine(): void {
+    // 恐慌（批次 511）：先把附近的威胁收一遍，再逐只村民决定"跑还是上班"
+    const threats: Array<{ typeId: string; x: number; z: number; mob: Mob }> = [];
+    for (const entity of this.entities.all) {
+      if (entity instanceof Mob && !entity.dead && isPanicThreat(entity.type.id)) {
+        threats.push({ typeId: entity.type.id, x: entity.x, z: entity.z, mob: entity });
+      }
+    }
+    this.panicThreats.clear();
+
     for (const entity of this.entities.all) {
       if (!(entity instanceof Villager) || entity.dead || entity.baby) continue;
+
+      const threatened = threats.length > 0 ? nearestPanicThreat(entity.x, entity.z, threats) : null;
+      if (threatened) {
+        entity.panicFrom(threatened.x, threatened.z);
+        // 正在威胁村民的那一只，铁傀儡优先处理（见 `tickGuardians`）
+        this.panicThreats.add(threatened.mob);
+      }
+      if (entity.panicking) {
+        entity.panicStep();
+        continue;
+      }
+
       const mode = villagerRoutine(this.timeOfDay, entity.workstation !== null, entity.home !== null);
       const target = routineTarget(mode, entity.home, entity.workstation);
       if (!target) continue;
@@ -8280,6 +8302,8 @@ class App {
 
   /** 村民作息的下一次刷新倒计时（秒，批次 510） */
   private villagerRoutineTimer = 0;
+  /** 正在威胁村民的生物（批次 511）：铁傀儡优先打这一批 */
+  private readonly panicThreats = new Set<Mob>();
 
   private tickGuardians(context: EntityContext, dt: number): void {
     const hostiles: Mob[] = [];
@@ -8290,7 +8314,12 @@ class App {
     for (const entity of this.entities.all) {
       if (!(entity instanceof Mob) || entity.dead || entity.type.id !== 'iron_golem') continue;
       entity.guardCooldown = Math.max(0, entity.guardCooldown - dt);
-      const hit = nearestHostileTarget(entity, hostiles, GUARD_RANGE, (mob) => mob.type.hostile);
+      // 批次 511：先打"正在威胁村民"的那一只；没有这样的目标再退回"最近的敌对生物"
+      const priority = hostiles.filter((mob) => this.panicThreats.has(mob));
+      const hit =
+        (priority.length > 0
+          ? nearestHostileTarget(entity, priority, GUARD_RANGE, (mob) => mob.type.hostile)
+          : null) ?? nearestHostileTarget(entity, hostiles, GUARD_RANGE, (mob) => mob.type.hostile);
       if (!hit) continue;
       // 无论远近都先朝它走：距离够了再由下面的分支出手
       entity.guardToward(hit.target.x, hit.target.z);
@@ -9761,14 +9790,15 @@ class App {
     this.tickRaid(dt);
     // 掠夺者巡逻队（批次 476）：与袭击互不影响，只是另一组会游荡的怪
     this.tickPatrol(dt);
-    // 村庄守卫（批次 474）：铁傀儡在实体 tick **之前**拿到指令（朝谁走、打不打），
-    // 实体自己只负责按 `moveDir` 移动——见 `Mob.guardToward` 的注释
-    this.tickGuardians(context, dt);
-    // 村民作息（批次 510）：同样是"实体 tick 之前下指令"，每 0.5 秒一次
+    // 村民作息与恐慌（批次 510/511）：先算村民这一侧——恐慌集会决定
+    // 铁傀儡的优先目标，所以要排在 `tickGuardians` 之前
     if ((this.villagerRoutineTimer -= dt) <= 0) {
       this.villagerRoutineTimer = 0.5;
       this.tickVillagerRoutine();
     }
+    // 村庄守卫（批次 474）：铁傀儡在实体 tick **之前**拿到指令（朝谁走、打不打），
+    // 实体自己只负责按 `moveDir` 移动——见 `Mob.guardToward` 的注释
+    this.tickGuardians(context, dt);
     // 每帧重置寻路预算（批次 500）：放在实体 tick 之前，`canPathSearch` 才能正确递减
     this.pathSearchesLeft = PATH_SEARCH_BUDGET_PER_FRAME;
     this.entities.update(context, dt);

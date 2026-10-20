@@ -40,6 +40,15 @@ import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
 import { advancementById } from '../src/core/progress/advancements.ts';
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import {
+  VILLAGER_FLEE_DISTANCE,
+  VILLAGER_PANIC_RADIUS,
+  VILLAGER_PANIC_SECONDS,
+  VILLAGER_PANIC_SPEED,
+  fleePointFrom,
+  isPanicThreat,
+  nearestPanicThreat,
+} from '../src/core/entity/VillagerPanic.ts';
+import {
   VILLAGER_ARRIVE_RADIUS,
   VILLAGER_WORK_END,
   VILLAGER_WORK_START,
@@ -830,6 +839,75 @@ console.log('\n[接线守卫]');
     '作息在实体 tick 之前',
     mainSrc.indexOf('this.tickVillagerRoutine()') < mainSrc.indexOf('this.entities.update(context, dt)'),
   );
+}
+
+
+// ---------------------------------------------------------------- 恐慌（批次 511）
+
+console.log('\n[恐慌：谁会吓到村民]');
+{
+  const scared = ['zombie', 'husk', 'drowned', 'zombie_villager', 'pillager', 'vindicator', 'evoker', 'illusioner', 'ravager', 'vex'];
+  const calm = ['creeper', 'skeleton', 'spider', 'sheep', 'villager', 'iron_golem'];
+  check('僵尸系与灾厄系都会吓到村民', scared.every((id) => isPanicThreat(id)), scared.filter((id) => !isPanicThreat(id)).join(','));
+  check('苦力怕/骷髅/蜘蛛不会（原版也不恐慌）', calm.every((id) => !isPanicThreat(id)), calm.filter((id) => isPanicThreat(id)).join(','));
+
+  const candidates = [
+    { typeId: 'sheep', x: 1, z: 0 },
+    { typeId: 'zombie', x: 5, z: 0 },
+    { typeId: 'vindicator', x: 3, z: 0 },
+  ];
+  equal('取最近的威胁（忽略非威胁）', nearestPanicThreat(0, 0, candidates)?.typeId, 'vindicator');
+  equal('半径内没有就 null', nearestPanicThreat(0, 0, [{ typeId: 'zombie', x: 9, z: 0 }]), null);
+  check('刚好在半径上算看见', nearestPanicThreat(0, 0, [{ typeId: 'zombie', x: VILLAGER_PANIC_RADIUS, z: 0 }]) !== null);
+  check('超出半径不算', nearestPanicThreat(0, 0, [{ typeId: 'zombie', x: VILLAGER_PANIC_RADIUS + 0.1, z: 0 }]) === null);
+}
+
+console.log('\n[恐慌：往哪跑]');
+{
+  const point = fleePointFrom(2, 0, 0, 0);
+  equal('朝远离威胁的方向', point.x, 2 + VILLAGER_FLEE_DISTANCE);
+  equal('z 方向不偏', point.z, 0);
+  check('距离等于逃跑距离', Math.abs(Math.hypot(point.x - 2, point.z) - VILLAGER_FLEE_DISTANCE) < 1e-9);
+  const same = fleePointFrom(4, 4, 4, 4);
+  equal('贴在同一格时朝 +X 跑（不产生 NaN）', same.x, 4 + VILLAGER_FLEE_DISTANCE);
+  equal('贴在同一格时 z 不变', same.z, 4);
+}
+
+console.log('\n[恐慌：计时与加速]');
+{
+  const villager = new Villager(0, 64, 0);
+  equal('平时速度倍率 1', villager.movementScale, 1);
+  check('平时不恐慌', !villager.panicking);
+
+  villager.panicFrom(5, 0);
+  check('看到威胁就恐慌', villager.panicking);
+  equal('恐慌时长', villager.panicSeconds, VILLAGER_PANIC_SECONDS);
+  equal('恐慌时速度倍率', villager.movementScale, VILLAGER_PANIC_SPEED);
+
+  villager.advancePanic(2);
+  equal('两秒后还剩三秒', villager.panicSeconds, 3);
+  villager.advancePanic(10);
+  equal('超时归零', villager.panicSeconds, 0);
+  check('归零后不再恐慌', !villager.panicking);
+  equal('速度回到 1', villager.movementScale, 1);
+  villager.advancePanic(5);
+  equal('没有恐慌时递减也不出负数', villager.panicSeconds, 0);
+  villager.panicStep();
+  check('没有逃跑目标时 panicStep 不抛异常', true);
+}
+
+console.log('\n[恐慌：接线守卫]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('主程序识别恐慌威胁', mainSrc.includes('isPanicThreat(entity.type.id)'));
+  check('恐慌源被记进优先集', mainSrc.includes('this.panicThreats.add(threatened.mob)'));
+  check(
+    '作息先于守卫结算（优先集要先生成）',
+    mainSrc.indexOf('this.tickVillagerRoutine();') < mainSrc.indexOf('this.tickGuardians(context, dt);'),
+  );
+  check('铁傀儡优先打恐慌源', mainSrc.includes('this.panicThreats.has(mob)'));
+  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  check('基类留了速度倍率钩子', mobSrc.includes('this.speedMultiplier()'));
 }
 
 // ---------------------------------------------------------------- 收尾
