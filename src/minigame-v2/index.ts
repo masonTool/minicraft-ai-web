@@ -1944,10 +1944,30 @@ const frame = (): void => {
 const wxTestApi = (globalThis as unknown as { wx?: { __v2Test?: unknown } }).wx;
 if (wxTestApi) {
   wxTestApi.__v2Test = {
+    clearInventory: () => {
+      for (let i = 0; i < 36; i++) inventory.set(i, null);
+      selectedSlot = 0;
+      showHud();
+    },
+    giveItem: (id = 1, count = 2) => {
+      inventory.add(id, count);
+      showHud();
+      return { id, count };
+    },
     fillChestFirst: (id = 1, count = 2) => {
       openedContainer?.set(0, { id, count });
       showContainer();
       return { id, count };
+    },
+    openFurnaceAtFeet: () => {
+      const x = Math.floor(physics.x);
+      const y = Math.max(0, Math.floor(physics.y) - 1);
+      const z = Math.floor(physics.z);
+      world.setBlockAndUpdate(x, y, z, Block.FURNACE);
+      openedContainer = world.containers.getOrCreateFurnace('overworld', x, y, z);
+      containerTitle = '熔炉';
+      showContainer();
+      return { x, y, z };
     },
     openChestAtFeet: () => {
       const x = Math.floor(physics.x);
