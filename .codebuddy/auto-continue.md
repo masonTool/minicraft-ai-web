@@ -210,4 +210,14 @@
 - [x] B451-7 `test:crafting` 114 → **124**（含"每张 tiles 都在图集名单里"——
       漏一张会静默回退到 tiles[0]，画面错了但不报错）
 - ⚠️ 原版"任意颜色盒子再染色"要配方引擎支持按族匹配，本批只做"无色 + 染料"
-- ⚠️ 未做：`wall_sign` 6 种（告示牌族）
+
+## 批次 452：`audit:blocks` 的两处假缺口（2026-10-20）
+
+- [x] B452-1 `wall_sign` 6 种移出缺口表：本仓库用 `sign` + `wallMounted` 状态位
+      表达挂墙/落地（火把同一套路），`blockShapes` 与 `Placement` 都早已支持。
+      原版拆两个 id 是它的实现选择，不是一条玩法
+- [x] B452-2 `stripped_log` 6 种：审计只认 `oak_stripped_log`，实际叫
+      `stripped_oak_log`（B54 那条命名坑的又一次现身）
+- [x] B452-3 顺手去掉 `colorShapes` 里重复的 `concrete`（统计会重复报一行）
+- 结果：审计只剩 `mud`（1.19 不做）+ `lodestone` + `respawn_anchor`
+- **教训**：审计脚本报的"缺口"也要先怀疑口径——这已经是第三次栽在命名上
