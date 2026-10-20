@@ -124,7 +124,9 @@ async function boot(): Promise<void> {
   const { worker: sharedWorker, state: workerState } = await chooseWorker(platform);
   console.log('[WX-020] worker mode', workerState);
   const createWorker = () => sharedWorker;
-  const world = new World(0x5eed, 'default', 1, createWorker);
+  const storedSeed = Number(platform.storage.get('wx.worldSeed') ?? '');
+  const worldSeed = Number.isFinite(storedSeed) && storedSeed > 0 ? Math.floor(storedSeed) : 0x5eed;
+  const world = new World(worldSeed, 'default', 1, createWorker);
   const meshPool = new MeshWorkerPool(1, createWorker);
   const chunkRenderer = new ChunkRenderer(
     scene,
@@ -425,27 +427,38 @@ async function boot(): Promise<void> {
     void persist();
   }, 15000);
 
-  const confirmDelete = (): Promise<boolean> =>
+  const confirmModal = (title: string, content: string): Promise<boolean> =>
     new Promise((resolve) => {
       (wx as any).showModal({
-        title: 'DELETE SAVE?',
-        content: 'Removes player position, inventory and block edits. Restart to generate a new world.',
+        title,
+        content,
         showCancel: true,
         success: (res: { confirm?: boolean }) => resolve(res.confirm === true),
         fail: () => resolve(false),
       });
     });
 
+  const clearSave = async (): Promise<void> => {
+    if (save) {
+      await save.clear();
+      save = null;
+    } else {
+      await FileSaveGame.deleteWorld('wx-default', platform.files);
+    }
+    saveStatus = 'deleted';
+  };
+
   const deleteSave = async (): Promise<void> => {
-    if (!(await confirmDelete())) return;
+    if (
+      !(await confirmModal(
+        'DELETE SAVE?',
+        'Removes player position, inventory and block edits. Restart to generate a new world.',
+      ))
+    ) {
+      return;
+    }
     try {
-      if (save) {
-        await save.clear();
-        save = null;
-      } else {
-        await FileSaveGame.deleteWorld('wx-default', platform.files);
-      }
-      saveStatus = 'deleted';
+      await clearSave();
       ui.setWorldInfo({ name: 'MY WORLD', seed: world.seed, edits: 0 });
       ui.showToast('SAVE DELETED');
       console.log('[WX-020] save deleted');
@@ -453,6 +466,34 @@ async function boot(): Promise<void> {
       saveStatus = 'error';
       ui.showToast('DELETE FAILED');
       console.warn('[WX-020] 删除存档失败', error);
+    }
+  };
+
+  const newWorld = async (): Promise<void> => {
+    if (
+      !(await confirmModal(
+        'NEW WORLD?',
+        'Clears the current save and restarts with a new seed. The game will close; reopen it to play.',
+      ))
+    ) {
+      return;
+    }
+    const seed = ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) & 0x7fffffff;
+    const nextSeed = seed > 0 ? seed : 1;
+    try {
+      await clearSave();
+      platform.storage.set('wx.worldSeed', String(nextSeed));
+      ui.setWorldInfo({ name: 'MY WORLD', seed: nextSeed, edits: 0 });
+      ui.showToast('NEW WORLD · REOPEN');
+      console.log('[WX-020] new world seed', nextSeed);
+      setTimeout(() => {
+        const exit = (wx as any).exitMiniProgram;
+        if (typeof exit === 'function') exit({});
+      }, 900);
+    } catch (error) {
+      saveStatus = 'error';
+      ui.showToast('NEW WORLD FAILED');
+      console.warn('[WX-020] 新建世界失败', error);
     }
   };
 
@@ -568,6 +609,7 @@ async function boot(): Promise<void> {
       const action = ui.handleMainMenuTap(x, y, width, height);
       if (action === 'settings') ui.openSettings();
       if (action === 'delete') void deleteSave();
+      if (action === 'new') void newWorld();
       return;
     }
     // 暂停面板优先：暂停时所有点击只走 UI

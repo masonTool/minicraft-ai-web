@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
 
-export type MainMenuAction = 'play' | 'settings' | 'delete' | null;
+export type MainMenuAction = 'play' | 'settings' | 'new' | 'delete' | null;
 
 export interface MainMenuInfo {
   name: string;
@@ -97,7 +97,7 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
     );
     drawButton(context, play, 'PLAY', 'normal', 26);
     drawButton(context, settings, 'SETTINGS', 'normal', 22);
-    drawButton(context, newWorld, 'NEW WORLD (SOON)', 'disabled', 18);
+    drawButton(context, newWorld, 'NEW WORLD', 'normal', 18);
     drawButton(context, deleteSave, 'DELETE SAVE', 'normal', 16);
     texture.needsUpdate = true;
   };
@@ -134,6 +134,9 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       if (contains(settings, x, y)) {
         setOpen(false);
         return 'settings';
+      }
+      if (contains(newWorld, x, y)) {
+        return 'new';
       }
       if (contains(deleteSave, x, y)) {
         return 'delete';
