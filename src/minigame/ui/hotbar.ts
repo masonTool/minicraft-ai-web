@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { blockTiles } from '../../core/registry/blocks.ts';
-import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE, type TextureAtlas } from '../../render/TextureAtlas.ts';
+import type { TextureAtlas } from '../../render/TextureAtlas.ts';
+import { drawBlockIcon } from './icons.ts';
 
 export interface Hotbar {
   setSelected(index: number): void;
@@ -58,23 +58,7 @@ export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Ho
     context.lineWidth = selected ? 4 : 2;
     context.strokeRect(x + 1, y + 1, slotSize - 2, slotSize - 2);
 
-    const tile = blockTiles(blocks[index] ?? 0, 0)[0];
-    const tileIndex = (TILE_ORDER as readonly string[]).indexOf(tile);
-    if (tileIndex < 0) return;
-    const sx = (tileIndex % ATLAS_COLUMNS) * TILE_SIZE;
-    const sy = Math.floor(tileIndex / ATLAS_COLUMNS) * TILE_SIZE;
-    const inset = 6;
-    context.drawImage(
-      atlas.canvas,
-      sx,
-      sy,
-      TILE_SIZE,
-      TILE_SIZE,
-      x + inset,
-      y + inset,
-      slotSize - inset * 2,
-      slotSize - inset * 2,
-    );
+    drawBlockIcon(context, atlas, blocks[index] ?? 0, x, y, slotSize);
   };
 
   const redraw = (selected: number): void => {

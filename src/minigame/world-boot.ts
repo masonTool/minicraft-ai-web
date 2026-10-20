@@ -23,7 +23,7 @@ import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
-import { createHotbar } from './ui/hotbar.ts';
+import { createCanvasUi } from './ui/port.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { workerHostToLike } from '../platform/wx/worker-like.ts';
 import { createMainThreadWorker } from './main-thread-worker.ts';
@@ -43,54 +43,6 @@ const view = globalThis as any;
 const VIEW_RADIUS = 3;
 const LIGHT_BUDGET = 8000;
 const MESH_BUDGET = 8;
-
-function createHud(): {
-  update(lines: readonly string[]): void;
-  render(renderer: THREE.WebGLRenderer): void;
-} {
-  const canvas = doc.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
-  camera.position.z = 1;
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(2, 0.5),
-    new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-    }),
-  );
-  mesh.position.set(0, 0.72, 0);
-  scene.add(mesh);
-
-  return {
-    update(lines: readonly string[]): void {
-      if (!context) return;
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = 'rgba(0, 0, 0, 0.64)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.font = '24px monospace';
-      context.textBaseline = 'top';
-      context.fillStyle = '#ffffff';
-      lines.forEach((line, index) => {
-        context.fillText(line.slice(0, 84), 18, 16 + index * 46);
-      });
-      texture.needsUpdate = true;
-    },
-    render(renderer: THREE.WebGLRenderer): void {
-      renderer.clearDepth();
-      renderer.render(scene, camera);
-    },
-  };
-}
 
 async function chooseWorker(platform: ReturnType<typeof wxPlatform>): Promise<{
   worker: WorkerLike;
@@ -197,7 +149,7 @@ async function boot(): Promise<void> {
   scene.add(outline);
 
   const HOTBAR = [Block.OAK_PLANKS, Block.STONE, Block.DIRT, Block.GRASS_BLOCK, Block.OAK_LOG, Block.GLASS];
-  const hotbar = createHotbar(atlas, HOTBAR);
+  const ui = createCanvasUi(atlas, HOTBAR, width, height);
   let selectedSlot = 0;
   let currentHit: RayHit | null = null;
   let targetLabel = '-';
@@ -244,6 +196,7 @@ async function boot(): Promise<void> {
   let playerReady = false;
   let movePointerId: number | null = null;
   let lookPointerId: number | null = null;
+  let uiPointerId: number | null = null;
   let moveOriginX = 0;
   let moveOriginY = 0;
   let moveStartTime = 0;
@@ -262,7 +215,7 @@ async function boot(): Promise<void> {
     yaw = loadedPlayer.yaw;
     pitch = loadedPlayer.pitch;
     selectedSlot = Math.max(0, Math.min(HOTBAR.length - 1, loadedPlayer.selectedSlot));
-    hotbar.setSelected(selectedSlot);
+    ui.setSelectedSlot(selectedSlot);
     playerReady = true;
   }
 
@@ -421,7 +374,7 @@ async function boot(): Promise<void> {
 
   const cycleSlot = (): void => {
     selectedSlot = (selectedSlot + 1) % HOTBAR.length;
-    hotbar.setSelected(selectedSlot);
+    ui.setSelectedSlot(selectedSlot);
   };
 
   const handleRightTap = (_x: number, y: number): void => {
@@ -439,6 +392,20 @@ async function boot(): Promise<void> {
     if (audio) audioStatus = 'on';
     const x = event.clientX;
     const y = event.clientY;
+
+    // 背包打开时，所有点击先交给 UI；点外/点槽都会关闭
+    if (ui.isInventoryOpen()) {
+      uiPointerId = event.pointerId;
+      ui.handleInventoryTap(x, y, width, height);
+      return;
+    }
+    // 右上角背包按钮
+    if (x > width * 0.86 && y < height * 0.22) {
+      uiPointerId = event.pointerId;
+      ui.toggleInventory();
+      return;
+    }
+
     if (x < width * 0.45 && movePointerId === null) {
       movePointerId = event.pointerId;
       moveOriginX = x;
@@ -459,6 +426,7 @@ async function boot(): Promise<void> {
   });
 
   platform.input.onPointer('move', (event) => {
+    if (event.pointerId === uiPointerId) return;
     if (event.pointerId === movePointerId) {
       if (Math.hypot(event.clientX - moveOriginX, event.clientY - moveOriginY) > 8) {
         moveMoved = true;
@@ -483,6 +451,10 @@ async function boot(): Promise<void> {
   });
 
   const releasePointer = (event: { pointerId: number; clientX: number; clientY: number }): void => {
+    if (event.pointerId === uiPointerId) {
+      uiPointerId = null;
+      return;
+    }
     if (event.pointerId === movePointerId) {
       if (!moveMoved && Date.now() - moveStartTime < 300) cycleSlot();
       resetMove();
@@ -499,13 +471,12 @@ async function boot(): Promise<void> {
 
   updateCamera();
 
-  const hud = createHud();
-  hud.update([
+  ui.updateStatus([
     `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  PLAYER`,
     `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T -  SLOT 1/${HOTBAR.length}`,
     `CHUNKS ...  DRAWN ...  LIGHT ...  SAVE ${saveStatus}  AUD ${audioStatus}`,
     'FPS ...  MS ...  TRI ...  CALLS ...',
-    'L tap cycle/drag move · R drag look/tap top place mid break bottom jump',
+    'L tap cycle/drag move · R drag look/tap place/break/jump · top-right bag',
   ]);
 
   let frames = 0;
@@ -600,12 +571,12 @@ async function boot(): Promise<void> {
       console.log(
         `[WX-020] fps=${fps} ms=${ms.toFixed(1)} chunks=${world.chunks.size} drawn=${chunkRenderer.drawnCount} light=${world.lightWorkCount} queue=${chunkRenderer.queueLength} tri=${sceneTriangles} calls=${sceneCalls}`,
       );
-      hud.update([
+      ui.updateStatus([
         `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  P ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)} G${physics.onGround ? 1 : 0}`,
         `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T ${targetLabel}  SLOT ${selectedSlot + 1}/${HOTBAR.length}`,
         `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}  SAVE ${saveStatus}  AUD ${audioStatus}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
-        'L tap cycle/drag move · R drag look/tap top place mid break bottom jump',
+        'L tap cycle/drag move · R drag look/tap place/break/jump · top-right bag',
       ]);
       frames = 0;
       lastReport = time;
@@ -615,8 +586,7 @@ async function boot(): Promise<void> {
     renderer.render(scene, camera);
     sceneTriangles = renderer.info.render.triangles;
     sceneCalls = renderer.info.render.calls;
-    hud.render(renderer);
-    hotbar.render(renderer);
+    ui.render(renderer);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
