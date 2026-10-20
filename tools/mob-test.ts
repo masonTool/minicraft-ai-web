@@ -912,5 +912,113 @@ console.log('\n[潜影贝：站着不动、射漂浮箭（批次 344）]');
   );
 }
 
+console.log('\n[寻路节流（批次 500）：走不到玩家时不会每帧重算]');
+{
+  // 一大片平地上盖一个 3 格高的封闭房间：玩家站在外面 10 格处，僵尸看得见、走不到
+  const world = new TestWorld();
+  world.floor(-12, 20, -12, 12, 64);
+  for (let x = -4; x <= 4; x++) {
+    for (let y = 65; y <= 67; y++) {
+      world.setBlock(x, y, -4, true);
+      world.setBlock(x, y, 4, true);
+    }
+  }
+  for (let z = -3; z <= 3; z++) {
+    for (let y = 65; y <= 67; y++) {
+      world.setBlock(-4, y, z, true);
+      world.setBlock(4, y, z, true);
+    }
+  }
+
+  let blockReads = 0;
+  let searches = 0;
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => {
+      blockReads++;
+      return world.getBlock(x, y, z);
+    },
+    player: { x: 10.5, y: 65, z: 0.5 },
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+    // 只统计"真的去搜了路"的次数：`canPathSearch` 每次搜索前被问一次
+    canPathSearch: () => {
+      searches++;
+      return true;
+    },
+  };
+
+  const zombie = new Mob(mobTypeById('zombie')!, 0.5, 65.5, 0.5);
+  // 1 秒 = 20 帧。旧写法（`path.length === 0` 就重算）每帧都会重跑一次失败搜索，
+  // 20 帧就是 20 次；新写法首帧搜一次、失败后退避 1.2~2 秒
+  for (let i = 0; i < 20; i++) zombie.tick(ctx, 0.05);
+  check('1 秒内最多搜 2 次（旧写法是每帧一次 = 20 次）', searches <= 2, `${searches} 次搜索`);
+  check('（对照）它确实跑过搜索，不是"根本没找路"', searches >= 1, `${searches} 次搜索`);
+  check('世界查询量随之降到单次搜索的量级', blockReads < 60_000, `${blockReads} 次 getBlock`);
+  check('走不到就待在原地（没有抽搐式乱走）', Math.abs(zombie.x - 0.5) < 0.6, `x=${zombie.x.toFixed(2)}`);
+}
+
+console.log('\n[寻路预算（批次 500）：拿不到预算就不跑 A*]');
+{
+  const world = new TestWorld();
+  world.floor(-8, 20, -8, 8, 64);
+  let blockReads = 0;
+  let asked = 0;
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => {
+      blockReads++;
+      return world.getBlock(x, y, z);
+    },
+    player: { x: 10.5, y: 65, z: 0.5 },
+    hurtPlayer: () => undefined,
+    spawnDrop: () => undefined,
+    // 主程序一帧的预算用完了：这一帧不许再搜
+    canPathSearch: () => {
+      asked++;
+      return false;
+    },
+  };
+
+  const zombie = new Mob(mobTypeById('zombie')!, 0.5, 65.5, 0.5);
+  for (let i = 0; i < 20; i++) zombie.tick(ctx, 0.05);
+  check('问过预算（钩子确实被调用）', asked > 0, `${asked} 次`);
+  check('不给预算就一次 A* 都不跑', blockReads < 50, `${blockReads} 次 getBlock`);
+  check('也不会因此乱走（没路就原地等下一帧）', Math.abs(zombie.x - 0.5) < 0.6, `x=${zombie.x.toFixed(2)}`);
+}
+
+console.log('\n[寻路：贴身 2 格内直接走（批次 500）]');
+{
+  const world = new TestWorld();
+  world.floor(-8, 20, -8, 8, 64);
+  let searches = 0;
+  let damage = 0;
+  const ctx: EntityContext = {
+    world: world.asPhysicsWorld(),
+    playerBox: null,
+    pickup: () => 0,
+    getBlock: (x, y, z) => world.getBlock(x, y, z),
+    player: { x: 10.5, y: 65, z: 0.5 },
+    hurtPlayer: (amount) => {
+      damage += amount;
+    },
+    spawnDrop: () => undefined,
+    canPathSearch: () => {
+      searches++;
+      return true;
+    },
+  };
+
+  // 水平 1.5 格（distanceSq = 2.25 ≤ 4）、同一高度 → 走直线，不请 A*
+  const zombie = new Mob(mobTypeById('zombie')!, 9, 65.5, 0.5);
+  for (let i = 0; i < 20; i++) zombie.tick(ctx, 0.05);
+  check('贴身时一次 A* 都不跑', searches === 0, `${searches} 次`);
+  check('照样会贴上去打人（功能没退化）', damage > 0, `累计 ${damage}`);
+}
+
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);
 if (failed > 0) process.exit(1);

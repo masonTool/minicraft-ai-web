@@ -164,6 +164,16 @@ const MELEE_VERTICAL_GAP = 1;
 const MELEE_SIGHT_STEP = 0.4;
 
 /**
+ * 追人时"贴到这么近就直线走过去、不跑 A*"（格²，批次 500）。
+ *
+ * 2 格：这个距离上任何绕路都没有意义，而每帧重算 A* 的代价却是实打实的
+ * （见 `updateAi` 里那段注释）。
+ */
+const NEAR_DIRECT_RANGE_SQ = 4;
+/** 同上：只有**同一高度**才走直线；高度差超过 1.5 格仍交给寻路（玩家在柱子/崖上） */
+const NEAR_DIRECT_MAX_DY = 1.5;
+
+/**
  * 跳跃式移动（批次 120，史莱姆）的三个数：
  *  - `HOP_SPEED` 是**起跳那一瞬间**给的向上速度（原版约 0.42 格/tick ≈ 8 格/秒的初速，
  *    这里取小一点：本项目的地形更密，跳太高会一直撞天花板）；
@@ -1282,14 +1292,37 @@ export class Mob extends Entity {
       // 跳不过去就再跳，不会绕路——所以这里连 A* 都不必跑（那是最贵的一段）。
       // 与"不撞墙"那条取舍一起记在 TASKS J16：原版史莱姆也是撞墙时反复跳。
       if (this.type.hops !== true) {
-        this.repathTimer -= dt;
-        if (this.repathTimer <= 0 || this.path.length === 0) {
-          this.repathTimer = 0.5 + Math.random() * 0.4;
-          this.path =
-            this.pathfinder.find(this.x, this.y, this.z, player.x, player.y, player.z, {
+        // 贴身（水平 2 格内、且同一高度）**不需要 A***：直线走过去就够。
+        // ⚠️ 这一段以前是性能黑洞（批次 500）：走到玩家脚下 → `move()` 把路径清空 →
+        // 下一帧发现 `path.length === 0` 又重算一次，24 只怪一起贴身时每帧要跑几十次搜索。
+        // 高度差 > 1.5 时仍交给寻路（玩家在柱子上/崖上，怪得绕路）。
+        const nearDirect =
+          distanceSq <= NEAR_DIRECT_RANGE_SQ && Math.abs(player.y - this.y) <= NEAR_DIRECT_MAX_DY;
+        if (nearDirect) {
+          // 只在真有条路径要扔时才新建数组（空数组也每帧 new 一个就是纯 GC 噪音）
+          if (this.path.length > 0) {
+            this.path = [];
+            this.pathIndex = 0;
+          }
+          const length = Math.max(1e-4, Math.sqrt(distanceSq));
+          this.moveDirX = dx / length;
+          this.moveDirZ = dz / length;
+        } else {
+          this.repathTimer -= dt;
+          // 每帧预算（批次 500）：主程序一帧只放行 2 次 A*，避免"所有怪同时重算"。
+          // 没拿到预算的怪保持 `repathTimer <= 0`，下一帧再排队（不会丢目标）。
+          if (this.repathTimer <= 0 && (ctx.canPathSearch?.() ?? true)) {
+            const found = this.pathfinder.find(this.x, this.y, this.z, player.x, player.y, player.z, {
               heightBlocks: this.bodyBlocks,
-            }) ?? [];
-          this.pathIndex = 0;
+            });
+            this.path = found ?? [];
+            this.pathIndex = 0;
+            // 找到路：0.5~0.9 秒后再算（原样）。
+            // **找不到路：退避 1.2~2.0 秒**——以前 `path.length === 0` 会让它每帧重算，
+            // 而一次失败的搜索要把 maxNodes 撑满（洞里/墙后的怪就是这么把帧率吃掉的）。
+            this.repathTimer =
+              this.path.length > 0 ? 0.5 + Math.random() * 0.4 : 1.2 + Math.random() * 0.8;
+          }
         }
       }
 
@@ -1515,7 +1548,14 @@ export class Mob extends Entity {
         }
         break;
       }
-      if (this.pathIndex >= this.path.length) this.path = [];
+      // 走完一段路径：清掉并**尽快**续算（批次 500）。
+      // ⚠️ 条件要加 `path.length > 0`：空路径时 `0 >= 0` 也为真，原写法会每帧
+      // 新建一个空数组（纯 GC 噪音）；另外续算走的是定时器 + 每帧预算，
+      // 不是"同一帧立刻再搜一次"。
+      if (this.path.length > 0 && this.pathIndex >= this.path.length) {
+        this.path = [];
+        this.repathTimer = 0.05 + Math.random() * 0.1;
+      }
 
       // **会爬墙的生物在没有路时朝目标直推**（批次 93）。
       //

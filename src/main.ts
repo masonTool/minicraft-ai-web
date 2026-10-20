@@ -745,6 +745,7 @@ import {
   NETHER_MIN_BRIGHTNESS,
   NETHER_SKY_BRIGHTNESS,
   PARTICLE_MIN_BRIGHTNESS,
+  PATH_SEARCH_BUDGET_PER_FRAME,
   PENDING_SETTLE_LIMIT,
   PLACE_COOLDOWN,
   PORTAL_ARRIVAL_TIMEOUT_FRAMES,
@@ -1006,6 +1007,13 @@ class App {
   private readonly mobRenderer: MobRenderer;
   /** 生物生成规则 */
   private readonly mobSpawner = new MobSpawner();
+  /**
+   * 这一帧还剩几次 A* 寻路预算（批次 500，见 `PATH_SEARCH_BUDGET_PER_FRAME`）。
+   *
+   * 每帧在 `updateEntities` 开头重置，`EntityContext.canPathSearch` 递减。
+   * 目的只有一个：**别让二十几只怪在同一帧各自跑一次几百节点的搜索**。
+   */
+  private pathSearchesLeft = 0;
   /**
    * 下界那套"锚点查询"（批次 115）：只用来回答"这一列在不在要塞里"（见 `inStructure`）。
    *
@@ -9668,6 +9676,13 @@ class App {
         : undefined,
       // 方块状态位（批次 246）：动力铁轨要读 `powered` 决定推不推车
       getState: (x, y, z) => this.world.getBlockState(x, y, z),
+      // 寻路预算（批次 500）：一帧只放行 `PATH_SEARCH_BUDGET_PER_FRAME` 次 A*，
+      // 拿不到预算的怪下一帧再排队（见 `EntityContext.canPathSearch`）
+      canPathSearch: () => {
+        if (this.pathSearchesLeft <= 0) return false;
+        this.pathSearchesLeft--;
+        return true;
+      },
       // 投掷物撞到方块（批次 248，标靶）：实体层只报格子，是不是标靶由这里判
       hitBlock: (x, y, z) => this.onProjectileHitBlock(x, y, z),
       // 引雷（批次 269）：只在雷雨天真的落雷（原版规则）
@@ -9685,6 +9700,8 @@ class App {
     // 村庄守卫（批次 474）：铁傀儡在实体 tick **之前**拿到指令（朝谁走、打不打），
     // 实体自己只负责按 `moveDir` 移动——见 `Mob.guardToward` 的注释
     this.tickGuardians(context, dt);
+    // 每帧重置寻路预算（批次 500）：放在实体 tick 之前，`canPathSearch` 才能正确递减
+    this.pathSearchesLeft = PATH_SEARCH_BUDGET_PER_FRAME;
     this.entities.update(context, dt);
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;

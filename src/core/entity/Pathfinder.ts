@@ -119,7 +119,11 @@ export class Pathfinder {
   find(sx: number, sy: number, sz: number, tx: number, ty: number, tz: number, options: PathOptions = {}): PathPoint[] | null {
     const height = options.heightBlocks ?? 2;
     const maxFall = options.maxFall ?? 3;
-    const maxNodes = options.maxNodes ?? 900;
+    // 900 → 384（批次 500）：追击距离最多 48 格，正常地形几十~一百多个节点就够；
+    // 而**失败的搜索**会把上限撑满——900 个节点 × 每节点十几次 `getBlock`，
+    // 一次就是 10~30ms（真机日志里 `phases.ent` 的主因）。配合 `Mob` 那边的失败退避，
+    // 单次成本直接砍到 4 成以下。
+    const maxNodes = options.maxNodes ?? 384;
 
     const start = this.snapToGround(Math.floor(sx), Math.floor(sy), Math.floor(sz), height);
     const goal = this.snapToGround(Math.floor(tx), Math.floor(ty), Math.floor(tz), height);

@@ -24,6 +24,15 @@ import type { GameMode } from '../core/world/GameMode.ts';
 export const VIEW_DISTANCE = 12;
 /** 每帧最多网格化的区块数，用于把加载耗时摊到多帧 */
 export const MESH_BUDGET_PER_FRAME = 3;
+/**
+ * 每帧最多跑几次生物 A* 寻路（批次 500）。
+ *
+ * 一次搜索 = 几百个节点 × 每个节点十几次 `getBlock`，手机上约 1~3ms。
+ * 二十几只怪各按 0.5~0.9 秒重算，平均每秒 ~35 次——不设预算时它们会**同一帧撞在一起**，
+ * 单帧就是几十毫秒（真机日志里 `phases.ent` 35ms 的主因）。
+ * 2 次/帧 @ 24fps = 48 次/秒，够用且不会把一帧吃掉。
+ */
+export const PATH_SEARCH_BUDGET_PER_FRAME = 2;
 
 /** 游戏逻辑 tick（原版 20 次/秒），生存机制按这个节奏结算 */
 export const TICK_SECONDS = 0.05;
