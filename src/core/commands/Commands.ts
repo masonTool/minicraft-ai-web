@@ -96,7 +96,7 @@ export interface CommandContext {
    * 以前是 `setCreative(boolean)`，加旁观时改成传入完整模式名——
    * 布尔没法表达第三种，硬塞会变成"旁观 = 创造 + 一堆特判"。
    */
-  setGameMode(mode: 'survival' | 'creative' | 'spectator'): void;
+  setGameMode(mode: 'survival' | 'creative' | 'adventure' | 'spectator'): void;
   isCreative(): boolean;
   killPlayer(): void;
   seed(): number;
@@ -812,17 +812,25 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'gamemode',
-    usage: '/gamemode <survival|creative|spectator>',
-    description: '切换游戏模式（创造 = 飞行 + 不受伤 + 秒破；旁观 = 穿墙飞行 + 不能交互）',
+    usage: '/gamemode <survival|creative|adventure|spectator>',
+    description: '切换游戏模式（创造 = 飞行 + 不受伤 + 秒破；冒险 = 不能破坏/放方块；旁观 = 穿墙飞行 + 不能交互）',
     // ⚠️ 故意**不设** creativeOnly：否则一旦切到生存就再也切不回来了
     // （其他创造专用命令仍然要求创造模式）。原版这条命令是权限等级控制的。
     run(args, ctx, out) {
-      // 缩写：c / s / sp（原版也收单字母）
+      // 缩写：c / s / a / sp（原版也收单字母）
       const raw = args[0]?.toLowerCase();
       const mode =
-        raw === 'c' ? 'creative' : raw === 's' ? 'survival' : raw === 'sp' ? 'spectator' : raw;
-      if (mode !== 'survival' && mode !== 'creative' && mode !== 'spectator') {
-        out.error('用法：/gamemode <survival|creative|spectator>');
+        raw === 'c'
+          ? 'creative'
+          : raw === 's'
+            ? 'survival'
+            : raw === 'a'
+              ? 'adventure'
+              : raw === 'sp'
+                ? 'spectator'
+                : raw;
+      if (mode !== 'survival' && mode !== 'creative' && mode !== 'adventure' && mode !== 'spectator') {
+        out.error('用法：/gamemode <survival|creative|adventure|spectator>');
         return;
       }
       ctx.setGameMode(mode);

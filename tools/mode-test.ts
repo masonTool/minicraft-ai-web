@@ -57,18 +57,20 @@ console.log('\n[一、模式取值]');
 
 {
   // 批次 491：加了旁观（M22）
-  equal('三种模式（生存 / 创造 / 旁观）', GAME_MODES.join(','), 'survival,creative,spectator');
+  equal('四种模式（生存 / 创造 / 冒险 / 旁观）', GAME_MODES.join(','), 'survival,creative,adventure,spectator');
   check('都有中文名', GAME_MODES.every((mode) => GAME_MODE_LABELS[mode].length > 0));
   check('survival 合法', isGameMode('survival'));
   check('creative 合法', isGameMode('creative'));
   check('spectator 合法', isGameMode('spectator'));
-  check('别的一律不合法', !isGameMode('adventure') && !isGameMode(1) && !isGameMode(null));
+  check('adventure 合法', isGameMode('adventure'));
+  check('别的一律不合法', !isGameMode('nope') && !isGameMode(1) && !isGameMode(null));
   equal('非法值回落到生存', normalizeGameMode('nope'), 'survival');
   equal('非法值可以指定回落', normalizeGameMode(undefined, 'creative'), 'creative');
   equal('合法值原样保留', normalizeGameMode('creative'), 'creative');
   equal('生存点一下变创造', nextGameMode('survival'), 'creative');
-  equal('创造点一下变旁观', nextGameMode('creative'), 'spectator');
-  equal('旁观点一下回到生存（三态循环）', nextGameMode('spectator'), 'survival');
+  equal('创造点一下变冒险', nextGameMode('creative'), 'adventure');
+  equal('冒险点一下变旁观', nextGameMode('adventure'), 'spectator');
+  equal('旁观点一下回到生存（四态循环）', nextGameMode('spectator'), 'survival');
   check('创造是能力口径', isCreativeMode('creative') && !isCreativeMode('survival'));
   check('旁观进入世界时默认在飞（否则会穿地）', startsFlying('spectator'));
   check('创造进入世界时从地面开始（不默认飞）', !startsFlying('creative'));
@@ -133,7 +135,7 @@ console.log('\n[二、世界清单]');
         seed: 8,
         worldType: 'default',
         difficulty: 'normal',
-        gameMode: 'adventure',
+        gameMode: 'nope',
         createdAt: 1,
         lastPlayed: 1,
         playTime: 0,

@@ -4,7 +4,7 @@
  * 之前"类型 / 模式 / 难度"是**分三个套件各测一半**的：
  * 类型测了生成、模式测了语义、难度测了系数，但**没有一组测试是"建出来再进世界"**。
  * 这一套补三件事：
- *  ① 5×3×4 = **60 种组合**都能创建、字段正确、持久化往返一致；
+ *  ① 5×4×4 = **80 种组合**都能创建、字段正确、持久化往返一致；
  *  ② 每种类型 × 生存/创造（10 组）都能算出**出生点**、出生区块不是空的；
  *  ③ 脏参数在 `create` 里就被收口（而不是先写进清单、等下次读盘才修）。
  *
@@ -58,7 +58,7 @@ class MemoryStorage {
 
 const SEED = 20261014;
 
-// ---------------------------------------------------------------- 1. 60 组
+// ---------------------------------------------------------------- 1. 80 组
 
 console.log('\n[60 种组合：创建 / 字段 / 持久化]');
 {
@@ -85,9 +85,9 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
     }
   }
 
-  equal('一共 60 种组合', created.length, 60);
-  equal('清单里就是 60 个世界', registry.count, 60);
-  equal('id 互不重复', new Set(created.map((world) => world.id)).size, 60);
+  equal('一共 80 种组合', created.length, 80);
+  equal('清单里就是 80 个世界', registry.count, 80);
+  equal('id 互不重复', new Set(created.map((world) => world.id)).size, 80);
 
   const badFields: string[] = [];
   for (let i = 0; i < created.length; i++) {
@@ -99,9 +99,9 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
   }
   check('每一组的类型/模式/难度/种子都按传入值落盘', badFields.length === 0, badFields.slice(0, 4).join(' '));
 
-  // 读盘往返：换一个 registry 读同一份 storage，60 组必须一一对上
+  // 读盘往返：换一个 registry 读同一份 storage，80 组必须一一对上
   const reloaded = new WorldRegistry(storage as unknown as Storage);
-  equal('重新加载后仍是 60 个世界', reloaded.count, 60);
+  equal('重新加载后仍是 80 个世界', reloaded.count, 80);
   let mismatched = 0;
   for (let i = 0; i < created.length; i++) {
     const back = reloaded.get(created[i]!.id);
@@ -110,14 +110,14 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
       mismatched++;
     }
   }
-  equal('60 组持久化往返全部一致', mismatched, 0);
+  equal('80 组持久化往返全部一致', mismatched, 0);
 
-  // 默认命名：每种类型 12 个（3 模式 × 4 难度），名字互不重复
+  // 默认命名：每种类型 16 个（4 模式 × 4 难度），名字互不重复
   const badNames = WORLD_TYPES.filter((type) => {
     const names = created.filter((world) => world.worldType === type).map((world) => world.name);
-    return names.length !== 12 || new Set(names).size !== 12;
+    return names.length !== 16 || new Set(names).size !== 16;
   });
-  check('每种类型 12 个世界、名字互不重复', badNames.length === 0, badNames.join(','));
+  check('每种类型 16 个世界、名字互不重复', badNames.length === 0, badNames.join(','));
 }
 
 console.log('\n[脏参数在 create 里就收口]');
@@ -125,7 +125,7 @@ console.log('\n[脏参数在 create 里就收口]');
   const registry = new WorldRegistry(new MemoryStorage() as unknown as Storage);
   const dirty = registry.create({
     worldType: 'nope' as WorldType,
-    gameMode: 'adventure' as GameMode,
+    gameMode: 'nope' as GameMode,
     difficulty: '地狱' as Difficulty,
   });
   equal('非法类型回落 default', dirty.worldType, 'default');

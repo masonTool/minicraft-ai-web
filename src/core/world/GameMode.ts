@@ -10,18 +10,19 @@
  * 纯数据 + 纯函数：主程序、存档、主菜单与命令层都从这里取口径。
  */
 
-export type GameMode = 'survival' | 'creative' | 'spectator';
+export type GameMode = 'survival' | 'creative' | 'adventure' | 'spectator';
 
-export const GAME_MODES: readonly GameMode[] = ['survival', 'creative', 'spectator'];
+export const GAME_MODES: readonly GameMode[] = ['survival', 'creative', 'adventure', 'spectator'];
 
 export const GAME_MODE_LABELS: Record<GameMode, string> = {
   survival: '生存',
   creative: '创造',
+  adventure: '冒险',
   spectator: '旁观',
 };
 
 export function isGameMode(value: unknown): value is GameMode {
-  return value === 'survival' || value === 'creative' || value === 'spectator';
+  return value === 'survival' || value === 'creative' || value === 'adventure' || value === 'spectator';
 }
 
 /**
@@ -34,11 +35,32 @@ export function normalizeGameMode(value: unknown, fallback: GameMode = 'survival
   return isGameMode(value) ? value : fallback;
 }
 
-/** 菜单里点一下换下一个模式（三态循环：生存 → 创造 → 旁观） */
+/** 菜单里点一下换下一个模式（四态循环：生存 → 创造 → 冒险 → 旁观） */
 export function nextGameMode(mode: GameMode): GameMode {
   if (mode === 'survival') return 'creative';
-  if (mode === 'creative') return 'spectator';
+  if (mode === 'creative') return 'adventure';
+  if (mode === 'adventure') return 'spectator';
   return 'survival';
+}
+
+/**
+ * 冒险模式（批次 549）：能走、能打、能交互，但**不能破坏/放置方块**。
+ *
+ * 原版的冒险模式还允许用 `CanDestroy` / `CanPlaceOn` 标签给特定方块开口子，
+ * 本项目没有物品标签/NBT，所以这一条暂不做（差异记在 TASKS B21）。
+ */
+export function isAdventureMode(mode: GameMode): boolean {
+  return mode === 'adventure';
+}
+
+/** 能不能破坏方块：创造与生存可以，冒险与旁观不行 */
+export function canBreakBlocks(mode: GameMode): boolean {
+  return mode === 'creative' || mode === 'survival';
+}
+
+/** 能不能放置方块：口径与破坏一致 */
+export function canPlaceBlocks(mode: GameMode): boolean {
+  return mode === 'creative' || mode === 'survival';
 }
 
 /** 创造模式的能力口径（免伤、瞬间破坏、不耗耐久、无限物品…） */
@@ -83,9 +105,9 @@ export function hasBlockCollision(mode: GameMode): boolean {
   return mode !== 'spectator';
 }
 
-/** 会不会受伤：创造与旁观都免伤 */
+/** 会不会受伤：创造与旁观都免伤；冒险与生存一样会受伤 */
 export function canTakeDamage(mode: GameMode): boolean {
-  return mode === 'survival';
+  return mode === 'survival' || mode === 'adventure';
 }
 
 /** 能不能捡起地上的物品：旁观者不能（原版同口径）；创造可以 */

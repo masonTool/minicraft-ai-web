@@ -12,10 +12,13 @@
 import {
   GAME_MODES,
   GAME_MODE_LABELS,
+  canBreakBlocks,
   canFly,
   canInteract,
+  canPlaceBlocks,
   canTakeDamage,
   hasBlockCollision,
+  isAdventureMode,
   isCreativeMode,
   isGameMode,
   isSpectatorMode,
@@ -42,10 +45,10 @@ function equal(label: string, actual: unknown, expected: unknown): void {
   check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
-console.log('\n[三种模式]');
+console.log('\n[四种模式]');
 {
-  equal('一共三种', GAME_MODES.length, 3);
-  equal('顺序是 生存 → 创造 → 旁观', GAME_MODES.join(','), 'survival,creative,spectator');
+  equal('一共四种', GAME_MODES.length, 4);
+  equal('顺序是 生存 → 创造 → 冒险 → 旁观', GAME_MODES.join(','), 'survival,creative,adventure,spectator');
   for (const mode of GAME_MODES) {
     check(`${mode} 有中文名`, (GAME_MODE_LABELS[mode] ?? '').length > 0, GAME_MODE_LABELS[mode]);
     check(`isGameMode 认得 ${mode}`, isGameMode(mode));
@@ -55,33 +58,42 @@ console.log('\n[三种模式]');
   equal('不认识的模式按指定值回落', normalizeGameMode(null, 'creative'), 'creative');
 
   equal('生存 → 创造', nextGameMode('survival'), 'creative');
-  equal('创造 → 旁观', nextGameMode('creative'), 'spectator');
-  equal('旁观 → 生存（三态循环，不会卡在最后一种）', nextGameMode('spectator'), 'survival');
+  equal('创造 → 冒险', nextGameMode('creative'), 'adventure');
+  equal('冒险 → 旁观', nextGameMode('adventure'), 'spectator');
+  equal('旁观 → 生存（四态循环，不会卡在最后一种）', nextGameMode('spectator'), 'survival');
 }
 
 console.log('\n[能力矩阵]');
 {
-  // 每一行：模式 → [创造? 旁观? 能飞? 能交互? 有方块碰撞? 会受伤?]
+  // 每一行：模式 → [创造? 冒险? 旁观? 能飞? 能交互? 能破坏? 能放置? 有碰撞? 会受伤?]
   const table: readonly {
     mode: GameMode;
     creative: boolean;
+    adventure: boolean;
     spectator: boolean;
     fly: boolean;
     interact: boolean;
+    breakBlocks: boolean;
+    placeBlocks: boolean;
     collide: boolean;
     damage: boolean;
   }[] = [
-    { mode: 'survival', creative: false, spectator: false, fly: false, interact: true, collide: true, damage: true },
-    { mode: 'creative', creative: true, spectator: false, fly: true, interact: true, collide: true, damage: false },
+    { mode: 'survival', creative: false, adventure: false, spectator: false, fly: false, interact: true, breakBlocks: true, placeBlocks: true, collide: true, damage: true },
+    { mode: 'creative', creative: true, adventure: false, spectator: false, fly: true, interact: true, breakBlocks: true, placeBlocks: true, collide: true, damage: false },
+    // 冒险：能走能打能交互，但破坏/放置一律不行
+    { mode: 'adventure', creative: false, adventure: true, spectator: false, fly: false, interact: true, breakBlocks: false, placeBlocks: false, collide: true, damage: true },
     // 旁观与创造的三处不同：穿墙、不能交互（能飞与免伤相同）
-    { mode: 'spectator', creative: false, spectator: true, fly: true, interact: false, collide: false, damage: false },
+    { mode: 'spectator', creative: false, adventure: false, spectator: true, fly: true, interact: false, breakBlocks: false, placeBlocks: false, collide: false, damage: false },
   ];
 
   for (const row of table) {
     equal(`${row.mode}：是创造`, isCreativeMode(row.mode), row.creative);
+    equal(`${row.mode}：是冒险`, isAdventureMode(row.mode), row.adventure);
     equal(`${row.mode}：是旁观`, isSpectatorMode(row.mode), row.spectator);
     equal(`${row.mode}：能飞`, canFly(row.mode), row.fly);
     equal(`${row.mode}：能交互`, canInteract(row.mode), row.interact);
+    equal(`${row.mode}：能破坏方块`, canBreakBlocks(row.mode), row.breakBlocks);
+    equal(`${row.mode}：能放置方块`, canPlaceBlocks(row.mode), row.placeBlocks);
     equal(`${row.mode}：会被方块挡住`, hasBlockCollision(row.mode), row.collide);
     equal(`${row.mode}：会受伤`, canTakeDamage(row.mode), row.damage);
   }
@@ -91,7 +103,10 @@ console.log('\n[能力矩阵]');
     '旁观 ≠ 创造（否则会穿墙失败、还能破坏方块）',
     isCreativeMode('spectator') === false && hasBlockCollision('spectator') === false,
   );
-  check('只有生存会受伤（创造与旁观都免伤）', canTakeDamage('survival') && !canTakeDamage('creative') && !canTakeDamage('spectator'));
+  check(
+    '生存与冒险会受伤（创造与旁观都免伤）',
+    canTakeDamage('survival') && canTakeDamage('adventure') && !canTakeDamage('creative') && !canTakeDamage('spectator'),
+  );
 }
 
 console.log('\n[源码守卫：真接上了没有]');
@@ -112,6 +127,9 @@ console.log('\n[源码守卫：真接上了没有]');
     '`setFlying` 用的是 `canFly` 而不是 `isCreative`（否则旁观飞不起来）',
     /if \(value && !canFly\(this\.gameMode\)\)/.test(mainSrc),
   );
+  check('冒险模式的破坏入口被挡住', mainSrc.includes('if (!canBreakBlocks(this.gameMode)) return;'));
+  check('冒险模式的放方块入口被挡住', mainSrc.includes('if (!canPlaceBlocks(this.gameMode)) return;'));
+  check('切到冒险/生存时强制落地', /if \(!canFly\(next\) && this\.flying\)/.test(mainSrc));
 }
 
 console.log(`\n游戏模式测试：${passed} 通过 / ${failed} 失败`);

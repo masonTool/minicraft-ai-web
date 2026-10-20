@@ -152,13 +152,13 @@ class FakeWorld implements CommandContext {
   isFlying(): boolean {
     return this.flying;
   }
-  setGameMode(mode: 'survival' | 'creative' | 'spectator'): void {
-    // 与真实现同一口径：旁观也算"能飞"，所以 flying = mode !== 'survival'
+  setGameMode(mode: 'survival' | 'creative' | 'adventure' | 'spectator'): void {
+    // 与真实现同一口径：只有创造与旁观能飞，冒险/生存都落地
     this.creative = mode === 'creative';
-    this.flying = mode !== 'survival';
+    this.flying = mode === 'creative' || mode === 'spectator';
     this.gameMode_ = mode;
   }
-  gameMode_: 'survival' | 'creative' | 'spectator' = 'survival';
+  gameMode_: 'survival' | 'creative' | 'adventure' | 'spectator' = 'survival';
   isCreative(): boolean {
     return this.creative;
   }
@@ -518,6 +518,13 @@ console.log('\n[模式、种子与权限]');
   check('旁观也算能飞', spectator.world.flying === true);
   check('旁观不是创造', spectator.world.creative === false);
   check('旁观的中文名', spectator.out.lastInfo.includes('旁观'), spectator.out.lastInfo);
+  // 批次 549：冒险是第四种模式，不能飞，但仍是"非创造"
+  const adventure = run('/gamemode a');
+  check('/gamemode a 是 adventure 的简写', adventure.world.gameMode_ === 'adventure', adventure.out.lastError);
+  check('冒险不是创造', adventure.world.creative === false);
+  check('冒险不能飞', adventure.world.flying === false);
+  check('冒险的中文名', adventure.out.lastInfo.includes('冒险'), adventure.out.lastInfo);
+
   const badMode = run('/gamemode nope');
   check('拼错的模式报用法', badMode.out.lastError.includes('spectator'), badMode.out.lastError);
   const seed = run('/seed');

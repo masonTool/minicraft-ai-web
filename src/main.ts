@@ -210,9 +210,11 @@ import {
 } from './core/items/Totem.ts';
 // 旁观模式（批次 491）：能力判定全在 GameMode.ts
 import {
+  canBreakBlocks,
   canFly,
   canInteract,
   canPickUpItems,
+  canPlaceBlocks,
   canTakeDamage,
   hasBlockCollision,
   isSpectatorMode,
@@ -7072,6 +7074,8 @@ class App {
   private updateBreaking(dt: number): void {
     // 旁观模式（批次 491）：不能破坏方块
     if (!canInteract(this.gameMode)) return;
+    // 冒险模式（批次 549）：能打怪、能交互，但不能破坏方块
+    if (!canBreakBlocks(this.gameMode)) return;
     if (this.suppressBreaking) {
       this.breakingKey = '';
       this.breakProgress = 0;
@@ -13214,6 +13218,8 @@ class App {
 
     const blockId = this.selectedBlock;
     if (blockId === undefined) return;
+    // 冒险模式（批次 549）：右键交互仍然走上面的分支，但**放方块**这一步要挡住
+    if (!canPlaceBlocks(this.gameMode)) return;
 
     // 睡莲（B16）：命中水面时一律按**上表面**算落点。
     // 水面没有可贴的实体面，玩家从侧面看水面时命中的是水面那一格的侧面，
@@ -15717,7 +15723,8 @@ class App {
     }
     diag.event('mode', 'gameMode.change', { from: this.gameMode, to: next, flying: this.flying });
     this.gameMode = next;
-    if (next === 'survival' && this.flying) this.setFlying(false);
+    // 生存与冒险都不能飞（冒险模式没有创造飞行）
+    if (!canFly(next) && this.flying) this.setFlying(false);
     // 旁观模式一定在飞（批次 491）：否则"穿墙但受重力"会让人一直往下掉
     if (next === 'spectator' && !this.flying) this.setFlying(true);
     // 回写世界清单（暂停菜单里改的，下次从主菜单进来还是这个模式）
