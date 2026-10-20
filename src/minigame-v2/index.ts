@@ -95,7 +95,7 @@ const drawBlockIcon = (
 const ui = new UiLayer(platform.system.width, platform.system.height, drawBlockIcon);
 const uiHeight = ui.height;
 let started = false;
-let menuScreen: 'title' | 'worlds' | 'create' = 'title';
+let menuScreen: 'title' | 'worlds' | 'create' | 'edit' = 'title';
 let paused = false;
 let settingsOpen = false;
 let inventoryOpen = false;
@@ -544,25 +544,141 @@ const showCreate = (): void => {
   );
 };
 
+const confirmDelete = async (name: string): Promise<boolean> => {
+  const wxApi = (globalThis as unknown as { wx?: { showModal?: (options: any) => void } }).wx;
+  if (!wxApi?.showModal) return true;
+  return new Promise((resolve) => {
+    wxApi.showModal?.({
+      title: '删除世界',
+      content: `删除「${name}」？存档会一起删掉，无法恢复。`,
+      success: (result: { confirm?: boolean }) => resolve(Boolean(result.confirm)),
+      fail: () => resolve(false),
+    });
+  });
+};
+
+const removeWorld = async (entry: WorldSummary): Promise<void> => {
+  if (!(await confirmDelete(entry.name))) return;
+  try {
+    await FileSaveGame.deleteWorld(entry.id, platform.files);
+  } catch (error) {
+    console.warn('[v2] delete save failed', error);
+  }
+  registry.remove(entry.id);
+  if (currentWorld?.id === entry.id) currentWorld = null;
+  showWorlds();
+};
+
+const showEdit = (entry: WorldSummary): void => {
+  menuScreen = 'edit';
+  const panelW = 800;
+  const panelH = 390;
+  const panelX = (1024 - panelW) / 2;
+  const panelY = (uiHeight - panelH) / 2;
+  const fieldX = panelX + 230;
+  const fieldW = panelW - 270;
+  const nameY = panelY + 92;
+  const modeY = panelY + 158;
+  const difficultyY = panelY + 224;
+  const modeIndex = Math.max(0, GAME_MODES.indexOf(entry.gameMode as GameMode));
+  const difficultyIndex = Math.max(0, DIFFICULTIES.indexOf(entry.difficulty as Difficulty));
+  const field = (value: string, ry: number, onTap: () => void): UiElement =>
+    button(fieldX, ry, fieldW, 50, value, onTap, {
+      background: 'rgba(22, 30, 36, 0.95)',
+      border: 'rgba(180, 215, 235, 0.35)',
+      radius: 8,
+    });
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: 'rgba(0,0,0,0.55)' }),
+      box(panelX, panelY, panelW, panelH, [
+        text(panelX + 30, panelY + 20, 400, 40, '编辑世界', { fontSize: 30, color: '#ffffff' }),
+        text(panelX + 30, nameY + 12, 190, 30, '名称', { fontSize: 19, color: '#dcecf5' }),
+        field(entry.name, nameY, () => {
+          void askText(entry.name, 24).then((value) => {
+            if (value !== null) {
+              const name = value.trim() || entry.name;
+              registry.rename(entry.id, name);
+              entry.name = name;
+              showEdit(entry);
+            }
+          });
+        }),
+        text(panelX + 30, modeY + 12, 190, 30, '模式', { fontSize: 19, color: '#dcecf5' }),
+        field(GAME_MODE_LABELS[modeIndex]!, modeY, () => {
+          const next = GAME_MODES[(modeIndex + 1) % GAME_MODES.length]!;
+          registry.update(entry.id, { gameMode: next });
+          entry.gameMode = next;
+          showEdit(entry);
+        }),
+        text(panelX + 30, difficultyY + 12, 190, 30, '难度', { fontSize: 19, color: '#dcecf5' }),
+        field(DIFFICULTY_LABELS[difficultyIndex]!, difficultyY, () => {
+          const next = DIFFICULTIES[(difficultyIndex + 1) % DIFFICULTIES.length]!;
+          registry.update(entry.id, { difficulty: next });
+          entry.difficulty = next;
+          showEdit(entry);
+        }),
+        button(panelX + 30, panelY + panelH - 62, 220, 44, '取消', () => showWorlds(), {
+          background: 'rgba(32,42,50,0.95)',
+          border: 'rgba(190,220,240,0.4)',
+          radius: 8,
+        }),
+        button(panelX + panelW - 340, panelY + panelH - 62, 310, 44, '保存并返回', () => showWorlds(), {
+          background: 'rgba(60,110,90,0.96)',
+          border: 'rgba(190,235,215,0.55)',
+          radius: 8,
+        }),
+      ], {
+        background: 'rgba(16,22,28,0.97)',
+        border: 'rgba(170,205,230,0.45)',
+        borderWidth: 2,
+        radius: 12,
+      }),
+    ]),
+  );
+};
+
 const showWorlds = (): void => {
   menuScreen = 'worlds';
   const worlds = registry.list();
-  const buttons: UiElement[] = worlds.slice(0, 6).map((world, index) =>
-    button(272, 176 + index * 62, 480, 50, world.name, () => void mountWorld(world), {
-      background: 'rgba(34, 48, 44, 0.95)',
-      border: 'rgba(180, 225, 205, 0.38)',
-      radius: 8,
-    }),
-  );
+  const visible = worlds.slice(0, 4);
+  const buttons: UiElement[] = visible.flatMap((world, index) => {
+    const y = 150 + index * 56;
+    return [
+      button(272, y, 300, 50, world.name, () => void mountWorld(world), {
+        background: 'rgba(34, 48, 44, 0.95)',
+        border: 'rgba(180, 225, 205, 0.38)',
+        radius: 8,
+      }),
+      button(580, y, 80, 50, '编辑', () => showEdit(world), {
+        background: 'rgba(32, 42, 50, 0.95)',
+        border: 'rgba(190, 220, 240, 0.38)',
+        radius: 8,
+      }),
+      button(668, y, 100, 50, '删除', () => void removeWorld(world), {
+        background: 'rgba(74, 38, 40, 0.95)',
+        border: 'rgba(240, 170, 170, 0.4)',
+        radius: 8,
+      }),
+    ];
+  });
+  const bottom = 150 + Math.max(1, visible.length) * 56;
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
       box(0, 0, 1024, uiHeight, [], { background: '#0d1a24' }),
-      text(0, 44, 1024, 60, '选择世界', { fontSize: 44, color: '#f2f7fa', align: 'center' }),
+      text(0, 34, 1024, 52, '选择世界', { fontSize: 40, color: '#f2f7fa', align: 'center' }),
+      text(0, 92, 1024, 26, `存档 ${worlds.length}`, {
+        fontSize: 14,
+        color: 'rgba(200, 225, 240, 0.65)',
+        align: 'center',
+      }),
       ...buttons,
-      button(272, 176 + Math.max(1, Math.min(6, worlds.length)) * 62 + 8, 480, 52, '新建世界', () => {
-        showCreate();
-      }, { background: 'rgba(60, 110, 90, 0.96)', border: 'rgba(190, 235, 215, 0.55)', radius: 8 }),
-      button(272, 176 + Math.max(1, Math.min(6, worlds.length)) * 62 + 72, 480, 46, '返回标题', () => showTitle(), {
+      button(272, bottom + 6, 496, 46, '新建世界', () => showCreate(), {
+        background: 'rgba(60, 110, 90, 0.96)',
+        border: 'rgba(190, 235, 215, 0.55)',
+        radius: 8,
+      }),
+      button(272, bottom + 60, 496, 38, '返回标题', () => showTitle(), {
         background: 'rgba(32, 42, 50, 0.95)',
         border: 'rgba(190, 220, 240, 0.4)',
         radius: 8,
@@ -628,7 +744,7 @@ const showPause = (): void => {
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
       box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
-      box(panelX, panelY, 480, 300, [], {
+      box(panelX, panelY, 480, 340, [], {
         background: 'rgba(16, 22, 28, 0.96)',
         border: 'rgba(170, 205, 230, 0.45)',
         borderWidth: 2,
@@ -640,12 +756,24 @@ const showPause = (): void => {
         color: 'rgba(220,235,245,0.75)',
         align: 'center',
       }),
-      button(panelX + 90, panelY + 200, 300, 52, '继续游戏', () => {
+      button(panelX + 90, panelY + 190, 300, 52, '继续游戏', () => {
         paused = false;
         showHud();
       }, {
         background: 'rgba(52, 64, 74, 0.96)',
         border: 'rgba(190, 220, 240, 0.45)',
+        radius: 8,
+      }),
+      button(panelX + 90, panelY + 258, 300, 42, '保存并返回菜单', () => {
+        void (async () => {
+          await persistWorld();
+          started = false;
+          paused = false;
+          showWorlds();
+        })();
+      }, {
+        background: 'rgba(32, 42, 50, 0.95)',
+        border: 'rgba(190, 220, 240, 0.4)',
         radius: 8,
       }),
     ]),

@@ -66,7 +66,7 @@ const assert = (condition, message, state) => {
   const title = await waitState((state) => state.screen === 'title', '未进入标题页');
   await tap(512, 327);
   const worlds = await waitState((state) => state.screen === 'worlds', '未进入世界列表');
-  await tap(512, 272);
+  await tap(512, 235);
   const create = await waitState((state) => state.screen === 'create', '未进入新建表单');
   await tap(727, 423);
   const inGame = await waitState(
@@ -85,6 +85,31 @@ const assert = (condition, message, state) => {
   const inventory = await waitState((state) => state.inventoryOpen && state.screen === 'inventory', '背包没有打开');
   await tap(902, 56);
   const inventoryClosed = await waitState((state) => !state.inventoryOpen && state.screen === 'game', '背包没有关闭');
+
+  // 暂停 → 保存返回菜单 → 编辑 → 删除
+  await tap(912, 42);
+  await waitState((state) => state.paused && state.screen === 'pause', '返回菜单用例暂停失败');
+  await tap(512, 366);
+  const worldsAfterPause = await waitState(
+    (state) => state.screen === 'worlds' && state.worldCount === 1,
+    '暂停保存后没有回到世界列表',
+    10000,
+  );
+  await tap(620, 175);
+  const editScreen = await waitState((state) => state.screen === 'edit', '世界编辑没有打开');
+  await tap(252, 391);
+  const worldsAfterEdit = await waitState((state) => state.screen === 'worlds', '编辑取消没有回列表');
+  const liveFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
+  assert(liveFrame, '删除用例找不到 iframe');
+  await liveFrame.evaluate(() => {
+    wx.showModal = (options) => options?.success?.({ confirm: true, cancel: false });
+  });
+  await tap(718, 175);
+  const afterDelete = await waitState(
+    (state) => state.screen === 'worlds' && state.worldCount === 0,
+    '删除世界后数量未归零',
+    10000,
+  );
 
   // helper 的存储是 mock，重载后世界清单可能重置；真机才验证跨进程恢复。
   latest = null;
@@ -107,7 +132,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, paused, resumed, inventory, inventoryClosed, afterReload, reentered },
+      { title, worlds, create, inGame, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),
