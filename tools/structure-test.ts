@@ -24,6 +24,12 @@ import {
   type StructureKind,
 } from '../src/core/gen/Structures.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
+import {
+  planVillageLayout,
+  VILLAGE_PIECE_CLEAR_HALF,
+  VILLAGE_PIECE_HALF,
+  VILLAGE_WELL_HALF,
+} from '../src/core/gen/VillageLayout.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import {
   type BlockArray,
@@ -46,6 +52,10 @@ function check(label: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${label}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
 // ---------------------------------------------------------------- 工具
@@ -551,3 +561,63 @@ console.log('\n[矿井里的蛛网（批次 442）]');
 
 console.log(`\n结构测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
+
+console.log('\n[村庄布局（批次 455：街道槽位拼图）]');
+{
+  const plan = (target: number, buildable: (x: number, z: number, half: number) => boolean) =>
+    planVillageLayout({ centerX: 0, centerZ: 0, target, buildable });
+
+  // ① 地形全通时能排满目标数
+  const full = plan(8, () => true);
+  equal('无障碍时排满 8 个零件', full.length, 8);
+
+  // ② 两两不重叠（用清地半宽，不是占地半宽）
+  let overlaps = 0;
+  for (let i = 0; i < full.length; i++) {
+    for (let j = i + 1; j < full.length; j++) {
+      const a = full[i]!;
+      const b = full[j]!;
+      if (
+        Math.abs(a.x - b.x) < VILLAGE_PIECE_CLEAR_HALF * 2 &&
+        Math.abs(a.z - b.z) < VILLAGE_PIECE_CLEAR_HALF * 2
+      ) {
+        overlaps++;
+      }
+    }
+  }
+  equal('任意两个零件都不重叠（清地包络也不相交）', overlaps, 0);
+
+  // ③ 每个零件都离水井足够远（不会压住广场）
+  check(
+    '零件都不会压住中心水井',
+    full.every((piece) => Math.abs(piece.x) >= VILLAGE_WELL_HALF + VILLAGE_PIECE_HALF || Math.abs(piece.z) >= VILLAGE_WELL_HALF + VILLAGE_PIECE_HALF),
+  );
+
+  // ④ 门朝街：零件在中心的哪个方位，门就朝那个方位
+  let wrongDoor = 0;
+  for (const piece of full) {
+    // 零件 = 街道上的点 + 垂直偏移：**较小的那个分量**是"街的哪一侧"，
+    // 门朝它的反方向（x 偏东 → 门朝西；z 偏南 → 门朝北）
+    const expected =
+      Math.abs(piece.x) < Math.abs(piece.z)
+        ? piece.x > 0
+          ? 3
+          : 1
+        : piece.z > 0
+          ? 0
+          : 2;
+    if (piece.door !== expected) wrongDoor++;
+  }
+  equal('每一扇门都朝着街道（不是背对）', wrongDoor, 0);
+
+  // ⑤ 种类：住宅为主，农场/铁匠铺/图书馆各至少一个
+  const kinds = new Set(full.map((piece) => piece.kind));
+  check('三种工作点都排到了', kinds.has('farm') && kinds.has('smithy') && kinds.has('library'), [...kinds].join(','));
+  check('住宅占多数', full.filter((piece) => piece.kind === 'house').length >= full.length / 2);
+
+  // ⑥ 地形全不通 → 一个都不放（不能凭空"悬空造房"）
+  equal('地形都不合适时一个零件都不放', plan(8, () => false).length, 0);
+
+  // ⑦ 确定性：同样输入两次结果完全一致（跨区块重放的前提）
+  equal('同样输入两次结果一致', JSON.stringify(plan(8, () => true)), JSON.stringify(full));
+}

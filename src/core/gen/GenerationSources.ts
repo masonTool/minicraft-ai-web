@@ -253,6 +253,15 @@ const VILLAGE = [
   Block.TORCH,
   Block.CHEST,
   ...Array.from({ length: 16 }, (_unused, i) => bedId(i)),
+  // 批次 455：农场 / 铁匠铺 / 图书馆的家具与建材（村庄布局扩到四类建筑之后）
+  Block.FARMLAND,
+  Block.HAY_BLOCK,
+  Block.COMPOSTER,
+  Block.SMOKER,
+  Block.BLAST_FURNACE,
+  Block.GRINDSTONE,
+  Block.LECTERN,
+  Block.BOOKSHELF,
 ];
 
 const MINESHAFT = [

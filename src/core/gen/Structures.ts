@@ -41,6 +41,7 @@ import { lootTableIndex } from '../registry/loot.ts';
 import { WORKSTATION_BLOCKS } from '../registry/villagerTrades.ts';
 import { Biome } from './Biome.ts';
 import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld, OUTSIDE } from './Features.ts';
+import { planVillageLayout, type VillageDoorFacing, type VillagePieceKind } from './VillageLayout.ts';
 
 // ---------------------------------------------------------------- 类型
 
@@ -723,41 +724,40 @@ function buildVillage(w: FeatureWriter, s: StructureInstance, world: FeatureWorl
   // 于是"走到一个村庄，只见一个村民"。改成多撒候选、够了就停之后，
   // 实测（随机种子上 12 个村庄）从平均 1 栋提到 **2 栋**、最好的 4 栋
   // （`test:village` 直接数房子与床；要更多就得放宽高差或铺第二圈，那是另一条活的量级）。
-  const houses = 4 + s.rng.int(4);
-  const placed: Array<{ x: number; z: number; r: number }> = [];
-  for (let attempt = 0; attempt < houses * 3 && placed.length < houses; attempt++) {
-    const angle = (attempt / (houses * 3)) * Math.PI * 2 + s.rng.next() * 0.8;
-    const distance = 11 + s.rng.int(12);
-    const hx = s.x + Math.round(Math.cos(angle) * distance);
-    const hz = s.z + Math.round(Math.sin(angle) * distance);
-    if (placed.some((other) => Math.abs(other.x - hx) < 13 && Math.abs(other.z - hz) < 13)) continue;
-    // 房屋必须建在陆地上，且地面不能太陡
-    const hGround = world.surfaceY(hx, hz);
-    if (hGround < SEA_LEVEL || Math.abs(hGround - ground) > 6) continue;
-    placed.push({ x: hx, z: hz, r: 8 });
-    buildHouse(w, hx, hGround, hz, s.rng, palette);
+  // ---- 建筑：走 `planVillageLayout`（批次 455，结构"拼图化"的第一刀）
+  //
+  // 布局是**纯函数**（中心 + 随机源 + 地形判据），所以跨区块重放时结果一致；
+  // 地形判据只问 `surfaceY`（世界坐标纯函数），不读本区块的方块——
+  // 这是 HANDOFF §3.5 那条硬约定（否则接缝上的房子只会剩一半）。
+  //
+  // 目标 6~10 栋：原版村庄 5~15 栋，这里取"地形好时可以到 10"的一档。
+  const target = 6 + s.rng.int(5);
+  const pieces = planVillageLayout({
+    centerX: s.x,
+    centerZ: s.z,
+    target,
+    buildable: (px, pz) => {
+      const groundY = world.surfaceY(px, pz);
+      return groundY >= SEA_LEVEL && Math.abs(groundY - ground) <= 6;
+    },
+  });
+  for (const piece of pieces) {
+    buildHouse(w, piece.x, world.surfaceY(piece.x, piece.z), piece.z, s.rng, palette, piece.door, piece.kind);
   }
 
-  /**
-   * 房屋占地的保守半径（含 ±1 的石头地基圈与 1 格余量）。
-   * 房子最大 9×9（半宽 4）+ 地基外扩 1 + 余量 1 = 6。
-   */
-  const HOUSE_HALF = 6;
-
-  // ---- 道路：从广场向 4 个方向铺出去，顺带清掉挡路的植物
+  // ---- 道路：沿四条街铺（批次 455 改造）
   //
-  // ⚠️ 批次 179 修：道路**必须绕开房屋**。原来这里是无条件
-  // `clear(rx, ry+1, rz, rx, ry+4, rz)` —— 一条路正好从房子南墙穿过去时，
-  // 会把墙和门一起清掉，于是那栋房子**有床没门**（`test:village` 数到 10 张床 9 扇门）。
-  // 这个坑一直在，只是以前村庄中心那个区块没有房子、断言整段被跳过；
-  // 地形一变（房屋落点高度变了）露出来。判据是"房子的门必须比邻床存在"。
+  // ⚠️ 批次 179 修过一次"路从房子南墙穿过去、把门清掉"（表现是有床没门）。
+  // 现在布局与道路共用同一份 `pieces`：**落在零件占地里的格子一律跳过**，
+  // 路就不可能再把墙与门挖穿。
   for (const [dx, dz] of [
     [1, 0],
     [-1, 0],
     [0, 1],
     [0, -1],
   ] as const) {
-    const length = 14 + s.rng.int(12);
+    // 街道长度盖过最远的一圈（8 + 圈数×9 + 半宽），固定 34 够 6~10 栋的规模
+    const length = 34;
     for (let step = 3; step < length; step++) {
       const px = s.x + dx * step;
       const pz = s.z + dz * step;
@@ -765,10 +765,10 @@ function buildVillage(w: FeatureWriter, s: StructureInstance, world: FeatureWorl
       for (let side = -1; side <= 1; side++) {
         const rx = px + (dz === 0 ? 0 : side);
         const rz = pz + (dx === 0 ? 0 : side);
-        const insideHouse = placed.some(
-          (house) => Math.abs(house.x - rx) <= HOUSE_HALF && Math.abs(house.z - rz) <= HOUSE_HALF,
+        const insideBuilding = pieces.some(
+          (piece) => Math.abs(piece.x - rx) <= piece.half && Math.abs(piece.z - rz) <= piece.half,
         );
-        if (insideHouse) continue;
+        if (insideBuilding) continue;
         const ry = world.surfaceY(rx, rz);
         clear(w, rx, ry + 1, rz, rx, ry + 4, rz);
         w.fill(rx, ry, rz, Block.GRAVEL);
@@ -804,7 +804,26 @@ function villageBed(
 }
 
 /** 一栋村庄房屋：地基 → 木墙 → 门窗 → 坡屋顶 */
-function buildHouse(w: FeatureWriter, x: number, floorY: number, z: number, rng: PositionalRng, palette: VillagePalette): void {
+/**
+ * 村庄里的一栋建筑（批次 455 改造）。
+ *
+ * 原来只有"住宅"一种、门固定开在南墙。布局改成街道槽位之后：
+ *  - `door` 决定门开在**朝街那一面**（0 北 / 1 东 / 2 南 / 3 西）；
+ *  - `kind` 决定室内陈设（四种建筑共用同一个壳子，只有家具与建材细节不同）。
+ *
+ * ⚠️ 四类建筑都必须**各有一扇门、一张床、一个工作站**——
+ * `VillagePopulation` 是按床招人的，而 `test:village` 钉的是"床数 = 门数"。
+ */
+function buildHouse(
+  w: FeatureWriter,
+  x: number,
+  floorY: number,
+  z: number,
+  rng: PositionalRng,
+  palette: VillagePalette,
+  door: VillageDoorFacing = 2,
+  kind: VillagePieceKind = 'house',
+): void {
   const width = rng.chance(0.5) ? 7 : 9;
   const depth = rng.chance(0.5) ? 7 : 9;
   const x0 = x - (width >> 1);
@@ -852,12 +871,21 @@ function buildHouse(w: FeatureWriter, x: number, floorY: number, z: number, rng:
     w.fill(x1, base + 1, wz, Block.GLASS);
   }
 
-  // 门（开在南墙中央，门轴随机左右）
+  // 门（批次 455：开在**布局给的**那一面，门轴随机左右）
   const doorX = x0 + (width >> 1);
+  const doorZ = z0 + (depth >> 1);
   const hinge = rng.chance(0.5) ? 1 : 0;
-  w.fill(doorX, base, z1, Block.AIR);
-  w.fill(doorX, base + 1, z1, Block.AIR);
-  openDoor(w, doorX, base, z1, 2, hinge as 0 | 1);
+  const doorAt: [number, number, VillageDoorFacing] =
+    door === 0 ? [doorX, z0, 0] : door === 1 ? [x1, doorZ, 1] : door === 2 ? [doorX, z1, 2] : [x0, doorZ, 3];
+  w.fill(doorAt[0], base, doorAt[1], Block.AIR);
+  w.fill(doorAt[0], base + 1, doorAt[1], Block.AIR);
+  openDoor(w, doorAt[0], base, doorAt[1], doorAt[2], hinge as 0 | 1);
+  // 门内那一格（base 与 base+1）再强制清一次：相邻建筑的地基/山坡偶尔会压到
+  // 这里，表现是"门在、但走不进去"（`test:village` 在 24 扇门里抓到过 1 扇）。
+  // 门本来就是通道，清掉是语义上正确的；床在门的对侧，不会被误清。
+  const inwardX = door === 1 ? -1 : door === 3 ? 1 : 0;
+  const inwardZ = door === 0 ? 1 : door === 2 ? -1 : 0;
+  clear(w, doorAt[0] + inwardX, base, doorAt[1] + inwardZ, doorAt[0] + inwardX, base + 1, doorAt[1] + inwardZ);
 
   // 屋顶：四周挑檐 + 平顶（用楼梯做出檐口）
   for (let rx = x0 - 1; rx <= x1 + 1; rx++) {
@@ -881,10 +909,63 @@ function buildHouse(w: FeatureWriter, x: number, floorY: number, z: number, rng:
   // 所以这两样不是装饰，是**功能方块**，位置也不能被别的家具挤掉。
   torch(w, x0 + 1, base + 1, z0 + 1, 0);
   lootChest(w, x1 - 1, base, z1 - 2, 'village_house');
-  // 床贴着西墙、在火把那盏灯的南边（错开一格，免得火把正好悬在枕头上面）
-  villageBed(w, x0 + 1, base, z0 + 2, 2, rng.int(16));
-  // 工作站贴着东墙（与箱子隔开一格，免得"打开箱子挡着认领"）
-  w.fill(x1 - 1, base, z0 + 1, rng.pick(WORKSTATION_BLOCKS));
+
+  // 床放**门的对侧**（批次 455：门不再固定在南墙，挡门就进不去了）。
+  // `facing` 是床脚那格的方向、床头在它指向的那一侧：
+  //   门在北 → 床贴南墙、头朝北；门在南 → 贴北墙、头朝南；以此类推
+  const bedFacing = ((door + 2) % 4) as VillageDoorFacing;
+  const bedX = bedFacing === 1 ? x0 + 1 : bedFacing === 3 ? x1 - 2 : x0 + 1;
+  const bedZ = bedFacing === 0 ? z1 - 2 : z0 + 2;
+  villageBed(w, bedX, base, bedZ, bedFacing, rng.int(16));
+
+  // 工作站：按建筑类型指定（住宅随机挑一个，农场/铁匠铺/图书馆各给自己的那种）
+  const station =
+    kind === 'farm'
+      ? Block.COMPOSTER
+      : kind === 'smithy'
+        ? Block.GRINDSTONE
+        : kind === 'library'
+          ? Block.LECTERN
+          : rng.pick(WORKSTATION_BLOCKS);
+  w.fill(x1 - 1, base, z0 + 1, station);
+
+  // ---- 各建筑自己的"招牌"陈设（都在不挡门、不压床的角落里）
+  if (kind === 'farm') {
+    // 农场（批次 455）：屋里两行耕地 + 一摞干草（原版农场就是"没有地板、直接种地"）
+    for (let fx = x0 + 1; fx <= x1 - 1; fx++) {
+      w.fill(fx, base - 1, z0 + 1, Block.FARMLAND);
+      w.fill(fx, base - 1, z0 + 2, Block.FARMLAND);
+    }
+    w.fill(x1 - 2, base, z1 - 2, Block.HAY_BLOCK);
+    w.fill(x1 - 3, base, z1 - 2, Block.HAY_BLOCK);
+  } else if (kind === 'smithy') {
+    // 铁匠铺：两座熔炉 + 一座高炉（砂轮已经在工作站那格）。
+    // ⚠️ 不放铁砧：原版铁砧**不是工作站**，摆进来会被 `test:village` 的
+    // "没有没人认领的方块"那条判红（它检查的正是"看着像工作站、职业表不认"）
+    // ⚠️ 不放**普通熔炉**：它在本项目的职业表里不是工作站，但长得很像，
+    // `test:village` 的"没人认领的方块"那条会把它数进去（高炉/烟熏炉才是工作台）
+    w.fill(x1 - 1, base, z1 - 2, Block.BLAST_FURNACE);
+    w.fill(x1 - 1, base, z1 - 3, Block.BLAST_FURNACE);
+    // ⚠️ 烟熏炉要避开**床那一列**：门朝北时床就摆在 x0+1、z0+2/z0+3，
+    // 而 z1-3 在 depth=7 时正好是 z0+3 —— 第一版把床头盖掉了（`test:village`
+    // 的"每张床两格"抓到 16 张里少了 1 个头）
+    w.fill(bedX === x0 + 1 ? x0 + 2 : x0 + 1, base, z1 - 3, Block.SMOKER);
+  } else if (kind === 'library') {
+    // 图书馆：书架摆**不靠门的那面墙**。
+    // ⚠️ 第一版固定摆东墙，门朝东时门内那格正好被书架占住（`test:village` 的
+    // "门口能走进去"抓到 24 扇里 1 扇）；按 door 分两种摆法才是对的
+    if (door === 1 || door === 3) {
+      for (let fx = x0 + 2; fx <= x1 - 2; fx++) {
+        w.fill(fx, base, z1 - 1, Block.BOOKSHELF);
+        w.fill(fx, base + 1, z1 - 1, Block.BOOKSHELF);
+      }
+    } else {
+      for (let fz = z0 + 2; fz <= z1 - 2; fz++) {
+        w.fill(x1 - 1, base, fz, Block.BOOKSHELF);
+        w.fill(x1 - 1, base + 1, fz, Block.BOOKSHELF);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------- 废弃矿井

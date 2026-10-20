@@ -133,8 +133,11 @@ console.log('\n[真实生成：村庄的屋里有床与工作站]');
     const cz0 = Math.floor(instance.minZ / CHUNK_SIZE_Z);
     const cz1 = Math.floor(instance.maxZ / CHUNK_SIZE_Z);
 
-    for (let cz = cz0; cz <= cz1; cz++) {
-      for (let cx = cx0; cx <= cx1; cx++) {
+    // 多扫一圈：床/门可能落在 instance 包围盒外那一格（批次 455 布局变大之后
+    // 最远一栋房子的床头正好跨出去，头数就比脚少 1 —— 那是**扫描范围**的问题，
+    // 不是床生成错了。扩一圈比"放宽断言"诚实）
+    for (let cz = cz0 - 1; cz <= cz1 + 1; cz++) {
+      for (let cx = cx0 - 1; cx <= cx1 + 1; cx++) {
         const blocks = generateChunkBlocks(cx, cz, SEED);
         const states = takeGeneratedStates() ?? new Uint8Array(blocks.length);
         for (let y = 0; y < 200; y++) {
@@ -176,13 +179,16 @@ console.log('\n[真实生成：村庄的屋里有床与工作站]');
                 const upper = (state & 0b100000) !== 0;
                 if (upper) continue;
                 doors++;
-                // 门开在南墙（朝南），所以"屋里"是门那一格的北边一格。
+                // 门开在**哪一面**由 facing 决定（批次 455：布局改成"门朝街"之后
+                // 不再固定朝南，这里必须跟着转，否则"屋内"那一格会量到墙外去）。
                 // ⚠️ 门那一层与它上一层**都**必须是空气：O13 那条"隐形地板"
                 // 正是让门口比屋外高两格（得跳着进），这两格就是最直接的判据。
-                const lz = z - 1;
-                if (lz < 0) continue; // 跨到隔壁区块那一侧，这里不查
-                const lower = blocks[Chunk.index(x, y, lz)]!;
-                const above = y + 1 < 200 ? blocks[Chunk.index(x, y + 1, lz)]! : Block.AIR;
+                const facing = facingOf(state);
+                const lx = facing === 1 ? x - 1 : facing === 3 ? x + 1 : x;
+                const lz = facing === 0 ? z + 1 : facing === 2 ? z - 1 : z;
+                if (lx < 0 || lx > 15 || lz < 0 || lz > 15) continue; // 跨到隔壁区块那一侧
+                const lower = blocks[Chunk.index(lx, y, lz)]!;
+                const above = y + 1 < 200 ? blocks[Chunk.index(lx, y + 1, lz)]! : Block.AIR;
                 if (lower !== Block.AIR || above !== Block.AIR) blockedDoorways++;
               }
             }
