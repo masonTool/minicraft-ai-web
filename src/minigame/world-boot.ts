@@ -1817,23 +1817,27 @@ async function boot(): Promise<void> {
       }
     }
 
-    const centerCx = Math.floor(physics.x / 16);
-    const centerCz = Math.floor(physics.z / 16);
+    // 首页是静态背景：主菜单期间不生成区块、不做光照/网格化，
+    // 只有点“游戏 → 进入”关闭主菜单后，才真正进入世界。
+    if (!ui.isMainMenuOpen()) {
+      const centerCx = Math.floor(physics.x / 16);
+      const centerCz = Math.floor(physics.z / 16);
 
-    world.update(centerCx, centerCz, viewRadius);
-    world.processLighting(LIGHT_BUDGET);
+      world.update(centerCx, centerCz, viewRadius);
+      world.processLighting(LIGHT_BUDGET);
 
-    const busy = !playerReady || world.lightWorkCount > 0 || chunkRenderer.queueLength > 0;
-    if (busy) {
-      const progress = world.chunks.size > 0 ? chunkRenderer.drawnCount / world.chunks.size : 0;
-      ui.setLoading(Math.min(1, progress), 'GENERATING WORLD');
-    } else {
-      ui.setLoading(null);
+      const busy = !playerReady || world.lightWorkCount > 0 || chunkRenderer.queueLength > 0;
+      if (busy) {
+        const progress = world.chunks.size > 0 ? chunkRenderer.drawnCount / world.chunks.size : 0;
+        ui.setLoading(Math.min(1, progress), 'GENERATING WORLD');
+      } else {
+        ui.setLoading(null);
+      }
+      // WX-020A：先保证能看到完整地形；正式版应恢复“光照收敛后再网格化”的门闩，
+      // 否则会把未收敛的光照烘焙进网格（App 里的 pendingSettle 会补刷）。
+      chunkRenderer.processQueue(MESH_BUDGET, centerCx, centerCz);
+      chunkRenderer.applyViewDistance(centerCx, centerCz, viewRadius);
     }
-    // WX-020A：先保证能看到完整地形；正式版应恢复“光照收敛后再网格化”的门闩，
-    // 否则会把未收敛的光照烘焙进网格（App 里的 pendingSettle 会补刷）。
-    chunkRenderer.processQueue(MESH_BUDGET, centerCx, centerCz);
-    chunkRenderer.applyViewDistance(centerCx, centerCz, viewRadius);
     solid.setTime(time * 0.001);
     translucent.setTime(time * 0.001);
 
