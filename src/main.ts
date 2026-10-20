@@ -117,6 +117,7 @@ import {
   type SavedEntity,
   type SavedEntityRecord,
 } from './core/entity/EntityParking.ts';
+import { sanitizeMobEquipment } from './core/entity/MobEquipment.ts';
 /**
  * 可骑乘的载具（批次 245）：船与矿车共用"上下车 + 每帧贴位置 + `vehicleInput`"那一套，
  * 所以主程序里所有骑乘状态都按这个联合类型存。
@@ -5982,6 +5983,8 @@ class App {
         baby: entity.baby,
         growSeconds: entity.growRemaining,
         effects: entity.effects.count > 0 ? entity.effects.serialize() : undefined,
+        // 个体装备（J27）：白板不写键，老存档读回来按白板处理
+        ...(Object.keys(entity.equipment).length > 0 ? { equipment: entity.equipment } : {}),
         ...(villager ? { villager } : {}),
       };
     }
@@ -6010,6 +6013,8 @@ class App {
     const mob = createMob(type, record.x, record.y, record.z);
     mob.yaw = record.yaw;
     mob.health = Math.max(1, Math.min(type.health, record.health));
+    // 个体装备（J27）：读档以存档为准；老存档没有这个键 → 白板
+    mob.equipment = sanitizeMobEquipment(record.equipment) ?? {};
     mob.tamed = record.tamed;
     mob.sitting = record.sitting;
     mob.leashed = record.leashed;

@@ -188,6 +188,8 @@ console.log('\n[三叉戟的投掷：唯一一个"两边都能打"的投掷物]'
 
   // ---- 玩家扔的：砸生物
   const zombie = new Mob(mobTypeById('zombie')!, 2, 1, 0.5);
+  // J27：装备是随机生成的；这条断言测的是"三叉戟伤害 8 点"，先钉住无甲前提
+  zombie.equipment = {};
   const healthBefore = zombie.health;
   const { ctx: mobCtx } = makeCtx({ hitMob: () => zombie });
   const playerTrident = new Throwable(0.5, 1, 0.5, { x: 30, y: 0, z: 0 }, {

@@ -60,6 +60,7 @@
     "test:mesh": "esbuild tools/mesh-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mesh-test.mjs --log-level=error && node .tmp/mesh-test.mjs",
     "test:survival": "esbuild tools/survival-test.ts --bundle --platform=node --format=esm --outfile=.tmp/survival-test.mjs --log-level=error && node .tmp/survival-test.mjs",
     "test:mob": "esbuild tools/mob-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mob-test.mjs --log-level=error && node .tmp/mob-test.mjs",
+    "test:equipment": "esbuild tools/mob-equipment-test.ts --bundle --platform=node --format=esm --outfile=.tmp/mob-equipment-test.mjs --log-level=error && node .tmp/mob-equipment-test.mjs",
     "test:spawn": "esbuild tools/spawn-test.ts --bundle --platform=node --format=esm --outfile=.tmp/spawn-test.mjs --log-level=error && node .tmp/spawn-test.mjs",
     "test:combat": "esbuild tools/combat-test.ts --bundle --platform=node --format=esm --outfile=.tmp/combat-test.mjs --log-level=error && node .tmp/combat-test.mjs",
     "test:decor": "esbuild tools/decor-test.ts --bundle --platform=node --format=esm --outfile=.tmp/decor-test.mjs --log-level=error && node .tmp/decor-test.mjs",

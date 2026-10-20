@@ -16,6 +16,7 @@
  */
 
 import type { DroppedExtras } from './Entity.ts';
+import type { MobEquipment } from './MobEquipment.ts';
 import type { VillagerSavedState } from './Villager.ts';
 import { MAX_TRADE_DEMAND } from '../registry/villagerTrades.ts';
 
@@ -48,6 +49,8 @@ export interface SavedMob {
   effects?: SavedMobEffect[];
   /** 村民的职业与交易进度（批次 501）；非村民、无业村民都不写这个键 */
   villager?: VillagerSavedState;
+  /** 个体装备（J27）：白板生物不写这个键 */
+  equipment?: MobEquipment;
 }
 
 export interface SavedItemEntity {

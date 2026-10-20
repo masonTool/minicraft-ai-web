@@ -17,7 +17,7 @@ P9 支持加载玩家自备的资源包（`.mcpack`）。
 npm install
 npm run dev         # 开发服务器 http://localhost:5173
 npm run typecheck   # 类型检查
-npm test            # 先过 tools 的类型检查，再跑 vitest + 161 套自建离线测试（含可达性审计）
+npm test            # 先过 tools 的类型检查，再跑 vitest + 162 套自建离线测试（含可达性审计）
 npm run check       # 提交前门禁：`typecheck` + `test` + 三张台账，任一失败即非零退出
 npm run check:fast  # 改代码时的内循环：只跑被本次改动命中的那几套离线测试
 npm run build       # 生产构建（`npm run build:fast` 是关掉 sourcemap 的快版本）
@@ -26,7 +26,7 @@ npm run audit:coverage # 覆盖度台账：从注册表量出各维度覆盖率�
 ```
 
 > 用 AI 推进这个仓库时，先读 [`AGENTS.md`](./AGENTS.md)（会话入口 + 该展开哪些文档的索引）。
-> 161 套离线测试由 `tools/run-tests.mjs` 聚合跑（一次打包 + 并行执行）；
+> 162 套离线测试由 `tools/run-tests.mjs` 聚合跑（一次打包 + 并行执行）；
 > 单套仍可直接 `npm run test:reach` 这样跑。
 
 操作：`W/A/S/D` 移动 · `Space` 跳跃/上升 · `Shift` 潜行/下降 · `Ctrl` 疾跑 ·
@@ -76,7 +76,7 @@ Settings → Pages → Build and deployment → Source = GitHub Actions
 | **P3** 玩家与交互 | AABB 物理、疾跑/潜行/游泳/摔伤、射线选块、破坏耗时与工具等级、方块掉落 | 🔶 已完成 24 / 共 27 |
 | **P4** 物品与合成 | 物品注册表、背包 36 格、2×2 / 3×3 合成、熔炉、箱子 | 🔶 已完成 18 / 共 19 |
 | **P5** 生存机制 | 生命/饥饿/饱和度、生物生成、昼夜循环、天气、床与重生 | 🔶 已完成 21 / 共 22 |
-| **P6** 实体与生物 | 实体框架、怪物 AI 与寻路、战斗、掉落物、繁殖 | 🔶 已完成 14 / 共 21 |
+| **P6** 实体与生物 | 实体框架、怪物 AI 与寻路、战斗、掉落物、繁殖 | 🔶 已完成 15 / 共 22 |
 | **P7** 世界特色 | 村庄/遗迹结构、下界、末地、红石、附魔、酿造 | 🔶 已完成 7 / 共 11 |
 | **P8** 存档与联机 | IndexedDB 存档、WebSocket 多人 | 🔶 已完成 1 / 共 5 |
 | **P9** UI 与音频 | 主菜单/设置、资源包加载、音效 | 🔶 已完成 23 / 共 35 |

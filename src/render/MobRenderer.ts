@@ -16,6 +16,13 @@
 import * as THREE from 'three';
 import { BABY_SCALE, type Mob } from '../core/entity/Mob.ts';
 import type { MobType } from '../core/entity/Mob.ts';
+import {
+  armorTint,
+  mobEquipmentKey,
+  weaponKindOf,
+  weaponTint,
+  type MobEquipment,
+} from '../core/entity/MobEquipment.ts';
 import { Villager } from '../core/entity/Villager.ts';
 import { DYE_COLORS } from '../core/registry/colors.ts';
 import { VILLAGER_IDLE_ROBE, VILLAGER_SKIN_COLOR } from '../core/registry/villagerTrades.ts';
@@ -62,11 +69,15 @@ export function mobAccentColor(mob: Mob): number {
  * 加第二种"会变色的生物"就得再写一处 if（本项目的坑之一）。
  */
 export function mobAppearanceKey(mob: Mob): string {
-  if (mob.type.wool) return mob.sheared ? 'sheared' : 'woolly';
-  if (mob instanceof Villager) return mob.appearanceKey;
+  let base = '';
+  if (mob.type.wool) base = mob.sheared ? 'sheared' : 'woolly';
+  else if (mob instanceof Villager) base = mob.appearanceKey;
   // 驯养系（批次 242）：项圈的颜色跟着"驯没驯服"变 → 驯服那一刻要重建一次模型
-  if (mob.type.tameWith !== undefined) return mob.tamed ? 'tamed' : 'wild';
-  return '';
+  else if (mob.type.tameWith !== undefined) base = mob.tamed ? 'tamed' : 'wild';
+  // 个体装备（J27）：盔甲材质与主手武器都在 `createVisual` 里定色，
+  // 溺尸扔出三叉戟后主手会变空，必须靠指纹触发一次重建
+  const equipment = mobEquipmentKey(mob.equipment);
+  return equipment ? `${base}|${equipment}` : base;
 }
 
 type ModelKind =
@@ -300,6 +311,20 @@ interface BoxSpec {
    *    驯服之后才变成红色。这样模型表不必按"驯没驯服"分两份。
    */
   color: 'body' | 'accent' | 'eye' | 'collar';
+  /**
+   * 直接指定颜色（J27：盔甲材质色 / 武器材质色）。
+   *
+   * 有 `tint` 时优先于 `color` 角色——装备件不参与"身体色/点缀色"那套，
+   * 否则铁头盔会跟着羊的毛色变。
+   */
+  tint?: number;
+  /**
+   * 跟着哪条腿摆动（J27：腿甲/靴子）。
+   *
+   * 现有骨架默认"前 `legCount` 个部件摆腿"，而装备件是追加在末尾的；
+   * 有这个字段就不必把新部件插进数组中间，也不会打乱眼睛等部位的下标。
+   */
+  swing?: 1 | -1;
 }
 
 function humanoidBoxes(type: MobType): BoxSpec[] {
@@ -330,6 +355,124 @@ function humanoidBoxes(type: MobType): BoxSpec[] {
  * 颜色分工：`body` = 皮肤（头/手/鼻子）、`accent` = 长袍（躯干/腿/袖口）——
  * 长袍色按职业换，见 `mobAccentColor`。
  */
+/**
+ * 个体装备的可见部件（J27）。
+ *
+ * 只在人形骨架上追加：头/胸/腿/靴各一块略大的薄板 + 主手一件长条。
+ * 尺寸直接按 `humanoidBoxes` 的同一套比例算——两边都用 `type.width/height`，
+ * 所以"盔甲比身体大一圈"在任何体型上都成立。
+ */
+function equipmentBoxes(kind: ModelKind, type: MobType, equipment: MobEquipment | undefined): BoxSpec[] {
+  if (kind !== 'humanoid' || !equipment) return [];
+  const keys = Object.keys(equipment);
+  if (keys.length === 0) return [];
+
+  const w = type.width;
+  const legHeight = type.height * 0.38;
+  const bodyHeight = type.height * 0.34;
+  const bodyY = legHeight + bodyHeight / 2;
+  const headSize = w * 0.78;
+  const headY = legHeight + bodyHeight + headSize / 2;
+  const armLength = bodyHeight * 0.92;
+  const out: BoxSpec[] = [];
+
+  if (equipment.head !== undefined) {
+    out.push({
+      width: headSize * 1.06,
+      height: headSize * 1.06,
+      depth: headSize * 1.06,
+      x: 0,
+      y: headY,
+      z: 0,
+      color: 'body',
+      tint: armorTint(equipment.head),
+    });
+  }
+  if (equipment.chest !== undefined) {
+    out.push({
+      width: w * 1.04,
+      height: bodyHeight * 0.92,
+      depth: w * 0.56,
+      x: 0,
+      y: bodyY,
+      z: 0,
+      color: 'body',
+      tint: armorTint(equipment.chest),
+    });
+  }
+  if (equipment.legs !== undefined) {
+    const tint = armorTint(equipment.legs);
+    out.push(
+      {
+        width: w * 0.32,
+        height: legHeight * 0.9,
+        depth: w * 0.32,
+        x: -w * 0.24,
+        y: legHeight / 2,
+        z: 0,
+        color: 'body',
+        tint,
+        swing: -1,
+      },
+      {
+        width: w * 0.32,
+        height: legHeight * 0.9,
+        depth: w * 0.32,
+        x: w * 0.24,
+        y: legHeight / 2,
+        z: 0,
+        color: 'body',
+        tint,
+        swing: 1,
+      },
+    );
+  }
+  if (equipment.feet !== undefined) {
+    const tint = armorTint(equipment.feet);
+    out.push(
+      {
+        width: w * 0.32,
+        height: legHeight * 0.24,
+        depth: w * 0.36,
+        x: -w * 0.24,
+        y: legHeight * 0.1,
+        z: w * 0.03,
+        color: 'body',
+        tint,
+        swing: -1,
+      },
+      {
+        width: w * 0.32,
+        height: legHeight * 0.24,
+        depth: w * 0.36,
+        x: w * 0.24,
+        y: legHeight * 0.1,
+        z: w * 0.03,
+        color: 'body',
+        tint,
+        swing: 1,
+      },
+    );
+  }
+  if (equipment.mainHand !== undefined) {
+    const kindOfWeapon = weaponKindOf(equipment.mainHand);
+    const tint = weaponTint(equipment.mainHand) ?? 0xd8d8d8;
+    // 弓/弩横着拿，剑/斧/三叉戟竖着握——只差长宽比，省一套旋转
+    const ranged = kindOfWeapon === 'bow' || kindOfWeapon === 'crossbow';
+    out.push({
+      width: ranged ? w * 0.12 : w * 0.16,
+      height: armLength * (ranged ? 0.62 : 0.72),
+      depth: w * (ranged ? 0.2 : 0.16),
+      x: w * 0.66,
+      y: bodyY - armLength * 0.08,
+      z: w * 0.26,
+      color: 'body',
+      tint,
+    });
+  }
+  return out;
+}
+
 function villagerBoxes(type: MobType): BoxSpec[] {
   const w = type.width;
   const legHeight = type.height * 0.42;
@@ -1058,6 +1201,7 @@ export class MobRenderer {
         let rotY = 0;
         let rotZ = 0;
         if (visual.kind === 'crystal') rotY = visual.spin;
+        else if (spec.swing !== undefined) rotX = legSwing * spec.swing;
         else if (i < visual.legCount) {
           if (visual.kind === 'dragon') rotZ = i % 2 === 0 ? flap : -flap;
           else rotX = i % 2 === 0 ? legSwing : -legSwing;
@@ -1148,7 +1292,8 @@ export class MobRenderer {
   private createVisual(mob: Mob): MobVisual {
     const type = mob.type;
     const kind = modelKindOf(type.id);
-    const specs = modelBoxes(kind, type);
+    // 装备件追加在骨架之后（下标不变，眼睛等部位的 `legCount` 判定不受影响）
+    const specs = [...modelBoxes(kind, type), ...equipmentBoxes(kind, type, mob.equipment)];
 
     const partColors = new Uint32Array(specs.length);
     // ⚠️ 主色与点缀色都走函数（不是 `type.bodyColor`）：羊的毛色与村民的长袍色
@@ -1162,14 +1307,16 @@ export class MobRenderer {
       const spec = specs[i]!;
       // `eye`：默认那份近黑色，除非这种生物自带 `eyeColor`
       // （批次 112 末影人：全身纯黑，眼睛是它唯一的辨识点）
+      // 装备件自带 `tint`（盔甲/武器材质色），优先于身体/点缀色角色
       partColors[i] =
-        spec.color === 'body'
+        spec.tint ??
+        (spec.color === 'body'
           ? bodyColor
           : spec.color === 'accent'
             ? accentColor
             : spec.color === 'collar'
               ? collarColor
-              : (type.eyeColor ?? 0x14161c);
+              : (type.eyeColor ?? 0x14161c));
     }
 
     return {

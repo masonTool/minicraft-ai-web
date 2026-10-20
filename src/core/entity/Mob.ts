@@ -27,6 +27,12 @@ import { shouldChasePlayer } from './ChaseRules.ts';
 import { opensDoors } from './DoorRules.ts';
 import { swimVerticalSpeed } from './SwimRules.ts';
 import { Pathfinder, type PathPoint } from './Pathfinder.ts';
+import {
+  applyMobArmor,
+  equipmentDrops,
+  rollMobEquipment,
+  type MobEquipment,
+} from './MobEquipment.ts';
 
 /** 与玩家一致的常量（原版数值） */
 /** 苦力怕引信时长（秒） */
@@ -599,6 +605,14 @@ export class Mob extends Entity {
    */
   hasTrident = false;
 
+  /**
+   * 个体装备（J27）：主手 + 头/胸/腿/靴。
+   *
+   * 白板是空对象；装备只在生成时掷一次（溺尸扔完三叉戟后会清掉主手）。
+   * 护甲值/掉落/渲染都从这里读，避免"渲染有头盔、减伤却没有"的两套状态。
+   */
+  equipment: MobEquipment = {};
+
   /** 求爱剩余秒数（>0 表示正在找配偶）与两次繁殖之间的冷却 */
   private loveTimer = 0;
   private breedCooldown = 0;
@@ -706,6 +720,9 @@ export class Mob extends Entity {
     this.health = type.health;
     // 带不带三叉戟是**个体**属性（原版约 15%）：在这里掷一次，而不是按种类写死
     this.hasTrident = type.throwsTrident === true && Math.random() < (type.tridentChance ?? 0);
+    // 个体装备（J27）：与三叉戟同一条"生成时掷一次"的口径；
+    // 溺尸的三叉戟已经掷过，这里只把它映射到主手，避免再掷一次出现"有装备没三叉戟"
+    this.equipment = rollMobEquipment(type.id, Math.random, { hasTrident: this.hasTrident });
     // 声音档案按种类查一次（`remote_player` 是 null：玩家角色不该发出动物声音）
     this.voiceId = mobVoiceFor(type.id, type.family);
     // 寻路器只需要"读方块"这一点能力，直接转发给每帧传入的上下文
@@ -1473,6 +1490,8 @@ export class Mob extends Entity {
       // 原版：溺尸只有那一支，扔出去就没了。不扣掉它，每 2.5 秒就会凭空造一把
       // （落地又会 `spawnDrop` 一把），海面很快漂满三叉戟（批次 235 修的就是这个）
       this.hasTrident = false;
+      // 主手也一起清掉（J27）：否则模型还举着一支、死亡时还会再掉一支
+      delete this.equipment.mainHand;
       ctx.spawnTrident?.(this.x, eyeY, this.z, {
         x: (aimX * cos - aimZ * sin) * ranged.speed,
         y: aimY * ranged.speed,
@@ -2060,7 +2079,13 @@ export class Mob extends Entity {
       }
     }
     this.hitFlash = 0.3;
-    this.health -= amount;
+    // 生物护甲（J27）：只挡玩家/生物造成的伤害。摔落/着火/岩浆/爆炸与玩家那边
+    // 的 `bypasses_armor` 同口径，不从这条路走（调用方传的是 `environment`）。
+    const applied =
+      source !== undefined && source.kind !== 'environment'
+        ? applyMobArmor(this.equipment, amount)
+        : amount;
+    this.health -= applied;
 
     // 挨打叫一声（批次 232）。
     // ⚠️ 致死的那一下**不在这里**播：死亡声统一由 `tickVoice` 结算，
@@ -2109,6 +2134,12 @@ export class Mob extends Entity {
       const max = drop.max + Math.max(0, looting);
       const count = drop.min + Math.floor(Math.random() * (max - drop.min + 1));
       if (count > 0) ctx.spawnDrop(drop.itemId, count, this.x, this.y + this.height * 0.5, this.z);
+    }
+
+    // 个体装备（J27）：每件独立 8.5%（抢夺每级 +1%）。
+    // 放在种类掉落之后、羊毛之前：顺序不影响结果，但读起来是"先种类、再个体、最后特例"。
+    for (const itemId of equipmentDrops(this.equipment, Math.random, looting)) {
+      ctx.spawnDrop(itemId, 1, this.x, this.y + this.height * 0.5, this.z);
     }
 
     // 羊毛按**自己身上的颜色**掉，所以进不了 drops 表；
