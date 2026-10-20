@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { BABY_SCALE, type Mob } from '../core/entity/Mob.ts';
+import { BABY_SCALE, attackSwingAmount, type Mob } from '../core/entity/Mob.ts';
 import type { MobType } from '../core/entity/Mob.ts';
 import {
   armorTint,
@@ -325,6 +325,15 @@ interface BoxSpec {
    * 有这个字段就不必把新部件插进数组中间，也不会打乱眼睛等部位的下标。
    */
   swing?: 1 | -1;
+  /**
+   * 跟着哪条手臂做攻击摆动（J12）。
+   *
+   * 手臂与手持武器的旋转**绕肩关节**，不是绕自己的中心——所以还要配 `pivot`；
+   * 只有 `swingArm` 没有 `pivot` 时，手臂会像跷跷板一样原地转。
+   */
+  swingArm?: 1 | -1;
+  /** 旋转支点（部件坐标）；缺省表示绕自己的中心转 */
+  pivot?: { x: number; y: number; z: number };
 }
 
 function humanoidBoxes(type: MobType): BoxSpec[] {
@@ -340,8 +349,28 @@ function humanoidBoxes(type: MobType): BoxSpec[] {
     { width: w * 0.28, height: legHeight, depth: w * 0.28, x: -w * 0.24, y: legHeight / 2, z: 0, color: 'accent' },
     { width: w * 0.28, height: legHeight, depth: w * 0.28, x: w * 0.24, y: legHeight / 2, z: 0, color: 'accent' },
     { width: w, height: bodyHeight, depth: w * 0.5, x: 0, y: bodyY, z: 0, color: 'body' },
-    { width: w * 0.26, height: armLength, depth: w * 0.26, x: -w * 0.62, y: bodyY, z: 0, color: 'body' },
-    { width: w * 0.26, height: armLength, depth: w * 0.26, x: w * 0.62, y: bodyY, z: 0, color: 'body' },
+    {
+      width: w * 0.26,
+      height: armLength,
+      depth: w * 0.26,
+      x: -w * 0.62,
+      y: bodyY,
+      z: 0,
+      color: 'body',
+      swingArm: 1,
+      pivot: { x: -w * 0.62, y: bodyY + armLength / 2, z: 0 },
+    },
+    {
+      width: w * 0.26,
+      height: armLength,
+      depth: w * 0.26,
+      x: w * 0.62,
+      y: bodyY,
+      z: 0,
+      color: 'body',
+      swingArm: 1,
+      pivot: { x: w * 0.62, y: bodyY + armLength / 2, z: 0 },
+    },
     { width: headSize, height: headSize, depth: headSize, x: 0, y: headY, z: 0, color: 'body' },
     { width: w * 0.16, height: w * 0.1, depth: w * 0.06, x: -headSize * 0.22, y: headY + headSize * 0.1, z: headSize * 0.5, color: 'eye' },
     { width: w * 0.16, height: w * 0.1, depth: w * 0.06, x: headSize * 0.22, y: headY + headSize * 0.1, z: headSize * 0.5, color: 'eye' },
@@ -468,6 +497,9 @@ function equipmentBoxes(kind: ModelKind, type: MobType, equipment: MobEquipment 
       z: w * 0.26,
       color: 'body',
       tint,
+      // 跟着右臂绕同一个肩关节摆（J12）：否则挥臂时武器会留在原地
+      swingArm: 1,
+      pivot: { x: w * 0.62, y: bodyY + armLength / 2, z: 0 },
     });
   }
   return out;
@@ -1175,6 +1207,8 @@ export class MobRenderer {
       // ---- 摆动量
       let legSwing = 0;
       let flap = 0;
+      // 出手摆动（J12）：0.35 秒的正弦曲线，没在攻击时恒为 0
+      const attackSwing = attackSwingAmount(mob.attackAnim);
       if (visual.kind === 'dragon') {
         const speed = Math.hypot(mob.vx, mob.vz);
         flap = Math.sin(this.elapsed * (5 + speed * 0.15)) * 0.55;
@@ -1195,17 +1229,31 @@ export class MobRenderer {
         }
         const spec = visual.specs[i]!;
 
-        this.partDummy.position.set(spec.x, spec.y, spec.z);
         this.partDummy.scale.set(spec.width, spec.height, spec.depth);
         let rotX = 0;
         let rotY = 0;
         let rotZ = 0;
         if (visual.kind === 'crystal') rotY = visual.spin;
+        else if (spec.swingArm !== undefined) rotX = -attackSwing * spec.swingArm;
         else if (spec.swing !== undefined) rotX = legSwing * spec.swing;
         else if (i < visual.legCount) {
           if (visual.kind === 'dragon') rotZ = i % 2 === 0 ? flap : -flap;
           else rotX = i % 2 === 0 ? legSwing : -legSwing;
         }
+        // 手臂/武器绕肩关节转：先算中心相对支点的位移，旋转后再加回支点。
+        // 只给 `rotation` 会让部件绕自己的中心转（看起来像跷跷板，不像挥拳）。
+        let px = spec.x;
+        let py = spec.y;
+        let pz = spec.z;
+        if (spec.pivot && rotX !== 0) {
+          const dy = spec.y - spec.pivot.y;
+          const dz = spec.z - spec.pivot.z;
+          const cos = Math.cos(rotX);
+          const sin = Math.sin(rotX);
+          py = spec.pivot.y + dy * cos - dz * sin;
+          pz = spec.pivot.z + dy * sin + dz * cos;
+        }
+        this.partDummy.position.set(px, py, pz);
         this.partDummy.rotation.set(rotX, rotY, rotZ);
         this.partDummy.updateMatrix();
         this.partDummy.updateWorldMatrix(true, false);

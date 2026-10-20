@@ -44,6 +44,21 @@ export const WOOL_REGROW_SECONDS = 30;
 
 export const CREEPER_FUSE_TIME = 1.5;
 
+/** 近战出手动画时长（秒，J12）：一次挥臂 0.35 秒，足够看清但不拖慢 1 秒的出手节奏 */
+export const ATTACK_ANIM_SECONDS = 0.35;
+
+/**
+ * 出手动画的摆动量（0~1，纯函数）。
+ *
+ * `remaining` 是还剩多少秒；用正弦让"抬起 → 挥下 → 收回"连成一口气，
+ * 而不是线性插值那种一顿一顿的机械感。
+ */
+export function attackSwingAmount(remaining: number): number {
+  if (!(remaining > 0)) return 0;
+  const progress = 1 - Math.min(1, remaining / ATTACK_ANIM_SECONDS);
+  return Math.sin(progress * Math.PI);
+}
+
 /** 手上的食物能把动物引过来的距离（格，原版约 8 格） */
 export const TEMPT_RANGE = 8;
 /** 引到这么近就停下来（否则动物会一直顶着玩家推） */
@@ -613,6 +628,13 @@ export class Mob extends Entity {
    */
   equipment: MobEquipment = {};
 
+  /**
+   * 出手动画剩余秒数（J12）：渲染层只读，每次真的打中玩家时重置。
+   * 与 `attackCooldown`（1 秒的出手节奏）分开——动画只有 0.35 秒，
+   * 拿冷却当时长会变成"手臂慢慢抬 1 秒"。
+   */
+  attackAnim = 0;
+
   /** 求爱剩余秒数（>0 表示正在找配偶）与两次繁殖之间的冷却 */
   private loveTimer = 0;
   private breedCooldown = 0;
@@ -760,6 +782,7 @@ export class Mob extends Entity {
     this.tickWaterFear(ctx, dt);
     this.tickAquatic(ctx, dt);
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
+    if (this.attackAnim > 0) this.attackAnim = Math.max(0, this.attackAnim - dt);
     if (this.jumpCooldown > 0) this.jumpCooldown -= dt;
     // 效果要在 AI 之前结算：缓慢/速度影响的正是这一帧的移动速度
     this.tickEffects(ctx, dt);
@@ -1081,6 +1104,8 @@ export class Mob extends Entity {
     // 把 `this` 一起传下去（批次 264）：荆棘要靠它反伤"是谁打的"
     ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name, this);
     if (this.type.venom) ctx.afflictPlayer?.(this.type.venom.effect, this.type.venom.seconds);
+    // 真的打中了才挥臂（J12）：没够着的那一下不该有动作，否则站在墙后也会"空挥"
+    this.attackAnim = ATTACK_ANIM_SECONDS;
     return true;
   }
 

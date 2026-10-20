@@ -15,7 +15,8 @@
  *   9. 骷髅远程（J9）：射程内放箭、贴太近后退、有冷却、不再近战
  */
 
-import { Mob } from '../src/core/entity/Mob.ts';
+import { readFileSync } from 'node:fs';
+import { ATTACK_ANIM_SECONDS, Mob, attackSwingAmount } from '../src/core/entity/Mob.ts';
 import { Pathfinder, type BlockSampler } from '../src/core/entity/Pathfinder.ts';
 import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
@@ -1018,6 +1019,25 @@ console.log('\n[寻路：贴身 2 格内直接走（批次 500）]');
   for (let i = 0; i < 20; i++) zombie.tick(ctx, 0.05);
   check('贴身时一次 A* 都不跑', searches === 0, `${searches} 次`);
   check('照样会贴上去打人（功能没退化）', damage > 0, `累计 ${damage}`);
+}
+
+console.log('\n[出手动画（J12）]');
+{
+  check('时长是一眼能看清的一小段（0.2~0.6 秒）', ATTACK_ANIM_SECONDS > 0.2 && ATTACK_ANIM_SECONDS < 0.6);
+  check('没在攻击时摆动量为 0', attackSwingAmount(0) === 0);
+  check('刚出手时从 0 开始抬', attackSwingAmount(ATTACK_ANIM_SECONDS) < 1e-9);
+  check('中段最大（sin 半周期）', attackSwingAmount(ATTACK_ANIM_SECONDS / 2) > 0.99);
+  check(
+    '抬起与收回对称',
+    Math.abs(attackSwingAmount(ATTACK_ANIM_SECONDS * 0.25) - attackSwingAmount(ATTACK_ANIM_SECONDS * 0.75)) < 1e-9,
+  );
+  check('剩余时间为负也不会画出异常角度', attackSwingAmount(-1) === 0);
+
+  const mobSrc = readFileSync(new URL('../src/core/entity/Mob.ts', import.meta.url), 'utf8');
+  const rendererSrc = readFileSync(new URL('../src/render/MobRenderer.ts', import.meta.url), 'utf8');
+  check('命中时重置动画计时', mobSrc.includes('this.attackAnim = ATTACK_ANIM_SECONDS'));
+  check('渲染层每帧读动画曲线', rendererSrc.includes('attackSwingAmount(mob.attackAnim)'));
+  check('手臂绕肩关节转（不是绕自己中心）', rendererSrc.includes('spec.pivot && rotX !== 0'));
 }
 
 console.log(`\n生物测试：${passed} 通过 / ${failed} 失败\n`);
