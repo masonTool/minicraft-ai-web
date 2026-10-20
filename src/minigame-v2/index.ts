@@ -18,8 +18,9 @@ import { WxMeshWorkerPool } from './wx-mesh-pool.ts';
 import { MobSystem } from './mobs.ts';
 import { ContainerSystem } from './containers.ts';
 import { drawBlockIcon } from './block-icon.ts';
-import { CREATIVE_CATEGORIES, creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
-import { fillRecipe as fillRecipeFromInventory, recipeFits } from './recipe-book.ts';
+import type { V2CreativeCategory } from './inventory-catalog.ts';
+import { fillRecipe as fillRecipeFromInventory } from './recipe-book.ts';
+import { buildCreativeTab, buildRecipeTab } from './inventory-tabs.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -27,7 +28,7 @@ import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital, ty
 import { Inventory } from '../core/container/Inventory.ts';
 import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
-import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
+import type { ShapedRecipe, ShapelessRecipe } from '../core/crafting/Recipes.ts';
 import { CREATIVE_ITEMS, categoryOf, foodInfoById, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
@@ -700,111 +701,66 @@ const showInventory = (): void => {
       }, (from, to) => handleDrop(from.index, to.index)));
     }
   } else if (inventoryTab === 'creative') {
-    const query = creativeQuery.trim().toLowerCase();
-    const filtered = creativeItems.filter((id) => {
-      if (creativeCategory !== 'all' && creativeTabFor(id) !== creativeCategory) return false;
-      return !query || itemLabel(id).toLowerCase().includes(query);
-    });
-    const pageSize = 45;
-    const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
-    creativePage = Math.max(0, Math.min(creativePage, pages - 1));
-    const startIndex = creativePage * pageSize;
-    const list = filtered.slice(startIndex, startIndex + pageSize);
-    CREATIVE_CATEGORIES.forEach((category, index) => {
-      elements.push(button(gridX + index * 74, panelY + 50, 70, 28, category.label, () => {
-        creativeCategory = category.key;
-        creativePage = 0;
-        showInventory();
-      }, {
-        background: creativeCategory === category.key ? 'rgba(80,120,105,0.95)' : 'rgba(32,44,52,0.95)',
-        border: 'rgba(180,215,235,0.35)',
-        radius: 6,
-        fontSize: 12,
-      }));
-    });
-    elements.push(button(gridX + 5 * 74, panelY + 50, 95, 28, creativeQuery ? '搜索中' : '搜索', () => {
-      void askText(creativeQuery, 20).then((value) => {
-        if (value !== null) {
-          creativeQuery = value;
-          creativePage = 0;
-          showInventory();
-        }
-      });
-    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6, fontSize: 12 }));
-    elements.push(button(gridX + 5 * 74 + 101, panelY + 50, 85, 28, '整理', () => {
-      const stacks = [];
-      for (let i = 0; i < 36; i++) {
-        const stack = inventory.get(i);
-        if (stack) stacks.push({ id: stack.id, count: stack.count });
-      }
-      stacks.sort((a, b) => a.id - b.id);
-      for (let i = 0; i < 36; i++) inventory.set(i, stacks[i] ?? null);
-      selectedSlot = 0;
-      showInventory();
-    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6, fontSize: 12 }));
-    for (let i = 0; i < list.length; i++) {
-      const id = list[i]!;
-      elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, i, id, 0, false, () => {
-        inventory.add(id, 64);
-        showInventory();
-      }));
-    }
-    elements.push(text(gridX, gridY + 5 * (slotSize + gap) + 10, 420, 24, `${filtered.length} 项 · ${creativePage + 1}/${pages}`, {
-      fontSize: 13,
-      color: 'rgba(200,220,235,0.65)',
+    elements.push(...buildCreativeTab({
+      gridX,
+      gridY,
+      panelY,
+      slotSize,
+      gap,
+      inventory,
+      items: creativeItems,
+      category: creativeCategory,
+      query: creativeQuery,
+      page: creativePage,
+      setCategory: (value) => {
+        creativeCategory = value;
+      },
+      setQuery: (value) => {
+        creativeQuery = value;
+      },
+      setPage: (value) => {
+        creativePage = value;
+      },
+      refresh: () => showInventory(),
+      onSearch: () => {
+        void askText(creativeQuery, 20).then((value) => {
+          if (value !== null) {
+            creativeQuery = value;
+            creativePage = 0;
+            showInventory();
+          }
+        });
+      },
     }));
-    elements.push(button(gridX + 420, gridY + 5 * (slotSize + gap) + 6, 75, 28, '上一页', () => {
-      creativePage = Math.max(0, creativePage - 1);
-      showInventory();
-    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
-    elements.push(button(gridX + 505, gridY + 5 * (slotSize + gap) + 6, 75, 28, '下一页', () => {
-      creativePage = Math.min(pages - 1, creativePage + 1);
-      showInventory();
-    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
   } else {
-    const query = recipeQuery.trim().toLowerCase();
-    const recipes = RECIPES.filter((recipe) => recipeFits(recipe, recipeSize)).filter((recipe) => {
-      if (!query) return true;
-      return itemLabel(recipe.result.id).toLowerCase().includes(query);
-    });
-    const perPage = 6;
-    const pages = Math.max(1, Math.ceil(recipes.length / perPage));
-    recipePage = Math.max(0, Math.min(recipePage, pages - 1));
-    elements.push(button(gridX, panelY + 52, 150, 30, recipeQuery ? `搜索：${recipeQuery}` : '搜索配方', () => {
-      void askText(recipeQuery, 20).then((value) => {
-        if (value !== null) {
-          recipeQuery = value;
-          recipePage = 0;
-          showInventory();
-        }
-      });
-    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6 }));
-    elements.push(button(gridX + 160, panelY + 52, 110, 30, `${recipeSize}x${recipeSize}`, () => {
-      recipeSize = recipeSize === 2 ? 3 : 2;
-      recipePage = 0;
-      showInventory();
-    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6 }));
-    const start = recipePage * perPage;
-    for (let i = 0; i < Math.min(perPage, recipes.length - start); i++) {
-      const recipe = recipes[start + i]!;
-      const result = recipe.result;
-      const col = i % 3;
-      const row = Math.floor(i / 3);
-      const x = gridX + col * 160;
-      const y = gridY + row * 86;
-      elements.push(slot(x, y, 50, 300 + i, result.id, result.count, false, () => fillRecipe(recipe)));
-      elements.push(text(x + 58, y + 4, 96, 26, itemLabel(result.id), { fontSize: 14, color: '#dcecf5' }));
-      elements.push(text(x + 58, y + 30, 96, 20, `x${result.count}`, { fontSize: 12, color: 'rgba(190,215,230,0.65)' }));
-    }
-    elements.push(text(gridX, gridY + 188, 400, 26, `配方 ${recipePage + 1}/${pages} · ${recipes.length} 条`, { fontSize: 13, color: 'rgba(200,220,235,0.65)' }));
-    elements.push(button(gridX, gridY + 216, 90, 34, '上一页', () => {
-      recipePage = Math.max(0, recipePage - 1);
-      showInventory();
-    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
-    elements.push(button(gridX + 100, gridY + 216, 90, 34, '下一页', () => {
-      recipePage = Math.min(pages - 1, recipePage + 1);
-      showInventory();
-    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
+    elements.push(...buildRecipeTab({
+      gridX,
+      gridY,
+      panelY,
+      query: recipeQuery,
+      size: recipeSize,
+      page: recipePage,
+      setQuery: (value) => {
+        recipeQuery = value;
+      },
+      setSize: (value) => {
+        recipeSize = value;
+      },
+      setPage: (value) => {
+        recipePage = value;
+      },
+      fillRecipe: (recipe) => fillRecipe(recipe),
+      refresh: () => showInventory(),
+      onSearch: () => {
+        void askText(recipeQuery, 20).then((value) => {
+          if (value !== null) {
+            recipeQuery = value;
+            recipePage = 0;
+            showInventory();
+          }
+        });
+      },
+    }));
   }
   elements.push(button(craftX, panelY + 22, 110, 28, `${crafting.size}x${crafting.size}`, () => {
     crafting.drainTo(inventory);

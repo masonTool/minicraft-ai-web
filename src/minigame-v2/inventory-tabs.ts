@@ -1,0 +1,149 @@
+import { RECIPES, type ShapelessRecipe, type ShapedRecipe } from '../core/crafting/Recipes.ts';
+import type { Inventory } from '../core/container/Inventory.ts';
+import { itemLabel } from '../core/registry/itemNames.ts';
+import { CREATIVE_CATEGORIES, creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
+import { recipeFits } from './recipe-book.ts';
+import { button, slot, text, type UiElement } from './ui-kit/index.ts';
+
+export interface CreativeTabContext {
+  gridX: number;
+  gridY: number;
+  panelY: number;
+  slotSize: number;
+  gap: number;
+  inventory: Inventory;
+  items: readonly number[];
+  category: V2CreativeCategory;
+  query: string;
+  page: number;
+  setCategory(category: V2CreativeCategory): void;
+  setQuery(query: string): void;
+  setPage(page: number): void;
+  refresh(): void;
+  onSearch(): void;
+}
+
+export function buildCreativeTab(ctx: CreativeTabContext): UiElement[] {
+  const elements: UiElement[] = [];
+  const query = ctx.query.trim().toLowerCase();
+  const filtered = ctx.items.filter((id) => {
+    if (ctx.category !== 'all' && creativeTabFor(id) !== ctx.category) return false;
+    return !query || itemLabel(id).toLowerCase().includes(query);
+  });
+  const pageSize = 45;
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = Math.max(0, Math.min(ctx.page, pages - 1));
+  const startIndex = page * pageSize;
+  const list = filtered.slice(startIndex, startIndex + pageSize);
+  for (let index = 0; index < CREATIVE_CATEGORIES.length; index++) {
+    const category = CREATIVE_CATEGORIES[index]!;
+    elements.push(
+      button(ctx.gridX + index * 74, ctx.panelY + 50, 70, 28, category.label, () => {
+        ctx.setCategory(category.key);
+        ctx.setPage(0);
+        ctx.refresh();
+      }, {
+        background: ctx.category === category.key ? 'rgba(80,120,105,0.95)' : 'rgba(32,44,52,0.95)',
+        border: 'rgba(180,215,235,0.35)',
+        radius: 6,
+        fontSize: 12,
+      }),
+    );
+  }
+  elements.push(
+    button(ctx.gridX + 5 * 74, ctx.panelY + 50, 95, 28, ctx.query ? '搜索中' : '搜索', () => {
+      ctx.onSearch();
+    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6, fontSize: 12 }),
+    button(ctx.gridX + 5 * 74 + 101, ctx.panelY + 50, 85, 28, '整理', () => {
+      const stacks = [];
+      for (let i = 0; i < 36; i++) {
+        const stack = ctx.inventory.get(i);
+        if (stack) stacks.push({ id: stack.id, count: stack.count });
+      }
+      stacks.sort((a, b) => a.id - b.id);
+      for (let i = 0; i < 36; i++) ctx.inventory.set(i, stacks[i] ?? null);
+      ctx.setPage(0);
+      ctx.refresh();
+    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6, fontSize: 12 }),
+  );
+  for (let i = 0; i < list.length; i++) {
+    const id = list[i]!;
+    elements.push(
+      slot(ctx.gridX + (i % 9) * (ctx.slotSize + ctx.gap), ctx.gridY + Math.floor(i / 9) * (ctx.slotSize + ctx.gap), ctx.slotSize, i, id, 0, false, () => {
+        ctx.inventory.add(id, 64);
+        ctx.refresh();
+      }),
+    );
+  }
+  elements.push(text(ctx.gridX, ctx.gridY + 5 * (ctx.slotSize + ctx.gap) + 10, 420, 24, `${filtered.length} 项 · ${page + 1}/${pages}`, {
+    fontSize: 13,
+    color: 'rgba(200,220,235,0.65)',
+  }));
+  elements.push(button(ctx.gridX + 420, ctx.gridY + 5 * (ctx.slotSize + ctx.gap) + 6, 75, 28, '上一页', () => {
+    ctx.setPage(Math.max(0, page - 1));
+    ctx.refresh();
+  }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
+  elements.push(button(ctx.gridX + 505, ctx.gridY + 5 * (ctx.slotSize + ctx.gap) + 6, 75, 28, '下一页', () => {
+    ctx.setPage(Math.min(pages - 1, page + 1));
+    ctx.refresh();
+  }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
+  return elements;
+}
+
+export interface RecipeTabContext {
+  gridX: number;
+  gridY: number;
+  panelY: number;
+  query: string;
+  size: 2 | 3;
+  page: number;
+  setQuery(query: string): void;
+  setSize(size: 2 | 3): void;
+  setPage(page: number): void;
+  fillRecipe(recipe: ShapedRecipe | ShapelessRecipe): void;
+  refresh(): void;
+  onSearch(): void;
+}
+
+export function buildRecipeTab(ctx: RecipeTabContext): UiElement[] {
+  const elements: UiElement[] = [];
+  const query = ctx.query.trim().toLowerCase();
+  const recipes = RECIPES.filter((recipe) => recipeFits(recipe, ctx.size)).filter((recipe) => {
+    if (!query) return true;
+    return itemLabel(recipe.result.id).toLowerCase().includes(query);
+  });
+  const perPage = 6;
+  const pages = Math.max(1, Math.ceil(recipes.length / perPage));
+  const page = Math.max(0, Math.min(ctx.page, pages - 1));
+  elements.push(button(ctx.gridX, ctx.panelY + 52, 150, 30, ctx.query ? `搜索：${ctx.query}` : '搜索配方', () => {
+    ctx.onSearch();
+  }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6 }));
+  elements.push(button(ctx.gridX + 160, ctx.panelY + 52, 110, 30, `${ctx.size}x${ctx.size}`, () => {
+    ctx.setSize(ctx.size === 2 ? 3 : 2);
+    ctx.setPage(0);
+    ctx.refresh();
+  }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6 }));
+  const start = page * perPage;
+  for (let i = 0; i < Math.min(perPage, recipes.length - start); i++) {
+    const recipe = recipes[start + i]!;
+    const result = recipe.result;
+    const x = ctx.gridX + (i % 3) * 160;
+    const y = ctx.gridY + Math.floor(i / 3) * 86;
+    elements.push(slot(x, y, 50, 300 + i, result.id, result.count, false, () => ctx.fillRecipe(recipe)));
+    elements.push(text(x + 58, y + 4, 96, 26, itemLabel(result.id), { fontSize: 14, color: '#dcecf5' }));
+    elements.push(text(x + 58, y + 30, 96, 20, `x${result.count}`, { fontSize: 12, color: 'rgba(190,215,230,0.65)' }));
+  }
+  elements.push(text(ctx.gridX, ctx.gridY + 188, 400, 26, `配方 ${page + 1}/${pages} · ${recipes.length} 条`, {
+    fontSize: 13,
+    color: 'rgba(200,220,235,0.65)',
+  }));
+  elements.push(button(ctx.gridX, ctx.gridY + 216, 90, 34, '上一页', () => {
+    ctx.setPage(Math.max(0, page - 1));
+    ctx.refresh();
+  }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
+  elements.push(button(ctx.gridX + 100, ctx.gridY + 216, 90, 34, '下一页', () => {
+    ctx.setPage(Math.min(pages - 1, page + 1));
+    ctx.refresh();
+  }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
+  return elements;
+}
