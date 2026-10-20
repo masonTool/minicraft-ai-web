@@ -6521,6 +6521,33 @@ PAINTERS.jukebox_top = (x, y) => {
 };
 
 /**
+ * 洞穴藤蔓（批次 496）：垂下来的细藤。
+ *
+ * 几何那边已经画成"两条交叉的薄片"，这张图只负责"藤条上有叶子"：
+ * 中间一根主茎 + 两侧零星的叶子；带浆果的那张在叶间点上几颗橙色浆果。
+ */
+function caveVinesPainter(withBerries: boolean): Painter {
+  return (x, y) => {
+    // 主茎：x 7~8
+    if (x === 7 || x === 8) return [92, 132, 58, 255];
+    // 叶子：按坐标哈希撒，越靠上越密（藤条从洞顶垂下来）
+    const h = Math.abs(Math.imul(x + 1, 73856093) ^ Math.imul(y + 1, 19349663)) % 100;
+    if (h < (withBerries ? 26 : 22)) {
+      const shade = 0.82 + (h % 5) * 0.05;
+      return [clamp255(108 * shade), clamp255(154 * shade), clamp255(66 * shade), 255];
+    }
+    // 浆果：橙色小点，撒在叶子间隙里
+    if (withBerries && h > 60 && h < 74) {
+      return [226, 138, 44, 255];
+    }
+    return [0, 0, 0, 0];
+  };
+}
+
+PAINTERS.cave_vines = caveVinesPainter(false);
+PAINTERS.cave_vines_berries = caveVinesPainter(true);
+
+/**
  * 盔甲架（批次 492）：浅木色 + 中间一道深缝。
  *
  * 几何那边已经用 5 个盒子搭出人形了，这张图只负责"木头"的质感：

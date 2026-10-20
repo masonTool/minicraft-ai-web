@@ -402,7 +402,7 @@ export const GENERATION_SOURCES: readonly GenSource[] = [
   },
   {
     key: 'cave_decor',
-    label: '洞穴装饰（发光地衣 / 发光浆果 / 尖滴石 / 滴水石）',
+    label: '洞穴装饰（发光地衣 / 发光浆果 / 尖滴石 / 滴水石 / 洞穴藤蔓）',
     origin: 'declared',
     where: 'gen/OverworldGenerator.ts 的 decorateCaves',
     blocks: [
@@ -413,6 +413,8 @@ export const GENERATION_SOURCES: readonly GenSource[] = [
       Block.SPORE_BLOSSOM,
       Block.HANGING_ROOTS,
       Block.ROOTED_DIRT,
+      // 洞穴藤蔓（批次 496）：繁茂洞穴的洞顶上垂下来
+      Block.CAVE_VINES,
       Block.MOSS_BLOCK,
       Block.MOSS_CARPET,
       Block.AZALEA,

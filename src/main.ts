@@ -58,7 +58,7 @@ import { fertilizeAt, type BoneMealWorld } from './core/world/BoneMeal.ts';
 // 树苗与树（批次 75）：树的形状复用区块生成那套 Planter，这里只提供"写进活世界"的 writer
 import { growTreeAt, type TreeWorld } from './core/world/TreeGrowth.ts';
 // 支撑没了、该掉的就掉（批次 78，B49）：判据在 `Support.ts`（纯函数 + 注入世界）
-import { sweepHangingsAround, sweepUnsupported, type SupportWorld } from './core/world/Support.ts';
+import { sweepCaveVinesBelow, sweepHangingsAround, sweepUnsupported, type SupportWorld } from './core/world/Support.ts';
 import { absorbWater } from './core/world/Sponge.ts';
 import { CommandBlockStore } from './core/world/CommandBlocks.ts';
 import {
@@ -356,6 +356,8 @@ import {
   // 多格画（批次 495）：哨兵档位与朝向
   facingOf,
   paintingVariantOf,
+  // 洞穴藤蔓（批次 496）：有浆果的那节掉一颗发光浆果
+  caveVinesHaveBerries,
 } from './core/registry/blockState.ts';
 // 信标（K5，批次 117）：等级/范围/效果是纯逻辑（`world/Beacon.ts`），
 // 界面与光柱各自一份（与告示牌的"文字表 / 编辑框 / 渲染器"三件套同构）
@@ -6945,6 +6947,28 @@ class App {
     if (brokenId === Block.JUKEBOX) this.dropJukeboxDisc(this.hit.x, this.hit.y, this.hit.z);
     // 多格画（批次 495）：拆任意一格带走整幅（1×1 的画查不到表，交给常规掉落）
     if (brokenId === Block.PAINTING) this.breakMultiPainting(this.hit.x, this.hit.y, this.hit.z);
+
+    // 洞穴藤蔓（批次 496）：有浆果的那节掉一颗发光浆果；下面几节失去支撑一起掉
+    if (brokenId === Block.CAVE_VINES) {
+      if (caveVinesHaveBerries(brokenState) && !this.isCreative && this.rules.doTileDrops) {
+        this.spawnDrop(Block.GLOW_BERRIES, 1, this.hit.x + 0.5, this.hit.y + 0.5, this.hit.z + 0.5);
+      }
+      // 藤蔓是往下垂的：拆掉上面那一节，下面几节要跟着掉（`sweepUnsupported` 是往上扫的，
+      // 够不到这里——见 `Support.ts` 的 `sweepCaveVinesBelow`）
+      sweepCaveVinesBelow(
+        {
+          getBlock: (bx, by, bz) => this.world.getBlock(bx, by, bz),
+          setBlock: (bx: number, by: number, bz: number, id: number) => this.world.setBlockAndUpdate(bx, by, bz, id),
+        },
+        this.hit.x,
+        this.hit.y,
+        this.hit.z,
+        (bx, by, bz) => {
+          this.net.sendBlock(bx, by, bz, Block.AIR, 0, this.dimension);
+          this.particles.spawnBlockBreak(bx + 0.5, by + 0.5, bz + 0.5, this.blockParticleColor(Block.CAVE_VINES), 3);
+        },
+      );
+    }
     // 盔甲架（批次 492）：架子拆了，穿在身上的装备也要还回来
     if (brokenId === Block.ARMOR_STAND) {
       if (this.isCreative) this.armorStands.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);

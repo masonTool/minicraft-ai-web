@@ -176,6 +176,7 @@ export function isoBoxesForShape(shape: BlockShape): readonly IsoBox[] | null {
     case 'banner':
     case 'bell':
     case 'armor_stand':
+    case 'cave_vines':
     case 'cross':
     case 'nether_wart':
     case 'coral_fan':

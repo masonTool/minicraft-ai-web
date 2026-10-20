@@ -191,6 +191,8 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'bell':
     // 盔甲架（批次 492）：原版是实体、能穿过去（只是会被轻推开）
     case 'armor_stand':
+    // 洞穴藤蔓（批次 496）：垂下来的一条，走过去不挡路
+    case 'cave_vines':
     // 珊瑚扇（批次 51）：一片薄面，原版可以直接游过去
     case 'coral_fan':
     // 告示牌（批次 80）：原版告示牌**不挡路**（能从牌子里走过去），所以没有碰撞盒。
@@ -536,6 +538,13 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'banner':
       // 旗帜（批次 484 立地 / 486 挂墙）：见 `bannerBoxes`
       return bannerBoxes(state);
+    case 'cave_vines':
+      // 洞穴藤蔓（批次 496）：两条交叉的薄片（与 `cross` 同一套画法），
+      // 但它挂在洞顶、只占中上那一段——下半格留空，看着是"垂下来的一条"
+      return [
+        [7 / 16, 0.1, 0, 9 / 16, 1, 1],
+        [0, 0.1, 7 / 16, 1, 1, 9 / 16],
+      ];
     case 'armor_stand':
       // 盔甲架（批次 492）：底座 + 立柱 + 两根横杆 + 头部。
       // 5 个盒子是这个分辨率下"看得出是个人形架子"的最小集合

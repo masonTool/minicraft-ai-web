@@ -784,6 +784,21 @@ export class OverworldGenerator {
             else if (h % 29 === 0) blocks[index] = Block.GLOW_LICHEN;
             continue;
           }
+          // 洞顶垂藤（批次 496，D23）：繁茂洞穴的顶上垂下来 1~3 节。
+          // 判据与"地面植物"正好相反——看的是**上方**是不是石头。
+          // ⚠️ 这里只能写方块、写不了状态位（`decorateCaves` 只拿得到 blocks 数组），
+          // 所以地物长出来的藤蔓**都不带浆果**；带浆果的只有玩家自己放的（差异记在 TASKS）
+          if (lush && stoneLike(above) && h % 5 === 0) {
+            const length = 1 + (h % 3);
+            for (let i = 0; i < length; i++) {
+              const vineY = y - i;
+              if (vineY < 5) break;
+              const vineIndex = Chunk.index(x, vineY, z);
+              if (blocks[vineIndex] !== Block.AIR) break;
+              blocks[vineIndex] = Block.CAVE_VINES;
+            }
+            continue;
+          }
           if (stoneLike(below)) {
             // 繁茂洞穴：地衣/浆果；滴水石洞：少量地衣
             if (h % (lush ? 317 : 1103) === 0) blocks[index] = Block.GLOW_BERRIES;

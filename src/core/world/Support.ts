@@ -57,6 +57,11 @@ export type SupportKind =
    * 目前只有展示框与画走这一档——火把/梯子/藤蔓还是 `'none'`（见文件头那条"暂不处理"）。
    */
   | 'wall'
+  /**
+   * **上方支撑**（批次 496，洞穴藤蔓）：上面是实心方块，或者上面是同一节藤蔓
+   * （"一节串一节"地垂下来）。
+   */
+  | 'ceiling'
   /** 不处理（贴附面那一类里还没接的那些，见文件头） */
   | 'none';
 
@@ -84,6 +89,8 @@ export function supportKindOf(id: number): SupportKind {
   // ⚠️ 这一档只接了这两件：火把/梯子/藤蔓仍是 `'none'`（它们是同一类，
   // 但"藤蔓能同时挂好几面、梯子还能站人"这些差别要各自想过，见 TASKS B49）
   if (def.shape === 'item_frame' || def.shape === 'painting') return 'wall';
+  // 洞穴藤蔓（批次 496）：靠**上方**支撑，而且是一节串一节
+  if (def.shape === 'cave_vines') return 'ceiling';
   // `torch` / `ladder` / 其它：**暂不处理**（贴附面那一类要看状态里的朝向）
   return 'none';
 }
@@ -113,6 +120,11 @@ export function supportIsValid(world: SupportWorld, x: number, y: number, z: num
     const [dx, dz] = wallSupportOffset(getState(x, y, z));
     return isSolidSupport(world.getBlock(x + dx, y, z + dz));
   }
+  if (kind === 'ceiling') {
+    // 上面是实心方块，或者上面还是同一节藤蔓（垂下来的一串）
+    const above = world.getBlock(x, y + 1, z);
+    return isSolidSupport(above) || above === Block.CAVE_VINES;
+  }
   if (kind === 'waterBelow') return below === Block.WATER;
   if (kind === 'water') {
     // 那一格自己（水草在水里）或下方是水
@@ -120,6 +132,31 @@ export function supportIsValid(world: SupportWorld, x: number, y: number, z: num
   }
   // waterOrSelf（海带）：水，或下方还是海带
   return below === Block.WATER || below === Block.KELP;
+}
+
+/**
+ * 从 (x, y, z) **往下**收拾失去支撑的洞穴藤蔓（批次 496）。
+ *
+ * 为什么不能复用 `sweepUnsupported`：那个是**往上**扫的（甘蔗、海带都是一柱往上长），
+ * 而藤蔓是**往下垂**的——拆掉中间那一节，下面几节要跟着掉，往上的扫描永远够不到它们。
+ *
+ * @returns 移除了几格
+ */
+export function sweepCaveVinesBelow(
+  world: SupportWorld,
+  x: number,
+  y: number,
+  z: number,
+  onChange?: (x: number, y: number, z: number) => void,
+): number {
+  let removed = 0;
+  for (let oy = y - 1; oy >= y - 64; oy--) {
+    if (world.getBlock(x, oy, z) !== Block.CAVE_VINES) break;
+    world.setBlock(x, oy, z, Block.AIR);
+    onChange?.(x, oy, z);
+    removed++;
+  }
+  return removed;
 }
 
 /**

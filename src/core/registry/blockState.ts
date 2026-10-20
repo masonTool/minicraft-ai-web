@@ -61,6 +61,13 @@ export type BlockShape =
    * 而方块表已经有存档通道了。
    */
   | 'armor_stand'
+  /**
+   * 洞穴藤蔓（批次 496，D23）：从洞顶垂下的一条。
+   *
+   * 与 `vine`（贴墙的藤）不同：它靠**上方**支撑，而且是"一节串一节"——
+   * 所以支撑判定单独一档（`Support.ts` 的 `'ceiling'`）。
+   */
+  | 'cave_vines'
   /** 堆肥桶（批次 70）：四面板条 + 2/16 桶底，顶面敞口 */
   | 'composter'
   | 'pane'
@@ -835,6 +842,19 @@ export function isWaterlogged(state: number): boolean {
 /** 写含水标记；其余位原样保留 */
 export function withWaterlogged(state: number, on: boolean): number {
   return on ? state | WATERLOGGED_MASK : state & ~WATERLOGGED_MASK;
+}
+
+// ---------------------------------------------------------------- 洞穴藤蔓（批次 496）
+
+/** 洞穴藤蔓上有没有浆果（bit0）：有浆果才掉发光浆果 */
+const CAVE_VINES_BERRIES_MASK = 0b1;
+
+export function caveVinesHaveBerries(state: number): boolean {
+  return (state & CAVE_VINES_BERRIES_MASK) !== 0;
+}
+
+export function withCaveVinesBerries(state: number, on: boolean): number {
+  return on ? state | CAVE_VINES_BERRIES_MASK : state & ~CAVE_VINES_BERRIES_MASK;
 }
 
 // ---------------------------------------------------------------- 雪层（B11）

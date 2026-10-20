@@ -20,7 +20,7 @@
 import { Block, JUNGLE_LOG_ID, blockDef, cropOf, isRailId, stemKindOf } from '../registry/blocks.ts';
 // 铁轨形状（批次 478）：放下去按四邻自动接成直轨或弯道
 import { pickRailShape, pickRailSlope, withRailShape } from '../world/RailShape.ts';
-import { withBannerTop } from '../registry/blockState.ts';
+import { withBannerTop, withCaveVinesBerries } from '../registry/blockState.ts';
 import {
   MULTI_PAINTINGS_LARGE_FIRST,
   MULTI_PAINTING_VARIANT,
@@ -381,6 +381,13 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       if (ny <= 0) return null;
       if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
       return { state: 0 };
+    }
+
+    case 'cave_vines': {
+      // 洞穴藤蔓（批次 496）：必须挂在**实心方块下面**（洞顶），有浆果的概率五五开
+      if (!blockDef(input.blockAt(0, 1, 0)).solid) return null;
+      const berried = (input.random ?? Math.random)() < 0.5;
+      return { state: withCaveVinesBerries(0, berried) };
     }
 
     case 'bell': {

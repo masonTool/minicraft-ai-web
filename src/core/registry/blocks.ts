@@ -11,6 +11,7 @@ import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { TreeKind } from '../gen/Features.ts';
 import { anchorLight } from '../world/RespawnAnchor.ts';
 import { railShapeOf } from '../world/RailShape.ts';
+import { caveVinesHaveBerries } from './blockState.ts';
 import { isWaterlogged, withWaterlogged } from './blockState.ts';
 import {
   cauldronLevelOf,
@@ -2238,6 +2239,24 @@ export const BELL_ID = 717;
 /** 盔甲架（批次 492）：id **718**，接在钟之后 */
 export const ARMOR_STAND_ID = 718;
 
+/** 洞穴藤蔓（批次 496，D23）：id **719**，接在盔甲架之后 */
+export const CAVE_VINES_ID = 719;
+
+const CAVE_VINES_SPEC: BlockSpec = {
+  id: CAVE_VINES_ID,
+  name: 'minecraft:cave_vines',
+  tiles: ['cave_vines', 'cave_vines', 'cave_vines'],
+  // 有浆果换一张图（状态 bit0）
+  stateTiles: (state) => {
+    const tile = caveVinesHaveBerries(state) ? 'cave_vines_berries' : 'cave_vines';
+    return [tile, tile, tile];
+  },
+  shape: 'cave_vines',
+  solid: false,
+  opaque: false,
+  lightOpacity: 0,
+};
+
 const ARMOR_STAND_SPEC: BlockSpec = {
   id: ARMOR_STAND_ID,
   name: 'minecraft:armor_stand',
@@ -3490,6 +3509,7 @@ const SPECS: readonly BlockSpec[] = [
   JUKEBOX_SPEC,
   BELL_SPEC,
   ARMOR_STAND_SPEC,
+  CAVE_VINES_SPEC,
   ...BANNER_SPECS,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
@@ -4062,6 +4082,8 @@ export const Block = {
   BELL: BELL_ID,
   // ---- 盔甲架（批次 492）：右键穿脱装备
   ARMOR_STAND: ARMOR_STAND_ID,
+  // ---- 洞穴藤蔓（批次 496）：从洞顶垂下，有浆果的那节会掉发光浆果
+  CAVE_VINES: CAVE_VINES_ID,
   // ---- 16 色旗帜（批次 484）：占两格、无碰撞
   WHITE_BANNER: BANNER_ID_START + 0,
   ORANGE_BANNER: BANNER_ID_START + 1,
@@ -4655,6 +4677,8 @@ HARDNESS.set(Block.JUKEBOX, 2);
 HARDNESS.set(Block.BELL, 5);
 // 盔甲架（批次 492）：原版 1.0，徒手拆
 HARDNESS.set(Block.ARMOR_STAND, 1);
+// 洞穴藤蔓（批次 496）：原版 0.2，徒手就能揪
+HARDNESS.set(Block.CAVE_VINES, 0.2);
 
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);

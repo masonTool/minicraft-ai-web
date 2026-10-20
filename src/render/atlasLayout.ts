@@ -853,6 +853,9 @@ export const TILE_ORDER = [
   'bell',
   // 盔甲架（批次 492）：浅木色 + 中间一道深缝（当立柱）
   'armor_stand',
+  // 洞穴藤蔓（批次 496）：光秃的 / 结着浆果的
+  'cave_vines',
+  'cave_vines_berries',
   // 铁轨弯道（批次 478）：四个方向各一张（直轨沿用原来的 `rail`）
   'rail_east_west',
   'rail_ne',
