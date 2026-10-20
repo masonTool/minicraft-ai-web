@@ -81,10 +81,35 @@ function compatTouchEvent() {
 
 /**
  * 兼容显示隐藏事件
+ *
+ * 注意：开发者工具里 `document` 是浏览器 HTMLDocument，
+ * `hidden` / `visibilityState` 是只读的；直接赋值会抛
+ * "Cannot assign to read only property 'visibilityState'"。
+ * 小游戏真机里是适配器的假 Document，赋值正常。
  */
+function setVisibilityState(state) {
+  const hidden = state === 'hidden';
+  try {
+    document.hidden = hidden;
+  } catch {
+    /* 浏览器原生 Document：只读，忽略 */
+  }
+  try {
+    Object.defineProperty(document, 'visibilityState', {
+      value: state,
+      configurable: true,
+    });
+  } catch {
+    try {
+      document.visibilityState = state;
+    } catch {
+      /* 原生 Document：只读，忽略 */
+    }
+  }
+}
+
 function dispatchVisibility(state) {
-  document.hidden = state === 'hidden';
-  document.visibilityState = state;
+  setVisibilityState(state);
   // document.addEventListener 在适配器里绑到 canvas 上，所以派发到 canvas
   document.canvas.dispatchEvent({
     type: 'visibilitychange',
@@ -94,7 +119,7 @@ function dispatchVisibility(state) {
 }
 
 function compatShowHideEvent() {
-  document.visibilityState = 'visible';
+  setVisibilityState('visible');
   wx.onShow(() => {
     window.dispatchEvent({ type: 'focus', target: window });
     window.dispatchEvent({ type: 'resume' });
