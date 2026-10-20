@@ -269,6 +269,7 @@ interface V2Settings {
   volume: number;
   volumeBlocks: number;
   volumeUi: number;
+  quality: 'auto' | 'high' | 'low';
   volumeMobs: number;
   volumePlayer: number;
   volumeAmbient: number;
@@ -302,6 +303,7 @@ const defaultSettings: V2Settings = {
   volume: 0.7,
   volumeBlocks: 1,
   volumeUi: 1,
+  quality: 'auto',
   volumeMobs: 1,
   volumePlayer: 1,
   volumeAmbient: 1,
@@ -338,6 +340,7 @@ const readSettings = (): V2Settings => {
       volume: Math.max(0, Math.min(1, Number(parsed.volume ?? 0.7))),
       volumeBlocks: Math.max(0, Math.min(1, Number(parsed.volumeBlocks ?? 1))),
       volumeUi: Math.max(0, Math.min(1, Number(parsed.volumeUi ?? 1))),
+      quality: parsed.quality === 'high' || parsed.quality === 'low' ? parsed.quality : 'auto',
       volumeMobs: Math.max(0, Math.min(1, Number(parsed.volumeMobs ?? 1))),
       volumePlayer: Math.max(0, Math.min(1, Number(parsed.volumePlayer ?? 1))),
       volumeAmbient: Math.max(0, Math.min(1, Number(parsed.volumeAmbient ?? 1))),
@@ -433,6 +436,13 @@ const showSettings = (): void => {
       settings.showDebug = value;
       apply();
     }));
+    row(button(panelX + 24, rowY, panelW - 48, 50, `画质：${settings.quality === 'auto' ? '自动' : settings.quality === 'high' ? '高' : '性能'}`, () => {
+      settings.quality = settings.quality === 'auto' ? 'high' : settings.quality === 'high' ? 'low' : 'auto';
+      if (settings.quality === 'high') qualityTier = 2;
+      if (settings.quality === 'low') qualityTier = 0;
+      applyQuality();
+      apply();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
   } else if (activeSettingsTab === 'controls') {
     row(slider(panelX + 24, rowY, panelW - 48, 50, '视角灵敏度', 0.5, 2, 0.1, settings.sensitivity, (value) => {
       settings.sensitivity = value;
@@ -2457,7 +2467,9 @@ const applyQuality = (): void => {
   weather.object.visible = qualityTier > 0;
   lastViewDistance = -1;
   lastViewApply = 0;
-  showToast(qualityTier === 2 ? '画质：高' : qualityTier === 1 ? '画质：中' : '画质：性能');
+  if (started && !settingsOpen) {
+    showToast(qualityTier === 2 ? '画质：高' : qualityTier === 1 ? '画质：中' : '画质：性能');
+  }
 };
 
 const frame = (): void => {
@@ -2475,7 +2487,7 @@ const frame = (): void => {
     fpsFrames = 0;
     fpsStartedAt = now;
   }
-  if (playerReady && playerReadyAt > 0 && now - playerReadyAt > 8000 && fps > 0) {
+  if (settings.quality === 'auto' && playerReady && playerReadyAt > 0 && now - playerReadyAt > 8000 && fps > 0) {
     if (fps < 55) {
       poorFpsSeconds += dt;
       goodFpsSeconds = 0;
