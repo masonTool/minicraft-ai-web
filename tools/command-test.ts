@@ -1252,6 +1252,14 @@ console.log('\n[/clone 区域复制（批次 431）]');
     check('物品联想支持英文 id', english.some((item) => item.value.includes('diamond')));
     const blocks = suggestCommandValues('block', 'stone');
     check('方块联想返回方块 id', blocks.some((item) => item.value === 'stone'));
+    const biomes = suggestCommandValues('biome', '沙漠');
+    check(
+      '群系联想支持中文名',
+      biomes.some((item) => item.value === 'desert' && item.label.includes('沙漠')),
+      biomes.map((item) => `${item.value}=${item.label}`).join(','),
+    );
+    const biomeField = field('locate', '群系');
+    equal('群系输入框接上了联想', biomeField.suggest, 'biome');
     equal('空输入不弹一大串联想', suggestCommandValues('item', '').length, 0);
   }
 

@@ -3439,7 +3439,7 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
   );
   check(
     '输入行在最上面（左上角），历史在下面',
-    chatSrc.includes('this.root.append(this.entryEl, this.helpRow, this.hintEl, this.logEl)') &&
+    chatSrc.includes('this.root.append(this.entryEl, this.hintEl, this.logEl)') &&
       html.includes('.chat-entry {') &&
       html.includes('.chat-entry.hidden { display: none; }'),
   );
@@ -3509,12 +3509,12 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       !chatSrc.includes('this.inputEl.value = prefill; this.close();'),
   );
   check(
-    '聊天输入框下面有「命令帮助」快捷入口',
-    chatSrc.includes("this.helpButton.className = 'chat-help'") &&
-      chatSrc.includes('this.helpRow.append(this.helpButton, helpHint)') &&
-      appSrc.includes('this.chat.onHelp = () => {') &&
-      html.includes('.chat-help-row {') &&
-      html.includes('.chat-help {'),
+    '提示行里的 help 可点击并填入 /help（不再单独占一行）',
+    chatSrc.includes('private renderHint(text: string): void') &&
+      chatSrc.includes("help.className = 'chat-help-link'") &&
+      chatSrc.includes("this.inputEl.value = '/help';") &&
+      !chatSrc.includes('chat-help-row') &&
+      html.includes('.chat-help-link {'),
   );
 
   // 批次 533（用户）：/help 改成独立弹窗，不再往聊天历史刷介绍
@@ -3531,6 +3531,8 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       helpSrc.includes('buildCommand(entry, this.variantIndex, this.values)') &&
       helpSrc.includes('suggestCommandValues(field.suggest!, query, 8)') &&
       helpSrc.includes('cmd-help-suggest-list') &&
+      helpSrc.includes('let interacting = false;') &&
+      helpSrc.includes("item.addEventListener('click', (event) => {") &&
       helpSrc.includes("this.searchEl.placeholder = '搜索命令…'") &&
       helpSrc.includes("fill.textContent = '填入聊天框'") &&
       appSrc.includes('this.commandHelp.onUse = (command) =>') &&

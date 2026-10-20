@@ -21,6 +21,7 @@ import { ADVANCEMENTS } from '../progress/advancements.ts';
 import { BLOCKS } from '../registry/blocks.ts';
 import { CREATIVE_ITEMS, itemName } from '../registry/items.ts';
 import { blockLabel, itemLabel } from '../registry/itemNames.ts';
+import { BIOME_LABELS, BIOME_TABLE } from '../gen/Biome.ts';
 
 export interface CommandHelpOption {
   readonly value: string;
@@ -36,8 +37,8 @@ export interface CommandHelpField {
   readonly options?: readonly CommandHelpOption[];
   /** combo 的"自定义"输入框占位（如“数字”“进度 id”） */
   readonly customPlaceholder?: string;
-  /** 文本输入框要自动联想：物品 / 方块 */
-  readonly suggest?: 'item' | 'block';
+  /** 文本输入框要自动联想：物品 / 方块 / 群系 */
+  readonly suggest?: 'item' | 'block' | 'biome';
 }
 
 export type CommandHelpPart =
@@ -470,7 +471,14 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
     kind: NUMBER_ARGS.has(name) ? 'number' : 'text',
     optional,
     placeholder: placeholderFor(name),
-    suggest: name === '物品' ? 'item' : name === '方块' ? 'block' : undefined,
+    suggest:
+      name === '物品'
+        ? 'item'
+        : name === '方块'
+          ? 'block'
+          : name === '群系名'
+            ? 'biome'
+            : undefined,
   };
 }
 
@@ -505,6 +513,14 @@ const BLOCK_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string
   };
 });
 
+const BIOME_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string })[] = BIOME_TABLE.map(
+  (biome) => ({
+    value: biome.name,
+    label: `${BIOME_LABELS[biome.name] ?? biome.name}（${biome.name}）`,
+    search: `${BIOME_LABELS[biome.name] ?? ''} ${biome.name}`.toLowerCase(),
+  }),
+);
+
 /**
  * 物品/方块输入框的自动联想（批次 534）。
  *
@@ -512,13 +528,14 @@ const BLOCK_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string
  * （避免一打开就是几百条）。
  */
 export function suggestCommandValues(
-  kind: 'item' | 'block',
+  kind: 'item' | 'block' | 'biome',
   query: string,
   limit = 10,
 ): CommandSuggestion[] {
   const q = query.trim().toLowerCase();
   if (q.length === 0) return [];
-  const source = kind === 'item' ? ITEM_SUGGESTIONS : BLOCK_SUGGESTIONS;
+  const source =
+    kind === 'item' ? ITEM_SUGGESTIONS : kind === 'block' ? BLOCK_SUGGESTIONS : BIOME_SUGGESTIONS;
   return source
     .filter((entry) => entry.search.includes(q))
     .slice(0, limit)

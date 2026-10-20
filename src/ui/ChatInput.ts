@@ -75,17 +75,12 @@ export class ChatInput {
   onSubmit: ((text: string) => void) | null = null;
   /** 打开/关闭回调（App 用它暂停/恢复玩家输入） */
   onOpenChange: ((open: boolean) => void) | null = null;
-  /** 点输入框下方的「命令帮助」：App 关闭聊天并打开命令帮助弹窗 */
-  onHelp: (() => void) | null = null;
 
   private readonly logEl: HTMLDivElement;
   /** 输入行（输入框 + 发送键）单独一组：打开时放在**最上面**（左上角） */
   private readonly entryEl: HTMLDivElement;
   private readonly inputEl: HTMLInputElement;
   private readonly hintEl: HTMLDivElement;
-  /** 输入框下方的「命令帮助」快捷入口（批次 534） */
-  private readonly helpRow: HTMLDivElement;
-  private readonly helpButton: HTMLButtonElement;
   /** 触屏的"发送"按钮：手机虚拟键盘的确定键不一定派发 Enter 的 keydown */
   private readonly sendButton: HTMLButtonElement;
   /** 所有消息（含已经淡出的）：打开输入框时要能翻历史 */
@@ -152,26 +147,8 @@ export class ChatInput {
     this.entryEl = document.createElement('div');
     this.entryEl.className = 'chat-entry hidden';
     this.entryEl.append(this.inputEl, this.sendButton);
-
-    // `/help` 不在命令列表里展示，改在输入框下面给一个可点击的快捷入口。
-    this.helpRow = document.createElement('div');
-    this.helpRow.className = 'chat-help-row hidden';
-    this.helpButton = document.createElement('button');
-    this.helpButton.type = 'button';
-    this.helpButton.className = 'chat-help';
-    this.helpButton.textContent = '? 命令帮助';
-    const helpHint = document.createElement('span');
-    helpHint.className = 'chat-help-hint';
-    helpHint.textContent = '点这里查看全部指令与生成器';
-    this.helpRow.append(this.helpButton, helpHint);
-    this.helpButton.addEventListener('pointerdown', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      this.onHelp?.();
-    });
-
-    // 输入行在最上面（左上角），下面是帮助入口、提示与历史；打开时新消息排在最前
-    this.root.append(this.entryEl, this.helpRow, this.hintEl, this.logEl);
+    // 输入行在最上面（左上角），下面是提示与历史；打开时新消息排在最前
+    this.root.append(this.entryEl, this.hintEl, this.logEl);
     host.appendChild(this.root);
 
     this.inputEl.addEventListener('keydown', (event) => this.onInputKeyDown(event));
@@ -286,7 +263,6 @@ export class ChatInput {
     this.root.classList.add('open');
     this.root.classList.remove('peek');
     this.entryEl.classList.remove('hidden');
-    this.helpRow.classList.remove('hidden');
     this.inputEl.classList.remove('hidden');
     this.hintEl.classList.remove('hidden');
     this.sendButton.classList.remove('hidden');
@@ -314,7 +290,6 @@ export class ChatInput {
     this.open = false;
     this.root.classList.remove('open');
     this.entryEl.classList.add('hidden');
-    this.helpRow.classList.add('hidden');
     this.inputEl.classList.add('hidden');
     this.hintEl.classList.add('hidden');
     this.sendButton.classList.add('hidden');
@@ -556,26 +531,63 @@ export class ChatInput {
     const touch = isTouchUi();
     const value = this.inputEl.value;
     if (!value.startsWith('/') || value.length < 2) {
-      this.hintEl.textContent = touch
-        ? '输入命令（/help 查看全部）或直接发言，点"发送"提交'
-        : '输入命令（/help 查看全部）或直接发言，Enter 提交，Esc 取消';
+      this.renderHint(
+        touch
+          ? '输入命令（/help 查看全部）或直接发言，点"发送"提交'
+          : '输入命令（/help 查看全部）或直接发言，Enter 提交，Esc 取消',
+      );
       return;
     }
     const prefix = value.slice(1).split(/\s+/)[0]!.toLowerCase();
     const matches = commandNames().filter((name) => name.startsWith(prefix));
     if (matches.length === 0) {
-      this.hintEl.textContent = t('chat.noCommandMatch');
+      this.renderHint(t('chat.noCommandMatch'));
       return;
     }
     if (matches.length === 1 && matches[0] === prefix) {
-      this.hintEl.textContent = touch
-        ? '点"发送"提交（手机上没有 Tab 补全，参数要打全）'
-        : 'Tab 补全参数 · Enter 提交 · ↑↓ 翻历史';
+      this.renderHint(
+        touch
+          ? '点"发送"提交（手机上没有 Tab 补全，参数要打全）'
+          : 'Tab 补全参数 · Enter 提交 · ↑↓ 翻历史',
+      );
       return;
     }
-    this.hintEl.textContent = `候选：${matches.slice(0, 6).join(' / ')}${matches.length > 6 ? ' …' : ''}${
-      touch ? '' : '（Tab 补全）'
-    }`;
+    this.renderHint(
+      `候选：${matches.slice(0, 6).join(' / ')}${matches.length > 6 ? ' …' : ''}${
+        touch ? '' : '（Tab 补全）'
+      }`,
+    );
+  }
+
+  /**
+   * 把提示里的 `/help` 中的 `help` 做成可点击（批次 534）。
+   *
+   * 用户要求省掉单独一行帮助按钮：点一下直接把 `/help` 填进输入框，
+   * 由玩家自己按发送（不自动执行）。
+   */
+  private renderHint(text: string): void {
+    this.hintEl.textContent = '';
+    const token = '/help';
+    const index = text.indexOf(token);
+    if (index < 0) {
+      this.hintEl.textContent = text;
+      return;
+    }
+    this.hintEl.append(text.slice(0, index));
+    const help = document.createElement('button');
+    help.type = 'button';
+    help.className = 'chat-help-link';
+    help.textContent = 'help';
+    help.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.inputEl.value = '/help';
+      this.inputEl.focus();
+      const end = this.inputEl.value.length;
+      this.inputEl.setSelectionRange(end, end);
+      this.updateHint();
+    });
+    this.hintEl.append(help, text.slice(index + token.length));
   }
 }
 

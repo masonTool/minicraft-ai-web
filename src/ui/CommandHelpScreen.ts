@@ -290,6 +290,11 @@ export class CommandHelpScreen {
       const list = document.createElement('div');
       list.className = 'cmd-help-suggest-list';
       list.hidden = true;
+      // 手指压在列表上时不要因为输入框失焦就收起：否则想滑动列表，
+      // 一碰就被收掉。onClick 才代表“选中”，滑动不会派发 click。
+      let interacting = false;
+      let moved = false;
+      let startY = 0;
 
       const renderSuggestions = (): void => {
         const query = input.value.trim();
@@ -310,9 +315,12 @@ export class CommandHelpScreen {
             item.type = 'button';
             item.className = 'cmd-help-suggest-item';
             item.textContent = suggestion.label;
-            item.addEventListener('pointerdown', (event) => {
+            // 不用 pointerdown：那会在滑动时误选。click 在滚动后不会触发。
+            item.addEventListener('click', (event) => {
               event.preventDefault();
               event.stopPropagation();
+              // 手指在列表上滑动过：这不是“选中”，别把碰到的第一条填进去
+              if (moved) return;
               input.value = suggestion.value;
               this.values[field.key] = suggestion.value;
               list.hidden = true;
@@ -325,6 +333,23 @@ export class CommandHelpScreen {
         list.hidden = false;
       };
 
+      list.addEventListener('pointerdown', (event) => {
+        interacting = true;
+        moved = false;
+        startY = event.clientY;
+      });
+      list.addEventListener('pointermove', (event) => {
+        if (interacting && Math.abs(event.clientY - startY) > 6) moved = true;
+      });
+      list.addEventListener('pointerup', () => {
+        window.setTimeout(() => {
+          interacting = false;
+        }, 50);
+      });
+      list.addEventListener('pointercancel', () => {
+        interacting = false;
+        moved = false;
+      });
       input.addEventListener('input', () => {
         this.values[field.key] = input.value;
         renderSuggestions();
@@ -332,10 +357,9 @@ export class CommandHelpScreen {
       });
       input.addEventListener('focus', renderSuggestions);
       input.addEventListener('blur', () => {
-        // 让 suggestion 的 pointerdown 先跑完再收起
         window.setTimeout(() => {
-          list.hidden = true;
-        }, 120);
+          if (!interacting) list.hidden = true;
+        }, 400);
       });
       wrap.append(input, list);
       return wrap;
