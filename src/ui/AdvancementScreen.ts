@@ -15,6 +15,7 @@
  *     这条是有断言的——`renderedRows` 会被验收脚本读走（"DOM 里有多少行"最好使）。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import type { TextureAtlas } from '../render/TextureAtlas.ts';
 import {
   ADVANCEMENTS,
@@ -61,7 +62,7 @@ export class AdvancementScreen {
     header.className = 'adv-header';
 
     const title = document.createElement('b');
-    title.textContent = '成就';
+    title.textContent = t('advancement.title');
 
     this.summaryEl = document.createElement('span');
     this.summaryEl.className = 'adv-summary';
@@ -163,7 +164,7 @@ export class AdvancementScreen {
     if (rows === 0) {
       const empty = document.createElement('div');
       empty.className = 'adv-empty';
-      empty.textContent = '这一支还没有条目';
+      empty.textContent = t('advancement.empty');
       this.listEl.appendChild(empty);
     }
     this.renderedRows = rows;

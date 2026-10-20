@@ -14,6 +14,7 @@
  *  3. **`onClose` 交回输入权**：与背包/告示牌同一条（App 里那个 `uiOpen` 判据）。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import {
   BEACON_MAX_LEVEL,
   BEACON_POWERS,
@@ -56,7 +57,7 @@ export class BeaconScreen {
 
     const title = document.createElement('div');
     title.className = 'beacon-screen-title';
-    title.textContent = '信标';
+    title.textContent = t('beacon.title');
 
     this.summaryEl = document.createElement('div');
     this.summaryEl.className = 'beacon-screen-summary';

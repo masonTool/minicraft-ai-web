@@ -17,6 +17,7 @@
  * 文本区自己滚，按钮永远在底部（不跟着内容滚走）。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import {
   BOOK_MAX_PAGES,
   BOOK_PAGE_CHARS,
@@ -242,7 +243,7 @@ export class BookScreen {
     if (!this.writing) return;
     this.pages[this.pageIndex] = this.pageEl.value;
     if (this.pages.every((page) => page.trim() === '')) {
-      this.titleEl.textContent = '一页都没写，没法署名';
+      this.titleEl.textContent = t('book.noPages');
       return;
     }
     this.titleRow.classList.remove('hidden');

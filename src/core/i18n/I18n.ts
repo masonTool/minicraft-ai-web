@@ -132,6 +132,11 @@ const ZH: Readonly<Record<string, string>> = {
   'inventory.statAll': '{label} · 全部 {total} 项（白底 {available} 项现在能做）',
   'inventory.statAvailable': '{label} · 现在能做 {available} 项（点配方书看全部）',
   'inventory.burnTime': '{item}（可烧 {seconds} 秒）',
+  // ---- 小面板（批次 427）
+  'advancement.title': '成就',
+  'advancement.empty': '这一支还没有条目',
+  'beacon.title': '信标',
+  'book.noPages': '一页都没写，没法署名',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -225,6 +230,10 @@ const EN: Readonly<Record<string, string>> = {
   'inventory.statAll': '{label} · {total} total (white = {available} craftable now)',
   'inventory.statAvailable': '{label} · {available} craftable now (open the recipe book for all)',
   'inventory.burnTime': '{item} (burns for {seconds}s)',
+  'advancement.title': 'Advancements',
+  'advancement.empty': 'Nothing in this branch yet',
+  'beacon.title': 'Beacon',
+  'book.noPages': 'Nothing written yet — cannot sign it',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
@@ -306,6 +315,24 @@ export function tp(key: string, params: Record<string, string | number>): string
     const value = params[name];
     return value === undefined ? match : String(value);
   });
+}
+
+/**
+ * 把几个词连成一句（枚举清单用）。
+ *
+ * 为什么需要它：中文用顿号、英文用逗号加 and，**分隔符本身就是语言相关的**。
+ * 直接把 `items.join('、')` 写在界面里，英文模式下会变成
+ * "Oak Planks、Cobblestone、Stick" —— 语法上不算错，但一眼就是机翻。
+ */
+export function joinList(items: readonly string[], language: Language = current): string {
+  const list = items.filter((item) => item.length > 0);
+  if (list.length === 0) return '';
+  if (list.length === 1) return list[0]!;
+  if (language === 'en') {
+    if (list.length === 2) return `${list[0]} and ${list[1]}`;
+    return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
+  }
+  return list.join('、');
 }
 
 /**

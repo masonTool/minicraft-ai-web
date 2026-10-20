@@ -21,6 +21,7 @@ import {
   setLanguage,
   t,
   tp,
+  joinList,
 } from '../src/core/i18n/I18n.ts';
 
 let passed = 0;
@@ -188,6 +189,20 @@ console.log('\n[占位符（批次 425）]');
     '不带数量的那条是完整句子（不是半句）',
     t('station.startMaking', 'zh') === '点一下开始制作' && !t('station.startMaking', 'zh').includes('（'),
   );
+}
+
+console.log('\n[枚举清单的连接词（批次 427）]');
+{
+  check('中文用顿号', joinList(['木板', '圆石', '木棍'], 'zh') === '木板、圆石、木棍', joinList(['木板', '圆石', '木棍'], 'zh'));
+  check('英文两项用 and', joinList(['Planks', 'Cobblestone'], 'en') === 'Planks and Cobblestone');
+  check(
+    '英文三项是 "a, b, and c"',
+    joinList(['Planks', 'Cobblestone', 'Stick'], 'en') === 'Planks, Cobblestone, and Stick',
+    joinList(['Planks', 'Cobblestone', 'Stick'], 'en'),
+  );
+  check('一项不加分隔符', joinList(['木板'], 'zh') === '木板' && joinList(['Planks'], 'en') === 'Planks');
+  check('空清单返回空串', joinList([], 'en') === '');
+  check('空字符串项被跳过', joinList(['木板', '', '圆石'], 'zh') === '木板、圆石');
 }
 
 console.log(`\ni18n 测试：${passed} 通过 / ${failed} 失败`);
