@@ -378,6 +378,9 @@ import { Block, BLOCKS, blockDef, woolId,
   stripResult,
   // 蜂蜜块（批次 450）：摔落减免的判据
   isHoneyBlock,
+  // 水浸（批次 469）：判定在 blocks.ts 里（纯函数），这里只调用
+  waterloggedPlacementState,
+  blockAfterBreak,
   // 潜影盒（批次 451）：无色 + 16 色，特判一律问这个（别再逐 id 比）
   isShulkerBox,
 } from './core/registry/blocks.ts';
@@ -6791,7 +6794,9 @@ class App {
     const shulkerContents = isShulkerBox(brokenId) ? shulkerContentsOf(this.world.containers.getShulkerBox(this.dimension, this.hit.x, this.hit.y, this.hit.z)) : undefined;
     if (isShulkerBox(brokenId)) this.world.containers.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
     this.dropContainerContents(this.hit.x, this.hit.y, this.hit.z);
-    this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, Block.AIR);
+    // 水浸（批次 469）：挖掉的是"含水方块"→ 变回**水**而不是空气。
+    // 判定用挖之前的 `brokenState`（上面已经读过），不看"现在还是不是那个方块"
+    this.world.setBlockAndUpdate(this.hit.x, this.hit.y, this.hit.z, blockAfterBreak(brokenId, brokenState));
     // 批次 185（用户："水旁边的方块挖掉之后水不会流"）：
     // 挖掉的一格可能是"水底/水侧"的塞子——必须唤醒它周围的液体重新评估流向。
     // 原来只有爆炸、拔海带/甘蔗那几条路会唤醒，**玩家手挖这条主路漏了**。
@@ -6863,8 +6868,16 @@ class App {
     this.vibrate(12);
     // 音效：按方块材质挑（石头/木头/草/沙/玻璃/羊毛）
     this.audio.playBreakForBlock(blockDef(brokenId).name, { x: this.hit.x + 0.5, y: this.hit.y + 0.5, z: this.hit.z + 0.5 });
-    // 联机：告诉队友这里被挖空了
-    this.net.sendBlock(this.hit.x, this.hit.y, this.hit.z, Block.AIR, 0, this.dimension);
+    // 联机：告诉队友这里被挖空了。
+    // 读**实际**方块：含水方块挖掉之后是水（批次 469），不是空气
+    this.net.sendBlock(
+      this.hit.x,
+      this.hit.y,
+      this.hit.z,
+      this.world.getBlock(this.hit.x, this.hit.y, this.hit.z),
+      this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z),
+      this.dimension,
+    );
   }
 
   /**
@@ -11826,7 +11839,11 @@ class App {
       return;
     }
 
-    if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.state)) {
+    // 水浸（批次 469）：落点原本是**水**、且这个方块能含水（台阶/楼梯/栅栏…）→
+    // 放下去时打上 waterlogged 标记。没有这个标记，水下放的台阶被挖掉之后
+    // 只会留一个空气洞（水不会回来），"在海底修一条路"就没法做了
+    const placeState = waterloggedPlacementState(blockId, plan.state, existing);
+    if (this.world.setBlockAndUpdate(x, y, z, blockId, placeState)) {
       if (plan.extra) {
         const { dx, dy, dz, id, state } = plan.extra;
         this.world.setBlockAndUpdate(x + dx, y + dy, z + dz, id, state);

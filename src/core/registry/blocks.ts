@@ -10,6 +10,7 @@
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { TreeKind } from '../gen/Features.ts';
 import { anchorLight } from '../world/RespawnAnchor.ts';
+import { isWaterlogged, withWaterlogged } from './blockState.ts';
 import {
   cauldronLevelOf,
   hasEndPortalEye,
@@ -4935,6 +4936,51 @@ export function stripResult(id: number): number | undefined {
 
 export function isCobwebBlock(id: number): boolean {
   return id === Block.COBWEB;
+}
+
+/**
+ * 这一块能不能"含水"（批次 469）。
+ *
+ * 判据是**形状**而不是白名单：原版能含水的全是非整格方块（台阶/楼梯/栅栏/墙/
+ * 活板门/玻璃板/门/栅栏门/告示牌）。整格方块（石头、泥土）与植物、雪层都不行。
+ *
+ * ⚠️ 雪层虽然也是非整格，但它的 bits5-7 全被层数占了，不能含水（原版也不行）——
+ * 它的 shape 是 `snow`，不在这张表里，天然被排除。
+ */
+export function canBeWaterlogged(id: number): boolean {
+  const shape = blockDef(id).shape;
+  return (
+    shape === 'slab' ||
+    shape === 'stairs' ||
+    shape === 'fence' ||
+    shape === 'wall' ||
+    shape === 'trapdoor' ||
+    shape === 'pane' ||
+    shape === 'door' ||
+    shape === 'fence_gate' ||
+    shape === 'sign'
+  );
+}
+
+/**
+ * 放置时的水浸判定（批次 469，纯函数）：
+ * 落点原本是**水**、且这个方块能含水 → 返回带 waterlogged 的状态。
+ *
+ * 抽到这里是为了能离线断言：主程序只负责"读落点、写方块"，判定本身没有世界依赖。
+ */
+export function waterloggedPlacementState(blockId: number, state: number, existingBlock: number): number {
+  return existingBlock === Block.WATER && canBeWaterlogged(blockId) ? withWaterlogged(state, true) : state;
+}
+
+/**
+ * 挖掉一格之后应该留下什么（批次 469，纯函数）：
+ * 含水方块 → 水；其余 → 空气。
+ *
+ * ⚠️ 顺序要紧：先看**挖之前**的 id/state（调用方传进来），
+ * 不是"挖完之后再读"——那时这一格已经是空气了。
+ */
+export function blockAfterBreak(blockId: number, state: number): number {
+  return canBeWaterlogged(blockId) && isWaterlogged(state) ? Block.WATER : Block.AIR;
 }
 
 /** 这一块是不是蜂蜜块（批次 450）：物理层的"跳不起来 / 下滑限速"与摔落减伤共用 */

@@ -2949,9 +2949,11 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   );
 
   // ⑨ 水流动：玩家手挖也要唤醒邻居
+  // ⚠️ 批次 469 起破坏的落点由 `blockAfterBreak` 决定（含水方块变回水），
+  // 所以断言匹配的是那个调用，而不是写死的 `Block.AIR`
   check(
     '玩家破坏方块后唤醒周围流体',
-    /this\.world\.setBlockAndUpdate\(this\.hit\.x, this\.hit\.y, this\.hit\.z, Block\.AIR\);[\s\S]{0,400}this\.wakeFluidsAround\(this\.hit\.x, this\.hit\.y, this\.hit\.z\);/.test(appSrc),
+    /blockAfterBreak\(brokenId, brokenState\)[\s\S]{0,400}this\.wakeFluidsAround\(this\.hit\.x, this\.hit\.y, this\.hit\.z\);/.test(appSrc),
   );
 
   // ⑩ 设置：恢复默认 + 性能项精简

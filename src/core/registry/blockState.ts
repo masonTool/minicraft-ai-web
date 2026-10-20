@@ -771,6 +771,29 @@ export function withChestLoot(state: number, index: number): number {
   );
 }
 
+// ---------------------------------------------------------------- 水浸（批次 469）
+
+/**
+ * 水浸（`waterlogged`）：bit7。
+ *
+ * 只给**非整格形状族**（台阶/楼梯/栅栏/墙/活板门/玻璃板/门/栅栏门/告示牌）用：
+ * 这些族的 bit7 是空的（台阶的 bit6 是"双层"、门只用到 bit5、雪层则是 bits5-7 全占）。
+ * 整格方块与雪层**不支持**含水，`canBeWaterlogged()` 在方块层再兜一道。
+ *
+ * 为什么选 bit7：状态字节只剩这一个高位，而且上面列的族都没用它。
+ */
+const WATERLOGGED_MASK = 0b10000000;
+
+/** 这一格是不是"含水"的（只有 `canBeWaterlogged` 的方块才可能为真） */
+export function isWaterlogged(state: number): boolean {
+  return (state & WATERLOGGED_MASK) !== 0;
+}
+
+/** 写含水标记；其余位原样保留 */
+export function withWaterlogged(state: number, on: boolean): number {
+  return on ? state | WATERLOGGED_MASK : state & ~WATERLOGGED_MASK;
+}
+
 // ---------------------------------------------------------------- 雪层（B11）
 
 /**

@@ -438,3 +438,15 @@
 - [x] B468-6 测试：`test:commands` 199 → **218**、`test:save` **108**
       （顺带把 save-test 的汇总行挪到文件末尾：批次 456 起它一直在中间）
 - ⚠️ 仍缺：队友免伤（伤害来源）、碰撞开关、名字颜色/前后缀（名字牌渲染）
+
+## 批次 469：水浸（waterlogged）行为层（2026-10-20）
+
+- [x] B469-1 状态位 **bit7**（`WATERLOGGED_MASK`）：只给非整格形状族；雪层被层数占了，天然排除
+- [x] B469-2 `canBeWaterlogged(id)` 按**形状**判断（slab/stairs/fence/wall/trapdoor/pane/door/fence_gate/sign）
+- [x] B469-3 放置：落点是水 → 打标记（`waterloggedPlacementState`，纯函数）
+- [x] B469-4 破坏：含水方块 → 变回水（`blockAfterBreak`，纯函数）；联机广播读**实际**方块
+- [x] B469-5 新套件 `test:waterlogged` **30 条**：位操作（与朝向/双层共存）、
+      谁可以含水（含雪层负对照）、放置、破坏（含"整格脏 bit7 不变水"）、老存档兼容
+- [x] B469-6 套数 135 → **136**（README/HANDOFF/AGENTS 三处同步）；
+      修 `test:ui` 那条按 `Block.AIR` 写死的源码守卫
+- ⚠️ **渲染未接**：含水方块看起来与干的相同——要画半格水得让网格化多输出一层水面
