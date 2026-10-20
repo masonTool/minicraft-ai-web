@@ -8,7 +8,7 @@
 
 ## 0. 当前状态（新会话 / 换设备先读这一页）
 
-> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新提交 `dbced2b`
+> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新提交 `f868573`
 > 只要这一页和 §5 任务表是最新的，换会话/换机器就不会丢上下文。
 
 ### 0.1 一眼看进度
@@ -572,7 +572,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-020A 自动化 | 开发者工具 automator 可连、`Tool.getInfo` 正常，但 `App.callFunction/captureScreenshot/CDPEnable` 与 `Game.*` 全部超时：官方 automator 只覆盖小程序 App/Page，小游戏无此上下文 | `d102894` |
 | 2026-10-20 | WX-020A 预览 | 改用 `weixin-minigame-helper`：真实地形出现；CHUNKS 37 / DRAWN 37 / LIGHT 0 / Q 0 / TRI ~243k / CALLS ~239；稳定后 FPS 121 / MS 8.3（worker 超时后主线程降级） | `1737c9e` |
 | 2026-10-20 | 清理/看板 | 删除 WX-001 自写 shim、WX-006 适配器对比工程与旧构建脚本；正式入口/worker 目录改名；新增 §0 状态看板与接手清单 | `dbced2b` |
-| 2026-10-20 | WX-020B 第一块 | 真实世界接入第一人称：`PlayerPhysics` + 平台 pointer；左摇杆/右视角/右下跳跃；helper 预览 `P 9,67,9 G1`、37 chunks、89.7k tri、98 calls、121fps | 本次提交 |
+| 2026-10-20 | WX-020B 第一块 | 真实世界接入第一人称：`PlayerPhysics` + 平台 pointer；左摇杆/右视角/右下跳跃；helper 预览 `P 9,67,9 G1`、37 chunks、89.7k tri、98 calls、121fps | `f868573` |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
