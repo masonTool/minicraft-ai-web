@@ -469,7 +469,14 @@ requirePickaxe(2, [
 
 // ---- 钻石镐（tier 3）：黑曜石、远古残骸与下界合金块
 // 下界合金块要钻石镐（原版如此）：想把它挖回去得先有钻石镐，和"想炼下界合金先要钻石镐"一致
-requirePickaxe(3, [Block.OBSIDIAN, Block.ANCIENT_DEBRIS, Block.NETHERITE_BLOCK, Block.ENDER_CHEST]);
+requirePickaxe(3, [
+  Block.OBSIDIAN,
+  Block.ANCIENT_DEBRIS,
+  Block.NETHERITE_BLOCK,
+  Block.ENDER_CHEST,
+  // 重生锚（批次 454）：原版与黑曜石同一档，要钻石镐
+  Block.RESPAWN_ANCHOR,
+]);
 
 // ---- 矿物块与信标（批次 117，K5 信标那一批的开采口径）
 // 矿物块**跟随它那种矿石的档位**：铁块要石镐（与铁矿同档），

@@ -1929,6 +1929,13 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['SSS', 'SNS', 'SSS'],
     key: { S: Block.CHISELED_STONE_BRICKS, N: Item.NETHERITE_INGOT },
   },
+  // ---- 重生锚（批次 454）：6 哭泣的黑曜石 + 3 荧石（原版图案：上下两排哭黑、中间一排荧石）
+  {
+    kind: 'shaped',
+    result: { id: Block.RESPAWN_ANCHOR, count: 1 },
+    pattern: ['CCC', 'GGG', 'CCC'],
+    key: { C: Block.CRYING_OBSIDIAN, G: Block.GLOWSTONE },
+  },
   // ---- 磨制玄武岩 / 蓝冰（批次 439）
   {
     kind: 'shaped',

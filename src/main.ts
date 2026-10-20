@@ -60,6 +60,11 @@ import { growTreeAt, type TreeWorld } from './core/world/TreeGrowth.ts';
 // 支撑没了、该掉的就掉（批次 78，B49）：判据在 `Support.ts`（纯函数 + 注入世界）
 import { sweepHangingsAround, sweepUnsupported, type SupportWorld } from './core/world/Support.ts';
 import { absorbWater } from './core/world/Sponge.ts';
+import {
+  RESPAWN_ANCHOR_MAX_CHARGE,
+  anchorCharge,
+  withAnchorCharge,
+} from './core/world/RespawnAnchor.ts';
 import type { TreeKind } from './core/gen/Features.ts';
 // 堆肥（批次 70）：什么能堆肥、几分概率在 `registry/compost.ts`（纯数据 + 纯函数）
 import { compostStep } from './core/registry/compost.ts';
@@ -7136,7 +7141,8 @@ class App {
         (this.bedSpawn.x === ox && this.bedSpawn.y === oy && this.bedSpawn.z === oz))
     ) {
       this.bedSpawn = null;
-      this.chat.push('你的重生点（床）被拆掉了', 'system');
+      // 床与重生锚共用 `bedSpawn`，所以提示不点名（拆哪个都走这一条）
+      this.chat.push('你的重生点被拆掉了', 'system');
     }
   }
 
@@ -10793,6 +10799,50 @@ class App {
    * 玻璃挡 0 级——这两个在原版都**不挡**箱子，用 `opaque` 会误伤。
    */
   /**
+   * 重生锚（批次 454）：手持荧石 → 充能 +1；空手/其他物品 → 设重生点并消耗 1 档。
+   *
+   * 原版从 1.16 起，重生锚就是"下界与末地的床"：**任何维度都能设重生点**，
+   * 所以这里不判维度（与"床上只能在下界以外睡"是两条不同的规则，别混）。
+   */
+  private useRespawnAnchor(x: number, y: number, z: number): boolean {
+    if (this.world.getBlock(x, y, z) !== Block.RESPAWN_ANCHOR) return false;
+    const state = this.world.getBlockState(x, y, z);
+    const charge = anchorCharge(state);
+
+    // ① 手持荧石：充能（满了只提示，不白扣一块荧石）
+    // 荧石是**方块物品**（id 与方块相同），所以这里比的是 `Block.GLOWSTONE`
+    if (this.heldItemId === Block.GLOWSTONE) {
+      if (charge >= RESPAWN_ANCHOR_MAX_CHARGE) {
+        this.chat.push('这块重生锚已经充满了', 'system');
+        return true;
+      }
+      const next = withAnchorCharge(state, charge + 1);
+      this.world.setStateAndUpdate(x, y, z, next);
+      this.inventory.consume(Block.GLOWSTONE, 1);
+      this.refreshHotbar();
+      this.net.sendBlock(x, y, z, Block.RESPAWN_ANCHOR, next, this.dimension);
+      this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xb46aff, 8);
+      this.chat.push(`重生锚充能 ${charge + 1} / ${RESPAWN_ANCHOR_MAX_CHARGE}`, 'system');
+      return true;
+    }
+
+    // ② 其他物品/空手：设重生点
+    if (charge <= 0) {
+      this.chat.push('重生锚没有充能：拿荧石右键它', 'system');
+      return true;
+    }
+    const next = withAnchorCharge(state, charge - 1);
+    this.world.setStateAndUpdate(x, y, z, next);
+    this.net.sendBlock(x, y, z, Block.RESPAWN_ANCHOR, next, this.dimension);
+    this.bedSpawn = { x, y, z, dimension: this.dimension };
+    this.particles.spawnFlame(x + 0.5, y + 0.9, z + 0.5, 0xb46aff, 12);
+    this.audio.play('place', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.chat.push(`重生点已设置在这块重生锚上（剩余充能 ${charge - 1}）`, 'system');
+    return true;
+  }
+
+  /**
    * 磁石绑定（批次 453）：手持指南针右键磁石 → 把指南针的指向钉在这一格。
    *
    * 原版把坐标记在**物品**上（不是"玩家记住"），所以这里改的是主手那一份栈：
@@ -11474,6 +11524,14 @@ class App {
     // 磁石（批次 453）：手持指南针右键磁石 → 把指向钉在这一格。
     // 排在放置之前：指南针不是方块物品，落到下面只会什么都不做
     if (this.bindLodestone(this.hit.x, this.hit.y, this.hit.z)) {
+      this.touchPlaceRequest = false;
+      this.placeCooldown = PLACE_COOLDOWN;
+      return;
+    }
+
+    // 重生锚（批次 454）：荧石充能 / 其他物品设重生点。同样排在放置之前
+    // （空手右键是"设点"，落到放置分支就什么都不做）
+    if (this.useRespawnAnchor(this.hit.x, this.hit.y, this.hit.z)) {
       this.touchPlaceRequest = false;
       this.placeCooldown = PLACE_COOLDOWN;
       return;
@@ -12457,13 +12515,22 @@ class App {
     if (bed) {
       if (bed.dimension === this.dimension) {
         const id = this.world.getBlock(bed.x, bed.y, bed.z);
-        const other = bedOtherHalf(bed.x, bed.y, bed.z, this.world.getBlockState(bed.x, bed.y, bed.z));
-        if (isBed(id) && isBed(this.world.getBlock(other[0], other[1], other[2]))) {
-          return { x: bed.x + 0.5, y: bed.y + 1.2, z: bed.z + 0.5, dimension: bed.dimension };
+        // 重生锚（批次 454）：方块还在、**且仍有充能**才算数（原版也这样）
+        if (id === Block.RESPAWN_ANCHOR) {
+          if (anchorCharge(this.world.getBlockState(bed.x, bed.y, bed.z)) > 0) {
+            return { x: bed.x + 0.5, y: bed.y + 1.2, z: bed.z + 0.5, dimension: bed.dimension };
+          }
+          this.bedSpawn = null;
+          this.chat.push('重生锚的充能耗尽了，回世界出生点复活', 'system');
+        } else {
+          const other = bedOtherHalf(bed.x, bed.y, bed.z, this.world.getBlockState(bed.x, bed.y, bed.z));
+          if (isBed(id) && isBed(this.world.getBlock(other[0], other[1], other[2]))) {
+            return { x: bed.x + 0.5, y: bed.y + 1.2, z: bed.z + 0.5, dimension: bed.dimension };
+          }
+          // 床没了：这一份重生点作废，下次睡觉才会重新记
+          this.bedSpawn = null;
+          this.chat.push('你的床不在了，回世界出生点复活', 'system');
         }
-        // 床没了：这一份重生点作废，下次睡觉才会重新记
-        this.bedSpawn = null;
-        this.chat.push('你的床不在了，回世界出生点复活', 'system');
       } else {
         // ⚠️ 床在**别的维度**：切维度会把区块重新流式加载，这一刻 `getBlock` 一律返回空气，
         // 所以**没法在校验**"那张床还在不在"——直接把落点交给 `setDimension`（与传送门同一条路），

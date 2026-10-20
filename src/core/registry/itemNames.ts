@@ -599,6 +599,7 @@ const EXPLICIT: Record<string, string> = {
   wet_sponge: '湿海绵',
   honey_block: '蜂蜜块',
   lodestone: '磁石',
+  respawn_anchor: '重生锚',
   honeycomb_block: '蜜脾块',
   cobweb: '蛛网',
   stripped_oak_log: '剥皮橡木原木',

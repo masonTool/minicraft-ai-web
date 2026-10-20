@@ -5751,6 +5751,35 @@ PAINTERS.lodestone_side = (x, y, rng) => {
 };
 
 /**
+ * 重生锚（批次 454）：黑曜石紫黑底 + 中心一团紫光。
+ *
+ * 原版顶面中心是一颗会呼吸的紫色星芒、侧面是裂纹里透出的紫光；
+ * 这个分辨率下"中心亮、外圈暗、带几粒紫点"就够认了。
+ * ⚠️ 充能越高越亮是**方块发光的档位**（`stateLight`），不是贴图变化——
+ * 贴图不随档位换（原版会换 5 张，这里省掉，记在 TASKS）。
+ */
+PAINTERS.respawn_anchor_top = (x, y, rng) => {
+  const OBSIDIAN: readonly [number, number, number] = [36, 24, 46];
+  const r = Math.hypot(x - 7.5, y - 7.5);
+  if (r < 2.4) {
+    // 中心的紫光
+    return [clamp255(168 + rng() * 40), clamp255(92 + rng() * 30), clamp255(214 + rng() * 30), 255];
+  }
+  const fleck = hashString(`anchor${x},${y}`) % 9 === 0;
+  const v = (1 + rng() * 0.1 - 0.05) * (fleck ? 1.5 : 1);
+  return [clamp255(OBSIDIAN[0] * v), clamp255(OBSIDIAN[1] * v), clamp255(OBSIDIAN[2] * v), 255];
+};
+
+PAINTERS.respawn_anchor_side = (x, y, rng) => {
+  const OBSIDIAN: readonly [number, number, number] = [36, 24, 46];
+  // 一道从中间裂开的紫纹（原版侧面的紫光就是从裂缝里出来的）
+  const crack = Math.abs(x - 7.5) < 1.2 && Math.abs(y - 7.5) < 5.5;
+  const v = 1 + rng() * 0.1 - 0.05;
+  if (crack) return [clamp255(150 * v), clamp255(86 * v), clamp255(196 * v), 255];
+  return [clamp255(OBSIDIAN[0] * v), clamp255(OBSIDIAN[1] * v), clamp255(OBSIDIAN[2] * v), 255];
+};
+
+/**
  * 16 色潜影盒（批次 451）：与无色那套**同一个画法**，只把基色换成染料色。
  *
  * 基色直接取 `DYE_COLORS`（与羊毛/床/染色玻璃同一张表），

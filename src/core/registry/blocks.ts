@@ -9,6 +9,7 @@
 
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { TreeKind } from '../gen/Features.ts';
+import { anchorLight } from '../world/RespawnAnchor.ts';
 import {
   cauldronLevelOf,
   hasEndPortalEye,
@@ -2200,6 +2201,21 @@ const LODESTONE_SPEC: BlockSpec = {
   tiles: ['lodestone_top', 'lodestone_side', 'lodestone_side'],
 };
 
+/**
+ * 重生锚（批次 454）：id **714**。
+ *
+ * 充能档位（0~4）存在状态位低 3 位（`world/RespawnAnchor.ts`），
+ * 发光随档位走（`stateLight`）——原版就是"越充越亮"。
+ */
+export const RESPAWN_ANCHOR_ID = 714;
+
+const RESPAWN_ANCHOR_SPEC: BlockSpec = {
+  id: RESPAWN_ANCHOR_ID,
+  name: 'minecraft:respawn_anchor',
+  tiles: ['respawn_anchor_top', 'respawn_anchor_side', 'respawn_anchor_side'],
+  stateLight: (state) => anchorLight(state),
+};
+
 const SHULKER_BOX_ID_SET = new Set<number>(SHULKER_BOX_IDS);
 
 /** 这一块是不是潜影盒（任意颜色）。容器/掉落/活塞那几处特判都改问它 */
@@ -3360,6 +3376,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SHULKER_BOX_SPECS,
   ...COLORED_SHULKER_SPECS,
   LODESTONE_SPEC,
+  RESPAWN_ANCHOR_SPEC,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
   ...BED_SPECS,
@@ -3922,6 +3939,8 @@ export const Block = {
   HONEY_BLOCK: HONEY_BLOCK_ID,
   // ---- 磁石（批次 453）：手持指南针右键它，指南针就改指这里
   LODESTONE: LODESTONE_ID,
+  // ---- 重生锚（批次 454）：充能 0~4 存在状态位里，右键设重生点
+  RESPAWN_ANCHOR: RESPAWN_ANCHOR_ID,
   // ---- 瓜藤（批次 77，见 `STEM_SPECS`）：8 阶段 + 结果的茎
   PUMPKIN_STEM_STAGE0: PUMPKIN_STEM_ID_START,
   MELON_STEM_STAGE0: MELON_STEM_ID_START,
@@ -4486,6 +4505,8 @@ HARDNESS.set(Block.WET_SPONGE, 0.6);
 HARDNESS.set(Block.HONEY_BLOCK, 0);
 // 磁石（批次 453）：原版 3.5，**必须用镐**（徒手挖得动但一无所获）
 HARDNESS.set(Block.LODESTONE, 3.5);
+// 重生锚（批次 454）：原版 5，**要钻石镐**（黑曜石那一档）
+HARDNESS.set(Block.RESPAWN_ANCHOR, 5);
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);
 // 瓜藤（批次 77）：与作物一样一碰就掉（茎与结果的茎都是）

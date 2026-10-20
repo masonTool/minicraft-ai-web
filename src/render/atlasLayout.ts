@@ -838,6 +838,9 @@ export const TILE_ORDER = [
   // 磁石（批次 453）：顶面一圈凹槽、侧面一条竖槽（原版顶面是"刻出来的圆环"）
   'lodestone_top',
   'lodestone_side',
+  // 重生锚（批次 454）：顶面中心的发光口 + 侧面（黑曜石底 + 一道紫色裂纹）
+  'respawn_anchor_top',
+  'respawn_anchor_side',
   // 瓜藤（批次 77）：8 个阶段各一张（茎越长越高）+ 结果的那一张
   'pumpkin_stem_stage0',
   'pumpkin_stem_stage1',
