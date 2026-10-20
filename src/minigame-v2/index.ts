@@ -21,7 +21,7 @@ import { Furnace } from '../core/container/Furnace.ts';
 import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
-import { blockForItem, itemIconTile } from '../core/registry/items.ts';
+import { CREATIVE_ITEMS, blockForItem, categoryOf, itemIconTile } from '../core/registry/items.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
@@ -189,7 +189,32 @@ let inventoryHint = '';
 let selectedSlot = 0;
 const inventory = new Inventory();
 let crafting = new CraftingGrid(2);
-const creativeBlocks = Object.values(Block).filter((value): value is number => typeof value === 'number' && value > 0).slice(0, 45);
+const creativeItems = CREATIVE_ITEMS;
+type V2CreativeCategory = 'all' | 'building' | 'equipment' | 'items' | 'nature';
+const CREATIVE_CATEGORIES: Array<{ key: V2CreativeCategory; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'building', label: '建筑' },
+  { key: 'equipment', label: '装备' },
+  { key: 'items', label: '物品' },
+  { key: 'nature', label: '自然' },
+];
+const creativeTabFor = (id: number): Exclude<V2CreativeCategory, 'all'> => {
+  switch (categoryOf(id)) {
+    case 'building':
+      return 'building';
+    case 'tools':
+    case 'armor':
+      return 'equipment';
+    case 'natural':
+    case 'wool':
+    case 'food':
+      return 'nature';
+    default:
+      return 'items';
+  }
+};
+let creativeCategory: V2CreativeCategory = 'all';
+let creativePage = 0;
 const registryStorage = {
   getItem: (key: string): string | null => platform.storage.get(key),
   setItem: (key: string, value: string): void => platform.storage.set(key, value),
@@ -687,16 +712,37 @@ const showInventory = (): void => {
     }
   } else if (inventoryTab === 'creative') {
     const query = creativeQuery.trim().toLowerCase();
-    const list = creativeBlocks.filter((id) => !query || itemLabel(id).toLowerCase().includes(query));
-    elements.push(button(gridX, panelY + 52, 150, 30, creativeQuery ? `搜索：${creativeQuery}` : '搜索方块', () => {
+    const filtered = creativeItems.filter((id) => {
+      if (creativeCategory !== 'all' && creativeTabFor(id) !== creativeCategory) return false;
+      return !query || itemLabel(id).toLowerCase().includes(query);
+    });
+    const pageSize = 45;
+    const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    creativePage = Math.max(0, Math.min(creativePage, pages - 1));
+    const startIndex = creativePage * pageSize;
+    const list = filtered.slice(startIndex, startIndex + pageSize);
+    CREATIVE_CATEGORIES.forEach((category, index) => {
+      elements.push(button(gridX + index * 74, panelY + 50, 70, 28, category.label, () => {
+        creativeCategory = category.key;
+        creativePage = 0;
+        showInventory();
+      }, {
+        background: creativeCategory === category.key ? 'rgba(80,120,105,0.95)' : 'rgba(32,44,52,0.95)',
+        border: 'rgba(180,215,235,0.35)',
+        radius: 6,
+        fontSize: 12,
+      }));
+    });
+    elements.push(button(gridX + 5 * 74, panelY + 50, 95, 28, creativeQuery ? '搜索中' : '搜索', () => {
       void askText(creativeQuery, 20).then((value) => {
         if (value !== null) {
           creativeQuery = value;
+          creativePage = 0;
           showInventory();
         }
       });
-    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6 }));
-    elements.push(button(gridX + 160, panelY + 52, 100, 30, '整理背包', () => {
+    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6, fontSize: 12 }));
+    elements.push(button(gridX + 5 * 74 + 101, panelY + 50, 85, 28, '整理', () => {
       const stacks = [];
       for (let i = 0; i < 36; i++) {
         const stack = inventory.get(i);
@@ -706,7 +752,7 @@ const showInventory = (): void => {
       for (let i = 0; i < 36; i++) inventory.set(i, stacks[i] ?? null);
       selectedSlot = 0;
       showInventory();
-    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6 }));
+    }, { background: 'rgba(32,44,52,0.95)', border: 'rgba(180,215,235,0.35)', radius: 6, fontSize: 12 }));
     for (let i = 0; i < list.length; i++) {
       const id = list[i]!;
       elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, i, id, 0, false, () => {
@@ -714,7 +760,18 @@ const showInventory = (): void => {
         showInventory();
       }));
     }
-    elements.push(text(gridX, gridY + 5 * (slotSize + gap) + 12, 640, 30, `点方块放入背包（${list.length} 项）`, { fontSize: 14, color: 'rgba(200, 220, 235, 0.65)' }));
+    elements.push(text(gridX, gridY + 5 * (slotSize + gap) + 10, 420, 24, `${filtered.length} 项 · ${creativePage + 1}/${pages}`, {
+      fontSize: 13,
+      color: 'rgba(200,220,235,0.65)',
+    }));
+    elements.push(button(gridX + 420, gridY + 5 * (slotSize + gap) + 6, 75, 28, '上一页', () => {
+      creativePage = Math.max(0, creativePage - 1);
+      showInventory();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
+    elements.push(button(gridX + 505, gridY + 5 * (slotSize + gap) + 6, 75, 28, '下一页', () => {
+      creativePage = Math.min(pages - 1, creativePage + 1);
+      showInventory();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6, fontSize: 12 }));
   } else {
     const query = recipeQuery.trim().toLowerCase();
     const recipes = RECIPES.filter((recipe) => recipeFits(recipe, recipeSize)).filter((recipe) => {
