@@ -12,6 +12,7 @@ import { World } from '../core/world/World.ts';
 import { TextureAtlas } from '../render/TextureAtlas.ts';
 import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { Sky } from '../render/Sky.ts';
+import { Weather } from '../render/Weather.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -81,6 +82,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87b9e8);
 const sky = new Sky();
 scene.add(sky.object);
+const weather = new Weather();
+scene.add(weather.object);
 let worldTime = 0.25;
 const camera = new THREE.PerspectiveCamera(
   72,
@@ -921,6 +924,7 @@ const snapshotPlayer = (): PlayerSave => ({
   dimension: 'overworld',
   flying,
   timeOfDay: worldTime,
+  weather: weather.snapshot(),
   health,
   food,
   saturation,
@@ -1037,6 +1041,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
       xpIntoLevel = Math.max(0, loaded.xp?.partial ?? 0);
       flying = loaded.flying === true;
       worldTime = Number.isFinite(loaded.timeOfDay) ? loaded.timeOfDay : 0.25;
+      weather.restore(loaded.weather);
       selectedSlot = Math.max(0, Math.min(8, loaded.selectedSlot ?? 0));
       playerReady = true;
     }
@@ -1472,6 +1477,7 @@ const sendChat = (value: string): void => {
   if (command === '/help') {
     pushChat('/help · /seed · /pos · /heal');
     pushChat('/gamemode survival|creative · /tp x y z');
+    pushChat('/weather clear|rain|thunder');
     pushChat('聊天为 v2 本地日志，尚未接联机');
   } else if (command === '/seed') {
     pushChat(`种子 ${currentWorld?.seed ?? '-'}`);
@@ -1482,6 +1488,14 @@ const sendChat = (value: string): void => {
     food = 20;
     saturation = 5;
     pushChat('生命/饥饿已恢复');
+  } else if (command === '/weather') {
+    const kind = args[0];
+    if (kind !== 'clear' && kind !== 'rain' && kind !== 'thunder') {
+      pushChat('用法：/weather clear|rain|thunder');
+    } else {
+      weather.restore({ kind, seconds: 600 });
+      pushChat(`天气：${kind}`);
+    }
   } else if (command === '/gamemode') {
     const mode = args[0] === 'creative' ? 'creative' : args[0] === 'survival' ? 'survival' : null;
     if (!mode) {
@@ -2314,6 +2328,7 @@ const frame = (): void => {
   solid.skyBrightness = settings.brightness * daylight;
   translucent.skyBrightness = settings.brightness * daylight;
   sky.update(worldTime, camera.position, dt);
+  weather.update(dt, camera.position, false);
 
   chunks.processQueue(4, centerCx, centerCz);
   chunks.applyViewDistance(centerCx, centerCz, settings.viewDistance);
