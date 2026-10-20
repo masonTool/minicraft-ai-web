@@ -35,7 +35,10 @@ import type {
 import { getWxApi } from './api.ts';
 
 export function wxSystemInfo(): SystemInfo {
-  const info = getWxApi().getSystemInfoSync() ?? {};
+  const wx = getWxApi();
+  const info = wx.getSystemInfoSync() ?? {};
+  const device =
+    typeof wx.getDeviceInfo === 'function' ? (wx.getDeviceInfo() ?? {}) : {};
   const safe = info.safeArea ?? {};
   return {
     kind: 'wx',
@@ -51,6 +54,7 @@ export function wxSystemInfo(): SystemInfo {
     isTouch: true,
     model: String(info.model ?? ''),
     system: String(info.system ?? ''),
+    platform: String(device.platform ?? info.platform ?? ''),
     ...(typeof info.benchmarkLevel === 'number' ? { benchmarkLevel: info.benchmarkLevel } : {}),
     ...(typeof info.SDKVersion === 'string' ? { sdkVersion: info.SDKVersion } : {}),
   };

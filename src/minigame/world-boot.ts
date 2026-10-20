@@ -72,6 +72,10 @@ async function chooseWorker(platform: ReturnType<typeof wxPlatform>): Promise<{
   worker: WorkerLike;
   state: string;
 }> {
+  if (platform.system.platform === 'devtools') {
+    console.log('[WX-020] devtools：跳过 worker，避免不支持的 worker API 噪音');
+    return { worker: createMainThreadWorker(), state: 'main-devtools' };
+  }
   try {
     const host = platform.workers.create('workers/chunk.worker.js');
     const worker = workerHostToLike(host);

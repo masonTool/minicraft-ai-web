@@ -43,6 +43,8 @@ export interface SystemInfo {
   readonly isTouch: boolean;
   readonly model: string;
   readonly system: string;
+  /** 平台标识（devtools/ios/android…），用于开发者工具内跳过 worker */
+  readonly platform?: string;
   /** 微信小游戏才有；用于低端机降级判断 */
   readonly benchmarkLevel?: number;
   /** 微信基础库版本 */
