@@ -1304,11 +1304,25 @@ async function boot(): Promise<void> {
     // 中间按住仍是破坏；短按用于打开箱子
   };
 
+  let lastDownAt = 0;
+  let lastDownX = 0;
+  let lastDownY = 0;
   platform.input.onPointer('down', (event) => {
     audio?.resume();
     if (audio) audioStatus = 'on';
     const x = event.clientX;
     const y = event.clientY;
+    const now = Date.now();
+    if (
+      now - lastDownAt < 40 &&
+      Math.abs(x - lastDownX) < 2 &&
+      Math.abs(y - lastDownY) < 2
+    ) {
+      return;
+    }
+    lastDownAt = now;
+    lastDownX = x;
+    lastDownY = y;
 
     // 主菜单优先：PLAY/SETTINGS，其他点击不穿透
     if (ui.isMainMenuOpen()) {
