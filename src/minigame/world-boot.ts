@@ -220,6 +220,34 @@ function boot(): void {
   let sceneTriangles = 0;
   let sceneCalls = 0;
 
+  // 自动化/调试入口：开发者工具 automator 或控制台可直接读这些值
+  (globalThis as any).__wxWorld = {
+    get chunks() {
+      return world.chunks.size;
+    },
+    get drawn() {
+      return chunkRenderer.drawnCount;
+    },
+    get light() {
+      return world.lightWorkCount;
+    },
+    get queue() {
+      return chunkRenderer.queueLength;
+    },
+    get worker() {
+      return workerState;
+    },
+    get fps() {
+      return fps;
+    },
+    get triangles() {
+      return sceneTriangles;
+    },
+    get calls() {
+      return sceneCalls;
+    },
+  };
+
   const frame = (time: number): void => {
     frames += 1;
 
