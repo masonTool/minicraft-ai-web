@@ -75,12 +75,17 @@ export class ChatInput {
   onSubmit: ((text: string) => void) | null = null;
   /** 打开/关闭回调（App 用它暂停/恢复玩家输入） */
   onOpenChange: ((open: boolean) => void) | null = null;
+  /** 点输入框下方的「命令帮助」：App 关闭聊天并打开命令帮助弹窗 */
+  onHelp: (() => void) | null = null;
 
   private readonly logEl: HTMLDivElement;
   /** 输入行（输入框 + 发送键）单独一组：打开时放在**最上面**（左上角） */
   private readonly entryEl: HTMLDivElement;
   private readonly inputEl: HTMLInputElement;
   private readonly hintEl: HTMLDivElement;
+  /** 输入框下方的「命令帮助」快捷入口（批次 534） */
+  private readonly helpRow: HTMLDivElement;
+  private readonly helpButton: HTMLButtonElement;
   /** 触屏的"发送"按钮：手机虚拟键盘的确定键不一定派发 Enter 的 keydown */
   private readonly sendButton: HTMLButtonElement;
   /** 所有消息（含已经淡出的）：打开输入框时要能翻历史 */
@@ -147,8 +152,26 @@ export class ChatInput {
     this.entryEl = document.createElement('div');
     this.entryEl.className = 'chat-entry hidden';
     this.entryEl.append(this.inputEl, this.sendButton);
-    // 输入行在最上面（左上角），下面是提示与历史；打开时新消息排在最前
-    this.root.append(this.entryEl, this.hintEl, this.logEl);
+
+    // `/help` 不在命令列表里展示，改在输入框下面给一个可点击的快捷入口。
+    this.helpRow = document.createElement('div');
+    this.helpRow.className = 'chat-help-row hidden';
+    this.helpButton = document.createElement('button');
+    this.helpButton.type = 'button';
+    this.helpButton.className = 'chat-help';
+    this.helpButton.textContent = '? 命令帮助';
+    const helpHint = document.createElement('span');
+    helpHint.className = 'chat-help-hint';
+    helpHint.textContent = '点这里查看全部指令与生成器';
+    this.helpRow.append(this.helpButton, helpHint);
+    this.helpButton.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.onHelp?.();
+    });
+
+    // 输入行在最上面（左上角），下面是帮助入口、提示与历史；打开时新消息排在最前
+    this.root.append(this.entryEl, this.helpRow, this.hintEl, this.logEl);
     host.appendChild(this.root);
 
     this.inputEl.addEventListener('keydown', (event) => this.onInputKeyDown(event));
@@ -263,15 +286,18 @@ export class ChatInput {
     this.root.classList.add('open');
     this.root.classList.remove('peek');
     this.entryEl.classList.remove('hidden');
+    this.helpRow.classList.remove('hidden');
     this.inputEl.classList.remove('hidden');
     this.hintEl.classList.remove('hidden');
     this.sendButton.classList.remove('hidden');
-    this.inputEl.value = prefill;
-    // 批次 220：点消息进来时不聚焦（手机不弹键盘）；键盘/按 T 进来仍然聚焦
+    // 批次 534（用户）：没发送的文字要留在输入框里。
+    // 只有显式预填（`/`、帮助弹窗生成的命令）才覆盖；普通打开保留上次没发出去的内容。
+    if (prefill.length > 0) this.inputEl.value = prefill;
     if (options.focus !== false) {
       this.inputEl.focus();
-      // 光标放到末尾（`/` 预填时就在斜杠后面）
-      this.inputEl.setSelectionRange(prefill.length, prefill.length);
+      // 光标放到末尾（预填时就在最后）
+      const end = this.inputEl.value.length;
+      this.inputEl.setSelectionRange(end, end);
     }
     this.historyIndex = -1;
     this.lastPrefix = '';
@@ -288,10 +314,12 @@ export class ChatInput {
     this.open = false;
     this.root.classList.remove('open');
     this.entryEl.classList.add('hidden');
+    this.helpRow.classList.add('hidden');
     this.inputEl.classList.add('hidden');
     this.hintEl.classList.add('hidden');
     this.sendButton.classList.add('hidden');
     this.inputEl.blur();
+    // 注意：这里**不清空** inputEl.value。没发送的文字要在下次打开时还在。
     // 收起后回到"只显示最近 10 行 + 淡出"的观感
     this.renderedStart = -1;
     this.renderLog();
@@ -301,8 +329,13 @@ export class ChatInput {
   /** 提交当前输入（Enter 与"发送"按钮共用同一条路径，避免两处行为漂移） */
   private submit(): void {
     const text = this.inputEl.value.trim();
+    if (text.length === 0) {
+      this.close();
+      return;
+    }
+    // 发送成功（非空）才清空输入框；关闭/取消都不清。
+    this.inputEl.value = '';
     this.close();
-    if (text.length === 0) return;
     this.history.push(text);
     while (this.history.length > MAX_HISTORY) this.history.shift();
     this.onSubmit?.(text);

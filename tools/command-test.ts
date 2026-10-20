@@ -11,6 +11,7 @@
 import {
   buildCommand,
   commandHelpEntries,
+  suggestCommandValues,
   type CommandHelpField,
 } from '../src/core/commands/CommandHelp.ts';
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
@@ -1069,9 +1070,15 @@ console.log('\n[/clone 区域复制（批次 431）]');
     return found!;
   };
 
-  equal('帮助条目覆盖全部命令', entries.length, COMMANDS.length);
+  equal('帮助条目覆盖全部命令（/help 自身除外）', entries.length, COMMANDS.length - 1);
   check('每条命令都有用法与说明', entries.every((entry) => entry.usage.length > 0 && entry.description.length > 0));
   check('每条命令至少有一个变体', entries.every((entry) => entry.variants.length > 0));
+  check('/help 不在指令列表里', !byName.has('help'));
+  check(
+    '指令按字母排序',
+    entries.every((entry, index) => index === 0 || entries[index - 1]!.name.localeCompare(entry.name, 'en') <= 0),
+    entries.map((entry) => entry.name).join(','),
+  );
 
   {
     const item = field('give', '物品');
@@ -1139,13 +1146,6 @@ console.log('\n[/clone 区域复制（批次 431）]');
     equal('xp 拆成三个变体', entry.variants.length, 3);
     const points = fieldsOf('xp', 0)[0]!;
     equal('xp add 能生成命令', buildCommand(entry, 0, { [points.key]: '10' }), '/xp add 10');
-  }
-
-  {
-    const help = field('help', '命令');
-    equal('help 的命令参数是下拉', help.kind, 'select');
-    check('help 的命令参数可以不填', help.optional);
-    equal('help 不填参数时生成 /help', buildCommand(byName.get('help')!, 0, {}), '/help');
   }
 
   {
@@ -1239,6 +1239,20 @@ console.log('\n[/clone 区域复制（批次 431）]');
       ),
       progress.options!.slice(0, 2).map((option) => `${option.value}=${option.label}`).join(','),
     );
+  }
+
+  {
+    const items = suggestCommandValues('item', '石头');
+    check(
+      '物品联想支持中文名',
+      items.some((item) => item.value === 'stone' && item.label.includes('石头')),
+      items.map((item) => `${item.value}=${item.label}`).join(','),
+    );
+    const english = suggestCommandValues('item', 'diamond');
+    check('物品联想支持英文 id', english.some((item) => item.value.includes('diamond')));
+    const blocks = suggestCommandValues('block', 'stone');
+    check('方块联想返回方块 id', blocks.some((item) => item.value === 'stone'));
+    equal('空输入不弹一大串联想', suggestCommandValues('item', '').length, 0);
   }
 
   equal('没有参数的 /seed 直接生成', buildCommand(byName.get('seed')!, 0, {}), '/seed');

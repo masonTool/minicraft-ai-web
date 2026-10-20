@@ -1983,6 +1983,25 @@
       .chat-entry .chat-input { flex: 1 1 auto; min-width: 0; }
       .chat-entry .chat-send { flex: 0 0 auto; }
       .chat-hint { flex: 0 0 auto; }
+      /* 输入框下方的命令帮助入口（批次 534）：`/help` 从命令列表里拿掉后，
+         这里给一个明确的点击引导。 */
+      .chat-help-row {
+        display: flex; align-items: center; gap: 7px;
+        flex: 0 0 auto; margin-top: 1px;
+      }
+      .chat-help-row.hidden { display: none; }
+      .chat-help {
+        font: inherit; font-size: 10px; line-height: 1.4;
+        padding: 2px 7px; cursor: pointer;
+        color: #d8f0c8; background: rgba(0, 0, 0, .48);
+        border: 1px solid rgba(150, 220, 130, .55);
+        text-shadow: 1px 1px 0 #000;
+      }
+      .chat-help:hover { color: #fff; border-color: rgba(190, 255, 160, .85); }
+      .chat-help-hint {
+        font-size: 10px; color: #b8b8b8; white-space: nowrap;
+        text-shadow: 1px 1px 0 rgba(0, 0, 0, .8);
+      }
       .chat-log {
         display: flex; flex-direction: column; gap: 1px;
         max-height: 34vh; overflow: hidden;
@@ -2148,6 +2167,20 @@
       .cmd-help-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
       .cmd-help-field label { font-size: 10px; color: #a8a8a8; }
       .cmd-help-field .world-input { width: 100%; box-sizing: border-box; }
+      /* 物品/方块自动联想占满整行，结果列表直接展开在输入框下面（不遮挡其它字段） */
+      .cmd-help-field-suggest { grid-column: 1 / -1; }
+      .cmd-help-suggest-list {
+        display: flex; flex-direction: column;
+        max-height: 168px; overflow-y: auto; margin-top: 2px;
+        background: #1c1c1c; border: 2px solid rgba(255, 255, 255, .16);
+      }
+      .cmd-help-suggest-list[hidden] { display: none; }
+      .cmd-help-suggest-item {
+        font: inherit; font-size: 11px; text-align: left;
+        padding: 4px 8px; cursor: pointer;
+        background: transparent; border: 0; color: #d8d8d8;
+      }
+      .cmd-help-suggest-item:hover { background: rgba(108, 195, 73, .18); color: #fff; }
       .cmd-help-combo-custom { margin-top: 4px; }
       .cmd-help-combo-custom[hidden] { display: none; }
       .cmd-help-preview {

@@ -3439,7 +3439,7 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
   );
   check(
     '输入行在最上面（左上角），历史在下面',
-    chatSrc.includes('this.root.append(this.entryEl, this.hintEl, this.logEl)') &&
+    chatSrc.includes('this.root.append(this.entryEl, this.helpRow, this.hintEl, this.logEl)') &&
       html.includes('.chat-entry {') &&
       html.includes('.chat-entry.hidden { display: none; }'),
   );
@@ -3500,6 +3500,23 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       chatSrc.includes('private dismissVisible(): void') &&
       !chatSrc.includes("this.openWith('', { focus: false });"),
   );
+  // 批次 534（用户）：没发送的文字留在输入框；输入框下面给命令帮助快捷入口
+  check(
+    '未发送的文字保留在输入框（只有发送成功才清空）',
+    chatSrc.includes('if (prefill.length > 0) this.inputEl.value = prefill;') &&
+      chatSrc.includes("// 发送成功（非空）才清空输入框") &&
+      chatSrc.includes('this.inputEl.value = \'\';') &&
+      !chatSrc.includes('this.inputEl.value = prefill; this.close();'),
+  );
+  check(
+    '聊天输入框下面有「命令帮助」快捷入口',
+    chatSrc.includes("this.helpButton.className = 'chat-help'") &&
+      chatSrc.includes('this.helpRow.append(this.helpButton, helpHint)') &&
+      appSrc.includes('this.chat.onHelp = () => {') &&
+      html.includes('.chat-help-row {') &&
+      html.includes('.chat-help {'),
+  );
+
   // 批次 533（用户）：/help 改成独立弹窗，不再往聊天历史刷介绍
   const helpSrc = readFileSync(new URL('../src/ui/CommandHelpScreen.ts', import.meta.url), 'utf8');
   check(
@@ -3512,6 +3529,8 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
     '命令帮助弹窗能搜索、切换命令、用表单生成并填入聊天框',
     helpSrc.includes('commandHelpEntries()') &&
       helpSrc.includes('buildCommand(entry, this.variantIndex, this.values)') &&
+      helpSrc.includes('suggestCommandValues(field.suggest!, query, 8)') &&
+      helpSrc.includes('cmd-help-suggest-list') &&
       helpSrc.includes("this.searchEl.placeholder = '搜索命令…'") &&
       helpSrc.includes("fill.textContent = '填入聊天框'") &&
       appSrc.includes('this.commandHelp.onUse = (command) =>') &&

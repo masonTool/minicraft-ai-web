@@ -14,6 +14,7 @@
 import {
   buildCommand,
   commandHelpEntries,
+  suggestCommandValues,
   variantLabel,
   type CommandHelpEntry,
   type CommandHelpField,
@@ -105,10 +106,12 @@ export class CommandHelpScreen {
     this.root.classList.remove('hidden');
     this.searchEl.value = '';
     this.renderList();
-    // 未知命令（`/help nope`）回落到 help，而不是停在上一页空白
+    // 未知命令（`/help nope`）回落到第一条，而不是停在上一页空白。
+    // `/help` 本身不在列表里，也不作为默认选中项。
+    const first = this.entries[0]?.name ?? '';
     this.selectedName = '';
-    this.select(initial ?? 'help');
-    if (this.selectedName === '') this.select('help');
+    this.select(initial ?? first);
+    if (this.selectedName === '' && first.length > 0) this.select(first);
     this.onOpenChange?.(true);
   }
 
@@ -273,9 +276,70 @@ export class CommandHelpScreen {
   private renderField(field: CommandHelpField): HTMLDivElement {
     const wrap = document.createElement('div');
     wrap.className = 'cmd-help-field';
+    if (field.suggest) wrap.classList.add('cmd-help-field-suggest');
     const label = document.createElement('label');
     label.textContent = field.optional ? `${field.label}（可选）` : field.label;
     wrap.appendChild(label);
+
+    if (field.suggest) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'world-input';
+      input.placeholder = field.placeholder ?? '';
+      input.value = this.values[field.key] ?? '';
+      const list = document.createElement('div');
+      list.className = 'cmd-help-suggest-list';
+      list.hidden = true;
+
+      const renderSuggestions = (): void => {
+        const query = input.value.trim();
+        if (query.length === 0) {
+          list.hidden = true;
+          list.replaceChildren();
+          return;
+        }
+        const suggestions = suggestCommandValues(field.suggest!, query, 8);
+        if (suggestions.length === 0) {
+          list.hidden = true;
+          list.replaceChildren();
+          return;
+        }
+        list.replaceChildren(
+          ...suggestions.map((suggestion) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'cmd-help-suggest-item';
+            item.textContent = suggestion.label;
+            item.addEventListener('pointerdown', (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              input.value = suggestion.value;
+              this.values[field.key] = suggestion.value;
+              list.hidden = true;
+              this.refreshPreview();
+              input.focus();
+            });
+            return item;
+          }),
+        );
+        list.hidden = false;
+      };
+
+      input.addEventListener('input', () => {
+        this.values[field.key] = input.value;
+        renderSuggestions();
+        this.refreshPreview();
+      });
+      input.addEventListener('focus', renderSuggestions);
+      input.addEventListener('blur', () => {
+        // 让 suggestion 的 pointerdown 先跑完再收起
+        window.setTimeout(() => {
+          list.hidden = true;
+        }, 120);
+      });
+      wrap.append(input, list);
+      return wrap;
+    }
 
     if (field.kind === 'select' || field.kind === 'combo') {
       const select = document.createElement('select');

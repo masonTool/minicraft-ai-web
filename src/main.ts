@@ -2166,6 +2166,10 @@ class App {
 
     this.chat.onSubmit = (text) => this.handleChatSubmit(text);
     this.chat.onOpenChange = (open) => this.handleChatOpen(open);
+    this.chat.onHelp = () => {
+      this.chat.close();
+      this.commandHelp.show();
+    };
     // `/help` 弹窗：开/关沿用"界面打开就停用移动与交互"；
     // 点“填入聊天框”只把命令放进输入框，由玩家自己按发送。
     this.commandHelp.onOpenChange = (open) => this.handleInventoryOpen(open);

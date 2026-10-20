@@ -18,6 +18,9 @@ import { ENCHANTMENTS } from '../registry/enchantments.ts';
 import { MOB_TYPES } from '../entity/mobs.ts';
 import { LOOT_TABLES } from '../registry/loot.ts';
 import { ADVANCEMENTS } from '../progress/advancements.ts';
+import { BLOCKS } from '../registry/blocks.ts';
+import { CREATIVE_ITEMS, itemName } from '../registry/items.ts';
+import { blockLabel, itemLabel } from '../registry/itemNames.ts';
 
 export interface CommandHelpOption {
   readonly value: string;
@@ -33,6 +36,8 @@ export interface CommandHelpField {
   readonly options?: readonly CommandHelpOption[];
   /** combo 的"自定义"输入框占位（如“数字”“进度 id”） */
   readonly customPlaceholder?: string;
+  /** 文本输入框要自动联想：物品 / 方块 */
+  readonly suggest?: 'item' | 'block';
 }
 
 export type CommandHelpPart =
@@ -134,13 +139,18 @@ const FREE_VALUE_CHOICES = new Set(['数字', '值', '内容', '命令', '半径
 const NUMBER_ARGS = new Set(['数量', '秒数', '等级', '伤害', '点数', '边长']);
 
 export function commandHelpEntries(): CommandHelpEntry[] {
-  return COMMANDS.map((spec) => ({
-    name: spec.name,
-    usage: spec.usage,
-    description: spec.description,
-    creativeOnly: spec.creativeOnly === true,
-    variants: parseUsage(spec),
-  }));
+  return COMMANDS
+    // `/help` 本身不进列表：它在聊天输入框下面有单独的快捷入口。
+    .filter((spec) => spec.name !== 'help')
+    // 批次 534（用户）：指令按字母排序，长列表里才找得到。
+    .sort((a, b) => a.name.localeCompare(b.name, 'en'))
+    .map((spec) => ({
+      name: spec.name,
+      usage: spec.usage,
+      description: spec.description,
+      creativeOnly: spec.creativeOnly === true,
+      variants: parseUsage(spec),
+    }));
 }
 
 /** 拼出最终命令；必填项没填返回 null（界面据此禁用"填入"按钮） */
@@ -460,7 +470,59 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
     kind: NUMBER_ARGS.has(name) ? 'number' : 'text',
     optional,
     placeholder: placeholderFor(name),
+    suggest: name === '物品' ? 'item' : name === '方块' ? 'block' : undefined,
   };
+}
+
+export interface CommandSuggestion {
+  /** 填进输入框的值（英文 id，命令直接可用） */
+  readonly value: string;
+  /** 给玩家看的「中文名（英文 id）」 */
+  readonly label: string;
+}
+
+const ITEM_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string })[] = CREATIVE_ITEMS.map(
+  (id) => {
+    const full = itemName(id);
+    const short = full.replace(/^minecraft:/, '');
+    return {
+      value: short,
+      label: `${itemLabel(id)}（${short}）`,
+      search: `${itemLabel(id)} ${short} ${full} ${id}`.toLowerCase(),
+    };
+  },
+);
+
+const BLOCK_SUGGESTIONS: readonly (CommandSuggestion & { readonly search: string })[] = BLOCKS.filter(
+  (block) => block.id !== 0,
+).map((block) => {
+  const full = block.name;
+  const short = full.replace(/^minecraft:/, '');
+  return {
+    value: short,
+    label: `${blockLabel(block.id)}（${short}）`,
+    search: `${blockLabel(block.id)} ${short} ${full} ${block.id}`.toLowerCase(),
+  };
+});
+
+/**
+ * 物品/方块输入框的自动联想（批次 534）。
+ *
+ * 按中文名、英文短 id、完整 id 或数字 id 匹配；空输入不返回任何项
+ * （避免一打开就是几百条）。
+ */
+export function suggestCommandValues(
+  kind: 'item' | 'block',
+  query: string,
+  limit = 10,
+): CommandSuggestion[] {
+  const q = query.trim().toLowerCase();
+  if (q.length === 0) return [];
+  const source = kind === 'item' ? ITEM_SUGGESTIONS : BLOCK_SUGGESTIONS;
+  return source
+    .filter((entry) => entry.search.includes(q))
+    .slice(0, limit)
+    .map(({ value, label }) => ({ value, label }));
 }
 
 function selectField(
