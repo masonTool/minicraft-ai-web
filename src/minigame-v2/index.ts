@@ -2477,7 +2477,6 @@ platform.input.onPointer('down', (event) => {
     lookMoved = false;
     lookStartTime = Date.now();
     updateAimRing(event.clientX, event.clientY, true);
-    updateAimRing(event.clientX, event.clientY, true);
     updateHitAt(event.clientX, event.clientY);
   }
 });
