@@ -25,6 +25,8 @@ export interface MainMenuInfo {
     worldType?: 'default' | 'flat' | 'amplified';
     difficulty?: 'peaceful' | 'easy' | 'normal' | 'hard';
     gameMode?: 'survival' | 'creative';
+    playTime?: number;
+    lastPlayed?: number;
   }>;
   currentId: string;
   seed: number;
@@ -283,11 +285,31 @@ export function createMainMenu(
       const modeLabel = world.gameMode === 'creative' ? '创造' : '生存';
       drawText(
         context,
-        `${typeLabel} · ${difficultyLabel} · ${modeLabel} · 种子 ${info.seed} · 改动 ${info.edits}`,
+        `${typeLabel} · ${difficultyLabel} · ${modeLabel} · 种子 ${info.seed}`,
         row.x + 16,
-        row.y + 36,
-        12,
+        row.y + 30,
+        11,
         'rgba(190, 215, 235, 0.65)',
+        'left',
+        row.w - 140,
+      );
+      const played = world.playTime ?? 0;
+      const playedLabel = played >= 60 ? `${Math.round(played / 60)} 分钟` : `${Math.round(played)} 秒`;
+      const last = world.lastPlayed ?? 0;
+      const elapsed = Date.now() - last;
+      const lastLabel =
+        elapsed < 60_000
+          ? '刚刚'
+          : elapsed < 3_600_000
+            ? `${Math.floor(elapsed / 60_000)} 分钟前`
+            : `${Math.floor(elapsed / 3_600_000)} 小时前`;
+      drawText(
+        context,
+        `上次游玩 ${lastLabel} · 已游玩 ${playedLabel} · 改动 ${info.edits} 格`,
+        row.x + 16,
+        row.y + 47,
+        11,
+        'rgba(170, 200, 220, 0.55)',
         'left',
         row.w - 140,
       );

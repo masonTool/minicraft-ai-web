@@ -254,6 +254,8 @@ async function boot(): Promise<void> {
     worldType: WorldType;
     difficulty: Difficulty;
     gameMode: GameMode;
+    playTime: number;
+    lastPlayed: number;
   }
   const parseWorlds = (raw: string | null): WorldEntry[] => {
     if (!raw) return [];
@@ -275,6 +277,10 @@ async function boot(): Promise<void> {
           worldType: entry.worldType === 'flat' || entry.worldType === 'amplified'
             ? entry.worldType
             : 'default',
+          playTime: Number.isFinite(entry.playTime) && entry.playTime > 0 ? entry.playTime : 0,
+          lastPlayed: Number.isFinite(entry.lastPlayed) && entry.lastPlayed > 0
+            ? entry.lastPlayed
+            : Date.now(),
           difficulty: ['peaceful', 'easy', 'normal', 'hard'].includes(entry.difficulty)
             ? entry.difficulty
             : 'normal',
@@ -293,12 +299,16 @@ async function boot(): Promise<void> {
       worldType: 'default',
       difficulty: 'normal',
       gameMode: 'survival',
+      playTime: 0,
+      lastPlayed: Date.now(),
     }];
   }
   let currentWorldId = platform.storage.get('wx.worldId') ?? worlds[0]!.id;
   let currentWorld = worlds.find((world) => world.id === currentWorldId) ?? worlds[0]!;
   currentWorldId = currentWorld.id;
   const gameMode: GameMode = currentWorld.gameMode;
+  let playMark = Date.now();
+  currentWorld.lastPlayed = playMark;
   const storedSeed = Number(platform.storage.get('wx.worldSeed') ?? '');
   const fallbackSeed =
     Number.isFinite(storedSeed) && storedSeed > 0 ? Math.floor(storedSeed) : 0x5eed;
@@ -593,6 +603,8 @@ async function boot(): Promise<void> {
         worldType: entry.worldType,
         difficulty: entry.difficulty,
         gameMode: entry.gameMode,
+        playTime: entry.playTime,
+        lastPlayed: entry.lastPlayed,
       })),
       currentId: currentWorldId,
       seed: currentWorld.seed,
@@ -872,6 +884,11 @@ async function boot(): Promise<void> {
 
   const persist = async (manual = false): Promise<void> => {
     if (!save || saving) return;
+    const now = Date.now();
+    currentWorld.playTime += Math.max(0, (now - playMark) / 1000);
+    currentWorld.lastPlayed = now;
+    playMark = now;
+    platform.storage.set('wx.worlds', JSON.stringify(worlds));
     saving = true;
     saveStatus = 'saving';
     try {
@@ -974,6 +991,8 @@ async function boot(): Promise<void> {
       worldType: 'default',
       difficulty: 'normal',
       gameMode: 'survival',
+      playTime: 0,
+      lastPlayed: Date.now(),
     }];
       }
       currentWorld = worlds[0]!;
@@ -1037,10 +1056,14 @@ async function boot(): Promise<void> {
         worldType: draft.worldType,
         difficulty: draft.difficulty,
         gameMode: draft.gameMode,
+        playTime: 0,
+        lastPlayed: Date.now(),
       };
       worlds.push(entry);
       currentWorld = entry;
       currentWorldId = entry.id;
+      playMark = Date.now();
+      currentWorld.lastPlayed = playMark;
       platform.storage.set('wx.worlds', JSON.stringify(worlds));
       platform.storage.set('wx.worldId', entry.id);
       platform.storage.set('wx.worldSeed', String(nextSeed));
@@ -1068,6 +1091,8 @@ async function boot(): Promise<void> {
     saveStatus = 'deleted';
     currentWorld = target;
     currentWorldId = id;
+    playMark = Date.now();
+    currentWorld.lastPlayed = playMark;
     refreshWorldInfo(0);
     ui.showToast('SWITCHING WORLD');
     restartApp();
