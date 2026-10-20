@@ -8,7 +8,7 @@
 
 ## 0. 当前状态（新会话 / 换设备先读这一页）
 
-> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `ec914a3`
+> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `0a1a6fb`
 > 只要这一页和 §5 任务表是最新的，换会话/换机器就不会丢上下文。
 
 ### 0.1 一眼看进度
@@ -16,7 +16,7 @@
 | 项 | 值 |
 | --- | --- |
 | 当前阶段 | M1 平台层收尾 → M2 UI |
-| 当前任务 | **WX-030：熔炉**（箱子已完成） |
+| 当前任务 | **WX-025：启动失败页**（WX-030 已收口） |
 | 刚完成 | WX-029 完成：2×2/3×3 工作台、工作台距离、RECIPES 列表与点配方扣料填格；WX-024 两段式世界列表；WX-022/021/020B/020A 完成；WX-018 共享 Worker；WX-011~017、01B/01C |
 | 正式壳 | `minigame/`（压力场景，801 draw call 基线） |
 | 真实世界 | `minigame-world/`（WX-020A，当前可看完整地形） |
@@ -612,7 +612,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-029 收口 | RECIPES 点配方：按 `recipeGridSize` 切 2×2/3×3（3×3 检查工作台），`takeItem` 从真实 41 格扣料，`recipePlacement` 填格后回合成面板；材料不足回滚 | `d41c4c7` |
 | 2026-10-20 | WX-030 箱子 | 新增 27 格箱子界面：准星中间短按箱子打开，点箱子格取整叠到背包、点快捷栏格放入箱子；箱子独占渲染隐藏重复快捷栏 | `da2da4b` |
 | 2026-10-20 | WX-030 熔炉 | 新增 3 格熔炉界面：原料/燃料/产物、火焰/进度、快捷栏放料；Furnace.tick 逐帧推进，打开的炉子持续烧炼；短按熔炉打开 | `ec914a3` |
-| 2026-10-20 | WX-030 持久化 | 读档 `restoreContainers(await save.loadContainers())`，存档 `serializeContainers(world.containers)` 写 `containers.json`；helper 日志 `saved ... 0 containers` 正常；WX-030 收口 | 本次提交 |
+| 2026-10-20 | WX-030 持久化 | 读档 `restoreContainers(await save.loadContainers())`，存档 `serializeContainers(world.containers)` 写 `containers.json`；helper 日志 `saved ... 0 containers` 正常；WX-030 收口 | `0a1a6fb` |
 | 2026-10-20 | UI 视觉优化 | 面板/按钮渐变+冷色高光；HUD 从全宽黑条改紧凑面板；快捷栏/背包槽位渐变；主菜单加宽、标题下划线、拉开按钮间距；helper 截图自测 | `6f07fbb` |
 | 2026-10-20 | 对齐网页版 | 对照 Web 截图：主菜单改 `MINECRAFT` + 绿色徽章 + 中文按钮；HUD 移到右上 4 行中文小字；MENU/BAG 移到左上；准星下加目标名；快捷栏加灰色斜面外框/选中提亮；去掉 HP/FOOD 文本；helper 自测主菜单/游戏内 HUD | `f2cde48` |
 | 2026-10-20 | 中文显示名 | 目标名/Toast/背包 Tooltip/配方产物统一改用 `itemLabel()`，如 `矮草`、`橡木木板`；与网页版中文一致 | `e799def` |
