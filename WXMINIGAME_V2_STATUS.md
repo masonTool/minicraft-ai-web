@@ -34,6 +34,7 @@
 - [x] 破坏方块获得经验 + HUD 经验条/等级，经验写入存档
 - [x] 15s 自动保存 + 页面隐藏保存
 - [x] 聊天命令：/help /seed /pos /heal /gamemode /tp
+- [x] 顶部三图标缩到 36 设计像素并居中，贴近 Web 手机版
 - [x] 双击摇杆潜行；方块选中框；合成格拖入不再吞物品
 - [x] v2 标题页/开始游戏门控（标题页不生成世界）
 - [x] UI Kit：Box/Text/Button/Toggle/Slider、命中、Canvas 叠加、HUD/暂停

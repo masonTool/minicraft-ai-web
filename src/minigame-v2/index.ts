@@ -1545,12 +1545,12 @@ const showHud = (): void => {
             }),
           ]
         : []),
-      icon(434, 14, 44, 'chat', () => showChat(), { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
-      icon(488, 14, 44, 'pause', () => {
+      icon(464, 18, 36, 'chat', () => showChat(), { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
+      icon(512, 18, 36, 'pause', () => {
         paused = true;
         showPause();
       }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
-      icon(542, 14, 44, 'view', () => {
+      icon(560, 18, 36, 'view', () => {
         cameraMode = cameraMode === 'first' ? 'third' : 'first';
         settings.view = cameraMode;
         persistSettings();
