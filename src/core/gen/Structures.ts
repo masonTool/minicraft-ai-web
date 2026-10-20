@@ -43,6 +43,7 @@ import { Biome } from './Biome.ts';
 import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld, OUTSIDE } from './Features.ts';
 import { planVillageLayout, type VillageDoorFacing, type VillagePieceKind } from './VillageLayout.ts';
 import { creatureAnchorsFor, type StructureCreatureKind } from './StructureCreatures.ts';
+import { planStronghold, roomHalf } from './StrongholdLayout.ts';
 import {
   MINESHAFT_CORRIDOR_HALF,
   MINESHAFT_ROOM_HALF,
@@ -1121,6 +1122,13 @@ function buildMineshaft(w: FeatureWriter, s: StructureInstance, _world: FeatureW
 
 // ---------------------------------------------------------------- 要塞
 
+/**
+ * 要塞（批次 462 改造）：从"写死的一主巷 + 三间房"换成**房间网格拼图**。
+ *
+ * 布局在 `StrongholdLayout.ts`（纯函数）：房间落在 12 格网格上、只占一次、
+ * 广度优先所以全部连通；**传送门房永远在离入口最深的叶节点**。
+ * 这里只负责按零件画：走廊（石砖 + 火把）与六种房间。
+ */
 function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
   const rng = s.rng;
   const brick = Block.STONE_BRICKS;
@@ -1142,89 +1150,97 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
     }
   };
 
-  // 主走廊：沿 X 方向 44 格，截面 3 宽 4 高
-  const y = s.y;
-  const startX = s.x - 22;
-  clear(w, startX, y, s.z - 2, startX + 44, y + 4, s.z + 2);
-  box(w, startX, y - 1, s.z - 2, startX + 44, y - 1, s.z + 2, brick);
-  walls(w, startX, y, s.z - 2, startX + 44, y + 4, s.z + 2, brick);
-  for (let i = 0; i < 44; i += 3) {
-    for (const dz of [-2, 2]) w.fill(startX + i, y + 3, s.z + dz, Block.TORCH);
-  }
-  // 走廊里的两只箱子（批次 459）：原版要塞有 corridor / crossing 两类箱子，
-  // 本项目只有一条主走廊，用 corridor 表摆两只——在此之前这段路只有火把
-  lootChest(w, startX + 18, y, s.z + 1, 'stronghold_corridor');
-  lootChest(w, startX + 34, y, s.z - 1, 'stronghold_corridor');
+  const plan = planStronghold(s.x, s.y, s.z, () => rng.next(), { target: 5 + rng.int(3) });
 
-  // 图书馆（走廊北侧的方厅，放书架台与箱子）
-  const libX = startX + 6;
-  const libZ = s.z - 14;
-  clear(w, libX, y, libZ, libX + 14, y + 5, libZ + 9);
-  box(w, libX, y - 1, libZ, libX + 14, y - 1, libZ + 9, Block.OAK_PLANKS);
-  mottled(libX, y, libZ, libX + 14, y + 5, libZ + 9);
-  // 书架（用木板 + 台阶叠出的"书柜"：原版书架方块暂无）
-  for (let i = 0; i < 5; i++) {
-    box(w, libX + 2 + i * 2, y, libZ + 1, libX + 2 + i * 2, y + 2, libZ + 1, Block.OAK_PLANKS);
-  }
-  // 图书馆角落的蠹虫刷怪笼（批次 365）
-  w.fill(libX + 12, y, libZ + 7, Block.SILVERFISH_SPAWNER);
-  lootChest(w, libX + 1, y, libZ + 4, 'stronghold_library');
-  lootChest(w, libX + 13, y, libZ + 8, 'stronghold_library');
-  torch(w, libX + 7, y + 4, libZ + 5, 0);
-  // 连接走廊与图书馆的支路
-  clear(w, libX + 6, y, s.z - 2, libX + 8, y + 3, libZ + 9);
-  box(w, libX + 6, y - 1, s.z - 2, libX + 8, y - 1, libZ + 9, brick);
-  walls(w, libX + 6, y, s.z - 3, libX + 8, y + 3, libZ, brick);
-
-  // 喷泉房（走廊南侧）：中央水池 + 金块装饰（用粗金块位代替的"金"）
-  const fX = startX + 26;
-  const fZ = s.z + 6;
-  clear(w, fX, y, fZ, fX + 12, y + 6, fZ + 12);
-  box(w, fX, y - 1, fZ, fX + 12, y - 1, fZ + 12, brick);
-  mottled(fX, y, fZ, fX + 12, y + 6, fZ + 12);
-  clear(w, fX + 3, y, fZ + 3, fX + 9, y + 1, fZ + 9);
-  box(w, fX + 4, y, fZ + 4, fX + 8, y, fZ + 8, Block.WATER);
-  box(w, fX + 4, y - 1, fZ + 4, fX + 8, y - 1, fZ + 8, Block.STONE_BRICKS);
-  w.fill(fX + 6, y + 1, fZ + 6, Block.SEA_LANTERN);
-  clear(w, fX + 5, y, s.z + 2, fX + 7, y + 3, fZ + 6);
-  box(w, fX + 5, y - 1, s.z + 2, fX + 7, y - 1, fZ + 6, brick);
-
-  // 传送门房（走廊尽头，K9 批次 111 改成**真的**末地传送门）：
-  // 12 格末地传送门框架围成一圈 + 中间的岩浆池。圈齐了（12 只末影之眼）
-  // 中间的 3×3 才会亮起来——在此之前这里只是一堵"用黑曜石比划出来的假门"。
-  //
-  // 布局与原版一致：框架圈在**地面上那一层**，中间 3×3 是空的、底下往下两层是岩浆
-  //（原版传送门房就是"一座架在岩浆池上的门"）。
-  const pX = startX + 38;
-  const pZ = s.z;
-  clear(w, pX - 5, y, pZ - 5, pX + 5, y + 6, pZ + 5);
-  box(w, pX - 5, y - 1, pZ - 5, pX + 5, y - 1, pZ + 5, brick);
-  mottled(pX - 5, y, pZ - 5, pX + 5, y + 6, pZ + 5);
-
-  // 中心 3×3 的岩浆池：先把池子**包起来**再灌岩浆
-  // （要塞是地下结构，池底周围可能是洞穴——不包的话岩浆会顺着洞流走，
-  //  原版的传送门房也是"一圈石砖围着一个池子"）
-  box(w, pX - 2, y - 2, pZ - 2, pX + 2, y - 1, pZ + 2, brick);
-  box(w, pX - 1, y - 2, pZ - 1, pX + 1, y - 1, pZ + 1, Block.LAVA);
-  clear(w, pX - 1, y, pZ - 1, pX + 1, y, pZ + 1);
-
-  // 12 格框架（5×5 去掉四角，见 `world/EndPortal.ts` 的唯一一份布局表）。
-  // 每格有 10% 的概率**出生时就带着眼睛**（原版数值）——
-  // 所以"这一座要塞还差几只"每次都不一样
-  for (const [dx, dz] of END_PORTAL_RING) {
-    w.fillState(
-      pX + dx,
-      y,
-      pZ + dz,
-      Block.END_PORTAL_FRAME,
-      rng.chance(0.1) ? withEndPortalEye(0, true) : 0,
-    );
+  // ---- 走廊：3 宽 4 高，两侧墙、每 3 格一盏火把
+  for (const link of plan.links) {
+    const [dx, dz] = link.dir === 0 ? [1, 0] : link.dir === 1 ? [-1, 0] : link.dir === 2 ? [0, 1] : [0, -1];
+    const px = dz !== 0 ? 1 : 0;
+    const pz = dx !== 0 ? 1 : 0;
+    for (let i = 0; i <= link.length; i++) {
+      const cx = link.x + dx * i;
+      const cz = link.z + dz * i;
+      clear(w, cx - px, link.y, cz - pz, cx + px, link.y + 3, cz + pz);
+      for (let ox = -px; ox <= px; ox++) {
+        for (let oz = -pz; oz <= pz; oz++) w.fill(cx + ox, link.y - 1, cz + oz, brick);
+      }
+      // 两侧墙（走廊尽头会接到房间，房间后画会把入口清开）
+      for (const side of [-1, 1]) {
+        const wx = cx + (dz !== 0 ? side : 0);
+        const wz = cz + (dx !== 0 ? side : 0);
+        for (let h = 0; h <= 4; h++) w.fill(wx, link.y + h, wz, pick());
+      }
+      if (i % 3 === 0) w.fill(cx, link.y + 3, cz, Block.TORCH);
+    }
+    // 走廊中段偶尔一只箱子（原版的 corridor 表）
+    if (rng.chance(0.5)) {
+      const mid = Math.floor(link.length / 2);
+      lootChest(w, link.x + dx * mid, link.y, link.z + dz * mid, 'stronghold_corridor');
+    }
   }
 
-  // 传送门房的那一个箱子（K9）：末影珍珠在这里（表见 `loot.ts` 的 `stronghold_portal`）
-  lootChest(w, pX - 4, y, pZ + 4, 'stronghold_portal');
-  for (const dx of [-4, 4]) {
-    for (const dz of [-4, 4]) w.fill(pX + dx, y, pZ + dz, Block.TORCH);
+  // ---- 房间：先按种类画壳子，再摆各自的家具
+  for (const room of plan.rooms) {
+    const half = roomHalf(room.kind);
+    const height = room.kind === 'corridor' ? 3 : room.kind === 'crossing' ? 4 : 5;
+    clear(w, room.x - half, room.y, room.z - half, room.x + half, room.y + height, room.z + half);
+    box(w, room.x - half, room.y - 1, room.z - half, room.x + half, room.y - 1, room.z + half, brick);
+    mottled(room.x - half, room.y, room.z - half, room.x + half, room.y + height, room.z + half);
+
+    if (room.kind === 'library') {
+      // 书架（用木板叠出的"书柜"：原版书架方块暂无）
+      for (let i = 0; i < 5; i++) {
+        box(w, room.x - 3 + i * 2, room.y, room.z - 3, room.x - 3 + i * 2, room.y + 2, room.z - 3, Block.OAK_PLANKS);
+      }
+      // 蠹虫刷怪笼（批次 365）
+      w.fill(room.x + 3, room.y, room.z + 3, Block.SILVERFISH_SPAWNER);
+      lootChest(w, room.x - 3, room.y, room.z + 1, 'stronghold_library');
+      lootChest(w, room.x + 3, room.y, room.z - 1, 'stronghold_library');
+      torch(w, room.x, room.y + 4, room.z, 0);
+    } else if (room.kind === 'fountain') {
+      // 中央水池 + 海晶灯（原版喷泉房）
+      clear(w, room.x - 2, room.y, room.z - 2, room.x + 2, room.y + 1, room.z + 2);
+      box(w, room.x - 2, room.y, room.z - 2, room.x + 2, room.y, room.z + 2, Block.WATER);
+      box(w, room.x - 2, room.y - 1, room.z - 2, room.x + 2, room.y - 1, room.z + 2, Block.STONE_BRICKS);
+      w.fill(room.x, room.y + 1, room.z, Block.SEA_LANTERN);
+      for (const dx of [-3, 3]) {
+        for (const dz of [-3, 3]) torch(w, room.x + dx, room.y, room.z + dz, 0);
+      }
+    } else if (room.kind === 'cell') {
+      // 牢房：四角木栅栏围出两个隔间 + 一只箱子
+      for (const dx of [-2, 2]) {
+        for (let dz = -2; dz <= 2; dz++) w.fill(room.x + dx, room.y, room.z + dz, Block.OAK_FENCE);
+      }
+      w.fill(room.x - 2, room.y, room.z, Block.AIR);
+      w.fill(room.x + 2, room.y, room.z, Block.AIR);
+      lootChest(w, room.x, room.y, room.z + 2, 'dungeon');
+      torch(w, room.x, room.y + 3, room.z - 2, 0);
+    } else if (room.kind === 'portal') {
+      // 传送门房（K9，批次 111 改成**真的**末地传送门）：
+      // 12 格框架围成一圈 + 中间的岩浆池；框架圈齐（12 只末影之眼）中间 3×3 才会亮
+      const pX = room.x;
+      const pZ = room.z;
+      // 中心 3×3 的岩浆池：先把池子包起来再灌岩浆
+      // （要塞在地下，池底周围可能是洞穴——不包的话岩浆会顺着洞流走）
+      box(w, pX - 2, room.y - 2, pZ - 2, pX + 2, room.y - 1, pZ + 2, brick);
+      box(w, pX - 1, room.y - 2, pZ - 1, pX + 1, room.y - 1, pZ + 1, Block.LAVA);
+      clear(w, pX - 1, room.y, pZ - 1, pX + 1, room.y, pZ + 1);
+      // 12 格框架（5×5 去掉四角，见 `world/EndPortal.ts` 的唯一一份布局表）。
+      // 每格有 10% 的概率**出生时就带着眼睛**（原版数值）
+      for (const [dx, dz] of END_PORTAL_RING) {
+        w.fillState(
+          pX + dx,
+          room.y,
+          pZ + dz,
+          Block.END_PORTAL_FRAME,
+          rng.chance(0.1) ? withEndPortalEye(0, true) : 0,
+        );
+      }
+      lootChest(w, pX - 4, room.y, pZ + 4, 'stronghold_portal');
+      for (const dx of [-4, 4]) {
+        for (const dz of [-4, 4]) w.fill(pX + dx, room.y, pZ + dz, Block.TORCH);
+      }
+    }
   }
 }
 

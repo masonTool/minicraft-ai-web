@@ -27,6 +27,7 @@ import {
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { planMineshaft } from '../src/core/gen/MineshaftLayout.ts';
+import { planStronghold } from '../src/core/gen/StrongholdLayout.ts';
 import { lootTableIndex } from '../src/core/registry/loot.ts';
 import {
   STRUCTURE_CREATURE_KINDS,
@@ -940,6 +941,121 @@ console.log('\n[废弃矿井的拼图布局（批次 460）]');
     check('木支撑立柱在（栅栏 > 15 格）', fences > 15, `${fences} 格`);
     check('顶角挂着蛛网', cobwebs > 0, `${cobwebs} 格`);
     check('房间里有挂着矿井表的箱子', lootChests > 0, `${lootChests} 只`);
+  }
+}
+
+console.log('\n[要塞的房间网格拼图（批次 462）]');
+{
+  const lcg = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  };
+  const dirVec = (dir: number): [number, number] =>
+    dir === 0 ? [1, 0] : dir === 1 ? [-1, 0] : dir === 2 ? [0, 1] : [0, -1];
+
+  const plan = planStronghold(0, 30, 0, lcg(11), { target: 6 });
+  equal('房间数 = 目标数', plan.rooms.length, 6);
+  equal('走廊数 = 房间数 - 1（是一棵树）', plan.links.length, plan.rooms.length - 1);
+
+  const keys = new Set(plan.rooms.map((room) => `${room.x},${room.z}`));
+  equal('房间互不重叠（网格唯一）', keys.size, plan.rooms.length);
+
+  let dangling = 0;
+  const adjacency = new Map<string, string[]>();
+  for (const link of plan.links) {
+    const [dx, dz] = dirVec(link.dir);
+    const from = `${link.x},${link.z}`;
+    const to = `${link.x + dx * link.length},${link.z + dz * link.length}`;
+    if (!keys.has(to)) dangling++;
+    if (!adjacency.has(from)) adjacency.set(from, []);
+    if (!adjacency.has(to)) adjacency.set(to, []);
+    adjacency.get(from)!.push(to);
+    adjacency.get(to)!.push(from);
+  }
+  equal('每条走廊的终点都是一个房间（没有断头路）', dangling, 0);
+
+  const startKey = `${plan.rooms[0]!.x},${plan.rooms[0]!.z}`;
+  const seen = new Set<string>([startKey]);
+  const queue = [startKey];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const next of adjacency.get(current) ?? []) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      queue.push(next);
+    }
+  }
+  equal('全部房间与入口连通', seen.size, plan.rooms.length);
+
+  check(
+    '全部在半径 36 内',
+    plan.rooms.every((room) => Math.hypot(room.x, room.z) <= 36),
+    `最远 ${Math.max(...plan.rooms.map((room) => Math.hypot(room.x, room.z))).toFixed(1)}`,
+  );
+
+  // 传送门房：恰有一个，且是**最深的**那个
+  const portals = plan.rooms.filter((room) => room.kind === 'portal');
+  equal('恰有一间传送门房', portals.length, 1);
+  const deepest = Math.max(...plan.rooms.map((room) => room.depth));
+  equal('传送门房就在最深的那一层（玩家越往里走越接近目标）', portals[0]?.depth, deepest);
+
+  // 特殊房间配额：图书馆 / 喷泉 / 牢房各至多一间
+  equal('图书馆至多一间', plan.rooms.filter((room) => room.kind === 'library').length <= 1, true);
+  equal('喷泉房至多一间', plan.rooms.filter((room) => room.kind === 'fountain').length <= 1, true);
+  equal('牢房至多一间', plan.rooms.filter((room) => room.kind === 'cell').length <= 1, true);
+
+  equal(
+    '同样的种子两次布局完全一致',
+    JSON.stringify(planStronghold(0, 30, 0, lcg(11), { target: 6 })),
+    JSON.stringify(plan),
+  );
+  equal('target = 3 也能排出（最小规模）', planStronghold(0, 30, 0, lcg(3), { target: 3 }).rooms.length, 3);
+
+  // ---- 真实生成：石砖 / 传送门框架 / 图书馆箱子 / 蠹虫刷怪笼
+  const seed = 20261014;
+  const world = new OverworldGenerator(seed);
+  let fort = null;
+  for (let cellZ = -4; cellZ <= 4 && !fort; cellZ++) {
+    for (let cellX = -4; cellX <= 4 && !fort; cellX++) {
+      fort = structureInstanceForTest('stronghold', cellX, cellZ, world, seed);
+    }
+  }
+  check('找得到一座要塞', fort !== null);
+  if (fort) {
+    const cx0 = Math.floor((fort.x - 40) / 16);
+    const cx1 = Math.floor((fort.x + 40) / 16);
+    const cz0 = Math.floor((fort.z - 40) / 16);
+    const cz1 = Math.floor((fort.z + 40) / 16);
+    let bricks = 0;
+    let frames = 0;
+    let libraryChests = 0;
+    let silverfish = 0;
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const blocks = generateChunkBlocks(cx, cz, seed);
+        const states = takeGeneratedStates() ?? new Uint8Array(blocks.length);
+        for (let y = -64; y < 200; y++) {
+          for (let z = 0; z < 16; z++) {
+            for (let x = 0; x < 16; x++) {
+              const index = Chunk.index(x, y, z);
+              const id = blocks[index]!;
+              if (id === Block.STONE_BRICKS || id === Block.MOSSY_STONE_BRICKS || id === Block.CRACKED_STONE_BRICKS) {
+                bricks++;
+              } else if (id === Block.END_PORTAL_FRAME) frames++;
+              else if (id === Block.SILVERFISH_SPAWNER) silverfish++;
+              else if (id === Block.CHEST && chestLootIndex(states[index]!) === lootTableIndex('stronghold_library')) libraryChests++;
+            }
+          }
+        }
+      }
+    }
+    check('石砖（含苔石/裂纹）铺满了整座要塞（> 1500 格）', bricks > 1500, `${bricks} 格`);
+    equal('末地传送门框架是 12 格（原版一圈）', frames >= 12, true);
+    check('图书馆里有两只箱子', libraryChests >= 2, `${libraryChests} 只`);
+    check('图书馆里有蠹虫刷怪笼', silverfish >= 1, `${silverfish} 个`);
   }
 }
 
