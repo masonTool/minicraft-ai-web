@@ -32,6 +32,7 @@ import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
 import { MobHealthBar } from '../src/render/MobHealthBar.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
+import { ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../src/render/alphaCoverage.ts';
 import { srgbColor } from '../src/render/srgb.ts';
 import { tileOriginAt, tileRectAt } from '../src/render/atlasCoords.ts';
 import { ATLAS_COLUMNS, TILE_ORDER } from '../src/render/atlasLayout.ts';
@@ -552,6 +553,38 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
   check('没有退回"只乘标量亮度"的旧写法', !frag.includes('texel.rgb * brightness;'));
 
   material.material.dispose();
+}
+
+// ---------------------------------------------------------------- 2.12 镂空贴图的覆盖率补偿
+//
+// mipmap 的 alpha 是覆盖率平均：43% 覆盖率的草到 mip2 就掉到 0.2~0.4，被 0.5 的
+// 阈值整块 discard —— 剪影随距离被啃掉、走动时还在跳（"草的颗粒感"）。
+
+console.log('\n[镂空贴图的覆盖率补偿（批次 425）]');
+{
+  // 纯函数：alpha=0 必须恒等（空白区域永远空白，不能凭空长出一层绿雾）
+  equal('完全透明抬了也是 0', coverageAlpha(0, 3), 0);
+  equal('LOD 0 不动（原图就是原图）', coverageAlpha(0.4, 0), 0.4);
+  check('LOD 越高抬得越多', coverageAlpha(0.3, 2) > coverageAlpha(0.3, 1));
+  check('实心方块（alpha=1）抬了还是 1', coverageAlpha(1, 3) === 1);
+  check('每级增益是 0.4（LOD1 的 0.3 → 0.42）', Math.abs(coverageAlpha(0.3, 1) - 0.42) < 1e-9);
+  check('封顶在 LOD 3（再远不再抬）', coverageAlpha(0.3, 9) === coverageAlpha(0.3, 3));
+  check('负的 LOD（放大）不抬', coverageAlpha(0.3, -2) === 0.3);
+  check('NaN 当 LOD 0 处理', coverageAlpha(0.3, Number.NaN) === 0.3);
+
+  // 材质默认值：实心层开补偿、半透明层关（那一层本来就没有 alphaTest）
+  const solid = new VoxelMaterial(new THREE.Texture());
+  const translucent = new VoxelMaterial(new THREE.Texture(), { translucent: true });
+  equal('实心层默认开启补偿', solid.material.uniforms.uAlphaLift!.value, ALPHA_LIFT_PER_LOD);
+  equal('半透明层不补偿', translucent.material.uniforms.uAlphaLift!.value, 0);
+  // 着色器守卫：常量由 TS 注入（`alphaCoverage.ts` 是唯一口径），不能手抄一份
+  check(
+    '着色器里的 LOD 上限由常量注入',
+    solid.material.fragmentShader.includes(`0.0, ${ALPHA_LIFT_MAX_LOD.toFixed(1)})`),
+  );
+  check('alphaTest 用的是补偿后的值', solid.material.fragmentShader.includes('if (covered < uAlphaTest) discard;'));
+  solid.material.dispose();
+  translucent.material.dispose();
 }
 
 // ---------------------------------------------------------------- 3. 视野效果

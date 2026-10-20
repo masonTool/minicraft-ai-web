@@ -12,6 +12,7 @@
  */
 
 import * as THREE from 'three';
+import { ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD } from './alphaCoverage.ts';
 
 /**
  * 流体贴图槽位数（水、岩浆；再多就扩这个数组与着色器里的循环）。
@@ -83,6 +84,11 @@ uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
 uniform float uAlphaTest;
+/**
+ * 镂空贴图的**覆盖率补偿**强度（批次 425，见 alphaCoverage.ts）。
+ * 实心层 0.4、半透明层 0（那一层本来就不做 alphaTest）。
+ */
+uniform float uAlphaLift;
 /** 单张贴图占图集的 UV 尺寸，以及半像素内缩比例 */
 uniform vec2 uTileSpan;
 uniform float uTileInset;
@@ -143,7 +149,18 @@ void main() {
   float tileTexels = uTileSpan.x * uAtlasSize.x;
   float lodCap = min(1.0, tileTexels / max(rho, 0.0001));
   vec4 texel = textureGrad(uAtlas, tileUv, gradX * lodCap, gradY * lodCap);
-  if (texel.a < uAlphaTest) discard;
+
+  // ---- 镂空贴图的覆盖率补偿（批次 425）
+  //
+  // mipmap 的 alpha 是**覆盖率平均**：43% 覆盖率的草到 mip2 就掉到 0.2~0.4，
+  // 被 0.5 的阈值整块 discard —— 剪影随距离被一点点啃掉，走动时洞的位置还跟着跳，
+  // 这就是"草的颗粒感"。按 LOD 把 alpha 乘法抬回去：alpha=0 恒等（空白永远空白），
+  // 实心方块 alpha=1 也恒等（所以不需要为它单开一层材质）。
+  //
+  // 常量与 alphaCoverage.ts 同源（那边是离线断言的唯一口径）。
+  float alphaLod = clamp(log2(max(rho, 0.0001)), 0.0, ${ALPHA_LIFT_MAX_LOD.toFixed(1)});
+  float covered = min(1.0, texel.a * (1.0 + uAlphaLift * alphaLod));
+  if (covered < uAlphaTest) discard;
 
   // 两条光各走一次原版曲线（level / (4 - 3·level)），亮度取较大者：
   // 洞里只有块光、白天只有天光。
@@ -208,6 +225,8 @@ export class VoxelMaterial {
       uFogNear: { value: 120 },
       uFogFar: { value: 160 },
       uAlphaTest: { value: translucent ? 0 : 0.5 },
+      // 半透明层没有 alphaTest（阈值 0），补偿也就没有意义——保持 0，省一次乘法的影响
+      uAlphaLift: { value: translucent ? 0 : ALPHA_LIFT_PER_LOD },
       uTileSpan: { value: new THREE.Vector2(span[0], span[1]) },
       uTileInset: { value: options.tileInset ?? 0 },
       uAtlasSize: { value: atlasSize },
