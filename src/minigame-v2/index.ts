@@ -1503,6 +1503,9 @@ const showHud = (): void => {
   const jumpTop = uiHeight - 200;
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
+      ...(Date.now() < damageFlashUntil
+        ? [box(0, 0, 1024, uiHeight, [], { background: 'rgba(200, 20, 20, 0.22)' })]
+        : []),
       text(24, 18, 240, 36, `${currentWorld?.name ?? '世界'}`, { fontSize: 19, color: '#ffffff' }),
       ...(settings.showDebug
         ? [
@@ -1583,6 +1586,17 @@ const showHud = (): void => {
   );
 };
 
+const applyDamage = (amount: number, cause: string): void => {
+  if (amount <= 0 || dead) return;
+  health = Math.max(0, health - amount);
+  lastDamageCause = cause;
+  damageFlashUntil = Date.now() + 260;
+  showHud();
+  setTimeout(() => {
+    if (Date.now() >= damageFlashUntil && started && !dead) showHud();
+  }, 280);
+};
+
 const respawn = (): void => {
   health = 20;
   food = 20;
@@ -1592,6 +1606,8 @@ const respawn = (): void => {
   fallPeakY = spawn.y + 1;
   wasOnGround = false;
   dead = false;
+  lastDamageCause = '';
+  damageFlashUntil = 0;
   paused = false;
   physics.teleport(spawn.x + 0.5, spawn.y + 1.01, spawn.z + 0.5);
   showHud();
@@ -1612,7 +1628,7 @@ const showDeath = (): void => {
         radius: 12,
       }),
       text(panelX, panelY + 34, panelW, 54, '你死了！', { fontSize: 38, color: '#ffffff', align: 'center' }),
-      text(panelX + 30, panelY + 108, panelW - 60, 60, '生命归零，回到出生点会恢复生命与饥饿。', {
+      text(panelX + 30, panelY + 108, panelW - 60, 60, lastDamageCause ? `死因：${lastDamageCause}` : '生命归零，回到出生点会恢复生命与饥饿。', {
         fontSize: 15,
         color: 'rgba(240, 210, 210, 0.8)',
         align: 'center',
@@ -1728,6 +1744,8 @@ let fallPeakY = 80;
 let wasOnGround = false;
 let starvationTimer = 0;
 let dead = false;
+let lastDamageCause = '';
+let damageFlashUntil = 0;
 let lastStickTap = 0;
 let stickOffsetX = 0;
 let stickOffsetY = 0;
@@ -2062,8 +2080,7 @@ const frame = (): void => {
       if (!wasOnGround) {
         const drop = fallPeakY - physics.y;
         if (drop > 3) {
-          health = Math.max(0, health - Math.floor(drop - 3));
-          showHud();
+          applyDamage(Math.floor(drop - 3), '摔落');
         }
       }
       fallPeakY = physics.y;
@@ -2083,8 +2100,7 @@ const frame = (): void => {
       starvationTimer += dt;
       if (starvationTimer >= 1) {
         starvationTimer = 0;
-        health = Math.max(0, health - 1);
-        showHud();
+        applyDamage(1, '饥饿');
       }
     } else {
       starvationTimer = 0;
