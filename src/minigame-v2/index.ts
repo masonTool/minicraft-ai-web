@@ -14,6 +14,7 @@ import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
+import { UiLayer, box, button, text } from './ui-kit/index.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 
 /**
@@ -49,6 +50,7 @@ const canvas = doc.canvas as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
 renderer.setPixelRatio(Math.min(platform.system.dpr, 2));
 renderer.setSize(platform.system.width, platform.system.height, false);
+renderer.autoClear = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87b9e8);
@@ -58,6 +60,40 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   320,
 );
+
+const ui = new UiLayer(platform.system.width, platform.system.height);
+const uiHeight = ui.height;
+let paused = false;
+
+const showHud = (): void => {
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      text(24, 18, 460, 40, 'MINECRAFT v2 · main core', { fontSize: 22, color: '#ffffff' }),
+      button(824, 18, 176, 48, '暂停', () => {
+        paused = true;
+        showPause();
+      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
+    ]),
+  );
+};
+
+const showPause = (): void => {
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
+      box(272, Math.max(40, uiHeight / 2 - 150), 480, 300, [
+        text(0, 28, 480, 44, '暂停', { fontSize: 34, color: '#ffffff', align: 'center' }),
+        text(0, 88, 480, 32, 'v2 最小 UI Kit 切片', { fontSize: 16, color: 'rgba(220,235,245,0.75)', align: 'center' }),
+        button(90, 200, 300, 52, '继续游戏', () => {
+          paused = false;
+          showHud();
+        }, { background: 'rgba(52, 64, 74, 0.96)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
+      ], { background: 'rgba(16, 22, 28, 0.96)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
+    ]),
+  );
+};
+
+showHud();
 
 const atlas = new TextureAtlas();
 const solid = new VoxelMaterial(atlas.texture, {
@@ -105,6 +141,8 @@ let lookX = 0;
 let lookY = 0;
 
 platform.input.onPointer('down', (event) => {
+  if (ui.handleTap(event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
+  if (paused) return;
   if (event.clientX < platform.system.width / 2) {
     movePointer = event.pointerId;
     moveX = event.clientX;
@@ -165,7 +203,7 @@ const frame = (): void => {
     }
   }
 
-  if (playerReady) {
+  if (playerReady && !paused) {
     physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, false);
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;
@@ -178,6 +216,7 @@ const frame = (): void => {
   translucent.setTime(now * 0.001);
   renderer.clear();
   renderer.render(scene, camera);
+  ui.render(renderer);
   requestAnimationFrame(frame);
 };
 

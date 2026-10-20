@@ -23,7 +23,7 @@
 - [x] v2 出包：`minigame-v2/game.js` 约 2.2MB
 - [ ] 触摸输入
 - [x] PlayerPhysics + 基础触摸（左半屏移动 / 右半屏视角）
-- [ ] UI Kit
+- [x] UI Kit MVP：Box/Text/Button、命中、Canvas 叠加、HUD/暂停面板
 - [ ] Settings / Inventory 按 Web 结构重做
 - [x] 小游戏构建脚本与包体（`build:minigame:v2`，2.2MB）
 
@@ -32,7 +32,7 @@
 1. 用平台 SaveGame 承接 IndexedDB。
 3. 写 v2 最小启动：World + TextureAtlas + ChunkRenderer 画出一个区块。
 4. 正式触摸控件（摇杆/跳跃/挖掘）。
-5. 最后做 UI Kit。
+5. 扩展 UI Kit（Toggle/Slider/Scroll/Tabs/Grid），重做 Settings/Inventory。
 
 ## 验收
 
