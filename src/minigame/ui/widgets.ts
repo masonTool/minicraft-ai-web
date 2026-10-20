@@ -64,6 +64,79 @@ export function drawButton(
   context.globalAlpha = 1;
 }
 
+/** 页签：active 用亮底/黑字，非 active 用暗底/白字 */
+export function drawTab(
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  label: string,
+  active: boolean,
+): void {
+  context.fillStyle = active ? 'rgba(235, 238, 240, 0.95)' : 'rgba(48, 54, 60, 0.95)';
+  context.fillRect(rect.x, rect.y, rect.w, rect.h);
+  context.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  context.lineWidth = 2;
+  context.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
+  drawText(
+    context,
+    label,
+    rect.x + rect.w / 2,
+    rect.y + (rect.h - 20) / 2,
+    20,
+    active ? '#111111' : '#ffffff',
+    'center',
+  );
+}
+
+/** 水平滑块：value01 为 0..1 */
+export function drawSlider(
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  value01: number,
+  label: string,
+  valueText: string,
+): void {
+  const value = Math.max(0, Math.min(1, value01));
+  drawText(context, label, rect.x, rect.y - 28, 18, 'rgba(255, 255, 255, 0.78)');
+  drawText(
+    context,
+    valueText,
+    rect.x + rect.w,
+    rect.y - 28,
+    18,
+    '#ffffff',
+    'right',
+  );
+
+  const trackY = rect.y + rect.h / 2 - 4;
+  context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  context.fillRect(rect.x, trackY, rect.w, 8);
+  context.fillStyle = 'rgba(180, 220, 255, 0.9)';
+  context.fillRect(rect.x, trackY, rect.w * value, 8);
+
+  const knobX = rect.x + rect.w * value;
+  context.fillStyle = '#ffffff';
+  context.fillRect(knobX - 8, trackY - 8, 16, 24);
+}
+
+/** 开关：左侧标签，右侧 64×28 轨道 */
+export function drawSwitch(
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  label: string,
+  on: boolean,
+): void {
+  drawText(context, label, rect.x, rect.y + 4, 18, 'rgba(255, 255, 255, 0.78)');
+  const x = rect.x + rect.w - 64;
+  const y = rect.y;
+  context.fillStyle = on ? 'rgba(110, 200, 140, 0.95)' : 'rgba(0, 0, 0, 0.6)';
+  context.fillRect(x, y, 64, 28);
+  context.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  context.lineWidth = 2;
+  context.strokeRect(x + 1, y + 1, 62, 26);
+  context.fillStyle = '#ffffff';
+  context.fillRect(on ? x + 38 : x + 6, y + 4, 20, 20);
+}
+
 /** 等宽文字；按 maxWidth 截断并补省略号 */
 export function drawText(
   context: CanvasRenderingContext2D,

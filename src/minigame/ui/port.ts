@@ -4,6 +4,7 @@ import { createHud } from './hud.ts';
 import { createHotbar } from './hotbar.ts';
 import { createInventory } from './inventory.ts';
 import { createPauseMenu, type PauseAction } from './pause.ts';
+import { createSettingsMenu, type SettingsValues } from './settings.ts';
 
 /**
  * 小游戏 UI 端口（WX-020B）
@@ -21,6 +22,9 @@ export interface MiniGameUi {
   togglePause(): void;
   isPauseOpen(): boolean;
   handlePauseTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): PauseAction;
+  openSettings(): void;
+  isSettingsOpen(): boolean;
+  handleSettingsTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -29,11 +33,18 @@ export function createCanvasUi(
   blocks: readonly number[],
   screenWidth: number,
   screenHeight: number,
+  onSettingsChange?: (values: SettingsValues) => void,
 ): MiniGameUi {
   const hud = createHud();
   const hotbar = createHotbar(atlas, blocks);
   const inventory = createInventory(atlas, blocks, screenWidth, screenHeight);
   const pause = createPauseMenu(screenWidth, screenHeight);
+  const settings = createSettingsMenu(
+    screenWidth,
+    screenHeight,
+    { fov: 72, renderDistance: 3, sound: true, invertLook: false },
+    (values) => onSettingsChange?.(values),
+  );
 
   return {
     updateStatus(lines: readonly string[]): void {
@@ -44,7 +55,7 @@ export function createCanvasUi(
       inventory.setSelected(index);
     },
     toggleInventory(): void {
-      if (pause.isOpen()) return;
+      if (pause.isOpen() || settings.isOpen()) return;
       inventory.toggle();
     },
     isInventoryOpen(): boolean {
@@ -54,6 +65,7 @@ export function createCanvasUi(
       return inventory.isOpen() ? inventory.handleTap(clientX, clientY, sw, sh) : false;
     },
     togglePause(): void {
+      if (settings.isOpen()) settings.close();
       if (inventory.isOpen()) inventory.close();
       pause.toggle();
     },
@@ -63,11 +75,26 @@ export function createCanvasUi(
     handlePauseTap(clientX, clientY, sw, sh): PauseAction {
       return pause.isOpen() ? pause.handleTap(clientX, clientY, sw, sh) : null;
     },
+    openSettings(): void {
+      inventory.close();
+      pause.close();
+      settings.open();
+    },
+    isSettingsOpen(): boolean {
+      return settings.isOpen();
+    },
+    handleSettingsTap(clientX, clientY, sw, sh): boolean {
+      if (!settings.isOpen()) return false;
+      const action = settings.handleTap(clientX, clientY, sw, sh);
+      if (action === 'back') pause.toggle();
+      return true;
+    },
     render(renderer: THREE.WebGLRenderer): void {
       hud.render(renderer);
       hotbar.render(renderer);
       inventory.render(renderer);
       pause.render(renderer);
+      settings.render(renderer);
     },
   };
 }

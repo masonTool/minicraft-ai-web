@@ -39,8 +39,9 @@ declare const wx: {
 const doc = (globalThis as any).document;
 const view = globalThis as any;
 
-// WX-020A 主线程降级：先小视距把地形完整跑出来；正式版会恢复 6 并切回 worker
-const VIEW_RADIUS = 3;
+// WX-020A 主线程降级：先小视距把地形完整跑出来；设置页可以实时调整
+let viewRadius = 3;
+let invertLook = false;
 const LIGHT_BUDGET = 8000;
 const MESH_BUDGET = 8;
 
@@ -189,7 +190,19 @@ async function boot(): Promise<void> {
     if (!inventory.get(i)) inventory.add(HOTBAR[i]!, 64);
   }
   const hotbarBlocks = HOTBAR.map((_, index) => inventory.get(index)?.id ?? 0);
-  const ui = createCanvasUi(atlas, hotbarBlocks, width, height);
+  const ui = createCanvasUi(atlas, hotbarBlocks, width, height, (settings) => {
+    camera.fov = settings.fov;
+    camera.updateProjectionMatrix();
+    viewRadius = settings.renderDistance;
+    invertLook = settings.invertLook;
+    if (settings.sound) {
+      audio?.resume();
+      if (audio) audioStatus = 'on';
+    } else {
+      audio?.suspend();
+      audioStatus = 'off';
+    }
+  });
 
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
@@ -407,10 +420,16 @@ async function boot(): Promise<void> {
     const y = event.clientY;
 
     // 暂停面板优先：暂停时所有点击只走 UI
+    if (ui.isSettingsOpen()) {
+      uiPointerId = event.pointerId;
+      ui.handleSettingsTap(x, y, width, height);
+      return;
+    }
     if (ui.isPauseOpen()) {
       uiPointerId = event.pointerId;
       const action = ui.handlePauseTap(x, y, width, height);
       if (action === 'save') void persist();
+      if (action === 'settings') ui.openSettings();
       return;
     }
     // 右上角 MENU / BAG
@@ -468,7 +487,11 @@ async function boot(): Promise<void> {
         lookMoved = true;
       }
       yaw -= (event.clientX - lastLookX) * 0.006;
-      pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lastLookY) * 0.006));
+      const pitchSign = invertLook ? -1 : 1;
+      pitch = Math.max(
+        -1.2,
+        Math.min(1.2, pitch - (event.clientY - lastLookY) * 0.006 * pitchSign),
+      );
       lastLookX = event.clientX;
       lastLookY = event.clientY;
       updateCamera();
@@ -569,7 +592,7 @@ async function boot(): Promise<void> {
 
     // 等脚下区块加载完再落玩家，避免出生就掉进虚空
     if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
-    if (ui.isPauseOpen()) {
+    if (ui.isPauseOpen() || ui.isSettingsOpen()) {
       playerInput.forward = 0;
       playerInput.strafe = 0;
       playerInput.jump = false;
@@ -586,12 +609,12 @@ async function boot(): Promise<void> {
     const centerCx = Math.floor(physics.x / 16);
     const centerCz = Math.floor(physics.z / 16);
 
-    world.update(centerCx, centerCz, VIEW_RADIUS);
+    world.update(centerCx, centerCz, viewRadius);
     world.processLighting(LIGHT_BUDGET);
     // WX-020A：先保证能看到完整地形；正式版应恢复“光照收敛后再网格化”的门闩，
     // 否则会把未收敛的光照烘焙进网格（App 里的 pendingSettle 会补刷）。
     chunkRenderer.processQueue(MESH_BUDGET, centerCx, centerCz);
-    chunkRenderer.applyViewDistance(centerCx, centerCz, VIEW_RADIUS);
+    chunkRenderer.applyViewDistance(centerCx, centerCz, viewRadius);
     solid.setTime(time * 0.001);
     translucent.setTime(time * 0.001);
 

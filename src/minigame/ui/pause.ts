@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
 
-export type PauseAction = 'resume' | 'save' | null;
+export type PauseAction = 'resume' | 'save' | 'settings' | null;
 
 export interface PauseMenu {
   toggle(): void;
@@ -69,7 +69,7 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
     );
     drawButton(context, resume, 'RESUME', 'normal', 24);
     drawButton(context, save, 'SAVE NOW', 'normal', 22);
-    drawButton(context, settings, 'SETTINGS', 'disabled', 20);
+    drawButton(context, settings, 'SETTINGS', 'normal', 20);
     texture.needsUpdate = true;
   };
 
@@ -103,8 +103,8 @@ export function createPauseMenu(screenWidth: number, screenHeight: number): Paus
         return 'save';
       }
       if (contains(settings, x, y)) {
-        // 设置页在 WX-025 后续接；现在只吞掉点击，避免穿透到世界
-        return null;
+        setOpen(false);
+        return 'settings';
       }
       setOpen(false);
       return 'resume';
