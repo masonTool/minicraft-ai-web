@@ -126,7 +126,7 @@ import { planVillagePopulation, type VillageWorldView } from './core/world/Villa
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
 import { spawnerDefFor } from './core/registry/spawners.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
-import { endPillarTops } from './core/gen/EndGenerator.ts';
+import { EndGenerator, endPillarTops } from './core/gen/EndGenerator.ts';
 import { RedstoneEngine, wirePowerOf, type RedstoneWorld } from './core/redstone/RedstoneEngine.ts';
 import { GamepadInput } from './ui/GamepadInput.ts';
 import {
@@ -423,7 +423,10 @@ import {
 // `nearestStronghold`（批次 114）是"最近的要塞"的**轻量**版本：要塞是地下结构，
 // 位置不看地形，所以末影之眼每次出手都算得起（见那个函数的注释）
 import { nearestStronghold, structureCreatureSpawnsAt, structureInstanceForTest } from './core/gen/Structures.ts';
-import { nearbyStandingSpot, type StructureCreatureKind } from './core/gen/StructureCreatures.ts';
+import { nearbyStandingSpot } from './core/gen/StructureCreatures.ts';
+import { bastionCreatureSpawnsAt } from './core/gen/Bastion.ts';
+import { fortressCreatureSpawnsAt } from './core/gen/NetherFortress.ts';
+import { endCityCreatureSpawnsAt } from './core/gen/EndStructures.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 // 中键拾取方块（批次 129）：三条规则是纯函数（`test:pickblock` 逐条钉住）
@@ -919,6 +922,8 @@ class App {
    * 那几个闭包已经把生成器拴住了。
    */
   private netherStructureWorld: FortressWorld | null = null;
+  /** 末地城生物的实例重算要用它（懒建，只在末地加载区块时才建） */
+  private endGenerator: EndGenerator | null = null;
   private readonly domeTop = new THREE.Color();
   private readonly domeHorizon = new THREE.Color();
   /**
@@ -7665,18 +7670,48 @@ class App {
    * 入口，是下一批的事——这里显式判维度，不靠"碰巧没刷"。
    */
   private populateStructureMobs(cx: number, cz: number): void {
-    if (this.dimension !== Dimension.OVERWORLD) return;
-    const generator = this.biomeGenerator;
-    if (!generator) return;
-    const spawns = structureCreatureSpawnsAt(
-      cx,
-      cz,
-      {
-        surfaceY: (x, z) => generator.surfaceY(x, z),
-        columnBiome: (x, z) => generator.biomeAt(x, z),
-      },
-      this.worldConfig.seed,
-    );
+    if (this.dimension === Dimension.OVERWORLD) {
+      const generator = this.biomeGenerator;
+      if (!generator) return;
+      this.spawnStructureCreatures(
+        structureCreatureSpawnsAt(
+          cx,
+          cz,
+          {
+            surfaceY: (x, z) => generator.surfaceY(x, z),
+            columnBiome: (x, z) => generator.biomeAt(x, z),
+          },
+          this.worldConfig.seed,
+        ),
+      );
+      return;
+    }
+    // 末地（批次 458）：末地城的潜影贝。城的锚点是"外岛岛心 + 基座"，
+    // 与 `generateEndStructures` 同一套纯函数
+    if (this.dimension === Dimension.END) {
+      this.endGenerator ??= new EndGenerator(this.worldConfig.seed);
+      this.spawnStructureCreatures(endCityCreatureSpawnsAt(cx, cz, this.worldConfig.seed, this.endGenerator));
+      return;
+    }
+    // 下界（批次 458）：堡垒遗迹的猪灵/猪灵蛮兵、下界要塞的凋灵骷髅。
+    // 它们不共用主世界的 `STRUCTURE_DEFS`，所以各有一份实例重算函数
+    if (this.dimension === Dimension.NETHER) {
+      this.netherStructureWorld ??= new NetherGenerator(this.worldConfig.seed).structureWorld();
+      const world = this.netherStructureWorld;
+      this.spawnStructureCreatures([
+        ...bastionCreatureSpawnsAt(cx, cz, this.worldConfig.seed, world),
+        ...fortressCreatureSpawnsAt(cx, cz, this.worldConfig.seed, world),
+      ]);
+    }
+  }
+
+  /**
+   * 把一批"结构该有的生物"落地（主世界与下界共用）。
+   *
+   * 三步：就近找落点（锚点是手写偏移，差一两格是常态）→ 附近已有同类就跳过
+   * （区块卸载重载不会翻倍）→ 按 `MobType` 造出来。
+   */
+  private spawnStructureCreatures(spawns: readonly { kind: string; x: number; y: number; z: number }[]): void {
     for (const spawn of spawns) {
       // 锚点是手写偏移、与房间位置难免差一两格（隔墙/灯具），就近找一个能站的格子：
       // 直接按锚点放会把生物卡进海晶石墙里（实测神殿 9 只只成了 3 只）
@@ -7703,7 +7738,7 @@ class App {
    * 没有回填，所以这里对 aquatic 放宽成"本格与头顶是空气就行"；
    * 其余走地生物要求脚下实心。
    */
-  private structureCreatureSpotFree(kind: StructureCreatureKind, x: number, y: number, z: number): boolean {
+  private structureCreatureSpotFree(kind: string, x: number, y: number, z: number): boolean {
     const type = mobTypeById(kind);
     if (!type) return false;
     const here = this.world.getBlock(x, y, z);

@@ -241,3 +241,72 @@ function buildShip(w: FeatureWriter, x: number, y: number, z: number, cellX: num
   w.fill(x0 - 1, y + 3, z, purpur);
   w.fill(x0 - 2, y + 4, z, pillar);
 }
+
+// ---------------------------------------------------------------- 末地城里的生物（批次 458）
+
+/** 一只由结构生成的生物（与 `Bastion.ts` / `NetherFortress.ts` 同一形状） */
+export interface EndCreatureSpawn {
+  readonly kind: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/** 末地城的锚点：塔内 2 只潜影贝（原版的"活体陷阱"） */
+const END_CITY_CREATURES: readonly { kind: string; dx: number; dy: number; dz: number; count?: number }[] = [
+  { kind: 'shulker', dx: 4, dy: 2, dz: 4, count: 2 },
+];
+
+/**
+ * 这个区块里"末地城该有的生物"（批次 458）。
+ *
+ * 与 `generateEndStructures` 同一套单元与相交判定；只返回**落在本区块**的锚点。
+ * 末地城的锚点用岛心（取整）+ 基座高度算，主线程还会就近找落点，
+ * 所以差一两格不会把潜影贝卡进紫珀里。
+ */
+export function endCityCreatureSpawnsAt(
+  cx: number,
+  cz: number,
+  seed: number,
+  world: EndGenerator,
+): EndCreatureSpawn[] {
+  const reach = Math.ceil((SHIP_RADIUS + 16) / OUTER_CELL) + 1;
+  const baseCellX = Math.floor((cx * 16) / OUTER_CELL);
+  const baseCellZ = Math.floor((cz * 16) / OUTER_CELL);
+  const originX = cx * 16;
+  const originZ = cz * 16;
+  const spawns: EndCreatureSpawn[] = [];
+
+  for (let dcz = -reach; dcz <= reach; dcz++) {
+    for (let dcx = -reach; dcx <= reach; dcx++) {
+      const cellX = baseCellX + dcx;
+      const cellZ = baseCellZ + dcz;
+      const island = world.outerIslandOfCell(cellX, cellZ);
+      if (!island || island.radius < 24) continue;
+      if (!cityInCell(cellX, cellZ, seed)) continue;
+      const anchorX = Math.round(island.x);
+      const anchorZ = Math.round(island.z);
+      const surface = world.islandAt(anchorX, anchorZ);
+      if (!surface) continue;
+      // 只处理与本区块相交的城（与 `intersects` 同一个判据，只是这里没有 writer）
+      if (
+        anchorX + SHIP_RADIUS < originX ||
+        anchorX - SHIP_RADIUS > originX + CHUNK_SIZE_X - 1 ||
+        anchorZ + SHIP_RADIUS < originZ ||
+        anchorZ - SHIP_RADIUS > originZ + CHUNK_SIZE_Z - 1
+      ) {
+        continue;
+      }
+      for (const anchor of END_CITY_CREATURES) {
+        for (let i = 0; i < (anchor.count ?? 1); i++) {
+          const x = anchorX + anchor.dx;
+          const y = surface.top + 1 + anchor.dy;
+          const z = anchorZ + anchor.dz + i;
+          if (Math.floor(x / 16) !== cx || Math.floor(z / 16) !== cz) continue;
+          spawns.push({ kind: anchor.kind, x, y, z });
+        }
+      }
+    }
+  }
+  return spawns;
+}

@@ -385,3 +385,61 @@ export function generateNetherFossils(w: FeatureWriter, seed: number, world: Bas
     }
   }
 }
+
+// ---------------------------------------------------------------- 堡垒遗迹里的生物（批次 458）
+
+/** 一只由结构生成的生物（世界坐标） */
+export interface NetherCreatureSpawn {
+  readonly kind: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/**
+ * 堡垒遗迹的锚点：宝库前 1 只猪灵蛮兵、桥面上 2 只猪灵。
+ *
+ * 与主世界那张表（`StructureCreatures.ts`）同一个思路：偏移是"相对实例原点"，
+ * 主线程拿到之后还会就近找落点，所以差一两格不会把生物卡进黑石里。
+ */
+const BASTION_CREATURES: readonly { kind: string; dx: number; dy: number; dz: number; count?: number }[] = [
+  // 宝库在 buildBastion 里的位置是 (inst.x + 10, inst.y + 1, inst.z)
+  { kind: 'piglin_brute', dx: 10, dy: 2, dz: 0 },
+  { kind: 'piglin', dx: 6, dy: 2, dz: 4, count: 2 },
+];
+
+/**
+ * 这个区块里"堡垒遗迹该有的生物"（批次 458）。
+ *
+ * 与 `generateBastions` 同一套 reach 与相交判定；锚点只由**它所在的区块**负责，
+ * 所以跨区块不会重复。主世界那条通道（`Structures.structureCreatureSpawnsAt`）
+ * 不覆盖下界，所以这里单独一份——这正是"下界结构不共用 STRUCTURE_DEFS"的代价。
+ */
+export function bastionCreatureSpawnsAt(
+  cx: number,
+  cz: number,
+  seed: number,
+  world: BastionWorld,
+): NetherCreatureSpawn[] {
+  const cellSize = BASTION_SPACING * 16;
+  const reach = Math.ceil((BASTION_RADIUS + 16) / cellSize) + 1;
+  const baseCellX = Math.floor((cx * 16) / cellSize);
+  const baseCellZ = Math.floor((cz * 16) / cellSize);
+  const spawns: NetherCreatureSpawn[] = [];
+  for (let dcz = -reach; dcz <= reach; dcz++) {
+    for (let dcx = -reach; dcx <= reach; dcx++) {
+      const instance = bastionCandidate(baseCellX + dcx, baseCellZ + dcz, seed, world);
+      if (!instance || !bastionIntersects(instance, cx, cz)) continue;
+      for (const anchor of BASTION_CREATURES) {
+        for (let i = 0; i < (anchor.count ?? 1); i++) {
+          const x = Math.round(instance.x + anchor.dx);
+          const y = Math.round(instance.y + anchor.dy);
+          const z = Math.round(instance.z + anchor.dz + i);
+          if (Math.floor(x / 16) !== cx || Math.floor(z / 16) !== cz) continue;
+          spawns.push({ kind: anchor.kind, x, y, z });
+        }
+      }
+    }
+  }
+  return spawns;
+}

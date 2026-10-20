@@ -26,6 +26,7 @@ import { LOOT_TABLES, lootTableByIndex, lootTableIndex, rollLoot, validateLootTa
 import {
   BASTION_CLEARANCE,
   BASTION_RADIUS,
+  bastionCreatureSpawnsAt,
   bastionInstanceForTest,
   bastionIntersects,
   NETHER_STRUCTURE_KINDS,
@@ -36,6 +37,7 @@ import {
   type BastionWorld,
 } from '../src/core/gen/Bastion.ts';
 import { NetherGenerator, NetherBiome } from '../src/core/gen/NetherGenerator.ts';
+import { nearbyStandingSpot } from '../src/core/gen/StructureCreatures.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
 import { Dimension } from '../src/core/gen/Dimension.ts';
 import { FeatureWriter } from '../src/core/gen/Features.ts';
@@ -554,6 +556,98 @@ console.log('\n[下界化石（批次 410）]');
     }
   }
   check('非灵魂沙峡谷一个都不生成', inWastes === 0, `实际 ${inWastes} 个`);
+}
+
+console.log('\n[堡垒里的生物（批次 458）]');
+{
+  const world: BastionWorld = {
+    floorAt: () => 40,
+    ceilingAt: () => 90,
+    biomeAt: () => NetherBiome.NETHER_WASTES,
+    basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
+  };
+  const inst = bastionInstanceForTest(0, 0, SEED, world);
+  check('求得到这座堡垒', inst !== null);
+  if (inst) {
+    // 跨它覆盖的所有区块合并（与主线程的调用方式一致）
+    const seen = new Map<string, string>();
+    for (let cz = Math.floor((inst.z - BASTION_RADIUS) / 16); cz <= Math.floor((inst.z + BASTION_RADIUS) / 16); cz++) {
+      for (let cx = Math.floor((inst.x - BASTION_RADIUS) / 16); cx <= Math.floor((inst.x + BASTION_RADIUS) / 16); cx++) {
+        for (const spawn of bastionCreatureSpawnsAt(cx, cz, SEED, world)) {
+          seen.set(`${spawn.x},${spawn.y},${spawn.z}`, spawn.kind);
+        }
+      }
+    }
+    equal('跨区块合并后不重复（1 蛮兵 + 2 猪灵）', seen.size, 3);
+    equal('猪灵蛮兵恰好一只', [...seen.values()].filter((k) => k === 'piglin_brute').length, 1);
+    equal('猪灵两只', [...seen.values()].filter((k) => k === 'piglin').length, 2);
+    check(
+      '都在堡垒的包围盒附近',
+      [...seen.keys()].every((key) => {
+        const [x, y, z] = key.split(',').map(Number) as [number, number, number];
+        return Math.abs(x - inst.x) <= BASTION_RADIUS && Math.abs(z - inst.z) <= BASTION_RADIUS && y > inst.y && y < inst.y + 20;
+      }),
+    );
+  }
+  equal('没有堡垒的地方一只都不刷（负对照）', bastionCreatureSpawnsAt(999, 999, SEED, world).length, 0);
+  equal(
+    '同一区块调两次结果一致',
+    JSON.stringify(bastionCreatureSpawnsAt(0, 0, SEED, world)),
+    JSON.stringify(bastionCreatureSpawnsAt(0, 0, SEED, world)),
+  );
+}
+
+
+console.log('\n[堡垒生物锚点在真实生成里有空间（批次 458）]');
+{
+  const world: BastionWorld = {
+    floorAt: () => 40,
+    ceilingAt: () => 90,
+    biomeAt: () => NetherBiome.NETHER_WASTES,
+    basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
+  };
+  const inst = bastionInstanceForTest(0, 0, SEED, world);
+  if (!inst) {
+    check('求得到堡垒（否则这条断言没意义）', false);
+  } else {
+    const cx0 = Math.floor((inst.x - BASTION_RADIUS) / 16) - 1;
+    const cx1 = Math.floor((inst.x + BASTION_RADIUS) / 16) + 1;
+    const cz0 = Math.floor((inst.z - BASTION_RADIUS) / 16) - 1;
+    const cz1 = Math.floor((inst.z + BASTION_RADIUS) / 16) + 1;
+    const blocks = new Map<string, number>();
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const ids = generateChunkBlocks(cx, cz, SEED, Dimension.NETHER);
+        takeGeneratedStates();
+        for (let y = 20; y < 120; y++) {
+          for (let z = 0; z < 16; z++) {
+            for (let x = 0; x < 16; x++) {
+              blocks.set(`${cx * 16 + x},${y},${cz * 16 + z}`, ids[Chunk.index(x, y, z)]!);
+            }
+          }
+        }
+      }
+    }
+    const spawns = [];
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) spawns.push(...bastionCreatureSpawnsAt(cx, cz, SEED, world));
+    }
+    check('真实实例里有锚点', spawns.length > 0, `${spawns.length}`);
+    let placed = 0;
+    for (const spawn of spawns) {
+      const spot = nearbyStandingSpot(
+        (x, y, z) => blocks.get(`${x},${y},${z}`) === Block.AIR,
+        spawn.x,
+        spawn.y,
+        spawn.z,
+        3,
+      );
+      if (spot) placed++;
+    }
+    equal('每个锚点 3 格内都有空气（不会把猪灵卡进黑石）', placed, spawns.length);
+  }
 }
 
 console.log(`\n堡垒遗迹测试：${passed} 通过 / ${failed} 失败`);

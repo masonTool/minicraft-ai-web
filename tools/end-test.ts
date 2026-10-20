@@ -19,11 +19,17 @@ import { Dimension } from '../src/core/gen/Dimension.ts';
 import { END_BIOME_NAMES, EndGenerator } from '../src/core/gen/EndGenerator.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
+import { endCityCreatureSpawnsAt } from '../src/core/gen/EndStructures.ts';
+import { nearbyStandingSpot } from '../src/core/gen/StructureCreatures.ts';
 
 const SEED = 20261014;
 
 let passed = 0;
 let failed = 0;
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
 
 function check(label: string, condition: boolean, detail = ''): void {
   if (condition) {
@@ -307,6 +313,95 @@ console.log('\n[末地城的战利品箱都挂着表]');
   }
   check(`末地城/末地船里有战利品箱（${chests} 只）`, chests > 0);
   check('每一只都写了战利品表', untagged.length === 0, untagged.slice(0, 3).join(' '));
+}
+
+
+console.log('\n[末地城的生物（批次 458）]');
+{
+  // 先按**外岛单元**找岛（cell 256 格），再算岛心所在区块去取锚点——
+  // 直接遍历区块会漏掉"城在更远处"的情形（±40 区块只覆盖 ±2.5 个 cell）
+  let found: { cx: number; cz: number; spawns: { kind: string; x: number; y: number; z: number }[] } | null = null;
+  for (let cellZ = -10; cellZ <= 10 && !found; cellZ++) {
+    for (let cellX = -10; cellX <= 10 && !found; cellX++) {
+      const island = gen.outerIslandOfCell(cellX, cellZ);
+      if (!island || island.radius < 24) continue;
+      const cx = Math.floor(Math.round(island.x) / 16);
+      const cz = Math.floor(Math.round(island.z) / 16);
+      const spawns = [];
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          spawns.push(...endCityCreatureSpawnsAt(cx + dx, cz + dz, SEED, gen));
+        }
+      }
+      if (spawns.length > 0) found = { cx, cz, spawns };
+    }
+  }
+  check('找得到一座有潜影贝的末地城', found !== null, `种子 ${SEED}`);
+  if (found) {
+    const seen = new Map<string, string>();
+    for (const spawn of found.spawns) seen.set(`${spawn.x},${spawn.y},${spawn.z}`, spawn.kind);
+    equal('合并后是两只（不重复）', seen.size, 2);
+    equal('都是潜影贝', [...seen.values()].filter((k) => k === 'shulker').length, 2);
+  }
+  // 负对照：绝大多数区块没有城，锚点数应该是 0（不是"随便哪个区块都有"）
+  let emptyChunks = 0;
+  for (let cz = 0; cz < 8; cz++) {
+    for (let cx = 0; cx < 8; cx++) {
+      if (endCityCreatureSpawnsAt(cx, cz, SEED, gen).length === 0) emptyChunks++;
+    }
+  }
+  check('大多数区块没有城（锚点不是到处都有）', emptyChunks >= 60, `${emptyChunks} / 64`);
+}
+
+
+console.log('\n[末地城生物锚点在真实生成里有空间（批次 458）]');
+{
+  let target: { cx: number; cz: number; spawns: { kind: string; x: number; y: number; z: number }[] } | null = null;
+  for (let cellZ = -10; cellZ <= 10 && !target; cellZ++) {
+    for (let cellX = -10; cellX <= 10 && !target; cellX++) {
+      const island = gen.outerIslandOfCell(cellX, cellZ);
+      if (!island || island.radius < 24) continue;
+      const cx = Math.floor(Math.round(island.x) / 16);
+      const cz = Math.floor(Math.round(island.z) / 16);
+      const spawns = [];
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) spawns.push(...endCityCreatureSpawnsAt(cx + dx, cz + dz, SEED, gen));
+      }
+      if (spawns.length > 0) target = { cx, cz, spawns };
+    }
+  }
+  if (!target) {
+    check('找得到末地城（否则这条断言没意义）', false);
+  } else {
+    const blocks = new Map<string, number>();
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cx = target.cx + dx;
+        const cz = target.cz + dz;
+        const ids = generateChunkBlocks(cx, cz, SEED, Dimension.END);
+        takeGeneratedStates();
+        for (let y = 0; y < 160; y++) {
+          for (let z = 0; z < 16; z++) {
+            for (let x = 0; x < 16; x++) {
+              blocks.set(`${cx * 16 + x},${y},${cz * 16 + z}`, ids[Chunk.index(x, y, z)]!);
+            }
+          }
+        }
+      }
+    }
+    let placed = 0;
+    for (const spawn of target.spawns) {
+      const spot = nearbyStandingSpot(
+        (x, y, z) => blocks.get(`${x},${y},${z}`) === Block.AIR,
+        spawn.x,
+        spawn.y,
+        spawn.z,
+        3,
+      );
+      if (spot) placed++;
+    }
+    equal('每个锚点 3 格内都有空气（不会把潜影贝卡进紫珀）', placed, target.spawns.length);
+  }
 }
 
 console.log(`\n末地测试：${passed} 通过 / ${failed} 失败`);

@@ -36,6 +36,7 @@ import {
   FORTRESS_CLEARANCE,
   FORTRESS_RADIUS,
   buildFortress,
+  fortressCreatureSpawnsAt,
   fortressInstanceForTest,
   fortressIntersects,
   type FortressInstance,
@@ -536,6 +537,35 @@ console.log('\n[小火球：打中玩家 → 5 点伤害 + 点着 5 秒]');
   equal('点着 5 秒', ignited, SMALL_FIREBALL_FIRE_SECONDS);
   check('命中之后自己消失', fireball.dead);
   check('常量与 `Blaze.ts` 里那份对得上', FIREBALL_DAMAGE === SMALL_FIREBALL_DAMAGE && FIREBALL_FIRE_SECONDS === SMALL_FIREBALL_FIRE_SECONDS);
+}
+
+
+console.log('\n[要塞里的生物（批次 458）]');
+{
+  const world = makeFortressWorld();
+  let inst = null;
+  for (let cell = -4; cell <= 4 && !inst; cell++) inst = fortressInstanceForTest(cell, 0, SEED, world);
+  check('求得到一座要塞', inst !== null);
+  if (inst) {
+    const seen = new Map<string, string>();
+    for (let cz = Math.floor((inst.z - FORTRESS_RADIUS) / 16); cz <= Math.floor((inst.z + FORTRESS_RADIUS) / 16); cz++) {
+      for (let cx = Math.floor((inst.x - FORTRESS_RADIUS) / 16); cx <= Math.floor((inst.x + FORTRESS_RADIUS) / 16); cx++) {
+        for (const spawn of fortressCreatureSpawnsAt(cx, cz, SEED, world)) {
+          seen.set(`${spawn.x},${spawn.y},${spawn.z}`, spawn.kind);
+        }
+      }
+    }
+    equal('跨区块合并后不重复（两只凋灵骷髅）', seen.size, 2);
+    equal('两只都是凋灵骷髅', [...seen.values()].filter((k) => k === 'wither_skeleton').length, 2);
+    check(
+      '都在要塞的包围盒附近',
+      [...seen.keys()].every((key) => {
+        const [x, y, z] = key.split(',').map(Number) as [number, number, number];
+        return Math.abs(x - inst!.x) <= FORTRESS_RADIUS && Math.abs(z - inst!.z) <= FORTRESS_RADIUS && y > inst!.y && y < inst!.y + 20;
+      }),
+    );
+  }
+  equal('没有要塞的地方一只都不刷（负对照）', fortressCreatureSpawnsAt(999, 999, SEED, world).length, 0);
 }
 
 console.log(`\n下界要塞与酿造链测试：${passed} 通过 / ${failed} 失败`);

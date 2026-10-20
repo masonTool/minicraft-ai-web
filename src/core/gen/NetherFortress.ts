@@ -395,3 +395,53 @@ export function fortressInstanceForTest(
 ): FortressInstance | null {
   return fortressCandidate(cellX, cellZ, seed, world);
 }
+
+// ---------------------------------------------------------------- 要塞里的生物（批次 458）
+
+/** 一只由结构生成的生物（与 `Bastion.ts` 同一个形状；两边都不引对方的类型） */
+export interface FortressCreatureSpawn {
+  readonly kind: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/**
+ * 下界要塞的锚点：大厅两侧各 1 只凋灵骷髅。
+ *
+ * 烈焰人不用放——大厅正中那个**刷怪笼**（`SPAWNER`）早就由 `SpawnerTicking` 负责；
+ * 这一批补的是"没有刷怪笼、但原版必有"的凋灵骷髅。
+ */
+const FORTRESS_CREATURES: readonly { kind: string; dx: number; dy: number; dz: number; count?: number }[] = [
+  { kind: 'wither_skeleton', dx: 6, dy: 2, dz: 0, count: 2 },
+];
+
+/** 这个区块里"要塞该有的生物"（批次 458；reach 与相交判定与 `generateFortresses` 同一套） */
+export function fortressCreatureSpawnsAt(
+  cx: number,
+  cz: number,
+  seed: number,
+  world: FortressWorld,
+): FortressCreatureSpawn[] {
+  const cellSize = FORTRESS_SPACING * 16;
+  const reach = Math.ceil((FORTRESS_RADIUS + 16) / cellSize) + 1;
+  const baseCellX = Math.floor((cx * 16) / cellSize);
+  const baseCellZ = Math.floor((cz * 16) / cellSize);
+  const spawns: FortressCreatureSpawn[] = [];
+  for (let dcz = -reach; dcz <= reach; dcz++) {
+    for (let dcx = -reach; dcx <= reach; dcx++) {
+      const instance = fortressCandidate(baseCellX + dcx, baseCellZ + dcz, seed, world);
+      if (!instance || !fortressIntersects(instance, cx, cz)) continue;
+      for (const anchor of FORTRESS_CREATURES) {
+        for (let i = 0; i < (anchor.count ?? 1); i++) {
+          const x = Math.round(instance.x + anchor.dx);
+          const y = Math.round(instance.y + anchor.dy);
+          const z = Math.round(instance.z + anchor.dz + i);
+          if (Math.floor(x / 16) !== cx || Math.floor(z / 16) !== cz) continue;
+          spawns.push({ kind: anchor.kind, x, y, z });
+        }
+      }
+    }
+  }
+  return spawns;
+}
