@@ -66,6 +66,13 @@ export interface StrongholdLayoutOptions {
   readonly target: number;
   /** 半径上限（默认 36：结构 radius 40 留出房间半宽） */
   readonly maxRadius?: number;
+  /**
+   * 要不要生成传送门房（批次 521：下层不放传送门）。
+   *
+   * 一座要塞只能有一个末地传送门；第二层只提供图书馆/喷泉/牢房这些"往下探索"的内容，
+   * 免得玩家在两层各找到一个传送门。
+   */
+  readonly includePortal?: boolean;
 }
 
 const DIRECTIONS: readonly { dx: number; dz: number; dir: StrongholdDirection }[] = [
@@ -148,11 +155,14 @@ export function planStronghold(
     rooms[index] = { ...rooms[index]!, kind };
   };
   // 传送门房：最深的那个房间（并列取序号大的，结果稳定）
-  let portalIndex = rooms.length - 1;
-  for (let i = 1; i < rooms.length; i++) {
-    if (rooms[i]!.depth >= rooms[portalIndex]!.depth) portalIndex = i;
+  const includePortal = options.includePortal !== false;
+  let portalIndex = includePortal ? rooms.length - 1 : -1;
+  if (includePortal) {
+    for (let i = 1; i < rooms.length; i++) {
+      if (rooms[i]!.depth >= rooms[portalIndex]!.depth) portalIndex = i;
+    }
+    assign(portalIndex, 'portal');
   }
-  assign(portalIndex, 'portal');
   // 图书馆 / 喷泉房 / 牢房：按序号取（跳过起点与传送门房）
   const specials: StrongholdRoomKind[] = ['library', 'fountain', 'cell'];
   let special = 0;

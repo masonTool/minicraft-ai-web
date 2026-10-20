@@ -43,7 +43,7 @@ import { Biome } from './Biome.ts';
 import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld, OUTSIDE } from './Features.ts';
 import { planVillageLayout, type VillageDoorFacing, type VillagePieceKind } from './VillageLayout.ts';
 import { creatureAnchorsFor, type StructureCreatureKind } from './StructureCreatures.ts';
-import { planStronghold, roomHalf } from './StrongholdLayout.ts';
+import { planStronghold, roomHalf, type StrongholdPlan } from './StrongholdLayout.ts';
 import { MANSION_FLOOR_HEIGHT, mansionRoomHalf, planMansion } from './MansionLayout.ts';
 import {
   MINESHAFT_CORRIDOR_HALF,
@@ -1197,7 +1197,7 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
     }
   };
 
-  const plan = planStronghold(s.x, s.y, s.z, () => rng.next(), { target: 5 + rng.int(3) });
+  const drawFloor = (plan: StrongholdPlan): void => {
 
   // ---- 走廊：3 宽 4 高，两侧墙、每 3 格一盏火把
   for (const link of plan.links) {
@@ -1291,6 +1291,27 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
       for (const dx of [-4, 4]) {
         for (const dz of [-4, 4]) w.fill(pX + dx, room.y, pZ + dz, Block.TORCH);
       }
+    }
+  }
+  };
+
+  // 上层：五个左右房间，传送门房在这一层（原版要塞的"最深处"）
+  drawFloor(planStronghold(s.x, s.y, s.z, () => rng.next(), { target: 5 + rng.int(3) }));
+
+  // 下层（批次 521）：再往下 12 格的一层，只放图书馆/喷泉/牢房这些内容。
+  // ⚠️ `includePortal: false`：一座要塞只有一个末地传送门，两层各一个会让玩家懵。
+  const lowerY = s.y - 12;
+  drawFloor(
+    planStronghold(s.x, lowerY, s.z, () => rng.next(), { target: 4 + rng.int(2), includePortal: false }),
+  );
+
+  // 楼梯井：原点房间正中挖一个 2×1 的竖井，两列梯子从下层通到上层。
+  // 为什么不做成"逐级台阶"：12 格落差要横着铺 12 格，会横穿两层好几间房的墙；
+  // 竖井只占 2 格、还顺手给了玩家一条明确的上下路线。⚠️ 生物不会爬梯子（原版也不会）。
+  for (let y = lowerY; y <= s.y + 2; y++) {
+    for (const dx of [0, 1]) {
+      w.fill(s.x + dx, y, s.z, Block.AIR);
+      w.fill(s.x + dx, y, s.z, Block.LADDER);
     }
   }
 }

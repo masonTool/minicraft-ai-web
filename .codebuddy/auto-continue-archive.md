@@ -11527,4 +11527,13 @@
 - [x] B515-4 `test:chase` **26 条**；`test:mob` 146 条原样通过；套数 156 → **157**
 - ⚠️ J3 仍缺：开门、游泳
 
+## 批次 516：生物开门（J3 尾巴）（2026-10-20）
+
+- [x] B516-1 `DoorRules.ts`：村民/掠夺者/卫道士/唤魔者/幻术师/女巫会开门
+- [x] B516-2 `PathOptions.isDoor`：会开门的生物寻路时把门当可走格
+- [x] B516-3 `EntityContext.openDoor` + Mob 贴近开门（前两格、2.6 格内）
+- [x] B516-4 主程序 `isClosedDoorAt` + 复用 `toggleDoor`（上下半与音效一处）
+- [x] B516-5 `test:doors` **13 条**；套数 157 → **158**
+- ⚠️ J3 只剩游泳
+
 <!-- docs-archive:end -->

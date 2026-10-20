@@ -286,6 +286,8 @@ const STRONGHOLD = [
   Block.END_PORTAL_FRAME,
   Block.CHEST,
   Block.SILVERFISH_SPAWNER,
+  // 批次 520：上下两层的梯子井
+  Block.LADDER,
 ];
 const DUNGEON = [Block.MOSSY_COBBLESTONE, Block.COBBLESTONE, Block.CHEST, Block.ZOMBIE_SPAWNER];
 // 沉船：船体木料按群系换（六种都可能），箱子里是战利品表

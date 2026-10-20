@@ -482,6 +482,29 @@ console.log('\n[最近的要塞：末影之眼的导航点]');
   }
 }
 
+console.log('\n[要塞：上下两层 + 梯子井（批次 521）]');
+{
+  const stronghold = findInstance('stronghold', gen);
+  if (stronghold) {
+    const ladder = buildReal(stronghold.x - 6, stronghold.x + 6, stronghold.z - 6, stronghold.z + 6, [Block.LADDER]);
+    check('原点竖井里有梯子（> 10 格）', ladder.count > 10, `${ladder.count} 格`);
+    const bricks = buildReal(
+      stronghold.x - 30,
+      stronghold.x + 30,
+      stronghold.z - 30,
+      stronghold.z + 30,
+      [Block.STONE_BRICKS],
+    );
+    check(
+      '石砖在垂直方向跨了两层（≥ 12 格）',
+      bricks.maxY - bricks.minY >= 12,
+      `${bricks.minY}..${bricks.maxY}`,
+    );
+  } else {
+    check('找到要塞实例', false);
+  }
+}
+
 // FeatureWriter 也要能脱离 Worker 独立使用：拿一个已知的地牢实例，手工生成它所在的区块
 {
   const dungeon = findInstance('dungeon', gen);
@@ -1017,6 +1040,22 @@ console.log('\n[要塞的房间网格拼图（批次 462）]');
     JSON.stringify(plan),
   );
   equal('target = 3 也能排出（最小规模）', planStronghold(0, 30, 0, lcg(3), { target: 3 }).rooms.length, 3);
+
+  // ---- 批次 521：上下两层；下层不放传送门
+  const withPortal = planStronghold(0, 30, 0, lcg(12), { target: 5 });
+  equal('上层恰好一个传送门房', withPortal.rooms.filter((room) => room.kind === 'portal').length, 1);
+  const portalDepth = Math.max(...withPortal.rooms.map((room) => room.depth));
+  check(
+    '传送门房仍是最深的房间',
+    withPortal.rooms.filter((room) => room.kind === 'portal').every((room) => room.depth === portalDepth),
+  );
+  const lower = planStronghold(0, 18, 0, lcg(12), { target: 5, includePortal: false });
+  equal('下层没有传送门房', lower.rooms.filter((room) => room.kind === 'portal').length, 0);
+  check(
+    '下层仍然有内容房（图书馆/喷泉/牢房至少一间）',
+    lower.rooms.some((room) => room.kind === 'library' || room.kind === 'fountain' || room.kind === 'cell'),
+  );
+  equal('下层的房间高度是下层原点', lower.rooms.every((room) => room.y === 18), true);
 
   // ---- 真实生成：石砖 / 传送门框架 / 图书馆箱子 / 蠹虫刷怪笼
   const seed = 20261014;
