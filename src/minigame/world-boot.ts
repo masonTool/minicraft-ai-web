@@ -124,8 +124,44 @@ async function boot(): Promise<void> {
   const { worker: sharedWorker, state: workerState } = await chooseWorker(platform);
   console.log('[WX-020] worker mode', workerState);
   const createWorker = () => sharedWorker;
+  interface WorldEntry {
+    id: string;
+    name: string;
+    seed: number;
+  }
+  const parseWorlds = (raw: string | null): WorldEntry[] => {
+    if (!raw) return [];
+    try {
+      const data = JSON.parse(raw) as unknown;
+      if (!Array.isArray(data)) return [];
+      return data
+        .filter(
+          (item): item is WorldEntry =>
+            typeof item === 'object' &&
+            item !== null &&
+            typeof (item as WorldEntry).id === 'string' &&
+            typeof (item as WorldEntry).name === 'string' &&
+            typeof (item as WorldEntry).seed === 'number',
+        )
+        .slice(0, 3);
+    } catch {
+      return [];
+    }
+  };
+  let worlds = parseWorlds(platform.storage.get('wx.worlds'));
+  if (worlds.length === 0) {
+    worlds = [{ id: 'wx-default', name: 'MY WORLD', seed: 0x5eed }];
+  }
+  let currentWorldId = platform.storage.get('wx.worldId') ?? worlds[0]!.id;
+  let currentWorld = worlds.find((world) => world.id === currentWorldId) ?? worlds[0]!;
+  currentWorldId = currentWorld.id;
   const storedSeed = Number(platform.storage.get('wx.worldSeed') ?? '');
-  const worldSeed = Number.isFinite(storedSeed) && storedSeed > 0 ? Math.floor(storedSeed) : 0x5eed;
+  const fallbackSeed =
+    Number.isFinite(storedSeed) && storedSeed > 0 ? Math.floor(storedSeed) : 0x5eed;
+  const worldSeed = currentWorld.seed > 0 ? currentWorld.seed : fallbackSeed;
+  currentWorld.seed = worldSeed;
+  platform.storage.set('wx.worldId', currentWorldId);
+  platform.storage.set('wx.worlds', JSON.stringify(worlds));
   const world = new World(worldSeed, 'default', 1, createWorker);
   const meshPool = new MeshWorkerPool(1, createWorker);
   const chunkRenderer = new ChunkRenderer(
@@ -172,7 +208,7 @@ async function boot(): Promise<void> {
   let saveStatus = 'off';
   let loadedPlayer: PlayerSave | null = null;
   try {
-    save = await FileSaveGame.open('wx-default', platform.files);
+    save = await FileSaveGame.open(currentWorldId, platform.files);
     const records = await save.loadAllChunkEdits();
     for (const record of records) {
       world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
@@ -350,11 +386,15 @@ async function boot(): Promise<void> {
     armor: 0,
     xp: loadedPlayer?.xp?.progress ?? 0,
   });
-  ui.setWorldInfo({
-    name: 'MY WORLD',
-    seed: save?.meta?.seed ?? world.seed,
-    edits: world.edits.totalEdits || save?.meta?.edits || 0,
-  });
+  const refreshWorldInfo = (edits: number): void => {
+    ui.setWorldInfo({
+      worlds: worlds.map((entry) => ({ id: entry.id, name: entry.name })),
+      currentId: currentWorldId,
+      seed: currentWorld.seed,
+      edits,
+    });
+  };
+  refreshWorldInfo(world.edits.totalEdits || save?.meta?.edits || 0);
 
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
@@ -563,6 +603,13 @@ async function boot(): Promise<void> {
     void persist();
   }, 15000);
 
+  const restartApp = (): void => {
+    setTimeout(() => {
+      const exit = (wx as any).exitMiniProgram;
+      if (typeof exit === 'function') exit({});
+    }, 900);
+  };
+
   const confirmModal = (title: string, content: string): Promise<boolean> =>
     new Promise((resolve) => {
       (wx as any).showModal({
@@ -579,7 +626,7 @@ async function boot(): Promise<void> {
       await save.clear();
       save = null;
     } else {
-      await FileSaveGame.deleteWorld('wx-default', platform.files);
+      await FileSaveGame.deleteWorld(currentWorldId, platform.files);
     }
     saveStatus = 'deleted';
   };
@@ -595,7 +642,8 @@ async function boot(): Promise<void> {
     }
     try {
       await clearSave();
-      ui.setWorldInfo({ name: 'MY WORLD', seed: world.seed, edits: 0 });
+      save = null;
+      refreshWorldInfo(0);
       ui.showToast('SAVE DELETED');
       console.log('[WX-020] save deleted');
     } catch (error) {
@@ -609,28 +657,56 @@ async function boot(): Promise<void> {
     if (
       !(await confirmModal(
         'NEW WORLD?',
-        'Clears the current save and restarts with a new seed. The game will close; reopen it to play.',
+        'Adds a world with a new seed and switches to it. The game will close; reopen it to play.',
       ))
     ) {
+      return;
+    }
+    if (worlds.length >= 3) {
+      ui.showToast('WORLD LIMIT 3');
       return;
     }
     const seed = ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) & 0x7fffffff;
     const nextSeed = seed > 0 ? seed : 1;
     try {
-      await clearSave();
+      const entry: WorldEntry = {
+        id: `w${Date.now().toString(36)}`,
+        name: `WORLD ${worlds.length + 1}`,
+        seed: nextSeed,
+      };
+      worlds.push(entry);
+      currentWorld = entry;
+      currentWorldId = entry.id;
+      platform.storage.set('wx.worlds', JSON.stringify(worlds));
+      platform.storage.set('wx.worldId', entry.id);
       platform.storage.set('wx.worldSeed', String(nextSeed));
-      ui.setWorldInfo({ name: 'MY WORLD', seed: nextSeed, edits: 0 });
+      // 旧世界已经落过盘；停止本次会话的旧 save，避免退出前写回旧世界。
+      save = null;
+      saveStatus = 'deleted';
+      refreshWorldInfo(0);
       ui.showToast('NEW WORLD · REOPEN');
-      console.log('[WX-020] new world seed', nextSeed);
-      setTimeout(() => {
-        const exit = (wx as any).exitMiniProgram;
-        if (typeof exit === 'function') exit({});
-      }, 900);
+      console.log('[WX-020] new world', entry.id, nextSeed);
+      restartApp();
     } catch (error) {
       saveStatus = 'error';
       ui.showToast('NEW WORLD FAILED');
       console.warn('[WX-020] 新建世界失败', error);
     }
+  };
+
+  const switchWorld = async (id: string): Promise<void> => {
+    if (id === currentWorldId) return;
+    const target = worlds.find((world) => world.id === id);
+    if (!target) return;
+    await persist();
+    platform.storage.set('wx.worldId', id);
+    save = null;
+    saveStatus = 'deleted';
+    currentWorld = target;
+    currentWorldId = id;
+    refreshWorldInfo(0);
+    ui.showToast('SWITCHING WORLD');
+    restartApp();
   };
 
   const resetMove = (): void => {
@@ -746,6 +822,7 @@ async function boot(): Promise<void> {
       if (action === 'settings') ui.openSettings();
       if (action === 'delete') void deleteSave();
       if (action === 'new') void newWorld();
+      if (typeof action === 'object' && action?.type === 'world') void switchWorld(action.id);
       return;
     }
     // 暂停面板优先：暂停时所有点击只走 UI

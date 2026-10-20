@@ -16,7 +16,7 @@
 | 项 | 值 |
 | --- | --- |
 | 当前阶段 | M1 平台层收尾 → M2 UI |
-| 当前任务 | **WX-024：世界列表 + 新建世界**（主菜单壳已接） |
+| 当前任务 | **WX-027：独立攻击按钮**（WX-024 已收口） |
 | 刚完成 | WX-022 完成：页签/滑块/开关/Toast/加载/41 格背包/CONTROLS 搜索+滚动；WX-024 主菜单壳；WX-021 完成；WX-020B 完成；WX-020A 真实世界；WX-018 共享 Worker；WX-011~017、01B/01C |
 | 正式壳 | `minigame/`（压力场景，801 draw call 基线） |
 | 真实世界 | `minigame-world/`（WX-020A，当前可看完整地形） |
@@ -425,7 +425,7 @@ flex/absolute/grid 子集。
 | WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020B | 2 | [ ] |
 | WX-022 | UI 工具包 B | 页签/滑块/开关 + CONTROLS 搜索输入 + 拖动滚动列表完成 | WX-021 | 2 | [x] |
 | WX-023 | UI 工具包 C | Toast/进度条/41 格槽位/数量/拖拽移动/合并/交换已完成；长按 Tooltip 待做 | WX-021 | 3 | [~] |
-| WX-024 | 主菜单 | 单世界卡片 + 种子/编辑数 + NEW WORLD（换种子/清档/退出重进）+ DELETE SAVE 完成；多世界列表待做 | WX-022 | 2 | [~] |
+| WX-024 | 主菜单 | 最多 3 个世界卡片 + 切换/新建/删档（写 worldId/worlds，退出重进）完成 | WX-022 | 2 | [x] |
 | WX-025 | 加载/错误/暂停/设置 | 暂停 + 设置页 + 世界生成进度已完成；错误页/启动失败页待做 | WX-022 | 3 | [~] |
 | WX-026 | HUD | 准星/生命/饥饿/护甲/氧气/经验条 + 破坏进度已完成；Boss 条待做 | WX-023 | 2 | [~] |
 | WX-027 | 触摸控件 | 可见 MOVE/FLY/SNEAK/PLACE/MINE/JUMP + 摇杆/视角/长按破坏/飞行/潜行已接；独立攻击按钮待做 | WX-013, WX-026 | 3 | [~] |
@@ -600,6 +600,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-024 删档 | 主菜单 DELETE SAVE：showModal 确认后 clear player/meta/chunks 并停保存；修 clear/deleteWorld 不递归 chunks 的问题；helper 截图验证菜单布局 | `25f9f76` |
 | 2026-10-20 | WX-024 新世界 | 主菜单 NEW WORLD：生成新种子写 `wx.worldSeed`、清档、尝试 `exitMiniProgram`；world-boot 启动读该种子；helper 截图验证菜单 | `51a7949` |
 | 2026-10-20 | WX-028 收口 | 背包 QUICK 快速移到主背包、DROP 1 生成带重力/落地/近距离拾取的小方块实体；WX-028 交互项完成 | `03f0bc3` |
+| 2026-10-20 | WX-024 列表 | `wx.worlds` 注册表 + `wx.worldId` 当前世界：主菜单最多 3 卡片、切换保存后退出、NEW WORLD 新增、DELETE SAVE 清当前；启动按世界 ID/种子打开存档 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 

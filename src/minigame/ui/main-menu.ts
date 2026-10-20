@@ -1,10 +1,17 @@
 import * as THREE from 'three';
-import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
+import { contains, drawButton, drawPanel, drawTab, drawText, type Rect } from './widgets.ts';
 
-export type MainMenuAction = 'play' | 'settings' | 'new' | 'delete' | null;
+export type MainMenuAction =
+  | 'play'
+  | 'settings'
+  | 'new'
+  | 'delete'
+  | { type: 'world'; id: string }
+  | null;
 
 export interface MainMenuInfo {
-  name: string;
+  worlds: Array<{ id: string; name: string }>;
+  currentId: string;
   seed: number;
   edits: number;
 }
@@ -49,13 +56,25 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   const panel: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
-  const play: Rect = { x: panelX + 70, y: panelY + 190, w: panelWidth - 140, h: 56 };
-  const settings: Rect = { x: panelX + 70, y: panelY + 260, w: panelWidth - 140, h: 56 };
-  const newWorld: Rect = { x: panelX + 70, y: panelY + 320, w: panelWidth - 140, h: 38 };
-  const deleteSave: Rect = { x: panelX + 70, y: panelY + 366, w: panelWidth - 140, h: 38 };
+  const play: Rect = { x: panelX + 70, y: panelY + 202, w: panelWidth - 140, h: 52 };
+  const settings: Rect = { x: panelX + 70, y: panelY + 268, w: panelWidth - 140, h: 44 };
+  const newWorld: Rect = { x: panelX + 70, y: panelY + 322, w: panelWidth - 140, h: 38 };
+  const deleteSave: Rect = { x: panelX + 70, y: panelY + 370, w: panelWidth - 140, h: 36 };
 
   let open = true;
-  let info: MainMenuInfo = { name: 'MY WORLD', seed: 0x5eed, edits: 0 };
+  let info: MainMenuInfo = {
+    worlds: [{ id: 'wx-default', name: 'MY WORLD' }],
+    currentId: 'wx-default',
+    seed: 0x5eed,
+    edits: 0,
+  };
+
+  const worldRect = (index: number): Rect => ({
+    x: panelX + 30 + index * 148,
+    y: panelY + 142,
+    w: 138,
+    h: 34,
+  });
 
   const redraw = (): void => {
     if (!context) return;
@@ -85,12 +104,21 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       15,
       'rgba(255, 255, 255, 0.45)',
     );
+    const visibleWorlds = info.worlds.slice(0, 3);
+    visibleWorlds.forEach((world, index) => {
+      drawTab(
+        context,
+        worldRect(index),
+        world.name,
+        world.id === info.currentId,
+      );
+    });
     drawText(
       context,
-      `${info.name}  ·  SEED 0x${info.seed.toString(16).toUpperCase()}  ·  EDITS ${info.edits}`,
+      `SEED 0x${info.seed.toString(16).toUpperCase()}  ·  EDITS ${info.edits}`,
       panelX + 42,
-      panelY + 148,
-      15,
+      panelY + 182,
+      13,
       'rgba(180, 220, 255, 0.85)',
       'left',
       panelWidth - 84,
@@ -127,6 +155,13 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       if (!open) return null;
       const x = (clientX / Math.max(1, sw)) * canvas.width;
       const y = (clientY / Math.max(1, sh)) * canvas.height;
+      for (let i = 0; i < Math.min(3, info.worlds.length); i++) {
+        if (contains(worldRect(i), x, y)) {
+          const world = info.worlds[i]!;
+          if (world.id !== info.currentId) return { type: 'world', id: world.id };
+          return null;
+        }
+      }
       if (contains(play, x, y)) {
         setOpen(false);
         return 'play';
