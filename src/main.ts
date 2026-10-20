@@ -6606,6 +6606,8 @@ class App {
       context,
       lootingBonus(this.heldEnchants),
       knockbackLevel,
+      // 批次 471：玩家近战是"被打"，会让它记仇/惊动同类
+      { kind: 'player' },
     );
     // 被蛰（J21，批次 407）：打了蜜蜂就中毒，而且**一只蜜蜂只蜇一次**。
     // 只在"真的造成了伤害"（没被无敌帧挡下）时触发，否则连点可以无限续毒。
@@ -6633,7 +6635,8 @@ class App {
         if (distance < 0.01 || distance > 2.6) continue;
         // 只溅射身前约 60°：点积 > 0.5
         if ((dx * fx + dz * fz) / distance < 0.5) continue;
-        other.hurt(splash, dx, dz, context, 0, 0);
+        // 横扫之刃溅到的那几只同样是玩家打的
+        other.hurt(splash, dx, dz, context, 0, 0, { kind: 'player' });
       }
     }
     // 打击感（批次 232）：打中"有肉的东西"的一下闷响。
@@ -7285,7 +7288,8 @@ class App {
       const distance = Math.hypot(entity.x - x, entity.y - y, entity.z - z);
       if (distance > radius) continue;
       const amount = Math.max(1, Math.round(damage * (1 - distance / radius)));
-      entity.hurt(amount, x, z, this.lastEntityContext ?? undefined);
+      // 爆炸不惊动记仇（批次 471）：环境伤害
+      entity.hurt(amount, x, z, this.lastEntityContext ?? undefined, 0, 0, { kind: 'environment' });
     }
   }
 
@@ -8225,7 +8229,7 @@ class App {
         if (Math.abs(entity.y - tip.y) > radius) continue;
         if (Math.abs(entity.z - tip.z) > radius) continue;
         if (!(entity instanceof Mob)) continue;
-        entity.hurt(LIGHTNING_DAMAGE, entity.x - tip.x, entity.z - tip.z, context);
+        entity.hurt(LIGHTNING_DAMAGE, entity.x - tip.x, entity.z - tip.z, context, 0, 0, { kind: 'environment' });
       }
     }
   }
@@ -8724,6 +8728,8 @@ class App {
           context,
           0,
           0,
+          // 荆棘是玩家护甲的反伤：按"玩家打的"算（原版也会让它记仇）
+          { kind: 'player' },
         );
       }
     }
@@ -11459,7 +11465,7 @@ class App {
       const distance = Math.hypot(entity.x - cloud.x, entity.y + entity.height / 2 - cloud.y, entity.z - cloud.z);
       if (distance > cloud.radius) continue;
       if (cloud.kind === 'dragon_breath') {
-        entity.hurt(DRAGON_BREATH_DAMAGE, 0, 0, this.lastEntityContext ?? undefined);
+        entity.hurt(DRAGON_BREATH_DAMAGE, 0, 0, this.lastEntityContext ?? undefined, 0, 0, { kind: 'environment' });
         continue;
       }
       for (const effect of cloudEffectsAt(cloud, distance)) {

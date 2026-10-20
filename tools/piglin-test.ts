@@ -139,7 +139,7 @@ console.log('\n[中立：不惹它就不打人，打一下才翻脸]');
   const { ctx: angryCtx, rec: angryRec } = makeCtx(attackRange);
   const angry = new Mob(ZOMBIE_PIGLIN_TYPE, 0.5, 0, 0.5);
   check('打它之前不记仇', !angry.angry);
-  angry.hurt(1, 0, 0, angryCtx);
+  angry.hurt(1, 0, 0, angryCtx, 0, 0, { kind: 'player' });
   check('打一下立刻记仇', angry.angry);
   equal(
     '而且报了一次"惊动同类"（半径 32、种类是它自己）',
@@ -153,7 +153,7 @@ console.log('\n[中立：不惹它就不打人，打一下才翻脸]');
   // 对照：**没写 `angerRadius` 的生物不会调那个钩子**
   const zombie = new Mob(mobTypeById('zombie')!, 0.5, 0, 0.5);
   const { ctx: zombieCtx, rec: zombieRec } = makeCtx();
-  zombie.hurt(1, 0, 0, zombieCtx);
+  zombie.hurt(1, 0, 0, zombieCtx, 0, 0, { kind: 'player' });
   equal('僵尸挨打不会惊动同类（它没有 `angerRadius`）', zombieRec.provoked.length, 0);
   check('（对照）僵尸仍然是敌对的（不是"中立"那一类）', mobTypeById('zombie')!.neutral !== true);
 }

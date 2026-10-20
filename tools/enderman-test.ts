@@ -324,7 +324,7 @@ console.log('\n[末影人：挨打之后]');
   {
     const mob = spawnEnderman();
     const rec = makeCtx(FLAT_PHYSICS, FLAT, { player });
-    mob.hurt(1, 0, 0, rec.ctx);
+    mob.hurt(1, 0, 0, rec.ctx, 0, 0, { kind: 'player' });
     check('被打过就记仇（中立暂时失效）', mob.angry);
     // ⚠️ 挨打那一下有**一半概率把它闪到 32 格外**（那是"受伤逃开"，与记不记仇无关），
     // 所以这里先把位置摆回玩家跟前再推进——否则这条断言会时红时绿。
@@ -345,7 +345,7 @@ console.log('\n[末影人：挨打之后]');
       const rec = makeCtx(FLAT_PHYSICS, FLAT, {});
       const x0 = mob.x;
       const z0 = mob.z;
-      mob.hurt(1, 0, 0, rec.ctx);
+      mob.hurt(1, 0, 0, rec.ctx, 0, 0, { kind: 'player' });
       if (Math.hypot(mob.x - x0, mob.z - z0) > 1) moved++;
     }
     const rate = moved / total;
@@ -361,7 +361,7 @@ console.log('\n[末影人：挨打之后]');
       const rec = makeCtx(FLAT_PHYSICS, FLAT, {});
       const x0 = mob.x;
       const z0 = mob.z;
-      mob.hurt(100, 0, 0, rec.ctx);
+      mob.hurt(100, 0, 0, rec.ctx, 0, 0, { kind: 'player' });
       if (!mob.dead) survived++;
       if (Math.hypot(mob.x - x0, mob.z - z0) > 1) movedOnKill++;
     }
@@ -376,7 +376,7 @@ console.log('\n[末影人：挨打之后]');
     for (let i = 0; i < total; i++) {
       const mob = spawnEnderman();
       const rec = makeCtx(FLAT_PHYSICS, FLAT, {});
-      mob.hurt(100, 0, 0, rec.ctx);
+      mob.hurt(100, 0, 0, rec.ctx, 0, 0, { kind: 'player' });
       pearls += rec.drops.filter((id) => id === Item.ENDER_PEARL).length;
     }
     const rate = pearls / total;

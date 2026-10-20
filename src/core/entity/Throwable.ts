@@ -341,7 +341,8 @@ export class Throwable extends Entity implements MovingBody {
     // 三叉戟（玩家那一支）：直接结算伤害。⚠️ 走 `mob.hurt` 而不是 `push`——
     // 雪球那一条是"0 伤害只推一下"，而三叉戟是**实打实的武器**
     if (this.kind === 'trident') {
-      mob.hurt(TRIDENT_THROW_DAMAGE, this.x, this.z, ctx);
+      // 三叉戟只有玩家能扔（批次 471：按玩家伤害算）
+      mob.hurt(TRIDENT_THROW_DAMAGE, this.x, this.z, ctx, 0, 0, { kind: 'player' });
     }
 
     // 雪球：原版**0 伤害**，只把目标推一下（所以走 `push` 而不是 `hurt(0)`——

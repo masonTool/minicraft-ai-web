@@ -127,6 +127,28 @@ const CLIMB_SPEED = 3;
 const ANGER_SECONDS = 10;
 
 /**
+ * 伤害来源（批次 471）。
+ *
+ * 之前 `hurt()` 不认识"谁打的"，于是三处行为都只能用"任意伤害"近似：
+ *  * 记仇（蜘蛛/末影人）：被火烧、被摔也会翻脸；
+ *  * 群体激怒（僵尸猪灵）：同伴被岩浆烫到，整群一起冲过来；
+ *  * 末影人挨打瞬移：摔一跤也会闪走（原版只有被打才闪）。
+ *
+ * 现在调用方把来源传进来，上面三条只认 `'player'` / `'mob'`；
+ * `'environment'`（摔伤/着火/爆炸/闪电/龙息）不惊动任何人。
+ *
+ * ⚠️ 队友免伤还需要"玩家与玩家之间"的判定——那是联机会话的事，
+ * 这里只把"谁打的"这条链路铺好（`sameTeam` 已经在 `world/Teams.ts` 里等着）。
+ */
+export interface HurtSource {
+  readonly kind: 'player' | 'mob' | 'environment';
+  /** 玩家名（`kind = 'player'` 时可选） */
+  readonly name?: string;
+  /** 造成伤害的那只生物（`kind = 'mob'` 时可选；循环引用所以用 unknown 存） */
+  readonly mobId?: string;
+}
+
+/**
  * 玩家碰撞盒高度（格，批次 225）。与 `PlayerPhysics.height` 同源；
  * 实体层只要判断"竖直方向有没有重叠"，不必为此依赖玩家物理模块。
  */
@@ -600,6 +622,13 @@ export class Mob extends Entity {
   private hurtTime = 0;
   /** 记仇倒计时（批次 93）：>0 时"亮处中立"的蜘蛛照样追人；末影人也靠它 */
   private angerTimer = 0;
+  /**
+   * 最后一次伤害的来源（批次 471）。
+   *
+   * 目前只有测试与调试读它，但它把"这条链是通的"钉住了：
+   * 哪天要给死亡消息加上"被 X 杀死"，读这里就够了。
+   */
+  private lastHurtSource: HurtSource = { kind: 'environment' };
   /** 下一次起跳还要等多久（批次 120，跳跃式移动的生物用；只在**落地**时倒数） */
   private hopTimer = 0;
   /** 泡水/淋雨的掉血计时（批次 112，末影人） */
@@ -1889,19 +1918,24 @@ export class Mob extends Entity {
     ctx?: EntityContext,
     looting = 0,
     knockbackLevel = 0,
+    source?: HurtSource,
   ): boolean {
     if (this.dead || this.hurtTime > 0 || amount <= 0) return false;
 
     this.hurtTime = HURT_COOLDOWN;
-    // 记仇（批次 93）：亮处中立的蜘蛛被打过之后就会还手，见 `ANGER_SECONDS`。
-    // 末影人的"中立"也靠它——被砍一下就不再是那个站着不动的黑家伙了
-    this.angerTimer = ANGER_SECONDS;
-    // **群体激怒**（批次 122，僵尸猪灵）：同伴挨打，附近的同类一起翻脸。
-    // 扫描交给主程序（实体层没有"周围有谁"的视野）——这里只报"我这儿被打了一下"。
-    // ⚠️ 与蜘蛛那条同一个已知简化：`hurt()` 不认识"谁打的"，
-    // 所以**被烧、被摔、站在岩浆块上**也会惊动同类（原版只有玩家打的才算）
-    if (this.type.angerRadius !== undefined) {
-      ctx?.provokeNearby?.(this.x, this.y, this.z, this.type.angerRadius, this.type.id);
+    // 只有"被打"才记仇（批次 471）：摔伤、着火、岩浆块、爆炸都不算。
+    // 原版里蜘蛛被摔也不会翻脸——以前这里不认来源，所以只能一律记
+    const provoked = source !== undefined && source.kind !== 'environment';
+    this.lastHurtSource = source ?? { kind: 'environment' };
+    if (provoked) {
+      // 记仇（批次 93）：亮处中立的蜘蛛被打过之后就会还手，见 `ANGER_SECONDS`。
+      // 末影人的"中立"也靠它——被砍一下就不再是那个站着不动的黑家伙了
+      this.angerTimer = ANGER_SECONDS;
+      // **群体激怒**（批次 122，僵尸猪灵）：同伴挨打，附近的同类一起翻脸。
+      // 扫描交给主程序（实体层没有"周围有谁"的视野）——这里只报"我这儿被打了一下"
+      if (this.type.angerRadius !== undefined) {
+        ctx?.provokeNearby?.(this.x, this.y, this.z, this.type.angerRadius, this.type.id);
+      }
     }
     this.hitFlash = 0.3;
     this.health -= amount;
@@ -1912,9 +1946,10 @@ export class Mob extends Entity {
     if (this.health > 0) this.playVoice(ctx, 'hurt');
 
     // 挨打就闪（批次 112，末影人）：原版按伤害来源分（被箭射必躲、近战有概率躲），
-    // 我们的 `hurt()` 不认识来源，统一按 `TELEPORT_ON_HURT_CHANCE`。
+    // 这里统一按 `TELEPORT_ON_HURT_CHANCE`——但**只有真的被打**才闪（批次 471）：
+    // 摔一跤就瞬移走是这个模式以前最出戏的地方
     // ⚠️ 放在扣血之后、死亡判定之前：打死它的那一下不该"瞬移走了"（那就永远打不死）
-    if (this.type.teleports && ctx && this.health > 0 && Math.random() < TELEPORT_ON_HURT_CHANCE) {
+    if (this.type.teleports && ctx && this.health > 0 && provoked && Math.random() < TELEPORT_ON_HURT_CHANCE) {
       this.teleportRandomly(ctx);
     }
 
@@ -1988,6 +2023,11 @@ export class Mob extends Entity {
    */
   get angry(): boolean {
     return this.angerTimer > 0;
+  }
+
+  /** 最后一次伤害的来源（批次 471；没人传就是 `'environment'`） */
+  get lastDamageSource(): HurtSource {
+    return this.lastHurtSource;
   }
 
   /**

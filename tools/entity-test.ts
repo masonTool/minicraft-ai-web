@@ -1117,5 +1117,41 @@ console.log('\n[最后三种生物（批次 436）]');
   }
 }
 
+
+console.log('\n[伤害来源：只有"被打"才记仇（批次 471）]');
+{
+  // ① 环境伤害（摔/火/爆炸/闪电/龙息）不记仇
+  const burned = createMob(mobTypeById('zombie')!, 0.5, 64, 0.5);
+  const hurt1 = burned.hurt(2, 0, 0, undefined, 0, 0, { kind: 'environment' });
+  check('环境伤害真的扣血了（不是被无敌帧挡掉）', hurt1 && burned.health < burned.type.health, `${burned.health}`);
+  check('环境伤害不记仇', !burned.angry);
+  equal('来源记成 environment', burned.lastDamageSource.kind, 'environment');
+
+  // ② 玩家伤害记仇
+  const hitByPlayer = createMob(mobTypeById('zombie')!, 0.5, 64, 0.5);
+  hitByPlayer.hurt(2, 0, 0, undefined, 0, 0, { kind: 'player' });
+  check('玩家伤害会记仇', hitByPlayer.angry);
+  equal('来源记成 player', hitByPlayer.lastDamageSource.kind, 'player');
+
+  // ③ 不传来源 = 按环境算（老调用点不改也不会凭空记仇）
+  const legacy = createMob(mobTypeById('zombie')!, 0.5, 64, 0.5);
+  legacy.hurt(2, 0, 0);
+  check('不传来源时不记仇（默认 environment）', !legacy.angry);
+
+  // ④ 群体激怒（僵尸猪灵）：只有被打才惊动同类
+  let provoked = 0;
+  const ctx = {
+    provokeNearby: () => {
+      provoked++;
+    },
+  } as unknown as Parameters<typeof legacy.hurt>[3];
+  const piglin = createMob(mobTypeById('zombie_piglin')!, 0.5, 64, 0.5);
+  piglin.hurt(1, 0, 0, ctx, 0, 0, { kind: 'environment' });
+  equal('环境伤害不惊动同类（岩浆块烫到不算"被攻击"）', provoked, 0);
+  const piglin2 = createMob(mobTypeById('zombie_piglin')!, 0.5, 64, 0.5);
+  piglin2.hurt(1, 0, 0, ctx, 0, 0, { kind: 'player' });
+  equal('玩家打一下才惊动同类', provoked, 1);
+}
+
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
 process.exit(failed === 0 ? 0 : 1);

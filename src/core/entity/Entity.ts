@@ -73,6 +73,8 @@ export interface DamageAttacker {
     ctx: EntityContext,
     looting?: number,
     knockback?: number,
+    /** 批次 471：伤害来源（荆棘反伤按"玩家打的"算） */
+    source?: { kind: 'player' | 'mob' | 'environment'; name?: string; mobId?: string },
   ): boolean;
 }
 

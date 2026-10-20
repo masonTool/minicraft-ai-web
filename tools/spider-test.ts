@@ -151,7 +151,7 @@ console.log('\n[掉落：蛛丝总是掉、蜘蛛眼 1/3]');
   for (let i = 0; i < KILLS; i++) {
     const rec = makeCtx(physics, FLAT);
     const spider = new Mob(SPIDER_TYPE, 0.5, 65, 0.5);
-    spider.hurt(100, 0, 0, rec.ctx);
+    spider.hurt(100, 0, 0, rec.ctx, 0, 0, { kind: 'player' });
     const eyes = rec.drops.filter((id) => id === Item.SPIDER_EYE).length;
     const strings = rec.drops.filter((id) => id === Item.STRING).length;
     if (eyes > 0) withEye++;
@@ -234,7 +234,8 @@ console.log('\n[亮处中立：暗处追人、亮处干瞪眼、被打过就还�
 
   const angered = new Mob(SPIDER_TYPE, 0.5, 65, 0.5);
   const angeredRec = makeCtx(physicsOf(FLAT), FLAT, { player, light: 12 });
-  angered.hurt(1, 0, 0, angeredRec.ctx); // 玩家打了它一下
+  // ⚠️ 批次 471 起"环境伤害不记仇"，所以这一下必须显式标成玩家打的
+  angered.hurt(1, 0, 0, angeredRec.ctx, 0, 0, { kind: 'player' });
   for (let i = 0; i < 200; i++) angered.tick(angeredRec.ctx, 0.05);
   check('**被打过之后，亮处也照样打回来**（记仇 10 秒）', angeredRec.damage > 0, String(angeredRec.damage));
 

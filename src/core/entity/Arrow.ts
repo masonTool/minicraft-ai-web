@@ -248,7 +248,11 @@ export class Arrow extends Entity implements MovingBody {
     const length = Math.hypot(this.vx, this.vz);
     const kx = length > 1e-6 ? this.vx / length : this.dirX;
     const kz = length > 1e-6 ? this.vz / length : this.dirZ;
-    mob.hurt(this.options.damage, kx * this.options.knockback, kz * this.options.knockback, ctx);
+    // 批次 471：玩家射的箭按"玩家打的"算（骷髅射的按生物算），
+    // 这样"被箭射"才会让它记仇，而摔伤/着火不会
+    mob.hurt(this.options.damage, kx * this.options.knockback, kz * this.options.knockback, ctx, 0, 0, {
+      kind: this.options.fromPlayer ? 'player' : 'mob',
+    });
     if (this.options.fireSeconds > 0) mob.ignite(this.options.fireSeconds);
     // 药水箭（K4 最后一步）：命中挂上药水的效果，时长是原药水的 1/8（原版规则）。
     // 与喷溅药水的差别：**只作用于被射中的那一只**，没有范围结算（原版如此）
