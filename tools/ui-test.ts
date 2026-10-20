@@ -3097,6 +3097,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       invSrc.includes('private syncCreativeScrollbar(): void') &&
       invSrc.includes("this.creativeScrollTrack.className = 'inv-category-scrollbar';") &&
       css.includes('.inv-category-scrollbar {') &&
+      css.includes('background: transparent;') &&
       css.includes('.inv-grid.inv-creative { scrollbar-width: none; }') &&
       css.includes('overflow-y: scroll;') &&
       css.includes('scrollbar-width: none;'),

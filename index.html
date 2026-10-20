@@ -3395,7 +3395,9 @@
       /* 自绘常驻滚动条：父级 `.inv-category-section` 已经是 position: relative */
       .inv-category-scrollbar {
         position: absolute; right: 1px; width: 4px;
-        background: rgba(0, 0, 0, .26);
+        /* 轨道透明：只留下滑块本身。原来整条深色轨道在滚动时
+           看起来像列表底部多了一条黑影（用户反馈）。 */
+        background: transparent;
         border-radius: 3px; z-index: 3; pointer-events: none;
       }
       .inv-creative-section .inv-category-scrollbar { right: 2px; width: 6px; }
