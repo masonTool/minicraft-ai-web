@@ -38,6 +38,7 @@ import {
   buildFortress,
   fortressCreatureSpawnsAt,
   fortressInstanceForTest,
+  nearestFortress,
   fortressIntersects,
   type FortressInstance,
   type FortressWorld,
@@ -566,6 +567,25 @@ console.log('\n[要塞里的生物（批次 458）]');
     );
   }
   equal('没有要塞的地方一只都不刷（负对照）', fortressCreatureSpawnsAt(999, 999, SEED, world).length, 0);
+}
+
+
+console.log('\n[最近下界要塞（批次 465，/locate structure）]');
+{
+  const world = makeFortressWorld();
+  let inst = null;
+  for (let cell = -4; cell <= 4 && !inst; cell++) inst = fortressInstanceForTest(cell, 0, SEED, world);
+  if (inst) {
+    const hit = nearestFortress(inst.x + 5, inst.z - 5, SEED, world);
+    check('从要塞旁边问最近要塞', hit !== null);
+    equal('返回的就是这一座', `${hit?.x},${hit?.z}`, `${inst.x},${inst.z}`);
+    check('距离算得对', hit !== null && Math.abs(hit.distance - Math.hypot(5, 5)) < 1e-6, `${hit?.distance}`);
+  }
+  equal(
+    '同样的查询两次一致',
+    JSON.stringify(nearestFortress(70, 90, SEED, world)),
+    JSON.stringify(nearestFortress(70, 90, SEED, world)),
+  );
 }
 
 console.log(`\n下界要塞与酿造链测试：${passed} 通过 / ${failed} 失败`);

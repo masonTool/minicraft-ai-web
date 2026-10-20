@@ -431,9 +431,9 @@ import {
   type StructureKind,
 } from './core/gen/Structures.ts';
 import { nearbyStandingSpot } from './core/gen/StructureCreatures.ts';
-import { bastionCreatureSpawnsAt } from './core/gen/Bastion.ts';
-import { fortressCreatureSpawnsAt } from './core/gen/NetherFortress.ts';
-import { endCityCreatureSpawnsAt } from './core/gen/EndStructures.ts';
+import { bastionCreatureSpawnsAt, nearestBastion } from './core/gen/Bastion.ts';
+import { fortressCreatureSpawnsAt, nearestFortress } from './core/gen/NetherFortress.ts';
+import { endCityCreatureSpawnsAt, nearestEndCity } from './core/gen/EndStructures.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 // 中键拾取方块（批次 129）：三条规则是纯函数（`test:pickblock` 逐条钉住）
@@ -9606,21 +9606,38 @@ class App {
       // 批次 464：/locate structure —— 结构位置是"种子 + 候选规则"的纯函数，
       // 主线程用同一个生成器重算一遍即可（不需要 Worker 的生成器）
       locateStructure: (kind) => {
-        if (this.dimension !== Dimension.OVERWORLD) return null;
-        const generator = this.biomeGenerator;
-        if (!generator) return null;
-        if (!(STRUCTURE_KINDS as readonly string[]).includes(kind)) return null;
         const p = this.physics;
-        return nearestStructure(
-          kind as StructureKind,
-          p.x,
-          p.z,
-          {
-            surfaceY: (x, z) => generator.surfaceY(x, z),
-            columnBiome: (x, z) => generator.biomeAt(x, z),
-          },
-          this.worldConfig.seed,
-        );
+        const seed = this.worldConfig.seed;
+        if (this.dimension === Dimension.OVERWORLD) {
+          const generator = this.biomeGenerator;
+          if (!generator) return null;
+          if (!(STRUCTURE_KINDS as readonly string[]).includes(kind)) return null;
+          return nearestStructure(
+            kind as StructureKind,
+            p.x,
+            p.z,
+            {
+              surfaceY: (x, z) => generator.surfaceY(x, z),
+              columnBiome: (x, z) => generator.biomeAt(x, z),
+            },
+            seed,
+          );
+        }
+        // 下界（批次 465）：堡垒遗迹 / 下界要塞各有自己的单元与候选规则
+        if (this.dimension === Dimension.NETHER) {
+          this.netherStructureWorld ??= new NetherGenerator(seed).structureWorld();
+          const world = this.netherStructureWorld;
+          if (kind === 'bastion_remnant' || kind === 'bastion') return nearestBastion(p.x, p.z, seed, world);
+          if (kind === 'fortress' || kind === 'nether_fortress') return nearestFortress(p.x, p.z, seed, world);
+          return null;
+        }
+        // 末地（批次 465）：末地城由**外岛单元**决定
+        if (this.dimension === Dimension.END) {
+          this.endGenerator ??= new EndGenerator(seed);
+          if (kind === 'end_city') return nearestEndCity(p.x, p.z, seed, this.endGenerator);
+          return null;
+        }
+        return null;
       },
       advancements: () => this.advancements,
       biomeNameAt: (x: number, z: number) => {

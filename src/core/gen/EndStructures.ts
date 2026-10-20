@@ -310,3 +310,48 @@ export function endCityCreatureSpawnsAt(
   }
   return spawns;
 }
+
+/** `/locate structure` 的末地结果 */
+export interface EndStructureHit {
+  readonly kind: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly distance: number;
+}
+
+/**
+ * 找离 (fromX, fromZ) 最近的末地城（批次 465）。
+ *
+ * 末地城的"有没有城"由外岛单元决定（岛要够大 + 哈希过 0.55），
+ * 所以这里枚举的是 256 格的**外岛单元**，默认向外数 4 个（±1024 格）。
+ */
+export function nearestEndCity(
+  fromX: number,
+  fromZ: number,
+  seed: number,
+  world: EndGenerator,
+  cellRadius = 4,
+): EndStructureHit | null {
+  const baseCellX = Math.floor(fromX / OUTER_CELL);
+  const baseCellZ = Math.floor(fromZ / OUTER_CELL);
+  let best: EndStructureHit | null = null;
+  for (let dcz = -cellRadius; dcz <= cellRadius; dcz++) {
+    for (let dcx = -cellRadius; dcx <= cellRadius; dcx++) {
+      const cellX = baseCellX + dcx;
+      const cellZ = baseCellZ + dcz;
+      const island = world.outerIslandOfCell(cellX, cellZ);
+      if (!island || island.radius < 24) continue;
+      if (!cityInCell(cellX, cellZ, seed)) continue;
+      const anchorX = Math.round(island.x);
+      const anchorZ = Math.round(island.z);
+      const surface = world.islandAt(anchorX, anchorZ);
+      if (!surface) continue;
+      const distance = Math.hypot(anchorX - fromX, anchorZ - fromZ);
+      if (best === null || distance < best.distance) {
+        best = { kind: 'end_city', x: anchorX, y: surface.top + 1, z: anchorZ, distance };
+      }
+    }
+  }
+  return best;
+}

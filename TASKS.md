@@ -3312,7 +3312,10 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       按该结构的 spacing 枚举周围单元、重算候选点（结构与地形一样是"种子 + 候选规则"
       的纯函数，**不需要 Worker 的生成器**），取最近的一个。
       默认向外数 2 个单元（村庄 ±1000 格、要塞 ±3000 格）。
-      `test:structure` 125 → **132**、`test:commands` **184** 条。
+      **批次 465 补了下界与末地**：堡垒遗迹 / 下界要塞 / 末地城各有自己的
+      `nearestXxx`（单元尺寸不同，末地是 256 格的外岛单元）。
+      `test:structure` 125 → **132**、`test:commands` **184**、
+      `test:bastion` **103**、`test:fortress` **109**、`test:end` **41** 条。
       —— 批次 399 补 `/execute` + 选择器、批次 402 补 `/scoreboard`、
       **批次 415 补 `/advancement grant|revoke <id | *>`**（`AdvancementTracker.revoke`
       是这一批新加的：**收回父条目会连带收回子条目**，否则界面上子条目会挂在 `???` 底下；

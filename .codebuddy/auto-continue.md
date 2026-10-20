@@ -390,3 +390,14 @@
 - ⚠️ 只做主世界；下界/末地各自的结构入口是另一批
 - **教训**：K11 里"主线程拿不到生成器"是误判——结构位置本来就是纯函数，
   主线程有种子与地形查询就能重算。以后遇到"要跨线程拿生成器"先想想这条
+
+## 批次 465：/locate structure 的下界与末地（2026-10-20）
+
+- [x] B465-1 `Bastion.nearestBastion`（24 区块单元，±2 → ±768 格）
+- [x] B465-2 `NetherFortress.nearestFortress`（22 区块单元，±2 → ±704 格）
+- [x] B465-3 `EndStructures.nearestEndCity`（256 格外岛单元，±4 → ±1024 格；
+      要岛够大 + 哈希过 0.55 + 岛心真有岛面）
+- [x] B465-4 main 按维度分派：主世界 / 下界（bastion_remnant、fortress）/ 末地（end_city）
+- [x] B465-5 测试：bastion 99 → **103**、fortress 105 → **109**、end 36 → **41**
+      （都含"从结构旁边问到的就是这一座"与"两次一致"）
+- 至此 `/locate structure` 三个维度都通了

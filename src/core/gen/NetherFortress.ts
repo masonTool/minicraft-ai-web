@@ -452,3 +452,37 @@ export function fortressCreatureSpawnsAt(
   }
   return spawns;
 }
+
+/** `/locate structure` 的结果（与堡垒遗迹同一个形状；两边都不引对方的类型） */
+export interface FortressStructureHit {
+  readonly kind: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly distance: number;
+}
+
+/** 找离 (fromX, fromZ) 最近的下界要塞（批次 465；默认 ±2 单元 = ±704 格） */
+export function nearestFortress(
+  fromX: number,
+  fromZ: number,
+  seed: number,
+  world: FortressWorld,
+  cellRadius = 2,
+): FortressStructureHit | null {
+  const cellSize = FORTRESS_SPACING * 16;
+  const baseCellX = Math.floor(fromX / cellSize);
+  const baseCellZ = Math.floor(fromZ / cellSize);
+  let best: FortressStructureHit | null = null;
+  for (let dcz = -cellRadius; dcz <= cellRadius; dcz++) {
+    for (let dcx = -cellRadius; dcx <= cellRadius; dcx++) {
+      const instance = fortressCandidate(baseCellX + dcx, baseCellZ + dcz, seed, world);
+      if (!instance) continue;
+      const distance = Math.hypot(instance.x - fromX, instance.z - fromZ);
+      if (best === null || distance < best.distance) {
+        best = { kind: 'fortress', x: instance.x, y: instance.y, z: instance.z, distance };
+      }
+    }
+  }
+  return best;
+}

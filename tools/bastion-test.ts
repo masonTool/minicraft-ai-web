@@ -28,6 +28,7 @@ import {
   BASTION_RADIUS,
   bastionCreatureSpawnsAt,
   bastionInstanceForTest,
+  nearestBastion,
   bastionIntersects,
   NETHER_STRUCTURE_KINDS,
   netherFossilCandidate,
@@ -649,6 +650,30 @@ console.log('\n[堡垒生物锚点在真实生成里有空间（批次 458）]')
     }
     equal('每个锚点 3 格内都有空气（不会把猪灵卡进黑石）', placed, spawns.length);
   }
+}
+
+
+console.log('\n[最近堡垒遗迹（批次 465，/locate structure）]');
+{
+  const world: BastionWorld = {
+    floorAt: () => 40,
+    ceilingAt: () => 90,
+    biomeAt: () => NetherBiome.NETHER_WASTES,
+    basaltBiome: NetherBiome.BASALT_DELTAS,
+    soulSandBiome: NetherBiome.SOUL_SAND_VALLEY,
+  };
+  const found = bastionInstanceForTest(0, 0, SEED, world);
+  if (found) {
+    const hit = nearestBastion(found.x + 8, found.z + 8, SEED, world);
+    check('从堡垒旁边问最近堡垒', hit !== null);
+    equal('返回的就是这一座（不会指到隔壁单元）', `${hit?.x},${hit?.z}`, `${found.x},${found.z}`);
+    check('距离算得对', hit !== null && Math.abs(hit.distance - Math.hypot(8, 8)) < 1e-6, `${hit?.distance}`);
+  }
+  equal(
+    '同样的查询两次一致',
+    JSON.stringify(nearestBastion(100, -200, SEED, world)),
+    JSON.stringify(nearestBastion(100, -200, SEED, world)),
+  );
 }
 
 console.log(`\n堡垒遗迹测试：${passed} 通过 / ${failed} 失败`);

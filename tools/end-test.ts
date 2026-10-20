@@ -19,7 +19,7 @@ import { Dimension } from '../src/core/gen/Dimension.ts';
 import { END_BIOME_NAMES, EndGenerator } from '../src/core/gen/EndGenerator.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z, CHUNK_VOLUME, Chunk, type BlockArray } from '../src/core/world/Chunk.ts';
-import { endCityCreatureSpawnsAt } from '../src/core/gen/EndStructures.ts';
+import { endCityCreatureSpawnsAt, nearestEndCity } from '../src/core/gen/EndStructures.ts';
 import { nearbyStandingSpot } from '../src/core/gen/StructureCreatures.ts';
 
 const SEED = 20261014;
@@ -402,6 +402,33 @@ console.log('\n[末地城生物锚点在真实生成里有空间（批次 458）
     }
     equal('每个锚点 3 格内都有空气（不会把潜影贝卡进紫珀）', placed, target.spawns.length);
   }
+}
+
+
+console.log('\n[最近末地城（批次 465，/locate structure）]');
+{
+  let island = null;
+  for (let cellZ = -10; cellZ <= 10 && !island; cellZ++) {
+    for (let cellX = -10; cellX <= 10 && !island; cellX++) {
+      const candidate = gen.outerIslandOfCell(cellX, cellZ);
+      if (candidate && candidate.radius >= 24) island = candidate;
+    }
+  }
+  check('找得到一座够大的外岛', island !== null);
+  if (island) {
+    const hit = nearestEndCity(Math.round(island.x) + 6, Math.round(island.z) + 6, SEED, gen);
+    // 这个单元不一定有城（哈希决定），但 8×8 个单元里应该至少有一座
+    check('从岛心附近能问到一座末地城', hit !== null, JSON.stringify(hit));
+    if (hit) {
+      equal('种类是 end_city', hit.kind, 'end_city');
+      check('距离是正的且算得对', Math.abs(hit.distance - Math.hypot(hit.x - (Math.round(island.x) + 6), hit.z - (Math.round(island.z) + 6))) < 1e-6);
+    }
+  }
+  equal(
+    '同样的查询两次一致',
+    JSON.stringify(nearestEndCity(200, 300, SEED, gen)),
+    JSON.stringify(nearestEndCity(200, 300, SEED, gen)),
+  );
 }
 
 console.log(`\n末地测试：${passed} 通过 / ${failed} 失败`);

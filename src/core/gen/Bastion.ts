@@ -443,3 +443,42 @@ export function bastionCreatureSpawnsAt(
   }
   return spawns;
 }
+
+/** `/locate structure` 的下界结果（与主世界同一个形状） */
+export interface NetherStructureHit {
+  readonly kind: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly distance: number;
+}
+
+/**
+ * 找离 (fromX, fromZ) 最近的堡垒遗迹（批次 465，`/locate structure bastion_remnant`）。
+ *
+ * 堡垒位置是"种子 + 候选规则"的纯函数，所以主线程重算即可，不需要 Worker。
+ * @param cellRadius 向外数几个单元（默认 2：24 区块 × 2 = ±768 格）
+ */
+export function nearestBastion(
+  fromX: number,
+  fromZ: number,
+  seed: number,
+  world: BastionWorld,
+  cellRadius = 2,
+): NetherStructureHit | null {
+  const cellSize = BASTION_SPACING * 16;
+  const baseCellX = Math.floor(fromX / cellSize);
+  const baseCellZ = Math.floor(fromZ / cellSize);
+  let best: NetherStructureHit | null = null;
+  for (let dcz = -cellRadius; dcz <= cellRadius; dcz++) {
+    for (let dcx = -cellRadius; dcx <= cellRadius; dcx++) {
+      const instance = bastionCandidate(baseCellX + dcx, baseCellZ + dcz, seed, world);
+      if (!instance) continue;
+      const distance = Math.hypot(instance.x - fromX, instance.z - fromZ);
+      if (best === null || distance < best.distance) {
+        best = { kind: 'bastion_remnant', x: instance.x, y: instance.y, z: instance.z, distance };
+      }
+    }
+  }
+  return best;
+}
