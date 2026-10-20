@@ -35,6 +35,7 @@ import {
 import type { AdvancementTracker } from '../progress/AdvancementTracker.ts';
 import { advancementById } from '../progress/advancements.ts';
 import { findNearestBiome } from '../gen/Locate.ts';
+import { CLONE_LIMIT, cloneRegion, cloneVolume, normalizeCloneBox } from './Clone.ts';
 // 记分板（M23，批次 402）：纯类，规则一条都不依赖世界
 import {
   SCOREBOARD_SLOTS,
@@ -664,6 +665,64 @@ export const COMMANDS: readonly CommandSpec[] = [
         return;
       }
       out.info(`已给手持物品附上 ${def.name} ${level}`);
+    },
+  },
+  {
+    name: 'clone',
+    usage: '/clone <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz> [masked|replace]',
+    description: '把一块区域复制到别处（单次上限 32768 格；masked = 只覆盖空气）',
+    creativeOnly: true,
+    run(args, ctx, out) {
+      if (args.length < 9) {
+        out.error('用法：/clone <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz> [masked|replace]');
+        return;
+      }
+      const base = ctx.position();
+      const from = parsePosition(args.slice(0, 3), base);
+      const to = parsePosition(args.slice(3, 6), base);
+      if (!from || !to) {
+        out.error('坐标格式不对');
+        return;
+      }
+      const offset = {
+        x: Number(args[6]),
+        y: Number(args[7]),
+        z: Number(args[8]),
+      };
+      if (!Number.isFinite(offset.x) || !Number.isFinite(offset.y) || !Number.isFinite(offset.z)) {
+        // 位移只接受数字（不接受 ~ / ^）：它是"相对源区域"的量，不是坐标
+        out.error('位移只能是数字：<dx> <dy> <dz>');
+        return;
+      }
+      const modeArg = (args[9] ?? 'replace').toLowerCase();
+      if (modeArg !== 'replace' && modeArg !== 'masked') {
+        out.error(`模式只有 masked / replace：${modeArg}`);
+        return;
+      }
+      const box = normalizeCloneBox(
+        { x: Math.floor(from.x), y: Math.floor(from.y), z: Math.floor(from.z) },
+        { x: Math.floor(to.x), y: Math.floor(to.y), z: Math.floor(to.z) },
+      );
+      const volume = cloneVolume(box);
+      if (volume > CLONE_LIMIT) {
+        out.error(`区域太大（${volume} 格），上限 ${CLONE_LIMIT}`);
+        return;
+      }
+      const target = {
+        x: box.x1 + Math.floor(offset.x),
+        y: box.y1 + Math.floor(offset.y),
+        z: box.z1 + Math.floor(offset.z),
+      };
+      const result = cloneRegion(
+        { read: (x, y, z) => ctx.getBlock(x, y, z), write: (x, y, z, id) => void ctx.setBlock(x, y, z, id) },
+        box,
+        { x: Math.floor(offset.x), y: Math.floor(offset.y), z: Math.floor(offset.z) },
+        modeArg,
+      );
+      const masked = result.skipped > 0 ? `（masked：跳过 ${result.skipped} 格非空气）` : '';
+      out.info(
+        `已复制 ${result.copied} / ${result.volume} 格到 ${target.x} ${target.y} ${target.z}${masked}`,
+      );
     },
   },
   {

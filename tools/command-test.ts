@@ -11,6 +11,7 @@
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
 import { findNearestBiome } from '../src/core/gen/Locate.ts';
+import { CLONE_LIMIT, cloneRegion, cloneVolume, normalizeCloneBox } from '../src/core/commands/Clone.ts';
 import {
   COMMANDS,
   commandNames,
@@ -779,6 +780,62 @@ console.log('\n[/locate biome（批次 416）]');
     out.lastError,
   );
   check('假世界查不到群系时报告没找到', run3('/locate biome plains').lastError.includes('没有找到'));
+}
+
+console.log('\n[/clone 区域复制（批次 431）]');
+{
+  // ---- 纯逻辑：用 Map 当世界
+  const world = new Map<string, number>();
+  const key = (x: number, y: number, z: number): string => `${x},${y},${z}`;
+  const io = {
+    read: (x: number, y: number, z: number) => world.get(key(x, y, z)) ?? 0,
+    write: (x: number, y: number, z: number, id: number) => void world.set(key(x, y, z), id),
+  };
+
+  // 摆一个 2×1×2 的"房子"：四个角是石头，其余空气
+  world.set(key(0, 0, 0), 1);
+  world.set(key(1, 0, 0), 1);
+  world.set(key(0, 0, 1), 1);
+  world.set(key(1, 0, 1), 1);
+
+  const box = normalizeCloneBox({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 1 });
+  check('体积算得对', cloneVolume(box) === 4, String(cloneVolume(box)));
+  check('归一化把对角点排成 min/max', box.x1 === 0 && box.x2 === 1 && box.y1 === 0 && box.y2 === 0);
+
+  const plain = cloneRegion(io, box, { x: 10, y: 0, z: 0 }, 'replace');
+  check('replace 复制了全部 4 格', plain.copied === 4 && plain.skipped === 0, JSON.stringify(plain));
+  check('目标位置真的有石头', io.read(10, 0, 0) === 1 && io.read(11, 0, 1) === 1);
+
+  // masked：目标已有一格石头 → 那一格跳过，不覆盖
+  world.set(key(20, 0, 0), 7);
+  const masked = cloneRegion(io, box, { x: 20, y: 0, z: 0 }, 'masked');
+  check('masked 跳过非空气格', masked.skipped === 1 && masked.copied === 3, JSON.stringify(masked));
+  check('被占的那格没被覆盖', io.read(20, 0, 0) === 7);
+  check('其余格子照常复制', io.read(21, 0, 1) === 1);
+
+  // 重叠复制：先读后写，结果不能取决于遍历顺序
+  world.clear();
+  world.set(key(0, 0, 0), 1);
+  world.set(key(1, 0, 0), 2);
+  const overlap = normalizeCloneBox({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
+  cloneRegion(io, overlap, { x: 1, y: 0, z: 0 }, 'replace');
+  check('重叠复制不会把源数据覆盖坏', io.read(1, 0, 0) === 1 && io.read(2, 0, 0) === 2,
+    `${io.read(1, 0, 0)} / ${io.read(2, 0, 0)}`);
+  check('上限是 32768', CLONE_LIMIT === 32768);
+
+  // ---- 命令层
+  const fake = new FakeWorld();
+  const out = new Recorder();
+  const run4 = (line: string): Recorder => {
+    out.infos.length = 0;
+    out.errors.length = 0;
+    executeCommand(line, fake, out);
+    return out;
+  };
+  check('参数不够报用法', run4('/clone 0 0 0 1 1 1 5').lastError.includes('用法'));
+  check('位移必须是数字', run4('/clone 0 0 0 1 1 1 ~ ~ ~').lastError.includes('位移'));
+  check('模式写错报错', run4('/clone 0 0 0 1 1 1 5 0 0 nope').lastError.includes('模式'));
+  check('超上限报错', run4('/clone 0 0 0 99 99 99 0 0 0').lastError.includes('上限'));
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);
