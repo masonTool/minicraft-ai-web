@@ -16462,7 +16462,7 @@ async function boot(): Promise<void> {
 
   const menu = new WorldScreen(document.body, registry, {
     onEnter: (world) => void startWorld(world),
-    onDelete: (world) => void deleteWorld(world),
+    onDelete: (world) => deleteWorld(world),
     onSettings: openMenuSettings,
   });
 

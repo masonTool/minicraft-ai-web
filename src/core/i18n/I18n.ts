@@ -80,6 +80,7 @@ const ZH: Readonly<Record<string, string>> = {
   'menu.newWorld': '＋ 新建世界',
   'menu.empty': '还没有存档——点上面「＋ 新建世界」开一个。',
   'menu.back': '‹ 返回',
+  'menu.cancel': '取消',
   'menu.reroll': '随机',
   'menu.create': '创建并进入',
   // ---- 世界列表与新建表单
@@ -196,6 +197,7 @@ const EN: Readonly<Record<string, string>> = {
   'menu.newWorld': '+ New World',
   'menu.empty': 'No worlds yet — use “+ New World” above to create one.',
   'menu.back': '‹ Back',
+  'menu.cancel': 'Cancel',
   'menu.reroll': 'Random',
   'menu.create': 'Create & Enter',
   'world.list': 'Worlds',

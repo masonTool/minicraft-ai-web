@@ -2092,6 +2092,22 @@ console.log('\n[主菜单分层（批次 108）]');
   check('二级页有存档列表（验收脚本按 id 找）', source.includes("this.listEl.id = 'world-list';"));
   check('存档的"进入"按钮有专属类名（不再靠"第一个匹配"）', source.includes("enter.className = 'world-enter';"));
   check('新建表单的提交按钮有专属 id', source.includes("createButton.id = 'world-create-button';"));
+  // 批次 528（用户）：新建世界的三张原生 select 全部换成设置同款下拉
+  check(
+    '新建世界选项复用设置的下拉组件',
+    source.includes('new Dropdown<WorldType>(') &&
+      source.includes('new Dropdown<Difficulty>(') &&
+      source.includes('new Dropdown<GameMode>(') &&
+      source.includes('this.typeSelect.element'),
+  );
+  // 删除确认必须是游戏内弹窗，不能再用 window.confirm/alert
+  check(
+    '删除世界用游戏内确认弹窗（不再 confirm/alert）',
+    !source.includes('window.confirm(') &&
+      !source.includes('window.alert(') &&
+      source.includes('private async confirmDelete(') &&
+      source.includes("overlay.className = 'world-confirm';"),
+  );
   check('首页品牌信号是 MINECRAFT + 基岩版标识', source.includes("logo.textContent = 'MINECRAFT';") && source.includes('world-edition'));
   check('世界列表按视图展开并带缩略图', source.includes("this.panel.dataset.view = view;") && source.includes('world-card-thumb'));
   check(
@@ -2874,7 +2890,7 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   );
   check(
     '新建世界表单：说明排在字段最后、创建键跨满两列',
-    /this\.makeRow\(t\('world\.gameMode'\), this\.gameModeSelect, null\),\s*this\.typeHintEl,\s*createButton,/.test(worldSrc) &&
+    /this\.makeRow\(t\('world\.gameMode'\), this\.gameModeSelect\.element, null\),\s*this\.typeHintEl,\s*createButton,/.test(worldSrc) &&
       css.includes('.world-new > .world-primary { grid-column: 1 / -1; }'),
   );
   // ④ 配方开关关着 + 空栏 = 空白（不再写"这一栏里你还没有东西…"）

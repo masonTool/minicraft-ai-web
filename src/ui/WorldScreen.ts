@@ -26,12 +26,13 @@ import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../core/world/
 import { GAME_MODES, GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
+import { Dropdown } from './Dropdown.ts';
 
 export interface WorldScreenActions {
   /** 进入世界（已有存档或刚创建的都走这里） */
   onEnter: (world: WorldSummary) => void;
-  /** 删除世界（含存档数据）；调用方负责真的删库 */
-  onDelete: (world: WorldSummary) => void;
+  /** 删除世界（含存档数据）；调用方负责真的删库（可能是异步的） */
+  onDelete: (world: WorldSummary) => void | Promise<void>;
   /** 打开设置（图形/操作/声音这些是"这台设备的偏好"，与世界无关） */
   onSettings?: () => void;
 }
@@ -50,11 +51,14 @@ export class WorldScreen {
   private readonly worldCountEl: HTMLSpanElement;
   private readonly nameInput: HTMLInputElement;
   private readonly seedInput: HTMLInputElement;
-  private readonly typeSelect: HTMLSelectElement;
+  /** 批次 528：三张原生 select 换成与设置页同一套下拉 */
+  private readonly typeSelect: Dropdown<WorldType>;
   /** 新建世界时的难度（I7）：进世界后还能用 /difficulty 改 */
-  private readonly difficultySelect: HTMLSelectElement;
+  private readonly difficultySelect: Dropdown<Difficulty>;
   /** 新建世界时的游戏模式（批次 181）：生存/创造；进世界后可在暂停菜单里改 */
-  private readonly gameModeSelect: HTMLSelectElement;
+  private readonly gameModeSelect: Dropdown<GameMode>;
+  /** 游戏内确认弹窗（删除世界用；批次 528 不再用 window.confirm） */
+  private confirmEl: HTMLDivElement | null = null;
   /** 世界类型下面那行说明（批次 181：超平坦没有树/村庄/矿石要说在前面） */
   private readonly typeHintEl: HTMLDivElement;
   /** 三个视图各自的那一节（同一份 DOM 用 `.active` 切换，见文件头注释） */
@@ -201,41 +205,33 @@ export class WorldScreen {
       this.seedInput.value = String(randomSeed());
     });
 
-    this.typeSelect = document.createElement('select');
-    this.typeSelect.className = 'world-input';
-    for (const type of WORLD_TYPES) {
-      const option = document.createElement('option');
-      option.value = type;
-      option.textContent = WORLD_TYPE_LABELS[type];
-      this.typeSelect.appendChild(option);
-    }
-
-    this.difficultySelect = document.createElement('select');
-    this.difficultySelect.className = 'world-input';
-    for (const value of DIFFICULTIES) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = `${DIFFICULTY_LABELS[value]}（${value}）`;
-      this.difficultySelect.appendChild(option);
-    }
-    this.difficultySelect.value = 'normal';
-
+    // 世界类型 / 难度 / 模式：与设置页同一个下拉组件（批次 528，用户要求）
+    this.typeSelect = new Dropdown<WorldType>(
+      WORLD_TYPES,
+      WORLD_TYPE_LABELS,
+      'default',
+      () => this.updateTypeHint(),
+      { fullWidth: true, className: 'world-dropdown' },
+    );
+    this.difficultySelect = new Dropdown<Difficulty>(
+      DIFFICULTIES,
+      DIFFICULTY_LABELS,
+      'normal',
+      () => this.updateTypeHint(),
+      { fullWidth: true, className: 'world-dropdown' },
+    );
     // 游戏模式（批次 181）：**在创建时就要选**，不要靠游戏里双击跳跃去猜
-    this.gameModeSelect = document.createElement('select');
-    this.gameModeSelect.className = 'world-input';
-    for (const value of GAME_MODES) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = GAME_MODE_LABELS[value];
-      this.gameModeSelect.appendChild(option);
-    }
-    this.gameModeSelect.value = 'survival';
+    this.gameModeSelect = new Dropdown<GameMode>(
+      GAME_MODES,
+      GAME_MODE_LABELS,
+      'survival',
+      () => this.updateTypeHint(),
+      { fullWidth: true, className: 'world-dropdown' },
+    );
 
     // 世界类型说明（批次 181）：超平坦"没有树/村庄/矿石"必须写在选之前
     this.typeHintEl = document.createElement('div');
     this.typeHintEl.className = 'world-type-hint';
-    this.typeSelect.addEventListener('change', () => this.updateTypeHint());
-    this.gameModeSelect.addEventListener('change', () => this.updateTypeHint());
 
     const createButton = document.createElement('button');
     createButton.type = 'button';
@@ -258,9 +254,9 @@ export class WorldScreen {
     form.append(
       this.makeRow(t('world.name'), this.nameInput, null),
       this.makeRow(t('world.seed'), this.seedInput, reroll),
-      this.makeRow(t('world.type'), this.typeSelect, null),
-      this.makeRow(t('world.difficulty'), this.difficultySelect, null),
-      this.makeRow(t('world.gameMode'), this.gameModeSelect, null),
+      this.makeRow(t('world.type'), this.typeSelect.element, null),
+      this.makeRow(t('world.difficulty'), this.difficultySelect.element, null),
+      this.makeRow(t('world.gameMode'), this.gameModeSelect.element, null),
       this.typeHintEl,
       createButton,
     );
@@ -308,8 +304,10 @@ export class WorldScreen {
   }
 
   /** 一行"标签 + 控件（+ 右侧小按钮）" */
-  private makeRow(label: string, control: HTMLElement, extra: HTMLElement | null): HTMLLabelElement {
-    const row = document.createElement('label');
+  private makeRow(label: string, control: HTMLElement, extra: HTMLElement | null): HTMLDivElement {
+    // 用 div 而不是 label：label 会把"点标签文字"转发给下拉按钮，
+    // 玩家点一下"世界类型"四个字就弹出菜单，反而是误触。
+    const row = document.createElement('div');
     row.className = 'world-row';
     const name = document.createElement('span');
     name.textContent = label;
@@ -413,15 +411,86 @@ export class WorldScreen {
     remove.className = 'danger';
     remove.textContent = t('world.delete');
     remove.addEventListener('click', () => {
-      if (confirm(`删除「${world.name}」？该世界的存档会一起删掉，无法恢复。`)) {
-        this.actions.onDelete(world);
-        this.render();
-      }
+      void this.confirmDelete(world);
     });
 
     buttons.append(enter, remove);
     card.append(thumbnail, info, buttons);
     return card;
+  }
+
+  /**
+   * 删除世界：游戏内确认弹窗（批次 528，用户要求不要 `window.confirm`）。
+   *
+   * 删除是异步的（先删 IndexedDB 再删清单），所以等 `onDelete` 真正完成再重画列表；
+   * 否则确认之后卡片还会留在原地几百毫秒。
+   */
+  private async confirmDelete(world: WorldSummary): Promise<void> {
+    const ok = await this.confirm({
+      title: t('world.delete'),
+      message: `删除「${world.name}」？该世界的存档会一起删掉，无法恢复。`,
+      confirmText: t('world.delete'),
+      danger: true,
+    });
+    if (!ok) return;
+    await this.actions.onDelete(world);
+    this.render();
+  }
+
+  /** 游戏内的小型确认弹窗（只有确认 / 取消两个出口，点遮罩不关） */
+  private confirm(options: {
+    title: string;
+    message: string;
+    confirmText: string;
+    danger?: boolean;
+  }): Promise<boolean> {
+    // 同一时间只留一个
+    this.confirmEl?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'world-confirm';
+    const panel = document.createElement('div');
+    panel.className = 'world-confirm-panel';
+    const title = document.createElement('b');
+    title.className = 'world-confirm-title';
+    title.textContent = options.title;
+    const message = document.createElement('div');
+    message.className = 'world-confirm-message';
+    message.textContent = options.message;
+    const actions = document.createElement('div');
+    actions.className = 'world-confirm-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = t('menu.cancel');
+    const accept = document.createElement('button');
+    accept.type = 'button';
+    accept.textContent = options.confirmText;
+    if (options.danger) accept.className = 'danger';
+    actions.append(cancel, accept);
+    panel.append(title, message, actions);
+    overlay.appendChild(panel);
+    this.root.appendChild(overlay);
+    this.confirmEl = overlay;
+
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (value: boolean): void => {
+        if (settled) return;
+        settled = true;
+        document.removeEventListener('keydown', onKey, true);
+        overlay.remove();
+        if (this.confirmEl === overlay) this.confirmEl = null;
+        resolve(value);
+      };
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        finish(false);
+      };
+      cancel.addEventListener('click', () => finish(false));
+      accept.addEventListener('click', () => finish(true));
+      document.addEventListener('keydown', onKey, true);
+    });
   }
 
   /** 读取表单 → 新建世界 → 进入 */
@@ -431,7 +500,8 @@ export class WorldScreen {
     if (raw.length > 0) {
       const parsed = Number(raw);
       if (!Number.isFinite(parsed)) {
-        alert('种子要填数字，或者留空用随机种子。');
+        this.typeHintEl.textContent = '种子要填数字，或者留空用随机种子。';
+        this.typeHintEl.classList.add('bad');
         return;
       }
       seed = Math.floor(parsed);
@@ -466,9 +536,9 @@ export class WorldScreen {
     this.setView('create');
     this.nameInput.value = name;
     this.seedInput.value = seed;
-    this.typeSelect.value = worldType;
-    this.difficultySelect.value = difficulty;
-    this.gameModeSelect.value = gameMode;
+    this.typeSelect.setValue(worldType);
+    this.difficultySelect.setValue(difficulty);
+    this.gameModeSelect.setValue(gameMode);
     this.updateTypeHint();
   }
 

@@ -454,11 +454,13 @@
       /* 首页没有框，内容在盒子正中（否则固定高度下会顶在上面、下面空一大片） */
       .world-view[data-view='home'].active { justify-content: center; }
       /* 二级页面顶部：‹ 返回 + 标题 */
-      .world-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex: 0 0 auto; }
+      .world-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex: 0 0 auto; }
       .world-nav-title { font-size: 17px; letter-spacing: 1px; color: #fff; }
       .world-back {
+        /* 批次 528（用户）：返回键不要占一整行——宽度贴合文字，高度压到 34px */
         font: inherit; font-size: 12px; cursor: pointer; flex: 0 0 auto;
-        padding: 6px 10px; background: var(--btn-bg); color: var(--btn-text);
+        width: fit-content; min-width: 0; min-height: 30px;
+        padding: 4px 9px; background: var(--btn-bg); color: var(--btn-text);
         transition: transform var(--dur-fast) var(--ease);
       }
       /* 主页那几列入口：竖着一列（按钮宽度由 `.world-primary/.world-secondary`
@@ -507,7 +509,7 @@
       /* 二级页面里"存档"那一行小标题（上面是「＋ 新建世界」主入口） */
       .world-group-label {
         display: flex; justify-content: space-between; align-items: center;
-        margin: 12px 0 6px; padding: 8px 10px; font-size: 13px;
+        margin: 6px 0 4px; padding: 8px 10px; font-size: 13px;
         color: #fff; letter-spacing: 1px;
         background: rgba(0,0,0,.55);
         border-bottom: 3px solid #4f8b37;
@@ -603,9 +605,40 @@
         align-self: center; justify-self: center;
       }
       .world-primary { padding: 9px; font-size: 14px; letter-spacing: 1px; }
+      /* 批次 528（用户）：世界列表页的「新建世界」比首页主按钮矮一点，
+         把高度让给下面的存档列表。 */
+      #world-new-button {
+        width: min(100%, 320px);
+        min-height: 40px; padding: 6px 10px; font-size: 13px;
+      }
       /* ⚠️ 不再写 `margin-top`：主页那几颗入口的间距交给 `.world-menu` 的 `gap`，
          写了 margin 会在"列表页底部那颗新建键"上多出一截空隙 */
       .world-secondary { padding: 9px; font: inherit; font-size: 13px; }
+
+      /* ---------------- 世界删除确认（批次 528） ----------------
+         用户："删除确认弹窗不要用 alert，请用游戏内的弹窗确认。"
+         这一层挂在 #world-screen 里（z-index 40 之上），只有两个出口：
+         取消 / 删除；点遮罩不关，避免手滑点到外面以为删掉了。 */
+      .world-confirm {
+        position: fixed; inset: 0; z-index: 45;
+        display: flex; align-items: center; justify-content: center;
+        padding: 12px; background: rgba(0, 0, 0, .55);
+      }
+      .world-confirm-panel {
+        width: min(90vw, 380px);
+        padding: 12px 14px;
+        background: rgba(22, 22, 22, .96); color: var(--mc-text-light);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+        font-size: 13px; text-shadow: 1px 1px 0 var(--mc-text-shadow);
+      }
+      .world-confirm-title { font-size: 15px; color: #fff; }
+      .world-confirm-message { margin: 8px 0 12px; color: #d8d8d8; line-height: 1.5; }
+      .world-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+      .world-confirm-actions button {
+        font: inherit; font-size: 13px; min-height: 36px; padding: 6px 14px; cursor: pointer;
+      }
+      .world-confirm-actions button.danger { color: var(--mc-text-danger); }
 
       /* ---------------- 配方书 ---------------- */
       #recipe-book {
@@ -3907,12 +3940,13 @@
          手机上点"进入/删除"经常点到隔壁。手机上统一抬到 44px。 */
       body.touch-mode .world-card-actions button,
       body.touch-mode .world-mini,
-      body.touch-mode .world-secondary,
-      body.touch-mode .world-back { min-height: 44px; padding: 8px 14px; }
+      body.touch-mode .world-secondary { min-height: 44px; padding: 8px 14px; }
       body.touch-mode .world-primary { min-height: 52px; }
       body.touch-mode .world-input { padding: 10px 10px; font-size: 14px; }
+      /* 批次 528（用户）：返回键保持紧凑，不再是一条 44px 高的整行 */
+      body.touch-mode .world-back { min-height: 34px; padding: 4px 10px; }
       /* 二级页面的"‹ 返回"固定在左上、标题跟着它，拇指区一眼就能找到出口 */
-      body.touch-mode .world-nav { margin-bottom: 14px; }
+      body.touch-mode .world-nav { margin-bottom: 8px; }
 
       /* ---------------- 小屏适配 ----------------
          目标：竖屏/横屏手机都能操作，且界面不溢出、热区够大。 */
