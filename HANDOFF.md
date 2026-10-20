@@ -34,9 +34,9 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1066（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1068（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
-- 进度口径：`TASKS.md` 共 288 项 —— 已完成 **201**、进行中 **79**、待办 8 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
+- 进度口径：`TASKS.md` 共 288 项 —— 已完成 **202**、进行中 **78**、待办 8 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
   其中相当一部分待办是长期大项（村民与交易、织布机等功能方块、信标与地图、喷溅/滞留药水等）
   —— **进行中口径以 `.codebuddy/auto-continue.md` 队列为准**，两份文件分工不同，不要只看一份
@@ -315,7 +315,16 @@ npm run dev            # http://localhost:5173
   挂墙旗换一次图案会被改朝向（当时只在立地旗上验过）；现在编码为
   **bit0 / bit4 / bit6**，`test:banner` 补了"换图案不碰朝向/挂墙位"两条。
   `test:banner` 57 → **67 条**、`test:inventory` 89 → **103 条**。
-  ⚠️ 差异：图案仍只有 4 种、单层；织布机界面（带染料消耗、去掉右键循环）是批次 503。
+  ⚠️ 差异：图案仍只有 4 种、单层；织布机界面是批次 503。
+- 批次 503（J25 收口）：**织布机**。`core/container/Loom.ts` 三格（旗帜 / 染料 /
+  **算出来的成品**）+ `BlockEntityStore` / `ContainerSave` / `Transfer` 三处登记
+  （`loom` 种类、`[LOOM_BANNER, LOOM_DYE]` 可塞、成品进 `isComputedResultSlot`）+
+  `InventoryScreen` 的 `loom` 模式（图案列表随材料置灰）+ 右键入口。
+  ⚠️ 两条关键判据：**只扣一件**（整叠 64 面白旗 + 1 染料不会全变花旗）；
+  **删掉 `cycleBannerPattern`**——右键免费换图案会让染料消耗形同虚设。
+  差异：图案 4 种、单层；**染料只当消耗**（图案色随旗面自动取反色）。
+  新套件 `test:loom` **56 条**，套数 152 → **153**（README/HANDOFF/AGENTS 三处同步）；
+  **J25 勾掉**：完成 201 → **202**、进行中 79 → **78**。
 - 批次 473（结构内容）：**战利品表 20 → 22**。新增 `stronghold_crossing`
   （要塞十字口）与 `ocean_ruins`（海底废墟，原先借用沉船补给表——物品池对不上）；
   要塞十字口与海底废墟各放了箱子，堡垒遗迹桥面也加了一只 `bastion_other`
@@ -430,11 +439,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 152 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 153 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 152 套离线测试
+npm test                   # typecheck:tools + vitest + 153 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -446,7 +455,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **152 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **153 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。

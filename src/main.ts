@@ -363,10 +363,8 @@ import {
   // 多格画（批次 495）：哨兵档位与朝向
   facingOf,
   paintingVariantOf,
-  // 旗帜图案（批次 497）：右键换一种图案
-  BANNER_PATTERNS,
+  // 旗帜图案（批次 497/502）：拆旗时把图案写进掉落物
   bannerPatternOf,
-  nextBannerPattern,
   // 洞穴藤蔓（批次 496）：有浆果的那节掉一颗发光浆果
   caveVinesHaveBerries,
 } from './core/registry/blockState.ts';
@@ -427,7 +425,6 @@ import { Block, BLOCKS, blockDef, woolId,
   // 潜影盒（批次 451）：无色 + 16 色，特判一律问这个（别再逐 id 比）
   isShulkerBox,
   // 旗帜（批次 497）：右键换图案
-  isBannerId,
 } from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
@@ -2049,6 +2046,8 @@ class App {
         appearance: () => paletteOf(this.settings),
         // 村民交易（J11）：界面只管"点了第几条"，扣材料/给东西/经验/音效全在这儿
         onTrade: (villager, index) => void this.performTrade(villager, index),
+        // 织布机（J25，批次 503）：界面负责扣料与改图案，这里只响一声
+        onLoomApply: () => this.audio.play('shear', { x: this.physics.x, y: this.physics.y + 1, z: this.physics.z }),
         // 熔炉产物被取空时结算烧炼经验（I5）
         // 熔炉经验（原版取出产物时给）：炉子就在身旁，掉在玩家脚下即可
         onFurnaceXp: (amount) => this.spawnXpOrbs(amount, this.physics.x, this.physics.y + 0.5, this.physics.z),
@@ -10981,32 +10980,6 @@ class App {
   }
 
   /**
-   * 换旗帜图案（批次 497）：右键一次换下一种，转一圈回到光板。
-   *
-   * 上下半格都要改（旗帜是两格高、两半各自存状态位）——只改下半的话，
-   * 上半那半截的贴图还是旧图案，看起来像"上下两半不一样"。
-   *
-   * ⚠️ 与原版的差异：原版要用**织布机 + 染料**、图案还会叠加成 6 层；
-   * 这里做成"右键循环"（免材料、只有一层图案），理由是没有织布机界面那套 UI。
-   */
-  private cycleBannerPattern(x: number, y: number, z: number): boolean {
-    const state = this.world.getBlockState(x, y, z);
-    const baseY = isBannerTop(state) ? y - 1 : y;
-    const next = nextBannerPattern(state);
-    for (let dy = 0; dy < 2; dy++) {
-      const oy = baseY + dy;
-      if (!isBannerId(this.world.getBlock(x, oy, z))) continue;
-      const half = dy === 1 ? (next | 0b100000) : (next & ~0b100000);
-      this.world.setStateAndUpdate(x, oy, z, half);
-      this.net.sendBlock(x, oy, z, this.world.getBlock(x, oy, z), half, this.dimension);
-    }
-    this.audio.play('click', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
-    this.hand.swing();
-    this.chat.push(`旗帜图案：${BANNER_PATTERNS[bannerPatternOf(next)] ?? '无'}`, 'system');
-    return true;
-  }
-
-  /**
    * 盔甲架（批次 492）：拿装备右键**穿上**；空手右键**取下一件**。
    *
    * 槽位由 `armorSlotForItem` 从 `armor.ts` 的注册表反查（与"能不能穿"同一条判据），
@@ -11210,8 +11183,6 @@ class App {
     if (hitBlock === Block.JUKEBOX) return this.useJukebox(x, y, z);
     // 盔甲架（批次 492）：拿装备右键穿上；空手右键取下一件
     if (hitBlock === Block.ARMOR_STAND) return this.useArmorStand(x, y, z);
-    // 旗帜（批次 497）：右键换一种图案（0 → 十字 → 边框 → 斜纹 → 横条 → 0）
-    if (isBannerId(hitBlock)) return this.cycleBannerPattern(x, y, z);
     // 钟（批次 490）：右键敲响
     if (hitBlock === Block.BELL) return this.ringBell(x, y, z);
     if (hitBlock === Block.CRAFTING_TABLE) {
@@ -11356,6 +11327,11 @@ class App {
     }
     if (hitBlock === Block.STONECUTTER) {
       this.inventoryScreen.openWith('stonecutter', this.world.containers.getOrCreateStonecutter(this.dimension, x, y, z));
+      return true;
+    }
+    // 织布机（J25，批次 503）：旗帜 + 染料 → 带图案的旗（图案是物品数据，见 502）
+    if (hitBlock === Block.LOOM) {
+      this.inventoryScreen.openWith('loom', this.world.containers.getOrCreateLoom(this.dimension, x, y, z));
       return true;
     }
     // 砂轮（H15，批次 188）：洗附魔 / 拼耐久。记下坐标是为了让返还的经验球冒在砂轮上方
@@ -11901,6 +11877,8 @@ class App {
     if (block === Block.SMITHING_TABLE) return store.getOrCreateSmithingTable(dimension, x, y, z);
     if (block === Block.STONECUTTER) return store.getOrCreateStonecutter(dimension, x, y, z);
     if (block === Block.GRINDSTONE) return store.getOrCreateGrindstone(dimension, x, y, z);
+    // 织布机（批次 503）：旗帜/染料按坐标存，拆掉时才会掉出来（成品格是算出来的，不倒）
+    if (block === Block.LOOM) return store.getOrCreateLoom(dimension, x, y, z);
     // 讲台（批次 191）：摊着的那本书按坐标存，拆掉时才会掉出来
     if (block === Block.LECTERN) return store.getOrCreateLectern(dimension, x, y, z);
     if (block === Block.ENCHANTING_TABLE) return store.getOrCreateEnchantTable(dimension, x, y, z);

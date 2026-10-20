@@ -247,8 +247,12 @@ console.log('\n[图案：状态位与循环（批次 497）]');
 
   // 接线守卫
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  check('右键旗帜会换图案', /isBannerId\(hitBlock\)\) return this\.cycleBannerPattern/.test(mainSrc));
-  check('上下半格都改（只改下半会两半不一样）', /const half = dy === 1 \? \(next \| 0b100000\)/.test(mainSrc));
+  // 批次 503：右键免费换图案已删（改由织布机消耗染料），换成两条新守卫
+  check('右键旗帜不再免费换图案（否则染料消耗形同虚设）', !mainSrc.includes('cycleBannerPattern'));
+  check(
+    '右键织布机打开织布机界面',
+    /if \(hitBlock === Block\.LOOM\)[\s\S]{0,200}openWith\('loom'/.test(mainSrc),
+  );
 }
 
 console.log(`\n旗帜测试：${passed} 通过 / ${failed} 失败`);

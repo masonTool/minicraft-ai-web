@@ -45,6 +45,8 @@ import {
   Grindstone,
 } from './Grindstone.ts';
 import { LECTERN_SIZE, Lectern } from './Lectern.ts';
+import { LOOM_BANNER, LOOM_DYE, LOOM_OUTPUT, LOOM_SIZE, Loom, isDyeItem } from './Loom.ts';
+import { isBannerId } from '../registry/blocks.ts';
 import { STONECUTTER_INPUT, STONECUTTER_SIZE, Stonecutter } from './Stonecutter.ts';
 import { sameExtras, type ItemStack } from './Inventory.ts';
 import { fuelSeconds, smeltingRecipeFor } from '../crafting/Smelting.ts';
@@ -94,6 +96,8 @@ export function acceptingSlots(container: BlockContainer): readonly number[] {
   // 讲台（批次 191）：**不接受自动输入**——原版讲台只收"一本摊开的书"，
   // 而且它的界面是"阅读"而不是物品栏，让漏斗往里塞只会塞进一个看不见的口袋。
   if (container instanceof Lectern) return EMPTY_SLOTS;
+  // 织布机（批次 503）：两格输入可塞，**成品格不能塞**（与铁砧/砂轮同一个理由）
+  if (container instanceof Loom) return [LOOM_BANNER, LOOM_DYE];
   // 剩下的就是附魔台：原版对漏斗是关着的（见文件头的差异说明）
   return EMPTY_SLOTS;
 }
@@ -111,6 +115,7 @@ export function isComputedResultSlot(container: BlockContainer, slot: number): b
   if (container instanceof Anvil) return slot === ANVIL_RESULT;
   if (container instanceof SmithingTable) return slot === SMITHING_RESULT;
   if (container instanceof Grindstone) return slot === GRINDSTONE_RESULT;
+  if (container instanceof Loom) return slot === LOOM_OUTPUT;
   return false;
 }
 
@@ -127,6 +132,7 @@ export function containerSlotCount(container: BlockContainer): number {
   if (container instanceof Anvil) return ANVIL_SIZE;
   if (container instanceof Grindstone) return GRINDSTONE_SIZE;
   if (container instanceof Lectern) return LECTERN_SIZE;
+  if (container instanceof Loom) return LOOM_SIZE;
   if (container instanceof EnchantTable) return ENCHANT_SLOT_COUNT;
   return 0;
 }
@@ -152,6 +158,12 @@ function slotHasRoom(container: BlockContainer, slot: number, stack: ItemStack):
 function kindAccepts(container: BlockContainer, slot: number, itemId: number): boolean {
   if (container instanceof Campfire) return smeltingRecipeFor(itemId, 'campfire') !== undefined;
   if (container instanceof Furnace && slot === FURNACE_FUEL) return fuelSeconds(itemId) > 0;
+  // 织布机（批次 503）：旗帜格只收旗帜、染料格只收染料——不拦的话漏斗会把石头塞进去
+  if (container instanceof Loom) {
+    if (slot === LOOM_BANNER) return isBannerId(itemId);
+    if (slot === LOOM_DYE) return isDyeItem(itemId);
+    return false;
+  }
   // 酿造台（批次 330）：三类槽位各认各的，避免漏斗把石头塞进瓶子槽、把材料塞进燃料槽
   if (container instanceof BrewingStand) {
     if (BREW_BOTTLE_SLOTS.some((bottle) => bottle === slot)) return isBottleItem(itemId);

@@ -105,6 +105,9 @@ import {
   SmithingTable,
 } from '../core/container/SmithingTable.ts';
 import { STONECUTTER_INPUT, Stonecutter } from '../core/container/Stonecutter.ts';
+// 织布机（J25，批次 503）：旗帜 + 染料 → 成品，图案是物品数据（批次 502）
+import { LOOM_BANNER, LOOM_DYE, LOOM_OUTPUT, LOOM_PATTERNS, Loom } from '../core/container/Loom.ts';
+import { BANNER_PATTERNS } from '../core/registry/blockState.ts';
 // 村民交易（J11，批次 88）：职业/交易表在注册表那一层（纯数据），界面只读不算
 import { Villager } from '../core/entity/Villager.ts';
 import { levelName, tradeBlocker } from '../core/registry/villagerTrades.ts';
@@ -197,6 +200,8 @@ export type InventoryPanelMode =
   | 'campfire'
   /** 切石机（H11，批次 44）：一格输入 + 一列可选产物，点哪一项切哪一项 */
   | 'stonecutter'
+  /** 织布机（J25，批次 503）：旗帜 + 染料两格 + 一列图案，点一下印一件 */
+  | 'loom'
   /** 漏斗（批次 58）：5 格排成一行，内容由方块自己每 0.4 秒搬一次 */
   | 'hopper'
   /** 投掷器（批次 59）：3×3 九格，内容由红石脉冲往外吐（界面里只存货与朝向） */
@@ -232,6 +237,7 @@ export function isWorkstationMode(mode: InventoryPanelMode): boolean {
     case 'anvil':
     case 'grindstone':
     case 'stonecutter':
+    case 'loom':
     case 'brewing':
     case 'enchanting':
     case 'campfire':
@@ -318,6 +324,11 @@ export interface InventoryScreenHooks {
    * 全由主程序决定（它握着 `spawnXpOrbs` 与砂轮坐标）。
    */
   onGrindstoneXp?: (amount: number) => void;
+  /**
+   * 织布机印好一件（批次 503）：界面负责扣材料与改图案，主程序只负责**响一声**
+   * （与砂轮返经验同一个分工：界面不持有音频，也不知道音量设置）。
+   */
+  onLoomApply?: (pattern: number) => void;
   /**
    * **把手上/某一格的东西丢进世界**（批次 128，Q / Ctrl+Q / 点界面外）。
    *
@@ -760,6 +771,14 @@ export class InventoryScreen {
   private readonly stonecutterListEl: HTMLDivElement;
   private readonly stonecutterHintEl: HTMLDivElement;
 
+  /** 织布机（J25，批次 503）：旗帜格 + 染料格 + 成品格 + 一列图案按钮 */
+  private readonly loomLayout: HTMLDivElement;
+  private readonly loomBannerSlot: HTMLDivElement;
+  private readonly loomDyeSlot: HTMLDivElement;
+  private readonly loomOutputSlot: HTMLDivElement;
+  private readonly loomListEl: HTMLDivElement;
+  private readonly loomHintEl: HTMLDivElement;
+
   /**
    * 村民交易（J11，批次 88）：左边是他本人的状态（职业/等级/经验），右边是一列交易。
    *
@@ -1125,6 +1144,20 @@ export class InventoryScreen {
     this.stonecutterListEl.className = 'stonecutter-list';
     this.stonecutterHintEl = document.createElement('div');
     this.stonecutterHintEl.className = 'anvil-cost';
+
+    // 织布机（J25，批次 503）：左边三格（旗帜 / 染料 / 成品），右边一列图案
+    this.loomLayout = document.createElement('div');
+    this.loomLayout.className = 'stonecutter-layout';
+    this.loomBannerSlot = this.createSlot();
+    this.loomBannerSlot.dataset.key = `loom:${LOOM_BANNER}`;
+    this.loomDyeSlot = this.createSlot();
+    this.loomDyeSlot.dataset.key = `loom:${LOOM_DYE}`;
+    this.loomOutputSlot = this.createSlot();
+    this.loomOutputSlot.dataset.key = `loom:${LOOM_OUTPUT}`;
+    this.loomListEl = document.createElement('div');
+    this.loomListEl.className = 'stonecutter-list';
+    this.loomHintEl = document.createElement('div');
+    this.loomHintEl.className = 'anvil-cost';
 
     // 村民交易（J11，批次 88）：左边是他的状态，右边是一列交易（没有收货格）
     this.tradeLayout = document.createElement('div');
@@ -4104,6 +4137,7 @@ export class InventoryScreen {
     this.clearBindings('grindstone:');
     this.clearBindings('smithing:');
     this.clearBindings('stonecutter:');
+    this.clearBindings('loom:');
     this.clearBindings('campfire:');
     this.clearBindings('brewing:');
     this.clearBindings('hopper:');
@@ -4369,6 +4403,43 @@ export class InventoryScreen {
 
       this.stonecutterLayout.replaceChildren(left, right);
       this.topArea.appendChild(this.stonecutterLayout);
+      return;
+    }
+
+    if (this.mode === 'loom') {
+      const loom = this.activeContainer instanceof Loom ? this.activeContainer : null;
+      const banner = this.registerExisting(this.loomBannerSlot, `loom:${LOOM_BANNER}`, loom!, LOOM_BANNER);
+      const dye = this.registerExisting(this.loomDyeSlot, `loom:${LOOM_DYE}`, loom!, LOOM_DYE);
+      // 成品格只能取不能放（与铁砧/砂轮一样：产物算出来的，放进去的东西拆机器时不会掉）
+      const output = this.registerExisting(
+        this.loomOutputSlot,
+        `loom:${LOOM_OUTPUT}`,
+        loom!,
+        LOOM_OUTPUT,
+        true,
+      );
+      this.loomHintEl.textContent = '';
+
+      const left = document.createElement('div');
+      left.className = 'stonecutter-col';
+      left.append(
+        this.buildLabel('要印图案的旗帜'),
+        banner,
+        this.buildLabel('染料（每种图案消耗 1 个）'),
+        dye,
+        this.buildLabel('成品（拿走再放下才会变成真正的旗）'),
+        output,
+        this.loomHintEl,
+      );
+
+      // 图案按钮由 `refreshLoom` 填：它们的可用状态随两格变化
+      this.loomListEl.replaceChildren();
+      const right = document.createElement('div');
+      right.className = 'stonecutter-right';
+      right.append(this.buildLabel('选一种图案（点一下印一件）'), this.loomListEl);
+
+      this.loomLayout.replaceChildren(left, right);
+      this.topArea.appendChild(this.loomLayout);
       return;
     }
 
@@ -5977,6 +6048,7 @@ export class InventoryScreen {
       this.renderStationTarget();
     }
     if (this.mode === 'stonecutter') this.refreshStonecutter();
+    if (this.mode === 'loom') this.refreshLoom();
     if (this.mode === 'trade') this.refreshTrade();
     // 批次 295：红底配方缺的那几件画成红底预览
     this.renderStationGhost();
@@ -6558,6 +6630,59 @@ export class InventoryScreen {
     this.refresh();
   }
 
+  /**
+   * 刷新织布机（批次 503）。
+   *
+   * 四个图案按钮**每次都重建**：它们只有 4 个、而且可用状态随"旗帜/染料"变化，
+   * 做指纹比对省下的那点开销还不如让状态永远正确（切石机的产物列表可能有几十项，
+   * 那才需要指纹；这里的规模完全不同）。
+   */
+  private refreshLoom(): void {
+    const loom = this.activeContainer;
+    if (!(loom instanceof Loom)) return;
+
+    this.loomListEl.replaceChildren();
+    for (const pattern of LOOM_PATTERNS) {
+      const blocker = loom.blockerFor(pattern);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'stonecutter-option';
+      button.disabled = blocker !== null;
+      const label = document.createElement('span');
+      label.textContent = BANNER_PATTERNS[pattern] ?? `图案 ${pattern}`;
+      button.append(label);
+      if (blocker) button.title = blocker;
+      button.addEventListener('click', () => this.handleLoomApply(pattern));
+      this.loomListEl.appendChild(button);
+    }
+
+    const hint = this.loomHintEl;
+    hint.classList.remove('bad');
+    if (!loom.banner) {
+      hint.textContent = '先放一面旗帜';
+      return;
+    }
+    if (!loom.dye) {
+      hint.textContent = '再放一个染料';
+      return;
+    }
+    hint.textContent = `还可以印 ${Math.min(loom.banner.count, loom.dye.count)} 件（每件消耗 1 面旗 + 1 个染料）`;
+  }
+
+  /** 点一种图案：印一件进成品格（材料不够时把原因写在提示行上） */
+  private handleLoomApply(pattern: number): void {
+    const loom = this.activeContainer;
+    if (!(loom instanceof Loom)) return;
+    const result = loom.applyPattern(pattern);
+    if (!result.ok) {
+      this.loomHintEl.textContent = result.reason;
+      this.loomHintEl.classList.add('bad');
+      return;
+    }
+    this.hooks.onLoomApply?.(pattern);
+    this.refresh();
+  }
+
   /** 刷新锻造台的提示行：没产物时解释为什么，有产物时把代价说清楚 */
   private refreshSmithing(): void {
     const table = this.activeContainer;
@@ -6698,6 +6823,7 @@ const MODE_TITLES: Record<InventoryPanelMode, string> = {
   grindstone: '砂轮',
   smithing: '锻造台',
   stonecutter: '切石机',
+  loom: '织布机',
   brewing: '酿造台',
   hopper: '漏斗',
   trade: '与村民交易',

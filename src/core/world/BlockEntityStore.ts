@@ -23,6 +23,7 @@ import { EnchantTable } from '../container/EnchantTable.ts';
 import { Furnace } from '../container/Furnace.ts';
 import { Grindstone } from '../container/Grindstone.ts';
 import { Lectern } from '../container/Lectern.ts';
+import { Loom } from '../container/Loom.ts';
 import { Hopper } from '../container/Hopper.ts';
 import { SmithingTable } from '../container/SmithingTable.ts';
 import { Stonecutter } from '../container/Stonecutter.ts';
@@ -45,7 +46,8 @@ export type BlockContainer =
   | Dispenser
   | Barrel
   | Grindstone
-  | Lectern;
+  | Lectern
+  | Loom;
 export type ContainerKind =
   | 'furnace'
   | 'chest'
@@ -61,7 +63,8 @@ export type ContainerKind =
   | 'barrel'
   | 'shulker_box'
   | 'grindstone'
-  | 'lectern';
+  | 'lectern'
+  | 'loom';
 
 /**
  * **带方块实体的方块**（= 装得下东西的方块）的 id 名单。
@@ -101,6 +104,8 @@ export const CONTAINER_BLOCKS: ReadonlySet<number> = new Set<number>([
   Block.GRINDSTONE,
   // 讲台（批次 191）：摊在上面的那本书按坐标存（推走就等于把书弄丢）
   Block.LECTERN,
+  // 织布机（批次 503）：旗帜/染料按坐标存，走开再回来还在台面上
+  Block.LOOM,
   Block.ENCHANTING_TABLE,
   Block.CAMPFIRE,
   // 三种炉子：站台不同，但都是按坐标存着的容器
@@ -253,6 +258,20 @@ export class BlockEntityStore {
     const grindstone = new Grindstone();
     this.put({ dimension, x, y, z, container: grindstone });
     return grindstone;
+  }
+
+  getLoom(dimension: DimensionId, x: number, y: number, z: number): Loom | undefined {
+    const container = this.get(dimension, x, y, z);
+    return container instanceof Loom ? container : undefined;
+  }
+
+  /** 织布机的两格输入也按坐标存（与铁砧/砂轮同一个理由） */
+  getOrCreateLoom(dimension: DimensionId, x: number, y: number, z: number): Loom {
+    const existing = this.getLoom(dimension, x, y, z);
+    if (existing) return existing;
+    const loom = new Loom();
+    this.put({ dimension, x, y, z, container: loom });
+    return loom;
   }
 
   getLectern(dimension: DimensionId, x: number, y: number, z: number): Lectern | undefined {
