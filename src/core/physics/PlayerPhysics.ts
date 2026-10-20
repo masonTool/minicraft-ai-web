@@ -26,6 +26,19 @@ export const FLY_SPEED = 10.9;
 export const FLY_SPRINT_SPEED = 21.8;
 
 const GRAVITY = 32;
+
+/**
+ * 滑翔（批次 499，鞘翅）。
+ *
+ * 三个数就是"飞起来像不像纸飞机"的全部：
+ *  - 水平 10.5 格/秒（比冲刺 5.6 快近一倍，但明显慢于创造飞行 10.9）；
+ *  - 下降速度收敛到 **-0.55**（不是自由落体），所以松手不会直接砸下去；
+ *  - 加速用 20（远低于地面的 48）：滑翔是靠惯性飞的，转向要"飘"过去。
+ */
+export const GLIDE_SPEED = 10.5;
+const GLIDE_FALL_SPEED = -0.55;
+const GLIDE_ACCEL = 20;
+const GLIDE_FALL_ACCEL = 8;
 const JUMP_VELOCITY = 8.95;
 const TERMINAL_VELOCITY = 78;
 /**
@@ -219,6 +232,8 @@ export class PlayerPhysics {
     speedMultiplier = 1,
     jumpMultiplier = 1,
     autoJump = false,
+    /** 是否在滑翔（批次 499，鞘翅）：由主程序按"装备了鞘翅 + 空中 + 按过跳跃"判定 */
+    gliding = false,
   ): void {
     this.autoJumped = false;
 
@@ -269,7 +284,9 @@ export class PlayerPhysics {
       ? input.sprint
         ? FLY_SPRINT_SPEED
         : FLY_SPEED
-      : this.inWater
+      : gliding && !this.inWater
+        ? GLIDE_SPEED
+        : this.inWater
         ? SWIM_SPEED
         : input.sneak
           ? SNEAK_SPEED
@@ -301,7 +318,7 @@ export class PlayerPhysics {
         world.isHoney?.(Math.floor(this.x), honeyFeetY, Math.floor(this.z + 0.45)) === true ||
         world.isHoney?.(Math.floor(this.x), honeyFeetY, Math.floor(this.z - 0.45)) === true);
 
-    const accelerate = flying ? 90 : this.onGround ? 48 : 10;
+    const accelerate = flying ? 90 : gliding && !this.inWater ? GLIDE_ACCEL : this.onGround ? 48 : 10;
     /**
      * 水流推动（F9 尾巴，批次 447）。
      *
@@ -318,6 +335,12 @@ export class PlayerPhysics {
       this.vy = approach(this.vy, vertical * speed * 0.85, 90 * dt);
       this.onGround = false;
       this.fallStartY = null;
+    } else if (gliding && !this.inWater) {
+      // 滑翔（批次 499）：垂直速度**收敛到缓降**，不是自由落体。
+      // 不累积摔落高度：从天上滑下来不该摔伤（原版也是）。
+      this.vy = approach(this.vy, GLIDE_FALL_SPEED, GLIDE_FALL_ACCEL * dt);
+      this.fallStartY = null;
+      this.onGround = false;
     } else if (this.onClimbable) {
       // 攀爬：按跳跃往上、按潜行往下、什么都不按就慢慢往下滑（原版手感）
       const target = input.jump ? CLIMB_UP_SPEED : input.sneak ? -CLIMB_DOWN_SPEED : -CLIMB_SLIDE_SPEED;

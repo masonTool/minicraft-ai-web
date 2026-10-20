@@ -10,7 +10,7 @@
  * 工具等级沿用原版：0 木 / 1 石 / 2 铁 / 3 钻石 / 4 下界合金。
  */
 
-import { ARMOR_SPECS, type ArmorInfo } from './armor.ts';
+import { ARMOR_SPECS, ELYTRA_ITEM_ID, type ArmorInfo } from './armor.ts';
 import { POTION_IDS, POTION_ITEMS, TIPPED_ARROWS } from './potions.ts';
 import {
   BLOCKS,
@@ -222,7 +222,7 @@ export const Item = {
   /** 爆裂紫颂果（批次 414）：烤过的果实，4 个合成 1 块紫珀（原版就是这样） */
   POPPED_CHORUS_FRUIT: 1542,
   /** 鞘翅（批次 384）：末地城宝箱的稀有掉落，装备在胸甲槽 */
-  ELYTRA: 1539,
+  ELYTRA: ELYTRA_ITEM_ID,
   /**
    * 唱片（批次 489）：三张，曲名与原版一致（`13` / `cat` / `ward`）。
    *

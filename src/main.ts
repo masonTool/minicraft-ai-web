@@ -10433,6 +10433,33 @@ class App {
   }
 
   /**
+   * 滑翔状态机（批次 499，鞘翅）。
+   *
+   * 三条开始条件与原版一致：**装备了鞘翅**、**不在地面/水里**、**在空中按下跳跃**。
+   * 最后一条用"这一帧按下（上一帧没按）"判定——否则起跳时按住的那一下会立刻变成滑翔，
+   * 表现是"一跳就贴地平飞"。
+   *
+   * 结束条件：落地、入水、卸下鞘翅、切创造飞行。
+   */
+  private updateGliding(input: PlayerInput): void {
+    const jumpPressed = input.jump && !this.jumpWasDown;
+    this.jumpWasDown = input.jump;
+
+    const chest = this.inventory.get(ARMOR_SLOT_BASE + 1);
+    const hasElytra = chest?.id === Item.ELYTRA;
+    // 卸下鞘翅 / 切飞行 / 入水 → 立刻结束（落地在下一条单独判，便于读）
+    if (!hasElytra || this.flying || this.physics.inWater) {
+      this.gliding = false;
+      return;
+    }
+    if (this.physics.onGround) {
+      this.gliding = false;
+      return;
+    }
+    if (jumpPressed) this.gliding = true;
+  }
+
+  /**
    * 用不死图腾救一次（批次 498）。
    *
    * 顺序要紧：**先确认背包里真有**，再回血——否则会出现"没图腾却回了 1 滴血"。
@@ -11618,6 +11645,10 @@ class App {
   private readonly jukeboxDiscs = new Map<string, number>();
   /** 盔甲架上的装备（批次 492）：按坐标存，随存档走 */
   private readonly armorStands = new ArmorStandStore();
+  /** 是否在滑翔（批次 499，鞘翅）：装备鞘翅 + 空中再按一次跳跃开始 */
+  private gliding = false;
+  /** 上一帧跳跃键是否按住（用来分辨"按下"与"按住"——按住起跳不算滑翔） */
+  private jumpWasDown = false;
   /** 多格拼贴的画（批次 495）：每格一条，拆任意一格带走整幅 */
   private readonly paintings = new PaintingStore();
   /** 旧版"击杀 5 只算一波"的计数（只在没有真袭击时兜底进度） */
@@ -14528,6 +14559,7 @@ class App {
         this.physics.vy = 0;
         this.physics.vz = 0;
       } else {
+        this.updateGliding(rawInput);
         this.physics.update(
           // 旁观模式（批次 491）：换一个"永远不碰撞"的世界代理，于是能穿墙
           hasBlockCollision(this.gameMode) ? this.world : this.spectatorWorld,
@@ -14540,6 +14572,8 @@ class App {
           this.effects.jumpMultiplier(),
           // 自动跳跃（批次 206）：飞行时不跳（`update` 里那条分支本来也不走）
           this.settings.autoJump,
+          // 滑翔（批次 499）：鞘翅
+          this.gliding,
         );
         // 自动跳跃进诊断日志（批次 222）：用户反馈"顶着仙人掌走路时画面一直抖"，
         // 静态看代码只能猜（受伤没有镜头抖动、仙人掌当时也没接线掉血）。

@@ -225,9 +225,21 @@ export interface ArmorSlotAccess {
  * 第 slotIndex 号背包槽能不能放这件物品。
  * 不是盔甲槽（< 36 或 > 39）时一律返回 true，方便调用方把它当通用判定用。
  */
+/**
+ * 鞘翅的物品 id（批次 499）。
+ *
+ * 定义在**这里**而不是 `items.ts`：`armorSlotAccepts` 要用它，而
+ * `items.ts` 已经反过来依赖本模块（`ARMOR_SPECS`）——常量放在这边、那边引用，
+ * 才不会成环。`items.ts` 的 `Item.ELYTRA` 就是它。
+ */
+export const ELYTRA_ITEM_ID = 1539;
+
 export function armorSlotAccepts(slotIndex: number, itemId: number): boolean {
   const slot = slotIndex - ARMOR_SLOT_BASE;
   if (slot < 0 || slot >= ARMOR_SLOT_COUNT) return true;
+  // 鞘翅（批次 499）：装备在**胸甲槽**，但它不是盔甲（`armorInfoById` 查不到）——
+  // 不特判的话，背包里根本放不进胸甲槽，滑翔也就无从谈起
+  if (itemId === ELYTRA_ITEM_ID) return slot === 1;
   return armorInfoById(itemId)?.slot === slot;
 }
 

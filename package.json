@@ -38,6 +38,7 @@
     "test:painting": "esbuild tools/painting-test.ts --bundle --platform=node --format=esm --outfile=.tmp/painting-test.mjs --log-level=error && node .tmp/painting-test.mjs",
     "test:cavevines": "esbuild tools/cavevines-test.ts --bundle --platform=node --format=esm --outfile=.tmp/cavevines-test.mjs --log-level=error && node .tmp/cavevines-test.mjs",
     "test:totem": "esbuild tools/totem-test.ts --bundle --platform=node --format=esm --outfile=.tmp/totem-test.mjs --log-level=error && node .tmp/totem-test.mjs",
+    "test:elytra": "esbuild tools/elytra-test.ts --bundle --platform=node --format=esm --outfile=.tmp/elytra-test.mjs --log-level=error && node .tmp/elytra-test.mjs",
     "audit:blocks": "esbuild tools/block-gap-audit.ts --bundle --platform=node --format=esm --outfile=.tmp/block-gap.mjs --log-level=error && node .tmp/block-gap.mjs",
     "audit:recipes": "esbuild tools/recipe-audit.ts --bundle --platform=node --format=esm --outfile=.tmp/recipe-audit.mjs --log-level=error && node .tmp/recipe-audit.mjs",
     "test:i18n": "esbuild tools/i18n-test.ts --bundle --platform=node --format=esm --outfile=.tmp/i18n-test.mjs --log-level=error && node .tmp/i18n-test.mjs",
