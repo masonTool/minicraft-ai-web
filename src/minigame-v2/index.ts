@@ -1451,39 +1451,35 @@ const showChat = (): void => {
 
 const showHud = (): void => {
   menuScreen = 'title';
+  const stickLeft = settings.leftHanded ? 1024 - 24 - 120 : 24;
+  const jumpLeft = settings.leftHanded ? 24 : 1024 - 16 - 92;
+  const stickTop = uiHeight - 216;
+  const jumpTop = uiHeight - 200;
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
-      text(24, 18, 250, 40, `${currentWorld?.name ?? '世界'} · v2`, { fontSize: 22, color: '#ffffff' }),
+      text(24, 18, 240, 36, `${currentWorld?.name ?? '世界'}`, { fontSize: 19, color: '#ffffff' }),
       ...(settings.showDebug
         ? [
-            text(24, 66, 720, 24, `FPS ${fps.toFixed(0)} · 区块 ${chunks.drawnCount}/${world.chunks.size} · ${currentHit ? world.getBlock(currentHit.x, currentHit.y, currentHit.z) : '-'} · ${physics.x.toFixed(1)},${physics.y.toFixed(1)},${physics.z.toFixed(1)}`, {
-              fontSize: 13,
+            text(24, 58, 380, 24, `FPS ${fps.toFixed(0)} · 区块 ${chunks.drawnCount}/${world.chunks.size} · ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)}`, {
+              fontSize: 12,
               color: 'rgba(220,240,250,0.8)',
             }),
           ]
         : []),
-      button(284, 18, 110, 48, '聊天', () => {
+      button(434, 14, 44, 44, '聊', () => {
         showChat();
-      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
-      button(404, 18, 110, 48, cameraMode === 'first' ? '第一人称' : '第三人称', () => {
+      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2, radius: 22, fontSize: 16 }),
+      button(488, 14, 44, 44, 'Ⅱ', () => {
+        paused = true;
+        showPause();
+      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2, radius: 22, fontSize: 18 }),
+      button(542, 14, 44, 44, '视', () => {
         cameraMode = cameraMode === 'first' ? 'third' : 'first';
         settings.view = cameraMode;
         persistSettings();
         playerModel.visible = cameraMode === 'third';
         showHud();
-      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
-      button(524, 18, 130, 48, '背包', () => {
-        inventoryOpen = true;
-        showInventory();
-      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
-      button(664, 18, 130, 48, '设置', () => {
-        paused = true;
-        showSettings();
-      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
-      button(804, 18, 160, 48, '暂停', () => {
-        paused = true;
-        showPause();
-      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
+      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2, radius: 22, fontSize: 16 }),
       ...Array.from({ length: 9 }, (_, i) => {
         const stack = inventory.get(i);
         return slot(242 + i * 60, uiHeight - 76, 54, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
@@ -1491,25 +1487,30 @@ const showHud = (): void => {
           showHud();
         });
       }),
-      button(820, uiHeight - 104, 70, 70, sneaking ? '潜行' : '站', () => {
-        sneaking = !sneaking;
-        input.sneak = sneaking;
-        showHud();
-      }, {
-        background: sneaking ? 'rgba(90, 130, 110, 0.45)' : 'rgba(255, 255, 255, 0.18)',
-        border: 'rgba(255, 255, 255, 0.42)',
+      button(792, uiHeight - 76, 46, 54, '包', () => {
+        inventoryOpen = true;
+        showInventory();
+      }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2, radius: 8, fontSize: 16 }),
+      box(stickLeft, stickTop, 120, 120, [], {
+        background: 'rgba(12,16,20,0.52)',
+        border: 'rgba(255,255,255,0.62)',
         borderWidth: 2,
-        radius: 35,
-        fontSize: 18,
+        radius: 60,
       }),
-      button(902, uiHeight - 104, 70, 70, '跳', () => {
+      box(stickLeft + 36, stickTop + 36, 48, 48, [], {
+        background: sneaking ? 'rgba(120,190,120,0.55)' : 'rgba(245,247,250,0.35)',
+        border: 'rgba(255,255,255,0.75)',
+        borderWidth: 1,
+        radius: 24,
+      }),
+      button(jumpLeft, jumpTop, 92, 92, '跳', () => {
         jumpQueued = true;
       }, {
-        background: 'rgba(255, 255, 255, 0.18)',
-        border: 'rgba(255, 255, 255, 0.42)',
+        background: 'rgba(40,72,34,0.86)',
+        border: 'rgba(198,240,185,0.8)',
         borderWidth: 2,
-        radius: 35,
-        fontSize: 22,
+        radius: 46,
+        fontSize: 26,
       }),
       ...(!settings.fingerAim
         ? [
@@ -1539,12 +1540,19 @@ const showPause = (): void => {
         color: 'rgba(220,235,245,0.75)',
         align: 'center',
       }),
-      button(panelX + 90, panelY + 190, 300, 52, '继续游戏', () => {
+      button(panelX + 40, panelY + 190, 180, 52, '继续游戏', () => {
         paused = false;
         showHud();
       }, {
         background: 'rgba(52, 64, 74, 0.96)',
         border: 'rgba(190, 220, 240, 0.45)',
+        radius: 8,
+      }),
+      button(panelX + 240, panelY + 190, 190, 52, '设置', () => {
+        showSettings();
+      }, {
+        background: 'rgba(32, 42, 50, 0.95)',
+        border: 'rgba(190, 220, 240, 0.4)',
         radius: 8,
       }),
       button(panelX + 90, panelY + 258, 300, 42, '保存并返回菜单', () => {
@@ -1608,6 +1616,7 @@ let pitch = 0;
 let playerReady = false;
 let jumpQueued = false;
 let sneaking = false;
+let lastStickTap = 0;
 let movePointer: number | null = null;
 let lookPointer: number | null = null;
 let moveX = 0;
@@ -1694,12 +1703,24 @@ platform.input.onPointer('down', (event) => {
   lastDownY = event.clientY;
   if (ui.handlePointer('down', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
   if (!started || paused || settingsOpen || inventoryOpen || chatOpen || containerOpen) return;
-  const leftSide = event.clientX < platform.system.width / 2;
-  const moveSide = settings.leftHanded ? !leftSide : leftSide;
-  if (moveSide) {
+  const designX = (event.clientX / Math.max(1, platform.system.width)) * 1024;
+  const designY = (event.clientY / Math.max(1, platform.system.height)) * uiHeight;
+  const stickLeft = settings.leftHanded ? 1024 - 24 - 120 : 24;
+  const stickTop = uiHeight - 216;
+  const inStick = designX >= stickLeft && designX <= stickLeft + 120 && designY >= stickTop && designY <= stickTop + 120;
+  if (inStick) {
     movePointer = event.pointerId;
-    moveX = event.clientX;
-    moveY = event.clientY;
+    moveX = ((stickLeft + 60) / 1024) * platform.system.width;
+    moveY = ((stickTop + 60) / uiHeight) * platform.system.height;
+    const nowTap = Date.now();
+    if (nowTap - lastStickTap < 320) {
+      sneaking = !sneaking;
+      input.sneak = sneaking;
+      lastStickTap = 0;
+      showHud();
+    } else {
+      lastStickTap = nowTap;
+    }
   } else if (lookPointer === null) {
     lookPointer = event.pointerId;
     lookX = event.clientX;

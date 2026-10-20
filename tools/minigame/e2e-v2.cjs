@@ -76,9 +76,9 @@ const assert = (condition, message, state) => {
   );
   assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
 
-  await tap(912, 42);
+  await tap(510, 36);
   const paused = await waitState((state) => state.paused && state.screen === 'pause', '暂停没有打开');
-  await tap(512, 313);
+  await tap(402, 313);
   const resumed = await waitState((state) => !state.paused && state.screen === 'game', '暂停没有继续');
 
   const liveFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
@@ -104,13 +104,13 @@ const assert = (condition, message, state) => {
   await tap(775, 108);
   const containerClosed = await waitState((state) => !state.containerOpen, '容器没有关闭', 5000);
 
-  await tap(550, 42);
+  await tap(815, 424);
   const inventory = await waitState((state) => state.inventoryOpen && state.screen === 'inventory', '背包没有打开');
   await tap(902, 56);
   const inventoryClosed = await waitState((state) => !state.inventoryOpen && state.screen === 'game', '背包没有关闭');
 
   // 暂停 → 保存返回菜单 → 编辑 → 删除
-  await tap(912, 42);
+  await tap(510, 36);
   await waitState((state) => state.paused && state.screen === 'pause', '返回菜单用例暂停失败');
   await tap(512, 366);
   const worldsAfterPause = await waitState(
