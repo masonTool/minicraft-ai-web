@@ -72,9 +72,11 @@ async function chooseWorker(platform: ReturnType<typeof wxPlatform>): Promise<{
   worker: WorkerLike;
   state: string;
 }> {
-  if (platform.system.platform === 'devtools') {
-    console.log('[WX-020] devtools：跳过 worker，避免不支持的 worker API 噪音');
-    return { worker: createMainThreadWorker(), state: 'main-devtools' };
+  // 真机曾出现扫码后整包闪退：先完全避开 wx.createWorker（原生 worker 占内存，
+  // 且 iOS 上 createWorker 失败可能直接杀进程）。稳定后再按性能分级恢复 worker。
+  if (platform.kind === 'wx') {
+    console.log('[WX-020] wx safe mode：主线程生成，跳过原生 worker');
+    return { worker: createMainThreadWorker(), state: 'main-wx-safe' };
   }
   try {
     const host = platform.workers.create('workers/chunk.worker.js');
@@ -120,7 +122,13 @@ async function boot(): Promise<void> {
         ...DEFAULT_SETTINGS,
         ...parsed,
         fov: Math.max(50, Math.min(110, Number(parsed.fov) || DEFAULT_SETTINGS.fov)),
-        renderDistance: Math.max(2, Math.min(8, Math.round(Number(parsed.renderDistance) || DEFAULT_SETTINGS.renderDistance))),
+        renderDistance: Math.max(
+          2,
+          Math.min(
+            platform.kind === 'wx' ? 2 : 8,
+            Math.round(Number(parsed.renderDistance) || DEFAULT_SETTINGS.renderDistance),
+          ),
+        ),
         sound: parsed.sound !== false,
         invertLook: parsed.invertLook === true,
         cameraMode: mode === 'third-back' || mode === 'third-front' ? mode : 'first',
@@ -210,7 +218,9 @@ async function boot(): Promise<void> {
     alpha: false,
   });
   bootRenderer = renderer;
-  renderer.setPixelRatio(Math.min(view.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(
+    Math.min(view.devicePixelRatio || 1, platform.kind === 'wx' ? 1.5 : 2),
+  );
   renderer.setSize(width, height, false);
   renderer.setClearColor(0x8fc7ff, 1);
   renderer.autoClear = false;
