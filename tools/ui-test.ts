@@ -3459,19 +3459,32 @@ console.log('\n[左上聊天 + 右上性能（批次 206）]');
       chatSrc.includes('performance.now() - this.openedAt < 350') &&
       chatSrc.includes("closest?.('#touch-pause')"),
   );
-  // 批次 528（用户）：收起时弹出的消息 = 展开后字号的 2 倍；展开区四处统一
+  // 批次 528 / 532（用户）：收起时弹出的消息 = 展开后字号的 1.1 倍；展开区四处统一
   check(
-    '聊天字号：展开 12px / 弹出 24px（严格 2 倍）',
+    '聊天字号：展开 12px / 弹出 1.1 倍（13.2px）',
     html.includes('--chat-open-size: 12px;') &&
-      html.includes('--chat-pop-size: 24px;') &&
+      html.includes('--chat-pop-size: calc(var(--chat-open-size) * 1.1);') &&
       html.includes('#chat:not(.open) .chat-line { font-size: var(--chat-pop-size); }') &&
       html.includes('font-size: var(--chat-open-size);'),
   );
   check(
     '展开后的输入框 / 提示 / 历史同字号（不再大一号）',
-    /#chat\.open \.chat-log \{[\s\S]{0,400}?font-size: var\(--chat-open-size\);/.test(html) &&
+    /#chat\.open \.chat-log \{[\s\S]{0,500}?font-size: var\(--chat-open-size\);/.test(html) &&
       /\.chat-hint \{[\s\S]{0,80}?font-size: var\(--chat-open-size\);/.test(html) &&
       /\.chat-input \{[\s\S]{0,80}?font-size: var\(--chat-open-size\);/.test(html),
+  );
+  check(
+    '展开后的历史是一整块背景（行间无白缝）',
+    /#chat\.open \.chat-log \{[\s\S]{0,500}?gap: 0;[\s\S]{0,120}?background: rgba\(0, 0, 0, \.42\);/.test(
+      html,
+    ) &&
+      /#chat\.open \.chat-line \{\s*background: transparent;/.test(html),
+  );
+  check(
+    '被截断的消息有明确的"展开"提示（不是只剩省略号）',
+    html.includes("content: '展开';") &&
+      html.includes('#chat.open .chat-line.collapsible::after') &&
+      chatSrc.includes("html.title = '点击展开';"),
   );
   check(
     '消息 3 秒后彻底消失（2.2s 清晰 + 0.8s 淡出）',

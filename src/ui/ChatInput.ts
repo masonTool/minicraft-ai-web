@@ -182,11 +182,13 @@ export class ChatInput {
         if (!element) return;
         event.preventDefault();
         event.stopPropagation();
-        const index = Number((element as HTMLElement).dataset.chatIndex);
+        const lineEl = element as HTMLElement;
+        const index = Number(lineEl.dataset.chatIndex);
         const line = this.messages[index];
         if (!line) return;
         line.expanded = line.expanded !== true;
-        element.classList.toggle('expanded', line.expanded);
+        lineEl.classList.toggle('expanded', line.expanded);
+        lineEl.title = line.expanded ? '点击收起' : '点击展开';
       },
       { signal: this.listeners.signal },
     );
@@ -236,6 +238,9 @@ export class ChatInput {
 
   /** 追加一行消息 */
   push(text: string, kind: ChatLineKind = 'system'): void {
+    // 空消息不占行：命令/系统提示偶尔会拼出空串，留在列表里就是一条
+    // "看得见高度、看不见字"的空白条（批次 532 用户反馈的"不知名空格"）。
+    if (text.trim().length === 0) return;
     this.messages.push({ text, kind, expires: performance.now() + LINE_LIFETIME });
     while (this.messages.length > MAX_STORED_LINES) this.messages.shift();
     this.renderLog();
@@ -370,9 +375,17 @@ export class ChatInput {
     // ⚠️ 已展开的行不要摘 `.collapsible`，否则再点一下就没法收起了。
     for (const element of this.logEl.children) {
       if (!element.classList.contains('collapsible')) continue;
-      if (element.classList.contains('expanded')) continue;
       const html = element as HTMLElement;
-      if (html.scrollWidth <= html.clientWidth + 1) element.classList.remove('collapsible');
+      if (element.classList.contains('expanded')) {
+        html.title = '点击收起';
+        continue;
+      }
+      if (html.scrollWidth <= html.clientWidth + 1) {
+        element.classList.remove('collapsible');
+        html.removeAttribute('title');
+      } else {
+        html.title = '点击展开';
+      }
     }
     // 只有停在顶部才自动跟到最新；玩家往下翻旧消息时保留原来的滚动位置
     this.logEl.scrollTop = this.stickToTop ? 0 : previousTop;
