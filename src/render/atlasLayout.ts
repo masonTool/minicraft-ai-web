@@ -1362,6 +1362,11 @@ export const TILE_ORDER = [
   'item_furnace_minecart',
   // 鞍与拴绳（批次 254/256）
   'item_saddle',
+  // 马铠（批次 570，K10）
+  'item_leather_horse_armor',
+  'item_iron_horse_armor',
+  'item_golden_horse_armor',
+  'item_diamond_horse_armor',
   'item_lead',
   // 制图台（批次 505）：顶面摊开的地图 + 罗盘、侧面的纸卷
   'cartography_table_top',

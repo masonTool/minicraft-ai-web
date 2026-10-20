@@ -22,7 +22,7 @@ import {
   validateLootTables,
   type LootTable,
 } from '../src/core/registry/loot.ts';
-import { itemDef, itemName } from '../src/core/registry/items.ts';
+import { Item, itemDef, itemName } from '../src/core/registry/items.ts';
 import { fillLootChests } from '../src/core/world/LootFill.ts';
 import { BlockEntityStore, type BlockContainer } from '../src/core/world/BlockEntityStore.ts';
 import { CHEST_SIZE, Chest } from '../src/core/container/Chest.ts';
@@ -353,6 +353,19 @@ function slotsOf(chest: Chest): ItemStack[] {
     if (stack) out.push(stack);
   }
   return out;
+}
+
+console.log('\n[马铠：K10 最后缺的一类（批次 570）]');
+{
+  const armors = [Item.LEATHER_HORSE_ARMOR, Item.IRON_HORSE_ARMOR, Item.GOLDEN_HORSE_ARMOR, Item.DIAMOND_HORSE_ARMOR];
+  for (const id of armors) {
+    check(
+      `${itemName(id)}至少在一张结构表里`,
+      LOOT_TABLES.some((table) => table.entries.some((entry) => entry.id === id)),
+    );
+    check(`${itemName(id)}有图标`, (itemDef(id)?.tile.length ?? 0) > 0);
+  }
+  check('四档马铠都不可堆叠', armors.every((id) => itemDef(id)?.maxStack === 1));
 }
 
 console.log(`\n战利品测试：${passed} 通过 / ${failed} 失败`);

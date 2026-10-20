@@ -2153,6 +2153,22 @@ PAINTERS.item_saddle = (x, y) => {
   return [0, 0, 0, 0];
 };
 
+/** 马铠（批次 570）：一块罩住马背的护甲轮廓，四档只换颜色 */
+function horseArmorPainter(color: readonly [number, number, number]): (x: number, y: number) => [number, number, number, number] {
+  return (x, y) => {
+    if (y < 4 || y > 12) return [0, 0, 0, 0];
+    const half = 6.4 - Math.abs(y - 8) * 0.35;
+    if (Math.abs(x - 7.5) > half) return [0, 0, 0, 0];
+    const edge = y === 4 || y === 12 || Math.abs(x - 7.5) > half - 1.1;
+    const shade = edge ? 0.68 : 1;
+    return [color[0] * shade, color[1] * shade, color[2] * shade, 255];
+  };
+}
+PAINTERS.item_leather_horse_armor = horseArmorPainter([145, 96, 55]);
+PAINTERS.item_iron_horse_armor = horseArmorPainter([205, 205, 212]);
+PAINTERS.item_golden_horse_armor = horseArmorPainter([238, 194, 72]);
+PAINTERS.item_diamond_horse_armor = horseArmorPainter([104, 222, 214]);
+
 /** 动力矿车（批次 252）：车斗正面一个炉口 + 底部火光 */
 PAINTERS.item_furnace_minecart = (x, y) => {
   if (y >= 3 && y <= 10) {

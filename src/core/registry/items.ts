@@ -254,6 +254,14 @@ export const Item = {
    */
   POWDER_SNOW_BUCKET: 1562,
   /**
+   * 马铠（批次 570）：K10 战利品表最后缺的一类，皮革/铁/金/钻石四档。
+   * ⚠️ 目前只作为**战利品**存在（没有马铠装备栏），差异记在 TASKS K10。
+   */
+  LEATHER_HORSE_ARMOR: 1563,
+  IRON_HORSE_ARMOR: 1564,
+  GOLDEN_HORSE_ARMOR: 1565,
+  DIAMOND_HORSE_ARMOR: 1566,
+  /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
    * 它的用途与原版一致：**缓降药水**（`Brewing` 的 `VARIANT_INGREDIENTS`）
@@ -561,6 +569,11 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.NAUTILUS_SHELL, name: 'minecraft:nautilus_shell', tile: 'item_nautilus_shell' },
   // 细雪桶（批次 548）：与其它桶一样不可堆叠
   { id: Item.POWDER_SNOW_BUCKET, name: 'minecraft:powder_snow_bucket', tile: 'item_powder_snow_bucket', maxStack: 1 },
+  // 马铠（批次 570）：原版四档，不可堆叠；目前只作为战利品
+  { id: Item.LEATHER_HORSE_ARMOR, name: 'minecraft:leather_horse_armor', tile: 'item_leather_horse_armor', maxStack: 1 },
+  { id: Item.IRON_HORSE_ARMOR, name: 'minecraft:iron_horse_armor', tile: 'item_iron_horse_armor', maxStack: 1 },
+  { id: Item.GOLDEN_HORSE_ARMOR, name: 'minecraft:golden_horse_armor', tile: 'item_golden_horse_armor', maxStack: 1 },
+  { id: Item.DIAMOND_HORSE_ARMOR, name: 'minecraft:diamond_horse_armor', tile: 'item_diamond_horse_armor', maxStack: 1 },
   { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
