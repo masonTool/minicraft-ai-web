@@ -10371,4 +10371,12 @@
 - 覆盖：文案表 **58 → 68 条**
 - ⚠️ 背包界面很大（5000+ 行），**分几批做**：下一批是页签与搜索/筛选栏
 
+## 批次 423：M8 i18n 背包第二批（2026-10-20）
+
+- [x] B423-1 七条键：searchItems / searchCraftable / renamePlaceholder /
+      tab.craftable / tab.items / returnFurnaceHint / returnBrewHint
+- [x] B423-2 **老断言零改动**：上批把会被波及的四条改成按键匹配，这一批直接受益
+- 覆盖：文案表 **68 → 75 条**
+- ⚠️ 背包剩下的：各工作站的功能性提示语（锻造/织布/切石/交易…），下一批
+
 <!-- docs-archive:end -->

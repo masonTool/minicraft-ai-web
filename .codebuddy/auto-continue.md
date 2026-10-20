@@ -98,14 +98,6 @@
 
 ---
 
-## 批次 423：M8 i18n 背包第二批（2026-10-20）
-
-- [x] B423-1 七条键：searchItems / searchCraftable / renamePlaceholder /
-      tab.craftable / tab.items / returnFurnaceHint / returnBrewHint
-- [x] B423-2 **老断言零改动**：上批把会被波及的四条改成按键匹配，这一批直接受益
-- 覆盖：文案表 **68 → 75 条**
-- ⚠️ 背包剩下的：各工作站的功能性提示语（锻造/织布/切石/交易…），下一批
-
 ## 批次 424：M8 i18n 背包第三批（工作站提示）（2026-10-20）
 
 - [x] B424-1 五条键：station.tradeHint / smithingDone / villagerIdle / stonecutterHint / fuelHint
@@ -123,3 +115,12 @@
       未知键 / 不带数量的那条确实是完整句子）
 - 覆盖：文案表 **80 → 85 条**
 - ⚠️ 别给 `t()` 加 params 参数：它的第二参已经是**语言**，再塞对象会让签名靠类型猜
+
+## 批次 426：M8 用 tp() 改造拼接句（2026-10-20）
+
+- [x] B426-1 四组模板：inventory.searchAllFor / searchUsableFor / statAll / statAvailable / burnTime
+- [x] B426-2 判断标准（写进 TASKS）：**一句话里既有中文又有变量就不能拼**，
+      英文语序会把变量放到别的句段去
+- 覆盖：文案表 **85 → 90 条**
+- ⚠️ 还剩的拼接句多是"枚举清单"（把几件物品名连成一串），那些要改的是**连接词**
+      （中文"、"vs 英文", "），单独一批做更安全

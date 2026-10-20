@@ -1678,8 +1678,8 @@ export class InventoryScreen {
     this.categorySearch.style.display = this.categoryTab === 'all' ? '' : 'none';
     this.categorySearch.placeholder = this.stationHasRecipes()
       ? this.showUnowned
-        ? `搜索${STATION_LABELS[this.stationRecipeKey()]}的全部配方…`
-        : `搜索${STATION_LABELS[this.stationRecipeKey()]}现在能做的物品…`
+        ? tp('inventory.searchAllFor', { station: STATION_LABELS[this.stationRecipeKey()] })
+        : tp('inventory.searchUsableFor', { station: STATION_LABELS[this.stationRecipeKey()] })
       : '搜索可合成的物品…';
     // 底部统计：开关打开时报"这一栏共多少 / 其中现在能做多少"，
     // 关闭时报"现在能做多少 / 用过的缺料多少"。**不受搜索词影响**。
@@ -1690,8 +1690,8 @@ export class InventoryScreen {
       const total = entries.filter((entry) => inTab(entry.resultId)).length;
       const label = STATION_LABELS[this.stationRecipeKey()];
       this.categoryInfo.textContent = this.showUnowned
-        ? `${label} · 全部 ${total} 项（白底 ${available} 项现在能做）`
-        : `${label} · 现在能做 ${available} 项（点配方书看全部）`;
+        ? tp('inventory.statAll', { label, total, available })
+        : tp('inventory.statAvailable', { label, available });
     } else {
       const inTab = (id: number): boolean => this.categoryTab === 'all' || recipeBookTab(id) === this.categoryTab;
       const craftable = this.craftableIds();
@@ -1699,7 +1699,11 @@ export class InventoryScreen {
       if (this.showUnowned) {
         const allInTab = CREATIVE_ITEMS.filter(inTab).length;
         this.categoryInfo.textContent =
-          `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 全部 ${allInTab} 项（白底 ${craftableInTab} 项现在能做）`;
+          tp('inventory.statAll', {
+            label: RECIPE_BOOK_TAB_LABELS[this.categoryTab],
+            total: allInTab,
+            available: craftableInTab,
+          });
       } else {
         this.categoryInfo.textContent = `${RECIPE_BOOK_TAB_LABELS[this.categoryTab]} · 可合成 ${craftableInTab}`;
       }
@@ -2534,7 +2538,7 @@ export class InventoryScreen {
       button.type = 'button';
       button.className = 'furnace-fuel-option';
       if (current?.id === id) button.classList.add('active');
-      button.title = `${itemLabel(id)}（可烧 ${fuelSeconds(id)} 秒）`;
+      button.title = tp('inventory.burnTime', { item: itemLabel(id), seconds: fuelSeconds(id) });
       const canvas = document.createElement('canvas');
       canvas.width = 22;
       canvas.height = 22;

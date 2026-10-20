@@ -126,6 +126,12 @@ const ZH: Readonly<Record<string, string>> = {
   'station.notEnough': '材料或燃料不足，不能开始',
   'unit.item': '个',
   'unit.bottle': '瓶',
+  // ---- 拼接句改造（批次 426）：一律改成"一条完整模板 + 占位符"
+  'inventory.searchAllFor': '搜索{station}的全部配方…',
+  'inventory.searchUsableFor': '搜索{station}现在能做的物品…',
+  'inventory.statAll': '{label} · 全部 {total} 项（白底 {available} 项现在能做）',
+  'inventory.statAvailable': '{label} · 现在能做 {available} 项（点配方书看全部）',
+  'inventory.burnTime': '{item}（可烧 {seconds} 秒）',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -214,6 +220,11 @@ const EN: Readonly<Record<string, string>> = {
   'station.notEnough': 'Not enough materials or fuel to start',
   'unit.item': 'items',
   'unit.bottle': 'bottles',
+  'inventory.searchAllFor': 'Search all {station} recipes…',
+  'inventory.searchUsableFor': 'Search what {station} can make right now…',
+  'inventory.statAll': '{label} · {total} total (white = {available} craftable now)',
+  'inventory.statAvailable': '{label} · {available} craftable now (open the recipe book for all)',
+  'inventory.burnTime': '{item} (burns for {seconds}s)',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {
