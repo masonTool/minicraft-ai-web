@@ -23,6 +23,7 @@
  *     （本项目是按"能跑在手机浏览器上"写的，这层兜底不贵）。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 type FullscreenCapableElement = HTMLElement & {
   webkitRequestFullscreen?: () => void;
 };
@@ -281,9 +282,9 @@ export function installRotateHint(): void {
   const phone = doc.createElement('div');
   phone.className = 'rotate-phone';
   const title = doc.createElement('b');
-  title.textContent = '请横屏游玩';
+  title.textContent = t('fullscreen.rotateTitle');
   const detail = doc.createElement('span');
-  detail.textContent = '点一下进入全屏并横屏 · 把手机横过来也会自动开始';
+  detail.textContent = t('fullscreen.rotateDetail');
   hint.append(phone, title, detail);
   // 批次 212：**整屏任何位置**都算点击（不再依赖点中提示层本身）。
   // 用 document 的捕获阶段：即使有别的浮层压在它上面，这一下也先落到这里。

@@ -137,6 +137,18 @@ const ZH: Readonly<Record<string, string>> = {
   'advancement.empty': '这一支还没有条目',
   'beacon.title': '信标',
   'book.noPages': '一页都没写，没法署名',
+  // ---- 其余小界面（批次 434）：聊天 / 横屏提示 / 安装提示 / 地图 / 配方书 / 牌子
+  'chat.send': '发送',
+  'chat.noCommandMatch': '没有匹配的命令，输入 /help 查看全部',
+  'fullscreen.rotateTitle': '请横屏游玩',
+  'fullscreen.rotateDetail': '点一下进入全屏并横屏 · 把手机横过来也会自动开始',
+  'install.hint': '添加到主屏幕后，打开即全屏横屏',
+  'install.add': '添加',
+  'install.later': '以后',
+  'map.close': '关闭',
+  'recipeBook.title': '配方书',
+  'recipeBook.detail': '点一格：材料会摆进右边的合成格',
+  'sign.done': '完成',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -234,6 +246,17 @@ const EN: Readonly<Record<string, string>> = {
   'advancement.empty': 'Nothing in this branch yet',
   'beacon.title': 'Beacon',
   'book.noPages': 'Nothing written yet — cannot sign it',
+  'chat.send': 'Send',
+  'chat.noCommandMatch': 'No matching command — type /help to see all',
+  'fullscreen.rotateTitle': 'Please rotate your device',
+  'fullscreen.rotateDetail': 'Tap to go fullscreen · rotating the phone starts it too',
+  'install.hint': 'Add to Home Screen to launch straight into fullscreen landscape',
+  'install.add': 'Add',
+  'install.later': 'Later',
+  'map.close': 'Close',
+  'recipeBook.title': 'Recipe Book',
+  'recipeBook.detail': 'Tap a cell: its ingredients go into the grid on the right',
+  'sign.done': 'Done',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {

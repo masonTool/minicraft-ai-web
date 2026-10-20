@@ -18,6 +18,7 @@
  * 数据都在 `core/crafting/RecipeBook.ts` 里（纯函数，可离线测），这里只管画。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import type { Inventory } from '../core/container/Inventory.ts';
 import {
   RECIPE_BOOK_TAB_LABELS,
@@ -149,7 +150,7 @@ export class RecipeBook {
     header.className = 'recipe-header';
 
     const title = document.createElement('b');
-    title.textContent = '配方书';
+    title.textContent = t('recipeBook.title');
 
     this.summaryEl = document.createElement('span');
     this.summaryEl.className = 'recipe-hint';
@@ -546,7 +547,7 @@ export class RecipeBook {
 
   /** 说明行的默认文案（没点着任何一格时） */
   private resetDetail(): void {
-    this.detailEl.textContent = '点一格：材料会摆进右边的合成格';
+    this.detailEl.textContent = t('recipeBook.detail');
   }
 
   /** 翻页条：与创造物品栏共用 `.inv-pager` 那套样式（一处样式，两处使用） */

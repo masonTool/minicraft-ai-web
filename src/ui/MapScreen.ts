@@ -13,6 +13,7 @@
  *     所以打开地图期间地图不会变（也就不会出现"看着看着自己长出一块"的怪事）。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import { MAP_GRID, MAP_CHUNK_SPAN, exploredCount, isExplored, mapOffset, type MapData } from '../core/items/Map.ts';
 
 /** 画布内部边长（CSS 会把它缩到面板上；固定值让绘制逻辑与屏幕无关） */
@@ -54,7 +55,7 @@ export class MapScreen {
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'map-button';
-    closeButton.textContent = '关闭';
+    closeButton.textContent = t('map.close');
     closeButton.addEventListener('click', () => this.close());
 
     panel.append(this.titleEl, this.canvas, this.footerEl, closeButton);

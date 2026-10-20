@@ -18,6 +18,7 @@
  *  3. **关掉之后记住**（localStorage）：这类引导第二次出现就只剩烦人了。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import { isStandalone } from './Fullscreen.ts';
 
 /** 关过一次就不再烦（换设备/换浏览器各记各的） */
@@ -73,12 +74,12 @@ function showHint(): void {
   hint.className = 'install-hint';
 
   const text = document_.createElement('span');
-  text.textContent = '添加到主屏幕后，打开即全屏横屏';
+  text.textContent = t('install.hint');
 
   const add = document_.createElement('button');
   add.type = 'button';
   add.className = 'install-hint-add';
-  add.textContent = '添加';
+  add.textContent = t('install.add');
   add.addEventListener('click', () => {
     const prompt = deferred;
     deferred = null;
@@ -91,7 +92,7 @@ function showHint(): void {
   const later = document_.createElement('button');
   later.type = 'button';
   later.className = 'install-hint-later';
-  later.textContent = '以后';
+  later.textContent = t('install.later');
   later.addEventListener('click', () => dismissInstallHint());
 
   hint.append(text, add, later);

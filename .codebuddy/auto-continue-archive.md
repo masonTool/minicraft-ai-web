@@ -10445,4 +10445,14 @@
   它变红正好证明改动生效；新负对照用 0.5 格（半砖天花板）
 - ⚠️ F9 只剩：游泳视觉姿态、水流推动
 
+## 批次 431：K11 /clone（2026-10-20）
+
+- [x] B431-1 `core/commands/Clone.ts`：`normalizeCloneBox` / `cloneVolume` / `cloneRegion`
+- [x] B431-2 **先读后写**：源与目标重叠时，结果不能取决于遍历顺序（否则换方向就复制错）
+- [x] B431-3 `masked` 只覆盖空气并计入 `skipped`（原版语义：贴房子不铲地形）
+- [x] B431-4 `/clone <x1 y1 z1> <x2 y2 z2> <dx dy dz> [masked|replace]`，上限 32768
+- [x] B431-5 `test:commands` 166 → **179 条**
+- 覆盖：命令 **31 → 32（78% → 80%）**
+- ⚠️ 没做：`/clone` 的 `filter` 模式（按方块过滤）与"源区域含方块实体"的搬运
+
 <!-- docs-archive:end -->

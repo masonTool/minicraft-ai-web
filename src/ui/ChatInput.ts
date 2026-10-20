@@ -9,6 +9,7 @@
  * 而且消息栏要能自己淡出（批次 223：整条消息 3 秒后彻底消失，见 `LINE_LIFETIME`）。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import { commandNames, mobNames } from '../core/commands/Commands.ts';
 import { resolveItemId } from '../core/registry/itemNames.ts';
 import { isTouchUi } from './TouchControls.ts';
@@ -134,7 +135,7 @@ export class ChatInput {
     this.sendButton = document.createElement('button');
     this.sendButton.type = 'button';
     this.sendButton.className = 'chat-send hidden';
-    this.sendButton.textContent = '发送';
+    this.sendButton.textContent = t('chat.send');
     this.sendButton.setAttribute('aria-label', '发送');
     // pointerdown 而不是 click：click 之前浏览器会先把焦点从输入框移走，
     // 手机上会顺手收起键盘、甚至把整个输入行关掉（preventDefault 才不会）
@@ -508,7 +509,7 @@ export class ChatInput {
     const prefix = value.slice(1).split(/\s+/)[0]!.toLowerCase();
     const matches = commandNames().filter((name) => name.startsWith(prefix));
     if (matches.length === 0) {
-      this.hintEl.textContent = '没有匹配的命令，输入 /help 查看全部';
+      this.hintEl.textContent = t('chat.noCommandMatch');
       return;
     }
     if (matches.length === 1 && matches[0] === prefix) {

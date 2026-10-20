@@ -98,16 +98,6 @@
 
 ---
 
-## 批次 431：K11 /clone（2026-10-20）
-
-- [x] B431-1 `core/commands/Clone.ts`：`normalizeCloneBox` / `cloneVolume` / `cloneRegion`
-- [x] B431-2 **先读后写**：源与目标重叠时，结果不能取决于遍历顺序（否则换方向就复制错）
-- [x] B431-3 `masked` 只覆盖空气并计入 `skipped`（原版语义：贴房子不铲地形）
-- [x] B431-4 `/clone <x1 y1 z1> <x2 y2 z2> <dx dy dz> [masked|replace]`，上限 32768
-- [x] B431-5 `test:commands` 166 → **179 条**
-- 覆盖：命令 **31 → 32（78% → 80%）**
-- ⚠️ 没做：`/clone` 的 `filter` 模式（按方块过滤）与"源区域含方块实体"的搬运
-
 ## 批次 432：F9 游泳视觉姿态（2026-10-20）
 
 - [x] B432-1 `PlayerPose.swimming`（独立字段，不复用 sneaking）
@@ -128,3 +118,11 @@
 - ⚠️ **教训（第二次）**：这一批开头打算"实现打火石点火"，写到一半发现
   `main.igniteWithFlint` + `Fire.ts` 早就完整（含 TNT 与传送门点燃、耐久规则），重复实现已回滚。
   判断"缺什么"必须去源码/注册表确认，不能凭印象。
+
+## 批次 434：M8 i18n 收尾——六个小界面（2026-10-20）
+
+- [x] B434-1 十一条键：chat.send / noCommandMatch、fullscreen.rotateTitle / rotateDetail、
+      install.hint / add / later、map.close、recipeBook.title / detail、sign.done
+- [x] B434-2 `ui-test` 两条字面量断言改成按键（配方书说明、横屏标题）
+- 覆盖：文案表 **94 → 105 条**；界面里的**静态中文**到此清空
+- ⚠️ 下一块是数据（成就标题/物品名/分类名带双语字段），与"抽表换调用点"不是一个量级

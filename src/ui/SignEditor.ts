@@ -16,6 +16,7 @@
  * 点哪行改哪行，但**不拦 Tab/方向键**（留给浏览器默认行为，输入法才不会被顶掉）。
  */
 
+import { t } from '../core/i18n/I18n.ts';
 import { SIGN_LINES, SIGN_LINE_LENGTH } from '../core/world/SignText.ts';
 
 /** 标题里要显示的方块名（"橡木告示牌"） */
@@ -80,7 +81,7 @@ export class SignEditor {
     saveButton.type = 'button';
     // 原版的"完成"就是一颗普通灰按钮（批次 109 去掉了绿色主按钮那一套）
     saveButton.className = 'sign-editor-button';
-    saveButton.textContent = '完成';
+    saveButton.textContent = t('sign.done');
     saveButton.addEventListener('click', () => this.save());
 
     const cancelButton = document.createElement('button');

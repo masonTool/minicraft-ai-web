@@ -2572,7 +2572,11 @@ console.log('\n[物品与配方书的交互（批次 132，按中文 Wiki「物�
   // 图标网格省掉了卡片上的文字，但名字与材料不能跟着一起没（手机上没有悬停）
   check('底部有一行说明"这格是什么 + 材料够不够"', bookUi.includes("this.detailEl.textContent = summary"));
   check('说明行会说出缺哪样材料', bookUi.includes('材料不足${missing'));
-  check('没点着任何一格时说明行也有默认文案', bookUi.includes('this.resetDetail()') && bookUi.includes('点一格：材料会摆进右边的合成格'));
+  check(
+    '没点着任何一格时说明行也有默认文案',
+    // 批次 434：文案走 i18n 键（中文表里那条由 i18n 测试管）
+    bookUi.includes('this.resetDetail()') && bookUi.includes("t('recipeBook.detail')"),
+  );
 
   // ---- 配方书嵌进背包左栏（批次 157：不再有 "第二个窗口并排"）
   check(
@@ -2843,7 +2847,8 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '竖屏浮层是整屏不透明层（不再只是底部横条）',
     /\.rotate-hint \{[\s\S]{0,500}position: fixed;[\s\S]{0,200}inset: 0;/.test(css) &&
       /\.rotate-hint \{[\s\S]{0,600}z-index: 90;/.test(css) &&
-      fullscreenSrc.includes('请横屏游玩'),
+      // 批次 434：文案走 i18n 键
+      fullscreenSrc.includes("t('fullscreen.rotateTitle')"),
   );
   check(
     '浮层尽早挂上（不等菜单/加载）',
