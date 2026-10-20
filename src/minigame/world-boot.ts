@@ -107,12 +107,14 @@ async function boot(): Promise<void> {
   console.log('[WX-020] platform', platform.kind, platform.system);
   const uiScale = width / 1024;
   const safe = platform.system.safeArea;
-  const safeLeftPx = Math.max(0, safe.left);
   const safeTopPx = Math.max(0, safe.top);
-  const topButtonLeft = safeLeftPx + 8 * uiScale;
-  const topButtonRight = safeLeftPx + 206 * uiScale;
-  const topButtonTop = safeTopPx;
-  const topButtonBottom = safeTopPx + 48 * uiScale;
+  const safeBottomPx = Math.max(0, height - safe.bottom);
+  const pauseSize = 50 * uiScale;
+  const pauseLeft = width / 2 - pauseSize / 2;
+  const pauseTop = safeTopPx + 8 * uiScale;
+  const bagSize = 50 * uiScale;
+  const bagLeft = 840 * uiScale;
+  const bagTop = height - safeBottomPx - 84 * uiScale;
 
   const atlasStarted = Date.now();
   const atlas = new TextureAtlas();
@@ -489,6 +491,8 @@ async function boot(): Promise<void> {
   let lookMoved = false;
   let jumpQueued = false;
   let jumpHeld = false;
+  let lastMoveTap = 0;
+  let lastJumpTap = 0;
   let flying = loadedPlayer?.flying ?? false;
   let sneaking = false;
   let mining: { x: number; y: number; z: number; elapsed: number; pointerId: number } | null = null;
@@ -891,20 +895,6 @@ async function boot(): Promise<void> {
     requestSave();
   };
 
-  const swingAttack = (): void => {
-    if (!currentHit) {
-      ui.showToast('NO TARGET');
-      return;
-    }
-    const id = world.getBlock(currentHit.x, currentHit.y, currentHit.z);
-    spawnHitParticles(
-      currentHit.x + 0.5,
-      currentHit.y + 0.5,
-      currentHit.z + 0.5,
-      dropColor(id),
-    );
-  };
-
   const chestSnapshot = (): Array<ItemStack | null> =>
     Array.from({ length: 27 }, (_, index) => openedChest?.get(index) ?? null);
   const playerHotbarSnapshot = (): Array<ItemStack | null> =>
@@ -1001,13 +991,22 @@ async function boot(): Promise<void> {
 
   const handleRightTap = (_x: number, y: number): void => {
     if (y > height * 0.78) {
-      jumpQueued = true;
+      const now = Date.now();
+      if (now - lastJumpTap < 320) {
+        lastJumpTap = 0;
+        flying = !flying;
+        ui.setFlying(flying);
+        ui.showToast(flying ? '飞行开' : '飞行关');
+      } else {
+        lastJumpTap = now;
+        jumpQueued = true;
+      }
     } else if (y <= height * 0.45) {
       placeTarget();
     } else if (y <= height * 0.78) {
       useTarget();
     }
-    // 中间区域按住仍是破坏；短按用于打开箱子
+    // 中间按住仍是破坏；短按用于打开箱子
   };
 
   platform.input.onPointer('down', (event) => {
@@ -1039,16 +1038,21 @@ async function boot(): Promise<void> {
       if (action === 'settings') ui.openSettings();
       return;
     }
-    // 左上角 MENU / BAG（按安全区后的实际按钮位置命中）
+    // 顶部居中暂停
     if (
-      y >= topButtonTop &&
-      y <= topButtonBottom &&
-      x >= topButtonLeft &&
-      x <= topButtonRight
+      x >= pauseLeft &&
+      x <= pauseLeft + pauseSize &&
+      y >= pauseTop &&
+      y <= pauseTop + pauseSize
     ) {
       uiPointerId = event.pointerId;
-      if (x < safeLeftPx + 104 * uiScale) ui.togglePause();
-      else ui.toggleInventory();
+      ui.togglePause();
+      return;
+    }
+    // 快捷栏右侧背包
+    if (x >= bagLeft && x <= bagLeft + bagSize && y >= bagTop && y <= bagTop + bagSize) {
+      uiPointerId = event.pointerId;
+      ui.toggleInventory();
       return;
     }
     // 背包打开时，所有点击先交给 UI；点外/点槽都会关闭
@@ -1129,37 +1133,12 @@ async function boot(): Promise<void> {
       return;
     }
 
-    // 左侧 FLY / SNEAK 按钮（避开摇杆与 HUD）
-    if (y > height * 0.3 && y < height * 0.46) {
-      if (x > width * 0.12 && x < width * 0.2) {
-        uiPointerId = event.pointerId;
-        flying = !flying;
-        ui.setFlying(flying);
-        ui.showToast(flying ? 'FLY ON' : 'FLY OFF');
-        return;
-      }
-      if (x > width * 0.21 && x < width * 0.29) {
-        uiPointerId = event.pointerId;
-        sneaking = !sneaking;
-        playerInput.sneak = sneaking;
-        ui.setSneaking(sneaking);
-        ui.showToast(sneaking ? 'SNEAK ON' : 'SNEAK OFF');
-        return;
-      }
-    }
-
     if (x < width * 0.45 && movePointerId === null) {
       movePointerId = event.pointerId;
       moveOriginX = x;
       moveOriginY = y;
       moveStartTime = Date.now();
       moveMoved = false;
-      return;
-    }
-    // 右侧 ATK 按钮：不进入视角拖动
-    if (x > width * 0.66 && x < width * 0.78 && y > height * 0.5 && y < height * 0.66) {
-      uiPointerId = event.pointerId;
-      swingAttack();
       return;
     }
     if (lookPointerId === null) {
@@ -1243,7 +1222,17 @@ async function boot(): Promise<void> {
             stack ? itemLabel(stack.id) : '空槽位',
           );
         } else if (held < 300) {
-          cycleSlot();
+          const now = Date.now();
+          if (now - lastMoveTap < 320) {
+            lastMoveTap = 0;
+            sneaking = !sneaking;
+            playerInput.sneak = sneaking;
+            ui.setSneaking(sneaking);
+            ui.showToast(sneaking ? '潜行开' : '潜行关');
+          } else {
+            lastMoveTap = now;
+            cycleSlot();
+          }
         }
       }
       resetMove();
@@ -1262,11 +1251,12 @@ async function boot(): Promise<void> {
 
   updateCamera();
 
+  const heldStack = inventory.get(selectedSlot);
   ui.updateStatus([
     `基岩版  ${width}x${height}`,
-    `坐标 -  工作线程 ${workerState}`,
-    `目标 -  槽位 1/${HOTBAR.length}`,
-    `存档 ${saveStatus}  音频 ${audioStatus}`,
+    '生存  加载中',
+    `持有 ${heldStack ? itemLabel(heldStack.id) : '空'}`,
+    `潜行 关 · 飞行 关  槽位 1/${HOTBAR.length}`,
   ]);
 
   let frames = 0;
@@ -1414,11 +1404,12 @@ async function boot(): Promise<void> {
       console.log(
         `[WX-020] fps=${fps} ms=${ms.toFixed(1)} chunks=${world.chunks.size} drawn=${chunkRenderer.drawnCount} light=${world.lightWorkCount} queue=${chunkRenderer.queueLength} tri=${sceneTriangles} calls=${sceneCalls}`,
       );
+      const held = inventory.get(selectedSlot);
       ui.updateStatus([
-        `基岩版 ${fps}FPS ${ms.toFixed(1)}ms`,
-        `坐标 ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)} ${physics.onGround ? '落地' : '空中'}`,
+        `${fps} fps   ${physics.x.toFixed(1)} / ${physics.y.toFixed(1)} / ${physics.z.toFixed(1)}`,
+        `生存   ${physics.onGround ? '地面' : '空中'}   ${flying ? '飞行' : sneaking ? '潜行' : '行走'}`,
+        `持有 ${held ? itemLabel(held.id) : '空'}`,
         `目标 ${targetLabel}  槽位 ${selectedSlot + 1}/${HOTBAR.length}`,
-        `存档 ${saveStatus}  音频 ${audioStatus}`,
       ]);
       frames = 0;
       lastReport = time;

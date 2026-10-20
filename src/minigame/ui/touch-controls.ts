@@ -8,15 +8,20 @@ export interface TouchControls {
 }
 
 /**
- * 可见触摸控件（WX-027 第一版）
+ * Web 手机版同款触控层：
+ * - 左下透明摇杆（无 MOVE 文字）
+ * - 右下只有跳跃键（向上箭头）
+ * - 顶部居中暂停方键
+ * - 快捷栏右侧背包方键
+ * - 快捷栏上方一行操作提示
  *
- * 只负责画提示，触摸判定仍在 world-boot 的分区里：
- *   - 左下摇杆 = 左半屏拖动
- *   - PLACE = 右半屏上部轻点
- *   - MINE = 右半屏中部按住
- *   - JUMP = 右半屏底部轻点
+ * 放置/挖掘仍由 world-boot 的右半屏手势分区处理，不再画 PLACE/MINE/ATK 大按钮。
  */
-export function createTouchControls(screenWidth: number, screenHeight: number): TouchControls {
+export function createTouchControls(
+  screenWidth: number,
+  screenHeight: number,
+  safeArea?: { top: number; right: number; bottom: number; left: number },
+): TouchControls {
   const doc = (globalThis as unknown as { document: Document }).document;
   const canvas = doc.createElement('canvas');
   canvas.width = 1024;
@@ -31,10 +36,7 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
   camera.position.z = 1;
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(
-      2,
-      2 * (canvas.height / canvas.width) * (screenWidth / Math.max(1, screenHeight)),
-    ),
+    new THREE.PlaneGeometry(2, 2),
     new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -44,13 +46,15 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
   );
   scene.add(mesh);
 
-  const circle = (
-    x: number,
-    y: number,
-    radius: number,
-    fill: string,
-    stroke: string,
-  ): void => {
+  const designScale = 1024 / Math.max(1, screenWidth);
+  const safeTop = (safeArea?.top ?? 0) * designScale;
+  const safeLeft = (safeArea?.left ?? 0) * designScale;
+  const safeBottom = Math.max(0, screenHeight - (safeArea?.bottom ?? screenHeight)) * designScale;
+
+  let flying = false;
+  let sneaking = false;
+
+  const circle = (x: number, y: number, radius: number, fill: string, stroke: string): void => {
     if (!context) return;
     context.beginPath();
     context.arc(x, y, radius, 0, Math.PI * 2);
@@ -61,48 +65,107 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
     context.stroke();
   };
 
-  let flying = false;
-  let sneaking = false;
+  const squareButton = (x: number, y: number, size: number, drawIcon: () => void): void => {
+    if (!context) return;
+    context.fillStyle = 'rgba(0, 0, 0, 0.34)';
+    context.fillRect(x, y, size, size);
+    context.strokeStyle = 'rgba(255, 255, 255, 0.42)';
+    context.lineWidth = 3;
+    context.strokeRect(x + 1.5, y + 1.5, size - 3, size - 3);
+    drawIcon();
+  };
 
-  const button = (
-    x: number,
-    y: number,
-    radius: number,
-    label: string,
-    active = false,
-    fontSize = 16,
-  ): void => {
-    circle(
-      x,
-      y,
-      radius,
-      active ? 'rgba(70, 140, 90, 0.65)' : 'rgba(20, 24, 28, 0.5)',
-      active ? 'rgba(180, 255, 200, 0.95)' : 'rgba(255, 255, 255, 0.55)',
-    );
-    drawText(context!, label, x, y - fontSize / 2, fontSize, 'rgba(255, 255, 255, 0.9)', 'center');
+  const drawPauseIcon = (cx: number, cy: number): void => {
+    if (!context) return;
+    context.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    context.fillRect(cx - 10, cy - 13, 7, 26);
+    context.fillRect(cx + 3, cy - 13, 7, 26);
+  };
+
+  const drawBagIcon = (cx: number, cy: number): void => {
+    if (!context) return;
+    context.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    context.lineWidth = 4;
+    context.strokeRect(cx - 13, cy - 7, 26, 22);
+    context.beginPath();
+    context.arc(cx, cy - 8, 8, Math.PI, Math.PI * 2);
+    context.stroke();
   };
 
   const redraw = (): void => {
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 左下摇杆提示
-    const jx = canvas.width * 0.16;
-    const jy = canvas.height * 0.58;
-    circle(jx, jy, 58, 'rgba(20, 24, 28, 0.35)', 'rgba(255, 255, 255, 0.35)');
-    circle(jx, jy, 26, 'rgba(255, 255, 255, 0.25)', 'rgba(255, 255, 255, 0.55)');
-    drawText(context, 'MOVE', jx, jy - 76, 14, 'rgba(255, 255, 255, 0.55)', 'center');
+    // 摇杆：Web 132px / 屏宽 844 ≈ 160 设计单位
+    const stickRadius = 80;
+    const stickX = safeLeft + 26 + stickRadius;
+    const stickY = canvas.height - safeBottom - 116 - stickRadius;
+    circle(stickX, stickY, stickRadius, 'rgba(255, 255, 255, 0.13)', 'rgba(255, 255, 255, 0.3)');
+    circle(stickX, stickY, 34, 'rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0.8)');
+    if (sneaking) {
+      drawText(context, '潜行', stickX, stickY - stickRadius - 22, 15, 'rgba(255, 255, 255, 0.85)', 'center');
+    }
 
-    // 飞行/潜行开关：左侧中部，避开摇杆
-    button(jx, canvas.height * 0.38, 34, 'FLY', flying, 14);
-    button(jx + 88, canvas.height * 0.38, 30, 'SNEAK', sneaking, 12);
+    // 顶部居中暂停
+    const pauseSize = 50;
+    const pauseX = canvas.width / 2 - pauseSize / 2;
+    const pauseY = safeTop + 8;
+    squareButton(pauseX, pauseY, pauseSize, () =>
+      drawPauseIcon(pauseX + pauseSize / 2, pauseY + pauseSize / 2),
+    );
 
-    // 右侧按钮：与 world-boot 的 y 分区对应
-    const bx = canvas.width * 0.88;
-    button(bx, canvas.height * 0.3, 44, 'PLACE');
-    button(canvas.width * 0.72, canvas.height * 0.58, 30, 'ATK', false, 12);
-    button(bx, canvas.height * 0.58, 48, 'MINE');
-    button(bx, canvas.height * 0.84, 46, 'JUMP');
+    // 快捷栏右侧背包（设计宽 1024，快捷栏右缘 832）
+    const bagSize = 50;
+    const bagX = 840;
+    const bagY = canvas.height - safeBottom - 84;
+    squareButton(bagX, bagY, bagSize, () => drawBagIcon(bagX + bagSize / 2, bagY + bagSize / 2));
+
+    // 右下跳跃：Web 76px / 844 ≈ 92 设计单位
+    const jumpRadius = 46;
+    const jumpX = canvas.width - safeLeft - 24 - jumpRadius;
+    const jumpY = canvas.height - safeBottom - 116 - jumpRadius;
+    circle(jumpX, jumpY, jumpRadius, 'rgba(255, 255, 255, 0.16)', 'rgba(255, 255, 255, 0.34)');
+    context.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    context.beginPath();
+    context.moveTo(jumpX, jumpY - 20);
+    context.lineTo(jumpX - 16, jumpY + 2);
+    context.lineTo(jumpX - 5, jumpY + 2);
+    context.lineTo(jumpX - 5, jumpY + 20);
+    context.lineTo(jumpX + 5, jumpY + 20);
+    context.lineTo(jumpX + 5, jumpY + 2);
+    context.lineTo(jumpX + 16, jumpY + 2);
+    context.closePath();
+    context.fill();
+
+    if (flying) {
+      drawText(context, '飞行', jumpX, jumpY - jumpRadius - 18, 14, 'rgba(190, 245, 210, 0.9)', 'center');
+    }
+
+    // 操作提示（Web 同款圆角深色底，放在快捷栏上方、目标名之上）
+    const hint = '摇杆走 · 双击摇杆潜行 · 拖动看 · 轻点放 · 按住挖 · 双击跳起飞';
+    const hintY = canvas.height - safeBottom - 260;
+    const hintWidth = Math.min(canvas.width - 100, hint.length * 15 + 28);
+    const hintX = (canvas.width - hintWidth) / 2;
+    context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    const r = 15;
+    context.beginPath();
+    context.moveTo(hintX + r, hintY - 9);
+    context.arcTo(hintX + hintWidth, hintY - 9, hintX + hintWidth, hintY + 21, r);
+    context.arcTo(hintX + hintWidth, hintY + 21, hintX, hintY + 21, r);
+    context.arcTo(hintX, hintY + 21, hintX, hintY - 9, r);
+    context.arcTo(hintX, hintY - 9, hintX + hintWidth, hintY - 9, r);
+    context.closePath();
+    context.fill();
+    drawText(
+      context,
+      hint,
+      canvas.width / 2,
+      hintY,
+      15,
+      'rgba(255, 255, 255, 0.86)',
+      'center',
+      hintWidth - 16,
+    );
 
     texture.needsUpdate = true;
   };

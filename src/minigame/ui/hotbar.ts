@@ -68,13 +68,13 @@ export function createHotbar(
     const x = padding + index * (slotSize + gap);
     const y = padding;
     const gradient = context.createLinearGradient(0, y, 0, y + slotSize);
-    gradient.addColorStop(0, selected ? 'rgba(92, 112, 128, 0.86)' : 'rgba(58, 64, 70, 0.9)');
-    gradient.addColorStop(1, selected ? 'rgba(30, 42, 52, 0.9)' : 'rgba(24, 28, 32, 0.92)');
+    gradient.addColorStop(0, selected ? 'rgba(214, 218, 222, 0.96)' : 'rgba(58, 64, 70, 0.9)');
+    gradient.addColorStop(1, selected ? 'rgba(170, 176, 182, 0.96)' : 'rgba(24, 28, 32, 0.92)');
     context.fillStyle = gradient;
     context.fillRect(x, y, slotSize, slotSize);
-    context.fillStyle = selected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)';
+    context.fillStyle = selected ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.08)';
     context.fillRect(x + 2, y + 2, slotSize - 4, 3);
-    context.strokeStyle = selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.38)';
+    context.strokeStyle = selected ? '#ffffff' : 'rgba(160, 205, 230, 0.38)';
     context.lineWidth = selected ? 4 : 2;
     context.strokeRect(x + 1, y + 1, slotSize - 2, slotSize - 2);
 

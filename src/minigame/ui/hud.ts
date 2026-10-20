@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { drawButton, drawText } from './widgets.ts';
+import { drawText } from './widgets.ts';
 
 export interface Hud {
   update(lines: readonly string[]): void;
@@ -18,7 +18,6 @@ export function createHud(
   canvas.height = Math.max(320, Math.round((1024 * screenHeight) / Math.max(1, screenWidth)));
   const designScale = 1024 / Math.max(1, screenWidth);
   const safeTop = (safeArea?.top ?? 0) * designScale;
-  const safeLeft = (safeArea?.left ?? 0) * designScale;
   const safeRight = (safeArea?.right ?? screenWidth) * designScale;
   const context = canvas.getContext('2d');
   const texture = new THREE.CanvasTexture(canvas);
@@ -66,9 +65,6 @@ export function createHud(
           panelWidth - 18,
         );
       });
-      // 左上角 MENU/BAG：与 world-boot 的触摸区对应
-      drawButton(context, { x: 12 + safeLeft, y: top, w: 86, h: 36 }, '菜单', 'normal', 16);
-      drawButton(context, { x: 106 + safeLeft, y: top, w: 96, h: 36 }, '背包', 'normal', 17);
       texture.needsUpdate = true;
     },
     render(renderer: THREE.WebGLRenderer): void {

@@ -123,7 +123,7 @@ export function createCanvasUi(
   const chestScreen = createChestScreen(atlas, screenWidth, screenHeight);
   const furnaceScreen = createFurnaceScreen(atlas, screenWidth, screenHeight);
   const stats = createStats(screenWidth, screenHeight, safeArea);
-  const touchControls = createTouchControls(screenWidth, screenHeight);
+  const touchControls = createTouchControls(screenWidth, screenHeight, safeArea);
   let settingsFromMenu = false;
 
   return {
