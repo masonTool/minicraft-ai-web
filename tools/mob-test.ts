@@ -348,12 +348,12 @@ console.log('\n[生物表]');
   );
   // 村民（J11，批次 88）是**刻意的例外**：原版杀掉村民什么都不掉也不给经验
   //（掉了就等于鼓励玩家屠村），所以它进不了"被动生物都有掉落"这条里
-  // 兔/山羊也在这条白名单里：原版它们掉兔皮/角，而本项目还没有那两件物品，
-  // 所以**故意不给假掉落**（写进 TASKS 的差异）
+  // 山羊也在这条白名单里：原版它掉角，而本项目还没有那件物品，所以**故意不给假掉落**；
+  // 兔子在批次 545 接上了兔脚（跳跃药水的原料），因此不再属于"没有掉落"这一档。
   // 蜜蜂（批次 374）：原版也不掉东西
-  const noDropIds = new Set(['villager', 'fox', 'rabbit', 'goat', 'panda', 'turtle', 'axolotl', 'bat', 'bee', 'parrot', 'wandering_trader']);
+  const noDropIds = new Set(['villager', 'fox', 'goat', 'panda', 'turtle', 'axolotl', 'bat', 'bee', 'parrot', 'wandering_trader']);
   check(
-    '被动动物都有掉落；村民/狐狸/兔/山羊与宠物没有（原版如此或物品未做）',
+    '被动动物都有掉落；村民/狐狸/山羊与宠物没有（原版如此或物品未做）',
     MOB_TYPES.filter(
       (t) => !t.hostile && !noDropIds.has(t.id) && t.tameWith === undefined,
     ).every((t) => t.drops.length > 0) &&

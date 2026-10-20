@@ -64,19 +64,24 @@ export const VARIANT_INGREDIENTS: Readonly<Record<string, number>> = {
   poison: Item.SPIDER_EYE,
   // 幻翼膜（批次 126，幻翼那一批）：它与上面那些的关系一样——材料有了来源，路才通
   slow_falling: Item.PHANTOM_MEMBRANE,
+  // 批次 545：水肺（河豚）与跳跃（兔脚）。两件材料本来就在注册表里，
+  // 缺的一直是"它们能酿出什么"
+  water_breathing: Item.PUFFERFISH,
+  leaping: Item.RABBIT_FOOT,
 };
 
 /**
  * 发酵蜘蛛眼腐化：原料效果的基础档 → 目标效果的基础档。
  *
- * 原版一共五条，现在**全部补齐**（K4 尾巴把缺的三个目标效果做出来了）：
- * 迅捷 → 缓慢、治疗 → 伤害、剧毒 → 伤害、夜视 → 隐身、跳跃 → 缓慢（跳跃药水还没做）。
+ * 原版一共五条，现在**全部补齐**（K4 尾巴把缺的三个目标效果做出来了；
+ * 批次 545 补上跳跃药水之后，"跳跃 → 缓慢"这条也通了）。
  */
 export const CORRUPTION: Readonly<Record<string, string>> = {
   swiftness: 'slowness',
   healing: 'harming',
   poison: 'harming',
   night_vision: 'invisibility',
+  leaping: 'slowness',
 };
 
 function requireBaseId(key: string): number {

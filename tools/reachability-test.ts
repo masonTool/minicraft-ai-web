@@ -307,10 +307,7 @@ const EXEMPT: readonly Exempt[] = [
     reason: '已填好的地图由空地图右键绑定得到（界面里的一步，不是配方/掉落）',
   },
 
-  // ---- ④ 没有该生物（恶魂已在批次 94 做掉，这里只剩兔子）
-  { id: Item.RABBIT_FOOT, reason: '兔子已在批次 259 落地，但故意不掉兔脚：兔皮/兔脚两件物品都还没做' },
-
-  // ---- ⑤ 旧 id（保留只为存档兼容）
+  // ---- ④ 旧 id（保留只为存档兼容）
   {
     id: Item.REDSTONE_DUST,
     reason: '已是旧 id：与红石粉（1004）是同一件东西，本批统一到 1004，它只留给存档兼容（见 LEGACY_ITEM_IDS）',
@@ -362,7 +359,7 @@ check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.le
 // → 批次 169（锁链甲改由盔甲匠卖）**4 条**。
 // 剩下这 4 条都不是"某条链断在中间"，而是**内容本身还没做**（黑/灰染料要鱿鱼与凋灵、
 // 兔子脚要兔子、旧 id 只留存档兼容）
-equal('缺口总数（批次 196 之后：4 条 —— 三条"界面里才拿得到"的：成书 / 已填好的地图…）', unreachable.length, 4);
+equal('缺口总数（批次 196 之后：3 条 —— 三条"界面里才拿得到/旧 id"的：成书 / 已填好的地图 / 旧红石 id）', unreachable.length, 3);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));
@@ -379,7 +376,7 @@ console.log('\n[五、本批查到并修掉/记下的几件事]');
 // 蜘蛛眼、恶魂之泪四处来源，而白名单每一次都**自己**缩短
 const drinkableReachable = POTION_ITEMS.filter((entry) => reach.has(entry.id)).length;
 const potionId = (key: string): number => POTION_ITEMS.find((entry) => entry.key === key)!.id;
-equal('**整族药水都能酿出来了**（84 / 84 瓶）', drinkableReachable, POTION_ITEMS.length);
+equal('**整族药水都能酿出来了**（105 / 105 瓶）', drinkableReachable, POTION_ITEMS.length);
 check('剩下的都断在**原料**上，而不是断在"第一件原料从哪来"（下界疣已通）', reach.has(Item.NETHER_WART));
 check('烈焰棒拿得到（烈焰人掉）', reach.has(Item.BLAZE_ROD));
 check('烈焰粉拿得到（1 根棒拆 2 份）', reach.has(Item.BLAZE_POWDER));
@@ -405,9 +402,9 @@ check(
       recipeIngredients(recipe).every((ingredient) => reach.has(ingredient.id)),
   ),
 );
-equal('药水箭的条数是 30（与饮用型一一对应）', TIPPED_ARROWS.length, 30);
+equal('药水箭的条数是 35（与饮用型一一对应）', TIPPED_ARROWS.length, 35);
 const arrowReachable = TIPPED_ARROWS.filter((entry) => reach.has(entry.id)).length;
-equal('药水箭 28 / 28 支全能做（跟着饮用型走）', arrowReachable, TIPPED_ARROWS.length);
+equal('药水箭 35 / 35 支全能做（跟着饮用型走）', arrowReachable, TIPPED_ARROWS.length);
 
 // ② 红石粉：同一件东西注册了两份，酿造用的那份没有任何来源
 equal('红石矿石掉的是红石粉（1004）', dropFor(Block.REDSTONE_ORE)?.id, Item.REDSTONE);
@@ -519,10 +516,10 @@ check(
     CHAINMAIL_PIECES.every((id) => MOB_TYPES.every((type) => type.drops.every((drop) => drop.itemId !== id))),
 );
 
-// ⑤ 兔子脚 / 恶魂之泪：理由要能机器验证——真的没有那种生物在掉它
+// ⑤ 兔子脚（批次 545）：跳跃药水的原料，兔子要真的掉它
 check(
-  '"没有该生物"这条理由仍然成立（生物表里没有任何东西掉兔子脚）',
-  DROPPING_MOB_TYPES.every((type) => type.drops.every((drop) => drop.itemId !== Item.RABBIT_FOOT)),
+  '兔子掉兔脚（跳跃药水的原料链）',
+  MOB_TYPES.some((type) => type.id === 'rabbit' && type.drops.some((drop) => drop.itemId === Item.RABBIT_FOOT)),
 );
 check(
   '（批次 94 之后）恶魂之泪有来源了：恶魂在生物表里且掉它',

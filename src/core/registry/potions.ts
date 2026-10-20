@@ -130,6 +130,15 @@ export const POTION_IDS = {
   // 所以这一条从 1248 起，`test:brewing` 有一条断言盯着"四段互不撞车"
   slow_falling: 1248,
   slow_falling_long: 1249,
+  // ---- 批次 545：水肺与跳跃（1.18 本来就有的两条）
+  // 1555~1559 的四个派生段（+50=1605~ / +100=1655~ / +200=1755~）都是空的；
+  // `test:brewing` 的"四段互不撞车"断言会复核这件事。
+  // ⚠️ 1270~1274 被下界合金工具占着，不能拿来当药水 id
+  water_breathing: 1555,
+  leaping: 1556,
+  leaping_long: 1557,
+  leaping_strong: 1558,
+  water_breathing_long: 1559,
 } as const;
 
 /**
@@ -307,6 +316,28 @@ export const POTION_VARIANTS: readonly PotionVariant[] = [
     baseId: POTION_IDS.slow_falling,
     longId: POTION_IDS.slow_falling_long,
   },
+  {
+    key: 'water_breathing',
+    name: '水肺药水',
+    effect: 'water_breathing',
+    // 原版：3:00，延长 8:00，没有水肺 II
+    seconds: 180,
+    extended: 480,
+    baseId: POTION_IDS.water_breathing,
+    longId: POTION_IDS.water_breathing_long,
+  },
+  {
+    key: 'leaping',
+    name: '跳跃药水',
+    effect: 'jump_boost',
+    // 原版：3:00，延长 8:00，强化 II 1:30
+    seconds: 180,
+    extended: 480,
+    strong: { amplifier: 1, seconds: 90 },
+    baseId: POTION_IDS.leaping,
+    longId: POTION_IDS.leaping_long,
+    strongId: POTION_IDS.leaping_strong,
+  },
 ];
 
 /** 按 key 拿变体（酿造链与断言都按 key 找） */
@@ -349,7 +380,7 @@ function entry(variant: PotionVariant, tier: PotionTier, id: number, seconds: nu
   };
 }
 
-/** 所有**饮用型**药水（含粗制）：9 种效果 × 各自有的档位 + 粗制，共 24 条 */
+/** 所有**饮用型**药水（含粗制）：14 种效果 × 各自有的档位 + 粗制，共 35 条 */
 export const DRINKABLE: readonly PotionEntry[] = [
   AWKWARD,
   ...POTION_VARIANTS.flatMap((variant): PotionEntry[] => {
@@ -392,7 +423,7 @@ function twinEntry(potion: PotionEntry, kind: 'splash' | 'lingering'): PotionEnt
 }
 
 /**
- * 全部药水物品：**饮用型 + 喷溅型 + 滞留型，每种一一对应，共 28 × 3 = 84 条**。
+ * 全部药水物品：**饮用型 + 喷溅型 + 滞留型，每种一一对应，共 35 × 3 = 105 条**。
  *
  * 三份放在一起是有意的——酿造链（+ 火药 → 喷溅、+ 龙息 → 滞留）与贴图生成
  * 都按这张表遍历，分成三张表就会出现"新药水只加进了其中一张"的半残状态。

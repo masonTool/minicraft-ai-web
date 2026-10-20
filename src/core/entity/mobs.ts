@@ -1533,7 +1533,9 @@ export const RABBIT_TYPE: MobType = {
   hostile: false,
   attackDamage: 0,
   followRange: 0,
-  drops: [],
+  // 兔脚（批次 545）：跳跃药水的原料。原版约 10%，抢夺提高概率——
+  // 本项目的 `MobDrop.chance` 不读抢夺等级，所以这里只钉基础概率
+  drops: [{ itemId: Item.RABBIT_FOOT, min: 1, max: 1, chance: 0.1 }],
   xp: 1,
   feed: [Item.CARROT, Item.GOLDEN_CARROT],
   spawnBiomes: ['plains', 'sunflower_plains', 'desert', 'taiga', 'snowy_plains', 'meadow', 'forest'],
