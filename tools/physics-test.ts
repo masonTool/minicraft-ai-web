@@ -704,10 +704,19 @@ console.log('\n[下落方块（批次 543）]');
   };
 
   check(
-    '沙子/红沙/沙砾/混凝土粉末都会下落',
-    [Block.SAND, Block.RED_SAND, Block.GRAVEL, CONCRETE_POWDER_ID_START].every(isFallingBlock),
+    '沙子/红沙/沙砾/混凝土粉末/脚手架都会下落',
+    [Block.SAND, Block.RED_SAND, Block.GRAVEL, CONCRETE_POWDER_ID_START, Block.SCAFFOLDING].every(isFallingBlock),
   );
   check('石头与空气不会下落', !isFallingBlock(Block.STONE) && !isFallingBlock(Block.AIR));
+
+  // 脚手架（批次 554）：抽掉下面那节，上面那节也会掉
+  world.set(2, 63, 0, Block.STONE);
+  world.set(2, 64, 0, Block.SCAFFOLDING);
+  world.set(2, 63, 0, Block.AIR);
+  const scaffoldFall = new FallingBlocks();
+  scaffoldFall.wakeAfterChange(world, 2, 63, 0);
+  scaffoldFall.tick(world, FALL_STEP_SECONDS);
+  check('脚手架失去支撑后下落一格', world.getBlock(2, 63, 0) === Block.SCAFFOLDING);
 
   const fb = new FallingBlocks();
   world.set(0, 64, 0, Block.STONE);

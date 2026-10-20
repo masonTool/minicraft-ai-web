@@ -1,7 +1,7 @@
 /**
  * 下落方块（B8 尾巴 / 批次 543）
  *
- * 原版里沙子、红沙、沙砾、混凝土粉末在**下方失去支撑**时是实体（`FallingBlock`）：
+ * 原版里沙子、红沙、沙砾、混凝土粉末与**脚手架**在**下方失去支撑**时是实体：
  * 会掉下去、能被推动、落地变成方块、砸到生物有伤害。本项目以前把它们当普通静态方块，
  * 于是"抽掉沙柱底下的方块，上面整柱悬空"——这是方块物理里最容易被玩家发现的一条差异。
  *
@@ -31,6 +31,9 @@ const MAX_Y = 319;
 /** 这些方块在失去支撑时会下落 */
 export function isFallingBlock(id: number): boolean {
   if (id === Block.SAND || id === Block.RED_SAND || id === Block.GRAVEL) return true;
+  // 脚手架（批次 554）：原版拆掉底下一节，上面整片会跟着掉；
+  // 这里复用同一套"一格一格下落"，观感与沙子一致
+  if (id === Block.SCAFFOLDING) return true;
   // 16 色混凝土粉末：id 连续，落在 [START, START+16)
   return id >= CONCRETE_POWDER_ID_START && id < CONCRETE_POWDER_ID_START + 16;
 }
