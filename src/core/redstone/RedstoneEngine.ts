@@ -1402,7 +1402,7 @@ export class RedstoneEngine {
       keys.add(key);
       group.push({ x, y, z, id, state: world.getState(x, y, z) });
       if (group.length > 12) return false;
-      if (id !== Block.SLIME_BLOCK) continue;
+      if (id !== Block.SLIME_BLOCK && id !== Block.HONEY_BLOCK) continue;
       for (const [ox, oy, oz] of NEIGHBORS) {
         if (!keys.has(keyOf(x + ox, y + oy, z + oz))) queue.push([x + ox, y + oy, z + oz]);
       }
@@ -1449,7 +1449,7 @@ export class RedstoneEngine {
     if (!canPush(frontId)) return false;
 
     // 黏液块（批次 557）：把它粘着的相邻方块整组带走
-    if (frontId === Block.SLIME_BLOCK) {
+    if (frontId === Block.SLIME_BLOCK || frontId === Block.HONEY_BLOCK) {
       if (!this.pushSlimeCluster(world, fx, fy, fz, dx, dy, dz)) return false;
       world.setBlock(fx, fy, fz, Block.PISTON_HEAD, withSixFacing(0, facing));
       this.markDirty(fx, fy, fz);
@@ -1484,7 +1484,7 @@ export class RedstoneEngine {
       const pz = hz + dz;
       const pulled = world.getBlock(px, py, pz);
       // 黏液块（批次 557）：收回时把整组一起拉回来
-      if (pulled === Block.SLIME_BLOCK) {
+      if (pulled === Block.SLIME_BLOCK || pulled === Block.HONEY_BLOCK) {
         this.pushSlimeCluster(world, px, py, pz, -dx, -dy, -dz);
         return true;
       }

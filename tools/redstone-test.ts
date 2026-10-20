@@ -407,6 +407,28 @@ console.log('\n[黏液块：活塞推动/拉回整组（批次 557）]');
   check('更前面那格清空', world.getBlock(4, Y, 0) === Block.AIR);
 }
 
+console.log('\n[蜂蜜块：与黏液块同一条粘性通道（批次 577）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.STICKY_PISTON, withFacing(0, 1));
+  world.setBlock(2, Y, 0, Block.HONEY_BLOCK, 0);
+  world.setBlock(3, Y, 0, Block.STONE, 0);
+  engine.onBlockChanged(world, 1, Y, 0);
+  step(engine, world, 0.1);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('蜂蜜块被推到前面一格', world.getBlock(3, Y, 0) === Block.HONEY_BLOCK);
+  check('粘在蜂蜜块上的石头也被带走', world.getBlock(4, Y, 0) === Block.STONE);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('收回时蜂蜜块回到活塞前方', world.getBlock(2, Y, 0) === Block.HONEY_BLOCK);
+  check('石头也跟着回到蜂蜜块前面', world.getBlock(3, Y, 0) === Block.STONE);
+}
+
 console.log('\n[中继器侧向锁存（批次 561）]');
 {
   const world = new StubWorld();
