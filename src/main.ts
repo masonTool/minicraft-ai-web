@@ -1864,7 +1864,13 @@ class App {
     // 而不是让 `new WebGLRenderer` 那行红字把整页留成白屏
     try {
       this.renderer = new THREE.WebGLRenderer({
-        antialias: false,
+        // 抗锯齿（批次 521）：方块的斜棱、台阶轮廓、生物的斜边原本都是硬边，
+        // 透视下没有一条边是正交的，所以"斜着的线条有毛刺"最明显。
+        //
+        // 这个属性**只能在创建上下文时给**，改它要重载页面。带价的部分只有一个：
+        // 透明叠加（水面/雨点/云/粒子）会按 sample 数混合；不透明几何在移动端的
+        // TBDR 上基本免费。真机若因此掉帧，把它改回 false 即可（其余改动不依赖它）。
+        antialias: true,
         // 手机上 high-performance 会钉在大核/高功耗 GPU，几分钟后降频，帧时间反而更差
         powerPreference: isTouchDevice() ? 'default' : 'high-performance',
         alpha: false,
@@ -1878,6 +1884,9 @@ class App {
     this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), this.perf.resolutionScale, this.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
+    // 选中描边是按**屏幕像素**算宽度的（批次 521），第一次就要把背板尺寸告诉它，
+    // 否则第一帧到第一次 resize 之间描边宽度是 1 个像素（= 半个 CSS 像素）
+    this.syncOutlineViewport();
     // 图集各向异性（批次 520）：只在拿到 renderer 之后才能开（three 会按设备上限夹）。
     // 斜视地面/墙壁时 LOD 由长轴决定，没有它会糊成一块色；图集已加 8 纹素边距，
     // 足迹跨出去看到的是自己的外扩而不是邻居贴图（见 TextureAtlas.syncUploadCanvas）。
@@ -1898,7 +1907,8 @@ class App {
     // 深度精度与 near 成正比，抬到 0.25 等于白拿 2.5 倍精度——远景的共面闪烁与
     // 缝隙（方块贴方块的地方）主要就是它。
     this.camera = new THREE.PerspectiveCamera(
-      72,
+      // 这里只是**初值**：真正的视野在下面按 `settings.fov`（默认 60°，批次 521）落一次
+      60,
       window.innerWidth / window.innerHeight,
       CAMERA_NEAR,
       cameraFarFor(this.viewDistance),
@@ -2156,10 +2166,10 @@ class App {
     this.settings.adaptiveResolution = true;
     this.settings.adaptiveViewDistance = true;
     this.settings.viewDistance = defaultViewDistanceFor(isTouchDevice());
-    // 视野同样按设备封顶（批次 215）：手机 90°。自适应管不到 FOV，
-    // 而 72°→110° 是约 2 倍的可视范围，老存档里存着的 110 必须在这里夹掉
+    // 视野同样按设备封顶（批次 215；批次 521 起上限统一 90°）。自适应管不到 FOV，
+    // 而 60°→110° 是约 1.7 倍的可视范围，老存档里存着的 110 必须在这里夹掉
     this.settings.fov = clampFovFor(this.settings.fov, isTouchDevice());
-    // ⚠️ 相机是上面按**硬编码 72°** 建的，这里必须落一次真正的值：
+    // ⚠️ 相机是上面按**硬编码 60°** 建的，这里必须落一次真正的值：
     // 以前只有 `applySettings` 会写 `camera.fov`，于是"视野调到 90"重启之后就没了
     // （要等玩家进设置动一下才生效）——这也是批次 215 顺手修的
     this.camera.fov = this.settings.fov;
@@ -2320,8 +2330,12 @@ class App {
       // 轻点抬起（批次 181）：**先看准星下有没有生物**——
       // 有就是攻击（生物不是可放置面），没有才走"交互 / 放置一次"那条老路
       onTap: (clientX: number, clientY: number) => {
-        // 批次 271：瞄准方式决定"这一下打哪"——手指落点，或屏幕中心的老方式
-        const aim = this.usesCenterAim() ? this.screenCenterPoint() : { x: clientX, y: clientY };
+        // 批次 271：瞄准方式决定"这一下打哪"——手指落点，或屏幕中心的老方式。
+        // 批次 521：手指落点要先挪到**白圈的左上/右上边缘**（手指会盖住目标格），
+        // 这条换算在 `TouchControls.aimPointAt` 里，白圈本身仍然跟手。
+        const aim = this.usesCenterAim()
+          ? this.screenCenterPoint()
+          : (this.touch?.aimPointAt(clientX, clientY) ?? { x: clientX, y: clientY });
         // 批次 239：记下这一下的落点——**方块目标**也改由它决定（不只是生物）
         this.touchTapPoint = aim;
         // 批次 244：点到船 → 上船（船不是生物，单独一条；优先于生物与方块）
@@ -14280,6 +14294,17 @@ class App {
     // 粒子的点尺寸是按"设备像素"算的（`setViewport` 拿的就是缓冲区高度），
     // 所以分辨率一变要重新告诉它一次，否则粒子会跟着分辨率一起变大或变小
     this.particles.setViewport(this.camera.fov, this.renderer.domElement.height);
+    // 选中描边同理（批次 521）：它的宽度也是设备像素口径
+    this.syncOutlineViewport();
+  }
+
+  /** 把背板尺寸与像素比同步给选中描边（分辨率/窗口变化时都要走一次） */
+  private syncOutlineViewport(): void {
+    this.outline.setViewport(
+      this.renderer.domElement.width,
+      this.renderer.domElement.height,
+      this.renderer.getPixelRatio(),
+    );
   }
 
   /**

@@ -1574,7 +1574,8 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
 {
   equal('摇杆两档（与基岩版一致）', STICK_MODES.join(','), 'fixed,dynamic');
   check('两档都有中文名', STICK_MODES.every((mode) => STICK_MODE_LABELS[mode].length > 0));
-  equal('默认固定（肌肉记忆优先）', DEFAULT_SETTINGS.touchStick, 'fixed');
+  // 批次 521：用户要求默认改成"跟随手指"（左下随便一按就是摇杆，躺着玩单手也够得着）
+  equal('默认跟随手指', DEFAULT_SETTINGS.touchStick, 'dynamic');
   equal('按钮大小默认 1×（不改任何既有尺寸）', DEFAULT_SETTINGS.touchScale, 1);
   // ⚠️ 触摸相关的每一处尺寸都必须乘 `--touch-scale`：竖屏/横屏那两段媒体查询里
   // 原来写死了像素值（同优先级、后出现 → 会盖掉带变量的那条），
@@ -3019,17 +3020,14 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     !/setDoubleSided[\s\S]{0,200}needsUpdate/.test(renderMapSrc),
   );
 
-  // 批次 215：视野也是"同屏画多少"的乘数，但自适应管不到它 → 手机上封 90° 并说明
+  // 批次 215 / 521：视野也是"同屏画多少"的乘数，但自适应管不到它 → 滑块与运行时
+  // 必须共用同一处策略（`fovCapFor` / `clampFovFor`）。批次 521 起上限统一 90°，
+  // 那句"手机视野上限 90°"的说明行随之撤掉（与滑杆右端重复）。
   check(
-    '手机视野封 90°，且滑块上限与运行时夹紧共用同一处策略',
+    '视野滑块与运行时夹紧共用同一处策略',
     settingsSrc.includes('fovCapFor(isTouchUi())') &&
-      settingsSrc.includes('this.makeNote(controlSliders') &&
       appSrc.includes('clampFovFor(this.settings.fov, isTouchDevice())') &&
       appSrc.includes('clampFovFor(settings.fov, mobile)'),
-  );
-  check(
-    '说明行有样式（跨满整行，不压到半栏）',
-    /\.settings-note \{[^}]*grid-column: 1 \/ -1;/.test(css),
   );
   // 顺手修的：相机是按硬编码 72° 建的，以前"视野 90"重启后要进设置动一下才生效
   check(

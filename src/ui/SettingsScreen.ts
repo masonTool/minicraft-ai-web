@@ -29,7 +29,7 @@ import {
   type Language,
 } from '../core/i18n/I18n.ts';
 import { GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
-import { FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
+import { FOV_MAX, FOV_MIN, MOBILE_VIEW_DISTANCE_MAX, fovCapFor } from '../core/world/PerfPolicy.ts';
 import {
   HANDEDNESS_LABELS,
   HANDEDNESS_MODES,
@@ -101,13 +101,16 @@ export const TOUCH_SCALE_MIN = 0.8;
 export const TOUCH_SCALE_MAX = 1.4;
 
 /**
- * 灵敏度档位（批次 271，用户要求）：0~8，**4 是正中间**（= 1×）。
+ * 灵敏度档位（批次 271，用户要求；批次 521 把下限从 0 抬到 1）：**1~8，4 是正中间**（= 1×）。
  *
  * 以前存的是 0.5~4 的倍率（默认 1），滑块两头手感不对称：往左只能减半，
- * 往右能翻四倍。改成档位后两边对称：每两档翻一倍，0=0.25×、4=1×、8=4×。
+ * 往右能翻四倍。改成档位后两边对称：每两档翻一倍，1=0.35×、4=1×、8=4×。
  * `sensitivityGain()` 是唯一的换算出处，鼠标/触摸/手柄三条路径都读它。
+ *
+ * ⚠️ 下限为什么不是 0：档位 0 那档（0.25×）在实际游玩里没人会用，滑杆左端却因此
+ * 多停一格；用户的原话是"范围拓展为 1 到 8"，默认仍是 4。
  */
-export const SENSITIVITY_MIN = 0;
+export const SENSITIVITY_MIN = 1;
 export const SENSITIVITY_MAX = 8;
 export const SENSITIVITY_DEFAULT = 4;
 
@@ -140,13 +143,19 @@ export const TOUCH_AIM_MODE_LABELS: Record<TouchAimMode, string> = {
 };
 
 /**
- * 设置格式版本（批次 271）。
+ * 设置格式版本（批次 271；批次 521 升到 3）。
  *
- * 版本 1 = 灵敏度存的是 0.5~4 的倍率；版本 2 = 灵敏度存 0~8 的档位。
+ *  - 版本 1 = 灵敏度存的是 0.5~4 的倍率；
+ *  - 版本 2 = 灵敏度存 0~8 的档位（批次 521 起下限是 1）；
+ *  - 版本 3 = 视野默认 72° → **60°**、摇杆默认 固定 → **跟随手指**。
+ *
  * **必须显式存版本**：老默认值 1 在新口径里是"档位 1"，直接 clamp 会把
  * 所有老玩家的灵敏度从 1× 悄悄降到 0.7×。
+ *
+ * 版本 3 的迁移只改"还停在旧默认值上"的那几项（见 `loadSettings`）：
+ * 玩家自己调过的 72° 或"固定摇杆"要保留——迁移默认值不等于覆盖玩家的选择。
  */
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 
 /**
  * 场景亮度的范围（批次 220）：0.5 ~ 2，1 = 原始亮度。
@@ -244,7 +253,7 @@ export interface GameSettings {
   language: Language;
   /** 视距（区块）：4~16。影响流式加载范围与雾的远近 */
   viewDistance: number;
-  /** 视野角度（度）：60~110 */
+  /** 视野角度（度）：45~90，默认 60（见 `FOV_MIN` / `FOV_MAX`） */
   fov: number;
   /** 主音量 0~1（K5 的音效会用） */
   volume: number;
@@ -379,7 +388,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   settingsVersion: SETTINGS_VERSION,
   language: DEFAULT_LANGUAGE,
   viewDistance: 12,
-  fov: 72,
+  // 视野默认 60°（批次 521，用户要求；基岩版默认也是 60），范围 45~90 见 `FOV_MIN/FOV_MAX`
+  fov: 60,
   volume: 0.7,
   volumeBlocks: 1,
   volumeMobs: 1,
@@ -415,7 +425,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   adaptiveViewDistance: true,
   adaptiveResolution: true,
   maxFps: 0,
-  touchStick: 'fixed',
+  touchStick: 'dynamic',
   touchScale: 1,
 };
 
@@ -443,18 +453,26 @@ export function loadSettings(): GameSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<GameSettings>;
-    // 版本 1 的灵敏度是 0.5~4 的倍率（默认 1）；版本 2 是 0~8 的档位（默认 4）
+    // 版本 1 的灵敏度是 0.5~4 的倍率（默认 1）；版本 2 起是档位（默认 4）。
+    // ⚠️ 判据写死 `>= 2` 而不是 `>= SETTINGS_VERSION`：版本 3 只改了别的字段，
+    // 灵敏度的存法没变，拿 `>= SETTINGS_VERSION` 会把 v2 存档的"档位 4"当成倍率 4
+    // 再走一遍迁移 → 变成档位 8（灵敏度翻四倍）。
     const storedVersion = typeof parsed.settingsVersion === 'number' ? parsed.settingsVersion : 1;
     const sensitivity =
-      storedVersion >= SETTINGS_VERSION
+      storedVersion >= 2
         ? Math.round(clampNumber(parsed.sensitivity, SENSITIVITY_MIN, SENSITIVITY_MAX, SENSITIVITY_DEFAULT))
         : sensitivityLevelFromGain(clampNumber(parsed.sensitivity, 0.5, 4, 1));
+    // 版本 3 的默认值迁移（批次 521）：**只改还停在旧默认值上的项**。
+    // 72° 与"固定摇杆"是 v2 的出厂值；玩家真调过就按他调的那个留着。
+    const legacy = storedVersion < 3;
+    const migratedFov = legacy && parsed.fov === 72 ? DEFAULT_SETTINGS.fov : parsed.fov;
+    const migratedStick = legacy && parsed.touchStick === 'fixed' ? DEFAULT_SETTINGS.touchStick : parsed.touchStick;
     return {
       settingsVersion: SETTINGS_VERSION,
       // 语言：只认 zh / en，写坏了回退默认（不做"从标签推断"——存档里的选择优先）
       language: isLanguage(parsed.language) ? parsed.language : DEFAULT_SETTINGS.language,
       viewDistance: clampNumber(parsed.viewDistance, 4, 16, DEFAULT_SETTINGS.viewDistance),
-      fov: clampNumber(parsed.fov, 60, 110, DEFAULT_SETTINGS.fov),
+      fov: clampNumber(migratedFov, FOV_MIN, FOV_MAX, DEFAULT_SETTINGS.fov),
       volume: clampNumber(parsed.volume, 0, 1, DEFAULT_SETTINGS.volume),
       // 四组音量（批次 178）：脏数据一律回退到 1（= 不额外衰减）
       volumeBlocks: clampNumber(parsed.volumeBlocks, 0, 1, DEFAULT_SETTINGS.volumeBlocks),
@@ -508,8 +526,8 @@ export function loadSettings(): GameSettings {
       adaptiveViewDistance: parsed.adaptiveViewDistance !== false,
       adaptiveResolution: parsed.adaptiveResolution !== false,
       maxFps: FPS_CAPS.includes(parsed.maxFps as number) ? (parsed.maxFps as number) : DEFAULT_SETTINGS.maxFps,
-      touchStick: STICK_MODES.includes(parsed.touchStick as StickMode)
-        ? (parsed.touchStick as StickMode)
+      touchStick: STICK_MODES.includes(migratedStick as StickMode)
+        ? (migratedStick as StickMode)
         : DEFAULT_SETTINGS.touchStick,
       touchScale: clampNumber(parsed.touchScale, TOUCH_SCALE_MIN, TOUCH_SCALE_MAX, DEFAULT_SETTINGS.touchScale),
     };
@@ -1064,7 +1082,8 @@ export class SettingsScreen {
         (level) => `${level}（×${sensitivityGain(level).toFixed(2)}）`,
       ),
     );
-    if (isTouchUi()) this.makeNote(controlSliders, `手机视野上限 ${fovCapFor(true)}°`);
+    // 批次 521 起桌面的上限也收到 90°，这句"手机视野上限 90°"的说明反而成了噪音
+    // （滑杆右端就写着 90），所以撤掉。
 
     const sound = this.section('sound');
     // 音频页全是滑杆：两列排，主音量与分组音量分开读
@@ -1286,20 +1305,9 @@ export class SettingsScreen {
     return group;
   }
 
-  /**
-   * 一行浅色说明（批次 215）。
-   *
-   * 与开关/滑块不同，它不可点、不占控件位置，只回答"为什么这么定"——
-   * 用户的原话是"给一点提示，可能会影响性能，会好一点"。所以只在**真的有代价**
-   * 的那一项下面出现，不做成通用帮助文本（那会变成噪音）。
-   */
-  private makeNote(host: HTMLElement, text: string): HTMLDivElement {
-    const note = document.createElement('div');
-    note.className = 'settings-note';
-    note.textContent = text;
-    host.appendChild(note);
-    return note;
-  }
+  // 批次 521：`makeNote`（"浅色说明"那行）随最后一条说明一起删掉了——
+  // 视野上限收到 90° 之后，"手机视野上限 90°"与滑杆右端的读数重复。
+  // 以后若又出现"真的有代价、需要解释"的设置项，可以从 git 历史里取回这个函数。
 
   /**
    * 设置分组里的一块（批次 335）：**同类控件聚在一起**，块内两列、块间一条细分隔线。

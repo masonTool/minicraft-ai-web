@@ -18,6 +18,7 @@
 
 import * as THREE from 'three';
 import { ARMOR_STAND_SLOTS, armorDisplayColor } from '../core/world/ArmorStands.ts';
+import { applyBoxFaceShade } from './boxShading.ts';
 
 /**
  * 每个槽位的盒子（相对方块原点，单位是格）。
@@ -67,8 +68,13 @@ interface StandEntry {
 /** 最低亮度：与展示框同一个理由（夜里/洞里也要看得清穿了什么） */
 const MIN_BRIGHTNESS = 0.4;
 
-/** 阴影系数：不同朝向的面压暗一点，否则纯色盒子看着是一块平面 */
-const FACE_SHADE = { px: 0.86, nx: 0.74, py: 1, ny: 0.62, pz: 0.92, nz: 0.8 } as const;
+/**
+ * 阴影系数（批次 521 起统一到 `boxShading`）。
+ *
+ * 数值没变（+X .86 / -X .74 / +Y 1 / -Y .62 / +Z .92 / -Z .8），只是生物与玩家也要用，
+ * 三处各抄一份迟早会漂——现在只有 `BOX_FACE_SHADE` 一个出处。
+ */
+
 
 export class ArmorStandRenderer {
   readonly group = new THREE.Group();
@@ -155,13 +161,9 @@ export class ArmorStandRenderer {
     let geometry = this.geometries.get(key);
     if (!geometry) {
       const geometry2 = new THREE.BoxGeometry(1, 1, 1);
-      // 逐面压暗：把六个面的法线方向烘进顶点色（纯白 → 乘阴影系数）
-      const colors: number[] = [];
-      const shades = [FACE_SHADE.px, FACE_SHADE.nx, FACE_SHADE.py, FACE_SHADE.ny, FACE_SHADE.pz, FACE_SHADE.nz];
-      for (const shade of shades) {
-        for (let vertex = 0; vertex < 4; vertex++) colors.push(shade, shade, shade);
-      }
-      geometry2.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      // 逐面压暗：把六个面的法线方向烘进顶点色（纯白 → 乘阴影系数）。
+      // 批次 521 起与生物/玩家共用同一张表（`boxShading`），不再各写一份。
+      applyBoxFaceShade(geometry2);
       this.geometries.set(key, geometry2);
       geometry = geometry2;
     }

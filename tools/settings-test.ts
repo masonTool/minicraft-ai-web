@@ -36,7 +36,7 @@ import {
   sensitivityLevelFromGain,
   type GameSettings,
 } from '../src/ui/SettingsScreen.ts';
-import { HANDEDNESS_LABELS, HANDEDNESS_MODES } from '../src/ui/TouchControls.ts';
+import { HANDEDNESS_LABELS, HANDEDNESS_MODES, fingerAimPoint } from '../src/ui/TouchControls.ts';
 import { CAMERA_MODES, CAMERA_MODE_LABELS } from '../src/core/viewMode.ts';
 import {
   FRAME_TIME_DROP,
@@ -95,15 +95,19 @@ console.log('\n[默认设置]');
   check('自动跳跃默认开（与基岩版一致，老存档缺字段也按开）', DEFAULT_SETTINGS.autoJump === true && fallback.autoJump === true);
   // 批次 219：触摸端没有独立使用键，进食要借用"长按空处"，1.6 秒 + 280ms 太磨
   check('快速进食默认开（老存档缺字段也按开）', DEFAULT_SETTINGS.fastEat === true && fallback.fastEat === true);
-  check('默认视距/视野在合理范围', DEFAULT_SETTINGS.viewDistance >= 4 && DEFAULT_SETTINGS.viewDistance <= 16 && DEFAULT_SETTINGS.fov >= 60 && DEFAULT_SETTINGS.fov <= 110);
-  // 批次 271：灵敏度改成 0~8 档，默认正中间 4
+  check('默认视距/视野在合理范围', DEFAULT_SETTINGS.viewDistance >= 4 && DEFAULT_SETTINGS.viewDistance <= 16 && DEFAULT_SETTINGS.fov >= 45 && DEFAULT_SETTINGS.fov <= 90);
+  // 批次 521：视野默认 60°（基岩版同款），范围 45~90
+  check('视野默认 60°', DEFAULT_SETTINGS.fov === 60 && fallback.fov === 60, String(DEFAULT_SETTINGS.fov));
+  // 批次 271：灵敏度改成档位，默认正中间 4；批次 521 下限抬到 1
   check(
-    '灵敏度默认 4（正中间，= 1×）',
-    DEFAULT_SETTINGS.sensitivity === 4 && SENSITIVITY_DEFAULT === 4 && SENSITIVITY_MIN === 0 && SENSITIVITY_MAX === 8,
+    '灵敏度默认 4（正中间，= 1×），范围 1~8',
+    DEFAULT_SETTINGS.sensitivity === 4 && SENSITIVITY_DEFAULT === 4 && SENSITIVITY_MIN === 1 && SENSITIVITY_MAX === 8,
   );
   check('默认瞄准方式是手指落点', DEFAULT_SETTINGS.aimMode === 'finger');
   check('默认右手模式（摇杆在左）', DEFAULT_SETTINGS.handedness === 'right');
-  check('设置格式版本是 2', DEFAULT_SETTINGS.settingsVersion === SETTINGS_VERSION && SETTINGS_VERSION === 2);
+  // 批次 521：摇杆默认改成"跟随手指"（用户要求），老存档里停在 fixed 的在迁移时跟着改
+  check('摇杆默认跟随手指', DEFAULT_SETTINGS.touchStick === 'dynamic' && fallback.touchStick === 'dynamic');
+  check('设置格式版本是 3', DEFAULT_SETTINGS.settingsVersion === SETTINGS_VERSION && SETTINGS_VERSION === 3);
 }
 
 // ---------------------------------------------------------------- 2. 容错
@@ -134,13 +138,24 @@ console.log('\n[设置的容错]');
   );
   const messy = loadSettings();
   check('视距被夹回上限', messy.viewDistance === 16, String(messy.viewDistance));
-  check('视野被夹回下限', messy.fov === 60, String(messy.fov));
+  check('视野被夹回下限', messy.fov === 45, String(messy.fov));
   check('音量被夹回 1', messy.volume === 1, String(messy.volume));
-  check('灵敏度档位被夹回 0', messy.sensitivity === 0, String(messy.sensitivity));
+  check('灵敏度档位被夹回 1', messy.sensitivity === 1, String(messy.sensitivity));
   storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, sensitivity: 9 }));
   check('灵敏度上限是 8（批次 271）', loadSettings().sensitivity === 8, String(loadSettings().sensitivity));
   storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, sensitivity: 6.7 }));
   check('档位取整（6.7 → 7）', loadSettings().sensitivity === 7, String(loadSettings().sensitivity));
+
+  // 批次 521：v2 → v3 的**默认值迁移**——只改"还停在旧默认值"的那两项，
+  // 玩家自己调过的值必须留着（迁移默认值 ≠ 覆盖玩家的选择）
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, fov: 72, touchStick: 'fixed' }));
+  const migrated = loadSettings();
+  check('v2 的旧默认视野 72 → 60', migrated.fov === 60, String(migrated.fov));
+  check('v2 的旧默认摇杆 fixed → dynamic', migrated.touchStick === 'dynamic', migrated.touchStick);
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, fov: 80, touchStick: 'fixed' }));
+  check('玩家调过的视野 80 不被迁移覆盖', loadSettings().fov === 80, String(loadSettings().fov));
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 3, fov: 72 }));
+  check('v3 存档里的 72 原样保留（不再迁移）', loadSettings().fov === 72, String(loadSettings().fov));
 
   // 批次 271：老存档的"倍率"要迁成新档位（1× → 4，不是档位 1）
   storage.setItem(KEY, JSON.stringify({ sensitivity: 1 }));
@@ -197,7 +212,9 @@ console.log('\n[保存与读取]');
 console.log('\n[灵敏度档位 / 瞄准方式 / 左右手（批次 271）]');
 {
   check('4 档 = 1×（正中间不改变既有手感）', Math.abs(sensitivityGain(4) - 1) < 1e-9);
-  check('0 档 = 0.25×', Math.abs(sensitivityGain(0) - 0.25) < 1e-9, String(sensitivityGain(0)));
+  // 批次 521：下限从 0 抬到 1（用户："范围拓展为 1 到 8"），1 档 = 2^(-3/2) ≈ 0.354
+  check('1 档 ≈ 0.35×（新的下限）', Math.abs(sensitivityGain(1) - 2 ** -1.5) < 1e-9, String(sensitivityGain(1)));
+  check('0 档（越界）被夹到 1 档', Math.abs(sensitivityGain(0) - sensitivityGain(1)) < 1e-12);
   check('8 档 = 4×（与老滑块的上限一致）', Math.abs(sensitivityGain(8) - 4) < 1e-9, String(sensitivityGain(8)));
   check('每两档翻一倍', Math.abs(sensitivityGain(6) - 2) < 1e-9 && Math.abs(sensitivityGain(2) - 0.5) < 1e-9);
   check('越界档位被夹住', sensitivityGain(-3) === sensitivityGain(0) && sensitivityGain(99) === sensitivityGain(8));
@@ -210,6 +227,19 @@ console.log('\n[灵敏度档位 / 瞄准方式 / 左右手（批次 271）]');
 
   check('瞄准方式只有两档，且都有中文标签', TOUCH_AIM_MODES.join(',') === 'finger,center' && TOUCH_AIM_MODES.every((mode) => TOUCH_AIM_MODE_LABELS[mode].length > 0));
   check('左右手只有两档，且都有中文标签', HANDEDNESS_MODES.join(',') === 'right,left' && HANDEDNESS_MODES.every((mode) => HANDEDNESS_LABELS[mode].length > 0));
+
+  // ---- 手指瞄准的取点偏移（批次 521）
+  //
+  // 指肚会盖住目标格，所以右手往**左上**、左手往**右上**各偏 r/√2（45° 圆周点）。
+  const radius = 46;
+  const edge = (radius * Math.SQRT1_2);
+  const right = fingerAimPoint(100, 200, radius, 'right');
+  const left = fingerAimPoint(100, 200, radius, 'left');
+  check('右手取点：左上边缘', Math.abs(right.x - (100 - edge)) < 1e-9 && Math.abs(right.y - (200 - edge)) < 1e-9, `${right.x},${right.y}`);
+  check('左手取点：右上边缘', Math.abs(left.x - (100 + edge)) < 1e-9 && Math.abs(left.y - (200 - edge)) < 1e-9, `${left.x},${left.y}`);
+  check('两种手都往上偏（手指总从下方伸上来）', right.y < 200 && left.y < 200);
+  check('左右镜像（横向偏移等大反向）', Math.abs((right.x - 100) + (left.x - 100)) < 1e-9);
+  check('半径为 0 时原样返回', fingerAimPoint(10, 20, 0, 'right').x === 10 && fingerAimPoint(10, 20, 0, 'right').y === 20);
 
   const storage = new MemoryStorage();
   useStorage(storage);

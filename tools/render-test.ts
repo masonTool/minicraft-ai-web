@@ -36,6 +36,8 @@ import { SHEARED_BODY_COLOR, mobBodyColor } from '../src/render/MobRenderer.ts';
 import { Mob } from '../src/core/entity/Mob.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
 import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/render/BlockOverlay.ts';
+import { buildOutlineGeometry } from '../src/render/BlockOutline.ts';
+import { applyBoxFaceShade } from '../src/render/boxShading.ts';
 import { MobHealthBar } from '../src/render/MobHealthBar.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../src/render/alphaCoverage.ts';
@@ -1060,6 +1062,72 @@ console.log('\n[十字植物贴图的覆盖率下限]');
   }
   // 树叶是实心方块（不靠 alphaTest），覆盖率必须是 100% —— 用户眼中"画质好"的对照组
   equal('树叶是不透明整块（覆盖率 100%）', paintedCoverage('oak_leaves'), 1);
+}
+
+// ---------------------------------------------------------------- 选中描边（批次 521）
+
+console.log('\n[选中描边的屏幕空间带（批次 521）]');
+{
+  // 为什么不再是 1px 的 GL 线段：WebGL 的 `linewidth` 不生效，斜棱会变成阶梯。
+  const geometry = buildOutlineGeometry('cube', 0);
+  const position = geometry.getAttribute('position');
+  const other = geometry.getAttribute('aOther');
+  const side = geometry.getAttribute('aSide');
+  const end = geometry.getAttribute('aEnd');
+
+  equal('一个立方体 = 12 条棱 × 4 顶点', position.count, 48);
+  equal('索引数 = 12 条棱 × 6', geometry.index!.count, 72);
+  equal('每条棱的宽度属性是 ±1 交替', `${side.getX(0)},${side.getX(1)}`, '-1,1');
+  equal('每条棱的两端 aEnd 是 0,0,1,1', `${end.getX(0)},${end.getX(1)},${end.getX(2)},${end.getX(3)}`, '0,0,1,1');
+
+  // ⚠️ 关键不变式：v0/v1（起点）的 aOther 必须等于 v2/v3 的 position，反之亦然。
+  // 写反了那条棱会缩成一个点——画面上只表现为"框缺一条边"，很难联想到是这里。
+  let mismatched = 0;
+  for (let edge = 0; edge < 12; edge++) {
+    const base = edge * 4;
+    const at = (index: number): [number, number, number] => [
+      position.getX(index), position.getY(index), position.getZ(index),
+    ];
+    const to = (index: number): [number, number, number] => [
+      other.getX(index), other.getY(index), other.getZ(index),
+    ];
+    const samePoint = (a: [number, number, number], b: [number, number, number]): boolean =>
+      Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-6;
+    if (!samePoint(to(base), at(base + 2)) || !samePoint(to(base + 2), at(base))) mismatched++;
+  }
+  equal('每条棱的两端互为 aOther', mismatched, 0);
+
+  // 台阶这种多盒形状：盒子数 × 12 条棱
+  const slab = buildOutlineGeometry('slab', 0);
+  check('半砖的棱数是 12 的正整数倍', slab.getAttribute('position').count % 48 === 0, String(slab.getAttribute('position').count));
+}
+
+// ---------------------------------------------------------------- 逐面明暗（批次 521）
+
+console.log('\n[生物/玩家的逐面明暗（批次 521）]');
+{
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  check('方块几何体刷上了顶点色', applyBoxFaceShade(box));
+  const color = box.getAttribute('color');
+  equal('24 个顶点都有颜色', color.count, 24);
+  // BoxGeometry 的面顺序：+X(0-3) -X(4-7) +Y(8-11) -Y(12-15) +Z(16-19) -Z(20-23)
+  equal('顶面最亮（1.0）', color.getX(8), 1);
+  check('底面最暗', color.getX(12) < 0.7, String(color.getX(12)));
+  check('侧面介于两者之间', color.getX(0) > color.getX(12) && color.getX(0) < 1, String(color.getX(0)));
+  check('四个顶点同亮度（逐面而不是逐顶点）', color.getX(8) === color.getX(11));
+  check('重复调用不会覆盖（幂等）', applyBoxFaceShade(box) && box.getAttribute('color').count === 24);
+
+  // 非"6 面 × 4 顶点"的几何体不能乱刷：算错面会把顶面涂成暗的
+  check('平面几何体不刷（宁可不加也别涂错）', applyBoxFaceShade(new THREE.PlaneGeometry(1, 1)) === false);
+
+  // 属性写了、材质没开 `vertexColors` 的话等于没加——这条是那个失败模式的门禁
+  for (const file of ['MobRenderer.ts', 'PlayerRenderer.ts']) {
+    const source = readFileSync(new URL(`../src/render/${file}`, import.meta.url), 'utf8');
+    check(
+      `${file} 打开了 vertexColors`,
+      source.includes('vertexColors: true') && source.includes('applyBoxFaceShade'),
+    );
+  }
 }
 
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);

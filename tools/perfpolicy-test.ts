@@ -561,15 +561,18 @@ console.log('\n[帧内分段计时]');
 
 console.log('\n[视野封顶]');
 {
-  // FOV 也是"同屏要画多少"的乘数（72°→110° ≈ 1.97 倍可视范围），而自适应管不到它，
-  // 所以只能封上限。手机上 90、桌面 110。
+  // FOV 也是"同屏要画多少"的乘数（60°→110° ≈ 1.73 倍可视范围），而自适应管不到它，
+  // 所以只能封上限。批次 521：用户要求范围 45~90，桌面上限也不再放宽。
   equal('手机视野上限 90°', fovCapFor(true), MOBILE_FOV_MAX);
-  equal('桌面视野上限 110°', fovCapFor(false), FOV_MAX);
-  check('手机上限比桌面低（否则封它没有意义）', MOBILE_FOV_MAX < FOV_MAX);
+  equal('桌面视野上限 90°（批次 521 起与手机同一条）', fovCapFor(false), FOV_MAX);
+  equal('手机与桌面共用同一条上限', MOBILE_FOV_MAX, FOV_MAX);
+  equal('下限是 45°（给晕动症玩家）', FOV_MIN, 45);
 
   equal('老存档里的 110 在手机上被夹到 90', clampFovFor(110, true), MOBILE_FOV_MAX);
-  equal('桌面上 110 原样保留', clampFovFor(110, false), 110);
+  equal('桌面上 110 也被夹到 90', clampFovFor(110, false), 90);
   equal('小视野在手机上不被抬高', clampFovFor(70, true), 70);
+  equal('60° 原样保留（新的默认值）', clampFovFor(60, false), 60);
+  equal('44° 被抬到下限', clampFovFor(44, false), 45);
 
   // 脏值：0 / 负数 / NaN 都会让投影矩阵退化（画面全黑或倒过来）
   equal('0 回退到下限', clampFovFor(0, false), FOV_MIN);

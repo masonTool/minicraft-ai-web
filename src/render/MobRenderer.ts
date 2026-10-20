@@ -19,6 +19,7 @@ import type { MobType } from '../core/entity/Mob.ts';
 import { Villager } from '../core/entity/Villager.ts';
 import { DYE_COLORS } from '../core/registry/colors.ts';
 import { VILLAGER_IDLE_ROBE, VILLAGER_SKIN_COLOR } from '../core/registry/villagerTrades.ts';
+import { applyBoxFaceShade } from './boxShading.ts';
 
 /** 剪过毛的羊露出的贴身皮色（原版是把羊毛那层隐藏掉，我们只有一份颜色可用） */
 export const SHEARED_BODY_COLOR = 0xd9c3ad;
@@ -961,7 +962,10 @@ export class MobRenderer {
     //   · 颜色（含光照衰减与受击红闪）写进 instanceColor，逐实例生效
     //   · 走路摆腿/龙扇翅通过逐实例的旋转实现
     this.geometry = new THREE.BoxGeometry(1, 1, 1);
-    this.material = new THREE.MeshBasicMaterial();
+    // 逐面明暗（批次 521）：所有部件共用一个单位方块，六个面原本一样亮 → 远看是一块
+    // 纯色剪影。顶点色只写一次，与 instanceColor（染色/受击/昼夜亮度）相乘叠加。
+    applyBoxFaceShade(this.geometry);
+    this.material = new THREE.MeshBasicMaterial({ vertexColors: true });
     this.mesh = new THREE.InstancedMesh(this.geometry, this.material, MAX_PARTS);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PARTS * 3), 3);

@@ -86,16 +86,24 @@ export const VIEW_DISTANCE_MAX = 16;
 /**
  * 手机上的视野（FOV）上限（批次 215）。
  *
- * FOV 不是视距，但它同样决定"同屏要画多少"：72° → 110° 时水平可视范围约翻一倍
- * （`tan(55°)/tan(36°) ≈ 1.97`），视锥里能进的区块网格与三角形也跟着翻。
+ * FOV 不是视距，但它同样决定"同屏要画多少"：60° → 110° 时水平可视范围约翻一倍
+ * （`tan(55°)/tan(30°) ≈ 1.73`），视锥里能进的区块网格与三角形也跟着翻。
  * 手机屏幕小、离眼近，超过 90° 的"更广"几乎看不出来，却要实打实多画一圈——
- * 而这一项**自适应管不到**（策略只动视距/装饰层/分辨率），所以只能封上限，
- * 并在设置里写一行说明（见 `SettingsScreen`，批次 215）。
+ * 而这一项**自适应管不到**（策略只动视距/装饰层/分辨率），所以只能封上限。
+ *
+ * 批次 521 起桌面的上限也收到 90（见 `FOV_MAX`），这个常量因此与它同值：
+ * 保留它是因为"手机的口径"这个概念还在，将来若要重新分开只需改这一处。
  */
 export const MOBILE_FOV_MAX = 90;
-/** 视野的通用上限（桌面）与下限，与设置界面那颗滑块一致 */
-export const FOV_MAX = 110;
-export const FOV_MIN = 60;
+/**
+ * 视野的通用上限与下限，与设置界面那颗滑块一致（批次 521）。
+ *
+ * 用户要求"默认 60°、范围 45~90"：60° 是基岩版的默认视野，45° 给晕动症玩家，
+ * 90° 是"再大也看不出更多、只是多画一圈"的那个点——于是桌面与手机同一条上限，
+ * `MOBILE_FOV_MAX` 保留成同一个数（它仍是手机上的口径，只是不再比桌面低）。
+ */
+export const FOV_MAX = 90;
+export const FOV_MIN = 45;
 /** 每次调档的步长 */
 export const RESOLUTION_STEP = 0.1;
 /** 视距的地板（再低就没法玩了，与 N6 一致） */
@@ -207,7 +215,7 @@ export function viewDistanceCapFor(playerSetting: number, mobile: boolean): numb
   return Math.max(VIEW_DISTANCE_MIN, cap);
 }
 
-/** 这台设备的视野上限（见 `MOBILE_FOV_MAX`）：手机 90、桌面 110 */
+/** 这台设备的视野上限（见 `MOBILE_FOV_MAX` / `FOV_MAX`）：现在两边都是 90 */
 export function fovCapFor(mobile: boolean): number {
   return mobile ? MOBILE_FOV_MAX : FOV_MAX;
 }

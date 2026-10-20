@@ -126,6 +126,32 @@ export const HANDEDNESS_LABELS: Record<Handedness, string> = {
  */
 export const STICK_DEAD_ZONE_RATIO = 1.0;
 
+/**
+ * 手指瞄准时，取点从"手指正中"挪到白圈边缘的比例（批次 521，用户要求）。
+ *
+ * 白圈半径 r，取 45° 方向上的圆周点 → 偏移量 r/√2 ≈ 0.707r。右手模式往**左上**、
+ * 左手模式往**右上**：指肚是从下方盖住目标格的，往手背那一侧偏一格才能看见它。
+ *
+ * 导出是为了能离线断言"往上是恒定的、左右跟着手换边"。
+ */
+export const AIM_EDGE_FACTOR = Math.SQRT1_2;
+
+/**
+ * 手指落点 → 实际瞄准点（纯函数，离线测试直接钉住）。
+ *
+ * 右手往左上、左手往右上，两个方向都**往上**偏——手指永远是从屏幕下方伸上来的。
+ */
+export function fingerAimPoint(
+  x: number,
+  y: number,
+  radius: number,
+  handedness: Handedness,
+): { x: number; y: number } {
+  const edge = Math.max(0, radius) * AIM_EDGE_FACTOR;
+  const toward = handedness === 'right' ? -1 : 1;
+  return { x: x + toward * edge, y: y - edge };
+}
+
 /** 点 (x, y) 是否落在"摇杆 + 死区"这个圆里（纯函数，离线测试用） */
 export function withinStickDeadZone(
   centerX: number,
@@ -256,6 +282,8 @@ export class TouchControls {
   private stickMode: StickMode = 'fixed';
   /** 左右手模式（批次 271）：只影响摇杆/按钮的边与动态摇杆的拇指区 */
   private handedness: Handedness = 'right';
+  /** 白圈半径（CSS 像素）：手指瞄准的取点要挪到圈的边缘。按下时量一次 */
+  private aimRadius = 46;
   /** 上一次"按下跳跃键"的时刻（双击起飞用） */
   private lastJumpDown = 0;
   /** 上一次"按下摇杆"的时刻（双击潜行用） */
@@ -482,7 +510,22 @@ export class TouchControls {
    * 所以它为空时主程序也不该有任何目标。
    */
   get aimPoint(): { x: number; y: number } | null {
-    return this.aim;
+    return this.aim ? this.aimPointAt(this.aim.x, this.aim.y) : null;
+  }
+
+  /**
+   * 某个落点对应的**实际瞄准点**（批次 521，用户要求）。
+   *
+   * 手指瞄准时，指肚会盖住它指着的那一格——所以取点从"手指正中"挪到
+   * **白圈的边缘**上，往手背那一侧偏：
+   *  - 右手模式：**左上**边缘（-r/√2, -r/√2）；
+   *  - 左手模式：**右上**边缘（+r/√2, -r/√2）。
+   *
+   * ⚠️ 只挪**射线取点**，白圈本身仍然跟手（它是"我按在哪"的锚点）。
+   * 如果连圈一起挪，玩家会觉得圈和手指脱节了。
+   */
+  aimPointAt(x: number, y: number): { x: number; y: number } {
+    return fingerAimPoint(x, y, this.aimRadius, this.handedness);
   }
 
   /** 取走本帧累积的视角增量（像素），取完即清零 */
@@ -922,6 +965,10 @@ export class TouchControls {
   private trackAim(x: number, y: number): void {
     this.clearTapFlash();
     this.aim = { x, y };
+    // 白圈半径（CSS 像素）：瞄准取点要用它算"圈的左上/右上边缘"。
+    // 一次手势只量一次（在 pointerdown 上），避免每帧强制布局。
+    const rect = this.aimRing.getBoundingClientRect();
+    if (rect.width > 0) this.aimRadius = rect.width / 2;
     this.aimRing.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     this.aimRing.classList.add('visible');
   }

@@ -33,6 +33,7 @@
 import * as THREE from 'three';
 import { ARMOR_SLOT_COUNT } from '../core/registry/armor.ts';
 import { Item } from '../core/registry/items.ts';
+import { applyBoxFaceShade } from './boxShading.ts';
 import {
   bodyProportions,
   eyeProfileOf,
@@ -184,6 +185,9 @@ export class PlayerRenderer {
     // 先偏航再俯仰：潜行前倾要绕着**身体朝向**的 X 轴转，默认的 XYZ 会绕世界轴转
     this.object.rotation.order = 'YXZ';
     this.scene.add(this.object);
+    // 逐面明暗（批次 521）：全身共用一个单位方块，六个面原本一样亮 —— 顶面与底面
+    // 分不出来，远看是一块纯色剪影。顶点色只写一次，与逐部位颜色相乘叠加。
+    applyBoxFaceShade(this.geometry);
 
     // ---- 双腿：枢轴在髋（y = 0.78），网格挂在枢轴下方
     // 批次 241（用户："组成人物的方块可以更加精细"）：一条腿从"一整根 0.25×0.72 的柱子"
@@ -540,7 +544,7 @@ export class PlayerRenderer {
   ): void {
     let material = this.armorMaterials[slot];
     if (!material) {
-      material = new THREE.MeshBasicMaterial();
+      material = new THREE.MeshBasicMaterial({ vertexColors: true });
       this.setBaseColor(material, 0xffffff);
       this.armorMaterials[slot] = material;
     }
@@ -651,7 +655,8 @@ export class PlayerRenderer {
   private materialFor(color: number): THREE.MeshBasicMaterial {
     let material = this.materials.get(color);
     if (!material) {
-      material = new THREE.MeshBasicMaterial();
+      // vertexColors：读共享方块上的逐面明暗（批次 521），与这里的部位色相乘
+      material = new THREE.MeshBasicMaterial({ vertexColors: true });
       this.setBaseColor(material, color);
       this.materials.set(color, material);
     }
