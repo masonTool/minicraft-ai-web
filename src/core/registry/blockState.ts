@@ -742,18 +742,33 @@ export function withEndPortalEye(state: number, eye: boolean): number {
  *
  * 箱子当前不使用低位（朝向/开关都没做），所以 bits 4-7 是干净的。
  * ⚠️ 以后要是给箱子加上 facing，务必避开这四位。
+ *
+ * **批次 459 扩展到 6 位（最多 63 张表）**，做法是"高位放 bits 0-1"：
+ * 老存档只写了 bits 4-7、低位恒为 0，所以读出来的表号**完全不变**；
+ * 新表号 = 低 4 位 | (高 2 位 << 4)。这样不用迁移存档、也不动已有编码。
+ * （表数超过 15 时如果直接把 shift 挪到 0，老存档会集体读错——所以选了"加高位"。）
  */
 const CHEST_LOOT_SHIFT = 4;
 const CHEST_LOOT_MASK = 0b1111 << CHEST_LOOT_SHIFT;
+// 高位只能用 bit0：bits 1-3 是 `facing`（`FACING_MASK = 0b11 << 1`）
+const CHEST_LOOT_HIGH_SHIFT = 0;
+const CHEST_LOOT_HIGH_MASK = 0b1 << CHEST_LOOT_HIGH_SHIFT;
+const CHEST_LOOT_MAX = 31;
 
 /** 箱子带的战利品表序号（0 = 没有） */
 export function chestLootIndex(state: number): number {
-  return (state & CHEST_LOOT_MASK) >> CHEST_LOOT_SHIFT;
+  const low = (state & CHEST_LOOT_MASK) >> CHEST_LOOT_SHIFT;
+  const high = (state & CHEST_LOOT_HIGH_MASK) >> CHEST_LOOT_HIGH_SHIFT;
+  return low | (high << 4);
 }
 
 export function withChestLoot(state: number, index: number): number {
-  const clamped = Math.max(0, Math.min(15, index | 0));
-  return (state & ~CHEST_LOOT_MASK) | (clamped << CHEST_LOOT_SHIFT);
+  const clamped = Math.max(0, Math.min(CHEST_LOOT_MAX, index | 0));
+  return (
+    (state & ~(CHEST_LOOT_MASK | CHEST_LOOT_HIGH_MASK)) |
+    ((clamped & 0b1111) << CHEST_LOOT_SHIFT) |
+    (((clamped >> 4) & 0b1) << CHEST_LOOT_HIGH_SHIFT)
+  );
 }
 
 // ---------------------------------------------------------------- 雪层（B11）

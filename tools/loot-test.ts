@@ -87,11 +87,11 @@ console.log('\n[战利品表：合法性]');
 
 // ---------------------------------------------------------------- 2. 状态位
 
-console.log('\n[箱子状态位：bits 4-7 存表序号]');
+console.log('\n[箱子状态位：低 4 位在 bits 4-7、高 1 位在 bit0（批次 459）]');
 {
   equal('写入后能读回来', chestLootIndex(withChestLoot(0, 7)), 7);
   equal('默认 0（玩家自己放的箱子）', chestLootIndex(0), 0);
-  equal('上限钳制到 15', chestLootIndex(withChestLoot(0, 99)), 15);
+  equal('上限钳制到 31', chestLootIndex(withChestLoot(0, 999)), 31);
   equal('负数钳制到 0', chestLootIndex(withChestLoot(0, -3)), 0);
   equal('小数向下取整', chestLootIndex(withChestLoot(0, 3.9)), 3);
   // 不与其它状态位打架：箱子的低位将来可能给 facing，这里做个对照

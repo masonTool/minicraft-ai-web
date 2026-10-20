@@ -26,6 +26,8 @@
 import { Block, NETHER_WART_STAGES, stoneVariantId } from '../registry/blocks.ts';
 import { CHUNK_SIZE_X, CHUNK_SIZE_Z } from '../world/Chunk.ts';
 import { FeatureWriter, hashAt, PositionalRng } from './Features.ts';
+// 带战利品表的箱子（与其它结构同一个助手：表序号进方块状态）
+import { lootChest } from './Structures.ts';
 
 /** 下界那边注入进来的世界查询（都是纯函数，见 `NetherGenerator`） */
 export interface FortressWorld {
@@ -250,6 +252,11 @@ export function buildFortress(w: FeatureWriter, inst: FortressInstance): void {
       }
     }
   }
+  // 大厅两侧的箱子（批次 459）：原版要塞的 `nether_bridge` 表——
+  // 在此之前下界要塞**一个箱子都没有**（J26 差异里记着这件事）
+  lootChest(w, inst.x - 4, inst.y + 1, inst.z - 3, 'nether_bridge');
+  lootChest(w, inst.x + 4, inst.y + 1, inst.z + 3, 'nether_bridge');
+
   // 红色下界砖点缀：四角 + 顶面四角（原版要塞里那种"修过"的痕迹）
   for (const [rx, rz] of [
     [-5, -4],

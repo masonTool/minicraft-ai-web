@@ -366,6 +366,86 @@ export const LOOT_TABLES: readonly LootTable[] = [
       empty(5),
     ],
   },
+  // ---- 批次 459：把"结构有箱子、但没有自己的表"这五处补齐。
+  // 物品池按原版量级裁剪，只放本项目真的有的东西（不拿替代品凑数）。
+  {
+    key: 'igloo',
+    name: '雪屋',
+    rollsMin: 2,
+    rollsMax: 5,
+    entries: [
+      entry(Item.APPLE, 1, 3, 6),
+      entry(Item.COAL, 1, 4, 5),
+      entry(Item.ROTTEN_FLESH, 1, 3, 4),
+      entry(Item.GOLD_NUGGET, 1, 5, 4),
+      entry(Item.GOLDEN_APPLE, 1, 1, 1),
+      empty(3),
+    ],
+  },
+  {
+    key: 'ruined_portal',
+    name: '废弃传送门',
+    rollsMin: 2,
+    rollsMax: 5,
+    entries: [
+      entry(Item.GOLD_INGOT, 2, 6, 6),
+      entry(Item.GOLD_NUGGET, 4, 12, 6),
+      entry(Block.GOLD_BLOCK, 1, 2, 4),
+      entry(Item.FLINT, 1, 3, 4),
+      entry(Item.GOLDEN_APPLE, 1, 1, 2),
+      empty(3),
+    ],
+  },
+  {
+    key: 'buried_treasure',
+    name: '埋藏的宝藏',
+    rollsMin: 3,
+    rollsMax: 6,
+    entries: [
+      entry(Item.DIAMOND, 1, 3, 5),
+      entry(Item.EMERALD, 1, 3, 4),
+      entry(Item.GOLD_INGOT, 1, 4, 4),
+      entry(Item.IRON_INGOT, 1, 4, 4),
+      entry(Item.COOKED_COD, 1, 3, 3),
+      entry(Item.GOLDEN_APPLE, 1, 1, 1),
+      empty(3),
+    ],
+  },
+  {
+    key: 'nether_bridge',
+    name: '下界要塞',
+    rollsMin: 2,
+    rollsMax: 5,
+    entries: [
+      entry(Item.GOLD_INGOT, 1, 3, 6),
+      entry(Item.IRON_INGOT, 1, 3, 5),
+      entry(Item.NETHER_WART, 2, 5, 4),
+      entry(Item.FLINT, 1, 3, 3),
+      entry(Block.OBSIDIAN, 1, 3, 3),
+      entry(Item.SADDLE, 1, 1, 2),
+      entry(Item.DIAMOND, 1, 2, 2),
+      entry(Item.GOLDEN_APPLE, 1, 1, 1),
+      empty(3),
+    ],
+  },
+  {
+    key: 'stronghold_corridor',
+    name: '要塞走廊',
+    rollsMin: 2,
+    rollsMax: 5,
+    entries: [
+      entry(Item.IRON_INGOT, 1, 4, 6),
+      entry(Item.GOLD_INGOT, 1, 3, 4),
+      entry(Item.BREAD, 1, 3, 4),
+      entry(Item.APPLE, 1, 3, 4),
+      entry(Item.COAL, 1, 4, 4),
+      entry(Item.BOOK, 1, 3, 3),
+      entry(Item.ENDER_PEARL, 1, 1, 2),
+      entry(Item.DIAMOND, 1, 2, 2),
+      entry(Item.GOLDEN_APPLE, 1, 1, 1),
+      empty(3),
+    ],
+  },
 ];
 
 /** 序号 1 起的表（0 = 这一格没有战利品表，是玩家自己放的箱子） */
@@ -380,8 +460,13 @@ export function lootTableIndex(key: string): number {
   return index < 0 ? 0 : index + 1;
 }
 
-/** 能不能用 4 位状态位装下（`blockState.ts` 给箱子留了 bits 4-7） */
-export const LOOT_INDEX_MAX = 15;
+/**
+ * 能不能用状态位装下。
+ *
+ * 批次 459 从 4 位扩到 **5 位**（低 4 位在 bits 4-7、高 1 位在 bit0，
+ * 见 `blockState.withChestLoot`）：老存档低位恒 0，所以表号读出来不变。
+ */
+export const LOOT_INDEX_MAX = 31;
 
 /**
  * 掷点：把结果追加进 `out`（一轮一项，**不合并**同类——原版也是这样，

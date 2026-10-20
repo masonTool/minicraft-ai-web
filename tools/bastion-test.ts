@@ -235,8 +235,9 @@ console.log('\n[配方：两块建材各一条，鎏金黑石没有配方]');
 console.log('\n[两张战利品表：追加在表尾]');
 {
   // 批次 111（K9）在表尾追加了第 11 张（要塞传送门房），所以这里跟着 +1
-  // 批次 341 追加沙漠神殿/丛林神庙两张 → 13（仍 < 4 位状态位的 15 张上限）
-  equal('表的总数是 15（批次 345 起，已到 4 位状态位上限）', LOOT_TABLES.length, 15);
+  // 批次 341 追加沙漠神殿/丛林神庙两张 → 13；批次 345 到 15（当时是 4 位上限）；
+  // 批次 459 把状态位扩到 5 位（bit0 当高位）后追加 5 张 → 20
+  equal('表的总数是 20（批次 459 新增 5 张）', LOOT_TABLES.length, 20);
   equal('宝库表在倒数第二位', LOOT_TABLES[8]?.key, 'bastion_treasure');
   equal('杂物表是最后一张', LOOT_TABLES[9]?.key, 'bastion_other');
   equal('序号从 1 起（宝库 = 9）', lootTableIndex('bastion_treasure'), 9);
@@ -506,8 +507,8 @@ console.log('\n[与"玩家自己放的箱子"不冲突]');
   const state = withChestLoot(0, lootTableIndex('bastion_treasure'));
   check('宝库箱子的战利品序号不为 0（不会被当成玩家放的箱子）', chestLootIndex(state) > 0);
   equal('读出来的就是宝库', lootTableByIndex(chestLootIndex(state))?.key, 'bastion_treasure');
-  // 4 位状态位装得下（序列号上限 15）
-  check('10 张表都在 4 位状态位能表示的范围内', LOOT_TABLES.length <= 15);
+  // 状态位装得下（批次 459 扩到 5 位：低 4 位 bits 4-7 + 高 1 位 bit0 → 31 张）
+  check('表数在状态位能表示的范围内（31 张）', LOOT_TABLES.length <= 31);
 }
 
 console.log('\n[下界化石（批次 410）]');

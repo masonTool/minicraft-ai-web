@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1019（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1020（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **191**、进行中 **79**、待办 18 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -142,6 +142,11 @@ npm run dev            # http://localhost:5173
   落点/去重/造实体与主世界共用 `spawnStructureCreatures`。
   `test:bastion` 97 → **99**、`test:fortress` **105**、`test:end` 32 → **36**
   （都含"真实生成后锚点 3 格内有空气"）。
+- 批次 459（结构内容）：**战利品表 15 → 20**。新增 `igloo` / `ruined_portal` /
+  `buried_treasure` / `nether_bridge` / `stronghold_corridor`；雪屋、废弃传送门、
+  埋藏宝藏从"借用别的表"改成自己的，要塞走廊与下界要塞**新增箱子**（后者此前
+  一个都没有）。箱子状态位 4 → **5 位**（低 4 位 bits 4-7、高 1 位 bit0，
+  老存档不变），上限 31 张。`test:loot` 74 → **79**。
 - ⚠️ **批次编号冲突（第二次）**：并发会话占用了 **295-1~295-4**。本轮两个提交正式编号是
   **297（容器暂停）/ 298（目标框界面）**；旧 commit message 里的 295/296 是撞号。
 - ⚠️ **批次编号冲突（第三次）**：并发会话占用了 **303**。本轮正式编号 **304**；

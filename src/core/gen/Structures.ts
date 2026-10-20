@@ -1138,6 +1138,10 @@ function buildStronghold(w: FeatureWriter, s: StructureInstance): void {
   for (let i = 0; i < 44; i += 3) {
     for (const dz of [-2, 2]) w.fill(startX + i, y + 3, s.z + dz, Block.TORCH);
   }
+  // 走廊里的两只箱子（批次 459）：原版要塞有 corridor / crossing 两类箱子，
+  // 本项目只有一条主走廊，用 corridor 表摆两只——在此之前这段路只有火把
+  lootChest(w, startX + 18, y, s.z + 1, 'stronghold_corridor');
+  lootChest(w, startX + 34, y, s.z - 1, 'stronghold_corridor');
 
   // 图书馆（走廊北侧的方厅，放书架台与箱子）
   const libX = startX + 6;
@@ -1619,7 +1623,7 @@ function buildRuinedPortal(w: FeatureWriter, s: StructureInstance): void {
     for (const y of [1, 5] as const) if (rng.chance(0.8)) w.fill(s.x + x, base + y, s.z, Block.OBSIDIAN);
   }
   if (rng.chance(0.5)) w.fill(s.x - 1, base + 1, s.z - 1, Block.GOLD_BLOCK);
-  lootChest(w, s.x + 1, base + 1, s.z - 1, 'dungeon');
+  lootChest(w, s.x + 1, base + 1, s.z - 1, 'ruined_portal');
 }
 
 // ---------------------------------------------------------------- 埋藏的宝藏（批次 347）
@@ -1630,7 +1634,7 @@ function buildBuriedTreasure(w: FeatureWriter, s: StructureInstance): void {
   clear(w, s.x - 2, y, s.z - 2, s.x + 2, y + 2, s.z + 2);
   box(w, s.x - 2, y - 1, s.z - 2, s.x + 2, y - 1, s.z + 2, Block.SANDSTONE);
   walls(w, s.x - 2, y, s.z - 2, s.x + 2, y + 2, s.z + 2, Block.SANDSTONE);
-  lootChest(w, s.x, y, s.z, 'shipwreck_treasure');
+  lootChest(w, s.x, y, s.z, 'buried_treasure');
 }
 
 // ---------------------------------------------------------------- 沙漠水井（批次 408）
@@ -1680,7 +1684,7 @@ function buildIgloo(w: FeatureWriter, s: StructureInstance): void {
   w.fill(s.x, base + 2, s.z + 2, Block.AIR);
   box(w, s.x - 3, base + 4, s.z - 2, s.x + 3, base + 4, s.z + 2, Block.SNOW_BLOCK);
   box(w, s.x - 2, base + 5, s.z - 1, s.x + 2, base + 5, s.z + 1, Block.SNOW_BLOCK);
-  lootChest(w, s.x + 2, base + 1, s.z - 1, 'village_house');
+  lootChest(w, s.x + 2, base + 1, s.z - 1, 'igloo');
   torch(w, s.x - 2, base + 2, s.z);
 }
 
