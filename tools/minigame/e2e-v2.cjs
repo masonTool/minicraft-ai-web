@@ -77,6 +77,18 @@ const assert = (condition, message, state) => {
   assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
   assert(inGame.health === 20 && inGame.food === 20, '初始生命/饥饿应为 20', inGame);
 
+  // 死亡 → 重生
+  const deathFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
+  assert(deathFrame, '死亡用例找不到 iframe');
+  await deathFrame.evaluate(() => wx.__v2Test?.setHealth?.(0));
+  const deathScreen = await waitState((state) => state.dead, '生命归零后没有死亡界面', 5000);
+  await tap(512, 321);
+  const respawned = await waitState(
+    (state) => !state.dead && state.health === 20 && state.food === 20,
+    '重生没有恢复生命/饥饿',
+    5000,
+  );
+
   // 摇杆拖动：玩家坐标应变化
   const stickCenter = point(84, 317);
   const beforeMove = await waitState((state) => state.screen === 'game', '摇杆用例未进入游戏');
@@ -204,7 +216,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
+      { title, worlds, create, inGame, deathScreen, respawned, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),

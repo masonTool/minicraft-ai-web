@@ -984,6 +984,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   foodExhaustion = 0;
   fallPeakY = spawn.y + 1;
   wasOnGround = false;
+  dead = false;
   hudInputBlockUntil = Date.now() + 400;
   try {
     save = await FileSaveGame.open(entry.id, platform.files);
@@ -1581,6 +1582,49 @@ const showHud = (): void => {
   );
 };
 
+const respawn = (): void => {
+  health = 20;
+  food = 20;
+  saturation = 5;
+  foodExhaustion = 0;
+  starvationTimer = 0;
+  fallPeakY = spawn.y + 1;
+  wasOnGround = false;
+  dead = false;
+  paused = false;
+  physics.teleport(spawn.x + 0.5, spawn.y + 1.01, spawn.z + 0.5);
+  showHud();
+};
+
+const showDeath = (): void => {
+  const panelW = 480;
+  const panelH = 300;
+  const panelX = (1024 - panelW) / 2;
+  const panelY = (uiHeight - panelH) / 2;
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.72)' }),
+      box(panelX, panelY, panelW, panelH, [], {
+        background: 'rgba(24, 14, 14, 0.96)',
+        border: 'rgba(220, 120, 120, 0.55)',
+        borderWidth: 2,
+        radius: 12,
+      }),
+      text(panelX, panelY + 34, panelW, 54, '你死了！', { fontSize: 38, color: '#ffffff', align: 'center' }),
+      text(panelX + 30, panelY + 108, panelW - 60, 60, '生命归零，回到出生点会恢复生命与饥饿。', {
+        fontSize: 15,
+        color: 'rgba(240, 210, 210, 0.8)',
+        align: 'center',
+      }),
+      button(panelX + 110, panelY + 210, 260, 50, '重生', () => respawn(), {
+        background: 'rgba(90, 60, 60, 0.96)',
+        border: 'rgba(240, 180, 180, 0.55)',
+        radius: 8,
+      }),
+    ]),
+  );
+};
+
 const showPause = (): void => {
   const panelX = (1024 - 480) / 2;
   const panelY = Math.max(40, uiHeight / 2 - 150);
@@ -1682,6 +1726,7 @@ let foodExhaustion = 0;
 let fallPeakY = 80;
 let wasOnGround = false;
 let starvationTimer = 0;
+let dead = false;
 let lastStickTap = 0;
 let stickOffsetX = 0;
 let stickOffsetY = 0;
@@ -1951,6 +1996,7 @@ const frame = (): void => {
       target: currentHit ? `${world.getBlock(currentHit.x, currentHit.y, currentHit.z)}@${currentHit.x},${currentHit.y},${currentHit.z}` : '',
       held: inventory.get(selectedSlot)?.id ?? 0,
       cameraMode,
+      dead,
       health,
       food,
       saturation,
@@ -2041,14 +2087,10 @@ const frame = (): void => {
     } else {
       starvationTimer = 0;
     }
-    if (health <= 0) {
-      health = 20;
-      food = 20;
-      saturation = 5;
-      foodExhaustion = 0;
-      fallPeakY = spawn.y + 1;
-      physics.teleport(spawn.x + 0.5, spawn.y + 1.01, spawn.z + 0.5);
-      showHud();
+    if (health <= 0 && !dead) {
+      dead = true;
+      paused = true;
+      showDeath();
     }
   }
 
@@ -2075,6 +2117,10 @@ if (wxTestApi) {
       for (let i = 0; i < 36; i++) inventory.set(i, null);
       selectedSlot = 0;
       showHud();
+    },
+    setHealth: (value = 0) => {
+      health = value;
+      return { health };
     },
     giveItem: (id = 1, count = 2) => {
       inventory.add(id, count);
