@@ -56,6 +56,7 @@ export interface CanvasUiCallbacks {
   onMoveItem?: (from: number, to: number) => void;
   onGiveBlock?: (id: number) => void;
   onTakeSelectedItem?: () => ItemStack | null;
+  onTakeItem?: (id: number, count: number) => number;
   onAddStack?: (stack: ItemStack) => void;
   canUseWorkbench?: () => boolean;
   onToast?: (message: string) => void;
@@ -79,6 +80,7 @@ export function createCanvasUi(
   const hotbar = createHotbar(atlas, blocks);
   const inventory = createInventory(atlas, slots, screenWidth, screenHeight, {
     takeSelectedOne: callbacks.onTakeSelectedItem,
+    takeItem: callbacks.onTakeItem,
     addStack: callbacks.onAddStack,
     canUseWorkbench: callbacks.canUseWorkbench,
     showToast: callbacks.onToast,

@@ -284,6 +284,22 @@ async function boot(): Promise<void> {
         scheduleSave?.();
         return one;
       },
+      onTakeItem: (id, count) => {
+        let need = count;
+        for (let i = 0; i < 41 && need > 0; i++) {
+          const stack = inventory.get(i);
+          if (!stack || stack.id !== id) continue;
+          const take = Math.min(stack.count, need);
+          stack.count -= take;
+          need -= take;
+          if (stack.count <= 0) inventory.set(i, null);
+        }
+        if (need !== count) {
+          ui.syncInventory(inventory.serialize(), selectedSlot);
+          scheduleSave?.();
+        }
+        return count - need;
+      },
       onAddStack: (stack) => {
         inventory.addStack(stack);
         ui.syncInventory(inventory.serialize(), selectedSlot);

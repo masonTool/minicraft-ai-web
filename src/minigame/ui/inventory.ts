@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import type { ItemStack } from '../../core/container/Inventory.ts';
 import { CraftingGrid } from '../../core/crafting/CraftingGrid.ts';
-import { buildRecipeEntries, type RecipeEntry } from '../../core/crafting/RecipeBook.ts';
+import {
+  buildRecipeEntries,
+  recipeGridSize,
+  recipePlacement,
+  type RecipeEntry,
+} from '../../core/crafting/RecipeBook.ts';
 import type { Recipe } from '../../core/crafting/Recipes.ts';
 import { Block } from '../../core/registry/blocks.ts';
 import { itemLabel } from '../../core/registry/itemNames.ts';
@@ -24,6 +29,8 @@ export interface InventoryCallbacks {
   takeSelectedOne?: () => ItemStack | null;
   /** 把合成格/产物放回真实背包 */
   addStack?: (stack: ItemStack) => void;
+  /** 从真实背包按 id 取指定数量，返回实际取到的数量 */
+  takeItem?: (id: number, count: number) => number;
   /** 3×3 工作台是否可用（附近有工作台方块） */
   canUseWorkbench?: () => boolean;
   showToast?: (message: string) => void;
@@ -374,6 +381,60 @@ export function createInventory(
     }
   };
 
+  const fillRecipe = (recipe: Recipe): void => {
+    const needSize = recipeGridSize(recipe);
+    if (needSize > craftSize) {
+      if (needSize === 3) {
+        if (callbacks.canUseWorkbench && !callbacks.canUseWorkbench()) {
+          callbacks.showToast?.('需要靠近工作台');
+          return;
+        }
+        craftSize = 3;
+      } else {
+        callbacks.showToast?.('这个配方需要更大的合成格');
+        return;
+      }
+    }
+
+    const grid = activeGrid();
+    for (let i = 0; i < craftSize * craftSize; i++) {
+      const stack = grid.get(i);
+      if (stack) callbacks.addStack?.(stack);
+      grid.set(i, null);
+    }
+
+    const placement = recipePlacement(recipe, craftSize);
+    const needed = new Map<number, number>();
+    for (const [, id] of placement) needed.set(id, (needed.get(id) ?? 0) + 1);
+    if (!callbacks.takeItem) {
+      callbacks.showToast?.('合成功能不可用');
+      return;
+    }
+
+    const taken = new Map<number, number>();
+    for (const [id, count] of needed) {
+      const got = callbacks.takeItem(id, count);
+      taken.set(id, got);
+      if (got < count) {
+        for (const [backId, backCount] of taken) {
+          if (backCount > 0) callbacks.addStack?.({ id: backId, count: backCount });
+        }
+        callbacks.showToast?.('材料不足');
+        redraw();
+        return;
+      }
+    }
+
+    for (const [cell, id] of placement) {
+      grid.set(cell, { id, count: 1 });
+    }
+    mode = 'inventory';
+    pendingRecipe = null;
+    pendingCraft = null;
+    redraw();
+    callbacks.showToast?.('已填入配方');
+  };
+
   const clearHold = (): void => {
     if (holdTimer) {
       clearTimeout(holdTimer);
@@ -463,8 +524,7 @@ export function createInventory(
         if (x >= gridX && x <= gridX + gridWidth && y >= gridY) {
           const index = Math.floor((y - gridY) / 42);
           if (index >= 0 && index < recipeRows.length) {
-            pendingRecipe = recipeRows[index]!.recipe;
-            redraw();
+            fillRecipe(recipeRows[index]!.recipe);
           }
         }
         return true;
