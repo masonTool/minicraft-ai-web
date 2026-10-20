@@ -32,6 +32,13 @@ import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
 import { createCanvasUi } from './ui/port.ts';
 import { showBootError } from './ui/boot-error.ts';
+import {
+  cameraPlacement,
+  clampedCameraDistance,
+  CLOSE_CAMERA_HIDE_PLAYER,
+  THIRD_PERSON_DISTANCE,
+  type CameraMode,
+} from '../core/viewMode.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { workerHostToLike } from '../platform/wx/worker-like.ts';
 import { createMainThreadWorker } from './main-thread-worker.ts';
@@ -51,6 +58,9 @@ let bootRenderer: THREE.WebGLRenderer | null = null;
 // WX-020A 主线程降级：先小视距把地形完整跑出来；设置页可以实时调整
 let viewRadius = 3;
 let invertLook = false;
+let cameraMode: CameraMode = 'first';
+let lookSensitivity = 1;
+let autoJump = true;
 const LIGHT_BUDGET = 8000;
 const MESH_BUDGET = 8;
 
@@ -169,6 +179,28 @@ async function boot(): Promise<void> {
   scene.add(camera);
   let handTime = 0;
   let handItem = -1;
+
+  // 第三人称玩家模型（简单方块人，原点在脚底）
+  const playerModel = new THREE.Group();
+  const skinMaterial = new THREE.MeshBasicMaterial({ color: 0xc98a63 });
+  const shirtMaterial = new THREE.MeshBasicMaterial({ color: 0x4b7aa8 });
+  const pantsMaterial = new THREE.MeshBasicMaterial({ color: 0x2f4058 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.82, 0.3), shirtMaterial);
+  body.position.y = 1.0;
+  playerModel.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMaterial);
+  head.position.y = 1.62;
+  playerModel.add(head);
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.24), pantsMaterial);
+    leg.position.set(side * 0.15, 0.35, 0);
+    playerModel.add(leg);
+    const armMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.72, 0.22), shirtMaterial);
+    armMesh.position.set(side * 0.4, 1.0, 0);
+    playerModel.add(armMesh);
+  }
+  playerModel.visible = false;
+  scene.add(playerModel);
 
   const atlasShape = { tileSpan: atlas.tileSpan, tileInset: atlas.tileInset };
   const solid = new VoxelMaterial(atlas.texture, atlasShape);
@@ -457,6 +489,9 @@ async function boot(): Promise<void> {
         camera.updateProjectionMatrix();
         viewRadius = settings.renderDistance;
         invertLook = settings.invertLook;
+        cameraMode = settings.cameraMode;
+        lookSensitivity = settings.sensitivity;
+        autoJump = settings.autoJump;
         if (settings.sound) {
           audio?.resume();
           if (audio) audioStatus = 'on';
@@ -554,9 +589,42 @@ async function boot(): Promise<void> {
   }
 
   const updateCamera = (): void => {
-    camera.position.set(physics.x, physics.eyeY, physics.z);
-    camera.rotation.y = yaw;
-    camera.rotation.x = pitch;
+    const eye = { x: physics.x, y: physics.eyeY, z: physics.z };
+    const cosPitch = Math.cos(pitch);
+    const dir = {
+      x: -Math.sin(yaw) * cosPitch,
+      y: Math.sin(pitch),
+      z: -Math.cos(yaw) * cosPitch,
+    };
+    if (cameraMode === 'first') {
+      camera.position.set(eye.x, eye.y, eye.z);
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+      hand.visible = true;
+      playerModel.visible = false;
+      return;
+    }
+
+    const sign = cameraMode === 'third-back' ? -1 : 1;
+    const hit = raycastVoxels(
+      (x, y, z) => world.isSelectable(x, y, z),
+      eye.x,
+      eye.y,
+      eye.z,
+      dir.x * sign,
+      dir.y * sign,
+      dir.z * sign,
+      THIRD_PERSON_DISTANCE,
+    );
+    const distance = clampedCameraDistance(hit ? hit.distance : null);
+    const placement = cameraPlacement(eye, dir, yaw, pitch, cameraMode, distance);
+    camera.position.set(placement.x, placement.y, placement.z);
+    camera.rotation.y = placement.yaw;
+    camera.rotation.x = placement.pitch;
+    hand.visible = false;
+    playerModel.visible = distance >= CLOSE_CAMERA_HIDE_PLAYER;
+    playerModel.position.set(physics.x, physics.y, physics.z);
+    playerModel.rotation.y = yaw;
   };
 
   interface DroppedItem {
@@ -1308,11 +1376,14 @@ async function boot(): Promise<void> {
         lookMoved = true;
         if (mining?.pointerId === event.pointerId) cancelMining();
       }
-      yaw -= (event.clientX - lastLookX) * 0.006;
+      yaw -= (event.clientX - lastLookX) * 0.006 * lookSensitivity;
       const pitchSign = invertLook ? -1 : 1;
       pitch = Math.max(
         -1.2,
-        Math.min(1.2, pitch - (event.clientY - lastLookY) * 0.006 * pitchSign),
+        Math.min(
+          1.2,
+          pitch - (event.clientY - lastLookY) * 0.006 * lookSensitivity * pitchSign,
+        ),
       );
       lastLookX = event.clientX;
       lastLookY = event.clientY;
@@ -1469,7 +1540,7 @@ async function boot(): Promise<void> {
     } else if (playerReady && world.isLoaded(physics.x, physics.z)) {
       playerInput.jump = jumpQueued || (flying && jumpHeld);
       jumpQueued = false;
-      physics.update(world, playerInput, yaw, dt, flying, 1, 1, false);
+      physics.update(world, playerInput, yaw, dt, flying, 1, 1, autoJump);
       if (physics.y < -40) spawnPlayer();
     }
     updateCamera();

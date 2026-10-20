@@ -119,7 +119,7 @@ export function createCanvasUi(
   const settings = createSettingsMenu(
     screenWidth,
     screenHeight,
-    { fov: 72, renderDistance: 3, sound: true, invertLook: false },
+    { fov: 72, renderDistance: 3, sound: true, invertLook: false, cameraMode: 'first', sensitivity: 1, autoJump: true },
     (values) => callbacks.onSettingsChange?.(values),
     callbacks.onRequestText,
   );

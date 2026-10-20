@@ -10,11 +10,16 @@ import {
   type Rect,
 } from './widgets.ts';
 
+import type { CameraMode } from '../../core/viewMode.ts';
+
 export interface SettingsValues {
   fov: number;
   renderDistance: number;
   sound: boolean;
   invertLook: boolean;
+  cameraMode: CameraMode;
+  sensitivity: number;
+  autoJump: boolean;
 }
 
 export type SettingsAction = 'back' | null;
@@ -31,25 +36,13 @@ export interface SettingsMenu {
 
 type Tab = 'video' | 'game' | 'controls';
 
-const CONTROLS: readonly string[] = [
-  'MOVE: LEFT DRAG',
-  'LOOK: RIGHT DRAG',
-  'JUMP: TAP BOTTOM RIGHT',
-  'PLACE: TAP TOP RIGHT',
-  'BREAK: TAP MIDDLE RIGHT',
-  'CYCLE SLOT: TAP LEFT',
-  'INVENTORY: BAG',
-  'PAUSE / SAVE: MENU',
-  'FOV / DISTANCE: SETTINGS > VIDEO',
-];
-
 /** 设置页（WX-022）：VIDEO/GAME/CONTROLS 页签、滑块、开关、搜索输入、滚动列表 */
 export function createSettingsMenu(
   screenWidth: number,
   screenHeight: number,
   initial: SettingsValues,
   onChange: (values: SettingsValues) => void,
-  requestText?: (current: string) => Promise<string | null>,
+  _requestText?: (current: string) => Promise<string | null>,
 ): SettingsMenu {
   const doc = (globalThis as unknown as { document: Document }).document;
   const canvas = doc.createElement('canvas');
@@ -86,30 +79,18 @@ export function createSettingsMenu(
   const videoTab: Rect = { x: panelX + 28, y: panelY + 70, w: 140, h: 42 };
   const gameTab: Rect = { x: panelX + 176, y: panelY + 70, w: 140, h: 42 };
   const controlsTab: Rect = { x: panelX + 324, y: panelY + 70, w: 160, h: 42 };
-  const backButton: Rect = { x: panelX + panelWidth - 128, y: panelY + panelHeight - 62, w: 100, h: 40 };
+  const backButton: Rect = { x: panelX + panelWidth - 128, y: panelY + 18, w: 100, h: 38 };
   const fovSlider: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
   const distanceSlider: Rect = { x: panelX + 60, y: panelY + 255, w: panelWidth - 120, h: 30 };
   const soundSwitch: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
-  const invertSwitch: Rect = { x: panelX + 60, y: panelY + 235, w: panelWidth - 120, h: 30 };
-  const searchField: Rect = { x: panelX + 60, y: panelY + 140, w: panelWidth - 120, h: 36 };
-  const listRect: Rect = { x: panelX + 60, y: panelY + 190, w: panelWidth - 120, h: 150 };
-  const rowHeight = 32;
+  const invertSwitch: Rect = { x: panelX + 60, y: panelY + 350, w: panelWidth - 120, h: 30 };
+  const cameraButton: Rect = { x: panelX + 60, y: panelY + 128, w: panelWidth - 120, h: 46 };
+  const sensitivitySlider: Rect = { x: panelX + 60, y: panelY + 230, w: panelWidth - 120, h: 30 };
+  const autoJumpSwitch: Rect = { x: panelX + 60, y: panelY + 300, w: panelWidth - 120, h: 30 };
 
   const values: SettingsValues = { ...initial };
   let tab: Tab = 'video';
   let open = false;
-  let query = '';
-  let scrollOffset = 0;
-  let draggingList = false;
-  let dragLastY = 0;
-  let dragDistance = 0;
-
-  const visibleRows = Math.floor(listRect.h / rowHeight);
-  const filtered = (): string[] => {
-    const needle = query.trim().toLowerCase();
-    return needle ? CONTROLS.filter((item) => item.toLowerCase().includes(needle)) : [...CONTROLS];
-  };
-  const maxOffset = (): number => Math.max(0, filtered().length - visibleRows);
 
   const redraw = (): void => {
     if (!context) return;
@@ -122,89 +103,55 @@ export function createSettingsMenu(
     context.fillStyle = 'rgba(0, 0, 0, 0.62)';
     context.fillRect(0, 0, canvas.width, canvas.height);
     drawPanel(context, panel);
-    drawText(context, 'SETTINGS', panelX + 28, panelY + 20, 30, '#ffffff');
-    drawTab(context, videoTab, 'VIDEO', tab === 'video');
-    drawTab(context, gameTab, 'GAME', tab === 'game');
-    drawTab(context, controlsTab, 'CONTROLS', tab === 'controls');
+    drawText(context, '设置', panelX + 28, panelY + 20, 30, '#ffffff');
+    drawTab(context, videoTab, '视频', tab === 'video');
+    drawTab(context, gameTab, '游戏', tab === 'game');
+    drawTab(context, controlsTab, '控制', tab === 'controls');
 
     if (tab === 'controls') {
-      scrollOffset = Math.max(0, Math.min(maxOffset(), scrollOffset));
-      context.fillStyle = 'rgba(0, 0, 0, 0.55)';
-      context.fillRect(searchField.x, searchField.y, searchField.w, searchField.h);
-      context.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-      context.lineWidth = 2;
-      context.strokeRect(searchField.x + 1, searchField.y + 1, searchField.w - 2, searchField.h - 2);
+      const cameraLabel =
+        values.cameraMode === 'first'
+          ? '第一人称'
+          : values.cameraMode === 'third-back'
+            ? '第三人称（背后）'
+            : '第三人称（正面）';
+      drawButton(context, cameraButton, `相机：${cameraLabel}`, 'normal', 18);
+      const sensitivityValue = (values.sensitivity - 0.5) / 1.5;
+      drawSlider(context, sensitivitySlider, sensitivityValue, '灵敏度', `×${values.sensitivity.toFixed(1)}`);
+      drawSwitch(context, autoJumpSwitch, '自动跳跃', values.autoJump);
+      drawSwitch(context, invertSwitch, '反转视角', values.invertLook);
       drawText(
         context,
-        query ? `SEARCH: ${query}` : 'SEARCH: TAP TO TYPE',
-        searchField.x + 12,
-        searchField.y + 9,
-        16,
-        query ? '#ffffff' : 'rgba(255, 255, 255, 0.45)',
-        'left',
-        searchField.w - 24,
-      );
-
-      const items = filtered();
-      context.save();
-      context.beginPath();
-      context.rect(listRect.x, listRect.y, listRect.w, listRect.h);
-      context.clip();
-      const start = Math.floor(scrollOffset);
-      for (let row = 0; row < visibleRows; row++) {
-        const index = start + row;
-        if (index >= items.length) break;
-        const y = listRect.y + row * rowHeight;
-        context.fillStyle = row % 2 === 0 ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.18)';
-        context.fillRect(listRect.x, y, listRect.w, rowHeight);
-        drawText(context, items[index]!, listRect.x + 10, y + 9, 15, '#ffffff', 'left', listRect.w - 20);
-      }
-      context.restore();
-
-      if (maxOffset() > 0) {
-        const trackX = listRect.x + listRect.w + 8;
-        context.fillStyle = 'rgba(0, 0, 0, 0.55)';
-        context.fillRect(trackX, listRect.y, 6, listRect.h);
-        const thumbHeight = Math.max(24, (visibleRows / items.length) * listRect.h);
-        const thumbY =
-          listRect.y + (scrollOffset / maxOffset()) * Math.max(0, listRect.h - thumbHeight);
-        context.fillStyle = 'rgba(180, 220, 255, 0.85)';
-        context.fillRect(trackX, thumbY, 6, thumbHeight);
-      }
-
-      drawText(
-        context,
-        items.length === 0 ? 'NO MATCH' : 'DRAG LIST TO SCROLL',
+        '摇杆固定左下 · 其他区域拖动视角',
         panelX + 28,
-        panelY + 350,
+        panelY + 398,
         14,
         'rgba(255, 255, 255, 0.5)',
       );
     } else if (tab === 'video') {
       const fovValue = (values.fov - 60) / 40;
-      drawSlider(context, fovSlider, fovValue, 'FOV', `${values.fov}`);
+      drawSlider(context, fovSlider, fovValue, '视野', `${values.fov}°`);
       const distanceValue = (values.renderDistance - 2) / 4;
       drawSlider(
         context,
         distanceSlider,
         distanceValue,
-        'RENDER DISTANCE',
+        '视距',
         `${values.renderDistance}`,
       );
       drawText(
         context,
-        'CHANGES APPLY IMMEDIATELY',
+        '修改立即生效',
         panelX + 28,
         panelY + 330,
         15,
         'rgba(255, 255, 255, 0.5)',
       );
     } else {
-      drawSwitch(context, soundSwitch, 'SOUND', values.sound);
-      drawSwitch(context, invertSwitch, 'INVERT LOOK', values.invertLook);
+      drawSwitch(context, soundSwitch, '声音', values.sound);
       drawText(
         context,
-        'TOUCH TO TOGGLE',
+        '点按切换',
         panelX + 28,
         panelY + 330,
         15,
@@ -212,7 +159,7 @@ export function createSettingsMenu(
       );
     }
 
-    drawButton(context, backButton, 'BACK', 'normal', 20);
+    drawButton(context, backButton, '返回', 'normal', 18);
     texture.needsUpdate = true;
   };
 
@@ -270,24 +217,25 @@ export function createSettingsMenu(
       }
 
       if (tab === 'controls') {
-        if (contains(searchField, x, y)) {
-          void requestText?.(query)
-            .then((value) => {
-              if (value !== null) {
-                query = value;
-                scrollOffset = 0;
-                redraw();
-              }
-            })
-            .catch(() => {
-              /* 平台键盘不可用：保持原查询 */
-            });
+        if (contains(cameraButton, x, y)) {
+          values.cameraMode =
+            values.cameraMode === 'first'
+              ? 'third-back'
+              : values.cameraMode === 'third-back'
+                ? 'third-front'
+                : 'first';
+          notify();
           return null;
         }
-        if (contains(listRect, x, y)) {
-          draggingList = true;
-          dragLastY = y;
-          dragDistance = 0;
+        const sensitivity = hitSlider(sensitivitySlider, x, y);
+        if (sensitivity !== null) {
+          values.sensitivity = Math.round((0.5 + sensitivity * 1.5) * 10) / 10;
+          notify();
+          return null;
+        }
+        if (contains(autoJumpSwitch, x, y)) {
+          values.autoJump = !values.autoJump;
+          notify();
           return null;
         }
         setOpen(false);
@@ -313,27 +261,16 @@ export function createSettingsMenu(
           notify();
           return null;
         }
-        if (contains(invertSwitch, x, y)) {
-          values.invertLook = !values.invertLook;
-          notify();
-          return null;
-        }
       }
 
       setOpen(false);
       return 'back';
     },
-    handleScrollMove(_clientX: number, clientY: number, _sw: number, sh: number): void {
-      if (!open || tab !== 'controls' || !draggingList) return;
-      const y = (clientY / Math.max(1, sh)) * canvas.height;
-      const delta = (y - dragLastY) / rowHeight;
-      dragLastY = y;
-      dragDistance += Math.abs(delta);
-      scrollOffset = Math.max(0, Math.min(maxOffset(), scrollOffset - delta));
-      redraw();
+    handleScrollMove(_clientX: number, _clientY: number, _sw: number, _sh: number): void {
+      // 控制页已改为固定设置行，不再滚动
     },
     handleScrollUp(): void {
-      draggingList = false;
+      // 无滚动
     },
     render(renderer: THREE.WebGLRenderer): void {
       if (!open) return;
