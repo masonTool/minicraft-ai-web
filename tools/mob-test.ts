@@ -20,6 +20,7 @@ import { ATTACK_ANIM_SECONDS, Mob, attackSwingAmount } from '../src/core/entity/
 import { Pathfinder, type BlockSampler } from '../src/core/entity/Pathfinder.ts';
 import { MOB_TYPES, mobTypeById } from '../src/core/entity/mobs.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
+import { toolItemId } from '../src/core/registry/tools.ts';
 import { Horse } from '../src/core/entity/Horse.ts';
 import type { EntityContext } from '../src/core/entity/Entity.ts';
 import { Block, woolId } from '../src/core/registry/blocks.ts';
@@ -236,6 +237,18 @@ console.log('\n[苦力怕：贴身后点燃引信并爆炸]');
   const zombie = new Mob(mobTypeById('zombie')!, 2.5, 65.5, 0.5);
   for (let i = 0; i < 40; i++) zombie.tick(zombieCtx, 0.05);
   check('僵尸依旧近战（不会爆炸）', zombieDamage > 0 && explosions === 1, `伤害 ${zombieDamage}`);
+
+  // 主手武器改伤害（批次 562）：铁剑僵尸应当比空手僵尸疼
+  let armedDamage = 0;
+  const armedCtx: EntityContext = { ...ctx, hurtPlayer: (amount) => { armedDamage += amount; } };
+  const armed = new Mob(mobTypeById('zombie')!, 2.5, 65.5, 0.5);
+  armed.equipment.mainHand = toolItemId('sword', 'diamond');
+  for (let i = 0; i < 40; i++) armed.tick(armedCtx, 0.05);
+  check(
+    '铁剑僵尸的伤害高于空手（武器伤害表生效）',
+    armedDamage > zombieDamage,
+    `铁剑 ${armedDamage} / 空手 ${zombieDamage}`,
+  );
 }
 
 console.log('\n[被动生物不会跳崖]');

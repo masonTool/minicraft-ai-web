@@ -15,6 +15,7 @@ import { Entity, type EntityContext } from './Entity.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
 import { Block, blockDef, woolId } from '../registry/blocks.ts';
 import { Item } from '../registry/items.ts';
+import { toolInfoById } from '../registry/tools.ts';
 import { flowPush, waterFlowAt } from '../world/FluidFlow.ts';
 import { StatusEffects, type EffectId } from '../survival/StatusEffects.ts';
 import {
@@ -1145,8 +1146,12 @@ export class Mob extends Entity {
   private deliverMelee(ctx: EntityContext, reach: number): boolean {
     const player = ctx.player;
     if (!player || !this.canMeleeReach(ctx, player, reach)) return false;
+    // 主手武器（批次 562）：有武器就按 `tools.ts` 的伤害表，没有才退回种类基础伤害。
+    // 之前武器只影响外观与掉落，僵尸拿铁剑和空手一样疼——这是 J27 留下的差异。
+    const weapon = this.equipment.mainHand !== undefined ? toolInfoById(this.equipment.mainHand) : undefined;
+    const base = weapon?.attack ?? this.type.attackDamage;
     // 力量/虚弱影响出手伤害（数值与玩家同源）；虚弱不能把伤害打成负数
-    const damage = Math.max(0, this.type.attackDamage + this.effects.attackBonus());
+    const damage = Math.max(0, base + this.effects.attackBonus());
     // 带上生物名：左上角要写"被僵尸攻击"而不是笼统的"受到攻击"（批次 207）
     // 把 `this` 一起传下去（批次 264）：荆棘要靠它反伤"是谁打的"
     ctx.hurtPlayer(damage, this.x, this.z, 'generic', this.type.name, this);
