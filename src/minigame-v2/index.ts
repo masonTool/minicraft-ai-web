@@ -1991,10 +1991,12 @@ platform.input.onPointer('move', (event) => {
   if (event.pointerId === movePointer) {
     input.strafe = Math.max(-1, Math.min(1, (event.clientX - moveX) / 56));
     input.forward = Math.max(-1, Math.min(1, -(event.clientY - moveY) / 56));
-    if (Math.hypot(event.clientX - moveX, event.clientY - moveY) < 8) {
+    const moveDistance = Math.hypot(event.clientX - moveX, event.clientY - moveY);
+    if (moveDistance < 8) {
       input.strafe = 0;
       input.forward = 0;
     }
+    input.sprint = moveDistance > 62;
     const rawX = ((event.clientX - moveX) / Math.max(1, platform.system.width)) * 1024;
     const rawY = ((event.clientY - moveY) / Math.max(1, platform.system.height)) * uiHeight;
     const length = Math.hypot(rawX, rawY);
@@ -2024,6 +2026,7 @@ const release = (event: { pointerId: number; clientX: number; clientY: number })
     movePointer = null;
     input.forward = 0;
     input.strafe = 0;
+    input.sprint = false;
     stickOffsetX = 0;
     stickOffsetY = 0;
     if (hudStickKnob) {
@@ -2193,7 +2196,7 @@ const frame = (): void => {
     wasOnGround = physics.onGround;
 
     const moving = Math.abs(input.forward) + Math.abs(input.strafe) > 0.1;
-    foodExhaustion += dt * (moving ? 0.03 : 0.005);
+    foodExhaustion += dt * (moving ? (input.sprint ? 0.06 : 0.03) : 0.005);
     if (foodExhaustion >= 4) {
       foodExhaustion -= 4;
       if (food > 0) {

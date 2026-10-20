@@ -36,6 +36,7 @@
 - [x] 聊天命令：/help /seed /pos /heal /gamemode /tp
 - [x] 顶部三图标缩到 36 设计像素并居中，贴近 Web 手机版
 - [x] 创造模式双击跳跃起飞/落地，飞行时显示升/降按住键
+- [x] 摇杆推到底自动疾跑（input.sprint），疾跑加快饥饿
 - [x] 双击摇杆潜行；方块选中框；合成格拖入不再吞物品
 - [x] v2 标题页/开始游戏门控（标题页不生成世界）
 - [x] UI Kit：Box/Text/Button/Toggle/Slider、命中、Canvas 叠加、HUD/暂停
