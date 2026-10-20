@@ -3938,9 +3938,15 @@
            不会把跳跃键挤走。 */
       #touch-ui {
         --touch-side-inset: 40px;
+        --touch-stick-size: calc(132px * var(--touch-scale, 1));
+        --touch-jump-size: calc(76px * var(--touch-scale, 1));
+        /* 批次 536（用户）：摇杆与跳跃键的**圆心**到各自屏幕边缘的距离必须一致。
+           两者的直径不同，所以按钮簇的右边距要在摇杆左边距上补上半径差。 */
+        --touch-buttons-inset: calc(
+          var(--touch-side-inset) + (var(--touch-stick-size) - var(--touch-jump-size)) / 2
+        );
         --touch-stick-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
         --touch-buttons-bottom: calc(124px + env(safe-area-inset-bottom, 0px));
-        --touch-jump-size: calc(76px * var(--touch-scale, 1));
         --touch-cluster-gap: calc(10px * var(--touch-scale, 1));
       }
       #touch-stick {
@@ -3949,8 +3955,8 @@
         bottom: var(--touch-stick-bottom);
         /* 尺寸乘 `--touch-scale`（批次 97）：设置里的"触摸按钮大小"直接改这个变量，
            摇杆与按钮一起缩放（分别调会更乱：两者的比例本来就是配好的） */
-        width: calc(132px * var(--touch-scale, 1));
-        height: calc(132px * var(--touch-scale, 1));
+        width: var(--touch-stick-size);
+        height: var(--touch-stick-size);
         border-radius: 50%;
         /* 批次 530：深色玻璃底 + 浅色描边 + 外圈暗边。
            纯白（雪地/云层/亮天空）上靠暗底与外圈分开，深色洞穴里靠浅描边分开。 */
@@ -3979,7 +3985,7 @@
       /* 左手模式（批次 271）：摇杆与操作键整体镜像。死区跟着 `getBoundingClientRect`
          走，所以这里只换边、不写死任何坐标 */
       #touch-ui.left-handed #touch-stick { left: auto; right: var(--touch-side-inset); }
-      #touch-ui.left-handed #touch-buttons { right: auto; left: var(--touch-side-inset); }
+      #touch-ui.left-handed #touch-buttons { right: auto; left: var(--touch-buttons-inset); }
       #touch-stick .knob {
         width: calc(56px * var(--touch-scale, 1));
         height: calc(56px * var(--touch-scale, 1));
@@ -3999,7 +4005,7 @@
          竖排：上 → 跳 → 下。背包与聊天在快捷栏两侧（见 `.touch-side-btn`）。 */
       #touch-buttons {
         position: absolute;
-        right: var(--touch-side-inset);
+        right: var(--touch-buttons-inset);
         bottom: var(--touch-buttons-bottom);
         width: var(--touch-jump-size);
         height: var(--touch-jump-size);
@@ -4389,13 +4395,10 @@
            "触摸按钮大小"这个设置项在手机上等于没接线（批次 98 顺手修） */
         #touch-ui {
           --touch-side-inset: 34px;
+          --touch-stick-size: calc(124px * var(--touch-scale, 1));
           --touch-stick-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
           --touch-buttons-bottom: calc(131px + env(safe-area-inset-bottom, 0px));
           --touch-jump-size: calc(70px * var(--touch-scale, 1));
-        }
-        #touch-stick {
-          width: calc(124px * var(--touch-scale, 1));
-          height: calc(124px * var(--touch-scale, 1));
         }
         #touch-stick .knob {
           width: calc(52px * var(--touch-scale, 1));
@@ -4417,13 +4420,10 @@
       @media (max-height: 480px) {
         #touch-ui {
           --touch-side-inset: 30px;
+          --touch-stick-size: calc(108px * var(--touch-scale, 1));
           --touch-stick-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
           --touch-buttons-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
           --touch-jump-size: calc(64px * var(--touch-scale, 1));
-        }
-        #touch-stick {
-          width: calc(108px * var(--touch-scale, 1));
-          height: calc(108px * var(--touch-scale, 1));
         }
         #touch-stick .knob {
           width: calc(46px * var(--touch-scale, 1));
@@ -4804,32 +4804,6 @@
         background: radial-gradient(circle at 50% 35%, #14181f, #07080a 70%);
       }
       .unsupported-screen.visible { display: grid; }
-      /* 从后台回来的"点击继续"层（批次 184）。
-         用户要求："从后台返回时，先不显示游戏页面，显示暂停页面；点击页面自动横屏全屏恢复游戏。"
-         **不透明**是刻意的：回来时浏览器常常已经退出了全屏、方向也被系统转回去，
-         先让玩家看见运行中的竖屏小窗等于把"我已经不在游戏里"演一遍。
-         层数高于暂停菜单（50），由它自己吃掉第一下点击（`App.dismissResumeGate`）。 */
-      #resume-gate {
-        position: fixed; inset: 0; z-index: 55;
-        display: grid; place-items: center;
-        padding: 16px;
-        background: radial-gradient(circle at 50% 42%, #1b1f24, #060708 76%);
-        color: var(--mc-text-light);
-        text-align: center;
-        font-size: 13px; line-height: 1.6;
-        text-shadow: 1px 1px 0 var(--mc-text-shadow);
-        cursor: pointer;
-      }
-      #resume-gate .resume-gate-panel {
-        display: flex; flex-direction: column; gap: 6px;
-        padding: 18px 30px;
-        background: rgba(20, 20, 20, .9);
-        border: 3px solid; border-color: var(--pixel-bevel-dark);
-        box-shadow: var(--panel-shadow);
-      }
-      #resume-gate b { font-size: 22px; letter-spacing: 2px; }
-      #resume-gate span { font-size: 12px; color: #a8a8a8; }
-
       /* 竖屏手机：点这一条就是进全屏 + 锁横屏的那一次手势。默认不显示。
          ⚠️ 批次 181 从**整屏黑幕**改成**底部横条**：黑幕会把主菜单一起盖住，
          用户体感是"退出了另一个游戏"。现在菜单始终可见可点，只提示"横屏更好"。 */

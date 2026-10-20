@@ -179,7 +179,6 @@ import {
   armAutoFullscreen,
   armPresentOnTap,
   enterFullscreenOnBoot,
-  enterMobilePresentation,
   installRotateHint,
   isFullscreen,
   preferInstalledLandscape,
@@ -1284,7 +1283,7 @@ class App {
    * 手机上切出去再回来，浏览器可能已经退出了全屏、或者方向被系统转回去了；
    * 直接把运行中的画面摆到玩家面前，既容易被吓一跳，也常常是"一回来看见小窗/竖屏"。
    */
-  private resumeGateEl: HTMLDivElement | null = null;
+
   /** 刚刚切到过后台：下一次回到前台要先落到暂停页（见 `handleReturnFromBackground`） */
   private wasHidden = false;
   /**
@@ -2787,15 +2786,14 @@ class App {
   }
 
   /**
-   * 从后台回来（批次 201，用户要求）：
-   * **先不显示游戏页面，显示暂停页面；点一下才横屏全屏回到游戏。**
+   * 从后台回来（批次 536，用户要求）：
+   * **游戏内场景一律落到游戏内的暂停页；不再叠一层全屏"点击继续"门。**
    *
-   * 两件事分开做是有意的：
-   *  1. 暂停菜单照常打开（Esc / 返回键那条路也在用它），玩家能看见"游戏已暂停"；
-   *  2. 上面再压一层不透明的 `#resume-gate`——它同时挡住画面与暂停菜单上的按钮：
-   *     从后台回来时浏览器往往已经**退出了全屏、方向也被系统转回去了**，
-   *     直接让玩家点"继续游戏"只会得到一个竖屏小窗里的游戏。
-   *     那一层自己吃掉第一下点击：请求全屏 + 锁横屏，再关掉它自己与暂停菜单。
+   * 全屏门原本是为了在系统退出全屏/转回竖屏时补一次全屏请求，但它和暂停菜单
+   * 叠成两个"游戏已暂停"页面，反而多一层。现在：
+   *  - 横屏：直接显示游戏内暂停菜单，玩家点"继续游戏"即可；
+   *  - 非横屏：由现有的"请横屏游玩"提示负责，暂停菜单仍在下面；
+   *  - 主菜单/非游戏场景：不走这里（App 已经销毁）。
    */
   private handleReturnFromBackground(): void {
     if (this.disposed) return;
@@ -2807,50 +2805,10 @@ class App {
     if (this.beaconScreen.isOpen) this.beaconScreen.close();
     if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
     if (this.advancementScreen.isOpen) this.advancementScreen.hide();
-    if (!this.settingsScreen.isOpen) this.openSettings();
-    this.showResumeGate();
-  }
-
-  /** 挂出"点击继续"那一层（已经挂着就不重复建） */
-  private showResumeGate(): void {
-    if (this.resumeGateEl) return;
-    const gate = document.createElement('div');
-    gate.id = 'resume-gate';
-    gate.dataset.role = 'resume-gate';
-    const panel = document.createElement('div');
-    panel.className = 'resume-gate-panel';
-    const title = document.createElement('b');
-    title.textContent = '游戏已暂停';
-    const hint = document.createElement('span');
-    hint.textContent = '点击任意处继续 · 自动横屏全屏';
-    panel.append(title, hint);
-    gate.appendChild(panel);
-    // pointerdown 而不是 click：全屏必须在用户手势的调用栈里发出
-    gate.addEventListener('pointerdown', (event) => {
-      event.preventDefault();
-      // 请求全屏可能顺带派发 blur/focus：先立一个窗口，别让它把刚解冻的游戏又冻回去
-      this.ignoreBlurUntilMs = performance.now() + 800;
-      enterMobilePresentation();
-      this.dismissResumeGate();
-    });
-    document.body.appendChild(gate);
-    // 这一层常出现在"系统把手机转回竖屏"之后：别让"请横屏游玩"盖在"游戏已暂停"上
-    document.body.classList.add('pause-open');
-    this.resumeGateEl = gate;
-  }
-
-  /** 收掉"点击继续"那一层，并把暂停菜单一起关掉（回到游戏） */
-  private dismissResumeGate(): void {
-    this.resumeGateEl?.remove();
-    this.resumeGateEl = null;
-    // 双保险：万一某条 resume 事件丢了，玩家点这一下也必须真的解冻
-    this.backgroundPaused = false;
-    // "点击继续"是确定的手势：音频在非手势的 visible 里被自动播放策略挡住时，这里补一次
-    this.audio.resume();
-    this.audioPaused = false;
-    if (this.settingsScreen.isOpen) this.closeSettings();
-    document.body.classList.remove('pause-open');
-    syncRotateHint();
+    // 已经停在设置子页/形象弹窗时，也拉回暂停菜单首页：
+    // 用户口径是"从后台回来无论如何都进暂停页面"。
+    if (this.settingsScreen.isOpen) this.settingsScreen.show();
+    else this.openSettings();
   }
 
   /** 背包开关：打开时释放指针锁并停用移动/交互，关闭时重新锁定视角 */
@@ -14838,7 +14796,7 @@ class App {
       // 一律不再推进。画面定格在最后一帧，暂停页是 DOM，照常显示与点击。
       // ⚠️ 仍然要排下一帧：解冻靠 Resume/Esc/返回键，循环不能自己停死。
       const paused =
-        this.backgroundPaused || this.settingsScreen.isOpen || this.resumeGateEl !== null;
+        this.backgroundPaused || this.settingsScreen.isOpen;
       this.syncPauseAudio(paused);
       if (paused) {
         this.lastTime = now;
@@ -15200,9 +15158,7 @@ class App {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    // 从后台回来那一层遮罩挂在 body 上（不在 App 的容器里），要自己摘掉
-    this.resumeGateEl?.remove();
-    this.resumeGateEl = null;
+
     if (this.pauseAfterFullscreenTimer !== null) {
       window.clearTimeout(this.pauseAfterFullscreenTimer);
       this.pauseAfterFullscreenTimer = null;

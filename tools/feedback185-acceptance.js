@@ -397,11 +397,13 @@
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
     document.dispatchEvent(new Event('visibilitychange'));
     await sleep(500);
-    const gate = document.getElementById('resume-gate');
-    check('从后台回来：先显示暂停门（不是游戏画面）', !!gate && mc.settingsScreen.isOpen === true);
-    gate?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'touch', button: 0 }));
-    await sleep(400);
-    check('点暂停门：遮罩与暂停菜单一起收起、回到游戏', !document.getElementById('resume-gate') && mc.settingsScreen.isOpen === false);
+    check(
+      '从后台回来：直接显示游戏内暂停页（没有全屏暂停门）',
+      !document.getElementById('resume-gate') && mc.settingsScreen.isOpen === true,
+    );
+    mc.settingsScreen.hide();
+    await sleep(300);
+    check('暂停页可以正常关闭回到游戏', mc.settingsScreen.isOpen === false);
   }
 
   // ------------------------------------------------------------ 返回键层级（最后做：会退出世界）

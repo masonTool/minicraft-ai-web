@@ -279,7 +279,7 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 尺寸都走 `--touch-scale`（批次 98）：默认 1× 下与写死像素完全一致
     // 右下那一簇（批次 107）：一列右对齐，跳跃在下
     // 右下那一簇（批次 111 对齐原版）：一排、右对齐——跳跃在右、潜行在它左边
-    ['右下按钮簇以跳跃键为固定锚点', '#touch-buttons { position: absolute; right: var(--touch-side-inset); bottom: var(--touch-buttons-bottom); width: var(--touch-jump-size);'],
+    ['右下按钮簇以跳跃键为固定锚点', '#touch-buttons { position: absolute; right: var(--touch-buttons-inset); bottom: var(--touch-buttons-bottom); width: var(--touch-jump-size);'],
     // 快捷栏右侧只留背包（聊天搬到顶部，批次 181）
     ['背包按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
     ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
@@ -1606,7 +1606,13 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
     for (const [, selector, body] of blocks) {
       for (const line of (body ?? '').split(';')) {
         if (!/(width|height|grid-template-columns|gap)\s*:/.test(line)) continue;
-        if (line.includes('var(--touch-scale') || line.includes('var(--touch-jump-size')) continue;
+        if (
+          line.includes('var(--touch-scale') ||
+          line.includes('var(--touch-jump-size') ||
+          line.includes('var(--touch-stick-size')
+        ) {
+          continue;
+        }
         offenders.push(`${selector!.trim()}: ${line.trim()}`);
       }
     }
@@ -1647,16 +1653,19 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
     // 按钮大小（批次 97）：尺寸必须走 CSS 变量，否则设置里的滑块拖了没反应
     ['触摸按钮尺寸吃变量', '.touch-button { width: calc(62px * var(--touch-scale, 1));'],
     ['跳跃键尺寸吃变量', 'width: var(--touch-jump-size);'],
-    ['摇杆尺寸吃变量', 'width: calc(132px * var(--touch-scale, 1));'],
+    ['摇杆尺寸吃变量', 'width: var(--touch-stick-size);'],
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
   // 批次 535（用户）：左右两组控件居中对称；起飞行时跳跃键位置不动，升降键绝对定位到上下
   check(
-    '摇杆与跳跃簇左右对称（共用 --touch-side-inset）',
+    '摇杆与跳跃键的圆心到屏幕边缘等距',
     compact.includes('--touch-side-inset: 40px;') &&
       compact.includes('left: var(--touch-side-inset);') &&
-      compact.includes('right: var(--touch-side-inset);') &&
+      compact.includes('right: var(--touch-buttons-inset);') &&
+      /--touch-buttons-inset: calc\([\s\S]{0,120}?var\(--touch-stick-size\)[\s\S]{0,60}?var\(--touch-jump-size\)/.test(
+        compact,
+      ) &&
       compact.includes('--touch-buttons-bottom: calc(124px + env(safe-area-inset-bottom, 0px));'),
   );
   check(
@@ -1933,7 +1942,7 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check(
     '左右手模式镜像摇杆与按钮（CSS 与动态拇指区同一套边）',
     indexSource.includes('#touch-ui.left-handed #touch-stick { left: auto; right: var(--touch-side-inset); }') &&
-    indexSource.includes('#touch-ui.left-handed #touch-buttons { right: auto; left: var(--touch-side-inset); }') &&
+    indexSource.includes('#touch-ui.left-handed #touch-buttons { right: auto; left: var(--touch-buttons-inset); }') &&
       source.includes("return this.handedness === 'left'"),
   );
   check(
@@ -2912,18 +2921,15 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
       fullscreenSrc.includes('if (isFullscreen() && isLandscapeOrientation()) return;') &&
       appSrc.includes('armPresentOnTap(document);'),
   );
-  // ② 从后台回来：先落暂停页 + 不透明"点击继续"层，点它才请求全屏并回到游戏
+  // ② 从后台回来：直接落到游戏内暂停页，不再叠一层全屏"点击继续"门
   check(
-    '从后台回来先落到暂停页（先收起其它界面）',
+    '从后台回来直接落到游戏内暂停页（不再有全屏暂停门）',
     appSrc.includes('private handleReturnFromBackground(): void {') &&
       appSrc.includes('if (this.wasHidden) this.handleReturnFromBackground();') &&
-      appSrc.includes('if (!this.settingsScreen.isOpen) this.openSettings();'),
-  );
-  check(
-    '"点击继续"层自己吃掉第一下点击：请求全屏再关掉自己与暂停菜单',
-    /gate\.addEventListener\('pointerdown'[\s\S]{0,200}enterMobilePresentation\(\);[\s\S]{0,80}this\.dismissResumeGate\(\);/.test(appSrc) &&
-      css.includes('#resume-gate {') &&
-      css.includes('z-index: 55;'),
+      appSrc.includes('if (this.settingsScreen.isOpen) this.settingsScreen.show();') &&
+      appSrc.includes('else this.openSettings();') &&
+      !appSrc.includes('resumeGateEl') &&
+      !css.includes('#resume-gate'),
   );
   // ③ 新建世界：标签与输入框同一行，说明放最后（两列栅格不再被切断）
   check(
@@ -3131,9 +3137,7 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   check(
     '物理 dt 与测量帧间距分开（暂停时整帧跳过）',
     // 批次 303：暂停判据多了"页面在后台"这一条，断言按多行写法匹配
-    /const paused =\s*\n\s*this\.backgroundPaused \|\| this\.settingsScreen\.isOpen \|\| this\.resumeGateEl !== null;/.test(
-      appSrc,
-    ) &&
+    /const paused =[\s\S]{0,120}this\.backgroundPaused \|\| this\.settingsScreen\.isOpen;/.test(appSrc) &&
       appSrc.includes('this.syncPauseAudio(paused);') &&
       /if \(paused\) \{[\s\S]{0,120}this\.lastTime = now;[\s\S]{0,80}schedule\(\);[\s\S]{0,60}return;/.test(appSrc) &&
       appSrc.includes('const dt = Math.min(rawDt, 0.1);') &&
@@ -4400,7 +4404,7 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
   );
   check(
     '暂停判据包含后台标记（漏清时有双保险）',
-    appSrc.includes('this.backgroundPaused || this.settingsScreen.isOpen || this.resumeGateEl !== null'),
+    appSrc.includes('this.backgroundPaused || this.settingsScreen.isOpen'),
   );
   check('回前台重置 lastTime（后台那几分钟不算一帧）', leaveBody.includes('this.lastTime = performance.now();'));
   check(
@@ -4436,10 +4440,9 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       appSrc.includes("this.resumeFromBackground('visible')"),
   );
   check(
-    '"点击继续"顺手解冻并恢复音频（手势里恢复最稳）',
-    /private dismissResumeGate\(\): void \{[\s\S]{0,500}this\.backgroundPaused = false;[\s\S]{0,200}this\.audio\.resume\(\);/.test(
-      appSrc,
-    ),
+    '后台恢复后的解冻与音频恢复仍由 leaveBackground 统一负责',
+    leaveBody.includes('this.backgroundPaused = false;') &&
+      leaveBody.includes('this.audio.resume();'),
   );
 }
 
