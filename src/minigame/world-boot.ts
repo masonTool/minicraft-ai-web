@@ -271,6 +271,11 @@ async function boot(): Promise<void> {
     armor: 0,
     xp: loadedPlayer?.xp?.progress ?? 0,
   });
+  ui.setWorldInfo({
+    name: 'MY WORLD',
+    seed: save?.meta?.seed ?? world.seed,
+    edits: world.edits.totalEdits || save?.meta?.edits || 0,
+  });
 
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
@@ -300,6 +305,7 @@ async function boot(): Promise<void> {
   let jumpQueued = false;
   let jumpHeld = false;
   let flying = loadedPlayer?.flying ?? false;
+  let sneaking = false;
   let mining: { x: number; y: number; z: number; elapsed: number; pointerId: number } | null = null;
   const MINE_TIME = 0.6;
   let lastFrameTime = 0;
@@ -542,13 +548,23 @@ async function boot(): Promise<void> {
       return;
     }
 
-    // 左侧 FLY 按钮（避开摇杆与 HUD）
-    if (x < width * 0.28 && y > height * 0.3 && y < height * 0.46) {
-      uiPointerId = event.pointerId;
-      flying = !flying;
-      ui.setFlying(flying);
-      ui.showToast(flying ? 'FLY ON' : 'FLY OFF');
-      return;
+    // 左侧 FLY / SNEAK 按钮（避开摇杆与 HUD）
+    if (y > height * 0.3 && y < height * 0.46) {
+      if (x > width * 0.12 && x < width * 0.2) {
+        uiPointerId = event.pointerId;
+        flying = !flying;
+        ui.setFlying(flying);
+        ui.showToast(flying ? 'FLY ON' : 'FLY OFF');
+        return;
+      }
+      if (x > width * 0.21 && x < width * 0.29) {
+        uiPointerId = event.pointerId;
+        sneaking = !sneaking;
+        playerInput.sneak = sneaking;
+        ui.setSneaking(sneaking);
+        ui.showToast(sneaking ? 'SNEAK ON' : 'SNEAK OFF');
+        return;
+      }
     }
 
     if (x < width * 0.45 && movePointerId === null) {

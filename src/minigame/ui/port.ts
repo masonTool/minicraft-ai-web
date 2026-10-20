@@ -7,7 +7,7 @@ import { createInventory } from './inventory.ts';
 import { createPauseMenu, type PauseAction } from './pause.ts';
 import { createSettingsMenu, type SettingsValues } from './settings.ts';
 import { createOverlay } from './overlay.ts';
-import { createMainMenu, type MainMenuAction } from './main-menu.ts';
+import { createMainMenu, type MainMenuAction, type MainMenuInfo } from './main-menu.ts';
 import { createStats, type PlayerStats } from './stats.ts';
 import { createTouchControls } from './touch-controls.ts';
 
@@ -35,10 +35,12 @@ export interface MiniGameUi {
   handleSettingsScrollMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
   handleSettingsScrollUp(): void;
   isMainMenuOpen(): boolean;
+  setWorldInfo(info: MainMenuInfo): void;
   handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
   setStats(stats: PlayerStats): void;
   setMining(progress: number | null): void;
   setFlying(active: boolean): void;
+  setSneaking(active: boolean): void;
   showToast(message: string): void;
   setLoading(progress: number | null, text?: string): void;
   render(renderer: THREE.WebGLRenderer): void;
@@ -157,6 +159,9 @@ export function createCanvasUi(
     isMainMenuOpen(): boolean {
       return mainMenu.isOpen();
     },
+    setWorldInfo(info: MainMenuInfo): void {
+      mainMenu.setInfo(info);
+    },
     handleMainMenuTap(clientX, clientY, sw, sh): MainMenuAction {
       return mainMenu.isOpen() ? mainMenu.handleTap(clientX, clientY, sw, sh) : null;
     },
@@ -168,6 +173,9 @@ export function createCanvasUi(
     },
     setFlying(active: boolean): void {
       touchControls.setFlying(active);
+    },
+    setSneaking(active: boolean): void {
+      touchControls.setSneaking(active);
     },
     showToast(message: string): void {
       overlay.showToast(message);

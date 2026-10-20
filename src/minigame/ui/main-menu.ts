@@ -3,10 +3,17 @@ import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.
 
 export type MainMenuAction = 'play' | 'settings' | null;
 
+export interface MainMenuInfo {
+  name: string;
+  seed: number;
+  edits: number;
+}
+
 export interface MainMenu {
   open(): void;
   close(): void;
   isOpen(): boolean;
+  setInfo(info: MainMenuInfo): void;
   handleTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
   render(renderer: THREE.WebGLRenderer): void;
 }
@@ -42,11 +49,12 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   const panel: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
-  const play: Rect = { x: panelX + 70, y: panelY + 160, w: panelWidth - 140, h: 56 };
-  const settings: Rect = { x: panelX + 70, y: panelY + 232, w: panelWidth - 140, h: 56 };
-  const newWorld: Rect = { x: panelX + 70, y: panelY + 304, w: panelWidth - 140, h: 46 };
+  const play: Rect = { x: panelX + 70, y: panelY + 190, w: panelWidth - 140, h: 56 };
+  const settings: Rect = { x: panelX + 70, y: panelY + 260, w: panelWidth - 140, h: 56 };
+  const newWorld: Rect = { x: panelX + 70, y: panelY + 328, w: panelWidth - 140, h: 42 };
 
   let open = true;
+  let info: MainMenuInfo = { name: 'MY WORLD', seed: 0x5eed, edits: 0 };
 
   const redraw = (): void => {
     if (!context) return;
@@ -76,6 +84,16 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       15,
       'rgba(255, 255, 255, 0.45)',
     );
+    drawText(
+      context,
+      `${info.name}  ·  SEED 0x${info.seed.toString(16).toUpperCase()}  ·  EDITS ${info.edits}`,
+      panelX + 42,
+      panelY + 148,
+      15,
+      'rgba(180, 220, 255, 0.85)',
+      'left',
+      panelWidth - 84,
+    );
     drawButton(context, play, 'PLAY', 'normal', 26);
     drawButton(context, settings, 'SETTINGS', 'normal', 22);
     drawButton(context, newWorld, 'NEW WORLD (SOON)', 'disabled', 18);
@@ -98,6 +116,10 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
     },
     isOpen(): boolean {
       return open;
+    },
+    setInfo(next: MainMenuInfo): void {
+      info = { ...next };
+      redraw();
     },
     handleTap(clientX: number, clientY: number, sw: number, sh: number): MainMenuAction {
       if (!open) return null;

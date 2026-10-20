@@ -3,6 +3,7 @@ import { drawText } from './widgets.ts';
 
 export interface TouchControls {
   setFlying(active: boolean): void;
+  setSneaking(active: boolean): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -58,6 +59,7 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
   };
 
   let flying = false;
+  let sneaking = false;
 
   const button = (x: number, y: number, radius: number, label: string, active = false): void => {
     circle(
@@ -81,8 +83,9 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
     circle(jx, jy, 26, 'rgba(255, 255, 255, 0.25)', 'rgba(255, 255, 255, 0.55)');
     drawText(context, 'MOVE', jx, jy - 76, 14, 'rgba(255, 255, 255, 0.55)', 'center');
 
-    // 飞行开关：左侧中部，避开摇杆
+    // 飞行/潜行开关：左侧中部，避开摇杆
     button(jx, canvas.height * 0.38, 34, 'FLY', flying);
+    button(jx + 88, canvas.height * 0.38, 30, 'SNEAK', sneaking);
 
     // 右侧按钮：与 world-boot 的 y 分区对应
     const bx = canvas.width * 0.88;
@@ -99,6 +102,11 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
     setFlying(active: boolean): void {
       if (flying === active) return;
       flying = active;
+      redraw();
+    },
+    setSneaking(active: boolean): void {
+      if (sneaking === active) return;
+      sneaking = active;
       redraw();
     },
     render(renderer: THREE.WebGLRenderer): void {
