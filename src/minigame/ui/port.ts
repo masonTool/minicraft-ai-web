@@ -125,7 +125,7 @@ export function createCanvasUi(
     callbacks.onRequestText,
   );
   const overlay = createOverlay(screenWidth, screenHeight);
-  const mainMenu = createMainMenu(screenWidth, screenHeight);
+  const mainMenu = createMainMenu(screenWidth, screenHeight, callbacks.onRequestText);
   const chestScreen = createChestScreen(atlas, screenWidth, screenHeight);
   const furnaceScreen = createFurnaceScreen(atlas, screenWidth, screenHeight);
   const stats = createStats(screenWidth, screenHeight, safeArea);

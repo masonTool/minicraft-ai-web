@@ -7,10 +7,24 @@ export type MainMenuAction =
   | 'new'
   | 'delete'
   | { type: 'world'; id: string }
+  | {
+      type: 'create';
+      name: string;
+      seed: number | null;
+      worldType: 'default' | 'flat' | 'amplified';
+      difficulty: 'peaceful' | 'easy' | 'normal' | 'hard';
+      gameMode: 'survival' | 'creative';
+    }
   | null;
 
 export interface MainMenuInfo {
-  worlds: Array<{ id: string; name: string }>;
+  worlds: Array<{
+    id: string;
+    name: string;
+    worldType?: 'default' | 'flat' | 'amplified';
+    difficulty?: 'peaceful' | 'easy' | 'normal' | 'hard';
+    gameMode?: 'survival' | 'creative';
+  }>;
   currentId: string;
   seed: number;
   edits: number;
@@ -25,10 +39,14 @@ export interface MainMenu {
   render(renderer: THREE.WebGLRenderer): void;
 }
 
-type Screen = 'title' | 'worlds';
+type Screen = 'title' | 'worlds' | 'create';
 
 /** 启动主菜单：标题页 → 游戏 → 世界卡片（对齐网页版流程） */
-export function createMainMenu(screenWidth: number, screenHeight: number): MainMenu {
+export function createMainMenu(
+  screenWidth: number,
+  screenHeight: number,
+  requestText?: (current: string) => Promise<string | null>,
+): MainMenu {
   const doc = (globalThis as unknown as { document: Document }).document;
   const canvas = doc.createElement('canvas');
   canvas.width = 1024;
@@ -91,6 +109,37 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   let page = 0;
   const PAGE_SIZE = 3;
   const pageCount = (): number => Math.max(1, Math.ceil(info.worlds.length / PAGE_SIZE));
+  const draft = {
+    name: '',
+    seed: '',
+    typeIndex: 0,
+    difficultyIndex: 2,
+    modeIndex: 0,
+  };
+  const WORLD_TYPES = ['default', 'flat', 'amplified'] as const;
+  const WORLD_TYPE_LABELS = ['默认', '超平坦', '放大化'] as const;
+  const DIFFICULTIES = ['peaceful', 'easy', 'normal', 'hard'] as const;
+  const DIFFICULTY_LABELS = ['和平', '简单', '普通', '困难'] as const;
+  const GAME_MODES = ['survival', 'creative'] as const;
+  const GAME_MODE_LABELS = ['生存', '创造'] as const;
+  const createField = (row: number): Rect => ({
+    x: panelX + 150,
+    y: panelY + 100 + row * 50,
+    w: panelWidth - 220,
+    h: 36,
+  });
+  const reroll: Rect = {
+    x: panelX + panelWidth - 64,
+    y: panelY + 150,
+    w: 42,
+    h: 36,
+  };
+  const createButton: Rect = {
+    x: panelX + 70,
+    y: panelY + 376,
+    w: panelWidth - 140,
+    h: 44,
+  };
   let info: MainMenuInfo = {
     worlds: [{ id: 'wx-default', name: '我的世界' }],
     currentId: 'wx-default',
@@ -218,11 +267,19 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
         'left',
         row.w - 140,
       );
+      const typeLabel = { default: '默认', flat: '超平坦', amplified: '放大化' }[
+        world.worldType ?? 'default'
+      ];
+      const difficultyLabel = {
+        peaceful: '和平',
+        easy: '简单',
+        normal: '普通',
+        hard: '困难',
+      }[world.difficulty ?? 'normal'];
+      const modeLabel = world.gameMode === 'creative' ? '创造' : '生存';
       drawText(
         context,
-        world.id === info.currentId
-          ? `当前世界 · 种子 ${info.seed} · 改动 ${info.edits}`
-          : '点「进入」切换到这个世界',
+        `${typeLabel} · ${difficultyLabel} · ${modeLabel} · 种子 ${info.seed} · 改动 ${info.edits}`,
         row.x + 16,
         row.y + 36,
         12,
@@ -233,6 +290,48 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       drawButton(context, enterButton(index), '进入', 'normal', 15);
     });
     drawButton(context, deleteSave, '删除当前世界', 'normal', 15);
+  };
+
+  const drawField = (row: number, label: string, value: string, placeholder: boolean): void => {
+    if (!context) return;
+    const rect = createField(row);
+    drawText(context, label, panelX + 34, rect.y + 9, 15, 'rgba(225, 238, 248, 0.8)');
+    context.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    context.fillRect(rect.x, rect.y, rect.w, rect.h);
+    context.strokeStyle = 'rgba(180, 210, 230, 0.55)';
+    context.lineWidth = 2;
+    context.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
+    drawText(
+      context,
+      value,
+      rect.x + 10,
+      rect.y + 9,
+      15,
+      placeholder ? 'rgba(255, 255, 255, 0.4)' : '#ffffff',
+      'left',
+      rect.w - 20,
+    );
+  };
+
+  const drawCreate = (): void => {
+    if (!context) return;
+    drawButton(context, back, '‹ 返回', 'normal', 16);
+    drawText(context, '新建世界', panelX + 150, panelY + 22, 26, '#ffffff');
+    drawField(0, '名称', draft.name || '未命名', draft.name.length === 0);
+    drawField(1, '种子', draft.seed || '留空随机', draft.seed.length === 0);
+    drawButton(context, reroll, '随机', 'normal', 13);
+    drawField(2, '类型', WORLD_TYPE_LABELS[draft.typeIndex]!, false);
+    drawField(3, '难度', DIFFICULTY_LABELS[draft.difficultyIndex]!, false);
+    drawField(4, '模式', GAME_MODE_LABELS[draft.modeIndex]!, false);
+    drawText(
+      context,
+      '类型 / 难度 / 模式：点一下切换',
+      panelX + 34,
+      panelY + 346,
+      13,
+      'rgba(200, 225, 240, 0.6)',
+    );
+    drawButton(context, createButton, '创建并进入', 'normal', 19);
   };
 
   const redraw = (): void => {
@@ -246,7 +345,8 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
     if (screen === 'title') drawTitle();
     else {
       drawPanel(context, panel);
-      drawWorlds();
+      if (screen === 'worlds') drawWorlds();
+      else drawCreate();
     }
     texture.needsUpdate = true;
   };
@@ -293,12 +393,81 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
         return null;
       }
 
+      if (screen === 'create') {
+        if (contains(back, x, y)) {
+          screen = 'worlds';
+          redraw();
+          return null;
+        }
+        if (contains(createField(0), x, y)) {
+          void requestText?.(draft.name)
+            .then((value) => {
+              if (value !== null) {
+                draft.name = value.slice(0, 24);
+                redraw();
+              }
+            })
+            .catch(() => undefined);
+          return null;
+        }
+        if (contains(createField(1), x, y)) {
+          void requestText?.(draft.seed)
+            .then((value) => {
+              if (value !== null) {
+                draft.seed = value.replace(/[^0-9-]/g, '').slice(0, 12);
+                redraw();
+              }
+            })
+            .catch(() => undefined);
+          return null;
+        }
+        if (contains(reroll, x, y)) {
+          draft.seed = String(Math.floor(Math.random() * 0x7fffffff) || 1);
+          redraw();
+          return null;
+        }
+        if (contains(createField(2), x, y)) {
+          draft.typeIndex = (draft.typeIndex + 1) % WORLD_TYPES.length;
+          redraw();
+          return null;
+        }
+        if (contains(createField(3), x, y)) {
+          draft.difficultyIndex = (draft.difficultyIndex + 1) % DIFFICULTIES.length;
+          redraw();
+          return null;
+        }
+        if (contains(createField(4), x, y)) {
+          draft.modeIndex = (draft.modeIndex + 1) % GAME_MODES.length;
+          redraw();
+          return null;
+        }
+        if (contains(createButton, x, y)) {
+          const parsed = draft.seed.trim().length > 0 ? Number(draft.seed) : null;
+          const seed = parsed !== null && Number.isFinite(parsed) ? Math.floor(parsed) : null;
+          return {
+            type: 'create',
+            name: draft.name.trim() || `世界 ${info.worlds.length + 1}`,
+            seed,
+            worldType: WORLD_TYPES[draft.typeIndex]!,
+            difficulty: DIFFICULTIES[draft.difficultyIndex]!,
+            gameMode: GAME_MODES[draft.modeIndex]!,
+          };
+        }
+        return null;
+      }
+
       if (contains(back, x, y)) {
         screen = 'title';
         redraw();
         return null;
       }
-      if (contains(newWorld, x, y)) return 'new';
+      if (contains(newWorld, x, y)) {
+        screen = 'create';
+        draft.name = '';
+        draft.seed = '';
+        redraw();
+        return null;
+      }
       if (contains(deleteSave, x, y)) return 'delete';
       if (pageCount() > 1) {
         if (contains(prevPage, x, y) && page > 0) {

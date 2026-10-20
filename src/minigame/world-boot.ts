@@ -28,6 +28,9 @@ import type { Furnace } from '../core/container/Furnace.ts';
 import { isFuel, stationOfBlock } from '../core/crafting/Smelting.ts';
 import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
+import type { WorldType } from '../core/gen/WorldType.ts';
+import type { Difficulty } from '../core/world/Rules.ts';
+import type { GameMode } from '../core/world/GameMode.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
 import { createCanvasUi } from './ui/port.ts';
@@ -248,6 +251,9 @@ async function boot(): Promise<void> {
     id: string;
     name: string;
     seed: number;
+    worldType: WorldType;
+    difficulty: Difficulty;
+    gameMode: GameMode;
   }
   const parseWorlds = (raw: string | null): WorldEntry[] => {
     if (!raw) return [];
@@ -266,6 +272,13 @@ async function boot(): Promise<void> {
         .map((entry) => ({
           ...entry,
           name: entry.name === 'MY WORLD' ? '我的世界' : entry.name,
+          worldType: entry.worldType === 'flat' || entry.worldType === 'amplified'
+            ? entry.worldType
+            : 'default',
+          difficulty: ['peaceful', 'easy', 'normal', 'hard'].includes(entry.difficulty)
+            ? entry.difficulty
+            : 'normal',
+          gameMode: entry.gameMode === 'creative' ? 'creative' : 'survival',
         }));
     } catch {
       return [];
@@ -273,7 +286,14 @@ async function boot(): Promise<void> {
   };
   let worlds = parseWorlds(platform.storage.get('wx.worlds'));
   if (worlds.length === 0) {
-    worlds = [{ id: 'wx-default', name: '我的世界', seed: 0x5eed }];
+    worlds = [{
+      id: 'wx-default',
+      name: '我的世界',
+      seed: 0x5eed,
+      worldType: 'default',
+      difficulty: 'normal',
+      gameMode: 'survival',
+    }];
   }
   let currentWorldId = platform.storage.get('wx.worldId') ?? worlds[0]!.id;
   let currentWorld = worlds.find((world) => world.id === currentWorldId) ?? worlds[0]!;
@@ -285,7 +305,7 @@ async function boot(): Promise<void> {
   currentWorld.seed = worldSeed;
   platform.storage.set('wx.worldId', currentWorldId);
   platform.storage.set('wx.worlds', JSON.stringify(worlds));
-  const world = new World(worldSeed, 'default', 1, createWorker);
+  const world = new World(worldSeed, currentWorld.worldType, 1, createWorker);
   const meshPool = new MeshWorkerPool(1, createWorker);
   const chunkRenderer = new ChunkRenderer(
     scene,
@@ -565,7 +585,13 @@ async function boot(): Promise<void> {
   };
   const refreshWorldInfo = (edits: number): void => {
     ui.setWorldInfo({
-      worlds: worlds.map((entry) => ({ id: entry.id, name: entry.name })),
+      worlds: worlds.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        worldType: entry.worldType,
+        difficulty: entry.difficulty,
+        gameMode: entry.gameMode,
+      })),
       currentId: currentWorldId,
       seed: currentWorld.seed,
       edits,
@@ -820,7 +846,7 @@ async function boot(): Promise<void> {
       pitch,
       dimension: world.dimension,
       flying,
-      gameMode: 'survival',
+      gameMode: currentWorld.gameMode,
       timeOfDay: 0.3,
       health: playerHealth,
       food: playerFood,
@@ -930,7 +956,14 @@ async function boot(): Promise<void> {
       await clearSave();
       worlds = worlds.filter((world) => world.id !== currentWorldId);
       if (worlds.length === 0) {
-        worlds = [{ id: 'wx-default', name: '我的世界', seed: 0x5eed }];
+        worlds = [{
+      id: 'wx-default',
+      name: '我的世界',
+      seed: 0x5eed,
+      worldType: 'default',
+      difficulty: 'normal',
+      gameMode: 'survival',
+    }];
       }
       currentWorld = worlds[0]!;
       currentWorldId = currentWorld.id;
@@ -948,22 +981,25 @@ async function boot(): Promise<void> {
     }
   };
 
-  const newWorld = async (): Promise<void> => {
-    if (
-      !(await confirmModal(
-        'NEW WORLD?',
-        'Adds a world with a new seed and switches to it. The game will close; reopen it to play.',
-      ))
-    ) {
-      return;
-    }
-    const seed = ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) & 0x7fffffff;
-    const nextSeed = seed > 0 ? seed : 1;
+  const createWorld = async (draft: {
+    name: string;
+    seed: number | null;
+    worldType: WorldType;
+    difficulty: Difficulty;
+    gameMode: GameMode;
+  }): Promise<void> => {
+    const nextSeed =
+      draft.seed && draft.seed > 0
+        ? Math.floor(draft.seed)
+        : (((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) & 0x7fffffff) || 1;
     try {
       const entry: WorldEntry = {
         id: `w${Date.now().toString(36)}`,
-        name: `世界 ${worlds.length + 1}`,
+        name: draft.name.trim() || `世界 ${worlds.length + 1}`,
         seed: nextSeed,
+        worldType: draft.worldType,
+        difficulty: draft.difficulty,
+        gameMode: draft.gameMode,
       };
       worlds.push(entry);
       currentWorld = entry;
@@ -1177,7 +1213,7 @@ async function boot(): Promise<void> {
       const action = ui.handleMainMenuTap(x, y, width, height);
       if (action === 'settings') ui.openSettings();
       if (action === 'delete') void deleteSave();
-      if (action === 'new') void newWorld();
+      if (typeof action === 'object' && action?.type === 'create') void createWorld(action);
       if (typeof action === 'object' && action?.type === 'world') void switchWorld(action.id);
       return;
     }
