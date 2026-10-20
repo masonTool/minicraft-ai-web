@@ -1025,6 +1025,9 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   xpLevel = 0;
   xpIntoLevel = 0;
   hudInputBlockUntil = Date.now() + 400;
+  playerReadyAt = 0;
+  poorFpsSeconds = 0;
+  goodFpsSeconds = 0;
   lastAutoSave = Date.now();
   try {
     save = await FileSaveGame.open(entry.id, platform.files);
@@ -2434,11 +2437,36 @@ let lastWorldCx = Number.NaN;
 let lastWorldCz = Number.NaN;
 let lastViewDistance = -1;
 let lastAutoSave = 0;
-let lowFpsSeconds = 0;
-let qualityReduced = false;
+let qualityTier = 2;
+let lastQualityChange = 0;
+let lastFrameAt = 0;
+let lastViewApply = 0;
+let mobAccum = 0;
+let weatherAccum = 0;
+let playerReadyAt = 0;
+let poorFpsSeconds = 0;
+let goodFpsSeconds = 0;
+
+const effectiveViewDistance = (): number =>
+  qualityTier === 0 ? Math.min(settings.viewDistance, 1) : settings.viewDistance;
+
+const applyQuality = (): void => {
+  const dpr = qualityTier === 2 ? 1.5 : qualityTier === 1 ? 1.25 : 1;
+  renderer.setPixelRatio(Math.min(platform.system.dpr, dpr));
+  renderer.setSize(platform.system.width, platform.system.height, false);
+  weather.object.visible = qualityTier > 0;
+  lastViewDistance = -1;
+  lastViewApply = 0;
+  showToast(qualityTier === 2 ? '画质：高' : qualityTier === 1 ? '画质：中' : '画质：性能');
+};
 
 const frame = (): void => {
   const now = performance.now();
+  if (now - lastFrameAt < 13.5) {
+    requestAnimationFrame(frame);
+    return;
+  }
+  lastFrameAt = now;
   const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
   fpsFrames += 1;
@@ -2447,17 +2475,25 @@ const frame = (): void => {
     fpsFrames = 0;
     fpsStartedAt = now;
   }
-  if (playerReady && !qualityReduced && fps > 0 && fps < 28) {
-    lowFpsSeconds += dt;
-    if (lowFpsSeconds > 3) {
-      qualityReduced = true;
-      lowFpsSeconds = 0;
-      renderer.setPixelRatio(1);
-      renderer.setSize(platform.system.width, platform.system.height, false);
-      showToast('已降低渲染分辨率以保持流畅');
+  if (playerReady && playerReadyAt > 0 && now - playerReadyAt > 8000 && fps > 0) {
+    if (fps < 55) {
+      poorFpsSeconds += dt;
+      goodFpsSeconds = 0;
+    } else if (fps >= 58) {
+      goodFpsSeconds += dt;
+      poorFpsSeconds = 0;
     }
-  } else if (fps >= 28) {
-    lowFpsSeconds = 0;
+    if (poorFpsSeconds > 3 && qualityTier > 0 && now - lastQualityChange > 8000) {
+      qualityTier = (qualityTier - 1) as 0 | 1 | 2;
+      lastQualityChange = now;
+      poorFpsSeconds = 0;
+      applyQuality();
+    } else if (goodFpsSeconds > 10 && qualityTier < 2 && now - lastQualityChange > 10000) {
+      qualityTier = (qualityTier + 1) as 0 | 1 | 2;
+      lastQualityChange = now;
+      goodFpsSeconds = 0;
+      applyQuality();
+    }
   }
 
   const screen = !started
@@ -2481,6 +2517,7 @@ const frame = (): void => {
       currentWorldName: currentWorld?.name ?? '',
       gameMode: currentWorld?.gameMode ?? 'survival',
       fps,
+      qualityTier,
       chunks: world.chunks.size,
       drawn: chunks.drawnCount,
       x: physics.x,
@@ -2533,12 +2570,14 @@ const frame = (): void => {
 
   const centerCx = Math.floor(physics.x / 16);
   const centerCz = Math.floor(physics.z / 16);
-  const centerChanged = centerCx !== lastWorldCx || centerCz !== lastWorldCz || settings.viewDistance !== lastViewDistance;
+  if (playerReady && playerReadyAt === 0) playerReadyAt = now;
+  const viewDistance = effectiveViewDistance();
+  const centerChanged = centerCx !== lastWorldCx || centerCz !== lastWorldCz || viewDistance !== lastViewDistance;
   if (centerChanged) {
-    world.update(centerCx, centerCz, settings.viewDistance);
+    world.update(centerCx, centerCz, viewDistance);
     lastWorldCx = centerCx;
     lastWorldCz = centerCz;
-    lastViewDistance = settings.viewDistance;
+    lastViewDistance = viewDistance;
   }
 
   if (!playerReady && world.isLoaded(spawn.x, spawn.z)) {
@@ -2645,7 +2684,11 @@ const frame = (): void => {
   solid.skyBrightness = settings.brightness * daylight;
   translucent.skyBrightness = settings.brightness * daylight;
   sky.update(worldTime, camera.position, dt);
-  weather.update(dt, camera.position, false);
+  weatherAccum += dt;
+  if (weatherAccum >= 1 / 30) {
+    weather.update(weatherAccum, camera.position, false);
+    weatherAccum = 0;
+  }
 
   if (playerReady && !dead && !paused) {
     hazardTimer += dt;
@@ -2662,9 +2705,12 @@ const frame = (): void => {
   const queueStart = performance.now();
   for (let i = 0; i < 4; i++) {
     chunks.processQueue(1, centerCx, centerCz);
-    if (performance.now() - queueStart > 4) break;
+    if (performance.now() - queueStart > 3) break;
   }
-  chunks.applyViewDistance(centerCx, centerCz, settings.viewDistance);
+  if (centerChanged || now - lastViewApply > 150) {
+    lastViewApply = now;
+    chunks.applyViewDistance(centerCx, centerCz, viewDistance);
+  }
   solid.setTime(now * 0.001);
   translucent.setTime(now * 0.001);
   renderer.clear();
@@ -2684,8 +2730,12 @@ const frame = (): void => {
     }
   }
   if (playerReady && !paused) {
-    tickPigs(dt);
-    tickZombies(dt);
+    mobAccum += dt;
+    if (mobAccum >= 0.05) {
+      tickPigs(mobAccum);
+      tickZombies(mobAccum);
+      mobAccum = 0;
+    }
   }
 
   if (started && save && !paused && now - lastAutoSave > 15000) {
