@@ -1069,24 +1069,27 @@ function buildMineshaft(w: FeatureWriter, s: StructureInstance, _world: FeatureW
     for (let i = 0; i <= segment.length; i++) {
       const cx = segment.x + dx * i;
       const cz = segment.z + dz * i;
-      clear(w, cx - px, segment.y, cz - pz, cx + px, segment.y + 2, cz + pz);
+      // 楼梯段（批次 461）：高度沿段线性抬升，每 2 格升 1 格。
+      // 端点恒等于两端节点的 y（`rise = 终点 y - 起点 y`），所以接头处不会错层
+      const stepY = segment.y + Math.round((segment.rise * i) / segment.length);
+      clear(w, cx - px, stepY, cz - pz, cx + px, stepY + 2, cz + pz);
       for (let ox = -px; ox <= px; ox++) {
-        for (let oz = -pz; oz <= pz; oz++) w.fill(cx + ox, segment.y - 1, cz + oz, plank);
+        for (let oz = -pz; oz <= pz; oz++) w.fill(cx + ox, stepY - 1, cz + oz, plank);
       }
       // 蛛网（批次 442）：顶角挂几缕——同时它也是"生存里怎么拿到蛛网"的答案
       if (rng.chance(0.12)) {
-        w.fill(cx - px, segment.y + 2, cz - pz, Block.COBWEB);
-        if (rng.chance(0.5)) w.fill(cx + px, segment.y + 2, cz + pz, Block.COBWEB);
+        w.fill(cx - px, stepY + 2, cz - pz, Block.COBWEB);
+        if (rng.chance(0.5)) w.fill(cx + px, stepY + 2, cz + pz, Block.COBWEB);
       }
       // 木支撑（拱形：两根立柱 + 一根横梁）。立柱底是木板、上面是栅栏——
       // 与改造前同一套观感（直接全用栅栏会显得"空"，且栅栏数量也少一半）
       if (i % 4 === 0) {
-        w.fill(cx - px, segment.y, cz - pz, plank);
-        w.fill(cx + px, segment.y, cz + pz, plank);
-        w.fill(cx - px, segment.y + 1, cz - pz, fence);
-        w.fill(cx + px, segment.y + 1, cz + pz, fence);
-        w.fill(cx, segment.y + 2, cz, plank);
-        if (i % 12 === 0) torch(w, cx, segment.y + 1, cz, 0);
+        w.fill(cx - px, stepY, cz - pz, plank);
+        w.fill(cx + px, stepY, cz + pz, plank);
+        w.fill(cx - px, stepY + 1, cz - pz, fence);
+        w.fill(cx + px, stepY + 1, cz + pz, fence);
+        w.fill(cx, stepY + 2, cz, plank);
+        if (i % 12 === 0) torch(w, cx, stepY + 1, cz, 0);
       }
     }
   }

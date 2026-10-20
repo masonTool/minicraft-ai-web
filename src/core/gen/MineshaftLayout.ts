@@ -1,5 +1,5 @@
 /**
- * 废弃矿井的拼图布局（批次 460）
+ * 废弃矿井的拼图布局（批次 460 立、461 补多层）
  *
  * 原来的矿井是"一条主巷 + 递归随机分叉"：分叉从不检查占用，两条走廊会穿模；
  * 也没有交叉口与房间的概念（尽头那个小房间是唯一"像房间"的东西）。
@@ -10,8 +10,10 @@
  *  - 节点**只会被占用一次**（网格 Set），所以走廊绝不会穿模；
  *  - 从起点做广度优先扩展，所以**全部连通**（不会出现玩家走不到的孤岛）。
  *
- * ⚠️ 本批只做**平面**拼图（同一层高度）。原版矿井是多层的、层间靠楼梯/竖井连着，
- * 那一层要"段的高度连续"这套约束，单独一批做。
+ * **批次 461 补多层**：约 30% 的分支会带一个 ±4 的层差（`rise`），
+ * 那一段画成**逐格抬升的楼梯**（每 2 格升 1 格，玩家直接走上去，不用跳）。
+ * 层差只允许 ±4：再多就得做"竖直井 + 梯子"，那是另一套零件。
+ * 同一格网格上下相邻的两层必须差 ≥ 4（走廊 3 高 + 地面 1），否则会互相打穿。
  *
  * 该模块是纯函数（只吃坐标 + 随机源），因此跨区块重放逐格一致——
  * 与 `VillageLayout` 同一条硬约定。
@@ -26,6 +28,13 @@ export const MINESHAFT_NODE_SPACING = 8;
 export const MINESHAFT_CORRIDOR_HALF = 1;
 /** 房间的半宽（7×7 → 半宽 3） */
 export const MINESHAFT_ROOM_HALF = 3;
+/**
+ * 一段楼梯能升降的高度（格）。
+ *
+ * 取 4 是因为"走廊 3 高 + 地面 1"：两层若只差 3，上下层的地板/天花会贴在一起；
+ * 差 4 刚好留出一格实体岩层，看起来是"两层矿井"而不是"一串通铺"。
+ */
+export const MINESHAFT_STAIR_RISE = 4;
 
 export interface MineshaftNode {
   readonly x: number;
@@ -42,6 +51,12 @@ export interface MineshaftSegment {
   readonly dir: MineshaftDirection;
   /** 长度（格）：从起点节点中心到终点节点中心 */
   readonly length: number;
+  /**
+   * 这一段的高度变化（格）：0 = 平段，±4 = 楼梯段。
+   *
+   * 终点节点的 y 恒等于 `y + rise`——画法与布局靠这一条对齐。
+   */
+  readonly rise: number;
 }
 
 export interface MineshaftPlan {
@@ -56,6 +71,8 @@ export interface MineshaftLayoutOptions {
   readonly maxRadius?: number;
   /** 每扩展一次就接一个新节点的概率 */
   readonly branchChance?: number;
+  /** 层差上下限（相对原点 y；默认 ±16，配合 ±4 的层差就是最多 4 层） */
+  readonly maxLevelOffset?: number;
 }
 
 /** 四个方向：网格增量 + 段朝向编号（两者必须一一对应） */
@@ -82,11 +99,17 @@ export function planMineshaft(
 ): MineshaftPlan {
   const maxRadius = options.maxRadius ?? 24;
   const branchChance = options.branchChance ?? 0.6;
+  const maxLevelOffset = options.maxLevelOffset ?? 16;
 
   const nodes: MineshaftNode[] = [];
   const segments: MineshaftSegment[] = [];
-  /** 已占用的网格（键 `cx,cz`）——走廊撞不到别人的唯一保证 */
-  const occupied = new Set<string>([`0,0`]);
+  /**
+   * 已占用的网格：`cx,cz` → 该列的节点高度列表。
+   *
+   * 用列表而不是单个 Set 键，是因为**多层**允许同一 (cx,cz) 上下两层；
+   * 但两层必须差 ≥ `MINESHAFT_STAIR_RISE`，否则走廊会互相打穿。
+   */
+  const occupied = new Map<string, number[]>();
 
   const nodeAt = (cx: number, cz: number): { x: number; z: number; dist: number } => ({
     x: originX + cx * MINESHAFT_NODE_SPACING,
@@ -96,9 +119,12 @@ export function planMineshaft(
 
   const start = nodeAt(0, 0);
   nodes.push({ x: start.x, y: originY, z: start.z, kind: 'crossing' });
+  occupied.set('0,0', [originY]);
 
   /** 待扩展的节点（广度优先：先铺满近处，玩家进矿井就有活干） */
-  const frontier: Array<{ cx: number; cz: number; x: number; z: number }> = [{ cx: 0, cz: 0, x: start.x, z: start.z }];
+  const frontier: Array<{ cx: number; cz: number; x: number; z: number; y: number }> = [
+    { cx: 0, cz: 0, x: start.x, z: start.z, y: originY },
+  ];
   let attempts = 0;
 
   while (nodes.length < options.target && frontier.length > 0 && attempts < 400) {
@@ -124,28 +150,38 @@ export function planMineshaft(
       const ncx = current.cx + dir.dx;
       const ncz = current.cz + dir.dz;
       const key = `${ncx},${ncz}`;
-      if (occupied.has(key)) continue;
       const next = nodeAt(ncx, ncz);
       // 半径上限：超出的分支直接放弃（否则矿井会拉成一条线，包围盒还装不下）
       if (next.dist > maxRadius) continue;
 
-      occupied.add(key);
+      // 层差（批次 461）：约 30% 的分支换层，层差固定 ±4
+      let nextY = current.y;
+      if (rng() < 0.3) {
+        const candidate = current.y + (rng() < 0.5 ? MINESHAFT_STAIR_RISE : -MINESHAFT_STAIR_RISE);
+        if (Math.abs(candidate - originY) <= maxLevelOffset) nextY = candidate;
+      }
+      // 同列已有节点：两层必须差 ≥ 4，否则走廊上下打穿
+      const heights = occupied.get(key) ?? [];
+      if (heights.some((height) => Math.abs(height - nextY) < MINESHAFT_STAIR_RISE)) continue;
+
+      occupied.set(key, [...heights, nextY]);
       branches++;
       nodes.push({
         x: next.x,
-        y: originY,
+        y: nextY,
         z: next.z,
         // 房间大约五分之一（原版矿井里的房间本来就少）
         kind: rng() < 0.2 ? 'room' : 'crossing',
       });
       segments.push({
         x: current.x,
-        y: originY,
+        y: current.y,
         z: current.z,
         dir: dir.dir,
         length: MINESHAFT_NODE_SPACING,
+        rise: nextY - current.y,
       });
-      frontier.push({ cx: ncx, cz: ncz, x: next.x, z: next.z });
+      frontier.push({ cx: ncx, cz: ncz, x: next.x, z: next.z, y: nextY });
     }
     // 这个前沿节点已经扩展完（或没有可接的方向）→ 移出队列
     if (branches === 0) frontier.splice(index, 1);

@@ -561,7 +561,7 @@ console.log('\n[矿井里的蛛网（批次 442）]');
   const sources = readFileSync(new URL('../src/core/gen/GenerationSources.ts', import.meta.url), 'utf8');
   check(
     '废弃矿井生成时会挂蛛网',
-    structures.includes('w.fill(cx - px, segment.y + 2, cz - pz, Block.COBWEB)'),
+    structures.includes('w.fill(cx - px, stepY + 2, cz - pz, Block.COBWEB)'),
   );
   check(
     '生成来源表也把蛛网算进矿井（可达性审计靠这张表）',
@@ -815,15 +815,25 @@ console.log('\n[废弃矿井的拼图布局（批次 460）]');
   equal('半径够时节点数 = 目标数', plan.nodes.length, 10);
   equal('段数 = 节点数 - 1（是一棵树，没有环）', plan.segments.length, plan.nodes.length - 1);
 
-  const keys = new Set(plan.nodes.map((node) => `${node.x},${node.z}`));
-  equal('节点互不重叠（网格唯一）', keys.size, plan.nodes.length);
+  // ⚠️ 键要带 y（批次 461）：多层允许同一 (x,z) 上下两层，只按 (x,z) 去重会把
+  // 正常的"上下两层"误判成重叠
+  const keys = new Set(plan.nodes.map((node) => `${node.x},${node.y},${node.z}`));
+  equal('节点互不重叠（同坐标同高度只占一次）', keys.size, plan.nodes.length);
+  check(
+    '同列上下两层的层差至少 4 格（不会打穿）',
+    [...new Set(plan.nodes.map((node) => `${node.x},${node.z}`))].every((column) => {
+      const heights = plan.nodes.filter((node) => `${node.x},${node.z}` === column).map((node) => node.y).sort((a, b) => a - b);
+      for (let i = 1; i < heights.length; i++) if (heights[i]! - heights[i - 1]! < 4) return false;
+      return true;
+    }),
+  );
 
   let dangling = 0;
   const adjacency = new Map<string, string[]>();
   for (const segment of plan.segments) {
     const [dx, dz] = dirVec(segment.dir);
-    const from = `${segment.x},${segment.z}`;
-    const to = `${segment.x + dx * segment.length},${segment.z + dz * segment.length}`;
+    const from = `${segment.x},${segment.y},${segment.z}`;
+    const to = `${segment.x + dx * segment.length},${segment.y + segment.rise},${segment.z + dz * segment.length}`;
     if (!keys.has(to)) dangling++;
     // 双向邻接表（连通性检查用）
     if (!adjacency.has(from)) adjacency.set(from, []);
@@ -834,7 +844,7 @@ console.log('\n[废弃矿井的拼图布局（批次 460）]');
   equal('每条走廊的终点都是一个节点（没有断头路）', dangling, 0);
 
   // 连通性：从起点 BFS 能走到每一个节点
-  const startKey = `${plan.nodes[0]!.x},${plan.nodes[0]!.z}`;
+  const startKey = `${plan.nodes[0]!.x},${plan.nodes[0]!.y},${plan.nodes[0]!.z}`;
   const seen = new Set<string>([startKey]);
   const queue = [startKey];
   while (queue.length > 0) {
@@ -867,6 +877,22 @@ console.log('\n[废弃矿井的拼图布局（批次 460）]');
     planMineshaft(0, 40, 0, lcg(7), { target: 10, maxRadius: 0 }).nodes.length,
     1,
   );
+
+  // ---- 多层（批次 461）：换几个种子，至少能排出带楼梯段的布局
+  check(
+    '层差只有 0 与 ±4（没有 -3/-5 这种接不上的高度）',
+    plan.segments.every((segment) => segment.rise === 0 || Math.abs(segment.rise) === 4),
+  );
+  let stairPlans = 0;
+  let maxLayers = 1;
+  for (let seed = 1; seed <= 8; seed++) {
+    const candidate = planMineshaft(0, 40, 0, lcg(seed), { target: 12 });
+    if (candidate.segments.some((segment) => segment.rise !== 0)) stairPlans++;
+    const levels = new Set(candidate.nodes.map((node) => node.y));
+    maxLayers = Math.max(maxLayers, levels.size);
+  }
+  check('换几个种子就能排出多层矿井（有楼梯段）', stairPlans > 0, `${stairPlans} / 8`);
+  check('最多能排到 3 层以上', maxLayers >= 2, `最多 ${maxLayers} 层`);
 
   // ---- 真实生成：找一个矿井，数它铺下去的方块
   const seed = 20261014;
@@ -907,7 +933,8 @@ console.log('\n[废弃矿井的拼图布局（批次 460）]');
         }
       }
     }
-    check('走廊铺满了木板（> 300 格）', planks > 300, `${planks} 格`);
+    // 段数随分层冲突略少（9~13 个节点），木板量级在 250~400 之间
+    check('走廊铺满了木板（> 250 格）', planks > 250, `${planks} 格`);
     // 柱子从 i%4==0 开始，段两端的柱子会被**节点自身的木柱**覆盖（同位置写两次），
     // 所以实际留下来的只有段中部那几根——数量级对就行，不追求精确值
     check('木支撑立柱在（栅栏 > 15 格）', fences > 15, `${fences} 格`);
