@@ -1249,6 +1249,11 @@ export function applyClimateGain(point: ClimatePoint): ClimatePoint {
 }
 
 /** 按 id 取群系（BIOME_TABLE 已按 id 排序，可直接下标） */
+/** 按注册名取群系（单一群系世界用；找不到返回 null） */
+export function biomeByName(name: string): BiomeDef | null {
+  return BIOMES.find((biome) => biome.name === name) ?? null;
+}
+
 export function biomeById(id: number): BiomeDef {
   return BIOME_TABLE[id] ?? BIOME_TABLE[0]!;
 }

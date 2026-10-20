@@ -1824,7 +1824,7 @@ class App {
       difficulty: 'normal',
     },
   ) {
-    this.world = new World(this.worldConfig.seed, this.worldConfig.worldType);
+    this.world = new World(this.worldConfig.seed, this.worldConfig.worldType, this.worldConfig.singleBiome);
     this.gameMode = normalizeGameMode(this.worldConfig.gameMode);
     // 旁观模式（批次 532）：新世界没有存档时也要立刻起飞，否则无碰撞 + 重力 = 穿地
     this.flying = startsFlying(this.gameMode);
@@ -3701,7 +3701,7 @@ class App {
   /** 预选一片值得加载的陆地；读档失败时也走这里，不能把玩家留在空世界。 */
   private prepareNewWorldSpawn(): void {
     // 原点恰在大海时，小视距永远加载不到陆地，安全出生点也就无从复核。
-    this.biomeGenerator = new OverworldGenerator(this.worldConfig.seed, this.worldConfig.worldType);
+    this.biomeGenerator = new OverworldGenerator(this.worldConfig.seed, this.worldConfig.worldType, this.worldConfig.singleBiome);
     // 地表高度下限跟着世界类型走（批次 238）：超平坦地表在 y=-61，
     // 还用海平面 64 的话出生点永远解析不出来（遮罩不撤、看起来卡死）。
     const surfaceY = WORLD_SURFACE_Y[this.worldConfig.worldType];
@@ -15690,7 +15690,7 @@ class App {
    */
   private biomeNameAt(x: number, z: number): string | null {
     if (this.dimension !== Dimension.OVERWORLD) return null;
-    this.biomeGenerator ??= new OverworldGenerator(this.worldConfig.seed, this.worldConfig.worldType);
+    this.biomeGenerator ??= new OverworldGenerator(this.worldConfig.seed, this.worldConfig.worldType, this.worldConfig.singleBiome);
     return this.biomeGenerator.biomeAt(x, z).name;
   }
 
@@ -16405,6 +16405,7 @@ async function boot(): Promise<void> {
         worldType: world.worldType,
         difficulty: world.difficulty,
         gameMode: world.gameMode,
+        ...(world.singleBiome ? { singleBiome: world.singleBiome } : {}),
       });
     } catch (error) {
       // 预检过了、但真正创建渲染器时还是失败（显存不足/上下文到顶）：

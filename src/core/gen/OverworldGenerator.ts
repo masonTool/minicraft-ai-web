@@ -36,6 +36,7 @@ import {
   Biome,
   applyClimateGain,
   biomeById,
+  biomeByName,
   biomeForColumn,
   caveBiomeAt,
   findLandBiome,
@@ -212,12 +213,22 @@ export class OverworldGenerator {
    */
   private readonly reliefScale: number;
 
+  /** 群系坐标缩放：大型群系把气候采样坐标除以 4（群系面积 ×4），其余为 1 */
+  private readonly biomeScale: number;
+  /** 单一群系世界固定返回的群系；其余世界为 null */
+  private readonly singleBiomeDef: import('./Biome.ts').BiomeDef | null;
+
   constructor(
     seed: number,
-    /** 世界类型：目前只有 `amplified` 会改参数（把起伏放大） */
+    /** 世界类型：amplified 放大起伏、large_biomes 放大群系、single_biome 固定群系 */
     private readonly worldType: WorldType = 'default',
+    /** 单一群系世界的群系注册名（如 `plains`）；其余类型忽略 */
+    singleBiome?: string,
   ) {
     this.reliefScale = this.worldType === 'amplified' ? AMPLIFIED_RELIEF_SCALE : 1;
+    this.biomeScale = this.worldType === 'large_biomes' ? 4 : 1;
+    this.singleBiomeDef =
+      this.worldType === 'single_biome' && singleBiome ? biomeByName(singleBiome) : null;
     const random = new Random(seed);
 
     /**
@@ -361,6 +372,12 @@ export class OverworldGenerator {
     grid[slot + 4] = this.humidity.getValue(x, 0, z);
   }
 
+  /** 群系用的气候采样：大型群系按 1/4 坐标取，其余与地形同一坐标 */
+  private biomeClimateAt(x: number, z: number): ReturnType<OverworldGenerator['climateAt']> {
+    const scale = this.biomeScale;
+    return this.climateAt(x / scale, z / scale);
+  }
+
   /** 该点对外的气候参数（供生物群系与地表规则使用） */
   climateAt(x: number, z: number): { continent: number; erosion: number; weirdness: number; temperature: number; humidity: number } {
     return {
@@ -383,18 +400,22 @@ export class OverworldGenerator {
    * depth 维度目前恒为 0（所有群系的 depth 区间都是全集，不影响匹配结果）。
    */
   biomeAt(x: number, z: number): BiomeDef {
+    // 单一群系：整个主世界只有这一种
+    if (this.singleBiomeDef) return this.singleBiomeDef;
+    const sx = x / this.biomeScale;
+    const sz = z / this.biomeScale;
     const base = findLandBiome(
       applyClimateGain({
-        temperature: this.temperature.getValue(x, 0, z),
-        humidity: this.humidity.getValue(x, 0, z),
-        continentalness: this.continents.getValue(x, 0, z),
-        erosion: this.erosion.getValue(x, 0, z),
+        temperature: this.temperature.getValue(sx, 0, sz),
+        humidity: this.humidity.getValue(sx, 0, sz),
+        continentalness: this.continents.getValue(sx, 0, sz),
+        erosion: this.erosion.getValue(sx, 0, sz),
         depth: 0,
-        weirdness: this.ridges.getValue(x, 0, z),
+        weirdness: this.ridges.getValue(sx, 0, sz),
       }),
     );
     // 批次 342：母群系命中之后，再按 64 格区域决定是不是变体
-    return regionVariantAt(base, x, z);
+    return regionVariantAt(base, sx, sz);
   }
 
   /**
@@ -535,14 +556,15 @@ export class OverworldGenerator {
    * 供地物与结构使用；与 `applySurface` 里的判定完全同一套逻辑。
    */
   columnBiome(x: number, z: number): BiomeDef {
+    if (this.singleBiomeDef) return this.singleBiomeDef;
     const top = this.surfaceY(x, z);
     // 海洋 / 海岸仍按"地表高度 + 温度"判（那是水线决定的，不能平滑）
     if (top <= SEA_LEVEL) {
-      const raw = this.climateAt(x, z);
+      const raw = this.biomeClimateAt(x, z);
       return biomeForColumn(this.climatePointOf(raw), top, SEA_LEVEL);
     }
     // 批次 353：山峰按高度判，不能走"气候平面 + 平滑"
-    const peak = biomeForColumn(this.climatePointOf(this.climateAt(x, z)), top, SEA_LEVEL);
+    const peak = biomeForColumn(this.climatePointOf(this.biomeClimateAt(x, z)), top, SEA_LEVEL);
     if (peak.id === Biome.JAGGED_PEAKS || peak.id === Biome.FROZEN_PEAKS) return peak;
     return this.smoothedLandBiomeAt(x, z);
   }
@@ -578,8 +600,8 @@ export class OverworldGenerator {
     if (hit !== undefined) return hit;
     const x = cellX * CELL_XZ + (CELL_XZ >> 1);
     const z = cellZ * CELL_XZ + (CELL_XZ >> 1);
-    const base = findLandBiome(applyClimateGain(this.climatePointOf(this.climateAt(x, z))));
-    const biome = regionVariantAt(base, x, z);
+    const base = findLandBiome(applyClimateGain(this.climatePointOf(this.biomeClimateAt(x, z))));
+    const biome = regionVariantAt(base, x / this.biomeScale, z / this.biomeScale);
     if (this.landBiomeCache.size > 200_000) this.landBiomeCache.clear();
     this.landBiomeCache.set(key, biome.id);
     return biome.id;

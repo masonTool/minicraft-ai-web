@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-21 · 提交总数 1148（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-21 · 提交总数 1149（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **234**、进行中 **48**、待办 5 条（另有 1 条主动放弃）（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -329,8 +329,8 @@ npm run agent:setup        # 跨机器自检
   结论：**这些方块是显示问题，不是机制缺失**（骨块 9 骨粉互转、旗帜 4 图案与织布机都在）。
 - 批次 531（白块真正根因）：`noisy(0xRRGGBB)` 把 24 位色当亮度 → **95 张**彩色贴图全白；
   按 `>255` 拆三通道修复，`test:textures` 22 → **29 条**。Node/浏览器/游戏截图三层验证。
-- 批次 532（目标校准 + 两个真 bug）：**删除非原版世界类型** caves / floating_islands
-  （类型/标签/密度场/UI/命名/专用套件全部移除，旧存档回落 default），世界类型回到三型。
-  **旁观穿地**：进入世界被 `isCreative` 覆盖掉飞行 → 新增 `startsFlying`，三处入口保证起飞。
-  **正面相机**：`y` 改为 `-dir.y`（低头升到前上方），碰撞射线同向。
-  `test:worldmatrix` 60 → **36 组**；套数 162 → **161**。
+- 批次 532：删除非原版 caves / floating_islands（旧存档回落 default）；**旁观穿地**
+  （`startsFlying` 三处保证起飞）与**正面相机**（`y = -dir.y`，射线同向）修复。套数 162 → **161**。
+- 批次 533（原版世界类型补全）：新增 **large_biomes**（群系气候采样 /4、面积 ×4）与
+  **single_biome**（创建时选群系，一路传到 Worker）。`test:world` 82 条、worldmatrix 60 组；
+  浏览器实测单一沙漠表层一致（含 Worker 生成）、大型群系可加载。

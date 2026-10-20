@@ -121,6 +121,8 @@ export class World {
     readonly seed: number,
     /** 世界类型：默认 / 超平坦 / 放大化（只影响主世界地形） */
     readonly worldType: WorldType = 'default',
+    /** 单一群系世界的群系注册名（其它类型忽略） */
+    readonly singleBiome?: string,
     workerCount: number = Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 1)),
   ) {
     this.light = new LightEngine(this);
@@ -233,6 +235,7 @@ export class World {
       seed: this.seed,
       dimension: this.dimension,
       worldType: this.worldType,
+      ...(this.singleBiome ? { singleBiome: this.singleBiome } : {}),
     };
     worker.postMessage(message);
   }

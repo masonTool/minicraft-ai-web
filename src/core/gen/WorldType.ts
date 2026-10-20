@@ -13,14 +13,16 @@
  * 放在独立模块里：生成器、Worker 协议、存档与世界列表都要用，谁都不该反过来依赖谁。
  */
 
-export type WorldType = 'default' | 'flat' | 'amplified';
+export type WorldType = 'default' | 'flat' | 'large_biomes' | 'amplified' | 'single_biome';
 
-export const WORLD_TYPES: readonly WorldType[] = ['default', 'flat', 'amplified'];
+export const WORLD_TYPES: readonly WorldType[] = ['default', 'flat', 'large_biomes', 'amplified', 'single_biome'];
 
 export const WORLD_TYPE_LABELS: Record<WorldType, string> = {
   default: '默认（山地与海洋）',
   flat: '超平坦（一层草地）',
+  large_biomes: '大型群系（群系面积 ×4）',
   amplified: '放大化（更高的山）',
+  single_biome: '单一群系（全世界同一种群系）',
 };
 
 /**
@@ -34,6 +36,8 @@ export const WORLD_TYPE_HINTS: Record<WorldType, string> = {
   default: '完整世界：群系、树木、矿石、村庄、要塞… 生存模式推荐',
   amplified: '与默认相同的全部内容，只是陆地起伏更大、山更高',
   flat: '只有三层平地：没有树木、村庄与矿石（适合建筑/创造）',
+  large_biomes: '与默认相同的完整世界，只是群系面积大约 ×4（走很久才会换群系）',
+  single_biome: '与默认相同的地形，但整个世界只有一种群系（在下面选是哪一种）',
 };
 
 /** 超平坦世界的分层（从 y = -64 起，与原版"经典"预设一致） */
@@ -64,6 +68,8 @@ export const WORLD_SURFACE_Y: Record<WorldType, number> = {
   default: 64,
   amplified: 64,
   flat: FLAT_SURFACE_Y,
+  large_biomes: 64,
+  single_biome: 64,
 };
 
 /** 放大化的起伏倍率：山体高度与峡谷深度都按它放大 */

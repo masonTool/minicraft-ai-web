@@ -18,6 +18,7 @@
 import { isWorldType, randomSeed, type WorldType } from '../gen/WorldType.ts';
 import { normalizeDifficulty, type Difficulty } from '../world/Rules.ts';
 import { normalizeGameMode, type GameMode } from '../world/GameMode.ts';
+import { biomeByName } from '../gen/Biome.ts';
 
 export interface WorldSummary {
   id: string;
@@ -39,6 +40,8 @@ export interface WorldSummary {
    * 老清单没有这个字段 → 生存。
    */
   gameMode: GameMode;
+  /** 单一群系世界的群系注册名（其它类型为 undefined） */
+  singleBiome?: string;
 }
 
 const STORAGE_KEY = 'bedrock-worlds';
@@ -61,6 +64,8 @@ export interface CreateWorldOptions {
   worldType?: WorldType;
   difficulty?: Difficulty;
   gameMode?: GameMode;
+  /** 单一群系世界的群系注册名 */
+  singleBiome?: string;
   /** 指定 id（认领旧存档时用） */
   id?: string;
 }
@@ -99,6 +104,10 @@ export class WorldRegistry {
       // 批次 529：与 gameMode 同口径——非法值落到普通，而不是先写进清单等读盘才修
       difficulty: normalizeDifficulty(options.difficulty),
       gameMode: normalizeGameMode(options.gameMode),
+      // 单一群系：只在这个类型下保留，且必须是注册表里存在的群系名
+      ...(options.worldType === 'single_biome' && biomeByName(options.singleBiome ?? '')
+        ? { singleBiome: options.singleBiome }
+        : {}),
       createdAt: now,
       lastPlayed: now,
       playTime: 0,
@@ -122,6 +131,7 @@ export class WorldRegistry {
       edits?: number;
       difficulty?: Difficulty;
       gameMode?: GameMode;
+      singleBiome?: string;
     } = {},
   ): WorldSummary {
     const existing = this.get(id);
@@ -134,6 +144,7 @@ export class WorldRegistry {
       worldType: isWorldType(options.worldType) ? options.worldType : 'default',
       difficulty: options.difficulty,
       gameMode: options.gameMode,
+      singleBiome: options.singleBiome,
       // 认领时不重置游玩时长：存档里已经有 meta 了，后面 update 会同步回来
     });
   }
@@ -195,6 +206,12 @@ function normalizeWorld(value: unknown): WorldSummary | null {
     difficulty: normalizeDifficulty((raw as { difficulty?: unknown }).difficulty),
     gameMode: normalizeGameMode((raw as { gameMode?: unknown }).gameMode),
     worldType: isWorldType(raw.worldType) ? raw.worldType : 'default',
+    ...(isWorldType(raw.worldType) &&
+    raw.worldType === 'single_biome' &&
+    typeof (raw as { singleBiome?: unknown }).singleBiome === 'string' &&
+    biomeByName((raw as { singleBiome: string }).singleBiome)
+      ? { singleBiome: (raw as { singleBiome: string }).singleBiome }
+      : {}),
     createdAt,
     lastPlayed: typeof raw.lastPlayed === 'number' ? raw.lastPlayed : createdAt,
     playTime: typeof raw.playTime === 'number' && raw.playTime >= 0 ? raw.playTime : 0,
@@ -216,7 +233,9 @@ function defaultName(worlds: readonly WorldSummary[], worldType: WorldType): str
   const prefix: Record<WorldType, string> = {
     default: '新的世界',
     flat: '超平坦世界',
+    large_biomes: '大型群系世界',
     amplified: '放大化世界',
+    single_biome: '单一群系世界',
   };
   const same = worlds.filter((world) => world.worldType === worldType).length + 1;
   return `${prefix[worldType]} ${same}`;

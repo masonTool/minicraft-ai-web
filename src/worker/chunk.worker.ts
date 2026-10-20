@@ -32,8 +32,10 @@ export interface GenerateRequest {
   seed: number;
   /** 维度（主世界 / 下界 / 末地） */
   dimension: DimensionId;
-  /** 世界类型（默认 / 超平坦 / 放大化） */
+  /** 世界类型（默认 / 超平坦 / 大型群系 / 放大化 / 单一群系） */
   worldType: WorldType;
+  /** 单一群系世界的群系注册名 */
+  singleBiome?: string;
 }
 
 export interface GenerateResponse {
@@ -242,6 +244,8 @@ ctx.addEventListener('message', (event) => {
       req.dimension,
       req.worldType,
       new Uint16Array(CHUNK_BLOCK_COUNT),
+      undefined,
+      req.singleBiome,
     );
     const states = takeGeneratedStates();
     const response: GenerateResponse = {

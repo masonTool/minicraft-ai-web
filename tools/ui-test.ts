@@ -2981,7 +2981,7 @@ console.log('\n[用户反馈一轮收口（批次 184）]');
   );
   check(
     '新建世界表单：说明排在字段最后、创建键跨满两列',
-    /this\.makeRow\(t\('world\.gameMode'\), this\.gameModeSelect\.element, null\),\s*this\.typeHintEl,\s*createButton,/.test(worldSrc) &&
+    /this\.makeRow\(t\('world\.gameMode'\), this\.gameModeSelect\.element, null\),\s*(this\.biomeRow,\s*)?this\.typeHintEl,\s*createButton,/.test(worldSrc) &&
       css.includes('.world-new > .world-primary { grid-column: 1 / -1; }'),
   );
   // ④ 配方开关关着 + 空栏 = 空白（不再写"这一栏里你还没有东西…"）

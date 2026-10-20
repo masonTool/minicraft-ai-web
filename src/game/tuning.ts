@@ -205,6 +205,8 @@ export interface WorldConfig {
   difficulty: Difficulty;
   /** 游戏模式（批次 181）：生存/创造；缺省按生存处理 */
   gameMode?: GameMode;
+  /** 单一群系世界的群系注册名（批次 533） */
+  singleBiome?: string;
 }
 
 /** 界面打开时喂给物理的空输入，让玩家原地停住而不是保持上一帧的速度 */

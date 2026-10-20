@@ -50,6 +50,10 @@ function check(label: string, condition: boolean, detail = ''): void {
   }
 }
 
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
+}
+
 /** 内存版 localStorage（Node 里没有真的），只实现用到的几个方法 */
 class MemoryStorage implements Storage {
   private readonly map = new Map<string, string>();
@@ -83,10 +87,10 @@ const SEED = 20261014;
 
 console.log('\n[世界类型]');
 {
-  // 批次 532：删掉非原版的 caves / floating_islands，只留原版三型
+  // 批次 533：补上原版的 large_biomes / single_biome，共五种
   check(
-    '三种原版类型（默认 / 超平坦 / 放大化）',
-    WORLD_TYPES.join('|') === 'default|flat|amplified',
+    '五种原版类型（默认 / 超平坦 / 大型群系 / 放大化 / 单一群系）',
+    WORLD_TYPES.join('|') === 'default|flat|large_biomes|amplified|single_biome',
     WORLD_TYPES.join('|'),
   );
   check(
@@ -109,6 +113,34 @@ console.log('\n[世界类型]');
 }
 
 // ---------------------------------------------------------------- 2. 世界清单
+
+console.log('\n[大型群系 / 单一群系]');
+{
+  const def = new OverworldGenerator(SEED, 'default');
+  const large = new OverworldGenerator(SEED, 'large_biomes');
+  // 大型群系 = 群系气候按 1/4 坐标采样：与默认世界在同一“缩放坐标”上的结果一致
+  const probes: Array<[number, number]> = [[0, 0], [512, -256], [2048, 1024]];
+  let mismatched = 0;
+  for (const [x, z] of probes) {
+    if (large.biomeAt(x, z).name !== def.biomeAt(x / 4, z / 4).name) mismatched++;
+  }
+  equal('大型群系：群系按 1/4 坐标采样', mismatched, 0);
+
+  const desert = new OverworldGenerator(SEED, 'single_biome', 'desert');
+  const names = probes.map(([x, z]) => desert.biomeAt(x, z).name);
+  check('单一群系：每个点都是选中的群系', names.every((name) => name === 'desert'), names.join(','));
+  check('单一群系的 columnBiome 也是它', desert.columnBiome(123, -456).name === 'desert');
+
+  // 群系名写错时不固定（回落到正常气候群系），且不能崩
+  let bogusOk = true;
+  try {
+    const bogus = new OverworldGenerator(SEED, 'single_biome', 'not_a_biome');
+    bogus.biomeAt(0, 0);
+  } catch {
+    bogusOk = false;
+  }
+  check('非法群系名不会崩', bogusOk);
+}
 
 console.log('\n[世界清单]');
 {
@@ -140,13 +172,22 @@ console.log('\n[世界清单]');
   registry.rename(flat.id, '   ');
   check('重命名成空白时回退成"未命名世界"', registry.get(flat.id)!.name === '未命名世界');
 
+  // 批次 533：单一群系的名字随清单往返；非法/类型不符会被丢掉
+  const desertWorld = registry.create({ worldType: 'single_biome', singleBiome: 'desert' });
+  equal('单一群系落盘', desertWorld.singleBiome, 'desert');
+  equal('重读还在', new WorldRegistry(storage).get(desertWorld.id)?.singleBiome, 'desert');
+  const bogusBiome = registry.create({ worldType: 'single_biome', singleBiome: 'nope' });
+  equal('非法群系被丢掉', bogusBiome.singleBiome, undefined);
+  const plainWorld = registry.create({ worldType: 'default', singleBiome: 'desert' });
+  equal('非单一群系类型不保留群系', plainWorld.singleBiome, undefined);
+
   // 持久化：换一个 registry 读同一个 storage
   const reloaded = new WorldRegistry(storage);
-  check('清单会持久化（重新加载后还在）', reloaded.count === 3 && reloaded.get(first.id)!.name === first.name);
+  check('清单会持久化（重新加载后还在）', reloaded.count === 6 && reloaded.get(first.id)!.name === first.name);
 
   reloaded.remove(flat.id);
-  check('删除后清单里没有了', reloaded.count === 2 && reloaded.get(flat.id) === undefined);
-  check('删除也写回了存储', new WorldRegistry(storage).count === 2);
+  check('删除后清单里没有了', reloaded.count === 5 && reloaded.get(flat.id) === undefined);
+  check('删除也写回了存储', new WorldRegistry(storage).count === 5);
 
   // 清单损坏 / 字段缺失
   const broken = new MemoryStorage();

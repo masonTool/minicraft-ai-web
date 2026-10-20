@@ -25,6 +25,7 @@ import {
 import { DIFFICULTIES, DIFFICULTY_LABELS, type Difficulty } from '../core/world/Rules.ts';
 import { GAME_MODES, GAME_MODE_LABELS, type GameMode } from '../core/world/GameMode.ts';
 import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts';
+import { BIOMES, BIOME_LABELS } from '../core/gen/Biome.ts';
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
 import { Dropdown } from './Dropdown.ts';
 
@@ -32,7 +33,9 @@ import { Dropdown } from './Dropdown.ts';
 const WORLD_TYPE_SHORT_LABELS: Record<WorldType, string> = {
   default: '默认',
   flat: '超平坦',
+  large_biomes: '大型群系',
   amplified: '放大化',
+  single_biome: '单一群系',
 };
 
 /** 编辑世界时允许改的三项（世界类型/种子会改变地形，不在可编辑范围） */
@@ -79,6 +82,9 @@ export class WorldScreen {
   private readonly difficultySelect: Dropdown<Difficulty>;
   /** 新建世界时的游戏模式（批次 181）：生存/创造；进世界后可在暂停菜单里改 */
   private readonly gameModeSelect: Dropdown<GameMode>;
+  /** 单一群系世界选哪种群系（批次 533）：只在类型为 single_biome 时显示 */
+  private readonly biomeSelect: Dropdown<string>;
+  private readonly biomeRow: HTMLDivElement;
   /** 游戏内确认弹窗（删除世界用；批次 528 不再用 window.confirm） */
   private confirmEl: HTMLDivElement | null = null;
   /** 编辑世界弹窗（批次 529）：同一时间只开一个 */
@@ -254,6 +260,20 @@ export class WorldScreen {
       { fullWidth: true, className: 'world-dropdown' },
     );
 
+    // 单一群系的群系选择（批次 533）：默认平原；列表用注册表里的全部群系
+    const biomeNames = BIOMES.map((biome) => biome.name);
+    const biomeLabels: Record<string, string> = {};
+    for (const biome of BIOMES) biomeLabels[biome.name] = BIOME_LABELS[biome.name] ?? biome.name;
+    this.biomeSelect = new Dropdown<string>(
+      biomeNames,
+      biomeLabels,
+      'plains',
+      () => undefined,
+      { fullWidth: true, className: 'world-dropdown' },
+    );
+    this.biomeRow = this.makeRow(t('world.biome'), this.biomeSelect.element, null);
+    this.biomeRow.hidden = true;
+
     // 世界类型说明（批次 181）：超平坦"没有树/村庄/矿石"必须写在选之前
     this.typeHintEl = document.createElement('div');
     this.typeHintEl.className = 'world-type-hint';
@@ -284,6 +304,7 @@ export class WorldScreen {
       this.makeRow(t('world.type'), this.typeSelect.element, null),
       this.makeRow(t('world.difficulty'), this.difficultySelect.element, null),
       this.makeRow(t('world.gameMode'), this.gameModeSelect.element, null),
+      this.biomeRow,
       this.typeHintEl,
       createButton,
     );
@@ -699,6 +720,7 @@ export class WorldScreen {
       worldType: this.typeSelect.value as WorldType,
       difficulty: this.difficultySelect.value as Difficulty,
       gameMode: this.gameModeSelect.value as GameMode,
+      ...(this.typeSelect.value === 'single_biome' ? { singleBiome: this.biomeSelect.value } : {}),
     });
     // 清空表单：下次再新建时不会带上一次的名字与种子
     this.nameInput.value = '';
@@ -718,6 +740,7 @@ export class WorldScreen {
     worldType: WorldType,
     difficulty: Difficulty = 'normal',
     gameMode: GameMode = 'survival',
+    singleBiome = 'plains',
   ): void {
     this.setView('create');
     this.nameInput.value = name;
@@ -725,6 +748,7 @@ export class WorldScreen {
     this.typeSelect.setValue(worldType);
     this.difficultySelect.setValue(difficulty);
     this.gameModeSelect.setValue(gameMode);
+    this.biomeSelect.setValue(singleBiome);
     this.updateTypeHint();
   }
 
@@ -734,6 +758,8 @@ export class WorldScreen {
     const survival = this.gameModeSelect.value === 'survival';
     const base = WORLD_TYPE_HINTS[type] ?? '';
     const warn = type === 'flat' && survival;
+    // 只有单一群系世界才显示"选群系"这一行
+    this.biomeRow.hidden = type !== 'single_biome';
     this.typeHintEl.textContent = warn ? `${base} —— 生存模式建议改选默认世界，或改用创造模式` : base;
     this.typeHintEl.classList.toggle('bad', warn);
   }

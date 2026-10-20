@@ -4,8 +4,8 @@
  * 之前"类型 / 模式 / 难度"是**分三个套件各测一半**的：
  * 类型测了生成、模式测了语义、难度测了系数，但**没有一组测试是"建出来再进世界"**。
  * 这一套补三件事：
- *  ① 3×3×4 = **36 种组合**都能创建、字段正确、持久化往返一致；
- *  ② 每种类型 × 生存/创造（6 组）都能算出**出生点**、出生区块不是空的；
+ *  ① 5×3×4 = **60 种组合**都能创建、字段正确、持久化往返一致；
+ *  ② 每种类型 × 生存/创造（10 组）都能算出**出生点**、出生区块不是空的；
  *  ③ 脏参数在 `create` 里就被收口（而不是先写进清单、等下次读盘才修）。
  *
  * 运行：npm run test:worldmatrix
@@ -72,14 +72,22 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
       for (const difficulty of DIFFICULTIES) {
         const seed = SEED + created.length;
         expected.push({ type, mode, difficulty, seed });
-        created.push(registry.create({ worldType: type, gameMode: mode, difficulty, seed }));
+        created.push(
+          registry.create({
+            worldType: type,
+            gameMode: mode,
+            difficulty,
+            seed,
+            ...(type === 'single_biome' ? { singleBiome: 'plains' } : {}),
+          }),
+        );
       }
     }
   }
 
-  equal('一共 36 种组合', created.length, 36);
-  equal('清单里就是 36 个世界', registry.count, 36);
-  equal('id 互不重复', new Set(created.map((world) => world.id)).size, 36);
+  equal('一共 60 种组合', created.length, 60);
+  equal('清单里就是 60 个世界', registry.count, 60);
+  equal('id 互不重复', new Set(created.map((world) => world.id)).size, 60);
 
   const badFields: string[] = [];
   for (let i = 0; i < created.length; i++) {
@@ -93,7 +101,7 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
 
   // 读盘往返：换一个 registry 读同一份 storage，60 组必须一一对上
   const reloaded = new WorldRegistry(storage as unknown as Storage);
-  equal('重新加载后仍是 36 个世界', reloaded.count, 36);
+  equal('重新加载后仍是 60 个世界', reloaded.count, 60);
   let mismatched = 0;
   for (let i = 0; i < created.length; i++) {
     const back = reloaded.get(created[i]!.id);
@@ -102,7 +110,7 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
       mismatched++;
     }
   }
-  equal('36 组持久化往返全部一致', mismatched, 0);
+  equal('60 组持久化往返全部一致', mismatched, 0);
 
   // 默认命名：每种类型 12 个（3 模式 × 4 难度），名字互不重复
   const badNames = WORLD_TYPES.filter((type) => {
@@ -162,8 +170,8 @@ console.log('\n[每种类型 × 生存/创造：出生点与出生区块]');
     }
   }
 
-  equal('跑了 3 类型 × 2 模式的启动验证', combos, 6);
-  check('6 组都能算出出生点、出生区块非空、模式能力正确', problems.length === 0, problems.join(' | '));
+  equal('跑了 5 类型 × 2 模式的启动验证', combos, 10);
+  check('10 组都能算出出生点、出生区块非空、模式能力正确', problems.length === 0, problems.join(' | '));
 }
 
 // ---------------------------------------------------------------- 3. 难度语义在矩阵里一致
@@ -191,6 +199,7 @@ console.log('\n[UI 联动守卫]');
   check('难度传进 create', worldSrc.includes('difficulty: this.difficultySelect.value as Difficulty'));
   check('模式传进 create', worldSrc.includes('gameMode: this.gameModeSelect.value as GameMode'));
   check('三个下拉框都在新建表单里', worldSrc.includes("makeRow(t('world.type')") && worldSrc.includes("makeRow(t('world.difficulty')") && worldSrc.includes("makeRow(t('world.gameMode')"));
+  check('单一群系选择传进 create', worldSrc.includes("singleBiome: this.biomeSelect.value"));
   check('测试用的预填入口还在（spec 三个参数都能设）', worldSrc.includes('difficulty: Difficulty = \'normal\'') && worldSrc.includes('gameMode: GameMode = \'survival\''));
 }
 

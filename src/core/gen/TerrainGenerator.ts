@@ -38,11 +38,11 @@ const endGenerators = new Map<number, EndGenerator>();
 /** 地物配置表完整性校验：每个群系都必须有一行（启动即报错，不留隐患） */
 validateBiomeFeatures(BIOME_TABLE.length);
 
-function generatorFor(seed: number, worldType: WorldType): OverworldGenerator {
-  const key = `${worldType}|${seed}`;
+function generatorFor(seed: number, worldType: WorldType, singleBiome?: string): OverworldGenerator {
+  const key = `${worldType}|${seed}|${singleBiome ?? ''}`;
   let generator = generators.get(key);
   if (!generator) {
-    generator = new OverworldGenerator(seed, worldType);
+    generator = new OverworldGenerator(seed, worldType, singleBiome);
     generators.set(key, generator);
   }
   return generator;
@@ -106,6 +106,8 @@ export function generateChunkBlocks(
   worldType: WorldType = 'default',
   out?: BlockArray,
   stats?: FeatureStats,
+  /** 单一群系世界的群系注册名（其它类型忽略） */
+  singleBiome?: string,
 ): BlockArray {
   // 超平坦只换主世界：下界与末地仍按原样生成（原版也是这个规则）
   if (dimension === Dimension.OVERWORLD && worldType === 'flat') {
@@ -144,7 +146,7 @@ export function generateChunkBlocks(
     return blocks;
   }
 
-  const generator = generatorFor(seed, worldType);
+  const generator = generatorFor(seed, worldType, singleBiome);
   const blocks = generator.generate(cx, cz, out);
 
   // 洞穴世界（批次 485）：**跳过地物与结构**。
