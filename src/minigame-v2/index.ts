@@ -1012,6 +1012,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   food = 20;
   saturation = 5;
   foodExhaustion = 0;
+  hazardTimer = 0;
   fallPeakY = spawn.y + 1;
   wasOnGround = false;
   landedOnce = false;
@@ -1890,6 +1891,7 @@ let fallPeakY = 80;
 let wasOnGround = false;
 let landedOnce = false;
 let starvationTimer = 0;
+let hazardTimer = 0;
 let dead = false;
 let lastDamageCause = '';
 interface DroppedItem {
@@ -2329,6 +2331,18 @@ const frame = (): void => {
   translucent.skyBrightness = settings.brightness * daylight;
   sky.update(worldTime, camera.position, dt);
   weather.update(dt, camera.position, false);
+
+  if (playerReady && !dead && !paused) {
+    hazardTimer += dt;
+    if (hazardTimer >= 1) {
+      hazardTimer = 0;
+      const feet = world.getBlock(Math.floor(physics.x), Math.floor(physics.y + 0.1), Math.floor(physics.z));
+      if (feet === Block.LAVA) applyDamage(4, '岩浆');
+      else if (feet === Block.FIRE || feet === Block.CAMPFIRE) applyDamage(2, '火焰');
+      else if (feet === Block.CACTUS) applyDamage(1, '仙人掌');
+      if (physics.y < -5) applyDamage(20, '虚空');
+    }
+  }
 
   chunks.processQueue(4, centerCx, centerCz);
   chunks.applyViewDistance(centerCx, centerCz, settings.viewDistance);
