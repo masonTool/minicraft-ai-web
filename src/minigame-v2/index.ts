@@ -37,6 +37,7 @@ import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { BED_IDS, Block, blockDef } from '../core/registry/blocks.ts';
 import { sleepRefusal } from '../core/survival/Sleep.ts';
+import { isDoorOpen, isDoorUpper, withDoorOpen } from '../core/registry/blockState.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
@@ -1205,6 +1206,25 @@ const showTitle = (): void => {
 const openBlockAt = (hit: RayHit): boolean => {
   lastAction = 'probe-open';
   const id = world.getBlock(hit.x, hit.y, hit.z);
+  const shape = blockDef(id).shape;
+  if (shape === 'door' || shape === 'trapdoor' || shape === 'fence_gate') {
+    const state = world.getBlockState(hit.x, hit.y, hit.z);
+    const open = !isDoorOpen(state);
+    world.setStateAndUpdate(hit.x, hit.y, hit.z, withDoorOpen(state, open));
+    if (shape === 'door') {
+      const upper = isDoorUpper(state);
+      const otherY = upper ? hit.y - 1 : hit.y + 1;
+      const otherId = world.getBlock(hit.x, otherY, hit.z);
+      if (otherId === id) {
+        const otherState = world.getBlockState(hit.x, otherY, hit.z);
+        world.setStateAndUpdate(hit.x, otherY, hit.z, withDoorOpen(otherState, open));
+      }
+    }
+    lastAction = open ? 'door-open' : 'door-close';
+    audio.play('break_wood');
+    saveController.request();
+    return true;
+  }
   if (BED_IDS.includes(id)) return trySleep(hit);
   if (id === Block.CRAFTING_TABLE) {
     crafting.drainTo(inventory);
