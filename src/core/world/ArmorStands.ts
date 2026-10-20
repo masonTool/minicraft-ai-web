@@ -22,6 +22,31 @@ import { restoreStack, stackExtras, type ItemStack } from '../container/Inventor
 /** 盔甲架的槽位数（= `ARMOR_SLOT_COUNT`） */
 export const ARMOR_STAND_SLOTS = 4;
 
+/**
+ * 六档材质在架子上的显示色（批次 493）。
+ *
+ * 为什么不用装备的图标贴图：架子上穿的是**立体**的，而物品图标是 16×16 的平面
+ * （头盔那几张图在平面上看着像"一顶帽子"，套在架子上会糊成一片）。
+ * 用材质色 + 部位盒子的形状来表达，反而比贴一张平面图更像"穿上了"。
+ *
+ * 颜色按原版护甲的主色取：皮革棕、锁链灰、铁白、金、钻石青、下界合金深紫。
+ */
+export const ARMOR_MATERIAL_COLORS: Readonly<Record<string, number>> = {
+  leather: 0x8b5a2b,
+  chainmail: 0x8a8f98,
+  iron: 0xd8dde4,
+  golden: 0xf2c94c,
+  diamond: 0x4fd8d0,
+  netherite: 0x4a3a46,
+};
+
+/** 一件装备在架子上的显示色（不是装备就返回灰） */
+export function armorDisplayColor(itemId: number): number {
+  const info = armorInfoById(itemId);
+  if (!info) return 0x888888;
+  return ARMOR_MATERIAL_COLORS[info.material] ?? 0x888888;
+}
+
 /** 四个槽位的中文名（顺序与 `ArmorInfo.slot` 一致） */
 export const ARMOR_STAND_SLOT_LABELS: readonly string[] = ['头盔', '胸甲', '护腿', '靴子'];
 

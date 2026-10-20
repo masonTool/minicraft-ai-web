@@ -136,8 +136,10 @@ import {
   ARMOR_STAND_SLOTS,
   ArmorStandStore,
   armorSlotForItem,
+  armorStandKey,
   restoreArmorStands,
   serializeArmorStands,
+  type ArmorStandEntry,
 } from './core/world/ArmorStands.ts';
 import { spawnerDefFor } from './core/registry/spawners.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
@@ -616,6 +618,7 @@ import {
   type FrameEntry,
 } from './core/world/ItemFrame.ts';
 import { ItemFrameRenderer, type FrameRenderItem } from './render/ItemFrameRenderer.ts';
+import { ArmorStandRenderer, type ArmorStandRenderItem } from './render/ArmorStandRenderer.ts';
 // 成就 / 进度（M7，批次 87）：数据与判定在 core/progress/*（纯逻辑），
 // 这里只做"在事件处报一声 + 弹提示 + 面板入口 + 随存档走"四件事
 import { AdvancementTracker } from './core/progress/AdvancementTracker.ts';
@@ -1368,6 +1371,8 @@ class App {
    */
   private readonly itemFrames = new ItemFrameStore();
   private readonly itemFrameRenderer: ItemFrameRenderer;
+  /** 盔甲架上穿着的装备（批次 493）：与展示框同一条"表 + 渲染器"的路 */
+  private readonly armorStandRenderer: ArmorStandRenderer;
   /**
    * 成就 / 进度（M7，批次 87）。
    *
@@ -1888,6 +1893,9 @@ class App {
     // （外层节点管框面朝哪边、子节点管物品自己的 45° 旋转）
     this.itemFrameRenderer = new ItemFrameRenderer(atlas);
     this.scene.add(this.itemFrameRenderer.group);
+    // 盔甲架上穿着的装备（批次 493）：架子本体走区块网格，这里只画装备
+    this.armorStandRenderer = new ArmorStandRenderer();
+    this.scene.add(this.armorStandRenderer.group);
     this.signEditor.onSave = (lines) => this.applySignText(lines);
     this.signEditor.onClose = () => {
       this.editingSign = null;
@@ -7688,6 +7696,39 @@ class App {
     this.itemFrameRenderer.sync(items);
   }
 
+  /**
+   * 盔甲架上穿着的装备（批次 493）：与 `syncFrames` 同一套对账。
+   *
+   * 两条与展示框一样的判据：只做当前维度、区块没加载就跳过（这一刻既看不出架子在不在，
+   * 也没必要显示）。**方块已经不是盔甲架了**（被火烧/被指令改/脏存档）→
+   * 把装备还回去再清条目——与展示框"宁可掉在地上，也不能静默吞掉"同一个理由。
+   */
+  private syncArmorStands(): void {
+    const items: ArmorStandRenderItem[] = [];
+    const stale: ArmorStandEntry[] = [];
+    this.armorStands.forEach((entry) => {
+      if (entry.dimension !== this.dimension) return;
+      if (!this.world.getChunk(toChunkCoord(entry.x), toChunkCoord(entry.z))) return;
+      if (this.world.getBlock(entry.x, entry.y, entry.z) !== Block.ARMOR_STAND) {
+        stale.push(entry);
+        return;
+      }
+      items.push({
+        key: armorStandKey(entry.dimension, entry.x, entry.y, entry.z),
+        x: entry.x,
+        y: entry.y,
+        z: entry.z,
+        slots: entry.slots.map((slot) => (slot ? slot.id : null)),
+        light: Math.max(
+          this.world.getSkyLight(entry.x, entry.y, entry.z),
+          this.world.getBlockLight(entry.x, entry.y, entry.z),
+        ),
+      });
+    });
+    for (const entry of stale) this.dropArmorStandContents(entry.x, entry.y, entry.z);
+    this.armorStandRenderer.update(items);
+  }
+
   // ---------------------------------------------------------------- 成就 / 进度（M7，批次 87）
 
   /**
@@ -10706,6 +10747,7 @@ class App {
       this.armorStands.setSlot(this.dimension, x, y, z, index, null);
       this.spawnDrop(item.id, item.count, x + 0.5, y + 1.05, z + 0.5, stackExtras(item));
       this.audio.play('place_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.syncArmorStands();
       return true;
     }
 
@@ -10722,6 +10764,7 @@ class App {
     });
     if (replaced) this.spawnDrop(replaced.id, replaced.count, x + 0.5, y + 1.05, z + 0.5, stackExtras(replaced));
     this.audio.play('place_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.syncArmorStands();
     return true;
   }
 
@@ -14304,6 +14347,8 @@ class App {
         // 展示框里挂着的东西（B14）：同一个节拍对账（两件事的"必须重新看世界一眼"
         // 的理由完全一样：区块流式加载/卸载、光照变化都没有事件）
         this.syncFrames();
+        // 盔甲架上的装备（批次 493）：同一个节拍（理由一样：区块流式加载没有事件）
+        this.syncArmorStands();
       }
       // 背包对账（M7）：每秒一次。**不是**为了"发现新东西"（那个由 `onChange` 立刻管），
       // 而是兜底"东西早就在背包里、而它的父条目刚刚才达成"这类顺序问题——
@@ -14567,6 +14612,7 @@ class App {
     // 告示牌的文字平面与画布贴图（B12）：每块牌子一份材质，得逐块释放
     this.signRenderer.dispose();
     this.itemFrameRenderer.dispose();
+    this.armorStandRenderer.dispose();
     this.beaconBeamRenderer.dispose();
     this.borderRenderer.dispose();
     // 浮标（批次 81）：懒建的，可能一次都没抛过竿

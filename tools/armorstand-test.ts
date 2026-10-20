@@ -11,7 +11,9 @@
  * 穿上去的装备目前只有数据、画不出来（差异记在 TASKS B51）。
  */
 
+import * as THREE from 'three';
 import {
+  ARMOR_MATERIAL_COLORS,
   ARMOR_STAND_SLOTS,
   ARMOR_STAND_SLOT_LABELS,
   ArmorStandStore,
@@ -21,8 +23,10 @@ import {
   normalizeStandSlots,
   restoreArmorStands,
   serializeArmorStands,
+  armorDisplayColor,
   standSlotsEmpty,
 } from '../src/core/world/ArmorStands.ts';
+import { ArmorStandRenderer } from '../src/render/ArmorStandRenderer.ts';
 import { ARMOR_SPECS } from '../src/core/registry/armor.ts';
 import { Block, ARMOR_STAND_ID, blockDef } from '../src/core/registry/blocks.ts';
 import { collisionBoxes, meshBoxes } from '../src/core/registry/blockShapes.ts';
@@ -173,6 +177,69 @@ console.log('\n[方块、几何与配方]');
   } else {
     check('应该是定形配方', false, recipe?.kind);
   }
+}
+
+
+console.log('\n[显示色：六档材质]');
+{
+  const colors = new Set<number>();
+  for (const spec of ARMOR_SPECS) colors.add(armorDisplayColor(spec.id));
+  equal('六档材质有六种颜色', colors.size, Object.keys(ARMOR_MATERIAL_COLORS).length);
+  equal('皮革是棕的（不是灰的）', armorDisplayColor(sample[0]!.id) !== armorDisplayColor(Block.STONE), true);
+  equal('非装备给灰色兜底', armorDisplayColor(Block.STONE), 0x888888);
+  equal('同一档材质的上衣与靴子同色', armorDisplayColor(chest) !== 0, true);
+}
+
+console.log('\n[渲染层：穿上去真的画出来（批次 493）]');
+{
+  const renderer = new ArmorStandRenderer();
+  renderer.update([]);
+  equal('一开始什么也没有', renderer.standCount, 0);
+
+  const key = 'overworld|5,64,5';
+  renderer.update([{ key, x: 5, y: 64, z: 5, slots: [null, null, null, null], light: 15 }]);
+  equal('空架子也在表里（但它不画东西）', renderer.standCount, 1);
+  equal('空架子没有盒子', renderer.meshCountOf(key), 0);
+
+  // 穿头盔 + 胸甲：各 1 个盒子
+  renderer.update([{ key, x: 5, y: 64, z: 5, slots: [helmet, chest, null, null], light: 15 }]);
+  equal('头盔 + 胸甲 = 2 个盒子', renderer.meshCountOf(key), 2);
+
+  // 穿满四件：护腿与靴子各 2 个盒子
+  renderer.update([{ key, x: 5, y: 64, z: 5, slots: [helmet, chest, legs, boots], light: 15 }]);
+  equal('穿满 = 1 + 1 + 2 + 2 = 6 个盒子', renderer.meshCountOf(key), 6);
+
+  // 再更新一次（内容没变）不应该翻倍
+  renderer.update([{ key, x: 5, y: 64, z: 5, slots: [helmet, chest, legs, boots], light: 15 }]);
+  equal('重复更新不会翻倍', renderer.meshCountOf(key), 6);
+
+  // 换装备（同槽位）：数量不变
+  renderer.update([{ key, x: 5, y: 64, z: 5, slots: [boots, chest, null, null], light: 15 }]);
+  equal('换装备后数量跟着槽位走', renderer.meshCountOf(key), 2);
+
+  // 光照变了一档：不崩、数量不变
+  renderer.update([{ key, x: 5, y: 64, z: 5, slots: [boots, chest, null, null], light: 3 }]);
+  equal('光照变化不影响盒子数', renderer.meshCountOf(key), 2);
+
+  // 第二个架子
+  renderer.update([
+    { key, x: 5, y: 64, z: 5, slots: [helmet, null, null, null], light: 15 },
+    { key: 'overworld|9,64,9', x: 9, y: 64, z: 9, slots: [null, null, null, boots], light: 15 },
+  ]);
+  equal('两个架子都在', renderer.standCount, 2);
+  equal('第二个架子只有靴子（2 个盒子）', renderer.meshCountOf('overworld|9,64,9'), 2);
+
+  // 移除一个
+  renderer.update([{ key: 'overworld|9,64,9', x: 9, y: 64, z: 9, slots: [null, null, null, boots], light: 15 }]);
+  equal('不在列表里的架子被移除', renderer.standCount, 1);
+  equal('被移除的架子查不到盒子', renderer.meshCountOf(key), 0);
+
+  // 顶点色属性确实烘进去了（面压暗靠它）
+  renderer.update([{ key, x: 5, y: 64, z: 5, slots: [helmet, null, null, null], light: 15 }]);
+  const group = renderer.group.children[0] as THREE.Group;
+  const mesh = group.children[0] as THREE.Mesh;
+  check('盒子上有逐面压暗的顶点色', mesh.geometry.getAttribute('color') !== undefined);
+  renderer.dispose();
 }
 
 console.log(`\n盔甲架测试：${passed} 通过 / ${failed} 失败`);
