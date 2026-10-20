@@ -239,3 +239,33 @@ export function buildCraftingPanel(ctx: CraftingPanelContext): UiElement[] {
   );
   return elements;
 }
+
+
+export interface InventoryChromeContext {
+  panelX: number;
+  panelY: number;
+  panelW: number;
+  railW: number;
+  tab: 'items' | 'creative' | 'recipes';
+  onTab(tab: 'items' | 'creative' | 'recipes'): void;
+  onClose(): void;
+}
+
+export function buildInventoryChrome(ctx: InventoryChromeContext): UiElement[] {
+  const tabStyle = (active: boolean): Record<string, unknown> => ({
+    background: active ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)',
+    border: 'rgba(180, 215, 235, 0.35)',
+    radius: 8,
+  });
+  return [
+    text(ctx.panelX + 24, ctx.panelY + 20, 200, 42, '背包', { fontSize: 30, color: '#ffffff' }),
+    button(ctx.panelX + 24, ctx.panelY + 86, ctx.railW - 24, 52, '物品', () => ctx.onTab('items'), tabStyle(ctx.tab === 'items')),
+    button(ctx.panelX + 24, ctx.panelY + 150, ctx.railW - 24, 52, '创造', () => ctx.onTab('creative'), tabStyle(ctx.tab === 'creative')),
+    button(ctx.panelX + 24, ctx.panelY + 214, ctx.railW - 24, 52, '配方', () => ctx.onTab('recipes'), tabStyle(ctx.tab === 'recipes')),
+    button(ctx.panelX + ctx.panelW - 72, ctx.panelY + 20, 44, 44, 'X', () => ctx.onClose(), {
+      background: 'rgba(30, 38, 46, 0.95)',
+      border: 'rgba(180, 215, 235, 0.35)',
+      radius: 8,
+    }),
+  ];
+}

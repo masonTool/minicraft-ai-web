@@ -22,7 +22,7 @@ import { drawBlockIcon } from './block-icon.ts';
 import { QualityManager } from './quality.ts';
 import type { V2CreativeCategory } from './inventory-catalog.ts';
 import { fillRecipe as fillRecipeFromInventory } from './recipe-book.ts';
-import { buildCraftingPanel, buildCreativeTab, buildItemTab, buildRecipeTab } from './inventory-tabs.ts';
+import { buildCraftingPanel, buildCreativeTab, buildInventoryChrome, buildItemTab, buildRecipeTab } from './inventory-tabs.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -650,32 +650,24 @@ const showInventory = (): void => {
   const craftX = gridX + 9 * (slotSize + gap) + 10;
   const craftY = gridY;
   const outputX = craftX + 3 * (craftSlot + craftGap) + 12;
-  const elements: UiElement[] = [
-    text(panelX + 24, panelY + 20, 200, 42, '背包', { fontSize: 30, color: '#ffffff' }),
-    button(panelX + 24, panelY + 86, railW - 24, 52, '物品', () => {
-      inventoryTab = 'items';
+  const elements: UiElement[] = buildInventoryChrome({
+    panelX,
+    panelY,
+    panelW,
+    railW,
+    tab: inventoryTab,
+    onTab: (tab) => {
+      inventoryTab = tab;
+      if (tab === 'recipes') recipePage = 0;
       showInventory();
-    }, { background: inventoryTab === 'items' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
-    button(panelX + 24, panelY + 150, railW - 24, 52, '创造', () => {
-      inventoryTab = 'creative';
-      showInventory();
-    }, {
-      background: inventoryTab === 'creative' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)',
-      border: 'rgba(180, 215, 235, 0.35)',
-      radius: 8,
-    }),
-    button(panelX + 24, panelY + 214, railW - 24, 52, '配方', () => {
-      inventoryTab = 'recipes';
-      recipePage = 0;
-      showInventory();
-    }, { background: inventoryTab === 'recipes' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
-    button(panelX + panelW - 72, panelY + 20, 44, 44, 'X', () => {
+    },
+    onClose: () => {
       crafting.drainTo(inventory);
       inventoryOpen = false;
       paused = false;
       showHud();
-    }, { background: 'rgba(30, 38, 46, 0.95)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
-  ];
+    },
+  });
   if (inventoryTab === 'items') {
     elements.push(...buildItemTab({
       gridX,

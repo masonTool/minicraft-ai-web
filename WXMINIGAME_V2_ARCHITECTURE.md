@@ -30,7 +30,7 @@ v2
                  inventory-catalog.ts
                                    创造五分类与页签映射
                  recipe-book.ts    配方匹配/取料/填格纯逻辑
-                 inventory-tabs.ts 物品/创造/配方页与合成面板 UI
+                 inventory-tabs.ts 背包壳/物品/创造/配方页与合成面板 UI
                  quality.ts        画质分级/FPS 自适应
                  save-controller.ts
                                    打开/防抖保存/脏区块/容器/玩家写入
@@ -105,7 +105,7 @@ v2
 - 抽取 `ContainerSystem`：箱子/熔炉打开、存取、面板、熔炉 tick 移出组合根
 - 抽取 `drawBlockIcon` 与创造分类纯逻辑，组合根不再依赖图集布局
 - 抽取 `recipe-book.ts`：配方尺寸匹配、背包取 1 份材料、填合成格
-- 抽取 `inventory-tabs.ts`：物品/创造/配方三页 + 合成面板 UI 构建，组合根只注入状态与回调
+- 抽取 `inventory-tabs.ts`：背包壳、物品/创造/配方三页、合成面板；组合根只注入状态与回调
 - 抽取 `quality.ts`：DPR 分级、低帧降级、稳定回升、天气可见性
 - 抽取 `save-controller.ts`：存档打开/关闭/防抖保存/脏区块/容器/玩家写入
 
