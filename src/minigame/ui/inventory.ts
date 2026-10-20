@@ -1,28 +1,31 @@
 import * as THREE from 'three';
+import type { ItemStack } from '../../core/container/Inventory.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { drawBlockIcon } from './icons.ts';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
+
+export type InventoryAction = { type: 'select' | 'swap'; index: number } | null;
 
 export interface Inventory {
   toggle(): void;
   close(): void;
   isOpen(): boolean;
   setSelected(index: number): void;
-  /** 返回 true 表示这次点击被 UI 消费 */
-  handleTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
+  setSlots(slots: readonly (ItemStack | null)[]): void;
+  /** 返回动作；null 表示关闭/点击空白 */
+  handleTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): InventoryAction;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
 /**
- * 背包/方块面板（WX-020B 第一版）
+ * 真实 41 格背包面板（WX-023/028 第一版）
  *
- * 目前没有真正的 41 格物品模型，先做一个 9×3 的方块选择面板：
- * 前 6 格是快捷栏方块，点一下选中并关闭；其余格子先留空。
- * 等 WX-028 接入 Inventory 数据后，只替换 slots 数据源。
+ * 9×5 网格：0-8 快捷栏、9-35 主背包、36-40 盔甲/副手（先当普通槽显示）。
+ * 点快捷栏槽位 = 选中；点其他有物品的槽位 = 与当前快捷栏槽位交换。
  */
 export function createInventory(
   atlas: TextureAtlas,
-  blocks: readonly number[],
+  slots: readonly (ItemStack | null)[],
   screenWidth: number,
   screenHeight: number,
 ): Inventory {
@@ -52,9 +55,9 @@ export function createInventory(
   scene.add(mesh);
 
   const cols = 9;
-  const rows = 3;
-  const slot = 56;
-  const gap = 8;
+  const rows = 5;
+  const slot = 48;
+  const gap = 6;
   const gridWidth = cols * slot + (cols - 1) * gap;
   const gridHeight = rows * slot + (rows - 1) * gap;
   const panelWidth = gridWidth + 40;
@@ -68,6 +71,7 @@ export function createInventory(
 
   let open = false;
   let selected = 0;
+  let currentSlots: readonly (ItemStack | null)[] = slots;
 
   const slotRect = (index: number): { x: number; y: number } => {
     const col = index % cols;
@@ -85,18 +89,17 @@ export function createInventory(
 
     context.fillStyle = 'rgba(0, 0, 0, 0.58)';
     context.fillRect(0, 0, canvas.width, canvas.height);
-
     drawPanel(context, panelRect);
-    drawText(context, 'INVENTORY', panelX + 20, panelY + 18, 28, '#ffffff');
+    drawText(context, 'INVENTORY', panelX + 20, panelY + 18, 26, '#ffffff');
     drawText(
       context,
-      'TAP OUTSIDE TO CLOSE',
-      panelX + panelWidth - 64,
-      panelY + 22,
-      16,
+      'TAP HOTBAR = SELECT · TAP ITEM = SWAP',
+      panelX + 20,
+      panelY + 48,
+      13,
       'rgba(255, 255, 255, 0.55)',
-      'right',
-      180,
+      'left',
+      panelWidth - 100,
     );
     drawButton(context, closeRect, 'X', 'normal', 24);
 
@@ -105,10 +108,17 @@ export function createInventory(
       context.fillStyle = 'rgba(0, 0, 0, 0.42)';
       context.fillRect(x, y, slot, slot);
       context.strokeStyle =
-        i === selected ? '#ffffff' : 'rgba(255, 255, 255, 0.28)';
+        i === selected ? '#ffffff' : i < 9 ? 'rgba(190, 220, 255, 0.55)' : 'rgba(255, 255, 255, 0.25)';
       context.lineWidth = i === selected ? 4 : 2;
       context.strokeRect(x + 1, y + 1, slot - 2, slot - 2);
-      if (i < blocks.length) drawBlockIcon(context, atlas, blocks[i]!, x, y, slot);
+
+      const stack = i < 41 ? currentSlots[i] : null;
+      if (stack && stack.count > 0) {
+        drawBlockIcon(context, atlas, stack.id, x, y, slot);
+        if (stack.count > 1) {
+          drawText(context, `${stack.count}`, x + slot - 4, y + slot - 18, 14, '#ffffff', 'right', 34);
+        }
+      }
     }
 
     texture.needsUpdate = true;
@@ -118,6 +128,8 @@ export function createInventory(
     open = value;
     redraw();
   };
+
+  redraw();
 
   return {
     toggle(): void {
@@ -130,31 +142,41 @@ export function createInventory(
       return open;
     },
     setSelected(index: number): void {
-      selected = Math.max(0, Math.min(blocks.length - 1, index));
+      selected = Math.max(0, Math.min(8, index));
       redraw();
     },
-    handleTap(clientX: number, clientY: number, sw: number, sh: number): boolean {
-      if (!open) return false;
+    setSlots(next: readonly (ItemStack | null)[]): void {
+      currentSlots = next;
+      redraw();
+    },
+    handleTap(clientX: number, clientY: number, sw: number, sh: number): InventoryAction {
+      if (!open) return null;
       const x = (clientX / Math.max(1, sw)) * canvas.width;
       const y = (clientY / Math.max(1, sh)) * canvas.height;
 
       if (contains(closeRect, x, y)) {
         setOpen(false);
-        return true;
+        return null;
       }
 
-      for (let i = 0; i < blocks.length; i++) {
+      for (let i = 0; i < cols * rows; i++) {
         const rect = slotRect(i);
-        if (x >= rect.x && x <= rect.x + slot && y >= rect.y && y <= rect.y + slot) {
-          selected = i;
+        if (x < rect.x || x > rect.x + slot || y < rect.y || y > rect.y + slot) continue;
+        const stack = i < 41 ? currentSlots[i] : null;
+        if (!stack) {
           setOpen(false);
-          return true;
+          return null;
         }
+        setOpen(false);
+        if (i < 9) {
+          selected = i;
+          return { type: 'select', index: i };
+        }
+        return { type: 'swap', index: i };
       }
 
-      // 点面板外或空槽都关闭，避免玩家被困在背包里
       setOpen(false);
-      return true;
+      return null;
     },
     render(renderer: THREE.WebGLRenderer): void {
       if (!open) return;

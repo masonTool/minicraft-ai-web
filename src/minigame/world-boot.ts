@@ -149,7 +149,17 @@ async function boot(): Promise<void> {
   outline.renderOrder = 10;
   scene.add(outline);
 
-  const HOTBAR = [Block.OAK_PLANKS, Block.STONE, Block.DIRT, Block.GRASS_BLOCK, Block.OAK_LOG, Block.GLASS];
+  const HOTBAR = [
+    Block.OAK_PLANKS,
+    Block.STONE,
+    Block.DIRT,
+    Block.GRASS_BLOCK,
+    Block.OAK_LOG,
+    Block.GLASS,
+    Block.COBBLESTONE,
+    Block.SAND,
+    Block.GLOWSTONE,
+  ];
   let selectedSlot = 0;
   let currentHit: RayHit | null = null;
   let targetLabel = '-';
@@ -190,19 +200,43 @@ async function boot(): Promise<void> {
     if (!inventory.get(i)) inventory.add(HOTBAR[i]!, 64);
   }
   const hotbarBlocks = HOTBAR.map((_, index) => inventory.get(index)?.id ?? 0);
-  const ui = createCanvasUi(atlas, hotbarBlocks, width, height, (settings) => {
-    camera.fov = settings.fov;
-    camera.updateProjectionMatrix();
-    viewRadius = settings.renderDistance;
-    invertLook = settings.invertLook;
-    if (settings.sound) {
-      audio?.resume();
-      if (audio) audioStatus = 'on';
-    } else {
-      audio?.suspend();
-      audioStatus = 'off';
-    }
-  });
+  let scheduleSave: (() => void) | null = null;
+  const ui = createCanvasUi(
+    atlas,
+    hotbarBlocks,
+    inventory.serialize(),
+    selectedSlot,
+    width,
+    height,
+    {
+      onSelectSlot: (index) => {
+        selectedSlot = Math.max(0, Math.min(HOTBAR.length - 1, index));
+        ui.setSelectedSlot(selectedSlot);
+        scheduleSave?.();
+      },
+      onSwapSlot: (index) => {
+        const from = inventory.get(index);
+        const to = inventory.get(selectedSlot);
+        inventory.set(selectedSlot, from);
+        inventory.set(index, to);
+        ui.syncInventory(inventory.serialize(), selectedSlot);
+        scheduleSave?.();
+      },
+      onSettingsChange: (settings) => {
+        camera.fov = settings.fov;
+        camera.updateProjectionMatrix();
+        viewRadius = settings.renderDistance;
+        invertLook = settings.invertLook;
+        if (settings.sound) {
+          audio?.resume();
+          if (audio) audioStatus = 'on';
+        } else {
+          audio?.suspend();
+          audioStatus = 'off';
+        }
+      },
+    },
+  );
 
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
@@ -315,6 +349,8 @@ async function boot(): Promise<void> {
     }, 1200);
   };
 
+  scheduleSave = requestSave;
+
   platform.lifecycle.onHide(() => {
     void persist();
   });
@@ -367,6 +403,7 @@ async function boot(): Promise<void> {
     });
     world.setBlockAndUpdate(currentHit.x, currentHit.y, currentHit.z, Block.AIR);
     inventory.add(id, 1);
+    ui.syncInventory(inventory.serialize(), selectedSlot);
     ui.showToast(`+ ${blockDef(id).name.replace('minecraft:', '')}`);
     requestSave();
   };
@@ -403,6 +440,7 @@ async function boot(): Promise<void> {
     world.setBlockAndUpdate(px, py, pz, blockId);
     stack.count -= 1;
     if (stack.count <= 0) inventory.set(selectedSlot, null);
+    ui.syncInventory(inventory.serialize(), selectedSlot);
     audio?.playPlaceForBlock(blockDef(blockId).name, { x: px + 0.5, y: py + 0.5, z: pz + 0.5 });
     requestSave();
   };

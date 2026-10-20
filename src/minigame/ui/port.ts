@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { ItemStack } from '../../core/container/Inventory.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { createHud } from './hud.ts';
 import { createHotbar } from './hotbar.ts';
@@ -16,6 +17,7 @@ import { createOverlay } from './overlay.ts';
 export interface MiniGameUi {
   updateStatus(lines: readonly string[]): void;
   setSelectedSlot(index: number): void;
+  syncInventory(slots: readonly (ItemStack | null)[], selectedSlot: number): void;
   toggleInventory(): void;
   isInventoryOpen(): boolean;
   /** 返回 true 表示这次点击被 UI 消费 */
@@ -31,22 +33,31 @@ export interface MiniGameUi {
   render(renderer: THREE.WebGLRenderer): void;
 }
 
+export interface CanvasUiCallbacks {
+  onSelectSlot?: (index: number) => void;
+  onSwapSlot?: (index: number) => void;
+  onSettingsChange?: (values: SettingsValues) => void;
+}
+
 export function createCanvasUi(
   atlas: TextureAtlas,
   blocks: readonly number[],
+  slots: readonly (ItemStack | null)[],
+  selectedSlot: number,
   screenWidth: number,
   screenHeight: number,
-  onSettingsChange?: (values: SettingsValues) => void,
+  callbacks: CanvasUiCallbacks = {},
 ): MiniGameUi {
   const hud = createHud();
   const hotbar = createHotbar(atlas, blocks);
-  const inventory = createInventory(atlas, blocks, screenWidth, screenHeight);
+  const inventory = createInventory(atlas, slots, screenWidth, screenHeight);
+  inventory.setSelected(selectedSlot);
   const pause = createPauseMenu(screenWidth, screenHeight);
   const settings = createSettingsMenu(
     screenWidth,
     screenHeight,
     { fov: 72, renderDistance: 3, sound: true, invertLook: false },
-    (values) => onSettingsChange?.(values),
+    (values) => callbacks.onSettingsChange?.(values),
   );
   const overlay = createOverlay(screenWidth, screenHeight);
 
@@ -58,6 +69,12 @@ export function createCanvasUi(
       hotbar.setSelected(index);
       inventory.setSelected(index);
     },
+    syncInventory(next: readonly (ItemStack | null)[], selectedSlot: number): void {
+      hotbar.setBlocks(next.slice(0, 6).map((stack) => stack?.id ?? 0));
+      hotbar.setSelected(selectedSlot);
+      inventory.setSlots(next);
+      inventory.setSelected(selectedSlot);
+    },
     toggleInventory(): void {
       if (pause.isOpen() || settings.isOpen()) return;
       inventory.toggle();
@@ -66,7 +83,11 @@ export function createCanvasUi(
       return inventory.isOpen();
     },
     handleInventoryTap(clientX, clientY, sw, sh): boolean {
-      return inventory.isOpen() ? inventory.handleTap(clientX, clientY, sw, sh) : false;
+      if (!inventory.isOpen()) return false;
+      const action = inventory.handleTap(clientX, clientY, sw, sh);
+      if (action?.type === 'select') callbacks.onSelectSlot?.(action.index);
+      if (action?.type === 'swap') callbacks.onSwapSlot?.(action.index);
+      return true;
     },
     togglePause(): void {
       if (settings.isOpen()) settings.close();

@@ -4,6 +4,7 @@ import { drawBlockIcon } from './icons.ts';
 
 export interface Hotbar {
   setSelected(index: number): void;
+  setBlocks(blocks: readonly number[]): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -17,8 +18,11 @@ export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Ho
   const slotSize = 64;
   const gap = 8;
   const padding = 8;
-  const width = blocks.length * slotSize + (blocks.length - 1) * gap + padding * 2;
+  const slotCount = blocks.length;
+  const width = slotCount * slotSize + (slotCount - 1) * gap + padding * 2;
   const height = slotSize + padding * 2;
+  let currentBlocks = [...blocks];
+  let currentSelected = 0;
 
   const doc = (globalThis as unknown as { document: Document }).document;
   const canvas = doc.createElement('canvas');
@@ -58,21 +62,26 @@ export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Ho
     context.lineWidth = selected ? 4 : 2;
     context.strokeRect(x + 1, y + 1, slotSize - 2, slotSize - 2);
 
-    drawBlockIcon(context, atlas, blocks[index] ?? 0, x, y, slotSize);
+    drawBlockIcon(context, atlas, currentBlocks[index] ?? 0, x, y, slotSize);
   };
 
-  const redraw = (selected: number): void => {
+  const redraw = (): void => {
     if (!context) return;
     context.clearRect(0, 0, width, height);
-    for (let i = 0; i < blocks.length; i++) drawSlot(i, i === selected);
+    for (let i = 0; i < slotCount; i++) drawSlot(i, i === currentSelected);
     texture.needsUpdate = true;
   };
 
-  redraw(0);
+  redraw();
 
   return {
     setSelected(index: number): void {
-      redraw(Math.max(0, Math.min(blocks.length - 1, index)));
+      currentSelected = Math.max(0, Math.min(slotCount - 1, index));
+      redraw();
+    },
+    setBlocks(next: readonly number[]): void {
+      currentBlocks = Array.from({ length: slotCount }, (_, index) => next[index] ?? 0);
+      redraw();
     },
     render(renderer: THREE.WebGLRenderer): void {
       renderer.clearDepth();
