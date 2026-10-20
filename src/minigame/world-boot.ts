@@ -2074,7 +2074,13 @@ async function boot(): Promise<void> {
         inventorySlots: inventory.serialize().map((stack) => stack?.id ?? 0),
         target: targetLabel,
         chestOpen: ui.isChestOpen(),
+        chestSlots: openedChest
+          ? Array.from({ length: 27 }, (_, index) => openedChest?.get(index)?.id ?? 0)
+          : [],
         furnaceOpen: ui.isFurnaceOpen(),
+        furnaceSlots: openedFurnace
+          ? Array.from({ length: 3 }, (_, index) => openedFurnace?.get(index)?.id ?? 0)
+          : [],
         chunks: world.chunks.size,
         drawn: chunkRenderer.drawnCount,
       });
