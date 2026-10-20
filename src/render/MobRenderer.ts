@@ -901,6 +901,22 @@ interface MobVisual {
 /** 实例容量：约 64 只生物 × 最多 16 个部件。超出会被截断并打印一次警告 */
 const MAX_PARTS = 1024;
 
+/** 刷怪笼里的迷你模型的缩放（原版约 0.4~0.5） */
+const DECOR_SCALE = 0.45;
+/** 旋转速度（弧度/秒）：原版转得很慢，转快了像电风扇 */
+const DECOR_SPIN = 0.7;
+
+/** 一个装饰生物：样板（只取外观）+ 位置 + 相位 */
+export interface MobDecoration {
+  /** 样板：只读 `type` 与外观状态，**不会被 tick** */
+  readonly sample: Mob;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** 初始相位（让相邻笼子里的模型不同步转） */
+  readonly phase: number;
+}
+
 export class MobRenderer {
   readonly object = new THREE.Group();
 
@@ -915,6 +931,21 @@ export class MobRenderer {
   private elapsed = 0;
   /** 上一帧实际用到的实例数（调试与验收用） */
   usedInstances = 0;
+
+  /** 装饰生物（批次 487：刷怪笼里旋转的迷你模型），由主程序每帧灌进来 */
+  private decorations: readonly MobDecoration[] = [];
+  /** 装饰用的外观缓存（按 `mobId + 外观版本`）——它们没有实体 id，不能塞进 `visuals` */
+  private readonly decorationVisuals = new Map<string, MobVisual>();
+
+  /**
+   * 设置这一帧的装饰生物（刷怪笼里的迷你模型）。
+   *
+   * 与 `mobs` 走**同一套实例缓冲**：它们也是方块模型，没必要为几只迷你模型
+   * 再开一个 InstancedMesh（那会多一次 draw call，而这正是实例化的意义所在）。
+   */
+  setDecorations(list: readonly MobDecoration[]): void {
+    this.decorations = list;
+  }
   private warnedOverflow = false;
 
   constructor(
@@ -1045,6 +1076,58 @@ export class MobRenderer {
         this.mesh.setColorAt(instance, this.scratchColor);
         instance++;
       }
+    }
+
+    // ---- 装饰生物（批次 487）：刷怪笼里旋转的迷你模型
+    //
+    // 与实体同一套 `rootDummy + partDummy`：位置在笼子正中、绕 Y 轴匀速转、
+    // 整体缩小（`DECOR_SCALE`）。**不做走路摆动**——它们没在走，
+    // 摆动反而会让"这是一只被关着的怪"看起来在跑步。
+    const seenDecor = new Set<string>();
+    for (const deco of this.decorations) {
+      const sample = deco.sample;
+      const appearanceKey = `${sample.type.id}|${mobAppearanceKey(sample)}`;
+      seenDecor.add(appearanceKey);
+      let visual = this.decorationVisuals.get(appearanceKey);
+      if (!visual) {
+        visual = this.createVisual(sample);
+        this.decorationVisuals.set(appearanceKey, visual);
+      }
+
+      this.rootDummy.position.set(deco.x, deco.y, deco.z);
+      this.rootDummy.rotation.set(0, this.elapsed * DECOR_SPIN + deco.phase, 0);
+      this.rootDummy.scale.setScalar(DECOR_SCALE);
+      this.rootDummy.updateMatrix();
+
+      const light = sampleLight(Math.floor(deco.x), Math.floor(deco.y), Math.floor(deco.z));
+      const sky = light ? light.sky : 15;
+      const block = light ? light.block : 0;
+      const level = Math.max((sky / 15) * skyBrightness, block / 15);
+      const brightness = Math.max(level / (4 - 3 * level), 0.08);
+
+      for (let i = 0; i < visual.specs.length; i++) {
+        if (instance >= MAX_PARTS) break;
+        const spec = visual.specs[i]!;
+        this.partDummy.position.set(spec.x, spec.y, spec.z);
+        this.partDummy.scale.set(spec.width, spec.height, spec.depth);
+        this.partDummy.rotation.set(0, 0, 0);
+        this.partDummy.updateMatrix();
+        this.partDummy.updateWorldMatrix(true, false);
+        this.mesh.setMatrixAt(instance, this.partDummy.matrixWorld);
+
+        const base = visual.partColors[i]!;
+        this.scratchColor.setRGB(
+          Math.min(1, (((base >> 16) & 0xff) * brightness) / 255),
+          Math.min(1, (((base >> 8) & 0xff) * brightness) / 255),
+          Math.min(1, ((base & 0xff) * brightness) / 255),
+        );
+        this.mesh.setColorAt(instance, this.scratchColor);
+        instance++;
+      }
+    }
+    // 笼子没了就丢掉它的外观（否则换个笼子类型之后旧的会一直留着）
+    for (const key of [...this.decorationVisuals.keys()]) {
+      if (!seenDecor.has(key)) this.decorationVisuals.delete(key);
     }
 
     this.usedInstances = instance;

@@ -93,7 +93,7 @@ import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
 import { Sky, cameraFarFor } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
-import { MobRenderer } from './render/MobRenderer.ts';
+import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy } from './core/entity/Mob.ts';
 import { entityIntersectsBox, type DroppedExtras } from './core/entity/Entity.ts';
 import { mobTypeById } from './core/entity/mobs.ts';
@@ -125,6 +125,8 @@ import { isVillagerFood, levelName, tradeBlocker, tradeSettlement } from './core
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
 import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
+// 刷怪笼里旋转的迷你生物（批次 487）：收集逻辑是纯函数，渲染在 MobRenderer
+import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
 import { spawnerDefFor } from './core/registry/spawners.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { EndGenerator, endPillarTops } from './core/gen/EndGenerator.ts';
@@ -1409,6 +1411,13 @@ class App {
    * 分成两张表迟早会有一张忘了清。
    */
   private readonly spawners = new Map<string, number>();
+  /**
+   * 刷怪笼装饰用的"样板生物"（批次 487）。
+   *
+   * 只用来生成外观（颜色/部件），**不会被 tick、也不会进实体表**——
+   * 每个 `mobId` 一只，用完就留着（颜色跟着种类走，不会变）。
+   */
+  private readonly spawnerSamples = new Map<string, Mob>();
   private readonly rodPulses = new RodPulses();
   /** 下一次打雷的倒计时（只在雷暴里走） */
   private strikeTimer = 0;
@@ -8466,6 +8475,40 @@ class App {
   }
 
   /** 记下一个刷怪笼（区块扫描与"放下笼子"两条路径都走这里） */
+  /**
+   * 刷新刷怪笼里的装饰生物（批次 487）。
+   *
+   * 三步：纯函数收集（哪些笼子、什么生物）→ 每种生物取一只样板 →
+   * 交给渲染层（与实体共用同一套实例缓冲）。
+   *
+   * 相位按坐标错开：一排笼子如果同步旋转，看起来像"整排电风扇"。
+   */
+  private refreshSpawnerDecorations(): void {
+    const decorations = collectSpawnerDecorations(
+      this.spawners.keys(),
+      (x, y, z) => this.world.getBlock(x, y, z),
+      (id) => spawnerDefFor(id) ?? null,
+    );
+    const list: MobDecoration[] = [];
+    for (const decoration of decorations) {
+      const type = mobTypeById(decoration.mobId);
+      if (!type) continue;
+      let sample = this.spawnerSamples.get(decoration.mobId);
+      if (!sample) {
+        sample = createMob(type, 0, 0, 0);
+        this.spawnerSamples.set(decoration.mobId, sample);
+      }
+      list.push({
+        sample,
+        x: decoration.x,
+        y: decoration.y,
+        z: decoration.z,
+        phase: ((decoration.x * 0.7 + decoration.z * 0.3) % (Math.PI * 2)),
+      });
+    }
+    this.mobRenderer.setDecorations(list);
+  }
+
   private noteSpawner(x: number, y: number, z: number): void {
     const def = spawnerDefFor(this.world.getBlock(x, y, z));
     if (!def) return;
@@ -9489,6 +9532,9 @@ class App {
     }
     // 联机队友也交给同一个渲染器（只是不进 EntityManager，不跑 AI 与物理）
     for (const mob of this.remotePlayers.values()) mobs.push(mob);
+    // 刷怪笼里的迷你模型（批次 487）：必须在 `mobRenderer.update` **之前**灌进去，
+    // 否则这一帧还是上一帧那批笼子
+    this.refreshSpawnerDecorations();
     this.mobRenderer.update(mobs, this.camera, dt, sampleLight);
     this.updateEndBoss();
     this.updateMobSpawning(dt);
