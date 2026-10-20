@@ -139,6 +139,9 @@ interface V2Settings {
   brightness: number;
   viewDistance: number;
   sensitivity: number;
+  fov: number;
+  invertY: boolean;
+  autoJump: boolean;
   fingerAim: boolean;
   sound: boolean;
 }
@@ -148,6 +151,9 @@ const defaultSettings: V2Settings = {
   brightness: 1,
   viewDistance: 2,
   sensitivity: 1,
+  fov: 72,
+  invertY: false,
+  autoJump: false,
   fingerAim: true,
   sound: true,
 };
@@ -160,6 +166,9 @@ const readSettings = (): V2Settings => {
       brightness: Math.max(0.5, Math.min(2, Number(parsed.brightness ?? 1))),
       viewDistance: Math.max(1, Math.min(4, Math.round(Number(parsed.viewDistance ?? 2)))),
       sensitivity: Math.max(0.5, Math.min(2, Number(parsed.sensitivity ?? 1))),
+      fov: Math.max(60, Math.min(110, Number(parsed.fov ?? 72))),
+      invertY: parsed.invertY === true,
+      autoJump: parsed.autoJump === true,
       fingerAim: parsed.fingerAim !== false,
       sound: parsed.sound !== false,
     };
@@ -199,35 +208,49 @@ const showSettings = (): void => {
   let rowY = panelY + 96;
   const row = (node: ReturnType<typeof box>): void => {
     rows.push(node);
-    rowY += 68;
+    rowY += 58;
   };
   const apply = (): void => {
     persistSettings();
     solid.skyBrightness = settings.brightness;
     translucent.skyBrightness = settings.brightness;
+    camera.fov = settings.fov;
+    camera.updateProjectionMatrix();
     showSettings();
   };
 
   if (activeSettingsTab === 'game') {
-    row(slider(panelX + 24, rowY, panelW - 48, 56, '亮度', 0.5, 2, 0.05, settings.brightness, (value) => {
+    row(slider(panelX + 24, rowY, panelW - 48, 50, '亮度', 0.5, 2, 0.05, settings.brightness, (value) => {
       settings.brightness = value;
       apply();
     }));
-    row(slider(panelX + 24, rowY, panelW - 48, 56, '视距', 1, 4, 1, settings.viewDistance, (value) => {
+    row(slider(panelX + 24, rowY, panelW - 48, 50, '视距', 1, 4, 1, settings.viewDistance, (value) => {
       settings.viewDistance = value;
       apply();
     }));
   } else if (activeSettingsTab === 'controls') {
-    row(slider(panelX + 24, rowY, panelW - 48, 56, '视角灵敏度', 0.5, 2, 0.1, settings.sensitivity, (value) => {
+    row(slider(panelX + 24, rowY, panelW - 48, 50, '视角灵敏度', 0.5, 2, 0.1, settings.sensitivity, (value) => {
       settings.sensitivity = value;
       apply();
     }));
-    row(toggle(panelX + 24, rowY, panelW - 48, 56, '手指落点瞄准', settings.fingerAim, (value) => {
+    row(slider(panelX + 24, rowY, panelW - 48, 50, '视野 FOV', 60, 110, 1, settings.fov, (value) => {
+      settings.fov = value;
+      apply();
+    }));
+    row(toggle(panelX + 24, rowY, panelW - 48, 50, '反转 Y 轴', settings.invertY, (value) => {
+      settings.invertY = value;
+      apply();
+    }));
+    row(toggle(panelX + 24, rowY, panelW - 48, 50, '自动跳跃', settings.autoJump, (value) => {
+      settings.autoJump = value;
+      apply();
+    }));
+    row(toggle(panelX + 24, rowY, panelW - 48, 50, '手指落点瞄准', settings.fingerAim, (value) => {
       settings.fingerAim = value;
       apply();
     }));
   } else if (activeSettingsTab === 'sound') {
-    row(toggle(panelX + 24, rowY, panelW - 48, 56, '声音', settings.sound, (value) => {
+    row(toggle(panelX + 24, rowY, panelW - 48, 50, '声音', settings.sound, (value) => {
       settings.sound = value;
       apply();
     }));
@@ -974,7 +997,8 @@ platform.input.onPointer('move', (event) => {
   } else if (event.pointerId === lookPointer) {
     if (Math.hypot(event.clientX - lookX, event.clientY - lookY) > 8) lookMoved = true;
     yaw -= (event.clientX - lookX) * 0.005 * settings.sensitivity;
-    pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lookY) * 0.005 * settings.sensitivity));
+    const pitchDelta = (event.clientY - lookY) * 0.005 * settings.sensitivity * (settings.invertY ? -1 : 1);
+    pitch = Math.max(-1.2, Math.min(1.2, pitch - pitchDelta));
     lookX = event.clientX;
     lookY = event.clientY;
     updateHitAt(event.clientX, event.clientY);
@@ -999,6 +1023,8 @@ const release = (event: { pointerId: number; clientX: number; clientY: number })
 platform.input.onPointer('up', release);
 platform.input.onPointer('cancel', release);
 
+camera.fov = settings.fov;
+camera.updateProjectionMatrix();
 camera.rotation.order = 'YXZ';
 
 let lastTime = performance.now();
@@ -1061,7 +1087,7 @@ const frame = (): void => {
   }
 
   if (playerReady && !paused && !settingsOpen && !inventoryOpen) {
-    physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, false);
+    physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, settings.autoJump);
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
