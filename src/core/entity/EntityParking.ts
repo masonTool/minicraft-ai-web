@@ -116,7 +116,14 @@ function sanitizeEffects(data: unknown): SavedMobEffect[] | undefined {
  */
 function sanitizeVillager(data: unknown): VillagerSavedState | undefined {
   if (!data || typeof data !== 'object') return undefined;
-  const record = data as { profession?: unknown; xp?: unknown; uses?: unknown; demand?: unknown };
+  const record = data as {
+    profession?: unknown;
+    xp?: unknown;
+    uses?: unknown;
+    demand?: unknown;
+    home?: unknown;
+    workstation?: unknown;
+  };
   if (typeof record.profession !== 'string' || record.profession.length === 0) return undefined;
   const xp =
     typeof record.xp === 'number' && Number.isFinite(record.xp) ? Math.max(0, Math.floor(record.xp)) : 0;
@@ -137,7 +144,24 @@ function sanitizeVillager(data: unknown): VillagerSavedState | undefined {
       );
     }
   }
-  return { profession: record.profession, xp, uses, ...(demand.length > 0 ? { demand } : {}) };
+  const home = sanitizePoint(record.home);
+  const workstation = sanitizePoint(record.workstation);
+  return {
+    profession: record.profession,
+    xp,
+    uses,
+    ...(demand.length > 0 ? { demand } : {}),
+    ...(home ? { home } : {}),
+    ...(workstation ? { workstation } : {}),
+  };
+}
+
+/** 作息坐标的浅校验（批次 510）：三个都必须是有限数，否则整份丢掉 */
+function sanitizePoint(raw: unknown): { x: number; y: number; z: number } | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const point = raw as { x?: unknown; y?: unknown; z?: unknown };
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)) return undefined;
+  return { x: Math.floor(point.x as number), y: Math.floor(point.y as number), z: Math.floor(point.z as number) };
 }
 
 /** 一层附加数据（掉落物本身，或潜影盒里的一格）的浅校验 */

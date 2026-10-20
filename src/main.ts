@@ -126,6 +126,7 @@ import { Villager } from './core/entity/Villager.ts';
 import { isVillagerFood, levelName, recordTradeUse, tradeBlocker, tradeDemand, tradeSettlement } from './core/registry/villagerTrades.ts';
 // 村庄的人口（J22，批次 89）：房子里的每张床招一个村民——规则是纯函数，可离线断言
 import { planVillagePopulation, type VillageWorldView } from './core/world/VillagePopulation.ts';
+import { routineTarget, villagerArrived, villagerRoutine } from './core/world/VillagerRoutine.ts';
 import { planSpawnerSpawn, type SpawnerWorldView } from './core/world/SpawnerTicking.ts';
 // 刷怪笼里旋转的迷你生物（批次 487）：收集逻辑是纯函数，渲染在 MobRenderer
 import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
@@ -5790,6 +5791,8 @@ class App {
               xp: entity.tradeXp,
               uses: entity.offers.map((offer) => offer.uses),
               demand: entity.offers.map((offer) => tradeDemand(offer)),
+              ...(entity.home ? { home: entity.home } : {}),
+              ...(entity.workstation ? { workstation: entity.workstation } : {}),
             }
           : undefined;
       return {
@@ -8001,6 +8004,8 @@ class App {
       // 身边有工作站就直接认领（村庄里"这栋房子摆什么，住的就是谁"）——
       // 认领的是**哪一格**也一并记下来，与 J11 那套"认领工作站"是同一份数据
       if (plan.professionId !== null) villager.assignProfession(plan.professionId, plan.workstation);
+      // 家 = 招他来的那张床（批次 510）：晚上往这儿走
+      villager.setHome({ x: plan.bedX, y: plan.bedY, z: plan.bedZ });
       this.entities.spawn(villager);
     }
     // 铁傀儡（批次 472）：原版"3 个村民 + 3 张床"就有村庄守卫。
@@ -8252,6 +8257,30 @@ class App {
    * ⚠️ 铁傀儡自己 `hostile: false`，所以它**不会被自己选成目标**；
    * 候选里也只取 `type.hostile` 的生物（村民、动物、其他傀儡都不在内）。
    */
+  /**
+   * 村民作息（J11 尾巴，批次 510）：白天去工作站、其它时间去床边。
+   *
+   * 每 0.5 秒下一次指令（不是每帧）：`guardToward` 只写 `moveDir`，
+   * 实体自己按它走；每帧写一次既浪费，也会把 `wanderTimer` 一直顶着。
+   * 到点后 `standStill()`，否则游荡 AI 马上又把人带走。
+   */
+  private tickVillagerRoutine(): void {
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Villager) || entity.dead || entity.baby) continue;
+      const mode = villagerRoutine(this.timeOfDay, entity.workstation !== null, entity.home !== null);
+      const target = routineTarget(mode, entity.home, entity.workstation);
+      if (!target) continue;
+      if (villagerArrived(entity.x, entity.z, target)) {
+        entity.standStill();
+        continue;
+      }
+      entity.walkToward(target.x + 0.5, target.z + 0.5);
+    }
+  }
+
+  /** 村民作息的下一次刷新倒计时（秒，批次 510） */
+  private villagerRoutineTimer = 0;
+
   private tickGuardians(context: EntityContext, dt: number): void {
     const hostiles: Mob[] = [];
     for (const entity of this.entities.all) {
@@ -9735,6 +9764,11 @@ class App {
     // 村庄守卫（批次 474）：铁傀儡在实体 tick **之前**拿到指令（朝谁走、打不打），
     // 实体自己只负责按 `moveDir` 移动——见 `Mob.guardToward` 的注释
     this.tickGuardians(context, dt);
+    // 村民作息（批次 510）：同样是"实体 tick 之前下指令"，每 0.5 秒一次
+    if ((this.villagerRoutineTimer -= dt) <= 0) {
+      this.villagerRoutineTimer = 0.5;
+      this.tickVillagerRoutine();
+    }
     // 每帧重置寻路预算（批次 500）：放在实体 tick 之前，`canPathSearch` 才能正确递减
     this.pathSearchesLeft = PATH_SEARCH_BUDGET_PER_FRAME;
     this.entities.update(context, dt);

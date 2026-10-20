@@ -423,7 +423,9 @@ console.log('\n[维度与空腔（批次 94）]');
 
   // ③ 下界 + 七格高的空腔：刷得出来，而且落点自带那片空腔
   const open: Spawned[] = [];
-  runCycles(new MobSpawner(), makeContext({ sky: 0, block: 0, dimension: 'nether', airBox: true, spawned: open }));
+  // ⚠️ 批次 510：这里从 30 轮加到 120 轮——下界池里有三只（恶魂/岩浆怪/猪灵），
+  // 30 轮偶尔会漏掉其中一只，断言就红（批次 499 之后跑全量撞到过一次）。
+  runCycles(new MobSpawner(), makeContext({ sky: 0, block: 0, dimension: 'nether', airBox: true, spawned: open }), 120);
   check('下界里有一片 4×4 空腔 → 刷得出恶魂', open.some((entry) => entry.type.id === 'ghast'), open.map((e) => e.type.id).join(','));
   // ⚠️ 下界自然刷的敌对生物一路在长：原本只有恶魂 → 批次 121 加了大岩浆怪 →
   // 批次 122 又加了僵尸猪灵。所以这条按**集合**断言（写死一只或两只都会过期）

@@ -61,6 +61,17 @@ export interface VillagerSavedState {
   uses: readonly number[];
   /** 每条交易的需求量（批次 509）；老存档没有 → 按 0 */
   demand?: readonly number[];
+  /** 家（床）与工作站（批次 510）：没有就交给游荡 AI */
+  home?: WorkstationPos;
+  workstation?: WorkstationPos;
+}
+
+/** 三格整数坐标的浅校验（脏数据整份丢掉，别让村民往 NaN 走） */
+function sanitizePoint(raw: unknown): WorkstationPos | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const point = raw as { x?: unknown; y?: unknown; z?: unknown };
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)) return undefined;
+  return { x: Math.floor(point.x as number), y: Math.floor(point.y as number), z: Math.floor(point.z as number) };
 }
 
 /** 存档里的交易经验上限：脏数据（手改存档）不该把进度条撑成天文数字 */
@@ -73,8 +84,10 @@ export class Villager extends Mob {
   tradeXp = 0;
   /** 交易清单（认领职业时建 1 级那一批，升级时追加新等级那一批） */
   offers: TradeOffer[] = [];
-  /** 认领的工作站坐标（原版靠它决定白天去哪；本项目只用来显示与调试） */
+  /** 认领的工作站坐标（批次 510 起真的会走过去） */
   workstation: WorkstationPos | null = null;
+  /** 家（床脚）坐标：晚上往这儿走（批次 510） */
+  home: WorkstationPos | null = null;
 
   private claimTimer = CLAIM_RETRY_MIN + Math.random() * (CLAIM_RETRY_MAX - CLAIM_RETRY_MIN);
 
@@ -167,8 +180,9 @@ export class Villager extends Mob {
         offer.demand = Math.max(0, Math.min(MAX_TRADE_DEMAND, Math.floor(demand)));
       }
     }
-    // 工作站坐标不落盘（见文件头第 4 条）
-    this.workstation = null;
+    // 作息目标（批次 510）：坐标随存档走，读档后白天照样会去上班
+    this.home = sanitizePoint(state.home) ?? null;
+    this.workstation = sanitizePoint(state.workstation) ?? null;
     return true;
   }
 
@@ -233,6 +247,21 @@ export class Villager extends Mob {
     this.assignProfession(profession.id, { x: found.x, y: found.y, z: found.z });
     ctx.spawnHearts?.(this.x, this.y + this.type.height, this.z, 0.6);
     ctx.playMobVoice?.('villager', 'ambient', this.x, this.y + this.type.height * 0.6, this.z);
+  }
+
+  /** 设家（床脚）：村庄人口在生成时调用（批次 510） */
+  setHome(home: WorkstationPos | null): void {
+    this.home = home;
+  }
+
+  /** 朝某一格走一步（走位交给 `Mob` 的 `moveDir`，这里只下一个方向指令） */
+  walkToward(x: number, z: number): void {
+    this.guardToward(x, z);
+  }
+
+  /** 到点停住：把 `idle` 立起来，游荡 AI 就不会马上又把他带走 */
+  standStill(): void {
+    this.idle = true;
   }
 
   /** 调试与断言用：这一只现在能做什么（不返回 offer 对象本体，免得被顺手改掉） */

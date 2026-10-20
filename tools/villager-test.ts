@@ -19,6 +19,7 @@
  * 运行：npm run test:villager
  */
 
+import { readFileSync } from 'node:fs';
 import { Block, blockDef, blockTiles } from '../src/core/registry/blocks.ts';
 import { Item, dropFor, itemDef, possibleBlockDropIds } from '../src/core/registry/items.ts';
 import { hasDescription, missingBlockNames } from '../src/core/registry/itemNames.ts';
@@ -38,6 +39,15 @@ import { fishingEntryIds } from '../src/core/registry/fishing.ts';
 import { DRAGON_TYPE } from '../src/core/entity/EndBoss.ts';
 import { advancementById } from '../src/core/progress/advancements.ts';
 import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
+import {
+  VILLAGER_ARRIVE_RADIUS,
+  VILLAGER_WORK_END,
+  VILLAGER_WORK_START,
+  normalizeTimeOfDay,
+  routineTarget,
+  villagerArrived,
+  villagerRoutine,
+} from '../src/core/world/VillagerRoutine.ts';
 import {
   PROFESSIONS,
   PROFESSION_COUNT,
@@ -704,6 +714,122 @@ console.log('\n[需求随实体寄存往返]');
     dirtyRecord && dirtyRecord.kind === 'mob' ? dirtyRecord.villager?.demand : undefined;
   equal('脏需求夹到上限', dirtyDemand?.[0], MAX_TRADE_DEMAND);
   equal('非数字需求归 0', dirtyDemand?.[1], 0);
+}
+
+
+// ---------------------------------------------------------------- 作息（批次 510）
+
+console.log('\n[作息：白天上班、夜里回家]');
+{
+  equal('日出后上班', villagerRoutine(VILLAGER_WORK_START, true, true), 'work');
+  equal('正午上班', villagerRoutine(0.25, true, true), 'work');
+  equal('日落前仍上班', villagerRoutine(VILLAGER_WORK_END - 0.001, true, true), 'work');
+  equal('日落后回家', villagerRoutine(VILLAGER_WORK_END, true, true), 'home');
+  equal('午夜在家', villagerRoutine(0.75, true, true), 'home');
+  equal('日出前在家', villagerRoutine(0.001, true, true), 'home');
+
+  equal('无业：白天也不上班', villagerRoutine(0.25, false, true), 'idle');
+  equal('没有床：晚上也不回家', villagerRoutine(0.75, true, false), 'idle');
+  equal('什么都没有 → idle', villagerRoutine(0.25, false, false), 'idle');
+
+  equal('负时间规整（-0.1 → 0.9）', normalizeTimeOfDay(-0.1), 0.9);
+  check('超过 1 规整（1.2 → 0.2）', Math.abs(normalizeTimeOfDay(1.2) - 0.2) < 1e-9);
+  equal('NaN 按正午（至少不会全村同时回家）', normalizeTimeOfDay(Number.NaN), 0.25);
+  equal('负时间走夜间分支', villagerRoutine(-0.1, true, true), 'home');
+  equal('超过 1 的时间也走对分支', villagerRoutine(1.2, true, true), 'work');
+}
+
+console.log('\n[作息：目的地与到达判定]');
+{
+  const home = { x: 10, y: 64, z: 10 };
+  const work = { x: 20, y: 64, z: 20 };
+  equal('上班去工作站', routineTarget('work', home, work)?.x, 20);
+  equal('回家去床边', routineTarget('home', home, work)?.x, 10);
+  equal('idle 没有目标', routineTarget('idle', home, work), null);
+
+  check('目标点中心算到达', villagerArrived(20.5, 20.5, work));
+  check('差一格也算到达', villagerArrived(21.5, 20.5, work));
+  check('差两格不算到达', !villagerArrived(22.5, 20.5, work));
+  check('半径与常量一致', VILLAGER_ARRIVE_RADIUS === 1.6);
+}
+
+console.log('\n[作息坐标进存档与寄存]');
+{
+  const source = new Villager(0, 64, 0);
+  source.assignProfession('farmer', { x: 5, y: 64, z: 6 });
+  source.setHome({ x: 1, y: 64, z: 2 });
+
+  const restored = new Villager(0, 64, 0);
+  restored.restoreState({
+    profession: 'farmer',
+    xp: 0,
+    uses: source.offers.map((offer) => offer.uses),
+    home: { x: 1, y: 64, z: 2 },
+    workstation: { x: 5, y: 64, z: 6 },
+  });
+  equal('家读回来', restored.home?.x, 1);
+  equal('工作站读回来', restored.workstation?.x, 5);
+
+  const dirty = new Villager(0, 64, 0);
+  dirty.restoreState({
+    profession: 'farmer',
+    xp: 0,
+    uses: source.offers.map((offer) => offer.uses),
+    home: { x: Number.NaN, y: 64, z: 2 },
+    workstation: { x: 5, y: 64 },
+  } as never);
+  equal('坏的家整份丢掉', dirty.home, null);
+  equal('坏的工作站整份丢掉', dirty.workstation, null);
+
+  const parking = new EntityParking();
+  parking.restoreAll([
+    {
+      dimension: 'overworld',
+      kind: 'mob',
+      typeId: 'villager',
+      x: 1,
+      y: 64,
+      z: 1,
+      yaw: 0,
+      health: 20,
+      tamed: false,
+      sitting: false,
+      leashed: false,
+      sheared: false,
+      woolColor: 0,
+      baby: false,
+      growSeconds: 0,
+      villager: {
+        profession: 'farmer',
+        xp: 0,
+        uses: [0],
+        home: { x: 1, y: 64, z: 2 },
+        workstation: { x: 5, y: 64, z: 6 },
+      },
+    },
+  ]);
+  const [record] = parking.take('overworld', 0, 0);
+  equal(
+    '寄存往返保住家',
+    record && record.kind === 'mob' ? record.villager?.home?.z : undefined,
+    2,
+  );
+  equal(
+    '寄存往返保住工作站',
+    record && record.kind === 'mob' ? record.villager?.workstation?.x : undefined,
+    5,
+  );
+}
+
+console.log('\n[接线守卫]');
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check('村庄人口给村民设了家', mainSrc.includes('villager.setHome({ x: plan.bedX'));
+  check('主程序每 0.5 秒下发作息指令', mainSrc.includes('this.villagerRoutineTimer = 0.5'));
+  check(
+    '作息在实体 tick 之前',
+    mainSrc.indexOf('this.tickVillagerRoutine()') < mainSrc.indexOf('this.entities.update(context, dt)'),
+  );
 }
 
 // ---------------------------------------------------------------- 收尾
