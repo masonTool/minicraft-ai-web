@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Minecraft 基岩版 1.18 复刻（Web / WebGL2）",
   "scripts": {
+    "sync:audit": "node tools/minigame/sync-audit.mjs",
+    "sync:audit:run": "node tools/minigame/sync-audit.mjs --run",
     "dev": "vite",
     "build": "tsc --noEmit && npm run typecheck:tools && vite build",
     "build:fast": "SOURCEMAP=0 vite build",
