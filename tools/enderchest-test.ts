@@ -161,16 +161,16 @@ console.log('\n[存档：走玩家存档那条"非坐标"通道]');
 
 // ---------------------------------------------------------------- 4. 配方与相邻规则
 
-console.log('\n[配方（与原版的差异）与活塞/漏斗]');
+console.log('\n[配方（原版）与活塞/漏斗]');
 {
   const O = Block.OBSIDIAN;
-  const D = Item.DIAMOND;
-  equal('8 黑曜石 + 1 钻石 → 末影箱', matchRecipe([O, O, O, O, D, O, O, O, O], 3)?.id, ENDER);
-  equal('做出 1 个', matchRecipe([O, O, O, O, D, O, O, O, O], 3)?.count, 1);
+  const EYE = Item.ENDER_EYE;
+  // 批次 514：末影之眼做好之后换回原版配方（当年用钻石是因为它还不存在）
+  equal('8 黑曜石 + 1 末影之眼 → 末影箱', matchRecipe([O, O, O, O, EYE, O, O, O, O], 3)?.id, ENDER);
+  equal('做出 1 个', matchRecipe([O, O, O, O, EYE, O, O, O, O], 3)?.count, 1);
   equal('只放 9 个黑曜石合不出任何东西（对照）', matchRecipe([O, O, O, O, O, O, O, O, O], 3), null);
-  // ⚠️ 与原版的差异：原版要 8 黑曜石 + 1 **末影之眼**，本项目还没有那件物品
-  // （末影之眼要末影珍珠 + 烈焰粉，两件都还没做）——所以这里用一颗钻石代替，见配方注释
-  equal('没有末影之眼这件物品（差异的由来）', itemDef(Item.DIAMOND) !== undefined && matchRecipe([O, O, O, O, D, O, O, O, O], 3)?.id === ENDER, true);
+  equal('用钻石已经合不出来（当年那个替代配方已撤）', matchRecipe([O, O, O, O, Item.DIAMOND, O, O, O, O], 3), null);
+  check('末影之眼这件物品存在', itemDef(EYE) !== undefined);
 
   check('在"活塞推不动"的名单里', CONTAINER_BLOCKS.has(ENDER));
   check('活塞推不动末影箱（内容是玩家的，推走其实也不丢——列进来是对齐原版）', !canPush(ENDER));
