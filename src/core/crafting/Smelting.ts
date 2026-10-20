@@ -87,6 +87,8 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
    * 也不是熔炼产物"的方块，这三条一直挂在那个清单里——不是没做，是**在另一张表**。
    * 补完它们之后，审计清单里剩下的都能说清原因（原料物品不存在 / 原版确实没配方）。
    */
+  // 紫颂果 → 爆裂紫颂果（批次 414）：紫珀块的唯一前体
+  { input: Item.CHORUS_FRUIT, output: { id: Item.POPPED_CHORUS_FRUIT, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
   // 下界岩 → 下界砖（批次 413）：原版里下界砖**唯一的生存来源**就是烧下界岩
   { input: Block.NETHERRACK, output: { id: Item.NETHER_BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
   { input: Block.CLAY, output: { id: Block.TERRACOTTA, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'none' },

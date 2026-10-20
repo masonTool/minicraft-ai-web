@@ -1874,6 +1874,13 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['WWW', 'WWW', 'WWW'],
     key: { W: Item.NETHER_WART },
   },
+  // ---- 紫珀块（批次 414）：4 个爆裂紫颂果 2×2（原版如此）
+  {
+    kind: 'shaped',
+    result: { id: Block.PURPUR_BLOCK, count: 4 },
+    pattern: ['CC', 'CC'],
+    key: { C: Item.POPPED_CHORUS_FRUIT },
+  },
   // ---- 下界砖（批次 413）：原版是"4 块砖 → 1 个砖块"，反过来"1 个砖块 → 4 块砖"
   {
     kind: 'shaped',

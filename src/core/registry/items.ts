@@ -216,6 +216,10 @@ export const Item = {
    * 所以下界砖块只能靠结构/创造拿到，配方审计里一直挂着它也补不了。
    */
   NETHER_BRICK: 1540,
+  /** 紫颂果（批次 414）：末地紫颂树的果实，唯一来源是打掉紫颂植株 */
+  CHORUS_FRUIT: 1541,
+  /** 爆裂紫颂果（批次 414）：烤过的果实，4 个合成 1 块紫珀（原版就是这样） */
+  POPPED_CHORUS_FRUIT: 1542,
   /** 鞘翅（批次 384）：末地城宝箱的稀有掉落，装备在胸甲槽 */
   ELYTRA: 1539,
   /**
@@ -512,6 +516,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   { id: Item.HONEYCOMB, name: 'minecraft:honeycomb', tile: 'item_honeycomb' },
   { id: Item.HONEY_BOTTLE, name: 'minecraft:honey_bottle', tile: 'item_honey_bottle', maxStack: 1 },
   { id: Item.NETHER_BRICK, name: 'minecraft:nether_brick', tile: 'item_nether_brick' },
+  { id: Item.CHORUS_FRUIT, name: 'minecraft:chorus_fruit', tile: 'item_chorus_fruit' },
+  { id: Item.POPPED_CHORUS_FRUIT, name: 'minecraft:popped_chorus_fruit', tile: 'item_popped_chorus_fruit' },
   { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },
@@ -1642,6 +1648,9 @@ const DROP_OVERRIDES = new Map<number, { id: number; count: number }>([
   [Block.GRASS_BLOCK, { id: Block.DIRT, count: 1 }],
   // 蜂巢（批次 374）：掉 1 个蜜脾（原版 0~3；这里固定 1，可达性审计也认它）
   [Block.BEE_NEST, { id: Item.HONEYCOMB, count: 1 }],
+  // 紫颂植株（批次 414）：掉 1 个紫颂果（原版每节 0~1 个）。不接这一条的话，
+  // 紫颂果与紫珀块整条链在生存里都拿不到（创造里有、生存里没有 = 可达性审计会红）
+  [Block.CHORUS_PLANT, { id: Item.CHORUS_FRUIT, count: 1 }],
   // 小麦（H13）：没熟只能拿回 1 粒种子，熟了才给小麦（种子另算，见 wheatExtraSeeds）
   [Block.WHEAT_STAGE0, { id: Item.WHEAT_SEEDS, count: 1 }],
   [Block.WHEAT_STAGE1, { id: Item.WHEAT_SEEDS, count: 1 }],
