@@ -288,7 +288,7 @@ export function createCanvasUi(
         mainMenu.render(renderer);
         return;
       }
-      if (settings.isOpen() && settingsFromMenu) {
+      if (settings.isOpen()) {
         settings.render(renderer);
         return;
       }
@@ -302,6 +302,10 @@ export function createCanvasUi(
       }
       if (furnaceScreen.isOpen()) {
         furnaceScreen.render(renderer);
+        return;
+      }
+      if (inventory.isOpen()) {
+        inventory.render(renderer);
         return;
       }
       touchControls.render(renderer);
