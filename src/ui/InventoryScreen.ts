@@ -551,6 +551,9 @@ export class InventoryScreen {
   private readonly creativeScrollByCategory = new Map<CreativeTab, number>();
   private readonly creativeSearchByCategory = new Map<CreativeTab, string>();
   private creativeScrollIgnoreUntil = 0;
+  /** 创造分类列表的常驻自绘滚动条 */
+  private creativeScrollTrack!: HTMLDivElement;
+  private creativeScrollThumb!: HTMLDivElement;
   /** 常驻的自绘滚动条（iOS 的 overlay 滚动条不会一直显示） */
   private categoryScrollTrack!: HTMLDivElement;
   private categoryScrollThumb!: HTMLDivElement;
@@ -1402,6 +1405,8 @@ export class InventoryScreen {
 
     this.creativeSection = document.createElement('div');
     this.creativeSection.className = 'inv-creative-section';
+    // 自绘滚动条以它为定位父级
+    this.creativeSection.style.position = 'relative';
     this.buildCreativeSection();
 
     // 携带版统一双栏：左栏在“玩家物品 / 创造物品 / 可做列表”之间切换，右栏是合成/装备/工作站。
@@ -1424,6 +1429,7 @@ export class InventoryScreen {
         () => {
           this.applyPocketLayout();
           this.syncCategoryScrollbar();
+          this.syncCreativeScrollbar();
         },
         { signal: this.listeners.signal },
       );
@@ -1568,6 +1574,7 @@ export class InventoryScreen {
         this.creativeGrid.scrollTop = targetScroll;
         this.renderCreativeGrid();
         this.creativeGrid.scrollTop = this.creativeScrollByCategory.get(category) ?? targetScroll;
+        this.syncCreativeScrollbar();
         // 批次 181：任何点击都在快捷栏上方说一句"刚才点了什么"
         this.showMessage(`创造分类：${CREATIVE_TAB_LABELS[category]}`);
         if (category === 'all') this.creativeSearch.focus();
@@ -1597,6 +1604,7 @@ export class InventoryScreen {
     this.creativeGrid.addEventListener(
       'scroll',
       () => {
+        this.syncCreativeScrollbar();
         if (performance.now() < this.creativeScrollIgnoreUntil) return;
         if (this.pane !== 'creative' || this.creativeSection.style.display === 'none') return;
         if (this.creativeGrid.clientHeight === 0) return;
@@ -1604,6 +1612,38 @@ export class InventoryScreen {
       },
       { passive: true },
     );
+
+    // 与生存分类栏同一套自绘滚动条：不滚动时也一直显示
+    this.creativeScrollTrack = document.createElement('div');
+    this.creativeScrollTrack.className = 'inv-category-scrollbar';
+    this.creativeScrollThumb = document.createElement('div');
+    this.creativeScrollThumb.className = 'inv-category-scroll-thumb';
+    this.creativeScrollTrack.appendChild(this.creativeScrollThumb);
+    this.creativeScrollTrack.style.display = 'none';
+    this.creativeScrollThumb.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const grid = this.creativeGrid;
+      const max = grid.scrollHeight - grid.clientHeight;
+      const trackH = this.creativeScrollTrack.clientHeight;
+      const thumbH = this.creativeScrollThumb.offsetHeight;
+      const span = Math.max(1, trackH - thumbH);
+      const startY = event.clientY;
+      const startTop = grid.scrollTop;
+      this.creativeScrollThumb.setPointerCapture(event.pointerId);
+      const onMove = (move: PointerEvent): void => {
+        const ratio = (move.clientY - startY) / span;
+        grid.scrollTop = startTop + ratio * max;
+      };
+      const onUp = (): void => {
+        this.creativeScrollThumb.removeEventListener('pointermove', onMove);
+        this.creativeScrollThumb.removeEventListener('pointerup', onUp);
+        this.creativeScrollThumb.removeEventListener('pointercancel', onUp);
+      };
+      this.creativeScrollThumb.addEventListener('pointermove', onMove);
+      this.creativeScrollThumb.addEventListener('pointerup', onUp);
+      this.creativeScrollThumb.addEventListener('pointercancel', onUp);
+    });
 
     // 翻页条：只渲染当前页之后，"全部"分类也不会一次性塞进 495 个图标
     this.creativePager = document.createElement('div');
@@ -1620,7 +1660,13 @@ export class InventoryScreen {
     // 批次 185（用户要求）：创造栏下面那颗「销毁」格**去掉**。
     // 它占掉了一整行高度，而且和"拖到界面外丢弃"是同一件事的两种入口；
     // 现在统一走"点界面外丢弃"（`dropFromCursor` / root 空白区）。
-    this.creativeSection.append(header, this.creativeControls, this.creativeGrid, this.creativePager);
+    this.creativeSection.append(
+      header,
+      this.creativeControls,
+      this.creativeGrid,
+      this.creativeScrollTrack,
+      this.creativePager,
+    );
     this.updateTabHighlight();
     this.renderCreativeGrid();
     this.updateCreativeVisibility();
@@ -1982,6 +2028,25 @@ export class InventoryScreen {
     const grid = this.categoryGrid;
     const max = grid.scrollHeight - grid.clientHeight;
     const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'category';
+    track.style.display = visible ? 'block' : 'none';
+    if (!visible) return;
+    track.style.top = `${grid.offsetTop}px`;
+    track.style.height = `${grid.clientHeight}px`;
+    const trackH = grid.clientHeight;
+    const thumbH = Math.max(18, Math.round((grid.clientHeight / grid.scrollHeight) * trackH));
+    thumb.style.height = `${thumbH}px`;
+    const top = max > 0 ? (grid.scrollTop / max) * Math.max(0, trackH - thumbH) : 0;
+    thumb.style.transform = `translateY(${top}px)`;
+  }
+
+  /** 创造分类列表的常驻滚动条：内容超出一屏才显示，拇指按比例定位 */
+  private syncCreativeScrollbar(): void {
+    const track = this.creativeScrollTrack;
+    const thumb = this.creativeScrollThumb;
+    if (!track || !thumb || !this.creativeGrid) return;
+    const grid = this.creativeGrid;
+    const max = grid.scrollHeight - grid.clientHeight;
+    const visible = max > 1 && grid.clientHeight > 0 && this.pane === 'creative';
     track.style.display = visible ? 'block' : 'none';
     if (!visible) return;
     track.style.top = `${grid.offsetTop}px`;
@@ -4047,6 +4112,7 @@ export class InventoryScreen {
       // render 因指纹未变提前返回时也要在这里补一次。
       this.creativeScrollIgnoreUntil = performance.now() + 200;
       this.creativeGrid.scrollTop = this.creativeScrollByCategory.get(this.creativeCategory) ?? 0;
+      requestAnimationFrame(() => this.syncCreativeScrollbar());
     }
     // 配方书开关：生存双栏时**留在标题栏**（与关闭键同一行，排在左栏右上角那一带），
     // 创造模式左栏是物品分类，用不上它。
@@ -4351,6 +4417,7 @@ export class InventoryScreen {
     this.creativeScrollIgnoreUntil = performance.now() + 200;
     this.creativeGrid.replaceChildren(fragment);
     this.creativeGrid.scrollTop = targetScroll;
+    this.syncCreativeScrollbar();
 
     // 把"手上那叠"的落点搬回重建后的新格子，并把选中态补上
     // （`refresh()` 里那一步在上面的重建之前就做完了）

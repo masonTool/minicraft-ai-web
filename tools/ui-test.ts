@@ -3074,7 +3074,10 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '分类列表超过一屏时常驻自绘滚动条',
     invSrc.includes('private syncCategoryScrollbar(): void') &&
       invSrc.includes("this.categoryScrollTrack.className = 'inv-category-scrollbar';") &&
+      invSrc.includes('private syncCreativeScrollbar(): void') &&
+      invSrc.includes("this.creativeScrollTrack.className = 'inv-category-scrollbar';") &&
       css.includes('.inv-category-scrollbar {') &&
+      css.includes('.inv-grid.inv-creative { scrollbar-width: none; }') &&
       css.includes('overflow-y: scroll;') &&
       css.includes('scrollbar-width: none;'),
   );

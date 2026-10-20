@@ -3381,6 +3381,9 @@
         touch-action: pan-y;
       }
       .inv-grid.inv-category::-webkit-scrollbar { display: none; width: 0; height: 0; }
+      /* 创造分类列表同样改用自绘常驻滚动条（原生 overlay 在 iOS 不常驻） */
+      .inv-grid.inv-creative { scrollbar-width: none; }
+      .inv-grid.inv-creative::-webkit-scrollbar { display: none; width: 0; height: 0; }
       /* 自绘常驻滚动条：父级 `.inv-category-section` 已经是 position: relative */
       .inv-category-scrollbar {
         position: absolute; right: 1px; width: 6px;
