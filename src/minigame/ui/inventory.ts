@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { ItemStack } from '../../core/container/Inventory.ts';
 import { CraftingGrid } from '../../core/crafting/CraftingGrid.ts';
-import { Block } from '../../core/registry/blocks.ts';
+import { Block, blockDef } from '../../core/registry/blocks.ts';
 import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { drawBlockIcon } from './icons.ts';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
@@ -106,6 +106,9 @@ export function createInventory(
   let pendingGive: number | null = null;
   let pendingCraft: number | null = null;
   let pendingCommand: 'quick' | 'drop' | null = null;
+  let tooltip: { text: string; index: number } | null = null;
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  let tooltipTimer: ReturnType<typeof setTimeout> | null = null;
   let currentSlots: readonly (ItemStack | null)[] = slots;
   let drag: { from: number; startX: number; startY: number; x: number; y: number; moved: boolean } | null =
     null;
@@ -230,6 +233,15 @@ export function createInventory(
       drawButton(context, dropButton, 'DROP 1', 'normal', 15);
     }
 
+    if (tooltip) {
+      const rect = slotRect(tooltip.index);
+      const width = Math.min(panelWidth - 20, tooltip.text.length * 9 + 24);
+      const x = Math.min(rect.x, panelX + panelWidth - width - 10);
+      const y = rect.y - 38 < panelY + 50 ? rect.y + slot + 6 : rect.y - 38;
+      drawPanel(context, { x, y, w: width, h: 30 });
+      drawText(context, tooltip.text, x + 10, y + 7, 14, '#ffffff', 'left', width - 20);
+    }
+
     // 拖拽中的物品跟随手指
     if (drag?.moved) {
       const stack = currentSlots[drag.from];
@@ -281,11 +293,29 @@ export function createInventory(
     }
   };
 
+  const clearHold = (): void => {
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+  };
+
+  const clearTooltip = (): void => {
+    clearHold();
+    tooltip = null;
+    if (tooltipTimer) {
+      clearTimeout(tooltipTimer);
+      tooltipTimer = null;
+    }
+    redraw();
+  };
+
   redraw();
 
   return {
     toggle(): void {
       if (open) drainCrafting();
+      clearTooltip();
       drag = null;
       pendingGive = null;
       pendingCraft = null;
@@ -295,6 +325,7 @@ export function createInventory(
     },
     close(): void {
       if (open) drainCrafting();
+      clearTooltip();
       drag = null;
       pendingGive = null;
       pendingCraft = null;
@@ -374,7 +405,20 @@ export function createInventory(
         setOpen(false);
         return true;
       }
+      clearTooltip();
       drag = { from: index, startX: x, startY: y, x, y, moved: false };
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        if (!drag || drag.from !== index || drag.moved) return;
+        tooltip = { text: blockDef(stack.id).name.replace('minecraft:', ''), index };
+        redraw();
+        if (tooltipTimer) clearTimeout(tooltipTimer);
+        tooltipTimer = setTimeout(() => {
+          tooltip = null;
+          tooltipTimer = null;
+          redraw();
+        }, 1200);
+      }, 500);
       redraw();
       return true;
     },
@@ -384,7 +428,11 @@ export function createInventory(
       const y = (clientY / Math.max(1, sh)) * canvas.height;
       drag.x = x;
       drag.y = y;
-      if (Math.hypot(x - drag.startX, y - drag.startY) > 8) drag.moved = true;
+      if (Math.hypot(x - drag.startX, y - drag.startY) > 8) {
+        drag.moved = true;
+        clearHold();
+        tooltip = null;
+      }
       redraw();
     },
     handleUp(clientX: number, clientY: number, sw: number, sh: number): InventoryAction {
@@ -422,6 +470,7 @@ export function createInventory(
         return null;
       }
       if (!drag) return null;
+      clearHold();
       const current = drag;
       drag = null;
       const x = (clientX / Math.max(1, sw)) * canvas.width;

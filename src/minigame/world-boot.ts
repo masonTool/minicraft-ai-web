@@ -956,7 +956,17 @@ async function boot(): Promise<void> {
       return;
     }
     if (event.pointerId === movePointerId) {
-      if (!moveMoved && Date.now() - moveStartTime < 300) cycleSlot();
+      if (!moveMoved) {
+        const held = Date.now() - moveStartTime;
+        if (held >= 500) {
+          const stack = inventory.get(selectedSlot);
+          ui.showToast(
+            stack ? blockDef(stack.id).name.replace('minecraft:', '') : 'EMPTY SLOT',
+          );
+        } else if (held < 300) {
+          cycleSlot();
+        }
+      }
       resetMove();
     }
     if (event.pointerId === lookPointerId) {
