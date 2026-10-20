@@ -363,6 +363,27 @@ console.log('\n[活塞：伸出与收回]');
   check('石头留在原地（普通活塞不拉回）', world.getBlock(3, Y, 0) === Block.STONE);
 }
 
+console.log('\n[活塞准连接：上方被充能也会伸出（批次 578）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  // 活塞在 (1,Y,0)，朝东；拉杆在它**上方那一格**的北侧，不直接贴着活塞
+  world.setBlock(1, Y + 1, -1, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.PISTON, withFacing(0, 1));
+  engine.onBlockChanged(world, 1, Y, 0);
+  step(engine, world, 0.1);
+  check('初始没通电', !isPowered(world.getState(1, Y, 0)));
+
+  engine.toggleLever(world, 1, Y + 1, -1);
+  step(engine, world, 0.1);
+  check('上方充能后活塞伸出', isPowered(world.getState(1, Y, 0)));
+  check('准连接也生成活塞头', world.getBlock(2, Y, 0) === Block.PISTON_HEAD);
+
+  engine.toggleLever(world, 1, Y + 1, -1);
+  step(engine, world, 0.1);
+  check('断开上方充能后收回', !isPowered(world.getState(1, Y, 0)));
+}
+
 console.log('\n[粘性活塞：收回时把方块拉回来]');
 {
   const world = new StubWorld();

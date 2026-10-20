@@ -1036,7 +1036,11 @@ export class RedstoneEngine {
         }
         case Block.PISTON:
         case Block.STICKY_PISTON: {
-          const shouldExtend = input > 0;
+          // 准连接（批次 578）：原版活塞在"自己上方的方块被充能"时也会伸出。
+          // 本项目没有完整的方块充能模型，这里按"上方那一格的输入"近似——
+          // 红石火把/拉杆贴在上方方块旁边、或上方就是电源时都能触发。
+          const quasi = this.inputStrength(world, strengths, nx, ny + 1, nz);
+          const shouldExtend = input > 0 || quasi > 0;
           if (isPowered(state) !== shouldExtend) {
             const ok = shouldExtend
               ? this.extendPiston(world, nx, ny, nz, id, state)
@@ -1361,6 +1365,16 @@ export class RedstoneEngine {
       const key = keyOf(node.x, node.y, node.z);
       if (visited.has(key)) continue;
       const id = world.getBlock(node.x, node.y, node.z);
+      // 准连接（批次 578）：这一格正下方的活塞也要纳入本次求解——
+      // 它靠“上方被充能”伸出，与上方这一格并不相邻于同一个连通块。
+      // ⚠️ 必须在“不是元件就跳过”之前做：上方那一格通常是空气。
+      const below = node.y - 1;
+      if (below >= WORLD_MIN_Y) {
+        const belowId = world.getBlock(node.x, below, node.z);
+        if (belowId === Block.PISTON || belowId === Block.STICKY_PISTON) {
+          start.push({ x: node.x, y: below, z: node.z });
+        }
+      }
       if (!isRedstoneComponent(id)) continue;
       visited.add(key);
       for (const [dx, dy, dz] of NEIGHBORS) {
