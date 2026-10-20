@@ -1118,6 +1118,7 @@ export const TILE_ORDER = [
   'candle_red',
   'candle_black',
   'moss_block',
+  'hay_block',
   'azalea',
   'bee_nest_top',
   'bee_nest_side',

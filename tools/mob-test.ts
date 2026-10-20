@@ -842,7 +842,20 @@ console.log('\n[蝙蝠：会飞的被动生物（批次 261）]');
   const startX = bat.x;
   const startY = bat.y;
   const startZ = bat.z;
-  for (let i = 0; i < 80; i++) bat.tick(ctx, 0.05); // 4 秒
+  // ⚠️ 蝙蝠的游荡方向来自 `Math.random`，不固定随机源时这条断言**偶发失败**
+  // （实测出现过 horizontal = 0.25 < 0.3，而连跑三次又都是绿的）。
+  // "偶尔红一次"比一直红更难查，所以这里临时换成固定种子的 LCG，跑完还原。
+  const realRandom = Math.random;
+  let seed = 12345;
+  Math.random = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  try {
+    for (let i = 0; i < 80; i++) bat.tick(ctx, 0.05); // 4 秒
+  } finally {
+    Math.random = realRandom;
+  }
   const horizontal = Math.hypot(bat.x - startX, bat.z - startZ);
   check('蝙蝠在空中游荡（水平方向动了）', horizontal > 0.3, `水平位移 ${horizontal.toFixed(2)}`);
   check('不会越飞越远（只在出生点附近绕）', horizontal < 8, `水平位移 ${horizontal.toFixed(2)}`);

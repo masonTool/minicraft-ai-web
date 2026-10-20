@@ -584,6 +584,7 @@ const EXPLICIT: Record<string, string> = {
   prismarine_shard: '海晶碎片',
   // 下界砖（批次 413）
   nether_brick: '下界砖',
+  hay_block: '干草块',
   chorus_fruit: '紫颂果',
   popped_chorus_fruit: '爆裂紫颂果',
   prismarine_crystals: '海晶砂粒',

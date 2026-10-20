@@ -10476,4 +10476,12 @@
   `main.igniteWithFlint` + `Fire.ts` 早就完整（含 TNT 与传送门点燃、耐久规则），重复实现已回滚。
   判断"缺什么"必须去源码/注册表确认，不能凭印象。
 
+## 批次 434：M8 i18n 收尾——六个小界面（2026-10-20）
+
+- [x] B434-1 十一条键：chat.send / noCommandMatch、fullscreen.rotateTitle / rotateDetail、
+      install.hint / add / later、map.close、recipeBook.title / detail、sign.done
+- [x] B434-2 `ui-test` 两条字面量断言改成按键（配方书说明、横屏标题）
+- 覆盖：文案表 **94 → 105 条**；界面里的**静态中文**到此清空
+- ⚠️ 下一块是数据（成就标题/物品名/分类名带双语字段），与"抽表换调用点"不是一个量级
+
 <!-- docs-archive:end -->

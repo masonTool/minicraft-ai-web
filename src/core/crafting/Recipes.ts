@@ -1881,6 +1881,18 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['CC', 'CC'],
     key: { C: Item.POPPED_CHORUS_FRUIT },
   },
+  // ---- 干草块（批次 437）：9 小麦压成一块，也能拆回去（原版双向）
+  {
+    kind: 'shaped',
+    result: { id: Block.HAY_BLOCK, count: 1 },
+    pattern: ['WWW', 'WWW', 'WWW'],
+    key: { W: Item.WHEAT },
+  },
+  {
+    kind: 'shapeless',
+    result: { id: Item.WHEAT, count: 9 },
+    ingredients: [Block.HAY_BLOCK],
+  },
   // ---- 下界砖（批次 413）：原版是"4 块砖 → 1 个砖块"，反过来"1 个砖块 → 4 块砖"
   {
     kind: 'shaped',

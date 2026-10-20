@@ -230,6 +230,8 @@ const BASE_SPECS: readonly BlockSpec[] = [
   { id: 14, name: 'minecraft:diorite', tiles: ['diorite', 'diorite', 'diorite'] },
   { id: 15, name: 'minecraft:andesite', tiles: ['andesite', 'andesite', 'andesite'] },
   { id: 16, name: 'minecraft:tuff', tiles: ['tuff', 'tuff', 'tuff'] },
+  // 干草块（批次 437）：六个面同一张贴图（原版只有顶面/侧面之分，这里不细分）
+  { id: 667, name: 'minecraft:hay_block', tiles: ['hay_block', 'hay_block', 'hay_block'] },
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -3903,6 +3905,8 @@ export const Block = {
   AZALEA: 600,
   FLOWERING_AZALEA: 601,
   BEE_NEST: 602,
+  /** 干草块（批次 437）：9 小麦压成一块，可反过来拆回 9 小麦 */
+  HAY_BLOCK: 667,
   WAXED_COPPER_BLOCK: 603,
   WAXED_EXPOSED_COPPER: 604,
   WAXED_WEATHERED_COPPER: 605,
@@ -4246,6 +4250,7 @@ HARDNESS.set(Block.MOSS_BLOCK, 0.1);
 HARDNESS.set(Block.MOSS_CARPET, 0.1);
 HARDNESS.set(Block.AZALEA, 0.1);
 HARDNESS.set(Block.BEE_NEST, 0.3);
+HARDNESS.set(Block.HAY_BLOCK, 0.5);
 HARDNESS.set(Block.WAXED_COPPER_BLOCK, 3);
 HARDNESS.set(Block.WAXED_EXPOSED_COPPER, 3);
 HARDNESS.set(Block.WAXED_WEATHERED_COPPER, 3);
