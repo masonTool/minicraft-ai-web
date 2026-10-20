@@ -298,6 +298,8 @@ async function boot(): Promise<void> {
   let lookStartTime = 0;
   let lookMoved = false;
   let jumpQueued = false;
+  let mining: { x: number; y: number; z: number; elapsed: number; pointerId: number } | null = null;
+  const MINE_TIME = 0.6;
   let lastFrameTime = 0;
 
   if (loadedPlayer) {
@@ -425,17 +427,17 @@ async function boot(): Promise<void> {
       .name.replace('minecraft:', '');
   };
 
-  const breakTarget = (): void => {
-    updateTarget();
-    if (!currentHit) return;
-    const id = world.getBlock(currentHit.x, currentHit.y, currentHit.z);
+  const cancelMining = (): void => {
+    if (!mining) return;
+    mining = null;
+    ui.setMining(null);
+  };
+
+  const breakAt = (x: number, y: number, z: number): void => {
+    const id = world.getBlock(x, y, z);
     if (id === Block.AIR || id === Block.BEDROCK) return;
-    audio?.playBreakForBlock(blockDef(id).name, {
-      x: currentHit.x + 0.5,
-      y: currentHit.y + 0.5,
-      z: currentHit.z + 0.5,
-    });
-    world.setBlockAndUpdate(currentHit.x, currentHit.y, currentHit.z, Block.AIR);
+    audio?.playBreakForBlock(blockDef(id).name, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    world.setBlockAndUpdate(x, y, z, Block.AIR);
     inventory.add(id, 1);
     ui.syncInventory(inventory.serialize(), selectedSlot);
     ui.showToast(`+ ${blockDef(id).name.replace('minecraft:', '')}`);
@@ -487,11 +489,10 @@ async function boot(): Promise<void> {
   const handleRightTap = (_x: number, y: number): void => {
     if (y > height * 0.78) {
       jumpQueued = true;
-    } else if (y > height * 0.45) {
-      breakTarget();
-    } else {
+    } else if (y <= height * 0.45) {
       placeTarget();
     }
+    // 中间区域改为按住破坏，由 mining 状态在帧里推进
   };
 
   platform.input.onPointer('down', (event) => {
@@ -554,6 +555,16 @@ async function boot(): Promise<void> {
       lookStartY = y;
       lookStartTime = Date.now();
       lookMoved = false;
+      if (y > height * 0.45 && y < height * 0.78 && currentHit) {
+        mining = {
+          x: currentHit.x,
+          y: currentHit.y,
+          z: currentHit.z,
+          elapsed: 0,
+          pointerId: event.pointerId,
+        };
+        ui.setMining(0);
+      }
     }
   });
 
@@ -580,6 +591,7 @@ async function boot(): Promise<void> {
     if (event.pointerId === lookPointerId) {
       if (Math.hypot(event.clientX - lookStartX, event.clientY - lookStartY) > 10) {
         lookMoved = true;
+        if (mining?.pointerId === event.pointerId) cancelMining();
       }
       yaw -= (event.clientX - lastLookX) * 0.006;
       const pitchSign = invertLook ? -1 : 1;
@@ -608,6 +620,7 @@ async function boot(): Promise<void> {
       resetMove();
     }
     if (event.pointerId === lookPointerId) {
+      if (mining?.pointerId === event.pointerId) cancelMining();
       if (!lookMoved && Date.now() - lookStartTime < 350) {
         handleRightTap(event.clientX, event.clientY);
       }
@@ -624,7 +637,7 @@ async function boot(): Promise<void> {
     `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T -  SLOT 1/${HOTBAR.length}`,
     `CHUNKS ...  DRAWN ...  LIGHT ...  SAVE ${saveStatus}  AUD ${audioStatus}`,
     'FPS ...  MS ...  TRI ...  CALLS ...',
-    'L tap cycle/drag move · R drag look/tap place/break/jump · MENU/BAG top-right',
+    'L tap cycle/drag move · R drag look · tap top place / bottom jump / hold mid break',
   ]);
 
   let frames = 0;
@@ -705,6 +718,25 @@ async function boot(): Promise<void> {
     }
     updateCamera();
     updateTarget();
+
+    if (mining) {
+      if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen() || ui.isInventoryOpen()) {
+        cancelMining();
+      } else {
+        const id = world.getBlock(mining.x, mining.y, mining.z);
+        if (id === Block.AIR || id === Block.BEDROCK) {
+          cancelMining();
+        } else {
+          mining.elapsed += dt;
+          const progress = Math.min(1, mining.elapsed / MINE_TIME);
+          ui.setMining(progress);
+          if (progress >= 1) {
+            breakAt(mining.x, mining.y, mining.z);
+            cancelMining();
+          }
+        }
+      }
+    }
 
     const centerCx = Math.floor(physics.x / 16);
     const centerCz = Math.floor(physics.z / 16);

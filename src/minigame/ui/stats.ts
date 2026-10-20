@@ -11,6 +11,7 @@ export interface PlayerStats {
 
 export interface StatsOverlay {
   setStats(stats: PlayerStats): void;
+  setMining(progress: number | null): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -41,6 +42,7 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
   scene.add(mesh);
 
   let stats: PlayerStats = { health: 20, food: 20, air: 300, armor: 0, xp: 0 };
+  let mining: number | null = null;
 
   const heart = (x: number, y: number, size: number, filled: boolean): void => {
     if (!context) return;
@@ -110,6 +112,19 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
     context.fillStyle = '#7ddc6a';
     context.fillRect(barX, barY, 440 * Math.max(0, Math.min(1, stats.xp)), 8);
 
+    if (mining !== null) {
+      const barW = 180;
+      const x = cx - barW / 2;
+      const y = cy + 34;
+      context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      context.fillRect(x, y, barW, 10);
+      context.fillStyle = '#f0d36a';
+      context.fillRect(x, y, barW * Math.max(0, Math.min(1, mining)), 10);
+      context.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      context.lineWidth = 1;
+      context.strokeRect(x + 0.5, y + 0.5, barW - 1, 9);
+    }
+
     texture.needsUpdate = true;
   };
 
@@ -118,6 +133,11 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
   return {
     setStats(next: PlayerStats): void {
       stats = { ...next };
+      redraw();
+    },
+    setMining(progress: number | null): void {
+      if (mining === progress) return;
+      mining = progress;
       redraw();
     },
     render(renderer: THREE.WebGLRenderer): void {

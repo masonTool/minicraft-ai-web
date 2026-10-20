@@ -36,6 +36,7 @@ export interface MiniGameUi {
   isMainMenuOpen(): boolean;
   handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
   setStats(stats: PlayerStats): void;
+  setMining(progress: number | null): void;
   showToast(message: string): void;
   setLoading(progress: number | null, text?: string): void;
   render(renderer: THREE.WebGLRenderer): void;
@@ -158,6 +159,9 @@ export function createCanvasUi(
     },
     setStats(next: PlayerStats): void {
       stats.setStats(next);
+    },
+    setMining(progress: number | null): void {
+      stats.setMining(progress);
     },
     showToast(message: string): void {
       overlay.showToast(message);
