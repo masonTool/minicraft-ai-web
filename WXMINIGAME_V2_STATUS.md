@@ -51,7 +51,8 @@
 - [x] Inventory 拖拽交换 + HUD 快捷栏选中
 - [x] 物品页 27 主背包 + 独立 9 格快捷栏（Web 结构），主背包点击不改 selectedSlot
 - [x] 昼夜天空（Sky + 日月星云 + 随时间方块亮度），时间写入存档
-- [x] 性能：60FPS 上限、分级画质（1.5/1.25/1x）、画质模式设置（自动/高/性能）、UI 33ms 节流、world.update 按区块、区块 3ms 预算
+- [x] 性能：60FPS 上限、分级画质（自动/高/性能）、UI 33ms 节流、world.update 按区块
+- [x] 真实 Worker 网格化（微信 worker.onMessage 入口 + 2.5s 无响应回退主线程）
 - [x] 天气（雨/雪粒子/闪电/存档）+ /weather clear|rain|thunder
 - [x] 2x2/3x3 合成切换、产物、材料拖入/关闭返还（CraftingGrid）
 - [x] 配方书：2x2/3x3 过滤、搜索、6 条分页、产物图标/一键填格

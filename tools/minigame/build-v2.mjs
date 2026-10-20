@@ -30,6 +30,23 @@ await build({
   logLevel: 'info',
 });
 
+// 真实 Worker：区块网格化不在主线程跑
+const workersDir = join(outDir, 'workers');
+mkdirSync(workersDir, { recursive: true });
+await build({
+  absWorkingDir: root,
+  entryPoints: ['src/minigame-v2/chunk-worker-entry.ts'],
+  bundle: true,
+  format: 'iife',
+  target: ['es2017'],
+  platform: 'browser',
+  outfile: join(workersDir, 'chunk.worker.js'),
+  legalComments: 'none',
+  sourcemap: false,
+  minify: true,
+  logLevel: 'silent',
+});
+
 const code = readFileSync(outfile, 'utf8');
 const bytes = statSync(outfile).size;
 console.log(`[minigame-v2] game.js ${(bytes / 1024).toFixed(0)} KB（gzip ${(gzipSync(code).length / 1024).toFixed(0)} KB）`);

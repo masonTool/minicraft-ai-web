@@ -13,6 +13,8 @@ import { TextureAtlas } from '../render/TextureAtlas.ts';
 import { ChunkRenderer } from '../render/ChunkRenderer.ts';
 import { Sky } from '../render/Sky.ts';
 import { Weather } from '../render/Weather.ts';
+import type { MeshWorkerPool } from '../render/MeshWorkerPool.ts';
+import { WxMeshWorkerPool } from './wx-mesh-pool.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -1007,7 +1009,8 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   world.events = {};
   chunks.disposeAll();
   world = new World(entry.seed, entry.worldType, 1);
-  chunks = new ChunkRenderer(scene, atlas, world, solid.material, translucent.material, null);
+  chunks = new ChunkRenderer(scene, atlas, world, solid.material, translucent.material, meshPool);
+  workerFallbackAt = meshPool ? performance.now() : 0;
   world.events = {
     onChunkLoaded: (chunk) => chunks.onChunkLoaded(chunk.cx, chunk.cz),
     onChunkUnloaded: (cx, cz) => chunks.onChunkUnloaded(cx, cz),
@@ -2013,6 +2016,15 @@ const translucent = new VoxelMaterial(atlas.texture, {
 solid.skyBrightness = settings.brightness;
 translucent.skyBrightness = settings.brightness;
 
+let meshPool = (() => {
+  try {
+    return new WxMeshWorkerPool(platform) as unknown as MeshWorkerPool;
+  } catch (error) {
+    console.warn('[v2] worker mesh unavailable, fallback main thread', error);
+    return null;
+  }
+})();
+
 let world = new World(0x5eed, 'default', 1);
 let chunks = new ChunkRenderer(
   scene,
@@ -2020,7 +2032,7 @@ let chunks = new ChunkRenderer(
   world,
   solid.material,
   translucent.material,
-  null,
+  meshPool,
 );
 
 world.events = {
@@ -2454,6 +2466,7 @@ let lastViewApply = 0;
 let mobAccum = 0;
 let weatherAccum = 0;
 let playerReadyAt = 0;
+let workerFallbackAt = 0;
 let poorFpsSeconds = 0;
 let goodFpsSeconds = 0;
 
@@ -2712,6 +2725,19 @@ const frame = (): void => {
       else if (feet === Block.CACTUS) applyDamage(1, '仙人掌');
       if (physics.y < -5) applyDamage(20, '虚空');
     }
+  }
+
+  if (meshPool && workerFallbackAt > 0 && now - workerFallbackAt > 2500 && chunks.drawnCount === 0) {
+    chunks.disposeAll();
+    meshPool = null;
+    workerFallbackAt = 0;
+    chunks = new ChunkRenderer(scene, atlas, world, solid.material, translucent.material, null);
+    world.events = {
+      onChunkLoaded: (chunk) => chunks.onChunkLoaded(chunk.cx, chunk.cz),
+      onChunkUnloaded: (cx, cz) => chunks.onChunkUnloaded(cx, cz),
+      onBlockChanged: (x, _y, z) => chunks.enqueueAround(x, z),
+    };
+    showToast('Worker 不可用，已回退主线程');
   }
 
   const queueStart = performance.now();
