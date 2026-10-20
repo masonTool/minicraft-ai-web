@@ -4,7 +4,11 @@ import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { drawBlockIcon } from './icons.ts';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
 
-export type InventoryAction = { type: 'select' | 'swap'; index: number } | null;
+export type InventoryAction =
+  | { type: 'select'; index: number }
+  | { type: 'swap'; index: number }
+  | { type: 'move'; from: number; to: number }
+  | null;
 
 export interface Inventory {
   toggle(): void;
@@ -12,8 +16,9 @@ export interface Inventory {
   isOpen(): boolean;
   setSelected(index: number): void;
   setSlots(slots: readonly (ItemStack | null)[]): void;
-  /** 返回动作；null 表示关闭/点击空白 */
-  handleTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): InventoryAction;
+  handleDown(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
+  handleMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
+  handleUp(clientX: number, clientY: number, screenWidth: number, screenHeight: number): InventoryAction;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -72,6 +77,8 @@ export function createInventory(
   let open = false;
   let selected = 0;
   let currentSlots: readonly (ItemStack | null)[] = slots;
+  let drag: { from: number; startX: number; startY: number; x: number; y: number; moved: boolean } | null =
+    null;
 
   const slotRect = (index: number): { x: number; y: number } => {
     const col = index % cols;
@@ -121,6 +128,28 @@ export function createInventory(
       }
     }
 
+    // 拖拽中的物品跟随手指
+    if (drag?.moved) {
+      const stack = currentSlots[drag.from];
+      if (stack) {
+        context.globalAlpha = 0.82;
+        drawBlockIcon(context, atlas, stack.id, drag.x - slot / 2, drag.y - slot / 2, slot);
+        context.globalAlpha = 1;
+        if (stack.count > 1) {
+          drawText(
+            context,
+            `${stack.count}`,
+            drag.x + slot / 2 - 4,
+            drag.y + slot / 2 - 18,
+            14,
+            '#ffffff',
+            'right',
+            34,
+          );
+        }
+      }
+    }
+
     texture.needsUpdate = true;
   };
 
@@ -129,13 +158,23 @@ export function createInventory(
     redraw();
   };
 
+  const slotAt = (x: number, y: number): number | null => {
+    for (let i = 0; i < Math.min(41, cols * rows); i++) {
+      const rect = slotRect(i);
+      if (x >= rect.x && x <= rect.x + slot && y >= rect.y && y <= rect.y + slot) return i;
+    }
+    return null;
+  };
+
   redraw();
 
   return {
     toggle(): void {
+      drag = null;
       setOpen(!open);
     },
     close(): void {
+      drag = null;
       setOpen(false);
     },
     isOpen(): boolean {
@@ -149,33 +188,63 @@ export function createInventory(
       currentSlots = next;
       redraw();
     },
-    handleTap(clientX: number, clientY: number, sw: number, sh: number): InventoryAction {
-      if (!open) return null;
+    handleDown(clientX: number, clientY: number, sw: number, sh: number): boolean {
+      if (!open) return false;
       const x = (clientX / Math.max(1, sw)) * canvas.width;
       const y = (clientY / Math.max(1, sh)) * canvas.height;
 
       if (contains(closeRect, x, y)) {
+        drag = null;
         setOpen(false);
-        return null;
+        return true;
       }
 
-      for (let i = 0; i < cols * rows; i++) {
-        const rect = slotRect(i);
-        if (x < rect.x || x > rect.x + slot || y < rect.y || y > rect.y + slot) continue;
-        const stack = i < 41 ? currentSlots[i] : null;
-        if (!stack) {
-          setOpen(false);
-          return null;
-        }
+      const index = slotAt(x, y);
+      if (index === null) {
+        drag = null;
         setOpen(false);
-        if (i < 9) {
-          selected = i;
-          return { type: 'select', index: i };
+        return true;
+      }
+      const stack = currentSlots[index];
+      if (!stack) {
+        drag = null;
+        setOpen(false);
+        return true;
+      }
+      drag = { from: index, startX: x, startY: y, x, y, moved: false };
+      redraw();
+      return true;
+    },
+    handleMove(clientX: number, clientY: number, sw: number, sh: number): void {
+      if (!open || !drag) return;
+      const x = (clientX / Math.max(1, sw)) * canvas.width;
+      const y = (clientY / Math.max(1, sh)) * canvas.height;
+      drag.x = x;
+      drag.y = y;
+      if (Math.hypot(x - drag.startX, y - drag.startY) > 8) drag.moved = true;
+      redraw();
+    },
+    handleUp(clientX: number, clientY: number, sw: number, sh: number): InventoryAction {
+      if (!open || !drag) return null;
+      const current = drag;
+      drag = null;
+      const x = (clientX / Math.max(1, sw)) * canvas.width;
+      const y = (clientY / Math.max(1, sh)) * canvas.height;
+
+      if (!current.moved) {
+        setOpen(false);
+        if (current.from < 9) {
+          selected = current.from;
+          return { type: 'select', index: current.from };
         }
-        return { type: 'swap', index: i };
+        return { type: 'swap', index: current.from };
       }
 
+      const target = slotAt(x, y);
       setOpen(false);
+      if (target !== null && target !== current.from) {
+        return { type: 'move', from: current.from, to: target };
+      }
       return null;
     },
     render(renderer: THREE.WebGLRenderer): void {

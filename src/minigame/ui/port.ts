@@ -22,8 +22,9 @@ export interface MiniGameUi {
   syncInventory(slots: readonly (ItemStack | null)[], selectedSlot: number): void;
   toggleInventory(): void;
   isInventoryOpen(): boolean;
-  /** 返回 true 表示这次点击被 UI 消费 */
-  handleInventoryTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
+  handleInventoryDown(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
+  handleInventoryMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
+  handleInventoryUp(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
   togglePause(): void;
   isPauseOpen(): boolean;
   handlePauseTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): PauseAction;
@@ -43,6 +44,7 @@ export interface MiniGameUi {
 export interface CanvasUiCallbacks {
   onSelectSlot?: (index: number) => void;
   onSwapSlot?: (index: number) => void;
+  onMoveItem?: (from: number, to: number) => void;
   onSettingsChange?: (values: SettingsValues) => void;
   onRequestText?: (current: string) => Promise<string | null>;
 }
@@ -94,11 +96,18 @@ export function createCanvasUi(
     isInventoryOpen(): boolean {
       return inventory.isOpen();
     },
-    handleInventoryTap(clientX, clientY, sw, sh): boolean {
+    handleInventoryDown(clientX, clientY, sw, sh): boolean {
+      return inventory.isOpen() ? inventory.handleDown(clientX, clientY, sw, sh) : false;
+    },
+    handleInventoryMove(clientX, clientY, sw, sh): void {
+      if (inventory.isOpen()) inventory.handleMove(clientX, clientY, sw, sh);
+    },
+    handleInventoryUp(clientX, clientY, sw, sh): boolean {
       if (!inventory.isOpen()) return false;
-      const action = inventory.handleTap(clientX, clientY, sw, sh);
+      const action = inventory.handleUp(clientX, clientY, sw, sh);
       if (action?.type === 'select') callbacks.onSelectSlot?.(action.index);
       if (action?.type === 'swap') callbacks.onSwapSlot?.(action.index);
+      if (action?.type === 'move') callbacks.onMoveItem?.(action.from, action.to);
       return true;
     },
     togglePause(): void {

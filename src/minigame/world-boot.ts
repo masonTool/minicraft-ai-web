@@ -18,6 +18,7 @@ import { World } from '../core/world/World.ts';
 import { PlayerPhysics, type PlayerInput } from '../core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { Block, blockDef } from '../core/registry/blocks.ts';
+import { maxStackOf } from '../core/registry/items.ts';
 import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { Inventory } from '../core/container/Inventory.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
@@ -219,6 +220,29 @@ async function boot(): Promise<void> {
         const to = inventory.get(selectedSlot);
         inventory.set(selectedSlot, from);
         inventory.set(index, to);
+        ui.syncInventory(inventory.serialize(), selectedSlot);
+        scheduleSave?.();
+      },
+      onMoveItem: (from, to) => {
+        if (from === to) return;
+        const source = inventory.get(from);
+        if (!source) return;
+        const target = inventory.get(to);
+        if (!target) {
+          inventory.set(to, source);
+          inventory.set(from, null);
+        } else if (target.id === source.id) {
+          const moved = Math.min(maxStackOf(source.id) - target.count, source.count);
+          if (moved > 0) {
+            target.count += moved;
+            source.count -= moved;
+            inventory.set(to, target);
+            inventory.set(from, source.count > 0 ? source : null);
+          }
+        } else {
+          inventory.set(to, source);
+          inventory.set(from, target);
+        }
         ui.syncInventory(inventory.serialize(), selectedSlot);
         scheduleSave?.();
       },
@@ -510,7 +534,7 @@ async function boot(): Promise<void> {
     // 背包打开时，所有点击先交给 UI；点外/点槽都会关闭
     if (ui.isInventoryOpen()) {
       uiPointerId = event.pointerId;
-      ui.handleInventoryTap(x, y, width, height);
+      ui.handleInventoryDown(x, y, width, height);
       return;
     }
 
@@ -537,6 +561,8 @@ async function boot(): Promise<void> {
     if (event.pointerId === uiPointerId) {
       if (ui.isSettingsOpen()) {
         ui.handleSettingsScrollMove(event.clientX, event.clientY, width, height);
+      } else if (ui.isInventoryOpen()) {
+        ui.handleInventoryMove(event.clientX, event.clientY, width, height);
       }
       return;
     }
@@ -569,7 +595,11 @@ async function boot(): Promise<void> {
 
   const releasePointer = (event: { pointerId: number; clientX: number; clientY: number }): void => {
     if (event.pointerId === uiPointerId) {
-      if (ui.isSettingsOpen()) ui.handleSettingsScrollUp();
+      if (ui.isSettingsOpen()) {
+        ui.handleSettingsScrollUp();
+      } else if (ui.isInventoryOpen()) {
+        ui.handleInventoryUp(event.clientX, event.clientY, width, height);
+      }
       uiPointerId = null;
       return;
     }
