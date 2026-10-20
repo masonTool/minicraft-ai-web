@@ -29,6 +29,7 @@ v2
                  block-icon.ts     背包/HUD 物品图标与图集 UV
                  inventory-catalog.ts
                                    创造五分类与页签映射
+                 recipe-book.ts    配方匹配/取料/填格纯逻辑
                  wx-mesh-pool.ts   微信真实 Worker 网格化
                  chunk-worker-entry.ts
                                    微信 worker.onMessage 入口
@@ -99,6 +100,7 @@ v2
 - 抽取 `MobSystem`：猪/羊/僵尸模型、游走、追击、攻击、击杀统一，组合根减少约 350 行
 - 抽取 `ContainerSystem`：箱子/熔炉打开、存取、面板、熔炉 tick 移出组合根
 - 抽取 `drawBlockIcon` 与创造分类纯逻辑，组合根不再依赖图集布局
+- 抽取 `recipe-book.ts`：配方尺寸匹配、背包取 1 份材料、填合成格
 
 ## 已知架构债务
 

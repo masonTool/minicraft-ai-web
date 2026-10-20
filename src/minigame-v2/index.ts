@@ -19,6 +19,7 @@ import { MobSystem } from './mobs.ts';
 import { ContainerSystem } from './containers.ts';
 import { drawBlockIcon } from './block-icon.ts';
 import { CREATIVE_CATEGORIES, creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
+import { fillRecipe as fillRecipeFromInventory, recipeFits } from './recipe-book.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -624,55 +625,14 @@ const swapSlots = (fromIndex: number, toIndex: number): void => {
   showInventory();
 };
 
-const recipeFits = (recipe: ShapedRecipe | ShapelessRecipe, size: 2 | 3): boolean => {
-  if (recipe.kind === 'shapeless') return recipe.ingredients.length <= size * size;
-  return recipe.pattern.length <= size && recipe.pattern.every((row) => row.length <= size);
-};
-
-const takeOne = (id: number): boolean => {
-  for (let i = 0; i < 36; i++) {
-    const stack = inventory.get(i);
-    if (!stack || stack.id !== id) continue;
-    stack.count -= 1;
-    inventory.set(i, stack.count > 0 ? stack : null);
-    return true;
-  }
-  return false;
-};
-
 const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
   if (crafting.size !== recipeSize) {
     crafting.drainTo(inventory);
     crafting = new CraftingGrid(recipeSize);
-  } else {
-    crafting.drainTo(inventory);
   }
-  inventoryHint = '';
-  if (recipe.kind === 'shapeless') {
-    for (let i = 0; i < recipe.ingredients.length; i++) {
-      const id = recipe.ingredients[i]!;
-      if (!takeOne(id)) {
-        inventoryHint = '材料不足';
-        break;
-      }
-      crafting.set(i, { id, count: 1 });
-    }
-  } else {
-    for (let row = 0; row < recipe.pattern.length; row++) {
-      const line = recipe.pattern[row]!;
-      for (let col = 0; col < line.length; col++) {
-        const char = line[col]!;
-        if (char === ' ') continue;
-        const id = recipe.key[char];
-        if (id === undefined) continue;
-        if (!takeOne(id)) {
-          inventoryHint = '材料不足';
-          continue;
-        }
-        crafting.set(row * recipeSize + col, { id, count: 1 });
-      }
-    }
-  }
+  const result = fillRecipeFromInventory(recipe, recipeSize, inventory, crafting);
+  crafting = result.crafting;
+  inventoryHint = result.hint;
   inventoryTab = 'items';
   showInventory();
 };
