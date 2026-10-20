@@ -5,6 +5,7 @@ import { createHotbar } from './hotbar.ts';
 import { createInventory } from './inventory.ts';
 import { createPauseMenu, type PauseAction } from './pause.ts';
 import { createSettingsMenu, type SettingsValues } from './settings.ts';
+import { createOverlay } from './overlay.ts';
 
 /**
  * 小游戏 UI 端口（WX-020B）
@@ -25,6 +26,8 @@ export interface MiniGameUi {
   openSettings(): void;
   isSettingsOpen(): boolean;
   handleSettingsTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
+  showToast(message: string): void;
+  setLoading(progress: number | null, text?: string): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -45,6 +48,7 @@ export function createCanvasUi(
     { fov: 72, renderDistance: 3, sound: true, invertLook: false },
     (values) => onSettingsChange?.(values),
   );
+  const overlay = createOverlay(screenWidth, screenHeight);
 
   return {
     updateStatus(lines: readonly string[]): void {
@@ -89,10 +93,17 @@ export function createCanvasUi(
       if (action === 'back') pause.toggle();
       return true;
     },
+    showToast(message: string): void {
+      overlay.showToast(message);
+    },
+    setLoading(progress: number | null, text?: string): void {
+      overlay.setLoading(progress, text);
+    },
     render(renderer: THREE.WebGLRenderer): void {
       hud.render(renderer);
       hotbar.render(renderer);
       inventory.render(renderer);
+      overlay.render(renderer);
       pause.render(renderer);
       settings.render(renderer);
     },

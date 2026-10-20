@@ -279,7 +279,7 @@ async function boot(): Promise<void> {
     };
   };
 
-  const persist = async (): Promise<void> => {
+  const persist = async (manual = false): Promise<void> => {
     if (!save || saving) return;
     saving = true;
     saveStatus = 'saving';
@@ -295,9 +295,11 @@ async function boot(): Promise<void> {
       await save.saveMeta(save.buildMeta(world.seed, world.edits.totalEdits));
       world.edits.markSaved();
       saveStatus = 'ok';
+      if (manual) ui.showToast('SAVED');
       console.log('[WX-020] saved', records.length, 'chunks', world.edits.totalEdits, 'edits');
     } catch (error) {
       saveStatus = 'error';
+      ui.showToast('SAVE FAILED');
       console.warn('[WX-020] 保存失败', error);
     } finally {
       saving = false;
@@ -365,6 +367,7 @@ async function boot(): Promise<void> {
     });
     world.setBlockAndUpdate(currentHit.x, currentHit.y, currentHit.z, Block.AIR);
     inventory.add(id, 1);
+    ui.showToast(`+ ${blockDef(id).name.replace('minecraft:', '')}`);
     requestSave();
   };
 
@@ -388,9 +391,15 @@ async function boot(): Promise<void> {
       return;
     }
     const stack = inventory.get(selectedSlot);
-    if (!stack) return;
+    if (!stack) {
+      ui.showToast('NO BLOCK');
+      return;
+    }
     const blockId = stack.id;
-    if (blockDef(blockId).id === 0) return;
+    if (blockDef(blockId).id === 0) {
+      ui.showToast('CANNOT PLACE');
+      return;
+    }
     world.setBlockAndUpdate(px, py, pz, blockId);
     stack.count -= 1;
     if (stack.count <= 0) inventory.set(selectedSlot, null);
@@ -428,7 +437,7 @@ async function boot(): Promise<void> {
     if (ui.isPauseOpen()) {
       uiPointerId = event.pointerId;
       const action = ui.handlePauseTap(x, y, width, height);
-      if (action === 'save') void persist();
+      if (action === 'save') void persist(true);
       if (action === 'settings') ui.openSettings();
       return;
     }
@@ -611,6 +620,14 @@ async function boot(): Promise<void> {
 
     world.update(centerCx, centerCz, viewRadius);
     world.processLighting(LIGHT_BUDGET);
+
+    const busy = !playerReady || world.lightWorkCount > 0 || chunkRenderer.queueLength > 0;
+    if (busy) {
+      const progress = world.chunks.size > 0 ? chunkRenderer.drawnCount / world.chunks.size : 0;
+      ui.setLoading(Math.min(1, progress), 'GENERATING WORLD');
+    } else {
+      ui.setLoading(null);
+    }
     // WX-020A：先保证能看到完整地形；正式版应恢复“光照收敛后再网格化”的门闩，
     // 否则会把未收敛的光照烘焙进网格（App 里的 pendingSettle 会补刷）。
     chunkRenderer.processQueue(MESH_BUDGET, centerCx, centerCz);

@@ -147,7 +147,13 @@ function wxFiles(): FileStore {
     },
     async list(dir: string): Promise<readonly string[]> {
       try {
-        return fs.readdirSync(full(dir)) ?? [];
+        const names = (fs.readdirSync(full(dir)) ?? []) as string[];
+        const base = dir.replace(/\/+$/, '');
+        // wx readdirSync 只返回文件名；FileStore.list 的契约是“可直接 read 的路径”，
+        // 所以这里补上目录。否则 FileSaveGame 会去读 wxfile://usr/overworld|0,0.bin。
+        return names.map((name) =>
+          name.startsWith(base) || name.startsWith(root) ? name : `${base}/${name}`,
+        );
       } catch {
         return [];
       }

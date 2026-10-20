@@ -137,6 +137,22 @@ export function drawSwitch(
   context.fillRect(on ? x + 38 : x + 6, y + 4, 20, 20);
 }
 
+/** 水平进度条，value 为 0..1 */
+export function drawProgressBar(
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  value: number,
+): void {
+  const v = Math.max(0, Math.min(1, value));
+  context.fillStyle = 'rgba(0, 0, 0, 0.65)';
+  context.fillRect(rect.x, rect.y, rect.w, rect.h);
+  context.fillStyle = 'rgba(130, 210, 255, 0.95)';
+  context.fillRect(rect.x, rect.y, rect.w * v, rect.h);
+  context.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+  context.lineWidth = 2;
+  context.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
+}
+
 /** 等宽文字；按 maxWidth 截断并补省略号 */
 export function drawText(
   context: CanvasRenderingContext2D,
