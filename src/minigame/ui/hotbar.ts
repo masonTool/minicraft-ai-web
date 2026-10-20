@@ -56,9 +56,14 @@ export function createHotbar(atlas: TextureAtlas, blocks: readonly number[]): Ho
     if (!context) return;
     const x = padding + index * (slotSize + gap);
     const y = padding;
-    context.fillStyle = 'rgba(0, 0, 0, 0.48)';
+    const gradient = context.createLinearGradient(0, y, 0, y + slotSize);
+    gradient.addColorStop(0, 'rgba(48, 60, 70, 0.72)');
+    gradient.addColorStop(1, 'rgba(8, 12, 16, 0.78)');
+    context.fillStyle = gradient;
     context.fillRect(x, y, slotSize, slotSize);
-    context.strokeStyle = selected ? '#ffffff' : 'rgba(255, 255, 255, 0.32)';
+    context.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    context.fillRect(x + 2, y + 2, slotSize - 4, 3);
+    context.strokeStyle = selected ? '#9fe0ff' : 'rgba(160, 205, 230, 0.38)';
     context.lineWidth = selected ? 4 : 2;
     context.strokeRect(x + 1, y + 1, slotSize - 2, slotSize - 2);
 

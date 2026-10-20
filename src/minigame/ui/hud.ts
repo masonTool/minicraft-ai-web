@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { drawButton } from './widgets.ts';
+import { drawButton, drawPanel, drawText } from './widgets.ts';
 
 export interface Hud {
   update(lines: readonly string[]): void;
@@ -36,13 +36,20 @@ export function createHud(): Hud {
     update(lines: readonly string[]): void {
       if (!context) return;
       context.clearRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = 'rgba(0, 0, 0, 0.64)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.font = '24px monospace';
-      context.textBaseline = 'top';
-      context.fillStyle = '#ffffff';
+      const panelWidth = Math.min(720, canvas.width - 280);
+      const panelHeight = lines.length * 30 + 20;
+      drawPanel(context, { x: 12, y: 8, w: panelWidth, h: panelHeight });
       lines.forEach((line, index) => {
-        context.fillText(line.slice(0, 84), 18, 16 + index * 46);
+        drawText(
+          context,
+          line,
+          24,
+          18 + index * 30,
+          18,
+          index === 0 ? 'rgba(165, 225, 250, 1)' : 'rgba(255, 255, 255, 0.92)',
+          'left',
+          panelWidth - 24,
+        );
       });
       // 右上角 MENU/BAG：与 world-boot 的触摸区对应
       drawButton(context, { x: canvas.width - 236, y: 8, w: 96, h: 40 }, 'MENU', 'normal', 18);

@@ -51,15 +51,15 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   );
   scene.add(mesh);
 
-  const panelWidth = 500;
-  const panelHeight = 430;
+  const panelWidth = 560;
+  const panelHeight = 440;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   const panel: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
-  const play: Rect = { x: panelX + 70, y: panelY + 202, w: panelWidth - 140, h: 52 };
-  const settings: Rect = { x: panelX + 70, y: panelY + 268, w: panelWidth - 140, h: 44 };
-  const newWorld: Rect = { x: panelX + 70, y: panelY + 322, w: panelWidth - 140, h: 38 };
-  const deleteSave: Rect = { x: panelX + 70, y: panelY + 370, w: panelWidth - 140, h: 36 };
+  const play: Rect = { x: panelX + 70, y: panelY + 210, w: panelWidth - 140, h: 52 };
+  const settings: Rect = { x: panelX + 70, y: panelY + 276, w: panelWidth - 140, h: 44 };
+  const newWorld: Rect = { x: panelX + 70, y: panelY + 334, w: panelWidth - 140, h: 38 };
+  const deleteSave: Rect = { x: panelX + 70, y: panelY + 380, w: panelWidth - 140, h: 36 };
 
   let open = true;
   let info: MainMenuInfo = {
@@ -70,9 +70,9 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   };
 
   const worldRect = (index: number): Rect => ({
-    x: panelX + 30 + index * 148,
+    x: panelX + 32 + index * 160,
     y: panelY + 142,
-    w: 138,
+    w: 150,
     h: 34,
   });
 
@@ -84,17 +84,22 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       return;
     }
 
-    context.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    const backdrop = context.createLinearGradient(0, 0, 0, canvas.height);
+    backdrop.addColorStop(0, 'rgba(8, 16, 26, 0.5)');
+    backdrop.addColorStop(1, 'rgba(0, 0, 0, 0.74)');
+    context.fillStyle = backdrop;
     context.fillRect(0, 0, canvas.width, canvas.height);
     drawPanel(context, panel);
-    drawText(context, 'BEDROCK', panelX + 40, panelY + 28, 46, '#ffffff');
+    drawText(context, 'BEDROCK', panelX + 40, panelY + 24, 46, '#ffffff');
+    context.fillStyle = 'rgba(125, 215, 245, 0.95)';
+    context.fillRect(panelX + 42, panelY + 78, 240, 4);
     drawText(
       context,
       'WECHAT MINI GAME',
       panelX + 42,
       panelY + 88,
       18,
-      'rgba(200, 225, 255, 0.75)',
+      'rgba(190, 225, 250, 0.8)',
     );
     drawText(
       context,
@@ -117,7 +122,7 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       context,
       `SEED 0x${info.seed.toString(16).toUpperCase()}  ·  EDITS ${info.edits}`,
       panelX + 42,
-      panelY + 182,
+      panelY + 188,
       13,
       'rgba(180, 220, 255, 0.85)',
       'left',

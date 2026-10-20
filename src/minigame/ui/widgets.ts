@@ -18,21 +18,25 @@ export function contains(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
 }
 
-/** 像素风面板：深色底 + 双层边框 + 四角加粗 */
+/** 像素风面板：深色渐变 + 冷色双边框 + 四角高光 */
 export function drawPanel(context: CanvasRenderingContext2D, rect: Rect): void {
-  context.fillStyle = 'rgba(18, 22, 26, 0.96)';
+  const gradient = context.createLinearGradient(0, rect.y, 0, rect.y + rect.h);
+  gradient.addColorStop(0, 'rgba(30, 38, 46, 0.97)');
+  gradient.addColorStop(0.55, 'rgba(18, 23, 28, 0.97)');
+  gradient.addColorStop(1, 'rgba(12, 16, 20, 0.98)');
+  context.fillStyle = gradient;
   context.fillRect(rect.x, rect.y, rect.w, rect.h);
 
-  context.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  context.strokeStyle = 'rgba(150, 205, 235, 0.62)';
   context.lineWidth = 3;
   context.strokeRect(rect.x + 1.5, rect.y + 1.5, rect.w - 3, rect.h - 3);
 
-  context.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+  context.strokeStyle = 'rgba(0, 0, 0, 0.85)';
   context.lineWidth = 1;
   context.strokeRect(rect.x + 5.5, rect.y + 5.5, rect.w - 11, rect.h - 11);
 
   // 四角像素装饰
-  context.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  context.fillStyle = 'rgba(180, 225, 245, 0.9)';
   const c = 5;
   context.fillRect(rect.x + 2, rect.y + 2, c, c);
   context.fillRect(rect.x + rect.w - 2 - c, rect.y + 2, c, c);
@@ -53,10 +57,20 @@ export function drawButton(
   const y = rect.y + offset;
   const disabled = state === 'disabled';
 
-  context.globalAlpha = disabled ? 0.45 : 1;
-  context.fillStyle = state === 'pressed' ? 'rgba(42, 48, 54, 0.98)' : 'rgba(64, 72, 80, 0.98)';
+  context.globalAlpha = disabled ? 0.42 : 1;
+  const gradient = context.createLinearGradient(0, y, 0, y + rect.h);
+  if (state === 'pressed') {
+    gradient.addColorStop(0, 'rgba(44, 54, 64, 0.98)');
+    gradient.addColorStop(1, 'rgba(28, 36, 44, 0.98)');
+  } else {
+    gradient.addColorStop(0, 'rgba(82, 98, 112, 0.98)');
+    gradient.addColorStop(1, 'rgba(42, 52, 62, 0.98)');
+  }
+  context.fillStyle = gradient;
   context.fillRect(x, y, rect.w, rect.h);
-  context.strokeStyle = state === 'pressed' ? 'rgba(160, 168, 176, 0.9)' : 'rgba(255, 255, 255, 0.7)';
+  context.fillStyle = state === 'pressed' ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.12)';
+  context.fillRect(x + 2, y + 2, rect.w - 4, 3);
+  context.strokeStyle = state === 'pressed' ? 'rgba(150, 205, 235, 0.8)' : 'rgba(180, 225, 245, 0.8)';
   context.lineWidth = 2;
   context.strokeRect(x + 1, y + 1, rect.w - 2, rect.h - 2);
 
@@ -71,9 +85,11 @@ export function drawTab(
   label: string,
   active: boolean,
 ): void {
-  context.fillStyle = active ? 'rgba(235, 238, 240, 0.95)' : 'rgba(48, 54, 60, 0.95)';
+  context.fillStyle = active ? 'rgba(150, 220, 245, 0.95)' : 'rgba(42, 50, 58, 0.95)';
   context.fillRect(rect.x, rect.y, rect.w, rect.h);
-  context.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  context.fillStyle = active ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.1)';
+  context.fillRect(rect.x + 2, rect.y + 2, rect.w - 4, 3);
+  context.strokeStyle = active ? 'rgba(220, 250, 255, 0.95)' : 'rgba(150, 205, 235, 0.45)';
   context.lineWidth = 2;
   context.strokeRect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2);
   drawText(
@@ -82,7 +98,7 @@ export function drawTab(
     rect.x + rect.w / 2,
     rect.y + (rect.h - 20) / 2,
     20,
-    active ? '#111111' : '#ffffff',
+    active ? '#08131a' : '#ffffff',
     'center',
   );
 }

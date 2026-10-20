@@ -87,7 +87,7 @@ export function createInventory(
   const gridHeight = rows * slot + (rows - 1) * gap;
   const craftWidth = 270;
   const panelWidth = gridWidth + 40 + craftWidth;
-  const panelHeight = gridHeight + 120;
+  const panelHeight = gridHeight + 136;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   const panelRect: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
@@ -98,7 +98,7 @@ export function createInventory(
   const workbenchButton: Rect = { x: panelX + 420, y: panelY + panelHeight - 48, w: 130, h: 36 };
   const recipesButton: Rect = { x: panelX + 560, y: panelY + panelHeight - 48, w: 120, h: 36 };
   const gridX = panelX + 20;
-  const gridY = panelY + 56;
+  const gridY = panelY + 70;
   const craftX = gridX + gridWidth + 24;
   const craftY = gridY + 38;
   const craftGap = 6;
@@ -153,8 +153,8 @@ export function createInventory(
       context,
       mode === 'recipes' ? 'RECIPES' : mode === 'creative' ? 'CREATIVE' : 'INVENTORY',
       panelX + 20,
-      panelY + 18,
-      26,
+      panelY + 16,
+      24,
       '#ffffff',
     );
     drawText(
@@ -165,9 +165,9 @@ export function createInventory(
           ? 'TAP A BLOCK = GET 64'
           : 'TAP HOTBAR = SELECT · TAP ITEM = SWAP',
       panelX + 20,
-      panelY + 48,
-      13,
-      'rgba(255, 255, 255, 0.55)',
+      panelY + 56,
+      12,
+      'rgba(170, 210, 235, 0.65)',
       'left',
       panelWidth - 100,
     );
@@ -203,14 +203,19 @@ export function createInventory(
 
     for (let i = 0; i < cols * rows && mode !== 'recipes'; i++) {
       const { x, y } = slotRect(i);
-      context.fillStyle = 'rgba(0, 0, 0, 0.42)';
+      const slotGradient = context.createLinearGradient(0, y, 0, y + slot);
+      slotGradient.addColorStop(0, 'rgba(52, 64, 74, 0.62)');
+      slotGradient.addColorStop(1, 'rgba(8, 12, 16, 0.68)');
+      context.fillStyle = slotGradient;
       context.fillRect(x, y, slot, slot);
+      context.fillStyle = 'rgba(255, 255, 255, 0.07)';
+      context.fillRect(x + 2, y + 2, slot - 4, 3);
       context.strokeStyle =
         mode === 'inventory' && i === selected
-          ? '#ffffff'
+          ? '#9fe0ff'
           : i < 9
-            ? 'rgba(190, 220, 255, 0.55)'
-            : 'rgba(255, 255, 255, 0.25)';
+            ? 'rgba(150, 205, 235, 0.48)'
+            : 'rgba(180, 210, 230, 0.22)';
       context.lineWidth = mode === 'inventory' && i === selected ? 4 : 2;
       context.strokeRect(x + 1, y + 1, slot - 2, slot - 2);
 

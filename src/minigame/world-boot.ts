@@ -1090,7 +1090,7 @@ async function boot(): Promise<void> {
     `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T -  SLOT 1/${HOTBAR.length}`,
     `CHUNKS ...  DRAWN ...  LIGHT ...  SAVE ${saveStatus}  AUD ${audioStatus}`,
     'FPS ...  MS ...  TRI ...  CALLS ...',
-    'L tap cycle/drag move · R drag look · tap top place / bottom jump / hold mid break',
+    'L move · R look · tap place/break/jump · MENU/BAG',
   ]);
 
   let frames = 0;
@@ -1225,7 +1225,7 @@ async function boot(): Promise<void> {
         `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T ${targetLabel}  SLOT ${selectedSlot + 1}/${HOTBAR.length}`,
         `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}  SAVE ${saveStatus}  AUD ${audioStatus}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
-        'L tap cycle/drag move · R drag look/tap place/break/jump · MENU/BAG top-right',
+        'L move · R look · tap place/break/jump · MENU/BAG',
       ]);
       frames = 0;
       lastReport = time;
