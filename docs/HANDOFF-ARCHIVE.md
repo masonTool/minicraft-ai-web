@@ -3181,4 +3181,14 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
   `test:banner` 57 → **67 条**、`test:inventory` 89 → **103 条**。
   ⚠️ 差异：图案仍只有 4 种、单层；织布机界面是批次 503。
 
+- 批次 503（J25 收口）：**织布机**。`core/container/Loom.ts` 三格（旗帜 / 染料 /
+  **算出来的成品**）+ `BlockEntityStore` / `ContainerSave` / `Transfer` 三处登记
+  （`loom` 种类、`[LOOM_BANNER, LOOM_DYE]` 可塞、成品进 `isComputedResultSlot`）+
+  `InventoryScreen` 的 `loom` 模式（图案列表随材料置灰）+ 右键入口。
+  ⚠️ 两条关键判据：**只扣一件**（整叠 64 面白旗 + 1 染料不会全变花旗）；
+  **删掉 `cycleBannerPattern`**——右键免费换图案会让染料消耗形同虚设。
+  差异：图案 4 种、单层；**染料只当消耗**（图案色随旗面自动取反色）。
+  新套件 `test:loom` **56 条**，套数 152 → **153**（README/HANDOFF/AGENTS 三处同步）；
+  **J25 勾掉**：完成 201 → **202**、进行中 79 → **78**。
+
 <!-- docs-archive:end -->
