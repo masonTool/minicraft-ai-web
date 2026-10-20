@@ -90,8 +90,13 @@ interface Face {
   corners: readonly [FaceCorner, FaceCorner, FaceCorner, FaceCorner];
 }
 
-/** AO 等级 → 亮度系数（两邻边都遮挡 → 最暗） */
-const AO_BRIGHTNESS: readonly number[] = [0.55, 0.7, 0.85, 1.0];
+/**
+ * AO 等级 → 亮度系数（两邻边都遮挡 → 最暗）。
+ *
+ * 批次 526：整体再压一档（0.55/0.7/0.85 → 0.48/0.65/0.82）。凹角、墙根、洞口
+ * 这些"该暗的地方"压得住，方块才像垒起来的；顶上仍是 1.0，不影响受光面。
+ */
+export const AO_BRIGHTNESS: readonly number[] = [0.48, 0.65, 0.82, 1.0];
 
 /** 由面的法线与顶点位置推导出该顶点的三组 AO 采样偏移 */
 function aoOffsetsFor(

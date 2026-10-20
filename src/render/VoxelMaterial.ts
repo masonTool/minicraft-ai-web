@@ -21,6 +21,16 @@ import { GLSL_DITHER } from './dither.ts';
  */
 export const FLUID_TILE_SLOTS = 4;
 
+/**
+ * 方向化色温的两端（批次 526）。
+ *
+ * 朝上的面掺暖、朝侧/朝下的面掺冷，幅度控制在 ±7%：再大就成了"滤镜"（雪地会发黄、
+ * 石头会发紫）；这个量级刚好让"顶面比侧面暖一点点"，人眼却读成体积。
+ * 三个分量**均值都在 1.0 附近**，所以整体亮度不变，只是色相随朝向走。
+ */
+export const SHADE_WARM: readonly [number, number, number] = [1.06, 1.0, 0.92];
+export const SHADE_COOL: readonly [number, number, number] = [0.93, 0.98, 1.07];
+
 const VERTEX_SHADER = /* glsl */ `
 attribute vec2 aLight;
 attribute float aShade;
@@ -112,6 +122,9 @@ uniform vec2 uAtlasSize;
  */
 uniform vec3 uSkyLightColor;
 uniform vec3 uBlockLightColor;
+/** 方向化色温的两端（批次 526）：朝上的面取 warm、背光/朝下的面取 cool */
+uniform vec3 uShadeWarm;
+uniform vec3 uShadeCool;
 
 uniform float uTime;
 
@@ -201,7 +214,17 @@ void main() {
   vec3 lightColor = mix(uSkyLightColor, uBlockLightColor, t * t);
   float brightness = max(max(skyCurve, blkCurve) * vShade, uMinBrightness);
 
-  vec3 color = texel.rgb * brightness * lightColor;
+  // ---- 方向化色温（批次 526）
+  //
+  // 朝上的面（亮）掺暖、朝侧/朝下的面掺冷。人眼把"暖=受光、冷=背光"直接读成体积，
+  // 比单纯加减亮度更像"这个世界有盏灯照着"；而且它是**零成本**的：只用已有的 vShade
+  // （面明暗 × AO）当判据，加一次 mix、一次乘法，不动几何也不加 draw call。
+  //
+  // 判据为什么用 vShade 而不是面法线：网格里没有法线属性（面明暗早就烘进 aShade 了），
+  // 再传一个属性要多 4 字节/顶点；而 vShade 本身就编码了"这个顶点被光找到多少"，
+  // 凹角（AO 低）自然落到冷端——那正是它们该有的样子。
+  vec3 sunTint = mix(uShadeCool, uShadeWarm, clamp((vShade - 0.42) / 0.58, 0.0, 1.0));
+  vec3 color = texel.rgb * brightness * lightColor * sunTint;
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDepth);
   color = mix(color, uFogColor, fogFactor);
 
@@ -261,6 +284,9 @@ export class VoxelMaterial {
       // 默认纯白：与"只有亮度"的旧行为完全一致，由主程序按昼夜去推色温
       uSkyLightColor: { value: new THREE.Color(1, 1, 1) },
       uBlockLightColor: { value: new THREE.Color(1, 1, 1) },
+      // new THREE.Color(r, g, b) 是**直接写分量**（不做 sRGB→线性），与整条管线的口径一致
+      uShadeWarm: { value: new THREE.Color(SHADE_WARM[0], SHADE_WARM[1], SHADE_WARM[2]) },
+      uShadeCool: { value: new THREE.Color(SHADE_COOL[0], SHADE_COOL[1], SHADE_COOL[2]) },
     };
 
     this.defaultMinBrightness = translucent ? 0.32 : 0.06;

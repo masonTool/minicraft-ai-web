@@ -11,7 +11,7 @@
  *   3. **真实地形上的合并率**：用真实生成的区块对比「逐面网格化」的三角形数。
  */
 
-import { meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
+import { AO_BRIGHTNESS, meshSection, type MeshContext, type TileUvSource } from '../src/core/mesh/ChunkMesher.ts';
 import { OverworldGenerator } from '../src/core/gen/OverworldGenerator.ts';
 import { Block, blockDef, slabId } from '../src/core/registry/blocks.ts';
 import { withWaterlogged } from '../src/core/registry/blockState.ts';
@@ -77,6 +77,18 @@ console.log('\n[平坦石板：应当彻底合并]');
 
   const tile = result.solid!.getAttribute('aTile');
   check('每个顶点都带有贴图起点属性 aTile', tile !== undefined && tile.count === uv.count);
+}
+
+// ---------------------------------------------------------------- AO 档位（批次 526）
+
+console.log('\n[AO 档位]');
+{
+  // 四档：0 = 两条邻边+对角都被挡（最暗），3 = 完全开阔（不压暗）
+  check('四档、单调递增', AO_BRIGHTNESS.length === 4 && AO_BRIGHTNESS.every((v, i) => i === 0 || v > AO_BRIGHTNESS[i - 1]!));
+  check('完全开阔的一档是 1.0（不改变受光面）', AO_BRIGHTNESS[3] === 1);
+  // 批次 526 从 0.55 压到 0.48：凹角/墙根要"压得住"，方块才像垒起来的
+  check('最暗一档 ≤ 0.5（墙角压得住）', AO_BRIGHTNESS[0]! <= 0.5, String(AO_BRIGHTNESS[0]));
+  check('最暗与最亮拉得开（≥ 2 倍）', AO_BRIGHTNESS[3]! / AO_BRIGHTNESS[0]! >= 2, `${AO_BRIGHTNESS[3]! / AO_BRIGHTNESS[0]!}`);
 }
 
 console.log('\n[植物（十字）贴图方向：茎在下面]');

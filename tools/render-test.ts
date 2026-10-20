@@ -41,7 +41,7 @@ import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/rend
 import { buildOutlineGeometry } from '../src/render/BlockOutline.ts';
 import { applyBoxFaceShade } from '../src/render/boxShading.ts';
 import { MobHealthBar } from '../src/render/MobHealthBar.ts';
-import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
+import { FLUID_TILE_SLOTS, SHADE_COOL, SHADE_WARM, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { ALPHA_DITHER_BAND, ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../src/render/alphaCoverage.ts';
 import { GLSL_DITHER } from '../src/render/dither.ts';
 import { readFileSync } from 'node:fs';
@@ -668,6 +668,23 @@ console.log('\n[镂空贴图的覆盖率补偿（批次 520）]');
   );
   equal('实心层的抖动幅度 = ALPHA_DITHER_BAND', solid.material.uniforms.uAlphaDither!.value, ALPHA_DITHER_BAND);
   equal('半透明层不抖（那层没有 alphaTest，抖了只是白算）', translucent.material.uniforms.uAlphaDither!.value, 0);
+
+  // ---- 方向化色温（批次 526）：朝上的面掺暖、朝侧/朝下的面掺冷
+  check(
+    '片元里按 vShade 混暖冷（零成本的"有盏灯照着"）',
+    solid.material.fragmentShader.includes('mix(uShadeCool, uShadeWarm') &&
+      solid.material.fragmentShader.includes('* sunTint'),
+  );
+  {
+    const warm = solid.material.uniforms.uShadeWarm!.value as THREE.Color;
+    const cool = solid.material.uniforms.uShadeCool!.value as THREE.Color;
+    check('暖端偏红（红 > 蓝）', warm.r > warm.b && Math.abs(warm.r - SHADE_WARM[0]) < 1e-6, `${warm.r},${warm.b}`);
+    check('冷端偏蓝（蓝 > 红）', cool.b > cool.r && Math.abs(cool.b - SHADE_COOL[2]) < 1e-6, `${cool.r},${cool.b}`);
+    const warmMean = (warm.r + warm.g + warm.b) / 3;
+    const coolMean = (cool.r + cool.g + cool.b) / 3;
+    // 亮度不能跟着朝向变：两端均值都得贴近 1（否则就是"全局调色"而不是"色温"）
+    check('两端均值都≈1（只改色相，不改亮度）', Math.abs(warmMean - 1) < 0.03 && Math.abs(coolMean - 1) < 0.03, `${warmMean.toFixed(3)},${coolMean.toFixed(3)}`);
+  }
   solid.material.dispose();
   translucent.material.dispose();
 }
