@@ -1651,6 +1651,18 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
+  // 批次 530（用户）：纯白场景（雪地/云层/亮天空）里按钮不能是"纯白透明块"。
+  // 深色玻璃底 + 浅描边 + 外圈暗边，三层缺一不可。
+  check(
+    '触摸按钮在纯白场景也可见（深底 + 浅描边 + 暗外圈）',
+    compact.includes('rgba(44, 52, 60, .82)') &&
+      compact.includes('rgba(12, 16, 20, .82)') &&
+      compact.includes('border: 2px solid rgba(255, 255, 255, .72)') &&
+      compact.includes('0 0 0 1px rgba(0, 0, 0, .55)') &&
+      compact.includes('rgba(12, 16, 20, .52)') &&
+      compact.includes('linear-gradient(180deg, #f7f9fb, #c7ccd2)'),
+    '触摸按钮/摇杆底色',
+  );
 }
 
 console.log('\n[创造栏分类图标（批次 98，对齐基岩版的组织形式）]');

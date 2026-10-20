@@ -3739,9 +3739,12 @@
         margin-left: calc(-46px * var(--touch-scale, 1));
         margin-top: calc(-46px * var(--touch-scale, 1));
         border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, .92);
-        /* 外层暗影保证在雪地/亮天空上也看得见，内层微光是"圈"的厚度感 */
-        box-shadow: 0 0 10px rgba(0, 0, 0, .35), inset 0 0 10px rgba(255, 255, 255, .22);
+        border: 2px solid rgba(255, 255, 255, .95);
+        /* 外圈再压一道暗边（批次 530）：纯白场景里只靠白圈会和背景融在一起 */
+        box-shadow:
+          0 0 0 2px rgba(0, 0, 0, .55),
+          0 0 10px rgba(0, 0, 0, .45),
+          inset 0 0 10px rgba(255, 255, 255, .22);
         pointer-events: none;
         opacity: 0;
         transition: opacity .10s linear;
@@ -3756,13 +3759,30 @@
         width: calc(132px * var(--touch-scale, 1));
         height: calc(132px * var(--touch-scale, 1));
         border-radius: 50%;
-        background: rgba(255, 255, 255, .13);
-        border: 2px solid rgba(255, 255, 255, .3);
+        /* 批次 530：深色玻璃底 + 浅色描边 + 外圈暗边。
+           纯白（雪地/云层/亮天空）上靠暗底与外圈分开，深色洞穴里靠浅描边分开。 */
+        background:
+          radial-gradient(circle at 50% 42%, rgba(255, 255, 255, .10), rgba(255, 255, 255, 0) 62%),
+          rgba(12, 16, 20, .52);
+        border: 2px solid rgba(255, 255, 255, .62);
+        box-shadow:
+          0 2px 8px rgba(0, 0, 0, .40),
+          0 0 0 1px rgba(0, 0, 0, .50),
+          inset 0 0 20px rgba(0, 0, 0, .38);
         pointer-events: auto; touch-action: none;
         display: grid; place-items: center;
-        transition: background .15s;
+        transition: background .15s, border-color .15s, box-shadow .15s;
       }
-      #touch-stick.active { background: rgba(255, 255, 255, .22); }
+      #touch-stick.active {
+        background:
+          radial-gradient(circle at 50% 42%, rgba(255, 255, 255, .14), rgba(255, 255, 255, 0) 62%),
+          rgba(18, 24, 30, .68);
+        border-color: rgba(255, 255, 255, .85);
+        box-shadow:
+          0 2px 10px rgba(0, 0, 0, .48),
+          0 0 0 1px rgba(0, 0, 0, .55),
+          inset 0 0 22px rgba(0, 0, 0, .42);
+      }
       /* 左手模式（批次 271）：摇杆与操作键整体镜像。死区跟着 `getBoundingClientRect`
          走，所以这里只换边、不写死任何坐标 */
       #touch-ui.left-handed #touch-stick { left: auto; right: 22px; }
@@ -3771,8 +3791,13 @@
         width: calc(56px * var(--touch-scale, 1));
         height: calc(56px * var(--touch-scale, 1));
         border-radius: 50%;
-        background: rgba(255, 255, 255, .55);
-        border: 2px solid rgba(255, 255, 255, .8);
+        /* 摇杆芯：浅灰实体 + 深色描边。原来半透明白在雪地上等于没有 */
+        background: linear-gradient(180deg, #f7f9fb, #c7ccd2);
+        border: 2px solid rgba(0, 0, 0, .55);
+        box-shadow:
+          0 2px 5px rgba(0, 0, 0, .50),
+          inset 0 1px 0 #ffffff,
+          inset 0 -2px 0 rgba(0, 0, 0, .20);
         will-change: transform;
       }
 
@@ -3791,22 +3816,51 @@
         height: calc(62px * var(--touch-scale, 1));
         border-radius: 50%; padding: 0;
         display: grid; place-items: center;
-        font: inherit; font-size: 17px; color: #fff;
-        background: rgba(255, 255, 255, .16);
-        border: 2px solid rgba(255, 255, 255, .34);
-        text-shadow: 1px 1px 0 rgba(0, 0, 0, .6);
+        font: inherit; font-size: 17px; color: #f5f7fa;
+        /* 批次 530：深色玻璃 + 浅描边 + 外圈暗边。
+           纯白场景里深底负责"看得见"，深色场景里浅描边负责"看得见"。
+           顶部再叠一点高光，按钮不至于像一块死黑色块。 */
+        background:
+          radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 62%),
+          linear-gradient(180deg, rgba(44, 52, 60, .82), rgba(12, 16, 20, .82));
+        border: 2px solid rgba(255, 255, 255, .72);
+        box-shadow:
+          0 2px 6px rgba(0, 0, 0, .50),
+          0 0 0 1px rgba(0, 0, 0, .55),
+          inset 0 1px 0 rgba(255, 255, 255, .25),
+          inset 0 -2px 0 rgba(0, 0, 0, .35);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, .90), 0 0 4px rgba(0, 0, 0, .50);
         pointer-events: auto; touch-action: none;
         user-select: none; -webkit-user-select: none;
+        transition: background .15s, border-color .15s, box-shadow .15s, transform .08s;
       }
       /* 图标是内联 SVG：跟着按钮缩放，颜色用 currentColor 与按钮文字同色 */
-      .touch-button svg { width: 58%; height: 58%; display: block; fill: currentColor; }
-      .touch-button.on { background: rgba(140, 220, 140, .38); border-color: rgba(200, 255, 200, .8); }
+      .touch-button svg {
+        width: 58%; height: 58%; display: block; fill: currentColor;
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .85));
+      }
+      .touch-button:active { transform: scale(.94); }
       .touch-button.jump {
         width: calc(76px * var(--touch-scale, 1));
         height: calc(76px * var(--touch-scale, 1));
         font-size: 19px;
+        /* 跳跃是主操作：绿色玻璃，与升降/暂停区分开 */
+        background:
+          radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .24), rgba(255, 255, 255, 0) 62%),
+          linear-gradient(180deg, rgba(62, 104, 56, .88), rgba(18, 40, 16, .88));
+        border-color: rgba(198, 240, 185, .80);
       }
       .touch-button.jump svg { width: 52%; height: 52%; }
+      .touch-button.on {
+        background:
+          radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 62%),
+          linear-gradient(180deg, rgba(86, 158, 66, .92), rgba(30, 74, 22, .92));
+        border-color: rgba(205, 250, 185, .95);
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, .55),
+          0 0 10px rgba(120, 220, 110, .45),
+          inset 0 1px 0 rgba(255, 255, 255, .30);
+      }
 
       /* 飞行时上升/下降是独立两颗键（不再用伪元素画在跳跃/潜行上） */
       .touch-button { position: relative; }
@@ -3821,13 +3875,18 @@
       /* 双击摇杆潜行时的提示（批次 275）：一圈更亮的绿边 + 摇杆芯变绿，
          再在正上方挂一枚"潜行"小牌——拇指压着摇杆时，只有上方的小牌看得见 */
       #touch-stick.sneaking {
-        border-color: rgba(190, 255, 190, .9);
-        background: rgba(120, 210, 130, .18);
-        box-shadow: 0 0 0 4px rgba(140, 220, 140, .7), inset 0 0 16px rgba(140, 220, 140, .35);
+        border-color: rgba(190, 255, 190, .95);
+        background:
+          radial-gradient(circle at 50% 42%, rgba(190, 255, 190, .18), rgba(190, 255, 190, 0) 62%),
+          rgba(30, 66, 28, .62);
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, .55),
+          0 0 0 4px rgba(140, 220, 140, .70),
+          inset 0 0 16px rgba(140, 220, 140, .35);
       }
       #touch-stick.sneaking .knob {
-        background: rgba(165, 240, 170, .85);
-        border-color: rgba(225, 255, 225, .95);
+        background: linear-gradient(180deg, #e2ffdc, #9fe094);
+        border-color: rgba(26, 64, 20, .85);
       }
       #touch-stick .sneak-badge {
         position: absolute; left: 50%; top: -22px; transform: translateX(-50%);
@@ -3882,8 +3941,7 @@
         height: calc(22px * var(--touch-scale, 1));
         border-radius: 0;
         pointer-events: auto;
-        background: rgba(0, 0, 0, .34);
-        border-color: rgba(255, 255, 255, .42);
+        /* 背景/描边沿用 `.touch-button` 的深色玻璃；这里只改尺寸与形状 */
       }
       #touch-pause .touch-button::before {
         content: ''; position: absolute; inset: -3px;
@@ -3900,8 +3958,7 @@
         position: absolute; bottom: calc(100% + 4px);
         width: calc(44px * var(--touch-scale, 1));
         height: calc(44px * var(--touch-scale, 1));
-        background: rgba(0, 0, 0, .34);
-        border-color: rgba(255, 255, 255, .42);
+        /* 背景/描边沿用 `.touch-button` 的深色玻璃 */
       }
       /* 界面打开时一起收起（批次 231）：`visibility` 不改布局，
          不要写成 `display:none`——那会让整条快捷栏重排一次 */
