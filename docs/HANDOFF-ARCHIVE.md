@@ -3151,4 +3151,13 @@ O5（与原版对照截图）、J9 的火焰弹/三叉戟、J10 的凋灵与栖�
   困难 ×1.5"从未生效（TASKS I7 是文档漂移）；现在 和平 0 / 简单 12 / 普通 24 / 困难 36。
   被动名额只数 `PASSIVE_MOBS`（村民/铁傀儡不再把动物挤掉）。`test:spawn` 56 → **61 条**。
 
+- 批次 500（性能）：**寻路节流**（真机日志里 `phases.ent` 29~35ms / 24fps 的根因）。
+  `Mob.updateAi` 原条件是 `repathTimer <= 0 || path.length === 0`，于是"路径走完"与
+  "找不到路"都会**下一帧立刻重算**；失败的搜索还要把 `maxNodes` 撑满。三处修：
+  ① 失败退避 1.2~2.0 秒；② `EntityContext.canPathSearch` + 主程序每帧 2 次预算
+  （`PATH_SEARCH_BUDGET_PER_FRAME`），拿不到预算的怪下一帧再排队；
+  ③ 水平 2 格内且同高度时直线走过去（不再"贴身→清空→重算"）。
+  `Pathfinder.maxNodes` 900 → 384。`test:mob` 137 → **145 条**（1 秒只搜 1 次 /
+  没预算不搜 / 贴身不搜 三条）。
+
 <!-- docs-archive:end -->
