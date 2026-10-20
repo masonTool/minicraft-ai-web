@@ -41,7 +41,13 @@ import {
  * 剪过之后羊毛长回来的时间（秒）。
  * 原版是"吃草长回来"，我们没有啃草皮这件事，用计时器代替。
  */
-export const WOOL_REGROW_SECONDS = 30;
+/**
+ * 剪毛后的羊每隔多少秒尝试吃一次草（批次 558）。
+ *
+ * 原版不是"剪完 30 秒自动长回来"，而是**低头吃草方块**才长毛：
+ * 这里保留一个短冷却，避免羊一被剪就立刻把脚下的草吃掉。
+ */
+export const WOOL_EAT_COOLDOWN_SECONDS = 5;
 
 export const CREEPER_FUSE_TIME = 1.5;
 
@@ -775,7 +781,20 @@ export class Mob extends Entity {
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.sheared) {
       this.woolTimer -= dt;
-      if (this.woolTimer <= 0) this.sheared = false;
+      if (this.woolTimer <= 0) {
+        // 吃草长毛（批次 558）：脚下是草方块才吃；吃完变泥土，羊毛长回来。
+        // 没有草就等下一个冷却周期再试——不再"30 秒凭空长回来"。
+        const bx = Math.floor(this.x);
+        const by = Math.floor(this.y) - 1;
+        const bz = Math.floor(this.z);
+        if (ctx.setBlock && ctx.getBlock(bx, by, bz) === Block.GRASS_BLOCK) {
+          ctx.setBlock(bx, by, bz, Block.DIRT);
+          this.sheared = false;
+          this.woolTimer = 0;
+        } else {
+          this.woolTimer = WOOL_EAT_COOLDOWN_SECONDS;
+        }
+      }
     }
     if (this.baby) {
       this.growTimer -= dt;
@@ -1798,7 +1817,7 @@ export class Mob extends Entity {
   shear(): number {
     if (this.dead || this.sheared) return 0;
     this.sheared = true;
-    this.woolTimer = WOOL_REGROW_SECONDS;
+    this.woolTimer = WOOL_EAT_COOLDOWN_SECONDS;
     return 1 + Math.floor(Math.random() * 3);
   }
 

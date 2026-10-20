@@ -96,6 +96,11 @@ export interface EntityContext {
   /** 读取方块 id（生物寻路用） */
   getBlock: (x: number, y: number, z: number) => number;
   /**
+   * 写一格方块（批次 558：羊吃草把草方块变泥土）。
+   * 可选——老离线桩不提供时，羊就"吃不到草"，也就不会长毛。
+   */
+  setBlock?: (x: number, y: number, z: number, id: number) => void;
+  /**
    * 这一格是不是**关着的木门**（批次 516）。
    *
    * 会开门的生物（村民/灾厄村民）寻路时把门当可走格；不传就当"没有门"。

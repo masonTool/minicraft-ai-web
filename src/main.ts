@@ -10021,6 +10021,10 @@ class App {
         return this.inventory.addStack({ id: itemId, count, ...extras });
       },
       getBlock: (x, y, z) => this.world.getBlock(x, y, z),
+      // 羊吃草（批次 558）：把草方块改成泥土，走带光照/网格/增量存档的那条路
+      setBlock: (x, y, z, id) => {
+        this.world.setBlockAndUpdate(x, y, z, id);
+      },
       // 会开门的生物（村民/灾厄村民，批次 516）：寻路把关着的门当可走格，
       // 贴近时由 `toggleDoor` 真的推开（它已经处理了上下半与音效）
       isClosedDoor: (x, y, z) => this.isClosedDoorAt(x, y, z),

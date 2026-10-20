@@ -28,7 +28,7 @@ import {
   BABY_GROW_SECONDS,
   BABY_SCALE,
   LOVE_SECONDS,
-  WOOL_REGROW_SECONDS,
+  WOOL_EAT_COOLDOWN_SECONDS,
   mobAcceptsTame,
   mobEats,
 } from '../src/core/entity/Mob.ts';
@@ -55,15 +55,25 @@ function equal(name: string, actual: unknown, expected: unknown, detail = ''): v
 /** 用集合表示实心方块的测试世界 */
 class TestWorld implements BlockSampler {
   private readonly solid = new Set<string>();
+  /** 明确指定 id 的格子（羊吃草要用）；没有就按 solid 回落成石头 */
+  private readonly ids = new Map<string, number>();
 
-  setBlock(x: number, y: number, z: number, solid: boolean): void {
+  setBlock(x: number, y: number, z: number, solid: boolean | number): void {
     const key = `${x},${y},${z}`;
+    if (typeof solid === 'number') {
+      this.ids.set(key, solid);
+      if (solid !== Block.AIR) this.solid.add(key);
+      else this.solid.delete(key);
+      return;
+    }
+    this.ids.delete(key);
     if (solid) this.solid.add(key);
     else this.solid.delete(key);
   }
 
   getBlock(x: number, y: number, z: number): number {
-    return this.solid.has(`${x},${y},${z}`) ? Block.STONE : Block.AIR;
+    const key = `${x},${y},${z}`;
+    return this.ids.get(key) ?? (this.solid.has(key) ? Block.STONE : Block.AIR);
   }
 
   /** 铺一块地面 */
@@ -483,15 +493,27 @@ console.log('\n[剪羊毛]');
   check('没剪的羊死后掉羊毛', dropped.includes(woolId(11)), dropped.join(','));
   check('掉的是它自己的颜色（不是白色）', !dropped.includes(woolId(0)), dropped.join(','));
 
-  // ---- 30 秒后长回来
-  const grow = new Mob(sheepType, 0.5, 65.5, 0.5);
-  grow.shear();
-  const quietCtx: EntityContext = { ...ctx, player: null };
-  for (let t = 0; t < WOOL_REGROW_SECONDS - 2; t += 0.5) grow.tick(quietCtx, 0.5);
-  check('30 秒内还没长回来', grow.sheared);
-  for (let t = 0; t < 4; t += 0.5) grow.tick(quietCtx, 0.5);
-  check('30 秒后羊毛长回来了', !grow.sheared);
-  check('长回来之后还能再剪', grow.shear() >= 1);
+  // ---- 吃草才长毛（批次 558）：脚下不是草方块就永远不长
+  const hungry = new Mob(sheepType, 0.5, 65.5, 0.5);
+  hungry.shear();
+  for (let t = 0; t < WOOL_EAT_COOLDOWN_SECONDS * 3; t += 0.5) hungry.tick(ctx, 0.5);
+  check('脚下没有草方块就不会凭空长毛', hungry.sheared);
+
+  // 换成草方块：冷却结束后吃掉它、变泥土、羊毛长回来
+  world.setBlock(0, 64, 0, Block.GRASS_BLOCK);
+  const eatCtx: EntityContext = {
+    ...ctx,
+    setBlock: (x, y, z, id) => world.setBlock(x, y, z, id),
+  };
+  for (let t = 0; t < WOOL_EAT_COOLDOWN_SECONDS + 1; t += 0.5) {
+    // 钉住位置：羊会自己游荡，跑出草方块上方就永远吃不到
+    hungry.x = 0.5;
+    hungry.z = 0.5;
+    hungry.tick(eatCtx, 0.5);
+  }
+  check('吃到草方块后羊毛长回来', !hungry.sheared, `y=${hungry.y} sheared=${hungry.sheared} block=${world.getBlock(0, 64, 0)}`);
+  equal('草方块被吃成泥土', world.getBlock(0, 64, 0), Block.DIRT);
+  check('长回来之后还能再剪', hungry.shear() >= 1);
 }
 
 console.log('\n[喂食繁殖与幼体]');
