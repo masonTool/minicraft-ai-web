@@ -8,7 +8,7 @@
 
 ## 0. 当前状态（新会话 / 换设备先读这一页）
 
-> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `c9ca496`
+> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `4a39351`
 > 只要这一页和 §5 任务表是最新的，换会话/换机器就不会丢上下文。
 
 ### 0.1 一眼看进度
@@ -589,7 +589,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-023/028 | 41 格背包 UI：9×5、数量、快捷栏 9 格、点快捷栏选中/点物品交换；helper 截图验证 | `ea1e80f` |
 | 2026-10-20 | WX-024 开始 | 启动主菜单壳：BEDROCK / PLAY / SETTINGS / NEW WORLD 占位；世界后台生成，菜单独占渲染；PLAY 关闭、SETTINGS 返回菜单 | `5b535e7` |
 | 2026-10-20 | WX-026 开始 | HUD 状态层：准星、生命/饥饿图标、HP/FOOD、护甲/氧气、经验条；helper 截图验证 | `c9ca496` |
-| 2026-10-20 | WX-022 收口 | CONTROLS 页签：搜索框接 wx.showKeyboard、拖动滚动列表（4 行可见/滚动条）、操作说明；WORLD-INPUT down/move/up 转发；helper 截图验证 | 本次提交 |
+| 2026-10-20 | WX-022 收口 | CONTROLS 页签：搜索框接 wx.showKeyboard、拖动滚动列表（4 行可见/滚动条）、操作说明；WORLD-INPUT down/move/up 转发；helper 截图验证 | `4a39351` |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
