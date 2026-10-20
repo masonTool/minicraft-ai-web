@@ -1324,10 +1324,11 @@ console.log('\n[左栏 = 物品分类（批次 159 三）]');
       invSrc.includes('this.hidePickToast(true)') &&
       readFileSync(new URL('../src/ui/HudToast.ts', import.meta.url), 'utf8').includes('hide(): void {'),
   );
-  // 创造模式点"需要站台"的物品：除了站台图标，目标框也要红底画出这件物品
+  // 创造模式不展示配方；红底目标框只在生存模式做
   check(
-    '创造模式需要站台时，目标框红底显示当前物品',
-    invSrc.includes('this.previewResultNeedsStation = true;') &&
+    '创造模式不展示配方/站台，生存模式需要站台时目标框红底显示当前物品',
+    invSrc.includes('if (this.hooks.isCreative?.() ?? false) return;') &&
+      invSrc.includes('this.previewResultNeedsStation = true;') &&
       invSrc.includes("this.resultElement.classList.toggle(\n        'needs-station',") &&
       invSrc.includes('this.craftGhost || this.previewResultNeedsStation') &&
       css.includes('.inv-slot.needs-station {'),

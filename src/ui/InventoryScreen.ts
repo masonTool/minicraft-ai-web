@@ -2232,14 +2232,16 @@ export class InventoryScreen {
     }
     this.pendingRecipeId = null;
     this.clearCraftGhost();
-    const creative = this.hooks.isCreative?.() ?? false;
+    // 创造模式不展示配方（拥有所有方块，看配方没有意义）。
+    // 用户确认：红底目标框只在生存模式做。
+    if (this.hooks.isCreative?.() ?? false) return;
     const recipe = this.bestRecipeFor(itemId);
     // 没有任何合成配方：只可能是站台产物（烧/酿/切/升级/织/制图）。
     // 把所有能产出它的站台都列出来（食物可能同时有熔炉/烟熏炉/营火）。
     if (!recipe) {
       this.craftStations = stationItemsFor(itemId);
-      if (creative && this.craftStations.length > 0) {
-        // 创造模式：目标框里也要画出这件东西（红底），让玩家知道
+      if (this.craftStations.length > 0) {
+        // 生存模式：目标框里也画出这件物品（红底），让玩家知道
         // "需要站台的是它"，而不是只看到一排站台图标。
         this.previewResult = { id: itemId, count: 1 };
         this.previewResultNeedsStation = true;
@@ -2249,17 +2251,10 @@ export class InventoryScreen {
     // 配方需要 3×3、当前背包只有 2×2：列出所有站台路线（工作台一定在第一位）。
     if (recipeGridSize(recipe) > this.crafting.size) {
       this.craftStations = stationItemsFor(itemId);
-      if (creative && this.craftStations.length > 0) {
+      if (this.craftStations.length > 0) {
         this.previewResult = { id: itemId, count: recipe.result.count };
         this.previewResultNeedsStation = true;
       }
-      return;
-    }
-    // 创造模式 2×2 就能做：不需要站台，也不消费仓库材料
-    if (creative) {
-      this.craftStations = [];
-      this.previewResult = null;
-      this.previewResultNeedsStation = false;
       return;
     }
     // 2×2 就能摆下：白底（材料够）不显示站台；
