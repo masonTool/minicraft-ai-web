@@ -21,7 +21,7 @@ import { Furnace } from '../core/container/Furnace.ts';
 import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
-import { CREATIVE_ITEMS, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
+import { CREATIVE_ITEMS, Item, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
@@ -985,6 +985,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   foodExhaustion = 0;
   fallPeakY = spawn.y + 1;
   wasOnGround = false;
+  landedOnce = false;
   dead = false;
   xpLevel = 0;
   xpIntoLevel = 0;
@@ -1638,6 +1639,7 @@ const respawn = (): void => {
   starvationTimer = 0;
   fallPeakY = spawn.y + 1;
   wasOnGround = false;
+  landedOnce = false;
   dead = false;
   lastDamageCause = '';
   damageFlashUntil = 0;
@@ -1775,6 +1777,7 @@ let saturation = 5;
 let foodExhaustion = 0;
 let fallPeakY = 80;
 let wasOnGround = false;
+let landedOnce = false;
 let starvationTimer = 0;
 let dead = false;
 let lastDamageCause = '';
@@ -2125,12 +2128,13 @@ const frame = (): void => {
     if (!physics.onGround) {
       fallPeakY = Math.max(fallPeakY, physics.y);
     } else {
-      if (!wasOnGround) {
+      if (!wasOnGround && landedOnce) {
         const drop = fallPeakY - physics.y;
         if (drop > 3) {
           applyDamage(Math.floor(drop - 3), '摔落');
         }
       }
+      if (!landedOnce) landedOnce = true;
       fallPeakY = physics.y;
     }
     wasOnGround = physics.onGround;
@@ -2201,6 +2205,14 @@ if (wxTestApi) {
       openedContainer?.set(0, { id, count });
       showContainer();
       return { id, count };
+    },
+    smeltFurnace: () => {
+      if (!(openedContainer instanceof Furnace)) return { error: 'not-furnace' };
+      openedContainer.set(0, { id: Item.RAW_IRON, count: 1 });
+      openedContainer.set(1, { id: Item.COAL, count: 1 });
+      openedContainer.tick(20);
+      showContainer();
+      return { output: openedContainer.get(2)?.id ?? 0 };
     },
     openFurnaceAtFeet: () => {
       const x = Math.floor(physics.x);

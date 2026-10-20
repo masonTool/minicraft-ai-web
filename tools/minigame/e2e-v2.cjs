@@ -114,7 +114,7 @@ const assert = (condition, message, state) => {
   await joystickDouble();
   await waitState((state) => !state.sneaking, '双击摇杆没有关闭潜行', 5000);
 
-  await tap(510, 36);
+  await tap(530, 36);
   const paused = await waitState((state) => state.paused && state.screen === 'pause', '暂停没有打开');
   await tap(402, 313);
   const resumed = await waitState((state) => !state.paused && state.screen === 'game', '暂停没有继续');
@@ -162,6 +162,12 @@ const assert = (condition, message, state) => {
   // 熔炉打开/关闭
   await liveFrame.evaluate(() => wx.__v2Test?.openFurnaceAtFeet?.());
   const furnaceOpen = await waitState((state) => state.containerOpen, '熔炉没有打开', 5000);
+  const smelted = await liveFrame.evaluate(() => wx.__v2Test?.smeltFurnace?.());
+  const furnaceCooked = await waitState(
+    (state) => state.containerSlots?.[2] === 1009,
+    '铁矿石没有熔炼成铁锭',
+    5000,
+  );
   await tap(775, 82);
   const furnaceClosed = await waitState((state) => !state.containerOpen, '熔炉没有关闭', 5000);
 
@@ -171,7 +177,7 @@ const assert = (condition, message, state) => {
   const inventoryClosed = await waitState((state) => !state.inventoryOpen && state.screen === 'game', '背包没有关闭');
 
   // 暂停 → 保存返回菜单 → 编辑 → 删除
-  await tap(510, 36);
+  await tap(530, 36);
   await waitState((state) => state.paused && state.screen === 'pause', '返回菜单用例暂停失败');
   await tap(512, 366);
   const worldsAfterPause = await waitState(
