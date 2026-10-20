@@ -31,6 +31,7 @@ import { ChunkEdits } from '../core/save/ChunkEdits.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import type { ChunkSaveRecord, PlayerSave } from '../core/save/SaveGame.ts';
 import { createCanvasUi } from './ui/port.ts';
+import { showBootError } from './ui/boot-error.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { workerHostToLike } from '../platform/wx/worker-like.ts';
 import { createMainThreadWorker } from './main-thread-worker.ts';
@@ -45,6 +46,7 @@ declare const wx: {
 
 const doc = (globalThis as any).document;
 const view = globalThis as any;
+let bootRenderer: THREE.WebGLRenderer | null = null;
 
 // WX-020A 主线程降级：先小视距把地形完整跑出来；设置页可以实时调整
 let viewRadius = 3;
@@ -104,6 +106,7 @@ async function boot(): Promise<void> {
     antialias: false,
     alpha: false,
   });
+  bootRenderer = renderer;
   renderer.setPixelRatio(Math.min(view.devicePixelRatio || 1, 2));
   renderer.setSize(width, height, false);
   renderer.setClearColor(0x8fc7ff, 1);
@@ -1435,9 +1438,18 @@ async function boot(): Promise<void> {
 
 void boot().catch((error) => {
   console.error('[WX-020] boot failed', error);
+  const message = error instanceof Error ? error.message : String(error);
+  if (bootRenderer) {
+    try {
+      showBootError(bootRenderer, message);
+      return;
+    } catch (renderError) {
+      console.warn('[WX-020] 启动失败页绘制失败', renderError);
+    }
+  }
   wx.showModal({
-    title: 'WX-020 启动失败',
-    content: String(error && (error as Error).stack ? (error as Error).stack : error),
+    title: '启动失败',
+    content: message,
     showCancel: false,
   });
 });
