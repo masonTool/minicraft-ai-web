@@ -20,11 +20,17 @@ export interface StatsOverlay {
 }
 
 /** 准星 + 生命/饥饿/氧气/护甲/经验条（WX-026 第一版） */
-export function createStats(screenWidth: number, screenHeight: number): StatsOverlay {
+export function createStats(
+  screenWidth: number,
+  screenHeight: number,
+  safeArea?: { top: number; right: number; bottom: number; left: number },
+): StatsOverlay {
   const doc = (globalThis as unknown as { document: Document }).document;
   const canvas = doc.createElement('canvas');
   canvas.width = 1024;
   canvas.height = Math.max(320, Math.round((1024 * screenHeight) / Math.max(1, screenWidth)));
+  const safeBottom = Math.max(0, screenHeight - (safeArea?.bottom ?? screenHeight));
+  const safeBottomDesign = (safeBottom * 1024) / Math.max(1, screenWidth);
   const context = canvas.getContext('2d');
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -106,7 +112,7 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
     if (boss) {
       const barWidth = Math.min(560, canvas.width - 100);
       const x = (canvas.width - barWidth) / 2;
-      const y = canvas.height * 0.9;
+      const y = canvas.height * 0.9 - safeBottomDesign;
       drawText(context, boss.name, canvas.width / 2, y + 2, 14, '#ffffff', 'center', barWidth);
       context.fillStyle = 'rgba(0, 0, 0, 0.7)';
       context.fillRect(x, y, barWidth, 18);
@@ -138,7 +144,7 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
     }
     context.fillRect(cx - 1, cy - 11, 2, 22);
 
-    const baseY = canvas.height - 96;
+    const baseY = canvas.height - 96 - safeBottomDesign;
     // 右移避开左侧摇杆；生命 320-560，饥饿 610-810
     const startX = 320;
     const heartSize = 20;

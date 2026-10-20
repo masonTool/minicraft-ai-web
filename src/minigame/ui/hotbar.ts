@@ -19,6 +19,7 @@ export function createHotbar(
   blocks: readonly number[],
   screenWidth: number,
   screenHeight: number,
+  safeArea?: { top: number; right: number; bottom: number; left: number },
 ): Hotbar {
   const slotSize = 64;
   const gap = 8;
@@ -58,7 +59,8 @@ export function createHotbar(
     }),
   );
   // 保持设计尺寸并贴底：宽度/高度按 1024 设计宽等比缩放
-  mesh.position.set(0, -1 + planeHeight / 2, 0);
+  const safeBottomPx = Math.max(0, screenHeight - (safeArea?.bottom ?? screenHeight));
+  mesh.position.set(0, -1 + planeHeight / 2 + (2 * safeBottomPx) / Math.max(1, screenHeight), 0);
   scene.add(mesh);
 
   const drawSlot = (index: number, selected: boolean): void => {

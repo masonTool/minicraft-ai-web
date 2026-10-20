@@ -105,6 +105,14 @@ async function boot(): Promise<void> {
     safeArea: platform.system.safeArea,
   });
   console.log('[WX-020] platform', platform.kind, platform.system);
+  const uiScale = width / 1024;
+  const safe = platform.system.safeArea;
+  const safeLeftPx = Math.max(0, safe.left);
+  const safeTopPx = Math.max(0, safe.top);
+  const topButtonLeft = safeLeftPx + 8 * uiScale;
+  const topButtonRight = safeLeftPx + 206 * uiScale;
+  const topButtonTop = safeTopPx;
+  const topButtonBottom = safeTopPx + 48 * uiScale;
 
   const atlasStarted = Date.now();
   const atlas = new TextureAtlas();
@@ -427,6 +435,7 @@ async function boot(): Promise<void> {
         }
       },
     },
+    platform.system.safeArea,
   );
 
   let playerHealth = loadedPlayer?.health ?? 20;
@@ -1030,15 +1039,16 @@ async function boot(): Promise<void> {
       if (action === 'settings') ui.openSettings();
       return;
     }
-    // 左上角 MENU / BAG
-    if (x < width * 0.13 && y < height * 0.12) {
+    // 左上角 MENU / BAG（按安全区后的实际按钮位置命中）
+    if (
+      y >= topButtonTop &&
+      y <= topButtonBottom &&
+      x >= topButtonLeft &&
+      x <= topButtonRight
+    ) {
       uiPointerId = event.pointerId;
-      ui.togglePause();
-      return;
-    }
-    if (x >= width * 0.13 && x < width * 0.24 && y < height * 0.12) {
-      uiPointerId = event.pointerId;
-      ui.toggleInventory();
+      if (x < safeLeftPx + 104 * uiScale) ui.togglePause();
+      else ui.toggleInventory();
       return;
     }
     // 背包打开时，所有点击先交给 UI；点外/点槽都会关闭

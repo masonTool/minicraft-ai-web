@@ -84,6 +84,13 @@ export interface CanvasUiCallbacks {
   onRequestText?: (current: string) => Promise<string | null>;
 }
 
+export interface UiSafeArea {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export function createCanvasUi(
   atlas: TextureAtlas,
   blocks: readonly number[],
@@ -92,9 +99,10 @@ export function createCanvasUi(
   screenWidth: number,
   screenHeight: number,
   callbacks: CanvasUiCallbacks = {},
+  safeArea?: UiSafeArea,
 ): MiniGameUi {
-  const hud = createHud(screenWidth, screenHeight);
-  const hotbar = createHotbar(atlas, blocks, screenWidth, screenHeight);
+  const hud = createHud(screenWidth, screenHeight, safeArea);
+  const hotbar = createHotbar(atlas, blocks, screenWidth, screenHeight, safeArea);
   const inventory = createInventory(atlas, slots, screenWidth, screenHeight, {
     takeSelectedOne: callbacks.onTakeSelectedItem,
     takeItem: callbacks.onTakeItem,
@@ -114,7 +122,7 @@ export function createCanvasUi(
   const mainMenu = createMainMenu(screenWidth, screenHeight);
   const chestScreen = createChestScreen(atlas, screenWidth, screenHeight);
   const furnaceScreen = createFurnaceScreen(atlas, screenWidth, screenHeight);
-  const stats = createStats(screenWidth, screenHeight);
+  const stats = createStats(screenWidth, screenHeight, safeArea);
   const touchControls = createTouchControls(screenWidth, screenHeight);
   let settingsFromMenu = false;
 
