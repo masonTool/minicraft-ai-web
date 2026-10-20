@@ -27,7 +27,7 @@ import { SPAWN_EGG_SPECS, spawnEggTile } from '../core/registry/spawnEggs.ts';
 import { MULTI_PAINTINGS, paintingSubTile, type MultiPainting } from '../core/registry/paintings.ts';
 import { mobTypeById } from '../core/entity/mobs.ts';
 
-import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from './atlasLayout.ts';
+import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE, type TileName } from './atlasLayout.ts';
 import { canvasLooksLost, is2dContextLost, pickOpaqueSamples, type PixelSample } from './canvasProbe.ts';
 
 export { ATLAS_COLUMNS, TILE_SIZE, TILE_ORDER };
@@ -3137,32 +3137,90 @@ PAINTERS.item_brick = (x, y, rng) => {
 /** 空像素（透明） */
 const EMPTY: RGBA = [0, 0, 0, 0];
 
+/** 一片叶子：起始列、宽度（固定 2，叶尖收成 1）、顶端高度、倾斜方向、色相档（0~1） */
+interface Blade {
+  baseX: number;
+  top: number;
+  lean: number;
+  warm: number;
+}
+
 /**
  * 草丛 / 蕨类：从底部往上长的若干条细叶，叶尖渐窄。
+ *
+ * 批次 425 重画。老实现是"按列哈希决定这一列是不是叶子，再按 `x % width` 打洞"：
+ * 有效覆盖率只有 **约 20%**、叶子只有 **1 像素宽**，再叠 ±15% 的逐像素随机亮度——
+ * 在 16×16 里这就是一张高频噪声图。十字薄面本身没有厚度，侧看时一个像素跨好几个
+ * texel，mipmap 把 alpha 平均到 0.5 以下就被 alphaTest 整片啃掉，剩下的零星像素
+ * 就是肉眼看到的"草的颗粒感"。
+ *
+ * 现在按树叶（`leavesPainter`）已经做对的那条路重画，三条规矩：
+ *  1. **覆盖率约 45%**：5~6 片叶子、每片 2 像素宽（只有叶尖 1 像素），片间留空隙。
+ *     远看是一丛草、近看叶片是连续的形状，而不是散落的噪点；
+ *  2. **4×4 一簇的色相起伏**（亮簇偏黄绿、暗簇偏青绿），逐像素噪声压到 ±6%：
+ *     高频交给 mipmap 抹平，留下来的低频色差才是"一丛草里有好几种绿"；
+ *  3. **根部压暗、叶尖提亮**：贴图自己有上下层次，十字面交叠时才不像一块贴纸。
+ *
  * @param rgb 叶色
  * @param blades 叶片数量
  * @param tall 叶片最大高度（像素）
  */
 function bladesPainter(rgb: readonly [number, number, number], blades: number, tall = 12): Painter {
+  // 叶子位置在**建画笔时**算好（每像素再算一遍是白费，而且那样每片叶子的
+  // 起点会随采样顺序漂移）。横向按槽位均匀铺开、再抖 1 格，既不满也留缝。
+  const list: Blade[] = [];
+  const salt = hashString(`blades${blades}:${tall}:${rgb.join(',')}`);
+  for (let i = 0; i < blades; i++) {
+    // ⚠️ `hashString` 返回的是**无符号** 32 位（`>>> 0`），再拿 `>>` 取位会先转成
+    // int32 变成负数，`% 6` 于是可能为负——高度会被 `Math.max(5, ...)` 全压到 5，
+    // 覆盖率从 50% 掉到 23%。这里一律用无符号右移。
+    const seed = hashString(`blade${i}:${salt}`);
+    const slot = blades > 1 ? Math.round((i * 13) / (blades - 1)) : 7;
+    const baseX = Math.min(14, Math.max(0, slot + (seed % 3) - 1));
+    // 高度要有明显差异：全都一样高就像一排栅栏，不像一丛草（蕨类整体更高）
+    const height = Math.max(5, tall - 5 + ((seed >>> 5) % 6));
+    list.push({
+      baseX,
+      top: 16 - height,
+      lean: ((seed >>> 9) % 3) - 1,
+      warm: ((seed >>> 3) % 5) / 4,
+    });
+  }
+
   return (x, y, rng) => {
-    // 每列是否属于某个叶片，以及该叶片的顶端高度：用列号哈希，保证纵向连续
-    const column = hashString(`blade${x}`);
-    if (column % 100 >= (blades / 16) * 100) return EMPTY;
-    const top = 16 - ((column >> 3) % tall) - 3;
-    if (y < top) return EMPTY;
-    // 叶尖 1 像素宽，往下 2 像素宽（用 x 偏移的哈希模拟"叶片歪斜"）
-    const lean = (column >> 7) % 3;
-    const width = y < top + 2 ? 1 : 2;
-    const inBlade = x % width === lean % width;
-    if (!inBlade) return EMPTY;
-    const v = 1 + (rng() * 0.3 - 0.15);
-    return [clamp255(rgb[0] * v), clamp255(rgb[1] * v), clamp255(rgb[2] * v), 255];
+    let blade: Blade | null = null;
+    for (const candidate of list) {
+      if (y < candidate.top) continue;
+      // 叶尖 2 行收成 1 像素，并按 `lean` 偏向左/右那半，肉眼就是"叶尖歪了一下"
+      const tip = y < candidate.top + 2;
+      const x0 = tip ? candidate.baseX + (candidate.lean > 0 ? 1 : 0) : candidate.baseX;
+      if (x >= x0 && x < x0 + (tip ? 1 : 2)) {
+        blade = candidate;
+        break;
+      }
+    }
+    if (!blade) return EMPTY;
+    // 4×4 簇：色相与亮度都按簇走；逐像素只留很轻的噪点（高频会变成颗粒）
+    const cluster = (hashString(`gcl${x >> 2},${y >> 2}`) % 5) / 4;
+    const warm = (cluster - 0.5) * 0.5 + (blade.warm - 0.5) * 0.3;
+    const root = y > 12 ? -0.16 : 0;
+    const tipBoost = y < blade.top + 3 ? 0.1 : 0;
+    const v = 1 + (cluster - 0.5) * 0.18 + (rng() * 0.12 - 0.06) + root + tipBoost;
+    return [
+      clamp255(rgb[0] * v * (1 + warm * 0.28)),
+      clamp255(rgb[1] * v * (1 + warm * 0.06)),
+      clamp255(rgb[2] * v * (1 - warm * 0.3)),
+      255,
+    ];
   };
 }
 
 /**
  * 花：底部一根 1 像素的茎 + 顶部一团花瓣（中心亮、边缘暗）。
  * 花瓣形状用"到花心的距离 + 角度抖动"画，避免出现方块状的圆。
+ *
+ * 批次 425：花瓣的逐像素抖动从 ±7 收到 ±3，并按 4×4 簇叠一层轻微色相——
+ * 一朵花在屏幕上只有十几个像素，逐像素强噪声就是"花的边缘在闪"。
  */
 function flowerPainter(stem: readonly [number, number, number], petal: readonly [number, number, number], salt: string): Painter {
   return (x, y, rng) => {
@@ -3185,11 +3243,13 @@ function flowerPainter(stem: readonly [number, number, number], petal: readonly 
     if (distance > radius) return EMPTY;
     const core = distance < 1.2;
     const shade = core ? 1.15 : 0.92 + 0.3 * (1 - distance / radius);
-    const jitter = rng() * 14 - 7;
+    // 4×4 簇的亮暗起伏（同一朵花里"有几片花瓣更亮"），逐像素只抖 ±3
+    const cluster = 1 + ((hashString(`${salt}p${x >> 2},${y >> 2}`) % 7) - 3) * 0.012;
+    const jitter = rng() * 6 - 3;
     return [
-      clamp255(petal[0] * shade + jitter),
-      clamp255(petal[1] * shade + jitter),
-      clamp255(petal[2] * shade + jitter),
+      clamp255(petal[0] * shade * cluster + jitter),
+      clamp255(petal[1] * shade * cluster + jitter),
+      clamp255(petal[2] * shade * cluster + jitter),
       255,
     ];
   };
@@ -3221,15 +3281,35 @@ function mushroomPainter(cap: readonly [number, number, number], stem: readonly 
   };
 }
 
-/** 甘蔗 / 竹子：若干根竖直的秆，秆上有节点色带（竹子更细更青） */
-function stalkPainter(rgb: readonly [number, number, number], stalks: number, nodeColor: readonly [number, number, number]): Painter {
+/**
+ * 甘蔗 / 竹子：若干根竖直的秆，秆上有节点色带（竹子更细更青）。
+ *
+ * 批次 425 重画：老实现是"按列哈希，只有 `% stalks === 0` 的列留下"——覆盖率约
+ * **17%**、秆只有 **1 像素宽**。十字薄面侧看时 mipmap 一平均就被 alphaTest 啃成
+ * 断续的细线（与草丛同一个病）。现在按位置**均匀**排秆、每根 2~3 像素宽，
+ * 左右两列压暗一档当圆柱的暗边，节点处换色。
+ */
+function stalkPainter(
+  rgb: readonly [number, number, number],
+  stalks: number,
+  nodeColor: readonly [number, number, number],
+  width = 3,
+): Painter {
+  // 秆的列范围在建画笔时算好：均匀铺开，不靠每像素的哈希（那样会挤在一起）
+  const spans: Array<[number, number]> = [];
+  const gap = Math.max(width + 1, Math.floor(16 / stalks));
+  for (let i = 0; i < stalks; i++) {
+    const x0 = Math.min(16 - width, i * gap + 1);
+    spans.push([x0, x0 + width - 1]);
+  }
   return (x, y, rng) => {
-    const column = hashString(`stalk${x}`) % stalks;
-    if (column !== 0) return EMPTY;
+    const span = spans.find(([a, b]) => x >= a && x <= b);
+    if (!span) return EMPTY;
     // 节点：每 5 像素一条横向色带
-    const node = y % 5 === 0;
-    const base = node ? nodeColor : rgb;
-    const v = 1 + (rng() * 0.14 - 0.07);
+    const base = y % 5 === 0 ? nodeColor : rgb;
+    // 圆柱感：最左/最右各压暗一档；秆宽 2 时只压左侧，免得整根都变暗
+    const edge = x === span[1] || (width > 2 && x === span[0]) ? 0.86 : 1;
+    const v = edge + (rng() * 0.1 - 0.05);
     return [clamp255(base[0] * v), clamp255(base[1] * v), clamp255(base[2] * v), 255];
   };
 }
@@ -3465,8 +3545,10 @@ function rootsPainter(rgb: readonly [number, number, number], salt: string): Pai
   };
 }
 
+// 叶片数与宽度（2px）一起决定覆盖率：7 片 ≈ 42%、6 片 ≈ 36%（见 `paintedCoverage`
+// 在 `test:render` 里的下限断言）。蕨类更高，片数可以少一点——但同样不能叠到"实心"。
 PAINTERS.short_grass = bladesPainter([104, 158, 66], 7, 12);
-PAINTERS.fern = bladesPainter([86, 142, 62], 9, 14);
+PAINTERS.fern = bladesPainter([86, 142, 62], 6, 14);
 PAINTERS.dandelion = flowerPainter([92, 148, 60], [250, 226, 74], 'dand');
 PAINTERS.poppy = flowerPainter([92, 148, 60], [214, 54, 48], 'poppy');
 PAINTERS.blue_orchid = flowerPainter([92, 148, 60], [58, 168, 208], 'orchid');
@@ -3474,8 +3556,9 @@ PAINTERS.oxeye_daisy = flowerPainter([92, 148, 60], [242, 242, 236], 'daisy');
 PAINTERS.cornflower = flowerPainter([92, 148, 60], [86, 108, 214], 'corn');
 PAINTERS.red_mushroom = mushroomPainter([196, 44, 44], [236, 226, 216], 'rm');
 PAINTERS.brown_mushroom = mushroomPainter([154, 112, 78], [222, 212, 198], 'bm');
-PAINTERS.sugar_cane = stalkPainter([142, 190, 96], 6, [166, 206, 118]);
-PAINTERS.bamboo = stalkPainter([122, 176, 66], 8, [148, 198, 92]);
+// 3 根 × 3px ≈ 56%（甘蔗）；4 根 × 2px ≈ 50%（竹子更细）
+PAINTERS.sugar_cane = stalkPainter([142, 190, 96], 3, [166, 206, 118]);
+PAINTERS.bamboo = stalkPainter([122, 176, 66], 4, [148, 198, 92], 2);
 PAINTERS.dead_bush = DEAD_BUSH_PAINTER;
 PAINTERS.pumpkin_side = gourdSidePainter([226, 132, 32], 'pumpkin');
 PAINTERS.pumpkin_top = gourdTopPainter([216, 122, 28], [128, 94, 48]);
@@ -6157,6 +6240,25 @@ function seedsPainter(color: readonly [number, number, number]): Painter {
 
 PAINTERS.item_pumpkin_seeds = seedsPainter([236, 224, 186]);
 PAINTERS.item_melon_seeds = seedsPainter([62, 58, 44]);
+
+/**
+ * 某张程序化贴图的**不透明覆盖率**（0~1）。
+ *
+ * 直接跑画笔算，不碰 canvas —— 于是离线测试也能断言。十字植物（草/花/蕨/树苗）
+ * 靠 alphaTest 裁背景：覆盖率越低、细节越细，mipmap 把 alpha 平均到 0.5 以下时
+ * 就被整片 discard，剩下的零星像素就是"草的颗粒感"。这条判据用来守住下限。
+ */
+export function paintedCoverage(name: TileName, size = 16): number {
+  const painter = PAINTERS[name] ?? noisy(128, 14);
+  const rng = makeRng(hashString(name));
+  let solid = 0;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (painter(x, y, rng)[3] >= 128) solid++;
+    }
+  }
+  return solid / (size * size);
+}
 
 export class TextureAtlas {
   readonly texture: THREE.Texture;

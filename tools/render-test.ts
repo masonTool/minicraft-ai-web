@@ -20,7 +20,7 @@
 import * as THREE from 'three';
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
 import { Item } from '../src/core/registry/items.ts';
-import type { TextureAtlas } from '../src/render/TextureAtlas.ts';
+import { paintedCoverage, type TextureAtlas } from '../src/render/TextureAtlas.ts';
 import { applyFaceShade, applyFaceUvs, blockFaceTiles, FACE_SHADE } from '../src/render/atlasMesh.ts';
 import { PARTICLE_POOL, ParticleSystem } from '../src/render/ParticleSystem.ts';
 import { ScreenEffects } from '../src/render/ScreenEffects.ts';
@@ -927,6 +927,33 @@ console.log('\n[只画视距之内的区块]');
 
   renderer.disposeAll();
   material.dispose();
+}
+
+// ---------------------------------------------------------------- 十字植物贴图的覆盖率
+//
+// 十字薄面没有厚度，侧看时一个像素跨好几个 texel：mipmap 把 alpha 平均到 0.5 以下，
+// alphaTest 就把那片剪影整块 discard，剩下的零星像素就是"草的颗粒感"。
+// 覆盖率是这件事的**下限**，所以在这里钉住（不需要 canvas，画笔是纯函数）。
+
+console.log('\n[十字植物贴图的覆盖率下限]');
+{
+  for (const [tile, min] of [
+    ['short_grass', 0.35],
+    ['fern', 0.35],
+    ['sugar_cane', 0.4],
+    ['bamboo', 0.35],
+  ] as const) {
+    const cover = paintedCoverage(tile);
+    check(
+      `${tile} 覆盖率 ${(cover * 100).toFixed(0)}%（≥ ${(min * 100).toFixed(0)}%）`,
+      cover >= min,
+      `${(cover * 100).toFixed(1)}%`,
+    );
+    // 上限也守：整张画满就没有"叶片之间能透过去"的观感了
+    check(`${tile} 没有画满（≤ 70%）`, cover <= 0.7, `${(cover * 100).toFixed(1)}%`);
+  }
+  // 树叶是实心方块（不靠 alphaTest），覆盖率必须是 100% —— 用户眼中"画质好"的对照组
+  equal('树叶是不透明整块（覆盖率 100%）', paintedCoverage('oak_leaves'), 1);
 }
 
 console.log(`\n渲染测试：${passed} 通过 / ${failed} 失败`);
