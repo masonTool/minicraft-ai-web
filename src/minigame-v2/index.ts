@@ -17,6 +17,9 @@ import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
 import { UiLayer, box, button, slider, slot, text, toggle, type UiElement } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
+import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
+import { blockForItem, itemIconTile } from '../core/registry/items.ts';
+import { itemLabel } from '../core/registry/itemNames.ts';
 import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
@@ -84,13 +87,19 @@ const drawBlockIcon = (
   y: number,
   size: number,
 ): void => {
-  const tile = blockTiles(blockId, 0)[0];
-  const tileIndex = (TILE_ORDER as readonly string[]).indexOf(tile);
-  if (tileIndex < 0) return;
-  const sx = (tileIndex % ATLAS_COLUMNS) * TILE_SIZE;
-  const sy = Math.floor(tileIndex / ATLAS_COLUMNS) * TILE_SIZE;
+  const block = blockForItem(blockId);
   const inset = Math.max(2, Math.floor(size * 0.1));
-  ctx.drawImage(atlas.canvas, sx, sy, TILE_SIZE, TILE_SIZE, x + inset, y + inset, size - inset * 2, size - inset * 2);
+  if (block !== undefined) {
+    const tile = blockTiles(block, 0)[0];
+    const tileIndex = (TILE_ORDER as readonly string[]).indexOf(tile);
+    if (tileIndex < 0) return;
+    const sx = (tileIndex % ATLAS_COLUMNS) * TILE_SIZE;
+    const sy = Math.floor(tileIndex / ATLAS_COLUMNS) * TILE_SIZE;
+    ctx.drawImage(atlas.canvas, sx, sy, TILE_SIZE, TILE_SIZE, x + inset, y + inset, size - inset * 2, size - inset * 2);
+    return;
+  }
+  const source = atlas.tileSource(itemIconTile(blockId));
+  ctx.drawImage(atlas.canvas, source.x, source.y, TILE_SIZE, TILE_SIZE, x + inset, y + inset, size - inset * 2, size - inset * 2);
 };
 
 const ui = new UiLayer(platform.system.width, platform.system.height, drawBlockIcon);
@@ -100,7 +109,9 @@ let menuScreen: 'title' | 'worlds' | 'create' | 'edit' = 'title';
 let paused = false;
 let settingsOpen = false;
 let inventoryOpen = false;
-let inventoryTab: 'items' | 'creative' = 'items';
+let inventoryTab: 'items' | 'creative' | 'recipes' = 'items';
+let recipePage = 0;
+let inventoryHint = '';
 let selectedSlot = 0;
 const inventory = new Inventory();
 let crafting = new CraftingGrid(2);
@@ -318,6 +329,54 @@ const swapSlots = (fromIndex: number, toIndex: number): void => {
   showInventory();
 };
 
+const recipeFits2x2 = (recipe: ShapedRecipe | ShapelessRecipe): boolean => {
+  if (recipe.kind === 'shapeless') return recipe.ingredients.length <= 4;
+  return recipe.pattern.length <= 2 && recipe.pattern.every((row) => row.length <= 2);
+};
+
+const takeOne = (id: number): boolean => {
+  for (let i = 0; i < 36; i++) {
+    const stack = inventory.get(i);
+    if (!stack || stack.id !== id) continue;
+    stack.count -= 1;
+    inventory.set(i, stack.count > 0 ? stack : null);
+    return true;
+  }
+  return false;
+};
+
+const fillRecipe = (recipe: ShapedRecipe | ShapelessRecipe): void => {
+  crafting.drainTo(inventory);
+  inventoryHint = '';
+  if (recipe.kind === 'shapeless') {
+    for (let i = 0; i < recipe.ingredients.length; i++) {
+      const id = recipe.ingredients[i]!;
+      if (!takeOne(id)) {
+        inventoryHint = '材料不足';
+        break;
+      }
+      crafting.set(i, { id, count: 1 });
+    }
+  } else {
+    for (let row = 0; row < recipe.pattern.length; row++) {
+      const line = recipe.pattern[row]!;
+      for (let col = 0; col < line.length; col++) {
+        const char = line[col]!;
+        if (char === ' ') continue;
+        const id = recipe.key[char];
+        if (id === undefined) continue;
+        if (!takeOne(id)) {
+          inventoryHint = '材料不足';
+          continue;
+        }
+        crafting.set(row * 2 + col, { id, count: 1 });
+      }
+    }
+  }
+  inventoryTab = 'items';
+  showInventory();
+};
+
 const showInventory = (): void => {
   inventoryOpen = true;
   const panelW = 880;
@@ -343,7 +402,16 @@ const showInventory = (): void => {
     button(panelX + 24, panelY + 150, railW - 24, 52, '创造', () => {
       inventoryTab = 'creative';
       showInventory();
-    }, { background: inventoryTab === 'creative' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
+    }, {
+      background: inventoryTab === 'creative' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)',
+      border: 'rgba(180, 215, 235, 0.35)',
+      radius: 8,
+    }),
+    button(panelX + 24, panelY + 214, railW - 24, 52, '配方', () => {
+      inventoryTab = 'recipes';
+      recipePage = 0;
+      showInventory();
+    }, { background: inventoryTab === 'recipes' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
     button(panelX + panelW - 72, panelY + 20, 44, 44, 'X', () => {
       crafting.drainTo(inventory);
       inventoryOpen = false;
@@ -359,7 +427,7 @@ const showInventory = (): void => {
         showInventory();
       }, (from, to) => handleDrop(from.index, to.index)));
     }
-  } else {
+  } else if (inventoryTab === 'creative') {
     for (let i = 0; i < creativeBlocks.length; i++) {
       const id = creativeBlocks[i]!;
       elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, i, id, 0, false, () => {
@@ -368,6 +436,32 @@ const showInventory = (): void => {
       }));
     }
     elements.push(text(gridX, gridY + 5 * (slotSize + gap) + 12, 640, 30, '点方块放入背包；物品页查看/选中', { fontSize: 15, color: 'rgba(200, 220, 235, 0.65)' }));
+  } else {
+    const recipes = RECIPES.filter(recipeFits2x2);
+    const perPage = 6;
+    const pages = Math.max(1, Math.ceil(recipes.length / perPage));
+    recipePage = Math.max(0, Math.min(recipePage, pages - 1));
+    const start = recipePage * perPage;
+    for (let i = 0; i < Math.min(perPage, recipes.length - start); i++) {
+      const recipe = recipes[start + i]!;
+      const result = recipe.result;
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const x = gridX + col * 160;
+      const y = gridY + row * 86;
+      elements.push(slot(x, y, 50, 300 + i, result.id, result.count, false, () => fillRecipe(recipe)));
+      elements.push(text(x + 58, y + 4, 96, 26, itemLabel(result.id), { fontSize: 14, color: '#dcecf5' }));
+      elements.push(text(x + 58, y + 30, 96, 20, `x${result.count}`, { fontSize: 12, color: 'rgba(190,215,230,0.65)' }));
+    }
+    elements.push(text(gridX, gridY + 188, 400, 26, `配方位 ${recipePage + 1}/${pages}`, { fontSize: 13, color: 'rgba(200,220,235,0.65)' }));
+    elements.push(button(gridX, gridY + 216, 90, 34, '上一页', () => {
+      recipePage = Math.max(0, recipePage - 1);
+      showInventory();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
+    elements.push(button(gridX + 100, gridY + 216, 90, 34, '下一页', () => {
+      recipePage = Math.min(pages - 1, recipePage + 1);
+      showInventory();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
   }
   elements.push(button(craftX, panelY + 22, 110, 28, `${crafting.size}x${crafting.size}`, () => {
     crafting.drainTo(inventory);
@@ -398,6 +492,9 @@ const showInventory = (): void => {
     showInventory();
   }));
 
+  if (inventoryHint) {
+    elements.push(text(gridX, panelY + panelH - 32, 560, 26, inventoryHint, { fontSize: 14, color: 'rgba(255,190,120,0.9)' }));
+  }
   ui.setRoot(box(0, 0, 1024, uiHeight, [
     box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
     box(panelX, panelY, panelW, panelH, elements, { background: 'rgba(16, 22, 28, 0.97)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
