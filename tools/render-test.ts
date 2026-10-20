@@ -23,7 +23,9 @@ import { Item } from '../src/core/registry/items.ts';
 import {
   ATLAS_ANISOTROPY_DESKTOP,
   ATLAS_ANISOTROPY_MOBILE,
+  FOLIAGE_DARKEN,
   clampAnisotropy,
+  foliage,
   paintedCoverage,
   paintedEdgeOpaque,
   paintedThinColumns,
@@ -1104,6 +1106,34 @@ console.log('\n[植物贴图：不许有 1 像素宽的竖条]');
     const thin = paintedThinColumns(tile);
     check(`${tile} 没有孤立的 1 像素竖条`, thin === 0, `${thin} 个`);
   }
+}
+
+// ---------------------------------------------------------------- 草地/植物压暗（批次 527）
+
+console.log('\n[草地与植物整体压暗]');
+{
+  // 用户："草方块和植物的亮度太高了" —— 只压这一族（草方块/草/蕨/甘蔗/竹子/花茎/藤/睡莲）
+  check('压暗系数在 (0.8, 1) 之间（还在压、但没压成黑）', FOLIAGE_DARKEN > 0.8 && FOLIAGE_DARKEN < 1, String(FOLIAGE_DARKEN));
+  equal('foliage 真的乘上系数（100 → 88）', foliage([100, 100, 100])[0], 88);
+  equal('白不会溢出', foliage([255, 255, 255])[0], 224);
+
+  // 结构守卫：这一族必须走 `foliage()` / `FOLIAGE_DARKEN`，否则改回去了也没人发现
+  const atlasSrc = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
+  check(
+    '草方块顶面与侧面那圈草边都压了',
+    atlasSrc.includes('grass_top: layered(148 * FOLIAGE_DARKEN') && atlasSrc.includes('* FOLIAGE_DARKEN;'),
+  );
+  check(
+    '草/蕨/花的茎叶都走 foliage()',
+    atlasSrc.includes('bladesPainter(foliage([104, 158, 66])') &&
+      atlasSrc.includes('flowerPainter(foliage([92, 148, 60])'),
+  );
+  check(
+    '甘蔗/竹子/藤/睡莲也在这一族里',
+    atlasSrc.includes('stalkPainter(foliage([142, 190, 96])') &&
+      atlasSrc.includes('foliage(stem ? [62, 100, 46] : [82, 142, 60])') &&
+      atlasSrc.includes('foliage([74, 128, 56])'),
+  );
 }
 
 // ---------------------------------------------------------------- 植物贴图的四边必须透明（批次 525）

@@ -578,16 +578,40 @@ function crackPainter(stage: number): Painter {
   };
 }
 
+/**
+ * 草地 / 植物一族的**整体压暗**系数（批次 527）。
+ *
+ * 用户："草方块和植物的亮度太高了，需要降低一点。"
+ *
+ * 只作用在这一族：草方块顶面、侧面那道草边、草/蕨/甘蔗/竹子的叶与秆、花的茎叶、
+ * 藤蔓、睡莲。石头 / 木头 / 土 / 沙 / 花瓣一概不动——它们已经被认定是合适的，
+ * 而且花瓣压暗会变成"脏花"。
+ *
+ * 0.88 ≈ 降 12%。这是**观感**参数不是物理量：还要更沉就往下调（0.8 明显更暗，
+ * 0.95 几乎看不出），只需要改这一个数。
+ */
+export const FOLIAGE_DARKEN = 0.88;
+
+/** 把一组 RGB 按 `FOLIAGE_DARKEN` 压暗（草地/植物族专用，导出给离线断言） */
+export function foliage(rgb: readonly [number, number, number]): [number, number, number] {
+  return [
+    clamp255(rgb[0] * FOLIAGE_DARKEN),
+    clamp255(rgb[1] * FOLIAGE_DARKEN),
+    clamp255(rgb[2] * FOLIAGE_DARKEN),
+  ];
+}
+
 const PAINTERS: Record<string, Painter> = {
   stone: STONE_BASE(),
   cobblestone: cobblestonePainter,
   dirt: layered(134, 8, 9, [1.0, 0.85, 0.68]),
   sand: layered(220, 6, 6, [1.0, 0.96, 0.78]),
-  grass_top: layered(148, 7, 10, [0.62, 1.0, 0.42]),
+  // 批次 527：草地/植物整体压暗 12%（`FOLIAGE_DARKEN`）
+  grass_top: layered(148 * FOLIAGE_DARKEN, 7, 10, [0.62, 1.0, 0.42]),
   grass_side: (x, y, rng) => {
     const base = layered(134, 8, 9, [1.0, 0.85, 0.68])(x, y, rng);
     if (y < 3 + (hashString('gs' + x) % 2)) {
-      const g = 120 + (rng() * 20 - 10);
+      const g = (120 + (rng() * 20 - 10)) * FOLIAGE_DARKEN;
       return [clamp255(g * 0.6), clamp255(g), clamp255(g * 0.4), 255];
     }
     return base;
@@ -1252,7 +1276,8 @@ PAINTERS.vine = (x, y, rng) => {
   if ((hashString(`vineedge${x},${y}`) % 100) / 100 < edge * 0.85) return [0, 0, 0, 0];
   if ((hashString(`vinehole${x},${y}`) % 9) === 0) return [0, 0, 0, 0];
   const stem = dist <= 2;
-  const base = stem ? [62, 100, 46] : [82, 142, 60];
+  // 批次 527：与草/蕨同一套压暗（`FOLIAGE_DARKEN`），否则墙上的藤比地上的草还亮
+  const base = foliage(stem ? [62, 100, 46] : [82, 142, 60]);
   const v = 1 + (rng() * 0.3 - 0.15);
   return [clamp255(base[0]! * v), clamp255(base[1]! * v), clamp255(base[2]! * v), 255];
 };
@@ -2223,7 +2248,9 @@ PAINTERS.lily_pad = (x, y, rng) => {
   const vein = distance > 2 && Math.abs((angle * 5) % 1) < 0.13;
   const shade = (1.06 - (distance / 8) * 0.32) * (vein ? 0.8 : 1);
   const jitter = rng() * 12 - 6;
-  return [clamp255(74 * shade + jitter), clamp255(128 * shade + jitter), clamp255(56 * shade + jitter), 255];
+  // 批次 527：叶片与草/蕨同一套压暗（`FOLIAGE_DARKEN`）
+  const leaf = foliage([74, 128, 56]);
+  return [clamp255(leaf[0] * shade + jitter), clamp255(leaf[1] * shade + jitter), clamp255(leaf[2] * shade + jitter), 255];
 };
 
 // ---- 下界合金（K8 尾巴）
@@ -3608,18 +3635,18 @@ function rootsPainter(rgb: readonly [number, number, number], salt: string): Pai
 
 // 叶片数与宽度（2px）一起决定覆盖率：7 片 ≈ 42%、6 片 ≈ 36%（见 `paintedCoverage`
 // 在 `test:render` 里的下限断言）。蕨类更高，片数可以少一点——但同样不能叠到"实心"。
-PAINTERS.short_grass = bladesPainter([104, 158, 66], 7, 12);
-PAINTERS.fern = bladesPainter([86, 142, 62], 6, 14);
-PAINTERS.dandelion = flowerPainter([92, 148, 60], [250, 226, 74], 'dand');
-PAINTERS.poppy = flowerPainter([92, 148, 60], [214, 54, 48], 'poppy');
-PAINTERS.blue_orchid = flowerPainter([92, 148, 60], [58, 168, 208], 'orchid');
-PAINTERS.oxeye_daisy = flowerPainter([92, 148, 60], [242, 242, 236], 'daisy');
-PAINTERS.cornflower = flowerPainter([92, 148, 60], [86, 108, 214], 'corn');
+PAINTERS.short_grass = bladesPainter(foliage([104, 158, 66]), 7, 12);
+PAINTERS.fern = bladesPainter(foliage([86, 142, 62]), 6, 14);
+PAINTERS.dandelion = flowerPainter(foliage([92, 148, 60]), [250, 226, 74], 'dand');
+PAINTERS.poppy = flowerPainter(foliage([92, 148, 60]), [214, 54, 48], 'poppy');
+PAINTERS.blue_orchid = flowerPainter(foliage([92, 148, 60]), [58, 168, 208], 'orchid');
+PAINTERS.oxeye_daisy = flowerPainter(foliage([92, 148, 60]), [242, 242, 236], 'daisy');
+PAINTERS.cornflower = flowerPainter(foliage([92, 148, 60]), [86, 108, 214], 'corn');
 PAINTERS.red_mushroom = mushroomPainter([196, 44, 44], [236, 226, 216], 'rm');
 PAINTERS.brown_mushroom = mushroomPainter([154, 112, 78], [222, 212, 198], 'bm');
 // 3 根 × 3px ≈ 56%（甘蔗）；4 根 × 2px ≈ 50%（竹子更细）
-PAINTERS.sugar_cane = stalkPainter([142, 190, 96], 3, [166, 206, 118]);
-PAINTERS.bamboo = stalkPainter([122, 176, 66], 4, [148, 198, 92], 2);
+PAINTERS.sugar_cane = stalkPainter(foliage([142, 190, 96]), 3, foliage([166, 206, 118]));
+PAINTERS.bamboo = stalkPainter(foliage([122, 176, 66]), 4, foliage([148, 198, 92]), 2);
 PAINTERS.dead_bush = DEAD_BUSH_PAINTER;
 PAINTERS.pumpkin_side = gourdSidePainter([226, 132, 32], 'pumpkin');
 PAINTERS.pumpkin_top = gourdTopPainter([216, 122, 28], [128, 94, 48]);
