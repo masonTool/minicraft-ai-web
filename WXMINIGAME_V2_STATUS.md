@@ -47,7 +47,7 @@
 - [x] 外观：发型/发色/胡须/眼睛颜色/披风 + 3D 模型同步
 - [x] 眼型/年龄/身架 + 3D 模型同步
 - [x] 声音与全部分组音量（主/方块/UI/生物/玩家/环境/音乐）
-- [x] Inventory MVP：物品/创造左侧分类、36/45 格、图标、数量、选中、创造取方块、显式关闭
+- [x] Inventory：物品/创造/配方左侧分类、27 主背包 + 9 快捷栏、图标、数量、选中、创造取方块、显式关闭
 - [x] Inventory 拖拽交换 + HUD 快捷栏选中
 - [x] 物品页 27 主背包 + 独立 9 格快捷栏（Web 结构），主背包点击不改 selectedSlot
 - [x] 昼夜天空（Sky + 日月星云 + 随时间方块亮度），时间写入存档
@@ -62,14 +62,17 @@
 - [x] 调试信息开关（FPS/区块/目标/坐标）
 - [ ] Inventory 完整态：拖拽细节
 - [ ] Settings / Inventory 按 Web 结构重做
-- [x] 小游戏构建脚本与包体（`build:minigame:v2`，2.2MB）
+- [x] 小游戏构建脚本与包体（`build:minigame:v2`，game.js 约 2.76MB + worker 约 540KB）
 
 ## 下一步顺序
 
-1. 用平台 SaveGame 承接 IndexedDB。
-3. 写 v2 最小启动：World + TextureAtlas + ChunkRenderer 画出一个区块。
-4. 正式触摸控件（摇杆/跳跃/挖掘）。
-5. 扩展 UI Kit（Toggle/Slider/Scroll/Tabs/Grid），重做 Settings/Inventory。
+1. 真机验证 Worker/60FPS/存档/声音/容器/生物
+2. 完整生物/怪物 AI
+3. 门/按钮等方块交互
+4. 按 `WXMINIGAME_V2_ARCHITECTURE.md` 拆分组合根
+5. Settings / Inventory 继续按 Web 结构拆分
+
+架构与债务见：`WXMINIGAME_V2_ARCHITECTURE.md`
 
 ## 验收
 

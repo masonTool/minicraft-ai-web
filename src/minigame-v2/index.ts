@@ -1011,13 +1011,8 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   world.events = {};
   chunks.disposeAll();
   world = new World(entry.seed, entry.worldType, 1);
-  chunks = new ChunkRenderer(scene, atlas, world, solid.material, translucent.material, meshPool);
+  chunks = createChunkRenderer(meshPool);
   workerFallbackAt = meshPool ? performance.now() : 0;
-  world.events = {
-    onChunkLoaded: (chunk) => chunks.onChunkLoaded(chunk.cx, chunk.cz),
-    onChunkUnloaded: (cx, cz) => chunks.onChunkUnloaded(cx, cz),
-    onBlockChanged: (x, _y, z) => chunks.enqueueAround(x, z),
-  };
   currentWorld = entry;
   playMark = Date.now();
   registry.update(entry.id, { lastPlayed: Date.now() });
@@ -1643,7 +1638,6 @@ const trySleep = (hit: RayHit): boolean => {
 };
 
 const showHud = (): void => {
-  menuScreen = 'title';
   const stickLeft = settings.leftHanded ? 1024 - 24 - 120 : 24;
   const jumpLeft = settings.leftHanded ? 24 : 1024 - 16 - 92;
   const stickTop = uiHeight - 216;
@@ -2029,20 +2023,25 @@ let meshPool = (() => {
 meshBackend = meshPool ? 'worker' : 'main';
 
 let world = new World(0x5eed, 'default', 1);
-let chunks = new ChunkRenderer(
-  scene,
-  atlas,
-  world,
-  solid.material,
-  translucent.material,
-  meshPool,
-);
 
-world.events = {
-  onChunkLoaded: (chunk) => chunks.onChunkLoaded(chunk.cx, chunk.cz),
-  onChunkUnloaded: (cx, cz) => chunks.onChunkUnloaded(cx, cz),
-  onBlockChanged: (x, _y, z) => chunks.enqueueAround(x, z),
+const createChunkRenderer = (pool: MeshWorkerPool | null): ChunkRenderer => {
+  const renderer = new ChunkRenderer(
+    scene,
+    atlas,
+    world,
+    solid.material,
+    translucent.material,
+    pool,
+  );
+  world.events = {
+    onChunkLoaded: (chunk) => renderer.onChunkLoaded(chunk.cx, chunk.cz),
+    onChunkUnloaded: (cx, cz) => renderer.onChunkUnloaded(cx, cz),
+    onBlockChanged: (x, _y, z) => renderer.enqueueAround(x, z),
+  };
+  return renderer;
 };
+
+let chunks = createChunkRenderer(meshPool);
 
 const physics = new PlayerPhysics();
 const input: PlayerInput = {
@@ -2082,7 +2081,7 @@ interface DroppedItem {
 }
 const droppedItems: DroppedItem[] = [];
 
-interface PigMob {
+interface MobState {
   group: THREE.Group;
   x: number;
   y: number;
@@ -2092,8 +2091,8 @@ interface PigMob {
   dirZ: number;
   wander: number;
 }
-const pigs: PigMob[] = [];
-const zombies: PigMob[] = [];
+const pigs: MobState[] = [];
+const zombies: MobState[] = [];
 let pigsSpawned = false;
 let zombieSpawned = false;
 let damageFlashUntil = 0;
@@ -2735,12 +2734,7 @@ const frame = (): void => {
     meshPool = null;
     meshBackend = 'main';
     workerFallbackAt = 0;
-    chunks = new ChunkRenderer(scene, atlas, world, solid.material, translucent.material, null);
-    world.events = {
-      onChunkLoaded: (chunk) => chunks.onChunkLoaded(chunk.cx, chunk.cz),
-      onChunkUnloaded: (cx, cz) => chunks.onChunkUnloaded(cx, cz),
-      onBlockChanged: (x, _y, z) => chunks.enqueueAround(x, z),
-    };
+    chunks = createChunkRenderer(null);
     showToast('Worker 不可用，已回退主线程');
   }
 
@@ -2794,8 +2788,10 @@ const frame = (): void => {
 
 
 
+// 仅桌面/开发者工具安装测试入口；真机不暴露 __v2Test。
 const wxTestApi = (globalThis as unknown as { wx?: { __v2Test?: unknown } }).wx;
-if (wxTestApi) {
+const isDesktopRuntime = typeof navigator !== 'undefined';
+if (wxTestApi && isDesktopRuntime) {
   wxTestApi.__v2Test = {
     clearInventory: () => {
       for (let i = 0; i < 36; i++) inventory.set(i, null);
