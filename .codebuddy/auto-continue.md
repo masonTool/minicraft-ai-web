@@ -63,7 +63,7 @@
       ⑤ 断言 `test:loom`（新套件，套数 152 → 153，README/HANDOFF/AGENTS 三处同步）；
       ⑥ 差异：图案仍 4 种、单层，染料只作消耗（图案色随旗面自动取反色，原版由染料决定）。
 
-- [ ] 批次 505：**制图台（K7 尾巴）**。三件事：复制 / 缩放 / 锁定，全部落在 `MapData` 上。
+- [~] 批次 505：**制图台（K7 尾巴）**。三件事：复制 / 缩放 / 锁定，全部落在 `MapData` 上。
       ① 数据：`MapData` 加 `scale`（0~2）与 `locked`；`mapCellIndex` 用
       `span = MAP_CHUNK_SPAN << scale`（格子数仍 32，覆盖 512 → 1024 → 2048 格）；
       `markExplored` 在 `locked` 时返回 null；`zoomOut(map)` 把 2×2 旧格 OR 成一格
