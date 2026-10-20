@@ -4783,6 +4783,134 @@
         .world-panel { font-size: 14px; }
         .world-primary { font-size: 15px; padding: 10px; }
         .world-secondary { font-size: 14px; padding: 10px; }
+        /* 主菜单整屏纹理层原来是 mix-blend-mode + 无限 splash 动画：
+           在笔记本上会持续做全屏合成，没进世界也在发热。PC 上改成普通半透明。 */
+        #world-screen::before {
+          mix-blend-mode: normal;
+          opacity: .55;
+        }
+        .world-splash { animation: none; }
+
+        /* 背包/合成/配方这些界面原来全是按手机半屏做的（40~44px 槽位）。
+           PC 屏大、鼠标精度高，给到 52~54px，文字也放一档。 */
+        :root {
+          --inv-pocket-w: min(calc(100vw - 160px), 600px);
+          --inv-pocket-h: min(calc(100dvh - 80px), 500px);
+          --pause-w: min(92vw, 560px);
+          --settings-ctrl-w: 116px;
+          --settings-ctrl-h: 34px;
+        }
+        .inv-panel { font-size: 14px; }
+        .inv-panel.pocket-ui .inv-main > .inv-grid,
+        .inv-hotbar-dock .inv-hotbar {
+          grid-template-columns: repeat(9, 54px);
+          gap: 3px;
+        }
+        .inv-panel.pocket-ui .inv-main > .inv-grid .inv-slot,
+        .inv-hotbar-dock .inv-slot {
+          width: 54px; height: 54px; min-width: 54px;
+          max-width: 54px; max-height: 54px;
+        }
+        .inv-panel.pocket-ui .inv-main > .inv-grid .inv-slot canvas,
+        .inv-hotbar-dock .inv-slot canvas {
+          width: 44px; height: 44px; max-width: 44px; max-height: 44px;
+        }
+        .inv-panel.pocket-ui .inv-craft-grid.size-2 {
+          grid-template-columns: repeat(2, minmax(44px, 52px));
+          gap: 6px;
+        }
+        .inv-panel.pocket-ui .inv-craft-grid.size-3 {
+          grid-template-columns: repeat(3, 46px);
+          gap: 4px;
+        }
+        .inv-panel.pocket-ui .inv-craft-grid.size-2 .inv-slot {
+          width: 52px; height: 52px; max-width: 52px; max-height: 52px;
+        }
+        .inv-panel.pocket-ui .inv-craft-grid.size-3 .inv-slot {
+          width: 46px; height: 46px; max-width: 46px; max-height: 46px;
+        }
+        .inv-panel.pocket-ui .inv-grid.inv-armor {
+          grid-template-columns: minmax(0, 48px);
+        }
+        .inv-panel.pocket-ui .inv-grid.inv-armor .inv-slot {
+          max-width: 48px; max-height: 48px;
+        }
+        .inv-panel.pocket-ui.pocket-dual {
+          width: min(calc(100vw - 160px), 920px);
+          max-width: min(calc(100vw - 160px), 920px);
+        }
+        /* 双栏内容只占上半截：PC 上把整组垂直居中，别在下方留一大片空白 */
+        .inv-panel.pocket-ui.pocket-dual .inv-body {
+          grid-template-rows: auto auto;
+          align-content: center;
+        }
+        .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid {
+          grid-template-columns: repeat(7, 52px);
+          gap: 3px;
+        }
+        .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid .inv-slot {
+          width: 52px; height: 52px; min-width: 52px;
+          max-width: 52px; max-height: 52px;
+        }
+        .inv-panel.pocket-ui.pocket-dual .inv-main > .inv-grid .inv-slot canvas {
+          width: 42px; height: 42px; max-width: 42px; max-height: 42px;
+        }
+        .inv-grid.inv-category {
+          grid-template-columns: repeat(7, 48px);
+          gap: 2px;
+          padding-right: 8px;
+        }
+        .inv-grid.inv-category .inv-slot {
+          width: 48px; height: 48px; max-width: 48px; max-height: 48px;
+        }
+        .inv-grid.inv-category .inv-slot canvas {
+          width: 40px; height: 40px;
+        }
+        .inv-grid.inv-creative {
+          /* 双栏左半区约 500px：12×44 会横向溢出，改成 8 列大格 */
+          grid-template-columns: repeat(8, 46px);
+          gap: 3px;
+          padding-right: 20px;
+        }
+        .inv-grid.inv-creative .inv-slot {
+          width: 46px; height: 46px;
+        }
+        .inv-grid.inv-creative .inv-slot canvas {
+          width: 38px; height: 38px;
+        }
+        /* 盖过 `.inv-panel.creative-ui.pocket-ui .inv-creative` 的 10×44 基础规则 */
+        .inv-panel.creative-ui.pocket-ui .inv-creative {
+          grid-template-columns: repeat(8, 46px);
+          gap: 3px;
+          padding-right: 20px;
+        }
+        .inv-panel.creative-ui.pocket-ui .inv-creative .inv-slot {
+          width: 46px; height: 46px; max-width: 46px; max-height: 46px;
+        }
+        .inv-panel.creative-ui.pocket-ui .inv-creative .inv-slot canvas {
+          width: 38px; height: 38px; max-width: 38px; max-height: 38px;
+        }
+        .inv-panel.pocket-ui.pocket-dual.station-ui {
+          width: min(calc(100vw - 80px), 1100px);
+          max-width: min(calc(100vw - 80px), 1100px);
+        }
+        .inv-station-grid .inv-slot {
+          width: 48px; height: 48px;
+        }
+        .inv-station-grid .inv-slot canvas {
+          width: 40px; height: 40px;
+        }
+        .inv-panel .inv-close,
+        .inv-panel .inv-pocket-recipe-toggle {
+          font-size: 13px;
+          min-height: 26px;
+        }
+        /* 配方书 / 设置 / 成就：PC 上字号和配方格跟着放大一档 */
+        .recipe-grid { --recipe-cell: 40px; gap: 4px; }
+        .recipe-cell canvas { width: 34px; height: 34px; }
+        .recipe-panel,
+        .settings-panel,
+        .adv-panel { font-size: 14px; }
       }
 
       /* ---------------- 减少动效（无障碍） ----------------

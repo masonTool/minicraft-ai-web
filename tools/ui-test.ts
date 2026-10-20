@@ -4579,6 +4579,38 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
       mainSource.includes('const k = 1 - Math.exp(-Math.max(0, dt) * 30);') &&
       mainSource.includes('this.pendingLookX += dx;'),
   );
+  const fullscreenSource = readFileSync(new URL('../src/ui/Fullscreen.ts', import.meta.url), 'utf8');
+  check(
+    'PC 不自动全屏（请求/启动/手势三处都只看粗指针）',
+    /export function enterFullscreen\(\)[\s\S]{0,180}?if \(!doc \|\| !isCoarsePointer\(\)/.test(fullscreenSource) &&
+      /export function enterMobilePresentation\(\): void \{\s*\n\s*if \(!isCoarsePointer\(\)\) return;/.test(
+        fullscreenSource,
+      ) &&
+      /export function enterFullscreenOnBoot\(\): void \{[\s\S]{0,180}?if \(!doc \|\| !isCoarsePointer\(\)\) return;/.test(
+        fullscreenSource,
+      ),
+  );
+  check(
+    'PC 背包槽位/配方格自适应放大（只命中桌面宽屏）',
+    htmlSource.includes('grid-template-columns: repeat(9, 54px);') &&
+      htmlSource.includes('grid-template-columns: repeat(7, 52px);') &&
+      htmlSource.includes('grid-template-columns: repeat(7, 48px);') &&
+      htmlSource.includes('grid-template-columns: repeat(8, 46px);') &&
+      htmlSource.includes('--recipe-cell: 40px;'),
+  );
+  check(
+    'PC 主菜单停止整屏混合/无限动画',
+    htmlSource.includes('mix-blend-mode: normal;') &&
+      htmlSource.includes('.world-splash { animation: none; }'),
+  );
+  const atlasSource = readFileSync(new URL('../src/render/TextureAtlas.ts', import.meta.url), 'utf8');
+  check(
+    '主菜单延迟绘制纹理图集（进世界才铺三百张贴图）',
+    mainSource.includes('new TextureAtlas(true)') &&
+      atlasSource.includes('constructor(deferPaint = false)') &&
+      atlasSource.includes('if (!this.painted) return this.repaint();') &&
+      atlasSource.includes('if (!this.painted) {\n      this.ensurePainted();'),
+  );
 }
 
 console.log(`\n界面测试：${passed} 通过 / ${failed} 失败`);

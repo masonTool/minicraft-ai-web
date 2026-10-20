@@ -6524,8 +6524,14 @@ export class TextureAtlas {
   private readonly overrides = new Map<string, ImageData>();
   /** 上下文正丢着（等 `contextrestored` 再画） */
   private repaintPending = false;
+  /** 是否已经真正画过像素（主菜单阶段可以延迟到进世界再画） */
+  private painted = false;
 
-  constructor() {
+  /**
+   * @param deferPaint 只创建画布/纹理对象，不铺三百多张贴图。主菜单阶段用，
+   *   进世界时由 `ensureUploaded()` 首次触发 `repaint()`，避免打开页面就满核画图。
+   */
+  constructor(deferPaint = false) {
     const columns = ATLAS_COLUMNS;
     const rows = Math.ceil(TILE_ORDER.length / columns);
     const canvas = document.createElement('canvas');
@@ -6547,8 +6553,9 @@ export class TextureAtlas {
     this.columns = columns;
     this.rows = rows;
     this.context = ctx;
-    this.paintPixels();
-    this.syncUploadCanvas();
+    if (!deferPaint) {
+      this.ensurePainted();
+    }
 
     // 2D 画布也会被系统回收。事件不是判据（兼容性有限，见 `canvasProbe.ts`），
     // 但"知道了就立刻补"是最省事的一条路：`contextrestored` 到了直接重画。
@@ -6743,8 +6750,16 @@ export class TextureAtlas {
    */
   ensurePixels(): boolean {
     if (this.repaintPending) return false; // 上下文还没回来，等 `contextrestored`
+    if (!this.painted) return this.repaint();
     if (this.pixelsIntact()) return false;
     return this.repaint();
+  }
+
+  /** 首次真正铺像素；构造时 `deferPaint` 与主菜单阶段共用 */
+  private ensurePainted(): void {
+    this.paintPixels();
+    this.syncUploadCanvas();
+    this.painted = true;
   }
 
   /**
@@ -6765,6 +6780,11 @@ export class TextureAtlas {
     if (is2dContextLost(this.context) || is2dContextLost(this.uploadContext)) {
       this.repaintPending = true;
       return false;
+    }
+    if (!this.painted) {
+      this.ensurePainted();
+      this.texture.needsUpdate = true;
+      return true;
     }
     this.syncUploadCanvas();
     this.texture.needsUpdate = true;
@@ -6821,6 +6841,7 @@ export class TextureAtlas {
       return false;
     }
     this.paintPixels();
+    this.painted = true;
     this.markTextureChanged();
     this.repaintPending = false;
     return true;

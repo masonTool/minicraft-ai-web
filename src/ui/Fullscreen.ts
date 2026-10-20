@@ -95,7 +95,8 @@ export function lockLandscape(): void {
 /** 请求全屏；不支持或被拒时静默忽略。返回的 Promise 在已经进了全屏、或根本没发出去时为 null。 */
 export function enterFullscreen(): Promise<void> | null {
   const doc = fullscreenDocument();
-  if (!doc || isFullscreen()) return null;
+  // PC 不需要全屏：只有触摸/粗指针设备才走这套展示逻辑。
+  if (!doc || !isCoarsePointer() || isFullscreen()) return null;
   const element = doc.documentElement as FullscreenCapableElement;
   try {
     if (typeof element.requestFullscreen === 'function') {
@@ -122,6 +123,7 @@ export function enterFullscreen(): Promise<void> | null {
  * （已安装的 PWA 不需要全屏也允许锁），再在全屏 Promise 完成时补一次。
  */
 export function enterMobilePresentation(): void {
+  if (!isCoarsePointer()) return;
   const pending = enterFullscreen();
   lockLandscape();
   // 全屏被拒时不要再冒出一条未处理的 rejection（then 自己也会再包一层）
@@ -186,7 +188,8 @@ export function toggleFullscreen(): void {
  */
 export function enterFullscreenOnBoot(): void {
   const doc = fullscreenDocument();
-  if (!doc) return;
+  // PC 打开页面不请求全屏，也不注册"切回前台再补一次"的监听
+  if (!doc || !isCoarsePointer()) return;
   enterMobilePresentation();
   // 切回前台时补一次：有些内核在"页面重新可见"这一刻放行（浏览器切后台再回来很常见）
   doc.addEventListener('visibilitychange', () => {

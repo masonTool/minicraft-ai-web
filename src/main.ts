@@ -16713,7 +16713,9 @@ async function boot(): Promise<void> {
   }
 
   startupTrace.mark(STARTUP_PHASES.bootGl);
-  const atlas = new TextureAtlas();
+  // 主菜单阶段**只建对象、不铺贴图**：三百多张 16×16 的画笔 + 上传画布合成
+  // 会让笔记本刚打开页面就满核转。真正绘制推迟到进世界（`ensureUploaded`）。
+  const atlas = new TextureAtlas(true);
   startupTrace.mark(STARTUP_PHASES.bootAtlas);
   const registry = new WorldRegistry();
   await adoptLegacyWorld(registry);
