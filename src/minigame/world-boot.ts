@@ -350,7 +350,7 @@ async function boot(): Promise<void> {
   let currentWorldId = platform.storage.get('wx.worldId') ?? worlds[0]!.id;
   let currentWorld = worlds.find((world) => world.id === currentWorldId) ?? worlds[0]!;
   currentWorldId = currentWorld.id;
-  const gameMode: GameMode = currentWorld.gameMode;
+  let gameMode: GameMode = currentWorld.gameMode;
   let playMark = Date.now();
   currentWorld.lastPlayed = playMark;
   const storedSeed = Number(platform.storage.get('wx.worldSeed') ?? '');
@@ -360,14 +360,14 @@ async function boot(): Promise<void> {
   currentWorld.seed = worldSeed;
   platform.storage.set('wx.worldId', currentWorldId);
   platform.storage.set('wx.worlds', JSON.stringify(worlds));
-  const world = new World(worldSeed, currentWorld.worldType, 1, createWorker);
+  let world = new World(worldSeed, currentWorld.worldType, 1, createWorker);
   // 微信 worker 对含 ArrayBuffer 的嵌套消息序列化不完整，网格化请求会丢掉 chunks；
   // 地形生成只传数字，可以继续走 worker；网格化改主线程执行。
   const meshCreateWorker =
     workerState === 'wx' ? () => createMainThreadWorker() : createWorker;
   const meshPool = new MeshWorkerPool(1, meshCreateWorker);
   console.log('[WX-020] mesh mode', workerState === 'wx' ? 'main' : 'worker');
-  const chunkRenderer = new ChunkRenderer(
+  let chunkRenderer = new ChunkRenderer(
     scene,
     atlas,
     world,
@@ -376,11 +376,14 @@ async function boot(): Promise<void> {
     meshPool,
   );
 
-  world.events = {
-    onChunkLoaded: (chunk) => chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz),
-    onChunkUnloaded: (cx, cz) => chunkRenderer.onChunkUnloaded(cx, cz),
-    onBlockChanged: (x, _y, z) => chunkRenderer.enqueueAround(x, z),
+  const wireWorldEvents = (): void => {
+    world.events = {
+      onChunkLoaded: (chunk) => chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz),
+      onChunkUnloaded: (cx, cz) => chunkRenderer.onChunkUnloaded(cx, cz),
+      onBlockChanged: (x, _y, z) => chunkRenderer.enqueueAround(x, z),
+    };
   };
+  wireWorldEvents();
 
   // 选中方块的黑框（先不做准星 UI，HUD 会显示目标名称）
   const outline = new THREE.LineSegments(
@@ -671,13 +674,6 @@ async function boot(): Promise<void> {
     });
   };
   refreshWorldInfo(world.edits.totalEdits || save?.meta?.edits || 0);
-  // 新建/切换世界后重启回来：跳过标题页，直接进入目标世界（对齐 Web“创建并进入”）
-  const pendingWorldId = platform.storage.get('wx.pendingWorldId');
-  if (pendingWorldId) {
-    platform.storage.set('wx.pendingWorldId', '');
-    ui.closeMainMenu();
-  }
-
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
   const playerInput: PlayerInput = {
@@ -1107,6 +1103,77 @@ async function boot(): Promise<void> {
     }
   };
 
+  const enterWorld = async (entry: WorldEntry): Promise<void> => {
+    ui.setLoading(0, 'GENERATING WORLD');
+    world.events = {};
+    chunkRenderer.disposeAll();
+    world = new World(entry.seed, entry.worldType, 1, createWorker);
+    chunkRenderer = new ChunkRenderer(
+      scene,
+      atlas,
+      world,
+      solid.material,
+      translucent.material,
+      meshPool,
+    );
+    wireWorldEvents();
+
+    currentWorld = entry;
+    currentWorldId = entry.id;
+    playMark = Date.now();
+    currentWorld.lastPlayed = playMark;
+    platform.storage.set('wx.worldId', entry.id);
+    platform.storage.set('wx.worldSeed', String(entry.seed));
+    platform.storage.set('wx.worlds', JSON.stringify(worlds));
+
+    save = null;
+    saveStatus = 'off';
+    loadedPlayer = null;
+    try {
+      save = await FileSaveGame.open(entry.id, platform.files);
+      const records = await save.loadAllChunkEdits();
+      for (const record of records) {
+        world.edits.restore(record.dimension, record.cx, record.cz, record.edits);
+      }
+      restoreContainers(world.containers, await save.loadContainers());
+      loadedPlayer = await save.loadPlayer();
+      saveStatus = 'ready';
+    } catch (error) {
+      saveStatus = 'off';
+      console.warn('[WX-020] 切换世界存档不可用', error);
+    }
+
+    inventory.clear();
+    if (loadedPlayer?.inventory) inventory.restore(loadedPlayer.inventory);
+    selectedSlot = Math.max(0, Math.min(HOTBAR.length - 1, loadedPlayer?.selectedSlot ?? 0));
+    ui.setSelectedSlot(selectedSlot);
+    ui.syncInventory(inventory.serialize(), selectedSlot);
+
+    playerHealth = Math.max(1, loadedPlayer?.health ?? 20);
+    playerFood = loadedPlayer?.food ?? 20;
+    playerAir = loadedPlayer?.air ?? 300;
+    gameMode = entry.gameMode;
+    ui.setCreativeMode(gameMode === 'creative');
+    refreshVitals();
+    damageFlash = 0;
+    ui.setDamageFlash(0);
+    ui.hideDeath();
+    fallStartY = null;
+    if (loadedPlayer) {
+      physics.teleport(loadedPlayer.x, loadedPlayer.y, loadedPlayer.z);
+      yaw = loadedPlayer.yaw;
+      pitch = loadedPlayer.pitch;
+      playerReady = true;
+    } else {
+      playerReady = false;
+    }
+    flying = gameMode === 'creative' && Boolean(loadedPlayer?.flying);
+    ui.setFlying(flying);
+    refreshWorldInfo(world.edits.totalEdits);
+    ui.closeMainMenu();
+    ui.showToast(`进入「${entry.name}」`);
+  };
+
   const createWorld = async (draft: {
     name: string;
     seed: number | null;
@@ -1119,17 +1186,15 @@ async function boot(): Promise<void> {
         ? Math.floor(draft.seed)
         : (((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) & 0x7fffffff) || 1;
     try {
+      const prefix: Record<WorldType, string> = {
+        default: '新的世界',
+        flat: '超平坦世界',
+        amplified: '放大化世界',
+      };
+      const same = worlds.filter((world) => world.worldType === draft.worldType).length + 1;
       const entry: WorldEntry = {
         id: `w${Date.now().toString(36)}`,
-        name: draft.name.trim() || (() => {
-          const prefix: Record<WorldType, string> = {
-            default: '新的世界',
-            flat: '超平坦世界',
-            amplified: '放大化世界',
-          };
-          const same = worlds.filter((world) => world.worldType === draft.worldType).length + 1;
-          return `${prefix[draft.worldType]} ${same}`;
-        })(),
+        name: draft.name.trim() || `${prefix[draft.worldType]} ${same}`,
         seed: nextSeed,
         worldType: draft.worldType,
         difficulty: draft.difficulty,
@@ -1138,24 +1203,10 @@ async function boot(): Promise<void> {
         lastPlayed: Date.now(),
       };
       worlds.push(entry);
-      currentWorld = entry;
-      currentWorldId = entry.id;
-      playMark = Date.now();
-      currentWorld.lastPlayed = playMark;
-      platform.storage.set('wx.worlds', JSON.stringify(worlds));
-      platform.storage.set('wx.worldId', entry.id);
-      platform.storage.set('wx.worldSeed', String(nextSeed));
-      platform.storage.set('wx.pendingWorldId', entry.id);
-      // 旧世界已经落过盘；停止本次会话的旧 save，避免退出前写回旧世界。
-      save = null;
-      saveStatus = 'deleted';
-      refreshWorldInfo(0);
-      ui.showToast('NEW WORLD · REOPEN');
-      console.log('[WX-020] new world', entry.id, nextSeed);
-      restartApp();
+      await enterWorld(entry);
     } catch (error) {
       saveStatus = 'error';
-      ui.showToast('NEW WORLD FAILED');
+      ui.showToast('新建世界失败');
       console.warn('[WX-020] 新建世界失败', error);
     }
   };
@@ -1165,17 +1216,7 @@ async function boot(): Promise<void> {
     const target = worlds.find((world) => world.id === id);
     if (!target) return;
     await persist();
-    platform.storage.set('wx.worldId', id);
-    platform.storage.set('wx.pendingWorldId', id);
-    save = null;
-    saveStatus = 'deleted';
-    currentWorld = target;
-    currentWorldId = id;
-    playMark = Date.now();
-    currentWorld.lastPlayed = playMark;
-    refreshWorldInfo(0);
-    ui.showToast('SWITCHING WORLD');
-    restartApp();
+    await enterWorld(target);
   };
 
   const resetMove = (): void => {
