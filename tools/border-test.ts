@@ -7,6 +7,7 @@
  * 运行：npm run test:border
  */
 
+import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import {
   BORDER_MAX_SIZE,
   BORDER_MIN_SIZE,
@@ -219,6 +220,11 @@ console.log('\n[/worldborder：get / set / center]');
     readonly board = new Scoreboard();
     scoreboard(): Scoreboard {
       return this.board;
+    }
+    /** 进度（批次 415）：`/advancement` 用它授/收 */
+    readonly progressTracker = new AdvancementTracker();
+    advancements(): AdvancementTracker {
+      return this.progressTracker;
     }
   }
 

@@ -150,6 +150,30 @@ export class AdvancementTracker {
     return true;
   }
 
+  /**
+   * 收回一条进度（批次 415，`/advancement revoke`）。
+   *
+   * **连带收回所有子条目**：本项目有一条硬约定——"父没达成，子拿不到"
+   * （见 `isAvailable`）。只收回父会留下"子已达成、父未达成"的空洞，
+   * 界面上子条目会挂在 `???` 底下，看起来像渲染错了。
+   * 同时清掉计数型进度的**收集记录**，否则下一件同类物品进来它立刻又达成一次。
+   */
+  revoke(id: string): boolean {
+    if (!this.earnedIds.has(id)) return false;
+    let removed = 0;
+    const stack: string[] = [id];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (!this.earnedIds.delete(current)) continue;
+      removed++;
+      this.progress.delete(current);
+      for (const def of this.defs) {
+        if (def.parent === current) stack.push(def.id);
+      }
+    }
+    return removed > 0;
+  }
+
   isEarned(id: string): boolean {
     return this.earnedIds.has(id);
   }

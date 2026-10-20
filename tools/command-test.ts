@@ -8,6 +8,8 @@
  * 运行：npm run test:commands
  */
 
+import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
+import { ADVANCEMENTS } from '../src/core/progress/advancements.ts';
 import {
   COMMANDS,
   commandNames,
@@ -225,6 +227,11 @@ class FakeWorld implements CommandContext {
   readonly board = new Scoreboard();
   scoreboard(): Scoreboard {
     return this.board;
+  }
+  /** 进度（批次 415）：`/advancement` 用它授/收 */
+  readonly progressTracker = new AdvancementTracker();
+  advancements(): AdvancementTracker {
+    return this.progressTracker;
   }
   /** 选择器快照（批次 399）：这一套里没有生物，只交出玩家自己 */
   entities(): readonly CommandEntity[] {
@@ -685,6 +692,45 @@ console.log('\n[记分板（M23，批次 402）]');
   check('restore 跳过非法目标与悬空槽位', skipped === 2, String(skipped));
   check('restore 收下合法的部分', restored.getScore('甲', 'ok') === 3);
   check('restore 恢复显示槽位', restored.display('sidebar') === 'ok');
+}
+
+console.log('\n[进度命令 /advancement（批次 415）]');
+{
+  const world = new FakeWorld();
+  const out = new Recorder();
+  const run2 = (line: string): Recorder => {
+    out.infos.length = 0;
+    out.errors.length = 0;
+    executeCommand(line, world, out);
+    return out;
+  };
+  const first = ADVANCEMENTS[0]!.id;
+
+  check('命令表里有 /advancement', COMMANDS.some((command) => command.name === 'advancement'));
+
+  run2(`/advancement grant ${first}`);
+  check('授予一条进度', world.progressTracker.isEarned(first), out.lastError);
+  check('重复授予报告 0 条', run2(`/advancement grant ${first}`).lastInfo.includes('0 条'), out.lastInfo);
+
+  run2(`/advancement revoke ${first}`);
+  check('收回一条进度', !world.progressTracker.isEarned(first));
+  check('收回没达成的进度也报告 0 条', run2(`/advancement revoke ${first}`).lastInfo.includes('0 条'));
+
+  check('未知的进度 id 报错', run2('/advancement grant no/such_thing').lastError.includes('没有这条进度'));
+  check('动作写错报用法', run2('/advancement 拿走 ' + first).lastError.includes('用法'));
+
+  run2('/advancement grant *');
+  const earned = ADVANCEMENTS.filter((def) => world.progressTracker.isEarned(def.id)).length;
+  check('`*` 一次全给', earned === ADVANCEMENTS.length, `${earned} / ${ADVANCEMENTS.length}`);
+
+  // 收回父条目会连带收回子条目（否则界面上子条目挂在 ??? 底下）
+  const parent = ADVANCEMENTS.find((def) => ADVANCEMENTS.some((child) => child.parent === def.id));
+  if (parent) {
+    const child = ADVANCEMENTS.find((def) => def.parent === parent.id)!;
+    run2(`/advancement revoke ${parent.id}`);
+    check('收回父条目连带收回子条目', !world.progressTracker.isEarned(child.id), child.id);
+    check('父条目本身也收回了', !world.progressTracker.isEarned(parent.id));
+  }
 }
 
 console.log(`\n命令测试：${passed} 通过 / ${failed} 失败`);

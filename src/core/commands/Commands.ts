@@ -32,6 +32,8 @@ import {
   describeBorder,
   type WorldBorder,
 } from '../world/WorldBorder.ts';
+import type { AdvancementTracker } from '../progress/AdvancementTracker.ts';
+import { advancementById } from '../progress/advancements.ts';
 // 记分板（M23，批次 402）：纯类，规则一条都不依赖世界
 import {
   SCOREBOARD_SLOTS,
@@ -134,6 +136,10 @@ export interface CommandContext {
    * `Selectors.ts`（纯函数，可离线断言）。
    */
   entities(): readonly CommandEntity[];
+
+  // ---- 进度（M7，批次 415）
+  /** 这份存档的进度跟踪器（`/advancement` 用它授/收） */
+  advancements(): AdvancementTracker;
 
   // ---- 记分板（M23，批次 402）
   /** 这个世界的记分板（`/scoreboard` 与 `/execute if score` 共用同一份） */
@@ -802,6 +808,32 @@ export const COMMANDS: readonly CommandSpec[] = [
     description: '以指定目标与位置执行一条命令（可链式叠加）',
     run(args, ctx, out) {
       runExecute(args, ctx, out);
+    },
+  },
+  {
+    name: 'advancement',
+    usage: '/advancement grant|revoke <进度 id | *>',
+    description: '授予或收回进度（`*` = 全部）',
+    run(args, ctx, out) {
+      const action = (args[0] ?? '').toLowerCase();
+      const target = args[1];
+      if ((action !== 'grant' && action !== 'revoke') || !target) {
+        out.error('用法：/advancement grant|revoke <进度 id | *>');
+        return;
+      }
+      const tracker = ctx.advancements();
+      const all = target === '*';
+      if (!all && !advancementById(target)) {
+        out.error(`没有这条进度：${target}`);
+        return;
+      }
+      const ids = all ? tracker.defs.map((def) => def.id) : [target];
+      let changed = 0;
+      for (const id of ids) {
+        if (action === 'grant' ? tracker.grant(id) : tracker.revoke(id)) changed++;
+      }
+      const verb = action === 'grant' ? '授予' : '收回';
+      out.info(`已${verb} ${changed} 条进度${all ? '（全部）' : `：${target}`}`);
     },
   },
   {

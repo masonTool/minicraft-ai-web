@@ -9240,6 +9240,7 @@ class App {
         return list;
       },
       scoreboard: () => this.scoreboardState,
+      advancements: () => this.advancements,
     };
   }
 

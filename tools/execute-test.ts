@@ -8,6 +8,7 @@
  * 运行：npm run test:execute
  */
 
+import { AdvancementTracker } from '../src/core/progress/AdvancementTracker.ts';
 import {
   executeCommand,
   type CommandContext,
@@ -198,6 +199,11 @@ class FakeWorld implements CommandContext {
   readonly board = new Scoreboard();
   scoreboard(): Scoreboard {
     return this.board;
+  }
+  /** 进度（批次 415）：`/advancement` 用它授/收 */
+  readonly progressTracker = new AdvancementTracker();
+  advancements(): AdvancementTracker {
+    return this.progressTracker;
   }
   entities(): readonly CommandEntity[] {
     const list: CommandEntity[] = [
