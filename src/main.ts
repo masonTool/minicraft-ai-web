@@ -1297,6 +1297,13 @@ class App {
    */
   private backgroundPaused = false;
   /**
+   * 音频当前是不是被"暂停页"挂起（批次 528）。
+   *
+   * 与 `backgroundPaused` 分开：切后台那条路自己会 suspend/resume；
+   * 这里只跟踪"暂停菜单 / 点击继续层"。两者最终都落到同一个 AudioContext。
+   */
+  private audioPaused = false;
+  /**
    * 在这个时刻之前忽略 `blur`（批次 303）。
    *
    * 进出全屏时部分内核会顺带派发一次 blur/focus（点"继续游戏"回游戏、安卓返回掉出全屏
@@ -2685,6 +2692,25 @@ class App {
   }
 
   /**
+   * 暂停页开着时把音频一起挂起（批次 528，用户："暂停了里面的声音还没停"）。
+   *
+   * **必须挂起 AudioContext**：`dt=0` 只能让音乐导演不再排新音符，
+   * 雨声是常驻循环、已经预约到未来的音符也还在播——只有 suspend 才真的安静。
+   *
+   * 用 `audioPaused` 去重：每帧都调 suspend 会生成一串无意义的 Promise。
+   */
+  private syncPauseAudio(paused: boolean): void {
+    if (paused === this.audioPaused) return;
+    this.audioPaused = paused;
+    if (paused) {
+      this.audio.suspend();
+      return;
+    }
+    // 真后台由 enterBackground/leaveBackground 管，别在这里抢着恢复
+    if (!this.backgroundPaused) this.audio.resume();
+  }
+
+  /**
    * 进入后台：冻结整帧 + 存盘 + 挂起音频（批次 303）。
    *
    * **幂等**：`hidden` / `pagehide` / `blur` 会前后脚到达（安卓切 App 时往往
@@ -2707,6 +2733,7 @@ class App {
     if (first) {
       // 雨声是常驻循环、音符是预约的：dt=0 停不掉已经在跑的音频线程
       this.audio.suspend();
+      this.audioPaused = true;
       diag.event('app', 'pause.background', { reason });
     }
   }
@@ -2745,6 +2772,8 @@ class App {
     // 后台几分钟回来时 rawDt 会是几分钟：不重置的话第一帧会被夹成 0.1s 的"瞬移"
     this.lastTime = performance.now();
     this.audio.resume();
+    // 若回来仍停在暂停页，主循环会在下一帧按 paused 重新挂起
+    this.audioPaused = false;
     diag.event('app', 'resume.background', {
       reason,
       fullscreen: isFullscreen(),
@@ -2812,6 +2841,7 @@ class App {
     this.backgroundPaused = false;
     // "点击继续"是确定的手势：音频在非手势的 visible 里被自动播放策略挡住时，这里补一次
     this.audio.resume();
+    this.audioPaused = false;
     if (this.settingsScreen.isOpen) this.closeSettings();
     document.body.classList.remove('pause-open');
     syncRotateHint();
@@ -14786,6 +14816,18 @@ class App {
         schedule();
         return;
       }
+      // 暂停菜单 / 后台回来的"点击继续"层开着时，**整个游戏停住**（批次 528，用户要求）：
+      // 不只是 `dt=0`——区块流式、光照队列、网格化、实体/粒子、网络、渲染、音频
+      // 一律不再推进。画面定格在最后一帧，暂停页是 DOM，照常显示与点击。
+      // ⚠️ 仍然要排下一帧：解冻靠 Resume/Esc/返回键，循环不能自己停死。
+      const paused =
+        this.backgroundPaused || this.settingsScreen.isOpen || this.resumeGateEl !== null;
+      this.syncPauseAudio(paused);
+      if (paused) {
+        this.lastTime = now;
+        schedule();
+        return;
+      }
       // 两条时间要分开（批次 205）：
       //  - `dt` 给物理与动画——**必须夹住**（一步 0.6 秒会穿模、跳过整段碰撞）；
       //  - `frameSeconds` 给测量——**必须真实**。真机掉到 9fps 时帧间距是 111ms，
@@ -14794,12 +14836,7 @@ class App {
       // 后台回来那一下 `now - lastTime` 可能是几分钟：那是"暂停"，不是"一帧卡了 3 分钟"，
       // 所以测量值另有一个 2 秒上限。
       const rawDt = Math.max(0, (now - this.lastTime) / 1000);
-      // 暂停菜单 / 后台回来的"点击继续"层开着时，**整局模拟停住**（批次 228）：
-      // 循环里物理、生存 tick、实体、粒子、昼夜、天气、方块 tick 全部吃 `dt`；
-      // 渲染与性能采样仍用真实帧时间（`frameSeconds`），画面不会冻结在黑屏。
-      const paused =
-        this.backgroundPaused || this.settingsScreen.isOpen || this.resumeGateEl !== null;
-      const dt = paused ? 0 : Math.min(rawDt, 0.1);
+      const dt = Math.min(rawDt, 0.1);
       const frameSeconds = Math.min(rawDt, 2);
       this.lastTime = now;
       // 帧内分段计时的起点（诊断用，见 `lap`）

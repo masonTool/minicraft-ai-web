@@ -3004,12 +3004,14 @@ console.log('\n[用户第二轮反馈（批次 185）]');
   // 批次 205：物理用的 dt 必须夹住，测量用的必须是真实间隔（以前两者共用夹紧值，
   // 掉到 9fps 时诊断里只看到 100ms）
   check(
-    '物理 dt 与测量帧间距分开（暂停时模拟 dt 归零）',
+    '物理 dt 与测量帧间距分开（暂停时整帧跳过）',
     // 批次 303：暂停判据多了"页面在后台"这一条，断言按多行写法匹配
     /const paused =\s*\n\s*this\.backgroundPaused \|\| this\.settingsScreen\.isOpen \|\| this\.resumeGateEl !== null;/.test(
       appSrc,
     ) &&
-      appSrc.includes('const dt = paused ? 0 : Math.min(rawDt, 0.1);') &&
+      appSrc.includes('this.syncPauseAudio(paused);') &&
+      /if \(paused\) \{[\s\S]{0,120}this\.lastTime = now;[\s\S]{0,80}schedule\(\);[\s\S]{0,60}return;/.test(appSrc) &&
+      appSrc.includes('const dt = Math.min(rawDt, 0.1);') &&
       appSrc.includes('const frameSeconds = Math.min(rawDt, 2);') &&
       appSrc.includes('this.updatePerfPolicy(frameSeconds);'),
   );
@@ -4218,6 +4220,12 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
     enterBody.includes('this.audio.suspend();') &&
       leaveBody.includes('this.audio.resume();') &&
       /suspend\(\): void \{[\s\S]{0,240}ctx\.suspend\(\)/.test(audioSrc),
+  );
+  check(
+    '暂停页开着时也挂起音频（用户："暂停了声音还没停"）',
+    appSrc.includes('private syncPauseAudio(paused: boolean): void') &&
+      appSrc.includes('this.audio.suspend();') &&
+      /if \(paused\) \{[\s\S]{0,120}this\.audio\.suspend\(\);/.test(appSrc),
   );
   check(
     'blur 只在非输入态才算后台（聊天/告示牌打字时不会把世界冻住）',
