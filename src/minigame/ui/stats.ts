@@ -60,6 +60,32 @@ export function createStats(
   let boss: { name: string; health: number; max: number } | null = null;
   let targetName: string | null = null;
 
+  const foodIcon = (x: number, y: number, size: number, filled: boolean): void => {
+    if (!context) return;
+    // 8×6 像素鸡腿：上方肉块 + 右下骨头
+    const pattern = [
+      '00111000',
+      '01111100',
+      '11111110',
+      '01111110',
+      '00011100',
+      '00001000',
+    ];
+    const px = size / 8;
+    for (let row = 0; row < pattern.length; row++) {
+      for (let col = 0; col < 8; col++) {
+        if (pattern[row]![col] !== '1') continue;
+        const isBone = row >= 4 && col >= 4;
+        context.fillStyle = filled
+          ? isBone
+            ? '#efe2c2'
+            : '#c98a3a'
+          : 'rgba(30, 30, 34, 0.75)';
+        context.fillRect(x + col * px, y + row * px, px + 0.5, px + 0.5);
+      }
+    }
+  };
+
   const heart = (x: number, y: number, size: number, filled: boolean): void => {
     if (!context) return;
     // 8×6 像素心形
@@ -153,11 +179,10 @@ export function createStats(
       heart(startX + i * 26, baseY, heartSize, i < hearts);
     }
 
-    // 饥饿：用 10 个小方块表示
+    // 饥饿：像素鸡腿图标
+    const foodStartX = 610;
     for (let i = 0; i < 10; i++) {
-      const filled = i < Math.ceil(stats.food / 2);
-      context.fillStyle = filled ? '#c98a3a' : 'rgba(30, 30, 34, 0.75)';
-      context.fillRect(startX + 290 + i * 20, baseY + 3, 16, 16);
+      foodIcon(foodStartX + i * 26, baseY, heartSize, i < Math.ceil(stats.food / 2));
     }
 
     if (stats.armor > 0) {
