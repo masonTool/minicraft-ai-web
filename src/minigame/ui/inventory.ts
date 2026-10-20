@@ -78,7 +78,7 @@ export function createInventory(
   const gap = 6;
   const gridWidth = cols * slot + (cols - 1) * gap;
   const gridHeight = rows * slot + (rows - 1) * gap;
-  const craftWidth = 220;
+  const craftWidth = 270;
   const panelWidth = gridWidth + 40 + craftWidth;
   const panelHeight = gridHeight + 120;
   const panelX = (canvas.width - panelWidth) / 2;
@@ -88,14 +88,23 @@ export function createInventory(
   const creativeButton: Rect = { x: panelX + 20, y: panelY + panelHeight - 48, w: 150, h: 36 };
   const quickButton: Rect = { x: panelX + 190, y: panelY + panelHeight - 48, w: 110, h: 36 };
   const dropButton: Rect = { x: panelX + 312, y: panelY + panelHeight - 48, w: 90, h: 36 };
+  const workbenchButton: Rect = { x: panelX + 420, y: panelY + panelHeight - 48, w: 130, h: 36 };
   const gridX = panelX + 20;
   const gridY = panelY + 56;
   const craftX = gridX + gridWidth + 24;
   const craftY = gridY + 38;
   const craftGap = 6;
-  const outputRect: Rect = { x: craftX + 2 * (slot + craftGap) + 26, y: craftY + 24, w: slot, h: slot };
+  const crafting2 = new CraftingGrid(2);
+  const crafting3 = new CraftingGrid(3);
+  let craftSize: 2 | 3 = 2;
 
-  const crafting = new CraftingGrid(2);
+  const activeGrid = (): CraftingGrid => (craftSize === 2 ? crafting2 : crafting3);
+  const craftOutputRect = (): Rect => ({
+    x: craftX + craftSize * (slot + craftGap) + 18,
+    y: craftY + (craftSize * slot + (craftSize - 1) * craftGap - slot) / 2,
+    w: slot,
+    h: slot,
+  });
   const creativeBlocks = Object.values(Block).filter(
     (value): value is number => typeof value === 'number' && value > 0,
   ).slice(0, 45);
@@ -172,16 +181,18 @@ export function createInventory(
     }
 
     if (mode === 'inventory') {
-      drawText(context, 'CRAFTING', craftX, panelY + 18, 20, '#ffffff');
-      for (let i = 0; i < 4; i++) {
-        const x = craftX + (i % 2) * (slot + craftGap);
-        const y = craftY + Math.floor(i / 2) * (slot + craftGap);
+      const grid = activeGrid();
+      const output = craftOutputRect();
+      drawText(context, `CRAFTING ${craftSize}x${craftSize}`, craftX, panelY + 18, 18, '#ffffff');
+      for (let i = 0; i < craftSize * craftSize; i++) {
+        const x = craftX + (i % craftSize) * (slot + craftGap);
+        const y = craftY + Math.floor(i / craftSize) * (slot + craftGap);
         context.fillStyle = 'rgba(0, 0, 0, 0.42)';
         context.fillRect(x, y, slot, slot);
         context.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         context.lineWidth = 2;
         context.strokeRect(x + 1, y + 1, slot - 2, slot - 2);
-        const stack = crafting.get(i);
+        const stack = grid.get(i);
         if (stack) {
           drawBlockIcon(context, atlas, stack.id, x, y, slot);
           if (stack.count > 1) {
@@ -193,25 +204,25 @@ export function createInventory(
       drawText(
         context,
         '>',
-        craftX + 2 * (slot + craftGap) + 4,
-        craftY + 18,
+        output.x - 20,
+        output.y + slot / 2 - 14,
         28,
         'rgba(255, 255, 255, 0.7)',
         'center',
       );
       context.fillStyle = 'rgba(0, 0, 0, 0.42)';
-      context.fillRect(outputRect.x, outputRect.y, outputRect.w, outputRect.h);
+      context.fillRect(output.x, output.y, output.w, output.h);
       context.strokeStyle = 'rgba(255, 220, 140, 0.8)';
       context.lineWidth = 2;
-      context.strokeRect(outputRect.x + 1, outputRect.y + 1, outputRect.w - 2, outputRect.h - 2);
-      if (crafting.result) {
-        drawBlockIcon(context, atlas, crafting.result.id, outputRect.x, outputRect.y, outputRect.w);
-        if (crafting.result.count > 1) {
+      context.strokeRect(output.x + 1, output.y + 1, output.w - 2, output.h - 2);
+      if (grid.result) {
+        drawBlockIcon(context, atlas, grid.result.id, output.x, output.y, output.w);
+        if (grid.result.count > 1) {
           drawText(
             context,
-            `${crafting.result.count}`,
-            outputRect.x + outputRect.w - 4,
-            outputRect.y + outputRect.h - 18,
+            `${grid.result.count}`,
+            output.x + output.w - 4,
+            output.y + output.h - 18,
             14,
             '#ffffff',
             'right',
@@ -231,6 +242,13 @@ export function createInventory(
     if (mode === 'inventory') {
       drawButton(context, quickButton, 'QUICK', 'normal', 16);
       drawButton(context, dropButton, 'DROP 1', 'normal', 15);
+      drawButton(
+        context,
+        workbenchButton,
+        craftSize === 2 ? '3x3 TABLE' : '2x2 BAG',
+        'normal',
+        15,
+      );
     }
 
     if (tooltip) {
@@ -281,15 +299,17 @@ export function createInventory(
   };
 
   const craftCellRect = (index: number): { x: number; y: number } => ({
-    x: craftX + (index % 2) * (slot + craftGap),
-    y: craftY + Math.floor(index / 2) * (slot + craftGap),
+    x: craftX + (index % craftSize) * (slot + craftGap),
+    y: craftY + Math.floor(index / craftSize) * (slot + craftGap),
   });
 
   const drainCrafting = (): void => {
-    for (let i = 0; i < 4; i++) {
-      const stack = crafting.get(i);
-      if (stack) callbacks.addStack?.(stack);
-      crafting.set(i, null);
+    for (const grid of [crafting2, crafting3]) {
+      for (let i = 0; i < grid.size * grid.size; i++) {
+        const stack = grid.get(i);
+        if (stack) callbacks.addStack?.(stack);
+        grid.set(i, null);
+      }
     }
   };
 
@@ -378,8 +398,14 @@ export function createInventory(
         redraw();
         return true;
       }
+      if (contains(workbenchButton, x, y)) {
+        craftSize = craftSize === 2 ? 3 : 2;
+        pendingCraft = null;
+        redraw();
+        return true;
+      }
 
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < craftSize * craftSize; i++) {
         const cell = craftCellRect(i);
         if (contains({ x: cell.x, y: cell.y, w: slot, h: slot }, x, y)) {
           pendingCraft = i;
@@ -387,8 +413,8 @@ export function createInventory(
           return true;
         }
       }
-      if (contains(outputRect, x, y)) {
-        pendingCraft = 4;
+      if (contains(craftOutputRect(), x, y)) {
+        pendingCraft = 9;
         redraw();
         return true;
       }
@@ -451,19 +477,20 @@ export function createInventory(
       if (pendingCraft !== null) {
         const slotIndex = pendingCraft;
         pendingCraft = null;
-        if (slotIndex === 4) {
-          if (crafting.result) {
-            callbacks.addStack?.(crafting.result);
-            crafting.takeResult();
+        const grid = activeGrid();
+        if (slotIndex === 9) {
+          if (grid.result) {
+            callbacks.addStack?.(grid.result);
+            grid.takeResult();
           }
         } else {
-          const stack = crafting.get(slotIndex);
+          const stack = grid.get(slotIndex);
           if (stack) {
             callbacks.addStack?.(stack);
-            crafting.set(slotIndex, null);
+            grid.set(slotIndex, null);
           } else {
             const one = callbacks.takeSelectedOne?.();
-            if (one) crafting.set(slotIndex, one);
+            if (one) grid.set(slotIndex, one);
           }
         }
         redraw();
