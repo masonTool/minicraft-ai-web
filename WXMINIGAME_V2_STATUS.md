@@ -33,8 +33,8 @@
 - [x] Inventory MVP：物品/创造左侧分类、36/45 格、图标、数量、选中、创造取方块、显式关闭
 - [x] Inventory 拖拽交换 + HUD 快捷栏选中
 - [x] 2x2/3x3 合成切换、产物、材料拖入/关闭返还（CraftingGrid）
-- [x] 配方书：2x2 配方列表/6 条分页/产物图标/一键填格
-- [ ] Inventory 完整态：搜索/3x3 配方过滤
+- [x] 配方书：2x2/3x3 过滤、搜索、6 条分页、产物图标/一键填格
+- [ ] Inventory 完整态：拖拽边界/更多分类
 - [ ] Settings / Inventory 按 Web 结构重做
 - [x] 小游戏构建脚本与包体（`build:minigame:v2`，2.2MB）
 
