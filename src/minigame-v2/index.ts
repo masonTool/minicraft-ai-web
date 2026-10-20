@@ -745,9 +745,20 @@ const showInventory = (): void => {
     }, { background: 'rgba(30, 38, 46, 0.95)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
   ];
   if (inventoryTab === 'items') {
-    for (let i = 0; i < 36; i++) {
+    // 主背包 27 格（索引 9..35）
+    for (let j = 0; j < 27; j++) {
+      const i = j + 9;
       const stack = inventory.get(i);
-      elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
+      elements.push(slot(gridX + (j % 9) * (slotSize + gap), gridY + Math.floor(j / 9) * (slotSize + gap), slotSize, i, stack?.id ?? 0, stack?.count ?? 0, false, () => {
+        showInventory();
+      }, (from, to) => handleDrop(from.index, to.index)));
+    }
+    // 独立快捷栏 9 格（索引 0..8）
+    const hotbarY = gridY + 3 * (slotSize + gap) + 14;
+    elements.push(text(gridX, hotbarY - 22, 300, 20, '快捷栏', { fontSize: 12, color: 'rgba(200,220,235,0.65)' }));
+    for (let i = 0; i < 9; i++) {
+      const stack = inventory.get(i);
+      elements.push(slot(gridX + i * (slotSize + gap), hotbarY, slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
         selectedSlot = i;
         showInventory();
       }, (from, to) => handleDrop(from.index, to.index)));
