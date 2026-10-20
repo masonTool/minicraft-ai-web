@@ -337,8 +337,8 @@ flex/absolute/grid 子集。
 | WX-011 | 平台接口与探测 | `src/platform/types.ts` + `wx/tt/web` 探测；Web 版行为不变 | WX-010 | 1 | [x] |
 | WX-012 | canvas / system / lifecycle | 复用适配器 Canvas/WxInfo/WxEvent；补 `visibilitychange`、`matchMedia`、安全区 | WX-011 | 1.5 | [x] |
 | WX-013 | 输入适配 | 适配器 touch 事件之上合成 pointerdown/move/up；多点、摇杆、视角 | WX-012 | 1.5 | [~] |
-| WX-014 | storage 适配 | 复用适配器 `localStorage`；补 `Storage` 接口；设置/世界清单/诊断 | WX-011 | 0.5 | [ ] |
-| WX-015 | FileSystem 封装 | 原子写（临时文件 + rename）、目录/配额/错误处理 | WX-011 | 2 | [ ] |
+| WX-014 | storage 适配 | 复用适配器 `localStorage`；`asDomStorage`/JSON 辅助已就绪；设置/世界清单接线在 WX-020/025 | WX-011 | 0.5 | [~] |
+| WX-015 | FileSystem 封装 | 原子写（临时文件 + rename）、目录/配额/错误处理 | WX-011 | 2 | [x] |
 | WX-016 | 存档适配 | IndexedDB 7 个仓 → 文件；`SaveGame` API 不变 | WX-015 | 3 | [ ] |
 | WX-017 | 音频适配 | 复用适配器 `AudioContext`；验证振荡器/滤波器/压缩器/延迟节点 | WX-011 | 0.5 | [ ] |
 | WX-018 | Worker 适配 | 合并“生成池 + 网格池”为单 worker 队列；消息复制 | WX-013 | 2 | [ ] |
@@ -495,7 +495,8 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | 2026-10-20 | WX-005/007 | **Go**；采用适配器作为平台层基座，保留 ctx 包装，只补 pointer/matchMedia/visibilitychange/HTMLScriptElement/Worker/存储/键盘/WebSocket；UI 仍自研 canvas | `5579bd8` |
 | 2026-10-20 | M0 关闭 | 用户确认适配器已在参考项目验证，不再单独验收；WX-003/004 并入 WX-018/WX-020；直接进入 WX-010 | `5579bd8` |
 | 2026-10-20 | WX-010 | 适配器 vendored 到 `vendor/minigame-adapter/`（870d66f）+ 5 条补丁；正式构建 1232KB / gzip 221KB，`??` 0；入口切到 vendored 适配器 | `969adba` |
-| 2026-10-20 | WX-011/012 | 平台接口 + Web/微信实现：system/canvas/storage/files/lifecycle/input/audio/worker/socket/keyboard；6 个单测；入口启动时初始化平台；正式构建 1242KB / gzip 223KB | 本次提交 |
+| 2026-10-20 | WX-011/012 | 平台接口 + Web/微信实现：system/canvas/storage/files/lifecycle/input/audio/worker/socket/keyboard；6 个单测；入口启动时初始化平台；正式构建 1242KB / gzip 223KB | `f51a4f5` |
+| 2026-10-20 | WX-014/015 | 平台 storage + wx FileStore 原子写完成；新增 `asDomStorage`/`readJson`/`writeJson`；单测 106 全过 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 

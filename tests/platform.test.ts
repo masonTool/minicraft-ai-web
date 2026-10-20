@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { asDomStorage, readJson, writeJson } from '../src/platform/dom-storage.ts';
 import { assertPlatformKind, detectPlatformKind } from '../src/platform/detect.ts';
 import { createMemoryFiles, createMemoryStorage } from '../src/platform/memory.ts';
 
@@ -36,6 +37,30 @@ describe('memory storage', () => {
     expect(storage.get('a')).toBeNull();
     storage.clear();
     expect(storage.keys()).toEqual([]);
+  });
+});
+
+describe('DOM storage adapter', () => {
+  it('exposes a Storage-compatible surface over KeyValueStore', () => {
+    const store = asDomStorage(createMemoryStorage());
+    store.setItem('bedrock-worlds', '[]');
+    expect(store.length).toBe(1);
+    expect(store.key(0)).toBe('bedrock-worlds');
+    expect(store.getItem('bedrock-worlds')).toBe('[]');
+    store.removeItem('bedrock-worlds');
+    expect(store.length).toBe(0);
+    store.setItem('a', '1');
+    store.clear();
+    expect(store.length).toBe(0);
+  });
+
+  it('reads and writes JSON with a safe fallback', () => {
+    const store = createMemoryStorage();
+    expect(readJson(store, 'settings', { fov: 70 })).toEqual({ fov: 70 });
+    writeJson(store, 'settings', { fov: 90 });
+    expect(readJson(store, 'settings', { fov: 70 })).toEqual({ fov: 90 });
+    store.set('settings', '{broken');
+    expect(readJson(store, 'settings', { fov: 70 })).toEqual({ fov: 70 });
   });
 });
 
