@@ -9,6 +9,7 @@
     "sync:audit": "node tools/minigame/sync-audit.mjs",
     "sync:audit:run": "node tools/minigame/sync-audit.mjs --run",
     "test:v2-core": "esbuild tools/minigame/v2-core-smoke.ts --bundle --platform=node --format=esm --outfile=.tmp/v2-core-smoke.mjs --log-level=error && node .tmp/v2-core-smoke.mjs",
+    "test:v2-save": "esbuild tools/minigame/v2-save-smoke.ts --bundle --platform=node --format=esm --outfile=.tmp/v2-save-smoke.mjs --log-level=error && node .tmp/v2-save-smoke.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && npm run typecheck:tools && vite build",
     "build:fast": "SOURCEMAP=0 vite build",

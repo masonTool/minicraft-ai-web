@@ -18,7 +18,7 @@
 
 ## 尚未完成
 
-- [ ] SaveGame / IndexedDB seam
+- [x] SaveGame / IndexedDB seam（FileSaveGame 内存冒烟通过）
 - [x] v2 最小世界渲染启动（main World + TextureAtlas + ChunkRenderer，截图已验证）
 - [x] v2 出包：`minigame-v2/game.js` 约 2.2MB
 - [ ] 触摸输入

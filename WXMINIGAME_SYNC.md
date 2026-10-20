@@ -110,7 +110,7 @@ npm run sync:audit -- --run
 这条会执行：
 
 - `typecheck`
-- `test:v2-core`（存在时）
+- `test:v2-core` / `test:v2-save`（存在时）
 - `build:minigame:world`（存在时）
 - `check:fast`
 
