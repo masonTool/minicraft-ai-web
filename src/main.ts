@@ -526,10 +526,13 @@ import {
   bucketFluidAt,
   drainCauldronToBottle,
   drainCauldronToBucket,
+  drainPowderSnowCauldron,
   fillCauldron,
   fillCauldronWithLava,
+  fillCauldronWithPowderSnow,
   isBucketSource,
   isLavaCauldronState,
+  isPowderSnowCauldronState,
 } from './core/world/Cauldron.ts';
 import {
   isDoorOpen,
@@ -11432,9 +11435,26 @@ class App {
       return true;
     }
 
+    // ①c 细雪桶 → 灌成细雪锅（批次 559）：与水/岩浆锅共用方块，靠状态位区分
+    if (held === Item.POWDER_SNOW_BUCKET) {
+      this.world.setStateAndUpdate(x, y, z, fillCauldronWithPowderSnow(state));
+      if (!this.isCreative) this.exchangeHeld(Item.POWDER_SNOW_BUCKET, Item.BUCKET);
+      this.audio.play('place_sand', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.particles.spawnSplash(x + 0.5, y + 0.9, z + 0.5, 0xf2f8ff, 6);
+      this.hand.swing();
+      return true;
+    }
+
     // ② 空桶 → 从**满锅**里舀回一桶（不满舀不出来，见 `drainCauldronToBucket`）。
-    // 岩浆锅舀出来的是岩浆桶（原版也是这样），水锅舀出来的是水桶。
+    // 岩浆锅舀出来的是岩浆桶（原版也是这样），水锅舀出来的是水桶；细雪锅舀细雪桶。
     if (held === Item.BUCKET) {
+      if (isPowderSnowCauldronState(state)) {
+        this.world.setStateAndUpdate(x, y, z, drainPowderSnowCauldron(state));
+        this.exchangeHeld(Item.BUCKET, Item.POWDER_SNOW_BUCKET);
+        this.audio.play('place_sand', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+        this.hand.swing();
+        return true;
+      }
       const lava = isLavaCauldronState(state);
       const drained = drainCauldronToBucket(state);
       if (drained === null) return false;

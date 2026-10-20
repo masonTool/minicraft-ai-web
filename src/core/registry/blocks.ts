@@ -17,6 +17,7 @@ import {
   cauldronLevelOf,
   hasEndPortalEye,
   isLavaCauldron,
+  isPowderSnowCauldron,
   isComposterReady,
   isFlash,
   isInverted,
@@ -2187,9 +2188,11 @@ const CAULDRON_SPECS: readonly BlockSpec[] = [
     stateTiles: (state) =>
       isLavaCauldron(state)
         ? ['cauldron_lava', 'cauldron_bottom', 'cauldron_side']
-        : cauldronLevelOf(state) > 0
-          ? ['cauldron_water', 'cauldron_bottom', 'cauldron_side']
-          : ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
+        : isPowderSnowCauldron(state)
+          ? ['powder_snow', 'cauldron_bottom', 'cauldron_side']
+          : cauldronLevelOf(state) > 0
+            ? ['cauldron_water', 'cauldron_bottom', 'cauldron_side']
+            : ['cauldron_top', 'cauldron_bottom', 'cauldron_side'],
     shape: 'composter' as const,
   },
 ];

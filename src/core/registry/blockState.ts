@@ -1356,3 +1356,19 @@ export function isLavaCauldron(state: number): boolean {
 export function withCauldronLava(state: number, lava = true): number {
   return lava ? state | CAULDRON_LAVA_MASK : state & ~CAULDRON_LAVA_MASK;
 }
+
+/**
+ * 锅里装的是**细雪**（批次 559）：用第 4 位标记。
+ *
+ * 细雪锅是满的（3 级），但**舀不出水瓶**、也不接雨；空桶能把它舀成细雪桶。
+ * 与岩浆标记同一条做法：共用方块 id，靠状态位区分内容物。
+ */
+const CAULDRON_POWDER_SNOW_MASK = 0b1000;
+
+export function isPowderSnowCauldron(state: number): boolean {
+  return (state & CAULDRON_POWDER_SNOW_MASK) !== 0;
+}
+
+export function withCauldronPowderSnow(state: number, powderSnow = true): number {
+  return powderSnow ? state | CAULDRON_POWDER_SNOW_MASK : state & ~CAULDRON_POWDER_SNOW_MASK;
+}

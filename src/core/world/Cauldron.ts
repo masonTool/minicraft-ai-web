@@ -21,8 +21,10 @@ import {
   fluidLevel,
   isFallingFluid,
   isLavaCauldron,
+  isPowderSnowCauldron,
   withCauldronLava,
   withCauldronLevel,
+  withCauldronPowderSnow,
 } from '../registry/blockState.ts';
 
 /** 这一格是不是"可以装进桶里的水源"（水或岩浆，且是源头、不是瀑布的一节） */
@@ -47,8 +49,8 @@ export function bucketFluidAt(blockId: number): BucketFluid | null {
  * @returns 灌完之后的状态（调用方直接写回世界）
  */
 export function fillCauldron(state: number): number {
-  // 倒水会**洗掉**锅里的岩浆（原版也是：岩浆锅倒水就变水锅）
-  return withCauldronLevel(withCauldronLava(state, false), CAULDRON_MAX_LEVEL);
+  // 倒水会**洗掉**锅里的岩浆/细雪（原版也是：岩浆锅倒水就变水锅）
+  return withCauldronLevel(withCauldronPowderSnow(withCauldronLava(state, false), false), CAULDRON_MAX_LEVEL);
 }
 
 /**
@@ -57,7 +59,31 @@ export function fillCauldron(state: number): number {
  * 岩浆锅**接不到雨**，也**舀不出水瓶**——但空桶能从里面舀回岩浆桶，与原版一致。
  */
 export function fillCauldronWithLava(state: number): number {
-  return withCauldronLevel(withCauldronLava(state, true), CAULDRON_MAX_LEVEL);
+  return withCauldronLevel(
+    withCauldronPowderSnow(withCauldronLava(state, true), false),
+    CAULDRON_MAX_LEVEL,
+  );
+}
+
+/** 用细雪桶灌炼药锅（批次 559）：满锅 + 细雪标记，同时洗掉水/岩浆标记 */
+export function fillCauldronWithPowderSnow(state: number): number {
+  return withCauldronLevel(
+    withCauldronPowderSnow(withCauldronLava(state, false), true),
+    CAULDRON_MAX_LEVEL,
+  );
+}
+
+/** 这一锅装的是细雪吗 */
+export function isPowderSnowCauldronState(state: number): boolean {
+  return isPowderSnowCauldron(state);
+}
+
+/** 空桶从细雪锅里舀：清成空锅（细雪标记一起清） */
+export function drainPowderSnowCauldron(state: number): number {
+  return withCauldronLevel(
+    withCauldronPowderSnow(withCauldronLava(state, false), false),
+    0,
+  );
 }
 
 /** 这一锅装的是岩浆吗（水锅与空锅都返回 false） */
@@ -82,7 +108,7 @@ export function drainCauldronToBucket(state: number): number | null {
   if (!isCauldronFull(state)) return null;
   // 舀空之后锅里什么都不剩：**岩浆标记也要一起清掉**——
   // 否则会留下一个"空的岩浆锅"（顶面还是岩浆贴图、站上去还烫脚）
-  return withCauldronLevel(withCauldronLava(state, false), 0);
+  return withCauldronLevel(withCauldronPowderSnow(withCauldronLava(state, false), false), 0);
 }
 
 /**
@@ -93,7 +119,8 @@ export function drainCauldronToBucket(state: number): number | null {
 export function drainCauldronToBottle(state: number): number | null {
   const level = cauldronLevelOf(state);
   // 岩浆舀不成瓶子（原版只能装进水瓶），所以岩浆锅在这里直接否掉
-  if (level <= 0 || isLavaCauldron(state)) return null;
+  // 细雪锅也舀不出水瓶（原版只有水锅能装瓶）
+  if (level <= 0 || isLavaCauldron(state) || isPowderSnowCauldron(state)) return null;
   return withCauldronLevel(state, level - 1);
 }
 
@@ -105,7 +132,7 @@ export function drainCauldronToBottle(state: number): number | null {
  */
 export function cauldronAcceptsRain(state: number, skyLight: number): boolean {
   // 岩浆锅不接雨（原版：雨水浇不灭岩浆，只是白费）
-  return !isLavaCauldron(state) && !isCauldronFull(state) && skyLight >= 15;
+  return !isLavaCauldron(state) && !isPowderSnowCauldron(state) && !isCauldronFull(state) && skyLight >= 15;
 }
 
 /** 每个"降水刻"给炼药锅加一级的概率（原版靠随机刻，这里给一个能观察到的值） */
@@ -115,5 +142,6 @@ export const CAULDRON_RAIN_CHANCE = 0.15;
 export function describeCauldron(state: number): string {
   const level = cauldronLevelOf(state);
   if (level <= 0) return '炼药锅（空）';
-  return `炼药锅（${isLavaCauldron(state) ? '岩浆' : '水'} ${level}/${CAULDRON_MAX_LEVEL}）`;
+  const content = isLavaCauldron(state) ? '岩浆' : isPowderSnowCauldron(state) ? '细雪' : '水';
+  return `炼药锅（${content} ${level}/${CAULDRON_MAX_LEVEL}）`;
 }

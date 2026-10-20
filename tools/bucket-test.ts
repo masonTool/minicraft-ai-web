@@ -26,11 +26,14 @@ import {
   describeCauldron,
   drainCauldronToBottle,
   drainCauldronToBucket,
+  drainPowderSnowCauldron,
   fillCauldron,
   fillCauldronWithLava,
+  fillCauldronWithPowderSnow,
   isBucketSource,
   isCauldronFull,
   isLavaCauldronState,
+  isPowderSnowCauldronState,
 } from '../src/core/world/Cauldron.ts';
 import { RANDOM_TICK_BEHAVIORS, hasRandomTick } from '../src/core/tick/RandomTicks.ts';
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
@@ -116,6 +119,27 @@ console.log('\n[岩浆锅：同一个锅、另一种内容物]');
   check(
     '岩浆锅的顶面换成岩浆那张（水/空锅各一张）',
     blockDef(Block.CAULDRON).stateTiles?.(fillCauldronWithLava(0))?.[0] === 'cauldron_lava',
+  );
+}
+
+console.log('\n[细雪锅：第三种内容物（批次 559）]');
+{
+  const snow = fillCauldronWithPowderSnow(0);
+  equal('细雪桶灌满', cauldronLevelOf(snow), CAULDRON_MAX_LEVEL);
+  check('灌完带"细雪"标记', isPowderSnowCauldronState(snow));
+  check('不是岩浆锅', !isLavaCauldronState(snow));
+  check(
+    '往细雪锅里倒水 → 洗成水锅',
+    !isPowderSnowCauldronState(fillCauldron(fillCauldronWithPowderSnow(0))),
+  );
+  check('细雪锅不接雨', !cauldronAcceptsRain(snow, 15));
+  equal('细雪锅舀不出水瓶', drainCauldronToBottle(snow), null);
+  equal('空桶舀完变空锅', drainPowderSnowCauldron(snow), 0);
+  check('描述里写的是"细雪"', describeCauldron(snow).includes('细雪'));
+  equal(
+    '细雪锅顶面用细雪贴图',
+    blockDef(Block.CAULDRON).stateTiles?.(snow)?.[0],
+    'powder_snow',
   );
 }
 
