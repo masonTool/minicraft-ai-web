@@ -259,6 +259,10 @@ interface V2Settings {
   volume: number;
   volumeBlocks: number;
   volumeUi: number;
+  volumeMobs: number;
+  volumePlayer: number;
+  volumeAmbient: number;
+  volumeMusic: number;
   leftHanded: boolean;
   view: 'first' | 'third';
   skinColor: string;
@@ -288,6 +292,10 @@ const defaultSettings: V2Settings = {
   volume: 0.7,
   volumeBlocks: 1,
   volumeUi: 1,
+  volumeMobs: 1,
+  volumePlayer: 1,
+  volumeAmbient: 1,
+  volumeMusic: 1,
   leftHanded: false,
   view: 'first',
   skinColor: '#e0ac69',
@@ -320,6 +328,10 @@ const readSettings = (): V2Settings => {
       volume: Math.max(0, Math.min(1, Number(parsed.volume ?? 0.7))),
       volumeBlocks: Math.max(0, Math.min(1, Number(parsed.volumeBlocks ?? 1))),
       volumeUi: Math.max(0, Math.min(1, Number(parsed.volumeUi ?? 1))),
+      volumeMobs: Math.max(0, Math.min(1, Number(parsed.volumeMobs ?? 1))),
+      volumePlayer: Math.max(0, Math.min(1, Number(parsed.volumePlayer ?? 1))),
+      volumeAmbient: Math.max(0, Math.min(1, Number(parsed.volumeAmbient ?? 1))),
+      volumeMusic: Math.max(0, Math.min(1, Number(parsed.volumeMusic ?? 1))),
       leftHanded: parsed.leftHanded === true,
       view: parsed.view === 'third' ? 'third' : 'first',
       skinColor: typeof parsed.skinColor === 'string' ? parsed.skinColor : '#e0ac69',
@@ -390,6 +402,10 @@ const showSettings = (): void => {
     audio.volume = settings.sound ? settings.volume : 0;
     audio.setGroupVolume('blocks', settings.volumeBlocks);
     audio.setGroupVolume('ui', settings.volumeUi);
+    audio.setGroupVolume('mobs', settings.volumeMobs);
+    audio.setGroupVolume('player', settings.volumePlayer);
+    audio.setGroupVolume('ambient', settings.volumeAmbient);
+    audio.setGroupVolume('music', settings.volumeMusic);
     applyPlayerAppearance();
     showSettings();
   };
@@ -433,25 +449,42 @@ const showSettings = (): void => {
       apply();
     }));
   } else if (activeSettingsTab === 'sound') {
-    row(toggle(panelX + 24, rowY, panelW - 48, 50, '声音', settings.sound, (value) => {
+    const soundTop = panelY + 108;
+    const colW = 350;
+    const left = panelX + 30;
+    const right = panelX + 420;
+    const gapY = 54;
+    rows.push(toggle(left, soundTop, colW, 44, '声音', settings.sound, (value) => {
       settings.sound = value;
       apply();
     }));
-    row(slider(panelX + 24, rowY, panelW - 48, 50, '主音量', 0, 1, 0.05, settings.volume, (value) => {
+    rows.push(slider(left, soundTop + gapY, colW, 44, '主音量', 0, 1, 0.05, settings.volume, (value) => {
       settings.volume = value;
       apply();
     }));
-    row(slider(panelX + 24, rowY, panelW - 48, 50, '方块音效', 0, 1, 0.05, settings.volumeBlocks, (value) => {
+    rows.push(slider(left, soundTop + gapY * 2, colW, 44, '方块音效', 0, 1, 0.05, settings.volumeBlocks, (value) => {
       settings.volumeBlocks = value;
       apply();
     }));
-    row(slider(panelX + 24, rowY, panelW - 48, 50, 'UI 音效', 0, 1, 0.05, settings.volumeUi, (value) => {
+    rows.push(slider(left, soundTop + gapY * 3, colW, 44, 'UI 音效', 0, 1, 0.05, settings.volumeUi, (value) => {
       settings.volumeUi = value;
       apply();
     }));
-    row(text(panelX + 24, rowY + 10, panelW - 48, 30, '生物/玩家/环境/音乐分组待接入', {
-      fontSize: 14,
-      color: 'rgba(200, 220, 235, 0.65)',
+    rows.push(slider(right, soundTop, colW, 44, '生物', 0, 1, 0.05, settings.volumeMobs, (value) => {
+      settings.volumeMobs = value;
+      apply();
+    }));
+    rows.push(slider(right, soundTop + gapY, colW, 44, '玩家', 0, 1, 0.05, settings.volumePlayer, (value) => {
+      settings.volumePlayer = value;
+      apply();
+    }));
+    rows.push(slider(right, soundTop + gapY * 2, colW, 44, '环境', 0, 1, 0.05, settings.volumeAmbient, (value) => {
+      settings.volumeAmbient = value;
+      apply();
+    }));
+    rows.push(slider(right, soundTop + gapY * 3, colW, 44, '音乐', 0, 1, 0.05, settings.volumeMusic, (value) => {
+      settings.volumeMusic = value;
+      apply();
     }));
   } else {
     const skinColors = ['#e0ac69', '#c68642', '#8d5524', '#f1c27d', '#d9a066'];
