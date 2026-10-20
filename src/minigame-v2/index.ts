@@ -912,6 +912,7 @@ const snapshotPlayer = (): PlayerSave => ({
   air: 300,
   exhaustion: 0,
   inventory: inventory.serialize(),
+  xp: { level: xpLevel, progress: xpIntoLevel / (7 * (xpLevel + 1)), total: 0, partial: xpIntoLevel },
   selectedSlot,
   dragonDefeated: false,
 });
@@ -985,6 +986,8 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   fallPeakY = spawn.y + 1;
   wasOnGround = false;
   dead = false;
+  xpLevel = 0;
+  xpIntoLevel = 0;
   hudInputBlockUntil = Date.now() + 400;
   lastAutoSave = Date.now();
   try {
@@ -1002,6 +1005,8 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
       health = Math.max(0, Math.min(20, loaded.health));
       food = Math.max(0, Math.min(20, loaded.food));
       saturation = Math.max(0, Math.min(20, loaded.saturation));
+      xpLevel = Math.max(0, loaded.xp?.level ?? 0);
+      xpIntoLevel = Math.max(0, loaded.xp?.partial ?? 0);
       selectedSlot = Math.max(0, Math.min(8, loaded.selectedSlot ?? 0));
       playerReady = true;
     }
@@ -1552,9 +1557,12 @@ const showHud = (): void => {
         playerModel.visible = cameraMode === 'third';
         showHud();
       }, { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
-      vital(242, uiHeight - 140, 16, 'heart', health),
-      vital(612, uiHeight - 140, 16, 'food', food),
-      text(0, uiHeight - 108, 1024, 24, inventory.get(selectedSlot) ? itemLabel(inventory.get(selectedSlot)!.id) : '空手', {
+      box(242, uiHeight - 98, 420, 5, [], { background: 'rgba(0,0,0,0.55)', radius: 2 }),
+      box(242, uiHeight - 98, Math.max(0, Math.min(420, 420 * (xpIntoLevel / (7 * (xpLevel + 1))))), 5, [], { background: '#7bd88f', radius: 2 }),
+      text(668, uiHeight - 110, 90, 20, `Lv ${xpLevel}`, { fontSize: 11, color: 'rgba(210,255,210,0.9)' }),
+      vital(242, uiHeight - 152, 16, 'heart', health),
+      vital(612, uiHeight - 152, 16, 'food', food),
+      text(0, uiHeight - 128, 1024, 20, inventory.get(selectedSlot) ? itemLabel(inventory.get(selectedSlot)!.id) : '空手', {
         fontSize: 14,
         color: 'rgba(255,255,255,0.92)',
         align: 'center',
@@ -1771,6 +1779,8 @@ let starvationTimer = 0;
 let dead = false;
 let lastDamageCause = '';
 let damageFlashUntil = 0;
+let xpLevel = 0;
+let xpIntoLevel = 0;
 let lastStickTap = 0;
 let stickOffsetX = 0;
 let stickOffsetY = 0;
@@ -1822,10 +1832,22 @@ const updateHitAt = (clientX: number, clientY: number): void => {
   }
 };
 
+const gainXp = (amount: number): void => {
+  xpIntoLevel += amount;
+  for (;;) {
+    const need = 7 * (xpLevel + 1);
+    if (xpIntoLevel < need) break;
+    xpIntoLevel -= need;
+    xpLevel += 1;
+  }
+  showHud();
+};
+
 const breakAt = (hit: RayHit): void => {
   lastAction = 'break';
   world.setBlockAndUpdate(hit.x, hit.y, hit.z, Block.AIR);
   audio.play('break_stone', { x: hit.x, y: hit.y, z: hit.z });
+  gainXp(1);
   requestSave();
 };
 
@@ -2042,6 +2064,7 @@ const frame = (): void => {
       held: inventory.get(selectedSlot)?.id ?? 0,
       cameraMode,
       dead,
+      xpLevel,
       health,
       food,
       saturation,
