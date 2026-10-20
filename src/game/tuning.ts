@@ -212,6 +212,8 @@ export interface WorldConfig {
   difficulty: Difficulty;
   /** 游戏模式（批次 181）：生存/创造；缺省按生存处理 */
   gameMode?: GameMode;
+  /** 极限模式（批次 550）：锁定困难 + 生存，死亡后只能旁观 */
+  hardcore?: boolean;
   /** 单一群系世界的群系注册名（批次 533） */
   singleBiome?: string;
 }

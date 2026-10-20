@@ -203,5 +203,24 @@ console.log('\n[UI 联动守卫]');
   check('测试用的预填入口还在（spec 三个参数都能设）', worldSrc.includes('difficulty: Difficulty = \'normal\'') && worldSrc.includes('gameMode: GameMode = \'survival\''));
 }
 
+console.log('\n[极限模式（批次 550）]');
+{
+  const storage = new MemoryStorage();
+  const registry = new WorldRegistry(storage as unknown as Storage);
+  // 故意传"和平 + 创造"：极限模式必须在 create 里强制成困难 + 生存
+  const hardcore = registry.create({ name: '极限测试', hardcore: true, difficulty: 'peaceful', gameMode: 'creative' });
+  equal('极限标记落盘', hardcore.hardcore, true);
+  equal('极限模式强制困难', hardcore.difficulty, 'hard');
+  equal('极限模式强制生存', hardcore.gameMode, 'survival');
+
+  const reloaded = new WorldRegistry(storage as unknown as Storage);
+  const again = reloaded.get(hardcore.id);
+  equal('重新加载后仍是极限模式', again?.hardcore, true);
+  equal('重新加载后难度仍是困难', again?.difficulty, 'hard');
+
+  const normal = registry.create({ name: '普通测试' });
+  check('普通世界不带极限标记', normal.hardcore !== true);
+}
+
 console.log(`\n世界创建矩阵测试：${passed} 通过 / ${failed} 失败\n`);
 if (failed > 0) process.exit(1);

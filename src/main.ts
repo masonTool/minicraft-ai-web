@@ -1545,6 +1545,8 @@ class App {
   private playerName = '玩家';
   /** 难度（I7）：保存在世界里 */
   private difficulty: Difficulty = 'normal';
+  /** 极限模式（批次 550）：只读；难度锁困难、死亡后只能旁观 */
+  private readonly hardcore: boolean;
   /** 难度被命令改动时的回调（主菜单用它回写世界清单） */
   onDifficultyChanged: ((value: Difficulty) => void) | null = null;
   /** 游戏模式改了（批次 181）：主菜单用它回写世界清单 */
@@ -1861,7 +1863,9 @@ class App {
     // 下落方块表只对当前世界有效；换世界/重开时清空，避免旧坐标落到新世界
     this.fallingBlocks.clear();
     this.conduits.clear();
-    this.gameMode = normalizeGameMode(this.worldConfig.gameMode);
+    // 极限模式（批次 550）：从清单读进来就是只读的；难度与模式都锁死
+    this.hardcore = this.worldConfig.hardcore === true;
+    this.gameMode = this.hardcore ? 'survival' : normalizeGameMode(this.worldConfig.gameMode);
     // 旁观模式（批次 532）：新世界没有存档时也要立刻起飞，否则无碰撞 + 重力 = 穿地
     this.flying = startsFlying(this.gameMode);
     this.waitingForSaveRestore = Boolean(save?.hasSave);
@@ -2195,7 +2199,7 @@ class App {
     this.advancementToast = new AdvancementToast(document.body, atlas);
 
     // 难度先按"新建世界时选的"来；如果存档里有玩家数据，loadPlayer 会再用存档的覆盖
-    this.difficulty = this.worldConfig.difficulty;
+    this.difficulty = this.hardcore ? 'hard' : this.worldConfig.difficulty;
 
     // 水面动画：告诉材质"哪些贴图要做波浪与滚动"（水与岩浆）
     const fluidTiles: Array<readonly [number, number]> = [
@@ -10669,6 +10673,8 @@ class App {
       setWeather: (kind) => this.setWeather(kind),
       difficulty: () => this.difficulty,
       setDifficulty: (value) => {
+        // 极限模式（批次 550）：难度锁死困难，/difficulty 与设置面板都不生效
+        if (this.hardcore) return;
         this.difficulty = value;
         // 回写世界清单：下次进这个世界（还没保存过玩家数据时）也能拿到新难度
         this.onDifficultyChanged?.(value);
@@ -13899,8 +13905,17 @@ class App {
       }
       this.deathEl.classList.remove('hidden');
       this.respawnCountdown += dt;
-      // 立即重生（批次 255）：跳过那 1 秒等待，直接回出生点
-      if (this.rules.doImmediateRespawn || this.respawnCountdown >= RESPAWN_DELAY) this.respawnPlayer();
+      if (this.hardcore) {
+        // 极限模式（批次 550）：不能回生存，重生后直接转旁观（原版 Java 也只剩旁观）
+        if (this.respawnCountdown >= RESPAWN_DELAY) {
+          this.respawnPlayer();
+          this.setGameMode('spectator');
+          this.chat.push('极限模式：你已死亡，只能以旁观者继续查看这个世界', 'system');
+        }
+      } else if (this.rules.doImmediateRespawn || this.respawnCountdown >= RESPAWN_DELAY) {
+        // 立即重生（批次 255）：跳过那 1 秒等待，直接回出生点
+        this.respawnPlayer();
+      }
     } else {
       if (this.respawnCountdown !== 0) this.respawnCountdown = 0;
       this.deathEl.classList.add('hidden');
@@ -16576,6 +16591,7 @@ async function boot(): Promise<void> {
         worldType: world.worldType,
         difficulty: world.difficulty,
         gameMode: world.gameMode,
+        ...(world.hardcore ? { hardcore: true } : {}),
         ...(world.singleBiome ? { singleBiome: world.singleBiome } : {}),
       });
     } catch (error) {

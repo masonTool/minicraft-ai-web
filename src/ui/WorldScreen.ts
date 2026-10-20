@@ -82,6 +82,8 @@ export class WorldScreen {
   private readonly difficultySelect: Dropdown<Difficulty>;
   /** 新建世界时的游戏模式（批次 181）：生存/创造；进世界后可在暂停菜单里改 */
   private readonly gameModeSelect: Dropdown<GameMode>;
+  /** 极限模式（批次 550）：普通 / 极限；极限会锁定困难 + 生存 */
+  private readonly hardcoreSelect: Dropdown<'normal' | 'hardcore'>;
   /** 单一群系世界选哪种群系（批次 533）：只在类型为 single_biome 时显示 */
   private readonly biomeSelect: Dropdown<string>;
   private readonly biomeRow: HTMLDivElement;
@@ -259,6 +261,15 @@ export class WorldScreen {
       () => this.updateTypeHint(),
       { fullWidth: true, className: 'world-dropdown' },
     );
+    // 极限模式（批次 550）：与难度/模式并排；选了极限后那两个值仍会显示，
+    // 但 `WorldRegistry.create` 会把它们强制成"困难 + 生存"
+    this.hardcoreSelect = new Dropdown<'normal' | 'hardcore'>(
+      ['normal', 'hardcore'],
+      { normal: t('world.hardcoreOff'), hardcore: t('world.hardcoreOn') },
+      'normal',
+      () => this.updateTypeHint(),
+      { fullWidth: true, className: 'world-dropdown' },
+    );
 
     // 单一群系的群系选择（批次 533）：默认平原；列表用注册表里的全部群系
     const biomeNames = BIOMES.map((biome) => biome.name);
@@ -304,6 +315,7 @@ export class WorldScreen {
       this.makeRow(t('world.type'), this.typeSelect.element, null),
       this.makeRow(t('world.difficulty'), this.difficultySelect.element, null),
       this.makeRow(t('world.gameMode'), this.gameModeSelect.element, null),
+      this.makeRow(t('world.hardcore'), this.hardcoreSelect.element, null),
       this.biomeRow,
       this.typeHintEl,
       createButton,
@@ -439,6 +451,7 @@ export class WorldScreen {
     const chips = document.createElement('div');
     chips.className = 'world-card-chips';
     chips.append(
+      ...(world.hardcore ? [this.makeChip(t('world.hardcoreOn'), 'hardcore', 'hardcore')] : []),
       this.makeChip(GAME_MODE_LABELS[world.gameMode], 'mode', world.gameMode),
       this.makeChip(DIFFICULTY_LABELS[world.difficulty], 'difficulty', world.difficulty),
       this.makeChip(WORLD_TYPE_SHORT_LABELS[world.worldType], 'type', world.worldType),
@@ -720,6 +733,7 @@ export class WorldScreen {
       worldType: this.typeSelect.value as WorldType,
       difficulty: this.difficultySelect.value as Difficulty,
       gameMode: this.gameModeSelect.value as GameMode,
+      hardcore: this.hardcoreSelect.value === 'hardcore',
       ...(this.typeSelect.value === 'single_biome' ? { singleBiome: this.biomeSelect.value } : {}),
     });
     // 清空表单：下次再新建时不会带上一次的名字与种子
@@ -741,6 +755,7 @@ export class WorldScreen {
     difficulty: Difficulty = 'normal',
     gameMode: GameMode = 'survival',
     singleBiome = 'plains',
+    hardcore: 'normal' | 'hardcore' = 'normal',
   ): void {
     this.setView('create');
     this.nameInput.value = name;
@@ -748,6 +763,7 @@ export class WorldScreen {
     this.typeSelect.setValue(worldType);
     this.difficultySelect.setValue(difficulty);
     this.gameModeSelect.setValue(gameMode);
+    this.hardcoreSelect.setValue(hardcore);
     this.biomeSelect.setValue(singleBiome);
     this.updateTypeHint();
   }

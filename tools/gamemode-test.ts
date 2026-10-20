@@ -130,6 +130,9 @@ console.log('\n[源码守卫：真接上了没有]');
   check('冒险模式的破坏入口被挡住', mainSrc.includes('if (!canBreakBlocks(this.gameMode)) return;'));
   check('冒险模式的放方块入口被挡住', mainSrc.includes('if (!canPlaceBlocks(this.gameMode)) return;'));
   check('切到冒险/生存时强制落地', /if \(!canFly\(next\) && this\.flying\)/.test(mainSrc));
+  // 极限模式（批次 550）：死亡转旁观、难度锁死
+  check('极限模式死亡后转旁观', mainSrc.includes("this.setGameMode('spectator');"));
+  check('极限模式锁住难度修改', mainSrc.includes('if (this.hardcore) return;'));
 }
 
 console.log(`\n游戏模式测试：${passed} 通过 / ${failed} 失败`);

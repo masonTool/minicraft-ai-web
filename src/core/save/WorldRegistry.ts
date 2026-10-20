@@ -40,6 +40,11 @@ export interface WorldSummary {
    * 老清单没有这个字段 → 生存。
    */
   gameMode: GameMode;
+  /**
+   * 极限模式（批次 550）：难度锁定困难、死亡后只能旁观。
+   * 老清单没有这个字段 → 普通世界。
+   */
+  hardcore?: boolean;
   /** 单一群系世界的群系注册名（其它类型为 undefined） */
   singleBiome?: string;
 }
@@ -64,6 +69,8 @@ export interface CreateWorldOptions {
   worldType?: WorldType;
   difficulty?: Difficulty;
   gameMode?: GameMode;
+  /** 极限模式：强制困难难度 + 生存模式 */
+  hardcore?: boolean;
   /** 单一群系世界的群系注册名 */
   singleBiome?: string;
   /** 指定 id（认领旧存档时用） */
@@ -95,6 +102,7 @@ export class WorldRegistry {
   /** 新建一个世界（默认随机种子 + 默认地形），返回它的清单项 */
   create(options: CreateWorldOptions = {}): WorldSummary {
     const now = Date.now();
+    const hardcore = options.hardcore === true;
     const world: WorldSummary = {
       id: options.id ?? uniqueId(this.worlds, now),
       name: options.name?.trim() || defaultName(this.worlds, options.worldType ?? 'default'),
@@ -102,8 +110,10 @@ export class WorldRegistry {
       // 批次 529：三种创建参数一律在这里收口，非 UI 调用传脏值也不会写进清单
       worldType: isWorldType(options.worldType) ? options.worldType : 'default',
       // 批次 529：与 gameMode 同口径——非法值落到普通，而不是先写进清单等读盘才修
-      difficulty: normalizeDifficulty(options.difficulty),
-      gameMode: normalizeGameMode(options.gameMode),
+      // 批次 550：极限模式强制困难 + 生存（原版极限模式也不能选难度/创造）
+      difficulty: hardcore ? 'hard' : normalizeDifficulty(options.difficulty),
+      gameMode: hardcore ? 'survival' : normalizeGameMode(options.gameMode),
+      ...(hardcore ? { hardcore: true } : {}),
       // 单一群系：只在这个类型下保留，且必须是注册表里存在的群系名
       ...(options.worldType === 'single_biome' && biomeByName(options.singleBiome ?? '')
         ? { singleBiome: options.singleBiome }
@@ -199,12 +209,15 @@ function normalizeWorld(value: unknown): WorldSummary | null {
   const raw = value as Partial<WorldSummary>;
   if (typeof raw.id !== 'string' || raw.id.length === 0) return null;
   const createdAt = typeof raw.createdAt === 'number' ? raw.createdAt : Date.now();
+  const hardcore = raw.hardcore === true;
   return {
     id: raw.id,
     name: typeof raw.name === 'string' && raw.name.length > 0 ? raw.name : '未命名世界',
     seed: typeof raw.seed === 'number' && Number.isFinite(raw.seed) ? Math.floor(raw.seed) : randomSeed(),
-    difficulty: normalizeDifficulty((raw as { difficulty?: unknown }).difficulty),
-    gameMode: normalizeGameMode((raw as { gameMode?: unknown }).gameMode),
+    // 极限模式（批次 550）：老清单/脏数据里如果困难或创造被改过，这里一律拉回困难 + 生存
+    difficulty: hardcore ? 'hard' : normalizeDifficulty((raw as { difficulty?: unknown }).difficulty),
+    gameMode: hardcore ? 'survival' : normalizeGameMode((raw as { gameMode?: unknown }).gameMode),
+    ...(hardcore ? { hardcore: true } : {}),
     worldType: isWorldType(raw.worldType) ? raw.worldType : 'default',
     ...(isWorldType(raw.worldType) &&
     raw.worldType === 'single_biome' &&
