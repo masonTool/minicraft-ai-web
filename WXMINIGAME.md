@@ -341,7 +341,7 @@ flex/absolute/grid 子集。
 | WX-015 | FileSystem 封装 | 原子写（临时文件 + rename）、目录/配额/错误处理 | WX-011 | 2 | [x] |
 | WX-016 | 存档适配 | `FileSaveGame` 与 `SaveGame` 同 API（meta/player/容器/牌子/展示框/成就/区块）；接线在 WX-020 | WX-015 | 3 | [x] |
 | WX-017 | 音频适配 | 复用适配器 `AudioContext`；`AudioEngine` 支持注入工厂；接线在 WX-020 | WX-011 | 0.5 | [x] |
-| WX-018 | Worker 适配 | 合并“生成池 + 网格池”为单 worker 队列；消息复制 | WX-013 | 2 | [ ] |
+| WX-018 | Worker 适配 | 产物已构建：`workers/chunk.worker.js` + wx 全局 shim；两池合并/BigInt 降级在 WX-020 接线 | WX-013 | 2 | [~] |
 | WX-019 | 网络适配（可后置） | `WebSocket` → `wx.connectSocket`；wss + 域名白名单 | WX-011 | 1 | [ ] |
 | WX-01A | 键盘/文本输入 | `wx.showKeyboard` 支撑聊天、告示牌、世界名 | WX-013 | 1 | [ ] |
 | WX-01B | 资源包降级 | `DecompressionStream` 不可用时关闭 K4，不报错 | WX-011 | 1 | [ ] |
@@ -498,7 +498,8 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | 2026-10-20 | WX-011/012 | 平台接口 + Web/微信实现：system/canvas/storage/files/lifecycle/input/audio/worker/socket/keyboard；6 个单测；入口启动时初始化平台；正式构建 1242KB / gzip 223KB | `f51a4f5` |
 | 2026-10-20 | WX-014/015 | 平台 storage + wx FileStore 原子写完成；新增 `asDomStorage`/`readJson`/`writeJson`；单测 106 全过 | `adeb625` |
 | 2026-10-20 | WX-016 | 新增 `FileSaveGame`：meta/player/容器/牌子/展示框/成就/区块（紧凑二进制）落文件；与 IndexedDB 版同 API；单测 108 | 本次提交 |
-| 2026-10-20 | WX-017 | `AudioEngine` 支持注入 AudioContext 工厂（默认行为不变）；微信端可传 createWebAudioContext；音频测试 86 通过 | 本次提交 |
+| 2026-10-20 | WX-017 | `AudioEngine` 支持注入 AudioContext 工厂（默认行为不变）；微信端可传 createWebAudioContext；音频测试 86 通过 | `948a015` |
+| 2026-10-20 | WX-018 | 真实区块 Worker 打成 `workers/chunk.worker.js`（1097KB / gzip 242KB）+ wx 全局 shim；主包合计 2339KB；入口启动时记录 BigInt 能力 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -519,7 +520,8 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | **Layout 插件限制** | 只有微信、需插件权限；不支持完整 CSS/拖拽/输入法 | 只做 WX-021B 小规模验证；核心 UI 仍自研 canvas 工具包 | 待验证 |
 | **UI 工作量** | 34 个模块、约 500 个 DOM 节点、4,200 行 CSS | 先做工具包 + 闭环；MVP 砍非核心界面 | 进行中 |
 | **`main.ts` 冲突** | 主线持续改 14,400 行入口 | 只做最小接口改动；每 3~5 个任务 merge 一次 | 进行中 |
-| **Worker 单线程** | 生成/网格化抢一个 worker，卡顿 | WX-018 合并两池 + 分片；必要时主线程时间切片 | WX-018 处理 |
+| **Worker 单线程** | 生成/网格化抢一个 worker，卡顿 | WX-018 合并两池 + 分片；必要时主线程时间切片 | Worker 产物已就绪，接线在 WX-020 |
+| **BigInt（Worker/Random）** | `Random.ts` 的 SplitMix64 用 BigInt；老引擎无 BigInt 时 Worker 运行时报错 | esbuild 已把 `1n` 降成 `BigInt("...")`；入口记录 `typeof BigInt`；无 BigInt 时降级到主线程/提示 | 待真机确认 |
 | **存档** | 杀进程/写一半导致丢档 | 原子写 + 备份 + 迁移测试 | 未开始 |
 | **IP / 合规** | “Minecraft / 我的世界 / 基岩版” 侵权风险 | 提审前改名/去商标；软著/备案并行 | 未开始 |
 | **iOS 内存** | 小游戏内存上限低，易被回收 | 视距降级、纹理释放、内存警告处理 | 未验证 |

@@ -99,6 +99,8 @@ function boot() {
       platform.system.sdkVersion ?? '?'
     } bench ${platform.system.benchmarkLevel ?? '?'}`;
     console.log(`${TAG} ${platformLine}`, platform.system, 'detected', detectPlatformKind());
+    // Worker 里的 Random 用 BigInt；老引擎缺失时要在 WX-020 降级到主线程生成
+    console.log(`${TAG} BigInt`, typeof BigInt === 'function');
   } catch (error) {
     console.error(`${TAG} platform init failed`, error);
     platformLine = `platform: FAIL ${String(error)}`;

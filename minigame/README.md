@@ -41,10 +41,21 @@ FPS 61  MS 16.6  TRI 12720  CALLS 801
 - `CALLS 801` = 799 个独立 Mesh + 地面 InstancedMesh + 标记方块；
 - 单指拖动转视角；绿色标记方块。
 
+## 构建产物
+
+```
+minigame/game.js                    主包（vendored 适配器 + three + 入口）
+minigame/workers/chunk.worker.js    真实区块生成/网格化 Worker（WX-018）
+```
+
+`game.json` 已声明 `"workers": "workers"`。Worker 里的 `Random.ts` 用 BigInt；
+esbuild 会把 `1n` 降成 `BigInt("...")`，但老引擎没有 BigInt 时仍会在运行时报错。
+入口会打印 `[WX-...] BigInt true/false`，WX-020 接线时据此决定是否降级到主线程。
+
 ## 已知限制
 
 - 仍是压力场景占位，不接世界生成/存档/UI；`WX-020` 后换成真实 App。
-- Worker 还没接（`WX-018`）；`game.json` 暂未声明 `workers`。
+- Worker 产物已就绪，但两套池子的合并/接线在 `WX-020`。
 - 适配器的假 DOM 只能给库用，**不要拿它做 UI**（见 `WXMINIGAME.md` §2.6）。
 - 抖音没有做；M6 单独评估。
 

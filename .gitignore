@@ -23,6 +23,7 @@ references/
 # 微信小游戏构建产物（`npm run build:minigame` / `build:minigame:adapter` 生成）
 minigame/game.js
 minigame/game.js.map
+minigame/workers/
 minigame-adapter-spike/game.js
 minigame-adapter-spike/game.js.map
 

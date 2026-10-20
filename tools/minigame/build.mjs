@@ -8,8 +8,8 @@
  * 约定：
  *   - 单文件 IIFE（小游戏没有 ESM 入口）
  *   - target 必须是 es2017 或更低（真机 JSCore 不支持 `??` / `?.`）
- *   - 产物 `minigame/game.js`，主包上限 4MB
- *   - worker 产物在 WX-018 接入（`minigame/workers/*.js`）
+ *   - 产物 `minigame/game.js` + `minigame/workers/chunk.worker.js`
+ *   - 两者合计受 4MB 主包上限约束
  *
  * 用法：`npm run build:minigame:formal`
  */
@@ -23,6 +23,7 @@ import { gzipSync } from 'node:zlib';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const adapterEntry = join(root, 'vendor', 'minigame-adapter', 'index.js');
 const outfile = join(root, 'minigame', 'game.js');
+const workerOutfile = join(root, 'minigame', 'workers', 'chunk.worker.js');
 
 if (!existsSync(adapterEntry)) {
   console.error(
@@ -52,21 +53,50 @@ await build({
   logLevel: 'info',
 });
 
+mkdirSync(join(root, 'minigame', 'workers'), { recursive: true });
+
+await build({
+  absWorkingDir: root,
+  entryPoints: ['tools/minigame/spike-worker/entry.mjs'],
+  bundle: true,
+  format: 'iife',
+  target: ['es2017'],
+  platform: 'browser',
+  outfile: workerOutfile,
+  legalComments: 'none',
+  sourcemap: false,
+  minify: false,
+  logLevel: 'info',
+});
+
 const code = readFileSync(outfile, 'utf8');
+const workerCode = readFileSync(workerOutfile, 'utf8');
 const bytes = statSync(outfile).size;
+const workerBytes = statSync(workerOutfile).size;
+const totalBytes = bytes + workerBytes;
 const gzip = gzipSync(code).length;
+const workerGzip = gzipSync(workerCode).length;
 const kb = (value) => `${(value / 1024).toFixed(0)} KB`;
 
 console.log(`[minigame] formal game.js ${kb(bytes)}（gzip ${kb(gzip)}）`);
+console.log(`[minigame] worker chunk.worker.js ${kb(workerBytes)}（gzip ${kb(workerGzip)}）`);
+console.log(`[minigame] 主包合计 ${kb(totalBytes)}`);
 
 // 真机语法闸门：ES2020 的 ?? / ?. 在模拟器能跑、真机会报 Unexpected token ?
 // 这里只做“可疑残留”提示（字符串里也可能出现），正式目标由 esbuild target 保证。
-const suspicious = (code.match(/\?\?|\?\./g) ?? []).length;
-if (suspicious > 0) {
-  console.warn(`[minigame] ⚠️ 产物里仍有 ${suspicious} 处 ??/?.，确认是否字符串/注释；真机可能报语法错误`);
+for (const [label, source] of [
+  ['game.js', code],
+  ['chunk.worker.js', workerCode],
+]) {
+  const suspicious = (source.match(/\?\?|\?\./g) ?? []).length;
+  if (suspicious > 0) {
+    console.warn(
+      `[minigame] ⚠️ ${label} 里仍有 ${suspicious} 处 ??/?.，确认是否字符串/注释；真机可能报语法错误`,
+    );
+  }
 }
 
-if (bytes > 4 * 1024 * 1024) {
-  console.error('[minigame] ✗ 超过微信小游戏主包 4MB 上限');
+if (totalBytes > 4 * 1024 * 1024) {
+  console.error('[minigame] ✗ 主包 + worker 超过微信小游戏主包 4MB 上限');
   process.exit(1);
 }
