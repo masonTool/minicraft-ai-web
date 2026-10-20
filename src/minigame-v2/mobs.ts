@@ -40,6 +40,7 @@ export class MobSystem {
   private readonly pigs: MobState[] = [];
   private readonly sheep: MobState[] = [];
   private readonly zombies: MobState[] = [];
+  private lastPlayerAttackAt = 0;
 
   constructor(private readonly deps: MobDeps) {}
 
@@ -134,6 +135,7 @@ export class MobSystem {
     screenHeight: number,
     designHeight: number,
   ): boolean {
+    if (Date.now() - this.lastPlayerAttackAt < 300) return false;
     const rules: DropRule[] = [
       { list: this.pigs, dropId: Item.PORKCHOP, xp: 3, yOffset: 0.65 },
       { list: this.sheep, dropId: WOOL_ID_START, xp: 1, yOffset: 0.8 },
@@ -151,6 +153,7 @@ export class MobSystem {
         const touchX = (clientX / Math.max(1, screenWidth)) * 1024;
         const touchY = (clientY / Math.max(1, screenHeight)) * designHeight;
         if (Math.hypot(designX - touchX, designY - touchY) > 88) continue;
+        this.lastPlayerAttackAt = Date.now();
         mob.hp -= 4;
         this.deps.onHit();
         if (mob.hp <= 0) {

@@ -322,6 +322,7 @@ const readSettings = (): V2Settings => {
   }
 };
 let cameraMode: 'first' | 'third' = 'first';
+let currentFov = 72;
 const settings = readSettings();
 cameraMode = settings.view;
 playerModel.visible = cameraMode === 'third';
@@ -2245,6 +2246,13 @@ const frame = (): void => {
     }
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
+  }
+  const sprinting = !flying && input.sprint && Math.abs(input.forward) + Math.abs(input.strafe) > 0.1;
+  const targetFov = settings.fov + (sprinting ? 6 : 0);
+  if (Math.abs(currentFov - targetFov) > 0.05) {
+    currentFov += (targetFov - currentFov) * Math.min(1, dt * 10);
+    camera.fov = currentFov;
+    camera.updateProjectionMatrix();
   }
   input.jump = false;
 
