@@ -4563,13 +4563,21 @@ console.log('\n[页面压后台立即暂停（批次 303）]');
   );
   check(
     'PC 鼠标灵敏度降低（触摸常量不变）',
-    /export const MOUSE_SENSITIVITY = 0\.0014;/.test(tuningSource) &&
+    /export const MOUSE_SENSITIVITY = 0\.0008;/.test(tuningSource) &&
       /export const TOUCH_SENSITIVITY = 0\.0034;/.test(tuningSource),
   );
   check(
-    'PC 网格式 Worker 最多 4 个（手机仍是 1）',
-    mainSource.includes('Math.max(2, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 2))') &&
-      mainSource.includes('? 1\n      : Math.max(2'),
+    'PC 网格化保持 2 个 Worker（避免发热降频）',
+    mainSource.includes('Math.max(1, Math.min(2, (navigator.hardwareConcurrency ?? 4) - 2))') &&
+      mainSource.includes('? 1\n      : Math.max(1'),
+  );
+  check(
+    'PC 鼠标视角按帧平滑消费，且单次增量有上限',
+    mainSource.includes('private pendingLookX = 0;') &&
+      mainSource.includes('private applyPendingLook(dt: number): void') &&
+      mainSource.includes('this.applyPendingLook(dt);') &&
+      mainSource.includes('const k = 1 - Math.exp(-Math.max(0, dt) * 30);') &&
+      mainSource.includes('this.pendingLookX += dx;'),
   );
 }
 

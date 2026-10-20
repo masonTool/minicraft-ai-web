@@ -1718,6 +1718,14 @@ class App {
 
   private yaw = 0;
   private pitch = -0.22;
+  /**
+   * PC 鼠标视角的"待消费"增量（弧度）。
+   *
+   * 鼠标事件频率远高于渲染帧：直接在 mousemove 里改 yaw/pitch，会让同一帧内
+   * 视角被多次跳变，高刷鼠标上尤其抖。这里先累积，主循环每帧按时间平滑消费。
+   */
+  private pendingLookX = 0;
+  private pendingLookY = 0;
   private readonly keys = new Set<string>();
   private locked = false;
   /** 在飞（**只在创造模式里**有意义；批次 181 起它与"模式"分开） */
@@ -1977,11 +1985,10 @@ class App {
     // 网格化放在独立 Worker 池里：地形生成的 Worker 忙于长任务，混在一起会互相拖慢。
     // 留 2 个核心给主线程（渲染 + 物理），最多用 2 个做网格化。
     // 手机核心又小又挤：再开两个网格化 Worker 会跟主线程抢同一颗大核，表现为一卡一卡
-    // PC（批次 539）：桌面 CPU 核心更多，网格化从最多 2 个提到最多 4 个，
-    // 让区块生成/重建更快摊开，减少跑图时的长帧卡顿；手机仍是 1 个，避免抢大核。
+    // PC 也按"稳帧优先"：网格化最多 2 个，避免 4 个 Worker 把 CPU 打满后发热降频。
     const meshWorkers = isTouchDevice()
       ? 1
-      : Math.max(2, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 2));
+      : Math.max(1, Math.min(2, (navigator.hardwareConcurrency ?? 4) - 2));
     this.meshPool = new MeshWorkerPool(meshWorkers);
     this.chunkRenderer = new ChunkRenderer(
       this.scene,
@@ -2201,7 +2208,7 @@ class App {
     //
     //  - 两档自适应一律打开：它们就是"我们替玩家做决定"的那套策略（掉帧时先收视距、
     //    再关装饰层、最后降分辨率）；老存档里关过它们的，进世界时重新接管。
-    //  - 视距回到这台设备的上限（手机 8 / 桌面 16），**并忽略存下来的旧值**：
+    //  - 视距回到这台设备的上限（手机 8 / 桌面 12），**并忽略存下来的旧值**：
     //    没有滑块之后，旧值只会是"以前在别的设备上拖过的数字"（手机上是 489 个区块的坑）。
     this.settings.adaptiveResolution = true;
     this.settings.adaptiveViewDistance = true;
@@ -4270,6 +4277,9 @@ class App {
             this.keys.clear();
             this.leftDown = false;
             this.rightDown = false;
+            // 指针锁丢失时丢掉未消费的视角增量，避免下次进入游戏"自己转一下"
+            this.pendingLookX = 0;
+            this.pendingLookY = 0;
           }
         },
         { signal: this.listeners.signal },
@@ -4282,9 +4292,19 @@ class App {
         'mousemove',
         (e) => {
           if (!this.locked) return;
-          // 灵敏度是设置项（0.5~2 倍）：鼠标、触摸、手柄三条路径都要乘上，不然调了没感觉
+          // 灵敏度是设置项：鼠标、触摸、手柄三条路径都要乘上，不然调了没感觉
           const gain = sensitivityGain(this.settings.sensitivity);
-          this.applyLook(e.movementX * MOUSE_SENSITIVITY * gain, e.movementY * MOUSE_SENSITIVITY * gain);
+          // 单次事件夹住，避免掉帧/系统补发造成的巨大 movementX 把视角甩飞
+          const dx = Math.max(
+            -0.35,
+            Math.min(0.35, e.movementX * MOUSE_SENSITIVITY * gain),
+          );
+          const dy = Math.max(
+            -0.35,
+            Math.min(0.35, e.movementY * MOUSE_SENSITIVITY * gain),
+          );
+          this.pendingLookX += dx;
+          this.pendingLookY += dy;
         },
         { signal: this.listeners.signal },
       );
@@ -4378,6 +4398,26 @@ class App {
     this.pitch -= this.settings.invertY ? -dyPixels : dyPixels;
     const limit = Math.PI / 2 - 0.001;
     this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
+  }
+
+  /**
+   * 每帧消费鼠标累积的视角增量（PC 平滑）。
+   *
+   * 用 `1 - e^(-dt*30)` 而不是固定比例：60Hz 与 144Hz 下"跟手时间"一致，
+   * 高刷屏不会因为帧多而变得过度迟滞。总旋转量不丢，只是分摊到几帧。
+   */
+  private applyPendingLook(dt: number): void {
+    if (this.pendingLookX === 0 && this.pendingLookY === 0) return;
+    // 30/s 的时间常数：约 33ms 内走完 63%，手感仍然跟手，但抹掉了单帧尖峰
+    const k = 1 - Math.exp(-Math.max(0, dt) * 30);
+    const dx = this.pendingLookX * k;
+    const dy = this.pendingLookY * k;
+    this.pendingLookX -= dx;
+    this.pendingLookY -= dy;
+    // 小于 0.0001 弧度（约 0.006°）的尾巴直接收掉，避免永远消费不完
+    if (Math.abs(this.pendingLookX) < 0.0001) this.pendingLookX = 0;
+    if (Math.abs(this.pendingLookY) < 0.0001) this.pendingLookY = 0;
+    this.applyLook(dx, dy);
   }
 
   private collectInput(): PlayerInput {
@@ -14861,6 +14901,9 @@ class App {
 
       this.tryResolveSpawn();
       this.settlePlayerOnGround();
+
+      // PC 鼠标视角：每帧平滑消费，避免高刷鼠标在一帧内多次跳视角
+      this.applyPendingLook(dt);
 
       // 触摸视角：在物理与射线之前应用，保证同一帧里"看到的"和"走到的"是一致的
       if (this.touch) {
