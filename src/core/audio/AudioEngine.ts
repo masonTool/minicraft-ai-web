@@ -1040,6 +1040,14 @@ const CRITICAL_BYPASS = 4;
 const REVERB_MIX = 0.1;
 
 export class AudioEngine {
+  /**
+   * WX-017：把 AudioContext 的创建方式注入进来。
+   *
+   * 默认仍是浏览器 `new AudioContext()`（Web 版行为不变）；
+   * 微信小游戏传 `() => wx.createWebAudioContext()` 即可复用整套合成音效。
+   */
+  constructor(private readonly createContext: () => AudioContext = () => new AudioContext()) {}
+
   private ctx: AudioContext | null = null;
   /** 主总线（所有声音都汇到这里 → 压缩器 → 扬声器） */
   private master: GainNode | null = null;
@@ -1103,7 +1111,7 @@ export class AudioEngine {
   resume(): void {
     if (!this.enabled) return;
     try {
-      this.ctx ??= new AudioContext();
+      this.ctx ??= this.createContext();
       this.ensureGraph(this.ctx);
       if (this.ctx.state === 'suspended') void this.ctx.resume();
     } catch {
