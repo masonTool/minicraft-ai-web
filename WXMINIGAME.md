@@ -180,6 +180,88 @@ Worker（改写）、xmldom（只有在需要时）。
 
 ---
 
+## 2.6 为什么不做“DOM/CSS 全模拟”
+
+> 结论：**这不是在适配器上再加一层，而是自己写一个迷你浏览器。**
+> 工作量比“重写 UI”更大，且视觉/交互保真度更差，不采用。
+
+### 2.6.1 仓库里的真实用量
+
+`index.html` 的样式（4,199 行）里：
+
+| 特性 | 行数 |
+| --- | --- |
+| `display: flex/grid/inline-flex` | 168 |
+| `position: absolute/fixed/sticky` | 86 |
+| `@keyframes` / `transition` / `animation` | 58 |
+| `box-shadow` / `gradient` / `clip-path` / `border-radius` / `image-rendering` | 203 |
+| `@media` / `var(--…)` / `calc()` / `env(safe-area…)` | 374 |
+| `:hover` / `:active` / `::before` / `::after` / `:not()` / `nth-child` | 77 |
+| `overflow` / `scroll` | 100 |
+| `text-overflow` / `white-space` / `font-family` / `letter-spacing` | 52 |
+
+`src` 里的 DOM 依赖：
+
+| API | 次数 |
+| --- | --- |
+| `createElement(...)` | 473（div 284、button 55、span 50、**canvas 31**、i/b 26、input 11、select/option 6…） |
+| `classList` | 331 |
+| `textContent` | 261 |
+| `addEventListener` | 200 |
+| `querySelector` | 30 |
+| `getBoundingClientRect` | 18 |
+| `clientWidth/Height`、`offsetWidth/Height` | 15 |
+| `scrollTop` / `scrollLeft` | 9 |
+| `innerHTML` | 10 |
+
+### 2.6.2 为什么这比“重写 UI”更贵
+
+1. **CSS 不是“样式表”，是布局约束**：168 处 flex/grid + 86 处绝对定位 +
+   19 个媒体查询 + 374 处变量/calc/safe-area，必须有级联、选择器匹配、
+   响应式断点和计算值，否则面板会错位。
+2. **31 个 `<canvas>` 子元素**：物品图标是“每格一个 canvas 再 drawImage”。
+   DOM 模拟层必须知道每个 canvas 的布局位置、裁剪、z 序、重绘时机；
+   这不是 appendChild 能解决的。
+3. **交互不是 click**：拖拽物品、长按 Tooltip、滚轮/滑动列表、输入法、
+   `pointer` 捕获、`elementFromPoint`，都要重新实现命中测试与事件分发。
+4. **调试成本**：一旦视觉不对，很难判断是 CSS 解析、布局、绘制还是 canvas 合成；
+   这类问题会以“某个界面在某个分辨率下差 2px”的形式长期存在。
+5. **适配器只完成了 10%**：它给了 `Element/Node/EventTarget` 树和
+   `Canvas/Image/Audio`，但 `CSSStyleDeclaration` 只处理 `margin`，
+   `getElementById` 返回 faker，没有 layout/paint/scroll/input。
+
+### 2.6.3 工作量估算（只做“够用子集”）
+
+| 模块 | 人日 |
+| --- | --- |
+| DOM 树 + API（createElement/appendChild/classList/style/textContent/querySelector/getBoundingClientRect） | 5~8 |
+| CSS 解析 + 级联 + 变量 + 媒体查询 | 10~15 |
+| 布局（flex / grid / absolute / fixed） | 15~25 |
+| 绘制（边框/圆角/渐变/阴影/伪元素/文本换行/图片） | 10~15 |
+| 事件/命中测试/滚动/输入法 | 10~15 |
+| 31 个子 canvas 合成 + 拖拽层 | 5~8 |
+| 把 4,200 行 CSS + 34 个界面调到可用 | 20~30 |
+| **合计（子集）** | **75~110 人日（3.5~5 个月）** |
+
+- 完整 DOM/CSS 引擎：**6~12 个月**，而且没法保证和浏览器一致。
+- 自研 canvas UI 工具包 + 界面重写：**40~60 人日（8~12 周）**，
+  可控、跨平台（微信/抖音），是我们选的路。
+
+### 2.6.4 如果一定要保留“DOM 写法”
+
+可以做一个**API 像 DOM、但不解析 CSS** 的 canvas UI 工具包：
+`createElement/appendChild/classList/style/textContent` 都有，样式只接受
+一个**明确的样式对象**（不是 CSS 字符串），布局只支持我们真正用到的
+flex/absolute/grid 子集。
+
+- 工具包本身约 **3~4 周**；
+- 仍然要把 4,200 行 CSS 手工翻译成样式对象/主题表；
+- 好处是界面代码的“形状”不用大改，坏处是 CSS 不能直接复用。
+
+这条可以作为 WX-021 的备选实现方式，但**不要**去做 CSS 解析器。
+
+---
+
 ## 3. 里程碑
 
 | 里程碑 | 目标 | 出口条件 |
@@ -244,6 +326,9 @@ Worker（改写）、xmldom（只有在需要时）。
 | WX-027 | 触摸控件 | 摇杆/跳跃/飞行/潜行/攻击/放置/快捷栏 | WX-013, WX-026 | 3 | [ ] |
 | WX-028 | 背包 + 2×2 合成 + 创造栏 | 拿起/放下/合并/交换/快速移动/丢弃 | WX-023 | 3 | [ ] |
 | WX-029 | 工作台 + 配方书 | 3×3 合成、可做列表、点配方填格 | WX-028 | 3 | [ ] |
+
+> UI 方案见 §2.6：**不做 DOM/CSS 全模拟**；WX-021 用自研 canvas 工具包，
+> WX-021B 只验证 `Layout` 插件是否值得用于菜单/设置。
 
 ### M3 · 内容对齐
 
@@ -337,8 +422,14 @@ npm run build:minigame         # 生成 minigame/game.js（WX-001 自写 shim）
 npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 适配器版）
 ```
 
-- 微信开发者工具：导入 `minigame/`（项目类型选**小游戏**；真机预览要把
-  `project.config.json` 的 `appid` 换成自己的 AppID）。
+- 微信开发者工具导入哪个目录：
+  - **WX-001 自写 shim**：`minigame/`（红色标记方块）
+  - **WX-006 适配器版**：`minigame-adapter-spike/`（绿色标记方块）
+  - 项目类型选**小游戏**（不是小程序）；真机预览要把各自 `project.config.json` 的
+    `appid` 换成自己的小游戏 AppID。
+- 屏上已有 HUD（顶部四行）：版本（SHIM/ADAPTER）、分辨率/dpr、`GL_VERSION`、
+  `GL_RENDERER`、`FPS/TRI/CALLS`；不需要连控制台也能读基线数据。
+  黑屏/启动失败会弹 `wx.showModal`，把弹窗文字发回来即可。
 - 本 worktree 已放 `.codebuddy/auto-continue.off`：**不要删**。
   主线的自动继续钩子指向主工作区的脚本，不关掉会按主线队列在这个 worktree 里乱跑。
 
@@ -349,9 +440,11 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 | 日期 | 任务 | 结论 / 改动 | 提交 |
 | --- | --- | --- | --- |
 | 2026-10-20 | WX-000 | 建立 `wxminigame` worktree/分支；新增本任务表；`AGENTS.md` 加分支提示；关闭本 worktree 的 auto-continue | `5cfc584` |
-| 2026-10-20 | WX-001 | 最小工程已构建：`minigame/game.js` 1170KB（gzip 207KB）；three r186 + InstancedMesh + CanvasTexture + 触摸；**待真机导入验证** | `f7eaeba` |
-| 2026-10-20 | 适配器评估 | 结论：`minigame-adapter` 可复用于平台层，**不能**跑现有 DOM/CSS UI；新增 §2.5 与 WX-006/007 | 本次提交 |
-| 2026-10-20 | WX-006 | 适配器版 `game.js` 已构建：1299KB（gzip 234KB）；动态 require 用 esbuild 插件替换；**待真机与 WX-001 对比** | 本次提交 |
+| 2026-10-20 | WX-001 | 最小工程已构建：`minigame/game.js` 1172KB（gzip 208KB）；three r186 + InstancedMesh + CanvasTexture + 触摸；**待真机导入验证** | `f7eaeba` |
+| 2026-10-20 | 适配器评估 | 结论：`minigame-adapter` 可复用于平台层，**不能**跑现有 DOM/CSS UI；新增 §2.5 与 WX-006/007 | `3878a65` |
+| 2026-10-20 | WX-006 | 适配器版 `game.js` 已构建：1301KB（gzip 235KB）；动态 require 用 esbuild 插件替换；**待真机与 WX-001 对比** | `3878a65` |
+| 2026-10-20 | WX-002 预置 | 两份 spike 加屏上 HUD（版本/GL/FPS/TRI/分辨率）；红/绿方块区分 SHIM/ADAPTER | `d8b3337` |
+| 2026-10-20 | WX-021 决策 | DOM/CSS 全模拟实测需 75~110 人日（子集），决定不做；UI 走 canvas 工具包，详见 §2.6 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
