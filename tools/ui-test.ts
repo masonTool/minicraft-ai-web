@@ -45,11 +45,14 @@ import {
 } from '../src/ui/TouchControls.ts';
 import {
   DEFAULT_SETTINGS,
+  SENSITIVITY_MAX,
+  SENSITIVITY_MIN,
   SETTING_GROUP_LABELS,
   SETTING_GROUPS,
   TOUCH_SCALE_MAX,
   TOUCH_SCALE_MIN,
   loadSettings,
+  sensitivityGain,
 } from '../src/ui/SettingsScreen.ts';
 import { CREATIVE_TAB_ICONS, CREATIVE_TABS, creativeTabFor, missingTabIcons } from '../src/ui/CreativeTabs.ts';
 import { armAutoFullscreen, isFullscreen } from '../src/ui/Fullscreen.ts';
@@ -1899,7 +1902,12 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       indexSource.includes('#touch-stick.sneaking .sneak-badge') &&
       indexSource.includes('#touch-stick.dynamic.sneaking { opacity: 1; }'),
   );
-  check('灵敏度默认 4、范围 0~8（4 是正中间）', DEFAULT_SETTINGS.sensitivity === 4);
+  // 批次 522：滑杆 1~8，默认 4 —— 但 4 档的实际倍率是 4×（上一版最快档）
+  check(
+    '灵敏度默认 4、范围 1~8（4 档 = 4×）',
+    DEFAULT_SETTINGS.sensitivity === 4 && SENSITIVITY_MIN === 1 && SENSITIVITY_MAX === 8 &&
+      Math.abs(sensitivityGain(DEFAULT_SETTINGS.sensitivity) - 4) < 1e-9,
+  );
   check(
     '瞄准方式 / 左右手都能在设置里切换',
     mainSource.includes('this.settings.aimMode') &&

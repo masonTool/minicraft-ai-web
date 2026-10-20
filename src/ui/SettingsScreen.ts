@@ -101,33 +101,67 @@ export const TOUCH_SCALE_MIN = 0.8;
 export const TOUCH_SCALE_MAX = 1.4;
 
 /**
- * 灵敏度档位（批次 271，用户要求；批次 521 把下限从 0 抬到 1）：**1~8，4 是正中间**（= 1×）。
+ * 灵敏度档位（批次 271 引入；**批次 522 重新定标**）：**1~8，4 档 = 上一版的最快档（4×）**。
  *
- * 以前存的是 0.5~4 的倍率（默认 1），滑块两头手感不对称：往左只能减半，
- * 往右能翻四倍。改成档位后两边对称：每两档翻一倍，1=0.35×、4=1×、8=4×。
+ * 用户的原话："显示成 4，但实际应该是当前的最高档；范围 1~8，变化后体感要平滑。"
+ *
+ *  - **4 档 = 4×**：上一版 0~8 里 8 档的倍率就是 4×，也就是他一直用的"最快档"。
+ *    重新编号后它落在滑杆正中间，1~3 可以更慢（做精细建筑），5~8 是真的加速余量。
+ *  - **每档 ×1.25（等比）**：灵敏度是"手移多少 → 视角转多少"的比例，人对它的感知是
+ *    **对数**的。等比步进 = 每拨一档的体感差不多；等差会变成"低档几乎没区别、
+ *    高档一格跳飞"。1.25 也比上一版的 ×1.41 更细腻。
+ *  - 结果：整条滑杆 2.05× ~ 9.77×，8 档约等于"最快档再快 2.4 倍"。
+ *
+ * ⚠️ 这个刻度的代价：滑杆**最慢也是 2.05×**（上一版还能到 0.25×）。因为锚点被钉在
+ * "最快档"，这是算术上的必然；要放宽只能调小 `SENSITIVITY_STEP_RATIO`（见它的注释）。
+ *
  * `sensitivityGain()` 是唯一的换算出处，鼠标/触摸/手柄三条路径都读它。
- *
- * ⚠️ 下限为什么不是 0：档位 0 那档（0.25×）在实际游玩里没人会用，滑杆左端却因此
- * 多停一格；用户的原话是"范围拓展为 1 到 8"，默认仍是 4。
  */
 export const SENSITIVITY_MIN = 1;
 export const SENSITIVITY_MAX = 8;
 export const SENSITIVITY_DEFAULT = 4;
 
-/** 档位 → 视角倍率（4 → 1×；每 2 档翻一倍） */
+/** 4 档（滑杆默认位置）对应的实际倍率 = 上一版的最快档 */
+export const SENSITIVITY_GAIN_AT_DEFAULT = 4;
+
+/**
+ * 相邻两档的倍率比（等比步进）。
+ *
+ * 调小 → 每档更细腻、但整条滑杆的范围更窄（8 档不够快）；
+ * 调大 → 范围更宽、但每档的跳动更明显。1.25 是"8 档能到 9.8×、每档 +25%"的折中。
+ */
+export const SENSITIVITY_STEP_RATIO = 1.25;
+
+/** 档位 → 视角倍率（4 → 4×；每档 ×1.25） */
 export function sensitivityGain(level: number): number {
   const clamped = Math.min(
     SENSITIVITY_MAX,
     Math.max(SENSITIVITY_MIN, Number.isFinite(level) ? level : SENSITIVITY_DEFAULT),
   );
-  return 2 ** ((clamped - SENSITIVITY_DEFAULT) / 2);
+  return SENSITIVITY_GAIN_AT_DEFAULT * SENSITIVITY_STEP_RATIO ** (clamped - SENSITIVITY_DEFAULT);
 }
 
-/** 旧存档里的倍率 → 新档位（0.5→2、1→4、2→6、4→8），用于设置迁移 */
+/**
+ * 任意倍率 → **最接近**的一档（用于设置迁移）。
+ * 低于滑杆下限的倍率（例如老存档的 0.5×）一律落到 1 档 —— 新刻度表达不了更慢的。
+ */
 export function sensitivityLevelFromGain(gain: number): number {
-  const clamped = Math.min(4, Math.max(0.5, Number.isFinite(gain) ? gain : 1));
-  const level = Math.round(SENSITIVITY_DEFAULT + 2 * Math.log2(clamped));
+  const value = Number.isFinite(gain) && gain > 0 ? gain : SENSITIVITY_GAIN_AT_DEFAULT;
+  const level = Math.round(
+    SENSITIVITY_DEFAULT + Math.log(value / SENSITIVITY_GAIN_AT_DEFAULT) / Math.log(SENSITIVITY_STEP_RATIO),
+  );
   return Math.min(SENSITIVITY_MAX, Math.max(SENSITIVITY_MIN, level));
+}
+
+/**
+ * **版本 2 的档位** → 当时的实际倍率（旧刻度：0~8 档、4 = 1×、每 2 档翻一倍）。
+ *
+ * 版本 3 换了锚点，迁移必须先把旧档位换成"实际倍率"再按新刻度找回最近的一档：
+ * 直接把数字搬过来会让老存档的"档位 4"（1×）变成 4×，手感一夜之间翻四倍。
+ */
+export function legacySensitivityGain(level: number): number {
+  const clamped = Math.min(8, Math.max(0, Number.isFinite(level) ? level : 4));
+  return 2 ** ((clamped - 4) / 2);
 }
 
 /**
@@ -147,7 +181,8 @@ export const TOUCH_AIM_MODE_LABELS: Record<TouchAimMode, string> = {
  *
  *  - 版本 1 = 灵敏度存的是 0.5~4 的倍率；
  *  - 版本 2 = 灵敏度存 0~8 的档位（批次 521 起下限是 1）；
- *  - 版本 3 = 视野默认 72° → **60°**、摇杆默认 固定 → **跟随手指**。
+ *  - 版本 3 = 视野默认 72° → **60°**、摇杆默认 固定 → **跟随手指**、
+ *    **灵敏度重新定标**（1~8，4 档 = 上一版最快档 4×），字段含义随之改变。
  *
  * **必须显式存版本**：老默认值 1 在新口径里是"档位 1"，直接 clamp 会把
  * 所有老玩家的灵敏度从 1× 悄悄降到 0.7×。
@@ -271,7 +306,7 @@ export interface GameSettings {
   volumeAmbient: number;
   /** 背景音乐（批次 233）：默认 0.6——音乐是背景，不该和"我挨打了"一样响 */
   volumeMusic: number;
-  /** 视角灵敏度档位：0~8，4 = 1×（见 `sensitivityGain`） */
+  /** 视角灵敏度档位：1~8，4 = 4×（上一版的最快档，见 `sensitivityGain`） */
   sensitivity: number;
   /** 触摸端瞄准方式（批次 271）：手指落点 / 屏幕中心 */
   aimMode: TouchAimMode;
@@ -453,15 +488,19 @@ export function loadSettings(): GameSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<GameSettings>;
-    // 版本 1 的灵敏度是 0.5~4 的倍率（默认 1）；版本 2 起是档位（默认 4）。
-    // ⚠️ 判据写死 `>= 2` 而不是 `>= SETTINGS_VERSION`：版本 3 只改了别的字段，
-    // 灵敏度的存法没变，拿 `>= SETTINGS_VERSION` 会把 v2 存档的"档位 4"当成倍率 4
-    // 再走一遍迁移 → 变成档位 8（灵敏度翻四倍）。
+    // 三个世代的灵敏度存储口径，**必须按版本分别换算**：
+    //  · v1 = 0.5~4 的倍率；
+    //  · v2 = 0~8 档（4 = 1×、每 2 档翻倍）—— 与 v3 的**档位含义不同**，
+    //    要先还原成实际倍率再按新刻度找回最近的一档；
+    //  · v3 = 1~8 档（4 = 4×、每档 ×1.25），可以直接用。
+    // ⚠️ 直接把 v2 的数字搬过来，会让老存档的"档位 4"（当时是 1×）变成 4×。
     const storedVersion = typeof parsed.settingsVersion === 'number' ? parsed.settingsVersion : 1;
     const sensitivity =
-      storedVersion >= 2
+      storedVersion >= 3
         ? Math.round(clampNumber(parsed.sensitivity, SENSITIVITY_MIN, SENSITIVITY_MAX, SENSITIVITY_DEFAULT))
-        : sensitivityLevelFromGain(clampNumber(parsed.sensitivity, 0.5, 4, 1));
+        : storedVersion === 2
+          ? sensitivityLevelFromGain(legacySensitivityGain(clampNumber(parsed.sensitivity, 0, 8, 4)))
+          : sensitivityLevelFromGain(clampNumber(parsed.sensitivity, 0.5, 4, 1));
     // 版本 3 的默认值迁移（批次 521）：**只改还停在旧默认值上的项**。
     // 72° 与"固定摇杆"是 v2 的出厂值；玩家真调过就按他调的那个留着。
     const legacy = storedVersion < 3;
@@ -1069,7 +1108,7 @@ export class SettingsScreen {
     controlSliders.append(
       this.makeSlider('touchScale', t('settings.row.touchScale'), '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100),
     );
-    // 灵敏度（批次 271）：0~8 档，4 是正中间（= 1×），读数的 ×值已经说明了含义
+    // 灵敏度（批次 522）：1~8 档，4 = 4×（上一版最快档）；读数里的 ×值就是实际倍率
     controlSliders.append(
       this.makeSlider(
         'sensitivity',

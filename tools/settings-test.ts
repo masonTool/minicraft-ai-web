@@ -33,6 +33,7 @@ import {
   nextCycleValue,
   saveSettings,
   sensitivityGain,
+  legacySensitivityGain,
   sensitivityLevelFromGain,
   type GameSettings,
 } from '../src/ui/SettingsScreen.ts';
@@ -98,10 +99,15 @@ console.log('\n[默认设置]');
   check('默认视距/视野在合理范围', DEFAULT_SETTINGS.viewDistance >= 4 && DEFAULT_SETTINGS.viewDistance <= 16 && DEFAULT_SETTINGS.fov >= 45 && DEFAULT_SETTINGS.fov <= 90);
   // 批次 521：视野默认 60°（基岩版同款），范围 45~90
   check('视野默认 60°', DEFAULT_SETTINGS.fov === 60 && fallback.fov === 60, String(DEFAULT_SETTINGS.fov));
-  // 批次 271：灵敏度改成档位，默认正中间 4；批次 521 下限抬到 1
+  // 批次 522：灵敏度重新定标 —— 默认显示 4，但实际倍率 = 上一版的最快档（4×）
   check(
-    '灵敏度默认 4（正中间，= 1×），范围 1~8',
-    DEFAULT_SETTINGS.sensitivity === 4 && SENSITIVITY_DEFAULT === 4 && SENSITIVITY_MIN === 1 && SENSITIVITY_MAX === 8,
+    '灵敏度默认 4 = 上一版最快档（4×），范围 1~8',
+    DEFAULT_SETTINGS.sensitivity === 4 &&
+      SENSITIVITY_DEFAULT === 4 &&
+      SENSITIVITY_MIN === 1 &&
+      SENSITIVITY_MAX === 8 &&
+      Math.abs(sensitivityGain(DEFAULT_SETTINGS.sensitivity) - 4) < 1e-9,
+    String(sensitivityGain(DEFAULT_SETTINGS.sensitivity)),
   );
   check('默认瞄准方式是手指落点', DEFAULT_SETTINGS.aimMode === 'finger');
   check('默认右手模式（摇杆在左）', DEFAULT_SETTINGS.handedness === 'right');
@@ -141,10 +147,14 @@ console.log('\n[设置的容错]');
   check('视野被夹回下限', messy.fov === 45, String(messy.fov));
   check('音量被夹回 1', messy.volume === 1, String(messy.volume));
   check('灵敏度档位被夹回 1', messy.sensitivity === 1, String(messy.sensitivity));
+  // v2 存的是**旧刻度**的档位（4 = 1×、8 = 4×）：迁移要先换算成实际倍率，
+  // 再按新刻度找回最近的一档 —— 直接搬数字会让老存档的手感整体变快
   storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, sensitivity: 9 }));
-  check('灵敏度上限是 8（批次 271）', loadSettings().sensitivity === 8, String(loadSettings().sensitivity));
+  check('v2 档位 9 → 夹到 8（旧口径 4×）→ 新刻度 4 档', loadSettings().sensitivity === 4, String(loadSettings().sensitivity));
   storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, sensitivity: 6.7 }));
-  check('档位取整（6.7 → 7）', loadSettings().sensitivity === 7, String(loadSettings().sensitivity));
+  check('v2 档位 6.7（2.55×）→ 新刻度 2 档', loadSettings().sensitivity === 2, String(loadSettings().sensitivity));
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 3, sensitivity: 4 }));
+  check('v3 的 4 档原样保留（= 4×，不再换算）', loadSettings().sensitivity === 4, String(loadSettings().sensitivity));
 
   // 批次 521：v2 → v3 的**默认值迁移**——只改"还停在旧默认值"的那两项，
   // 玩家自己调过的值必须留着（迁移默认值 ≠ 覆盖玩家的选择）
@@ -157,13 +167,15 @@ console.log('\n[设置的容错]');
   storage.setItem(KEY, JSON.stringify({ settingsVersion: 3, fov: 72 }));
   check('v3 存档里的 72 原样保留（不再迁移）', loadSettings().fov === 72, String(loadSettings().fov));
 
-  // 批次 271：老存档的"倍率"要迁成新档位（1× → 4，不是档位 1）
+  // v1 存的是**倍率本身**：按"实际倍率不变"迁到新刻度；
+  // 低于新下限（2.05×）的一律落到 1 档 —— 新刻度表达不了更慢的，这是锚点选在
+  // "上一版最快档"的算术后果，不做假动作（不要偷偷把 0.5× 抬成 2× 还假装没变）
   storage.setItem(KEY, JSON.stringify({ sensitivity: 1 }));
-  check('老存档 1× → 档位 4', loadSettings().sensitivity === 4, String(loadSettings().sensitivity));
+  check('老存档 1× → 新刻度 1 档（下限）', loadSettings().sensitivity === 1, String(loadSettings().sensitivity));
   storage.setItem(KEY, JSON.stringify({ sensitivity: 0.5 }));
-  check('老存档 0.5× → 档位 2', loadSettings().sensitivity === 2, String(loadSettings().sensitivity));
+  check('老存档 0.5× → 也是 1 档', loadSettings().sensitivity === 1, String(loadSettings().sensitivity));
   storage.setItem(KEY, JSON.stringify({ sensitivity: 4 }));
-  check('老存档 4× → 档位 8', loadSettings().sensitivity === 8, String(loadSettings().sensitivity));
+  check('老存档 4× → 新刻度 4 档（位置不变）', loadSettings().sensitivity === 4, String(loadSettings().sensitivity));
   check('非法视角模式回退第一人称', messy.cameraMode === 'first');
   check('非法粒子档位回退"全部"', messy.particles === 'all');
   check('clouds 不是 false 就当开（缺省友好）', messy.clouds === true);
@@ -211,19 +223,23 @@ console.log('\n[保存与读取]');
 
 console.log('\n[灵敏度档位 / 瞄准方式 / 左右手（批次 271）]');
 {
-  check('4 档 = 1×（正中间不改变既有手感）', Math.abs(sensitivityGain(4) - 1) < 1e-9);
-  // 批次 521：下限从 0 抬到 1（用户："范围拓展为 1 到 8"），1 档 = 2^(-3/2) ≈ 0.354
-  check('1 档 ≈ 0.35×（新的下限）', Math.abs(sensitivityGain(1) - 2 ** -1.5) < 1e-9, String(sensitivityGain(1)));
-  check('0 档（越界）被夹到 1 档', Math.abs(sensitivityGain(0) - sensitivityGain(1)) < 1e-12);
-  check('8 档 = 4×（与老滑块的上限一致）', Math.abs(sensitivityGain(8) - 4) < 1e-9, String(sensitivityGain(8)));
-  check('每两档翻一倍', Math.abs(sensitivityGain(6) - 2) < 1e-9 && Math.abs(sensitivityGain(2) - 0.5) < 1e-9);
-  check('越界档位被夹住', sensitivityGain(-3) === sensitivityGain(0) && sensitivityGain(99) === sensitivityGain(8));
+  // 批次 522：4 档 = 上一版的最快档（4×），每档等比 ×1.25
+  check('4 档 = 4×（上一版最快档，用户要求）', Math.abs(sensitivityGain(4) - 4) < 1e-9, String(sensitivityGain(4)));
+  check('每档等比 ×1.25（体感均匀）', Math.abs(sensitivityGain(5) / sensitivityGain(4) - 1.25) < 1e-9);
+  check('1 档 ≈ 2.05×（新的下限）', Math.abs(sensitivityGain(1) - 4 / 1.25 ** 3) < 1e-9, String(sensitivityGain(1)));
+  check('8 档 ≈ 9.77×（真正的加速余量）', Math.abs(sensitivityGain(8) - 4 * 1.25 ** 4) < 1e-9, String(sensitivityGain(8)));
+  check(
+    '整条滑杆严格递增（拨一格只会更快，不会跳档）',
+    [1, 2, 3, 4, 5, 6, 7].every((level) => sensitivityGain(level + 1) > sensitivityGain(level)),
+  );
+  check('越界档位被夹住', sensitivityGain(-3) === sensitivityGain(1) && sensitivityGain(99) === sensitivityGain(8));
 
-  // 迁移用：老倍率 → 最近的档位（0.5→2、1→4、2→6、4→8）
-  check('老倍率 0.5 → 档位 2', sensitivityLevelFromGain(0.5) === 2);
-  check('老倍率 1 → 档位 4', sensitivityLevelFromGain(1) === 4);
-  check('老倍率 2 → 档位 6', sensitivityLevelFromGain(2) === 6);
-  check('老倍率 4 → 档位 8', sensitivityLevelFromGain(4) === 8);
+  // 迁移：先用**旧口径**把档位还原成实际倍率，再找最近的新档位
+  check('旧档位 8（4×）→ 新档位 4（手感不变）', sensitivityLevelFromGain(legacySensitivityGain(8)) === 4);
+  check('旧档位 7（2.83×）→ 新档位 2（2.56×）', sensitivityLevelFromGain(legacySensitivityGain(7)) === 2);
+  check('旧档位 4（1×）→ 落到新下限 1 档', sensitivityLevelFromGain(legacySensitivityGain(4)) === 1);
+  check('老倍率 4× → 新档位 4', sensitivityLevelFromGain(4) === 4);
+  check('老倍率 0.5× → 落到新下限 1 档', sensitivityLevelFromGain(0.5) === 1);
 
   check('瞄准方式只有两档，且都有中文标签', TOUCH_AIM_MODES.join(',') === 'finger,center' && TOUCH_AIM_MODES.every((mode) => TOUCH_AIM_MODE_LABELS[mode].length > 0));
   check('左右手只有两档，且都有中文标签', HANDEDNESS_MODES.join(',') === 'right,left' && HANDEDNESS_MODES.every((mode) => HANDEDNESS_LABELS[mode].length > 0));
