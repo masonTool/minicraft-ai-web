@@ -268,6 +268,9 @@ const BASE_SPECS: readonly BlockSpec[] = [
   // 吸饱了变成湿海绵；湿海绵在熔炉里烤干才会变回来（原版就是这么一条闭环）
   { id: 694, name: 'minecraft:sponge', tiles: ['sponge', 'sponge', 'sponge'] },
   { id: 695, name: 'minecraft:wet_sponge', tiles: ['wet_sponge', 'wet_sponge', 'wet_sponge'] },
+  // 蜂蜜块（批次 450）：站在上面**跳不起来**、贴着侧面下滑被限速、摔上去只受 20% 伤害。
+  // 原版还有"被活塞推动时粘走相邻方块"——本项目没有"活塞推方块实体"那条路，记在差异里
+  { id: 696, name: 'minecraft:honey_block', tiles: ['honey_block', 'honey_block', 'honey_block'] },
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -2147,6 +2150,8 @@ export const SHULKER_BOX_ID = 482;
 /** 海绵 / 湿海绵（批次 449，接在六种压力板 693 之后） */
 export const SPONGE_ID = 694;
 export const WET_SPONGE_ID = 695;
+/** 蜂蜜块（批次 450，接在海绵之后） */
+export const HONEY_BLOCK_ID = 696;
 
 const SHULKER_BOX_SPECS: readonly BlockSpec[] = [
   {
@@ -3859,6 +3864,8 @@ export const Block = {
   // ---- 海绵 / 湿海绵（批次 449）：只有干海绵会吸水，见 `world/Sponge.ts`
   SPONGE: SPONGE_ID,
   WET_SPONGE: WET_SPONGE_ID,
+  // ---- 蜂蜜块（批次 450）：粘住实体（跳跃取消 / 贴面下滑限速 / 摔落减伤）
+  HONEY_BLOCK: HONEY_BLOCK_ID,
   // ---- 瓜藤（批次 77，见 `STEM_SPECS`）：8 阶段 + 结果的茎
   PUMPKIN_STEM_STAGE0: PUMPKIN_STEM_ID_START,
   MELON_STEM_STAGE0: MELON_STEM_ID_START,
@@ -4418,6 +4425,8 @@ HARDNESS.set(Block.SHULKER_BOX, 2);
 // 海绵 / 湿海绵（批次 449）：原版 0.6，徒手就能拆（锄更快，但不强制）
 HARDNESS.set(Block.SPONGE, 0.6);
 HARDNESS.set(Block.WET_SPONGE, 0.6);
+// 蜂蜜块（批次 450）：原版硬度 0（徒手一拍就掉，但挖起来黏糊糊的慢）
+HARDNESS.set(Block.HONEY_BLOCK, 0);
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);
 // 瓜藤（批次 77）：与作物一样一碰就掉（茎与结果的茎都是）
@@ -4846,6 +4855,11 @@ export function stripResult(id: number): number | undefined {
 
 export function isCobwebBlock(id: number): boolean {
   return id === Block.COBWEB;
+}
+
+/** 这一块是不是蜂蜜块（批次 450）：物理层的"跳不起来 / 下滑限速"与摔落减伤共用 */
+export function isHoneyBlock(id: number): boolean {
+  return id === Block.HONEY_BLOCK;
 }
 
 export function isClimbableBlock(id: number): boolean {

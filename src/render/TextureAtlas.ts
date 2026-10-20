@@ -5727,6 +5727,20 @@ PAINTERS.sponge = spongePainter([196, 190, 92], 0.68);
 PAINTERS.wet_sponge = spongePainter([116, 146, 132], 0.64);
 
 /**
+ * 蜂蜜块（批次 450）：琥珀色底 + 4 像素一格的蜂巢网格。
+ *
+ * 原版顶面是六边形蜂巢、侧面是竖着的蜂蜜流痕；六边形在这个分辨率下画不出细节，
+ * 用"网格暗线 + 通透的高光点"表达"这是一块黏糊糊的蜂蜜"就够了。
+ */
+PAINTERS.honey_block = (x, y, rng) => {
+  const HONEY: readonly [number, number, number] = [232, 160, 48];
+  const seam = x % 4 === 0 || y % 4 === 0;
+  const glint = !seam && hashString(`honey${x},${y}`) % 11 === 0;
+  const scale = (seam ? 0.76 : 1) * (glint ? 1.18 : 1 + rng() * 0.08 - 0.04);
+  return [clamp255(HONEY[0] * scale), clamp255(HONEY[1] * scale), clamp255(HONEY[2] * scale), 255];
+};
+
+/**
  * 树苗（批次 75）：一小截茎 + 一坨叶色——**同一套画法、六种叶色**。
  *
  * 与花/草共用"十字面片"的渲染路径，所以只要一张图看得出"这是棵小树"就够：

@@ -53,6 +53,13 @@ const CLIMB_ACCEL = 30;
 const MAX_STEP = 0.4;
 /** 蛛网里的水平速度系数（批次 441） */
 export const COBWEB_SPEED_FACTOR = 0.25;
+/**
+ * 贴着蜂蜜块下滑时的速度上限（批次 450）。
+ *
+ * 原版约 1 格/秒（0.05 格/tick ≈ 1 格/秒），这里取 1.2：比自由下落的 -4 慢得多，
+ * 又不会慢到"卡在墙上不掉"（那种手感更像 bug）。
+ */
+export const HONEY_SLIDE_SPEED = 1.2;
 /** 爬行的前瞻距离（格）：比半个身位略远一点，走到洞口前一两帧就开始爬 */
 const CRAWL_PROBE = 0.45;
 
@@ -78,6 +85,14 @@ export interface PhysicsWorld extends CollisionWorld {
    * 可选——不给就是不减速（假世界不必都实现它）。
    */
   isCobweb?(x: number, y: number, z: number): boolean;
+  /**
+   * 这一格是不是蜂蜜块（批次 450）。
+   *
+   * 三个行为都挂在这一个判据上：站在上面**跳不起来**、贴着侧面下滑被限速、
+   * 摔在它上面只受 20% 伤害（最后一条在 `PlayerStats.honeyFallDistance`，
+   * 因为它属于"结算伤害"而不是"移动"）。
+   */
+  isHoney?(x: number, y: number, z: number): boolean;
   /**
    * 这一格是不是"贴上去会掉血"的方块（目前只有仙人掌，批次 222）。
    *
@@ -268,6 +283,24 @@ export class PlayerPhysics {
       !flying && world.isCobweb?.(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)) === true;
     const speed = baseSpeed * speedMultiplier * (inCobweb ? COBWEB_SPEED_FACTOR : 1);
 
+    /**
+     * 蜂蜜块（批次 450）：脚下是它 → **跳不起来**；贴着它的侧面 → 下滑被限速。
+     *
+     * 只探"脚底一格 + 四个水平邻格"：蜜块是整格方块，玩家不可能站进它里面，
+     * 所以"贴着"必然是这五个位置之一，不需要整盒重叠测试（那个更贵、还会在
+     * 半格台阶上给出假阳性）。
+     */
+    const honeyFeetY = Math.floor(this.y + 0.1);
+    const onHoney =
+      !flying &&
+      world.isHoney?.(Math.floor(this.x), Math.floor(this.y - 0.05), Math.floor(this.z)) === true;
+    const besideHoney =
+      !flying &&
+      (world.isHoney?.(Math.floor(this.x + 0.45), honeyFeetY, Math.floor(this.z)) === true ||
+        world.isHoney?.(Math.floor(this.x - 0.45), honeyFeetY, Math.floor(this.z)) === true ||
+        world.isHoney?.(Math.floor(this.x), honeyFeetY, Math.floor(this.z + 0.45)) === true ||
+        world.isHoney?.(Math.floor(this.x), honeyFeetY, Math.floor(this.z - 0.45)) === true);
+
     const accelerate = flying ? 90 : this.onGround ? 48 : 10;
     /**
      * 水流推动（F9 尾巴，批次 447）。
@@ -312,14 +345,16 @@ export class PlayerPhysics {
       // 自动跳跃（设置项，批次 206）：走路顶到一格高的台阶时自己起跳。
       // 与"上台阶"（0.6 格）互补：0.6 以内的雪层/台阶仍由 `tryStepUp` 悄悄走上去，
       // 这里只负责整格高的那一档；两格高的墙不会触发（跳上去也站不住）。
-      if (autoJump && this.onGround && input.jump === false && dirLength > 1e-6) {
+      if (autoJump && this.onGround && input.jump === false && dirLength > 1e-6 && !onHoney) {
         if (this.canAutoJump(world, dirX, dirZ)) {
           this.vy = JUMP_VELOCITY * jumpMultiplier;
           this.onGround = false;
           this.autoJumped = true;
         }
       }
-      if (input.jump && this.onGround) {
+      // ⚠️ 蜜块上**跳不起来**（批次 450，原版行为）：不是"跳得矮"，是整个跳跃被取消。
+      // 这一条与下面的下滑限速合起来才是"黏住"的手感——只做限速的话，玩家还能原地连跳。
+      if (input.jump && this.onGround && !onHoney) {
         this.vy = JUMP_VELOCITY * jumpMultiplier;
         // 冲刺跳（F3 尾巴）：起跳那一帧沿**输入方向**再补一点水平速度。
         // 用输入方向而不是当前速度方向：贴着墙起跳时速度可能已经被撞没了，
@@ -332,6 +367,9 @@ export class PlayerPhysics {
       }
       this.vy -= GRAVITY * dt;
       if (this.vy < -TERMINAL_VELOCITY) this.vy = -TERMINAL_VELOCITY;
+      // 蜂蜜块（批次 450）：贴着侧面下滑被限速——所以"从蜜块墙上淌下来"不会摔伤；
+      // 但**落在**蜜块上仍然要减伤，那一半在 `PlayerStats.honeyFallDistance`
+      if ((onHoney || besideHoney) && this.vy < -HONEY_SLIDE_SPEED) this.vy = -HONEY_SLIDE_SPEED;
     }
 
     // 潜行防掉落（F3 尾巴）：贴着边缘时不许把自己走出去。

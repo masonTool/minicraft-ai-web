@@ -595,6 +595,7 @@ const EXPLICIT: Record<string, string> = {
   blue_ice: '蓝冰',
   sponge: '海绵',
   wet_sponge: '湿海绵',
+  honey_block: '蜂蜜块',
   honeycomb_block: '蜜脾块',
   cobweb: '蛛网',
   stripped_oak_log: '剥皮橡木原木',

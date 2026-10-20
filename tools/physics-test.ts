@@ -13,6 +13,7 @@
  */
 
 import {
+  HONEY_SLIDE_SPEED,
   PlayerPhysics,
   SPRINT_JUMP_BOOST,
   SPRINT_SPEED,
@@ -564,6 +565,56 @@ console.log('\n[水流推动（批次 447）]');
     upstream.update(pool(-FLOW_DRIFT_SPEED), input({ forward: 1 }), YAW_PLUS_X, DT, false);
   }
   check('逆流仍然游得动', upstream.x - 2 > 0.5, `x=${upstream.x.toFixed(2)}`);
+}
+
+console.log('\n[蜂蜜块（批次 450）]');
+{
+  // ① 站在蜜块上：跳跃被取消（不是"跳得矮"，是一点都跳不起来）
+  const honeyFloor = (honey: boolean): PhysicsWorld => ({
+    collisionAt: (_x, y) => (y < 64 ? ('full' as const) : null),
+    isLiquid: () => false,
+    isClimbable: () => false,
+    isHoney: (_x, y) => honey && y === 63,
+  });
+
+  const sticky = standOnGround();
+  let stickyPeak = sticky.y;
+  for (let i = 0; i < 40; i++) {
+    sticky.update(honeyFloor(true), input({ jump: true }), YAW_PLUS_X, DT, false);
+    stickyPeak = Math.max(stickyPeak, sticky.y);
+  }
+  check('站在蜂蜜块上跳不起来', stickyPeak < 64.25, `峰值 ${stickyPeak.toFixed(2)}`);
+
+  const plain = standOnGround();
+  let plainPeak = plain.y;
+  for (let i = 0; i < 40; i++) {
+    plain.update(honeyFloor(false), input({ jump: true }), YAW_PLUS_X, DT, false);
+    plainPeak = Math.max(plainPeak, plain.y);
+  }
+  check('普通地面上照样能跳（负对照）', plainPeak > 64.8, `峰值 ${plainPeak.toFixed(2)}`);
+
+  // ② 贴着蜜块侧面下滑：速度被限在 HONEY_SLIDE_SPEED 以内
+  const honeyWall = (honey: boolean): PhysicsWorld => ({
+    collisionAt: () => null,
+    isLiquid: () => false,
+    isClimbable: () => false,
+    // 玩家身体所在高度整层都是蜜块 —— 等价于"贴着蜜块墙往下溜"
+    isHoney: (_x, y) => honey && y >= 64,
+  });
+
+  const slider = new PlayerPhysics();
+  slider.x = 0.5;
+  slider.y = 80;
+  slider.z = 0.5;
+  for (let i = 0; i < 60; i++) slider.update(honeyWall(true), input({}), YAW_PLUS_X, DT, false);
+  check('贴着蜂蜜块下滑被限速', slider.vy >= -HONEY_SLIDE_SPEED - 1e-6, `vy=${slider.vy.toFixed(2)}`);
+
+  const freeFall = new PlayerPhysics();
+  freeFall.x = 0.5;
+  freeFall.y = 80;
+  freeFall.z = 0.5;
+  for (let i = 0; i < 60; i++) freeFall.update(honeyWall(false), input({}), YAW_PLUS_X, DT, false);
+  check('没有蜜块时会一直加速（负对照）', freeFall.vy < -5, `vy=${freeFall.vy.toFixed(2)}`);
 }
 
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);

@@ -798,6 +798,8 @@ export const TILE_ORDER = [
   // 海绵 / 湿海绵（批次 449）：六个面同一张——干的是土黄多孔，湿的是深一档的青褐
   'sponge',
   'wet_sponge',
+  // 蜂蜜块（批次 450）：琥珀色 + 六边形蜂巢纹（顶面/侧面同一张，原版侧面也带纹）
+  'honey_block',
   // 瓜藤（批次 77）：8 个阶段各一张（茎越长越高）+ 结果的那一张
   'pumpkin_stem_stage0',
   'pumpkin_stem_stage1',

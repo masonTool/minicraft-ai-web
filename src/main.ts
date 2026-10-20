@@ -30,6 +30,7 @@ import {
   depthStriderMultiplier,
   featherFallDamage,
   frostWalkerRadius,
+  honeyFallDistance,
   soulSpeedMultiplier,
   thornsDamage,
   type DamageCause,
@@ -369,6 +370,8 @@ import { Block, BLOCKS, blockDef, woolId,
   saplingTreeOf,
   // 剥皮（批次 443）：原木 → 剥皮原木的映射，右键交互用
   stripResult,
+  // 蜂蜜块（批次 450）：摔落减免的判据
+  isHoneyBlock,
 } from './core/registry/blocks.ts';
 import {
   ARMOR_SLOT_BASE,
@@ -12340,7 +12343,12 @@ class App {
       // 窒息用 `suffocates` 而不是 `opaque`：树叶为了剔除相邻面是"不透明"的，
       // 但原版钻进树叶里不掉血（批次 218，之前站在树冠里会被持续扣血）
       suffocating: body !== Block.AIR && blockDef(body).suffocates,
-      fallDistance: this.pendingFallDistance,
+      // 蜜块（批次 450）：落在蜜块上只受 20% 摔落伤害。
+      // 判据是"落点脚下那一格"——`pendingFallDistance` 在接地那一帧才算出来，
+      // 此时玩家已经站在蜜块上了，所以问得到
+      fallDistance: isHoneyBlock(this.world.getBlock(Math.floor(p.x), Math.floor(p.y - 0.05), Math.floor(p.z)))
+        ? honeyFallDistance(this.pendingFallDistance)
+        : this.pendingFallDistance,
       y: p.y,
       // 批次 181：能力看模式，不再看"在不在飞"
       creative: this.isCreative,

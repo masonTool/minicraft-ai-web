@@ -125,6 +125,22 @@ export function fallDamageFor(distance: number, featherFalling = 0): number {
   return featherFallDamage(distance - 3, featherFalling);
 }
 
+/** 蜜块减伤系数（批次 450）：落在蜜块上只受 20% 摔落伤害（原版减 80%） */
+export const HONEY_FALL_FACTOR = 0.2;
+
+/**
+ * 落在蜜块上的"等效下落高度"（批次 450）。
+ *
+ * 为什么不直接乘伤害：伤害公式里有那个 **3 格免伤门槛**（`distance - 3`），
+ * 先乘伤害会把门槛也一起缩掉（4 格摔落本该免伤，乘完反而不足 1 点）。
+ * 所以缩的是"门槛以上的那一段高度"：`3 + (d-3)×0.2`——
+ * 于是 10 格摔落按 4.4 格算，伤害从 7 点降到 1 点，与原版量级一致。
+ */
+export function honeyFallDistance(distance: number): number {
+  if (!(distance > 3)) return distance;
+  return 3 + (distance - 3) * HONEY_FALL_FACTOR;
+}
+
 /** 一次摔落伤害经过摔落保护之后的数值（已取整） */
 /**
  * 深海探索者的水下移速倍率（批次 262）。

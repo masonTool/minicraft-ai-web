@@ -17,6 +17,7 @@ import {
   depthStriderMultiplier,
   fallDamageFor,
   frostWalkerRadius,
+  honeyFallDistance,
   soulSpeedMultiplier,
   thornsDamage,
   type SurvivalEnvironment,
@@ -352,6 +353,20 @@ console.log('\n[靴子附魔的移速倍率（批次 262）]');
   check('灵魂疾行 0 级 = 1 倍', soulSpeedMultiplier(0) === 1);
   check('灵魂疾行 I 级 = 1.3', Math.abs(soulSpeedMultiplier(1) - 1.3) < 1e-6);
   check('灵魂疾行 III 级 = 1.9', Math.abs(soulSpeedMultiplier(3) - 1.9) < 1e-6);
+}
+
+console.log('\n[蜂蜜块摔落减伤（批次 450）]');
+{
+  // 门槛以下原样返回（3 格免伤这条不能被减伤系数一起缩掉）
+  check('2 格落差原样返回', honeyFallDistance(2) === 2);
+  check('3 格落差原样返回', honeyFallDistance(3) === 3);
+  // 门槛以上按 20% 折算：10 格 → 3 + 7×0.2 = 4.4
+  check('10 格落差折算成 4.4', Math.abs(honeyFallDistance(10) - 4.4) < 1e-9);
+  // 伤害面：10 格本来 7 点，落在蜜块上只剩 1 点（(4.4-3) 取整）
+  check('10 格摔在蜜块上只受 1 点', fallDamageFor(honeyFallDistance(10)) === 1, `${fallDamageFor(honeyFallDistance(10))}`);
+  check('10 格摔在地上仍是 7 点（负对照）', fallDamageFor(10) === 7);
+  // 与摔落保护叠乘：先减伤、再按附魔扣
+  check('蜜块 + 摔落保护 IV：10 格只剩 0 点', fallDamageFor(honeyFallDistance(10), 4) === 0);
 }
 
 console.log(`\n生存测试：${passed} 通过 / ${failed} 失败\n`);

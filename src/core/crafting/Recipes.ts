@@ -1900,6 +1900,14 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['HH', 'HH'],
     key: { H: Item.HONEYCOMB },
   },
+  // ---- 蜂蜜块（批次 450）：4 瓶蜂蜜 2×2 → 1 块（原版配方）。
+  // 蜂蜜瓶来自蜂巢/蜂箱（J21 的 `BeeHive.ts`），所以这条是"蜂蜜这条链"的出口
+  {
+    kind: 'shaped',
+    result: { id: Block.HONEY_BLOCK, count: 1 },
+    pattern: ['HH', 'HH'],
+    key: { H: Item.HONEY_BOTTLE },
+  },
   // ---- 磨制玄武岩 / 蓝冰（批次 439）
   {
     kind: 'shaped',
