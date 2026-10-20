@@ -93,7 +93,7 @@ import {
 import { pickArrowAmmo } from './core/entity/ArrowAmmo.ts';
 import { applyMending } from './core/crafting/Repair.ts';
 import { enchantLevel } from './core/registry/enchantments.ts';
-import { Sky, cameraFarFor } from './render/Sky.ts';
+import { Sky, CAMERA_NEAR, cameraFarFor } from './render/Sky.ts';
 import { Weather, type WeatherKind } from './render/Weather.ts';
 import { MobRenderer, type MobDecoration } from './render/MobRenderer.ts';
 import { MATE_SEARCH_RANGE, Mob, mobAcceptsTame, mobEats, provokedBy } from './core/entity/Mob.ts';
@@ -1888,10 +1888,15 @@ class App {
     // 远裁面用 `cameraFarFor`：它保证罩得住天空层（穹顶半径 180）。
     // 只按"视距×16+32"算的话，手机上（视距 6~8）会小于穹顶半径，
     // 结果屏幕正中会被裁出一个颜色不同的圆洞
+    //
+    // 近裁面 0.25（批次 425）：原来 0.1 是"手离镜头很近"的桌面习惯，但世界相机里
+    // **没有任何东西**比 0.25 格更近（手持物品是独立相机，见 `HandRenderer`）。
+    // 深度精度与 near 成正比，抬到 0.25 等于白拿 2.5 倍精度——远景的共面闪烁与
+    // 缝隙（方块贴方块的地方）主要就是它。
     this.camera = new THREE.PerspectiveCamera(
       72,
       window.innerWidth / window.innerHeight,
-      0.1,
+      CAMERA_NEAR,
       cameraFarFor(this.viewDistance),
     );
     this.camera.rotation.order = 'YXZ';

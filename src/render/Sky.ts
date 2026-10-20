@@ -38,6 +38,16 @@ export function cameraFarFor(viewDistance: number): number {
   const terrain = Math.max(0, Number.isFinite(viewDistance) ? viewDistance : 0) * 16 + 32;
   return Math.max(terrain, SKY_MAX_RADIUS + 32);
 }
+
+/**
+ * 世界相机的**近裁面**（格）。
+ *
+ * 原来取 0.1（桌面 FPS 的习惯），但这个世界里没有任何东西会离镜头小于 0.25 格：
+ * 手持物品走的是独立相机（`HandRenderer`，near 0.02），玩家眼睛在方块中心，
+ * 最近的可见面也在 0.5 格外。深度缓冲的精度与 near 成正比，抬到 0.25 等于
+ * 白拿 2.5 倍精度 —— 远景里"方块贴方块"的共面闪烁正是精度不够的典型症状。
+ */
+export const CAMERA_NEAR = 0.25;
 /** 原版主世界云层高度 */
 export const CLOUD_HEIGHT = 192;
 const CLOUD_PLANE_SIZE = 900;

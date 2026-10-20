@@ -9,7 +9,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { SKY_MAX_RADIUS, cameraFarFor } from '../src/render/Sky.ts';
+import { CAMERA_NEAR, SKY_MAX_RADIUS, cameraFarFor } from '../src/render/Sky.ts';
 
 import {
   LIGHT_BUDGET_PER_FRAME,
@@ -506,6 +506,10 @@ console.log('\n[远裁面罩得住天空层（"屏幕正中那个圆洞"的来�
   equal('视距 16 同样不回归', cameraFarFor(16), 16 * 16 + 32);
   equal('小视距时由"罩住天空"那一式兜底', cameraFarFor(4), SKY_MAX_RADIUS + 32);
   check('日月（150）也在范围内', cameraFarFor(6) > 150, `${cameraFarFor(6)}`);
+  // 近裁面 0.25 格：既要**不裁到身边的面**（玩家站在方块边界时最近面约 0.5 格），
+  // 又要比桌面习惯的 0.1 大，否则抬它就没有意义
+  check('近裁面不裁到身边的面（< 半格）', CAMERA_NEAR < 0.5, `near ${CAMERA_NEAR}`);
+  check('近裁面确实比原来的 0.1 更远（精度更高）', CAMERA_NEAR > 0.1, `near ${CAMERA_NEAR}`);
 }
 
 // ---------------------------------------------------------------- 帧内分段计时（批次 205）
