@@ -31,14 +31,13 @@ export interface InventoryCallbacks {
   addStack?: (stack: ItemStack) => void;
   /** 从真实背包按 id 取指定数量，返回实际取到的数量 */
   takeItem?: (id: number, count: number) => number;
-  /** 3×3 工作台是否可用（附近有工作台方块） */
-  canUseWorkbench?: () => boolean;
   showToast?: (message: string) => void;
 }
 
 export interface Inventory {
   toggle(): void;
   close(): void;
+  openCraftingTable(): void;
   isOpen(): boolean;
   setSelected(index: number): void;
   setSlots(slots: readonly (ItemStack | null)[]): void;
@@ -102,7 +101,6 @@ export function createInventory(
   const creativeButton: Rect = { x: panelX + 20, y: panelY + panelHeight - 48, w: 150, h: 36 };
   const quickButton: Rect = { x: panelX + 190, y: panelY + panelHeight - 48, w: 110, h: 36 };
   const dropButton: Rect = { x: panelX + 312, y: panelY + panelHeight - 48, w: 90, h: 36 };
-  const workbenchButton: Rect = { x: panelX + 420, y: panelY + panelHeight - 48, w: 130, h: 36 };
   const recipesButton: Rect = { x: panelX + 560, y: panelY + panelHeight - 48, w: 120, h: 36 };
   const gridX = panelX + 20;
   const gridY = panelY + 70;
@@ -310,13 +308,6 @@ export function createInventory(
     if (mode === 'inventory') {
       drawButton(context, quickButton, 'QUICK', 'normal', 16);
       drawButton(context, dropButton, 'DROP 1', 'normal', 15);
-      drawButton(
-        context,
-        workbenchButton,
-        craftSize === 2 ? '3x3 TABLE' : '2x2 BAG',
-        'normal',
-        15,
-      );
     }
 
     if (tooltip) {
@@ -384,16 +375,8 @@ export function createInventory(
   const fillRecipe = (recipe: Recipe): void => {
     const needSize = recipeGridSize(recipe);
     if (needSize > craftSize) {
-      if (needSize === 3) {
-        if (callbacks.canUseWorkbench && !callbacks.canUseWorkbench()) {
-          callbacks.showToast?.('需要靠近工作台');
-          return;
-        }
-        craftSize = 3;
-      } else {
-        callbacks.showToast?.('这个配方需要更大的合成格');
-        return;
-      }
+      callbacks.showToast?.('请对准工作台打开 3×3 合成');
+      return;
     }
 
     const grid = activeGrid();
@@ -464,6 +447,7 @@ export function createInventory(
       pendingCommand = null;
       pendingRecipe = null;
       mode = 'inventory';
+      craftSize = 2;
       setOpen(!open);
     },
     close(): void {
@@ -475,7 +459,20 @@ export function createInventory(
       pendingCommand = null;
       pendingRecipe = null;
       mode = 'inventory';
+      craftSize = 2;
       setOpen(false);
+    },
+    openCraftingTable(): void {
+      if (open) drainCrafting();
+      clearTooltip();
+      drag = null;
+      pendingGive = null;
+      pendingCraft = null;
+      pendingCommand = null;
+      pendingRecipe = null;
+      mode = 'inventory';
+      craftSize = 3;
+      setOpen(true);
     },
     isOpen(): boolean {
       return open;
@@ -540,17 +537,6 @@ export function createInventory(
         redraw();
         return true;
       }
-      if (contains(workbenchButton, x, y)) {
-        if (craftSize === 2 && callbacks.canUseWorkbench && !callbacks.canUseWorkbench()) {
-          callbacks.showToast?.('STAND NEAR CRAFTING TABLE');
-          return true;
-        }
-        craftSize = craftSize === 2 ? 3 : 2;
-        pendingCraft = null;
-        redraw();
-        return true;
-      }
-
       for (let i = 0; i < craftSize * craftSize; i++) {
         const cell = craftCellRect(i);
         if (contains({ x: cell.x, y: cell.y, w: slot, h: slot }, x, y)) {

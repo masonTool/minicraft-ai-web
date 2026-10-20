@@ -64,6 +64,8 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   const back: Rect = { x: panelX + 28, y: panelY + 18, w: 104, h: 36 };
   const newWorld: Rect = { x: panelX + 70, y: panelY + 74, w: panelWidth - 140, h: 40 };
   const deleteSave: Rect = { x: panelX + 70, y: panelY + 382, w: panelWidth - 140, h: 36 };
+  const prevPage: Rect = { x: panelX + panelWidth - 100, y: panelY + 20, w: 30, h: 30 };
+  const nextPage: Rect = { x: panelX + panelWidth - 62, y: panelY + 20, w: 30, h: 30 };
 
   const worldRow = (index: number): Rect => ({
     x: panelX + 30,
@@ -78,6 +80,9 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
 
   let open = true;
   let screen: Screen = 'title';
+  let page = 0;
+  const PAGE_SIZE = 3;
+  const pageCount = (): number => Math.max(1, Math.ceil(info.worlds.length / PAGE_SIZE));
   let info: MainMenuInfo = {
     worlds: [{ id: 'wx-default', name: '我的世界' }],
     currentId: 'wx-default',
@@ -137,8 +142,30 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
     drawButton(context, back, '‹ 返回', 'normal', 16);
     drawText(context, '游戏', panelX + 150, panelY + 22, 26, '#ffffff');
     drawButton(context, newWorld, '＋ 新建世界', 'normal', 17);
+    if (pageCount() > 1) {
+      drawButton(context, prevPage, '‹', page > 0 ? 'normal' : 'disabled', 18);
+      drawButton(
+        context,
+        nextPage,
+        '›',
+        page < pageCount() - 1 ? 'normal' : 'disabled',
+        18,
+      );
+      drawText(
+        context,
+        `${page + 1}/${pageCount()}`,
+        panelX + panelWidth - 108,
+        panelY + 26,
+        13,
+        'rgba(200, 225, 240, 0.75)',
+        'right',
+        54,
+      );
+    }
 
-    const visible = info.worlds.slice(0, 3);
+    page = Math.min(page, pageCount() - 1);
+    const start = page * PAGE_SIZE;
+    const visible = info.worlds.slice(start, start + PAGE_SIZE);
     if (visible.length === 0) {
       drawPanel(context, { x: panelX + 30, y: panelY + 126, w: panelWidth - 60, h: 80 });
       drawText(
@@ -214,6 +241,7 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   return {
     open(): void {
       screen = 'title';
+      page = 0;
       setOpen(true);
     },
     close(): void {
@@ -224,6 +252,7 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
     },
     setInfo(next: MainMenuInfo): void {
       info = { ...next };
+      page = Math.min(page, pageCount() - 1);
       redraw();
     },
     handleTap(clientX: number, clientY: number, sw: number, sh: number): MainMenuAction {
@@ -251,8 +280,22 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
       }
       if (contains(newWorld, x, y)) return 'new';
       if (contains(deleteSave, x, y)) return 'delete';
-      for (let i = 0; i < Math.min(3, info.worlds.length); i++) {
-        const world = info.worlds[i]!;
+      if (pageCount() > 1) {
+        if (contains(prevPage, x, y) && page > 0) {
+          page -= 1;
+          redraw();
+          return null;
+        }
+        if (contains(nextPage, x, y) && page < pageCount() - 1) {
+          page += 1;
+          redraw();
+          return null;
+        }
+      }
+      const start = page * PAGE_SIZE;
+      const visible = info.worlds.slice(start, start + PAGE_SIZE);
+      for (let i = 0; i < visible.length; i++) {
+        const world = visible[i]!;
         if (contains(worldRow(i), x, y) || contains(enterButton(i), x, y)) {
           if (world.id !== info.currentId) return { type: 'world', id: world.id };
           setOpen(false);

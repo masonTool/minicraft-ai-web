@@ -155,8 +155,7 @@ async function boot(): Promise<void> {
         .map((entry) => ({
           ...entry,
           name: entry.name === 'MY WORLD' ? '我的世界' : entry.name,
-        }))
-        .slice(0, 3);
+        }));
     } catch {
       return [];
     }
@@ -312,19 +311,6 @@ async function boot(): Promise<void> {
         inventory.addStack(stack);
         ui.syncInventory(inventory.serialize(), selectedSlot);
         scheduleSave?.();
-      },
-      canUseWorkbench: () => {
-        const px = Math.floor(physics.x);
-        const py = Math.floor(physics.y);
-        const pz = Math.floor(physics.z);
-        for (let dx = -4; dx <= 4; dx++) {
-          for (let dy = -3; dy <= 3; dy++) {
-            for (let dz = -4; dz <= 4; dz++) {
-              if (world.getBlock(px + dx, py + dy, pz + dz) === Block.CRAFTING_TABLE) return true;
-            }
-          }
-        }
-        return false;
       },
       onToast: (message) => ui.showToast(message),
       onQuickMove: () => {
@@ -792,10 +778,6 @@ async function boot(): Promise<void> {
     ) {
       return;
     }
-    if (worlds.length >= 3) {
-      ui.showToast('WORLD LIMIT 3');
-      return;
-    }
     const seed = ((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) & 0x7fffffff;
     const nextSeed = seed > 0 ? seed : 1;
     try {
@@ -946,6 +928,10 @@ async function boot(): Promise<void> {
         currentHit.z,
       );
       ui.openChest('箱子', chestSnapshot(), playerHotbarSnapshot());
+      return;
+    }
+    if (id === Block.CRAFTING_TABLE) {
+      ui.openCraftingTable();
       return;
     }
     const station = stationOfBlock(id);
@@ -1332,6 +1318,7 @@ async function boot(): Promise<void> {
       ui.isMainMenuOpen() ||
       ui.isPauseOpen() ||
       ui.isSettingsOpen() ||
+      ui.isInventoryOpen() ||
       ui.isChestOpen() ||
       ui.isFurnaceOpen()
     ) {
