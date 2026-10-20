@@ -986,6 +986,7 @@ const clearDrops = (): void => {
 const mountWorld = async (entry: WorldSummary): Promise<void> => {
   await persistWorld();
   clearDrops();
+  clearPigs();
   if (save) {
     save.close();
     save = null;
@@ -1700,7 +1701,42 @@ const showHud = (): void => {
   );
 };
 
-const dropInventory = (): void => {
+const spawnPig = (x: number, y: number, z: number): void => {
+  const group = new THREE.Group();
+  const pink = new THREE.MeshBasicMaterial({ color: 0xf0a8a0 });
+  const snoutMat = new THREE.MeshBasicMaterial({ color: 0xd98f88 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 1.0), pink);
+  body.position.y = 0.62;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.5), pink);
+  head.position.set(0, 0.78, -0.65);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.12), snoutMat);
+  snout.position.set(0, 0.72, -0.92);
+  group.add(body, head, snout);
+  for (const [lx, lz] of [[-0.22, -0.32], [0.22, -0.32], [-0.22, 0.32], [0.22, 0.32]] as const) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.45, 0.18), pink);
+    leg.position.set(lx, 0.22, lz);
+    group.add(leg);
+  }
+  group.position.set(x, y, z);
+  scene.add(group);
+  pigs.push({ group, x, y, z, hp: 10, dirX: 1, dirZ: 0, wander: 2 });
+};
+
+const clearPigs = (): void => {
+  for (const pig of pigs) {
+    scene.remove(pig.group);
+    pig.group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+      }
+    });
+  }
+  pigs.length = 0;
+  pigsSpawned = false;
+};
+
+const addDrop = (id: number, count: number, x: number, y: number, z: number): void => {
   const colors: Record<string, number> = {
     building: 0x9b7b4f,
     tools: 0x8a9aa8,
@@ -1713,21 +1749,25 @@ const dropInventory = (): void => {
     brewing: 0x8a5a8a,
     none: 0x999999,
   };
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 0.3, 0.3),
+    new THREE.MeshBasicMaterial({ color: colors[categoryOf(id)] ?? 0x999999 }),
+  );
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  droppedItems.push({ mesh, id, count, x, y, z, bob: Math.random() * Math.PI * 2, pickupAt: Date.now() + 1500 });
+};
+
+const dropInventory = (): void => {
   const baseX = physics.x;
   const baseY = physics.y + 0.6;
   const baseZ = physics.z;
   for (let i = 0; i < 36; i++) {
     const stack = inventory.get(i);
     if (!stack) continue;
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.3, 0.3),
-      new THREE.MeshBasicMaterial({ color: colors[categoryOf(stack.id)] ?? 0x999999 }),
-    );
     const x = baseX + (Math.random() - 0.5) * 1.2;
     const z = baseZ + (Math.random() - 0.5) * 1.2;
-    mesh.position.set(x, baseY, z);
-    scene.add(mesh);
-    droppedItems.push({ mesh, id: stack.id, count: stack.count, x, y: baseY, z, bob: Math.random() * Math.PI * 2, pickupAt: Date.now() + 1500 });
+    addDrop(stack.id, stack.count, x, baseY, z);
     inventory.set(i, null);
   }
 };
@@ -1905,6 +1945,19 @@ interface DroppedItem {
   pickupAt: number;
 }
 const droppedItems: DroppedItem[] = [];
+
+interface PigMob {
+  group: THREE.Group;
+  x: number;
+  y: number;
+  z: number;
+  hp: number;
+  dirX: number;
+  dirZ: number;
+  wander: number;
+}
+const pigs: PigMob[] = [];
+let pigsSpawned = false;
 let damageFlashUntil = 0;
 let xpLevel = 0;
 let xpIntoLevel = 0;
@@ -2025,6 +2078,71 @@ const updateAimRing = (clientX: number, clientY: number, visible: boolean): void
   ui.refresh();
 };
 
+const tickPigs = (dt: number): void => {
+  for (const pig of pigs) {
+    pig.wander -= dt;
+    if (pig.wander <= 0) {
+      const angle = Math.random() * Math.PI * 2;
+      pig.dirX = Math.cos(angle);
+      pig.dirZ = Math.sin(angle);
+      pig.wander = 2 + Math.random() * 3;
+    }
+    const nx = pig.x + pig.dirX * 1.15 * dt;
+    const nz = pig.z + pig.dirZ * 1.15 * dt;
+    const surface = world.getSurfaceBlockY(Math.floor(nx), Math.floor(nz));
+    if (surface !== null && Math.abs(surface + 1 - pig.y) <= 1.2) {
+      pig.x = nx;
+      pig.z = nz;
+      pig.y = surface + 1;
+    } else {
+      pig.dirX *= -1;
+      pig.dirZ *= -1;
+    }
+    pig.group.position.set(pig.x, pig.y, pig.z);
+    pig.group.rotation.y = Math.atan2(pig.dirX, pig.dirZ);
+  }
+};
+
+const removePig = (index: number): void => {
+  const pig = pigs[index];
+  if (!pig) return;
+  scene.remove(pig.group);
+  pig.group.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      (child.material as THREE.Material).dispose();
+    }
+  });
+  pigs.splice(index, 1);
+};
+
+const tryAttackMob = (clientX: number, clientY: number): boolean => {
+  if (pigs.length === 0) return false;
+  camera.updateMatrixWorld();
+  for (let i = pigs.length - 1; i >= 0; i--) {
+    const pig = pigs[i]!;
+    const distance = Math.hypot(pig.x - physics.x, pig.z - physics.z);
+    if (distance > 5) continue;
+    const projected = new THREE.Vector3(pig.x, pig.y + 0.65, pig.z).project(camera);
+    if (projected.z > 1) continue;
+    const designX = ((projected.x + 1) / 2) * 1024;
+    const designY = ((1 - projected.y) / 2) * uiHeight;
+    const touchX = (clientX / Math.max(1, platform.system.width)) * 1024;
+    const touchY = (clientY / Math.max(1, platform.system.height)) * uiHeight;
+    if (Math.hypot(designX - touchX, designY - touchY) > 88) continue;
+    pig.hp -= 4;
+    audio.play('break_wood');
+    if (pig.hp <= 0) {
+      addDrop(Item.PORKCHOP, 1, pig.x, pig.y + 0.5, pig.z);
+      gainXp(3);
+      removePig(i);
+    }
+    showHud();
+    return true;
+  }
+  return false;
+};
+
 platform.input.onPointer('down', (event) => {
   if (!audioResumed) {
     audioResumed = true;
@@ -2121,7 +2239,9 @@ const release = (event: { pointerId: number; clientX: number; clientY: number })
     }
   }
   if (event.pointerId === lookPointer) {
-    if (!lookMoved && currentHit) {
+    if (!lookMoved && tryAttackMob(event.clientX, event.clientY)) {
+      lookMoved = true;
+    } else if (!lookMoved && currentHit) {
       if (Date.now() - lookStartTime >= 350) breakAt(currentHit);
       else placeAt(currentHit);
     }
@@ -2197,6 +2317,7 @@ const frame = (): void => {
       held: inventory.get(selectedSlot)?.id ?? 0,
       cameraMode,
       dead,
+      pigs: pigs.length,
       drops: droppedItems.length,
       xpLevel,
       flying,
@@ -2350,6 +2471,15 @@ const frame = (): void => {
   translucent.setTime(now * 0.001);
   renderer.clear();
   renderer.render(scene, camera);
+  if (playerReady && !pigsSpawned) {
+    const surface = world.getSurfaceBlockY(spawn.x + 3, spawn.z + 2);
+    if (surface !== null) {
+      spawnPig(spawn.x + 3, surface + 1, spawn.z + 2);
+      pigsSpawned = true;
+    }
+  }
+  if (playerReady && !paused) tickPigs(dt);
+
   if (started && save && !paused && now - lastAutoSave > 15000) {
     lastAutoSave = now;
     void persistWorld();
@@ -2371,6 +2501,15 @@ if (wxTestApi) {
       for (let i = 0; i < 36; i++) inventory.set(i, null);
       selectedSlot = 0;
       showHud();
+    },
+    killPig: () => {
+      const pig = pigs[0];
+      if (!pig) return { killed: false };
+      addDrop(Item.PORKCHOP, 1, pig.x, pig.y + 0.5, pig.z);
+      gainXp(3);
+      removePig(0);
+      showHud();
+      return { killed: true };
     },
     setGameMode: (mode: 'survival' | 'creative' = 'creative') => {
       if (currentWorld) {

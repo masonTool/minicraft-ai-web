@@ -77,6 +77,17 @@ const assert = (condition, message, state) => {
   assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
   assert(inGame.health === 20 && inGame.food === 20, '初始生命/饥饿应为 20', inGame);
 
+  // 猪生成与击杀掉落
+  const pigFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
+  assert(pigFrame, '猪用例找不到 iframe');
+  const pigSpawned = await waitState((state) => state.pigs > 0, '猪没有生成', 20000);
+  const pigKilled = await pigFrame.evaluate(() => wx.__v2Test?.killPig?.());
+  const pigGone = await waitState(
+    (state) => state.pigs === 0 && state.drops > 0,
+    '猪没有死亡掉落',
+    5000,
+  );
+
   // 创造双击跳跃：起飞/落地
   const flightFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
   assert(flightFrame, '飞行用例找不到 iframe');
@@ -237,7 +248,7 @@ const assert = (condition, message, state) => {
   console.log(
     'PASS',
     JSON.stringify(
-      { title, worlds, create, inGame, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
+      { title, worlds, create, inGame, pigSpawned, pigKilled, pigGone, flyingOn, flyingOff, deathScreen, respawned, afterMove, sneakOn, paused, resumed, inventory, inventoryClosed, worldsAfterPause, editScreen, worldsAfterEdit, afterDelete, afterReload, reentered },
       null,
       2,
     ),
