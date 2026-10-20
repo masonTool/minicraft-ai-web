@@ -4074,7 +4074,12 @@ export class InventoryScreen {
       const slot = this.createSlot();
       slot.classList.add('creative-slot');
       slot.dataset.itemId = String(itemId);
-      this.tooltipStacks.set(slot, { id: itemId, count: 1 });
+      // 批次 528（用户）：可堆叠的方块**不点也要看到上限数**（64/16/1）。
+      // 创造格拿的是复制品，数量恒为上限；这里只写角标，不写 `has-item`。
+      const stackLimit = maxStackOf(itemId);
+      const countEl = slot.querySelector('.inv-count') as HTMLSpanElement | null;
+      if (countEl && stackLimit > 1) countEl.textContent = String(stackLimit);
+      this.tooltipStacks.set(slot, { id: itemId, count: stackLimit });
       drawItemIcon(slot.querySelector('canvas')!, this.atlas, itemId, 28);
       slot.addEventListener('pointerdown', (event) => {
         event.preventDefault();
@@ -5690,6 +5695,17 @@ export class InventoryScreen {
 
   get isOpen(): boolean {
     return this.open;
+  }
+
+  /**
+   * 面板根节点（批次 528）。
+   *
+   * 成就面板要"跟背包面板一样大、并且重叠"，最可靠的做法是直接量这块
+   * 已布局好的元素——携带版背包的宽度会随单/双栏、创造/生存变化，
+   * 另抄一套 CSS 尺寸迟早会差几像素。
+   */
+  get panelElement(): HTMLElement {
+    return this.panel;
   }
 
   get currentMode(): InventoryPanelMode {

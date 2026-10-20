@@ -8104,7 +8104,11 @@ class App {
   /** 打开成就面板（暂停菜单/背包标题栏/`J` 键都走这里） */
   private openAdvancements(): void {
     if (this.advancementScreen.isOpen) return;
-    this.advancementScreen.show();
+    // 批次 528（用户）：从背包里点成就时，面板要跟背包**一样大并重叠**；
+    // 从暂停菜单点开时背包不在，走 `adv-panel` 自己的同规格默认尺寸。
+    this.advancementScreen.show(
+      this.inventoryScreen.isOpen ? this.inventoryScreen.panelElement : undefined,
+    );
     this.handleInventoryOpen(true);
   }
 

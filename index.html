@@ -4080,18 +4080,30 @@
       }
       #advancements.hidden { display: none; }
       .adv-panel {
-        /* 批次 111：同上——与设置/暂停/配方书共用一套固定尺寸 */
-        width: var(--panel-w); max-width: var(--panel-w);
-        height: var(--panel-h); max-height: var(--panel-h); overflow-y: auto;
+        /* 批次 528（用户）：尺寸与背包一致，并**只让列表滚**。
+           从背包里打开时 JS 会直接复制背包面板的 rect（见 AdvancementScreen#alignTo），
+           这里的默认值只负责"从暂停菜单打开"那条路。 */
+        width: min(94vw, 660px); max-width: min(94vw, 660px);
+        height: min(92dvh, 620px); max-height: min(92dvh, 620px);
+        display: flex; flex-direction: column; overflow: hidden;
         background: var(--panel-bg);
         border: 3px solid; border-color: var(--pixel-bevel);
         border-radius: var(--panel-radius);
         padding: 12px 14px; color: var(--panel-text); font-size: 13px;
         box-shadow: var(--panel-shadow);
       }
+      body.touch-mode .adv-panel {
+        width: min(calc(100vw - 88px), 800px);
+        max-width: min(calc(100vw - 88px), 800px);
+        height: var(--inv-pocket-h);
+        max-height: var(--inv-pocket-h);
+        padding: 8px 10px;
+      }
+      #advancements.aligned .adv-panel { margin: 0; }
       .adv-header {
         display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
         padding-bottom: 8px; border-bottom: 2px solid #9a9a9a; margin-bottom: 8px;
+        flex: 0 0 auto;
       }
       .adv-header b { font-size: 15px; }
       .adv-summary { color: #4a4a4a; font-size: 11px; }
@@ -4100,15 +4112,31 @@
         background: #a8a8a8; color: #222; border: 2px solid;
         border-color: #ffffff #5a5a5a #5a5a5a #ffffff;
       }
+      /* 触摸端与背包的关闭键同尺寸（携带版背包是 24×20 的紧凑 ✕） */
+      body.touch-mode .adv-panel .adv-close {
+        min-width: 24px; min-height: 20px; padding: 0 6px; font-size: 12px; line-height: 1.1;
+      }
       /* 分类页签：手机上会横向挤到 6 个，所以允许换行（不滚动，滚动条在手机上是另一种麻烦） */
-      .adv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+      .adv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; flex: 0 0 auto; }
       .adv-tab {
         font: inherit; font-size: 11px; padding: 5px 9px; cursor: pointer;
         background: #a8a8a8; color: #222; border: 2px solid;
         border-color: #d8d8d8 #6a6a6a #6a6a6a #d8d8d8; border-radius: 3px;
       }
       .adv-tab.active { background: #7fa06f; border-color: #dfe9d8 #47603c #47603c #dfe9d8; }
-      .adv-list { display: flex; flex-direction: column; gap: 5px; }
+      /* 只有列表滚：与背包同高之后，标题/页签不能被滚走 */
+      .adv-list {
+        display: flex; flex-direction: column; gap: 5px;
+        flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+        overscroll-behavior: contain;
+      }
+      /* 横屏矮屏：标题与页签再压一档，给列表让出高度 */
+      body.touch-mode .adv-header { gap: 6px; padding-bottom: 4px; margin-bottom: 4px; }
+      body.touch-mode .adv-header b { font-size: 13px; }
+      body.touch-mode .adv-summary { font-size: 10px; }
+      body.touch-mode .adv-tabs { gap: 4px; margin-bottom: 4px; }
+      body.touch-mode .adv-tab { font-size: 10px; padding: 3px 6px; }
+      body.touch-mode .adv-row { min-height: 40px; padding: 4px 6px; }
       .adv-empty { padding: 18px; text-align: center; color: #5a5a5a; }
       .adv-row {
         display: flex; align-items: center; gap: 9px;

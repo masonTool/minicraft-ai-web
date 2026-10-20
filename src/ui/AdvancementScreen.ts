@@ -69,7 +69,8 @@ export class AdvancementScreen {
 
     const close = document.createElement('button');
     close.type = 'button';
-    close.className = 'adv-close';
+    // 批次 528：与背包的关闭键同一套外观/尺寸（.inv-close 提供基础样式）
+    close.className = 'adv-close inv-close';
     // 手机上统一成 ✕（与配方书、设置面板同一个形状：右上一个叉关掉，
     // 基岩版也是这么给的），PC 上保留"关闭"两个字（有 Esc 也用得着点）
     close.textContent = isTouchUi() ? '✕' : '关闭';
@@ -103,15 +104,58 @@ export class AdvancementScreen {
     return this.renderedRows;
   }
 
-  show(): void {
+  /**
+   * 打开面板。
+   *
+   * @param anchor 传入时（从背包里点成就），面板会**精确复制**锚点当前的位置与尺寸，
+   *   于是与背包面板完全重叠——携带版背包的宽度会随单/双栏、创造/生存变化，
+   *   另写一套 CSS 尺寸必然对不齐。
+   */
+  show(anchor?: HTMLElement): void {
     this.open = true;
     this.root.classList.remove('hidden');
+    this.alignTo(anchor);
     this.render();
   }
 
   hide(): void {
     this.open = false;
     this.root.classList.add('hidden');
+    this.clearAlignment();
+  }
+
+  /**
+   * 与背包面板对齐（批次 528）。
+   *
+   * 只在这个面板的生命周期内写行内样式；`hide()` 会清掉，
+   * 否则下一次从暂停菜单打开会沿用上一次背包的尺寸。
+   */
+  private alignTo(anchor?: HTMLElement): void {
+    this.clearAlignment();
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const style = this.panelEl.style;
+    style.position = 'fixed';
+    style.left = `${Math.round(rect.left)}px`;
+    style.top = `${Math.round(rect.top)}px`;
+    style.width = `${Math.round(rect.width)}px`;
+    style.height = `${Math.round(rect.height)}px`;
+    style.maxWidth = 'none';
+    style.maxHeight = 'none';
+    this.root.classList.add('aligned');
+  }
+
+  private clearAlignment(): void {
+    const style = this.panelEl.style;
+    style.position = '';
+    style.left = '';
+    style.top = '';
+    style.width = '';
+    style.height = '';
+    style.maxWidth = '';
+    style.maxHeight = '';
+    this.root.classList.remove('aligned');
   }
 
   toggle(): void {

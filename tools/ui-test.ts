@@ -1052,6 +1052,13 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
       invSrc.includes("classList.toggle('workbench-ui', workbench)"),
   );
   check('携带版创造栏是半屏可容纳的 7 列 40px 槽位', css.includes('grid-template-columns: repeat(7, 40px)'));
+  // 批次 528（用户）：可堆叠方块在创造栏里**不点也显示上限数**（64/16）
+  check(
+    '创造格常显堆叠上限（不再只有点击后才出现数字）',
+    invSrc.includes('const stackLimit = maxStackOf(itemId);') &&
+      invSrc.includes("countEl.textContent = String(stackLimit);") &&
+      invSrc.includes('this.tooltipStacks.set(slot, { id: itemId, count: stackLimit });'),
+  );
   // 批次 159：判据从"是不是携带版布局"改成"是不是触摸端"——
   // 界面统一成携带版之后，PC 也会被算成滚动，于是 PC 失去了底部分页键
   check(
@@ -2266,11 +2273,27 @@ console.log('\n[按钮尺寸对齐（批次 111）]');
   );
   check('装备格竖排成一一列（原版位置）', compact.includes('.inv-grid.inv-armor { grid-template-columns: 42px; }'));
   check('快捷栏与主背包之间留一道缝', compact.includes('.inv-main .inv-hotbar { margin-top: 5px; }'));
-  // 成就 / 配方书 / 设置 / 主菜单：直接吃 --panel-*；触摸背包用 min(vw/dvh, --panel-*) 夹紧
+  // 配方书 / 设置 / 主菜单：直接吃 --panel-*；触摸背包用 min(vw/dvh, --panel-*) 夹紧
   // （批次 167：主菜单也并进来了——用户"首页两个按钮点下去应该是同一个固定大小的框"）
   check(
-    '成就/配方书/设置/主菜单共用同一套固定尺寸',
-    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 4,
+    '配方书/设置/主菜单共用同一套固定尺寸',
+    (compact.match(/width: var\(--panel-w\); max-width: var\(--panel-w\);/g) ?? []).length === 3,
+  );
+  // 批次 528：成就面板改成与背包同尺寸；从背包打开时 JS 直接复制背包 rect
+  const advSource = readFileSync(new URL('../src/ui/AdvancementScreen.ts', import.meta.url), 'utf8');
+  check(
+    '成就面板与背包同尺寸 / 重叠（从背包打开时复制 rect）',
+    advSource.includes('show(anchor?: HTMLElement): void') &&
+      advSource.includes("style.position = 'fixed';") &&
+      advSource.includes('this.root.classList.add(\'aligned\')') &&
+      compact.includes('body.touch-mode .adv-panel {') &&
+      compact.includes('height: var(--inv-pocket-h);'),
+  );
+  check(
+    '成就关闭键与背包同一套（.inv-close + 紧凑尺寸）',
+    advSource.includes("close.className = 'adv-close inv-close';") &&
+      compact.includes('body.touch-mode .adv-panel .adv-close {') &&
+      compact.includes('min-width: 24px; min-height: 20px;'),
   );
   // 文字标签是原来我们自己加的（原版没有），这次按用户要求去掉
   const invSource = readFileSync(new URL('../src/ui/InventoryScreen.ts', import.meta.url), 'utf8');
