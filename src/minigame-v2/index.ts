@@ -1308,7 +1308,10 @@ const showHud = (): void => {
       box(242, uiHeight - 98, Math.max(0, Math.min(420, 420 * (xpIntoLevel / (7 * (xpLevel + 1))))), 5, [], { background: '#7bd88f', radius: 2 }),
       text(668, uiHeight - 110, 90, 20, `Lv ${xpLevel}`, { fontSize: 11, color: 'rgba(210,255,210,0.9)' }),
       ...(air < 300
-        ? [text(0, uiHeight - 178, 1024, 20, `氧气 ${Math.ceil(air / 20)}s`, { fontSize: 13, color: '#9fe0ff', align: 'center' })]
+        ? [
+            vital(428, uiHeight - 178, 16, 'air', air),
+            text(0, uiHeight - 196, 1024, 18, `氧气 ${Math.ceil(air / 20)}s`, { fontSize: 11, color: '#9fe0ff', align: 'center' }),
+          ]
         : []),
       vital(242, uiHeight - 152, 16, 'heart', health),
       vital(612, uiHeight - 152, 16, 'food', food),

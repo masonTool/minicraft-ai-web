@@ -80,7 +80,7 @@ export interface UiIconNode extends UiNode {
 
 export interface UiVitalNode extends UiNode {
   kind: 'vital';
-  vital: 'heart' | 'food';
+  vital: 'heart' | 'food' | 'air';
   count: number;
 }
 
@@ -181,7 +181,7 @@ export function vital(
   x: number,
   y: number,
   size: number,
-  vitalType: 'heart' | 'food',
+  vitalType: 'heart' | 'food' | 'air',
   count: number,
 ): UiVitalNode {
   return { kind: 'vital', x, y, w: size * 10 + 9, h: size, vital: vitalType, count };
@@ -479,8 +479,15 @@ export class UiLayer {
       for (let i = 0; i < 10; i++) {
         const cx = node.x + i * (size + gap) + size / 2;
         const cy = node.y + size / 2;
-        const filled = node.count >= (i + 1) * 2;
-        ctx.fillStyle = filled ? (node.vital === 'heart' ? '#e5484d' : '#e0a03a') : 'rgba(0,0,0,0.55)';
+        const step = node.vital === 'air' ? 30 : 2;
+        const filled = node.count >= (i + 1) * step;
+        ctx.fillStyle = filled
+          ? node.vital === 'heart'
+            ? '#e5484d'
+            : node.vital === 'food'
+              ? '#e0a03a'
+              : '#6fc3ff'
+          : 'rgba(0,0,0,0.55)';
         ctx.strokeStyle = 'rgba(0,0,0,0.75)';
         ctx.lineWidth = 1;
         if (node.vital === 'heart') {
@@ -491,6 +498,15 @@ export class UiLayer {
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
+        } else if (node.vital === 'air') {
+          ctx.beginPath();
+          ctx.arc(cx, cy, size * 0.32, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,0.55)';
+          ctx.beginPath();
+          ctx.arc(cx - size * 0.1, cy - size * 0.1, size * 0.1, 0, Math.PI * 2);
+          ctx.fill();
         } else {
           ctx.beginPath();
           ctx.ellipse(cx, cy - size * 0.1, size * 0.32, size * 0.24, 0.4, 0, Math.PI * 2);
