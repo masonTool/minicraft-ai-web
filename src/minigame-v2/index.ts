@@ -20,7 +20,7 @@ import { ContainerSystem } from './containers.ts';
 import { drawBlockIcon } from './block-icon.ts';
 import type { V2CreativeCategory } from './inventory-catalog.ts';
 import { fillRecipe as fillRecipeFromInventory } from './recipe-book.ts';
-import { buildCreativeTab, buildRecipeTab } from './inventory-tabs.ts';
+import { buildCraftingPanel, buildCreativeTab, buildItemTab, buildRecipeTab } from './inventory-tabs.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -682,24 +682,20 @@ const showInventory = (): void => {
     }, { background: 'rgba(30, 38, 46, 0.95)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
   ];
   if (inventoryTab === 'items') {
-    // 主背包 27 格（索引 9..35）
-    for (let j = 0; j < 27; j++) {
-      const i = j + 9;
-      const stack = inventory.get(i);
-      elements.push(slot(gridX + (j % 9) * (slotSize + gap), gridY + Math.floor(j / 9) * (slotSize + gap), slotSize, i, stack?.id ?? 0, stack?.count ?? 0, false, () => {
+    elements.push(...buildItemTab({
+      gridX,
+      gridY,
+      slotSize,
+      gap,
+      inventory,
+      selectedSlot,
+      onSelect: (slotIndex) => {
+        selectedSlot = slotIndex;
         showInventory();
-      }, (from, to) => handleDrop(from.index, to.index)));
-    }
-    // 独立快捷栏 9 格（索引 0..8）
-    const hotbarY = gridY + 3 * (slotSize + gap) + 14;
-    elements.push(text(gridX, hotbarY - 22, 300, 20, '快捷栏', { fontSize: 12, color: 'rgba(200,220,235,0.65)' }));
-    for (let i = 0; i < 9; i++) {
-      const stack = inventory.get(i);
-      elements.push(slot(gridX + i * (slotSize + gap), hotbarY, slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
-        selectedSlot = i;
-        showInventory();
-      }, (from, to) => handleDrop(from.index, to.index)));
-    }
+      },
+      onDrop: (from, to) => handleDrop(from, to),
+      refresh: () => showInventory(),
+    }));
   } else if (inventoryTab === 'creative') {
     elements.push(...buildCreativeTab({
       gridX,
@@ -762,33 +758,22 @@ const showInventory = (): void => {
       },
     }));
   }
-  elements.push(button(craftX, panelY + 22, 110, 28, `${crafting.size}x${crafting.size}`, () => {
-    crafting.drainTo(inventory);
-    crafting = new CraftingGrid(crafting.size === 2 ? 3 : 2);
-    showInventory();
-  }, {
-    background: 'rgba(32, 44, 52, 0.95)',
-    border: 'rgba(180, 215, 235, 0.35)',
-    radius: 6,
-  }));
-  for (let i = 0; i < crafting.size * crafting.size; i++) {
-    const stack = crafting.get(i);
-    elements.push(slot(craftX + (i % crafting.size) * (craftSlot + craftGap), craftY + Math.floor(i / crafting.size) * (craftSlot + craftGap), craftSlot, 100 + i, stack?.id ?? 0, stack?.count ?? 0, false, () => {
-      const current = crafting.get(i);
-      if (current) {
-        const remaining = inventory.add(current.id, current.count);
-        crafting.set(i, remaining > 0 ? { id: current.id, count: remaining } : null);
-        showInventory();
-      }
-    }, (from, to) => handleDrop(from.index, to.index)));
-  }
-  const result = crafting.result;
-  elements.push(text(outputX, craftY + 2, 100, 24, '产物', { fontSize: 13, color: 'rgba(210,230,240,0.7)' }));
-  elements.push(slot(outputX, craftY + 26, craftSlot, 200, result?.id ?? 0, result?.count ?? 0, false, () => {
-    if (!crafting.result) return;
-    inventory.add(crafting.result.id, crafting.result.count);
-    crafting.takeResult();
-    showInventory();
+  elements.push(...buildCraftingPanel({
+    craftX,
+    craftY,
+    craftSlot,
+    craftGap,
+    outputX,
+    panelY,
+    crafting,
+    inventory,
+    onToggleSize: () => {
+      crafting.drainTo(inventory);
+      crafting = new CraftingGrid(crafting.size === 2 ? 3 : 2);
+      showInventory();
+    },
+    onDrop: (from, to) => handleDrop(from, to),
+    refresh: () => showInventory(),
   }));
 
   if (inventoryHint) {

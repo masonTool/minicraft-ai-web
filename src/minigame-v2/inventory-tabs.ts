@@ -1,4 +1,5 @@
 import { RECIPES, type ShapelessRecipe, type ShapedRecipe } from '../core/crafting/Recipes.ts';
+import type { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import type { Inventory } from '../core/container/Inventory.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { CREATIVE_CATEGORIES, creativeTabFor, type V2CreativeCategory } from './inventory-catalog.ts';
@@ -145,5 +146,96 @@ export function buildRecipeTab(ctx: RecipeTabContext): UiElement[] {
     ctx.setPage(Math.min(pages - 1, page + 1));
     ctx.refresh();
   }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }));
+  return elements;
+}
+
+export interface ItemTabContext {
+  gridX: number;
+  gridY: number;
+  slotSize: number;
+  gap: number;
+  inventory: Inventory;
+  selectedSlot: number;
+  onSelect(slot: number): void;
+  onDrop(from: number, to: number): void;
+  refresh(): void;
+}
+
+export function buildItemTab(ctx: ItemTabContext): UiElement[] {
+  const elements: UiElement[] = [];
+  for (let j = 0; j < 27; j++) {
+    const i = j + 9;
+    const stack = ctx.inventory.get(i);
+    elements.push(
+      slot(ctx.gridX + (j % 9) * (ctx.slotSize + ctx.gap), ctx.gridY + Math.floor(j / 9) * (ctx.slotSize + ctx.gap), ctx.slotSize, i, stack?.id ?? 0, stack?.count ?? 0, false, () => ctx.refresh(), (from, to) => ctx.onDrop(from.index, to.index)),
+    );
+  }
+  const hotbarY = ctx.gridY + 3 * (ctx.slotSize + ctx.gap) + 14;
+  elements.push(text(ctx.gridX, hotbarY - 22, 300, 20, '快捷栏', { fontSize: 12, color: 'rgba(200,220,235,0.65)' }));
+  for (let i = 0; i < 9; i++) {
+    const stack = ctx.inventory.get(i);
+    elements.push(
+      slot(ctx.gridX + i * (ctx.slotSize + ctx.gap), hotbarY, ctx.slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === ctx.selectedSlot, () => ctx.onSelect(i), (from, to) => ctx.onDrop(from.index, to.index)),
+    );
+  }
+  return elements;
+}
+
+export interface CraftingPanelContext {
+  craftX: number;
+  craftY: number;
+  craftSlot: number;
+  craftGap: number;
+  outputX: number;
+  panelY: number;
+  crafting: CraftingGrid;
+  inventory: Inventory;
+  onToggleSize(): void;
+  onDrop(from: number, to: number): void;
+  refresh(): void;
+}
+
+export function buildCraftingPanel(ctx: CraftingPanelContext): UiElement[] {
+  const elements: UiElement[] = [];
+  elements.push(
+    button(ctx.craftX, ctx.panelY + 22, 110, 28, `${ctx.crafting.size}x${ctx.crafting.size}`, () => ctx.onToggleSize(), {
+      background: 'rgba(32, 44, 52, 0.95)',
+      border: 'rgba(180, 215, 235, 0.35)',
+      radius: 6,
+    }),
+  );
+  for (let i = 0; i < ctx.crafting.size * ctx.crafting.size; i++) {
+    const stack = ctx.crafting.get(i);
+    elements.push(
+      slot(
+        ctx.craftX + (i % ctx.crafting.size) * (ctx.craftSlot + ctx.craftGap),
+        ctx.craftY + Math.floor(i / ctx.crafting.size) * (ctx.craftSlot + ctx.craftGap),
+        ctx.craftSlot,
+        100 + i,
+        stack?.id ?? 0,
+        stack?.count ?? 0,
+        false,
+        () => {
+          const current = ctx.crafting.get(i);
+          if (!current) return;
+          const remaining = ctx.inventory.add(current.id, current.count);
+          ctx.crafting.set(i, remaining > 0 ? { id: current.id, count: remaining } : null);
+          ctx.refresh();
+        },
+        (from, to) => ctx.onDrop(from.index, to.index),
+      ),
+    );
+  }
+  const result = ctx.crafting.result;
+  elements.push(text(ctx.outputX, ctx.craftY + 2, 100, 24, '产物', { fontSize: 13, color: 'rgba(210,230,240,0.7)' }));
+  elements.push(
+    slot(ctx.outputX, ctx.craftY + 26, ctx.craftSlot, 200, result?.id ?? 0, result?.count ?? 0, false, () => {
+      const current = ctx.crafting.result;
+      if (!current) return;
+      ctx.inventory.add(current.id, current.count);
+      ctx.crafting.takeResult();
+      ctx.refresh();
+    }),
+  );
   return elements;
 }

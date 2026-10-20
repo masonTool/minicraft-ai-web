@@ -102,7 +102,7 @@ v2
 - 抽取 `ContainerSystem`：箱子/熔炉打开、存取、面板、熔炉 tick 移出组合根
 - 抽取 `drawBlockIcon` 与创造分类纯逻辑，组合根不再依赖图集布局
 - 抽取 `recipe-book.ts`：配方尺寸匹配、背包取 1 份材料、填合成格
-- 抽取 `inventory-tabs.ts`：创造/配方页签 UI 构建，组合根只注入状态与回调
+- 抽取 `inventory-tabs.ts`：物品/创造/配方三页 + 合成面板 UI 构建，组合根只注入状态与回调
 
 ## 已知架构债务
 
