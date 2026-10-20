@@ -298,6 +298,7 @@ async function boot(): Promise<void> {
   let currentWorldId = platform.storage.get('wx.worldId') ?? worlds[0]!.id;
   let currentWorld = worlds.find((world) => world.id === currentWorldId) ?? worlds[0]!;
   currentWorldId = currentWorld.id;
+  const gameMode: GameMode = currentWorld.gameMode;
   const storedSeed = Number(platform.storage.get('wx.worldSeed') ?? '');
   const fallbackSeed =
     Number.isFinite(storedSeed) && storedSeed > 0 ? Math.floor(storedSeed) : 0x5eed;
@@ -575,7 +576,7 @@ async function boot(): Promise<void> {
   let damageFlash = 0;
   let fallStartY: number | null = null;
   const applyDamage = (amount: number, cause: string): void => {
-    if (amount <= 0 || ui.isDead()) return;
+    if (amount <= 0 || ui.isDead() || gameMode === 'creative') return;
     playerHealth = Math.max(0, playerHealth - amount);
     refreshVitals();
     damageFlash = Math.min(1, 0.32 + amount / 8);
@@ -629,7 +630,7 @@ async function boot(): Promise<void> {
   let jumpPointerId: number | null = null;
   let lastMoveTap = 0;
   let lastJumpTap = 0;
-  let flying = loadedPlayer?.flying ?? false;
+  let flying = gameMode === 'creative' && (loadedPlayer?.flying ?? false);
   let sneaking = false;
   let mining: { x: number; y: number; z: number; elapsed: number; pointerId: number } | null = null;
   let openedChest: Chest | null = null;
@@ -638,6 +639,15 @@ async function boot(): Promise<void> {
   const MINE_TIME = 0.6;
   let lastFrameTime = 0;
   ui.setFlying(flying);
+  const toggleFlight = (): void => {
+    if (gameMode !== 'creative') {
+      ui.showToast('生存模式不能飞行');
+      return;
+    }
+    flying = !flying;
+    ui.setFlying(flying);
+    ui.showToast(flying ? '飞行开' : '飞行关');
+  };
 
   if (loadedPlayer) {
     physics.teleport(loadedPlayer.x, loadedPlayer.y, loadedPlayer.z);
@@ -1212,9 +1222,7 @@ async function boot(): Promise<void> {
       const now = Date.now();
       if (now - lastJumpTap < 320) {
         lastJumpTap = 0;
-        flying = !flying;
-        ui.setFlying(flying);
-        ui.showToast(flying ? '飞行开' : '飞行关');
+        toggleFlight();
       } else {
         lastJumpTap = now;
         jumpQueued = true;
@@ -1414,9 +1422,7 @@ async function boot(): Promise<void> {
       const now = Date.now();
       if (now - lastJumpTap < 320) {
         lastJumpTap = 0;
-        flying = !flying;
-        ui.setFlying(flying);
-        ui.showToast(flying ? '飞行开' : '飞行关');
+        toggleFlight();
       } else {
         lastJumpTap = now;
         jumpQueued = true;
@@ -1694,7 +1700,8 @@ async function boot(): Promise<void> {
           cancelMining();
         } else {
           mining.elapsed += dt;
-          const progress = Math.min(1, mining.elapsed / MINE_TIME);
+          const mineTime = gameMode === 'creative' ? 0.05 : MINE_TIME;
+          const progress = Math.min(1, mining.elapsed / mineTime);
           ui.setMining(progress);
           if (progress >= 1) {
             breakAt(mining.x, mining.y, mining.z);
