@@ -32,14 +32,17 @@ AppID 已填，换账号时改 `project.config.json`。
 
 ```
 WX-020 WORLD 844x390 dpr 3  P 9,67,9 G1
-ATLAS 200ms 256x1040  WORKER main
+ATLAS 224ms 256x1040  W main  T grass_block  SLOT 1/6
 CHUNKS 37  DRAWN 37  LIGHT 0  Q 0
-FPS 121  MS 8.3  TRI 89722  CALLS 98
-LEFT DRAG MOVE  ·  RIGHT DRAG LOOK  ·  TAP RIGHT-BOTTOM JUMP
+FPS 119  MS 8.4  TRI 229322  CALLS 254
+L tap cycle/drag move · R drag look/tap top place mid break bottom jump
 ```
 
 - `P x,y,z G0/1`：玩家坐标、是否落地；
-- 左半屏拖动 = 摇杆；右半屏拖动 = 视角；右下角点按 = 跳跃；
+- `T ...`：准星命中的方块（黑色选中框会套住它）；
+- `SLOT 1/6`：快捷栏当前槽位；
+- 左半屏拖动 = 摇杆，轻点 = 切快捷栏；
+- 右半屏拖动 = 视角，轻点分区：上 = 放方块、中 = 挖方块、下 = 跳跃；
 - `WORKER wx` 表示真机 worker 可用；`main` 表示自动降级主线程。
 
 重点看：
@@ -59,4 +62,4 @@ LEFT DRAG MOVE  ·  RIGHT DRAG LOOK  ·  TAP RIGHT-BOTTOM JUMP
 
 - `Random.ts` 依赖 BigInt；入口会先检查，不支持则直接弹窗。
 - helper 预览里 `wx.createWorker` 不回 pong，会自动降级主线程（启动约 12s、5fps，完成后 120fps）。
-- 还没有 UI/背包/方块交互/存档；这是 WX-020B 的下一阶段。
+- 方块交互是基础射线版：固定 6 格快捷栏、无破坏进度/音效/掉落物；这些与背包/存档一起在 WX-020B 后续和 WX-021 补。

@@ -17,6 +17,8 @@ import { TextureAtlas } from '../render/TextureAtlas.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { World } from '../core/world/World.ts';
 import { PlayerPhysics, type PlayerInput } from '../core/physics/PlayerPhysics.ts';
+import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
+import { Block, blockDef } from '../core/registry/blocks.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { workerHostToLike } from '../platform/wx/worker-like.ts';
 import { createMainThreadWorker } from './main-thread-worker.ts';
@@ -177,7 +179,22 @@ async function boot(): Promise<void> {
   world.events = {
     onChunkLoaded: (chunk) => chunkRenderer.onChunkLoaded(chunk.cx, chunk.cz),
     onChunkUnloaded: (cx, cz) => chunkRenderer.onChunkUnloaded(cx, cz),
+    onBlockChanged: (x, _y, z) => chunkRenderer.enqueueAround(x, z),
   };
+
+  // 选中方块的黑框（先不做准星 UI，HUD 会显示目标名称）
+  const outline = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)),
+    new THREE.LineBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.9 }),
+  );
+  outline.visible = false;
+  outline.renderOrder = 10;
+  scene.add(outline);
+
+  const HOTBAR = [Block.OAK_PLANKS, Block.STONE, Block.DIRT, Block.GRASS_BLOCK, Block.OAK_LOG, Block.GLASS];
+  let selectedSlot = 0;
+  let currentHit: RayHit | null = null;
+  let targetLabel = '-';
 
   // 第一人称玩家（WX-020B 第一块）：先用平台 pointer 输入，UI 后续再抽 UiPort。
   const physics = new PlayerPhysics();
@@ -189,15 +206,21 @@ async function boot(): Promise<void> {
     sprint: false,
   };
   let yaw = Math.PI * 0.25;
-  let pitch = -0.15;
+  let pitch = -0.9;
   let playerReady = false;
   let movePointerId: number | null = null;
   let lookPointerId: number | null = null;
-  let jumpPointerId: number | null = null;
   let moveOriginX = 0;
   let moveOriginY = 0;
+  let moveStartTime = 0;
+  let moveMoved = false;
   let lastLookX = 0;
   let lastLookY = 0;
+  let lookStartX = 0;
+  let lookStartY = 0;
+  let lookStartTime = 0;
+  let lookMoved = false;
+  let jumpQueued = false;
   let lastFrameTime = 0;
 
   const updateCamera = (): void => {
@@ -219,6 +242,76 @@ async function boot(): Promise<void> {
     playerInput.strafe = 0;
   };
 
+  const updateTarget = (): void => {
+    const cosPitch = Math.cos(pitch);
+    const dx = -Math.sin(yaw) * cosPitch;
+    const dy = Math.sin(pitch);
+    const dz = -Math.cos(yaw) * cosPitch;
+    currentHit = raycastVoxels(
+      (x, y, z) => world.isSelectable(x, y, z),
+      physics.x,
+      physics.eyeY,
+      physics.z,
+      dx,
+      dy,
+      dz,
+      8,
+    );
+    if (!currentHit) {
+      outline.visible = false;
+      targetLabel = '-';
+      return;
+    }
+    outline.visible = true;
+    outline.position.set(currentHit.x + 0.5, currentHit.y + 0.5, currentHit.z + 0.5);
+    targetLabel = blockDef(world.getBlock(currentHit.x, currentHit.y, currentHit.z))
+      .name.replace('minecraft:', '');
+  };
+
+  const breakTarget = (): void => {
+    updateTarget();
+    if (!currentHit) return;
+    const id = world.getBlock(currentHit.x, currentHit.y, currentHit.z);
+    if (id === Block.AIR || id === Block.BEDROCK) return;
+    world.setBlockAndUpdate(currentHit.x, currentHit.y, currentHit.z, Block.AIR);
+  };
+
+  const placeTarget = (): void => {
+    updateTarget();
+    if (!currentHit) return;
+    const px = currentHit.x + currentHit.nx;
+    const py = currentHit.y + currentHit.ny;
+    const pz = currentHit.z + currentHit.nz;
+    if (!world.isLoaded(px, pz) || world.getBlock(px, py, pz) !== Block.AIR) return;
+    // 别把方块放进玩家自己的碰撞盒
+    const half = physics.width / 2;
+    if (
+      px + 1 > physics.x - half &&
+      px < physics.x + half &&
+      py + 1 > physics.y &&
+      py < physics.y + physics.height &&
+      pz + 1 > physics.z - half &&
+      pz < physics.z + half
+    ) {
+      return;
+    }
+    world.setBlockAndUpdate(px, py, pz, HOTBAR[selectedSlot] ?? Block.OAK_PLANKS);
+  };
+
+  const cycleSlot = (): void => {
+    selectedSlot = (selectedSlot + 1) % HOTBAR.length;
+  };
+
+  const handleRightTap = (_x: number, y: number): void => {
+    if (y > height * 0.78) {
+      jumpQueued = true;
+    } else if (y > height * 0.45) {
+      breakTarget();
+    } else {
+      placeTarget();
+    }
+  };
+
   platform.input.onPointer('down', (event) => {
     const x = event.clientX;
     const y = event.clientY;
@@ -226,22 +319,26 @@ async function boot(): Promise<void> {
       movePointerId = event.pointerId;
       moveOriginX = x;
       moveOriginY = y;
-      return;
-    }
-    if (x > width * 0.82 && y > height * 0.68 && jumpPointerId === null) {
-      jumpPointerId = event.pointerId;
-      playerInput.jump = true;
+      moveStartTime = Date.now();
+      moveMoved = false;
       return;
     }
     if (lookPointerId === null) {
       lookPointerId = event.pointerId;
       lastLookX = x;
       lastLookY = y;
+      lookStartX = x;
+      lookStartY = y;
+      lookStartTime = Date.now();
+      lookMoved = false;
     }
   });
 
   platform.input.onPointer('move', (event) => {
     if (event.pointerId === movePointerId) {
+      if (Math.hypot(event.clientX - moveOriginX, event.clientY - moveOriginY) > 8) {
+        moveMoved = true;
+      }
       const dx = (event.clientX - moveOriginX) / 64;
       const dy = (event.clientY - moveOriginY) / 64;
       const deadzone = 0.12;
@@ -250,6 +347,9 @@ async function boot(): Promise<void> {
       return;
     }
     if (event.pointerId === lookPointerId) {
+      if (Math.hypot(event.clientX - lookStartX, event.clientY - lookStartY) > 10) {
+        lookMoved = true;
+      }
       yaw -= (event.clientX - lastLookX) * 0.006;
       pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lastLookY) * 0.006));
       lastLookX = event.clientX;
@@ -258,12 +358,16 @@ async function boot(): Promise<void> {
     }
   });
 
-  const releasePointer = (event: { pointerId: number }): void => {
-    if (event.pointerId === movePointerId) resetMove();
-    if (event.pointerId === lookPointerId) lookPointerId = null;
-    if (event.pointerId === jumpPointerId) {
-      jumpPointerId = null;
-      playerInput.jump = false;
+  const releasePointer = (event: { pointerId: number; clientX: number; clientY: number }): void => {
+    if (event.pointerId === movePointerId) {
+      if (!moveMoved && Date.now() - moveStartTime < 300) cycleSlot();
+      resetMove();
+    }
+    if (event.pointerId === lookPointerId) {
+      if (!lookMoved && Date.now() - lookStartTime < 350) {
+        handleRightTap(event.clientX, event.clientY);
+      }
+      lookPointerId = null;
     }
   };
   platform.input.onPointer('up', releasePointer);
@@ -274,10 +378,10 @@ async function boot(): Promise<void> {
   const hud = createHud();
   hud.update([
     `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  PLAYER`,
-    `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  WORKER ${workerState}`,
+    `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T -  SLOT 1/${HOTBAR.length}`,
     'CHUNKS ...  DRAWN ...  LIGHT ...',
     'FPS ...  MS ...  TRI ...  CALLS ...',
-    'LEFT DRAG MOVE  ·  RIGHT DRAG LOOK  ·  TAP RIGHT-BOTTOM JUMP',
+    'L tap cycle/drag move · R drag look/tap top place mid break bottom jump',
   ]);
 
   let frames = 0;
@@ -324,6 +428,12 @@ async function boot(): Promise<void> {
     get onGround() {
       return physics.onGround;
     },
+    get target() {
+      return targetLabel;
+    },
+    get slot() {
+      return selectedSlot;
+    },
   };
 
   const frame = (time: number): void => {
@@ -334,10 +444,13 @@ async function boot(): Promise<void> {
     // 等脚下区块加载完再落玩家，避免出生就掉进虚空
     if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
     if (playerReady && world.isLoaded(physics.x, physics.z)) {
+      playerInput.jump = jumpQueued;
+      jumpQueued = false;
       physics.update(world, playerInput, yaw, dt, false, 1, 1, false);
       if (physics.y < -40) spawnPlayer();
     }
     updateCamera();
+    updateTarget();
 
     const centerCx = Math.floor(physics.x / 16);
     const centerCz = Math.floor(physics.z / 16);
@@ -359,10 +472,10 @@ async function boot(): Promise<void> {
       );
       hud.update([
         `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}  P ${physics.x.toFixed(0)},${physics.y.toFixed(0)},${physics.z.toFixed(0)} G${physics.onGround ? 1 : 0}`,
-        `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  WORKER ${workerState}`,
+        `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T ${targetLabel}  SLOT ${selectedSlot + 1}/${HOTBAR.length}`,
         `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
-        'LEFT DRAG MOVE  ·  RIGHT DRAG LOOK  ·  TAP RIGHT-BOTTOM JUMP',
+        'L tap cycle/drag move · R drag look/tap top place mid break bottom jump',
       ]);
       frames = 0;
       lastReport = time;
