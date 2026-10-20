@@ -2474,7 +2474,12 @@ console.log('\n[进游戏首页默认全屏]');
   const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
   check('第一次点击同时请求全屏和横屏锁', fullscreenSrc.includes('enterMobilePresentation') && fullscreenSrc.includes("orientation.lock('landscape')"));
   check('竖屏触摸设备有横屏提示，点它就是那一次手势', fullscreenSrc.includes('installRotateHint') && htmlHead.includes('rotate-hint'));
-  check('manifest 以横屏全屏打开', manifest.includes('"orientation": "landscape"') && manifest.includes('"display": "fullscreen"'));
+  check(
+    'manifest 以横屏全屏打开（iOS 用 standalone，Chrome 优先 fullscreen）',
+    manifest.includes('"orientation": "landscape"') &&
+      manifest.includes('"display": "standalone"') &&
+      manifest.includes('"display_override": ["fullscreen", "standalone"]'),
+  );
   check('微信/QQ 的 X5 内核一打开就横屏全屏', htmlHead.includes('x5-orientation') && htmlHead.includes('content="landscape"') && htmlHead.includes('x5-fullscreen'));
   check(
     '手机进游戏后不再把“视距没涨完”当成启动期光照',
@@ -2504,6 +2509,13 @@ console.log('\n[进游戏首页默认全屏]');
       installSrc.includes('event.preventDefault()') &&
       installSrc.includes('isStandalone()') &&
       mainSrc.includes('installInstallHint();'),
+  );
+  check(
+    'iOS Safari 没有网页全屏 API：引导“分享 → 添加到主屏幕”',
+    installSrc.includes('isIosTouchDevice()') &&
+      installSrc.includes("t('install.iosHint')") &&
+      installSrc.includes('IOS_DISMISS_KEY') &&
+      fullscreenSrc.includes("'fullscreen.rotateIosDetail'"),
   );
   check(
     '引导关掉之后记住（不会每次开都弹）',

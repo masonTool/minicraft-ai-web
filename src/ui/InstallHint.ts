@@ -6,23 +6,27 @@
  * 浏览器这边的硬事实（`Fullscreen.ts` 文件头也写了）：`requestFullscreen()` 必须在
  * **用户手势**的调用栈里发出，所以"页面一加载就全屏"在标签页里做不到。
  * 但有一条**真的**能零点击的路径：把页面装成 App（PWA）——
- * `public/manifest.webmanifest` 已经写着 `display: fullscreen` + `orientation: landscape`，
+ * `public/manifest.webmanifest` 用 `display: standalone`（iOS 兼容）+ 
+ * `display_override: fullscreen`（Android/Chrome 优先真全屏），
  * 从桌面图标启动的窗口本身就是全屏横屏，不需要任何手势。
  *
  * 所以这里只做一件很小的事：**没装的时候提示一次**，装了 / 关了就不再骚扰。
  * 三个刻意的取舍：
- *  1. **只在 `beforeinstallprompt` 到达时出现**：那个事件只有"浏览器认为可以装"才发，
- *     所以不会在 iOS Safari（根本没有安装提示 API）或桌面浏览器上冒出来；
+ *  1. Android/Chrome 只用 `beforeinstallprompt`（那个事件只有"浏览器认为可以装"才发）；
+ *     iOS 没有这个 API、也没有网页全屏 API，所以单独弹一条
+ *     "分享 → 添加到主屏幕"的操作说明；
  *  2. **`preventDefault()`**：Chrome 自己的迷你安装条会贴在屏幕底部，正好压住我们的
  *     跳跃键——收下事件、自己画一条，位置与样式都可控；
  *  3. **关掉之后记住**（localStorage）：这类引导第二次出现就只剩烦人了。
  */
 
 import { t } from '../core/i18n/I18n.ts';
-import { isStandalone } from './Fullscreen.ts';
+import { isIosTouchDevice, isStandalone } from './Fullscreen.ts';
 
 /** 关过一次就不再烦（换设备/换浏览器各记各的） */
 const DISMISS_KEY = 'bedrock-install-hint-dismissed';
+/** iOS 的说明与 Android 的安装条分开记：之前的安装提示关过也不该压掉这条 */
+const IOS_DISMISS_KEY = 'bedrock-ios-fullscreen-hint-dismissed';
 const HINT_ID = 'install-hint';
 
 /** `beforeinstallprompt` 的私有形状（TS 标准库里没有它） */
@@ -50,9 +54,27 @@ function markDismissed(): void {
   }
 }
 
+function readIosDismissed(): boolean {
+  try {
+    return localStorage.getItem(IOS_DISMISS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markIosDismissed(): void {
+  try {
+    localStorage.setItem(IOS_DISMISS_KEY, '1');
+  } catch {
+    /* 同上 */
+  }
+}
+
 function doc(): Document | null {
   return typeof document === 'undefined' ? null : document;
 }
+
+
 
 /** 收起来（不改"关过"的标记：进世界时用它，玩家下次回主菜单还该看到） */
 export function hideInstallHint(): void {
@@ -63,6 +85,37 @@ export function hideInstallHint(): void {
 export function dismissInstallHint(): void {
   hideInstallHint();
   markDismissed();
+}
+
+/**
+ * iOS Safari 专用引导（批次 537）。
+ *
+ * iOS 的 Safari **没有普通网页的 Fullscreen API**，`requestFullscreen()` 只会被拒；
+ * 唯一能真正全屏横屏的路径是把页面加到主屏幕后从桌面图标启动。
+ * iOS 也没有 `beforeinstallprompt`，所以只能自己弹一条"分享 → 添加到主屏幕"的说明。
+ */
+function showIosHint(): void {
+  const document_ = doc();
+  if (!document_ || document_.getElementById(HINT_ID)) return;
+
+  const hint = document_.createElement('div');
+  hint.id = HINT_ID;
+  hint.className = 'install-hint install-hint-ios';
+
+  const text = document_.createElement('span');
+  text.textContent = t('install.iosHint');
+
+  const ok = document_.createElement('button');
+  ok.type = 'button';
+  ok.className = 'install-hint-add';
+  ok.textContent = t('install.iosOk');
+  ok.addEventListener('click', () => {
+    markIosDismissed();
+    hideInstallHint();
+  });
+
+  hint.append(text, ok);
+  document_.body.appendChild(hint);
 }
 
 function showHint(): void {
@@ -108,7 +161,9 @@ function showHint(): void {
  */
 export function installInstallHint(): void {
   if (typeof window === 'undefined' || !doc()) return;
-  if (isStandalone() || readDismissed()) return;
+  if (isStandalone()) return;
+  // iOS 用单独的关闭键：之前关过 Android/Chrome 的安装条，不该连带压掉这条说明
+  if (!isIosTouchDevice() && readDismissed()) return;
 
   window.addEventListener('appinstalled', () => {
     deferred = null;
@@ -122,6 +177,14 @@ export function installInstallHint(): void {
     deferred = event as InstallPromptEvent;
     showHint();
   });
+
+  // iOS 没有 beforeinstallprompt / Fullscreen API：给一次操作说明。
+  // 延迟一点出现，避免和主菜单首帧、旋转提示叠在一起。
+  if (isIosTouchDevice()) {
+    window.setTimeout(() => {
+      if (!isStandalone() && !readIosDismissed()) showIosHint();
+    }, 1200);
+  }
 }
 
 /** 调试用：现在有没有挂着引导 */

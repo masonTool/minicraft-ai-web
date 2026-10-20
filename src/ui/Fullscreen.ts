@@ -284,7 +284,10 @@ export function installRotateHint(): void {
   const title = doc.createElement('b');
   title.textContent = t('fullscreen.rotateTitle');
   const detail = doc.createElement('span');
-  detail.textContent = t('fullscreen.rotateDetail');
+  // iPhone/iPad 的 Safari 没有网页全屏 API：别写"点一下进入全屏"这种做不到的话
+  detail.textContent = t(
+    isIosTouchDevice() ? 'fullscreen.rotateIosDetail' : 'fullscreen.rotateDetail',
+  );
   hint.append(phone, title, detail);
   // 批次 212：**整屏任何位置**都算点击（不再依赖点中提示层本身）。
   // 用 document 的捕获阶段：即使有别的浮层压在它上面，这一下也先落到这里。
@@ -322,4 +325,12 @@ function isCoarsePointer(): boolean {
   const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
   const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   return coarse && hasTouch;
+}
+
+/** iPhone / iPad / iPod（iPadOS 13+ 的 UA 是 Macintosh，用多点触控补判） */
+export function isIosTouchDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
 }

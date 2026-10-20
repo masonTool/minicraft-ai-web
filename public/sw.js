@@ -12,7 +12,9 @@
  * 代价是"第一次访问之后"才能离线——这是可接受的取舍。
  */
 
-const CACHE_NAME = 'bedrock-118-web-v1';
+// v2（批次 537）：manifest 改成 iOS 兼容的 standalone，必须换缓存名，
+// 否则老用户装到主屏时可能还读到缓存里的 fullscreen（iOS 会忽略）。
+const CACHE_NAME = 'bedrock-118-web-v2';
 /** 离线兜底：任何导航请求失败都回落到它 */
 const APP_SHELL = './index.html';
 
