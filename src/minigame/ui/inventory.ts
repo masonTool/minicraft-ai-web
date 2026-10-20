@@ -24,6 +24,9 @@ export interface InventoryCallbacks {
   takeSelectedOne?: () => ItemStack | null;
   /** 把合成格/产物放回真实背包 */
   addStack?: (stack: ItemStack) => void;
+  /** 3×3 工作台是否可用（附近有工作台方块） */
+  canUseWorkbench?: () => boolean;
+  showToast?: (message: string) => void;
 }
 
 export interface Inventory {
@@ -473,6 +476,10 @@ export function createInventory(
         return true;
       }
       if (contains(workbenchButton, x, y)) {
+        if (craftSize === 2 && callbacks.canUseWorkbench && !callbacks.canUseWorkbench()) {
+          callbacks.showToast?.('STAND NEAR CRAFTING TABLE');
+          return true;
+        }
         craftSize = craftSize === 2 ? 3 : 2;
         pendingCraft = null;
         redraw();

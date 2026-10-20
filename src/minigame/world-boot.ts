@@ -284,6 +284,20 @@ async function boot(): Promise<void> {
         ui.syncInventory(inventory.serialize(), selectedSlot);
         scheduleSave?.();
       },
+      canUseWorkbench: () => {
+        const px = Math.floor(physics.x);
+        const py = Math.floor(physics.y);
+        const pz = Math.floor(physics.z);
+        for (let dx = -4; dx <= 4; dx++) {
+          for (let dy = -3; dy <= 3; dy++) {
+            for (let dz = -4; dz <= 4; dz++) {
+              if (world.getBlock(px + dx, py + dy, pz + dz) === Block.CRAFTING_TABLE) return true;
+            }
+          }
+        }
+        return false;
+      },
+      onToast: (message) => ui.showToast(message),
       onQuickMove: () => {
         const stack = inventory.get(selectedSlot);
         if (!stack) {
