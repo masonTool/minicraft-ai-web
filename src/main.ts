@@ -173,6 +173,7 @@ import { executeCommand, type CommandContext, type CommandFeedback } from './cor
 import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.ts';
 // 记分板（M23，批次 402）
 import { Scoreboard } from './core/world/Scoreboard.ts';
+import { Teams } from './core/world/Teams.ts';
 // 蜂巢的蜂蜜等级与挤蜜（J21，批次 407）
 import {
   BEE_STING_POISON_AMPLIFIER,
@@ -1404,6 +1405,8 @@ class App {
    * 侧边栏界面也还没接——两件事都记在 TASKS M23 里，不装作做完了。
    */
   private readonly scoreboardState = new Scoreboard();
+  /** 队伍（批次 468）：与记分板同一层，纯数据 */
+  private readonly teamState = new Teams();
   /**
    * 载具的剩余耐久（批次 435）：按实体对象存。
    *
@@ -2869,6 +2872,11 @@ class App {
     const skippedScores = this.scoreboardState.restore(scoreboard);
     if (skippedScores > 0) console.info(`[save] 记分板跳过了 ${skippedScores} 条坏数据`);
 
+    // 队伍（批次 468）：同一条分工——存档只搬运，坏条目由 `Teams.restore` 跳过
+    const teams = await this.save.loadTeams();
+    const skippedTeams = this.teamState.restore(teams);
+    if (skippedTeams > 0) console.info(`[save] 队伍跳过了 ${skippedTeams} 条坏数据`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -3032,6 +3040,8 @@ class App {
       await this.save.saveAdvancements(this.advancements.serialize());
       // 记分板（M23，批次 456）：整份覆盖写
       await this.save.saveScoreboard(this.scoreboardState.snapshot());
+      // 队伍（批次 468）：同一条
+      await this.save.saveTeams(this.teamState.snapshot());
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -9603,6 +9613,7 @@ class App {
         return list;
       },
       scoreboard: () => this.scoreboardState,
+      teams: () => this.teamState,
       // 批次 464：/locate structure —— 结构位置是"种子 + 候选规则"的纯函数，
       // 主线程用同一个生成器重算一遍即可（不需要 Worker 的生成器）
       locateStructure: (kind) => {

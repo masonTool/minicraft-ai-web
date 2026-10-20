@@ -23,6 +23,7 @@ import {
   serializeContainers,
 } from '../src/core/save/ContainerSave.ts';
 import { Scoreboard, SIDEBAR_MAX_ROWS } from '../src/core/world/Scoreboard.ts';
+import { Teams } from '../src/core/world/Teams.ts';
 import { ChunkEdits, packEdit, packEditId, packEditState } from '../src/core/save/ChunkEdits.ts';
 import { BREW_SECONDS, BREWS_PER_BLAZE_POWDER } from '../src/core/crafting/Brewing.ts';
 
@@ -393,8 +394,45 @@ console.log('\n[容器内容：空容器与脏数据]');
   equal('补出来的格子是空的', short.getChest('overworld', 9, 64, 9)?.get(20), null);
 }
 
-console.log(`\n存档测试：${passed} 通过 / ${failed} 失败`);
-if (failed > 0) process.exit(1);
+
+console.log('\n[队伍存读档（批次 468）]');
+{
+  const teams = new Teams();
+  teams.add('red', '红队', 'red');
+  teams.join('red', 'Alice');
+  teams.join('red', 'Bob');
+  teams.add('blue');
+  teams.join('blue', 'Carol');
+  teams.setFriendlyFire('red', true);
+
+  // ① 快照 → JSON → 读回
+  const roundTrip = new Teams();
+  roundTrip.restore(JSON.parse(JSON.stringify(teams.snapshot())));
+  equal('队伍数读回来', roundTrip.count, 2);
+  equal('显示名读回来', roundTrip.get('red')?.displayName, '红队');
+  equal('颜色读回来', roundTrip.get('red')?.color, 'red');
+  equal('友好伤害读回来', roundTrip.get('red')?.friendlyFire, true);
+  equal('成员读回来', roundTrip.membersOf('red').join(','), 'Alice,Bob');
+  equal('成员的队伍读回来', roundTrip.teamOf('Carol')?.name, 'blue');
+  equal('两次快照完全一致', JSON.stringify(roundTrip.snapshot()), JSON.stringify(teams.snapshot()));
+
+  // ② 坏数据逐条跳过
+  const broken = {
+    teams: [
+      { name: 'ok', displayName: '好', color: 'white', friendlyFire: false, members: ['X'] },
+      { name: '', displayName: '空名', color: 'white', friendlyFire: false, members: [] },
+      { name: 'badColor', displayName: '坏色', color: 'rainbow', friendlyFire: true, members: ['a'.repeat(20)] },
+    ],
+  };
+  const salvaged = new Teams();
+  const skipped = salvaged.restore(broken as never);
+  equal('两个正常的队活下来', salvaged.count, 2);
+  equal('一条空名队 + 一条超长成员被跳过', skipped, 2);
+  equal('不认识的颜色的退成白色', salvaged.get('badColor')?.color, 'white');
+
+  equal('没有存档时跳过量是 0', new Teams().restore(null), 0);
+}
+
 
 console.log('\n[记分板存读档（M23，批次 456）]');
 {
@@ -464,3 +502,6 @@ console.log('\n[侧边栏视图（批次 456）]');
   board.setDisplay('sidebar', null);
   equal('清掉槽位后没有视图', board.sidebarView(), null);
 }
+
+console.log(`\n存档测试：${passed} 通过 / ${failed} 失败`);
+if (failed > 0) process.exit(1);

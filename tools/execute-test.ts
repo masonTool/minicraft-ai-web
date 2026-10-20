@@ -29,6 +29,8 @@ import { DEFAULT_GAME_RULES } from '../src/core/world/Rules.ts';
 import { defaultBorder, type WorldBorder } from '../src/core/world/WorldBorder.ts';
 import { resolveBlockId } from '../src/core/registry/itemNames.ts';
 import { Scoreboard } from '../src/core/world/Scoreboard.ts';
+import { Teams } from '../src/core/world/Teams.ts';
+const TEAMS = new Teams();
 
 let passed = 0;
 let failed = 0;
@@ -197,6 +199,9 @@ class FakeWorld implements CommandContext {
   }
   /** 记分板（M23，批次 402）：`/execute if score` 用它 */
   readonly board = new Scoreboard();
+  teams(): Teams {
+    return TEAMS;
+  }
   scoreboard(): Scoreboard {
     return this.board;
   }

@@ -28,6 +28,8 @@ import {
 import { executeCommand, type CommandContext } from '../src/core/commands/Commands.ts';
 import type { CommandEntity } from '../src/core/commands/Selectors.ts';
 import { Scoreboard } from '../src/core/world/Scoreboard.ts';
+import { Teams } from '../src/core/world/Teams.ts';
+const TEAMS = new Teams();
 import { DEFAULT_GAME_RULES, type GameRules } from '../src/core/world/Rules.ts';
 import { BorderRenderer } from '../src/render/BorderRenderer.ts';
 
@@ -218,7 +220,10 @@ console.log('\n[/worldborder：get / set / center]');
     }
     /** 记分板（M23，批次 402）：边界测试不碰它 */
     readonly board = new Scoreboard();
-    scoreboard(): Scoreboard {
+    teams(): Teams {
+    return TEAMS;
+  }
+  scoreboard(): Scoreboard {
       return this.board;
     }
     /** 进度（批次 415）：`/advancement` 用它授/收 */

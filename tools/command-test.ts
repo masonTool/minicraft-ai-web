@@ -31,6 +31,7 @@ import {
 } from '../src/core/commands/Commands.ts';
 import type { CommandEntity } from '../src/core/commands/Selectors.ts';
 import { Scoreboard } from '../src/core/world/Scoreboard.ts';
+import { Teams } from '../src/core/world/Teams.ts';
 import {
   DEFAULT_GAME_RULES,
   DIFFICULTIES as RULE_DIFFICULTIES,
@@ -230,6 +231,11 @@ class FakeWorld implements CommandContext {
   scoreboard(): Scoreboard {
     return this.board;
   }
+  /** 队伍（批次 468）：命令测试里共用一份实例 */
+  teams(): Teams {
+    return this.teams_;
+  }
+  readonly teams_ = new Teams();
   /** 进度（批次 415）：`/advancement` 用它授/收 */
   readonly progressTracker = new AdvancementTracker();
   advancements(): AdvancementTracker {
@@ -728,6 +734,53 @@ console.log('\n[记分板（M23，批次 402）]');
     world.board.getScore('甲', 'kills') === world.board.getScore(world.playerName_, 'kills'),
     `${world.board.getScore('甲', 'kills')}`,
   );
+
+  // ---- /team（批次 468）
+  run('/team add red 红队');
+  check('建队', world.teams_.get('red') !== null, out.lastError);
+  check('显示名生效', world.teams_.get('red')?.displayName === '红队');
+  check('重名报错', run('/team add red').lastError.includes('已经存在'));
+  run('/team add blue');
+  check('建第二个队', world.teams_.count === 2, out.lastError);
+
+  run('/team join red @p');
+  check('把自己拉进队', world.teams_.teamOf(world.playerName_)?.name === 'red', out.lastError);
+  run('/team join blue @p');
+  check('换队时自动退出旧队（一人只能在一个队）', world.teams_.teamOf(world.playerName_)?.name === 'blue');
+  check('旧队里没有人了', world.teams_.membersOf('red').length === 0);
+
+  run('/team leave');
+  check('退出队伍', world.teams_.teamOf(world.playerName_) === null, out.lastError);
+  check('本来没队时只是提示', run('/team leave').lastInfo.includes('本来就不在'), out.lastInfo);
+
+  run('/team join nope @p');
+  check('加入不存在的队报错', out.lastError.includes('不存在'), out.lastError);
+
+  run('/team modify red friendlyFire true');
+  check('打开友好伤害', world.teams_.get('red')?.friendlyFire === true, out.lastError);
+  run('/team modify red friendlyFire maybe');
+  check('友好伤害只接受 true/false', out.lastError.includes('true 或 false'), out.lastError);
+  run('/team modify red color purple');
+  check('改颜色', world.teams_.get('red')?.color === 'purple', out.lastError);
+  run('/team modify red color rainbow');
+  check('不认识的颜色报错', out.lastError.includes('颜色不认识'), out.lastError);
+  run('/team modify nope color red');
+  check('改不存在的队报错', out.lastError.includes('不存在'), out.lastError);
+
+  run('/team list');
+  check('列出队伍（带人数）', out.lastInfo.includes('人'), out.lastInfo);
+
+  run('/team remove red');
+  check('删队', world.teams_.get('red') === null, out.lastError);
+  run('/team remove red');
+  check('删不存在的队报错', out.lastError.includes('不存在'));
+
+  check('同一队的两个人算队友（friendlyFire 判定的入口）', (() => {
+    world.teams_.add('pair');
+    world.teams_.join('pair', 'A');
+    world.teams_.join('pair', 'B');
+    return world.teams_.sameTeam('A', 'B') && !world.teams_.sameTeam('A', 'C');
+  })());
 
   run('/scoreboard players reset 甲');
   check('重置清空该人的分数', world.board.getScore('甲', 'kills') === null);

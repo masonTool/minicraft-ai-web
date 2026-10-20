@@ -36,6 +36,8 @@ import type { AdvancementTracker } from '../progress/AdvancementTracker.ts';
 import { advancementById } from '../progress/advancements.ts';
 import { findNearestBiome } from '../gen/Locate.ts';
 import { CLONE_LIMIT, cloneRegion, cloneVolume, normalizeCloneBox } from './Clone.ts';
+// 队伍（M23 最后一块，批次 468）
+import { TEAM_COLORS, type Teams } from '../world/Teams.ts';
 // 记分板（M23，批次 402）：纯类，规则一条都不依赖世界
 import {
   SCORE_OPERATIONS,
@@ -157,6 +159,9 @@ export interface CommandContext {
   locateStructure?(kind: string): { x: number; y: number; z: number; distance: number } | null;
 
   // ---- 进度（M7，批次 415）
+  /** 队伍（批次 468，`/team` 用它） */
+  teams(): Teams;
+
   /** 这份存档的进度跟踪器（`/advancement` 用它授/收） */
   advancements(): AdvancementTracker;
 
@@ -930,6 +935,14 @@ export const COMMANDS: readonly CommandSpec[] = [
     },
   },
   {
+    name: 'team',
+    usage: '/team add|remove|list|join|leave|modify …',
+    description: '队伍：建队、拉人、改颜色与友好伤害（免伤/碰撞还没接，见 TASKS M23）',
+    run(args, ctx, out) {
+      runTeam(args, ctx, out);
+    },
+  },
+  {
     name: 'advancement',
     usage: '/advancement grant|revoke <进度 id | *>',
     description: '授予或收回进度（`*` = 全部）',
@@ -1462,6 +1475,147 @@ function runScoreboardObjectives(args: string[], ctx: CommandContext, out: Comma
   }
 
   out.error('用法：/scoreboard objectives <add|remove|list|setdisplay> …');
+}
+
+/**
+ * `/team`（批次 468）。
+ *
+ * ⚠️ 只做**数据层**：建队 / 拉人 / 查归属 / 改颜色与友好伤害。
+ * 队友免伤、碰撞开关、名字颜色三项要"伤害来源"与"名字渲染"，还没接
+ * （差异写在 `Teams.ts` 的文件头与 TASKS M23 里）。
+ */
+function runTeam(args: string[], ctx: CommandContext, out: CommandFeedback): void {
+  const teams = ctx.teams();
+  const sub = (args[0] ?? '').toLowerCase();
+  const usage =
+    '用法：/team add <队伍> [显示名] | remove <队伍> | list | join <队伍> [成员] | leave [成员] | modify <队伍> friendlyFire <true|false> | color <颜色>';
+
+  if (sub === 'add') {
+    const name = args[1];
+    if (!name) {
+      out.error(usage);
+      return;
+    }
+    const displayName = args.slice(2).join(' ').trim();
+    if (!teams.add(name, displayName)) {
+      out.error(`队伍 ${name} 已经存在`);
+      return;
+    }
+    out.info(`已创建队伍 ${name}${displayName ? `（显示为「${displayName}」）` : ''}`);
+    return;
+  }
+
+  if (sub === 'remove') {
+    const name = args[1];
+    if (!name) {
+      out.error(usage);
+      return;
+    }
+    if (!teams.remove(name)) {
+      out.error(`队伍 ${name} 不存在`);
+      return;
+    }
+    out.info(`已删除队伍 ${name}（成员一并解绑）`);
+    return;
+  }
+
+  if (sub === 'list') {
+    const all = teams.list();
+    if (all.length === 0) {
+      out.info('还没有任何队伍');
+      return;
+    }
+    const described = all.map((team) => {
+      const members = teams.membersOf(team.name);
+      const shown = team.displayName === team.name ? '' : `，显示为「${team.displayName}」`;
+      return `${team.name}（${team.color}，友好伤害${team.friendlyFire ? '开' : '关'}${shown}，${members.length} 人）`;
+    });
+    out.info(`共 ${all.length} 个队伍：${described.join('；')}`);
+    return;
+  }
+
+  if (sub === 'join' || sub === 'leave') {
+    const teamName = sub === 'join' ? args[1] : undefined;
+    const memberArg = sub === 'join' ? args[2] : args[1];
+    if (sub === 'join' && !teamName) {
+      out.error(usage);
+      return;
+    }
+    // 队不存在要**先说清楚**：否则 `teams.join` 返回 false 会被下面的分支
+    // 误报成"成员名字不合法"（第一版就是这么错的）
+    if (sub === 'join' && !teams.get(teamName!)) {
+      out.error(`队伍 ${teamName} 不存在`);
+      return;
+    }
+    const position = ctx.position();
+    const state: ExecState = {
+      origin: { x: position.x, y: position.y, z: position.z },
+      executorId: selfEntityId(ctx),
+    };
+    // 成员省略 = 自己（原版 `/team join <队>` 就是把自己拉进去）
+    const members = memberArg
+      ? holderNamesOf(memberArg, state, ctx, out)
+      : [ctx.playerName()];
+    if (members === null) return;
+    if (members.length === 0) {
+      out.error(`成员 ${memberArg} 没有匹配到任何对象`);
+      return;
+    }
+    if (sub === 'join') {
+      for (const member of members) {
+        if (!teams.join(teamName!, member)) {
+          out.error(`成员 ${member} 的名字不合法（1~16 个字符）`);
+          continue;
+        }
+        out.info(`已把 ${member} 加入队伍 ${teamName}`);
+      }
+    } else {
+      for (const member of members) {
+        if (!teams.leave(member)) {
+          out.info(`${member} 本来就不在任何队伍里`);
+          continue;
+        }
+        out.info(`已让 ${member} 退出队伍`);
+      }
+    }
+    return;
+  }
+
+  if (sub === 'modify') {
+    const name = args[1];
+    const key = (args[2] ?? '').toLowerCase();
+    const value = args[3];
+    if (!name || !key || value === undefined) {
+      out.error(usage);
+      return;
+    }
+    if (!teams.get(name)) {
+      out.error(`队伍 ${name} 不存在`);
+      return;
+    }
+    if (key === 'friendlyfire') {
+      const on = value.toLowerCase() === 'true';
+      if (value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false') {
+        out.error('友好伤害只能是 true 或 false');
+        return;
+      }
+      teams.setFriendlyFire(name, on);
+      out.info(`队伍 ${name} 的友好伤害已${on ? '打开' : '关闭'}`);
+      return;
+    }
+    if (key === 'color') {
+      if (!teams.setColor(name, value.toLowerCase())) {
+        out.error(`颜色不认识：${value}（可用 ${TEAM_COLORS.join(' / ')}）`);
+        return;
+      }
+      out.info(`队伍 ${name} 的颜色已改为 ${value.toLowerCase()}`);
+      return;
+    }
+    out.error(`不认识的属性 ${key}（只有 friendlyFire 与 color）`);
+    return;
+  }
+
+  out.error(usage);
 }
 
 function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandFeedback): void {
