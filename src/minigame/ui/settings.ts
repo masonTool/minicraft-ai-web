@@ -25,6 +25,7 @@ export interface SettingsValues {
   leftHanded: boolean;
   touchScale: number;
   groupVolumes: Record<SoundGroup, number>;
+  stickMode: 'fixed' | 'dynamic';
 }
 
 export const DEFAULT_SETTINGS: SettingsValues = {
@@ -39,6 +40,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   leftHanded: false,
   touchScale: 1,
   groupVolumes: { blocks: 1, mobs: 1, player: 1, ui: 1, ambient: 1, music: 1 },
+  stickMode: 'fixed',
 };
 
 export type SettingsAction = 'back' | null;
@@ -112,7 +114,8 @@ export function createSettingsMenu(
   });
   const invertSwitch: Rect = { x: panelX + 60, y: panelY + 384, w: panelWidth - 120, h: 28 };
   const sensitivitySlider: Rect = { x: panelX + 60, y: panelY + 198, w: panelWidth - 120, h: 30 };
-  const cameraButton: Rect = { x: panelX + 60, y: panelY + 118, w: panelWidth - 120, h: 42 };
+  const cameraButton: Rect = { x: panelX + 60, y: panelY + 118, w: 260, h: 42 };
+  const stickButton: Rect = { x: panelX + 340, y: panelY + 118, w: 260, h: 42 };
   const autoJumpSwitch: Rect = { x: panelX + 60, y: panelY + 310, w: panelWidth - 120, h: 28 };
   const leftHandedSwitch: Rect = { x: panelX + 60, y: panelY + 348, w: panelWidth - 120, h: 28 };
   const touchScaleSlider: Rect = { x: panelX + 60, y: panelY + 258, w: panelWidth - 120, h: 30 };
@@ -145,7 +148,14 @@ export function createSettingsMenu(
           : values.cameraMode === 'third-back'
             ? '第三人称（背后）'
             : '第三人称（正面）';
-      drawButton(context, cameraButton, `相机：${cameraLabel}`, 'normal', 18);
+      drawButton(context, cameraButton, `相机：${cameraLabel}`, 'normal', 16);
+      drawButton(
+        context,
+        stickButton,
+        `摇杆：${values.stickMode === 'fixed' ? '固定' : '动态'}`,
+        'normal',
+        16,
+      );
       const sensitivityValue = (values.sensitivity - 0.5) / 1.5;
       drawSlider(context, sensitivitySlider, sensitivityValue, '灵敏度', `×${values.sensitivity.toFixed(1)}`);
       drawSlider(
@@ -271,6 +281,11 @@ export function createSettingsMenu(
       }
 
       if (tab === 'controls') {
+        if (contains(stickButton, x, y)) {
+          values.stickMode = values.stickMode === 'fixed' ? 'dynamic' : 'fixed';
+          notify();
+          return null;
+        }
         if (contains(cameraButton, x, y)) {
           values.cameraMode =
             values.cameraMode === 'first'

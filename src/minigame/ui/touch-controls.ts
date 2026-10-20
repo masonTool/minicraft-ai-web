@@ -4,7 +4,8 @@ import { drawText } from './widgets.ts';
 export interface TouchControls {
   setFlying(active: boolean): void;
   setSneaking(active: boolean): void;
-  setLayout(leftHanded: boolean, scale: number): void;
+  setLayout(leftHanded: boolean, scale: number, stickMode: 'fixed' | 'dynamic'): void;
+  setStickOrigin(x: number, y: number, active: boolean): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -57,6 +58,10 @@ export function createTouchControls(
   let sneaking = false;
   let leftHanded = false;
   let touchScale = 1;
+  let stickMode: 'fixed' | 'dynamic' = 'fixed';
+  let dynamicX = 0;
+  let dynamicY = 0;
+  let dynamicActive = false;
 
   const circle = (x: number, y: number, radius: number, fill: string, stroke: string): void => {
     if (!context) return;
@@ -103,14 +108,18 @@ export function createTouchControls(
     // 摇杆：Web 132px / 屏宽 844 ≈ 160 设计单位；左手模式镜像到右侧
     const scale = touchScale;
     const stickRadius = 80 * scale;
-    const stickX = leftHanded
+    const fixedX = leftHanded
       ? safeRight - 26 - stickRadius
       : safeLeft + 26 + stickRadius;
-    const stickY = canvas.height - safeBottom - 116 - stickRadius;
-    circle(stickX, stickY, stickRadius, 'rgba(255, 255, 255, 0.13)', 'rgba(255, 255, 255, 0.3)');
-    circle(stickX, stickY, 34 * scale, 'rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0.8)');
-    if (sneaking) {
-      drawText(context, '潜行', stickX, stickY - stickRadius - 22, 15, 'rgba(255, 255, 255, 0.85)', 'center');
+    const fixedY = canvas.height - safeBottom - 116 - stickRadius;
+    const stickX = stickMode === 'dynamic' ? dynamicX : fixedX;
+    const stickY = stickMode === 'dynamic' ? dynamicY : fixedY;
+    if (stickMode === 'fixed' || dynamicActive) {
+      circle(stickX, stickY, stickRadius, 'rgba(255, 255, 255, 0.13)', 'rgba(255, 255, 255, 0.3)');
+      circle(stickX, stickY, 34 * scale, 'rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0.8)');
+      if (sneaking) {
+        drawText(context, '潜行', stickX, stickY - stickRadius - 22, 15, 'rgba(255, 255, 255, 0.85)', 'center');
+      }
     }
 
     // 顶部居中暂停
@@ -192,11 +201,26 @@ export function createTouchControls(
       sneaking = active;
       redraw();
     },
-    setLayout(nextLeftHanded: boolean, nextScale: number): void {
+    setLayout(nextLeftHanded: boolean, nextScale: number, nextStickMode: 'fixed' | 'dynamic'): void {
       const scale = Math.max(0.75, Math.min(1.5, nextScale));
-      if (leftHanded === nextLeftHanded && touchScale === scale) return;
+      if (
+        leftHanded === nextLeftHanded &&
+        touchScale === scale &&
+        stickMode === nextStickMode
+      ) {
+        return;
+      }
       leftHanded = nextLeftHanded;
       touchScale = scale;
+      stickMode = nextStickMode;
+      if (stickMode === 'fixed') dynamicActive = false;
+      redraw();
+    },
+    setStickOrigin(x: number, y: number, active: boolean): void {
+      if (dynamicX === x && dynamicY === y && dynamicActive === active) return;
+      dynamicX = x;
+      dynamicY = y;
+      dynamicActive = active;
       redraw();
     },
     render(renderer: THREE.WebGLRenderer): void {

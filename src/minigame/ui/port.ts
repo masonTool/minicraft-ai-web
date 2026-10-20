@@ -27,7 +27,8 @@ export interface MiniGameUi {
   toggleInventory(): void;
   openCraftingTable(): void;
   setCreativeMode(enabled: boolean): void;
-  setTouchLayout(leftHanded: boolean, scale: number): void;
+  setTouchLayout(leftHanded: boolean, scale: number, stickMode: 'fixed' | 'dynamic'): void;
+  setStickOrigin(x: number, y: number, active: boolean): void;
   isInventoryOpen(): boolean;
   handleInventoryDown(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
   handleInventoryMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
@@ -133,7 +134,11 @@ export function createCanvasUi(
   const stats = createStats(screenWidth, screenHeight, safeArea);
   const touchControls = createTouchControls(screenWidth, screenHeight, safeArea);
   const initialUiSettings = initialSettings ?? DEFAULT_SETTINGS;
-  touchControls.setLayout(initialUiSettings.leftHanded, initialUiSettings.touchScale);
+  touchControls.setLayout(
+    initialUiSettings.leftHanded,
+    initialUiSettings.touchScale,
+    initialUiSettings.stickMode,
+  );
   let settingsFromMenu = false;
 
   return {
@@ -157,8 +162,11 @@ export function createCanvasUi(
     setCreativeMode(enabled: boolean): void {
       inventory.setCreativeMode(enabled);
     },
-    setTouchLayout(leftHanded: boolean, scale: number): void {
-      touchControls.setLayout(leftHanded, scale);
+    setTouchLayout(leftHanded: boolean, scale: number, stickMode: 'fixed' | 'dynamic'): void {
+      touchControls.setLayout(leftHanded, scale, stickMode);
+    },
+    setStickOrigin(x: number, y: number, active: boolean): void {
+      touchControls.setStickOrigin(x, y, active);
     },
     openCraftingTable(): void {
       pause.close();

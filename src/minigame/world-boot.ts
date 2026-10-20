@@ -122,6 +122,7 @@ async function boot(): Promise<void> {
         cameraMode: mode === 'third-back' || mode === 'third-front' ? mode : 'first',
         sensitivity: Math.max(0.5, Math.min(2, Number(parsed.sensitivity) || DEFAULT_SETTINGS.sensitivity)),
         autoJump: parsed.autoJump !== false,
+        stickMode: parsed.stickMode === 'dynamic' ? 'dynamic' : 'fixed',
         volume: Math.max(0, Math.min(1, Number(parsed.volume) || DEFAULT_SETTINGS.volume)),
         groupVolumes: {
           blocks: Math.max(0, Math.min(1, Number(parsed.groupVolumes?.blocks) || 1)),
@@ -172,7 +173,13 @@ async function boot(): Promise<void> {
   let stickCenterX = (safe.left + 26 + 80) * uiScale;
   let stickCenterY = height - safeBottomPx - (116 + 80) * uiScale;
   let stickHitRadius = 110 * uiScale;
-  const applyTouchLayout = (leftHanded: boolean, scale: number): void => {
+  let stickMode: 'fixed' | 'dynamic' = savedSettings.stickMode;
+  const applyTouchLayout = (
+    leftHanded: boolean,
+    scale: number,
+    mode: 'fixed' | 'dynamic',
+  ): void => {
+    stickMode = mode;
     const s = Math.max(0.75, Math.min(1.5, scale));
     jumpRadiusPx = 46 * s * uiScale;
     jumpCenterX = (leftHanded ? safe.left + 24 + 46 * s : safe.right - 24 - 46 * s) * uiScale;
@@ -181,7 +188,11 @@ async function boot(): Promise<void> {
     stickCenterY = height - safeBottomPx - (116 + 80 * s) * uiScale;
     stickHitRadius = 110 * s * uiScale;
   };
-  applyTouchLayout(savedSettings.leftHanded, savedSettings.touchScale);
+  applyTouchLayout(
+    savedSettings.leftHanded,
+    savedSettings.touchScale,
+    savedSettings.stickMode,
+  );
 
   const atlasStarted = Date.now();
   const atlas = new TextureAtlas();
@@ -575,8 +586,8 @@ async function boot(): Promise<void> {
         cameraMode = settings.cameraMode;
         lookSensitivity = settings.sensitivity;
         autoJump = settings.autoJump;
-        applyTouchLayout(settings.leftHanded, settings.touchScale);
-        ui.setTouchLayout(settings.leftHanded, settings.touchScale);
+        applyTouchLayout(settings.leftHanded, settings.touchScale, settings.stickMode);
+        ui.setTouchLayout(settings.leftHanded, settings.touchScale, settings.stickMode);
         if (audio) {
           audio.volume = settings.volume;
           (Object.keys(settings.groupVolumes) as SoundGroup[]).forEach((group) => {
@@ -1130,6 +1141,7 @@ async function boot(): Promise<void> {
     movePointerId = null;
     playerInput.forward = 0;
     playerInput.strafe = 0;
+    if (stickMode === 'dynamic') ui.setStickOrigin(0, 0, false);
   };
 
   const updateTarget = (): void => {
@@ -1458,15 +1470,19 @@ async function boot(): Promise<void> {
       return;
     }
 
-    if (
-      Math.hypot(x - stickCenterX, y - stickCenterY) <= stickHitRadius &&
-      movePointerId === null
-    ) {
+    const inStick =
+      stickMode === 'dynamic'
+        ? x < width * 0.5
+        : Math.hypot(x - stickCenterX, y - stickCenterY) <= stickHitRadius;
+    if (inStick && movePointerId === null) {
       movePointerId = event.pointerId;
       moveOriginX = x;
       moveOriginY = y;
       moveStartTime = Date.now();
       moveMoved = false;
+      if (stickMode === 'dynamic') {
+        ui.setStickOrigin(x / uiScale, y / uiScale, true);
+      }
       return;
     }
     // 右下跳跃键：命中范围跟随视觉圆钮，不再落到中间挖掘区
