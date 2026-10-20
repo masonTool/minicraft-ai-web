@@ -547,6 +547,10 @@ export class InventoryScreen {
    */
   private readonly categoryScrollByTab = new Map<RecipeBookTab, number>();
   private readonly categorySearchByTab = new Map<RecipeBookTab, string>();
+  /** 创造分类同样按分类记住滚动位置/搜索词（批次 538 补） */
+  private readonly creativeScrollByCategory = new Map<CreativeTab, number>();
+  private readonly creativeSearchByCategory = new Map<CreativeTab, string>();
+  private creativeScrollIgnoreUntil = 0;
   /** 常驻的自绘滚动条（iOS 的 overlay 滚动条不会一直显示） */
   private categoryScrollTrack!: HTMLDivElement;
   private categoryScrollThumb!: HTMLDivElement;
@@ -1535,25 +1539,35 @@ export class InventoryScreen {
       button.append(icon, label);
       button.addEventListener('pointerdown', (event) => {
         event.preventDefault();
+        // 先存下当前分类的滚动/搜索，再切目标分类
+        if (
+          this.pane === 'creative' &&
+          this.creativeSection.style.display !== 'none' &&
+          this.creativeGrid.clientHeight > 0
+        ) {
+          this.creativeScrollByCategory.set(this.creativeCategory, this.creativeGrid.scrollTop);
+        }
+        this.creativeSearchByCategory.set(this.creativeCategory, this.creativeSearch.value);
         this.creativeCategory = category;
         // 换分类回到第 1 页：停在"第 7 页"而新分类只有 2 页会显示空网格
         this.creativePage = 0;
-        // ⚠️ 换到不显示搜索框的分类时**把搜索词清掉**，否则那是个看不见的过滤器：
-        //    列表会一直空着，而玩家已经没有输入框可以取消它（"分类栏怎么全空了"）
-        if (category !== 'all') {
-          this.creativeQuery = '';
-          this.creativeSearch.value = '';
-        }
+        // 每个分类自己的搜索词；非"搜索"分类没有输入框，必须为空
+        const savedSearch =
+          category === 'all' ? (this.creativeSearchByCategory.get(category) ?? '') : '';
+        this.creativeSearch.value = savedSearch;
+        this.creativeQuery = savedSearch.trim().toLowerCase();
         // Wiki：创造模式下点左侧分类 = 回到创造物品网格（离开生存背包）
         // 批次 181：分类条现在**常驻左轨**，所以这里只要把 pane 切回去，
         // 不再有"按钮被搬走、点了没反应"的情况
         this.pane = 'creative';
+        const targetScroll = this.creativeScrollByCategory.get(category) ?? 0;
+        this.creativeScrollIgnoreUntil = performance.now() + 200;
         this.applyInventoryChrome();
         this.updateTabHighlight();
-        // 批次 185：换分类要**回到这一类的最上面**——原来沿用上一类的滚动位置，
-        // 玩家切过去看到的是"从中间开始"的列表，得自己滑回顶部。
-        this.creativeGrid.scrollTop = 0;
+        // 恢复该分类上次离开时的位置，而不是一律回顶
+        this.creativeGrid.scrollTop = targetScroll;
         this.renderCreativeGrid();
+        this.creativeGrid.scrollTop = this.creativeScrollByCategory.get(category) ?? targetScroll;
         // 批次 181：任何点击都在快捷栏上方说一句"刚才点了什么"
         this.showMessage(`创造分类：${CREATIVE_TAB_LABELS[category]}`);
         if (category === 'all') this.creativeSearch.focus();
@@ -1566,9 +1580,12 @@ export class InventoryScreen {
     this.creativeSearch.className = 'inv-search';
     this.creativeSearch.placeholder = t('inventory.searchItems');
     this.creativeSearch.addEventListener('input', () => {
-      this.creativeQuery = this.creativeSearch.value.trim().toLowerCase();
-      // 搜索是从头筛一遍，页码当然要回到第 1 页
+      const raw = this.creativeSearch.value;
+      this.creativeSearchByCategory.set(this.creativeCategory, raw);
+      this.creativeQuery = raw.trim().toLowerCase();
+      // 搜索是从头筛一遍，页码/滚动都回到第 1 屏
       this.creativePage = 0;
+      this.creativeScrollByCategory.set(this.creativeCategory, 0);
       this.renderCreativeGrid();
     });
 
@@ -1576,6 +1593,17 @@ export class InventoryScreen {
 
     this.creativeGrid = document.createElement('div');
     this.creativeGrid.className = 'inv-grid inv-creative';
+    // 创造分类的滚动位置按分类记住：去仓库/关掉再回来仍停在原处
+    this.creativeGrid.addEventListener(
+      'scroll',
+      () => {
+        if (performance.now() < this.creativeScrollIgnoreUntil) return;
+        if (this.pane !== 'creative' || this.creativeSection.style.display === 'none') return;
+        if (this.creativeGrid.clientHeight === 0) return;
+        this.creativeScrollByCategory.set(this.creativeCategory, this.creativeGrid.scrollTop);
+      },
+      { passive: true },
+    );
 
     // 翻页条：只渲染当前页之后，"全部"分类也不会一次性塞进 495 个图标
     this.creativePager = document.createElement('div');
@@ -4014,6 +4042,12 @@ export class InventoryScreen {
     this.placeHotbar(true);
     this.syncPocketBodyClass(true);
     this.renderCreativeGrid();
+    if (leftPane === 'creative') {
+      // 创造栏刚从隐藏状态回来时，浏览器可能已把 scrollTop 归零；
+      // render 因指纹未变提前返回时也要在这里补一次。
+      this.creativeScrollIgnoreUntil = performance.now() + 200;
+      this.creativeGrid.scrollTop = this.creativeScrollByCategory.get(this.creativeCategory) ?? 0;
+    }
     // 配方书开关：生存双栏时**留在标题栏**（与关闭键同一行，排在左栏右上角那一带），
     // 创造模式左栏是物品分类，用不上它。
     // ⚠️ active = "该分类下的所有物品都列出来（没有的红底）"；
@@ -4312,7 +4346,11 @@ export class InventoryScreen {
     // 换掉整批格子时把它们在 `tooltipStacks` 里的条目一起删掉：
     // 不删的话每重建一次就多留 800 条指向旧元素的记录（只增不减）。
     for (const child of Array.from(this.creativeGrid.children)) this.tooltipStacks.delete(child as HTMLElement);
+    // 重建会把 scrollTop 打回 0，并可能派发一次 scroll；恢复该分类的记忆位置
+    const targetScroll = this.creativeScrollByCategory.get(this.creativeCategory) ?? 0;
+    this.creativeScrollIgnoreUntil = performance.now() + 200;
     this.creativeGrid.replaceChildren(fragment);
+    this.creativeGrid.scrollTop = targetScroll;
 
     // 把"手上那叠"的落点搬回重建后的新格子，并把选中态补上
     // （`refresh()` 里那一步在上面的重建之前就做完了）

@@ -1038,7 +1038,7 @@ console.log('\n[携带版统一双栏（批次 140 / 156）]');
   );
   check(
     '点创造分类会切回无限物品页',
-    /this\.pane = 'creative';\s*\n\s*this\.applyInventoryChrome\(\);/.test(invSrc),
+    /this\.pane = 'creative';[\s\S]{0,220}?this\.applyInventoryChrome\(\);/.test(invSrc),
   );
   check(
     '点箱子页签回到我的物品',
@@ -1386,7 +1386,11 @@ console.log('\n[分类栏"怎么就空了"（批次 159 六）]');
   // ② 看不见的过滤器：换到不显示搜索框的分类时要把搜索词清掉
   check(
     '换分类时清掉藏起来的搜索词',
-    invSrc.includes("if (category !== 'all') {") && invSrc.includes("this.creativeQuery = '';") && invSrc.includes("this.categoryQuery = '';"),
+    invSrc.includes("const savedSearch =") &&
+      invSrc.includes("this.creativeQuery = savedSearch.trim().toLowerCase();") &&
+      invSrc.includes("category === 'all' ? (this.creativeSearchByCategory.get(category) ?? '') : ''") &&
+      invSrc.includes("if (tab !== 'all')") &&
+      invSrc.includes("this.categoryQuery = '';"),
   );
   // ③ 竖排容器里搜索框不能吃剩余高度（会把网格挤出可视区）
   check('分类栏搜索框 flex: 0 0 auto', css.includes('.inv-category-section .inv-search {') && css.includes('flex: 0 0 auto;'));
@@ -3057,6 +3061,14 @@ console.log('\n[用户第二轮反馈（批次 185）]');
       invSrc.includes('private categoryScrollIgnoreUntil = 0;') &&
       invSrc.includes("if (this.pane !== 'category' || this.categoryHostEl.style.display === 'none') return;") &&
       invSrc.includes('if (this.categoryGrid.clientHeight === 0) return;'),
+  );
+  check(
+    '创造分类的滚动位置与搜索词也会保持',
+    invSrc.includes('private readonly creativeScrollByCategory = new Map<CreativeTab, number>();') &&
+      invSrc.includes('private readonly creativeSearchByCategory = new Map<CreativeTab, string>();') &&
+      invSrc.includes('this.creativeGrid.scrollTop = targetScroll;') &&
+      invSrc.includes('this.creativeGrid.clientHeight === 0') &&
+      invSrc.includes('this.creativeScrollByCategory.get(this.creativeCategory) ?? 0'),
   );
   check(
     '分类列表超过一屏时常驻自绘滚动条',
