@@ -193,6 +193,21 @@ const registry = new WorldRegistry(registryStorage as Storage);
 let currentWorld: WorldSummary | null = null;
 let worldPage = 0;
 let spawn = { x: 0, z: 0, y: 80 };
+const respawnKey = (): string => `wx.v2.respawn.${currentWorld?.id ?? 'none'}`;
+
+const loadSleepSpawn = (): void => {
+  try {
+    const raw = platform.storage.get(respawnKey());
+    if (!raw) return;
+    const value = JSON.parse(raw) as { x?: number; y?: number; z?: number };
+    if ([value.x, value.y, value.z].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+      spawn = { x: value.x!, y: value.y!, z: value.z! };
+    }
+  } catch {
+    // 损坏的重生点忽略
+  }
+};
+
 const planSpawn = (seed: number, type: WorldType): { x: number; z: number; y: number } => {
   const generator = new OverworldGenerator(seed, type);
   return planSpawnRegion(
@@ -825,6 +840,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   currentWorld = entry;
   registry.update(entry.id, { lastPlayed: Date.now() });
   spawn = planSpawn(entry.seed, entry.worldType);
+  loadSleepSpawn();
   physics.teleport(spawn.x + 0.5, spawn.y + 1.01, spawn.z + 0.5);
   playerReady = false;
   inventory.clear();
@@ -1338,7 +1354,9 @@ const trySleep = (hit: RayHit): boolean => {
   worldTime = 0;
   health = 20;
   food = Math.max(food, 6);
-  showToast('一觉睡到天亮');
+  spawn = { x: hit.x + 0.5, y: hit.y + 1, z: hit.z + 0.5 };
+  platform.storage.set(respawnKey(), JSON.stringify(spawn));
+  showToast('已设置重生点，睡到天亮');
   return true;
 };
 
