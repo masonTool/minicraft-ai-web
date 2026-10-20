@@ -8,7 +8,7 @@
 
 ## 0. 当前状态（新会话 / 换设备先读这一页）
 
-> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `03f0bc3`
+> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `a03157e`
 > 只要这一页和 §5 任务表是最新的，换会话/换机器就不会丢上下文。
 
 ### 0.1 一眼看进度
@@ -600,7 +600,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-024 删档 | 主菜单 DELETE SAVE：showModal 确认后 clear player/meta/chunks 并停保存；修 clear/deleteWorld 不递归 chunks 的问题；helper 截图验证菜单布局 | `25f9f76` |
 | 2026-10-20 | WX-024 新世界 | 主菜单 NEW WORLD：生成新种子写 `wx.worldSeed`、清档、尝试 `exitMiniProgram`；world-boot 启动读该种子；helper 截图验证菜单 | `51a7949` |
 | 2026-10-20 | WX-028 收口 | 背包 QUICK 快速移到主背包、DROP 1 生成带重力/落地/近距离拾取的小方块实体；WX-028 交互项完成 | `03f0bc3` |
-| 2026-10-20 | WX-024 列表 | `wx.worlds` 注册表 + `wx.worldId` 当前世界：主菜单最多 3 卡片、切换保存后退出、NEW WORLD 新增、DELETE SAVE 清当前；启动按世界 ID/种子打开存档 | 本次提交 |
+| 2026-10-20 | WX-024 列表 | `wx.worlds` 注册表 + `wx.worldId` 当前世界：主菜单最多 3 卡片、切换保存后退出、NEW WORLD 新增、DELETE SAVE 清当前；启动按世界 ID/种子打开存档 | `a03157e` |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
