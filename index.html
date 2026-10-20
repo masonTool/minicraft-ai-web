@@ -3930,8 +3930,23 @@
       }
       #touch-ring.visible { opacity: 1; }
 
+      /* 触摸端左右两组控件的共用锚点（批次 535）：
+         - `--touch-side-inset` 同时给摇杆左沿与按钮簇右沿，保证左右对称；
+         - `--touch-stick-bottom` / `--touch-buttons-bottom` 让两者**圆心同高**
+           （摇杆 132 / 跳跃 76，所以按钮簇的 bottom 比摇杆高 28）；
+         - 跳跃键固定在这个 76px 的容器里，起飞时升降键用绝对定位挂到上下，
+           不会把跳跃键挤走。 */
+      #touch-ui {
+        --touch-side-inset: 40px;
+        --touch-stick-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+        --touch-buttons-bottom: calc(124px + env(safe-area-inset-bottom, 0px));
+        --touch-jump-size: calc(76px * var(--touch-scale, 1));
+        --touch-cluster-gap: calc(10px * var(--touch-scale, 1));
+      }
       #touch-stick {
-        position: absolute; left: 22px; bottom: 96px;
+        position: absolute;
+        left: var(--touch-side-inset);
+        bottom: var(--touch-stick-bottom);
         /* 尺寸乘 `--touch-scale`（批次 97）：设置里的"触摸按钮大小"直接改这个变量，
            摇杆与按钮一起缩放（分别调会更乱：两者的比例本来就是配好的） */
         width: calc(132px * var(--touch-scale, 1));
@@ -3963,8 +3978,8 @@
       }
       /* 左手模式（批次 271）：摇杆与操作键整体镜像。死区跟着 `getBoundingClientRect`
          走，所以这里只换边、不写死任何坐标 */
-      #touch-ui.left-handed #touch-stick { left: auto; right: 22px; }
-      #touch-ui.left-handed #touch-buttons { right: auto; left: 20px; }
+      #touch-ui.left-handed #touch-stick { left: auto; right: var(--touch-side-inset); }
+      #touch-ui.left-handed #touch-buttons { right: auto; left: var(--touch-side-inset); }
       #touch-stick .knob {
         width: calc(56px * var(--touch-scale, 1));
         height: calc(56px * var(--touch-scale, 1));
@@ -3983,12 +3998,23 @@
          **生存只有一颗跳跃**；创造双击起飞后，上下再出现上升 / 下降。
          竖排：上 → 跳 → 下。背包与聊天在快捷栏两侧（见 `.touch-side-btn`）。 */
       #touch-buttons {
-        position: absolute; right: 20px; bottom: 96px;
-        display: flex; flex-direction: column; align-items: center;
-        gap: calc(10px * var(--touch-scale, 1));
+        position: absolute;
+        right: var(--touch-side-inset);
+        bottom: var(--touch-buttons-bottom);
+        width: var(--touch-jump-size);
+        height: var(--touch-jump-size);
         pointer-events: none;
       }
       #touch-buttons .fly-only.hidden { display: none; }
+      /* 跳跃键固定占满容器；升降键绝对定位到它的上/下，显隐都不影响跳跃键位置 */
+      .touch-button.jump { position: absolute; inset: 0; }
+      .touch-button.fly-up,
+      .touch-button.fly-down {
+        position: absolute; left: 50%;
+        transform: translateX(-50%);
+      }
+      .touch-button.fly-up { bottom: calc(100% + var(--touch-cluster-gap)); }
+      .touch-button.fly-down { top: calc(100% + var(--touch-cluster-gap)); }
       .touch-button {
         width: calc(62px * var(--touch-scale, 1));
         height: calc(62px * var(--touch-scale, 1));
@@ -4019,8 +4045,8 @@
       }
       .touch-button:active { transform: scale(.94); }
       .touch-button.jump {
-        width: calc(76px * var(--touch-scale, 1));
-        height: calc(76px * var(--touch-scale, 1));
+        width: var(--touch-jump-size);
+        height: var(--touch-jump-size);
         font-size: 19px;
         /* 跳跃是主操作：绿色玻璃，与升降/暂停区分开 */
         background:
@@ -4361,8 +4387,13 @@
         /* ⚠️ 这里的尺寸**必须**乘 `--touch-scale`：竖屏手机是最常见的场景，
            而这几条规则会盖掉上面那些（同优先级、后出现）——不乘的话
            "触摸按钮大小"这个设置项在手机上等于没接线（批次 98 顺手修） */
+        #touch-ui {
+          --touch-side-inset: 34px;
+          --touch-stick-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+          --touch-buttons-bottom: calc(131px + env(safe-area-inset-bottom, 0px));
+          --touch-jump-size: calc(70px * var(--touch-scale, 1));
+        }
         #touch-stick {
-          left: 18px; bottom: calc(104px + env(safe-area-inset-bottom, 0px));
           width: calc(124px * var(--touch-scale, 1));
           height: calc(124px * var(--touch-scale, 1));
         }
@@ -4370,20 +4401,9 @@
           width: calc(52px * var(--touch-scale, 1));
           height: calc(52px * var(--touch-scale, 1));
         }
-        #touch-buttons {
-          /* ⚠️ bottom 抬到 132px（原来 104px）：快捷栏右上角现在还挂着背包键
-             （`#touch-hotbar-inventory`，占底部 65~109px），按原值两者会叠在一起。
-             留到 132 之后，即使"触摸按钮大小"拉到 1.4× 也不会撞上 */
-          right: 14px; bottom: calc(132px + env(safe-area-inset-bottom, 0px));
-          gap: calc(10px * var(--touch-scale, 1));
-        }
         .touch-button {
           width: calc(58px * var(--touch-scale, 1));
           height: calc(58px * var(--touch-scale, 1));
-        }
-        .touch-button.jump {
-          width: calc(70px * var(--touch-scale, 1));
-          height: calc(70px * var(--touch-scale, 1));
         }
         #touch-hint {
           bottom: calc(322px + env(safe-area-inset-bottom, 0px));
@@ -4395,27 +4415,24 @@
          ⚠️ 横屏屏幕宽（≥ 760px 命中上面那条），所以背包/聊天是摆在快捷栏**左右两侧**的，
          不再需要为它们留出"上方"的空间——这一簇仍然只有"潜行 + 跳跃"两颗 */
       @media (max-height: 480px) {
+        #touch-ui {
+          --touch-side-inset: 30px;
+          --touch-stick-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+          --touch-buttons-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+          --touch-jump-size: calc(64px * var(--touch-scale, 1));
+        }
         #touch-stick {
           width: calc(108px * var(--touch-scale, 1));
           height: calc(108px * var(--touch-scale, 1));
-          bottom: 70px; left: 16px;
         }
         #touch-stick .knob {
           width: calc(46px * var(--touch-scale, 1));
           height: calc(46px * var(--touch-scale, 1));
         }
-        #touch-buttons {
-          bottom: calc(70px + env(safe-area-inset-bottom, 0px));
-          gap: calc(10px * var(--touch-scale, 1));
-        }
         .touch-button {
           width: calc(54px * var(--touch-scale, 1));
           height: calc(54px * var(--touch-scale, 1));
           font-size: 15px;
-        }
-        .touch-button.jump {
-          width: calc(64px * var(--touch-scale, 1));
-          height: calc(64px * var(--touch-scale, 1));
         }
         #touch-hint { bottom: calc(178px + env(safe-area-inset-bottom, 0px)); }
       }

@@ -279,7 +279,7 @@ console.log('\n[index.html：手机端与 PC 端的布局规则]');
     // 尺寸都走 `--touch-scale`（批次 98）：默认 1× 下与写死像素完全一致
     // 右下那一簇（批次 107）：一列右对齐，跳跃在下
     // 右下那一簇（批次 111 对齐原版）：一排、右对齐——跳跃在右、潜行在它左边
-    ['右下按钮簇竖排（生存只跳，飞时上中下）', '#touch-buttons { position: absolute; right: 20px; bottom: 96px; display: flex; flex-direction: column; align-items: center;'],
+    ['右下按钮簇以跳跃键为固定锚点', '#touch-buttons { position: absolute; right: var(--touch-side-inset); bottom: var(--touch-buttons-bottom); width: var(--touch-jump-size);'],
     // 快捷栏右侧只留背包（聊天搬到顶部，批次 181）
     ['背包按钮挂进快捷栏', '#hotbar .touch-side-btn { position: absolute; bottom: calc(100% + 4px);'],
     ['屏幕够宽时背包摆快捷栏右侧', '#touch-hotbar-inventory { right: auto; left: calc(100% + 8px); }'],
@@ -1606,7 +1606,7 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
     for (const [, selector, body] of blocks) {
       for (const line of (body ?? '').split(';')) {
         if (!/(width|height|grid-template-columns|gap)\s*:/.test(line)) continue;
-        if (line.includes('var(--touch-scale')) continue;
+        if (line.includes('var(--touch-scale') || line.includes('var(--touch-jump-size')) continue;
         offenders.push(`${selector!.trim()}: ${line.trim()}`);
       }
     }
@@ -1646,11 +1646,25 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
     ['下降键画 ▼', ".touch-button.fly-down::after { content: '▼';"],
     // 按钮大小（批次 97）：尺寸必须走 CSS 变量，否则设置里的滑块拖了没反应
     ['触摸按钮尺寸吃变量', '.touch-button { width: calc(62px * var(--touch-scale, 1));'],
-    ['跳跃键尺寸吃变量', 'width: calc(76px * var(--touch-scale, 1));'],
+    ['跳跃键尺寸吃变量', 'width: var(--touch-jump-size);'],
     ['摇杆尺寸吃变量', 'width: calc(132px * var(--touch-scale, 1));'],
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
+  // 批次 535（用户）：左右两组控件居中对称；起飞行时跳跃键位置不动，升降键绝对定位到上下
+  check(
+    '摇杆与跳跃簇左右对称（共用 --touch-side-inset）',
+    compact.includes('--touch-side-inset: 40px;') &&
+      compact.includes('left: var(--touch-side-inset);') &&
+      compact.includes('right: var(--touch-side-inset);') &&
+      compact.includes('--touch-buttons-bottom: calc(124px + env(safe-area-inset-bottom, 0px));'),
+  );
+  check(
+    '飞行时跳跃键不位移，升降键挂在其上下',
+    compact.includes('.touch-button.jump { position: absolute; inset: 0; }') &&
+      compact.includes('.touch-button.fly-up { bottom: calc(100% + var(--touch-cluster-gap)); }') &&
+      compact.includes('.touch-button.fly-down { top: calc(100% + var(--touch-cluster-gap)); }'),
+  );
   // 批次 530（用户）：纯白场景（雪地/云层/亮天空）里按钮不能是"纯白透明块"。
   // 深色玻璃底 + 浅描边 + 外圈暗边，三层缺一不可。
   check(
@@ -1918,8 +1932,8 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   );
   check(
     '左右手模式镜像摇杆与按钮（CSS 与动态拇指区同一套边）',
-    indexSource.includes('#touch-ui.left-handed #touch-stick { left: auto; right: 22px; }') &&
-      indexSource.includes('#touch-ui.left-handed #touch-buttons { right: auto; left: 20px; }') &&
+    indexSource.includes('#touch-ui.left-handed #touch-stick { left: auto; right: var(--touch-side-inset); }') &&
+    indexSource.includes('#touch-ui.left-handed #touch-buttons { right: auto; left: var(--touch-side-inset); }') &&
       source.includes("return this.handedness === 'left'"),
   );
   check(
