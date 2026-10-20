@@ -26,7 +26,8 @@ import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafti
 import { CREATIVE_ITEMS, Item, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
-import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
+import { BED_IDS, Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
+import { sleepRefusal } from '../core/survival/Sleep.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
@@ -1454,6 +1455,9 @@ const showContainer = (): void => {
 const openContainerAt = (hit: RayHit): boolean => {
   lastAction = 'probe-open';
   const id = world.getBlock(hit.x, hit.y, hit.z);
+  if (BED_IDS.includes(id)) {
+    return trySleep(hit);
+  }
   if (id === Block.CHEST) {
     openedContainer = world.containers.getOrCreateChest('overworld', hit.x, hit.y, hit.z);
     containerTitle = '箱子';
@@ -1486,11 +1490,18 @@ const sendChat = (value: string): void => {
   if (command === '/help') {
     pushChat('/help · /seed · /pos · /heal');
     pushChat('/gamemode survival|creative · /tp x y z');
-    pushChat('/weather clear|rain|thunder');
+    pushChat('/weather clear|rain|thunder · /time set day|night');
     pushChat('聊天为 v2 本地日志，尚未接联机');
   } else if (command === '/seed') {
     pushChat(`种子 ${currentWorld?.seed ?? '-'}`);
-  } else if (command === '/pos' || command === '/time') {
+  } else if (command === '/time') {
+    if (args[0] === 'set' && (args[1] === 'day' || args[1] === 'night')) {
+      worldTime = args[1] === 'day' ? 0.25 : 0.75;
+      pushChat(`时间：${args[1] === 'day' ? '白天' : '夜晚'}`);
+    } else {
+      pushChat('用法：/time set day|night');
+    }
+  } else if (command === '/pos') {
     pushChat(`坐标 ${physics.x.toFixed(1)}, ${physics.y.toFixed(1)}, ${physics.z.toFixed(1)}`);
   } else if (command === '/heal') {
     health = 20;
@@ -1579,6 +1590,40 @@ const showChat = (): void => {
   );
 };
 
+const showToast = (message: string): void => {
+  toastMessage = message;
+  toastUntil = Date.now() + 2200;
+  showHud();
+  setTimeout(() => {
+    if (Date.now() >= toastUntil && started) showHud();
+  }, 2300);
+};
+
+const trySleep = (hit: RayHit): boolean => {
+  const id = world.getBlock(hit.x, hit.y, hit.z);
+  if (!BED_IDS.includes(id)) return false;
+  const monstersNear = zombies.some((zombie) =>
+    Math.abs(zombie.x - (hit.x + 0.5)) <= 8 &&
+    Math.abs(zombie.y - (hit.y + 0.5)) <= 5 &&
+    Math.abs(zombie.z - (hit.z + 0.5)) <= 8,
+  );
+  const refusal = sleepRefusal({
+    timeOfDay: worldTime,
+    thundering: weather.snapshot().kind === 'thunder',
+    dead,
+    monstersNear,
+  });
+  if (refusal) {
+    showToast(refusal);
+    return true;
+  }
+  worldTime = 0;
+  health = 20;
+  food = Math.max(food, 6);
+  showToast('一觉睡到天亮');
+  return true;
+};
+
 const showHud = (): void => {
   menuScreen = 'title';
   const stickLeft = settings.leftHanded ? 1024 - 24 - 120 : 24;
@@ -1598,6 +1643,9 @@ const showHud = (): void => {
               color: 'rgba(220,240,250,0.8)',
             }),
           ]
+        : []),
+      ...(Date.now() < toastUntil
+        ? [text(0, 70, 1024, 26, toastMessage, { fontSize: 16, color: '#ffe0a0', align: 'center' })]
         : []),
       icon(464, 18, 36, 'chat', () => showChat(), { background: 'rgba(12,16,20,0.82)', border: 'rgba(255,255,255,0.72)', borderWidth: 2 }),
       icon(512, 18, 36, 'pause', () => {
@@ -1992,6 +2040,8 @@ let starvationTimer = 0;
 let hazardTimer = 0;
 let dead = false;
 let lastDamageCause = '';
+let toastMessage = '';
+let toastUntil = 0;
 interface DroppedItem {
   mesh: THREE.Mesh;
   id: number;
