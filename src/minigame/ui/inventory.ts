@@ -39,6 +39,7 @@ export interface Inventory {
   close(): void;
   openCraftingTable(): void;
   setCreativeMode(enabled: boolean): void;
+  getMode(): 'inventory' | 'creative' | 'recipes';
   isOpen(): boolean;
   setSelected(index: number): void;
   setSlots(slots: readonly (ItemStack | null)[]): void;
@@ -357,7 +358,8 @@ export function createInventory(
   };
 
   const slotAt = (x: number, y: number): number | null => {
-    for (let i = 0; i < Math.min(41, cols * rows); i++) {
+    const limit = mode === 'creative' ? cols * rows : Math.min(41, cols * rows);
+    for (let i = 0; i < limit; i++) {
       const rect = slotRect(i);
       if (x >= rect.x && x <= rect.x + slot && y >= rect.y && y <= rect.y + slot) return i;
     }
@@ -468,6 +470,9 @@ export function createInventory(
       mode = 'inventory';
       craftSize = 2;
       setOpen(false);
+    },
+    getMode(): 'inventory' | 'creative' | 'recipes' {
+      return mode;
     },
     setCreativeMode(enabled: boolean): void {
       creativeAllowed = enabled;

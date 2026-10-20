@@ -265,6 +265,25 @@ async function main() {
     );
     assert(creative.worldCount === worldsBeforeCreative + 1, '创造世界数量未增加', creative);
 
+    // 创造物品栏取箱子 → 放置 → 打开 → 关闭
+    await tap(865, 414);
+    await waitState((state) => state.inventory, '箱子用例打开背包失败');
+    await tap(212, 406);
+    await waitState((state) => state.inventoryMode === 'creative', '箱子用例未切到创造页');
+    await tap(593, 346.5);
+    const chestGiven = await waitState(
+      (state) => state.hotbar.includes(45),
+      '创造物品栏最后一格箱子没有进入背包',
+    );
+    await tap(875, 66.5);
+    await waitState((state) => !state.inventory, '箱子用例关闭背包失败');
+    await tap(700, 180);
+    await page.waitForTimeout(500);
+    await tap(700, 250);
+    const chestOpen = await waitState((state) => state.chestOpen, '箱子放置后无法打开', 5000);
+    await tap(726, 49.5);
+    const chestClosed = await waitState((state) => !state.chestOpen, '箱子界面关闭失败', 5000);
+
     // 双击摇杆潜行，再双击恢复
     const stickCenter = await point(106, 277);
     const joystickDouble = async () => {
@@ -347,7 +366,7 @@ async function main() {
     );
 
     console.log('PASS');
-    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, editOpen, editSaved, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, modeCreative, modeSurvival, sneakOn, flyOn, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
+    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, editOpen, editSaved, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, chestGiven, chestOpen, chestClosed, modeCreative, modeSurvival, sneakOn, flyOn, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
   } catch (error) {
     await page.screenshot({ path: '/tmp/e2e-fail.png' }).catch(() => undefined);
     console.error('FAIL:', error.message);

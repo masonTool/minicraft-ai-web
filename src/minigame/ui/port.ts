@@ -27,6 +27,7 @@ export interface MiniGameUi {
   toggleInventory(): void;
   openCraftingTable(): void;
   setCreativeMode(enabled: boolean): void;
+  inventoryMode(): string;
   setTouchLayout(leftHanded: boolean, scale: number, stickMode: 'fixed' | 'dynamic'): void;
   setStickOrigin(x: number, y: number, active: boolean): void;
   isInventoryOpen(): boolean;
@@ -166,6 +167,9 @@ export function createCanvasUi(
     },
     setCreativeMode(enabled: boolean): void {
       inventory.setCreativeMode(enabled);
+    },
+    inventoryMode(): string {
+      return inventory.getMode();
     },
     setTouchLayout(leftHanded: boolean, scale: number, stickMode: 'fixed' | 'dynamic'): void {
       touchControls.setLayout(leftHanded, scale, stickMode);
