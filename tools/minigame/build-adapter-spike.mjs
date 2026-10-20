@@ -61,7 +61,8 @@ await build({
   entryPoints: ['tools/minigame/spike-adapter/entry.mjs'],
   bundle: true,
   format: 'iife',
-  target: ['es2020'],
+  // ⚠️ 同 build-spike：真机不支持 ES2020 的 `??` / `?.`，必须降到 es2017
+  target: ['es2017'],
   platform: 'browser',
   outfile,
   legalComments: 'none',

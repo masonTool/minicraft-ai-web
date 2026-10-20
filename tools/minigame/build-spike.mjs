@@ -30,7 +30,10 @@ await build({
   bundle: true,
   // 小游戏没有 ES module 入口，必须是单文件 IIFE
   format: 'iife',
-  target: ['es2020'],
+  // ⚠️ 真机 JSCore 不支持 ES2020 的 `??` / `?.`（模拟器支持，真机报
+  // "SyntaxError: Unexpected token ?"）。target 必须 ≤ es2017；
+  // three r186 里也有现代语法，会一起被降级。
+  target: ['es2017'],
   platform: 'browser',
   outfile,
   legalComments: 'none',

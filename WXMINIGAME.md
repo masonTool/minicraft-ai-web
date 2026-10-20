@@ -422,6 +422,12 @@ npm run build:minigame         # 生成 minigame/game.js（WX-001 自写 shim）
 npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 适配器版）
 ```
 
+> ⚠️ **构建目标必须是 es2017 或更低**：微信真机 JSCore 不支持 ES2020 的
+> `??` / `?.`，而开发者工具模拟器支持。症状是真机预览报
+> `SyntaxError: Unexpected token ?`（示例：`game.js 25:27` 的
+> `canvas.width ?? 0`）。两个 build 脚本已固定 `target: ['es2017']`；
+> 以后加正式构建（WX-010）也必须守住这条。
+
 - 微信开发者工具导入哪个目录：
   - **WX-001 自写 shim**：`minigame/`（红色标记方块）
   - **WX-006 适配器版**：`minigame-adapter-spike/`（绿色标记方块）
@@ -444,7 +450,8 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 | 2026-10-20 | 适配器评估 | 结论：`minigame-adapter` 可复用于平台层，**不能**跑现有 DOM/CSS UI；新增 §2.5 与 WX-006/007 | `3878a65` |
 | 2026-10-20 | WX-006 | 适配器版 `game.js` 已构建：1301KB（gzip 235KB）；动态 require 用 esbuild 插件替换；**待真机与 WX-001 对比** | `3878a65` |
 | 2026-10-20 | WX-002 预置 | 两份 spike 加屏上 HUD（版本/GL/FPS/TRI/分辨率）；红/绿方块区分 SHIM/ADAPTER | `d8b3337` |
-| 2026-10-20 | WX-021 决策 | DOM/CSS 全模拟实测需 75~110 人日（子集），决定不做；UI 走 canvas 工具包，详见 §2.6 | 本次提交 |
+| 2026-10-20 | WX-021 决策 | DOM/CSS 全模拟实测需 75~110 人日（子集），决定不做；UI 走 canvas 工具包，详见 §2.6 | `2e03430` |
+| 2026-10-20 | WX-002 修复 | 真机报 `Unexpected token ?`：两个 spike 构建 target `es2020 → es2017`，产物已无 `??`/`?.` | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -455,6 +462,7 @@ npm run build:minigame:adapter # 生成 minigame-adapter-spike/game.js（WX-006 
 | 风险 | 影响 | 应对 | 状态 |
 | --- | --- | --- | --- |
 | **微信 WebGL2 / 内存** | 低端 Android 可能拿不到 WebGL2 或内存不足 | WX-002 真机基线；不达标先降视距/锁 30fps | 未验证（spike 待导入） |
+| **真机 JS 语法** | 模拟器支持 ES2020，真机 JSCore 不支持 `??`/`?.`，报 `Unexpected token ?` | 构建 target 固定 `es2017`；产物用 grep 检查 `??`/`?.` | 已修复（WX-002） |
 | **抖音 WebGL2** | 官方小游戏 canvas 只保证 WebGL1；three r186 只支持 WebGL2 | M6 单独 Gate；必要时 three 0.162 + WebGL1 适配 | 未验证 |
 | **适配器假 DOM** | `getElementById`/`querySelector` 返回占位对象，UI 代码会“看起来没报错但什么都不显示” | 小游戏 UI/游戏代码禁止依赖假 DOM；只经 `UiPort`/`src/platform` 访问 | 待约束 |
 | **适配器 WebGL 包装** | `Canvas.getContext` 对每个方法加包装，draw call 多时可能明显掉帧 | WX-006 对比帧率；WebGL 跳过全量包装，只解 `texImage2D` 参数 | 待验证 |
