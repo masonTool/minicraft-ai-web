@@ -65,6 +65,8 @@ import {
 } from './Selectors.ts';
 
 export { DIFFICULTIES, DIFFICULTY_LABELS, DEFAULT_GAME_RULES } from '../world/Rules.ts';
+// 游戏模式（批次 491）：`/gamemode` 的三种取值与中文名
+import { GAME_MODE_LABELS } from '../world/GameMode.ts';
 export type { Difficulty, GameRules } from '../world/Rules.ts';
 
 /** 命令能看到的"世界与玩家" */
@@ -88,7 +90,13 @@ export interface CommandContext {
   clearInventory(): number;
   setFlying(on: boolean): void;
   isFlying(): boolean;
-  setCreative(on: boolean): void;
+  /**
+   * 切游戏模式（批次 491 起收三种：生存 / 创造 / 旁观）。
+   *
+   * 以前是 `setCreative(boolean)`，加旁观时改成传入完整模式名——
+   * 布尔没法表达第三种，硬塞会变成"旁观 = 创造 + 一堆特判"。
+   */
+  setGameMode(mode: 'survival' | 'creative' | 'spectator'): void;
   isCreative(): boolean;
   killPlayer(): void;
   seed(): number;
@@ -804,20 +812,23 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'gamemode',
-    usage: '/gamemode <creative|survival>',
-    description: '切换创造/生存（创造 = 飞行 + 不受伤 + 秒破）',
+    usage: '/gamemode <survival|creative|spectator>',
+    description: '切换游戏模式（创造 = 飞行 + 不受伤 + 秒破；旁观 = 穿墙飞行 + 不能交互）',
     // ⚠️ 故意**不设** creativeOnly：否则一旦切到生存就再也切不回来了
     // （其他创造专用命令仍然要求创造模式）。原版这条命令是权限等级控制的。
     run(args, ctx, out) {
-      const mode = args[0]?.toLowerCase();
-      if (mode !== 'creative' && mode !== 'survival' && mode !== 'c' && mode !== 's') {
-        out.error('用法：/gamemode <creative|survival>');
+      // 缩写：c / s / sp（原版也收单字母）
+      const raw = args[0]?.toLowerCase();
+      const mode =
+        raw === 'c' ? 'creative' : raw === 's' ? 'survival' : raw === 'sp' ? 'spectator' : raw;
+      if (mode !== 'survival' && mode !== 'creative' && mode !== 'spectator') {
+        out.error('用法：/gamemode <survival|creative|spectator>');
         return;
       }
-      const creative = mode === 'creative' || mode === 'c';
-      ctx.setCreative(creative);
-      ctx.setFlying(creative);
-      out.info(`已将游戏模式设置为 ${creative ? '创造' : '生存'}`);
+      ctx.setGameMode(mode);
+      // 飞行由 `setGameMode` 内部处理（旁观强制飞、切回生存强制落地），
+      // 这里**不再**单独调 `setFlying`——两处都设会让"切到生存却还在飞"再现
+      out.info(`已将游戏模式设置为 ${GAME_MODE_LABELS[mode]}`);
     },
   },
   {

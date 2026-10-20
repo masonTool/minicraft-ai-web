@@ -1912,7 +1912,8 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
 
   // 模式与飞行分开（批次 181）：老存档按 flying 迁移，新世界在表单里选
   check('老存档迁移：flying=true 视为创造', mainSource.includes("else if (data.flying) this.setGameMode('creative')"));
-  check('生存模式拒绝起飞（能力看模式）', mainSource.includes('if (value && !this.isCreative)'));
+  // 批次 491：旁观也能飞，所以判据从 `isCreative` 换成 `canFly`
+  check('生存模式拒绝起飞（能力看模式）', mainSource.includes('if (value && !canFly(this.gameMode))'));
   const worldSource = readFileSync(new URL('../src/ui/WorldScreen.ts', import.meta.url), 'utf8');
   check(
     '新建世界表单有"游戏模式"',

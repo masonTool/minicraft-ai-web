@@ -146,9 +146,13 @@ class FakeWorld implements CommandContext {
   isFlying(): boolean {
     return this.flying;
   }
-  setCreative(on: boolean): void {
-    this.creative = on;
+  setGameMode(mode: 'survival' | 'creative' | 'spectator'): void {
+    // 与真实现同一口径：旁观也算"能飞"，所以 flying = mode !== 'survival'
+    this.creative = mode === 'creative';
+    this.flying = mode !== 'survival';
+    this.gameMode_ = mode;
   }
+  gameMode_: 'survival' | 'creative' | 'spectator' = 'survival';
   isCreative(): boolean {
     return this.creative;
   }
@@ -502,6 +506,14 @@ console.log('\n[模式、种子与权限]');
   check('/gamemode survival 关掉飞行', world.flying === false && world.creative === false && out.lastInfo.includes('生存'));
   const creative = run('/gamemode c');
   check('/gamemode c 是 creative 的简写', creative.world.creative === true);
+  // 批次 491：旁观是第三种模式（不是"创造 + 特判"）
+  const spectator = run('/gamemode sp');
+  check('/gamemode sp 是 spectator 的简写', spectator.world.gameMode_ === 'spectator', spectator.out.lastError);
+  check('旁观也算能飞', spectator.world.flying === true);
+  check('旁观不是创造', spectator.world.creative === false);
+  check('旁观的中文名', spectator.out.lastInfo.includes('旁观'), spectator.out.lastInfo);
+  const badMode = run('/gamemode nope');
+  check('拼错的模式报用法', badMode.out.lastError.includes('spectator'), badMode.out.lastError);
   const seed = run('/seed');
   check('/seed 显示种子', seed.out.lastInfo.includes('4242'));
   const list = run('/list');

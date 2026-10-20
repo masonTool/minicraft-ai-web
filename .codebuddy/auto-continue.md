@@ -730,3 +730,24 @@
 - [x] B490-6 顺带把 `test:crafting` 的配方规模 689 → **690**
 - [x] B490-7 套数 **145 → 146**
 - ⚠️ 差异：挂墙与挂天花板没做；原版"敲钟让灾厄村民发光"没做（生物无 `glowing`）
+
+## 批次 491：旁观模式（M22）（2026-10-20）
+
+- [x] B491-1 `GameMode` 两档 → **三档**（survival / creative / spectator）；
+      `nextGameMode` 三态循环；`normalizeGameMode` 容错照旧
+- [x] B491-2 能力拆成六个纯函数：`isCreativeMode` / `isSpectatorMode` / `canFly` /
+      `canInteract` / `hasBlockCollision` / `canTakeDamage`
+      ⚠️ **旁观 ≠ 创造**：穿墙、不能交互、免伤——用 `isCreative` 顶替会在这三处全错
+- [x] B491-3 穿墙：物理层换一个 `collisionAt` 永远 null 的**世界代理**
+      （比给 `World` 加开关干净，`World` 不必知道玩家是不是旁观者）
+- [x] B491-4 `setGameMode` 内部处理"旁观强制飞、切回生存强制落地"；
+      `setFlying` 的判据从 `isCreative` 换成 `canFly`（否则旁观飞不起来）
+- [x] B491-5 三个交互入口（破坏 / 攻击 / 放置）开头 `if (!canInteract) return`
+- [x] B491-6 `/gamemode survival|creative|spectator`（缩写 s|c|sp）；
+      `CommandContext.setCreative` 换成 `setGameMode(mode)`——布尔表达不了第三种
+- [x] B491-7 新套件 `test:gamemode` **38 条**：能力矩阵（3 模式 × 6 能力）+ 源码守卫
+      （物理真换了世界、三个入口真挡住了、旁观真强制飞）
+- [x] B491-8 顺带修 `test:mode`（"只有两种模式"→ 三种、循环顺序）与
+      `test:ui` 里按 `isCreative` 写死的守卫
+- **M22 勾掉**：完成 196 → 197、待办 13 → 12
+- ⚠️ 差异：看不到"隐藏方块"；旁观者不显示生命条还没接

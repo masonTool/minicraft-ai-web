@@ -181,6 +181,8 @@ import { PLAYER_ENTITY_ID, type CommandEntity } from './core/commands/Selectors.
 // 记分板（M23，批次 402）
 import { Scoreboard } from './core/world/Scoreboard.ts';
 import { shouldEchoCommandResult } from './core/world/Rules.ts';
+// 旁观模式（批次 491）：能力判定全在 GameMode.ts
+import { canFly, canInteract, hasBlockCollision, isSpectatorMode } from './core/world/GameMode.ts';
 import { Teams } from './core/world/Teams.ts';
 // 蜂巢的蜂蜜等级与挤蜜（J21，批次 407）
 import {
@@ -460,7 +462,7 @@ import { PATROL_INTERVAL_SECONDS, patrolSpawnPoint, planPatrol, shouldTryPatrol 
 import { bastionCreatureSpawnsAt, nearestBastion } from './core/gen/Bastion.ts';
 import { fortressCreatureSpawnsAt, nearestFortress } from './core/gen/NetherFortress.ts';
 import { endCityCreatureSpawnsAt, nearestEndCity } from './core/gen/EndStructures.ts';
-import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
+import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 // 中键拾取方块（批次 129）：三条规则是纯函数（`test:pickblock` 逐条钉住）
 import { applyPickBlock, pickItemFor, planPickBlock } from './core/interaction/PickBlock.ts';
@@ -1101,6 +1103,18 @@ class App {
   /** 破坏裂纹与命中面高亮（G2 / G3） */
   private readonly blockOverlay: BlockOverlay;
   private readonly physics = new PlayerPhysics();
+  /**
+   * 旁观模式用的"空世界"（批次 491）：`collisionAt` 永远 null，于是穿墙。
+   *
+   * 为什么做一个代理而不是给 `World` 加开关：物理层只认 `PhysicsWorld` 这个接口，
+   * 换一个实现比到处塞 `if (spectator)` 干净——`World` 也不必知道"玩家是不是旁观者"。
+   */
+  private readonly spectatorWorld: PhysicsWorld = {
+    // 永远不碰撞 = 能穿过任何方块
+    collisionAt: () => null,
+    // 也不算"在水里"：旁观者不该被水流推着走
+    isLiquid: () => false,
+  };
   private readonly inventory = new Inventory();
   private readonly inventoryScreen: InventoryScreen;
   private readonly entities = new EntityManager();
@@ -6604,6 +6618,8 @@ class App {
   }
 
   private updateAttacking(dt: number): void {
+    // 旁观模式（批次 491）：不能攻击（连挥空都不该有）
+    if (!canInteract(this.gameMode)) return;
     // 批次 271：只要这一帧瞄着生物，就不许去挖方块——包括**攻击冷却期间**。
     // 原来这一行是无条件 false，冷却的 0.5 秒里 `updateBreaking` 会拿方块目标继续挖，
     // 手机上按住一只猪就会把脚下的地挖穿。
@@ -6740,6 +6756,8 @@ class App {
   }
 
   private updateBreaking(dt: number): void {
+    // 旁观模式（批次 491）：不能破坏方块
+    if (!canInteract(this.gameMode)) return;
     if (this.suppressBreaking) {
       this.breakingKey = '';
       this.breakProgress = 0;
@@ -10008,7 +10026,8 @@ class App {
       },
       setFlying: (on) => this.setFlying(on),
       isFlying: () => this.flying,
-      setCreative: (on) => this.setGameMode(on ? 'creative' : 'survival'),
+      // 批次 491：三种模式（布尔表达不了旁观）
+      setGameMode: (mode) => this.setGameMode(mode),
       isCreative: () => this.isCreative,
       killPlayer: () => {
         this.stats.damage(MAX_HEALTH * 10, 'generic', '/kill 命令');
@@ -12097,6 +12116,8 @@ class App {
   }
 
   private updatePlacing(): void {
+    // 旁观模式（批次 491）：不能放置、也不能右键功能方块
+    if (!canInteract(this.gameMode)) return;
     // 触摸：轻点一次；鼠标：按住右键。统一成"本帧要不要放"
     //（批次 181 删掉了"按住连放"：它在 140ms 就触发，抢在长按破坏之前）
     const tapped = this.touchPlaceRequest;
@@ -14130,7 +14151,8 @@ class App {
         this.physics.vz = 0;
       } else {
         this.physics.update(
-          this.world,
+          // 旁观模式（批次 491）：换一个"永远不碰撞"的世界代理，于是能穿墙
+          hasBlockCollision(this.gameMode) ? this.world : this.spectatorWorld,
           rawInput,
           this.yaw,
           dt,
@@ -14753,6 +14775,11 @@ class App {
     return isCreativeMode(this.gameMode);
   }
 
+  /** 旁观模式（批次 491）：穿墙、能飞、不能交互、不掉血 */
+  get isSpectator(): boolean {
+    return isSpectatorMode(this.gameMode);
+  }
+
   /**
    * 切游戏模式（批次 181）。
    *
@@ -14765,6 +14792,8 @@ class App {
     diag.event('mode', 'gameMode.change', { from: this.gameMode, to: next, flying: this.flying });
     this.gameMode = next;
     if (next === 'survival' && this.flying) this.setFlying(false);
+    // 旁观模式一定在飞（批次 491）：否则"穿墙但受重力"会让人一直往下掉
+    if (next === 'spectator' && !this.flying) this.setFlying(true);
     // 回写世界清单（暂停菜单里改的，下次从主菜单进来还是这个模式）
     this.onGameModeChanged?.(next);
     this.hudToast.show(`游戏模式：${GAME_MODE_LABELS[next]}`);
@@ -14778,13 +14807,13 @@ class App {
     // 先记日志再改状态：D2 那种"切完就卡"的问题要靠 before/after 对比定位
     diag.event('mode', 'setFlying', {
       value,
-      allowed: !value || this.isCreative,
+      allowed: !value || canFly(this.gameMode),
       before: this.flying,
       gameMode: this.gameMode,
       uiOpen: this.uiOpen,
       touch: this.touch?.debugState,
     });
-    if (value && !this.isCreative) {
+    if (value && !canFly(this.gameMode)) {
       // 生存不能飞：把调用方（双击跳/F/命令）静默挡掉，状态保持一致
       return;
     }

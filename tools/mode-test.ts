@@ -52,16 +52,19 @@ class MemoryStorage {
 console.log('\n[一、模式取值]');
 
 {
-  equal('只有两种模式', GAME_MODES.join(','), 'survival,creative');
+  // 批次 491：加了旁观（M22）
+  equal('三种模式（生存 / 创造 / 旁观）', GAME_MODES.join(','), 'survival,creative,spectator');
   check('都有中文名', GAME_MODES.every((mode) => GAME_MODE_LABELS[mode].length > 0));
   check('survival 合法', isGameMode('survival'));
   check('creative 合法', isGameMode('creative'));
+  check('spectator 合法', isGameMode('spectator'));
   check('别的一律不合法', !isGameMode('adventure') && !isGameMode(1) && !isGameMode(null));
   equal('非法值回落到生存', normalizeGameMode('nope'), 'survival');
   equal('非法值可以指定回落', normalizeGameMode(undefined, 'creative'), 'creative');
   equal('合法值原样保留', normalizeGameMode('creative'), 'creative');
   equal('生存点一下变创造', nextGameMode('survival'), 'creative');
-  equal('创造点一下变生存', nextGameMode('creative'), 'survival');
+  equal('创造点一下变旁观', nextGameMode('creative'), 'spectator');
+  equal('旁观点一下回到生存（三态循环）', nextGameMode('spectator'), 'survival');
   check('创造是能力口径', isCreativeMode('creative') && !isCreativeMode('survival'));
 }
 
