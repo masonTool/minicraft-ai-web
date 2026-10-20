@@ -21,7 +21,7 @@ import { Block, blockDef } from '../core/registry/blocks.ts';
 import { maxStackOf } from '../core/registry/items.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { craftFromInventory } from '../core/crafting/RecipeBook.ts';
-import { AudioEngine } from '../core/audio/AudioEngine.ts';
+import { AudioEngine, type SoundGroup } from '../core/audio/AudioEngine.ts';
 import { Inventory, type ItemStack } from '../core/container/Inventory.ts';
 import type { Chest } from '../core/container/Chest.ts';
 import type { Furnace } from '../core/container/Furnace.ts';
@@ -123,6 +123,14 @@ async function boot(): Promise<void> {
         sensitivity: Math.max(0.5, Math.min(2, Number(parsed.sensitivity) || DEFAULT_SETTINGS.sensitivity)),
         autoJump: parsed.autoJump !== false,
         volume: Math.max(0, Math.min(1, Number(parsed.volume) || DEFAULT_SETTINGS.volume)),
+        groupVolumes: {
+          blocks: Math.max(0, Math.min(1, Number(parsed.groupVolumes?.blocks) || 1)),
+          mobs: Math.max(0, Math.min(1, Number(parsed.groupVolumes?.mobs) || 1)),
+          player: Math.max(0, Math.min(1, Number(parsed.groupVolumes?.player) || 1)),
+          ui: Math.max(0, Math.min(1, Number(parsed.groupVolumes?.ui) || 1)),
+          ambient: Math.max(0, Math.min(1, Number(parsed.groupVolumes?.ambient) || 1)),
+          music: Math.max(0, Math.min(1, Number(parsed.groupVolumes?.music) || 1)),
+        },
       };
     } catch {
       return { ...DEFAULT_SETTINGS };
@@ -392,6 +400,9 @@ async function boot(): Promise<void> {
   try {
     audio = new AudioEngine(() => platform.audio.createContext() as unknown as AudioContext);
     audio.volume = savedSettings.volume;
+    (Object.keys(savedSettings.groupVolumes) as SoundGroup[]).forEach((group) => {
+      audio?.setGroupVolume(group, savedSettings.groupVolumes[group]);
+    });
     audioStatus = 'ready';
   } catch (error) {
     console.warn('[WX-020] 音频不可用', error);
@@ -566,7 +577,12 @@ async function boot(): Promise<void> {
         autoJump = settings.autoJump;
         applyTouchLayout(settings.leftHanded, settings.touchScale);
         ui.setTouchLayout(settings.leftHanded, settings.touchScale);
-        if (audio) audio.volume = settings.volume;
+        if (audio) {
+          audio.volume = settings.volume;
+          (Object.keys(settings.groupVolumes) as SoundGroup[]).forEach((group) => {
+            audio?.setGroupVolume(group, settings.groupVolumes[group]);
+          });
+        }
         platform.storage.set(SETTINGS_KEY, JSON.stringify(settings));
         if (settings.sound) {
           audio?.resume();

@@ -11,6 +11,7 @@ import {
 } from './widgets.ts';
 
 import type { CameraMode } from '../../core/viewMode.ts';
+import type { SoundGroup } from '../../core/audio/AudioEngine.ts';
 
 export interface SettingsValues {
   fov: number;
@@ -23,6 +24,7 @@ export interface SettingsValues {
   volume: number;
   leftHanded: boolean;
   touchScale: number;
+  groupVolumes: Record<SoundGroup, number>;
 }
 
 export const DEFAULT_SETTINGS: SettingsValues = {
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS: SettingsValues = {
   volume: 0.7,
   leftHanded: false,
   touchScale: 1,
+  groupVolumes: { blocks: 1, mobs: 1, player: 1, ui: 1, ambient: 1, music: 1 },
 };
 
 export type SettingsAction = 'back' | null;
@@ -50,7 +53,7 @@ export interface SettingsMenu {
   render(renderer: THREE.WebGLRenderer): void;
 }
 
-type Tab = 'video' | 'game' | 'controls';
+type Tab = 'video' | 'game' | 'controls' | 'sound';
 
 /** 设置页（WX-022）：VIDEO/GAME/CONTROLS 页签、滑块、开关、搜索输入、滚动列表 */
 export function createSettingsMenu(
@@ -92,14 +95,21 @@ export function createSettingsMenu(
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   const panel: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
-  const videoTab: Rect = { x: panelX + 28, y: panelY + 70, w: 140, h: 42 };
-  const gameTab: Rect = { x: panelX + 176, y: panelY + 70, w: 140, h: 42 };
-  const controlsTab: Rect = { x: panelX + 324, y: panelY + 70, w: 160, h: 42 };
+  const videoTab: Rect = { x: panelX + 28, y: panelY + 70, w: 120, h: 42 };
+  const gameTab: Rect = { x: panelX + 156, y: panelY + 70, w: 120, h: 42 };
+  const controlsTab: Rect = { x: panelX + 284, y: panelY + 70, w: 130, h: 42 };
+  const soundTab: Rect = { x: panelX + 422, y: panelY + 70, w: 120, h: 42 };
   const backButton: Rect = { x: panelX + panelWidth - 128, y: panelY + 18, w: 100, h: 38 };
   const fovSlider: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
   const distanceSlider: Rect = { x: panelX + 60, y: panelY + 255, w: panelWidth - 120, h: 30 };
   const soundSwitch: Rect = { x: panelX + 60, y: panelY + 165, w: panelWidth - 120, h: 30 };
   const volumeSlider: Rect = { x: panelX + 60, y: panelY + 235, w: panelWidth - 120, h: 30 };
+  const groupRect = (index: number): Rect => ({
+    x: panelX + 60 + (index % 2) * 300,
+    y: panelY + 286 + Math.floor(index / 2) * 50,
+    w: 260,
+    h: 14,
+  });
   const invertSwitch: Rect = { x: panelX + 60, y: panelY + 384, w: panelWidth - 120, h: 28 };
   const sensitivitySlider: Rect = { x: panelX + 60, y: panelY + 198, w: panelWidth - 120, h: 30 };
   const cameraButton: Rect = { x: panelX + 60, y: panelY + 118, w: panelWidth - 120, h: 42 };
@@ -126,6 +136,7 @@ export function createSettingsMenu(
     drawTab(context, videoTab, '视频', tab === 'video');
     drawTab(context, gameTab, '游戏', tab === 'game');
     drawTab(context, controlsTab, '控制', tab === 'controls');
+    drawTab(context, soundTab, '声音', tab === 'sound');
 
     if (tab === 'controls') {
       const cameraLabel =
@@ -166,16 +177,34 @@ export function createSettingsMenu(
         15,
         'rgba(255, 255, 255, 0.5)',
       );
-    } else {
+    } else if (tab === 'sound') {
       drawSwitch(context, soundSwitch, '声音', values.sound);
       drawSlider(context, volumeSlider, values.volume, '主音量', `${Math.round(values.volume * 100)}%`);
+      const groups: Array<[SoundGroup, string]> = [
+        ['blocks', '方块'],
+        ['mobs', '生物'],
+        ['player', '玩家'],
+        ['ui', '界面'],
+        ['ambient', '环境'],
+        ['music', '音乐'],
+      ];
+      groups.forEach(([key, label], index) => {
+        drawSlider(
+          context,
+          groupRect(index),
+          values.groupVolumes[key],
+          label,
+          `${Math.round(values.groupVolumes[key] * 100)}%`,
+        );
+      });
+    } else {
       drawText(
         context,
-        '点按切换 / 拖动滑杆调音量',
+        '更多游戏设置待接入',
         panelX + 28,
-        panelY + 330,
-        15,
-        'rgba(255, 255, 255, 0.5)',
+        panelY + 160,
+        16,
+        'rgba(255, 255, 255, 0.55)',
       );
     }
 
@@ -228,6 +257,11 @@ export function createSettingsMenu(
       }
       if (contains(controlsTab, x, y)) {
         tab = 'controls';
+        redraw();
+        return null;
+      }
+      if (contains(soundTab, x, y)) {
+        tab = 'sound';
         redraw();
         return null;
       }
@@ -286,7 +320,7 @@ export function createSettingsMenu(
           notify();
           return null;
         }
-      } else {
+      } else if (tab === 'sound') {
         if (contains(soundSwitch, x, y)) {
           values.sound = !values.sound;
           notify();
@@ -297,6 +331,18 @@ export function createSettingsMenu(
           values.volume = Math.round(volume * 100) / 100;
           notify();
           return null;
+        }
+        const groups: SoundGroup[] = ['blocks', 'mobs', 'player', 'ui', 'ambient', 'music'];
+        for (let index = 0; index < groups.length; index++) {
+          const value = hitSlider(groupRect(index), x, y);
+          if (value !== null) {
+            values.groupVolumes = {
+              ...values.groupVolumes,
+              [groups[index]!]: Math.round(value * 100) / 100,
+            };
+            notify();
+            return null;
+          }
         }
       }
 
