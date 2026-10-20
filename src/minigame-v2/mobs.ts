@@ -25,6 +25,7 @@ export interface MobDeps {
   onXp(amount: number): void;
   onHit(): void;
   onUi(): void;
+  mobDamage(): number;
 }
 
 interface DropRule {
@@ -265,7 +266,7 @@ export class MobSystem {
       mob.group.rotation.y = Math.atan2(dirX, dirZ);
       if (dist < 1.35 && Date.now() > (mob.attackAt ?? 0)) {
         mob.attackAt = Date.now() + 1200;
-        this.deps.onDamage(2, '僵尸');
+        this.deps.onDamage(this.deps.mobDamage(), '僵尸');
       }
     }
   }

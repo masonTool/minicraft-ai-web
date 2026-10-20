@@ -121,7 +121,10 @@ const assert = (condition, message, state) => {
   // 死亡 → 重生
   const deathFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
   assert(deathFrame, '死亡用例找不到 iframe');
-  await deathFrame.evaluate(() => wx.__v2Test?.setHealth?.(0));
+  await deathFrame.evaluate(() => {
+    wx.__v2Test?.setGameMode?.('survival');
+    wx.__v2Test?.setHealth?.(0);
+  });
   const deathScreen = await waitState((state) => state.dead, '生命归零后没有死亡界面', 5000);
   await tap(512, 321);
   const respawned = await waitState(

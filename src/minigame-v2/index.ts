@@ -1421,7 +1421,7 @@ const dropInventory = (): void => {
 };
 
 const applyDamage = (amount: number, cause: string): void => {
-  if (amount <= 0 || dead) return;
+  if (amount <= 0 || dead || currentWorld?.gameMode === 'creative') return;
   health = Math.max(0, health - amount);
   lastDamageCause = cause;
   damageFlashUntil = Date.now() + 260;
@@ -1750,7 +1750,9 @@ const placeAt = (hit: RayHit): void => {
   if (!world.setBlockAndUpdate(x, y, z, stack.id)) return;
   stack.count -= 1;
   lastAction = 'placed';
-  inventory.set(selectedSlot, stack.count > 0 ? stack : null);
+  if (currentWorld?.gameMode !== 'creative') {
+    inventory.set(selectedSlot, stack.count > 0 ? stack : null);
+  }
   audio.play('place', { x, y, z });
   saveController.request();
   showHud();
@@ -1786,6 +1788,10 @@ const mobs = new MobSystem({
   onXp: (amount) => gainXp(amount),
   onHit: () => audio.play('break_wood'),
   onUi: () => showHud(),
+  mobDamage: () => {
+    const difficulty = currentWorld?.difficulty;
+    return difficulty === 'easy' ? 1 : difficulty === 'hard' ? 3 : 2;
+  },
 });
 
 platform.input.onPointer('down', (event) => {
@@ -2065,7 +2071,7 @@ const frame = (): void => {
   }
   input.jump = false;
 
-  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chat.isOpen && !containers.isOpen) {
+  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chat.isOpen && !containers.isOpen && currentWorld?.gameMode !== 'creative') {
     if (!physics.onGround) {
       fallPeakY = Math.max(fallPeakY, physics.y);
     } else {
@@ -2160,7 +2166,7 @@ const frame = (): void => {
     weatherAccum = 0;
   }
 
-  if (playerReady && !dead && !paused) {
+  if (playerReady && !dead && !paused && currentWorld?.gameMode !== 'creative') {
     hazardTimer += dt;
     if (hazardTimer >= 1) {
       hazardTimer = 0;
@@ -2208,7 +2214,7 @@ const frame = (): void => {
       sheepSpawned = true;
     }
   }
-  if (playerReady && !zombieSpawned && worldTime > 0.55) {
+  if (playerReady && !zombieSpawned && worldTime > 0.55 && currentWorld?.difficulty !== 'peaceful') {
     const surface = world.getSurfaceBlockY(spawn.x - 5, spawn.z - 4);
     if (surface !== null) {
       mobs.spawnZombie(spawn.x - 5, surface + 1, spawn.z - 4);
