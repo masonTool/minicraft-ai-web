@@ -102,6 +102,13 @@ const drawBlockIcon = (
   ctx.drawImage(atlas.canvas, source.x, source.y, TILE_SIZE, TILE_SIZE, x + inset, y + inset, size - inset * 2, size - inset * 2);
 };
 
+const outline = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.006, 1.006, 1.006)),
+  new THREE.LineBasicMaterial({ color: 0x1b1b1b, transparent: true, opacity: 0.85, depthTest: false }),
+);
+outline.visible = false;
+scene.add(outline);
+
 const ui = new UiLayer(platform.system.width, platform.system.height, drawBlockIcon);
 const uiHeight = ui.height;
 let started = false;
@@ -1057,6 +1064,17 @@ const showHud = (): void => {
           showHud();
         });
       }),
+      button(820, uiHeight - 104, 70, 70, sneaking ? '潜行' : '站', () => {
+        sneaking = !sneaking;
+        input.sneak = sneaking;
+        showHud();
+      }, {
+        background: sneaking ? 'rgba(90, 130, 110, 0.45)' : 'rgba(255, 255, 255, 0.18)',
+        border: 'rgba(255, 255, 255, 0.42)',
+        borderWidth: 2,
+        radius: 35,
+        fontSize: 18,
+      }),
       button(902, uiHeight - 104, 70, 70, '跳', () => {
         jumpQueued = true;
       }, {
@@ -1156,6 +1174,7 @@ let yaw = 0;
 let pitch = 0;
 let playerReady = false;
 let jumpQueued = false;
+let sneaking = false;
 let movePointer: number | null = null;
 let lookPointer: number | null = null;
 let moveX = 0;
@@ -1190,6 +1209,12 @@ const updateHitAt = (clientX: number, clientY: number): void => {
     direction.z,
     8,
   );
+  if (currentHit) {
+    outline.visible = true;
+    outline.position.set(currentHit.x + 0.5, currentHit.y + 0.5, currentHit.z + 0.5);
+  } else {
+    outline.visible = false;
+  }
 };
 
 const breakAt = (hit: RayHit): void => {
@@ -1315,6 +1340,7 @@ const frame = (): void => {
       settings: settingsOpen,
       inventoryOpen,
       chatOpen,
+      sneaking,
     }),
   );
 
