@@ -1,6 +1,6 @@
 {
   "description": "Minicraft 微信小游戏移植 spike（WX-001）",
-  "appid": "touristappid",
+  "appid": "wx5bfe973b5421e5bb",
   "projectname": "minicraft-wxminigame",
   "compileType": "game",
   "miniprogramRoot": "./",
@@ -10,7 +10,32 @@
     "postcss": false,
     "minified": false,
     "urlCheck": false,
-    "checkSiteMap": false
+    "checkSiteMap": false,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
   },
-  "libVersion": "latest"
+  "libVersion": "latest",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "isGameTourist": false,
+  "editorSetting": {}
 }
