@@ -948,8 +948,6 @@ async function boot(): Promise<void> {
 
   const chestSnapshot = (): Array<ItemStack | null> =>
     Array.from({ length: 27 }, (_, index) => openedChest?.get(index) ?? null);
-  const playerHotbarSnapshot = (): Array<ItemStack | null> =>
-    Array.from({ length: 9 }, (_, index) => inventory.get(index));
   const playerInventorySnapshot = (): Array<ItemStack | null> =>
     Array.from({ length: 36 }, (_, index) => inventory.get(index));
   const refreshChest = (): void => {
@@ -966,7 +964,7 @@ async function boot(): Promise<void> {
     const cook = openedFurnace.cookTimeTotal > 0
       ? openedFurnace.cookProgress / openedFurnace.cookTimeTotal
       : 0;
-    ui.setFurnace(furnaceSnapshot(), playerHotbarSnapshot(), burn, cook);
+    ui.setFurnace(furnaceSnapshot(), playerInventorySnapshot(), burn, cook);
   };
 
   const openFurnaceAt = (x: number, y: number, z: number, station: ReturnType<typeof stationOfBlock>): void => {
@@ -975,7 +973,7 @@ async function boot(): Promise<void> {
     openedFurnace = furnace;
     liveFurnaces.add(furnace);
     furnace.paused = false;
-    ui.openFurnace(furnace.stationName, furnaceSnapshot(), playerHotbarSnapshot());
+    ui.openFurnace(furnace.stationName, furnaceSnapshot(), playerInventorySnapshot());
   };
 
   const useTarget = (): void => {
@@ -1163,40 +1161,61 @@ async function boot(): Promise<void> {
     if (ui.isFurnaceOpen()) {
       uiPointerId = event.pointerId;
       const action = ui.handleFurnaceTap(x, y, width, height);
-      if (action?.type === 'take' && openedFurnace) {
-        const stack = openedFurnace.get(action.index);
-        if (stack) {
-          openedFurnace.set(action.index, null);
-          inventory.addStack(stack);
+      if (action?.type === 'move' && openedFurnace) {
+        const getAt = (side: 'station' | 'player', index: number): ItemStack | null => {
+          if (side === 'station') return openedFurnace?.get(index) ?? null;
+          return inventory.get(index);
+        };
+        const setAt = (side: 'station' | 'player', index: number, stack: ItemStack | null): void => {
+          if (side === 'station') openedFurnace?.set(index, stack);
+          else inventory.set(index, stack);
+        };
+        const source = getAt(action.fromSide, action.fromIndex);
+        const target = getAt(action.toSide, action.toIndex);
+        if (source) {
+          if (action.toSide === 'station' && action.toIndex === 2) {
+            ui.showToast('产物格只能取出');
+          } else if (
+            action.toSide === 'station' &&
+            action.toIndex === 1 &&
+            !isFuel(source.id)
+          ) {
+            ui.showToast('燃料格只放燃料');
+          } else if (
+            action.fromSide === 'station' &&
+            action.fromIndex === 2 &&
+            target &&
+            target.id !== source.id
+          ) {
+            ui.showToast('产物格只能取出');
+          } else if (
+            action.fromSide === 'station' &&
+            action.fromIndex === 2 &&
+            target &&
+            target.id === source.id
+          ) {
+            const moved = Math.min(maxStackOf(source.id) - target.count, source.count);
+            if (moved > 0) {
+              target.count += moved;
+              source.count -= moved;
+              setAt(action.toSide, action.toIndex, target);
+              setAt('station', 2, source.count > 0 ? source : null);
+            }
+          } else if (target && target.id === source.id) {
+            const moved = Math.min(maxStackOf(source.id) - target.count, source.count);
+            if (moved > 0) {
+              target.count += moved;
+              source.count -= moved;
+              setAt(action.toSide, action.toIndex, target);
+              setAt(action.fromSide, action.fromIndex, source.count > 0 ? source : null);
+            }
+          } else {
+            setAt(action.toSide, action.toIndex, source);
+            setAt(action.fromSide, action.fromIndex, target);
+          }
           ui.syncInventory(inventory.serialize(), selectedSlot);
           refreshFurnace();
           scheduleSave?.();
-        }
-      }
-      if (action?.type === 'put' && openedFurnace) {
-        const stack = inventory.get(action.index);
-        if (stack) {
-          const input = openedFurnace.get(0);
-          const fuel = openedFurnace.get(1);
-          let target = -1;
-          if (isFuel(stack.id) && (!fuel || fuel.id === stack.id)) target = 1;
-          else if (!input || input.id === stack.id) target = 0;
-          else if (!fuel || fuel.id === stack.id) target = 1;
-          if (target < 0) {
-            ui.showToast('炉子已满');
-          } else {
-            const dest = openedFurnace.get(target);
-            if (dest && dest.id === stack.id) {
-              dest.count += stack.count;
-              openedFurnace.set(target, dest);
-            } else {
-              openedFurnace.set(target, stack);
-            }
-            inventory.set(action.index, null);
-            ui.syncInventory(inventory.serialize(), selectedSlot);
-            refreshFurnace();
-            scheduleSave?.();
-          }
         }
       }
       if (!ui.isFurnaceOpen()) openedFurnace = null;
