@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { drawText } from './widgets.ts';
+import { drawPanel, drawText } from './widgets.ts';
 
 export interface PlayerStats {
   health: number;
@@ -12,6 +12,8 @@ export interface PlayerStats {
 export interface StatsOverlay {
   setStats(stats: PlayerStats): void;
   setMining(progress: number | null): void;
+  setError(message: string | null): void;
+  hasError(): boolean;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -43,6 +45,7 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
 
   let stats: PlayerStats = { health: 20, food: 20, air: 300, armor: 0, xp: 0 };
   let mining: number | null = null;
+  let error: string | null = null;
 
   const heart = (x: number, y: number, size: number, filled: boolean): void => {
     if (!context) return;
@@ -68,6 +71,30 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
   const redraw = (): void => {
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (error) {
+      context.fillStyle = 'rgba(0, 0, 0, 0.82)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      const width = Math.min(760, canvas.width - 80);
+      const x = (canvas.width - width) / 2;
+      const y = canvas.height * 0.3;
+      drawPanel(context, { x, y, w: width, h: 190 });
+      drawText(context, 'FATAL ERROR', x + 24, y + 20, 28, '#ff8a8a');
+      const lines = error.match(/.{1,52}/g) ?? [error];
+      lines.slice(0, 3).forEach((line, index) => {
+        drawText(context, line, x + 24, y + 68 + index * 26, 16, '#ffffff');
+      });
+      drawText(
+        context,
+        'RESTART THE MINI GAME TO RECOVER',
+        x + 24,
+        y + 154,
+        14,
+        'rgba(255, 255, 255, 0.55)',
+      );
+      texture.needsUpdate = true;
+      return;
+    }
 
     // 准星
     const cx = canvas.width / 2;
@@ -140,6 +167,13 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
       if (mining === progress) return;
       mining = progress;
       redraw();
+    },
+    setError(message: string | null): void {
+      error = message;
+      redraw();
+    },
+    hasError(): boolean {
+      return error !== null;
     },
     render(renderer: THREE.WebGLRenderer): void {
       renderer.clearDepth();

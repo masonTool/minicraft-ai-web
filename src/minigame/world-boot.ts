@@ -1128,7 +1128,7 @@ async function boot(): Promise<void> {
     },
   };
 
-  const frame = (time: number): void => {
+  const frameBody = (time: number): void => {
     frames += 1;
     const dt = lastFrameTime > 0 ? Math.min(0.05, (time - lastFrameTime) / 1000) : 0.016;
     lastFrameTime = time;
@@ -1213,7 +1213,23 @@ async function boot(): Promise<void> {
     sceneTriangles = renderer.info.render.triangles;
     sceneCalls = renderer.info.render.calls;
     ui.render(renderer);
-    requestAnimationFrame(frame);
+  };
+
+  const frame = (time: number): void => {
+    try {
+      frameBody(time);
+      requestAnimationFrame(frame);
+    } catch (error) {
+      console.error('[WX-020] frame error', error);
+      ui.showError(String(error));
+      try {
+        renderer.clear();
+        renderer.render(scene, camera);
+        ui.render(renderer);
+      } catch {
+        /* 渲染器本身失败时只能保留日志 */
+      }
+    }
   };
   requestAnimationFrame(frame);
 }

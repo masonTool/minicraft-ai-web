@@ -40,6 +40,7 @@ export interface MiniGameUi {
   handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
   setStats(stats: PlayerStats): void;
   setMining(progress: number | null): void;
+  showError(message: string | null): void;
   setFlying(active: boolean): void;
   setSneaking(active: boolean): void;
   showToast(message: string): void;
@@ -185,6 +186,9 @@ export function createCanvasUi(
     setMining(progress: number | null): void {
       stats.setMining(progress);
     },
+    showError(message: string | null): void {
+      stats.setError(message);
+    },
     setFlying(active: boolean): void {
       touchControls.setFlying(active);
     },
@@ -205,6 +209,10 @@ export function createCanvasUi(
       }
       if (settings.isOpen() && settingsFromMenu) {
         settings.render(renderer);
+        return;
+      }
+      if (stats.hasError()) {
+        stats.render(renderer);
         return;
       }
       touchControls.render(renderer);
