@@ -1881,6 +1881,22 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['CC', 'CC'],
     key: { C: Item.POPPED_CHORUS_FRUIT },
   },
+  // ---- 六面树皮的木头（批次 438）：4 根同种原木 2×2 → 3 块（原版就是这个比例）
+  ...([
+    ['oak', Block.OAK_LOG, Block.OAK_WOOD],
+    ['spruce', Wood.spruce.log, Block.SPRUCE_WOOD],
+    ['birch', Wood.birch.log, Block.BIRCH_WOOD],
+    ['jungle', Wood.jungle.log, Block.JUNGLE_WOOD],
+    ['acacia', Wood.acacia.log, Block.ACACIA_WOOD],
+    ['dark_oak', Wood.dark_oak.log, Block.DARK_OAK_WOOD],
+  ] as const).map(
+    ([, log, wood]): Recipe => ({
+      kind: 'shaped' as const,
+      result: { id: wood, count: 3 },
+      pattern: ['LL', 'LL'],
+      key: { L: log },
+    }),
+  ),
   // ---- 干草块（批次 437）：9 小麦压成一块，也能拆回去（原版双向）
   {
     kind: 'shaped',

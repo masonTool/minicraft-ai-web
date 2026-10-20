@@ -232,6 +232,13 @@ const BASE_SPECS: readonly BlockSpec[] = [
   { id: 16, name: 'minecraft:tuff', tiles: ['tuff', 'tuff', 'tuff'] },
   // 干草块（批次 437）：六个面同一张贴图（原版只有顶面/侧面之分，这里不细分）
   { id: 667, name: 'minecraft:hay_block', tiles: ['hay_block', 'hay_block', 'hay_block'] },
+  // 六面树皮的木头（批次 438）：复用原木侧面的贴图，不新画
+  { id: 668, name: 'minecraft:oak_wood', tiles: ['oak_log_side', 'oak_log_side', 'oak_log_side'] },
+  { id: 669, name: 'minecraft:spruce_wood', tiles: ['spruce_log_side', 'spruce_log_side', 'spruce_log_side'] },
+  { id: 670, name: 'minecraft:birch_wood', tiles: ['birch_log_side', 'birch_log_side', 'birch_log_side'] },
+  { id: 671, name: 'minecraft:jungle_wood', tiles: ['jungle_log_side', 'jungle_log_side', 'jungle_log_side'] },
+  { id: 672, name: 'minecraft:acacia_wood', tiles: ['acacia_log_side', 'acacia_log_side', 'acacia_log_side'] },
+  { id: 673, name: 'minecraft:dark_oak_wood', tiles: ['dark_oak_log_side', 'dark_oak_log_side', 'dark_oak_log_side'] },
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -3907,6 +3914,18 @@ export const Block = {
   BEE_NEST: 602,
   /** 干草块（批次 437）：9 小麦压成一块，可反过来拆回 9 小麦 */
   HAY_BLOCK: 667,
+  /**
+   * 六面树皮的"木头"（批次 438）：与同种原木共用**侧面**贴图，四个面都是树皮。
+   *
+   * 原版这六个方块的意义是"建筑时不想露出年轮"——只用原木的话，柱子顶端那一面
+   * 一定是年轮。所以它既不新画贴图，也不新增形状，纯粹是"把侧面贴图铺满六面"。
+   */
+  OAK_WOOD: 668,
+  SPRUCE_WOOD: 669,
+  BIRCH_WOOD: 670,
+  JUNGLE_WOOD: 671,
+  ACACIA_WOOD: 672,
+  DARK_OAK_WOOD: 673,
   WAXED_COPPER_BLOCK: 603,
   WAXED_EXPOSED_COPPER: 604,
   WAXED_WEATHERED_COPPER: 605,
@@ -4251,6 +4270,10 @@ HARDNESS.set(Block.MOSS_CARPET, 0.1);
 HARDNESS.set(Block.AZALEA, 0.1);
 HARDNESS.set(Block.BEE_NEST, 0.3);
 HARDNESS.set(Block.HAY_BLOCK, 0.5);
+// 木头：与原木同级（斧头挖得快）
+for (const id of [Block.OAK_WOOD, Block.SPRUCE_WOOD, Block.BIRCH_WOOD, Block.JUNGLE_WOOD, Block.ACACIA_WOOD, Block.DARK_OAK_WOOD]) {
+  HARDNESS.set(id, 2);
+}
 HARDNESS.set(Block.WAXED_COPPER_BLOCK, 3);
 HARDNESS.set(Block.WAXED_EXPOSED_COPPER, 3);
 HARDNESS.set(Block.WAXED_WEATHERED_COPPER, 3);

@@ -585,6 +585,12 @@ const EXPLICIT: Record<string, string> = {
   // 下界砖（批次 413）
   nether_brick: '下界砖',
   hay_block: '干草块',
+  oak_wood: '橡木木头',
+  spruce_wood: '云杉木头',
+  birch_wood: '白桦木头',
+  jungle_wood: '丛林木头',
+  acacia_wood: '金合欢木头',
+  dark_oak_wood: '深色橡木木头',
   chorus_fruit: '紫颂果',
   popped_chorus_fruit: '爆裂紫颂果',
   prismarine_crystals: '海晶砂粒',
