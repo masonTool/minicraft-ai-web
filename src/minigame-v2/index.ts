@@ -1260,6 +1260,12 @@ const showHud = (): void => {
         radius: 35,
         fontSize: 22,
       }),
+      ...(!settings.fingerAim
+        ? [
+            box(510, uiHeight / 2 - 10, 4, 20, [], { background: 'rgba(255,255,255,0.85)' }),
+            box(502, uiHeight / 2 - 2, 20, 4, [], { background: 'rgba(255,255,255,0.85)' }),
+          ]
+        : []),
     ]),
   );
 };
@@ -1366,11 +1372,13 @@ let lastDownX = 0;
 let lastDownY = 0;
 
 const updateHitAt = (clientX: number, clientY: number): void => {
+  const screenX = settings.fingerAim ? clientX : platform.system.width / 2;
+  const screenY = settings.fingerAim ? clientY : platform.system.height / 2;
   camera.updateMatrixWorld();
   aimRaycaster.setFromCamera(
     new THREE.Vector2(
-      (clientX / Math.max(1, platform.system.width)) * 2 - 1,
-      -(clientY / Math.max(1, platform.system.height)) * 2 + 1,
+      (screenX / Math.max(1, platform.system.width)) * 2 - 1,
+      -(screenY / Math.max(1, platform.system.height)) * 2 + 1,
     ),
     camera,
   );
