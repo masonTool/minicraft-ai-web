@@ -298,9 +298,12 @@ async function boot(): Promise<void> {
   let lookStartTime = 0;
   let lookMoved = false;
   let jumpQueued = false;
+  let jumpHeld = false;
+  let flying = loadedPlayer?.flying ?? false;
   let mining: { x: number; y: number; z: number; elapsed: number; pointerId: number } | null = null;
   const MINE_TIME = 0.6;
   let lastFrameTime = 0;
+  ui.setFlying(flying);
 
   if (loadedPlayer) {
     physics.teleport(loadedPlayer.x, loadedPlayer.y, loadedPlayer.z);
@@ -335,7 +338,7 @@ async function boot(): Promise<void> {
       yaw,
       pitch,
       dimension: world.dimension,
-      flying: false,
+      flying,
       gameMode: 'survival',
       timeOfDay: 0.3,
       health: 20,
@@ -539,6 +542,15 @@ async function boot(): Promise<void> {
       return;
     }
 
+    // 左侧 FLY 按钮（避开摇杆与 HUD）
+    if (x < width * 0.28 && y > height * 0.3 && y < height * 0.46) {
+      uiPointerId = event.pointerId;
+      flying = !flying;
+      ui.setFlying(flying);
+      ui.showToast(flying ? 'FLY ON' : 'FLY OFF');
+      return;
+    }
+
     if (x < width * 0.45 && movePointerId === null) {
       movePointerId = event.pointerId;
       moveOriginX = x;
@@ -555,6 +567,10 @@ async function boot(): Promise<void> {
       lookStartY = y;
       lookStartTime = Date.now();
       lookMoved = false;
+      if (y > height * 0.78) {
+        jumpHeld = true;
+        jumpQueued = true;
+      }
       if (y > height * 0.45 && y < height * 0.78 && currentHit) {
         mining = {
           x: currentHit.x,
@@ -621,6 +637,7 @@ async function boot(): Promise<void> {
     }
     if (event.pointerId === lookPointerId) {
       if (mining?.pointerId === event.pointerId) cancelMining();
+      jumpHeld = false;
       if (!lookMoved && Date.now() - lookStartTime < 350) {
         handleRightTap(event.clientX, event.clientY);
       }
@@ -710,10 +727,11 @@ async function boot(): Promise<void> {
       playerInput.strafe = 0;
       playerInput.jump = false;
       jumpQueued = false;
+      jumpHeld = false;
     } else if (playerReady && world.isLoaded(physics.x, physics.z)) {
-      playerInput.jump = jumpQueued;
+      playerInput.jump = jumpQueued || (flying && jumpHeld);
       jumpQueued = false;
-      physics.update(world, playerInput, yaw, dt, false, 1, 1, false);
+      physics.update(world, playerInput, yaw, dt, flying, 1, 1, false);
       if (physics.y < -40) spawnPlayer();
     }
     updateCamera();

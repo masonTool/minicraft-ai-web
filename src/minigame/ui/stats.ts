@@ -80,7 +80,8 @@ export function createStats(screenWidth: number, screenHeight: number): StatsOve
     context.fillRect(cx - 1, cy - 11, 2, 22);
 
     const baseY = canvas.height - 96;
-    const startX = 24;
+    // 右移避开左侧摇杆；生命 320-560，饥饿 610-810
+    const startX = 320;
     const heartSize = 20;
     const hearts = Math.max(0, Math.min(10, Math.ceil(stats.health / 2)));
     for (let i = 0; i < 10; i++) {

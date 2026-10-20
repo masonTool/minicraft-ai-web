@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { drawText } from './widgets.ts';
 
 export interface TouchControls {
+  setFlying(active: boolean): void;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -56,8 +57,16 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
     context.stroke();
   };
 
-  const button = (x: number, y: number, radius: number, label: string): void => {
-    circle(x, y, radius, 'rgba(20, 24, 28, 0.5)', 'rgba(255, 255, 255, 0.55)');
+  let flying = false;
+
+  const button = (x: number, y: number, radius: number, label: string, active = false): void => {
+    circle(
+      x,
+      y,
+      radius,
+      active ? 'rgba(70, 140, 90, 0.65)' : 'rgba(20, 24, 28, 0.5)',
+      active ? 'rgba(180, 255, 200, 0.95)' : 'rgba(255, 255, 255, 0.55)',
+    );
     drawText(context!, label, x, y - 9, 16, 'rgba(255, 255, 255, 0.9)', 'center');
   };
 
@@ -72,6 +81,9 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
     circle(jx, jy, 26, 'rgba(255, 255, 255, 0.25)', 'rgba(255, 255, 255, 0.55)');
     drawText(context, 'MOVE', jx, jy - 76, 14, 'rgba(255, 255, 255, 0.55)', 'center');
 
+    // 飞行开关：左侧中部，避开摇杆
+    button(jx, canvas.height * 0.38, 34, 'FLY', flying);
+
     // 右侧按钮：与 world-boot 的 y 分区对应
     const bx = canvas.width * 0.88;
     button(bx, canvas.height * 0.3, 44, 'PLACE');
@@ -84,6 +96,11 @@ export function createTouchControls(screenWidth: number, screenHeight: number): 
   redraw();
 
   return {
+    setFlying(active: boolean): void {
+      if (flying === active) return;
+      flying = active;
+      redraw();
+    },
     render(renderer: THREE.WebGLRenderer): void {
       renderer.clearDepth();
       renderer.render(scene, camera);
