@@ -1182,6 +1182,65 @@ console.log('\n[/clone 区域复制（批次 431）]');
     equal('spawnpoint 可以只生成 /spawnpoint', buildCommand(spawn, 0, {}), '/spawnpoint');
   }
 
+  {
+    const mob = field('summon', '生物');
+    equal('summon 的生物是下拉', mob.kind, 'select');
+    check(
+      '召唤生物显示中文名（值仍是英文 id）',
+      mob.options!.some((option) => option.value === 'zombie' && option.label.includes('僵尸')),
+      mob.options!.slice(0, 3).map((option) => `${option.value}=${option.label}`).join(','),
+    );
+  }
+
+  {
+    const rule = field('gamerule', '规则');
+    check(
+      '游戏规则显示中文名（值仍是英文 id）',
+      rule.options!.some(
+        (option) => option.value === 'keepInventory' && option.label.includes('死亡后保留物品'),
+      ),
+      rule.options!.slice(0, 3).map((option) => `${option.value}=${option.label}`).join(','),
+    );
+    const value = field('gamerule', '值');
+    equal('gamerule 的值是 true/false + 自定义数字', value.kind, 'combo');
+    check('gamerule 的值有中文开启/关闭', value.options!.some((option) => option.label.includes('开启')));
+  }
+
+  {
+    const type = field('particle', '类型');
+    equal('particle 的类型是下拉', type.kind, 'select');
+    check('particle 的类型有中文名', type.options!.some((option) => option.label.includes('爱心')));
+  }
+
+  {
+    const table = field('loot', '战利品表');
+    equal('loot 的战利品表是下拉', table.kind, 'select');
+    check(
+      '战利品表显示中文名（值仍是英文 key）',
+      table.options!.some((option) => option.value === 'village_house' && option.label.includes('村庄小屋')),
+    );
+  }
+
+  {
+    const condition = field('execute', '条件');
+    check(
+      'execute 的条件词带中文解释（作为/在/定位到…）',
+      condition.options!.some((option) => option.value === 'as' && option.label.includes('作为')),
+    );
+  }
+
+  {
+    const progress = field('advancement', '进度');
+    equal('advancement 的进度是下拉', progress.kind, 'select');
+    check(
+      '进度显示中文标题（值仍是英文 id）',
+      progress.options!.some(
+        (option) => option.value === 'minecraft:story/root' && option.label.includes('我的世界'),
+      ),
+      progress.options!.slice(0, 2).map((option) => `${option.value}=${option.label}`).join(','),
+    );
+  }
+
   equal('没有参数的 /seed 直接生成', buildCommand(byName.get('seed')!, 0, {}), '/seed');
 }
 

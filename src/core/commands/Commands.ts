@@ -421,9 +421,9 @@ export const COMMANDS: readonly CommandSpec[] = [
     name: 'gamerule',
     usage: '/gamerule <规则> [值]',
     description:
-      '查看或修改游戏规则（keepInventory / doMobSpawning / mobGriefing / doDaylightCycle / ' +
-      'naturalRegeneration / randomTickSpeed / doMobLoot / doTileDrops / doWeatherCycle / ' +
-      'doInsomnia / doImmediateRespawn / doPatrolSpawning / commandBlockOutput …）',
+      '查看或修改游戏规则，例如“死亡后保留物品 / 生物自然生成 / 生物破坏方块 / 昼夜循环 / ' +
+      '自然回血 / 随机刻速度 / 生物掉落物 / 天气循环”。帮助弹窗的下拉里有中文名，' +
+      '命令里仍使用对应的英文规则名。',
     run(args, ctx, out) {
       const rules = ctx.gameRules();
       const key = args[0] as keyof GameRules | undefined;
@@ -597,7 +597,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'particle',
     usage: '/particle <类型> [数量]',
-    description: '在玩家位置生成粒子（heart / crit / flame / portal / explosion）',
+    description: '在玩家位置生成粒子（爱心 / 暴击 / 火焰 / 传送门 / 爆炸）',
     run(args, ctx, out) {
       const kind = args[0];
       if (!kind) {
@@ -717,7 +717,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'clone',
     usage: '/clone <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz> [masked|replace]',
-    description: '把一块区域复制到别处（单次上限 32768 格；masked = 只覆盖空气）',
+    description: '把一块区域复制到别处（单次上限 32768 格；“遮罩”模式只覆盖空气）',
     creativeOnly: true,
     run(args, ctx, out) {
       if (args.length < 9) {

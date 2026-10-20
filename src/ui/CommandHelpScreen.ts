@@ -211,7 +211,12 @@ export class CommandHelpScreen {
     desc.className = 'cmd-help-desc';
     desc.textContent = entry.description;
 
-    this.detailEl.append(head, usage, desc);
+    const note = document.createElement('div');
+    note.className = 'cmd-help-note';
+    note.textContent =
+      '下拉框里显示中文名，生成的命令会自动使用对应的英文 id；物品、方块等文本框也能直接填中文名。';
+
+    this.detailEl.append(head, usage, desc, note);
 
     if (entry.variants.length > 1) {
       const modeField = document.createElement('div');

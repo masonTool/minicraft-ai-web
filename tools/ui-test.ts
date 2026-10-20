@@ -3867,7 +3867,12 @@ console.log('\n[游戏规则 6 → 11（批次 255）]');
     appSrc.includes('if (!this.rules.doInsomnia) return;') &&
       appSrc.includes('this.rules.doImmediateRespawn || this.respawnCountdown >= RESPAWN_DELAY'),
   );
-  check('/gamerule 的帮助里列出了新规则', commandsSrc.includes('doImmediateRespawn'));
+  check(
+    '/gamerule 的帮助里列出了新规则（中文名在帮助里，命令里仍用英文 id）',
+    commandsSrc.includes('死亡后保留物品') &&
+      rulesSrc.includes("doImmediateRespawn: '立即重生'") &&
+      rulesSrc.includes('doImmediateRespawn: false'),
+  );
 }
 
 console.log('\n[拴绳（批次 256）]');

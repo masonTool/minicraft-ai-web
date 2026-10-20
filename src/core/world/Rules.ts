@@ -93,6 +93,34 @@ export interface GameRules {
   commandBlockOutput: boolean;
 }
 
+/** 规则英文 id → 中文名（命令帮助的下拉用；命令里仍拼英文 id） */
+export const GAME_RULE_LABELS: Readonly<Record<keyof GameRules, string>> = {
+  keepInventory: '死亡后保留物品',
+  doMobSpawning: '生物自然生成',
+  mobGriefing: '生物破坏方块',
+  doDaylightCycle: '昼夜循环',
+  naturalRegeneration: '自然回血',
+  randomTickSpeed: '随机刻速度',
+  doMobLoot: '生物掉落物',
+  doTileDrops: '方块掉落物',
+  doWeatherCycle: '天气循环',
+  doInsomnia: '幻翼失眠',
+  doImmediateRespawn: '立即重生',
+  fallDamage: '摔落伤害',
+  fireDamage: '火焰伤害',
+  drowningDamage: '溺水伤害',
+  announceAdvancements: '播报进度',
+  sendCommandFeedback: '显示命令反馈',
+  showDeathMessages: '显示死亡消息',
+  disableRaids: '禁用袭击',
+  spawnRadius: '出生点半径',
+  reducedDebugInfo: '简化调试信息',
+  doFireTick: '火焰蔓延',
+  doEntityDrops: '实体掉落物',
+  doPatrolSpawning: '巡逻队生成',
+  commandBlockOutput: '命令方块输出',
+};
+
 export const DEFAULT_GAME_RULES: GameRules = {
   keepInventory: false,
   doMobSpawning: true,

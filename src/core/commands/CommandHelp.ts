@@ -11,15 +11,13 @@
  * 只有"下拉里混了一个自由值"（`<day|noon|night|midnight|数字>`）这种才退化成文本。
  */
 
-import {
-  COMMANDS,
-  commandNames,
-  mobNames,
-  type CommandSpec,
-} from './Commands.ts';
-import { DEFAULT_GAME_RULES } from '../world/Rules.ts';
+import { COMMANDS, commandNames, type CommandSpec } from './Commands.ts';
+import { DEFAULT_GAME_RULES, GAME_RULE_LABELS } from '../world/Rules.ts';
 import { EFFECT_LABELS } from '../survival/StatusEffects.ts';
 import { ENCHANTMENTS } from '../registry/enchantments.ts';
+import { MOB_TYPES } from '../entity/mobs.ts';
+import { LOOT_TABLES } from '../registry/loot.ts';
+import { ADVANCEMENTS } from '../progress/advancements.ts';
 
 export interface CommandHelpOption {
   readonly value: string;
@@ -99,6 +97,7 @@ const VALUE_LABELS: Readonly<Record<string, string>> = {
   overworld: '主世界',
   nether: '下界',
   end: '末地',
+  biome: '群系',
   '*': '全部（*）',
 };
 
@@ -320,6 +319,14 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
 
   const choices = inner.split('|').map((choice) => choice.trim()).filter(Boolean);
 
+  // 进度 id：100 条进度都有中文标题，直接给下拉（`*` = 全部）
+  if (inner.includes('进度')) {
+    return selectField(index, '进度', optional, [
+      { value: '*', label: '全部进度（*）' },
+      ...ADVANCEMENTS.map((entry) => ({ value: entry.id, label: `${entry.title}（${entry.id}）` })),
+    ]);
+  }
+
   if (choices.length > 1) {
     // `<day|noon|night|midnight|数字>`：固定选项做下拉，自由值做“自定义”输入
     const free = choices.filter((choice) => FREE_VALUE_CHOICES.has(choice));
@@ -355,7 +362,13 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
   const name = inner.trim();
   // 有现成数据源的参数直接给下拉，避免玩家背英文 id
   if (name === '生物') {
-    return selectField(index, name, optional, mobNames().map((mob) => ({ value: mob, label: mob })));
+    // 玩家不需要背英文 id：标签用中文名，命令里仍拼 id。
+    return selectField(
+      index,
+      name,
+      optional,
+      MOB_TYPES.map((mob) => ({ value: mob.id, label: `${mob.name}（${mob.id}）` })),
+    );
   }
   if (name === '命令') {
     // `/help [命令]` 是"从现有命令里挑一条"；`/execute … run <命令>` 则是
@@ -388,7 +401,10 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       index,
       name,
       optional,
-      Object.keys(DEFAULT_GAME_RULES).map((rule) => ({ value: rule, label: rule })),
+      (Object.keys(DEFAULT_GAME_RULES) as Array<keyof typeof DEFAULT_GAME_RULES>).map((rule) => ({
+        value: rule,
+        label: `${GAME_RULE_LABELS[rule]}（${rule}）`,
+      })),
     );
   }
   if (name === '效果') {
@@ -406,6 +422,36 @@ function fieldFromArg(inner: string, optional: boolean, index: number): CommandH
       optional,
       ENCHANTMENTS.map((entry) => ({ value: entry.id, label: entry.name })),
     );
+  }
+  if (name === '类型') {
+    return selectField(index, name, optional, [
+      { value: 'heart', label: '爱心（heart）' },
+      { value: 'crit', label: '暴击（crit）' },
+      { value: 'flame', label: '火焰（flame）' },
+      { value: 'portal', label: '传送门（portal）' },
+      { value: 'explosion', label: '爆炸（explosion）' },
+    ]);
+  }
+  if (name === '战利品表') {
+    return selectField(
+      index,
+      name,
+      optional,
+      LOOT_TABLES.map((table) => ({ value: table.key, label: `${table.name}（${table.key}）` })),
+    );
+  }
+  if (name === '值') {
+    return {
+      key: `f${index}`,
+      label: '值',
+      kind: 'combo',
+      optional,
+      options: [
+        { value: 'true', label: '开启（true）' },
+        { value: 'false', label: '关闭（false）' },
+      ],
+      customPlaceholder: '数字（如 3）',
+    };
   }
 
   return {
@@ -430,6 +476,10 @@ function optionOf(value: string, context = ''): CommandHelpOption {
   // `clear` 在天气里是“晴天”，在 effect 里是“清除”；不能共用一条标签
   if (value === 'clear' && context.includes('rain')) return { value, label: '晴天' };
   if (value === 'clear' && context.includes('give|clear')) return { value, label: '清除' };
+  // execute 的条件词保留英文原词，方便玩家把界面和命令对上
+  if (context.includes('as|at|') && VALUE_LABELS[value]) {
+    return { value, label: `${VALUE_LABELS[value]}（${value}）` };
+  }
   return { value, label: VALUE_LABELS[value] ?? value };
 }
 
@@ -452,25 +502,21 @@ function placeholderFor(name: string): string {
   if (/^[xyz]\d*$/.test(name) || /^d[xyz]$/.test(name)) return '~ 或数字';
   switch (name) {
     case '物品':
-      return '例如 stone / diamond_pickaxe';
+      return '中文名或英文 id，如 石头 / stone';
     case '方块':
-      return '例如 stone / oak_planks';
+      return '中文名或英文 id，如 石头 / stone';
     case '选择器':
-      return '@s / @p / 玩家名';
+      return '@s（自己）/ @p（最近玩家）/ 玩家名';
     case '目标':
-      return '@s / @p / 玩家名';
+      return '@s（自己）/ @p（最近玩家）/ 玩家名';
     case '内容':
       return '要发送的文字';
     case '动作':
       return '例如 跳了一下';
     case '音效':
-      return '例如 minecraft:block.note_block.harp';
-    case '类型':
-      return '例如 flame / smoke';
+      return '音效 id，如 block.note_block.harp（音符盒）';
     case '群系名':
-      return '例如 plains / desert';
-    case '战利品表':
-      return '例如 minecraft:chests/simple_dungeon';
+      return '英文群系名，如 plains（平原）/ desert（沙漠）';
     case '规则':
       return '规则名';
     case '命令':
