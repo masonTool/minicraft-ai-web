@@ -111,9 +111,9 @@ console.log('\n[默认设置]');
   );
   check('默认瞄准方式是手指落点', DEFAULT_SETTINGS.aimMode === 'finger');
   check('默认右手模式（摇杆在左）', DEFAULT_SETTINGS.handedness === 'right');
-  // 批次 521：摇杆默认改成"跟随手指"（用户要求），老存档里停在 fixed 的在迁移时跟着改
-  check('摇杆默认跟随手指', DEFAULT_SETTINGS.touchStick === 'dynamic' && fallback.touchStick === 'dynamic');
-  check('设置格式版本是 3', DEFAULT_SETTINGS.settingsVersion === SETTINGS_VERSION && SETTINGS_VERSION === 3);
+  // 批次 521 曾把默认改成"跟随手指"；批次 528（用户）又改回"固定"
+  check('摇杆默认固定', DEFAULT_SETTINGS.touchStick === 'fixed' && fallback.touchStick === 'fixed');
+  check('设置格式版本是 4', DEFAULT_SETTINGS.settingsVersion === SETTINGS_VERSION && SETTINGS_VERSION === 4);
 }
 
 // ---------------------------------------------------------------- 2. 容错
@@ -161,7 +161,12 @@ console.log('\n[设置的容错]');
   storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, fov: 72, touchStick: 'fixed' }));
   const migrated = loadSettings();
   check('v2 的旧默认视野 72 → 60', migrated.fov === 60, String(migrated.fov));
-  check('v2 的旧默认摇杆 fixed → dynamic', migrated.touchStick === 'dynamic', migrated.touchStick);
+  check('v2 的旧默认摇杆 fixed 保持 fixed', migrated.touchStick === 'fixed', migrated.touchStick);
+  // 批次 528：v3 的出厂值是 dynamic，迁移到 v4 的 fixed；显式选过 fixed 的保持不变
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 3, touchStick: 'dynamic' }));
+  check('v3 的旧默认摇杆 dynamic → fixed', loadSettings().touchStick === 'fixed', loadSettings().touchStick);
+  storage.setItem(KEY, JSON.stringify({ settingsVersion: 3, touchStick: 'fixed' }));
+  check('v3 里玩家选过的 fixed 保持 fixed', loadSettings().touchStick === 'fixed', loadSettings().touchStick);
   storage.setItem(KEY, JSON.stringify({ settingsVersion: 2, fov: 80, touchStick: 'fixed' }));
   check('玩家调过的视野 80 不被迁移覆盖', loadSettings().fov === 80, String(loadSettings().fov));
   storage.setItem(KEY, JSON.stringify({ settingsVersion: 3, fov: 72 }));

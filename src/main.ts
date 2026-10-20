@@ -184,7 +184,6 @@ import {
   isFullscreen,
   preferInstalledLandscape,
   syncRotateHint,
-  toggleFullscreen,
 } from './ui/Fullscreen.ts';
 import { hideInstallHint, installInstallHint } from './ui/InstallHint.ts';
 import { paletteOf } from './game/appearance.ts';
@@ -2235,12 +2234,6 @@ class App {
       // 诊断日志（批次 181；批次 220 只留导出）：读数由 runtime 自己算
       onDiagnosticsExport: () => diag.download(),
       diagnosticsStats: () => diag.stats(),
-      // 全屏 / 横屏：被系统踢出全屏、或第一次手势错过时的兜底入口
-      onToggleFullscreen: () => {
-        toggleFullscreen();
-        syncRotateHint();
-      },
-      isFullscreen: () => isFullscreen(),
     });
 
     // 开发期初始物资（批次 181）：**默认不再发放**。
@@ -16458,11 +16451,6 @@ async function boot(): Promise<void> {
       menuSettings = new SettingsScreen(document.body, settings, {
         onResume: () => menuSettings?.hide(),
         onChange: (next) => saveSettings(next),
-        onToggleFullscreen: () => {
-          toggleFullscreen();
-          syncRotateHint();
-        },
-        isFullscreen: () => isFullscreen(),
       });
       menuSettings.setTitle('设置', '设置保存在此设备，进入世界后立即生效', '返回');
       menuSettings.setMeta('');

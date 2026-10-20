@@ -183,14 +183,15 @@ export const TOUCH_AIM_MODE_LABELS: Record<TouchAimMode, string> = {
  *  - 版本 2 = 灵敏度存 0~8 的档位（批次 521 起下限是 1）；
  *  - 版本 3 = 视野默认 72° → **60°**、摇杆默认 固定 → **跟随手指**、
  *    **灵敏度重新定标**（1~8，4 档 = 上一版最快档 4×），字段含义随之改变。
+ *  - 版本 4 = 摇杆默认 **跟随手指 → 固定**（批次 528，用户要求）。
  *
  * **必须显式存版本**：老默认值 1 在新口径里是"档位 1"，直接 clamp 会把
  * 所有老玩家的灵敏度从 1× 悄悄降到 0.7×。
  *
- * 版本 3 的迁移只改"还停在旧默认值上"的那几项（见 `loadSettings`）：
- * 玩家自己调过的 72° 或"固定摇杆"要保留——迁移默认值不等于覆盖玩家的选择。
+ * 迁移只改"还停在旧默认值上"的那几项（见 `loadSettings`）：
+ * 玩家自己调过的 72° / 摇杆模式要保留——迁移默认值不等于覆盖玩家的选择。
  */
-export const SETTINGS_VERSION = 3;
+export const SETTINGS_VERSION = 4;
 
 /**
  * 场景亮度的范围（批次 220）：0.5 ~ 2，1 = 原始亮度。
@@ -460,7 +461,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   adaptiveViewDistance: true,
   adaptiveResolution: true,
   maxFps: 0,
-  touchStick: 'dynamic',
+  // 批次 528（用户）：默认改回"固定"——固定靠位置形成肌肉记忆
+  touchStick: 'fixed',
   touchScale: 1,
 };
 
@@ -502,10 +504,15 @@ export function loadSettings(): GameSettings {
           ? sensitivityLevelFromGain(legacySensitivityGain(clampNumber(parsed.sensitivity, 0, 8, 4)))
           : sensitivityLevelFromGain(clampNumber(parsed.sensitivity, 0.5, 4, 1));
     // 版本 3 的默认值迁移（批次 521）：**只改还停在旧默认值上的项**。
-    // 72° 与"固定摇杆"是 v2 的出厂值；玩家真调过就按他调的那个留着。
+    // 72° 是 v2 的出厂值；玩家真调过就按他调的那个留着。
     const legacy = storedVersion < 3;
     const migratedFov = legacy && parsed.fov === 72 ? DEFAULT_SETTINGS.fov : parsed.fov;
-    const migratedStick = legacy && parsed.touchStick === 'fixed' ? DEFAULT_SETTINGS.touchStick : parsed.touchStick;
+    // 版本 4（批次 528）：摇杆默认 dynamic → fixed。
+    // v3 的出厂值是 dynamic，只迁"还停在旧默认值"的那一项；更早的存档按原值处理。
+    const migratedStick =
+      storedVersion === 3 && parsed.touchStick === 'dynamic'
+        ? DEFAULT_SETTINGS.touchStick
+        : parsed.touchStick;
     return {
       settingsVersion: SETTINGS_VERSION,
       // 语言：只认 zh / en，写坏了回退默认（不做"从标签推断"——存档里的选择优先）
@@ -640,14 +647,6 @@ export interface SettingsActions {
   /** 当前条数 / 占用，用来在入口上显示"离 500KB 还有多远" */
   diagnosticsStats?: () => { events: number; kb: number; marked: boolean };
   /**
-   * 全屏 / 横屏（批次 181）。
-   *
-   * 浏览器的全屏必须由用户手势触发，所以"自动全屏"只能做到"第一次交互时补上"。
-   * 这一行是**手动兜底**：被系统踢出全屏、或第一次手势错过了，还能在这里补。
-   */
-  onToggleFullscreen?: () => void;
-  isFullscreen?: () => boolean;
-  /**
    * 游戏模式（批次 181）：生存 ↔ 创造。
    *
    * 这是**唯一的模式入口**（新建世界时也能选）；双击跳跃只负责在创造模式里起降，
@@ -735,6 +734,8 @@ export class SettingsScreen {
   }
   /** "飞行"那个开关（非持久设置，见 `makeCreativeRow`；只在创造模式里显示） */
   private flyingToggle: HTMLButtonElement | null = null;
+  /** 飞行开关所在的右半格（批次 528：与游戏模式同一行，不是整行） */
+  private flyingCell: HTMLElement | null = null;
   /** "游戏模式"那个开关（生存 ↔ 创造） */
   private gameModeToggle: HTMLButtonElement | null = null;
   /** 四颗角色预设按钮（批次 333）：手动改任一外观项后全部取消高亮 */
@@ -762,10 +763,20 @@ export class SettingsScreen {
   private readonly onWindowResize = (): void => this.closeDropdown();
   /** Esc 先收下拉菜单；没有菜单时才让 App 的返回逻辑接管 */
   private readonly onDocumentKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== 'Escape' || !this.openDropdown) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.closeDropdown();
+    if (event.key !== 'Escape') return;
+    // 下拉菜单在最上面，先收它
+    if (this.openDropdown) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.closeDropdown();
+      return;
+    }
+    // 再往下才是角色形象弹窗（批次 528）
+    if (this.appearanceOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.closeAppearance();
+    }
   };
   /**
    * 设置页的角色形象（批次 333）：复用背包那台 `PlayerPreview3D`。
@@ -777,6 +788,9 @@ export class SettingsScreen {
   private avatar: PlayerPreview3D | null = null;
   private avatarFailed = false;
   private avatarFocus: PreviewFocus = 'full';
+  /** 角色形象的二级弹窗（批次 528，用户要求把外观控件收进二级页） */
+  private appearanceModal: HTMLDivElement | null = null;
+  private appearanceOpen = false;
   private avatarDrag: { pointerId: number; x: number } | null = null;
   private readonly avatarFocusButtons: HTMLButtonElement[] = [];
   /** 诊断日志那一行的状态文字（条数 / 占用 / 是否打过点） */
@@ -953,6 +967,13 @@ export class SettingsScreen {
     // 拖动可旋转，另有「面部」特写看眼睛/眉毛/胡须。
     const appearance = this.section('appearance');
 
+    // 批次 528（用户："场景亮度向上移动到最上面的位置"）：
+    // 它留在外观页，但排到第一行——进外观先看到亮度，再进"角色形象"二级弹窗。
+    const appearanceTop = this.makeBlock(appearance);
+    appearanceTop.append(
+      this.makeSlider('brightness', '亮度', '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
+    );
+
     const hero = document.createElement('div');
     hero.className = 'appearance-hero';
     const stage = document.createElement('div');
@@ -994,7 +1015,41 @@ export class SettingsScreen {
     fields.className = 'appearance-fields';
 
     hero.append(stage, fields);
-    appearance.appendChild(hero);
+
+    // 外观页只留一个入口；真正的捏人控件全部搬进二级弹窗（批次 528，用户要求）
+    const appearanceEntry = document.createElement('div');
+    appearanceEntry.className = 'settings-row pair appearance-entry';
+    const appearanceEntryName = document.createElement('span');
+    appearanceEntryName.textContent = '角色形象';
+    const appearanceEdit = document.createElement('button');
+    appearanceEdit.type = 'button';
+    appearanceEdit.className = 'settings-cycle';
+    appearanceEdit.textContent = '编辑';
+    appearanceEdit.addEventListener('click', () => this.openAppearance());
+    appearanceEntry.append(appearanceEntryName, appearanceEdit);
+    appearance.appendChild(appearanceEntry);
+
+    const modal = document.createElement('div');
+    modal.className = 'appearance-modal hidden';
+    const modalPanel = document.createElement('div');
+    modalPanel.className = 'appearance-modal-panel';
+    const modalHeader = document.createElement('div');
+    modalHeader.className = 'appearance-modal-header';
+    const modalTitle = document.createElement('b');
+    modalTitle.textContent = '角色形象';
+    const modalClose = document.createElement('button');
+    modalClose.type = 'button';
+    modalClose.className = 'inv-close appearance-close';
+    modalClose.textContent = '✕';
+    modalClose.setAttribute('aria-label', '关闭角色形象');
+    modalClose.addEventListener('click', () => this.closeAppearance());
+    modalHeader.append(modalTitle, modalClose);
+    const modalBody = document.createElement('div');
+    modalBody.className = 'appearance-modal-body';
+    modalBody.append(hero);
+    modalPanel.append(modalHeader, modalBody);
+    modal.append(modalPanel);
+    this.appearanceModal = modal;
 
     // 批次 333（用户："预设 4 个"）：四颗按钮直接点选，比"点一下换一个"少点三次
     this.makePresetRow(fields);
@@ -1070,37 +1125,12 @@ export class SettingsScreen {
     );
     this.makeToggle(fields, 'cape', '披风');
 
-    // 外观页只有这一个滑杆：放在形象下方，与上面的"按钮/下拉"分开
-    const appearanceSliders = this.makeBlock(appearance);
-    // 场景亮度（批次 220）：50%~200%，100% 等于不动——只改屏幕这一层（见 `applySceneBrightness`）
-    appearanceSliders.append(
-      this.makeSlider('brightness', '亮度', '%', BRIGHTNESS_MIN * 100, BRIGHTNESS_MAX * 100, 5, 100),
-    );
-
     this.bindAvatar(canvas);
     this.applyFocusButtons();
 
     const controls = this.section('controls');
-    // 第一块：按钮 / 下拉 / 开关（同类聚在一起）
-    const controlOptions = this.makeBlock(controls);
-    // 全屏 / 横屏（批次 181）：手动兜底。放在最上面——"屏幕不对"时玩家第一个找的就是它
-    if (this.actions.onToggleFullscreen && this.actions.isFullscreen) {
-      controlOptions.appendChild(this.makeFullscreenRow());
-    }
-    this.makeSelect(controlOptions, 'cameraMode', t('settings.row.cameraMode'), CAMERA_MODES, CAMERA_MODE_LABELS);
-    // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
-    this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, HANDEDNESS_LABELS);
-    // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星
-    this.makeSelect(controlOptions, 'aimMode', t('settings.row.aimMode'), TOUCH_AIM_MODES, TOUCH_AIM_MODE_LABELS);
-    // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
-    this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, STICK_MODE_LABELS);
-    this.makeToggle(controlOptions, 'invertY', t('settings.row.invertY'));
-    // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开
-    this.makeToggle(controlOptions, 'autoJump', t('settings.row.autoJump'));
-    // 快速进食（批次 219）：1.0 秒 vs 原版的 1.6 秒，想对齐原版节奏就关掉
-    this.makeToggle(controlOptions, 'fastEat', t('settings.row.fastEat'));
-
-    // 第二块：滑杆（视野 / 按钮大小 / 灵敏度）
+    // 批次 528（用户："视野 / 按钮大小 / 灵敏度三个向上移"）：
+    // 三个滑杆放在控制页第一块，常用项不再被一堆开关压到下面。
     const controlSliders = this.makeBlock(controls);
     // 视野（批次 203 / 215）：晕动症的人会往小调，习惯广角的人会往大调。
     // 但它有代价（72°→110° 可视范围约翻倍），而自适应管不到 FOV → 手机上封 90°。
@@ -1116,6 +1146,21 @@ export class SettingsScreen {
     );
     // 批次 521 起桌面的上限也收到 90°，这句"手机视野上限 90°"的说明反而成了噪音
     // （滑杆右端就写着 90），所以撤掉。
+
+    // 第二块：按钮 / 下拉 / 开关（同类聚在一起）
+    const controlOptions = this.makeBlock(controls);
+    this.makeSelect(controlOptions, 'cameraMode', t('settings.row.cameraMode'), CAMERA_MODES, CAMERA_MODE_LABELS);
+    // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
+    this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, HANDEDNESS_LABELS);
+    // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星
+    this.makeSelect(controlOptions, 'aimMode', t('settings.row.aimMode'), TOUCH_AIM_MODES, TOUCH_AIM_MODE_LABELS);
+    // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
+    this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, STICK_MODE_LABELS);
+    this.makeToggle(controlOptions, 'invertY', t('settings.row.invertY'));
+    // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开
+    this.makeToggle(controlOptions, 'autoJump', t('settings.row.autoJump'));
+    // 快速进食（批次 219）：1.0 秒 vs 原版的 1.6 秒，想对齐原版节奏就关掉
+    this.makeToggle(controlOptions, 'fastEat', t('settings.row.fastEat'));
 
     const sound = this.section('sound');
     // 音频页全是滑杆：两列排，主音量与分组音量分开读
@@ -1133,12 +1178,10 @@ export class SettingsScreen {
     const game = this.section('game');
     // 第一块：开关与下拉
     const gameOptions = this.makeBlock(game);
+    // 批次 528（用户）：游戏模式单独成行、排第一；选中创造后"飞行"才在右边出现。
+    if (this.actions.onToggleGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);
     this.makeToggle(gameOptions, 'daylightCycle', t('settings.row.daylightCycle'));
     this.makeToggle(gameOptions, 'showDebug', t('settings.row.showDebug'));
-    // 飞行：只在创造模式里显示（由 `refreshGameModeRows()` 控制显隐）
-    if (this.actions.onToggleFly && this.actions.isFlying) this.makeCreativeRow(gameOptions);
-    // 自动保存间隔（批次 172）：大世界保存那一下会有卡顿，间隔可调
-    this.makeSelect(gameOptions, 'autosaveSeconds', t('settings.row.autosave'), AUTOSAVE_OPTIONS.map(String), AUTOSAVE_LABELS);
     // 界面语言（M8，批次 403）。放在"游戏"组最后一行：它跟难度/模式那种
     // "进去之前调一次"的东西同一性质，不值得单开一组（一组的行数掉到 1 行就该问
     // "它还算一个分类吗"——这条判据在 SETTING_GROUPS 的注释里）。
@@ -1155,8 +1198,6 @@ export class SettingsScreen {
         this.applyLanguage();
       },
     );
-    // 游戏模式（批次 181）：生存 ↔ 创造，唯一的模式入口
-    if (this.actions.onToggleGameMode && this.actions.gameMode) this.makeGameModeRow(gameOptions);
 
     // 第二块：导入 / 导出这类动作，各占半行
     const gameActions = this.makeBlock(game);
@@ -1183,7 +1224,7 @@ export class SettingsScreen {
 
     settingsPage.append(header, this.settingsHintEl, columns, footer);
 
-    this.root.append(panel);
+    this.root.append(panel, modal);
     panel.append(menuPage, settingsPage);
     host.appendChild(this.root);
 
@@ -1250,6 +1291,8 @@ export class SettingsScreen {
     this.currentPage = page;
     this.panel.dataset.page = page;
     for (const [key, element] of this.pages) element.classList.toggle('active', key === page);
+    // 弹窗只属于设置页；回菜单页时一起收起
+    if (page !== 'settings') this.closeAppearance();
     // 飞行状态是"实时"的（可能刚刚用双击跳跃切过），进设置页时对一次账
     if (page === 'settings' && this.flyingToggle) {
       this.controlSync.get(this.flyingToggle)?.();
@@ -1284,6 +1327,11 @@ export class SettingsScreen {
    * 不必各自去判断"现在停在哪一页"——**判据只有一处，就不会漂**。
    */
   goBack(): boolean {
+    // 二级弹窗在最上面：先关它，再谈"设置页 / 菜单页"
+    if (this.appearanceOpen) {
+      this.closeAppearance();
+      return true;
+    }
     if (this.currentPage === 'settings') {
       // 游戏内：退到暂停菜单；主菜单进入：直接关设置，不能露出「游戏已暂停」。
       if (this.actions.onExitToMenu) {
@@ -1313,6 +1361,8 @@ export class SettingsScreen {
   setActiveGroup(group: SettingGroup): void {
     this.activeGroup = group;
     for (const [key, section] of this.sections) section.classList.toggle('active', key === group);
+    // 切到别的页签时，外观的二级弹窗不该还浮在上面
+    if (group !== 'appearance') this.closeAppearance();
     for (const [key, tab] of this.tabs) {
       const on = key === group;
       tab.classList.toggle('active', on);
@@ -1502,7 +1552,8 @@ export class SettingsScreen {
     const optionButtons: Array<{ value: T; button: HTMLButtonElement }> = [];
     const sync = (): void => {
       const current = read();
-      button.textContent = `‹ ${labels[current]} › ▾`;
+      // 批次 528（用户）：去掉旧的左右箭头，只留一个下拉指示
+      button.textContent = `${labels[current]} ▾`;
       for (const option of optionButtons) {
         const on = option.value === current;
         option.button.classList.toggle('selected', on);
@@ -1541,7 +1592,8 @@ export class SettingsScreen {
     sync();
 
     wrap.appendChild(button);
-    row.append(name, wrap, document.createElement('i'));
+    // 两列就够（标签 | 下拉）；原来还多塞了一个空的 `<i>`，会在栅格里多占一行
+    row.append(name, wrap);
     host.appendChild(row);
     return button;
   }
@@ -1649,6 +1701,24 @@ export class SettingsScreen {
     });
   }
 
+  /** 打开角色形象二级弹窗（批次 528） */
+  private openAppearance(): void {
+    if (!this.appearanceModal || this.appearanceOpen) return;
+    this.closeDropdown();
+    this.appearanceOpen = true;
+    this.appearanceModal.classList.remove('hidden');
+    // 弹窗显示后画布才有尺寸；下一帧再画，否则 PlayerPreview3D 会按 0×0 建渲染器
+    window.requestAnimationFrame(() => this.refreshAvatar());
+  }
+
+  /** 关闭角色形象二级弹窗 */
+  private closeAppearance(): void {
+    if (!this.appearanceOpen) return;
+    this.appearanceOpen = false;
+    this.avatarDrag = null;
+    this.appearanceModal?.classList.add('hidden');
+  }
+
   /**
    * 设置页的角色形象（批次 333）。
    *
@@ -1660,9 +1730,9 @@ export class SettingsScreen {
   private refreshAvatar(): void {
     const canvas = this.avatarCanvas;
     if (!canvas) return;
-    // 只在「设置页 · 外观分组」真正显示时创建/绘制：否则一打开暂停菜单就会白占一个
+    // 只在角色形象弹窗真正显示时创建/绘制：否则一打开暂停菜单就会白占一个
     // WebGL 上下文（手机上的上下文数量是有限资源），而且隐藏时画布尺寸为 0、画了也没用。
-    if (!this.open || this.currentPage !== 'settings' || this.activeGroup !== 'appearance') return;
+    if (!this.open || this.currentPage !== 'settings' || !this.appearanceOpen) return;
     const palette = paletteOf(this.settings);
     if (!this.avatar && !this.avatarFailed) {
       try {
@@ -1860,37 +1930,6 @@ export class SettingsScreen {
     element.textContent = note ?? `${stats.events} 条 · ${stats.kb}KB${marked}`;
   }
 
-  /**
-   * 全屏 / 横屏行（批次 181）。
-   *
-   * 与其它循环按钮的区别：`requestFullscreen()` 是异步的，点完立刻读状态还是旧值，
-   * 所以这里点完延后一点再回填文案；不然玩家会看到"点了没反应"。
-   */
-  private makeFullscreenRow(): HTMLElement {
-    // `<div>`：`<label>` 会把点标题文字也转发给按钮
-    const row = document.createElement('div');
-    row.className = 'settings-row pair';
-
-    const name = document.createElement('span');
-    name.textContent = '全屏';
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'settings-cycle';
-    const read = (): string => (this.actions.isFullscreen?.() ? '已全屏' : '进入全屏');
-    button.textContent = read();
-    button.addEventListener('click', () => {
-      this.actions.onToggleFullscreen?.();
-      // 全屏 Promise 完成后再回填；400ms 足够浏览器走完过渡，也不会让玩家等太久
-      window.setTimeout(() => {
-        button.textContent = read();
-      }, 400);
-    });
-
-    row.append(name, button);
-    return row;
-  }
-
   /** 资源包导入行（.mcpack / .zip） */
   private makeResourcePackRow(): HTMLElement {
     // 批次 335：原生文件框太宽，改成"半行 + 导入按钮 + 文件名"，与其它动作行一致
@@ -1950,31 +1989,42 @@ export class SettingsScreen {
   }
 
   /**
-   * "游戏模式"开关（批次 181）。
+   * "游戏模式 + 飞行"同一行（批次 528，用户要求）。
    *
-   * 与"飞行"分成两行：模式决定能力（免伤/瞬间破坏/无限物品），飞行只是创造里的一种移动方式。
-   * 生存模式下"飞行"那一行会整行隐藏，否则玩家会以为生存也能飞。
+   * 模式决定能力（免伤/瞬间破坏/无限物品），飞行只是创造里的一种移动方式。
+   * 布局：第一行左半 = 游戏模式，右半 = 飞行；**只有创造模式才显示右半格**，
+   * 生存模式下不会出现"生存也能飞"的误解。
    */
   private makeGameModeRow(host: HTMLElement): void {
+    const row = document.createElement('div');
+    row.className = 'settings-row mode';
+    const modeCell = document.createElement('div');
+    modeCell.className = 'mode-cell';
+    const flyCell = document.createElement('div');
+    flyCell.className = 'mode-cell';
+    this.flyingCell = flyCell;
+
     this.gameModeToggle = this.makeDropdown(
-      host,
+      modeCell,
       t('settings.row.gameMode'),
       ['survival', 'creative'] as const,
       GAME_MODE_LABELS,
       () => this.actions.gameMode?.() ?? 'survival',
       () => this.actions.onToggleGameMode?.(),
     );
+    this.makeCreativeRow(flyCell);
+    row.append(modeCell, flyCell);
+    host.appendChild(row);
+    this.refreshGameModeRows();
   }
 
   /** 打开面板 / 切模式之后，把两个开关的文案与显隐对齐真实状态 */
   refreshGameModeRows(): void {
     const mode = this.actions.gameMode?.() ?? 'survival';
     if (this.gameModeToggle) this.controlSync.get(this.gameModeToggle)?.();
-    if (this.flyingToggle) {
-      this.controlSync.get(this.flyingToggle)?.();
-      const row = this.flyingToggle.closest<HTMLElement>('.settings-row');
-      if (row) row.style.display = mode === 'creative' ? '' : 'none';
-    }
+    if (this.flyingToggle) this.controlSync.get(this.flyingToggle)?.();
+    // 隐藏的是**右半格**，不是整行：左半的游戏模式永远都在
+    if (this.flyingCell) this.flyingCell.style.display = mode === 'creative' ? '' : 'none';
   }
 
   /** 造一个布尔开关（switch 组件；只有开关本身能点，整行不转发） */
@@ -2078,6 +2128,7 @@ export class SettingsScreen {
    */
   hide(): void {
     this.open = false;
+    this.closeAppearance();
     // 下拉菜单挂在 body 上，面板关掉时必须一起收起（否则会孤零零留在页面上）
     this.closeDropdown();
     document.body.classList.remove('pause-open');
@@ -2097,6 +2148,8 @@ export class SettingsScreen {
   /** 主菜单设置是懒建的临时实例；进世界前销毁，避免与局内面板重复 `#settings-screen`。 */
   destroy(): void {
     this.open = false;
+    this.closeAppearance();
+    this.appearanceModal = null;
     if (this.hideTimer !== null) {
       window.clearTimeout(this.hideTimer);
       this.hideTimer = null;

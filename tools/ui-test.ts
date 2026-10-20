@@ -214,6 +214,15 @@ console.log('\n[手机端操作界面（批次 104）：暂停键 / 去键盘化
   ] as const) {
     check(`index.html 里有"${label}"`, compact.includes(needle), needle);
   }
+  // 批次 528：设置内容区控件统一 96px，左侧页签文字居中，滑杆填满中间列
+  check(
+    '设置控件统一尺寸 / 页签居中 / 滑杆与读数等边距',
+    compact.includes('--settings-ctrl-w: 96px;') &&
+      compact.includes('width: var(--settings-ctrl-w); min-width: var(--settings-ctrl-w);') &&
+      /\.settings-tab \{[\s\S]{0,180}?text-align: center;/.test(compact) &&
+      compact.includes('gap: 4px 8px; min-width: 0; min-height: 32px;') &&
+      compact.includes('max-width: none;'),
+  );
   // 批次 274（用户）：指南针/时钟读数不能压在跳跃键上——触摸端挪到按钮簇左侧，
   // 右偏移吃 --touch-scale，底偏移避开快捷栏右侧背包键。
   check(
@@ -1585,7 +1594,7 @@ console.log('\n[动态摇杆与飞行提示（批次 96）]');
   equal('摇杆两档（与基岩版一致）', STICK_MODES.join(','), 'fixed,dynamic');
   check('两档都有中文名', STICK_MODES.every((mode) => STICK_MODE_LABELS[mode].length > 0));
   // 批次 521：用户要求默认改成"跟随手指"（左下随便一按就是摇杆，躺着玩单手也够得着）
-  equal('默认跟随手指', DEFAULT_SETTINGS.touchStick, 'dynamic');
+  equal('默认固定摇杆（批次 528，用户要求）', DEFAULT_SETTINGS.touchStick, 'fixed');
   equal('按钮大小默认 1×（不改任何既有尺寸）', DEFAULT_SETTINGS.touchScale, 1);
   // ⚠️ 触摸相关的每一处尺寸都必须乘 `--touch-scale`：竖屏/横屏那两段媒体查询里
   // 原来写死了像素值（同优先级、后出现 → 会盖掉带变量的那条），
@@ -1979,6 +1988,33 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
   check(
     '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
     !settingsSource.includes("key: 'flying'") && settingsSource.includes('private makeCreativeRow'),
+  );
+  check(
+    '设置里不再有自动保存与全屏按钮（批次 528，用户要求去掉）',
+    !settingsSource.includes("makeSelect(gameOptions, 'autosaveSeconds'") &&
+      !settingsSource.includes('makeFullscreenRow') &&
+      !settingsSource.includes('onToggleFullscreen'),
+  );
+  check(
+    '游戏模式单独成行且飞行在右半格（只有创造才显示）',
+    settingsSource.includes("row.className = 'settings-row mode';") &&
+      settingsSource.includes('private flyingCell') &&
+      /refreshGameModeRows\(\):[\s\S]{0,400}this\.flyingCell\.style\.display = mode === 'creative' \? '' : 'none';/.test(
+        settingsSource,
+      ),
+  );
+  check(
+    '控制页滑杆（视野/按钮/灵敏度）排在开关之前',
+    settingsSource.indexOf('const controlSliders = this.makeBlock(controls);') <
+      settingsSource.indexOf('const controlOptions = this.makeBlock(controls);'),
+  );
+  check(
+    '外观页只留亮度 + 角色形象入口，控件进二级弹窗',
+    settingsSource.includes("const appearanceTop = this.makeBlock(appearance);") &&
+      settingsSource.includes("appearanceEntry.className = 'settings-row pair appearance-entry';") &&
+      settingsSource.includes("modal.className = 'appearance-modal hidden';") &&
+      settingsSource.includes('private openAppearance()') &&
+      settingsSource.includes('this.appearanceOpen = true;'),
   );
 
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
