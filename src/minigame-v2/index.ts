@@ -151,6 +151,12 @@ const applyPlayerAppearance = (): void => {
   beardMesh.visible = settings.beard;
   eyeMaterial.color.set(settings.eyeColor);
   capeMesh.visible = settings.cape;
+  const eyeScale = settings.eyeStyle === 'wide' ? 1.6 : 1;
+  leftEye.scale.x = eyeScale;
+  rightEye.scale.x = eyeScale;
+  const widthScale = settings.build === 'slim' ? 0.9 : settings.build === 'broad' ? 1.14 : 1;
+  const heightScale = settings.age === 'young' ? 0.9 : settings.age === 'old' ? 0.96 : 1;
+  playerModel.scale.set(widthScale, heightScale, widthScale);
 };
 
 const outline = new THREE.LineSegments(
@@ -234,6 +240,9 @@ interface V2Settings {
   beard: boolean;
   eyeColor: string;
   cape: boolean;
+  eyeStyle: 'normal' | 'wide';
+  age: 'young' | 'adult' | 'old';
+  build: 'slim' | 'normal' | 'broad';
 }
 
 const SETTINGS_KEY = 'wx.v2.settings';
@@ -257,6 +266,9 @@ const defaultSettings: V2Settings = {
   beard: false,
   eyeColor: '#3b2a1a',
   cape: false,
+  eyeStyle: 'normal',
+  age: 'adult',
+  build: 'normal',
 };
 const readSettings = (): V2Settings => {
   try {
@@ -283,6 +295,9 @@ const readSettings = (): V2Settings => {
       beard: parsed.beard === true,
       eyeColor: typeof parsed.eyeColor === 'string' ? parsed.eyeColor : '#3b2a1a',
       cape: parsed.cape === true,
+      eyeStyle: parsed.eyeStyle === 'wide' ? 'wide' : 'normal',
+      age: parsed.age === 'young' || parsed.age === 'old' ? parsed.age : 'adult',
+      build: parsed.build === 'slim' || parsed.build === 'broad' ? parsed.build : 'normal',
     };
   } catch {
     return { ...defaultSettings };
@@ -406,38 +421,57 @@ const showSettings = (): void => {
     const rightX = panelX + 250;
     const topY = panelY + 108;
     const w = 205;
-    const gapY = 52;
+    const gapY = 38;
+    const h = 34;
     const styleLabels: Record<'none' | 'short' | 'long', string> = { none: '无', short: '短', long: '长' };
-    rows.push(button(leftX, topY, w, 44, '肤色', () => {
+    rows.push(button(leftX, topY, w, h, '肤色', () => {
       settings.skinColor = cycle(skinColors, settings.skinColor);
       apply();
     }, { background: settings.skinColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
-    rows.push(button(leftX, topY + gapY, w, 44, '上衣', () => {
+    rows.push(button(leftX, topY + gapY, w, h, '上衣', () => {
       settings.shirtColor = cycle(shirtColors, settings.shirtColor);
       apply();
     }, { background: settings.shirtColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
-    rows.push(button(leftX, topY + gapY * 2, w, 44, '裤子', () => {
+    rows.push(button(leftX, topY + gapY * 2, w, h, '裤子', () => {
       settings.pantsColor = cycle(pantsColors, settings.pantsColor);
       apply();
     }, { background: settings.pantsColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
-    rows.push(button(rightX, topY, w, 44, `发型：${styleLabels[settings.hairStyle]}`, () => {
+    rows.push(button(rightX, topY, w, h, `发型：${styleLabels[settings.hairStyle]}`, () => {
       const order: Array<'none' | 'short' | 'long'> = ['none', 'short', 'long'];
       settings.hairStyle = order[(order.indexOf(settings.hairStyle) + 1) % order.length]!;
       apply();
     }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
-    rows.push(button(rightX, topY + gapY, w, 44, '发色', () => {
+    rows.push(button(rightX, topY + gapY, w, h, '发色', () => {
       settings.hairColor = cycle(hairColors, settings.hairColor);
       apply();
     }, { background: settings.hairColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
-    rows.push(button(rightX, topY + gapY * 2, w, 44, settings.beard ? '胡须：开' : '胡须：关', () => {
+    rows.push(button(rightX, topY + gapY * 2, w, h, settings.beard ? '胡须：开' : '胡须：关', () => {
       settings.beard = !settings.beard;
       apply();
     }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
-    rows.push(button(leftX, topY + gapY * 3, w, 44, '眼睛颜色', () => {
+    const eyeStyles: Array<'normal' | 'wide'> = ['normal', 'wide'];
+    const ages: Array<'young' | 'adult' | 'old'> = ['young', 'adult', 'old'];
+    const builds: Array<'slim' | 'normal' | 'broad'> = ['slim', 'normal', 'broad'];
+    const styleLabel: Record<'normal' | 'wide', string> = { normal: '普通', wide: '宽' };
+    const ageLabel: Record<'young' | 'adult' | 'old', string> = { young: '年轻', adult: '成年', old: '老年' };
+    const buildLabel: Record<'slim' | 'normal' | 'broad', string> = { slim: '瘦', normal: '标准', broad: '壮' };
+    rows.push(button(leftX, topY + gapY * 4, w, h, `眼型：${styleLabel[settings.eyeStyle]}`, () => {
+      settings.eyeStyle = eyeStyles[(eyeStyles.indexOf(settings.eyeStyle) + 1) % eyeStyles.length]!;
+      apply();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
+    rows.push(button(leftX, topY + gapY * 5, w, h, `年龄：${ageLabel[settings.age]}`, () => {
+      settings.age = ages[(ages.indexOf(settings.age) + 1) % ages.length]!;
+      apply();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
+    rows.push(button(rightX, topY + gapY * 4, w, h, `身架：${buildLabel[settings.build]}`, () => {
+      settings.build = builds[(builds.indexOf(settings.build) + 1) % builds.length]!;
+      apply();
+    }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
+    rows.push(button(leftX, topY + gapY * 3, w, h, '眼睛颜色', () => {
       settings.eyeColor = cycle(hairColors, settings.eyeColor);
       apply();
     }, { background: settings.eyeColor, border: 'rgba(255,255,255,0.35)', radius: 8 }));
-    rows.push(button(rightX, topY + gapY * 3, w, 44, settings.cape ? '披风：开' : '披风：关', () => {
+    rows.push(button(rightX, topY + gapY * 3, w, h, settings.cape ? '披风：开' : '披风：关', () => {
       settings.cape = !settings.cape;
       apply();
     }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 8 }));
