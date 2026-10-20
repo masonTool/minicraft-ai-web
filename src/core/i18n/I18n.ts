@@ -51,6 +51,17 @@ const ZH: Readonly<Record<string, string>> = {
   'settings.row.autosave': '自动保存',
   'settings.row.flying': '飞行',
   'settings.row.gameMode': '游戏模式',
+  // ---- 设置行（"控制"组：视角、手感与触屏按钮）
+  'settings.row.cameraMode': '视角',
+  'settings.row.handedness': '惯用手',
+  'settings.row.aimMode': '瞄准',
+  'settings.row.touchStick': '摇杆',
+  'settings.row.invertY': '反转视角',
+  'settings.row.autoJump': '自动跳跃',
+  'settings.row.fastEat': '快速进食',
+  'settings.row.fov': '视野',
+  'settings.row.touchScale': '按钮大小',
+  'settings.row.sensitivity': '灵敏度',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -72,6 +83,16 @@ const EN: Readonly<Record<string, string>> = {
   'settings.row.autosave': 'Autosave',
   'settings.row.flying': 'Flying',
   'settings.row.gameMode': 'Game Mode',
+  'settings.row.cameraMode': 'Camera',
+  'settings.row.handedness': 'Handedness',
+  'settings.row.aimMode': 'Aiming',
+  'settings.row.touchStick': 'Joystick',
+  'settings.row.invertY': 'Invert Y',
+  'settings.row.autoJump': 'Auto Jump',
+  'settings.row.fastEat': 'Fast Eat',
+  'settings.row.fov': 'Field of View',
+  'settings.row.touchScale': 'Button Size',
+  'settings.row.sensitivity': 'Sensitivity',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {

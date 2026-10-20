@@ -98,17 +98,6 @@
 
 ---
 
-## 批次 415：K11 /advancement（2026-10-20）
-
-- [x] B415-1 `AdvancementTracker.revoke(id)`：**连带收回子条目**（"父没达成子拿不到"是本项目的硬约定，
-      只收父会留下空洞）+ 清掉计数型进度的收集记录
-- [x] B415-2 `/advancement grant|revoke <id | *>`（`*` = 全部），未知 id 与动作写错都明确报错
-- [x] B415-3 `CommandContext.advancements()`（3 个测试假世界各补一个 tracker）
-- [x] B415-4 `test:commands` 147 → **157 条**
-- 覆盖：命令 **29 → 30（73% → 75%）**
-- ⚠️ 没做 `/advancement grant <id> through|until <子>`（"一路授予到某条"）——收益低，
-  而且它依赖"父链顺序"，本项目 `grant()` 是显式授予、不检查父链
-
 ## 批次 416：K11 /locate biome（2026-10-20）
 
 - [x] B416-1 `core/gen/Locate.ts`：`findNearestBiome(probe, target, origin, opts)`——
@@ -132,3 +121,12 @@
       （绑了哪个键 + 中文表里是什么）
 - 覆盖：文案表 **13 → 18 条**；"界面语言"行仍记 **50%**（口径是"能不能选"，不是"翻了多少"）
 - ⚠️ 剩余界面文案仍是 M8 的主体：设置页其余行、背包、成就、主菜单
+
+## 批次 418：M8 i18n 扩到"控制"组（2026-10-20）
+
+- [x] B418-1 十条新键：cameraMode / handedness / aimMode / touchStick / invertY / autoJump /
+      fastEat / fov / touchScale / sensitivity（中英各一条）
+- [x] B418-2 `ui-test` 两条按字面量匹配的断言（"视角下拉还在""视野并进控制"）改成按**键**匹配——
+      这是文案搬家必然要付的账，早改早省事
+- 覆盖：文案表 **18 → 28 条**；"界面语言"行仍记 50%
+- ⚠️ 剩下"外观/音频"两组 + 背包/成就/主菜单，仍是 M8 主体

@@ -1949,7 +1949,11 @@ console.log('\n[触摸端按钮布局（批次 107，对齐基岩版）]');
       settingsSource.includes('private makeCreativeRow') &&
       settingsSource.includes('private makeGameModeRow'),
   );
-  check('设置面板里的"视角"下拉还在', settingsSource.includes("this.makeSelect(controlOptions, 'cameraMode', '视角'"));
+  check(
+    '设置面板里的"视角"下拉还在',
+    // 批次 418 起文案走 i18n 键：验"绑了哪个键"，中文表里那条由 i18n 测试管
+    settingsSource.includes("this.makeSelect(controlOptions, 'cameraMode', t('settings.row.cameraMode')"),
+  );
   check(
     '飞行开关不写进 localStorage（它是世界里的状态，不是设备偏好）',
     !settingsSource.includes("key: 'flying'") && settingsSource.includes('private makeCreativeRow'),
@@ -3033,7 +3037,8 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     '「视频」组没了，「视野」并进「控制」',
     !settingsSrc.includes("this.section('graphics')") &&
       !settingsSrc.includes('graphics:') &&
-      /makeSlider\(\s*'fov',\s*'视野'/.test(settingsSrc),
+      // 批次 418：标签改成 t('settings.row.fov')，所以匹配"fov 这个滑杆在控制组里"
+      /makeSlider\(\s*'fov',\s*t\('settings\.row\.fov'\)/.test(settingsSrc),
   );
   // ⚠️ 字段必须还在：删字段会让 `loadSettings` 把老存档里其它值一起丢掉
   check(

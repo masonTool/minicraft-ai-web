@@ -1030,32 +1030,32 @@ export class SettingsScreen {
     if (this.actions.onToggleFullscreen && this.actions.isFullscreen) {
       controlOptions.appendChild(this.makeFullscreenRow());
     }
-    this.makeSelect(controlOptions, 'cameraMode', '视角', CAMERA_MODES, CAMERA_MODE_LABELS);
+    this.makeSelect(controlOptions, 'cameraMode', t('settings.row.cameraMode'), CAMERA_MODES, CAMERA_MODE_LABELS);
     // 左右手模式（批次 271）：左手模式把摇杆整个挪到右侧
-    this.makeSelect(controlOptions, 'handedness', '惯用手', HANDEDNESS_MODES, HANDEDNESS_LABELS);
+    this.makeSelect(controlOptions, 'handedness', t('settings.row.handedness'), HANDEDNESS_MODES, HANDEDNESS_LABELS);
     // 瞄准方式（批次 271）：默认手指落点；可选回老的屏幕中心准星
-    this.makeSelect(controlOptions, 'aimMode', '瞄准', TOUCH_AIM_MODES, TOUCH_AIM_MODE_LABELS);
+    this.makeSelect(controlOptions, 'aimMode', t('settings.row.aimMode'), TOUCH_AIM_MODES, TOUCH_AIM_MODE_LABELS);
     // 触摸摇杆（批次 96）：手机上"手往哪搁"这件事因人而异
-    this.makeSelect(controlOptions, 'touchStick', '摇杆', STICK_MODES, STICK_MODE_LABELS);
-    this.makeToggle(controlOptions, 'invertY', '反转视角');
+    this.makeSelect(controlOptions, 'touchStick', t('settings.row.touchStick'), STICK_MODES, STICK_MODE_LABELS);
+    this.makeToggle(controlOptions, 'invertY', t('settings.row.invertY'));
     // 自动跳跃（批次 206）：手机上一边推摇杆一边点跳跃很别扭，默认开
-    this.makeToggle(controlOptions, 'autoJump', '自动跳跃');
+    this.makeToggle(controlOptions, 'autoJump', t('settings.row.autoJump'));
     // 快速进食（批次 219）：1.0 秒 vs 原版的 1.6 秒，想对齐原版节奏就关掉
-    this.makeToggle(controlOptions, 'fastEat', '快速进食');
+    this.makeToggle(controlOptions, 'fastEat', t('settings.row.fastEat'));
 
     // 第二块：滑杆（视野 / 按钮大小 / 灵敏度）
     const controlSliders = this.makeBlock(controls);
     // 视野（批次 203 / 215）：晕动症的人会往小调，习惯广角的人会往大调。
     // 但它有代价（72°→110° 可视范围约翻倍），而自适应管不到 FOV → 手机上封 90°。
-    controlSliders.append(this.makeSlider('fov', '视野', '°', FOV_MIN, fovCapFor(isTouchUi()), 1));
+    controlSliders.append(this.makeSlider('fov', t('settings.row.fov'), '°', FOV_MIN, fovCapFor(isTouchUi()), 1));
     controlSliders.append(
-      this.makeSlider('touchScale', '按钮大小', '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100),
+      this.makeSlider('touchScale', t('settings.row.touchScale'), '%', TOUCH_SCALE_MIN * 100, TOUCH_SCALE_MAX * 100, 5, 100),
     );
     // 灵敏度（批次 271）：0~8 档，4 是正中间（= 1×），读数的 ×值已经说明了含义
     controlSliders.append(
       this.makeSlider(
         'sensitivity',
-        '灵敏度',
+        t('settings.row.sensitivity'),
         '',
         SENSITIVITY_MIN,
         SENSITIVITY_MAX,

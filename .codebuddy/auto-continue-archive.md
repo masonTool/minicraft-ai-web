@@ -10291,4 +10291,15 @@
 - 覆盖：配方 **690 → 692（69%）**、物品 **1035 → 1037（94%）**
 - ⚠️ 紫珀柱（台阶那条）仍未做：它要"紫珀台阶"，而台阶族是按变体函数算 id 的
 
+## 批次 415：K11 /advancement（2026-10-20）
+
+- [x] B415-1 `AdvancementTracker.revoke(id)`：**连带收回子条目**（"父没达成子拿不到"是本项目的硬约定，
+      只收父会留下空洞）+ 清掉计数型进度的收集记录
+- [x] B415-2 `/advancement grant|revoke <id | *>`（`*` = 全部），未知 id 与动作写错都明确报错
+- [x] B415-3 `CommandContext.advancements()`（3 个测试假世界各补一个 tracker）
+- [x] B415-4 `test:commands` 147 → **157 条**
+- 覆盖：命令 **29 → 30（73% → 75%）**
+- ⚠️ 没做 `/advancement grant <id> through|until <子>`（"一路授予到某条"）——收益低，
+  而且它依赖"父链顺序"，本项目 `grant()` 是显式授予、不检查父链
+
 <!-- docs-archive:end -->

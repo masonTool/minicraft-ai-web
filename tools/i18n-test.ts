@@ -68,6 +68,15 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'settings.row.autosave',
     'settings.row.flying',
     'settings.row.gameMode',
+    'settings.row.cameraMode',
+    'settings.row.handedness',
+    'settings.row.aimMode',
+    'settings.row.touchStick',
+    'settings.row.invertY',
+    'settings.row.autoJump',
+    'settings.row.fastEat',
+    'settings.row.fov',
+    'settings.row.touchScale',
     ...['game', 'controls', 'appearance', 'sound'].map((group) => `settings.group.${group}`),
   ];
   const missing = required.filter((key) => !keys.has(key));
