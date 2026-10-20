@@ -750,7 +750,8 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | 全流程自测 | Playwright 按 iframe 映射点击：首页→游戏→世界→进入→暂停→设置→控制全部通过；修复 helper/原生 pointerdown 双派发导致暂停 true→false（40ms 同坐标去重）；主包 3746KB | `5fe9c68` |
 | 2026-10-20 | 模拟器/包体积修复 | 预览 25MB 根因：`minigame-world/.weixin-minigame-helper/shots` 22MB 自测截图被打包；清目录并加入 packOptions.ignore/.gitignore。worker `payloads is not iterable`：微信 worker 对含 ArrayBuffer 的 mesh 请求序列化不完整，地形生成继续走 worker、网格化改主线程；worker 对空/未知消息返回 pong 防御；helper 37 chunks/120fps，主包 3.7MB | `56066cc` |
 | 2026-10-20 | 模拟器日志清理 | SystemInfo 增加 platform；`platform==='devtools'` 时跳过 worker，避免 `getNetworkType/getPermissionBytes/readFile not support` 噪音；真机保留 worker。worker 环境警告本身不阻塞（模拟器已 37 chunks/48fps） | `8d77096` |
-| 2026-10-20 | 真机闪退安全模式 | 扫码后整包闪退：微信端完全跳过 `wx.createWorker`（主线程生成/网格化），DPR 上限降到 1.5，设置读距在 wx 端夹到 2；先保证能进入，再按真机表现恢复性能分级 | 本次提交 |
+| 2026-10-20 | 真机闪退安全模式 | 扫码后整包闪退：微信端完全跳过 `wx.createWorker`（主线程生成/网格化），DPR 上限降到 1.5，设置读距在 wx 端夹到 2；先保证能进入，再按真机表现恢复性能分级 | `bf8aa2b` |
+| 2026-10-20 | 静态首页 | 首页/世界列表改为不透明静态渐变山景 + 像素网格/暗角，不再透出背后的实时世界；进入世界后才显示 3D 场景；helper 截图验证 | 本次提交 |
 | 2026-10-20 | UI 视觉优化 | 面板/按钮渐变+冷色高光；HUD 从全宽黑条改紧凑面板；快捷栏/背包槽位渐变；主菜单加宽、标题下划线、拉开按钮间距；helper 截图自测 | `6f07fbb` |
 | 2026-10-20 | 对齐网页版 | 对照 Web 截图：主菜单改 `MINECRAFT` + 绿色徽章 + 中文按钮；HUD 移到右上 4 行中文小字；MENU/BAG 移到左上；准星下加目标名；快捷栏加灰色斜面外框/选中提亮；去掉 HP/FOOD 文本；helper 自测主菜单/游戏内 HUD | `f2cde48` |
 | 2026-10-20 | 中文显示名 | 目标名/Toast/背包 Tooltip/配方产物统一改用 `itemLabel()`，如 `矮草`、`橡木木板`；与网页版中文一致 | `e799def` |

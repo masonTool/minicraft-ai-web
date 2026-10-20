@@ -155,11 +155,55 @@ export function createMainMenu(
 
   const drawBackdrop = (): void => {
     if (!context) return;
-    const backdrop = context.createLinearGradient(0, 0, 0, canvas.height);
-    backdrop.addColorStop(0, 'rgba(8, 16, 26, 0.5)');
-    backdrop.addColorStop(1, 'rgba(0, 0, 0, 0.74)');
-    context.fillStyle = backdrop;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    const w = canvas.width;
+    const h = canvas.height;
+    const sky = context.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, '#769ab0');
+    sky.addColorStop(0.5, '#637f92');
+    sky.addColorStop(1, '#243326');
+    context.fillStyle = sky;
+    context.fillRect(0, 0, w, h);
+
+    // 远山
+    context.fillStyle = '#3d5635';
+    context.beginPath();
+    context.moveTo(0, h * 0.56);
+    context.lineTo(w * 0.16, h * 0.42);
+    context.lineTo(w * 0.3, h * 0.55);
+    context.lineTo(w * 0.46, h * 0.36);
+    context.lineTo(w * 0.62, h * 0.55);
+    context.lineTo(w * 0.8, h * 0.43);
+    context.lineTo(w, h * 0.55);
+    context.lineTo(w, h);
+    context.lineTo(0, h);
+    context.closePath();
+    context.fill();
+
+    // 近山/草地
+    context.fillStyle = '#2e4831';
+    context.beginPath();
+    context.moveTo(0, h * 0.7);
+    context.lineTo(w * 0.24, h * 0.58);
+    context.lineTo(w * 0.44, h * 0.72);
+    context.lineTo(w * 0.68, h * 0.57);
+    context.lineTo(w, h * 0.7);
+    context.lineTo(w, h);
+    context.lineTo(0, h);
+    context.closePath();
+    context.fill();
+
+    context.fillStyle = '#526c50';
+    context.fillRect(0, h * 0.72, w, h * 0.28);
+
+    // Web 同款像素网格 + 暗角
+    context.fillStyle = 'rgba(0, 0, 0, 0.045)';
+    for (let x = 0; x < w; x += 32) context.fillRect(x, 0, 1, h);
+    for (let y = 0; y < h; y += 32) context.fillRect(0, y, w, 1);
+    const vignette = context.createLinearGradient(0, 0, 0, h);
+    vignette.addColorStop(0, 'rgba(6, 12, 8, 0.05)');
+    vignette.addColorStop(1, 'rgba(6, 12, 8, 0.45)');
+    context.fillStyle = vignette;
+    context.fillRect(0, 0, w, h);
   };
 
   const drawTitle = (): void => {
