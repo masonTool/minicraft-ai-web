@@ -8,7 +8,7 @@
 
 ## 0. 当前状态（新会话 / 换设备先读这一页）
 
-> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `e097a6b`
+> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新功能提交 `db58faa`
 > 只要这一页和 §5 任务表是最新的，换会话/换机器就不会丢上下文。
 
 ### 0.1 一眼看进度
@@ -577,7 +577,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | 清理/看板 | 删除 WX-001 自写 shim、WX-006 适配器对比工程与旧构建脚本；正式入口/worker 目录改名；新增 §0 状态看板与接手清单 | `dbced2b` |
 | 2026-10-20 | WX-020B 第一块 | 真实世界接入第一人称：`PlayerPhysics` + 平台 pointer；左摇杆/右视角/右下跳跃；helper 预览 `P 9,67,9 G1`、37 chunks、89.7k tri、98 calls、121fps | `f868573` |
 | 2026-10-20 | WX-020B 第二块 | 准星射线 + 选中框 + 挖/放 + 6 格快捷栏；helper 预览 `T grass_block`、`SLOT 1/6`、229k tri / 254 calls / 119fps | `e097a6b` |
-| 2026-10-20 | WX-020B 第三块 | FileSaveGame 接线：玩家/快捷栏/区块增量落盘；`FileStore.mkdir` 修复父目录；15s 自动保存 + 切后台保存；重开 `save ready 0 chunks player`；AudioEngine 挖放音效 | 本次提交 |
+| 2026-10-20 | WX-020B 第三块 | FileSaveGame 接线：玩家/快捷栏/区块增量落盘；`FileStore.mkdir` 修复父目录；15s 自动保存 + 切后台保存；重开 `save ready 0 chunks player`；AudioEngine 挖放音效 | `db58faa` |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
