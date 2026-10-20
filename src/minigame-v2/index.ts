@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { World } from '../core/world/World.ts';
 import { TextureAtlas } from '../render/TextureAtlas.ts';
 import { ChunkRenderer } from '../render/ChunkRenderer.ts';
+import { Sky } from '../render/Sky.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
@@ -78,6 +79,9 @@ renderer.setClearColor(0x0b141c, 1);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87b9e8);
+const sky = new Sky();
+scene.add(sky.object);
+let worldTime = 0.25;
 const camera = new THREE.PerspectiveCamera(
   72,
   platform.system.width / Math.max(1, platform.system.height),
@@ -916,7 +920,7 @@ const snapshotPlayer = (): PlayerSave => ({
   pitch,
   dimension: 'overworld',
   flying,
-  timeOfDay: 0,
+  timeOfDay: worldTime,
   health,
   food,
   saturation,
@@ -1022,6 +1026,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
       xpLevel = Math.max(0, loaded.xp?.level ?? 0);
       xpIntoLevel = Math.max(0, loaded.xp?.partial ?? 0);
       flying = loaded.flying === true;
+      worldTime = Number.isFinite(loaded.timeOfDay) ? loaded.timeOfDay : 0.25;
       selectedSlot = Math.max(0, Math.min(8, loaded.selectedSlot ?? 0));
       playerReady = true;
     }
@@ -2230,6 +2235,13 @@ const frame = (): void => {
       showDeath();
     }
   }
+
+  worldTime = (worldTime + dt / 1200) % 1;
+  const sunAngle = worldTime * Math.PI * 2;
+  const daylight = 0.35 + 0.65 * Math.max(0, Math.sin(sunAngle));
+  solid.skyBrightness = settings.brightness * daylight;
+  translucent.skyBrightness = settings.brightness * daylight;
+  sky.update(worldTime, camera.position, dt);
 
   chunks.processQueue(4, centerCx, centerCz);
   chunks.applyViewDistance(centerCx, centerCz, settings.viewDistance);
