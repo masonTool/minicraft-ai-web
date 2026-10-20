@@ -96,11 +96,12 @@ export class EntityManager {
 
     for (let i = 0; i < items.length; i++) {
       const target = items[i]!;
-      if (target.dead || target.age < 0.5) continue;
+      // 联机镜像不参与合并：它的数量归生成方，本地并进来会"越并越多/越并越少"
+      if (target.dead || target.age < 0.5 || target.ghost) continue;
 
       for (let j = i + 1; j < items.length; j++) {
         const other = items[j]!;
-        if (other.dead || other.age < 0.5) continue;
+        if (other.dead || other.age < 0.5 || other.ghost) continue;
         // ⚠️ 只比 id 会把"改了名的/带附魔的"并进普通那堆，名字与附魔静默丢掉（批次 63）
         if (!other.sameAs(target)) continue;
 

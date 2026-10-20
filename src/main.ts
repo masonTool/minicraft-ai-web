@@ -297,9 +297,13 @@ import { applyResourcePack, packNameFromFile, type ResourcePackResult } from './
 import { SaveGame, type PlayerSave } from './core/save/SaveGame.ts';
 import { ChunkEdits } from './core/save/ChunkEdits.ts';
 import { restoreContainers, serializeContainers } from './core/save/ContainerSave.ts';
-import { NetClient, defaultServerUrl } from './net/NetClient.ts';
+import {
+  NetClient,
+  defaultServerUrl,
+  type NetItemState,
+  type NetPlayerState,
+} from './net/NetClient.ts';
 import { REMOTE_PLAYER_TYPE } from './core/entity/mobs.ts';
-import type { NetPlayerState } from './net/NetClient.ts';
 import {
   NOTE_BLOCK_MAX_PITCH,
   beaconPrimary,
@@ -1430,10 +1434,13 @@ class App {
    * 远程玩家借用生物渲染器的模型，位置完全由网络驱动，不进 EntityManager（不跑 AI/物理）。
    */
   private readonly net = new NetClient({
-    onWelcome: (seed, selfId, players, edits) => this.onNetWelcome(seed, selfId, players, edits),
+    onWelcome: (seed, selfId, players, edits, items) =>
+      this.onNetWelcome(seed, selfId, players, edits, items),
     onPlayer: (player) => this.onNetPlayer(player),
     onLeave: (id) => this.onNetLeave(id),
     onBlock: (x, y, z, id, state, dimension) => this.onNetBlock(x, y, z, id, state, dimension),
+    onItemSpawn: (item) => this.onNetItemSpawn(item),
+    onItemRemove: (owner, localId) => this.onNetItemRemove(owner, localId),
     onChat: (id, name, text) => {
       this.chat.push(`<${name}> ${text}`, 'player');
       this.chatLine = `<${name}> ${text}`;
@@ -1442,10 +1449,24 @@ class App {
     },
     onStatus: (connected, detail) => {
       this.netStatus = detail;
-      if (!connected) this.remotePlayers.clear();
+      if (!connected) {
+        this.remotePlayers.clear();
+        this.clearRemoteItems();
+      }
     },
   });
   private readonly remotePlayers = new Map<number, Mob>();
+  /**
+   * 队友那边的掉落物镜像（L7 第一刀，key = "owner:localId"）。
+   *
+   * 只渲染、不拾取：拾取需要"谁先拿到"的服务端仲裁，那是 L7 的下一刀。
+   */
+  private readonly remoteItems = new Map<string, ItemEntity>();
+  /** 本地掉落物 → 广播用的 localId（L7 第一刀） */
+  private readonly localNetItems = new Map<ItemEntity, number>();
+  private nextLocalItemId = 1;
+  /** 上次扫描本地新掉落物的时间（100ms 一次，别每帧遍历都发） */
+  private lastItemScan = 0;
 
   /**
    * 活着的药水云（K4 尾巴）：滞留药水摔出来的 + 末影龙吐出来的血息。
@@ -2577,7 +2598,13 @@ class App {
   // ---------------------------------------------------------------- 联机（K2）
 
   /** 连上服务器：拿到种子与已有玩家/方块改动 */
-  private onNetWelcome(seed: number, selfId: number, players: NetPlayerState[], edits: number[][]): void {
+  private onNetWelcome(
+    seed: number,
+    selfId: number,
+    players: NetPlayerState[],
+    edits: number[][],
+    items: NetItemState[],
+  ): void {
     console.info(`[net] 已加入服务器 #${selfId}，种子 ${seed}，在线 ${players.length} 人，已有方块改动 ${edits.length} 条`);
 
     // 种子不一致：地形会对不上（两边看到的是不同的大陆），只提示不强行切换
@@ -2608,6 +2635,13 @@ class App {
       if (player.id === selfId) continue;
       this.onNetPlayer(player);
     }
+
+    // 地上的掉落物：建镜像（新玩家进来看得见，但拿不到——见 `remoteItems` 的注释）
+    this.clearRemoteItems();
+    for (const item of items) {
+      if (item.owner === selfId) continue;
+      this.onNetItemSpawn(item);
+    }
   }
 
   /** 其它玩家的位置更新 */
@@ -2630,6 +2664,78 @@ class App {
   private onNetLeave(id: number): void {
     // 渲染器每帧会回收"这一帧没出现"的模型，所以这里只要从表里删掉就够了
     this.remotePlayers.delete(id);
+    // 他名下那些掉落物镜像也一并清掉（服务端也会逐条广播 remove，这是双保险）
+    for (const [key, ghost] of this.remoteItems) {
+      if (!key.startsWith(`${id}:`)) continue;
+      ghost.dead = true;
+      this.remoteItems.delete(key);
+    }
+  }
+
+  /**
+   * 队友那边生成了一堆掉落物 → 建一个只渲染的镜像（L7 第一刀）。
+   *
+   * ⚠️ 镜像不跑物理、不参与拾取（见 `ItemEntity.ghost`）：两边的模拟各自独立，
+   * 让镜像也能被捡会让同一堆被两个人各拿一份。拾取仲裁留给 L7 的下一刀。
+   */
+  private onNetItemSpawn(item: NetItemState): void {
+    const key = `${item.owner}:${item.localId}`;
+    const existing = this.remoteItems.get(key);
+    if (existing) {
+      // 区块卸载会把它从实体表里摘掉（`removeInChunk` 不认镜像）：再收到同 key 就补回去
+      if (!this.entities.all.includes(existing)) this.entities.spawn(existing);
+      // 同一堆的坐标/数量会变（合并、被推走）：跟着更新，别重建——重建会闪一下
+      existing.count = item.count;
+      existing.x = item.x;
+      existing.y = item.y;
+      existing.z = item.z;
+      return;
+    }
+    const ghost = new ItemEntity(item.itemId, item.count, item.x, item.y, item.z);
+    ghost.ghost = true;
+    this.remoteItems.set(key, ghost);
+    this.entities.spawn(ghost);
+  }
+
+  /** 队友那边那堆没了（捡走/烧掉/过期/他退出） */
+  private onNetItemRemove(owner: number, localId: number): void {
+    const key = `${owner}:${localId}`;
+    const ghost = this.remoteItems.get(key);
+    if (!ghost) return;
+    ghost.dead = true;
+    this.remoteItems.delete(key);
+  }
+
+  /** 断开/重连时清空镜像：旧会话的 key 在服务端已经不存在了 */
+  private clearRemoteItems(): void {
+    for (const ghost of this.remoteItems.values()) ghost.dead = true;
+    this.remoteItems.clear();
+    this.localNetItems.clear();
+  }
+
+  /**
+   * 把自己这边的掉落物变化广播出去（L7 第一刀）。
+   *
+   * 用"每 100ms 扫一遍实体表"而不是在 `spawnDrop` 里挂钩：生成掉落物的入口
+   * 不止一个（丢出、破坏方块、生物死亡、投掷器、区块恢复），逐个挂钩必然漏一处。
+   * 扫描顺带负责"消失检测"——被捡走/烧掉/过期/区块卸载都要让对方删镜像。
+   */
+  private syncNetItems(now: number): void {
+    if (!this.net.connected) return;
+    for (const [entity, localId] of this.localNetItems) {
+      if (!entity.dead && this.entities.all.includes(entity)) continue;
+      this.localNetItems.delete(entity);
+      this.net.sendItemRemove(localId);
+    }
+    if (now - this.lastItemScan < 100) return;
+    this.lastItemScan = now;
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof ItemEntity) || entity.ghost) continue;
+      if (this.localNetItems.has(entity)) continue;
+      const localId = this.nextLocalItemId++;
+      this.localNetItems.set(entity, localId);
+      this.net.sendItemSpawn(localId, entity.itemId, entity.count, entity.x, entity.y, entity.z);
+    }
   }
 
   /** 队友改了方块：直接写进世界（也会进增量存档） */
@@ -5442,6 +5548,8 @@ class App {
    */
   private savedEntityOf(entity: object): SavedEntity | null {
     if (entity instanceof ItemEntity) {
+      // 联机镜像不是"我的东西"：写进存档会让它读档后变成真的（凭空多一堆物品）
+      if (entity.ghost) return null;
       // 白板物品不写 extras：绝大多数掉落物都是"一堆圆石"，
       // 给每条记录都塞一个空对象会让存档无止境地胖下去
       const extras = Object.keys(entity.extras).length > 0 ? { ...entity.extras } : undefined;
@@ -13205,6 +13313,8 @@ class App {
         this.pitch,
         this.dimension,
       );
+      // 本地掉落物的增删同步（L7 第一刀）：内部自己节流到 100ms
+      this.syncNetItems(performance.now());
       mark = this.lap('io', mark);
 
       const centerCx = toChunkCoord(this.physics.x);

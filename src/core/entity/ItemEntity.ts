@@ -46,6 +46,14 @@ export class ItemEntity extends Entity implements MovingBody {
    */
   readonly extras: DroppedExtras;
 
+  /**
+   * 联机镜像（L7 第一刀）：只用于"看见队友那边的掉落物"。
+   *
+   * 镜像不跑物理、不参与拾取与合并——位置由生成方广播的那一条决定。
+   * 这一批**不做拾取仲裁**，所以远端那一堆在本地是拿不到的（写进 TASKS L7 的差异）。
+   */
+  ghost = false;
+
   /** 连续泡在火里的秒数（离开火焰立刻清零，见 `burnAway`） */
   private fireSeconds = 0;
 
@@ -78,6 +86,8 @@ export class ItemEntity extends Entity implements MovingBody {
     // 已被标记移除的实体不再推进：EntityManager 会在同一帧内移除它，
     // 但直接调用 tick 的场合（测试、未来的实体复用池）需要这道防线。
     if (this.dead) return;
+    // 联机镜像：位置与数量都归生成方，本地既不模拟也不拾取（见 `ghost` 的注释）
+    if (this.ghost) return;
 
     this.age += dt;
     if (this.age > ITEM_LIFETIME) {

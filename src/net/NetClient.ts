@@ -23,12 +23,38 @@ export interface NetPlayerState {
   dimension: string;
 }
 
+/**
+ * 一条掉落物（L7 第一刀）。
+ *
+ * `owner + localId` 是全局唯一键：服务端不接受客户端自带 owner，
+ * 一律用连接自己的 id 拼——否则谁都能删别人的东西。
+ */
+export interface NetItemState {
+  owner: number;
+  localId: number;
+  itemId: number;
+  count: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface NetHandlers {
-  /** 连接成功并拿到世界快照（种子 + 已有玩家 + 已有方块改动） */
-  onWelcome: (seed: number, selfId: number, players: NetPlayerState[], edits: number[][]) => void;
+  /** 连接成功并拿到世界快照（种子 + 已有玩家 + 已有方块改动 + 已有掉落物） */
+  onWelcome: (
+    seed: number,
+    selfId: number,
+    players: NetPlayerState[],
+    edits: number[][],
+    items: NetItemState[],
+  ) => void;
   onPlayer: (player: NetPlayerState) => void;
   onLeave: (id: number) => void;
   onBlock: (x: number, y: number, z: number, id: number, state: number, dimension: string) => void;
+  /** 别人那边生成了一堆掉落物（本地只渲染，不拾取） */
+  onItemSpawn: (item: NetItemState) => void;
+  /** 别人那边那堆没了（被捡走/烧掉/过期） */
+  onItemRemove: (owner: number, localId: number) => void;
   onChat: (id: number, name: string, text: string) => void;
   /** 连接状态变化（用于 HUD 提示） */
   onStatus: (connected: boolean, detail: string) => void;
@@ -144,7 +170,8 @@ export class NetClient {
           this.remote.set(player.id, player);
         }
         const edits = (message.edits as number[][] | undefined) ?? [];
-        this.handlers.onWelcome(this.worldSeed, this.selfId, players, edits);
+        const items = (message.items as NetItemState[] | undefined) ?? [];
+        this.handlers.onWelcome(this.worldSeed, this.selfId, players, edits, items);
         break;
       }
       case 'player': {
@@ -169,6 +196,27 @@ export class NetClient {
           Number(message.state ?? 0),
           String(message.dimension ?? 'overworld'),
         );
+        break;
+      }
+      case 'item-spawn': {
+        const item: NetItemState = {
+          owner: Number(message.owner ?? 0),
+          localId: Number(message.localId ?? 0),
+          itemId: Number(message.itemId ?? 0),
+          count: Number(message.count ?? 1),
+          x: Number(message.x ?? 0),
+          y: Number(message.y ?? 0),
+          z: Number(message.z ?? 0),
+        };
+        // 自己的生成也会被服务端回传（快照路径），别把自己那边再镜像一份
+        if (item.owner === this.selfId) break;
+        this.handlers.onItemSpawn(item);
+        break;
+      }
+      case 'item-remove': {
+        const owner = Number(message.owner ?? 0);
+        if (owner === this.selfId) break;
+        this.handlers.onItemRemove(owner, Number(message.localId ?? 0));
         break;
       }
       case 'chat': {
@@ -213,6 +261,33 @@ export class NetClient {
   sendBlock(x: number, y: number, z: number, id: number, state: number, dimension: string): void {
     if (!this.connected) return;
     this.socket?.send(JSON.stringify({ t: 'block', x, y, z, id, state, dimension }));
+  }
+
+  /**
+   * 本地生成了一堆掉落物 → 广播（L7 第一刀）。
+   *
+   * `localId` 由生成方自己分配，服务端拼上玩家 id 当全局键；坐标保留两位小数，
+   * 镜像本来就不跑物理，多出来的精度没有意义。
+   */
+  sendItemSpawn(localId: number, itemId: number, count: number, x: number, y: number, z: number): void {
+    if (!this.connected) return;
+    this.socket?.send(
+      JSON.stringify({
+        t: 'item-spawn',
+        localId: Math.trunc(localId),
+        itemId: Math.trunc(itemId),
+        count: Math.trunc(count),
+        x: Number(x.toFixed(2)),
+        y: Number(y.toFixed(2)),
+        z: Number(z.toFixed(2)),
+      }),
+    );
+  }
+
+  /** 本地那堆没了（被捡走/烧掉/过期）→ 让所有人删掉镜像 */
+  sendItemRemove(localId: number): void {
+    if (!this.connected) return;
+    this.socket?.send(JSON.stringify({ t: 'item-remove', localId: Math.trunc(localId) }));
   }
 
   sendChat(text: string): void {

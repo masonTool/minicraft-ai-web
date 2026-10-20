@@ -182,6 +182,69 @@ try {
   );
   check('新玩家拿到的是服务端种子（据此重现同一片地形）', welcomeC?.seed === welcomeA?.seed);
 
+  // ---------------------------------------------------------------- 掉落物镜像
+  console.log('\n[掉落物镜像（L7 第一刀）]');
+  alice.mailbox.length = 0;
+  bob.mailbox.length = 0;
+
+  alice.send({ t: 'item-spawn', localId: 7, itemId: 12, count: 3, x: 10.5, y: 70, z: 20.5 });
+  const itemSpawn = await bob.wait('item-spawn');
+  check(
+    '掉落物生成被广播（owner / localId / 物品 / 数量 / 坐标）',
+    itemSpawn?.owner === 1 &&
+      itemSpawn?.localId === 7 &&
+      itemSpawn?.itemId === 12 &&
+      itemSpawn?.count === 3 &&
+      Math.abs(itemSpawn?.x - 10.5) < 0.001,
+    JSON.stringify(itemSpawn),
+  );
+  check('生成者自己不会收到回传', (await alice.wait('item-spawn', 300)) === null);
+
+  // 新玩家进来要看得见地上已有的东西（与方块改动同一个思路）
+  const erin = new TestClient('Erin');
+  const welcomeE = await joinAndWaitWelcome(erin, 'Erin', 0, 70, 0);
+  check(
+    'welcome 里带已有掉落物',
+    (welcomeE?.items ?? []).some((i) => i.owner === 1 && i.localId === 7 && i.itemId === 12),
+    JSON.stringify(welcomeE?.items),
+  );
+  erin.close();
+  await alice.wait('leave');
+
+  // 删除：只有 owner 能删（协议里 localId 由服务端拼上自己的 id）
+  alice.send({ t: 'item-remove', localId: 7 });
+  const itemRemove = await bob.wait('item-remove');
+  check('掉落物消失被广播', itemRemove?.owner === 1 && itemRemove?.localId === 7, JSON.stringify(itemRemove));
+
+  alice.send({ t: 'item-spawn', localId: 8, itemId: 5, count: 1, x: 1, y: 70, z: 1 });
+  await bob.wait('item-spawn');
+  // Bob 用自己的 localId=8 想删 Alice 那一堆：key 前缀不同，删不到
+  bob.send({ t: 'item-remove', localId: 8 });
+  await sleep(120);
+  const frank = new TestClient('Frank');
+  const welcomeF = await joinAndWaitWelcome(frank, 'Frank', 0, 70, 0);
+  check(
+    '删不掉别人的掉落物（owner 由服务端填，不信消息里的 id）',
+    (welcomeF?.items ?? []).some((i) => i.owner === 1 && i.localId === 8),
+    JSON.stringify(welcomeF?.items),
+  );
+  frank.close();
+  await alice.wait('leave');
+
+  // 脏数据：数量超上限 / 坐标 NaN 都不该进快照
+  alice.send({ t: 'item-spawn', localId: 9, itemId: 5, count: 999, x: 1, y: 70, z: 1 });
+  alice.send({ t: 'item-spawn', localId: 10, itemId: 5, count: 1, x: 'abc', y: 70, z: 1 });
+  await sleep(120);
+  const grace = new TestClient('Grace');
+  const welcomeG = await joinAndWaitWelcome(grace, 'Grace', 0, 70, 0);
+  check(
+    '脏掉落物消息被拒（数量超上限 / 坐标非法）',
+    !(welcomeG?.items ?? []).some((i) => i.owner === 1 && (i.localId === 9 || i.localId === 10)),
+    JSON.stringify(welcomeG?.items),
+  );
+  grace.close();
+  await alice.wait('leave');
+
   // ---------------------------------------------------------------- 聊天与离开
   console.log('\n[聊天 / 离开]');
   bob.send({ t: 'chat', text: '你好世界' });
@@ -213,7 +276,30 @@ try {
 
   check('服务端仍然活着', server.exitCode === null, `exitCode=${server.exitCode}`);
 
+  // ---------------------------------------------------------------- 离开时清理掉落物
+  console.log('\n[离开时清理掉落物]');
+  alice.send({ t: 'item-spawn', localId: 99, itemId: 3, count: 1, x: 0, y: 70, z: 0 });
+  await bob.wait('item-spawn');
   alice.close();
+  await bob.wait('leave');
+  // Alice 名下还有 localId=8 那一堆，两条 remove 的先后不定：收集到 99 为止
+  const removes = [];
+  const removeDeadline = Date.now() + 1500;
+  while (Date.now() < removeDeadline) {
+    const message = bob.take('item-remove');
+    if (!message) {
+      await sleep(20);
+      continue;
+    }
+    removes.push(message);
+    if (removes.some((m) => m.localId === 99)) break;
+  }
+  check(
+    '玩家离开后他名下的掉落物被清掉',
+    removes.some((m) => m.owner === 1 && m.localId === 99),
+    JSON.stringify(removes),
+  );
+
   bob.close();
 } finally {
   server.kill('SIGTERM');
