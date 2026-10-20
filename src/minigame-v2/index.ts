@@ -1456,6 +1456,12 @@ const openContainerAt = (hit: RayHit): boolean => {
   if (id === Block.CHEST) {
     openedContainer = world.containers.getOrCreateChest('overworld', hit.x, hit.y, hit.z);
     containerTitle = '箱子';
+  } else if (id === Block.CRAFTING_TABLE) {
+    crafting.drainTo(inventory);
+    crafting = new CraftingGrid(3);
+    inventoryOpen = true;
+    showInventory();
+    return true;
   } else if (id === Block.FURNACE) {
     openedContainer = world.containers.getOrCreateFurnace('overworld', hit.x, hit.y, hit.z);
     containerTitle = '熔炉';
