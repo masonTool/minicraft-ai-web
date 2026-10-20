@@ -40,6 +40,7 @@ import type { SerializedArmorStand } from '../world/ArmorStands.ts';
 import type { SerializedPainting } from '../world/Paintings.ts';
 import type { SavedVehicle } from '../entity/VehicleParking.ts';
 import type { SavedEntityRecord } from '../entity/EntityParking.ts';
+import type { StatisticsData } from '../survival/Statistics.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
 import { SAVE_VERSION, migratePlayer } from './SaveMigrations.ts';
 
@@ -232,6 +233,8 @@ export interface PlayerSave {
    * 旧存档没有这个字段 → 没有床重生点，与 `xp` / `effects` 同一条处理。
    */
   bedSpawn?: { x: number; y: number; z: number; dimension: string };
+  /** 世界统计（批次 552）：挖/放/击杀/死亡/距离/游玩秒数；旧存档按全 0 处理 */
+  statistics?: StatisticsData;
 }
 
 /** 一个区块的存档记录 */

@@ -627,6 +627,8 @@ export interface SettingsActions {
    * 手机上没有 Esc，所以那个按钮同时也在背包标题栏上挂着（`InventoryScreenHooks`）。
    */
   onOpenAdvancements?: () => void;
+  /** 打开世界统计面板（批次 552） */
+  onOpenStatistics?: () => void;
   /**
    * 切换创造模式（飞行）（批次 107）。
    *
@@ -839,6 +841,15 @@ export class SettingsScreen {
     achievements.addEventListener('click', () => this.actions.onOpenAdvancements?.());
     achievements.style.display = this.actions.onOpenAdvancements ? '' : 'none';
 
+    // 统计（批次 552）：与成就并排，低频但玩家会想看一眼"这世界玩了多久"
+    const statistics = document.createElement('button');
+    statistics.type = 'button';
+    statistics.id = 'pause-statistics';
+    statistics.className = 'pause-action';
+    this.bindLabel(statistics, 'pause.statistics');
+    statistics.addEventListener('click', () => this.actions.onOpenStatistics?.());
+    statistics.style.display = this.actions.onOpenStatistics ? '' : 'none';
+
     // 用户点名的"保存档退出"：退出前主程序会落一次盘（`exitToMenu` 里已经这么做了）
     const exitToMenu = document.createElement('button');
     exitToMenu.type = 'button';
@@ -853,7 +864,7 @@ export class SettingsScreen {
     // 加在按钮上没有任何效果。
     if (!this.actions.onExitToMenu) exitToMenu.style.display = 'none';
 
-    actionsRow.append(this.resumeButton, settingsButton, achievements, exitToMenu);
+    actionsRow.append(this.resumeButton, settingsButton, achievements, statistics, exitToMenu);
 
     this.metaEl = document.createElement('div');
     this.metaEl.className = 'settings-hint settings-meta';

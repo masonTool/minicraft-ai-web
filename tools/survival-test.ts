@@ -23,6 +23,7 @@ import {
   type SurvivalEnvironment,
 } from '../src/core/survival/PlayerStats.ts';
 import { touchesCactus } from '../src/core/world/Cactus.ts';
+import { Statistics, emptyStatistics, formatPlayTime, normalizeStatistics } from '../src/core/survival/Statistics.ts';
 import { boxAt, type CollisionWorld } from '../src/core/physics/AABB.ts';
 
 let passed = 0;
@@ -36,6 +37,10 @@ function check(name: string, condition: boolean, detail = ''): void {
     failed++;
     console.log(`  ✗ ${name}${detail ? `  →  ${detail}` : ''}`);
   }
+}
+
+function equal(label: string, actual: unknown, expected: unknown): void {
+  check(label, Object.is(actual, expected), `实际 ${String(actual)}，期望 ${String(expected)}`);
 }
 
 function env(overrides: Partial<SurvivalEnvironment> = {}): SurvivalEnvironment {
@@ -393,6 +398,38 @@ console.log('\n[细雪冰冻（批次 548）]');
   runTicks(escaped, 140, env({ inPowderSnow: true }));
   runTicks(escaped, 100, env());
   check('离开细雪后计时清零（不会一回去就扣血）', escaped.health === MAX_HEALTH, `${escaped.health}`);
+}
+
+console.log('\n[世界统计（批次 552）]');
+{
+  const stats = new Statistics();
+  equal('新世界从 0 开始', stats.serialize().blocksMined, 0);
+  stats.add('blocksMined');
+  stats.add('blocksPlaced', 2);
+  stats.add('mobsKilled');
+  stats.add('deaths');
+  equal('计数累加', stats.data.blocksMined, 1);
+  equal('一次加多个', stats.data.blocksPlaced, 2);
+
+  stats.addDistance(3, 4);
+  equal('水平距离按勾股累加（3-4-5）', Math.round(stats.data.distance), 5);
+  stats.addPlayTime(65);
+  equal('游玩时间累加', formatPlayTime(stats.data.playSeconds), '1 分 5 秒');
+  equal('小时格式', formatPlayTime(3725), '1 小时 2 分');
+
+  // 脏数据清洗：负数/NaN/字符串一律归 0
+  const dirty = normalizeStatistics({ blocksMined: -3, blocksPlaced: Number.NaN, mobsKilled: 'x', deaths: 2 });
+  equal('负数归 0', dirty.blocksMined, 0);
+  equal('NaN 归 0', dirty.blocksPlaced, 0);
+  equal('字符串归 0', dirty.mobsKilled, 0);
+  equal('合法值保留', dirty.deaths, 2);
+  equal('缺字段补 0', emptyStatistics().distance, 0);
+
+  const copy = stats.serialize();
+  const restored = new Statistics();
+  restored.restore(copy);
+  equal('序列化往返一致', restored.data.blocksPlaced, 2);
+  equal('存档里没有统计 → 全 0', formatPlayTime(normalizeStatistics(undefined).playSeconds), '0 秒');
 }
 
 console.log(`\n生存测试：${passed} 通过 / ${failed} 失败\n`);

@@ -687,6 +687,8 @@ import {
 import { AdvancementTracker } from './core/progress/AdvancementTracker.ts';
 import type { AdvancementDef, ProgressEvent } from './core/progress/advancements.ts';
 import { AdvancementScreen } from './ui/AdvancementScreen.ts';
+import { StatisticsScreen } from './ui/StatisticsScreen.ts';
+import { Statistics } from './core/survival/Statistics.ts';
 import { AdvancementToast } from './ui/AdvancementToast.ts';
 import {
   CAKE_SLICES,
@@ -1477,6 +1479,13 @@ class App {
    */
   private readonly advancements = new AdvancementTracker();
   private readonly advancementScreen: AdvancementScreen;
+  /** 世界统计（批次 552） */
+  private readonly statistics = new Statistics();
+  private readonly statisticsScreen: StatisticsScreen;
+  /** 上一帧的玩家位置：算水平移动距离用 */
+  private statisticsLastX = 0;
+  private statisticsLastZ = 0;
+  private statisticsDistanceReady = false;
   private readonly advancementToast: AdvancementToast;
   /** 游戏内一行提示（批次 181）：视角/模式切换、全屏状态… */
   private readonly hudToast = new HudToast(document.getElementById('hud') ?? document.body);
@@ -2207,6 +2216,7 @@ class App {
     // 点外框关闭；提示卡是 HUD 性质的东西，挂 body 才不会被打包进 #app 的层叠上下文
     this.advancementScreen = new AdvancementScreen(document.body, atlas, this.advancements);
     this.advancementToast = new AdvancementToast(document.body, atlas);
+    this.statisticsScreen = new StatisticsScreen(document.body);
 
     // 难度先按"新建世界时选的"来；如果存档里有玩家数据，loadPlayer 会再用存档的覆盖
     this.difficulty = this.hardcore ? 'hard' : this.worldConfig.difficulty;
@@ -2295,6 +2305,8 @@ class App {
       onResourcePack: (file) => void this.loadResourcePack(file),
       // 成就（M7）：暂停菜单里点"成就"→ 面板叠在它上面（面板自己会接管 uiOpen）
       onOpenAdvancements: () => this.toggleAdvancements(),
+      // 统计（批次 552）：与成就同一层，面板只是只读展示
+      onOpenStatistics: () => this.toggleStatistics(),
       // 创造模式（飞行）搬进设置（批次 107）：触摸端右下那一簇不再有"飞行"键
       onToggleFly: () => this.setFlying(!this.flying),
       isFlying: () => this.flying,
@@ -2496,6 +2508,7 @@ class App {
       this.chat.isOpen ||
       this.recipeBook.isOpen ||
       this.advancementScreen.isOpen ||
+      this.statisticsScreen.isOpen ||
       this.inventoryScreen.isOpen ||
       this.commandHelp.isOpen ||
       this.settingsScreen.isOpen
@@ -2517,6 +2530,7 @@ class App {
     else if (this.chat.isOpen) this.chat.close();
     else if (this.recipeBook.isOpen) this.recipeBook.hide();
     else if (this.advancementScreen.isOpen) this.advancementScreen.hide();
+    else if (this.statisticsScreen.isOpen) this.statisticsScreen.hide();
     else if (this.inventoryScreen.isOpen) this.inventoryScreen.close();
     // 暂停菜单分两层（批次 108）：先"设置页 → 菜单页"，回到菜单页时它**还开着**，
     // 所以这里不能直接 closeSettings()——`goBack` 会自己决定（必要时才真关）
@@ -3225,12 +3239,20 @@ class App {
     this.stats.saturation = data.saturation;
     this.stats.air = data.air;
     this.stats.exhaustion = data.exhaustion;
+    // 统计（批次 552）：老存档没有这个字段 → 全 0
+    this.statistics.restore(data.statistics);
+    this.statisticsLastX = data.x;
+    this.statisticsLastZ = data.z;
     // 读档恢复的低血量不该被当成"刚刚受到伤害"播出来
     this.resetPlayerNotices();
     this.dragonDefeated = data.dragonDefeated;
     // 难度与游戏规则按世界存：旧存档没有这两个字段时回退默认值
     // 难度优先用存档里的（玩家可能在游戏里改过），没有就用世界清单里新建时选的
-    this.difficulty = data.difficulty ? normalizeDifficulty(data.difficulty) : this.worldConfig.difficulty;
+    this.difficulty = this.hardcore
+      ? 'hard'
+      : data.difficulty
+        ? normalizeDifficulty(data.difficulty)
+        : this.worldConfig.difficulty;
     this.rules = normalizeGameRules(data.gameRules);
     // 读档时也要把"火要不要处理"推给模块级开关（否则读档后开关停在旧世界/默认值上）
     setFireTickEnabled(this.rules.doFireTick);
@@ -3317,6 +3339,7 @@ class App {
       gameRules: { ...this.rules },
       effects: this.effects.serialize(),
       xp: this.experience.serialize(),
+      statistics: this.statistics.serialize(),
     };
   }
 
@@ -4778,6 +4801,17 @@ class App {
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
     this.shieldDisabled = Math.max(0, this.shieldDisabled - dt);
+    // 世界统计（批次 552）：游玩时间每帧累加；水平距离用"上一帧位置"差
+    this.statistics.addPlayTime(dt);
+    if (!this.statisticsDistanceReady) {
+      this.statisticsDistanceReady = true;
+      this.statisticsLastX = this.physics.x;
+      this.statisticsLastZ = this.physics.z;
+    } else {
+      this.statistics.addDistance(this.physics.x - this.statisticsLastX, this.physics.z - this.statisticsLastZ);
+      this.statisticsLastX = this.physics.x;
+      this.statisticsLastZ = this.physics.z;
+    }
 
     this.updateAttacking(dt);
     this.updateBreaking(dt);
@@ -7055,6 +7089,7 @@ class App {
       this.particles.spawnSmoke(mob.x, mob.y + 0.5, mob.z, 10, 0.32);
       // 进度（M7）：击杀。报的是**生物种类 id**而不是这一只——
       // 计数型进度（"怪物猎人"要三种）靠它去重，报成个体就永远凑不齐三种
+      this.statistics.add('mobsKilled');
       this.reportProgress({ kind: 'kill', mob: mob.type.id });
       // 不祥之兆（批次 475/476）：原版是"击杀巡逻队队长（带旗那只）"必掉。
       // 巡逻队是本批补上的，所以这里以"队长"为主；其余掠夺者留 3% 兜底
@@ -7163,6 +7198,7 @@ class App {
 
     const brokenId = this.world.getBlock(this.hit.x, this.hit.y, this.hit.z);
     const brokenState = this.world.getBlockState(this.hit.x, this.hit.y, this.hit.z);
+    if (brokenId !== Block.AIR) this.statistics.add('blocksMined');
 
     // 工具耐久 -1（挖掉一格算一次；创造模式不掉，见 damageHeldTool）
     this.damageHeldTool();
@@ -8209,6 +8245,12 @@ class App {
   private toggleAdvancements(): void {
     if (this.advancementScreen.isOpen) this.closeAdvancements();
     else this.openAdvancements();
+  }
+
+  /** 统计面板（批次 552）：只读，不改变 uiOpen（它总是从暂停菜单里打开） */
+  private toggleStatistics(): void {
+    if (this.statisticsScreen.isOpen) this.statisticsScreen.hide();
+    else this.statisticsScreen.show(this.statistics.serialize());
   }
 
   // ---------------------------------------------------------------- 村庄的人口（J22，批次 89）
@@ -10140,7 +10182,10 @@ class App {
     this.entities.update(context, dt);
     // 批次 370：凋灵是独立实体（不在 `MobType` 表里），击杀进度在这里补
     const witherAlive = this.aliveWither() !== null;
-    if (this.witherWasAlive && !witherAlive) this.reportProgress({ kind: 'kill', mob: 'wither' });
+    if (this.witherWasAlive && !witherAlive) {
+      this.statistics.add('mobsKilled');
+      this.reportProgress({ kind: 'kill', mob: 'wither' });
+    }
     this.witherWasAlive = witherAlive;
     // 船先动、人再贴上去：顺序不能反，否则相机会比船慢一帧（看着像"人在水里拖着船"）
     this.syncRiderToVehicle();
@@ -13326,6 +13371,7 @@ class App {
     // 藤蔓"再挂一面"：改的是**落点那一格**（它已经是同一种藤蔓了）
     if (plan.mergeIntoTarget) {
       if (this.world.setBlockAndUpdate(x, y, z, blockId, plan.mergeIntoTarget.state)) {
+        this.statistics.add('blocksPlaced');
         this.placeCooldown = PLACE_COOLDOWN;
         this.inventory.consume(heldId, 1);
         this.net.sendBlock(x, y, z, blockId, plan.mergeIntoTarget.state, this.dimension);
@@ -13340,6 +13386,7 @@ class App {
     // 只会留一个空气洞（水不会回来），"在海底修一条路"就没法做了
     const placeState = waterloggedPlacementState(blockId, plan.state, existing);
     if (this.world.setBlockAndUpdate(x, y, z, blockId, placeState)) {
+      this.statistics.add('blocksPlaced');
       // 多格画（批次 495）：`planPlacement` 只返回了哨兵档位，具体是哪一幅、
       // 占哪几格在这里补上（它要查世界，纯函数那边只有 `blockAt` 一个探针）
       if (blockId === Block.PAINTING && paintingVariantOf(placeState) === MULTI_PAINTING_VARIANT) {
@@ -13907,6 +13954,7 @@ class App {
       // 死亡只结算一次：把背包里的东西掉在原地（keepInventory 打开时保留）
       if (!this.deathHandled) {
         this.deathHandled = true;
+        this.statistics.add('deaths');
         // 死亡卡片也写清死因（"被僵尸打死"和"掉进岩浆"的应对完全不同）
         const last = this.stats.lastDamage;
         if (this.deathCauseEl) {
@@ -15431,6 +15479,7 @@ class App {
 
     this.recipeBook.dispose();
     this.advancementScreen.dispose();
+    this.statisticsScreen.root.remove();
     this.tooltip.dispose();
     this.mobRenderer.dispose();
     this.playerRenderer.dispose();

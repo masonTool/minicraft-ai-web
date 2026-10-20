@@ -4595,6 +4595,18 @@
       body.touch-mode .adv-tab { font-size: 10px; padding: 3px 6px; }
       body.touch-mode .adv-row { min-height: 40px; padding: 4px 6px; }
       .adv-empty { padding: 18px; text-align: center; color: #5a5a5a; }
+      /* 统计面板（批次 552）：复用成就面板外壳，列表换成标签 · 数值 */
+      .stat-panel { width: min(420px, calc(100vw - 24px)); }
+      .stat-list { gap: 7px; padding: 2px; }
+      .stat-row {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px; padding: 9px 11px; font-size: 13px;
+        color: #2a2a2a; background: #c6c6c6;
+        border: 2px solid; border-color: #e4e4e4 #6a6a6a #6a6a6a #e4e4e4; border-radius: 3px;
+      }
+      .stat-row b { color: #244a24; font-size: 14px; }
+      body.touch-mode .stat-row { min-height: 40px; padding: 7px 9px; font-size: 12px; }
+      body.touch-mode .stat-row b { font-size: 13px; }
       .adv-row {
         display: flex; align-items: center; gap: 9px;
         padding: 6px 8px; background: #b4b4b4;
