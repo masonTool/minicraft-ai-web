@@ -3052,7 +3052,11 @@ console.log('\n[用户第二轮反馈（批次 185）]');
     invSrc.includes('private readonly categoryScrollByTab = new Map<RecipeBookTab, number>();') &&
       invSrc.includes('private readonly categorySearchByTab = new Map<RecipeBookTab, string>();') &&
       invSrc.includes('this.categoryScrollByTab.set(this.categoryTab, this.categoryGrid.scrollTop);') &&
-      invSrc.includes('this.categoryGrid.scrollTop = this.categoryScrollByTab.get(this.categoryTab) ?? 0;'),
+      invSrc.includes('const targetScroll = this.categoryScrollByTab.get(this.categoryTab) ?? 0;') &&
+      // 隐藏分类栏时浏览器会把 scrollTop 归零，不能覆盖记忆值
+      invSrc.includes('private categoryScrollIgnoreUntil = 0;') &&
+      invSrc.includes("if (this.pane !== 'category' || this.categoryHostEl.style.display === 'none') return;") &&
+      invSrc.includes('if (this.categoryGrid.clientHeight === 0) return;'),
   );
   check(
     '分类列表超过一屏时常驻自绘滚动条',

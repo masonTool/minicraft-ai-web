@@ -550,6 +550,11 @@ export class InventoryScreen {
   /** 常驻的自绘滚动条（iOS 的 overlay 滚动条不会一直显示） */
   private categoryScrollTrack!: HTMLDivElement;
   private categoryScrollThumb!: HTMLDivElement;
+  /**
+   * 程序化恢复 scrollTop（重建列表/切回分类）时，浏览器也会派发 scroll。
+   * 在这小段时间内不要把这个"归零/恢复"过程写回记忆表，否则真实位置会被 0 覆盖。
+   */
+  private categoryScrollIgnoreUntil = 0;
   /** 左栏分类底部那行统计（批次 185：当前分类我有几种 / 共几种） */
   private categoryInfo!: HTMLDivElement;
   private categoryPrev!: HTMLButtonElement;
@@ -1636,8 +1641,15 @@ export class InventoryScreen {
     this.categoryGrid.addEventListener(
       'scroll',
       () => {
-        this.categoryScrollByTab.set(this.categoryTab, this.categoryGrid.scrollTop);
         this.syncCategoryScrollbar();
+        // 分类栏被隐藏（display:none）时，浏览器常把 scrollTop 打回 0 并派发 scroll；
+        // 那不是玩家滚到顶部，不能覆盖记忆值。
+        if (performance.now() < this.categoryScrollIgnoreUntil) return;
+        if (this.pane !== 'category' || this.categoryHostEl.style.display === 'none') return;
+        // 整个背包面板藏起来时，categoryHost 自己的 display 仍是 flex，
+        // 但 clientHeight 已经是 0——这时 scrollTop 归零也不是玩家操作。
+        if (this.categoryGrid.clientHeight === 0) return;
+        this.categoryScrollByTab.set(this.categoryTab, this.categoryGrid.scrollTop);
       },
       { passive: true },
     );
@@ -1908,9 +1920,12 @@ export class InventoryScreen {
     }
 
     for (const child of Array.from(this.categoryGrid.children)) this.tooltipStacks.delete(child as HTMLElement);
+    // replaceChildren 会把 scrollTop 打回 0，并可能异步派发一次 scroll；
+    // 先设忽略窗口，再把位置恢复到记忆值。
+    const targetScroll = this.categoryScrollByTab.get(this.categoryTab) ?? 0;
+    this.categoryScrollIgnoreUntil = performance.now() + 200;
     this.categoryGrid.replaceChildren(fragment);
-    // replaceChildren 会把 scrollTop 打回 0：重建后要回到这个分类上次的位置
-    this.categoryGrid.scrollTop = this.categoryScrollByTab.get(this.categoryTab) ?? 0;
+    this.categoryGrid.scrollTop = targetScroll;
     this.syncCategoryScrollbar();
     // 重建之后把"手上那叠"的落点按 id 找回来并补上选中态（刷新尾部不会再给分类栏补）
     if (this.held) {
@@ -2372,8 +2387,16 @@ export class InventoryScreen {
     // 批次 272（用户）：这里**不再写 `pocketTab`**。
     // 左栏换分类是左栏自己的事，右栏停在「盔甲」就继续停在盔甲；
     // 工作台的右栏由 `applyInventoryChrome` 强制回合成，不靠这一行。
-    // 先存下当前分类的滚动位置/搜索词，再切到目标分类
-    this.categoryScrollByTab.set(this.categoryTab, this.categoryGrid.scrollTop);
+    // 先存下当前分类的滚动位置/搜索词，再切到目标分类。
+    // ⚠️ 分类栏已经隐藏时，scrollTop 往往已经被浏览器打回 0：
+    // 这时读到的不是玩家离开时的位置，不能覆盖记忆值。
+    if (
+      this.pane === 'category' &&
+      this.categoryHostEl.style.display !== 'none' &&
+      this.categoryGrid.clientHeight > 0
+    ) {
+      this.categoryScrollByTab.set(this.categoryTab, this.categoryGrid.scrollTop);
+    }
     this.categorySearchByTab.set(this.categoryTab, this.categorySearch.value);
     const same = this.categoryTab === tab;
     this.categoryTab = tab;
@@ -2390,10 +2413,12 @@ export class InventoryScreen {
       this.categorySearch.value = '';
       this.categoryQuery = '';
     }
+    // 恢复该分类上次离开时的滚动位置，而不是一律回顶。
+    const targetScroll = this.categoryScrollByTab.get(tab) ?? 0;
+    this.categoryScrollIgnoreUntil = performance.now() + 200;
     this.applyInventoryChrome();
     // 必须放在 applyInventoryChrome 之后——里面会 renderCategoryGrid() 重建格子。
-    // 恢复该分类上次离开时的滚动位置，而不是一律回顶。
-    this.categoryGrid.scrollTop = this.categoryScrollByTab.get(tab) ?? 0;
+    this.categoryGrid.scrollTop = targetScroll;
     // 刚显示出来的栏可能还没完成布局，下一帧再量一次
     requestAnimationFrame(() => this.syncCategoryScrollbar());
     if (!same) this.showMessage(`分类：${RECIPE_BOOK_TAB_LABELS[tab]}`);
