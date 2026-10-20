@@ -222,6 +222,8 @@ async function boot(): Promise<void> {
         ui.syncInventory(inventory.serialize(), selectedSlot);
         scheduleSave?.();
       },
+      onRequestText: (current) =>
+        platform.keyboard.show({ defaultValue: current, maxLength: 24 }),
       onSettingsChange: (settings) => {
         camera.fov = settings.fov;
         camera.updateProjectionMatrix();
@@ -532,7 +534,12 @@ async function boot(): Promise<void> {
   });
 
   platform.input.onPointer('move', (event) => {
-    if (event.pointerId === uiPointerId) return;
+    if (event.pointerId === uiPointerId) {
+      if (ui.isSettingsOpen()) {
+        ui.handleSettingsScrollMove(event.clientX, event.clientY, width, height);
+      }
+      return;
+    }
     if (event.pointerId === movePointerId) {
       if (Math.hypot(event.clientX - moveOriginX, event.clientY - moveOriginY) > 8) {
         moveMoved = true;
@@ -562,6 +569,7 @@ async function boot(): Promise<void> {
 
   const releasePointer = (event: { pointerId: number; clientX: number; clientY: number }): void => {
     if (event.pointerId === uiPointerId) {
+      if (ui.isSettingsOpen()) ui.handleSettingsScrollUp();
       uiPointerId = null;
       return;
     }

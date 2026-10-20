@@ -16,8 +16,8 @@
 | 项 | 值 |
 | --- | --- |
 | 当前阶段 | M1 平台层收尾 → M2 UI |
-| 当前任务 | **WX-022：滚动列表 + 输入框**（主菜单/设置/Toast/加载/41 格背包已接） |
-| 刚完成 | WX-024 主菜单壳：PLAY/SETTINGS/NEW WORLD 占位；WX-022 部分：设置页、Toast/加载、41 格背包；WX-021 完成；WX-020B 完成；WX-020A 真实世界；WX-018 共享 Worker；WX-011~017、01B/01C |
+| 当前任务 | **WX-024：世界列表 + 新建世界**（主菜单壳已接） |
+| 刚完成 | WX-022 完成：页签/滑块/开关/Toast/加载/41 格背包/CONTROLS 搜索+滚动；WX-024 主菜单壳；WX-021 完成；WX-020B 完成；WX-020A 真实世界；WX-018 共享 Worker；WX-011~017、01B/01C |
 | 正式壳 | `minigame/`（压力场景，801 draw call 基线） |
 | 真实世界 | `minigame-world/`（WX-020A，当前可看完整地形） |
 | 平台基座 | `vendor/minigame-adapter/`（870d66f + 本分支补丁） |
@@ -423,7 +423,7 @@ flex/absolute/grid 子集。
 | WX-020B | 抽 `UiPort` + App 条件启动 | 独立 `src/minigame/main.ts`（未改 Web `main.ts`，避免 14k 行 UI 进包）、`MiniGameUi`、快捷栏、9×3 背包、真实 41 格 Inventory（放置消耗/挖掘拾取/存档） | WX-020A | 3 | [x] |
 | WX-021 | UI 工具包 A | 9-slice 面板/按钮三态/文字/快捷栏/背包/暂停面板完成；滚动/输入/拖拽归 WX-022/023 | WX-020B | 3 | [x] |
 | WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020B | 2 | [ ] |
-| WX-022 | UI 工具包 B | 页签/滑块/开关已完成并接设置页；滚动列表/输入框待做 | WX-021 | 2 | [~] |
+| WX-022 | UI 工具包 B | 页签/滑块/开关 + CONTROLS 搜索输入 + 拖动滚动列表完成 | WX-021 | 2 | [x] |
 | WX-023 | UI 工具包 C | Toast/进度条/41 格槽位/数量/交换已完成；拖拽/长按 Tooltip 待做 | WX-021 | 3 | [~] |
 | WX-024 | 主菜单 | 启动主菜单壳完成（PLAY/SETTINGS/NEW WORLD 占位）；世界列表/新建世界/删除确认待做 | WX-022 | 2 | [~] |
 | WX-025 | 加载/错误/暂停/设置 | 暂停 + 设置页 + 世界生成进度已完成；错误页/启动失败页待做 | WX-022 | 3 | [~] |
@@ -589,6 +589,7 @@ npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真�
 | 2026-10-20 | WX-023/028 | 41 格背包 UI：9×5、数量、快捷栏 9 格、点快捷栏选中/点物品交换；helper 截图验证 | `ea1e80f` |
 | 2026-10-20 | WX-024 开始 | 启动主菜单壳：BEDROCK / PLAY / SETTINGS / NEW WORLD 占位；世界后台生成，菜单独占渲染；PLAY 关闭、SETTINGS 返回菜单 | `5b535e7` |
 | 2026-10-20 | WX-026 开始 | HUD 状态层：准星、生命/饥饿图标、HP/FOOD、护甲/氧气、经验条；helper 截图验证 | `c9ca496` |
+| 2026-10-20 | WX-022 收口 | CONTROLS 页签：搜索框接 wx.showKeyboard、拖动滚动列表（4 行可见/滚动条）、操作说明；WORLD-INPUT down/move/up 转发；helper 截图验证 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 

@@ -30,6 +30,8 @@ export interface MiniGameUi {
   openSettings(): void;
   isSettingsOpen(): boolean;
   handleSettingsTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
+  handleSettingsScrollMove(clientX: number, clientY: number, screenWidth: number, screenHeight: number): void;
+  handleSettingsScrollUp(): void;
   isMainMenuOpen(): boolean;
   handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
   setStats(stats: PlayerStats): void;
@@ -42,6 +44,7 @@ export interface CanvasUiCallbacks {
   onSelectSlot?: (index: number) => void;
   onSwapSlot?: (index: number) => void;
   onSettingsChange?: (values: SettingsValues) => void;
+  onRequestText?: (current: string) => Promise<string | null>;
 }
 
 export function createCanvasUi(
@@ -63,6 +66,7 @@ export function createCanvasUi(
     screenHeight,
     { fov: 72, renderDistance: 3, sound: true, invertLook: false },
     (values) => callbacks.onSettingsChange?.(values),
+    callbacks.onRequestText,
   );
   const overlay = createOverlay(screenWidth, screenHeight);
   const mainMenu = createMainMenu(screenWidth, screenHeight);
@@ -130,6 +134,12 @@ export function createCanvasUi(
         }
       }
       return true;
+    },
+    handleSettingsScrollMove(clientX, clientY, sw, sh): void {
+      if (settings.isOpen()) settings.handleScrollMove(clientX, clientY, sw, sh);
+    },
+    handleSettingsScrollUp(): void {
+      if (settings.isOpen()) settings.handleScrollUp();
     },
     isMainMenuOpen(): boolean {
       return mainMenu.isOpen();
