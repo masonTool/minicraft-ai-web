@@ -116,5 +116,57 @@ console.log('\n[默认世界不受影响]');
   equal('默认世界的高空没有方块', sky.solid, 0);
 }
 
+
+console.log('\n[洞穴世界跳过地物与结构（批次 485）]');
+{
+  /** 数某个方块 id 在一个区块里出现了几次（扫全高度） */
+  const countBlock = (cx: number, cz: number, worldType: WorldType, id: number): number => {
+    const blocks = generateChunkBlocks(cx, cz, SEED, undefined, worldType);
+    takeGeneratedStates();
+    let count = 0;
+    for (let y = -64; y < 200; y++) {
+      for (let z = 0; z < 16; z++) {
+        for (let x = 0; x < 16; x++) {
+          if (blocks[Chunk.index(x, y, z)] === id) count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  // 抽样几个区块：洞穴世界里不该出现树干与树叶（它们只能来自地物）
+  const caveLogs = [3, 4, 5].reduce((sum, cx) => sum + countBlock(cx, 5, 'caves', Block.OAK_LOG), 0);
+  const caveLeaves = [3, 4, 5].reduce((sum, cx) => sum + countBlock(cx, 5, 'caves', Block.OAK_LEAVES), 0);
+  equal('洞穴世界里没有树干（地物被跳过）', caveLogs, 0);
+  equal('洞穴世界里没有树叶', caveLeaves, 0);
+
+  // 浮空岛与默认世界**不该**被这条影响：它们仍然有地表植被。
+  // 用 `FeatureStats.trees`（地物计数）而不是"数原木"：树可能长在别的区块，
+  // 数方块会受"这片刚好没树"影响（第一版就是这么红的）
+  const treesOf = (cx: number, cz: number, worldType: WorldType): number => {
+    const stats = { trees: 0, plants: 0, specials: 0 };
+    generateChunkBlocks(cx, cz, SEED, undefined, worldType, undefined, stats);
+    takeGeneratedStates();
+    return stats.trees;
+  };
+  let foundPlainTrees = 0;
+  outer: for (let cz = 0; cz < 8; cz++) {
+    for (let cx = 0; cx < 8; cx++) {
+      const trees = treesOf(cx, cz, 'default');
+      if (trees > 0) {
+        foundPlainTrees = trees;
+        break outer;
+      }
+    }
+  }
+  check('默认世界有地表植被（负对照）', foundPlainTrees > 0, `${foundPlainTrees} 棵`);
+  // 浮空岛只改地形、不碰地物：同一个区块的树数应当与默认世界一致
+  equal(
+    '浮空岛世界的地物与默认世界一致（只跳过 caves）',
+    treesOf(0, 0, 'floating_islands'),
+    treesOf(0, 0, 'default'),
+  );
+}
+
 console.log(`\n世界类型测试：${passed} 通过 / ${failed} 失败`);
 if (failed > 0) process.exit(1);
