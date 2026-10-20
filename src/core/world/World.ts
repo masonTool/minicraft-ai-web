@@ -17,7 +17,7 @@ import { heightToY, type HeightmapKind } from './Heightmap.ts';
 import { Dimension, hasSkyLight, type DimensionId } from '../gen/Dimension.ts';
 import type { WorldType } from '../gen/WorldType.ts';
 import { LightEngine, type LightPushStats } from '../light/LightEngine.ts';
-import { blockDef, isClimbableBlock, isCobwebBlock, isHoneyBlock } from '../registry/blocks.ts';
+import { Block, blockDef, isClimbableBlock, isCobwebBlock, isHoneyBlock } from '../registry/blocks.ts';
 import { lightNeedsUpdate } from '../light/LightSignature.ts';
 import { collisionBoxes } from '../registry/blockShapes.ts';
 import type { VoxelCollision } from '../physics/AABB.ts';
@@ -332,6 +332,14 @@ export class World {
   }
 
   /** 这一格是不是蜂蜜块（批次 450）：物理层的"跳不起来 / 贴着下滑限速"用 */
+  /**
+   * 细雪（批次 548）：物理层用它做"陷进去减速 + 限下落 + 免疫摔落"。
+   * 只认细雪这一种方块，不需要再进 `blocks.ts` 开一个通用能力表。
+   */
+  isPowderSnow(worldX: number, worldY: number, worldZ: number): boolean {
+    return this.getBlock(worldX, worldY, worldZ) === Block.POWDER_SNOW;
+  }
+
   isHoney(worldX: number, worldY: number, worldZ: number): boolean {
     if (worldY < -64 || worldY >= 320) return false;
     return isHoneyBlock(this.getBlock(worldX, worldY, worldZ));

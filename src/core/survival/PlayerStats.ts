@@ -41,6 +41,10 @@ const TICK_SECONDS = 1 / 20;
 export const FIRE_IGNITE_SECONDS = 8;
 export const FIRE_DAMAGE_INTERVAL_TICKS = 20;
 
+/** 细雪（批次 548）：连续陷在雪里 7 秒后开始冰冻，之后每 2 秒 1 点伤害 */
+export const FREEZE_START_SECONDS = 7;
+export const FREEZE_DAMAGE_INTERVAL_TICKS = 40;
+
 export type DamageCause =
   | 'poison'
   /**
@@ -67,6 +71,11 @@ export type DamageCause =
    * 所以它同时是"第一个进了 `ARMOR_BYPASS_CAUSES` 的外部伤害"。
    */
   | 'lightning'
+  /**
+   * 冰冻（批次 548）：细雪里持续 7 秒后开始掉血。
+   * 原版冰冻**无视护甲**，所以同时加进 `armor.ts` 的 `ARMOR_BYPASS_CAUSES`。
+   */
+  | 'freeze'
   | 'generic';
 
 /** 每 tick 从主循环传入的环境快照 */
@@ -113,6 +122,10 @@ export interface SurvivalEnvironment {
   featherFalling?: number;
   /** 水下呼吸附魔等级（批次 243，0~3）：每级把氧气消耗速度降到 1/(1+0.5·等级) */
   respiration?: number;
+  /** 身体是否陷在细雪里（批次 548） */
+  inPowderSnow?: boolean;
+  /** 是否穿着皮革靴子（批次 548：免疫冰冻） */
+  hasLeatherBoots?: boolean;
 }
 
 /**
@@ -269,6 +282,10 @@ export class PlayerStats {
    */
   fireSeconds = 0;
 
+  /** 细雪里的连续时间与冰冻伤害计时（批次 548） */
+  private freezeSeconds = 0;
+  private freezeTickTimer = 0;
+
   /** 最近一次受伤（HUD 抖动 / 调试面板用） */
   lastDamage: DamageResult | null = null;
   /** 累计受到的伤害，用于测试与统计 */
@@ -386,6 +403,8 @@ export class PlayerStats {
       this.air = MAX_AIR;
       this.fireSeconds = 0;
       this.fireTickTimer = 0;
+      this.freezeSeconds = 0;
+      this.freezeTickTimer = 0;
       // 虚空是创造模式**唯一**还会受伤的自然伤害（原版同口径）：
       // 掉出世界必须有反馈，否则玩家会在虚空里无限下坠，只能靠飞回来
       if (!env.spectator && env.y <= VOID_DAMAGE_Y) {
@@ -399,6 +418,7 @@ export class PlayerStats {
     this.tickAir(env);
     this.tickDamageSources(env);
     this.tickFire(env);
+    this.tickFreeze(env);
     this.tickHunger(env);
   }
 
@@ -431,6 +451,30 @@ export class PlayerStats {
       this.lastDamageAmount = 0;
       this.damage(1, 'fire');
     }
+  }
+
+  /**
+   * 细雪冰冻（批次 548）。
+   *
+   * 原版：连续陷在细雪里 7 秒开始"冻结"，之后每 2 秒 1 点伤害，**无视护甲**；
+   * 皮革靴子让玩家不陷入、也就不冻结。这里用同一个计时器：
+   * 离开细雪或穿靴子就把计时清零（简化：原版是缓慢回退，不是瞬间清零）。
+   */
+  private tickFreeze(env: SurvivalEnvironment): void {
+    if (!env.inPowderSnow || env.hasLeatherBoots) {
+      this.freezeSeconds = 0;
+      this.freezeTickTimer = 0;
+      return;
+    }
+    this.freezeSeconds += TICK_SECONDS;
+    if (this.freezeSeconds < FREEZE_START_SECONDS) return;
+    this.freezeTickTimer++;
+    if (this.freezeTickTimer < FREEZE_DAMAGE_INTERVAL_TICKS) return;
+    this.freezeTickTimer = 0;
+    // 冰冻伤害无视无敌帧（原版每 2 秒稳定 1 点，不被其它伤害的 0.5 秒无敌吃掉）
+    this.hurtResistantTime = 0;
+    this.lastDamageAmount = 0;
+    this.damage(1, 'freeze');
   }
 
   /** 氧气：水下缓慢耗尽，耗尽后周期性溺水伤害 */
@@ -580,5 +624,7 @@ export class PlayerStats {
     this.damageLog = [];
     this.fireSeconds = 0;
     this.fireTickTimer = 0;
+    this.freezeSeconds = 0;
+    this.freezeTickTimer = 0;
   }
 }

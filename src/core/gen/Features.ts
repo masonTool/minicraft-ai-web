@@ -1695,6 +1695,12 @@ function decorateLocal(w: FeatureWriter, world: FeatureWorld, seed: number, stat
         const y = w.snowSurfaceAbove(wx, wz, world.surfaceY(wx, wz) + 1);
         if (y < 0) continue;
         if (!isPlantableAt(w.get(wx, y, wz))) continue;
+        // 批次 548：雪原里偶发一小片**细雪**（约 1/96 列）——这是生存里细雪桶
+        // 唯一的自然来源；原版细雪也生成在积雪群系的地表。
+        if (hashAt(wx, wz, seed ^ 0x9e37) % 96 === 0) {
+          if (w.put(wx, y, wz, Block.POWDER_SNOW) && stats) stats.snow = (stats.snow ?? 0) + 1;
+          continue;
+        }
         // 批次 208：**统一 1 层**（= level 0，1/8 格）。
         // 原来按列哈希给 1~3 层，雪原看起来坑坑洼洼、走路还一深一浅；
         // 原版自然雪层也是整片同高（只有玩家手动堆才会变厚）。

@@ -126,6 +126,7 @@ export const TILE_ORDER = [
   'sandstone',
   'sandstone_top',
   'snow',
+  'powder_snow',
   'ice',
   'packed_ice',
   'obsidian',
@@ -1162,6 +1163,7 @@ export const TILE_ORDER = [
   'cauldron_lava',
   'item_water_bucket',
   'item_lava_bucket',
+  'item_powder_snow_bucket',
   // 驯养系的四枚刷怪蛋（批次 242）。⚠️ 按"新贴图只追加在末尾"的规矩放这里，
   // 不能插到上面那组蛋中间——图集 UV 按下标算，往中间插会让已有贴图整体错位。
   'spawn_egg_wolf',

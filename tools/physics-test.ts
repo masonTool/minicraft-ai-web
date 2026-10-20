@@ -753,5 +753,31 @@ console.log('\n[下落方块（批次 543）]');
   check('主循环推进下落方块', mainSrc.includes('fallingBlocks.tick(this.world, dt)'));
 }
 
+console.log('\n[细雪：限下落 + 减速 + 免疫摔落（批次 548）]');
+{
+  const powderWorld: PhysicsWorld = {
+    ...makeWorld(),
+    isPowderSnow: (_x, y) => y >= 64 && y < 80,
+  };
+  const inSnow = new PlayerPhysics();
+  inSnow.x = 0.5;
+  inSnow.y = 80;
+  inSnow.z = 0.5;
+  for (let i = 0; i < 60; i++) inSnow.update(powderWorld, input({ forward: 1 }), 0, DT, false);
+
+  check('陷在细雪里', inSnow.inPowderSnow);
+  check('下落速度被限制在 -1.6 以内', inSnow.vy >= -1.61, `${inSnow.vy}`);
+  check('摔落高度被清零（掉进细雪不摔伤）', inSnow.fallStartY === null);
+  check('水平速度低于正常走路', Math.abs(inSnow.vx) < WALK_SPEED, `${inSnow.vx}`);
+
+  const normal = new PlayerPhysics();
+  normal.x = 0.5;
+  normal.y = 80;
+  normal.z = 0.5;
+  // 只跑 10 帧：再久就落到地面、vy 被清零，测不到"正在加速"
+  for (let i = 0; i < 10; i++) normal.update(makeWorld(), input(), 0, DT, false);
+  check('没有细雪时会正常加速下落（负对照）', normal.vy < -1.6, `${normal.vy}`);
+}
+
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);
 process.exit(failed === 0 ? 0 : 1);

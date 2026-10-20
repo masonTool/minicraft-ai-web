@@ -129,6 +129,14 @@ export interface PhysicsWorld extends CollisionWorld {
    */
   isHoney?(x: number, y: number, z: number): boolean;
   /**
+   * 这一格是不是细雪（批次 548）。
+   *
+   * 细雪没有碰撞箱（`solid:false`），所以物理层不会"站上去"，只会穿进去；
+   * 进去之后靠这个判据做**减速 + 限下落速度 + 清摔落高度**。
+   * 可选成员：老 stub 世界不给就是"没有细雪"。
+   */
+  isPowderSnow?(x: number, y: number, z: number): boolean;
+  /**
    * 这一格是不是"贴上去会掉血"的方块（目前只有仙人掌，批次 222）。
    *
    * 自动跳跃用它避让：默认开着的自动跳跃会把 1 格高的障碍当台阶跳上去，
@@ -162,6 +170,8 @@ export class PlayerPhysics {
 
   onGround = false;
   inWater = false;
+  /** 这一帧身体是否陷在细雪里（批次 548：减速、限下落、免疫摔落） */
+  inPowderSnow = false;
   /**
    * 这一帧是不是刚触发了**自动跳跃**（批次 222，给诊断日志用）。
    *
@@ -275,6 +285,12 @@ export class PlayerPhysics {
     }
 
     this.inWater = world.isLiquid(Math.floor(this.x), Math.floor(this.y + 0.4), Math.floor(this.z));
+    // 细雪（批次 548）：脚或身体中段任意一处是它，就算"陷在雪里"。
+    // 采两个点是照顾"只有一个方块高的雪坑、脚在雪里但头已经露出来"的情况。
+    this.inPowderSnow =
+      !flying &&
+      (world.isPowderSnow?.(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)) === true ||
+        world.isPowderSnow?.(Math.floor(this.x), Math.floor(this.y + 0.9), Math.floor(this.z)) === true);
 
     // 姿态（F9，批次 404 / 430）：三层判定，顺序不能换。
     //  ① 头顶放得下 1.8 吗？放不下 → 站起来会卡进天花板，必须蹲着；
@@ -320,7 +336,8 @@ export class PlayerPhysics {
     // 在没有"挖掉网"这条交互之前会显得像卡死。×0.25 已经能明显感觉到"被粘住"。
     const inCobweb =
       !flying && world.isCobweb?.(Math.floor(this.x), Math.floor(this.y + 0.1), Math.floor(this.z)) === true;
-    const speed = baseSpeed * speedMultiplier * (inCobweb ? COBWEB_SPEED_FACTOR : 1);
+    const speed =
+      baseSpeed * speedMultiplier * (inCobweb ? COBWEB_SPEED_FACTOR : 1) * (this.inPowderSnow ? 0.65 : 1);
 
     /**
      * 蜂蜜块（批次 450）：脚下是它 → **跳不起来**；贴着它的侧面 → 下滑被限速。
@@ -430,6 +447,12 @@ export class PlayerPhysics {
       // 蜂蜜块（批次 450）：贴着侧面下滑被限速——所以"从蜜块墙上淌下来"不会摔伤；
       // 但**落在**蜜块上仍然要减伤，那一半在 `PlayerStats.honeyFallDistance`
       if ((onHoney || besideHoney) && this.vy < -HONEY_SLIDE_SPEED) this.vy = -HONEY_SLIDE_SPEED;
+      // 细雪（批次 548）：下落被"接住"，限速到 -1.6；并且把摔落高度清零——
+      // 原版从高处掉进细雪不掉血，这一条比"减速"更容易被玩家感知。
+      if (this.inPowderSnow) {
+        if (this.vy < -1.6) this.vy = -1.6;
+        this.fallStartY = null;
+      }
     }
 
     // 潜行防掉落（F3 尾巴）：贴着边缘时不许把自己走出去。

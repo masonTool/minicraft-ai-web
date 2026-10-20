@@ -686,6 +686,12 @@ export const PAINTERS: Record<string, Painter> = {
 
   // ---- 寒冷群系
   snow: layered(242, 4, 4, [1.0, 1.0, 1.0]),
+  // 细雪（批次 548）：比雪更亮、带轻微起伏，靠近看能区分"雪块"与"会陷进去的雪"
+  powder_snow: (x, y, rng) => {
+    const drift = Math.sin(x * 0.8 + y * 0.35) * 5 + Math.cos(y * 0.9) * 3;
+    const v = 246 + drift + (rng() * 6 - 3);
+    return [clamp255(v), clamp255(v), clamp255(v + 4), 255];
+  },
   ice: (x, y, rng) => {
     const v = 190 + rng() * 40 + Math.sin((x + y) * 0.8) * 10;
     return [clamp255(v * 0.72), clamp255(v * 0.9), clamp255(v), 190];
@@ -1759,6 +1765,8 @@ PAINTERS.item_milk_bucket = bucketPainter([246, 246, 240]);
 // 水桶 / 岩浆桶（批次 176，G13）：同形状、只换液体颜色
 PAINTERS.item_water_bucket = bucketPainter([70, 120, 220]);
 PAINTERS.item_lava_bucket = bucketPainter([226, 108, 28]);
+// 细雪桶（批次 548）：同形状，白色带一点冷蓝
+PAINTERS.item_powder_snow_bucket = bucketPainter([244, 249, 255]);
 
 // ---- 炼药锅（批次 176，G13）：铁皮桶身 / 桶底 / 空锅口（看得到锅底）/ 水面
 /**

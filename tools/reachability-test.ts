@@ -110,6 +110,7 @@ const MECHANISM_SOURCES: readonly { id: number; why: string }[] = [
   // 桶装水 / 岩浆桶（批次 176，G13）：原版也没有配方——它们是"拿桶去装"装出来的
   { id: Item.WATER_BUCKET, why: '空桶对着**水源**右键装满（流水不行）' },
   { id: Item.LAVA_BUCKET, why: '空桶对着岩浆右键装满' },
+  { id: Item.POWDER_SNOW_BUCKET, why: '空桶对着自然生成的**细雪**右键装满（批次 548）' },
 ];
 
 const reach = new Map<number, string>();
@@ -359,7 +360,7 @@ check('白名单没有重复 id', exemptIds.size === EXEMPT.length, `${EXEMPT.le
 // → 批次 169（锁链甲改由盔甲匠卖）**4 条**。
 // 剩下这 4 条都不是"某条链断在中间"，而是**内容本身还没做**（黑/灰染料要鱿鱼与凋灵、
 // 兔子脚要兔子、旧 id 只留存档兼容）
-equal('缺口总数（批次 196 之后：3 条 —— 三条"界面里才拿得到/旧 id"的：成书 / 已填好的地图 / 旧红石 id）', unreachable.length, 3);
+equal('缺口总数（批次 548 之后：3 条 —— 成书 / 已填好的地图 / 旧红石 id）', unreachable.length, 3);
 check('每条白名单都写了理由（≥ 8 字）', EXEMPT.every((entry) => entry.reason.length >= 8));
 check('白名单只收非方块物品（方块侧的判据还没做，见文件头）', EXEMPT.every((entry) => entry.id >= BLOCK_ITEM_ID_LIMIT));
 check('不拿"反正创造模式能拿"当理由', EXEMPT.every((entry) => !entry.reason.includes('创造')));

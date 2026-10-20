@@ -376,5 +376,24 @@ console.log('\n[蜂蜜块摔落减伤（批次 450）]');
   check('蜜块 + 摔落保护 IV：10 格只剩 0 点', fallDamageFor(honeyFallDistance(10), 4) === 0);
 }
 
+console.log('\n[细雪冰冻（批次 548）]');
+{
+  const frozen = new PlayerStats();
+  runTicks(frozen, 140, env({ inPowderSnow: true }));
+  check('前 7 秒不扣血', frozen.health === MAX_HEALTH, `${frozen.health}`);
+  runTicks(frozen, 45, env({ inPowderSnow: true }));
+  check('7 秒后开始每 2 秒扣 1 点', frozen.health === MAX_HEALTH - 1, `${frozen.health}`);
+  check('伤害原因记为 freeze', frozen.lastDamage?.cause === 'freeze');
+
+  const boots = new PlayerStats();
+  runTicks(boots, 300, env({ inPowderSnow: true, hasLeatherBoots: true }));
+  check('皮革靴子免疫冰冻', boots.health === MAX_HEALTH, `${boots.health}`);
+
+  const escaped = new PlayerStats();
+  runTicks(escaped, 140, env({ inPowderSnow: true }));
+  runTicks(escaped, 100, env());
+  check('离开细雪后计时清零（不会一回去就扣血）', escaped.health === MAX_HEALTH, `${escaped.health}`);
+}
+
 console.log(`\n生存测试：${passed} 通过 / ${failed} 失败\n`);
 if (failed > 0) process.exit(1);

@@ -316,9 +316,10 @@ console.log('\n[战斗与掉落]');
   let totalDrops = 0;
   for (let i = 0; i < 200; i++) {
     const victim = new Mob(mobTypeById('zombie')!, 0.5, 65.5, 0.5);
-    const before = drops.length;
+    // 只数腐肉：J27 之后僵尸还可能掉个体装备，不能再用 `drops.length` 一概而论
+    const before = drops.filter((drop) => drop.itemId === Item.ROTTEN_FLESH).length;
     victim.hurt(999, 0, 0, ctx);
-    totalDrops += drops.length - before;
+    totalDrops += drops.filter((drop) => drop.itemId === Item.ROTTEN_FLESH).length - before;
   }
   // 掉落数量是 0~2 的随机，所以实际"有掉落"的概率是 0.8 × 2/3 ≈ 0.53
   check('僵尸掉落腐肉（200 次击杀约 106 次有掉落）', totalDrops > 80 && totalDrops < 140, `实际 ${totalDrops}`);

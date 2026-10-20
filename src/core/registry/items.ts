@@ -249,6 +249,11 @@ export const Item = {
    */
   NAUTILUS_SHELL: 1561,
   /**
+   * 细雪桶（批次 548）：放置/回收细雪方块。细雪本身没有物品形态，
+   * 生存里唯一的来源就是这只桶（与原版一致）。
+   */
+  POWDER_SNOW_BUCKET: 1562,
+  /**
    * 幻翼膜（批次 126）：幻翼掉的那一片。
    *
    * 它的用途与原版一致：**缓降药水**（`Brewing` 的 `VARIANT_INGREDIENTS`）
@@ -554,6 +559,8 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // 潮涌核心的两件材料（批次 547）：海洋之心与鹦鹉螺壳
   { id: Item.HEART_OF_THE_SEA, name: 'minecraft:heart_of_the_sea', tile: 'item_heart_of_the_sea' },
   { id: Item.NAUTILUS_SHELL, name: 'minecraft:nautilus_shell', tile: 'item_nautilus_shell' },
+  // 细雪桶（批次 548）：与其它桶一样不可堆叠
+  { id: Item.POWDER_SNOW_BUCKET, name: 'minecraft:powder_snow_bucket', tile: 'item_powder_snow_bucket', maxStack: 1 },
   { id: Item.ELYTRA, name: 'minecraft:elytra', tile: 'item_elytra', maxStack: 1, durability: 432 },
   // 幻翼膜（批次 126）：一样是材料，可以堆叠
   { id: Item.PHANTOM_MEMBRANE, name: 'minecraft:phantom_membrane', tile: 'item_phantom_membrane' },

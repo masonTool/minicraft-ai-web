@@ -1298,6 +1298,27 @@ const CONDUIT_SPECS: readonly BlockSpec[] = [
 ];
 
 /**
+ * 细雪（批次 548）：1.17 的整格"会陷进去的雪"。
+ *
+ * **不是固体**：原版里它没有碰撞箱，实体/玩家会陷进去。这里也设 `solid:false`，
+ * 让物理层直接穿过去、由 `PlayerPhysics.inPowderSnow` 做"减速 + 免疫摔落"；
+ * 方块本身仍是满格 cube（视觉上是一整块雪）。
+ * 没有物品形态：生存只能靠**细雪桶**放置/回收（与原版一致）。
+ */
+export const POWDER_SNOW_ID = 723;
+const POWDER_SNOW_SPECS: readonly BlockSpec[] = [
+  {
+    id: POWDER_SNOW_ID,
+    name: 'minecraft:powder_snow',
+    tiles: ['powder_snow', 'powder_snow', 'powder_snow'],
+    solid: false,
+    opaque: false,
+    lightOpacity: 0,
+    itemless: true,
+  },
+];
+
+/**
  * 下界传送门方块（K8）。
  *
  * 形状上它就是一块"整格"，但**没有任何碰撞**（可以走进去）、**不遮挡**邻居、
@@ -3591,6 +3612,7 @@ const SPECS: readonly BlockSpec[] = [
   ...SOUL_LIGHT_SPECS,
   ...SOUL_FIRE_SPECS,
   ...CONDUIT_SPECS,
+  ...POWDER_SNOW_SPECS,
   ...CANDLE_SPECS,
   ...GLAZED_TERRACOTTA_SPECS,
 
@@ -4027,6 +4049,7 @@ export const Block = {
   FIRE: 291,
   SOUL_FIRE: SOUL_FIRE_ID,
   CONDUIT: CONDUIT_ID,
+  POWDER_SNOW: POWDER_SNOW_ID,
   /** 下界传送门（K8）：黑曜石框点燃后填满框内的那 2×3 格 */
   NETHER_PORTAL: 292,
   /** 下界合金（K8 尾巴）：储物方块与锻造台 */
@@ -4622,6 +4645,8 @@ HARDNESS.set(Block.DIAMOND_BLOCK, 5);
 HARDNESS.set(Block.EMERALD_BLOCK, 5);
 HARDNESS.set(Block.BEACON, 3);
 HARDNESS.set(Block.CONDUIT, 3);
+// 细雪原版 0.25 秒（铲子更快，但不是必需工具）
+HARDNESS.set(Block.POWDER_SNOW, 0.25);
 // 粘液块（批次 120）：原版硬度 **0**（徒手一拍就碎，只是碎得"黏"）
 HARDNESS.set(Block.SLIME_BLOCK, 0);
 HARDNESS.set(Block.BONE_BLOCK, 2);

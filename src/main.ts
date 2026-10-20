@@ -451,6 +451,7 @@ import {
   ARMOR_SLOT_BASE,
   ARMOR_SLOT_COUNT,
   armorInfoById,
+  armorItemId,
   armorTile,
   createArmorWearer,
 } from './core/registry/armor.ts';
@@ -11211,6 +11212,16 @@ class App {
     if (this.heldItemId !== Item.BUCKET || !this.hit) return false;
     const { x, y, z } = this.hit;
     const blockId = this.world.getBlock(x, y, z);
+    // 细雪桶（批次 548）：空桶对着细雪右击 → 收走方块、换细雪桶。
+    // 细雪不是流体，不能走 `isBucketSource` 那条液体判定。
+    if (blockId === Block.POWDER_SNOW) {
+      if (!this.world.setBlockAndUpdate(x, y, z, Block.AIR, 0)) return false;
+      this.exchangeHeld(Item.BUCKET, Item.POWDER_SNOW_BUCKET);
+      this.audio.play('place_sand', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      this.particles.spawnSplash(x + 0.5, y + 0.8, z + 0.5, 0xf2f8ff, 6);
+      this.hand.swing();
+      return true;
+    }
     if (!isBucketSource(blockId, this.world.getBlockState(x, y, z))) return false;
     const fluid = bucketFluidAt(blockId);
     if (!fluid) return false;
@@ -11230,6 +11241,25 @@ class App {
    */
   private pourBucket(): boolean {
     const held = this.heldItemId;
+
+    // 细雪桶（批次 548）：与倒水同一个"命中面外侧"落点，但放下的是细雪方块。
+    if (held === Item.POWDER_SNOW_BUCKET && this.hit) {
+      const target = {
+        x: this.hit.x + this.hit.nx,
+        y: this.hit.y + this.hit.ny,
+        z: this.hit.z + this.hit.nz,
+      };
+      const existing = this.world.getBlock(target.x, target.y, target.z);
+      if (existing !== Block.AIR && existing !== Block.WATER) return false;
+      if (!this.world.setBlockAndUpdate(target.x, target.y, target.z, Block.POWDER_SNOW, 0)) return false;
+      this.net.sendBlock(target.x, target.y, target.z, Block.POWDER_SNOW, 0, this.dimension);
+      if (!this.isCreative) this.exchangeHeld(held, Item.BUCKET);
+      this.audio.play('place_sand', { x: target.x + 0.5, y: target.y + 0.5, z: target.z + 0.5 });
+      this.particles.spawnSplash(target.x + 0.5, target.y + 0.8, target.z + 0.5, 0xf2f8ff, 5);
+      this.hand.swing();
+      return true;
+    }
+
     if ((held !== Item.WATER_BUCKET && held !== Item.LAVA_BUCKET) || !this.hit) return false;
 
     const target = {
@@ -14100,6 +14130,10 @@ class App {
       // 水下呼吸效果：氧气不掉；抗火效果：岩浆不掉血
       waterBreathing: this.effects.waterBreathing,
       fireImmune: this.effects.fireResistant,
+      // 细雪（批次 548）：脚或身体在细雪里 → 计时；皮革靴子免疫冰冻
+      inPowderSnow: feet === Block.POWDER_SNOW || body === Block.POWDER_SNOW,
+      hasLeatherBoots:
+        this.inventory.get(ARMOR_SLOT_BASE + 3)?.id === armorItemId('boots', 'leather'),
       // 附魔（批次 243）：摔落保护在靴子上、水下呼吸在头盔上。
       // 生存模块不认识背包，所以由这里把等级放进环境快照。
       featherFalling: enchantLevel(this.inventory.get(ARMOR_SLOT_BASE + 3)?.enchants, 'feather_falling'),
