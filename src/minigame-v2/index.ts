@@ -24,6 +24,7 @@ import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
+import { AudioEngine } from '../core/audio/AudioEngine.ts';
 import { WorldRegistry, type WorldSummary } from '../core/save/WorldRegistry.ts';
 import { FileSaveGame } from '../platform/file-save.ts';
 import { ChunkEdits } from '../core/save/ChunkEdits.ts';
@@ -201,6 +202,10 @@ const readSettings = (): V2Settings => {
   }
 };
 const settings = readSettings();
+const audio = new AudioEngine();
+audio.volume = settings.sound ? 0.7 : 0;
+audio.enabled = settings.sound;
+let audioResumed = false;
 const persistSettings = (): void => {
   platform.storage.set(SETTINGS_KEY, JSON.stringify(settings));
 };
@@ -240,6 +245,8 @@ const showSettings = (): void => {
     translucent.skyBrightness = settings.brightness;
     camera.fov = settings.fov;
     camera.updateProjectionMatrix();
+    audio.enabled = settings.sound;
+    audio.volume = settings.sound ? 0.7 : 0;
     showSettings();
   };
 
@@ -1219,6 +1226,7 @@ const updateHitAt = (clientX: number, clientY: number): void => {
 
 const breakAt = (hit: RayHit): void => {
   world.setBlockAndUpdate(hit.x, hit.y, hit.z, Block.AIR);
+  audio.play('break_stone', { x: hit.x, y: hit.y, z: hit.z });
   requestSave();
 };
 
@@ -1232,11 +1240,16 @@ const placeAt = (hit: RayHit): void => {
   if (!world.setBlockAndUpdate(x, y, z, stack.id)) return;
   stack.count -= 1;
   inventory.set(selectedSlot, stack.count > 0 ? stack : null);
+  audio.play('place', { x, y, z });
   requestSave();
   showHud();
 };
 
 platform.input.onPointer('down', (event) => {
+  if (!audioResumed) {
+    audioResumed = true;
+    audio.resume();
+  }
   const now = Date.now();
   if (now - lastDownAt < 40 && Math.abs(event.clientX - lastDownX) < 8 && Math.abs(event.clientY - lastDownY) < 8) {
     return;

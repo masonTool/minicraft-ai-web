@@ -19,6 +19,24 @@ export const platformGlobal = globalThis as unknown as Record<string, any>;
 export const platformWindow = platformGlobal.window as Record<string, any>;
 export const platformDocument = platformGlobal.document as Record<string, any>;
 
+/**
+ * WebAudio 垫片：main 的 AudioEngine 直接 `new AudioContext()`。
+ * 微信从基础库 2.19 起提供 wx.createWebAudioContext；没有时保持未定义，
+ * AudioEngine 会自己降级为 enabled=false，不影响游戏。
+ */
+const wxAudioApi = platformGlobal.wx as
+  | { createWebAudioContext?: () => AudioContext }
+  | undefined;
+if (!platformGlobal.AudioContext && typeof wxAudioApi?.createWebAudioContext === 'function') {
+  class WxAudioContext {
+    constructor() {
+      return wxAudioApi!.createWebAudioContext!();
+    }
+  }
+  platformGlobal.AudioContext = WxAudioContext;
+  platformWindow.AudioContext = WxAudioContext;
+}
+
 /** 适配器是否已经注入（用于启动自检/日志） */
 export function isWxAdapterReady(): boolean {
   return Boolean(platformDocument?.canvas && platformWindow?.matchMedia);
