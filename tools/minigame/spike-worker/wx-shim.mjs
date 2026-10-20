@@ -1,14 +1,14 @@
 /**
  * 微信小游戏 Worker 全局 shim（WX-018）
  *
- * 两种运行环境：
- *   1. 开发者工具/浏览器 Worker：原生有 `self`（WorkerGlobalScope），
- *      自带 addEventListener/postMessage，直接用原生通道；
- *   2. 微信真机 Worker：全局对象是 `worker`，只有 worker.onMessage/postMessage，
- *      没有浏览器式的 self —— 这时才把 self/addEventListener/postMessage 桥接过去。
+ * 开发者工具里 `self` 是 WorkerGlobalScope，同时可能还存在微信的全局 `worker`。
+ * 两者谁在传消息并不稳定，所以这里做**双通道**：
+ *   - 同时监听原生 `self` 的 message 与 `worker.onMessage`；
+ *   - 谁先收到消息就记成 activeChannel，回包只走同一条通道；
+ *   - `self` 不存在时（真机上的 worker 全局）把 self/addEventListener/postMessage
+ *     桥接到 worker。
  *
- * 注意：开发者工具的 `self` 是只读 getter，直接 `scope.self = scope` 会抛
- * "Cannot set property self of #<WorkerGlobalScope> which has only a getter"。
+ * 注意：开发者工具的 `self` 是只读 getter，不能 `scope.self = scope`。
  *
  * ⚠️ 必须由 entry.mjs 先 import 本文件，再 import chunk.worker.ts。
  */
@@ -16,8 +16,6 @@
 const scope = globalThis;
 
 function getWorker() {
-  // 微信 worker 的全局对象叫 worker；部分工具里它只存在于作用域而不是 globalThis，
-  // 还有的实现直接把 onMessage 挂在全局对象上。
   return (
     scope.worker ??
     (typeof worker !== 'undefined' ? worker : null) ??
@@ -25,7 +23,6 @@ function getWorker() {
   );
 }
 
-// onMessage 的参数在不同基础库/工具里可能是消息本身、{ message } 或 { data }
 function unwrapMessage(res) {
   if (!res || typeof res !== 'object') return res;
   const keys = Object.keys(res);
@@ -42,49 +39,86 @@ function getSelf() {
   }
 }
 
-const selfObject = getSelf();
-const nativeSelf =
-  selfObject &&
-  typeof selfObject.addEventListener === 'function' &&
-  typeof selfObject.postMessage === 'function';
+if (!scope.__wxWorkerShimInstalled) {
+  scope.__wxWorkerShimInstalled = true;
+  scope.__wxWorkerEntry = true;
 
-if (nativeSelf) {
-  // 开发者工具/浏览器 Worker：不要覆盖原生 self，否则会破坏 devtools 的消息通道
-  console.log('[wx-worker] mode native self');
-} else {
   const worker = getWorker();
+  const selfObject = getSelf();
+  const nativeAdd =
+    selfObject && typeof selfObject.addEventListener === 'function'
+      ? selfObject.addEventListener.bind(selfObject)
+      : null;
+  const nativePost =
+    selfObject && typeof selfObject.postMessage === 'function'
+      ? selfObject.postMessage.bind(selfObject)
+      : null;
 
-  const addEventListener = function (type, listener) {
-    if (type !== 'message') return;
-    if (!worker || typeof worker.onMessage !== 'function') {
-      throw new Error('微信 Worker 全局对象不可用：找不到 worker.onMessage');
-    }
-    worker.onMessage((res) => listener({ data: unwrapMessage(res) }));
+  let activeChannel = null;
+  let messageListener = null;
+
+  const deliverFromWorker = (res) => {
+    activeChannel = 'worker';
+    if (messageListener) messageListener({ data: unwrapMessage(res) });
   };
 
-  const postMessage = function (message) {
-    if (!worker || typeof worker.postMessage !== 'function') {
-      throw new Error('微信 Worker 全局对象不可用：找不到 worker.postMessage');
-    }
-    // 微信 worker 的消息是复制而不是 Transferable；第二个参数直接忽略
-    worker.postMessage(message);
+  const deliverFromSelf = (event) => {
+    activeChannel = 'self';
+    if (messageListener) messageListener({ data: unwrapMessage(event?.data) });
   };
 
-  // 优先挂到 self 上（chunk.worker.ts 用的是 self）；self 不存在时挂到 globalThis
+  const addEventListener = (type, listener) => {
+    if (type !== 'message') {
+      nativeAdd?.(type, listener);
+      return;
+    }
+    messageListener = listener;
+    if (nativeAdd) nativeAdd('message', deliverFromSelf);
+    if (worker && typeof worker.onMessage === 'function') {
+      try {
+        worker.onMessage(deliverFromWorker);
+      } catch (error) {
+        console.error('[wx-worker] worker.onMessage 注册失败', error);
+      }
+    }
+  };
+
+  const postMessage = (message, transfer) => {
+    if (activeChannel === 'worker') {
+      worker?.postMessage(message);
+      return;
+    }
+    if (activeChannel === 'self' && nativePost) {
+      try {
+        nativePost(message, transfer);
+      } catch (error) {
+        console.error('[wx-worker] self.postMessage 失败', error);
+      }
+      return;
+    }
+    // 还没收到过消息：两边都发，保证第一条 ping 能回来
+    if (nativePost) {
+      try {
+        nativePost(message, transfer);
+      } catch {
+        /* 忽略 */
+      }
+    }
+    if (worker && typeof worker.postMessage === 'function') {
+      try {
+        worker.postMessage(message);
+      } catch {
+        /* 忽略 */
+      }
+    }
+  };
+
   const target = selfObject ?? scope;
   try {
     target.addEventListener = addEventListener;
     target.postMessage = postMessage;
   } catch (error) {
-    console.error('[wx-worker] 无法在 self 上安装桥接', error);
-  }
-  if (target !== scope) {
-    try {
-      scope.addEventListener = addEventListener;
-      scope.postMessage = postMessage;
-    } catch {
-      /* 只读全局属性：忽略 */
-    }
+    console.error('[wx-worker] 无法安装双通道', error);
   }
   if (!selfObject) {
     try {
@@ -93,5 +127,11 @@ if (nativeSelf) {
       console.error('[wx-worker] 无法设置 self', error);
     }
   }
-  console.log('[wx-worker] mode bridge', Boolean(worker), Boolean(selfObject));
+
+  console.log(
+    '[wx-worker] dual',
+    'nativeSelf=' + Boolean(nativeAdd),
+    'worker=' + Boolean(worker),
+    'self=' + Boolean(selfObject),
+  );
 }

@@ -351,7 +351,7 @@ flex/absolute/grid 子集。
 
 | ID | 任务 | 验收 / 产出 | 依赖 | 人日 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| WX-020A | 真实世界启动（无 UI） | `minigame-world`：图集/材质/World/ChunkRenderer/共享 Worker；真机能出地形 | WX-018 | 3 | [~] |
+| WX-020A | 真实世界启动（无 UI） | `minigame-world`：图集/材质/World/ChunkRenderer；helper 预览已出完整地形，worker 超时自动降级主线程 | WX-018 | 3 | [x] |
 | WX-020B | 抽 `UiPort` + App 条件启动 | `main.ts` 只加导出与启动分支；Web 版回归通过 | WX-020A | 3 | [ ] |
 | WX-021 | UI 工具包 A | 面板/按钮三态/文字/图标/基础布局（9-slice、像素风） | WX-020B | 3 | [ ] |
 | WX-021B | `Layout` 插件可行性（可选） | 用 `requirePlugin('Layout')` 做一个设置页 demo；评估文字/滚动/点击/像素风是否够用 | WX-020B | 2 | [ ] |
@@ -506,7 +506,8 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | 2026-10-20 | WX-018 | `World`/`MeshWorkerPool` 支持 `createWorker` 注入；wx worker 按脚本路径复用 + 多订阅；`World` 过滤非 `generated` 响应 | 本次提交 |
 | 2026-10-20 | WX-020A | 新增 `minigame-world`：TextureAtlas + VoxelMaterial + World + ChunkRenderer + 共享 Worker；game.js 1929KB / worker 1097KB / 合计 3026KB；**待真机首块地形** | `92ddbde` |
 | 2026-10-20 | WX-020A 修复 | 开发者工具 `self` 只读：原生 self 直接用，微信真机才桥接 `worker`；新增 `npm run test:worker`（Node vm 模拟只读 self），ping + 真实生成回包通过 | `1a63221` |
-| 2026-10-20 | WX-020A 自动化 | 开发者工具 automator 可连、`Tool.getInfo` 正常，但 `App.callFunction/captureScreenshot/CDPEnable` 与 `Game.*` 全部超时：官方 automator 只覆盖小程序 App/Page，小游戏无此上下文 | 本次提交 |
+| 2026-10-20 | WX-020A 自动化 | 开发者工具 automator 可连、`Tool.getInfo` 正常，但 `App.callFunction/captureScreenshot/CDPEnable` 与 `Game.*` 全部超时：官方 automator 只覆盖小程序 App/Page，小游戏无此上下文 | `d102894` |
+| 2026-10-20 | WX-020A 预览 | 改用 `weixin-minigame-helper`：真实地形出现；CHUNKS 37 / DRAWN 37 / LIGHT 0 / Q 0 / TRI ~243k / CALLS ~239；稳定后 FPS 121 / MS 8.3（worker 超时后主线程降级） | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 
@@ -529,7 +530,8 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | **`main.ts` 冲突** | 主线持续改 14,400 行入口 | 只做最小接口改动；每 3~5 个任务 merge 一次 | 进行中 |
 | **Worker 单线程** | 生成/网格化抢一个 worker，卡顿 | WX-018 合并两池 + 分片；必要时主线程时间切片 | Worker 产物已就绪，接线在 WX-020 |
 | **BigInt（Worker/Random）** | `Random.ts` 的 SplitMix64 用 BigInt；老引擎无 BigInt 时 Worker 运行时报错 | esbuild 已把 `1n` 降成 `BigInt("...")`；`world-boot` 启动前检查，不支持直接弹窗 | WX-020A 真机确认 |
-| **真实世界首启** | 图集生成、共享 worker、光照/网格队列在真机上可能爆内存或卡顿 | `minigame-world` HUD 记录 ATLAS/CHUNKS/LIGHT/Q/FPS；不达标先降视距/图集分帧 | 待真机 |
+| **真实世界首启** | 图集生成、共享 worker、光照/网格队列在真机上可能爆内存或卡顿 | helper 预览通过：37 chunks / 243k tri / 稳定 121fps；worker 超时降级主线程时启动约 12s | helper 通过，真机待测 |
+| **helper 预览 worker** | `weixin-minigame-helper` 里 `wx.createWorker` 不返回 pong，只能主线程降级 | 运行时 ping 1.5s 超时自动降级；真机 worker 行为留给 WX-020B/040 复测 | 已降级 |
 | **存档** | 杀进程/写一半导致丢档 | 原子写 + 备份 + 迁移测试 | 未开始 |
 | **IP / 合规** | “Minecraft / 我的世界 / 基岩版” 侵权风险 | 提审前改名/去商标；软著/备案并行 | 未开始 |
 | **iOS 内存** | 小游戏内存上限低，易被回收 | 视距降级、纹理释放、内存警告处理 | 未验证 |

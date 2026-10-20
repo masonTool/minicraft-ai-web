@@ -32,3 +32,6 @@ minigame-adapter-spike/game.js.map
 
 # 微信开发者工具的本机私有配置（每个开发者不同，不入库）
 **/project.private.config.json
+
+# weixin-minigame-helper 的截图/缓存
+**/.weixin-minigame-helper/

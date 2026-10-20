@@ -230,14 +230,17 @@ interface WorkerScope {
   addEventListener(type: 'message', listener: (event: MessageEvent<WorkerRequest>) => void): void;
 }
 
-const ctx = self as unknown as WorkerScope;
-
-ctx.addEventListener('message', (event) => {
-  const req = event.data as WorkerRequest;
-
+/**
+ * 纯消息处理：Worker 入口和主线程降级共用。
+ *
+ * 返回的 transfer 只对真正的 Worker 有意义；主线程调用方可以忽略。
+ */
+export function handleWorkerRequest(req: WorkerRequest): {
+  response: WorkerResponse;
+  transfer: Transferable[];
+} {
   if (req.type === 'ping') {
-    ctx.postMessage({ type: 'pong', id: req.id } as WorkerResponse);
-    return;
+    return { response: { type: 'pong', id: req.id }, transfer: [] };
   }
 
   if (req.type === 'generate') {
@@ -261,12 +264,18 @@ ctx.addEventListener('message', (event) => {
     };
     const transfer: Transferable[] = [response.blocks];
     if (response.states) transfer.push(response.states);
-    ctx.postMessage(response, transfer);
-    return;
+    return { response, transfer };
   }
 
-  if (req.type === 'mesh') {
-    const { response, transfer } = meshChunk(req);
+  return meshChunk(req);
+}
+
+// 只有 Worker 入口才注册消息监听：主线程 bundle 也会 import 本文件拿 handleWorkerRequest，
+// 不能在那里碰 self/WokerGlobalScope。wx-shim 会设置 __wxWorkerEntry = true。
+if ((globalThis as unknown as { __wxWorkerEntry?: boolean }).__wxWorkerEntry) {
+  const ctx = self as unknown as WorkerScope;
+  ctx.addEventListener('message', (event) => {
+    const { response, transfer } = handleWorkerRequest(event.data as WorkerRequest);
     ctx.postMessage(response, transfer);
-  }
-});
+  });
+}

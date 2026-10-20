@@ -18,6 +18,8 @@ import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { World } from '../core/world/World.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 import { workerHostToLike } from '../platform/wx/worker-like.ts';
+import { createMainThreadWorker } from './main-thread-worker.ts';
+import type { WorkerLike } from '../core/worker/WorkerLike.ts';
 
 declare const wx: {
   showModal(options: { title: string; content: string; showCancel?: boolean }): void;
@@ -29,9 +31,10 @@ declare const wx: {
 const doc = (globalThis as any).document;
 const view = globalThis as any;
 
-const VIEW_RADIUS = 6;
-const LIGHT_BUDGET = 4000;
-const MESH_BUDGET = 2;
+// WX-020A 主线程降级：先小视距把地形完整跑出来；正式版会恢复 6 并切回 worker
+const VIEW_RADIUS = 3;
+const LIGHT_BUDGET = 8000;
+const MESH_BUDGET = 8;
 
 function createHud(): {
   update(lines: readonly string[]): void;
@@ -81,7 +84,33 @@ function createHud(): {
   };
 }
 
-function boot(): void {
+async function chooseWorker(platform: ReturnType<typeof wxPlatform>): Promise<{
+  worker: WorkerLike;
+  state: string;
+}> {
+  try {
+    const host = platform.workers.create('workers/chunk.worker.js');
+    const worker = workerHostToLike(host);
+    const ok = await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), 1500);
+      worker.addEventListener('message', (event) => {
+        if (event.data?.type === 'pong') {
+          clearTimeout(timer);
+          resolve(true);
+        }
+      });
+      worker.postMessage({ type: 'ping', id: -1 });
+    });
+    if (ok) return { worker, state: 'wx' };
+    worker.terminate();
+    console.warn('[WX-020] wx worker ping timeout，降级主线程');
+  } catch (error) {
+    console.warn('[WX-020] wx worker 不可用，降级主线程', error);
+  }
+  return { worker: createMainThreadWorker(), state: 'main' };
+}
+
+async function boot(): Promise<void> {
   if (typeof BigInt !== 'function') {
     wx.showModal({
       title: 'WX-020 启动失败',
@@ -129,23 +158,10 @@ function boot(): void {
   solid.skyBrightness = 1;
   translucent.skyBrightness = 1;
 
-  // 小游戏：生成与网格化共用同一个 worker；Web 端仍默认多 worker。
-  const workerHost = platform.workers.create('workers/chunk.worker.js');
-  const sharedWorker = workerHostToLike(workerHost);
+  // 真机优先 worker；预览环境 worker 不通时自动降级主线程，保证地形能出来。
+  const { worker: sharedWorker, state: workerState } = await chooseWorker(platform);
+  console.log('[WX-020] worker mode', workerState);
   const createWorker = () => sharedWorker;
-
-  // Worker 通道自检：HUD 会显示 ok / timeout，避免 chunks=0 时只能猜
-  let workerState = 'waiting';
-  sharedWorker.addEventListener('message', (event) => {
-    if (event.data?.type === 'pong') workerState = 'ok';
-  });
-  sharedWorker.postMessage({ type: 'ping', id: -1 });
-  setTimeout(() => {
-    if (workerState !== 'ok') {
-      workerState = 'timeout';
-      console.error('[WX-020] worker ping timeout');
-    }
-  }, 3000);
   const world = new World(0x5eed, 'default', 1, createWorker);
   const meshPool = new MeshWorkerPool(1, createWorker);
   const chunkRenderer = new ChunkRenderer(
@@ -208,7 +224,7 @@ function boot(): void {
 
   const hud = createHud();
   hud.update([
-    `WX-020 WORLD  ${width}x${height} dpr ${view.devicePixelRatio}`,
+    `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}`,
     `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  WORKER ${workerState}`,
     'CHUNKS ...  DRAWN ...  LIGHT ...',
     'FPS ...  MS ...  TRI ...  CALLS ...',
@@ -259,11 +275,10 @@ function boot(): void {
     }
 
     world.update(centerCx, centerCz, VIEW_RADIUS);
-    const lightBusy = world.processLighting(LIGHT_BUDGET);
-    const lightBacklog = world.lightWorkCount > 200000;
-    if (!lightBusy || lightBacklog) {
-      chunkRenderer.processQueue(MESH_BUDGET, centerCx, centerCz);
-    }
+    world.processLighting(LIGHT_BUDGET);
+    // WX-020A：先保证能看到完整地形；正式版应恢复“光照收敛后再网格化”的门闩，
+    // 否则会把未收敛的光照烘焙进网格（App 里的 pendingSettle 会补刷）。
+    chunkRenderer.processQueue(MESH_BUDGET, centerCx, centerCz);
     chunkRenderer.applyViewDistance(centerCx, centerCz, VIEW_RADIUS);
     solid.setTime(time * 0.001);
     translucent.setTime(time * 0.001);
@@ -275,7 +290,7 @@ function boot(): void {
         `[WX-020] fps=${fps} ms=${ms.toFixed(1)} chunks=${world.chunks.size} drawn=${chunkRenderer.drawnCount} light=${world.lightWorkCount} queue=${chunkRenderer.queueLength} tri=${sceneTriangles} calls=${sceneCalls}`,
       );
       hud.update([
-        `WX-020 WORLD  ${width}x${height} dpr ${view.devicePixelRatio}`,
+        `WX-020 WORLD  ${width}x${height} dpr ${platform.system.dpr}`,
         `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  WORKER ${workerState}`,
         `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
@@ -294,13 +309,11 @@ function boot(): void {
   requestAnimationFrame(frame);
 }
 
-try {
-  boot();
-} catch (error) {
+void boot().catch((error) => {
   console.error('[WX-020] boot failed', error);
   wx.showModal({
     title: 'WX-020 启动失败',
     content: String(error && (error as Error).stack ? (error as Error).stack : error),
     showCancel: false,
   });
-}
+});
