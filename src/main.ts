@@ -347,6 +347,7 @@ import {
   SOUND_KINDS,
   digSoundFor,
   doorSoundFor,
+  minecartLevelForSpeed,
   stepSoundFor,
   type SoundKind,
 } from './core/audio/AudioEngine.ts';
@@ -14850,6 +14851,13 @@ class App {
     const rainLevel =
       !raining || this.audio.underwater ? 0 : this.snowyHere ? 0.3 : this.weather.current === 'thunder' ? 1 : 0.8;
     this.audio.setAmbience(rainLevel);
+
+    // 矿车滚动（批次 576）：按当前载具速度给循环声，离开矿车自动淡出
+    const minecartSpeed =
+      this.ridingVehicle instanceof Minecart
+        ? Math.hypot(this.ridingVehicle.vx, this.ridingVehicle.vz)
+        : 0;
+    this.audio.setMinecart(minecartLevelForSpeed(minecartSpeed));
 
     // ---- 脚步：按水平位移累积（`frameMove` 在函数开头就算好了）
     this.lastStepX = p.x;

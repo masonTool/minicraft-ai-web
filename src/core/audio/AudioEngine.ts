@@ -1039,6 +1039,12 @@ const CRITICAL_BYPASS = 4;
 /** 混响发送量（0 = 干声）。10% 足够让脚步/弓弦不"贴着脸"，又不至于糊 */
 const REVERB_MIX = 0.1;
 
+/** 矿车速度 → 滚动声音量（批次 576）：8 格/秒左右拉满 */
+export function minecartLevelForSpeed(speed: number): number {
+  if (!(speed > 0.2)) return 0;
+  return Math.min(1, speed / 8);
+}
+
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   /** 主总线（所有声音都汇到这里 → 压缩器 → 扬声器） */
@@ -1085,6 +1091,8 @@ export class AudioEngine {
    * 只有第一次真的需要出声时才建，晴天一分钱不花。
    */
   private ambienceGain: GainNode | null = null;
+  /** 矿车滚动声（批次 576）：与雨声同一条“常驻循环噪声”通道 */
+  private minecartGain: GainNode | null = null;
   /** 音乐声部的结束时刻：与音效的并发上限**分开**计数（音乐不该抢音效的名额） */
   private musicEnds: number[] = [];
   /** 统计播放次数（调试面板用） */
@@ -1303,6 +1311,50 @@ export class AudioEngine {
     // 0.22 是"大雨"的上限：雨是背景，不该盖过脚步与生物叫
     const volume = 0.22 * target * this.volume * this.groupVolume.ambient;
     this.ambienceGain.gain.setTargetAtTime(volume, ctx.currentTime, 0.5);
+  }
+
+  /**
+   * 矿车滚动声（批次 576）：随速度变化的常驻低频噪声。
+   *
+   * 与雨声同一条“循环噪声 + 滤波 + 增益”通道；离开矿车时调用 0 淡出。
+   */
+  setMinecart(level: number): void {
+    if (!this.enabled || !this.ctx || this.ctx.state !== 'running' || !this.master) return;
+    const target = Math.max(0, Math.min(1, level));
+    if (target <= 0.001 && !this.minecartGain) return;
+
+    const ctx = this.ctx;
+    if (!this.minecartGain) {
+      const out = ctx.createGain();
+      out.gain.value = 0;
+      const source = ctx.createBufferSource();
+      source.buffer = this.getNoiseBuffer(ctx);
+      source.loop = true;
+
+      // 铁轮摩擦：中低频为主，叠一点高频“沙沙”
+      const rumble = ctx.createBiquadFilter();
+      rumble.type = 'lowpass';
+      rumble.frequency.value = 320;
+      rumble.Q.value = 0.7;
+      const rumbleLevel = ctx.createGain();
+      rumbleLevel.gain.value = 0.9;
+      source.connect(rumble).connect(rumbleLevel).connect(out);
+
+      const grind = ctx.createBiquadFilter();
+      grind.type = 'bandpass';
+      grind.frequency.value = 1200;
+      grind.Q.value = 0.8;
+      const grindLevel = ctx.createGain();
+      grindLevel.gain.value = 0.18;
+      source.connect(grind).connect(grindLevel).connect(out);
+
+      source.start(0, Math.random() * 0.5);
+      out.connect(this.master);
+      this.minecartGain = out;
+    }
+
+    const volume = 0.3 * target * this.volume * this.groupVolume.blocks;
+    this.minecartGain.gain.setTargetAtTime(volume, ctx.currentTime, 0.15);
   }
 
   /**

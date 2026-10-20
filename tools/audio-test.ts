@@ -22,6 +22,7 @@ import {
   digSoundFor,
   doorSoundFor,
   layersDuration,
+  minecartLevelForSpeed,
   pickLayers,
   placeSoundFor,
   soundGroupOf,
@@ -580,6 +581,15 @@ console.log('\n[旧音效兼容（验收脚本与控制台还在用这些名字�
   const missing = legacy.filter((kind) => !soundSpec(kind));
   check(`${legacy.length} 个旧音效名字都还在`, missing.length === 0, missing.join(','));
   check('新增的脚步/落地有独立种类', !!soundSpec('step_grass') && !!soundSpec('land_soft') && !!soundSpec('land_hard'));
+}
+
+console.log('\n[矿车滚动声（批次 576）]');
+{
+  check('停着不响', minecartLevelForSpeed(0) === 0);
+  check('低速只给一点点', minecartLevelForSpeed(0.5) > 0 && minecartLevelForSpeed(0.5) < 0.2);
+  check('中速约半音量', Math.abs(minecartLevelForSpeed(4) - 0.5) < 1e-9);
+  check('8 格/秒拉满', minecartLevelForSpeed(8) === 1);
+  check('再快也不超过 1', minecartLevelForSpeed(100) === 1);
 }
 
 console.log(`\n音效测试：${passed} 通过 / ${failed} 失败`);
