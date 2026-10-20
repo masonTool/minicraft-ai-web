@@ -66,7 +66,7 @@ const assert = (condition, message, state) => {
   const title = await waitState((state) => state.screen === 'title', '未进入标题页');
   await tap(512, 327);
   const worlds = await waitState((state) => state.screen === 'worlds', '未进入世界列表');
-  await tap(512, 235);
+  await tap(512, 216);
   const create = await waitState((state) => state.screen === 'create', '未进入新建表单');
   await tap(727, 423);
   const inGame = await waitState(
@@ -95,7 +95,7 @@ const assert = (condition, message, state) => {
     '暂停保存后没有回到世界列表',
     10000,
   );
-  await tap(620, 175);
+  await tap(682, 163);
   const editScreen = await waitState((state) => state.screen === 'edit', '世界编辑没有打开');
   await tap(252, 391);
   const worldsAfterEdit = await waitState((state) => state.screen === 'worlds', '编辑取消没有回列表');
@@ -104,7 +104,7 @@ const assert = (condition, message, state) => {
   await liveFrame.evaluate(() => {
     wx.showModal = (options) => options?.success?.({ confirm: true, cancel: false });
   });
-  await tap(718, 175);
+  await tap(782, 163);
   const afterDelete = await waitState(
     (state) => state.screen === 'worlds' && state.worldCount === 0,
     '删除世界后数量未归零',
@@ -120,7 +120,7 @@ const assert = (condition, message, state) => {
   if (afterReload.worldCount > 0) {
     await tap(512, 327);
     await waitState((state) => state.screen === 'worlds', '重载后未进入世界列表');
-    await tap(512, 201);
+    await tap(512, 163);
     reentered = await waitState(
       (state) => state.screen === 'game' && state.chunks > 0 && state.drawn > 0,
       '重载后重进世界失败',

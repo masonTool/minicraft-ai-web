@@ -125,6 +125,7 @@ const registryStorage = {
 };
 const registry = new WorldRegistry(registryStorage as Storage);
 let currentWorld: WorldSummary | null = null;
+let worldPage = 0;
 let save: FileSaveGame | null = null;
 let saving = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -846,44 +847,65 @@ const showEdit = (entry: WorldSummary): void => {
 const showWorlds = (): void => {
   menuScreen = 'worlds';
   const worlds = registry.list();
-  const visible = worlds.slice(0, 4);
+  const pageSize = 4;
+  const pages = Math.max(1, Math.ceil(worlds.length / pageSize));
+  worldPage = Math.max(0, Math.min(worldPage, pages - 1));
+  const visible = worlds.slice(worldPage * pageSize, worldPage * pageSize + pageSize);
+  const difficultyLabel = (value: string): string =>
+    value === 'hard' ? '困难' : value === 'peaceful' ? '和平' : value === 'easy' ? '简单' : '普通';
+  const modeLabel = (value: string): string => (value === 'creative' ? '创造' : '生存');
   const buttons: UiElement[] = visible.flatMap((world, index) => {
-    const y = 150 + index * 56;
+    const y = 140 + index * 52;
     return [
-      button(272, y, 300, 50, world.name, () => void mountWorld(world), {
+      button(252, y, 380, 46, `${world.name}  ·  ${difficultyLabel(world.difficulty)} / ${modeLabel(world.gameMode)}`, () => void mountWorld(world), {
         background: 'rgba(34, 48, 44, 0.95)',
         border: 'rgba(180, 225, 205, 0.38)',
         radius: 8,
       }),
-      button(580, y, 80, 50, '编辑', () => showEdit(world), {
+      button(642, y, 80, 46, '编辑', () => showEdit(world), {
         background: 'rgba(32, 42, 50, 0.95)',
         border: 'rgba(190, 220, 240, 0.38)',
         radius: 8,
       }),
-      button(668, y, 100, 50, '删除', () => void removeWorld(world), {
+      button(732, y, 100, 46, '删除', () => void removeWorld(world), {
         background: 'rgba(74, 38, 40, 0.95)',
         border: 'rgba(240, 170, 170, 0.4)',
         radius: 8,
       }),
     ];
   });
-  const bottom = 150 + Math.max(1, visible.length) * 56;
+  const bottom = 140 + Math.max(1, visible.length) * 52;
+  const pager: UiElement[] = pages > 1
+    ? [
+        button(292, bottom + 2, 120, 30, '上一页', () => {
+          worldPage = Math.max(0, worldPage - 1);
+          showWorlds();
+        }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }),
+        text(0, bottom + 8, 1024, 22, `${worldPage + 1} / ${pages}`, { fontSize: 14, color: 'rgba(220,238,245,0.8)', align: 'center' }),
+        button(612, bottom + 2, 120, 30, '下一页', () => {
+          worldPage = Math.min(pages - 1, worldPage + 1);
+          showWorlds();
+        }, { background: 'rgba(32,42,50,0.95)', border: 'rgba(190,220,240,0.35)', radius: 6 }),
+      ]
+    : [];
+  const actionY = bottom + (pages > 1 ? 40 : 4);
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
       box(0, 0, 1024, uiHeight, [], { background: '#0d1a24' }),
-      text(0, 34, 1024, 52, '选择世界', { fontSize: 40, color: '#f2f7fa', align: 'center' }),
-      text(0, 92, 1024, 26, `存档 ${worlds.length}`, {
+      text(0, 26, 1024, 48, '选择世界', { fontSize: 38, color: '#f2f7fa', align: 'center' }),
+      text(0, 78, 1024, 24, `存档 ${worlds.length}`, {
         fontSize: 14,
         color: 'rgba(200, 225, 240, 0.65)',
         align: 'center',
       }),
       ...buttons,
-      button(272, bottom + 6, 496, 46, '新建世界', () => showCreate(), {
+      ...pager,
+      button(252, actionY, 580, 40, '新建世界', () => showCreate(), {
         background: 'rgba(60, 110, 90, 0.96)',
         border: 'rgba(190, 235, 215, 0.55)',
         radius: 8,
       }),
-      button(272, bottom + 60, 496, 38, '返回标题', () => showTitle(), {
+      button(252, actionY + 46, 580, 34, '返回标题', () => showTitle(), {
         background: 'rgba(32, 42, 50, 0.95)',
         border: 'rgba(190, 220, 240, 0.4)',
         radius: 8,
