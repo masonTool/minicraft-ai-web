@@ -108,6 +108,9 @@ let started = false;
 let menuScreen: 'title' | 'worlds' | 'create' | 'edit' = 'title';
 let paused = false;
 let settingsOpen = false;
+let chatOpen = false;
+const chatMessages: string[] = ['v2 本地聊天', '输入 /help 查看命令'];
+let chatInput = '';
 let inventoryOpen = false;
 let inventoryTab: 'items' | 'creative' | 'recipes' = 'items';
 let recipePage = 0;
@@ -937,11 +940,84 @@ const showTitle = (): void => {
   );
 };
 
+const pushChat = (line: string): void => {
+  chatMessages.push(line);
+  if (chatMessages.length > 9) chatMessages.splice(0, chatMessages.length - 9);
+};
+
+const sendChat = (value: string): void => {
+  const text = value.trim();
+  if (!text) return;
+  if (text === '/help') {
+    pushChat('/help · /seed · /time');
+    pushChat('聊天为 v2 本地日志，尚未接联机');
+  } else if (text === '/seed') {
+    pushChat(`种子 ${currentWorld?.seed ?? '-'}`);
+  } else if (text === '/time') {
+    pushChat(`坐标 ${physics.x.toFixed(1)}, ${physics.y.toFixed(1)}, ${physics.z.toFixed(1)}`);
+  } else {
+    pushChat(`我：${text}`);
+  }
+  chatInput = '';
+  showChat();
+};
+
+const showChat = (): void => {
+  chatOpen = true;
+  const panelW = 760;
+  const panelH = Math.min(460, uiHeight - 32);
+  const panelX = (1024 - panelW) / 2;
+  const panelY = (uiHeight - panelH) / 2;
+  const visible = chatMessages.slice(-8);
+  const lines = visible.map((line, index) =>
+    text(panelX + 28, panelY + 80 + index * 28, panelW - 56, 26, line, {
+      fontSize: 17,
+      color: index === visible.length - 1 ? '#ffffff' : 'rgba(220,235,245,0.78)',
+    }),
+  );
+  ui.setRoot(
+    box(0, 0, 1024, uiHeight, [
+      box(0, 0, 1024, uiHeight, [], { background: 'rgba(0,0,0,0.55)' }),
+      box(panelX, panelY, panelW, panelH, [
+        text(panelX + 28, panelY + 20, 500, 40, '聊天', { fontSize: 30, color: '#ffffff' }),
+        button(panelX + panelW - 70, panelY + 20, 42, 42, 'X', () => {
+          chatOpen = false;
+          showHud();
+        }, { background: 'rgba(30,38,46,0.95)', border: 'rgba(180,215,235,0.35)', radius: 8 }),
+        ...lines,
+        button(panelX + 28, panelY + panelH - 68, panelW - 220, 44, chatInput || '点击输入聊天/命令', () => {
+          const wxApi = (globalThis as unknown as { wx?: { showKeyboard?: (options: any) => void } }).wx;
+          if (!wxApi?.showKeyboard) return;
+          void askText(chatInput, 80).then((value) => {
+            if (value !== null) {
+              chatInput = value;
+              showChat();
+            }
+          });
+        }, { background: 'rgba(22,30,36,0.95)', border: 'rgba(180,215,235,0.35)', radius: 8 }),
+        button(panelX + panelW - 176, panelY + panelH - 68, 148, 44, '发送', () => sendChat(chatInput), {
+          background: 'rgba(60,110,90,0.96)',
+          border: 'rgba(190,235,215,0.55)',
+          radius: 8,
+        }),
+      ], {
+        background: 'rgba(16,22,28,0.97)',
+        border: 'rgba(170,205,230,0.45)',
+        borderWidth: 2,
+        radius: 12,
+      }),
+    ]),
+  );
+};
+
 const showHud = (): void => {
   menuScreen = 'title';
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
-      text(24, 18, 460, 40, `${currentWorld?.name ?? '世界'} · v2`, { fontSize: 22, color: '#ffffff' }),
+      text(24, 18, 290, 40, `${currentWorld?.name ?? '世界'} · v2`, { fontSize: 22, color: '#ffffff' }),
+      button(330, 18, 130, 48, '聊天', () => {
+        showChat();
+      }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
       button(480, 18, 140, 48, '背包', () => {
         inventoryOpen = true;
         showInventory();
@@ -1114,7 +1190,7 @@ platform.input.onPointer('down', (event) => {
   lastDownX = event.clientX;
   lastDownY = event.clientY;
   if (ui.handlePointer('down', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
-  if (!started || paused || settingsOpen || inventoryOpen) return;
+  if (!started || paused || settingsOpen || inventoryOpen || chatOpen) return;
   if (event.clientX < platform.system.width / 2) {
     movePointer = event.pointerId;
     moveX = event.clientX;
@@ -1208,6 +1284,7 @@ const frame = (): void => {
       paused,
       settings: settingsOpen,
       inventoryOpen,
+      chatOpen,
     }),
   );
 
@@ -1230,7 +1307,7 @@ const frame = (): void => {
     }
   }
 
-  if (playerReady && !paused && !settingsOpen && !inventoryOpen) {
+  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen) {
     physics.update(world as unknown as PhysicsWorld, input, yaw, dt, false, 1, 1, settings.autoJump);
     camera.position.set(physics.x, physics.eyeY, physics.z);
     camera.rotation.y = yaw;
