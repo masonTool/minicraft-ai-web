@@ -336,7 +336,15 @@ console.log('\n[性能：被动刷怪不再逐格扫描（C6 高度图）]');
   const counts = { block: 0, surface: 0 };
   // 给一个平原群系：现在大多数被动生物都带 `spawnBiomes`，没有群系钩子的话
   // 它们会被"群系未知 ⇒ 不刷"挡掉，这条断言就会变成随机失败
-  new MobSpawner().update(
+  // ⚠️ 注入**确定性**随机源（批次 457 顺手修的一处偶发红灯）：这条原来用默认的
+  // `Math.random`，"照样刷得出来"就变成了掷骰子——跑十次红一次，还查不出是代码坏了
+  // 还是运气不好。与钓鱼/雨声那几条同一套做法：随机源注入 + 固定序列。
+  let seed = 0x2f6e2b1;
+  const rng = (): number => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  new MobSpawner(rng).update(
     2.0,
     makeContext({ sky: 15, block: 0, spawned, counts, hostile: 24, biomeAt: () => 'plains' }),
   );

@@ -422,7 +422,8 @@ import {
 // 村庄的坐标（J22 验收用）：与 Worker 里同一份确定性放置逻辑，不必扫地形找房子。
 // `nearestStronghold`（批次 114）是"最近的要塞"的**轻量**版本：要塞是地下结构，
 // 位置不看地形，所以末影之眼每次出手都算得起（见那个函数的注释）
-import { nearestStronghold, structureInstanceForTest } from './core/gen/Structures.ts';
+import { nearestStronghold, structureCreatureSpawnsAt, structureInstanceForTest } from './core/gen/Structures.ts';
+import { nearbyStandingSpot, type StructureCreatureKind } from './core/gen/StructureCreatures.ts';
 import { PlayerPhysics, type PlayerInput } from './core/physics/PlayerPhysics.ts';
 import { raycastVoxels, type RayHit } from './core/interaction/Raycast.ts';
 // 中键拾取方块（批次 129）：三条规则是纯函数（`test:pickblock` 逐条钉住）
@@ -1833,6 +1834,9 @@ class App {
         // 与上面两件事同一个位置、同一条理由：**方块已经在了，但还需要有人管一下**
         // （结构生成在 Worker 里，而 Worker 造不了实体）
         this.populateVillage(chunk.cx, chunk.cz);
+        // 结构里的生物（批次 457）：海底神殿的守卫者、府邸的唤魔者、前哨的掠夺者……
+        // 与村庄人口同一条机制（结构在 Worker 里造不了实体，主线程按纯函数重算）
+        this.populateStructureMobs(chunk.cx, chunk.cz);
         // 载具（批次 257）：这一列上次卸载时停着的船/矿车，现在原样造回来
         this.restoreVehicles(chunk.cx, chunk.cz);
         // 生物与掉落物（批次 258）：同一条恢复路径
@@ -7646,6 +7650,81 @@ class App {
       if (plan.professionId !== null) villager.assignProfession(plan.professionId, plan.workstation);
       this.entities.spawn(villager);
     }
+  }
+
+  // ---------------------------------------------------------------- 结构里的生物（批次 457）
+
+  /**
+   * 区块加载之后：把这个区块里**结构该有的生物**造出来。
+   *
+   * 与 `populateVillage` 同一套机制——结构生成跑在 Worker 里（造不了实体），
+   * 位置又是"种子 + 候选规则"的纯函数，所以主线程在方块就位之后重算一遍即可，
+   * 不需要新增数据通道（不占方块、不进存档、不改 Worker 协议）。
+   *
+   * ⚠️ 只在主世界做：下界（堡垒遗迹的猪灵）与末地（末地城的潜影贝）各自一套实例
+   * 入口，是下一批的事——这里显式判维度，不靠"碰巧没刷"。
+   */
+  private populateStructureMobs(cx: number, cz: number): void {
+    if (this.dimension !== Dimension.OVERWORLD) return;
+    const generator = this.biomeGenerator;
+    if (!generator) return;
+    const spawns = structureCreatureSpawnsAt(
+      cx,
+      cz,
+      {
+        surfaceY: (x, z) => generator.surfaceY(x, z),
+        columnBiome: (x, z) => generator.biomeAt(x, z),
+      },
+      this.worldConfig.seed,
+    );
+    for (const spawn of spawns) {
+      // 锚点是手写偏移、与房间位置难免差一两格（隔墙/灯具），就近找一个能站的格子：
+      // 直接按锚点放会把生物卡进海晶石墙里（实测神殿 9 只只成了 3 只）
+      const spot = nearbyStandingSpot(
+        (x, y, z) => this.structureCreatureSpotFree(spawn.kind, x, y, z),
+        spawn.x,
+        spawn.y,
+        spawn.z,
+        3,
+      );
+      if (!spot) continue;
+      // 区块反复加载时"附近已有同类"就不刷（与村庄人口同一条去重）
+      if (this.mobOfKindNear(spawn.kind, spot.x, spot.y, spot.z, 32)) continue;
+      const type = mobTypeById(spawn.kind);
+      if (!type) continue;
+      this.entities.spawn(createMob(type, spot.x + 0.5, spot.y, spot.z + 0.5));
+    }
+  }
+
+  /**
+   * 结构生物的落点能不能站（粗判，宁可少刷）。
+   *
+   * 守卫者（`aquatic`）在神殿里是**空房**不是水——原版神殿灌满水，本项目挖空之后
+   * 没有回填，所以这里对 aquatic 放宽成"本格与头顶是空气就行"；
+   * 其余走地生物要求脚下实心。
+   */
+  private structureCreatureSpotFree(kind: StructureCreatureKind, x: number, y: number, z: number): boolean {
+    const type = mobTypeById(kind);
+    if (!type) return false;
+    const here = this.world.getBlock(x, y, z);
+    const above = this.world.getBlock(x, y + 1, z);
+    if (type.flying) return here === Block.AIR;
+    if (here !== Block.AIR || above !== Block.AIR) return false;
+    if (type.aquatic === true || type.spawnInWater === true) return true;
+    return blockDef(this.world.getBlock(x, y - 1, z)).solid;
+  }
+
+  /** 附近有没有活着的同种生物（结构生物的去重判据） */
+  private mobOfKindNear(kind: string, x: number, y: number, z: number, radius: number): boolean {
+    for (const entity of this.entities.all) {
+      if (!(entity instanceof Mob) || entity.dead) continue;
+      if (entity.type.id !== kind) continue;
+      if (Math.abs(entity.x - (x + 0.5)) > radius) continue;
+      if (Math.abs(entity.z - (z + 0.5)) > radius) continue;
+      if (Math.abs(entity.y - y) > radius) continue;
+      return true;
+    }
+    return false;
   }
 
   /** 这一格附近有没有活着的村民（`planVillagePopulation` 的"别刷第二遍"用） */

@@ -42,6 +42,7 @@ import { WORKSTATION_BLOCKS } from '../registry/villagerTrades.ts';
 import { Biome } from './Biome.ts';
 import { hashAt, PositionalRng, SEA_LEVEL, type FeatureWriter, type FeatureWorld, OUTSIDE } from './Features.ts';
 import { planVillageLayout, type VillageDoorFacing, type VillagePieceKind } from './VillageLayout.ts';
+import { creatureAnchorsFor, type StructureCreatureKind } from './StructureCreatures.ts';
 
 // ---------------------------------------------------------------- 类型
 
@@ -627,6 +628,67 @@ export function generateStructures(
 /** 建立统计对象 */
 export function newStructureStats(): StructureStats {
   return { counts: emptyCounts() };
+}
+
+/** 结构里该有一只什么生物（世界坐标；由主线程据此造实体） */
+export interface StructureCreatureSpawn {
+  readonly kind: StructureCreatureKind;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/**
+ * 主线程用的"这个区块里该刷哪些结构生物"（批次 457）。
+ *
+ * 为什么不在 Worker 里做：Worker 只写方块，造不了实体；而结构位置本身是
+ * "种子 + 候选规则"的纯函数，主线程重算一遍即可，**不需要新的数据通道**
+ * （不占方块、不进存档、不用改 Worker 协议）。
+ *
+ * 三条约定：
+ *  1. 只处理 `STRUCTURE_CREATURES` 表里有的结构（其余结构直接跳过）；
+ *  2. 锚点只由**它所在的那个区块**负责（跨区块的锚点会重复刷）；
+ *  3. `probe` 是可站立探针（主线程看真方块）：锚点稍有偏差时结果是"少刷一只"，
+ *     而不是把生物卡进墙里——宁可少，也不要坏。
+ */
+export function structureCreatureSpawnsAt(
+  cx: number,
+  cz: number,
+  world: FeatureWorld,
+  seed: number,
+  probe?: (kind: StructureCreatureKind, x: number, y: number, z: number) => boolean,
+): StructureCreatureSpawn[] {
+  const spawns: StructureCreatureSpawn[] = [];
+  for (const def of STRUCTURE_DEFS) {
+    const anchors = creatureAnchorsFor(def.kind);
+    if (anchors.length === 0) continue;
+
+    // 与 `generateStructures` 同一套 reach：少算一格就会"结构在内、生物没算到"
+    const cellSize = def.spacing * 16;
+    const reach = Math.ceil((def.radius + 16) / cellSize) + 1;
+    const baseCellX = Math.floor((cx * 16) / cellSize);
+    const baseCellZ = Math.floor((cz * 16) / cellSize);
+
+    for (let dcz = -reach; dcz <= reach; dcz++) {
+      for (let dcx = -reach; dcx <= reach; dcx++) {
+        const instance = candidateFor(def, baseCellX + dcx, baseCellZ + dcz, world, seed);
+        if (!instance || !intersects(instance, cx, cz)) continue;
+
+        for (const anchor of anchors) {
+          for (let i = 0; i < (anchor.count ?? 1); i++) {
+            const x = Math.round(instance.x + anchor.dx);
+            const y = Math.round(instance.y + anchor.dy);
+            // 多只沿 +z 排开一格：叠在同一格会让第二只立刻被挤开、看起来像"只刷了一只"
+            const z = Math.round(instance.z + anchor.dz + i);
+            if (Math.floor(x / 16) !== cx || Math.floor(z / 16) !== cz) continue;
+            if (probe && !probe(anchor.kind, x, y, z)) continue;
+            spawns.push({ kind: anchor.kind, x, y, z });
+          }
+        }
+      }
+    }
+  }
+  return spawns;
 }
 
 /**

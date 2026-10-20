@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1017（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1018（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **191**、进行中 **79**、待办 18 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -129,6 +129,13 @@ npm run dev            # http://localhost:5173
   `Scoreboard.sidebarView()` 给出"标题 + 降序 + 最多 15 行"的纯数据，
   `ui/ScoreboardHud.ts` 只负责画（右上角、内容不变不动 DOM、手机再缩一号）。
   `test:save` **新增 19 条**。M23 只剩队伍（仍是 `[~]`）。
+- 批次 457（结构）：**"结构 → 生物"通道**（补齐"结构只有壳子"那条根）。
+  `gen/StructureCreatures.ts` 锚点表 + `Structures.structureCreatureSpawnsAt()`
+  （区块加载时按种子重算，**不新增数据通道**）+ 主线程 `populateStructureMobs`
+  （同类 32 格去重）+ `nearbyStandingSpot`（半径 3 内由近到远找可站格）。
+  覆盖主世界 4 种：神殿 1 远古守卫者 + 6 守卫者、府邸 1 唤魔者 + 2 卫道士、
+  前哨 3 掠夺者、村庄 1 铁傀儡。`test:structure` 54 → **73 条**。
+  ⚠️ 下界（猪灵/猪灵蛮兵）与末地（潜影贝）待接，各自的实例入口是下一批。
 - ⚠️ **批次编号冲突（第二次）**：并发会话占用了 **295-1~295-4**。本轮两个提交正式编号是
   **297（容器暂停）/ 298（目标框界面）**；旧 commit message 里的 295/296 是撞号。
 - ⚠️ **批次编号冲突（第三次）**：并发会话占用了 **303**。本轮正式编号 **304**；

@@ -591,7 +591,8 @@ export const PIGLIN_TYPE: MobType = {
  *  - 子弹走 `spawnArrow` 通道（本项目没有独立的潜影贝子弹实体，外观是箭）；
  *  - 不会贴墙/贴天花板（没有"附着面"这一层），落地站住；
  *  - 模型暂用 `quadruped` 骨架（没有方块型生物骨架）。
- * 本项目没有"结构生成点上放生物"的通道，所以 `naturalSpawn: false`。
+ * 本项目**不自然刷**：主世界那几种已由 `gen/StructureCreatures.ts` 在结构里生成
+ * （批次 457），末地城还没接（那一批要单独的实例入口），所以 `naturalSpawn: false`。
  */
 export const SHULKER_TYPE: MobType = {
   id: 'shulker',
@@ -642,7 +643,8 @@ export const BEE_TYPE: MobType = {
 
 /**
  * 卫道士（批次 379）：村庄系的近战劫掠者，24 血、伤害 13。
- * 原版随袭击/林地府邸出现；本项目 `naturalSpawn: false`。
+ * 原版随袭击/林地府邸出现；本项目**不自然刷**，由林地府邸的锚点生成
+ * （`gen/StructureCreatures.ts`，批次 457），袭击还没做。
  */
 export const VINDICATOR_TYPE: MobType = {
   id: 'vindicator',
@@ -901,8 +903,9 @@ export const MOOSHROOM_TYPE: MobType = {
 /**
  * 守卫者（批次 359，海洋系）。
  *
- * 30 血、水下敌对、掉海晶碎片/砂粒。原版守海底神殿，本项目没有
- * "结构 → 生物"的通道，所以 `naturalSpawn: false`，靠刷怪蛋/命令。
+ * 30 血、水下敌对、掉海晶碎片/砂粒。原版守海底神殿；本项目**不自然刷**，
+ * 而是由 `gen/StructureCreatures.ts` 的锚点表在神殿里生成（批次 457 的
+ * "结构 → 生物"通道），所以 `naturalSpawn: false` 保持不变。
  * ⚠️ 原版的激光束简化为近战接触伤害（没有独立的激光实体）。
  */
 export const GUARDIAN_TYPE: MobType = {
@@ -982,8 +985,9 @@ export const IRON_GOLEM_TYPE: MobType = {
 /**
  * 掠夺者（批次 358，J24 第二批）。
  *
- * 24 血、**远程**（弩），掉绿宝石与箭。原版随巡逻队/前哨出现，
- * 本项目没有巡逻队，所以 `naturalSpawn: false`。
+ * 24 血、**远程**（弩），掉绿宝石与箭。原版随巡逻队/前哨出现；
+ * 本项目没有巡逻队，**前哨那两只由锚点表生成**（批次 457），
+ * 所以 `naturalSpawn: false`。
  */
 export const PILLAGER_TYPE: MobType = {
   id: 'pillager',

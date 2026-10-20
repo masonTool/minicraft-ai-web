@@ -20,10 +20,18 @@ import {
   STRUCTURE_KINDS,
   generateStructures,
   nearestStronghold,
+  structureCreatureSpawnsAt,
   structureInstanceForTest,
   type StructureKind,
 } from '../src/core/gen/Structures.ts';
 import { generateChunkBlocks, takeGeneratedStates } from '../src/core/gen/TerrainGenerator.ts';
+import { mobTypeById } from '../src/core/entity/mobs.ts';
+import {
+  STRUCTURE_CREATURE_KINDS,
+  STRUCTURE_CREATURES,
+  creatureAnchorsFor,
+  nearbyStandingSpot,
+} from '../src/core/gen/StructureCreatures.ts';
 import {
   planVillageLayout,
   VILLAGE_PIECE_CLEAR_HALF,
@@ -559,8 +567,6 @@ console.log('\n[矿井里的蛛网（批次 442）]');
   );
 }
 
-console.log(`\n结构测试：${passed} 通过 / ${failed} 失败`);
-if (failed > 0) process.exit(1);
 
 console.log('\n[村庄布局（批次 455：街道槽位拼图）]');
 {
@@ -621,3 +627,174 @@ console.log('\n[村庄布局（批次 455：街道槽位拼图）]');
   // ⑦ 确定性：同样输入两次结果完全一致（跨区块重放的前提）
   equal('同样输入两次结果一致', JSON.stringify(plan(8, () => true)), JSON.stringify(full));
 }
+
+console.log('\n[结构里的生物（批次 457）]');
+{
+  // ① 表覆盖：生物表里的结构必须是真的结构种类
+  const tableKinds = Object.keys(STRUCTURE_CREATURES);
+  check(
+    '生物表里的 key 都是真实结构种类',
+    tableKinds.every((kind) => (STRUCTURE_KINDS as readonly string[]).includes(kind)),
+    tableKinds.join(','),
+  );
+  check(
+    '四种主世界结构都有生物表',
+    ['ocean_monument', 'woodland_mansion', 'pillager_outpost', 'village'].every((kind) => tableKinds.includes(kind)),
+  );
+
+  // ② 映射：每种结构生物都能查到 MobType，且自身都不自然刷
+  //    （后者是"为什么需要这条通道"的判据；哪天改成自然刷了，这条会红，提醒删表）
+  let mapped = 0;
+  let naturalOnly = 0;
+  const unmapped: string[] = [];
+  for (const kind of STRUCTURE_CREATURE_KINDS) {
+    const type = mobTypeById(kind);
+    if (!type) {
+      unmapped.push(kind);
+      continue;
+    }
+    mapped++;
+    if (type.naturalSpawn === false) naturalOnly++;
+  }
+  equal('每种结构生物都能映射到 MobType', mapped, STRUCTURE_CREATURE_KINDS.length);
+  equal('没有映射不上的种类', unmapped.length, 0);
+  equal('它们自身都不自然刷（所以必须有这条结构通道）', naturalOnly, STRUCTURE_CREATURE_KINDS.length);
+
+  // ③ 真实实例：找一个海底神殿，跨它覆盖的所有区块合并结果
+  const seed = 20261014;
+  const world = new OverworldGenerator(seed);
+  let monument = null;
+  for (let cellZ = -6; cellZ <= 6 && !monument; cellZ++) {
+    for (let cellX = -6; cellX <= 6 && !monument; cellX++) {
+      monument = structureInstanceForTest('ocean_monument', cellX, cellZ, world, seed);
+    }
+  }
+  check('找得到一个海底神殿（深海里不算稀有）', monument !== null);
+  if (monument) {
+    const cx0 = Math.floor(monument.minX / 16);
+    const cx1 = Math.floor(monument.maxX / 16);
+    const cz0 = Math.floor(monument.minZ / 16);
+    const cz1 = Math.floor(monument.maxZ / 16);
+    const seen = new Map<string, string>();
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        for (const spawn of structureCreatureSpawnsAt(cx, cz, world, seed)) {
+          seen.set(`${spawn.x},${spawn.y},${spawn.z}`, spawn.kind);
+        }
+      }
+    }
+    const expected = creatureAnchorsFor('ocean_monument').reduce((n, anchor) => n + (anchor.count ?? 1), 0);
+    equal('跨区块合并后不重复、数量等于锚点总数', seen.size, expected);
+    check(
+      '只有守卫者与远古守卫者',
+      [...seen.values()].every((kind) => kind === 'guardian' || kind === 'elder_guardian'),
+    );
+    check(
+      '每个锚点都落在结构包围盒里',
+      [...seen.keys()].every((key) => {
+        const [x, y, z] = key.split(',').map(Number) as [number, number, number];
+        return (
+          x >= monument!.minX &&
+          x <= monument!.maxX &&
+          z >= monument!.minZ &&
+          z <= monument!.maxZ &&
+          y >= monument!.minY &&
+          y <= monument!.maxY
+        );
+      }),
+    );
+  }
+
+  // ④ 探针拒绝时一只都不放（锚点偏差不该变成"卡进墙里的生物"）
+  equal('探针拒绝时一个都不放', structureCreatureSpawnsAt(0, 0, world, seed, () => false).length, 0);
+
+  // ⑤ 幂等：同一区块调两次结果完全一致（区块卸载重载的前提）
+  equal(
+    '同一区块两次结果一致',
+    JSON.stringify(structureCreatureSpawnsAt(7, 8, world, seed)),
+    JSON.stringify(structureCreatureSpawnsAt(7, 8, world, seed)),
+  );
+}
+
+console.log('\n[结构生物的就近落点（批次 457）]');
+{
+  // ① 纯逻辑：由近到远、找不到返回 null、顺序确定
+  equal('探针全拒绝时没有落点', nearbyStandingSpot(() => false, 0, 64, 0, 3), null);
+  const center = nearbyStandingSpot((x, y, z) => x === 0 && y === 64 && z === 0, 0, 64, 0, 3);
+  equal('中心可用时就用中心', `${center?.x},${center?.y},${center?.z}`, '0,64,0');
+  const side = nearbyStandingSpot((x, y, z) => x === 1 && y === 64 && z === 0, 0, 64, 0, 3);
+  equal('中心不可用时挪到相邻一格', `${side?.x},${side?.y},${side?.z}`, '1,64,0');
+  equal(
+    '同样的探针两次结果一致（确定性）',
+    JSON.stringify(nearbyStandingSpot((x) => x === 2, 0, 64, 0, 3)),
+    JSON.stringify(nearbyStandingSpot((x) => x === 2, 0, 64, 0, 3)),
+  );
+  equal('半径 0 时只看中心', nearbyStandingSpot((x) => x === 1, 0, 64, 0, 0), null);
+}
+
+console.log('\n[结构生物在真实地形上都能落地（批次 457）]');
+{
+  const seed = 20261014;
+  const world = new OverworldGenerator(seed);
+  let monument = null;
+  for (let cellZ = -6; cellZ <= 6 && !monument; cellZ++) {
+    for (let cellX = -6; cellX <= 6 && !monument; cellX++) {
+      monument = structureInstanceForTest('ocean_monument', cellX, cellZ, world, seed);
+    }
+  }
+  if (!monument) {
+    check('找得到海底神殿（否则这条断言没意义）', false);
+  } else {
+    // 把神殿覆盖的区块（再多一圈）生成出来，按世界坐标查方块
+    const cx0 = Math.floor(monument.minX / 16) - 1;
+    const cx1 = Math.floor(monument.maxX / 16) + 1;
+    const cz0 = Math.floor(monument.minZ / 16) - 1;
+    const cz1 = Math.floor(monument.maxZ / 16) + 1;
+    const blocks = new Map<string, number>();
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const ids = generateChunkBlocks(cx, cz, seed);
+        takeGeneratedStates();
+        for (let y = 0; y < 200; y++) {
+          for (let z = 0; z < 16; z++) {
+            for (let x = 0; x < 16; x++) {
+              blocks.set(`${cx * 16 + x},${y},${cz * 16 + z}`, ids[Chunk.index(x, y, z)]!);
+            }
+          }
+        }
+      }
+    }
+    const at = (x: number, y: number, z: number): number => blocks.get(`${x},${y},${z}`) ?? -1;
+
+    const spawns = [];
+    for (let cz = Math.floor(monument.minZ / 16); cz <= Math.floor(monument.maxZ / 16); cz++) {
+      for (let cx = Math.floor(monument.minX / 16); cx <= Math.floor(monument.maxX / 16); cx++) {
+        spawns.push(...structureCreatureSpawnsAt(cx, cz, world, seed));
+      }
+    }
+    check('神殿里有锚点', spawns.length > 0, `${spawns.length}`);
+
+    let placed = 0;
+    const missing: string[] = [];
+    for (const spawn of spawns) {
+      const type = mobTypeById(spawn.kind);
+      if (!type) continue;
+      // 与 `main.structureCreatureSpotFree` 同一条判据
+      const probe = (x: number, y: number, z: number): boolean => {
+        const here = at(x, y, z);
+        const above = at(x, y + 1, z);
+        if (type.flying) return here === Block.AIR;
+        if (here !== Block.AIR || above !== Block.AIR) return false;
+        if (type.aquatic || type.spawnInWater) return true;
+        return blockDef(at(x, y - 1, z)).solid;
+      };
+      if (nearbyStandingSpot(probe, spawn.x, spawn.y, spawn.z, 3)) placed++;
+      else missing.push(`${spawn.kind}@${spawn.x},${spawn.y},${spawn.z}`);
+    }
+    equal('每一个锚点都在 3 格内找到了落点（一只都不会丢）', placed, spawns.length);
+    check('没有落不下的锚点', missing.length === 0, missing.slice(0, 3).join(' '));
+  }
+}
+
+console.log(`\n结构测试：${passed} 通过 / ${failed} 失败`);
+if (failed > 0) process.exit(1);
