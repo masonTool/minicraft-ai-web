@@ -2108,6 +2108,24 @@ console.log('\n[主菜单分层（批次 108）]');
       source.includes('private async confirmDelete(') &&
       source.includes("overlay.className = 'world-confirm';"),
   );
+  // 批次 529（用户）：世界列表可编辑名称/模式/难度，列表精简成"名称 + 标签 + 活跃度"
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(
+    '世界列表可编辑名称/模式/难度',
+    source.includes('private openEdit(world: WorldSummary): void') &&
+      source.includes("title.textContent = t('world.editTitle');") &&
+      source.includes("this.makeRow(t('world.gameMode'), mode.element, null)") &&
+      source.includes("this.makeRow(t('world.difficulty'), difficulty.element, null)") &&
+      source.includes('private makeChip(') &&
+      source.includes('world-card-chips'),
+  );
+  check(
+    '编辑世界的模式与难度同步进玩家存档（否则读档会被旧值覆盖）',
+    mainSrc.includes('const editWorld = async (world: WorldSummary, patch: WorldEditPatch)') &&
+      mainSrc.includes('gameMode: patch.gameMode') &&
+      mainSrc.includes('difficulty: patch.difficulty') &&
+      mainSrc.includes('await save.savePlayer('),
+  );
   check('首页品牌信号是 MINECRAFT + 基岩版标识', source.includes("logo.textContent = 'MINECRAFT';") && source.includes('world-edition'));
   check('世界列表按视图展开并带缩略图', source.includes("this.panel.dataset.view = view;") && source.includes('world-card-thumb'));
   check(

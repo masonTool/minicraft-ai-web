@@ -167,7 +167,7 @@ import {
   type GameSettings,
   type SettingsChangeMeta,
 } from './ui/SettingsScreen.ts';
-import { WorldScreen } from './ui/WorldScreen.ts';
+import { WorldScreen, type WorldEditPatch } from './ui/WorldScreen.ts';
 import {
   failBootLoading,
   hideBootLoading,
@@ -16463,6 +16463,7 @@ async function boot(): Promise<void> {
   const menu = new WorldScreen(document.body, registry, {
     onEnter: (world) => void startWorld(world),
     onDelete: (world) => deleteWorld(world),
+    onEdit: (world, patch) => editWorld(world, patch),
     onSettings: openMenuSettings,
   });
 
@@ -16470,6 +16471,32 @@ async function boot(): Promise<void> {
   const deleteWorld = async (world: WorldSummary): Promise<void> => {
     await SaveGame.deleteWorld(world.id);
     registry.remove(world.id);
+  };
+
+  /**
+   * 编辑世界（批次 529）：清单 + 玩家存档两处一起改。
+   *
+   * ⚠️ 只改清单是不够的：读档时 `loadPlayer().gameMode` 会覆盖启动参数里的模式，
+   * 难度也在玩家存档里。不同步的话，列表里改成创造，进去仍是旧模式。
+   */
+  const editWorld = async (world: WorldSummary, patch: WorldEditPatch): Promise<void> => {
+    registry.update(world.id, patch);
+    let save: SaveGame | null = null;
+    try {
+      save = await SaveGame.open(world.id);
+      if (!save) return;
+      const data = await save.loadPlayer();
+      if (!data) return;
+      await save.savePlayer({
+        ...data,
+        gameMode: patch.gameMode,
+        difficulty: patch.difficulty,
+      });
+    } catch (error) {
+      console.warn('[world] 编辑世界时同步存档失败', error);
+    } finally {
+      save?.close();
+    }
   };
 
   // 开发调试入口：验收脚本用它建世界、看列表

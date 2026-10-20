@@ -28,11 +28,35 @@ import type { WorldRegistry, WorldSummary } from '../core/save/WorldRegistry.ts'
 import { formatBuildInfo, readBuildInfo } from '../game/buildInfo.ts';
 import { Dropdown } from './Dropdown.ts';
 
+/** 列表里的世界类型短名（新建表单仍然用带说明的全名） */
+const WORLD_TYPE_SHORT_LABELS: Record<WorldType, string> = {
+  default: '默认',
+  flat: '超平坦',
+  amplified: '放大化',
+  caves: '洞穴',
+  floating_islands: '浮空岛',
+};
+
+/** 编辑世界时允许改的三项（世界类型/种子会改变地形，不在可编辑范围） */
+export interface WorldEditPatch {
+  name: string;
+  gameMode: GameMode;
+  difficulty: Difficulty;
+}
+
 export interface WorldScreenActions {
   /** 进入世界（已有存档或刚创建的都走这里） */
   onEnter: (world: WorldSummary) => void;
   /** 删除世界（含存档数据）；调用方负责真的删库（可能是异步的） */
   onDelete: (world: WorldSummary) => void | Promise<void>;
+  /**
+   * 编辑世界（名称 / 模式 / 难度）。
+   *
+   * 主程序除了回写清单，还要把模式与难度同步进**玩家存档**——
+   * 读档时 `loadPlayer().gameMode` 会覆盖清单里的模式，不同步的话
+   * "在列表里改成创造，进去还是生存"。
+   */
+  onEdit?: (world: WorldSummary, patch: WorldEditPatch) => void | Promise<void>;
   /** 打开设置（图形/操作/声音这些是"这台设备的偏好"，与世界无关） */
   onSettings?: () => void;
 }
@@ -59,6 +83,9 @@ export class WorldScreen {
   private readonly gameModeSelect: Dropdown<GameMode>;
   /** 游戏内确认弹窗（删除世界用；批次 528 不再用 window.confirm） */
   private confirmEl: HTMLDivElement | null = null;
+  /** 编辑世界弹窗（批次 529）：同一时间只开一个 */
+  private editEl: HTMLDivElement | null = null;
+  private editCleanup: (() => void) | null = null;
   /** 世界类型下面那行说明（批次 181：超平坦没有树/村庄/矿石要说在前面） */
   private readonly typeHintEl: HTMLDivElement;
   /** 三个视图各自的那一节（同一份 DOM 用 `.active` 切换，见文件头注释） */
@@ -174,7 +201,7 @@ export class WorldScreen {
     listLabel.appendChild(this.worldCountEl);
 
     worlds.append(
-      this.makeNav(t('menu.play'), () => this.setView('home')),
+      this.makeNav(t('world.list'), () => this.setView('home')),
       newEntry,
       listLabel,
       this.listEl,
@@ -355,7 +382,7 @@ export class WorldScreen {
   render(): void {
     this.listEl.textContent = '';
     const worlds = this.registry.list();
-    this.worldCountEl.textContent = ` ${worlds.length}`;
+    this.worldCountEl.textContent = String(worlds.length);
 
     if (worlds.length === 0) {
       const empty = document.createElement('div');
@@ -373,29 +400,42 @@ export class WorldScreen {
   private makeCard(world: WorldSummary): HTMLDivElement {
     const card = document.createElement('div');
     card.className = 'world-card';
-
-    const info = document.createElement('div');
-    info.className = 'world-card-info';
+    // 完整信息留在悬停提示里（桌面端可看；手机端不占行高）
+    card.title = `种子 ${world.seed} · 改动 ${world.edits} 格`;
 
     const thumbnail = document.createElement('div');
     thumbnail.className = 'world-card-thumb';
     thumbnail.dataset.worldType = world.worldType;
     thumbnail.setAttribute('aria-hidden', 'true');
 
+    const info = document.createElement('div');
+    info.className = 'world-card-info';
+
     const name = document.createElement('div');
     name.className = 'world-card-name';
     name.textContent = world.name;
 
-    const meta = document.createElement('div');
-    meta.className = 'world-card-meta';
-    meta.textContent = `${WORLD_TYPE_LABELS[world.worldType]} · ${DIFFICULTY_LABELS[world.difficulty]} · ${GAME_MODE_LABELS[world.gameMode]} · 种子 ${world.seed}`;
+    // 三个小标签：模式 / 难度 / 世界类型。比原来那行"类型 · 难度 · 模式 · 种子"
+    // 更好扫读，也不再让种子这种低频信息占掉一整行。
+    const chips = document.createElement('div');
+    chips.className = 'world-card-chips';
+    chips.append(
+      this.makeChip(GAME_MODE_LABELS[world.gameMode], 'mode', world.gameMode),
+      this.makeChip(DIFFICULTY_LABELS[world.difficulty], 'difficulty', world.difficulty),
+      this.makeChip(WORLD_TYPE_SHORT_LABELS[world.worldType], 'type', world.worldType),
+    );
 
     const stats = document.createElement('div');
-    stats.className = 'world-card-meta';
-    const played = world.playTime >= 60 ? `${Math.round(world.playTime / 60)} 分钟` : `${Math.round(world.playTime)} 秒`;
-    stats.textContent = `上次游玩 ${relativeTime(world.lastPlayed)} · 已游玩 ${played} · 改动 ${world.edits} 格`;
+    stats.className = 'world-card-stats';
+    const played =
+      world.playTime < 60
+        ? '不到 1 分钟'
+        : world.playTime < 3600
+          ? `${Math.round(world.playTime / 60)} 分钟`
+          : `${Math.floor(world.playTime / 3600)} 小时 ${Math.round((world.playTime % 3600) / 60)} 分`;
+    stats.textContent = `上次游玩 ${relativeTime(world.lastPlayed)} · 已玩 ${played}`;
 
-    info.append(name, meta, stats);
+    info.append(name, chips, stats);
 
     const buttons = document.createElement('div');
     buttons.className = 'world-card-actions';
@@ -408,6 +448,12 @@ export class WorldScreen {
     enter.textContent = t('world.enter');
     enter.addEventListener('click', () => this.actions.onEnter(world));
 
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'world-edit';
+    edit.textContent = t('world.edit');
+    edit.addEventListener('click', () => this.openEdit(world));
+
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'danger';
@@ -416,9 +462,144 @@ export class WorldScreen {
       void this.confirmDelete(world);
     });
 
-    buttons.append(enter, remove);
+    buttons.append(enter, edit, remove);
     card.append(thumbnail, info, buttons);
     return card;
+  }
+
+  /** 列表里的彩色小标签（模式 / 难度 / 类型） */
+  private makeChip(text: string, kind: string, value: string): HTMLSpanElement {
+    const chip = document.createElement('span');
+    chip.className = 'world-chip';
+    chip.dataset.kind = kind;
+    chip.dataset.value = value;
+    chip.textContent = text;
+    return chip;
+  }
+
+  /**
+   * 编辑世界（批次 529，用户要求）：名称 / 游戏模式 / 难度。
+   *
+   * 世界类型与种子不在这里改——它们决定地形，改了就不是同一个世界了。
+   * 模式与难度同时回写玩家存档，否则读档时会被存档里的旧值覆盖。
+   */
+  private openEdit(world: WorldSummary): void {
+    this.editCleanup?.();
+    const overlay = document.createElement('div');
+    overlay.className = 'world-modal';
+    const panel = document.createElement('div');
+    panel.className = 'world-modal-panel';
+
+    const header = document.createElement('div');
+    header.className = 'world-modal-header';
+    const title = document.createElement('b');
+    title.textContent = t('world.editTitle');
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'world-modal-close';
+    close.textContent = '✕';
+    close.setAttribute('aria-label', '关闭');
+    header.append(title, close);
+
+    const form = document.createElement('div');
+    form.className = 'world-edit-form';
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'world-input';
+    nameInput.maxLength = 24;
+    nameInput.value = world.name;
+
+    const mode = new Dropdown<GameMode>(
+      GAME_MODES,
+      GAME_MODE_LABELS,
+      world.gameMode,
+      () => undefined,
+      { fullWidth: true, className: 'world-dropdown' },
+    );
+    const difficulty = new Dropdown<Difficulty>(
+      DIFFICULTIES,
+      DIFFICULTY_LABELS,
+      world.difficulty,
+      () => undefined,
+      { fullWidth: true, className: 'world-dropdown' },
+    );
+
+    const hint = document.createElement('div');
+    hint.className = 'world-edit-hint';
+    hint.textContent = t('world.editHint');
+    const error = document.createElement('div');
+    error.className = 'world-edit-error hidden';
+
+    const actions = document.createElement('div');
+    actions.className = 'world-modal-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = t('menu.cancel');
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'world-edit-save';
+    save.textContent = t('world.save');
+    actions.append(cancel, save);
+
+    form.append(
+      this.makeRow(t('world.name'), nameInput, null),
+      this.makeRow(t('world.gameMode'), mode.element, null),
+      this.makeRow(t('world.difficulty'), difficulty.element, null),
+      hint,
+      error,
+    );
+    panel.append(header, form, actions);
+    overlay.appendChild(panel);
+    this.root.appendChild(overlay);
+    this.editEl = overlay;
+
+    const cleanup = (): void => {
+      document.removeEventListener('keydown', onKey, true);
+      mode.dispose();
+      difficulty.dispose();
+      overlay.remove();
+      if (this.editEl === overlay) this.editEl = null;
+      if (this.editCleanup === cleanup) this.editCleanup = null;
+    };
+    this.editCleanup = cleanup;
+
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      cleanup();
+    };
+    document.addEventListener('keydown', onKey, true);
+    close.addEventListener('click', cleanup);
+    cancel.addEventListener('click', cleanup);
+    save.addEventListener('click', () => {
+      void (async () => {
+        const name = nameInput.value.trim() || '未命名世界';
+        save.disabled = true;
+        try {
+          const patch: WorldEditPatch = {
+            name,
+            gameMode: mode.value,
+            difficulty: difficulty.value,
+          };
+          if (this.actions.onEdit) await this.actions.onEdit(world, patch);
+          else this.registry.update(world.id, patch);
+          cleanup();
+          this.render();
+        } catch (saveError) {
+          console.error('[world] 保存编辑失败', saveError);
+          error.textContent = '保存失败，请重试';
+          error.classList.remove('hidden');
+          save.disabled = false;
+        }
+      })();
+    });
+
+    requestAnimationFrame(() => {
+      nameInput.focus();
+      nameInput.select();
+    });
   }
 
   /**

@@ -501,23 +501,29 @@
       }
       .install-hint span { flex: 1 1 auto; min-width: 0; }
       .install-hint button { flex: 0 0 auto; font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer; }
-      .world-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+      .world-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
       /* 列表在窄屏/世界多的时候自己滚，别把面板撑破 */
       .world-list { max-height: min(46vh, 300px); overflow-x: hidden; overflow-y: auto; }
       /* 固定盒子之后列表改成"吃掉剩下的高度"（原来是 46vh 封顶，PC 上会在框底留一片空） */
       .world-panel[data-view='worlds'] .world-list { flex: 1 1 auto; min-height: 0; max-height: none; }
-      /* 二级页面里"存档"那一行小标题（上面是「＋ 新建世界」主入口） */
+      /* 二级页面里"存档"那一行小标题（上面是「＋ 新建世界」主入口）。
+         批次 529：去掉原来那条厚重的黑底绿边，改成"文字 + 数量胶囊 + 细线"，
+         列表因此显得更轻、更规整。 */
       .world-group-label {
         display: flex; justify-content: space-between; align-items: center;
-        margin: 6px 0 4px; padding: 8px 10px; font-size: 13px;
-        color: #fff; letter-spacing: 1px;
-        background: rgba(0,0,0,.55);
-        border-bottom: 3px solid #4f8b37;
+        margin: 8px 0 2px; padding: 2px 2px 6px; font-size: 12px;
+        color: #d8d8d8; letter-spacing: .5px;
+        border-bottom: 1px solid rgba(255, 255, 255, .16);
       }
-      .world-count { color: #bdbdbd; font-size: 11px; }
+      .world-count {
+        color: #e6e6e6; font-size: 10px; line-height: 1.5;
+        padding: 0 7px; background: rgba(255, 255, 255, .14);
+        border: 1px solid rgba(255, 255, 255, .18);
+      }
       .world-empty {
-        padding: 12px; text-align: center; color: #a8a8a8;
-        border: 2px dashed rgba(255, 255, 255, .22);
+        padding: 18px 12px; text-align: center; color: #b0b0b0; font-size: 12px;
+        border: 2px dashed rgba(255, 255, 255, .18);
+        background: rgba(0, 0, 0, .18);
       }
       /* 存档卡片：原版是"深色底 + 黑描边 + 一圈内斜面"（凹进去的一块） */
       .world-card {
@@ -547,15 +553,40 @@
         left: 26px; height: 32px; transform: skew(-30deg);
       }
       .world-card-info { flex: 1; min-width: 0; }
-      .world-card-name { font-size: 14px; color: #fff; }
-      .world-card-meta {
-        color: #a8a8a8; font-size: 11px; margin-top: 2px;
+      .world-card-name {
+        font-size: 15px; font-weight: 600; color: #fff; line-height: 1.35;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
-      .world-card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+      /* 模式 / 难度 / 类型：三个小标签，扫一眼就知道这是什么世界 */
+      .world-card-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+      .world-chip {
+        font-size: 10px; line-height: 1.5; padding: 0 6px;
+        color: #d0d0d0; background: rgba(255, 255, 255, .08);
+        border: 1px solid rgba(255, 255, 255, .22);
+      }
+      .world-chip[data-kind='mode'][data-value='creative'] { color: #b8f09a; border-color: #4f8b37; }
+      .world-chip[data-kind='mode'][data-value='spectator'] { color: #b9c9ff; border-color: #4a5f9a; }
+      .world-chip[data-kind='difficulty'][data-value='peaceful'] { color: #a9d8ff; border-color: #3f6f8a; }
+      .world-chip[data-kind='difficulty'][data-value='hard'] { color: #ffb0a6; border-color: #8a3f38; }
+      .world-card-stats {
+        color: #969696; font-size: 10px; margin-top: 3px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .world-card-actions { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: nowrap; }
       .world-card-actions button, .world-primary, .world-mini, .world-secondary {
         font: inherit; cursor: pointer; padding: 6px 10px;
         transition: transform var(--dur-fast) var(--ease);
+      }
+      .world-card-actions button { font-size: 12px; padding: 5px 9px; white-space: nowrap; }
+      /* 「进入」是这张卡的主操作：绿色面，和三颗灰按钮区分开 */
+      .world-card-actions .world-enter {
+        color: #fff; background: #3f6f2d;
+        border-color: #1f3a16 #8fd06b #8fd06b #1f3a16;
+      }
+      .world-card-actions .world-enter:hover { background: #4a8236; color: #fff; }
+      .world-card-actions .world-enter:active {
+        background: #355d26;
+        border-color: #8fd06b #1f3a16 #1f3a16 #8fd06b;
       }
       /* 危险操作 = **红字**（原版没有红色按钮），底还是那颗灰按钮 */
       .world-card-actions button.danger,
@@ -606,10 +637,12 @@
       }
       .world-primary { padding: 9px; font-size: 14px; letter-spacing: 1px; }
       /* 批次 528（用户）：世界列表页的「新建世界」比首页主按钮矮一点，
-         把高度让给下面的存档列表。 */
+         把高度让给下面的存档列表；批次 529 起铺满整行，与下面的卡片对齐。 */
       #world-new-button {
-        width: min(100%, 320px);
-        min-height: 40px; padding: 6px 10px; font-size: 13px;
+        width: 100%; max-width: none;
+        align-self: stretch; justify-self: stretch;
+        min-height: 40px; padding: 6px 12px; font-size: 13px;
+        text-align: left;
       }
       /* ⚠️ 不再写 `margin-top`：主页那几颗入口的间距交给 `.world-menu` 的 `gap`，
          写了 margin 会在"列表页底部那颗新建键"上多出一截空隙 */
@@ -639,6 +672,53 @@
         font: inherit; font-size: 13px; min-height: 36px; padding: 6px 14px; cursor: pointer;
       }
       .world-confirm-actions button.danger { color: var(--mc-text-danger); }
+
+      /* ---------------- 编辑世界（批次 529） ----------------
+         与删除确认同一套遮罩/面板；里面三行：名称 / 游戏模式 / 难度。
+         模式与难度在保存时同步进玩家存档，下次进入才生效（提示写在表单里）。 */
+      .world-modal {
+        position: fixed; inset: 0; z-index: 46;
+        display: flex; align-items: center; justify-content: center;
+        padding: 12px; background: rgba(0, 0, 0, .58);
+      }
+      .world-modal-panel {
+        width: min(92vw, 440px); max-height: min(90dvh, 520px);
+        overflow-y: auto; overscroll-behavior: contain;
+        padding: 12px 14px;
+        background: rgba(22, 22, 22, .97); color: var(--mc-text-light);
+        border: 3px solid; border-color: var(--pixel-bevel-dark);
+        box-shadow: var(--panel-shadow);
+        font-size: 13px; text-shadow: 1px 1px 0 var(--mc-text-shadow);
+      }
+      .world-modal-header {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding-bottom: 8px; margin-bottom: 8px;
+        border-bottom: 2px solid rgba(255, 255, 255, .16);
+      }
+      .world-modal-header b { font-size: 15px; color: #fff; }
+      .world-modal-close {
+        font: inherit; font-size: 13px; line-height: 1;
+        min-width: 26px; min-height: 24px; padding: 0 6px; cursor: pointer;
+      }
+      .world-edit-form { display: flex; flex-direction: column; gap: 6px; }
+      .world-edit-hint { font-size: 10px; line-height: 1.45; color: #a8a8a8; margin-top: 2px; }
+      .world-edit-error { font-size: 11px; color: #ff9b8a; }
+      .world-edit-error.hidden { display: none; }
+      .world-modal-actions {
+        display: flex; justify-content: flex-end; gap: 8px;
+        margin-top: 12px; padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, .14);
+      }
+      .world-modal-actions button {
+        font: inherit; font-size: 13px; min-height: 36px; padding: 6px 14px; cursor: pointer;
+      }
+      .world-modal-actions .world-edit-save { background: #3f6f2d; color: #fff; }
+      .world-modal-actions .world-edit-save:hover { background: #4a8236; color: #fff; }
+      /* 极窄（竖屏手机）：三颗操作键换到卡片下面一行，名字与标签不再被挤成一条 */
+      @media (max-width: 560px) {
+        .world-card { flex-wrap: wrap; }
+        .world-card-actions { width: 100%; justify-content: flex-end; }
+      }
 
       /* ---------------- 配方书 ---------------- */
       #recipe-book {
@@ -4290,7 +4370,9 @@
          这套值是原版反推的：面板 #c6c6c6 / 斜面 #fff + #555 / 描边 #000 /
          文字 #e0e0e0 / 阴影 #3f3f3f / 悬停 #ffffa0。 */
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
-          .world-card-actions button, .pause-action, .settings-back,
+          .world-card-actions button, .world-confirm-actions button,
+          .world-modal-actions button, .world-modal-close,
+          .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .settings-dropdown-button,
           .appearance-preset, .appearance-focus-button,
           .adv-close, .recipe-close, .recipe-page-button,
@@ -4303,7 +4385,9 @@
         text-shadow: 1px 1px 0 var(--mc-text-shadow);
       }
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
-          .world-card-actions button, .pause-action, .settings-back,
+          .world-card-actions button, .world-confirm-actions button,
+          .world-modal-actions button, .world-modal-close,
+          .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .settings-dropdown-button,
           .appearance-preset, .appearance-focus-button,
           .adv-close, .recipe-close, .recipe-page-button,
@@ -4312,7 +4396,9 @@
         color: var(--mc-text-hover);
       }
       :is(.world-primary, .world-secondary, .world-mini, .world-back,
-          .world-card-actions button, .pause-action, .settings-back,
+          .world-card-actions button, .world-confirm-actions button,
+          .world-modal-actions button, .world-modal-close,
+          .pause-action, .settings-back,
           .settings-tab, .settings-cycle, .settings-dropdown-button,
           .appearance-preset, .appearance-focus-button,
           .adv-close, .recipe-close, .recipe-page-button,
