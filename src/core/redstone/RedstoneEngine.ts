@@ -921,6 +921,17 @@ export class RedstoneEngine {
     for (const source of sources) {
       const startKey = keyOf(source.x, source.y, source.z);
       const startStrength = strengths.get(startKey) ?? 0;
+      // 输出落点如果本身是另一个中继器/比较器/侦测器，**不能**把这一格当作
+      // 红石粉的电源继续往它旁边传：那会让"被侧向锁存的中继器"旁边的粉也带电
+      // （批次 561 修）。真正的输出由那个元件自己再算一次。
+      const sourceBlock = world.getBlock(source.x, source.y, source.z);
+      if (
+        sourceBlock === Block.REPEATER ||
+        sourceBlock === Block.COMPARATOR ||
+        sourceBlock === Block.OBSERVER
+      ) {
+        continue;
+      }
       for (const [dx, dy, dz] of NEIGHBORS) {
         const nx = source.x + dx;
         const ny = source.y + dy;
@@ -1102,8 +1113,14 @@ export class RedstoneEngine {
           // ⚠️ 中继器的"输入"必须只看**背面**那一侧：它的输出就写在自己朝向的那一格上，
           // 若沿用六邻域输入，输出会被自己当成输入，形成自锁——断开电源后永远不停。
           const k = keyOf(nx, ny, nz);
-          const wanted = this.backInput(world, strengths, nx, ny, nz, state) > 0;
           const outputting = this.repeaterOutput.get(k) ?? false;
+          // 侧向锁存（批次 561）：保持当前输出，输入变化先不管；解锁后会重新跟随
+          if (this.isRepeaterLocked(world, nx, ny, nz, state)) {
+            // 锁存且当前没有输出时，前方那格粉不该还亮着（可能来自上一次瞬时输出）
+            if (!outputting) this.clearRepeaterFront(world, nx, ny, nz, state);
+            break;
+          }
+          const wanted = this.backInput(world, strengths, nx, ny, nz, state) > 0;
           if (wanted && !outputting && !this.repeaterTimers.has(k)) {
             const delay = (delayTicksOf(state) + 1) * 0.1;
             this.repeaterTimers.set(k, delay);
@@ -1232,6 +1249,50 @@ export class RedstoneEngine {
       default:
         return { dx: 0, dy: 0, dz: 0, strength: 0 };
     }
+  }
+
+  /**
+   * 中继器是否被**侧向锁存**（批次 561，原版行为）。
+   *
+   * 左右两侧如果有一个中继器/比较器**正朝着这一格输出**，这一格就被锁住：
+   * 输入再怎么变，输出保持原样；解锁后才重新跟随输入。
+   * 只有中继器/比较器能锁存（红石粉、火把不行）。
+   */
+  /** 中继器前方那格如果是红石粉，把它的缓存强度清掉并标脏（锁存时用） */
+  private clearRepeaterFront(world: RedstoneWorld, x: number, y: number, z: number, state: number): void {
+    const [fx, fz] = FACING_OFFSET[facingOf(state)]!;
+    const wx = x + fx;
+    const wz = z + fz;
+    if (world.getBlock(wx, y, wz) !== Block.REDSTONE_WIRE) return;
+    const key = keyOf(wx, y, wz);
+    if ((this.wirePower.get(key) ?? 0) === 0) return;
+    this.wirePower.delete(key);
+    this.markDirty(wx, y, wz);
+  }
+
+  private isRepeaterLocked(world: RedstoneWorld, x: number, y: number, z: number, state: number): boolean {
+    const [fx, fz] = FACING_OFFSET[facingOf(state)]!;
+    const sides: readonly (readonly [number, number])[] = [
+      [-fz, fx],
+      [fz, -fx],
+    ];
+    for (const [sxOff, szOff] of sides) {
+      const sx = x + sxOff;
+      const sz = z + szOff;
+      const id = world.getBlock(sx, y, sz);
+      if (id !== Block.REPEATER && id !== Block.COMPARATOR) continue;
+      const sideState = world.getState(sx, y, sz);
+      const [ox, oz] = FACING_OFFSET[facingOf(sideState)]!;
+      // 侧面的元件必须**朝着这一格**，否则它只是在旁边
+      if (sx + ox !== x || sz + oz !== z) continue;
+      if (id === Block.REPEATER) {
+        if (this.repeaterOutput.get(keyOf(sx, y, sz)) ?? false) return true;
+      } else {
+        const output = this.componentOutput(world, sx, y, sz, id, sideState);
+        if (output.strength > 0) return true;
+      }
+    }
+    return false;
   }
 
   /** 中继器/比较器的输入：只看朝向的反方向那一格（避免把自己的输出当输入） */

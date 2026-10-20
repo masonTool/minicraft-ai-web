@@ -407,6 +407,36 @@ console.log('\n[黏液块：活塞推动/拉回整组（批次 557）]');
   check('更前面那格清空', world.getBlock(4, Y, 0) === Block.AIR);
 }
 
+console.log('\n[中继器侧向锁存（批次 561）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  // A：主中继器，朝东；输入来自西边的拉杆，输出到东边的红石粉
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.REPEATER, withFacing(0, 1));
+  world.setBlock(2, Y, 0, Block.REDSTONE_WIRE, 0);
+  // B：锁存器，在 A 的北侧、朝南（正对着 A）
+  world.setBlock(1, Y, -2, Block.LEVER, 0);
+  world.setBlock(1, Y, -1, Block.REPEATER, withFacing(0, 2));
+  engine.onBlockChanged(world, 1, Y, 0);
+  step(engine, world, 0.2);
+
+  // 先把 B 打开，让 A 进入锁存
+  engine.toggleLever(world, 1, Y, -2);
+  step(engine, world, 0.2);
+  check('锁存器 B 已输出', world.getBlock(1, Y, -1) === Block.REPEATER);
+
+  // 再打开 A 的输入：被锁住，输出不应出现
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.5);
+  equal('锁存期间输入变化不改变输出', wirePowerOf(engine, 2, Y, 0), 0);
+
+  // 关掉 B：解锁后 A 才按输入点亮
+  engine.toggleLever(world, 1, Y, -2);
+  step(engine, world, 0.5);
+  equal('解锁后中继器恢复输出', wirePowerOf(engine, 2, Y, 0), 15);
+}
+
 console.log('\n[活塞头：技术方块（批次 68）]');
 {
   equal('活塞头没有对应物品（背包里拿不到）', itemDef(Block.PISTON_HEAD), undefined);
