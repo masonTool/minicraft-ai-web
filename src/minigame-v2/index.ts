@@ -1521,6 +1521,8 @@ const frame = (): void => {
       inventoryOpen,
       chatOpen,
       containerOpen,
+      target: currentHit ? `${world.getBlock(currentHit.x, currentHit.y, currentHit.z)}@${currentHit.x},${currentHit.y},${currentHit.z}` : '',
+      held: inventory.get(selectedSlot)?.id ?? 0,
       cameraMode,
       sneaking,
     }),
