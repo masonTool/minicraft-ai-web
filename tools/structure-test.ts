@@ -12,6 +12,7 @@
  * 运行：npm run test:structure
  */
 
+import { readFileSync } from 'node:fs';
 import { Block, BLOCKS, blockDef } from '../src/core/registry/blocks.ts';
 import { chestLootIndex } from '../src/core/registry/blockState.ts';
 import { FeatureWriter, type FeatureWorld } from '../src/core/gen/Features.ts';
@@ -532,6 +533,20 @@ console.log('\n[结构箱都挂着战利品表]');
   console.log(`  各类结构的箱子数：${perKind.join(' · ')}`);
   check(`六种结构里都有战利品箱（共 ${total} 只）`, total >= 6, perKind.join(' · '));
   check('每一只箱子都写了战利品表（没有"打开是空的"箱子）', untagged.length === 0, untagged.slice(0, 3).join(' '));
+}
+
+console.log('\n[矿井里的蛛网（批次 442）]');
+{
+  const structures = readFileSync(new URL('../src/core/gen/Structures.ts', import.meta.url), 'utf8');
+  const sources = readFileSync(new URL('../src/core/gen/GenerationSources.ts', import.meta.url), 'utf8');
+  check(
+    '废弃矿井生成时会挂蛛网',
+    structures.includes('w.fill(cx - px, y + 2, cz - pz, Block.COBWEB)'),
+  );
+  check(
+    '生成来源表也把蛛网算进矿井（可达性审计靠这张表）',
+    sources.includes('Block.COBWEB'),
+  );
 }
 
 console.log(`\n结构测试：${passed} 通过 / ${failed} 失败`);

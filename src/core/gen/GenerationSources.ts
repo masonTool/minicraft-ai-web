@@ -255,7 +255,16 @@ const VILLAGE = [
   ...Array.from({ length: 16 }, (_unused, i) => bedId(i)),
 ];
 
-const MINESHAFT = [Block.OAK_LOG, Block.OAK_PLANKS, Block.OAK_FENCE, Block.CHEST, Block.TORCH, Block.CAVE_SPIDER_SPAWNER];
+const MINESHAFT = [
+  Block.OAK_LOG,
+  Block.OAK_PLANKS,
+  Block.OAK_FENCE,
+  Block.CHEST,
+  Block.TORCH,
+  Block.CAVE_SPIDER_SPAWNER,
+  // 批次 442：顶角挂蛛网（同时也让它从"生存里拿不到"变成拿得到）
+  Block.COBWEB,
+];
 const STRONGHOLD = [
   Block.STONE_BRICKS,
   Block.MOSSY_STONE_BRICKS,

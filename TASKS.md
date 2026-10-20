@@ -1660,7 +1660,7 @@ Mojang 的贴图、音效、音乐、字体受版权保护，直接抓取并随�
       `stripped_log` 6 · `wall_sign` 6 · 非橡木 `button`/`pressure_plate` 各 5
       ② 16 色潜影盒（目前只有**无色**那一个）
       ③ 单件：~~`polished_basalt`~~、~~`blue_ice`~~（**批次 439 已补**）·
-      ~~`honeycomb_block`~~（**批次 440 已补**）· ~~`cobweb`~~（**批次 441 已补**，
+      ~~`honeycomb_block`~~（**批次 440 已补**）· ~~`cobweb`~~（**批次 441/442 已补**：减速 + 矿井生成，
       含减速）· `sponge`/`wet_sponge` · `honey_block` · `lodestone` · `respawn_anchor`
       （`mud` 是 1.19 的，**不做**）
       ⚠️ 剩下这六个**都不是"加个方块就行"**：海绵要吸水、蜜块要粘住实体、

@@ -908,6 +908,14 @@ function buildMineshaft(w: FeatureWriter, s: StructureInstance, _world: FeatureW
       for (let dx = -px; dx <= px; dx++) {
         for (let dz = -pz; dz <= pz; dz++) w.fill(cx + dx, y - 1, cz + dz, plank);
       }
+      // 蛛网（批次 442）：矿井里"角落里挂着几缕"才是原版的样子，
+      // 而且它同时解决了**蛛网在生存里拿不到**这件事（此前只能创造里放）。
+      // 放在顶角而不是通道中央：中央会把人粘在半路，玩起来只剩烦。
+      if (rng.chance(0.15)) {
+        w.fill(cx - px, y + 2, cz - pz, Block.COBWEB);
+        if (rng.chance(0.5)) w.fill(cx + px, y + 2, cz + pz, Block.COBWEB);
+      }
+
       // 木支撑（拱形：两根立柱 + 一根横梁）
       if (i % 4 === 0) {
         w.fill(cx - px, y, cz - pz, plank);
