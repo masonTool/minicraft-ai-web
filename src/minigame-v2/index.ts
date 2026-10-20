@@ -16,17 +16,16 @@ import { Weather } from '../render/Weather.ts';
 import type { MeshWorkerPool } from '../render/MeshWorkerPool.ts';
 import { WxMeshWorkerPool } from './wx-mesh-pool.ts';
 import { MobSystem } from './mobs.ts';
+import { ContainerSystem } from './containers.ts';
 import { PlayerPhysics, type PlayerInput, type PhysicsWorld } from '../core/physics/PlayerPhysics.ts';
 import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
 import { UiLayer, box, button, icon, ring, slider, slot, text, toggle, vital, type UiElement, type UiRingNode } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
-import { Chest } from '../core/container/Chest.ts';
-import { Furnace } from '../core/container/Furnace.ts';
 import { restoreContainers, serializeContainers } from '../core/save/ContainerSave.ts';
 import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafting/Recipes.ts';
-import { CREATIVE_ITEMS, Item, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
+import { CREATIVE_ITEMS, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
 import { BED_IDS, Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
@@ -187,9 +186,6 @@ let menuScreen: 'title' | 'worlds' | 'create' | 'edit' = 'title';
 let paused = false;
 let settingsOpen = false;
 let chatOpen = false;
-let containerOpen = false;
-let openedContainer: Chest | Furnace | null = null;
-let containerTitle = '';
 let lastAction = '';
 const chatMessages: string[] = ['v2 本地聊天', '输入 /help 查看命令'];
 let chatInput = '';
@@ -1381,117 +1377,20 @@ const showTitle = (): void => {
   );
 };
 
-const showContainer = (): void => {
-  if (!openedContainer) return;
-  containerOpen = true;
-  const isFurnace = openedContainer instanceof Furnace;
-  const slots = isFurnace ? 3 : 27;
-  const cols = isFurnace ? 3 : 9;
-  const slotSize = 50;
-  const gap = 5;
-  const panelW = 620;
-  const panelH = 390;
-  const panelX = (1024 - panelW) / 2;
-  const panelY = (uiHeight - panelH) / 2;
-  const gridW = cols * slotSize + (cols - 1) * gap;
-  const gridX = panelX + (panelW - gridW) / 2;
-  const gridY = panelY + 92;
-  const elements: UiElement[] = [
-    text(panelX + 26, panelY + 20, 420, 40, containerTitle, { fontSize: 28, color: '#ffffff' }),
-    button(panelX + panelW - 68, panelY + 20, 42, 42, 'X', () => {
-      containerOpen = false;
-      openedContainer = null;
-      showHud();
-    }, { background: 'rgba(30,38,46,0.95)', border: 'rgba(180,215,235,0.35)', radius: 8 }),
-    text(gridX, gridY - 28, gridW, 24, isFurnace ? '材料 / 燃料 / 产物' : '点击取出；空槽可放入当前快捷栏物品', {
-      fontSize: 13,
-      color: 'rgba(200,220,235,0.7)',
-    }),
-    ...(isFurnace
-      ? [
-          text(panelX + 26, panelY + 62, panelW - 52, 24, `熔炼进度 ${Math.round((openedContainer as Furnace).cookRatio * 100)}%`, {
-            fontSize: 14,
-            color: '#9fe0ff',
-          }),
-        ]
-      : []),
-  ];
-  for (let i = 0; i < slots; i++) {
-    const stack = openedContainer.get(i);
-    elements.push(slot(gridX + (i % cols) * (slotSize + gap), gridY + Math.floor(i / cols) * (slotSize + gap), slotSize, 400 + i, stack?.id ?? 0, stack?.count ?? 0, false, () => {
-      const current = openedContainer?.get(i);
-      if (current) {
-        const remaining = inventory.add(current.id, current.count);
-        openedContainer?.set(i, remaining > 0 ? { id: current.id, count: remaining } : null);
-      } else {
-        const held = inventory.get(selectedSlot);
-        if (held) {
-          openedContainer?.set(i, held);
-          inventory.set(selectedSlot, null);
-        }
-      }
-      showContainer();
-    }));
-  }
-  const hotbarSize = 42;
-  const hotbarGap = 5;
-  const hotbarW = 9 * hotbarSize + 8 * hotbarGap;
-  const hotbarX = panelX + (panelW - hotbarW) / 2;
-  const hotbarY = gridY + (isFurnace ? 1 : 3) * (slotSize + gap) + 18;
-  elements.push(text(hotbarX, hotbarY - 24, hotbarW, 20, '背包快捷栏 · 点击存入', {
-    fontSize: 12,
-    color: 'rgba(200,220,235,0.7)',
-  }));
-  for (let i = 0; i < 9; i++) {
-    const stack = inventory.get(i);
-    elements.push(slot(hotbarX + i * (hotbarSize + hotbarGap), hotbarY, hotbarSize, 500 + i, stack?.id ?? 0, stack?.count ?? 0, false, () => {
-      const held = inventory.get(i);
-      if (!held) return;
-      for (let j = 0; j < slots; j++) {
-        if (openedContainer?.get(j)) continue;
-        openedContainer?.set(j, held);
-        inventory.set(i, null);
-        break;
-      }
-      showContainer();
-    }));
-  }
-
-  ui.setRoot(box(0, 0, 1024, uiHeight, [
-    box(0, 0, 1024, uiHeight, [], { background: 'rgba(0,0,0,0.55)' }),
-    box(panelX, panelY, panelW, panelH, elements, {
-      background: 'rgba(16,22,28,0.97)',
-      border: 'rgba(170,205,230,0.45)',
-      borderWidth: 2,
-      radius: 12,
-    }),
-  ]));
-};
-
-const openContainerAt = (hit: RayHit): boolean => {
+const openBlockAt = (hit: RayHit): boolean => {
   lastAction = 'probe-open';
   const id = world.getBlock(hit.x, hit.y, hit.z);
-  if (BED_IDS.includes(id)) {
-    return trySleep(hit);
-  }
-  if (id === Block.CHEST) {
-    openedContainer = world.containers.getOrCreateChest('overworld', hit.x, hit.y, hit.z);
-    containerTitle = '箱子';
-  } else if (id === Block.CRAFTING_TABLE) {
+  if (BED_IDS.includes(id)) return trySleep(hit);
+  if (id === Block.CRAFTING_TABLE) {
     crafting.drainTo(inventory);
     crafting = new CraftingGrid(3);
     inventoryOpen = true;
     showInventory();
     return true;
-  } else if (id === Block.FURNACE) {
-    openedContainer = world.containers.getOrCreateFurnace('overworld', hit.x, hit.y, hit.z);
-    containerTitle = '熔炉';
-  } else {
-    return false;
   }
-  lastAction = 'open-container';
-  showContainer();
-  return true;
+  const opened = containers.openAt(hit);
+  if (opened) lastAction = 'open-container';
+  return opened;
 };
 
 const pushChat = (line: string): void => {
@@ -2075,7 +1974,7 @@ const breakAt = (hit: RayHit): void => {
 
 const placeAt = (hit: RayHit): void => {
   lastAction = 'place';
-  if (openContainerAt(hit)) return;
+  if (openBlockAt(hit)) return;
   const stack = inventory.get(selectedSlot);
   if (!stack) return;
   const foodInfo = foodInfoById(stack.id);
@@ -2117,6 +2016,15 @@ const updateAimRing = (clientX: number, clientY: number, visible: boolean): void
   ui.refresh(true);
 };
 
+const containers = new ContainerSystem({
+  ui,
+  uiHeight,
+  getWorld: () => world,
+  inventory,
+  getSelectedSlot: () => selectedSlot,
+  showHud: () => showHud(),
+});
+
 const mobs = new MobSystem({
   scene,
   getPlayer: () => ({ x: physics.x, y: physics.y, z: physics.z }),
@@ -2141,7 +2049,7 @@ platform.input.onPointer('down', (event) => {
   lastDownX = event.clientX;
   lastDownY = event.clientY;
   if (ui.handlePointer('down', event.clientX, event.clientY, platform.system.width, platform.system.height)) return;
-  if (!started || paused || settingsOpen || inventoryOpen || chatOpen || containerOpen) return;
+  if (!started || paused || settingsOpen || inventoryOpen || chatOpen || containers.isOpen) return;
   const designX = (event.clientX / Math.max(1, platform.system.width)) * 1024;
   const designY = (event.clientY / Math.max(1, platform.system.height)) * uiHeight;
   const stickLeft = settings.leftHanded ? 1024 - 24 - 120 : 24;
@@ -2244,7 +2152,6 @@ let fps = 0;
 let fpsFrames = 0;
 let fpsStartedAt = performance.now();
 let lastDebugHud = 0;
-let lastFurnaceUi = 0;
 let lastWorldCx = Number.NaN;
 let lastWorldCz = Number.NaN;
 let lastViewDistance = -1;
@@ -2344,13 +2251,8 @@ const frame = (): void => {
       settings: settingsOpen,
       inventoryOpen,
       chatOpen,
-      containerOpen,
-      containerSlots: openedContainer
-        ? Array.from(
-            { length: openedContainer instanceof Chest ? 27 : 3 },
-            (_, index) => openedContainer?.get(index)?.id ?? 0,
-          )
-        : [],
+      containerOpen: containers.isOpen,
+      containerSlots: containers.slotIds,
       lastAction,
       target: currentHit ? `${world.getBlock(currentHit.x, currentHit.y, currentHit.z)}@${currentHit.x},${currentHit.y},${currentHit.z}` : '',
       held: inventory.get(selectedSlot)?.id ?? 0,
@@ -2369,13 +2271,7 @@ const frame = (): void => {
     }),
   );
 
-  if (started && openedContainer instanceof Furnace) {
-    openedContainer.tick(dt);
-    if (containerOpen && now - lastFurnaceUi > 500) {
-      lastFurnaceUi = now;
-      showContainer();
-    }
-  }
+  if (started && containers.isOpen) containers.tick(dt, now);
 
   if (!started) {
     renderer.clear();
@@ -2408,7 +2304,7 @@ const frame = (): void => {
     input.jump = true;
     jumpQueued = false;
   }
-  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen) {
+  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containers.isOpen) {
     const jumpHeld = input.jump;
     const sneakHeld = input.sneak;
     if (flying) {
@@ -2436,7 +2332,7 @@ const frame = (): void => {
   }
   input.jump = false;
 
-  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen) {
+  if (playerReady && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containers.isOpen) {
     if (!physics.onGround) {
       fallPeakY = Math.max(fallPeakY, physics.y);
     } else {
@@ -2574,7 +2470,7 @@ const frame = (): void => {
     void persistWorld();
   }
   ui.render(renderer);
-  if (settings.showDebug && started && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen && now - lastDebugHud > 1000) {
+  if (settings.showDebug && started && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containers.isOpen && now - lastDebugHud > 1000) {
     lastDebugHud = now;
     showHud();
   }
@@ -2632,26 +2528,18 @@ if (wxTestApi && isDesktopRuntime) {
       return { id, count };
     },
     fillChestFirst: (id = 1, count = 2) => {
-      openedContainer?.set(0, { id, count });
-      showContainer();
+      containers.fillFirst(id, count);
       return { id, count };
     },
     smeltFurnace: () => {
-      if (!(openedContainer instanceof Furnace)) return { error: 'not-furnace' };
-      openedContainer.set(0, { id: Item.RAW_IRON, count: 1 });
-      openedContainer.set(1, { id: Item.COAL, count: 1 });
-      openedContainer.tick(20);
-      showContainer();
-      return { output: openedContainer.get(2)?.id ?? 0 };
+      return containers.smeltTest();
     },
     openFurnaceAtFeet: () => {
       const x = Math.floor(physics.x);
       const y = Math.max(0, Math.floor(physics.y) - 1);
       const z = Math.floor(physics.z);
       world.setBlockAndUpdate(x, y, z, Block.FURNACE);
-      openedContainer = world.containers.getOrCreateFurnace('overworld', x, y, z);
-      containerTitle = '熔炉';
-      showContainer();
+      containers.openFurnaceAt(x, y, z);
       return { x, y, z };
     },
     openChestAtFeet: () => {
@@ -2659,9 +2547,7 @@ if (wxTestApi && isDesktopRuntime) {
       const y = Math.max(0, Math.floor(physics.y) - 1);
       const z = Math.floor(physics.z);
       world.setBlockAndUpdate(x, y, z, Block.CHEST);
-      openedContainer = world.containers.getOrCreateChest('overworld', x, y, z);
-      containerTitle = '箱子';
-      showContainer();
+      containers.openChestAt(x, y, z);
       return { x, y, z };
     },
   };
