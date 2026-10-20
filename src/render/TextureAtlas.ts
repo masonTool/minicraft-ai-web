@@ -1782,7 +1782,66 @@ function railPainter(
   };
 }
 
+/** 点到线段（从原点出发、终点 (tx,ty)）的距离 */
+function segmentDistance(px: number, py: number, tx: number, ty: number): number {
+  const lengthSq = tx * tx + ty * ty;
+  if (lengthSq < 1e-6) return Math.hypot(px, py);
+  const t = Math.max(0, Math.min(1, (px * tx + py * ty) / lengthSq));
+  return Math.hypot(px - tx * t, py - ty * t);
+}
+
+/**
+ * 弯轨（批次 478）：两条从格心各自伸向一条边的轨道。
+ *
+ * 这个分辨率下画不出真正的弧形，用"两条直线在中心交汇"表达弯道——
+ * 玩家在俯视角度看到的是一根拐弯的轨道，够认。
+ * 轨道外再铺一圈枕木色（距离 1.4~3.4），否则弯道会显得"悬空"。
+ */
+function railCornerPainter(
+  sleeper: readonly [number, number, number],
+  steel: readonly [number, number, number],
+  a: readonly [number, number],
+  b: readonly [number, number],
+  glow = false,
+): Painter {
+  return (x, y) => {
+    const px = x - 7.5;
+    const py = y - 7.5;
+    const distance = Math.min(
+      segmentDistance(px, py, a[0] * 7.5, a[1] * 7.5),
+      segmentDistance(px, py, b[0] * 7.5, b[1] * 7.5),
+    );
+    if (distance < 1.4) {
+      const shine = (distance < 0.7 ? 1.22 : 1) * (glow ? 1.28 : 1);
+      return [clamp255(steel[0] * shine), clamp255(steel[1] * shine), clamp255(steel[2] * shine), 255];
+    }
+    if (distance < 3.4) {
+      return [sleeper[0], sleeper[1], sleeper[2], 255];
+    }
+    return [0, 0, 0, 0];
+  };
+}
+
 PAINTERS.rail = railPainter([104, 80, 56], [176, 176, 184]);
+// 四个弯：北+东 / 北+西 / 南+东 / 南+西（`dirs` 里 dz > 0 = 图的下方）
+// 东西向直轨（批次 478）：把南北向那张转 90°——轨道变成两条横线、枕木变竖线
+PAINTERS.rail_east_west = (x, y) => {
+  const onRail = (y >= 2 && y <= 4) || (y >= 11 && y <= 13);
+  if (onRail && x > 0) {
+    const shine = y === 3 || y === 12 ? 1.22 : 1;
+    return [clamp255(176 * shine), clamp255(176 * shine), clamp255(184 * shine), 255];
+  }
+  if (x % 4 === 2 && y > 0) {
+    const grain = y % 3 === 0 ? 0.84 : 1;
+    return [clamp255(104 * grain), clamp255(80 * grain), clamp255(56 * grain), 255];
+  }
+  return [0, 0, 0, 0];
+};
+
+PAINTERS.rail_ne = railCornerPainter([104, 80, 56], [176, 176, 184], [0, -1], [1, 0]);
+PAINTERS.rail_nw = railCornerPainter([104, 80, 56], [176, 176, 184], [0, -1], [-1, 0]);
+PAINTERS.rail_se = railCornerPainter([104, 80, 56], [176, 176, 184], [0, 1], [1, 0]);
+PAINTERS.rail_sw = railCornerPainter([104, 80, 56], [176, 176, 184], [0, 1], [-1, 0]);
 // 动力铁轨：金枕木 + 金轨；通电版整体提亮（原版是"金轨亮起来"）
 PAINTERS.powered_rail = railPainter([150, 122, 48], [206, 172, 74]);
 PAINTERS.powered_rail_on = railPainter([188, 152, 58], [245, 206, 96], true);

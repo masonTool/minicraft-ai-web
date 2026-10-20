@@ -18,6 +18,7 @@
 import { Entity, type EntityContext } from './Entity.ts';
 import { Block } from '../registry/blocks.ts';
 import { isPowered } from '../registry/blockState.ts';
+import { railExitDirection, railShapeOf } from '../world/RailShape.ts';
 import { moveBody } from '../physics/EntityMotion.ts';
 
 /** 矿车碰撞盒（格）：比一格窄一点，过门/过洞不容易卡 */
@@ -84,6 +85,20 @@ export class Minecart extends Entity {
         const rz = -Math.sin(this.yaw);
         this.vx += (fx * forward + rx * strafe) * accel * dt;
         this.vz += (fz * forward + rz * strafe) * accel * dt;
+      }
+    }
+
+    // 弯道（批次 478）：把速度掰到轨道的出口方向。
+    //
+    // 为什么每帧都可以直接掰（不需要"进弯/出弯"状态）：出口取的是"与当前速度点积
+    // 较大"的那条边，掰过去之后点积只会更大，所以下一帧还是同一条边——天然稳定，
+    // 不会在两条边之间来回抖。
+    if (onRail) {
+      const exit = railExitDirection(railShapeOf(ctx.getState?.(railX, railY, railZ) ?? 0), this.vx, this.vz);
+      const speed = Math.hypot(this.vx, this.vz);
+      if (exit && speed > 0.05) {
+        this.vx = exit.dx * speed;
+        this.vz = exit.dz * speed;
       }
     }
 

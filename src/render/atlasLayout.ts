@@ -844,6 +844,12 @@ export const TILE_ORDER = [
   // 命令方块（批次 477）：橙色底 + 中心刻环（顶）/ 中间横槽（侧）
   'command_block_top',
   'command_block_side',
+  // 铁轨弯道（批次 478）：四个方向各一张（直轨沿用原来的 `rail`）
+  'rail_east_west',
+  'rail_ne',
+  'rail_nw',
+  'rail_se',
+  'rail_sw',
   // 瓜藤（批次 77）：8 个阶段各一张（茎越长越高）+ 结果的那一张
   'pumpkin_stem_stage0',
   'pumpkin_stem_stage1',

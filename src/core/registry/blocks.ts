@@ -10,6 +10,7 @@
 import { DYE_COLORS, WOOD_TYPES } from './colors.ts';
 import type { TreeKind } from '../gen/Features.ts';
 import { anchorLight } from '../world/RespawnAnchor.ts';
+import { railShapeOf } from '../world/RailShape.ts';
 import { isWaterlogged, withWaterlogged } from './blockState.ts';
 import {
   cauldronLevelOf,
@@ -2551,11 +2552,48 @@ export const LIGHT_WEIGHTED_PRESSURE_PLATE_ID = 582;
 export const HEAVY_WEIGHTED_PRESSURE_PLATE_ID = 583;
 /** 标靶（批次 248）：被投掷物打中时发一秒红石信号 */
 export const TARGET_ID = 584;
+/**
+ * 铁轨形状对应的贴图名（批次 478）。
+ *
+ * 弯道四张、直轨两张；`stateTiles` 返回的必须是图集里注册过的 key。
+ */
+export function railTileFor(state: number): string {
+  switch (railShapeOf(state)) {
+    case 'east_west':
+      return 'rail_east_west';
+    case 'north_east':
+      return 'rail_ne';
+    case 'north_west':
+      return 'rail_nw';
+    case 'south_east':
+      return 'rail_se';
+    case 'south_west':
+      return 'rail_sw';
+    default:
+      return 'rail';
+  }
+}
+
+/** 四种铁轨（形状判定、矿车转向、红石元件表都认这一张） */
+export const RAIL_IDS: readonly number[] = [RAIL_ID, POWERED_RAIL_ID, DETECTOR_RAIL_ID, ACTIVATOR_RAIL_ID];
+
+/** 这一块是不是铁轨（批次 478：放置时按邻居自动接成直/弯） */
+export function isRailId(id: number): boolean {
+  return RAIL_IDS.includes(id);
+}
+
 export const RAIL_SPECS: readonly BlockSpec[] = [
   {
     id: RAIL_ID,
     name: 'minecraft:rail',
     tiles: ['rail', 'rail', 'rail'],
+    // 形状贴图（批次 478）：六种平面形状各一张（直南北 / 直东西 / 四个弯）。
+    // ⚠️ 只有**普通铁轨**做了这套图：动力/探测/激活铁轨的形状也存在（矿车照样转向），
+    // 但贴图仍是直轨——4 种 × 5 张 = 20 张图，这一批先不做（差异记在 TASKS G12）
+    stateTiles: (state) => {
+      const key = railTileFor(state);
+      return [key, key, key];
+    },
     shape: 'flat',
     solid: false,
     opaque: false,
