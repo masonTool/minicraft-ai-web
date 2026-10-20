@@ -218,6 +218,15 @@ const showSettings = (): void => {
   );
 };
 
+const swapSlots = (fromIndex: number, toIndex: number): void => {
+  const from = inventory.get(fromIndex);
+  const to = inventory.get(toIndex);
+  inventory.set(fromIndex, to);
+  inventory.set(toIndex, from);
+  selectedSlot = toIndex;
+  showInventory();
+};
+
 const showInventory = (): void => {
   inventoryOpen = true;
   const panelW = 880;
@@ -248,15 +257,15 @@ const showInventory = (): void => {
   if (inventoryTab === 'items') {
     for (let i = 0; i < 36; i++) {
       const stack = inventory.get(i);
-      elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
+      elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
         selectedSlot = i;
         showInventory();
-      }));
+      }, (from, to) => swapSlots(from.index, to.index)));
     }
   } else {
     for (let i = 0; i < creativeBlocks.length; i++) {
       const id = creativeBlocks[i]!;
-      elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, id, 0, false, () => {
+      elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, i, id, 0, false, () => {
         inventory.add(id, 64);
         showInventory();
       }));
@@ -285,6 +294,13 @@ const showHud = (): void => {
         paused = true;
         showPause();
       }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
+      ...Array.from({ length: 9 }, (_, i) => {
+        const stack = inventory.get(i);
+        return slot(242 + i * 60, uiHeight - 76, 54, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
+          selectedSlot = i;
+          showHud();
+        });
+      }),
     ]),
   );
 };

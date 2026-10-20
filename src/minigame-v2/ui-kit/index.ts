@@ -61,10 +61,12 @@ export interface UiSliderNode extends UiNode {
 
 export interface UiSlotNode extends UiNode {
   kind: 'slot';
+  index: number;
   itemId: number;
   count: number;
   selected: boolean;
   onTap: () => void;
+  onDrop?: (from: UiSlotNode, to: UiSlotNode) => void;
 }
 
 export type UiElement = UiNode | UiTextNode | UiButtonNode | UiToggleNode | UiSliderNode | UiSlotNode;
@@ -120,12 +122,14 @@ export function slot(
   x: number,
   y: number,
   size: number,
+  index: number,
   itemId: number,
   count: number,
   selected: boolean,
   onTap: () => void,
+  onDrop?: (from: UiSlotNode, to: UiSlotNode) => void,
 ): UiSlotNode {
-  return { kind: 'slot', x, y, w: size, h: size, itemId, count, selected, onTap };
+  return { kind: 'slot', x, y, w: size, h: size, index, itemId, count, selected, onTap, onDrop };
 }
 
 export function row(
@@ -171,6 +175,7 @@ export class UiLayer {
   private root: UiElement | null = null;
   private buttons: UiButtonNode[] = [];
   private activeSlider: UiSliderNode | null = null;
+  private dragSlot: { node: UiSlotNode; startX: number; startY: number; moved: boolean } | null = null;
   private slots: UiSlotNode[] = [];
   private readonly drawIcon?: (ctx: CanvasRenderingContext2D, id: number, x: number, y: number, size: number) => void;
 
@@ -235,27 +240,37 @@ export class UiLayer {
       this.updateSlider(this.activeSlider, x);
       return true;
     }
+    if (phase === 'move' && this.dragSlot) {
+      if (Math.hypot(x - this.dragSlot.startX, y - this.dragSlot.startY) > 8) this.dragSlot.moved = true;
+      return true;
+    }
     if (phase === 'up') {
       if (this.activeSlider) {
         this.activeSlider = null;
+        return true;
+      }
+      if (this.dragSlot) {
+        const drag = this.dragSlot;
+        this.dragSlot = null;
+        const target = this.findSlot(x, y);
+        if (drag.moved && target && target !== drag.node) drag.node.onDrop?.(drag.node, target);
+        else if (!drag.moved) drag.node.onTap();
         return true;
       }
       return false;
     }
     if (phase !== 'down') return false;
 
+    const downSlot = this.findSlot(x, y);
+    if (downSlot) {
+      this.dragSlot = { node: downSlot, startX: x, startY: y, moved: false };
+      return true;
+    }
+
     for (let i = this.buttons.length - 1; i >= 0; i--) {
       const item = this.buttons[i]!;
       if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
         item.onClick?.();
-        return true;
-      }
-    }
-
-    for (let i = this.slots.length - 1; i >= 0; i--) {
-      const item = this.slots[i]!;
-      if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) {
-        item.onTap();
         return true;
       }
     }
@@ -284,6 +299,14 @@ export class UiLayer {
       node.value = value;
       node.onChange(value);
     }
+  }
+
+  private findSlot(x: number, y: number): UiSlotNode | null {
+    for (let i = this.slots.length - 1; i >= 0; i--) {
+      const item = this.slots[i]!;
+      if (x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h) return item;
+    }
+    return null;
   }
 
   private findControl(x: number, y: number): UiToggleNode | UiSliderNode | null {
