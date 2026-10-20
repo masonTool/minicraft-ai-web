@@ -36,6 +36,8 @@ import type { AdvancementTracker } from '../progress/AdvancementTracker.ts';
 import { advancementById } from '../progress/advancements.ts';
 import { findNearestBiome } from '../gen/Locate.ts';
 import { CLONE_LIMIT, cloneRegion, cloneVolume, normalizeCloneBox } from './Clone.ts';
+// 战利品表（批次 480：`/loot`）
+import { lootTableByIndex, lootTableIndex, rollLoot } from '../registry/loot.ts';
 // 队伍（M23 最后一块，批次 468）
 import { TEAM_COLORS, type Teams } from '../world/Teams.ts';
 // 记分板（M23，批次 402）：纯类，规则一条都不依赖世界
@@ -118,6 +120,20 @@ export interface CommandContext {
   summon(mobName: string, x: number, y: number, z: number): boolean;
   /** 杀死玩家附近（半径 r）的实体，返回击杀数 */
   killNearby(radius: number): number;
+  /**
+   * 给某个实体造成伤害（批次 480，`/damage`）。
+   * @param entityId `CommandEntity.id`（`mob:12` / 玩家固定 id）
+   * @returns 找没找到（找不到返回 false）
+   */
+  damageEntity?(entityId: string, amount: number): boolean;
+  /**
+   * 按**物品 id** 直接塞进背包（批次 480，`/loot` 用）。
+   *
+   * 为什么不复用 `give(name)`：战利品表里是 id，反查注册名要再过一层表；
+   * 这里直接按 id 给，省一道"名字对不对"的风险。
+   * @returns 实际塞进去的数量（背包满了会少于请求值）
+   */
+  giveById?(itemId: number, count: number): number;
 
   // ---- 状态效果（I4）
   applyEffect(effectName: string, seconds: number, amplifier: number): boolean;
@@ -940,6 +956,83 @@ export const COMMANDS: readonly CommandSpec[] = [
           ? `你脚下就是 ${target}（${hit.x}, ${hit.z}）`
           : `最近的 ${target} 在 ${hit.x}, ${hit.z}（约 ${Math.round(hit.distance)} 格）`,
       );
+    },
+  },
+  {
+    name: 'damage',
+    usage: '/damage <目标> <伤害>',
+    description: '对目标实体造成伤害（伤害是点数，2 点 = 1 颗心）',
+    run(args, ctx, out) {
+      const target = args[0];
+      const rawAmount = args[1];
+      const amount = Number(rawAmount);
+      if (!target || rawAmount === undefined || !Number.isFinite(amount) || amount <= 0) {
+        out.error('用法：/damage <目标> <伤害>（伤害要大于 0）');
+        return;
+      }
+      if (!ctx.damageEntity) {
+        out.error('这个环境不支持 /damage');
+        return;
+      }
+      const position = ctx.position();
+      const state: ExecState = {
+        origin: { x: position.x, y: position.y, z: position.z },
+        executorId: selfEntityId(ctx),
+      };
+      const selector = parseSelector(target);
+      if (typeof selector === 'string') {
+        out.error(selector);
+        return;
+      }
+      const found = resolveSelector(selector, selectorView(ctx), state.origin, state.executorId);
+      if (found.length === 0) {
+        out.error(`没有匹配到实体：${target}`);
+        return;
+      }
+      let hit = 0;
+      for (const entity of found) {
+        if (ctx.damageEntity(entity.id, amount)) hit++;
+      }
+      out.info(`对 ${hit} 个实体造成了 ${amount} 点伤害`);
+    },
+  },
+  {
+    name: 'loot',
+    usage: '/loot give <战利品表> [数量]',
+    description: '把一张战利品表掷点后塞进自己的背包',
+    run(args, ctx, out) {
+      // ⚠️ 只支持"给自己"：`/loot give @a loot …` 那种广播式发放要按目标逐个塞，
+      // 而本项目只有本地玩家一个背包，做出来也是假的（差异记在 TASKS）
+      const mode = (args[0] ?? '').toLowerCase();
+      // 兼容两种写法：`/loot give <表>` 与 `/loot give <目标> loot <表>`
+      const tableKey = (mode === 'give' && args[2] === 'loot' ? args[3] : args[1])?.toLowerCase();
+      const rawCount = (mode === 'give' && args[2] === 'loot' ? args[4] : args[2]) ?? '1';
+      const times = Math.floor(Number(rawCount));
+      if (mode !== 'give' || !tableKey) {
+        out.error('用法：/loot give <战利品表> [数量]');
+        return;
+      }
+      if (!Number.isFinite(times) || times < 1 || times > 10) {
+        out.error('数量要在 1~10 之间');
+        return;
+      }
+      const index = lootTableIndex(tableKey);
+      const table = index > 0 ? lootTableByIndex(index) : null;
+      if (!table) {
+        out.error(`没有这张战利品表：${tableKey}（用 village_house / mineshaft / dungeon 这类）`);
+        return;
+      }
+      if (!ctx.giveById) {
+        out.error('这个环境不支持发放物品');
+        return;
+      }
+      let given = 0;
+      for (let i = 0; i < times; i++) {
+        for (const stack of rollLoot(table, Math.random)) {
+          given += ctx.giveById(stack.id, stack.count);
+        }
+      }
+      out.info(`从 ${tableKey} 掷了 ${times} 次，塞进背包 ${given} 件`);
     },
   },
   {

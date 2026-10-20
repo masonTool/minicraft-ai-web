@@ -9888,6 +9888,24 @@ class App {
         this.inventoryScreen.refresh();
         return count - remaining;
       },
+      // 批次 480：/loot 按 id 直接塞背包（战利品表里是 id）
+      giveById: (itemId, count) => {
+        const remaining = this.inventory.add(itemId, count);
+        this.refreshHotbar();
+        this.inventoryScreen.refresh();
+        return count - remaining;
+      },
+      // 批次 480：/damage —— 只对**生物**生效（玩家自己的 id 不在这张表里，
+      // 原版 `@s` 能伤自己；这里明确不做，差异记在 TASKS）
+      damageEntity: (entityId, amount) => {
+        for (const entity of this.entities.all) {
+          if (!(entity instanceof Mob) || entity.dead) continue;
+          if (`mob:${entity.id}` !== entityId) continue;
+          entity.hurt(amount, 0, 0, this.lastEntityContext ?? undefined, 0, 0, { kind: 'environment' });
+          return true;
+        }
+        return false;
+      },
       clearInventory: () => {
         let slots = 0;
         for (let i = 0; i < TOTAL_SLOTS; i++) if (this.inventory.get(i)) slots++;

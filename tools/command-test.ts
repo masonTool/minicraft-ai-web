@@ -252,6 +252,19 @@ class FakeWorld implements CommandContext {
   locateStructure(kind: string): { x: number; y: number; z: number; distance: number } | null {
     return kind === 'village' ? { x: 120, y: 64, z: -80, distance: 144 } : null;
   }
+  /** 发放物品（批次 480，`/loot`）：记下给了什么 */
+  readonly given: number[] = [];
+  giveById(itemId: number, count: number): number {
+    this.given.push(itemId);
+    return count;
+  }
+  /** 伤害（批次 480，`/damage`）：假世界认玩家与 `mob:1` */
+  readonly damaged: Array<{ id: string; amount: number }> = [];
+  damageEntity(entityId: string, amount: number): boolean {
+    if (entityId !== 'player' && entityId !== 'mob:1') return false;
+    this.damaged.push({ id: entityId, amount });
+    return true;
+  }
   /** 方块信息（批次 479）：假世界只有 (0,64,0) 是石头，其余空气 */
   blockInfoAt(x: number, y: number, z: number): { id: number; name: string; state: number } | null {
     if (x === 0 && y === 64 && z === 0) return { id: 1, name: 'minecraft:stone', state: 0 };
@@ -804,6 +817,30 @@ console.log('\n[记分板（M23，批次 402）]');
   run('/data merge entity @s');
   check('只支持 get（merge 明确拒绝）', out.lastError.includes('用法'), out.lastError);
   run('/data get');
+  check('缺参数报用法', out.lastError.includes('用法'), out.lastError);
+
+
+  // ---- /damage（批次 480）
+  run('/damage @s 6');
+  check('对匹配到的实体造成伤害', world.damaged.length === 1 && world.damaged[0]!.amount === 6, JSON.stringify(world.damaged));
+  run('/damage @s 0');
+  check('伤害必须大于 0', out.lastError.includes('大于 0'), out.lastError);
+  run('/damage @s');
+  check('缺伤害报用法', out.lastError.includes('用法'), out.lastError);
+  run('/damage @e[type=enderman] 3');
+  check('没有匹配时报错', out.lastError.includes('没有匹配到'), out.lastError);
+
+  // ---- /loot（批次 480）
+  run('/loot give village_house');
+  check('掷一次战利品表会往背包塞东西', world.given.length > 0, `${world.given.length} 件`);
+  const before = world.given.length;
+  run('/loot give village_house 3');
+  check('数量参数生效（掷 3 次）', world.given.length > before, `${world.given.length - before} 件`);
+  run('/loot give nope');
+  check('表名不存在时报错', out.lastError.includes('没有这张战利品表'), out.lastError);
+  run('/loot give village_house 99');
+  check('数量上限 10', out.lastError.includes('1~10'), out.lastError);
+  run('/loot');
   check('缺参数报用法', out.lastError.includes('用法'), out.lastError);
 
   run('/scoreboard players reset 甲');

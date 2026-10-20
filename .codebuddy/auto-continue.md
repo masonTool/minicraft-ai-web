@@ -579,3 +579,14 @@
       坐标不全/merge 拒绝/缺参数）
 - 命令覆盖 **33 → 34（85%）**
 - ⚠️ 差异：读不到容器内容与告示牌文字（方块实体数据要另一条通道）
+
+## 批次 480：/damage 与 /loot give（2026-10-20）
+
+- [x] B480-1 `/damage <目标> <伤害>`：同一个 `resolveSelector`，逐个 `ctx.damageEntity`；
+      伤害必须 > 0；无匹配明确报错
+- [x] B480-2 `ctx.damageEntity`：main 里只对**生物**生效（`mob:<id>` 匹配），
+      `HurtSource = environment`（不会让生物记仇/惊动同类）
+- [x] B480-3 `/loot give <表> [数量]`：`rollLoot` 掷点 + `ctx.giveById` 按 id 塞背包；
+      数量上限 10；表名不认识明确报错
+- [x] B480-4 `test:commands` 227 → **236 条**；命令覆盖 **34 → 36（90%）**
+- ⚠️ 差异：`/damage @s` 伤不到玩家自己（玩家 id 不在生物表里）；`/loot` 只给自己
