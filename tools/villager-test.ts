@@ -119,7 +119,7 @@ function world(blocks: Record<string, number>): (x: number, y: number, z: number
 
 console.log('\n[职业表：工作站已经实现的职业]');
 {
-  equal('职业数（批次 568 皮匠补齐到 12）', PROFESSION_COUNT, 12);
+  equal('职业数（批次 569 制图师补齐到 13）', PROFESSION_COUNT, 13);
   const ids = PROFESSIONS.map((profession) => profession.id);
   equal('id 不重复', new Set(ids).size, ids.length);
   equal('名字不重复', new Set(PROFESSIONS.map((p) => p.name)).size, PROFESSIONS.length);
@@ -142,6 +142,15 @@ console.log('\n[职业表：工作站已经实现的职业]');
     '皮匠卖皮革盔甲与鞍',
     leatherworker.levels.flat().some((trade) => trade.result.id === armorItemId('chestplate', 'leather')) &&
       leatherworker.levels.flat().some((trade) => trade.result.id === Item.SADDLE),
+  );
+  // 批次 569：制图台落地后补的制图师
+  equal('制图师 ← 制图台', professionForWorkstation(Block.CARTOGRAPHY_TABLE)?.id, 'cartographer');
+  const cartographer = professionById('cartographer')!;
+  equal('制图师五级交易都有', cartographer.levels.length, 5);
+  check(
+    '制图师卖空地图与指南针',
+    cartographer.levels.flat().some((trade) => trade.result.id === Item.MAP) &&
+      cartographer.levels.flat().some((trade) => trade.result.id === Item.COMPASS),
   );
   check('村庄能摆的工作站清单跟着变长（村庄会自动摆上新的四种）', WORKSTATION_BLOCKS.length === PROFESSIONS.length);
   check('清单里没有重复方块', new Set(WORKSTATION_BLOCKS).size === WORKSTATION_BLOCKS.length);

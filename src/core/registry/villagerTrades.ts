@@ -18,7 +18,7 @@
  *  - **不做价格浮动**（原版买多了会涨价）：固定价才好断言，也免得玩家觉得"被宰"。
  */
 
-import { Block, bedId, carpetId, woolId } from './blocks.ts';
+import { Block, GLASS_PANE_ID, bedId, carpetId, woolId } from './blocks.ts';
 import { DYE_COLORS } from './colors.ts';
 import { Item, dyeItemId } from './items.ts';
 // 武器匠卖的是**工具/武器**（原版也是），所以这里要按"种类 × 材质"算 id
@@ -41,7 +41,9 @@ export type VillagerProfessionId =
   | 'weaponsmith'
   | 'shepherd'
   // 批次 568（J23）：炼药锅落地后补上的皮匠
-  | 'leatherworker';
+  | 'leatherworker'
+  // 批次 569（J23）：制图台落地后补上的制图师
+  | 'cartographer';
 
 /** 一条交易里村民收的东西（1~2 样） */
 export interface TradeCost {
@@ -110,15 +112,16 @@ const BROWN_DYE_INDEX = DYE_COLORS.findIndex((color) => color.name === 'brown');
 export const VILLAGER_SKIN_COLOR = 0xd6a27a;
 
 /**
- * 12 个职业（原版 15 种里，**工作站方块已经实现了**的那 12 种）。
+ * 13 个职业（原版 15 种里，**工作站方块已经实现了**的那 13 种）。
  *
  * 批次 90（J23）补齐了 4 个：图书管理员（讲台）、制箭师（制箭台）、
  * 武器匠（砂轮）、牧羊人（织布机）——它们的方块是同一批加的
  * （`blocks.ts` 的 `WORKSTATION_SPECS`，村庄会自动把它们摆进屋里）。
  *
- * 还剩 3 种没做，各卡在不同的前置上（不是"忘了"）：
+ * 还剩 2 种没做，各卡在不同的前置上（不是"忘了"）：
  *  - **皮匠**已在批次 568 补上（炼药锅落地之后）；
- *  - **制图师**（制图台）、**牧师之外的"神职人员"**、**箭匠之外的…**：
+ *  - **制图师**已在批次 569 补上（制图台落地之后）；
+ *  - **牧师之外的"神职人员"**、**箭匠之外的…**：
  *    制图台、以及原版那几种需要**未实现内容**的职业（例如"信标/铃"那一类装饰方块）。
  *    真要做，判据是"先有方块，再谈职业"（这也是这一批的口径）。
  */
@@ -365,6 +368,46 @@ export const PROFESSIONS: readonly VillagerProfession[] = [
         },
       ],
       [{ cost: [{ id: Item.EMERALD, count: 6 }], result: { id: Item.SADDLE, count: 1 }, maxUses: 4, xp: 30 }],
+    ],
+  },
+  {
+    // 制图师（批次 569，J23 倒数第二个）：工作站是制图台。
+    // 原版的"海洋探险家地图"需要带目标结构的地图数据，这里没有那条通道，
+    // 所以卖的是**空地图 / 指南针 / 玻璃板 / 旗帜**这些已有物品。
+    id: 'cartographer',
+    name: '制图师',
+    workstation: Block.CARTOGRAPHY_TABLE,
+    robeColor: 0x5b7f8c,
+    levels: [
+      [
+        { cost: [{ id: Item.PAPER, count: 24 }], result: { id: Item.EMERALD, count: 1 }, maxUses: 16, xp: 2 },
+        { cost: [{ id: Item.EMERALD, count: 1 }], result: { id: Item.MAP, count: 1 }, maxUses: 12, xp: 2 },
+      ],
+      [
+        {
+          cost: [{ id: Item.EMERALD, count: 1 }],
+          result: { id: GLASS_PANE_ID, count: 4 },
+          maxUses: 12,
+          xp: 5,
+        },
+      ],
+      [{ cost: [{ id: Item.EMERALD, count: 1 }], result: { id: Item.COMPASS, count: 1 }, maxUses: 8, xp: 10 }],
+      [
+        {
+          cost: [{ id: Item.EMERALD, count: 2 }],
+          result: { id: Block.WHITE_BANNER, count: 1 },
+          maxUses: 8,
+          xp: 15,
+        },
+      ],
+      [
+        {
+          cost: [{ id: Item.EMERALD, count: 1 }],
+          result: { id: GLASS_PANE_ID, count: 8 },
+          maxUses: 12,
+          xp: 30,
+        },
+      ],
     ],
   },
 ];
