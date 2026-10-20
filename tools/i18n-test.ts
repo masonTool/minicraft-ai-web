@@ -97,6 +97,8 @@ console.log('\n[界面真的会去查的那些键都在表里]');
     'inventory.searchItems',
     'inventory.tab.craftable',
     'inventory.tab.items',
+    'station.tradeHint',
+    'station.villagerIdle',
     ...['game', 'controls', 'appearance', 'sound'].map((group) => `settings.group.${group}`),
   ];
   const missing = required.filter((key) => !keys.has(key));

@@ -114,6 +114,12 @@ const ZH: Readonly<Record<string, string>> = {
   'inventory.tab.items': '背包',
   'inventory.returnFurnaceHint': '把熔炉里的原料、燃料和产物全部放回仓库',
   'inventory.returnBrewHint': '把酿造台里的药水、材料和燃料全部放回仓库',
+  // ---- 背包第三批（批次 424）：各工作站的功能性提示
+  'station.tradeHint': '点一条交易直接从背包结算（材料要带在身上）',
+  'station.smithingDone': '升级完成：附魔与耐久损耗都保留',
+  'station.villagerIdle': '他还没有工作——在他附近放一个工作站（堆肥桶 / 高炉 / 烟熏炉 / 酿造台 / 切石机 / 木桶 / 锻造台），他过几秒就会认领。',
+  'station.stonecutterHint': '放进石料（石头 / 砂岩 / 深板岩 / 石英 / 铜块…）后会列出能切的东西',
+  'station.fuelHint': '煤 / 木炭 / 木板 / 干海带块等可燃物都能当燃料；点下方备选或手动拖入',
 };
 
 const EN: Readonly<Record<string, string>> = {
@@ -192,6 +198,11 @@ const EN: Readonly<Record<string, string>> = {
   'inventory.tab.items': 'Inventory',
   'inventory.returnFurnaceHint': 'Move every input, fuel and output back to storage',
   'inventory.returnBrewHint': 'Move every potion, ingredient and fuel back to storage',
+  'station.tradeHint': 'Tap an offer to trade straight from your inventory (bring the goods)',
+  'station.smithingDone': 'Upgraded: enchantments and durability are kept',
+  'station.villagerIdle': 'He has no job yet — place a workstation nearby (composter / blast furnace / smoker / brewing stand / stonecutter / barrel / smithing table) and he will claim it in a few seconds.',
+  'station.stonecutterHint': 'Add stone-type blocks (stone / sandstone / deepslate / quartz / copper…) to list what can be cut',
+  'station.fuelHint': 'Coal, charcoal, planks, dried kelp blocks and other burnables all work; pick below or drag one in',
 };
 
 export const TABLES: Readonly<Record<Language, Readonly<Record<string, string>>>> = {

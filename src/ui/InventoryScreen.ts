@@ -2559,7 +2559,7 @@ export class InventoryScreen {
       : hasOptions
         ? '燃料：空 · 请选择下方燃料'
         : '燃料：空 · 请放燃料';
-    this.furnaceFuelTextEl.title = '煤 / 木炭 / 木板 / 干海带块等可燃物都能当燃料；点下方备选或手动拖入';
+    this.furnaceFuelTextEl.title = t('station.fuelHint');
     this.renderFurnaceFuelOptions(furnace);
   }
 
@@ -4367,7 +4367,7 @@ export class InventoryScreen {
       // 左侧：他本人的信息（职业 / 等级 / 还差多少经验）+ 一句操作方法
       this.tradeInfoEl.replaceChildren();
       this.tradeInfoEl.append(this.buildLabel('村民'), this.tradeLevelEl, this.tradeHintEl);
-      this.tradeHintEl.textContent = '点一条交易直接从背包结算（材料要带在身上）';
+      this.tradeHintEl.textContent = t('station.tradeHint');
       this.tradeHintEl.classList.remove('bad');
 
       // 右侧：一列交易。按钮由 `refreshTrade` 填——
@@ -6315,7 +6315,7 @@ export class InventoryScreen {
       return;
     }
     this.held = result.output;
-    this.smithingHintEl.textContent = '升级完成：附魔与耐久损耗都保留';
+    this.smithingHintEl.textContent = t('station.smithingDone');
     this.smithingHintEl.classList.remove('bad');
     this.refresh();
   }
@@ -6369,7 +6369,7 @@ export class InventoryScreen {
       if (villager.offers.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'trade-note';
-        empty.textContent = '他还没有工作——在他附近放一个工作站（堆肥桶 / 高炉 / 烟熏炉 / 酿造台 / 切石机 / 木桶 / 锻造台），他过几秒就会认领。';
+        empty.textContent = t('station.villagerIdle');
         this.tradeListEl.appendChild(empty);
       }
 
@@ -6512,7 +6512,7 @@ export class InventoryScreen {
     const hint = this.stonecutterHintEl;
     hint.classList.remove('bad');
     if (!input) {
-      hint.textContent = '放进石料（石头 / 砂岩 / 深板岩 / 石英 / 铜块…）后会列出能切的东西';
+      hint.textContent = t('station.stonecutterHint');
       return;
     }
     if (cutter.offers.length === 0) {

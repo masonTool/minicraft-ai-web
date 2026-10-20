@@ -10353,4 +10353,13 @@
 - ⚠️ 新建世界表单的文案（'游戏模式' / '创建新世界'）没动：被 ui-test 按字面量断言着，
   换键要连带改断言，留给下一批
 
+## 批次 421：M8 i18n 扩到世界列表与新建表单（2026-10-20）
+
+- [x] B421-1 十二条键：world.list / name / seed / type / difficulty / gameMode /
+      namePlaceholder / seedPlaceholder / hint / createTitle / enter / delete
+- [x] B421-2 `ui-test` 三条按字面量匹配的断言改成按键（"表单有游戏模式"、
+      "返回世界列表"、"说明排在字段最后"）
+- 覆盖：文案表 **46 → 58 条**；主菜单三个视图（首页 / 列表 / 新建）全部有英文
+- ⚠️ 主菜单仍在启动时构建：切语言要刷新页面
+
 <!-- docs-archive:end -->

@@ -98,15 +98,6 @@
 
 ---
 
-## 批次 421：M8 i18n 扩到世界列表与新建表单（2026-10-20）
-
-- [x] B421-1 十二条键：world.list / name / seed / type / difficulty / gameMode /
-      namePlaceholder / seedPlaceholder / hint / createTitle / enter / delete
-- [x] B421-2 `ui-test` 三条按字面量匹配的断言改成按键（"表单有游戏模式"、
-      "返回世界列表"、"说明排在字段最后"）
-- 覆盖：文案表 **46 → 58 条**；主菜单三个视图（首页 / 列表 / 新建）全部有英文
-- ⚠️ 主菜单仍在启动时构建：切语言要刷新页面
-
 ## 批次 422：M8 i18n 背包/工作站面板第一批（2026-10-20）
 
 - [x] B422-1 十条键：inventory.title / armor / returnToStorage / noMatch / noRecipes /
@@ -123,3 +114,11 @@
 - [x] B423-2 **老断言零改动**：上批把会被波及的四条改成按键匹配，这一批直接受益
 - 覆盖：文案表 **68 → 75 条**
 - ⚠️ 背包剩下的：各工作站的功能性提示语（锻造/织布/切石/交易…），下一批
+
+## 批次 424：M8 i18n 背包第三批（工作站提示）（2026-10-20）
+
+- [x] B424-1 五条键：station.tradeHint / smithingDone / villagerIdle / stonecutterHint / fuelHint
+- [x] B424-2 零断言改动（前两批已把相关字面量断言改成按键）
+- 覆盖：文案表 **75 → 80 条**
+- ⚠️ 背包里剩下的多是"运行时拼出来的句子"（如"还缺 2 个木头"），那些要改的是
+  拼接逻辑而不是字面量，单独一批
