@@ -33,6 +33,8 @@ import { BlockOverlay, DAMAGE_STAGES, facesWithInwardWinding } from '../src/rend
 import { MobHealthBar } from '../src/render/MobHealthBar.ts';
 import { FLUID_TILE_SLOTS, VoxelMaterial } from '../src/render/VoxelMaterial.ts';
 import { ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD, coverageAlpha } from '../src/render/alphaCoverage.ts';
+import { GLSL_DITHER } from '../src/render/dither.ts';
+import { readFileSync } from 'node:fs';
 import { srgbColor } from '../src/render/srgb.ts';
 import { tileOriginAt, tileRectAt } from '../src/render/atlasCoords.ts';
 import { ATLAS_COLUMNS, TILE_ORDER } from '../src/render/atlasLayout.ts';
@@ -558,6 +560,15 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
     frag.includes('mix(uSkyLightColor, uBlockLightColor, t * t)'),
   );
   check('没有退回"只乘标量亮度"的旧写法', !frag.includes('texel.rgb * brightness;'));
+  // 抖色（批次 425）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带
+  check('片元最后加了抖色', frag.includes('ditherColor(color, gl_FragCoord.xy)'));
+  check('抖色幅度是一个量化级（1/255，再大就成颗粒了）', GLSL_DITHER.includes('/ 255.0'));
+  check(
+    '天空穹顶用同一段抖色（不能各写一版）',
+    readFileSync(new URL('../src/render/Sky.ts', import.meta.url), 'utf8').includes(
+      'ditherColor(color, gl_FragCoord.xy)',
+    ),
+  );
 
   material.material.dispose();
 }

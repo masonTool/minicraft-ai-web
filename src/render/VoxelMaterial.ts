@@ -13,6 +13,7 @@
 
 import * as THREE from 'three';
 import { ALPHA_LIFT_MAX_LOD, ALPHA_LIFT_PER_LOD } from './alphaCoverage.ts';
+import { GLSL_DITHER } from './dither.ts';
 
 /**
  * 流体贴图槽位数（水、岩浆；再多就扩这个数组与着色器里的循环）。
@@ -117,6 +118,8 @@ varying float vFogDepth;
 varying float vFluid;
 varying float vPortal;
 
+${GLSL_DITHER}
+
 void main() {
   // 导数必须在**任何分支之前**取：GLSL 规定 dFdx/dFdy 在非一致控制流里是未定义的。
   // 这里要的是 vUv（fract 之前的平铺坐标）的屏幕空间变化率，换算成图集 UV 空间。
@@ -186,7 +189,9 @@ void main() {
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDepth);
   color = mix(color, uFogColor, fogFactor);
 
-  gl_FragColor = vec4(color, texel.a);
+  // 抖色（批次 425）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带，
+  // ±0.5/255 的有序抖动把它们打散，肉眼不可见。见 dither.ts
+  gl_FragColor = vec4(ditherColor(color, gl_FragCoord.xy), texel.a);
 }
 `;
 

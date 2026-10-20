@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import { MOON_PHASE_COUNT, moonShape } from '../core/world/MoonPhase.ts';
+import { GLSL_DITHER } from './dither.ts';
 
 const DOME_RADIUS = 180;
 const CELESTIAL_DISTANCE = 150;
@@ -68,13 +69,17 @@ uniform vec3 uSunDir;
 uniform float uSunGlow;
 varying vec3 vDir;
 
+${GLSL_DITHER}
+
 void main() {
   float h = clamp(vDir.y, -1.0, 1.0);
   vec3 color = mix(uHorizon, uTop, smoothstep(-0.08, 0.5, h));
   // 日出日落时太阳附近泛橙红（霞光）
   float glow = pow(max(dot(normalize(vDir), normalize(uSunDir)), 0.0), 8.0) * uSunGlow;
   color += vec3(1.0, 0.52, 0.22) * glow;
-  gl_FragColor = vec4(color, 1.0);
+  // 抖色（批次 425）：天空是横跨整个屏幕的平滑渐变，8 bit 输出在夜里会出台阶状
+  // 色带（白天也有一条条很淡的横纹）。±0.5/255 的有序抖动把台阶打散。见 dither.ts
+  gl_FragColor = vec4(ditherColor(color, gl_FragCoord.xy), 1.0);
 }
 `;
 
