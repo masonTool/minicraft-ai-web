@@ -99,7 +99,7 @@ v2
    - HUD/容器/设置/背包 UI
    - 生物/掉落/生存
    - 存档/自动保存
-2. 猪/僵尸各自有模型和 tick 代码，存在重复；应抽成 `mobs/` 模块
+2. 猪/羊/僵尸各自有模型和 tick 代码，重复进一步增加；应优先抽成 `mobs/` 模块
 3. 容器/背包 UI 与游戏逻辑仍耦合在组合根
 4. `WorkerHost.post` 忽略 transfer，Worker 消息仍可能发生结构化克隆拷贝
 5. Settings/Inventory 尚未按 Web DOM 结构拆分组件

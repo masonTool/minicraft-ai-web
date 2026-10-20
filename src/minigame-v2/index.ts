@@ -28,7 +28,7 @@ import { RECIPES, type ShapedRecipe, type ShapelessRecipe } from '../core/crafti
 import { CREATIVE_ITEMS, Item, blockForItem, categoryOf, foodInfoById, itemIconTile, saturationFrom } from '../core/registry/items.ts';
 import { canEat } from '../core/registry/food.ts';
 import { itemLabel } from '../core/registry/itemNames.ts';
-import { BED_IDS, Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
+import { BED_IDS, Block, WOOL_ID_START, blockDef, blockTiles } from '../core/registry/blocks.ts';
 import { sleepRefusal } from '../core/survival/Sleep.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
@@ -1003,6 +1003,7 @@ const mountWorld = async (entry: WorldSummary): Promise<void> => {
   clearDrops();
   clearPigs();
   clearZombies();
+  clearSheep();
   if (save) {
     save.close();
     save = null;
@@ -1841,6 +1842,54 @@ const clearZombies = (): void => {
   zombieSpawned = false;
 };
 
+const spawnSheep = (x: number, y: number, z: number): void => {
+  const group = new THREE.Group();
+  const wool = new THREE.MeshBasicMaterial({ color: 0xf2f2ee });
+  const skin = new THREE.MeshBasicMaterial({ color: 0xd8c7b8 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 1.0), wool);
+  body.position.y = 0.72;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), wool);
+  head.position.set(0, 0.95, -0.62);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.1), skin);
+  face.position.set(0, 0.9, -0.86);
+  group.add(body, head, face);
+  for (const [lx, lz] of [[-0.24, -0.3], [0.24, -0.3], [-0.24, 0.3], [0.24, 0.3]] as const) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), skin);
+    leg.position.set(lx, 0.25, lz);
+    group.add(leg);
+  }
+  group.position.set(x, y, z);
+  scene.add(group);
+  sheep.push({ group, x, y, z, hp: 8, dirX: -1, dirZ: 0, wander: 2 });
+};
+
+const clearSheep = (): void => {
+  for (const mob of sheep) {
+    scene.remove(mob.group);
+    mob.group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+      }
+    });
+  }
+  sheep.length = 0;
+  sheepSpawned = false;
+};
+
+const removeSheep = (index: number): void => {
+  const mob = sheep[index];
+  if (!mob) return;
+  scene.remove(mob.group);
+  mob.group.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      (child.material as THREE.Material).dispose();
+    }
+  });
+  sheep.splice(index, 1);
+};
+
 const removeZombie = (index: number): void => {
   const zombie = zombies[index];
   if (!zombie) return;
@@ -2093,8 +2142,10 @@ interface MobState {
 }
 const pigs: MobState[] = [];
 const zombies: MobState[] = [];
+const sheep: MobState[] = [];
 let pigsSpawned = false;
 let zombieSpawned = false;
+let sheepSpawned = false;
 let damageFlashUntil = 0;
 let xpLevel = 0;
 let xpIntoLevel = 0;
@@ -2278,6 +2329,31 @@ const tickZombies = (dt: number): void => {
   }
 };
 
+const tickSheep = (dt: number): void => {
+  for (const mob of sheep) {
+    mob.wander -= dt;
+    if (mob.wander <= 0) {
+      const angle = Math.random() * Math.PI * 2;
+      mob.dirX = Math.cos(angle);
+      mob.dirZ = Math.sin(angle);
+      mob.wander = 2 + Math.random() * 3;
+    }
+    const nx = mob.x + mob.dirX * 0.85 * dt;
+    const nz = mob.z + mob.dirZ * 0.85 * dt;
+    const surface = world.getSurfaceBlockY(Math.floor(nx), Math.floor(nz));
+    if (surface !== null && Math.abs(surface + 1 - mob.y) <= 1.2) {
+      mob.x = nx;
+      mob.z = nz;
+      mob.y = surface + 1;
+    } else {
+      mob.dirX *= -1;
+      mob.dirZ *= -1;
+    }
+    mob.group.position.set(mob.x, mob.y, mob.z);
+    mob.group.rotation.y = Math.atan2(mob.dirX, mob.dirZ);
+  }
+};
+
 const removePig = (index: number): void => {
   const pig = pigs[index];
   if (!pig) return;
@@ -2311,6 +2387,27 @@ const tryAttackMob = (clientX: number, clientY: number): boolean => {
       addDrop(Item.PORKCHOP, 1, pig.x, pig.y + 0.5, pig.z);
       gainXp(3);
       removePig(i);
+    }
+    showHud();
+    return true;
+  }
+  for (let i = sheep.length - 1; i >= 0; i--) {
+    const mob = sheep[i]!;
+    const distance = Math.hypot(mob.x - physics.x, mob.z - physics.z);
+    if (distance > 5) continue;
+    const projected = new THREE.Vector3(mob.x, mob.y + 0.8, mob.z).project(camera);
+    if (projected.z > 1) continue;
+    const designX = ((projected.x + 1) / 2) * 1024;
+    const designY = ((1 - projected.y) / 2) * uiHeight;
+    const touchX = (clientX / Math.max(1, platform.system.width)) * 1024;
+    const touchY = (clientY / Math.max(1, platform.system.height)) * uiHeight;
+    if (Math.hypot(designX - touchX, designY - touchY) > 88) continue;
+    mob.hp -= 4;
+    audio.play('break_wood');
+    if (mob.hp <= 0) {
+      addDrop(WOOL_ID_START, 1, mob.x, mob.y + 0.5, mob.z);
+      gainXp(1);
+      removeSheep(i);
     }
     showHud();
     return true;
@@ -2570,6 +2667,7 @@ const frame = (): void => {
       dead,
       pigs: pigs.length,
       zombies: zombies.length,
+      sheep: sheep.length,
       drops: droppedItems.length,
       xpLevel,
       flying,
@@ -2758,6 +2856,13 @@ const frame = (): void => {
       pigsSpawned = true;
     }
   }
+  if (playerReady && !sheepSpawned) {
+    const surface = world.getSurfaceBlockY(spawn.x - 2, spawn.z + 3);
+    if (surface !== null) {
+      spawnSheep(spawn.x - 2, surface + 1, spawn.z + 3);
+      sheepSpawned = true;
+    }
+  }
   if (playerReady && !zombieSpawned && worldTime > 0.55) {
     const surface = world.getSurfaceBlockY(spawn.x - 5, spawn.z - 4);
     if (surface !== null) {
@@ -2769,6 +2874,7 @@ const frame = (): void => {
     mobAccum += dt;
     if (mobAccum >= 0.05) {
       tickPigs(mobAccum);
+      tickSheep(mobAccum);
       tickZombies(mobAccum);
       mobAccum = 0;
     }
@@ -2804,6 +2910,15 @@ if (wxTestApi && isDesktopRuntime) {
       spawnZombie(Math.floor(physics.x + 3), surface + 1, Math.floor(physics.z + 3));
       zombieSpawned = true;
       return { spawned: true };
+    },
+    killSheep: () => {
+      const mob = sheep[0];
+      if (!mob) return { killed: false };
+      addDrop(WOOL_ID_START, 1, mob.x, mob.y + 0.5, mob.z);
+      gainXp(1);
+      removeSheep(0);
+      showHud();
+      return { killed: true };
     },
     killZombie: () => {
       const zombie = zombies[0];
