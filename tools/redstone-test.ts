@@ -16,6 +16,7 @@
  */
 
 import { Block, blockDef } from '../src/core/registry/blocks.ts';
+import { isButtonId, isPlateId } from '../src/core/redstone/RedstoneEngine.ts';
 import { Item, itemDef } from '../src/core/registry/items.ts';
 // 配方（批次 119）：这一节要断言"红石元件的配方就是原版那一条"
 import { RECIPES, matchRecipe } from '../src/core/crafting/Recipes.ts';
@@ -725,6 +726,24 @@ console.log('\n[红石灯：断电后延迟 0.2 秒才灭（批次 250）]');
 
   step(engine, world, 0.15);
   check('超过 0.2 秒后才熄灭', !isPowered(world.getState(1, Y, 0)));
+}
+
+console.log('\n[木质按钮 / 压力板的判定收敛（批次 444）]');
+{
+  const buttons = [
+    Block.OAK_BUTTON, Block.SPRUCE_BUTTON, Block.BIRCH_BUTTON,
+    Block.JUNGLE_BUTTON, Block.ACACIA_BUTTON, Block.DARK_OAK_BUTTON,
+  ];
+  const plates = [
+    Block.OAK_PRESSURE_PLATE, Block.SPRUCE_PRESSURE_PLATE, Block.BIRCH_PRESSURE_PLATE,
+    Block.JUNGLE_PRESSURE_PLATE, Block.ACACIA_PRESSURE_PLATE, Block.DARK_OAK_PRESSURE_PLATE,
+  ];
+  // 这两条是"加木材时最容易漏"的地方：判定点有五处，漏一处就是某两种木材按不动
+  check('六种木材的按钮全被认成按钮', buttons.every((id) => isButtonId(id)), buttons.filter((id) => !isButtonId(id)).join(','));
+  check('六种木材的压力板全被认成压力板', plates.every((id) => isPlateId(id)), plates.filter((id) => !isPlateId(id)).join(','));
+  check('石按钮算按钮、不算压力板', isButtonId(Block.STONE_BUTTON) && !isPlateId(Block.STONE_BUTTON));
+  check('石压力板算压力板、不算按钮', isPlateId(Block.STONE_PRESSURE_PLATE) && !isButtonId(Block.STONE_PRESSURE_PLATE));
+  check('木板本身既不是按钮也不是压力板', !isButtonId(Block.OAK_PLANKS) && !isPlateId(Block.OAK_PLANKS));
 }
 
 console.log(`\n红石测试：${passed} 通过 / ${failed} 失败`);

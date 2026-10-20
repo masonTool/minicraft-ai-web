@@ -253,6 +253,17 @@ const BASE_SPECS: readonly BlockSpec[] = [
   { id: 681, name: 'minecraft:stripped_jungle_log', tiles: ['stripped_jungle_log', 'stripped_jungle_log', 'stripped_jungle_log'] },
   { id: 682, name: 'minecraft:stripped_acacia_log', tiles: ['stripped_acacia_log', 'stripped_acacia_log', 'stripped_acacia_log'] },
   { id: 683, name: 'minecraft:stripped_dark_oak_log', tiles: ['stripped_dark_oak_log', 'stripped_dark_oak_log', 'stripped_dark_oak_log'] },
+  // 其余五种木材的按钮 / 压力板（批次 444）：贴图复用同种木板，形状与橡木那两个一致
+  { id: 684, name: 'minecraft:spruce_button', tiles: ['spruce_planks', 'spruce_planks', 'spruce_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 685, name: 'minecraft:birch_button', tiles: ['birch_planks', 'birch_planks', 'birch_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 686, name: 'minecraft:jungle_button', tiles: ['jungle_planks', 'jungle_planks', 'jungle_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 687, name: 'minecraft:acacia_button', tiles: ['acacia_planks', 'acacia_planks', 'acacia_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 688, name: 'minecraft:dark_oak_button', tiles: ['dark_oak_planks', 'dark_oak_planks', 'dark_oak_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 689, name: 'minecraft:spruce_pressure_plate', tiles: ['spruce_planks', 'spruce_planks', 'spruce_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 690, name: 'minecraft:birch_pressure_plate', tiles: ['birch_planks', 'birch_planks', 'birch_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 691, name: 'minecraft:jungle_pressure_plate', tiles: ['jungle_planks', 'jungle_planks', 'jungle_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 692, name: 'minecraft:acacia_pressure_plate', tiles: ['acacia_planks', 'acacia_planks', 'acacia_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
+  { id: 693, name: 'minecraft:dark_oak_pressure_plate', tiles: ['dark_oak_planks', 'dark_oak_planks', 'dark_oak_planks'], shape: 'flat', solid: false, opaque: false, lightOpacity: 0 },
   { id: 17, name: 'minecraft:calcite', tiles: ['calcite', 'calcite', 'calcite'] },
   { id: 18, name: 'minecraft:gravel', tiles: ['gravel', 'gravel', 'gravel'] },
   { id: 19, name: 'minecraft:clay', tiles: ['clay', 'clay', 'clay'] },
@@ -3958,6 +3969,21 @@ export const Block = {
   STRIPPED_JUNGLE_LOG: 681,
   STRIPPED_ACACIA_LOG: 682,
   STRIPPED_DARK_OAK_LOG: 683,
+  /**
+   * 其余五种木材的按钮 / 压力板（批次 444）：橡木的那两个早就有，
+   * 但 `RedstoneEngine` 里是按 id 逐个 `case` 的，所以加方块必须先把判定收敛成集合
+   * （见该文件顶部的 `isButtonId` / `isPlateId`）——否则会出现"三种木材能用、两种按不动"。
+   */
+  SPRUCE_BUTTON: 684,
+  BIRCH_BUTTON: 685,
+  JUNGLE_BUTTON: 686,
+  ACACIA_BUTTON: 687,
+  DARK_OAK_BUTTON: 688,
+  SPRUCE_PRESSURE_PLATE: 689,
+  BIRCH_PRESSURE_PLATE: 690,
+  JUNGLE_PRESSURE_PLATE: 691,
+  ACACIA_PRESSURE_PLATE: 692,
+  DARK_OAK_PRESSURE_PLATE: 693,
   WAXED_COPPER_BLOCK: 603,
   WAXED_EXPOSED_COPPER: 604,
   WAXED_WEATHERED_COPPER: 605,
@@ -4312,6 +4338,10 @@ HARDNESS.set(Block.BLUE_ICE, 2.8);
 HARDNESS.set(Block.HONEYCOMB_BLOCK, 0.6);
 // 蛛网：剑挖得快（原版 4，且只有剑/剪刀效率正常）；这里统一 4
 HARDNESS.set(Block.COBWEB, 4);
+// 按钮 / 压力板（批次 444）：木制统一 0.5
+for (const id of [Block.SPRUCE_BUTTON, Block.BIRCH_BUTTON, Block.JUNGLE_BUTTON, Block.ACACIA_BUTTON, Block.DARK_OAK_BUTTON, Block.SPRUCE_PRESSURE_PLATE, Block.BIRCH_PRESSURE_PLATE, Block.JUNGLE_PRESSURE_PLATE, Block.ACACIA_PRESSURE_PLATE, Block.DARK_OAK_PRESSURE_PLATE]) {
+  HARDNESS.set(id, 0.5);
+}
 // 剥皮原木：与原木同级
 for (const id of [Block.STRIPPED_OAK_LOG, Block.STRIPPED_SPRUCE_LOG, Block.STRIPPED_BIRCH_LOG, Block.STRIPPED_JUNGLE_LOG, Block.STRIPPED_ACACIA_LOG, Block.STRIPPED_DARK_OAK_LOG]) {
   HARDNESS.set(id, 2);

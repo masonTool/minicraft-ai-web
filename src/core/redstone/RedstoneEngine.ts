@@ -104,15 +104,16 @@ export function isRedstoneComponent(id: number): boolean {
   // 批次 38 起按**形状**判定 —— 6 种木材的同一种门是同一件东西，
   // 按 id 逐个列举必然漏（加一种木材就多 4 个方块）。
   if (isOpenableShape(blockDef(id).shape)) return true;
+  // 木质按钮/压力板（批次 444）：五种木材 × 两种，逐个写 case 必然漏（见集合的注释）
+  if (isButtonId(id) || isPlateId(id)) return true;
   switch (id) {
     case Block.REDSTONE_WIRE:
     case Block.REDSTONE_TORCH:
     case Block.REDSTONE_BLOCK:
     case Block.LEVER:
     case Block.STONE_BUTTON:
-    case Block.OAK_BUTTON:
     case Block.STONE_PRESSURE_PLATE:
-    case Block.OAK_PRESSURE_PLATE:
+    // 木质按钮/压力板（批次 444）：五种木材共用下面的集合判定，不再逐个列
     case Block.REPEATER:
     case Block.COMPARATOR:
     case Block.REDSTONE_LAMP:
@@ -215,6 +216,43 @@ interface Node {
 
 function keyOf(x: number, y: number, z: number): string {
   return `${x},${y},${z}`;
+}
+
+/**
+ * 按钮 / 压力板的判定必须**按集合**，不能按 id 逐个 `case`。
+ *
+ * 这是批次 444 加的：加其余五种木材的按钮时，如果继续写
+ * `id === Block.SPRUCE_BUTTON || id === Block.BIRCH_BUTTON || …`，
+ * 五处判定点（是否元件 / 能不能按 / 压力板轮询 / 电源强度 / 相邻输入）
+ * 只要漏一处，表现就是"某种木材的按钮按下去没反应"——而这种 bug 在游戏里
+ * 长得跟"我的手柄坏了"一模一样，很难归因。
+ */
+const WOODEN_BUTTONS: ReadonlySet<number> = new Set([
+  Block.OAK_BUTTON,
+  Block.SPRUCE_BUTTON,
+  Block.BIRCH_BUTTON,
+  Block.JUNGLE_BUTTON,
+  Block.ACACIA_BUTTON,
+  Block.DARK_OAK_BUTTON,
+]);
+
+const WOODEN_PLATES: ReadonlySet<number> = new Set([
+  Block.OAK_PRESSURE_PLATE,
+  Block.SPRUCE_PRESSURE_PLATE,
+  Block.BIRCH_PRESSURE_PLATE,
+  Block.JUNGLE_PRESSURE_PLATE,
+  Block.ACACIA_PRESSURE_PLATE,
+  Block.DARK_OAK_PRESSURE_PLATE,
+]);
+
+/** 是不是按钮（石制 + 所有木质） */
+export function isButtonId(id: number): boolean {
+  return id === Block.STONE_BUTTON || WOODEN_BUTTONS.has(id);
+}
+
+/** 是不是压力板（石制 + 所有木质） */
+export function isPlateId(id: number): boolean {
+  return id === Block.STONE_PRESSURE_PLATE || WOODEN_PLATES.has(id);
 }
 
 export class RedstoneEngine {
@@ -324,7 +362,7 @@ export class RedstoneEngine {
   /** 玩家右键按钮：按下并在 1 秒（石）/ 1.5 秒（木）后自动弹起 */
   pressButton(world: RedstoneWorld, x: number, y: number, z: number): boolean {
     const id = world.getBlock(x, y, z);
-    if (id !== Block.STONE_BUTTON && id !== Block.OAK_BUTTON) return false;
+    if (!isButtonId(id)) return false;
     const state = world.getState(x, y, z);
     if (isPowered(state)) return false;
     if (!world.setState(x, y, z, withPowered(state, true))) return false;
@@ -579,7 +617,7 @@ export class RedstoneEngine {
     for (const [key, on] of [...this.plateState]) {
       const [x, y, z] = parseKey(key);
       const id = world.getBlock(x, y, z);
-      if (id !== Block.STONE_PRESSURE_PLATE && id !== Block.OAK_PRESSURE_PLATE) {
+      if (!isPlateId(id)) {
         this.plateState.delete(key);
         continue;
       }
@@ -679,18 +717,20 @@ export class RedstoneEngine {
       const id = world.getBlock(nx, ny, nz);
       const state = world.getState(nx, ny, nz);
 
+      // 按钮 / 压力板（石制 + 木质，批次 444）：**先判后 switch**。
+      // 写成 case 的话，新加的十块木质方块会落进 default，
+      // 表现是"压力板通电了但旁边电路没反应"。
+      if (id === Block.LEVER || isButtonId(id) || isPlateId(id)) {
+        if (isPlateId(id)) this.trackPlate(world, nx, ny, nz);
+        if (isPowered(state)) {
+          strengths.set(key, 15);
+          sources.push({ x: nx, y: ny, z: nz });
+        }
+        continue;
+      }
+
       switch (id) {
         case Block.LEVER:
-        case Block.STONE_BUTTON:
-        case Block.OAK_BUTTON:
-        case Block.STONE_PRESSURE_PLATE:
-        case Block.OAK_PRESSURE_PLATE:
-          if (id === Block.STONE_PRESSURE_PLATE || id === Block.OAK_PRESSURE_PLATE) this.trackPlate(world, nx, ny, nz);
-          if (isPowered(state)) {
-            strengths.set(key, 15);
-            sources.push({ x: nx, y: ny, z: nz });
-          }
-          break;
         case Block.REDSTONE_TORCH:
         case Block.REDSTONE_BLOCK:
           strengths.set(key, 15);
@@ -1120,7 +1160,7 @@ export class RedstoneEngine {
         if (best < 15) best = 15;
         continue;
       }
-      if (id === Block.LEVER || id === Block.STONE_BUTTON || id === Block.OAK_BUTTON) {
+      if (id === Block.LEVER || isButtonId(id)) {
         if (isPowered(world.getState(nx, ny, nz)) && best < 15) best = 15;
       }
       // 中继器/比较器的输出面紧贴负载时也算输入

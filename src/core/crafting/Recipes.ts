@@ -1881,6 +1881,18 @@ const WORLD_BLOCK_RECIPES: readonly Recipe[] = [
     pattern: ['CC', 'CC'],
     key: { C: Item.POPPED_CHORUS_FRUIT },
   },
+  // ---- 其余五种木材的按钮 / 压力板（批次 444）：与原版一致
+  // 按钮 = 1 块木板无序；压力板 = 2 块木板竖排（都按橡木那两个同款规则）
+  ...([
+    [Wood.spruce.planks, Block.SPRUCE_BUTTON, Block.SPRUCE_PRESSURE_PLATE],
+    [Wood.birch.planks, Block.BIRCH_BUTTON, Block.BIRCH_PRESSURE_PLATE],
+    [Wood.jungle.planks, Block.JUNGLE_BUTTON, Block.JUNGLE_PRESSURE_PLATE],
+    [Wood.acacia.planks, Block.ACACIA_BUTTON, Block.ACACIA_PRESSURE_PLATE],
+    [Wood.dark_oak.planks, Block.DARK_OAK_BUTTON, Block.DARK_OAK_PRESSURE_PLATE],
+  ] as const).flatMap(([planks, button, plate]): Recipe[] => [
+    { kind: 'shapeless', result: { id: button, count: 1 }, ingredients: [planks] },
+    { kind: 'shaped', result: { id: plate, count: 1 }, pattern: ['P', 'P'], key: { P: planks } },
+  ]),
   // ---- 蜜脾块（批次 440）：4 个蜜脾 2×2 → 1 块
   {
     kind: 'shaped',
