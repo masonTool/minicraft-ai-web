@@ -68,7 +68,7 @@ void main() {
   if (fluid > 0.5) {
     // 两个不同频率的正弦叠加，按**世界坐标**取样：跨区块的接缝处不会断裂
     float wave = sin(worldPos.x * 0.85 + uTime * 1.7) + sin(worldPos.z * 0.7 + uTime * 1.25);
-    // 批次 425：**起伏幅度随距离衰减**。
+    // 批次 520：**起伏幅度随距离衰减**。
     //
     // 远处的水面是"斜着看"的，几厘米的起伏在屏幕上会变成一个像素跨好几个波长的高频
     // 信号 —— 每帧都在跳，这就是"远处水面在闪"。近处的水才需要看得见起伏，
@@ -92,7 +92,7 @@ uniform float uFogNear;
 uniform float uFogFar;
 uniform float uAlphaTest;
 /**
- * 镂空贴图的**覆盖率补偿**强度（批次 425，见 alphaCoverage.ts）。
+ * 镂空贴图的**覆盖率补偿**强度（批次 520，见 alphaCoverage.ts）。
  * 实心层 0.4、半透明层 0（那一层本来就不做 alphaTest）。
  */
 uniform float uAlphaLift;
@@ -159,7 +159,7 @@ void main() {
   float lodCap = min(1.0, tileTexels / max(rho, 0.0001));
   vec4 texel = textureGrad(uAtlas, tileUv, gradX * lodCap, gradY * lodCap);
 
-  // ---- 镂空贴图的覆盖率补偿（批次 425）
+  // ---- 镂空贴图的覆盖率补偿（批次 520）
   //
   // mipmap 的 alpha 是**覆盖率平均**：43% 覆盖率的草到 mip2 就掉到 0.2~0.4，
   // 被 0.5 的阈值整块 discard —— 剪影随距离被一点点啃掉，走动时洞的位置还跟着跳，
@@ -189,7 +189,7 @@ void main() {
   float fogFactor = smoothstep(uFogNear, uFogFar, vFogDepth);
   color = mix(color, uFogColor, fogFactor);
 
-  // 抖色（批次 425）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带，
+  // 抖色（批次 520）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带，
   // ±0.5/255 的有序抖动把它们打散，肉眼不可见。见 dither.ts
   gl_FragColor = vec4(ditherColor(color, gl_FragCoord.xy), texel.a);
 }

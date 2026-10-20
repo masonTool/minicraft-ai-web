@@ -77,7 +77,7 @@ void main() {
   // 日出日落时太阳附近泛橙红（霞光）
   float glow = pow(max(dot(normalize(vDir), normalize(uSunDir)), 0.0), 8.0) * uSunGlow;
   color += vec3(1.0, 0.52, 0.22) * glow;
-  // 抖色（批次 425）：天空是横跨整个屏幕的平滑渐变，8 bit 输出在夜里会出台阶状
+  // 抖色（批次 520）：天空是横跨整个屏幕的平滑渐变，8 bit 输出在夜里会出台阶状
   // 色带（白天也有一条条很淡的横纹）。±0.5/255 的有序抖动把台阶打散。见 dither.ts
   gl_FragColor = vec4(ditherColor(color, gl_FragCoord.xy), 1.0);
 }
@@ -170,7 +170,7 @@ function cloudTexture(): THREE.Texture {
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(6, 6);
   texture.colorSpace = THREE.NoColorSpace;
-  // 批次 425：云层是一整片 900×900 的平面，玩家几乎总是**斜着**看它（地平线附近）。
+  // 批次 520：云层是一整片 900×900 的平面，玩家几乎总是**斜着**看它（地平线附近）。
   // 没有各向异性时 LOD 由长轴决定，云的边缘会被糊成一片并在走动时闪。
   // 这张是独立贴图（不在图集里），开各向异性没有渗色问题——three 会按设备上限夹住。
   texture.anisotropy = 4;

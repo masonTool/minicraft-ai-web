@@ -151,7 +151,7 @@ const stubAtlas = {
     const rect = TILE_RECTS[tile];
     return rect ? [rect[0], rect[1]] : [0, 0];
   },
-  /** 破坏裂纹叠加层还要用它算"一张贴图占多大"（批次 425：不能再用 1/columns 手算） */
+  /** 破坏裂纹叠加层还要用它算"一张贴图占多大"（批次 520：不能再用 1/columns 手算） */
   tileSpan: [0.25, 0.25] as [number, number],
 } as unknown as TextureAtlas;
 
@@ -228,7 +228,7 @@ console.log('\n[图集几何工具：UV 与逐面明暗]');
     rect.map((v) => v.toFixed(4)).join(','),
   );
 
-  // ---- 上传图集的**边距**（批次 425）：每格 32 纹素，内容 16 居中
+  // ---- 上传图集的**边距**（批次 520）：每格 32 纹素，内容 16 居中
   //
   // 加边距是为了各向异性过滤：取样足迹沿长轴会跨出这张贴图，紧挨着排就会把邻居
   // 的颜色混进来（砖缝处出现彩色细线）。这里钉住三件事：内容区还是 16 纹素宽、
@@ -263,7 +263,7 @@ console.log('\n[图集几何工具：UV 与逐面明暗]');
     );
   }
 
-  // ---- 各向异性档位（批次 425）
+  // ---- 各向异性档位（批次 520）
   check('0/负数/NaN 都落到 1（GL 里 0 是非法值）', [0, -3, Number.NaN].every((v) => clampAnisotropy(v) === 1));
   equal('4 原样保留', clampAnisotropy(4), 4);
   equal('过大被夹到 16', clampAnisotropy(999), 16);
@@ -615,7 +615,7 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
     frag.includes('mix(uSkyLightColor, uBlockLightColor, t * t)'),
   );
   check('没有退回"只乘标量亮度"的旧写法', !frag.includes('texel.rgb * brightness;'));
-  // 抖色（批次 425）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带
+  // 抖色（批次 520）：雾与暗部是大面积平滑渐变，8 bit 输出会出台阶状色带
   check('片元最后加了抖色', frag.includes('ditherColor(color, gl_FragCoord.xy)'));
   check('抖色幅度是一个量化级（1/255，再大就成颗粒了）', GLSL_DITHER.includes('/ 255.0'));
   check(
@@ -633,7 +633,7 @@ console.log('\n[光照色温 / mip 层级（批次 237）]');
 // mipmap 的 alpha 是覆盖率平均：43% 覆盖率的草到 mip2 就掉到 0.2~0.4，被 0.5 的
 // 阈值整块 discard —— 剪影随距离被啃掉、走动时还在跳（"草的颗粒感"）。
 
-console.log('\n[镂空贴图的覆盖率补偿（批次 425）]');
+console.log('\n[镂空贴图的覆盖率补偿（批次 520）]');
 {
   // 纯函数：alpha=0 必须恒等（空白区域永远空白，不能凭空长出一层绿雾）
   equal('完全透明抬了也是 0', coverageAlpha(0, 3), 0);

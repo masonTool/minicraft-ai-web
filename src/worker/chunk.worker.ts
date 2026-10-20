@@ -109,7 +109,7 @@ const ATLAS_ROWS = Math.ceil(TILE_ORDER.length / ATLAS_COLUMNS);
  * 与 TextureAtlas.tileOrigin 必须完全一致。
  * 这里只用常量算，不创建 canvas —— 顶点只需要「贴图在图集里的起点」。
  *
- * ⚠️ `TILE_PADDING` 不能漏（批次 425）：上传图集每格四周有 8 纹素的外扩边距，
+ * ⚠️ `TILE_PADDING` 不能漏（批次 520）：上传图集每格四周有 8 纹素的外扩边距，
  * 顶点里的起点是**内容区**的左下角。这里少传一个参数，整张图的 UV 就会偏移
  * 半个格子（所有方块贴图错位）。两边的一致性由 `test:mesh` 的 UV 断言守着。
  */

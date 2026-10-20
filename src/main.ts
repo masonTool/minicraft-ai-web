@@ -1878,7 +1878,7 @@ class App {
     this.renderer.setPixelRatio(effectivePixelRatio(devicePixelRatioValue(), this.perf.resolutionScale, this.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(this.renderer.domElement);
-    // 图集各向异性（批次 425）：只在拿到 renderer 之后才能开（three 会按设备上限夹）。
+    // 图集各向异性（批次 520）：只在拿到 renderer 之后才能开（three 会按设备上限夹）。
     // 斜视地面/墙壁时 LOD 由长轴决定，没有它会糊成一块色；图集已加 8 纹素边距，
     // 足迹跨出去看到的是自己的外扩而不是邻居贴图（见 TextureAtlas.syncUploadCanvas）。
     this.atlas.setAnisotropy(isTouchDevice() ? ATLAS_ANISOTROPY_MOBILE : ATLAS_ANISOTROPY_DESKTOP);
@@ -1893,7 +1893,7 @@ class App {
     // 只按"视距×16+32"算的话，手机上（视距 6~8）会小于穹顶半径，
     // 结果屏幕正中会被裁出一个颜色不同的圆洞
     //
-    // 近裁面 0.25（批次 425）：原来 0.1 是"手离镜头很近"的桌面习惯，但世界相机里
+    // 近裁面 0.25（批次 520）：原来 0.1 是"手离镜头很近"的桌面习惯，但世界相机里
     // **没有任何东西**比 0.25 格更近（手持物品是独立相机，见 `HandRenderer`）。
     // 深度精度与 near 成正比，抬到 0.25 等于白拿 2.5 倍精度——远景的共面闪烁与
     // 缝隙（方块贴方块的地方）主要就是它。

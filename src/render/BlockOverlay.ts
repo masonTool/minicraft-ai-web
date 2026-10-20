@@ -129,7 +129,7 @@ export class BlockOverlay {
     this.damageUniforms = {
       uAtlas: { value: atlas.texture },
       uTileOrigin: { value: new THREE.Vector2(0, 0) },
-      // ⚠️ 用 `atlas.tileSpan` 而不是 `1 / columns`（批次 425）：上传图集每格四周
+      // ⚠️ 用 `atlas.tileSpan` 而不是 `1 / columns`（批次 520）：上传图集每格四周
       // 有 8 纹素的外扩边距，一张贴图只占格子的 16/32。手算会大出一倍。
       uTileSpan: { value: new THREE.Vector2(atlas.tileSpan[0], atlas.tileSpan[1]) },
     };
