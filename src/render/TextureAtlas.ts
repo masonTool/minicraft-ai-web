@@ -6508,6 +6508,16 @@ PAINTERS['budding_amethyst'] = noisy(0x6f47a8, 14);
 PAINTERS['amethyst_cluster'] = noisy(0xb98ee8, 18);
 PAINTERS['item_amethyst_shard'] = noisy(0xa97ce0, 22);
 
+/** 望远镜（批次 518）：竖直铜筒 + 深色握把 + 顶部紫色镜片 */
+PAINTERS['item_spyglass'] = paintingPainter([58, 50, 40], [
+  [6, 2, 4, 12, [188, 146, 76]],
+  [7, 2, 2, 12, [214, 176, 104]],
+  [5, 5, 6, 3, [96, 78, 52]],
+  [6, 3, 4, 2, [110, 92, 148]],
+  [7, 3, 2, 1, [196, 178, 230]],
+  [6, 12, 4, 2, [140, 106, 56]],
+]);
+
 // 蘑菇岛族（批次 352）：菌丝偏灰紫，菌盖红/棕，柄是米色
 PAINTERS['mycelium_top'] = noisy(0x9a8fa8, 14);
 PAINTERS['mycelium_side'] = noisy(0x8a7f96, 12);

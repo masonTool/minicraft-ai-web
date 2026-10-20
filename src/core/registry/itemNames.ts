@@ -574,6 +574,7 @@ const EXPLICIT: Record<string, string> = {
   budding_amethyst: '紫水晶芽床',
   amethyst_cluster: '紫水晶簇',
   amethyst_shard: '紫水晶碎片',
+  spyglass: '望远镜',
   mycelium: '菌丝',
   mushroom_stem: '蘑菇柄',
   brown_mushroom_block: '棕色蘑菇块',

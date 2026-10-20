@@ -34,7 +34,7 @@ npm run dev            # http://localhost:5173
 
 ## 1. 当前状态快照
 
-- 时间：2026-10-20 · 提交总数 1085（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
+- 时间：2026-10-20 · 提交总数 1086（每个功能点一条，可逐条回滚；`npm run audit:tasks` 会核对这一句）
 - 技术栈：TypeScript（严格模式）+ Vite + Three.js / WebGL2；无第三方运行时依赖（除 three）
 - 进度口径：`TASKS.md` 共 288 项 —— 已完成 **235**、进行中 **48**、待办 5 条（其中 55 条是需求审计新补的**整组**缺口，逐组明细见 `docs/HANDOFF-ARCHIVE.md` 的「需求审计」一节）；
   （`npm run audit:tasks` 会核对这一行与本表，改完条目记得跑一次）
@@ -210,11 +210,11 @@ Service Worker 只在生产模式注册（开发时注册会把 vite 的开发�
 
 ```bash
 npm run dev                # 开发服务器
-npm run check              # 【提交前】typecheck + 单测 + 159 套离线测试 + 三张台账（全过才提交）
+npm run check              # 【提交前】typecheck + 单测 + 160 套离线测试 + 三张台账（全过才提交）
 npm run check:fast         # 【改代码时】typecheck + 单测 + 只跑被改动命中的套件（秒级）
 npm run build              # 类型检查 + 生产构建（带 sourcemap，发布用）
 npm run build:fast         # 只验"能不能出包"（SOURCEMAP=0，产物 hash 与正式构建一致）
-npm test                   # typecheck:tools + vitest + 159 套离线测试
+npm test                   # typecheck:tools + vitest + 160 套离线测试
 npm run test:offline:changed  # 只跑与本次 git 改动相关的离线套件
 npm run audit:tasks        # 任务清单自检（编号重复/跳号 + 本文件进度口径是否过期）
 npm run gen:stats          # 地形生成统计（耗时/洞穴占比/矿石产量）
@@ -226,7 +226,7 @@ npm run agent:setup        # 跨机器自检
 （`tools/run-tests.mjs`：**一次 esbuild 打包全部入口 + 多进程并行**，
 32s → 9s，见 TASKS A13）。单套调试仍可直接 `npm run test:reach` 这类老命令。
 
-`npm test` 那一层共 **159 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
+`npm test` 那一层共 **160 套**自建离线测试（清单的唯一来源是 `package.json` 的 `test:*` 脚本，
 不在文档里另抄一份——`npm run audit:tasks` 会核对这个数）；
 另有 `tools/mobile-check.sh` / `tools/ui-check.sh` / `tools/net-check.sh` 等**真浏览器验收脚本**，
 它们要 dev server，不在 `npm test` 里。
@@ -332,8 +332,7 @@ npm run agent:setup        # 跨机器自检
 - 批次 514（文档对齐）：修正 12 处过期"还没做"，并把**末影箱配方换回原版**（8 黑曜石 + 1 末影之眼）。
 - 批次 515（J3 第三批）：**"追玩家"判据抽成纯函数**。`ChaseRules.ts` + `Mob.updateAi` 只取数
   （行为不变）。`test:chase` **26 条**，套数 → **157**。
-- 批次 516（J3 尾巴）：**生物开门**。`DoorRules.ts` + `PathOptions.isDoor` +
-  `EntityContext.openDoor`，主程序复用 `toggleDoor`。`test:doors` **13 条**，套数 → **158**。
-  ⚠️ J3 只剩游泳。
-- 批次 517（J3 收口）：**生物游泳**。`SwimRules.ts`（水下才推、头出水不推、追击 2.6 / 自然 0.6），
-  `Mob` 在 `aquatic` 之后接上。`test:swim` **16 条**，套数 → **159**；**J3 勾掉**（235 / 48）。
+- 批次 516（J3 尾巴）：**生物开门**（`DoorRules.ts` + `PathOptions.isDoor`）。`test:doors` **13 条**。
+- 批次 517（J3 收口）：**生物游泳**（`SwimRules.ts` + `Mob`）。`test:swim` **16 条**；**J3 勾掉**。
+- 批次 518（B15 尾巴）：**望远镜**（1543，2 铜锭 + 1 紫水晶碎片）；按住使用把 FOV 压到
+  `基础 × 0.12`（下限 6°），松手缓回。`test:spyglass` **22 条**，套数 → **160**。B15 只剩细雪。

@@ -1306,6 +1306,8 @@ export const TILE_ORDER = [
   // 制图台（批次 505）：顶面摊开的地图 + 罗盘、侧面的纸卷
   'cartography_table_top',
   'cartography_table_side',
+  // 望远镜（批次 518）：铜镜筒 + 一片紫色镜片
+  'item_spyglass',
 ] as const;
 
 export type TileName = (typeof TILE_ORDER)[number];

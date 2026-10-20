@@ -198,6 +198,8 @@ export const Item = {
   CROSSBOW: 1510,
   /** 紫水晶碎片（批次 351）：紫水晶簇的掉落，4 个压成一块紫水晶块 */
   AMETHYST_SHARD: 1521,
+  /** 望远镜（批次 518）：按住使用键放大；2 铜锭 + 1 紫水晶碎片 */
+  SPYGLASS: 1543,
   /** 海晶碎片 / 海晶砂粒（批次 359）：守卫者的掉落，用来合成海晶石族 */
   PRISMARINE_SHARD: 1522,
   PRISMARINE_CRYSTALS: 1523,
@@ -527,6 +529,7 @@ const BASE_NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [
   // 弩（批次 265）：耐久与弓同档（原版 465），一次装填一发
   { id: Item.CROSSBOW, name: 'minecraft:crossbow', tile: 'item_crossbow', maxStack: 1, durability: 465 },
   { id: Item.AMETHYST_SHARD, name: 'minecraft:amethyst_shard', tile: 'item_amethyst_shard' },
+  { id: Item.SPYGLASS, name: 'minecraft:spyglass', tile: 'item_spyglass', maxStack: 1 },
   { id: Item.PRISMARINE_SHARD, name: 'minecraft:prismarine_shard', tile: 'item_prismarine_shard' },
   { id: Item.PRISMARINE_CRYSTALS, name: 'minecraft:prismarine_crystals', tile: 'item_prismarine_crystals' },
   { id: Item.HONEYCOMB, name: 'minecraft:honeycomb', tile: 'item_honeycomb' },

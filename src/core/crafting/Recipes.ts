@@ -1213,6 +1213,13 @@ const ENCHANT_RECIPES: readonly Recipe[] = [
     pattern: ['PP', 'WW'],
     key: { P: Item.PAPER, W: Block.OAK_PLANKS },
   },
+  // 望远镜（批次 518）：2 铜锭 + 1 紫水晶碎片（原版）
+  {
+    kind: 'shaped' as const,
+    result: { id: Item.SPYGLASS, count: 1 },
+    pattern: ['C', 'A', 'C'],
+    key: { C: Item.COPPER_INGOT, A: Item.AMETHYST_SHARD },
+  },
   // ⚠️ 下界合金的**工具与盔甲没有配方**：它们只能在锻造台上、由对应的钻石装备 + 1 个
   // 下界合金锭升级而来（见 `core/crafting/Smithing.ts`），与原版一致。
   // ⚠️ 与 原版 的差异：原版是 4 线 → 1 羊毛，方向相反。

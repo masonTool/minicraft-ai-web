@@ -36,6 +36,7 @@
     "test:chase": "esbuild tools/chase-test.ts --bundle --platform=node --format=esm --outfile=.tmp/chase-test.mjs --log-level=error && node .tmp/chase-test.mjs",
     "test:doors": "esbuild tools/door-test.ts --bundle --platform=node --format=esm --outfile=.tmp/door-test.mjs --log-level=error && node .tmp/door-test.mjs",
     "test:swim": "esbuild tools/swim-test.ts --bundle --platform=node --format=esm --outfile=.tmp/swim-test.mjs --log-level=error && node .tmp/swim-test.mjs",
+    "test:spyglass": "esbuild tools/spyglass-test.ts --bundle --platform=node --format=esm --outfile=.tmp/spyglass-test.mjs --log-level=error && node .tmp/spyglass-test.mjs",
     "test:spawnerdecor": "esbuild tools/spawnerdecor-test.ts --bundle --platform=node --format=esm --outfile=.tmp/spawnerdecor-test.mjs --log-level=error && node .tmp/spawnerdecor-test.mjs",
     "test:rules": "esbuild tools/rules-test.ts --bundle --platform=node --format=esm --outfile=.tmp/rules-test.mjs --log-level=error && node .tmp/rules-test.mjs",
     "test:disc": "esbuild tools/disc-test.ts --bundle --platform=node --format=esm --outfile=.tmp/disc-test.mjs --log-level=error && node .tmp/disc-test.mjs",

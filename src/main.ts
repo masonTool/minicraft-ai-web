@@ -720,6 +720,7 @@ import {
   extraCropDrop,
 } from './core/registry/items.ts';
 import { CAKE_SLICE_FOOD, canEat, eatSecondsFor } from './core/registry/food.ts';
+import { SPYGLASS_EASE_IN, SPYGLASS_EASE_OUT, spyglassFov } from './core/items/Spyglass.ts';
 // 调参常量 / 世界配置 / 纯工具：**批次 101 从本文件搬出去的**（详见各文件头）
 import {
   ATTACK_RANGE,
@@ -3865,6 +3866,26 @@ class App {
    * 所以触摸端改读 `touch.holding`（按住不动 100ms、漂移 ≤ 6px 即算使用），
    * 比长按阈值快得多，又不会被"滑动视角"误触发（细节见 TouchControls 那个 getter）。
    */
+  /**
+   * 望远镜的视野缓动（批次 518）。
+   *
+   * 基础 FOV 取设置里那一档（桌面 70 / 手机 90，由 `clampFovFor` 封顶），
+   * 举镜时乘 0.12；松手缓回。**每帧都写 `camera.fov`**——只在 `applySettings`
+   * 里写的话，举镜与放镜就没有过渡。
+   *
+   * ⚠️ 只在"手里拿着望远镜 + 按住使用键"时放大：进食/拉弓/交易界面都不会误触。
+   */
+  private updateCameraFov(dt: number): void {
+    const base = clampFovFor(this.settings.fov, isTouchDevice());
+    const zoomed =
+      this.heldItemId === Item.SPYGLASS && this.usingItem && !this.uiOpen && !this.stats.dead;
+    const target = zoomed ? spyglassFov(base) : base;
+    const ease = zoomed ? SPYGLASS_EASE_IN : SPYGLASS_EASE_OUT;
+    this.camera.fov += (target - this.camera.fov) * Math.min(1, ease * dt);
+    // 回到基础视野时对齐，避免浮点残留让 FOV 永远差 0.0001
+    if (!zoomed && Math.abs(this.camera.fov - base) < 0.05) this.camera.fov = base;
+  }
+
   private get usingItem(): boolean {
     if (this.rightDown || this.padUse) return true;
     if (this.touch === null || this.hit !== null) return false;
@@ -14907,6 +14928,7 @@ class App {
 
       // 手持物品：跟快捷栏选中项同步，并按走路/挥动做动画。
       // 第三人称看的是玩家模型（手里没有画方块），所以第一人称的手臂要藏起来。
+      this.updateCameraFov(dt);
       this.hand.setItem(this.inventory.get(this.hotbarIndex)?.id);
       this.hand.update(dt, this.isPlayerMoving(), this.camera.fov, this.camera.aspect);
       this.particles.setViewport(this.camera.fov, this.renderer.domElement.height);
