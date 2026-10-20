@@ -208,7 +208,7 @@ import {
   totemSoundSpec,
 } from './core/items/Totem.ts';
 // 旁观模式（批次 491）：能力判定全在 GameMode.ts
-import { canFly, canInteract, hasBlockCollision, isSpectatorMode } from './core/world/GameMode.ts';
+import { canFly, canInteract, hasBlockCollision, isSpectatorMode, startsFlying } from './core/world/GameMode.ts';
 import { Teams } from './core/world/Teams.ts';
 // 蜂巢的蜂蜜等级与挤蜜（J21，批次 407）
 import {
@@ -1826,6 +1826,8 @@ class App {
   ) {
     this.world = new World(this.worldConfig.seed, this.worldConfig.worldType);
     this.gameMode = normalizeGameMode(this.worldConfig.gameMode);
+    // 旁观模式（批次 532）：新世界没有存档时也要立刻起飞，否则无碰撞 + 重力 = 穿地
+    this.flying = startsFlying(this.gameMode);
     this.waitingForSaveRestore = Boolean(save?.hasSave);
     // TNT（批次 56）：红石引擎只负责"判定这里通电了"，点火交给拿着引信表的那一方
     this.redstone.onTntIgnite = (x, y, z) => {
@@ -3144,7 +3146,8 @@ class App {
     if (data.gameMode) this.setGameMode(data.gameMode);
     else if (data.flying) this.setGameMode('creative');
     // 生存模式不允许飞：`setFlying` 自己也会挡，这里把条件写清楚
-    this.setFlying(data.flying === true && this.isCreative);
+    // 旁观模式永远允许飞；创造仍按存档里的飞行状态恢复（批次 532 修掉旁观被卡成 false）
+    this.setFlying(isSpectatorMode(this.gameMode) || (data.flying === true && this.isCreative));
     this.timeOfDay = data.timeOfDay;
     // 月相（批次 84）：老存档没有 dayCount → 第 0 天（满月），与 `moonPhaseFor(0)` 一条口径
     this.dayCount = Number.isFinite(data.dayCount) && (data.dayCount ?? 0) >= 0 ? Math.floor(data.dayCount!) : 0;
@@ -4412,10 +4415,14 @@ class App {
     const [dirX, dirY, dirZ] = PlayerPhysics.lookDirection(this.yaw, this.pitch);
     const dir = { x: dirX, y: dirY, z: dirZ };
 
-    const distance =
-      this.cameraMode === 'first'
-        ? 0
-        : this.cameraDistance(eye, dir, this.cameraMode === 'third-back' ? -1 : 1);
+    // 第三人称的射线方向（眼睛 → 相机）：背后 = -视线；正面 = 水平前移 + 竖直上移
+    const back = this.cameraMode === 'third-back';
+    const offsetDir = {
+      x: dir.x * (back ? -1 : 1),
+      y: -dir.y,
+      z: dir.z * (back ? -1 : 1),
+    };
+    const distance = this.cameraMode === 'first' ? 0 : this.cameraDistance(eye, offsetDir);
     const placement = cameraPlacement(eye, dir, this.yaw, this.pitch, this.cameraMode, distance);
     this.camera.position.set(placement.x, placement.y, placement.z);
     this.camera.rotation.set(placement.pitch, placement.yaw, 0);
@@ -4462,18 +4469,23 @@ class App {
   }
 
   /**
-   * 第三人称相机到眼睛的距离：撞到方块就停在撞点之前。
-   * @param sign +1 = 沿视线方向（正面视角），-1 = 反方向（背后视角）
+   * 第三人称相机到眼睛的距离：沿"眼睛 → 相机"的方向打一条体素射线，
+   * 撞到方块就停在撞点之前。
+   *
+   * @param offsetDir 眼睛指向相机的单位方向（背后 = -视线，正面 = 水平前移 + 竖直上移）
    */
-  private cameraDistance(eye: { x: number; y: number; z: number }, dir: { x: number; y: number; z: number }, sign: number): number {
+  private cameraDistance(
+    eye: { x: number; y: number; z: number },
+    offsetDir: { x: number; y: number; z: number },
+  ): number {
     const hit = raycastVoxels(
       (x, y, z) => this.world.isSelectable(x, y, z),
       eye.x,
       eye.y,
       eye.z,
-      dir.x * sign,
-      dir.y * sign,
-      dir.z * sign,
+      offsetDir.x,
+      offsetDir.y,
+      offsetDir.z,
       THIRD_PERSON_DISTANCE + CAMERA_CLEARANCE,
     );
     return clampedCameraDistance(hit ? hit.distance : null);
@@ -15534,7 +15546,11 @@ class App {
    */
   setGameMode(mode: GameMode): void {
     const next = normalizeGameMode(mode);
-    if (next === this.gameMode) return;
+    if (next === this.gameMode) {
+      // 已经是旁观但没在飞（老存档/初始化顺序）：补一次，避免穿地
+      if (isSpectatorMode(next) && !this.flying) this.setFlying(true);
+      return;
+    }
     diag.event('mode', 'gameMode.change', { from: this.gameMode, to: next, flying: this.flying });
     this.gameMode = next;
     if (next === 'survival' && this.flying) this.setFlying(false);

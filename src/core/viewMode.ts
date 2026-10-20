@@ -77,7 +77,8 @@ export function clampedCameraDistance(hitDistance: number | null): number {
  *
  *  - 第一人称：就架在眼睛上，朝向 = (pitch, yaw)
  *  - 第三人称（背后）：沿视线的**反**方向退 distance 格，朝向仍是 (pitch, yaw)
- *  - 第三人称（正面）：沿视线方向前移 distance 格，朝向转 180° 回头看玩家
+ *  - 第三人称（正面）：水平方向前移 distance 格、竖直方向与视线相反
+ *    （低头时升到前上方、抬头时降到前下方），朝向转 180° 回头看玩家
  */
 export function cameraPlacement(
   eye: Vec3,
@@ -91,11 +92,14 @@ export function cameraPlacement(
     return { x: eye.x, y: eye.y, z: eye.z, yaw, pitch };
   }
   const behind = mode === 'third-back';
-  const sign = behind ? -1 : 1;
+  // 水平：背后往视线反方向退、正面往视线方向前移
+  const horizontal = behind ? -1 : 1;
   return {
-    x: eye.x + dir.x * distance * sign,
-    y: eye.y + dir.y * distance * sign,
-    z: eye.z + dir.z * distance * sign,
+    x: eye.x + dir.x * distance * horizontal,
+    // 竖直：两种第三人称都与视线相反。低头时背后相机升到后上方、正面升到前上方，
+    // 这样相机不会钻进地里，玩家也保持在画面中心（批次 532）。
+    y: eye.y - dir.y * distance,
+    z: eye.z + dir.z * distance * horizontal,
     yaw: behind ? yaw : yaw + Math.PI,
     pitch,
   };

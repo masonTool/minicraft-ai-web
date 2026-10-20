@@ -639,16 +639,6 @@ export class OverworldGenerator {
    * @param slot climateGrid 中该列气候参数起始下标
    */
   private densityAt(x: number, y: number, z: number, slot: number): number {
-    // 洞穴世界（批次 483）：**整个主世界只剩洞穴网络**。
-    // 判据是"三维噪声的等值面附近"——噪声穿过 ±阈值的那些层连成洞壁，
-    // 于是没有地表、也没有天空，只有岩壁与洞腔。
-    if (this.worldType === 'caves') {
-      // 最下面几层永远是实心：否则挖穿底部就掉出世界了
-      if (y < WORLD_MIN_Y + 4) return 1;
-      const shell = Math.abs(this.detail3d.getValue(x * 0.55, y * 0.9, z * 0.55));
-      return shell < 0.16 ? 1 : -1;
-    }
-
     const grid = this.climateGrid;
     const factor = this.factorSpline.apply(grid[slot + 1]!);
 
@@ -664,14 +654,6 @@ export class OverworldGenerator {
     // 海陆门控同样管三维细节：水下几乎不给扰动（否则海床会被捅出深坑）
     const jitter = detail * factor * DETAIL_SCALE * taper * this.landGate(slot);
     let density = gradient + Math.max(-DETAIL_MAX, Math.min(DETAIL_MAX, jitter));
-
-    // 浮空岛（批次 483）：地表**之上**再叠一层岛。
-    // 用同一套三维噪声当"团块"，再按离地高度衰减——越高越稀，所以岛是"飘在天上的团"
-    if (this.worldType === 'floating_islands' && y > surface + 10) {
-      const blobs = this.detail3d.getValue(x * 0.7 + 512, y * 1.1, z * 0.7 - 512);
-      const above = y - surface;
-      density = Math.max(density, blobs * 1.4 - above / 50);
-    }
 
     // 深处强制实心，避免出现大片浮空岛（洞穴由 D10 的雕刻器另行挖出）
     if (y < surface - 34) density = Math.max(density, 1);

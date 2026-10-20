@@ -33,8 +33,6 @@ const WORLD_TYPE_SHORT_LABELS: Record<WorldType, string> = {
   default: '默认',
   flat: '超平坦',
   amplified: '放大化',
-  caves: '洞穴',
-  floating_islands: '浮空岛',
 };
 
 /** 编辑世界时允许改的三项（世界类型/种子会改变地形，不在可编辑范围） */

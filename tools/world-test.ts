@@ -83,10 +83,10 @@ const SEED = 20261014;
 
 console.log('\n[世界类型]');
 {
-  // 批次 483 加了 caves / floating_islands（五种）
+  // 批次 532：删掉非原版的 caves / floating_islands，只留原版三型
   check(
-    '五种类型齐全（批次 483 加了洞穴世界与浮空岛）',
-    WORLD_TYPES.join('|') === 'default|flat|amplified|caves|floating_islands',
+    '三种原版类型（默认 / 超平坦 / 放大化）',
+    WORLD_TYPES.join('|') === 'default|flat|amplified',
     WORLD_TYPES.join('|'),
   );
   check(
@@ -160,6 +160,18 @@ console.log('\n[世界清单]');
   check('没有 id 的条目被丢掉', healed.get('') === undefined);
   check('合法的 worldType 保留下来', healed.get('b')!.worldType === 'flat');
   check('非法 worldType 回退成 default', healed.get('a')!.worldType === 'default');
+  // 批次 532：被删除的非原版类型（caves / floating_islands）读到就回落默认
+  const legacy = new MemoryStorage();
+  legacy.raw(
+    'bedrock-worlds',
+    JSON.stringify([
+      { id: 'c', name: '洞穴', seed: 1, worldType: 'caves' },
+      { id: 'f', name: '浮空', seed: 2, worldType: 'floating_islands' },
+    ]),
+  );
+  const migrated = new WorldRegistry(legacy);
+  check('旧洞穴世界回落默认', migrated.get('c')?.worldType === 'default');
+  check('旧浮空岛世界回落默认', migrated.get('f')?.worldType === 'default');
 
   // 认领旧存档
   const legacyRegistry = new WorldRegistry(new MemoryStorage());

@@ -15,6 +15,8 @@ import {
   isGameMode,
   nextGameMode,
   normalizeGameMode,
+  startsFlying,
+  canFly,
 } from '../src/core/world/GameMode.ts';
 import { WorldRegistry } from '../src/core/save/WorldRegistry.ts';
 
@@ -66,6 +68,10 @@ console.log('\n[一、模式取值]');
   equal('创造点一下变旁观', nextGameMode('creative'), 'spectator');
   equal('旁观点一下回到生存（三态循环）', nextGameMode('spectator'), 'survival');
   check('创造是能力口径', isCreativeMode('creative') && !isCreativeMode('survival'));
+  check('旁观进入世界时默认在飞（否则会穿地）', startsFlying('spectator'));
+  check('创造进入世界时从地面开始（不默认飞）', !startsFlying('creative'));
+  check('生存不默认飞', !startsFlying('survival'));
+  check('旁观允许飞行', canFly('spectator'));
 }
 
 console.log('\n[二、世界清单]');

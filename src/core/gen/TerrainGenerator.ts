@@ -148,13 +148,7 @@ export function generateChunkBlocks(
   const blocks = generator.generate(cx, cz, out);
 
   // 洞穴世界（批次 485）：**跳过地物与结构**。
-  // 那个世界没有地表，树会长在洞腔里、村庄会埋在岩壁中间——原版也是把它当
-  // "纯洞穴"来看的。与超平坦那条"直接返回三层方块"是同一个思路，只是理由不同。
-  if (dimension === Dimension.OVERWORLD && worldType === 'caves') {
-    generationStates.fill(0);
-    statesUsed = false;
-    return blocks;
-  }
+
 
   // 地物阶段也要能写方块状态：**雪层**的层数就存在状态里（批次 37）。
   // 这条通道早先没有接（只传了 blocks），"雪层写状态"会被静默丢掉。

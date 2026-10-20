@@ -4,8 +4,8 @@
  * 之前"类型 / 模式 / 难度"是**分三个套件各测一半**的：
  * 类型测了生成、模式测了语义、难度测了系数，但**没有一组测试是"建出来再进世界"**。
  * 这一套补三件事：
- *  ① 5×3×4 = **60 种组合**都能创建、字段正确、持久化往返一致；
- *  ② 每种类型 × 生存/创造（10 组）都能算出**出生点**、出生区块不是空的；
+ *  ① 3×3×4 = **36 种组合**都能创建、字段正确、持久化往返一致；
+ *  ② 每种类型 × 生存/创造（6 组）都能算出**出生点**、出生区块不是空的；
  *  ③ 脏参数在 `create` 里就被收口（而不是先写进清单、等下次读盘才修）。
  *
  * 运行：npm run test:worldmatrix
@@ -77,9 +77,9 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
     }
   }
 
-  equal('一共 60 种组合', created.length, 60);
-  equal('清单里就是 60 个世界', registry.count, 60);
-  equal('id 互不重复', new Set(created.map((world) => world.id)).size, 60);
+  equal('一共 36 种组合', created.length, 36);
+  equal('清单里就是 36 个世界', registry.count, 36);
+  equal('id 互不重复', new Set(created.map((world) => world.id)).size, 36);
 
   const badFields: string[] = [];
   for (let i = 0; i < created.length; i++) {
@@ -93,7 +93,7 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
 
   // 读盘往返：换一个 registry 读同一份 storage，60 组必须一一对上
   const reloaded = new WorldRegistry(storage as unknown as Storage);
-  equal('重新加载后仍是 60 个世界', reloaded.count, 60);
+  equal('重新加载后仍是 36 个世界', reloaded.count, 36);
   let mismatched = 0;
   for (let i = 0; i < created.length; i++) {
     const back = reloaded.get(created[i]!.id);
@@ -102,7 +102,7 @@ console.log('\n[60 种组合：创建 / 字段 / 持久化]');
       mismatched++;
     }
   }
-  equal('60 组持久化往返全部一致', mismatched, 0);
+  equal('36 组持久化往返全部一致', mismatched, 0);
 
   // 默认命名：每种类型 12 个（3 模式 × 4 难度），名字互不重复
   const badNames = WORLD_TYPES.filter((type) => {
@@ -123,7 +123,8 @@ console.log('\n[脏参数在 create 里就收口]');
   equal('非法类型回落 default', dirty.worldType, 'default');
   equal('非法模式回落生存', dirty.gameMode, 'survival');
   equal('非法难度回落普通', dirty.difficulty, 'normal');
-  check('合法类型不会被改动', isWorldType('caves') && registry.create({ worldType: 'caves' }).worldType === 'caves');
+  check('合法类型不会被改动', isWorldType('flat') && registry.create({ worldType: 'flat' }).worldType === 'flat');
+  check('已删除的 caves 不再合法（回落 default）', !isWorldType('caves'));
 }
 
 // ---------------------------------------------------------------- 2. 10 组启动验证
@@ -161,8 +162,8 @@ console.log('\n[每种类型 × 生存/创造：出生点与出生区块]');
     }
   }
 
-  equal('跑了 5 类型 × 2 模式的启动验证', combos, 10);
-  check('10 组都能算出出生点、出生区块非空、模式能力正确', problems.length === 0, problems.join(' | '));
+  equal('跑了 3 类型 × 2 模式的启动验证', combos, 6);
+  check('6 组都能算出出生点、出生区块非空、模式能力正确', problems.length === 0, problems.join(' | '));
 }
 
 // ---------------------------------------------------------------- 3. 难度语义在矩阵里一致

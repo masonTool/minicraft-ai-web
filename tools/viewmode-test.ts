@@ -99,6 +99,13 @@ console.log('\n[相机摆位]');
   );
   check('正面：朝向转 180° 回头看玩家', close(front.yaw, 0.5 + Math.PI));
 
+  // 批次 532：正面视角的竖直方向必须与视线相反（低头升到前上方、抬头降到前下方）
+  const down = cameraPlacement(EYE, { x: 0, y: -0.5, z: -0.866 }, 0, -0.5236, 'third-front', 4);
+  check('低头时正面相机升到前上方（不会钻进地里）', down.y > EYE.y, `y=${down.y.toFixed(3)}`);
+  const upFront = cameraPlacement(EYE, { x: 0, y: 0.5, z: -0.866 }, 0, 0.5236, 'third-front', 4);
+  check('抬头时正面相机降到前下方', upFront.y < EYE.y, `y=${upFront.y.toFixed(3)}`);
+  check('正面相机仍在水平前方', close(down.z, EYE.z - 4 * 0.866, 1e-6));
+
   // 抬头时相机应该跟着落到下方（背后视角沿视线反向，视线朝上则相机朝下）
   const up = cameraPlacement(EYE, { x: 0, y: 0.5, z: -0.866 }, 0, 0.5236, 'third-back', 4);
   check('抬头时背后相机落到更低处（与原版一致）', up.y < EYE.y, `y=${up.y.toFixed(3)}`);

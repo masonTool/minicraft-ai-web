@@ -68,6 +68,11 @@ export function canFly(mode: GameMode): boolean {
   return mode === 'creative' || mode === 'spectator';
 }
 
+/** 进入世界时默认是否在飞：旁观必须飞（否则无碰撞 + 重力会穿地）；创造从地面开始 */
+export function startsFlying(mode: GameMode): boolean {
+  return isSpectatorMode(mode);
+}
+
 /** 能不能与方块/实体交互（破坏、放置、右键、攻击）：旁观者一律不行 */
 export function canInteract(mode: GameMode): boolean {
   return mode !== 'spectator';

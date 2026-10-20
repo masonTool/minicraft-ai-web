@@ -27,7 +27,6 @@
     "test:patrol": "esbuild tools/patrol-test.ts --bundle --platform=node --format=esm --outfile=.tmp/patrol-test.mjs --log-level=error && node .tmp/patrol-test.mjs",
     "test:commandblock": "esbuild tools/commandblock-test.ts --bundle --platform=node --format=esm --outfile=.tmp/commandblock-test.mjs --log-level=error && node .tmp/commandblock-test.mjs",
     "test:rail": "esbuild tools/rail-test.ts --bundle --platform=node --format=esm --outfile=.tmp/rail-test.mjs --log-level=error && node .tmp/rail-test.mjs",
-    "test:worldtype": "esbuild tools/worldtype-test.ts --bundle --platform=node --format=esm --outfile=.tmp/worldtype-test.mjs --log-level=error && node .tmp/worldtype-test.mjs",
     "test:banner": "esbuild tools/banner-test.ts --bundle --platform=node --format=esm --outfile=.tmp/banner-test.mjs --log-level=error && node .tmp/banner-test.mjs",
     "test:loom": "esbuild tools/loom-test.ts --bundle --platform=node --format=esm --outfile=.tmp/loom-test.mjs --log-level=error && node .tmp/loom-test.mjs",
     "test:cartography": "esbuild tools/cartography-test.ts --bundle --platform=node --format=esm --outfile=.tmp/cartography-test.mjs --log-level=error && node .tmp/cartography-test.mjs",
