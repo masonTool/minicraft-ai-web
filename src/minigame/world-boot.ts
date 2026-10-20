@@ -950,8 +950,10 @@ async function boot(): Promise<void> {
     Array.from({ length: 27 }, (_, index) => openedChest?.get(index) ?? null);
   const playerHotbarSnapshot = (): Array<ItemStack | null> =>
     Array.from({ length: 9 }, (_, index) => inventory.get(index));
+  const playerInventorySnapshot = (): Array<ItemStack | null> =>
+    Array.from({ length: 36 }, (_, index) => inventory.get(index));
   const refreshChest = (): void => {
-    if (openedChest) ui.setChest(chestSnapshot(), playerHotbarSnapshot());
+    if (openedChest) ui.setChest(chestSnapshot(), playerInventorySnapshot());
   };
 
   const furnaceSnapshot = (): Array<ItemStack | null> =>
@@ -987,7 +989,7 @@ async function boot(): Promise<void> {
         currentHit.y,
         currentHit.z,
       );
-      ui.openChest('箱子', chestSnapshot(), playerHotbarSnapshot());
+      ui.openChest('箱子', chestSnapshot(), playerInventorySnapshot());
       return;
     }
     if (id === Block.CRAFTING_TABLE) {
@@ -1121,22 +1123,34 @@ async function boot(): Promise<void> {
     if (ui.isChestOpen()) {
       uiPointerId = event.pointerId;
       const action = ui.handleChestTap(x, y, width, height);
-      if (action?.type === 'take' && openedChest) {
-        const stack = openedChest.get(action.index);
-        if (stack) {
-          openedChest.set(action.index, null);
-          inventory.addStack(stack);
-          ui.syncInventory(inventory.serialize(), selectedSlot);
-          refreshChest();
-          scheduleSave?.();
-        }
-      }
-      if (action?.type === 'put' && openedChest) {
-        const stack = inventory.get(action.index);
-        if (stack) {
-          const remaining = openedChest.add(stack.id, stack.count);
-          if (remaining <= 0) inventory.set(action.index, null);
-          else stack.count = remaining;
+      if (action?.type === 'move' && openedChest) {
+        const getAt = (side: 'chest' | 'player', index: number): ItemStack | null => {
+          if (side === 'chest') return openedChest?.get(index) ?? null;
+          return inventory.get(index);
+        };
+        const setAt = (side: 'chest' | 'player', index: number, stack: ItemStack | null): void => {
+          if (side === 'chest') openedChest?.set(index, stack);
+          else inventory.set(index, stack);
+        };
+        const source = getAt(action.fromSide, action.fromIndex);
+        if (source) {
+          const target = getAt(action.toSide, action.toIndex);
+          if (target && target.id === source.id) {
+            const moved = Math.min(maxStackOf(source.id) - target.count, source.count);
+            if (moved > 0) {
+              target.count += moved;
+              source.count -= moved;
+              setAt(action.toSide, action.toIndex, target);
+              setAt(
+                action.fromSide,
+                action.fromIndex,
+                source.count > 0 ? source : null,
+              );
+            }
+          } else {
+            setAt(action.toSide, action.toIndex, source);
+            setAt(action.fromSide, action.fromIndex, target);
+          }
           ui.syncInventory(inventory.serialize(), selectedSlot);
           refreshChest();
           scheduleSave?.();
