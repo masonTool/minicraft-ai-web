@@ -19,11 +19,12 @@
 ## 尚未完成
 
 - [ ] SaveGame / IndexedDB seam
-- [ ] v2 最小世界渲染启动（core 生成已通，差渲染器）
+- [x] v2 最小世界渲染启动（main World + TextureAtlas + ChunkRenderer，截图已验证）
+- [x] v2 出包：`minigame-v2/game.js` 约 2.2MB
 - [ ] 触摸输入
 - [ ] UI Kit
 - [ ] Settings / Inventory 按 Web 结构重做
-- [ ] 小游戏构建脚本与包体
+- [x] 小游戏构建脚本与包体（`build:minigame:v2`，2.2MB）
 
 ## 下一步顺序
 

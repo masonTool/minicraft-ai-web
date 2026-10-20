@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Minecraft 基岩版 1.18 复刻（Web / WebGL2）",
   "scripts": {
+    "build:minigame:v2": "node tools/minigame/build-v2.mjs",
     "sync:audit": "node tools/minigame/sync-audit.mjs",
     "sync:audit:run": "node tools/minigame/sync-audit.mjs --run",
     "test:v2-core": "esbuild tools/minigame/v2-core-smoke.ts --bundle --platform=node --format=esm --outfile=.tmp/v2-core-smoke.mjs --log-level=error && node .tmp/v2-core-smoke.mjs",

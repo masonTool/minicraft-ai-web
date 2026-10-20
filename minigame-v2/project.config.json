@@ -1,0 +1,50 @@
+{
+  "description": "Minicraft v2 最小世界渲染切片",
+  "appid": "wx5bfe973b5421e5bb",
+  "projectname": "minicraft-wx-v2",
+  "compileType": "game",
+  "miniprogramRoot": "./",
+  "setting": {
+    "es6": false,
+    "enhance": false,
+    "postcss": false,
+    "minified": false,
+    "urlCheck": false,
+    "checkSiteMap": false,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "libVersion": "latest",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [
+      {
+        "type": "folder",
+        "value": ".weixin-minigame-helper"
+      },
+      {
+        "type": "folder",
+        "value": "workers/.cache"
+      }
+    ],
+    "include": []
+  },
+  "isGameTourist": false,
+  "editorSetting": {}
+}

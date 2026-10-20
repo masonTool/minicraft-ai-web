@@ -19,3 +19,9 @@ shot-*.png
 
 # 参考资料（本地存档的网页 / 截图；4.7MB 的 mhtml 进仓库会永久留在历史里）
 references/
+
+# v2 小游戏构建产物
+minigame-v2/game.js
+minigame-v2/game.js.map
+minigame-v2/workers/
+minigame-v2/.weixin-minigame-helper/

@@ -193,7 +193,9 @@ const report = {
 if (run) {
   if (scripts.typecheck) report.checks.push(runCheck('typecheck', 'typecheck'));
   if (scripts['test:v2-core']) report.checks.push(runCheck('v2 core smoke', 'test:v2-core'));
-  if (scripts['build:minigame:world']) {
+  if (scripts['build:minigame:v2']) {
+    report.checks.push(runCheck('minigame v2 build', 'build:minigame:v2'));
+  } else if (scripts['build:minigame:world']) {
     report.checks.push(runCheck('minigame build', 'build:minigame:world'));
   }
   if (scripts['check:fast']) report.checks.push(runCheck('offline fast check', 'check:fast'));
