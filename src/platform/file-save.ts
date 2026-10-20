@@ -119,11 +119,15 @@ export class FileSaveGame {
     return save;
   }
 
-  /** 删除某个世界的整个目录（删世界用） */
+  /** 删除某个世界的整个目录（删世界用；先清 chunks，再清顶层文件） */
   static async deleteWorld(worldId: string, files: FileStore): Promise<void> {
     const worldDir = `${SAVE_ROOT}/${safeWorldId(worldId)}`;
-    const paths = await files.list(worldDir);
-    for (const path of paths) await files.remove(path);
+    const chunkDir = `${worldDir}/${CHUNK_DIR}`;
+    for (const path of await files.list(chunkDir)) await files.remove(path);
+    for (const path of await files.list(worldDir)) {
+      if (path === chunkDir || path.startsWith(`${chunkDir}/`)) continue;
+      await files.remove(path);
+    }
   }
 
   get hasSave(): boolean {
@@ -251,8 +255,11 @@ export class FileSaveGame {
   }
 
   async clear(): Promise<void> {
-    const paths = await this.files.list(this.worldDir);
-    for (const path of paths) await this.files.remove(path);
+    for (const path of await this.files.list(this.chunkDir)) await this.files.remove(path);
+    for (const path of await this.files.list(this.worldDir)) {
+      if (path === this.chunkDir || path.startsWith(`${this.chunkDir}/`)) continue;
+      await this.files.remove(path);
+    }
     this.meta = null;
   }
 

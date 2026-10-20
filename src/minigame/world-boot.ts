@@ -425,6 +425,37 @@ async function boot(): Promise<void> {
     void persist();
   }, 15000);
 
+  const confirmDelete = (): Promise<boolean> =>
+    new Promise((resolve) => {
+      (wx as any).showModal({
+        title: 'DELETE SAVE?',
+        content: 'Removes player position, inventory and block edits. Restart to generate a new world.',
+        showCancel: true,
+        success: (res: { confirm?: boolean }) => resolve(res.confirm === true),
+        fail: () => resolve(false),
+      });
+    });
+
+  const deleteSave = async (): Promise<void> => {
+    if (!(await confirmDelete())) return;
+    try {
+      if (save) {
+        await save.clear();
+        save = null;
+      } else {
+        await FileSaveGame.deleteWorld('wx-default', platform.files);
+      }
+      saveStatus = 'deleted';
+      ui.setWorldInfo({ name: 'MY WORLD', seed: world.seed, edits: 0 });
+      ui.showToast('SAVE DELETED');
+      console.log('[WX-020] save deleted');
+    } catch (error) {
+      saveStatus = 'error';
+      ui.showToast('DELETE FAILED');
+      console.warn('[WX-020] 删除存档失败', error);
+    }
+  };
+
   const resetMove = (): void => {
     movePointerId = null;
     playerInput.forward = 0;
@@ -536,6 +567,7 @@ async function boot(): Promise<void> {
       uiPointerId = event.pointerId;
       const action = ui.handleMainMenuTap(x, y, width, height);
       if (action === 'settings') ui.openSettings();
+      if (action === 'delete') void deleteSave();
       return;
     }
     // 暂停面板优先：暂停时所有点击只走 UI

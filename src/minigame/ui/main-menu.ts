@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { contains, drawButton, drawPanel, drawText, type Rect } from './widgets.ts';
 
-export type MainMenuAction = 'play' | 'settings' | null;
+export type MainMenuAction = 'play' | 'settings' | 'delete' | null;
 
 export interface MainMenuInfo {
   name: string;
@@ -45,13 +45,14 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
   scene.add(mesh);
 
   const panelWidth = 500;
-  const panelHeight = 380;
+  const panelHeight = 430;
   const panelX = (canvas.width - panelWidth) / 2;
   const panelY = (canvas.height - panelHeight) / 2;
   const panel: Rect = { x: panelX, y: panelY, w: panelWidth, h: panelHeight };
   const play: Rect = { x: panelX + 70, y: panelY + 190, w: panelWidth - 140, h: 56 };
   const settings: Rect = { x: panelX + 70, y: panelY + 260, w: panelWidth - 140, h: 56 };
-  const newWorld: Rect = { x: panelX + 70, y: panelY + 328, w: panelWidth - 140, h: 42 };
+  const newWorld: Rect = { x: panelX + 70, y: panelY + 320, w: panelWidth - 140, h: 38 };
+  const deleteSave: Rect = { x: panelX + 70, y: panelY + 366, w: panelWidth - 140, h: 38 };
 
   let open = true;
   let info: MainMenuInfo = { name: 'MY WORLD', seed: 0x5eed, edits: 0 };
@@ -97,6 +98,7 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
     drawButton(context, play, 'PLAY', 'normal', 26);
     drawButton(context, settings, 'SETTINGS', 'normal', 22);
     drawButton(context, newWorld, 'NEW WORLD (SOON)', 'disabled', 18);
+    drawButton(context, deleteSave, 'DELETE SAVE', 'normal', 16);
     texture.needsUpdate = true;
   };
 
@@ -133,7 +135,10 @@ export function createMainMenu(screenWidth: number, screenHeight: number): MainM
         setOpen(false);
         return 'settings';
       }
-      // 点面板外不关闭；主菜单必须显式 PLAY/SETTINGS
+      if (contains(deleteSave, x, y)) {
+        return 'delete';
+      }
+      // 点面板外不关闭；主菜单必须显式 PLAY/SETTINGS/DELETE
       return null;
     },
     render(renderer: THREE.WebGLRenderer): void {
