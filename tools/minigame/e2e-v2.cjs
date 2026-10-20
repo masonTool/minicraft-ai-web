@@ -1,0 +1,119 @@
+/**
+ * v2 主流程自动验收
+ *
+ * 前置：helper 预览运行的是 minigame-v2。
+ *   npm run test:minigame:v2-flow
+ */
+
+const fs = require('node:fs');
+const { chromium } = require('playwright');
+
+const URL = 'http://localhost:3847/';
+const DEFAULT_CHROME =
+  '/Users/mason/Library/Caches/ms-playwright/chromium-1223/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+const CHROME_PATH =
+  process.env.CHROME_PATH || (fs.existsSync(DEFAULT_CHROME) ? DEFAULT_CHROME : undefined);
+const DESIGN = { width: 1024, height: (1024 * 390) / 844 };
+
+const assert = (condition, message, state) => {
+  if (condition) return;
+  const suffix = state ? `\nstate=${JSON.stringify(state)}` : '';
+  throw new Error(message + suffix);
+};
+
+(async () => {
+  const browser = await chromium.launch({ headless: true, executablePath: CHROME_PATH });
+  const context = await browser.newContext({ viewport: { width: 1080, height: 700 }, hasTouch: true });
+  const page = await context.newPage();
+  let latest = null;
+  page.on('console', (message) => {
+    const text = message.text();
+    const index = text.indexOf('[V2] ');
+    if (index < 0) return;
+    try {
+      latest = JSON.parse(text.slice(index + 5));
+    } catch {
+      /* ignore */
+    }
+  });
+  page.on('pageerror', (error) => console.error('[pageerror]', error.message));
+
+  await page.goto(URL, { waitUntil: 'networkidle' });
+  await page.evaluate(() => localStorage.clear());
+  latest = null;
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(3000);
+
+  const box = await page.locator('iframe').boundingBox();
+  assert(box, '找不到 iframe');
+  const point = (x, y) => ({
+    x: box.x + (x / DESIGN.width) * box.width,
+    y: box.y + (y / DESIGN.height) * box.height,
+  });
+  const tap = async (x, y) => {
+    const p = point(x, y);
+    await page.touchscreen.tap(p.x, p.y);
+  };
+  const waitState = async (predicate, message, timeout = 15000) => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeout) {
+      if (latest && predicate(latest)) return latest;
+      await page.waitForTimeout(150);
+    }
+    throw new Error(`${message}\nlast=${JSON.stringify(latest)}`);
+  };
+
+  const title = await waitState((state) => state.screen === 'title', '未进入标题页');
+  await tap(512, 327);
+  const worlds = await waitState((state) => state.screen === 'worlds', '未进入世界列表');
+  await tap(512, 272);
+  const create = await waitState((state) => state.screen === 'create', '未进入新建表单');
+  await tap(727, 423);
+  const inGame = await waitState(
+    (state) => state.screen === 'game' && state.chunks > 0 && state.drawn > 0,
+    '创建世界后没有进入/绘制世界',
+    40000,
+  );
+  assert(inGame.worldCount === 1, '世界数量应为 1', inGame);
+
+  await tap(912, 42);
+  const paused = await waitState((state) => state.paused && state.screen === 'pause', '暂停没有打开');
+  await tap(512, 313);
+  const resumed = await waitState((state) => !state.paused && state.screen === 'game', '暂停没有继续');
+
+  await tap(550, 42);
+  const inventory = await waitState((state) => state.inventoryOpen && state.screen === 'inventory', '背包没有打开');
+  await tap(902, 56);
+  const inventoryClosed = await waitState((state) => !state.inventoryOpen && state.screen === 'game', '背包没有关闭');
+
+  // helper 的存储是 mock，重载后世界清单可能重置；真机才验证跨进程恢复。
+  latest = null;
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(3000);
+  const afterReload = await waitState((state) => state.screen === 'title', '重载后未回到标题');
+  let reentered = null;
+  if (afterReload.worldCount > 0) {
+    await tap(512, 327);
+    await waitState((state) => state.screen === 'worlds', '重载后未进入世界列表');
+    await tap(512, 201);
+    reentered = await waitState(
+      (state) => state.screen === 'game' && state.chunks > 0 && state.drawn > 0,
+      '重载后重进世界失败',
+      40000,
+    );
+    assert(reentered.currentWorldId === inGame.currentWorldId, '重进世界 id 不一致', reentered);
+  }
+
+  console.log(
+    'PASS',
+    JSON.stringify(
+      { title, worlds, create, inGame, paused, resumed, inventory, inventoryClosed, afterReload, reentered },
+      null,
+      2,
+    ),
+  );
+  await browser.close();
+})().catch((error) => {
+  console.error('FAIL', error.message);
+  process.exit(1);
+});

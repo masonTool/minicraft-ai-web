@@ -95,6 +95,7 @@ const drawBlockIcon = (
 const ui = new UiLayer(platform.system.width, platform.system.height, drawBlockIcon);
 const uiHeight = ui.height;
 let started = false;
+let menuScreen: 'title' | 'worlds' | 'create' = 'title';
 let paused = false;
 let settingsOpen = false;
 let inventoryOpen = false;
@@ -102,7 +103,12 @@ let inventoryTab: 'items' | 'creative' = 'items';
 let selectedSlot = 0;
 const inventory = new Inventory();
 const creativeBlocks = Object.values(Block).filter((value): value is number => typeof value === 'number' && value > 0).slice(0, 45);
-const registry = new WorldRegistry();
+const registryStorage = {
+  getItem: (key: string): string | null => platform.storage.get(key),
+  setItem: (key: string, value: string): void => platform.storage.set(key, value),
+  removeItem: (key: string): void => platform.storage.remove(key),
+};
+const registry = new WorldRegistry(registryStorage as Storage);
 let currentWorld: WorldSummary | null = null;
 let save: FileSaveGame | null = null;
 let saving = false;
@@ -432,6 +438,7 @@ const askText = async (
 };
 
 const showCreate = (): void => {
+  menuScreen = 'create';
   const panelW = 800;
   const panelH = Math.min(640, uiHeight - 32);
   const panelX = (1024 - panelW) / 2;
@@ -538,6 +545,7 @@ const showCreate = (): void => {
 };
 
 const showWorlds = (): void => {
+  menuScreen = 'worlds';
   const worlds = registry.list();
   const buttons: UiElement[] = worlds.slice(0, 6).map((world, index) =>
     button(272, 176 + index * 62, 480, 50, world.name, () => void mountWorld(world), {
@@ -564,6 +572,7 @@ const showWorlds = (): void => {
 };
 
 const showTitle = (): void => {
+  menuScreen = 'title';
   const horizon = uiHeight * 0.56;
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
@@ -586,6 +595,7 @@ const showTitle = (): void => {
 };
 
 const showHud = (): void => {
+  menuScreen = 'title';
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
       text(24, 18, 460, 40, `${currentWorld?.name ?? '世界'} · v2`, { fontSize: 22, color: '#ffffff' }),
@@ -613,17 +623,31 @@ const showHud = (): void => {
 };
 
 const showPause = (): void => {
+  const panelX = (1024 - 480) / 2;
+  const panelY = Math.max(40, uiHeight / 2 - 150);
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
       box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
-      box(272, Math.max(40, uiHeight / 2 - 150), 480, 300, [
-        text(0, 28, 480, 44, '暂停', { fontSize: 34, color: '#ffffff', align: 'center' }),
-        text(0, 88, 480, 32, 'v2 最小 UI Kit 切片', { fontSize: 16, color: 'rgba(220,235,245,0.75)', align: 'center' }),
-        button(90, 200, 300, 52, '继续游戏', () => {
-          paused = false;
-          showHud();
-        }, { background: 'rgba(52, 64, 74, 0.96)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
-      ], { background: 'rgba(16, 22, 28, 0.96)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
+      box(panelX, panelY, 480, 300, [], {
+        background: 'rgba(16, 22, 28, 0.96)',
+        border: 'rgba(170, 205, 230, 0.45)',
+        borderWidth: 2,
+        radius: 12,
+      }),
+      text(panelX, panelY + 28, 480, 44, '暂停', { fontSize: 34, color: '#ffffff', align: 'center' }),
+      text(panelX, panelY + 88, 480, 32, 'v2 最小 UI Kit 切片', {
+        fontSize: 16,
+        color: 'rgba(220,235,245,0.75)',
+        align: 'center',
+      }),
+      button(panelX + 90, panelY + 200, 300, 52, '继续游戏', () => {
+        paused = false;
+        showHud();
+      }, {
+        background: 'rgba(52, 64, 74, 0.96)',
+        border: 'rgba(190, 220, 240, 0.45)',
+        radius: 8,
+      }),
     ]),
   );
 };
@@ -795,6 +819,39 @@ const frame = (): void => {
   const now = performance.now();
   const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
+
+  const screen = !started
+    ? settingsOpen
+      ? 'settings'
+      : menuScreen
+    : settingsOpen
+      ? 'settings'
+      : inventoryOpen
+        ? 'inventory'
+        : paused
+          ? 'pause'
+          : 'game';
+  console.log(
+    '[V2]',
+    JSON.stringify({
+      screen,
+      started,
+      worldCount: registry.count,
+      currentWorldId: currentWorld?.id ?? '',
+      currentWorldName: currentWorld?.name ?? '',
+      gameMode: currentWorld?.gameMode ?? 'survival',
+      chunks: world.chunks.size,
+      drawn: chunks.drawnCount,
+      x: physics.x,
+      y: physics.y,
+      z: physics.z,
+      selectedSlot,
+      inventory: Array.from({ length: 9 }, (_, i) => inventory.get(i)?.id ?? 0),
+      paused,
+      settings: settingsOpen,
+      inventoryOpen,
+    }),
+  );
 
   if (!started) {
     renderer.clear();
