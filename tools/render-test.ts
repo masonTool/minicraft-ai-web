@@ -481,6 +481,13 @@ console.log('\n[水面动画（E12）]');
 
   material.setTime(12.5);
   check('时间写进 uniform', material.material.uniforms.uTime!.value === 12.5);
+  // 水面起伏必须随距离衰减：远处是斜着看的，几厘米的起伏在屏幕上是一个像素跨几个
+  // 波长的高频信号，每帧都在跳（"远处水面在闪"）。近处观感不受影响。
+  check(
+    '水面起伏按距离衰减（远处不闪）',
+    material.material.vertexShader.includes('waveFade') &&
+      material.material.vertexShader.includes('distance(cameraPosition, worldPos)'),
+  );
   // VoxelMaterial 没有 dispose（材质由场景持有），这里只释放纹理对象
   material.material.dispose();
 }

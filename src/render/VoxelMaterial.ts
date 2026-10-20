@@ -67,7 +67,13 @@ void main() {
   if (fluid > 0.5) {
     // 两个不同频率的正弦叠加，按**世界坐标**取样：跨区块的接缝处不会断裂
     float wave = sin(worldPos.x * 0.85 + uTime * 1.7) + sin(worldPos.z * 0.7 + uTime * 1.25);
-    displaced.y += wave * 0.014;
+    // 批次 425：**起伏幅度随距离衰减**。
+    //
+    // 远处的水面是"斜着看"的，几厘米的起伏在屏幕上会变成一个像素跨好几个波长的高频
+    // 信号 —— 每帧都在跳，这就是"远处水面在闪"。近处的水才需要看得见起伏，
+    // 24 格以外渐隐到 0 对观感没有影响（那一带本来就被雾压住）。
+    float waveFade = 1.0 - smoothstep(24.0, 64.0, distance(cameraPosition, worldPos));
+    displaced.y += wave * 0.014 * waveFade;
   }
 
   vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);

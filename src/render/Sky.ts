@@ -165,6 +165,10 @@ function cloudTexture(): THREE.Texture {
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(6, 6);
   texture.colorSpace = THREE.NoColorSpace;
+  // 批次 425：云层是一整片 900×900 的平面，玩家几乎总是**斜着**看它（地平线附近）。
+  // 没有各向异性时 LOD 由长轴决定，云的边缘会被糊成一片并在走动时闪。
+  // 这张是独立贴图（不在图集里），开各向异性没有渗色问题——three 会按设备上限夹住。
+  texture.anisotropy = 4;
   return texture;
 }
 
