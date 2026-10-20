@@ -253,6 +253,7 @@ interface V2Settings {
   fov: number;
   invertY: boolean;
   autoJump: boolean;
+  showDebug: boolean;
   fingerAim: boolean;
   sound: boolean;
   volume: number;
@@ -281,6 +282,7 @@ const defaultSettings: V2Settings = {
   fov: 72,
   invertY: false,
   autoJump: false,
+  showDebug: false,
   fingerAim: true,
   sound: true,
   volume: 0.7,
@@ -312,6 +314,7 @@ const readSettings = (): V2Settings => {
       fov: Math.max(60, Math.min(110, Number(parsed.fov ?? 72))),
       invertY: parsed.invertY === true,
       autoJump: parsed.autoJump === true,
+      showDebug: parsed.showDebug === true,
       fingerAim: parsed.fingerAim !== false,
       sound: parsed.sound !== false,
       volume: Math.max(0, Math.min(1, Number(parsed.volume ?? 0.7))),
@@ -398,6 +401,10 @@ const showSettings = (): void => {
     }));
     row(slider(panelX + 24, rowY, panelW - 48, 50, '视距', 1, 4, 1, settings.viewDistance, (value) => {
       settings.viewDistance = value;
+      apply();
+    }));
+    row(toggle(panelX + 24, rowY, panelW - 48, 50, '调试信息', settings.showDebug, (value) => {
+      settings.showDebug = value;
       apply();
     }));
   } else if (activeSettingsTab === 'controls') {
@@ -1414,6 +1421,14 @@ const showHud = (): void => {
   ui.setRoot(
     box(0, 0, 1024, uiHeight, [
       text(24, 18, 250, 40, `${currentWorld?.name ?? '世界'} · v2`, { fontSize: 22, color: '#ffffff' }),
+      ...(settings.showDebug
+        ? [
+            text(24, 66, 720, 24, `FPS ${fps.toFixed(0)} · 区块 ${chunks.drawnCount}/${world.chunks.size} · ${currentHit ? world.getBlock(currentHit.x, currentHit.y, currentHit.z) : '-'} · ${physics.x.toFixed(1)},${physics.y.toFixed(1)},${physics.z.toFixed(1)}`, {
+              fontSize: 13,
+              color: 'rgba(220,240,250,0.8)',
+            }),
+          ]
+        : []),
       button(284, 18, 110, 48, '聊天', () => {
         showChat();
       }, { background: 'rgba(32, 40, 48, 0.9)', border: 'rgba(190, 220, 240, 0.45)', radius: 8 }),
@@ -1705,11 +1720,21 @@ camera.updateProjectionMatrix();
 camera.rotation.order = 'YXZ';
 
 let lastTime = performance.now();
+let fps = 0;
+let fpsFrames = 0;
+let fpsStartedAt = performance.now();
+let lastDebugHud = 0;
 
 const frame = (): void => {
   const now = performance.now();
   const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
+  fpsFrames += 1;
+  if (now - fpsStartedAt >= 1000) {
+    fps = (fpsFrames * 1000) / (now - fpsStartedAt);
+    fpsFrames = 0;
+    fpsStartedAt = now;
+  }
 
   const screen = !started
     ? settingsOpen
@@ -1805,6 +1830,10 @@ const frame = (): void => {
   renderer.clear();
   renderer.render(scene, camera);
   ui.render(renderer);
+  if (settings.showDebug && started && !paused && !settingsOpen && !inventoryOpen && !chatOpen && !containerOpen && now - lastDebugHud > 1000) {
+    lastDebugHud = now;
+    showHud();
+  }
   requestAnimationFrame(frame);
 };
 
