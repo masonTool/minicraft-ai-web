@@ -6432,6 +6432,22 @@ PAINTERS.jukebox_top = (x, y) => {
 };
 
 /**
+ * 盔甲架（批次 492）：浅木色 + 中间一道深缝。
+ *
+ * 几何那边已经用 5 个盒子搭出人形了，这张图只负责"木头"的质感：
+ * 竖向的纹理 + 正中间那道阴影（立柱的位置）。
+ */
+PAINTERS.armor_stand = (x, y) => {
+  const BASE: readonly [number, number, number] = [196, 166, 118];
+  // 中间那道缝（x 7~8）压暗一档：这是立柱
+  const seam = x === 7 || x === 8;
+  // 横纹：每 4 像素一道（木纹）
+  const grain = y % 4 === 2 ? 0.9 : 1;
+  const v = (seam ? 0.74 : 1) * grain;
+  return [clamp255(BASE[0] * v), clamp255(BASE[1] * v), clamp255(BASE[2] * v), 255];
+};
+
+/**
  * 钟（批次 490）：金色钟体。
  *
  * 16×16 下画不出钟的轮廓（几何那边已经用三个盒子叠出来了），

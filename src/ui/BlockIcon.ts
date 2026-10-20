@@ -175,6 +175,7 @@ export function isoBoxesForShape(shape: BlockShape): readonly IsoBox[] | null {
     // 旗帜（批次 484）/ 钟（批次 490）：物品栏里按平面精灵图
     case 'banner':
     case 'bell':
+    case 'armor_stand':
     case 'cross':
     case 'nether_wart':
     case 'coral_fan':

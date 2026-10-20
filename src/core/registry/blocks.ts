@@ -2235,6 +2235,19 @@ export const JUKEBOX_ID = 716;
 /** 钟（批次 490）：id **717**，接在唱片机之后 */
 export const BELL_ID = 717;
 
+/** 盔甲架（批次 492）：id **718**，接在钟之后 */
+export const ARMOR_STAND_ID = 718;
+
+const ARMOR_STAND_SPEC: BlockSpec = {
+  id: ARMOR_STAND_ID,
+  name: 'minecraft:armor_stand',
+  tiles: ['armor_stand', 'armor_stand', 'armor_stand'],
+  shape: 'armor_stand',
+  solid: false,
+  opaque: false,
+  lightOpacity: 0,
+};
+
 const BELL_SPEC: BlockSpec = {
   id: BELL_ID,
   name: 'minecraft:bell',
@@ -3476,6 +3489,7 @@ const SPECS: readonly BlockSpec[] = [
   COMMAND_BLOCK_SPEC,
   JUKEBOX_SPEC,
   BELL_SPEC,
+  ARMOR_STAND_SPEC,
   ...BANNER_SPECS,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
@@ -4046,6 +4060,8 @@ export const Block = {
   JUKEBOX: JUKEBOX_ID,
   // ---- 钟（批次 490）：右键敲响
   BELL: BELL_ID,
+  // ---- 盔甲架（批次 492）：右键穿脱装备
+  ARMOR_STAND: ARMOR_STAND_ID,
   // ---- 16 色旗帜（批次 484）：占两格、无碰撞
   WHITE_BANNER: BANNER_ID_START + 0,
   ORANGE_BANNER: BANNER_ID_START + 1,
@@ -4637,6 +4653,8 @@ HARDNESS.set(Block.COMMAND_BLOCK, 5);
 HARDNESS.set(Block.JUKEBOX, 2);
 // 钟（批次 490）：原版 5.0，要木镐
 HARDNESS.set(Block.BELL, 5);
+// 盔甲架（批次 492）：原版 1.0，徒手拆
+HARDNESS.set(Block.ARMOR_STAND, 1);
 
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);

@@ -370,6 +370,13 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       };
     }
 
+    case 'armor_stand': {
+      // 盔甲架（批次 492）：立在地上——下方要实心，且只能点顶面
+      if (ny <= 0) return null;
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      return { state: 0 };
+    }
+
     case 'bell': {
       // 钟（批次 490）：立在地上——下方要实心，命中面必须是顶面
       //（挂墙/挂天花板没做，见 `BlockShape` 里 `bell` 的注释）

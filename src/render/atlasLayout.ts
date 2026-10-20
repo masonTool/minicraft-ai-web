@@ -849,6 +849,8 @@ export const TILE_ORDER = [
   'jukebox_side',
   // 钟（批次 490）：金色钟体 + 钟口阴影
   'bell',
+  // 盔甲架（批次 492）：浅木色 + 中间一道深缝（当立柱）
+  'armor_stand',
   // 铁轨弯道（批次 478）：四个方向各一张（直轨沿用原来的 `rail`）
   'rail_east_west',
   'rail_ne',

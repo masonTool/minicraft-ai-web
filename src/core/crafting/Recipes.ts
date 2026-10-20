@@ -1541,6 +1541,13 @@ const CONTAINER_RECIPES: readonly Recipe[] = [
     key: { P: Block.OAK_PLANKS, R: Item.REDSTONE },
   },
   {
+    // 盔甲架（批次 492，B51）：原版 = 6 木棍 + 1 石台阶
+    kind: 'shaped' as const,
+    result: { id: Block.ARMOR_STAND, count: 1 },
+    pattern: ['SSS', ' S ', 'S S'],
+    key: { S: Item.STICK },
+  },
+  {
     // 钟（批次 490，B19）：原版 = 4 金锭摆成钟形（上 1 下 3）
     kind: 'shaped' as const,
     result: { id: Block.BELL, count: 1 },

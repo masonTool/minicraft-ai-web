@@ -16,8 +16,9 @@
  *   8. **scoreboard**：记分板（M23，批次 456；序列化在 `world/Scoreboard.ts` 的 `snapshot`）
  *   9. **teams**：队伍（M23，批次 468；序列化在 `world/Teams.ts` 的 `snapshot`）
  *  10. **commandBlocks**：命令方块的内容（批次 477；序列化在 `world/CommandBlocks.ts`）
+ *  11. **armorStands**：盔甲架上的装备（批次 492；序列化在 `world/ArmorStands.ts`）
  *
- * 仓库版本：现在 **8**（每加一个对象仓 +1，`onupgradeneeded` 会补建，老存档自动升级）。
+ * 仓库版本：现在 **9**（每加一个对象仓 +1，`onupgradeneeded` 会补建，老存档自动升级）。
  *
  * 为什么用 IndexedDB 而不是 localStorage：
  *   localStorage 只能存字符串且容量约 5MB，把二进制转 base64 还会再胖 33%；
@@ -34,6 +35,7 @@ import type { SerializedAdvancements } from '../progress/AdvancementTracker.ts';
 import type { ScoreboardSnapshot } from '../world/Scoreboard.ts';
 import type { TeamsSnapshot } from '../world/Teams.ts';
 import type { SerializedCommandBlock } from '../world/CommandBlocks.ts';
+import type { SerializedArmorStand } from '../world/ArmorStands.ts';
 import type { SavedVehicle } from '../entity/VehicleParking.ts';
 import type { SavedEntityRecord } from '../entity/EntityParking.ts';
 import { LEGACY_WORLD_ID, dbNameFor } from './WorldRegistry.ts';
@@ -46,7 +48,7 @@ import { SAVE_VERSION, migratePlayer } from './SaveMigrations.ts';
 export { SAVE_VERSION };
 
 /** IndexedDB 结构版本：加对象仓就要 +1（`onupgradeneeded` 里补建，旧库自动升级） */
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 const STORE_META = 'meta';
 import type { ItemStack } from '../container/Inventory.ts';
 import type { GameMode } from '../world/GameMode.ts';
@@ -104,6 +106,13 @@ const STORE_TEAMS = 'teams';
  * 仓库版本 7 → 8，老存档自动补建（缺这一份 = 所有命令方块都没命令）。
  */
 const STORE_COMMAND_BLOCKS = 'commandBlocks';
+/**
+ * 盔甲架上的装备（批次 492，B51）——第 11 个对象仓。
+ *
+ * 与展示框同一档：按坐标存"四个槽各是什么"，条数不多、整份覆盖写。
+ * 仓库版本 8 → 9，老存档自动补建（缺这一份 = 所有盔甲架都是空的）。
+ */
+const STORE_ARMOR_STANDS = 'armorStands';
 
 export interface SaveMeta {
   seed: number;
@@ -289,6 +298,7 @@ export class SaveGame {
         if (!db.objectStoreNames.contains(STORE_SCOREBOARD)) db.createObjectStore(STORE_SCOREBOARD);
         if (!db.objectStoreNames.contains(STORE_TEAMS)) db.createObjectStore(STORE_TEAMS);
         if (!db.objectStoreNames.contains(STORE_COMMAND_BLOCKS)) db.createObjectStore(STORE_COMMAND_BLOCKS);
+        if (!db.objectStoreNames.contains(STORE_ARMOR_STANDS)) db.createObjectStore(STORE_ARMOR_STANDS);
       };
       const db = await promisify(request);
       const save = new SaveGame(db, worldId);
@@ -556,6 +566,20 @@ export class SaveGame {
   async saveCommandBlocks(list: SerializedCommandBlock[]): Promise<void> {
     await this.transaction(STORE_COMMAND_BLOCKS, 'readwrite', (store) => {
       store.put(list, 'commandBlocks');
+    });
+  }
+
+  /** 读盔甲架（批次 492）：校验在 `restoreArmorStands` */
+  async loadArmorStands(): Promise<SerializedArmorStand[] | null> {
+    const value = await this.transaction(STORE_ARMOR_STANDS, 'readonly', (store) =>
+      promisify(store.get('armorStands') as IDBRequest<SerializedArmorStand[] | undefined>),
+    );
+    return value ?? null;
+  }
+
+  async saveArmorStands(list: SerializedArmorStand[]): Promise<void> {
+    await this.transaction(STORE_ARMOR_STANDS, 'readwrite', (store) => {
+      store.put(list, 'armorStands');
     });
   }
 

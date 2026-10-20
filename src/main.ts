@@ -131,6 +131,14 @@ import { collectSpawnerDecorations } from './core/world/SpawnerDecor.ts';
 import { discDuration, discSoundKind, discSoundSpec } from './core/audio/DiscMelody.ts';
 // 钟声（批次 490）
 import { bellSoundSpec } from './core/audio/BellSound.ts';
+// 盔甲架（批次 492）：装备存在按坐标的表里，与展示框同一条路子
+import {
+  ARMOR_STAND_SLOTS,
+  ArmorStandStore,
+  armorSlotForItem,
+  restoreArmorStands,
+  serializeArmorStands,
+} from './core/world/ArmorStands.ts';
 import { spawnerDefFor } from './core/registry/spawners.ts';
 import { DRAGON_CRUISE_Y, DRAGON_TYPE, Dragon, EndCrystal } from './core/entity/EndBoss.ts';
 import { EndGenerator, endPillarTops } from './core/gen/EndGenerator.ts';
@@ -2950,6 +2958,12 @@ class App {
     const skippedCommands = this.commandBlocks.restore(commandBlocks);
     if (skippedCommands > 0) console.info(`[save] 命令方块跳过了 ${skippedCommands} 条坏数据`);
 
+    // 盔甲架（批次 492）：与展示框同一套"存档只搬运、校验在 restore"的分工
+    const armorStands = await this.save.loadArmorStands();
+    this.armorStands.clear();
+    const restoredStands = restoreArmorStands(this.armorStands, armorStands);
+    if (restoredStands > 0) console.info(`[save] 读回 ${restoredStands} 个盔甲架`);
+
     const data = await this.save.loadPlayer();
     if (!data) {
       // 只有区块增量、没有玩家数据（异常存档）：至少把世界放出来
@@ -3117,6 +3131,8 @@ class App {
       await this.save.saveTeams(this.teamState.snapshot());
       // 命令方块（批次 477）：按坐标的文本表，整份覆盖写
       await this.save.saveCommandBlocks(this.commandBlocks.serialize());
+      // 盔甲架（批次 492）：同一条
+      await this.save.saveArmorStands(serializeArmorStands(this.armorStands));
       this.save.addPlayTime(this.autoSaveInterval);
       await this.save.saveMeta(this.save.buildMeta(this.worldConfig.seed, this.world.edits.totalEdits));
       this.save.resetSessionTime();
@@ -6888,6 +6904,11 @@ class App {
     if (brokenId === Block.COMMAND_BLOCK) this.commandBlocks.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
     // 唱片机（批次 489）：方块没了，里面那张唱片要掉出来（否则唱片会凭空消失）
     if (brokenId === Block.JUKEBOX) this.dropJukeboxDisc(this.hit.x, this.hit.y, this.hit.z);
+    // 盔甲架（批次 492）：架子拆了，穿在身上的装备也要还回来
+    if (brokenId === Block.ARMOR_STAND) {
+      if (this.isCreative) this.armorStands.remove(this.dimension, this.hit.x, this.hit.y, this.hit.z);
+      else this.dropArmorStandContents(this.hit.x, this.hit.y, this.hit.z);
+    }
 
     // 展示框（B14）：框拆了，**里面挂着的那件东西也要还给玩家**——
     // 它不在方块状态里，不管的话就是"拆一个框，里面那把附魔剑凭空消失"
@@ -10658,6 +10679,65 @@ class App {
   }
 
   /**
+   * 盔甲架（批次 492）：拿装备右键**穿上**；空手右键**取下一件**。
+   *
+   * 槽位由 `armorSlotForItem` 从 `armor.ts` 的注册表反查（与"能不能穿"同一条判据），
+   * 所以头盔只会进头槽、靴子只会进靴槽，不需要两处各写一遍映射。
+   *
+   * 槽里已经有东西时**换下来还给玩家**（掉落物），而不是把它吞掉——
+   * 原版也是"新装备顶替旧的，旧的掉出来"。
+   *
+   * ⚠️ 差异：原版"潜行右键取下全部"，这里只能一次取一件——
+   * `useFunctionalBlock` 收不到潜行状态（潜行右键一律走放置方块那条路，
+   * 与音符盒是同一个已知限制）。
+   */
+  private useArmorStand(x: number, y: number, z: number): boolean {
+    const heldId = this.heldItemId;
+    const slot = heldId === undefined ? null : armorSlotForItem(heldId);
+
+    if (slot === null) {
+      const entry = this.armorStands.get(this.dimension, x, y, z);
+      const index = entry ? entry.slots.findIndex((item) => item !== null) : -1;
+      if (!entry || index < 0) {
+        this.chat.push('盔甲架是空的（拿盔甲右键可以给它穿上）', 'system');
+        return true;
+      }
+      const item = entry.slots[index]!;
+      this.armorStands.setSlot(this.dimension, x, y, z, index, null);
+      this.spawnDrop(item.id, item.count, x + 0.5, y + 1.05, z + 0.5, stackExtras(item));
+      this.audio.play('place_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+      return true;
+    }
+
+    // 穿装备：先从手上扣一件（扣的正是手上那一份，附魔/耐久跟着走）
+    const held = this.inventory.get(this.hotbarIndex);
+    if (!held) return true;
+    const replaced = this.armorStands.get(this.dimension, x, y, z)?.slots[slot] ?? null;
+    if (!this.inventory.consume(heldId!, 1)) return true;
+    this.refreshHotbar();
+    this.armorStands.setSlot(this.dimension, x, y, z, slot, {
+      id: held.id,
+      count: 1,
+      ...stackExtras(held),
+    });
+    if (replaced) this.spawnDrop(replaced.id, replaced.count, x + 0.5, y + 1.05, z + 0.5, stackExtras(replaced));
+    this.audio.play('place_wood', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    return true;
+  }
+
+  /** 盔甲架被拆掉时把装备还回来（批次 492）：与展示框的 `dropFrameContents` 同一套做法 */
+  private dropArmorStandContents(x: number, y: number, z: number): void {
+    const entry = this.armorStands.get(this.dimension, x, y, z);
+    if (!entry) return;
+    this.armorStands.remove(this.dimension, x, y, z);
+    for (let slot = 0; slot < ARMOR_STAND_SLOTS; slot++) {
+      const item = entry.slots[slot];
+      if (!item) continue;
+      this.spawnDrop(item.id, item.count, x + 0.5, y + 0.5, z + 0.5, stackExtras(item));
+    }
+  }
+
+  /**
    * 唱片机（批次 489）：右键放唱片 / 空手取出。
    *
    * 放进去就**自己播**（不需要"再点一下播放"）：旋律在 `audio/DiscMelody.ts` 里，
@@ -10798,6 +10878,8 @@ class App {
     }
     // 唱片机（批次 489）：右键放唱片 / 空手取出
     if (hitBlock === Block.JUKEBOX) return this.useJukebox(x, y, z);
+    // 盔甲架（批次 492）：拿装备右键穿上；空手右键取下一件
+    if (hitBlock === Block.ARMOR_STAND) return this.useArmorStand(x, y, z);
     // 钟（批次 490）：右键敲响
     if (hitBlock === Block.BELL) return this.ringBell(x, y, z);
     if (hitBlock === Block.CRAFTING_TABLE) {
@@ -11247,6 +11329,8 @@ class App {
    * （与告示牌文字、命令方块同一处缺口），差异记在 TASKS G9。
    */
   private readonly jukeboxDiscs = new Map<string, number>();
+  /** 盔甲架上的装备（批次 492）：按坐标存，随存档走 */
+  private readonly armorStands = new ArmorStandStore();
   /** 旧版"击杀 5 只算一波"的计数（只在没有真袭击时兜底进度） */
   private raidKills = 0;
 

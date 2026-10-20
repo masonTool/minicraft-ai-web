@@ -189,6 +189,8 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'banner':
     // 钟（批次 490）：钟体很细，走过去不会挡路
     case 'bell':
+    // 盔甲架（批次 492）：原版是实体、能穿过去（只是会被轻推开）
+    case 'armor_stand':
     // 珊瑚扇（批次 51）：一片薄面，原版可以直接游过去
     case 'coral_fan':
     // 告示牌（批次 80）：原版告示牌**不挡路**（能从牌子里走过去），所以没有碰撞盒。
@@ -534,6 +536,20 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
     case 'banner':
       // 旗帜（批次 484 立地 / 486 挂墙）：见 `bannerBoxes`
       return bannerBoxes(state);
+    case 'armor_stand':
+      // 盔甲架（批次 492）：底座 + 立柱 + 两根横杆 + 头部。
+      // 5 个盒子是这个分辨率下"看得出是个人形架子"的最小集合
+      return [
+        // 底座（8×8 的一块小板）
+        [4 / 16, 0, 4 / 16, 12 / 16, 1 / 16, 12 / 16],
+        // 立柱
+        [7 / 16, 1 / 16, 7 / 16, 9 / 16, 11 / 16, 9 / 16],
+        // 两根横杆（当肩膀）
+        [3 / 16, 10 / 16, 7 / 16, 13 / 16, 11 / 16, 9 / 16],
+        [7 / 16, 4 / 16, 3 / 16, 9 / 16, 5 / 16, 13 / 16],
+        // 头部
+        [6 / 16, 11 / 16, 6 / 16, 10 / 16, 14 / 16, 10 / 16],
+      ];
     case 'bell':
       // 钟（批次 490）：两根支架 + 一个钟体。
       // 钟体是个"上窄下宽"的倒锥——16×16 下用三个盒子叠出来（顶盖 / 腰 / 口沿）
