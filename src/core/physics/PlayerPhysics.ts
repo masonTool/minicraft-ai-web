@@ -51,6 +51,8 @@ const CLIMB_ACCEL = 30;
 
 /** 单次步进的最大位移，超过就拆成多步，避免高速穿透薄墙 */
 const MAX_STEP = 0.4;
+/** 爬行的前瞻距离（格）：比半个身位略远一点，走到洞口前一两帧就开始爬 */
+const CRAWL_PROBE = 0.45;
 
 export interface PlayerInput {
   forward: number; // -1..1
@@ -141,12 +143,27 @@ export class PlayerPhysics {
    */
   crouching = false;
 
+  /**
+   * 爬行高度（F9，批次 430）：0.6 格，能钻**一格高**的洞。
+   *
+   * 与潜行的区别不是"再矮一点"：潜行是**主动姿态**，爬行是**被迫姿态**
+   * （头顶连 1.5 都放不下时才有），而且它要能"从外面钻进 1 格高的洞"——
+   * 所以判定里带了**前瞻**：想往哪走就看那一格站不站得下 1.5，站不下但放得下 0.6 就爬。
+   */
+  readonly crawlHeight = 0.6;
+  readonly crawlEyeHeight = 0.6;
+
+  /** 当前是否在爬（比潜行更矮；只能从"头顶放不下 1.5"或"前方洞口太矮"两种情况进入） */
+  crawling = false;
+
   /** 碰撞盒高度（跟着姿态走）。所有碰撞/挤缝判定都读这里，不要各自取常量 */
   get height(): number {
+    if (this.crawling) return this.crawlHeight;
     return this.crouching ? this.sneakHeight : this.standHeight;
   }
 
   get eyeHeight(): number {
+    if (this.crawling) return this.crawlEyeHeight;
     return this.crouching ? this.sneakEyeHeight : this.standEyeHeight;
   }
 
@@ -192,10 +209,21 @@ export class PlayerPhysics {
 
     this.inWater = world.isLiquid(Math.floor(this.x), Math.floor(this.y + 0.4), Math.floor(this.z));
 
-    // 姿态（F9，批次 404）：按住潜行就蹲；**头顶不够高时站不起来**，
-    // 松手也保持蹲姿。不这么做的话，蹲着钻进 1.5 格高的缝、一松手就把
-    // 碰撞盒弹回 1.8 —— 人会卡在天花板里（原版是靠"强制潜行"避免的）。
-    this.crouching = input.sneak || !this.hasStandingRoom(world);
+    // 姿态（F9，批次 404 / 430）：三层判定，顺序不能换。
+    //  ① 头顶放得下 1.8 吗？放不下 → 站起来会卡进天花板，必须蹲着；
+    //  ② 头顶放得下 1.5 吗？放不下 → 只能爬（0.6）；
+    //  ③ **前瞻**：想往前走、但前方那一格连 1.5 都放不下而 0.6 放得下
+    //     （按住潜行时才生效）→ 现在就开始爬，否则人会被洞口挡在外面永远进不去。
+    const canStand = this.hasRoom(world, this.standHeight);
+    const canSneak = this.hasRoom(world, this.sneakHeight);
+    let aheadCrawl = false;
+    if (input.sneak && dirLength > 1e-6) {
+      const probeX = this.x + dirX * CRAWL_PROBE;
+      const probeZ = this.z + dirZ * CRAWL_PROBE;
+      aheadCrawl = !this.hasRoomAt(world, probeX, probeZ, this.sneakHeight) && this.hasRoomAt(world, probeX, probeZ, this.crawlHeight);
+    }
+    this.crawling = !canSneak || aheadCrawl;
+    this.crouching = input.sneak || !canStand || this.crawling;
 
     // 攀爬（B11）：脚下那一格或身体中段那一格是梯子/藤蔓/锁链，就算"贴住了"。
     // 采两个点是为了照顾"人站在梯子底部、身体只有上半段挨着"的情况。
@@ -302,10 +330,17 @@ export class PlayerPhysics {
    *  - 终点收 `-0.02`：贴着天花板时同理，会把"刚好 1.5 格"判成过不去，
    *    而原版那 0.3 格的余量本来就该容得下。
    */
-  private hasStandingRoom(world: PhysicsWorld): boolean {
-    // 交给共享的 `collides`（它认台阶/楼梯那种非完整方块），自己再写一遍
-    // 体素枚举会漏掉"天花板是半砖"的情况——而半砖天花板正是最常见的 1.5 格缝
-    const box = boxAt(this.x, this.y + 0.02, this.z, this.width, this.standHeight - 0.04);
+  private hasRoom(world: PhysicsWorld, height: number): boolean {
+    return this.hasRoomAt(world, this.x, this.z, height);
+  }
+
+  /**
+   * (x, z) 这一列、从脚底往上 `height` 的空间够不够。
+   * 交给共享的 `collides`（它认台阶/楼梯那种非完整方块），自己写体素枚举
+   * 会漏掉"天花板是半砖"的情况——而半砖天花板正是最常见的 1.5 格缝。
+   */
+  private hasRoomAt(world: PhysicsWorld, x: number, z: number, height: number): boolean {
+    const box = boxAt(x, this.y + 0.02, z, this.width, height - 0.04);
     return !collides(world, box);
   }
 

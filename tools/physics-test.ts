@@ -349,13 +349,23 @@ console.log('\n[姿态：潜行 1.5 格高（F9，批次 404）]');
   check('缝外松手就站直', !outside.crouching);
   equal('高度回到 1.8', outside.height, 1.8);
 
-  // ⑥ 负对照：净高 1.0 的洞，蹲着也过不去（没把玩家改成 1 格高）
+  // ⑥ 负对照：净高 0.5 的洞，**爬着也过不去**（没把玩家改成"什么洞都能钻"）。
+  // ⚠️ 批次 430 起"1 格高的洞"是**能爬进去的**（爬行高度 0.6），所以这条负对照
+  // 从 1.0 改成 0.5：天花板是 y=64 那一格的上半砖。
   const tight = standOnGround(3.0);
-  const world10 = halfCeilingWorld('full');
+  const world05: PhysicsWorld = {
+    collisionAt: (x, y) => {
+      if (y < 64) return 'full' as const;
+      if (y === 64 && x >= 4) return [[0, 0.5, 0, 1, 1, 1]] as const;
+      return null;
+    },
+    isLiquid: () => false,
+    isClimbable: () => false,
+  };
   for (let i = 0; i < 120; i++) {
-    tight.update(world10, input({ forward: 1, sneak: true }), YAW_PLUS_X, DT, false);
+    tight.update(world05, input({ forward: 1, sneak: true }), YAW_PLUS_X, DT, false);
   }
-  check('1 格高的洞蹲着也进不去', tight.x < 3.8, `x=${tight.x.toFixed(2)}`);
+  check('净高 0.5 的洞爬着也进不去', tight.x < 3.8, `x=${tight.x.toFixed(2)}`);
 }
 
 console.log('\n[水中上下：跳跃上浮 / 潜行下潜（F9，批次 428）]');
@@ -392,6 +402,62 @@ console.log('\n[水中上下：跳跃上浮 / 潜行下潜（F9，批次 428）]
 
   // ④ 下潜不会把人送到无底：竖直速度被夹在 -4
   check('竖直速度下限仍是 -4', down.vy >= -4, `vy=${down.vy.toFixed(2)}`);
+}
+
+console.log('\n[爬行：一格高的洞（F9，批次 430）]');
+{
+  // 走廊在 x ≥ 4，天花板占满 y=65 那一格 → 净高 1.0（潜行的 1.5 都放不下）
+  const tunnel: PhysicsWorld = {
+    collisionAt: (x, y) => {
+      if (y < 64) return 'full' as const;
+      if (y === 65 && x >= 4) return 'full' as const;
+      return null;
+    },
+    isLiquid: () => false,
+    isClimbable: () => false,
+  };
+
+  // ① 蹲着往前走：进得去（前瞻在洞口前就开始爬）
+  const crawler = standOnGround(3.0);
+  for (let i = 0; i < 150; i++) {
+    crawler.update(tunnel, input({ forward: 1, sneak: true }), YAW_PLUS_X, DT, false);
+  }
+  check('按住潜行能钻进一格高的洞', crawler.x > 4.2, `x=${crawler.x.toFixed(2)}`);
+  check('洞里处于爬行姿态', crawler.crawling);
+  check('爬行高度是 0.6', Math.abs(crawler.height - 0.6) < 1e-9, String(crawler.height));
+
+  // ② 不按潜行：被洞口挡在外面（潜行是必须的——原版也要求主动蹲下/爬）
+  const walker = standOnGround(3.0);
+  for (let i = 0; i < 150; i++) {
+    walker.update(tunnel, input({ forward: 1 }), YAW_PLUS_X, DT, false);
+  }
+  check('不按潜行进不去', walker.x < 3.8, `x=${walker.x.toFixed(2)}`);
+  check('洞外不会自己爬', !walker.crawling);
+
+  // ③ 洞里松手：仍然是爬行（头顶放不下 1.5，站不起来）
+  const inside = standOnGround(5.0);
+  inside.update(tunnel, input(), YAW_PLUS_X, DT, false);
+  check('洞里松手仍然爬着', inside.crawling);
+  check('不会被顶起来', Math.abs(inside.y - 64) < 0.05, `y=${inside.y.toFixed(3)}`);
+
+  // ④ 洞外松手：站直
+  const outside = standOnGround(2.0);
+  outside.update(tunnel, input(), YAW_PLUS_X, DT, false);
+  check('洞外松手就站直', !outside.crawling && !outside.crouching);
+  check('站立高度回到 1.8', Math.abs(outside.height - 1.8) < 1e-9, String(outside.height));
+
+  // ⑤ 站在实心墙前不会误判成"要爬"（墙里连 0.6 都放不下）
+  const solid: PhysicsWorld = {
+    collisionAt: (x, y) => (y < 64 || (y >= 64 && y < 66 && x >= 4) ? ('full' as const) : null),
+    isLiquid: () => false,
+    isClimbable: () => false,
+  };
+  const againstWall = standOnGround(3.0);
+  for (let i = 0; i < 60; i++) {
+    againstWall.update(solid, input({ forward: 1, sneak: true }), YAW_PLUS_X, DT, false);
+  }
+  check('对着整堵墙时不会误入爬行', !againstWall.crawling);
+  check('也确实被挡住了', againstWall.x < 3.8, `x=${againstWall.x.toFixed(2)}`);
 }
 
 console.log(`\n物理测试：${passed} 通过 / ${failed} 失败`);
