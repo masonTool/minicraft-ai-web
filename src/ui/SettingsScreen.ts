@@ -69,6 +69,7 @@ import {
 } from '../game/appearance.ts';
 import { PlayerPreview3D, type PreviewFocus } from './PlayerPreview3D.ts';
 import { drawPlayerPreview } from './PlayerPreview.ts';
+import { Dropdown } from './Dropdown.ts';
 
 /**
  * 粒子效果强度。
@@ -741,42 +742,19 @@ export class SettingsScreen {
   /** 四颗角色预设按钮（批次 333）：手动改任一外观项后全部取消高亮 */
   private readonly presetButtons: HTMLButtonElement[] = [];
   /**
-   * 下拉菜单（批次 334）：同一时间只允许一个展开。
+   * 所有下拉控件（批次 528 起统一交给 `ui/Dropdown.ts`）。
    *
-   * 菜单挂在 `<body>` 上并 `position: fixed`——设置内容区是滚动容器，
-   * 菜单若留在行内会被 `overflow-y: auto` 裁掉。
+   * 这里只保留 close/dispose 两个能力：切页、关面板、销毁时要把它们收起来。
    */
-  private openDropdown: { button: HTMLButtonElement; menu: HTMLDivElement } | null = null;
-  /** 所有下拉菜单（`destroy` 时一并摘掉） */
-  private readonly dropdownMenus: HTMLDivElement[] = [];
+  private readonly dropdowns: Array<{ close(): void; dispose(): void }> = [];
   /** 每个控件的"按真实状态重画"回调（switch / 下拉共用；飞行与游戏模式受外部状态影响） */
   private readonly controlSync = new Map<HTMLButtonElement, () => void>();
-  /** 外部点击 / 滚动 / 转屏时收起下拉菜单 */
-  private readonly onDocumentPointerDown = (event: PointerEvent): void => {
-    const open = this.openDropdown;
-    if (!open) return;
-    const target = event.target as Node | null;
-    if (target && (open.menu.contains(target) || open.button.contains(target))) return;
-    this.closeDropdown();
-  };
-  private readonly onSettingsScroll = (): void => this.closeDropdown();
-  private readonly onWindowResize = (): void => this.closeDropdown();
-  /** Esc 先收下拉菜单；没有菜单时才让 App 的返回逻辑接管 */
+  /** Esc：角色形象弹窗（下拉菜单自己在 `Dropdown` 里处理 Esc） */
   private readonly onDocumentKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== 'Escape') return;
-    // 下拉菜单在最上面，先收它
-    if (this.openDropdown) {
-      event.preventDefault();
-      event.stopPropagation();
-      this.closeDropdown();
-      return;
-    }
-    // 再往下才是角色形象弹窗（批次 528）
-    if (this.appearanceOpen) {
-      event.preventDefault();
-      event.stopPropagation();
-      this.closeAppearance();
-    }
+    if (event.key !== 'Escape' || !this.appearanceOpen) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeAppearance();
   };
   /**
    * 设置页的角色形象（批次 333）：复用背包那台 `PlayerPreview3D`。
@@ -1228,11 +1206,9 @@ export class SettingsScreen {
     panel.append(menuPage, settingsPage);
     host.appendChild(this.root);
 
-    // 批次 334：下拉菜单挂在 body 上，需要三条"收起来"的信号
-    document.addEventListener('pointerdown', this.onDocumentPointerDown, true);
+    // 下拉菜单的"点外面 / 滚动 / 转屏 / Esc"由 `Dropdown` 自己在展开期间挂监听；
+    // 设置页只需要处理角色形象弹窗的 Esc。
     document.addEventListener('keydown', this.onDocumentKeyDown, true);
-    this.root.addEventListener('scroll', this.onSettingsScroll, true);
-    window.addEventListener('resize', this.onWindowResize);
 
     this.setActiveGroup(SETTING_GROUPS[0]);
     this.setPage('menu');
@@ -1513,10 +1489,10 @@ export class SettingsScreen {
   }
 
   /**
-   * 造一个**下拉按钮**行（批次 334，用户要求："多个选项的用下拉按钮"）。
+   * 造一个**下拉按钮**行（批次 334；批次 528 换成共享的 `ui/Dropdown.ts`）。
    *
-   * 菜单挂到 `<body>`、`position: fixed`：设置内容区是滚动容器，留在行内会被裁掉。
-   * 只有按钮能展开、只有选项能选择；点行内其它位置不会触发任何东西。
+   * 样式与展开/收起/定位都在 `Dropdown` 里，设置页只负责"标签 + 控件"的排版，
+   * 以及把 `read()` / `write()` 与 `GameSettings` 接起来。
    */
   private makeDropdown<T extends string>(
     host: HTMLElement,
@@ -1533,111 +1509,25 @@ export class SettingsScreen {
     const name = document.createElement('span');
     name.textContent = label;
 
-    const wrap = document.createElement('div');
-    wrap.className = 'settings-dropdown';
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'settings-dropdown-button';
-    button.setAttribute('aria-haspopup', 'listbox');
-    button.setAttribute('aria-expanded', 'false');
-
-    const menu = document.createElement('div');
-    menu.className = 'settings-dropdown-menu';
-    menu.setAttribute('role', 'listbox');
-    menu.style.display = 'none';
-    document.body.appendChild(menu);
-    this.dropdownMenus.push(menu);
-
-    const optionButtons: Array<{ value: T; button: HTMLButtonElement }> = [];
-    const sync = (): void => {
-      const current = read();
-      // 批次 528（用户）：去掉旧的左右箭头，只留一个下拉指示
-      button.textContent = `${labels[current]} ▾`;
-      for (const option of optionButtons) {
-        const on = option.value === current;
-        option.button.classList.toggle('selected', on);
-        option.button.setAttribute('aria-selected', String(on));
-      }
-    };
-
-    for (const value of values) {
-      const option = document.createElement('button');
-      option.type = 'button';
-      option.className = 'settings-dropdown-option';
-      option.setAttribute('role', 'option');
-      option.textContent = labels[value];
-      option.addEventListener('click', () => {
-        if (read() !== value) write(value);
-        sync();
-        this.closeDropdown();
-        this.commit();
-      });
-      menu.appendChild(option);
-      optionButtons.push({ value, button: option });
-    }
-
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (this.openDropdown?.button === button) {
-        this.closeDropdown();
-        return;
-      }
-      sync();
-      this.openDropdownMenu(button, menu);
+    const control = new Dropdown<T>(values, labels, read(), (next) => {
+      write(next);
+      this.commit();
     });
-
-    this.controlSync.set(button, sync);
+    this.dropdowns.push(control);
+    const sync = (): void => control.setValue(read());
+    this.controlSync.set(control.button, sync);
     this.refreshers.push(sync);
     sync();
 
-    wrap.appendChild(button);
     // 两列就够（标签 | 下拉）；原来还多塞了一个空的 `<i>`，会在栅格里多占一行
-    row.append(name, wrap);
+    row.append(name, control.element);
     host.appendChild(row);
-    return button;
+    return control.button;
   }
 
-  /**
-   * 展开一个下拉菜单（同一时间只保留一个）。
-   *
-   * 上下两侧取空间更大的一侧，并把菜单高度夹在可用空间内（超出就内部滚动）——
-   * 否则 6 个选项的外观下拉会被"往上顶"到盖住整个标题栏。
-   */
-  private openDropdownMenu(button: HTMLButtonElement, menu: HTMLDivElement): void {
-    this.closeDropdown();
-    const rect = button.getBoundingClientRect();
-    menu.style.display = 'block';
-    menu.style.visibility = 'hidden';
-    menu.style.width = `${Math.max(rect.width, 132)}px`;
-    menu.style.maxHeight = 'none';
-
-    const desired = Math.min(240, menu.scrollHeight);
-    const spaceBelow = innerHeight - rect.bottom - 6;
-    const spaceAbove = rect.top - 6;
-    const openUp = spaceBelow < desired && spaceAbove > spaceBelow;
-    const available = Math.max(80, openUp ? spaceAbove : spaceBelow);
-    menu.style.maxHeight = `${Math.min(desired, available)}px`;
-
-    const menuRect = menu.getBoundingClientRect();
-    // 右对齐到按钮右沿（控件本身靠右，菜单跟着靠右更自然）
-    const left = Math.min(Math.max(4, rect.right - menuRect.width), Math.max(4, innerWidth - menuRect.width - 4));
-    let top = openUp ? rect.top - menuRect.height - 2 : rect.bottom + 2;
-    top = Math.max(4, Math.min(top, innerHeight - menuRect.height - 4));
-    menu.style.left = `${left}px`;
-    menu.style.top = `${top}px`;
-    menu.style.visibility = 'visible';
-    button.setAttribute('aria-expanded', 'true');
-    this.openDropdown = { button, menu };
-  }
-
-  /** 收起下拉菜单（点外面 / 滚动 / 转屏 / 切页都会调） */
+  /** 收起所有下拉菜单（点外面 / 滚动 / 转屏 / 切页都会调） */
   private closeDropdown(): void {
-    const open = this.openDropdown;
-    if (!open) return;
-    open.menu.style.display = 'none';
-    open.button.setAttribute('aria-expanded', 'false');
-    this.openDropdown = null;
+    for (const control of this.dropdowns) control.close();
   }
 
   /**
@@ -2158,14 +2048,10 @@ export class SettingsScreen {
     this.avatar?.dispose();
     this.avatar = null;
     this.avatarFailed = false;
-    // 批次 334：下拉菜单挂在 body 上，监听与节点都要清干净
-    this.closeDropdown();
-    for (const menu of this.dropdownMenus) menu.remove();
-    this.dropdownMenus.length = 0;
-    document.removeEventListener('pointerdown', this.onDocumentPointerDown, true);
+    // 下拉控件：关闭并摘掉挂在 body 上的菜单
+    for (const control of this.dropdowns) control.dispose();
+    this.dropdowns.length = 0;
     document.removeEventListener('keydown', this.onDocumentKeyDown, true);
-    this.root.removeEventListener('scroll', this.onSettingsScroll, true);
-    window.removeEventListener('resize', this.onWindowResize);
     this.root.remove();
     document.body.classList.remove('pause-open');
   }

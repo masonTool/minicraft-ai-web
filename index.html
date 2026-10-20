@@ -1554,6 +1554,11 @@
          菜单是 `position: fixed` 挂在 body 上（见 SettingsScreen#openDropdownMenu），
          不然会被设置内容区的 `overflow-y: auto` 裁掉。 */
       .settings-dropdown { justify-self: start; min-width: var(--settings-ctrl-w); }
+      /* 世界表单里的下拉铺满控件列（按钮靠左，不再是设置里那种居中短按钮） */
+      .settings-dropdown.settings-dropdown-full { width: 100%; min-width: 0; }
+      .settings-dropdown.settings-dropdown-full .settings-dropdown-button {
+        width: 100%; min-width: 0; text-align: left;
+      }
       .settings-dropdown-button {
         width: 100%; min-width: var(--settings-ctrl-w); min-height: var(--settings-ctrl-h); padding: 4px 6px;
         font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; text-align: center;

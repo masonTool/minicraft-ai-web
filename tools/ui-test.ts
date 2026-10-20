@@ -2163,11 +2163,14 @@ console.log('\n[像素风与"界面不许左右滑"（批次 108）]');
       !/const row = document\.createElement\('label'\)/.test(settingsSrcText) &&
         settingsSrcText.includes("const row = document.createElement('div');"),
     );
+    const dropdownSrc = readFileSync(new URL('../src/ui/Dropdown.ts', import.meta.url), 'utf8');
     check(
-      '下拉菜单挂在 body 上（不被滚动区裁切）',
-      settingsSrcText.includes('document.body.appendChild(menu)') &&
-        settingsSrcText.includes('this.openDropdownMenu(button, menu)'),
-      '菜单在 openDropdownMenu 里定位',
+      '设置与主菜单共用同一个下拉组件，菜单挂在 body 上（不被滚动区裁切）',
+      settingsSrcText.includes('new Dropdown<T>(') &&
+        dropdownSrc.includes('document.body.appendChild(this.menu)') &&
+        dropdownSrc.includes('private place(): void') &&
+        dropdownSrc.includes("this.menu.className = 'settings-dropdown-menu';"),
+      '共享 Dropdown',
     );
   }
   check(
