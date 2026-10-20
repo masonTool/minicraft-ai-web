@@ -8,8 +8,6 @@
     "dev": "vite",
     "build": "tsc --noEmit && npm run typecheck:tools && vite build",
     "build:fast": "SOURCEMAP=0 vite build",
-    "build:minigame": "node tools/minigame/build-spike.mjs",
-    "build:minigame:adapter": "node tools/minigame/build-adapter-spike.mjs",
     "build:minigame:formal": "node tools/minigame/build.mjs",
     "build:minigame:world": "node tools/minigame/build-world.mjs",
     "test:worker": "node tools/minigame/test-worker-shim.mjs",

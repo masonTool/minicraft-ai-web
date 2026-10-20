@@ -15,13 +15,15 @@ npm install
 npm run build:minigame:formal   # 正式版 → minigame/game.js
 ```
 
-旧的自写 shim 版本仍保留用于对比：
+真实世界预览在独立工程 `minigame-world/`（WX-020A）：
 
 ```bash
-npm run build:minigame          # 会覆盖 minigame/game.js，HUD 显示 WX-001 SHIM
+npm run build:minigame:world    # → minigame-world/game.js
 ```
 
-适配器对比工程在 `minigame-adapter-spike/`，用 `npm run build:minigame:adapter`。
+`minigame/` 暂时保留为**正式构建壳 + 801 draw call 压力基线**，
+WX-020B 抽完 `UiPort` 后会替换成真实 App；一次性对比工程（自写 shim / 适配器版）
+已经删除，历史留在 git 里。
 
 然后：
 
@@ -54,13 +56,13 @@ esbuild 会把 `1n` 降成 `BigInt("...")`，但老引擎没有 BigInt 时仍会
 
 ## 已知限制
 
-- 仍是压力场景占位，不接世界生成/存档/UI；`WX-020` 后换成真实 App。
-- Worker 产物已就绪，但两套池子的合并/接线在 `WX-020`。
+- 仍是压力场景占位，不接世界生成/存档/UI；`WX-020B` 后换成真实 App。
+- Worker 产物已就绪；`minigame-world` 在 helper 预览里 worker 不回 pong，会自动降级主线程，真机行为待复测。
 - 适配器的假 DOM 只能给库用，**不要拿它做 UI**（见 `WXMINIGAME.md` §2.6）。
 - 抖音没有做；M6 单独评估。
 
 ## 下一步
 
-- **WX-020**：抽 `UiPort` + App 条件启动，接入真实世界。
-- **WX-018**：两套 Worker 池合并 + 单 worker 消息通道。
-- **WX-011..017**：平台接口/存储/音频/输入/生命周期。
+- **WX-020B**：抽 `UiPort` + 玩家/输入，接入真实 App。
+- **WX-021**：canvas UI 工具包。
+- 平台层 WX-011~018 已完成；真机 worker 与真实内存放到 WX-040/041 复测。

@@ -6,12 +6,70 @@
 
 ---
 
-## 0. 基本信息
+## 0. 当前状态（新会话 / 换设备先读这一页）
+
+> 最后更新：2026-10-20 · 分支 `wxminigame` · 最新提交 `d102894`（清理提交待填）
+> 只要这一页和 §5 任务表是最新的，换会话/换机器就不会丢上下文。
+
+### 0.1 一眼看进度
+
+| 项 | 值 |
+| --- | --- |
+| 当前阶段 | M1 平台层收尾 → M2 UI |
+| 当前任务 | **WX-020B：抽 `UiPort` + 玩家/输入接线**（下一步） |
+| 刚完成 | WX-020A 真实世界预览通过；WX-018 共享 Worker；WX-011~017、01B/01C |
+| 正式壳 | `minigame/`（压力场景，801 draw call 基线） |
+| 真实世界 | `minigame-world/`（WX-020A，当前可看完整地形） |
+| 平台基座 | `vendor/minigame-adapter/`（870d66f + 本分支补丁） |
+| UI 方案 | 自研 canvas 工具包；**不做 DOM/CSS 全模拟**（§2.6） |
+
+### 0.2 最近一次验证数据
+
+| 指标 | 值 |
+| --- | --- |
+| 环境 | `weixin-minigame-helper`（iPhone 12/13 预览，iOS 17，SDK 3.7.1） |
+| 图集 | `TextureAtlas` 209ms，256×1040 |
+| 世界 | 37 chunks / 37 drawn / light 0 / queue 0 |
+| 几何 | 约 243k triangles / 239 draw calls |
+| 帧率 | 主线程降级：启动约 12s，稳定后 121fps / 8.3ms |
+| Worker | helper 里 `wx.createWorker` 不回 pong，自动降级主线程；真机行为待复测 |
+
+### 0.3 新会话 / 换设备接手清单
+
+```bash
+cd /Users/mason/DouDou/minicraft-ai-web-wxminigame
+git fetch origin && git status -sb
+npm ci
+npm run typecheck
+npm run test:worker
+npm run check:fast
+```
+
+1. 只读本文件 **§0** 与 **§5 任务表**，不要读主线 `TASKS.md` / `HANDOFF.md` / `auto-continue.md`。
+2. 当前分支是 `wxminigame`，主工作区 `/Users/mason/DouDou/minicraft-ai-web` 仍在推进 `main`，不要碰。
+3. 构建：
+   - `npm run build:minigame:formal` → `minigame/game.js`（压力壳）
+   - `npm run build:minigame:world` → `minigame-world/game.js`（真实世界）
+4. 预览：`weixin-minigame-helper` 的 `run_game` 指向 `minigame-world/`，再用 `get_logs` / `capture_screenshot`。
+5. 只有在**里程碑**才请用户真机截图；日常先用 helper 自测。
+6. 提交前缀 `WX-NNN:`；完成一个任务就更新 §5 状态与 §7 进度日志。
+
+### 0.4 当前不要做
+
+- 不要删除 `vendor/minigame-adapter/`（平台基座）。
+- 不要删除 `.codebuddy/auto-continue.off`（防止主线自动队列在这个 worktree 乱跑）。
+- 不要依赖适配器的假 DOM 写 UI（`getElementById` 返回占位对象）。
+- 不要把构建 target 改回 ES2020（真机不支持 `??`/`?.`）。
+- 不要为了“省事”把 `minigame/` 和 `minigame-world/` 合并成两个以上新工程；先收口 WX-020B。
+
+---
+
+## 0.5 基本信息
 
 | 项 | 值 |
 | --- | --- |
 | 本 worktree | `/Users/mason/DouDou/minicraft-ai-web-wxminigame` |
-| 本分支 | `wxminigame`（从 `main@60a5240` 拉出） |
+| 本分支 | `wxminigame`（基于 `main`；最近一次合并 `2c4d3fc`） |
 | 主线 worktree | `/Users/mason/DouDou/minicraft-ai-web`（`main`，继续推进自己的队列） |
 | 任务 ID | `WX-NNN`，与主线“批次 NNN”完全隔离 |
 | 提交前缀 | `WX-NNN: ...` |
@@ -49,11 +107,17 @@ src/platform/            # 平台接口 + 各平台实现（新增）
   wx/                    # 微信小游戏实现
   tt/                    # 抖音（M6 再加）
 src/minigame/            # 小游戏入口 + canvas UI（新增）
-  main.ts                # 正式入口（WX-010 起）
-  spike/                 # WX-001 技术验证（验完可删）
-  ui/                    # canvas UI 工具包与各界面
-minigame/                # game.json / project.config.json / game.js 产物（新增）
-tools/minigame/          # 小游戏构建与校验（build-spike.mjs / build.mjs）
+  world-boot.ts          # WX-020A 真实世界启动（图集/World/ChunkRenderer）
+  main-thread-worker.ts  # Worker 不可用时的主线程降级
+  ui/                    # WX-020B 起的 canvas UI 工具包与各界面
+minigame/                # 正式构建壳 + 801 draw call 压力基线
+minigame-world/          # WX-020A 真实世界预览工程
+tools/minigame/          # 构建与校验
+  build.mjs              # 正式主包
+  build-world.mjs        # 真实世界主包
+  formal-entry.mjs       # 正式壳入口（压力场景）
+  worker-entry/          # Worker IIFE 入口 + wx shim
+  test-worker-shim.mjs   # Node vm Worker 自测
 ```
 
 原则：**平台差异只允许出现在 `src/platform/**`**；
@@ -455,10 +519,9 @@ git push
 cd /Users/mason/DouDou/minicraft-ai-web-wxminigame
 npm install            # worktree 没有 node_modules
 npm run dev            # 确认 Web 版仍可跑（对照用）
-npm run build:minigame:formal   # 正式版 → minigame/game.js（压力场景）
+npm run build:minigame:formal   # 正式壳 → minigame/game.js（压力场景）
 npm run build:minigame:world    # 真实世界 → minigame-world/game.js（WX-020A）
-npm run build:minigame          # 旧自写 shim（会覆盖 minigame/game.js，仅对比用）
-npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006 对比）
+npm run test:worker             # Node vm 模拟只读 self，验证 ping + 真实 generate
 ```
 
 > ⚠️ **构建目标必须是 es2017 或更低**：微信真机 JSCore 不支持 ES2020 的
@@ -468,12 +531,11 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 > 以后加正式构建（WX-010）也必须守住这条。
 
 - 微信开发者工具导入哪个目录：
-  - **WX-001 自写 shim**：`minigame/`（红色标记方块）
-  - **WX-006 适配器版**：`minigame-adapter-spike/`（绿色标记方块）
-  - 项目类型选**小游戏**（不是小程序）；真机预览要把各自 `project.config.json` 的
-    `appid` 换成自己的小游戏 AppID。
-- 屏上已有 HUD（顶部四行）：版本（SHIM/ADAPTER）、分辨率/dpr、`GL_VERSION`、
-  `GL_RENDERER`、`FPS/TRI/CALLS`；不需要连控制台也能读基线数据。
+  - **正式压力壳**：`minigame/`（HUD `WX-010 FORMAL`，801 draw call 基线）
+  - **真实世界预览**：`minigame-world/`（HUD `WX-020 WORLD`，WX-020A）
+  - 项目类型选**小游戏**（不是小程序）；两个工程的 `project.config.json` 已统一 AppID。
+- 屏上已有 HUD：版本/分辨率/dpr、`GL_VERSION`、`GL_RENDERER`、`FPS/MS/TRI/CALLS`；
+  真实世界还会显示 `CHUNKS/DRAWN/LIGHT/Q/WORKER`。不需要连控制台也能读基线数据。
   黑屏/启动失败会弹 `wx.showModal`，把弹窗文字发回来即可。
 - 本 worktree 已放 `.codebuddy/auto-continue.off`：**不要删**。
   主线的自动继续钩子指向主工作区的脚本，不关掉会按主线队列在这个 worktree 里乱跑。
@@ -507,7 +569,8 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | 2026-10-20 | WX-020A | 新增 `minigame-world`：TextureAtlas + VoxelMaterial + World + ChunkRenderer + 共享 Worker；game.js 1929KB / worker 1097KB / 合计 3026KB；**待真机首块地形** | `92ddbde` |
 | 2026-10-20 | WX-020A 修复 | 开发者工具 `self` 只读：原生 self 直接用，微信真机才桥接 `worker`；新增 `npm run test:worker`（Node vm 模拟只读 self），ping + 真实生成回包通过 | `1a63221` |
 | 2026-10-20 | WX-020A 自动化 | 开发者工具 automator 可连、`Tool.getInfo` 正常，但 `App.callFunction/captureScreenshot/CDPEnable` 与 `Game.*` 全部超时：官方 automator 只覆盖小程序 App/Page，小游戏无此上下文 | `d102894` |
-| 2026-10-20 | WX-020A 预览 | 改用 `weixin-minigame-helper`：真实地形出现；CHUNKS 37 / DRAWN 37 / LIGHT 0 / Q 0 / TRI ~243k / CALLS ~239；稳定后 FPS 121 / MS 8.3（worker 超时后主线程降级） | 本次提交 |
+| 2026-10-20 | WX-020A 预览 | 改用 `weixin-minigame-helper`：真实地形出现；CHUNKS 37 / DRAWN 37 / LIGHT 0 / Q 0 / TRI ~243k / CALLS ~239；稳定后 FPS 121 / MS 8.3（worker 超时后主线程降级） | `1737c9e` |
+| 2026-10-20 | 清理/看板 | 删除 WX-001 自写 shim、WX-006 适配器对比工程与旧构建脚本；正式入口/worker 目录改名；新增 §0 状态看板与接手清单 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 

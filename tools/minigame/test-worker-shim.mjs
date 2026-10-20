@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const shimPath = join(root, 'tools/minigame/spike-worker/wx-shim.mjs');
+const shimPath = join(root, 'tools/minigame/worker-entry/wx-shim.mjs');
 const workerPath = join(root, 'minigame-world/workers/chunk.worker.js');
 
 const shimCode = readFileSync(shimPath, 'utf8');

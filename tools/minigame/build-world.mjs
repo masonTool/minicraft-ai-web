@@ -43,7 +43,7 @@ await build({
 
 await build({
   absWorkingDir: root,
-  entryPoints: ['tools/minigame/spike-worker/entry.mjs'],
+  entryPoints: ['tools/minigame/worker-entry/entry.mjs'],
   bundle: true,
   format: 'iife',
   target: ['es2017'],

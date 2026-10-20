@@ -2,7 +2,7 @@
 /**
  * 微信小游戏正式构建（WX-010）
  *
- * 当前入口是 `tools/minigame/spike-adapter/entry.mjs`（压力场景占位）；
+ * 当前入口是 `tools/minigame/formal-entry.mjs`（压力场景占位）；
  * WX-020 抽出 `UiPort` 后换成 `src/minigame/main.ts`，构建脚本本身不变。
  *
  * 约定：
@@ -38,7 +38,7 @@ mkdirSync(join(root, 'minigame'), { recursive: true });
 
 await build({
   absWorkingDir: root,
-  entryPoints: ['tools/minigame/spike-adapter/entry.mjs'],
+  entryPoints: ['tools/minigame/formal-entry.mjs'],
   bundle: true,
   format: 'iife',
   target: ['es2017'],
@@ -57,7 +57,7 @@ mkdirSync(join(root, 'minigame', 'workers'), { recursive: true });
 
 await build({
   absWorkingDir: root,
-  entryPoints: ['tools/minigame/spike-worker/entry.mjs'],
+  entryPoints: ['tools/minigame/worker-entry/entry.mjs'],
   bundle: true,
   format: 'iife',
   target: ['es2017'],

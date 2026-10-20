@@ -5,17 +5,17 @@
  * `vendor/minigame-adapter/` 并打过补丁，这里改为走正式启动层
  * `src/platform/wx/bootstrap.ts`，不再依赖 `references/`。
  *
- * 当前画面仍是压力场景（WX-020 接入真实 App/UiPort 后会替换掉）。
+ * 当前画面仍是压力场景（WX-020B 接入真实 App/UiPort 后会替换掉）。
  *
  * ⚠️ 必须最先 import bootstrap：适配器要先注入 window/document，three 才能初始化。
  */
 
-import '../../../src/platform/wx/bootstrap.ts';
-import { detectPlatformKind } from '../../../src/platform/detect.ts';
-import { wxPlatform } from '../../../src/platform/wx/index.ts';
+import '../../src/platform/wx/bootstrap.ts';
+import { detectPlatformKind } from '../../src/platform/detect.ts';
+import { wxPlatform } from '../../src/platform/wx/index.ts';
 import * as THREE from 'three';
 
-/** 构建期注入：正式版 WX-010 FORMAL，对比 spike WX-006 ADAPTER */
+/** 构建期注入：正式版 WX-010 FORMAL */
 const HUD_LABEL = __WX_LABEL__;
 const TAG = `[${HUD_LABEL}]`;
 
