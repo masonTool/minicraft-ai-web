@@ -1316,12 +1316,12 @@ const showContainer = (): void => {
   const slotSize = 50;
   const gap = 5;
   const panelW = 620;
-  const panelH = 340;
+  const panelH = 390;
   const panelX = (1024 - panelW) / 2;
   const panelY = (uiHeight - panelH) / 2;
   const gridW = cols * slotSize + (cols - 1) * gap;
   const gridX = panelX + (panelW - gridW) / 2;
-  const gridY = panelY + 100;
+  const gridY = panelY + 92;
   const elements: UiElement[] = [
     text(panelX + 26, panelY + 20, 420, 40, containerTitle, { fontSize: 28, color: '#ffffff' }),
     button(panelX + panelW - 68, panelY + 20, 42, 42, 'X', () => {
@@ -1351,6 +1351,30 @@ const showContainer = (): void => {
       showContainer();
     }));
   }
+  const hotbarSize = 42;
+  const hotbarGap = 5;
+  const hotbarW = 9 * hotbarSize + 8 * hotbarGap;
+  const hotbarX = panelX + (panelW - hotbarW) / 2;
+  const hotbarY = gridY + (isFurnace ? 1 : 3) * (slotSize + gap) + 18;
+  elements.push(text(hotbarX, hotbarY - 24, hotbarW, 20, '背包快捷栏 · 点击存入', {
+    fontSize: 12,
+    color: 'rgba(200,220,235,0.7)',
+  }));
+  for (let i = 0; i < 9; i++) {
+    const stack = inventory.get(i);
+    elements.push(slot(hotbarX + i * (hotbarSize + hotbarGap), hotbarY, hotbarSize, 500 + i, stack?.id ?? 0, stack?.count ?? 0, false, () => {
+      const held = inventory.get(i);
+      if (!held) return;
+      for (let j = 0; j < slots; j++) {
+        if (openedContainer?.get(j)) continue;
+        openedContainer?.set(j, held);
+        inventory.set(i, null);
+        break;
+      }
+      showContainer();
+    }));
+  }
+
   ui.setRoot(box(0, 0, 1024, uiHeight, [
     box(0, 0, 1024, uiHeight, [], { background: 'rgba(0,0,0,0.55)' }),
     box(panelX, panelY, panelW, panelH, elements, {

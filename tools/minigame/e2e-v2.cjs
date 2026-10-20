@@ -120,13 +120,13 @@ const assert = (condition, message, state) => {
   const containerOpen = await waitState((state) => state.containerOpen, '容器没有打开', 5000);
   await liveFrame.evaluate(() => wx.__v2Test?.fillChestFirst?.(1, 2));
   await waitState((state) => state.containerSlots?.[0] === 1, '箱子预置物品失败', 5000);
-  await tap(292, 192);
+  await tap(292, 158);
   const containerTaken = await waitState(
     (state) => state.inventory?.[0] === 1 && state.containerSlots?.[0] === 0,
     '从箱子取出物品失败',
     5000,
   );
-  await tap(775, 108);
+  await tap(775, 82);
   const containerClosed = await waitState((state) => !state.containerOpen, '容器没有关闭', 5000);
 
   // 背包 → 箱子存入：先给物品并选中槽 0，再点箱子空槽
@@ -137,19 +137,19 @@ const assert = (condition, message, state) => {
   await tap(269, 424);
   await liveFrame.evaluate(() => wx.__v2Test?.openChestAtFeet?.());
   await waitState((state) => state.containerOpen, '存入用例打开箱子失败', 5000);
-  await tap(292, 192);
+  await tap(292, 158);
   const containerStored = await waitState(
     (state) => state.containerSlots?.[0] === 3 && state.inventory?.[0] === 0,
     '背包物品没有存入箱子',
     5000,
   );
-  await tap(775, 108);
+  await tap(775, 82);
   await waitState((state) => !state.containerOpen, '存入用例关闭箱子失败', 5000);
 
   // 熔炉打开/关闭
   await liveFrame.evaluate(() => wx.__v2Test?.openFurnaceAtFeet?.());
   const furnaceOpen = await waitState((state) => state.containerOpen, '熔炉没有打开', 5000);
-  await tap(775, 108);
+  await tap(775, 82);
   const furnaceClosed = await waitState((state) => !state.containerOpen, '熔炉没有关闭', 5000);
 
   await tap(815, 424);
