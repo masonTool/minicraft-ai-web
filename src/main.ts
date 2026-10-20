@@ -332,6 +332,8 @@ import {
   withFenceGateOpen,
   withNotePitch,
   withTrapdoorOpen,
+  // 旗帜（批次 484）：两格高，破坏时要分辨上下半
+  isBannerTop,
 } from './core/registry/blockState.ts';
 // 信标（K5，批次 117）：等级/范围/效果是纯逻辑（`world/Beacon.ts`），
 // 界面与光柱各自一份（与告示牌的"文字表 / 编辑框 / 渲染器"三件套同构）
@@ -6810,6 +6812,15 @@ class App {
       return;
     }
 
+    // 旗帜（批次 484）：与门一样是两格高——拆一半带走另一半，否则会剩半面旗
+    if (blockDef(brokenId).shape === 'banner') {
+      this.breakBannerPair(this.hit.x, this.hit.y, this.hit.z);
+      this.breakProgress = 0;
+      this.breakingKey = '';
+      this.breakCooldown = BREAK_COOLDOWN;
+      return;
+    }
+
     // 床（批次 79）同理，只是它横着占两格：拆一半必须带走另一半，
     // 否则会留下一张**半张床**（站上去只剩 9/16 的一半，看着像 bug）
     if (blockDef(brokenId).shape === 'bed') {
@@ -8836,6 +8847,29 @@ class App {
       this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
       if (this.isCreative || dy !== 0) continue;
       // 掉落**这一种**门（原来写死 `dropFor(Block.OAK_DOOR)`，加别的木材就会掉错东西）
+      const drop = dropFor(id);
+      if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5);
+    }
+  }
+
+  /**
+   * 拆掉一整面旗帜（批次 484）：与 `breakDoorPair` 同一套做法。
+   *
+   * 两格高举例子——只拆一半会剩"半面旗"悬在空中（门踩过同一个坑）。
+   * 掉落只在下面那一格产生一次。
+   */
+  private breakBannerPair(x: number, y: number, z: number): void {
+    const state = this.world.getBlockState(x, y, z);
+    const baseY = isBannerTop(state) ? y - 1 : y;
+
+    for (let dy = 0; dy < 2; dy++) {
+      const oy = baseY + dy;
+      const id = this.world.getBlock(x, oy, z);
+      if (blockDef(id).shape !== 'banner') continue;
+      this.world.setBlockAndUpdate(x, oy, z, Block.AIR);
+      this.net.sendBlock(x, oy, z, Block.AIR, 0, this.dimension);
+      this.particles.spawnBlockBreak(x + 0.5, oy + 0.5, z + 0.5, this.blockParticleColor(id));
+      if (this.isCreative || dy !== 0) continue;
       const drop = dropFor(id);
       if (drop) this.spawnDrop(drop.id, drop.count, x + 0.5, baseY + 0.5, z + 0.5);
     }

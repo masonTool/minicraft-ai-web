@@ -20,6 +20,7 @@
 import { Block, JUNGLE_LOG_ID, blockDef, cropOf, isRailId, stemKindOf } from '../registry/blocks.ts';
 // 铁轨形状（批次 478）：放下去按四邻自动接成直轨或弯道
 import { pickRailShape, pickRailSlope, withRailShape } from '../world/RailShape.ts';
+import { withBannerTop } from '../registry/blockState.ts';
 import { pickPaintingVariant } from '../registry/paintings.ts';
 import {
   FACING_OFFSET,
@@ -366,6 +367,18 @@ export function planPlacement(input: PlacementInput): PlacementPlan | null {
       return {
         state: lower,
         extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withDoorUpper(lower, true) },
+      };
+    }
+
+    case 'banner': {
+      // 旗帜（批次 484）：占**两格**（下半 + 上半），与原版一致。
+      // ① 下方要实心（杆立在地上）；② 上方一格必须是空气，否则只放得下下半格、
+      //    上面那半截会凭空消失（门那条判据踩过同样的坑）
+      if (!blockDef(input.blockAt(0, -1, 0)).solid) return null;
+      if (input.blockAt(0, 1, 0) !== Block.AIR) return null;
+      return {
+        state: 0,
+        extra: { dx: 0, dy: 1, dz: 0, id: input.blockId, state: withBannerTop(0, true) },
       };
     }
 

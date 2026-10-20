@@ -41,6 +41,11 @@ export type BlockShape =
    * 而 `meshBoxes(shape, state)` **拿不到方块 id**——不拆就分不出"这是铁轨还是红石粉"。
    */
   | 'rail'
+  /**
+   * 旗帜（批次 484）：一根杆 + 一面 1/16 厚的布，**占两格高**
+   * （下半 + 上半，靠 `BANNER_TOP_MASK` 区分）。没有碰撞——原版能从旗子里走过去。
+   */
+  | 'banner'
   /** 堆肥桶（批次 70）：四面板条 + 2/16 桶底，顶面敞口 */
   | 'composter'
   | 'pane'
@@ -283,6 +288,21 @@ const WALL_MOUNT_MASK = 0b1000;
 const DOOR_OPEN_MASK = 0b1000;
 const DOOR_HINGE_MASK = 0b10000;
 const DOOR_UPPER_MASK = 0b100000;
+
+/**
+ * 旗帜的上半格（批次 484）。与门的 `DOOR_UPPER_MASK` 同一位、同一套用法：
+ * 两格高的东西必须能分辨"我在上半还是下半"，否则破坏时不知道该带走哪一半。
+ * 旗帜与门不会出现在同一格，所以按族复用这一位。
+ */
+const BANNER_TOP_MASK = 0b100000;
+
+export function isBannerTop(state: number): boolean {
+  return (state & BANNER_TOP_MASK) !== 0;
+}
+
+export function withBannerTop(state: number, top: boolean): number {
+  return top ? state | BANNER_TOP_MASK : state & ~BANNER_TOP_MASK;
+}
 /**
  * 通用"通电 / 按下 / 开关"标记（bit3）。
  *

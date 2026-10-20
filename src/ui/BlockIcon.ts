@@ -172,6 +172,8 @@ export function isoBoxesForShape(shape: BlockShape): readonly IsoBox[] | null {
     case 'item_frame':
     case 'painting':
     // 十字植物（草/花/蘑菇/甘蔗/树苗/作物/下界疣）与珊瑚扇、可可豆、藤蔓、绊线、睡莲、红石粉
+    // 旗帜（批次 484）：物品栏里按平面精灵图（原版旗帜的图标也是平面布面）
+    case 'banner':
     case 'cross':
     case 'nether_wart':
     case 'coral_fan':

@@ -1516,18 +1516,31 @@ const COPPER_SPECS: readonly BlockSpec[] = COPPER_STAGES.flatMap((stage, index) 
     return base;
   }),
 );
-/** 旗帜（批次 386）：16 色，`cross` 形状（没有布面朝向，先用薄片表示） */
+/**
+ * 旗帜（批次 386 加、**批次 484 改成真正的旗面**）：16 色。
+ *
+ * 原来用 `cross` 形状（两片交叉薄片）——看着像一块立着的布，但**只有一格高**，
+ * 而且从侧面看是"两片纸"而不是一面旗。批次 484 换成 `banner` 形状：
+ * 一根杆 + 一面 1/16 厚的布，占**两格高**（下半 + 上半），与原版一致。
+ */
+export const BANNER_ID_START = 640;
+
 const BANNER_SPECS: readonly BlockSpec[] = DYE_COLORS.map(
   (color, index): BlockSpec => ({
-    id: 640 + index,
+    id: BANNER_ID_START + index,
     name: `minecraft:${color.name}_banner`,
     tiles: [`banner_${color.name}`, `banner_${color.name}`, `banner_${color.name}`] as const,
-    shape: 'cross' as const,
+    shape: 'banner' as const,
     solid: false,
     opaque: false,
     lightOpacity: 0,
   }),
 );
+
+/** 这一块是不是旗帜（放置/破坏/掉落都认它） */
+export function isBannerId(id: number): boolean {
+  return id >= BANNER_ID_START && id < BANNER_ID_START + DYE_COLORS.length;
+}
 
 
 // ---------------------------------------------------------------- 石英与更多石材（批次 42）
@@ -3434,6 +3447,7 @@ const SPECS: readonly BlockSpec[] = [
   LODESTONE_SPEC,
   RESPAWN_ANCHOR_SPEC,
   COMMAND_BLOCK_SPEC,
+  ...BANNER_SPECS,
   ...SAPLING_SPECS,
   ...STEM_SPECS,
   ...BED_SPECS,
@@ -3451,7 +3465,6 @@ const SPECS: readonly BlockSpec[] = [
   ...SOUL_LIGHT_SPECS,
   ...CANDLE_SPECS,
   ...GLAZED_TERRACOTTA_SPECS,
-  ...BANNER_SPECS,
 
   // 繁茂洞穴植物（批次 397）：小型 / 大型垂滴叶
   {
@@ -4000,6 +4013,24 @@ export const Block = {
   RESPAWN_ANCHOR: RESPAWN_ANCHOR_ID,
   // ---- 命令方块（批次 477）：红石上升沿执行一格命令
   COMMAND_BLOCK: COMMAND_BLOCK_ID,
+  // ---- 16 色旗帜（批次 484）：占两格、无碰撞
+  WHITE_BANNER: BANNER_ID_START + 0,
+  ORANGE_BANNER: BANNER_ID_START + 1,
+  MAGENTA_BANNER: BANNER_ID_START + 2,
+  LIGHT_BLUE_BANNER: BANNER_ID_START + 3,
+  YELLOW_BANNER: BANNER_ID_START + 4,
+  LIME_BANNER: BANNER_ID_START + 5,
+  PINK_BANNER: BANNER_ID_START + 6,
+  GRAY_BANNER: BANNER_ID_START + 7,
+  LIGHT_GRAY_BANNER: BANNER_ID_START + 8,
+  CYAN_BANNER: BANNER_ID_START + 9,
+  PURPLE_BANNER: BANNER_ID_START + 10,
+  BLUE_BANNER: BANNER_ID_START + 11,
+  BROWN_BANNER: BANNER_ID_START + 12,
+  GREEN_BANNER: BANNER_ID_START + 13,
+  RED_BANNER: BANNER_ID_START + 14,
+  BLACK_BANNER: BANNER_ID_START + 15,
+  // ---- 16 色旗帜（批次 484）：占两格、无碰撞，纯装饰
   // ---- 瓜藤（批次 77，见 `STEM_SPECS`）：8 阶段 + 结果的茎
   PUMPKIN_STEM_STAGE0: PUMPKIN_STEM_ID_START,
   MELON_STEM_STAGE0: MELON_STEM_ID_START,
@@ -4569,6 +4600,7 @@ HARDNESS.set(Block.RESPAWN_ANCHOR, 5);
 // 命令方块（批次 477）：原版 -1（基岩级、挖不掉）；这里给 5 并**不设挖掘等级**，
 // 方便玩家拆掉重摆（原版只能靠创造模式）
 HARDNESS.set(Block.COMMAND_BLOCK, 5);
+
 // 树苗（批次 75）：与草/花一样是"一拍就掉"的东西
 for (const id of SAPLING_IDS) HARDNESS.set(id, 0);
 // 瓜藤（批次 77）：与作物一样一碰就掉（茎与结果的茎都是）

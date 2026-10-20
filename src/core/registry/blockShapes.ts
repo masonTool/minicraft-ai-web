@@ -185,6 +185,8 @@ export function collisionBoxes(shape: BlockShape, state: number): readonly Local
     case 'flat':
     // 铁轨（批次 481）：与 `flat` 一样不挡路——玩家能直接从轨道上走过去
     case 'rail':
+    // 旗帜（批次 484）：原版能从旗子里走过去
+    case 'banner':
     // 珊瑚扇（批次 51）：一片薄面，原版可以直接游过去
     case 'coral_fan':
     // 告示牌（批次 80）：原版告示牌**不挡路**（能从牌子里走过去），所以没有碰撞盒。
@@ -485,6 +487,14 @@ export function meshBoxes(shape: BlockShape, state: number, ctx: ShapeContext = 
       // 铁轨（批次 481）：平面走 1/16 平板，坡道走 4 段阶梯（近似斜面）。
       // 4 段是"看着像斜坡"与"盒子数别太多"之间的折中：每段 1/4 宽、抬高 1/4 格
       return railBoxes(state);
+    case 'banner':
+      // 旗帜（批次 484）：中间一根杆 + 一面 12/16 宽、1/16 厚的布（向 -z 展开）。
+      // 上下半用同一套盒子，两格叠起来就是 2 格高的旗——上半格的高度靠 `BANNER_TOP_MASK`
+      // 只用来"知道自己在上面"，几何不用变
+      return [
+        [7 / 16, 0, 7 / 16, 9 / 16, 1, 9 / 16],
+        [2 / 16, 0, 2 / 16, 14 / 16, 1, 3 / 16],
+      ];
     case 'coral_fan':
       return coralFanBoxes(state);
     case 'scaffolding':
