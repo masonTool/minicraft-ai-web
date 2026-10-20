@@ -154,6 +154,7 @@ async function boot(): Promise<void> {
     }
   };
   const savedSettings = readSettings();
+  let currentSettings = savedSettings;
   viewRadius = savedSettings.renderDistance;
   invertLook = savedSettings.invertLook;
   cameraMode = savedSettings.cameraMode;
@@ -615,6 +616,7 @@ async function boot(): Promise<void> {
       onSettingsChange: (settings) => {
         camera.fov = settings.fov;
         camera.updateProjectionMatrix();
+        currentSettings = settings;
         viewRadius = settings.renderDistance;
         invertLook = settings.invertLook;
         cameraMode = settings.cameraMode;
@@ -1963,6 +1965,10 @@ async function boot(): Promise<void> {
         gameMode,
         worldType: currentWorld.worldType,
         difficulty: currentWorld.difficulty,
+        brightness: currentSettings.brightness,
+        leftHanded: currentSettings.leftHanded,
+        touchScale: currentSettings.touchScale,
+        stickMode: currentSettings.stickMode,
         health: playerHealth,
         chunks: world.chunks.size,
         drawn: chunkRenderer.drawnCount,

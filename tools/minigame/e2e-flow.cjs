@@ -99,12 +99,33 @@ async function main() {
     await waitState((state) => state.settingsTab === 'controls', '标题设置控制页未切换');
     await tap(654, 112.5);
     await waitState((state) => state.settingsTab === 'sound', '标题设置声音页未切换');
+    // 改亮度 + 左手模式，关闭再打开应保留
+    await tap(260, 112.5);
+    await waitState((state) => state.settingsTab === 'video', '标题设置未回到视频页');
+    await tap(650, 381.5);
+    await tap(521, 112.5);
+    await waitState((state) => state.settingsTab === 'controls', '标题设置未切到控制页');
+    await tap(600, 383.5);
+    const tuned = await waitState(
+      (state) => state.brightness > 1 && state.leftHanded,
+      '亮度/左手模式修改未生效',
+    );
     await tap(774, 58.5);
     const titleAgain = await waitState(
       (state) => state.menuOpen && state.screen === 'title' && !state.settings,
       '标题页设置关闭后没有回到标题',
     );
     assert(!titleAgain.inGame, '标题页关闭设置后错误进入了游戏', titleAgain);
+    await tap(512, DESIGN.height * 0.5 + 78);
+    const reopened = await waitState(
+      (state) => state.settings && state.brightness === tuned.brightness && state.leftHanded === tuned.leftHanded,
+      '设置关闭再打开后修改丢失',
+    );
+    // 恢复默认，避免影响后续触摸坐标用例
+    await tap(600, 383.5);
+    await tap(260, 112.5);
+    await tap(419, 381.5);
+    await tap(774, 58.5);
 
     await tap(512, DESIGN.height * 0.5 + 26);
     const worlds = await waitState(
@@ -253,7 +274,7 @@ async function main() {
     );
 
     console.log('PASS');
-    console.log(JSON.stringify({ title, titleSettings, titleAgain, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
+    console.log(JSON.stringify({ title, titleSettings, tuned, titleAgain, reopened, worlds, ingame, paused, settings, controls, backToPause, resumed, inventory, inventoryClosed, gameTab, soundTab, backToWorlds, creative, worldsAgain, switched, titleSettings, beforeDelete, afterDelete, afterCurrentDelete, reentered }, null, 2));
   } catch (error) {
     await page.screenshot({ path: '/tmp/e2e-fail.png' }).catch(() => undefined);
     console.error('FAIL:', error.message);
