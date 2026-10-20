@@ -19,8 +19,9 @@
  * 而抄漏一处（比如忘了覆写 `updateAi`）的表现是"能骑上但按 W 不动"，很难查。
  */
 
-import { Mob } from './Mob.ts';
+import { Mob, type HurtSource } from './Mob.ts';
 import type { EntityContext } from './Entity.ts';
+import { Item } from '../registry/items.ts';
 
 /** 左右转向的速度（弧度/秒）：比视角慢一档，不然马会像陀螺 */
 const HORSE_TURN_RATE = 2.2;
@@ -30,6 +31,25 @@ const HORSE_STOP_DRAG = 6;
 export const HORSE_JUMP_SPEED = 8.2;
 /** 连续起跳的最小间隔（秒） */
 const HORSE_JUMP_COOLDOWN = 0.8;
+
+/** 马铠四档（批次 571）：只有真正的马/驴/骡能装，猪与炽足兽不行 */
+export type HorseArmorTier = 'leather' | 'iron' | 'golden' | 'diamond';
+
+export function horseArmorTier(itemId: number): HorseArmorTier | null {
+  if (itemId === Item.LEATHER_HORSE_ARMOR) return 'leather';
+  if (itemId === Item.IRON_HORSE_ARMOR) return 'iron';
+  if (itemId === Item.GOLDEN_HORSE_ARMOR) return 'golden';
+  if (itemId === Item.DIAMOND_HORSE_ARMOR) return 'diamond';
+  return null;
+}
+
+/** 四档马铠的护甲点（原版量级：皮革 3 / 铁 5 / 金 7 / 钻石 11） */
+const HORSE_ARMOR_POINTS: Readonly<Record<HorseArmorTier, number>> = {
+  leather: 3,
+  iron: 5,
+  golden: 7,
+  diamond: 11,
+};
 
 export class Horse extends Mob {
   /** 谁骑着它（本项目只有玩家能上） */
@@ -45,6 +65,36 @@ export class Horse extends Mob {
   rideYaw = 0;
   /** 有没有装鞍（批次 254）：驯服之后还要装鞍才能骑 */
   saddled = false;
+  /** 装着的马铠物品 id（批次 571）：null = 没装 */
+  armor: number | null = null;
+
+  /** 这个种类能不能装马铠（猪/炽足兽不行） */
+  get canWearHorseArmor(): boolean {
+    return this.type.id === 'horse' || this.type.id === 'donkey' || this.type.id === 'mule';
+  }
+
+  /** 当前马铠的护甲点（没装为 0） */
+  get armorPoints(): number {
+    const tier = this.armor === null ? null : horseArmorTier(this.armor);
+    return tier ? HORSE_ARMOR_POINTS[tier] : 0;
+  }
+
+  /** 马铠减伤（批次 571）：只挡玩家/生物伤害，环境伤害照旧穿透 */
+  override hurt(
+    amount: number,
+    knockbackX: number,
+    knockbackZ: number,
+    ctx?: EntityContext,
+    looting = 0,
+    knockbackLevel = 0,
+    source?: HurtSource,
+  ): boolean {
+    const points = this.armorPoints;
+    if (points > 0 && source !== undefined && source.kind !== 'environment') {
+      amount = Math.max(1, amount * (1 - points * 0.04));
+    }
+    return super.hurt(amount, knockbackX, knockbackZ, ctx, looting, knockbackLevel, source);
+  }
   /** 起跳冷却（秒） */
   private rideJumpCooldown = 0;
   /** 玩家坐在坐骑背上时脚底相对坐骑脚底的高度（渲染与相机用） */

@@ -106,7 +106,7 @@ import { Boat } from './core/entity/Boat.ts';
 import { Minecart } from './core/entity/Minecart.ts';
 import { HopperMinecart } from './core/entity/HopperMinecart.ts';
 import { FURNACE_CART_FUEL_PER_COAL, FurnaceMinecart } from './core/entity/FurnaceMinecart.ts';
-import { Horse } from './core/entity/Horse.ts';
+import { Horse, horseArmorTier } from './core/entity/Horse.ts';
 import {
   VehicleParking,
   type SavedVehicle,
@@ -6078,6 +6078,9 @@ class App {
         effects: entity.effects.count > 0 ? entity.effects.serialize() : undefined,
         // 个体装备（J27）：白板不写键，老存档读回来按白板处理
         ...(Object.keys(entity.equipment).length > 0 ? { equipment: entity.equipment } : {}),
+        // 马鞍与马铠（批次 571）：只有马/驴/骡才有，没装就不写
+        ...(entity instanceof Horse && entity.saddled ? { saddled: true } : {}),
+        ...(entity instanceof Horse && entity.armor !== null ? { horseArmor: entity.armor } : {}),
         ...(villager ? { villager } : {}),
       };
     }
@@ -6108,6 +6111,14 @@ class App {
     mob.health = Math.max(1, Math.min(type.health, record.health));
     // 个体装备（J27）：读档以存档为准；老存档没有这个键 → 白板
     mob.equipment = sanitizeMobEquipment(record.equipment) ?? {};
+    // 马鞍与马铠（批次 571）：老存档没有这两个键 → 没装；
+    // 马铠还要过一遍物品 id（存档可能来自旧版本/被改过）
+    if (mob instanceof Horse) {
+      mob.saddled = record.saddled === true;
+      const armor = record.horseArmor;
+      mob.armor =
+        mob.canWearHorseArmor && typeof armor === 'number' && horseArmorTier(armor) !== null ? armor : null;
+    }
     mob.tamed = record.tamed;
     mob.sitting = record.sitting;
     mob.leashed = record.leashed;
@@ -6332,6 +6343,25 @@ class App {
       this.hand.swing();
       this.refreshHotbar();
       this.hudToast.show(`给${mob.type.name}装上了鞍`);
+      return true;
+    }
+    // 马铠（批次 571）：拿马铠点已驯服/不需驯服的马、驴、骡，装上一件
+    if (
+      mob instanceof Horse &&
+      (mob.tamed || !mob.needsTaming) &&
+      mob.canWearHorseArmor &&
+      held !== undefined &&
+      horseArmorTier(held) !== null
+    ) {
+      if (mob.armor !== null) {
+        this.hudToast.show(`这匹${mob.type.name}已经有马铠了`);
+        return true;
+      }
+      if (!this.inventory.consume(held, 1)) return false;
+      mob.armor = held;
+      this.hand.swing();
+      this.refreshHotbar();
+      this.hudToast.show(`给${mob.type.name}装上了马铠`);
       return true;
     }
     // 马（批次 253）：驯服后空手点它 = **上马**（不是坐下）；没鞍先提示

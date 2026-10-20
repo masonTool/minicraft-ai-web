@@ -51,6 +51,10 @@ export interface SavedMob {
   villager?: VillagerSavedState;
   /** 个体装备（J27）：白板生物不写这个键 */
   equipment?: MobEquipment;
+  /** 马/驴/骡的鞍（批次 571）：没装鞍不写 */
+  saddled?: boolean;
+  /** 马铠物品 id（批次 571）：没装不写 */
+  horseArmor?: number;
 }
 
 export interface SavedItemEntity {
