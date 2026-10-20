@@ -458,7 +458,14 @@ console.log('\n[红石：上升沿吐一次]');
   equal('拉杆没合上时不吐', fired.length, 0);
 
   engine.toggleLever(world, 1, 64, 0);
-  equal('合上拉杆 → 吐一次', fired.length, 1);
+  equal('合上拉杆后不立刻吐（4 tick 延迟，批次 448）', fired.length, 0);
+
+  // 推进 0.183 秒：还不到 0.2 秒
+  for (let i = 0; i < 11; i++) engine.tick(world, 1 / 60);
+  equal('延迟未到时不吐', fired.length, 0);
+
+  for (let i = 0; i < 2; i++) engine.tick(world, 1 / 60);
+  equal('到点吐一次', fired.length, 1);
   equal('吐的是投掷器那一格', fired[0], '0,64,0');
 
   engine.recompute(world, 1, 64, 0);
@@ -467,7 +474,15 @@ console.log('\n[红石：上升沿吐一次]');
 
   engine.toggleLever(world, 1, 64, 0);
   engine.toggleLever(world, 1, 64, 0);
+  for (let i = 0; i < 13; i++) engine.tick(world, 1 / 60);
   equal('断电再通电 → 还能再吐一次（红石钟就是靠这个）', fired.length, 2);
+
+  // 延迟期间方块被拆掉：到点不能对着空气吐（原版也是到点才看那一格）
+  engine.toggleLever(world, 1, 64, 0);
+  engine.toggleLever(world, 1, 64, 0);
+  world.set(0, 64, 0, Block.AIR);
+  for (let i = 0; i < 13; i++) engine.tick(world, 1 / 60);
+  equal('延迟期间投掷器被拆掉 → 到点不吐', fired.length, 2);
 }
 
 // ---------------------------------------------------------------- 8. 配方

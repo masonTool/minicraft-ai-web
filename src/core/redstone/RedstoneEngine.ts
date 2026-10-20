@@ -182,6 +182,13 @@ const OBSERVER_PULSE = 0.2;
  * "断电即灭"，也是红石灯能做出"余晖/脉冲拉长"玩法的手感来源。
  */
 const LAMP_OFF_DELAY = 0.2;
+/**
+ * 投掷器 / 发射器从"信号到达"到"真的吐东西"的延迟（批次 448）。
+ *
+ * 原版是 4 个游戏刻 = 0.2 秒。之前这里是**立即**调用 `onDispense`——
+ * 单次脉冲看不出来，但红石钟一快，吐出的节奏就与原版不同（B33 差异台账里记着）。
+ */
+const DISPENSER_DELAY = 0.2;
 
 /**
  * 阳光传感器的输出强度（批次 54）：白天 = 天光等级，反向模式 = 15 − 天光。
@@ -274,6 +281,8 @@ export class RedstoneEngine {
   private readonly weightedPlatePower = new Map<string, number>();
   /** 红石灯延迟熄灭（批次 250）：位置 → 剩余秒数 */
   private readonly lampOffTimers = new Map<string, number>();
+  /** 投掷器/发射器的 4 tick 延迟（批次 448）：位置 → 剩余秒数 */
+  private readonly dispenserTimers = new Map<string, number>();
   /**
    * 阳光传感器：位置 → 上次算出的输出强度（批次 54）。
    *
@@ -448,6 +457,21 @@ export class RedstoneEngine {
         this.markDirty(x, y, z);
         changed = true;
       }
+    }
+
+    // 投掷器 / 发射器的 4 tick 延迟（批次 448）：到点才吐
+    for (const [key, remaining] of [...this.dispenserTimers]) {
+      const next = remaining - dt;
+      if (next > 0) {
+        this.dispenserTimers.set(key, next);
+        continue;
+      }
+      this.dispenserTimers.delete(key);
+      const [x, y, z] = parseKey(key);
+      const id = world.getBlock(x, y, z);
+      // 延迟期间被拆掉 / 换成别的东西：静默取消（原版也是到点才看那一格）
+      if (id !== Block.DROPPER && id !== Block.DISPENSER) continue;
+      this.onDispense?.(x, y, z);
     }
 
     // 中继器延迟输出
@@ -995,7 +1019,8 @@ export class RedstoneEngine {
           const wasFired = this.dropperPrimed.has(dropperKey);
           if (input > 0 && !wasFired) {
             this.dropperPrimed.add(dropperKey);
-            this.onDispense?.(nx, ny, nz);
+            // 4 tick 延迟（批次 448）：这里只登记计时，到点在 `tick` 里才吐
+            this.dispenserTimers.set(dropperKey, DISPENSER_DELAY);
           } else if (input <= 0 && wasFired) {
             // 断电后允许下一次脉冲再来一次（红石钟就是这么把它变成自动投喂机的）
             this.dropperPrimed.delete(dropperKey);

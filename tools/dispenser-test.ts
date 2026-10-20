@@ -479,13 +479,16 @@ console.log('\n[红石：与投掷器同一套上升沿]');
   engine.recompute(world, 1, 64, 0);
   equal('拉杆没合上时不动', fired.length, 0);
   engine.toggleLever(world, 1, 64, 0);
-  equal('合上拉杆 → 动一次', fired.length, 1);
+  equal('合上拉杆后不立刻动（4 tick 延迟，批次 448）', fired.length, 0);
+  for (let i = 0; i < 13; i++) engine.tick(world, 1 / 60);
+  equal('到点动一次', fired.length, 1);
   equal('动的是发射器那一格', fired[0], '0,64,0');
   engine.recompute(world, 1, 64, 0);
   engine.recompute(world, 1, 64, 0);
   equal('通着电反复重算不会连发', fired.length, 1);
   engine.toggleLever(world, 1, 64, 0);
   engine.toggleLever(world, 1, 64, 0);
+  for (let i = 0; i < 13; i++) engine.tick(world, 1 / 60);
   equal('断电再通电 → 还能再发一次', fired.length, 2);
 }
 
