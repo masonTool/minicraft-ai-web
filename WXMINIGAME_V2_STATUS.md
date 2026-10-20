@@ -31,7 +31,8 @@
 - [ ] 完整声音/分组音量
 - [x] Inventory MVP：物品/创造左侧分类、36/45 格、图标、数量、选中、创造取方块、显式关闭
 - [x] Inventory 拖拽交换 + HUD 快捷栏选中
-- [ ] Inventory 完整态：拖拽/合成/配方书/搜索/分页
+- [x] 2x2 合成格/产物/材料拖入/关闭返还（CraftingGrid）
+- [ ] Inventory 完整态：3x3/配方书/搜索/分页
 - [ ] Settings / Inventory 按 Web 结构重做
 - [x] 小游戏构建脚本与包体（`build:minigame:v2`，2.2MB）
 

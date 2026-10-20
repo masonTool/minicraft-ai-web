@@ -16,6 +16,7 @@ import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
 import { UiLayer, box, button, slider, slot, text, toggle, type UiElement } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
+import { CraftingGrid } from '../core/crafting/CraftingGrid.ts';
 import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
 import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
@@ -102,6 +103,7 @@ let inventoryOpen = false;
 let inventoryTab: 'items' | 'creative' = 'items';
 let selectedSlot = 0;
 const inventory = new Inventory();
+const crafting = new CraftingGrid(2);
 const creativeBlocks = Object.values(Block).filter((value): value is number => typeof value === 'number' && value > 0).slice(0, 45);
 const registryStorage = {
   getItem: (key: string): string | null => platform.storage.get(key),
@@ -261,6 +263,28 @@ const showSettings = (): void => {
   );
 };
 
+const handleDrop = (fromIndex: number, toIndex: number): void => {
+  if (fromIndex < 100 && toIndex < 100) {
+    swapSlots(fromIndex, toIndex);
+    return;
+  }
+  if (fromIndex < 100 && toIndex >= 100 && toIndex < 104) {
+    const stack = inventory.get(fromIndex);
+    if (!stack) return;
+    crafting.set(toIndex - 100, stack);
+    inventory.set(fromIndex, null);
+    showInventory();
+    return;
+  }
+  if (fromIndex >= 100 && fromIndex < 104 && toIndex < 100) {
+    const stack = crafting.get(fromIndex - 100);
+    if (!stack) return;
+    const remaining = inventory.add(stack.id, stack.count);
+    crafting.set(fromIndex - 100, remaining > 0 ? { id: stack.id, count: remaining } : null);
+    showInventory();
+  }
+};
+
 const swapSlots = (fromIndex: number, toIndex: number): void => {
   const from = inventory.get(fromIndex);
   const to = inventory.get(toIndex);
@@ -276,11 +300,13 @@ const showInventory = (): void => {
   const panelH = Math.min(620, uiHeight - 28);
   const panelX = (1024 - panelW) / 2;
   const panelY = (uiHeight - panelH) / 2;
-  const railW = 180;
-  const slotSize = 54;
-  const gap = 6;
-  const gridX = panelX + railW + 30;
+  const railW = 160;
+  const slotSize = 50;
+  const gap = 5;
+  const gridX = panelX + railW + 20;
   const gridY = panelY + 92;
+  const craftX = gridX + 9 * (slotSize + gap) + 18;
+  const craftY = gridY;
   const elements: UiElement[] = [
     text(panelX + 24, panelY + 20, 200, 42, '背包', { fontSize: 30, color: '#ffffff' }),
     button(panelX + 24, panelY + 86, railW - 24, 52, '物品', () => {
@@ -292,6 +318,7 @@ const showInventory = (): void => {
       showInventory();
     }, { background: inventoryTab === 'creative' ? 'rgba(80, 120, 105, 0.95)' : 'rgba(30, 38, 46, 0.92)', border: 'rgba(180, 215, 235, 0.35)', radius: 8 }),
     button(panelX + panelW - 72, panelY + 20, 44, 44, 'X', () => {
+      crafting.drainTo(inventory);
       inventoryOpen = false;
       paused = false;
       showHud();
@@ -303,7 +330,7 @@ const showInventory = (): void => {
       elements.push(slot(gridX + (i % 9) * (slotSize + gap), gridY + Math.floor(i / 9) * (slotSize + gap), slotSize, i, stack?.id ?? 0, stack?.count ?? 0, i === selectedSlot, () => {
         selectedSlot = i;
         showInventory();
-      }, (from, to) => swapSlots(from.index, to.index)));
+      }, (from, to) => handleDrop(from.index, to.index)));
     }
   } else {
     for (let i = 0; i < creativeBlocks.length; i++) {
@@ -315,6 +342,27 @@ const showInventory = (): void => {
     }
     elements.push(text(gridX, gridY + 5 * (slotSize + gap) + 12, 640, 30, '点方块放入背包；物品页查看/选中', { fontSize: 15, color: 'rgba(200, 220, 235, 0.65)' }));
   }
+  elements.push(text(craftX, panelY + 62, 170, 28, '合成 2x2', { fontSize: 16, color: '#dcecf5' }));
+  for (let i = 0; i < 4; i++) {
+    const stack = crafting.get(i);
+    elements.push(slot(craftX + (i % 2) * (slotSize + gap), craftY + Math.floor(i / 2) * (slotSize + gap), slotSize, 100 + i, stack?.id ?? 0, stack?.count ?? 0, false, () => {
+      const current = crafting.get(i);
+      if (current) {
+        const remaining = inventory.add(current.id, current.count);
+        crafting.set(i, remaining > 0 ? { id: current.id, count: remaining } : null);
+        showInventory();
+      }
+    }, (from, to) => handleDrop(from.index, to.index)));
+  }
+  const result = crafting.result;
+  elements.push(text(craftX + 112, craftY + 4, 120, 26, '产物', { fontSize: 14, color: 'rgba(210,230,240,0.7)' }));
+  elements.push(slot(craftX + 112, craftY + 30, slotSize, 200, result?.id ?? 0, result?.count ?? 0, false, () => {
+    if (!crafting.result) return;
+    inventory.add(crafting.result.id, crafting.result.count);
+    crafting.takeResult();
+    showInventory();
+  }));
+
   ui.setRoot(box(0, 0, 1024, uiHeight, [
     box(0, 0, 1024, uiHeight, [], { background: 'rgba(0, 0, 0, 0.55)' }),
     box(panelX, panelY, panelW, panelH, elements, { background: 'rgba(16, 22, 28, 0.97)', border: 'rgba(170, 205, 230, 0.45)', borderWidth: 2, radius: 12 }),
