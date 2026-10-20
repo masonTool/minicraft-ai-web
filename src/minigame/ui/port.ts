@@ -7,6 +7,7 @@ import { createInventory } from './inventory.ts';
 import { createPauseMenu, type PauseAction } from './pause.ts';
 import { createSettingsMenu, type SettingsValues } from './settings.ts';
 import { createOverlay } from './overlay.ts';
+import { createMainMenu, type MainMenuAction } from './main-menu.ts';
 
 /**
  * 小游戏 UI 端口（WX-020B）
@@ -28,6 +29,8 @@ export interface MiniGameUi {
   openSettings(): void;
   isSettingsOpen(): boolean;
   handleSettingsTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
+  isMainMenuOpen(): boolean;
+  handleMainMenuTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): MainMenuAction;
   showToast(message: string): void;
   setLoading(progress: number | null, text?: string): void;
   render(renderer: THREE.WebGLRenderer): void;
@@ -60,6 +63,8 @@ export function createCanvasUi(
     (values) => callbacks.onSettingsChange?.(values),
   );
   const overlay = createOverlay(screenWidth, screenHeight);
+  const mainMenu = createMainMenu(screenWidth, screenHeight);
+  let settingsFromMenu = false;
 
   return {
     updateStatus(lines: readonly string[]): void {
@@ -101,6 +106,8 @@ export function createCanvasUi(
       return pause.isOpen() ? pause.handleTap(clientX, clientY, sw, sh) : null;
     },
     openSettings(): void {
+      settingsFromMenu = mainMenu.isOpen();
+      mainMenu.close();
       inventory.close();
       pause.close();
       settings.open();
@@ -111,8 +118,21 @@ export function createCanvasUi(
     handleSettingsTap(clientX, clientY, sw, sh): boolean {
       if (!settings.isOpen()) return false;
       const action = settings.handleTap(clientX, clientY, sw, sh);
-      if (action === 'back') pause.toggle();
+      if (action === 'back') {
+        if (settingsFromMenu) {
+          settingsFromMenu = false;
+          mainMenu.open();
+        } else {
+          pause.toggle();
+        }
+      }
       return true;
+    },
+    isMainMenuOpen(): boolean {
+      return mainMenu.isOpen();
+    },
+    handleMainMenuTap(clientX, clientY, sw, sh): MainMenuAction {
+      return mainMenu.isOpen() ? mainMenu.handleTap(clientX, clientY, sw, sh) : null;
     },
     showToast(message: string): void {
       overlay.showToast(message);
@@ -121,6 +141,15 @@ export function createCanvasUi(
       overlay.setLoading(progress, text);
     },
     render(renderer: THREE.WebGLRenderer): void {
+      // 主菜单/从主菜单进入的设置页：只画菜单，不把 HUD/快捷栏透出来
+      if (mainMenu.isOpen()) {
+        mainMenu.render(renderer);
+        return;
+      }
+      if (settings.isOpen() && settingsFromMenu) {
+        settings.render(renderer);
+        return;
+      }
       hud.render(renderer);
       hotbar.render(renderer);
       inventory.render(renderer);

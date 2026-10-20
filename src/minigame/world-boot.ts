@@ -466,6 +466,13 @@ async function boot(): Promise<void> {
     const x = event.clientX;
     const y = event.clientY;
 
+    // 主菜单优先：PLAY/SETTINGS，其他点击不穿透
+    if (ui.isMainMenuOpen()) {
+      uiPointerId = event.pointerId;
+      const action = ui.handleMainMenuTap(x, y, width, height);
+      if (action === 'settings') ui.openSettings();
+      return;
+    }
     // 暂停面板优先：暂停时所有点击只走 UI
     if (ui.isSettingsOpen()) {
       uiPointerId = event.pointerId;
@@ -639,7 +646,7 @@ async function boot(): Promise<void> {
 
     // 等脚下区块加载完再落玩家，避免出生就掉进虚空
     if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
-    if (ui.isPauseOpen() || ui.isSettingsOpen()) {
+    if (ui.isMainMenuOpen() || ui.isPauseOpen() || ui.isSettingsOpen()) {
       playerInput.forward = 0;
       playerInput.strafe = 0;
       playerInput.jump = false;
