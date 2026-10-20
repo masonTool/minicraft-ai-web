@@ -1313,6 +1313,63 @@ export class RedstoneEngine {
 
   // ---------------------------------------------------------------- 活塞
 
+  /**
+   * 推动一整块**黏液块组**（批次 557）：黏液块会把相邻的可推方块粘在一起。
+   *
+   * 从被推的那一格开始 BFS：黏液块继续向六面扩张，非黏液块只作为叶子带上。
+   * 上限 12 格（原版也是 12）；任一目标格不是空气（且不属于这一组）就整组不动。
+   * 移动时按"离活塞最远优先"排序，避免前面先把后面要用的格子覆盖掉。
+   */
+  private pushSlimeCluster(
+    world: RedstoneWorld,
+    sx: number,
+    sy: number,
+    sz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+  ): boolean {
+    const group: { x: number; y: number; z: number; id: number; state: number }[] = [];
+    const keys = new Set<string>();
+    const queue: [number, number, number][] = [[sx, sy, sz]];
+    while (queue.length > 0) {
+      const [x, y, z] = queue.shift()!;
+      const key = keyOf(x, y, z);
+      if (keys.has(key)) continue;
+      const id = world.getBlock(x, y, z);
+      if (!canPush(id)) continue;
+      keys.add(key);
+      group.push({ x, y, z, id, state: world.getState(x, y, z) });
+      if (group.length > 12) return false;
+      if (id !== Block.SLIME_BLOCK) continue;
+      for (const [ox, oy, oz] of NEIGHBORS) {
+        if (!keys.has(keyOf(x + ox, y + oy, z + oz))) queue.push([x + ox, y + oy, z + oz]);
+      }
+    }
+    if (group.length === 0) return false;
+
+    // 目标格必须空着，或者属于"这一组马上就会挪走"的格子
+    for (const cell of group) {
+      const tx = cell.x + dx;
+      const ty = cell.y + dy;
+      const tz = cell.z + dz;
+      if (keys.has(keyOf(tx, ty, tz))) continue;
+      if (world.getBlock(tx, ty, tz) !== Block.AIR) return false;
+    }
+
+    // 先搬最远的：它挪走之后，近的那一格才空出来
+    group.sort((a, b) => b.x * dx + b.y * dy + b.z * dz - (a.x * dx + a.y * dy + a.z * dz));
+    for (const cell of group) {
+      const tx = cell.x + dx;
+      const ty = cell.y + dy;
+      const tz = cell.z + dz;
+      world.setBlock(tx, ty, tz, cell.id, cell.state);
+      world.setBlock(cell.x, cell.y, cell.z, Block.AIR, 0);
+      this.markDirty(tx, ty, tz);
+    }
+    return true;
+  }
+
   /** 活塞伸出：把前方方块推走一格，然后放上活塞头 */
   private extendPiston(world: RedstoneWorld, x: number, y: number, z: number, _id: number, state: number): boolean {
     // 批次 66：**六向**（活塞可以朝上/朝下推了）。水平那四向的偏移与原来完全一致，
@@ -1329,6 +1386,14 @@ export class RedstoneEngine {
       return true;
     }
     if (!canPush(frontId)) return false;
+
+    // 黏液块（批次 557）：把它粘着的相邻方块整组带走
+    if (frontId === Block.SLIME_BLOCK) {
+      if (!this.pushSlimeCluster(world, fx, fy, fz, dx, dy, dz)) return false;
+      world.setBlock(fx, fy, fz, Block.PISTON_HEAD, withSixFacing(0, facing));
+      this.markDirty(fx, fy, fz);
+      return true;
+    }
 
     const fx2 = fx + dx;
     const fy2 = fy + dy;
@@ -1357,6 +1422,11 @@ export class RedstoneEngine {
       const py = hy + dy;
       const pz = hz + dz;
       const pulled = world.getBlock(px, py, pz);
+      // 黏液块（批次 557）：收回时把整组一起拉回来
+      if (pulled === Block.SLIME_BLOCK) {
+        this.pushSlimeCluster(world, px, py, pz, -dx, -dy, -dz);
+        return true;
+      }
       if (pulled !== Block.AIR && canPush(pulled)) {
         world.setBlock(hx, hy, hz, pulled, world.getState(px, py, pz));
         world.setBlock(px, py, pz, Block.AIR, 0);

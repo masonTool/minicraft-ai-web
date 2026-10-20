@@ -383,6 +383,30 @@ console.log('\n[粘性活塞：收回时把方块拉回来]');
   check('更前面那格变成空气', world.getBlock(3, Y, 0) === Block.AIR);
 }
 
+console.log('\n[黏液块：活塞推动/拉回整组（批次 557）]');
+{
+  const world = new StubWorld();
+  const engine = new RedstoneEngine();
+  world.setBlock(0, Y, 0, Block.LEVER, 0);
+  world.setBlock(1, Y, 0, Block.STICKY_PISTON, withFacing(0, 1));
+  world.setBlock(2, Y, 0, Block.SLIME_BLOCK, 0);
+  world.setBlock(3, Y, 0, Block.STONE, 0);
+  engine.onBlockChanged(world, 1, Y, 0);
+  step(engine, world, 0.1);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('前方是黏液块时，活塞头仍然生成在黏液块原位', world.getBlock(2, Y, 0) === Block.PISTON_HEAD);
+  check('黏液块被推到前面一格', world.getBlock(3, Y, 0) === Block.SLIME_BLOCK);
+  check('粘在黏液块上的石头也被带走', world.getBlock(4, Y, 0) === Block.STONE);
+
+  engine.toggleLever(world, 0, Y, 0);
+  step(engine, world, 0.1);
+  check('收回时黏液块回到活塞前方', world.getBlock(2, Y, 0) === Block.SLIME_BLOCK);
+  check('石头也跟着回到黏液块前面', world.getBlock(3, Y, 0) === Block.STONE);
+  check('更前面那格清空', world.getBlock(4, Y, 0) === Block.AIR);
+}
+
 console.log('\n[活塞头：技术方块（批次 68）]');
 {
   equal('活塞头没有对应物品（背包里拿不到）', itemDef(Block.PISTON_HEAD), undefined);
