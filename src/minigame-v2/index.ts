@@ -16,7 +16,8 @@ import { VoxelMaterial } from '../render/VoxelMaterial.ts';
 import { createMainThreadWorker } from '../platform/wx/main-thread-worker.ts';
 import { UiLayer, box, button, slider, slot, text, toggle, type UiElement } from './ui-kit/index.ts';
 import { Inventory } from '../core/container/Inventory.ts';
-import { Block, blockTiles } from '../core/registry/blocks.ts';
+import { Block, blockDef, blockTiles } from '../core/registry/blocks.ts';
+import { raycastVoxels, type RayHit } from '../core/interaction/Raycast.ts';
 import { ATLAS_COLUMNS, TILE_ORDER, TILE_SIZE } from '../render/TextureAtlas.ts';
 import { wxPlatform } from '../platform/wx/index.ts';
 
@@ -370,9 +371,52 @@ let moveX = 0;
 let moveY = 0;
 let lookX = 0;
 let lookY = 0;
+let lookMoved = false;
+let lookStartTime = 0;
+let currentHit: RayHit | null = null;
+const aimRaycaster = new THREE.Raycaster();
 let lastDownAt = 0;
 let lastDownX = 0;
 let lastDownY = 0;
+
+const updateHitAt = (clientX: number, clientY: number): void => {
+  camera.updateMatrixWorld();
+  aimRaycaster.setFromCamera(
+    new THREE.Vector2(
+      (clientX / Math.max(1, platform.system.width)) * 2 - 1,
+      -(clientY / Math.max(1, platform.system.height)) * 2 + 1,
+    ),
+    camera,
+  );
+  const direction = aimRaycaster.ray.direction;
+  currentHit = raycastVoxels(
+    (x, y, z) => world.isSelectable(x, y, z),
+    physics.x,
+    physics.eyeY,
+    physics.z,
+    direction.x,
+    direction.y,
+    direction.z,
+    8,
+  );
+};
+
+const breakAt = (hit: RayHit): void => {
+  world.setBlockAndUpdate(hit.x, hit.y, hit.z, Block.AIR);
+};
+
+const placeAt = (hit: RayHit): void => {
+  const stack = inventory.get(selectedSlot);
+  if (!stack) return;
+  const x = hit.x + hit.nx;
+  const y = hit.y + hit.ny;
+  const z = hit.z + hit.nz;
+  if (world.getBlock(x, y, z) !== Block.AIR || blockDef(stack.id).id === 0) return;
+  if (!world.setBlockAndUpdate(x, y, z, stack.id)) return;
+  stack.count -= 1;
+  inventory.set(selectedSlot, stack.count > 0 ? stack : null);
+  showHud();
+};
 
 platform.input.onPointer('down', (event) => {
   const now = Date.now();
@@ -392,6 +436,9 @@ platform.input.onPointer('down', (event) => {
     lookPointer = event.pointerId;
     lookX = event.clientX;
     lookY = event.clientY;
+    lookMoved = false;
+    lookStartTime = Date.now();
+    updateHitAt(event.clientX, event.clientY);
   }
 });
 
@@ -405,10 +452,12 @@ platform.input.onPointer('move', (event) => {
       input.forward = 0;
     }
   } else if (event.pointerId === lookPointer) {
+    if (Math.hypot(event.clientX - lookX, event.clientY - lookY) > 8) lookMoved = true;
     yaw -= (event.clientX - lookX) * 0.005 * settings.sensitivity;
     pitch = Math.max(-1.2, Math.min(1.2, pitch - (event.clientY - lookY) * 0.005 * settings.sensitivity));
     lookX = event.clientX;
     lookY = event.clientY;
+    updateHitAt(event.clientX, event.clientY);
   }
 });
 
@@ -419,7 +468,13 @@ const release = (event: { pointerId: number; clientX: number; clientY: number })
     input.forward = 0;
     input.strafe = 0;
   }
-  if (event.pointerId === lookPointer) lookPointer = null;
+  if (event.pointerId === lookPointer) {
+    if (!lookMoved && currentHit) {
+      if (Date.now() - lookStartTime >= 350) breakAt(currentHit);
+      else placeAt(currentHit);
+    }
+    lookPointer = null;
+  }
 };
 platform.input.onPointer('up', release);
 platform.input.onPointer('cancel', release);
