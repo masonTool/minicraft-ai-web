@@ -52,6 +52,16 @@ export interface ScoreEntry {
   value: number;
 }
 
+/**
+ * `/scoreboard players operation` 的运算符（批次 467）。
+ *
+ * 原版一共 9 个：赋值、四则、取余、取小、取大、交换。
+ * 除法/取余的除数为 0 时**分数保持不变**（原版行为，不是报错）。
+ */
+export type ScoreOperation = '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '<' | '>' | '><';
+
+export const SCORE_OPERATIONS: readonly ScoreOperation[] = ['=', '+=', '-=', '*=', '/=', '%=', '<', '>', '><'];
+
 /** 侧边栏最多显示多少行（原版也是 15） */
 export const SIDEBAR_MAX_ROWS = 15;
 
@@ -199,6 +209,71 @@ export class Scoreboard {
   /** 减分；返回减完之后的值 */
   removeScore(holder: string, objective: string, delta: number): number | null {
     return this.addScore(holder, objective, -Math.abs(clampScore(delta)));
+  }
+
+  /**
+   * `/scoreboard players operation`（批次 467）：把 target 的分数变成
+   * `target op source`。两边缺分数都按 0 算（原版如此）。
+   *
+   * @returns 运算后的分数；目标不存在或名字非法返回 null
+   */
+  operate(
+    targetHolder: string,
+    targetObjective: string,
+    op: ScoreOperation,
+    sourceHolder: string,
+    sourceObjective: string,
+  ): number | null {
+    const table = this.scores.get(targetObjective);
+    const sourceTable = this.scores.get(sourceObjective);
+    if (!table || !sourceTable) return null;
+    if (!isValidHolderName(targetHolder) || !isValidHolderName(sourceHolder)) return null;
+    this.rememberHolder(targetHolder);
+    this.rememberHolder(sourceHolder);
+    const key = targetHolder.toLowerCase();
+    const sourceKey = sourceHolder.toLowerCase();
+    const left = table.get(key) ?? 0;
+    const right = sourceTable.get(sourceKey) ?? 0;
+
+    if (op === '><') {
+      // 交换：target 拿 source 的值，source 拿 target 的值。两边可能在不同目标里，
+      // 所以**先读两个值再写**（就地交换会读到已经改过的那一份）
+      table.set(key, clampScore(right));
+      sourceTable.set(sourceKey, clampScore(left));
+      return table.get(key) ?? null;
+    }
+
+    let next: number;
+    switch (op) {
+      case '=':
+        next = right;
+        break;
+      case '+=':
+        next = left + right;
+        break;
+      case '-=':
+        next = left - right;
+        break;
+      case '*=':
+        next = left * right;
+        break;
+      case '/=':
+        next = right === 0 ? left : Math.trunc(left / right);
+        break;
+      case '%=':
+        next = right === 0 ? left : left % right;
+        break;
+      case '<':
+        next = Math.min(left, right);
+        break;
+      case '>':
+        next = Math.max(left, right);
+        break;
+      default:
+        return null;
+    }
+    table.set(key, clampScore(next));
+    return table.get(key) ?? null;
   }
 
   /** 查分；没有这条记录返回 null（与"分数是 0"区分开：原版 `/get` 也会说"没有"） */

@@ -38,10 +38,12 @@ import { findNearestBiome } from '../gen/Locate.ts';
 import { CLONE_LIMIT, cloneRegion, cloneVolume, normalizeCloneBox } from './Clone.ts';
 // 记分板（M23，批次 402）：纯类，规则一条都不依赖世界
 import {
+  SCORE_OPERATIONS,
   SCOREBOARD_SLOTS,
   SLOT_LABELS,
   SUPPORTED_CRITERIA,
   isValidScoreName,
+  type ScoreOperation,
   type Scoreboard,
   type ScoreboardSlot,
 } from '../world/Scoreboard.ts';
@@ -955,7 +957,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   },
   {
     name: 'scoreboard',
-    usage: '/scoreboard objectives add|remove|list|setdisplay … / players set|add|remove|get|list|reset …',
+    usage: '/scoreboard objectives add|remove|list|setdisplay … / players set|add|remove|operation|get|list|reset …',
     description: '记分板：目标、分数与显示槽位',
     run(args, ctx, out) {
       runScoreboard(args, ctx, out);
@@ -1367,7 +1369,7 @@ function runExecute(args: string[], ctx: CommandContext, out: CommandFeedback): 
 // ---------------------------------------------------------------- /scoreboard（批次 402）
 
 const SCOREBOARD_USAGE =
-  '用法：/scoreboard objectives <add|remove|list|setdisplay> … 或 /scoreboard players <set|add|remove|get|list|reset> …';
+  '用法：/scoreboard objectives <add|remove|list|setdisplay> … 或 /scoreboard players <set|add|remove|operation|get|list|reset> …';
 
 function runScoreboard(args: string[], ctx: CommandContext, out: CommandFeedback): void {
   const branch = (args[0] ?? '').toLowerCase();
@@ -1467,7 +1469,7 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
   const sub = (args[1] ?? '').toLowerCase();
   const target = args[2];
   if (!target) {
-    out.error('用法：/scoreboard players <set|add|remove|get|list|reset> <目标> …');
+    out.error('用法：/scoreboard players <set|add|remove|operation|get|list|reset> <目标> …');
     return;
   }
 
@@ -1515,6 +1517,42 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     return;
   }
 
+  // ---- 运算（批次 467）：target = target op source，两边缺分数按 0 算
+  if (sub === 'operation') {
+    const objective = args[3];
+    const op = (args[4] ?? '') as ScoreOperation;
+    const sourceTarget = args[5];
+    const sourceObjective = args[6];
+    if (!objective || !SCORE_OPERATIONS.includes(op) || !sourceTarget || !sourceObjective) {
+      out.error(
+        `用法：/scoreboard players operation <目标> <目标名> <运算> <来源> <来源目标名>（运算：${SCORE_OPERATIONS.join(' ')}）`,
+      );
+      return;
+    }
+    if (!board.objective(objective)) {
+      out.error(`目标 ${objective} 不存在`);
+      return;
+    }
+    if (!board.objective(sourceObjective)) {
+      out.error(`目标 ${sourceObjective} 不存在`);
+      return;
+    }
+    const sourceHolders = holderNamesOf(sourceTarget, state, ctx, out);
+    if (sourceHolders === null) return;
+    if (sourceHolders.length === 0) {
+      out.error(`来源 ${sourceTarget} 没有匹配到任何对象`);
+      return;
+    }
+    // 原版是"每个 target 与每个 source 各算一次"（两边都可以是选择器）
+    for (const holder of holders) {
+      for (const source of sourceHolders) {
+        const next = board.operate(holder, objective, op, source, sourceObjective);
+        out.info(`已将 ${holder} 的 ${objective} 设为 ${next}（${op} ${source} 的 ${sourceObjective}）`);
+      }
+    }
+    return;
+  }
+
   if (sub === 'get') {
     const objective = args[3];
     if (!objective) {
@@ -1554,5 +1592,5 @@ function runScoreboardPlayers(args: string[], ctx: CommandContext, out: CommandF
     return;
   }
 
-  out.error('用法：/scoreboard players <set|add|remove|get|list|reset> <目标> …');
+  out.error('用法：/scoreboard players <set|add|remove|operation|get|list|reset> <目标> …');
 }

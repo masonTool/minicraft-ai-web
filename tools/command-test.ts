@@ -676,6 +676,59 @@ console.log('\n[记分板（M23，批次 402）]');
   run('/scoreboard players list 甲');
   check('列出某人的分数', out.lastInfo.includes('kills='), out.lastInfo);
 
+  // ---- 运算（批次 467）：target = target op source
+  run('/scoreboard objectives add base dummy');
+  run('/scoreboard players set 甲 kills 10');
+  run('/scoreboard players set 乙 base 3');
+  run('/scoreboard players operation 甲 kills = 乙 base');
+  check('= 赋值', world.board.getScore('甲', 'kills') === 3, out.lastError);
+  run('/scoreboard players operation 甲 kills += 乙 base');
+  check('+= 加', world.board.getScore('甲', 'kills') === 6);
+  run('/scoreboard players operation 甲 kills -= 乙 base');
+  check('-= 减', world.board.getScore('甲', 'kills') === 3);
+  run('/scoreboard players operation 甲 kills *= 乙 base');
+  check('*= 乘', world.board.getScore('甲', 'kills') === 9);
+  run('/scoreboard players operation 甲 kills /= 乙 base');
+  check('/= 整除', world.board.getScore('甲', 'kills') === 3);
+  run('/scoreboard players operation 甲 kills %= 乙 base');
+  check('%= 取余', world.board.getScore('甲', 'kills') === 0);
+
+  run('/scoreboard players set 甲 kills 7');
+  run('/scoreboard players set 乙 base 0');
+  run('/scoreboard players operation 甲 kills /= 乙 base');
+  check('除数为 0 时分数不变（原版行为，不报错）', world.board.getScore('甲', 'kills') === 7);
+
+  run('/scoreboard players set 乙 base 3');
+  run('/scoreboard players operation 甲 kills < 乙 base');
+  check('< 取小', world.board.getScore('甲', 'kills') === 3);
+  run('/scoreboard players operation 甲 kills > 乙 base');
+  check('> 取大', world.board.getScore('甲', 'kills') === 3);
+  run('/scoreboard players set 甲 kills 9');
+  run('/scoreboard players operation 甲 kills >< 乙 base');
+  check(
+    '>< 交换两边的分数',
+    world.board.getScore('甲', 'kills') === 3 && world.board.getScore('乙', 'base') === 9,
+    `甲=${world.board.getScore('甲', 'kills')} 乙=${world.board.getScore('乙', 'base')}`,
+  );
+
+  run('/scoreboard players operation 甲 nope = 乙 base');
+  check('目标不存在时报错', out.lastError.includes('不存在'), out.lastError);
+  run('/scoreboard players operation 甲 kills = 乙 nope');
+  check('来源目标不存在时报错', out.lastError.includes('不存在'), out.lastError);
+  run('/scoreboard players operation 甲 kills');
+  check('参数不够报用法', out.lastError.includes('用法'), out.lastError);
+  run('/scoreboard players operation 甲 kills ** 乙 base');
+  check('不认识的运算符报错', out.lastError.includes('运算：'), out.lastError);
+
+  // 来源可以是选择器（原版最常见的用法就是把玩家的分数合并到计数器里）
+  run('/scoreboard players set 甲 kills 5');
+  run('/scoreboard players operation 甲 kills = @p kills');
+  check(
+    '来源用选择器时展开成持有人',
+    world.board.getScore('甲', 'kills') === world.board.getScore(world.playerName_, 'kills'),
+    `${world.board.getScore('甲', 'kills')}`,
+  );
+
   run('/scoreboard players reset 甲');
   check('重置清空该人的分数', world.board.getScore('甲', 'kills') === null);
 
