@@ -1996,6 +1996,80 @@ export const MOB_TYPES: readonly MobType[] = [
     eyeHeight: 0.6,
   },
   VILLAGER_TYPE,
+  // ---- 批次 436：补上最后三种生物（这一批把生物补齐到 1.18 的 70 种）
+  /**
+   * 热带鱼：与鳕鱼/鲑鱼同一条水生路径，区别只有颜色、体型与群系。
+   * 原版有 2700 多种花纹组合，这里只做**一种**配色——花纹是纯装饰，
+   * 而"海里有没有鱼"才是玩家能感知的那件事。
+   */
+  {
+    id: 'tropical_fish',
+    name: '热带鱼',
+    health: 3,
+    width: 0.5,
+    height: 0.3,
+    speed: 1.4,
+    hostile: false,
+    attackDamage: 0,
+    followRange: 0,
+    drops: [{ itemId: Item.TROPICAL_FISH, min: 1, max: 1 }],
+    xp: 1,
+    aquatic: true,
+    spawnInWater: true,
+    ignoreLight: true,
+    // 原版只在暖水/温水海里（珊瑚礁那一带）
+    spawnBiomes: ['warm_ocean', 'lukewarm_ocean', 'deep_lukewarm_ocean'],
+    bodyColor: 0xf08a24,
+    accentColor: 0x2f6fd0,
+    eyeHeight: 0.18,
+  },
+  /** 河豚：同一条水生路径；受惊会鼓起来是**动画**，这一批不做（只有数值与掉落对齐） */
+  {
+    id: 'pufferfish',
+    name: '河豚',
+    health: 3,
+    width: 0.6,
+    height: 0.5,
+    speed: 1.2,
+    hostile: false,
+    attackDamage: 0,
+    followRange: 0,
+    drops: [{ itemId: Item.PUFFERFISH, min: 1, max: 1 }],
+    xp: 1,
+    aquatic: true,
+    spawnInWater: true,
+    ignoreLight: true,
+    spawnBiomes: ['warm_ocean', 'lukewarm_ocean', 'deep_lukewarm_ocean'],
+    bodyColor: 0xe8c341,
+    accentColor: 0x4a3a12,
+    eyeHeight: 0.3,
+  },
+  /**
+   * 发光鱿鱼：深海里的鱿鱼。
+   * ⚠️ 原版掉**发光墨囊**，本仓库没有那件物品，所以掉普通墨囊并在这里写明——
+   * 掉落表"少一件"和"掉错一件"在验收时看起来一样，必须留字据。
+   */
+  {
+    id: 'glow_squid',
+    name: '发光鱿鱼',
+    health: 10,
+    width: 0.8,
+    height: 0.8,
+    speed: 1.1,
+    hostile: false,
+    attackDamage: 0,
+    followRange: 0,
+    drops: [{ itemId: Item.INK_SAC, min: 1, max: 3 }],
+    xp: 2,
+    aquatic: true,
+    spawnInWater: true,
+    ignoreLight: true,
+    // 原版只在深海（含各种深海变体）
+    spawnBiomes: ['deep_ocean', 'deep_cold_ocean', 'deep_lukewarm_ocean', 'deep_frozen_ocean'],
+    bodyColor: 0x37d6c8,
+    accentColor: 0x0f5f63,
+    eyeHeight: 0.4,
+  },
 ];
 
 /**

@@ -651,7 +651,7 @@ const NON_BLOCK_SPECS: readonly NonBlockItemSpec[] = [...BASE_NON_BLOCK_SPECS, .
 // 批次 259：第二批被动生物要 5 枚新刷怪蛋，原 1500 上限不够（1500~1504 已用），
 // 扩到 1510 留几个空位。批次 265 又要给弩让一格，继续扩到 1520。
 // 这个数只是"数组长度"，扩大不影响已有 id。
-const MAX_ITEM_ID = 1545;
+const MAX_ITEM_ID = 1550;
 
 /** 按 id 索引的物品表（未定义的 id 为 undefined） */
 export const ITEMS: (ItemDef | undefined)[] = new Array(MAX_ITEM_ID).fill(undefined);

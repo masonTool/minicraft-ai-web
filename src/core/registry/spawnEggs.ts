@@ -122,6 +122,9 @@ export const SPAWN_EGG_SPECS: readonly SpawnEggSpec[] = [
   { mobId: 'wandering_trader', label: '流浪商人', id: 1536 },
   { mobId: 'trader_llama', label: '行商羊驼', id: 1537 },
   { mobId: 'zombie_villager', label: '僵尸村民', id: 1538 },
+  { mobId: 'tropical_fish', label: '热带鱼', id: 1545 },
+  { mobId: 'pufferfish', label: '河豚', id: 1546 },
+  { mobId: 'glow_squid', label: '发光鱿鱼', id: 1547 },
 ];
 
 /** 刷怪蛋的贴图名（与物品名同源：`spawn_egg_zombie`） */

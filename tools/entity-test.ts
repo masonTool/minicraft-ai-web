@@ -10,6 +10,7 @@ import { withPowered } from '../src/core/registry/blockState.ts';
 import { Item, isFireproofItem } from '../src/core/registry/items.ts';
 import { createMob } from '../src/core/entity/MobFactory.ts';
 import { mobTypeById } from '../src/core/entity/mobs.ts';
+import { SPAWN_EGG_SPECS, spawnEggItemId, spawnEggMobOf } from '../src/core/registry/spawnEggs.ts';
 import { readFileSync } from 'node:fs';
 import { TOOL_KINDS, toolItemId } from '../src/core/registry/tools.ts';
 import { ItemEntity, ITEM_FIRE_SECONDS, ITEM_LIFETIME } from '../src/core/entity/ItemEntity.ts';
@@ -950,6 +951,45 @@ console.log('\n[载具被敲坏 + doEntityDrops（批次 435）]');
       (kind) => vehicleDropFor(kind, false) === null,
     ),
   );
+}
+
+console.log('\n[最后三种生物（批次 436）]');
+{
+  const fish = mobTypeById('tropical_fish');
+  const puffer = mobTypeById('pufferfish');
+  const glow = mobTypeById('glow_squid');
+
+  check('热带鱼在生物表里', fish !== undefined);
+  check('河豚在生物表里', puffer !== undefined);
+  check('发光鱿鱼在生物表里', glow !== undefined);
+
+  check('热带鱼掉热带鱼', fish?.drops?.[0]?.itemId === Item.TROPICAL_FISH);
+  check('河豚掉河豚', puffer?.drops?.[0]?.itemId === Item.PUFFERFISH);
+  // ⚠️ 原版掉发光墨囊，本仓库没有那件物品 → 掉普通墨囊，这条断言就是"留字据"
+  check('发光鱿鱼掉墨囊（原版是发光墨囊，此处有差异）', glow?.drops?.[0]?.itemId === Item.INK_SAC);
+
+  check('三种都是水生、只在水里刷', fish?.aquatic === true && fish?.spawnInWater === true && puffer?.aquatic === true && glow?.aquatic === true);
+  check(
+    '热带鱼与河豚只在暖水/温水海',
+    fish?.spawnBiomes?.every((id) => id.includes('warm')) === true &&
+      puffer?.spawnBiomes?.every((id) => id.includes('warm')) === true,
+  );
+  check(
+    '发光鱿鱼只在深海',
+    glow?.spawnBiomes?.every((id) => id.startsWith('deep_')) === true,
+    (glow?.spawnBiomes ?? []).join(','),
+  );
+
+  // 刷怪蛋：三种都能拿到，且能反查到生物
+  for (const [mob, label] of [
+    ['tropical_fish', '热带鱼'],
+    ['pufferfish', '河豚'],
+    ['glow_squid', '发光鱿鱼'],
+  ] as const) {
+    const eggId = spawnEggItemId(SPAWN_EGG_SPECS.findIndex((spec) => spec.mobId === mob));
+    check(`${label}有刷怪蛋`, eggId > 0, String(eggId));
+    check(`${label}的刷怪蛋能反查到生物`, spawnEggMobOf(eggId) === mob, String(spawnEggMobOf(eggId)));
+  }
 }
 
 console.log(`\n结果：通过 ${passed}，失败 ${failed}\n`);
