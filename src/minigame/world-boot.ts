@@ -133,6 +133,19 @@ function boot(): void {
   const workerHost = platform.workers.create('workers/chunk.worker.js');
   const sharedWorker = workerHostToLike(workerHost);
   const createWorker = () => sharedWorker;
+
+  // Worker 通道自检：HUD 会显示 ok / timeout，避免 chunks=0 时只能猜
+  let workerState = 'waiting';
+  sharedWorker.addEventListener('message', (event) => {
+    if (event.data?.type === 'pong') workerState = 'ok';
+  });
+  sharedWorker.postMessage({ type: 'ping', id: -1 });
+  setTimeout(() => {
+    if (workerState !== 'ok') {
+      workerState = 'timeout';
+      console.error('[WX-020] worker ping timeout');
+    }
+  }, 3000);
   const world = new World(0x5eed, 'default', 1, createWorker);
   const meshPool = new MeshWorkerPool(1, createWorker);
   const chunkRenderer = new ChunkRenderer(
@@ -196,7 +209,7 @@ function boot(): void {
   const hud = createHud();
   hud.update([
     `WX-020 WORLD  ${width}x${height} dpr ${view.devicePixelRatio}`,
-    `ATLAS ${atlasMs}ms  ${atlas.canvas.width}x${atlas.canvas.height}`,
+    `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  WORKER ${workerState}`,
     'CHUNKS ...  DRAWN ...  LIGHT ...',
     'FPS ...  MS ...  TRI ...  CALLS ...',
   ]);
@@ -235,7 +248,7 @@ function boot(): void {
       );
       hud.update([
         `WX-020 WORLD  ${width}x${height} dpr ${view.devicePixelRatio}`,
-        `ATLAS ${atlasMs}ms  ${atlas.canvas.width}x${atlas.canvas.height}`,
+        `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  WORKER ${workerState}`,
         `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
       ]);

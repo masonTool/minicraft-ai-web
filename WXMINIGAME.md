@@ -504,7 +504,8 @@ npm run build:minigame:adapter  # 生成 minigame-adapter-spike/game.js（WX-006
 | 2026-10-20 | WX-018 | 真实区块 Worker 打成 `workers/chunk.worker.js`（1097KB / gzip 242KB）+ wx 全局 shim；主包合计 2339KB；入口启动时记录 BigInt 能力 | `086953c` |
 | 2026-10-20 | WX-01B/01C | `canReadResourcePacks()` 能力检测；平台单测 10 个（探测/存储/文件/文件存档/DOM 适配），单元测试 108 全过 | `96ea23b` |
 | 2026-10-20 | WX-018 | `World`/`MeshWorkerPool` 支持 `createWorker` 注入；wx worker 按脚本路径复用 + 多订阅；`World` 过滤非 `generated` 响应 | 本次提交 |
-| 2026-10-20 | WX-020A | 新增 `minigame-world`：TextureAtlas + VoxelMaterial + World + ChunkRenderer + 共享 Worker；game.js 1929KB / worker 1097KB / 合计 3026KB；**待真机首块地形** | 本次提交 |
+| 2026-10-20 | WX-020A | 新增 `minigame-world`：TextureAtlas + VoxelMaterial + World + ChunkRenderer + 共享 Worker；game.js 1929KB / worker 1097KB / 合计 3026KB；**待真机首块地形** | `92ddbde` |
+| 2026-10-20 | WX-020A 修复 | Worker `onMessage` 兼容 `{message}`/`{data}`；shim 无条件接管；加 ping/pong、onError 与 HUD `WORKER` 状态；等待复测 | 本次提交 |
 
 > 每次完成任务后在这里追加一行；**只写结论与数据**，不要贴大段日志。
 

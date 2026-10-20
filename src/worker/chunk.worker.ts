@@ -91,8 +91,13 @@ export interface MeshResponse {
   sections: MeshSectionPayload[];
 }
 
-export type WorkerRequest = GenerateRequest | MeshRequest;
-export type WorkerResponse = GenerateResponse | MeshResponse;
+export interface PingRequest {
+  type: 'ping';
+  id: number;
+}
+
+export type WorkerRequest = GenerateRequest | MeshRequest | PingRequest;
+export type WorkerResponse = GenerateResponse | MeshResponse | { type: 'pong'; id: number };
 
 /** 只依赖几何体的读取接口，避免 Worker 里引入 three 的类型 */
 interface GeometryLike {
@@ -228,7 +233,12 @@ interface WorkerScope {
 const ctx = self as unknown as WorkerScope;
 
 ctx.addEventListener('message', (event) => {
-  const req = event.data;
+  const req = event.data as WorkerRequest;
+
+  if (req.type === 'ping') {
+    ctx.postMessage({ type: 'pong', id: req.id } as WorkerResponse);
+    return;
+  }
 
   if (req.type === 'generate') {
     const blocks = generateChunkBlocks(

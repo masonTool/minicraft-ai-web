@@ -247,10 +247,29 @@ function wxWorkers(): WorkerFactory {
       if (!worker) {
         throw new Error(`创建 worker 失败：${scriptPath}`);
       }
+      console.log('[wx-worker] create', scriptPath);
       const subscribers = new Set<(data: any) => void>();
-      worker.onMessage((data: any) => {
+      let loggedFirstMessage = false;
+      const unwrap = (res: any): any => {
+        if (!res || typeof res !== 'object') return res;
+        const keys = Object.keys(res);
+        if (keys.length === 1 && 'message' in res) return res.message;
+        if (keys.length === 1 && 'data' in res) return res.data;
+        return res;
+      };
+      worker.onMessage((res: any) => {
+        const data = unwrap(res);
+        if (!loggedFirstMessage) {
+          loggedFirstMessage = true;
+          console.log('[wx-worker] first message', data);
+        }
         for (const callback of subscribers) callback(data);
       });
+      if (typeof worker.onError === 'function') {
+        worker.onError((error: unknown) => {
+          console.error('[wx-worker] error', error);
+        });
+      }
       const host: WorkerHost = {
         post(message: unknown): void {
           worker.postMessage(message);
