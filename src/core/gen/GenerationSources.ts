@@ -288,6 +288,8 @@ const OCEAN_MONUMENT = [
   Block.SEA_LANTERN,
   Block.STONE,
   Block.WATER,
+  // 海绵房（批次 449）：湿海绵只能在这里拿到，烤干之后才是海绵
+  Block.WET_SPONGE,
 ];
 // 林地府邸：深色橡木那一族（本项目没有深色森林群系，所以这批方块**只有府邸里能见到**）
 const WOODLAND_MANSION = [Block.COBBLESTONE, Block.GLASS, ...woodTrio('dark_oak'), Block.CHEST];

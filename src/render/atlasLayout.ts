@@ -795,6 +795,9 @@ export const TILE_ORDER = [
   'shulker_top',
   'shulker_bottom',
   'shulker_side',
+  // 海绵 / 湿海绵（批次 449）：六个面同一张——干的是土黄多孔，湿的是深一档的青褐
+  'sponge',
+  'wet_sponge',
   // 瓜藤（批次 77）：8 个阶段各一张（茎越长越高）+ 结果的那一张
   'pumpkin_stem_stage0',
   'pumpkin_stem_stage1',

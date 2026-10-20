@@ -1207,6 +1207,20 @@ function buildOceanMonument(w: FeatureWriter, s: StructureInstance, world: Featu
       }
     }
   }
+  // 海绵房（批次 449）：原版海底神殿里那间"湿海绵房间"。
+  // 放在两侧小房间里（±3 一圈），一个房间 6 块——湿海绵的唯一来源，
+  // 烤干之后才是能吃水的干海绵（闭环见 `world/Sponge.ts` + `Smelting.ts`）
+  for (const [dx, dz] of [
+    [-3, -3],
+    [-2, -3],
+    [-3, -2],
+    [3, 3],
+    [2, 3],
+    [3, 2],
+  ]) {
+    w.fill(s.x + dx, base + 1, s.z + dz, Block.WET_SPONGE);
+  }
+
   for (const [dx, dz] of [
     [0, 0],
     [5, 5],

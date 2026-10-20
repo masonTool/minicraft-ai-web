@@ -5708,6 +5708,25 @@ PAINTERS.shulker_side = (x, y, rng) => {
 };
 
 /**
+ * 海绵 / 湿海绵（批次 449）。
+ *
+ * 原版海绵就是"一块黄绿色的多孔海绵"，所以这里只做两件事：底色 + 孔洞。
+ * 孔洞用 `hashString` 在 2×2 的格子上确定性取点（同一次构建里图集指纹必须稳定，
+ * 否则每次启动纹理都不同、`test:atlas` 那类断言会随机红）。
+ */
+function spongePainter(base: readonly [number, number, number], holeScale: number): Painter {
+  return (x, y, rng): RGBA => {
+    const cell = Math.floor(x / 2) * 8 + Math.floor(y / 2);
+    const hole = hashString(`sponge${cell}`) % 5 === 0;
+    const scale = hole ? holeScale : 1 + rng() * 0.08 - 0.04;
+    return [clamp255(base[0] * scale), clamp255(base[1] * scale), clamp255(base[2] * scale), 255];
+  };
+}
+
+PAINTERS.sponge = spongePainter([196, 190, 92], 0.68);
+PAINTERS.wet_sponge = spongePainter([116, 146, 132], 0.64);
+
+/**
  * 树苗（批次 75）：一小截茎 + 一坨叶色——**同一套画法、六种叶色**。
  *
  * 与花/草共用"十字面片"的渲染路径，所以只要一张图看得出"这是棵小树"就够：

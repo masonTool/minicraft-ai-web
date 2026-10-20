@@ -92,6 +92,9 @@ export const SMELTING_RECIPES: readonly SmeltingRecipe[] = [
   // 下界岩 → 下界砖（批次 413）：原版里下界砖**唯一的生存来源**就是烧下界岩
   { input: Block.NETHERRACK, output: { id: Item.NETHER_BRICK, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
   { input: Block.CLAY, output: { id: Block.TERRACOTTA, count: 1 }, time: SMELTING_TIME, experience: 0.35, kind: 'none' },
+  // 湿海绵 → 海绵（批次 449）：原版唯一"把湿的烤干"的闭环。
+  // 没有这一条，海绵就是一次性的（海底神殿那几块吸完水就废了）
+  { input: Block.WET_SPONGE, output: { id: Block.SPONGE, count: 1 }, time: SMELTING_TIME, experience: 0.15, kind: 'none' },
   { input: Block.STONE_BRICKS, output: { id: Block.CRACKED_STONE_BRICKS, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
   { input: Block.BASALT, output: { id: Block.SMOOTH_BASALT, count: 1 }, time: SMELTING_TIME, experience: 0.1, kind: 'none' },
   // 带釉陶瓦（批次 385）：同色陶瓦烧制

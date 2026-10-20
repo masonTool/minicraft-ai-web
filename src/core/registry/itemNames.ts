@@ -593,6 +593,8 @@ const EXPLICIT: Record<string, string> = {
   dark_oak_wood: '深色橡木木头',
   polished_basalt: '磨制玄武岩',
   blue_ice: '蓝冰',
+  sponge: '海绵',
+  wet_sponge: '湿海绵',
   honeycomb_block: '蜜脾块',
   cobweb: '蛛网',
   stripped_oak_log: '剥皮橡木原木',

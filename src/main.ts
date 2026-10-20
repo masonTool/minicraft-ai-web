@@ -58,6 +58,7 @@ import { fertilizeAt, type BoneMealWorld } from './core/world/BoneMeal.ts';
 import { growTreeAt, type TreeWorld } from './core/world/TreeGrowth.ts';
 // 支撑没了、该掉的就掉（批次 78，B49）：判据在 `Support.ts`（纯函数 + 注入世界）
 import { sweepHangingsAround, sweepUnsupported, type SupportWorld } from './core/world/Support.ts';
+import { absorbWater } from './core/world/Sponge.ts';
 import type { TreeKind } from './core/gen/Features.ts';
 // 堆肥（批次 70）：什么能堆肥、几分概率在 `registry/compost.ts`（纯数据 + 纯函数）
 import { compostStep } from './core/registry/compost.ts';
@@ -10779,6 +10780,31 @@ class App {
    * 用 `lightOpacity >= 15`（而不是 `opaque`）：树叶在原版带 `opaque` 标记但只挡 1 级光，
    * 玻璃挡 0 级——这两个在原版都**不挡**箱子，用 `opaque` 会误伤。
    */
+  /**
+   * 海绵吸水（批次 449）：吸到了就变成湿海绵。
+   *
+   * 吸水那一侧走世界的 `setBlockAndUpdate`（不是裸 `setBlock`）：
+   * 否则光照与网格不会跟着更新，海洋里会留下一片"看不见的空洞"。
+   *
+   * @returns 是否发生了吸水（0 格 = 附近没水，保持干海绵）
+   */
+  private absorbWithSponge(x: number, y: number, z: number): boolean {
+    const absorbed = absorbWater(
+      {
+        getBlock: (bx, by, bz) => this.world.getBlock(bx, by, bz),
+        setBlock: (bx, by, bz, id, state) => this.world.setBlockAndUpdate(bx, by, bz, id, state),
+      },
+      x,
+      y,
+      z,
+    );
+    if (absorbed === 0) return false;
+    this.world.setBlockAndUpdate(x, y, z, Block.WET_SPONGE, 0);
+    // 吸空的那一片要唤醒流体刻，水才会重新流进来
+    this.wakeFluidsAround(x, y, z);
+    return true;
+  }
+
   private isCoveredAbove(x: number, y: number, z: number): boolean {
     return blockDef(this.world.getBlock(x, y + 1, z)).lightOpacity >= 15;
   }
@@ -11536,6 +11562,10 @@ class App {
       if (blockId === Block.BEACON) this.noteBeacon(x, y, z);
       // 凋灵骷髅头（批次 116）：摆上去之后看看"4 块灵魂沙 + 3 颗头"齐了没有
       if (blockId === Block.WITHER_SKELETON_SKULL) this.trySummonWither(x, y, z);
+      // 海绵（批次 449）：放下就把周围的水吸掉；吸到了就变成湿海绵。
+      // ⚠️ 必须在下面那次 `net.sendBlock` **之前**做——否则远端会收到"海绵"，
+      // 而本地已经是湿海绵了（两条消息顺序反了，队友看到的方块就永远不一致）
+      if (blockId === Block.SPONGE) this.absorbWithSponge(x, y, z);
 
       // 进度（M7）：放下方块。"种下一颗种子"也走这条——种子是**方块物品**
       // （`Item.WHEAT_SEEDS` 的 `block` 就是 `WHEAT_STAGE0`），所以它本来就落在放置这条路上
@@ -11566,8 +11596,16 @@ class App {
       // 放置音按材质分（批次 232）：放羊毛和放石头不该是同一声
       this.audio.playPlaceForBlock(blockDef(blockId).name, { x: x + 0.5, y: y + 0.5, z: z + 0.5 });
       this.hand.swing();
-      // 联机：把这次改动广播给队友
-      this.net.sendBlock(x, y, z, blockId, this.world.getBlockState(x, y, z), this.dimension);
+      // 联机：把这次改动广播给队友。
+      // 读**实际**方块而不是 `blockId`：海绵放下后可能已经变成湿海绵（批次 449）
+      this.net.sendBlock(
+        x,
+        y,
+        z,
+        this.world.getBlock(x, y, z),
+        this.world.getBlockState(x, y, z),
+        this.dimension,
+      );
       if (plan.extra) {
         const { dx, dy, dz, id, state } = plan.extra;
         this.net.sendBlock(x + dx, y + dy, z + dz, id, state, this.dimension);
