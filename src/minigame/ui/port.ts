@@ -3,6 +3,7 @@ import type { TextureAtlas } from '../../render/TextureAtlas.ts';
 import { createHud } from './hud.ts';
 import { createHotbar } from './hotbar.ts';
 import { createInventory } from './inventory.ts';
+import { createPauseMenu, type PauseAction } from './pause.ts';
 
 /**
  * 小游戏 UI 端口（WX-020B）
@@ -17,6 +18,9 @@ export interface MiniGameUi {
   isInventoryOpen(): boolean;
   /** 返回 true 表示这次点击被 UI 消费 */
   handleInventoryTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): boolean;
+  togglePause(): void;
+  isPauseOpen(): boolean;
+  handlePauseTap(clientX: number, clientY: number, screenWidth: number, screenHeight: number): PauseAction;
   render(renderer: THREE.WebGLRenderer): void;
 }
 
@@ -29,6 +33,7 @@ export function createCanvasUi(
   const hud = createHud();
   const hotbar = createHotbar(atlas, blocks);
   const inventory = createInventory(atlas, blocks, screenWidth, screenHeight);
+  const pause = createPauseMenu(screenWidth, screenHeight);
 
   return {
     updateStatus(lines: readonly string[]): void {
@@ -39,6 +44,7 @@ export function createCanvasUi(
       inventory.setSelected(index);
     },
     toggleInventory(): void {
+      if (pause.isOpen()) return;
       inventory.toggle();
     },
     isInventoryOpen(): boolean {
@@ -47,10 +53,21 @@ export function createCanvasUi(
     handleInventoryTap(clientX, clientY, sw, sh): boolean {
       return inventory.isOpen() ? inventory.handleTap(clientX, clientY, sw, sh) : false;
     },
+    togglePause(): void {
+      if (inventory.isOpen()) inventory.close();
+      pause.toggle();
+    },
+    isPauseOpen(): boolean {
+      return pause.isOpen();
+    },
+    handlePauseTap(clientX, clientY, sw, sh): PauseAction {
+      return pause.isOpen() ? pause.handleTap(clientX, clientY, sw, sh) : null;
+    },
     render(renderer: THREE.WebGLRenderer): void {
       hud.render(renderer);
       hotbar.render(renderer);
       inventory.render(renderer);
+      pause.render(renderer);
     },
   };
 }

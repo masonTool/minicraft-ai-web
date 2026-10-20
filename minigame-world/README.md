@@ -43,7 +43,7 @@ L tap cycle/drag move · R drag look/tap top place mid break bottom jump
 - `SLOT 1/6`：快捷栏当前槽位；底部 6 格是真实图集图标，白框为当前槽位；
 - 左半屏拖动 = 摇杆，轻点 = 切快捷栏；
 - 右半屏拖动 = 视角，轻点分区：上 = 放方块、中 = 挖方块、下 = 跳跃；
-- 右上角 `BAG` = 背包面板（9×3，前 6 格是快捷栏方块，点选/`X`/点外关闭）；
+- 右上角 `MENU` = 暂停（继续/立即保存/设置占位）；`BAG` = 背包（9×3，点选/`X`/点外关闭）；
 - 背包是真实 41 格 `Inventory`：新世界/空槽补 64 个起始方块，放置扣数量、挖掘进背包，存档写回真实槽位；
 - `WORKER wx` 表示真机 worker 可用；`main` 表示自动降级主线程；
 - `SAVE ready/ok/error`：文件存档状态；`AUD ready/on`：音频状态；

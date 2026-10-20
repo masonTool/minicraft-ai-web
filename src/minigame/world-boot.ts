@@ -406,16 +406,28 @@ async function boot(): Promise<void> {
     const x = event.clientX;
     const y = event.clientY;
 
+    // 暂停面板优先：暂停时所有点击只走 UI
+    if (ui.isPauseOpen()) {
+      uiPointerId = event.pointerId;
+      const action = ui.handlePauseTap(x, y, width, height);
+      if (action === 'save') void persist();
+      return;
+    }
+    // 右上角 MENU / BAG
+    if (x > width * 0.7 && x < width * 0.86 && y < height * 0.22) {
+      uiPointerId = event.pointerId;
+      ui.togglePause();
+      return;
+    }
+    if (x > width * 0.86 && y < height * 0.22) {
+      uiPointerId = event.pointerId;
+      ui.toggleInventory();
+      return;
+    }
     // 背包打开时，所有点击先交给 UI；点外/点槽都会关闭
     if (ui.isInventoryOpen()) {
       uiPointerId = event.pointerId;
       ui.handleInventoryTap(x, y, width, height);
-      return;
-    }
-    // 右上角背包按钮
-    if (x > width * 0.86 && y < height * 0.22) {
-      uiPointerId = event.pointerId;
-      ui.toggleInventory();
       return;
     }
 
@@ -489,7 +501,7 @@ async function boot(): Promise<void> {
     `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T -  SLOT 1/${HOTBAR.length}`,
     `CHUNKS ...  DRAWN ...  LIGHT ...  SAVE ${saveStatus}  AUD ${audioStatus}`,
     'FPS ...  MS ...  TRI ...  CALLS ...',
-    'L tap cycle/drag move · R drag look/tap place/break/jump · top-right bag',
+    'L tap cycle/drag move · R drag look/tap place/break/jump · MENU/BAG top-right',
   ]);
 
   let frames = 0;
@@ -557,7 +569,12 @@ async function boot(): Promise<void> {
 
     // 等脚下区块加载完再落玩家，避免出生就掉进虚空
     if (!playerReady && world.isLoaded(8, 8)) spawnPlayer();
-    if (playerReady && world.isLoaded(physics.x, physics.z)) {
+    if (ui.isPauseOpen()) {
+      playerInput.forward = 0;
+      playerInput.strafe = 0;
+      playerInput.jump = false;
+      jumpQueued = false;
+    } else if (playerReady && world.isLoaded(physics.x, physics.z)) {
       playerInput.jump = jumpQueued;
       jumpQueued = false;
       physics.update(world, playerInput, yaw, dt, false, 1, 1, false);
@@ -589,7 +606,7 @@ async function boot(): Promise<void> {
         `ATLAS ${atlasMs}ms ${atlas.canvas.width}x${atlas.canvas.height}  W ${workerState}  T ${targetLabel}  SLOT ${selectedSlot + 1}/${HOTBAR.length}`,
         `CHUNKS ${world.chunks.size}  DRAWN ${chunkRenderer.drawnCount}  LIGHT ${world.lightWorkCount}  Q ${chunkRenderer.queueLength}  SAVE ${saveStatus}  AUD ${audioStatus}`,
         `FPS ${fps}  MS ${ms.toFixed(1)}  TRI ${sceneTriangles}  CALLS ${sceneCalls}`,
-        'L tap cycle/drag move · R drag look/tap place/break/jump · top-right bag',
+        'L tap cycle/drag move · R drag look/tap place/break/jump · MENU/BAG top-right',
       ]);
       frames = 0;
       lastReport = time;
