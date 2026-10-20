@@ -99,9 +99,9 @@ const assert = (condition, message, state) => {
   const editScreen = await waitState((state) => state.screen === 'edit', '世界编辑没有打开');
   await tap(252, 391);
   const worldsAfterEdit = await waitState((state) => state.screen === 'worlds', '编辑取消没有回列表');
-  const liveFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
-  assert(liveFrame, '删除用例找不到 iframe');
-  await liveFrame.evaluate(() => {
+  const deleteFrame = page.frames().find((item) => item.url().startsWith('about:srcdoc'));
+  assert(deleteFrame, '删除用例找不到 iframe');
+  await deleteFrame.evaluate(() => {
     wx.showModal = (options) => options?.success?.({ confirm: true, cancel: false });
   });
   await tap(782, 163);

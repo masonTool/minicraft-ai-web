@@ -1673,4 +1673,5 @@ const frame = (): void => {
   requestAnimationFrame(frame);
 };
 
+
 requestAnimationFrame(frame);
